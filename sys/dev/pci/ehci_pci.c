@@ -1,4 +1,4 @@
-/*	$NetBSD: ehci_pci.c,v 1.57 2012/09/22 14:27:24 tsutsui Exp $	*/
+/*	$NetBSD: ehci_pci.c,v 1.54.2.1 2012/10/01 17:37:28 riz Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ehci_pci.c,v 1.57 2012/09/22 14:27:24 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ehci_pci.c,v 1.54.2.1 2012/10/01 17:37:28 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -145,7 +145,7 @@ ehci_pci_attach(device_t parent, device_t self, void *aux)
 	/* Disable interrupts, so we don't get any spurious ones. */
 	sc->sc.sc_offs = EREAD1(&sc->sc, EHCI_CAPLENGTH);
 	DPRINTF(("%s: offs=%d\n", device_xname(self), sc->sc.sc_offs));
-	EOWRITE4(&sc->sc, EHCI_USBINTR, 0);
+	EOWRITE2(&sc->sc, EHCI_USBINTR, 0);
 
 	sc->sc_pc = pc;
 	sc->sc_tag = tag;
@@ -177,7 +177,7 @@ ehci_pci_attach(device_t parent, device_t self, void *aux)
 	 * Allocate IRQ
 	 */
 	intrstr = pci_intr_string(pc, ih);
-	sc->sc_ih = pci_intr_establish(pc, ih, IPL_SCHED, ehci_intr, sc);
+	sc->sc_ih = pci_intr_establish(pc, ih, IPL_USB, ehci_intr, sc);
 	if (sc->sc_ih == NULL) {
 		aprint_error_dev(self, "couldn't establish interrupt");
 		if (intrstr != NULL)
@@ -285,9 +285,9 @@ ehci_pci_detach(device_t self, int flags)
 	ehci_shutdown(self, flags);
 
 	/* disable interrupts */
-	EOWRITE4(&sc->sc, EHCI_USBINTR, 0);
+	EOWRITE2(&sc->sc, EHCI_USBINTR, 0);
 	/* XXX grotty hack to flush the write */
-	(void)EOREAD4(&sc->sc, EHCI_USBINTR);
+	(void)EOREAD2(&sc->sc, EHCI_USBINTR);
 
 	if (sc->sc_ih != NULL) {
 		pci_intr_disestablish(sc->sc_pc, sc->sc_ih);
@@ -298,15 +298,6 @@ ehci_pci_detach(device_t self, int flags)
 		bus_space_unmap(sc->sc.iot, sc->sc.ioh, sc->sc.sc_size);
 		sc->sc.sc_size = 0;
 	}
-
-#if 1
-	/* XXX created in ehci.c */
-	mutex_destroy(&sc->sc.sc_lock);
-	mutex_destroy(&sc->sc.sc_intr_lock);
-
-	softint_disestablish(sc->sc.sc_doorbell_si);
-	softint_disestablish(sc->sc.sc_pcd_si);
-#endif
 
 	return 0;
 }

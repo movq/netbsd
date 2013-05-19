@@ -1,4 +1,4 @@
-/*	$NetBSD: cc.c,v 1.4 2012/12/04 23:38:55 spz Exp $	*/
+/*	$NetBSD: cc.c,v 1.2.6.2 2012/12/15 05:40:12 riz Exp $	*/
 
 /*
  * Portions Copyright (C) 2004-2007, 2012  Internet Systems Consortium, Inc. ("ISC")

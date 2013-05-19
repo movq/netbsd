@@ -1,4 +1,4 @@
-/* $NetBSD: emdtv_dtv.c,v 1.10 2013/01/22 12:40:42 jmcneill Exp $ */
+/* $NetBSD: emdtv_dtv.c,v 1.8 2012/01/09 11:02:18 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2008, 2011 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: emdtv_dtv.c,v 1.10 2013/01/22 12:40:42 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: emdtv_dtv.c,v 1.8 2012/01/09 11:02:18 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -37,7 +37,6 @@ __KERNEL_RCSID(0, "$NetBSD: emdtv_dtv.c,v 1.10 2013/01/22 12:40:42 jmcneill Exp 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
 #include <dev/usb/usbdi_util.h>
-#include <dev/usb/usbdivar.h>
 #include <dev/usb/usbdevs.h>
 
 #include <dev/i2c/i2cvar.h>
@@ -103,7 +102,7 @@ emdtv_dtv_attach(struct emdtv_softc *sc)
 	aprint_debug_dev(sc->sc_dev, "calling usbd_open_pipe, ep 0x%02x\n",
 	    ed->bEndpointAddress);
 	status = usbd_open_pipe(sc->sc_iface, 
-	    ed->bEndpointAddress, USBD_EXCLUSIVE_USE|USBD_MPSAFE,
+	    ed->bEndpointAddress, USBD_EXCLUSIVE_USE,
 	    &sc->sc_isoc_pipe);
 	if (status != USBD_NORMAL_COMPLETION) {
 		aprint_error_dev(sc->sc_dev, "couldn't open isoc pipe\n");

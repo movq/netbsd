@@ -1,4 +1,4 @@
-/*	$NetBSD: postscreen_smtpd.c,v 1.1.1.2 2013/01/02 18:59:04 tron Exp $	*/
+/*	$NetBSD: postscreen_smtpd.c,v 1.1.1.1 2011/03/02 19:32:27 tron Exp $	*/
 
 /*++
 /* NAME
@@ -14,10 +14,6 @@
 /*
 /*	void	psc_smtpd_tests(state)
 /*	PSC_STATE *state;
-/*
-/*	void	PSC_SMTPD_X21(state, final_reply)
-/*	PSC_STATE *state;
-/*	const char *final_reply;
 /* DESCRIPTION
 /*	psc_smtpd_pre_jail_init() performs one-time per-process
 /*	initialization during the "before chroot" execution phase.
@@ -27,10 +23,6 @@
 /*	psc_smtpd_tests() starts up an SMTP server engine for deep
 /*	protocol tests and for collecting helo/sender/recipient
 /*	information.
-/*
-/*	PSC_SMTPD_X21() redirects the SMTP client to an SMTP server
-/*	engine, which sends the specified final reply at the first
-/*	legitimate opportunity without doing any protocol tests.
 /*
 /*	Unlike the Postfix SMTP server, this engine does not announce
 /*	PIPELINING support. This exposes spambots that pipeline
@@ -183,12 +175,7 @@
 
 #define PSC_SMTPD_BUFFER_EMPTY(state) \
 	(!PSC_SMTPD_HAVE_PUSH_BACK(state) \
-	&& vstream_peek((state)->smtp_client_stream) <= 0)
-
-#define PSC_SMTPD_PEEK_DATA(state) \
-	vstream_peek_data((state)->smtp_client_stream)
-#define PSC_SMTPD_PEEK_LEN(state) \
-	vstream_peek((state)->smtp_client_stream)
+	&& vstream_peek(state->smtp_client_stream) <= 0)
 
  /*
   * Dynamic reply strings. To minimize overhead we format these once.
@@ -367,9 +354,6 @@ static int psc_ehlo_cmd(PSC_STATE *state, char *args)
 	psc_smtpd_format_ehlo_reply(psc_temp, discard_mask);
 	reply = STR(psc_temp);
 	state->ehlo_discard_mask = discard_mask;
-    } else if (psc_ehlo_discard_maps && psc_ehlo_discard_maps->error) {
-	msg_fatal("%s lookup error for %s",
-		  psc_ehlo_discard_maps->title, state->smtp_client_addr);
     } else if (state->flags & PSC_STATE_FLAG_USING_TLS) {
 	reply = psc_smtpd_ehlo_reply_tls;
 	state->ehlo_discard_mask = psc_ehlo_discard_mask | EHLO_MASK_STARTTLS;
@@ -879,9 +863,6 @@ static void psc_smtpd_read_event(int event, char *context)
 			 state->smtp_client_addr, state->smtp_client_port,
 			 STR(state->cmd_buffer), cp);
 		vstring_strcpy(state->cmd_buffer, cp);
-	    } else if (psc_cmd_filter->error != 0) {
-		msg_fatal("%s:%s lookup error for \"%.100s\"",
-			  psc_cmd_filter->type, psc_cmd_filter->name, cp);
 	    }
 	}
 
@@ -920,22 +901,15 @@ static void psc_smtpd_read_event(int event, char *context)
 	    if (strcasecmp(command, cmdp->name) == 0)
 		break;
 
-	if ((state->flags & PSC_STATE_FLAG_SMTPD_X21)
-	    && cmdp->action != psc_quit_cmd) {
-	    PSC_CLEAR_EVENT_DROP_SESSION_STATE(state, psc_smtpd_time_event,
-					       state->final_reply);
-	    return;
-	}
 	/* Non-SMTP command test. */
 	if ((state->flags & PSC_STATE_MASK_NSMTP_TODO_SKIP)
 	    == PSC_STATE_FLAG_NSMTP_TODO && cmdp->name == 0
 	    && (is_header(command)
-	/* Ignore forbid_cmds lookup errors. Non-critical feature. */
 		|| (*var_psc_forbid_cmds
 		    && string_list_match(psc_forbid_cmds, command)))) {
 	    printable(command, '?');
-	    msg_info("NON-SMTP COMMAND from [%s]:%s %.100s %.100s",
-		     PSC_CLIENT_ADDR_PORT(state), command, cmd_buffer_ptr);
+	    msg_info("NON-SMTP COMMAND from [%s]:%s %.100s",
+		     PSC_CLIENT_ADDR_PORT(state), command);
 	    PSC_FAIL_SESSION_STATE(state, PSC_STATE_FLAG_NSMTP_FAIL);
 	    PSC_UNPASS_SESSION_STATE(state, PSC_STATE_FLAG_NSMTP_PASS);
 	    state->nsmtp_stamp = PSC_TIME_STAMP_DISABLED;	/* XXX */
@@ -969,11 +943,8 @@ static void psc_smtpd_read_event(int event, char *context)
 	if ((state->flags & PSC_STATE_MASK_PIPEL_TODO_SKIP)
 	    == PSC_STATE_FLAG_PIPEL_TODO && !PSC_SMTPD_BUFFER_EMPTY(state)) {
 	    printable(command, '?');
-	    escape(psc_temp, PSC_SMTPD_PEEK_DATA(state),
-		   PSC_SMTPD_PEEK_LEN(state) < 100 ?
-		   PSC_SMTPD_PEEK_LEN(state) : 100);
-	    msg_info("COMMAND PIPELINING from [%s]:%s after %.100s: %s",
-		     PSC_CLIENT_ADDR_PORT(state), command, STR(psc_temp));
+	    msg_info("COMMAND PIPELINING from [%s]:%s after %.100s",
+		     PSC_CLIENT_ADDR_PORT(state), command);
 	    PSC_FAIL_SESSION_STATE(state, PSC_STATE_FLAG_PIPEL_FAIL);
 	    PSC_UNPASS_SESSION_STATE(state, PSC_STATE_FLAG_PIPEL_PASS);
 	    state->pipel_stamp = PSC_TIME_STAMP_DISABLED;	/* XXX */
@@ -1111,11 +1082,8 @@ void    psc_smtpd_tests(PSC_STATE *state)
      * 
      * XXX Make "opportunistically" configurable for each test.
      */
-    if ((state->flags & PSC_STATE_FLAG_SMTPD_X21) == 0) {
-	state->flags |= PSC_STATE_MASK_SMTPD_TODO;
-    } else {
-	state->flags &= ~PSC_STATE_MASK_SMTPD_TODO;
-    }
+    state->flags |= (PSC_STATE_FLAG_PIPEL_TODO | PSC_STATE_FLAG_NSMTP_TODO | \
+		     PSC_STATE_FLAG_BARLF_TODO);
 
     /*
      * Send no SMTP banner to pregreeting clients. This eliminates a lot of

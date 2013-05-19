@@ -2,7 +2,7 @@
 | author: chapuni(webmaster@chapuni.com)
 |         ITOH Yasufumi
 |
-| $NetBSD: boot.S,v 1.10 2012/11/01 14:33:31 isaki Exp $
+| $NetBSD: boot.S,v 1.9.10.1 2012/11/24 20:20:24 jdc Exp $
 
 #include <machine/asm.h>
 #include "iocscall.h"

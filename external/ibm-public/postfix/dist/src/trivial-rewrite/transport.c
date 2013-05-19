@@ -1,4 +1,4 @@
-/*	$NetBSD: transport.c,v 1.1.1.2 2013/01/02 18:59:11 tron Exp $	*/
+/*	$NetBSD: transport.c,v 1.1.1.1 2009/06/23 10:08:58 tron Exp $	*/
 
 /*++
 /* NAME
@@ -103,7 +103,7 @@ TRANSPORT_INFO *transport_pre_init(const char *transport_maps_name,
 				     DICT_FLAG_LOCK | DICT_FLAG_FOLD_FIX
 				     | DICT_FLAG_NO_REGSUB);
     tp->wildcard_channel = tp->wildcard_nexthop = 0;
-    tp->wildcard_errno = 0;
+    tp->transport_errno = 0;
     tp->expire = 0;
     return (tp);
 }
@@ -171,6 +171,11 @@ static int find_transport_entry(TRANSPORT_INFO *tp, const char *key,
     const char *host;
     const char *value;
 
+    /*
+     * Reset previous error history.
+     */
+    dict_errno = 0;
+
 #define FOUND		1
 #define NOTFOUND	0
 
@@ -231,14 +236,14 @@ static void transport_wildcard_init(TRANSPORT_INFO *tp)
 #define PARTIAL		DICT_FLAG_FIXED
 
     if (find_transport_entry(tp, WILDCARD, "", FULL, channel, nexthop)) {
-	tp->wildcard_errno = 0;
+	tp->transport_errno = 0;
 	tp->wildcard_channel = channel;
 	tp->wildcard_nexthop = nexthop;
 	if (msg_verbose)
 	    msg_info("wildcard_{chan:hop}={%s:%s}",
 		     vstring_str(channel), vstring_str(nexthop));
     } else {
-	tp->wildcard_errno = tp->transport_path->error;
+	tp->transport_errno = dict_errno;
 	vstring_free(channel);
 	vstring_free(nexthop);
 	tp->wildcard_channel = 0;
@@ -279,7 +284,7 @@ int     transport_lookup(TRANSPORT_INFO *tp, const char *addr,
 
     if (find_transport_entry(tp, addr, rcpt_domain, FULL, channel, nexthop))
 	return (FOUND);
-    if (tp->transport_path->error != 0)
+    if (dict_errno != 0)
 	return (NOTFOUND);
 
     /*
@@ -295,7 +300,7 @@ int     transport_lookup(TRANSPORT_INFO *tp, const char *addr,
 	myfree(stripped_addr);
 	if (found)
 	    return (FOUND);
-	if (tp->transport_path->error != 0)
+	if (dict_errno != 0)
 	    return (NOTFOUND);
     }
 
@@ -318,7 +323,7 @@ int     transport_lookup(TRANSPORT_INFO *tp, const char *addr,
     for (name = ratsign + 1; *name != 0; name = next) {
 	if (find_transport_entry(tp, name, rcpt_domain, PARTIAL, channel, nexthop))
 	    return (FOUND);
-	if (tp->transport_path->error != 0)
+	if (dict_errno != 0)
 	    return (NOTFOUND);
 	if ((next = strchr(name + 1, '.')) == 0)
 	    break;
@@ -329,10 +334,10 @@ int     transport_lookup(TRANSPORT_INFO *tp, const char *addr,
     /*
      * Fall back to the wild-card entry.
      */
-    if (tp->wildcard_errno || event_time() > tp->expire)
+    if (tp->transport_errno || event_time() > tp->expire)
 	transport_wildcard_init(tp);
-    if (tp->wildcard_errno) {
-	tp->transport_path->error = tp->wildcard_errno;
+    if (tp->transport_errno) {
+	dict_errno = tp->transport_errno;
 	return (NOTFOUND);
     } else if (tp->wildcard_channel) {
 	update_entry(STR(tp->wildcard_channel), STR(tp->wildcard_nexthop),

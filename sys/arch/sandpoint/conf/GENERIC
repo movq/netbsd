@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.78 2013/04/27 21:43:39 christos Exp $
+# $NetBSD: GENERIC,v 1.70 2012/02/11 12:31:47 phx Exp $
 #
 # machine description file for GENERIC NAS
 # 
@@ -22,7 +22,7 @@ include 	"arch/sandpoint/conf/std.sandpoint"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.78 $"
+#ident 		"GENERIC-$Revision: 1.70 $"
 
 maxusers	32
 
@@ -37,6 +37,7 @@ options 	KTRACE
 #options 	SYSVMSG		# System V message queues
 #options 	SYSVSEM		# System V semaphores
 #options 	SYSVSHM		# System V shared memory
+#options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 #options 	MODULAR		# module(7) support
 #options 	USERCONF	# userconf(4) support
@@ -57,6 +58,7 @@ options 	DDB
 #options 	TRAP_PANICWAIT
 #options 	PMAPCHECK
 #options 	PMAPDEBUG
+#options 	SYMTAB_SPACE=300000
 options 	MSGBUFSIZE=65536
 
 #makeoptions	DEBUG="-g"
@@ -75,7 +77,6 @@ options 	COMPAT_20	# NetBSD 2.0
 options 	COMPAT_30	# NetBSD 3.0
 options 	COMPAT_40	# NetBSD 4.0
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_43	# 4.3BSD, 386BSD, and BSDI
 #options 	COMPAT_386BSD_MBRPART	# recognize old partition ID
 #options 	COMPAT_LINUX	# binary compatibility with Linux
@@ -127,10 +128,13 @@ options 	NFS_BOOT_BOOTPARAM,NFS_BOOT_BOOTP
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking protocols
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 #options 	PPP_DEFLATE	# Deflate compression support for PPP
@@ -210,6 +214,7 @@ atabus* at ata?
 wd*		at atabus? drive ? flags 0x0000	# the drives themselves
 
 # PCI network interfaces
+fxp*	at pci? dev ? function ?	# Intel EtherExpress PRO 10+/100B
 ral*	at pci? dev ? function ?	# Ralink Technology RT25x0 802.11a/b/g
 re*	at pci? dev ? function ?	# Realtek 8139C+/8169/8169S/8110S
 skc*	at pci? dev ? function ?	# Marvell Yukon Gigabit Ethernet
@@ -260,7 +265,6 @@ sd*	at scsibus? target ? lun ?	# SCSI disk drives
 cd*	at scsibus? target ? lun ?	# SCSI CD-ROM drives
 
 atapibus* at atapi?
-sd*	at atapibus? drive ? flags 0x0000	# ATAPI disk drives
 cd*	at atapibus? drive ? flags 0x0000	# ATAPI CD-ROM drives
 
 #
@@ -270,12 +274,12 @@ cd*	at atapibus? drive ? flags 0x0000	# ATAPI CD-ROM drives
 #pseudo-device	swcrypto		# software crypto implementation
 
 # disk/mass storage pseudo-devices
-#pseudo-device	ccd			# concatenated/striped disk devices
-#pseudo-device	cgd			# cryptographic disk devices
+#pseudo-device	ccd		4	# concatenated/striped disk devices
+#pseudo-device	cgd		4	# cryptographic disk devices
 pseudo-device	fss			# file system snapshot device
 #pseudo-device	putter			# for puffs and pud
 
-pseudo-device	raid			# RAIDframe disk driver
+pseudo-device	raid		8	# RAIDframe disk driver
 options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # Options to enable various other RAIDframe RAID types.
 #options 	RF_INCLUDE_EVENODD=1
@@ -323,7 +327,7 @@ pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	lockstat		# lock profiling
 
 # a pseudo device needed for Coda	# also needs CODA (above)
-#pseudo-device	vcoda			# coda minicache <-> venus comm.
+#pseudo-device	vcoda		4	# coda minicache <-> venus comm.
 
 # a pseudo device needed for SMBFS
 #pseudo-device	nsmb			# experimental - SMB requester
@@ -334,7 +338,7 @@ pseudo-device	drvctl
 # Veriexec
 #
 # a pseudo device needed for veriexec
-#pseudo-device	veriexec
+#pseudo-device	veriexec		1
 #
 # Uncomment the fingerprint methods below that are desired. Note that
 # removing fingerprint methods will have almost no impact on the kernel

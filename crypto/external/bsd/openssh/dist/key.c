@@ -1,5 +1,5 @@
-/*	$NetBSD: key.c,v 1.12 2013/03/29 16:19:45 christos Exp $	*/
-/* $OpenBSD: key.c,v 1.100 2013/01/17 23:00:01 djm Exp $ */
+/*	$NetBSD: key.c,v 1.9 2011/09/07 17:49:19 christos Exp $	*/
+/* $OpenBSD: key.c,v 1.97 2011/05/17 07:13:31 djm Exp $ */
 /*
  * read_bignum():
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -36,7 +36,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: key.c,v 1.12 2013/03/29 16:19:45 christos Exp $");
+__RCSID("$NetBSD: key.c,v 1.9 2011/09/07 17:49:19 christos Exp $");
 #include <sys/param.h>
 #include <sys/types.h>
 
@@ -53,8 +53,6 @@ __RCSID("$NetBSD: key.c,v 1.12 2013/03/29 16:19:45 christos Exp $");
 #include "log.h"
 #include "misc.h"
 #include "ssh2.h"
-
-static int to_blob(const Key *, u_char **, u_int *, int);
 
 static struct KeyCert *
 cert_new(void)
@@ -317,15 +315,14 @@ key_equal(const Key *a, const Key *b)
 }
 
 u_char*
-key_fingerprint_raw(const Key *k, enum fp_type dgst_type,
-    u_int *dgst_raw_length)
+key_fingerprint_raw(Key *k, enum fp_type dgst_type, u_int *dgst_raw_length)
 {
 	const EVP_MD *md = NULL;
 	EVP_MD_CTX ctx;
 	u_char *blob = NULL;
 	u_char *retval = NULL;
 	u_int len = 0;
-	int nlen, elen;
+	int nlen, elen, otype;
 
 	*dgst_raw_length = 0;
 
@@ -335,9 +332,6 @@ key_fingerprint_raw(const Key *k, enum fp_type dgst_type,
 		break;
 	case SSH_FP_SHA1:
 		md = EVP_sha1();
-		break;
-	case SSH_FP_SHA256:
-		md = EVP_sha256();
 		break;
 	default:
 		fatal("key_fingerprint_raw: bad digest type %d",
@@ -363,7 +357,10 @@ key_fingerprint_raw(const Key *k, enum fp_type dgst_type,
 	case KEY_ECDSA_CERT:
 	case KEY_RSA_CERT:
 		/* We want a fingerprint of the _key_ not of the cert */
-		to_blob(k, &blob, &len, 1);
+		otype = k->type;
+		k->type = key_type_plain(k->type);
+		key_to_blob(k, &blob, &len);
+		k->type = otype;
 		break;
 	case KEY_UNSPEC:
 		return retval;
@@ -1316,6 +1313,11 @@ cert_parse(Buffer *b, Key *key, const u_char *blob, u_int blen)
 		goto out;
 	}
 
+	if (kidlen != strlen(key->cert->key_id)) {
+		error("%s: key ID contains \\0 character", __func__);
+		goto out;
+	}
+
 	/* Signature is left in the buffer so we can calculate this length */
 	signed_len = buffer_len(&key->cert->certblob) - buffer_len(b);
 
@@ -1533,19 +1535,18 @@ key_from_blob(const u_char *blob, u_int blen)
 	return key;
 }
 
-static int
-to_blob(const Key *key, u_char **blobp, u_int *lenp, int force_plain)
+int
+key_to_blob(const Key *key, u_char **blobp, u_int *lenp)
 {
 	Buffer b;
-	int len, type;
+	int len;
 
 	if (key == NULL) {
 		error("key_to_blob: key == NULL");
 		return 0;
 	}
 	buffer_init(&b);
-	type = force_plain ? key_type_plain(key->type) : key->type;
-	switch (type) {
+	switch (key->type) {
 	case KEY_DSA_CERT_V00:
 	case KEY_RSA_CERT_V00:
 	case KEY_DSA_CERT:
@@ -1556,23 +1557,20 @@ to_blob(const Key *key, u_char **blobp, u_int *lenp, int force_plain)
 		    buffer_len(&key->cert->certblob));
 		break;
 	case KEY_DSA:
-		buffer_put_cstring(&b,
-		    key_ssh_name_from_type_nid(type, key->ecdsa_nid));
+		buffer_put_cstring(&b, key_ssh_name(key));
 		buffer_put_bignum2(&b, key->dsa->p);
 		buffer_put_bignum2(&b, key->dsa->q);
 		buffer_put_bignum2(&b, key->dsa->g);
 		buffer_put_bignum2(&b, key->dsa->pub_key);
 		break;
 	case KEY_ECDSA:
-		buffer_put_cstring(&b,
-		    key_ssh_name_from_type_nid(type, key->ecdsa_nid));
+		buffer_put_cstring(&b, key_ssh_name(key));
 		buffer_put_cstring(&b, key_curve_nid_to_name(key->ecdsa_nid));
 		buffer_put_ecpoint(&b, EC_KEY_get0_group(key->ecdsa),
 		    EC_KEY_get0_public_key(key->ecdsa));
 		break;
 	case KEY_RSA:
-		buffer_put_cstring(&b,
-		    key_ssh_name_from_type_nid(type, key->ecdsa_nid));
+		buffer_put_cstring(&b, key_ssh_name(key));
 		buffer_put_bignum2(&b, key->rsa->e);
 		buffer_put_bignum2(&b, key->rsa->n);
 		break;
@@ -1591,12 +1589,6 @@ to_blob(const Key *key, u_char **blobp, u_int *lenp, int force_plain)
 	memset(buffer_ptr(&b), 0, len);
 	buffer_free(&b);
 	return len;
-}
-
-int
-key_to_blob(const Key *key, u_char **blobp, u_int *lenp)
-{
-	return to_blob(key, blobp, lenp, 0);
 }
 
 int
@@ -1970,7 +1962,7 @@ key_cert_check_authority(const Key *k, int want_host, int require_principal,
 }
 
 int
-key_cert_is_legacy(const Key *k)
+key_cert_is_legacy(Key *k)
 {
 	switch (k->type) {
 	case KEY_DSA_CERT_V00:

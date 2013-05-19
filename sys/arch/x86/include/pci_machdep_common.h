@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep_common.h,v 1.11 2012/12/09 21:30:02 jakllsch Exp $	*/
+/*	$NetBSD: pci_machdep_common.h,v 1.8 2011/08/28 06:04:17 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -42,7 +42,7 @@
 #endif
 
 /*
- * x86-specific PCI structure and type definitions.
+ * i386-specific PCI structure and type definitions.
  * NOT TO BE USED DIRECTLY BY MACHINE INDEPENDENT CODE.
  *
  * Configuration tag; created from a {bus,device,function} triplet by
@@ -51,13 +51,6 @@
  * the read and write routines, but this would cause extra overhead.
  *
  * Mode 2 is historical and deprecated by the Revision 2.0 specification.
- *
- *
- * Mode 1 tag:
- *	 31              24           16 15     11 10  8
- *	+---------------------------------------------------------------+
- *	|1|      0      |      BUS      |   DEV   |FUNC |       0       |
- *	+---------------------------------------------------------------+
  */
 union x86_pci_tag_u {
 	uint32_t mode1;
@@ -90,7 +83,7 @@ struct pci_chipset_tag {
 };
 
 /*
- * x86-specific PCI variables and functions.
+ * i386-specific PCI variables and functions.
  * NOT TO BE USED DIRECTLY BY MACHINE INDEPENDENT CODE.
  */
 int		pci_bus_flags(void);
@@ -139,11 +132,11 @@ int		pchb_get_bus_number(pci_chipset_tag_t, pcitag_t);
 void pci_device_foreach(pci_chipset_tag_t, int,
 			void (*)(pci_chipset_tag_t, pcitag_t, void*),
 			void *);
-
+        
 void pci_device_foreach_min(pci_chipset_tag_t, int, int,
 			    void (*)(pci_chipset_tag_t, pcitag_t, void*),
 			    void *);
-
+        
 void pci_bridge_foreach(pci_chipset_tag_t, int, int,
 	void (*) (pci_chipset_tag_t, pcitag_t, void *), void *);
 

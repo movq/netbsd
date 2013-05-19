@@ -1,4 +1,4 @@
-/*	$NetBSD: param.h,v 1.428 2013/03/29 01:09:45 christos Exp $	*/
+/*	$NetBSD: param.h,v 1.408.2.12 2013/05/12 23:49:43 riz Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -63,7 +63,7 @@
  *	2.99.9		(299000900)
  */
 
-#define	__NetBSD_Version__	699001900	/* NetBSD 6.99.19 */
+#define	__NetBSD_Version__	601000000	/* NetBSD 6.1 */
 
 #define __NetBSD_Prereq__(M,m,p) (((((M) * 100000000) + \
     (m) * 1000000) + (p) * 100) <= __NetBSD_Version__)
@@ -149,8 +149,8 @@
 #define	NVNODE	(NPROC + NTEXT + 100)
 #define	NVNODE_IMPLICIT
 #endif
-#ifndef VNODE_KMEM_MAXPCT
-#define	VNODE_KMEM_MAXPCT	60
+#ifndef VNODE_VA_MAXPCT
+#define	VNODE_VA_MAXPCT	20
 #endif
 #ifndef BUFCACHE_VA_MAXPCT
 #define	BUFCACHE_VA_MAXPCT	20

@@ -1,6 +1,6 @@
-#	$NetBSD: NETWALKER,v 1.19 2013/03/02 02:42:12 christos Exp $
+#	$NetBSD: NETWALKER,v 1.7 2011/12/18 05:49:26 dholland Exp $
 #
-#	NETWALKER -- http://www.sharp.co.jp/netwalker/
+#	NETWALKER -- Sharp
 #
 
 include	"arch/evbarm/conf/std.netwalker"
@@ -17,7 +17,7 @@ options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 #options 	NTP		# NTP phase/frequency locked loop
 
 # CPU options
-options 	CPU_CORTEXA8	# Support the ARM-v7a core
+options 	CPU_CORTEXA8	# Support the ARM11 core
 options 	IMX51
 options 	PMAPCOUNTERS
 
@@ -38,8 +38,8 @@ file-system	MSDOSFS		# MS-DOS file system
 file-system	FDESC		# /dev/fd
 file-system	KERNFS		# /kern
 file-system	NULLFS		# loopback file system
+#file-system	PORTAL		# portal filesystem (still experimental)
 file-system	PROCFS		# /proc
-#file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
 file-system	TMPFS		# memory file system
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 #file-system	UNION		# union file system
@@ -59,10 +59,13 @@ options 	WAPBL		# File system journaling support
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/ IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking
 #options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
@@ -78,7 +81,6 @@ options 	INET6		# IPV6
 # Compatibility options
 
 #options 	COMPAT_43	# 4.3BSD compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
 #options 	COMPAT_30	# NetBSD 3.0 compatibility.
@@ -101,6 +103,10 @@ options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
+#options 	SEMMNI=10	# number of semaphore identifiers
+#options 	SEMMNS=60	# number of semaphores in system
+#options 	SEMUME=10	# max number of undo entries per process
+#options 	SEMMNU=30	# number of undo structures in system
 options 	SYSVSHM		# System V-like memory sharing
 
 # Device options
@@ -143,8 +149,7 @@ options 	DDB_VERBOSE_HELP
 #options 	PMAP_DEBUG	# Enable pmap_debug_level code
 #options 	IPKDB		# remote kernel debugging
 options 	VERBOSE_INIT_ARM # verbose bootstraping messages
-makeoptions	DEBUG="-g"	# compile full symbol table
-#makeoptions	COPTS="-O2"
+makeoptions	DEBUG="-g -O2"	# compile full symbol table
 #options 	SYSCALL_STATS	# per syscall counts
 #options 	SYSCALL_TIMES 	# per syscall times
 #options 	SYSCALL_TIMES_HASCOUNTER	# use 'broken' rdtsc (soekris)
@@ -176,10 +181,6 @@ imxuart0	at axi? addr 0x73fbc000 irq 31		# UART1
 #imxuart2	at axi? addr 0x7000c000 irq 33
 options		IMXUARTCONSOLE
 
-# Clock Control
-imxccm0		at axi? addr 0x73fd4000
-options		IMX51_CKIL_FREQ=32768
-
 # Enhanced Periodic Interrupt Timer
 imxclock0	at axi? addr 0x73fac000 size 0x4000 irq 40
 imxclock1	at axi? addr 0x73fb0000 size 0x4000 irq 41
@@ -192,14 +193,6 @@ imxgpio0	at axi? addr 0x73f84000
 imxgpio1	at axi? addr 0x73f88000
 imxgpio2	at axi? addr 0x73f8c000
 imxgpio3	at axi? addr 0x73f90000
-
-# SD/MMC
-sdhc0    	at axi? addr 0x70004000 irq 1	     # eSDHC1
-#sdhc1   	at axi? addr 0x70008000 irq 2	     # eSDHC2
-sdmmc*		at sdhc?
-ld*		at sdmmc?			# MMC/SD card
-#options 	SDHC_DEBUG
-#options 	SDMMC_DEBUG
 
 # USB
 imxusbc0  at axi?  addr 0x73f80000
@@ -254,26 +247,6 @@ ucom*	at uvscom? portno ?
 ugensa* at uhub? port ?
 ucom*	at ugensa?
 
-# IPUv3 LCD Controller
-ipu0		at axi?
-wsdisplay0	at wsemuldisplaydev? console ?
-wsdisplay*	at wsemuldisplaydev?
-#options	IPUV3_DEBUG=1
-#options	LCD_DEBUG
-options 	IMXIPUCONSOLE
-
-# various options for wscons - we try to look as much like a standard
-# sun console as possible
-options 	WSEMUL_VT100		# sun terminal emulation
-options 	WS_DEFAULT_FG=WSCOL_WHITE
-options 	WS_DEFAULT_BG=WSCOL_BLACK
-options		WS_KERNEL_FG=WSCOL_GREEN
-options		WS_KERNEL_BG=WSCOL_BLACK
-options 	WSDISPLAY_COMPAT_PCVT		# emulate some ioctls
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
-options 	WSDISPLAY_COMPAT_RAWKBD		# can get raw scancodes
-options 	WSDISPLAY_DEFAULTSCREENS=4
-
 # SCSI bus support
 scsibus* at scsi?
 
@@ -288,8 +261,6 @@ pseudo-device	swcrypto		# software crypto implementation
 # disk/mass storage pseudo-devices
 #pseudo-device	md			# memory disk device (ramdisk)
 #pseudo-device	vnd			# disk-like interface to files
-#pseudo-device	fss			# file system snapshot device
-#pseudo-device	putter			# for puffs and pud
 
 # network pseudo-devices
 #pseudo-device	bpfilter		# Berkeley packet filter
@@ -304,4 +275,3 @@ pseudo-device	clockctl		# NTP clockctl
 
 # wscons pseudo-devices
 pseudo-device	wsmux			# mouse & keyboard multiplexor
-pseudo-device	wsfont

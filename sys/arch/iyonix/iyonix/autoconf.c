@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.15 2012/10/27 17:17:58 chs Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.12.18.1 2012/08/08 15:51:05 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.15 2012/10/27 17:17:58 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.12.18.1 2012/08/08 15:51:05 martin Exp $");
 
 #include "opt_md.h"
 
@@ -53,6 +53,9 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.15 2012/10/27 17:17:58 chs Exp $");
 
 #include <acorn32/include/bootconfig.h>
 
+struct device *booted_device;
+int booted_partition;
+
 extern struct bootconfig bootconfig;
 
 /*
@@ -62,7 +65,7 @@ void
 cpu_rootconf(void)
 {
 	aprint_normal("boot device: %s\n",
-	    booted_device != NULL ? device_xname(booted_device) : "<unknown>");
+	    booted_device != NULL ? booted_device->dv_xname : "<unknown>");
 	rootconf();
 }
 
@@ -97,15 +100,15 @@ cpu_configure(void)
 		if (prop_dictionary_set(device_properties(dev),		\
 						x, y) == false) {	\
 			printf("WARNING: unable to set " x " "		\
-			   "property for %s\n", device_xname(dev));	\
+			   "property for %s\n", dev->dv_xname);		\
 		}							\
 		prop_object_release(y);					\
 	} while (/*CONSTCOND*/0)
 
 void
-device_register(device_t dev, void *aux)
+device_register(struct device *dev, void *aux)
 {
-	device_t pdev;
+	struct device *pdev;
 
 	if ((pdev = device_parent(dev)) != NULL &&
 	    device_is_a(pdev, "pci")) {

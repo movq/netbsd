@@ -1,4 +1,5 @@
-/*	$NetBSD: uhcivar.h,v 1.52 2013/01/29 00:00:15 christos Exp $	*/
+/*	$NetBSD: uhcivar.h,v 1.48 2010/11/03 22:34:23 dyoung Exp $	*/
+/*	$FreeBSD: src/sys/dev/usb/uhcivar.h,v 1.14 1999/11/17 22:33:42 n_hibma Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -29,11 +30,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
-#ifndef _UHCIVAR_H_
-#define _UHCIVAR_H_
-
-#include <sys/pool.h>
 
 /*
  * To avoid having 1024 TDs for each isochronous transfer we introduce
@@ -137,10 +133,6 @@ typedef struct uhci_softc {
 	bus_space_handle_t ioh;
 	bus_size_t sc_size;
 
-	kmutex_t sc_lock;
-	kmutex_t sc_intr_lock;
-	kcondvar_t sc_softwake_cv;
-
 	uhci_physaddr_t *sc_pframes;
 	usb_dma_t sc_dma;
 	struct uhci_vframe sc_vframes[UHCI_VFRAMELIST_COUNT];
@@ -157,7 +149,7 @@ typedef struct uhci_softc {
 	uhci_soft_td_t *sc_freetds;	/* TD free list */
 	uhci_soft_qh_t *sc_freeqhs;	/* QH free list */
 
-	pool_cache_t sc_xferpool;	/* free xfer pool */
+	SIMPLEQ_HEAD(, usbd_xfer) sc_free_xfers; /* free xfers */
 
 	u_int8_t sc_addr;		/* device address */
 	u_int8_t sc_conf;		/* device configuration */
@@ -165,7 +157,9 @@ typedef struct uhci_softc {
 	u_int8_t sc_saved_sof;
 	u_int16_t sc_saved_frnum;
 
+#ifdef USB_USE_SOFTINTR
 	char sc_softwake;
+#endif /* USB_USE_SOFTINTR */
 
 	char sc_isreset;
 	char sc_suspend;
@@ -181,16 +175,21 @@ typedef struct uhci_softc {
 	char sc_vendor[32];		/* vendor string for root hub */
 	int sc_id_vendor;		/* vendor ID for root hub */
 
+#if defined(__NetBSD__) || defined(__OpenBSD__)
 	device_t sc_child;		/* /dev/usb# device */
+#endif
+#ifdef __NetBSD__
 	struct usb_dma_reserve sc_dma_reserve;
+#endif
 } uhci_softc_t;
 
 usbd_status	uhci_init(uhci_softc_t *);
 int		uhci_intr(void *);
+#if defined(__NetBSD__) || defined(__OpenBSD__)
 int		uhci_detach(uhci_softc_t *, int);
 void		uhci_childdet(device_t, device_t);
 int		uhci_activate(device_t, enum devact);
 bool		uhci_resume(device_t, const pmf_qual_t *);
 bool		uhci_suspend(device_t, const pmf_qual_t *);
+#endif
 
-#endif /* _UHCIVAR_H_ */

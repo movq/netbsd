@@ -1,4 +1,4 @@
-/*	$NetBSD: xenpmap.h,v 1.37 2012/06/30 22:50:36 jym Exp $	*/
+/*	$NetBSD: xenpmap.h,v 1.33.2.2 2012/07/02 21:01:48 jdc Exp $	*/
 
 /*
  *
@@ -76,11 +76,29 @@ void xen_kpm_sync(struct pmap *, int);
 
 extern unsigned long *xpmap_phys_to_machine_mapping;
 
+/*   
+ * On Xen-2, the start of the day virtual memory starts at KERNTEXTOFF
+ * (0xc0100000). On Xen-3 for domain0 it starts at KERNBASE (0xc0000000).
+ * So the offset between physical and virtual address is different on
+ * Xen-2 and Xen-3 for domain0.
+ * starting with xen-3.0.2, we can add notes so that virtual memory starts
+ * at KERNBASE for domU as well.
+ */  
+#if defined(DOM0OPS) || !defined(XEN_COMPAT_030001)
+#define XPMAP_OFFSET	0
+#else
+#define	XPMAP_OFFSET	(KERNTEXTOFF - KERNBASE)
+#endif
+
+#define mfn_to_pfn(mfn) (machine_to_phys_mapping[(mfn)])
+#define pfn_to_mfn(pfn) (xpmap_phys_to_machine_mapping[(pfn)])
+
 static __inline paddr_t
 xpmap_mtop_masked(paddr_t mpa)
 {
 	return (
-	    (paddr_t)machine_to_phys_mapping[mpa >> PAGE_SHIFT] << PAGE_SHIFT);
+	    ((paddr_t)machine_to_phys_mapping[mpa >> PAGE_SHIFT] << PAGE_SHIFT)
+	    + XPMAP_OFFSET);
 }
 
 static __inline paddr_t
@@ -92,35 +110,14 @@ xpmap_mtop(paddr_t mpa)
 static __inline paddr_t
 xpmap_ptom_masked(paddr_t ppa)
 {
-	return (
-	    (paddr_t)xpmap_phys_to_machine_mapping[ppa >> PAGE_SHIFT]
-	    << PAGE_SHIFT);
+	return (((paddr_t)xpmap_phys_to_machine_mapping[(ppa -
+	    XPMAP_OFFSET) >> PAGE_SHIFT]) << PAGE_SHIFT);
 }
 
 static __inline paddr_t
 xpmap_ptom(paddr_t ppa)
 {
 	return (xpmap_ptom_masked(ppa) | (ppa & ~PG_FRAME));
-}
-
-static __inline void
-xpmap_ptom_map(paddr_t ppa, paddr_t mpa)
-{
-	xpmap_phys_to_machine_mapping[ppa >> PAGE_SHIFT] = mpa >> PAGE_SHIFT;
-}
-
-static __inline void
-xpmap_ptom_unmap(paddr_t ppa)
-{
-	xpmap_phys_to_machine_mapping[ppa >> PAGE_SHIFT] = INVALID_P2M_ENTRY;
-}
-
-static __inline bool
-xpmap_ptom_isvalid(paddr_t ppa)
-{
-	return (
-	    xpmap_phys_to_machine_mapping[ppa >> PAGE_SHIFT]
-	    != INVALID_P2M_ENTRY);
 }
 
 static inline void

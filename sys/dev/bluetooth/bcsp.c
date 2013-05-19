@@ -1,4 +1,4 @@
-/*	$NetBSD: bcsp.c,v 1.21 2012/06/02 21:36:43 dsl Exp $	*/
+/*	$NetBSD: bcsp.c,v 1.20.8.1 2012/06/12 17:13:57 riz Exp $	*/
 /*
  * Copyright (c) 2007 KIYOHARA Takashi
  * All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcsp.c,v 1.21 2012/06/02 21:36:43 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcsp.c,v 1.20.8.1 2012/06/12 17:13:57 riz Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

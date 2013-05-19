@@ -1,4 +1,4 @@
-/*	$NetBSD: lookup.c,v 1.4 2012/06/05 00:41:34 christos Exp $	*/
+/*	$NetBSD: lookup.c,v 1.3.6.1 2012/06/05 21:15:03 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")

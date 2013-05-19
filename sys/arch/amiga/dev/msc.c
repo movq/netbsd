@@ -1,4 +1,4 @@
-/*	$NetBSD: msc.c,v 1.45 2012/10/27 17:17:30 chs Exp $ */
+/*	$NetBSD: msc.c,v 1.44 2011/06/03 00:52:22 matt Exp $ */
 
 /*
  * Copyright (c) 1982, 1986, 1990 The Regents of the University of California.
@@ -93,7 +93,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msc.c,v 1.45 2012/10/27 17:17:30 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msc.c,v 1.44 2011/06/03 00:52:22 matt Exp $");
 
 #include "msc.h"
 
@@ -231,11 +231,11 @@ const struct cdevsw msc_cdevsw = {
 };
 
 int
-mscmatch(device_t parent, cfdata_t cf, void *aux)
+mscmatch(device_t pdp, cfdata_t cfp, void *auxp)
 {
 	struct zbus_args *zap;
 
-	zap = aux;
+	zap = auxp;
 	if (zap->manid == 514 && (zap->prodid == 70 || zap->prodid == 69))
 		return(1);
 
@@ -243,7 +243,7 @@ mscmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-mscattach(device_t parent, device_t self, void *aux)
+mscattach(device_t pdp, device_t dp, void *auxp)
 {
 	volatile struct mscmemory *mscmem;
 	struct mscdevice *msc;
@@ -251,8 +251,8 @@ mscattach(device_t parent, device_t self, void *aux)
 	int unit;
 	int Count;
 
-	zap = aux;
-	unit = device_unit(self);
+	zap = (struct zbus_args *)auxp;
+	unit = device_unit(dp);
 
 	/*
 	 * Make config msgs look nicer.

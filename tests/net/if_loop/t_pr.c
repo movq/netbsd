@@ -1,4 +1,4 @@
-/*	$NetBSD: t_pr.c,v 1.7 2012/03/18 09:46:50 jruoho Exp $	*/
+/*	$NetBSD: t_pr.c,v 1.6 2011/04/26 18:42:08 martin Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: t_pr.c,v 1.7 2012/03/18 09:46:50 jruoho Exp $");
+__RCSID("$NetBSD: t_pr.c,v 1.6 2011/04/26 18:42:08 martin Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -154,8 +154,8 @@ ATF_TC(loopmtu);
 ATF_TC_HEAD(loopmtu, tc)
 {
 
-	atf_tc_set_md_var(tc, "descr",
-	    "test lo0 fragmentation (PR kern/43664)");
+	atf_tc_set_md_var(tc, "descr", "test lo0 fragmentation");
+	/* PR kern/43664 */
 }
 
 ATF_TC_BODY(loopmtu, tc)
@@ -178,6 +178,11 @@ ATF_TC_BODY(loopmtu, tc)
 	sin.sin_port = htons(12345);
 	sin.sin_addr.s_addr = inet_addr("127.0.0.1");
 
+	/*
+	 * Should not fail anymore, PR has been fixed...
+	 *
+	 * atf_tc_expect_signal(SIGABRT, "PR kern/43664");
+	 */
 	if (rump_sys_sendto(s, data, sizeof(data), 0,
 	    (struct sockaddr *)&sin, sizeof(sin)) == -1)
 		atf_tc_fail_errno("sendto failed");
@@ -187,8 +192,8 @@ ATF_TC(loopmtu_csum);
 ATF_TC_HEAD(loopmtu_csum, tc)
 {
 
-	atf_tc_set_md_var(tc, "descr",
-	    "test lo0 fragmentation with checksums (PR kern/43664)");
+	atf_tc_set_md_var(tc, "descr", "test lo0 fragmentation with checksums");
+	/* PR kern/43664 */
 }
 
 ATF_TC_BODY(loopmtu_csum, tc)
@@ -213,6 +218,11 @@ ATF_TC_BODY(loopmtu_csum, tc)
 	sin.sin_port = htons(12345);
 	sin.sin_addr.s_addr = inet_addr("127.0.0.1");
 
+	/*
+	 * Should not fail anymore, PR has been fixed...
+	 *
+	 * atf_tc_expect_signal(SIGABRT, "PR kern/43664");
+	 */
 	if (rump_sys_sendto(s, data, sizeof(data), 0,
 	    (struct sockaddr *)&sin, sizeof(sin)) == -1)
 		atf_tc_fail_errno("sendto failed");

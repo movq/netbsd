@@ -1,4 +1,4 @@
-/*	$NetBSD: armadillo9_pcic.c,v 1.2 2012/10/27 17:17:46 chs Exp $	*/
+/*	$NetBSD: armadillo9_pcic.c,v 1.1 2005/11/13 06:33:05 hamajima Exp $	*/
 
 /*
  * Copyright (c) 2005 HAMAJIMA Katsuomi. All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: armadillo9_pcic.c,v 1.2 2012/10/27 17:17:46 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: armadillo9_pcic.c,v 1.1 2005/11/13 06:33:05 hamajima Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,11 +43,15 @@ int armadillo9pcic_debug = A9PCIC_DEBUG;
 #define DPRINTFN(n,x)   
 #endif  
 
-static int armadillo9pcic_match(device_t, cfdata_t, void *);
-static void armadillo9pcic_attach(device_t, device_t, void *);
+struct armadillo9pcic_softc {
+	struct eppcic_softc	sc_dev;
+};
 
-CFATTACH_DECL_NEW(armadillo9pcic, 0,
-    armadillo9pcic_match, armadillo9pcic_attach, NULL, NULL);
+static int armadillo9pcic_match(struct device *, struct cfdata *, void *);
+static void armadillo9pcic_attach(struct device *, struct device *, void *);
+
+CFATTACH_DECL(armadillo9pcic, sizeof(struct armadillo9pcic_softc),
+	      armadillo9pcic_match, armadillo9pcic_attach, NULL, NULL);
 
 static int armadillo9pcic_card_mode(void *, int);
 static int armadillo9pcic_power_capability(void *, int);
@@ -60,13 +64,13 @@ struct eppcic_chipset_tag armadillo9pcic_tag = {
 };
 
 static int
-armadillo9pcic_match(device_t parent, cfdata_t match, void *aux)
+armadillo9pcic_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	return 1;
 }
 
 static void
-armadillo9pcic_attach(device_t parent, device_t self, void *aux)
+armadillo9pcic_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct epsoc_attach_args *sa = aux;
 
@@ -96,7 +100,7 @@ armadillo9pcic_power_capability(void *self, int socket)
 static int
 armadillo9pcic_power_ctl(void *self, int socket, int onoff)
 {
-	struct eppcic_softc *sc = device_private(self);
+	struct eppcic_softc *sc = (struct eppcic_softc *)self;
 
 	DPRINTFN(1, ("armadillo9pcic_power_ctl: %s\n",onoff?"on":"off"));
 

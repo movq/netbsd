@@ -1,4 +1,4 @@
-/*$NetBSD: at91tctmr.c,v 1.7 2012/11/12 18:00:36 skrll Exp $*/
+/*$NetBSD: at91tctmr.c,v 1.6 2011/11/04 17:11:19 aymeric Exp $*/
 
 /*
  * AT91 Timer Counter (TC) based clock functions
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at91tctmr.c,v 1.7 2012/11/12 18:00:36 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at91tctmr.c,v 1.6 2011/11/04 17:11:19 aymeric Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -134,18 +134,18 @@ usec_to_timer_count(uint32_t usec)
 #endif
 
 /* macros to simplify writing to the timer controller */
-static inline uint32_t
+static inline u_int32_t
 READ_TC(struct at91tctmr_softc *sc, uint offset)
 {
-	volatile uint32_t *addr = (void*)(sc->sc_addr + offset);
+	volatile u_int32_t *addr = (void*)(sc->sc_addr + offset);
 	return *addr;
 }
 
 //bus_space_read_4(sc->sc_iot, sc->sc_ioh, offset)
 static inline void
-WRITE_TC(struct at91tctmr_softc *sc, uint offset, uint32_t value)
+WRITE_TC(struct at91tctmr_softc *sc, uint offset, u_int32_t value)
 {
-	volatile uint32_t *addr = (void*)(sc->sc_addr + offset);
+	volatile u_int32_t *addr = (void*)(sc->sc_addr + offset);
 	*addr = value;
 }
 
@@ -197,7 +197,7 @@ at91tctmr_attach(device_t parent, device_t self, void *aux)
     WRITE_TC(sc, TC_IDR, -1);	/* make sure interrupts are disabled	*/
 
     /* find divider */
-    uint32_t cmr = 0;
+    u_int32_t cmr = 0;
     if (AT91_MSTCLK / 2U / HZ <= 65536) {
       sc->sc_timerclock = AT91_MSTCLK / 2U;
       cmr = TC_CMR_TCCLKS_MCK_DIV_2;
@@ -300,7 +300,7 @@ cpu_initclocks(void)
 static void udelay(unsigned int usec)
 {
     struct at91tctmr_softc *sc = at91tctmr_sc;
-    uint32_t prev_cvr, cvr, divi = READ_TC(sc, TC_RC), diff;
+    u_int32_t prev_cvr, cvr, divi = READ_TC(sc, TC_RC), diff;
     int prev_ticks, ticks, ticks2;
     unsigned footick = (sc->sc_timerclock * 64ULL / 1000000UL);
 

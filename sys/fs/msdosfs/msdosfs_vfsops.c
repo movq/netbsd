@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_vfsops.c,v 1.101 2013/04/15 14:10:59 jakllsch Exp $	*/
+/*	$NetBSD: msdosfs_vfsops.c,v 1.93.6.1 2012/07/05 17:36:31 riz Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msdosfs_vfsops.c,v 1.101 2013/04/15 14:10:59 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msdosfs_vfsops.c,v 1.93.6.1 2012/07/05 17:36:31 riz Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -104,7 +104,7 @@ int msdosfs_mountfs(struct vnode *, struct mount *, struct lwp *,
 static int update_mp(struct mount *, struct msdosfs_args *);
 
 MALLOC_JUSTDEFINE(M_MSDOSFSMNT, "MSDOSFS mount", "MSDOS FS mount structure");
-MALLOC_JUSTDEFINE(M_MSDOSFSFAT, "MSDOSFS FAT", "MSDOS FS FAT table");
+MALLOC_JUSTDEFINE(M_MSDOSFSFAT, "MSDOSFS fat", "MSDOS FS fat table");
 MALLOC_JUSTDEFINE(M_MSDOSFSTMP, "MSDOSFS temp", "MSDOS FS temp. structures");
 
 #define ROOTNAME "root_device"
@@ -361,11 +361,10 @@ msdosfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 			 */
 			devvp = pmp->pm_devvp;
 			vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
-			error = kauth_authorize_system(l->l_cred,
-			    KAUTH_SYSTEM_MOUNT, KAUTH_REQ_SYSTEM_MOUNT_DEVICE,
-			    mp, devvp, KAUTH_ARG(VREAD | VWRITE));
+			error = genfs_can_mount(devvp, VREAD | VWRITE,
+			    l->l_cred);
 			VOP_UNLOCK(devvp);
-			DPRINTF(("KAUTH_REQ_SYSTEM_MOUNT_DEVICE %d\n", error));
+			DPRINTF(("genfs_can_mount %d\n", error));
 			if (error)
 				return (error);
 
@@ -405,11 +404,10 @@ msdosfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	if ((mp->mnt_flag & MNT_RDONLY) == 0)
 		accessmode |= VWRITE;
 	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
-	error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_MOUNT,
-	    KAUTH_REQ_SYSTEM_MOUNT_DEVICE, mp, devvp, KAUTH_ARG(accessmode));
+	error = genfs_can_mount(devvp, accessmode, l->l_cred);
 	VOP_UNLOCK(devvp);
 	if (error) {
-		DPRINTF(("KAUTH_REQ_SYSTEM_MOUNT_DEVICE %d\n", error));
+		DPRINTF(("genfs_can_mount %d\n", error));
 		vrele(devvp);
 		return (error);
 	}
@@ -493,7 +491,7 @@ msdosfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l, struct msd
 		goto error_exit;
 
 	error = getdisksize(devvp, &psize, &secsize);
-	if (error) {
+	if (error || secsize == 0) {
 		if (argp->flags & MSDOSFSMNT_GEMDOSFS)
 			goto error_exit;
 
@@ -506,7 +504,7 @@ msdosfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l, struct msd
 	if (argp->flags & MSDOSFSMNT_GEMDOSFS) {
 		bsize = secsize;
 		if (bsize != 512) {
-			DPRINTF(("Invalid block bsize %d for GEMDOS\n", bsize));
+			DPRINTF(("Invalid block bsize %d for gemdos\n", bsize));
 			error = EINVAL;
 			goto error_exit;
 		}
@@ -604,9 +602,9 @@ msdosfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l, struct msd
 
 	if (argp->flags & MSDOSFSMNT_GEMDOSFS) {
 		if (FAT32(pmp)) {
-			DPRINTF(("FAT32 for GEMDOS\n"));
+			DPRINTF(("fat32 for gemdos\n"));
 			/*
-			 * GEMDOS doesn't know FAT32.
+			 * GEMDOS doesn't know fat32.
 			 */
 			error = EINVAL;
 			goto error_exit;
@@ -625,12 +623,12 @@ msdosfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l, struct msd
 		  || (pmp->pm_HugeSectors == 0)
 		  || (pmp->pm_HugeSectors * (pmp->pm_BytesPerSec / bsize)
 		      > psize)) {
-			DPRINTF(("consistency checks for GEMDOS\n"));
+			DPRINTF(("consistency checks for gemdos\n"));
 			error = EINVAL;
 			goto error_exit;
 		}
 		/*
-		 * XXX - Many parts of the msdosfs driver seem to assume that
+		 * XXX - Many parts of the msdos fs driver seem to assume that
 		 * the number of bytes per logical sector (BytesPerSec) will
 		 * always be the same as the number of bytes per disk block
 		 * Let's pretend it is.
@@ -687,7 +685,7 @@ msdosfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l, struct msd
 		    <= ((CLUST_RSRVD - CLUST_FIRST) & FAT12_MASK)) {
 			/*
 			 * This will usually be a floppy disk. This size makes
-			 * sure that one FAT entry will not be split across
+			 * sure that one fat entry will not be split across
 			 * multiple blocks.
 			 */
 			pmp->pm_fatmask = FAT12_MASK;
@@ -722,18 +720,6 @@ msdosfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l, struct msd
 	if (pmp->pm_bpcluster ^ (1 << pmp->pm_cnshift)) {
 		DPRINTF(("bpcluster %lu cnshift %lu\n", 
 		    pmp->pm_bpcluster, pmp->pm_cnshift));
-		error = EINVAL;
-		goto error_exit;
-	}
-
-	/*
-	 * Cluster size must be within limit of MAXBSIZE.
-	 * Many FAT filesystems will not have clusters larger than
-	 * 32KiB due to limits in Windows versions before Vista.
-	 */
-	if (pmp->pm_bpcluster > MAXBSIZE) {
-		DPRINTF(("bpcluster %lu > MAXBSIZE %d\n",
-		    pmp->pm_bpcluster, MAXBSIZE));
 		error = EINVAL;
 		goto error_exit;
 	}
@@ -775,8 +761,7 @@ msdosfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l, struct msd
 	 * XXX
 	 */
 	if (pmp->pm_fsinfo) {
-		if ((pmp->pm_nxtfree == 0xffffffffUL) ||
-		    (pmp->pm_nxtfree > pmp->pm_maxcluster))
+		if (pmp->pm_nxtfree == (u_long)-1)
 			pmp->pm_fsinfo = 0;
 	}
 
@@ -784,7 +769,7 @@ msdosfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l, struct msd
 	 * Allocate memory for the bitmap of allocated clusters, and then
 	 * fill it in.
 	 */
-	pmp->pm_inusemap = malloc(((pmp->pm_maxcluster + N_INUSEBITS)
+	pmp->pm_inusemap = malloc(((pmp->pm_maxcluster + N_INUSEBITS - 1)
 				   / N_INUSEBITS)
 				  * sizeof(*pmp->pm_inusemap),
 				  M_MSDOSFSFAT, M_WAITOK);
@@ -804,9 +789,9 @@ msdosfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l, struct msd
 	}
 
 	/*
-	 * If they want FAT updates to be synchronous then let them suffer
+	 * If they want fat updates to be synchronous then let them suffer
 	 * the performance degradation in exchange for the on disk copy of
-	 * the FAT being correct just about all the time.  I suppose this
+	 * the fat being correct just about all the time.  I suppose this
 	 * would be a good thing to turn on if the kernel is still flakey.
 	 */
 	if (mp->mnt_flag & MNT_SYNCHRONOUS)
@@ -959,14 +944,14 @@ msdosfs_sync(struct mount *mp, int waitfor, kauth_cred_t cred)
 	int error, allerror = 0;
 
 	/*
-	 * If we ever switch to not updating all of the FATs all the time,
+	 * If we ever switch to not updating all of the fats all the time,
 	 * this would be the place to update them from the first one.
 	 */
 	if (pmp->pm_fmod != 0) {
 		if (pmp->pm_flags & MSDOSFSMNT_RONLY)
 			panic("msdosfs_sync: rofs mod");
 		else {
-			/* update FATs here */
+			/* update fats here */
 		}
 	}
 	/* Allocate a marker vnode. */

@@ -1,4 +1,4 @@
-/*	$NetBSD: map_object.c,v 1.51 2013/05/09 15:38:14 christos Exp $	 */
+/*	$NetBSD: map_object.c,v 1.43 2011/08/13 22:25:20 christos Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: map_object.c,v 1.51 2013/05/09 15:38:14 christos Exp $");
+__RCSID("$NetBSD: map_object.c,v 1.43 2011/08/13 22:25:20 christos Exp $");
 #endif /* not lint */
 
 #include <errno.h>
@@ -105,7 +105,7 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 #endif
 
 	if (sb != NULL && sb->st_size < (off_t)sizeof (Elf_Ehdr)) {
-		_rtld_error("%s: not ELF file (too short)", path);
+		_rtld_error("%s: unrecognized file format1", path);
 		return NULL;
 	}
 
@@ -125,12 +125,9 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 		goto bad;
 	}
 	/* Make sure the file is valid */
-	if (memcmp(ELFMAG, ehdr->e_ident, SELFMAG) != 0) {
-		_rtld_error("%s: not ELF file (magic number bad)", path);
-		goto bad;
-	}
-	if (ehdr->e_ident[EI_CLASS] != ELFCLASS) {
-		_rtld_error("%s: invalid ELF class %x; expected %x", path,
+	if (memcmp(ELFMAG, ehdr->e_ident, SELFMAG) != 0 ||
+	    ehdr->e_ident[EI_CLASS] != ELFCLASS) {
+		_rtld_error("%s: unrecognized file format2 [%x != %x]", path,
 		    ehdr->e_ident[EI_CLASS], ELFCLASS);
 		goto bad;
 	}
@@ -188,40 +185,28 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 			if (nsegs < 2)
 				segs[nsegs] = phdr;
 			++nsegs;
-
-#if ELFSIZE == 64
-#define	PRImemsz	PRIu64
-#else
-#define PRImemsz	PRIu32
-#endif
-			dbg(("%s: %s %p phsize %" PRImemsz, obj->path, "PT_LOAD",
+			dbg(("%s: %s %p phsize %zu", obj->path, "PT_LOAD",
 			    (void *)(uintptr_t)phdr->p_vaddr, phdr->p_memsz));
 			break;
 
 		case PT_PHDR:
 			phdr_vaddr = phdr->p_vaddr;
 			phdr_memsz = phdr->p_memsz;
-			dbg(("%s: %s %p phsize %" PRImemsz, obj->path, "PT_PHDR",
+			dbg(("%s: %s %p phsize %zu", obj->path, "PT_PHDR",
 			    (void *)(uintptr_t)phdr->p_vaddr, phdr->p_memsz));
 			break;
-
+		
 		case PT_DYNAMIC:
 			obj->dynamic = (void *)(uintptr_t)phdr->p_vaddr;
-			dbg(("%s: %s %p phsize %" PRImemsz, obj->path, "PT_DYNAMIC",
+			dbg(("%s: %s %p phsize %zu", obj->path, "PT_DYNAMIC",
 			    (void *)(uintptr_t)phdr->p_vaddr, phdr->p_memsz));
 			break;
 
 #if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
 		case PT_TLS:
 			phtls = phdr;
-			dbg(("%s: %s %p phsize %" PRImemsz, obj->path, "PT_TLS",
+			dbg(("%s: %s %p phsize %zu", obj->path, "PT_TLS",
 			    (void *)(uintptr_t)phdr->p_vaddr, phdr->p_memsz));
-			break;
-#endif
-#ifdef __ARM_EABI__
-		case PT_ARM_EXIDX:
-			obj->exidx_start = (void *)(uintptr_t)phdr->p_vaddr;
-			obj->exidx_sz = phdr->p_memsz;
 			break;
 #endif
 		}
@@ -401,10 +386,6 @@ _rtld_map_object(const char *path, int fd, const struct stat *sb)
 		obj->interp = (void *)(obj->relocbase + (Elf_Addr)(uintptr_t)obj->interp);
 	if (obj->phdr_loaded)
 		obj->phdr =  (void *)(obj->relocbase + (Elf_Addr)(uintptr_t)obj->phdr);
-#ifdef __ARM_EABI__
-	if (obj->exidx_start)
-		obj->exidx_start = (void *)(obj->relocbase + (Elf_Addr)(uintptr_t)obj->exidx_start);
-#endif
 
 	return obj;
 
@@ -421,7 +402,6 @@ void
 _rtld_obj_free(Obj_Entry *obj)
 {
 	Objlist_Entry *elm;
-	Name_Entry *entry;
 
 #if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
 	if (obj->tls_done)
@@ -432,10 +412,6 @@ _rtld_obj_free(Obj_Entry *obj)
 		Needed_Entry *needed = obj->needed;
 		obj->needed = needed->next;
 		xfree(needed);
-	}
-	while ((entry = SIMPLEQ_FIRST(&obj->names)) != NULL) {
-		SIMPLEQ_REMOVE_HEAD(&obj->names, link);
-		xfree(entry);
 	}
 	while ((elm = SIMPLEQ_FIRST(&obj->dldags)) != NULL) {
 		SIMPLEQ_REMOVE_HEAD(&obj->dldags, link);
@@ -459,7 +435,6 @@ _rtld_obj_new(void)
 	Obj_Entry *obj;
 
 	obj = CNEW(Obj_Entry);
-	SIMPLEQ_INIT(&obj->names);
 	SIMPLEQ_INIT(&obj->dldags);
 	SIMPLEQ_INIT(&obj->dagmembers);
 	return obj;

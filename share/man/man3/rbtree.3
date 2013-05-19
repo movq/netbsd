@@ -1,4 +1,4 @@
-.\"     $NetBSD: rbtree.3,v 1.8 2013/03/13 13:38:05 riastradh Exp $
+.\"     $NetBSD: rbtree.3,v 1.5.6.1 2012/09/03 18:41:15 riz Exp $
 .\"
 .\" Copyright (c) 2010 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd March 13, 2013
+.Dd August 19, 2012
 .Dt RBTREE 3
 .Os
 .Sh NAME
@@ -50,13 +50,7 @@
 .Ft void *
 .Fn rb_tree_find_node_leq "rb_tree_t *rbt" "const void *key"
 .Ft void *
-.Fn rb_tree_iterate "rb_tree_t *rbt" "void *rb" "unsigned int direction"
-.Ft void *
-.Fn RB_TREE_MIN "rb_tree_t *rbt"
-.Ft void *
-.Fn RB_TREE_MAX "rb_tree_t *rbt"
-.Fn RB_TREE_FOREACH "void *rb" "rb_tree_t *rbt"
-.Fn RB_TREE_FOREACH_REVERSE "void *rb" "rb_tree_t *rbt"
+.Fn rb_tree_iterate "rb_tree_t *rbt" "void *rb" "const unsigned int direction"
 .Sh DESCRIPTION
 .Nm
 provides red-black trees.
@@ -80,7 +74,7 @@ The maximum height of a red-black tree is 2lg (n+1).
 .It Vt rb_tree_t
 A red-black tree.
 .It Vt typedef signed int \
-(* rbto_compare_nodes_fn)(void *context, const void *node1, const void *node2);
+(*const rbto_compare_nodes_fn)(void *context, const void *node1, const void *node2);
 The node-comparison operator.
 Defines an ordering on nodes.
 Returns a negative value if the first node
@@ -97,7 +91,7 @@ and the second node
 .Ar node2
 are identical according to the ordering.
 .It Vt typedef signed int \
-(* rbto_compare_key_fn)(void *context, const void *node, const void *key);
+(*const rbto_compare_key_fn)(void *context, const void *node, const void *key);
 The node-key comparison operator.
 Defines the order of nodes and keys.
 Returns a negative value if the node
@@ -196,7 +190,7 @@ or, if
 .Fa rb
 is
 .Dv NULL ,
-return the first node in
+return the last node in
 .Fa rbt
 or, if the tree is empty, return
 .Dv NULL .
@@ -213,44 +207,10 @@ or, if
 .Fa rb
 is
 .Dv NULL ,
-return the last node in
+return the first node in
 .Fa rbt
 or, if the tree is empty, return
 .Dv NULL .
-.It Fn RB_TREE_MIN "rbt"
-Return the first node in
-.Fa rbt ,
-i.e. the node with the least key, or
-.Dv NULL
-if
-.Fa rbt
-is empty.
-.It Fn RB_TREE_MAX "rbt"
-Return the last node in
-.Fa rbt ,
-i.e. the node with the greatest key, or
-.Dv NULL
-if
-.Fa rbt
-is empty.
-.It Fn RB_TREE_FOREACH "rb" "rbt"
-.Nm RB_TREE_FOREACH
-is a macro to be used in the place of a
-.Dv for
-header preceding a statement to traverse the nodes in
-.Fa rbt
-from least to greatest, assigning
-.Fa rb
-to each node in turn and executing the statement.
-.It Fn RB_TREE_FOREACH_REVERSE "rb" "rbt"
-.Nm RB_TREE_FOREACH_REVERSE
-is a macro to be used in the place of a
-.Dv for
-header preceding a statement to traverse the nodes in
-.Fa rbt
-from greatest to least, assigning
-.Fa rb
-to each node in turn and executing the statement.
 .El
 .Sh CODE REFERENCES
 The

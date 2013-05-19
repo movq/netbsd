@@ -1,4 +1,4 @@
-/* $NetBSD: t_parsedate.c,v 1.7 2013/01/19 15:21:43 apb Exp $ */
+/* $NetBSD: t_parsedate.c,v 1.3 2011/12/17 19:07:34 apb Exp $ */
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -29,25 +29,22 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_parsedate.c,v 1.7 2013/01/19 15:21:43 apb Exp $");
+__RCSID("$NetBSD: t_parsedate.c,v 1.3 2011/12/17 19:07:34 apb Exp $");
 
 #include <atf-c.h>
-#include <errno.h>
-#include <stdlib.h>
-#include <time.h>
 #include <util.h>
 
 ATF_TC(dates);
 
 ATF_TC_HEAD(dates, tc)
 {
-	atf_tc_set_md_var(tc, "descr", "Test unambiguous dates"
-	    " (PR lib/44255)");
+	atf_tc_set_md_var(tc, "descr", "Test unambiguous dates");
 }
 
 ATF_TC_BODY(dates, tc)
 {
 
+//	atf_tc_expect_fail("PR lib/44255");
 	ATF_CHECK(parsedate("69-09-10", NULL, NULL) != -1);
 	ATF_CHECK(parsedate("2006-11-17", NULL, NULL) != -1);
 	ATF_CHECK(parsedate("10/1/2000", NULL, NULL) != -1);
@@ -63,13 +60,13 @@ ATF_TC(times);
 
 ATF_TC_HEAD(times, tc)
 {
-	atf_tc_set_md_var(tc, "descr", "Test times"
-	    " (PR lib/44255)");
+	atf_tc_set_md_var(tc, "descr", "Test times");
 }
 
 ATF_TC_BODY(times, tc)
 {
 
+//	atf_tc_expect_fail("PR lib/44255");
 	ATF_CHECK(parsedate("10:01", NULL, NULL) != -1);
 	ATF_CHECK(parsedate("10:12pm", NULL, NULL) != -1);
 	ATF_CHECK(parsedate("12:11:01.000012", NULL, NULL) != -1);
@@ -80,13 +77,13 @@ ATF_TC(relative);
 
 ATF_TC_HEAD(relative, tc)
 {
-	atf_tc_set_md_var(tc, "descr", "Test relative items"
-	    " (PR lib/44255)");
+	atf_tc_set_md_var(tc, "descr", "Test relative items");            
 }
 
 ATF_TC_BODY(relative, tc)
 {
 
+//	atf_tc_expect_fail("PR lib/44255");
 	ATF_CHECK(parsedate("-1 month", NULL, NULL) != -1);
 	ATF_CHECK(parsedate("last friday", NULL, NULL) != -1);
 	ATF_CHECK(parsedate("one week ago", NULL, NULL) != -1);
@@ -95,48 +92,11 @@ ATF_TC_BODY(relative, tc)
 	ATF_CHECK(parsedate("+2 years", NULL, NULL) != -1);
 }
 
-ATF_TC(atsecs);
-
-ATF_TC_HEAD(atsecs, tc)
-{
-	atf_tc_set_md_var(tc, "descr", "Test seconds past the epoch");
-}
-
-ATF_TC_BODY(atsecs, tc)
-{
-	int tzoff;
-
-	/* "@0" -> (time_t)0, regardless of timezone */
-	ATF_CHECK(parsedate("@0", NULL, NULL) == (time_t)0);
-	putenv(__UNCONST("TZ=Europe/Berlin"));
-	tzset();
-	ATF_CHECK(parsedate("@0", NULL, NULL) == (time_t)0);
-	putenv(__UNCONST("TZ=America/New_York"));
-	tzset();
-	ATF_CHECK(parsedate("@0", NULL, NULL) == (time_t)0);
-	tzoff = 0;
-	ATF_CHECK(parsedate("@0", NULL, &tzoff) == (time_t)0);
-	tzoff = 3600;
-	ATF_CHECK(parsedate("@0", NULL, &tzoff) == (time_t)0);
-	tzoff = -3600;
-	ATF_CHECK(parsedate("@0", NULL, &tzoff) == (time_t)0);
-
-	/* -1 or other negative numbers are not errors */
-	errno = 0;
-	ATF_CHECK(parsedate("@-1", NULL, &tzoff) == (time_t)-1 && errno == 0);
-	ATF_CHECK(parsedate("@-2", NULL, &tzoff) == (time_t)-2 && errno == 0);
-
-	/* junk is an error */
-	errno = 0;
-	ATF_CHECK(parsedate("@junk", NULL, NULL) == (time_t)-1 && errno != 0);
-}
-
 ATF_TP_ADD_TCS(tp)
 {
 	ATF_TP_ADD_TC(tp, dates);
 	ATF_TP_ADD_TC(tp, times);
 	ATF_TP_ADD_TC(tp, relative);
-	ATF_TP_ADD_TC(tp, atsecs);
 
 	return atf_no_error();
 }

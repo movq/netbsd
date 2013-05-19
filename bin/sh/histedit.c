@@ -1,4 +1,4 @@
-/*	$NetBSD: histedit.c,v 1.45 2012/03/20 18:42:29 matt Exp $	*/
+/*	$NetBSD: histedit.c,v 1.44 2011/07/12 16:40:41 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)histedit.c	8.2 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: histedit.c,v 1.45 2012/03/20 18:42:29 matt Exp $");
+__RCSID("$NetBSD: histedit.c,v 1.44 2011/07/12 16:40:41 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -199,7 +199,9 @@ setterm(const char *term)
 }
 
 int
-inputrc(int argc, char **argv)
+inputrc(argc, argv)
+	int argc;
+	char **argv;
 {
 	if (argc != 2) {
 		out2str("usage: inputrc file\n");

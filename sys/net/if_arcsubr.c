@@ -1,4 +1,4 @@
-/*	$NetBSD: if_arcsubr.c,v 1.64 2012/09/24 03:05:53 msaitoh Exp $	*/
+/*	$NetBSD: if_arcsubr.c,v 1.63.14.1 2012/10/23 16:19:47 riz Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Ignatios Souvatzis
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_arcsubr.c,v 1.64 2012/09/24 03:05:53 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_arcsubr.c,v 1.63.14.1 2012/10/23 16:19:47 riz Exp $");
 
 #include "opt_inet.h"
 

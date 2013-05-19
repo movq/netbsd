@@ -1,4 +1,4 @@
-/*	$NetBSD: scores.c,v 1.21 2012/06/19 05:30:44 dholland Exp $	*/
+/*	$NetBSD: scores.c,v 1.20 2010/04/24 00:56:14 dholland Exp $	*/
 
 /*
  * scores.c			 Larn is copyrighted 1986 by Noah Morgan.
@@ -26,7 +26,7 @@
  */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: scores.c,v 1.21 2012/06/19 05:30:44 dholland Exp $");
+__RCSID("$NetBSD: scores.c,v 1.20 2010/04/24 00:56:14 dholland Exp $");
 #endif				/* not lint */
 #include <sys/types.h>
 #include <sys/times.h>
@@ -118,7 +118,7 @@ static void diedsub(int);
  * returns -1 if unable to read in the scoreboard, returns 0 if all is OK
  */
 static int
-readboard(void)
+readboard()
 {
 	int             i;
 
@@ -145,7 +145,7 @@ readboard(void)
  * returns -1 if unable to write the scoreboard, returns 0 if all is OK
  */
 static int
-writeboard(void)
+writeboard()
 {
 	int             i;
 
@@ -173,7 +173,7 @@ writeboard(void)
  * returns -1 if unable to write the scoreboard, returns 0 if all is OK
  */
 int
-makeboard(void)
+makeboard()
 {
 	int    i;
 	set_score_output();
@@ -200,7 +200,7 @@ makeboard(void)
  * the winners scoreboard.
  */
 int
-hashewon(void)
+hashewon()
 {
 	int    i;
 	c[HARDGAME] = 0;
@@ -223,7 +223,8 @@ hashewon(void)
  * Returns amount actually paid.
  */
 long 
-paytaxes(long x)
+paytaxes(x)
+	long            x;
 {
 	int    i;
 	long   amt;
@@ -256,7 +257,7 @@ paytaxes(long x)
  * Returns the number of players on scoreboard that were shown
  */
 static int
-winshou(void)
+winshou()
 {
 	struct wscofmt *p;
 	int    i, j, count;
@@ -295,7 +296,8 @@ winshou(void)
  * Returns the number of players on scoreboard that were shown
  */
 static int
-shou(int x)
+shou(x)
+	int             x;
 {
 	int    i, j, n, k;
 	int             count;
@@ -349,7 +351,7 @@ shou(int x)
  */
 static char     esb[] = "The scoreboard is empty.\n";
 void
-showscores(void)
+showscores()
 {
 	int    i, j;
 	lflush();
@@ -371,7 +373,7 @@ showscores(void)
  * Returns nothing of value
  */
 void
-showallscores(void)
+showallscores()
 {
 	int    i, j;
 	lflush();
@@ -399,7 +401,7 @@ showallscores(void)
  * Returns 0 if no sorting done, else returns 1
  */
 static int
-sortboard(void)
+sortboard()
 {
 	int    i, j = 0, pos;
 	long            jdat;
@@ -438,7 +440,10 @@ sortboard(void)
  * ex.		newscore(1000, "player 1", 32, 0);
  */
 static void
-newscore(long score, char *whoo, int whyded, int winner)
+newscore(score, whoo, whyded, winner)
+	long            score;
+	int             winner, whyded;
+	char           *whoo;
 {
 	int    i;
 	long            taxes;
@@ -504,7 +509,10 @@ newscore(long score, char *whoo, int whyded, int winner)
  * Returns nothing of value
  */
 static void
-new1sub(long score, int i, char *whoo, long taxes)
+new1sub(score, i, whoo, taxes)
+	long            score, taxes;
+	int             i;
+	char           *whoo;
 {
 	struct wscofmt *p;
 	p = &winr[i];
@@ -528,7 +536,10 @@ new1sub(long score, int i, char *whoo, long taxes)
  * Returns nothing of value
  */
 static void
-new2sub(long score, int i, char *whoo, int whyded)
+new2sub(score, i, whoo, whyded)
+	long            score;
+	int             i, whyded;
+	char           *whoo;
 {
 	int    j;
 	struct scofmt *p;
@@ -590,7 +601,8 @@ new2sub(long score, int i, char *whoo, int whyded)
 
 static int      scorerror;
 void
-died(int x)
+died(x)
+	int             x;
 {
 	int    f, win;
 	char            ch;
@@ -756,7 +768,7 @@ diedsub(int x)
  * diedlog() 	Subroutine to read a log file and print it out in ascii format
  */
 void
-diedlog(void)
+diedlog()
 {
 	int    n;
 	char  *p;

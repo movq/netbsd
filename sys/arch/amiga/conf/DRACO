@@ -1,9 +1,9 @@
-# $NetBSD: DRACO,v 1.169 2013/04/27 21:43:14 christos Exp $
+# $NetBSD: DRACO,v 1.154 2012/01/24 00:19:39 rkujawa Exp $
 #
 # This file was automatically created.
 # Changes will be lost when make is run in this directory.
 #
-# Created from: # NetBSD: GENERIC.in,v 1.110 2013/01/29 21:04:55 rkujawa Exp $
+# Created from: # NetBSD: GENERIC.in,v 1.95 2012/01/19 22:43:11 rkujawa Exp $
 #
 ##
 # GENERIC machine description file
@@ -29,7 +29,7 @@ include "arch/amiga/conf/std.amiga"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.169 $"
+#ident 		"GENERIC-$Revision: 1.154 $"
 
 
 maxusers	8
@@ -51,6 +51,7 @@ options 	M060SP		# MC68060 software support (Required for 060)
 options 	INET		# IP networking support (Required)
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	GATEWAY		# Packet forwarding
@@ -58,6 +59,8 @@ options 	INET6		# IPV6
 
 #options 	MROUTING	# Multicast routing
 #options 	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 options 	NETATALK	# AppleTalk networking protocols
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
@@ -139,7 +142,6 @@ options 	COMPAT_20	# compatibility with NetBSD 2.0
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_SUNOS	# Support to run Sun (m68k) executables
 options 	COMPAT_SVR4	# Support to run SVR4 (m68k) executables
 options 	COMPAT_NOMID	# allow nonvalid machine id executables
@@ -155,6 +157,7 @@ options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 options 	SYSVSHM		# System V-like shared memory
 options 	SYSVMSG		# System V-like messages
 options 	SYSVSEM		# System V-like semaphores
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 #
 # Support for various kernel options
@@ -295,16 +298,10 @@ audio*		at toccata?
 
 # Ethernet cards:
 le*		at zbus0		# A2065, Ameristar, Ariadne
-ne*		at zbus0		# AriadneII
+ne*		at zbus0		# AriadneII, X-surf
 ed*		at zbus0		# Hydra, ASDG LanRover
 es*		at zbus0		# CEI A4066 EthernetPLUS
 qn*		at zbus0		# Quicknet
-
-xsurf*		at zbus0		# X-Surf
-ne*		at xsurfbus?		# NE2000 chip on X-Surf
-gencp*		at xsurfbus?		# clockports on X-Surf
-wdc*		at xsurfbus?		# IDE on X-Surf
-clockport*	at gencp?
 
 # Arcnet
 bah*		at zbus0		# C=/Ameristar A2060 / 560
@@ -358,9 +355,9 @@ pseudo-device	clockctl		# user control of clock subsystem
 
 pseudo-device	vnd			# vnode pseudo-disks
 #options 	VND_COMPRESSION		# compressed vnd(4)
-pseudo-device	ccd			# concatenated disk devices
-#pseudo-device	cgd			# cryptographic disk devices
-pseudo-device	raid			# RAIDframe disk driver
+pseudo-device	ccd		4	# concatenated disk devices
+#pseudo-device	cgd		4	# cryptographic disk devices
+pseudo-device	raid		8	# RAIDframe disk driver
 options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # Options to enable various other RAIDframe RAID types.
 # options 	RF_INCLUDE_EVENODD=1
@@ -379,7 +376,7 @@ pseudo-device	nsmb			# experimental - SMB requester
 # Veriexec
 #
 # a pseudo device needed for veriexec
-#pseudo-device	veriexec
+#pseudo-device	veriexec		1
 #
 # Uncomment the fingerprint methods below that are desired. Note that
 # removing fingerprint methods will have almost no impact on the kernel

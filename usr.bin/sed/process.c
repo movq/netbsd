@@ -1,4 +1,4 @@
-/*	$NetBSD: process.c,v 1.39 2013/03/17 21:02:54 uwe Exp $	*/
+/*	$NetBSD: process.c,v 1.38.8.1 2013/05/11 21:59:29 riz Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993, 1994
@@ -76,7 +76,7 @@
 #if 0
 static char sccsid[] = "@(#)process.c	8.6 (Berkeley) 4/20/94";
 #else
-__RCSID("$NetBSD: process.c,v 1.39 2013/03/17 21:02:54 uwe Exp $");
+__RCSID("$NetBSD: process.c,v 1.38.8.1 2013/05/11 21:59:29 riz Exp $");
 #endif
 #endif /* not lint */
 

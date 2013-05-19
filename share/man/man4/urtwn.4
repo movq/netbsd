@@ -1,4 +1,4 @@
-.\" $NetBSD: urtwn.4,v 1.6 2012/06/19 22:12:03 njoly Exp $
+.\" $NetBSD: urtwn.4,v 1.4.2.3 2012/08/13 23:18:23 riz Exp $
 .\" $OpenBSD: urtwn.4,v 1.15 2011/11/26 06:39:33 ckuethe Exp $
 .\"
 .\" Copyright (c) 2010 Damien Bergamini <damien.bergamini@free.fr>
@@ -27,7 +27,7 @@
 The
 .Nm
 driver supports USB 2.0 wireless network devices based on Realtek
-RTL8188CUS, RTL8188CE-VAU, RTL8188RU, and RTL8192CU chipsets.
+RTL8188CUS, RTL8188CE-VAU, RTL8188RU and RTL8192CU chipsets.
 .Pp
 The RTL8188CUS is a highly integrated 802.11n adapter that combines
 a MAC, a 1T1R capable baseband and an RF in a single chip.
@@ -84,6 +84,7 @@ which are loaded when an interface is attached:
 .It /libdata/firmware/if_urtwn/rtl8192cfw.bin
 .It /libdata/firmware/if_urtwn/rtl8192cfwU.bin
 .El
+.Ed
 .Sh HARDWARE
 The following adapters should work:
 .Pp
@@ -160,9 +161,8 @@ The
 device driver first appeared in
 .Ox 4.9
 and in
-.Nx 6.0 .
+.Nx 7.0 .
 .Sh AUTHORS
-.An -nosplit
 The
 .Nm
 driver was written by
@@ -174,7 +174,7 @@ and ported to
 .Nx
 by
 .An NONAKA Kimihiro
-.Aq nonaka@NetBSD.org .
+.Aq nonaka@netbsd.org .
 .Sh CAVEATS
 The
 .Nm

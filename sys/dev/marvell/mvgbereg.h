@@ -1,4 +1,4 @@
-/*	$NetBSD: mvgbereg.h,v 1.7 2012/11/08 15:39:30 msaitoh Exp $	*/
+/*	$NetBSD: mvgbereg.h,v 1.3.10.2 2012/11/24 18:10:10 jdc Exp $	*/
 /*
  * Copyright (c) 2007 KIYOHARA Takashi
  * All rights reserved.
@@ -233,14 +233,8 @@
 #define MVGBE_SDC_BLMR			(1 << 4)
 #define MVGBE_SDC_BLMT			(1 << 5)
 #define MVGBE_SDC_SWAPMODE		(1 << 6)
-#define MVGBE_SDC_IPGINTRX_V1_MASK	__BITS(21, 8)
-#define MVGBE_SDC_IPGINTRX_V2_MASK	(__BIT(25) | __BITS(21, 7))
-#define MVGBE_SDC_IPGINTRX_V1(x)	(((x) << 4)			\
-						& MVGBE_SDC_IPGINTRX_V1_MASK)
-#define MVGBE_SDC_IPGINTRX_V2(x)	((((x) & 0x8000) << 10) 	\
-						| (((x) & 0x7fff) << 7))
-#define MVGBE_SDC_IPGINTRX_V1_MAX	0x3fff
-#define MVGBE_SDC_IPGINTRX_V2_MAX	0xffff
+#define MVGBE_SDC_IPGINTRX_MASK		__BITS(21, 8)
+#define MVGBE_SDC_IPGINTRX(x)		__SHIFTIN(x, MVGBE_SDC_IPGINTRX_MASK)
 #define MVGBE_SDC_TXBSZ(x)		((x) << 22)
 #define MVGBE_SDC_TXBSZ_MASK		MVGBE_SDC_TXBSZ(7)
 #define MVGBE_SDC_TXBSZ_1_64BITWORDS	MVGBE_SDC_TXBSZ(0)
@@ -314,12 +308,8 @@
 #define MVGBE_ICE_ETHERINTSUM		(1 << 31)
 
 /* Port Tx FIFO Urgent Threshold (MVGBE_PTFUT) */
-#define MVGBE_PTFUT_IPGINTTX_V1_MASK	__BITS(17, 4)
-#define MVGBE_PTFUT_IPGINTTX_V2_MASK	__BITS(19, 4)
-#define MVGBE_PTFUT_IPGINTTX_V1(x)   __SHIFTIN(x, MVGBE_PTFUT_IPGINTTX_V1_MASK)
-#define MVGBE_PTFUT_IPGINTTX_V2(x)   __SHIFTIN(x, MVGBE_PTFUT_IPGINTTX_V2_MASK)
-#define MVGBE_PTFUT_IPGINTTX_V1_MAX	0x3fff
-#define MVGBE_PTFUT_IPGINTTX_V2_MAX	0xffff
+#define MVGBE_PTFUT_IPGINTTX_MASK	__BITS(17, 4)
+#define MVGBE_PTFUT_IPGINTTX(x)		__SHIFTIN(x, MVGBE_PTFUT_IPGINTTX_MASK)
 
 /* Port Rx Minimal Frame Size (MVGBE_PMFS) */
 #define MVGBE_PMFS_RXMFS(rxmfs)		(((rxmfs) - 40) & 0x7c)

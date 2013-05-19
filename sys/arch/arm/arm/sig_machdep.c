@@ -1,4 +1,4 @@
-/*	$NetBSD: sig_machdep.c,v 1.46 2013/03/04 23:12:52 matt Exp $	*/
+/*	$NetBSD: sig_machdep.c,v 1.41.2.1 2012/05/21 15:25:58 riz Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -44,7 +44,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.46 2013/03/04 23:12:52 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.41.2.1 2012/05/21 15:25:58 riz Exp $");
 
 #include <sys/mount.h>		/* XXX only needed by syscallargs.h */
 #include <sys/proc.h>
@@ -66,8 +66,8 @@ __KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.46 2013/03/04 23:12:52 matt Exp $"
 void *
 getframe(struct lwp *l, int sig, int *onstack)
 {
-	struct proc * const p = l->l_proc;
-	struct trapframe * const tf = lwp_trapframe(l);
+	struct proc *p = l->l_proc;
+	struct trapframe *tf = process_frame(l);
 
 	/* Do we need to jump onto the signal stack? */
 	*onstack = (l->l_sigstk.ss_flags & (SS_DISABLE | SS_ONSTACK)) == 0
@@ -90,14 +90,17 @@ getframe(struct lwp *l, int sig, int *onstack)
 void
 sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 {
-	struct lwp * const l = curlwp;
-	struct proc * const p = l->l_proc;
-	struct sigacts * const ps = p->p_sigacts;
-	struct trapframe * const tf = lwp_trapframe(l);
+	struct lwp *l = curlwp;
+	struct proc *p = l->l_proc;
+	struct sigacts *ps = p->p_sigacts;
+	struct trapframe *tf;
 	struct sigframe_siginfo *fp, frame;
 	int onstack, error;
 	int sig = ksi->ksi_signo;
 	sig_t catcher = SIGACTION(p, sig).sa_handler;
+
+	/* get the current frame */
+	tf = process_frame(l);
 
 	fp = getframe(l, sig, &onstack);
 	
@@ -162,8 +165,8 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 void
 cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 {
-	struct trapframe * const tf = lwp_trapframe(l);
-	__greg_t * const gr = mcp->__gregs;
+	struct trapframe *tf = process_frame(l);
+	__greg_t *gr = mcp->__gregs;
 	__greg_t ras_pc;
 
 	/* Save General Register context. */
@@ -191,8 +194,10 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 
 	*flags |= _UC_CPU;
 
-#ifdef FPU_VFP
-	vfp_getcontext(l, mcp, flags);
+#ifdef ARMFPE
+	/* Save Floating Point Register context. */
+	arm_fpe_getcontext(p, (struct fpreg *)(void *)&mcp->fpregs);
+	*flags |= _UC_FPU;
 #endif
 
 	mcp->_mc_tlsbase = (uintptr_t)l->l_private;
@@ -202,7 +207,7 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 int
 cpu_mcontext_validate(struct lwp *l, const mcontext_t *mcp)
 {
-	const __greg_t * const gr = mcp->__gregs;
+	const __greg_t *gr = mcp->__gregs;
 
 	/* Make sure the processor mode has not been tampered with. */
 	if (!VALID_R15_PSR(gr[_REG_PC], gr[_REG_CPSR]))
@@ -213,16 +218,10 @@ cpu_mcontext_validate(struct lwp *l, const mcontext_t *mcp)
 int
 cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 {
-	struct trapframe * const tf = lwp_trapframe(l);
-	const __greg_t * const gr = mcp->__gregs;
-	struct proc * const p = l->l_proc;
+	struct trapframe *tf = process_frame(l);
+	const __greg_t *gr = mcp->__gregs;
+	struct proc *p = l->l_proc;
 	int error;
-
-#ifdef FPU_VFP
-	if ((flags & _UC_FPU)
-	    && (curcpu()->ci_vfp_id == 0 || (flags & _UC_ARM_VFP) == 0))
-		return EINVAL;
-#endif
 
 	if ((flags & _UC_CPU) != 0) {
 		/* Restore General Register context. */
@@ -249,10 +248,10 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		tf->tf_spsr   = gr[_REG_CPSR];
 	}
 
-#ifdef FPU_VFP
+#ifdef ARMFPE
 	if ((flags & _UC_FPU) != 0) {
 		/* Restore Floating Point Register context. */
-		vfp_setcontext(l, mcp);
+		arm_fpe_setcontext(p, (struct fpreg *)(void *)&mcp->__fpregs);
 	}
 #endif
 

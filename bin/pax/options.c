@@ -1,4 +1,4 @@
-/*	$NetBSD: options.c,v 1.114 2012/08/09 11:05:59 christos Exp $	*/
+/*	$NetBSD: options.c,v 1.112 2011/08/31 16:24:54 plunky Exp $	*/
 
 /*-
  * Copyright (c) 1992 Keith Muller.
@@ -42,7 +42,7 @@
 #if 0
 static char sccsid[] = "@(#)options.c	8.2 (Berkeley) 4/18/94";
 #else
-__RCSID("$NetBSD: options.c,v 1.114 2012/08/09 11:05:59 christos Exp $");
+__RCSID("$NetBSD: options.c,v 1.112 2011/08/31 16:24:54 plunky Exp $");
 #endif
 #endif /* not lint */
 
@@ -62,7 +62,6 @@ __RCSID("$NetBSD: options.c,v 1.114 2012/08/09 11:05:59 christos Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <inttypes.h>
 #include <paths.h>
 #include "pax.h"
 #include "options.h"
@@ -1380,7 +1379,8 @@ tar_options(int argc, char **argv)
 }
 
 int
-mkpath(char *path)
+mkpath(path)
+	char *path;
 {
 	char *slash;
 	int done = 0;

@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.66 2013/05/11 07:35:58 skrll Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.55 2011/02/10 14:46:46 pooka Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.66 2013/05/11 07:35:58 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.55 2011/02/10 14:46:46 pooka Exp $");
 
 #include "opt_armfpe.h"
 #include "opt_pmap_debug.h"
@@ -56,7 +56,6 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.66 2013/05/11 07:35:58 skrll Exp $"
 #include <sys/proc.h>
 #include <sys/malloc.h>
 #include <sys/vnode.h>
-#include <sys/cpu.h>
 #include <sys/buf.h>
 #include <sys/pmc.h>
 #include <sys/exec.h>
@@ -64,12 +63,19 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.66 2013/05/11 07:35:58 skrll Exp $"
 
 #include <uvm/uvm_extern.h>
 
-#include <arm/vfpreg.h>
-
-#include <machine/pcb.h>
+#include <machine/cpu.h>
 #include <machine/pmap.h>
 #include <machine/reg.h>
 #include <machine/vmparam.h>
+
+#ifdef ARMFPE
+#include <arm/fpe-arm/armfpe.h>
+#endif
+
+extern pv_addr_t systempage;
+
+int process_read_regs(struct proc *p, struct reg *regs);
+int process_read_fpregs(struct proc *p, struct fpreg *regs);
 
 void lwp_trampoline(void);
 
@@ -95,11 +101,25 @@ cpu_proc_fork(struct proc *p1, struct proc *p2)
 #endif
 }
 
+void
+cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
+{
+	struct pcb *pcb = lwp_getpcb(l);
+	struct trapframe *tf = pcb->pcb_tf;
+	struct switchframe *sf = (struct switchframe *)tf - 1;
+
+	sf->sf_r4 = (u_int)func;
+	sf->sf_r5 = (u_int)arg;
+	sf->sf_sp = (u_int)tf;
+	sf->sf_pc = (u_int)lwp_trampoline;
+	pcb->pcb_un.un_32.pcb32_sp = (u_int)sf;
+}
+
 /*
  * Finish a fork operation, with LWP l2 nearly set up.
  *
  * Copy and update the pcb and trapframe, making the child ready to run.
- *
+ * 
  * Rig the child's kernel stack so that it will start out in
  * lwp_trampoline() which will call the specified func with the argument arg.
  *
@@ -111,35 +131,45 @@ void
 cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
     void (*func)(void *), void *arg)
 {
-	struct switchframe *sf;
+	struct pcb *pcb1, *pcb2;
+	struct trapframe *tf;
 	vaddr_t uv;
 
-	const struct pcb * const pcb1 = lwp_getpcb(l1);
-	struct pcb * const pcb2 = lwp_getpcb(l2);
+	pcb1 = lwp_getpcb(l1);
+	pcb2 = lwp_getpcb(l2);
 
 #ifdef PMAP_DEBUG
-	if (pmap_debug_level > 0)
+	if (pmap_debug_level >= 0)
 		printf("cpu_lwp_fork: %p %p %p %p\n", l1, l2, curlwp, &lwp0);
 #endif	/* PMAP_DEBUG */
+
+#if 0 /* XXX */
+	if (l1 == curlwp) {
+		/* Sync the PCB before we copy it. */
+		savectx(curpcb);
+	}
+#endif
+
+	l2->l_md.md_flags = l1->l_md.md_flags & MDP_VFPUSED;
+
+#ifdef FPU_VFP
+	/*
+	 * Copy the floating point state from the VFP to the PCB
+	 * if this process has state stored there.
+	 */
+	if (pcb1->pcb_vfpcpu != NULL)
+		vfp_saveregs_lwp(l1, 1);
+#endif
 
 	/* Copy the pcb */
 	*pcb2 = *pcb1;
 
-#ifdef FPU_VFP
-	/*
-	 * Disable the VFP for a newly created LWP but remember if the
-	 * VFP state is valid.
-	 */
-	pcb2->pcb_vfp.vfp_fpexc &= ~VFP_FPEXC_EN;
-	l2->l_md.md_flags = l1->l_md.md_flags & MDLWP_VFPUSED;
-#endif
-
-	/*
+	/* 
 	 * Set up the kernel stack for the process.
 	 * Note: this stack is not in use if we are forking from p1
 	 */
 	uv = uvm_lwp_getuarea(l2);
-	pcb2->pcb_ksp = uv + USPACE_SVC_STACK_TOP;
+	pcb2->pcb_un.un_32.pcb32_sp = uv + USPACE_SVC_STACK_TOP;
 
 #ifdef STACKCHECKS
 	/* Fill the kernel stack with a known pattern */
@@ -148,7 +178,7 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 #endif	/* STACKCHECKS */
 
 #ifdef PMAP_DEBUG
-	if (pmap_debug_level > 0) {
+	if (pmap_debug_level >= 0) {
 		printf("l1: pcb=%p pid=%d pmap=%p\n",
 		    pcb1, l1->l_lid, l1->l_proc->p_vmspace->vm_map.pmap);
 		printf("l2: pcb=%p pid=%d pmap=%p\n",
@@ -156,24 +186,23 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 	}
 #endif	/* PMAP_DEBUG */
 
-	struct trapframe *tf = (struct trapframe *)pcb2->pcb_ksp - 1;
-	lwp_settrapframe(l2, tf);
-	*tf = *lwp_trapframe(l1);
+#ifdef ARMFPE
+	/* Initialise a new FP context for p2 and copy the context from p1 */
+	arm_fpe_core_initcontext(FP_CONTEXT(l2));
+	arm_fpe_copycontext(FP_CONTEXT(l1), FP_CONTEXT(l2));
+#endif	/* ARMFPE */
+
+	tf = (struct trapframe *)pcb2->pcb_un.un_32.pcb32_sp - 1;
+	pcb2->pcb_tf = tf;
+	*tf = *pcb1->pcb_tf;
 
 	/*
-	 * If specified, give the child a different stack (make sure
-	 * it's 8-byte aligned).
+	 * If specified, give the child a different stack.
 	 */
 	if (stack != NULL)
-		tf->tf_usr_sp = ((vaddr_t)(stack) + stacksize) & -8;
+		tf->tf_usr_sp = (u_int)stack + stacksize;
 
-	sf = (struct switchframe *)tf - 1;
-	sf->sf_r4 = (u_int)func;
-	sf->sf_r5 = (u_int)arg;
-	sf->sf_r7 = PSR_USR32_MODE;		/* for returning to userspace */
-	sf->sf_sp = (u_int)tf;
-	sf->sf_pc = (u_int)lwp_trampoline;
-	pcb2->pcb_ksp = (u_int)sf;
+	cpu_setfunc(l2, func, arg);
 }
 
 /*
@@ -187,16 +216,33 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 void
 cpu_lwp_free(struct lwp *l, int proc)
 {
+#ifdef FPU_VFP
+	struct pcb *pcb;
+#endif
+
+#ifdef ARMFPE
+	/* Abort any active FP operation and deactivate the context */
+	arm_fpe_core_abort(FP_CONTEXT(l), NULL, NULL);
+	arm_fpe_core_changecontext(0);
+#endif	/* ARMFPE */
+
+#ifdef FPU_VFP
+	pcb = lwp_getpcb(l);
+	if (pcb->pcb_vfpcpu != NULL)
+		vfp_saveregs_lwp(l, 0);
+#endif
+
 #ifdef STACKCHECKS
 	/* Report how much stack has been used - debugging */
-	struct pcb * const pcb = lwp_getpcb(l);
-	u_char *ptr;
-	u_int loop;
+	if (l) {
+		u_char *ptr;
+		int loop;
 
-	ptr = (u_char *)pcb + USPACE_SVC_STACK_BOTTOM;
-	for (loop = 0; loop < (USPACE_SVC_STACK_TOP - USPACE_SVC_STACK_BOTTOM)
-	    && *ptr == 0xdd; ++loop, ++ptr) ;
-	log(LOG_INFO, "%u bytes of svc stack fill pattern\n", loop);
+		ptr = (u_char *)pcb + USPACE_SVC_STACK_BOTTOM;
+		for (loop = 0; loop < (USPACE_SVC_STACK_TOP - USPACE_SVC_STACK_BOTTOM)
+		    && *ptr == 0xdd; ++loop, ++ptr) ;
+		log(LOG_INFO, "%d bytes of svc stack fill pattern\n", loop);
+	}
 #endif	/* STACKCHECKS */
 }
 
@@ -218,11 +264,11 @@ vmapbuf(struct buf *bp, vsize_t len)
 
 
 #ifdef PMAP_DEBUG
-	if (pmap_debug_level > 0)
+	if (pmap_debug_level >= 0)
 		printf("vmapbuf: bp=%08x buf=%08x len=%08x\n", (u_int)bp,
 		    (u_int)bp->b_data, (u_int)len);
 #endif	/* PMAP_DEBUG */
-
+    
 	if ((bp->b_flags & B_PHYS) == 0)
 		panic("vmapbuf");
 
@@ -230,8 +276,7 @@ vmapbuf(struct buf *bp, vsize_t len)
 	faddr = trunc_page((vaddr_t)bp->b_data);
 	off = (vaddr_t)bp->b_data - faddr;
 	len = round_page(off + len);
-	taddr = uvm_km_alloc(phys_map, len, atop(faddr) & uvmexp.colormask,
-	    UVM_KMF_VAONLY | UVM_KMF_WAITVA | UVM_KMF_COLORMATCH);
+	taddr = uvm_km_alloc(phys_map, len, 0, UVM_KMF_VAONLY | UVM_KMF_WAITVA);
 	bp->b_data = (void *)(taddr + off);
 
 	/*
@@ -261,7 +306,7 @@ vunmapbuf(struct buf *bp, vsize_t len)
 	vaddr_t addr, off;
 
 #ifdef PMAP_DEBUG
-	if (pmap_debug_level > 0)
+	if (pmap_debug_level >= 0)
 		printf("vunmapbuf: bp=%08x buf=%08x len=%08x\n",
 		    (u_int)bp, (u_int)bp->b_data, (u_int)len);
 #endif	/* PMAP_DEBUG */
@@ -276,7 +321,7 @@ vunmapbuf(struct buf *bp, vsize_t len)
 	addr = trunc_page((vaddr_t)bp->b_data);
 	off = (vaddr_t)bp->b_data - addr;
 	len = round_page(off + len);
-
+	
 	pmap_remove(pmap_kernel(), addr, addr + len);
 	pmap_update(pmap_kernel());
 	uvm_km_free(phys_map, addr, len, UVM_KMF_VAONLY);

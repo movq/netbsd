@@ -1,4 +1,4 @@
-/*	$NetBSD: banner.c,v 1.21 2012/10/13 19:44:36 dholland Exp $	*/
+/*	$NetBSD: banner.c,v 1.19 2011/08/29 20:30:36 joerg Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993, 1994
@@ -39,13 +39,13 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)banner.c	8.4 (Berkeley) 4/29/95";
 #else
-__RCSID("$NetBSD: banner.c,v 1.21 2012/10/13 19:44:36 dholland Exp $");
+__RCSID("$NetBSD: banner.c,v 1.19 2011/08/29 20:30:36 joerg Exp $");
 #endif
 #endif /* not lint */
 
 /*
  * banner - prints large signs
- * banner [-dt] [-w width] [message]
+ * banner [-w width] [-d] [-t] message ...
  */
 
 #include <err.h>
@@ -1022,7 +1022,7 @@ static const unsigned char data_table[NBYTES] = {
 static char line[DWIDTH];
 static char message[MAXMSG];
 static char print[DWIDTH];
-static int debug, linen, max, nchars, pc, term, trace;
+static int debug, i, j, linen, max, nchars, pc, term, trace, x, y;
 static int width = DWIDTH;	/* -w option: scrunch letters to 80 columns */
 
 __dead static void
@@ -1035,9 +1035,6 @@ int
 main(int argc, char *argv[])
 { 
 	int ch;
-	int i, j, x, y;
-
-	x = y = 0;
 
 	while ((ch = getopt(argc, argv, "w:td")) != -1)
 		switch (ch) {
@@ -1054,7 +1051,7 @@ main(int argc, char *argv[])
 			break;
 		case '?':
 		default:
-			(void)fprintf(stderr, "usage: banner [-w width] [message]\n");
+			(void)fprintf(stderr, "usage: banner [-w width]\n");
 			exit(1);
 		}
 	argc -= optind;

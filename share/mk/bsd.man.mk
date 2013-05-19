@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.man.mk,v 1.112 2013/03/21 02:04:17 christos Exp $
+#	$NetBSD: bsd.man.mk,v 1.109 2011/09/10 16:57:35 apb Exp $
 #	@(#)bsd.man.mk	8.1 (Berkeley) 6/8/93
 
 .include <bsd.init.mk>
@@ -17,16 +17,12 @@ TMACDEPDIR?=	/usr/share/tmac
 .endif
 
 HTMLDIR?=	${DESTDIR}${MANDIR}
-.if ${MKMANDOC} == yes && !defined(NOMANDOC)
-CATDEPS?=
-.else
 CATDEPS?=	${TMACDEPDIR}/andoc.tmac \
 		${TMACDEPDIR}/doc.tmac \
 		${TMACDEPDIR}/mdoc/doc-common \
 		${TMACDEPDIR}/mdoc/doc-ditroff \
 		${TMACDEPDIR}/mdoc/doc-nroff \
 		${TMACDEPDIR}/mdoc/doc-syms
-.endif
 MANTARGET?=	cat
 
 MAN?=
@@ -202,22 +198,9 @@ realall:	${HTMLPAGES}
 
 ${_MNUMBERS:@N@.$N.html$N@}: 				# build rule
 	${_MKTARGET_FORMAT}
-.if ${MKMANDOC} == yes && !defined(NOMANDOC)
-	if test ""${NOMANDOC.${.IMPSRC:T}:tl:Q} != "yes"; then \
-	    ${TOOL_MANDOC_HTML} -Oman=${HTMLLINKS} -Ostyle=${HTMLSTYLE} \
-		${.IMPSRC} > ${.TARGET}.tmp && \
-		mv ${.TARGET}.tmp ${.TARGET}; \
-	else \
-		${TOOL_ROFF_HTML} ${.IMPSRC} ${MANCOMPRESS} \
-		    > ${.TARGET}.tmp && mv ${.TARGET}.tmp ${.TARGET}; \
-	fi
-.elif defined(USETBL)
-	${TOOL_TBL} ${.IMPSRC} | ${TOOL_ROFF_HTML} ${MANCOMPRESS} \
-	    > ${.TARGET}.tmp && mv ${.TARGET}.tmp ${.TARGET}
-.else
-	${TOOL_ROFF_HTML} ${.IMPSRC} ${MANCOMPRESS} \
-	    > ${.TARGET}.tmp && mv ${.TARGET}.tmp ${.TARGET}
-.endif
+	${TOOL_MANDOC_HTML} -Oman=${HTMLLINKS} -Ostyle=${HTMLSTYLE} \
+	    ${.IMPSRC} > ${.TARGET}.tmp && \
+	    mv ${.TARGET}.tmp ${.TARGET}
 
 .for F in ${HTMLPAGES:O:u}
 # construct installed path

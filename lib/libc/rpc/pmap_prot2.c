@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_prot2.c,v 1.17 2013/03/11 20:19:29 tron Exp $	*/
+/*	$NetBSD: pmap_prot2.c,v 1.15.62.1 2013/03/14 22:03:14 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -37,7 +37,7 @@
 static char *sccsid = "@(#)pmap_prot2.c 1.3 87/08/11 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)pmap_prot2.c	2.1 88/07/29 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: pmap_prot2.c,v 1.17 2013/03/11 20:19:29 tron Exp $");
+__RCSID("$NetBSD: pmap_prot2.c,v 1.15.62.1 2013/03/14 22:03:14 riz Exp $");
 #endif
 #endif
 
@@ -99,7 +99,9 @@ __weak_alias(xdr_pmaplist,_xdr_pmaplist)
  * this sounds like a job for xdr_reference!
  */
 bool_t
-xdr_pmaplist(XDR *xdrs, struct pmaplist **rp)
+xdr_pmaplist(xdrs, rp)
+	XDR *xdrs;
+	struct pmaplist **rp;
 {
 	/*
 	 * more_elements is pre-computed in case the direction is
@@ -141,7 +143,9 @@ xdr_pmaplist(XDR *xdrs, struct pmaplist **rp)
  * functionality to xdr_pmaplist().
  */
 bool_t
-xdr_pmaplist_ptr(XDR *xdrs, struct pmaplist *rp)
+xdr_pmaplist_ptr(xdrs, rp)
+	XDR *xdrs;
+	struct pmaplist *rp;
 {
 
 	_DIAGASSERT(xdrs != NULL);

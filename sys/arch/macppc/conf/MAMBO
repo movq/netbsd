@@ -6,7 +6,7 @@ include		"arch/macppc/conf/std.macppc.g5"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.18 $"
+#ident 		"GENERIC-$Revision: 1.15 $"
 
 maxusers	32
 
@@ -26,6 +26,8 @@ options 	SYSVSEM		# System V semaphores
 #options 	SEMUME=10	# max number of undo entries per process
 #options 	SEMMNU=30	# number of undo structures in system
 options 	SYSVSHM		# System V shared memory
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
+
 
 options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -95,7 +97,6 @@ options 	MIIVERBOSE	# verbose PHY autoconfig messages
 # wscons options
 #options 	WSEMUL_SUN			# sun terminal emulation
 options 	WSEMUL_VT100			# VT100 / VT220 emulation
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 #options 	WSDISPLAY_COMPAT_RAWKBD		# can get raw scancodes
 options 	FONT_GALLANT12x22
 
@@ -182,7 +183,7 @@ uk*	at atapibus? drive ? flags 0x0000	# ATAPI unknown
 
 #pseudo-device 	crypto			# opencrypto framework
 					# (disabled, requires generic softints)
-pseudo-device	vnd			# disk-like interface to files
+pseudo-device	vnd		4	# disk-like interface to files
 pseudo-device	md			# memory disk device
 pseudo-device	loop			# network loopback
 pseudo-device	pty			# pseudo-terminals

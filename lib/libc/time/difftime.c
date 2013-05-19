@@ -1,4 +1,4 @@
-/*	$NetBSD: difftime.c,v 1.13 2012/10/26 23:23:23 christos Exp $	*/
+/*	$NetBSD: difftime.c,v 1.10 2009/12/31 22:49:16 mlelstv Exp $	*/
 
 /*
 ** This file is in the public domain, so clarified as of
@@ -10,7 +10,7 @@
 #if 0
 static char	elsieid[] = "@(#)difftime.c	8.1";
 #else
-__RCSID("$NetBSD: difftime.c,v 1.13 2012/10/26 23:23:23 christos Exp $");
+__RCSID("$NetBSD: difftime.c,v 1.10 2009/12/31 22:49:16 mlelstv Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -19,24 +19,26 @@ __RCSID("$NetBSD: difftime.c,v 1.13 2012/10/26 23:23:23 christos Exp $");
 #include "private.h"	/* for time_t, TYPE_INTEGRAL, and TYPE_SIGNED */
 
 double
-difftime(const time_t time1, const time_t time0)
+difftime(time1, time0)
+const time_t	time1;
+const time_t	time0;
 {
 	/*
 	** If (sizeof (double) > sizeof (time_t)) simply convert and subtract
 	** (assuming that the larger type has more precision).
 	** This is the common real-world case circa 2004.
 	*/
-	/*CONSTCOND*/
+/* LINTED constant */
 	if (sizeof (double) > sizeof (time_t))
 		return (double) time1 - (double) time0;
-	/*LINTED const not */
+/* LINTED constant */
 	if (!TYPE_INTEGRAL(time_t)) {
 		/*
 		** time_t is floating.
 		*/
 		return time1 - time0;
 	}
-	/*LINTED const not */
+/* LINTED constant */
 	if (!TYPE_SIGNED(time_t)) {
 		/*
 		** time_t is integral and unsigned.
@@ -58,7 +60,7 @@ difftime(const time_t time1, const time_t time0)
 	** time1 and time0 have opposite signs.
 	** Punt if unsigned long is too narrow.
 	*/
-	/* CONSTCOND */
+/* CONSTCOND */
 	if (sizeof (unsigned long) < sizeof (time_t))
 		return (double) time1 - (double) time0;
 	/*

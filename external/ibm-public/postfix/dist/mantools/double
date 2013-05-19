@@ -3,5 +3,5 @@
 for i in $*
 do
 	echo === $i ===
-	dehtml $i | tr A-Z a-z | double
+	dehtml $i | double
 done

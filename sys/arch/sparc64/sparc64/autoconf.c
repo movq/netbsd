@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.191 2012/11/02 17:47:29 jdc Exp $ */
+/*	$NetBSD: autoconf.c,v 1.185.2.3 2012/08/08 15:51:10 martin Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.191 2012/11/02 17:47:29 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.185.2.3 2012/08/08 15:51:10 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -280,7 +280,6 @@ bootstrap(void *o0, void *bootargs, void *bootsize, void *o3, void *ofw)
 	extern void* get_romtba(void);
 	extern void  OF_val2sym32(void *);
 	extern void OF_sym2val32(void *);
-	extern struct consdev consdev_prom;
 
 	/* Save OpenFrimware entry point */
 	romp   = ofw;
@@ -291,7 +290,6 @@ bootstrap(void *o0, void *bootargs, void *bootsize, void *o3, void *ofw)
 	console_node = OF_instance_to_package(promops.po_stdout);
 
 	/* Initialize the PROM console so printf will not panic */
-	cn_tab = &consdev_prom;
 	(*cn_tab->cn_init)(cn_tab);
 
 	DPRINTF(ACDB_BOOTARGS,
@@ -758,7 +756,7 @@ romgetcursoraddr(int **rowp, int **colp)
 }
 
 /*
- * Match a device_t against the bootpath, by
+ * Match a struct device against the bootpath, by
  * comparing it's firmware package handle. If they match
  * exactly, we found the boot device.
  */
@@ -774,7 +772,7 @@ dev_path_exact_match(device_t dev, int ofnode)
 }
 
 /*
- * Match a device_t against the bootpath, by
+ * Match a struct device against the bootpath, by
  * comparing it's firmware package handle and calculating
  * the target/lun suffix and comparing that against
  * the bootpath remainder.
@@ -827,7 +825,7 @@ dev_path_drive_match(device_t dev, int ctrlnode, int target,
 }
 
 /*
- * Get the firmware package handle from a device_t.
+ * Get the firmware package handle from a struct device.
  * Assuming we have previously stored it in the device properties
  * dictionary.
  */
@@ -851,7 +849,7 @@ device_ofnode(device_t dev)
 
 /*
  * Save the firmware package handle inside the properties dictionary
- * of a device_t.
+ * of a struct device.
  */
 static void
 device_setofnode(device_t dev, int node)
@@ -912,9 +910,6 @@ device_register(device_t dev, void *aux)
 		ofnode = ea->ea_node;
 	} else if (device_is_a(busdev, "iic")) {
 		struct i2c_attach_args *ia = aux;
-
-		if (ia->ia_name == NULL)	/* indirect config */
-			return;
 
 		ofnode = (int)ia->ia_cookie;
 	} else if (device_is_a(dev, "sd") || device_is_a(dev, "cd")) {

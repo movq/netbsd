@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_rwlock.c,v 1.40 2013/04/27 08:12:35 mlelstv Exp $	*/
+/*	$NetBSD: kern_rwlock.c,v 1.37 2011/03/20 23:19:16 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2006, 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_rwlock.c,v 1.40 2013/04/27 08:12:35 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_rwlock.c,v 1.37 2011/03/20 23:19:16 rmind Exp $");
 
 #define	__RWLOCK_PRIVATE
 
@@ -61,9 +61,9 @@ __KERNEL_RCSID(0, "$NetBSD: kern_rwlock.c,v 1.40 2013/04/27 08:12:35 mlelstv Exp
 
 #if defined(LOCKDEBUG)
 
-#define	RW_WANTLOCK(rw, op)						\
+#define	RW_WANTLOCK(rw, op, t)						\
 	LOCKDEBUG_WANTLOCK(RW_DEBUG_P(rw), (rw),			\
-	    (uintptr_t)__builtin_return_address(0), op == RW_READER);
+	    (uintptr_t)__builtin_return_address(0), op == RW_READER, t);
 #define	RW_LOCKED(rw, op)						\
 	LOCKDEBUG_LOCKED(RW_DEBUG_P(rw), (rw), NULL,			\
 	    (uintptr_t)__builtin_return_address(0), op == RW_READER);
@@ -78,7 +78,7 @@ do {									\
 
 #else	/* LOCKDEBUG */
 
-#define	RW_WANTLOCK(rw, op)	/* nothing */
+#define	RW_WANTLOCK(rw, op, t)	/* nothing */
 #define	RW_LOCKED(rw, op)	/* nothing */
 #define	RW_UNLOCKED(rw, op)	/* nothing */
 #define	RW_DASSERT(rw, cond)	/* nothing */
@@ -281,7 +281,7 @@ rw_vector_enter(krwlock_t *rw, const krw_t op)
 
 	RW_ASSERT(rw, !cpu_intr_p());
 	RW_ASSERT(rw, curthread != 0);
-	RW_WANTLOCK(rw, op);
+	RW_WANTLOCK(rw, op, false);
 
 	if (panicstr == NULL) {
 		LOCKDEBUG_BARRIER(&kernel_lock, 1);
@@ -348,9 +348,9 @@ rw_vector_enter(krwlock_t *rw, const krw_t op)
 			LOCKSTAT_START_TIMER(lsflag, spintime);
 			u_int count = SPINLOCK_BACKOFF_MIN;
 			do {
-				KPREEMPT_ENABLE(curlwp);
+				kpreempt_enable();
 				SPINLOCK_BACKOFF(count);
-				KPREEMPT_DISABLE(curlwp);
+				kpreempt_disable();
 				owner = rw->rw_owner;
 			} while (rw_oncpu(owner));
 			LOCKSTAT_STOP_TIMER(lsflag, spintime);
@@ -394,8 +394,6 @@ rw_vector_enter(krwlock_t *rw, const krw_t op)
 		 */
 		if (op == RW_READER || (rw->rw_owner & RW_THREAD) == curthread)
 			break;
-
-		owner = rw->rw_owner;
 	}
 	KPREEMPT_ENABLE(curlwp);
 
@@ -555,7 +553,7 @@ rw_vector_tryenter(krwlock_t *rw, const krw_t op)
 		}
 	}
 
-	RW_WANTLOCK(rw, op);
+	RW_WANTLOCK(rw, op, true);
 	RW_LOCKED(rw, op);
 	RW_DASSERT(rw, (op != RW_READER && RW_OWNER(rw) == curthread) ||
 	    (op == RW_READER && RW_COUNT(rw) != 0));
@@ -647,7 +645,7 @@ rw_downgrade(krwlock_t *rw)
 		}
 	}
 
-	RW_WANTLOCK(rw, RW_READER);
+	RW_WANTLOCK(rw, RW_READER, false);
 	RW_LOCKED(rw, RW_READER);
 	RW_DASSERT(rw, (rw->rw_owner & RW_WRITE_LOCKED) == 0);
 	RW_DASSERT(rw, RW_COUNT(rw) != 0);
@@ -683,7 +681,7 @@ rw_tryupgrade(krwlock_t *rw)
 	}
 
 	RW_UNLOCKED(rw, RW_READER);
-	RW_WANTLOCK(rw, RW_WRITER);
+	RW_WANTLOCK(rw, RW_WRITER, true);
 	RW_LOCKED(rw, RW_WRITER);
 	RW_DASSERT(rw, rw->rw_owner & RW_WRITE_LOCKED);
 	RW_DASSERT(rw, RW_OWNER(rw) == curthread);

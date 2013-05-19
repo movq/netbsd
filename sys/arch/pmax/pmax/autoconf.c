@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.80 2012/10/13 06:51:22 tsutsui Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.78.8.1 2012/08/08 15:51:06 martin Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.80 2012/10/13 06:51:22 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.78.8.1 2012/08/08 15:51:06 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -62,9 +62,9 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.80 2012/10/13 06:51:22 tsutsui Exp $"
 #include "opt_dec_3100.h"
 #include "opt_dec_5100.h"
 
-struct intrhand		intrtab[MAX_DEV_NCOOKIES];
-static device_t		booted_controller;
-static int		booted_slot, booted_unit;
+struct intrhand		 intrtab[MAX_DEV_NCOOKIES];
+static struct device	*booted_controller;
+static int		 booted_slot, booted_unit;
 static const char	*booted_protocol;
 
 /*
@@ -149,7 +149,7 @@ cpu_rootconf(void)
 {
 
 	printf("boot device: %s\n",
-	    booted_device ? device_xname(booted_device) : "<unknown>");
+	    booted_device ? booted_device->dv_xname : "<unknown>");
 
 	rootconf();
 }
@@ -158,11 +158,11 @@ cpu_rootconf(void)
  * Try to determine the boot device.
  */
 void
-device_register(device_t dev, void *aux)
+device_register(struct device *dev, void *aux)
 {
 	static int found, initted, scsiboot, netboot;
-	static device_t ioasicdev;
-	device_t parent = device_parent(dev);
+	static struct device *ioasicdev;
+	struct device *parent = device_parent(dev);
 
 	if (found)
 		return;

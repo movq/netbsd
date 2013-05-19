@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2013/02/04 15:00:34 joerg Exp $
+#	$NetBSD: Makefile,v 1.1 2011/02/06 01:13:54 joerg Exp $
 
 LIB=	LLVMBitReader
 
@@ -7,8 +7,7 @@ LIB=	LLVMBitReader
 .PATH: ${LLVM_SRCDIR}/lib/Bitcode/Reader
 
 SRCS+=	BitReader.cpp \
-	BitcodeReader.cpp \
-	BitstreamReader.cpp
+	BitcodeReader.cpp
 
 .if defined(HOSTLIB)
 .include <bsd.hostlib.mk>

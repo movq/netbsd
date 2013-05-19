@@ -14,7 +14,6 @@
 
 #include <stdio.h>
 #include <ctype.h>
-#include <errno.h>
 #include <string.h>
 #include <time.h>
 #include <util.h>
@@ -149,8 +148,8 @@ cvsstamp: tUNUMBER '.' tUNUMBER '.' tUNUMBER '.' tUNUMBER '.' tUNUMBER '.' tUNUM
 	}
 	;
 
-epochdate: AT_SIGN at_number {
-            time_t    when = $<Number>2;
+epochdate: AT_SIGN tUNUMBER {
+            time_t    when = $2;
             struct tm tmbuf;
             if (gmtime_r(&when, &tmbuf) != NULL) {
 		param->yyYear = tmbuf.tm_year + 1900;
@@ -173,8 +172,6 @@ epochdate: AT_SIGN at_number {
 	    param->yyTimezone = 0;
 	}
 	;
-
-at_number : tUNUMBER | tSNUMBER ;
 
 time	: tUNUMBER tMERIDIAN {
 	    param->yyHour = $1;
@@ -370,7 +367,7 @@ o_merid	: /* NULL */ {
 %%
 
 /* Month and day table. */
-static const TABLE MonthDayTable[] = {
+static const TABLE const MonthDayTable[] = {
     { "january",	tMONTH,  1 },
     { "february",	tMONTH,  2 },
     { "march",		tMONTH,  3 },
@@ -399,7 +396,7 @@ static const TABLE MonthDayTable[] = {
 };
 
 /* Time units table. */
-static const TABLE UnitsTable[] = {
+static const TABLE const UnitsTable[] = {
     { "year",		tMONTH_UNIT,	12 },
     { "month",		tMONTH_UNIT,	1 },
     { "fortnight",	tMINUTE_UNIT,	14 * 24 * 60 },
@@ -414,7 +411,7 @@ static const TABLE UnitsTable[] = {
 };
 
 /* Assorted relative-time words. */
-static const TABLE OtherTable[] = {
+static const TABLE const OtherTable[] = {
     { "tomorrow",	tMINUTE_UNIT,	1 * 24 * 60 },
     { "yesterday",	tMINUTE_UNIT,	-1 * 24 * 60 },
     { "today",		tMINUTE_UNIT,	0 },
@@ -452,7 +449,7 @@ static const TABLE OtherTable[] = {
 
 /* The timezone table. */
 /* Some of these are commented out because a time_t can't store a float. */
-static const TABLE TimezoneTable[] = {
+static const TABLE const TimezoneTable[] = {
     { "gmt",	tZONE,     HOUR( 0) },	/* Greenwich Mean */
     { "ut",	tZONE,     HOUR( 0) },	/* Universal (Coordinated) */
     { "utc",	tZONE,     HOUR( 0) },
@@ -536,7 +533,7 @@ static const TABLE TimezoneTable[] = {
 };
 
 /* Military timezone table. */
-static const TABLE MilitaryTable[] = {
+static const TABLE const MilitaryTable[] = {
     { "a",	tZONE,	HOUR(  1) },
     { "b",	tZONE,	HOUR(  2) },
     { "c",	tZONE,	HOUR(  3) },
@@ -886,10 +883,6 @@ parsedate(const char *p, const time_t *now, const int *zone)
     time_t		Start;
     time_t		tod, rm;
     struct dateinfo	param;
-    int			saved_errno;
-    
-    saved_errno = errno;
-    errno = 0;
 
     if (now == NULL || zone == NULL) {
         now = &nowt;
@@ -934,16 +927,14 @@ parsedate(const char *p, const time_t *now, const int *zone)
     param.yyHaveZone = 0;
 
     if (yyparse(&param, &p) || param.yyHaveTime > 1 || param.yyHaveZone > 1 ||
-	param.yyHaveDate > 1 || param.yyHaveDay > 1) {
-	errno = EINVAL;
+	param.yyHaveDate > 1 || param.yyHaveDay > 1)
 	return -1;
-    }
 
     if (param.yyHaveDate || param.yyHaveTime || param.yyHaveDay) {
 	Start = Convert(param.yyMonth, param.yyDay, param.yyYear, param.yyHour,
 	    param.yyMinutes, param.yySeconds, param.yyTimezone,
 	    param.yyMeridian, param.yyDSTmode);
-	if (Start == -1 && errno != 0)
+	if (Start == -1)
 	    return -1;
     }
     else {
@@ -954,7 +945,7 @@ parsedate(const char *p, const time_t *now, const int *zone)
 
     Start += param.yyRelSeconds;
     rm = RelativeMonth(Start, param.yyRelMonth, param.yyTimezone);
-    if (rm == -1 && errno != 0)
+    if (rm == -1)
 	return -1;
     Start += rm;
 
@@ -963,8 +954,6 @@ parsedate(const char *p, const time_t *now, const int *zone)
 	Start += tod;
     }
 
-    if (errno == 0)
-	errno = saved_errno;
     return Start;
 }
 
@@ -973,21 +962,21 @@ parsedate(const char *p, const time_t *now, const int *zone)
 
 /* ARGSUSED */
 int
-main(int ac, char *av[])
+main(ac, av)
+    int		ac;
+    char	*av[];
 {
     char	buff[128];
     time_t	d;
 
     (void)printf("Enter date, or blank line to exit.\n\t> ");
     (void)fflush(stdout);
-    while (fgets(buff, sizeof(buff), stdin) && buff[0] != '\n') {
-	errno = 0;
+    while (gets(buff) && buff[0]) {
 	d = parsedate(buff, NULL, NULL);
-	if (d == -1 && errno != 0)
-	    (void)printf("Bad format - couldn't convert: %s\n",
-	        strerror(errno));
+	if (d == -1)
+	    (void)printf("Bad format - couldn't convert.\n");
 	else
-	    (void)printf("%jd\t%s", (intmax_t)d, ctime(&d));
+	    (void)printf("%s", ctime(&d));
 	(void)printf("\t> ");
 	(void)fflush(stdout);
     }

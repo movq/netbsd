@@ -1,4 +1,4 @@
-/*	$NetBSD: xsasl_dovecot_server.c,v 1.1.1.4 2012/02/17 08:36:25 tron Exp $	*/
+/*	$NetBSD: xsasl_dovecot_server.c,v 1.1.1.3.6.1 2012/02/19 18:28:54 riz Exp $	*/
 
 /*++
 /* NAME

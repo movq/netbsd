@@ -1,4 +1,4 @@
-/*	$NetBSD: if.c,v 1.76 2013/03/01 18:26:11 joerg Exp $	*/
+/*	$NetBSD: if.c,v 1.73.2.1 2012/10/24 03:39:17 riz Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)if.c	8.2 (Berkeley) 2/21/94";
 #else
-__RCSID("$NetBSD: if.c,v 1.76 2013/03/01 18:26:11 joerg Exp $");
+__RCSID("$NetBSD: if.c,v 1.73.2.1 2012/10/24 03:39:17 riz Exp $");
 #endif
 #endif /* not lint */
 
@@ -51,6 +51,8 @@ __RCSID("$NetBSD: if.c,v 1.76 2013/03/01 18:26:11 joerg Exp $");
 #include <net/route.h>
 #include <netinet/in.h>
 #include <netinet/in_var.h>
+#include <netiso/iso.h>
+#include <netiso/iso_var.h>
 #include <arpa/inet.h>
 
 #include <kvm.h>
@@ -105,7 +107,10 @@ bool	signalled;			/* set if alarm goes off "early" */
  * which is a TAILQ_HEAD.
  */
 void
-intpr(int interval, u_long ifnetaddr, void (*pfunc)(const char *))
+intpr(interval, ifnetaddr, pfunc)
+	int interval;
+	u_long ifnetaddr;
+	void (*pfunc)(const char *);
 {
 
 	if (interval) {
@@ -246,6 +251,7 @@ union ifaddr_u {
 #ifdef INET6
 	struct in6_ifaddr in6;
 #endif /* INET6 */
+	struct iso_ifaddr iso;
 };
 
 static void
@@ -920,7 +926,9 @@ loop:
  * First line printed at top of screen is always cumulative.
  */
 static void
-sidewaysintpr(unsigned int interval, u_long off)
+sidewaysintpr(interval, off)
+	unsigned interval;
+	u_long off;
 {
 
 	if (use_sysctl) {
@@ -935,7 +943,8 @@ sidewaysintpr(unsigned int interval, u_long off)
  * Sets a flag to not wait for the alarm.
  */
 static void
-catchalarm(int signo)
+catchalarm(signo)
+	int signo;
 {
 
 	signalled = true;

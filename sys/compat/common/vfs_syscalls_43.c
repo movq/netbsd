@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_syscalls_43.c,v 1.55 2013/02/21 01:39:54 pgoyette Exp $	*/
+/*	$NetBSD: vfs_syscalls_43.c,v 1.54.14.1 2013/03/14 16:33:09 riz Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_43.c,v 1.55 2013/02/21 01:39:54 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_syscalls_43.c,v 1.54.14.1 2013/03/14 16:33:09 riz Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"

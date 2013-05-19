@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_fs.c,v 1.64 2012/12/13 15:16:57 matt Exp $	*/
+/*	$NetBSD: netbsd32_fs.c,v 1.62.2.2 2012/12/17 00:31:29 riz Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_fs.c,v 1.64 2012/12/13 15:16:57 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_fs.c,v 1.62.2.2 2012/12/17 00:31:29 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: consio1.c,v 1.1 2012/03/20 13:01:32 minoura Exp $	*/
+/*	$NetBSD: consio1.c,v 1.1.6.2 2012/11/18 19:05:17 riz Exp $	*/
 
 /*
  * Copyright (c) 2001,2010 MINOURA Makoto.

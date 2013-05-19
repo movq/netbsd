@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.26 2013/04/27 22:21:15 christos Exp $
+# $NetBSD: GENERIC,v 1.19 2011/12/18 05:49:31 dholland Exp $
 #
 # GENERIC machine description file
 # 
@@ -24,7 +24,7 @@ options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
 #makeoptions	COPTS="-O2 -mno-powerpc -mno-power"	# wheeee
 
-#ident		"GENERIC-$Revision: 1.26 $"
+#ident		"GENERIC-$Revision: 1.19 $"
 
 maxusers	32
 
@@ -46,6 +46,8 @@ options 	SYSVSEM		# System V-like semaphores
 #options 	SEMUME=10	# max number of undo entries per process
 #options 	SEMMNU=30	# number of undo structures in system
 options 	SYSVSHM		# System V-like memory sharing
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
+
 
 options 	USERCONF	# userconf(4) support
 #options	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -74,7 +76,6 @@ options 	DDB		# in-kernel debugger
 #options 	COMPAT_30	# NetBSD 3.0,
 #options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_43	# and 4.3BSD
 #options 	COMPAT_LINUX	# Linux binary compatibility
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
@@ -117,6 +118,7 @@ options 	NFSSERVER	# Network File System server
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPv6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
@@ -159,7 +161,6 @@ options 	NFS_BOOT_DHCP
 #
 # builtin terminal emulations
 options 	WSEMUL_VT100		# VT100 / VT220 emulation
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 # different kernel output - see dev/wscons/wsdisplayvar.h
 options 	WS_KERNEL_FG=WSCOL_GREEN
 #options 	WS_KERNEL_BG=WSCOL_BLACK
@@ -212,9 +213,9 @@ cinclude "arch/rs6000/conf/GENERIC.local"
 #pseudo-device	swcrypto	# software crypto implementation
 
 # disk/mass storage pseudo-devices
-#pseudo-device	ccd			# concatenated/striped disk devices
-#pseudo-device	cgd			# cryptographic disk devices
-#pseudo-device	raid			# RAIDframe disk driver
+#pseudo-device	ccd		4	# concatenated/striped disk devices
+#pseudo-device	cgd		4	# cryptographic disk devices
+#pseudo-device	raid		8	# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # Options to enable various other RAIDframe RAID types.
 # options	RF_INCLUDE_EVENODD=1
@@ -255,7 +256,7 @@ pseudo-device   accf_http		# "httpready" accept filter
 
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
-#pseudo-device	sequencer		# MIDI sequencer
+#pseudo-device	sequencer	1	# MIDI sequencer
 #options 	RND_COM			# use "com" randomness as well
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
@@ -263,7 +264,7 @@ pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	pflog			# PF log if
 
 # a pseudo device needed for Coda	# also needs CODA (above)
-#pseudo-device	vcoda			# coda minicache <-> venus comm.
+#pseudo-device	vcoda		4	# coda minicache <-> venus comm.
 
 # wscons pseudo-devices
 pseudo-device	wsmux			# mouse & keyboard multiplexor
@@ -273,7 +274,7 @@ pseudo-device	wsfont
 #options VERIFIED_EXEC
 #
 # a pseudo device needed for veriexec
-#pseudo-device	veriexec
+#pseudo-device	veriexec		1
 #
 # Uncomment the fingerprint methods below that are desired. Note that
 # removing fingerprint methods will have almost no impact on the kernel

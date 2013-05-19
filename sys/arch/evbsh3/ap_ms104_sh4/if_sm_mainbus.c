@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sm_mainbus.c,v 1.4 2012/10/27 17:17:51 chs Exp $	*/
+/*	$NetBSD: if_sm_mainbus.c,v 1.3 2012/01/21 19:44:29 nonaka Exp $	*/
 
 /*-
  * Copyright (C) 2009 NONAKA Kimihiro <nonaka@netbsd.org>
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sm_mainbus.c,v 1.4 2012/10/27 17:17:51 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sm_mainbus.c,v 1.3 2012/01/21 19:44:29 nonaka Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,7 +58,7 @@ struct sm_mainbus_softc {
 	void *sc_ih;
 };
 
-CFATTACH_DECL_NEW(sm_mainbus, sizeof(struct sm_mainbus_softc),
+CFATTACH_DECL(sm_mainbus, sizeof(struct sm_mainbus_softc),
     sm_mainbus_match, sm_mainbus_attach, NULL, NULL);
 
 static int
@@ -98,7 +98,6 @@ sm_mainbus_attach(device_t parent, device_t self, void *aux)
 	}
 
 	/* fill in master sc */
-	sc->sc_dev = self;
 	sc->sc_bst = bst;
 	sc->sc_bsh = bsh;
 

@@ -1,4 +1,4 @@
-#	$NetBSD: EV64260,v 1.57 2013/04/27 21:43:23 christos Exp $
+#	$NetBSD: EV64260,v 1.51 2011/12/18 05:49:26 dholland Exp $
 #
 #	MVP -- Motorola's Multiprocessing Verification Platform
 #
@@ -75,7 +75,6 @@ options 	COMPAT_20	# NetBSD 2.0,
 options 	COMPAT_30	# NetBSD 3.0,
 options 	COMPAT_40	# NetBSD 4.0,
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_43	# and 4.3BSD
 #options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
@@ -116,11 +115,14 @@ options 	NFS_BOOT_RWSIZE=1024
 options 	INET		# IP + ICMP + TCP + UDP
 #options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
 #options        DIRECTED_BROADCAST      # allow broadcasts through routers
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking protocols
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 #options 	PPP_DEFLATE	# Deflate compression support for PPP
@@ -142,7 +144,6 @@ options 	PCI_NETBSD_CONFIGURE	# Do not rely on BIOS/whatever to configure PCI de
 # wscons options
 #options 	WSEMUL_SUN		# sun terminal emulation
 options 	WSEMUL_VT100		# VT100 / VT220 emulation
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 options 	WSDISPLAY_DEFAULTSCREENS=1
 
 # Kernel root file system and dump configuration.
@@ -257,8 +258,8 @@ atabus* 	at ata? channel ?
 wd*		at atabus? drive ? flags 0x0000
 
 #pseudo-device	vnd			# disk-like interface to files
-#pseudo-device	ccd			# concatenated/striped disk devices
-#pseudo-device	raid			# RAIDframe disk driver
+#pseudo-device	ccd		4	# concatenated/striped disk devices
+#pseudo-device	raid		4	# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 #pseudo-device	fss			# file system snapshot device
 pseudo-device	md			# memory disk device

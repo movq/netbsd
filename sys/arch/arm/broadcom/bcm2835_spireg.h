@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_spireg.h,v 1.1 2013/01/05 20:31:23 jakllsch Exp $	*/
+/*	$NetBSD: bcm2835_spireg.h,v 1.1.4.2 2013/02/13 01:36:14 riz Exp $	*/
 
 /*
  * Copyright (c) 2012 Jonathan A. Kollasch

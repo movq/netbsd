@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.rump,v 1.81 2013/04/28 12:54:39 pooka Exp $
+#	$NetBSD: Makefile.rump,v 1.61 2011/05/10 00:33:58 matt Exp $
 #
 
 WARNS?=		3	# XXX: src/sys won't compile with -Wsign-compare yet
@@ -15,48 +15,25 @@ CPPFLAGS+=	-D_RUMPKERNEL
 CPPFLAGS+=	-D_RUMP_NATIVE_ABI
 .endif
 
-CPPFLAGS+=	-DMAXUSERS=32
-CPPFLAGS+=	-DCOMPAT_50=1
-
-CPPFLAGS+=	-nostdinc
 CFLAGS+=	-ffreestanding -fno-strict-aliasing
-
+.if defined(HAVE_GCC) && ${HAVE_GCC} >= 3
+CFLAGS+=	-Wsign-compare
+CFLAGS+=	-Wno-pointer-sign -Wno-attributes
+CFLAGS+=	-std=gnu99
+.endif
 CWARNFLAGS+=	-Wno-format-zero-length -Wno-pointer-sign
 CPPFLAGS+=	-D_KERNEL -DMULTIPROCESSOR -D_MODULE -DMODULAR
+CPPFLAGS+=	-DMAXUSERS=32
+CPPFLAGS+=	-DDIAGNOSTIC
+CPPFLAGS+=	-DCOMPAT_50=1
 CPPFLAGS+=	-DDEBUGPRINT
 CPPFLAGS+=	-I${.CURDIR} -I.
-CPPFLAGS+=	-I${RUMPTOP}/../../common/include
+CPPFLAGS+=	-I${RUMPTOP}/../../common/include -isystem ${RUMPTOP}/../arch
 CPPFLAGS+=	-I${RUMPTOP}/include
 CPPFLAGS+=	-I${RUMPTOP}/librump/rumpkern/opt
-
-.ifdef NEED_ISYSTEM
-CPPFLAGS+=	-isystem ${RUMPTOP}/../arch
-CPPFLAGS+=	-isystem ${RUMPTOP}/..
-.else
-CPPFLAGS+=	-I${RUMPTOP}/../arch
-CPPFLAGS+=	-I${RUMPTOP}/..
-.endif
-
-RUMP_LDSCRIPT?=yes
-.if ${RUMP_LDSCRIPT} != "no"
-# my ld or yours?
-.ifdef HAVE_SUN_LD
-LDFLAGS+=	-Wl,-M ${RUMPTOP}/ldscript_sun.rump
-SRCS+=		linksyms_sun.c
-.PATH:		${RUMPTOP}
-.else
-LDFLAGS+=	-Wl,-T ${RUMPTOP}/ldscript.rump
-.endif
-.endif
-
-RUMP_DIAGNOSTIC?=yes
-.if ${RUMP_DIAGNOSTIC} == "yes"
-CPPFLAGS+=	-DDIAGNOSTIC
-.endif
-
-.ifdef RUMP_DEBUG
-CPPFLAGS+=	-DDEBUG
-.endif
+CPPFLAGS+=	-nostdinc -isystem ${RUMPTOP}/..
+LDFLAGS+=	-T ${RUMPTOP}/ldscript.rump
+#CPPFLAGS+=	-DDEBUG
 
 .ifdef RUMP_LOCKDEBUG
 CPPFLAGS+=	-DLOCKDEBUG
@@ -69,8 +46,7 @@ CPPFLAGS+=	-DLOCKDEBUG
 #LDFLAGS+=	-nodefaultlibs
 
 # make sure __NetBSD__ gets defined (for builds on non-NetBSD)
-# also, give those builds a way to undef the local compiler's macros
-CPPFLAGS+=	-D__NetBSD__ ${RUMPKERN_UNDEF}
+CPPFLAGS+=	-D__NetBSD__
 
 RUMPKERNEL=	This is NetBSD and I am the rump.  Good evening.
 
@@ -81,36 +57,6 @@ CPPFLAGS+=	-DPPC_OEA
 
 # If this file changes, we need a full rebuild
 DPSRCS+=	${RUMPTOP}/Makefile.rump
-
-#
-# Support for component-specific hypercalls
-#
-
-
-.ifdef RUMPCOMP_USER && !defined(RUMPTEST_BUILDSH)
-.if empty(DESTDIR)
-DESTDIR=/
-.endif
-BUILDRUMP_CPPFLAGS ?= -isysroot ${DESTDIR}
-rumpcomp_user.d: rumpcomp_user.c
-	${_MKTARGET_CREATE}
-	${MKDEP} -f ${.TARGET} -- ${MKDEPFLAGS} ${BUILDRUMP_CPPFLAGS} ${RUMPCOMP_USER_CPPFLAGS} ${.ALLSRC:O:u:M*rumpcomp_user.c}
-
-rumpcomp_user.o: rumpcomp_user.c
-	${_MKTARGET_COMPILE}
-	${CC} -o ${.TARGET} ${DBG} ${CWARNFLAGS} ${BUILDRUMP_CPPFLAGS} ${BUILDRUMP_CFLAGS} ${RUMPCOMP_USER_CPPFLAGS} ${RUMPCOMP_USER_CFLAGS} -c ${.ALLSRC:O:u:M*rumpcomp_user.c}
-
-rumpcomp_user.pico: rumpcomp_user.c
-	${_MKTARGET_COMPILE}
-	${CC} -o ${.TARGET} -fPIC -DPIC ${DBG} ${CWARNFLAGS} ${BUILDRUMP_CPPFLAGS} ${BUILDRUMP_CFLAGS} ${RUMPCOMP_USER_CPPFLAGS} ${RUMPCOMP_USER_CFLAGS} -c ${.ALLSRC:O:u:M*rumpcomp_user.c}
-
-rumpcomp_user.po: rumpcomp_user.c
-	${_MKTARGET_COMPILE}
-	${CC} -o ${.TARGET} ${PROFFLAGS} -pg ${DBG} ${CWARNFLAGS} ${BUILDRUMP_CPPFLAGS} ${BUILDRUMP_CPPFLAGS} ${RUMPCOMP_USER_CPPFLAGS} ${RUMPCOMP_USER_CFLAGS} -c ${.ALLSRC:O:u:M*rumpcomp_user.c}
-
-RUMPCOMP_USEROBJ=rumpcomp_user.*o
-SRCS+=rumpcomp_user.c
-.endif
 
 #
 # Rename library symbols before use.  If a symbol does not already belong
@@ -171,19 +117,17 @@ __archivebuild: .USE
 .else
 	${_MKTARGET_BUILD}
 	rm -f ${.TARGET}
+	${AR} ${_ARFL} ${.TARGET} `NM=${NM} ${LORDER} ${.ALLSRC:M*o} | ${TSORT}`
 .endif
-	for obj in ${RUMP_SYMREN:U${.ALLSRC:N${RUMPCOMP_USEROBJ}}}; do \
-		${NM} -go $${obj} | ${TOOL_AWK} ' \
-		    $$NF!~/^'${_PQ}'(rump|RUMP|__|_GLOBAL_OFFSET_TABLE'${_SYMQUIRK}')/ \
-		      {s=$$NF;sub(/^'${_PQ}'/, "&rumpns_", s); print $$NF, s}'\
-		    | sort | uniq  > renametab.$${obj}; \
-		${OBJCOPY} --preserve-dates --redefine-syms \
-		    renametab.$${obj} $${obj}; \
-		rm -f renametab.$${obj}; \
-	done
+	${NM} -go ${RUMP_SYMREN:U${.TARGET}} | ${TOOL_AWK} '	\
+	    $$NF!~/^'${_PQ}'(rump|RUMP|__|_GLOBAL_OFFSET_TABLE'${_SYMQUIRK}')/ \
+	      {s = $$NF; sub(/^'${_PQ}'/, "&rumpns_", s); print $$NF, s}' \
+	    | sort | uniq  > renametab.${.TARGET}
+	${OBJCOPY} --preserve-dates --redefine-syms \
+	    renametab.${.TARGET} ${RUMP_SYMREN:U${.TARGET}}
+	rm -f renametab.${.TARGET}
 .if !defined(RUMP_SYMREN)
-	${AR} ${_ARFL} ${.TARGET} \
-	    `NM=${NM} ${LORDER} ${.ALLSRC:M*o} | ${TSORT}`
+	${AR} ${_ARRANFL} ${.TARGET}
 .endif
 
 _BSD_IOCONF_MK_USER_=1

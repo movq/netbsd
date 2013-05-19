@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_node.c,v 1.29 2013/03/06 11:40:22 yamt Exp $	*/
+/*	$NetBSD: puffs_node.c,v 1.23.2.2 2012/08/12 12:59:50 martin Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007  Antti Kantee.  All Rights Reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: puffs_node.c,v 1.29 2013/03/06 11:40:22 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: puffs_node.c,v 1.23.2.2 2012/08/12 12:59:50 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/hash.h>
@@ -247,8 +247,7 @@ puffs_newnode(struct mount *mp, struct vnode *dvp, struct vnode **vpp,
 	*vpp = vp;
 
 	if (PUFFS_USE_NAMECACHE(pmp))
-		cache_enter(dvp, vp, cnp->cn_nameptr, cnp->cn_namelen,
-			    cnp->cn_flags);
+		cache_enter(dvp, vp, cnp);
 
 	return 0;
 }
@@ -279,7 +278,7 @@ puffs_cookie2hashlist(struct puffs_mount *pmp, puffs_cookie_t ck)
 {
 	uint32_t hash;
 
-	hash = hash32_buf(&ck, sizeof(ck), HASH32_BUF_INIT);
+	hash = hash32_buf(&ck, sizeof(void *), HASH32_BUF_INIT);
 	return &pmp->pmp_pnodehash[hash % pmp->pmp_npnodehash];
 }
 
@@ -366,18 +365,11 @@ puffs_makeroot(struct puffs_mount *pmp)
 
 /*
  * Locate the in-kernel vnode based on the cookie received given
- * from userspace.
+ * from userspace.  Returns a vnode, if found, NULL otherwise.
  * The parameter "lock" control whether to lock the possible or
  * not.  Locking always might cause us to lock against ourselves
  * in situations where we want the vnode but don't care for the
  * vnode lock, e.g. file server issued putpages.
- *
- * returns 0 on success.  otherwise returns an errno or PUFFS_NOSUCHCOOKIE.
- *
- * returns PUFFS_NOSUCHCOOKIE if no vnode for the cookie is found.
- * in that case, if willcreate=true, the pmp_newcookie list is populated with
- * the given cookie.  it's the caller's responsibility to consume the entry
- * with calling puffs_getvnode.
  */
 int
 puffs_cookie2vnode(struct puffs_mount *pmp, puffs_cookie_t ck, int lock,

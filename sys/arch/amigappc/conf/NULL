@@ -1,4 +1,4 @@
-# $NetBSD: NULL,v 1.40 2013/04/27 21:43:16 christos Exp $
+# $NetBSD: NULL,v 1.33 2011/12/18 05:49:24 dholland Exp $
 #
 # NULL machine description file
 # 
@@ -7,7 +7,7 @@ include "arch/amigappc/conf/std.amigappc"
 
 #options 	INCLUDE_CONFIG_FILE     # embed config file in kernel binary
 
-#ident          "GENERIC-$Revision: 1.40 $"
+#ident          "GENERIC-$Revision: 1.33 $"
 
 maxusers	8
 
@@ -39,6 +39,7 @@ options 	SCSIVERBOSE	# human readable SCSI error messages
 #options 	SYSVSHM		# System V-like shared memory
 #options 	SYSVMSG		# System V-like messages
 #options 	SYSVSEM		# System V-like semaphores
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 # Enable experimental buffer queue strategy for better responsiveness under 
 # high disk I/O load. Use it with caution - it's not proven to be stable yet.
@@ -73,7 +74,6 @@ makeoptions	DEBUG="-g"	# compile full symbol table
 #options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 #options 	COMPAT_43	# and 4.3BSD
 #options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	COMPAT_LINUX	# Linux binary compatibility
@@ -122,6 +122,7 @@ file-system	TMPFS		# Efficient memory file-system
 options 	INET		# IP networking support (Required)
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	GATEWAY		# Packet forwarding
@@ -129,6 +130,8 @@ options 	INET6		# IPV6
 
 #options 	MROUTING	# Multicast routing
 #options 	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking protocols
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 
@@ -216,7 +219,6 @@ fd*		at fdc0 unit ?		# floppy disks on the later
 #amidisplaycc0	at mainbus0		# wscons interface to custom chips
 #wsdisplay0	at amidisplaycc0 console ?
 #options 	WSEMUL_VT100
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 #options 	FONT_VT220L8x10
 #options	FONT_VT220ISO8x16
 #
@@ -414,9 +416,9 @@ pseudo-device	clockctl		# user control of clock subsystem
 
 #pseudo-device	vnd			# vnode pseudo-disks
 #options 	VND_COMPRESSION		# compressed vnd(4)
-#pseudo-device	ccd			# concatenated disk devices
-#pseudo-device	cgd			# cryptographic disk devices
-#pseudo-device	raid			# RAIDframe disk driver
+#pseudo-device	ccd		4	# concatenated disk devices
+#pseudo-device	cgd		4	# cryptographic disk devices
+#pseudo-device	raid		8	# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # Options to enable various other RAIDframe RAID types.
 # options 	RF_INCLUDE_EVENODD=1
@@ -435,7 +437,7 @@ pseudo-device	ksyms			# /dev/ksyms (kernel symbols)
 # Veriexec
 #
 # a pseudo device needed for veriexec
-#pseudo-device	veriexec
+#pseudo-device	veriexec		1
 #
 # Uncomment the fingerprint methods below that are desired. Note that
 # removing fingerprint methods will have almost no impact on the kernel

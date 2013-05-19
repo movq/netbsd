@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.142 2012/02/19 21:06:20 rmind Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.141 2011/09/27 01:02:34 jym Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.142 2012/02/19 21:06:20 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.141 2011/09/27 01:02:34 jym Exp $");
 
 #include "opt_ddb.h"
 #include "opt_coredump.h"
@@ -53,6 +53,8 @@ __KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.142 2012/02/19 21:06:20 rmind Exp $
 #include <sys/vnode.h>
 #include <sys/core.h>
 #include <sys/exec.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 
 #include <uvm/uvm.h>
 
@@ -127,6 +129,18 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 		}
 	}
 #endif
+
+	cpu_setfunc(l2, func, arg);
+}
+
+void
+cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
+{
+	struct pcb * const pcb = lwp_getpcb(l);
+	struct trapframe * const tf = l->l_md.md_utf;
+
+	KASSERT(tf == (struct trapframe *)(uvm_lwp_getuarea(l) + USPACE) - 1);
+
 	/*
 	 * Rig kernel stack so that it would start out in lwp_trampoline()
 	 * and call child_return() with l as an argument.  This causes the
@@ -135,16 +149,16 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 	 * returns normally.
 	 */
 
-	pcb2->pcb_context.val[_L_S0] = (intptr_t)func;			/* S0 */
-	pcb2->pcb_context.val[_L_S1] = (intptr_t)arg;			/* S1 */
-	pcb2->pcb_context.val[MIPS_CURLWP_LABEL] = (intptr_t)l2;	/* T8 */
-	pcb2->pcb_context.val[_L_SP] = (intptr_t)tf;			/* SP */
-	pcb2->pcb_context.val[_L_RA] =
+	pcb->pcb_context.val[_L_S0] = (intptr_t)func;			/* S0 */
+	pcb->pcb_context.val[_L_S1] = (intptr_t)arg;			/* S1 */
+	pcb->pcb_context.val[MIPS_CURLWP_LABEL] = (intptr_t)l;		/* T8 */
+	pcb->pcb_context.val[_L_SP] = (intptr_t)tf;			/* SP */
+	pcb->pcb_context.val[_L_RA] =
 	   mips_locore_jumpvec.ljv_lwp_trampoline;			/* RA */
 #ifdef _LP64
-	KASSERT(pcb2->pcb_context.val[_L_SR] & MIPS_SR_KX);
+	KASSERT(pcb->pcb_context.val[_L_SR] & MIPS_SR_KX);
 #endif
-	KASSERT(pcb2->pcb_context.val[_L_SR] & MIPS_SR_INT_IE);
+	KASSERT(pcb->pcb_context.val[_L_SR] & MIPS_SR_INT_IE);
 }
 
 /*

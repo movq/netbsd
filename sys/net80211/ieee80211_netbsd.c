@@ -1,4 +1,4 @@
-/* $NetBSD: ieee80211_netbsd.c,v 1.23 2013/02/04 15:44:45 christos Exp $ */
+/* $NetBSD: ieee80211_netbsd.c,v 1.20 2011/11/19 22:51:25 tls Exp $ */
 /*-
  * Copyright (c) 2003-2005 Sam Leffler, Errno Consulting
  * All rights reserved.
@@ -30,7 +30,7 @@
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/sys/net80211/ieee80211_freebsd.c,v 1.8 2005/08/08 18:46:35 sam Exp $");
 #else
-__KERNEL_RCSID(0, "$NetBSD: ieee80211_netbsd.c,v 1.23 2013/02/04 15:44:45 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ieee80211_netbsd.c,v 1.20 2011/11/19 22:51:25 tls Exp $");
 #endif
 
 /*
@@ -80,10 +80,6 @@ static int
 ieee80211_init0(void)
 {
 	ieee80211_setup_func * const *ieee80211_setup, f;
-
-	if (max_linkhdr < ALIGN(sizeof(struct ieee80211_qosframe_addr4))) {
-		max_linkhdr = ALIGN(sizeof(struct ieee80211_qosframe_addr4));
-	}
 
         __link_set_foreach(ieee80211_setup, ieee80211_funcs) {
 		f = (void*)*ieee80211_setup;
@@ -193,7 +189,7 @@ ieee80211_sysctl_attach(struct ieee80211com *ic)
 	if ((rc = sysctl_createv(&ic->ic_sysctllog, 0, &rnode, &cnode,
 	    CTLFLAG_PERMANENT|CTLFLAG_READONLY, CTLTYPE_STRING,
 	    "parent", SYSCTL_DESCR("parent device"),
-	    ieee80211_sysctl_parent, 0, (void *)ic, IFNAMSIZ, CTL_CREATE,
+	    ieee80211_sysctl_parent, 0, ic, IFNAMSIZ, CTL_CREATE,
 	    CTL_EOL)) != 0)
 		goto err;
 
@@ -655,8 +651,8 @@ ieee80211_notify_node_join(struct ieee80211com *ic, struct ieee80211_node *ni, i
 	struct ifnet *ifp = ic->ic_ifp;
 	struct ieee80211_join_event iev;
 
-	IEEE80211_DPRINTF(ic, IEEE80211_MSG_NODE, "%snode %s join\n",
-	    (ni == ic->ic_bss) ? "bss " : "",
+	IEEE80211_DPRINTF(ic, IEEE80211_MSG_NODE, "%s: %snode %s join\n",
+	    ifp->if_xname, (ni == ic->ic_bss) ? "bss " : "",
 	    ether_sprintf(ni->ni_macaddr));
 
 	memset(&iev, 0, sizeof(iev));
@@ -680,8 +676,8 @@ ieee80211_notify_node_leave(struct ieee80211com *ic, struct ieee80211_node *ni)
 	struct ifnet *ifp = ic->ic_ifp;
 	struct ieee80211_leave_event iev;
 
-	IEEE80211_DPRINTF(ic, IEEE80211_MSG_NODE, "%snode %s leave\n",
-	    (ni == ic->ic_bss) ? "bss " : "",
+	IEEE80211_DPRINTF(ic, IEEE80211_MSG_NODE, "%s: %snode %s leave\n",
+	    ifp->if_xname, (ni == ic->ic_bss) ? "bss " : "",
 	    ether_sprintf(ni->ni_macaddr));
 
 	if (ni == ic->ic_bss) {
@@ -701,7 +697,7 @@ ieee80211_notify_scan_done(struct ieee80211com *ic)
 	struct ifnet *ifp = ic->ic_ifp;
 
 	IEEE80211_DPRINTF(ic, IEEE80211_MSG_SCAN,
-		"%s", "notify scan done\n");
+		"%s: notify scan done\n", ic->ic_ifp->if_xname);
 
 	/* dispatch wireless event indicating scan completed */
 	rt_ieee80211msg(ifp, RTM_IEEE80211_SCAN, NULL, 0);

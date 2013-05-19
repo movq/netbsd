@@ -1,4 +1,4 @@
-/*	$NetBSD: vga_raster.c,v 1.37 2013/04/14 16:37:32 christos Exp $	*/
+/*	$NetBSD: vga_raster.c,v 1.35 2012/01/11 20:41:28 macallan Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Bang Jun-Young
@@ -56,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vga_raster.c,v 1.37 2013/04/14 16:37:32 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vga_raster.c,v 1.35 2012/01/11 20:41:28 macallan Exp $");
 
 #include "opt_wsmsgattrs.h" /* for WSDISPLAY_CUSTOM_OUTPUT */
 
@@ -372,7 +372,7 @@ vga_cnattach(bus_space_tag_t iot, bus_space_tag_t memt, int type, int check)
 	return (0);
 }
 
-static void
+void
 vga_raster_init(struct vga_config *vc, bus_space_tag_t iot,
     bus_space_tag_t memt)
 {
@@ -439,7 +439,7 @@ vga_raster_init(struct vga_config *vc, bus_space_tag_t iot,
 	LIST_INSERT_HEAD(&vc->vc_fontlist, vf, next);
 }
 
-static void
+void
 vga_raster_init_screen(struct vga_config *vc, struct vgascreen *scr,
     const struct wsscreen_descr *type, int existing, long *attrp)
 {
@@ -632,25 +632,22 @@ vga_raster_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 		*(int *)data = vc->vc_type;
 		return 0;
 
-	case WSDISPLAYIO_GINFO: {
-		struct wsdisplay_fbinfo *fbi = data;
-		const struct wsscreen_descr *wd = vc->currenttype;
-		const struct videomode *vm = wd->modecookie;
-		fbi->width = vm->hdisplay;
-		fbi->height = vm->vdisplay;
-		fbi->depth = 24;	/* xxx: ? */
-		fbi->cmsize = 256;	/* xxx: from palette */
-		return 0;
-	}
+	case WSDISPLAYIO_GINFO:
+		/* XXX should get detailed hardware information here */
+		return EPASSTHROUGH;
 
 	case WSDISPLAYIO_GVIDEO:
+#if 1
 		*(int *)data = (vga_get_video(vc) ?
 		    WSDISPLAYIO_VIDEO_ON : WSDISPLAYIO_VIDEO_OFF);
 		return 0;
+#endif
 
 	case WSDISPLAYIO_SVIDEO:
+#if 1
 		vga_set_video(vc, *(int *)data == WSDISPLAYIO_VIDEO_ON);
 		return 0;
+#endif
 
 	case WSDISPLAYIO_GETCMAP:
 	case WSDISPLAYIO_PUTCMAP:
@@ -659,26 +656,15 @@ vga_raster_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 	case WSDISPLAYIO_GCURMAX:
 	case WSDISPLAYIO_GCURSOR:
 	case WSDISPLAYIO_SCURSOR:
-#ifdef DIAGNOSTIC
-		printf("%s: 0x%lx unsupported\n", __func__, cmd);
-#endif
 		/* NONE of these operations are by the generic VGA driver. */
 		return EPASSTHROUGH;
 	}
 
-	if (vc->vc_funcs == NULL) {
-#ifdef DIAGNOSTIC
-		printf("%s: no vc_funcs\n", __func__);
-#endif
-		return EPASSTHROUGH;
-	}
+	if (vc->vc_funcs == NULL)
+		return (EPASSTHROUGH);
 
-	if (vf->vf_ioctl == NULL) {
-#ifdef DIAGNOSTIC
-		printf("%s: no vf_ioctl\n", __func__);
-#endif
-		return EPASSTHROUGH;
-	}
+	if (vf->vf_ioctl == NULL)
+		return (EPASSTHROUGH);
 
 	return ((*vf->vf_ioctl)(v, cmd, data, flag, l));
 }
@@ -698,7 +684,7 @@ vga_raster_mmap(void *v, void *vs, off_t offset, int prot)
 	return ((*vf->vf_mmap)(v, offset, prot));
 }
 
-static int
+int
 vga_raster_alloc_screen(void *v, const struct wsscreen_descr *type,
     void **cookiep, int *curxp, int *curyp, long *defattrp)
 {
@@ -729,7 +715,7 @@ vga_raster_alloc_screen(void *v, const struct wsscreen_descr *type,
 	return (0);
 }
 
-static void
+void
 vga_raster_free_screen(void *v, void *cookie)
 {
 	struct vgascreen *vs = cookie;
@@ -746,7 +732,7 @@ vga_raster_free_screen(void *v, void *cookie)
 		vc->active = 0;
 }
 
-static int
+int
 vga_raster_show_screen(void *v, void *cookie, int waitok,
     void (*cb)(void *, int, int), void *cbarg)
 {
@@ -771,7 +757,7 @@ vga_raster_show_screen(void *v, void *cookie, int waitok,
 	return (0);
 }
 
-static void
+void
 vga_switch_screen(struct vga_config *vc)
 {
 	struct vgascreen *scr, *oldscr;
@@ -843,7 +829,7 @@ vga_raster_load_font(void *v, void *id,
 	return (0);
 }
 
-static void
+void
 vga_raster_setup_font(struct vga_config *vc, struct vgascreen *scr)
 {
 	struct vga_raster_font *vf;
@@ -878,7 +864,7 @@ vga_raster_setup_font(struct vga_config *vc, struct vgascreen *scr)
 	LIST_INSERT_HEAD(&scr->fontset, vf, next);
 }
 
-static void
+void
 vga_setup_regs(struct videomode *mode, struct vga_moderegs *regs)
 {
 	int i;
@@ -1003,7 +989,7 @@ vga_setup_regs(struct videomode *mode, struct vga_moderegs *regs)
 	regs->atc[20] = 0x00;
 }
 
-static void
+void
 vga_set_mode(struct vga_handle *vh, struct vga_moderegs *regs)
 {
 	int i;
@@ -1041,7 +1027,7 @@ vga_set_mode(struct vga_handle *vh, struct vga_moderegs *regs)
 	vga_ts_write(vh, mode, vga_ts_read(vh, mode) & ~VGA_TS_MODE_BLANK);
 }
 
-static void
+void
 vga_raster_cursor_init(struct vgascreen *scr, int existing)
 {
 	struct vga_handle *vh = scr->hdl;
@@ -1072,7 +1058,7 @@ vga_raster_cursor_init(struct vgascreen *scr, int existing)
 	scr->cursoron = 1;
 }
 
-static void
+void
 vga_raster_cursor(void *id, int on, int row, int col)
 {
 	struct vgascreen *scr = id;
@@ -1132,7 +1118,7 @@ vga_raster_mapchar(void *id, int uni, u_int *index)
 	}
 }
 
-static void
+void
 vga_raster_putchar(void *id, int row, int col, u_int c, long attr)
 {
 	struct vgascreen *scr = id;
@@ -1265,7 +1251,7 @@ _vga_raster_putchar(void *id, int row, int col, u_int c, long attr,
 	}
 }
 
-static void
+void
 vga_raster_copycols(void *id, int row, int srccol, int dstcol, int ncols)
 {
 	struct vgascreen *scr = id;
@@ -1295,7 +1281,7 @@ vga_raster_copycols(void *id, int row, int srccol, int dstcol, int ncols)
 	}
 }
 
-static void
+void
 vga_raster_erasecols(void *id, int row, int startcol, int ncols, long fillattr)
 {
 	struct vgascreen *scr = id;
@@ -1308,7 +1294,7 @@ vga_raster_erasecols(void *id, int row, int startcol, int ncols, long fillattr)
 		vga_raster_putchar(id, row, i, ' ', fillattr);
 }
 
-static void
+void
 vga_raster_copyrows(void *id, int srcrow, int dstrow, int nrows)
 {
 	struct vgascreen *scr = id;
@@ -1366,7 +1352,7 @@ vga_raster_copyrows(void *id, int srcrow, int dstrow, int nrows)
 	    nrows * ncols * sizeof(struct vga_scrmem));
 }
 
-static void
+void
 vga_raster_eraserows(void *id, int startrow, int nrows, long fillattr)
 {
 	struct vgascreen *scr = id;
@@ -1445,7 +1431,7 @@ vga_raster_allocattr(void *id, int fg, int bg, int flags, long *attrp)
 	return (0);
 }
 
-static void
+void
 vga_restore_screen(struct vgascreen *scr,
     const struct wsscreen_descr *type, struct vga_scrmem *mem)
 {
@@ -1465,7 +1451,7 @@ vga_restore_screen(struct vgascreen *scr,
 	scr->encoding = tmp;
 }
 
-static void
+void
 vga_raster_setscreentype(struct vga_config *vc,
     const struct wsscreen_descr *type)
 {
@@ -1477,7 +1463,7 @@ vga_raster_setscreentype(struct vga_config *vc,
 }
 
 #ifdef WSDISPLAY_CUSTOM_OUTPUT
-static void
+void
 vga_raster_replaceattr(void *id, long oldattr, long newattr)
 {
 	struct vgascreen *scr = id;

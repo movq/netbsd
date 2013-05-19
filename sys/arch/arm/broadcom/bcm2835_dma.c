@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_dma.c,v 1.2 2012/09/18 05:47:27 matt Exp $	*/
+/*	$NetBSD: bcm2835_dma.c,v 1.1.2.2 2012/08/09 06:36:49 jdc Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_dma.c,v 1.2 2012/09/18 05:47:27 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_dma.c,v 1.1.2.2 2012/08/09 06:36:49 jdc Exp $");
 
 #define _ARM32_BUS_DMA_PRIVATE
 
@@ -38,7 +38,24 @@ __KERNEL_RCSID(0, "$NetBSD: bcm2835_dma.c,v 1.2 2012/09/18 05:47:27 matt Exp $")
 #include <sys/bus.h>
 
 struct arm32_bus_dma_tag bcm2835_bus_dma_tag = {
-	_BUS_DMAMAP_FUNCS,
-	_BUS_DMAMEM_FUNCS,
-	_BUS_DMATAG_FUNCS,
+	NULL,			/* _ranges: set by platform specific routine */
+	0,			/* _nranges */
+
+	NULL,			/* _cookie */
+
+	_bus_dmamap_create,
+	_bus_dmamap_destroy,
+	_bus_dmamap_load,
+	_bus_dmamap_load_mbuf,
+	_bus_dmamap_load_uio,
+	_bus_dmamap_load_raw,
+	_bus_dmamap_unload,
+	_bus_dmamap_sync,
+	NULL,			/* sync_post */
+
+	_bus_dmamem_alloc,
+	_bus_dmamem_free,
+	_bus_dmamem_map,
+	_bus_dmamem_unmap,
+	_bus_dmamem_mmap,
 };

@@ -1,4 +1,4 @@
-.\"	$NetBSD: main,v 1.495 2013/05/06 21:21:14 jnemeth Exp $
+.\"	$NetBSD: main,v 1.484.2.6 2013/05/12 16:44:03 riz Exp $
 .\"
 .\" Copyright (c) 1999-2012 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -458,62 +458,305 @@ possible, it's likely that
 wouldn't exist.
 .
 .if \n[FOR_RELEASE] \{\
-.Ss Changes Between The NetBSD 5.0 and 6.0 Releases
+.Ss Changes Between The NetBSD 6.0 and 6.1 Releases
 .Pp
 The
 .Nx
 \*V release
 provides numerous significant functional enhancements, including
-support for many new devices, integration of hundreds of bug fixes,
-new and updated kernel subsystems, and many user-land enhancements.
+support for new devices, integration of hundreds of bug fixes,
+updated kernel subsystems, and many user-land enhancements.
 The result of these improvements is a stable operating system fit for
 production use that rivals most commercially available systems.
 .Pp
-It is impossible to completely summarize the massive development that
-went into the
-.Nx
-\*V release.
 The complete list of changes can be found in the
-CHANGES:
-.Lk http://ftp.NetBSD.org/pub/NetBSD/NetBSD-6.0/CHANGES
-and
-CHANGES-6.0:
-.Lk http://ftp.NetBSD.org/pub/NetBSD/NetBSD-6.0/CHANGES-6.0
-files in the top level directory of the NetBSD 6.0 release tree.
-.Pp
-.\" fill in with changes.mdoc
-.
-.\} \" \n[FOR_RELEASE]
-.
-.Ss "Features to be removed in a later release"
-The following features are to be removed from
-.Nx
-in the future:
+CHANGES-6.1:
+.Lk http://ftp.NetBSD.org/pub/NetBSD/NetBSD-6.1/CHANGES-6.1
+file in the top level directory of the NetBSD 6.1 release tree. An abbreviated list is as follows:
+.Ss2 Security Advisory Fixes
 .(bullet
-.Xr dhclient 8
-and
-.Xr rtsol 8
-in favor of
-.Xr dhcpcd 8 .
+NetBSD-SA2013-001:
+.Lk http://ftp.netbsd.org/pub/NetBSD/security/advisories/NetBSD-SA2013-001.txt.asc ,
+Kernel panic triggered from userland
 .It
-.Xr groff 1
-is being phased out.
-Man pages are handled with
-.Xr mandoc 1 ,
-and
-.Xr groff 1
-can still be found in pkgsrc as
-.Pa textproc/groff .
+NetBSD-SA2013-002:
+.Lk http://ftp.netbsd.org/pub/NetBSD/security/advisories/NetBSD-SA2013-002.txt.asc ,
+kqueue related kernel panic triggered from userland
 .It
-.Xr kame_ipsec 4
-has been replaced by
-.Xr fast_ipsec 4 .
-The option to use the old implementation (see
-.Xr options 4 )
-will be removed in the next
-.Nx
-release.
+NetBSD-SA2013-003:
+.Lk http://ftp.netbsd.org/pub/NetBSD/security/advisories/NetBSD-SA2013-003.txt.asc ,
+RNG Bug May Result in Weak Cryptographic Keys
+.It
+NetBSD-SA2013-004:
+.Lk http://ftp.netbsd.org/pub/NetBSD/security/advisories/NetBSD-SA2013-004.txt.asc ,
+Vulnerabilities in grep
 .bullet)
+.
+.Ss2 Security Fixes
+.(bullet
+expat: Fix CVE-2012-1147, CVE-2012-1148 and CVE-2012-0876.
+.It
+BIND: Address CVE-2012-5688: Named could die on specific queries with dns64 enabled.
+.It
+Fixed a crash which could happen with sysctl security.curtain=1 set.
+(PR#47598):
+.Lk http://gnats.NetBSD.org/47598
+.It
+Address CVE-2012-5667: Multiple integer overflows in GNU grep.
+.It
+Several fixes to entropy handling in the kernel.
+.It
+Prevent ktrace from being able to crash the kernel.
+.bullet)
+.
+.Ss2 General kernel
+.(bullet
+posix_spawn(): Fix processes with attributes.
+.It
+Resolve races between vget() and vrele() resulting in vget() returning dead vnodes.
+.It
+Prevent crash when unsupported fd's are used with kevent.
+.It
+Fix a bug where kmem_alloc() could be called from interrupt context.
+.It
+WAPBL: coalesce writes to the journal to speed up wapbl_flush() on raid5 by a factor of 3 to 4.
+.bullet)
+.
+.Ss2 Networking
+.(bullet
+Fix "atomic fragments" for IPv6.
+.It
+ipf: Fix alignment issues in ipmon.
+(PR#47101):
+.Lk http://gnats.NetBSD.org/47101
+.It
+npf: handle delayed checksums in the network stack.
+(PR#47235):
+.Lk http://gnats.NetBSD.org/47235
+.It
+Fixed some locking issues in
+.Xr ipf 4
+.It
+.Xr npf 3 :
+Many fixes and updates. Config syntax has changed somewhat, please check your config files.
+.It
+Fixed sendto(2) issue with IPv6 UDP datagrams.
+(PR#47408):
+.Lk http://gnats.NetBSD.org/47408
+.bullet)
+.
+.Ss2 File systems
+.(bullet
+smbfs: Make smbfs actually work on big-endian ports.
+.It
+smbfs: various fixes.
+(PR#25070):
+.Lk http://gnats.NetBSD.org/25070
+.It
+Allow mounting ext2fs and msdosfs in 32-bit compat mode.
+.It
+v7fs: fix off-by-one error.
+.bullet)
+.
+.Ss2 Drivers
+.(bullet
+.Xr ciss 4 :
+don't try to handle sensors if there aren't any.
+.It
+.Xr isp 4 :
+Fix FC-AL devices on QLogic ISP2100.
+(PR#47302):
+.Lk http://gnats.NetBSD.org/47302
+.It
+.Xr mfi 4 :
+Add support for LSI Thunderbolt (SAS2208) controllers.
+.It
+.Xr mfi 4 :
+Add support for running the MegaCLI Linux binary to manage the controller.
+.It
+.Xr puc 4 :
+Additional device support.
+.It
+.Xr bge 4 :
+Add support for Apple's Thunderbolt to Gigabit Ethernet adapter.
+(PR#46961):
+.Lk http://gnats.NetBSD.org/46961
+.It
+.Xr mvgbe 4 :
+fix a number of issues
+.It
+.Xr nfe 4 :
+Avoid bounce buffering and improve performance.
+.It
+.Xr wm 4 :
+Fix handling of 82578D and 82579V chips. Various other fixes.
+.It
+.Xr fss 4 :
+Don't crash when running multiple dump -X.
+(PR#47514):
+.Lk http://gnats.NetBSD.org/47514
+.It
+.Xr fss 4 :
+Fixed panic.
+(PR#47020):
+.Lk http://gnats.NetBSD.org/47020
+.bullet)
+.
+.Ss2 Platforms
+.(bullet
+alpha:
+.(bullet
+Fixed longjmp/setjmp on alpha for statically linked programs such as those in /rescue.
+.bullet)
+.
+.It
+amiga:
+.(bullet
+New
+.Xr ed 4
+device driver for Hydra and ASDG Zorro2 bus network cards.
+.bullet)
+.
+.It
+arm:
+.(bullet
+Fix gcc bugid 51408 for arm.
+(PR#46972):
+.Lk http://gnats.NetBSD.org/46972
+.It
+Fixed a bit check in the Kirkwood IRQ code.
+.It
+Fixed incorrect counts for 'vmstat -e' on Kirkwood.
+.It
+Make bigendian ARM get the MBR partition and offset correct.
+(PR#47081):
+.Lk http://gnats.NetBSD.org/47081
+.It
+Fixed bug where IRQ masks of GPIO were set incorrectly on Marvell SoCs.
+.It
+Fixed static linking on ARM platforms.
+(PR#47139):
+.Lk http://gnats.NetBSD.org/47139
+.It
+Properly block IRQs >= 32.
+(PR#45371):
+.Lk http://gnats.NetBSD.org/45371
+.It
+Greatly improved Raspberry Pi support - USB and onboard Ethernet now work.
+.It
+Enabled DCache Streaming Switch and Write Allocate for Sheeva CPUs.
+.It
+Added support for the watchdog timer in some Marvell SoCs.
+.It
+Fix for non-MBR disks on ARM.
+(PR#47463):
+.Lk http://gnats.NetBSD.org/47463
+.bullet)
+.
+.It
+mips:
+.(bullet
+MIPS ports have switched to gdb 7.3.1. GDB6 is removed.
+.bullet)
+.
+.It
+vax:
+.(bullet
+Reverted MAXPARTITION bump to 16, lowering it to 12 instead, to fix bootblocks and installboot for VAX 780 and other machines booting via VMB.EXE.
+.bullet)
+.
+.It
+x68k:
+.(bullet
+Update bootloader: cdboot, netboot support and bugfixes.
+.It
+Add floppy format support.
+.bullet)
+.
+.It
+x86 (
+i386,
+amd64):
+.(bullet
+Work around a possible gcc bug generating bad assembler code.
+(PR#45673):
+.Lk http://gnats.NetBSD.org/45673
+.It
+Disable C1E on AMD K8 CPUs, to prevent freeze during boot.
+.It
+Fix running BSDi and NetBSD <= 1.0 binaries.
+(PR#41341):
+.Lk http://gnats.NetBSD.org/41341
+.It
+Add support in ld.elf_so for relocation type R_386_TLS_TPOFF32.
+(PR#47061):
+.Lk http://gnats.NetBSD.org/47061
+.It
+Fix some ACPI panics.
+(PR#47016):
+.Lk http://gnats.NetBSD.org/47016
+.It
+The amd64 port now supports dtrace. (Not compiled in by default)
+.bullet)
+.
+.It
+xen:
+.(bullet
+Prevent a memory corruption issue that locks up a Xen DomU, and can potentially cause file system corruption. (
+PR#47056,:
+.Lk http://gnats.NetBSD.org/47056
+ PR#47057:
+.Lk http://gnats.NetBSD.org/47057
+)
+.It
+Fix: Xen Dom0 NetBSD kernel could crash by adding duplicate xenwatches.
+.bullet)
+.
+.bullet)
+.
+.Ss2 Userland fixes
+.(bullet
+Library Updates
+.(bullet
+.Xr pthread 3 :
+libpthread minor number was bumped for the addition of pthread_cond_setclock(). Threaded binaries built on NetBSD 6.1 will not function on NetBSD 6.0.
+.It
+.Xr pthread 3 :
+libpthread can be dlopen()ed again.
+.It
+.Xr terminfo 3 :
+Various fixes to libterminfo.
+.It
+libc: fix memory corruption in rpc.
+(PR#13082):
+.Lk http://gnats.NetBSD.org/13082
+.It
+libutil: Fixed a bug in
+.Xr parsedate 3
+where it would treat all input as if it were in the local time zone.
+.bullet)
+.
+.It
+Update to tzdata2013c.
+.It
+cdb: don't refuse to open databases without entries or keys.
+.It
+Address graphics corruption in recent Cairo, manifested most commonly by certain rendered text sections appearing as solid rectangular blocks of color.
+.It
+Added
+.Xr flock 1 ,
+inspired by the Linux program of the same name.
+.It
+Updated Postfix to version 2.8.13.
+.It
+.Xr wsconsctl 8 :
+add support for touchscreen calibration.
+(PR#45872):
+.Lk http://gnats.NetBSD.org/45872
+.It
+openssl: Fixed a multiple-free bug.
+.bullet)
+.
 .
 .Ss "The NetBSD Foundation"
 .Pp
@@ -555,6 +798,8 @@ The root directory of the
 Changes between the 5.0 and 6.0 releases.
 .It Li CHANGES-6.0
 Changes between the initial 6.0 branch and final release of 6.0.
+.It Li CHANGES-6.1
+Changes between the final release of 6.0 and final release of 6.1.
 .It Li CHANGES.prev
 Changes in previous
 .Nx
@@ -651,7 +896,7 @@ range of operating systems can check the integrity of the release files.
 .item)
 .Pp
 Other directories provide unpacked source trees e.g. for distribution via
-the software update protocol (SUP) or the
+the the software update protocol (SUP) or the
 concurrent version system (CVS). For more information see:
 .Lk http://www.NetBSD.org/mirrors/
 .\}
@@ -1040,8 +1285,6 @@ If you're one of them, and would like to be mentioned, tell us!)
 .br_ne 2i
 .It Em "The portmasters (and their ports):"
 .\"
-.\" Please keep src/doc/RESPONSIBLE in sync with this list.
-.\"
 .\" XXX created by list-portmasters.pl
 .\"
 .It Ta Reinoud Zandijk                Ta Mt              reinoud Ta Sy acorn32
@@ -1183,7 +1426,6 @@ If you're one of them, and would like to be mentioned, tell us!)
 .It Ta Matt Fredette Ta Mt fredette@NetBSD.org
 .It Ta Thorsten Frueauf Ta Mt frueauf@NetBSD.org
 .It Ta Castor Fu Ta Mt castor@NetBSD.org
-.It Ta Hisashi Todd Fujinaka Ta Mt htodd@NetBSD.org
 .It Ta Makoto Fujiwara Ta Mt mef@NetBSD.org
 .It Ta Ichiro Fukuhara Ta Mt ichiro@NetBSD.org
 .It Ta Quentin Garnier Ta Mt cube@NetBSD.org
@@ -1212,7 +1454,6 @@ If you're one of them, and would like to be mentioned, tell us!)
 .It Ta John Heasley Ta Mt heas@NetBSD.org
 .It Ta Lars Heidieker Ta Mt para@NetBSD.org
 .It Ta Geert Hendrickx Ta Mt ghen@NetBSD.org
-.It Ta Wen Heping Ta Mt wen@NetBSD.org
 .It Ta Ren\('e Hexel Ta Mt rh@NetBSD.org
 .It Ta Iain Hibbert Ta Mt plunky@NetBSD.org
 .It Ta Kouichirou Hiratsuka Ta Mt hira@NetBSD.org
@@ -1254,7 +1495,6 @@ If you're one of them, and would like to be mentioned, tell us!)
 .It Ta Wayne Knowles Ta Mt wdk@NetBSD.org
 .It Ta Takayoshi Kochi Ta Mt kochi@NetBSD.org
 .It Ta Jonathan A. Kollasch Ta Mt jakllsch@NetBSD.org
-.It Ta Joseph Koshy Ta Mt jkoshy@NetBSD.org
 .It Ta Radoslaw Kujawa Ta Mt rkujawa@NetBSD.org
 .It Ta Jochen Kunz Ta Mt jkunz@NetBSD.org
 .It Ta Martti Kuparinen Ta Mt martti@NetBSD.org
@@ -1275,7 +1515,6 @@ If you're one of them, and would like to be mentioned, tell us!)
 .It Ta Warner Losh Ta Mt imp@NetBSD.org
 .It Ta Tomasz Luchowski Ta Mt zuntum@NetBSD.org
 .It Ta Federico Lupi Ta Mt federico@NetBSD.org
-.It Ta Palle Lyckegaard Ta Mt palle@NetBSD.org
 .It Ta Brett Lymn Ta Mt blymn@NetBSD.org
 .It Ta MAEKAWA Masahide Ta Mt gehenna@NetBSD.org
 .It Ta Anders Magnusson Ta Mt ragge@NetBSD.org
@@ -1323,7 +1562,6 @@ If you're one of them, and would like to be mentioned, tell us!)
 .It Ta Matthias Pfaller Ta Mt matthias@NetBSD.org
 .It Ta Chris Pinnock Ta Mt cjep@NetBSD.org
 .It Ta Adrian Portelli Ta Mt adrianp@NetBSD.org
-.It Ta Pierre Pronchery Ta Mt khorben@NetBSD.org
 .It Ta Chris Provenzano Ta Mt proven@NetBSD.org
 .It Ta Mindaugas Rasiukevicius Ta Mt rmind@NetBSD.org
 .It Ta Michael Rauch Ta Mt mrauch@NetBSD.org
@@ -1389,7 +1627,6 @@ If you're one of them, and would like to be mentioned, tell us!)
 .It Ta Matt Thomas Ta Mt matt@NetBSD.org
 .It Ta Jason Thorpe Ta Mt thorpej@NetBSD.org
 .It Ta Christoph Toshok Ta Mt toshok@NetBSD.org
-.It Ta Tam\('as T\('oth Ta Mt ttoth@NetBSD.org
 .It Ta Greg Troxel Ta Mt gdt@NetBSD.org
 .It Ta Tsubai Masanari Ta Mt tsubai@NetBSD.org
 .It Ta Izumi Tsutsui Ta Mt tsutsui@NetBSD.org

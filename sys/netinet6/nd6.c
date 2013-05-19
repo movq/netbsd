@@ -1,4 +1,4 @@
-/*	$NetBSD: nd6.c,v 1.144 2013/01/24 14:23:09 joerg Exp $	*/
+/*	$NetBSD: nd6.c,v 1.141 2012/02/03 03:32:45 christos Exp $	*/
 /*	$KAME: nd6.c,v 1.279 2002/06/08 11:16:51 itojun Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nd6.c,v 1.144 2013/01/24 14:23:09 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nd6.c,v 1.141 2012/02/03 03:32:45 christos Exp $");
 
 #include "opt_ipsec.h"
 
@@ -68,6 +68,10 @@ __KERNEL_RCSID(0, "$NetBSD: nd6.c,v 1.144 2013/01/24 14:23:09 joerg Exp $");
 #include <netinet6/nd6.h>
 #include <netinet/icmp6.h>
 #include <netinet6/icmp6_private.h>
+
+#ifdef KAME_IPSEC
+#include <netinet6/ipsec.h>
+#endif
 
 #include <net/net_osdep.h>
 
@@ -131,16 +135,6 @@ static int fill_prlist(void *, size_t *, size_t);
 
 MALLOC_DEFINE(M_IP6NDP, "NDP", "IPv6 Neighbour Discovery");
 
-#define LN_DEQUEUE(ln) do { \
-	(ln)->ln_next->ln_prev = (ln)->ln_prev; \
-	(ln)->ln_prev->ln_next = (ln)->ln_next; \
-	} while (/*CONSTCOND*/0)
-#define LN_INSERTHEAD(ln) do { \
-	(ln)->ln_next = llinfo_nd6.ln_next; \
-	llinfo_nd6.ln_next = (ln); \
-	(ln)->ln_prev = &llinfo_nd6; \
-	(ln)->ln_next->ln_prev = (ln); \
-	} while (/*CONSTCOND*/0)
 void
 nd6_init(void)
 {
@@ -483,7 +477,6 @@ nd6_llinfo_timer(void *arg)
 		}
 		break;
 
-	case ND6_LLINFO_PURGE:
 	case ND6_LLINFO_STALE:
 		/* Garbage Collection(RFC 2461 5.3) */
 		if (!ND6_LLINFO_PERMANENT(ln)) {
@@ -1144,7 +1137,7 @@ nd6_rtrequest(int req, struct rtentry *rt, const struct rt_addrinfo *info)
 	uint8_t namelen = strlen(ifp->if_xname), addrlen = ifp->if_addrlen;
 	struct ifaddr *ifa;
 
-	RT_DPRINTF("rt_getkey(rt) = %p\n", rt_getkey(rt));
+	RT_DPRINTF("rt->_rt_key = %p\n", (void *)rt->_rt_key);
 
 	if (req == RTM_LLINFO_UPD) {
 		int rc;
@@ -1179,7 +1172,7 @@ nd6_rtrequest(int req, struct rtentry *rt, const struct rt_addrinfo *info)
 		return;
 
 	if (nd6_need_cache(ifp) == 0 && (rt->rt_flags & RTF_HOST) == 0) {
-		RT_DPRINTF("rt_getkey(rt) = %p\n", rt_getkey(rt));
+		RT_DPRINTF("rt->_rt_key = %p\n", (void *)rt->_rt_key);
 		/*
 		 * This is probably an interface direct route for a link
 		 * which does not need neighbor caches (e.g. fe80::%lo0/64).
@@ -1193,7 +1186,7 @@ nd6_rtrequest(int req, struct rtentry *rt, const struct rt_addrinfo *info)
 	if (req == RTM_RESOLVE &&
 	    (nd6_need_cache(ifp) == 0 || /* stf case */
 	     !nd6_is_addr_neighbor(satocsin6(rt_getkey(rt)), ifp))) {
-		RT_DPRINTF("rt_getkey(rt) = %p\n", rt_getkey(rt));
+		RT_DPRINTF("rt->_rt_key = %p\n", (void *)rt->_rt_key);
 		/*
 		 * FreeBSD and BSD/OS often make a cloned host route based
 		 * on a less-specific route (e.g. the default route).
@@ -1214,7 +1207,7 @@ nd6_rtrequest(int req, struct rtentry *rt, const struct rt_addrinfo *info)
 
 	switch (req) {
 	case RTM_ADD:
-		RT_DPRINTF("rt_getkey(rt) = %p\n", rt_getkey(rt));
+		RT_DPRINTF("rt->_rt_key = %p\n", (void *)rt->_rt_key);
 		/*
 		 * There is no backward compatibility :)
 		 *
@@ -1244,14 +1237,14 @@ nd6_rtrequest(int req, struct rtentry *rt, const struct rt_addrinfo *info)
 			}
 			rt_setgate(rt, &u.sa);
 			gate = rt->rt_gateway;
-			RT_DPRINTF("rt_getkey(rt) = %p\n", rt_getkey(rt));
+			RT_DPRINTF("rt->_rt_key = %p\n", (void *)rt->_rt_key);
 			if (ln != NULL)
 				nd6_llinfo_settimer(ln, 0);
-			RT_DPRINTF("rt_getkey(rt) = %p\n", rt_getkey(rt));
+			RT_DPRINTF("rt->_rt_key = %p\n", (void *)rt->_rt_key);
 			if ((rt->rt_flags & RTF_CLONING) != 0)
 				break;
 		}
-		RT_DPRINTF("rt_getkey(rt) = %p\n", rt_getkey(rt));
+		RT_DPRINTF("rt->_rt_key = %p\n", (void *)rt->_rt_key);
 		/*
 		 * In IPv4 code, we try to annonuce new RTF_ANNOUNCE entry here.
 		 * We don't do that here since llinfo is not ready yet.
@@ -1282,7 +1275,7 @@ nd6_rtrequest(int req, struct rtentry *rt, const struct rt_addrinfo *info)
 		/* FALLTHROUGH */
 	case RTM_RESOLVE:
 		if ((ifp->if_flags & (IFF_POINTOPOINT | IFF_LOOPBACK)) == 0) {
-			RT_DPRINTF("rt_getkey(rt) = %p\n", rt_getkey(rt));
+			RT_DPRINTF("rt->_rt_key = %p\n", (void *)rt->_rt_key);
 			/*
 			 * Address resolution isn't necessary for a point to
 			 * point link, so we can skip this test for a p2p link.
@@ -1297,23 +1290,23 @@ nd6_rtrequest(int req, struct rtentry *rt, const struct rt_addrinfo *info)
 			}
 			satosdl(gate)->sdl_type = ifp->if_type;
 			satosdl(gate)->sdl_index = ifp->if_index;
-			RT_DPRINTF("rt_getkey(rt) = %p\n", rt_getkey(rt));
+			RT_DPRINTF("rt->_rt_key = %p\n", (void *)rt->_rt_key);
 		}
 		if (ln != NULL)
 			break;	/* This happens on a route change */
-		RT_DPRINTF("rt_getkey(rt) = %p\n", rt_getkey(rt));
+		RT_DPRINTF("rt->_rt_key = %p\n", (void *)rt->_rt_key);
 		/*
 		 * Case 2: This route may come from cloning, or a manual route
 		 * add with a LL address.
 		 */
 		R_Malloc(ln, struct llinfo_nd6 *, sizeof(*ln));
 		rt->rt_llinfo = ln;
-		RT_DPRINTF("rt_getkey(rt) = %p\n", rt_getkey(rt));
+		RT_DPRINTF("rt->_rt_key = %p\n", (void *)rt->_rt_key);
 		if (ln == NULL) {
 			log(LOG_DEBUG, "nd6_rtrequest: malloc failed\n");
 			break;
 		}
-		RT_DPRINTF("rt_getkey(rt) = %p\n", rt_getkey(rt));
+		RT_DPRINTF("rt->_rt_key = %p\n", (void *)rt->_rt_key);
 		nd6_inuse++;
 		nd6_allocated++;
 		memset(ln, 0, sizeof(*ln));
@@ -1336,50 +1329,21 @@ nd6_rtrequest(int req, struct rtentry *rt, const struct rt_addrinfo *info)
 			ln->ln_state = ND6_LLINFO_NOSTATE;
 			nd6_llinfo_settimer(ln, 0);
 		}
-		RT_DPRINTF("rt_getkey(rt) = %p\n", rt_getkey(rt));
+		RT_DPRINTF("rt->_rt_key = %p\n", (void *)rt->_rt_key);
 		rt->rt_flags |= RTF_LLINFO;
 		ln->ln_next = llinfo_nd6.ln_next;
 		llinfo_nd6.ln_next = ln;
 		ln->ln_prev = &llinfo_nd6;
 		ln->ln_next->ln_prev = ln;
 
-		/*
-		 * If we have too many cache entries, initiate immediate
-		 * purging for some "less recently used" entries.  Note that
-		 * we cannot directly call nd6_free() here because it would
-		 * cause re-entering rtable related routines triggering an LOR
-		 * problem for FreeBSD.
-		 */
-		if (ip6_neighborgcthresh >= 0 &&
-		    nd6_inuse >= ip6_neighborgcthresh) {
-			int i;
-
-			for (i = 0; i < 10 && llinfo_nd6.ln_prev != ln; i++) {
-				struct llinfo_nd6 *ln_end = llinfo_nd6.ln_prev;
-
-				/* Move this entry to the head */
-				LN_DEQUEUE(ln_end);
-				LN_INSERTHEAD(ln_end);
-
-				if (ND6_LLINFO_PERMANENT(ln_end))
-					continue;
-
-				if (ln_end->ln_state > ND6_LLINFO_INCOMPLETE)
-					ln_end->ln_state = ND6_LLINFO_STALE;
-				else
-					ln_end->ln_state = ND6_LLINFO_PURGE;
-				nd6_llinfo_settimer(ln_end, 0);
-			}
-		}
-
-		RT_DPRINTF("rt_getkey(rt) = %p\n", rt_getkey(rt));
+		RT_DPRINTF("rt->_rt_key = %p\n", (void *)rt->_rt_key);
 		/*
 		 * check if rt_getkey(rt) is an address assigned
 		 * to the interface.
 		 */
 		ifa = (struct ifaddr *)in6ifa_ifpwithaddr(ifp,
 		    &satocsin6(rt_getkey(rt))->sin6_addr);
-		RT_DPRINTF("rt_getkey(rt) = %p\n", rt_getkey(rt));
+		RT_DPRINTF("rt->_rt_key = %p\n", (void *)rt->_rt_key);
 		if (ifa != NULL) {
 			const void *mac;
 			nd6_llinfo_settimer(ln, -1);
@@ -2083,14 +2047,6 @@ nd6_output(struct ifnet *ifp, struct ifnet *origifp, struct mbuf *m0,
 		goto sendpkt;	/* send anyway */
 	}
 
-	/*
-	 * Move this entry to the head of the queue so that it is less likely
-	 * for this entry to be a target of forced garbage collection (see
-	 * nd6_rtrequest()).
-	 */
-	LN_DEQUEUE(ln);
-	LN_INSERTHEAD(ln);
-
 	/* We don't have to do link-layer address resolution on a p2p link. */
 	if ((ifp->if_flags & IFF_POINTOPOINT) != 0 &&
 	    ln->ln_state < ND6_LLINFO_REACHABLE) {
@@ -2169,6 +2125,10 @@ nd6_output(struct ifnet *ifp, struct ifnet *origifp, struct mbuf *m0,
 		goto bad;
 	}
 
+#ifdef KAME_IPSEC
+	/* clean ipsec history once it goes out of the node */
+	ipsec_delaux(m);
+#endif
 	if ((ifp->if_flags & IFF_LOOPBACK) != 0)
 		return (*ifp->if_output)(origifp, m, sin6tocsa(dst), rt);
 	return (*ifp->if_output)(ifp, m, sin6tocsa(dst), rt);

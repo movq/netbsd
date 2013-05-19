@@ -1,6 +1,6 @@
-.\"	$NetBSD: editline.3,v 1.79 2013/01/22 20:23:21 christos Exp $
+.\"	$NetBSD: editline.3,v 1.75 2011/02/27 01:51:37 christos Exp $
 .\"
-.\" Copyright (c) 1997-2013 The NetBSD Foundation, Inc.
+.\" Copyright (c) 1997-2003 The NetBSD Foundation, Inc.
 .\" All rights reserved.
 .\"
 .\" This file was contributed to The NetBSD Foundation by Luke Mewburn.
@@ -26,13 +26,12 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd January 22, 2013
+.Dd February 26, 2011
 .Dt EDITLINE 3
 .Os
 .Sh NAME
 .Nm editline ,
 .Nm el_init ,
-.Nm el_init_fd ,
 .Nm el_end ,
 .Nm el_reset ,
 .Nm el_gets ,
@@ -78,8 +77,6 @@
 .In histedit.h
 .Ft EditLine *
 .Fn el_init "const char *prog" "FILE *fin" "FILE *fout" "FILE *ferr"
-.Ft EditLine *
-.Fn el_init_fd "const char *prog" "FILE *fin" "FILE *fout" "FILE *ferr" "int fdin" "int fdout" "int fderr"
 .Ft void
 .Fn el_end "EditLine *e"
 .Ft void
@@ -173,8 +170,6 @@ The line editing functions use a common data structure,
 .Fa EditLine ,
 which is created by
 .Fn el_init
-or
-.Fn el_init_fd
 and freed by
 .Fn el_end .
 .Pp
@@ -198,20 +193,11 @@ are the input, output, and error streams (respectively) to use.
 In this documentation, references to
 .Dq the tty
 are actually to this input/output stream combination.
-.It Fn el_init_fd
-Like
-.Fn el_init
-but allows specifying file descriptors for the
-.Xr stdio 3
-corresponding streams, in case those were created with
-.Xr funopen 3 .
 .It Fn el_end
 Clean up and finish with
 .Fa e ,
 assumed to have been created with
-.Fn el_init
-or
-.Fn el_init_fd .
+.Fn el_init .
 .It Fn el_reset
 Reset the tty and the parser.
 This should be called after an error which may have upset the tty's
@@ -235,10 +221,7 @@ and must be copied if the data is to be retained.
 Read a character from the tty.
 .Fa ch
 is modified to contain the character read.
-Returns the number of characters read if successful, \-1 otherwise,
-in which case
-.Dv errno
-can be inspected for the cause.
+Returns the number of characters read if successful, \-1 otherwise.
 .It Fn el_push
 Pushes
 .Fa str
@@ -449,14 +432,6 @@ check this
 (using
 .Fn el_get )
 to determine if editing should be enabled or not.
-.It Dv EL_UNBUFFERED , Fa "int flag"
-If
-.Fa flag
-is zero,
-unbuffered mode is disabled (the default).
-In unbuffered mode,
-.Fn el_gets
-will return immediately after processing a single character.
 .It Dv EL_GETCFN , Fa "int (*f)(EditLine *, char *c)"
 Define the character reading function as
 .Fa f ,
@@ -559,7 +534,10 @@ previously registered with the corresponding
 .Fn el_set
 call.
 .It Dv EL_UNBUFFERED , Fa "int"
-Return non-zero if unbuffered mode is enabled.
+Sets or clears unbuffered mode.
+In this mode,
+.Fn el_gets
+will return immediately after processing a single character.
 .It Dv EL_PREP_TERM , Fa "int"
 Sets or clears terminal editing mode.
 .It Dv EL_GETFP , Fa "int fd", Fa "FILE **fp"
@@ -595,6 +573,8 @@ If
 is
 .Dv NULL ,
 try
+.Pa $PWD/.editrc
+then
 .Pa $HOME/.editrc .
 Refer to
 .Xr editrc 5

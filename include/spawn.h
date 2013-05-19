@@ -1,4 +1,4 @@
-/*	$NetBSD: spawn.h,v 1.4 2012/02/22 17:51:01 martin Exp $	*/
+/*	$NetBSD: spawn.h,v 1.1.2.2 2012/02/23 18:34:33 riz Exp $	*/
 
 /*-
  * Copyright (c) 2008 Ed Schouten <ed@FreeBSD.org>

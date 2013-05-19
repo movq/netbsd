@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.c,v 1.1.1.2 2013/01/02 18:59:13 tron Exp $	*/
+/*	$NetBSD: msg.c,v 1.1.1.1 2009/06/23 10:09:00 tron Exp $	*/
 
 /*++
 /* NAME
@@ -13,46 +13,21 @@
 /*	void	msg_info(format, ...)
 /*	const char *format;
 /*
-/*	void	vmsg_info(format, ap)
-/*	const char *format;
-/*	va_list	ap;
-/*
 /*	void	msg_warn(format, ...)
 /*	const char *format;
-/*
-/*	void	vmsg_warn(format, ap)
-/*	const char *format;
-/*	va_list	ap;
 /*
 /*	void	msg_error(format, ...)
 /*	const char *format;
 /*
-/*	void	vmsg_error(format, ap)
-/*	const char *format;
-/*	va_list	ap;
-/*
 /*	NORETURN msg_fatal(format, ...)
 /*	const char *format;
-/*
-/*	NORETURN vmsg_fatal(format, ap)
-/*	const char *format;
-/*	va_list	ap;
 /*
 /*	NORETURN msg_fatal_status(status, format, ...)
 /*	int	status;
 /*	const char *format;
 /*
-/*	NORETURN vmsg_fatal_status(status, format, ap)
-/*	int	status;
-/*	const char *format;
-/*	va_list	ap;
-/*
 /*	NORETURN msg_panic(format, ...)
 /*	const char *format;
-/*
-/*	NORETURN vmsg_panic(format, ap)
-/*	const char *format;
-/*	va_list	ap;
 /*
 /*	MSG_CLEANUP_FN msg_cleanup(cleanup)
 /*	void (*cleanup)(void);
@@ -203,13 +178,8 @@ void    msg_info(const char *fmt,...)
     va_list ap;
 
     va_start(ap, fmt);
-    vmsg_info(fmt, ap);
-    va_end(ap);
-}
-
-void    vmsg_info(const char *fmt, va_list ap)
-{
     msg_vprintf(MSG_INFO, fmt, ap);
+    va_end(ap);
 }
 
 /* msg_warn - report warning message */
@@ -219,13 +189,8 @@ void    msg_warn(const char *fmt,...)
     va_list ap;
 
     va_start(ap, fmt);
-    vmsg_warn(fmt, ap);
-    va_end(ap);
-}
-
-void    vmsg_warn(const char *fmt, va_list ap)
-{
     msg_vprintf(MSG_WARN, fmt, ap);
+    va_end(ap);
 }
 
 /* msg_error - report recoverable error */
@@ -235,13 +200,8 @@ void    msg_error(const char *fmt,...)
     va_list ap;
 
     va_start(ap, fmt);
-    vmsg_error(fmt, ap);
-    va_end(ap);
-}
-
-void    vmsg_error(const char *fmt, va_list ap)
-{
     msg_vprintf(MSG_ERROR, fmt, ap);
+    va_end(ap);
     if (++msg_error_count >= msg_error_bound)
 	msg_fatal("too many errors - program terminated");
 }
@@ -252,15 +212,10 @@ NORETURN msg_fatal(const char *fmt,...)
 {
     va_list ap;
 
-    va_start(ap, fmt);
-    vmsg_fatal(fmt, ap);
-    /* NOTREACHED */
-}
-
-NORETURN vmsg_fatal(const char *fmt, va_list ap)
-{
     if (msg_exiting++ == 0) {
+	va_start(ap, fmt);
 	msg_vprintf(MSG_FATAL, fmt, ap);
+	va_end(ap);
 	if (msg_cleanup_fn)
 	    msg_cleanup_fn();
     }
@@ -275,15 +230,10 @@ NORETURN msg_fatal_status(int status, const char *fmt,...)
 {
     va_list ap;
 
-    va_start(ap, fmt);
-    vmsg_fatal_status(status, fmt, ap);
-    /* NOTREACHED */
-}
-
-NORETURN vmsg_fatal_status(int status, const char *fmt, va_list ap)
-{
     if (msg_exiting++ == 0) {
+	va_start(ap, fmt);
 	msg_vprintf(MSG_FATAL, fmt, ap);
+	va_end(ap);
 	if (msg_cleanup_fn)
 	    msg_cleanup_fn();
     }
@@ -298,15 +248,10 @@ NORETURN msg_panic(const char *fmt,...)
 {
     va_list ap;
 
-    va_start(ap, fmt);
-    vmsg_panic(fmt, ap);
-    /* NOTREACHED */
-}
-
-NORETURN vmsg_panic(const char *fmt, va_list ap)
-{
     if (msg_exiting++ == 0) {
+	va_start(ap, fmt);
 	msg_vprintf(MSG_PANIC, fmt, ap);
+	va_end(ap);
     }
     sleep(1);
     abort();					/* Die! */

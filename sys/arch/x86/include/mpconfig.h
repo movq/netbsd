@@ -1,4 +1,4 @@
-/*	$NetBSD: mpconfig.h,v 1.14 2012/06/15 13:57:59 yamt Exp $	*/
+/*	$NetBSD: mpconfig.h,v 1.13 2011/07/01 18:22:39 dyoung Exp $	*/
 
 /*
  * Definitions originally from the mpbios code, but now used for ACPI
@@ -16,7 +16,7 @@
 #include <machine/pci_machdep.h>
 
 /* 
- * Interrupt types
+ * Interrupt typess
  */
 #define MPS_INTTYPE_INT         0
 #define MPS_INTTYPE_NMI         1
@@ -52,15 +52,10 @@ struct mp_intr_map
 {
 	struct mp_intr_map *next;
 	struct mp_bus *bus;
-	/*
-	 * encoding of bus_pin is mp_bus dependant.
-	 * for pci, bus_pin = (pci_device_number << 2) | pin
-	 * where pin is 0=INTA ... 3=INTD.
-	 */
 	int bus_pin;
-	struct pic *ioapic;	/* NULL for local apic */
+	struct pic *ioapic;
 	int ioapic_pin;
-	int ioapic_ih;		/* int handle, see i82093var.h for encoding */
+	int ioapic_ih;		/* int handle, for apic_intr_est */
 	int type;		/* from mp spec intr record */
  	int flags;		/* from mp spec intr record */
 	uint32_t redir;

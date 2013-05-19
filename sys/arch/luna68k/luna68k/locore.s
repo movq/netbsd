@@ -1,4 +1,4 @@
-/* $NetBSD: locore.s,v 1.52 2013/01/21 15:21:30 tsutsui Exp $ */
+/* $NetBSD: locore.s,v 1.47.2.2 2012/07/31 08:22:06 martin Exp $ */
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -107,6 +107,8 @@ ASENTRY_NOPROFILE(start)
 	movl	%d7,%a0@		| save boothowto
 	RELOC(bootdev,%a0)
 	movl	%d6,%a0@		| save bootdev
+	RELOC(esym,%a0)
+	movl	%d5,%a0@		| save esym
 #endif
 	RELOC(edata,%a0)		| clear out BSS
 	movl	#_C_LABEL(end)-4,%d0	| (must be <= 256 kB)
@@ -115,6 +117,10 @@ ASENTRY_NOPROFILE(start)
 1:	clrl	%a0@+
 	dbra	%d0,1b
 
+#if 1
+	RELOC(esym,%a0)
+	clrl	%a0@			| store end of symbol table XXX
+#endif
 	RELOC(lowram,%a0)
 	movl	%a5,%a0@		| store start of physical memory
 
@@ -213,24 +219,6 @@ Lstart2:
 	RELOC(physmem,%a0)
 	movl	%d1,%a0@		| and physmem
 
-/* check if symbol table is loaded and set esym address */
-#if NKSYMS || defined(DDB) || defined(LKM)
-	RELOC(end,%a0)
-	pea	%a0@
-	RELOC(_C_LABEL(symtab_size),%a0)
-	jbsr	%a0@			| symtab_size(end)
-	addql	#4,%sp
-	tstl	%d0			| check if valid symtab is loaded
-	jeq	1f			|  no, skip
-	lea	_C_LABEL(end),%a0	| calculate end of symtab address
-	addl	%a0,%d0
-#else
-	clrl	%d0			| no symbol table
-#endif
-1:
-	RELOC(esym,%a0)
-	movl	%d0,%a0@
-	
 /* configure kernel and lwp0 VA space so we can get going */
 #if NKSYMS || defined(DDB) || defined(LKM)
 	RELOC(esym,%a0)			| end of static kernel test/data/syms
@@ -819,7 +807,6 @@ ENTRY_NOPROFILE(intrhand_vectored)
 
 #if 1	/* XXX wild timer -- how can I disable/enable the interrupt? */
 ENTRY_NOPROFILE(lev5intr)
-	addql	#1,_C_LABEL(idepth)
 	btst	#7,0x63000000		| check whether system clock
 	beq	1f
 	movb	#1,0x63000000		| clear the interrupt
@@ -833,7 +820,6 @@ ENTRY_NOPROFILE(lev5intr)
 	addql	#1,_C_LABEL(intrcnt)+20
 	INTERRUPT_RESTOREREG
 1:
-	subql	#1,_C_LABEL(idepth)
 	jra	_ASM_LABEL(rei)		| all done
 #endif
 

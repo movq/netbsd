@@ -1,4 +1,4 @@
-/*	$NetBSD: tls_client.c,v 1.6 2013/01/02 19:18:36 tron Exp $	*/
+/*	$NetBSD: tls_client.c,v 1.4.6.1 2012/06/13 19:29:04 riz Exp $	*/
 
 /*++
 /* NAME
@@ -169,8 +169,7 @@ static SSL_SESSION *load_clnt_session(TLS_SESS_STATE *TLScontext)
     /*
      * Prepare the query.
      */
-    if (TLScontext->log_mask & TLS_LOG_CACHE)
-	/* serverid already contains namaddrport information */
+    if (TLScontext->log_level >= 2)
 	msg_info("looking for session %s in %s cache",
 		 TLScontext->serverid, TLScontext->cache_type);
 
@@ -191,8 +190,7 @@ static SSL_SESSION *load_clnt_session(TLS_SESS_STATE *TLScontext)
 		       session_data) == TLS_MGR_STAT_OK) {
 	session = tls_session_activate(STR(session_data), LEN(session_data));
 	if (session) {
-	    if (TLScontext->log_mask & TLS_LOG_CACHE)
-		/* serverid already contains namaddrport information */
+	    if (TLScontext->log_level >= 2)
 		msg_info("reloaded session %s from %s cache",
 			 TLScontext->serverid, TLScontext->cache_type);
 	}
@@ -231,8 +229,7 @@ static int new_client_session_cb(SSL *ssl, SSL_SESSION *session)
 	msg_panic("%s: null session cache type in new session callback",
 		  myname);
 
-    if (TLScontext->log_mask & TLS_LOG_CACHE)
-	/* serverid already contains namaddrport information */
+    if (TLScontext->log_level >= 2)
 	msg_info("save session %s to %s cache",
 		 TLScontext->serverid, TLScontext->cache_type);
 
@@ -279,8 +276,7 @@ static void uncache_session(SSL_CTX *ctx, TLS_SESS_STATE *TLScontext)
     if (TLScontext->cache_type == 0 || TLScontext->serverid == 0)
 	return;
 
-    if (TLScontext->log_mask & TLS_LOG_CACHE)
-	/* serverid already contains namaddrport information */
+    if (TLScontext->log_level >= 2)
 	msg_info("remove session %s from client cache", TLScontext->serverid);
 
     tls_mgr_delete(TLScontext->cache_type, TLScontext->serverid);
@@ -296,14 +292,8 @@ TLS_APPL_STATE *tls_client_init(const TLS_CLIENT_INIT_PROPS *props)
     TLS_APPL_STATE *app_ctx;
     const EVP_MD *md_alg;
     unsigned int md_len;
-    int     log_mask;
 
-    /*
-     * Convert user loglevel to internal logmask.
-     */
-    log_mask = tls_log_mask(props->log_param, props->log_level);
-
-    if (log_mask & TLS_LOG_VERBOSE)
+    if (props->log_level >= 2)
 	msg_info("initializing the client-side TLS engine");
 
     /*
@@ -397,7 +387,7 @@ TLS_APPL_STATE *tls_client_init(const TLS_CLIENT_INIT_PROPS *props)
     /*
      * Set the call-back routine for verbose logging.
      */
-    if (log_mask & TLS_LOG_DEBUG)
+    if (props->log_level >= 2)
 	SSL_CTX_set_info_callback(client_ctx, tls_info_callback);
 
     /*
@@ -481,7 +471,7 @@ TLS_APPL_STATE *tls_client_init(const TLS_CLIENT_INIT_PROPS *props)
      * Allocate an application context, and populate with mandatory protocol
      * and cipher data.
      */
-    app_ctx = tls_alloc_app_context(client_ctx, log_mask);
+    app_ctx = tls_alloc_app_context(client_ctx);
 
     /*
      * The external session cache is implemented by the tlsmgr(8) process.
@@ -522,7 +512,7 @@ TLS_APPL_STATE *tls_client_init(const TLS_CLIENT_INIT_PROPS *props)
 static int match_hostname(const char *peerid,
 			          const TLS_CLIENT_START_PROPS *props)
 {
-    const ARGV *cmatch_argv;
+    const ARGV *cmatch_argv = props->matchargv;
     const char *nexthop = props->nexthop;
     const char *hname = props->host;
     const char *pattern;
@@ -531,9 +521,6 @@ static int match_hostname(const char *peerid,
     int     i;
     int     idlen;
     int     patlen;
-
-    if ((cmatch_argv = props->matchargv) == 0)
-	return 0;
 
     /*
      * Match the peerid against each pattern until we find a match.
@@ -589,10 +576,6 @@ static void verify_extract_name(TLS_SESS_STATE *TLScontext, X509 *peercert,
     int     i;
     int     r;
     int     matched = 0;
-    int     dnsname_match;
-    int     verify_peername = 0;
-    int     log_certmatch;
-    int     verbose;
     const char *dnsname;
     const GENERAL_NAME *gn;
 
@@ -609,16 +592,7 @@ static void verify_extract_name(TLS_SESS_STATE *TLScontext, X509 *peercert,
     if (SSL_get_verify_result(TLScontext->con) == X509_V_OK)
 	TLScontext->peer_status |= TLS_CERT_FLAG_TRUSTED;
 
-    if (TLS_CERT_IS_TRUSTED(TLScontext) && props->tls_level >= TLS_LEV_VERIFY)
-	verify_peername = 1;
-
-    /* Force cert processing so we can log the data? */
-    log_certmatch = TLScontext->log_mask & TLS_LOG_CERTMATCH;
-
-    /* Log cert details when processing? */
-    verbose = log_certmatch || (TLScontext->log_mask & TLS_LOG_VERBOSE);
-
-    if (verify_peername || log_certmatch) {
+    if (TLS_CERT_IS_TRUSTED(TLScontext) && props->tls_level >= TLS_LEV_VERIFY) {
 
 	/*
 	 * Verify the dNSName(s) in the peer certificate against the nexthop
@@ -642,7 +616,7 @@ static void verify_extract_name(TLS_SESS_STATE *TLScontext, X509 *peercert,
 	gens = X509_get_ext_d2i(peercert, NID_subject_alt_name, 0, 0);
 	if (gens) {
 	    r = sk_GENERAL_NAME_num(gens);
-	    for (i = 0; i < r; ++i) {
+	    for (i = 0; i < r && !matched; ++i) {
 		gn = sk_GENERAL_NAME_value(gens, i);
 		if (gn->type != GEN_DNS)
 		    continue;
@@ -660,26 +634,16 @@ static void verify_extract_name(TLS_SESS_STATE *TLScontext, X509 *peercert,
 		TLScontext->peer_status |= TLS_CERT_FLAG_ALTNAME;
 		dnsname = tls_dns_name(gn, TLScontext);
 		if (dnsname && *dnsname) {
-		    if ((dnsname_match = match_hostname(dnsname, props)) != 0)
-			matched++;
-		    /* Keep the first matched name. */
+		    matched = match_hostname(dnsname, props);
 		    if (TLScontext->peer_CN
-			&& ((dnsname_match && matched == 1)
-			    || *TLScontext->peer_CN == 0)) {
+			&& (matched || *TLScontext->peer_CN == 0)) {
 			myfree(TLScontext->peer_CN);
 			TLScontext->peer_CN = 0;
 		    }
-		    if (verbose)
-			msg_info("%s: %ssubjectAltName: %s", props->namaddr,
-				 dnsname_match ? "Matched " : "", dnsname);
 		}
 		if (TLScontext->peer_CN == 0)
 		    TLScontext->peer_CN = mystrdup(dnsname ? dnsname : "");
-		if (matched && !log_certmatch)
-		    break;
 	    }
-	    if (verify_peername && matched)
-		TLScontext->peer_status |= TLS_CERT_FLAG_MATCHED;
 
 	    /*
 	     * (Sam Rushing, Ironport) Free stack *and* member GENERAL_NAME
@@ -695,21 +659,20 @@ static void verify_extract_name(TLS_SESS_STATE *TLScontext, X509 *peercert,
 	    TLScontext->peer_CN = tls_peer_CN(peercert, TLScontext);
 	    if (*TLScontext->peer_CN)
 		matched = match_hostname(TLScontext->peer_CN, props);
-	    if (verify_peername && matched)
-		TLScontext->peer_status |= TLS_CERT_FLAG_MATCHED;
-	    if (verbose)
-		msg_info("%s %sCommonName %s", props->namaddr,
-			 matched ? "Matched " : "", TLScontext->peer_CN);
-	} else if (verbose) {
-	    char   *tmpcn = tls_peer_CN(peercert, TLScontext);
-
-	    /*
-	     * Though the CommonName was superceded by a subjectAltName, log
-	     * it when certificate match debugging was requested.
-	     */
-	    msg_info("%s CommonName %s", TLScontext->namaddr, tmpcn);
-	    myfree(tmpcn);
 	}
+	if (matched)
+	    TLScontext->peer_status |= TLS_CERT_FLAG_MATCHED;
+
+	/*
+	 * - Matched: Trusted and peername matches - Trusted: Signed by
+	 * trusted CA(s), but peername not matched - Untrusted: Can't verify
+	 * the trust chain, reason already logged.
+	 */
+	if (TLScontext->log_level >= 2)
+	    msg_info("%s: %s subject_CN=%s, issuer_CN=%s", props->namaddr,
+		     TLS_CERT_IS_MATCHED(TLScontext) ? "Matched" :
+		  TLS_CERT_IS_TRUSTED(TLScontext) ? "Trusted" : "Untrusted",
+		     TLScontext->peer_CN, TLScontext->issuer_CN);
     } else
 	TLScontext->peer_CN = tls_peer_CN(peercert, TLScontext);
 
@@ -721,7 +684,7 @@ static void verify_extract_name(TLS_SESS_STATE *TLScontext, X509 *peercert,
      */
     if (TLScontext->session_reused
 	&& !TLS_CERT_IS_TRUSTED(TLScontext)
-	&& (TLScontext->log_mask & TLS_LOG_UNTRUSTED))
+	&& TLScontext->log_level >= 1)
 	msg_info("%s: re-using session with untrusted certificate, "
 		 "look for details earlier in the log", props->namaddr);
 }
@@ -735,21 +698,23 @@ static void verify_extract_print(TLS_SESS_STATE *TLScontext, X509 *peercert,
 
     /* Non-null by contract */
     TLScontext->peer_fingerprint = tls_fingerprint(peercert, props->fpt_dgst);
-    TLScontext->peer_pkey_fprint = tls_pkey_fprint(peercert, props->fpt_dgst);
+
+    if (props->tls_level != TLS_LEV_FPRINT)
+	return;
 
     /*
      * Compare the fingerprint against each acceptable value, ignoring
      * upper/lower case differences.
      */
-    if (props->tls_level == TLS_LEV_FPRINT) {
-	for (cpp = props->matchargv->argv; *cpp; ++cpp) {
-	    if (strcasecmp(TLScontext->peer_fingerprint, *cpp) == 0
-		|| strcasecmp(TLScontext->peer_pkey_fprint, *cpp) == 0) {
-		TLScontext->peer_status |= TLS_CERT_FLAG_MATCHED;
-		break;
-	    }
+    for (cpp = props->matchargv->argv; *cpp; ++cpp)
+	if (strcasecmp(TLScontext->peer_fingerprint, *cpp) == 0) {
+	    TLScontext->peer_status |= TLS_CERT_FLAG_MATCHED;
+	    break;
 	}
-    }
+    if (props->log_level >= 2)
+	msg_info("%s %s%s fingerprint %s", props->namaddr,
+		 TLS_CERT_IS_MATCHED(TLScontext) ? "Matched " : "",
+		 props->fpt_dgst, TLScontext->peer_fingerprint);
 }
 
  /*
@@ -768,16 +733,8 @@ TLS_SESS_STATE *tls_client_start(const TLS_CLIENT_START_PROPS *props)
     TLS_SESS_STATE *TLScontext;
     TLS_APPL_STATE *app_ctx = props->ctx;
     VSTRING *myserverid;
-    int     log_mask = app_ctx->log_mask;
 
-    /*
-     * When certificate verification is required, log trust chain validation
-     * errors even when disabled by default for opportunistic sessions.
-     */
-    if (props->tls_level >= TLS_LEV_VERIFY)
-	log_mask |= TLS_LOG_UNTRUSTED;
-
-    if (log_mask & TLS_LOG_VERBOSE)
+    if (props->log_level >= 1)
 	msg_info("setting up TLS connection to %s", props->namaddr);
 
     /*
@@ -824,7 +781,7 @@ TLS_SESS_STATE *tls_client_start(const TLS_CLIENT_START_PROPS *props)
 	vstring_free(myserverid);
 	return (0);
     }
-    if (log_mask & TLS_LOG_VERBOSE)
+    if (props->log_level >= 2)
 	msg_info("%s: TLS cipher list \"%s\"", props->namaddr, cipher_list);
     vstring_sprintf_append(myserverid, "&c=%s", cipher_list);
 
@@ -842,11 +799,10 @@ TLS_SESS_STATE *tls_client_start(const TLS_CLIENT_START_PROPS *props)
      * If session caching was enabled when TLS was initialized, the cache type
      * is stored in the client SSL context.
      */
-    TLScontext = tls_alloc_sess_context(log_mask, props->namaddr);
+    TLScontext = tls_alloc_sess_context(props->log_level, props->namaddr);
     TLScontext->cache_type = app_ctx->cache_type;
 
     TLScontext->serverid = vstring_export(myserverid);
-    TLScontext->stream = props->stream;
 
     if ((TLScontext->con = SSL_new(app_ctx->ssl_ctx)) == NULL) {
 	msg_warn("Could not allocate 'TLScontext->con' with SSL_new()");
@@ -934,14 +890,13 @@ TLS_SESS_STATE *tls_client_start(const TLS_CLIENT_START_PROPS *props)
 
     /*
      * If the debug level selected is high enough, all of the data is dumped:
-     * TLS_LOG_TLSPKTS will dump the SSL negotiation, TLS_LOG_ALLPKTS will
-     * dump everything.
+     * 3 will dump the SSL negotiation, 4 will dump everything.
      * 
      * We do have an SSL_set_fd() and now suddenly a BIO_ routine is called?
      * Well there is a BIO below the SSL routines that is automatically
      * created for us, so we can use it for debugging purposes.
      */
-    if (log_mask & TLS_LOG_TLSPKTS)
+    if (props->log_level >= 3)
 	BIO_set_callback(SSL_get_rbio(TLScontext->con), tls_bio_dump_cb);
 
     /*
@@ -954,21 +909,14 @@ TLS_SESS_STATE *tls_client_start(const TLS_CLIENT_START_PROPS *props)
     sts = tls_bio_connect(vstream_fileno(props->stream), props->timeout,
 			  TLScontext);
     if (sts <= 0) {
-	if (ERR_peek_error() != 0) {
-	    msg_info("SSL_connect error to %s: %d", props->namaddr, sts);
-	    tls_print_errors();
-	} else if (errno != 0) {
-	    msg_info("SSL_connect error to %s: %m", props->namaddr);
-	} else {
-	    msg_info("SSL_connect error to %s: lost connection",
-		     props->namaddr);
-	}
+	msg_info("SSL_connect error to %s: %d", props->namaddr, sts);
+	tls_print_errors();
 	uncache_session(app_ctx->ssl_ctx, TLScontext);
 	tls_free_context(TLScontext);
 	return (0);
     }
-    /* Turn off packet dump if only dumping the handshake */
-    if ((log_mask & TLS_LOG_ALLPKTS) == 0)
+    /* Only log_level==4 dumps everything */
+    if (props->log_level < 4)
 	BIO_set_callback(SSL_get_rbio(TLScontext->con), 0);
 
     /*
@@ -976,7 +924,7 @@ TLS_SESS_STATE *tls_client_start(const TLS_CLIENT_START_PROPS *props)
      * session was negotiated.
      */
     TLScontext->session_reused = SSL_session_reused(TLScontext->con);
-    if ((log_mask & TLS_LOG_CACHE) && TLScontext->session_reused)
+    if (props->log_level >= 2 && TLScontext->session_reused)
 	msg_info("%s: Reusing old session", TLScontext->namaddr);
 
     /*
@@ -992,20 +940,11 @@ TLS_SESS_STATE *tls_client_start(const TLS_CLIENT_START_PROPS *props)
 	 */
 	verify_extract_name(TLScontext, peercert, props);
 	verify_extract_print(TLScontext, peercert, props);
-
-	if (TLScontext->log_mask &
-	    (TLS_LOG_CERTMATCH | TLS_LOG_VERBOSE | TLS_LOG_PEERCERT))
-	    msg_info("%s: subject_CN=%s, issuer_CN=%s, "
-		     "fingerprint %s, pkey_fingerprint=%s", props->namaddr,
-		     TLScontext->peer_CN, TLScontext->issuer_CN,
-		     TLScontext->peer_fingerprint,
-		     TLScontext->peer_pkey_fprint);
 	X509_free(peercert);
     } else {
 	TLScontext->issuer_CN = mystrdup("");
 	TLScontext->peer_CN = mystrdup("");
 	TLScontext->peer_fingerprint = mystrdup("");
-	TLScontext->peer_pkey_fprint = mystrdup("");
     }
 
     /*
@@ -1026,7 +965,7 @@ TLS_SESS_STATE *tls_client_start(const TLS_CLIENT_START_PROPS *props)
     /*
      * All the key facts in a single log entry.
      */
-    if (log_mask & TLS_LOG_SUMMARY)
+    if (props->log_level >= 1)
 	msg_info("%s TLS connection established to %s: %s with cipher %s "
 	      "(%d/%d bits)", TLS_CERT_IS_MATCHED(TLScontext) ? "Verified" :
 		 TLS_CERT_IS_TRUSTED(TLScontext) ? "Trusted" : "Untrusted",

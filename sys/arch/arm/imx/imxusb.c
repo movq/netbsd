@@ -1,4 +1,4 @@
-/*	$NetBSD: imxusb.c,v 1.4 2012/11/23 02:17:15 matt Exp $	*/
+/*	$NetBSD: imxusb.c,v 1.1 2010/11/30 13:05:27 bsh Exp $	*/
 /*
  * Copyright (c) 2009, 2010  Genetec Corporation.  All rights reserved.
  * Written by Hashimoto Kenichi and Hiroyuki Bessho for Genetec Corporation.
@@ -25,7 +25,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imxusb.c,v 1.4 2012/11/23 02:17:15 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imxusb.c,v 1.1 2010/11/30 13:05:27 bsh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -93,7 +93,6 @@ imxehci_attach(device_t parent, device_t self, void *aux)
 	sc->sc_unit = aa->aa_unit;
 	sc->sc_usbc = usbc;
 	hsc->sc_bus.hci_private = sc;
-	hsc->sc_flags |= EHCIF_ETTF;
 
 	aprint_normal("\n");
 
@@ -187,7 +186,7 @@ imxehci_attach(device_t parent, device_t self, void *aux)
 	}
 
 	/* Disable interrupts, so we don't get any spurious ones. */
-	EOWRITE4(hsc, EHCI_USBINTR, 0);
+	EOWRITE2(hsc, EHCI_USBINTR, 0);
 
 	intr_establish(aa->aa_irq, IPL_USB, IST_LEVEL, ehci_intr, hsc);
 
@@ -351,7 +350,7 @@ ulpi_reset(struct imxehci_softc *sc)
 void
 imxehci_reset(struct imxehci_softc *sc)
 {
-	uint32_t reg;
+	u_int32_t reg;
 	int i;
 	struct ehci_softc *hsc = &sc->sc_hsc;
 #define	RESET_TIMEOUT 100

@@ -1,4 +1,4 @@
-/*	$NetBSD: vector.S,v 1.42 2012/11/02 08:33:16 yamt Exp $	*/
+/*	$NetBSD: vector.S,v 1.38.8.2 2012/06/03 21:45:10 jdc Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2007, 2008 The NetBSD Foundation, Inc.
@@ -573,7 +573,7 @@ IDTVEC(intr_ ## name ## num)						;\
 	incq	CPUVAR(NINTR)		/* statistical info */		;\
 	incq	IS_EVCNT(%r14)						;\
 1:									\
-	pushq	%r13			/* save for Xdoreti */		;\
+	pushq	%r13							;\
 	movl	%ebx,CPUVAR(ILEVEL)					;\
 	sti								;\
 	incl	CPUVAR(IDEPTH)						;\

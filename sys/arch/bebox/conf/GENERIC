@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.138 2013/04/27 22:21:13 christos Exp $
+# $NetBSD: GENERIC,v 1.129.2.1 2012/06/12 17:48:02 riz Exp $
 #
 # GENERIC machine description file
 #
@@ -22,7 +22,7 @@ include 	"arch/bebox/conf/std.bebox"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.138 $"
+#ident 		"GENERIC-$Revision: 1.129.2.1 $"
 
 maxusers	32
 
@@ -36,6 +36,7 @@ options 	KTRACE		# system call tracing via ktrace(1)
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
+options 	P1003_1B_SEMAPHORE	# p1003.1b semaphore support
 
 options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -67,7 +68,6 @@ options 	COMPAT_20	# NetBSD 2.0,
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_43	# 4.3BSD
 #options 	COMPAT_386BSD_MBRPART	# recognize old partition ID
 #options 	COMPAT_LINUX	# Linux binary compatibility
@@ -113,10 +113,13 @@ options 	WAPBL		# File system journaling support
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking protocols
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 #options 	PPP_DEFLATE	# Deflate compression support for PPP
@@ -202,8 +205,8 @@ lpt0	at isa? port 0x378 irq 7	# standard PC parallel ports
 
 mcclock0 at isa? port 0x70		# time-of-day clock
 attimer0 at isa?
-#pcppi0	at isa?
-#spkr0	at pcppi?
+pcppi0	at isa?
+spkr0	at pcppi?
 
 wss0	at isa? port 0x82c irq 30 drq 6 drq2 7	# Windows Sound System
 
@@ -211,7 +214,7 @@ wss0	at isa? port 0x82c irq 30 drq 6 drq2 7	# Windows Sound System
 audio*	at audiobus?
 
 # MIDI support
-#midi*	at pcppi?			# MIDI interface to the PC speaker
+midi*	at pcppi?			# MIDI interface to the PC speaker
 
 # Joystick driver. Probe is a little strange; add only if you have one.
 joy0	at isa? port 0x201
@@ -227,6 +230,7 @@ cd*	at scsibus? target ? lun ?	# SCSI CD-ROM drives
 #uk*	at scsibus? target ? lun ?	# SCSI unknown
 
 fdc0	at isa? port 0x3f0 irq 6 drq 2	# standard PC floppy controllers
+#fdc1	at isa? port 0x370 irq ? drq ?
 fd0	at fdc? drive 1
 #fd*	at fdc? drive ?
 
@@ -268,11 +272,11 @@ pseudo-device	crypto			# /dev/crypto device
 pseudo-device	swcrypto		# software crypto implementation
 
 # disk/mass storage pseudo-devices
-#pseudo-device	bio			# RAID control device driver
-pseudo-device	ccd			# concatenated/striped disk devices
-pseudo-device	cgd			# cryptographic disk devices
-#pseudo-device	raid			# RAIDframe disk driver
-#options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
+pseudo-device	bio			# RAID control device driver
+pseudo-device	ccd		4	# concatenated/striped disk devices
+pseudo-device	cgd		4	# cryptographic disk devices
+pseudo-device	raid		8	# RAIDframe disk driver
+options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # Options to enable various other RAIDframe RAID types.
 #options 	RF_INCLUDE_EVENODD=1
 #options 	RF_INCLUDE_RAID5_RS=1
@@ -319,7 +323,7 @@ pseudo-device   accf_http		# "httpready" accept filter
 
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
-pseudo-device	sequencer		# MIDI sequencer
+pseudo-device	sequencer	1	# MIDI sequencer
 #options 	RND_COM			# use "com" randomness as well (BROKEN)
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
@@ -328,7 +332,7 @@ pseudo-device	lockstat		# lock profiling
 #pseudo-device	btuart			# Bluetooth HCI UART (H4)
 
 # a pseudo device needed for Coda	# also needs CODA (above)
-#pseudo-device	vcoda			# coda minicache <-> venus comm.
+#pseudo-device	vcoda		4	# coda minicache <-> venus comm.
 
 # a pseudo device needed for SMBFS
 #pseudo-device	nsmb			# experimental - SMB requester
@@ -349,7 +353,7 @@ pseudo-device	wsfont
 # Veriexec
 #
 # a pseudo device needed for veriexec
-#pseudo-device	veriexec
+#pseudo-device	veriexec		1
 #
 # Uncomment the fingerprint methods below that are desired. Note that
 # removing fingerprint methods will have almost no impact on the kernel

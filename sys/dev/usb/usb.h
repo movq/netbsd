@@ -1,4 +1,4 @@
-/*	$NetBSD: usb.h,v 1.103 2013/04/05 09:20:51 skrll Exp $	*/
+/*	$NetBSD: usb.h,v 1.93 2011/08/23 16:16:43 christos Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usb.h,v 1.14 1999/11/17 22:33:46 n_hibma Exp $	*/
 
 /*
@@ -40,10 +40,6 @@
 
 #include <sys/ioctl.h>
 
-#if defined(_KERNEL_OPT)
-#include "opt_usb.h"	/* for USB_DEBUG */
-#endif
-
 #if defined(_KERNEL)
 #include <sys/mallocvar.h>
 
@@ -55,77 +51,43 @@ MALLOC_DECLARE(M_USBHC);
 
 #endif
 
+#define USB_USE_SOFTINTR
+
 #ifdef USB_DEBUG
-#define ATU_DEBUG 1
-#define AUE_DEBUG 1
-#define AUVITEK_I2C_DEBUG 1
-#define AXE_DEBUG 1
-#define CUE_DEBUG 1
-#define DWC_OTG_DEBUG 1
-#define EHCI_DEBUG 1
-#define EZLOAD_DEBUG 1
-#define KUE_DEBUG 1
-#define OHCI_DEBUG 1
-#define OTUS_DEBUG 1
-#define RUM_DEBUG 1
-#define RUN_DEBUG 1
-#define UARK_DEBUG 1
-#define UATP_DEBUG 1
-#define UAUDIO_DEBUG 1
-#define UBERRY_DEBUG 1
-#define UBSA_DEBUG 1
-#define UBT_DEBUG 1
-#define UCHCOM_DEBUG 1
-#define UCOM_DEBUG 1
-#define UCYCOM_DEBUG 1
-#define UDAV_DEBUG 1
-#define UDL_DEBUG 1
-#define UDSBR_DEBUG 1
-#define UFTDI_DEBUG 1
-#define UGENSA_DEBUG 1
-#define UGEN_DEBUG 1
-#define UHCI_DEBUG 1
+#define UKBD_DEBUG 1
 #define UHIDEV_DEBUG 1
 #define UHID_DEBUG 1
-#define UHMODEM_DEBUG 1
-#define UHSO_DEBUG 1
+#define OHCI_DEBUG 1
+#define UGEN_DEBUG 1
+#define UHCI_DEBUG 1
 #define UHUB_DEBUG 1
-#define UIPAD_DEBUG 1
-#define UIPAQ_DEBUG 1
-#define UIRDA_DEBUG 1
-#define UISDATA_DEBUG 1
-#define UKBD_DEBUG 1
-#define UKYOPON_DEBUG 1
 #define ULPT_DEBUG 1
-#define UMASS_DEBUG 1
-#define UMCT_DEBUG 1
-#define UMIDIQUIRK_DEBUG 1
-#define UMIDI_DEBUG 1
-#define UMODEM_DEBUG 1
-#define UMS_DEBUG 1
-#define UPGT_DEBUG 1
+#define UCOM_DEBUG 1
 #define UPLCOM_DEBUG 1
-#define UPL_DEBUG 1
-#define URAL_DEBUG 1
-#define URIO_DEBUG 1
+#define UMCT_DEBUG 1
+#define UMODEM_DEBUG 1
+#define UAUDIO_DEBUG 1
+#define AUE_DEBUG 1
+#define CUE_DEBUG 1
+#define KUE_DEBUG 1
 #define URL_DEBUG 1
-#define URNDIS_DEBUG 1
-#define URTWN_DEBUG 1
-#define URTW_DEBUG 1
-#define USB_DEBUG 1
-#define USCANNER_DEBUG 1
-#define USLSA_DEBUG 1
-#define USSCANNER_DEBUG 1
-#define USTIR_DEBUG 1
-#define UTHUM_DEBUG 1
-#define UTOPPY_DEBUG 1
-#define UTS_DEBUG 1
-#define UVIDEO_DEBUG 1
 #define UVISOR_DEBUG 1
-#define UVSCOM_DEBUG 1
-#define UYUREX_DEBUG 1
+#define UPL_DEBUG 1
 #define UZCOM_DEBUG 1
-#define ZYD_DEBUG 1
+#define URIO_DEBUG 1
+#define UFTDI_DEBUG 1
+#define USCANNER_DEBUG 1
+#define USSCANNER_DEBUG 1
+#define EHCI_DEBUG 1
+#define UIRDA_DEBUG 1
+#define USTIR_DEBUG 1
+#define UISDATA_DEBUG 1
+#define UDSBR_DEBUG 1
+#define UBT_DEBUG 1
+#define AXE_DEBUG 1
+#define UIPAQ_DEBUG 1
+#define UCYCOM_DEBUG 1
+#define UHSO_DEBUG 1
 #define Static
 #else
 #define Static static
@@ -134,7 +96,6 @@ MALLOC_DECLARE(M_USBHC);
 #define USB_STACK_VERSION 2
 
 #define USB_MAX_DEVICES 128
-#define USB_MIN_DEVICES 2               /* unused + root HUB */
 #define USB_START_ADDR 0
 
 #define USB_CONTROL_ENDPOINT 0
@@ -165,7 +126,7 @@ typedef u_int8_t uDWord[4];
 		     (w)[3] = (u_int8_t)((v) >> 24))
 #else
 /*
- * On little-endian machines that can handle unaligned accesses
+ * On little-endian machines that can handle unanliged accesses
  * (e.g. i386) these macros can be replaced by the following.
  */
 #define UGETW(w) (*(u_int16_t *)(w))
@@ -184,16 +145,11 @@ typedef struct {
 	uWord		wLength;
 } UPACKED usb_device_request_t;
 
-#define UT_GET_DIR(a) ((a) & 0x80)
 #define UT_WRITE		0x00
 #define UT_READ			0x80
-
-#define UT_GET_TYPE(a) ((a) & 0x60)
 #define UT_STANDARD		0x00
 #define UT_CLASS		0x20
 #define UT_VENDOR		0x40
-
-#define UT_GET_RECIPIENT(a) ((a) & 0x1f)
 #define UT_DEVICE		0x00
 #define UT_INTERFACE		0x01
 #define UT_ENDPOINT		0x02
@@ -222,7 +178,7 @@ typedef struct {
 #define UT_WRITE_VENDOR_OTHER	(UT_WRITE | UT_VENDOR | UT_OTHER)
 #define UT_WRITE_VENDOR_ENDPOINT (UT_WRITE | UT_VENDOR | UT_ENDPOINT)
 
-/* Standard Requests Codes from the USB 2.0 spec, table 9-4 */
+/* Requests */
 #define UR_GET_STATUS		0x00
 #define UR_CLEAR_FEATURE	0x01
 #define UR_SET_FEATURE		0x03
@@ -252,16 +208,10 @@ typedef struct {
 #define UR_SET_INTERFACE	0x0b
 #define UR_SYNCH_FRAME		0x0c
 
-/*
- * Feature selectors. USB 2.0 spec, table 9-6 and OTG and EH suppliment,
- * table 6-2
- */
+/* Feature numbers */
 #define UF_ENDPOINT_HALT	0
 #define UF_DEVICE_REMOTE_WAKEUP	1
 #define UF_TEST_MODE		2
-#define UF_DEVICE_B_HNP_ENABLE	3
-#define UF_DEVICE_A_HNP_SUPPORT	4
-#define UF_DEVICE_A_ALT_HNP_SUPPORT 5
 
 #define USB_MAX_IPACKET		8 /* maximum size of the initial packet */
 
@@ -380,10 +330,7 @@ typedef struct {
 #define UR_GET_TT_STATE		0x0a
 #define UR_STOP_TT		0x0b
 
-/*
- * Hub features from USB 2.0 spec, table 11-17 and updated by the
- * LPM ECN table 4-7.
- */
+/* Hub features */
 #define UHF_C_HUB_LOCAL_POWER	0
 #define UHF_C_HUB_OVER_CURRENT	1
 #define UHF_PORT_CONNECTION	0
@@ -393,7 +340,6 @@ typedef struct {
 #define UHF_PORT_RESET		4
 #define UHF_PORT_POWER		8
 #define UHF_PORT_LOW_SPEED	9
-#define UHF_PORT_L1		10
 #define UHF_C_PORT_CONNECTION	16
 #define UHF_C_PORT_ENABLE	17
 #define UHF_C_PORT_SUSPEND	18
@@ -401,7 +347,6 @@ typedef struct {
 #define UHF_C_PORT_RESET	20
 #define UHF_PORT_TEST		21
 #define UHF_PORT_INDICATOR	22
-#define UHF_C_PORT_L1		23
 
 typedef struct {
 	uByte		bDescLength;
@@ -489,7 +434,6 @@ typedef struct {
 #define UPS_SUSPEND			0x0004
 #define UPS_OVERCURRENT_INDICATOR	0x0008
 #define UPS_RESET			0x0010
-#define UPS_PORT_L1			0x0020
 #define UPS_PORT_POWER			0x0100
 #define UPS_FULL_SPEED			0x0000	/* for completeness */
 #define UPS_LOW_SPEED			0x0200
@@ -502,7 +446,6 @@ typedef struct {
 #define UPS_C_SUSPEND			0x0004
 #define UPS_C_OVERCURRENT_INDICATOR	0x0008
 #define UPS_C_PORT_RESET		0x0010
-#define UPS_C_PORT_L1			0x0020
 } UPACKED usb_port_status_t;
 
 /* Device class codes */
@@ -540,8 +483,6 @@ typedef struct {
 #define	 UISUBCLASS_CAPI_CONTROLMODEL		5
 #define	 UISUBCLASS_ETHERNET_NETWORKING_CONTROL_MODEL 6
 #define	 UISUBCLASS_ATM_NETWORKING_CONTROL_MODEL 7
-#define	  UIPROTO_CDC_NOCLASS			0 /* no class specific
-						     protocol required */
 #define   UIPROTO_CDC_AT			1
 
 #define UICLASS_HID		0x03

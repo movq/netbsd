@@ -1,4 +1,4 @@
-/*	$NetBSD: fio.c,v 1.40 2013/03/09 19:43:07 christos Exp $	*/
+/*	$NetBSD: fio.c,v 1.34 2010/01/12 14:45:31 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)fio.c	8.2 (Berkeley) 4/20/95";
 #else
-__RCSID("$NetBSD: fio.c,v 1.40 2013/03/09 19:43:07 christos Exp $");
+__RCSID("$NetBSD: fio.c,v 1.34 2010/01/12 14:45:31 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -189,7 +189,7 @@ setptr(FILE *ibuf, off_t offset)
 	/* Get temporary file. */
 	(void)snprintf(linebuf, LINESIZE, "%s/mail.XXXXXX", tmpdir);
 	if ((c = mkstemp(linebuf)) == -1 ||
-	    (mestmp = Fdopen(c, "re+")) == NULL) {
+	    (mestmp = Fdopen(c, "r+")) == NULL) {
 		(void)fprintf(stderr, "mail: can't open %s\n", linebuf);
 		exit(1);
 	}
@@ -392,20 +392,14 @@ fsize(FILE *iob)
 PUBLIC int
 getfold(char *name, size_t namesize)
 {
-	char unres[PATHSIZE], res[PATHSIZE];
 	char *folder;
 
 	if ((folder = value(ENAME_FOLDER)) == NULL)
 		return -1;
-	if (*folder != '/') {
-		(void)snprintf(unres, sizeof(unres), "%s/%s", homedir, folder);
-		folder = unres;
-	}
-	if (realpath(folder, res) == NULL)
-		warn("Can't canonicalize folder `%s'", folder);
+	if (*folder == '/')
+		(void)strlcpy(name, folder, namesize);
 	else
-		folder = res;
-	(void)strlcpy(name, folder, namesize);
+		(void)snprintf(name, namesize, "%s/%s", homedir, folder);
 	return 0;
 }
 
@@ -446,7 +440,7 @@ expand(const char *name)
 		if (name[1] != 0)
 			break;
 		if (prevfile[0] == 0) {
-			warnx("No previous file");
+			(void)printf("No previous file\n");
 			return NULL;
 		}
 		return savestr(prevfile);

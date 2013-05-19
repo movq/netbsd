@@ -1,4 +1,4 @@
-/*	$NetBSD: mem.h,v 1.9 2013/03/24 18:42:00 christos Exp $	*/
+/*	$NetBSD: mem.h,v 1.7.4.1 2012/06/05 21:15:27 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004-2012  Internet Systems Consortium, Inc. ("ISC")
@@ -720,18 +720,14 @@ ISCMEMPOOLFUNC(get)(isc_mempool_t * _ISC_MEM_FLARG);
 void
 ISCMEMPOOLFUNC(put)(isc_mempool_t *, void * _ISC_MEM_FLARG);
 
-void *
-isc_default_memalloc(void *arg, size_t len);
-void
-isc_default_memfree(void *arg, void *ptr);
+#ifdef USE_MEMIMPREGISTER
 
 /*%<
  * See isc_mem_create2() above.
  */
 typedef isc_result_t
 (*isc_memcreatefunc_t)(size_t init_max_size, size_t target_size,
-		       isc_memalloc_t memalloc, isc_memfree_t memfree,
-		       void *arg, isc_mem_t **ctxp, unsigned int flags);
+		       isc_mem_t **ctxp, unsigned int flags);
 
 isc_result_t
 isc_mem_register(isc_memcreatefunc_t createfunc);
@@ -749,6 +745,7 @@ isc__mem_register(void);
  * usually do not have to care about this function: it would call
  * isc_lib_register(), which internally calls this function.
  */
+#endif /* USE_MEMIMPREGISTER */
 
 ISC_LANG_ENDDECLS
 

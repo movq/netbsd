@@ -362,17 +362,15 @@ if_route6(const struct rt6 *rt, int action)
 	if (IN6_IS_ADDR_UNSPECIFIED(&rt->dest) &&
 	    IN6_IS_ADDR_UNSPECIFIED(&rt->net))
 		rtm.hdr.rtm_flags |= RTF_GATEWAY;
-#ifdef RTF_CLONING
 	else
 		rtm.hdr.rtm_flags |= RTF_CLONING;
-#endif
 
 	rtm.hdr.rtm_addrs = RTA_DST | RTA_GATEWAY | RTA_NETMASK;
 //	if (action >= 0)
 //		rtm.hdr.rtm_addrs |= RTA_IFA;
 
 	ADDADDR(&rt->dest);
-	if (!(rtm.hdr.rtm_flags & RTF_GATEWAY)) {
+	if (rtm.hdr.rtm_flags & (RTF_HOST | RTF_CLONING)) {
 		/* Make us a link layer socket for the host gateway */
 		memset(&su, 0, sizeof(su));
 		su.sdl.sdl_len = sizeof(struct sockaddr_dl);

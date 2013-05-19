@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC_TINY,v 1.135 2013/04/27 18:19:39 christos Exp $
+#	$NetBSD: GENERIC_TINY,v 1.130.4.1 2012/06/12 17:47:52 riz Exp $
 #
 #	GENERIC_TINY -- suitable default for 4M machines
 #			No EISA, PCI, or SCSI.
@@ -41,6 +41,7 @@ options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 #options 	SYSVMSG		# System V-like message queues
 #options 	SYSVSEM		# System V-like semaphores
 #options 	SYSVSHM		# System V-like memory sharing
+#options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 #options 	USERCONF	# userconf(4) support
 options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -71,7 +72,6 @@ options 	COMPAT_20	# NetBSD 2.0
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_43	# 4.3BSD, 386BSD, and BSDI
 #options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
@@ -113,6 +113,8 @@ options 	FFS_NO_SNAPSHOT	# No FF snapshot support
 options 	INET		# IP + ICMP + TCP + UDP
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking protocols
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 #options 	PPP_DEFLATE	# Deflate compression support for PPP
@@ -539,7 +541,7 @@ cinclude "arch/i386/conf/GENERIC.local"
 # Pseudo-Devices
 
 # disk/mass storage pseudo-devices
-#pseudo-device	ccd			# concatenated/striped disk devices
+#pseudo-device	ccd		4	# concatenated/striped disk devices
 pseudo-device	fss			# file system snapshot device
 #pseudo-device	md			# memory disk device (ramdisk)
 pseudo-device	vnd			# disk-like interface to files

@@ -1,4 +1,4 @@
-.\"     $NetBSD: autoconf.9,v 1.30 2013/03/13 00:09:21 riastradh Exp $
+.\"     $NetBSD: autoconf.9,v 1.28 2010/12/02 12:54:13 wiz Exp $
 .\"
 .\" Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd February 17, 2012
+.Dd June 26, 2010
 .Dt AUTOCONF 9
 .Os
 .Sh NAME
@@ -42,7 +42,6 @@
 .Nm config_attach ,
 .Nm config_attach_pseudo ,
 .Nm config_detach ,
-.Nm config_detach_children ,
 .Nm config_deactivate ,
 .Nm config_defer ,
 .Nm config_interrupts ,
@@ -81,8 +80,6 @@
 .Fn config_attach_pseudo "cfdata_t cf"
 .Ft int
 .Fn config_detach "device_t dev" "int flags"
-.Ft int
-.Fn config_detach_children "device_t dev" "int flags"
 .Ft int
 .Fn config_deactivate "device_t dev"
 .Ft int
@@ -304,7 +301,7 @@ The
 function returns a nonzero integer indicating the confidence of
 supporting this device and a value of 0 if the driver doesn't support
 the device.
-.It Fn config_attach_loc "parent" "cf" "locs" "aux" "print"
+.It Fn config_attach_loc "parent" "locs" "cf" "aux" "print"
 Attach a found device.
 Allocates the memory for the
 .Em softc
@@ -351,17 +348,6 @@ returns zero if successful and an error code otherwise.
 .Fn config_detach
 is always called from a thread context, allowing condition variables
 to be used while the device detaches itself.
-.It Fn config_detach_children "dev" "flags"
-Iterate through all attached devices, calling
-.Fn config_detach
-for each child of
-.Fa dev ,
-passing
-.Fa flags .
-If detaching any child results in an error, the iteration will halt
-and any remaining devices will not be detached.
-.Fn config_detach_children
-returns zero if successful and an error code otherwise.
 .It Fn config_deactivate "dev"
 Called by the parent to deactivate the child device
 .Fa dev .

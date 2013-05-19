@@ -1,4 +1,4 @@
-/*	$NetBSD: itesio_isavar.h,v 1.9 2012/11/15 04:45:01 msaitoh Exp $	*/
+/*	$NetBSD: itesio_isavar.h,v 1.8.14.1 2012/11/23 16:38:45 riz Exp $	*/
 /*	$OpenBSD: itvar.h,v 1.2 2003/11/05 20:57:10 grange Exp $	*/
 
 /*

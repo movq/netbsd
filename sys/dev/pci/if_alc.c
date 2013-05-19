@@ -103,7 +103,6 @@ static void	alc_attach(device_t, device_t, void *);
 static int	alc_detach(device_t, int);
 
 static int	alc_init(struct ifnet *);
-static int	alc_init_backend(struct ifnet *, bool);
 static void	alc_start(struct ifnet *);
 static int	alc_ioctl(struct ifnet *, u_long, void *);
 static void	alc_watchdog(struct ifnet *);
@@ -120,15 +119,15 @@ static struct alc_ident *
 static void	alc_get_macaddr(struct alc_softc *);
 static void	alc_init_cmb(struct alc_softc *);
 static void	alc_init_rr_ring(struct alc_softc *);
-static int	alc_init_rx_ring(struct alc_softc *, bool);
+static int	alc_init_rx_ring(struct alc_softc *);
 static void	alc_init_smb(struct alc_softc *);
 static void	alc_init_tx_ring(struct alc_softc *);
 static int	alc_intr(void *);
 static void	alc_mac_config(struct alc_softc *);
 static int	alc_miibus_readreg(device_t, int, int);
-static void	alc_miibus_statchg(struct ifnet *);
+static void	alc_miibus_statchg(device_t);
 static void	alc_miibus_writereg(device_t, int, int, int);
-static int	alc_newbuf(struct alc_softc *, struct alc_rxdesc *, bool);
+static int	alc_newbuf(struct alc_softc *, struct alc_rxdesc *, int);
 static void	alc_phy_down(struct alc_softc *);
 static void	alc_phy_reset(struct alc_softc *);
 static void	alc_reset(struct alc_softc *);
@@ -210,14 +209,17 @@ alc_miibus_writereg(device_t dev, int phy, int reg, int val)
 }
 
 static void
-alc_miibus_statchg(struct ifnet *ifp)
+alc_miibus_statchg(device_t dev)
 {
-	struct alc_softc *sc = ifp->if_softc;
-	struct mii_data *mii = &sc->sc_miibus;
+	struct alc_softc *sc = device_private(dev);
+	struct ifnet *ifp = &sc->sc_ec.ec_if;
+	struct mii_data *mii;
 	uint32_t reg;
 
 	if ((ifp->if_flags & IFF_RUNNING) == 0)
 		return;
+
+	mii = &sc->sc_miibus;
 
 	sc->alc_flags &= ~ALC_FLAG_LINK;
 	if ((mii->mii_media_status & (IFM_ACTIVE | IFM_AVALID)) ==
@@ -364,7 +366,7 @@ alc_get_macaddr(struct alc_softc *sc)
 				break;
 		}
 		if (i == 0)
-			printf("%s: reloading EEPROM timeout!\n",
+			printf("%s: reloading EEPROM timeout!\n", 
 			    device_xname(sc->sc_dev));
 	} else {
 		if (alcdebug)
@@ -562,12 +564,12 @@ alc_aspm(struct alc_softc *sc, int media)
 {
 	uint32_t pmcfg;
 	uint16_t linkcfg;
-
+ 
 	pmcfg = CSR_READ_4(sc, ALC_PM_CFG);
 	if ((sc->alc_flags & (ALC_FLAG_APS | ALC_FLAG_PCIE)) ==
 	    (ALC_FLAG_APS | ALC_FLAG_PCIE))
 		linkcfg = CSR_READ_2(sc, sc->alc_expcap +
-		    PCIE_LCSR);
+		    PCI_PCIE_LCSR);
 	else
 		linkcfg = 0;
 	pmcfg &= ~PM_CFG_SERDES_PD_EX_L1;
@@ -582,7 +584,7 @@ alc_aspm(struct alc_softc *sc, int media)
 		if (sc->alc_ident->deviceid == PCI_PRODUCT_ATTANSIC_AR8152_B &&
 		    sc->alc_rev == ATHEROS_AR8152_B_V10)
 			linkcfg |= 0x80;
-		CSR_WRITE_2(sc, sc->alc_expcap + PCIE_LCSR,
+		CSR_WRITE_2(sc, sc->alc_expcap + PCI_PCIE_LCSR,
 		    linkcfg);
 		pmcfg &= ~(PM_CFG_EN_BUFS_RX_L0S | PM_CFG_SA_DLY_ENB |
 		    PM_CFG_HOTRST);
@@ -706,7 +708,7 @@ alc_attach(device_t parent, device_t self, void *aux)
 		goto fail;
 	}
 	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
-
+	
 	/* Set PHY address. */
 	sc->alc_phyaddr = ALC_PHY_ADDR;
 
@@ -719,12 +721,12 @@ alc_attach(device_t parent, device_t self, void *aux)
 		sc->alc_flags |= ALC_FLAG_PCIE;
 		sc->alc_expcap = base;
 		burst = pci_conf_read(sc->sc_pct, sc->sc_pcitag,
-		    base + PCIE_DCSR) >> 16;
+		    base + PCI_PCIE_DCSR) >> 16;
 		sc->alc_dma_rd_burst = (burst & 0x7000) >> 12;
 		sc->alc_dma_wr_burst = (burst & 0x00e0) >> 5;
 		if (alcdebug) {
 			printf("%s: Read request size : %u bytes.\n",
-			    device_xname(sc->sc_dev),
+			    device_xname(sc->sc_dev), 
 			    alc_dma_burst[sc->alc_dma_rd_burst]);
 			printf("%s: TLP payload size : %u bytes.\n",
 			    device_xname(sc->sc_dev),
@@ -750,10 +752,10 @@ alc_attach(device_t parent, device_t self, void *aux)
 		}
 		/* Disable ASPM L0S and L1. */
 		cap = pci_conf_read(sc->sc_pct, sc->sc_pcitag,
-		    base + PCIE_LCAP) >> 16;
+		    base + PCI_PCIE_LCAP) >> 16;
 		if ((cap & 0x00000c00) != 0) {
 			ctl = pci_conf_read(sc->sc_pct, sc->sc_pcitag,
-			    base + PCIE_LCSR) >> 16;
+			    base + PCI_PCIE_LCSR) >> 16;
 			if ((ctl & 0x08) != 0)
 				sc->alc_rcb = DMA_CFG_RCB_128;
 			if (alcdebug)
@@ -888,7 +890,7 @@ alc_attach(device_t parent, device_t self, void *aux)
 		ifmedia_add(&sc->sc_miibus.mii_media, IFM_ETHER | IFM_MANUAL,
 		    0, NULL);
 		ifmedia_set(&sc->sc_miibus.mii_media, IFM_ETHER | IFM_MANUAL);
-	} else
+	} else 
 		ifmedia_set(&sc->sc_miibus.mii_media, IFM_ETHER | IFM_AUTO);
 
 	if_attach(ifp);
@@ -984,12 +986,12 @@ alc_dma_alloc(struct alc_softc *sc)
 	if (error) {
 		printf("%s: could not load DMA'able memory for Tx ring.\n",
 		    device_xname(sc->sc_dev));
-		bus_dmamem_free(sc->sc_dmat,
+		bus_dmamem_free(sc->sc_dmat, 
 		    &sc->alc_rdata.alc_tx_ring_seg, 1);
 		return error;
 	}
 
-	sc->alc_rdata.alc_tx_ring_paddr =
+	sc->alc_rdata.alc_tx_ring_paddr = 
 	    sc->alc_cdata.alc_tx_ring_map->dm_segs[0].ds_addr;
 
 	/*
@@ -999,7 +1001,7 @@ alc_dma_alloc(struct alc_softc *sc)
 	    ALC_RX_RING_SZ, 0, BUS_DMA_NOWAIT, &sc->alc_cdata.alc_rx_ring_map);
 	if (error)
 		return (ENOBUFS);
-
+	
 	/* Allocate DMA'able memory for RX ring */
 	error = bus_dmamem_alloc(sc->sc_dmat, ALC_RX_RING_SZ,
 	    ETHER_ALIGN, 0, &sc->alc_rdata.alc_rx_ring_seg, 1,
@@ -1033,14 +1035,14 @@ alc_dma_alloc(struct alc_softc *sc)
 	/*
 	 * Create DMA stuffs for RX return ring
 	 */
-	error = bus_dmamap_create(sc->sc_dmat, ALC_RR_RING_SZ, 1,
+	error = bus_dmamap_create(sc->sc_dmat, ALC_RR_RING_SZ, 1, 
 	    ALC_RR_RING_SZ, 0, BUS_DMA_NOWAIT, &sc->alc_cdata.alc_rr_ring_map);
 	if (error)
 		return (ENOBUFS);
 
 	/* Allocate DMA'able memory for RX return ring */
-	error = bus_dmamem_alloc(sc->sc_dmat, ALC_RR_RING_SZ,
-	    ETHER_ALIGN, 0, &sc->alc_rdata.alc_rr_ring_seg, 1,
+	error = bus_dmamem_alloc(sc->sc_dmat, ALC_RR_RING_SZ, 
+	    ETHER_ALIGN, 0, &sc->alc_rdata.alc_rr_ring_seg, 1, 
 	    &nsegs, BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: could not allocate DMA'able memory for Rx "
@@ -1065,21 +1067,21 @@ alc_dma_alloc(struct alc_softc *sc)
 		return error;
 	}
 
-	sc->alc_rdata.alc_rr_ring_paddr =
+	sc->alc_rdata.alc_rr_ring_paddr = 
 	    sc->alc_cdata.alc_rr_ring_map->dm_segs[0].ds_addr;
 
 	/*
-	 * Create DMA stuffs for CMB block
+	 * Create DMA stuffs for CMB block 
 	 */
-	error = bus_dmamap_create(sc->sc_dmat, ALC_CMB_SZ, 1,
-	    ALC_CMB_SZ, 0, BUS_DMA_NOWAIT,
+	error = bus_dmamap_create(sc->sc_dmat, ALC_CMB_SZ, 1, 
+	    ALC_CMB_SZ, 0, BUS_DMA_NOWAIT, 
 	    &sc->alc_cdata.alc_cmb_map);
-	if (error)
+	if (error) 
 		return (ENOBUFS);
 
 	/* Allocate DMA'able memory for CMB block */
-	error = bus_dmamem_alloc(sc->sc_dmat, ALC_CMB_SZ,
-	    ETHER_ALIGN, 0, &sc->alc_rdata.alc_cmb_seg, 1,
+	error = bus_dmamem_alloc(sc->sc_dmat, ALC_CMB_SZ, 
+	    ETHER_ALIGN, 0, &sc->alc_rdata.alc_cmb_seg, 1, 
 	    &nsegs, BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: could not allocate DMA'able memory for "
@@ -1095,7 +1097,7 @@ alc_dma_alloc(struct alc_softc *sc)
 
 	/*  Load the DMA map for CMB block. */
 	error = bus_dmamap_load(sc->sc_dmat, sc->alc_cdata.alc_cmb_map,
-	    sc->alc_rdata.alc_cmb, ALC_CMB_SZ, NULL,
+	    sc->alc_rdata.alc_cmb, ALC_CMB_SZ, NULL, 
 	    BUS_DMA_WAITOK);
 	if (error) {
 		printf("%s: could not load DMA'able memory for CMB block\n",
@@ -1105,21 +1107,21 @@ alc_dma_alloc(struct alc_softc *sc)
 		return error;
 	}
 
-	sc->alc_rdata.alc_cmb_paddr =
+	sc->alc_rdata.alc_cmb_paddr = 
 	    sc->alc_cdata.alc_cmb_map->dm_segs[0].ds_addr;
 
 	/*
 	 * Create DMA stuffs for SMB block
 	 */
-	error = bus_dmamap_create(sc->sc_dmat, ALC_SMB_SZ, 1,
-	    ALC_SMB_SZ, 0, BUS_DMA_NOWAIT,
+	error = bus_dmamap_create(sc->sc_dmat, ALC_SMB_SZ, 1, 
+	    ALC_SMB_SZ, 0, BUS_DMA_NOWAIT, 
 	    &sc->alc_cdata.alc_smb_map);
 	if (error)
 		return (ENOBUFS);
 
 	/* Allocate DMA'able memory for SMB block */
-	error = bus_dmamem_alloc(sc->sc_dmat, ALC_SMB_SZ,
-	    ETHER_ALIGN, 0, &sc->alc_rdata.alc_smb_seg, 1,
+	error = bus_dmamem_alloc(sc->sc_dmat, ALC_SMB_SZ, 
+	    ETHER_ALIGN, 0, &sc->alc_rdata.alc_smb_seg, 1, 
 	    &nsegs, BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: could not allocate DMA'able memory for "
@@ -1135,7 +1137,7 @@ alc_dma_alloc(struct alc_softc *sc)
 
 	/*  Load the DMA map for SMB block */
 	error = bus_dmamap_load(sc->sc_dmat, sc->alc_cdata.alc_smb_map,
-	    sc->alc_rdata.alc_smb, ALC_SMB_SZ, NULL,
+	    sc->alc_rdata.alc_smb, ALC_SMB_SZ, NULL, 
 	    BUS_DMA_WAITOK);
 	if (error) {
 		printf("%s: could not load DMA'able memory for SMB block\n",
@@ -1145,7 +1147,7 @@ alc_dma_alloc(struct alc_softc *sc)
 		return error;
 	}
 
-	sc->alc_rdata.alc_smb_paddr =
+	sc->alc_rdata.alc_smb_paddr = 
 	    sc->alc_cdata.alc_smb_map->dm_segs[0].ds_addr;
 
 
@@ -1229,11 +1231,11 @@ alc_dma_free(struct alc_softc *sc)
 	sc->alc_cdata.alc_tx_ring_map = NULL;
 
 	/* Rx ring. */
-	if (sc->alc_cdata.alc_rx_ring_map != NULL)
+	if (sc->alc_cdata.alc_rx_ring_map != NULL) 
 		bus_dmamap_unload(sc->sc_dmat, sc->alc_cdata.alc_rx_ring_map);
 	if (sc->alc_cdata.alc_rx_ring_map != NULL &&
 	    sc->alc_rdata.alc_rx_ring != NULL)
-		bus_dmamem_free(sc->sc_dmat,
+		bus_dmamem_free(sc->sc_dmat, 
 		    &sc->alc_rdata.alc_rx_ring_seg, 1);
 	sc->alc_rdata.alc_rx_ring = NULL;
 	sc->alc_cdata.alc_rx_ring_map = NULL;
@@ -1243,7 +1245,7 @@ alc_dma_free(struct alc_softc *sc)
 		bus_dmamap_unload(sc->sc_dmat, sc->alc_cdata.alc_rr_ring_map);
 	if (sc->alc_cdata.alc_rr_ring_map != NULL &&
 	    sc->alc_rdata.alc_rr_ring != NULL)
-		bus_dmamem_free(sc->sc_dmat,
+		bus_dmamem_free(sc->sc_dmat, 
 		    &sc->alc_rdata.alc_rr_ring_seg, 1);
 	sc->alc_rdata.alc_rr_ring = NULL;
 	sc->alc_cdata.alc_rr_ring_map = NULL;
@@ -1263,7 +1265,7 @@ alc_dma_free(struct alc_softc *sc)
 		bus_dmamap_unload(sc->sc_dmat, sc->alc_cdata.alc_smb_map);
 	if (sc->alc_cdata.alc_smb_map != NULL &&
 	    sc->alc_rdata.alc_smb != NULL)
-		bus_dmamem_free(sc->sc_dmat,
+		bus_dmamem_free(sc->sc_dmat, 
 		    &sc->alc_rdata.alc_smb_seg, 1);
 	sc->alc_rdata.alc_smb = NULL;
 	sc->alc_cdata.alc_smb_map = NULL;
@@ -1351,7 +1353,7 @@ alc_encap(struct alc_softc *sc, struct mbuf **m_head)
 		/* Set checksum start offset. */
 		cflags |= ((poff >> 1) << TD_PLOAD_OFFSET_SHIFT) &
 		    TD_PLOAD_OFFSET_MASK;
-	}
+	} 
 	for (; idx < nsegs; idx++) {
 		desc = &sc->alc_rdata.alc_tx_ring[prod];
 		desc->len =
@@ -1411,7 +1413,7 @@ alc_start(struct ifnet *ifp)
 			break;
 		}
 		enq = 1;
-	
+		
 		/*
 		 * If there's a BPF listener, bounce a copy of this frame
 		 * to him.
@@ -1422,7 +1424,7 @@ alc_start(struct ifnet *ifp)
 	if (enq) {
 		/* Sync descriptors. */
 		bus_dmamap_sync(sc->sc_dmat, sc->alc_cdata.alc_tx_ring_map, 0,
-		    sc->alc_cdata.alc_tx_ring_map->dm_mapsize,
+		    sc->alc_cdata.alc_tx_ring_map->dm_mapsize, 
 		    BUS_DMASYNC_PREWRITE);
 		/* Kick. Assume we're using normal Tx priority queue. */
 		CSR_WRITE_4(sc, ALC_MBOX_TD_PROD_IDX,
@@ -1443,13 +1445,13 @@ alc_watchdog(struct ifnet *ifp)
 		printf("%s: watchdog timeout (missed link)\n",
 		    device_xname(sc->sc_dev));
 		ifp->if_oerrors++;
-		alc_init_backend(ifp, false);
+		alc_init(ifp);
 		return;
 	}
 
 	printf("%s: watchdog timeout\n", device_xname(sc->sc_dev));
 	ifp->if_oerrors++;
-	alc_init_backend(ifp, false);
+	alc_init(ifp);
 
 	if (!IFQ_IS_EMPTY(&ifp->if_snd))
 		 alc_start(ifp);
@@ -1517,13 +1519,13 @@ alc_stats_clear(struct alc_softc *sc)
 
 	if ((sc->alc_flags & ALC_FLAG_SMB_BUG) == 0) {
 		bus_dmamap_sync(sc->sc_dmat, sc->alc_cdata.alc_smb_map, 0,
-		    sc->alc_cdata.alc_smb_map->dm_mapsize,
+		    sc->alc_cdata.alc_smb_map->dm_mapsize, 
 		    BUS_DMASYNC_POSTREAD);
 		smb = sc->alc_rdata.alc_smb;
 		/* Update done, clear. */
 		smb->updated = 0;
 		bus_dmamap_sync(sc->sc_dmat, sc->alc_cdata.alc_smb_map, 0,
-		    sc->alc_cdata.alc_smb_map->dm_mapsize,
+		    sc->alc_cdata.alc_smb_map->dm_mapsize, 
 		    BUS_DMASYNC_PREWRITE);
 	} else {
 		for (reg = &sb.rx_frames, i = 0; reg <= &sb.rx_pkts_filtered;
@@ -1679,7 +1681,7 @@ alc_intr(void *arg)
 
 			error = alc_rxintr(sc);
 			if (error) {
-				alc_init_backend(ifp, false);
+				alc_init(ifp);
 				return (0);
 			}
 		}
@@ -1695,7 +1697,7 @@ alc_intr(void *arg)
 			if (status & INTR_TXQ_TO_RST)
 				printf("%s: TxQ reset! -- resetting\n",
 				    device_xname(sc->sc_dev));
-			alc_init_backend(ifp, false);
+			alc_init(ifp);
 			return (0);
 		}
 
@@ -1724,7 +1726,7 @@ alc_txeof(struct alc_softc *sc)
 	    BUS_DMASYNC_POSTREAD);
 	if ((sc->alc_flags & ALC_FLAG_CMB_BUG) == 0) {
 		bus_dmamap_sync(sc->sc_dmat, sc->alc_cdata.alc_cmb_map, 0,
-		    sc->alc_cdata.alc_cmb_map->dm_mapsize,
+		    sc->alc_cdata.alc_cmb_map->dm_mapsize, 
 		    BUS_DMASYNC_POSTREAD);
 		prod = sc->alc_rdata.alc_cmb->cons;
 	} else
@@ -1766,7 +1768,7 @@ alc_txeof(struct alc_softc *sc)
 }
 
 static int
-alc_newbuf(struct alc_softc *sc, struct alc_rxdesc *rxd, bool init)
+alc_newbuf(struct alc_softc *sc, struct alc_rxdesc *rxd, int init)
 {
 	struct mbuf *m;
 	bus_dmamap_t map;
@@ -1921,7 +1923,7 @@ alc_rxeof(struct alc_softc *sc, struct rx_rdesc *rrd)
 		rxd = &sc->alc_cdata.alc_rxdesc[rx_cons];
 		mp = rxd->rx_m;
 		/* Add a new receive buffer to the ring. */
-		if (alc_newbuf(sc, rxd, false) != 0) {
+		if (alc_newbuf(sc, rxd, 0) != 0) {
 			ifp->if_iqdrops++;
 			/* Reuse Rx buffers. */
 			if (sc->alc_cdata.alc_rxhead != NULL)
@@ -2038,19 +2040,12 @@ alc_reset(struct alc_softc *sc)
 	}
 
 	if (i == 0)
-		printf("%s: reset timeout(0x%08x)!\n", device_xname(sc->sc_dev),
+		printf("%s: reset timeout(0x%08x)!\n", device_xname(sc->sc_dev), 
 		    reg);
 }
 
 static int
 alc_init(struct ifnet *ifp)
-{
-
-	return alc_init_backend(ifp, true);
-}
-
-static int
-alc_init_backend(struct ifnet *ifp, bool init)
 {
 	struct alc_softc *sc = ifp->if_softc;
 	struct mii_data *mii;
@@ -2069,7 +2064,7 @@ alc_init_backend(struct ifnet *ifp, bool init)
 	alc_reset(sc);
 
 	/* Initialize Rx descriptors. */
-	error = alc_init_rx_ring(sc, init);
+	error = alc_init_rx_ring(sc);
 	if (error != 0) {
 		printf("%s: no memory for Rx buffers.\n", device_xname(sc->sc_dev));
 		alc_stop(ifp, 0);
@@ -2522,7 +2517,7 @@ alc_init_tx_ring(struct alc_softc *sc)
 }
 
 static int
-alc_init_rx_ring(struct alc_softc *sc, bool init)
+alc_init_rx_ring(struct alc_softc *sc)
 {
 	struct alc_ring_data *rd;
 	struct alc_rxdesc *rxd;
@@ -2535,7 +2530,7 @@ alc_init_rx_ring(struct alc_softc *sc, bool init)
 		rxd = &sc->alc_cdata.alc_rxdesc[i];
 		rxd->rx_m = NULL;
 		rxd->rx_desc = &rd->alc_rx_ring[i];
-		if (alc_newbuf(sc, rxd, init) != 0)
+		if (alc_newbuf(sc, rxd, 1) != 0)
 			return (ENOBUFS);
 	}
 

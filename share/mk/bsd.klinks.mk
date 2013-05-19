@@ -1,9 +1,7 @@
-#	$NetBSD: bsd.klinks.mk,v 1.10 2013/05/02 04:14:28 matt Exp $
+#	$NetBSD: bsd.klinks.mk,v 1.9 2011/07/10 23:50:24 matt Exp $
 #
 
 .include <bsd.own.mk>
-
-KLINK_MACHINE?=	${MACHINE}
 
 ##### Default values
 .if !defined(S)
@@ -16,20 +14,20 @@ S=	/sys
 .endif
 .endif
 
-CLEANFILES+=	machine ${MACHINE_CPU} ${KLINK_MACHINE}
-.if ${KLINK_MACHINE} == "sun2" || ${KLINK_MACHINE} == "sun3"
+CLEANFILES+=	machine ${MACHINE_CPU} ${MACHINE}
+.if ${MACHINE} == "sun2" || ${MACHINE} == "sun3"
 CLEANFILES+=	sun68k
-.elif ${KLINK_MACHINE} == "sparc64"
+.elif ${MACHINE} == "sparc64"
 CLEANFILES+=	sparc
-.elif ${KLINK_MACHINE} == "i386"
+.elif ${MACHINE} == "i386"
 CLEANFILES+=	x86
-.elif ${KLINK_MACHINE} == "amd64"
+.elif ${MACHINE} == "amd64"
 CLEANFILES+=	x86 i386
-.elif ${KLINK_MACHINE} == "evbmips"
+.elif ${MACHINE} == "evbmips"
 CLEANFILES+=	algor sbmips
 .endif
 
-.if defined(XEN_BUILD) || ${KLINK_MACHINE} == "xen"
+.if defined(XEN_BUILD) || ${MACHINE} == "xen"
 CLEANFILES+=	xen xen-ma/machine # xen-ma
 CPPFLAGS+=	-I${.OBJDIR}/xen-ma
 .if ${MACHINE_CPU} == "i386"
@@ -42,23 +40,23 @@ CLEANFILES+=	x86
 .if !make(obj) && !make(clean) && !make(cleandir)
 .BEGIN:
 	@rm -f machine && \
-	    ln -s $S/arch/${KLINK_MACHINE}/include machine
-	@rm -f ${KLINK_MACHINE} && \
-	    ln -s $S/arch/${KLINK_MACHINE}/include ${KLINK_MACHINE}
+	    ln -s $S/arch/${MACHINE}/include machine
+	@rm -f ${MACHINE} && \
+	    ln -s $S/arch/${MACHINE}/include ${MACHINE}
 	@if [ -d $S/arch/${MACHINE_CPU} ]; then \
 	    rm -f ${MACHINE_CPU} && \
 	    ln -s $S/arch/${MACHINE_CPU}/include ${MACHINE_CPU}; \
 	 fi
 # XXX. it gets worse..
-.if ${KLINK_MACHINE} == "sun2" || ${KLINK_MACHINE} == "sun3"
+.if ${MACHINE} == "sun2" || ${MACHINE} == "sun3"
 	@rm -f sun68k && \
 	    ln -s $S/arch/sun68k/include sun68k
 .endif
-.if ${KLINK_MACHINE} == "sparc64"
+.if ${MACHINE} == "sparc64"
 	@rm -f sparc && \
 	    ln -s $S/arch/sparc/include sparc
 .endif
-.if ${KLINK_MACHINE} == "amd64"
+.if ${MACHINE} == "amd64"
 	@rm -f x86 && \
 	    ln -s $S/arch/x86/include x86
 	@rm -f i386 && \
@@ -68,13 +66,13 @@ CLEANFILES+=	x86
 	@rm -f x86 && \
 	    ln -s $S/arch/x86/include x86
 .endif
-.if defined(XEN_BUILD) || ${KLINK_MACHINE} == "xen"
+.if defined(XEN_BUILD) || ${MACHINE} == "xen"
 	@rm -f xen && \
 	    ln -s $S/arch/xen/include xen
 	@rm -rf xen-ma && mkdir xen-ma && \
 	    ln -s ../${XEN_BUILD:U${MACHINE_ARCH}} xen-ma/machine
 .endif
-.if ${KLINK_MACHINE} == "evbmips"
+.if ${MACHINE} == "evbmips"
 	@rm -f algor && \
 	    ln -s $S/arch/algor/include algor
 	@rm -f sbmips && \

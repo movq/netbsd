@@ -1,4 +1,4 @@
-/*	$NetBSD: util.h,v 1.65 2013/05/02 07:17:35 matt Exp $	*/
+/*	$NetBSD: util.h,v 1.61 2012/01/07 18:41:14 christos Exp $	*/
 
 /*-
  * Copyright (c) 1995
@@ -33,24 +33,20 @@
 #define	_UTIL_H_
 
 #include <sys/cdefs.h>
+#include <sys/ttycom.h>
 #include <sys/types.h>
-#include <sys/ansi.h>
-#include <sys/inttypes.h>
+#include <pwd.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <termios.h>
+#include <utmp.h>
+#include <utmpx.h>
+#include <stdint.h>
+#include <machine/ansi.h>
 
 #ifdef  _BSD_TIME_T_
 typedef _BSD_TIME_T_    time_t;
 #undef  _BSD_TIME_T_
-#endif
-#ifdef  _BSD_SIZE_T_
-typedef _BSD_SIZE_T_    size_t;
-#undef  _BSD_SIZE_T_
-#endif
- 
-#if defined(_POSIX_C_SOURCE)
-#ifndef __VA_LIST_DECLARED
-typedef __va_list va_list;
-#define __VA_LIST_DECLARED
-#endif
 #endif
 
 #define	PIDLOCK_NONBLOCK	1
@@ -66,23 +62,18 @@ struct iovec;
 struct passwd;
 struct termios;
 struct utmp;
-struct utmpx;
 struct winsize;
 struct sockaddr;
 
 char	       *flags_to_string(unsigned long, const char *);
 pid_t		forkpty(int *, char *, struct termios *, struct winsize *);
 const char     *getbootfile(void);
-int		getbyteorder(void);
 off_t		getlabeloffset(void);
 int		getlabelsector(void);
 int		getlabelusesmbr(void);
 int		getmaxpartitions(void);
 int		getrawpartition(void);
-const char     *getdiskrawname(char *, size_t, const char *);
-const char     *getdiskcookedname(char *, size_t, const char *);
 const char     *getfstypename(int);
-const char     *getfsspecname(char *, size_t, const char *);
 #ifndef __LIBC12_SOURCE__
 void		login(const struct utmp *) __RENAME(__login50);
 void		loginx(const struct utmpx *) __RENAME(__loginx50);
@@ -153,8 +144,8 @@ void 		*erealloc(void *, size_t);
 struct __sFILE	*efopen(const char *, const char *);
 int	 	easprintf(char ** __restrict, const char * __restrict, ...)
 			__printflike(2, 3);
-int		evasprintf(char ** __restrict, const char * __restrict,
-    __va_list) __printflike(2, 0);
+int		evasprintf(char ** __restrict, const char * __restrict, va_list)
+			__printflike(2, 0);
 __END_DECLS
 
 #endif /* !_UTIL_H_ */

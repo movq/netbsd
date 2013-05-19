@@ -1,4 +1,4 @@
-/*	$NetBSD: fast_ipsec.c,v 1.20 2013/04/15 21:20:39 christos Exp $ */
+/*	$NetBSD: fast_ipsec.c,v 1.18 2012/01/06 14:17:11 drochner Exp $ */
 /* 	$FreeBSD: src/tools/tools/crypto/ipsecstats.c,v 1.1.4.1 2003/06/03 00:13:13 sam Exp $ */
 
 /*-
@@ -33,7 +33,7 @@
 #include <sys/cdefs.h>
 #ifndef lint
 #ifdef __NetBSD__
-__RCSID("$NetBSD: fast_ipsec.c,v 1.20 2013/04/15 21:20:39 christos Exp $");
+__RCSID("$NetBSD: fast_ipsec.c,v 1.18 2012/01/06 14:17:11 drochner Exp $");
 #endif
 #endif /* not lint*/
 
@@ -62,6 +62,42 @@ __RCSID("$NetBSD: fast_ipsec.c,v 1.20 2013/04/15 21:20:39 christos Exp $");
 #include <string.h>
 
 #include "netstat.h"
+
+/*
+ * Cache the check to see if we have fast_ipsec so that we don't
+ * have to go to the kernel repeatedly.
+ */
+static int
+have_fast_ipsec(void)
+{
+	static int haveit = -1;
+
+	if (haveit == -1) {
+		if (sysctlbyname("net.inet.ipsec.ipsecstats", NULL, NULL,
+		    NULL, 0) == -1)
+			haveit = 0;
+		else
+			haveit = 1;
+	}
+
+	return (haveit);
+}
+
+/*
+ * Dispatch between fetching and printing (KAME) IPsec statistics,
+ * and FAST_IPSEC statistics, so the rest of netstat need not know
+ * about the vagaries of the two implementations.
+ */
+void
+ipsec_switch(u_long off, const char * name)
+{
+
+	if (have_fast_ipsec())
+		return fast_ipsec_stats(off, name);
+
+	return ipsec_stats(off, name);
+}
+
 
 /*
  * Table-driven mapping from SADB algorithm codes to string names.
@@ -149,15 +185,15 @@ fast_ipsec_stats(u_long off, const char *name)
 	memset(ipcs, 0, sizeof(ipcs));
 	memset(ipips, 0, sizeof(ipips));
 
+	/* silence check */
+	if (!have_fast_ipsec())
+		return;
+
 	slen = sizeof(ipsecstats);
 	status = sysctlbyname("net.inet.ipsec.ipsecstats", ipsecstats, &slen,
 			      NULL, 0);
-	if (status < 0) {
-		if (errno == ENOENT)
-			return;
-		if (errno != ENOMEM)
-			err(1, "net.inet.ipsec.ipsecstats");
-	}
+	if (status < 0 && errno != ENOMEM)
+		err(1, "net.inet.ipsec.ipsecstats");
 
 	slen = sizeof (ahstats);
 	status = sysctlbyname("net.inet.ah.ah_stats", ahstats, &slen, NULL, 0);

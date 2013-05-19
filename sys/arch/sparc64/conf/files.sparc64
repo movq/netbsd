@@ -1,4 +1,4 @@
-#	$NetBSD: files.sparc64,v 1.141 2013/03/17 00:44:16 christos Exp $
+#	$NetBSD: files.sparc64,v 1.136.8.1 2012/03/05 20:59:25 sborrill Exp $
 
 # @(#)files.sparc64	8.1 (Berkeley) 7/19/93
 # sparc64-specific configuration info
@@ -153,11 +153,6 @@ file	arch/sparc64/dev/sab.c			sab | sabtty needs-flag
 attach com at ebus with com_ebus
 file	arch/sparc64/dev/com_ebus.c		com_ebus
 
-# ebus PS/2 keyboard attachment for Tadpole SPARCle, etc.
-include "dev/pckbport/files.pckbport"
-attach pckbc at ebus with pckbc_ebus
-file	arch/sparc64/dev/pckbc_ebus.c		pckbc_ebus
-
 device zstty {}: tty
 attach zstty at zs
 file dev/ic/z8530tty.c			zstty needs-flag
@@ -231,11 +226,11 @@ file	arch/sparc64/sparc64/core_machdep.c	coredump
 file	arch/sparc64/sparc64/emul.c
 file	arch/sparc64/sparc64/intr.c
 file	arch/sparc64/sparc64/kgdb_machdep.c	kgdb
-file	arch/sparc/sparc/kobj_machdep.c		modular & !exec_elf64
-file	arch/sparc64/sparc64/kobj_machdep.c	modular & exec_elf64
+file	arch/sparc64/sparc64/kobj_machdep.c	modular
 # sparc64/sparc64/locore.s is handled specially in the makefile,
 # because it must come first in the "ld" command line.
 file	arch/sparc64/sparc64/machdep.c
+file	arch/sparc64/sparc64/memcpyset.s
 file	arch/sparc64/sparc64/process_machdep.c
 file	arch/sparc64/sparc64/procfs_machdep.c	procfs
 file	arch/sparc/sparc/openprom.c
@@ -250,7 +245,6 @@ file	arch/sparc64/sparc64/ipifuncs.c		multiprocessor
 file	arch/sparc64/sparc64/lock_stubs.s
 
 file	arch/sparc64/sparc64/db_interface.c	ddb | kgdb
-file	arch/sparc64/sparc64/db_machdep.c	ddb
 file	arch/sparc64/sparc64/db_trace.c		ddb
 file	arch/sparc64/sparc64/db_disasm.c	ddb
 file	arch/sparc64/sparc64/db_tlb_access.S	ddb

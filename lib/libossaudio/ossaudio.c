@@ -1,4 +1,4 @@
-/*	$NetBSD: ossaudio.c,v 1.28 2012/05/05 15:57:45 christos Exp $	*/
+/*	$NetBSD: ossaudio.c,v 1.26.4.1 2012/05/07 16:55:33 riz Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: ossaudio.c,v 1.28 2012/05/05 15:57:45 christos Exp $");
+__RCSID("$NetBSD: ossaudio.c,v 1.26.4.1 2012/05/07 16:55:33 riz Exp $");
 
 /*
  * This is an OSS (Linux) sound API emulator.

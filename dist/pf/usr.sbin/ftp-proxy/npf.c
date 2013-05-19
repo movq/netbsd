@@ -1,4 +1,4 @@
-/*	$NetBSD: npf.c,v 1.2 2012/12/24 01:14:40 rmind Exp $	*/
+/*	$NetBSD: npf.c,v 1.1.8.1 2013/01/07 16:51:07 riz Exp $	*/
 
 /*
  * Copyright (c) 2011 The NetBSD Foundation, Inc.

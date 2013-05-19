@@ -1,4 +1,4 @@
-/*	$NetBSD: nslu2_iic.c,v 1.8 2012/10/14 14:20:58 msaitoh Exp $	*/
+/*	$NetBSD: nslu2_iic.c,v 1.7 2008/06/28 15:00:13 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -45,6 +45,7 @@
 #include <evbarm/nslu2/nslu2reg.h>
 
 struct slugiic_softc {
+	struct device sc_dev;
 	struct i2c_controller sc_ic;
 	struct i2c_bitbang_ops sc_ibo;
 	kmutex_t sc_lock;
@@ -195,9 +196,9 @@ slugiic_read_bits(void *arg)
 }
 
 static void
-slugiic_deferred_attach(device_t self)
+slugiic_deferred_attach(struct device *device)
 {
-	struct slugiic_softc *sc = device_private(self);
+	struct slugiic_softc *sc = (struct slugiic_softc *)device;
 	struct i2cbus_attach_args iba;
 	uint32_t reg;
 
@@ -211,20 +212,20 @@ slugiic_deferred_attach(device_t self)
 	GPIO_CONF_WRITE_4(ixp425_softc, IXP425_GPIO_GPOER, reg);
 
 	iba.iba_tag = &sc->sc_ic;
-	(void) config_found_ia(self, "i2cbus", &iba, iicbus_print);
+	(void) config_found_ia(&sc->sc_dev, "i2cbus", &iba, iicbus_print);
 }
 
 static int
-slugiic_match(device_t parent, cfdata_t cf, void *aux)
+slugiic_match(struct device *parent, struct cfdata *cf, void *arg)
 {
 
 	return (1);
 }
 
 static void
-slugiic_attach(device_t parent, device_t self, void *aux)
+slugiic_attach(struct device *parent, struct device *self, void *arg)
 {
-	struct slugiic_softc *sc = device_private(self);
+	struct slugiic_softc *sc = (struct slugiic_softc *)self;
 
 	aprint_naive("\n");
 	aprint_normal(": I2C bus\n");
@@ -257,5 +258,5 @@ slugiic_attach(device_t parent, device_t self, void *aux)
 	config_interrupts(self, slugiic_deferred_attach);
 }
 
-CFATTACH_DECL_NEW(slugiic, sizeof(struct slugiic_softc),
+CFATTACH_DECL(slugiic, sizeof(struct slugiic_softc),
     slugiic_match, slugiic_attach, NULL, NULL);

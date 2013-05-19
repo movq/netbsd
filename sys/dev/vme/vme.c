@@ -1,4 +1,4 @@
-/* $NetBSD: vme.c,v 1.26 2012/10/27 17:18:38 chs Exp $ */
+/* $NetBSD: vme.c,v 1.25 2012/01/27 18:53:09 para Exp $ */
 
 /*
  * Copyright (c) 1999
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vme.c,v 1.26 2012/10/27 17:18:38 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vme.c,v 1.25 2012/01/27 18:53:09 para Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,19 +41,25 @@ __KERNEL_RCSID(0, "$NetBSD: vme.c,v 1.26 2012/10/27 17:18:38 chs Exp $");
 #include <dev/vme/vmereg.h>
 #include <dev/vme/vmevar.h>
 
-static void vme_extractlocators(int*, struct vme_attach_args *);
-static int vmeprint(struct vme_attach_args *, char *);
-static int vmesubmatch1(device_t, cfdata_t, const int *, void *);
-static int vmesubmatch(device_t, cfdata_t, const int *, void *);
+static void vme_extractlocators(int*, struct vme_attach_args*);
+static int vmeprint(struct vme_attach_args*, char*);
+static int vmesubmatch1(struct device*, struct cfdata*,
+			     const int *, void*);
+static int vmesubmatch(struct device*, struct cfdata*,
+			    const int *, void*);
 int vmematch(device_t, cfdata_t, void *);
-void vmeattach(device_t, device_t, void *);
+void vmeattach(struct device*, struct device*,void*);
 static struct extent *vme_select_map(struct vmebus_softc*, vme_am_t);
+
+#ifdef notyet
+int vmedetach(struct device*);
+#endif
 
 #define VME_SLAVE_DUMMYDRV "vme_slv"
 
 #define VME_NUMCFRANGES 3 /* cf. "files.vme" */
 
-CFATTACH_DECL_NEW(vme, sizeof(struct vmebus_softc),
+CFATTACH_DECL(vme, sizeof(struct vmebus_softc),
     vmematch, vmeattach, NULL, NULL);
 
 const struct cfattach vme_slv_ca = {
@@ -163,9 +169,10 @@ vmematch(device_t parent, cfdata_t match, void *aux)
 void
 vmeattach(device_t parent, device_t self, void *aux)
 {
-	struct vmebus_softc *sc = device_private(self);
+	struct vmebus_softc *sc = (struct vmebus_softc *)self;
 
-	struct vmebus_attach_args *aa = aux;
+	struct vmebus_attach_args *aa =
+	    (struct vmebus_attach_args*)aux;
 
 	sc->sc_vct = aa->va_vct;
 	sc->sc_bdt = aa->va_bdt;
@@ -219,7 +226,7 @@ vmeattach(device_t parent, device_t self, void *aux)
 int
 vmedetach(device_t dev)
 {
-	struct vmebus_softc *sc = device_private(dev);
+	struct vmebus_softc *sc = (struct vmebus_softc*)dev;
 
 	if (sc->slaveconfig) {
 		/* allow bus master to free its bus ressources */

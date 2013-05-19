@@ -1,4 +1,4 @@
-/*      $NetBSD: xennetback_xenbus.c,v 1.51 2013/03/06 11:37:23 yamt Exp $      */
+/*      $NetBSD: xennetback_xenbus.c,v 1.47 2011/08/28 22:36:17 jym Exp $      */
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xennetback_xenbus.c,v 1.51 2013/03/06 11:37:23 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xennetback_xenbus.c,v 1.47 2011/08/28 22:36:17 jym Exp $");
 
 #include "opt_xen.h"
 
@@ -672,7 +672,7 @@ xennetback_get_new_mcl_pages(void)
 	struct xen_memory_reservation res;
 
 	/* get some new pages. */
-	set_xen_guest_handle(res.extent_start, mcl_pages);
+	xenguest_handle(res.extent_start) = mcl_pages;
 	res.nr_extents = NB_XMIT_PAGES_BATCH;
 	res.extent_order = 0;
 	res.address_bits = 0;
@@ -1048,7 +1048,9 @@ xennetback_ifsoftstart_transfer(void *arg)
 			 * transfers the page containing the packet to the
 			 * remote domain, and map newp in place.
 			 */
-			xpmap_ptom_map(xmit_pa, newp_ma);
+			xpmap_phys_to_machine_mapping[
+			    (xmit_pa - XPMAP_OFFSET) >> PAGE_SHIFT] =
+			    newp_ma >> PAGE_SHIFT;
 			MULTI_update_va_mapping(mclp, xmit_va,
 			    newp_ma | PG_V | PG_RW | PG_U | PG_M, 0);
 			mclp++;
@@ -1057,7 +1059,7 @@ xennetback_ifsoftstart_transfer(void *arg)
 			gop++;
 
 			mmup->ptr = newp_ma | MMU_MACHPHYS_UPDATE;
-			mmup->val = xmit_pa >> PAGE_SHIFT;
+			mmup->val = (xmit_pa - XPMAP_OFFSET) >> PAGE_SHIFT;
 			mmup++;
 
 			/* done with this packet */
@@ -1202,7 +1204,7 @@ xennetback_ifsoftstart_copy(void *arg)
 	gnttab_copy_t *gop;
 	int id, offset;
 
-	XENPRINTF(("xennetback_ifsoftstart_copy "));
+	XENPRINTF(("xennetback_ifsoftstart_transfer "));
 	int s = splnet();
 	if (__predict_false(
 	    (ifp->if_flags & (IFF_RUNNING|IFF_OACTIVE)) != IFF_RUNNING)) {

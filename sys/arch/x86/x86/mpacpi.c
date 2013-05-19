@@ -1,4 +1,4 @@
-/*	$NetBSD: mpacpi.c,v 1.97 2013/03/25 01:30:37 chs Exp $	*/
+/*	$NetBSD: mpacpi.c,v 1.92.8.2 2013/03/31 20:32:01 riz Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpacpi.c,v 1.97 2013/03/25 01:30:37 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpacpi.c,v 1.92.8.2 2013/03/31 20:32:01 riz Exp $");
 
 #include "acpica.h"
 #include "opt_acpi.h"

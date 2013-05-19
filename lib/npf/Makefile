@@ -1,10 +1,10 @@
-# $NetBSD: Makefile,v 1.3 2013/03/10 21:41:05 christos Exp $
+# $NetBSD: Makefile,v 1.1.4.3 2012/12/15 23:45:58 riz Exp $
 
 .include <bsd.own.mk>
 
 .if ${MKPIC} != "no"
 
-SUBDIR=		ext_log ext_normalize ext_rndblock
+SUBDIR=		ext_log ext_normalise ext_rndblock
 
 .endif
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.S,v 1.68 2012/04/06 13:13:13 skrll Exp $	*/
+/*	$NetBSD: trap.S,v 1.62 2012/01/03 06:18:24 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -244,7 +244,7 @@ syscall_entry:
 
 	GET_CURCPU_SPACE(%sr1, %t1)
 	ldw	CI_PSW(%sr1, %t1), %t1
-	stw	%r1, TF_CR15-TRAPFRAME_SIZEOF(%sr1, %t3)	/* eiem ,bc (block copy cache control hint) */
+	stw	%r1, TF_CR15-TRAPFRAME_SIZEOF(%sr1, %t3)	/* eiem ,bc */
 	stw	%t1, TF_CR22-TRAPFRAME_SIZEOF(%sr1, %t3)	/* ipsw */
  
 	mfsp	%sr3, %t1
@@ -267,6 +267,7 @@ syscall_entry:
 	/* We can now set the frame pointer */
 	copy	%t3, %r3
 
+#if defined(DDB) || defined(KGDB) || defined(FPEMUL)
 	stw	%r4 , TF_R4 -TRAPFRAME_SIZEOF(%sr1, %t3)
 	stw	%r5 , TF_R5 -TRAPFRAME_SIZEOF(%sr1, %t3)
 	stw	%r6 , TF_R6 -TRAPFRAME_SIZEOF(%sr1, %t3)
@@ -282,7 +283,7 @@ syscall_entry:
 	stw	%r16, TF_R16-TRAPFRAME_SIZEOF(%sr1, %t3)
 	stw	%r17, TF_R17-TRAPFRAME_SIZEOF(%sr1, %t3)
 	stw	%r18, TF_R18-TRAPFRAME_SIZEOF(%sr1, %t3)
-
+#endif /* DDB || KGDB || FPEMUL */
 	stw	%r0, 0(%sr1, %t3)	/* terminate frame */
 	copy	%r0 , %r3
 	stw	%r0, HPPA_FRAME_PSP(%sr1, %sp)
@@ -444,11 +445,11 @@ syscall_return:
 	ldw	TF_R1(%t3), %r1
 	ldw	TF_R2(%t3), %r2
 	ldw	TF_R3(%t3), %r3
-
 	/*
 	 * See the comment in the trap handling code below about why we need to
 	 * save and restore all general registers under these cases.
 	 */
+#if defined(DDB) || defined(KGDB) || defined(FPEMUL)
 	ldw	TF_R4(%t3), %r4
 	ldw	TF_R5(%t3), %r5
 	ldw	TF_R6(%t3), %r6
@@ -464,7 +465,7 @@ syscall_return:
 	ldw	TF_R16(%t3), %r16
 	ldw	TF_R17(%t3), %r17
 	ldw	TF_R18(%t3), %r18
-
+#endif /* DDB || KGDB || FPEMUL */
 	ldw	TF_R19(%t3), %t4
 	/*	%r20(%t3) is used as a temporary and will be restored later */
 	/*	%r21(%t2) is used as a temporary and will be restored later */
@@ -512,7 +513,7 @@ syscall_return:
 	mtctl	%t2, CR_FPPADDR
 
 	ldw	TF_CR0(%sr3, %t3), %t1
-	mtctl	%t1, CR_RCTR
+	mtctl	%t1, %rctr
 
 	GET_CURCPU_SPACE(%sr3, %t3)
 
@@ -899,7 +900,7 @@ LEAF_ENTRY_NOPROFILE(TLABEL(emu))
 	 */
 	extru	%arg0, 5, 6, %r1
 	comib,=,n 4, %r1, L$emulate_sfu
-	comib,=,n 0xe, %r1, hppa_fpu_emulate
+	comib,=,n 0xe, %r1, hppa_fpu_nop0
 
 	/*
 	 * If the uid field in the instruction is not zero or one, indicating a
@@ -911,7 +912,10 @@ LEAF_ENTRY_NOPROFILE(TLABEL(emu))
 
 	/*
 	 * If we're still here, this is a FPU coprocessor instruction.  That we
-	 * trapped to emulate it means one of two things.
+	 * trapped to emulate it means one of three things.
+	 *
+	 * If we do not have a hardware FPU, we need to emulate this instr-
+	 * uction.
 	 *
 	 * If we do have a hardware FPU but it is disabled, we trapped because
 	 * the current process' state is not loaded into the FPU.  We load that
@@ -922,13 +926,20 @@ LEAF_ENTRY_NOPROFILE(TLABEL(emu))
 	 * emulate it.
 	 */
 
-hppa_fpu_emulate:
+	/*
+	 * As an optimization, hppa_fpu_bootstrap replaces this branch inst-
+	 * ruction with a nop if there is a hardware FPU.
+	 *
+	 * Otherwise, this is the branch to emulate an FPU coprocessor.
+	 */
+ALTENTRY(hppa_fpu_nop0)
+	b,n	L$emulate_fpu
 
 	/*
 	 * We have a hardware FPU.  If it is enabled,  branch to emulate the
 	 * instruction.
 	 */
-	mfctl	CR_CCR, %arg0
+	mfctl	%ccr, %arg0
 	extru,= %arg0, 25, 2, %r1
 	b,n	L$emulate_fpu
 
@@ -1044,10 +1055,10 @@ ALTENTRY(hppa_fpu_swap)
 	 * 
 	 * Also, branch if there's no FPU state to swap out.
 	 */
-	mfctl	CR_CCR, %r1
+	mfctl	%ccr, %r1
 	depi	3, 25, 2, %r1
 	comb,=	%r0, %arg0, L$fpu_swap_in
-	mtctl	%r1, CR_CCR
+	mtctl	%r1, %ccr
 
 	/*
 	 * Swap out the current FPU state.
@@ -1084,6 +1095,19 @@ ALTENTRY(hppa_fpu_swap)
 	fstds,ma %fr29, 8(%arg0)
 	fstds,ma %fr30, 8(%arg0)
 	fstds    %fr31, 0(%arg0)
+
+	ldo	-248(%arg0), %arg0
+	ldil	L%dcache_stride, %r1
+	ldw	R%dcache_stride(%r1), %r1
+	fdc,m	%r1(%arg0)
+	fdc,m	%r1(%arg0)
+	fdc,m	%r1(%arg0)
+	fdc,m	%r1(%arg0)
+	fdc,m	%r1(%arg0)
+	fdc,m	%r1(%arg0)
+	fdc,m	%r1(%arg0)
+	fdc,m	%r1(%arg0)
+	sync
 
 L$fpu_swap_in:
 
@@ -1138,6 +1162,18 @@ L$fpu_swap_in:
 	fldds,ma -8(%arg1), %fr1
 	fldds     0(%arg1), %fr0	/* fr0 must be restored last */
 
+	ldil	L%dcache_stride, %r1
+	ldw	R%dcache_stride(%r1), %r1
+	fdc,m	%r1(%arg1)
+	fdc,m	%r1(%arg1)
+	fdc,m	%r1(%arg1)
+	fdc,m	%r1(%arg1)
+	fdc,m	%r1(%arg1)
+	fdc,m	%r1(%arg1)
+	fdc,m	%r1(%arg1)
+	fdc,m	%r1(%arg1)
+	sync
+
 L$fpu_swap_done:
 
 	/* Increment the switch count and return. */
@@ -1150,10 +1186,10 @@ L$fpu_swap_done:
 L$fpu_no_swap_in:
 
 	/* We didn't swap any FPU state in, so disable the FPU. */
-	mfctl	CR_CCR, %r1
+	mfctl	%ccr, %r1
 	depi	0, 25, 2, %r1
 	b	L$fpu_swap_done
-	mtctl	%r1, CR_CCR
+	mtctl	%r1, %ccr
 EXIT(hppa_fpu_swapout)
 
 	/* Construct the virtual address tag. */
@@ -2017,7 +2053,7 @@ L$trap_have_stack:
 	stw	%r1, CI_TRAPSAVE + TF_FLAGS(%t3)
 
 	/* gotta get it before R is up */
-	mfctl	CR_RCTR, %t1
+	mfctl	%rctr, %t1
 
 	copy	%sp, %t3
 	ldo	HPPA_FRAME_SIZE+TRAPFRAME_SIZEOF(%sp), %sp
@@ -2037,7 +2073,7 @@ trapnowvirt:
 	 * %sp is loaded w/ the right VA (we did not need it being physical)
 	 */
 
-	mfctl	CR_CCR, %t2
+	mfctl	%ccr, %t2
 	stw	%t1, TF_CR0(%sr3, %t3)
 	stw	%t2, TF_CR10(%sr3, %t3)
 
@@ -2124,6 +2160,7 @@ trapnowvirt:
 	 *
 	 * See similar #ifdefs in the syscall entry and exit code.
 	 */
+#if defined(DDB) || defined(KGDB) || defined(FPEMUL)
 	stw	%r4, TF_R4(%t3)
 	stw	%r5, TF_R5(%t3)
 	stw	%r6, TF_R6(%t3)
@@ -2139,7 +2176,7 @@ trapnowvirt:
 	stw	%r16, TF_R16(%t3)
 	stw	%r17, TF_R17(%t3)
 	stw	%r18, TF_R18(%t3)
-
+#endif /* DDB || KGDB || FPEMUL */
 	stw	%t4, TF_R19(%t3)
 	stw	%r23,TF_R23(%t3)
 	stw	%r24,TF_R24(%t3)

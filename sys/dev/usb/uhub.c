@@ -1,4 +1,4 @@
-/*	$NetBSD: uhub.c,v 1.122 2013/01/22 21:12:32 jmcneill Exp $	*/
+/*	$NetBSD: uhub.c,v 1.114.10.1 2012/03/19 23:13:59 riz Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/uhub.c,v 1.18 1999/11/17 22:33:43 n_hibma Exp $	*/
 
 /*
@@ -36,7 +36,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uhub.c,v 1.122 2013/01/22 21:12:32 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uhub.c,v 1.114.10.1 2012/03/19 23:13:59 riz Exp $");
+
+#include "opt_usb.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -187,7 +189,7 @@ uhub_attach(device_t parent, device_t self, void *aux)
 	USETW2(req.wValue, UDESC_HUB, 0);
 	USETW(req.wIndex, 0);
 	USETW(req.wLength, USB_HUB_DESCRIPTOR_SIZE);
-	DPRINTFN(1,("%s: getting hub descriptor\n", __func__));
+	DPRINTFN(1,("usb_init_hub: getting hub descriptor\n"));
 	err = usbd_do_request(dev, &req, &hubdesc);
 	nports = hubdesc.bNbrPorts;
 	if (!err && nports > 7) {
@@ -259,9 +261,8 @@ uhub_attach(device_t parent, device_t self, void *aux)
 	sc->sc_explorepending = 1;
 
 	err = usbd_open_pipe_intr(iface, ed->bEndpointAddress,
-		  USBD_SHORT_XFER_OK|USBD_MPSAFE, &sc->sc_ipipe, sc,
-		  sc->sc_statusbuf, sc->sc_statuslen,
-		  uhub_intr, USBD_DEFAULT_INTERVAL);
+		  USBD_SHORT_XFER_OK, &sc->sc_ipipe, sc, sc->sc_statusbuf,
+		  sc->sc_statuslen, uhub_intr, USBD_DEFAULT_INTERVAL);
 	if (err) {
 		aprint_error_dev(self, "cannot open interrupt pipe\n");
 		goto bad;
@@ -463,12 +464,8 @@ uhub_explore(usbd_device_handle dev)
 
 		/* XXX handle overcurrent and resume events! */
 
-		if (!reconnect && !(change & UPS_C_CONNECT_STATUS)) {
-			/* No status change, just do recursive explore. */
-			if (up->device != NULL && up->device->hub != NULL)
-				up->device->hub->explore(up->device);
+		if (!(change & UPS_C_CONNECT_STATUS))
 			continue;
-		}
 
 		/* We have a connect status change, handle it. */
 
@@ -533,7 +530,7 @@ uhub_explore(usbd_device_handle dev)
 		if (!(status & UPS_PORT_ENABLED)) {
 			/* Not allowed send/receive packet. */
 #ifdef DIAGNOSTIC
-			printf("%s: port %d, device not enabled\n",
+			printf("%s: port %d, device not enable\n",
 			       device_xname(sc->sc_dev), port);
 #endif
 			continue;
@@ -670,7 +667,7 @@ uhub_childdet(device_t self, device_t child)
 	nports = devhub->hub->hubdesc.bNbrPorts;
 	for (port = 0; port < nports; port++) {
 		dev = devhub->hub->ports[port].device;
-		if (!dev || dev->subdevlen == 0)
+		if (!dev)
 			continue;
 		for (i = 0; i < dev->subdevlen; i++) {
 			if (dev->subdevs[i] == child) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: sockin.c,v 1.30 2013/04/30 00:12:35 pooka Exp $	*/
+/*	$NetBSD: sockin.c,v 1.26 2011/03/31 19:40:54 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2008, 2009 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sockin.c,v 1.30 2013/04/30 00:12:35 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sockin.c,v 1.26 2011/03/31 19:40:54 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/condvar.h>
@@ -53,7 +53,6 @@ __KERNEL_RCSID(0, "$NetBSD: sockin.c,v 1.30 2013/04/30 00:12:35 pooka Exp $");
 #include <rump/rumpuser.h>
 
 #include "rump_private.h"
-#include "rumpcomp_user.h"
 
 /*
  * An inet communication domain which uses the socket interface.
@@ -148,6 +147,7 @@ static void
 removesock(struct socket *so)
 {
 	struct sockin_unit *su_iter;
+	int error;
 
 	mutex_enter(&su_mtx);
 	LIST_FOREACH(su_iter, &su_ent, su_entries) {
@@ -162,7 +162,7 @@ removesock(struct socket *so)
 	rebuild = true;
 	mutex_exit(&su_mtx);
 
-	rumpuser_close(SO2S(su_iter->su_so));
+	rumpuser_close(SO2S(su_iter->su_so), &error);
 	kmem_free(su_iter, sizeof(*su_iter));
 }
 
@@ -173,7 +173,8 @@ sockin_process(struct socket *so)
 	struct iovec io;
 	struct msghdr rmsg;
 	struct mbuf *m;
-	size_t n, plen;
+	ssize_t n;
+	size_t plen;
 	int error;
 
 	m = m_gethdr(M_WAIT, MT_DATA);
@@ -197,8 +198,8 @@ sockin_process(struct socket *so)
 	rmsg.msg_name = (struct sockaddr *)&from;
 	rmsg.msg_namelen = sizeof(from);
 
-	error = rumpcomp_sockin_recvmsg(SO2S(so), &rmsg, 0, &n);
-	if (error) {
+	n = rumpuser_net_recvmsg(SO2S(so), &rmsg, 0, &error);
+	if (n <= 0) {
 		m_freem(m);
 
 		/* Treat a TCP socket a goner */
@@ -235,9 +236,9 @@ sockin_accept(struct socket *so)
 	int news, error, slen;
 
 	slen = sizeof(sin);
-	error = rumpcomp_sockin_accept(SO2S(so), (struct sockaddr *)&sin,
-	    &slen, &news);
-	if (error)
+	news = rumpuser_net_accept(SO2S(so), (struct sockaddr *)&sin,
+	    &slen, &error);
+	if (news == -1)
 		return;
 
 	mutex_enter(softnet_lock);
@@ -250,7 +251,7 @@ sockin_accept(struct socket *so)
 	return;
 
  errout:
-	rumpuser_close(news);
+	rumpuser_close(news, &error);
 	if (nso)
 		soclose(nso);
 	mutex_exit(softnet_lock);
@@ -298,8 +299,8 @@ sockinworker(void *arg)
 		}
 
 		/* find affected sockets & process */
-		error = rumpcomp_sockin_poll(pfds, cursock, POLLTIMEOUT, &rv);
-		for (i = 0; i < cursock && rv > 0 && error == 0; i++) {
+		rv = rumpuser_poll(pfds, cursock, POLLTIMEOUT, &error);
+		for (i = 0; i < cursock && rv > 0; i++) {
 			if (pfds[i].revents & POLLIN) {
 				mutex_enter(&su_mtx);
 				LIST_FOREACH(su_iter, &su_ent, su_entries) {
@@ -355,12 +356,12 @@ static int
 sockin_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	struct mbuf *control, struct lwp *l)
 {
-	int error = 0;
+	int error = 0, rv;
 
 	switch (req) {
 	case PRU_ATTACH:
 	{
-		int news;
+		int news, dummy;
 		int sbsize;
 
 		sosetlock(so);
@@ -370,25 +371,23 @@ sockin_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 				break;
 		}
 
-		error = rumpcomp_sockin_socket(PF_INET, so->so_proto->pr_type,
-		    0, &news);
-		if (error)
+		news = rumpuser_net_socket(PF_INET, so->so_proto->pr_type,
+		    0, &error);
+		if (news == -1)
 			break;
 
 		/* for UDP sockets, make sure we can send&recv max */
 		if (so->so_proto->pr_type == SOCK_DGRAM) {
 			sbsize = SOCKIN_SBSIZE;
-			error = rumpcomp_sockin_setsockopt(news,
-			    SOL_SOCKET, SO_SNDBUF,
-			    &sbsize, sizeof(sbsize));
+			rumpuser_net_setsockopt(news, SOL_SOCKET, SO_SNDBUF,
+			    &sbsize, sizeof(sbsize), &error);
 			sbsize = SOCKIN_SBSIZE;
-			error = rumpcomp_sockin_setsockopt(news,
-			    SOL_SOCKET, SO_RCVBUF,
-			    &sbsize, sizeof(sbsize));
+			rumpuser_net_setsockopt(news, SOL_SOCKET, SO_RCVBUF,
+			    &sbsize, sizeof(sbsize), &error);
 		}
 
 		if ((error = registersock(so, news)) != 0)
-			rumpuser_close(news);
+			rumpuser_close(news, &dummy);
 
 		break;
 	}
@@ -398,20 +397,20 @@ sockin_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		break;
 
 	case PRU_BIND:
-		error = rumpcomp_sockin_bind(SO2S(so),
-		    mtod(nam, const struct sockaddr *),
-		    sizeof(struct sockaddr_in));
+		rumpuser_net_bind(SO2S(so), mtod(nam, const struct sockaddr *),
+		    sizeof(struct sockaddr_in), &error);
 		break;
 
 	case PRU_CONNECT:
-		error = rumpcomp_sockin_connect(SO2S(so),
-		    mtod(nam, struct sockaddr *), sizeof(struct sockaddr_in));
-		if (error == 0)
+		rv = rumpuser_net_connect(SO2S(so),
+		    mtod(nam, struct sockaddr *), sizeof(struct sockaddr_in),
+		    &error);
+		if (rv == 0)
 			soisconnected(so);
 		break;
 
 	case PRU_LISTEN:
-		error = rumpcomp_sockin_listen(SO2S(so), so->so_qlimit);
+		rumpuser_net_listen(SO2S(so), so->so_qlimit, &error);
 		break;
 
 	case PRU_SEND:
@@ -421,7 +420,7 @@ sockin_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 		size_t iov_max, i;
 		struct iovec iov_buf[32], *iov;
 		struct mbuf *m2;
-		size_t tot, n;
+		size_t tot;
 		int s;
 
 		bpf_mtap_af(&sockin_if, AF_UNSPEC, m);
@@ -456,7 +455,7 @@ sockin_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 			mhdr.msg_namelen = saddr->sa_len;
 		}
 
-		rumpcomp_sockin_sendmsg(s, &mhdr, 0, &n);
+		rumpuser_net_sendmsg(s, &mhdr, 0, &error);
 
 		if (iov != iov_buf)
 			kmem_free(iov, sizeof(struct iovec) * iov_max);
@@ -478,14 +477,14 @@ sockin_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 	case PRU_PEERADDR:
 	{
 		int slen = nam->m_len;
-		enum rumpcomp_sockin_getnametype which;
+		enum rumpuser_getnametype which;
 
 		if (req == PRU_SOCKADDR)
-			which = RUMPCOMP_SOCKIN_SOCKNAME;
+			which = RUMPUSER_SOCKNAME;
 		else
-			which = RUMPCOMP_SOCKIN_PEERNAME;
-		error = rumpcomp_sockin_getname(SO2S(so),
-		    mtod(nam, struct sockaddr *), &slen, which);
+			which = RUMPUSER_PEERNAME;
+		rumpuser_net_getname(SO2S(so),
+		    mtod(nam, struct sockaddr *), &slen, which, &error);
 		if (error == 0)
 			nam->m_len = slen;
 		break;
@@ -505,7 +504,9 @@ sockin_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *nam,
 static int
 sockin_ctloutput(int op, struct socket *so, struct sockopt *sopt)
 {
+	int error;
 
-	return rumpcomp_sockin_setsockopt(SO2S(so), sopt->sopt_level,
-	    sopt->sopt_name, sopt->sopt_data, sopt->sopt_size);
+	rumpuser_net_setsockopt(SO2S(so), sopt->sopt_level,
+	    sopt->sopt_name, sopt->sopt_data, sopt->sopt_size, &error);
+	return error;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.103 2012/10/26 14:46:44 chs Exp $	*/
+/*	$NetBSD: locore.S,v 1.95.10.3 2012/10/31 17:19:49 riz Exp $	*/
 
 /*
  * Copyright-o-rama!
@@ -129,7 +129,7 @@
  */
 
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: locore.S,v 1.103 2012/10/26 14:46:44 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: locore.S,v 1.95.10.3 2012/10/31 17:19:49 riz Exp $");
 
 #include "opt_compat_oldboot.h"
 #include "opt_ddb.h"
@@ -169,11 +169,18 @@ __KERNEL_RCSID(0, "$NetBSD: locore.S,v 1.103 2012/10/26 14:46:44 chs Exp $");
  */
 .section __xen_guest
 	.ascii	"GUEST_OS=netbsd,GUEST_VER=3.0,XEN_VER=xen-3.0"
+#if defined(DOM0OPS) || !defined(XEN_COMPAT_030001)
 	.ascii  ",VIRT_BASE=0xc0000000" /* KERNBASE */
 	.ascii  ",ELF_PADDR_OFFSET=0xc0000000" /* KERNBASE */
+#else
+	.ascii  ",VIRT_BASE=0xc0100000" /* KERNTEXTOFF */
+	.ascii  ",ELF_PADDR_OFFSET=0xc0100000" /* KERNTEXTOFF */
+#endif
 	.ascii  ",VIRT_ENTRY=0xc0100000" /* KERNTEXTOFF */
+#if !defined(XEN_COMPAT_030001)
 	.ascii  ",HYPERCALL_PAGE=0x00000101"
 		/* (???+HYPERCALL_PAGE_OFFSET)/PAGE_SIZE) */
+#endif
 #ifdef PAE
 	.ascii  ",PAE=yes[extended-cr3]"
 #endif
@@ -189,7 +196,7 @@ __KERNEL_RCSID(0, "$NetBSD: locore.S,v 1.103 2012/10/26 14:46:44 chs Exp $");
  */
 	.data
 
-	.globl	_C_LABEL(cputype)
+	.globl	_C_LABEL(cpu)
 	.globl	_C_LABEL(cpuid_level)
 	.globl	_C_LABEL(esym)
 	.globl	_C_LABEL(eblob)
@@ -222,7 +229,7 @@ _C_LABEL(lapic_tpr):
 	.long 0
 #endif
 
-_C_LABEL(cputype):	.long	0	# are we 80486, Pentium, or..
+_C_LABEL(cpu):		.long	0	# are we 80486, Pentium, or..
 _C_LABEL(cpuid_level):	.long	0
 _C_LABEL(atdevbase):	.long	0	# location of start of iomem in virtual
 _C_LABEL(lwp0uarea):	.long	0
@@ -231,12 +238,7 @@ _C_LABEL(tablesize):	.long	0
 
 	.space 512
 tmpstk:
-#ifdef XEN
-	.align 		PAGE_SIZE, 0x0	# Align on page boundary
-	.globl tmpgdt
-_C_LABEL(tmpgdt):
-	.space 		PAGE_SIZE	# Xen expects a page
-#endif /* XEN */
+
 #ifndef XEN
 #define	_RELOC(x)	((x) - KERNBASE)
 #else
@@ -339,11 +341,11 @@ isnx586:
 	 * Don't try cpuid, as Nx586s reportedly don't support the
 	 * PSL_ID bit.
 	 */
-	movl	$CPU_NX586,RELOC(cputype)
+	movl	$CPU_NX586,RELOC(cpu)
 	jmp	2f
 
 is386:
-	movl	$CPU_386,RELOC(cputype)
+	movl	$CPU_386,RELOC(cpu)
 	jmp	2f
 
 try486:	/* Try to toggle identification flag; does not exist on early 486s. */
@@ -362,7 +364,7 @@ try486:	/* Try to toggle identification flag; does not exist on early 486s. */
 
 	testl	%eax,%eax
 	jnz	try586
-is486:	movl	$CPU_486,RELOC(cputype)
+is486:	movl	$CPU_486,RELOC(cpu)
 	/*
 	 * Check Cyrix CPU
 	 * Cyrix CPUs do not change the undefined flags following
@@ -380,7 +382,7 @@ is486:	movl	$CPU_486,RELOC(cputype)
 	popfl
 	jmp 2f
 trycyrix486:
-	movl	$CPU_6x86,RELOC(cputype)	# set CPU type
+	movl	$CPU_6x86,RELOC(cpu) 	# set CPU type
 	/*
 	 * Check for Cyrix 486 CPU by seeing if the flags change during a
 	 * divide. This is documented in the Cx486SLC/e SMM Programmer's
@@ -398,7 +400,7 @@ trycyrix486:
 	xorl	%ecx,%eax		# are the flags different?
 	testl	$0x8d5,%eax		# only check C|PF|AF|Z|N|V
 	jne	2f			# yes; must be Cyrix 6x86 CPU
-	movl	$CPU_486DLC,RELOC(cputype) 	# set CPU type
+	movl	$CPU_486DLC,RELOC(cpu) 	# set CPU type
 
 #ifndef CYRIX_CACHE_WORKS
 	/* Disable caching of the ISA hole only. */
@@ -675,7 +677,7 @@ try586:	/* Use the `cpuid' instruction. */
  	 */
 	movl	%cr0,%eax		# get control word
 					# enable paging & NPX emulation
-	orl	$(CR0_PE|CR0_PG|CR0_NE|CR0_TS|CR0_EM|CR0_MP|CR0_WP|CR0_AM),%eax
+	orl	$(CR0_PE|CR0_PG|CR0_NE|CR0_TS|CR0_EM|CR0_MP|CR0_AM),%eax
 	movl	%eax,%cr0		# and page NOW!
 
 	pushl	$begin			# jump to high mem
@@ -785,15 +787,6 @@ start:
 	cpuid
 	movl	%eax,RELOC(cpuid_level)
 
-	/*
-	 * Use a temp page. We'll re- add it to uvm(9) once we're
-	 * done using it.
-	 */
-	movl	$RELOC(tmpgdt), %eax
-	pushl	%eax		# start of temporary gdt
-	call	_C_LABEL(initgdt)
-	addl	$4,%esp
-
 	call	xen_pmap_bootstrap
 
 	/*
@@ -817,13 +810,13 @@ start:
 	addl	$PDE_SIZE,%esp		# pop paddr_t
 	call 	_C_LABEL(main)
 
-#if defined(XEN)
+#if defined(XEN) && !defined(XEN_COMPAT_030001)
 /* space for the hypercall call page */
 #define HYPERCALL_PAGE_OFFSET 0x1000
 .org HYPERCALL_PAGE_OFFSET
 ENTRY(hypercall_page)
 .skip 0x1000
-#endif /* defined(XEN) */
+#endif /* defined(XEN) && !defined(XEN_COMPAT_030001) */
 
 /*
  * void lgdt_finish(void);

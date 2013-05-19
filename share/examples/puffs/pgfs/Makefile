@@ -7,10 +7,8 @@ LDADD+=	-lpuffs -lutil
 
 NOMAN=
 
-PG_CONFIG=	pg_config
-
-PGINC!=		${PG_CONFIG} --includedir
-PGLIBDIR!=	${PG_CONFIG} --libdir
+PGINC!=		pg_config --includedir
+PGLIBDIR!=	pg_config --libdir
 CPPFLAGS+=	-I${PGINC}
 LDFLAGS+=	-L${PGLIBDIR}
 LDFLAGS+=	-Wl,-R${PGLIBDIR}

@@ -1,4 +1,4 @@
-/*	$NetBSD: rnd.h,v 1.35 2013/01/26 19:05:11 tls Exp $	*/
+/*	$NetBSD: rnd.h,v 1.29.2.3 2012/10/17 21:27:12 riz Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -91,7 +91,6 @@ typedef struct {
  */
 #define	RND_FLAG_NO_ESTIMATE	0x00000100	/* don't estimate entropy */
 #define	RND_FLAG_NO_COLLECT	0x00000200	/* don't collect entropy */
-#define RND_FLAG_FAST		0x00000400	/* process samples in bulk */
 
 #define	RND_TYPE_UNKNOWN	0	/* unknown source */
 #define	RND_TYPE_DISK		1	/* source is physical disk */
@@ -239,17 +238,5 @@ typedef struct {
 #define	RNDCTL		_IOW('R',  104, rndctl_t)  /* set/clear source flags */
 #define	RNDADDDATA	_IOW('R',  105, rnddata_t) /* add data to the pool */
 #define	RNDGETPOOLSTAT	_IOR('R',  106, rndpoolstat_t) /* get statistics */
-
-#ifdef _KERNEL
-/*
- * A context.  cprng plus a smidge.
- */
-typedef struct {
-	struct _cprng_strong	*cprng;
-	int		hard;
-	int		bytesonkey;
-	kmutex_t	interlock;
-} rp_ctx_t;
-#endif
 
 #endif /* !_SYS_RND_H_ */

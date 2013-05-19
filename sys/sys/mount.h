@@ -1,4 +1,4 @@
-/*	$NetBSD: mount.h,v 1.209 2013/04/26 22:27:16 mlelstv Exp $	*/
+/*	$NetBSD: mount.h,v 1.207.2.1 2012/11/18 18:42:03 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993
@@ -114,10 +114,10 @@ struct mount {
 	struct vnode	*mnt_syncer;		/* syncer vnode */
 	void		*mnt_transinfo;		/* for FS-internal use */
 	void		*mnt_data;		/* private data */
-	kmutex_t	mnt_unmounting;		/* to prevent new activity */
+	krwlock_t	mnt_unmounting;		/* to prevent new activity */
 	kmutex_t	mnt_renamelock;		/* per-fs rename lock */
 	int		mnt_refcnt;		/* ref count on this structure */
-	unsigned int	mnt_busynest;		/* vfs_busy nestings */
+	int		mnt_recursecnt;		/* count of write locks */
 	int		mnt_flag;		/* flags */
 	int		mnt_iflag;		/* internal flags */
 	int		mnt_fs_bshift;		/* offset shift for lblkno */

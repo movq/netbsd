@@ -1,4 +1,4 @@
-/*	$NetBSD: stvar.h,v 1.24 2012/02/28 10:58:11 mbalmer Exp $ */
+/*	$NetBSD: stvar.h,v 1.23.2.1 2012/03/02 16:33:39 riz Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

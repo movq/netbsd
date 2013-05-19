@@ -1,4 +1,4 @@
-/* $NetBSD: envstat.c,v 1.94 2012/12/14 05:29:28 pgoyette Exp $ */
+/* $NetBSD: envstat.c,v 1.90 2012/02/09 18:10:26 riz Exp $ */
 
 /*-
  * Copyright (c) 2007, 2008 Juan Romero Pardines.
@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: envstat.c,v 1.94 2012/12/14 05:29:28 pgoyette Exp $");
+__RCSID("$NetBSD: envstat.c,v 1.90 2012/02/09 18:10:26 riz Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -112,7 +112,7 @@ static int 		parse_dictionary(int);
 static int 		send_dictionary(FILE *);
 static int 		find_sensors(prop_array_t, const char *, dvprops_t);
 static void 		print_sensors(void);
-static int 		check_sensors(const char *);
+static int 		check_sensors(char *);
 static int 		usage(void);
 
 static int		sysmonfd; /* fd of /dev/sysmon */
@@ -132,13 +132,17 @@ int main(int argc, char **argv)
 	while ((c = getopt(argc, argv, "c:Dd:fIi:klrSs:Tw:Wx")) != -1) {
 		switch (c) {
 		case 'c':	/* configuration file */
-			configfile = optarg;
+			configfile = strdup(optarg);
+			if (configfile == NULL)
+				err(EXIT_FAILURE, "strdup");
 			break;
 		case 'D':	/* list registered devices */
 			flags |= ENVSYS_DFLAG;
 			break;
 		case 'd':	/* show sensors of a specific device */
-			mydevname = optarg;
+			mydevname = strdup(optarg);
+			if (mydevname == NULL)
+				err(EXIT_FAILURE, "strdup");
 			break;
 		case 'f':	/* display temperature in Farenheit */
 			flags |= ENVSYS_FFLAG;
@@ -167,7 +171,9 @@ int main(int argc, char **argv)
 			flags |= ENVSYS_SFLAG;
 			break;
 		case 's':	/* only show specified sensors */
-			sensors = optarg;
+			sensors = strdup(optarg);
+			if (sensors == NULL)
+				err(EXIT_FAILURE, "strdup");
 			break;
 		case 'T':	/* make statistics */
 			flags |= ENVSYS_TFLAG;
@@ -274,6 +280,10 @@ int main(int argc, char **argv)
 		rval = parse_dictionary(sysmonfd);
 	}
 
+	if (sensors)
+		free(sensors);
+	if (mydevname)
+		free(mydevname);
 	(void)prog_close(sysmonfd);
 
 	return rval ? EXIT_FAILURE : EXIT_SUCCESS;
@@ -427,8 +437,15 @@ parse_dictionary(int fd)
 	}
 
 	/* print sensors now */
-	if (sensors)
-		rval = check_sensors(sensors);
+	if (sensors) {
+		char *str = strdup(sensors);
+		if (!str) {
+			rval = ENOMEM;
+			goto out;
+		}
+		rval = check_sensors(str);
+		free(str);
+	}
 	if ((flags & ENVSYS_LFLAG) == 0 && (flags & ENVSYS_DFLAG) == 0)
 		print_sensors();
 	if (interval)
@@ -641,33 +658,30 @@ find_sensors(prop_array_t array, const char *dvname, dvprops_t edp)
 }
 
 static int
-check_sensors(const char *str)
+check_sensors(char *str)
 {
 	sensor_t sensor = NULL;
-	char *dvstring, *sstring, *p, *last, *s;
+	char *dvstring, *sstring, *p, *last;
 	bool sensor_found = false;
-
-	if ((s = strdup(str)) == NULL)
-		return errno;
 
 	/*
 	 * Parse device name and sensor description and find out
 	 * if the sensor is valid.
 	 */
-	for ((p = strtok_r(s, ",", &last)); p;
+	for ((p = strtok_r(str, ",", &last)); p;
 	     (p = strtok_r(NULL, ",", &last))) {
 		/* get device name */
 		dvstring = strtok(p, ":");
 		if (dvstring == NULL) {
 			warnx("missing device name");
-			goto out;
+			return EINVAL;
 		}
 
 		/* get sensor description */
 		sstring = strtok(NULL, ":");
 		if (sstring == NULL) {
 			warnx("missing sensor description");
-			goto out;
+			return EINVAL;
 		}
 
 		SIMPLEQ_FOREACH(sensor, &sensors_list, entries) {
@@ -683,21 +697,17 @@ check_sensors(const char *str)
 		if (sensor_found == false) {
 			warnx("unknown sensor `%s' for device `%s'",
 		       	    sstring, dvstring);
-			goto out;
+			return EINVAL;
 		}
 		sensor_found = false;
 	}
 
 	/* check if all sensors were ok, and error out if not */
 	SIMPLEQ_FOREACH(sensor, &sensors_list, entries)
-		if (sensor->visible) {
-			free(s);
+		if (sensor->visible)
 			return 0;
-		}
 
 	warnx("no sensors selected to display");
-out:
-	free(s);
 	return EINVAL;
 }
 
@@ -844,7 +854,7 @@ do {								\
 				PRINTTEMP(sensor->warnmin_value);
 				PRINTTEMP(sensor->critmin_value);
 			}
-			(void)printf("%*s", (int)ilen - 3, stype);
+			(void)printf("%*s", (int)ilen - 4, stype);
 #undef PRINTTEMP
 
 		/* fans */
@@ -890,7 +900,7 @@ do {								\
 
 			}
 
-			(void)printf("%*s", (int)ilen - 3, stype);
+			(void)printf("%*s", (int)ilen - 4, stype);
 
 		/* integers */
 		} else if (strcmp(sensor->type, "Integer") == 0) {
@@ -944,7 +954,7 @@ do {									\
 				ilen += 2;
 			}
 
-			(void)printf("%*s", (int)ilen - 3, stype);
+			(void)printf("%*s", (int)ilen - 4, stype);
 
 #undef PRINTINT
 #undef PRINTPCT

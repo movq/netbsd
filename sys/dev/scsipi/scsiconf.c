@@ -1,4 +1,4 @@
-/*	$NetBSD: scsiconf.c,v 1.269 2012/08/21 14:19:02 bouyer Exp $	*/
+/*	$NetBSD: scsiconf.c,v 1.262.10.4 2012/09/03 18:36:33 riz Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2004 The NetBSD Foundation, Inc.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scsiconf.c,v 1.269 2012/08/21 14:19:02 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scsiconf.c,v 1.262.10.4 2012/09/03 18:36:33 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -119,7 +119,6 @@ const struct scsipi_bustype scsi_bustype = {
 	scsipi_interpret_sense,
 	scsi_print_addr,
 	scsi_kill_pending,
-	scsi_async_event_xfer_mode,
 };
 
 const struct scsipi_bustype scsi_fc_bustype = {
@@ -128,7 +127,6 @@ const struct scsipi_bustype scsi_fc_bustype = {
 	scsipi_interpret_sense,
 	scsi_print_addr,
 	scsi_kill_pending,
-	scsi_fc_sas_async_event_xfer_mode,
 };
 
 const struct scsipi_bustype scsi_sas_bustype = {
@@ -137,7 +135,6 @@ const struct scsipi_bustype scsi_sas_bustype = {
 	scsipi_interpret_sense,
 	scsi_print_addr,
 	scsi_kill_pending,
-	scsi_fc_sas_async_event_xfer_mode,
 };
 
 const struct scsipi_bustype scsi_usb_bustype = {
@@ -146,7 +143,6 @@ const struct scsipi_bustype scsi_usb_bustype = {
 	scsipi_interpret_sense,
 	scsi_print_addr,
 	scsi_kill_pending,
-	NULL,
 };
 
 static int
@@ -495,8 +491,6 @@ scsibusprint(void *aux, const char *pnp)
 }
 
 static const struct scsi_quirk_inquiry_pattern scsi_quirk_patterns[] = {
-	{{T_DIRECT, T_REMOV,
-	 "Apple   ", "iPod            ", ""},	  PQUIRK_START},
 	{{T_CDROM, T_REMOV,
 	 "CHINON  ", "CD-ROM CDS-431  ", ""},     PQUIRK_NOLUNS},
 	{{T_CDROM, T_REMOV,

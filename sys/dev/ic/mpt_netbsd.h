@@ -1,4 +1,4 @@
-/*	$NetBSD: mpt_netbsd.h,v 1.10 2012/03/18 21:05:21 martin Exp $	*/
+/*	$NetBSD: mpt_netbsd.h,v 1.9 2010/11/13 13:52:01 uebayasi Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -160,7 +160,7 @@ typedef struct req_entry {
 } request_t;
 
 typedef struct mpt_softc {
-	device_t	sc_dev;		/* base device glue */
+	struct device	sc_dev;		/* base device glue */
 
 	/* Locking context */
 	int		mpt_splsaved;

@@ -95,12 +95,12 @@ check_file(const enum out_type type)
 {
     switch (type) {
     case stdout_type:
-        ATF_CHECK(atf_utils_grep_file("stdout: msg", "stdout"));
-        ATF_CHECK(!atf_utils_grep_file("stderr: msg", "stdout"));
+        ATF_CHECK(grep_file("stdout", "stdout: msg"));
+        ATF_CHECK(!grep_file("stdout", "stderr: msg"));
         break;
     case stderr_type:
-        ATF_CHECK(atf_utils_grep_file("stderr: msg", "stderr"));
-        ATF_CHECK(!atf_utils_grep_file("stdout: msg", "stderr"));
+        ATF_CHECK(grep_file("stderr", "stderr: msg"));
+        ATF_CHECK(!grep_file("stderr", "stdout: msg"));
         break;
     default:
         UNREACHABLE;
@@ -110,7 +110,7 @@ check_file(const enum out_type type)
 struct capture_stream {
     struct base_stream m_base;
 
-    char *m_msg;
+    atf_dynstr_t m_msg;
 };
 #define CAPTURE_STREAM(type) \
     { .m_base = BASE_STREAM(capture_stream_init, \
@@ -126,7 +126,7 @@ capture_stream_init(void *v)
 
     s->m_base.m_sb_ptr = &s->m_base.m_sb;
     RE(atf_process_stream_init_capture(&s->m_base.m_sb));
-    s->m_msg = NULL;
+    RE(atf_dynstr_init(&s->m_msg));
 }
 
 static
@@ -137,10 +137,10 @@ capture_stream_process(void *v, atf_process_child_t *c)
 
     switch (s->m_base.m_type) {
     case stdout_type:
-        s->m_msg = atf_utils_readline(atf_process_child_stdout(c));
+        (void)read_line(atf_process_child_stdout(c), &s->m_msg);
         break;
     case stderr_type:
-        s->m_msg = atf_utils_readline(atf_process_child_stderr(c));
+        (void)read_line(atf_process_child_stderr(c), &s->m_msg);
         break;
     default:
         UNREACHABLE;
@@ -155,18 +155,18 @@ capture_stream_fini(void *v)
 
     switch (s->m_base.m_type) {
     case stdout_type:
-        ATF_CHECK(atf_utils_grep_string("stdout: msg", s->m_msg));
-        ATF_CHECK(!atf_utils_grep_string("stderr: msg", s->m_msg));
+        ATF_CHECK(grep_string(&s->m_msg, "stdout: msg"));
+        ATF_CHECK(!grep_string(&s->m_msg, "stderr: msg"));
         break;
     case stderr_type:
-        ATF_CHECK(!atf_utils_grep_string("stdout: msg", s->m_msg));
-        ATF_CHECK(atf_utils_grep_string("stderr: msg", s->m_msg));
+        ATF_CHECK(!grep_string(&s->m_msg, "stdout: msg"));
+        ATF_CHECK(grep_string(&s->m_msg, "stderr: msg"));
         break;
     default:
         UNREACHABLE;
     }
 
-    free(s->m_msg);
+    atf_dynstr_fini(&s->m_msg);
     atf_process_stream_fini(&s->m_base.m_sb);
 }
 
@@ -881,10 +881,16 @@ static
 void
 check_line(int fd, const char *exp)
 {
-    char *line = atf_utils_readline(fd);
-    ATF_CHECK(line != NULL);
-    ATF_CHECK_STREQ_MSG(exp, line, "read: '%s', expected: '%s'", line, exp);
-    free(line);
+    atf_dynstr_t line;
+    bool eof;
+
+    atf_dynstr_init(&line);
+    eof = read_line(fd, &line);
+    ATF_CHECK(!eof);
+    ATF_CHECK_MSG(atf_equal_dynstr_cstring(&line, exp),
+                  "read: '%s', expected: '%s'",
+                  atf_dynstr_cstring(&line), exp);
+    atf_dynstr_fini(&line);
 }
 
 ATF_TC(exec_failure);

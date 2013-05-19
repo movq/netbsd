@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC_PS2TINY,v 1.68 2013/03/02 02:42:15 christos Exp $
+#	$NetBSD: GENERIC_PS2TINY,v 1.64 2011/12/18 05:49:28 dholland Exp $
 #
 #	GENERIC-style kernel config for IBM PS/2 with MCA bus. It only contains
 #	IBM PS/2 related stuff and has been generally trimmed down somewhat,
@@ -49,6 +49,8 @@ options 	NTP		# NTP phase/frequency locked loop
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
+
 
 options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -98,10 +100,13 @@ options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPv6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking protocols
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 #options 	PPP_DEFLATE	# Deflate compression support for PPP
@@ -140,6 +145,9 @@ options 	MCAVERBOSE	# verbose MCA device autoconfig messages
 
 options 	NFS_BOOT_DHCP,NFS_BOOT_BOOTPARAM
 
+options 	WSEMUL_VT100	# VT100 / VT220 emulation
+options 	WS_KERNEL_FG=WSCOL_GREEN
+
 # Kernel root file system and dump configuration.
 config		netbsd root on ? type ?
 #config		netbsd root on ? type nfs
@@ -164,10 +172,6 @@ pckbd*		at pckbc?		# PC keyboard
 wskbd*		at pckbd? console ?
 vga0		at isa?
 wsdisplay*	at vga? console ?
-
-options 	WSEMUL_VT100	# VT100 / VT220 emulation
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
-options 	WS_KERNEL_FG=WSCOL_GREEN
 options 	WSDISPLAY_DEFAULTSCREENS=4
 
 com0	at isa? port 0x3f8 irq 4	# "SERIAL_!"

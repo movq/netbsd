@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.19 2013/01/08 08:55:28 skrll Exp $	*/
+/*	$NetBSD: intr.h,v 1.18.10.1 2013/02/08 19:32:07 riz Exp $	*/
 
 /*
  * Copyright (c) 2009, 2010 Antti Kantee.  All Rights Reserved.

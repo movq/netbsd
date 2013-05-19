@@ -1,4 +1,4 @@
-/* $NetBSD: if_vge.c,v 1.54 2013/03/30 03:21:08 christos Exp $ */
+/* $NetBSD: if_vge.c,v 1.52 2012/01/30 19:41:21 drochner Exp $ */
 
 /*-
  * Copyright (c) 2004
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_vge.c,v 1.54 2013/03/30 03:21:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_vge.c,v 1.52 2012/01/30 19:41:21 drochner Exp $");
 
 /*
  * VIA Networking Technologies VT612x PCI gigabit ethernet NIC driver.
@@ -325,7 +325,7 @@ static void vge_miipoll_start(struct vge_softc *);
 static void vge_miipoll_stop(struct vge_softc *);
 static int vge_miibus_readreg(device_t, int, int);
 static void vge_miibus_writereg(device_t, int, int, int);
-static void vge_miibus_statchg(struct ifnet *);
+static void vge_miibus_statchg(device_t);
 
 static void vge_cam_clear(struct vge_softc *);
 static int vge_cam_set(struct vge_softc *, uint8_t *);
@@ -1553,7 +1553,7 @@ vge_encap(struct vge_softc *sc, struct mbuf *m_head, int idx)
 
 #ifdef DIAGNOSTIC
 	/* If this descriptor is still owned by the chip, bail. */
-	VGE_TXDESCSYNC(sc, idx,
+	VGE_TXDESCSYNC(sc, idx, 
 	    BUS_DMASYNC_POSTREAD|BUS_DMASYNC_POSTWRITE);
 	td_sts = le32toh(txd->td_sts);
 	VGE_TXDESCSYNC(sc, idx, BUS_DMASYNC_PREREAD);
@@ -1636,7 +1636,7 @@ vge_encap(struct vge_softc *sc, struct mbuf *m_head, int idx)
 	 */
 	mtag = VLAN_OUTPUT_TAG(&sc->sc_ethercom, m_head);
 	if (mtag != NULL) {
-		/*
+		/* 
 		 * No need htons() here since vge(4) chip assumes
 		 * that tags are written in little endian and
 		 * we already use htole32() here.
@@ -1960,12 +1960,15 @@ out:
 }
 
 static void
-vge_miibus_statchg(struct ifnet *ifp)
+vge_miibus_statchg(device_t self)
 {
-	struct vge_softc *sc = ifp->if_softc;
-	struct mii_data *mii = &sc->sc_mii;
-	struct ifmedia_entry *ife = mii->mii_media.ifm_cur;
+	struct vge_softc *sc;
+	struct mii_data *mii;
+	struct ifmedia_entry *ife;
 
+	sc = device_private(self);
+	mii = &sc->sc_mii;
+	ife = mii->mii_media.ifm_cur;
 	/*
 	 * If the user manually selects a media mode, we need to turn
 	 * on the forced MAC mode bit in the DIAGCTL register. If the

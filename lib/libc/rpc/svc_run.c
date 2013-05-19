@@ -1,4 +1,4 @@
-/*	$NetBSD: svc_run.c,v 1.22 2013/03/11 20:19:29 tron Exp $	*/
+/*	$NetBSD: svc_run.c,v 1.19.58.1 2013/03/14 22:03:08 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -37,7 +37,7 @@
 static char *sccsid = "@(#)svc_run.c 1.1 87/10/13 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)svc_run.c	2.1 88/07/29 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: svc_run.c,v 1.22 2013/03/11 20:19:29 tron Exp $");
+__RCSID("$NetBSD: svc_run.c,v 1.19.58.1 2013/03/14 22:03:08 riz Exp $");
 #endif
 #endif
 
@@ -55,7 +55,6 @@ __RCSID("$NetBSD: svc_run.c,v 1.22 2013/03/11 20:19:29 tron Exp $");
 
 #include <rpc/rpc.h>
 
-#include "svc_fdset.h"
 #include "rpc_internal.h"
 
 #ifdef __weak_alias
@@ -64,14 +63,10 @@ __weak_alias(svc_exit,_svc_exit)
 #endif
 
 void
-svc_run(void)
+svc_run()
 {
 	fd_set readfds, cleanfds;
 	struct timeval timeout;
-	int maxfd;
-#ifndef RUMP_RPC		
-	int probs = 0;
-#endif
 #ifdef _REENTRANT
 	extern rwlock_t svc_fd_lock;
 #endif
@@ -81,31 +76,21 @@ svc_run(void)
 
 	for (;;) {
 		rwlock_rdlock(&svc_fd_lock);
-		readfds = *get_fdset();
-		cleanfds = *get_fdset();
-		maxfd = *get_fdsetmax();
+		readfds = svc_fdset;
+		cleanfds = svc_fdset;
 		rwlock_unlock(&svc_fd_lock);
-		switch (select(maxfd + 1, &readfds, NULL, NULL, &timeout)) {
+		switch (select(svc_maxfd+1, &readfds, NULL, NULL, &timeout)) {
 		case -1:
-#ifndef RUMP_RPC		
-			if ((errno == EINTR || errno == EBADF) && probs < 100) {
-				probs++;
-				continue;
-			}
-#endif
 			if (errno == EINTR) {
 				continue;
 			}
-			warn("%s: select failed", __func__);
+			warn("svc_run: - select failed");
 			return;
 		case 0:
 			__svc_clean_idle(&cleanfds, 30, FALSE);
 			continue;
 		default:
 			svc_getreqset(&readfds);
-#ifndef RUMP_RPC
-			probs = 0;
-#endif
 		}
 	}
 }
@@ -115,13 +100,13 @@ svc_run(void)
  *      more work to do.
  */
 void
-svc_exit(void)
+svc_exit()
 {
 #ifdef _REENTRANT
 	extern rwlock_t svc_fd_lock;
 #endif
 
 	rwlock_wrlock(&svc_fd_lock);
-	FD_ZERO(get_fdset());
+	FD_ZERO(&svc_fdset);
 	rwlock_unlock(&svc_fd_lock);
 }

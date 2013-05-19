@@ -1,5 +1,3 @@
-/*	$NetBSD: fad-sita.c,v 1.1.1.2 2013/04/06 15:57:44 christos Exp $	*/
-
 /*
  *  fad-sita.c: Packet capture interface additions for SITA ACN devices
  *

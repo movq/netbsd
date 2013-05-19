@@ -1,4 +1,4 @@
-/*	$NetBSD: shlib.c,v 1.2 2012/03/21 16:11:26 he Exp $	*/
+/*	$NetBSD: shlib.c,v 1.1 2010/07/06 05:59:56 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -74,7 +74,8 @@ const char	*standard_search_dirs[] = {
 };
 
 static void
-add_search_dir(const char *name)
+add_search_dir(name)
+	const char	*name;
 {
 	n_search_dirs += 2;
 	search_dirs = (char **)
@@ -87,7 +88,7 @@ add_search_dir(const char *name)
 }
 
 void
-std_search_path(void)
+std_search_path()
 {
 	int	i, n;
 
@@ -104,7 +105,9 @@ std_search_path(void)
  */
 
 int
-getdewey(int dewey[], char *cp)
+getdewey(dewey, cp)
+int	dewey[];
+char	*cp;
 {
 	int	i, n;
 
@@ -133,7 +136,9 @@ getdewey(int dewey[], char *cp)
  * Return  0 if equal.
  */
 int
-cmpndewey(int d1[], int n1, int d2[], int n2)
+cmpndewey(d1, n1, d2, n2)
+int	d1[], d2[];
+int	n1, n2;
 {
 	register int	i;
 
@@ -167,7 +172,8 @@ cmpndewey(int d1[], int n1, int d2[], int n2)
  * Like malloc but get fatal error if memory is exhausted.
  */
 void *
-xmalloc(size_t size)
+xmalloc(size)
+	size_t size;
 {
 	void	*result = (void *)malloc(size);
 
@@ -181,7 +187,9 @@ xmalloc(size_t size)
  * Like realloc but get fatal error if memory is exhausted.
  */
 void *
-xrealloc(void *ptr, size_t size)
+xrealloc(ptr, size)
+	void *ptr;
+	size_t size;
 {
 	void	*result;
 
@@ -197,7 +205,8 @@ xrealloc(void *ptr, size_t size)
  * the strings S1, S2, S3.
  */
 char *
-concat(const char *s1, const char *s2, const char *s3)
+concat(s1, s2, s3)
+	const char *s1, *s2, *s3;
 {
 	int	len1 = strlen(s1),
 		len2 = strlen(s2),

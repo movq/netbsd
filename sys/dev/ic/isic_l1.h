@@ -1,4 +1,4 @@
-/* $NetBSD: isic_l1.h,v 1.21 2012/10/27 17:18:21 chs Exp $ */
+/* $NetBSD: isic_l1.h,v 1.20 2005/12/11 12:21:27 christos Exp $ */
 
 /*
  * Copyright (c) 1997, 2000 Hellmuth Michaelis. All rights reserved.
@@ -154,7 +154,7 @@ typedef struct
  *---------------------------------------------------------------------------*/
 struct isic_softc
 {
-	device_t	sc_dev;
+	struct device	sc_dev;
 	void 		*sc_l3token;	/* pointer to registered L3 instance */
 	struct l2_softc	sc_l2;		/* D-channel variables */
 

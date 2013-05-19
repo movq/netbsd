@@ -1,4 +1,4 @@
-/*	$NetBSD: nbperf.c,v 1.5 2013/01/31 16:32:02 joerg Exp $	*/
+/*	$NetBSD: nbperf.c,v 1.4.4.1 2013/02/14 22:06:18 jdc Exp $	*/
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -36,7 +36,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: nbperf.c,v 1.5 2013/01/31 16:32:02 joerg Exp $");
+__RCSID("$NetBSD: nbperf.c,v 1.4.4.1 2013/02/14 22:06:18 jdc Exp $");
 
 #include <sys/endian.h>
 #include <err.h>

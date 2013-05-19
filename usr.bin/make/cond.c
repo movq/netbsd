@@ -1,4 +1,4 @@
-/*	$NetBSD: cond.c,v 1.67 2012/11/03 13:59:27 christos Exp $	*/
+/*	$NetBSD: cond.c,v 1.62 2011/03/29 17:19:22 sjg Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
@@ -70,14 +70,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: cond.c,v 1.67 2012/11/03 13:59:27 christos Exp $";
+static char rcsid[] = "$NetBSD: cond.c,v 1.62 2011/03/29 17:19:22 sjg Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)cond.c	8.2 (Berkeley) 1/2/94";
 #else
-__RCSID("$NetBSD: cond.c,v 1.67 2012/11/03 13:59:27 christos Exp $");
+__RCSID("$NetBSD: cond.c,v 1.62 2011/03/29 17:19:22 sjg Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -327,7 +327,7 @@ CondGetArg(char **linePtr, char **argPtr, const char *func)
  *-----------------------------------------------------------------------
  */
 static Boolean
-CondDoDefined(int argLen MAKE_ATTR_UNUSED, const char *arg)
+CondDoDefined(int argLen __unused, const char *arg)
 {
     char    *p1;
     Boolean result;
@@ -376,7 +376,7 @@ CondStrMatch(const void *string, const void *pattern)
  *-----------------------------------------------------------------------
  */
 static Boolean
-CondDoMake(int argLen MAKE_ATTR_UNUSED, const char *arg)
+CondDoMake(int argLen __unused, const char *arg)
 {
     return Lst_Find(create, arg, CondStrMatch) != NULL;
 }
@@ -395,7 +395,7 @@ CondDoMake(int argLen MAKE_ATTR_UNUSED, const char *arg)
  *-----------------------------------------------------------------------
  */
 static Boolean
-CondDoExists(int argLen MAKE_ATTR_UNUSED, const char *arg)
+CondDoExists(int argLen __unused, const char *arg)
 {
     Boolean result;
     char    *path;
@@ -428,7 +428,7 @@ CondDoExists(int argLen MAKE_ATTR_UNUSED, const char *arg)
  *-----------------------------------------------------------------------
  */
 static Boolean
-CondDoTarget(int argLen MAKE_ATTR_UNUSED, const char *arg)
+CondDoTarget(int argLen __unused, const char *arg)
 {
     GNode   *gn;
 
@@ -452,7 +452,7 @@ CondDoTarget(int argLen MAKE_ATTR_UNUSED, const char *arg)
  *-----------------------------------------------------------------------
  */
 static Boolean
-CondDoCommands(int argLen MAKE_ATTR_UNUSED, const char *arg)
+CondDoCommands(int argLen __unused, const char *arg)
 {
     GNode   *gn;
 
@@ -790,7 +790,7 @@ done:
 }
 
 static int
-get_mpt_arg(char **linePtr, char **argPtr, const char *func MAKE_ATTR_UNUSED)
+get_mpt_arg(char **linePtr, char **argPtr, const char *func __unused)
 {
     /*
      * Use Var_Parse to parse the spec in parens and return
@@ -831,7 +831,7 @@ get_mpt_arg(char **linePtr, char **argPtr, const char *func MAKE_ATTR_UNUSED)
 }
 
 static Boolean
-CondDoEmpty(int arglen, const char *arg MAKE_ATTR_UNUSED)
+CondDoEmpty(int arglen, const char *arg __unused)
 {
     return arglen == 1;
 }
@@ -1227,8 +1227,7 @@ do_Cond_EvalExpression(Boolean *value)
 int
 Cond_Eval(char *line)
 {
-#define	    MAXIF      128	/* maximum depth of .if'ing */
-#define	    MAXIF_BUMP  32	/* how much to grow by */
+    #define	    MAXIF	64	/* maximum depth of .if'ing */
     enum if_states {
 	IF_ACTIVE,		/* .if or .elif part active */
 	ELSE_ACTIVE,		/* .else part active */
@@ -1236,8 +1235,7 @@ Cond_Eval(char *line)
 	SKIP_TO_ELSE,           /* has been true, but not seen '.else' */
 	SKIP_TO_ENDIF		/* nothing else to execute */
     };
-    static enum if_states *cond_state = NULL;
-    static unsigned int max_if_depth = MAXIF;
+    static enum if_states cond_state[MAXIF + 1] = { IF_ACTIVE };
 
     const struct If *ifp;
     Boolean 	    isElif;
@@ -1246,10 +1244,7 @@ Cond_Eval(char *line)
     enum if_states  state;
 
     level = PARSE_FATAL;
-    if (!cond_state) {
-	cond_state = bmake_malloc(max_if_depth * sizeof(*cond_state));
-	cond_state[0] = IF_ACTIVE;
-    }
+
     /* skip leading character (the '.') and any whitespace */
     for (line++; *line == ' ' || *line == '\t'; line++)
 	continue;
@@ -1266,6 +1261,8 @@ Cond_Eval(char *line)
 	    }
 	    /* Return state for previous conditional */
 	    cond_depth--;
+	    if (cond_depth > MAXIF)
+		return COND_SKIP;
 	    return cond_state[cond_depth] <= ELSE_ACTIVE ? COND_PARSE : COND_SKIP;
 	}
 
@@ -1278,6 +1275,8 @@ Cond_Eval(char *line)
 		return COND_PARSE;
 	    }
 
+	    if (cond_depth > MAXIF)
+		return COND_SKIP;
 	    state = cond_state[cond_depth];
 	    switch (state) {
 	    case SEARCH_FOR_ELIF:
@@ -1326,6 +1325,9 @@ Cond_Eval(char *line)
 	    Parse_Error(level, "if-less elif");
 	    return COND_PARSE;
 	}
+	if (cond_depth > MAXIF)
+	    /* Error reported when we saw the .if ... */
+	    return COND_SKIP;
 	state = cond_state[cond_depth];
 	if (state == SKIP_TO_ENDIF || state == ELSE_ACTIVE) {
 	    Parse_Error(PARSE_WARNING, "extra elif");
@@ -1339,15 +1341,10 @@ Cond_Eval(char *line)
 	}
     } else {
 	/* Normal .if */
-	if (cond_depth + 1 >= max_if_depth) {
-	    /*
-	     * This is rare, but not impossible.
-	     * In meta mode, dirdeps.mk (only runs at level 0)
-	     * can need more than the default.
-	     */
-	    max_if_depth += MAXIF_BUMP;
-	    cond_state = bmake_realloc(cond_state, max_if_depth *
-		sizeof(*cond_state));
+	if (cond_depth >= MAXIF) {
+	    cond_depth++;
+	    Parse_Error(PARSE_FATAL, "Too many nested if's. %d max.", MAXIF);
+	    return COND_SKIP;
 	}
 	state = cond_state[cond_depth];
 	cond_depth++;

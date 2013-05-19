@@ -1,4 +1,4 @@
-#	$NetBSD: ARMADILLO9,v 1.41 2013/04/27 22:21:13 christos Exp $
+#	$NetBSD: ARMADILLO9,v 1.32.2.1 2012/06/12 17:47:57 riz Exp $
 #
 #	ARMADILLO9 -- Atmark Techno, Armadillo-9
 #
@@ -33,7 +33,6 @@ file-system	FDESC		# /dev/fd
 file-system	KERNFS		# /kern
 file-system	NULLFS		# loopback file system
 file-system	PROCFS		# /proc
-#file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 file-system	UNION		# union file system
 file-system	PTYFS		# /dev/pts/N support
@@ -54,10 +53,13 @@ options 	NFSSERVER	# Network File System server
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/ IPSEC)
 #options	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 #options 	PPP_DEFLATE	# Deflate compression support for PPP
@@ -78,7 +80,6 @@ options 	COMPAT_20	# NetBSD 2.0
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_43	# 4.3BSD compatibility.
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 options		COMPAT_OSSAUDIO	# OSS (Voxware) audio driver compatibility
@@ -88,7 +89,12 @@ options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 # Shared memory options
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
+#options 	SEMMNI=10	# number of semaphore identifiers
+#options 	SEMMNS=60	# number of semaphores in system
+#options 	SEMUME=10	# max number of undo entries per process
+#options 	SEMMNU=30	# number of undo structures in system
 options 	SYSVSHM		# System V-like memory sharing
+options		P1003_1B_SEMAPHORE	# p1003.1b semaphore support
 
 # Device options
 
@@ -124,7 +130,7 @@ options 	DDB		# in-kernel debugger
 #options	DDB_ONPANIC=1
 options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
 #makeoptions	DEBUG="-g"	# compile full symbol table
-options 	SYMTAB_SPACE=600000
+options 	SYMTAB_SPACE=450000
 
 #options 	PMAP_INCLUDE_PTE_SYNC
 #options 	LOCKDEBUG
@@ -262,7 +268,6 @@ uk*	at scsibus? target ? lun ?	# SCSI unknown
 pseudo-device	vnd			# disk-like interface to files
 options 	VND_COMPRESSION		# compressed vnd(4)
 #pseudo-device	fss			# file system snapshot device
-#pseudo-device	putter			# for puffs and pud
 
 # network pseudo-devices
 pseudo-device	bpfilter		# Berkeley packet filter
@@ -293,7 +298,7 @@ pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	crypto			# /dev/crypto device
 #pseudo-device	swcrypto		# software crypto implementation
-#pseudo-device	sequencer		# MIDI sequencer
+#pseudo-device	sequencer	1	# MIDI sequencer
 
 #
 # wscons options

@@ -1,4 +1,4 @@
-/*	$NetBSD: vasprintf.c,v 1.1.1.3 2013/01/03 16:27:51 christos Exp $	*/
+/*	$NetBSD: vasprintf.c,v 1.1.1.1.10.1 2012/03/07 23:18:29 riz Exp $	*/
 
 /*
  * Copyright (c) Ian F. Darwin 1986-1995.
@@ -85,7 +85,7 @@ trying to do any interpretation
 flag:   none   +     -     #     (blank)
 width:  n    0n    *
 prec:   none   .0    .n     .*
-modifier:    F N L h l ll z t    ('F' and 'N' are ms-dos/16-bit specific)
+modifier:    F N L h l ll    ('F' and 'N' are ms-dos/16-bit specific)
 type:  d i o u x X f e g E G c s p n
 
 
@@ -111,9 +111,9 @@ you use strange formats.
 
 #ifndef	lint
 #if 0
-FILE_RCSID("@(#)$File: vasprintf.c,v 1.10 2012/08/09 16:40:04 christos Exp $")
+FILE_RCSID("@(#)$File: vasprintf.c,v 1.8 2011/12/08 12:38:24 rrt Exp $")
 #else
-__RCSID("$NetBSD: vasprintf.c,v 1.1.1.3 2013/01/03 16:27:51 christos Exp $");
+__RCSID("$NetBSD: vasprintf.c,v 1.1.1.1.10.1 2012/03/07 23:18:29 riz Exp $");
 #endif
 #endif	/* lint */
 
@@ -124,9 +124,6 @@ __RCSID("$NetBSD: vasprintf.c,v 1.1.1.3 2013/01/03 16:27:51 christos Exp $");
 #include <ctype.h>
 #ifdef HAVE_LIMITS_H
 #include <limits.h>
-#endif
-#ifdef HAVE_STDDEF_H
-#include <stddef.h>
 #endif
 
 #define ALLOC_CHUNK 2048
@@ -394,12 +391,7 @@ static int dispatch(xprintf_struct *s)
     prec = -1;                  /* no .prec specified */
 
   /* modifier */
-  switch (*SRCTXT) {
-  case 'L':
-  case 'h':
-  case 'l':
-  case 'z':
-  case 't':
+  if (*SRCTXT == 'L' || *SRCTXT == 'h' || *SRCTXT == 'l') {
     modifier = *SRCTXT;
     SRCTXT++;
     if (modifier=='l' && *SRCTXT=='l') {
@@ -407,11 +399,8 @@ static int dispatch(xprintf_struct *s)
       modifier = 'L';  /* 'll' == 'L'      long long == long double */
     } /* only for compatibility ; not portable */
     INCOHERENT_TEST();
-    break;
-  default:
+  } else
     modifier = -1;              /* no modifier specified */
-    break;
-  }
 
   /* type */
   type = *SRCTXT;
@@ -494,10 +483,6 @@ static int dispatch(xprintf_struct *s)
       return print_it(s, (size_t)approx_width, format_string, va_arg(s->vargs, long int));
     case 'h':
       return print_it(s, (size_t)approx_width, format_string, va_arg(s->vargs, int));
-    case 'z':
-      return print_it(s, (size_t)approx_width, format_string, va_arg(s->vargs, size_t));
-    case 't':
-      return print_it(s, (size_t)approx_width, format_string, va_arg(s->vargs, ptrdiff_t));
       /* 'int' instead of 'short int' because default promotion is 'int' */
     default:
       INCOHERENT();

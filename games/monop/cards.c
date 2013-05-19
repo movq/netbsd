@@ -1,4 +1,4 @@
-/*	$NetBSD: cards.c,v 1.25 2012/06/19 05:35:32 dholland Exp $	*/
+/*	$NetBSD: cards.c,v 1.24 2010/09/26 21:12:23 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)cards.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: cards.c,v 1.25 2012/06/19 05:35:32 dholland Exp $");
+__RCSID("$NetBSD: cards.c,v 1.24 2010/09/26 21:12:23 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -190,7 +190,7 @@ static const struct cardinfo ch_cards[] = {
  * This routine initializes the decks from the data above.
  */
 void
-init_decks(void)
+init_decks()
 {
 	CC_D.info = cc_cards;
 	CC_D.num_cards = sizeof(cc_cards) / sizeof(cc_cards[0]);
@@ -204,7 +204,8 @@ init_decks(void)
  *	This routine sets up the offset pointers for the given deck.
  */
 static void
-set_up(DECK *dp)
+set_up(dp)
+	DECK *dp;
 {
 	int r1, r2;
 	int i;
@@ -234,7 +235,8 @@ set_up(DECK *dp)
  *	This routine draws a card from the given deck
  */
 void
-get_card(DECK *dp)
+get_card(dp)
+	DECK *dp;
 {
 	char type_maj, type_min;
 	int num;
@@ -356,7 +358,8 @@ printmes(const char *text)
  * deck.
  */
 void
-ret_card(PLAY *plr)
+ret_card(plr)
+	PLAY *plr;
 {
 	char type_maj;
 	int gojfpos, last_card;

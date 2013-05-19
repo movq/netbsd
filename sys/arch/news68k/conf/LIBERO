@@ -1,4 +1,4 @@
-# 	$NetBSD: LIBERO,v 1.59 2013/04/27 21:43:37 christos Exp $
+# 	$NetBSD: LIBERO,v 1.55 2011/11/22 21:25:29 tls Exp $
 
 #	NEWS1750 config file;
 #
@@ -47,7 +47,6 @@ options 	COMPAT_20		# NetBSD 2.0 binary compatibility
 options 	COMPAT_30		# NetBSD 3.0 binary compatibility
 options 	COMPAT_40		# NetBSD 4.0 binary compatibility
 options 	COMPAT_50		# NetBSD 5.0 binary compatibility
-options 	COMPAT_60		# NetBSD 6.0 compatibility.
 options 	COMPAT_AOUT_M68K	# compatibility with NetBSD/m68k a.out
 
 #options 	COMPAT_SVR4		# binary compatibility with SVR4
@@ -80,6 +79,7 @@ options 	FFS_NO_SNAPSHOT	# FFS snapshot support
 options 	INET		# Internet protocols
 options 	INET6		# IPv6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	GATEWAY		# IP packet forwarding
@@ -159,8 +159,8 @@ pseudo-device	loop			# loopback interface; required
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	md			# memory disk device
 pseudo-device	vnd			# disk-like interface to files
-#pseudo-device	ccd			# concatenated and striped disks
-#pseudo-device	raid			# RAIDframe disk driver
+#pseudo-device	ccd		4	# concatenated and striped disks
+#pseudo-device	raid		4	# RAIDframe disk driver
 #pseudo-device	fss			# file system snapshot device
 #pseudo-device	sl			# SLIP interfaces
 #pseudo-device	ppp			# PPP interfaces

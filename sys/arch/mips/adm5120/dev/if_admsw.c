@@ -1,4 +1,4 @@
-/* $NetBSD: if_admsw.c,v 1.11 2012/10/27 17:18:01 chs Exp $ */
+/* $NetBSD: if_admsw.c,v 1.10 2011/07/10 23:13:23 matt Exp $ */
 
 /*-
  * Copyright (c) 2007 Ruslan Ermilov and Vsevolod Lobko.
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_admsw.c,v 1.11 2012/10/27 17:18:01 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_admsw.c,v 1.10 2011/07/10 23:13:23 matt Exp $");
 
 
 #include <sys/param.h>
@@ -152,14 +152,14 @@ static int	admsw_add_rxbuf(struct admsw_softc *, int, int);
 static int	admsw_mediachange(struct ifnet *);
 static void	admsw_mediastatus(struct ifnet *, struct ifmediareq *);
 
-static int	admsw_match(device_t, cfdata_t, void *);
-static void	admsw_attach(device_t, device_t, void *);
+static int	admsw_match(struct device *, struct cfdata *, void *);
+static void	admsw_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(admsw, sizeof(struct admsw_softc),
+CFATTACH_DECL(admsw, sizeof(struct admsw_softc),
     admsw_match, admsw_attach, NULL, NULL);
 
 static int
-admsw_match(device_t parent, cfdata_t cf, void *aux)
+admsw_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct obio_attach_args *aa = aux;
 
@@ -324,10 +324,10 @@ admsw_reset(struct admsw_softc *sc)
 }
 
 static void
-admsw_attach(device_t parent, device_t self, void *aux)
+admsw_attach(struct device *parent, struct device *self, void *aux)
 {
 	uint8_t enaddr[ETHER_ADDR_LEN];
-	struct admsw_softc *sc = device_private(self);
+	struct admsw_softc *sc = (void *) self;
 	struct obio_attach_args *aa = aux;
 	struct ifnet *ifp;
 	bus_dma_segment_t seg;
@@ -336,11 +336,10 @@ admsw_attach(device_t parent, device_t self, void *aux)
 
 	printf(": ADM5120 Switch Engine, %d ports\n", SW_DEVS);
 
-	sc->sc_dev = self;
 	sc->sc_dmat = aa->oba_dt;
 	sc->sc_st = aa->oba_st;
 
-	pd = prop_dictionary_get(device_properties(self), "mac-address");
+	pd = prop_dictionary_get(device_properties(&sc->sc_dev), "mac-address");
 
 	if (pd == NULL) {
 		enaddr[0] = 0x02;
@@ -354,12 +353,12 @@ admsw_attach(device_t parent, device_t self, void *aux)
 
 	memcpy(sc->sc_enaddr, enaddr, sizeof(sc->sc_enaddr));
 
-	printf("%s: base Ethernet address %s\n", device_xname(sc->sc_dev),
+	printf("%s: base Ethernet address %s\n", sc->sc_dev.dv_xname,
 	    ether_sprintf(enaddr));
 
 	/* Map the device. */
 	if (bus_space_map(sc->sc_st, aa->oba_addr, 512, 0, &sc->sc_ioh) != 0) {
-		printf("%s: unable to map device\n", device_xname(sc->sc_dev));
+		printf("%s: unable to map device\n", device_xname(&sc->sc_dev));
 		return;
 	}
 
@@ -368,7 +367,7 @@ admsw_attach(device_t parent, device_t self, void *aux)
 
 	if (sc->sc_ih == NULL) {
 		printf("%s: unable to register interrupt handler\n",
-		    device_xname(sc->sc_dev));
+		    sc->sc_dev.dv_xname);
 		return;
 	}
 
@@ -380,28 +379,28 @@ admsw_attach(device_t parent, device_t self, void *aux)
 	    sizeof(struct admsw_control_data), PAGE_SIZE, 0, &seg, 1, &rseg,
 	    0)) != 0) {
 		printf("%s: unable to allocate control data, error = %d\n",
-		    device_xname(sc->sc_dev), error);
+		    sc->sc_dev.dv_xname, error);
 		return;
 	}
 	if ((error = bus_dmamem_map(sc->sc_dmat, &seg, rseg,
 	    sizeof(struct admsw_control_data), (void *)&sc->sc_control_data,
 	    0)) != 0) {
 		printf("%s: unable to map control data, error = %d\n",
-		    device_xname(sc->sc_dev), error);
+		    sc->sc_dev.dv_xname, error);
 		return;
 	}
 	if ((error = bus_dmamap_create(sc->sc_dmat,
 	    sizeof(struct admsw_control_data), 1,
 	    sizeof(struct admsw_control_data), 0, 0, &sc->sc_cddmamap)) != 0) {
 		printf("%s: unable to create control data DMA map, "
-		    "error = %d\n", device_xname(sc->sc_dev), error);
+		    "error = %d\n", sc->sc_dev.dv_xname, error);
 		return;
 	}
 	if ((error = bus_dmamap_load(sc->sc_dmat, sc->sc_cddmamap,
 	    sc->sc_control_data, sizeof(struct admsw_control_data), NULL,
 	    0)) != 0) {
 		printf("%s: unable to load control data DMA map, error = %d\n",
-		    device_xname(sc->sc_dev), error);
+		    sc->sc_dev.dv_xname, error);
 		return;
 	}
 
@@ -413,7 +412,7 @@ admsw_attach(device_t parent, device_t self, void *aux)
 		    2, MCLBYTES, 0, 0,
 		    &sc->sc_txhsoft[i].ds_dmamap)) != 0) {
 			printf("%s: unable to create txh DMA map %d, "
-			    "error = %d\n", device_xname(sc->sc_dev), i, error);
+			    "error = %d\n", sc->sc_dev.dv_xname, i, error);
 			return;
 		}
 		sc->sc_txhsoft[i].ds_mbuf = NULL;
@@ -423,7 +422,7 @@ admsw_attach(device_t parent, device_t self, void *aux)
 		    2, MCLBYTES, 0, 0,
 		    &sc->sc_txlsoft[i].ds_dmamap)) != 0) {
 			printf("%s: unable to create txl DMA map %d, "
-			    "error = %d\n", device_xname(sc->sc_dev), i, error);
+			    "error = %d\n", sc->sc_dev.dv_xname, i, error);
 			return;
 		}
 		sc->sc_txlsoft[i].ds_mbuf = NULL;
@@ -436,7 +435,7 @@ admsw_attach(device_t parent, device_t self, void *aux)
 		if ((error = bus_dmamap_create(sc->sc_dmat, MCLBYTES, 1,
 		    MCLBYTES, 0, 0, &sc->sc_rxhsoft[i].ds_dmamap)) != 0) {
 			printf("%s: unable to create rxh DMA map %d, "
-			    "error = %d\n", device_xname(sc->sc_dev), i, error);
+			    "error = %d\n", sc->sc_dev.dv_xname, i, error);
 			return;
 		}
 		sc->sc_rxhsoft[i].ds_mbuf = NULL;
@@ -445,7 +444,7 @@ admsw_attach(device_t parent, device_t self, void *aux)
 		if ((error = bus_dmamap_create(sc->sc_dmat, MCLBYTES, 1,
 		    MCLBYTES, 0, 0, &sc->sc_rxlsoft[i].ds_dmamap)) != 0) {
 			printf("%s: unable to create rxl DMA map %d, "
-			    "error = %d\n", device_xname(sc->sc_dev), i, error);
+			    "error = %d\n", sc->sc_dev.dv_xname, i, error);
 			return;
 		}
 		sc->sc_rxlsoft[i].ds_mbuf = NULL;
@@ -465,7 +464,7 @@ admsw_attach(device_t parent, device_t self, void *aux)
 		ifmedia_set(&sc->sc_ifmedia[i], IFM_ETHER|IFM_AUTO);
 
 		ifp = &sc->sc_ethercom[i].ec_if;
-		strcpy(ifp->if_xname, device_xname(sc->sc_dev));
+		strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
 		ifp->if_xname[5] += i;
 		ifp->if_softc = sc;
 		ifp->if_flags = IFF_BROADCAST | IFF_SIMPLEX | IFF_MULTICAST;
@@ -486,16 +485,16 @@ admsw_attach(device_t parent, device_t self, void *aux)
 
 #ifdef ADMSW_EVENT_COUNTERS
 	evcnt_attach_dynamic(&sc->sc_ev_txstall, EVCNT_TYPE_MISC,
-	    NULL, device_xname(sc->sc_dev), "txstall");
+	    NULL, sc->sc_dev.dv_xname, "txstall");
 	evcnt_attach_dynamic(&sc->sc_ev_rxstall, EVCNT_TYPE_MISC,
-	    NULL, device_xname(sc->sc_dev), "rxstall");
+	    NULL, sc->sc_dev.dv_xname, "rxstall");
 	evcnt_attach_dynamic(&sc->sc_ev_txintr, EVCNT_TYPE_MISC,
-	    NULL, device_xname(sc->sc_dev), "txintr");
+	    NULL, sc->sc_dev.dv_xname, "txintr");
 	evcnt_attach_dynamic(&sc->sc_ev_rxintr, EVCNT_TYPE_MISC,
-	    NULL, device_xname(sc->sc_dev), "rxintr");
+	    NULL, sc->sc_dev.dv_xname, "rxintr");
 #if 1
 	evcnt_attach_dynamic(&sc->sc_ev_rxsync, EVCNT_TYPE_MISC,
-	    NULL, device_xname(sc->sc_dev), "rxsync");
+	    NULL, sc->sc_dev.dv_xname, "rxsync");
 #endif
 #endif
 
@@ -505,7 +504,7 @@ admsw_attach(device_t parent, device_t self, void *aux)
 	sc->sc_sdhook = shutdownhook_establish(admsw_shutdown, sc);
 	if (sc->sc_sdhook == NULL)
 		printf("%s: WARNING: unable to establish shutdown hook\n",
-		    device_xname(sc->sc_dev));
+		    sc->sc_dev.dv_xname);
 
 	/* leave interrupts and cpu port disabled */
 	return;
@@ -596,14 +595,14 @@ admsw_start(struct ifnet *ifp)
 			MGETHDR(m, M_DONTWAIT, MT_DATA);
 			if (m == NULL) {
 				printf("%s: unable to allocate Tx mbuf\n",
-				    device_xname(sc->sc_dev));
+				    sc->sc_dev.dv_xname);
 				break;
 			}
 			if (m0->m_pkthdr.len > MHLEN) {
 				MCLGET(m, M_DONTWAIT);
 				if ((m->m_flags & M_EXT) == 0) {
 					printf("%s: unable to allocate Tx "
-					    "cluster\n", device_xname(sc->sc_dev));
+					    "cluster\n", sc->sc_dev.dv_xname);
 					m_freem(m);
 					break;
 				}
@@ -622,7 +621,7 @@ admsw_start(struct ifnet *ifp)
 			    m, BUS_DMA_WRITE|BUS_DMA_NOWAIT);
 			if (error) {
 				printf("%s: unable to load Tx buffer, "
-				    "error = %d\n", device_xname(sc->sc_dev), error);
+				    "error = %d\n", sc->sc_dev.dv_xname, error);
 				break;
 			}
 		}
@@ -697,23 +696,23 @@ admsw_watchdog(struct ifnet *ifp)
 #if 1
 	/* Check if an interrupt was lost. */
 	if (sc->sc_txfree == ADMSW_NTXLDESC) {
-		printf("%s: watchdog false alarm\n", device_xname(sc->sc_dev));
+		printf("%s: watchdog false alarm\n", sc->sc_dev.dv_xname);
 		return;
 	}
 	if (sc->sc_ethercom[0].ec_if.if_timer != 0)
-		printf("%s: watchdog timer is %d!\n", device_xname(sc->sc_dev), sc->sc_ethercom[0].ec_if.if_timer);
+		printf("%s: watchdog timer is %d!\n", sc->sc_dev.dv_xname, sc->sc_ethercom[0].ec_if.if_timer);
 	admsw_txintr(sc, 0);
 	if (sc->sc_txfree == ADMSW_NTXLDESC) {
-		printf("%s: tx IRQ lost (queue empty)\n", device_xname(sc->sc_dev));
+		printf("%s: tx IRQ lost (queue empty)\n", sc->sc_dev.dv_xname);
 		return;
 	}
 	if (sc->sc_ethercom[0].ec_if.if_timer != 0) {
-		printf("%s: tx IRQ lost (timer recharged)\n", device_xname(sc->sc_dev));
+		printf("%s: tx IRQ lost (timer recharged)\n", sc->sc_dev.dv_xname);
 		return;
 	}
 #endif
 
-	printf("%s: device timeout, txfree = %d\n", device_xname(sc->sc_dev), sc->sc_txfree);
+	printf("%s: device timeout, txfree = %d\n", sc->sc_dev.dv_xname, sc->sc_txfree);
 	for (vlan = 0; vlan < SW_DEVS; vlan++)
 		admsw_stop(&sc->sc_ethercom[vlan].ec_if, 0);
 	for (vlan = 0; vlan < SW_DEVS; vlan++)
@@ -945,7 +944,7 @@ admsw_rxintr(struct admsw_softc *sc, int high)
 			ADMSW_CDRXLSYNC(sc, sc->sc_rxptr, BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
 			/* We've fallen behind the chip: catch it. */
 			printf("%s: RX ring resync, base=%x, work=%x, %d -> %d\n",
-			    device_xname(sc->sc_dev), REG_READ(RECV_LBADDR_REG),
+			    sc->sc_dev.dv_xname, REG_READ(RECV_LBADDR_REG),
 			    REG_READ(RECV_LWADDR_REG), sc->sc_rxptr, i);
 			sc->sc_rxptr = i;
 			ADMSW_EVCNT_INCR(&sc->sc_ev_rxsync);
@@ -1205,7 +1204,7 @@ admsw_add_rxbuf(struct admsw_softc *sc, int idx, int high)
 	    BUS_DMA_READ | BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: can't load rx DMA map %d, error = %d\n",
-		    device_xname(sc->sc_dev), idx, error);
+		    sc->sc_dev.dv_xname, idx, error);
 		panic("admsw_add_rxbuf");	/* XXX */
 	}
 

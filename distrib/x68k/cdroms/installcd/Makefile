@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2012/11/22 20:26:33 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.1.40.1 2012/11/24 20:29:49 jdc Exp $
 CDBASE=		x68kcd			# gives ${CDBASE}.iso
 CDRELEASE=	true			# include $RELEASEDIR/$MACHINE
 CDINSTKERNEL=	../../floppies/instkernel

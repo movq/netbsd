@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ed_zbus.c,v 1.2 2012/10/27 21:13:03 phx Exp $ */
+/*	$NetBSD: if_ed_zbus.c,v 1.2.6.2 2012/11/22 00:27:54 riz Exp $ */
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ed_zbus.c,v 1.2 2012/10/27 21:13:03 phx Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ed_zbus.c,v 1.2.6.2 2012/11/22 00:27:54 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: ofw_consinit.c,v 1.16 2013/05/12 13:23:08 macallan Exp $ */
+/* $NetBSD: ofw_consinit.c,v 1.13 2011/07/17 20:54:46 joerg Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofw_consinit.c,v 1.16 2013/05/12 13:23:08 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofw_consinit.c,v 1.13 2011/07/17 20:54:46 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -88,7 +88,7 @@ extern struct consdev consdev_zs;
 #include <dev/ic/pckbcvar.h>
 #endif
 
-int console_node = 0, console_instance = 0;
+extern int console_node, console_instance;
 
 int chosen, stdin, stdout;
 int ofkbd_ihandle;
@@ -150,7 +150,6 @@ cninit(void)
 
 #ifdef PMAC_G5
 		/* The MMU hasn't been initialized yet, use failsafe for now */
-		extern struct consdev failsafe_cons;
 		cp = &failsafe_cons;
 		cn_tab = cp;
 		(*cp->cn_probe)(cp);
@@ -240,7 +239,7 @@ cninit_kd(void)
 	if (strcmp(name, "isa") == 0) {
 		printf("console keyboard type: PC Keyboard\n");
 		pckbc_cnattach(&genppc_isa_io_space_tag, IO_KBD, KBCMDP,
-		    PCKBC_KBD_SLOT, 0);
+		    PCKBC_KBD_SLOT);
 		goto kbd_found;
 	}
 #endif

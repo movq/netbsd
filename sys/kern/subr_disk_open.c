@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_disk_open.c,v 1.11 2012/10/27 17:18:39 chs Exp $	*/
+/*	$NetBSD: subr_disk_open.c,v 1.6 2011/11/27 00:38:12 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_disk_open.c,v 1.11 2012/10/27 17:18:39 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_disk_open.c,v 1.6 2011/11/27 00:38:12 tsutsui Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -40,10 +40,9 @@ __KERNEL_RCSID(0, "$NetBSD: subr_disk_open.c,v 1.11 2012/10/27 17:18:39 chs Exp 
 #include <miscfs/specfs/specdev.h>
 
 struct vnode *
-opendisk(device_t dv)
+opendisk(struct device *dv)
 {
-	devmajor_t bmajor;
-	int unit;
+	int bmajor, bminor;
 	struct vnode *tmpvn;
 	int error;
 	dev_t dev;
@@ -55,32 +54,27 @@ opendisk(device_t dv)
 	if (bmajor == -1)
 		return NULL;
 	
-	unit = device_unit(dv);
+	bminor = minor(device_unit(dv));
 	/*
 	 * Fake a temporary vnode for the disk, open it, and read
 	 * and hash the sectors.
 	 */
-	dev = device_is_a(dv, "dk") ? makedev(bmajor, unit) :
-	    MAKEDISKDEV(bmajor, unit, RAW_PART);
+	dev = device_is_a(dv, "dk") ? makedev(bmajor, bminor) :
+	    MAKEDISKDEV(bmajor, bminor, RAW_PART);
 	if (bdevvp(dev, &tmpvn))
 		panic("%s: can't alloc vnode for %s", __func__,
 		    device_xname(dv));
 	error = VOP_OPEN(tmpvn, FREAD | FSILENT, NOCRED);
 	if (error) {
+#ifndef DEBUG
 		/*
 		 * Ignore errors caused by missing device, partition,
-		 * medium, or busy [presumably because of a wedge covering it]
+		 * or medium.
 		 */
-		switch (error) {
-		case ENXIO:
-		case ENODEV:
-		case EBUSY:
-			break;
-		default:
+		if (error != ENXIO && error != ENODEV)
+#endif
 			printf("%s: can't open dev %s (%d)\n",
 			    __func__, device_xname(dv), error);
-			break;
-		}
 		vput(tmpvn);
 		return NULL;
 	}
@@ -89,46 +83,28 @@ opendisk(device_t dv)
 }
 
 int
-getdisksize(struct vnode *vp, uint64_t *numsecp, unsigned int *secsizep)
+getdisksize(struct vnode *vp, uint64_t *numsecp, unsigned *secsizep)
 {
 	struct partinfo dpart;
 	struct dkwedge_info dkw;
 	struct disk *pdk;
-	unsigned int secsize;
-	uint64_t numsec;
 	int error;
 
 	error = VOP_IOCTL(vp, DIOCGPART, &dpart, FREAD, NOCRED);
 	if (error == 0) {
-		secsize = dpart.disklab->d_secsize;
-		numsec  = dpart.part->p_size;
-	} else {
-		error = VOP_IOCTL(vp, DIOCGWEDGEINFO, &dkw, FREAD, NOCRED);
-		if (error == 0) {
-			pdk = disk_find(dkw.dkw_parent);
-			if (pdk != NULL) {
-				secsize = DEV_BSIZE << pdk->dk_blkshift;
-				numsec  = dkw.dkw_size;
-			} else
-				error = ENODEV;
-		}
+		*secsizep = dpart.disklab->d_secsize;
+		*numsecp  = dpart.part->p_size;
+		return 0;
 	}
 
-	if (error == 0 &&
-	    (secsize == 0 || secsize > MAXBSIZE || !powerof2(secsize) ||
-	     numsec == 0)) {
-#ifdef DIAGNOSTIC
-		printf("%s: %s returns invalid disksize values"
-		    " (secsize = %u, numsec = %" PRIu64 ")\n",
-		    __func__,
-		    devsw_blk2name(major(vp->v_specnode->sn_rdev)),
-		    secsize, numsec);
-#endif
-		error = EINVAL;
-	}
+	error = VOP_IOCTL(vp, DIOCGWEDGEINFO, &dkw, FREAD, NOCRED);
 	if (error == 0) {
-		*secsizep = secsize;
-		*numsecp  = numsec;
+		pdk = disk_find(dkw.dkw_parent);
+		if (pdk != NULL) {
+			*secsizep = DEV_BSIZE << pdk->dk_blkshift;
+			*numsecp  = dkw.dkw_size;
+		} else
+			error = ENODEV;
 	}
 
 	return error;

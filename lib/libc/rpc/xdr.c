@@ -1,4 +1,4 @@
-/*	$NetBSD: xdr.c,v 1.33 2013/03/11 20:19:29 tron Exp $	*/
+/*	$NetBSD: xdr.c,v 1.28.46.1 2013/03/14 22:03:13 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -37,7 +37,7 @@
 static char *sccsid = "@(#)xdr.c 1.35 87/08/12";
 static char *sccsid = "@(#)xdr.c	2.1 88/07/29 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: xdr.c,v 1.33 2013/03/11 20:19:29 tron Exp $");
+__RCSID("$NetBSD: xdr.c,v 1.28.46.1 2013/03/14 22:03:13 riz Exp $");
 #endif
 #endif
 
@@ -110,7 +110,9 @@ static const char xdr_zero[BYTES_PER_XDR_UNIT] = { 0, 0, 0, 0 };
  * Not a filter, but a convenient utility nonetheless
  */
 void
-xdr_free(xdrproc_t proc, char *objp)
+xdr_free(proc, objp)
+	xdrproc_t proc;
+	char *objp;
 {
 	XDR x;
 	
@@ -122,7 +124,10 @@ xdr_free(xdrproc_t proc, char *objp)
  * XDR nothing
  */
 bool_t
-xdr_void(void) {
+xdr_void(/* xdrs, addr */)
+	/* XDR *xdrs; */
+	/* caddr_t addr; */
+{
 
 	return (TRUE);
 }
@@ -132,7 +137,9 @@ xdr_void(void) {
  * XDR integers
  */
 bool_t
-xdr_int(XDR *xdrs, int *ip)
+xdr_int(xdrs, ip)
+	XDR *xdrs;
+	int *ip;
 {
 	long l;
 
@@ -163,7 +170,9 @@ xdr_int(XDR *xdrs, int *ip)
  * XDR unsigned integers
  */
 bool_t
-xdr_u_int(XDR *xdrs, u_int *up)
+xdr_u_int(xdrs, up)
+	XDR *xdrs;
+	u_int *up;
 {
 	u_long l;
 
@@ -196,7 +205,9 @@ xdr_u_int(XDR *xdrs, u_int *up)
  * same as xdr_u_long - open coded to save a proc call!
  */
 bool_t
-xdr_long(XDR *xdrs, long *lp)
+xdr_long(xdrs, lp)
+	XDR *xdrs;
+	long *lp;
 {
 
 	_DIAGASSERT(xdrs != NULL);
@@ -219,7 +230,9 @@ xdr_long(XDR *xdrs, long *lp)
  * same as xdr_long - open coded to save a proc call!
  */
 bool_t
-xdr_u_long(XDR *xdrs, u_long *ulp)
+xdr_u_long(xdrs, ulp)
+	XDR *xdrs;
+	u_long *ulp;
 {
 
 	_DIAGASSERT(xdrs != NULL);
@@ -243,7 +256,9 @@ xdr_u_long(XDR *xdrs, u_long *ulp)
  * same as xdr_u_int32_t - open coded to save a proc call!
  */
 bool_t
-xdr_int32_t(XDR *xdrs, int32_t *int32_p)
+xdr_int32_t(xdrs, int32_p)
+	XDR *xdrs;
+	int32_t *int32_p;
 {
 	long l;
 
@@ -275,7 +290,9 @@ xdr_int32_t(XDR *xdrs, int32_t *int32_p)
  * same as xdr_int32_t - open coded to save a proc call!
  */
 bool_t
-xdr_u_int32_t(XDR *xdrs, u_int32_t *u_int32_p)
+xdr_u_int32_t(xdrs, u_int32_p)
+	XDR *xdrs;
+	u_int32_t *u_int32_p;
 {
 	u_long l;
 
@@ -307,7 +324,9 @@ xdr_u_int32_t(XDR *xdrs, u_int32_t *u_int32_p)
  * XDR short integers
  */
 bool_t
-xdr_short(XDR *xdrs, short *sp)
+xdr_short(xdrs, sp)
+	XDR *xdrs;
+	short *sp;
 {
 	long l;
 
@@ -338,7 +357,9 @@ xdr_short(XDR *xdrs, short *sp)
  * XDR unsigned short integers
  */
 bool_t
-xdr_u_short(XDR *xdrs, u_short *usp)
+xdr_u_short(xdrs, usp)
+	XDR *xdrs;
+	u_short *usp;
 {
 	u_long l;
 
@@ -370,7 +391,9 @@ xdr_u_short(XDR *xdrs, u_short *usp)
  * XDR 16-bit integers
  */
 bool_t
-xdr_int16_t(XDR *xdrs, int16_t *int16_p)
+xdr_int16_t(xdrs, int16_p)
+	XDR *xdrs;
+	int16_t *int16_p;
 {
 	long l;
 
@@ -401,7 +424,9 @@ xdr_int16_t(XDR *xdrs, int16_t *int16_p)
  * XDR unsigned 16-bit integers
  */
 bool_t
-xdr_u_int16_t(XDR *xdrs, u_int16_t *u_int16_p)
+xdr_u_int16_t(xdrs, u_int16_p)
+	XDR *xdrs;
+	u_int16_t *u_int16_p;
 {
 	u_long l;
 
@@ -433,7 +458,9 @@ xdr_u_int16_t(XDR *xdrs, u_int16_t *u_int16_p)
  * XDR a char
  */
 bool_t
-xdr_char(XDR *xdrs, char *cp)
+xdr_char(xdrs, cp)
+	XDR *xdrs;
+	char *cp;
 {
 	int i;
 
@@ -452,7 +479,9 @@ xdr_char(XDR *xdrs, char *cp)
  * XDR an unsigned char
  */
 bool_t
-xdr_u_char(XDR *xdrs, u_char *cp)
+xdr_u_char(xdrs, cp)
+	XDR *xdrs;
+	u_char *cp;
 {
 	u_int u;
 
@@ -471,7 +500,9 @@ xdr_u_char(XDR *xdrs, u_char *cp)
  * XDR booleans
  */
 bool_t
-xdr_bool(XDR *xdrs, bool_t *bp)
+xdr_bool(xdrs, bp)
+	XDR *xdrs;
+	bool_t *bp;
 {
 	long lb;
 
@@ -502,7 +533,9 @@ xdr_bool(XDR *xdrs, bool_t *bp)
  * XDR enumerations
  */
 bool_t
-xdr_enum(XDR *xdrs, enum_t *ep)
+xdr_enum(xdrs, ep)
+	XDR *xdrs;
+	enum_t *ep;
 {
 	long l;
 
@@ -535,7 +568,10 @@ xdr_enum(XDR *xdrs, enum_t *ep)
  * cp points to the opaque object and cnt gives the byte length.
  */
 bool_t
-xdr_opaque(XDR *xdrs, caddr_t cp, u_int cnt)
+xdr_opaque(xdrs, cp, cnt)
+	XDR *xdrs;
+	caddr_t cp;
+	u_int cnt;
 {
 	u_int rndup;
 	static int crud[BYTES_PER_XDR_UNIT];
@@ -586,7 +622,11 @@ xdr_opaque(XDR *xdrs, caddr_t cp, u_int cnt)
  * If *cpp is NULL maxsize bytes are allocated
  */
 bool_t
-xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
+xdr_bytes(xdrs, cpp, sizep, maxsize)
+	XDR *xdrs;
+	char **cpp;
+	u_int *sizep;
+	u_int maxsize;
 {
 	char *sp;  		/* sp is the actual string pointer */
 	u_int nodesize;
@@ -621,7 +661,7 @@ xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
 			*cpp = sp = mem_alloc(nodesize);
 		}
 		if (sp == NULL) {
-			warn("%s: out of memory", __func__);
+			warnx("xdr_bytes: out of memory");
 			return (FALSE);
 		}
 		/* FALLTHROUGH */
@@ -644,7 +684,9 @@ xdr_bytes(XDR *xdrs, char **cpp, u_int *sizep, u_int maxsize)
  * Implemented here due to commonality of the object.
  */
 bool_t
-xdr_netobj(XDR *xdrs, struct netobj *np)
+xdr_netobj(xdrs, np)
+	XDR *xdrs;
+	struct netobj *np;
 {
 
 	_DIAGASSERT(xdrs != NULL);
@@ -665,13 +707,12 @@ xdr_netobj(XDR *xdrs, struct netobj *np)
  * If there is no specific or default routine an error is returned.
  */
 bool_t
-xdr_union(
-	XDR *xdrs,
-	enum_t *dscmp,		/* enum to decide which arm to work on */
-	char *unp,		/* the union itself */
-	const struct xdr_discrim *choices, /* [value, xdr proc] for each arm */
-	xdrproc_t dfault	/* default xdr routine */
-)
+xdr_union(xdrs, dscmp, unp, choices, dfault)
+	XDR *xdrs;
+	enum_t *dscmp;		/* enum to decide which arm to work on */
+	char *unp;		/* the union itself */
+	const struct xdr_discrim *choices; /* [value, xdr proc] for each arm */
+	xdrproc_t dfault;	/* default xdr routine */
 {
 	enum_t dscm;
 
@@ -721,12 +762,14 @@ xdr_union(
  * of the string as specified by a protocol.
  */
 bool_t
-xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
+xdr_string(xdrs, cpp, maxsize)
+	XDR *xdrs;
+	char **cpp;
+	u_int maxsize;
 {
 	char *sp;  		/* sp is the actual string pointer */
 	u_int size = 0;		/* XXX: GCC */
 	u_int nodesize;
-	size_t len;
 
 	_DIAGASSERT(xdrs != NULL);
 	_DIAGASSERT(cpp != NULL);
@@ -743,9 +786,7 @@ xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
 		}
 		/* FALLTHROUGH */
 	case XDR_ENCODE:
-		len = strlen(sp);
-		_DIAGASSERT(__type_fit(u_int, len));
-		size = (u_int)len;
+		size = strlen(sp);
 		break;
 	case XDR_DECODE:
 		break;
@@ -770,7 +811,7 @@ xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
 		if (sp == NULL)
 			*cpp = sp = mem_alloc(nodesize);
 		if (sp == NULL) {
-			warn("%s: out of memory", __func__);
+			warnx("xdr_string: out of memory");
 			return (FALSE);
 		}
 		sp[size] = 0;
@@ -793,7 +834,9 @@ xdr_string(XDR *xdrs, char **cpp, u_int maxsize)
  * routines like clnt_call
  */
 bool_t
-xdr_wrapstring(XDR *xdrs, char **cpp)
+xdr_wrapstring(xdrs, cpp)
+	XDR *xdrs;
+	char **cpp;
 {
 
 	_DIAGASSERT(xdrs != NULL);
@@ -814,7 +857,9 @@ xdr_wrapstring(XDR *xdrs, char **cpp)
  * XDR 64-bit integers
  */
 bool_t
-xdr_int64_t(XDR *xdrs, int64_t *llp)
+xdr_int64_t(xdrs, llp)
+	XDR *xdrs;
+	int64_t *llp;
 {
 	u_long ul[2];
 
@@ -823,10 +868,8 @@ xdr_int64_t(XDR *xdrs, int64_t *llp)
 
 	switch (xdrs->x_op) {
 	case XDR_ENCODE:
-		ul[0] = (u_long)(((uint64_t)*llp >> 32) &
-		    (uint64_t)0xffffffffULL);
-		ul[1] = (u_long)(((uint64_t)*llp) &
-		    (uint64_t)0xffffffffULL);
+		ul[0] = (u_long)((u_int64_t)*llp >> 32) & 0xffffffff;
+		ul[1] = (u_long)((u_int64_t)*llp) & 0xffffffff;
 		if (XDR_PUTLONG(xdrs, (long *)&ul[0]) == FALSE)
 			return (FALSE);
 		return (XDR_PUTLONG(xdrs, (long *)&ul[1]));
@@ -850,7 +893,9 @@ xdr_int64_t(XDR *xdrs, int64_t *llp)
  * XDR unsigned 64-bit integers
  */
 bool_t
-xdr_u_int64_t(XDR *xdrs, u_int64_t *ullp)
+xdr_u_int64_t(xdrs, ullp)
+	XDR *xdrs;
+	u_int64_t *ullp;
 {
 	u_long ul[2];
 
@@ -859,8 +904,8 @@ xdr_u_int64_t(XDR *xdrs, u_int64_t *ullp)
 
 	switch (xdrs->x_op) {
 	case XDR_ENCODE:
-		ul[0] = (u_long)(*ullp >> 32) & 0xffffffffUL;
-		ul[1] = (u_long)(*ullp) & 0xffffffffUL;
+		ul[0] = (u_long)(*ullp >> 32) & 0xffffffff;
+		ul[1] = (u_long)(*ullp) & 0xffffffff;
 		if (XDR_PUTLONG(xdrs, (long *)&ul[0]) == FALSE)
 			return (FALSE);
 		return (XDR_PUTLONG(xdrs, (long *)&ul[1]));
@@ -884,7 +929,9 @@ xdr_u_int64_t(XDR *xdrs, u_int64_t *ullp)
  * XDR hypers
  */
 bool_t
-xdr_hyper(XDR *xdrs, longlong_t *llp)
+xdr_hyper(xdrs, llp)
+	XDR *xdrs;
+	longlong_t *llp;
 {
 
 	_DIAGASSERT(xdrs != NULL);
@@ -902,7 +949,9 @@ xdr_hyper(XDR *xdrs, longlong_t *llp)
  * XDR unsigned hypers
  */
 bool_t
-xdr_u_hyper(XDR *xdrs, u_longlong_t *ullp)
+xdr_u_hyper(xdrs, ullp)
+	XDR *xdrs;
+	u_longlong_t *ullp;
 {
 
 	_DIAGASSERT(xdrs != NULL);
@@ -920,7 +969,9 @@ xdr_u_hyper(XDR *xdrs, u_longlong_t *ullp)
  * XDR longlong_t's
  */
 bool_t
-xdr_longlong_t(XDR *xdrs, longlong_t *llp)
+xdr_longlong_t(xdrs, llp)
+	XDR *xdrs;
+	longlong_t *llp;
 {
 
 	_DIAGASSERT(xdrs != NULL);
@@ -938,7 +989,9 @@ xdr_longlong_t(XDR *xdrs, longlong_t *llp)
  * XDR u_longlong_t's
  */
 bool_t
-xdr_u_longlong_t(XDR *xdrs, u_longlong_t *ullp)
+xdr_u_longlong_t(xdrs, ullp)
+	XDR *xdrs;
+	u_longlong_t *ullp;
 {
 
 	_DIAGASSERT(xdrs != NULL);

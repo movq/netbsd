@@ -573,7 +573,7 @@ add_subnet_route(struct rt *rt, const struct interface *iface)
 }
 
 static struct rt *
-get_routes(struct interface *iface)
+get_routes(const struct interface *iface)
 {
 	struct rt *rt, *nrt = NULL, *r = NULL;
 
@@ -596,7 +596,8 @@ get_routes(struct interface *iface)
 		return nrt;
 	}
 
-	return get_option_routes(iface, iface->state->new);
+	return get_option_routes(iface->state->new,
+	    iface->name, &iface->state->options->options);
 }
 
 /* Some DHCP servers add set host routes by setting the gateway
@@ -686,7 +687,7 @@ void
 build_routes(void)
 {
 	struct rt *nrs = NULL, *dnr, *or, *rt, *rtn, *rtl, *lrt = NULL;
-	struct interface *ifp;
+	const struct interface *ifp;
 
 	for (ifp = ifaces; ifp; ifp = ifp->next) {
 		if (ifp->state->new == NULL)

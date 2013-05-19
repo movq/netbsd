@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_var.h,v 1.6 2012/11/26 20:34:28 rmind Exp $	*/
+/*	$NetBSD: npf_var.h,v 1.1.2.5 2012/12/11 04:31:52 riz Exp $	*/
 
 /*-
  * Copyright (c) 2011-2012 The NetBSD Foundation, Inc.

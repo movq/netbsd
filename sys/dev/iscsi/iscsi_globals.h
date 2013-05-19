@@ -1,4 +1,4 @@
-/*	$NetBSD: iscsi_globals.h,v 1.6 2012/12/29 11:05:29 mlelstv Exp $	*/
+/*	$NetBSD: iscsi_globals.h,v 1.2.4.1 2012/07/03 20:48:40 jdc Exp $	*/
 
 /*-
  * Copyright (c) 2004,2005,2006,2011 The NetBSD Foundation, Inc.
@@ -84,7 +84,7 @@ ExpCmdSN in iscsi_send.c, and is enabled by default. The second definition
 effectively says "don't bother testing these values", and is used right
 now only in iscsi_send.c.
  */
-#define ISCSI_THROTTLING_ENABLED	1
+#define ISCSI_TROTTLING_ENABLED	1
 #define ISCSI_SERVER_TRUSTED	1
 
 /*
@@ -131,15 +131,14 @@ now only in iscsi_send.c.
 
 /* CCB Flags */
 
-#define CCBF_COMPLETE   0x0001	/* received status */
-#define CCBF_RESENT     0x0002	/* ccb was resent */
-#define CCBF_SENDTARGET 0x0004	/* SendTargets text request, not negotiation */
-#define CCBF_WAITING    0x0008	/* CCB is waiting for MaxCmdSN, wake it up */
-#define CCBF_GOT_RSP    0x0010	/* Got at least one response to this request */
-#define CCBF_REASSIGN   0x0020	/* Command can be reassigned */
-#define CCBF_OTHERCONN  0x0040	/* a logout for a different connection */
-#define CCBF_WAITQUEUE  0x0080	/* CCB is on waiting queue */
-#define CCBF_THROTTLING 0x0100	/* CCB is on throttling queue */
+#define CCBF_COMPLETE   0x01	/* received status */
+#define CCBF_RESENT     0x02	/* ccb was resent */
+#define CCBF_SENDTARGET 0x04	/* SendTargets text request, not negotiation */
+#define CCBF_WAITING    0x08	/* CCB is waiting for MaxCmdSN, wake it up */
+#define CCBF_GOT_RSP    0x10	/* Got at least one response to this request */
+#define CCBF_REASSIGN	0x20	/* Command can be reassigned */
+#define CCBF_OTHERCONN	0x40	/* a logout for a different connection */
+
 
 /* ---------------------------  Global Types  ------------------------------- */
 
@@ -540,20 +539,21 @@ typedef struct event_handler_list_s event_handler_list_t;
 
 /* In iscsi_main.c */
 
-extern struct cfattach iscsi_ca;		/* the device attach structure */
+struct cfattach iscsi_ca;		/* the device attach structure */
+struct cdevsw iscsi_cdevsw;		/* the character device descriptor */
 
-extern session_list_t iscsi_sessions;		/* the list of sessions */
+iscsi_softc_t *sc;			/* our device pointer */
+session_list_t sessions;		/* the list of sessions */
 
-extern connection_list_t iscsi_cleanupc_list;	/* connections to clean up */
-extern session_list_t iscsi_cleanups_list;	/* sessions to clean up */
-extern bool iscsi_detaching;			/* signal to cleanup thread it should exit */
-extern struct lwp *iscsi_cleanproc;		/* pointer to cleanup proc */
+connection_list_t cleanup_list;		/* connections to clean up */
+bool detaching;			/* signal to cleanup thread it should exit */
+struct lwp *cleanproc;			/* pointer to cleanup proc */
 
-extern uint32_t iscsi_num_send_threads;		/* the number of active send threads */
+uint32_t num_send_threads;		/* the number of active send threads */
 
-extern uint8_t iscsi_InitiatorName[ISCSI_STRING_LENGTH];
-extern uint8_t iscsi_InitiatorAlias[ISCSI_STRING_LENGTH];
-extern login_isid_t iscsi_InitiatorISID;
+uint8_t InitiatorName[ISCSI_STRING_LENGTH];
+uint8_t InitiatorAlias[ISCSI_STRING_LENGTH];
+login_isid_t InitiatorISID;
 
 /* Debugging and profiling stuff */
 
@@ -565,7 +565,7 @@ extern login_isid_t iscsi_InitiatorISID;
 
 #if defined(ISCSI_PERFTEST)
 
-extern int iscsi_perf_level;				/* How much info to display */
+int iscsi_perf_level;				/* How much info to display */
 
 #define PDEBOUT(x) printf x
 #define PDEB(lev,x) { if (iscsi_perf_level >= lev) printf x ;}
@@ -580,7 +580,7 @@ extern int iscsi_perf_level;				/* How much info to display */
 
 #ifdef ISCSI_DEBUG
 
-extern int iscsi_debug_level;	/* How much debug info to display */
+int iscsi_debug_level;	/* How much debug info to display */
 
 #define DEBOUT(x) printf x
 #define DEB(lev,x) { if (iscsi_debug_level >= lev) printf x ;}
@@ -603,6 +603,9 @@ void dump(void *buf, int len);
 #endif
 
 /* Critical section macros */
+
+#define CS_BEGIN     { int s = splbio ();
+#define CS_END       splx (s); }
 
 /* misc stuff */
 #define min(a, b) ((a) < (b)) ? (a) : (b)
@@ -756,7 +759,7 @@ int iscsidetach(device_t, int);
 
 void iscsi_done(ccb_t *);
 int map_session(session_t *);
-int unmap_session(session_t *);
+void unmap_session(session_t *);
 
 /* in iscsi_send.c */
 
@@ -800,12 +803,12 @@ uint32_t gen_digest_2(void *, int, void *, int);
 void create_ccbs(session_t *);
 ccb_t *get_ccb(connection_t *, bool);
 void free_ccb(ccb_t *);
-void suspend_ccb(ccb_t *, bool);
-void throttle_ccb(ccb_t *, bool);
-void wake_ccb(ccb_t *, uint32_t);
+void wake_ccb(ccb_t *);
+void complete_ccb(ccb_t *);
 
 void create_pdus(connection_t *);
-pdu_t *get_pdu(connection_t *, bool);
+pdu_t *get_pdu(connection_t *);
+pdu_t *get_pdu_c(connection_t *, bool);
 void free_pdu(pdu_t *);
 
 void init_sernum(sernum_buffer_t *);

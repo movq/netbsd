@@ -1,77 +1,23 @@
-# $NetBSD: md.i386,v 1.134 2013/04/25 13:59:55 joerg Exp $
-./usr/include/clang-3.0/avxintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/avx2intrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/bmi2intrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/bmiintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/emmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/fma4intrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/immintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/lzcntintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/mm3dnow.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/mm_malloc.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/mmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/nmmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/pmmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/popcntintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/smmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/tmmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/wmmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/x86intrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.0/xmmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/__wmmintrin_aes.h	comp-obsolete		obsolete
-./usr/include/clang-3.2/__wmmintrin_pclmul.h	comp-obsolete		obsolete
-./usr/include/clang-3.2/ammintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/avxintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/avx2intrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/bmi2intrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/bmiintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/emmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/f16cintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/fma4intrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/fmaintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/immintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/lzcntintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/mm3dnow.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/mm_malloc.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/mmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/nmmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/pmmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/popcntintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/rtmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/smmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/tmmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/wmmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/x86intrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/xmmintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.2/xopintrin.h		comp-obsolete		obsolete
-./usr/include/clang-3.3/__wmmintrin_aes.h	comp-c-include		llvm
-./usr/include/clang-3.3/__wmmintrin_pclmul.h	comp-c-include		llvm
-./usr/include/clang-3.3/ammintrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/avxintrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/avx2intrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/bmi2intrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/bmiintrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/emmintrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/f16cintrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/fma4intrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/fmaintrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/immintrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/lzcntintrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/mm3dnow.h		comp-c-include		llvm
-./usr/include/clang-3.3/mm_malloc.h		comp-c-include		llvm
-./usr/include/clang-3.3/mmintrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/nmmintrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/pmmintrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/prfchwintrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/popcntintrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/rdseedintrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/rtmintrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/smmintrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/tmmintrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/wmmintrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/x86intrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/xmmintrin.h		comp-c-include		llvm
-./usr/include/clang-3.3/xopintrin.h		comp-c-include		llvm
+# $NetBSD: md.i386,v 1.124 2012/01/11 23:24:46 joerg Exp $
+./usr/include/clang-3.0/avxintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/avx2intrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/bmi2intrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/bmiintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/emmintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/fma4intrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/immintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/lzcntintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/mm3dnow.h		comp-c-include		llvm
+./usr/include/clang-3.0/mm_malloc.h		comp-c-include		llvm
+./usr/include/clang-3.0/mmintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/nmmintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/pmmintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/popcntintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/smmintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/tmmintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/wmmintrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/x86intrin.h		comp-c-include		llvm
+./usr/include/clang-3.0/xmmintrin.h		comp-c-include		llvm
 ./usr/include/emmintrin.h			comp-obsolete		obsolete
 ./usr/include/gcc-4.1/emmintrin.h		comp-c-include		gcccmds,gcc=4
 ./usr/include/gcc-4.1/emmintrin.h		comp-obsolete		gcc=45,obsolete
@@ -123,7 +69,7 @@
 ./usr/include/i386/cdefs.h			comp-c-include
 ./usr/include/i386/conf.h			comp-obsolete		obsolete
 ./usr/include/i386/cpu.h			comp-c-include
-./usr/include/i386/cpufunc.h			comp-c-obsolete		obsolete
+./usr/include/i386/cpufunc.h			comp-c-include
 ./usr/include/i386/cputypes.h			comp-c-include
 ./usr/include/i386/db_machdep.h			comp-obsolete		obsolete
 ./usr/include/i386/disklabel.h			comp-c-include
@@ -173,7 +119,6 @@
 ./usr/include/i386/segments.h			comp-c-include
 ./usr/include/i386/setjmp.h			comp-c-include
 ./usr/include/i386/signal.h			comp-c-include
-./usr/include/i386/sljitarch.h			comp-c-include
 ./usr/include/i386/specialreg.h			comp-c-include
 ./usr/include/i386/spkr.h			comp-c-include
 ./usr/include/i386/stdarg.h			comp-obsolete		obsolete
@@ -198,7 +143,6 @@
 ./usr/include/x86/bus.h				comp-obsolete		obsolete
 ./usr/include/x86/cacheinfo.h			comp-c-include
 ./usr/include/x86/cpu.h				comp-c-include
-./usr/include/x86/cpu_ucode.h			comp-c-include
 ./usr/include/x86/cputypes.h			comp-c-include
 ./usr/include/x86/cpuvar.h			comp-c-include
 ./usr/include/x86/float.h			comp-c-include
@@ -225,13 +169,30 @@
 ./usr/include/xen/xenio3.h			comp-c-include
 ./usr/include/xmmintrin.h			comp-obsolete		obsolete
 ./usr/lib/libi386.a				comp-c-lib
+./usr/lib/libi386_g.a				-unknown-		debuglib
 ./usr/lib/libi386_p.a				comp-c-proflib		profile
 ./usr/lib/libi386_pic.a				comp-c-piclib		pic
 ./usr/lib/libm387.a				comp-c-lib
+./usr/lib/libm387_g.a				-unknown-		debuglib
 ./usr/lib/libm387_p.a				comp-c-proflib		profile
 ./usr/lib/libm387_pic.a				comp-c-piclib		pic
 ./usr/lib/libpmc.a				comp-c-lib
+./usr/lib/libpmc_g.a				-unknown-		debuglib
 ./usr/lib/libpmc_p.a				comp-c-proflib		profile
 ./usr/lib/libpmc_pic.a				comp-c-piclib		pic
+./usr/libdata/debug/sbin/ldconfig.debug		comp-sysutil-debug	debug,pic
+./usr/libdata/debug/usr/bin/fdformat.debug	comp-util-debug		debug
+./usr/libdata/debug/usr/bin/iasl.debug		comp-util-debug		debug
+./usr/libdata/debug/usr/bin/pmc.debug		comp-util-debug		debug
+./usr/libdata/debug/usr/lib/libi386.so.1.0.debug	comp-sys-debug	pic,debug
+./usr/libdata/debug/usr/lib/libm387.so.0.1.debug	comp-sys-debug	pic,debug
+./usr/libdata/debug/usr/lib/libpmc.so.1.0.debug		comp-sys-debug	pic,debug
+./usr/libdata/debug/usr/sbin/acpidump.debug	comp-sysutil-debug	debug
+./usr/libdata/debug/usr/sbin/amldb.debug	comp-sysutil-debug	debug
+./usr/libdata/debug/usr/sbin/apm.debug		comp-sysutil-debug	debug
+./usr/libdata/debug/usr/sbin/apmd.debug		comp-sysutil-debug	debug
+./usr/libdata/debug/usr/sbin/bad144.debug	comp-sysutil-debug	debug
+./usr/libdata/debug/usr/sbin/ipwctl.debug	comp-sysutil-debug	debug
+./usr/libdata/debug/usr/sbin/ndiscvt.debug	comp-sysutil-debug	debug
 ./usr/libdata/lint/llib-li386.ln		comp-c-lintlib		lint
 ./usr/libdata/lint/llib-lpmc.ln			comp-c-lintlib		lint

@@ -1,4 +1,4 @@
-/*	$NetBSD: imx51_iomux.c,v 1.4 2012/10/27 17:17:39 chs Exp $	*/
+/*	$NetBSD: imx51_iomux.c,v 1.2 2011/07/01 20:27:50 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2009, 2010  Genetec Corporation.  All rights reserved.
@@ -26,7 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imx51_iomux.c,v 1.4 2012/10/27 17:17:39 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imx51_iomux.c,v 1.2 2011/07/01 20:27:50 dyoung Exp $");
 
 #define	_INTR_PRIVATE
 
@@ -51,9 +51,12 @@ __KERNEL_RCSID(0, "$NetBSD: imx51_iomux.c,v 1.4 2012/10/27 17:17:39 chs Exp $");
 #include <arm/imx/imx51var.h>
 
 struct iomux_softc {
+	struct device iomux_dev;
 	bus_space_tag_t iomux_memt;
 	bus_space_handle_t iomux_memh;
 };
+
+extern struct cfdriver imxiomux_cd;
 
 #define	IOMUX_READ(iomux, reg) \
 	bus_space_read_4((iomux)->iomux_memt, (iomux)->iomux_memh, (reg))
@@ -65,8 +68,10 @@ static void iomux_attach(device_t, device_t, void *);
 
 static struct iomux_softc *iomuxsc = NULL;
 
-CFATTACH_DECL_NEW(imxiomux, sizeof(struct iomux_softc),
-    iomux_match, iomux_attach, NULL, NULL);
+CFATTACH_DECL(imxiomux,
+	      sizeof(struct iomux_softc),
+	      iomux_match, iomux_attach,
+	      NULL, NULL);
 
 int
 iomux_match(device_t parent, cfdata_t cfdata, void *aux)
@@ -155,7 +160,7 @@ iomux_mux_config(const struct iomux_conf *conflist)
 
 	for (i = 0; conflist[i].pin != IOMUX_CONF_EOT; i++) {
 		iomux_set_pad_sub(iomuxsc, conflist[i].pin, conflist[i].pad);
-		iomux_set_function_sub(iomuxsc, conflist[i].pin,
+		iomux_set_function_sub(iomuxsc, conflist[i].pin, 
 		    conflist[i].mux);
 	}
 }
@@ -167,7 +172,7 @@ iomux_input_config(const struct iomux_input_conf *conflist)
 	int i;
 
 	for (i = 0; conflist[i].inout != -1; i++) {
-		iomux_set_inout(iomuxsc, conflist[i].inout,
+		iomux_set_inout(iomuxsc, conflist[i].inout, 
 		    conflist[i].inout_mode);
 	}
 }

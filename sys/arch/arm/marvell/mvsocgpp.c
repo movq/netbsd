@@ -1,4 +1,4 @@
-/*	$NetBSD: mvsocgpp.c,v 1.5 2012/11/21 08:03:18 msaitoh Exp $	*/
+/*	$NetBSD: mvsocgpp.c,v 1.3.8.2 2012/11/24 20:53:13 jdc Exp $	*/
 /*
  * Copyright (c) 2008, 2010 KIYOHARA Takashi
  * All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mvsocgpp.c,v 1.5 2012/11/21 08:03:18 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mvsocgpp.c,v 1.3.8.2 2012/11/24 20:53:13 jdc Exp $");
 
 #include "gpio.h"
 

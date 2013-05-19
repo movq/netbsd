@@ -1,4 +1,4 @@
-/*	$NetBSD: tx39ir.c,v 1.10 2012/10/27 17:17:54 chs Exp $ */
+/*	$NetBSD: tx39ir.c,v 1.9 2008/04/28 20:23:21 martin Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tx39ir.c,v 1.10 2012/10/27 17:17:54 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tx39ir.c,v 1.9 2008/04/28 20:23:21 martin Exp $");
 
 #undef TX39IRDEBUG
 
@@ -59,11 +59,12 @@ int	tx39ir_debug = 1;
 #define	DPRINTF(arg)
 #endif
 
-int	tx39ir_match(device_t, cfdata_t, void *);
-void	tx39ir_attach(device_t, device_t, void *);
+int	tx39ir_match(struct device *, struct cfdata *, void *);
+void	tx39ir_attach(struct device *, struct device *, void *);
 
 struct tx39ir_softc {
-	device_t sc_parent;
+	struct	device sc_dev;
+	struct	device *sc_parent;
 	tx_chipset_tag_t sc_tc;
 };
 
@@ -74,20 +75,20 @@ static void	tx39ir_dump(struct tx39ir_softc *);
 static int	tx39ir_intr(void *);
 #endif
 
-CFATTACH_DECL_NEW(tx39ir, sizeof(struct tx39ir_softc),
+CFATTACH_DECL(tx39ir, sizeof(struct tx39ir_softc),
     tx39ir_match, tx39ir_attach, NULL, NULL);
 
 int
-tx39ir_match(device_t parent, cfdata_t cf, void *aux)
+tx39ir_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	return (ATTACH_NORMAL);
 }
 
 void
-tx39ir_attach(device_t parent, device_t self, void *aux)
+tx39ir_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct txcom_attach_args *tca = aux;
-	struct tx39ir_softc *sc = device_private(self);
+	struct tx39ir_softc *sc = (void*)self;
 	tx_chipset_tag_t tc;
 	txreg_t reg;
 

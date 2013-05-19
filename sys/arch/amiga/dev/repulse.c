@@ -1,4 +1,4 @@
-/*	$NetBSD: repulse.c,v 1.19 2012/10/27 17:17:30 chs Exp $ */
+/*	$NetBSD: repulse.c,v 1.18 2011/11/23 23:07:28 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: repulse.c,v 1.19 2012/10/27 17:17:30 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: repulse.c,v 1.18 2011/11/23 23:07:28 jmcneill Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -198,7 +198,7 @@ void rep_write_8_mono(struct repulse_hw *, uint8_t *, int, unsigned);
 /* NetBSD device attachment */
 
 struct repulse_softc {
-	device_t		sc_dev;
+	struct device		sc_dev;
 	struct isr		sc_isr;
 	struct ac97_host_if	sc_achost;
 	struct ac97_codec_if	*sc_codec_if;
@@ -225,14 +225,14 @@ struct repulse_softc {
 	kmutex_t  sc_intr_lock;
 };
 
-int repulse_match (device_t, cfdata_t, void *);
-void repulse_attach (device_t, device_t, void *);
+int repulse_match (struct device *, struct cfdata *, void *);
+void repulse_attach (struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(repulse, sizeof(struct repulse_softc),
+CFATTACH_DECL(repulse, sizeof(struct repulse_softc),
     repulse_match, repulse_attach, NULL, NULL);
 
 int
-repulse_match(device_t parent, cfdata_t cf, void *aux)
+repulse_match(struct device *parent, struct cfdata *cfp, void *aux)
 {
 	struct zbus_args *zap;
 
@@ -248,7 +248,7 @@ repulse_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-repulse_attach(device_t parent, device_t self, void *aux)
+repulse_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct repulse_softc *sc;
 	struct zbus_args *zap;
@@ -257,8 +257,7 @@ repulse_attach(device_t parent, device_t self, void *aux)
 	int needs_firmware;
 	uint16_t a;
 
-	sc = device_private(self);
-	sc->sc_dev = self;
+	sc = (struct repulse_softc *)self;
 	zap = aux;
 	bp = (struct repulse_hw *)zap->va;
 	sc->sc_boardp = bp;
@@ -319,7 +318,7 @@ repulse_attach(device_t parent, device_t self, void *aux)
 	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_SCHED);
 
 	if (ac97_attach(&sc->sc_achost, self, &sc->sc_lock)) {
-		printf("%s: error attaching codec\n", device_xname(self));
+		printf("%s: error attaching codec\n", self->dv_xname);
 		return;
 	}
 
@@ -337,7 +336,7 @@ repulse_attach(device_t parent, device_t self, void *aux)
 	if (!(a & AC97_EXT_AUDIO_VRA)) {
 		printf("%s: warning: codec doesn't support "
 		    "hardware AC'97 2.0 Variable Rate Audio\n",
-			device_xname(self));
+			sc->sc_dev.dv_xname);
 	}
 #endif
 
@@ -346,12 +345,12 @@ repulse_attach(device_t parent, device_t self, void *aux)
 	sc->sc_isr.isr_intr = rep_intr;
 	add_isr(&sc->sc_isr);
 
-	audio_attach_mi(&rep_hw_if, sc, self);
+	audio_attach_mi(&rep_hw_if, sc, &sc->sc_dev);
 
 	return;
 
 Initerr:
-	printf("\n%s: firmware not successfully loaded\n", device_xname(self));
+	printf("\n%s: firmware not successfully loaded\n", self->dv_xname);
 	return;
 
 }
@@ -372,7 +371,7 @@ repac_reset(void *arg)
 	a = bp->rhw_status;
 #ifdef DIAGNOSTIC
 	if ((a & REPSTATUS_CODECRESET) == 0)
-		panic("%s: cannot set reset bit", device_xname(sc->sc_dev));
+		panic("%s: cannot set reset bit", sc->sc_dev.dv_xname);
 #endif
 
 	a = bp->rhw_status;

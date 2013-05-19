@@ -1,4 +1,4 @@
-/* $NetBSD: csh.h,v 1.25 2013/01/23 16:39:03 christos Exp $ */
+/* $NetBSD: csh.h,v 1.22 2011/11/09 19:16:00 christos Exp $ */
 
 /*-
  * Copyright (c) 1980, 1991, 1993
@@ -548,12 +548,5 @@ Char *STR_BSHELL;
 #endif
 Char *STR_WORD_CHARS;
 Char **STR_environ;
-
-#ifdef EDIT
-#include <histedit.h>
-EditLine *el;
-History *hi;
-#endif
-int editing;
 
 #endif /* !_CSH_H_ */

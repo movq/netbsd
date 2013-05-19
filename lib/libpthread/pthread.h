@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread.h,v 1.35 2012/11/03 03:10:50 christos Exp $	*/
+/*	$NetBSD: pthread.h,v 1.34.8.1 2012/11/28 23:47:38 riz Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.

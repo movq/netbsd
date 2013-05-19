@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2012/11/17 19:10:47 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.4.2.3 2012/11/24 20:20:28 jdc Exp $
 
 DEV=		xx
 DEVDRV=		xx

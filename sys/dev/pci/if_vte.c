@@ -1,4 +1,4 @@
-/*	$NetBSD: if_vte.c,v 1.8 2013/03/30 03:21:08 christos Exp $	*/
+/*	$NetBSD: if_vte.c,v 1.5 2012/02/02 19:43:05 tls Exp $	*/
 
 /*
  * Copyright (c) 2011 Manuel Bouyer.  All rights reserved.
@@ -55,7 +55,7 @@
 /* Driver for DM&P Electronics, Inc, Vortex86 RDC R6040 FastEthernet. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_vte.c,v 1.8 2013/03/30 03:21:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_vte.c,v 1.5 2012/02/02 19:43:05 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -119,7 +119,7 @@ static int	vte_intr(void *);
 static int	vte_ifioctl(struct ifnet *, u_long, void *);
 static void	vte_mac_config(struct vte_softc *);
 static int	vte_miibus_readreg(device_t, int, int);
-static void	vte_miibus_statchg(struct ifnet *);
+static void	vte_miibus_statchg(device_t);
 static void	vte_miibus_writereg(device_t, int, int, int);
 static int	vte_mediachange(struct ifnet *);
 static int	vte_newbuf(struct vte_softc *, struct vte_rxdesc *);
@@ -259,13 +259,13 @@ vte_attach(device_t parent, device_t self, void *aux)
 
         strlcpy(ifp->if_xname, device_xname(self), IFNAMSIZ);
         ifp->if_flags = IFF_BROADCAST|IFF_SIMPLEX|IFF_NOTRAILERS|IFF_MULTICAST;
-        ifp->if_ioctl = vte_ifioctl;  
-        ifp->if_start = vte_ifstart;  
+        ifp->if_ioctl = vte_ifioctl;   
+        ifp->if_start = vte_ifstart;   
         ifp->if_watchdog = vte_ifwatchdog;
-        ifp->if_init = vte_init;      
-        ifp->if_stop = vte_stop;      
+        ifp->if_init = vte_init;       
+        ifp->if_stop = vte_stop;       
         ifp->if_timer = 0;
-        IFQ_SET_READY(&ifp->if_snd); 
+        IFQ_SET_READY(&ifp->if_snd);  
         if_attach(ifp);
         ether_ifattach(&(sc)->vte_if, (sc)->vte_eaddr);
 
@@ -290,7 +290,7 @@ vte_attach(device_t parent, device_t self, void *aux)
 	    CTLFLAG_READWRITE,
 	    CTLTYPE_INT, "int_rxct",
 	    SYSCTL_DESCR("vte RX interrupt moderation packet counter"),
-	    vte_sysctl_intrxct, 0, (void *)sc,
+	    vte_sysctl_intrxct, 0, sc,
 	    0, CTL_HW, vte_root_num, vte_nodenum, CTL_CREATE,
 	    CTL_EOL) != 0) {
 		aprint_normal_dev(sc->vte_dev,
@@ -300,7 +300,7 @@ vte_attach(device_t parent, device_t self, void *aux)
 	    CTLFLAG_READWRITE,
 	    CTLTYPE_INT, "int_txct",
 	    SYSCTL_DESCR("vte TX interrupt moderation packet counter"),
-	    vte_sysctl_inttxct, 0, (void *)sc,
+	    vte_sysctl_inttxct, 0, sc,
 	    0, CTL_HW, vte_root_num, vte_nodenum, CTL_CREATE,
 	    CTL_EOL) != 0) {
 		aprint_normal_dev(sc->vte_dev,
@@ -376,10 +376,13 @@ vte_miibus_writereg(device_t dev, int phy, int reg, int val)
 }
 
 static void
-vte_miibus_statchg(struct ifnet *ifp)
+vte_miibus_statchg(device_t dev)
 {
-	struct vte_softc *sc = ifp->if_softc;
+	struct vte_softc *sc = device_private(dev);
+	struct ifnet *ifp;
 	uint16_t val;
+
+	ifp = &sc->vte_if;
 
 	DPRINTF(("vte_miibus_statchg 0x%x 0x%x\n",
 	    sc->vte_mii.mii_media_status, sc->vte_mii.mii_media_active));
@@ -467,7 +470,7 @@ vte_dma_alloc(struct vte_softc *sc)
 	}
 	/* Allocate and map DMA'able memory and load the DMA map for TX ring. */
 	error = bus_dmamem_alloc(sc->vte_dmatag, VTE_TX_RING_SZ,
-	    VTE_TX_RING_ALIGN, 0,
+	    VTE_TX_RING_ALIGN, 0, 
 	    sc->vte_cdata.vte_tx_ring_seg, 1, &rseg,
 	    BUS_DMA_NOWAIT);
 	if (error != 0) {
@@ -510,7 +513,7 @@ vte_dma_alloc(struct vte_softc *sc)
 	}
 	/* Allocate and map DMA'able memory and load the DMA map for RX ring. */
 	error = bus_dmamem_alloc(sc->vte_dmatag, VTE_RX_RING_SZ,
-	    VTE_RX_RING_ALIGN, 0,
+	    VTE_RX_RING_ALIGN, 0, 
 	    sc->vte_cdata.vte_rx_ring_seg, 1, &rseg,
 	    BUS_DMA_NOWAIT);
 	if (error != 0) {
@@ -1000,7 +1003,7 @@ vte_txeof(struct vte_softc *sc)
 	if (sc->vte_cdata.vte_tx_cnt == 0)
 		return;
 	bus_dmamap_sync(sc->vte_dmatag,
-	    sc->vte_cdata.vte_tx_ring_map, 0,
+	    sc->vte_cdata.vte_tx_ring_map, 0, 
 	    sc->vte_cdata.vte_tx_ring_map->dm_mapsize,
 	    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
 	cons = sc->vte_cdata.vte_tx_cons;
@@ -1017,7 +1020,7 @@ vte_txeof(struct vte_softc *sc)
 			ifp->if_collisions += (status & 0xf);
 		sc->vte_cdata.vte_tx_cnt--;
 		/* Reclaim transmitted mbufs. */
-		bus_dmamap_sync(sc->vte_dmatag, txd->tx_dmamap, 0,
+		bus_dmamap_sync(sc->vte_dmatag, txd->tx_dmamap, 0, 
 		    txd->tx_dmamap->dm_mapsize, BUS_DMASYNC_POSTWRITE);
 		bus_dmamap_unload(sc->vte_dmatag, txd->tx_dmamap);
 		if ((txd->tx_flags & VTE_TXMBUF) == 0)
@@ -1695,7 +1698,7 @@ vte_sysctl_intrxct(SYSCTLFN_ARGS)
 		return EINVAL;
 
 	sc->vte_int_rx_mod = t;
-	vte_miibus_statchg(&sc->vte_if);
+	vte_miibus_statchg(sc->vte_dev);
 	return 0;
 }
 
@@ -1717,6 +1720,6 @@ vte_sysctl_inttxct(SYSCTLFN_ARGS)
 	if (t < VTE_IM_BUNDLE_MIN || t > VTE_IM_BUNDLE_MAX)
 		return EINVAL;
 	sc->vte_int_tx_mod = t;
-	vte_miibus_statchg(&sc->vte_if);
+	vte_miibus_statchg(sc->vte_dev);
 	return 0;
 }

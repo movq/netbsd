@@ -1,4 +1,4 @@
-#	$NetBSD: VIRTEX_GSRD2,v 1.20 2013/04/27 21:43:24 christos Exp $
+#	$NetBSD: VIRTEX_GSRD2,v 1.15.2.1 2012/06/12 17:48:00 riz Exp $
 #
 # VIRTEX_GSRD2
 #
@@ -74,7 +74,6 @@ makeoptions	DEBUG="-g"	# compile full symbol table
 options 	COMPAT_30	# NetBSD 3.0,
 options 	COMPAT_40	# NetBSD 4.0,
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 # File systems
@@ -112,6 +111,7 @@ options 	NFS_BOOT_DHCP	# Support DHCP NFS root
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
@@ -119,6 +119,8 @@ options 	INET6		# IPV6
 #options        DIRECTED_BROADCAST      # allow broadcasts through routers
 #options 	NS		# XNS
 #options 	NSIP		# XNS tunneling over IP
+options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 #options 	CCITT,LLC,HDLC	# X.25
 #options 	NETATALK	# AppleTalk networking protocols
 options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
@@ -166,10 +168,10 @@ ukphy*		at mii? phy ?		# generic unknown PHYs
 
 pseudo-device	md			# memory disk device
 pseudo-device	loop			# network loopback
-pseudo-device	bpfilter		# packet filter
+pseudo-device	bpfilter	8	# packet filter
 pseudo-device	ipfilter		# IP filter (firewall) and NAT
-pseudo-device	ppp			# Point-to-Point Protocol
-pseudo-device	sl			# Serial Line IP
+pseudo-device	ppp		2	# Point-to-Point Protocol
+pseudo-device	sl		2	# Serial Line IP
 pseudo-device	pty			# pseudo-terminals
 
 pseudo-device 	wsmux

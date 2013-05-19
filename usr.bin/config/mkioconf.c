@@ -1,4 +1,4 @@
-/*	$NetBSD: mkioconf.c,v 1.21 2012/03/11 21:16:08 dholland Exp $	*/
+/*	$NetBSD: mkioconf.c,v 1.19 2011/03/03 14:53:01 nakayama Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -168,7 +168,7 @@ static int
 cf_locators_print(const char *name, void *value, void *arg)
 {
 	struct attr *a;
-	struct loclist *ll;
+	struct nvlist *nv;
 	FILE *fp = arg;
 
 	a = value;
@@ -180,11 +180,11 @@ cf_locators_print(const char *name, void *value, void *arg)
 		    "static const struct cfiattrdata %scf_iattrdata = {\n",
 			    name);
 		fprintf(fp, "\t\"%s\", %d,\n\t{\n", name, a->a_loclen);
-		for (ll = a->a_locs; ll; ll = ll->ll_next)
+		for (nv = a->a_locs; nv; nv = nv->nv_next)
 			fprintf(fp, "\t\t{ \"%s\", \"%s\", %s },\n",
-				ll->ll_name,
-				(ll->ll_string ? ll->ll_string : "NULL"),
-				(ll->ll_string ? ll->ll_string : "0"));
+				nv->nv_name,
+				(nv->nv_str ? nv->nv_str : "NULL"),
+				(nv->nv_str ? nv->nv_str : "0"));
 		fprintf(fp, "\t}\n};\n");
 	} else {
 		fprintf(fp,
@@ -200,7 +200,7 @@ static void
 emitcfdrivers(FILE *fp)
 {
 	struct devbase *d;
-	struct attrlist *al;
+	struct nvlist *nv;
 	struct attr *a;
 	int has_iattrs;
 
@@ -212,8 +212,8 @@ emitcfdrivers(FILE *fp)
 		if (!devbase_has_instances(d, WILD))
 			continue;
 		has_iattrs = 0;
-		for (al = d->d_attrs; al != NULL; al = al->al_next) {
-			a = al->al_this;
+		for (nv = d->d_attrs; nv != NULL; nv = nv->nv_next) {
+			a = nv->nv_ptr;
 			if (a->a_iattr == 0)
 				continue;
 			if (has_iattrs == 0)
@@ -363,7 +363,7 @@ emitcfdata(FILE *fp)
 	struct pspec *ps;
 	int unit, v;
 	const char *state, *basename, *attachment;
-	struct loclist *ll;
+	struct nvlist *nv;
 	struct attr *a;
 	const char *loc;
 	char locbuf[20];
@@ -394,16 +394,16 @@ emitcfdata(FILE *fp)
 			}
 
 			a = ps->p_iattr;
-			for (ll = a->a_locs, v = 0; ll != NULL;
-			     ll = ll->ll_next, v++) {
-				if (ARRNAME(ll->ll_name, lastname)) {
+			for (nv = a->a_locs, v = 0; nv != NULL;
+			     nv = nv->nv_next, v++) {
+				if (ARRNAME(nv->nv_name, lastname)) {
 					fprintf(fp, " %s %s",
-					    ll->ll_name, i->i_locs[v]);
+					    nv->nv_name, i->i_locs[v]);
 				} else {
 					fprintf(fp, " %s %s",
-						    ll->ll_name,
+						    nv->nv_name,
 						    i->i_locs[v]);
-					lastname = ll->ll_name;
+					lastname = nv->nv_name;
 				}
 			}
 		} else {

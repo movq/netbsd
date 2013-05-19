@@ -1,4 +1,4 @@
-/*	$NetBSD: ptree.h,v 1.8 2012/10/06 22:15:09 matt Exp $	*/
+/*	$NetBSD: ptree.h,v 1.4.8.4 2013/03/31 17:30:20 riz Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.

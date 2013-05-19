@@ -1,4 +1,4 @@
-/*	$NetBSD: init.c,v 1.105 2012/11/09 06:27:17 msaitoh Exp $	*/
+/*	$NetBSD: init.c,v 1.102.4.1 2012/11/23 16:37:21 riz Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1991, 1993\
 #if 0
 static char sccsid[] = "@(#)init.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: init.c,v 1.105 2012/11/09 06:27:17 msaitoh Exp $");
+__RCSID("$NetBSD: init.c,v 1.102.4.1 2012/11/23 16:37:21 riz Exp $");
 #endif
 #endif /* not lint */
 
@@ -68,12 +68,6 @@ __RCSID("$NetBSD: init.c,v 1.105 2012/11/09 06:27:17 msaitoh Exp $");
 #include <util.h>
 #include <paths.h>
 #include <err.h>
-#ifdef SUPPORT_UTMP
-#include <utmp.h>
-#endif
-#ifdef SUPPORT_UTMPX
-#include <utmpx.h>
-#endif
 
 #include <stdarg.h>
 
@@ -1755,7 +1749,7 @@ do_setttyent(void)
 #if !defined(LETS_GET_SMALL) && defined(CHROOT)
 
 static int
-createsysctlnode(void)
+createsysctlnode()
 {
 	struct sysctlnode node;
 	int mib[2];

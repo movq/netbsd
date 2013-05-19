@@ -1,4 +1,4 @@
-/*	$NetBSD: icpsp.c,v 1.25 2012/10/27 17:18:20 chs Exp $	*/
+/*	$NetBSD: icpsp.c,v 1.24 2010/11/13 13:52:01 uebayasi Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: icpsp.c,v 1.25 2012/10/27 17:18:20 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: icpsp.c,v 1.24 2010/11/13 13:52:01 uebayasi Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -56,7 +56,7 @@ __KERNEL_RCSID(0, "$NetBSD: icpsp.c,v 1.25 2012/10/27 17:18:20 chs Exp $");
 #include <dev/ic/icpvar.h>
 
 struct icpsp_softc {
-	device_t sc_dv;
+	struct	device sc_dv;
 	struct	scsipi_adapter sc_adapter;
 	struct	scsipi_channel sc_channel;
 	int	sc_busno;
@@ -71,7 +71,7 @@ void	icpsp_scsipi_request(struct scsipi_channel *, scsipi_adapter_req_t,
 
 void	icpsp_adjqparam(device_t, int);
 
-CFATTACH_DECL_NEW(icpsp, sizeof(struct icpsp_softc),
+CFATTACH_DECL(icpsp, sizeof(struct icpsp_softc),
     icpsp_match, icpsp_attach, NULL, NULL);
 
 static const struct icp_servicecb icpsp_servicecb = {
@@ -97,17 +97,16 @@ icpsp_attach(device_t parent, device_t self, void *aux)
 	struct icp_softc *icp;
 
 	icpa = (struct icp_attach_args *)aux;
-	sc = device_private(self);
-	icp = device_private(parent);
+	sc = (struct icpsp_softc *)self;
+	icp = (struct icp_softc *)parent;
 
-	sc->sc_dv = self;
 	sc->sc_busno = icpa->icpa_unit - ICPA_UNIT_SCSI;
 	sc->sc_openings = icp->icp_openings;
 	printf(": physical SCSI channel %d\n", sc->sc_busno);
 
 	icp_register_servicecb(icp, icpa->icpa_unit, &icpsp_servicecb);
 
-	sc->sc_adapter.adapt_dev = sc->sc_dv;
+	sc->sc_adapter.adapt_dev = &sc->sc_dv;
 	sc->sc_adapter.adapt_nchannels = 1;
 	sc->sc_adapter.adapt_openings = icp->icp_openings;
 	sc->sc_adapter.adapt_max_periph = icp->icp_openings;
@@ -138,8 +137,8 @@ icpsp_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 	struct icp_ccb *ic;
 	int rv, flags, s, soff;
 
-	sc = device_private(chan->chan_adapter->adapt_dev);
-	icp = device_private(device_parent(sc->sc_dv));
+	sc = (void *)chan->chan_adapter->adapt_dev;
+	icp = (struct icp_softc *)device_parent(&sc->sc_dv);
 
 	switch (req) {
 	case ADAPTER_REQ_RUN_XFER:
@@ -158,7 +157,7 @@ icpsp_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 
 #if defined(ICP_DEBUG) || defined(SCSIDEBUG)
 		if (xs->cmdlen > sizeof(rc->rc_cdb))
-			panic("%s: CDB too large", device_xname(sc->sc_dv));
+			panic("%s: CDB too large", device_xname(&sc->sc_dv));
 #endif
 
 		/*
@@ -229,7 +228,7 @@ icpsp_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 		 */
  		ic->ic_intr = icpsp_intr;
 		ic->ic_context = xs;
-		ic->ic_dv = sc->sc_dv;
+		ic->ic_dv = &sc->sc_dv;
 
 		if ((flags & XS_CTL_POLL) != 0) {
 			s = splbio();
@@ -275,9 +274,9 @@ icpsp_intr(struct icp_ccb *ic)
  	struct icp_softc *icp;
  	int soff;
 
-	sc = device_private(ic->ic_dv);
-	xs = ic->ic_context;
-	icp = device_private(device_parent(ic->ic_dv));
+	sc = (struct icpsp_softc *)ic->ic_dv;
+	xs = (struct scsipi_xfer *)ic->ic_context;
+	icp = (struct icp_softc *)device_parent(ic->ic_dv);
 	soff = ICP_SCRATCH_SENSE + ic->ic_ident *
 	    sizeof(struct scsi_sense_data);
 
@@ -299,7 +298,7 @@ icpsp_intr(struct icp_ccb *ic)
 		case SCSI_OK:
 #ifdef DIAGNOSTIC
 			printf("%s: error return (%d), but SCSI_OK?\n",
-			    device_xname(sc->sc_dv), icp->icp_info);
+			    device_xname(&sc->sc_dv), icp->icp_info);
 #endif
 			xs->resid = 0;
 			break;
@@ -325,9 +324,9 @@ icpsp_intr(struct icp_ccb *ic)
 }
 
 void
-icpsp_adjqparam(device_t self, int openings)
+icpsp_adjqparam(device_t dv, int openings)
 {
-	struct icpsp_softc *sc = device_private(self);
+	struct icpsp_softc *sc = (struct icpsp_softc *) dv;
 	int s;
 
 	s = splbio();

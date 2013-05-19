@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.88 2013/02/21 14:08:50 christos Exp $
+#	$NetBSD: Makefile,v 1.84 2011/08/09 15:02:30 jmcneill Exp $
 
 # Experimental RCS METALOG versioning
 # (Needs host's rcs(1) commands)
@@ -124,17 +124,9 @@ clean_METALOG: .PHONY
 METALOG.unpriv= -M ${METALOG}.sanitised
 sanitise_METALOG: .PHONY ${METALOG}.sanitised
 ${METALOG}.sanitised: ${METALOG}
-# We keep only the last entry for update builds, but for clean builds we
-# want to make sure we install files only once.
-.if ${MKUPDATE} != "no"
-	${TOOL_AWK} \
-	    '{ a[$$1] = $$0; } END { for (f in a) print a[f]; }' ${METALOG} | \
-	    sort | ${TOOL_MTREE} -CSM -k all -N ${NETBSDSRCDIR}/etc \
+	sort ${METALOG} | \
+	    ${TOOL_MTREE} -CSM -k all -N ${NETBSDSRCDIR}/etc \
 	    >${METALOG}.new
-.else
-	    sort ${METALOG} | ${TOOL_MTREE} -CSM -k all -N ${NETBSDSRCDIR}/etc \
-	    >${METALOG}.new
-.endif
 	mv ${METALOG}.new ${METALOG}.sanitised
 .if defined(RCSMETALOG)
 	. ./metalog.subr; \

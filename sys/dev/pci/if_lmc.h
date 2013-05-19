@@ -1,5 +1,5 @@
 /*-
- * $NetBSD: if_lmc.h,v 1.21 2012/10/27 17:18:33 chs Exp $
+ * $NetBSD: if_lmc.h,v 1.19 2010/04/05 07:20:26 joerg Exp $
  *
  * Copyright (c) 2002-2006 David Boggs. (boggs@boggs.palo-alto.ca.us)
  * All rights reserved.
@@ -964,14 +964,14 @@ typedef int intr_return_t;
 # define WRITE_PCI_CFG(sc, addr, data) pci_conf_write((sc)->pa_pc, (sc)->pa_tag, addr, data)
 # define  READ_CSR(sc, csr)	 bus_space_read_4 ((sc)->csr_tag, (sc)->csr_handle, csr)
 # define WRITE_CSR(sc, csr, val) bus_space_write_4((sc)->csr_tag, (sc)->csr_handle, csr, val)
-# define NAME_UNIT		device_xname(sc->sc_dev)
+# define NAME_UNIT		device_xname(&sc->dev)
 # define BOOT_VERBOSE		(boothowto & AB_VERBOSE)
 # define TOP_LOCK(sc)		(mutex_spin_enter(&(sc)->top_lock), 0)
 # define TOP_TRYLOCK(sc)	mutex_tryenter(&(sc)->top_lock)
 # define TOP_UNLOCK(sc)		mutex_spin_exit(&(sc)->top_lock)
 # define BOTTOM_TRYLOCK(sc)	__cpu_simple_lock_try(&(sc)->bottom_lock)
 # define BOTTOM_UNLOCK(sc)	__cpu_simple_unlock  (&(sc)->bottom_lock)
-# define CHECK_CAP		kauth_authorize_network(curlwp->l_cred, KAUTH_NETWORK_INTERFACE, KAUTH_REQ_NETWORK_INTERFACE_FIRMWARE, sc->ifp, NULL, NULL)
+# define CHECK_CAP		kauth_authorize_generic(curlwp->l_cred, KAUTH_GENERIC_ISSUSER, NULL)
 # define DISABLE_INTR		int spl = splnet()
 # define ENABLE_INTR		splx(spl)
 # define IRQ_NONE		0
@@ -1099,10 +1099,11 @@ struct stack				/* an object */
   };
 
 /* This is the instance data, or "software context" for the device driver. */
+/* NetBSD, OpenBSD and BSD/OS want struct device first in the softc. */
 struct softc
   {
 
-  device_t sc_dev;
+  struct device dev;			/* must be first in softc          */
   pcitag_t pa_tag;
   pci_chipset_tag_t pa_pc;
   bus_dma_tag_t pa_dmat;
@@ -1381,9 +1382,9 @@ static void tulip_detach(void *);
 
 static void print_driver_info(void);
 
-static int nbsd_match(device_t, cfdata_t, void *);
-static void nbsd_attach(device_t, device_t, void *);
-static int nbsd_detach(device_t, int);
+static int nbsd_match(struct device *, cfdata_t, void *);
+static void nbsd_attach(struct device *, struct device *, void *);
+static int nbsd_detach(struct device *, int);
 
 #endif /* KERNEL */
 

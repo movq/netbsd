@@ -1,11 +1,11 @@
-/*	$NetBSD: component.c,v 1.2 2013/03/10 21:01:19 christos Exp $	*/
+/*	$NetBSD: component.c,v 1.1.6.2 2012/11/18 21:45:08 riz Exp $	*/
 
 /*
  * Public Domain.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: component.c,v 1.2 2013/03/10 21:01:19 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: component.c,v 1.1.6.2 2012/11/18 21:45:08 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -31,5 +31,4 @@ RUMP_COMPONENT(RUMP_COMPONENT_DEV)
 	if (error) {
 		panic("npf device node creation failed: %d", error);
 	}
-	devsw_detach(NULL, &npf_cdevsw);
 }

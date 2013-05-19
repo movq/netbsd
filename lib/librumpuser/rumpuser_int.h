@@ -1,4 +1,4 @@
-/*	$NetBSD: rumpuser_int.h,v 1.8 2013/04/30 12:39:20 pooka Exp $	*/
+/*	$NetBSD: rumpuser_int.h,v 1.4 2010/11/15 15:23:32 pooka Exp $	*/
 
 /*
  * Copyright (c) 2008 Antti Kantee.  All Rights Reserved.
@@ -29,30 +29,18 @@
 
 #include <rump/rumpuser.h>
 
+extern kernel_lockfn rumpuser__klock;
+extern kernel_unlockfn rumpuser__kunlock;
+extern int rumpuser__wantthreads;
+
 #define seterror(value) do { if (error) *error = value;} while (/*CONSTCOND*/0)
-
-extern struct rumpuser_hyperup rumpuser__hyp;
-
-static inline void
-rumpkern_unsched(int *nlocks, void *interlock)
-{
-
-	rumpuser__hyp.hyp_backend_unschedule(0, nlocks, interlock);
-}
-
-static inline void
-rumpkern_sched(int nlocks, void *interlock)
-{
-
-	rumpuser__hyp.hyp_backend_schedule(nlocks, interlock);
-}
 
 #define KLOCK_WRAP(a)							\
 do {									\
 	int nlocks;							\
-	rumpkern_unsched(&nlocks, NULL);				\
+	rumpuser__kunlock(0, &nlocks, NULL);				\
 	a;								\
-	rumpkern_sched(nlocks, NULL);					\
+	rumpuser__klock(nlocks, NULL);					\
 } while (/*CONSTCOND*/0)
 
 #define DOCALL(rvtype, call)						\
@@ -70,33 +58,12 @@ do {									\
 {									\
 	rvtype rv;							\
 	int nlocks;							\
-	rumpkern_unsched(&nlocks, NULL);				\
+	rumpuser__kunlock(0, &nlocks, NULL);				\
 	rv = call;							\
-	rumpkern_sched(nlocks, NULL);					\
+	rumpuser__klock(nlocks, NULL);					\
 	if (rv == -1)							\
 		seterror(errno);					\
 	else								\
 		seterror(0);						\
 	return rv;							\
 }
-
-void rumpuser__thrinit(void);
-
-#define NOFAIL(a) do {if (!(a)) abort();} while (/*CONSTCOND*/0)
-
-#define NOFAIL_ERRNO(a)							\
-do {									\
-	int fail_rv = (a);						\
-	if (fail_rv) {							\
-		printf("panic: rumpuser fatal failure %d (%s)\n",	\
-		    fail_rv, strerror(fail_rv));			\
-		abort();						\
-	}								\
-} while (/*CONSTCOND*/0)
-
-int  rumpuser__errtrans(int);
-#ifdef __NetBSD__
-#define ET(_v_) return (_v_);
-#else
-#define ET(_v_) return (_v_) ? rumpuser__errtrans(_v_) : 0;
-#endif

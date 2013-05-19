@@ -1,6 +1,5 @@
-# $NetBSD: Makefile.inc,v 1.5 2013/04/29 07:21:59 skrll Exp $
+# $NetBSD: Makefile.inc,v 1.1 2010/08/07 18:01:33 joerg Exp $
 
 CPPFLAGS+=	-DELFSIZE=32
-.if (!empty(CPUFLAGS) && ${CPUFLAGS:M-mabi=aapcs*} != "")
-CPPFLAGS+=      -DHAVE_INITFINI_ARRAY
-.endif
+
+

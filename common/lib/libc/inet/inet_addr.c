@@ -1,4 +1,4 @@
-/*	$NetBSD: inet_addr.c,v 1.3 2012/03/09 15:41:16 christos Exp $	*/
+/*	$NetBSD: inet_addr.c,v 1.2 2008/02/16 17:37:13 apb Exp $	*/
 
 /*
  * Copyright (c) 1983, 1990, 1993
@@ -77,7 +77,7 @@
 static const char sccsid[] = "@(#)inet_addr.c	8.1 (Berkeley) 6/17/93";
 static const char rcsid[] = "Id: inet_addr.c,v 1.2.206.2 2004/03/17 00:29:45 marka Exp";
 #else
-__RCSID("$NetBSD: inet_addr.c,v 1.3 2012/03/09 15:41:16 christos Exp $");
+__RCSID("$NetBSD: inet_addr.c,v 1.2 2008/02/16 17:37:13 apb Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -125,8 +125,7 @@ inet_addr(const char *cp) {
 int
 inet_aton(const char *cp, struct in_addr *addr) {
 	uint32_t val;
-	int base;
-	size_t n;
+	int base, n;
 	char c;
 	uint8_t parts[4];
 	uint8_t *pp = parts;

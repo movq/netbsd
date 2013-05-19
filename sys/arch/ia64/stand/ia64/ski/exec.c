@@ -1,4 +1,4 @@
-/* $NetBSD: exec.c,v 1.6 2012/12/27 20:21:51 martin Exp $ */
+/* $NetBSD: exec.c,v 1.5 2009/03/18 16:00:12 cegger Exp $ */
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -68,7 +68,6 @@
 
 #include <lib/libsa/stand.h>
 #include <lib/libsa/loadfile.h>
-#include <lib/libkern/libkern.h>
 
 #include <sys/param.h>
 #include <sys/lock.h>
@@ -160,7 +159,7 @@ elf64_exec(struct preloaded_file *fp)
 	 */
 	bi = &bootinfo;
 	memset(bi, 0, sizeof(struct bootinfo));
-	bi_load(bi, fp, "");
+	bi_load(bi, fp);
 
 	/*
 	 * Region 6 is direct mapped UC and region 7 is direct mapped

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_socket.c,v 1.115 2013/01/11 19:01:36 christos Exp $	*/
+/*	$NetBSD: linux_socket.c,v 1.112 2012/01/20 14:08:07 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 2008 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_socket.c,v 1.115 2013/01/11 19:01:36 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_socket.c,v 1.112 2012/01/20 14:08:07 joerg Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_inet.h"
@@ -619,7 +619,7 @@ linux_sys_sendmsg(struct lwp *l, const struct linux_sys_sendmsg_args *uap, regis
 		msg.msg_control = ctl_mbuf;
 		msg.msg_flags |= MSG_CONTROLMBUF;
 
-		ktrkuser("mbcontrol", mtod(ctl_mbuf, void *),
+		ktrkuser("msgcontrol", mtod(ctl_mbuf, void *),
 		    msg.msg_controllen);
 	}
 
@@ -1083,7 +1083,7 @@ int
 linux_getifconf(struct lwp *l, register_t *retval, void *data)
 {
 	struct linux_ifreq ifr, *ifrp;
-	struct linux_ifconf ifc;
+	struct ifconf *ifc = data;
 	struct ifnet *ifp;
 	struct ifaddr *ifa;
 	struct sockaddr *sa;
@@ -1091,15 +1091,11 @@ linux_getifconf(struct lwp *l, register_t *retval, void *data)
 	int space, error = 0;
 	const int sz = (int)sizeof(ifr);
 
-	error = copyin(data, &ifc, sizeof(ifc));
-	if (error)
-		return error;
-
-	ifrp = ifc.ifc_req;
+	ifrp = (struct linux_ifreq *)ifc->ifc_req;
 	if (ifrp == NULL)
 		space = 0;
 	else
-		space = ifc.ifc_len;
+		space = ifc->ifc_len;
 
 	IFNET_FOREACH(ifp) {
 		(void)strncpy(ifr.ifr_name, ifp->if_xname,
@@ -1127,11 +1123,11 @@ linux_getifconf(struct lwp *l, register_t *retval, void *data)
 	}
 
 	if (ifrp != NULL)
-		ifc.ifc_len -= space;
+		ifc->ifc_len -= space;
 	else
-		ifc.ifc_len = -space;
+		ifc->ifc_len = -space;
 
-	return copyout(&ifc, data, sizeof(ifc));
+	return 0;
 }
 
 int
@@ -1207,7 +1203,7 @@ linux_getifhwaddr(struct lwp *l, register_t *retval, u_int fd,
 
 	if (strncmp(lreq.ifr_name, "eth", 3) == 0) {
 		for (ifnum = 0, index = 3;
-		     index < LINUX_IFNAMSIZ && lreq.ifr_name[index] != '\0';
+		     lreq.ifr_name[index] != '\0' && index < LINUX_IFNAMSIZ;
 		     index++) {
 			ifnum *= 10;
 			ifnum += lreq.ifr_name[index] - '0';
@@ -1499,7 +1495,7 @@ linux_get_sa(struct lwp *l, int s, struct mbuf **mp,
 		goto bad;
 	}
 
-	ktrkuser("linux/sockaddr", kosa, salen);
+	ktrkuser("linux sockaddr", kosa, salen);
 
 	bdom = linux_to_bsd_domain(kosa->sa_family);
 	if (bdom == -1) {
@@ -1561,7 +1557,7 @@ linux_get_sa(struct lwp *l, int s, struct mbuf **mp,
 	sa->sa_family = bdom;
 	sa->sa_len = salen;
 	m->m_len = salen;
-	ktrkuser("mbsoname", kosa, salen);
+	ktrkuser("new sockaddr", kosa, salen);
 
 #ifdef DEBUG_LINUX
 	DPRINTF(("family %d, len = %d [ ", sa->sa_family, sa->sa_len));

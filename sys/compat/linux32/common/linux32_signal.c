@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_signal.c,v 1.16 2012/05/10 19:40:46 christos Exp $ */
+/*	$NetBSD: linux32_signal.c,v 1.15.6.1 2012/05/19 15:19:43 riz Exp $ */
 
 /*-
  * Copyright (c) 2006 Emmanuel Dreyfus, all rights reserved.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux32_signal.c,v 1.16 2012/05/10 19:40:46 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_signal.c,v 1.15.6.1 2012/05/19 15:19:43 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/ucred.h>

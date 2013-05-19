@@ -1,4 +1,4 @@
-/* $NetBSD: strtodg.c,v 1.12 2013/04/19 10:41:53 joerg Exp $ */
+/* $NetBSD: strtodg.c,v 1.8 2011/03/21 12:53:50 christos Exp $ */
 
 /****************************************************************
 
@@ -37,13 +37,14 @@ THIS SOFTWARE.
 #include "locale.h"
 #endif
 
-#ifndef VAX
  static CONST int
 fivesbits[] = {	 0,  3,  5,  7, 10, 12, 14, 17, 19, 21,
 		24, 26, 28, 31, 33, 35, 38, 40, 42, 45,
 		47, 49, 52
-		};
+#ifdef VAX
+		, 54, 56
 #endif
+		};
 
  Bigint *
 #ifdef KR_headers
@@ -319,14 +320,16 @@ mantbits(U *d)
 #endif /* !VAX */
 
  int
-strtodg(CONST char *s00, char **se, CONST FPI *fpi, Long *expt, ULong *bits,
-	locale_t loc)
+strtodg
+#ifdef KR_headers
+	(s00, se, fpi, expt, bits)
+	CONST char *s00; char **se; CONST FPI *fpi; Long *expt; ULong *bits;
+#else
+	(CONST char *s00, char **se, CONST FPI *fpi, Long *expt, ULong *bits)
+#endif
 {
 	int abe, abits, asub;
-#ifdef INFNAN_CHECK
-	int decpt;
-#endif
-	int bb0, bb2, bb5, bbe, bd2, bd5, bbbits, bs2, c, denorm;
+	int bb0, bb2, bb5, bbe, bd2, bd5, bbbits, bs2, c, decpt, denorm;
 	int dsign, e, e1, e2, emin, esign, finished, i, inex, irv;
 	int j, k, nbits, nd, nd0, nf, nz, nz0, rd, rvbits, rve, rve1, sign;
 	int sudden_underflow = 0; /* pacify gcc */
@@ -337,8 +340,25 @@ strtodg(CONST char *s00, char **se, CONST FPI *fpi, Long *expt, ULong *bits,
 	ULong *b, *be, y, z;
 	Bigint *ab, *bb, *bb1, *bd, *bd0, *bs, *delta, *rvb, *rvb0;
 #ifdef USE_LOCALE /*{{*/
-	char *decimalpoint = localeconv_l(loc)->decimal_point;
+#ifdef NO_LOCALE_CACHE
+	char *decimalpoint = localeconv()->decimal_point;
 	size_t dplen = strlen(decimalpoint);
+#else
+	char *decimalpoint;
+	static char *decimalpoint_cache;
+	static int dplen;
+	if (!(s0 = decimalpoint_cache)) {
+		s0 = localeconv()->decimal_point;
+		if ((decimalpoint_cache = MALLOC(strlen(s0) + 1)) != NULL) {
+			strcpy(decimalpoint_cache, s0);
+			s0 = decimalpoint_cache;
+			}
+		dplen = strlen(s0);
+		}
+	decimalpoint = __UNCONST(s0);
+#endif /*NO_LOCALE_CACHE*/
+#else  /*USE_LOCALE}{*/
+#define dplen 1
 #endif /*USE_LOCALE}}*/
 
 	e2 = 0;	/* XXX gcc */
@@ -377,7 +397,7 @@ strtodg(CONST char *s00, char **se, CONST FPI *fpi, Long *expt, ULong *bits,
 		switch(s[1]) {
 		  case 'x':
 		  case 'X':
-			irv = gethex(&s, fpi, expt, &rvb, sign, loc);
+			irv = gethex(&s, fpi, expt, &rvb, sign);
 			if (irv == STRTOG_NoNumber) {
 				s = s00;
 				sign = 0;
@@ -393,10 +413,7 @@ strtodg(CONST char *s00, char **se, CONST FPI *fpi, Long *expt, ULong *bits,
 	sudden_underflow = fpi->sudden_underflow;
 	s0 = s;
 	y = z = 0;
-#ifdef INFNAN_CHECK
-	decpt = 0;
-#endif
-	for(nd = nf = 0; (c = *s) >= '0' && c <= '9'; nd++, s++)
+	for(decpt = nd = nf = 0; (c = *s) >= '0' && c <= '9'; nd++, s++)
 		if (nd < 9)
 			y = 10*y + c - '0';
 		else if (nd < 16)
@@ -413,9 +430,7 @@ strtodg(CONST char *s00, char **se, CONST FPI *fpi, Long *expt, ULong *bits,
 	if (c == '.') {
 		c = *++s;
 #endif
-#ifdef INFNAN_CHECK
 		decpt = 1;
-#endif
 		if (!nd) {
 			for(; c == '0'; c = *++s)
 				nz++;

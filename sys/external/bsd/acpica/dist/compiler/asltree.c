@@ -728,7 +728,6 @@ TrLinkChildren (
         {
             AslError (ASL_WARNING, ASL_MSG_COMPILER_INTERNAL, Child,
                 "Child node list invalid");
-	    va_end(ap);
             return Op;
         }
 

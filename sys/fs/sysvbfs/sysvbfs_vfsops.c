@@ -1,4 +1,4 @@
-/*	$NetBSD: sysvbfs_vfsops.c,v 1.41 2012/06/14 01:08:22 agc Exp $	*/
+/*	$NetBSD: sysvbfs_vfsops.c,v 1.38.6.1 2012/06/24 16:03:39 jdc Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysvbfs_vfsops.c,v 1.41 2012/06/14 01:08:22 agc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysvbfs_vfsops.c,v 1.38.6.1 2012/06/24 16:03:39 jdc Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -135,10 +135,8 @@ sysvbfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		    (mp->mnt_iflag & IMNT_WANTRDWR) != 0 :
 		    (mp->mnt_flag & MNT_RDONLY) == 0)
 			accessmode |= VWRITE;
-
-		error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_MOUNT,
-		    KAUTH_REQ_SYSTEM_MOUNT_DEVICE, mp, devvp,
-		    KAUTH_ARG(accessmode));
+		
+		error = genfs_can_mount(devvp, accessmode, l->l_cred);
 	}
 
 	if (error) {
@@ -277,8 +275,8 @@ sysvbfs_statvfs(struct mount *mp, struct statvfs *f)
 	f->f_bfree = free_block;
 	f->f_bavail = f->f_bfree;
 	f->f_bresvd = 0;
-	f->f_files = bfs->max_inode;
-	f->f_ffree = bfs->max_inode - bfs->n_inode;
+	f->f_files = bfs->n_inode;
+	f->f_ffree = bfs->max_inode - f->f_files;
 	f->f_favail = f->f_ffree;
 	f->f_fresvd = 0;
 	copy_statvfs_info(f, mp);

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_atu.c,v 1.49 2013/03/30 03:15:52 christos Exp $ */
+/*	$NetBSD: if_atu.c,v 1.43 2011/12/23 00:51:43 jakllsch Exp $ */
 /*	$OpenBSD: if_atu.c,v 1.48 2004/12/30 01:53:21 dlg Exp $ */
 /*
  * Copyright (c) 2003, 2004
@@ -48,7 +48,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_atu.c,v 1.49 2013/03/30 03:15:52 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_atu.c,v 1.43 2011/12/23 00:51:43 jakllsch Exp $");
+
 
 #include <sys/param.h>
 #include <sys/sockio.h>
@@ -91,6 +92,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_atu.c,v 1.49 2013/03/30 03:15:52 christos Exp $")
 #include <net80211/ieee80211_var.h>
 #include <net80211/ieee80211_radiotap.h>
 
+#ifdef USB_DEBUG
+#define ATU_DEBUG
+#endif
+
 #include <dev/usb/if_atureg.h>
 
 #ifdef ATU_DEBUG
@@ -106,105 +111,37 @@ int atudebug = 1;
  * Various supported device vendors/products/radio type.
  */
 struct atu_type atu_devs[] = {
-	{ USB_VENDOR_3COM,	USB_PRODUCT_3COM_3CRSHEW696,
-	  RadioRFMD,		ATU_NO_QUIRK },
-	{ USB_VENDOR_ABOCOM,	USB_PRODUCT_ABOCOM_BWU613,
-	  RadioRFMD,		ATU_NO_QUIRK },
-	{ USB_VENDOR_ACCTON,	USB_PRODUCT_ACCTON_2664W,
-	  AT76C503_rfmd_acc,	ATU_NO_QUIRK },
-	{ USB_VENDOR_ACERP,	USB_PRODUCT_ACERP_AWL300,
-	  RadioIntersil,	ATU_NO_QUIRK },
-	{ USB_VENDOR_ACERP,	USB_PRODUCT_ACERP_AWL400,
-	  RadioRFMD,		ATU_NO_QUIRK },
-	{ USB_VENDOR_ACTIONTEC,	USB_PRODUCT_ACTIONTEC_UAT1,
-	  RadioRFMD,		ATU_NO_QUIRK },
-	{ USB_VENDOR_ADDTRON,	USB_PRODUCT_ADDTRON_AWU120,
-	  RadioIntersil,	ATU_NO_QUIRK },
-	{ USB_VENDOR_AINCOMM,	USB_PRODUCT_AINCOMM_AWU2000B,
-	  RadioRFMD2958,	ATU_NO_QUIRK },
-	{ USB_VENDOR_ASKEY,	USB_PRODUCT_ASKEY_VOYAGER1010,
-	  RadioIntersil,	ATU_NO_QUIRK },
-	{ USB_VENDOR_ASKEY,	USB_PRODUCT_ASKEY_WLL013I,
-	  RadioIntersil,	ATU_NO_QUIRK },
-	{ USB_VENDOR_ASKEY,	USB_PRODUCT_ASKEY_WLL013,
-	  RadioRFMD,		ATU_NO_QUIRK },
-	{ USB_VENDOR_ATMEL,	USB_PRODUCT_ATMEL_AT76C503I1,
-	  RadioIntersil,	ATU_NO_QUIRK },
-	{ USB_VENDOR_ATMEL,	USB_PRODUCT_ATMEL_AT76C503I2,
-	  AT76C503_i3863,	ATU_NO_QUIRK },
-	{ USB_VENDOR_ATMEL,	USB_PRODUCT_ATMEL_AT76C503RFMD,
-	  RadioRFMD,		ATU_NO_QUIRK },
-	{ USB_VENDOR_ATMEL,	USB_PRODUCT_ATMEL_AT76C505RFMD,
-	  AT76C505_rfmd,	ATU_NO_QUIRK },
-	{ USB_VENDOR_ATMEL,	USB_PRODUCT_ATMEL_AT76C505RFMD2958,
-	  RadioRFMD2958,	ATU_NO_QUIRK },
-	{ USB_VENDOR_ATMEL,	USB_PRODUCT_ATMEL_AT76C505A, /* SMC2662 V.4 */
-	  RadioRFMD2958_SMC,	ATU_QUIRK_NO_REMAP | ATU_QUIRK_FW_DELAY },
-	{ USB_VENDOR_ATMEL,	USB_PRODUCT_ATMEL_AT76C505AS, /* quirk? */
-	  RadioRFMD2958_SMC,	ATU_QUIRK_NO_REMAP | ATU_QUIRK_FW_DELAY },
-	{ USB_VENDOR_ATMEL,	USB_PRODUCT_ATMEL_WN210,
+	{ USB_VENDOR_ATMEL,	USB_PRODUCT_ATMEL_BW002,
 	  RadioRFMD,		ATU_NO_QUIRK },
 	{ USB_VENDOR_BELKIN,	USB_PRODUCT_BELKIN_F5D6050,
 	  RadioRFMD,		ATU_NO_QUIRK },
-	{ USB_VENDOR_CONCEPTRONIC, USB_PRODUCT_CONCEPTRONIC_C11U,
-	  RadioIntersil,	ATU_NO_QUIRK },
-	{ USB_VENDOR_CONCEPTRONIC, USB_PRODUCT_CONCEPTRONIC_WL210,
-	  RadioIntersil,	ATU_NO_QUIRK },
-	{ USB_VENDOR_COMPAQ,	USB_PRODUCT_COMPAQ_IPAQWLAN,
-	  RadioRFMD,		ATU_NO_QUIRK },
-	{ USB_VENDOR_COREGA,	USB_PRODUCT_COREGA_WLUSB_11_STICK,
-	  RadioRFMD2958,	ATU_NO_QUIRK },
-	{ USB_VENDOR_DICKSMITH,	USB_PRODUCT_DICKSMITH_CHUSB611G,
-	  RadioRFMD2958,	ATU_NO_QUIRK },
-	{ USB_VENDOR_DICKSMITH,	USB_PRODUCT_DICKSMITH_WL200U,
-	  RadioRFMD,		ATU_NO_QUIRK },
-	{ USB_VENDOR_DICKSMITH,	USB_PRODUCT_DICKSMITH_WL240U,
-	  RadioRFMD2958,	ATU_NO_QUIRK },
-	{ USB_VENDOR_DICKSMITH,	USB_PRODUCT_DICKSMITH_XH1153,
-	  RadioRFMD,		ATU_NO_QUIRK },
-	{ USB_VENDOR_DLINK,	USB_PRODUCT_DLINK_DWL120E,
-	  RadioRFMD,		ATU_NO_QUIRK },
-	{ USB_VENDOR_GIGABYTE,	USB_PRODUCT_GIGABYTE_GNWLBM101,
-	  RadioRFMD,		ATU_NO_QUIRK },
-	{ USB_VENDOR_GIGASET,	USB_PRODUCT_GIGASET_WLAN, /* quirk? */
-	  RadioRFMD2958_SMC,	ATU_QUIRK_NO_REMAP | ATU_QUIRK_FW_DELAY },
-	{ USB_VENDOR_HP,	USB_PRODUCT_HP_HN210W,
-	  RadioIntersil,	ATU_NO_QUIRK },
-	{ USB_VENDOR_INTEL,	USB_PRODUCT_INTEL_AP310,
-	  RadioIntersil,	ATU_NO_QUIRK },
-	{ USB_VENDOR_IODATA,	USB_PRODUCT_IODATA_USBWNB11A,
+	{ USB_VENDOR_ATMEL,	USB_PRODUCT_ATMEL_AT76C503A,
 	  RadioIntersil,	ATU_NO_QUIRK },
 	{ USB_VENDOR_LEXAR,	USB_PRODUCT_LEXAR_2662WAR,
 	  RadioRFMD,		ATU_NO_QUIRK },
-	{ USB_VENDOR_LINKSYS,	USB_PRODUCT_LINKSYS_WUSB11,
-	  RadioIntersil,	ATU_NO_QUIRK },
-	{ USB_VENDOR_LINKSYS2,	USB_PRODUCT_LINKSYS2_WUSB11,
+	/* Belkin F5D6050 */
+	{ USB_VENDOR_SMC3,	USB_PRODUCT_SMC3_2662WUSB,
 	  RadioRFMD,		ATU_NO_QUIRK },
-	{ USB_VENDOR_LINKSYS2,	USB_PRODUCT_LINKSYS2_NWU11B,
+	{ USB_VENDOR_LINKSYS2,	USB_PRODUCT_LINKSYS2_WUSB11,
 	  RadioRFMD,		ATU_NO_QUIRK },
 	{ USB_VENDOR_LINKSYS3,	USB_PRODUCT_LINKSYS3_WUSB11V28,
 	  RadioRFMD2958,	ATU_NO_QUIRK },
-	{ USB_VENDOR_MSI,	USB_PRODUCT_MSI_WLAN,
-	  RadioRFMD2958,	ATU_NO_QUIRK },
-	{ USB_VENDOR_NETGEAR2,	USB_PRODUCT_NETGEAR2_MA101,
-	  RadioIntersil,	ATU_NO_QUIRK },
 	{ USB_VENDOR_NETGEAR2,	USB_PRODUCT_NETGEAR2_MA101B,
 	  RadioRFMD,		ATU_NO_QUIRK },
+	{ USB_VENDOR_ACERP,	USB_PRODUCT_ACERP_AWL400,
+	  RadioRFMD,		ATU_NO_QUIRK },
+	{ USB_VENDOR_ATMEL,	USB_PRODUCT_ATMEL_WL1130,
+	  RadioRFMD2958,	ATU_NO_QUIRK },
+	{ USB_VENDOR_AINCOMM,	USB_PRODUCT_AINCOMM_AWU2000B,
+	  RadioRFMD2958,	ATU_NO_QUIRK },
+	/* SMC2662 V.4 */
+	{ USB_VENDOR_ATMEL,	USB_PRODUCT_ATMEL_AT76C505A,
+	  RadioRFMD2958_SMC,	ATU_QUIRK_NO_REMAP | ATU_QUIRK_FW_DELAY },
+	{ USB_VENDOR_ACERP,	USB_PRODUCT_ACERP_AWL300,
+	  RadioIntersil,	ATU_NO_QUIRK },
 	{ USB_VENDOR_OQO,	USB_PRODUCT_OQO_WIFI01,
 	  RadioRFMD2958_SMC,	ATU_QUIRK_NO_REMAP | ATU_QUIRK_FW_DELAY },
-	{ USB_VENDOR_PLANEX2,	USB_PRODUCT_PLANEX2_GW_US11S,
-	  RadioRFMD,		ATU_NO_QUIRK },
-	{ USB_VENDOR_SAMSUNG,	USB_PRODUCT_SAMSUNG_SWL2100W,
-	  AT76C503_i3863,	ATU_NO_QUIRK },
-	{ USB_VENDOR_SIEMENS2,	USB_PRODUCT_SIEMENS2_WLL013,
-	  RadioRFMD,		ATU_NO_QUIRK },
 	{ USB_VENDOR_SMC3,	USB_PRODUCT_SMC3_2662WV1,
-	  RadioIntersil,	ATU_NO_QUIRK },
-	{ USB_VENDOR_SMC3,	USB_PRODUCT_SMC3_2662WV2,
-	  AT76C503_rfmd_acc,	ATU_NO_QUIRK },
-	{ USB_VENDOR_TEKRAM,	USB_PRODUCT_TEKRAM_U300C,
-	  RadioIntersil,	ATU_NO_QUIRK },
-	{ USB_VENDOR_ZCOM,	USB_PRODUCT_ZCOM_M4Y750,
 	  RadioIntersil,	ATU_NO_QUIRK },
 };
 
@@ -693,8 +630,8 @@ atu_initial_config(struct atu_softc *sc)
 
 		cmd.WEP_DefaultKeyID = ic->ic_def_txkey;
 		for (i = 0; i < IEEE80211_WEP_NKID; i++) {
-			memcpy(cmd.WEP_DefaultKey[i], ic->ic_nw_keys[i].wk_key,
-			    ic->ic_nw_keys[i].wk_keylen);
+			memcpy(cmd.WEP_DefaultKey[i], ic->ic_nw_keys[i].wk_key, 
+			    ic->ic_nw_keys[i].wk_keylen); 
 		}
 	}
 
@@ -1052,8 +989,6 @@ atu_get_card_config(struct atu_softc *sc)
 	case RadioRFMD:
 	case RadioRFMD2958:
 	case RadioRFMD2958_SMC:
-	case AT76C503_rfmd_acc:
-	case AT76C505_rfmd:
 		err = atu_usb_request(sc, UT_READ_VENDOR_INTERFACE, 0x33,
 		    0x0a02, 0x0000, sizeof(rfmd_conf),
 		    (u_int8_t *)&rfmd_conf);
@@ -1066,7 +1001,6 @@ atu_get_card_config(struct atu_softc *sc)
 		break;
 
 	case RadioIntersil:
-	case AT76C503_i3863:
 		err = atu_usb_request(sc, UT_READ_VENDOR_INTERFACE, 0x33,
 		    0x0902, 0x0000, sizeof(intersil_conf),
 		    (u_int8_t *)&intersil_conf);
@@ -1252,8 +1186,7 @@ atu_attach(device_t parent, device_t self, void *aux)
 
 	err = usbd_set_config_no(dev, ATU_CONFIG_NO, 1);
 	if (err) {
-		aprint_error_dev(self, "failed to set configuration"
-		    ", err=%s\n", usbd_errstr(err));
+		aprint_error_dev(self, "setting config no failed\n");
 		return;
 	}
 
@@ -1461,7 +1394,7 @@ atu_complete_attach(struct atu_softc *sc)
 	/* setup ifmedia interface */
 	ieee80211_media_init(ic, atu_media_change, atu_media_status);
 
-	usb_init_task(&sc->sc_task, atu_task, sc, 0);
+	usb_init_task(&sc->sc_task, atu_task, sc);
 
 	sc->sc_state = ATU_S_OK;
 }

@@ -1,7 +1,7 @@
-#	$NetBSD: Makefile.inc,v 1.2 2013/01/29 19:14:02 matt Exp $
+#	$NetBSD: Makefile.inc,v 1.1 2007/11/13 15:21:20 ad Exp $
 #	@(#)Makefile.inc	8.3 (Berkeley) 10/24/94
 
-.PATH: ${ARCHDIR}/misc ${.CURDIR}/misc
+.PATH: ${.CURDIR}/misc
 
 # constructor
 SRCS+=	initfini.c

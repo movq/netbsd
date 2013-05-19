@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.5 2012/05/30 05:20:36 macallan Exp $
+#	$NetBSD: Makefile,v 1.4.24.1 2012/12/13 17:38:07 riz Exp $
 
 DRIVER=		xf86-video-nv
 DRIVER_NAME=	nv_drv

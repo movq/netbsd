@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.109 2013/04/27 22:21:16 christos Exp $
+#	$NetBSD: GENERIC,v 1.98.2.2 2012/08/15 15:33:00 sborrill Exp $
 #
 # Generic Shark configuration.
 #
@@ -7,7 +7,7 @@ include	"arch/shark/conf/std.shark"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC-$Revision: 1.109 $"
+#ident		"GENERIC-$Revision: 1.98.2.2 $"
 
 # estimated number of users
 maxusers	32
@@ -33,6 +33,10 @@ makeoptions	CPUFLAGS="-march=armv4 -mtune=strongarm"
 # properties and/or may set up devices incorrectly.
 options 	COMPAT_OLD_OFW
 
+# FPA options
+
+#options 	ARMFPE		# ARM Ltd FPE
+
 # File systems
 
 file-system	FFS		# UFS
@@ -49,7 +53,6 @@ file-system	KERNFS		# /kern
 file-system	NULLFS		# loopback file system
 #file-system 	OVERLAY		# overlay filesystem
 file-system	PROCFS		# /proc
-file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 #file-system	UNION		# union file system
 #file-system	CODA		# Coda file system (needs vcoda below)
@@ -72,10 +75,13 @@ options 	NFSSERVER
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking
 #options 	PFIL_HOOKS	# pfil(9) packet filter hooks (Required
 				# if you enable the pseudo-device ipl).
@@ -113,7 +119,6 @@ options 	COMPAT_20	# NetBSD 2.0 compatibility.
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_43	# 4.3BSD compatibility.
 options 	COMPAT_LINUX	# Linux compatibility.
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
@@ -124,6 +129,7 @@ options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
+options 	P1003_1B_SEMAPHORE	# p1003.1b semaphore support
 
 # Device options
 
@@ -152,10 +158,10 @@ options 	MODULAR		# new style module(7) framework
 
 #options 	ARM700BUGTRACK	# track the ARM700 swi bug
 #options 	PORTMASTER	# Enable PortMaster only options
-options 	DIAGNOSTIC	# internal consistency checks
+#options 	DIAGNOSTIC	# internal consistency checks
 #options 	PMAP_DEBUG	# Enable pmap_debug_level code
 options 	DDB		# in-kernel debugger
-options 	SYMTAB_SPACE=600000 	# reserve symbol space for DDB
+options 	SYMTAB_SPACE=450000 	# reserve symbol space for DDB
 				# (needed because we boot netbsd.aout)
 #options 	DDB_ONPANIC=0	# don't run DDB at panictime
 #options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
@@ -281,13 +287,13 @@ cinclude "arch/shark/conf/GENERIC.local"
 pseudo-device   accf_data		# "dataready" accept filter
 pseudo-device   accf_http		# "httpready" accept filter
 
-pseudo-device	loop			# network loopback
+pseudo-device	loop	1		# network loopback
 pseudo-device	bpfilter		# packet filter
 #pseudo-device	carp			# Common Address Redundancy Protocol
 #pseudo-device	sl			# CSLIP
 #pseudo-device	ppp			# PPP
 #pseudo-device	tun			# network tunneling over tty
-#pseudo-device	ipfilter		# ip filter
+#pseudo-device	ipfilter 1		# ip filter
 pseudo-device	gif			# IPv[46] over IPv[46] tunnel (RFC1933)
 #pseudo-device	faith			# IPv[46] tcp relay translation i/f
 pseudo-device	stf			# 6to4 IPv6 over IPv4 encapsulation
@@ -295,27 +301,26 @@ pseudo-device	stf			# 6to4 IPv6 over IPv4 encapsulation
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
-#pseudo-device	ccd			# concatenated disk devices
+#pseudo-device	ccd	2		# concatenated disk devices
 pseudo-device	fss			# file system snapshot device
-#pseudo-device	cgd			# cryptographic disk devices
+#pseudo-device	cgd	4		# cryptographic disk devices
 
 #pseudo-device	md			# Ramdisk driver
 #pseudo-device	profiler 1		# fiq based profiling device
-pseudo-device	sequencer		# MIDI sequencer
+pseudo-device	sequencer 1		# MIDI sequencer
 pseudo-device	openfirm		# /dev/openfirm
-#pseudo-device	vcoda			# coda kernel <-> cachemanager
+#pseudo-device	vcoda	4		# coda kernel <-> cachemanager
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	wsmux			# mouse & keyboard multiplexor
 pseudo-device	wsfont
 pseudo-device	ksyms			# /dev/ksyms
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
-pseudo-device	putter			# for puffs and pud
 
 # Veriexec
 #
 # a pseudo device needed for veriexec
-#pseudo-device	veriexec
+#pseudo-device	veriexec		1
 #
 # Uncomment the fingerprint methods below that are desired. Note that
 # removing fingerprint methods will have almost no impact on the kernel

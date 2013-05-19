@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_state_tcp.c,v 1.12 2012/12/24 19:05:45 rmind Exp $	*/
+/*	$NetBSD: npf_state_tcp.c,v 1.3.2.7 2013/02/08 19:18:10 riz Exp $	*/
 
 /*-
  * Copyright (c) 2010-2012 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_state_tcp.c,v 1.12 2012/12/24 19:05:45 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_state_tcp.c,v 1.3.2.7 2013/02/08 19:18:10 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

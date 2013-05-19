@@ -1,4 +1,4 @@
-/*	$NetBSD: if_jme.c,v 1.22 2013/03/30 03:21:05 christos Exp $	*/
+/*	$NetBSD: if_jme.c,v 1.19 2012/02/02 19:43:05 tls Exp $	*/
 
 /*
  * Copyright (c) 2008 Manuel Bouyer.  All rights reserved.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_jme.c,v 1.22 2013/03/30 03:21:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_jme.c,v 1.19 2012/02/02 19:43:05 tls Exp $");
 
 
 #include <sys/param.h>
@@ -206,7 +206,7 @@ static void jme_set_filter(jme_softc_t *);
 
 int jme_mii_read(device_t, int, int);
 void jme_mii_write(device_t, int, int, int);
-void jme_statchg(struct ifnet *);
+void jme_statchg(device_t);
 
 static int jme_eeprom_read_byte(struct jme_softc *, uint8_t, uint8_t *);
 static int jme_eeprom_macaddr(struct jme_softc *);
@@ -530,7 +530,7 @@ jme_pci_attach(device_t parent, device_t self, void *aux)
 	    CTLFLAG_READWRITE,
 	    CTLTYPE_INT, "int_rxto",
 	    SYSCTL_DESCR("jme RX interrupt moderation timer"),
-	    jme_sysctl_intrxto, 0, (void *)sc,
+	    jme_sysctl_intrxto, 0, sc,
 	    0, CTL_HW, jme_root_num, jme_nodenum, CTL_CREATE,
 	    CTL_EOL) != 0) {
 		aprint_normal_dev(sc->jme_dev,
@@ -540,7 +540,7 @@ jme_pci_attach(device_t parent, device_t self, void *aux)
 	    CTLFLAG_READWRITE,
 	    CTLTYPE_INT, "int_rxct",
 	    SYSCTL_DESCR("jme RX interrupt moderation packet counter"),
-	    jme_sysctl_intrxct, 0, (void *)sc,
+	    jme_sysctl_intrxct, 0, sc,
 	    0, CTL_HW, jme_root_num, jme_nodenum, CTL_CREATE,
 	    CTL_EOL) != 0) {
 		aprint_normal_dev(sc->jme_dev,
@@ -550,7 +550,7 @@ jme_pci_attach(device_t parent, device_t self, void *aux)
 	    CTLFLAG_READWRITE,
 	    CTLTYPE_INT, "int_txto",
 	    SYSCTL_DESCR("jme TX interrupt moderation timer"),
-	    jme_sysctl_inttxto, 0, (void *)sc,
+	    jme_sysctl_inttxto, 0, sc,
 	    0, CTL_HW, jme_root_num, jme_nodenum, CTL_CREATE,
 	    CTL_EOL) != 0) {
 		aprint_normal_dev(sc->jme_dev,
@@ -560,7 +560,7 @@ jme_pci_attach(device_t parent, device_t self, void *aux)
 	    CTLFLAG_READWRITE,
 	    CTLTYPE_INT, "int_txct",
 	    SYSCTL_DESCR("jme TX interrupt moderation packet counter"),
-	    jme_sysctl_inttxct, 0, (void *)sc,
+	    jme_sysctl_inttxct, 0, sc,
 	    0, CTL_HW, jme_root_num, jme_nodenum, CTL_CREATE,
 	    CTL_EOL) != 0) {
 		aprint_normal_dev(sc->jme_dev,
@@ -687,7 +687,7 @@ jme_add_rxbuf(jme_softc_t *sc, struct mbuf *m)
 			m_freem(m);
 		return EINVAL;
 	}
-
+	
 	if (m == NULL) {
 		sc->jme_rxmbuf[i] = NULL;
 		MGETHDR(m, M_DONTWAIT, MT_DATA);
@@ -1037,8 +1037,10 @@ jme_mii_write(device_t self, int phy, int reg, int val)
 }
 
 void
-jme_statchg(struct ifnet *ifp)
+jme_statchg(device_t self)
 {
+	jme_softc_t *sc = device_private(self);
+	struct ifnet *ifp = &sc->jme_if;
 	if ((ifp->if_flags & (IFF_UP|IFF_RUNNING)) == (IFF_UP|IFF_RUNNING))
 		jme_init(ifp, 0);
 }
@@ -2012,7 +2014,7 @@ jme_eeprom_macaddr(struct jme_softc *sc)
 		}
 		if (fup & JME_EEPROM_DESC_END)
 			break;
-		
+			
 		/* Try next eeprom descriptor. */
 		offset += JME_EEPROM_DESC_BYTES;
 	} while (match != ETHER_ADDR_LEN && offset < JME_EEPROM_END);

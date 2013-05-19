@@ -1,4 +1,4 @@
-/*	$NetBSD: mace.c,v 1.19 2012/10/27 17:18:10 chs Exp $	*/
+/*	$NetBSD: mace.c,v 1.18 2011/08/18 03:25:34 macallan Exp $	*/
 
 /*
  * Copyright (c) 2003 Christopher Sekiya
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mace.c,v 1.19 2012/10/27 17:18:10 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mace.c,v 1.18 2011/08/18 03:25:34 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -99,10 +99,11 @@ struct mace_softc {
 	void *isa_ringbuffer;
 };
 
-static int	mace_match(device_t, cfdata_t, void *);
-static void	mace_attach(device_t, device_t, void *);
+static int	mace_match(struct device *, struct cfdata *, void *);
+static void	mace_attach(struct device *, struct device *, void *);
 static int	mace_print(void *, const char *);
-static int	mace_search(device_t, cfdata_t, const int *, void *);
+static int	mace_search(struct device *, struct cfdata *,
+			    const int *, void *);
 
 CFATTACH_DECL_NEW(mace, sizeof(struct mace_softc),
     mace_match, mace_attach, NULL, NULL);
@@ -146,9 +147,9 @@ mace_attach(device_t parent, device_t self, void *aux)
 
 	aprint_normal("\n");
 
-	aprint_debug("%s: isa sts %#"PRIx64"\n", device_xname(self),
+	aprint_debug("%s: isa sts %#"PRIx64"\n", self->dv_xname,
 	    bus_space_read_8(sc->iot, sc->ioh, MACE_ISA_INT_STATUS));
-	aprint_debug("%s: isa msk %#"PRIx64"\n", device_xname(self),
+	aprint_debug("%s: isa msk %#"PRIx64"\n", self->dv_xname,
 	    bus_space_read_8(sc->iot, sc->ioh, MACE_ISA_INT_MASK));
 
 	/*
@@ -202,7 +203,8 @@ mace_print(void *aux, const char *pnp)
 }
 
 static int
-mace_search(device_t parent, struct cfdata *cf, const int *ldesc, void *aux)
+mace_search(device_t parent, struct cfdata *cf,
+	    const int *ldesc, void *aux)
 {
 	struct mace_softc *sc = device_private(parent);
 	struct mace_attach_args maa;
@@ -325,7 +327,7 @@ mace_intr(int irqs)
 static void
 mace_blink(void *self)
 {
-	struct mace_softc *sc = device_private(self);
+	struct mace_softc *sc = (struct mace_softc *) self;
 	register int s;
 	int value;
 

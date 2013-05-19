@@ -1,4 +1,4 @@
-/*	$NetBSD: mime_attach.c,v 1.16 2013/01/04 01:54:55 christos Exp $	*/
+/*	$NetBSD: mime_attach.c,v 1.13 2009/04/11 14:22:32 christos Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef __lint__
-__RCSID("$NetBSD: mime_attach.c,v 1.16 2013/01/04 01:54:55 christos Exp $");
+__RCSID("$NetBSD: mime_attach.c,v 1.13 2009/04/11 14:22:32 christos Exp $");
 #endif /* not __lint__ */
 
 #include <assert.h>
@@ -224,48 +224,43 @@ is_text(const char *ctype)
 static const char *
 content_encoding_core(void *fh, const char *ctype)
 {
-#define MAILMSG_CLEAN	0x0
-#define MAILMSG_ENDWS	0x1
-#define MAILMSG_CTRLC	0x2
-#define MAILMSG_8BIT	0x4
-#define MAILMSG_LONGL	0x8
-	int c, lastc, state;
+	int c, lastc;
 	int ctrlchar, endwhite;
 	size_t curlen, maxlen;
 
-	state = MAILMSG_CLEAN;
 	curlen = 0;
-	maxlen = line_limit();
+	maxlen = 0;
 	ctrlchar = 0;
 	endwhite = 0;
 	lastc = EOF;
 	while ((c = fgetc(fh)) != EOF) {
 		curlen++;
 
-		if (c == '\0')
+		if (c == '\0' || (lastc == '\r' && c != '\n'))
 			return MIME_TRANSFER_BASE64;
 
 		if (c > 0x7f) {
-			if (!is_text(ctype))
+			if (is_text(ctype))
+				return MIME_TRANSFER_QUOTED;
+			else
 				return MIME_TRANSFER_BASE64;
-			state |= MAILMSG_8BIT;
-			continue;
 		}
 		if (c == '\n') {
 			if (is_WSP(lastc))
-				state |= MAILMSG_ENDWS;
+				endwhite = 1;
 			if (curlen > maxlen)
-				state |= MAILMSG_LONGL;
+				maxlen = curlen;
 			curlen = 0;
 		}
-		else if ((c < 0x20 && c != '\t') || c == 0x7f || lastc == '\r')
-			state |= MAILMSG_CTRLC;
+		else if ((c < 0x20 && c != '\t') || c == 0x7f)
+			ctrlchar = 1;
+
 		lastc = c;
 	}
 	if (lastc == EOF) /* no characters read */
 		return MIME_TRANSFER_7BIT;
 
-	if (lastc != '\n' || state != MAILMSG_CLEAN)
+	if (lastc != '\n' || ctrlchar || endwhite || maxlen > line_limit())
 		return MIME_TRANSFER_QUOTED;
 
 	return MIME_TRANSFER_7BIT;
@@ -276,7 +271,7 @@ content_encoding_by_name(const char *filename, const char *ctype)
 {
 	FILE *fp;
 	const char *enc;
-	fp = Fopen(filename, "re");
+	fp = Fopen(filename, "r");
 	if (fp == NULL) {
 		warn("content_encoding_by_name: %s", filename);
 		return MIME_TRANSFER_BASE64;	/* safe */
@@ -296,7 +291,7 @@ content_encoding_by_fileno(int fd, const char *ctype)
 
 	cur_pos = lseek(fd, (off_t)0, SEEK_CUR);
 	if ((fd2 = dup(fd)) == -1 ||
-	    (fp = Fdopen(fd2, "re")) == NULL) {
+	    (fp = Fdopen(fd2, "r")) == NULL) {
 		warn("content_encoding_by_fileno");
 		if (fd2 != -1)
 			(void)close(fd2);
@@ -359,7 +354,7 @@ content_type_by_name(char *filename)
 			int ch;
 
 			if (sb.st_size == 0 || filename == NULL ||
-			    (fp = Fopen(filename, "re")) == NULL)
+			    (fp = Fopen(filename, "r")) == NULL)
 				return "text/plain";
 
 			ch = fgetc(fp);
@@ -548,7 +543,7 @@ fput_attachment(FILE *fo, struct attachment *ap)
 
 	switch (ap->a_type) {
 	case ATTACH_FNAME:
-		fi = Fopen(ap->a_name, "re");
+		fi = Fopen(ap->a_name, "r");
 		if (fi == NULL)
 			err(EXIT_FAILURE, "Fopen: %s", ap->a_name);
 		break;
@@ -559,7 +554,7 @@ fput_attachment(FILE *fo, struct attachment *ap)
 		 * finished with the attachment, so the Fclose() below
 		 * is OK for now.  This will be changed in the future.
 		 */
-		fi = Fdopen(ap->a_fileno, "re");
+		fi = Fdopen(ap->a_fileno, "r");
 		if (fi == NULL)
 			err(EXIT_FAILURE, "Fdopen: %d", ap->a_fileno);
 		break;
@@ -572,7 +567,7 @@ fput_attachment(FILE *fo, struct attachment *ap)
 		(void)snprintf(mailtempname, sizeof(mailtempname),
 		    "%s/mail.RsXXXXXXXXXX", tmpdir);
 		if ((fd = mkstemp(mailtempname)) == -1 ||
-		    (fi = Fdopen(fd, "we+")) == NULL) {
+		    (fi = Fdopen(fd, "w+")) == NULL) {
 			if (fd != -1)
 				(void)close(fd);
 			err(EXIT_FAILURE, "%s", mailtempname);
@@ -617,7 +612,7 @@ mktemp_file(FILE **nfo, FILE **nfi, const char *hint)
 	(void)snprintf(tempname, sizeof(tempname), "%s/%sXXXXXXXXXX",
 	    tmpdir, hint);
 	if ((fd = mkstemp(tempname)) == -1 ||
-	    (*nfo = Fdopen(fd, "we")) == NULL) {
+	    (*nfo = Fdopen(fd, "w")) == NULL) {
 		if (fd != -1)
 			(void)close(fd);
 		warn("%s", tempname);
@@ -625,7 +620,7 @@ mktemp_file(FILE **nfo, FILE **nfi, const char *hint)
 	}
 	(void)rm(tempname);
 	if ((fd2 = dup(fd)) == -1 ||
-	    (*nfi = Fdopen(fd2, "re")) == NULL) {
+	    (*nfi = Fdopen(fd2, "r")) == NULL) {
 		warn("%s", tempname);
 		(void)Fclose(*nfo);
 		return -1;

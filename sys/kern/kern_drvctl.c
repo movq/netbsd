@@ -1,4 +1,4 @@
-/* $NetBSD: kern_drvctl.c,v 1.34 2013/04/26 09:04:43 msaitoh Exp $ */
+/* $NetBSD: kern_drvctl.c,v 1.32.8.1 2013/05/11 21:43:06 riz Exp $ */
 
 /*
  * Copyright (c) 2004
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_drvctl.c,v 1.34 2013/04/26 09:04:43 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_drvctl.c,v 1.32.8.1 2013/05/11 21:43:06 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -175,7 +175,7 @@ drvctlopen(dev_t dev, int flags, int mode, struct lwp *l)
 static int
 pmdevbyname(u_long cmd, struct devpmargs *a)
 {
-	device_t d;
+	struct device *d;
 
 	if ((d = device_find_by_xname(a->devname)) == NULL)
 		return ENXIO;
@@ -231,7 +231,7 @@ listdevbyname(struct devlistargs *l)
 static int
 detachdevbyname(const char *devname)
 {
-	device_t d;
+	struct device *d;
 
 	if ((d = device_find_by_xname(devname)) == NULL)
 		return ENXIO;
@@ -254,7 +254,7 @@ rescanbus(const char *busname, const char *ifattr,
 	  int numlocators, const int *locators)
 {
 	int i, rc;
-	device_t d;
+	struct device *d;
 	const struct cfiattrdata * const *ap;
 
 	/* XXX there should be a way to get limits and defaults (per device)

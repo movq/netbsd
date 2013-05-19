@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_init.c,v 1.45 2013/01/29 21:37:04 para Exp $	*/
+/*	$NetBSD: uvm_init.c,v 1.43 2012/01/28 00:00:06 rmind Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_init.c,v 1.45 2013/01/29 21:37:04 para Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_init.c,v 1.43 2012/01/28 00:00:06 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -58,9 +58,9 @@ struct uvmexp uvmexp;	/* decl */
 struct uvm_object *uvm_kernel_object;
 
 #if defined(__uvmexp_pagesize)
-const int * const uvmexp_pagesize = &uvmexp.pagesize;
-const int * const uvmexp_pagemask = &uvmexp.pagemask;
-const int * const uvmexp_pageshift = &uvmexp.pageshift;
+int *uvmexp_pagesize = &uvmexp.pagesize;
+int *uvmexp_pagemask = &uvmexp.pagemask;
+int *uvmexp_pageshift = &uvmexp.pageshift;
 #endif
 
 kmutex_t uvm_pageqlock;
@@ -106,8 +106,8 @@ uvm_init(void)
 
 	/*
 	 * Setup the kernel's virtual memory data structures.  This includes
-	 * setting up the kernel_map/kernel_object.
-	 * Bootstrap all kernel memory allocators.
+	 * setting up the kernel_map/kernel_object.  Bootstrap all kernel
+	 * memory allocators.
 	 */
 
 	uao_init();
@@ -128,8 +128,9 @@ uvm_init(void)
 	pmap_init();
 
 	/*
-	 * Make kernel memory allocators ready for use.
-	 * After this call the pool/kmem memory allocators can be used.
+	 * Init the kernel maps virtual address caches.  Make kernel memory
+	 * allocator ready for use.  After this call the pool/kmem memory
+	 * allocators can be used.
 	 */
 
 	uvm_km_init();

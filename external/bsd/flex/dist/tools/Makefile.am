@@ -1,3 +1,4 @@
 EXTRA_DIST = \
-	git2cl
+	cvsauthors \
+	cvs2cl.pl
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: vswprintf.c,v 1.5 2013/05/17 12:55:57 joerg Exp $	*/
+/*	$NetBSD: vswprintf.c,v 1.2 2011/08/17 09:53:54 christos Exp $	*/
 
 /*
  * Copyright (c) 1997 Todd C. Miller <Todd.Miller@courtesan.com>
@@ -32,27 +32,21 @@
 #if 0
 __FBSDID("$FreeBSD: src/lib/libc/stdio/vswprintf.c,v 1.6 2005/02/21 19:41:44 fjoe Exp $");
 #else
-__RCSID("$NetBSD: vswprintf.c,v 1.5 2013/05/17 12:55:57 joerg Exp $");
+__RCSID("$NetBSD: vswprintf.c,v 1.2 2011/08/17 09:53:54 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <errno.h>
-#include <locale.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <wchar.h>
 #include <stdarg.h>
-
 #include "reentrant.h"
-#include "setlocale_local.h"
 #include "local.h"
 
-__weak_alias(vswprintf_l, _vswprintf_l)
-
 int
-vswprintf_l(wchar_t * __restrict s, size_t n, locale_t loc,
-    const wchar_t * __restrict fmt, va_list ap)
+vswprintf(wchar_t * __restrict s, size_t n, const wchar_t * __restrict fmt,
+    va_list ap)
 {
 	static const mbstate_t initial;
 	mbstate_t mbs;
@@ -64,7 +58,7 @@ vswprintf_l(wchar_t * __restrict s, size_t n, locale_t loc,
 
 	if (n == 0) {
 		errno = EINVAL;
-		return -1;
+		return (-1);
 	}
 
 	_FILEEXT_SETUP(&f, &fext);
@@ -73,15 +67,15 @@ vswprintf_l(wchar_t * __restrict s, size_t n, locale_t loc,
 	f._bf._base = f._p = (unsigned char *)malloc(128);
 	if (f._bf._base == NULL) {
 		errno = ENOMEM;
-		return -1;
+		return (-1);
 	}
 	f._bf._size = f._w = 127;		/* Leave room for the NUL */
-	ret = __vfwprintf_unlocked_l(&f, loc, fmt, ap);
+	ret = __vfwprintf_unlocked(&f, fmt, ap);
 	if (ret < 0) {
 		sverrno = errno;
 		free(f._bf._base);
 		errno = sverrno;
-		return -1;
+		return (-1);
 	}
 	*f._p = '\0';
 	mbp = (char *)f._bf._base;
@@ -90,24 +84,17 @@ vswprintf_l(wchar_t * __restrict s, size_t n, locale_t loc,
 	 * fputwc() did in __vfwprintf().
 	 */
 	mbs = initial;
-	nwc = mbsrtowcs_l(s, (void *)&mbp, n, &mbs, loc);
+	nwc = mbsrtowcs(s, (void *)&mbp, n, &mbs);
 	free(f._bf._base);
 	if (nwc == (size_t)-1) {
 		errno = EILSEQ;
-		return -1;
+		return (-1);
 	}
 	if (nwc == n) {
 		s[n - 1] = L'\0';
 		errno = EOVERFLOW;
-		return -1;
+		return (-1);
 	}
 
-	return ret;
-}
-
-int
-vswprintf(wchar_t * __restrict s, size_t n, const wchar_t * __restrict fmt,
-    va_list ap)
-{
-	return vswprintf_l(s, n, _current_locale(), fmt, ap);
+	return (ret);
 }

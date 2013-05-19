@@ -1,4 +1,4 @@
-/*	$NetBSD: mptramp.S,v 1.24 2012/04/20 22:23:24 rmind Exp $	*/
+/*	$NetBSD: mptramp.S,v 1.22.14.2 2012/05/09 03:22:53 riz Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -76,7 +76,7 @@
  */
 
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: mptramp.S,v 1.24 2012/04/20 22:23:24 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mptramp.S,v 1.22.14.2 2012/05/09 03:22:53 riz Exp $");
 	
 #include "opt_mpbios.h"		/* for MPDEBUG */
 		

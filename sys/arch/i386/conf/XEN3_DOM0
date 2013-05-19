@@ -1,4 +1,4 @@
-#	$NetBSD: XEN3_DOM0,v 1.77 2013/04/27 22:21:14 christos Exp $
+#	$NetBSD: XEN3_DOM0,v 1.60.2.7 2013/02/11 21:39:39 riz Exp $
 #
 #	XEN3_0: Xen 3.0 domain0 kernel
 
@@ -55,6 +55,8 @@ options 	SYSVSEM		# System V-like semaphores
 #options 	SEMMNU=30	# number of undo structures in system
 options 	SYSVSHM		# System V-like memory sharing
 #options 	SHMMAXPGS=2048	# 2048 pages is the default
+options 	P1003_1B_SEMAPHORE	# p1003.1b semaphore support
+
 
 options 	USERCONF	# userconf(4) support
 options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
@@ -63,7 +65,7 @@ options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 options 	BUFQ_PRIOCSCAN
 
 # Diagnostic/debugging support options
-options 	DIAGNOSTIC	# expensive kernel consistency checks
+#options 	DIAGNOSTIC	# expensive kernel consistency checks
 #options 	DEBUG		# expensive debugging checks/support
 options 	KMEMSTATS	# kernel memory statistics (vmstat -m)
 options 	DDB		# in-kernel debugger
@@ -89,7 +91,6 @@ options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0
 options 	COMPAT_43	# 4.3BSD, 386BSD, and BSDI
 options 	COMPAT_50	# NetBSD 5.0
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 
@@ -145,10 +146,13 @@ options 	NFSSERVER	# Network File System server
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPv6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 options 	NETATALK	# AppleTalk networking protocols
 options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 options 	PPP_DEFLATE	# Deflate compression support for PPP
@@ -271,8 +275,7 @@ lpt0	at isa? port 0x378 irq 7	# standard PC parallel ports
 
 # Hardware monitors
 
-amdnb_misc* at pci?			# AMD NB Misc Configuration
-amdtemp* at amdnb_misc?			# AMD CPU Temperature sensors
+amdtemp* at pchb?			# AMD CPU Temperature sensors
 
 # AMD 768 and 8111 power/ACPI controllers
 amdpm*	at pci? dev ? function ?	# RNG and SMBus 1.0 interface
@@ -599,7 +602,7 @@ urndis*	at uhub? port ?		# Microsoft RNDIS specification
 
 # USB 802.11 adapters
 atu*	at uhub? port ?		# Atmel AT76C50XX based adapters
-ural*	at uhub? port ?		# Ralink Technology RT2500USB 802.11a/b/g
+ral*	at uhub? port ?		# Ralink Technology RT25x0 802.11a/b/g
 rum*	at uhub? port ?		# Ralink Technology RT2501/RT2601 802.11a/b/g
 
 # Prolific PL2301/PL2302 host-to-host adapter
@@ -750,9 +753,9 @@ pseudo-device	swcrypto	# software crypto implementation
 
 # disk/mass storage pseudo-devices
 pseudo-device	bio			# RAID control device driver
-pseudo-device	ccd			# concatenated/striped disk devices
-pseudo-device	cgd			# cryptographic disk devices
-pseudo-device	raid			# RAIDframe disk driver
+pseudo-device	ccd		4	# concatenated/striped disk devices
+pseudo-device	cgd		4	# cryptographic disk devices
+pseudo-device	raid		8	# RAIDframe disk driver
 options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # Options to enable various other RAIDframe RAID types.
 #options 	RF_INCLUDE_EVENODD=1
@@ -788,8 +791,6 @@ pseudo-device	bridge			# simple inter-network bridging
 #options 	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
-#pseudo-device	pfsync			# PF sync if
-#pseudo-device	npf			# NPF packet filter
 
 # accept filters
 pseudo-device	accf_data		# "dataready" accept filter
@@ -797,7 +798,7 @@ pseudo-device	accf_http		# "httpready" accept filter
 
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
-pseudo-device	sequencer		# MIDI sequencer
+pseudo-device	sequencer	1	# MIDI sequencer
 # rnd works; RND_COM does not on port i386 yet.
 #options 	RND_COM			# use "com" randomness as well (BROKEN)
 pseudo-device	clockctl		# user control of clock subsystem
@@ -805,7 +806,7 @@ pseudo-device	ksyms			# /dev/ksyms
 pseudo-device	putter			# for puffs and pud
 
 # a pseudo device needed for Coda	# also needs CODA (above)
-pseudo-device	vcoda			# coda minicache <-> venus comm.
+pseudo-device	vcoda		4	# coda minicache <-> venus comm.
 
 # a pseudo device needed for SMBFS
 pseudo-device	nsmb			# experimental - SMB requester

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.12 2013/03/29 16:19:46 christos Exp $
+#	$NetBSD: Makefile,v 1.10 2011/07/25 03:03:33 christos Exp $
 
 .include <bsd.own.mk>
 
@@ -37,7 +37,6 @@ kexecdhc.c \
 kexgex.c \
 kexgexc.c \
 key.c \
-krl.c \
 log.c \
 mac.c \
 match.c \
@@ -73,11 +72,13 @@ LIBDPLIBS+=	crypto	${NETBSDSRCDIR}/crypto/external/bsd/openssl/lib/libcrypto \
 		crypt	${NETBSDSRCDIR}/lib/libcrypt \
 		z	${NETBSDSRCDIR}/lib/libz
 
+.if defined(HAVE_GCC) || defined(HAVE_PCC)
 .for f in dns channels hostfile ssh-pkcs11
 COPTS.${f}.c+=	-Wno-pointer-sign
 .endfor
+.endif
+
+.include <bsd.lib.mk>
 
 # XXX
 COPTS.channels.c+=	-fno-strict-aliasing
-
-.include <bsd.lib.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: smb.h,v 1.20 2012/11/30 23:24:22 nakayama Exp $	*/
+/*	$NetBSD: smb.h,v 1.19.8.1 2012/12/10 21:16:25 riz Exp $	*/
 
 /*
  * Copyright (c) 2000-2001 Boris Popov

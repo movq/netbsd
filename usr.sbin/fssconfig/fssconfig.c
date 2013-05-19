@@ -1,4 +1,4 @@
-/*	$NetBSD: fssconfig.c,v 1.10 2012/11/04 22:21:11 christos Exp $	*/
+/*	$NetBSD: fssconfig.c,v 1.8.4.1 2012/07/30 08:05:33 martin Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -34,7 +34,6 @@
 #include <sys/mount.h>
 #include <sys/stat.h>
 
-#include <stdio.h>
 #include <err.h>
 #include <errno.h>
 #include <fcntl.h>

@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: nsparser.y,v 1.12 2012/03/20 17:44:18 matt Exp $	*/
+/*	$NetBSD: nsparser.y,v 1.11 2009/02/05 13:21:11 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: nsparser.y,v 1.12 2012/03/20 17:44:18 matt Exp $");
+__RCSID("$NetBSD: nsparser.y,v 1.11 2009/02/05 13:21:11 lukem Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -45,7 +45,7 @@ __RCSID("$NetBSD: nsparser.y,v 1.12 2012/03/20 17:44:18 matt Exp $");
 #include <syslog.h>
 
 
-static	void	_nsaddsrctomap(const char *);
+static	void	_nsaddsrctomap __P((const char *));
 
 static	ns_dbt		curdbt;
 static	ns_src		cursrc;
@@ -154,7 +154,8 @@ Action
 %%
 
 static void
-_nsaddsrctomap(const char *elem)
+_nsaddsrctomap(elem)
+	const char *elem;
 {
 	unsigned int	i;
 	int		lineno;

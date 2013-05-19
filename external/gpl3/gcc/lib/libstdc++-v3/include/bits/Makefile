@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.5 2013/04/30 20:45:41 skrll Exp $
+#	$NetBSD: Makefile,v 1.4 2011/06/29 02:01:37 mrg Exp $
 
 .include <bsd.own.mk>
 
@@ -33,8 +33,7 @@ BITS_CPUDIR=${BITS_CPUDIR.${MACHINE_ARCH}}
 BITS_CPUDIR=${MACHINE_GNU_ARCH}
 .endif
 
-.PATH: ${.CURDIR}/../../arch/${MACHINE_ARCH} \
-	${DIST}/libstdc++-v3/include/bits \
+.PATH:	${DIST}/libstdc++-v3/include/bits \
 	${DIST}/libstdc++-v3/include/c_std \
 	${DIST}/libstdc++-v3/include/precompiled \
 	${CONF}/os/bsd/netbsd \
@@ -42,7 +41,8 @@ BITS_CPUDIR=${MACHINE_GNU_ARCH}
 	${CONF}/io \
 	${CONF}/cpu/${BITS_CPUDIR} \
 	${CONF}/cpu/generic \
-	${CONF}/locale/generic
+	${CONF}/locale/generic \
+	${.CURDIR}/../../arch/${MACHINE_ARCH}
 
 # Get default targets including <bsd.inc.mk>.
 .include <bsd.prog.mk>

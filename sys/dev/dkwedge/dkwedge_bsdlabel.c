@@ -1,4 +1,4 @@
-/*	$NetBSD: dkwedge_bsdlabel.c,v 1.17 2012/06/07 16:15:31 mlelstv Exp $	*/
+/*	$NetBSD: dkwedge_bsdlabel.c,v 1.16.18.1 2012/07/05 18:12:47 riz Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -79,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dkwedge_bsdlabel.c,v 1.17 2012/06/07 16:15:31 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dkwedge_bsdlabel.c,v 1.16.18.1 2012/07/05 18:12:47 riz Exp $");
 
 #include <sys/param.h>
 #ifdef _KERNEL

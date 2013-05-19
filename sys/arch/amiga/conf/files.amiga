@@ -1,4 +1,4 @@
-#	$NetBSD: files.amiga,v 1.170 2013/04/27 22:27:33 rkujawa Exp $
+#	$NetBSD: files.amiga,v 1.154.2.2 2012/11/22 00:27:54 riz Exp $
 
 # maxpartitions must be first item in files.${ARCH}.newconf
 maxpartitions 16			# NOTE THAT AMIGA IS SPECIAL!
@@ -58,9 +58,6 @@ file	arch/amiga/amiga/amiga_bus_simple_16.c	amibus_b16
 define	amibus_b800
 file	arch/amiga/amiga/amiga_bus_simple_0x800.c	amibus_b800
 
-define  amibus_empb
-file	arch/amiga/pci/empb_bsm.c	amibus_empb
-
 file	arch/amiga/amiga/bus.c
 
 # zorro expansion bus.
@@ -76,7 +73,7 @@ attach	clock at mainbus
 file	arch/amiga/dev/clock.c
 
 # A2000 internal hwc
-device	a2kbbc: msm6242b
+device	a2kbbc
 attach	a2kbbc at mainbus
 file	arch/amiga/dev/a2kbbc.c		a2kbbc
 
@@ -221,19 +218,6 @@ file	arch/amiga/dev/if_le.c		le_zbus needs-flag
 # device defined in sys/conf/files
 attach	ne at zbus with ne_zbus: rtl80x9
 file	arch/amiga/dev/if_ne_zbus.c	ne_zbus needs-flag
-
-# X-Surf
-define	xsurfbus {}
-
-device	xsurf: xsurfbus 
-attach	xsurf at zbus
-file	arch/amiga/dev/xsurf.c		xsurf needs-flag
-
-attach	ne at xsurfbus with ne_xsurf: rtl80x9
-file	arch/amiga/dev/if_ne_xsurf.c	ne_xsurf needs-flag
-
-attach	wdc at xsurfbus with wdc_xsurf
-file	arch/amiga/dev/wdc_xsurf.c	wdc_xsurf & xsurf
 
 # Hydra ethernet card
 device	ed: ifnet, ether, arp
@@ -457,7 +441,6 @@ file	arch/m68k/m68k/pmap_motorola.c
 file	arch/m68k/m68k/procfs_machdep.c	procfs
 file	arch/m68k/m68k/sys_machdep.c
 file	arch/m68k/m68k/vm_machdep.c
-file	arch/m68k/m68k/bus_dma.c
 
 define	gayle
 file	arch/amiga/amiga/gayle.c		gayle
@@ -506,9 +489,6 @@ include "compat/ossaudio/files.ossaudio"
 # Bluetooth stack
 include "dev/bluetooth/files.bluetooth"
 
-# USB stack
-include "dev/usb/files.usb"
-
 # Phase5 BPPC/CSPPC internal bus
 device	p5bus {}
 attach	p5bus at zbus
@@ -529,47 +509,22 @@ attach	bppcsc at p5bus
 file	arch/amiga/dev/bppcsc.c		bppcsc needs-flag
 
 # PCI bus
+file	arch/amiga/pci/p5pb.c		pci
+file	arch/amiga/pci/mppb.c		pci
+file	arch/amiga/pci/cv3dpb.c		pci
 file	arch/amiga/pci/pci_machdep.c	pci
 
 device	p5pb: pcibus
 attach	p5pb at p5bus 
-file	arch/amiga/pci/p5pb.c		p5pb & pci
 
 device	mppb: pcibus
 attach	mppb at zbus
-file	arch/amiga/pci/mppb.c		mppb & pci
 
 device	cv3dpb: pcibus
 attach	cv3dpb at zbus
-file	arch/amiga/pci/cv3dpb.c		cv3dpb & pci
-
-define	empmdev { }
-device	empm
-attach	empm at empmdev
-file	arch/amiga/pci/empm.c		empm needs-flag
-
-device	empb: pcibus, amibus_empb, empmdev
-attach	empb at zbus
-file	arch/amiga/pci/empb.c		empb & pci & empm
-
-device	em4k: pcibus
-attach	em4k at zbus
-file	arch/amiga/pci/em4k.c		em4k & pci
-
-device	emmem {}
-attach	emmem at zbus
-file	arch/amiga/pci/emmem.c		emmem
 
 include	"dev/i2o/files.i2o"
 include	"dev/pci/files.pci"
 
-device	z3rambd: altmemdev
-attach	z3rambd at zbus
-file	arch/amiga/dev/z3rambd.c	z3rambd needs-flag
-
-attach	slhci at zbus with slhci_zbus
-file	arch/amiga/dev/slhci_zbus.c	slhci_zbus
-
-include "arch/amiga/clockport/files.clockport"
-
 include	"arch/amiga/conf/majors.amiga"
+

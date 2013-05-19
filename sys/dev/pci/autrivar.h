@@ -1,4 +1,4 @@
-/*	$NetBSD: autrivar.h,v 1.6 2012/03/17 20:29:59 martin Exp $	*/
+/*	$NetBSD: autrivar.h,v 1.5 2011/11/23 23:07:34 jmcneill Exp $	*/
 
 /*
  * Copyright (c) 2001 SOMEYA Yoshihiko and KUROSAWA Takahiro.
@@ -41,6 +41,7 @@ struct autri_dma {
 };
 
 struct autri_codec_softc {
+	struct device		sc_dev;		/* base device */
 	struct autri_softc	*sc;
 	int			id;
 	int			status_data;
@@ -67,7 +68,7 @@ struct autri_chstatus {
 };
 
 struct autri_softc {
-	device_t		sc_dev;
+	struct device		sc_dev;		/* base device */
 	kmutex_t		sc_lock;
 	kmutex_t		sc_intr_lock;
 	pci_chipset_tag_t	sc_pc;

@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_getport.c,v 1.19 2013/03/11 20:19:29 tron Exp $	*/
+/*	$NetBSD: pmap_getport.c,v 1.18.30.1 2013/03/14 22:03:08 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -37,7 +37,7 @@
 static char *sccsid = "@(#)pmap_getport.c 1.9 87/08/11 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)pmap_getport.c	2.2 88/08/01 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: pmap_getport.c,v 1.19 2013/03/11 20:19:29 tron Exp $");
+__RCSID("$NetBSD: pmap_getport.c,v 1.18.30.1 2013/03/14 22:03:08 riz Exp $");
 #endif
 #endif
 

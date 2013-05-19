@@ -1,6 +1,6 @@
 #!/usr/bin/awk -
 #
-#	$NetBSD: MAKEDEV.awk,v 1.23 2013/04/14 13:47:37 skrll Exp $
+#	$NetBSD: MAKEDEV.awk,v 1.21 2010/03/30 07:30:03 mrg Exp $
 #
 # Copyright (c) 2003 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -55,7 +55,7 @@ BEGIN {
 
 	# file with major definitions
 	majors[0] = "conf/majors"
-	if (index(maarch, "arm") != 0 && system("test -f '" top "arch/" machine "/conf/majors." machine "'") != 0)
+	if ((maarch == "arm" || maarch == "armeb") && system("test -f '" top "arch/" machine "/conf/majors." machine "'") != 0)
 		majors[1] = "arch/arm/conf/majors.arm32";
 	else if (machine == "sbmips")
 		majors[1] = "arch/evbmips/conf/majors.evbmips";
@@ -211,7 +211,7 @@ BEGIN {
 	print "# Generated from:"
 
 	# MAKEDEV.awk (this script) RCS Id
-	ARCSID = "$NetBSD: MAKEDEV.awk,v 1.23 2013/04/14 13:47:37 skrll Exp $"
+	ARCSID = "$NetBSD: MAKEDEV.awk,v 1.21 2010/03/30 07:30:03 mrg Exp $"
 	gsub(/\$/, "", ARCSID)
 	print "#	" ARCSID
 	

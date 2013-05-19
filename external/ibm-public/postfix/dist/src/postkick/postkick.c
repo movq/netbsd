@@ -1,4 +1,4 @@
-/*	$NetBSD: postkick.c,v 1.1.1.2 2013/01/02 18:59:03 tron Exp $	*/
+/*	$NetBSD: postkick.c,v 1.1.1.1 2009/06/23 10:08:51 tron Exp $	*/
 
 /*++
 /* NAME
@@ -54,7 +54,7 @@
 /*	configuration files.
 /* .IP "\fBapplication_event_drain_time (100s)\fR"
 /*	How long the \fBpostkick\fR(1) command waits for a request to enter the
-/*	Postfix daemon process input buffer before giving up.
+/*	server's input buffer before giving up.
 /* .IP "\fBqueue_directory (see 'postconf -d' output)\fR"
 /*	The location of the Postfix top-level queue directory.
 /* FILES
@@ -93,7 +93,6 @@
 #include <msg_vstream.h>
 #include <safe.h>
 #include <events.h>
-#include <warn_stat.h>
 
 /* Global library. */
 

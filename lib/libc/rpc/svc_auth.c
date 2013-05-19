@@ -1,4 +1,4 @@
-/*	$NetBSD: svc_auth.c,v 1.17 2013/03/11 20:19:29 tron Exp $	*/
+/*	$NetBSD: svc_auth.c,v 1.15.58.1 2013/03/14 22:03:09 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -41,7 +41,7 @@
 #if 0
 static char sccsid[] = "@(#)svc_auth.c 1.26 89/02/07 Copyr 1984 Sun Micro";
 #else
-__RCSID("$NetBSD: svc_auth.c,v 1.17 2013/03/11 20:19:29 tron Exp $");
+__RCSID("$NetBSD: svc_auth.c,v 1.15.58.1 2013/03/14 22:03:09 riz Exp $");
 #endif
 #endif
 
@@ -79,7 +79,7 @@ __weak_alias(svc_auth_reg,_svc_auth_reg)
 /* declarations to allow servers to specify new authentication flavors */
 struct authsvc {
 	int	flavor;
-	enum	auth_stat (*handler)(struct svc_req *, struct rpc_msg *);
+	enum	auth_stat (*handler) __P((struct svc_req *, struct rpc_msg *));
 	struct	authsvc	  *next;
 };
 static struct authsvc *Auths = NULL;
@@ -103,7 +103,9 @@ static struct authsvc *Auths = NULL;
  * invalid.
  */
 enum auth_stat
-_authenticate(struct svc_req *rqst, struct rpc_msg *msg)
+_authenticate(rqst, msg)
+	struct svc_req *rqst;
+	struct rpc_msg *msg;
 {
 	int cred_flavor;
 	struct authsvc *asp;
@@ -158,7 +160,9 @@ _authenticate(struct svc_req *rqst, struct rpc_msg *msg)
 
 /*ARGSUSED*/
 enum auth_stat
-_svcauth_null(struct svc_req *rqst, struct rpc_msg *msg)
+_svcauth_null(rqst, msg)
+	struct svc_req *rqst;
+	struct rpc_msg *msg;
 {
 	return (AUTH_OK);
 }
@@ -178,9 +182,9 @@ _svcauth_null(struct svc_req *rqst, struct rpc_msg *msg)
  */
 
 int
-svc_auth_reg(
-	int cred_flavor,
-	enum auth_stat (*handler)(struct svc_req *, struct rpc_msg *))
+svc_auth_reg(cred_flavor, handler)
+	int cred_flavor;
+	enum auth_stat (*handler) __P((struct svc_req *, struct rpc_msg *));
 {
 	struct authsvc *asp;
 #ifdef _REENTRANT

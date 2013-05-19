@@ -1,4 +1,4 @@
-#	$NetBSD: SHEEVAPLUG,v 1.32 2013/04/27 22:21:14 christos Exp $
+#	$NetBSD: SHEEVAPLUG,v 1.12.2.1 2013/01/05 23:36:59 riz Exp $
 #
 #  This configuration supports for generically Marvell SheevaPlug
 #
@@ -27,7 +27,6 @@ options 	KIRKWOOD
 
 # Standard system options
 
-options 	MSGBUFSIZE=32768
 options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 #options 	NTP		# NTP phase/frequency locked loop
 
@@ -45,8 +44,8 @@ file-system 	FDESC		# /dev/fd
 file-system 	KERNFS		# /kern
 #file-system 	NULLFS		# loopback file system
 #file-system 	OVERLAY		# overlay file system
+#file-system 	PORTAL		# portal filesystem (still experimental)
 file-system 	PROCFS		# /proc
-file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
 #file-system 	UMAPFS		# NULLFS + uid and gid remapping
 #file-system 	UNION		# union file system
 #file-system 	CODA		# Coda File System; also needs vcoda (below)
@@ -75,10 +74,13 @@ options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPv6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking protocols
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 #options 	PPP_DEFLATE	# Deflate compression support for PPP
@@ -89,11 +91,6 @@ options 	INET6		# IPv6
 #options 	IPFILTER_COMPAT	# Compat for IP-Filter
 #options 	IPFILTER_DEFAULT_BLOCK	# block all packets by default
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
-
-#options 	INET_CSUM_COUNTERS
-#options 	TCP_CSUM_COUNTERS
-#options 	UDP_CSUM_COUNTERS
-#options 	MVGBE_EVENT_COUNTERS
 
 #options 	NFS_BOOT_BOOTP
 options 	NFS_BOOT_DHCP
@@ -113,7 +110,6 @@ options 	NFS_BOOT_DHCP
 #options 	COMPAT_30	# NetBSD 3.0 compatibility.
 #options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 #options 	COMPAT_43	# 4.3BSD compatibility.
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 
@@ -125,7 +121,13 @@ options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
+#options 	SEMMNI=10	# number of semaphore identifiers
+#options 	SEMMNS=60	# number of semaphores in system
+#options 	SEMUME=10	# max number of undo entries per process
+#options 	SEMMNU=30	# number of undo structures in system
 options 	SYSVSHM		# System V-like memory sharing
+#options 	SHMMAXPGS=1024	# 1024 pages is the default
+options 	P1003_1B_SEMAPHORE	# p1003.1b semaphore support
 
 # Device options
 
@@ -135,12 +137,9 @@ options 	SYSVSHM		# System V-like memory sharing
 #options 	MEMORY_DISK_ROOT_SIZE=22528	# Size in blocks
 #options 	MEMORY_RBFLAGS=RB_AUTOBOOT
 
-options 	DKWEDGE_AUTODISCOVER
-options 	DKWEDGE_METHOD_GPT
-
 # Miscellaneous kernel options
 
-options 	KTRACE		# system call tracing, a la ktrace(1)
+#options 	KTRACE		# system call tracing, a la ktrace(1)
 options 	IRQSTATS	# manage IRQ statistics
 #options 	LKM		# loadable kernel modules
 #options 	KMEMSTATS	# kernel memory statistics
@@ -157,15 +156,13 @@ options 	USBVERBOSE	# verbose USB device autoconfig messages
 #options 	PERFCTRS	# performance counters
 options 	DIAGNOSTIC	# internally consistency checks
 options 	DEBUG
-#options 	LOCKDEBUG
 #options 	PMAP_DEBUG	# Enable pmap_debug_level code
 #options 	VERBOSE_INIT_ARM # verbose bootstraping messages
 options 	DDB		# in-kernel debugger
 #options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
 #options 	KGDB
 #options 	DEBUG_KGDB
-makeoptions	DEBUG="-g"	# compile full symbol table
-#makeoptions	COPTS="-O1"
+makeoptions	DEBUG="-g -O2"	# compile full symbol table
 options 	SYMTAB_SPACE=800000
 #options 	AUDIO_DEBUG=2
 
@@ -181,18 +178,18 @@ cpu0	at mainbus?
 mvsoc0	at mainbus?
 
 # On-chip PCI Express Interface
-mvpex*	at mvsoc? offset ? irq ?
+#mvpex*	at mvsoc? offset ? irq ?
 
 # PCI bus support
 options 	PCI_NETBSD_CONFIGURE
 #options 	PCI_CONFIG_DUMP		# verbosely dump PCI config space
 
-pci*	at mvpex?
+#pci*	at mvpex?
 
-pchb*	at pci? dev ? function ?	# PCI-Host bridges
+#pchb*	at pci? dev ? function ?	# PCI-Host bridges
 
 # On-chip Serial-ATA II Host Controller (SATAHC)
-mvsata* at mvsoc? offset ? irq ?
+#mvsata* at mvsoc? offset ? irq ?
 
 # On-chip Gigabit Ethernet Controller Interface
 mvgbec* at mvsoc? offset ?
@@ -206,7 +203,7 @@ ukphy*	at mii? phy ?			# generic unknown PHYs
 ehci*	at mvsoc? offset ? irq ?
 
 # On-chip Cryptographic Engines and Security Accelerator
-mvcesa* at mvsoc? offset ? irq ?
+#mvcesa* at mvsoc? offset ? irq ?
 
 # On-chip Two-Wire Serial Interface (TWSI)
 gttwsi* at mvsoc? offset ? irq ?
@@ -216,11 +213,11 @@ iic*	at gttwsi?
 com*	at mvsoc? offset ? irq ?
 
 # On-chip IDMA Controller
-gtidmac* at mvsoc? offset ? irq ?
+#gtidmac* at mvsoc? offset ? irq ?
 
 # On-chip General Purpose I/O Port Interface
-mvsocgpp* at mvsoc? offset ? irq ?
-gpio*	at mvsocgpp?
+#mvsocgpp* at mvsoc? offset ? irq ?
+#gpio*	at mvsocgpp?
 
 # On-chip Timers
 mvsoctmr* at mvsoc? offset ? irq ?
@@ -232,19 +229,19 @@ sdmmc*	at mvsdio?
 ld*	at sdmmc?
 
 # ATA (IDE) bus support
-atabus* at ata?
+#atabus* at ata?
 #options 	ATADEBUG
 
 # IDE drives
-wd*	at atabus? drive ? flags 0x0000
+#wd*	at atabus? drive ? flags 0x0000
 
 # ATAPI bus support
-atapibus* at atapi?
+#atapibus* at atapi?
 
 # ATAPI devices
 # flags have the same meaning as for IDE drives.
-cd*	at atapibus? drive ? flags 0x0000	# ATAPI CD-ROM drives
-sd*	at atapibus? drive ? flags 0x0000	# ATAPI disk drives
+#cd*	at atapibus? drive ? flags 0x0000	# ATAPI CD-ROM drives
+#sd*	at atapibus? drive ? flags 0x0000	# ATAPI disk drives
 
 # USB bus support
 usb*	at ehci?
@@ -327,7 +324,7 @@ url*	at uhub? port ?		# Realtek RTL8150L based adapters
 
 # USB 802.11 adapters
 atu*	at uhub? port ?		# Atmel AT76C50XX based adapters
-ural*	at uhub? port ?		# Ralink Technology RT2500USB 802.11a/b/g
+ral*	at uhub? port ?		# Ralink Technology RT25x0 802.11a/b/g
 rum*	at uhub? port ?		# Ralink Technology RT2501/RT2601 802.11a/b/g
 zyd*	at uhub? port ?		# Zydas ZD1211
 
@@ -445,9 +442,9 @@ pseudo-device	swcrypto		# software crypto implementation
 
 # disk/mass storage pseudo-devices
 #pseudo-device	bio			# RAID control device driver
-#pseudo-device	ccd			# concatenated/striped disk devices
-#pseudo-device	cgd			# cryptographic disk devices
-#pseudo-device	raid			# RAIDframe disk driver
+#pseudo-device	ccd		4	# concatenated/striped disk devices
+#pseudo-device	cgd		4	# cryptographic disk devices
+#pseudo-device	raid		8	# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # Options to enable various other RAIDframe RAID types.
 #options 	RF_INCLUDE_EVENODD=1
@@ -457,8 +454,7 @@ pseudo-device	swcrypto		# software crypto implementation
 #options 	RF_INCLUDE_INTERDECLUSTER=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
-pseudo-device	fss			# file system snapshot device
-pseudo-device	putter			# for puffs and pud
+#pseudo-device	fss			# file system snapshot device
 
 #pseudo-device	md			# memory disk device (ramdisk)
 pseudo-device	vnd			# disk-like interface to files
@@ -489,14 +485,13 @@ pseudo-device	stf			# 6to4 IPv6 over IPv4 encapsulation
 
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
-#pseudo-device	sequencer		# MIDI sequencer
+#pseudo-device	sequencer	1	# MIDI sequencer
 #options 	RND_COM
 pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
-pseudo-device	drvctl			# device control
 
 # a pseudo device needed for Coda	# also needs CODA (above)
-#pseudo-device	vcoda			# coda minicache <-> venus comm.
+#pseudo-device	vcoda		4	# coda minicache <-> venus comm.
 
 # a pseudo device needed for SMBFS
 #pseudo-device	nsmb			# experimental - SMB requester
@@ -506,7 +501,7 @@ pseudo-device	drvctl			# device control
 #pseudo-device	wsfont
 
 # data mover pseudo-devices
-pseudo-device	swdmover		# software dmover(9) back-end
+pseudo-device	swdmover		# softare dmover(9) back-end
 pseudo-device	dmoverio		# /dev/dmover dmover(9) interface
 
 #options 	FILEASSOC		# fileassoc(9) - required for Veriexec

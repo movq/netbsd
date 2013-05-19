@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.101 2013/02/04 22:19:43 macallan Exp $ */
+/*	$NetBSD: cpu.h,v 1.98.8.1 2012/11/23 16:12:35 riz Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -50,8 +50,7 @@
 #define	CPU_BOOTED_DEVICE	2	/* string: device booted from */
 #define	CPU_BOOT_ARGS		3	/* string: args booted with */
 #define	CPU_ARCH		4	/* integer: cpu architecture version */
-#define CPU_VIS			5	/* 0 - no VIS, 1 - VIS 1.0, etc. */
-#define	CPU_MAXID		6	/* number of valid machdep ids */
+#define	CPU_MAXID		5	/* number of valid machdep ids */
 
 #if defined(_KERNEL) || defined(_KMEMUSER)
 /*
@@ -377,6 +376,9 @@ void	switchtoctx_us(int);
 void	switchtoctx_usiii(int);
 void	next_tick(long);
 void	next_stick(long);
+void	setstick(long);
+long	getstick(void);
+
 /* trap.c */
 void	cpu_vmspace_exec(struct lwp *, vaddr_t, vaddr_t);
 int	rwindow_save(struct lwp *);

@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_runq.c,v 1.38 2013/03/12 23:16:31 yamt Exp $	*/
+/*	$NetBSD: kern_runq.c,v 1.33.4.1 2012/11/24 20:50:15 jdc Exp $	*/
 
 /*
  * Copyright (c) 2007, 2008 Mindaugas Rasiukevicius <rmind at NetBSD org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_runq.c,v 1.38 2013/03/12 23:16:31 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_runq.c,v 1.33.4.1 2012/11/24 20:50:15 jdc Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -471,9 +471,7 @@ sched_catchlwp(struct cpu_info *ci)
 		if (l == NULL) {
 			break;
 		}
-		KASSERTMSG(l->l_stat == LSRUN, "%s l %p (%s) l_stat %d",
-		    ci->ci_data.cpu_name,
-		    l, (l->l_name ? l->l_name : l->l_proc->p_comm), l->l_stat);
+		KASSERT(l->l_stat == LSRUN);
 
 		/* Look for threads, whose are allowed to migrate */
 		if ((l->l_pflag & LP_BOUND) || lwp_cache_hot(l) ||
@@ -864,7 +862,8 @@ SYSCTL_SETUP(sysctl_sched_setup, "sysctl sched setup")
 #ifdef DDB
 
 void
-sched_print_runqueue(void (*pr)(const char *, ...))
+sched_print_runqueue(void (*pr)(const char *, ...)
+    __attribute__((__format__(__printf__,1,2))))
 {
 	runqueue_t *ci_rq;
 	struct cpu_info *ci, *tci;

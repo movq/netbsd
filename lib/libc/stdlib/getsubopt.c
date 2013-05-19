@@ -1,4 +1,4 @@
-/*	$NetBSD: getsubopt.c,v 1.9 2012/06/25 22:32:45 abs Exp $	*/
+/*	$NetBSD: getsubopt.c,v 1.8 2004/05/09 19:34:11 kleink Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)getsubopt.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: getsubopt.c,v 1.9 2012/06/25 22:32:45 abs Exp $");
+__RCSID("$NetBSD: getsubopt.c,v 1.8 2004/05/09 19:34:11 kleink Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -58,7 +58,9 @@ __weak_alias(getsubopt,_getsubopt)
 char *suboptarg;
 
 int
-getsubopt(char **optionp, char * const *tokens, char **valuep)
+getsubopt(optionp, tokens, valuep)
+	char **optionp, **valuep;
+	char * const *tokens;
 {
 	int cnt;
 	char *p;

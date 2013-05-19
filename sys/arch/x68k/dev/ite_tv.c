@@ -1,4 +1,4 @@
-/*	$NetBSD: ite_tv.c,v 1.16 2013/04/28 14:44:46 isaki Exp $	*/
+/*	$NetBSD: ite_tv.c,v 1.15.82.1 2013/04/29 03:28:50 riz Exp $	*/
 
 /*
  * Copyright (c) 1997 Masaru Oki.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ite_tv.c,v 1.16 2013/04/28 14:44:46 isaki Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ite_tv.c,v 1.15.82.1 2013/04/29 03:28:50 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

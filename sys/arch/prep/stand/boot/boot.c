@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.19 2012/05/19 14:40:13 kiyohara Exp $	*/
+/*	$NetBSD: boot.c,v 1.18 2011/01/22 19:19:22 joerg Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -43,10 +43,8 @@
 #include <powerpc/oea/spr.h>
 
 #include "boot.h"
-#include "sdvar.h"
 
 char *names[] = {
-	"sd(0,0,0)netbsd", "sd(0,0,0)onetbsd",
 	"in()",
 };
 #define	NUMNAMES (sizeof (names) / sizeof (names[0]))
@@ -140,12 +138,6 @@ boot(void *resp, u_long loadaddr)
 
 	printf("\n");
 	printf(">> %s, Revision %s\n", bootprog_name, bootprog_rev);
-	printf("\n");
-
-	/*
-	 * Initialize siop@pci0 dev 16 func 0
-	 */
-	siop_init(0, 16, 0);
 
 	for (;;) {
 		name = names[n++];
@@ -231,11 +223,4 @@ next:
 		    (void *)bootinfo,
 		    (void *)marks[MARK_ENTRY]);
 	}
-}
-
-void
-_rtt(void)
-{
-
-	/* XXXX */
 }

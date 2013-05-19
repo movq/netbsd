@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_elf.c,v 1.45 2013/04/09 07:39:01 skrll Exp $	*/
+/*	$NetBSD: exec_elf.c,v 1.37.2.1 2012/04/12 17:05:36 riz Exp $	*/
 
 /*-
  * Copyright (c) 1994, 2000, 2005 The NetBSD Foundation, Inc.
@@ -57,7 +57,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: exec_elf.c,v 1.45 2013/04/09 07:39:01 skrll Exp $");
+__KERNEL_RCSID(1, "$NetBSD: exec_elf.c,v 1.37.2.1 2012/04/12 17:05:36 riz Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_pax.h"
@@ -665,6 +665,7 @@ exec_elf_makecmds(struct lwp *l, struct exec_package *epp)
 	int error, i, nload;
 	char *interp = NULL;
 	u_long phsize;
+	struct proc *p;
 	struct elf_args *ap = NULL;
 	bool is_dyn;
 
@@ -690,6 +691,7 @@ exec_elf_makecmds(struct lwp *l, struct exec_package *epp)
 	 * Allocate space to hold all the program headers, and read them
 	 * from the file
 	 */
+	p = l->l_proc;
 	phsize = eh->e_phnum * sizeof(Elf_Phdr);
 	ph = kmem_alloc(phsize, KM_SLEEP);
 
@@ -736,7 +738,7 @@ exec_elf_makecmds(struct lwp *l, struct exec_package *epp)
 	}
 
 #if defined(PAX_MPROTECT) || defined(PAX_SEGVGUARD) || defined(PAX_ASLR)
-	l->l_proc->p_pax = epp->ep_pax_flags;
+	p->p_pax = epp->ep_pax_flags;
 #endif /* PAX_MPROTECT || PAX_SEGVGUARD || PAX_ASLR */
 
 	if (is_dyn)
@@ -889,33 +891,15 @@ netbsd_elf_signature(struct lwp *l, struct exec_package *epp,
 			continue;
 
 		ndata = (char *)(np + 1);
-		unsigned int maxlen = (unsigned int)(shp->sh_size -
-		    ((char *)ndata - (char *)np));
-		if (maxlen < np->n_namesz)
-			goto bad;
 		switch (np->n_type) {
 		case ELF_NOTE_TYPE_NETBSD_TAG:
-			/*
-			 * It is us
-			 */
-			if (np->n_namesz == ELF_NOTE_NETBSD_NAMESZ &&
-			    np->n_descsz == ELF_NOTE_NETBSD_DESCSZ &&
+			if (np->n_namesz != ELF_NOTE_NETBSD_NAMESZ ||
+			    np->n_descsz != ELF_NOTE_NETBSD_DESCSZ ||
 			    memcmp(ndata, ELF_NOTE_NETBSD_NAME,
-			    ELF_NOTE_NETBSD_NAMESZ) == 0) {
-				isnetbsd = 1;
-				break;
-			}
-			/*
-			 * Ignore SuSE tags
-			 */
-			if (np->n_namesz == ELF_NOTE_SUSE_NAMESZ &&
-			    memcmp(ndata, ELF_NOTE_SUSE_NAME,
-			    ELF_NOTE_SUSE_NAMESZ) == 0)
-				break;
-			/*
-			 * Dunno, warn for diagnostic
-			 */
-			goto bad;
+			    ELF_NOTE_NETBSD_NAMESZ))
+				goto bad;
+			isnetbsd = 1;
+			break;
 
 		case ELF_NOTE_TYPE_PAX_TAG:
 			if (np->n_namesz != ELF_NOTE_PAX_NAMESZ ||
@@ -923,21 +907,26 @@ netbsd_elf_signature(struct lwp *l, struct exec_package *epp,
 			    memcmp(ndata, ELF_NOTE_PAX_NAME,
 			    ELF_NOTE_PAX_NAMESZ)) {
 bad:
+			    /*
+			     * Ignore GNU tags
+			     */
+			    if (np->n_namesz == ELF_NOTE_GNU_NAMESZ &&
+				memcmp(ndata, ELF_NOTE_GNU_NAME,
+				ELF_NOTE_GNU_NAMESZ) == 0)
+					break;
 #ifdef DIAGNOSTIC
-			{
-				/*
-				 * Ignore GNU tags
-				 */
-				if (np->n_namesz == ELF_NOTE_GNU_NAMESZ &&
-				    memcmp(ndata, ELF_NOTE_GNU_NAME,
-				    ELF_NOTE_GNU_NAMESZ) == 0)
-				    break;
-				int ns = MIN(np->n_namesz, maxlen);
-				printf("%s: Unknown elf note type %d: "
-				    "[namesz=%d, descsz=%d name=%*.*s]\n",
-				    epp->ep_kname, np->n_type, np->n_namesz,
-				    np->n_descsz, ns, ns, ndata);
-			}
+				printf("%s: bad tag %d: "
+				    "[%d %d, %d %d, %*.*s %*.*s]\n",
+				    epp->ep_kname,
+				    np->n_type,
+				    np->n_namesz, ELF_NOTE_PAX_NAMESZ,
+				    np->n_descsz, ELF_NOTE_PAX_DESCSZ,
+				    ELF_NOTE_PAX_NAMESZ,
+				    ELF_NOTE_PAX_NAMESZ,
+				    ndata,
+				    ELF_NOTE_PAX_NAMESZ,
+				    ELF_NOTE_PAX_NAMESZ,
+				    ELF_NOTE_PAX_NAME);
 #endif
 				continue;
 			}
@@ -946,7 +935,7 @@ bad:
 			    sizeof(epp->ep_pax_flags));
 			break;
 
-		case ELF_NOTE_TYPE_SUSE_VERSION_TAG:
+		case ELF_NOTE_TYPE_SUSE_TAG:
 			break;
 
 		default:

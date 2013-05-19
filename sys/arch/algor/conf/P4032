@@ -1,4 +1,4 @@
-#	$NetBSD: P4032,v 1.68 2013/04/27 22:21:12 christos Exp $
+#	$NetBSD: P4032,v 1.63 2011/12/18 05:49:22 dholland Exp $
 #
 # Algorithmics P-4032 kernel.
 #
@@ -7,7 +7,7 @@ include	"arch/algor/conf/std.algor"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"P4032-$Revision: 1.68 $"
+#ident 		"P4032-$Revision: 1.63 $"
 
 maxusers 32
 
@@ -54,6 +54,7 @@ options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 options 	INET		# Internet protocol suite
 options 	INET6		# IPV6
 options 	IPSEC		# IP security
+options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 
@@ -105,7 +106,6 @@ options 	NFS_BOOT_DHCP		# superset of BOOTP
 
 # WS console uses SUN or VT100 terminal emulation
 #options 	WSEMUL_VT100
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 
 config		netbsd	root on ? type ?
 #config		netbsd	root on sd0 type ffs
@@ -312,13 +312,13 @@ ukphy*	at mii? phy ?			# generic unknown PHYs
 #wsmouse*	at	pms?
 
 pseudo-device	bpfilter
-pseudo-device	ccd		
-#pseudo-device	cgd			# cryptographic disk devices
-#pseudo-device	raid			# RAIDframe disk driver
+pseudo-device	ccd		4
+#pseudo-device	cgd		4	# cryptographic disk devices
+#pseudo-device	raid		4		# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 #pseudo-device	fss			# file system snapshot device
-pseudo-device	ipfilter	
-pseudo-device	loop		
+pseudo-device	ipfilter	1
+pseudo-device	loop		1
 pseudo-device	md		
 pseudo-device	ppp		
 pseudo-device	pty			# pseudo-terminals
@@ -329,6 +329,6 @@ pseudo-device	gif			# IPv[46] over IPv[46] tunnel (RFC1933)
 #pseudo-device	faith			# IPv[46] tcp relay translation i/f
 pseudo-device	stf			# 6to4 IPv6 over IPv4 encapsulation
 pseudo-device	vlan			# IEEE 802.1q encapsulation
-pseudo-device	sequencer		# MIDI sequencer
+pseudo-device	sequencer	1	# MIDI sequencer
 #options 	RND_COM			# use "com" randomness too
 pseudo-device	clockctl		# user control of clock subsystem

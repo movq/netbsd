@@ -1,4 +1,4 @@
-/* $NetBSD: _wcstod.h,v 1.4 2013/05/17 12:55:57 joerg Exp $ */
+/* $NetBSD: _wcstod.h,v 1.2 2010/12/16 17:42:27 wiz Exp $ */
 
 /*-
  * Copyright (c) 2002 Tim J. Robbins
@@ -6,7 +6,7 @@
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
- * aINre met:
+ * are met:
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright
@@ -41,11 +41,6 @@
 #ifndef __WCSTOD_H_
 #define __WCSTOD_H_
 
-#include <locale.h>
-#include "setlocale_local.h"
-#define INT_NAME_(pre, middle, post) pre ## middle ## post
-#define INT_NAME(pre, middle, post) INT_NAME_(pre, middle, post)
-
 /*
  * Convert a string to a double-precision number.
  *
@@ -56,9 +51,8 @@
  * This assumes that the multibyte encoding is compatible with ASCII
  * for at least the digits, radix character and letters.
  */
-static _RETURN_TYPE
-INT_NAME(_int_, _FUNCNAME, _l)(const wchar_t * __restrict nptr,
-			   wchar_t ** __restrict endptr, locale_t loc)
+_RETURN_TYPE
+_FUNCNAME(const wchar_t * __restrict nptr, wchar_t ** __restrict endptr)
 {
 	const wchar_t *src, *start;
 	_RETURN_TYPE val;
@@ -69,7 +63,7 @@ INT_NAME(_int_, _FUNCNAME, _l)(const wchar_t * __restrict nptr,
 	/* endptr may be null */
 
 	src = nptr;
-	while (iswspace_l((wint_t)*src, loc) != 0)
+	while (iswspace((wint_t)*src) != 0)
 		++src;
 	if (*src == L'\0')
 		goto no_convert;
@@ -85,7 +79,7 @@ INT_NAME(_int_, _FUNCNAME, _l)(const wchar_t * __restrict nptr,
 	 * slows down the most common cases.
 	 */
 	start = src;
-	len = wcstombs_l(NULL, src, 0, loc);
+	len = wcstombs(NULL, src, 0);
 	if (len == (size_t)-1)
 		/* errno = EILSEQ */
 		goto no_convert;
@@ -98,13 +92,13 @@ INT_NAME(_int_, _FUNCNAME, _l)(const wchar_t * __restrict nptr,
 		/* errno = ENOMEM */
 		goto no_convert;
 
-	len = wcstombs_l(buf, src, bufsiz + 1, loc);
+	len = wcstombs(buf, src, bufsiz + 1);
 
 	_DIAGASSERT(len == bufsiz);
 	_DIAGASSERT(buf[len] == '\0');
 
 	/* Let strto{f,d,ld}() do most of the work for us. */
-	val = _STRTOD_FUNC(buf, &end, loc);
+	val = _STRTOD_FUNC(buf, &end);
 	if (buf == end) {
 		free(buf);
 		goto no_convert;
@@ -128,19 +122,5 @@ no_convert:
 	if (endptr != NULL)
 		*endptr = __UNCONST(nptr);
 	return 0;
-}
-
-_RETURN_TYPE
-INT_NAME(, _FUNCNAME, )(const wchar_t * __restrict nptr,
-    wchar_t ** __restrict endptr)
-{
-	return INT_NAME(_int_, _FUNCNAME, _l)(nptr, endptr, _current_locale());
-}
-
-_RETURN_TYPE
-INT_NAME(, _FUNCNAME, _l)(const wchar_t * __restrict nptr,
-    wchar_t ** __restrict endptr, locale_t loc)
-{
-	return INT_NAME(_int_, _FUNCNAME, _l)(nptr, endptr, loc);
 }
 #endif /*__WCSTOD_H_*/

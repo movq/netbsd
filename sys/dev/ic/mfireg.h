@@ -1,4 +1,4 @@
-/* $NetBSD: mfireg.h,v 1.8 2012/09/19 21:24:29 bouyer Exp $ */
+/* $NetBSD: mfireg.h,v 1.4.16.3 2012/10/24 03:23:44 riz Exp $ */
 /* $OpenBSD: mfireg.h,v 1.24 2006/06/19 19:05:45 marco Exp $ */
 /*
  * Copyright (c) 2006 Marco Peereboom <marco@peereboom.us>

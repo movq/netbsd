@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_descrip.c,v 1.28 2013/04/08 21:12:33 skrll Exp $	*/
+/*	$NetBSD: sys_descrip.c,v 1.26 2012/02/11 23:16:17 martin Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_descrip.c,v 1.28 2013/04/08 21:12:33 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_descrip.c,v 1.26 2012/02/11 23:16:17 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -479,22 +479,11 @@ sys_close(struct lwp *l, const struct sys_close_args *uap, register_t *retval)
 	/* {
 		syscallarg(int)	fd;
 	} */
-	int error;
 
 	if (fd_getfile(SCARG(uap, fd)) == NULL) {
 		return EBADF;
 	}
-
-	error = fd_close(SCARG(uap, fd));
-	if (error == ERESTART) {
-#ifdef DIAGNOSTIC
-		printf("pid %d: close returned ERESTART\n",
-		    (int)l->l_proc->p_pid);
-#endif
-		error = EINTR;
-	}
-
-	return error;
+	return fd_close(SCARG(uap, fd));
 }
 
 /*
@@ -601,6 +590,7 @@ sys_flock(struct lwp *l, const struct sys_flock_args *uap, register_t *retval)
 	file_t *fp;
 	vnode_t	*vp;
 	struct flock lf;
+	proc_t *p;
 
 	fd = SCARG(uap, fd);
 	how = SCARG(uap, how);
@@ -638,6 +628,7 @@ sys_flock(struct lwp *l, const struct sys_flock_args *uap, register_t *retval)
 	}
 
 	atomic_or_uint(&fp->f_flag, FHASLOCK);
+	p = curproc;
 	if (how & LOCK_NB) {
 		error = VOP_ADVLOCK(vp, fp, F_SETLK, &lf, F_FLOCK);
 	} else {

@@ -1,4 +1,4 @@
-/*	$NetBSD: cdefs.h,v 1.106 2013/04/30 14:45:15 joerg Exp $	*/
+/*	$NetBSD: cdefs.h,v 1.89.6.2 2012/06/24 15:44:07 jdc Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -232,12 +232,6 @@
 #define	__noinline	/* nothing */
 #endif
 
-#if __GNUC_PREREQ__(3, 0)
-#define	__always_inline	__attribute__((__always_inline__))
-#else
-#define	__always_inline	/* nothing */
-#endif
-
 #if __GNUC_PREREQ__(4, 1)
 #define	__returns_twice	__attribute__((__returns_twice__))
 #else
@@ -281,7 +275,6 @@
 #if __GNUC_PREREQ__(4, 0)
 #  define __dso_public	__attribute__((__visibility__("default")))
 #  define __dso_hidden	__attribute__((__visibility__("hidden")))
-#  define __dso_protected	__attribute__((__visibility__("protected")))
 #  define __BEGIN_PUBLIC_DECLS	\
 	_Pragma("GCC visibility push(default)") __BEGIN_EXTERN_C
 #  define __END_PUBLIC_DECLS	__END_EXTERN_C _Pragma("GCC visibility pop")
@@ -290,7 +283,6 @@
 #  define __END_HIDDEN_DECLS	__END_EXTERN_C _Pragma("GCC visibility pop")
 #else
 #  define __dso_public
-#  define __dso_protected
 #  define __dso_hidden
 #  define __BEGIN_PUBLIC_DECLS	__BEGIN_EXTERN_C
 #  define __END_PUBLIC_DECLS	__END_EXTERN_C
@@ -376,10 +368,12 @@
 #if !defined(_STANDALONE) && !defined(_KERNEL)
 #if defined(__GNUC__) || defined(__PCC__)
 #define	__RENAME(x)	___RENAME(x)
-#elif defined(__lint__)
+#else
+#ifdef __lint__
 #define	__RENAME(x)	__symbolrename(x)
 #else
 #error "No function renaming possible"
+#endif /* __lint__ */
 #endif /* __GNUC__ */
 #else /* _STANDALONE || _KERNEL */
 #define	__RENAME(x)	no renaming in kernel or standalone environment
@@ -470,7 +464,7 @@
  *
  *	__link_set_decl(set, ptype)
  *		Provide an extern declaration of the set `set', which
- *		contains an array of pointers to type `ptype'.  This
+ *		contains an array of the pointer type `ptype'.  This
  *		macro must be used by any code which wishes to reference
  *		the elements of a link set.
  *
@@ -497,16 +491,7 @@
 #define	__link_set_foreach(pvar, set)					\
 	for (pvar = __link_set_start(set); pvar < __link_set_end(set); pvar++)
 
-#define	__link_set_entry(set, idx)	(__link_set_start(set)[idx])
-
-/*
- * Return the natural alignment in bytes for the given type
- */
-#if __GNUC_PREREQ__(4, 1)
-#define	__alignof(__t)  __alignof__(__t)
-#else
-#define __alignof(__t) (sizeof(struct { char __x; __t __y; }) - sizeof(__t))
-#endif
+#define	__link_set_entry(set, idx)	(__link_set_begin(set)[idx])
 
 /*
  * Return the number of elements in a statically-allocated array,
@@ -514,7 +499,6 @@
  */
 #define	__arraycount(__x)	(sizeof(__x) / sizeof(__x[0]))
 
-#ifndef __ASSEMBLER__
 /* __BIT(n): nth bit, where __BIT(0) == 0x1. */
 #define	__BIT(__n)	\
     (((uintmax_t)(__n) >= NBBY * sizeof(uintmax_t)) ? 0 : ((uintmax_t)1 << (uintmax_t)(__n)))
@@ -522,7 +506,6 @@
 /* __BITS(m, n): bits m through n, m < n. */
 #define	__BITS(__m, __n)	\
 	((__BIT(MAX((__m), (__n)) + 1) - 1) ^ (__BIT(MIN((__m), (__n))) - 1))
-#endif /* !__ASSEMBLER__ */
 
 /* find least significant bit that is set */
 #define	__LOWEST_SET_BIT(__mask) ((((__mask) - 1) & (__mask)) ^ (__mask))
@@ -546,38 +529,5 @@
 #else
 #define __CAST(__dt, __st)	((__dt)(__st))
 #endif
-
-#define __type_mask(t) (/*LINTED*/sizeof(t) < sizeof(intmax_t) ? \
-    (~((1ULL << (sizeof(t) * NBBY)) - 1)) : 0ULL)
-
-#ifndef __ASSEMBLER__
-static __inline long long __zeroll(void) { return 0; }
-static __inline int __negative_p(double x) { return x < 0; }
-#else
-#define __zeroll() (0LL)
-#define __negative_p(x) ((x) < 0)
-#endif
-
-#define __type_min_s(t) ((t)((1ULL << (sizeof(t) * NBBY - 1))))
-#define __type_max_s(t) ((t)~((1ULL << (sizeof(t) * NBBY - 1))))
-#define __type_min_u(t) ((t)0ULL)
-#define __type_max_u(t) ((t)~0ULL)
-#define __type_is_signed(t) (/*LINTED*/__type_min_s(t) + (t)1 < (t)1)
-#define __type_min(t) (__type_is_signed(t) ? __type_min_s(t) : __type_min_u(t))
-#define __type_max(t) (__type_is_signed(t) ? __type_max_s(t) : __type_max_u(t))
-
-
-#define __type_fit_u(t, a) (/*LINTED*/sizeof(t) < sizeof(intmax_t) ? \
-    (((a) & __type_mask(t)) == 0) : !__negative_p(a))
-
-#define __type_fit_s(t, a) (/*LINTED*/__negative_p(a) ? \
-    ((intmax_t)((a) + __zeroll()) >= (intmax_t)__type_min_s(t)) : \
-    ((intmax_t)((a) + __zeroll()) <= (intmax_t)__type_max_s(t)))
-
-/*
- * return true if value 'a' fits in type 't'
- */
-#define __type_fit(t, a) (__type_is_signed(t) ? \
-    __type_fit_s(t, a) : __type_fit_u(t, a))
 
 #endif /* !_SYS_CDEFS_H_ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.102 2013/01/11 12:03:04 tsutsui Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.99.2.1 2012/08/08 15:51:05 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 2002 The NetBSD Foundation, Inc.
@@ -88,7 +88,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.102 2013/01/11 12:03:04 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.99.2.1 2012/08/08 15:51:05 martin Exp $");
 
 #include "dvbox.h"
 #include "gbox.h"
@@ -209,7 +209,7 @@ int extio_ex_malloc_safe;
 struct dev_data {
 	LIST_ENTRY(dev_data)	dd_list;  /* dev_data_list */
 	LIST_ENTRY(dev_data)	dd_clist; /* ctlr list */
-	device_t		dd_dev;  /* device described by this entry */
+	struct device		*dd_dev;  /* device described by this entry */
 	int			dd_scode; /* select code of device */
 	int			dd_slave; /* ...or slave */
 	int			dd_punit; /* and punit... */
@@ -223,7 +223,7 @@ static void	findbootdev(void);
 static void	findbootdev_slave(ddlist_t *, int, int, int);
 static void	setbootdev(void);
 
-static struct dev_data *dev_data_lookup(device_t);
+static struct dev_data *dev_data_lookup(struct device *);
 static void	dev_data_insert(struct dev_data *, ddlist_t *);
 
 static int	mainbusmatch(device_t, cfdata_t, void *);
@@ -300,7 +300,7 @@ void
 cpu_rootconf(void)
 {
 	struct dev_data *dd;
-	device_t dv;
+	struct device *dv;
 	struct vfsops *vops;
 
 	/*
@@ -320,7 +320,7 @@ cpu_rootconf(void)
 			    B_PARTITION(bootdev));
 			bootdev = 0;		/* invalidate bootdev */
 		} else {
-			printf("boot device: %s\n", device_xname(booted_device));
+			printf("boot device: %s\n", booted_device->dv_xname);
 		}
 	}
 
@@ -376,7 +376,7 @@ cpu_rootconf(void)
  * used to attach it.  This is used to find the boot device.
  */
 void
-device_register(device_t dev, void *aux)
+device_register(struct device *dev, void *aux)
 {
 	struct dev_data *dd;
 	static int seen_netdevice = 0;
@@ -517,7 +517,7 @@ findbootdev(void)
 		    (type == 2 && !device_is_a(booted_device, "rd"))) {
 			printf("WARNING: boot device/type mismatch!\n");
 			printf("device = %s, type = %d\n",
-			    device_xname(booted_device), type);
+			    booted_device->dv_xname, type);
 			booted_device = NULL;
 		}
 		goto out;
@@ -538,7 +538,7 @@ findbootdev(void)
 		if ((type == 4 && !device_is_a(booted_device, "sd"))) {
 			printf("WARNING: boot device/type mismatch!\n");
 			printf("device = %s, type = %d\n",
-			    device_xname(booted_device), type);
+			    booted_device->dv_xname, type);
 			booted_device = NULL;
 		}
 		goto out;
@@ -683,7 +683,7 @@ setbootdev(void)
  * Return the dev_data corresponding to the given device.
  */
 static struct dev_data *
-dev_data_lookup(device_t dev)
+dev_data_lookup(struct device *dev)
 {
 	struct dev_data *dd;
 
@@ -705,7 +705,7 @@ dev_data_insert(struct dev_data *dd, ddlist_t *ddlist)
 
 #ifdef DIAGNOSTIC
 	if (dd->dd_scode < 0 || dd->dd_scode > 255) {
-		printf("bogus select code for %s\n", device_xname(dd->dd_dev));
+		printf("bogus select code for %s\n", dd->dd_dev->dv_xname);
 		panic("dev_data_insert");
 	}
 #endif
@@ -827,10 +827,7 @@ hp300_cninit(void)
 		goto find_kbd;
 #endif
 
-#if (NDVBOX + NGBOX + NRBOX + NTOPCAT + NDVBOX + NGBOX + NHYPER + NRBOX + \
-     NTOPCAT + NTVRX + NGENDIOFB) > 0
 find_kbd:
-#endif
 
 #if NDNKBD > 0
 	dnkbdcnattach(bst, FRODO_BASE + FRODO_APCI_OFFSET(0))

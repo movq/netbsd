@@ -1,4 +1,4 @@
-	$NetBSD: syscalls.master,v 1.42 2013/04/08 20:54:47 pooka Exp $
+	$NetBSD: syscalls.master,v 1.40 2011/11/18 04:03:50 christos Exp $
 
 ;	@(#)syscalls.master	8.1 (Berkeley) 7/19/93
 
@@ -440,7 +440,7 @@
 232	UNIMPL		epoll_wait
 233	UNIMPL		epoll_ctl
 234	STD		{ int|linux_sys||tgkill(int tgid, int tid, int sig); }
-235	STD		{ int|linux_sys||utimes(const char *path, struct linux_timeval *times); }
+235	UNIMPL		utimes
 236	UNIMPL		vserver
 237	UNIMPL		mbind
 238	UNIMPL		set_mempolicy
@@ -476,9 +476,7 @@
 268	UNIMPL		fchmodat
 269	UNIMPL		faccessat
 270	UNIMPL		pselect6
-271	STD		{ int|linux_sys||ppoll(struct pollfd *fds, int nfds, \
-			    struct linux_timespec *timeout, \
-			    linux_sigset_t *sigset); }
+271	UNIMPL		ppoll
 272	UNIMPL		unshare
 273	STD		{ int|linux_sys||set_robust_list( \
 			    struct linux_robust_list_head *head, size_t len); }

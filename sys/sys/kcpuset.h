@@ -1,4 +1,4 @@
-/*	$NetBSD: kcpuset.h,v 1.8 2012/09/16 22:09:33 rmind Exp $	*/
+/*	$NetBSD: kcpuset.h,v 1.4.2.2 2012/06/12 19:00:26 riz Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2011 The NetBSD Foundation, Inc.
@@ -50,6 +50,7 @@ void		kcpuset_unuse(kcpuset_t *, kcpuset_t **);
 
 int		kcpuset_copyin(const cpuset_t *, kcpuset_t *, size_t);
 int		kcpuset_copyout(kcpuset_t *, cpuset_t *, size_t);
+void		kcpuset_copybits(const kcpuset_t *, void *, size_t);
 
 void		kcpuset_zero(kcpuset_t *);
 void		kcpuset_fill(kcpuset_t *);
@@ -66,8 +67,6 @@ int		kcpuset_countset(kcpuset_t *);
 
 void		kcpuset_atomic_set(kcpuset_t *, cpuid_t);
 void		kcpuset_atomic_clear(kcpuset_t *, cpuid_t);
-
-void		kcpuset_export_u32(const kcpuset_t *, uint32_t *, size_t);
 
 #endif
 

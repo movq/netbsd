@@ -1,19 +1,24 @@
-#	$NetBSD: std.rpi,v 1.7 2013/03/16 15:48:21 skrll Exp $
+#	$NetBSD: std.rpi,v 1.1.2.3 2013/02/13 01:36:14 riz Exp $
 #
 # standard NetBSD/evbarm for Raspberry Pi options
 
 machine		evbarm arm
-include 	"arch/evbarm/conf/std.evbarm"
+include		"conf/std"	# MI standard options
 
 # Pull in Raspberry Pi config definitions.
-include		"arch/evbarm/conf/files.rpi"
+include "arch/evbarm/conf/files.rpi"
 
-options 	__HAVE_CPU_COUNTER
+options 	EXEC_ELF32
+options 	EXEC_SCRIPT
+
+# To support easy transit to ../arch/arm/arm32
+options 	ARM32
+#options 	ARM11_CACHE_WRITE_THROUGH
+
+#options 	__HAVE_CPU_COUNTER
 options 	__HAVE_FAST_SOFTINTS		# should be in types.h
-options 	__HAVE_CPU_UAREA_ALLOC_IDLELWP
-options 	TPIDRPRW_IS_CURCPU
 options 	KERNEL_BASE_EXT=0xc0000000
-options 	URTWN_DOTG_WORKAROUND
+options 	TPIDRPRW_IS_CURCPU
 
 options 	EVBARM_BOARDTYPE="rpi"
 makeoptions	BOARDMKFRAG="${THISARM}/conf/mk.rpi"

@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_subr.c,v 1.213 2012/06/10 17:05:18 mlelstv Exp $	*/
+/*	$NetBSD: kern_subr.c,v 1.212.8.1 2012/07/05 18:12:47 riz Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2002, 2007, 2008 The NetBSD Foundation, Inc.
@@ -79,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_subr.c,v 1.213 2012/06/10 17:05:18 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_subr.c,v 1.212.8.1 2012/07/05 18:12:47 riz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_md.h"

@@ -1,4 +1,4 @@
-/*	$NetBSD: clnt_raw.c,v 1.32 2013/03/11 20:19:29 tron Exp $	*/
+/*	$NetBSD: clnt_raw.c,v 1.29.24.1 2013/03/14 22:03:11 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -37,7 +37,7 @@
 static char *sccsid = "@(#)clnt_raw.c 1.22 87/08/11 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)clnt_raw.c	2.2 88/08/01 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: clnt_raw.c,v 1.32 2013/03/11 20:19:29 tron Exp $");
+__RCSID("$NetBSD: clnt_raw.c,v 1.29.24.1 2013/03/14 22:03:11 riz Exp $");
 #endif
 #endif
 
@@ -87,20 +87,22 @@ static struct clntraw_private {
 	u_int	mcnt;
 } *clntraw_private;
 
-static enum clnt_stat clnt_raw_call(CLIENT *, rpcproc_t, xdrproc_t,
-    const char *, xdrproc_t, caddr_t, struct timeval);
-static void clnt_raw_geterr(CLIENT *, struct rpc_err *);
-static bool_t clnt_raw_freeres(CLIENT *, xdrproc_t, caddr_t);
-static void clnt_raw_abort(CLIENT *);
-static bool_t clnt_raw_control(CLIENT *, u_int, char *);
-static void clnt_raw_destroy(CLIENT *);
-static struct clnt_ops *clnt_raw_ops(void);
+static enum clnt_stat clnt_raw_call __P((CLIENT *, rpcproc_t, xdrproc_t,
+    const char *, xdrproc_t, caddr_t, struct timeval));
+static void clnt_raw_geterr __P((CLIENT *, struct rpc_err *));
+static bool_t clnt_raw_freeres __P((CLIENT *, xdrproc_t, caddr_t));
+static void clnt_raw_abort __P((CLIENT *));
+static bool_t clnt_raw_control __P((CLIENT *, u_int, char *));
+static void clnt_raw_destroy __P((CLIENT *));
+static struct clnt_ops *clnt_raw_ops __P((void));
 
 /*
  * Create a client handle for memory based rpc.
  */
 CLIENT *
-clnt_raw_create(rpcprog_t prog, rpcvers_t vers)
+clnt_raw_create(prog, vers)
+	rpcprog_t prog;
+	rpcvers_t vers;
 {
 	struct clntraw_private *clp = clntraw_private;
 	struct rpc_msg call_msg;
@@ -130,7 +132,7 @@ clnt_raw_create(rpcprog_t prog, rpcvers_t vers)
 	call_msg.rm_call.cb_vers = (u_int32_t)vers;
 	xdrmem_create(xdrs, clp->u.mashl_callmsg, MCALL_MSG_SIZE, XDR_ENCODE); 
 	if (! xdr_callhdr(xdrs, &call_msg))
-		warnx("%s: Fatal header serialization error", __func__);
+		warnx("clntraw_create - Fatal header serialization error.");
 	clp->mcnt = XDR_GETPOS(xdrs);
 	XDR_DESTROY(xdrs);
 
@@ -156,8 +158,14 @@ out:
 
 /* ARGSUSED */
 static enum clnt_stat 
-clnt_raw_call(CLIENT *h, rpcproc_t proc, xdrproc_t xargs, const char *argsp,
-	xdrproc_t xresults, caddr_t resultsp, struct timeval timeout)
+clnt_raw_call(h, proc, xargs, argsp, xresults, resultsp, timeout)
+	CLIENT *h;
+	rpcproc_t proc;
+	xdrproc_t xargs;
+	const char *argsp;
+	xdrproc_t xresults;
+	caddr_t resultsp;
+	struct timeval timeout;
 {
 	struct clntraw_private *clp = clntraw_private;
 	XDR *xdrs = &clp->xdr_stream;
@@ -248,14 +256,19 @@ call_again:
 
 /*ARGSUSED*/
 static void
-clnt_raw_geterr(CLIENT *cl, struct rpc_err *error)
+clnt_raw_geterr(cl, error)
+	CLIENT *cl;
+	struct rpc_err *error;
 {
 }
 
 
 /* ARGSUSED */
 static bool_t
-clnt_raw_freeres(CLIENT *cl, xdrproc_t xdr_res, caddr_t res_ptr)
+clnt_raw_freeres(cl, xdr_res, res_ptr)
+	CLIENT *cl;
+	xdrproc_t xdr_res;
+	caddr_t res_ptr;
 {
 	struct clntraw_private *clp = clntraw_private;
 	XDR *xdrs = &clp->xdr_stream;
@@ -274,25 +287,30 @@ clnt_raw_freeres(CLIENT *cl, xdrproc_t xdr_res, caddr_t res_ptr)
 
 /*ARGSUSED*/
 static void
-clnt_raw_abort(CLIENT *cl)
+clnt_raw_abort(cl)
+	CLIENT *cl;
 {
 }
 
 /*ARGSUSED*/
 static bool_t
-clnt_raw_control(CLIENT *cl, u_int ui, char *str)
+clnt_raw_control(cl, ui, str)
+	CLIENT *cl;
+	u_int ui;
+	char *str;
 {
 	return (FALSE);
 }
 
 /*ARGSUSED*/
 static void
-clnt_raw_destroy(CLIENT *cl)
+clnt_raw_destroy(cl)
+	CLIENT *cl;
 {
 }
 
 static struct clnt_ops *
-clnt_raw_ops(void)
+clnt_raw_ops()
 {
 	static struct clnt_ops ops;
 #ifdef _REENTRANT

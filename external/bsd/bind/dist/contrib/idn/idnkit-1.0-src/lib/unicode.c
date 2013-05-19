@@ -1,4 +1,4 @@
-/*	$NetBSD: unicode.c,v 1.3 2012/06/05 00:39:53 christos Exp $	*/
+/*	$NetBSD: unicode.c,v 1.2.6.1 2012/06/06 18:18:07 bouyer Exp $	*/
 
 #ifndef lint
 static char *rcsid = "Id: unicode.c,v 1.1 2003/06/04 00:26:16 marka Exp ";

@@ -1,4 +1,4 @@
-/* $NetBSD: test.c,v 1.40 2013/05/04 06:26:44 uebayasi Exp $ */
+/* $NetBSD: test.c,v 1.38 2011/08/29 14:51:19 joerg Exp $ */
 
 /*
  * test(1); version 7-like  --  author Erik Baalbergen
@@ -12,7 +12,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: test.c,v 1.40 2013/05/04 06:26:44 uebayasi Exp $");
+__RCSID("$NetBSD: test.c,v 1.38 2011/08/29 14:51:19 joerg Exp $");
 #endif
 
 #include <sys/stat.h>
@@ -172,10 +172,10 @@ static int olderf(const char *, const char *);
 static int equalf(const char *, const char *);
 
 #if defined(SHELL)
-extern void error(const char *, ...) __dead __printflike(1, 2);
+extern void error(const char *, ...) __dead;
 extern void *ckmalloc(size_t);
 #else
-static void error(const char *, ...) __dead __printflike(1, 2);
+static void error(const char *, ...) __dead;
 
 static void
 error(const char *msg, ...)
@@ -694,7 +694,7 @@ newerf(const char *f1, const char *f2)
 
 	return (stat(f1, &b1) == 0 &&
 		stat(f2, &b2) == 0 &&
-		timespeccmp(&b1.st_mtim, &b2.st_mtim, >));
+		b1.st_mtime > b2.st_mtime);
 }
 
 static int
@@ -704,7 +704,7 @@ olderf(const char *f1, const char *f2)
 
 	return (stat(f1, &b1) == 0 &&
 		stat(f2, &b2) == 0 &&
-		timespeccmp(&b1.st_mtim, &b2.st_mtim, <));
+		b1.st_mtime < b2.st_mtime);
 }
 
 static int

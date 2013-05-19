@@ -1,4 +1,4 @@
-/*	$NetBSD: rtld.c,v 1.169 2013/05/09 15:47:34 skrll Exp $	 */
+/*	$NetBSD: rtld.c,v 1.155.2.1 2012/10/17 22:36:59 riz Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -40,7 +40,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: rtld.c,v 1.169 2013/05/09 15:47:34 skrll Exp $");
+__RCSID("$NetBSD: rtld.c,v 1.155.2.1 2012/10/17 22:36:59 riz Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -103,7 +103,6 @@ Search_Path    *_rtld_default_paths;
 Search_Path    *_rtld_paths;
 
 Library_Xform  *_rtld_xforms;
-static void    *auxinfo;
 
 /*
  * Global declarations normally provided by crt0.
@@ -135,50 +134,13 @@ static void _rtld_unload_object(sigset_t *, Obj_Entry *, bool);
 static void _rtld_unref_dag(Obj_Entry *);
 static Obj_Entry *_rtld_obj_from_addr(const void *);
 
-static inline void
-_rtld_call_initfini_function(fptr_t func, sigset_t *mask)
-{
-	_rtld_exclusive_exit(mask);
-	(*func)();
-	_rtld_exclusive_enter(mask);
-}
-
-static void
-_rtld_call_fini_function(Obj_Entry *obj, sigset_t *mask, u_int cur_objgen)
-{
-	if (obj->fini_arraysz == 0 && (obj->fini == NULL || obj->fini_called)) {
-		    	return;
-	}
-	if (obj->fini != NULL && !obj->fini_called) {
-		dbg (("calling fini function %s at %p%s", obj->path,
-		    (void *)obj->fini,
-		    obj->z_initfirst ? " (DF_1_INITFIRST)" : ""));
-		obj->fini_called = 1;
-		_rtld_call_initfini_function(obj->fini, mask);
-	}
-#ifdef HAVE_INITFINI_ARRAY
-	/*
-	 * Now process the fini_array if it exists.  Simply go from
-	 * start to end.  We need to make restartable so just advance
-	 * the array pointer and decrement the size each time through
-	 * the loop.
-	 */
-	while (obj->fini_arraysz > 0 && _rtld_objgen == cur_objgen) {
-		fptr_t fini = *obj->fini_array++;
-		obj->fini_arraysz--;
-		dbg (("calling fini array function %s at %p%s", obj->path,
-		    (void *)fini,
-		    obj->z_initfirst ? " (DF_1_INITFIRST)" : ""));
-		_rtld_call_initfini_function(fini, mask);
-	}
-#endif /* HAVE_INITFINI_ARRAY */
-}
-
 static void
 _rtld_call_fini_functions(sigset_t *mask, int force)
 {
 	Objlist_Entry *elm;
 	Objlist finilist;
+	Obj_Entry *obj;
+	void (*fini)(void);
 	u_int cur_objgen;
 
 	dbg(("_rtld_call_fini_functions(%d)", force));
@@ -190,33 +152,49 @@ restart:
 
 	/* First pass: objects _not_ marked with DF_1_INITFIRST. */
 	SIMPLEQ_FOREACH(elm, &finilist, link) {
-		Obj_Entry * const obj = elm->obj;
-		if (!obj->z_initfirst) {
-			if (obj->refcount > 0 && !force) {
-				continue;
-			}
-			/*
-			 * XXX This can race against a concurrent dlclose().
-			 * XXX In that case, the object could be unmapped before
-			 * XXX the fini() call or the fini_array has completed.
-			 */
-			_rtld_call_fini_function(obj, mask, cur_objgen);
-			if (_rtld_objgen != cur_objgen) {
-				dbg(("restarting fini iteration"));
-				_rtld_objlist_clear(&finilist);
-				goto restart;
+		obj = elm->obj;
+		if (obj->refcount > 0 && !force) {
+			continue;
 		}
+		if (obj->fini == NULL || obj->fini_called || obj->z_initfirst) {
+		    	continue;
+		}
+		dbg (("calling fini function %s at %p",  obj->path,
+		    (void *)obj->fini));
+		obj->fini_called = 1;
+		/*
+		 * XXX This can race against a concurrent dlclose().
+		 * XXX In that case, the object could be unmapped before
+		 * XXX the fini() call is done.
+		 */
+		fini = obj->fini;
+		_rtld_exclusive_exit(mask);
+		(*fini)();
+		_rtld_exclusive_enter(mask);
+		if (_rtld_objgen != cur_objgen) {
+			dbg(("restarting fini iteration"));
+			_rtld_objlist_clear(&finilist);
+			goto restart;
 		}
 	}
 
 	/* Second pass: objects marked with DF_1_INITFIRST. */
 	SIMPLEQ_FOREACH(elm, &finilist, link) {
-		Obj_Entry * const obj = elm->obj;
+		obj = elm->obj;
 		if (obj->refcount > 0 && !force) {
 			continue;
 		}
+		if (obj->fini == NULL || obj->fini_called) {
+		    	continue;
+		}
+		dbg (("calling fini function %s at %p (DF_1_INITFIRST)",
+		    obj->path, (void *)obj->fini));
+		obj->fini_called = 1;
 		/* XXX See above for the race condition here */
-		_rtld_call_fini_function(obj, mask, cur_objgen);
+		fini = obj->fini;
+		_rtld_exclusive_exit(mask);
+		(*fini)();
+		_rtld_exclusive_enter(mask);
 		if (_rtld_objgen != cur_objgen) {
 			dbg(("restarting fini iteration"));
 			_rtld_objlist_clear(&finilist);
@@ -228,42 +206,12 @@ restart:
 }
 
 static void
-_rtld_call_init_function(Obj_Entry *obj, sigset_t *mask, u_int cur_objgen)
-{
-	if (obj->init_arraysz == 0 && (obj->init_called || obj->init == NULL)) {
-		return;
-	}
-	if (!obj->init_called && obj->init != NULL) {
-		dbg (("calling init function %s at %p%s",
-		    obj->path, (void *)obj->init,
-		    obj->z_initfirst ? " (DF_1_INITFIRST)" : ""));
-		obj->init_called = 1;
-		_rtld_call_initfini_function(obj->init, mask);
-	}
-
-#ifdef HAVE_INITFINI_ARRAY
-	/*
-	 * Now process the init_array if it exists.  Simply go from
-	 * start to end.  We need to make restartable so just advance
-	 * the array pointer and decrement the size each time through
-	 * the loop.
-	 */
-	while (obj->init_arraysz > 0 && _rtld_objgen == cur_objgen) {
-		fptr_t init = *obj->init_array++;
-		obj->init_arraysz--;
-		dbg (("calling init_array function %s at %p%s",
-		    obj->path, (void *)init,
-		    obj->z_initfirst ? " (DF_1_INITFIRST)" : ""));
-		_rtld_call_initfini_function(init, mask);
-	}
-#endif /* HAVE_INITFINI_ARRAY */
-}
-
-static void
 _rtld_call_init_functions(sigset_t *mask)
 {
 	Objlist_Entry *elm;
 	Objlist initlist;
+	Obj_Entry *obj;
+	void (*init)(void);
 	u_int cur_objgen;
 
 	dbg(("_rtld_call_init_functions()"));
@@ -275,20 +223,37 @@ restart:
 
 	/* First pass: objects marked with DF_1_INITFIRST. */
 	SIMPLEQ_FOREACH(elm, &initlist, link) {
-		Obj_Entry * const obj = elm->obj;
-		if (obj->z_initfirst) {
-			_rtld_call_init_function(obj, mask, cur_objgen);
-			if (_rtld_objgen != cur_objgen) {
-				dbg(("restarting init iteration"));
-				_rtld_objlist_clear(&initlist);
-				goto restart;
-			}
+		obj = elm->obj;
+		if (obj->init == NULL || obj->init_called || !obj->z_initfirst) {
+			continue;
+		}
+		dbg (("calling init function %s at %p (DF_1_INITFIRST)",
+		    obj->path, (void *)obj->init));
+		obj->init_called = 1;
+		init = obj->init;
+		_rtld_exclusive_exit(mask);
+		(*init)();
+		_rtld_exclusive_enter(mask);
+		if (_rtld_objgen != cur_objgen) {
+			dbg(("restarting init iteration"));
+			_rtld_objlist_clear(&initlist);
+			goto restart;
 		}
 	}
 
 	/* Second pass: all other objects. */
 	SIMPLEQ_FOREACH(elm, &initlist, link) {
-		_rtld_call_init_function(elm->obj, mask, cur_objgen);
+		obj = elm->obj;
+		if (obj->init == NULL || obj->init_called) {
+			continue;
+		}
+		dbg (("calling init function %s at %p",  obj->path,
+		    (void *)obj->init));
+		obj->init_called = 1;
+		init = obj->init;
+		_rtld_exclusive_exit(mask);
+		(*init)();
+		_rtld_exclusive_enter(mask);
 		if (_rtld_objgen != cur_objgen) {
 			dbg(("restarting init iteration"));
 			_rtld_objlist_clear(&initlist);
@@ -352,7 +317,12 @@ _rtld_init(caddr_t mapbase, caddr_t relocbase, const char *execname)
 	    RTLD_DEFAULT_LIBRARY_PATH "/" RTLD_ARCH_SUBDIR);
 #endif
 
-	/* Make the object list empty. */
+	/*
+	 * Set up the _rtld_objlist pointer, so that rtld symbols can be found.
+	 */
+	_rtld_objlist = &_rtld_objself;
+
+	/* Make the object list empty again. */
 	_rtld_objlist = NULL;
 	_rtld_objtail = &_rtld_objlist;
 	_rtld_objcount = 0;
@@ -379,12 +349,6 @@ _rtld_exit(void)
 	_rtld_exclusive_exit(&mask);
 }
 
-__dso_public void *
-_dlauxinfo(void)
-{
-	return auxinfo;
-}
-
 /*
  * Main entry point for dynamic linking.  The argument is the stack
  * pointer.  The stack is expected to be laid out as described in the
@@ -407,6 +371,7 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 		       *pAUX_ruid, *pAUX_rgid;
 	const AuxInfo  *pAUX_pagesz;
 	char          **env, **oenvp;
+	const AuxInfo  *aux;
 	const AuxInfo  *auxp;
 	Obj_Entry      *obj;
 	Elf_Addr       *const osp = sp;
@@ -438,10 +403,11 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	debug = 1;
 	dbg(("sp = %p, argc = %ld, argv = %p <%s> relocbase %p", sp,
 	    (long)sp[2], &sp[3], (char *) sp[3], (void *)relocbase));
-#ifndef __x86_64__
+#if 0
 	dbg(("got is at %p, dynamic is at %p", _GLOBAL_OFFSET_TABLE_,
 	    &_DYNAMIC));
 #endif
+	dbg(("_ctype_ is %p", _ctype_));
 #endif
 
 	sp += 2;		/* skip over return argument space */
@@ -455,7 +421,7 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 		dbg(("env[%d] = %p %s", i++, (void *)sp[-1], (char *)sp[-1]));
 #endif
 	}
-	auxinfo = (AuxInfo *) sp;
+	aux = (const AuxInfo *) sp;
 
 	pAUX_base = pAUX_entry = pAUX_execfd = NULL;
 	pAUX_phdr = pAUX_phent = pAUX_phnum = NULL;
@@ -465,7 +431,7 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	execname = NULL;
 
 	/* Digest the auxiliary vector. */
-	for (auxp = auxinfo; auxp->a_type != AT_NULL; ++auxp) {
+	for (auxp = aux; auxp->a_type != AT_NULL; ++auxp) {
 		switch (auxp->a_type) {
 		case AT_BASE:
 			pAUX_base = auxp;
@@ -628,7 +594,7 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	}
 
 	_rtld_objmain->mainprog = true;
-
+	
 	/*
 	 * Get the actual dynamic linker pathname from the executable if
 	 * possible.  (It should always be possible.)  That ensures that
@@ -639,7 +605,7 @@ _rtld(Elf_Addr *sp, Elf_Addr relocbase)
 	    strcmp(_rtld_objmain->interp, _rtld_objself.path) != 0)
 		_rtld_objself.path = xstrdup(_rtld_objmain->interp);
 	dbg(("actual dynamic linker is %s", _rtld_objself.path));
-
+	
 	_rtld_digest_dynamic(execname, _rtld_objmain);
 
 	/* Link the main program into the list of objects. */
@@ -987,7 +953,7 @@ dlopen(const char *name, int mode)
 
 	flags |= (mode & RTLD_GLOBAL) ? _RTLD_GLOBAL : 0;
 	flags |= (mode & RTLD_NOLOAD) ? _RTLD_NOLOAD : 0;
-
+	
 	nodelete = (mode & RTLD_NODELETE) ? true : false;
 	now = ((mode & RTLD_MODEMASK) == RTLD_NOW) ? true : false;
 
@@ -1098,7 +1064,7 @@ do_dlsym(void *handle, const char *name, const Ver_Entry *ventry, void *retaddr)
 	hash = _rtld_elf_hash(name);
 	def = NULL;
 	defobj = NULL;
-
+	
 	switch ((intptr_t)handle) {
 	case (intptr_t)NULL:
 	case (intptr_t)RTLD_NEXT:
@@ -1168,7 +1134,7 @@ do_dlsym(void *handle, const char *name, const Ver_Entry *ventry, void *retaddr)
 
 		break;
 	}
-
+	
 	if (def != NULL) {
 		void *p;
 #ifdef __HAVE_FUNCTION_DESCRIPTORS
@@ -1183,7 +1149,7 @@ do_dlsym(void *handle, const char *name, const Ver_Entry *ventry, void *retaddr)
 		lookup_mutex_exit();
 		return p;
 	}
-
+	
 	_rtld_error("Undefined symbol \"%s\"", name);
 	lookup_mutex_exit();
 	return NULL;
@@ -1260,7 +1226,7 @@ dladdr(const void *addr, Dl_info *info)
 	info->dli_fbase = obj->mapbase;
 	info->dli_saddr = (void *)0;
 	info->dli_sname = NULL;
-
+	
 	/*
 	 * Walk the symbol list looking for the symbol whose address is
 	 * closest to the address sent in.
@@ -1297,7 +1263,7 @@ dladdr(const void *addr, Dl_info *info)
 
 #ifdef __HAVE_FUNCTION_DESCRIPTORS
 	if (best_def != NULL && ELF_ST_TYPE(best_def->st_info) == STT_FUNC)
-		info->dli_saddr = (void *)_rtld_function_descriptor_alloc(obj,
+		info->dli_saddr = (void *)_rtld_function_descriptor_alloc(obj, 
 		    best_def, 0);
 #endif /* __HAVE_FUNCTION_DESCRIPTORS */
 
@@ -1367,9 +1333,8 @@ dl_iterate_phdr(int (*callback)(struct dl_phdr_info *, size_t, void *), void *pa
 
 	for (obj = _rtld_objlist;  obj != NULL;  obj = obj->next) {
 		phdr_info.dlpi_addr = (Elf_Addr)obj->relocbase;
-		/* XXX: wrong but not fixing it yet */
-		phdr_info.dlpi_name = SIMPLEQ_FIRST(&obj->names) ?
-		    SIMPLEQ_FIRST(&obj->names)->name : obj->path;
+		phdr_info.dlpi_name = STAILQ_FIRST(&obj->names) ?
+		    STAILQ_FIRST(&obj->names)->name : obj->path;
 		phdr_info.dlpi_phdr = obj->phdr;
 		phdr_info.dlpi_phnum = obj->phsize / sizeof(obj->phdr[0]);
 #if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
@@ -1413,8 +1378,7 @@ void
 _rtld_debug_state(void)
 {
 
-	/* Prevent optimizer from removing calls to this function */
-	__insn_barrier();
+	/* do nothing */
 }
 
 void
@@ -1469,7 +1433,7 @@ static Obj_Entry *
 _rtld_obj_from_addr(const void *addr)
 {
 	Obj_Entry *obj;
-
+	
 	for (obj = _rtld_objlist;  obj != NULL;  obj = obj->next) {
 		if (addr < (void *) obj->mapbase)
 			continue;
@@ -1493,7 +1457,7 @@ static void
 _rtld_objlist_remove(Objlist *list, Obj_Entry *obj)
 {
 	Objlist_Entry *elm;
-
+	
 	if ((elm = _rtld_objlist_find(list, obj)) != NULL) {
 		SIMPLEQ_REMOVE(list, elm, Struct_Objlist_Entry, link);
 		xfree(elm);
@@ -1541,7 +1505,7 @@ _rtld_shared_enter(void)
 		 */
 		if ((_rtld_mutex & RTLD_EXCLUSIVE_MASK) ||
 		    _rtld_waiter_exclusive)
-			_lwp_park(NULL, 0, __UNVOLATILE(&_rtld_mutex), NULL);
+			_lwp_park(NULL, -1, __UNVOLATILE(&_rtld_mutex), NULL);
 		/* Try to remove us from the waiter list. */
 		atomic_cas_uint(&_rtld_waiter_shared, self, 0);
 		if (waiter)
@@ -1597,7 +1561,7 @@ _rtld_exclusive_enter(sigset_t *mask)
 			_rtld_die();
 		}
 		if (cur)
-			_lwp_park(NULL, 0, __UNVOLATILE(&_rtld_mutex), NULL);
+			_lwp_park(NULL, -1, __UNVOLATILE(&_rtld_mutex), NULL);
 		atomic_cas_uint(&_rtld_waiter_exclusive, self, 0);
 		if (waiter)
 			_lwp_unpark(waiter, __UNVOLATILE(&_rtld_mutex));

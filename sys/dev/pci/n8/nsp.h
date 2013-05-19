@@ -116,7 +116,7 @@ typedef struct nsp_session {
 } nsp_session_t;
 
 struct nsp_softc {
-	device_t		sc_dev;
+	struct	device		device;
 	pci_chipset_tag_t	pa_pc;
 	pcitag_t		pa_tag;
 	void			*int_handle;

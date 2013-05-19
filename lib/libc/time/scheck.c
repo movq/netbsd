@@ -1,4 +1,4 @@
-/*	$NetBSD: scheck.c,v 1.9 2012/10/24 00:10:03 christos Exp $	*/
+/*	$NetBSD: scheck.c,v 1.8 2010/01/02 10:42:49 tsutsui Exp $	*/
 
 /*
 ** This file is in the public domain, so clarified as of
@@ -15,7 +15,7 @@
 #if 0
 static char	elsieid[] = "@(#)scheck.c	8.19";
 #else
-__RCSID("$NetBSD: scheck.c,v 1.9 2012/10/24 00:10:03 christos Exp $");
+__RCSID("$NetBSD: scheck.c,v 1.8 2010/01/02 10:42:49 tsutsui Exp $");
 #endif
 #endif /* !defined lint */
 
@@ -24,7 +24,9 @@ __RCSID("$NetBSD: scheck.c,v 1.9 2012/10/24 00:10:03 christos Exp $");
 #include "private.h"
 
 const char *
-scheck(const char *const string, const char *const format)
+scheck(string, format)
+const char * const	string;
+const char * const	format;
 {
 	register char *		fbuf;
 	register const char *	fp;
@@ -36,7 +38,7 @@ scheck(const char *const string, const char *const format)
 	result = "";
 	if (string == NULL || format == NULL)
 		return result;
-	fbuf = malloc(2 * strlen(format) + 4);
+	fbuf = imalloc((int) (2 * strlen(format) + 4));
 	if (fbuf == NULL)
 		return result;
 	fp = format;
@@ -65,7 +67,7 @@ scheck(const char *const string, const char *const format)
 	*tp++ = 'c';
 	*tp = '\0';
 	if (sscanf(string, fbuf, &dummy) != 1)
-		result = format;
-	free(fbuf);
+		result = (char *) format;
+	ifree(fbuf);
 	return result;
 }

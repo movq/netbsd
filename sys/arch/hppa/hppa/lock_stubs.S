@@ -1,4 +1,4 @@
-/*	$NetBSD: lock_stubs.S,v 1.26 2012/04/03 14:18:14 skrll Exp $	*/
+/*	$NetBSD: lock_stubs.S,v 1.22 2011/01/30 22:36:37 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
@@ -31,13 +31,14 @@
 
 #include "opt_multiprocessor.h"
 #include "opt_lockdebug.h"
+#include "opt_cputype.h"
+#include "opt_ddb.h"
 
 #define __MUTEX_PRIVATE
 
 #include <machine/asm.h>
 #include <machine/mutex.h>
 #include <machine/reg.h>
-#include <machine/cpu.h>
 
 #include "assym.h"
 
@@ -50,8 +51,10 @@
  * we don't need the overhead of interlocking.
  */
 
+#ifndef MULTIPROCESSOR
 
-#ifndef LOCKDEBUG
+	.global _lock_cas_ras_start
+	.global _lock_cas_ras_end
 
 	.global mutex_enter_crit_start
 	.global mutex_enter_crit_end
@@ -60,9 +63,40 @@
 	.import mutex_vector_exit, code
 	.import mutex_wakeup, code
 
+LEAF_ENTRY(_lock_cas)
+_lock_cas_ras_start:
+	ldw	0(%arg0),%t1
+	comb,<>	%arg1, %t1, 1f
+	 copy	%t1,%ret0
+_lock_cas_ras_end:
+	stw	%arg2, 0(%arg0)
+	copy	%arg1,%ret0
+1:
+	bv,n	%r0(%rp)
+
+EXIT(_lock_cas)
+
+STRONG_ALIAS(_atomic_cas_ulong,_lock_cas)
+STRONG_ALIAS(atomic_cas_ulong,_lock_cas)
+STRONG_ALIAS(_atomic_cas_32,_lock_cas)
+STRONG_ALIAS(atomic_cas_32,_lock_cas)
+STRONG_ALIAS(_atomic_cas_uint,_lock_cas)
+STRONG_ALIAS(atomic_cas_uint,_lock_cas)
+STRONG_ALIAS(_atomic_cas_ptr,_lock_cas)
+STRONG_ALIAS(atomic_cas_ptr,_lock_cas)
+
+STRONG_ALIAS(_atomic_cas_ulong_ni,_lock_cas)
+STRONG_ALIAS(atomic_cas_ulong_ni,_lock_cas)
+STRONG_ALIAS(_atomic_cas_32_ni,_lock_cas)
+STRONG_ALIAS(atomic_cas_32_ni,_lock_cas)
+STRONG_ALIAS(_atomic_cas_uint_ni,_lock_cas)
+STRONG_ALIAS(atomic_cas_uint_ni,_lock_cas)
+STRONG_ALIAS(_atomic_cas_ptr_ni,_lock_cas)
+STRONG_ALIAS(atomic_cas_ptr_ni,_lock_cas)
+
+#ifndef LOCKDEBUG
 /*
  * void mutex_exit(kmutex_t *mtx);
- *
  */
 
 LEAF_ENTRY(mutex_exit)
@@ -82,7 +116,7 @@ LEAF_ENTRY(mutex_exit)
 
 	ldi	__SIMPLELOCK_RAW_UNLOCKED, %t2	/* unlocked = 1 */
 	ldo	(MTX_LOCK + HPPA_LDCW_ALIGN - 1)(%arg0), %t3
-	depi	0, 31, 4, %t3			/* bits[28-31] = 0 */
+	depi	0, 31, 4, %t3
 	stw	%t1, MTX_OWNER(%arg0)
 	stw	%t2, 0(%t3)			/* %t3 is properly aligned */
 	sync
@@ -152,7 +186,7 @@ LEAF_ENTRY(mutex_enter)
 mutex_enter_crit_start:
 	comib,=	0, %ret0, .Lenter_slowpath
 
-	GET_CURLWP(%t2)
+	mfctl	CR_CURLWP, %t2
 
 	bv	%r0(%rp)
 mutex_enter_crit_end:
@@ -160,42 +194,6 @@ mutex_enter_crit_end:
 EXIT(mutex_enter)
 
 #endif	/* !LOCKDEBUG */
-
-#ifndef MULTIPROCESSOR
-
-	.global _lock_cas_ras_start
-	.global _lock_cas_ras_end
-
-LEAF_ENTRY(_lock_cas)
-_lock_cas_ras_start:
-	ldw	0(%arg0),%t1
-	comb,<>	%arg1, %t1, 1f
-	 copy	%t1,%ret0
-_lock_cas_ras_end:
-	stw	%arg2,0(%arg0)
-	copy	%arg1,%ret0
-1:
-	bv,n	%r0(%rp)
-
-EXIT(_lock_cas)
-
-STRONG_ALIAS(_atomic_cas_ulong,_lock_cas)
-STRONG_ALIAS(atomic_cas_ulong,_lock_cas)
-STRONG_ALIAS(_atomic_cas_32,_lock_cas)
-STRONG_ALIAS(atomic_cas_32,_lock_cas)
-STRONG_ALIAS(_atomic_cas_uint,_lock_cas)
-STRONG_ALIAS(atomic_cas_uint,_lock_cas)
-STRONG_ALIAS(_atomic_cas_ptr,_lock_cas)
-STRONG_ALIAS(atomic_cas_ptr,_lock_cas)
-
-STRONG_ALIAS(_atomic_cas_ulong_ni,_lock_cas)
-STRONG_ALIAS(atomic_cas_ulong_ni,_lock_cas)
-STRONG_ALIAS(_atomic_cas_32_ni,_lock_cas)
-STRONG_ALIAS(atomic_cas_32_ni,_lock_cas)
-STRONG_ALIAS(_atomic_cas_uint_ni,_lock_cas)
-STRONG_ALIAS(atomic_cas_uint_ni,_lock_cas)
-STRONG_ALIAS(_atomic_cas_ptr_ni,_lock_cas)
-STRONG_ALIAS(atomic_cas_ptr_ni,_lock_cas)
 
 #else  /* !MULTIPROCESSOR */
 
@@ -266,7 +264,7 @@ _lock_cas_mp_spin:
 
 _lock_cas_mp_interlocked:
 	ldw	0(%arg0), %ret0
-	comclr,<> %arg1, %ret0, %r0	/* If *ptr != old, then nullify */
+	comclr,<>	%arg1, %ret0, %r0	/* If *ptr != old, then nullify */
 	stw	%arg2, 0(%arg0)
 
 	sync
@@ -295,5 +293,6 @@ STRONG_ALIAS(_atomic_cas_uint_ni,_lock_cas_mp)
 STRONG_ALIAS(atomic_cas_uint_ni,_lock_cas_mp)
 STRONG_ALIAS(_atomic_cas_ptr_ni,_lock_cas_mp)
 STRONG_ALIAS(atomic_cas_ptr_ni,_lock_cas_mp)
+
 
 #endif /* MULTIPROCESSOR */

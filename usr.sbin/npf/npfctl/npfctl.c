@@ -1,4 +1,4 @@
-/*	$NetBSD: npfctl.c,v 1.37 2013/05/19 20:45:34 rmind Exp $	*/
+/*	$NetBSD: npfctl.c,v 1.10.2.16 2013/03/31 17:43:16 riz Exp $	*/
 
 /*-
  * Copyright (c) 2009-2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: npfctl.c,v 1.37 2013/05/19 20:45:34 rmind Exp $");
+__RCSID("$NetBSD: npfctl.c,v 1.10.2.16 2013/03/31 17:43:16 riz Exp $");
 
 #include <sys/ioctl.h>
 #include <sys/stat.h>
@@ -115,10 +115,7 @@ usage(void)
 	const char *progname = getprogname();
 
 	fprintf(stderr,
-	    "Usage:\t%s start | stop | flush | show | stats\n",
-	    progname);
-	fprintf(stderr,
-	    "\t%s validate | reload [<rule-file>]\n",
+	    "usage:\t%s [ start | stop | reload | flush | show | stats ]\n",
 	    progname);
 	fprintf(stderr,
 	    "\t%s rule \"rule-name\" { add | rem } <rule-syntax>\n",
@@ -136,7 +133,7 @@ usage(void)
 	    "\t%s table <tid> { list | flush }\n",
 	    progname);
 	fprintf(stderr,
-	    "\t%s sess-load | sess-save\n",
+	    "\t%s ( sess-save | sess-load )\n",
 	    progname);
 	exit(EXIT_FAILURE);
 }
@@ -279,7 +276,6 @@ npfctl_table(int fd, int argc, char **argv)
 		{ "del",	NPF_CMD_TABLE_REMOVE		},
 		{ "test",	NPF_CMD_TABLE_LOOKUP		},
 		{ "list",	NPF_CMD_TABLE_LIST		},
-		{ "flush",	NPF_CMD_TABLE_FLUSH		},
 		{ NULL,		0				}
 	};
 	npf_ioctl_table_t nct;
@@ -303,27 +299,17 @@ npfctl_table(int fd, int argc, char **argv)
 	if (tblops[n].cmd == NULL) {
 		errx(EXIT_FAILURE, "invalid command '%s'", cmd);
 	}
-
-	switch (nct.nct_cmd) {
-	case NPF_CMD_TABLE_LIST:
-	case NPF_CMD_TABLE_FLUSH:
-		break;
-	default:
+	if (nct.nct_cmd != NPF_CMD_TABLE_LIST) {
 		if (argc < 3) {
 			usage();
 		}
 		arg = argv[2];
 	}
-
 again:
-	switch (nct.nct_cmd) {
-	case NPF_CMD_TABLE_LIST:
+	if (nct.nct_cmd == NPF_CMD_TABLE_LIST) {
 		nct.nct_data.buf.buf = ecalloc(1, buflen);
 		nct.nct_data.buf.len = buflen;
-		break;
-	case NPF_CMD_TABLE_FLUSH:
-		break;
-	default:
+	} else {
 		if (!npfctl_parse_cidr(arg, &fam, &alen)) {
 			errx(EXIT_FAILURE, "invalid CIDR '%s'", arg);
 		}
@@ -415,37 +401,35 @@ npfctl_rule(int fd, int argc, char **argv)
 	static const struct ruleops_s {
 		const char *	cmd;
 		int		action;
-		bool		extra_arg;
 	} ruleops[] = {
-		{ "add",	NPF_CMD_RULE_ADD,	true	},
-		{ "rem",	NPF_CMD_RULE_REMKEY,	true	},
-		{ "del",	NPF_CMD_RULE_REMKEY,	true	},
-		{ "rem-id",	NPF_CMD_RULE_REMOVE,	true	},
-		{ "list",	NPF_CMD_RULE_LIST,	false	},
-		{ "flush",	NPF_CMD_RULE_FLUSH,	false	},
-		{ NULL,		0,			0	}
+		{ "add",	NPF_CMD_RULE_ADD		},
+		{ "rem",	NPF_CMD_RULE_REMKEY		},
+		{ "del",	NPF_CMD_RULE_REMKEY		},
+		{ "rem-id",	NPF_CMD_RULE_REMOVE		},
+		{ "list",	NPF_CMD_RULE_LIST		},
+		{ "flush",	NPF_CMD_RULE_FLUSH		},
+		{ NULL,		0				}
 	};
 	uint8_t key[NPF_RULE_MAXKEYLEN];
 	const char *ruleset_name = argv[0];
 	const char *cmd = argv[1];
 	int error, action = 0;
 	uint64_t rule_id;
-	bool extra_arg;
 	nl_rule_t *rl;
 
 	for (int n = 0; ruleops[n].cmd != NULL; n++) {
 		if (strcmp(cmd, ruleops[n].cmd) == 0) {
 			action = ruleops[n].action;
-			extra_arg = ruleops[n].extra_arg;
 			break;
 		}
 	}
-	argc -= 2;
-	argv += 2;
 
-	if (!action || (extra_arg && argc == 0)) {
+	bool narg = action == NPF_CMD_RULE_LIST || action == NPF_CMD_RULE_FLUSH;
+	if (!action || (argc < 3 && !narg)) {
 		usage();
 	}
+	argc -= 2;
+	argv += 2;
 
 	switch (action) {
 	case NPF_CMD_RULE_ADD:

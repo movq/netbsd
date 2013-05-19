@@ -1,4 +1,4 @@
-/*	$NetBSD: i80312_pci.c,v 1.13 2012/10/14 14:20:57 msaitoh Exp $	*/
+/*	$NetBSD: i80312_pci.c,v 1.11 2012/01/27 18:52:51 para Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i80312_pci.c,v 1.13 2012/10/14 14:20:57 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i80312_pci.c,v 1.11 2012/01/27 18:52:51 para Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -61,7 +61,7 @@ __KERNEL_RCSID(0, "$NetBSD: i80312_pci.c,v 1.13 2012/10/14 14:20:57 msaitoh Exp 
 #include "opt_pci.h"
 #include "pci.h"
 
-void		i80312_pci_attach_hook(device_t, device_t,
+void		i80312_pci_attach_hook(struct device *, struct device *,
 		    struct pcibus_attach_args *);
 int		i80312_pci_bus_maxdevs(void *, int);
 pcitag_t	i80312_pci_make_tag(void *, int, int, int);
@@ -69,7 +69,6 @@ void		i80312_pci_decompose_tag(void *, pcitag_t, int *, int *,
 		    int *);
 pcireg_t	i80312_pci_conf_read(void *, pcitag_t, int);
 void		i80312_pci_conf_write(void *, pcitag_t, int, pcireg_t);
-void		i80312_pci_conf_interrupt(void *, int, int, int, int, int *);
 
 #define	PCI_CONF_LOCK(s)	(s) = disable_interrupts(I32_bit)
 #define	PCI_CONF_UNLOCK(s)	restore_interrupts((s))
@@ -91,7 +90,6 @@ i80312_pci_init(pci_chipset_tag_t pc, void *cookie)
 	pc->pc_decompose_tag = i80312_pci_decompose_tag;
 	pc->pc_conf_read = i80312_pci_conf_read;
 	pc->pc_conf_write = i80312_pci_conf_write;
-	pc->pc_conf_interrupt = i80312_pci_conf_interrupt;
 
 #if NPCI > 0 && defined(PCI_NETBSD_CONFIGURE)
 	/*
@@ -115,7 +113,7 @@ i80312_pci_init(pci_chipset_tag_t pc, void *cookie)
 	    sc->sc_smemout_base + sc->sc_smemout_size - 1,
 	    NULL, 0, EX_NOWAIT);
 
-	aprint_normal_dev(sc->sc_dev, "configuring Secondary PCI bus\n");
+	aprint_normal("%s: configuring Secondary PCI bus\n", sc->sc_dev.dv_xname);
 	pci_configure_bus(pc, ioext, memext, NULL, sbus, arm_dcache_align);
 
 	extent_destroy(ioext);
@@ -124,12 +122,12 @@ i80312_pci_init(pci_chipset_tag_t pc, void *cookie)
 }
 
 void
-i80312_pci_conf_interrupt(void *v, int a, int b, int c, int d, int *p)
+pci_conf_interrupt(pci_chipset_tag_t pc, int a, int b, int c, int d, int *p)
 {
 }
 
 void
-i80312_pci_attach_hook(device_t parent, device_t self,
+i80312_pci_attach_hook(struct device *parent, struct device *self,
     struct pcibus_attach_args *pba)
 {
 

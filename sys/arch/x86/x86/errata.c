@@ -1,4 +1,4 @@
-/*	$NetBSD: errata.c,v 1.21 2013/03/21 13:22:37 christos Exp $	*/
+/*	$NetBSD: errata.c,v 1.19.14.1 2012/04/09 18:02:25 riz Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: errata.c,v 1.21 2013/03/21 13:22:37 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: errata.c,v 1.19.14.1 2012/04/09 18:02:25 riz Exp $");
 
 #include <sys/types.h>
 #include <sys/systm.h>
@@ -329,11 +329,6 @@ x86_errata(void)
 	int i, j, upgrade;
 	static int again;
 
-	/* don't run if we are under a hypervisor */
-	if (cpu_feature[1] & CPUID2_RAZ)
-		return;
-
-	/* only for AMD */
 	if (cpu_vendor != CPUVENDOR_AMD)
 		return;
 

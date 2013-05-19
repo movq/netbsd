@@ -1,4 +1,4 @@
-/*	$NetBSD: proc.h,v 1.13 2012/12/25 22:34:36 matt Exp $	*/
+/*	$NetBSD: proc.h,v 1.10 2011/01/14 02:06:24 rmind Exp $	*/
 
 /*
  * Copyright (c) 1994 Mark Brinicombe.
@@ -43,14 +43,11 @@ struct trapframe;
 struct lwp;
 
 struct mdlwp {
-	struct trapframe *md_tf;
 	int	md_flags;
 };
 
 /* Flags setttings for md_flags */
-#define MDLWP_VFPUSED		0x00000001	/* LWP used the VFP */
-#define MDLWP_NOALIGNFLT	0x00000002	/* For EXEC_AOUT */
-#define MDLWP_VFPINTR		0x00000004	/* VFP used in intr */
+#define MDP_VFPUSED	0x00000001	/* Process used the VFP */
 
 
 struct mdproc {

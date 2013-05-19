@@ -430,7 +430,7 @@ extern int      stbi_gif_info_from_file   (FILE *f,                  int *x, int
 #endif
 #ifdef _KERNEL
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: stb_image.c,v 1.5 2013/01/27 14:47:37 mbalmer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: stb_image.c,v 1.2 2012/01/20 23:13:47 jmcneill Exp $");
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
@@ -446,8 +446,7 @@ __KERNEL_RCSID(0, "$NetBSD: stb_image.c,v 1.5 2013/01/27 14:47:37 mbalmer Exp $"
 #ifdef _KERNEL
 #define	MALLOC(size)		malloc((size), M_TEMP, M_WAITOK)
 #define	REALLOC(ptr, size)	realloc((ptr), (size), M_TEMP, M_WAITOK)
-#define	FREE(ptr) \
-    do { if (ptr) free((ptr), M_TEMP); } while (/*CONSTCOND*/0)
+#define	FREE(ptr)		free((ptr), M_TEMP)
 #else
 #define	MALLOC(size)		malloc((size))
 #define	REALLOC(ptr, size)	realloc((ptr), (size))
@@ -2800,7 +2799,7 @@ static int expand_palette(png *a, uint8 *palette, int len, int pal_img_n)
    p = (uint8 *) MALLOC(pixel_count * pal_img_n);
    if (p == NULL) return e("outofmem", "Out of memory");
 
-   // between here and FREE(out) below, exiting would leak
+   // between here and FREE(out) below, exitting would leak
    temp_out = p;
 
    if (pal_img_n == 3) {
@@ -3051,6 +3050,7 @@ static unsigned char *do_png(png *p, int *x, int *y, int *n, int req_comp)
       *y = p->s.img_y;
       if (n) *n = p->s.img_n;
    }
+   FREE(p->out);      p->out      = NULL;
    FREE(p->expanded); p->expanded = NULL;
    FREE(p->idata);    p->idata    = NULL;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: calc3.tab.c,v 1.1.1.4 2013/04/06 14:45:29 christos Exp $	*/
+/*	$NetBSD: calc3.tab.c,v 1.1.1.3 2011/09/10 21:22:04 christos Exp $	*/
 
 #ifndef lint
 static const char yysccsid[] = "@(#)yaccpar	1.9 (Berkeley) 02/21/93";
@@ -101,16 +101,7 @@ static const char yysccsid[] = "@(#)yaccpar	1.9 (Berkeley) 02/21/93";
 # include <stdio.h>
 # include <ctype.h>
 
-#ifdef YYBISON
-#define YYSTYPE int
-#define YYLEX_PARAM base
-#define YYLEX_DECL() yylex(YYSTYPE *yylval, int *YYLEX_PARAM)
-#define YYERROR_DECL() yyerror(int regs[26], int *base, const char *s)
-int YYLEX_DECL();
-static void YYERROR_DECL();
-#endif
-
-#line 112 "calc3.tab.c"
+#line 103 "calc3.tab.c"
 
 #ifndef YYSTYPE
 typedef int YYSTYPE;
@@ -130,11 +121,7 @@ typedef int YYSTYPE;
 
 /* Parameters sent to lex. */
 #ifdef YYLEX_PARAM
-# ifdef YYLEX_PARAM_TYPE
-#  define YYLEX_DECL() yylex(YYSTYPE *yylval, YYLEX_PARAM_TYPE YYLEX_PARAM)
-# else
-#  define YYLEX_DECL() yylex(YYSTYPE *yylval, void * YYLEX_PARAM)
-# endif
+# define YYLEX_DECL() yylex(YYSTYPE *yylval, void *YYLEX_PARAM)
 # define YYLEX yylex(&yylval, YYLEX_PARAM)
 #else
 # define YYLEX_DECL() yylex(YYSTYPE *yylval, int * base)
@@ -142,12 +129,8 @@ typedef int YYSTYPE;
 #endif
 
 /* Parameters sent to yyerror. */
-#ifndef YYERROR_DECL
 #define YYERROR_DECL() yyerror(int  regs[26], int * base, const char *s)
-#endif
-#ifndef YYERROR_CALL
 #define YYERROR_CALL(msg) yyerror(regs, base, msg)
-#endif
 
 extern int YYPARSE_DECL();
 
@@ -303,11 +286,12 @@ typedef struct {
     YYSTYPE  *l_base;
     YYSTYPE  *l_mark;
 } YYSTACKDATA;
-#line 76 "calc3.y"
+#line 67 "calc3.y"
  /* start of programs */
 
 #ifdef YYBYACC
 extern int YYLEX_DECL();
+static void YYERROR_DECL();
 #endif
 
 int
@@ -352,7 +336,7 @@ YYLEX_DECL()
     }
     return( c );
 }
-#line 354 "calc3.tab.c"
+#line 338 "calc3.tab.c"
 
 #if YYDEBUG
 #include <stdio.h>		/* needed for printf */
@@ -376,7 +360,7 @@ static int yygrowstack(YYSTACKDATA *data)
     else if ((newsize *= 2) > YYMAXDEPTH)
         newsize = YYMAXDEPTH;
 
-    i = (int) (data->s_mark - data->s_base);
+    i = data->s_mark - data->s_base;
     newss = (short *)realloc(data->s_base, newsize * sizeof(*newss));
     if (newss == 0)
         return -1;
@@ -566,66 +550,66 @@ yyreduce:
     switch (yyn)
     {
 case 3:
-#line 38 "calc3.y"
+#line 29 "calc3.y"
 	{  yyerrok ; }
 break;
 case 4:
-#line 42 "calc3.y"
+#line 33 "calc3.y"
 	{  printf("%d\n",yystack.l_mark[0]);}
 break;
 case 5:
-#line 44 "calc3.y"
+#line 35 "calc3.y"
 	{  regs[yystack.l_mark[-2]] = yystack.l_mark[0]; }
 break;
 case 6:
-#line 48 "calc3.y"
+#line 39 "calc3.y"
 	{  yyval = yystack.l_mark[-1]; }
 break;
 case 7:
-#line 50 "calc3.y"
+#line 41 "calc3.y"
 	{  yyval = yystack.l_mark[-2] + yystack.l_mark[0]; }
 break;
 case 8:
-#line 52 "calc3.y"
+#line 43 "calc3.y"
 	{  yyval = yystack.l_mark[-2] - yystack.l_mark[0]; }
 break;
 case 9:
-#line 54 "calc3.y"
+#line 45 "calc3.y"
 	{  yyval = yystack.l_mark[-2] * yystack.l_mark[0]; }
 break;
 case 10:
-#line 56 "calc3.y"
+#line 47 "calc3.y"
 	{  yyval = yystack.l_mark[-2] / yystack.l_mark[0]; }
 break;
 case 11:
-#line 58 "calc3.y"
+#line 49 "calc3.y"
 	{  yyval = yystack.l_mark[-2] % yystack.l_mark[0]; }
 break;
 case 12:
-#line 60 "calc3.y"
+#line 51 "calc3.y"
 	{  yyval = yystack.l_mark[-2] & yystack.l_mark[0]; }
 break;
 case 13:
-#line 62 "calc3.y"
+#line 53 "calc3.y"
 	{  yyval = yystack.l_mark[-2] | yystack.l_mark[0]; }
 break;
 case 14:
-#line 64 "calc3.y"
+#line 55 "calc3.y"
 	{  yyval = - yystack.l_mark[0]; }
 break;
 case 15:
-#line 66 "calc3.y"
+#line 57 "calc3.y"
 	{  yyval = regs[yystack.l_mark[0]]; }
 break;
 case 17:
-#line 71 "calc3.y"
+#line 62 "calc3.y"
 	{  yyval = yystack.l_mark[0]; (*base) = (yystack.l_mark[0]==0) ? 8 : 10; }
 break;
 case 18:
-#line 73 "calc3.y"
+#line 64 "calc3.y"
 	{  yyval = (*base) * yystack.l_mark[-1] + yystack.l_mark[0]; }
 break;
-#line 627 "calc3.tab.c"
+#line 611 "calc3.tab.c"
     }
     yystack.s_mark -= yym;
     yystate = *yystack.s_mark;

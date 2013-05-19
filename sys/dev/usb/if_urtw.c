@@ -1,4 +1,4 @@
-/*	$NetBSD: if_urtw.c,v 1.5 2013/01/22 12:40:43 jmcneill Exp $	*/
+/*	$NetBSD: if_urtw.c,v 1.1.4.2 2012/06/15 08:48:46 sborrill Exp $	*/
 /*	$OpenBSD: if_urtw.c,v 1.39 2011/07/03 15:47:17 matthew Exp $	*/
 
 /*-
@@ -19,7 +19,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_urtw.c,v 1.5 2013/01/22 12:40:43 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_urtw.c,v 1.1.4.2 2012/06/15 08:48:46 sborrill Exp $");
 
 #include <sys/param.h>
 #include <sys/sockio.h>
@@ -60,6 +60,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_urtw.c,v 1.5 2013/01/22 12:40:43 jmcneill Exp $")
 #include <dev/usb/usbdevs.h>
 
 #include "if_urtwreg.h"
+
+#ifdef USB_DEBUG
+#define	URTW_DEBUG
+#endif
 
 #ifdef URTW_DEBUG
 #define	DPRINTF(x)	do { if (urtw_debug) printf x; } while (0)
@@ -681,8 +685,8 @@ urtw_attach(device_t parent, device_t self, void *aux)
 	/* XXX for what? */
 	sc->sc_preamble_mode = 2;
 
-	usb_init_task(&sc->sc_task, urtw_task, sc, 0);
-	usb_init_task(&sc->sc_ledtask, urtw_ledusbtask, sc, 0);
+	usb_init_task(&sc->sc_task, urtw_task, sc);
+	usb_init_task(&sc->sc_ledtask, urtw_ledusbtask, sc);
 	callout_init(&sc->scan_to, 0);
 	callout_setfunc(&sc->scan_to, urtw_next_scan, sc);
 	callout_init(&sc->sc_led_ch, 0);
@@ -2313,8 +2317,8 @@ urtw_init(struct ifnet *ifp)
 	if (!(sc->sc_flags & URTW_INIT_ONCE)) {
 		error = usbd_set_config_no(sc->sc_udev, URTW_CONFIG_NO, 0);
 		if (error != 0) {
-			aprint_error_dev(sc->sc_dev, "failed to set configuration"
-			    ", err=%s\n", usbd_errstr(error));
+			printf("%s: could not set configuration no\n",
+			    device_xname(sc->sc_dev));
 			goto fail;
 		}
 		/* get the first interface handle */
@@ -3682,9 +3686,8 @@ urtw_8187b_init(struct ifnet *ifp)
 	if (!(sc->sc_flags & URTW_INIT_ONCE)) {
 		error = usbd_set_config_no(sc->sc_udev, URTW_CONFIG_NO, 0);
 		if (error != 0) {
-			aprint_error_dev(sc->sc_dev, "failed to set configuration"
-			    ", err=%s\n", usbd_errstr(error));
-
+			printf("%s: could not set configuration no\n",
+			    device_xname(sc->sc_dev));
 			goto fail;
 		}
 		/* Get the first interface handle. */

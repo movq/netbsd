@@ -1,4 +1,4 @@
-/*	$NetBSD: ttyname.c,v 1.26 2012/06/12 18:17:04 joerg Exp $	*/
+/*	$NetBSD: ttyname.c,v 1.24.22.1 2012/06/23 22:54:54 riz Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)ttyname.c	8.2 (Berkeley) 1/27/94";
 #else
-__RCSID("$NetBSD: ttyname.c,v 1.26 2012/06/12 18:17:04 joerg Exp $");
+__RCSID("$NetBSD: ttyname.c,v 1.24.22.1 2012/06/23 22:54:54 riz Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

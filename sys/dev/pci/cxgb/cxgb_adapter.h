@@ -93,6 +93,7 @@ extern int cxgb_debug;
 #endif
 
 struct port_device {
+	struct device	original;
 	device_t	dev;
 	struct adapter	*parent;
 	int		port_number;
@@ -309,6 +310,7 @@ struct sge {
 struct filter_info;
 
 struct adapter {
+    struct device original;
     device_t        dev; // so we have a compatible pointer
     int         flags;
     TAILQ_ENTRY(adapter)    adapter_entry;

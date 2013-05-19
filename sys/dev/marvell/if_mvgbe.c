@@ -1,4 +1,4 @@
-/*	$NetBSD: if_mvgbe.c,v 1.34 2012/12/28 08:16:53 msaitoh Exp $	*/
+/*	$NetBSD: if_mvgbe.c,v 1.16.2.3 2013/01/07 16:45:30 riz Exp $	*/
 /*
  * Copyright (c) 2007, 2008 KIYOHARA Takashi
  * All rights reserved.
@@ -25,7 +25,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_mvgbe.c,v 1.34 2012/12/28 08:16:53 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_mvgbe.c,v 1.16.2.3 2013/01/07 16:45:30 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -33,12 +33,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_mvgbe.c,v 1.34 2012/12/28 08:16:53 msaitoh Exp $"
 #include <sys/device.h>
 #include <sys/endian.h>
 #include <sys/errno.h>
-#include <sys/evcnt.h>
 #include <sys/kernel.h>
 #include <sys/kmem.h>
 #include <sys/mutex.h>
 #include <sys/sockio.h>
-#include <sys/sysctl.h>
 
 #include <dev/marvell/marvellreg.h>
 #include <dev/marvell/marvellvar.h>
@@ -143,16 +141,6 @@ do {									\
 	    MVGBE_CDRXOFF((x)), sizeof(struct mvgbe_rx_desc), (ops));	\
 	} while (/*CONSTCOND*/0)
 
-#define MVGBE_IPGINTTX_DEFAULT	768
-#define MVGBE_IPGINTRX_DEFAULT	768
-
-#ifdef MVGBE_EVENT_COUNTERS
-#define	MVGBE_EVCNT_INCR(ev)		(ev)->ev_count++
-#define	MVGBE_EVCNT_ADD(ev, val)	(ev)->ev_count += (val)
-#else
-#define	MVGBE_EVCNT_INCR(ev)		/* nothing */
-#define	MVGBE_EVCNT_ADD(ev, val)	/* nothing */
-#endif
 
 struct mvgbe_jpool_entry {
 	int slot;
@@ -224,8 +212,6 @@ struct mvgbe_softc {
 	struct mvgbe_ring_data *sc_rdata;
 	bus_dmamap_t sc_ring_map;
 	int sc_if_flags;
-	unsigned int sc_ipginttx;
-	unsigned int sc_ipgintrx;
 	int sc_wdogsoft;
 
 	LIST_HEAD(__mvgbe_jfreehead, mvgbe_jpool_entry) sc_jfree_listhead;
@@ -233,11 +219,6 @@ struct mvgbe_softc {
 	SIMPLEQ_HEAD(__mvgbe_txmaphead, mvgbe_txmap_entry) sc_txmap_head;
 
 	krndsource_t sc_rnd_source;
-	struct sysctllog *mvgbe_clog;
-#ifdef MVGBE_EVENT_COUNTERS
-	struct evcnt sc_ev_rxoverrun;
-	struct evcnt sc_ev_wdogsoft;
-#endif
 };
 
 
@@ -252,7 +233,7 @@ static int mvgbec_search(device_t, cfdata_t, const int *, void *);
 /* MII funcstions */
 static int mvgbec_miibus_readreg(device_t, int, int);
 static void mvgbec_miibus_writereg(device_t, int, int, int);
-static void mvgbec_miibus_statchg(struct ifnet *);
+static void mvgbec_miibus_statchg(device_t);
 
 static void mvgbec_wininit(struct mvgbec_softc *);
 
@@ -289,13 +270,6 @@ static void mvgbe_filter_setup(struct mvgbe_softc *);
 #ifdef MVGBE_DEBUG
 static void mvgbe_dump_txdesc(struct mvgbe_tx_desc *, int);
 #endif
-static int mvgbe_ipginttx(struct mvgbec_softc *, struct mvgbe_softc *,
-    unsigned int);
-static int mvgbe_ipgintrx(struct mvgbec_softc *, struct mvgbe_softc *,
-    unsigned int);
-static void sysctl_mvgbe_init(struct mvgbe_softc *);
-static int mvgbe_sysctl_ipginttx(SYSCTLFN_PROTO);
-static int mvgbe_sysctl_ipgintrx(SYSCTLFN_PROTO);
 
 CFATTACH_DECL_NEW(mvgbec_gt, sizeof(struct mvgbec_softc),
     mvgbec_match, mvgbec_attach, NULL, NULL);
@@ -306,7 +280,6 @@ CFATTACH_DECL_NEW(mvgbe, sizeof(struct mvgbe_softc),
     mvgbe_match, mvgbe_attach, NULL, NULL);
 
 device_t mvgbec0 = NULL;
-static int mvgbe_root_num;
 
 struct mvgbe_port {
 	int model;
@@ -316,8 +289,6 @@ struct mvgbe_port {
 	int flags;
 #define FLAGS_FIX_TQTB	(1 << 0)
 #define FLAGS_FIX_MTU	(1 << 1)
-#define	FLAGS_IPG1	(1 << 2)
-#define	FLAGS_IPG2	(1 << 3)
 } mvgbe_ports[] = {
 	{ MARVELL_DISCOVERY_II,		0, 3, { 32, 33, 34 }, 0 },
 	{ MARVELL_DISCOVERY_III,	0, 3, { 32, 33, 34 }, 0 },
@@ -328,26 +299,24 @@ struct mvgbe_port {
 #endif
 	{ MARVELL_ORION_1_88F5082,	0, 1, { 21 }, FLAGS_FIX_MTU },
 	{ MARVELL_ORION_1_88F5180N,	0, 1, { 21 }, FLAGS_FIX_MTU },
-	{ MARVELL_ORION_1_88F5181,	0, 1, { 21 }, FLAGS_FIX_MTU | FLAGS_IPG1 },
-	{ MARVELL_ORION_1_88F5182,	0, 1, { 21 }, FLAGS_FIX_MTU | FLAGS_IPG1 },
-	{ MARVELL_ORION_2_88F5281,	0, 1, { 21 }, FLAGS_FIX_MTU | FLAGS_IPG1 },
+	{ MARVELL_ORION_1_88F5181,	0, 1, { 21 }, FLAGS_FIX_MTU },
+	{ MARVELL_ORION_1_88F5182,	0, 1, { 21 }, FLAGS_FIX_MTU },
+	{ MARVELL_ORION_2_88F5281,	0, 1, { 21 }, FLAGS_FIX_MTU },
 	{ MARVELL_ORION_1_88F6082,	0, 1, { 21 }, FLAGS_FIX_MTU },
 	{ MARVELL_ORION_1_88W8660,	0, 1, { 21 }, FLAGS_FIX_MTU },
 
-	{ MARVELL_KIRKWOOD_88F6180,	0, 1, { 11 }, FLAGS_FIX_TQTB | FLAGS_IPG2 },
-	{ MARVELL_KIRKWOOD_88F6192,	0, 1, { 11 }, FLAGS_FIX_TQTB | FLAGS_IPG2 },
-	{ MARVELL_KIRKWOOD_88F6192,	1, 1, { 15 }, FLAGS_FIX_TQTB | FLAGS_IPG2 },
-	{ MARVELL_KIRKWOOD_88F6281,	0, 1, { 11 }, FLAGS_FIX_TQTB | FLAGS_IPG2 },
-	{ MARVELL_KIRKWOOD_88F6281,	1, 1, { 15 }, FLAGS_FIX_TQTB | FLAGS_IPG2 },
-	{ MARVELL_KIRKWOOD_88F6282,	0, 1, { 11 }, FLAGS_FIX_TQTB | FLAGS_IPG2 },
-	{ MARVELL_KIRKWOOD_88F6282,	1, 1, { 15 }, FLAGS_FIX_TQTB | FLAGS_IPG2 },
+	{ MARVELL_KIRKWOOD_88F6180,	0, 1, { 11 }, FLAGS_FIX_TQTB },
+	{ MARVELL_KIRKWOOD_88F6192,	0, 1, { 11 }, FLAGS_FIX_TQTB },
+	{ MARVELL_KIRKWOOD_88F6192,	1, 1, { 14 }, FLAGS_FIX_TQTB },
+	{ MARVELL_KIRKWOOD_88F6281,	0, 1, { 11 }, FLAGS_FIX_TQTB },
+	{ MARVELL_KIRKWOOD_88F6281,	1, 1, { 15 }, FLAGS_FIX_TQTB },
 
-	{ MARVELL_MV78XX0_MV78100,	0, 1, { 40 }, FLAGS_FIX_TQTB | FLAGS_IPG2 },
-	{ MARVELL_MV78XX0_MV78100,	1, 1, { 44 }, FLAGS_FIX_TQTB | FLAGS_IPG2 },
-	{ MARVELL_MV78XX0_MV78200,	0, 1, { 40 }, FLAGS_FIX_TQTB | FLAGS_IPG2 },
-	{ MARVELL_MV78XX0_MV78200,	1, 1, { 44 }, FLAGS_FIX_TQTB | FLAGS_IPG2 },
-	{ MARVELL_MV78XX0_MV78200,	2, 1, { 48 }, FLAGS_FIX_TQTB | FLAGS_IPG2 },
-	{ MARVELL_MV78XX0_MV78200,	3, 1, { 52 }, FLAGS_FIX_TQTB | FLAGS_IPG2 },
+	{ MARVELL_MV78XX0_MV78100,	0, 1, { 40 }, FLAGS_FIX_TQTB },
+	{ MARVELL_MV78XX0_MV78100,	1, 1, { 44 }, FLAGS_FIX_TQTB },
+	{ MARVELL_MV78XX0_MV78200,	0, 1, { 40 }, FLAGS_FIX_TQTB },
+	{ MARVELL_MV78XX0_MV78200,	1, 1, { 44 }, FLAGS_FIX_TQTB },
+	{ MARVELL_MV78XX0_MV78200,	2, 1, { 48 }, FLAGS_FIX_TQTB },
+	{ MARVELL_MV78XX0_MV78200,	3, 1, { 52 }, FLAGS_FIX_TQTB },
 };
 
 
@@ -396,7 +365,7 @@ mvgbec_attach(device_t parent, device_t self, void *aux)
 
 	if (mvgbec0 == NULL)
 		mvgbec0 = self;
-
+		
 	phyaddr = 0;
 	MVGBE_WRITE(csc, MVGBE_PHYADDR, phyaddr);
 
@@ -569,7 +538,7 @@ mvgbec_miibus_writereg(device_t dev, int phy, int reg, int val)
 }
 
 static void
-mvgbec_miibus_statchg(struct ifnet *ifp)
+mvgbec_miibus_statchg(device_t dev)
 {
 
 	/* nothing to do */
@@ -821,14 +790,6 @@ mvgbe_attach(device_t parent, device_t self, void *aux)
 	ether_ifattach(ifp, sc->sc_enaddr);
 	ether_set_ifflags_cb(&sc->sc_ethercom, mvgbe_ifflags_cb);
 
-	sysctl_mvgbe_init(sc);
-#ifdef MVGBE_EVENT_COUNTERS
-	/* Attach event counters. */
-	evcnt_attach_dynamic(&sc->sc_ev_rxoverrun, EVCNT_TYPE_MISC,
-	    NULL, device_xname(sc->sc_dev), "rxoverrrun");
-	evcnt_attach_dynamic(&sc->sc_ev_wdogsoft, EVCNT_TYPE_MISC,
-	    NULL, device_xname(sc->sc_dev), "wdogsoft");
-#endif
 	rnd_attach_source(&sc->sc_rnd_source, device_xname(sc->sc_dev),
 	    RND_TYPE_NET, 0);
 
@@ -849,51 +810,6 @@ fail1:
 	return;
 }
 
-static int
-mvgbe_ipginttx(struct mvgbec_softc *csc, struct mvgbe_softc *sc,
-    unsigned int ipginttx)
-{
-	uint32_t reg;
-	reg = MVGBE_READ(sc, MVGBE_PTFUT);
-
-	if (csc->sc_flags & FLAGS_IPG2) {
-		if (ipginttx > MVGBE_PTFUT_IPGINTTX_V2_MAX)
-			return -1;
-		reg &= ~MVGBE_PTFUT_IPGINTTX_V2_MASK;
-		reg |= MVGBE_PTFUT_IPGINTTX_V2(ipginttx);
-	} else if (csc->sc_flags & FLAGS_IPG1) {
-		if (ipginttx > MVGBE_PTFUT_IPGINTTX_V1_MAX)
-			return -1;
-		reg &= ~MVGBE_PTFUT_IPGINTTX_V1_MASK;
-		reg |= MVGBE_PTFUT_IPGINTTX_V1(ipginttx);
-	}
-	MVGBE_WRITE(sc, MVGBE_PTFUT, reg);
-
-	return 0;
-}
-
-static int
-mvgbe_ipgintrx(struct mvgbec_softc *csc, struct mvgbe_softc *sc,
-    unsigned int ipgintrx)
-{
-	uint32_t reg;
-	reg = MVGBE_READ(sc, MVGBE_SDC);
-
-	if (csc->sc_flags & FLAGS_IPG2) {
-		if (ipgintrx > MVGBE_SDC_IPGINTRX_V2_MAX)
-			return -1;
-		reg &= ~MVGBE_SDC_IPGINTRX_V2_MASK;
-		reg |= MVGBE_SDC_IPGINTRX_V2(ipgintrx);
-	} else if (csc->sc_flags & FLAGS_IPG1) {
-		if (ipgintrx > MVGBE_SDC_IPGINTRX_V1_MAX)
-			return -1;
-		reg &= ~MVGBE_SDC_IPGINTRX_V1_MASK;
-		reg |= MVGBE_SDC_IPGINTRX_V1(ipgintrx);
-	}
-	MVGBE_WRITE(sc, MVGBE_SDC, reg);
-
-	return 0;
-}
 
 static void
 mvgbe_tick(void *arg)
@@ -905,7 +821,6 @@ mvgbe_tick(void *arg)
 	s = splnet();
 	mii_tick(mii);
 	/* Need more work */
-	MVGBE_EVCNT_ADD(&sc->sc_ev_rxoverrun, MVGBE_READ(sc, MVGBE_POFC));
 	splx(s);
 
 	callout_schedule(&sc->sc_tick_ch, hz);
@@ -1056,6 +971,9 @@ mvgbe_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 	return error;
 }
 
+int mvgbe_rximt = 0;
+int mvgbe_tximt = 0;
+
 static int
 mvgbe_init(struct ifnet *ifp)
 {
@@ -1086,10 +1004,6 @@ mvgbe_init(struct ifnet *ifp)
 		return ENOBUFS;
 	}
 
-	if ((csc->sc_flags & FLAGS_IPG1) || (csc->sc_flags & FLAGS_IPG2)) {
-		sc->sc_ipginttx = MVGBE_IPGINTTX_DEFAULT;
-		sc->sc_ipgintrx = MVGBE_IPGINTRX_DEFAULT;
-	}
 	if (csc->sc_flags & FLAGS_FIX_MTU)
 		MVGBE_WRITE(sc, MVGBE_MTU, 0);	/* hw reset value is wrong */
 	MVGBE_WRITE(sc, MVGBE_PSC,
@@ -1128,21 +1042,15 @@ mvgbe_init(struct ifnet *ifp)
 
 	MVGBE_WRITE(sc, MVGBE_PXC, MVGBE_PXC_RXCS);
 	MVGBE_WRITE(sc, MVGBE_PXCX, 0);
-
-	/* Set SDC register except IPGINT bits */
 	MVGBE_WRITE(sc, MVGBE_SDC,
 	    MVGBE_SDC_RXBSZ_16_64BITWORDS |
 #if BYTE_ORDER == LITTLE_ENDIAN
 	    MVGBE_SDC_BLMR |	/* Big/Little Endian Receive Mode: No swap */
 	    MVGBE_SDC_BLMT |	/* Big/Little Endian Transmit Mode: No swap */
 #endif
+	    MVGBE_SDC_IPGINTRX(mvgbe_rximt) |
 	    MVGBE_SDC_TXBSZ_16_64BITWORDS);
-	/* And then set IPGINT bits */
-	mvgbe_ipgintrx(csc, sc, sc->sc_ipgintrx);
-
-	/* Tx side */
-	MVGBE_WRITE(sc, MVGBE_PTFUT, 0);
-	mvgbe_ipginttx(csc, sc, sc->sc_ipginttx);
+	MVGBE_WRITE(sc, MVGBE_PTFUT, MVGBE_PTFUT_IPGINTTX(mvgbe_tximt));
 
 	mvgbe_filter_setup(sc);
 
@@ -1309,7 +1217,6 @@ mvgbe_watchdog(struct ifnet *ifp)
 			MVGBE_WRITE(sc, MVGBE_TQC, MVGBE_TQC_ENQ);
 			ifp->if_timer = 5;
 			sc->sc_wdogsoft = 0;
-			MVGBE_EVCNT_INCR(&sc->sc_ev_wdogsoft);
 		} else {
 			aprint_error_ifnet(ifp, "watchdog timeout\n");
 
@@ -2128,123 +2035,3 @@ mvgbe_dump_txdesc(struct mvgbe_tx_desc *desc, int idx)
 #undef DESC_PRINT
 }
 #endif
-
-SYSCTL_SETUP(sysctl_mvgbe, "sysctl mvgbe subtree setup")
-{
-	int rc;
-	const struct sysctlnode *node;
-
-	if ((rc = sysctl_createv(clog, 0, NULL, NULL,
-	    0, CTLTYPE_NODE, "hw", NULL,
-	    NULL, 0, NULL, 0, CTL_HW, CTL_EOL)) != 0) {
-		goto err;
-	}
-
-	if ((rc = sysctl_createv(clog, 0, NULL, &node,
-	    0, CTLTYPE_NODE, "mvgbe",
-	    SYSCTL_DESCR("mvgbe interface controls"),
-	    NULL, 0, NULL, 0, CTL_HW, CTL_CREATE, CTL_EOL)) != 0) {
-		goto err;
-	}
-
-	mvgbe_root_num = node->sysctl_num;
-	return;
-
-err:
-	aprint_error("%s: syctl_createv failed (rc = %d)\n", __func__, rc);
-}
-
-static void
-sysctl_mvgbe_init(struct mvgbe_softc *sc)
-{
-	const struct sysctlnode *node;
-	int mvgbe_nodenum;
-
-	if (sysctl_createv(&sc->mvgbe_clog, 0, NULL, &node,
-		0, CTLTYPE_NODE, device_xname(sc->sc_dev),
-		SYSCTL_DESCR("mvgbe per-controller controls"),
-		NULL, 0, NULL, 0, CTL_HW, mvgbe_root_num, CTL_CREATE,
-		CTL_EOL) != 0) {
-		aprint_normal_dev(sc->sc_dev, "couldn't create sysctl node\n");
-		return;
-	}
-	mvgbe_nodenum = node->sysctl_num;
-
-	/* interrupt moderation sysctls */
-	if (sysctl_createv(&sc->mvgbe_clog, 0, NULL, &node,
-		CTLFLAG_READWRITE, CTLTYPE_INT, "ipginttx",
-		SYSCTL_DESCR("mvgbe TX interrupt moderation timer"),
-		mvgbe_sysctl_ipginttx, 0, (void *)sc,
-		0, CTL_HW, mvgbe_root_num, mvgbe_nodenum, CTL_CREATE,
-		CTL_EOL) != 0) {
-		aprint_normal_dev(sc->sc_dev,
-		    "couldn't create ipginttx sysctl node\n");
-	}
-	if (sysctl_createv(&sc->mvgbe_clog, 0, NULL, &node,
-		CTLFLAG_READWRITE, CTLTYPE_INT, "ipgintrx",
-		SYSCTL_DESCR("mvgbe RX interrupt moderation timer"),
-		mvgbe_sysctl_ipgintrx, 0, (void *)sc,
-		0, CTL_HW, mvgbe_root_num, mvgbe_nodenum, CTL_CREATE,
-		CTL_EOL) != 0) {
-		aprint_normal_dev(sc->sc_dev,
-		    "couldn't create ipginttx sysctl node\n");
-	}
-}
-
-static int
-mvgbe_sysctl_ipginttx(SYSCTLFN_ARGS)
-{
-	int error;
-	unsigned int t;
-	struct sysctlnode node;
-	struct mvgbec_softc *csc;
-	struct mvgbe_softc *sc;
-
-	node = *rnode;
-	sc = node.sysctl_data;
-	csc = device_private(device_parent(sc->sc_dev));
-	t = sc->sc_ipginttx;
-	node.sysctl_data = &t;
-	error = sysctl_lookup(SYSCTLFN_CALL(&node));
-	if (error || newp == NULL)
-		return error;
-
-	if (mvgbe_ipginttx(csc, sc, t) < 0)
-		return EINVAL;
-	/*
-	 * update the softc with sysctl-changed value, and mark
-	 * for hardware update
-	 */
-	sc->sc_ipginttx = t;
-
-	return 0;
-}
-
-static int
-mvgbe_sysctl_ipgintrx(SYSCTLFN_ARGS)
-{
-	int error;
-	unsigned int t;
-	struct sysctlnode node;
-	struct mvgbec_softc *csc;
-	struct mvgbe_softc *sc;
-
-	node = *rnode;
-	sc = node.sysctl_data;
-	csc = device_private(device_parent(sc->sc_dev));
-	t = sc->sc_ipgintrx;
-	node.sysctl_data = &t;
-	error = sysctl_lookup(SYSCTLFN_CALL(&node));
-	if (error || newp == NULL)
-		return error;
-
-	if (mvgbe_ipgintrx(csc, sc, t) < 0)
-		return EINVAL;
-	/*
-	 * update the softc with sysctl-changed value, and mark
-	 * for hardware update
-	 */
-	sc->sc_ipgintrx = t;
-
-	return 0;
-}

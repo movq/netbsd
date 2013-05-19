@@ -1,4 +1,4 @@
-/*	$NetBSD: lex.c,v 1.43 2013/02/20 14:38:13 christos Exp $	*/
+/*	$NetBSD: lex.c,v 1.40 2011/09/16 15:39:27 joerg Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)lex.c	8.2 (Berkeley) 4/20/95";
 #else
-__RCSID("$NetBSD: lex.c,v 1.43 2013/02/20 14:38:13 christos Exp $");
+__RCSID("$NetBSD: lex.c,v 1.40 2011/09/16 15:39:27 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -141,47 +141,6 @@ file_leak_check(void)
 }
 #endif /* DEBUG_FILE_LEAK */
 
-static void
-update_mailname(const char *name)
-{
-	char tbuf[PATHSIZE];
-	size_t l;
-
-	/* Don't realpath(3) if it's only an update request */
-	if (name != NULL && realpath(name, mailname) == NULL) {
-		warn("Can't canonicalize `%s'", name);
-		return;
-	}
-
-	if (getfold(tbuf, sizeof(tbuf)) >= 0) {
-		l = strlen(tbuf);
-		if (l < sizeof(tbuf) - 1)
-			tbuf[l++] = '/';
-		if (strncmp(tbuf, mailname, l) == 0) {
-			char const *sep = "", *cp = mailname + l;
-
-			l = strlen(cp);
-			if (l >= sizeof(displayname)) {
-				cp += l;
-				cp -= sizeof(displayname) - 5;
-				sep = "...";
-			}
-			(void)snprintf(displayname, sizeof(displayname),
-			    "+%s%s", sep, cp);
-			return;
-		}
-	}
-
-	l = strlen(mailname);
-	if (l < sizeof(displayname))
-		strcpy(displayname, mailname);
-	else {
-		l -= sizeof(displayname) - 4 - sizeof(displayname) / 3;
-		(void)snprintf(displayname, sizeof(displayname), "%.*s...%s",
-			(int)sizeof(displayname) / 3, mailname, mailname + l);
-	}
-}
-
 /*
  * Set the size of the message vector used to construct argument
  * lists to message list functions.
@@ -214,7 +173,7 @@ setfile(const char *name)
 	if ((name = expand(name)) == NULL)
 		return -1;
 
-	if ((ibuf = Fopen(name, "re")) == NULL) {
+	if ((ibuf = Fopen(name, "r")) == NULL) {
 		if (!isedit && errno == ENOENT)
 			goto nomail;
 		warn("Can't open `%s'", name);
@@ -273,15 +232,18 @@ setfile(const char *name)
 	shudclob = 1;
 	edit = isedit;
 	(void)strcpy(prevfile, mailname);
-	update_mailname(name != mailname ? name : NULL);
+	if (name != mailname)
+		(void)strcpy(mailname, name);
 	mailsize = fsize(ibuf);
 	(void)snprintf(tempname, sizeof(tempname),
 	    "%s/mail.RxXXXXXXXXXX", tmpdir);
 	if ((fd = mkstemp(tempname)) == -1 ||
-	    (otf = fdopen(fd, "we")) == NULL)
+	    (otf = fdopen(fd, "w")) == NULL)
 		err(EXIT_FAILURE, "Can't create tmp file `%s'", tempname);
-	if ((itf = fopen(tempname, "re")) == NULL)
+	(void)fcntl(fileno(otf), F_SETFD, FD_CLOEXEC);
+	if ((itf = fopen(tempname, "r")) == NULL)
 		err(EXIT_FAILURE, "Can't create tmp file `%s'", tempname);
+	(void)fcntl(fileno(itf), F_SETFD, FD_CLOEXEC);
 	(void)rm(tempname);
 	setptr(ibuf, (off_t)0);
 	setmsize(get_abs_msgCount());
@@ -317,7 +279,7 @@ incfile(void)
 
 	omsgCount = get_abs_msgCount();
 
-	ibuf = Fopen(mailname, "re");
+	ibuf = Fopen(mailname, "r");
 	if (ibuf == NULL)
 		return -1;
 	sig_check();
@@ -487,7 +449,7 @@ setup_piping(const char *cmd, char *cmdline, int c_pipe)
 		cp++;
 
 		if (c == '|') {
-			if ((fout = Popen(cp, "we")) == NULL) {
+			if ((fout = Popen(cp, "w")) == NULL) {
 				warn("Popen: %s", cp);
 				return -1;
 			}
@@ -495,7 +457,7 @@ setup_piping(const char *cmd, char *cmdline, int c_pipe)
 		else {
 			const char *mode;
 			assert(c == '>');
-			mode = *cp == '>' ? "ae" : "we";
+			mode = *cp == '>' ? "a" : "w";
 			if (*cp == '>')
 				cp++;
 
@@ -513,7 +475,7 @@ setup_piping(const char *cmd, char *cmdline, int c_pipe)
 		if (pager == NULL || *pager == '\0')
 			pager = _PATH_MORE;
 
-		if ((fout = Popen(pager, "we")) == NULL) {
+		if ((fout = Popen(pager, "w")) == NULL) {
 			warn("Popen: %s", pager);
 			return -1;
 		}
@@ -1011,6 +973,8 @@ newfileinfo(int omsgCount)
 {
 	struct message *mp;
 	int d, n, s, t, u, mdot;
+	char fname[PATHSIZE];
+	char *ename;
 
 	/*
 	 * Figure out where to set the 'dot'.  Use the first new or
@@ -1054,11 +1018,23 @@ newfileinfo(int omsgCount)
 		if (mp->m_flag & MTAGGED)
 			t++;
 	}
+	ename = mailname;
+	if (getfold(fname, sizeof(fname)) >= 0) {
+		char zname[PATHSIZE];
+		size_t l;
+		l = strlen(fname);
+		if (l < sizeof(fname) - 1)
+			fname[l++] = '/';
+		if (strncmp(fname, mailname, l) == 0) {
+			(void)snprintf(zname, sizeof(zname), "+%s",
+			    mailname + l);
+			ename = zname;
+		}
+	}
 	/*
 	 * Display the statistics.
 	 */
-	update_mailname(NULL);
-	(void)printf("\"%s\": ", displayname);
+	(void)printf("\"%s\": ", ename);
 	{
 		int cnt = get_abs_msgCount();
 		(void)printf("%d message%s", cnt, cnt == 1 ? "" : "s");
@@ -1121,7 +1097,7 @@ load(const char *name)
 {
 	FILE *in, *oldin;
 
-	if ((in = Fopen(name, "re")) == NULL)
+	if ((in = Fopen(name, "r")) == NULL)
 		return;
 	oldin = input;
 	input = in;

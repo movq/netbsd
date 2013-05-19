@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.350 2013/01/07 16:59:18 chs Exp $ */
+/*	$NetBSD: pmap.c,v 1.348 2012/01/29 11:49:58 para Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -56,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.350 2013/01/07 16:59:18 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.348 2012/01/29 11:49:58 para Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -7408,32 +7408,21 @@ kvm_iocache(char *va, int npages)
  * (This will just seg-align mappings.)
  */
 void
-pmap_prefer(vaddr_t foff, vaddr_t *vap, size_t size, int td)
+pmap_prefer(vaddr_t foff, vaddr_t *vap)
 {
 	vaddr_t va = *vap;
-	long m;
+	long d, m;
+
+	if (VA_INHOLE(va))
+		va = MMU_HOLE_END;
 
 	m = CACHE_ALIAS_DIST;
 	if (m == 0)		/* m=0 => no cache aliasing */
 		return;
 
-	if (VA_INHOLE(va)) {
-		if (td)
-			va = MMU_HOLE_START - size;
-		else
-			va = MMU_HOLE_END;
-	}
-
-	va = (va & ~(m - 1)) | (foff & (m - 1));
-
-	if (td) {
-		if (va > *vap)
-			va -= m;
-	} else {
-		if (va < *vap)
-			va += m;
-	}
-	*vap = va;
+	d = foff - va;
+	d &= (m - 1);
+	*vap = va + d;
 }
 
 void
@@ -7451,19 +7440,31 @@ void
 pmap_activate(struct lwp *l)
 {
 	pmap_t pm = l->l_proc->p_vmspace->vm_map.pmap;
+	int s;
 
-	if (pm == pmap_kernel() || l != curlwp) {
-		return;
-	}
+	/*
+	 * This is essentially the same thing that happens in cpu_switch()
+	 * when the newly selected process is about to run, except that we
+	 * have to make sure to clean the register windows before we set
+	 * the new context.
+	 */
 
-	PMAP_LOCK();
-	if (pm->pm_ctx == NULL) {
-		ctx_alloc(pm);	/* performs setcontext() */
-	} else {
-		setcontext(pm->pm_ctxnum);
+	s = splvm();
+	if (l == curlwp) {
+		write_user_windows();
+		if (pm->pm_ctx == NULL) {
+			ctx_alloc(pm);	/* performs setcontext() */
+		} else {
+			/* Do any cache flush needed on context switch */
+			(*cpuinfo.pure_vcache_flush)();
+			setcontext(pm->pm_ctxnum);
+		}
+#if defined(MULTIPROCESSOR)
+		if (pm != pmap_kernel())
+			PMAP_SET_CPUSET(pm, &cpuinfo);
+#endif
 	}
-	PMAP_SET_CPUSET(pm, &cpuinfo);
-	PMAP_UNLOCK();
+	splx(s);
 }
 
 /*
@@ -7472,27 +7473,22 @@ pmap_activate(struct lwp *l)
 void
 pmap_deactivate(struct lwp *l)
 {
-	struct proc *p = l->l_proc;
-	pmap_t pm = p->p_vmspace->vm_map.pmap;
+#if defined(MULTIPROCESSOR)
+	pmap_t pm;
+	struct proc *p;
 
-	if (pm == pmap_kernel() || l != curlwp) {
-		return;
-	}
-
-	write_user_windows();
-	PMAP_LOCK();
-	if (pm->pm_ctx) {
-		(*cpuinfo.pure_vcache_flush)();
-
+	p = l->l_proc;
+	if (p->p_vmspace &&
+	    (pm = p->p_vmspace->vm_map.pmap) != pmap_kernel()) {
 #if defined(SUN4M) || defined(SUN4D)
-		if (CPU_HAS_SRMMU)
+		if (pm->pm_ctx && CPU_HAS_SRMMU)
 			sp_tlb_flush(0, pm->pm_ctxnum, ASI_SRMMUFP_L0);
 #endif
-	}
 
-	/* we no longer need broadcast tlb flushes for this pmap. */
-	PMAP_CLR_CPUSET(pm, &cpuinfo);
-	PMAP_UNLOCK();
+		/* we no longer need broadcast tlb flushes for this pmap. */
+		PMAP_CLR_CPUSET(pm, &cpuinfo);
+	}
+#endif
 }
 
 #ifdef DEBUG

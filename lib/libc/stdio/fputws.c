@@ -1,4 +1,4 @@
-/* $NetBSD: fputws.c,v 1.2 2012/03/15 18:22:30 christos Exp $ */
+/* $NetBSD: fputws.c,v 1.1 2003/03/07 07:11:37 tshiozak Exp $ */
 
 /*-
  * Copyright (c) 2002 Tim J. Robbins.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: fputws.c,v 1.2 2012/03/15 18:22:30 christos Exp $");
+__RCSID("$NetBSD: fputws.c,v 1.1 2003/03/07 07:11:37 tshiozak Exp $");
 #endif
 
 #include <assert.h>
@@ -42,7 +42,9 @@ __RCSID("$NetBSD: fputws.c,v 1.2 2012/03/15 18:22:30 christos Exp $");
 #include "local.h"
 
 int
-fputws(const wchar_t * __restrict ws, FILE * __restrict fp)
+fputws(ws, fp)
+	const wchar_t * __restrict ws;
+	FILE * __restrict fp;
 {
 	_DIAGASSERT(fp != NULL);
 	_DIAGASSERT(ws != NULL);
@@ -53,11 +55,11 @@ fputws(const wchar_t * __restrict ws, FILE * __restrict fp)
 	while (*ws != '\0') {
 		if (__fputwc_unlock(*ws++, fp) == WEOF) {
 			FUNLOCKFILE(fp);
-			return -1;
+			return (-1);
 		}
 	}
 
 	FUNLOCKFILE(fp);
 
-	return 0;
+	return (0);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_elf.h,v 1.127 2013/01/30 01:12:56 matt Exp $	*/
+/*	$NetBSD: exec_elf.h,v 1.122 2012/02/04 18:12:02 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -668,12 +668,7 @@ typedef struct {
 #define DT_FINI_ARRAY	26	/* Size, in bytes, of DT_INIT_ARRAY array */
 #define DT_INIT_ARRAYSZ 27	/* Address of termination function array */
 #define DT_FINI_ARRAYSZ 28	/* Size, in bytes, of DT_FINI_ARRAY array*/
-#define DT_RUNPATH	29	/* overrides DT_RPATH */
-#define DT_FLAGS	30	/* Encodes ORIGIN, SYMBOLIC, TEXTREL, BIND_NOW, STATIC_TLS */
-#define DT_ENCODING	31	/* ??? */
-#define DT_PREINIT_ARRAY 32	/* Address of pre-init function array */
-#define DT_PREINIT_ARRAYSZ 33	/* Size, in bytes, of DT_PREINIT_ARRAY array */
-#define DT_NUM		34
+#define DT_NUM		29
 
 #define DT_LOOS		0x60000000	/* Operating system specific range */
 #define DT_VERSYM	0x6ffffff0	/* Symbol versions */
@@ -810,23 +805,6 @@ typedef struct {
  */
 #define ELF_NOTE_TYPE_GNU_BUILD_ID	3
 
-/* SuSE-specific note type: ABI
- * name: SuSE\0
- * namesz: 5
- * desc:
- *	half[0] = MMmm
- *
- *	M = product major version
- *	m = product minor version
- * descsz: 2
- */
-#define ELF_NOTE_TYPE_SUSE_TAG	1
-/* SuSE-specific note name and description sizes */
-#define ELF_NOTE_SUSE_NAMESZ	5
-#define ELF_NOTE_SUSE_DESCSZ	2
-/* SuSE-specific note name */
-#define ELF_NOTE_SUSE_NAME		"SuSE\0"
-
 /* SuSE-specific note type: version
  * name: SuSE\0\0\0\0
  * namesz: 8
@@ -839,12 +817,12 @@ typedef struct {
  *	m = product minor version
  * descsz: 8
  */
-#define ELF_NOTE_TYPE_SUSE_VERSION_TAG	0x45537553	/* SuSE in LE */
+#define ELF_NOTE_TYPE_SUSE_TAG		0x45537553	/* SuSE in LE */
 /* SuSE-specific note name and description sizes */
-#define ELF_NOTE_SUSE_VERSION_NAMESZ	8
-#define ELF_NOTE_SUSE_VERSION_DESCSZ	8
+#define ELF_NOTE_SUSE_NAMESZ		8
+#define ELF_NOTE_SUSE_DESCSZ		8
 /* SuSE-specific note name */
-#define ELF_NOTE_SUSE_VERSION_NAME		"SuSE\0\0\0\0"
+#define ELF_NOTE_SUSE_NAME		"SuSE\0\0\0\0"
 
 /* NetBSD-specific note type: Emulation name.
  * name: NetBSD\0\0

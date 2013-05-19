@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.22 2013/01/15 10:18:38 martin Exp $     */
+/*	$NetBSD: syscall.c,v 1.20 2012/02/11 23:16:16 martin Exp $     */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -33,15 +33,18 @@
  /* All bugs are subject to removal without further notice */
 		
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.22 2013/01/15 10:18:38 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.20 2012/02/11 23:16:16 martin Exp $");
 
 #include "opt_multiprocessor.h"
+#include "opt_sa.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/cpu.h>
 #include <sys/ktrace.h>
 #include <sys/proc.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscall.h>
 #include <sys/syscallvar.h>
 
@@ -77,7 +80,7 @@ syscall(struct trapframe *tf)
 
 	TDB(("trap syscall %s pc %lx, psl %lx, sp %lx, pid %d, frame %p\n",
 	    syscallnames[tf->tf_code], tf->tf_pc, tf->tf_psl,tf->tf_sp,
-	    p->p_pid,tf));
+	    p->p_pid,frame));
 
 	curcpu()->ci_data.cpu_nsyscall++;
  
@@ -99,6 +102,12 @@ syscall(struct trapframe *tf)
 			goto bad;
 	}
 
+#ifdef KERN_SA
+	if (__predict_false((l->l_savp)
+            && (l->l_savp->savp_pflags & SAVP_FLAG_DELIVERING)))
+		l->l_savp->savp_pflags &= ~SAVP_FLAG_DELIVERING;
+#endif
+
 	/*
 	 * Only trace if tracing is enabled and the syscall isn't indirect
 	 * (SYS_syscall or SYS___syscall)
@@ -111,7 +120,7 @@ syscall(struct trapframe *tf)
 
 	TDB(("return %s pc %lx, psl %lx, sp %lx, pid %d, err %d r0 %d, r1 %d, "
 	    "tf %p\n", syscallnames[tf->tf_code], tf->tf_pc, tf->tf_psl,
-	    tf->tf_sp, p->p_pid, error, rval[0], rval[1], tf));
+	    tf->tf_sp, p->p_pid, error, rval[0], rval[1], exptr));
 bad:
 	switch (error) {
 	case 0:

@@ -1,4 +1,4 @@
-/*	$NetBSD: mime_detach.c,v 1.8 2012/04/29 23:50:22 christos Exp $	*/
+/*	$NetBSD: mime_detach.c,v 1.6 2011/05/24 12:33:22 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #ifndef __lint__
-__RCSID("$NetBSD: mime_detach.c,v 1.8 2012/04/29 23:50:22 christos Exp $");
+__RCSID("$NetBSD: mime_detach.c,v 1.6 2011/05/24 12:33:22 joerg Exp $");
 #endif /* not __lint__ */
 
 #include <assert.h>
@@ -125,14 +125,14 @@ detach_open_core(char *fname, const char *partstr)
 
 	flags = (detach_ctl.overwrite ? 0 : O_EXCL) | O_CREAT | O_TRUNC | O_WRONLY;
 
-	if ((fd = open(fname, flags | O_CLOEXEC, 0600)) != -1 &&
-	    Fdopen(fd, "we") != NULL)
+	if ((fd = open(fname, flags, 0600)) != -1 &&
+	    Fdopen(fd, "w") != NULL)
 		return DETACH_OPEN_OK;
 
 	if (detach_ctl.ask && fd == -1 && errno == EEXIST) {
 		char *p;
  start:
-		(void)sasprintf(&p, "%-7s overwrite %s: Always/Never/once/next/rename (ANonr)[n]? ",
+		(void)sasprintf(&p, "%-7s overwrite: Always/Never/once/next/rename (ANonr)[n]? ",
 		    partstr, fname);
 		p = my_gets(&elm.string, p, NULL);
 		if (p == NULL)
@@ -147,7 +147,7 @@ detach_open_core(char *fname, const char *partstr)
 				detach_ctl.ask = 0;
 				/* FALLTHROUGH */
 		case 'o':
-			if (Fopen(fname, "we") != NULL)
+			if (Fopen(fname, "w") != NULL)
 				return DETACH_OPEN_OK;
 			break;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.105 2012/10/14 19:06:25 tsutsui Exp $	*/
+/*	$NetBSD: fd.c,v 1.96.2.2 2012/11/18 21:56:37 riz Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.105 2012/10/14 19:06:25 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.96.2.2 2012/11/18 21:56:37 riz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_m68k_arch.h"

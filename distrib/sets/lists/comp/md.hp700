@@ -1,4 +1,4 @@
-# $NetBSD: md.hp700,v 1.10 2013/01/16 16:01:06 christos Exp $
+# $NetBSD: md.hp700,v 1.8 2011/07/17 23:37:32 dyoung Exp $
 ./usr/include/hp700				comp-c-include
 ./usr/include/hp700/ansi.h			comp-c-include
 ./usr/include/hp700/aout_machdep.h		comp-c-include
@@ -27,7 +27,6 @@
 ./usr/include/hp700/int_mwgwtypes.h		comp-c-include
 ./usr/include/hp700/int_types.h			comp-c-include
 ./usr/include/hp700/intr.h			comp-c-include
-./usr/include/hp700/intrdefs.h			comp-c-include
 ./usr/include/hp700/iomod.h			comp-c-include
 ./usr/include/hp700/isa_machdep.h		comp-c-include
 ./usr/include/hp700/kcore.h			comp-c-include
@@ -61,3 +60,4 @@
 ./usr/include/hp700/varargs.h			comp-obsolete		obsolete
 ./usr/include/hp700/vmparam.h			comp-c-include
 ./usr/include/hp700/wchar_limits.h		comp-c-include
+./usr/libdata/debug/usr/mdec/mkboot.debug	comp-sysutil-debug      debug

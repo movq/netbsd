@@ -1,4 +1,4 @@
-/*	$NetBSD: wprintf.c,v 1.3 2013/04/19 15:22:25 joerg Exp $	*/
+/*	$NetBSD: wprintf.c,v 1.1 2005/05/14 23:51:02 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002 Tim J. Robbins
@@ -31,16 +31,13 @@
 #if 0
 __FBSDID("$FreeBSD: src/lib/libc/stdio/wprintf.c,v 1.1 2002/09/21 13:00:30 tjr Exp $");
 #else
-__RCSID("$NetBSD: wprintf.c,v 1.3 2013/04/19 15:22:25 joerg Exp $");
+__RCSID("$NetBSD: wprintf.c,v 1.1 2005/05/14 23:51:02 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
 #include <stdarg.h>
 #include <stdio.h>
 #include <wchar.h>
-
-__weak_alias(wprintf_l, _wprintf_l)
 
 int
 wprintf(const wchar_t * __restrict fmt, ...)
@@ -52,18 +49,5 @@ wprintf(const wchar_t * __restrict fmt, ...)
 	ret = vfwprintf(stdout, fmt, ap);
 	va_end(ap);
 
-	return ret;
-}
-
-int
-wprintf_l(locale_t loc, const wchar_t * __restrict fmt, ...)
-{
-	int ret;
-	va_list ap;
-
-	va_start(ap, fmt);
-	ret = vfwprintf_l(stdout, loc, fmt, ap);
-	va_end(ap);
-
-	return ret;
+	return (ret);
 }

@@ -1,6 +1,6 @@
 #!/bin/sh -
 #
-#	$NetBSD: sensor_temperature,v 1.4 2012/04/10 13:58:52 jruoho Exp $
+#	$NetBSD: sensor_temperature,v 1.3.32.1 2012/04/12 17:10:40 riz Exp $
 #
 # Generic script for temperature sensors.
 #

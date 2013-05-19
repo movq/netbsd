@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.5 2012/02/19 05:06:41 christos Exp $
+# $NetBSD: Makefile,v 1.4.4.1 2012/02/24 17:18:58 riz Exp $
 
 .if (${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64")
 PROG=	iasl

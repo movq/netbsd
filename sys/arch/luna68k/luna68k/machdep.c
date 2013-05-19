@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.95 2013/01/26 15:46:24 tsutsui Exp $ */
+/* $NetBSD: machdep.c,v 1.89.2.1 2012/07/31 08:22:06 martin Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.95 2013/01/26 15:46:24 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.89.2.1 2012/07/31 08:22:06 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -68,8 +68,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.95 2013/01/26 15:46:24 tsutsui Exp $")
 #include <sys/kgdb.h>
 #endif
 #include <sys/boot_flag.h>
-#define ELFSIZE 32
-#include <sys/exec_elf.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -99,12 +97,18 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.95 2013/01/26 15:46:24 tsutsui Exp $")
 char	machine[] = MACHINE;
 char	cpu_model[120];
 
-/* Our exported CPU info; we can have only one. */
+/* Our exported CPU info; we can have only one. */  
 struct cpu_info cpu_info_store;
 
 struct vm_map *phys_map = NULL;
 
 int	maxmem;			/* max memory per process */
+int	physmem;		/* set by locore */
+/*
+ * safepri is a safe priority for sleep to set for a spin-wait
+ * during autoconfiguration or after a panic.
+ */
+int	safepri = PSL_LOWIPL;
 
 extern	u_int lowram;
 
@@ -118,12 +122,6 @@ void nmihand(struct frame);
 int  cpu_dumpsize(void);
 int  cpu_dump(int (*)(dev_t, daddr_t, void *, size_t), daddr_t *);
 void cpu_init_kcore_hdr(void);
-
-#if NKSYMS || defined(DDB) || defined(MODULAR)
-vsize_t symtab_size(vaddr_t);
-#endif
-extern char end[];
-extern void *esym;
 
 /*
  * Machine-independent crash dump header info.
@@ -161,13 +159,6 @@ luna68k_init(void)
 	extern char bootarg[64];
 
 	extern paddr_t avail_start, avail_end;
-
-	/* initialize cn_tab for early console */
-#if 1
-	cn_tab = &syscons;
-#else
-	cn_tab = &romcons;
-#endif
 
 	/*
 	 * Tell the VM system about available physical memory.  The
@@ -233,60 +224,18 @@ consinit(void)
 	}
 
 #if NKSYMS || defined(DDB) || defined(MODULAR)
-	ksyms_addsyms_elf((esym != NULL) ? 1 : 0, (void *)&end, esym);
+	{
+		extern char end[];
+		extern int *esym;
+
+		ksyms_addsyms_elf(*(int *)&end, ((int *)&end) + 1, esym);
+	}
 #endif
 #ifdef DDB
 	if (boothowto & RB_KDB)
 		cpu_Debugger();
 #endif
 }
-
-#if NKSYMS || defined(DDB) || defined(MODULAR)
-
-/*
- * Check and compute size of DDB symbols and strings.
- *
- * Note this function could be called from locore.s before MMU is turned on
- * so we should avoid global variables and function calls.
- */
-vsize_t
-symtab_size(vaddr_t hdr)
-{
-	int i;
-	Elf_Ehdr *ehdr;
-	Elf_Shdr *shp;
-	vaddr_t maxsym;
-
-	/*
-	 * Check the ELF headers.
-	 */
-
-	ehdr = (void *)hdr;
-	if (ehdr->e_ident[EI_MAG0] != ELFMAG0 ||
-	    ehdr->e_ident[EI_MAG1] != ELFMAG1 ||
-	    ehdr->e_ident[EI_MAG2] != ELFMAG2 ||
-	    ehdr->e_ident[EI_MAG3] != ELFMAG3 ||
-	    ehdr->e_ident[EI_CLASS] != ELFCLASS32) {
-		return 0;
-	}
-
-	/*
-	 * Find the end of the symbols and strings.
-	 */
-
-	maxsym = 0;
-	shp = (Elf_Shdr *)(hdr + ehdr->e_shoff);
-	for (i = 0; i < ehdr->e_shnum; i++) {
-		if (shp[i].sh_type != SHT_SYMTAB &&
-		    shp[i].sh_type != SHT_STRTAB) {
-			continue;
-		}
-		maxsym = max(maxsym, shp[i].sh_offset + shp[i].sh_size);
-	}
-
-	return maxsym;
-}
-#endif /* NKSYMS || defined(DDB) || defined(MODULAR) */
 
 /*
  * cpu_startup: allocate memory for variable-sized tables.
@@ -476,8 +425,9 @@ cpu_init_kcore_hdr(void)
 {
 	cpu_kcore_hdr_t *h = &cpu_kcore_hdr;
 	struct m68k_kcore_hdr *m = &h->un._m68k;
+	extern char end[];
 
-	memset(&cpu_kcore_hdr, 0, sizeof(cpu_kcore_hdr));
+	memset(&cpu_kcore_hdr, 0, sizeof(cpu_kcore_hdr)); 
 
 	/*
 	 * Initialize the `dispatcher' portion of the header.
@@ -552,7 +502,7 @@ cpu_dumpsize(void)
 int
 cpu_dump(int (*dump)(dev_t, daddr_t, void *, size_t), daddr_t *blknop)
 {
-	int buf[MDHDRSIZE / sizeof(int)];
+	int buf[MDHDRSIZE / sizeof(int)]; 
 	cpu_kcore_hdr_t *chdr;
 	kcore_seg_t *kseg;
 	int error;
@@ -801,7 +751,7 @@ luna68k_abort(const char *cp)
 /*
  * cpu_exec_aout_makecmds():
  *	CPU-dependent a.out format hook for execve().
- *
+ * 
  * Determine of the given exec package refers to something which we
  * understand and, if so, set up the vmcmds for it.
  */
@@ -828,7 +778,12 @@ module_init_md(void)
 }
 #endif
 
-#ifdef notyet
+#if 1
+
+struct consdev *cn_tab = &syscons;
+
+#else
+
 /*
  * romcons is useful until m68k TC register is initialized.
  */
@@ -844,6 +799,7 @@ struct consdev romcons = {
 	makedev(7, 0), /* XXX */
 	CN_DEAD,
 };
+struct consdev *cn_tab = &romcons;
 
 #define __		((int **)0x41000000)
 #define GETC()		(*(int (*)())__[6])()

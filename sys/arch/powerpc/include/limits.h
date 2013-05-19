@@ -1,4 +1,4 @@
-/*	$NetBSD: limits.h,v 1.18 2013/04/11 00:57:36 christos Exp $	*/
+/*	$NetBSD: limits.h,v 1.16 2010/06/07 13:52:31 tnozaki Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -48,9 +48,12 @@
  * These numbers work for pcc as well.  The UINT_MAX and ULONG_MAX values
  * are written as hex so that GCC will be quiet about large integer constants.
  */
+#define	SCHAR_MAX	0x7f		/* min value for a signed char */
+#define	SCHAR_MIN	(-0x7f-1)	/* max value for a signed char */
+
 #define	UCHAR_MAX	0xff		/* max value for an unsigned char */
-#define	SCHAR_MAX	0x7f		/* max value for a signed char */
-#define	SCHAR_MIN	(-0x7f-1)	/* min value for a signed char */
+#define	CHAR_MAX	0xff		/* max value for a char */
+#define	CHAR_MIN	0		/* min value for a char */
 
 #define	USHRT_MAX	0xffff		/* max value for an unsigned short */
 #define	SHRT_MAX	0x7fff		/* max value for a short */
@@ -87,10 +90,8 @@
 
 #if defined(_NETBSD_SOURCE)
 #ifdef _LP64
-#define	SSIZE_MIN	LONG_MIN	/* min value for a ssize_t */
 #define	SIZE_T_MAX	ULONG_MAX	/* max value for a size_t */
 #else
-#define	SSIZE_MIN	INT_MIN		/* min value for a ssize_t */
 #define	SIZE_T_MAX	UINT_MAX	/* max value for a size_t */
 #endif
 

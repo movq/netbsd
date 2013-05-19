@@ -1,4 +1,4 @@
-/*	$NetBSD: stvii.c,v 1.4 2013/02/28 13:21:15 macallan Exp $	*/
+/*	$NetBSD: stvii.c,v 1.3 2011/09/15 19:29:23 macallan Exp $	*/
 
 /*-
  * Copyright (C) 2011 Michael Lorenz.
@@ -30,7 +30,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: stvii.c,v 1.4 2013/02/28 13:21:15 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: stvii.c,v 1.3 2011/09/15 19:29:23 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -94,8 +94,7 @@ struct stvii_softc {
 	i2c_tag_t sc_i2c;
 	int sc_address, sc_version;
 	int sc_sleep;
-	int sc_flags, sc_charge, sc_bat_level;
-	uint8_t sc_control;
+	int sc_flags, sc_charge;
 	struct sysmon_envsys *sc_sme;
 	envsys_data_t sc_sensor[BAT_NSENSORS];
 	struct sysmon_pswitch sc_sm_acpower;
@@ -110,16 +109,9 @@ static int stvii_readreg(struct stvii_softc *, int);
 static void stvii_worker(void *);
 static void stvii_setup_envsys(struct stvii_softc *);
 static void stvii_refresh(struct sysmon_envsys *, envsys_data_t *);
-static int  stvii_battery_level(struct stvii_softc *);
 
 CFATTACH_DECL_NEW(stvii, sizeof(struct stvii_softc),
     stvii_match, stvii_attach, NULL, NULL);
-
-void stvii_poweroff(void);
-static device_t stvii_dev = NULL;
-
-#define BAT_FULL	8000000
-#define BAT_LOW		7100000
 
 static int
 stvii_match(device_t parent, cfdata_t cf, void *aux)
@@ -147,7 +139,6 @@ stvii_attach(device_t parent, device_t self, void *aux)
 	uint8_t ver, reg;
 
 	sc->sc_dev = self;
-	stvii_dev = self;
 	sc->sc_address = args->ia_addr;
 	aprint_normal(": ST7 Microcontroller\n");
 	sc->sc_i2c = args->ia_tag;
@@ -164,14 +155,11 @@ stvii_attach(device_t parent, device_t self, void *aux)
 		printf("\n");
 	}
 #endif
-	stvii_writereg(sc, ST7_SIGNATURE, STSIG_OS_CONTROL);
+	stvii_writereg(sc, ST7_SIGNATURE, STSIG_EC_CONTROL);
 	reg = stvii_readreg(sc, ST7_CONTROL);
 	reg |= STC_RADIO_ENABLE;
 	stvii_writereg(sc, ST7_CONTROL, reg);
-	sc->sc_control = reg;
 	reg = stvii_readreg(sc, ST7_CONTROL);
-
-	sc->sc_bat_level = stvii_battery_level(sc);
 
 	if (kthread_create(PRI_NONE, KTHREAD_MPSAFE, NULL, stvii_worker, sc,
 	    NULL, "stvii") != 0) {
@@ -251,15 +239,9 @@ static void
 stvii_worker(void *cookie)
 {
 	struct stvii_softc *sc = cookie;
-	int status = 0, st, cnt = 4;
-	int bl;
-	int charging = 0;
+	int status = 0, st;
+	int battery_level = 0, bl;
 	int ok = TRUE;
-	uint8_t nctrl;
-
-	/* if we were charging when we took over, keep charging */
-	if (sc->sc_control & STC_CHARGE_ENABLE)
-		charging = 1;
 
 	while (ok) {
 		st = stvii_readreg(sc, ST7_STATUS);
@@ -299,29 +281,13 @@ stvii_worker(void *cookie)
 			status = st;
 		}
 		sc->sc_flags = status;
-		if (cnt >= 4) {
-			nctrl = sc->sc_control & ~(STC_TRICKLE | STC_CHARGE_ENABLE);
+		if (0) {
 			bl = stvii_battery_level(sc);
-			sc->sc_bat_level = bl;
-			if (charging & (bl > BAT_FULL)) {
-				/* stop charging, we're full */
-				charging = 0;
-			} else if (!charging & (bl < BAT_LOW)) {
-				charging = 1;
+			if (bl != battery_level) {
+				printf("battery: %d\n", bl);
+				battery_level = bl;
 			}
-			if (st & STS_AC_AVAILABLE) {
-				if (charging) {
-					nctrl |= STC_CHARGE_ENABLE;
-				} else
-					nctrl |= STC_TRICKLE;
-			}
-			if (nctrl != sc->sc_control) {
-				sc->sc_control = nctrl;
-				stvii_writereg(sc, ST7_CONTROL, sc->sc_control);
-			}
-			cnt = 0;				
-		} else
-			cnt++;
+		}
 		tsleep(&sc->sc_sleep, 0, "stvii", hz / 2);
 	}
 }
@@ -369,7 +335,7 @@ static void
 stvii_refresh(struct sysmon_envsys *sme, envsys_data_t *edata)
 {
 	struct stvii_softc *sc = sme->sme_cookie;
-	int which = edata->sensor;
+	int which = edata->sensor, ctl, bat;
 
 	edata->state = ENVSYS_SINVALID;
 	switch (which) {
@@ -383,33 +349,23 @@ stvii_refresh(struct sysmon_envsys *sme, envsys_data_t *edata)
 		break;
 	case BAT_CHARGE:
 		if (sc->sc_flags & STS_BATTERY_PRESENT) {
-			edata->value_cur = sc->sc_bat_level;
+			bat = stvii_battery_level(sc);
+			edata->value_cur = bat;
 			edata->state = ENVSYS_SVALID;
 		}
 		break;
 	case BAT_MAX_CHARGE:
 		if (sc->sc_flags & STS_BATTERY_PRESENT) {
-			edata->value_cur = 8000000;
+			edata->value_cur = 8300000;
 			/*edata->state = ENVSYS_SVALID;*/
 		}
 		break;
 	case BAT_CHARGING:
-		edata->value_cur = sc->sc_control & STC_CHARGE_ENABLE;
+		ctl = stvii_readreg(sc, ST7_CONTROL);
+		if (ctl != -1) {
+			edata->value_cur = ctl & STC_CHARGE_ENABLE;
+		}
 		edata->state = ENVSYS_SVALID;
 		break;
 	}
-}
-
-void
-stvii_poweroff(void)
-{
-	struct stvii_softc *sc = device_private(stvii_dev);
-	int ctl;
-
-	if (sc == NULL)
-		return;
-	ctl = stvii_readreg(sc, ST7_CONTROL);
-	if (ctl == -1)
-		return;
-	stvii_writereg(sc, ST7_CONTROL, ctl & ~(STC_MAIN_POWER | STC_DDR_POWER));
 }

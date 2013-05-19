@@ -1,4 +1,4 @@
-/*	$NetBSD: advfsops.c,v 1.66 2012/12/20 08:03:41 hannken Exp $	*/
+/*	$NetBSD: advfsops.c,v 1.63 2011/11/14 18:35:12 hannken Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: advfsops.c,v 1.66 2012/12/20 08:03:41 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: advfsops.c,v 1.63 2011/11/14 18:35:12 hannken Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -48,7 +48,6 @@ __KERNEL_RCSID(0, "$NetBSD: advfsops.c,v 1.66 2012/12/20 08:03:41 hannken Exp $"
 #include <sys/malloc.h>
 #include <sys/pool.h>
 #include <sys/disklabel.h>
-#include <sys/disk.h>
 #include <miscfs/genfs/genfs.h>
 #include <miscfs/specfs/specdev.h> /* XXX */
 #include <sys/fcntl.h>
@@ -138,8 +137,7 @@ adosfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	if ((mp->mnt_flag & MNT_RDONLY) == 0)
 		accessmode |= VWRITE;
 	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
-	error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_MOUNT,
-	    KAUTH_REQ_SYSTEM_MOUNT_DEVICE, mp, devvp, KAUTH_ARG(accessmode));
+	error = genfs_can_mount(devvp, accessmode, l->l_cred);
 	VOP_UNLOCK(devvp);
 	if (error) {
 		vrele(devvp);
@@ -167,72 +165,49 @@ adosfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 	struct buf *bp;
 	struct vnode *rvp;
 	size_t bitmap_sz = 0;
-	int error, i;
-	uint64_t numsecs;
-	unsigned secsize;
-	unsigned long secsperblk, blksperdisk, resvblks;
+	int error, part, i;
 
+	part = DISKPART(devvp->v_rdev);
 	amp = NULL;
 
 	if ((error = vinvalbuf(devvp, V_SAVE, l->l_cred, l, 0, 0)) != 0)
 		return (error);
 
 	/*
-	 * open blkdev and read boot and root block
+	 * open blkdev and read root block
 	 */
 	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 	if ((error = VOP_OPEN(devvp, FREAD, NOCRED)) != 0) {
 		VOP_UNLOCK(devvp);
 		return (error);
 	}
-
-	error = getdisksize(devvp, &numsecs, &secsize);
-	if (error)
-		goto fail;
-
-	amp = kmem_zalloc(sizeof(struct adosfsmount), KM_SLEEP);
-
-	/*
-	 * compute filesystem parameters from disklabel
-	 * on arch/amiga the disklabel is computed from the native
-	 * partition tables
-	 * - p_fsize is the filesystem block size
-	 * - p_frag is the number of sectors per filesystem block
-	 * - p_cpg is the number of reserved blocks (boot blocks)
-	 * - p_psize is reduced by the number of preallocated blocks
-	 *           at the end of a partition
-	 *
-	 * XXX
-	 * - bsize and secsperblk could be computed from the first sector
-	 *   of the root block
-	 * - resvblks (the number of boot blocks) can only be guessed
-	 *   by scanning for the root block as its position moves
-	 *   with resvblks
-	 */
 	error = VOP_IOCTL(devvp, DIOCGDINFO, &dl, FREAD, NOCRED);
 	VOP_UNLOCK(devvp);
 	if (error)
 		goto fail;
-	parp = &dl.d_partitions[DISKPART(devvp->v_rdev)];
+
+	parp = &dl.d_partitions[part];
+	amp = kmem_zalloc(sizeof(struct adosfsmount), KM_SLEEP);
+	amp->mp = mp;
 	if (dl.d_type == DTYPE_FLOPPY) {
-		amp->bsize = secsize;
-		secsperblk = 1;
-		resvblks   = 2;
-	} else if (parp->p_fsize > 0 && parp->p_frag > 0) {
+		amp->bsize = dl.d_secsize;
+		amp->secsperblk = 1;
+	}
+	else {
 		amp->bsize = parp->p_fsize * parp->p_frag;
-		secsperblk = parp->p_frag;
-		resvblks   = parp->p_cpg;
-	} else {
+		amp->secsperblk = parp->p_frag;
+	}
+
+	/* invalid fs ? */
+	if (amp->secsperblk == 0) {
 		error = EINVAL;
 		goto fail;
 	}
-	blksperdisk = numsecs / secsperblk;
 
-
-	/* The filesytem variant ('dostype') is stored in the boot block */
 	bp = NULL;
 	if ((error = bread(devvp, (daddr_t)BBOFF,
 			   amp->bsize, NOCRED, 0, &bp)) != 0) {
+		brelse(bp, 0);
 		goto fail;
 	}
 	amp->dostype = adoswordn(bp, 0);
@@ -244,21 +219,20 @@ adosfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 		goto fail;
 	}
 
-	amp->rootb = (blksperdisk - 1 + resvblks) / 2;
-	amp->numblks = blksperdisk - resvblks;
+	amp->rootb = (parp->p_size / amp->secsperblk - 1 + parp->p_cpg) >> 1;
+	amp->numblks = parp->p_size / amp->secsperblk - parp->p_cpg;
 
 	amp->nwords = amp->bsize >> 2;
 	amp->dbsize = amp->bsize - (IS_FFS(amp) ? 0 : OFS_DATA_OFFSET);
 	amp->devvp = devvp;
 
-	amp->mp = mp;
 	mp->mnt_data = amp;
 	mp->mnt_stat.f_fsidx.__fsid_val[0] = (long)devvp->v_rdev;
 	mp->mnt_stat.f_fsidx.__fsid_val[1] = makefstype(MOUNT_ADOSFS);
 	mp->mnt_stat.f_fsid = mp->mnt_stat.f_fsidx.__fsid_val[0];
 	mp->mnt_stat.f_namemax = ADMAXNAMELEN;
 	mp->mnt_fs_bshift = ffs(amp->bsize) - 1;
-	mp->mnt_dev_bshift = DEV_BSHIFT;
+	mp->mnt_dev_bshift = DEV_BSHIFT;	/* XXX */
 	mp->mnt_flag |= MNT_LOCAL;
 
 	/*
@@ -410,6 +384,7 @@ adosfs_vget(struct mount *mp, ino_t an, struct vnode **vpp)
 
 	if ((error = bread(amp->devvp, an * amp->bsize / DEV_BSIZE,
 			   amp->bsize, NOCRED, 0, &bp)) != 0) {
+		brelse(bp, 0);
 		vput(vp);
 		return (error);
 	}
@@ -530,6 +505,7 @@ adosfs_vget(struct mount *mp, ino_t an, struct vnode **vpp)
 		error = bread(amp->devvp, ap->linkto * amp->bsize / DEV_BSIZE,
 		    amp->bsize, NOCRED, 0, &bp);
 		if (error) {
+			brelse(bp, 0);
 			vput(vp);
 			return (error);
 		}
@@ -609,6 +585,7 @@ adosfs_loadbitmap(struct adosfsmount *amp)
 	bn = amp->rootb;
 	if ((error = bread(amp->devvp, bn * amp->bsize / DEV_BSIZE, amp->bsize,
 	    NOCRED, 0, &bp)) != 0) {
+		brelse(bp, 0);
 		return (error);
 	}
 	blkix = amp->nwords - 49;

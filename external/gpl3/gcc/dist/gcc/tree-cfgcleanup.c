@@ -560,7 +560,7 @@ split_bbs_on_noreturn_calls (void)
 	   BB is present in the cfg.  */
 	if (bb == NULL
 	    || bb->index < NUM_FIXED_BLOCKS
-	    || bb->index >= last_basic_block
+	    || bb->index >= n_basic_blocks
 	    || BASIC_BLOCK (bb->index) != bb
 	    || last_stmt (bb) == stmt
 	    || !gimple_call_noreturn_p (stmt))

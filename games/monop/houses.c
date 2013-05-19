@@ -1,4 +1,4 @@
-/*	$NetBSD: houses.c,v 1.15 2012/06/19 05:35:32 dholland Exp $	*/
+/*	$NetBSD: houses.c,v 1.14 2008/02/24 03:26:26 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)houses.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: houses.c,v 1.15 2012/06/19 05:35:32 dholland Exp $");
+__RCSID("$NetBSD: houses.c,v 1.14 2008/02/24 03:26:26 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -56,7 +56,7 @@ static bool ready_for_hotels(MON *);
  *	These routines deal with buying and selling houses
  */
 void
-buy_houses(void)
+buy_houses()
 {
 	int num_mon;
 	MON *mp;
@@ -112,7 +112,8 @@ over:
 }
 
 static void
-buy_h(MON *mnp)
+buy_h(mnp)
+	MON *mnp;
 {
 	int i;
 	MON *mp;
@@ -216,7 +217,7 @@ err:		printf("That makes the spread too wide.  Try again\n");
  *	This routine sells houses.
  */
 void
-sell_houses(void)
+sell_houses()
 {
 	int num_mon;
 	MON *mp;
@@ -262,7 +263,8 @@ over:
 }
 
 static void
-sell_h(MON *mnp)
+sell_h(mnp)
+	MON *mnp;
 {
 	int i;
 	MON *mp;
@@ -321,7 +323,8 @@ err:		printf("That makes the spread too wide.  Try again\n");
 }
 
 static void
-list_cur(MON *mp)
+list_cur(mp)
+	MON *mp;
 {
 	int i;
 	SQUARE *sqp;

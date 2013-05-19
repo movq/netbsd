@@ -1,4 +1,4 @@
-/*	$NetBSD: sapic.c,v 1.2 2012/10/27 17:29:03 chs Exp $	*/
+/*	$NetBSD: sapic.c,v 1.1 2009/07/20 04:41:36 kiyohara Exp $	*/
 /*-
  * Copyright (c) 2001 Doug Rabson
  * All rights reserved.
@@ -30,7 +30,7 @@
 #include "opt_ddb.h"
 
 #include <sys/param.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/kernel.h>
 #include <sys/systm.h>
 #include <sys/bus.h>
@@ -43,6 +43,8 @@
 #include <machine/sapicreg.h>
 #include <machine/sapicvar.h>
 
+
+static MALLOC_DEFINE(M_SAPIC, "sapic", "I/O SAPIC devices");
 
 struct sapic *ia64_sapics[16]; /* XXX make this resizable */
 static int ia64_sapic_count;
@@ -144,7 +146,7 @@ sapic_create(u_int id, u_int base, uint64_t address)
 	struct sapic *sa;
 	u_int i;
 
-	sa = kmem_zalloc(sizeof(struct sapic), KM_NOSLEEP);
+	sa = malloc(sizeof(struct sapic), M_SAPIC, M_ZERO | M_NOWAIT);
 	if (sa == NULL)
 		return NULL;
 

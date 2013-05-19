@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.22 2013/04/25 13:59:57 joerg Exp $
+#	$NetBSD: Makefile,v 1.14 2012/01/17 15:51:55 joerg Exp $
 
 LIB=	LLVMCodeGen
 
@@ -9,18 +9,15 @@ LIB=	LLVMCodeGen
 SRCS+=	AggressiveAntiDepBreaker.cpp \
 	AllocationOrder.cpp \
 	Analysis.cpp \
-	BasicTargetTransformInfo.cpp \
 	BranchFolding.cpp \
 	CalcSpillWeights.cpp \
 	CallingConvLower.cpp \
 	CodeGen.cpp \
+	CodePlacementOpt.cpp \
 	CriticalAntiDepBreaker.cpp \
-	DFAPacketizer.cpp \
 	DeadMachineInstructionElim.cpp \
 	DwarfEHPrepare.cpp \
-	EarlyIfConversion.cpp \
 	EdgeBundles.cpp \
-	ErlangGC.cpp \
 	ExecutionDepsFix.cpp \
 	ExpandISelPseudos.cpp \
 	ExpandPostRAPseudos.cpp \
@@ -40,7 +37,6 @@ SRCS+=	AggressiveAntiDepBreaker.cpp \
 	LiveIntervalAnalysis.cpp \
 	LiveIntervalUnion.cpp \
 	LiveRangeCalc.cpp \
-	LiveRegMatrix.cpp \
 	LiveStackAnalysis.cpp \
 	LiveVariables.cpp \
 	LiveRangeEdit.cpp \
@@ -61,15 +57,14 @@ SRCS+=	AggressiveAntiDepBreaker.cpp \
 	MachineInstrBundle.cpp \
 	MachineLICM.cpp \
 	MachineLoopInfo.cpp \
+	MachineLoopRanges.cpp \
 	MachineModuleInfo.cpp \
 	MachineModuleInfoImpls.cpp \
 	MachinePassRegistry.cpp \
-	MachinePostDominators.cpp \
 	MachineRegisterInfo.cpp \
 	MachineSSAUpdater.cpp \
 	MachineScheduler.cpp \
 	MachineSink.cpp \
-	MachineTraceMetrics.cpp \
 	MachineVerifier.cpp \
 	OcamlGC.cpp \
 	OptimizePHIs.cpp \
@@ -89,9 +84,10 @@ SRCS+=	AggressiveAntiDepBreaker.cpp \
 	RegAllocPBQP.cpp \
 	RegisterClassInfo.cpp \
 	RegisterCoalescer.cpp \
-	RegisterPressure.cpp \
 	RegisterScavenging.cpp \
+	RenderMachineFunction.cpp \
 	ScheduleDAG.cpp \
+	ScheduleDAGEmit.cpp \
 	ScheduleDAGInstrs.cpp \
 	ScheduleDAGPrinter.cpp \
 	ShadowStackGC.cpp \
@@ -101,18 +97,14 @@ SRCS+=	AggressiveAntiDepBreaker.cpp \
 	Spiller.cpp \
 	SpillPlacement.cpp \
 	SplitKit.cpp \
-	StackColoring.cpp \
 	StackProtector.cpp \
 	StackSlotColoring.cpp \
 	StrongPHIElimination.cpp \
 	TailDuplication.cpp \
 	TargetFrameLoweringImpl.cpp \
-	TargetInstrInfo.cpp \
-	TargetLoweringBase.cpp \
+	TargetInstrInfoImpl.cpp \
 	TargetLoweringObjectFileImpl.cpp \
 	TargetOptionsImpl.cpp \
-	TargetRegisterInfo.cpp \
-	TargetSchedule.cpp \
 	TwoAddressInstructionPass.cpp \
 	UnreachableBlockElim.cpp \
 	VirtRegMap.cpp

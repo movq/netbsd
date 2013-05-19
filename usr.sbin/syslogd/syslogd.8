@@ -1,4 +1,4 @@
-.\"	$NetBSD: syslogd.8,v 1.54 2013/01/14 03:05:41 dholland Exp $
+.\"	$NetBSD: syslogd.8,v 1.49 2009/10/15 20:35:07 plunky Exp $
 .\"
 .\" Copyright (c) 1983, 1986, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"     from: @(#)syslogd.8	8.1 (Berkeley) 6/6/93
 .\"
-.Dd March 28, 2012
+.Dd October 15, 2009
 .Dt SYSLOGD 8
 .Os
 .Sh NAME
@@ -38,18 +38,36 @@
 .Sh SYNOPSIS
 .Nm
 .Op Fl dnrSsTUv
+.Bk -words
 .Op Fl b Ar bind_address
+.Ek
+.Bk -words
 .Op Fl f Ar config_file
+.Ek
+.Bk -words
 .Op Fl g Ar group
+.Ek
+.Bk -words
 .Op Fl m Ar mark_interval
+.Ek
+.Bk -words
 .Op Fl o Ar output_format
+.Ek
+.Bk -words
 .Op Fl P Ar file_list
+.Ek
+.Bk -words
 .Oo
 .Fl p Ar log_socket
 .Op Fl p Ar log_socket2 ...
 .Oc
+.Ek
+.Bk -words
 .Op Fl t Ar chroot_dir
+.Ek
+.Bk -words
 .Op Fl u Ar user
+.Ek
 .Sh DESCRIPTION
 .Nm
 reads and logs messages to the system console, log files, other
@@ -79,9 +97,9 @@ Do not perform hostname lookups; report only numeric addresses.
 .It Fl o Ar output_format
 Select output message format.
 .Bl -hang
-.It Em bsd , rfc3164
+.It Em rfc3164
 traditional BSD Syslog format (default)
-.It Em syslog , rfc5424
+.It Em syslog
 new syslog-protocol format
 .El
 .It Fl P
@@ -95,7 +113,7 @@ Multiple
 options create multiple log sockets.
 If no
 .Fl p
-arguments are given, the default socket of
+arguments are created, the default socket of
 .Pa /var/run/log
 is used.
 .It Fl r
@@ -267,6 +285,3 @@ Support for multiple log sockets appeared in
 .Nx 1.4 .
 libwrap support appeared in
 .Nx 1.6 .
-Support for RFC 5424, TLS encryption and authentication, signed messages
-appeared in
-.Nx 6.0 .

@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC.in,v 1.116 2013/04/27 22:29:56 rkujawa Exp $
+# $NetBSD: GENERIC.in,v 1.96 2012/01/24 00:19:39 rkujawa Exp $
 #
 ##
 # GENERIC machine description file
@@ -52,7 +52,7 @@ include "arch/amiga/conf/std.amiga"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.116 $"
+#ident 		"GENERIC-$Revision: 1.96 $"
 
 m4_ifdef(`INSTALL_CONFIGURATION', `m4_dnl
 makeoptions	COPTS="-Os"
@@ -95,6 +95,7 @@ options 	FPU_EMULATE	# FPU emulation
 options 	INET		# IP networking support (Required)
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	GATEWAY		# Packet forwarding
@@ -103,6 +104,8 @@ options 	INET6		# IPV6
 m4_ifdef(`INSTALL_CONFIGURATION', `', `m4_dnl
 #options 	MROUTING	# Multicast routing
 #options 	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 options 	NETATALK	# AppleTalk networking protocols
 #options 	TCP_DEBUG	# Record last TCP_NDEBUG packets with SO_DEBUG
 ')m4_dnl
@@ -192,7 +195,6 @@ options 	COMPAT_20	# compatibility with NetBSD 2.0
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_SUNOS	# Support to run Sun (m68k) executables
 options 	COMPAT_SVR4	# Support to run SVR4 (m68k) executables
 options 	COMPAT_NOMID	# allow nonvalid machine id executables
@@ -210,6 +212,7 @@ m4_ifdef(`INSTALL_CONFIGURATION', `', `m4_dnl
 options 	SYSVSHM		# System V-like shared memory
 options 	SYSVMSG		# System V-like messages
 options 	SYSVSEM		# System V-like semaphores
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 ')m4_dnl
 
 #
@@ -321,15 +324,11 @@ m4_ifdef(`AMIGA_CONFIGURATION', `m4_dnl
 #amidisplaycc0	at mainbus0		# wscons interface to custom chips
 #wsdisplay0	at amidisplaycc0 console ?
 #options 	WSEMUL_VT100
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 #options 	FONT_VT220L8x10
 #options	FONT_VT220ISO8x16
 ')m4_dnl
 
 m4_ifdef(`AMIGA_CONFIGURATION', `m4_dnl
-#z3rambd*	at zbus0		# Zorro III RAM block devices
-#altmem*	at z3rambd?
-
 p5bus0		at zbus0		# Phase5 CSPPC/BPPC internal bus
 
 grfcc0		at mainbus0		# custom chips
@@ -417,11 +416,6 @@ a2kbbc0 	at mainbus0		# A2000 battery backed clock
 m4_ifdef(`INSTALL_CONFIGURATION', `', `m4_dnl
 aucc*		at mainbus0		# Amiga CC audio
 audio*		at aucc?
-
-a1k2cp0         at mainbus0             # A1200 on-board clockport
-clockport*      at a1k2cp0
-
-#com*            at clockport?           # Individual Computers SilverSurfer
 ')m4_dnl
 ')m4_dnl
 
@@ -458,16 +452,10 @@ audio*		at toccata?
 
 # Ethernet cards:
 le*		at zbus0		# A2065, Ameristar, Ariadne
-ne*		at zbus0		# AriadneII
+ne*		at zbus0		# AriadneII, X-surf
 ed*		at zbus0		# Hydra, ASDG LanRover
 es*		at zbus0		# CEI A4066 EthernetPLUS
 qn*		at zbus0		# Quicknet
-
-xsurf*		at zbus0		# X-Surf
-ne*		at xsurfbus?		# NE2000 chip on X-Surf
-gencp*		at xsurfbus?		# clockports on X-Surf
-wdc*		at xsurfbus?		# IDE on X-Surf
-clockport*	at gencp?
 
 # Arcnet
 bah*		at zbus0		# C=/Ameristar A2060 / 560
@@ -526,7 +514,6 @@ wdc*		at zbus0		# Buddha / Catweasel
 
 atabus* 	at wdc? channel ?	# ATA bus
 #atabus*	at efa? channel ?	# ATA bus 
-atabus*		at ata? channel ?	# ATA bus 
 wd*		at atabus? drive ?	#  + drives
 atapibus*	at atabus?		# ATAPI bus
 cd*		at atapibus? drive ?	# ATAPI CD-ROM drives
@@ -534,21 +521,19 @@ sd*		at atapibus? drive ?	# ATAPI disk drives
 
 pccard0		at mainbus0
 pcmcia*		at pccard0
-com*		at pcmcia? function ?	# Modems and serial cards
-pcmcom*		at pcmcia? function ?	# PCMCIA multi-port serial cards
-aic*		at pcmcia? function ?	# Adaptec APA-1460 SCSI
+com*		at pcmcia? function ?		# Modems and serial cards
+pcmcom*		at pcmcia? function ?		# PCMCIA multi-port serial cards
+aic*		at pcmcia? function ?		# Adaptec APA-1460 SCSI
 wdc*		at pcmcia? function ?
-awi*		at pcmcia? function ?	# BayStack 650 (802.11FH)
-ep*		at pcmcia? function ?	# 3Com 3c589 and 3c562 Ethernet
-mbe*		at pcmcia? function ?	# MB8696x based Ethernet
-ne*		at pcmcia? function ?	# NE2000-compatible Ethernet
-sm*		at pcmcia? function ?	# Megahertz Ethernet
+awi*		at pcmcia? function ?		# BayStack 650 (802.11FH)
+ep*		at pcmcia? function ?		# 3Com 3c589 and 3c562 Ethernet
+mbe*		at pcmcia? function ?		# MB8696x based Ethernet
+ne*		at pcmcia? function ?		# NE2000-compatible Ethernet
+sm*		at pcmcia? function ?		# Megahertz Ethernet
 mhzc*		at pcmcia? function ?	# Megahertz Ethernet/Modem combo cards
 com*		at mhzc?
 sm*		at mhzc?
 
-nsphyter*	at mii? phy ?		# NS83843 PHYs
-ukphy*		at mii? phy ?		# generic unknown PHYs
 ')m4_dnl
 
 m4_ifdef(`DRACO_CONFIGURATION', `m4_dnl
@@ -572,7 +557,7 @@ m4_ifdef(`AMIGA_CONFIGURATION', `m4_dnl
 # PCI bus support
 options		PCIVERBOSE              # verbose PCI device autoconfig messages
 #options	PCI_CONFIG_DUMP
-options		PCI_NETBSD_CONFIGURE	# supported by mppb(4), p5pb(4), empb(4)
+options		PCI_NETBSD_CONFIGURE	# supported by mppb(4) and p5pb(4)
 
 p5pb0		at p5bus0		# Phase5 PCI bridge (CVPPC/BVPPC/G-REX)
 p5membar*	at zbus0		# Phase5 PCI bridge autoconfiguring BARs
@@ -583,13 +568,6 @@ pci*		at p5pb0
 mppb*           at zbus0		# Matay Prometheus Zorro-PCI bridge
 pci*            at mppb?
 
-empb0		at zbus0		# ELBOX Mediator PCI 1200
-em4k0		at zbus0		# ELBOX Mediator PCI 4000
-emmem0		at zbus0		# ELBOX Mediator PCI memory space
-empm0		at empb0		# ELBOX Mediator PCI Power Management
-pci*		at empb0
-pci*		at em4k0
-
 #cv3dpb*	at zbus0		# CyberVision 64/3D PCI bridge
 
 #genfb*		at pci?			# generic fb, CVPPC/BVPPC only
@@ -597,7 +575,6 @@ pci*		at em4k0
 #radeonfb*	at pci?			# untested
 
 ne*             at pci?			# NE2000 Ethernet
-satalink* at pci? dev ? function ? flags 0x0002	# SiI SATALink 3112 
 
 # Bluetooth Controller and Device support
 # tested only with btuart on an A1200
@@ -616,29 +593,19 @@ bthub*  at btuart?
 bthidev* at bthub?
 
 # Bluetooth Mouse
-#btms*   at bthidev? reportid ?
-#wsmouse* at btms? mux 0
+btms*   at bthidev? reportid ?
+wsmouse* at btms? mux 0
 
 # Bluetooth Keyboard
 #btkbd* at bthidev? reportid ?
 #wskbd* at btkbd? console ? mux 1
 
 # Bluetooth Apple Magic Mouse
-#btmagic* at bthub?
-#wsmouse* at btmagic? mux 0
+btmagic* at bthub?
+wsmouse* at btmagic? mux 0
 
 # Bluetooth Audio support
 #btsco* at bthub?
-
-# USB
-slhci*		at zbus?                # Thylacine
-usb*		at slhci?
-
-uhub*		at usb?
-uhub*		at uhub? port ?
-
-uhidev*		at uhub? port ? configuration ? interface ?
-uhid*		at uhidev? reportid ?
 
 ')m4_dnl
 m4_ifdef(`INSTALL_CONFIGURATION', `', `m4_dnl
@@ -680,7 +647,7 @@ pseudo-device	putter			# for puffs and pud
 
 pseudo-device	view		4	# views (needed for grfcc)
 m4_ifdef(`INSTALL_CONFIGURATION', `m4_dnl
-pseudo-device	pty			# pseudo-terminals
+pseudo-device	pty		2	# pseudo-terminals
 ', `m4_dnl
 pseudo-device	pty			# pseudo-terminals
 ')m4_dnl
@@ -691,9 +658,9 @@ pseudo-device	clockctl		# user control of clock subsystem
 
 pseudo-device	vnd			# vnode pseudo-disks
 #options 	VND_COMPRESSION		# compressed vnd(4)
-pseudo-device	ccd			# concatenated disk devices
-#pseudo-device	cgd			# cryptographic disk devices
-pseudo-device	raid			# RAIDframe disk driver
+pseudo-device	ccd		4	# concatenated disk devices
+#pseudo-device	cgd		4	# cryptographic disk devices
+pseudo-device	raid		8	# RAIDframe disk driver
 options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # Options to enable various other RAIDframe RAID types.
 # options 	RF_INCLUDE_EVENODD=1
@@ -718,7 +685,7 @@ pseudo-device   btuart                  # Bluetooth HCI UART (H4)
 # Veriexec
 #
 # a pseudo device needed for veriexec
-#pseudo-device	veriexec
+#pseudo-device	veriexec		1
 #
 # Uncomment the fingerprint methods below that are desired. Note that
 # removing fingerprint methods will have almost no impact on the kernel

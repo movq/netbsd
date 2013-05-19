@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.302 2012/12/03 13:53:29 apb Exp $
+#	$NetBSD: Makefile,v 1.291.2.2 2012/08/15 17:36:46 sborrill Exp $
 
 #
 # This is the top-level makefile for building NetBSD. For an outline of
@@ -87,14 +87,32 @@
 #   do-top-obj:      creates the top level object directory.
 #   do-tools-obj:    creates object directories for the host toolchain.
 #   do-tools:        builds host toolchain.
-#   params:          record the values of variables that might affect the
-#                    build.
 #   obj:             creates object directories.
 #   do-distrib-dirs: creates the distribution directories.
 #   includes:        installs include files.
-#   do-lib:          builds and installs prerequisites from lib
+#   do-tools-compat: builds the "libnbcompat" library; needed for some
+#                    random host tool programs in the source tree.
+#   do-lib-csu:      builds and installs prerequisites from lib/csu.
+#   do-libgcc:       builds and installs prerequisites from
+#                    gnu/lib/crtstuff${LIBGCC_EXT} (if necessary) and
+#                    gnu/lib/libgcc${LIBGCC_EXT}.
+#   do-libpcc:       builds and install prerequisites from
+#                    external/bsd/pcc/crtstuff (if necessary) and
+#                    external/bsd/pcc/libpcc.
+#   do-lib-libc:     builds and installs prerequisites from lib/libc.
+#   do-lib:          builds and installs prerequisites from lib.
+#   do-sys-rump-dev-lib: builds and installs prerequisites from sys/rump/dev/lib
+#   do-sys-rump-fs-lib:  builds and installs prerequisites from sys/rump/fs/lib
+#   do-sys-rump-kern-lib:  builds and installs prereq. from sys/rump/kern/lib
+#   do-sys-rump-net-lib: builds and installs prerequisites from sys/rump/net/lib
+#   do-sys-modules:  builds and installs kernel modules (used by rump binaries)
+#   do-ld.so:        builds and installs prerequisites from libexec/ld.*_so.
+#   do-compat-lib-csu: builds and installs prerequisites from compat/lib/csu
 #                    if ${MKCOMPAT} != "no".
-#   do-compat-lib:   builds and installs prerequisites from compat/lib
+#   do-compat-libgcc: builds and installs prerequisites from
+#                    compat/gnu/lib/crtstuff${LIBGCC_EXT} (if necessary) and
+#                    compat/gnu/lib/libgcc${LIBGCC_EXT} if ${MKCOMPAT} != "no".
+#   do-compat-lib-libc: builds and installs prerequisites from compat/lib/libc
 #                    if ${MKCOMPAT} != "no".
 #   do-build:        builds and installs the entire system.
 #   do-x11:          builds and installs X11 if ${MKX11} != "no"; either
@@ -222,7 +240,6 @@ BUILDTARGETS+=	do-tools-obj
 .endif
 BUILDTARGETS+=	do-tools
 .endif # USETOOLS		# }
-BUILDTARGETS+=	params
 .if ${MKOBJDIRS} != "no"
 BUILDTARGETS+=	obj
 .endif
@@ -233,8 +250,27 @@ BUILDTARGETS+=	do-distrib-dirs
 .if !defined(NOINCLUDES)
 BUILDTARGETS+=	includes
 .endif
+BUILDTARGETS+=	do-tools-compat
+BUILDTARGETS+=	do-lib-csu
+.if ${MKGCC} != "no"
+BUILDTARGETS+=	do-libgcc
+.endif
+.if ${MKPCC} != "no"
+BUILDTARGET+=	do-libpcc
+.endif
+BUILDTARGETS+=	do-lib-libc
 BUILDTARGETS+=	do-lib
-BUILDTARGETS+=	do-compat-lib
+.if ${MKKMOD} != "no"
+BUILDTARGETS+=	do-sys-modules
+.endif
+BUILDTARGETS+=	do-sys-rump-dev-lib do-sys-rump-fs-lib
+BUILDTARGETS+=	do-sys-rump-kern-lib do-sys-rump-net-lib
+.if ${MKCOMPAT} != "no"
+BUILDTARGETS+=	do-compat-lib-csu
+BUILDTARGETS+=	do-compat-libgcc
+BUILDTARGETS+=	do-compat-lib-libc
+.endif
+BUILDTARGETS+=	do-ld.so
 BUILDTARGETS+=	do-build
 .if ${MKX11} != "no"
 BUILDTARGETS+=	do-x11
@@ -251,32 +287,6 @@ BUILDTARGETS+=	do-obsolete
 .ORDER:		${BUILDTARGETS}
 includes-lib:	.PHONY includes-include includes-sys
 includes-gnu:	.PHONY includes-lib
-
-#
-# Record the values of variables that might affect the build.
-# If no values have changed, avoid updating the timestamp
-# of the params file.
-#
-# This is referenced by _NETBSD_VERSION_DEPENDS in <bsd.own.mk>.
-#
-.include "${NETBSDSRCDIR}/etc/Makefile.params"
-CLEANDIRFILES+= params
-params: .EXEC
-	${_MKMSG_CREATE} params
-	@${PRINT_PARAMS} >${.TARGET}.new
-	@if cmp -s ${.TARGET}.new ${.TARGET} > /dev/null 2>&1; then \
-		: "params is unchanged" ; \
-		rm ${.TARGET}.new ; \
-	else \
-		: "params has changed or is new" ; \
-		mv ${.TARGET}.new ${.TARGET} ; \
-	fi
-
-#
-# Display current make(1) parameters
-#
-show-params: .PHONY .MAKE
-	@${PRINT_PARAMS}
 
 #
 # Build the system and install into DESTDIR.
@@ -459,20 +469,73 @@ do-${targ}: .PHONY ${targ}
 	@true
 .endfor
 
-do-tools: .PHONY .MAKE
-	${MAKEDIRTARGET} tools build_install
+.if defined(HAVE_GCC)
+.if ${USE_COMPILERCRTSTUFF} == "yes"
+BUILD_CC_LIB= ${BUILD_CC_LIB_BASEDIR}/crtstuff${LIBGCC_EXT}
+.endif
+BUILD_CC_LIB+= ${BUILD_CC_LIB_BASEDIR}/libgcc${LIBGCC_EXT}
+.elif defined(HAVE_PCC)
+BUILD_CC_LIB+= external/bsd/pcc/crtstuff
+BUILD_CC_LIB+= external/bsd/pcc/libpcc
+.endif
 
-do-lib: .PHONY .MAKE
-	${MAKEDIRTARGET} lib build_install
+.for dir in tools tools/compat lib/csu ${BUILD_CC_LIB} lib/libc lib sys/rump/dev/lib sys/rump/fs/lib sys/rump/kern/lib sys/rump/net/lib sys/modules
+do-${dir:S/\//-/g}: .PHONY .MAKE
+.for targ in dependall install
+	${MAKEDIRTARGET} ${dir} ${targ}
+.endfor
+.endfor
 
-do-compat-lib: .PHONY .MAKE
-	${MAKEDIRTARGET} compat build_install BOOTSTRAP_SUBDIRS="../../../lib"
+.if ${MKCOMPAT} != "no"
+COMPAT_SUBDIR_LIST=lib/csu ${BUILD_CC_LIB} lib/libc
+.for dir in ${COMPAT_SUBDIR_LIST}
+do-compat-${dir:S/\//-/g}: .PHONY .MAKE
+.for targ in dependall install
+	${MAKEDIRTARGET} compat ${targ} BOOTSTRAP_SUBDIRS="../../../${dir}"
+.endfor
+.endfor
+.endif
 
 do-top-obj: .PHONY .MAKE
 	${MAKEDIRTARGET} . obj NOSUBDIR=
 
 do-tools-obj: .PHONY .MAKE
 	${MAKEDIRTARGET} tools obj
+
+do-libgcc: .PHONY .MAKE
+.if defined(HAVE_GCC)
+.if ${MKGCC} != "no"
+.if ${USE_COMPILERCRTSTUFF} == "yes"
+	${MAKEDIRTARGET} . do-${BUILD_CC_LIB_BASETARGET}-crtstuff${LIBGCC_EXT}
+.endif
+	${MAKEDIRTARGET} . do-${BUILD_CC_LIB_BASETARGET}-libgcc${LIBGCC_EXT}
+.endif
+.endif
+
+do-compat-libgcc: .PHONY .MAKE
+.if defined(HAVE_GCC)
+.if ${MKGCC} != "no"
+.if ${USE_COMPILERCRTSTUFF} == "yes"
+	${MAKEDIRTARGET} . do-compat-${BUILD_CC_LIB_BASETARGET}-crtstuff${LIBGCC_EXT}
+.endif
+	${MAKEDIRTARGET} . do-compat-${BUILD_CC_LIB_BASETARGET}-libgcc${LIBGCC_EXT}
+.endif
+.endif
+
+do-libpcc: .PHONY .MAKE
+.if defined(HAVE_PCC)
+.if ${MKPCC} != "no"
+.if ${USE_COMPILERCRTSTUFF} == "yes"
+	${MAKEDIRTARGET} . do-pcc-lib-crtstuff
+.endif
+	${MAKEDIRTARGET} . do-pcc-lib-libpcc
+.endif
+.endif
+
+do-ld.so: .PHONY .MAKE
+.for targ in dependall install
+	${MAKEDIRTARGET} libexec/ld.elf_so ${targ}
+.endfor
 
 do-build: .PHONY .MAKE
 .for targ in dependall install
@@ -527,3 +590,9 @@ dependall-distrib depend-distrib all-distrib: .PHONY
 .include <bsd.obj.mk>
 .include <bsd.kernobj.mk>
 .include <bsd.subdir.mk>
+
+#
+# Display current make(1) parameters
+#
+params: .PHONY .MAKE
+	${MAKEDIRTARGET} etc params

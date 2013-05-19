@@ -1,4 +1,4 @@
-/*	$NetBSD: string.h,v 1.43 2013/04/21 18:41:32 joerg Exp $	*/
+/*	$NetBSD: string.h,v 1.39 2009/07/22 19:48:27 kleink Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -96,11 +96,9 @@ __aconst char *strsignal(int);
  * strxfrm_l
  */
 #endif
-__END_DECLS
 
 #if defined(_NETBSD_SOURCE)
 #include <strings.h>		/* for backwards-compatibilty */
-__BEGIN_DECLS
 void	*memmem(const void *, size_t, const void *, size_t);
 char	*strcasestr(const char *, const char *);
 size_t	 strlcat(char *, const char *, size_t);
@@ -109,21 +107,8 @@ char	*strsep(char **, const char *);
 char	*stresep(char **, const char *, int);
 char	*strndup(const char *, size_t);
 void	*memrchr(const void *, int, size_t);
-void	__explicit_bzero(void *, size_t);
-int	__consttime_bcmp(const void *, const void *, size_t);
-__END_DECLS
 #endif
-
-#if (_POSIX_C_SOURCE - 0) >= 200809L || defined(_NETBSD_SOURCE)
-#  ifndef __LOCALE_T_DECLARED
-typedef struct _locale		*locale_t;
-#  define __LOCALE_T_DECLARED
-#  endif
-__BEGIN_DECLS
-int	 strcoll_l(const char *, const char *, locale_t);
-size_t	 strxfrm_l(char * __restrict, const char * __restrict, size_t, locale_t);
 __END_DECLS
-#endif /* _POSIX_C_SOURCE || _NETBSD_SOURCE */
 
 #if _FORTIFY_SOURCE > 0
 #include <ssp/string.h>

@@ -1,4 +1,4 @@
-/*      $NetBSD: kern_rndpool.c,v 1.2 2012/04/17 02:50:38 tls Exp $        */
+/*      $NetBSD: kern_rndpool.c,v 1.1.2.1 2012/04/20 23:35:20 riz Exp $        */
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_rndpool.c,v 1.2 2012/04/17 02:50:38 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_rndpool.c,v 1.1.2.1 2012/04/20 23:35:20 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

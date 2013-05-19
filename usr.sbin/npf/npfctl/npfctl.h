@@ -1,4 +1,4 @@
-/*	$NetBSD: npfctl.h,v 1.29 2013/03/20 00:29:47 christos Exp $	*/
+/*	$NetBSD: npfctl.h,v 1.11.2.13 2013/02/18 18:26:14 riz Exp $	*/
 
 /*-
  * Copyright (c) 2009-2013 The NetBSD Foundation, Inc.
@@ -37,6 +37,7 @@
 #include <inttypes.h>
 #include <assert.h>
 #include <util.h>
+#undef ECHO /* XXX util.h */
 
 #include <net/npf_ncode.h>
 #include <net/npf.h>
@@ -192,7 +193,6 @@ int		npfctl_ruleset_show(int, const char *);
 nl_rule_t *	npfctl_rule_ref(void);
 unsigned long	npfctl_debug_addif(const char *);
 
-void		npfctl_build_alg(const char *);
 void		npfctl_build_rproc(const char *, npfvar_t *);
 void		npfctl_build_group(const char *, int, u_int, bool);
 void		npfctl_build_group_end(void);
@@ -200,7 +200,6 @@ void		npfctl_build_rule(uint32_t, u_int, sa_family_t,
 		    const opt_proto_t *, const filt_opts_t *, const char *);
 void		npfctl_build_natseg(int, int, u_int, const addr_port_t *,
 		    const addr_port_t *, const filt_opts_t *);
-void		npfctl_build_maprset(const char *, int, u_int);
 void		npfctl_build_table(const char *, u_int, const char *);
 
 #endif

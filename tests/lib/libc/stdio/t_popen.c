@@ -1,4 +1,4 @@
-/*	$NetBSD: t_popen.c,v 1.4 2013/02/15 23:27:19 christos Exp $ */
+/*	$NetBSD: t_popen.c,v 1.3 2011/07/13 11:17:03 jruoho Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@ __COPYRIGHT("@(#) Copyright (c) 1999\
 #endif /* not lint */
 
 #ifndef lint
-__RCSID("$NetBSD: t_popen.c,v 1.4 2013/02/15 23:27:19 christos Exp $");
+__RCSID("$NetBSD: t_popen.c,v 1.3 2011/07/13 11:17:03 jruoho Exp $");
 #endif /* not lint */
 
 #include <atf-c.h>
@@ -73,7 +73,7 @@ ATF_TC_HEAD(popen_zeropad, tc)
 ATF_TC_BODY(popen_zeropad, tc)
 {
 	char *buffer, command[MAXPATHLEN];
-	int idx, in;
+	int index, in;
 	FILE *my_pipe;
 
 	if ((buffer = malloc(BUFSIZE)) == NULL)
@@ -81,8 +81,8 @@ ATF_TC_BODY(popen_zeropad, tc)
 
 	srand ((unsigned int)time(NULL));
 
-	for (idx = 0; idx < BUFSIZE; idx++)
-		buffer[idx]=(char)rand();
+	for (index = 0; index < BUFSIZE; index++)
+		buffer[index]=(char)rand();
 
 	(void)snprintf(command, sizeof(command), "%s >%s",
 	    _PATH_CAT, DATAFILE);
@@ -101,18 +101,18 @@ ATF_TC_BODY(popen_zeropad, tc)
 	if ((my_pipe = popen(command, "r")) == NULL)
 		TEST_ERROR("popen read");
 
-	idx = 0;
+	index = 0;
 	while ((in = fgetc(my_pipe)) != EOF)
-		if (idx == BUFSIZE) {
+		if (index == BUFSIZE) {
 			errno = EFBIG;
 			TEST_ERROR("read");
 		}
-		else if ((char)in != buffer[idx++]) {
+		else if ((char)in != buffer[index++]) {
 		    	errno = EINVAL;
 			TEST_ERROR("read");
 		}
 
-	if (idx < BUFSIZE) {
+	if (index < BUFSIZE) {
 		errno = EIO;
 		TEST_ERROR("read");
 	}

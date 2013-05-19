@@ -1,4 +1,4 @@
-/*	$NetBSD: lwp.h,v 1.168 2013/03/29 01:09:45 christos Exp $	*/
+/*	$NetBSD: lwp.h,v 1.159.2.2 2012/10/01 23:07:08 riz Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2006, 2007, 2008, 2009, 2010
@@ -33,8 +33,6 @@
 #ifndef _SYS_LWP_H_
 #define _SYS_LWP_H_
 
-#if defined(_KERNEL) || defined(_KMEMUSER)
-
 #include <sys/param.h>
 #include <sys/time.h>
 #include <sys/queue.h>
@@ -55,9 +53,9 @@
 #include <machine/proc.h>		/* Machine-dependent proc substruct. */
 
 /*
- * Lightweight process.  Field markings and the corresponding locks:
+ * Lightweight process.  Field markings and the corresponding locks: 
  *
- * a:	proc_lock
+ * a:	proclist_lock
  * c:	condition variable interlock, passed to cv_wait()
  * l:	*l_mutex
  * p:	l_proc->p_lock
@@ -69,10 +67,12 @@
  * Fields are clustered together by usage (to increase the likelyhood
  * of cache hits) and by size (to reduce dead space in the structure).
  */
+#if defined(_KERNEL) || defined(_KMEMUSER)
 
 #include <sys/pcu.h>
 
 struct lockdebug;
+struct sadata_vp;
 struct sysent;
 
 struct lwp {
@@ -92,6 +92,7 @@ struct lwp {
 	struct bintime 	l_rtime;	/* l: real time */
 	struct bintime	l_stime;	/* l: start time (while ONPROC) */
 	u_int		l_swtime;	/* l: time swapped in or out */
+	u_int		_reserved1;
 	u_int		l_rticks;	/* l: Saved start time of run */
 	u_int		l_rticksum;	/* l: Sum of ticks spent running */
 	u_int		l_slpticks;	/* l: Saved start time of sleep */
@@ -113,6 +114,7 @@ struct lwp {
 	struct lwpctl	*l_lwpctl;	/* p: lwpctl block kernel address */
 	struct lcpage	*l_lcpage;	/* p: lwpctl containing page */
 	kcpuset_t	*l_affinity;	/* l: CPU set for affinity */
+	struct sadata_vp *l_savp;	/* p: SA "virtual processor" */
 
 	/* Synchronisation. */
 	struct turnstile *l_ts;		/* l: current turnstile */
@@ -125,11 +127,10 @@ struct lwp {
 	u_int		l_slptime;	/* l: time since last blocked */
 	callout_t	l_timeout_ch;	/* !: callout for tsleep */
 	u_int		l_emap_gen;	/* !: emap generation number */
-	kcondvar_t	l_waitcv;	/* a: vfork() wait */
 
 #if PCU_UNIT_COUNT > 0
 	struct cpu_info	* volatile l_pcu_cpu[PCU_UNIT_COUNT];
-	uint16_t	l_pcu_used[2];
+	uint32_t	l_pcu_used;
 #endif
 
 	/* Process level and global state, misc. */
@@ -190,6 +191,7 @@ struct lwp {
 	uintptr_t	l_pfaillock;	/* !: for kernel preemption */
 	_TAILQ_HEAD(,struct lockdebug,volatile) l_ld_locks;/* !: locks held by LWP */
 	int		l_tcgen;	/* !: for timecounter removal */
+	int		l_unused2;	/* !: for future use */
 
 	/* These are only used by 'options SYSCALL_TIMES'. */
 	uint32_t	l_syscall_time;	/* !: time epoch for current syscall */
@@ -197,6 +199,7 @@ struct lwp {
 
 	struct kdtrace_thread *l_dtrace; /* (: DTrace-specific data. */
 };
+#endif /* _KERNEL || _KMEMUSER */
 
 /*
  * UAREA_PCB_OFFSET: an offset of PCB structure in the uarea.  MD code may
@@ -211,32 +214,29 @@ LIST_HEAD(lwplist, lwp);		/* A list of LWPs. */
 #ifdef _KERNEL
 extern struct lwplist	alllwp;		/* List of all LWPs. */
 extern lwp_t		lwp0;		/* LWP for proc0. */
-extern int		maxlwp __read_mostly;	/* max number of lwps */
-#ifndef MAXLWP
-#define	MAXLWP		2048
 #endif
-#ifndef	__HAVE_CPU_MAXLWP
-#define	cpu_maxlwp()	MAXLWP
-#endif
-#endif
-
-#endif /* _KERNEL || _KMEMUSER */
 
 /* These flags are kept in l_flag. */
 #define	LW_IDLE		0x00000001 /* Idle lwp. */
 #define	LW_LWPCTL	0x00000002 /* Adjust lwpctl in userret */
 #define	LW_SINTR	0x00000080 /* Sleep is interruptible. */
+#define	LW_SA_SWITCHING	0x00000100 /* SA LWP in context switch */
 #define	LW_SYSTEM	0x00000200 /* Kernel thread */
+#define	LW_SA		0x00000400 /* Scheduler activations LWP */
 #define	LW_WSUSPEND	0x00020000 /* Suspend before return to user */
 #define	LW_BATCH	0x00040000 /* LWP tends to hog CPU */
 #define	LW_WCORE	0x00080000 /* Stop for core dump on return to user */
 #define	LW_WEXIT	0x00100000 /* Exit before return to user */
+#define	LW_SA_UPCALL	0x00400000 /* SA upcall is pending */
+#define	LW_SA_BLOCKING	0x00800000 /* Blocking in tsleep() */
 #define	LW_PENDSIG	0x01000000 /* Pending signal for us */
 #define	LW_CANCELLED	0x02000000 /* tsleep should not sleep */
 #define	LW_WREBOOT	0x08000000 /* System is rebooting, please suspend */
 #define	LW_UNPARKED	0x10000000 /* Unpark op pending */
-#define	LW_RUMP_CLEAR	0x40000000 /* Clear curlwp in RUMP scheduler */
-#define	LW_RUMP_QEXIT	0x80000000 /* LWP should exit ASAP */
+#define	LW_SA_YIELD	0x40000000 /* LWP on VP is yielding */
+#define	LW_SA_IDLE	0x80000000 /* VP is idle */
+#define	LW_RUMP_CLEAR	LW_SA_IDLE /* clear curlwp in rump scheduler */
+#define	LW_RUMP_QEXIT	LW_SA_YIELD/* lwp should exit ASAP */
 
 /* The second set of flags is kept in l_pflag. */
 #define	LP_KTRACTIVE	0x00000001 /* Executing ktrace operation */
@@ -248,7 +248,8 @@ extern int		maxlwp __read_mostly;	/* max number of lwps */
 #define	LP_INTR		0x00000040 /* Soft interrupt handler */
 #define	LP_SYSCTLWRITE	0x00000080 /* sysctl write lock held */
 #define	LP_MUSTJOIN	0x00000100 /* Must join kthread on exit */
-#define	LP_VFORKWAIT	0x00000200 /* Waiting at vfork() for a child */
+#define	LP_SA_PAGEFAULT	0x00000200 /* SA LWP in pagefault handler */
+#define	LP_SA_NOBLOCK	0x00000400 /* SA don't upcall on block */
 #define	LP_TIMEINTR	0x00010000 /* Time this soft interrupt */
 #define	LP_RUNNING	0x20000000 /* Active on a CPU */
 #define	LP_BOUND	0x80000000 /* Bound to a CPU */
@@ -261,8 +262,8 @@ extern int		maxlwp __read_mostly;	/* max number of lwps */
  * Mask indicating that there is "exceptional" work to be done on return to
  * user.
  */
-#define	LW_USERRET	\
-    (LW_WEXIT | LW_PENDSIG | LW_WREBOOT | LW_WSUSPEND | LW_WCORE | LW_LWPCTL)
+#define	LW_USERRET (LW_WEXIT|LW_PENDSIG|LW_WREBOOT|LW_WSUSPEND|LW_WCORE|\
+		    LW_SA_BLOCKING|LW_SA_UPCALL|LW_LWPCTL)
 
 /*
  * Status values.
@@ -305,6 +306,8 @@ void	lwp_sys_init(void);
 
 void	lwp_startup(lwp_t *, lwp_t *);
 void	startlwp(void *);
+void	cpu_setfunc(lwp_t *, void (*)(void *), void *);
+void	upcallret(lwp_t *);
 
 int	lwp_locked(lwp_t *, kmutex_t *);
 void	lwp_setlock(lwp_t *, kmutex_t *);
@@ -348,7 +351,7 @@ void	*_lwp_getspecific_by_lwp(lwp_t *, specificdata_key_t);
 void	lwp_setspecific(specificdata_key_t, void *);
 
 /* Syscalls. */
-int	lwp_park(clockid_t, int, struct timespec *, const void *);
+int	lwp_park(struct timespec *, const void *);
 int	lwp_unpark(lwpid_t, const void *);
 
 /* DDB. */
@@ -413,7 +416,7 @@ lwp_eprio(lwp_t *l)
 	pri_t pri;
 
 	pri = l->l_priority;
-	if ((l->l_flag & LW_SYSTEM) == 0 && l->l_kpriority && pri < PRI_KERNEL)
+	if (l->l_kpriority && pri < PRI_KERNEL)
 		pri = (pri >> 1) + l->l_kpribase;
 	return MAX(l->l_inheritedprio, pri);
 }

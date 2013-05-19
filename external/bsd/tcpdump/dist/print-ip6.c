@@ -23,9 +23,9 @@
 #ifndef lint
 #if 0
 static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-ip6.c,v 1.52 2007-09-21 07:05:33 hannes Exp ";
+    "@(#) Header: /tcpdump/master/tcpdump/print-ip6.c,v 1.52 2007-09-21 07:05:33 hannes Exp";
 #else
-__RCSID("$NetBSD: print-ip6.c,v 1.3 2013/04/06 19:33:08 christos Exp $");
+__RCSID("$NetBSD: print-ip6.c,v 1.2 2010/12/05 05:11:30 christos Exp $");
 #endif
 #endif
 
@@ -53,38 +53,32 @@ __RCSID("$NetBSD: print-ip6.c,v 1.3 2013/04/06 19:33:08 christos Exp $");
  * Compute a V6-style checksum by building a pseudoheader.
  */
 int
-nextproto6_cksum(const struct ip6_hdr *ip6, const u_int8_t *data,
+nextproto6_cksum(const struct ip6_hdr *ip6, const u_short *data,
 		 u_int len, u_int next_proto)
 {
-        struct {
-                struct in6_addr ph_src;
-                struct in6_addr ph_dst;
-                u_int32_t       ph_len;
-                u_int8_t        ph_zero[3];
-                u_int8_t        ph_nxt;
-        } ph;
-        struct cksum_vec vec[2];
+        size_t i;
+        u_int32_t sum = 0;
+	union ip6_pseudo_hdr phu;
 
         /* pseudo-header */
-        memset(&ph, 0, sizeof(ph));
-        ph.ph_src = ip6->ip6_src;
-        ph.ph_dst = ip6->ip6_dst;
-        ph.ph_len = htonl(len);
-        ph.ph_nxt = next_proto;
+        memset(&phu, 0, sizeof(phu));
+        phu.ph.ph_src = ip6->ip6_src;
+        phu.ph.ph_dst = ip6->ip6_dst;
+        phu.ph.ph_len = htonl(len);
+        phu.ph.ph_nxt = next_proto;
 
-        vec[0].ptr = (const u_int8_t *)(void *)&ph;
-        vec[0].len = sizeof(ph);
-        vec[1].ptr = data;
-        vec[1].len = len;
+        for (i = 0; i < sizeof(phu.pa) / sizeof(phu.pa[0]); i++) {
+                sum += phu.pa[i];
+	}
 
-        return in_cksum(vec, 2);
+        return in_cksum(data, len, sum);
 }
 
 /*
  * print an IP6 datagram.
  */
 void
-ip6_print(netdissect_options *ndo, const u_char *bp, u_int length)
+ip6_print(register const u_char *bp, register u_int length)
 {
 	register const struct ip6_hdr *ip6;
 	register int advance;
@@ -100,62 +94,62 @@ ip6_print(netdissect_options *ndo, const u_char *bp, u_int length)
 
 	TCHECK(*ip6);
 	if (length < sizeof (struct ip6_hdr)) {
-		(void)ND_PRINT((ndo, "truncated-ip6 %u", length));
+		(void)printf("truncated-ip6 %u", length);
 		return;
 	}
 
-        if (!ndo->ndo_eflag)
-            ND_PRINT((ndo, "IP6 "));
+        if (!eflag)
+            printf("IP6 ");
 
 	payload_len = EXTRACT_16BITS(&ip6->ip6_plen);
 	len = payload_len + sizeof(struct ip6_hdr);
 	if (length < len)
-		(void)ND_PRINT((ndo, "truncated-ip6 - %u bytes missing!",
-			len - length));
+		(void)printf("truncated-ip6 - %u bytes missing!",
+			len - length);
 
-        if (ndo->ndo_vflag) {
+        if (vflag) {
             flow = EXTRACT_32BITS(&ip6->ip6_flow);
-            ND_PRINT((ndo, "("));
+            printf("(");
 #if 0
             /* rfc1883 */
             if (flow & 0x0f000000)
-		(void)ND_PRINT((ndo, "pri 0x%02x, ", (flow & 0x0f000000) >> 24));
+		(void)printf("pri 0x%02x, ", (flow & 0x0f000000) >> 24);
             if (flow & 0x00ffffff)
-		(void)ND_PRINT((ndo, "flowlabel 0x%06x, ", flow & 0x00ffffff));
+		(void)printf("flowlabel 0x%06x, ", flow & 0x00ffffff);
 #else
             /* RFC 2460 */
             if (flow & 0x0ff00000)
-		(void)ND_PRINT((ndo, "class 0x%02x, ", (flow & 0x0ff00000) >> 20));
+		(void)printf("class 0x%02x, ", (flow & 0x0ff00000) >> 20);
             if (flow & 0x000fffff)
-		(void)ND_PRINT((ndo, "flowlabel 0x%05x, ", flow & 0x000fffff));
+		(void)printf("flowlabel 0x%05x, ", flow & 0x000fffff);
 #endif
 
-            (void)ND_PRINT((ndo, "hlim %u, next-header %s (%u) payload length: %u) ",
+            (void)printf("hlim %u, next-header %s (%u) payload length: %u) ",
                          ip6->ip6_hlim,
                          tok2str(ipproto_values,"unknown",ip6->ip6_nxt),
                          ip6->ip6_nxt,
-                         payload_len));
+                         payload_len);
         }
 
 	/*
 	 * Cut off the snapshot length to the end of the IP payload.
 	 */
 	ipend = bp + len;
-	if (ipend < ndo->ndo_snapend)
-		ndo->ndo_snapend = ipend;
+	if (ipend < snapend)
+		snapend = ipend;
 
 	cp = (const u_char *)ip6;
 	advance = sizeof(struct ip6_hdr);
 	nh = ip6->ip6_nxt;
-	while (cp < ndo->ndo_snapend && advance > 0) {
+	while (cp < snapend && advance > 0) {
 		cp += advance;
 		len -= advance;
 
 		if (cp == (const u_char *)(ip6 + 1) &&
 		    nh != IPPROTO_TCP && nh != IPPROTO_UDP &&
 		    nh != IPPROTO_DCCP && nh != IPPROTO_SCTP) {
-			(void)ND_PRINT((ndo, "%s > %s: ", ip6addr_string(&ip6->ip6_src),
-				     ip6addr_string(&ip6->ip6_dst)));
+			(void)printf("%s > %s: ", ip6addr_string(&ip6->ip6_src),
+				     ip6addr_string(&ip6->ip6_dst));
 		}
 
 		switch (nh) {
@@ -169,7 +163,7 @@ ip6_print(netdissect_options *ndo, const u_char *bp, u_int length)
 			break;
 		case IPPROTO_FRAGMENT:
 			advance = frag6_print(cp, (const u_char *)ip6);
-			if (ndo->ndo_snapend <= cp + advance)
+			if (snapend <= cp + advance)
 				return;
 			nh = *cp;
 			fragmented = 1;
@@ -207,7 +201,7 @@ ip6_print(netdissect_options *ndo, const u_char *bp, u_int length)
 			udp_print(cp, len, (const u_char *)ip6, fragmented);
 			return;
 		case IPPROTO_ICMPV6:
-			icmp6_print(ndo, cp, len, (const u_char *)ip6, fragmented);
+			icmp6_print(gndo, cp, len, (const u_char *)ip6, fragmented);
 			return;
 		case IPPROTO_AH:
 			advance = ah_print(cp);
@@ -216,7 +210,7 @@ ip6_print(netdissect_options *ndo, const u_char *bp, u_int length)
 		case IPPROTO_ESP:
 		    {
 			int enh, padlen;
-			advance = esp_print(ndo, cp, len, (const u_char *)ip6, &enh, &padlen);
+			advance = esp_print(gndo, cp, len, (const u_char *)ip6, &enh, &padlen);
 			nh = enh & 0xff;
 			len -= padlen;
 			break;
@@ -230,7 +224,7 @@ ip6_print(netdissect_options *ndo, const u_char *bp, u_int length)
 		    }
 
 		case IPPROTO_PIM:
-			pim_print(cp, len, nextproto6_cksum(ip6, cp, len,
+			pim_print(cp, len, nextproto6_cksum(ip6, (u_short *)cp, len,
 							    IPPROTO_PIM));
 			return;
 
@@ -239,11 +233,11 @@ ip6_print(netdissect_options *ndo, const u_char *bp, u_int length)
 			return;
 
 		case IPPROTO_IPV6:
-			ip6_print(ndo, cp, len);
+			ip6_print(cp, len);
 			return;
 
 		case IPPROTO_IPV4:
-		        ip_print(ndo, cp, len);
+		        ip_print(gndo, cp, len);
 			return;
 
                 case IPPROTO_PGM:
@@ -259,18 +253,18 @@ ip6_print(netdissect_options *ndo, const u_char *bp, u_int length)
 			return;
 
 		case IPPROTO_NONE:
-			(void)ND_PRINT((ndo, "no next header"));
+			(void)printf("no next header");
 			return;
 
 		default:
-			(void)ND_PRINT((ndo, "ip-proto-%d %d", nh, len));
+			(void)printf("ip-proto-%d %d", nh, len);
 			return;
 		}
 	}
 
 	return;
 trunc:
-	(void)ND_PRINT((ndo, "[|ip6]"));
+	(void)printf("[|ip6]");
 }
 
 #endif /* INET6 */

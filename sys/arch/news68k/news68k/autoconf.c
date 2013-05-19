@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.22 2012/10/13 06:18:44 tsutsui Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.20.10.1 2012/08/08 15:51:12 martin Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -51,7 +51,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.22 2012/10/13 06:18:44 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.20.10.1 2012/08/08 15:51:12 martin Exp $");
 
 #include "scsibus.h"
 
@@ -110,7 +110,7 @@ cpu_rootconf(void)
 	findroot();
 
 	printf("boot device: %s\n",
-	       booted_device ? device_xname(booted_device) : "<unknown>");
+	       booted_device ? booted_device->dv_xname : "<unknown>");
 
 	rootconf();
 }

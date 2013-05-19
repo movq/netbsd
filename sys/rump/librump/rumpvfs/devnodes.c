@@ -1,4 +1,4 @@
-/*	$NetBSD: devnodes.c,v 1.8 2013/03/07 22:12:34 pooka Exp $	*/
+/*	$NetBSD: devnodes.c,v 1.6 2011/02/10 11:00:45 pooka Exp $	*/
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: devnodes.c,v 1.8 2013/03/07 22:12:34 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: devnodes.c,v 1.6 2011/02/10 11:00:45 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -40,8 +40,8 @@ __KERNEL_RCSID(0, "$NetBSD: devnodes.c,v 1.8 2013/03/07 22:12:34 pooka Exp $");
 #include "rump_vfs_private.h"
 
 /* realqvik(tm) "devfs" */
-static int
-makeonedevnode(dev_t devtype, const char *devname,
+int
+rump_vfs_makeonedevnode(dev_t devtype, const char *devname,
 	devmajor_t majnum, devminor_t minnum)
 {
 	register_t retval;
@@ -55,8 +55,8 @@ makeonedevnode(dev_t devtype, const char *devname,
 	return 0;
 }
 
-static int
-makedevnodes(dev_t devtype, const char *basename, char minchar,
+int
+rump_vfs_makedevnodes(dev_t devtype, const char *basename, char minchar,
 	devmajor_t maj, devminor_t minnum, int nnodes)
 {
 	int error = 0;
@@ -130,7 +130,7 @@ makeonenode(char *buf, devmajor_t blk, devmajor_t chr, devminor_t dmin,
 
 	/* block device */
 	snprintf(buf, MAXPATHLEN, "/dev/%s%s%s", base, cstr1, cstr2);
-	if (blk != NODEVMAJOR) {
+	if (blk != NODEV) {
 		switch (doesitexist(buf, true, blk, dmin)) {
 		case DIFFERENT:
 			aprint_verbose("mkdevnodes: block device %s "
@@ -174,9 +174,6 @@ rump_vfs_builddevs(struct devsw_conv *dcvec, size_t dcvecsize)
 	struct devsw_conv *dc;
 	size_t i;
 	int v1, v2;
-
-	rump_vfs_makeonedevnode = makeonedevnode;
-	rump_vfs_makedevnodes = makedevnodes;
 
 	for (i = 0; i < dcvecsize; i++) {
 		dc = &dcvec[i];

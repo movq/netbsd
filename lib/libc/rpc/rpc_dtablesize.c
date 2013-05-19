@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_dtablesize.c,v 1.16 2013/03/11 20:19:29 tron Exp $	*/
+/*	$NetBSD: rpc_dtablesize.c,v 1.14.72.1 2013/03/14 22:03:14 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -37,7 +37,7 @@
 static char *sccsid = "@(#)rpc_dtablesize.c 1.2 87/08/11 Copyr 1987 Sun Micro";
 static char *sccsid = "@(#)rpc_dtablesize.c	2.1 88/07/29 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: rpc_dtablesize.c,v 1.16 2013/03/11 20:19:29 tron Exp $");
+__RCSID("$NetBSD: rpc_dtablesize.c,v 1.14.72.1 2013/03/14 22:03:14 riz Exp $");
 #endif
 #endif
 
@@ -45,14 +45,14 @@ __RCSID("$NetBSD: rpc_dtablesize.c,v 1.16 2013/03/11 20:19:29 tron Exp $");
 
 #include <unistd.h>
 
-int _rpc_dtablesize(void);	/* XXX */
+int _rpc_dtablesize __P((void));	/* XXX */
 
 /*
  * Cache the result of sysconf(_SC_OPEN_MAX), so we don't have to do an
  * expensive system call every time.
  */
 int
-_rpc_dtablesize(void)
+_rpc_dtablesize()
 {
 	static int size;
 	if (size == 0)

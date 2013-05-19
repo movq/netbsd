@@ -1,4 +1,4 @@
-# $NetBSD: mi,v 1.1029 2013/04/27 23:02:17 joerg Exp $
+# $NetBSD: mi,v 1.984.2.15 2013/03/14 19:16:40 riz Exp $
 #
 # Note:	Don't delete entries from here - mark them as "obsolete" instead,
 #	unless otherwise stated below.
@@ -50,7 +50,7 @@
 ./bin/rm					base-util-root
 ./bin/rmail					base-obsolete		obsolete
 ./bin/rmdir					base-util-root
-./bin/rump.dd					base-util-root		rump
+./bin/rump.dd					base-util-root
 ./bin/sh					base-util-root
 ./bin/sleep					base-util-root
 ./bin/stty					base-util-root
@@ -99,7 +99,6 @@
 ./etc/iscsi					base-sysutil-root
 ./etc/kerberosIV				base-obsolete		obsolete
 ./etc/kerberosV					base-krb5-root
-./etc/kyua					base-kyua-root
 ./etc/mail					base-postfix-bin
 ./etc/mtree					base-sys-root
 ./etc/mtree/set.base				base-sys-root
@@ -125,16 +124,10 @@
 ./etc/uucp					base-obsolete		obsolete
 ./etc/zfs					base-zfs-root
 ./lib						base-sys-root
-./lib/npf					base-sys-root
 ./lib/libdes.so					base-obsolete		obsolete
 ./lib/libssp.so					base-obsolete		obsolete
 ./libdata					base-sys-root
 ./libdata/firmware				base-firmware-root
-./libdata/firmware/if_athn			base-firmware-root
-./libdata/firmware/if_athn/athn-ar7010		base-firmware-root
-./libdata/firmware/if_athn/athn-ar7010-11	base-firmware-root
-./libdata/firmware/if_athn/athn-ar9271		base-firmware-root
-./libdata/firmware/if_athn/athn-license		base-firmware-root
 ./libdata/firmware/if_ipw			base-firmware-root
 ./libdata/firmware/if_ipw/LICENSE		base-firmware-root
 ./libdata/firmware/if_ipw/ipw2100-1.2-i.fw	base-firmware-root
@@ -192,12 +185,6 @@
 ./libdata/firmware/rum				base-firmware-root
 ./libdata/firmware/rum/rum-license		base-firmware-root
 ./libdata/firmware/rum/rum-rt2573		base-firmware-root
-./libdata/firmware/rum/run-rt2870		base-obsolete	obsolete
-./libdata/firmware/rum/run-rt3071		base-obsolete	obsolete
-./libdata/firmware/run				base-firmware-root
-./libdata/firmware/run/run-license		base-firmware-root
-./libdata/firmware/run/run-rt2870		base-firmware-root
-./libdata/firmware/run/run-rt3071		base-firmware-root
 ./libdata/firmware/upgt				base-firmware-root
 ./libdata/firmware/urtwn			base-firmware-root obsolete
 ./libdata/firmware/zyd				base-firmware-root
@@ -208,7 +195,6 @@
 ./libexec					base-sys-root
 ./libexec/devpubd-hooks				base-sysutil-root
 ./libexec/devpubd-hooks/01-makedev		base-sysutil-root
-./libexec/devpubd-hooks/02-wedgenames		base-sysutil-root
 ./libexec/devpubd-run-hooks			base-sysutil-root
 ./libexec/dhcpcd-hooks				base-dhcpcd-root
 ./libexec/dhcpcd-hooks/01-test			base-dhcpcd-root
@@ -330,7 +316,6 @@
 ./sbin/nfsiod					base-obsolete		obsolete
 ./sbin/nologin					base-sysutil-root
 ./sbin/npfctl					base-npf-bin		npf
-./sbin/pdisk					base-sysutil-root
 ./sbin/pfctl					base-pf-root		pf
 ./sbin/pflogd					base-pf-root		pf
 ./sbin/pfs						base-pf-root		pf
@@ -353,15 +338,15 @@
 ./sbin/routed					base-router-root
 ./sbin/rrestore					base-netutil-root
 ./sbin/rtsol					base-netutil-root	use_inet6
-./sbin/rump.cgdconfig				base-sysutil-root	crypto,rump
-./sbin/rump.ifconfig				base-netutil-root	rump
-./sbin/rump.modload				base-sysutil-root	rump
-./sbin/rump.modstat				base-sysutil-root	rump
-./sbin/rump.modunload				base-sysutil-root	rump
-./sbin/rump.ping				base-netutil-root	rump
-./sbin/rump.raidctl				base-sysutil-root	rump
-./sbin/rump.route				base-netutil-root	rump
-./sbin/rump.sysctl				base-sysutil-root	rump
+./sbin/rump.cgdconfig				base-sysutil-root	crypto
+./sbin/rump.ifconfig					base-netutil-root
+./sbin/rump.modload					base-sysutil-root
+./sbin/rump.modstat					base-sysutil-root
+./sbin/rump.modunload				base-sysutil-root
+./sbin/rump.ping					base-netutil-root
+./sbin/rump.raidctl					base-sysutil-root
+./sbin/rump.route					base-netutil-root
+./sbin/rump.sysctl					base-sysutil-root
 ./sbin/savecore					base-sysutil-root
 ./sbin/scan_ffs					base-sysutil-root
 ./sbin/scan_lfs					base-sysutil-root
@@ -395,16 +380,11 @@
 ./usr/bin/arpaname				base-bind-bin
 ./usr/bin/at					base-cron-bin
 ./usr/bin/atf-check				base-obsolete		obsolete
-./usr/bin/atf-config				base-atf-bin		atf,!kyua
-./usr/bin/atf-config				base-obsolete		kyua,obsolete
+./usr/bin/atf-config				base-atf-bin		atf
 ./usr/bin/atf-report				base-atf-bin		atf
-./usr/bin/atf-report				base-kyua-bin		kyua
 ./usr/bin/atf-run				base-atf-bin		atf
-./usr/bin/atf-run				base-kyua-bin		kyua
 ./usr/bin/atf-sh				base-atf-bin		atf
-./usr/bin/atf-version				base-atf-bin		atf,!kyua
-./usr/bin/atf-version				base-obsolete		kyua,obsolete
-./usr/bin/atf2kyua				base-kyua-bin		kyua
+./usr/bin/atf-version				base-atf-bin		atf
 ./usr/bin/atq					base-cron-bin
 ./usr/bin/atrm					base-cron-bin
 ./usr/bin/audioctl				base-audio-bin
@@ -530,7 +510,6 @@
 ./usr/bin/krb5-config				base-krb5-bin		kerberos
 ./usr/bin/ktrace				base-debug-bin
 ./usr/bin/ktruss				base-debug-bin
-./usr/bin/kyua					base-kyua-bin		kyua
 ./usr/bin/lam					base-util-bin
 ./usr/bin/last					base-util-bin
 ./usr/bin/lastcomm				base-util-bin
@@ -564,8 +543,6 @@
 ./usr/bin/lsextattr				base-util-bin
 ./usr/bin/lua					base-util-bin
 ./usr/bin/lzcat					base-util-bin
-./usr/bin/lzf					base-util-bin
-./usr/bin/lzfcat				base-util-bin
 ./usr/bin/lzma					base-util-bin
 ./usr/bin/lzmainfo				base-util-bin
 ./usr/bin/m4					base-util-bin
@@ -659,12 +636,12 @@
 ./usr/bin/rpcinfo				base-rpcutil-bin
 ./usr/bin/rs					base-util-bin
 ./usr/bin/rsh					base-netutil-bin
-./usr/bin/rump.dhcpclient			base-util-bin		rump
-./usr/bin/rump.halt				base-util-bin		rump
-./usr/bin/rump.netstat				base-netutil-bin	rump
-./usr/bin/rump.sockstat				base-util-bin		rump
-./usr/bin/rump_allserver			base-util-bin		rump
-./usr/bin/rump_server				base-util-bin		rump
+./usr/bin/rump.dhcpclient			base-util-bin
+./usr/bin/rump.halt			base-util-bin
+./usr/bin/rump.netstat				base-netutil-bin
+./usr/bin/rump.sockstat				base-util-bin
+./usr/bin/rump_allserver			base-util-bin
+./usr/bin/rump_server			base-util-bin
 ./usr/bin/rup					base-netutil-bin
 ./usr/bin/ruptime				base-netutil-bin
 ./usr/bin/rusers				base-netutil-bin
@@ -722,9 +699,6 @@
 ./usr/bin/top					base-util-bin
 ./usr/bin/touch					base-util-bin
 ./usr/bin/tpfmt					base-util-bin
-./usr/bin/tpm_sealdata				base-tpm-bin		tpm
-./usr/bin/tpm_unsealdata			base-tpm-bin		tpm
-./usr/bin/tpm_version				base-tpm-bin		tpm
 ./usr/bin/tput					base-util-bin
 ./usr/bin/tr					base-util-bin
 ./usr/bin/true					base-util-bin
@@ -736,7 +710,6 @@
 ./usr/bin/unexpand				base-util-bin
 ./usr/bin/uniq					base-util-bin
 ./usr/bin/units					base-util-bin
-./usr/bin/unlzf					base-util-bin
 ./usr/bin/unlzma				base-util-bin
 ./usr/bin/unvis					base-util-bin
 ./usr/bin/unxz					base-util-bin
@@ -776,7 +749,7 @@
 ./usr/bin/who					base-util-bin
 ./usr/bin/whoami				base-util-bin
 ./usr/bin/whois					base-netutil-bin
-./usr/bin/window				base-obsolete		obsolete
+./usr/bin/window				base-util-bin
 ./usr/bin/write					base-util-bin
 ./usr/bin/xargs					base-util-bin
 ./usr/bin/xmlwf					base-util-bin
@@ -803,12 +776,8 @@
 ./usr/include/adosfs				base-c-usr
 ./usr/include/altq				base-c-usr
 ./usr/include/arpa				base-c-usr
-./usr/include/c++				base-cxx-usr
-./usr/include/c++/ext				base-cxx-usr
 ./usr/include/cdk				base-obsolete		obsolete
-./usr/include/clang-3.0				base-obsolete		obsolete
-./usr/include/clang-3.2				base-obsolete		obsolete
-./usr/include/clang-3.3				base-c-usr
+./usr/include/clang-3.0				base-c-usr
 ./usr/include/compat				base-obsolete		obsolete
 ./usr/include/crypto				base-c-usr
 ./usr/include/dev				base-c-usr
@@ -818,7 +787,6 @@
 ./usr/include/dev/dm	                        base-c-usr
 ./usr/include/dev/dmover			base-c-usr
 ./usr/include/dev/dtv				base-c-usr
-./usr/include/dev/filemon			base-c-usr
 ./usr/include/dev/eisa				base-obsolete		obsolete
 ./usr/include/dev/hpc				base-c-usr
 ./usr/include/dev/i2c				base-c-usr
@@ -851,7 +819,6 @@
 ./usr/include/dev/vinum				base-obsolete		obsolete
 ./usr/include/dev/vme				base-c-usr
 ./usr/include/dev/wscons			base-c-usr
-./usr/include/event2				base-c-usr
 ./usr/include/filecorefs			base-c-usr
 ./usr/include/fs				base-c-usr
 ./usr/include/fs/efs				base-c-usr
@@ -876,7 +843,6 @@
 ./usr/include/g++/std				base-obsolete		obsolete
 ./usr/include/g++/tr1				base-cxx-usr
 ./usr/include/g++/tr1_impl			base-cxx-usr
-./usr/include/gcc-4.1				base-obsolete		!gcc,obsolete
 ./usr/include/gcc-4.1				base-c-usr		gcc=4
 ./usr/include/gcc-4.1				base-obsolete		gcc=45,obsolete
 ./usr/include/gcc-4.5				base-c-usr
@@ -916,12 +882,11 @@
 ./usr/include/netinet6				base-c-usr
 ./usr/include/netipsec				base-c-usr
 ./usr/include/netisdn				base-c-usr
-./usr/include/netiso				base-obsolete		obsolete
+./usr/include/netiso				base-c-usr
 ./usr/include/netkey				base-c-usr
 ./usr/include/netmpls				base-c-usr
 ./usr/include/netnatm				base-c-usr
 ./usr/include/netns				base-obsolete		obsolete
-./usr/include/netpgp				base-c-usr
 ./usr/include/netsmb				base-c-usr
 ./usr/include/nfs				base-c-usr
 ./usr/include/ntfs				base-c-usr
@@ -959,7 +924,6 @@
 ./usr/lib/libusb.so				base-obsolete		obsolete
 ./usr/lib/lua					base-sys-usr
 ./usr/lib/lua/5.1				base-sys-usr
-./usr/lib/npf					base-obsolete		obsolete
 ./usr/lib/runemodule				base-obsolete		obsolete
 ./usr/lib/runemodule/libBIG5.a			base-obsolete		obsolete
 ./usr/lib/runemodule/libBIG5.so			base-obsolete		obsolete
@@ -970,6 +934,7 @@
 ./usr/lib/runemodule/libEUC.so.3		base-obsolete		obsolete
 ./usr/lib/runemodule/libEUC.so.3.0		base-obsolete		obsolete
 ./usr/lib/runemodule/libEUCTW.a			base-obsolete		obsolete
+./usr/lib/npf					base-sys-usr
 ./usr/lib/runemodule/libEUCTW.so		base-obsolete		obsolete
 ./usr/lib/runemodule/libEUCTW.so.3		base-obsolete		obsolete
 ./usr/lib/runemodule/libEUCTW.so.3.0		base-obsolete		obsolete
@@ -993,8 +958,6 @@
 ./usr/libdata					base-sys-usr
 ./usr/libdata/debug				base-sys-usr
 ./usr/libdata/debug/bin				base-sys-usr
-./usr/libdata/debug/lib				base-sys-usr
-./usr/libdata/debug/lib/npf			base-sys-usr
 ./usr/libdata/debug/libexec			base-sys-usr
 ./usr/libdata/debug/sbin			base-sys-usr
 ./usr/libdata/debug/usr				base-sys-usr
@@ -1002,7 +965,6 @@
 ./usr/libdata/debug/usr/games			base-sys-usr
 ./usr/libdata/debug/usr/lib			base-sys-usr
 ./usr/libdata/debug/usr/lib/i18n		base-i18n-root
-./usr/libdata/debug/usr/lib/npf			base-obsolete		obsolete
 ./usr/libdata/debug/usr/libexec			base-sys-usr
 ./usr/libdata/debug/usr/libexec/ching		base-sys-usr
 ./usr/libdata/debug/usr/libexec/lpr		base-sys-usr
@@ -1016,6 +978,7 @@
 ./usr/libdata/firmware/radeon/CEDAR_pfp.bin	base-firmware-usr
 ./usr/libdata/firmware/radeon/CEDAR_rlc.bin	base-firmware-usr
 ./usr/libdata/firmware/radeon/CYPRESS_me.bin	base-firmware-usr
+./usr/libdata/debug/usr/lib/npf			base-sys-usr
 ./usr/libdata/firmware/radeon/CYPRESS_pfp.bin	base-firmware-usr
 ./usr/libdata/firmware/radeon/CYPRESS_rlc.bin	base-firmware-usr
 ./usr/libdata/firmware/radeon/JUNIPER_me.bin	base-firmware-usr
@@ -1082,8 +1045,6 @@
 ./usr/libexec/kdc				base-obsolete		obsolete
 ./usr/libexec/kfd				base-obsolete		obsolete
 ./usr/libexec/kpasswdd				base-krb5-bin		kerberos
-./usr/libexec/kyua-atf-tester			base-kyua-bin		kyua
-./usr/libexec/kyua-plain-tester			base-kyua-bin		kyua
 ./usr/libexec/lfs_cleanerd			base-obsolete		obsolete
 ./usr/libexec/locate.bigram			base-sysutil-bin
 ./usr/libexec/locate.code			base-sysutil-bin
@@ -1358,10 +1319,10 @@
 ./usr/sbin/mopd					base-bootserver-bin
 ./usr/sbin/mopprobe				base-bootserver-bin
 ./usr/sbin/moptrace				base-bootserver-bin
-./usr/sbin/mount_9p				base-puffs-bin		rump
-./usr/sbin/mount_psshfs				base-puffs-bin		rump
+./usr/sbin/mount_9p				base-puffs-bin
+./usr/sbin/mount_psshfs				base-puffs-bin
 ./usr/sbin/mount_puffsportal			base-obsolete		obsolete
-./usr/sbin/mount_sysctlfs			base-puffs-bin		rump
+./usr/sbin/mount_sysctlfs			base-puffs-bin
 ./usr/sbin/mountd				base-nfsserver-bin
 ./usr/sbin/moused				base-sysutil-bin
 ./usr/sbin/mrinfo				base-router-bin
@@ -1386,7 +1347,6 @@
 ./usr/sbin/nfsd					base-nfsserver-bin
 ./usr/sbin/nfsiod				base-obsolete		obsolete
 ./usr/sbin/npfctl				base-obsolete		obsolete
-./usr/sbin/npftest				base-npf-bin		npf,rump,pic
 ./usr/sbin/nsec3hash				base-bind-bin
 ./usr/sbin/nslookup				base-obsolete		obsolete
 ./usr/sbin/nsquery				base-obsolete		obsolete
@@ -1468,24 +1428,24 @@
 ./usr/sbin/rtadvd				base-router-bin		use_inet6
 ./usr/sbin/rtquery				base-netutil-bin
 ./usr/sbin/rtsold				base-netutil-bin	inet6
-./usr/sbin/rump.envstat				base-sysutil-bin	rump
-./usr/sbin/rump.powerd				base-sysutil-bin	rump
-./usr/sbin/rump.traceroute			base-netutil-bin	rump
-./usr/sbin/rump_cd9660				base-puffs-bin	rump
-./usr/sbin/rump_efs				base-puffs-bin	rump
-./usr/sbin/rump_ext2fs				base-puffs-bin	rump
-./usr/sbin/rump_ffs				base-puffs-bin	rump
-./usr/sbin/rump_hfs				base-puffs-bin	rump
-./usr/sbin/rump_lfs				base-puffs-bin	rump
-./usr/sbin/rump_msdos				base-puffs-bin	rump
-./usr/sbin/rump_nfs				base-puffs-bin	rump
-./usr/sbin/rump_ntfs				base-puffs-bin	rump
-./usr/sbin/rump_smbfs				base-puffs-bin	crypto,rump
-./usr/sbin/rump_syspuffs			base-puffs-bin	rump
-./usr/sbin/rump_sysvbfs				base-puffs-bin	rump
-./usr/sbin/rump_tmpfs				base-puffs-bin	rump
-./usr/sbin/rump_udf				base-puffs-bin	rump
-./usr/sbin/rump_v7fs				base-puffs-bin	rump
+./usr/sbin/rump.envstat				base-sysutil-bin
+./usr/sbin/rump.powerd				base-sysutil-bin
+./usr/sbin/rump.traceroute				base-netutil-bin
+./usr/sbin/rump_cd9660				base-puffs-bin
+./usr/sbin/rump_efs				base-puffs-bin
+./usr/sbin/rump_ext2fs				base-puffs-bin
+./usr/sbin/rump_ffs				base-puffs-bin
+./usr/sbin/rump_hfs				base-puffs-bin
+./usr/sbin/rump_lfs				base-puffs-bin
+./usr/sbin/rump_msdos				base-puffs-bin
+./usr/sbin/rump_nfs				base-puffs-bin
+./usr/sbin/rump_ntfs				base-puffs-bin
+./usr/sbin/rump_smbfs				base-puffs-bin		crypto
+./usr/sbin/rump_syspuffs			base-puffs-bin
+./usr/sbin/rump_sysvbfs				base-puffs-bin
+./usr/sbin/rump_tmpfs				base-puffs-bin
+./usr/sbin/rump_udf				base-puffs-bin
+./usr/sbin/rump_v7fs				base-puffs-bin
 ./usr/sbin/rwhod				base-netutil-bin
 ./usr/sbin/sa					base-sysutil-bin
 ./usr/sbin/schedctl				base-sysutil-bin
@@ -1524,31 +1484,9 @@
 ./usr/sbin/tcpdmatch				base-netutil-bin
 ./usr/sbin/tcpdrop				base-netutil-bin
 ./usr/sbin/tcpdump				base-netutil-bin
-./usr/sbin/tcsd					base-tpm-bin		tpm
 ./usr/sbin/timed				base-timed-bin
 ./usr/sbin/timedc				base-timed-bin
 ./usr/sbin/tprof				base-sysutil-bin
-./usr/sbin/tpm_changeownerauth			base-tpm-bin		tpm
-./usr/sbin/tpm_clear				base-tpm-bin		tpm
-./usr/sbin/tpm_createek				base-tpm-bin		tpm
-./usr/sbin/tpm_getpubek				base-tpm-bin		tpm
-./usr/sbin/tpm_nvdefine				base-tpm-bin		tpm
-./usr/sbin/tpm_nvinfo				base-tpm-bin		tpm
-./usr/sbin/tpm_nvread				base-tpm-bin		tpm
-./usr/sbin/tpm_nvrelease			base-tpm-bin		tpm
-./usr/sbin/tpm_nvwrite				base-tpm-bin		tpm
-./usr/sbin/tpm_resetdalock			base-tpm-bin		tpm
-./usr/sbin/tpm_restrictpubek			base-tpm-bin		tpm
-./usr/sbin/tpm_restrictsrk			base-tpm-bin		tpm
-./usr/sbin/tpm_revokeek				base-tpm-bin		tpm
-./usr/sbin/tpm_selftest				base-tpm-bin		tpm
-./usr/sbin/tpm_setactive			base-tpm-bin		tpm
-./usr/sbin/tpm_setclearable			base-tpm-bin		tpm
-./usr/sbin/tpm_setenable			base-tpm-bin		tpm
-./usr/sbin/tpm_setoperatorauth			base-tpm-bin		tpm
-./usr/sbin/tpm_setownable			base-tpm-bin		tpm
-./usr/sbin/tpm_setpresence			base-tpm-bin		tpm
-./usr/sbin/tpm_takeownership			base-tpm-bin		tpm
 ./usr/sbin/traceroute				base-netutil-bin
 ./usr/sbin/traceroute6				base-netutil-bin	use_inet6
 ./usr/sbin/trpt					base-netutil-bin
@@ -1592,8 +1530,7 @@
 ./usr/sbin/zic					base-sysutil-bin
 ./usr/share					base-sys-share
 ./usr/share/atf					base-atf-share		
-./usr/share/atf/atf-run.hooks			base-atf-bin		share,atf,!kyua
-./usr/share/atf/atf-run.hooks			base-obsolete		share,kyua,obsolete
+./usr/share/atf/atf-run.hooks			base-atf-bin		share,atf
 ./usr/share/atf/atf.config.subr			base-obsolete		obsolete
 ./usr/share/atf/atf.footer.subr			base-obsolete		obsolete
 ./usr/share/atf/atf.header.subr			base-obsolete		obsolete
@@ -2540,18 +2477,6 @@
 ./usr/share/keymaps/amiga			base-sys-share
 ./usr/share/keymaps/atari			base-sys-share
 ./usr/share/keymaps/x68k			base-sys-share
-./usr/share/kyua-atf-compat			base-kyua-bin
-./usr/share/kyua-atf-compat/lib.subr		base-kyua-bin		kyua
-./usr/share/kyua-atf-compat/tests_lib.subr	base-kyua-bin		kyua
-./usr/share/kyua-cli				base-kyua-bin
-./usr/share/kyua-cli/misc			base-kyua-bin
-./usr/share/kyua-cli/misc/context.html		base-kyua-bin		share,kyua
-./usr/share/kyua-cli/misc/index.html		base-kyua-bin		share,kyua
-./usr/share/kyua-cli/misc/report.css		base-kyua-bin		share,kyua
-./usr/share/kyua-cli/misc/test_result.html	base-kyua-bin		share,kyua
-./usr/share/kyua-cli/store			base-kyua-bin
-./usr/share/kyua-cli/store/migrate_v1_v2.sql	base-kyua-bin		share,kyua
-./usr/share/kyua-cli/store/schema_v2.sql	base-kyua-bin		share,kyua
 ./usr/share/ldscripts				base-obsolete		obsolete
 ./usr/share/legal				base-sys-share
 ./usr/share/legal/COPYRIGHT			base-sys-share		share
@@ -3861,7 +3786,6 @@
 ./usr/share/misc/vgrindefs.db			base-groff-share	share
 ./usr/share/mk					base-util-share
 ./usr/share/mk/bsd.README			base-mk-share		share
-./usr/share/mk/bsd.buildinstall.mk			base-mk-share		share
 ./usr/share/mk/bsd.clang-analyze.mk		base-mk-share		share
 ./usr/share/mk/bsd.clean.mk			base-mk-share		share
 ./usr/share/mk/bsd.crypto.mk			base-obsolete		obsolete
@@ -5052,7 +4976,6 @@
 ./var/db/obsolete				base-sys-root
 ./var/db/obsolete/base				base-sys-root
 ./var/db/obsolete/comp				base-sys-root
-./var/db/obsolete/debug				base-sys-root		debug
 ./var/db/obsolete/etc				base-sys-root
 ./var/db/obsolete/games				base-sys-root
 ./var/db/obsolete/man				base-sys-root

@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_vnops.c,v 1.86 2013/03/18 19:35:39 plunky Exp $	*/
+/*	$NetBSD: smbfs_vnops.c,v 1.78.2.3 2012/12/10 21:16:25 riz Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_vnops.c,v 1.86 2013/03/18 19:35:39 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_vnops.c,v 1.78.2.3 2012/12/10 21:16:25 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -190,12 +190,10 @@ smbfs_check_permitted(struct vnode *vp, struct smbnode *np, mode_t mode,
     kauth_cred_t cred)
 {
 	struct smbmount *smp = VTOSMBFS(vp);
-	mode_t file_mode = (vp->v_type == VDIR) ? smp->sm_args.dir_mode :
-	    smp->sm_args.file_mode;
 
-	return kauth_authorize_vnode(cred, KAUTH_ACCESS_ACTION(mode,
-	    vp->v_type, file_mode), vp, NULL, genfs_can_access(vp->v_type,
-	    file_mode, smp->sm_args.uid, smp->sm_args.gid, mode, cred));
+	return genfs_can_access(vp->v_type,
+	    (vp->v_type == VDIR) ? smp->sm_args.dir_mode : smp->sm_args.file_mode,
+	    smp->sm_args.uid, smp->sm_args.gid, mode, cred);
 }
 
 int
@@ -469,10 +467,8 @@ smbfs_setattr(void *v)
 	if (vap->va_atime.tv_sec != VNOVAL)
 		atime = &vap->va_atime;
 	if (mtime != atime) {
-		error = kauth_authorize_vnode(ap->a_cred,
-		    KAUTH_VNODE_WRITE_TIMES, ap->a_vp, NULL,
-		    genfs_can_chtimes(ap->a_vp, vap->va_vaflags,
-		    VTOSMBFS(vp)->sm_args.uid, ap->a_cred));
+		error = genfs_can_chtimes(ap->a_vp, vap->va_vaflags,
+		    VTOSMBFS(vp)->sm_args.uid, ap->a_cred);
 		if (error)
 			return (error);
 
@@ -605,8 +601,7 @@ smbfs_create(void *v)
 	if (error)
 		goto out;
 
-	cache_enter(dvp, *ap->a_vpp, cnp->cn_nameptr, cnp->cn_namelen,
-		    cnp->cn_flags);
+	cache_enter(dvp, *ap->a_vpp, cnp);
 
   out:
 	VN_KNOTE(dvp, NOTE_WRITE);
@@ -1218,26 +1213,30 @@ smbfs_lookup(void *v)
 	 * the time the cache entry has been created. If it has,
 	 * the cache entry has to be ignored.
 	 */
-	if (cache_lookup(dvp, cnp->cn_nameptr, cnp->cn_namelen,
-			 cnp->cn_nameiop, cnp->cn_flags,
-			 NULL, vpp)) {
+	if ((error = cache_lookup(dvp, vpp, cnp)) >= 0) {
 		struct vattr vattr;
 		struct vnode *newvp;
+		int err2;
 		bool killit = false;
 
-		error = VOP_ACCESS(dvp, VEXEC, cnp->cn_cred);
-		if (error != 0) {
-			if (*vpp != NULLVP) {
+		if (error && error != ENOENT) {
+			*vpp = NULLVP;
+			return error;
+		}
+
+		err2 = VOP_ACCESS(dvp, VEXEC, cnp->cn_cred);
+		if (err2 != 0) {
+			if (error == 0) {
 				if (*vpp != dvp)
 					vput(*vpp);
 				else
 					vrele(*vpp);
 			}
 			*vpp = NULLVP;
-			return error;
+			return err2;
 		}
 
-		if (*vpp == NULLVP) {
+		if (error == ENOENT) {
 			if (!VOP_GETATTR(dvp, &vattr, cnp->cn_cred)
 			    && vattr.va_mtime.tv_sec == VTOSMB(dvp)->n_nctime)
 				return ENOENT;
@@ -1328,8 +1327,7 @@ smbfs_lookup(void *v)
 		 * Insert name into cache (as non-existent) if appropriate.
 		 */
 		if (nameiop != CREATE)
-			cache_enter(dvp, *vpp, cnp->cn_nameptr, cnp->cn_namelen,
-				    cnp->cn_flags);
+			cache_enter(dvp, *vpp, cnp);
 
 		return (ENOENT);
 	}
@@ -1384,13 +1382,11 @@ smbfs_lookup(void *v)
 	KASSERT(error == 0);
 	if (cnp->cn_nameiop != DELETE || !islastcn) {
 		VTOSMB(*vpp)->n_ctime = VTOSMB(*vpp)->n_mtime.tv_sec;
-		cache_enter(dvp, *vpp, cnp->cn_nameptr, cnp->cn_namelen,
-			    cnp->cn_flags);
+		cache_enter(dvp, *vpp, cnp);
 #ifdef notdef
 	} else if (error == ENOENT && cnp->cn_nameiop != CREATE) {
 		VTOSMB(*vpp)->n_nctime = VTOSMB(*vpp)->n_mtime.tv_sec;
-		cache_enter(dvp, *vpp, cnp->cn_nameptr, cnp->cn_namelen,
-			    cnp->cn_flags);
+		cache_enter(dvp, *vpp, cnp);
 #endif
 	}
 

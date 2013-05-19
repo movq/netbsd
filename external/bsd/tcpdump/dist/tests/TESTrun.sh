@@ -14,10 +14,10 @@ do
   then
       echo $i: passed.
       rm -f DIFF/$i.result
-      passed=`expr $passed + 1`
+      passed=$(($passed + 1))
   else
       echo $i: failed.
-      failed=`expr $failed + 1`
+      failed=$(($failed + 1))
   fi          
 done 
 
@@ -36,11 +36,11 @@ do
   then
       echo $name: passed.
       rm -f DIFF/$output.diff
-      passed=`expr $passed + 1`
+      passed=$(($passed + 1))
       echo $passed >.passed
   else
       echo $name: failed.
-      failed=`expr $failed + 1`
+      failed=$(($failed + 1))
       echo $failed >.failed
   fi
 done 

@@ -1,4 +1,4 @@
-/*	$NetBSD: rtl8169.c,v 1.139 2013/05/10 14:55:08 tsutsui Exp $	*/
+/*	$NetBSD: rtl8169.c,v 1.134.4.1 2012/03/05 20:31:49 sborrill Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998-2003
@@ -33,11 +33,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtl8169.c,v 1.139 2013/05/10 14:55:08 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtl8169.c,v 1.134.4.1 2012/03/05 20:31:49 sborrill Exp $");
 /* $FreeBSD: /repoman/r/ncvs/src/sys/dev/re/if_re.c,v 1.20 2004/04/11 20:34:08 ru Exp $ */
 
 /*
- * RealTek 8139C+/8169/8169S/8168/8110S PCI NIC driver
+ * RealTek 8139C+/8169/8169S/8110S PCI NIC driver
  *
  * Written by Bill Paul <wpaul@windriver.com>
  * Senior Networking Software Engineer
@@ -47,8 +47,8 @@ __KERNEL_RCSID(0, "$NetBSD: rtl8169.c,v 1.139 2013/05/10 14:55:08 tsutsui Exp $"
 /*
  * This driver is designed to support RealTek's next generation of
  * 10/100 and 10/100/1000 PCI ethernet controllers. There are currently
- * six devices in this family: the RTL8139C+, the RTL8169, the RTL8169S,
- * RTL8110S, the RTL8168 and the RTL8111.
+ * four devices in this family: the RTL8139C+, the RTL8169, the RTL8169S
+ * and the RTL8110S.
  *
  * The 8139C+ is a 10/100 ethernet chip. It is backwards compatible
  * with the older 8139 family, however it also supports a special
@@ -134,7 +134,6 @@ __KERNEL_RCSID(0, "$NetBSD: rtl8169.c,v 1.139 2013/05/10 14:55:08 tsutsui Exp $"
 #include <netinet/ip.h>		/* XXX for IP_MAXPACKET */
 
 #include <net/bpf.h>
-#include <sys/rnd.h>
 
 #include <sys/bus.h>
 
@@ -168,7 +167,7 @@ static void re_gmii_writereg(device_t, int, int, int);
 
 static int re_miibus_readreg(device_t, int, int);
 static void re_miibus_writereg(device_t, int, int, int);
-static void re_miibus_statchg(struct ifnet *);
+static void re_miibus_statchg(device_t);
 
 static void re_reset(struct rtk_softc *);
 
@@ -363,7 +362,7 @@ re_miibus_writereg(device_t dev, int phy, int reg, int data)
 }
 
 static void
-re_miibus_statchg(struct ifnet *ifp)
+re_miibus_statchg(device_t dev)
 {
 
 	return;
@@ -555,8 +554,9 @@ void
 re_attach(struct rtk_softc *sc)
 {
 	uint8_t eaddr[ETHER_ADDR_LEN];
+	uint16_t val;
 	struct ifnet *ifp;
-	int error = 0, i;
+	int error = 0, i, addr_len;
 
 	if ((sc->sc_quirk & RTKQ_8139CPLUS) == 0) {
 		uint32_t hwrev;
@@ -607,7 +607,6 @@ re_attach(struct rtk_softc *sc)
 			    RTKQ_NOJUMBO;
 			break;
 		case RTK_HWREV_8168E_VL:
-		case RTK_HWREV_8168F:
 			sc->sc_quirk |= RTKQ_DESCV2 | RTKQ_NOEECMD |
 			    RTKQ_MACSTAT | RTKQ_CMDSTOP | RTKQ_NOJUMBO;
 			break;
@@ -644,12 +643,6 @@ re_attach(struct rtk_softc *sc)
 	/* Reset the adapter. */
 	re_reset(sc);
 
-	/*
-	 * RTL81x9 chips automatically read EEPROM to init MAC address,
-	 * and some NAS override its MAC address per own configuration,
-	 * so no need to explicitely read EEPROM and set ID registers.
-	 */
-#ifdef RE_USE_EECMD
 	if ((sc->sc_quirk & RTKQ_NOEECMD) != 0) {
 		/*
 		 * Get station address from ID registers.
@@ -657,9 +650,6 @@ re_attach(struct rtk_softc *sc)
 		for (i = 0; i < ETHER_ADDR_LEN; i++)
 			eaddr[i] = CSR_READ_1(sc, RTK_IDR0 + i);
 	} else {
-		uint16_t val;
-		int addr_len;
-
 		/*
 		 * Get station address from the EEPROM.
 		 */
@@ -677,13 +667,6 @@ re_attach(struct rtk_softc *sc)
 			eaddr[(i * 2) + 1] = val >> 8;
 		}
 	}
-#else
-	/*
-	 * Get station address from ID registers.
-	 */
-	for (i = 0; i < ETHER_ADDR_LEN; i++)
-		eaddr[i] = CSR_READ_1(sc, RTK_IDR0 + i);
-#endif
 
 	/* Take PHY out of power down mode. */
 	if ((sc->sc_quirk & RTKQ_PHYWAKE_PM) != 0)
@@ -861,9 +844,6 @@ re_attach(struct rtk_softc *sc)
 	if_attach(ifp);
 	ether_ifattach(ifp, eaddr);
 
-	rnd_attach_source(&sc->rnd_source, device_xname(sc->sc_dev),
-	    RND_TYPE_NET, 0);
-
 	if (pmf_device_register(sc->sc_dev, NULL, NULL))
 		pmf_class_network_register(sc->sc_dev, ifp);
 	else
@@ -955,7 +935,6 @@ re_detach(struct rtk_softc *sc)
 	/* Delete all remaining media. */
 	ifmedia_delete_instance(&sc->mii.mii_media, IFM_INST_ANY);
 
-	rnd_detach_source(&sc->rnd_source);
 	ether_ifdetach(ifp);
 	if_detach(ifp);
 
@@ -1481,8 +1460,6 @@ re_intr(void *arg)
 	if (handled && !IFQ_IS_EMPTY(&ifp->if_snd))
 		re_start(ifp);
 
-	rnd_add_uint32(&sc->rnd_source, status);
-
 	return handled;
 }
 
@@ -1748,13 +1725,11 @@ static int
 re_init(struct ifnet *ifp)
 {
 	struct rtk_softc *sc = ifp->if_softc;
+	const uint8_t *enaddr;
 	uint32_t rxcfg = 0;
+	uint32_t reg;
 	uint16_t cfg;
 	int error;
-#ifdef RE_USE_EECMD
-	const uint8_t *enaddr;
-	uint32_t reg;
-#endif
 
 	if ((error = re_enable(sc)) != 0)
 		goto out;
@@ -1799,7 +1774,6 @@ re_init(struct ifnet *ifp)
 
 	DELAY(10000);
 
-#ifdef RE_USE_EECMD
 	/*
 	 * Init our MAC address.  Even though the chipset
 	 * documentation doesn't mention it, we need to enter "Config
@@ -1813,7 +1787,6 @@ re_init(struct ifnet *ifp)
 	reg = enaddr[4] | (enaddr[5] << 8);
 	CSR_WRITE_4(sc, RTK_IDR4, reg);
 	CSR_WRITE_1(sc, RTK_EECMD, RTK_EEMODE_OFF);
-#endif
 
 	/*
 	 * For C+ mode, initialize the RX descriptors and mbufs.

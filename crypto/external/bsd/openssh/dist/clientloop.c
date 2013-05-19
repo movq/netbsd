@@ -1,5 +1,5 @@
-/*	$NetBSD: clientloop.c,v 1.9 2013/03/29 16:19:45 christos Exp $	*/
-/* $OpenBSD: clientloop.c,v 1.248 2013/01/02 00:32:07 djm Exp $ */
+/*	$NetBSD: clientloop.c,v 1.6 2011/09/07 17:49:19 christos Exp $	*/
+/* $OpenBSD: clientloop.c,v 1.236 2011/06/22 22:08:42 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -61,7 +61,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: clientloop.c,v 1.9 2013/03/29 16:19:45 christos Exp $");
+__RCSID("$NetBSD: clientloop.c,v 1.6 2011/09/07 17:49:19 christos Exp $");
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>
@@ -276,23 +276,6 @@ set_control_persist_exit_time(void)
 	/* else we are already counting down to the timeout */
 }
 
-#define SSH_X11_VALID_DISPLAY_CHARS ":/.-_"
-static int
-client_x11_display_valid(const char *display)
-{
-	size_t i, dlen;
-
-	dlen = strlen(display);
-	for (i = 0; i < dlen; i++) {
-		if (!isalnum((unsigned char)display[i]) &&
-		    strchr(SSH_X11_VALID_DISPLAY_CHARS, display[i]) == NULL) {
-			debug("Invalid character '%c' in DISPLAY", display[i]);
-			return 0;
-		}
-	}
-	return 1;
-}
-
 #define SSH_X11_PROTO "MIT-MAGIC-COOKIE-1"
 void
 client_x11_get_proto(const char *display, const char *xauth_path,
@@ -315,9 +298,6 @@ client_x11_get_proto(const char *display, const char *xauth_path,
 
 	if (xauth_path == NULL ||(stat(xauth_path, &st) == -1)) {
 		debug("No xauth program.");
-	} else if (!client_x11_display_valid(display)) {
-		logit("DISPLAY '%s' invalid, falling back to fake xauth data",
-		    display);
 	} else {
 		if (display == NULL) {
 			debug("x11_get_proto: DISPLAY not set");
@@ -578,12 +558,10 @@ client_wait_until_can_do_something(fd_set **readsetp, fd_set **writesetp,
 {
 	struct timeval tv, *tvp;
 	int timeout_secs;
-	time_t minwait_secs = 0;
 	int ret;
 
 	/* Add any selections by the channel mechanism. */
-	channel_prepare_select(readsetp, writesetp, maxfdp, nallocp,
-	    &minwait_secs, rekeying);
+	channel_prepare_select(readsetp, writesetp, maxfdp, nallocp, rekeying);
 
 	if (!compat20) {
 		/* Read from the connection, unless our buffers are full. */
@@ -639,8 +617,6 @@ client_wait_until_can_do_something(fd_set **readsetp, fd_set **writesetp,
 		if (timeout_secs < 0)
 			timeout_secs = 0;
 	}
-	if (minwait_secs != 0)
-		timeout_secs = MIN(timeout_secs, (int)minwait_secs);
 	if (timeout_secs == INT_MAX)
 		tvp = NULL;
 	else {
@@ -860,8 +836,9 @@ process_cmdline(void)
 {
 	void (*handler)(int);
 	char *s, *cmd, *cancel_host;
-	int delete = 0, local = 0, remote = 0, dynamic = 0;
-	int cancel_port, ok;
+	int delete = 0;
+	int local = 0, remote = 0, dynamic = 0;
+	int cancel_port;
 	Forward fwd;
 
 	bzero(&fwd, sizeof(fwd));
@@ -887,12 +864,8 @@ process_cmdline(void)
 		    "Request remote forward");
 		logit("      -D[bind_address:]port                  "
 		    "Request dynamic forward");
-		logit("      -KL[bind_address:]port                 "
-		    "Cancel local forward");
 		logit("      -KR[bind_address:]port                 "
 		    "Cancel remote forward");
-		logit("      -KD[bind_address:]port                 "
-		    "Cancel dynamic forward");
 		if (!options.permit_local_command)
 			goto out;
 		logit("      !args                                  "
@@ -921,7 +894,11 @@ process_cmdline(void)
 		goto out;
 	}
 
-	if (delete && !compat20) {
+	if ((local || dynamic) && delete) {
+		logit("Not supported.");
+		goto out;
+	}
+	if (remote && delete && !compat20) {
 		logit("Not supported for SSH protocol version 1.");
 		goto out;
 	}
@@ -945,30 +922,16 @@ process_cmdline(void)
 			logit("Bad forwarding close port");
 			goto out;
 		}
-		if (remote)
-			ok = channel_request_rforward_cancel(cancel_host,
-			    cancel_port) == 0;
-		else if (dynamic)
-                	ok = channel_cancel_lport_listener(cancel_host,
-			    cancel_port, 0, options.gateway_ports) > 0;
-		else
-                	ok = channel_cancel_lport_listener(cancel_host,
-			    cancel_port, CHANNEL_CANCEL_PORT_STATIC,
-			    options.gateway_ports) > 0;
-		if (!ok) {
-			logit("Unkown port forwarding.");
-			goto out;
-		}
-		logit("Canceled forwarding.");
+		channel_request_rforward_cancel(cancel_host, cancel_port);
 	} else {
 		if (!parse_forward(&fwd, s, dynamic, remote)) {
 			logit("Bad forwarding specification.");
 			goto out;
 		}
 		if (local || dynamic) {
-			if (!channel_setup_local_fwd_listener(fwd.listen_host,
+			if (channel_setup_local_fwd_listener(fwd.listen_host,
 			    fwd.listen_port, fwd.connect_host,
-			    fwd.connect_port, options.gateway_ports)) {
+			    fwd.connect_port, options.gateway_ports) < 0) {
 				logit("Port forwarding failed.");
 				goto out;
 			}
@@ -980,6 +943,7 @@ process_cmdline(void)
 				goto out;
 			}
 		}
+
 		logit("Forwarding port.");
 	}
 
@@ -992,63 +956,6 @@ out:
 		xfree(fwd.listen_host);
 	if (fwd.connect_host != NULL)
 		xfree(fwd.connect_host);
-}
-
-/* reasons to suppress output of an escape command in help output */
-#define SUPPRESS_NEVER		0	/* never suppress, always show */
-#define SUPPRESS_PROTO1		1	/* don't show in protocol 1 sessions */
-#define SUPPRESS_MUXCLIENT	2	/* don't show in mux client sessions */
-#define SUPPRESS_MUXMASTER	4	/* don't show in mux master sessions */
-#define SUPPRESS_SYSLOG		8	/* don't show when logging to syslog */
-struct escape_help_text {
-	const char *cmd;
-	const char *text;
-	unsigned int flags;
-};
-static struct escape_help_text esc_txt[] = {
-    {".",  "terminate session", SUPPRESS_MUXMASTER},
-    {".",  "terminate connection (and any multiplexed sessions)",
-	SUPPRESS_MUXCLIENT},
-    {"B",  "send a BREAK to the remote system", SUPPRESS_PROTO1},
-    {"C",  "open a command line", SUPPRESS_MUXCLIENT},
-    {"R",  "request rekey", SUPPRESS_PROTO1},
-    {"V/v",  "decrease/increase verbosity (LogLevel)", SUPPRESS_MUXCLIENT},
-    {"^Z", "suspend ssh", SUPPRESS_MUXCLIENT},
-    {"#",  "list forwarded connections", SUPPRESS_NEVER},
-    {"&",  "background ssh (when waiting for connections to terminate)",
-	SUPPRESS_MUXCLIENT},
-    {"?", "this message", SUPPRESS_NEVER},
-};
-
-static void
-print_escape_help(Buffer *b, int escape_char, int protocol2, int mux_client,
-    int using_stderr)
-{
-	unsigned int i, suppress_flags;
-	char string[1024];
-
-	snprintf(string, sizeof string, "%c?\r\n"
-	    "Supported escape sequences:\r\n", escape_char);
-	buffer_append(b, string, strlen(string));
-
-	suppress_flags = (protocol2 ? 0 : SUPPRESS_PROTO1) |
-	    (mux_client ? SUPPRESS_MUXCLIENT : 0) |
-	    (mux_client ? 0 : SUPPRESS_MUXMASTER) |
-	    (using_stderr ? 0 : SUPPRESS_SYSLOG);
-
-	for (i = 0; i < sizeof(esc_txt)/sizeof(esc_txt[0]); i++) {
-		if (esc_txt[i].flags & suppress_flags)
-			continue;
-		snprintf(string, sizeof string, " %c%-3s - %s\r\n",
-		    escape_char, esc_txt[i].cmd, esc_txt[i].text);
-		buffer_append(b, string, strlen(string));
-	}
-
-	snprintf(string, sizeof string,
-	    " %c%c   - send the escape character by typing it twice\r\n"
-	    "(Note that escapes are only recognized immediately after "
-	    "newline.)\r\n", escape_char, escape_char);
-	buffer_append(b, string, strlen(string));
 }
 
 /* 
@@ -1101,8 +1008,6 @@ process_escapes(Channel *c, Buffer *bin, Buffer *bout, Buffer *berr,
 				if (c && c->ctl_chan != -1) {
 					chan_read_failed(c);
 					chan_write_failed(c);
-					mux_master_session_cleanup_cb(c->self,
-					    NULL);
 					return 0;
 				} else
 					quit_pending = 1;
@@ -1111,16 +1016,11 @@ process_escapes(Channel *c, Buffer *bin, Buffer *bout, Buffer *berr,
 			case 'Z' - 64:
 				/* XXX support this for mux clients */
 				if (c && c->ctl_chan != -1) {
-					char b[16];
  noescape:
-					if (ch == 'Z' - 64)
-						snprintf(b, sizeof b, "^Z");
-					else
-						snprintf(b, sizeof b, "%c", ch);
 					snprintf(string, sizeof string,
-					    "%c%s escape not available to "
+					    "%c%c escape not available to "
 					    "multiplexed sessions\r\n",
-					    escape_char, b);
+					    escape_char, ch);
 					buffer_append(berr, string,
 					    strlen(string));
 					continue;
@@ -1157,31 +1057,6 @@ process_escapes(Channel *c, Buffer *bin, Buffer *bout, Buffer *berr,
 					else
 						need_rekeying = 1;
 				}
-				continue;
-
-			case 'V':
-				/* FALLTHROUGH */
-			case 'v':
-				if (c && c->ctl_chan != -1)
-					goto noescape;
-				if (!log_is_on_stderr()) {
-					snprintf(string, sizeof string,
-					    "%c%c [Logging to syslog]\r\n",
-					     escape_char, ch);
-					buffer_append(berr, string,
-					    strlen(string));
-					continue;
-				}
-				if (ch == 'V' && options.log_level >
-				    SYSLOG_LEVEL_QUIET)
-					log_change_level(--options.log_level);
-				if (ch == 'v' && options.log_level <
-				    SYSLOG_LEVEL_DEBUG3)
-					log_change_level(++options.log_level);
-				snprintf(string, sizeof string,
-				    "%c%c [LogLevel %s]\r\n", escape_char, ch,
-				    log_level_name(options.log_level));
-				buffer_append(berr, string, strlen(string));
 				continue;
 
 			case '&':
@@ -1237,9 +1112,43 @@ process_escapes(Channel *c, Buffer *bin, Buffer *bout, Buffer *berr,
 				continue;
 
 			case '?':
-				print_escape_help(berr, escape_char, compat20,
-				    (c && c->ctl_chan != -1),
-				    log_is_on_stderr());
+				if (c && c->ctl_chan != -1) {
+					snprintf(string, sizeof string,
+"%c?\r\n\
+Supported escape sequences:\r\n\
+  %c.  - terminate session\r\n\
+  %cB  - send a BREAK to the remote system\r\n\
+  %cR  - Request rekey (SSH protocol 2 only)\r\n\
+  %c#  - list forwarded connections\r\n\
+  %c?  - this message\r\n\
+  %c%c  - send the escape character by typing it twice\r\n\
+(Note that escapes are only recognized immediately after newline.)\r\n",
+					    escape_char, escape_char,
+					    escape_char, escape_char,
+					    escape_char, escape_char,
+					    escape_char, escape_char);
+				} else {
+					snprintf(string, sizeof string,
+"%c?\r\n\
+Supported escape sequences:\r\n\
+  %c.  - terminate connection (and any multiplexed sessions)\r\n\
+  %cB  - send a BREAK to the remote system\r\n\
+  %cC  - open a command line\r\n\
+  %cR  - Request rekey (SSH protocol 2 only)\r\n\
+  %c^Z - suspend ssh\r\n\
+  %c#  - list forwarded connections\r\n\
+  %c&  - background ssh (when waiting for connections to terminate)\r\n\
+  %c?  - this message\r\n\
+  %c%c  - send the escape character by typing it twice\r\n\
+(Note that escapes are only recognized immediately after newline.)\r\n",
+					    escape_char, escape_char,
+					    escape_char, escape_char,
+					    escape_char, escape_char,
+					    escape_char, escape_char,
+					    escape_char, escape_char,
+					    escape_char);
+				}
+				buffer_append(berr, string, strlen(string));
 				continue;
 
 			case '#':
@@ -2249,10 +2158,10 @@ client_stop_mux(void)
 	if (options.control_path != NULL && muxserver_sock != -1)
 		unlink(options.control_path);
 	/*
-	 * If we are in persist mode, or don't have a shell, signal that we
-	 * should close when all active channels are closed.
+	 * If we are in persist mode, signal that we should close when all
+	 * active channels are closed.
 	 */
-	if (options.control_persist || no_shell_flag) {
+	if (options.control_persist) {
 		session_closed = 1;
 		setproctitle("[stopped mux]");
 	}

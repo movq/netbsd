@@ -1,4 +1,4 @@
-/* $NetBSD: nilfs_vnops.c,v 1.23 2013/05/08 10:39:17 reinoud Exp $ */
+/* $NetBSD: nilfs_vnops.c,v 1.16.6.1 2012/08/12 12:59:47 martin Exp $ */
 
 /*
  * Copyright (c) 2008, 2009 Reinoud Zandijk
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__KERNEL_RCSID(0, "$NetBSD: nilfs_vnops.c,v 1.23 2013/05/08 10:39:17 reinoud Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nilfs_vnops.c,v 1.16.6.1 2012/08/12 12:59:47 martin Exp $");
 #endif /* not lint */
 
 
@@ -315,11 +315,6 @@ return EIO;
 /*
  * bmap functionality that translates logical block numbers to the virtual
  * block numbers to be stored on the vnode itself.
- *
- * Important alert!
- *
- * If runp is not NULL, the number of contiguous blocks __starting from the
- * next block after the queried block__ will be returned in runp.
  */
 
 int
@@ -369,8 +364,7 @@ nilfs_trivial_bmap(void *v)
 	run = 1;
 	while ((run < blks) && (l2vmap[run] == *bnp + run))
 		run++;
-	run--;	/* see comment at start of function */
-
+	
 	/* set runlength */
 	if (runp)
 		*runp = run;
@@ -658,11 +652,10 @@ nilfs_lookup(void *v)
 
 	DPRINTF(LOOKUP, ("\tlooking up cnp->cn_nameptr '%s'\n",
 	    cnp->cn_nameptr));
-	/* look in the namecache */
-	if (cache_lookup(dvp, cnp->cn_nameptr, cnp->cn_namelen,
-			 cnp->cn_nameiop, cnp->cn_flags, NULL, vpp)) {
-		return *vpp == NULLVP ? ENOENT : 0;
-	}
+	/* look in the nami cache; returns 0 on success!! */
+	error = cache_lookup(dvp, vpp, cnp);
+	if (error >= 0)
+		return error;
 
 	DPRINTF(LOOKUP, ("\tNOT found in cache\n"));
 
@@ -768,8 +761,7 @@ out:
 	 * might be seen as negative caching.
 	 */
 	if (nameiop != CREATE)
-		cache_enter(dvp, *vpp, cnp->cn_nameptr, cnp->cn_namelen,
-			    cnp->cn_flags);
+		cache_enter(dvp, *vpp, cnp);
 
 	DPRINTFIF(LOOKUP, error, ("nilfs_lookup returing error %d\n", error));
 
@@ -1044,9 +1036,9 @@ nilfs_check_permitted(struct vnode *vp, struct vattr *vap, mode_t mode,
 {
 
 	/* ask the generic genfs_can_access to advice on security */
-	return kauth_authorize_vnode(cred, KAUTH_ACCESS_ACTION(mode,
-	    vp->v_type, vap->va_mode), vp, NULL, genfs_can_access(vp->v_type,
-	    vap->va_mode, vap->va_uid, vap->va_gid, mode, cred));
+	return genfs_can_access(vp->v_type,
+			vap->va_mode, vap->va_uid, vap->va_gid,
+			mode, cred);
 }
 
 int

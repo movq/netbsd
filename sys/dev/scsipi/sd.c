@@ -1,4 +1,4 @@
-/*	$NetBSD: sd.c,v 1.299 2013/04/16 21:01:09 jakllsch Exp $	*/
+/*	$NetBSD: sd.c,v 1.296.2.1 2012/04/23 16:28:30 riz Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2003, 2004 The NetBSD Foundation, Inc.
@@ -47,7 +47,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sd.c,v 1.299 2013/04/16 21:01:09 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sd.c,v 1.296.2.1 2012/04/23 16:28:30 riz Exp $");
 
 #include "opt_scsi.h"
 
@@ -263,9 +263,6 @@ sdattach(device_t parent, device_t self, void *aux)
 	 */
 	aprint_naive("\n");
 	aprint_normal("\n");
-
-	if (periph->periph_quirks & PQUIRK_START)
-		(void)scsipi_start(periph, SSS_START, XS_CTL_SILENT);
 
 	error = scsipi_test_unit_ready(periph,
 	    XS_CTL_DISCOVERY | XS_CTL_IGNORE_ILLEGAL_REQUEST |
@@ -1319,10 +1316,7 @@ sdgetdefaultlabel(struct sd_softc *sd, struct disklabel *lp)
 	 */
 	strncpy(lp->d_typename, sd->name, 16);
 	strncpy(lp->d_packname, "fictitious", 16);
-	if (sd->params.disksize > UINT32_MAX)
-		lp->d_secperunit = UINT32_MAX;
-	else
-		lp->d_secperunit = sd->params.disksize;
+	lp->d_secperunit = sd->params.disksize;
 	lp->d_rpm = sd->params.rot_rate;
 	lp->d_interleave = 1;
 	lp->d_flags = sd->sc_periph->periph_flags & PERIPH_REMOVABLE ?

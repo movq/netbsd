@@ -1,4 +1,4 @@
-/*	$NetBSD: if_emac.c,v 1.41 2012/07/22 14:32:52 matt Exp $	*/
+/*	$NetBSD: if_emac.c,v 1.39 2011/06/18 06:41:42 matt Exp $	*/
 
 /*
  * Copyright 2001, 2002 Wasabi Systems, Inc.
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_emac.c,v 1.41 2012/07/22 14:32:52 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_emac.c,v 1.39 2011/06/18 06:41:42 matt Exp $");
 
 #include "opt_emac.h"
 
@@ -306,7 +306,7 @@ static void	emac_smart_reset(struct emac_softc *);
 
 static int	emac_mii_readreg(device_t, int, int);
 static void	emac_mii_writereg(device_t, int, int, int);
-static void	emac_mii_statchg(struct ifnet *);
+static void	emac_mii_statchg(device_t);
 static uint32_t	emac_mii_wait(struct emac_softc *);
 static void	emac_mii_tick(void *);
 
@@ -1463,9 +1463,10 @@ out:
 }
 
 static void
-emac_mii_statchg(struct ifnet *ifp)
+emac_mii_statchg(device_t self)
 {
-	struct emac_softc *sc = ifp->if_softc;
+	struct emac_softc *sc = device_private(self);
+	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct mii_data *mii = &sc->sc_mii;
 
 	/*
@@ -1497,12 +1498,12 @@ emac_mii_statchg(struct ifnet *ifp)
 		break;
 
 	default:
-		aprint_error_dev(sc->sc_dev, "unknown sub-type %d\n",
+		aprint_error_dev(self, "unknown sub-type %d\n",
 		    IFM_SUBTYPE(mii->mii_media_active));
 		break;
 	}
 	if (sc->sc_rmii_speed)
-		sc->sc_rmii_speed(device_parent(sc->sc_dev), sc->sc_instance,
+		sc->sc_rmii_speed(device_parent(self), sc->sc_instance,
 		    IFM_SUBTYPE(mii->mii_media_active));
 
 	EMAC_WRITE(sc, EMAC_MR1, sc->sc_mr1);
@@ -1583,15 +1584,11 @@ emac_rxeob_intr(void *arg)
 
 		rxstat = sc->sc_rxdescs[i].md_stat_ctrl;
 
-		if (rxstat & MAL_RX_EMPTY) {
+		if (rxstat & MAL_RX_EMPTY)
 			/*
 			 * We have processed all of the receive buffers.
 			 */
-			/* Flush current empty descriptor */
-			EMAC_CDRXSYNC(sc, i,
-			    BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE);
 			break;
-		}
 
 		/*
 		 * If an error occurred, update stats, clear the status

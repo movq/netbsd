@@ -1,4 +1,4 @@
-/*	$NetBSD: powerpc_machdep.c,v 1.64 2012/03/16 07:41:55 matt Exp $	*/
+/*	$NetBSD: powerpc_machdep.c,v 1.62.2.1 2012/05/17 18:24:27 riz Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: powerpc_machdep.c,v 1.64 2012/03/16 07:41:55 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: powerpc_machdep.c,v 1.62.2.1 2012/05/17 18:24:27 riz Exp $");
 
 #include "opt_altivec.h"
 #include "opt_modular.h"
@@ -46,6 +46,8 @@ __KERNEL_RCSID(0, "$NetBSD: powerpc_machdep.c,v 1.64 2012/03/16 07:41:55 matt Ex
 #include <sys/kauth.h>
 #include <sys/pool.h>
 #include <sys/proc.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/signal.h>
 #include <sys/sysctl.h>
 #include <sys/ucontext.h>
@@ -337,6 +339,35 @@ cpu_spawn_return(struct lwp *l)
 	struct trapframe * const tf = l->l_md.md_utf;
 
 	userret(l, tf);
+}
+
+void
+upcallret(struct lwp *l)
+{
+	struct trapframe * const tf = l->l_md.md_utf;
+
+	KERNEL_UNLOCK_LAST(l);
+	userret(l, tf);
+}
+
+void 
+cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted,
+	void *sas, void *ap, void *sp, sa_upcall_t upcall)
+{
+	struct trapframe * const tf = l->l_md.md_utf;
+
+	/*
+	 * Build context to run handler in.
+	 */
+	tf->tf_fixreg[1] = (register_t)((struct saframe *)sp - 1);
+	tf->tf_lr = 0;
+	tf->tf_fixreg[3] = (register_t)type;
+	tf->tf_fixreg[4] = (register_t)sas;
+	tf->tf_fixreg[5] = (register_t)nevents;
+	tf->tf_fixreg[6] = (register_t)ninterrupted;
+	tf->tf_fixreg[7] = (register_t)ap;
+	tf->tf_srr0 = (register_t)upcall;
+	tf->tf_srr1 &= ~PSL_SE;
 }
 
 bool

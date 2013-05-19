@@ -23,9 +23,9 @@
 #ifndef lint
 #if 0
 static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-sunrpc.c,v 1.47 2005-04-27 21:43:48 guy Exp  (LBL)";
+    "@(#) Header: /tcpdump/master/tcpdump/print-sunrpc.c,v 1.47 2005-04-27 21:43:48 guy Exp (LBL)";
 #else
-__RCSID("$NetBSD: print-sunrpc.c,v 1.3 2013/04/06 19:33:08 christos Exp $");
+__RCSID("$NetBSD: print-sunrpc.c,v 1.2 2010/12/05 05:11:30 christos Exp $");
 #endif
 #endif
 
@@ -50,12 +50,12 @@ __RCSID("$NetBSD: print-sunrpc.c,v 1.3 2013/04/06 19:33:08 christos Exp $");
 
 #include <tcpdump-stdinc.h>
 
-#if defined(HAVE_GETRPCBYNUMBER) && defined(HAVE_RPC_RPC_H)
+#ifdef HAVE_GETRPCBYNUMBER
 #include <rpc/rpc.h>
 #ifdef HAVE_RPC_RPCENT_H
 #include <rpc/rpcent.h>
 #endif /* HAVE_RPC_RPCENT_H */
-#endif /* defined(HAVE_GETRPCBYNUMBER) && defined(HAVE_RPC_RPC_H) */
+#endif /* HAVE_GETRPCBYNUMBER */
 
 #include <stdio.h>
 #include <string.h>
@@ -156,7 +156,7 @@ static char *
 progstr(prog)
 	u_int32_t prog;
 {
-#if defined(HAVE_GETRPCBYNUMBER) && defined(HAVE_RPC_RPC_H)
+#ifdef HAVE_GETRPCBYNUMBER
 	register struct rpcent *rp;
 #endif
 	static char buf[32];
@@ -164,12 +164,12 @@ progstr(prog)
 
 	if (lastprog != 0 && prog == lastprog)
 		return (buf);
-#if defined(HAVE_GETRPCBYNUMBER) && defined(HAVE_RPC_RPC_H)
+#ifdef HAVE_GETRPCBYNUMBER
 	rp = getrpcbynumber(prog);
 	if (rp == NULL)
 #endif
 		(void) snprintf(buf, sizeof(buf), "#%u", prog);
-#if defined(HAVE_GETRPCBYNUMBER) && defined(HAVE_RPC_RPC_H)
+#ifdef HAVE_GETRPCBYNUMBER
 	else
 		strlcpy(buf, rp->r_name, sizeof(buf));
 #endif

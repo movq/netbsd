@@ -1,4 +1,4 @@
-/*	$NetBSD: stpcide.c,v 1.26 2012/07/31 15:50:36 bouyer Exp $	*/
+/*	$NetBSD: stpcide.c,v 1.21 2011/04/04 20:37:56 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: stpcide.c,v 1.26 2012/07/31 15:50:36 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: stpcide.c,v 1.21 2011/04/04 20:37:56 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -109,7 +109,6 @@ stpc_chip_map(struct pciide_softc *sc, const struct pci_attach_args *pa)
 	sc->sc_wdcdev.sc_atac.atac_set_modes = stpc_setup_channel;
 	sc->sc_wdcdev.sc_atac.atac_channels = sc->wdc_chanarray;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = PCIIDE_NUM_CHANNELS;
-	sc->sc_wdcdev.wdc_maxdrives = 2;
 
 	wdc_allocate_regs(&sc->sc_wdcdev);
 
@@ -159,14 +158,14 @@ stpc_setup_channel(struct ata_channel *chp)
 	for (drive = 0; drive < 2; drive++) {
 		drvp = &chp->ch_drive[drive];
 		/* If no drive, skip */
-		if (drvp->drive_type == ATA_DRIVET_NONE)
+		if ((drvp->drive_flags & DRIVE) == 0)
 			continue;
 		/* add timing values, setup DMA if needed */
 		if ((atac->atac_cap & ATAC_CAP_DMA) &&
-		    (drvp->drive_flags & ATA_DRIVE_DMA)) {
+		    (drvp->drive_flags & DRIVE_DMA)) {
 			/* use Multiword DMA */
 			s = splbio();
-			drvp->drive_flags &= ~ATA_DRIVE_UDMA;
+			drvp->drive_flags &= ~DRIVE_UDMA;
 			splx(s);
 			idedma_ctl |= IDEDMA_CTL_DRV_DMA(drive);
 			bits[drive] = 0xe; /* IOCHRDY,wr/post,rd/prefetch */
@@ -174,7 +173,7 @@ stpc_setup_channel(struct ata_channel *chp)
 		else {
 			/* PIO only */
 			s = splbio();
-			drvp->drive_flags &= ~(ATA_DRIVE_UDMA | ATA_DRIVE_DMA);
+			drvp->drive_flags &= ~(DRIVE_UDMA | DRIVE_DMA);
 			splx(s);
 			bits[drive] = 0x8; /* IOCHRDY */
 		}

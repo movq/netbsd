@@ -23,7 +23,7 @@
 #define HAVE_MEMORY_H 1
 
 /* Define to 1 if getopt has optreset */
-#define HAVE_OPTRESET 1
+/* #undef HAVE_OPTRESET */
 
 /* Define to 1 if you have the `putenv' function. */
 #define HAVE_PUTENV 1
@@ -96,19 +96,19 @@
 #define PACKAGE_NAME "Automated Testing Framework"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "Automated Testing Framework 0.17"
+#define PACKAGE_STRING "Automated Testing Framework 0.15"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "atf"
 
 /* Define to the home page for this package. */
-#define PACKAGE_URL "http://code.google.com/p/kyua/wiki/ATF"
+#define PACKAGE_URL "http://www.NetBSD.org/~jmmv/atf/"
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "0.17"
+#define PACKAGE_VERSION "0.15"
 
 /* Define to 1 if you have the ANSI C header files. */
 #define STDC_HEADERS 1
 
 /* Version number of package */
-#define VERSION "0.17"
+#define VERSION "0.15"

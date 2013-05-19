@@ -1,4 +1,4 @@
-/*	$NetBSD: newdisk.c,v 1.10 2012/06/23 08:48:15 minoura Exp $	*/
+/*	$NetBSD: newdisk.c,v 1.9.10.1 2012/11/18 19:05:16 riz Exp $	*/
 
 /*-
  * Copyright (c) 1999 Minoura Makoto

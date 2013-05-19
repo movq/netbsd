@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_intr.h,v 1.1 2012/07/26 06:21:57 skrll Exp $	*/
+/*	$NetBSD: bcm2835_intr.h,v 1.1.2.2 2012/08/09 06:36:49 jdc Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.

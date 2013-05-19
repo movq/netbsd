@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cas.c,v 1.19 2013/03/30 03:21:04 christos Exp $	*/
+/*	$NetBSD: if_cas.c,v 1.17 2012/02/03 10:11:07 martin Exp $	*/
 /*	$OpenBSD: if_cas.c,v 1.29 2009/11/29 16:19:38 kettenis Exp $	*/
 
 /*
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cas.c,v 1.19 2013/03/30 03:21:04 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cas.c,v 1.17 2012/02/03 10:11:07 martin Exp $");
 
 #ifndef _MODULE
 #include "opt_inet.h"
@@ -143,7 +143,7 @@ int		cas_encap(struct cas_softc *, struct mbuf *, u_int32_t *);
 /* MII methods & callbacks */
 int		cas_mii_readreg(device_t, int, int);
 void		cas_mii_writereg(device_t, int, int, int);
-void		cas_mii_statchg(struct ifnet *);
+void		cas_mii_statchg(device_t);
 int		cas_pcs_readreg(device_t, int, int);
 void		cas_pcs_writereg(device_t, int, int, int);
 
@@ -275,14 +275,14 @@ next:
 
 			desc = buf + sizeof(*vpd);
 
-			/*
+			/* 
 			 * ...which is an instance property...
 			 */
 			if (desc[0] != 'I')
 				continue;
 			desc += 3;
 
-			/*
+			/* 
 			 * ...that's a byte array with the proper
 			 * length for a MAC address...
 			 */
@@ -296,7 +296,7 @@ next:
 			if (strcmp(desc, "local-mac-address") != 0)
 				continue;
 			desc += strlen("local-mac-address") + 1;
-				
+					
 			memcpy(enaddr, desc, ETHER_ADDR_LEN);
 			rv = 0;
 		}
@@ -549,7 +549,7 @@ cas_config(struct cas_softc *sc, const uint8_t *enaddr)
 	child = LIST_FIRST(&mii->mii_phys);
 	if (child == NULL &&
 	    sc->sc_mif_config & (CAS_MIF_CONFIG_MDI0|CAS_MIF_CONFIG_MDI1)) {
-		/*
+		/* 
 		 * Try the external PCS SERDES if we didn't find any
 		 * MII devices.
 		 */
@@ -1292,7 +1292,7 @@ cas_rint(struct cas_softc *sc)
 
 			cp = rxs->rxs_kva + off * 256 + ETHER_ALIGN;
 			m = m_devget(cp, len, 0, ifp, NULL);
-		
+			
 			if (word[0] & CAS_RC0_RELEASE_HDR)
 				cas_add_rxbuf(sc, idx);
 
@@ -1605,9 +1605,9 @@ cas_mii_writereg(device_t self, int phy, int reg, int val)
 }
 
 void
-cas_mii_statchg(struct ifnet *ifp)
+cas_mii_statchg(device_t self)
 {
-	struct cas_softc *sc = ifp->if_softc;
+	struct cas_softc *sc = device_private(self);
 #ifdef CAS_DEBUG
 	int instance = IFM_INST(sc->sc_media.ifm_cur->ifm_media);
 #endif

@@ -1,4 +1,4 @@
-/*      $NetBSD: rumpuser_dl.c,v 1.18 2013/04/29 18:00:20 pooka Exp $	*/
+/*      $NetBSD: rumpuser_dl.c,v 1.7 2011/03/22 22:27:33 pooka Exp $	*/
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
@@ -30,27 +30,18 @@
  * Called during rump bootstrap.
  */
 
-/*
- * Solaris libelf.h doesn't support _FILE_OFFSET_BITS=64.  Luckily,
- * for this module it doesn't matter.
- */
-#if defined(__sun__)
-#define RUMPUSER_NO_FILE_OFFSET_BITS
-#endif
-#include "rumpuser_port.h"
-
-#if !defined(lint)
-__RCSID("$NetBSD: rumpuser_dl.c,v 1.18 2013/04/29 18:00:20 pooka Exp $");
-#endif /* !lint */
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: rumpuser_dl.c,v 1.7 2011/03/22 22:27:33 pooka Exp $");
 
 #include <sys/types.h>
 #include <sys/time.h>
-#include <assert.h>
 
+#include <assert.h>
 #include <dlfcn.h>
 #include <elf.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <link.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -59,10 +50,7 @@ __RCSID("$NetBSD: rumpuser_dl.c,v 1.18 2013/04/29 18:00:20 pooka Exp $");
 #include <rump/rumpuser.h>
 
 #if defined(__ELF__) && (defined(__NetBSD__) || defined(__FreeBSD__)	\
-    || (defined(__sun__) && defined(__svr4__))) || defined(__linux__)	\
-    || defined(__DragonFly__)
-#include <link.h>
-
+    || (defined(__sun__) && defined(__svr4__)))
 static size_t symtabsize = 0, strtabsize = 0;
 static size_t symtaboff = 0, strtaboff = 0;
 static uint8_t *symtab = NULL;
@@ -104,11 +92,11 @@ reservespace(void *store, size_t *storesize,
 #define DYNn_GETMEMBER(base, n, thevar, result)				\
 do {									\
 	if (eident == ELFCLASS32) {					\
-		const Elf32_Dyn *dyn = base;				\
+		Elf32_Dyn *dyn = base;					\
 		/*LINTED*/						\
 		result = dyn[n].thevar;					\
 	} else {							\
-		const Elf64_Dyn *dyn = base;				\
+		Elf64_Dyn *dyn = base;					\
 		/*LINTED*/						\
 		result = dyn[n].thevar;					\
 	}								\
@@ -142,35 +130,19 @@ do {									\
 
 #define SYM_GETSIZE() ((eident==ELFCLASS32)?sizeof(Elf32_Sym):sizeof(Elf64_Sym))
 
-/*
- * On NetBSD, the dynamic section pointer values seem to be relative to
- * the address the dso is mapped at.  On Linux, they seem to contain
- * the absolute address.  I couldn't find anything definite from a quick
- * read of the standard and therefore I will not go and figure beyond ifdef.
- * On Solaris and DragonFly, the main object works differently ... uuuuh.
- */
-#if defined(__linux__)
-#define adjptr(_map_, _ptr_) ((void *)(_ptr_))
-#elif defined(__sun__) || defined(__DragonFly__)
-#define adjptr(_map_, _ptr_) \
-    (ismainobj ? (void *)(_ptr_) : (void *)(_map_->l_addr + (_ptr_)))
-#else
-#define adjptr(_map_, _ptr_) ((void *)(_map_->l_addr + (_ptr_)))
-#endif
-
 static int
-getsymbols(struct link_map *map, int ismainobj)
+getsymbols(struct link_map *map)
 {
 	char *str_base;
 	void *syms_base = NULL; /* XXXgcc */
 	size_t curstrsize;
-	const void *ed_base;
+	void *ed_base;
 	uint64_t ed_tag;
 	size_t cursymcount;
 	unsigned i;
 
 	if (map->l_addr) {
-		if (memcmp((void *)map->l_addr, ELFMAG, SELFMAG) != 0)
+		if (memcmp(map->l_addr, ELFMAG, SELFMAG) != 0)
 			return ENOEXEC;
 		eident = *(unsigned char *)(map->l_addr + EI_CLASS);
 		if (eident != ELFCLASS32 && eident != ELFCLASS64)
@@ -204,11 +176,11 @@ getsymbols(struct link_map *map, int ismainobj)
 		switch (ed_tag) {
 		case DT_SYMTAB:
 			DYNn_GETMEMBER(ed_base, i, d_un.d_ptr, edptr);
-			syms_base = adjptr(map, edptr);
+			syms_base = map->l_addr + edptr;
 			break;
 		case DT_STRTAB:
 			DYNn_GETMEMBER(ed_base, i, d_un.d_ptr, edptr);
-			str_base = adjptr(map, edptr);
+			str_base = map->l_addr + edptr;
 			break;
 		case DT_STRSZ:
 			DYNn_GETMEMBER(ed_base, i, d_un.d_val, edval);
@@ -216,56 +188,9 @@ getsymbols(struct link_map *map, int ismainobj)
 			break;
 		case DT_HASH:
 			DYNn_GETMEMBER(ed_base, i, d_un.d_ptr, edptr);
-			hashtab = (Elf_Symindx *)adjptr(map, edptr);
+			hashtab = (Elf_Symindx *)(map->l_addr + edptr);
 			cursymcount = hashtab[1];
 			break;
-#ifdef DT_GNU_HASH
-		/*
-		 * DT_GNU_HASH is a bit more complicated than DT_HASH
-		 * in this regard since apparently there is no field
-		 * telling us the total symbol count.  Instead, we look
-		 * for the last valid hash bucket and add its chain lenght
-		 * to the bucket's base index.
-		 */
-		case DT_GNU_HASH: {
-			Elf32_Word nbuck, symndx, maskwords, maxchain = 0;
-			Elf32_Word *gnuhash, *buckets, *ptr;
-			int bi;
-
-			DYNn_GETMEMBER(ed_base, i, d_un.d_ptr, edptr);
-			gnuhash = (Elf32_Word *)adjptr(map, edptr);
-
-			nbuck = gnuhash[0];
-			symndx = gnuhash[1];
-			maskwords = gnuhash[2];
-
-			/*
-			 * First, find the last valid bucket and grab its index
-			 */
-			if (eident == ELFCLASS64)
-				maskwords *= 2; /* sizeof(*buckets) == 4 */
-			buckets = gnuhash + 4 + maskwords;
-			for (bi = nbuck-1; bi >= 0; bi--) {
-				if (buckets[bi] != 0) {
-					maxchain = buckets[bi];
-					break;
-				}
-			}
-			if (maxchain == 0 || maxchain < symndx)
-				break;
-
-			/*
-			 * Then, traverse the last chain and count symbols.
-			 */
-
-			cursymcount = maxchain;
-			ptr = buckets + nbuck + (maxchain - symndx);
-			do {
-				cursymcount++;
-			} while ((*ptr++ & 1) == 0);
-		}	
-			break;
-#endif
 		case DT_SYMENT:
 			DYNn_GETMEMBER(ed_base, i, d_un.d_val, edval);
 			assert(edval == SYM_GETSIZE());
@@ -346,24 +271,29 @@ getsymbols(struct link_map *map, int ismainobj)
 }
 
 static void
-process_object(void *handle,
-	rump_modinit_fn domodinit, rump_compload_fn docompload)
+process(const char *soname, rump_modinit_fn domodinit)
 {
+	void *handle;
 	const struct modinfo *const *mi_start, *const *mi_end;
-	struct rump_component *const *rc, *const *rc_end;
+
+	if (strstr(soname, "librump") == NULL)
+		return;
+
+	handle = dlopen(soname, RTLD_LAZY);
+	if (handle == NULL)
+		return;
 
 	mi_start = dlsym(handle, "__start_link_set_modules");
+	if (!mi_start)
+		goto out;
 	mi_end = dlsym(handle, "__stop_link_set_modules");
-	if (mi_start && mi_end)
-		domodinit(mi_start, (size_t)(mi_end-mi_start));
+	if (!mi_end)
+		goto out;
 
-	rc = dlsym(handle, "__start_link_set_rump_components");
-	rc_end = dlsym(handle, "__stop_link_set_rump_components");
-	if (rc && rc_end) {
-		for (; rc < rc_end; rc++)
-			docompload(*rc);
-		assert(rc == rc_end);
-	}
+	domodinit(mi_start, (size_t)(mi_end-mi_start));
+
+ out:
+	dlclose(handle);
 }
 
 /*
@@ -372,20 +302,16 @@ process_object(void *handle,
  */
 void
 rumpuser_dl_bootstrap(rump_modinit_fn domodinit,
-	rump_symload_fn symload, rump_compload_fn compload)
+	rump_symload_fn symload)
 {
-	struct link_map *map, *origmap, *mainmap;
-	void *mainhandle;
+	struct link_map *map, *origmap;
 	int error;
 
-	mainhandle = dlopen(NULL, RTLD_NOW);
-	if (dlinfo(mainhandle, RTLD_DI_LINKMAP, &mainmap) == -1) {
+	if (dlinfo(RTLD_SELF, RTLD_DI_LINKMAP, &origmap) == -1) {
 		fprintf(stderr, "warning: rumpuser module bootstrap "
 		    "failed: %s\n", dlerror());
 		return;
 	}
-	origmap = mainmap;
-
 	/*
 	 * Process last->first because that's the most probable
 	 * order for dependencies
@@ -400,8 +326,11 @@ rumpuser_dl_bootstrap(rump_modinit_fn domodinit,
 	 */
 	error = 0;
 	for (map = origmap; map && !error; map = map->l_prev) {
-		if (strstr(map->l_name, "librump") != NULL || map == mainmap)
-			error = getsymbols(map, map == mainmap);
+		if (strstr(map->l_name, "librump") != NULL)
+			error = getsymbols(map);
+		/* this should be the main object */
+		else if (map->l_addr == NULL && map->l_prev == NULL)
+			error = getsymbols(map);
 	}
 
 	if (error == 0) {
@@ -432,37 +361,65 @@ rumpuser_dl_bootstrap(rump_modinit_fn domodinit,
 	free(strtab);
 
 	/*
-	 * Next, load modules and components.
-	 *
-	 * Simply loop through all objects, ones unrelated to rump kernels
-	 * will not contain link_set_rump_components (well, not including
-	 * "sabotage", but that needs to be solved at another level anyway).
+	 * Next, load modules from dynlibs.
 	 */
-	for (map = origmap; map; map = map->l_prev) {
-		void *handle;
+	for (map = origmap; map; map = map->l_prev)
+		process(map->l_name, domodinit);
+}
 
-		if (map == mainmap) {
-			handle = mainhandle;
-		} else {
+void
+rumpuser_dl_component_init(int type, rump_component_init_fn compinit)
+{
+	struct link_map *map;
+
+	if (dlinfo(RTLD_SELF, RTLD_DI_LINKMAP, &map) == -1) {
+		fprintf(stderr, "warning: rumpuser module bootstrap "
+		    "failed: %s\n", dlerror());
+		return;
+	}
+
+	for (; map->l_next; map = map->l_next)
+		continue;
+	for (; map; map = map->l_prev) {
+		if (strstr(map->l_name, "librump") != NULL) {
+			void *handle;
+			struct rump_component **rc, **rc_end;
+
 			handle = dlopen(map->l_name, RTLD_LAZY);
 			if (handle == NULL)
 				continue;
-		}
-		process_object(handle, domodinit, compload);
-		if (map != mainmap)
+
+			rc = dlsym(handle,
+			    "__start_link_set_rump_components");
+			if (!rc)
+				goto loop;
+			rc_end = dlsym(handle,
+			    "__stop_link_set_rump_components");
+			if (!rc_end)
+				goto loop;
+
+			for (; rc < rc_end; rc++)
+				compinit(*rc, type);
+			assert(rc == rc_end);
+ loop:
 			dlclose(handle);
+		}
 	}
 }
 #else
-/*
- * no dynamic linking supported
- */
 void
 rumpuser_dl_bootstrap(rump_modinit_fn domodinit,
-	rump_symload_fn symload, rump_compload_fn compload)
+	rump_symload_fn symload)
 {
 
-	return;
+	fprintf(stderr, "Warning, dlinfo() unsupported on host?\n");
+}
+
+void
+rumpuser_dl_component_init(int type, rump_component_init_fn compinit)
+{
+
+	fprintf(stderr, "Warning, dlinfo() unsupported on host?\n");
 }
 #endif
 

@@ -1,11 +1,10 @@
-#	$NetBSD: files.omap2,v 1.25 2013/04/17 14:34:02 bouyer Exp $
+#	$NetBSD: files.omap2,v 1.8.10.1 2012/08/10 12:15:51 jdc Exp $
 #
 # Configuration info for Texas Instruments OMAP2/OMAP3 CPU support
 # Based on xscale/files.pxa2x0
 #
 
 include "arch/arm/pic/files.pic"
-include "arch/arm/cortex/files.cortex"
 
 file	arch/arm/arm32/irq_dispatch.S
 file	arch/arm/omap/omap_dma.c
@@ -15,14 +14,9 @@ defparam opt_omap.h				MEMSIZE
 defparam opt_omap.h				OMAP_EMIFF_PBASE OMAP_EMIFF_SIZE
 defflag opt_omap.h				OMAP2
 defflag opt_omap.h				OMAP3: OMAP2
-defflag opt_omap.h				OMAP4: OMAP3
 defflag	opt_omap.h				OMAP_2430: OMAP2
 defflag opt_omap.h				OMAP_2420: OMAP2
-defflag opt_omap.h				OMAP_3430: OMAP3
 defflag opt_omap.h				OMAP_3530: OMAP3
-defflag opt_omap.h				OMAP_4430: OMAP4
-defflag opt_omap.h				TI_AM335X: OMAP3
-defflag opt_omap.h				TI_DM37XX: OMAP3
 
 # OBIO just an attach point
 device	obio { [addr=-1], [size=0], [intr=-1], [mult=1], [intrbase=-1], [nobyteacc=0]
@@ -37,45 +31,16 @@ file	arch/arm/arm/bus_space_a2x.S		obio
 file	arch/arm/omap/omap_a4x_space.c		obio
 file	arch/arm/arm/bus_space_a4x.S		obio
 
-# TI Sitara control module
-device	sitaracm
-attach	sitaracm at obio with sitaracm
-file	arch/arm/omap/sitara_cm.c		sitaracm
-file	arch/arm/omap/am335x_cm_padconf.c	ti_am335x
-
 # OMAP2 interrupt controller
 device	omapicu: pic, pic_splfuncs
 attach	omapicu at obio with omap2icu
 file	arch/arm/omap/omap2_icu.c		(omap2 | omap3) & omapicu
-file	arch/arm/omap/omap2430_intr.c		omap2 & !omapicu & !omap4
+file	arch/arm/omap/omap2430_intr.c		omap2 & !omapicu
 
 # OMAP2 GPIO controllers
 device	omapgpio: gpiobus
 attach	omapgpio at obio with omap2gpio
 file	arch/arm/omap/omap2_gpio.c		(omap2 | omap3) & omapgpio
-
-# TI_AM335X (and maybe TI OMAP4) I2C controllers
-device	tiiic: i2cbus, i2cexec
-attach	tiiic at obio with ti_iic
-file	arch/arm/omap/ti_iic.c			ti_iic
-
-# OMAP3 I2C controllers
-device	omapiic: i2cbus, i2cexec
-attach	omapiic at obio with omap3_i2c
-file	arch/arm/omap/omap3_i2c.c		omap3_i2c
-
-# OMAP3 system control module
-device	omapscm: sysmon_envsys
-attach	omapscm at obio with omap3_scm
-file	arch/arm/omap/omap3_scm.c		omap3_scm
-
-# OMAP dual-mode timer
-device	omapdmtimer
-file	arch/arm/omap/omap_dmtimer.c		omapdmtimer
-defparam opt_omap.h				OMAP_SYSTEM_CLOCK_FREQ
-
-attach	omapdmtimer at obio with omap_dmtimer_obio
-file	arch/arm/omap/am335x_dmtimer.c		ti_am335x & omapdmtimer
 
 # OMAP 2430 General Purpose Timer
 device	omapmputmr
@@ -114,10 +79,6 @@ device	gpmc { [addr=-1], [size=0], [intr=-1], [mult=1], [nobyteacc=0]
 attach	gpmc at mainbus
 file	arch/arm/omap/omap2_gpmc.c		gpmc
 
-# SDMMC controller
-attach	sdhc at obio with obiosdhc
-file	arch/arm/omap/omap3_sdhc.c		obiosdhc
-
 # NAND flash controller
 device	omapnand: nandbus
 attach	omapnand at gpmc
@@ -127,26 +88,15 @@ file	arch/arm/omap/omap2_nand.c		omapnand
 device	prcm
 attach	prcm at obio
 file	arch/arm/omap/omap2_prcm.c		prcm needs-flag
-file	arch/arm/omap/am335x_prcm.c		ti_am335x
 
 # OHCI USB controller
+##attach	ohci at obio with obioohci:		omapgpio
 attach	ohci at obio with obioohci
 file	arch/arm/omap/obio_ohci.c		obioohci
 
-attach	ehci at obio with omap3_ehci
-file	arch/arm/omap/omap3_ehci.c		omap3_ehci
-
-device	omapfb: rasops16, rasops8, wsemuldisplaydev, vcons, edid
+device	omapfb: rasops16, rasops8, wsemuldisplaydev, vcons
 attach	omapfb at obio
 file	arch/arm/omap/omapfb.c			omapfb
-
-device	cpsw: ether, ifnet, arp, mii, mii_phy
-attach	cpsw at obio
-file	arch/arm/omap/if_cpsw.c			cpsw
-
-device 	omapdma
-attach 	omapdma at obio
-file	arch/arm/omap/omap3_sdma.c		omapdma needs-flag
 
 # these bus space methods are not bus-specific ...
 #

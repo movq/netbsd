@@ -1,4 +1,4 @@
-/*	$NetBSD: wsmux.c,v 1.55 2013/03/18 11:40:39 jmcneill Exp $	*/
+/*	$NetBSD: wsmux.c,v 1.54.2.1 2013/03/30 23:10:44 riz Exp $	*/
 
 /*
  * Copyright (c) 1998, 2005 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsmux.c,v 1.55 2013/03/18 11:40:39 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsmux.c,v 1.54.2.1 2013/03/30 23:10:44 riz Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_modular.h"

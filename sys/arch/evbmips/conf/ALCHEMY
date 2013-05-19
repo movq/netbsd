@@ -1,11 +1,11 @@
-#	$NetBSD: ALCHEMY,v 1.50 2013/04/27 22:21:14 christos Exp $
+#	$NetBSD: ALCHEMY,v 1.41.2.1 2012/08/21 05:34:48 riz Exp $
 #
 # Kernel config for the Alchemy Semiconductor (AMD) PB1000, PB1500,
 # DBAu1000 and DBAu1500 evaluation boards.
 
 include 	"arch/evbmips/conf/std.alchemy"
 
-#ident 		"ALCHEMY-$Revision: 1.50 $"
+#ident 		"ALCHEMY-$Revision: 1.41.2.1 $"
 
 maxusers	32
 
@@ -61,7 +61,6 @@ options 	COMPAT_20	# NetBSD 2.0 binary compatibility
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 #options 	EXEC_ECOFF	# exec ECOFF binaries
 #options 	COMPAT_ULTRIX	# binary compatibility with Ultrix
 options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
@@ -99,10 +98,13 @@ options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 options 	INET		# Internet protocols
 #options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# packet forwarding of multicast packets
 #options 	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI networking
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk (over Ethernet) protocol
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 #options 	PPP_DEFLATE	# Deflate compression support for PPP
@@ -235,8 +237,8 @@ obio*		at mainbus?
 # Pseudo-devices
 
 # Disk/mass storage pseudo-devices
-#pseudo-device	ccd				# concatenated disk devices
-#pseudo-device	raid				# RAIDframe disk driver
+#pseudo-device	ccd		4		# concatenated disk devices
+#pseudo-device	raid		4		# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG			# auto-configuration of RAID
 #pseudo-device	fss				# file system snapshot device
 #pseudo-device	md				# memory disk device (ramdisk)
@@ -252,7 +254,7 @@ pseudo-device	loop				# network loopback
 #pseudo-device	tun				# network tunneling over tty
 #pseudo-device	tap				# virtual Ethernet
 #pseudo-device	gre				# generic L3 over IP tunnel
-#pseudo-device	ipip				# RFC 2003 IP Encapsulation
+#pseudo-device	ipip		2		# RFC 2003 IP Encapsulation
 #pseudo-device	gif				# RFC1933 tunnel
 #pseudo-device	faith				# IPv[46] tcp relay translation 
 #pseudo-device	stf				# 6to4 IPv6 over IPv4 encapsulation
@@ -261,9 +263,9 @@ pseudo-device	bridge				# simple inter-network bridging
 
 # Miscellaneous pseudo-devices
 pseudo-device	pty				# pseudo-terminals
-#pseudo-device	sequencer			# MIDI sequencer
+#pseudo-device	sequencer	1		# MIDI sequencer
 pseudo-device	clockctl			# user control of clock subsystem
 pseudo-device	ksyms				# /dev/ksyms
 
 # A pseudo device needed for Coda		# also needs CODA (above)
-#pseudo-device	vcoda				# coda minicache <-> venus comm.
+#pseudo-device	vcoda		4		# coda minicache <-> venus comm.

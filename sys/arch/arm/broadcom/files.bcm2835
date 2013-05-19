@@ -1,4 +1,4 @@
-#	$NetBSD: files.bcm2835,v 1.16 2013/03/24 19:55:19 jmcneill Exp $
+#	$NetBSD: files.bcm2835,v 1.1.2.4 2013/02/13 01:36:14 riz Exp $  
 #
 # Configuration info for Broadcom BCM2835 ARM Peripherals
 #
@@ -76,11 +76,3 @@ file	arch/arm/broadcom/bcm2835_bsc.c		bsciic	needs-flag
 # Generic framebuffer console driver
 attach	genfb at obio with bcmgenfb: edid
 file	arch/arm/broadcom/bcm2835_genfb.c	bcmgenfb	needs-flag
-
-# VCHIQ
-include "external/bsd/vchiq/conf/files.vchiq"
-
-# VC audio
-device	vcaudio: audiobus, auconv, mulaw
-attach	vcaudio at vchiqbus
-file	arch/arm/broadcom/bcm2835_vcaudio.c	vcaudio

@@ -1,4 +1,4 @@
-/* $NetBSD: coram.c,v 1.11 2012/10/29 12:59:43 chs Exp $ */
+/* $NetBSD: coram.c,v 1.10 2012/01/30 19:41:18 drochner Exp $ */
 
 /*
  * Copyright (c) 2008, 2011 Jonathan A. Kollasch
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: coram.c,v 1.11 2012/10/29 12:59:43 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: coram.c,v 1.10 2012/01/30 19:41:18 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -157,10 +157,10 @@ coram_match(device_t parent, cfdata_t match, void *v)
 }
 
 static void
-coram_attach(device_t parent, device_t self, void *aux)
+coram_attach(device_t parent, device_t self, void *v)
 {
 	struct coram_softc *sc = device_private(self);
-	const struct pci_attach_args *pa = aux;
+	const struct pci_attach_args *pa = v;
 	pci_intr_handle_t ih;
 	pcireg_t reg;
 	const char *intrstr;
@@ -193,7 +193,8 @@ coram_attach(device_t parent, device_t self, void *aux)
 		return;
 	}
 	intrstr = pci_intr_string(pa->pa_pc, ih);
-	sc->sc_ih = pci_intr_establish(pa->pa_pc, ih, IPL_VM, coram_intr, self);
+	sc->sc_ih = pci_intr_establish(pa->pa_pc, ih, IPL_VM,
+	    coram_intr, (void *)self);
 	if (sc->sc_ih == NULL) {
 		aprint_error_dev(self, "couldn't establish interrupt");
 		if (intrstr != NULL)
@@ -213,8 +214,7 @@ coram_attach(device_t parent, device_t self, void *aux)
 		cic = &sc->sc_iic[i];
 
 		cic->cic_sc = sc;
-		if (bus_space_subregion(sc->sc_memt, sc->sc_memh,
-		    I2C_BASE + (I2C_SIZE * i), I2C_SIZE, &cic->cic_regh))
+		if(bus_space_subregion(sc->sc_memt, sc->sc_memh, I2C_BASE + (I2C_SIZE * i), I2C_SIZE, &cic->cic_regh))
 			panic("failed to subregion i2c");
 
 		mutex_init(&cic->cic_busmutex, MUTEX_DRIVER, IPL_NONE);
@@ -228,8 +228,8 @@ coram_attach(device_t parent, device_t self, void *aux)
 		memset(&iba, 0, sizeof(iba));
 		iba.iba_tag = &cic->cic_i2c;
 		iba.iba_type = I2C_TYPE_SMBUS;
-		cic->cic_i2cdev = config_found_ia(self, "i2cbus", &iba,
-		    iicbus_print);
+		cic->cic_i2cdev = config_found_ia(self, "i2cbus",
+		    &iba, iicbus_print);
 #endif
 	}
 
@@ -251,8 +251,7 @@ coram_attach(device_t parent, device_t self, void *aux)
 //	seeprom_bootstrap_read(&sc->sc_i2c, 0x50, 0, 256, foo, 256);
 
 	iic_acquire_bus(&sc->sc_i2c, I2C_F_POLL);
-	iic_exec(&sc->sc_i2c, I2C_OP_READ_WITH_STOP, 0x50, &bar, 1, foo, 256,
-	    I2C_F_POLL);
+	iic_exec(&sc->sc_i2c, I2C_OP_READ_WITH_STOP, 0x50, &bar, 1, foo, 256, I2C_F_POLL);
 	iic_release_bus(&sc->sc_i2c, I2C_F_POLL);
 
 	printf("\n");

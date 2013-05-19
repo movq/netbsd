@@ -1,4 +1,4 @@
-/*	$NetBSD: process_machdep.c,v 1.25 2012/12/08 06:46:49 matt Exp $	*/
+/*	$NetBSD: process_machdep.c,v 1.22 2009/11/21 20:32:17 rmind Exp $	*/
 
 /*
  * Copyright (c) 1993 The Regents of the University of California.
@@ -133,7 +133,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.25 2012/12/08 06:46:49 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.22 2009/11/21 20:32:17 rmind Exp $");
 
 #include <sys/proc.h>
 #include <sys/ptrace.h>
@@ -144,12 +144,15 @@ __KERNEL_RCSID(0, "$NetBSD: process_machdep.c,v 1.25 2012/12/08 06:46:49 matt Ex
 #include <machine/reg.h>
 
 #include <arm/armreg.h>
-#include <arm/vfpreg.h>
+
+#ifdef ARMFPE
+#include <arm/fpe-arm/armfpe.h>
+#endif
 
 int
 process_read_regs(struct lwp *l, struct reg *regs)
 {
-	struct trapframe * const tf = lwp_trapframe(l);
+	struct trapframe *tf = process_frame(l);
 
 	KASSERT(tf != NULL);
 	memcpy((void *)regs->r, (void *)&tf->tf_r0, sizeof(regs->r));
@@ -174,23 +177,20 @@ process_read_regs(struct lwp *l, struct reg *regs)
 int
 process_read_fpregs(struct lwp *l, struct fpreg *regs)
 {
-#ifdef FPU_VFP
-	if (curcpu()->ci_vfp_id == 0) {
-		memset(regs, 0, sizeof(regs));
-		return 0;
-	}
-	const struct pcb * const pcb = lwp_getpcb(l);
-	vfp_savecontext();
-	regs->fpr_vfp = pcb->pcb_vfp;
-	regs->fpr_vfp.vfp_fpexc &= ~VFP_FPEXC_EN;
-#endif
-	return 0;
+#ifdef ARMFPE
+	arm_fpe_getcontext(p, regs);
+	return(0);
+#else	/* ARMFPE */
+	/* No hardware FP support */
+	memset(regs, 0, sizeof(struct fpreg));
+	return(0);
+#endif	/* ARMFPE */
 }
 
 int
 process_write_regs(struct lwp *l, const struct reg *regs)
 {
-	struct trapframe * const tf = lwp_trapframe(l);
+	struct trapframe *tf = process_frame(l);
 
 	KASSERT(tf != NULL);
 	memcpy(&tf->tf_r0, regs->r, sizeof(regs->r));
@@ -222,23 +222,19 @@ process_write_regs(struct lwp *l, const struct reg *regs)
 int
 process_write_fpregs(struct lwp *l, const struct fpreg *regs)
 {
-#ifdef FPU_VFP
-	if (curcpu()->ci_vfp_id == 0) {
-		return EINVAL;
-	}
-	struct pcb * const pcb = lwp_getpcb(l);
-	vfp_discardcontext();
-	l->l_md.md_flags |= MDLWP_VFPUSED;
-	pcb->pcb_vfp = regs->fpr_vfp;
-	pcb->pcb_vfp.vfp_fpexc &= ~VFP_FPEXC_EN;
-#endif
+#ifdef ARMFPE
+	arm_fpe_setcontext(p, regs);
 	return(0);
+#else	/* ARMFPE */
+	/* No hardware FP support */
+	return(0);
+#endif	/* ARMFPE */
 }
 
 int
 process_set_pc(struct lwp *l, void *addr)
 {
-	struct trapframe * const tf = lwp_trapframe(l);
+	struct trapframe *tf = process_frame(l);
 
 	KASSERT(tf != NULL);
 #ifdef __PROG32

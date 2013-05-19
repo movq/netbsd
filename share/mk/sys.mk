@@ -1,9 +1,5 @@
-#	$NetBSD: sys.mk,v 1.116 2013/03/06 11:19:08 yamt Exp $
+#	$NetBSD: sys.mk,v 1.108.2.1 2012/05/17 18:02:30 riz Exp $
 #	@(#)sys.mk	8.2 (Berkeley) 3/21/94
-#
-# This file contains the basic rules for make(1) and is read first
-# Do not put conditionals that are set on different files here and
-# expect them to work.
 
 unix?=		We run NetBSD.
 
@@ -41,15 +37,23 @@ COMPILE.c?=	${CC} ${CFLAGS} ${CPPFLAGS} -c
 LINK.c?=	${CC} ${CFLAGS} ${CPPFLAGS} ${LDFLAGS}
 
 # C Type Format data is required for DTrace
-CTFFLAGS	?=	-g -L VERSION
-CTFMFLAGS	?=	-g -t -L VERSION
+# XXX TBD VERSION is not defined
+CTFFLAGS	?=	-L VERSION
+CTFMFLAGS	?=	-t -L VERSION
 
-# We don't define these here, we let the bsd.own.mk to do it
-#CTFCONVERT	?=	ctfconvert
-#CTFMERGE	?=	ctfmerge
+.if defined(MKDTRACE) && ${MKDTRACE} != "no"
+CTFCONVERT	?=	${TOOL_CTFCONVERT}
+CTFMERGE	?=	${TOOL_CTFMERGE}
+.if defined(CFLAGS) && (${CFLAGS:M-g} != "")
+CTFFLAGS	+=	-g
+CTFMFLAGS	+=	-g
+.else
+CFLAGS		+=	-g
+.endif
+.endif
 
 CXX?=		c++
-CXXFLAGS?=	${CFLAGS:N-Wno-traditional:N-Wstrict-prototypes:N-Wmissing-prototypes:N-Wno-pointer-sign:N-ffreestanding:N-std=gnu99:N-Wold-style-definition:N-Wno-format-zero-length}
+CXXFLAGS?=	${CFLAGS:N-Wno-traditional:N-Wstrict-prototypes:N-Wmissing-prototypes:N-Wno-pointer-sign:N-ffreestanding:N-std=gnu99}
 
 __ALLSRC1=	${empty(DESTDIR):?${.ALLSRC}:${.ALLSRC:S|^${DESTDIR}|^destdir|}}
 __ALLSRC2=	${empty(MAKEOBJDIR):?${__ALLSRC1}:${__ALLSRC1:S|^${MAKEOBJDIR}|^obj|}}
@@ -145,9 +149,6 @@ YACC.y?=	${YACC} ${YFLAGS}
 	${LINK.f} -o ${.TARGET} ${.IMPSRC} ${LDLIBS}
 .f.o:
 	${COMPILE.f} ${.IMPSRC}
-.if defined(CTFCONVERT)
-	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
-.endif
 .f.a:
 	${COMPILE.f} ${.IMPSRC}
 	${AR} ${ARFLAGS} ${.TARGET} ${.PREFIX}.o
@@ -172,9 +173,6 @@ YACC.y?=	${YACC} ${YFLAGS}
 	${LINK.r} -o ${.TARGET} ${.IMPSRC} ${LDLIBS}
 .r.o:
 	${COMPILE.r} ${.IMPSRC}
-.if defined(CTFCONVERT)
-	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
-.endif
 .r.a:
 	${COMPILE.r} ${.IMPSRC}
 	${AR} ${ARFLAGS} ${.TARGET} ${.PREFIX}.o
@@ -237,9 +235,6 @@ YACC.y?=	${YACC} ${YFLAGS}
 .l.o:
 	${LEX.l} ${.IMPSRC}
 	${COMPILE.c} -o ${.TARGET} lex.yy.c
-.if defined(CTFCONVERT)
-	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
-.endif
 	rm -f lex.yy.c
 
 # Yacc
@@ -253,9 +248,6 @@ YACC.y?=	${YACC} ${YFLAGS}
 .y.o:
 	${YACC.y} ${.IMPSRC}
 	${COMPILE.c} -o ${.TARGET} y.tab.c
-.if defined(CTFCONVERT)
-	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
-.endif
 	rm -f y.tab.c
 
 # Shell

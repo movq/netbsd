@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_compat_50.c,v 1.23 2013/03/29 01:04:30 christos Exp $	*/
+/*	$NetBSD: netbsd32_compat_50.c,v 1.20 2011/11/18 03:34:13 christos Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_50.c,v 1.23 2013/03/29 01:04:30 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_50.c,v 1.20 2011/11/18 03:34:13 christos Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_sysv.h"
@@ -438,8 +438,7 @@ compat_50_netbsd32_nanosleep(struct lwp *l,
 		return (error);
 	netbsd32_to_timespec50(&ts32, &rqt);
 
-	error = nanosleep1(l, CLOCK_MONOTONIC, 0, &rqt,
-	    SCARG_P32(uap, rmtp) ? &rmt : NULL);
+	error = nanosleep1(l, &rqt, SCARG_P32(uap, rmtp) ? &rmt : NULL);
 	if (SCARG_P32(uap, rmtp) == NULL || (error != 0 && error != EINTR))
 		return error;
 
@@ -561,8 +560,7 @@ compat_50_netbsd32__lwp_park(struct lwp *l,
 			return error;
 	}
 
-	return lwp_park(CLOCK_REALTIME, TIMER_ABSTIME, tsp,
-	    SCARG_P32(uap, hint));
+	return lwp_park(tsp, SCARG_P32(uap, hint));
 	return 0;
 }
 
@@ -841,17 +839,28 @@ compat_50_netbsd32_getrusage(struct lwp *l, const struct compat_50_netbsd32_getr
 		syscallarg(int) who;
 		syscallarg(netbsd32_rusage50p_t) rusage;
 	} */
-	int error;
 	struct proc *p = l->l_proc;
-	struct rusage ru;
-	struct netbsd32_rusage50 ru32;
+	struct rusage *rup;
+	struct netbsd32_rusage50 ru;
 
-	error = getrusage1(p, SCARG(uap, who), &ru);
-	if (error != 0)
-		return error;
+	switch (SCARG(uap, who)) {
 
-	netbsd32_from_rusage50(&ru, &ru32);
-	return copyout(&ru32, SCARG_P32(uap, rusage), sizeof(ru32));
+	case RUSAGE_SELF:
+		rup = &p->p_stats->p_ru;
+		mutex_enter(p->p_lock);
+		calcru(p, &rup->ru_utime, &rup->ru_stime, NULL, NULL);
+		mutex_exit(p->p_lock);
+		break;
+
+	case RUSAGE_CHILDREN:
+		rup = &p->p_stats->p_cru;
+		break;
+
+	default:
+		return (EINVAL);
+	}
+	netbsd32_from_rusage50(rup, &ru);
+	return copyout(&ru, SCARG_P32(uap, rusage), sizeof(ru));
 }
 
 int

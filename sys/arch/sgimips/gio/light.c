@@ -1,4 +1,4 @@
-/*	$Id: light.c,v 1.7 2012/10/27 17:18:09 chs Exp $	*/
+/*	$Id: light.c,v 1.6 2012/01/11 21:23:38 macallan Exp $	*/
 
 /*
  * Copyright (c) 2006 Stephen M. Rumble
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: light.c,v 1.7 2012/10/27 17:18:09 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: light.c,v 1.6 2012/01/11 21:23:38 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -61,6 +61,8 @@ __KERNEL_RCSID(0, "$NetBSD: light.c,v 1.7 2012/10/27 17:18:09 chs Exp $");
 #include <sgimips/gio/lightreg.h>
 
 struct light_softc {
+	struct device sc_dev;
+
 	struct light_devconfig *sc_dc;
 };
 
@@ -80,10 +82,10 @@ struct light_devconfig {
 #define LIGHT_YRES	768
 #define LIGHT_DEPTH	8
 
-static int	light_match(device_t, cfdata_t, void *);
-static void	light_attach(device_t, device_t, void *);
+static int	light_match(struct device *, struct cfdata *, void *);
+static void	light_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(light, sizeof(struct light_softc), light_match, light_attach,
+CFATTACH_DECL(light, sizeof(struct light_softc), light_match, light_attach,
     NULL, NULL);
 
 /* wsdisplay_emulops */
@@ -263,7 +265,7 @@ rex_fill_rect(struct light_devconfig *dc, int from_x, int from_y, int to_x,
  ******************************************************************************/
 
 static int
-light_match(device_t parent, cfdata_t cf, void *aux)
+light_match(struct device *parent, struct cfdata *self, void *aux)
 {
 	struct gio_attach_args *ga = aux;
 
@@ -309,10 +311,10 @@ light_attach_common(struct light_devconfig *dc, struct gio_attach_args *ga)
 }
 
 static void
-light_attach(device_t parent, device_t self, void *aux)
+light_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct gio_attach_args *ga = aux;
-	struct light_softc *sc = device_private(self);
+	struct light_softc *sc = (void *)self;
 	struct wsemuldisplaydev_attach_args wa;
 
 	if (light_is_console && ga->ga_addr == light_console_dc.dc_addr) {
@@ -338,7 +340,7 @@ light_attach(device_t parent, device_t self, void *aux)
 	wa.accessops = &light_accessops;
 	wa.accesscookie = sc->sc_dc;
 
-	config_found(self, &wa, wsemuldisplaydevprint);
+	config_found(&sc->sc_dev, &wa, wsemuldisplaydevprint);
 }
 
 int

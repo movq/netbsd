@@ -1,4 +1,4 @@
-# $NetBSD: t_miscquota.sh,v 1.8 2013/01/22 06:24:11 dholland Exp $ 
+# $NetBSD: t_miscquota.sh,v 1.6.2.1 2012/10/01 19:55:22 riz Exp $ 
 #
 #  Copyright (c) 2011 Manuel Bouyer
 #  All rights reserved.
@@ -53,10 +53,10 @@ test_case log_unlink_remount quota_log \
     -oRL le 1 user
 
 
-test_case_root default_deny_user quota_default_deny \
+test_case_root defaut_deny_user quota_defaut_deny \
     "new quota entry denied by default entry" 5 -b le 1 user
 
-test_case_root default_deny_user_big quota_default_deny \
+test_case_root defaut_deny_user_big quota_defaut_deny \
     "new quota entry denied by default entry, with list on more than one block" 5000 -b le 1 user
 
 
@@ -170,7 +170,7 @@ quota_log()
 	rump_quota_shutdown
 }
 
-quota_default_deny()
+quota_defaut_deny()
 {
 	local nusers=$1; shift
 	create_ffs_server $*

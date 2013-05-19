@@ -1,4 +1,4 @@
-/*	$NetBSD: reentrant.h,v 1.17 2013/04/12 18:12:58 joerg Exp $	*/
+/*	$NetBSD: reentrant.h,v 1.14.10.2 2013/04/29 01:50:20 riz Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2003 The NetBSD Foundation, Inc.
@@ -264,7 +264,7 @@ thr_t	__libc_thr_self_stub(void);
 int	__libc_thr_yield_stub(void);
 int	__libc_thr_create_stub(thr_t *, const thrattr_t *,
 	    void *(*)(void *), void *);
-void	__libc_thr_exit_stub(void *) __dead;
+void	__libc_thr_exit_stub(void *);
 int	*__libc_thr_errno_stub(void);
 int	__libc_thr_setcancelstate_stub(int, int *);
 int	__libc_thr_equal_stub(pthread_t, pthread_t);

@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_test.h,v 1.6 2012/08/15 19:47:38 rmind Exp $	*/
+/*	$NetBSD: npf_test.h,v 1.3.2.5 2012/11/18 21:45:09 riz Exp $	*/
 
 /*
  * Public Domain.

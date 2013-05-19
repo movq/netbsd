@@ -31,7 +31,7 @@
 __FBSDID("$FreeBSD: src/sbin/gpt/gpt.c,v 1.16 2006/07/07 02:44:23 marcel Exp $");
 #endif
 #ifdef __RCSID
-__RCSID("$NetBSD: gpt.c,v 1.20 2013/04/13 18:32:01 jakllsch Exp $");
+__RCSID("$NetBSD: gpt.c,v 1.15.4.1 2012/10/26 09:02:27 sborrill Exp $");
 #endif
 
 #include <sys/param.h>
@@ -241,7 +241,6 @@ utf8_to_utf16(const uint8_t *s8, uint16_t *s16, size_t s16len)
 	} while (c != 0);
 }
 
-#ifndef __NetBSD__
 void
 le_uuid_dec(void const *buf, uuid_t *uuid)
 {
@@ -274,7 +273,6 @@ le_uuid_enc(void *buf, uuid_t const *uuid)
 		p[10 + i] = uuid->node[i];
 }
 
-#endif
 int
 parse_uuid(const char *s, uuid_t *uuid)
 {
@@ -287,78 +285,78 @@ parse_uuid(const char *s, uuid_t *uuid)
 	switch (*s) {
 	case 'b':
 		if (strcmp(s, "bios") == 0) {
-			static const uuid_t bios = GPT_ENT_TYPE_BIOS;
+			uuid_t bios = GPT_ENT_TYPE_BIOS;
 			*uuid = bios;
 			return (0);
 		}
 		break;
 	case 'c':
 		if (strcmp(s, "ccd") == 0) {
-			static const uuid_t ccd = GPT_ENT_TYPE_NETBSD_CCD;
+			uuid_t ccd = GPT_ENT_TYPE_NETBSD_CCD;
 			*uuid = ccd;
 			return (0);
 		} else if (strcmp(s, "cgd") == 0) {
-			static const uuid_t cgd = GPT_ENT_TYPE_NETBSD_CGD;
+			uuid_t cgd = GPT_ENT_TYPE_NETBSD_CGD;
 			*uuid = cgd;
 			return (0);
 		}
 		break;
 	case 'e':
 		if (strcmp(s, "efi") == 0) {
-			static const uuid_t efi = GPT_ENT_TYPE_EFI;
+			uuid_t efi = GPT_ENT_TYPE_EFI;
 			*uuid = efi;
 			return (0);
 		}
 		break;
 	case 'f':
 		if (strcmp(s, "ffs") == 0) {
-			static const uuid_t nb_ffs = GPT_ENT_TYPE_NETBSD_FFS;
+			uuid_t nb_ffs = GPT_ENT_TYPE_NETBSD_FFS;
 			*uuid = nb_ffs;
 			return (0);
 		}
 		break;
 	case 'h':
 		if (strcmp(s, "hfs") == 0) {
-			static const uuid_t hfs = GPT_ENT_TYPE_APPLE_HFS;
+			uuid_t hfs = GPT_ENT_TYPE_APPLE_HFS;
 			*uuid = hfs;
 			return (0);
 		}
 		break;
 	case 'l':
 		if (strcmp(s, "lfs") == 0) {
-			static const uuid_t lfs = GPT_ENT_TYPE_NETBSD_LFS;
+			uuid_t lfs = GPT_ENT_TYPE_NETBSD_LFS;
 			*uuid = lfs;
 			return (0);
 		} else if (strcmp(s, "linux") == 0) {
-			static const uuid_t lnx = GPT_ENT_TYPE_LINUX_DATA;
+			uuid_t lnx = GPT_ENT_TYPE_MS_BASIC_DATA;
 			*uuid = lnx;
 			return (0);
 		}
 		break;
 	case 'r':
 		if (strcmp(s, "raid") == 0) {
-			static const uuid_t raid = GPT_ENT_TYPE_NETBSD_RAIDFRAME;
+			uuid_t raid = GPT_ENT_TYPE_NETBSD_RAIDFRAME;
 			*uuid = raid;
 			return (0);
 		}
 		break;
 	case 's':
 		if (strcmp(s, "swap") == 0) {
-			static const uuid_t sw = GPT_ENT_TYPE_NETBSD_SWAP;
+			uuid_t sw = GPT_ENT_TYPE_NETBSD_SWAP;
 			*uuid = sw;
 			return (0);
 		}
 		break;
 	case 'u':
 		if (strcmp(s, "ufs") == 0) {
-			static const uuid_t ufs = GPT_ENT_TYPE_NETBSD_FFS;
+			uuid_t ufs = GPT_ENT_TYPE_NETBSD_FFS;
 			*uuid = ufs;
 			return (0);
 		}
 		break;
 	case 'w':
 		if (strcmp(s, "windows") == 0) {
-			static const uuid_t win = GPT_ENT_TYPE_MS_BASIC_DATA;
+			uuid_t win = GPT_ENT_TYPE_MS_BASIC_DATA;
 			*uuid = win;
 			return (0);
 		}

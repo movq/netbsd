@@ -1,4 +1,4 @@
-/*	$NetBSD: ophandlers.c,v 1.12 2013/03/15 20:22:44 nakayama Exp $	*/
+/*	$NetBSD: ophandlers.c,v 1.11 2011/01/04 09:25:21 wiz Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -79,6 +79,7 @@ op_action(keyword, arg)
 	return;
 }
 
+#if defined(__sparc__) && !defined(__arch64__)
 int
 check_for_openprom()
 {
@@ -94,6 +95,7 @@ check_for_openprom()
 
 	return (rv == 0);
 }
+#endif
 
 char *
 op_handler(keyword, arg)

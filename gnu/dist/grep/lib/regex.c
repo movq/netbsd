@@ -1,4 +1,4 @@
-/*	$NetBSD: regex.c,v 1.2 2013/01/05 09:40:15 apb Exp $	*/
+/*	$NetBSD: regex.c,v 1.1.1.1.56.1 2013/01/13 19:08:05 bouyer Exp $	*/
 
 /* Extended regular expression matching and search library,
    version 0.12.

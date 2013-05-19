@@ -1,4 +1,4 @@
-/*	$NetBSD: wsdisplay_util.c,v 1.2 2013/01/31 10:57:31 macallan Exp $ */
+/*	$NetBSD: wsdisplay_util.c,v 1.1.8.1 2013/02/13 01:36:19 riz Exp $ */
 
 /*-
  * Copyright (c) 2011 Michael Lorenz

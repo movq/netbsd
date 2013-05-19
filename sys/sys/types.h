@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.90 2013/02/02 14:00:37 matt Exp $	*/
+/*	$NetBSD: types.h,v 1.88 2011/01/14 02:06:34 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1991, 1993, 1994
@@ -127,7 +127,7 @@ typedef	int64_t		longlong_t;	/* for XDR */
 typedef	uint64_t	u_longlong_t;	/* for XDR */
 
 typedef	int64_t		blkcnt_t;	/* fs block count */
-typedef	int32_t		blksize_t;	/* fs optimal block size */
+typedef	uint32_t	blksize_t;	/* fs optimal block size */
 
 #ifndef	fsblkcnt_t
 typedef	__fsblkcnt_t	fsblkcnt_t;	/* fs block count (statvfs) */
@@ -204,11 +204,9 @@ typedef	int		psetid_t;
  * Boolean type definitions for the kernel environment.  User-space
  * boolean definitions are found in <stdbool.h>.
  */
-#ifndef __cplusplus
 #define bool	_Bool
 #define true	1
 #define false	0
-#endif
 
 /*
  * Deprecated Mach-style boolean_t type.  Should not be used by new code.

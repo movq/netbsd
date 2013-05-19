@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_quota.h,v 1.21 2012/02/18 06:13:23 matt Exp $	*/
+/*	$NetBSD: ufs_quota.h,v 1.20.2.1 2012/07/30 08:24:57 martin Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993, 1995

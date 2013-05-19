@@ -1,5 +1,5 @@
-/*	$NetBSD: authfile.c,v 1.7 2013/03/29 16:19:45 christos Exp $	*/
-/* $OpenBSD: authfile.c,v 1.95 2013/01/08 18:49:04 markus Exp $ */
+/*	$NetBSD: authfile.c,v 1.5 2011/09/07 17:49:19 christos Exp $	*/
+/* $OpenBSD: authfile.c,v 1.92 2011/06/14 22:49:18 markus Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -38,7 +38,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: authfile.c,v 1.7 2013/03/29 16:19:45 christos Exp $");
+__RCSID("$NetBSD: authfile.c,v 1.5 2011/09/07 17:49:19 christos Exp $");
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/param.h>
@@ -147,7 +147,7 @@ key_private_rsa1_to_blob(Key *key, Buffer *blob, const char *passphrase,
 	cipher_set_key_string(&ciphercontext, cipher, passphrase,
 	    CIPHER_ENCRYPT);
 	cipher_crypt(&ciphercontext, cp,
-	    buffer_ptr(&buffer), buffer_len(&buffer), 0, 0);
+	    buffer_ptr(&buffer), buffer_len(&buffer));
 	cipher_cleanup(&ciphercontext);
 	memset(&ciphercontext, 0, sizeof(ciphercontext));
 
@@ -331,7 +331,7 @@ key_load_file(int fd, const char *filename, Buffer *blob)
 		    filename == NULL ? "" : " ");
 		return 0;
 	}
-	buffer_clear(blob);
+	buffer_init(blob);
 	for (;;) {
 		if ((len = atomicio(read, fd, buf, sizeof(buf))) == 0) {
 			if (errno == EPIPE)
@@ -465,7 +465,7 @@ key_parse_private_rsa1(Buffer *blob, const char *passphrase, char **commentp)
 	cipher_set_key_string(&ciphercontext, cipher, passphrase,
 	    CIPHER_DECRYPT);
 	cipher_crypt(&ciphercontext, cp,
-	    buffer_ptr(&copy), buffer_len(&copy), 0, 0);
+	    buffer_ptr(&copy), buffer_len(&copy));
 	cipher_cleanup(&ciphercontext);
 	memset(&ciphercontext, 0, sizeof(ciphercontext));
 	buffer_free(&copy);

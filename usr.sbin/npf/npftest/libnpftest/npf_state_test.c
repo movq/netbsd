@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_state_test.c,v 1.4 2012/12/24 19:05:49 rmind Exp $	*/
+/*	$NetBSD: npf_state_test.c,v 1.1.2.5 2013/02/08 19:18:12 riz Exp $	*/
 
 /*
  * NPF state tracking test.

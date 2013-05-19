@@ -1,4 +1,4 @@
-/*	$NetBSD: calendar.c,v 1.49 2012/04/03 12:03:04 matthias Exp $	*/
+/*	$NetBSD: calendar.c,v 1.48 2009/12/08 13:49:08 wiz Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\
 #if 0
 static char sccsid[] = "@(#)calendar.c	8.4 (Berkeley) 1/7/95";
 #endif
-__RCSID("$NetBSD: calendar.c,v 1.49 2012/04/03 12:03:04 matthias Exp $");
+__RCSID("$NetBSD: calendar.c,v 1.48 2009/12/08 13:49:08 wiz Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -117,7 +117,7 @@ static int	 getfield(char *, char **, int *);
 static void	 getmmdd(struct tm *, char *);
 static int	 getmonth(char *);
 static bool	 isnow(char *);
-static FILE	*opencal(FILE **);
+static FILE	*opencal(void);
 static void	 settime(void);
 static void	 usage(void) __dead;
 
@@ -192,13 +192,13 @@ static void
 cal(void)
 {
 	bool printing;
-	FILE *fp, *in = NULL;
+	FILE *fp;
 	char *line;
 
-	if ((fp = opencal(&in)) == NULL || in == NULL)
+	if ((fp = opencal()) == NULL)
 		return;
 	printing = false;
-	while ((line = fparseln(in,
+	while ((line = fparseln(stdin,
 		    NULL, NULL, NULL, FPARSELN_UNESCCOMM)) != NULL) {
 		if (line[0] == '\0')
 			continue;
@@ -381,7 +381,7 @@ getfield(char *p, char **endp, int *flags)
 }
 
 static FILE *
-opencal(FILE **in)
+opencal(void)
 {
 	int fd;
 	int pdes[2];
@@ -390,7 +390,7 @@ opencal(FILE **in)
 	/* open up calendar file as stdin */
 	if (fname == NULL) {
 		for (name = defaultnames; *name != NULL; name++) {
-			if ((fd = open(*name, O_RDONLY)) < 0)
+			if (freopen(*name, "rf", stdin) == NULL)
 				continue;
 			else
 				break;
@@ -400,7 +400,7 @@ opencal(FILE **in)
 				return NULL;
 			err(EXIT_FAILURE, "Cannot open calendar file");
 		}
-	} else if ((fd = open(fname, O_RDONLY)) < 0) {
+	} else if (freopen(fname, "rf", stdin) == NULL) {
 		if (doall)
 			return NULL;
 		err(EXIT_FAILURE, "Cannot open `%s'", fname);
@@ -418,13 +418,7 @@ opencal(FILE **in)
 		(void)close(pdes[1]);
 		return NULL;
 	case 0:
-		/* child */
-		/* set stdin to calendar file */
-		if (fd != STDIN_FILENO) {
-			(void)dup2(fd, STDIN_FILENO);
-			(void)close(fd);
-		}
-		/* set stdout to pipe input */
+		/* child -- stdin already setup, set stdout to pipe input */
 		if (pdes[1] != STDOUT_FILENO) {
 			(void)dup2(pdes[1], STDOUT_FILENO);
 			(void)close(pdes[1]);
@@ -440,12 +434,10 @@ opencal(FILE **in)
 		err(EXIT_FAILURE, "Cannot exec `%s'", _PATH_CPP);
 		/*NOTREACHED*/
 	default:
-		/* parent -- fdopen *in to pipe output */
-		*in = fdopen(pdes[0], "r");
+		/* parent -- set stdin to pipe output */
+		(void)dup2(pdes[0], STDIN_FILENO);
+		(void)close(pdes[0]);
 		(void)close(pdes[1]);
-
-		/* close calendar file */
-		close(fd);
 
 		/* not reading all calendar files, just set output to stdout */
 		if (!doall)

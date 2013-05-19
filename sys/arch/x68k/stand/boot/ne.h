@@ -1,4 +1,4 @@
-/*	$NetBSD: ne.h,v 1.1 2012/10/12 20:15:52 tsutsui Exp $	*/
+/*	$NetBSD: ne.h,v 1.1.4.2 2012/11/18 19:05:19 riz Exp $	*/
 
 /*
  * Copyright (c) 2003 Tetsuya Isaki. All rights reserved.

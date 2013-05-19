@@ -1,4 +1,4 @@
-/*	$NetBSD: firewire.c,v 1.42 2012/08/05 02:47:52 riastradh Exp $	*/
+/*	$NetBSD: firewire.c,v 1.38 2010/09/07 07:26:54 cegger Exp $	*/
 /*-
  * Copyright (c) 2003 Hidetoshi Shimokawa
  * Copyright (c) 1998-2002 Katsushi Kobayashi and Hidetoshi Shimokawa
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: firewire.c,v 1.42 2012/08/05 02:47:52 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: firewire.c,v 1.38 2010/09/07 07:26:54 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -128,6 +128,7 @@ err:
 }
 
 MALLOC_DEFINE(M_FW, "ieee1394", "IEEE1394");
+MALLOC_DEFINE(M_FWXFER, "fw_xfer", "XFER/IEEE1394");
 
 #define FW_MAXASYRTY 4
 
@@ -255,15 +256,11 @@ firewireattach(device_t parent, device_t self, void *aux)
 
 	callout_schedule(&fc->timeout_callout, hz);
 
-	/* Tell config we will have started a thread to scan the bus.  */
-	config_pending_incr();
-
 	/* create thread */
 	if (kthread_create(PRI_NONE, KTHREAD_MPSAFE, NULL, fw_bus_probe_thread,
-	    fc, &fc->probe_thread, "fw%dprobe", device_unit(fc->bdev))) {
+	    fc, &fc->probe_thread, "fw%dprobe", device_unit(fc->bdev)))
 		aprint_error_dev(self, "kthread_create failed\n");
-		config_pending_decr();
-	}
+	config_pending_incr();
 
 	devlist = malloc(sizeof(struct firewire_dev_list), M_DEVBUF, M_NOWAIT);
 	if (devlist == NULL) {
@@ -681,15 +678,6 @@ fw_init(struct firewire_comm *fc)
 #endif
 
 	fc->crom_src_buf = NULL;
-}
-
-void
-fw_destroy(struct firewire_comm *fc)
-{
-	mutex_destroy(&fc->arq->q_mtx);
-	mutex_destroy(&fc->ars->q_mtx);
-	mutex_destroy(&fc->atq->q_mtx);
-	mutex_destroy(&fc->ats->q_mtx);
 }
 
 #define BIND_CMP(addr, fwb) \
@@ -1151,7 +1139,7 @@ fw_rcv(struct fw_rcv_buf *rb)
 				    "cannot respond(bus reset)!\n");
 				return;
 			}
-			rb->xfer = fw_xfer_alloc(M_FW);
+			rb->xfer = fw_xfer_alloc(M_FWXFER);
 			if (rb->xfer == NULL)
 				return;
 			rb->xfer->send.spd = rb->spd;
@@ -1555,7 +1543,7 @@ fw_phy_config(struct firewire_comm *fc, int root_node, int gap_count)
 
 	fc->status = FWBUSPHYCONF;
 
-	xfer = fw_xfer_alloc(M_FW);
+	xfer = fw_xfer_alloc(M_FWXFER);
 	if (xfer == NULL)
 		return;
 	xfer->fc = fc;
@@ -1948,20 +1936,6 @@ fw_bus_probe_thread(void *arg)
 {
 	struct firewire_comm *fc = (struct firewire_comm *)arg;
 
-	/*
-	 * Tell config we've scanned the bus.
-	 *
-	 * XXX This is not right -- we haven't actually scanned it.  We
-	 * probably ought to call this after the first bus exploration.
-	 *
-	 * bool once = false;
-	 * ...
-	 * 	fw_attach_dev(fc);
-	 * 	if (!once) {
-	 * 		config_pending_decr();
-	 * 		once = true;
-	 * 	}
-	 */
 	config_pending_decr();
 
 	mutex_enter(&fc->wait_lock);
@@ -2276,7 +2250,7 @@ fw_try_bmr(void *arg)
 	struct fw_pkt *fp;
 	int err = 0;
 
-	xfer = fw_xfer_alloc_buf(M_FW, 8, 4);
+	xfer = fw_xfer_alloc_buf(M_FWXFER, 8, 4);
 	if (xfer == NULL)
 		return;
 	xfer->send.spd = 0;

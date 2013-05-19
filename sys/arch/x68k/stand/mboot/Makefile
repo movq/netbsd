@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.16 2012/04/05 12:01:36 isaki Exp $
+#	$NetBSD: Makefile,v 1.15.20.1 2012/04/09 18:08:31 riz Exp $
 
 NOMAN=		# defined
 .include <bsd.own.mk>

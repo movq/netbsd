@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.3 2012/06/05 00:43:00 christos Exp $	*/
+/*	$NetBSD: types.h,v 1.2.6.1 2012/06/05 21:15:30 bouyer Exp $	*/
 
 /*
  * Portions Copyright (C) 2004-2007  Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.53 2012/10/27 17:18:13 chs Exp $	*/
+/*	$NetBSD: cpu.h,v 1.47.2.3 2012/05/09 03:22:52 riz Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -75,6 +75,7 @@
 
 struct intrsource;
 struct pmap;
+struct device;
 
 #ifdef __x86_64__
 #define	i386tss	x86_64_tss
@@ -359,7 +360,7 @@ struct timeval;
 
 extern int biosbasemem;
 extern int biosextmem;
-extern int cputype;
+extern int cpu;
 extern int cpuid_level;
 extern int cpu_class;
 extern char cpu_brand_string[];
@@ -406,6 +407,7 @@ void	lgdt_finish(void);
 struct pcb;
 void	savectx(struct pcb *);
 void	lwp_trampoline(void);
+void	child_trampoline(void);
 #ifdef XEN
 void	startrtclock(void);
 void	xen_delay(unsigned int);

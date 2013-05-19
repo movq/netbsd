@@ -41,9 +41,10 @@ extern "C" {
 #include <string>
 #include <vector>
 
-#include "auto_array.hpp"
 #include "exceptions.hpp"
 #include "fs.hpp"
+
+#include "../utils.hpp"
 
 namespace atf {
 namespace process {
@@ -63,7 +64,7 @@ class argv_array {
     // std::tr1::shared_array instead when it becomes widely available.
     // The reason would be to remove all copy constructors and assignment
     // operators from this class.
-    auto_array< const char* > m_exec_argv;
+    utils::auto_array< const char* > m_exec_argv;
     void ctor_init_exec_argv(void);
 
 public:

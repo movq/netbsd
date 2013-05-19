@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.68 2013/03/24 20:57:19 joerg Exp $	*/
+/*	$NetBSD: main.c,v 1.63.2.2 2012/07/04 20:48:55 jdc Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -137,9 +137,6 @@ init(void)
 	pkg.xfer_type = pkgsrc.xfer_type = "http";
 }
 
-__weakref_visible void prelim_menu(void)
-    __weak_reference(md_prelim_menu);
-
 int
 main(int argc, char **argv)
 {
@@ -219,12 +216,6 @@ main(int argc, char **argv)
 
 	select_language();
 	get_kb_encoding();
-
-#ifdef __weak_reference
-	/* if md wants to ask anything before we start, do it now */
-	if (prelim_menu != 0)
-		prelim_menu();
-#endif
 
 	/* Menu processing */
 	process_menu(MENU_netbsd, NULL);

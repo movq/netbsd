@@ -39,7 +39,6 @@
 #if defined(sun)
 #include <alloca.h>
 #else
-#include <sys/ioctl.h>
 #include <sys/sysctl.h>
 #endif
 #include <assert.h>

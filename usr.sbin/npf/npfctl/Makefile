@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.10 2013/02/09 03:35:32 rmind Exp $
+# $NetBSD: Makefile,v 1.5.2.5 2013/02/11 21:49:48 riz Exp $
 
 BINDIR=/sbin
 PROG=		npfctl

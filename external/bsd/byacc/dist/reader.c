@@ -1,11 +1,10 @@
-/*	$NetBSD: reader.c,v 1.8 2013/04/06 14:52:24 christos Exp $	*/
-
-/* Id: reader.c,v 1.36 2012/05/26 16:05:41 tom Exp  */
+/*	$NetBSD: reader.c,v 1.7 2011/09/10 21:29:04 christos Exp $	*/
+/* Id: reader.c,v 1.33 2011/09/06 22:56:53 tom Exp */
 
 #include "defs.h"
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: reader.c,v 1.8 2013/04/06 14:52:24 christos Exp $");
+__RCSID("$NetBSD: reader.c,v 1.7 2011/09/10 21:29:04 christos Exp $");
 
 /*  The line size must be a positive integer.  One hundred was chosen	*/
 /*  because few lines in Yacc input grammars exceed 100 characters.	*/
@@ -57,7 +56,7 @@ cachec(int c)
     if (cinc >= cache_size)
     {
 	cache_size += 256;
-	cache = TREALLOC(char, cache, cache_size);
+	cache = REALLOC(cache, cache_size);
 	NO_SPACE(cache);
     }
     cache[cinc] = (char)c;
@@ -88,7 +87,7 @@ get_line(void)
 	if (line)
 	    FREE(line);
 	linesize = LINESIZE + 1;
-	line = TMALLOC(char, linesize);
+	line = MALLOC(linesize);
 	NO_SPACE(line);
     }
 
@@ -105,7 +104,7 @@ get_line(void)
 	if (++i >= linesize)
 	{
 	    linesize += LINESIZE;
-	    line = TREALLOC(char, line, linesize);
+	    line = REALLOC(line, linesize);
 	    NO_SPACE(line);
 	}
 	c = getc(f);
@@ -129,7 +128,7 @@ dup_line(void)
     s = line;
     while (*s != '\n')
 	++s;
-    p = TMALLOC(char, s - line + 1);
+    p = MALLOC(s - line + 1);
     NO_SPACE(p);
 
     s = line;
@@ -690,7 +689,7 @@ copy_param(int k)
     if (c == '}')
 	goto out;
 
-    buf = TMALLOC(char, linesize);
+    buf = MALLOC(linesize);
     NO_SPACE(buf);
 
     for (i = 0; (c = *cptr++) != '}'; i++)
@@ -738,7 +737,7 @@ copy_param(int k)
 
     name = i + 1;
 
-    p = TMALLOC(param, 1);
+    p = MALLOC(sizeof(*p));
     NO_SPACE(p);
 
     p->type2 = strdup(buf + type2);
@@ -895,7 +894,7 @@ get_literal(void)
     FREE(s_line);
 
     n = cinc;
-    s = TMALLOC(char, n);
+    s = MALLOC(n);
     NO_SPACE(s);
 
     for (i = 0; i < n; ++i)
@@ -1063,14 +1062,14 @@ get_tag(void)
     if (ntags >= tagmax)
     {
 	tagmax += 16;
-	tag_table =
+	tag_table = (char **)
 	    (tag_table
-	     ? TREALLOC(char *, tag_table, tagmax)
-	     : TMALLOC(char *, tagmax));
+	     ? REALLOC(tag_table, (unsigned)tagmax * sizeof(char *))
+	     : MALLOC((unsigned)tagmax * sizeof(char *)));
 	NO_SPACE(tag_table);
     }
 
-    s = TMALLOC(char, cinc);
+    s = MALLOC(cinc);
     NO_SPACE(s);
 
     strcpy(s, cache);
@@ -1251,7 +1250,7 @@ read_declarations(void)
     int c, k;
 
     cache_size = 256;
-    cache = TMALLOC(char, cache_size);
+    cache = MALLOC(cache_size);
     NO_SPACE(cache);
 
     for (;;)
@@ -1321,7 +1320,7 @@ initialize_grammar(void)
     nitems = 4;
     maxitems = 300;
 
-    pitem = TMALLOC(bucket *, maxitems);
+    pitem = (bucket **)MALLOC((unsigned)maxitems * sizeof(bucket *));
     NO_SPACE(pitem);
 
     pitem[0] = 0;
@@ -1332,21 +1331,21 @@ initialize_grammar(void)
     nrules = 3;
     maxrules = 100;
 
-    plhs = TMALLOC(bucket *, maxrules);
+    plhs = (bucket **)MALLOC((unsigned)maxrules * sizeof(bucket *));
     NO_SPACE(plhs);
 
     plhs[0] = 0;
     plhs[1] = 0;
     plhs[2] = 0;
 
-    rprec = TMALLOC(Value_t, maxrules);
+    rprec = (short *)MALLOC((unsigned)maxrules * sizeof(short));
     NO_SPACE(rprec);
 
     rprec[0] = 0;
     rprec[1] = 0;
     rprec[2] = 0;
 
-    rassoc = TMALLOC(Assoc_t, maxrules);
+    rassoc = (char *)MALLOC((unsigned)maxrules * sizeof(char));
     NO_SPACE(rassoc);
 
     rassoc[0] = TOKEN;
@@ -1358,7 +1357,7 @@ static void
 expand_items(void)
 {
     maxitems += 300;
-    pitem = TREALLOC(bucket *, pitem, maxitems);
+    pitem = (bucket **)REALLOC(pitem, (unsigned)maxitems * sizeof(bucket *));
     NO_SPACE(pitem);
 }
 
@@ -1367,13 +1366,13 @@ expand_rules(void)
 {
     maxrules += 100;
 
-    plhs = TREALLOC(bucket *, plhs, maxrules);
+    plhs = (bucket **)REALLOC(plhs, (unsigned)maxrules * sizeof(bucket *));
     NO_SPACE(plhs);
 
-    rprec = TREALLOC(Value_t, rprec, maxrules);
+    rprec = (short *)REALLOC(rprec, (unsigned)maxrules * sizeof(short));
     NO_SPACE(rprec);
 
-    rassoc = TREALLOC(Assoc_t, rassoc, maxrules);
+    rassoc = (char *)REALLOC(rassoc, (unsigned)maxrules * sizeof(char));
     NO_SPACE(rassoc);
 }
 
@@ -1785,7 +1784,7 @@ static int
 mark_symbol(void)
 {
     int c;
-    bucket *bp = NULL;
+    bucket *bp;
 
     c = cptr[1];
     if (c == '%' || c == '\\')
@@ -1889,7 +1888,7 @@ pack_names(void)
     for (bp = first_symbol; bp; bp = bp->next)
 	name_pool_size += strlen(bp->name) + 1;
 
-    name_pool = TMALLOC(char, name_pool_size);
+    name_pool = MALLOC(name_pool_size);
     NO_SPACE(name_pool);
 
     strlcpy(name_pool, "$accept", name_pool_size);
@@ -1944,7 +1943,7 @@ protect_string(char *src, char **des)
 	    len++;
 	}
 
-	*des = d = TMALLOC(char, len);
+	*des = d = (char *)MALLOC(len);
 	NO_SPACE(d);
 
 	s = src;
@@ -1976,19 +1975,19 @@ pack_symbols(void)
     start_symbol = (Value_t) ntokens;
     nvars = nsyms - ntokens;
 
-    symbol_name = TMALLOC(char *, nsyms);
+    symbol_name = (char **)MALLOC((unsigned)nsyms * sizeof(char *));
     NO_SPACE(symbol_name);
 
-    symbol_value = TMALLOC(Value_t, nsyms);
+    symbol_value = (short *)MALLOC((unsigned)nsyms * sizeof(short));
     NO_SPACE(symbol_value);
 
-    symbol_prec = TMALLOC(short, nsyms);
+    symbol_prec = (short *)MALLOC((unsigned)nsyms * sizeof(short));
     NO_SPACE(symbol_prec);
 
-    symbol_assoc = TMALLOC(char, nsyms);
+    symbol_assoc = MALLOC(nsyms);
     NO_SPACE(symbol_assoc);
 
-    v = TMALLOC(bucket *, nsyms);
+    v = (bucket **)MALLOC((unsigned)nsyms * sizeof(bucket *));
     NO_SPACE(v);
 
     v[0] = 0;
@@ -2088,7 +2087,7 @@ pack_symbols(void)
 
     if (gflag)
     {
-	symbol_pname = TMALLOC(char *, nsyms);
+	symbol_pname = (char **)MALLOC((unsigned)nsyms * sizeof(char *));
 	NO_SPACE(symbol_pname);
 
 	for (i = 0; i < nsyms; ++i)
@@ -2106,19 +2105,19 @@ pack_grammar(void)
     Assoc_t assoc;
     Value_t prec2;
 
-    ritem = TMALLOC(Value_t, nitems);
+    ritem = (short *)MALLOC((unsigned)nitems * sizeof(short));
     NO_SPACE(ritem);
 
-    rlhs = TMALLOC(Value_t, nrules);
+    rlhs = (short *)MALLOC((unsigned)nrules * sizeof(short));
     NO_SPACE(rlhs);
 
-    rrhs = TMALLOC(Value_t, nrules + 1);
+    rrhs = (short *)MALLOC((unsigned)(nrules + 1) * sizeof(short));
     NO_SPACE(rrhs);
 
-    rprec = TREALLOC(Value_t, rprec, nrules);
+    rprec = (short *)REALLOC(rprec, (unsigned)nrules * sizeof(short));
     NO_SPACE(rprec);
 
-    rassoc = TREALLOC(Assoc_t, rassoc, nrules);
+    rassoc = REALLOC(rassoc, nrules);
     NO_SPACE(rassoc);
 
     ritem[0] = -1;

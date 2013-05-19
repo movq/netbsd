@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_machdep.c,v 1.80 2012/12/31 16:20:17 dsl Exp $	*/
+/*	$NetBSD: netbsd32_machdep.c,v 1.74.10.2 2012/06/12 23:13:07 riz Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.80 2012/12/31 16:20:17 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.74.10.2 2012/06/12 23:13:07 riz Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
@@ -53,6 +53,8 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.80 2012/12/31 16:20:17 dsl Ex
 #include <sys/proc.h>
 #include <sys/signalvar.h>
 #include <sys/systm.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/core.h>
 #include <sys/mount.h>
 #include <sys/buf.h>
@@ -82,6 +84,8 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.80 2012/12/31 16:20:17 dsl Ex
 /* Provide a the name of the architecture we're emulating */
 const char	machine32[] = "i386";
 const char	machine_arch32[] = "i386";	
+
+extern void (osyscall_return)(void);
 
 #ifdef MTRR
 static int x86_64_get_mtrr32(struct lwp *, void *, register_t *);
@@ -125,6 +129,7 @@ netbsd32_setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 	struct pcb *pcb;
 	struct trapframe *tf;
 	struct proc *p = l->l_proc;
+	void **retaddr;
 
 	pcb = lwp_getpcb(l);
 
@@ -139,8 +144,7 @@ netbsd32_setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 
 	netbsd32_adjust_limits(p);
 
-	l->l_md.md_flags &= ~MDL_USEDFPU;
-	l->l_md.md_flags |= MDL_COMPAT32;	/* Force iret not sysret */
+	l->l_md.md_flags &= ~MDP_USEDFPU;
 	pcb->pcb_flags = PCB_COMPAT32;
         pcb->pcb_savefpu.fp_fxsave.fx_fcw = __NetBSD_NPXCW__;
         pcb->pcb_savefpu.fp_fxsave.fx_mxcsr = __INITIAL_MXCSR__;  
@@ -165,6 +169,10 @@ netbsd32_setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 	tf->tf_rflags = PSL_USERSET;
 	tf->tf_rsp = stack;
 	tf->tf_ss = LSEL(LUDATA32_SEL, SEL_UPL);
+
+	/* XXX frob return address to return via old iret method, not sysret */
+	retaddr = (void **)tf - 1;
+	*retaddr = (void *)osyscall_return;
 }
 
 #ifdef COMPAT_16
@@ -261,7 +269,7 @@ netbsd32_sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 	tf->tf_gs = GSEL(GUDATA32_SEL, SEL_UPL);
 
 	/* Ensure FP state is reset, if FP is used. */
-	l->l_md.md_flags &= ~MDL_USEDFPU;
+	l->l_md.md_flags &= ~MDP_USEDFPU;
 
 	tf->tf_rip = (uint64_t)catcher;
 	tf->tf_cs = GSEL(GUCODE32_SEL, SEL_UPL);
@@ -272,6 +280,7 @@ netbsd32_sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
+
 	if ((vaddr_t)catcher >= VM_MAXUSER_ADDRESS32) {
 		/*
 		 * process has given an invalid address for the
@@ -364,11 +373,12 @@ netbsd32_sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	tf->tf_ss = GSEL(GUDATA32_SEL, SEL_UPL);
 
 	/* Ensure FP state is reset, if FP is used. */
-	l->l_md.md_flags &= ~MDL_USEDFPU;
+	l->l_md.md_flags &= ~MDP_USEDFPU;
 
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
+
 	if ((vaddr_t)catcher >= VM_MAXUSER_ADDRESS32) {
 		/*
 		 * process has given an invalid address for the
@@ -568,6 +578,7 @@ int
 netbsd32_process_read_fpregs(struct lwp *l, struct fpreg32 *regs)
 {
 	struct pcb *pcb = lwp_getpcb(l);
+	struct savefpu *sf = &pcb->pcb_savefpu;
 	struct fpreg regs64;
 	struct save87 *s87 = (struct save87 *)regs;
 	int error, i;
@@ -597,13 +608,13 @@ netbsd32_process_read_fpregs(struct lwp *l, struct fpreg32 *regs)
 
 		s87->sv_ex_tw |=
 		    (xmm_to_s87_tag((uint8_t *)&regs64.fxstate.fx_st[i][0], i,
-		     pcb->pcb_savefpu_i387.fp_ex_tw) << (i * 2));
+		     sf->fp_ex_tw) << (i * 2));
 
 		memcpy(&s87->sv_ac[i].fp_bytes, &regs64.fxstate.fx_st[i][0],
 		    sizeof(s87->sv_ac[i].fp_bytes));
 	}
 
-	s87->sv_ex_sw = pcb->pcb_savefpu_i387.fp_ex_sw;
+	s87->sv_ex_sw = sf->fp_ex_sw;
 
 	return (0);
 }
@@ -883,7 +894,7 @@ cpu_setmcontext32(struct lwp *l, const mcontext32_t *mcp, unsigned int flags)
 		memcpy(&pcb->pcb_savefpu.fp_fxsave, &mcp->__fpregs,
 		    sizeof (pcb->pcb_savefpu.fp_fxsave));
 		/* If not set already. */
-		l->l_md.md_flags |= MDL_USEDFPU;
+		l->l_md.md_flags |= MDP_USEDFPU;
 	}
 
 	mutex_enter(p->p_lock);
@@ -934,7 +945,7 @@ cpu_getmcontext32(struct lwp *l, mcontext32_t *mcp, unsigned int *flags)
 	*flags |= _UC_TLSBASE;
 
 	/* Save floating point register context, if any. */
-	if ((l->l_md.md_flags & MDL_USEDFPU) != 0) {
+	if ((l->l_md.md_flags & MDP_USEDFPU) != 0) {
 		struct pcb *pcb = lwp_getpcb(l);
 
 		if (pcb->pcb_fpcpu) {
@@ -1022,6 +1033,42 @@ cpu_mcontext32_validate(struct lwp *l, const mcontext32_t *mcp)
 	if (gr[_REG32_EIP] >= VM_MAXUSER_ADDRESS32)
 		return EINVAL;
 	return 0;
+}
+
+void
+netbsd32_cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted,
+    void *sas, void *ap, void *sp, sa_upcall_t upcall)
+{
+	struct trapframe *tf;
+	struct netbsd32_saframe *sf, frame;
+
+	tf = l->l_md.md_regs;
+
+	frame.sa_type = type;
+	NETBSD32PTR32(frame.sa_sas, sas);
+	frame.sa_events = nevents;
+	frame.sa_interrupted = ninterrupted;
+	NETBSD32PTR32(frame.sa_arg, ap);
+	frame.sa_ra = 0;
+
+	sf = (struct netbsd32_saframe *)sp - 1;
+	if (copyout(&frame, sf, sizeof(frame)) != 0) {
+		sigexit(l, SIGILL);
+		/* NOTREACHED */
+	}
+
+	tf->tf_rip = (uintptr_t)upcall;
+	tf->tf_rsp = (uintptr_t)sf;
+	tf->tf_rbp = 0;
+	tf->tf_gs = GSEL(GUDATA32_SEL, SEL_UPL);
+	tf->tf_fs = GSEL(GUDATA32_SEL, SEL_UPL);
+	tf->tf_es = GSEL(GUDATA32_SEL, SEL_UPL);
+	tf->tf_ds = GSEL(GUDATA32_SEL, SEL_UPL);
+	tf->tf_cs = GSEL(GUCODE32_SEL, SEL_UPL);
+	tf->tf_ss = GSEL(GUDATA32_SEL, SEL_UPL);
+	tf->tf_rflags &= ~(PSL_T|PSL_VM|PSL_AC);
+
+	l->l_md.md_flags |= MDP_IRET;
 }
 
 vaddr_t

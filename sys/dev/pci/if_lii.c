@@ -1,4 +1,4 @@
-/*	$NetBSD: if_lii.c,v 1.12 2013/03/30 03:21:06 christos Exp $	*/
+/*	$NetBSD: if_lii.c,v 1.10 2011/04/20 20:15:03 christos Exp $	*/
 
 /*
  *  Copyright (c) 2008 The NetBSD Foundation.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_lii.c,v 1.12 2013/03/30 03:21:06 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_lii.c,v 1.10 2011/04/20 20:15:03 christos Exp $");
 
 
 #include <sys/param.h>
@@ -125,7 +125,7 @@ static int	lii_free_tx_space(struct lii_softc *);
 
 static int	lii_mii_readreg(device_t, int, int);
 static void	lii_mii_writereg(device_t, int, int, int);
-static void	lii_mii_statchg(struct ifnet *);
+static void	lii_mii_statchg(device_t);
 
 static int	lii_media_change(struct ifnet *);
 static void	lii_media_status(struct ifnet *, struct ifmediareq *);
@@ -635,9 +635,9 @@ lii_mii_writereg(device_t dev, int phy, int reg, int data)
 }
 
 static void
-lii_mii_statchg(struct ifnet *ifp)
+lii_mii_statchg(device_t dev)
 {
-	struct lii_softc *sc = ifp->if_softc;
+	struct lii_softc *sc = device_private(dev);
 	uint32_t val;
 
 	DPRINTF(("lii_mii_statchg\n"));
@@ -1146,7 +1146,7 @@ lii_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 		break;
 	case SIOCSIFMEDIA:
 	case SIOCGIFMEDIA:
-		error = ifmedia_ioctl(ifp, (struct ifreq *)data,
+		error = ifmedia_ioctl(ifp, (struct ifreq *)data, 
 		    &sc->sc_mii.mii_media, cmd);
 		break;
 	default:

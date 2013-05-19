@@ -1,11 +1,10 @@
-/*	$NetBSD: output.c,v 1.9 2013/04/06 14:52:24 christos Exp $	*/
-
-/* Id: output.c,v 1.45 2013/03/05 00:29:17 tom Exp  */
+/*	$NetBSD: output.c,v 1.8 2011/09/10 21:29:04 christos Exp $	*/
+/* Id: output.c,v 1.41 2011/09/08 09:25:40 tom Exp */
 
 #include "defs.h"
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: output.c,v 1.9 2013/04/06 14:52:24 christos Exp $");
+__RCSID("$NetBSD: output.c,v 1.8 2011/09/10 21:29:04 christos Exp $");
 
 #define StaticOrR	(rflag ? "" : "static ")
 #define CountLine(fp)   (!rflag || ((fp) == code_file))
@@ -562,10 +561,10 @@ pack_vector(int vector)
 		}
 		while (newmax <= loc);
 
-		table = TREALLOC(Value_t, table, newmax);
+		table = (Value_t *) REALLOC(table, (unsigned)newmax * sizeof(Value_t));
 		NO_SPACE(table);
 
-		check = TREALLOC(Value_t, check, newmax);
+		check = (Value_t *) REALLOC(check, (unsigned)newmax * sizeof(Value_t));
 		NO_SPACE(check);
 
 		for (l = maxtable; l < newmax; ++l)
@@ -832,7 +831,7 @@ output_defines(FILE * fp)
     for (i = 2; i < ntokens; ++i)
     {
 	s = symbol_name[i];
-	if (is_C_identifier(s) && (!sflag || *s != '"'))
+	if (is_C_identifier(s))
 	{
 	    fprintf(fp, "#define ");
 	    c = *s;
@@ -866,12 +865,9 @@ output_defines(FILE * fp)
     {
 	if (unionized)
 	{
-	    if (union_file != 0)
-	    {
-		rewind(union_file);
-		while ((c = getc(union_file)) != EOF)
-		    putc(c, fp);
-	    }
+	    rewind(union_file);
+	    while ((c = getc(union_file)) != EOF)
+		putc(c, fp);
 	    fprintf(fp, "extern YYSTYPE %slval;\n", symbol_prefix);
 	}
     }
@@ -927,7 +923,7 @@ output_debug(void)
     ++outline;
     fprintf(code_file, "#define YYMAXTOKEN %d\n", max);
 
-    symnam = TMALLOC(const char *, max + 1);
+    symnam = (const char **)MALLOC((unsigned)(max + 1) * sizeof(char *));
     NO_SPACE(symnam);
 
     /* Note that it is  not necessary to initialize the element         */
@@ -1248,13 +1244,8 @@ output_lex_decl(FILE * fp)
     putl_code(fp, "#ifdef YYLEX_PARAM\n");
     if (pure_parser)
     {
-	putl_code(fp, "# ifdef YYLEX_PARAM_TYPE\n");
-	putl_code(fp, "#  define YYLEX_DECL() yylex(YYSTYPE *yylval,"
-		  " YYLEX_PARAM_TYPE YYLEX_PARAM)\n");
-	putl_code(fp, "# else\n");
-	putl_code(fp, "#  define YYLEX_DECL() yylex(YYSTYPE *yylval,"
-		  " void * YYLEX_PARAM)\n");
-	putl_code(fp, "# endif\n");
+	putl_code(fp, "# define YYLEX_DECL() yylex(YYSTYPE *yylval, "
+		  "void *YYLEX_PARAM)\n");
 	putl_code(fp, "# define YYLEX yylex(&yylval, YYLEX_PARAM)\n");
     }
     else
@@ -1313,30 +1304,22 @@ output_error_decl(FILE * fp)
     {
 	param *p;
 
-	putl_code(fp, "#ifndef YYERROR_DECL\n");
 	fprintf(fp, "#define YYERROR_DECL() yyerror(");
 	for (p = parse_param; p; p = p->next)
 	    fprintf(fp, "%s %s%s, ", p->type, p->name, p->type2);
 	putl_code(fp, "const char *s)\n");
-	putl_code(fp, "#endif\n");
 
-	putl_code(fp, "#ifndef YYERROR_CALL\n");
 	puts_code(fp, "#define YYERROR_CALL(msg) yyerror(");
 
 	for (p = parse_param; p; p = p->next)
 	    fprintf(fp, "%s, ", p->name);
 
 	putl_code(fp, "msg)\n");
-	putl_code(fp, "#endif\n");
     }
     else
     {
-	putl_code(fp, "#ifndef YYERROR_DECL\n");
 	putl_code(fp, "#define YYERROR_DECL() yyerror(const char *s)\n");
-	putl_code(fp, "#endif\n");
-	putl_code(fp, "#ifndef YYERROR_CALL\n");
 	putl_code(fp, "#define YYERROR_CALL(msg) yyerror(msg)\n");
-	putl_code(fp, "#endif\n");
     }
 }
 
@@ -1454,12 +1437,9 @@ output(void)
 
     if (iflag)
     {
-	if (dflag)
-	{
-	    ++outline;
-	    fprintf(code_file, "#include \"%s\"\n", defines_file_name);
-	}
-	else
+	++outline;
+	fprintf(code_file, "#include \"%s\"\n", defines_file_name);
+	if (!dflag)
 	    output_defines(externs_file);
     }
     else

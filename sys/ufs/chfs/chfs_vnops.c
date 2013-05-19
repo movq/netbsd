@@ -1,4 +1,4 @@
-/*	$NetBSD: chfs_vnops.c,v 1.15 2013/03/18 19:35:47 plunky Exp $	*/
+/*	$NetBSD: chfs_vnops.c,v 1.2.4.2 2012/08/12 12:59:48 martin Exp $	*/
 
 /*-
  * Copyright (c) 2010 Department of Software Engineering,
@@ -70,25 +70,24 @@ chfs_lookup(void *v)
 
 	*vpp = NULL;
 
-	/* Check accessibility of requested node as a first step. */
+	// Check accessibility of requested node as a first step.
 	error = VOP_ACCESS(dvp, VEXEC, cnp->cn_cred);
 	if (error != 0) {
 		goto out;
 	}
 
-	/* If requesting the last path component on a read-only file system
-	 * with a write operation, deny it. */
+	// If requesting the last path component on a read-only file system
+	// with a write operation, deny it.
 	if ((cnp->cn_flags & ISLASTCN) && (dvp->v_mount->mnt_flag & MNT_RDONLY)
 	    && (cnp->cn_nameiop == DELETE || cnp->cn_nameiop == RENAME)) {
 		error = EROFS;
 		goto out;
 	}
 
-	/* Avoid doing a linear scan of the directory if the requested
-	 * directory/name couple is already in the cache. */
-	if (cache_lookup(dvp, cnp->cn_nameptr, cnp->cn_namelen,
-			 cnp->cn_nameiop, cnp->cn_flags, NULL, vpp)) {
-		error = *vpp == NULLVP ? ENOENT : 0;
+	// Avoid doing a linear scan of the directory if the requested
+	// directory/name couple is already in the cache.
+	error = cache_lookup(dvp, vpp, cnp);
+	if (error >= 0) {
 		goto out;
 	}
 
@@ -102,8 +101,8 @@ chfs_lookup(void *v)
 	chvc = chfs_vnode_cache_get(chmp, ip->ino);
 	mutex_exit(&chmp->chm_lock_vnocache);
 
-	/* We cannot be requesting the parent directory of the root node. */
-	KASSERT(IMPLIES(ip->ch_type == CHT_DIR && chvc->pvno == chvc->vno,
+	// We cannot be requesting the parent directory of the root node.
+	KASSERT(IMPLIES(dvp->v_type == VDIR && chvc->pvno == chvc->vno,
 		!(cnp->cn_flags & ISDOTDOT)));
 
 	if (cnp->cn_flags & ISDOTDOT) {
@@ -119,10 +118,10 @@ chfs_lookup(void *v)
 
 		if (fd == NULL) {
 			dbg("fd null\n");
-			/* The entry was not found in the directory.
-			 * This is OK if we are creating or renaming an
-			 * entry and are working on the last component of
-			 * the path name. */
+			// The entry was not found in the directory.
+			// This is OK if we are creating or renaming an
+			// entry and are working on the last component of
+			// the path name.
 			if ((cnp->cn_flags & ISLASTCN) && (cnp->cn_nameiop == CREATE
 				|| cnp->cn_nameiop == RENAME)) {
 				error = VOP_ACCESS(dvp, VWRITE, cnp->cn_cred);
@@ -137,11 +136,11 @@ chfs_lookup(void *v)
 				error = ENOENT;
 			}
 		} else {
-			/* If we are not at the last path component and
-			 * found a non-directory or non-link entry (which
-			 * may itself be pointing to a directory), raise
-			 * an error. */
-			if ((fd->type != CHT_DIR && fd->type != CHT_LNK) && !(cnp->cn_flags
+			// If we are not at the last path component and
+			// found a non-directory or non-link entry (which
+			// may itself be pointing to a directory), raise
+			// an error.
+			if ((fd->type != VDIR && fd->type != VLNK) && !(cnp->cn_flags
 				& ISLASTCN)) {
 				error = ENOTDIR;
 				goto out;
@@ -152,18 +151,19 @@ chfs_lookup(void *v)
 			error = VFS_VGET(dvp->v_mount, fd->vno, vpp);
 		}
 	}
-	/* Store the result of this lookup in the cache.  Avoid this if the
-	 * request was for creation, as it does not improve timings on
-	 * emprical tests. */
+	// Store the result of this lookup in the cache.  Avoid this if the
+	// request was for creation, as it does not improve timings on
+	// emprical tests.
 	if (cnp->cn_nameiop != CREATE && (cnp->cn_flags & ISDOTDOT) == 0) {
-		cache_enter(dvp, *vpp, cnp->cn_nameptr, cnp->cn_namelen,
-			    cnp->cn_flags);
+		cache_enter(dvp, *vpp, cnp);
 	}
 
 out:
-	/* If there were no errors, *vpp cannot be null and it must be
-	 * locked. */
+	// If there were no errors, *vpp cannot be null and it must be
+	// locked.
 	KASSERT(IFF(error == 0, *vpp != NULL && VOP_ISLOCKED(*vpp)));
+
+	// dvp must always be locked.
 	KASSERT(VOP_ISLOCKED(dvp));
 
 	return error;
@@ -227,7 +227,6 @@ chfs_mknod(void *v)
 	ump = VFSTOUFS(dvp->v_mount);
 	chmp = ump->um_chfs;
 
-	/* Check type of node. */
 	if (vap->va_type != VBLK && vap->va_type != VCHR && vap->va_type != VFIFO)
 		return EINVAL;
 
@@ -251,7 +250,6 @@ chfs_mknod(void *v)
 		}
 	}
 
-	/* Create a new node. */
 	err = chfs_makeinode(mode, dvp, &vp, cnp, vap->va_type);
 
 	ip = VTOI(vp);
@@ -269,7 +267,6 @@ chfs_mknod(void *v)
 	if (err)
 		return err;
 
-	/* Device is written out as a data node. */
 	len = sizeof(dev_t);
 	chfs_set_vnode_size(vp, len);
 	bp = getiobuf(vp, true);
@@ -289,7 +286,6 @@ chfs_mknod(void *v)
 		return err;
 	}
 
-	/* Add data node to the inode. */
 	err = chfs_add_full_dnode_to_inode(chmp, ip, fd);
 	if (err) {
 		mutex_exit(&chmp->chm_lock_mountfields);
@@ -328,7 +324,7 @@ chfs_open(void *v)
 		goto out;
 	}
 
-	/* If the file is marked append-only, deny write requests. */
+	// If the file is marked append-only, deny write requests.
 	if (ip->flags & APPEND && (mode & (FWRITE | O_APPEND)) == FWRITE)
 		error = EPERM;
 	else
@@ -354,6 +350,7 @@ chfs_close(void *v)
 	ip = VTOI(vp);
 
 	if (ip->chvc->nlink > 0) {
+		//ip->chvc->nlink = 0;
 		chfs_update(vp, NULL, NULL, UPDATE_CLOSE);
 	}
 
@@ -393,9 +390,8 @@ chfs_access(void *v)
 	if (mode & VWRITE && ip->flags & IMMUTABLE)
 		return (EPERM);
 
-	return kauth_authorize_vnode(cred, KAUTH_ACCESS_ACTION(mode, vp->v_type,
-	    ip->mode & ALLPERMS), vp, NULL, genfs_can_access(vp->v_type,
-	    ip->mode & ALLPERMS, ip->uid, ip->gid, mode, cred));
+	return genfs_can_access(vp->v_type, ip->mode & ALLPERMS,
+	    ip->uid, ip->gid, mode, cred);
 }
 
 /* --------------------------------------------------------------------- */
@@ -414,7 +410,7 @@ chfs_getattr(void *v)
 	vattr_null(vap);
 	CHFS_ITIMES(ip, NULL, NULL, NULL);
 
-	vap->va_type = CHTTOVT(ip->ch_type);
+	vap->va_type = vp->v_type;
 	vap->va_mode = ip->mode & ALLPERMS;
 	vap->va_nlink = ip->chvc->nlink;
 	vap->va_uid = ip->uid;
@@ -470,42 +466,26 @@ chfs_setattr(void *v)
 		return EINVAL;
 	}
 
-	/* set flags */
-	if (error == 0 && (vap->va_flags != VNOVAL)) {
+	if (error == 0 && (vap->va_flags != VNOVAL))
 		error = chfs_chflags(vp, vap->va_flags, cred);
-		return error;
-	}
 
-	if (ip->flags & (IMMUTABLE | APPEND)) {
-		error = EPERM;
-		return error;
-	}
-
-	/* set size */
-	if (error == 0 && (vap->va_size != VNOVAL)) {
+	if (error == 0 && (vap->va_size != VNOVAL))
 		error = chfs_chsize(vp, vap->va_size, cred);
-		if (error)
-			return error;
-	}
 
-	/* set owner */
-	if (error == 0 && (vap->va_uid != VNOVAL || vap->va_gid != VNOVAL)) {
+	if (error == 0 && (vap->va_uid != VNOVAL || vap->va_gid != VNOVAL))
 		error = chfs_chown(vp, vap->va_uid, vap->va_gid, cred);
-		if (error)
-			return error;
-	}
 
-	/* set mode */
-	if (error == 0 && (vap->va_mode != VNOVAL)) {
+	if (error == 0 && (vap->va_mode != VNOVAL))
 		error = chfs_chmod(vp, vap->va_mode, cred);
-		if (error)
-			return error;
-	}
 
-	/* set time */
+#if 0
+	/* why do we need that? */
+	if (ip->flags & (IMMUTABLE | APPEND))
+		return EPERM;
+#endif
+
 	if (vap->va_atime.tv_sec != VNOVAL || vap->va_mtime.tv_sec != VNOVAL) {
-		error = kauth_authorize_vnode(cred, KAUTH_VNODE_WRITE_TIMES, vp,
-		    NULL, genfs_can_chtimes(vp, vap->va_vaflags, ip->uid, cred));
+		error = genfs_can_chtimes(vp, vap->va_vaflags, ip->uid, cred);
 		if (error)
 			return error;
 		if (vap->va_atime.tv_sec != VNOVAL)
@@ -518,7 +498,6 @@ chfs_setattr(void *v)
 			return error;
 	}
 
-	/* Write it out. */
 	mutex_enter(&chmp->chm_lock_mountfields);
 	error = chfs_write_flash_vnode(chmp, ip, ALLOC_NORMAL);
 	mutex_exit(&chmp->chm_lock_mountfields);
@@ -533,8 +512,7 @@ chfs_chmod(struct vnode *vp, int mode, kauth_cred_t cred)
 	int error;
 	dbg("chmod\n");
 
-	error = kauth_authorize_vnode(cred, KAUTH_VNODE_WRITE_SECURITY, vp,
-	    NULL, genfs_can_chmod(vp->v_type, cred, ip->uid, ip->gid, mode));
+	error = genfs_can_chmod(vp, cred, ip->uid, ip->gid, mode);
 	if (error)
 		return error;
 	ip->mode &= ~ALLPERMS;
@@ -560,8 +538,7 @@ chfs_chown(struct vnode *vp, uid_t uid, gid_t gid, kauth_cred_t cred)
 	if (gid == (gid_t)VNOVAL)
 		gid = ip->gid;
 
-	error = kauth_authorize_vnode(cred, KAUTH_VNODE_CHANGE_OWNERSHIP, vp,
-	    NULL, genfs_can_chown(cred, ip->uid, ip->gid, uid, gid));
+	error = genfs_can_chown(vp, cred, ip->uid, ip->gid, uid, gid);
 	if (error)
 		return error;
 
@@ -595,7 +572,7 @@ chfs_chown(struct vnode *vp, uid_t uid, gid_t gid, kauth_cred_t cred)
 	(((size) + (chmp)->chm_fs_qfmask) & (chmp)->chm_fs_fmask)
 
 #define	blksize(chmp, ip, lbn)						      \
-	(((lbn) >= UFS_NDADDR || (ip)->size >= lblktosize(chmp, (lbn) + 1))	      \
+	(((lbn) >= NDADDR || (ip)->size >= lblktosize(chmp, (lbn) + 1))	      \
 	    ? (chmp)->chm_fs_bsize					      \
 	    : (fragroundup(chmp, blkoff(chmp, (ip)->size))))
 
@@ -603,7 +580,6 @@ chfs_chown(struct vnode *vp, uid_t uid, gid_t gid, kauth_cred_t cred)
 #define	blkroundup(chmp, size)						      \
  	(((size) + (chmp)->chm_fs_qbmask) & (chmp)->chm_fs_bmask)
 
-/* from ffs read */
 int
 chfs_read(void *v)
 {
@@ -681,6 +657,7 @@ chfs_read(void *v)
 		goto out;
 	}
 
+
 	dbg("start reading\n");
 	for (error = 0, bp = NULL; uio->uio_resid > 0; bp = NULL) {
 		bytesinfile = ip->size - uio->uio_offset;
@@ -725,35 +702,32 @@ chfs_read(void *v)
 			break;
 		brelse(bp, 0);
 	}
-
 	if (bp != NULL)
 		brelse(bp, 0);
 
 out:
-	// FIXME HACK
-	ip->ino = ip->chvc->vno;
-
 	if (!(vp->v_mount->mnt_flag & MNT_NOATIME)) {
 		ip->iflag |= IN_ACCESS;
 		if ((ap->a_ioflag & IO_SYNC) == IO_SYNC) {
+			//error = UFS_WAPBL_BEGIN(vp->v_mount);
 			if (error) {
 				fstrans_done(vp->v_mount);
 				return error;
 			}
 			error = chfs_update(vp, NULL, NULL, UPDATE_WAIT);
+			//UFS_WAPBL_END(vp->v_mount);
 		}
 	}
 
 	dbg("[END]\n");
 	fstrans_done(vp->v_mount);
-
 	return (error);
 }
 
 
 /* --------------------------------------------------------------------- */
 
-/* from ffs write */
+/*from ffs write*/
 int
 chfs_write(void *v)
 {
@@ -783,8 +757,11 @@ chfs_write(void *v)
 	uio = ap->a_uio;
 	vp = ap->a_vp;
 	ip = VTOI(vp);
+	//dbg("file size (vp): %llu\n", (unsigned long long)vp->v_size);
+	//dbg("file size (ip): %llu\n", (unsigned long long)ip->i_size);
 	ump = ip->ump;
 
+	//dbg("uio->resid: %d\n", uio->uio_resid);
 	dbg("write\n");
 
 	KASSERT(vp->v_size == ip->size);
@@ -833,6 +810,7 @@ chfs_write(void *v)
 	if (uio->uio_resid == 0)
 		return (0);
 
+	//mutex_enter(&ip->inode_lock);
 	fstrans_start(vp->v_mount, FSTRANS_SHARED);
 
 	flags = ioflag & IO_SYNC ? B_SYNC : 0;
@@ -841,6 +819,15 @@ chfs_write(void *v)
 	resid = uio->uio_resid;
 	osize = ip->size;
 	error = 0;
+
+
+	/*if ((ioflag & IO_JOURNALLOCKED) == 0) {
+	  error = UFS_WAPBL_BEGIN(vp->v_mount);
+	  if (error) {
+	  fstrans_done(vp->v_mount);
+	  return error;
+	  }
+	  }*/
 
 	preallocoff = round_page(blkroundup(chmp,
 		MAX(osize, uio->uio_offset)));
@@ -853,7 +840,7 @@ chfs_write(void *v)
 	 * the fragment if there is one.
 	 */
 
-	if (nsize > osize && lblkno(chmp, osize) < UFS_NDADDR &&
+	if (nsize > osize && lblkno(chmp, osize) < NDADDR &&
 	    lblkno(chmp, osize) != lblkno(chmp, nsize) &&
 	    blkroundup(chmp, osize) != osize) {
 		off_t eob;
@@ -976,18 +963,9 @@ out:
 		    PGO_CLEANIT | PGO_SYNCIO | PGO_JOURNALLOCKED);
 	}
 	ip->iflag |= IN_CHANGE | IN_UPDATE;
-	if (resid > uio->uio_resid && ap->a_cred) {
-		if (ip->mode & ISUID) {
-			if (kauth_authorize_vnode(ap->a_cred,
-			    KAUTH_VNODE_RETAIN_SUID, vp, NULL, EPERM) != 0)
-				ip->mode &= ~ISUID;
-		}
-
-		if (ip->mode & ISGID) {
-			if (kauth_authorize_vnode(ap->a_cred,
-			    KAUTH_VNODE_RETAIN_SGID, vp, NULL, EPERM) != 0)
-				ip->mode &= ~ISGID;
-		}
+	if (resid > uio->uio_resid && ap->a_cred &&
+	    kauth_authorize_generic(ap->a_cred, KAUTH_GENERIC_ISSUSER, NULL)) {
+		ip->mode &= ~(ISUID | ISGID);
 	}
 	if (resid > uio->uio_resid)
 		VN_KNOTE(vp, NOTE_WRITE | (extended ? NOTE_EXTEND : 0));
@@ -998,10 +976,12 @@ out:
 	} else if (resid > uio->uio_resid && (ioflag & IO_SYNC) == IO_SYNC)
 		error = UFS_UPDATE(vp, NULL, NULL, UPDATE_WAIT);
 
-	//FIXME HACK
+	//XXX hack, i write the next line after i know ip->i_size and vp->v_size don't equal
 	chfs_set_vnode_size(vp, vp->v_size);
 
 
+	//dbg("end file size (vp): %llu\n", (unsigned long long)vp->v_size);
+	//dbg("end file size (ip): %llu\n", (unsigned long long)ip->i_size);
 	KASSERT(vp->v_size == ip->size);
 	fstrans_done(vp->v_mount);
 
@@ -1009,6 +989,8 @@ out:
 	error = chfs_write_flash_vnode(chmp, ip, ALLOC_NORMAL);
 	mutex_exit(&chmp->chm_lock_mountfields);
 
+	//mutex_exit(&ip->inode_lock);
+	//dbg("end\n");
 	return (error);
 }
 
@@ -1018,6 +1000,7 @@ out:
 int
 chfs_fsync(void *v)
 {
+	//dbg("fsync\n");
 	struct vop_fsync_args /* {
 				 struct vnode *a_vp;
 				 kauth_cred_t a_cred;
@@ -1031,6 +1014,8 @@ chfs_fsync(void *v)
 		return ENODEV;
 	}
  	vflushbuf(vp, ap->a_flags);
+	//struct chfs_inode *ip = VTOI(vp);
+	//chfs_set_vnode_size(vp, ip->write_size);
 
 	return 0;
 }
@@ -1052,18 +1037,11 @@ chfs_remove(void *v)
 	struct chfs_inode *parent = VTOI(dvp);
 	int error = 0;
 
-	if (vp->v_type == VDIR || (ip->flags & (IMMUTABLE | APPEND)) ||
-		(parent->flags & APPEND)) {
-		error = EPERM;
-		goto out;
-	}
-
 	KASSERT(ip->chvc->vno != ip->chvc->pvno);
 
 	error = chfs_do_unlink(ip,
 	    parent, cnp->cn_nameptr, cnp->cn_namelen);
 
-out:
 	vput(dvp);
 	vput(vp);
 
@@ -1101,7 +1079,7 @@ chfs_link(void *v)
 	ip = VTOI(vp);
 
 	error = chfs_do_link(ip,
-	    parent, cnp->cn_nameptr, cnp->cn_namelen, ip->ch_type);
+	    parent, cnp->cn_nameptr, cnp->cn_namelen, vp->v_type);
 
 	if (dvp != vp)
 		VOP_UNLOCK(vp);
@@ -1124,7 +1102,7 @@ chfs_rename(void *v)
 
 	struct chfs_inode *oldparent, *old;
 	struct chfs_inode *newparent;
-	struct chfs_dirent *fd;
+	struct chfs_dirent *fd;//, *oldfd;
 	struct chfs_inode *ip;
 	int error = 0;
 	dbg("rename\n");
@@ -1139,12 +1117,18 @@ chfs_rename(void *v)
 		dbg("tvp not null\n");
 		ip = VTOI(tvp);
 		if (tvp->v_type == VDIR) {
+			//TODO: lock
+//			fd = ip->dents;
+//			while (fd) {
 			TAILQ_FOREACH(fd, &ip->dents, fds) {
 				if (fd->vno) {
+					//TODO: unlock
 					error = ENOTEMPTY;
 					goto out_unlocked;
 				}
+//				fd = fd->next;
 			}
+			//TODO: unlock
 		}
 		error = chfs_do_unlink(ip,
 		    newparent, tcnp->cn_nameptr, tcnp->cn_namelen);
@@ -1153,15 +1137,21 @@ chfs_rename(void *v)
 	VFS_VGET(tdvp->v_mount, old->ino, &tvp);
 	ip = VTOI(tvp);
 
-	/* link new */
+//	for (oldfd = oldparent->dents;
+//	     oldfd->vno != old->ino;
+//	     oldfd = oldfd->next);
+
 	error = chfs_do_link(ip,
-	    newparent, tcnp->cn_nameptr, tcnp->cn_namelen, ip->ch_type);
-	/* remove old */
+	    newparent, tcnp->cn_nameptr, tcnp->cn_namelen, tvp->v_type);
 	error = chfs_do_unlink(old,
 	    oldparent, fcnp->cn_nameptr, fcnp->cn_namelen);
 
+//out:
+//	if (fchnode != tchnode)
+//	VOP_UNLOCK(fdvp, 0);
+
 out_unlocked:
-	/* Release target nodes. */
+	// Release target nodes.
 	if (tdvp == tvp)
 		vrele(tdvp);
 	else
@@ -1169,7 +1159,7 @@ out_unlocked:
 	if (tvp != NULL)
 		vput(tvp);
 
-	/* Release source nodes. */
+	// Release source nodes.
 	vrele(fdvp);
 	vrele(fvp);
 
@@ -1224,6 +1214,7 @@ chfs_rmdir(void *v)
 
 	KASSERT(ip->chvc->vno != ip->chvc->pvno);
 
+//	for (fd = ip->dents; fd; fd = fd->next) {
 	TAILQ_FOREACH(fd, &ip->dents, fds) {
 		if (fd->vno) {
 			error = ENOTEMPTY;
@@ -1273,7 +1264,6 @@ chfs_symlink(void *v)
 	ip = VTOI(vp);
 	/* TODO max symlink len instead of "100" */
 	if (len < 100) {
-		/* symlink path stored as a data node */
 		ip->target = kmem_alloc(len, KM_SLEEP);
 		memcpy(ip->target, target, len);
 		chfs_set_vnode_size(vp, len);
@@ -1289,14 +1279,12 @@ chfs_symlink(void *v)
 
 		mutex_enter(&chmp->chm_lock_mountfields);
 
-		/* write out the data node */
 		err = chfs_write_flash_dnode(chmp, vp, bp, fd);
 		if (err) {
 			mutex_exit(&chmp->chm_lock_mountfields);
 			goto out;
 		}
 
-		/* add it to the inode */
 		err = chfs_add_full_dnode_to_inode(chmp, ip, fd);
 		if (err) {
 			mutex_exit(&chmp->chm_lock_mountfields);
@@ -1356,9 +1344,8 @@ chfs_readdir(void *v)
 	 */
 	offset = uio->uio_offset;
 
-	/* Add this entry. */
 	if (offset == CHFS_OFFSET_DOT) {
-		error = chfs_filldir(uio, ip->ino, ".", 1, CHT_DIR);
+		error = chfs_filldir(uio, ip->ino, ".", 1, VDIR);
 		if (error == -1) {
 			error = 0;
 			goto outok;
@@ -1368,7 +1355,6 @@ chfs_readdir(void *v)
 		offset = CHFS_OFFSET_DOTDOT;
 	}
 
-	/* Add parent entry. */
 	if (offset == CHFS_OFFSET_DOTDOT) {
 		ump = VFSTOUFS(vp->v_mount);
 		chmp = ump->um_chfs;
@@ -1376,7 +1362,7 @@ chfs_readdir(void *v)
 		chvc = chfs_vnode_cache_get(chmp, ip->ino);
 		mutex_exit(&chmp->chm_lock_vnocache);
 
-		error = chfs_filldir(uio, chvc->pvno, "..", 2, CHT_DIR);
+		error = chfs_filldir(uio, chvc->pvno, "..", 2, VDIR);
 		if (error == -1) {
 			error = 0;
 			goto outok;
@@ -1384,7 +1370,6 @@ chfs_readdir(void *v)
 			goto outok;
 		}
 
-		/* Has child or not? */
 		if (TAILQ_EMPTY(&ip->dents)) {
 			offset = CHFS_OFFSET_EOF;
 		} else {
@@ -1393,7 +1378,6 @@ chfs_readdir(void *v)
 	}
 
 	if (offset != CHFS_OFFSET_EOF) {
-		/* Child entries. */
 		skip = offset - CHFS_OFFSET_FIRST;
 
 		TAILQ_FOREACH(fd, &ip->dents, fds) {
@@ -1469,7 +1453,6 @@ chfs_inactive(void *v)
 
 	KASSERT(VOP_ISLOCKED(vp));
 
-	/* Reclaim only if there is no link to the node. */
 	if (ip->ino) {
 		chvc = ip->chvc;
 		if (chvc->nlink)
@@ -1494,24 +1477,28 @@ chfs_reclaim(void *v)
 	struct chfs_mount *chmp = ip->chmp;
 	struct chfs_dirent *fd;
 
-	mutex_enter(&chmp->chm_lock_mountfields);
+	//dbg("reclaim() | ino: %llu\n", (unsigned long long)ip->ino);
+	//mutex_enter(&ip->inode_lock);
 
 	mutex_enter(&chmp->chm_lock_vnocache);
-	ip->chvc->state = VNO_STATE_CHECKEDABSENT;
+	chfs_vnode_cache_set_state(chmp,
+	    ip->chvc, VNO_STATE_CHECKEDABSENT);
 	mutex_exit(&chmp->chm_lock_vnocache);
 
 	chfs_update(vp, NULL, NULL, UPDATE_CLOSE);
 
-	/* Clean fragments. */
-	chfs_kill_fragtree(chmp, &ip->fragtree);
+	if (vp->v_type == VREG || vp->v_type == VLNK || vp->v_type == VCHR ||
+	    vp->v_type == VBLK || vp->v_type == VFIFO || vp->v_type == VSOCK)
+		chfs_kill_fragtree(&ip->fragtree);
 
-	/* Clean dirents. */
 	fd = TAILQ_FIRST(&ip->dents);
-	while (fd) {
+	while(fd) {
 		TAILQ_REMOVE(&ip->dents, fd, fds);
 		chfs_free_dirent(fd);
 		fd = TAILQ_FIRST(&ip->dents);
 	}
+	//mutex_exit(&ip->inode_lock);
+	//mutex_destroy(&ip->inode_lock);
 
 	cache_purge(vp);
 	if (ip->devvp) {
@@ -1523,9 +1510,6 @@ chfs_reclaim(void *v)
 	genfs_node_destroy(vp);
 	pool_put(&chfs_inode_pool, vp->v_data);
 	vp->v_data = NULL;
-
-	mutex_exit(&chmp->chm_lock_mountfields);
-
 	return (0);
 }
 
@@ -1534,6 +1518,15 @@ chfs_reclaim(void *v)
 int
 chfs_advlock(void *v)
 {
+	//struct vnode *vp = ((struct vop_advlock_args *) v)->a_vp;
+	dbg("advlock()\n");
+	/*
+	  struct chfs_node *node;
+
+	  node = VP_TO_CHFS_NODE(vp);
+
+	  return lf_advlock(v, &node->chn_lockf, node->chn_size);
+	*/
 	return 0;
 }
 
@@ -1554,12 +1547,17 @@ chfs_strategy(void *v)
 	int read = (bp->b_flags & B_READ) ? 1 : 0;
 	int err = 0;
 
+/*	dbg("bp dump:\n");
+	dbg("	->b_bcount: %d\n", bp->b_bcount);
+	dbg("	->b_resid:  %d\n", bp->b_resid);
+	dbg("	->b_blkno:  %llu\n", (unsigned long long)bp->b_blkno);
+	dbg("	->b_error:  %d\n", bp->b_error);*/
 	if (read) {
 		err = chfs_read_data(chmp, vp, bp);
 	} else {
-		mutex_enter(&chmp->chm_lock_mountfields);
-
 		fd = chfs_alloc_full_dnode();
+
+		mutex_enter(&chmp->chm_lock_mountfields);
 
 		err = chfs_write_flash_dnode(chmp, vp, bp, fd);
 		if (err) {
@@ -1567,13 +1565,17 @@ chfs_strategy(void *v)
 			goto out;
 		}
 
-		ip = VTOI(vp);
 		err = chfs_add_full_dnode_to_inode(chmp, ip, fd);
+		/*if (err) {
+			mutex_exit(&chmp->chm_lock_mountfields);
+			goto out;
+		}*/
 
 		mutex_exit(&chmp->chm_lock_mountfields);
 	}
 out:
 	biodone(bp);
+	//dbg("end\n");
 	return err;
 }
 

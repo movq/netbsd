@@ -1,4 +1,4 @@
-/* $NetBSD: nilfs_vfsops.c,v 1.10 2012/12/20 08:03:43 hannken Exp $ */
+/* $NetBSD: nilfs_vfsops.c,v 1.8 2011/11/14 18:35:13 hannken Exp $ */
 
 /*
  * Copyright (c) 2008, 2009 Reinoud Zandijk
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__KERNEL_RCSID(0, "$NetBSD: nilfs_vfsops.c,v 1.10 2012/12/20 08:03:43 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nilfs_vfsops.c,v 1.8 2011/11/14 18:35:13 hannken Exp $");
 #endif /* not lint */
 
 
@@ -349,6 +349,7 @@ nilfs_read_superblock(struct nilfs_device *nilfsdev)
 	dev_blks  = (sb1off + dev_bsize -1)/dev_bsize;
 	error = bread(nilfsdev->devvp, dev_blk, dev_blks * dev_bsize, NOCRED, 0, &bp);
 	if (error) {
+		brelse(bp, BC_AGE);
 		return error;
 	}
 
@@ -363,6 +364,7 @@ nilfs_read_superblock(struct nilfs_device *nilfsdev)
 	dev_blks  = 2;		/* assumption max one dev_bsize */
 	error = bread(nilfsdev->devvp, dev_blk, dev_blks * dev_bsize, NOCRED, 0, &bp);
 	if (error) {
+		brelse(bp, BC_AGE);
 		return error;
 	}
 
@@ -605,8 +607,7 @@ nilfs_mount_device(struct vnode *devvp, struct mount *mp, struct nilfs_args *arg
 	if ((mp->mnt_flag & MNT_RDONLY) == 0)
 		accessmode |= VWRITE;
 	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
-	error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_MOUNT,
-	    KAUTH_REQ_SYSTEM_MOUNT_DEVICE, mp, devvp, KAUTH_ARG(accessmode));
+	error = genfs_can_mount(devvp, accessmode, l->l_cred);
 	VOP_UNLOCK(devvp);
 	if (error) {
 		vrele(devvp);

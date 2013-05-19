@@ -1,4 +1,4 @@
-/*	$NetBSD: copyin.c,v 1.5 2012/03/16 07:23:38 matt Exp $	*/
+/*	$NetBSD: copyin.c,v 1.4.8.1 2012/05/17 18:29:25 riz Exp $	*/
 
 /*-
  * Copyright (c) 2010, 2011 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: copyin.c,v 1.5 2012/03/16 07:23:38 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: copyin.c,v 1.4.8.1 2012/05/17 18:29:25 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/lwp.h>

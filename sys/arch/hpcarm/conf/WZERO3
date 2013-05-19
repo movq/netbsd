@@ -1,4 +1,4 @@
-#	$NetBSD: WZERO3,v 1.32 2013/04/27 21:43:27 christos Exp $
+#	$NetBSD: WZERO3,v 1.23 2011/12/18 05:49:28 dholland Exp $
 #
 #	WZERO3 -- Sharp Windows Mobile 5 based PDA
 #
@@ -8,15 +8,10 @@ include	"arch/hpcarm/conf/files.wzero3"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.32 $"
+#ident 		"GENERIC-$Revision: 1.23 $"
 
 # estimated number of users
 maxusers	32
-
-# in-kernel bootloader, see kloader(4)
-options 	KLOADER
-#options 	KLOADER_KERNEL_PATH="\"/netbsd\""
-#options 	KLOADER_DEBUG
 
 # Standard system options
 
@@ -69,10 +64,13 @@ options 	WAPBL		# File system journaling support
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking
 #options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
@@ -83,7 +81,6 @@ options 	INET6		# IPV6
 # Compatibility options
 
 #options 	COMPAT_43	# 4.3BSD compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
@@ -104,6 +101,7 @@ options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
+options 	P1003_1B_SEMAPHORE	# p1003.1b semaphore support
 
 # Miscellaneous kernel options
 options 	KTRACE		# system call tracing, a la ktrace(1)
@@ -123,7 +121,7 @@ options 	WSEMUL_VT100
 # allocate a number of virtual screens at autoconfiguration time
 #options 	WSDISPLAY_DEFAULTSCREENS=2
 # The X server requires theses two options
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
+options 	WSDISPLAY_COMPAT_USL
 options 	WSDISPLAY_COMPAT_RAWKBD
 # customization of console and kernel output - see dev/wscons/wsdisplayvar.h
 #options 	WSDISPLAY_CUSTOM_OUTPUT	# color customization from wsconsctl(8)
@@ -253,7 +251,7 @@ urlphy* at mii? phy ?		# Realtek RTL8150L internal PHYs
 
 # USB 802.11 adapters
 atu*	at uhub? port ?		# Atmel AT76C50XX based adapters
-ural*	at uhub? port ?		# Ralink Technology RT2500USB 802.11a/b/g
+#ral*	at uhub? port ?		# Ralink Technology RT25x0 802.11a/b/g
 rum*	at uhub? port ?		# Ralink Technology RT2501/RT2601 802.11a/b/g
 upgt*	at uhub? port ?		# Intersil PrismGT
 zyd*	at uhub? port ?		# Zydas ZD1211
@@ -298,9 +296,9 @@ pseudo-device	tun			# network tunneling over tty
 #pseudo-device	vlan			# IEEE 802.1q encapsulation
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	vnd			# disk-like interface to files
-#pseudo-device	ccd			# concatenated disk devices
-#pseudo-device	cgd			# cryptographic disk devices
-#pseudo-device	raid			# RAIDframe disk driver
+#pseudo-device	ccd	2		# concatenated disk devices
+#pseudo-device	cgd	2		# cryptographic disk devices
+#pseudo-device	raid	4		# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 #pseudo-device	fss			# file system snapshot device
 

@@ -1,4 +1,4 @@
-/* $NetBSD: siisata.c,v 1.24 2013/04/03 17:15:07 bouyer Exp $ */
+/* $NetBSD: siisata.c,v 1.15 2011/09/27 01:02:38 jym Exp $ */
 
 /* from ahcisata_core.c */
 
@@ -79,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: siisata.c,v 1.24 2013/04/03 17:15:07 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: siisata.c,v 1.15 2011/09/27 01:02:38 jym Exp $");
 
 #include <sys/types.h>
 #include <sys/malloc.h>
@@ -96,7 +96,6 @@ __KERNEL_RCSID(0, "$NetBSD: siisata.c,v 1.24 2013/04/03 17:15:07 bouyer Exp $");
 #include <dev/ata/satareg.h>
 #include <dev/ata/satafisvar.h>
 #include <dev/ata/satafisreg.h>
-#include <dev/ata/satapmpreg.h>
 #include <dev/ic/siisatavar.h>
 #include <dev/ic/siisatareg.h>
 
@@ -110,28 +109,6 @@ int siisata_debug_mask = 0;
 
 #define ATA_DELAY 10000		/* 10s for a drive I/O */
 
-#ifndef __BUS_SPACE_HAS_STREAM_METHODS
-#if _BYTE_ORDER == _LITTLE_ENDIAN
-#define bus_space_read_stream_4 bus_space_read_4
-#define bus_space_read_region_stream_4 bus_space_read_region_4
-#else
-static inline uint32_t
-bus_space_read_stream_4(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o)
-{
-	return htole32(bus_space_read_4(t, h, o);
-}
-
-static inline void
-bus_space_read_region_stream_4(bus_space_tag_t t, bus_space_handle_t h, bus_size_t o, uint32_t *p, bus_size_t c)
-{
-	bus_space_read_region_4(t, h, o, p, c);
-	for (bus_size_t i = 0; i < c; i++) {
-		p[i] = htole32(p[i]);
-	}
-}
-#endif
-#endif
-
 static void siisata_attach_port(struct siisata_softc *, int);
 static void siisata_intr_port(struct siisata_channel *);
 
@@ -139,7 +116,7 @@ void siisata_probe_drive(struct ata_channel *);
 void siisata_setup_channel(struct ata_channel *);
 
 int siisata_ata_bio(struct ata_drive_datas *, struct ata_bio *);
-void siisata_reset_drive(struct ata_drive_datas *, int, uint32_t *);
+void siisata_reset_drive(struct ata_drive_datas *, int);
 void siisata_reset_channel(struct ata_channel *, int);
 int siisata_ata_addref(struct ata_drive_datas *);
 void siisata_ata_delref(struct ata_drive_datas *);
@@ -195,8 +172,7 @@ static const struct scsipi_bustype siisata_atapi_bustype = {
 	atapi_scsipi_cmd,
 	atapi_interpret_sense,
 	atapi_print_addr,
-	siisata_atapi_kill_pending,
-	NULL,
+	siisata_atapi_kill_pending
 };
 #endif /* NATAPIBUS */
 
@@ -235,27 +211,6 @@ siisata_attach(struct siisata_softc *sc)
 }
 
 static void
-siisata_disable_port_interrupt(struct ata_channel *chp)
-{
-	struct siisata_softc *sc = (struct siisata_softc *)chp->ch_atac;
-
-	PRWRITE(sc, PRX(chp->ch_channel, PRO_PIEC), 0xffffffff);
-}
-
-static void
-siisata_enable_port_interrupt(struct ata_channel *chp)
-{
-	struct siisata_softc *sc = (struct siisata_softc *)chp->ch_atac;
-
-	/* clear any interrupts */
-	(void)PRREAD(sc, PRX(chp->ch_channel, PRO_PSS));
-	PRWRITE(sc, PRX(chp->ch_channel, PRO_PIS), 0xffffffff);
-	/* and enable CmdErrr+CmdCmpl interrupting */
-	PRWRITE(sc, PRX(chp->ch_channel, PRO_PIES),
-	    PR_PIS_CMDERRR | PR_PIS_CMDCMPL);
-}
-
-static void
 siisata_init_port(struct siisata_softc *sc, int port)
 {
 	struct siisata_channel *schp;
@@ -269,8 +224,11 @@ siisata_init_port(struct siisata_softc *sc, int port)
 	    PR_PC_32BA | PR_PC_PORT_RESET);
 	/* initialize port */
 	siisata_reinit_port(chp);
+	/* clear any interrupts */
+	PRWRITE(sc, PRX(chp->ch_channel, PRO_PIS), 0xffffffff);
 	/* enable CmdErrr+CmdCmpl interrupting */
-	siisata_enable_port_interrupt(chp);
+	PRWRITE(sc, PRX(chp->ch_channel, PRO_PIES),
+	    PR_PIS_CMDERRR | PR_PIS_CMDCMPL);
 	/* enable port interrupt */
 	GRWRITE(sc, GR_GC, GRREAD(sc, GR_GC) | GR_GC_PXIE(chp->ch_channel));
 }
@@ -368,6 +326,7 @@ siisata_attach_port(struct siisata_softc *sc, int port)
 		}
 	}
 
+	chp->ch_ndrive = 1;
 	if (bus_space_subregion(sc->sc_prt, sc->sc_prh,
 	    PRX(chp->ch_channel, PRO_SSTATUS), 4, &schp->sch_sstatus) != 0) {
 		aprint_error_dev(sc->sc_atac.atac_dev,
@@ -484,29 +443,23 @@ siisata_intr_port(struct siisata_channel *schp)
 	xfer = chp->ch_queue->active_xfer;
 	slot = SIISATA_NON_NCQ_SLOT;
 
-	pis = PRREAD(sc, PRX(chp->ch_channel, PRO_PIS));
+	SIISATA_DEBUG_PRINT(("%s: %s port %d\n",
+	    SIISATANAME(sc), __func__, chp->ch_channel), DEBUG_INTR);
 
-	SIISATA_DEBUG_PRINT(("%s: %s port %d, pis 0x%x ",
-	    SIISATANAME(sc), __func__, chp->ch_channel, pis), DEBUG_INTR);
+	pis = PRREAD(sc, PRX(chp->ch_channel, PRO_PIS));
 
 	if (pis & PR_PIS_CMDCMPL) {
 		/* get slot status, clearing completion interrupt */
 		pss = PRREAD(sc, PRX(chp->ch_channel, PRO_PSS));
-		SIISATA_DEBUG_PRINT(("pss 0x%x\n", pss), DEBUG_INTR);
 		/* is this expected? */
 		/* XXX improve */
 		if ((schp->sch_active_slots & __BIT(slot)) == 0) {
-			aprint_error( "%s: unexpected command "
+			PRWRITE(sc, PRX(chp->ch_channel, PRO_PIS), 0xffffffff);
+			log(LOG_WARNING, "%s: unexpected command "
 			    "completion on port %d\n",
 			    SIISATANAME(sc), chp->ch_channel);
 			return;
 		} 
-		if ((~pss & __BIT(slot)) == 0) {
-			aprint_error( "%s: unknown slot "
-			    "completion on port %d, pss 0x%x\n",
-			    SIISATANAME(sc), chp->ch_channel, pss);
-			return;
-		}
 	} else if (pis & PR_PIS_CMDERRR) {
 		uint32_t ec;
 
@@ -515,9 +468,8 @@ siisata_intr_port(struct siisata_channel *schp)
 		chp->ch_error = WDCE_CRC;
 
 		ec = PRREAD(sc, PRX(chp->ch_channel, PRO_PCE));
-		SIISATA_DEBUG_PRINT(("ec %d\n", ec), DEBUG_INTR);
 		if (ec <= PR_PCE_DATAFISERROR) {
-			if (ec == PR_PCE_DEVICEERROR && xfer != NULL) {
+			if (ec == PR_PCE_DEVICEERROR) {
 				/* read in specific information about error */
 				prbfis = bus_space_read_stream_4(
 				    sc->sc_prt, sc->sc_prh,
@@ -527,10 +479,6 @@ siisata_intr_port(struct siisata_channel *schp)
 			}
 			siisata_reinit_port(chp);
 		} else {
-			aprint_error_dev(sc->sc_atac.atac_dev, "fatal error %d"
-			    " on channel %d (ctx 0x%x), resetting\n",
-			    ec, chp->ch_channel,
-			    PRREAD(sc, PRX(chp->ch_channel, PRO_PCR)));
 			/* okay, we have a "Fatal Error" */
 			siisata_device_reset(chp);
 		}
@@ -538,14 +486,16 @@ siisata_intr_port(struct siisata_channel *schp)
 
 	/* clear some (ok, all) ints */
 	PRWRITE(sc, PRX(chp->ch_channel, PRO_PIS), 0xffffffff);
-	if (xfer && xfer->c_intr)
-		xfer->c_intr(chp, xfer, slot);
+
+	KASSERT(xfer != NULL);
+	KASSERT(xfer->c_intr != NULL);
+	xfer->c_intr(chp, xfer, slot);
 
 	return;
 }
 
 void
-siisata_reset_drive(struct ata_drive_datas *drvp, int flags, uint32_t *sigp)
+siisata_reset_drive(struct ata_drive_datas *drvp, int flags)
 {
 	struct ata_channel *chp = drvp->chnl_softc;
 	struct siisata_softc *sc = (struct siisata_softc *)chp->ch_atac;
@@ -562,37 +512,21 @@ siisata_reset_drive(struct ata_drive_datas *drvp, int flags, uint32_t *sigp)
 	memset(prb, 0, sizeof(struct siisata_prb));
 	prb->prb_control =
 	    htole16(PRB_CF_SOFT_RESET | PRB_CF_INTERRUPT_MASK);
-	KASSERT(drvp->drive <= PMP_PORT_CTL);
-	prb->prb_fis[rhd_c] = drvp->drive;
 
 	siisata_activate_prb(schp, slot);
 
-	for(i = 0; i < 3100; i++) {
-		if ((PRREAD(sc, PRX(chp->ch_channel, PRO_PSS)) &
-		    PR_PXSS(slot)) == 0)
-			break;
-		if (flags & AT_WAIT)
-			tsleep(schp, PRIBIO, "siiprb", mstohz(10));
+	for(i = 0; i < 31000; i++) {
+		if (PRREAD(sc, PRX(chp->ch_channel, PRO_PSS)) &
+		    PR_PXSS(slot))
+			DELAY(1000);
 		else
-			DELAY(10000);
+			break;
 	}
 
 	siisata_deactivate_prb(schp, slot);
-	if (i == 3100) {
-		/* timeout */
-		siisata_device_reset(chp);
-		if (sigp)
-			*sigp = 0xffffffff;
-	} else {
-		/* read the signature out of the FIS */
-		if (sigp) {
-			*sigp = 0;
-			*sigp |= (PRREAD(sc, PRSX(chp->ch_channel, slot,
-			    PRSO_FIS+0x4)) & 0x00ffffff) << 8;
-			*sigp |= PRREAD(sc, PRSX(chp->ch_channel, slot,
-			    PRSO_FIS+0xc)) & 0xff;
-		}
-	}
+
+	log(LOG_DEBUG, "%s: port %d: ch_status %x ch_error %x\n",
+	    __func__, chp->ch_channel, chp->ch_status, chp->ch_error);
 
 #if 1
 	/* attempt to downgrade signaling in event of CRC error */
@@ -617,6 +551,7 @@ siisata_reset_drive(struct ata_drive_datas *drvp, int flags, uint32_t *sigp)
 	chp->ch_status = 0;
 	chp->ch_error = 0;
 #endif
+
 	return;
 }
 
@@ -630,8 +565,8 @@ siisata_reset_channel(struct ata_channel *chp, int flags)
 	    DEBUG_FUNCS);
 
 	if (sata_reset_interface(chp, sc->sc_prt, schp->sch_scontrol,
-	    schp->sch_sstatus, flags) != SStatus_DET_DEV) {
-		aprint_error("%s port %d: reset failed\n",
+	    schp->sch_sstatus) != SStatus_DET_DEV) {
+		log(LOG_CRIT, "%s port %d: reset failed\n",
 		    SIISATANAME(sc), chp->ch_channel);
 		/* XXX and then ? */
 	}
@@ -672,65 +607,44 @@ siisata_probe_drive(struct ata_channel *chp)
 	struct siisata_softc *sc = (struct siisata_softc *)chp->ch_atac;
 	struct siisata_channel *schp = (struct siisata_channel *)chp;
 	int i;
+	int s;
 	uint32_t sig;
 	int slot = SIISATA_NON_NCQ_SLOT;
 	struct siisata_prb *prb;
-	bool timed_out;
 
 	SIISATA_DEBUG_PRINT(("%s: %s: port %d start\n", SIISATANAME(sc),
 	    __func__, chp->ch_channel), DEBUG_FUNCS);
 
-	/*
-	 * disable port interrupt as we're polling for PHY up and
-	 * prb completion
-	 */
-	siisata_disable_port_interrupt(chp);
+	/* XXX This should be done by other code. */
+	for (i = 0; i < chp->ch_ndrive; i++) {
+		chp->ch_drive[i].chnl_softc = chp;
+		chp->ch_drive[i].drive = i;
+	}
 
-	switch(sata_reset_interface(chp, sc->sc_prt, schp->sch_scontrol,
-		schp->sch_sstatus, AT_WAIT)) {
+	switch (sata_reset_interface(chp, sc->sc_prt, schp->sch_scontrol,
+		schp->sch_sstatus)) {
 	case SStatus_DET_DEV:
-		/* clear any interrupts */
-		(void)PRREAD(sc, PRX(chp->ch_channel, PRO_PSS));
-		PRWRITE(sc, PRX(chp->ch_channel, PRO_PIS), 0xffffffff);
 		/* wait for ready */
 		while (!(PRREAD(sc, PRX(chp->ch_channel, PRO_PS))
 		    & PR_PS_PORT_READY))
 			DELAY(10);
+
 		prb = schp->sch_prb[slot];
 		memset(prb, 0, sizeof(struct siisata_prb));
-		prb->prb_control = htole16(PRB_CF_SOFT_RESET);
-		prb->prb_fis[rhd_c] = PMP_PORT_CTL;
+		prb->prb_control =
+		    htole16(PRB_CF_SOFT_RESET | PRB_CF_INTERRUPT_MASK);
 
 		siisata_activate_prb(schp, slot);
 
-		timed_out = 1;
-		for(i = 0; i < 3100; i++) {
-			if ((PRREAD(sc, PRX(chp->ch_channel, PRO_PSS)) &
-			    PR_PXSS(slot)) == 0) {
-				/* prb completed */
-				timed_out = 0;
+		for(i = 0; i < 31000; i++) {
+			if (PRREAD(sc, PRX(chp->ch_channel, PRO_PSS)) &
+			    PR_PXSS(slot))
+				DELAY(1000);
+			else
 				break;
-			}
-			if (PRREAD(sc, PRX(chp->ch_channel, PRO_PIS)) &
-			    (PR_PIS_CMDERRR << 16)) {
-				/* we got an error; handle as timeout */
-				break;
-			}
-
-			tsleep(schp, PRIBIO, "siiprb", mstohz(10));
 		}
 
 		siisata_deactivate_prb(schp, slot);
-		if (timed_out) {
-			aprint_error_dev(sc->sc_atac.atac_dev,
-			    "SOFT_RESET failed on port %d (error %d PSS 0x%x), "
-			    "disabling\n", chp->ch_channel,
-			    PRREAD(sc, PRX(chp->ch_channel, PRO_PCE)),
-			    PRREAD(sc, PRX(chp->ch_channel, PRO_PSS)));
-			PRWRITE(sc, PRX(chp->ch_channel, PRO_PCS),
-			    PR_PC_PORT_RESET);
-			break;
-		}
 
 		/* read the signature out of the FIS */
 		sig = 0;
@@ -742,16 +656,33 @@ siisata_probe_drive(struct ata_channel *chp)
 		SIISATA_DEBUG_PRINT(("%s: %s: sig=0x%08x\n", SIISATANAME(sc),
 		    __func__, sig), DEBUG_PROBE);
 
-		if (sig == 0x96690101)
-			PRWRITE(sc, PRX(chp->ch_channel, PRO_PCS),
-			    PR_PC_PMP_ENABLE);
-		sata_interpret_sig(chp, 0, sig);
+		/* some ATAPI devices have bogus lower two bytes, sigh */
+		if ((sig & 0xffff0000) == 0xeb140000) {
+			sig &= 0xffff0000;
+			sig |= 0x00000101;
+		}
+
+		s = splbio();
+		switch (sig) {
+		case 0xeb140101:
+			chp->ch_drive[0].drive_flags |= DRIVE_ATAPI;
+			break;
+		case 0x00000101:
+			chp->ch_drive[0].drive_flags |= DRIVE_ATA;
+			break;
+		default:
+			chp->ch_drive[0].drive_flags |= DRIVE_ATA;
+			aprint_verbose_dev(sc->sc_atac.atac_dev,
+			    "Unrecognized signature 0x%08x on port %d. "
+			    "Assuming it's a disk.\n", sig, chp->ch_channel);
+			break;
+		}
+		splx(s);
 		break;
 	default:
 		break;
 	}
 
-	siisata_enable_port_interrupt(chp);
 	SIISATA_DEBUG_PRINT(("%s: %s: port %d done\n", SIISATANAME(sc),
 	    __func__, chp->ch_channel), DEBUG_PROBE);
 	return;
@@ -823,17 +754,15 @@ siisata_exec_command(struct ata_drive_datas *drvp, struct ata_command *ata_c)
 void
 siisata_cmd_start(struct ata_channel *chp, struct ata_xfer *xfer)
 {
+	struct siisata_softc *sc = (struct siisata_softc *)chp->ch_atac;
 	struct siisata_channel *schp = (struct siisata_channel *)chp;
 	struct ata_command *ata_c = xfer->c_cmd;
 	int slot = SIISATA_NON_NCQ_SLOT;
 	struct siisata_prb *prb;
 	int i;
 
-	SIISATA_DEBUG_PRINT(("%s: %s port %d drive %d command 0x%x, slot %d\n",
-	    SIISATANAME((struct siisata_softc *)chp->ch_atac),
-	    __func__, chp->ch_channel, xfer->c_drive,
-	    ata_c->r_command, slot),
-	    DEBUG_FUNCS|DEBUG_XFERS);
+	SIISATA_DEBUG_PRINT(("%s: %s port %d, slot %d\n",
+	    SIISATANAME(sc), __func__, chp->ch_channel, slot), DEBUG_FUNCS);
 
 	chp->ch_status = 0;
 	chp->ch_error = 0;
@@ -842,8 +771,6 @@ siisata_cmd_start(struct ata_channel *chp, struct ata_xfer *xfer)
 	memset(prb, 0, sizeof(struct siisata_prb));
 
 	satafis_rhd_construct_cmd(ata_c, prb->prb_fis);
-	KASSERT(xfer->c_drive <= PMP_PORT_CTL);
-	prb->prb_fis[rhd_c] |= xfer->c_drive;
 
 	memset(prb->prb_atapi, 0, sizeof(prb->prb_atapi));
 
@@ -859,7 +786,6 @@ siisata_cmd_start(struct ata_channel *chp, struct ata_xfer *xfer)
 	if (xfer->c_flags & C_POLL) {
 		/* polled command, disable interrupts */
 		prb->prb_control = htole16(PRB_CF_INTERRUPT_MASK);
-		siisata_disable_port_interrupt(chp);
 	}
 
 	/* go for it */
@@ -883,14 +809,15 @@ siisata_cmd_start(struct ata_channel *chp, struct ata_xfer *xfer)
 	}
 
 	if ((ata_c->flags & AT_DONE) == 0) {
-		siisata_timeout(chp);
+		ata_c->flags |= AT_TIMEOU;
+		siisata_cmd_complete(chp, xfer, slot);
 	}
 
 	/* reenable interrupts */
-	siisata_enable_port_interrupt(chp);
+	GRWRITE(sc, GR_GC, GRREAD(sc, GR_GC) | GR_GC_PXIE(chp->ch_channel));
 out:
 	SIISATA_DEBUG_PRINT(
-	    ("%s: %s: done\n", SIISATANAME((struct siisata_softc *)chp->ch_atac), __func__), DEBUG_FUNCS);
+	    ("%s: %s: done\n", SIISATANAME(sc), __func__), DEBUG_FUNCS);
 	return;
 }
 
@@ -924,7 +851,7 @@ siisata_cmd_complete(struct ata_channel *chp, struct ata_xfer *xfer, int slot)
 #endif
 
 	SIISATA_DEBUG_PRINT(
-	    ("%s: %s\n", SIISATANAME(sc), __func__), DEBUG_FUNCS|DEBUG_XFERS);
+	    ("%s: %s\n", SIISATANAME(sc), __func__), DEBUG_FUNCS);
 
 	chp->ch_flags &= ~ATACH_IRQ_WAIT;
 	if (xfer->c_flags & C_TIMEOU)
@@ -939,9 +866,9 @@ siisata_cmd_complete(struct ata_channel *chp, struct ata_xfer *xfer, int slot)
 		ata_c->flags |= AT_ERROR;
 	}
 
-	if (chp->ch_drive[xfer->c_drive].drive_flags & ATA_DRIVE_WAITDRAIN) {
+	if (chp->ch_drive[xfer->c_drive].drive_flags & DRIVE_WAITDRAIN) {
 		siisata_cmd_kill_xfer(chp, xfer, KILL_GONE);
-		chp->ch_drive[xfer->c_drive].drive_flags &= ~ATA_DRIVE_WAITDRAIN;
+		chp->ch_drive[xfer->c_drive].drive_flags &= ~DRIVE_WAITDRAIN;
 		wakeup(&chp->ch_queue->active_xfer);
 		return 0;
 	} else
@@ -961,8 +888,7 @@ siisata_cmd_done(struct ata_channel *chp, struct ata_xfer *xfer, int slot)
 	int i;
 
 	SIISATA_DEBUG_PRINT(
-	    ("%s: %s flags 0x%x error 0x%x\n", SIISATANAME(sc), __func__,
-		ata_c->flags, ata_c->r_error), DEBUG_FUNCS|DEBUG_XFERS);
+	    ("%s: %s.\n", SIISATANAME(sc), __func__), DEBUG_FUNCS);
 
 	siisata_deactivate_prb(schp, slot);
 
@@ -1034,6 +960,7 @@ siisata_ata_bio(struct ata_drive_datas *drvp, struct ata_bio *ata_bio)
 void
 siisata_bio_start(struct ata_channel *chp, struct ata_xfer *xfer)
 {
+	struct siisata_softc *sc = (struct siisata_softc *)chp->ch_atac;
 	struct siisata_channel *schp = (struct siisata_channel *)chp;
 	struct siisata_prb *prb;
 	struct ata_bio *ata_bio = xfer->c_cmd;
@@ -1042,7 +969,7 @@ siisata_bio_start(struct ata_channel *chp, struct ata_xfer *xfer)
 
 	SIISATA_DEBUG_PRINT(
 	    ("%s: %s port %d, slot %d\n",
-	    SIISATANAME((struct siisata_softc *)chp->ch_atac), __func__, chp->ch_channel, slot),
+	    SIISATANAME(sc), __func__, chp->ch_channel, slot),
 	    DEBUG_FUNCS);
 
 	chp->ch_status = 0;
@@ -1052,8 +979,6 @@ siisata_bio_start(struct ata_channel *chp, struct ata_xfer *xfer)
 	memset(prb, 0, sizeof(struct siisata_prb));
 
 	satafis_rhd_construct_bio(xfer, prb->prb_fis);
-	KASSERT(xfer->c_drive <= PMP_PORT_CTL);
-	prb->prb_fis[rhd_c] |= xfer->c_drive;
 
 	memset(prb->prb_atapi, 0, sizeof(prb->prb_atapi));
 
@@ -1068,7 +993,6 @@ siisata_bio_start(struct ata_channel *chp, struct ata_xfer *xfer)
 	if (xfer->c_flags & C_POLL) {
 		/* polled command, disable interrupts */
 		prb->prb_control = htole16(PRB_CF_INTERRUPT_MASK);
-		siisata_disable_port_interrupt(chp);
 	}
 
 	siisata_activate_prb(schp, slot);
@@ -1090,10 +1014,10 @@ siisata_bio_start(struct ata_channel *chp, struct ata_xfer *xfer)
 		DELAY(1000);
 	}
 
-	siisata_enable_port_interrupt(chp);
+	GRWRITE(sc, GR_GC, GRREAD(sc, GR_GC) | GR_GC_PXIE(chp->ch_channel));
 out:
 	SIISATA_DEBUG_PRINT(
-	    ("%s: %s: done\n", SIISATANAME((struct siisata_softc *)chp->ch_atac), __func__), DEBUG_FUNCS);
+	    ("%s: %s: done\n", SIISATANAME(sc), __func__), DEBUG_FUNCS);
 	return;
 }
 
@@ -1152,9 +1076,9 @@ siisata_bio_complete(struct ata_channel *chp, struct ata_xfer *xfer, int slot)
 	    BUS_DMASYNC_POSTWRITE);
 	bus_dmamap_unload(sc->sc_dmat, schp->sch_datad[slot]);
 
-	if (chp->ch_drive[xfer->c_drive].drive_flags & ATA_DRIVE_WAITDRAIN) {
+	if (chp->ch_drive[xfer->c_drive].drive_flags & DRIVE_WAITDRAIN) {
 		siisata_bio_kill_xfer(chp, xfer, KILL_GONE);
-		chp->ch_drive[xfer->c_drive].drive_flags &= ~ATA_DRIVE_WAITDRAIN;
+		chp->ch_drive[xfer->c_drive].drive_flags &= ~DRIVE_WAITDRAIN;
 		wakeup(&chp->ch_queue->active_xfer);
 		return 0;
 	}
@@ -1195,7 +1119,6 @@ siisata_timeout(void *v)
 	int slot = SIISATA_NON_NCQ_SLOT;
 	int s = splbio();
 	SIISATA_DEBUG_PRINT(("%s: %p\n", __func__, xfer), DEBUG_INTR);
-	siisata_device_reset(chp);
 	if ((chp->ch_flags & ATACH_IRQ_WAIT) != 0) {
 		xfer->c_flags |= C_TIMEOU;
 		xfer->c_intr(chp, xfer, slot);
@@ -1223,7 +1146,7 @@ siisata_dma_setup(struct ata_channel *chp, int slot, void *data,
 	error = bus_dmamap_load(sc->sc_dmat, schp->sch_datad[slot],
 	    data, count, NULL, BUS_DMA_NOWAIT | BUS_DMA_STREAMING | op);
 	if (error) {
-		aprint_error("%s port %d: "
+		log(LOG_ERR, "%s port %d: "
 		    "failed to load xfer in slot %d: error %d\n",
 		    SIISATANAME(sc), chp->ch_channel, slot, error);
 		return error;
@@ -1299,8 +1222,6 @@ siisata_reinit_port(struct ata_channel *chp)
 	PRWRITE(sc, PRX(chp->ch_channel, PRO_PCS), PR_PC_PORT_INITIALIZE);
 	while (!(PRREAD(sc, PRX(chp->ch_channel, PRO_PS)) & PR_PS_PORT_READY))
 		DELAY(10);
-	if (chp->ch_ndrives > 1)
-		PRWRITE(sc, PRX(chp->ch_channel, PRO_PCS), PR_PC_PMP_ENABLE);
 }
 
 static void
@@ -1417,7 +1338,7 @@ siisata_atapi_probe_device(struct atapibus_softc *sc, int target)
 		return;
 
 	/* if no ATAPI device detected at attach time, skip */
-	if (drvp->drive_type == ATA_DRIVET_ATAPI) {
+	if ((drvp->drive_flags & DRIVE_ATAPI) == 0) {
 		SIISATA_DEBUG_PRINT(("%s: drive %d "
 		    "not present\n", __func__, target), DEBUG_PROBE);
 		return;
@@ -1455,6 +1376,12 @@ siisata_atapi_probe_device(struct atapibus_softc *sc, int target)
 		periph->periph_type = ATAPI_CFG_TYPE(id->atap_config);
 		if (id->atap_config & ATAPI_CFG_REMOV)
 			periph->periph_flags |= PERIPH_REMOVABLE;
+		if (periph->periph_type == T_SEQUENTIAL) {
+			s = splbio();
+			drvp->drive_flags |= DRIVE_ATAPIST;
+			splx(s);
+		}
+
 		sa.sa_periph = periph;
 		sa.sa_inqbuf.type = ATAPI_CFG_TYPE(id->atap_config);
 		sa.sa_inqbuf.removable = id->atap_config & ATAPI_CFG_REMOV ?
@@ -1492,7 +1419,7 @@ siisata_atapi_probe_device(struct atapibus_softc *sc, int target)
 			ata_probe_caps(drvp);
 		else {
 			s = splbio();
-			drvp->drive_type &= ATA_DRIVET_NONE;
+			drvp->drive_flags &= ~DRIVE_ATAPI;
 			splx(s);
 		}
 	} else {
@@ -1501,7 +1428,7 @@ siisata_atapi_probe_device(struct atapibus_softc *sc, int target)
 		    __func__, SIISATANAME(siic), chp->ch_channel, target,
 		    chp->ch_error), DEBUG_PROBE);
 		s = splbio();
-		drvp->drive_type &= ATA_DRIVET_NONE;
+		drvp->drive_flags &= ~DRIVE_ATAPI;
 		splx(s);
 	}
 }
@@ -1571,6 +1498,7 @@ siisata_atapi_scsipi_request(struct scsipi_channel *chan,
 void
 siisata_atapi_start(struct ata_channel *chp, struct ata_xfer *xfer)
 {
+	struct siisata_softc *sc = (struct siisata_softc *)chp->ch_atac;
 	struct siisata_channel *schp = (struct siisata_channel *)chp;
 	struct siisata_prb *prbp;
 
@@ -1580,7 +1508,7 @@ siisata_atapi_start(struct ata_channel *chp, struct ata_xfer *xfer)
 	int i;
 
 	SIISATA_DEBUG_PRINT( ("%s: %s:%d:%d, scsi flags 0x%x\n", __func__,
-	    SIISATANAME((struct siisata_softc *)chp->ch_atac), chp->ch_channel,
+	    SIISATANAME(sc), chp->ch_channel,
 	    chp->ch_drive[xfer->c_drive].drive, sc_xfer->xs_control),
 	    DEBUG_XFERS);
 
@@ -1598,8 +1526,6 @@ siisata_atapi_start(struct ata_channel *chp, struct ata_xfer *xfer)
 		prbp->prb_control |= htole16(PRB_CF_PACKET_WRITE);
 
 	satafis_rhd_construct_atapi(xfer, prbp->prb_fis);
-	KASSERT(xfer->c_drive <= PMP_PORT_CTL);
-	prbp->prb_fis[rhd_c] |= xfer->c_drive;
 
 	/* copy over ATAPI command */
 	memcpy(prbp->prb_atapi, sc_xfer->cmd, sc_xfer->cmdlen);
@@ -1616,7 +1542,6 @@ siisata_atapi_start(struct ata_channel *chp, struct ata_xfer *xfer)
 	if (xfer->c_flags & C_POLL) {
 		/* polled command, disable interrupts */
 		prbp->prb_control = htole16(PRB_CF_INTERRUPT_MASK);
-		siisata_disable_port_interrupt(chp);
 	}
 
 	siisata_activate_prb(schp, slot);
@@ -1638,13 +1563,14 @@ siisata_atapi_start(struct ata_channel *chp, struct ata_xfer *xfer)
 		DELAY(1000);
 	}
 	if ((sc_xfer->xs_status & XS_STS_DONE) == 0) {
-		siisata_timeout(chp);
+		sc_xfer->error = XS_TIMEOUT;
+		siisata_atapi_complete(chp, xfer, slot);
 	}
 	/* reenable interrupts */
-	siisata_enable_port_interrupt(chp);
+	GRWRITE(sc, GR_GC, GRREAD(sc, GR_GC) | GR_GC_PXIE(chp->ch_channel));
 out:
 	SIISATA_DEBUG_PRINT(
-	    ("%s: %s: done\n", SIISATANAME((struct siisata_softc *)chp->ch_atac), __func__), DEBUG_FUNCS);
+	    ("%s: %s: done\n", SIISATANAME(sc), __func__), DEBUG_FUNCS);
 	return;
 }
 
@@ -1675,9 +1601,9 @@ siisata_atapi_complete(struct ata_channel *chp, struct ata_xfer *xfer,
 	    BUS_DMASYNC_POSTREAD : BUS_DMASYNC_POSTWRITE);
 	bus_dmamap_unload(sc->sc_dmat, schp->sch_datad[slot]);
 
-	if (chp->ch_drive[xfer->c_drive].drive_flags & ATA_DRIVE_WAITDRAIN) {
+	if (chp->ch_drive[xfer->c_drive].drive_flags & DRIVE_WAITDRAIN) {
 		siisata_atapi_kill_xfer(chp, xfer, KILL_GONE);
-		chp->ch_drive[xfer->c_drive].drive_flags &= ~ATA_DRIVE_WAITDRAIN;
+		chp->ch_drive[xfer->c_drive].drive_flags &= ~DRIVE_WAITDRAIN;
 		wakeup(&chp->ch_queue->active_xfer);
 		return 0; /* XXX verify */
 	}

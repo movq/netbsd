@@ -1,4 +1,4 @@
-/*	$NetBSD: adv_cardbus.c,v 1.29 2012/10/27 17:18:15 chs Exp $	*/
+/*	$NetBSD: adv_cardbus.c,v 1.28 2011/08/01 11:20:27 drochner Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adv_cardbus.c,v 1.29 2012/10/27 17:18:15 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adv_cardbus.c,v 1.28 2011/08/01 11:20:27 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -67,7 +67,7 @@ __KERNEL_RCSID(0, "$NetBSD: adv_cardbus.c,v 1.29 2012/10/27 17:18:15 chs Exp $")
 #define ADV_CARDBUS_DEBUG
 #define ADV_CARDBUS_ALLOW_MEMIO
 
-#define DEVNAME(sc) device_xname((sc)->sc_dev)
+#define DEVNAME(sc) device_xname(&(sc)->sc_dev)
 
 struct adv_cardbus_softc {
 	struct asc_softc sc_adv;	/* real ADV */
@@ -85,11 +85,12 @@ int	adv_cardbus_match(device_t, cfdata_t, void *);
 void	adv_cardbus_attach(device_t, device_t, void *);
 int	adv_cardbus_detach(device_t, int);
 
-CFATTACH_DECL_NEW(adv_cardbus, sizeof(struct adv_cardbus_softc),
+CFATTACH_DECL(adv_cardbus, sizeof(struct adv_cardbus_softc),
     adv_cardbus_match, adv_cardbus_attach, adv_cardbus_detach, NULL);
 
 int
-adv_cardbus_match(device_t parent, cfdata_t match, void *aux)
+adv_cardbus_match(device_t parent, cfdata_t match,
+    void *aux)
 {
 	struct cardbus_attach_args *ca = aux;
 
@@ -101,7 +102,8 @@ adv_cardbus_match(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-adv_cardbus_attach(device_t parent, device_t self, void *aux)
+adv_cardbus_attach(device_t parent, device_t self,
+    void *aux)
 {
 	struct cardbus_attach_args *ca = aux;
 	struct adv_cardbus_softc *csc = device_private(self);
@@ -112,7 +114,6 @@ adv_cardbus_attach(device_t parent, device_t self, void *aux)
 	pcireg_t reg;
 	u_int8_t latency = 0x20;
 
-	sc->sc_dev = self;
 	sc->sc_flags = 0;
 
 	if (PCI_VENDOR(ca->ca_id) == PCI_VENDOR_ADVSYS) {
@@ -173,7 +174,7 @@ adv_cardbus_attach(device_t parent, device_t self, void *aux)
 		csc->sc_csr |= PCI_COMMAND_IO_ENABLE;
 	} else {
 		csc->sc_bar = 0;
-		aprint_error_dev(sc->sc_dev, "unable to map device registers\n");
+		aprint_error_dev(&sc->sc_dev, "unable to map device registers\n");
 		return;
 	}
 
@@ -217,7 +218,7 @@ adv_cardbus_attach(device_t parent, device_t self, void *aux)
 	 */
 	sc->sc_ih = Cardbus_intr_establish(ct, IPL_BIO, adv_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error_dev(sc->sc_dev,
+		aprint_error_dev(&sc->sc_dev,
 				 "unable to establish interrupt\n");
 		return;
 	}

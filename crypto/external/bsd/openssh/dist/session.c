@@ -1,5 +1,5 @@
-/*	$NetBSD: session.c,v 1.11 2013/03/29 16:19:45 christos Exp $	*/
-/* $OpenBSD: session.c,v 1.261 2012/12/02 20:46:11 djm Exp $ */
+/*	$NetBSD: session.c,v 1.8 2011/09/16 15:36:18 joerg Exp $	*/
+/* $OpenBSD: session.c,v 1.258 2010/11/25 04:10:09 djm Exp $ */
 /*
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
  *                    All rights reserved
@@ -35,7 +35,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: session.c,v 1.11 2013/03/29 16:19:45 christos Exp $");
+__RCSID("$NetBSD: session.c,v 1.8 2011/09/16 15:36:18 joerg Exp $");
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/un.h>
@@ -262,10 +262,7 @@ do_authenticated(Authctxt *authctxt)
 	setproctitle("%s", authctxt->pw->pw_name);
 
 	/* setup the channel layer */
-	if (no_port_forwarding_flag ||
-	    (options.allow_tcp_forwarding & FORWARD_LOCAL) == 0)
-		channel_disable_adm_local_opens();
-	else
+	if (!no_port_forwarding_flag && options.allow_tcp_forwarding)
 		channel_permit_all_opens();
 
 	auth_debug_send();
@@ -375,7 +372,7 @@ do_authenticated1(Authctxt *authctxt)
 				debug("Port forwarding not permitted for this authentication.");
 				break;
 			}
-			if (!(options.allow_tcp_forwarding & FORWARD_REMOTE)) {
+			if (!options.allow_tcp_forwarding) {
 				debug("Port forwarding not permitted.");
 				break;
 			}
@@ -1324,7 +1321,7 @@ do_nologin(struct passwd *pw)
 	struct stat sb;
 
 #ifdef HAVE_LOGIN_CAP
-	if (login_getcapbool(lc, "ignorenologin", 0) || pw->pw_uid == 0)
+	if (login_getcapbool(lc, "ignorenologin", 0) && pw->pw_uid)
 		return;
 	nl = login_getcapstr(lc, "nologin", def_nl, def_nl);
 
@@ -2078,7 +2075,7 @@ session_break_req(Session *s)
 	packet_get_int();	/* ignored */
 	packet_check_eom();
 
-	if (s->ptymaster == -1 || tcsendbreak(s->ptymaster, 0) < 0)
+	if (s->ttyfd == -1 || tcsendbreak(s->ttyfd, 0) < 0)
 		return 0;
 	return 1;
 }

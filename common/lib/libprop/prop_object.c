@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_object.c,v 1.28 2012/07/27 09:10:59 pooka Exp $	*/
+/*	$NetBSD: prop_object.c,v 1.27 2011/04/20 20:00:07 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
@@ -29,12 +29,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "prop_object_impl.h"
 #include <prop/prop_object.h>
-
-#ifdef _PROP_NEED_REFCNT_MTX
-static pthread_mutex_t _prop_refcnt_mtx = PTHREAD_MUTEX_INITIALIZER;
-#endif /* _PROP_NEED_REFCNT_MTX */
+#include "prop_object_impl.h"
 
 #if !defined(_KERNEL) && !defined(_STANDALONE)
 #include <sys/mman.h>
@@ -44,6 +40,7 @@ static pthread_mutex_t _prop_refcnt_mtx = PTHREAD_MUTEX_INITIALIZER;
 #include <limits.h>
 #include <unistd.h>
 #endif
+#include <sys/atomic.h>
 
 #ifdef _STANDALONE
 void *
@@ -856,14 +853,10 @@ _prop_object_externalize_write_file(const char *fname, const char *xml,
 	 * and create the temporary file.
 	 */
 	_prop_object_externalize_file_dirname(fname, tname);
-#define PLISTTMP "/.plistXXXXXX"
-	if (strlen(tname) + strlen(PLISTTMP) >= sizeof(tname)) {
+	if (strlcat(tname, "/.plistXXXXXX", sizeof(tname)) >= sizeof(tname)) {
 		errno = ENAMETOOLONG;
 		return (false);
 	}
-	strcat(tname, PLISTTMP);
-#undef PLISTTMP
-
 	if ((fd = mkstemp(tname)) == -1)
 		return (false);
 
@@ -989,7 +982,7 @@ prop_object_retain(prop_object_t obj)
 	struct _prop_object *po = obj;
 	uint32_t ncnt;
 
-	_PROP_ATOMIC_INC32_NV(&po->po_refcnt, ncnt);
+	ncnt = atomic_inc_32_nv(&po->po_refcnt);
 	_PROP_ASSERT(ncnt != 0);
 }
 
@@ -1021,7 +1014,7 @@ prop_object_release_emergency(prop_object_t obj)
 		unlock = po->po_type->pot_unlock;
 		
 		/* Dance a bit to make sure we always get the non-racy ocnt */
-		_PROP_ATOMIC_DEC32_NV(&po->po_refcnt, ocnt);
+		ocnt = atomic_dec_32_nv(&po->po_refcnt);
 		ocnt++;
 		_PROP_ASSERT(ocnt != 0);
 
@@ -1043,7 +1036,7 @@ prop_object_release_emergency(prop_object_t obj)
 			unlock();
 		
 		parent = po;
-		_PROP_ATOMIC_INC32(&po->po_refcnt);
+		atomic_inc_32(&po->po_refcnt);
 	}
 	_PROP_ASSERT(parent);
 	/* One object was just freed. */
@@ -1080,7 +1073,7 @@ prop_object_release(prop_object_t obj)
 			/* Save pointer to object unlock function */
 			unlock = po->po_type->pot_unlock;
 			
-			_PROP_ATOMIC_DEC32_NV(&po->po_refcnt, ocnt);
+			ocnt = atomic_dec_32_nv(&po->po_refcnt);
 			ocnt++;
 			_PROP_ASSERT(ocnt != 0);
 
@@ -1099,7 +1092,7 @@ prop_object_release(prop_object_t obj)
 			if (ret == _PROP_OBJECT_FREE_DONE)
 				break;
 			
-			_PROP_ATOMIC_INC32(&po->po_refcnt);
+			atomic_inc_32(&po->po_refcnt);
 		} while (ret == _PROP_OBJECT_FREE_RECURSE);
 		if (ret == _PROP_OBJECT_FREE_FAILED)
 			prop_object_release_emergency(obj);

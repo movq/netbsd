@@ -1,4 +1,4 @@
-/*	$NetBSD: vraiu.c,v 1.15 2012/10/27 17:17:55 chs Exp $	*/
+/*	$NetBSD: vraiu.c,v 1.14 2011/11/24 03:35:56 mrg Exp $	*/
 
 /*
  * Copyright (c) 2001 HAMAJIMA Katsuomi. All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vraiu.c,v 1.15 2012/10/27 17:17:55 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vraiu.c,v 1.14 2011/11/24 03:35:56 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,7 +59,7 @@ int vraiu_debug = VRAIU_DEBUG;
 #define AUDIO_BUF_SIZE 2048
 
 struct vraiu_softc {
-	device_t		sc_dev;
+	struct device		sc_dev;
 	kmutex_t		sc_lock;
 	kmutex_t		sc_intr_lock;
 	bus_space_tag_t		sc_iot;
@@ -84,11 +84,11 @@ struct vraiu_softc {
 	void	*sc_intrdata;		/* interrupt data */
 };
 
-int vraiu_match(device_t, cfdata_t, void *);
-void vraiu_attach(device_t, device_t, void *);
+int vraiu_match(struct device *, struct cfdata *, void *);
+void vraiu_attach(struct device *, struct device *, void *);
 int vraiu_intr(void *);
 
-CFATTACH_DECL_NEW(vraiu, sizeof(struct vraiu_softc),
+CFATTACH_DECL(vraiu, sizeof(struct vraiu_softc),
     vraiu_match, vraiu_attach, NULL, NULL);
 
 struct audio_device aiu_device = {
@@ -169,13 +169,13 @@ static void vraiu_slinear16sw_2(struct vraiu_softc *, u_short *, void *, int);
 static void vraiu_volume(struct vraiu_softc *, u_short *, void *, int);
 
 int
-vraiu_match(device_t parent, cfdata_t cf, void *aux)
+vraiu_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	return 1;
 }
 
 void
-vraiu_attach(device_t parent, device_t self, void *aux)
+vraiu_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct vrip_attach_args *va;
 	struct vraiu_softc *sc;
@@ -183,8 +183,7 @@ vraiu_attach(device_t parent, device_t self, void *aux)
 	int rsegs;
 
 	va = aux;
-	sc = device_private(self);
-	sc->sc_dev = self;
+	sc = (void *)self;
 	sc->sc_status = ENXIO;
 	sc->sc_intr = NULL;
 	sc->sc_iot = va->va_iot;
@@ -278,7 +277,7 @@ vraiu_attach(device_t parent, device_t self, void *aux)
 	DPRINTFN(1, ("vraiu_attach: reset AIU\n"))
 	bus_space_write_2(sc->sc_iot, sc->sc_ioh, SEQ_REG_W, AIURST);
 	/* attach audio subsystem */
-	audio_attach_mi(&vraiu_hw_if, sc, self);
+	audio_attach_mi(&vraiu_hw_if, sc, &sc->sc_dev);
 }
 
 int
@@ -829,7 +828,7 @@ vraiu_slinear8_1(struct vraiu_softc *sc, u_short *dmap, void *p, int n)
 #ifdef DIAGNOSTIC
 	if (n > AUDIO_BUF_SIZE/2) {
 		printf("%s: output data too large (%d > %d)\n",
-		       device_xname(sc->sc_dev), n, AUDIO_BUF_SIZE/2);
+		       sc->sc_dev.dv_xname, n, AUDIO_BUF_SIZE/2);
 		n = AUDIO_BUF_SIZE/2;
 	}
 #endif
@@ -849,7 +848,7 @@ vraiu_slinear8_2(struct vraiu_softc *sc, u_short *dmap, void *p, int n)
 #ifdef DIAGNOSTIC
 	if (n > AUDIO_BUF_SIZE) {
 		printf("%s: output data too large (%d > %d)\n",
-		       device_xname(sc->sc_dev), n, AUDIO_BUF_SIZE);
+		       sc->sc_dev.dv_xname, n, AUDIO_BUF_SIZE);
 		n = AUDIO_BUF_SIZE;
 	}
 #endif
@@ -871,7 +870,7 @@ vraiu_ulinear8_1(struct vraiu_softc *sc, u_short *dmap, void *p, int n)
 #ifdef DIAGNOSTIC
 	if (n > AUDIO_BUF_SIZE/2) {
 		printf("%s: output data too large (%d > %d)\n",
-		       device_xname(sc->sc_dev), n, AUDIO_BUF_SIZE/2);
+		       sc->sc_dev.dv_xname, n, AUDIO_BUF_SIZE/2);
 		n = AUDIO_BUF_SIZE/2;
 	}
 #endif
@@ -891,7 +890,7 @@ vraiu_ulinear8_2(struct vraiu_softc *sc, u_short *dmap, void *p, int n)
 #ifdef DIAGNOSTIC
 	if (n > AUDIO_BUF_SIZE) {
 		printf("%s: output data too large (%d > %d)\n",
-		       device_xname(sc->sc_dev), n, AUDIO_BUF_SIZE);
+		       sc->sc_dev.dv_xname, n, AUDIO_BUF_SIZE);
 		n = AUDIO_BUF_SIZE;
 	}
 #endif
@@ -913,7 +912,7 @@ vraiu_mulaw_1(struct vraiu_softc *sc, u_short *dmap, void *p, int n)
 #ifdef DIAGNOSTIC
 	if (n > AUDIO_BUF_SIZE/2) {
 		printf("%s: output data too large (%d > %d)\n",
-		       device_xname(sc->sc_dev), n, AUDIO_BUF_SIZE/2);
+		       sc->sc_dev.dv_xname, n, AUDIO_BUF_SIZE/2);
 		n = AUDIO_BUF_SIZE/2;
 	}
 #endif
@@ -933,7 +932,7 @@ vraiu_mulaw_2(struct vraiu_softc *sc, u_short *dmap, void *p, int n)
 #ifdef DIAGNOSTIC
 	if (n > AUDIO_BUF_SIZE) {
 		printf("%s: output data too large (%d > %d)\n",
-		       device_xname(sc->sc_dev), n, AUDIO_BUF_SIZE);
+		       sc->sc_dev.dv_xname, n, AUDIO_BUF_SIZE);
 		n = AUDIO_BUF_SIZE;
 	}
 #endif
@@ -955,7 +954,7 @@ vraiu_slinear16_1(struct vraiu_softc *sc, u_short *dmap, void *p, int n)
 #ifdef DIAGNOSTIC
 	if (n > AUDIO_BUF_SIZE) {
 		printf("%s: output data too large (%d > %d)\n",
-		       device_xname(sc->sc_dev), n, AUDIO_BUF_SIZE);
+		       sc->sc_dev.dv_xname, n, AUDIO_BUF_SIZE);
 		n = AUDIO_BUF_SIZE;
 	}
 #endif
@@ -976,7 +975,7 @@ vraiu_slinear16_2(struct vraiu_softc *sc, u_short *dmap, void *p, int n)
 #ifdef DIAGNOSTIC
 	if (n > AUDIO_BUF_SIZE*2) {
 		printf("%s: output data too large (%d > %d)\n",
-		       device_xname(sc->sc_dev), n, AUDIO_BUF_SIZE*2);
+		       sc->sc_dev.dv_xname, n, AUDIO_BUF_SIZE*2);
 		n = AUDIO_BUF_SIZE*2;
 	}
 #endif
@@ -998,7 +997,7 @@ vraiu_slinear16sw_1(struct vraiu_softc *sc, u_short *dmap, void *p, int n)
 #ifdef DIAGNOSTIC
 	if (n > AUDIO_BUF_SIZE) {
 		printf("%s: output data too large (%d > %d)\n",
-		       device_xname(sc->sc_dev), n, AUDIO_BUF_SIZE);
+		       sc->sc_dev.dv_xname, n, AUDIO_BUF_SIZE);
 		n = AUDIO_BUF_SIZE;
 	}
 #endif
@@ -1019,7 +1018,7 @@ vraiu_slinear16sw_2(struct vraiu_softc *sc, u_short *dmap, void *p, int n)
 #ifdef DIAGNOSTIC
 	if (n > AUDIO_BUF_SIZE*2) {
 		printf("%s: output data too large (%d > %d)\n",
-		       device_xname(sc->sc_dev), n, AUDIO_BUF_SIZE*2);
+		       sc->sc_dev.dv_xname, n, AUDIO_BUF_SIZE*2);
 		n = AUDIO_BUF_SIZE*2;
 	}
 #endif

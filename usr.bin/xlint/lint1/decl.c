@@ -1,4 +1,4 @@
-/* $NetBSD: decl.c,v 1.57 2013/04/19 18:51:14 christos Exp $ */
+/* $NetBSD: decl.c,v 1.53 2011/06/24 01:10:31 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: decl.c,v 1.57 2013/04/19 18:51:14 christos Exp $");
+__RCSID("$NetBSD: decl.c,v 1.53 2011/06/24 01:10:31 christos Exp $");
 #endif
 
 #include <sys/param.h>
@@ -425,7 +425,7 @@ tdeferr(type_t *td, tspec_t t)
 			return (td);
 		}
 		break;
-		/* LINTED206: (enumeration values not handled in switch) */
+		/* LINTED (enumeration values not handled in switch) */
 	case NOTSPEC:
 	case USHORT:
 	case UCHAR:
@@ -1662,7 +1662,7 @@ mktag(sym_t *tag, tspec_t kind, int decl, int semi)
 			tp->t_str->stag = tag;
 		} else {
 			tp->t_isenum = 1;
-			tp->t_enum = getblk(sizeof(*tp->t_enum));
+			tp->t_enum = getblk(sizeof (enum_t));
 			tp->t_enum->etag = tag;
 		}
 		/* ist unvollstaendiger Typ */
@@ -1831,7 +1831,7 @@ ename(sym_t *sym, int val, int impl)
 	sym->s_type = dcs->d_tagtyp;
 	sym->s_value.v_tspec = INT;
 	sym->s_value.v_quad = val;
-	if (impl && val - 1 == TARG_INT_MAX) {
+	if (impl && val - 1 == INT_MAX) {
 		/* overflow in enumeration values: %s */
 		warning(48, sym->s_name);
 	}
@@ -2099,7 +2099,7 @@ eqtype(type_t *tp1, type_t *tp2, int ignqual, int promot, int *dowarn)
 				t = INT;
 			} else if (t == USHORT) {
 				/* CONSTCOND */
-				t = TARG_INT_MAX < TARG_USHRT_MAX || tflag ? UINT : INT;
+				t = INT_MAX < USHRT_MAX || tflag ? UINT : INT;
 			}
 		}
 
@@ -2876,22 +2876,21 @@ void
 chkusage(dinfo_t *di)
 {
 	sym_t	*sym;
-	int	mklwarn;
+	int	mknowarn;
 
-	/* for this warning LINTED has no effect */
-	mklwarn = lwarn;
-	lwarn = LWARN_ALL;
+	/* for this warnings LINTED has no effect */
+	mknowarn = nowarn;
+	nowarn = 0;
 
 #ifdef DEBUG
-	printf("%s, %d: >temp lwarn = %d\n", curr_pos.p_file, curr_pos.p_line,
-	    lwarn);
+	printf("%s, %d: >temp nowarn = 0\n", curr_pos.p_file, curr_pos.p_line);
 #endif
 	for (sym = di->d_dlsyms; sym != NULL; sym = sym->s_dlnxt)
 		chkusg1(di->d_asm, sym);
-	lwarn = mklwarn;
+	nowarn = mknowarn;
 #ifdef DEBUG
-	printf("%s, %d: <temp lwarn = %d\n", curr_pos.p_file, curr_pos.p_line,
-	    lwarn);
+	printf("%s, %d: <temp nowarn = %d\n", curr_pos.p_file, curr_pos.p_line,
+	    nowarn);
 #endif
 }
 

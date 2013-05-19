@@ -1,4 +1,4 @@
-/*	$NetBSD: clnt_generic.c,v 1.31 2013/05/07 21:08:45 christos Exp $	*/
+/*	$NetBSD: clnt_generic.c,v 1.27.24.1 2013/03/14 22:03:12 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -41,7 +41,7 @@
 #if 0
 static char sccsid[] = "@(#)clnt_generic.c 1.32 89/03/16 Copyr 1988 Sun Micro";
 #else
-__RCSID("$NetBSD: clnt_generic.c,v 1.31 2013/05/07 21:08:45 christos Exp $");
+__RCSID("$NetBSD: clnt_generic.c,v 1.27.24.1 2013/03/14 22:03:12 riz Exp $");
 #endif
 #endif
 
@@ -58,8 +58,6 @@ __RCSID("$NetBSD: clnt_generic.c,v 1.31 2013/05/07 21:08:45 christos Exp $");
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
-
-#include "svc_fdset.h"
 #include "rpc_internal.h"
 
 #ifdef __weak_alias
@@ -76,13 +74,13 @@ __weak_alias(clnt_tli_create,_clnt_tli_create)
  * if this can not be done.
  */
 CLIENT *
-clnt_create_vers(
-	const char *	hostname,
-	rpcprog_t	prog,
-	rpcvers_t *	vers_out,
-	rpcvers_t	vers_low,
-	rpcvers_t	vers_high,
-	const char *	nettype)
+clnt_create_vers(hostname, prog, vers_out, vers_low, vers_high, nettype)
+	const char *hostname;
+	rpcprog_t prog;
+	rpcvers_t *vers_out;
+	rpcvers_t vers_low;
+	rpcvers_t vers_high;
+	const char *nettype;
 {
 	CLIENT *clnt;
 	struct timeval to;
@@ -149,11 +147,11 @@ error:
  * It calls clnt_tp_create();
  */
 CLIENT *
-clnt_create(
-	const char *	hostname,			/* server name */
-	rpcprog_t	prog,				/* program number */
-	rpcvers_t	vers,				/* version number */
-	const char *	nettype)			/* net type */
+clnt_create(hostname, prog, vers, nettype)
+	const char *hostname;				/* server name */
+	rpcprog_t prog;				/* program number */
+	rpcvers_t vers;				/* version number */
+	const char *nettype;				/* net type */
 {
 	struct netconfig *nconf;
 	CLIENT *clnt = NULL;
@@ -222,11 +220,11 @@ clnt_create(
  * It finds out the server address from rpcbind and calls clnt_tli_create()
  */
 CLIENT *
-clnt_tp_create(
-	const char *		hostname,	/* server name */
-	rpcprog_t		prog,		/* program number */
-	rpcvers_t		vers,		/* version number */
-	const struct netconfig *nconf)		/* net config struct */
+clnt_tp_create(hostname, prog, vers, nconf)
+	const char *hostname;			/* server name */
+	rpcprog_t prog;				/* program number */
+	rpcvers_t vers;				/* version number */
+	const struct netconfig *nconf;		/* net config struct */
 {
 	struct netbuf *svcaddr;			/* servers address */
 	CLIENT *cl = NULL;			/* client handle */
@@ -288,14 +286,14 @@ out:
  * If sizes are 0; appropriate defaults will be chosen.
  */
 CLIENT *
-clnt_tli_create(
-	int fd,				/* fd */
-	const struct netconfig *nconf,	/* netconfig structure */
-	const struct netbuf *svcaddr,	/* servers address */
-	rpcprog_t prog,			/* program number */
-	rpcvers_t vers,			/* version number */
-	u_int sendsz,			/* send size */
-	u_int recvsz)			/* recv size */
+clnt_tli_create(fd, nconf, svcaddr, prog, vers, sendsz, recvsz)
+	int fd;				/* fd */
+	const struct netconfig *nconf;	/* netconfig structure */
+	const struct netbuf *svcaddr;	/* servers address */
+	rpcprog_t prog;			/* program number */
+	rpcvers_t vers;			/* version number */
+	u_int sendsz;			/* send size */
+	u_int recvsz;			/* recv size */
 {
 	CLIENT *cl;			/* client handle */
 	bool_t madefd = FALSE;		/* whether fd opened here */
@@ -380,21 +378,4 @@ err:
 err1:	if (madefd)
 		(void) close(fd);
 	return (NULL);
-}
-
-/*
- * Don't block thse so interactive programs don't get stuck in lalaland.
- * (easier to do this than making connect(2) non-blocking..)
- */
-int
-__clnt_sigfillset(sigset_t *ss) {
-	static const int usersig[] = {
-	    SIGHUP, SIGINT, SIGQUIT, SIGTERM, SIGTSTP
-	};
-	if (sigfillset(ss) == -1)
-		return -1;
-	for (size_t i = 0; i < __arraycount(usersig); i++)
-		if (sigdelset(ss, usersig[i]) == -1)
-			return -1;
-	return 0;
 }

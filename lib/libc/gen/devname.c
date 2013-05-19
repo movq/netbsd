@@ -1,4 +1,4 @@
-/*	$NetBSD: devname.c,v 1.22 2012/06/03 21:42:46 joerg Exp $	*/
+/*	$NetBSD: devname.c,v 1.21.8.1 2012/06/23 22:54:54 riz Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: devname.c,v 1.22 2012/06/03 21:42:46 joerg Exp $");
+__RCSID("$NetBSD: devname.c,v 1.21.8.1 2012/06/23 22:54:54 riz Exp $");
 
 #include "namespace.h"
 #include "reentrant.h"

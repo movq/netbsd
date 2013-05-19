@@ -1,4 +1,4 @@
-/* $NetBSD: sysmon_envsys_tables.c,v 1.11 2012/08/27 21:42:04 pgoyette Exp $ */
+/* $NetBSD: sysmon_envsys_tables.c,v 1.10.8.1 2012/10/17 21:21:43 riz Exp $ */
 
 /*-
  * Copyright (c) 2007 Juan Romero Pardines.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysmon_envsys_tables.c,v 1.11 2012/08/27 21:42:04 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysmon_envsys_tables.c,v 1.10.8.1 2012/10/17 21:21:43 riz Exp $");
 
 #include <sys/types.h>
 

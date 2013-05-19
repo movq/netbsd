@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu_in_cksum.S,v 1.3 2012/12/22 20:08:08 nakayama Exp $ */
+/*	$NetBSD: cpu_in_cksum.S,v 1.2 2009/10/19 18:12:37 snj Exp $ */
 
 /*
  * Copyright (c) 2001 Eduardo Horvath
@@ -95,7 +95,11 @@ ENTRY(cpu_in_cksum)
 	lduw	[%o0 + M_LEN], %o2	! Code duplicated at Lloop
 	srlx	%o3, 32, %g4	! REDUCE bigtime
 	sethi	%hi(0xffff), %g5
-	LDPTR	[%o0 + M_DATA], %o5
+#ifdef __arch64__
+	ldx	[%o0 + M_DATA], %o5
+#else
+	lduw	[%o0 + M_DATA], %o5
+#endif
 	srl	%o3, 0, %o3
 	or	%g5, %lo(0xffff), %g5
 	
@@ -108,7 +112,11 @@ Lloop:
 	lduw	[%o0 + M_LEN], %o2
 	srlx	%o3, 32, %g4	! REDUCE bigtime
 	sethi	%hi(0xffff), %g5
-	LDPTR	[%o0 + M_DATA], %o5
+#ifdef	__arch64__
+	ldx	[%o0 + M_DATA], %o5
+#else
+	lduw	[%o0 + M_DATA], %o5
+#endif
 	srl	%o3, 0, %o3
 	or	%g5, %lo(0xffff), %g5
 0:	
@@ -202,7 +210,11 @@ Lfinish_byte:
 	add	%o3, %o4, %o3
 	
 Lnext:
-	LDPTR	[%o0 + M_NEXT], %o0
+#ifdef __arch64__
+	ldx	[%o0 + M_NEXT], %o0
+#else
+	lduw	[%o0 + M_NEXT], %o0
+#endif
 Lfinish:
 	srlx	%o3, 32, %o4	! Reduce to 32-bits
 	srl	%o3, 0, %o3

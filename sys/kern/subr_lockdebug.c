@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_lockdebug.c,v 1.49 2013/04/27 08:12:35 mlelstv Exp $	*/
+/*	$NetBSD: subr_lockdebug.c,v 1.45 2011/07/26 13:07:20 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_lockdebug.c,v 1.49 2013/04/27 08:12:35 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_lockdebug.c,v 1.45 2011/07/26 13:07:20 yamt Exp $");
 
 #include "opt_ddb.h"
 
@@ -325,6 +325,7 @@ lockdebug_free(volatile void *lock)
 		__cpu_simple_unlock(&ld_mod_lk);
 		panic("lockdebug_free: destroying uninitialized object %p"
 		    "(ld_lock=%p)", lock, ld->ld_lock);
+		lockdebug_abort1(ld, s, __func__, "record follows", true);
 		return;
 	}
 	if ((ld->ld_flags & LD_LOCKED) != 0 || ld->ld_shares != 0) {
@@ -411,7 +412,8 @@ lockdebug_more(int s)
  *	Process the preamble to a lock acquire.
  */
 void
-lockdebug_wantlock(volatile void *lock, uintptr_t where, int shared)
+lockdebug_wantlock(volatile void *lock, uintptr_t where, bool shared,
+		   bool trylock)
 {
 	struct lwp *l = curlwp;
 	lockdebug_t *ld;
@@ -431,7 +433,7 @@ lockdebug_wantlock(volatile void *lock, uintptr_t where, int shared)
 	}
 	if ((ld->ld_flags & LD_LOCKED) != 0 || ld->ld_shares != 0) {
 		if ((ld->ld_flags & LD_SLEEPER) != 0) {
-			if (ld->ld_lwp == l)
+			if (ld->ld_lwp == l && !(shared && trylock))
 				recurse = true;
 		} else if (ld->ld_cpu == (uint16_t)cpu_index(curcpu()))
 			recurse = true;
@@ -713,8 +715,7 @@ lockdebug_mem_check(const char *func, void *base, size_t sz)
  *	Dump information about a lock on panic, or for DDB.
  */
 static void
-lockdebug_dump(lockdebug_t *ld, void (*pr)(const char *, ...)
-    __printflike(1, 2))
+lockdebug_dump(lockdebug_t *ld, void (*pr)(const char *, ...))
 {
 	int sleeper = (ld->ld_flags & LD_SLEEPER);
 
@@ -725,7 +726,7 @@ lockdebug_dump(lockdebug_t *ld, void (*pr)(const char *, ...)
 	    (long)ld->ld_initaddr);
 
 	if (ld->ld_lockops->lo_type == LOCKOPS_CV) {
-		(*pr)(" interlock: %#018lx\n", (long)ld->ld_locked);
+		(*pr)(" interlock: %#018lx\n", ld->ld_locked);
 	} else {
 		(*pr)("\n"
 		    "shared holds : %18u exclusive: %18u\n"
@@ -763,7 +764,7 @@ lockdebug_abort1(lockdebug_t *ld, int s, const char *func,
 {
 
 	/*
-	 * Don't make the situation worse if the system is already going
+	 * Don't make the situation wose if the system is already going
 	 * down in flames.  Once a panic is triggered, lockdebug state
 	 * becomes stale and cannot be trusted.
 	 */

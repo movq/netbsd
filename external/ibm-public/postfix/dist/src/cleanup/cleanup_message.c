@@ -1,4 +1,4 @@
-/*	$NetBSD: cleanup_message.c,v 1.1.1.3 2013/01/02 18:58:54 tron Exp $	*/
+/*	$NetBSD: cleanup_message.c,v 1.1.1.2 2011/03/02 19:32:09 tron Exp $	*/
 
 /*++
 /* NAME
@@ -171,7 +171,7 @@ static void cleanup_rewrite_sender(CLEANUP_STATE *state,
 	    if (cleanup_masq_domains
 		&& (cleanup_masq_flags & CLEANUP_MASQ_FLAG_HDR_FROM))
 		did_rewrite |=
-		    cleanup_masquerade_tree(state, *tpp, cleanup_masq_domains);
+		    cleanup_masquerade_tree(*tpp, cleanup_masq_domains);
 	}
     }
     if (did_rewrite) {
@@ -228,7 +228,7 @@ static void cleanup_rewrite_recip(CLEANUP_STATE *state,
 	    if (cleanup_masq_domains
 		&& (cleanup_masq_flags & CLEANUP_MASQ_FLAG_HDR_RCPT))
 		did_rewrite |=
-		    cleanup_masquerade_tree(state, *tpp, cleanup_masq_domains);
+		    cleanup_masquerade_tree(*tpp, cleanup_masq_domains);
 	}
     }
     if (did_rewrite) {
@@ -500,10 +500,6 @@ static void cleanup_header_callback(void *context, int header_class,
 		hdr_opts = header_opts_find(result);
 		myfree((char *) result);
 	    }
-	} else if (checks->error) {
-	    msg_warn("%s: %s map lookup problem -- deferring delivery",
-		     state->queue_id, checks->title);
-	    state->errs |= CLEANUP_STAT_WRITE;
 	}
     }
 
@@ -642,21 +638,14 @@ static void cleanup_header_done_callback(void *context)
     if ((state->hdr_rewrite_context || var_always_add_hdrs)
 	&& (state->headers_seen & (1 << (state->resent[0] ?
 			   HDR_RESENT_MESSAGE_ID : HDR_MESSAGE_ID))) == 0) {
-	if (var_long_queue_ids) {
-	    vstring_sprintf(state->temp1, "%s@%s",
-			    state->queue_id, var_myhostname);
-	} else {
-	    tv = state->handle->ctime.tv_sec;
-	    tp = gmtime(&tv);
-	    strftime(time_stamp, sizeof(time_stamp), "%Y%m%d%H%M%S", tp);
-	    vstring_sprintf(state->temp1, "%s.%s@%s",
-			    time_stamp, state->queue_id, var_myhostname);
-	}
-	cleanup_out_format(state, REC_TYPE_NORM, "%sMessage-Id: <%s>",
-			   state->resent, vstring_str(state->temp1));
-	msg_info("%s: %smessage-id=<%s>",
+	tv = state->handle->ctime.tv_sec;
+	tp = gmtime(&tv);
+	strftime(time_stamp, sizeof(time_stamp), "%Y%m%d%H%M%S", tp);
+	cleanup_out_format(state, REC_TYPE_NORM, "%sMessage-Id: <%s.%s@%s>",
+		state->resent, time_stamp, state->queue_id, var_myhostname);
+	msg_info("%s: %smessage-id=<%s.%s@%s>",
 		 state->queue_id, *state->resent ? "resent-" : "",
-		 vstring_str(state->temp1));
+		 time_stamp, state->queue_id, var_myhostname);
 	state->headers_seen |= (1 << (state->resent[0] ?
 				   HDR_RESENT_MESSAGE_ID : HDR_MESSAGE_ID));
     }
@@ -790,10 +779,6 @@ static void cleanup_body_callback(void *context, int type,
 		myfree((char *) result);
 		return;
 	    }
-	} else if (cleanup_body_checks->error) {
-	    msg_warn("%s: %s map lookup problem -- deferring delivery",
-		     state->queue_id, cleanup_body_checks->title);
-	    state->errs |= CLEANUP_STAT_WRITE;
 	}
     }
     cleanup_out(state, type, buf, len);
@@ -830,8 +815,6 @@ static void cleanup_message_headerbody(CLEANUP_STATE *state, int type,
 
     /*
      * Strip unwanted characters. Don't overwrite the input.
-     * 
-     * XXX Possible space+time optimization: use a bitset.
      * 
      * XXX Possible optimization: simplify the loop when the "strip" set
      * contains only one character.

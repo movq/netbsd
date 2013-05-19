@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.hostprog.mk,v 1.70 2013/04/11 01:27:47 christos Exp $
+#	$NetBSD: bsd.hostprog.mk,v 1.66.4.1 2012/03/02 18:27:56 riz Exp $
 #	@(#)bsd.prog.mk	8.2 (Berkeley) 4/2/94
 
 .include <bsd.init.mk>
@@ -21,8 +21,6 @@ LIBDBM?=	/usr/lib/libdbm.a
 LIBDES?=	/usr/lib/libdes.a
 LIBEDIT?=	/usr/lib/libedit.a
 LIBEVENT?=	/usr/lib/libevent.a
-LIBEVENT_OPENSSL?=	/usr/lib/libevent_openssl.a
-LIBEVENT_PTHREADS?=	/usr/lib/libevent_pthreads.a
 LIBEXPAT?=	/usr/lib/libexpat.a
 LIBFETCH?=	/usr/lib/libfetch.a
 LIBFORM?=	/usr/lib/libform.a
@@ -32,7 +30,6 @@ LIBINTL?=	/usr/lib/libintl.a
 LIBIPSEC?=	/usr/lib/libipsec.a
 LIBKVM?=	/usr/lib/libkvm.a
 LIBL?=		/usr/lib/libl.a
-LIBLUTOK?=	/usr/lib/liblutok.a
 LIBLZMA?=	/usr/lib/liblzma.a
 LIBM?=		/usr/lib/libm.a
 LIBMAGIC?=	/usr/lib/libmagic.a
@@ -116,10 +113,6 @@ ${OBJS} ${LOBJS}: ${DPSRCS}
 ${HOSTPROG}: ${OBJS} ${DPADD}
 	${_MKTARGET_LINK}
 	${HOST_LINK.c} ${HOST_LDSTATIC} -o ${.TARGET} ${OBJS} ${LDADD}
-.if !empty(.MAKE.OS:M*CYGWIN*)
-	${NETBSDSRCDIR}/tools/binstall/mkmanifest ${HOSTPROG}
-.endif
-
 
 .endif	# defined(OBJS) && !empty(OBJS)
 

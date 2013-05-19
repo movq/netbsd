@@ -1,4 +1,4 @@
-/* $NetBSD: compile.c,v 1.8 2012/06/03 23:19:10 joerg Exp $ */
+/* $NetBSD: compile.c,v 1.6.2.1 2012/06/23 22:54:57 riz Exp $ */
 
 /*
  * Copyright (c) 2009, 2010, 2011 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: compile.c,v 1.8 2012/06/03 23:19:10 joerg Exp $");
+__RCSID("$NetBSD: compile.c,v 1.6.2.1 2012/06/23 22:54:57 riz Exp $");
 
 #if !HAVE_NBTOOL_CONFIG_H || HAVE_SYS_ENDIAN_H
 #include <sys/endian.h>

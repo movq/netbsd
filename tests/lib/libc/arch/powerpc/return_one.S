@@ -1,4 +1,4 @@
-/*	$NetBSD: return_one.S,v 1.2 2012/03/16 08:51:47 matt Exp $ */
+/*	$NetBSD: return_one.S,v 1.1.4.1 2012/05/17 18:26:32 riz Exp $ */
 
 #include <machine/asm.h>
 

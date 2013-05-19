@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_specific.c,v 1.26 2013/03/21 16:49:12 christos Exp $	*/
+/*	$NetBSD: pthread_specific.c,v 1.21.22.3 2013/04/29 01:50:18 riz Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2007 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_specific.c,v 1.26 2013/03/21 16:49:12 christos Exp $");
+__RCSID("$NetBSD: pthread_specific.c,v 1.21.22.3 2013/04/29 01:50:18 riz Exp $");
 
 /* Functions and structures dealing with thread-specific data */
 
@@ -38,18 +38,11 @@ __RCSID("$NetBSD: pthread_specific.c,v 1.26 2013/03/21 16:49:12 christos Exp $")
 #include "pthread_int.h"
 #include "reentrant.h"
 
-#include <string.h>
 #include <sys/lwpctl.h>
-
-#include "../libc/include/extern.h" /* for _sys_setcontext() */
-
-int	pthread_setcontext(const ucontext_t *);
 
 __strong_alias(__libc_thr_setspecific,pthread_setspecific)
 __strong_alias(__libc_thr_getspecific,pthread_getspecific)
 __strong_alias(__libc_thr_curcpu,pthread_curcpu_np)
-
-__strong_alias(setcontext,pthread_setcontext)
 
 int
 pthread_setspecific(pthread_key_t key, const void *value)
@@ -66,7 +59,11 @@ pthread_setspecific(pthread_key_t key, const void *value)
 	 * and return it from functions that are const void *, without
 	 * generating a warning. 
 	 */
-	return pthread__add_specific(self, key, value);
+	/*LINTED const cast*/
+	self->pt_specific[key] = (void *) value;
+	self->pt_havespecific = 1;
+
+	return 0;
 }
 
 void *
@@ -75,7 +72,7 @@ pthread_getspecific(pthread_key_t key)
 	if (__predict_false(__uselibcstub))
 		return __libc_thr_getspecific_stub(key);
 
-	return pthread__self()->pt_specific[key].pts_value;
+	return pthread__self()->pt_specific[key];
 }
 
 unsigned int
@@ -84,32 +81,5 @@ pthread_curcpu_np(void)
 	if (__predict_false(__uselibcstub))
 		return __libc_thr_curcpu_stub();
 
-	{
-		const int curcpu = pthread__self()->pt_lwpctl->lc_curcpu;
-
-		pthread__assert(curcpu != LWPCTL_CPU_NONE);
-		pthread__assert(curcpu != LWPCTL_CPU_EXITED);
-		pthread__assert(curcpu >= 0);
-		return curcpu;
-	}
-}
-
-/*
- * Override setcontext so that pthread private pointer is preserved
- */
-int
-pthread_setcontext(const ucontext_t *ucp)
-{
-#ifdef _UC_TLSBASE
-	ucontext_t uc;
-	/*
-	 * Only copy and clear _UC_TLSBASE if it is set.
-	 */
-	if (ucp->uc_flags & _UC_TLSBASE) {
-		uc = *ucp;
-		uc.uc_flags &= ~_UC_TLSBASE;
-		ucp = &uc;
-	}
-#endif /* _UC_TLSBASE */
-	return _sys_setcontext(ucp);
+	return pthread__self()->pt_lwpctl->lc_curcpu;
 }

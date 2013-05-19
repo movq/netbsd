@@ -1,7 +1,7 @@
-/*	$NetBSD: hil_gpib.c,v 1.12 2012/10/27 17:18:16 chs Exp $	*/
+/*	$NetBSD: hil_gpib.c,v 1.11 2009/05/12 14:21:58 cegger Exp $	*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hil_gpib.c,v 1.12 2012/10/27 17:18:16 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hil_gpib.c,v 1.11 2009/05/12 14:21:58 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -26,6 +26,7 @@ int     hildebug = 0;
 #endif
 
 struct  hil_softc {
+	struct device sc_dev;
 	gpib_chipset_tag_t sc_ic;
 	gpib_handle_t sc_hdl;
 
@@ -76,7 +77,7 @@ hilattach(device_t parent, device_t self, void *aux)
 
 	if (gpibregister(sc->sc_ic, sc->sc_address, hilcallback, sc,
 	    &sc->sc_hdl)) {
-		aprint_error_dev(self, "can't register callback\n");
+		aprint_error_dev(&sc->sc_dev, "can't register callback\n");
 		return;
 	}
 
@@ -110,7 +111,7 @@ hilstart(void *v)
 {
 	struct hil_softc *sc = v;
 
-	DPRINTF(HDB_FOLLOW, ("hilstart\n"));
+	DPRINTF(HDB_FOLLOW, ("hilstart(%x)\n", device_unit(&sc->sc_dev)));
 
 	sc->sc_flags &= ~HILF_DELAY;
 }

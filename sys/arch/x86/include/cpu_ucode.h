@@ -1,4 +1,4 @@
-/* $NetBSD: cpu_ucode.h,v 1.3 2012/10/17 20:19:55 drochner Exp $ */
+/* $NetBSD: cpu_ucode.h,v 1.1 2012/01/13 16:05:14 cegger Exp $ */
 /*
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -31,58 +31,12 @@
 #ifndef _X86_CPU_UCODE_H_
 #define _X86_CPU_UCODE_H_
 
-#define CPU_UCODE_LOADER_AMD 0
-struct cpu_ucode_version_amd {
-	uint64_t version;
-};
-
-#define CPU_UCODE_LOADER_INTEL1 1
-struct cpu_ucode_version_intel1 {
-	uint32_t ucodeversion;
-	int platformid;
-};
-
-#ifdef _KERNEL
 #include <sys/cpu.h>
 #include <sys/cpuio.h>
 #include <dev/firmload.h>
 
-int cpu_ucode_amd_get_version(struct cpu_ucode_version *);
-#ifdef COMPAT_60
-int compat6_cpu_ucode_amd_get_version(struct compat6_cpu_ucode *);
-#endif
+int cpu_ucode_amd_get_version(struct cpu_ucode *);
 int cpu_ucode_amd_firmware_open(firmware_handle_t *, const char *);
-int cpu_ucode_amd_apply(struct cpu_ucode_softc *, int);
-
-int cpu_ucode_intel_get_version(struct cpu_ucode_version *);
-int cpu_ucode_intel_firmware_open(firmware_handle_t *, const char *);
-int cpu_ucode_intel_apply(struct cpu_ucode_softc *, int);
-#endif /* _KERNEL */
-
-struct intel1_ucode_header {
-	uint32_t	uh_header_ver;
-	uint32_t	uh_rev;
-	uint32_t	uh_date;
-	uint32_t	uh_signature;
-	uint32_t	uh_checksum;
-	uint32_t	uh_loader_rev;
-	uint32_t	uh_proc_flags;
-	uint32_t	uh_data_size;
-	uint32_t	uh_total_size;
-	uint32_t	uh_reserved[3];
-};
-
-struct intel1_ucode_proc_signature {
-	uint32_t	ups_signature;
-	uint32_t	ups_proc_flags;
-	uint32_t	ups_checksum;
-};
-
-struct intel1_ucode_ext_table {
-	uint32_t	uet_count;
-	uint32_t	uet_checksum;
-	uint32_t	uet_reserved[3];
-	struct intel1_ucode_proc_signature uet_proc_sig[1];
-};
+int cpu_ucode_amd_apply(struct cpu_ucode_softc *);
 
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_callmsg.c,v 1.20 2013/03/11 20:19:29 tron Exp $	*/
+/*	$NetBSD: rpc_callmsg.c,v 1.18.24.1 2013/03/14 22:03:13 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -37,7 +37,7 @@
 static char *sccsid = "@(#)rpc_callmsg.c 1.4 87/08/11 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)rpc_callmsg.c	2.1 88/07/29 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: rpc_callmsg.c,v 1.20 2013/03/11 20:19:29 tron Exp $");
+__RCSID("$NetBSD: rpc_callmsg.c,v 1.18.24.1 2013/03/14 22:03:13 riz Exp $");
 #endif
 #endif
 
@@ -66,7 +66,9 @@ __weak_alias(xdr_callmsg,_xdr_callmsg)
  * XDR a call message
  */
 bool_t
-xdr_callmsg(XDR *xdrs, struct rpc_msg *cmsg)
+xdr_callmsg(xdrs, cmsg)
+	XDR *xdrs;
+	struct rpc_msg *cmsg;
 {
 	int32_t *buf;
 	struct opaque_auth *oa;

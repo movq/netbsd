@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.267 2013/03/24 22:23:33 christos Exp $
+#	$NetBSD: Makefile,v 1.263.2.1 2012/06/05 15:37:23 jdc Exp $
 #	from: @(#)Makefile	5.20 (Berkeley) 6/12/93
 
 .include <bsd.own.mk>
@@ -6,7 +6,7 @@
 SUBDIR=	ac accton acpitools altq apm apmd arp \
 	bad144 bootp btattach btconfig btdevctl bthcid btpand catman \
 	chroot cnwctl cpuctl crash \
-	dev_mkdb diskpart dumpfs dumplfs \
+	dev_mkdb dhcp diskpart dumpfs dumplfs \
 	edquota eeprom envstat eshconfig etcupdate extattrctl \
 	flashctl fssconfig fusermount fwctl \
 	gpioctl grfconfig gspa \
@@ -20,7 +20,7 @@ SUBDIR=	ac accton acpitools altq apm apmd arp \
 	ndbootd ndiscvt netgroup_mkdb nfsd \
 	ofctl \
 	paxctl pcictl perfused pppd psrset pstat pwd_mkdb postinstall \
-	powerd \
+	powerd puffs \
 	quot quotacheck quotaon quotarestore \
 	rarpd rbootd rdate repquota rmt rpc.bootparamd rpc.lockd \
 	rpc.pcnfsd rpc.statd rpcbind rwhod \
@@ -38,10 +38,6 @@ SUBDIR+= makemandb
 
 .if (${MKYP} != "no")
 SUBDIR+= rpc.yppasswdd ypbind yppoll ypserv ypset
-.endif
-
-.if (${MKRUMP} != "no")
-SUBDIR+= puffs
 .endif
 
 .if ${TOOLCHAIN_MISSING} != "no"
@@ -65,6 +61,11 @@ SUBDIR+= racoon racoonctl
 # NPF
 .if (${MKNPF} != "no")
 SUBDIR+=npf
+.endif
+
+# IP Filter
+.if (${MKIPFILTER} != "no")
+SUBDIR+=ipf
 .endif
 
 # PF

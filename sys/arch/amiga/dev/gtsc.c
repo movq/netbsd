@@ -1,4 +1,4 @@
-/*	$NetBSD: gtsc.c,v 1.41 2012/10/27 17:17:29 chs Exp $ */
+/*	$NetBSD: gtsc.c,v 1.40 2010/02/09 18:13:10 phx Exp $ */
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gtsc.c,v 1.41 2012/10/27 17:17:29 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gtsc.c,v 1.40 2010/02/09 18:13:10 phx Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -88,8 +88,8 @@ __KERNEL_RCSID(0, "$NetBSD: gtsc.c,v 1.41 2012/10/27 17:17:29 chs Exp $");
 #include <amiga/dev/zbusvar.h>
 #include <amiga/dev/gvpbusvar.h>
 
-void gtscattach(device_t, device_t, void *);
-int gtscmatch(device_t, cfdata_t, void *);
+void gtscattach(struct device *, struct device *, void *);
+int gtscmatch(struct device *, struct cfdata *, void *);
 
 void gtsc_enintr(struct sbic_softc *);
 void gtsc_dmastop(struct sbic_softc *);
@@ -110,15 +110,15 @@ int gtsc_clock_override = 0;
 int gtsc_debug = 0;
 #endif
 
-CFATTACH_DECL_NEW(gtsc, sizeof(struct sbic_softc),
+CFATTACH_DECL(gtsc, sizeof(struct sbic_softc),
     gtscmatch, gtscattach, NULL, NULL);
 
 int
-gtscmatch(device_t parent, cfdata_t cf, void *aux)
+gtscmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	struct gvpbus_args *gap;
 
-	gap = aux;
+	gap = auxp;
 	if (gap->flags & GVP_SCSI)
 		return(1);
 	return(0);
@@ -128,16 +128,15 @@ gtscmatch(device_t parent, cfdata_t cf, void *aux)
  * attach all devices on our board.
  */
 void
-gtscattach(device_t parent, device_t self, void *aux)
+gtscattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	volatile struct sdmac *rp;
 	struct gvpbus_args *gap;
-	struct sbic_softc *sc = device_private(self);
+	struct sbic_softc *sc = (struct sbic_softc *)dp;
 	struct scsipi_adapter *adapt = &sc->sc_adapter;
 	struct scsipi_channel *chan = &sc->sc_channel;
 
-	gap = aux;
-	sc->sc_dev = self;
+	gap = auxp;
 	sc->sc_cregs = rp = gap->zargs.va;
 
 	/*
@@ -211,7 +210,7 @@ gtscattach(device_t parent, device_t self, void *aux)
 	 * Fill in the scsipi_adapter.
 	 */
 	memset(adapt, 0, sizeof(*adapt));
-	adapt->adapt_dev = self;
+	adapt->adapt_dev = &sc->sc_dev;
 	adapt->adapt_nchannels = 1;
 	adapt->adapt_openings = 7;
 	adapt->adapt_max_periph = 1;
@@ -239,7 +238,7 @@ gtscattach(device_t parent, device_t self, void *aux)
 	/*
 	 * attach all scsi units on us
 	 */
-	config_found(self, chan, scsiprint);
+	config_found(dp, chan, scsiprint);
 }
 
 void
@@ -345,7 +344,7 @@ gtsc_dmaintr(void *arg)
 		return (0);
 #ifdef DEBUG
 	if (gtsc_debug & DDB_FOLLOW)
-		printf("%s: dmaintr 0x%x\n", device_xname(dev->sc_dev), stat);
+		printf("%s: dmaintr 0x%x\n", dev->sc_dev.dv_xname, stat);
 #endif
 	if (dev->sc_flags & SBICF_INTR)
 		if (sbicintr(dev))

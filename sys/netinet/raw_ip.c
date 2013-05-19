@@ -1,4 +1,4 @@
-/*	$NetBSD: raw_ip.c,v 1.115 2013/02/05 17:30:02 joerg Exp $	*/
+/*	$NetBSD: raw_ip.c,v 1.113 2011/12/19 11:59:57 drochner Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: raw_ip.c,v 1.115 2013/02/05 17:30:02 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: raw_ip.c,v 1.113 2011/12/19 11:59:57 drochner Exp $");
 
 #include "opt_inet.h"
 #include "opt_compat_netbsd.h"
@@ -93,6 +93,11 @@ __KERNEL_RCSID(0, "$NetBSD: raw_ip.c,v 1.115 2013/02/05 17:30:02 joerg Exp $");
 #include <netinet/in_pcb.h>
 #include <netinet/in_proto.h>
 #include <netinet/in_var.h>
+
+#ifdef KAME_IPSEC
+#include <netinet6/ipsec.h>
+#include <netinet6/ipsec_private.h>
+#endif /* KAME_IPSEC */
 
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
@@ -203,7 +208,7 @@ rip_input(struct mbuf *m, ...)
 			continue;
 		if (last == NULL)
 			;
-#if defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 		/* check AH/ESP integrity. */
 		else if (ipsec4_in_reject_so(m, last->inp_socket)) {
 			IPSEC_STATINC(IPSEC_STAT_IN_POLVIO);
@@ -217,7 +222,7 @@ rip_input(struct mbuf *m, ...)
 		}
 		last = inp;
 	}
-#if defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 	/* check AH/ESP integrity. */
 	if (last != NULL && ipsec4_in_reject_so(m, last->inp_socket)) {
 		m_freem(m);
@@ -478,7 +483,8 @@ rip_bind(struct inpcb *inp, struct mbuf *nam)
 		return (EINVAL);
 	if (TAILQ_FIRST(&ifnet) == 0)
 		return (EADDRNOTAVAIL);
-	if (addr->sin_family != AF_INET)
+	if (addr->sin_family != AF_INET &&
+	    addr->sin_family != AF_IMPLINK)
 		return (EAFNOSUPPORT);
 	if (!in_nullhost(addr->sin_addr) &&
 	    ifa_ifwithaddr(sintosa(addr)) == 0)
@@ -496,7 +502,8 @@ rip_connect(struct inpcb *inp, struct mbuf *nam)
 		return (EINVAL);
 	if (TAILQ_FIRST(&ifnet) == 0)
 		return (EADDRNOTAVAIL);
-	if (addr->sin_family != AF_INET)
+	if (addr->sin_family != AF_INET &&
+	    addr->sin_family != AF_IMPLINK)
 		return (EAFNOSUPPORT);
 	inp->inp_faddr = addr->sin_addr;
 	return (0);

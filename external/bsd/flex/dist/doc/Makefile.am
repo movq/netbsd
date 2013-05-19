@@ -2,7 +2,7 @@ help2man = @HELP2MAN@
 
 info_TEXINFOS =	flex.texi
 dist_man_MANS = flex.1
-dist_doc_DATA= flex.pdf
+EXTRA_DIST = flex.pdf
 
 CLEANFILES = \
 	flex.hks \

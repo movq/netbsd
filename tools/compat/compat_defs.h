@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_defs.h,v 1.88 2013/03/05 16:26:41 christos Exp $	*/
+/*	$NetBSD: compat_defs.h,v 1.83.2.1 2012/06/23 22:54:57 riz Exp $	*/
 
 #ifndef	__NETBSD_COMPAT_DEFS_H__
 #define	__NETBSD_COMPAT_DEFS_H__
@@ -60,10 +60,6 @@
 #endif
 #if HAVE_STDDEF_H
 #include <stddef.h>
-#endif
-
-#if HAVE_RPC_TYPES_H
-#include <rpc/types.h>
 #endif
 
 #ifdef _NETBSD_SOURCE
@@ -266,9 +262,6 @@ int evasprintf(char **, const char *, va_list);
 
 #if !HAVE_FGETLN || defined(__NetBSD__)
 char *fgetln(FILE *, size_t *);
-#endif
-#if !HAVE_DPRINTF
-int dprintf(int, const char *, ...);
 #endif
 
 #if !HAVE_FLOCK
@@ -1201,8 +1194,8 @@ __GEN_ENDIAN_DEC(64, le)
 
 /* Has quad_t but these prototypes don't get pulled into scope. w/o we lose */
 #ifdef __NetBSD__
-quad_t   strtoq(const char *, char **, int);
-u_quad_t strtouq(const char *, char **, int);
+quad_t   strtoq __P((const char *, char **, int)); 
+u_quad_t strtouq __P((const char *, char **, int)); 
 #endif
 
 #endif	/* !__NETBSD_COMPAT_DEFS_H__ */

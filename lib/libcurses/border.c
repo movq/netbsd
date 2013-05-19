@@ -1,4 +1,4 @@
-/*	$NetBSD: border.c,v 1.15 2013/05/05 14:23:16 jdc Exp $	*/
+/*	$NetBSD: border.c,v 1.14.8.1 2013/05/11 21:46:26 riz Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: border.c,v 1.15 2013/05/05 14:23:16 jdc Exp $");
+__RCSID("$NetBSD: border.c,v 1.14.8.1 2013/05/11 21:46:26 riz Exp $");
 #endif				/* not lint */
 
 #include <stdlib.h>

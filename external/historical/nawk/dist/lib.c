@@ -97,13 +97,8 @@ void initgetrec(void)
 	char *p;
 
 	for (i = 1; i < *ARGC; i++) {
-		p = getargv(i); /* find 1st real filename */
-		if (p == NULL || *p == '\0') {  /* deleted or zapped */
-			argno++;
-			continue;
-		}
-		if (!isclvar(p)) {
-			setsval(lookup("FILENAME", symtab), p);
+		if (!isclvar(p = getargv(i))) {	/* find 1st real filename */
+			setsval(lookup("FILENAME", symtab), getargv(i));
 			return;
 		}
 		setclvar(p);	/* a commandline assignment before filename */
@@ -138,7 +133,7 @@ int getrec(uschar **pbuf, int *pbufsize, int isrecord)	/* get next input record 
 		   dprintf( ("argno=%d, file=|%s|\n", argno, file) );
 		if (infile == NULL) {	/* have to open a new file */
 			file = getargv(argno);
-			if (file == NULL || *file == '\0') {	/* deleted or zapped */
+			if (*file == '\0') {	/* it's been zapped */
 				argno++;
 				continue;
 			}
@@ -212,7 +207,6 @@ int readrec(uschar **pbuf, int *pbufsize, FILE *inf, int newflag)	/* read one re
 			FATAL("field separator %.10s... is too long", *FS);
 		memcpy(inputFS, *FS, len_inputFS);
 	}
-	/*fflush(stdout); avoids some buffering problem but makes it 25% slower*/
 	if (**RS && (*RS)[1]) {
 		fa *pfa = makedfa(*RS, 1);
 		if (newflag)
@@ -271,8 +265,6 @@ char *getargv(int n)	/* get ARGV[n] */
 	extern Array *ARGVtab;
 
 	snprintf(temp, sizeof(temp), "%d", n);
-	if (lookup(temp, ARGVtab) == NULL)
-		return NULL;
 	x = setsymtab(temp, "", 0.0, STR, ARGVtab);
 	s = getsval(x);
 	   dprintf( ("getargv(%d) returns |%s|\n", n, s) );
@@ -302,7 +294,6 @@ void fldbld(void)	/* create fields from current record */
 {
 	/* this relies on having fields[] the same length as $0 */
 	/* the fields are all stored in this one array with \0's */
-	/* possibly with a final trailing \0 not associated with any field */
 	char *r, *fr, sep;
 	Cell *p;
 	int i, j, n;
@@ -315,7 +306,7 @@ void fldbld(void)	/* create fields from current record */
 	n = strlen(r);
 	if (n > fieldssize) {
 		xfree(fields);
-		if ((fields = malloc(n+2)) == NULL) /* possibly 2 final \0s */
+		if ((fields = malloc(n+1)) == NULL)
 			FATAL("out of space for fields in fldbld %d", n);
 		fieldssize = n;
 	}

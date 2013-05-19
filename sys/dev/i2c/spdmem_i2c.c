@@ -1,4 +1,4 @@
-/* $NetBSD: spdmem_i2c.c,v 1.6 2012/09/12 00:36:41 pgoyette Exp $ */
+/* $NetBSD: spdmem_i2c.c,v 1.4 2012/01/22 10:36:52 nakayama Exp $ */
 
 /*
  * Copyright (c) 2007 Nicolas Joly
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spdmem_i2c.c,v 1.6 2012/09/12 00:36:41 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spdmem_i2c.c,v 1.4 2012/01/22 10:36:52 nakayama Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -145,14 +145,10 @@ static int
 spdmem_modcmd(modcmd_t cmd, void *opaque)
 {
 	int error = 0;
-#ifdef _MODULE
-	static struct sysctllog *spdmem_sysctl_clog;
-#endif
 
 	switch (cmd) {
 	case MODULE_CMD_INIT:
 #ifdef _MODULE
-		sysctl_spdmem_setup(&spdmem_sysctl_clog);
 		error = config_init_component(cfdriver_ioconf_spdmem,
 		    cfattach_ioconf_spdmem, cfdata_ioconf_spdmem);
 #endif
@@ -161,7 +157,6 @@ spdmem_modcmd(modcmd_t cmd, void *opaque)
 #ifdef _MODULE
 		error = config_fini_component(cfdriver_ioconf_spdmem,
 		    cfattach_ioconf_spdmem, cfdata_ioconf_spdmem);
-		sysctl_teardown(&spdmem_sysctl_clog);
 #endif
 		return error;
 	default:

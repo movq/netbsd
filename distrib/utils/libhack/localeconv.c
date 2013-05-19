@@ -1,11 +1,10 @@
-/*	$NetBSD: localeconv.c,v 1.4 2013/04/18 16:25:55 joerg Exp $	*/
+/*	$NetBSD: localeconv.c,v 1.3 2003/07/26 17:07:36 salo Exp $	*/
 
 /*
  * Written by J.T. Conklin <jtc@NetBSD.org>.
  * Public domain.
  */
 
-#define _NETBSD_SOURCE
 #include <sys/cdefs.h>
 #include <sys/localedef.h>
 #include <locale.h>
@@ -21,7 +20,7 @@
  * Fixed in the "C" locale.
  */
 struct lconv *
-localeconv(void)
+localeconv()
 {
     static struct lconv ret = {
 	/* char	*decimal_point */ ".",
@@ -45,11 +44,4 @@ localeconv(void)
     };
 
     return (&ret);
-}
-
-/* ARGSUSED */
-struct lconv *
-localeconv_l(locale_t loc)
-{
-	return localeconv();
 }

@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.36 2013/03/22 16:36:46 sjg Exp $
+# $NetBSD: Makefile,v 1.33 2011/09/29 23:38:04 sjg Exp $
 #
 # Unit tests for make(1)
 # The main targets are:
@@ -24,10 +24,8 @@ SUBFILES= \
 	error \
 	export \
 	export-all \
-	export-env \
 	doterror \
 	dotwait \
-	forloop \
 	forsubst \
 	hash \
 	misc \
@@ -37,7 +35,6 @@ SUBFILES= \
 	modorder \
 	modts \
 	modword \
-	order \
 	phony-end \
 	posix \
 	qequals \
@@ -50,7 +47,6 @@ SUBFILES= \
 all: ${SUBFILES}
 
 flags.doterror=
-flags.order=-j1
 
 # the tests are actually done with sub-makes.
 .PHONY: ${SUBFILES}

@@ -1,4 +1,30 @@
-/* $NetBSD: kern_auth.c,v 1.73 2013/03/18 19:35:42 plunky Exp $ */
+/* $NetBSD: kern_auth.c,v 1.66 2011/12/04 19:24:58 jym Exp $ */
+
+/*-
+ * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.
+ * All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
+ * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
+ * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
+ * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
+ * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
+ * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
+ * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
+ * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
+ * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
+ * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+ * POSSIBILITY OF SUCH DAMAGE.
+ */
 
 /*-
  * Copyright (c) 2005, 2006 Elad Efrat <elad@NetBSD.org>
@@ -28,7 +54,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_auth.c,v 1.73 2013/03/18 19:35:42 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_auth.c,v 1.66 2011/12/04 19:24:58 jym Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -66,7 +92,7 @@ struct kauth_cred {
 	 * Ensure that the first part of the credential resides in its own
 	 * cache line.  Due to sharing there aren't many kauth_creds in a
 	 * typical system, but the reference counts change very often.
-	 * Keeping it separate from the rest of the data prevents false
+	 * Keeping it seperate from the rest of the data prevents false
 	 * sharing between CPUs.
 	 */
 	u_int cr_refcnt;		/* reference count */
@@ -156,7 +182,7 @@ kauth_cred_hold(kauth_cred_t cred)
 	KASSERT(cred != NULL);
 	KASSERT(cred->cr_refcnt > 0);
 
-	atomic_inc_uint(&cred->cr_refcnt);
+        atomic_inc_uint(&cred->cr_refcnt);
 }
 
 /* Decrease reference count to cred. If reached zero, free it. */
@@ -258,12 +284,6 @@ kauth_proc_fork(struct proc *parent, struct proc *child)
 	/* XXX: relies on parent process stalling during fork() */
 	kauth_cred_hook(parent->p_cred, KAUTH_CRED_FORK, parent,
 	    child);
-}
-
-void
-kauth_proc_chroot(kauth_cred_t cred, struct cwdinfo *cwdi)
-{
-	kauth_cred_hook(cred, KAUTH_CRED_CHROOT, cwdi, NULL);
 }
 
 uid_t
@@ -930,7 +950,7 @@ kauth_authorize_action_internal(kauth_scope_t scope, kauth_cred_t cred,
 
 	/* Short-circuit requests coming from the kernel. */
 	if (cred == NOCRED || cred == FSCRED)
-		return KAUTH_RESULT_ALLOW;
+		return (0);
 
 	KASSERT(scope != NULL);
 
@@ -1074,19 +1094,6 @@ kauth_mode_to_action(mode_t mode)
 		action |= KAUTH_VNODE_WRITE_DATA;
 	if (mode & VEXEC)
 		action |= KAUTH_VNODE_EXECUTE;
-
-	return action;
-}
-
-kauth_action_t
-kauth_extattr_action(mode_t access_mode)
-{
-	kauth_action_t action = 0;
-
-	if (access_mode & VREAD)
-		action |= KAUTH_VNODE_READ_EXTATTRIBUTES;
-	if (access_mode & VWRITE)
-		action |= KAUTH_VNODE_WRITE_EXTATTRIBUTES;
 
 	return action;
 }

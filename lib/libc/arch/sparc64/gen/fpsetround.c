@@ -1,4 +1,4 @@
-/*	$NetBSD: fpsetround.c,v 1.6 2013/02/15 09:25:03 martin Exp $	*/
+/*	$NetBSD: fpsetround.c,v 1.4.46.1 2013/02/18 18:10:25 riz Exp $	*/
 
 /*
  * Written by J.T. Conklin, Apr 10, 1995
@@ -7,12 +7,11 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: fpsetround.c,v 1.6 2013/02/15 09:25:03 martin Exp $");
+__RCSID("$NetBSD: fpsetround.c,v 1.4.46.1 2013/02/18 18:10:25 riz Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
 
-#include <sys/types.h>
 #include <ieeefp.h>
 
 #ifdef __weak_alias
@@ -41,5 +40,5 @@ fpsetround(rnd_dir)
 
 	__asm("ld %0,%%fsr" : : "m" (*&new));
 
-	return ((uint32_t)old >> 30) & 0x03;
+	return (old >> 30) & 0x03;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: trap_subr.S,v 1.76 2013/04/11 17:13:15 macallan Exp $	*/
+/*	$NetBSD: trap_subr.S,v 1.73 2012/02/01 05:25:58 matt Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -55,20 +55,11 @@
 #define RESTORE_VRSAVE(tf,b)
 #endif
 
-#if defined (PPC_OEA64) || defined (PPC_OEA64_BRIDGE)
+#if defined (PPC_OEA64)
 #define	RFI	rfid
 #else
 #define	RFI	rfi
-#endif /* PPC_OEA64 || PPC_OEA64_BRIDGE*/
-
-#if defined (PPC_OEA64_BRIDGE)
-#define ENABLE_64BIT_BRIDGE(t0)						\
-	mfmsr	t0;							\
-	clrldi	t0,t0,1;						\
-	mtmsrd	t0;
-#else
-#define ENABLE_64BIT_BRIDGE(t0)
-#endif /* PPC_OEA64_BRIDGE */
+#endif /* PPC_OEA64 */
 
 #if defined(PPC_OEA64)
 /*
@@ -87,14 +78,6 @@
 	lis	t0,_C_LABEL(kernel_pmap_)@ha;				\
 	ldreg	t0,_C_LABEL(kernel_pmap_)+PM_STEG@l(t0);		\
 	mtasr	t0
-
-#elif defined(PPC_MPC8XX)
-
-/*
- * PPC_MPC8XX don't have SRs to load
- */
-#define RESTORE_USER_SRS(t0,t1)
-#define RESTORE_KERN_SRS(t0,t1)
 
 #else /* not OEA64 */
 
@@ -179,7 +162,6 @@
 	.globl	_C_LABEL(trapcode),_C_LABEL(trapsize)
 _C_LABEL(trapcode):
 	mtsprg1	%r1			/* save SP */
-	ENABLE_64BIT_BRIDGE(%r1)
 	GET_CPUINFO(%r1)
 	streg	%r28,(CI_TEMPSAVE+CPUSAVE_R28)(%r1)	/* free r28 */
 	streg	%r29,(CI_TEMPSAVE+CPUSAVE_R29)(%r1)	/* free r29 */
@@ -209,7 +191,6 @@ _C_LABEL(trapsize) = .-_C_LABEL(trapcode)
 	.globl	_C_LABEL(alitrap),_C_LABEL(alisize)
 _C_LABEL(alitrap):
 	mtsprg1	%r1			/* save SP */
-	ENABLE_64BIT_BRIDGE(%r1)
 	GET_CPUINFO(%r1)
 	streg	%r28,(CI_TEMPSAVE+CPUSAVE_R28)(%r1) /* save r28 */
 	streg	%r29,(CI_TEMPSAVE+CPUSAVE_R29)(%r1) /* save r29 */
@@ -235,7 +216,6 @@ _C_LABEL(alitrap):
 #endif
 _C_LABEL(alisize) = .-_C_LABEL(alitrap)
 
-#if !defined(PPC_MPC8XX)
 /*
  * Similar to the above for DSI
  * Has to handle BAT spills
@@ -245,7 +225,6 @@ _C_LABEL(alisize) = .-_C_LABEL(alitrap)
 	.globl	_C_LABEL(dsitrap),_C_LABEL(dsisize)
 _C_LABEL(dsitrap):
 	mtsprg1	%r1
-	ENABLE_64BIT_BRIDGE(%r1)
 	GET_CPUINFO(%r1)
 	streg	%r28,(CI_DISISAVE+CPUSAVE_R28)(%r1)	/* save r28 */
 	streg	%r29,(CI_DISISAVE+CPUSAVE_R29)(%r1)	/* save r29 */
@@ -253,11 +232,10 @@ _C_LABEL(dsitrap):
 	streg	%r31,(CI_DISISAVE+CPUSAVE_R31)(%r1)	/* save r31 */
 	mfsprg1	%r1
 	mfcr	%r29			/* save CR */
-	mfsrr1	%r31			/* test kernel mode */
-	mtcr	%r31
-#if !defined(PPC_MPC8XX)
 	mfxer	%r30			/* save XER */
 	mtsprg2	%r30			/* in SPRG2 */
+	mfsrr1	%r31			/* test kernel mode */
+	mtcr	%r31
 	bt	MSR_PR,1f		/* branch if PSL_PR is set */
 	mfdar	%r31			/* get fault address */
 	rlwinm	%r31,%r31,3+(32-BAT_ADDR_SHIFT),BAT_ADDR_SHIFT-3,28
@@ -318,7 +296,6 @@ dsitrap_fix_dbat7:
 	mfsprg1	%r1
 	RFI				/* return to trapped code */
 1:
-#endif	/* !PPC_MPC8XX */
 	mflr	%r28			/* save LR */
 	mtsprg1	%r1			/* save SP */
 #if defined(DISTANT_KERNEL)
@@ -330,7 +307,6 @@ dsitrap_fix_dbat7:
 	bla	disitrap
 #endif
 _C_LABEL(dsisize) = .-_C_LABEL(dsitrap)
-#endif /* !PPC_MPC8XX */
 
 #if defined(PPC_OEA601)
 /*
@@ -342,7 +318,6 @@ _C_LABEL(dsisize) = .-_C_LABEL(dsitrap)
 	.globl	_C_LABEL(dsi601trap),_C_LABEL(dsi601size)
 _C_LABEL(dsi601trap):
 	mtsprg1	%r1
-	ENABLE_64BIT_BRIDGE(%r1)
 	GET_CPUINFO(%r1)
 	streg	%r28,(CI_DISISAVE+CPUSAVE_R28)(%r1)	/* save r28 */
 	streg	%r29,(CI_DISISAVE+CPUSAVE_R29)(%r1)	/* save r29 */
@@ -410,7 +385,6 @@ _C_LABEL(dsi601size) = .-_C_LABEL(dsi601trap)
 	.globl	_C_LABEL(extint),_C_LABEL(extsize)
 _C_LABEL(extint):
 	mtsprg1	%r1			/* save SP */
-	ENABLE_64BIT_BRIDGE(%r1)
 	GET_CPUINFO(%r1)
 	streg	%r28,(CI_TEMPSAVE+CPUSAVE_R28)(%r1)	/* save r28 */
 	streg	%r29,(CI_TEMPSAVE+CPUSAVE_R29)(%r1)	/* save r29 */
@@ -444,7 +418,6 @@ _C_LABEL(extsize) = .-_C_LABEL(extint)
 	.globl	_C_LABEL(decrint),_C_LABEL(decrsize)
 _C_LABEL(decrint):
 	mtsprg1	%r1			/* save SP */
-	ENABLE_64BIT_BRIDGE(%r1)
 	GET_CPUINFO(%r1)
 	streg	%r28,(CI_TEMPSAVE+CPUSAVE_R28)(%r1)	/* save r28 */
 	streg	%r29,(CI_TEMPSAVE+CPUSAVE_R29)(%r1)	/* save r29 */
@@ -471,7 +444,7 @@ _C_LABEL(decrint):
 #endif
 _C_LABEL(decrsize) = .-_C_LABEL(decrint)
 
-#if !defined(PPC_OEA64) && !defined(PPC_MPC8XX)
+#if !defined(PPC_OEA64)
 /*
  * Now the tlb software load for 603 processors:
  * (Code essentially from the 603e User Manual, Chapter 5, but
@@ -675,7 +648,7 @@ _C_LABEL(tlbdsmiss):
 	ba	EXC_DSI
 #endif
 _C_LABEL(tlbdsmsize) = .-_C_LABEL(tlbdsmiss)
-#endif /* !PPC_OEA64 && !PPC_MPC8XX */
+#endif /* !defined(PPC_OEA64) */
 
 #if defined(DDB) || defined(KGDB)
 /*
@@ -688,7 +661,6 @@ _C_LABEL(tlbdsmsize) = .-_C_LABEL(tlbdsmiss)
 	.globl	_C_LABEL(ddblow),_C_LABEL(ddbsize)
 _C_LABEL(ddblow):
 	mtsprg1	%r1			/* save SP */
-	ENABLE_64BIT_BRIDGE(%r1)
 	mtsprg2 %r29			/* save r29 */
 	mfcr	%r29			/* save CR in r29 */
 	mfsrr1	%r1
@@ -744,7 +716,6 @@ _C_LABEL(ddbsize) = .-_C_LABEL(ddblow)
 	.globl	_C_LABEL(ipkdblow),_C_LABEL(ipkdbsize)
 _C_LABEL(ipkdblow):
 	mtsprg1	%r1			/* save SP */
-	ENABLE_64BIT_BRIDGE(%r1)
 	GET_CPUINFO(%r1)
 	streg	%r28,(CI_IPKDBSAVE+CPUSAVE_R28)(%r1) /* save r28 */
 	streg	%r29,(CI_IPKDBSAVE+CPUSAVE_R29)(%r1) /* save r29 */
@@ -1037,7 +1008,6 @@ intrleave:
 	.globl	_C_LABEL(sctrap),_C_LABEL(scsize),_C_LABEL(sctrapexit)
 _C_LABEL(sctrap):
 	mtsprg1	%r1			/* save SP */
-	ENABLE_64BIT_BRIDGE(%r1)
 	GET_CPUINFO(%r1)
 	streg	%r28,(CI_TEMPSAVE+CPUSAVE_R28)(%r1) /* save r28 */
 	streg	%r29,(CI_TEMPSAVE+CPUSAVE_R29)(%r1) /* save r20 */
@@ -1142,9 +1112,6 @@ _C_LABEL(sctrapexit):
 	streg	%r4,FRAME_CTR(%r1);					\
 	streg	%r11,FRAME_SRR0(%r1);					\
 	streg	%r12,FRAME_SRR1(%r1);					\
-	mfmsr	%r6;							\
-	ori	%r6,%r6,PSL_RI;		/* turn on recovery interrupt */\
-	mtmsr	%r6;							\
 	SAVE_VRSAVE(%r1,%r6);						\
 	SAVE_MQ(%r1,%r7)
 
@@ -1231,7 +1198,6 @@ _C_LABEL(ddb_trap):
 	andi.	%r3,%r3,~(PSL_EE|PSL_ME)@l
 	mtmsr	%r3			/* disable interrupts */
 	isync
-	ENABLE_64BIT_BRIDGE(%r3)
 	GET_CPUINFO(%r3)
 	streg	%r28,(CI_DDBSAVE+CPUSAVE_R28)(%r3)
 	streg	%r29,(CI_DDBSAVE+CPUSAVE_R29)(%r3)
@@ -1272,7 +1238,6 @@ _C_LABEL(ipkdb_trap):
 	andi.	%r3,%r3,~(PSL_EE|PSL_ME)@l
 	mtmsr	%r3			/* disable interrupts */
 	isync
-	ENABLE_64BIT_BRIDGE(%r3)
 	GET_CPUINFO(%r3)
 	streg	%r28,(CI_IPKDBSAVE+CPUSAVE_R28)(%r3)
 	streg	%r29,(CI_IPKDBSAVE+CPUSAVE_R29)(%r3)
@@ -1372,7 +1337,5 @@ _C_LABEL(trapend):
  * All OEA have FPUs so include this too.  Some OEA have AltiVec so include
  * that too.
  */
-#if !defined(PPC_MPC8XX)
 #include <powerpc/powerpc/fpu_subr.S>
 #include <powerpc/oea/altivec_subr.S>
-#endif

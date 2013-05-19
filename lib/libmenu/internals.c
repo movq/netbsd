@@ -1,4 +1,4 @@
-/*	$NetBSD: internals.c,v 1.16 2012/12/30 12:27:09 blymn Exp $	*/
+/*	$NetBSD: internals.c,v 1.13.42.1 2012/08/09 06:46:37 jdc Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com.au)
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: internals.c,v 1.16 2012/12/30 12:27:09 blymn Exp $");
+__RCSID("$NetBSD: internals.c,v 1.13.42.1 2012/08/09 06:46:37 jdc Exp $");
 
 #include <menu.h>
 #include <ctype.h>
@@ -446,9 +446,7 @@ _menui_draw_item(MENU *menu, int item)
 	   * all others unless the menu unmark string is set in which
 	   * case the unmark string is written.
 	   */
-	if ((menu->items[item]->selected == 1) ||
-	    (((menu->opts & O_ONEVALUE) == O_ONEVALUE) &&
-		(menu->cur_item == item))) {
+	if (menu->items[item]->selected == 1) {
 		if (menu->mark.string != NULL) {
 			for (j = 0; j < menu->mark.length; j++) {
 				waddch(menu->scrwin,

@@ -1,4 +1,4 @@
-/*	$NetBSD: itesio_isa.c,v 1.24 2012/11/15 04:45:01 msaitoh Exp $ */
+/*	$NetBSD: itesio_isa.c,v 1.23.8.1 2012/11/23 16:38:45 riz Exp $ */
 /*	Derived from $OpenBSD: it.c,v 1.19 2006/04/10 00:57:54 deraadt Exp $	*/
 
 /*
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: itesio_isa.c,v 1.24 2012/11/15 04:45:01 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: itesio_isa.c,v 1.23.8.1 2012/11/23 16:38:45 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>

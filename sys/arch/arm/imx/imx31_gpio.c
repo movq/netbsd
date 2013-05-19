@@ -1,4 +1,4 @@
-/*	$NetBSD: imx31_gpio.c,v 1.7 2012/10/27 17:17:39 chs Exp $	*/
+/*	$NetBSD: imx31_gpio.c,v 1.6 2011/07/01 20:27:50 dyoung Exp $	*/
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -28,7 +28,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imx31_gpio.c,v 1.7 2012/10/27 17:17:39 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imx31_gpio.c,v 1.6 2011/07/01 20:27:50 dyoung Exp $");
 
 #define _INTR_PRIVATE
 
@@ -72,6 +72,7 @@ const struct pic_ops gpio_pic_ops = {
 };
 
 struct gpio_softc {
+	struct device gpio_dev;
 	struct pic_softc gpio_pic;
 	bus_space_tag_t gpio_memt;
 	bus_space_handle_t gpio_memh;
@@ -219,7 +220,7 @@ gpio_pic_establish_irq(struct pic_softc *pic, struct intrsource *is)
 static int gpio_match(device_t, cfdata_t, void *);
 static void gpio_attach(device_t, device_t, void *);
 
-CFATTACH_DECL_NEW(imxgpio,
+CFATTACH_DECL(imxgpio,
 	sizeof(struct gpio_softc),
 	gpio_match, gpio_attach,
 	NULL, NULL);
@@ -272,7 +273,7 @@ imxgpio_pin_ctl(void *arg, int pin, int flags)
 static void
 gpio_defer(device_t self)
 {
-	struct gpio_softc * const gpio = device_private(self);
+	struct gpio_softc * const gpio = (void *) self;
 	struct gpio_chipset_tag * const gp = &gpio->gpio_chipset;
 	struct gpiobus_attach_args gba;
 	gpio_pin_t *pins;
@@ -334,7 +335,7 @@ void
 gpio_attach(device_t parent, device_t self, void *aux)
 {
 	struct ahb_attach_args * const ahba = aux;
-	struct gpio_softc * const gpio = device_private(self);
+	struct gpio_softc * const gpio = (void *) self;
 	int error;
 
 	if (ahba->ahba_size == AHBCF_SIZE_DEFAULT)
@@ -352,7 +353,7 @@ gpio_attach(device_t parent, device_t self, void *aux)
 
 	if (ahba->ahba_irqbase != AHBCF_IRQBASE_DEFAULT) {
 		gpio->gpio_pic.pic_ops = &gpio_pic_ops;
-		strlcpy(gpio->gpio_pic.pic_name, device_xname(self),
+		strlcpy(gpio->gpio_pic.pic_name, self->dv_xname,
 		    sizeof(gpio->gpio_pic.pic_name));
 		gpio->gpio_pic.pic_maxsources = 32;
 		pic_add(&gpio->gpio_pic, ahba->ahba_irqbase);

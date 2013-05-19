@@ -1,4 +1,4 @@
-/*	$NetBSD: acconfig.h,v 1.6 2012/12/04 23:38:37 spz Exp $	*/
+/*	$NetBSD: acconfig.h,v 1.4.6.2 2012/12/15 05:39:19 riz Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007, 2008, 2012  Internet Systems Consortium, Inc. ("ISC")

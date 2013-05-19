@@ -10,7 +10,8 @@ cat << _EOF
 # <Name><TAB><Alpha-2-code><TAB><Alpha-3-code><TAB><Numeric-3-code><TAB><FIPS>
 #
 # Further information can be found at the ISO 3166 Maintenance Agency
-# (ISO 3166/MA) web site, <http://www.iso.org/iso/country_codes>.
+# (ISO 3166/MA) web site,
+# <http://www.iso.org/iso/en/prods-services/iso3166ma/index.html>.
 #
 # FIPS 10-4 codes compiled from several sources, including
 # http://www.statoids.com/wab.html
@@ -24,17 +25,15 @@ cat << _EOF
 _EOF
 }
 
-I1=wab.html
-U1=http://www.statoids.com/$I1
+I1=http://www.statoids.com/wab.html
 O1=/tmp/wab.$$
-I2=country_names_and_code_elements_txt
-U2=http://www.iso.org/iso/$I2
+I2=http://www.iso.org/iso/list-en1-semic-3.txt
 O2=/tmp/list.$$
-trap "rm -f $I1 $I2 $O1 $O2" 0 1 2 3 15
-ftp $U1
-ftp $U2
+trap "rm -f wab.html list-en1-semic-3.txt $O1 $O2" 0 1 2 3 15
+ftp $I1
+ftp $I2
 
-grep '<tr class="[oe]">' $I1 |
+grep '<tr class="[oe]">' wab.html |
 sed -e 's,<tr class="."><td>,,g' \
     -e 's,\&nbsp;,,g' \
     -e 's,<code>,,g' \
@@ -48,7 +47,7 @@ awk -F'\t' '{ printf("%s\t%s\t%s\t%s\t%s\n", $2, $3, $4, $6, $1); }' |
 grep -v href= |
 sort > $O1
 
-grep ';[A-Z][A-Z]' $I2 |
+grep ';[A-Z][A-Z]' list-en1-semic-3.txt |
 tr -d '\015' |
 awk -F ';' '{ print $2 }' |
 sort > $O2

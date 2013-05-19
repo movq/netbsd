@@ -1,4 +1,4 @@
-/*	$NetBSD: filecore_vfsops.c,v 1.70 2012/12/20 08:03:42 hannken Exp $	*/
+/*	$NetBSD: filecore_vfsops.c,v 1.68 2011/11/14 18:35:13 hannken Exp $	*/
 
 /*-
  * Copyright (c) 1994 The Regents of the University of California.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: filecore_vfsops.c,v 1.70 2012/12/20 08:03:42 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: filecore_vfsops.c,v 1.68 2011/11/14 18:35:13 hannken Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -282,8 +282,7 @@ filecore_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	 * permissions on the device.
 	 */
 	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
-	error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_MOUNT,
-	    KAUTH_REQ_SYSTEM_MOUNT_DEVICE, mp, devvp, KAUTH_ARG(VREAD));
+	error = genfs_can_mount(devvp, VREAD, l->l_cred);
 	VOP_UNLOCK(devvp);
 	if (error) {
 		vrele(devvp);
@@ -615,6 +614,10 @@ filecore_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
 		if ((error = filecore_bread(fcmp, ino & FILECORE_INO_MASK,
 		    FILECORE_DIR_SIZE, NOCRED, &bp)) != 0) {
 			vput(vp);
+#ifdef FILECORE_DEBUG_BR
+			printf("brelse(%p) vf4\n", bp);
+#endif
+			brelse(bp, 0);
 			*vpp = NULL;
 			return (error);
 		}

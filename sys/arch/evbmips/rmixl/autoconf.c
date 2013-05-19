@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.7 2012/10/27 17:17:51 chs Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.5.2.1 2012/08/08 15:51:13 martin Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.7 2012/10/27 17:17:51 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.5.2.1 2012/08/08 15:51:13 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -72,7 +72,7 @@ cpu_rootconf(void)
 	findroot();
 
 	printf("boot device: %s\n",
-		booted_device ? device_xname(booted_device) : "<unknown>");
+		booted_device ? booted_device->dv_xname : "<unknown>");
 
 	rootconf();
 }

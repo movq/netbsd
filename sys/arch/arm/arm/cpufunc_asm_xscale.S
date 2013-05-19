@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc_asm_xscale.S,v 1.20 2012/09/22 00:33:37 matt Exp $	*/
+/*	$NetBSD: cpufunc_asm_xscale.S,v 1.19 2010/01/03 04:25:16 uebayasi Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -132,16 +132,14 @@ ENTRY(xscale_control)
 ENTRY(xscale_setttb)
 #ifdef CACHE_CLEAN_BLOCK_INTR
 	mrs	r3, cpsr_all
-	orr	r2, r3, #(I32_bit | F32_bit)
-	msr	cpsr_all, r2
+	orr	r1, r3, #(I32_bit | F32_bit)
+	msr	cpsr_all, r1
 #else
 	ldr	r3, .Lblock_userspace_access
 	ldr	r2, [r3]
-	orr	ip, r2, #1 
-	str	ip, [r3]
+	orr	r1, r2, #1 
+	str	r1, [r3]
 #endif
-	cmp	r1, #0			/* flush cache/TLB? */
-	beq	1f			/*   nope, so don't */
 	stmfd	sp!, {r0-r3, lr}
 	bl	_C_LABEL(xscale_cache_cleanID)
 	mcr	p15, 0, r0, c7, c5, 0	/* invalidate I$ and BTB */
@@ -150,12 +148,9 @@ ENTRY(xscale_setttb)
 	CPWAIT(r0)
 
 	ldmfd	sp!, {r0-r3, lr}
-	cmp	r0, #1
 
-1:	/* Write the TTB */ 
+	/* Write the TTB */ 
 	mcr	p15, 0, r0, c2, c0, 0
-
-	beq	2f			/*   nope, so don't */
 
 	/* If we have updated the TTB we must flush the TLB */
 	mcr	p15, 0, r0, c8, c7, 0	/* invalidate I+D TLB */
@@ -165,7 +160,6 @@ ENTRY(xscale_setttb)
 
 	CPWAIT(r0)
 
-2:
 #ifdef CACHE_CLEAN_BLOCK_INTR
 	msr	cpsr_all, r3
 #else

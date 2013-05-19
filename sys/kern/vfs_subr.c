@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_subr.c,v 1.437 2013/03/18 19:35:43 plunky Exp $	*/
+/*	$NetBSD: vfs_subr.c,v 1.432.2.2 2012/05/19 15:29:21 riz Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2004, 2005, 2007, 2008 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_subr.c,v 1.437 2013/03/18 19:35:43 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_subr.c,v 1.432.2.2 2012/05/19 15:29:21 riz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_compat_netbsd.h"
@@ -513,8 +513,23 @@ getdevvp(dev_t dev, vnode_t **vpp, enum vtype type)
 int
 vfinddev(dev_t dev, enum vtype type, vnode_t **vpp)
 {
+	vnode_t *vp;
 
-	return (spec_node_lookup_by_dev(type, dev, vpp) == 0);
+	mutex_enter(&device_lock);
+	for (vp = specfs_hash[SPECHASH(dev)]; vp; vp = vp->v_specnext) {
+		if (type == vp->v_type && dev == vp->v_rdev)
+			break;
+	}
+	if (vp == NULL) {
+		mutex_exit(&device_lock);
+		return 0;
+	}
+	mutex_enter(vp->v_interlock);
+	mutex_exit(&device_lock);
+	if (vget(vp, 0) != 0)
+		return 0;
+	*vpp = vp;
+	return 1;
 }
 
 /*
@@ -524,17 +539,34 @@ vfinddev(dev_t dev, enum vtype type, vnode_t **vpp)
 void
 vdevgone(int maj, int minl, int minh, enum vtype type)
 {
-	vnode_t *vp;
+	vnode_t *vp, **vpp;
 	dev_t dev;
 	int mn;
 
+	vp = NULL;	/* XXX gcc */
+
+	mutex_enter(&device_lock);
 	for (mn = minl; mn <= minh; mn++) {
 		dev = makedev(maj, mn);
-		while (spec_node_lookup_by_dev(type, dev, &vp) == 0) {
-			VOP_REVOKE(vp, REVOKEALL);
-			vrele(vp);
+		vpp = &specfs_hash[SPECHASH(dev)];
+		for (vp = *vpp; vp != NULL;) {
+			mutex_enter(vp->v_interlock);
+			if ((vp->v_iflag & VI_CLEAN) != 0 ||
+			    type != vp->v_type || dev != vp->v_rdev) {
+				mutex_exit(vp->v_interlock);
+				vp = vp->v_specnext;
+				continue;
+			}
+			mutex_exit(&device_lock);
+			if (vget(vp, 0) == 0) {
+				VOP_REVOKE(vp, REVOKEALL);
+				vrele(vp);
+			}
+			mutex_enter(&device_lock);
+			vp = *vpp;
 		}
 	}
+	mutex_exit(&device_lock);
 }
 
 /*
@@ -768,9 +800,7 @@ vaccess(enum vtype type, mode_t file_mode, uid_t uid, gid_t gid,
 	printf("vaccess: deprecated interface used.\n");
 #endif /* DIAGNOSTIC */
 
-	return kauth_authorize_vnode(cred, KAUTH_ACCESS_ACTION(acc_mode,
-	    type, file_mode), NULL /* This may panic. */, NULL,
-	    genfs_can_access(type, file_mode, uid, gid, acc_mode, cred));
+	return genfs_can_access(type, file_mode, uid, gid, acc_mode, cred);
 }
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: dirs.c,v 1.49 2013/01/22 09:39:13 dholland Exp $	*/
+/*	$NetBSD: dirs.c,v 1.48 2009/04/07 12:38:12 lukem Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)dirs.c	8.7 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: dirs.c,v 1.49 2013/01/22 09:39:13 dholland Exp $");
+__RCSID("$NetBSD: dirs.c,v 1.48 2009/04/07 12:38:12 lukem Exp $");
 #endif
 #endif /* not lint */
 
@@ -286,7 +286,7 @@ treescan(const char *pname, ino_t ino, long (*todo)(const char *, ino_t, int))
 }
 
 /*
- * Lookup a pathname which is always assumed to start from the root inode.
+ * Lookup a pathname which is always assumed to start from the ROOTINO.
  */
 struct direct *
 pathsearch(const char *pathname)
@@ -297,7 +297,7 @@ pathsearch(const char *pathname)
 
 	strcpy(buffer, pathname);
 	path = buffer;
-	ino = UFS_ROOTINO;
+	ino = ROOTINO;
 	while (*path == '/')
 		path++;
 	dp = NULL;
@@ -616,7 +616,7 @@ setdirmodes(int flags)
 				ep->e_flags &= ~NEW;
 				continue;
 			}
-			if (node.ino == UFS_ROOTINO && dotflag == 0)
+			if (node.ino == ROOTINO && dotflag == 0)
 				continue;
 		}
 		if (ep == NULL) {

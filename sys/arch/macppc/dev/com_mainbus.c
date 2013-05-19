@@ -47,8 +47,6 @@
 #include <dev/ic/comreg.h>
 #include <dev/ic/comvar.h>
 
-#include <machine/autoconf.h>
-
 struct com_mainbus_softc
 {
     struct com_softc sc_com;    /* real "com" softc */

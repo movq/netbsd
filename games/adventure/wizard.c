@@ -1,4 +1,4 @@
-/*	$NetBSD: wizard.c,v 1.16 2012/10/12 15:41:10 dholland Exp $	*/
+/*	$NetBSD: wizard.c,v 1.14 2009/08/25 06:56:52 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)wizard.c	8.1 (Berkeley) 6/2/93";
 #else
-__RCSID("$NetBSD: wizard.c,v 1.16 2012/10/12 15:41:10 dholland Exp $");
+__RCSID("$NetBSD: wizard.c,v 1.14 2009/08/25 06:56:52 dholland Exp $");
 #endif
 #endif				/* not lint */
 
@@ -130,19 +130,19 @@ wizard(void)
 void
 ciao(void)
 {
-	char fname[80];
-	size_t pos;
+	char   *c;
+	char    fname[80];
 
 	printf("What would you like to call the saved version?\n");
 	/* XXX - should use fgetln to avoid arbitrary limit */
-	for (pos = 0; pos < sizeof(fname) - 1; pos++) {
+	for (c = fname; c < fname + sizeof fname - 1; c++) {
 		int ch;
 		ch = getchar();
 		if (ch == '\n' || ch == EOF)
 			break;
-		fname[pos] = ch;
+		*c = ch;
 	}
-	fname[pos] = '\0';
+	*c = 0;
 	if (save(fname) != 0)
 		return;		/* Save failed */
 	printf("To resume, say \"adventure %s\".\n", fname);

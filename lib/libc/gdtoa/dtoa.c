@@ -1,4 +1,4 @@
-/* $NetBSD: dtoa.c,v 1.10 2012/05/16 17:48:59 alnsn Exp $ */
+/* $NetBSD: dtoa.c,v 1.7 2011/03/21 19:46:41 christos Exp $ */
 
 /****************************************************************
 
@@ -536,17 +536,15 @@ dtoa
 				Bfree(b);
 				b = b1;
 				}
-			if (( j = b5 - m5 )!=0) {
+			if (( j = b5 - m5 )!=0)
 				b = pow5mult(b, j);
 				if (b == NULL)
 					return NULL;
-				}
 			}
-		else {
+		else
 			b = pow5mult(b, b5);
 			if (b == NULL)
 				return NULL;
-			}
 		}
 	S = i2b(1);
 	if (S == NULL)
@@ -555,7 +553,7 @@ dtoa
 		S = pow5mult(S, s5);
 		if (S == NULL)
 			return NULL;
-		}
+	}
 
 	/* Check for special case that d is a normalized power of 2. */
 
@@ -607,12 +605,12 @@ dtoa
 		b = lshift(b, b2);
 		if (b == NULL)
 			return NULL;
-		}
+	}
 	if (s2 > 0) {
 		S = lshift(S, s2);
 		if (S == NULL)
 			return NULL;
-		}
+	}
 	if (k_check) {
 		if (cmp(b,S) < 0) {
 			k--;
@@ -623,7 +621,7 @@ dtoa
 				mhi = multadd(mhi, 10, 0);
 				if (mhi == NULL)
 					return NULL;
-				}
+			}
 			ilim = ilim1;
 			}
 		}
@@ -644,7 +642,7 @@ dtoa
 			mhi = lshift(mhi, m2);
 			if (mhi == NULL)
 				return NULL;
-			}
+		}
 
 		/* Compute mlo -- check for special case
 		 * that d is a normalized power of 2.

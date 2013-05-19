@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.11 2012/05/02 13:35:04 cheusov Exp $
+#	$NetBSD: Makefile,v 1.10.6.1 2012/05/18 16:56:26 riz Exp $
 
 USE_FORT?=	no
 NOLINT=		#defined

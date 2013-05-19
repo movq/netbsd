@@ -1,14 +1,18 @@
-#	$NetBSD: std.gemini,v 1.7 2012/12/16 23:47:56 matt Exp $
+#	$NetBSD: std.gemini,v 1.6 2008/11/20 07:45:37 cliff Exp $
 #
 # standard NetBSD/evbarm for GEMINI options
 
 machine	evbarm arm
-include		"arch/evbarm/conf/std.evbarm"
- 
+include		"conf/std"	# MI standard options
+
 # Pull in GEMINI config definitions.
-include		"arch/evbarm/conf/files.gemini"
+include "arch/evbarm/conf/files.gemini"
+
+options 	EXEC_ELF32
+options 	EXEC_SCRIPT
 
 # To support easy transit to ../arch/arm/arm32
+options 	ARM32
 options 	ARM9
 options 	__HAVE_FAST_SOFTINTS		# should be in types.h
 options 	__HAVE_PCI_CONF_HOOK		# should be in types.h

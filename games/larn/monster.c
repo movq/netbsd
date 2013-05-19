@@ -1,4 +1,4 @@
-/*	$NetBSD: monster.c,v 1.18 2012/06/19 05:30:43 dholland Exp $	*/
+/*	$NetBSD: monster.c,v 1.17 2009/08/12 08:04:05 dholland Exp $	*/
 
 /*
  * monster.c	Larn is copyrighted 1986 by Noah Morgan.
@@ -100,7 +100,7 @@
  */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: monster.c,v 1.18 2012/06/19 05:30:43 dholland Exp $");
+__RCSID("$NetBSD: monster.c,v 1.17 2009/08/12 08:04:05 dholland Exp $");
 #endif				/* not lint */
 
 #include <string.h>
@@ -141,7 +141,8 @@ static void genmonst(void);
  * Returns no value.
  */
 void
-createmonster(int mon)
+createmonster(mon)
+	int             mon;
 {
 	int    x, y, k, i;
 	if (mon < 1 || mon > MAXMONST + 8) {	/* check for monster number
@@ -211,7 +212,8 @@ cgood(int x, int y, int theitem, int monst)
  * Returns no value, thus we don't know about createitem() failures.
  */
 void
-createitem(int it, int arg)
+createitem(it, arg)
+	int             it, arg;
 {
 	int    x, y, k, i;
 	if (it >= MAXOBJ)
@@ -238,7 +240,7 @@ createitem(int it, int arg)
  */
 static char     eys[] = "\nEnter your spell: ";
 void
-cast(void)
+cast()
 {
 	int    i, j, a, b, d;
 	cursors();
@@ -651,7 +653,7 @@ speldamage(int x)
  * No arguments and no return value
  */
 static void
-loseint(void)
+loseint()
 {
 	if (--c[INTELLIGENCE] < 3)
 		c[INTELLIGENCE] = 3;
@@ -664,7 +666,7 @@ loseint(void)
  * returns 0 if not confused, non-zero (time remaining confused) if confused
  */
 static int
-isconfuse(void)
+isconfuse()
 {
 	if (c[CONFUSE]) {
 		lprcat(" You can't aim your magic!");
@@ -682,7 +684,8 @@ isconfuse(void)
  * Enter with the spell number in x, and the monster number in monst.
  */
 static int
-nospell(int x, int monst)
+nospell(x, monst)
+	int             x, monst;
 {
 	int    tmp;
 	if (x >= SPNUM || monst >= MAXMONST + 8 || monst < 0 || x < 0)
@@ -703,7 +706,8 @@ nospell(int x, int monst)
  * Enter with the number of full hits being done
  */
 static int
-fullhit(int xx)
+fullhit(xx)
+	int             xx;
 {
 	int    i;
 	if (xx < 0 || xx > 20)
@@ -725,7 +729,9 @@ fullhit(int xx)
  * Returns no value.
  */
 static void
-direct(int spnum, int dam, const char *str, int arg)
+direct(spnum, dam, str, arg)
+	int             spnum, dam, arg;
+	const char     *str;
 {
 	int             x, y;
 	int    m;
@@ -785,16 +791,13 @@ direct(int spnum, int dam, const char *str, int arg)
  * Returns no value.
  */
 void
-godirect(int spnum, int dam, const char *str, int delay, int cshow_i)
+godirect(spnum, dam, str, delay, cshow)
+	int             spnum, dam, delay;
+	const char     *str, cshow;
 {
 	u_char  *p;
 	int    x, y, m;
 	int             dx, dy;
-	char cshow;
-
-	/* truncate to char width in case it matters */
-	cshow = (char)cshow_i;
-
 	if (spnum < 0 || spnum >= SPNUM || str == 0 || delay < 0)
 		return;		/* bad args */
 	if (isconfuse())
@@ -936,7 +939,8 @@ ifblind(int x, int y)
  * Returns no value.
  */
 static void
-tdirect(int spnum)
+tdirect(spnum)
+	int             spnum;
 {
 	int             x, y;
 	int    m;
@@ -1003,7 +1007,8 @@ omnidirect(int spnum, int dam, const char *str)
  * Returns index into diroffx[] (0-8).
  */
 static int
-dirsub(int *x, int *y)
+dirsub(x, y)
+	int            *x, *y;
 {
 	int    i;
 	lprcat("\nIn What Direction? ");
@@ -1045,7 +1050,8 @@ out:
  * routine are affected.
  */
 int
-vxy(int *x, int *y)
+vxy(x, y)
+	int            *x, *y;
 {
 	int             flag = 0;
 	if (*x < 0) {
@@ -1076,7 +1082,8 @@ vxy(int *x, int *y)
  * Returns no value.
  */
 static void
-dirpoly(int spnum)
+dirpoly(spnum)
+	int             spnum;
 {
 	int             x, y, m;
 	if (spnum < 0 || spnum >= SPNUM)
@@ -1108,7 +1115,8 @@ dirpoly(int spnum)
  * Returns no value.
  */
 void
-hitmonster(int x, int y)
+hitmonster(x, y)
+	int             x, y;
 {
 	int    tmp, monst, damag = 0, flag;
 	if (c[TIMESTOP])
@@ -1160,7 +1168,9 @@ hitmonster(int x, int y)
  * Called by hitmonster(x,y)
  */
 static int
-hitm(int x, int y, int amt)
+hitm(x, y, amt)
+	int x, y;
+	int amt;
 {
 	int    monst;
 	int    hpoints, amt2;
@@ -1215,7 +1225,8 @@ hitm(int x, int y, int amt)
  * Returns nothing of value.
  */
 void
-hitplayer(int x, int y)
+hitplayer(x, y)
+	int             x, y;
 {
 	int    dam, tmp, mster, bias;
 	vxy(&x, &y);		/* verify coordinates are within range */
@@ -1291,7 +1302,8 @@ hitplayer(int x, int y)
  * Returns nothing of value.
  */
 static void
-dropsomething(int monst)
+dropsomething(monst)
+	int             monst;
 {
 	switch (monst) {
 	case ORC:
@@ -1324,7 +1336,8 @@ dropsomething(int monst)
  * Returns nothing of value.
  */
 void
-dropgold(int amount)
+dropgold(amount)
+	int    amount;
 {
 	if (amount > 250)
 		createitem(OMAXGOLD, amount / 100);
@@ -1371,7 +1384,8 @@ static char     nobjtab[] = {
 	OLONGSWORD};
 
 int
-newobject(int lev, int *i)
+newobject(lev, i)
+	int    lev, *i;
 {
 	int    tmp = 32, j;
 	if (level < 0 || level > MAXLEVEL + MAXVLEVEL)
@@ -1504,7 +1518,8 @@ static char     rustarm[ARMORTYPES][2] = {
 };
 static char     spsel[] = {1, 2, 3, 5, 6, 8, 9, 11, 13, 14};
 static int
-spattack(int x, int xx, int yy)
+spattack(x, xx, yy)
+	int             x, xx, yy;
 {
 	int    i, j = 0, k, m;
 	const char *p = NULL;
@@ -1691,7 +1706,8 @@ spout3:	p = "\nThe %s bit you!";
  * Note: if x > c[HP] this routine could kill the player!
  */
 void
-checkloss(int x)
+checkloss(x)
+	int             x;
 {
 	if (x > 0) {
 		losehp(x);
@@ -1706,7 +1722,7 @@ checkloss(int x)
  * Returns the experience gained from all monsters killed
  */
 int
-annihilate(void)
+annihilate()
 {
 	int             i, j;
 	long   k;
@@ -1741,7 +1757,8 @@ annihilate(void)
  * Returns the number of spheres currently in existence
  */
 int
-newsphere(int x, int y, int dir, int life)
+newsphere(x, y, dir, life)
+	int             x, y, dir, life;
 {
 	int             m;
 	struct sphere  *sp;
@@ -1830,7 +1847,8 @@ boom:		sphboom(x, y);	/* blow up stuff around sphere */
  * Returns the number of spheres currently in existence
  */
 int
-rmsphere(int x, int y)
+rmsphere(x, y)
+	int             x, y;
 {
 	struct sphere *sp, *sp2 = 0;
 	for (sp = spheres; sp; sp2 = sp, sp = sp->p)
@@ -1863,7 +1881,8 @@ rmsphere(int x, int y)
  * Enter with the coordinates of the blast, Returns no value
  */
 static void
-sphboom(int x, int y)
+sphboom(x, y)
+	int             x, y;
 {
 	int    i, j;
 	if (c[HOLDMONST])
@@ -1890,7 +1909,7 @@ sphboom(int x, int y)
  * This is done by setting a flag in the monster[] structure
  */
 static void
-genmonst(void)
+genmonst()
 {
 	int    i, j;
 	cursors();

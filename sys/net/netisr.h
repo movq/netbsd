@@ -1,4 +1,4 @@
-/* $NetBSD: netisr.h,v 1.42 2013/03/01 18:25:57 joerg Exp $ */
+/* $NetBSD: netisr.h,v 1.41 2010/06/27 06:48:40 kefren Exp $ */
 
 /*
  * Copyright (c) 1980, 1986, 1989, 1993
@@ -51,6 +51,7 @@
 #if defined(_KERNEL_OPT)
 #include "opt_inet.h"
 #include "opt_atalk.h"
+#include "opt_iso.h"
 #include "opt_mpls.h"
 #include "opt_natm.h"
 #include "arp.h"
@@ -81,6 +82,10 @@
 #include <netinet/ip6.h>
 #include <netinet6/ip6_var.h>
 #endif
+#ifdef ISO
+#include <netiso/iso.h>
+#include <netiso/clnp.h>
+#endif
 #ifdef MPLS
 #include <netmpls/mpls_var.h>
 #endif
@@ -103,6 +108,7 @@
  */
 #define	NETISR_IP	2		/* same as AF_INET */
 #define	NETISR_NS	6		/* same as AF_NS */
+#define	NETISR_ISO	7		/* same as AF_ISO */
 #define	NETISR_CCITT	10		/* same as AF_CCITT */
 #define	NETISR_ATALK	16		/* same as AF_APPLETALK */
 #define	NETISR_IPX	23		/* same as AF_IPX */

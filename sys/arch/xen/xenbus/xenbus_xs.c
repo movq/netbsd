@@ -1,4 +1,4 @@
-/* $NetBSD: xenbus_xs.c,v 1.23 2012/11/28 16:26:59 royger Exp $ */
+/* $NetBSD: xenbus_xs.c,v 1.22.8.1 2012/11/30 04:24:41 msaitoh Exp $ */
 /******************************************************************************
  * xenbus_xs.c
  *
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xenbus_xs.c,v 1.23 2012/11/28 16:26:59 royger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xenbus_xs.c,v 1.22.8.1 2012/11/30 04:24:41 msaitoh Exp $");
 
 #if 0
 #define DPRINTK(fmt, args...) \

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2012/08/14 07:24:41 martin Exp $
+#	$NetBSD: Makefile,v 1.1.46.1 2012/08/15 01:26:21 riz Exp $
 
 BOOTMODEL=	tiny
 IMAGE=		ramdisk-${BOOTMODEL}.fs

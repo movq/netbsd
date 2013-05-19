@@ -1,4 +1,4 @@
-/*      $NetBSD: epevar.h,v 1.7 2012/11/12 18:00:36 skrll Exp $        */
+/*      $NetBSD: epevar.h,v 1.5 2009/10/23 00:39:30 snj Exp $        */
 /*-
  * Copyright (c) 2004 Jesse Off
  * All rights reserved
@@ -38,25 +38,25 @@ struct epe_qmeta {
 };
 
 struct epe_softc {
-	device_t		sc_dev;
+	struct device		sc_dev;
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
 	bus_dma_tag_t		sc_dmat;
 	int			sc_intr;
-	uint8_t			sc_enaddr[ETHER_ADDR_LEN];
+	u_int8_t		sc_enaddr[ETHER_ADDR_LEN];
 	struct ethercom		sc_ec;
 	mii_data_t		sc_mii;
 	void *			ctrlpage;
 	bus_addr_t		ctrlpage_dsaddr;
 	bus_dmamap_t		ctrlpage_dmamap;
-	uint32_t		*TXDQ;
-	uint32_t		TXDQ_avail;
-	uint32_t		*TXDQ_cur;
-	uint32_t		*TXStsQ;
-	uint32_t		*TXStsQ_cur;
-	uint32_t		*RXDQ;
-	uint32_t		*RXStsQ;
-	uint32_t		*RXStsQ_cur;
+	u_int32_t		*TXDQ;
+	u_int32_t		TXDQ_avail;
+	u_int32_t		*TXDQ_cur;
+	u_int32_t		*TXStsQ;
+	u_int32_t		*TXStsQ_cur;
+	u_int32_t		*RXDQ;
+	u_int32_t		*RXStsQ;
+	u_int32_t		*RXStsQ_cur;
 	struct epe_qmeta	rxq[RX_QLEN];
 	struct epe_qmeta	txq[TX_QLEN];
 	struct callout		epe_tick_ch;

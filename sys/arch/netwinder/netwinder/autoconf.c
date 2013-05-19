@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.12 2012/10/27 17:18:04 chs Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.10.58.1 2012/08/08 15:51:06 martin Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.12 2012/10/27 17:18:04 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.10.58.1 2012/08/08 15:51:06 martin Exp $");
 
 #include "opt_md.h"
 
@@ -71,7 +71,7 @@ void
 cpu_rootconf(void)
 {
 	printf("boot device: %s\n",
-	    booted_device != NULL ? device_xname(booted_device) : "<unknown>");
+	    booted_device != NULL ? booted_device->dv_xname : "<unknown>");
 	rootconf();
 }
 
@@ -111,7 +111,7 @@ cpu_configure(void)
 }
 
 void
-device_register(device_t dev, void *aux)
+device_register(struct device *dev, void *aux)
 {
 }
 /* End of autoconf.c */

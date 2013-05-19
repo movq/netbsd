@@ -1,4 +1,4 @@
-/*      $NetBSD: scheduler.c,v 1.34 2013/05/15 14:07:26 pooka Exp $	*/
+/*      $NetBSD: scheduler.c,v 1.27.8.1 2012/06/26 14:49:09 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, 2011 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scheduler.c,v 1.34 2013/05/15 14:07:26 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scheduler.c,v 1.27.8.1 2012/06/26 14:49:09 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/atomic.h>
@@ -127,6 +127,7 @@ getnextcpu(void)
 void
 rump_cpus_bootstrap(int *nump)
 {
+	struct rumpcpu *rcpu;
 	struct cpu_info *ci;
 	int num = *nump;
 	int i;
@@ -138,6 +139,7 @@ rump_cpus_bootstrap(int *nump)
 	}
 
 	for (i = 0; i < num; i++) {
+		rcpu = &rcpu_storage[i];
 		ci = &rump_cpus[i];
 		ci->ci_index = i;
 	}
@@ -158,21 +160,21 @@ rump_scheduler_init(int numcpu)
 	struct cpu_info *ci;
 	int i;
 
-	rumpuser_mutex_init(&lwp0mtx, RUMPUSER_MTX_SPIN);
+	rumpuser_mutex_init(&lwp0mtx);
 	rumpuser_cv_init(&lwp0cv);
 	for (i = 0; i < numcpu; i++) {
 		rcpu = &rcpu_storage[i];
 		ci = &rump_cpus[i];
 		rcpu->rcpu_ci = ci;
 		ci->ci_schedstate.spc_mutex =
-		    mutex_obj_alloc(MUTEX_DEFAULT, IPL_SCHED);
+		    mutex_obj_alloc(MUTEX_DEFAULT, IPL_NONE);
 		ci->ci_schedstate.spc_flags = SPCF_RUNNING;
 		rcpu->rcpu_wanted = 0;
 		rumpuser_cv_init(&rcpu->rcpu_cv);
-		rumpuser_mutex_init(&rcpu->rcpu_mtx, RUMPUSER_MTX_SPIN);
+		rumpuser_mutex_init(&rcpu->rcpu_mtx);
 	}
 
-	mutex_init(&unruntime_lock, MUTEX_DEFAULT, IPL_SCHED);
+	mutex_init(&unruntime_lock, MUTEX_DEFAULT, IPL_NONE);
 }
 
 /*
@@ -225,8 +227,7 @@ lwp0rele(void)
 
 /*
  * rump_schedule: ensure that the calling host thread has a valid lwp context.
- * ie. ensure that curlwp != NULL.  Also, ensure that there
- * a 1:1 mapping between the lwp and rump kernel cpu.
+ * ie. ensure that rumpuser_get_curlwp() != NULL.
  */
 void
 rump_schedule()
@@ -240,7 +241,7 @@ rump_schedule()
 	 * for this case -- anyone who cares about performance will
 	 * start a real thread.
 	 */
-	if (__predict_true((l = rumpuser_curlwp()) != NULL)) {
+	if (__predict_true((l = rumpuser_get_curlwp()) != NULL)) {
 		rump_schedule_cpu(l);
 		LWP_CACHE_CREDS(l, l->l_proc);
 	} else {
@@ -248,7 +249,7 @@ rump_schedule()
 
 		/* schedule cpu and use lwp0 */
 		rump_schedule_cpu(&lwp0);
-		rumpuser_curlwpop(RUMPUSER_LWP_SET, &lwp0);
+		rumpuser_set_curlwp(&lwp0);
 
 		/* allocate thread, switch to it, and release lwp0 */
 		l = rump__lwproc_alloclwp(initproc);
@@ -299,7 +300,7 @@ rump_schedule_cpu_interlock(struct lwp *l, void *interlock)
 	KASSERT(l->l_target_cpu != NULL);
 	rcpu = &rcpu_storage[l->l_target_cpu-&rump_cpus[0]];
 	if (atomic_cas_ptr(&rcpu->rcpu_prevlwp, l, RCPULWP_BUSY) == l) {
-		if (interlock == rcpu->rcpu_mtx)
+		if (__predict_true(interlock == rcpu->rcpu_mtx))
 			rumpuser_mutex_exit(rcpu->rcpu_mtx);
 		SCHED_FASTPATH(rcpu);
 		/* jones, you're the man */
@@ -316,7 +317,7 @@ rump_schedule_cpu_interlock(struct lwp *l, void *interlock)
 		domigrate = true;
 
 	/* Take lock.  This acts as a load barrier too. */
-	if (interlock != rcpu->rcpu_mtx)
+	if (__predict_true(interlock != rcpu->rcpu_mtx))
 		rumpuser_mutex_enter_nowrap(rcpu->rcpu_mtx);
 
 	for (;;) {
@@ -365,7 +366,7 @@ rump_schedule_cpu_interlock(struct lwp *l, void *interlock)
 void
 rump_unschedule()
 {
-	struct lwp *l = rumpuser_curlwp();
+	struct lwp *l = rumpuser_get_curlwp();
 #ifdef DIAGNOSTIC
 	int nlock;
 
@@ -399,10 +400,10 @@ rump_unschedule()
 		lwp0.l_mutex = &unruntime_lock;
 		lwp0.l_pflag &= ~LP_RUNNING;
 		lwp0rele();
-		rumpuser_curlwpop(RUMPUSER_LWP_CLEAR, &lwp0);
+		rumpuser_set_curlwp(NULL);
 
 	} else if (__predict_false(l->l_flag & LW_RUMP_CLEAR)) {
-		rumpuser_curlwpop(RUMPUSER_LWP_CLEAR, l);
+		rumpuser_set_curlwp(NULL);
 		l->l_flag &= ~LW_RUMP_CLEAR;
 	}
 }
@@ -441,23 +442,17 @@ rump_unschedule_cpu1(struct lwp *l, void *interlock)
 	 * is relevant only in the non-fastpath scheduling case, but
 	 * we don't know here if that's going to happen, so need to
 	 * expect the worst.
-	 *
-	 * If the scheduler interlock was requested by the caller, we
-	 * need to obtain it before we release the CPU.  Otherwise, we risk a
-	 * race condition where another thread is scheduled onto the
-	 * rump kernel CPU before our current thread can
-	 * grab the interlock.
 	 */
-	if (interlock == rcpu->rcpu_mtx)
-		rumpuser_mutex_enter_nowrap(rcpu->rcpu_mtx);
-	else
-		membar_exit();
+	membar_exit();
 
 	/* Release the CPU. */
 	old = atomic_swap_ptr(&rcpu->rcpu_prevlwp, l);
 
 	/* No waiters?  No problems.  We're outta here. */
 	if (old == RCPULWP_BUSY) {
+		/* Was the scheduler interlock requested? */
+		if (__predict_false(interlock == rcpu->rcpu_mtx))
+			rumpuser_mutex_enter_nowrap(rcpu->rcpu_mtx);
 		return;
 	}
 
@@ -469,11 +464,11 @@ rump_unschedule_cpu1(struct lwp *l, void *interlock)
 	 * Snailpath: take lock and signal anyone waiting for this CPU.
 	 */
 
-	if (interlock != rcpu->rcpu_mtx)
-		rumpuser_mutex_enter_nowrap(rcpu->rcpu_mtx);
+	rumpuser_mutex_enter_nowrap(rcpu->rcpu_mtx);
 	if (rcpu->rcpu_wanted)
 		rumpuser_cv_broadcast(rcpu->rcpu_cv);
-	if (interlock != rcpu->rcpu_mtx)
+
+	if (__predict_true(interlock != rcpu->rcpu_mtx))
 		rumpuser_mutex_exit(rcpu->rcpu_mtx);
 }
 
@@ -513,14 +508,14 @@ void
 kpreempt_disable(void)
 {
 
-	//KPREEMPT_DISABLE(curlwp);
+	KPREEMPT_DISABLE(curlwp);
 }
 
 void
 kpreempt_enable(void)
 {
 
-	//KPREEMPT_ENABLE(curlwp);
+	KPREEMPT_ENABLE(curlwp);
 }
 
 void

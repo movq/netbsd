@@ -1,4 +1,4 @@
-/*	$NetBSD: p2k.c,v 1.60 2012/11/23 14:27:14 joerg Exp $	*/
+/*	$NetBSD: p2k.c,v 1.55.4.2 2012/09/13 20:20:17 riz Exp $	*/
 
 /*
  * Copyright (c) 2007, 2008, 2009  Antti Kantee.  All Rights Reserved.
@@ -651,7 +651,7 @@ p2k_fs_fhtonode(struct puffs_usermount *pu, void *fid, size_t fidsize,
 	struct mount *mp = p2m->p2m_mp;
 	struct p2k_node *p2n;
 	struct vnode *vp;
-	enum rump_vtype vtype;
+	enum vtype vtype;
 	voff_t vsize;
 	uint64_t rdev; /* XXX: allows running this on NetBSD 5.0 */
 	int rv;
@@ -667,7 +667,7 @@ p2k_fs_fhtonode(struct puffs_usermount *pu, void *fid, size_t fidsize,
 
 	puffs_newinfo_setcookie(pni, p2n);
 	rump_pub_getvninfo(vp, &vtype, &vsize, (void *)&rdev);
-	puffs_newinfo_setvtype(pni, (enum vtype)vtype);
+	puffs_newinfo_setvtype(pni, vtype);
 	puffs_newinfo_setsize(pni, vsize);
 	/* LINTED: yea, it'll lose accuracy, but that's life */
 	puffs_newinfo_setrdev(pni, rdev);
@@ -714,7 +714,7 @@ p2k_node_lookup(struct puffs_usermount *pu, puffs_cookie_t opc,
 	struct p2k_node *p2n_dir = opc, *p2n;
 	struct componentname *cn;
 	struct vnode *dvp = p2n_dir->p2n_vp, *vp;
-	enum rump_vtype vtype;
+	enum vtype vtype;
 	voff_t vsize;
 	uint64_t rdev; /* XXX: uint64_t because of stack overwrite in compat */
 	int rv;
@@ -726,7 +726,7 @@ p2k_node_lookup(struct puffs_usermount *pu, puffs_cookie_t opc,
 	freecn(cn);
 
 	if (rv) {
-		if (rv == RUMP_EJUSTRETURN) {
+		if (rv == EJUSTRETURN) {
 			rv = ENOENT;
 		}
 		return rv;
@@ -740,7 +740,7 @@ p2k_node_lookup(struct puffs_usermount *pu, puffs_cookie_t opc,
 
 	puffs_newinfo_setcookie(pni, p2n);
 	rump_pub_getvninfo(vp, &vtype, &vsize, (void *)&rdev);
-	puffs_newinfo_setvtype(pni, (enum vtype)vtype);
+	puffs_newinfo_setvtype(pni, vtype);
 	puffs_newinfo_setsize(pni, vsize);
 	/* LINTED: yea, it'll lose accuracy, but that's life */
 	puffs_newinfo_setrdev(pni, rdev);

@@ -1,4 +1,4 @@
-/*	$NetBSD: fsutil.c,v 1.24 2013/01/13 19:53:16 mlelstv Exp $	*/
+/*	$NetBSD: fsutil.c,v 1.20 2011/06/09 19:57:50 christos Exp $	*/
 
 /*
  * Copyright (c) 1990, 1993
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fsutil.c,v 1.24 2013/01/13 19:53:16 mlelstv Exp $");
+__RCSID("$NetBSD: fsutil.c,v 1.20 2011/06/09 19:57:50 christos Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -45,7 +45,6 @@ __RCSID("$NetBSD: fsutil.c,v 1.24 2013/01/13 19:53:16 mlelstv Exp $");
 #include <fcntl.h>
 #include <unistd.h>
 #include <err.h>
-#include <util.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -167,64 +166,77 @@ panic(const char *fmt, ...)
 }
 
 const char *
+unrawname(const char *name)
+{
+	static char unrawbuf[MAXPATHLEN];
+	const char *dp;
+	struct stat stb;
+
+	if ((dp = strrchr(name, '/')) == 0)
+		return (name);
+	if (stat(name, &stb) < 0)
+		return (name);
+	if (!S_ISCHR(stb.st_mode))
+		return (name);
+	if (dp[1] != 'r')
+		return (name);
+	(void)snprintf(unrawbuf, sizeof(unrawbuf), "%.*s/%s",
+	    (int)(dp - name), name, dp + 2);
+	return (unrawbuf);
+}
+
+const char *
+rawname(const char *name)
+{
+	static char rawbuf[MAXPATHLEN];
+	const char *dp;
+
+	if ((dp = strrchr(name, '/')) == 0)
+		return (0);
+	(void)snprintf(rawbuf, sizeof(rawbuf), "%.*s/r%s",
+	    (int)(dp - name), name, dp + 1);
+	return (rawbuf);
+}
+
+const char *
 blockcheck(const char *origname)
 {
 	struct stat stslash, stblock, stchar;
-	const char *newname, *raw, *cooked;
+	const char *newname, *raw;
 	struct fstab *fsp;
 	int retried = 0;
-	ssize_t len;
-	char cbuf[MAXPATHLEN];
-	static char buf[MAXPATHLEN];
 
 	hot = 0;
 	if (stat("/", &stslash) < 0) {
 		perr("Can't stat `/'");
 		return (origname);
 	}
-	len = readlink(origname, cbuf, sizeof(cbuf)-1);
-	if (len == -1) {
-		newname = origname;
-	} else {
-		cbuf[len] = '\0';
-		newname = cbuf;
-	}
+	newname = origname;
 retry:
 	if (stat(newname, &stblock) < 0) {
 		perr("Can't stat `%s'", newname);
-		return origname;
+		return (origname);
 	}
 	if (S_ISBLK(stblock.st_mode)) {
 		if (stslash.st_dev == stblock.st_rdev)
 			hot++;
-		raw = getdiskrawname(buf, sizeof(buf), newname);
-		if (raw == NULL) {
-			perr("Can't convert to raw `%s'", newname);
-			return origname;
-		}
+		raw = rawname(newname);
 		if (stat(raw, &stchar) < 0) {
 			perr("Can't stat `%s'", raw);
-			return origname;
+			return (origname);
 		}
 		if (S_ISCHR(stchar.st_mode)) {
-			return raw;
+			return (raw);
 		} else {
-			perr("%s is not a character device\n", raw);
-			return origname;
+			printf("%s is not a character device\n", raw);
+			return (origname);
 		}
 	} else if (S_ISCHR(stblock.st_mode) && !retried) {
-		cooked = getdiskcookedname(cbuf, sizeof(cbuf), newname);
-		if (cooked == NULL) {
-			perr("Can't convert to cooked `%s'", newname);
-			return origname;
-		} else
-			newname = cooked;
+		newname = unrawname(newname);
 		retried++;
 		goto retry;
 	} else if ((fsp = getfsfile(newname)) != 0 && !retried) {
-		newname = getfsspecname(cbuf, sizeof(cbuf), fsp->fs_spec);
-		if (newname == NULL)
-			perr("%s", buf);
+		newname = fsp->fs_spec;
 		retried++;
 		goto retry;
 	}
@@ -232,7 +244,7 @@ retry:
 	 * Not a block or character device, just return name and
 	 * let the user decide whether to use it.
 	 */
-	return origname;
+	return (origname);
 }
 
 const char *

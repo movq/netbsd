@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.98 2012/10/20 14:42:15 kiyohara Exp $	*/
+/*	$NetBSD: vm_machdep.c,v 1.94.2.2 2012/07/04 20:58:27 jdc Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,12 +32,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.98 2012/10/20 14:42:15 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.94.2.2 2012/07/04 20:58:27 jdc Exp $");
 
 #include "opt_altivec.h"
 #include "opt_multiprocessor.h"
 #include "opt_ppcarch.h"
-#include "opt_ppccache.h"
 
 #include <sys/param.h>
 #include <sys/core.h>
@@ -121,7 +120,15 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 	/*
 	 * Now deal setting up the initial function and its argument.
 	 */
-	struct ktrapframe * const ktf = ktrapframe(l2);
+	cpu_setfunc(l2, func, arg);
+}
+
+void
+cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
+{
+	extern void setfunc_trampoline(void);
+	struct pcb * const pcb = lwp_getpcb(l);
+	struct ktrapframe * const ktf = ktrapframe(l);
 	struct callframe * const cf = ((struct callframe *)ktf) - 1;
 	struct switchframe * const sf = ((struct switchframe *)cf) - 1;
 
@@ -146,42 +153,11 @@ cpu_lwp_fork(struct lwp *l1, struct lwp *l2, void *stack, size_t stacksize,
 #if defined (PPC_OEA) || defined (PPC_OEA64_BRIDGE)
 	sf->sf_user_sr = pmap_kernel()->pm_sr[USER_SR]; /* again, just in case */
 #endif
-	pcb2->pcb_sp = (register_t)sf;
-	pcb2->pcb_kmapsr = 0;
-	pcb2->pcb_umapsr = 0;
+	pcb->pcb_sp = (register_t)sf;
+	pcb->pcb_kmapsr = 0;
+	pcb->pcb_umapsr = 0;
 #ifdef PPC_HAVE_FPU
-	pcb2->pcb_flags = PSL_FE_DFLT;
-#endif
-#ifdef CACHE_PROTO_MEI
-	{
-		paddr_t pa;
-		int dcache_line_size, i;
-
-		/* Flush on cache values for other cpu. */
-
-		dcache_line_size = curcpu()->ci_ci.dcache_line_size;
-		pa = vtophys((vaddr_t)sf);
-		for (i = 0; i < SFRAMELEN + CALLFRAMELEN + FRAMELEN;
-		    i += dcache_line_size) {
-			__asm volatile ("dcbf 0,%0"::"r"(pa):"memory");
-			pa += dcache_line_size;
-		}
-		__asm volatile ("dcbf 0,%0"::"r"(pa):"memory");
-		pa = vtophys((vaddr_t)pcb2->pcb_pm);
-		for (i = 0; i < sizeof(*pcb2->pcb_pm); i += dcache_line_size) {
-			__asm volatile ("dcbf 0,%0"::"r"(pa):"memory");
-			pa += dcache_line_size;
-		}
-		__asm volatile ("dcbf 0,%0"::"r"(pa):"memory");
-		pa = vtophys((vaddr_t)pcb2);
-		for (i = 0; i < sizeof(*pcb2); i += dcache_line_size) {
-			__asm volatile ("dcbf 0,%0"::"r"(pa):"memory");
-			pa += dcache_line_size;
-		}
-		__asm volatile ("dcbf 0,%0"::"r"(pa):"memory");
-
-		/* Need more flush? */
-	}
+	pcb->pcb_flags = PSL_FE_DFLT;
 #endif
 }
 

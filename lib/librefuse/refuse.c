@@ -1,4 +1,4 @@
-/*	$NetBSD: refuse.c,v 1.96 2012/12/30 10:04:22 tron Exp $	*/
+/*	$NetBSD: refuse.c,v 1.95.2.1 2013/01/07 15:54:00 riz Exp $	*/
 
 /*
  * Copyright © 2007 Alistair Crooks.  All rights reserved.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: refuse.c,v 1.96 2012/12/30 10:04:22 tron Exp $");
+__RCSID("$NetBSD: refuse.c,v 1.95.2.1 2013/01/07 15:54:00 riz Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>

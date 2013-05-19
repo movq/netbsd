@@ -1,4 +1,4 @@
-/*	$NetBSD: eehandlers.c,v 1.17 2013/03/15 20:22:44 nakayama Exp $	*/
+/*	$NetBSD: eehandlers.c,v 1.15 2009/04/30 07:45:28 nakayama Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -40,9 +40,11 @@
 #include <time.h>
 #include <unistd.h>
 #include <util.h>
-#include <sys/inttypes.h>
 
 #include <machine/eeprom.h>
+#ifdef __sparc__
+#include <machine/openpromio.h>
+#endif /* __sparc__ */
 
 #include "defs.h"
 
@@ -138,7 +140,6 @@ ee_hwupdate(ktent, arg)
 	struct keytabent *ktent;
 	char *arg;
 {
-	uint32_t hwtime;
 	time_t t;
 	char *cp, *cp2;
 
@@ -153,26 +154,18 @@ ee_hwupdate(ktent, arg)
 		} else
 			if ((t = parsedate(arg, NULL, NULL)) == (time_t)(-1))
 				BARF(ktent);
-		hwtime = (uint32_t)t;	/* XXX 32 bit time_t on hardware */
-		if (hwtime != t)
-			warnx("time overflow");
 
-		if (doio(ktent, (u_char *)&hwtime, sizeof(hwtime), IO_WRITE))
+		if (doio(ktent, (u_char *)&t, sizeof(t), IO_WRITE))
 			FAILEDWRITE(ktent);
-	} else {
-		if (doio(ktent, (u_char *)&hwtime, sizeof(hwtime), IO_READ))
+	} else
+		if (doio(ktent, (u_char *)&t, sizeof(t), IO_READ))
 			FAILEDREAD(ktent);
-		t = (time_t)hwtime;	/* XXX 32 bit time_t on hardware */
-	}
 
 	cp = ctime(&t);
-	if (cp != NULL && (cp2 = strrchr(cp, '\n')) != NULL)
+	if ((cp2 = strrchr(cp, '\n')) != NULL)
 		*cp2 = '\0';
 
-	printf("%s=%" PRId64, ktent->kt_keyword, (int64_t)t);
-	if (cp != NULL)
-		printf(" (%s)", cp);
-	printf("\n");
+	printf("%s=%ld (%s)\n", ktent->kt_keyword, (long)t, cp);
 }
 
 void

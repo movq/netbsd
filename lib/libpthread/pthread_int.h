@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_int.h,v 1.89 2013/03/21 16:49:12 christos Exp $	*/
+/*	$NetBSD: pthread_int.h,v 1.82.2.3 2013/04/29 01:50:19 riz Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002, 2003, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -50,12 +50,11 @@
 #include "../../common/lib/libc/atomic/atomic_op_namespace.h"
 
 #include <sys/atomic.h>
-#include <sys/rbtree.h>
+#include <sys/tree.h>
 
-#include <limits.h>
 #include <lwp.h>
 #include <signal.h>
-#include <stdbool.h>
+#include <limits.h>
 
 #ifdef __GNUC__
 #define	PTHREAD_HIDE	__attribute__ ((visibility("hidden")))
@@ -105,8 +104,6 @@ struct	__pthread_st {
 	int		pt_cancel;	/* Deferred cancellation */
 	int		pt_errno;	/* Thread-specific errno. */
 	stack_t		pt_stack;	/* Our stack */
-	bool		pt_stack_allocated;
-	size_t		pt_guardsize;
 	void		*pt_exitval;	/* Read by pthread_join() */
 	char		*pt_name;	/* Thread's name, set by the app. */
 	int		pt_willpark;	/* About to park */
@@ -126,7 +123,7 @@ struct	__pthread_st {
 
 	/* LWP ID and entry on the list of all threads. */
 	lwpid_t		pt_lid;
-	rb_node_t	pt_alltree;
+	RB_ENTRY(__pthread_st) pt_alltree;
 	PTQ_ENTRY(__pthread_st) pt_allq;
 	PTQ_ENTRY(__pthread_st)	pt_deadq;
 
@@ -148,10 +145,7 @@ struct	__pthread_st {
 
 	/* Thread-specific data.  Large so it sits close to the end. */
 	int		pt_havespecific;
-	struct pt_specific {
-		void *pts_value;
-		PTQ_ENTRY(pt_specific) pts_next;
-	} pt_specific[PTHREAD_KEYS_MAX];
+	void		*pt_specific[PTHREAD_KEYS_MAX];
 
 	/*
 	 * Context for thread creation.  At the end as it's cached
@@ -181,8 +175,10 @@ struct	__pthread_st {
 #define PT_ATTR_MAGIC	0x22220002
 #define PT_ATTR_DEAD	0xDEAD0002
 
+extern int	pthread__stacksize_lg;
 extern size_t	pthread__stacksize;
-extern size_t	pthread__pagesize;
+extern vaddr_t	pthread__stackmask;
+extern vaddr_t	pthread__threadmask;
 extern int	pthread__nspins;
 extern int	pthread__concurrency;
 extern int 	pthread__osrev;
@@ -261,10 +257,7 @@ int	pthread__find(pthread_t) PTHREAD_HIDE;
 	} while (/*CONSTCOND*/0)
 
 
-#if !defined(__HAVE_TLS_VARIANT_I) && !defined(__HAVE_TLS_VARIANT_II)
-#error Either __HAVE_TLS_VARIANT_I or __HAVE_TLS_VARIANT_II must be defined
-#endif
-
+#if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
 static inline pthread_t __constfunc
 pthread__self(void)
 {
@@ -275,6 +268,9 @@ pthread__self(void)
 #endif
 	return (pthread_t)tcb->tcb_pthread;
 }
+#else
+#error Either __HAVE_TLS_VARIANT_I or __HAVE_TLS_VARIANT_II must be defined
+#endif
 
 #define pthread__abort()						\
 	pthread__assertfunc(__FILE__, __LINE__, __func__, "unreachable")
@@ -300,13 +296,9 @@ char	*pthread__getenv(const char *) PTHREAD_HIDE;
 __dead void	pthread__cancelled(void) PTHREAD_HIDE;
 void	pthread__mutex_deferwake(pthread_t, pthread_mutex_t *) PTHREAD_HIDE;
 int	pthread__checkpri(int) PTHREAD_HIDE;
-int	pthread__add_specific(pthread_t, pthread_key_t, const void *) PTHREAD_HIDE;
 
 #ifndef pthread__smt_pause
 #define	pthread__smt_pause()	/* nothing */
-#endif
-#ifndef pthread__smt_wake
-#define	pthread__smt_wake()	/* nothing */
 #endif
 
 /*

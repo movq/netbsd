@@ -1,4 +1,4 @@
-/*	$NetBSD: auth_unix.c,v 1.25 2013/03/11 20:19:28 tron Exp $	*/
+/*	$NetBSD: auth_unix.c,v 1.22.10.1 2013/03/14 22:03:09 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -37,7 +37,7 @@
 static char *sccsid = "@(#)auth_unix.c 1.19 87/08/11 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)auth_unix.c	2.2 88/08/01 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: auth_unix.c,v 1.25 2013/03/11 20:19:28 tron Exp $");
+__RCSID("$NetBSD: auth_unix.c,v 1.22.10.1 2013/03/14 22:03:09 riz Exp $");
 #endif
 #endif
 
@@ -76,13 +76,13 @@ __weak_alias(authunix_create_default,_authunix_create_default)
 
 
 /* auth_unix.c */
-static void authunix_nextverf(AUTH *);
-static bool_t authunix_marshal(AUTH *, XDR *);
-static bool_t authunix_validate(AUTH *, struct opaque_auth *);
-static bool_t authunix_refresh(AUTH *);
-static void authunix_destroy(AUTH *);
-static void marshal_new_auth(AUTH *);
-static const struct auth_ops *authunix_ops(void);
+static void authunix_nextverf __P((AUTH *));
+static bool_t authunix_marshal __P((AUTH *, XDR *));
+static bool_t authunix_validate __P((AUTH *, struct opaque_auth *));
+static bool_t authunix_refresh __P((AUTH *));
+static void authunix_destroy __P((AUTH *));
+static void marshal_new_auth __P((AUTH *));
+static const struct auth_ops *authunix_ops __P((void));
 
 /*
  * This struct is pointed to by the ah_private field of an auth_handle.
@@ -101,7 +101,12 @@ struct audata {
  * Returns an auth handle with the given stuff in it.
  */
 AUTH *
-authunix_create(char *machname, int uid, int gid, int len, int *aup_gids)
+authunix_create(machname, uid, gid, len, aup_gids)
+	char *machname;
+	int uid;
+	int gid;
+	int len;
+	int *aup_gids;
 {
 	struct authunix_parms aup;
 	char mymem[MAX_AUTH_BYTES];
@@ -117,14 +122,14 @@ authunix_create(char *machname, int uid, int gid, int len, int *aup_gids)
 	auth = mem_alloc(sizeof(*auth));
 #ifndef KERNEL
 	if (auth == NULL) {
-		warn("%s: out of memory", __func__);
+		warnx("authunix_create: out of memory");
 		goto cleanup_authunix_create;
 	}
 #endif
 	au = mem_alloc(sizeof(*au));
 #ifndef KERNEL
 	if (au == NULL) {
-		warn("%s: out of memory", __func__);
+		warnx("authunix_create: out of memory");
 		goto cleanup_authunix_create;
 	}
 #endif
@@ -157,7 +162,7 @@ authunix_create(char *machname, int uid, int gid, int len, int *aup_gids)
 	au->au_origcred.oa_base = mem_alloc((size_t)len);
 #else
 	if ((au->au_origcred.oa_base = mem_alloc((size_t)len)) == NULL) {
-		warn("%s: out of memory", __func__);
+		warnx("authunix_create: out of memory");
 		goto cleanup_authunix_create;
 	}
 #endif
@@ -187,7 +192,7 @@ authunix_create(char *machname, int uid, int gid, int len, int *aup_gids)
  * syscalls.
  */
 AUTH *
-authunix_create_default(void)
+authunix_create_default()
 {
 	int len;
 	char machname[MAXHOSTNAMELEN + 1];
@@ -213,13 +218,16 @@ authunix_create_default(void)
 
 /* ARGSUSED */
 static void
-authunix_nextverf(AUTH *auth)
+authunix_nextverf(auth)
+	AUTH *auth;
 {
 	/* no action necessary */
 }
 
 static bool_t
-authunix_marshal(AUTH *auth, XDR *xdrs)
+authunix_marshal(auth, xdrs)
+	AUTH *auth;
+	XDR *xdrs;
 {
 	struct audata *au;
 
@@ -231,7 +239,9 @@ authunix_marshal(AUTH *auth, XDR *xdrs)
 }
 
 static bool_t
-authunix_validate(AUTH *auth, struct opaque_auth *verf)
+authunix_validate(auth, verf)
+	AUTH *auth;
+	struct opaque_auth *verf;
 {
 	struct audata *au;
 	XDR xdrs;
@@ -263,7 +273,8 @@ authunix_validate(AUTH *auth, struct opaque_auth *verf)
 }
 
 static bool_t
-authunix_refresh(AUTH *auth)
+authunix_refresh(auth)
+	AUTH *auth;
 {
 	struct audata *au = AUTH_PRIVATE(auth);
 	struct authunix_parms aup;
@@ -307,7 +318,8 @@ done:
 }
 
 static void
-authunix_destroy(AUTH *auth)
+authunix_destroy(auth)
+	AUTH *auth;
 {
 	struct audata *au;
 
@@ -332,7 +344,8 @@ authunix_destroy(AUTH *auth)
  * sets private data, au_marshed and au_mpos
  */
 static void
-marshal_new_auth(AUTH *auth)
+marshal_new_auth(auth)
+	AUTH *auth;
 {
 	XDR	xdr_stream;
 	XDR	*xdrs = &xdr_stream;
@@ -344,14 +357,14 @@ marshal_new_auth(AUTH *auth)
 	xdrmem_create(xdrs, au->au_marshed, MAX_AUTH_BYTES, XDR_ENCODE);
 	if ((! xdr_opaque_auth(xdrs, &(auth->ah_cred))) ||
 	    (! xdr_opaque_auth(xdrs, &(auth->ah_verf))))
-		warnx("%s: Fatal marshalling problem", __func__);
+		warnx("auth_none.c - Fatal marshalling problem");
 	else
 		au->au_mpos = XDR_GETPOS(xdrs);
 	XDR_DESTROY(xdrs);
 }
 
 static const struct auth_ops *
-authunix_ops(void)
+authunix_ops()
 {
 	static struct auth_ops ops;
 #ifdef _REENTRANT

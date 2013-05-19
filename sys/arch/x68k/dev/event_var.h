@@ -1,4 +1,4 @@
-/*	$NetBSD: event_var.h,v 1.9 2012/08/15 19:13:58 tsutsui Exp $ */
+/*	$NetBSD: event_var.h,v 1.8.44.1 2012/08/16 02:37:55 riz Exp $ */
 
 /*
  * Copyright (c) 1992, 1993

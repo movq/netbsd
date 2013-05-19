@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm_amba.h,v 1.1 2012/07/26 06:21:57 skrll Exp $	*/
+/*	$NetBSD: bcm_amba.h,v 1.1.2.2 2012/08/09 06:36:50 jdc Exp $	*/
 
 #ifndef _ARM_BROADCOM_BCM_AMBA_H_
 #define _ARM_BROADCOM_BCM_AMBA_H_

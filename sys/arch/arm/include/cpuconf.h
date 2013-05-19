@@ -1,4 +1,4 @@
-/*	$NetBSD: cpuconf.h,v 1.21 2013/05/19 15:51:10 rkujawa Exp $	*/
+/*	$NetBSD: cpuconf.h,v 1.20 2011/03/10 07:47:14 bsh Exp $	*/
 
 /*
  * Copyright (c) 2002 Wasabi Systems, Inc.
@@ -132,7 +132,7 @@
 #define ARM_ARCH_6	0
 #endif
 
-#if defined(CPU_CORTEX) || defined(CPU_PJ4B)
+#if defined(CPU_CORTEX)
 #define ARM_ARCH_7	1
 #else
 #define ARM_ARCH_7	0
@@ -217,8 +217,7 @@
 	defined(CPU_ARM1136) || \
 	defined(CPU_ARM1176) || \
 	defined(CPU_ARM11) && \
-	!defined(CPU_CORTEX) && \
-	!defined(CPU_ARM11MPCORE) && !defined(CPU_PJ4B)
+	!defined(CPU_CORTEX) && !defined(CPU_ARM11MPCORE)
 #define	ARM_MMU_V6C		1
 #else
 #define	ARM_MMU_V6C		0
@@ -235,7 +234,7 @@
 
 
 #if !defined(_KERNEL_OPT) ||						\
-	 defined(CPU_CORTEX) || defined(CPU_PJ4B)
+	 defined(CPU_CORTEX)
 #define	ARM_MMU_V7		1
 #else
 #define	ARM_MMU_V7		0

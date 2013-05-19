@@ -1,5 +1,5 @@
-/*	$NetBSD: compat.c,v 1.5 2013/03/29 16:19:45 christos Exp $	*/
-/* $OpenBSD: compat.c,v 1.80 2012/08/17 01:30:00 djm Exp $ */
+/*	$NetBSD: compat.c,v 1.3 2011/07/25 03:03:10 christos Exp $	*/
+/* $OpenBSD: compat.c,v 1.78 2008/09/11 14:22:37 markus Exp $ */
 /*
  * Copyright (c) 1999, 2000, 2001, 2002 Markus Friedl.  All rights reserved.
  *
@@ -25,7 +25,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: compat.c,v 1.5 2013/03/29 16:19:45 christos Exp $");
+__RCSID("$NetBSD: compat.c,v 1.3 2011/07/25 03:03:10 christos Exp $");
 #include <sys/types.h>
 
 #include <stdlib.h>
@@ -46,8 +46,6 @@ int datafellows = 0;
 void
 enable_compat20(void)
 {
-	if (compat20)
-		return;
 	debug("Enabling compatibility mode for protocol 2.0");
 	compat20 = 1;
 }
@@ -95,7 +93,6 @@ compat_datafellows(const char *version)
 		{ "OpenSSH_3.*",	SSH_OLD_FORWARD_ADDR },
 		{ "Sun_SSH_1.0*",	SSH_BUG_NOREKEY|SSH_BUG_EXTEOF},
 		{ "OpenSSH_4*",		0 },
-		{ "OpenSSH_5*",		SSH_NEW_OPENSSH|SSH_BUG_DYNAMIC_RPORT},
 		{ "OpenSSH*",		SSH_NEW_OPENSSH },
 		{ "*MindTerm*",		0 },
 		{ "2.1.0*",		SSH_BUG_SIGBLOB|SSH_BUG_HMAC|

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.119 2013/03/12 20:49:22 christos Exp $
+#	$NetBSD: Makefile,v 1.101.2.2 2012/12/15 23:45:59 riz Exp $
 
 .include <bsd.own.mk>
 
@@ -16,7 +16,6 @@ SUBDIR+=	compat
 SUBDIR+=	compat_ossaudio
 SUBDIR+=	coredump
 SUBDIR+=	chfs
-SUBDIR+=	dbcool
 SUBDIR+=	efs
 SUBDIR+=	ext2fs
 SUBDIR+=	exec_script
@@ -31,10 +30,9 @@ SUBDIR+=	gpioiic
 SUBDIR+=	gpioow
 SUBDIR+=	gpiosim
 SUBDIR+=	hfs
-SUBDIR+=	if_axe
-SUBDIR+=	if_npflog
 SUBDIR+=	iic
 SUBDIR+=	kernfs
+SUBDIR+=	ksem
 SUBDIR+=	layerfs
 SUBDIR+=	lfs
 SUBDIR+=	mfs
@@ -49,10 +47,10 @@ SUBDIR+=	nfsserver
 SUBDIR+=	nilfs
 SUBDIR+=	npf
 SUBDIR+=	npf_alg_icmp
-SUBDIR+=	npf_ext_log
-SUBDIR+=	npf_ext_normalize
-SUBDIR+=	npf_ext_rndblock
 SUBDIR+=	ntfs
+SUBDIR+=	npf_ext_log
+SUBDIR+=	npf_ext_normalise
+SUBDIR+=	npf_ext_rndblock
 SUBDIR+=	null
 SUBDIR+=	onewire
 SUBDIR+=	overlay
@@ -65,7 +63,6 @@ SUBDIR+=	ptyfs
 SUBDIR+=	puffs
 SUBDIR+=	putter
 SUBDIR+=	scsiverbose
-SUBDIR+=	sdtemp
 SUBDIR+=	secmodel_bsd44
 SUBDIR+=	secmodel_extensions
 SUBDIR+=	secmodel_overlay
@@ -76,12 +73,10 @@ SUBDIR+=	sysvbfs
 SUBDIR+=	suser
 SUBDIR+=	swsensor
 SUBDIR+=	tmpfs
-SUBDIR+=	uatp
 SUBDIR+=	udf
 SUBDIR+=	umap
 SUBDIR+=	union
 SUBDIR+=	usbverbose
-SUBDIR+=	vcoda
 SUBDIR+=	v7fs
 SUBDIR+=	vnd
 SUBDIR+=	tprof
@@ -113,21 +108,12 @@ SUBDIR+=	exec_elf64
 SUBDIR+=	amdtemp
 SUBDIR+=	coretemp
 SUBDIR+=	est
-SUBDIR+=	hdafg
-SUBDIR+=	hdaudio
 SUBDIR+=	hpet
 SUBDIR+=	odcm
 SUBDIR+=	powernow
 SUBDIR+=	tprof_pmi
 SUBDIR+=	tprof_amdpmi
 SUBDIR+=	vmt
-.endif
-
-.if ${MACHINE_ARCH} == "i386" || \
-    ${MACHINE_ARCH} == "x86_64" || \
-    ${MACHINE_ARCH} == "sparc"
-SUBDIR+=	bpfjit
-SUBDIR+=	sljit
 .endif
 
 #
@@ -229,21 +215,12 @@ SUBDIR+=	pwdog
 
 .include <bsd.own.mk>
 
-#
-# NetBSD/usermode support
-#
-.if ${MACHINE_ARCH} == "i386" || \
-    ${MACHINE_ARCH} == "x86_64"
-SUBDIR+=	../arch/usermode/modules/syscallemu
-.endif
-
 # we need our device mapper for LVM
 .if (${MKLVM} != "no")
 SUBDIR+= 	dm
 .endif
 
 .if (${MKDTRACE} != "no")
-SUBDIR+=	cyclic
 SUBDIR+=	dtrace
 .endif
 

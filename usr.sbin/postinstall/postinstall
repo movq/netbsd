@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: postinstall,v 1.148 2013/05/16 07:37:05 yamt Exp $
+# $NetBSD: postinstall,v 1.129.2.10 2012/09/30 18:59:53 bouyer Exp $
 #
 # Copyright (c) 2002-2008 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -998,7 +998,7 @@ do_mtree()
 	if ! $SOURCEMODE; then
 		MTREE_DIR="${SRC_DIR}/etc/mtree"
 	else
-		${MAKE} -C "${SRC_DIR}/etc/mtree" emit_dist_file > \
+		${MAKE} -C ${SRC_DIR}/etc/mtree emit_dist_file > \
 		    "${SCRATCHDIR}/NetBSD.dist"
 		MTREE_DIR="${SCRATCHDIR}"
 	fi
@@ -1100,7 +1100,7 @@ do_pwd_mkdb()
 	# because we don't expect "postinstall fix pwd_mkdb" to be
 	# invoked during a cross build.
 
-	set -- $(${DB} -q -Sb -Ub -To -N hash "${DEST_DIR}/etc/pwd.db" \
+	set -- $(${DB} -q -Sb -Ub -To -N hash ${DEST_DIR}/etc/pwd.db \
 		'VERSION\0')
 	case "$2" in
 	'\001\000\000\000') return 0 ;; # version 1, little-endian
@@ -1110,9 +1110,7 @@ do_pwd_mkdb()
 	if [ "${op}" = "check" ]; then
 		msg "Update format of passwd database"
 		failed=1
-	elif ! ${PWD_MKDB} -V 1 -d "${DEST_DIR:-/}" \
-			"${DEST_DIR}/etc/master.passwd";
-	then
+	elif ! ${PWD_MKDB} -V 1 -d ${DEST_DIR:-/} ${DEST_DIR}/etc/master.passwd; then
 		msg "Can't update format of passwd database"
 		failed=1
 	else
@@ -1150,7 +1148,7 @@ do_rc()
 		DAEMON DISKS LOGIN NETWORKING SERVERS \
 		accounting altqd amd apmd \
 		bluetooth bootconf.sh bootparams \
-		ccd cgd cleartmp cron devpubd \
+		ccd cgd cleartmp cron \
 		dhclient dhcpcd dhcpd dhcrelay dmesg downinterfaces envsys \
 		fsck fsck_root ftp_proxy ftpd \
 		gpio \
@@ -1158,16 +1156,16 @@ do_rc()
 		identd ifwatchd inetd ipfilter ipfs ipmon ipnat ipsec \
 		irdaattach iscsi_target isdnd isibootd \
 		kdc \
-		ldconfig ldpd local lpd lvm \
+		ldconfig local lpd lvm\
 		makemandb mdnsd mixerctl mopd motd mountall mountcritlocal \
 		mountcritremote mountd moused mrouted \
-		named ndbootd network newsyslog nfsd nfslocking npf ntpd \
-		ntpdate \
+		named ndbootd network newsyslog nfsd nfslocking npf \
+		ntpd ntpdate \
 		perusertmp pf pf_boot pflogd postfix powerd ppp pwcheck \
 		quota \
-		racoon rpcbind raidframe raidframeparity random_seed rarpd \
-		rbootd rndctl root route6d routed rtadvd rtclocaltime \
-		rtsold rwho \
+		racoon rpcbind raidframe raidframeparity random_seed \
+		rarpd rbootd rndctl \
+		root route6d routed rtadvd rtclocaltime rtsold rwho \
 		savecore screenblank securelevel sshd \
 		staticroute swap1 swap2 sysctl sysdb syslogd \
 		timed tpctl ttys \
@@ -1239,11 +1237,11 @@ do_sendmail()
 	for f in /etc/mail/helpfile /etc/mail/local-host-names \
 	    /etc/mail/sendmail.cf /etc/mail/submit.cf /etc/rc.d/sendmail \
 	    /etc/rc.d/smmsp /usr/share/misc/sendmail.hf \
-	    $(find "${DEST_DIR}/usr/share/sendmail" -type f) \
-	    $(find "${DEST_DIR}/usr/share/sendmail" -type d) \
-	    "${DEST_DIR}/var/log/sendmail.st" \
-	    "${DEST_DIR}/var/spool/clientmqueue" \
-	    "${DEST_DIR}/var/spool/mqueue"; do
+	    $(find ${DEST_DIR}/usr/share/sendmail -type f) \
+	    $(find ${DEST_DIR}/usr/share/sendmail -type d) \
+	    ${DEST_DIR}/var/log/sendmail.st \
+	    ${DEST_DIR}/var/spool/clientmqueue \
+	    ${DEST_DIR}/var/spool/mqueue; do
 		[ -e "${DEST_DIR}${f}" ] && echo "${f}"
 	done | obsolete_paths "${op}"
 	failed=$(( ${failed} + $? ))
@@ -1261,8 +1259,7 @@ do_mailerconf()
 	op="$1"
 
 	failed=0
-	mta_path="$(${AWK} '/^sendmail[ \t]/{print$2}' \
-		"${DEST_DIR}/etc/mailer.conf")"
+	mta_path="$(${AWK} '/^sendmail[ \t]/{print$2}' ${DEST_DIR}/etc/mailer.conf)"
 	old_sendmail_path="/usr/libexec/sendmail/sendmail"
 	if [ "${mta_path}" = "${old_sendmail_path}" ]; then
 	    if [ "$op" = check ]; then
@@ -1556,11 +1553,11 @@ do_tcpdumpchroot()
 	[ -n "$1" ] || err 3 "USAGE: do_tcpdumpchroot  fix|check"
 
 	failed=0;
-	if [ -r "${DEST_DIR}/var/chroot/tcpdump/etc/protocols" ]; then
+	if [ -r ${DEST_DIR}/var/chroot/tcpdump/etc/protocols ]; then
 		if [ "$1" = "fix" ]; then
-			rm "${DEST_DIR}/var/chroot/tcpdump/etc/protocols"
+			rm ${DEST_DIR}/var/chroot/tcpdump/etc/protocols
 			failed=$(( ${failed} + $? ))
-			rmdir "${DEST_DIR}/var/chroot/tcpdump/etc"
+			rmdir  ${DEST_DIR}/var/chroot/tcpdump/etc
 			failed=$(( ${failed} + $? ))
 		else
 			failed=1
@@ -1682,13 +1679,11 @@ do_catpages()
 	failed=0
 	for manbase in /usr/share/man /usr/X11R6/man /usr/X11R7/man; do
 		for sec in 1 2 3 4 5 6 7 8 9; do
-			obsolete_catpages "$1" "${DEST_DIR}${manbase}" "${sec}"
+			obsolete_catpages $1 ${DEST_DIR}${manbase} ${sec}
 			failed=$(( ${failed} + $? ))
 			if [ "$1" = "fix" ]; then
-				rmdir "${DEST_DIR}${manbase}/cat${sec}"/* \
-					2>/dev/null
-				rmdir "${DEST_DIR}${manbase}/cat${sec}" \
-					2>/dev/null
+				rmdir ${DEST_DIR}${manbase}/cat${sec}/* 2>/dev/null
+				rmdir ${DEST_DIR}${manbase}/cat${sec} 2>/dev/null
 			fi
 		done
 	done
@@ -1908,6 +1903,19 @@ main()
 				if [ -f "${OPTARG}/etc/Makefile" ]; then
 					SOURCEMODE=true
 				fi
+			elif [ -f "${OPTARG%%:*}" -a -f "${OPTARG##*:}" \
+			       -a ! -f "${OPTARG}" ]
+			then
+				# Backward compatibility: allow arg to refer
+				# to a colon-separated list of tgz files.
+				# Remove this after NetBSD-5.0 is released.
+				cat >&2 <<EOF
+*** WARNING: The "-s tgzfile1:tgzfile2" option is deprecated.  Please use
+             "-s tgzfile1 -s tgzfile2" in future.
+EOF
+				TGZMODE=true
+				TGZLIST="${TGZLIST}${TGZLIST:+ }$( \
+					IFS=: eval shell_quote \${OPTARG} )"
 			else
 				err 2 "Invalid argument for -s option"
 			fi

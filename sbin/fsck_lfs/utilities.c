@@ -1,4 +1,4 @@
-/* $NetBSD: utilities.c,v 1.32 2013/01/22 09:39:12 dholland Exp $	 */
+/* $NetBSD: utilities.c,v 1.31 2011/06/09 19:57:53 christos Exp $	 */
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -194,7 +194,7 @@ getpathname(char *namebuf, size_t namebuflen, ino_t curdir, ino_t ino)
 	struct inodesc idesc;
 	static int busy = 0;
 
-	if (curdir == ino && ino == UFS_ROOTINO) {
+	if (curdir == ino && ino == ROOTINO) {
 		(void) strlcpy(namebuf, "/", namebuflen);
 		return;
 	}
@@ -213,7 +213,7 @@ getpathname(char *namebuf, size_t namebuflen, ino_t curdir, ino_t ino)
 		idesc.id_parent = curdir;
 		goto namelookup;
 	}
-	while (ino != UFS_ROOTINO) {
+	while (ino != ROOTINO) {
 		idesc.id_number = ino;
 		idesc.id_func = findino;
 		idesc.id_name = "..";
@@ -237,7 +237,7 @@ namelookup:
 		ino = idesc.id_number;
 	}
 	busy = 0;
-	if (ino != UFS_ROOTINO)
+	if (ino != ROOTINO)
 		*--cp = '?';
 	memcpy(namebuf, cp, (size_t) (&namebuf[MAXPATHLEN] - cp));
 }

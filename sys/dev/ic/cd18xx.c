@@ -1,4 +1,6 @@
-/*	$NetBSD: cd18xx.c,v 1.29 2012/10/27 17:18:19 chs Exp $	*/
+/*	$NetBSD: cd18xx.c,v 1.28 2011/04/24 16:26:59 rmind Exp $	*/
+
+/* XXXad does this even compile? */
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -92,7 +94,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd18xx.c,v 1.29 2012/10/27 17:18:19 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd18xx.c,v 1.28 2011/04/24 16:26:59 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -116,6 +118,11 @@ __KERNEL_RCSID(0, "$NetBSD: cd18xx.c,v 1.29 2012/10/27 17:18:19 chs Exp $");
 /*
  * some helpers
  */
+
+/* macros to clear/set/test flags. */
+#define SET(t, f)	(t) |= (f)
+#define CLR(t, f)	(t) &= ~(f)
+#define ISSET(t, f)	((t) & (f))
 
 static void	cdtty_attach(struct cd18xx_softc *, int);
 
@@ -172,9 +179,9 @@ int cd18xx_debug = CDD_INTR|CDD_INFO;
 
 /* Known supported revisions. */
 struct cd18xx_revs {
-	u_char		revision;
-	u_char		onehundred_pin;
-	const char	*name;
+	u_char	revision;
+	u_char	onehundred_pin;
+	char	*name;
 } cd18xx_revs[] = {
 	{ CD180_GFRCR_REV_B,		0, "CL-CD180 rev. B" },
 	{ CD180_GFRCR_REV_C,		0, "CL-CD180 rev. C" },
@@ -218,7 +225,7 @@ cd18xx_attach(struct cd18xx_softc *sc)
 		}
 
 	if (cd18xx_revs[i].name == NULL) {
-		aprint_error_dev(sc->sc_dev, "unknown revision, bailing.\n");
+		aprint_error_dev(&sc->sc_dev, "unknown revision, bailing.\n");
 		return;
 	}
 
@@ -242,7 +249,7 @@ cd18xx_attach(struct cd18xx_softc *sc)
 		;
 	if (i == 0) {
 		aprint_normal("\n");
-		aprint_error_dev(sc->sc_dev, "did not reset!\n");
+		aprint_error_dev(&sc->sc_dev, "did not reset!\n");
 		return;
 	}
 
@@ -292,6 +299,7 @@ void
 cdtty_attach(struct cd18xx_softc *sc, int port)
 {
 	struct cdtty_port *p = &sc->sc_ports[port];
+	int i;
 
 	/* load CAR with channel number */
 	cd18xx_set_car(sc, port);
@@ -299,7 +307,7 @@ cdtty_attach(struct cd18xx_softc *sc, int port)
 	/* wait for CCR to go to zero */
 	if (cd18xx_wait_ccr(sc)) {
 		printf("cd18xx_attach: change command timed out setting "
-		       "CAR for port %d\n", port);
+		       "CAR for port %d\n", i);
 		return;
 	}
 
@@ -329,7 +337,7 @@ cdtty_attach(struct cd18xx_softc *sc, int port)
 	p->p_rbput = p->p_rbget = p->p_rbuf;
 	p->p_rbavail = cdtty_rbuf_size;
 	if (p->p_rbuf == NULL) {
-		aprint_error_dev(sc->sc_dev, "unable to allocate ring buffer for tty %d\n", port);
+		aprint_error_dev(&sc->sc_dev, "unable to allocate ring buffer for tty %d\n", port);
 		return;
 	}
 	p->p_ebuf = p->p_rbuf + (cdtty_rbuf_size << 1);
@@ -379,7 +387,7 @@ cdtty_shutdown(struct cd18xx_softc *sc, struct cdtty_port *p)
  * cdttyopen:  open syscall for cdtty terminals..
  */
 int
-cdttyopen(dev_t dev, int flag, int mode, struct lwp *l)
+cdttyopen(dev_t dev, int flag, int mode, struct proc *p)
 {
 	struct tty *tp;
 	struct cd18xx_softc *sc;
@@ -479,7 +487,7 @@ cdttyopen(dev_t dev, int flag, int mode, struct lwp *l)
  * cdttyclose:  close syscall for cdtty terminals..
  */
 int
-cdttyclose(dev_t dev, int flag, int mode, struct lwp *l)
+cdttyclose(dev_t dev, int flag, int mode, struct proc *p)
 {
 	struct cd18xx_softc *sc;
 	struct cdtty_port *port;
@@ -543,13 +551,13 @@ cdttywrite(dev_t dev, struct uio *uio, int flag)
 }
 
 int
-cdttypoll(dev_t dev, int events, struct lwp *l)
+cdttypoll(dev_t dev, int events, struct proc *p)
 {
 	struct cd18xx_softc *sc = device_lookup_private(&clcd_cd, CD18XX_INSTANCE(dev));
 	struct cdtty_port *port = &sc->sc_ports[CD18XX_CHANNEL(dev)];
 	struct tty *tp = port->p_tty;
 
-	return ((*tp->t_linesw->l_poll)(tp, events, l));
+	return ((*tp->t_linesw->l_poll)(tp, events, p));
 }
 
 /*
@@ -568,18 +576,18 @@ cdttytty(dev_t dev)
  * cdttyioctl:  ioctl syscall for cdtty terminals..
  */
 int
-cdttyioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
+cdttyioctl(dev_t dev, u_long cmd, void *data, int flag, struct proc *p)
 {
 	struct cd18xx_softc *sc = device_lookup_private(&clcd_cd, CD18XX_INSTANCE(dev));
 	struct cdtty_port *port = &sc->sc_ports[CD18XX_CHANNEL(dev)];
 	struct tty *tp = port->p_tty;
 	int error, s;
 
-	error = (*tp->t_linesw->l_ioctl)(tp, cmd, data, flag, l);
+	error = (*tp->t_linesw->l_ioctl)(tp, cmd, data, flag, p);
 	if (error != EPASSTHROUGH)
 		return (error);
 
-	error = ttioctl(tp, cmd, data, flag, l);
+	error = ttioctl(tp, cmd, data, flag, p);
 	if (error != EPASSTHROUGH)
 		return (error);
 
@@ -727,7 +735,7 @@ cdtty_loadchannelregs(struct cd18xx_softc *sc, struct cdtty_port *p)
 	if (cd18xx_wait_ccr(sc)) {
 		DPRINTF(CDD_INFO,
 		    ("%s: cdtty_loadchannelregs ccr wait timed out\n",
-		    device_xname(sc->sc_dev)));
+		    device_xname(&sc->sc_dev)));
 	}
 	cd18xx_write(sc, CD18xx_CCR, p->p_chanctl);
 }
@@ -1065,7 +1073,7 @@ cd18xx_rint(struct cd18xx_softc *sc, int *ns)
 	/* work out the channel and softc */
 	channel = cd18xx_get_gscr1_channel(sc);
 	p = &sc->sc_ports[channel];
-	DPRINTF(CDD_INTR, ("%s: rint: channel %d", device_xname(sc->sc_dev), channel));
+	DPRINTF(CDD_INTR, ("%s: rint: channel %d", device_xname(&sc->sc_dev), channel));
 	GOTINTR(sc, p);
 
 	end = p->p_ebuf;
@@ -1139,7 +1147,7 @@ cd18xx_tint(struct cd18xx_softc *sc, int *ns)
 	/* work out the channel and softc */
 	channel = cd18xx_get_gscr1_channel(sc);
 	p = &sc->sc_ports[channel];
-	DPRINTF(CDD_INTR, ("%s: tint: channel %d", device_xname(sc->sc_dev),
+	DPRINTF(CDD_INTR, ("%s: tint: channel %d", device_xname(&sc->sc_dev),
 	    channel));
 	GOTINTR(sc, p);
 
@@ -1218,7 +1226,7 @@ cd18xx_mint(struct cd18xx_softc *sc, int *ns)
 	/* work out the channel and softc */
 	channel = cd18xx_get_gscr1_channel(sc);
 	p = &sc->sc_ports[channel];
-	DPRINTF(CDD_INTR, ("%s: mint: channel %d", device_xname(sc->sc_dev), channel));
+	DPRINTF(CDD_INTR, ("%s: mint: channel %d", device_xname(&sc->sc_dev), channel));
 	GOTINTR(sc, p);
 
 	/*
@@ -1283,7 +1291,7 @@ cd18xx_hardintr(void *v)
 		if (sc == NULL)
 			continue;
 
-		DPRINTF(CDD_INTR, ("%s:", device_xname(sc->sc_dev)));
+		DPRINTF(CDD_INTR, ("%s:", device_xname(&sc->sc_dev)));
 		while (count-- &&
 		    (status = (cd18xx_read(sc, CD18xx_SRSR) &
 		     CD18xx_SRSR_PENDING))) {

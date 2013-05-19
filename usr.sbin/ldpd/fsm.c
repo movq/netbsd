@@ -1,4 +1,4 @@
-/* $NetBSD: fsm.c,v 1.10 2013/02/05 13:02:33 kefren Exp $ */
+/* $NetBSD: fsm.c,v 1.5 2011/06/16 14:48:30 kefren Exp $ */
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -52,12 +52,12 @@ struct sockaddr	mplssockaddr;
 /* Processing a hello */
 void
 run_ldp_hello(struct ldp_pdu * pduid, struct hello_tlv * ht,
-    struct sockaddr * padd, struct in_addr * ladd, int mysock, bool may_connect)
+    struct in_addr * padd, struct in_addr * ladd, int mysock)
 {
 	struct ldp_peer *peer = NULL;
+	struct in_addr  peer_addr;
 	struct transport_address_tlv *trtlv;
-	struct hello_info *hi = NULL;
-	union sockunion traddr;
+	struct hello_info *hi;
 
 	if ((!pduid) || (!ht))
 		return;
@@ -66,6 +66,22 @@ run_ldp_hello(struct ldp_pdu * pduid, struct hello_tlv * ht,
 	debugp("Hello: Type: 0x%.4X Length: %.2d ID: %.8X\n", ht->type,
 	    ht->length, ht->messageid);
 
+	/* Add it to hello list or just update timer */
+	SLIST_FOREACH(hi, &hello_info_head, infos)
+		if (hi->ldp_id.s_addr == pduid->ldp_id.s_addr)
+			break;
+	if (hi == NULL) {
+		hi = malloc(sizeof(*hi));
+		if (!hi) {
+			fatalp("Cannot alloc a hello info structure");
+			return;
+		}
+		hi->ldp_id.s_addr = pduid->ldp_id.s_addr;
+		SLIST_INSERT_HEAD(&hello_info_head, hi, infos);
+	} else
+		/* Just update timer */
+		hi->keepalive = LDP_HELLO_KEEP;
+
 	if (ht->length <= 4)	/* Common hello parameters */
 		return;
 	ht->ch.type = ntohs(ht->ch.type);
@@ -73,51 +89,8 @@ run_ldp_hello(struct ldp_pdu * pduid, struct hello_tlv * ht,
 	ht->ch.holdtime = ntohs(ht->ch.holdtime);
 	ht->ch.res = ntohs(ht->ch.res);
 	debugp("Common hello Type: 0x%.4X Length: %.2d R:%d T:%d"
-	    " Hold time: %d\n", ht->ch.type, ht->ch.length,
+	    "Hold time: %d\n", ht->ch.type, ht->ch.length,
 	    ht->ch.tr / 2, ht->ch.tr % 2, ht->ch.holdtime);
-
-	memset(&traddr, 0, sizeof(traddr));
-	/* Check transport TLV */
-	if (pduid->length - PDU_PAYLOAD_LENGTH -
-	    sizeof(struct hello_tlv) >= 8) {
-		trtlv = (struct transport_address_tlv *)(ht + 1);
-		if (trtlv->type == htons(TLV_IPV4_TRANSPORT)) {
-			traddr.sin.sin_family = AF_INET;
-			traddr.sin.sin_len = sizeof(struct sockaddr_in);
-			memcpy(&traddr.sin.sin_addr,
-			    &trtlv->address, sizeof(struct in_addr));
-		} else if (trtlv->type == htons(TLV_IPV6_TRANSPORT)) {
-			traddr.sin6.sin6_family = AF_INET6;
-			traddr.sin6.sin6_len = sizeof(struct sockaddr_in6);
-			memcpy(&traddr.sin6.sin6_addr,
-			    &trtlv->address, sizeof(struct in6_addr));
-		} else
-			warnp("Unknown AF %x for transport address\n",
-			    ntohs(trtlv->type));
-	} else {
-		/* Use LDP ID as transport address */
-		traddr.sin.sin_family = AF_INET;
-		traddr.sin.sin_len = sizeof(struct sockaddr_in);
-		memcpy(&traddr.sin.sin_addr,
-		    &pduid->ldp_id, sizeof(struct in_addr));
-	}
-	/* Add it to hello list or just update timer */
-	SLIST_FOREACH(hi, &hello_info_head, infos)
-		if (hi->ldp_id.s_addr == pduid->ldp_id.s_addr &&
-		    sockaddr_cmp(&hi->transport_address.sa, &traddr.sa) == 0)
-			break;
-	if (hi == NULL) {
-		hi = calloc(1, sizeof(*hi));
-		if (!hi) {
-			fatalp("Cannot alloc a hello info structure");
-			return;
-		}
-		hi->ldp_id.s_addr = pduid->ldp_id.s_addr;
-		memcpy(&hi->transport_address, &traddr, traddr.sa.sa_len);
-		SLIST_INSERT_HEAD(&hello_info_head, hi, infos);
-	}
-
-	/* Update expire timer */
 	if (ht->ch.holdtime != 0)
 		hi->keepalive = ht->ch.holdtime;
 	else {
@@ -126,22 +99,33 @@ run_ldp_hello(struct ldp_pdu * pduid, struct hello_tlv * ht,
 		else
 			hi->keepalive = LDP_THELLO_KEEP;
 	}
-
-	if (!get_ldp_peer_by_id(&pduid->ldp_id)) {
+	if (!get_ldp_peer(&pduid->ldp_id)) {
+		/* First of all set peer_addr to announced LDP_ID */
+		memcpy(&peer_addr, &pduid->ldp_id,
+		    sizeof(struct in_addr));
 		/*
-		 * RFC 5036 2.5.2: If A1 > A2, LSR1 plays the active role;
+		 * Now let's see if there is any transport TLV in
+		 * there
+		 */
+		if (pduid->length - PDU_PAYLOAD_LENGTH -
+		    sizeof(struct hello_tlv) > 3) {
+			trtlv = (struct transport_address_tlv *) &ht[1];
+			if (trtlv->type == TLV_IPV4_TRANSPORT)
+				memcpy(&peer_addr, &trtlv->address,
+				    sizeof(struct in_addr));
+		} else
+			trtlv = NULL;
+		/*
+		 * RFC says: If A1 > A2, LSR1 plays the active role;
 		 * otherwise it is passive.
 		 */
-		if (may_connect == true &&
-		    (hi->transport_address.sa.sa_family == AF_INET &&
-		    ntohl(hi->transport_address.sin.sin_addr.s_addr) <
-		    ntohl(ladd->s_addr))) {
+		if (ntohl(peer_addr.s_addr) < ntohl(ladd->s_addr)) {
+#define	TRADDR (trtlv && trtlv->type == TLV_IPV4_TRANSPORT) ? &peer_addr : NULL
 			peer = ldp_peer_new(&pduid->ldp_id, padd,
-				&hi->transport_address.sa,
-				ht->ch.holdtime, 0);
-			if (peer == NULL)
+				TRADDR, ht->ch.holdtime, 0);
+			if (!peer)
 				return;
-			if (peer->state == LDP_PEER_CONNECTED)
+			if (peer && peer->state == LDP_PEER_CONNECTED)
 				send_initialize(peer);
 		}
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: ip6_input.c,v 1.141 2012/11/29 02:07:20 christos Exp $	*/
+/*	$NetBSD: ip6_input.c,v 1.136 2012/01/10 20:01:56 drochner Exp $	*/
 /*	$KAME: ip6_input.c,v 1.188 2001/03/29 05:34:31 itojun Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip6_input.c,v 1.141 2012/11/29 02:07:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip6_input.c,v 1.136 2012/01/10 20:01:56 drochner Exp $");
 
 #include "opt_gateway.h"
 #include "opt_inet.h"
@@ -103,7 +103,6 @@ __KERNEL_RCSID(0, "$NetBSD: ip6_input.c,v 1.141 2012/11/29 02:07:20 christos Exp
 #include <netinet/ip_icmp.h>
 #endif /* INET */
 #include <netinet/ip6.h>
-#include <netinet/portalgo.h>
 #include <netinet6/in6_var.h>
 #include <netinet6/ip6_var.h>
 #include <netinet6/ip6_private.h>
@@ -112,6 +111,11 @@ __KERNEL_RCSID(0, "$NetBSD: ip6_input.c,v 1.141 2012/11/29 02:07:20 christos Exp
 #include <netinet6/scope6_var.h>
 #include <netinet6/in6_ifattach.h>
 #include <netinet6/nd6.h>
+
+#ifdef KAME_IPSEC
+#include <netinet6/ipsec.h>
+#include <netinet6/ipsec_private.h>
+#endif
 
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
@@ -276,6 +280,15 @@ ip6_input(struct mbuf *m)
 	int s, error;
 #endif
 
+#ifdef KAME_IPSEC
+	/*
+	 * should the inner packet be considered authentic?
+	 * see comment in ah4_input().
+	 */
+	m->m_flags &= ~M_AUTHIPHDR;
+	m->m_flags &= ~M_AUTHIPDGM;
+#endif
+
 	/*
 	 * make sure we don't have onion peering information into m_tag.
 	 */
@@ -339,11 +352,16 @@ ip6_input(struct mbuf *m)
 		goto bad;
 	}
 
+#if defined(KAME_IPSEC)
+	/* IPv6 fast forwarding is not compatible with IPsec. */
+	m->m_flags &= ~M_CANFASTFWD;
+#else
 	/*
 	 * Assume that we can create a fast-forward IP flow entry
 	 * based on this packet.
 	 */
 	m->m_flags |= M_CANFASTFWD;
+#endif
 
 #ifdef PFIL_HOOKS
 	/*
@@ -357,7 +375,9 @@ ip6_input(struct mbuf *m)
 	 * let ipfilter look at packet on the wire,
 	 * not the decapsulated packet.
 	 */
-#if defined(FAST_IPSEC)
+#ifdef KAME_IPSEC
+	if (!ipsec_getnhist(m))
+#elif defined(FAST_IPSEC)
 	if (!ipsec_indone(m))
 #else
 	if (1)
@@ -766,6 +786,18 @@ ip6_input(struct mbuf *m)
 			}
 		}
 
+#ifdef KAME_IPSEC
+		/*
+		 * enforce IPsec policy checking if we are seeing last header.
+		 * note that we do not visit this with protocols with pcb layer
+		 * code - like udp/tcp/raw ip.
+		 */
+		if ((inet6sw[ip6_protox[nxt]].pr_flags & PR_LASTHDR) != 0 &&
+		    ipsec6_in_reject(m, NULL)) {
+			IPSEC6_STATINC(IPSEC_STAT_IN_POLVIO);
+			goto bad;
+		}
+#endif
 #ifdef FAST_IPSEC
 	/*
 	 * enforce IPsec policy checking if we are seeing last header.
@@ -1957,64 +1989,6 @@ sysctl_net_inet6_ip6_setup(struct sysctllog **clog)
 			CTL_NET, PF_INET6, IPPROTO_IPV6,
 			CTL_CREATE, CTL_EOL);
 #endif
-	/* anonportalgo RFC6056 subtree */
-	const struct sysctlnode *portalgo_node;
-	sysctl_createv(clog, 0, NULL, &portalgo_node,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_NODE, "anonportalgo",
-		       SYSCTL_DESCR("Anonymous port algorithm selection (RFC 6056)"),
-	    	       NULL, 0, NULL, 0,
-		       CTL_NET, PF_INET6, IPPROTO_IPV6, CTL_CREATE, CTL_EOL);
-	sysctl_createv(clog, 0, &portalgo_node, NULL,
-		       CTLFLAG_PERMANENT,
-		       CTLTYPE_STRING, "available",
-		       SYSCTL_DESCR("available algorithms"),
-		       sysctl_portalgo_available, 0, NULL, PORTALGO_MAXLEN,
-		       CTL_CREATE, CTL_EOL);
-	sysctl_createv(clog, 0, &portalgo_node, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_STRING, "selected",
-		       SYSCTL_DESCR("selected algorithm"),
-	               sysctl_portalgo_selected6, 0, NULL, PORTALGO_MAXLEN,
-		       CTL_CREATE, CTL_EOL);
-	sysctl_createv(clog, 0, &portalgo_node, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_STRUCT, "reserve",
-		       SYSCTL_DESCR("bitmap of reserved ports"),
-		       sysctl_portalgo_reserve6, 0, NULL, 0,
-		       CTL_CREATE, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "neighborgcthresh",
-		       SYSCTL_DESCR("Maximum number of entries in neighbor"
-			" cache"),
-		       NULL, 1, &ip6_neighborgcthresh, 0,
-		       CTL_NET, PF_INET6, IPPROTO_IPV6,
-		       CTL_CREATE, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "maxifprefixes",
-		       SYSCTL_DESCR("Maximum number of prefixes created by"
-			   " route advertisement per interface"),
-		       NULL, 1, &ip6_maxifprefixes, 0,
-		       CTL_NET, PF_INET6, IPPROTO_IPV6,
-		       CTL_CREATE, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "maxifdefrouters",
-		       SYSCTL_DESCR("Maximum number of default routers created"
-			   " by route advertisement per interface"),
-		       NULL, 1, &ip6_maxifdefrouters, 0,
-		       CTL_NET, PF_INET6, IPPROTO_IPV6,
-		       CTL_CREATE, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
-		       CTLTYPE_INT, "maxdynroutes",
-		       SYSCTL_DESCR("Maximum number of routes created via"
-			   " redirect"),
-		       NULL, 1, &ip6_maxdynroutes, 0,
-		       CTL_NET, PF_INET6, IPPROTO_IPV6,
-		       CTL_CREATE, CTL_EOL);
 }
 
 void

@@ -1,4 +1,4 @@
-/*	$NetBSD: unistd.h,v 1.54 2012/11/02 21:41:26 christos Exp $	*/
+/*	$NetBSD: unistd.h,v 1.52.18.2 2012/11/28 21:38:12 riz Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993

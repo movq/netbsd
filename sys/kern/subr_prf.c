@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_prf.c,v 1.150 2013/02/10 11:04:19 apb Exp $	*/
+/*	$NetBSD: subr_prf.c,v 1.148 2011/11/24 01:45:39 christos Exp $	*/
 
 /*-
  * Copyright (c) 1986, 1988, 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.150 2013/02/10 11:04:19 apb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.148 2011/11/24 01:45:39 christos Exp $");
 
 #include "opt_ddb.h"
 #include "opt_ipkdb.h"
@@ -68,6 +68,13 @@ __KERNEL_RCSID(0, "$NetBSD: subr_prf.c,v 1.150 2013/02/10 11:04:19 apb Exp $");
 
 #include <net/if.h>
 
+#ifdef DDB
+#include <ddb/ddbvar.h>
+#include <machine/db_machdep.h>
+#include <ddb/db_command.h>
+#include <ddb/db_interface.h>
+#endif
+
 #ifdef IPKDB
 #include <ipkdb/ipkdb.h>
 #endif
@@ -78,9 +85,7 @@ static bool kprintf_inited = false;
 #ifdef KGDB
 #include <sys/kgdb.h>
 #endif
-
 #ifdef DDB
-#include <ddb/ddbvar.h>		/* db_panic */
 #include <ddb/db_output.h>	/* db_printf, db_putchar prototypes */
 #endif
 
@@ -279,7 +284,26 @@ vpanic(const char *fmt, va_list ap)
 		kdbpanic();
 #endif
 #ifdef DDB
-	db_panic();
+	if (db_onpanic == 1)
+		Debugger();
+	else if (db_onpanic >= 0) {
+		static int intrace = 0;
+
+		if (intrace == 0) {
+			intrace = 1;
+			printf("cpu%u: Begin traceback...\n",
+			    cpu_index(curcpu()));
+			db_stack_trace_print(
+			    (db_expr_t)(intptr_t)__builtin_frame_address(0),
+			    true, 65535, "", printf);
+			printf("cpu%u: End traceback...\n",
+			    cpu_index(curcpu()));
+			intrace = 0;
+		} else
+			printf("Faulted in mid-traceback; aborting...");
+		if (db_onpanic == 2)
+			Debugger();
+	}
 #endif
 	cpu_reboot(bootopt, NULL);
 }
@@ -318,7 +342,7 @@ log(int level, const char *fmt, ...)
 }
 
 /*
- * vlog: write to the log buffer [already have va_list]
+ * vlog: write to the log buffer [already have va_alist]
  */
 
 void
@@ -977,7 +1001,7 @@ printf(const char *fmt, ...)
 
 /*
  * vprintf: print a message to the console and the log [already have
- *	va_list]
+ *	va_alist]
  */
 
 void
@@ -1012,7 +1036,7 @@ sprintf(char *bf, const char *fmt, ...)
 }
 
 /*
- * vsprintf: print a message to a buffer [already have va_list]
+ * vsprintf: print a message to a buffer [already have va_alist]
  */
 
 int
@@ -1043,7 +1067,7 @@ snprintf(char *bf, size_t size, const char *fmt, ...)
 }
 
 /*
- * vsnprintf: print a message to a buffer [already have va_list]
+ * vsnprintf: print a message to a buffer [already have va_alist]
  */
 int
 vsnprintf(char *bf, size_t size, const char *fmt, va_list ap)

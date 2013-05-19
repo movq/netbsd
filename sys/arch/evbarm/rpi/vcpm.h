@@ -1,4 +1,4 @@
-/*	$NetBSD: vcpm.h,v 1.1 2013/01/08 16:49:43 skrll Exp $	*/
+/*	$NetBSD: vcpm.h,v 1.1.4.2 2013/02/15 03:35:52 riz Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.

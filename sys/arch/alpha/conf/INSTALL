@@ -1,4 +1,4 @@
-# $NetBSD: INSTALL,v 1.104 2013/04/27 18:19:22 christos Exp $
+# $NetBSD: INSTALL,v 1.102 2011/12/18 05:49:23 dholland Exp $
 #
 # Alpha INSTALL kernel.
 
@@ -92,7 +92,6 @@ options 	NFS_BOOT_DHCP		# superset of BOOTP
 
 # WS console uses SUN or VT100 terminal emulation
 options 	WSEMUL_VT100
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 
 config		netbsd	root on ? type ?
 
@@ -341,10 +340,10 @@ wsmouse*	at	vsms?
 wskbd*		at	pckbd?
 wsmouse*	at	pms?
 
-pseudo-device	loop
+pseudo-device	loop		1
 pseudo-device	md		
 pseudo-device	ppp		
-pseudo-device	pty			# pseudo-terminals
+pseudo-device	pty		2	# pseudo-terminals (Sysinst needs two)
 pseudo-device	sl		
 
 #pseudo-device	fss			# file system snapshot device

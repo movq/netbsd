@@ -1,4 +1,4 @@
-/*	$NetBSD: imxgpio.c,v 1.3 2012/10/27 17:17:39 chs Exp $ */
+/*	$NetBSD: imxgpio.c,v 1.2 2011/07/01 20:27:50 dyoung Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imxgpio.c,v 1.3 2012/10/27 17:17:39 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imxgpio.c,v 1.2 2011/07/01 20:27:50 dyoung Exp $");
 
 #define	_INTR_PRIVATE
 
@@ -285,7 +285,7 @@ imxgpio_pin_ctl(void *arg, int pin, int flags)
 static void
 gpio_defer(device_t self)
 {
-	struct gpio_softc * const gpio = device_private(self);
+	struct gpio_softc * const gpio = (void *) self;
 	struct gpio_chipset_tag * const gp = &gpio->gpio_chipset;
 	struct gpiobus_attach_args gba;
 	gpio_pin_t *pins;
@@ -332,7 +332,7 @@ imxgpio_attach_common(device_t self, bus_space_tag_t iot,
 
 	if (irqbase > 0) {
 		gpio->gpio_pic.pic_ops = &gpio_pic_ops;
-		strlcpy(gpio->gpio_pic.pic_name, device_xname(self),
+		strlcpy(gpio->gpio_pic.pic_name, self->dv_xname,
 		    sizeof(gpio->gpio_pic.pic_name));
 		gpio->gpio_pic.pic_maxsources = 32;
 

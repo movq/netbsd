@@ -1,12 +1,10 @@
-#	$NetBSD: Makefile,v 1.68 2013/03/05 16:27:29 christos Exp $
+#	$NetBSD: Makefile,v 1.55.2.2 2012/06/23 22:54:56 riz Exp $
 
 HOSTLIB=	nbcompat
 
-.include <bsd.own.mk>
-
 SRCS=		atoll.c basename.c cdbr.c cdbw.c dirname.c \
-		dprintf.c fgetln.c flock.c fparseln.c fpurge.c \
-		getcap.c getline.c getmode.c getopt_long.c gettemp.c \
+		fgetln.c flock.c fparseln.c fpurge.c \
+		getline.c getmode.c getopt_long.c gettemp.c \
 		heapsort.c \
 		issetugid.c lchflags.c lchmod.c lchown.c libyywrap.c \
 		md2.c md2hl.c md4c.c md4hl.c md5c.c md5hl.c \
@@ -57,7 +55,6 @@ CPPFLAGS+=	-I. -I./include -I${.CURDIR} -I${.CURDIR}/sys \
 
 DPSRCS+=	defs.mk
 CLEANFILES+=	config.log config.status configure.lineno *.stamp
-CLEANDIRFILES+=	defs.mk config.cache confdefs.h
 
 # Get components of Berkeley DB.
 _CURDIR:=	${.CURDIR}
@@ -75,81 +72,22 @@ config.cache: include/.stamp configure nbtool_config.h.in defs.mk.in
 defs.mk: config.cache
 	@touch ${.TARGET}
 
-INCFILES=	nbtool_config.h
-INCSUBDIRS=	sys machine rpc arpa
-CLEANDIRFILES+= ${INCFILES}
-
-# CLEANDIRFILES may not contain directory names
-cleandir:	cleandir.include
-cleandir.include: .PHONY
-		rm -rf include
-
-include/.stamp:
-	mkdir -p ${INCSUBDIRS:@d@ include/$d @}
-	@touch ${.TARGET}
-
-# Install rules
-
-HOST_LIBDIR=	${TOOLDIR}/lib
-HOST_INCSDIR=	${TOOLDIR}/include
-HOST_SHAREDIR= ${TOOLDIR}/share
-
-install:	.PHONY install.lib includes install.defs.mk
-
-# Install lib${HOSTLIB}.a in ${TOOLDIR}/lib
-install.lib: .PHONY ${HOST_LIBDIR}/lib${HOSTLIB}.a
-${HOST_LIBDIR}/lib${HOSTLIB}.a: lib${HOSTLIB}.a
-	${_MKTARGET_INSTALL}
-	${HOST_INSTALL_DIR} ${HOST_LIBDIR}
-	${HOST_INSTALL_FILE} -m ${LIBMODE} ${.ALLSRC} ${.TARGET}
-
-.for _f in ${INCFILES}
-HOST_INCINSTFILES+= ${HOST_INCSDIR}/compat/${_f}
-${HOST_INCSDIR}/compat/${_f}: ${_f}
-	${_MKTARGET_INSTALL}
-	${HOST_INSTALL_FILE} ${.ALLSRC} ${.TARGET}
-.endfor
-
-.for _d in ${INCSUBDIRS}
-HOST_INCINSTDIRS+= ${HOST_INCSDIR}/compat/${_d}
-${HOST_INCSDIR}/compat/${_d}:
-	${_MKTARGET_INSTALL}
-	${HOST_INSTALL_DIR} ${.TARGET}
-.endfor
-
-# Install include files in ${TOOLDIR}/include/compat
-includes: .PHONY ${HOST_INCINSTDIRS} .WAIT ${HOST_INCINSTFILES}
-	@(cd include && find . -name '*.h' -print | while read f ; do \
-	    ${HOST_INSTALL_FILE} $$f ${HOST_INCSDIR}/compat/$$f ; \
-	done)
-
-
-# Install defs.mk in ${TOOLDIR}/share/compat
-install.defs.mk: .PHONY ${HOST_SHAREDIR}/compat/defs.mk
-${HOST_SHAREDIR}/compat/defs.mk: defs.mk
-	${_MKTARGET_INSTALL}
-	${HOST_INSTALL_DIR} ${HOST_SHAREDIR}
-	${HOST_INSTALL_DIR} ${HOST_SHAREDIR}/compat
-	${HOST_INSTALL_FILE} ${.ALLSRC} ${.TARGET}
-
-# bsd.hostlib.mk wants HOST_CPPFLAGS, not CPPFLAGS
-
-HOST_CPPFLAGS:=	${CPPFLAGS}
-CPPFLAGS:=	# empty
-
-.include <bsd.hostlib.mk>
-
-# Use uninstalled copy of host-mkdep
-HOST_MKDEP_OBJ!= cd ${.CURDIR}/../host-mkdep && ${PRINTOBJDIR}
-HOST_MKDEP=	${HOST_MKDEP_OBJ}/host-mkdep
-MKDEP=		${HOST_MKDEP}
-
-# Use uninstalled copy of the install program
-INSTALL_OBJ!=	cd ${NETBSDSRCDIR}/tools/binstall && ${PRINTOBJDIR}
-INSTALL=	${INSTALL_OBJ}/xinstall
-
 # Run "${TOOLDIR}/bin/nbmake-${MACHINE} regen" by hand after editing
 # configure.ac.  See more detailed instructions in configure.ac.
 regen:
 	cd ${.CURDIR} && ${TOOLDIR}/bin/${_TOOL_PREFIX}autoconf
 	cd ${.CURDIR} && ${TOOLDIR}/bin/${_TOOL_PREFIX}autoheader
+
+include/.stamp:
+	mkdir -p include/sys include/machine include/rpc include/arpa
+	@touch ${.TARGET}
+
+cleandir:
+	-rm -f nbtool_config.h confdefs.h defs.mk
+	-rm -r -f include
+	-rm -f config.cache
+
+HOST_CPPFLAGS:=	${CPPFLAGS}
+CPPFLAGS:=	# empty
+
+.include <bsd.hostlib.mk>

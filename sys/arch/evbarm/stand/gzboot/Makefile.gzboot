@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.gzboot,v 1.22 2013/02/06 07:19:19 matt Exp $
+#	$NetBSD: Makefile.gzboot,v 1.17.10.1 2012/08/13 20:24:10 riz Exp $
 
 NOMAN=  # defined
 
@@ -35,7 +35,6 @@ STARTFILE= srtbegin.o
 CPPFLAGS+= -nostdinc -I. -I${EVBARM_STAND}/gzboot -I${EVBARM_STAND}/board
 CPPFLAGS+= -I${S} -I${S}/arch -I${S}/lib/libsa
 CPPFLAGS+= -I${S}/../common/dist/zlib
-CPPFLAGS+= -mabi=apcs-gnu -mfloat-abi=soft
 
 CPPFLAGS+= -D_STANDALONE
 
@@ -92,7 +91,7 @@ cleandir distclean: .WAIT cleanlibdir
 cleanlibdir:
 	-rm -rf lib
 
-LDFLAGS= -M -T ${LDSCRIPT} --fix-v4bx
+LDFLAGS= -M -T ${LDSCRIPT}
 
 LIBLIST=${LIBSA} ${LIBZ} ${LIBSA} ${LIBKERN} ${LIBSA}
 
@@ -118,6 +117,5 @@ FILES=	${PROGSYM}
 .include <bsd.prog.mk>
 
 ${PROGSYM}: ${STARTFILE} ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
-	${_MKTARGET_LINK}
 	${LD} -o ${.TARGET} ${LDFLAGS} ${STARTFILE} \
 	    ${OBJS} ${LIBLIST} > ${BASE}.list

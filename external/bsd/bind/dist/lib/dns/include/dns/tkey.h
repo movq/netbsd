@@ -1,4 +1,4 @@
-/*	$NetBSD: tkey.h,v 1.3 2012/06/05 00:41:55 christos Exp $	*/
+/*	$NetBSD: tkey.h,v 1.2.6.1 2012/06/05 21:14:55 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004-2007, 2009-2011  Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-/*	$NetBSD: ubsec.c,v 1.28 2012/10/27 17:18:35 chs Exp $	*/
+/*	$NetBSD: ubsec.c,v 1.27 2012/01/30 19:41:23 drochner Exp $	*/
 /* $FreeBSD: src/sys/dev/ubsec/ubsec.c,v 1.6.2.6 2003/01/23 21:06:43 sam Exp $ */
 /*	$OpenBSD: ubsec.c,v 1.127 2003/06/04 14:04:58 jason Exp $	*/
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ubsec.c,v 1.28 2012/10/27 17:18:35 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ubsec.c,v 1.27 2012/01/30 19:41:23 drochner Exp $");
 
 #undef UBSEC_DEBUG
 
@@ -98,7 +98,7 @@ struct cfdriver ubsec_cd = {
 	0, "ubsec", DV_DULL
 };
 #else
-CFATTACH_DECL_NEW(ubsec, sizeof(struct ubsec_softc), ubsec_probe, ubsec_attach,
+CFATTACH_DECL(ubsec, sizeof(struct ubsec_softc), ubsec_probe, ubsec_attach,
 	      NULL, NULL);
 extern struct cfdriver ubsec_cd;
 #endif
@@ -307,7 +307,6 @@ ubsec_attach(device_t parent, device_t self, void *aux)
 	struct ubsec_dma *dmap;
 	u_int32_t cmd, i;
 
-	sc->sc_dev = self;
 	up = ubsec_lookup(pa);
 	if (up == NULL) {
 		printf("\n");
@@ -331,30 +330,30 @@ ubsec_attach(device_t parent, device_t self, void *aux)
 
 	if (pci_mapreg_map(pa, BS_BAR, PCI_MAPREG_TYPE_MEM, 0,
 	    &sc->sc_st, &sc->sc_sh, NULL, NULL)) {
-		aprint_error_dev(self, "can't find mem space");
+		aprint_error_dev(&sc->sc_dv, "can't find mem space");
 		return;
 	}
 
 	sc->sc_dmat = pa->pa_dmat;
 
 	if (pci_intr_map(pa, &ih)) {
-		aprint_error_dev(self, "couldn't map interrupt\n");
+		aprint_error_dev(&sc->sc_dv, "couldn't map interrupt\n");
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih);
 	sc->sc_ih = pci_intr_establish(pc, ih, IPL_NET, ubsec_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error_dev(self, "couldn't establish interrupt");
+		aprint_error_dev(&sc->sc_dv, "couldn't establish interrupt");
 		if (intrstr != NULL)
 			aprint_error(" at %s", intrstr);
 		aprint_error("\n");
 		return;
 	}
-	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
+	aprint_normal_dev(&sc->sc_dv, "interrupting at %s\n", intrstr);
 
 	sc->sc_cid = crypto_get_driverid(0);
 	if (sc->sc_cid < 0) {
-		aprint_error_dev(self, "couldn't get crypto driver id\n");
+		aprint_error_dev(&sc->sc_dv, "couldn't get crypto driver id\n");
 		pci_intr_disestablish(pc, sc->sc_ih);
 		return;
 	}
@@ -367,13 +366,13 @@ ubsec_attach(device_t parent, device_t self, void *aux)
 		q = (struct ubsec_q *)malloc(sizeof(struct ubsec_q),
 		    M_DEVBUF, M_NOWAIT);
 		if (q == NULL) {
-			aprint_error_dev(self, "can't allocate queue buffers\n");
+			aprint_error_dev(&sc->sc_dv, "can't allocate queue buffers\n");
 			break;
 		}
 
 		if (ubsec_dma_malloc(sc, sizeof(struct ubsec_dmachunk),
 		    &dmap->d_alloc, 0)) {
-			aprint_error_dev(self, "can't allocate dma buffers\n");
+			aprint_error_dev(&sc->sc_dv, "can't allocate dma buffers\n");
 			free(q, M_DEVBUF);
 			break;
 		}
@@ -443,9 +442,9 @@ ubsec_attach(device_t parent, device_t self, void *aux)
 #endif
  skip_rng:
 		if (sc->sc_rnghz)
-			aprint_normal_dev(self, "random number generator enabled\n");
+			aprint_normal_dev(&sc->sc_dv, "random number generator enabled\n");
 		else
-			aprint_error_dev(self, "WARNING: random number generator "
+			aprint_error_dev(&sc->sc_dv, "WARNING: random number generator "
 			    "disabled\n");
 	}
 #endif /* UBSEC_NO_RNG */
@@ -563,7 +562,7 @@ ubsec_intr(void *arg)
 		if (ubsec_debug) {
 			volatile u_int32_t a = READ_REG(sc, BS_ERR);
 
-			printf("%s: dmaerr %s@%08x\n", device_xname(sc->sc_dev),
+			printf("%s: dmaerr %s@%08x\n", device_xname(&sc->sc_dv),
 			    (a & BS_ERR_READ) ? "read" : "write",
 			       a & BS_ERR_ADDR);
 		}
@@ -577,7 +576,7 @@ ubsec_intr(void *arg)
 		int wkeup = sc->sc_needwakeup & (CRYPTO_SYMQ|CRYPTO_ASYMQ);
 #ifdef UBSEC_DEBUG
 		if (ubsec_debug)
-			printf("%s: wakeup crypto (%x)\n", device_xname(sc->sc_dev),
+			printf("%s: wakeup crypto (%x)\n", device_xname(&sc->sc_dv),
 				sc->sc_needwakeup);
 #endif /* UBSEC_DEBUG */
 		sc->sc_needwakeup &= ~wkeup;
@@ -646,7 +645,7 @@ ubsec_feed(struct ubsec_softc *sc)
 	/* XXX temporary aggregation statistics reporting code */
 	if (max < npkts) {
 		max = npkts;
-		printf("%s: new max aggregate %d\n", device_xname(sc->sc_dev), max);
+		printf("%s: new max aggregate %d\n", device_xname(&sc->sc_dv), max);
 	}
 #endif /* UBSEC_DEBUG */
 
@@ -875,7 +874,7 @@ ubsec_newsession(void *arg, u_int32_t *sidp, struct cryptoini *cri)
 			macini->cri_key[i] ^= HMAC_OPAD_VAL;
 	}
 
-	*sidp = UBSEC_SID(device_unit(sc->sc_dev), sesn);
+	*sidp = UBSEC_SID(device_unit(&sc->sc_dv), sesn);
 	return (0);
 }
 
@@ -1720,7 +1719,7 @@ ubsec_callback2(struct ubsec_softc *sc, struct ubsec_q2 *q)
 		break;
 	}
 	default:
-		printf("%s: unknown ctx op: %x\n", device_xname(sc->sc_dev),
+		printf("%s: unknown ctx op: %x\n", device_xname(&sc->sc_dv),
 		    letoh16(ctx->ctx_op));
 		break;
 	}
@@ -2036,7 +2035,7 @@ ubsec_kfree(struct ubsec_softc *sc, struct ubsec_q2 *q)
 		break;
 	}
 	default:
-		printf("%s: invalid kfree 0x%x\n", device_xname(sc->sc_dev),
+		printf("%s: invalid kfree 0x%x\n", device_xname(&sc->sc_dv),
 		    q->q_type);
 		break;
 	}
@@ -2078,7 +2077,7 @@ ubsec_kprocess(void *arg, struct cryptkop *krp, int hint)
 		break;
 	default:
 		printf("%s: kprocess: invalid op 0x%x\n",
-		    device_xname(sc->sc_dev), krp->krp_op);
+		    device_xname(&sc->sc_dv), krp->krp_op);
 		krp->krp_status = EOPNOTSUPP;
 		crypto_kdone(krp);
 		r = 0;
@@ -2217,10 +2216,10 @@ ubsec_kprocess_modexp_sw(struct ubsec_softc *sc, struct cryptkop *krp,
 	/* Misaligned output buffer will hang the chip. */
 	if ((letoh32(mcr->mcr_opktbuf.pb_addr) & 3) != 0)
 		panic("%s: modexp invalid addr 0x%x",
-		    device_xname(sc->sc_dev), letoh32(mcr->mcr_opktbuf.pb_addr));
+		    device_xname(&sc->sc_dv), letoh32(mcr->mcr_opktbuf.pb_addr));
 	if ((letoh32(mcr->mcr_opktbuf.pb_len) & 3) != 0)
 		panic("%s: modexp invalid len 0x%x",
-		    device_xname(sc->sc_dev), letoh32(mcr->mcr_opktbuf.pb_len));
+		    device_xname(&sc->sc_dv), letoh32(mcr->mcr_opktbuf.pb_len));
 #endif
 
 	ctx = (struct ubsec_ctx_modexp *)me->me_q.q_ctx.dma_vaddr;
@@ -2423,10 +2422,10 @@ ubsec_kprocess_modexp_hw(struct ubsec_softc *sc, struct cryptkop *krp,
 	/* Misaligned output buffer will hang the chip. */
 	if ((letoh32(mcr->mcr_opktbuf.pb_addr) & 3) != 0)
 		panic("%s: modexp invalid addr 0x%x",
-		    device_xname(sc->sc_dev), letoh32(mcr->mcr_opktbuf.pb_addr));
+		    device_xname(&sc->sc_dv), letoh32(mcr->mcr_opktbuf.pb_addr));
 	if ((letoh32(mcr->mcr_opktbuf.pb_len) & 3) != 0)
 		panic("%s: modexp invalid len 0x%x",
-		    device_xname(sc->sc_dev), letoh32(mcr->mcr_opktbuf.pb_len));
+		    device_xname(&sc->sc_dv), letoh32(mcr->mcr_opktbuf.pb_len));
 #endif
 
 	ctx = (struct ubsec_ctx_modexp *)me->me_q.q_ctx.dma_vaddr;
@@ -2630,12 +2629,12 @@ ubsec_kprocess_rsapriv(struct ubsec_softc *sc, struct cryptkop *krp,
 #ifdef DIAGNOSTIC
 	if (rp->rpr_msgin.dma_paddr & 3 || rp->rpr_msgin.dma_size & 3) {
 		panic("%s: rsapriv: invalid msgin 0x%lx(0x%lx)",
-		    device_xname(sc->sc_dev), (u_long) rp->rpr_msgin.dma_paddr,
+		    device_xname(&sc->sc_dv), (u_long) rp->rpr_msgin.dma_paddr,
 		    (u_long) rp->rpr_msgin.dma_size);
 	}
 	if (rp->rpr_msgout.dma_paddr & 3 || rp->rpr_msgout.dma_size & 3) {
 		panic("%s: rsapriv: invalid msgout 0x%lx(0x%lx)",
-		    device_xname(sc->sc_dev), (u_long) rp->rpr_msgout.dma_paddr,
+		    device_xname(&sc->sc_dv), (u_long) rp->rpr_msgout.dma_paddr,
 		    (u_long) rp->rpr_msgout.dma_size);
 	}
 #endif

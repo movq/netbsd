@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.8 2012/10/26 18:15:55 tsutsui Exp $
+#	$NetBSD: Makefile.inc,v 1.7.8.1 2012/11/18 16:58:43 msaitoh Exp $
 
 WARNS=		1
 DBG=		-Os

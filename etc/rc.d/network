@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: network,v 1.63 2013/04/20 18:24:18 christos Exp $
+# $NetBSD: network,v 1.61 2010/09/26 18:52:04 apb Exp $
 #
 
 # PROVIDE: network
@@ -15,18 +15,6 @@ stop_cmd="network_stop"
 
 nl='
 ' # a newline
-
-intmissing() {
-	local int="$1"
-	shift
-	for i
-	do
-		if [ "$int" = "$i" ]; then
-			return 1
-		fi
-	done
-	return 0
-}
 
 network_start()
 {
@@ -202,10 +190,9 @@ network_start()
 	# starting a line with "!".  Refer to ifconfig.if(5) for details.
 	#
 	if [ "$net_interfaces" != NO ]; then
-		ifaces="$(/sbin/ifconfig -l)"
 		if checkyesno auto_ifconfig; then
-			tmp="$ifaces"
-			for cloner in $(/sbin/ifconfig -C); do
+			tmp=$(/sbin/ifconfig -l)
+			for cloner in $(/sbin/ifconfig -C 2>/dev/null); do
 				for int in /etc/ifconfig.${cloner}[0-9]*; do
 					[ ! -f $int ] && break
 					tmp="$tmp ${int##*.}"
@@ -239,11 +226,9 @@ network_start()
 			# If the interface did not exist before,
 			# then also resync ipf(4).
 			#
-			if intmissing $int $ifaces; then
-				if /sbin/ifconfig $int create && \
-				   checkyesno ipfilter; then
-					/sbin/ipf -y >/dev/null
-				fi
+			if /sbin/ifconfig $int create 2>/dev/null && \
+			   checkyesno ipfilter; then
+				/sbin/ipf -y >/dev/null
 			fi
 
 			# If $ifconfig_xxN is empty, then use
@@ -395,8 +380,6 @@ network_start()
 		# wait till DAD is completed. always invoke it in case
 		# if are configured manually by ifconfig
 		#
-		echo 'Waiting for DAD completion for' \
-		    'statically configured addresses...'
 		dadcount=$(/sbin/sysctl -n net.inet6.ip6.dad_count 2>/dev/null)
 		sleep $dadcount
 		sleep 1
@@ -414,8 +397,6 @@ network_start()
 			# wait till DAD is completed, for global addresses
 			# configured by router advert message.
 			#
-			echo 'Waiting for DAD completion for' \
-			    'addresses configured by router advert message...'
 			sleep $dadcount
 			sleep 1
 		fi

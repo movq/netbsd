@@ -1,4 +1,4 @@
-/*	$NetBSD: dump.c,v 1.10 2012/12/13 15:36:36 roy Exp $	*/
+/*	$NetBSD: dump.c,v 1.9 2011/12/10 19:14:29 roy Exp $	*/
 /*	$KAME: dump.c,v 1.34 2004/06/14 05:35:59 itojun Exp $	*/
 
 /*
@@ -35,9 +35,6 @@
 
 #include <net/if.h>
 #include <net/if_dl.h>
-#ifdef __FreeBSD__
-#include <net/if_var.h>
-#endif
 
 #include <netinet/in.h>
 
@@ -106,7 +103,8 @@ if_dump(void)
 		fprintf(fp, "%s:\n", rai->ifname);
 
 		fprintf(fp, "  Status: %s\n",
-			(rai->ifflags & IFF_UP) ? "UP" : "DOWN");
+			(iflist[rai->ifindex]->ifm_flags & IFF_UP) ? "UP" :
+			"DOWN");
 
 		/* control information */
 		if (rai->lastsent.tv_sec) {

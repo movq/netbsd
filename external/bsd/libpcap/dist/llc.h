@@ -1,5 +1,3 @@
-/*	$NetBSD: llc.h,v 1.1.1.3 2013/04/06 15:57:46 christos Exp $	*/
-
 /*
  * Copyright (c) 1993, 1994, 1997
  *	The Regents of the University of California.  All rights reserved.
@@ -20,7 +18,7 @@
  * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  *
- * @(#) Header: /tcpdump/master/libpcap/llc.h,v 1.2 2001-01-28 09:44:50 guy Exp  (LBL)
+ * @(#) Header: /tcpdump/master/libpcap/llc.h,v 1.2 2001-01-28 09:44:50 guy Exp (LBL)
  */
 
 /*

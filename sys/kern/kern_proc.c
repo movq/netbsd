@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_proc.c,v 1.186 2012/06/09 02:31:14 christos Exp $	*/
+/*	$NetBSD: kern_proc.c,v 1.181.2.1 2012/06/12 17:18:22 riz Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_proc.c,v 1.186 2012/06/09 02:31:14 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_proc.c,v 1.181.2.1 2012/06/12 17:18:22 riz Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_kstack.h"
@@ -89,8 +89,10 @@ __KERNEL_RCSID(0, "$NetBSD: kern_proc.c,v 1.186 2012/06/09 02:31:14 christos Exp
 #include <sys/tty.h>
 #include <sys/signalvar.h>
 #include <sys/ras.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/filedesc.h>
-#include <sys/syscall_stats.h>
+#include "sys/syscall_stats.h"
 #include <sys/kauth.h>
 #include <sys/sleepq.h>
 #include <sys/atomic.h>
@@ -100,6 +102,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_proc.c,v 1.186 2012/06/09 02:31:14 christos Exp
 #include <sys/exec.h>
 #include <sys/cpu.h>
 
+#include <uvm/uvm_extern.h>
 #include <uvm/uvm_extern.h>
 
 #ifdef COMPAT_NETBSD32
@@ -459,9 +462,6 @@ proc0_init(void)
 	rlim[RLIMIT_MEMLOCK].rlim_max = lim;
 	rlim[RLIMIT_MEMLOCK].rlim_cur = lim / 3;
 
-	rlim[RLIMIT_NTHR].rlim_max = maxlwp;
-	rlim[RLIMIT_NTHR].rlim_cur = maxlwp < maxuprc ? maxlwp : maxuprc;
-
 	/* Note that default core name has zero length. */
 	limit0.pl_corename = defcorename;
 	limit0.pl_cnlen = 0;
@@ -742,11 +742,6 @@ proc_alloc(void)
 	proc_alloc_pid(p);
 	return p;
 }
-
-/*
- * proc_alloc_pid: allocate PID and record the given proc 'p' so that
- * proc_find_raw() can find it by the PID.
- */
 
 pid_t
 proc_alloc_pid(struct proc *p)
@@ -1572,6 +1567,7 @@ static const u_int sysctl_stflagmap[] = {
 const u_int sysctl_lwpflagmap[] = {
 	LW_SINTR, L_SINTR,
 	LW_SYSTEM, L_SYSTEM,
+	LW_SA, L_SA,	/* WRS ??? */
 	0
 };
 

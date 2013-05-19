@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.sys.mk,v 1.223 2013/01/27 02:31:44 christos Exp $
+#	$NetBSD: bsd.sys.mk,v 1.211.2.1 2012/06/30 10:13:02 bouyer Exp $
 #
 # Build definitions used for NetBSD source tree builds.
 
@@ -8,13 +8,12 @@ _BSD_SYS_MK_=1
 .if ${MKREPRO:Uno} == "yes"
 CPPFLAGS+=	-Wp,-iremap,${NETBSDSRCDIR}:/usr/src
 CPPFLAGS+=	-Wp,-iremap,${DESTDIR}/:/
-CPPFLAGS+=	-Wp,-iremap,${X11SRCDIR}:/usr/xsrc
 .endif
 
 # Enable c99 mode by default.
 # This has the side effect of complaining for missing prototypes
 # implicit type declarations and missing return statements.
-.if defined(HAVE_GCC) || defined(HAVE_LLVM)
+.if defined(HAVE_GCC)
 CFLAGS+=	-std=gnu99
 .endif
 
@@ -41,7 +40,7 @@ CFLAGS+=	-Wa,--fatal-warnings
 .if (!defined(MKPIC) || ${MKPIC} != "no") && \
     (!defined(LDSTATIC) || ${LDSTATIC} != "-static")
 # XXX there are some strange problems not yet resolved
-. if !defined(HAVE_GCC) || defined(HAVE_LLVM)
+. if !defined(HAVE_GCC)
 LDFLAGS+=	-Wl,--fatal-warnings
 . endif
 .endif
@@ -60,13 +59,8 @@ CXXFLAGS+=	-Wctor-dtor-privacy -Wnon-virtual-dtor -Wreorder \
 		-Wno-deprecated -Woverloaded-virtual -Wsign-promo -Wsynth
 CXXFLAGS+=	${${ACTIVE_CXX} == "gcc":? -Wno-non-template-friend -Wno-pmf-conversions :}
 .endif
-.if ${WARNS} > 3 && (defined(HAVE_GCC) || defined(HAVE_LLVM))
-.if ${WARNS} > 4
-CFLAGS+=	-Wold-style-definition
-.endif
+.if ${WARNS} > 3 && defined(HAVE_GCC)
 CFLAGS+=	-Wsign-compare -Wformat=2
-CFLAGS+=	${${ACTIVE_CC} == "clang":? -Wno-error=format-nonliteral :}
-CFLAGS+=	${${ACTIVE_CC} == "gcc":? -Wno-format-zero-length :}
 .endif
 .if ${WARNS} > 3 && defined(HAVE_LLVM)
 CFLAGS+=	${${ACTIVE_CC} == "clang":? -Wpointer-sign -Wmissing-noreturn :}
@@ -89,13 +83,29 @@ _NOWERROR=	${defined(NOGCCERROR) || (${ACTIVE_CC} == "clang" && defined(NOCLANGE
 CFLAGS+=	${${_NOWERROR} == "no" :?-Werror:} ${CWARNFLAGS}
 LINTFLAGS+=	${DESTDIR:D-d ${DESTDIR}/usr/include}
 
-.if (${USE_SSP:Uno} != "no") && (${BINDIR:Ux} != "/usr/mdec")
+.if (${MACHINE_ARCH} == "alpha") || \
+    (${MACHINE_ARCH} == "hppa") || \
+    (${MACHINE_ARCH} == "ia64") || \
+    (${MACHINE_ARCH} == "mipsel") || (${MACHINE_ARCH} == "mipseb") || \
+    (${MACHINE_ARCH} == "mips64el") || (${MACHINE_ARCH} == "mips64eb")
+HAS_SSP=	no
+.else
+HAS_SSP=	yes
+.endif
+
+.if ${USE_FORT:Uno} != "no"
+USE_SSP?=	yes
 .if !defined(KERNSRCDIR) && !defined(KERN) # not for kernels nor kern modules
 CPPFLAGS+=	-D_FORTIFY_SOURCE=2
 .endif
+.endif
+
+.if (${USE_SSP:Uno} != "no") && (${BINDIR:Ux} != "/usr/mdec")
+.if ${HAS_SSP} == "yes"
 COPTS+=	-fstack-protector -Wstack-protector 
-COPTS+=	${${ACTIVE_CC} == "clang":? --param ssp-buffer-size=1 :}
+COPTS+=	${${ACTIVE_CC} == "clang":? -mllvm -stack-protector-buffer-size=1 :}
 COPTS+=	${${ACTIVE_CC} == "gcc":? --param ssp-buffer-size=1 :}
+.endif
 .endif
 
 .if ${MKSOFTFLOAT:Uno} != "no"
@@ -187,7 +197,7 @@ STRIP?=		strip
 
 .c.ln:
 	${_MKTARGET_COMPILE}
-	${LINT} ${LINTFLAGS} ${LINTFLAGS.${.IMPSRC:T}} \
+	${LINT} ${LINTFLAGS} \
 	    ${CPPFLAGS:C/-([IDU])[  ]*/-\1/Wg:M-[IDU]*} \
 	    ${CPPFLAGS.${.IMPSRC:T}:C/-([IDU])[  ]*/-\1/Wg:M-[IDU]*} \
 	    -i ${.IMPSRC}

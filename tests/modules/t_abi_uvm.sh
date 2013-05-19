@@ -1,4 +1,4 @@
-# $NetBSD: t_abi_uvm.sh,v 1.3 2012/04/20 05:41:25 jruoho Exp $
+# $NetBSD: t_abi_uvm.sh,v 1.3.2.2 2012/05/17 19:03:23 riz Exp $
 #
 # Copyright (c) 2012 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -31,16 +31,6 @@ PAGE_SIZE_head() {
 	atf_set "require.user" "root"
 }
 PAGE_SIZE_body() {
-
-	# XXX: Adjust when modctl(8) fails consistently.
-	#
-	$(atf_get_srcdir)/k_helper3 \
-		"%s/k_helper/k_helper.kmod" $(atf_get_srcdir)
-
-	if [ $? -eq 1 ] || [ $? -eq 78 ]; then
-		atf_skip "host does not support modules"
-	fi
-
 	if modload $(atf_get_srcdir)/k_uvm/k_uvm.kmod; then
 		:
 	else

@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.89 2013/04/11 17:13:15 macallan Exp $	*/
+/*	$NetBSD: pmap.c,v 1.85 2012/02/03 19:29:59 matt Exp $	*/
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -63,7 +63,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.89 2013/04/11 17:13:15 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.85 2012/02/03 19:29:59 matt Exp $");
 
 #define	PMAP_NOOPNAMES
 
@@ -91,21 +91,24 @@ __KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.89 2013/04/11 17:13:15 macallan Exp $");
 #include <powerpc/oea/sr_601.h>
 
 #ifdef ALTIVEC
-extern int pmap_use_altivec;
+int pmap_use_altivec;
 #endif
 
+volatile struct pteg *pmap_pteg_table;
+unsigned int pmap_pteg_cnt;
+unsigned int pmap_pteg_mask;
 #ifdef PMAP_MEMLIMIT
 static paddr_t pmap_memlimit = PMAP_MEMLIMIT;
 #else
 static paddr_t pmap_memlimit = -PAGE_SIZE;		/* there is no limit */
 #endif
 
-extern struct pmap kernel_pmap_;
-static unsigned int pmap_pages_stolen;
-static u_long pmap_pte_valid;
+struct pmap kernel_pmap_;
+unsigned int pmap_pages_stolen;
+u_long pmap_pte_valid;
 #if defined(DIAGNOSTIC) || defined(DEBUG) || defined(PMAPCHECK)
-static u_long pmap_pvo_enter_depth;
-static u_long pmap_pvo_remove_depth;
+u_long pmap_pvo_enter_depth;
+u_long pmap_pvo_remove_depth;
 #endif
 
 #ifndef MSGBUFADDR
@@ -168,10 +171,6 @@ static u_int mem_cnt, avail_cnt;
 #define pmap_pinit		PMAPNAME(pinit)
 #define pmap_procwr		PMAPNAME(procwr)
 
-#define pmap_pool		PMAPNAME(pool)
-#define pmap_upvo_pool		PMAPNAME(upvo_pool)
-#define pmap_mpvo_pool		PMAPNAME(mpvo_pool)
-#define pmap_pvo_table		PMAPNAME(pvo_table)
 #if defined(DEBUG) || defined(PMAPCHECK) || defined(DDB)
 #define pmap_pte_print		PMAPNAME(pte_print)
 #define pmap_pteg_check		PMAPNAME(pteg_check)
@@ -337,10 +336,10 @@ struct pvo_page {
 SIMPLEQ_HEAD(pvop_head, pvo_page);
 static struct pvop_head pmap_upvop_head = SIMPLEQ_HEAD_INITIALIZER(pmap_upvop_head);
 static struct pvop_head pmap_mpvop_head = SIMPLEQ_HEAD_INITIALIZER(pmap_mpvop_head);
-static u_long pmap_upvop_free;
-static u_long pmap_upvop_maxfree;
-static u_long pmap_mpvop_free;
-static u_long pmap_mpvop_maxfree;
+u_long pmap_upvop_free;
+u_long pmap_upvop_maxfree;
+u_long pmap_mpvop_free;
+u_long pmap_mpvop_maxfree;
 
 static void *pmap_pool_ualloc(struct pool *, int);
 static void *pmap_pool_malloc(struct pool *, int);
@@ -490,11 +489,7 @@ extern struct evcnt pmap_evcnt_idlezeroed_pages;
 /* XXXSL: this needs to be moved to assembler */
 #define	TLBIEL(va)	__asm __volatile("tlbie %0" :: "r"(va))
 
-#ifdef MD_TLBSYNC
-#define TLBSYNC()	MD_TLBSYNC()
-#else
 #define	TLBSYNC()	__asm volatile("tlbsync")
-#endif
 #define	SYNC()		__asm volatile("sync")
 #define	EIEIO()		__asm volatile("eieio")
 #define	DCBST(va)	__asm __volatile("dcbst 0,%0" :: "r"(va))
@@ -1943,10 +1938,6 @@ pmap_enter(pmap_t pm, vaddr_t va, paddr_t pa, vm_prot_t prot, u_int flags)
 				break;
 			}
 		}
-#ifdef MULTIPROCESSOR
-		if (((mfpvr() >> 16) & 0xffff) == MPC603e)
-			pte_lo = PTE_M;
-#endif
 	} else {
 		pte_lo |= PTE_I;
 	}
@@ -2040,10 +2031,6 @@ pmap_kenter_pa(vaddr_t va, paddr_t pa, vm_prot_t prot, u_int flags)
 				break;
 			}
 		}
-#ifdef MULTIPROCESSOR
-		if (((mfpvr() >> 16) & 0xffff) == MPC603e)
-			pte_lo = PTE_M;
-#endif
 	}
 
 	if (prot & VM_PROT_WRITE)
@@ -3090,7 +3077,7 @@ pmap_boot_find_memory(psize_t size, psize_t alignment, int at_end)
 int
 pmap_setup_segment0_map(int use_large_pages, ...)
 {
-    vaddr_t va, va_end;
+    vaddr_t va;
 
     register_t pte_lo = 0x0;
     int ptegidx = 0, i = 0;
@@ -3123,7 +3110,7 @@ pmap_setup_segment0_map(int use_large_pages, ...)
         pa = va_arg(ap, paddr_t);
         size = va_arg(ap, size_t);
 
-        for (va_end = va + size; va < va_end; va += 0x1000, pa += 0x1000) {
+        for (; va < (va + size); va += 0x1000, pa += 0x1000) {
 #if 0
 	    printf("%s: Inserting: va: %#" _PRIxva ", pa: %#" _PRIxpa "\n", __func__,  va, pa);
 #endif
@@ -3465,7 +3452,7 @@ pmap_bootstrap(paddr_t kernelstart, paddr_t kernelend)
 	    sizeof(void *), 0, 0, "pmap_pl", &pmap_pool_uallocator,
 	    IPL_NONE);
 
-#if defined(PMAP_NEED_MAPKERNEL)
+#if defined(PMAP_NEED_MAPKERNEL) || 1
 	{
 		struct pmap *pm = pmap_kernel();
 #if defined(PMAP_NEED_FULL_MAPKERNEL)

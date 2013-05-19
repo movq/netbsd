@@ -1,4 +1,4 @@
-/*	$NetBSD: segments.h,v 1.24 2013/01/07 17:03:06 chs Exp $	*/
+/*	$NetBSD: segments.h,v 1.22 2011/02/07 03:54:45 chs Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -256,6 +256,8 @@ void idt_vec_free(int);
 #endif
 
 struct lwp;
+int memseg_baseaddr(struct lwp *, uint64_t, char *, int, uint64_t *);
+int valid_user_selector(struct lwp *, uint64_t, char *, int);
 void cpu_fsgs_zero(struct lwp *);
 void cpu_fsgs_reload(struct lwp *, int, int);
 
@@ -374,15 +376,12 @@ void cpu_fsgs_reload(struct lwp *, int, int);
  * Strange order because of syscall/sysret insns
  */
 #define	LSYS5CALLS_SEL	0	/* iBCS system call gate */
-/*			8	   second half */
+#define LUCODE32_SEL	8	/* 32 bit user code descriptor */
+#define	LUDATA_SEL	16	/* User data descriptor */
+#define	LUCODE_SEL	24	/* User code descriptor */
 #define	LSOL26CALLS_SEL	32	/* Solaris 2.6 system call gate */
-/*			40	   second half */
-#define LUCODE32_SEL	48	/* 32 bit user code descriptor */
-#define	LUDATA_SEL	56	/* User data descriptor */
-#define	LUCODE_SEL	64	/* User code descriptor */
-#define LUDATA32_SEL	72	/* 32 bit user data descriptor (needed?)*/
+#define LUDATA32_SEL	56	/* 32 bit user data descriptor (needed?)*/
 #define	LBSDICALLS_SEL	128	/* BSDI system call gate */
-/*			136	   second half */
 
 #define LDT_SIZE	144
 

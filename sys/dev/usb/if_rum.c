@@ -1,5 +1,5 @@
 /*	$OpenBSD: if_rum.c,v 1.40 2006/09/18 16:20:20 damien Exp $	*/
-/*	$NetBSD: if_rum.c,v 1.47 2013/01/22 12:40:42 jmcneill Exp $	*/
+/*	$NetBSD: if_rum.c,v 1.40 2011/09/08 22:06:54 christos Exp $	*/
 
 /*-
  * Copyright (c) 2005-2007 Damien Bergamini <damien.bergamini@free.fr>
@@ -24,7 +24,8 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_rum.c,v 1.47 2013/01/22 12:40:42 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_rum.c,v 1.40 2011/09/08 22:06:54 christos Exp $");
+
 
 #include <sys/param.h>
 #include <sys/sockio.h>
@@ -70,6 +71,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_rum.c,v 1.47 2013/01/22 12:40:42 jmcneill Exp $")
 #include <dev/usb/if_rumreg.h>
 #include <dev/usb/if_rumvar.h>
 
+#ifdef USB_DEBUG
+#define RUM_DEBUG
+#endif
+
 #ifdef RUM_DEBUG
 #define DPRINTF(x)	do { if (rum_debug) printf x; } while (0)
 #define DPRINTFN(n, x)	do { if (rum_debug >= (n)) printf x; } while (0)
@@ -91,12 +96,9 @@ static const struct usb_devno rum_devs[] = {
 	{ USB_VENDOR_ASUSTEK,		USB_PRODUCT_ASUSTEK_WL167G_3 },
 	{ USB_VENDOR_BELKIN,		USB_PRODUCT_BELKIN_F5D7050A },
 	{ USB_VENDOR_BELKIN,		USB_PRODUCT_BELKIN_F5D9050V3 },
-	{ USB_VENDOR_BELKIN,		USB_PRODUCT_BELKIN_F5D9050C },
-	{ USB_VENDOR_CISCOLINKSYS,	USB_PRODUCT_CISCOLINKSYS_WUSB200 },
 	{ USB_VENDOR_CISCOLINKSYS,	USB_PRODUCT_CISCOLINKSYS_WUSB54GC },
 	{ USB_VENDOR_CISCOLINKSYS,	USB_PRODUCT_CISCOLINKSYS_WUSB54GR },
 	{ USB_VENDOR_CONCEPTRONIC,	USB_PRODUCT_CONCEPTRONIC_C54RU2 },
-	{ USB_VENDOR_CONCEPTRONIC,	USB_PRODUCT_CONCEPTRONIC_RT2573 },
 	{ USB_VENDOR_COREGA,		USB_PRODUCT_COREGA_CGWLUSB2GL },
 	{ USB_VENDOR_COREGA,		USB_PRODUCT_COREGA_CGWLUSB2GPX },
 	{ USB_VENDOR_DICKSMITH,		USB_PRODUCT_DICKSMITH_CWD854F },
@@ -105,8 +107,6 @@ static const struct usb_devno rum_devs[] = {
 	{ USB_VENDOR_DLINK2,		USB_PRODUCT_DLINK2_WUA1340 },
 	{ USB_VENDOR_DLINK2,		USB_PRODUCT_DLINK2_DWA110 },
 	{ USB_VENDOR_DLINK2,		USB_PRODUCT_DLINK2_DWA111 },
-	{ USB_VENDOR_EDIMAX,		USB_PRODUCT_EDIMAX_EW7318 },
-	{ USB_VENDOR_EDIMAX,		USB_PRODUCT_EDIMAX_EW7618 },
 	{ USB_VENDOR_GIGABYTE,		USB_PRODUCT_GIGABYTE_GNWB01GS },
 	{ USB_VENDOR_GIGABYTE,		USB_PRODUCT_GIGABYTE_GNWI05GS },
 	{ USB_VENDOR_GIGASET,		USB_PRODUCT_GIGASET_RT2573 },
@@ -116,7 +116,6 @@ static const struct usb_devno rum_devs[] = {
 	{ USB_VENDOR_HUAWEI3COM,	USB_PRODUCT_HUAWEI3COM_RT2573 },
 	{ USB_VENDOR_MELCO,		USB_PRODUCT_MELCO_G54HP },
 	{ USB_VENDOR_MELCO,		USB_PRODUCT_MELCO_SG54HP },
-	{ USB_VENDOR_MELCO,		USB_PRODUCT_MELCO_SG54HG },
 	{ USB_VENDOR_MELCO,		USB_PRODUCT_MELCO_WLIUCG },
 	{ USB_VENDOR_MSI,		USB_PRODUCT_MSI_RT2573 },
 	{ USB_VENDOR_MSI,		USB_PRODUCT_MSI_RT2573_2 },
@@ -130,12 +129,11 @@ static const struct usb_devno rum_devs[] = {
 	{ USB_VENDOR_QCOM,		USB_PRODUCT_QCOM_RT2573_2 },
 	{ USB_VENDOR_QCOM,		USB_PRODUCT_QCOM_RT2573_3 },
 	{ USB_VENDOR_RALINK,		USB_PRODUCT_RALINK_RT2573 },
+	{ USB_VENDOR_RALINK_2,          USB_PRODUCT_RALINK_2_RT2573 },
 	{ USB_VENDOR_RALINK,		USB_PRODUCT_RALINK_RT2671 },
 	{ USB_VENDOR_SITECOMEU,		USB_PRODUCT_SITECOMEU_WL113R2 },
 	{ USB_VENDOR_SITECOMEU,		USB_PRODUCT_SITECOMEU_WL172 },
-	{ USB_VENDOR_SPARKLAN,		USB_PRODUCT_SPARKLAN_RT2573 },
-	{ USB_VENDOR_SURECOM,		USB_PRODUCT_SURECOM_RT2573 },
-	{ USB_VENDOR_ZYXEL,		USB_PRODUCT_ZYXEL_RT2573 }
+	{ USB_VENDOR_SURECOM,		USB_PRODUCT_SURECOM_RT2573 }
 };
 
 static int		rum_attachhook(void *);
@@ -325,10 +323,8 @@ rum_attach(device_t parent, device_t self, void *aux)
 	aprint_normal_dev(self, "%s\n", devinfop);
 	usbd_devinfo_free(devinfop);
 
-	error = usbd_set_config_no(sc->sc_udev, RT2573_CONFIG_NO, 0);
-	if (error != 0) {
-		aprint_error_dev(self, "failed to set configuration"
-		    ", err=%s\n", usbd_errstr(error));
+	if (usbd_set_config_no(sc->sc_udev, RT2573_CONFIG_NO, 0) != 0) {
+		aprint_error_dev(self, "could not set configuration no\n");
 		return;
 	}
 
@@ -366,7 +362,7 @@ rum_attach(device_t parent, device_t self, void *aux)
 		return;
 	}
 
-	usb_init_task(&sc->sc_task, rum_task, sc, 0);
+	usb_init_task(&sc->sc_task, rum_task, sc);
 	callout_init(&sc->sc_scan_ch, 0);
 
 	sc->amrr.amrr_min_success_threshold =  1;
@@ -2304,7 +2300,7 @@ rum_activate(device_t self, enum devact act)
 	}
 }
 
-MODULE(MODULE_CLASS_DRIVER, if_rum, "bpf");
+MODULE(MODULE_CLASS_DRIVER, if_rum, NULL);
 
 #ifdef _MODULE
 #include "ioconf.c"

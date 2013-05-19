@@ -1,4 +1,4 @@
-/*	$NetBSD: wsconsctl.h,v 1.12 2012/12/24 01:20:44 khorben Exp $ */
+/*	$NetBSD: wsconsctl.h,v 1.11.4.1 2013/02/11 21:36:30 riz Exp $ */
 
 /*-
  * Copyright (c) 1998, 2004, 2012 The NetBSD Foundation, Inc.

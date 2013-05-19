@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_mbox.h,v 1.4 2013/01/07 20:15:32 jmcneill Exp $	*/
+/*	$NetBSD: bcm2835_mbox.h,v 1.3.4.3 2013/02/13 01:36:14 riz Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_swap.c,v 1.163 2013/05/07 15:49:09 riastradh Exp $	*/
+/*	$NetBSD: uvm_swap.c,v 1.161 2012/02/05 16:08:28 rmind Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996, 1997, 2009 Matthew R. Green
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_swap.c,v 1.163 2013/05/07 15:49:09 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_swap.c,v 1.161 2012/02/05 16:08:28 rmind Exp $");
 
 #include "opt_uvmhist.h"
 #include "opt_compat_netbsd.h"
@@ -1136,7 +1136,6 @@ swstrategy(struct buf *bp)
 	mutex_exit(&uvm_swap_data_lock);
 	if (sdp == NULL) {
 		bp->b_error = EINVAL;
-		bp->b_resid = bp->b_bcount;
 		biodone(bp);
 		UVMHIST_LOG(pdhist, "  failed to get swap device", 0, 0, 0, 0);
 		return;
@@ -1534,19 +1533,6 @@ uvm_swap_alloc(int *nslots /* IN/OUT */, bool lessok)
 	 */
 	if (uvmexp.nswapdev < 1)
 		return 0;
-
-	/*
-	 * XXXJAK: BEGIN HACK
-	 *
-	 * blist_alloc() in subr_blist.c will panic if we try to allocate
-	 * too many slots.
-	 */
-	if (*nslots > BLIST_MAX_ALLOC) {
-		if (__predict_false(lessok == false))
-			return 0;
-		*nslots = BLIST_MAX_ALLOC;
-	}
-	/* XXXJAK: END HACK */
 
 	/*
 	 * lock data lock, convert slots into blocks, and enter loop

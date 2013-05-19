@@ -1,4 +1,4 @@
-/*	$NetBSD: teach.c,v 1.23 2012/10/13 19:25:22 dholland Exp $	*/
+/*	$NetBSD: teach.c,v 1.21 2010/03/22 05:10:19 mrg Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\
 #if 0
 static char sccsid[] = "@(#)teach.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: teach.c,v 1.23 2012/10/13 19:25:22 dholland Exp $");
+__RCSID("$NetBSD: teach.c,v 1.21 2010/03/22 05:10:19 mrg Exp $");
 #endif
 #endif				/* not lint */
 
@@ -63,7 +63,6 @@ int
 main(int argc __unused, char *argv[])
 {
 	int     i;
-	struct move mmstore, *mm;
 
 	/* revoke setgid privileges */
 	setgid(getgid());
@@ -77,12 +76,12 @@ main(int argc __unused, char *argv[])
 	raw.c_lflag &= ~ICANON;	/* set up modes */
 	ospeed = cfgetospeed(&old);	/* for termlib */
 	tflag = getcaps(getenv("TERM"));
-
-	/* need this now beceause getarg() may try to load a game */
-	mm = &mmstore;
-	move_init(mm);
+#ifdef V7
 	while (*++argv != 0)
-		getarg(mm, &argv);
+#else
+	while (*++argv != -1)
+#endif
+		getarg(&argv);
 	if (tflag) {
 		noech.c_oflag &= ~(ONLCR | OXTABS);
 		raw.c_oflag &= ~(ONLCR | OXTABS);
@@ -138,7 +137,7 @@ main(int argc __unused, char *argv[])
 			if ((i = wrtext(lastch)) != 0)
 				break;
 		}
-	tutor(mm);
+	tutor();
 	/* NOTREACHED */
 	return (0);
 }

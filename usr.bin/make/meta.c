@@ -1,4 +1,4 @@
-/*      $NetBSD: meta.c,v 1.30 2013/05/16 21:56:56 sjg Exp $ */
+/*      $NetBSD: meta.c,v 1.24 2011/09/21 14:30:47 christos Exp $ */
 
 /*
  * Implement 'meta' mode.
@@ -68,7 +68,6 @@ static Boolean metaSilent = FALSE;	/* if we have a .meta be SILENT */
 
 extern Boolean forceJobs;
 extern Boolean comatMake;
-extern char    **environ;
 
 #define	MAKE_META_PREFIX	".MAKE.META.PREFIX"
 
@@ -389,6 +388,7 @@ printCMD(void *cmdp, void *mfpp)
 static FILE *
 meta_create(BuildMon *pbm, GNode *gn)
 {
+    extern char **environ;
     meta_file_t mf;
     char buf[MAXPATHLEN];
     char objdir[MAXPATHLEN];
@@ -539,24 +539,8 @@ boolValue(char *s)
     return TRUE;
 }
 
-/*
- * Initialization we need before reading makefiles.
- */
 void
-meta_init(void)
-{
-#ifdef USE_FILEMON
-	/* this allows makefiles to test if we have filemon support */
-	Var_Set(".MAKE.PATH_FILEMON", _PATH_FILEMON, VAR_GLOBAL, 0);
-#endif
-}
-
-
-/*
- * Initialization we need after reading makefiles.
- */
-void
-meta_mode_init(const char *make_mode)
+meta_init(const char *make_mode)
 {
     static int once = 0;
     char *cp;
@@ -859,7 +843,7 @@ meta_oodate(GNode *gn, Boolean oodate)
     static size_t cwdlen = 0;
     static size_t tmplen = 0;
     FILE *fp;
-    Boolean needOODATE = FALSE;
+    Boolean ignoreOODATE = FALSE;
     Lst missingFiles;
     
     if (oodate)
@@ -1053,7 +1037,6 @@ meta_oodate(GNode *gn, Boolean oodate)
 			    char *tp = Lst_Datum(ln);
 			    Lst_Remove(missingFiles, ln);
 			    free(tp);
-			    ln = NULL;	/* we're done with it */
 			}
 		    }
 		    break;
@@ -1213,19 +1196,17 @@ meta_oodate(GNode *gn, Boolean oodate)
 		    oodate = TRUE;
 		} else {
 		    char *cmd = (char *)Lst_Datum(ln);
-		    Boolean hasOODATE = FALSE;
 
-		    if (strstr(cmd, "$?"))
-			hasOODATE = TRUE;
-		    else if ((cp = strstr(cmd, ".OODATE"))) {
-			/* check for $[{(].OODATE[:)}] */
-			if (cp > cmd + 2 && cp[-2] == '$')
-			    hasOODATE = TRUE;
-		    }
-		    if (hasOODATE) {
-			needOODATE = TRUE;
-			if (DEBUG(META))
-			    fprintf(debug_file, "%s: %d: cannot compare command using .OODATE\n", fname, lineno);
+		    if (!ignoreOODATE) {
+			if (strstr(cmd, "$?"))
+			    ignoreOODATE = TRUE;
+			else if ((cp = strstr(cmd, ".OODATE"))) {
+			    /* check for $[{(].OODATE[)}] */
+			    if (cp > cmd + 2 && cp[-2] == '$')
+				ignoreOODATE = TRUE;
+			}
+			if (ignoreOODATE && DEBUG(META))
+			    fprintf(debug_file, "%s: %d: cannot compare commands using .OODATE\n", fname, lineno);
 		    }
 		    cmd = Var_Subst(NULL, cmd, gn, TRUE);
 
@@ -1254,7 +1235,7 @@ meta_oodate(GNode *gn, Boolean oodate)
 			if (buf[x - 1] == '\n')
 			    buf[x - 1] = '\0';
 		    }
-		    if (!hasOODATE &&
+		    if (!ignoreOODATE &&
 			!(gn->type & OP_NOMETA_CMP) &&
 			strcmp(p, cmd) != 0) {
 			if (DEBUG(META))
@@ -1298,16 +1279,14 @@ meta_oodate(GNode *gn, Boolean oodate)
 	    oodate = TRUE;
 	}
     }
-    if (oodate && needOODATE) {
+    if (oodate && ignoreOODATE) {
 	/*
-	 * Target uses .OODATE which is empty; or we wouldn't be here.
-	 * We have decided it is oodate, so .OODATE needs to be set.
-	 * All we can sanely do is set it to .ALLSRC.
+	 * Target uses .OODATE, so we need to re-compute it.
+	 * We need to clean up what Make_DoAllVar() did.
 	 */
+	Var_Delete(ALLSRC, gn);
 	Var_Delete(OODATE, gn);
-	Var_Set(OODATE, Var_Value(ALLSRC, gn, &cp), gn, 0);
-	if (cp)
-	    free(cp);
+	gn->flags &= ~DONE_ALLSRC;
     }
     return oodate;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: xdr_reference.c,v 1.18 2013/03/11 20:19:30 tron Exp $	*/
+/*	$NetBSD: xdr_reference.c,v 1.15.24.1 2013/03/14 22:03:15 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -37,7 +37,7 @@
 static char *sccsid = "@(#)xdr_reference.c 1.11 87/08/11 SMI";
 static char *sccsid = "@(#)xdr_reference.c	2.1 88/07/29 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: xdr_reference.c,v 1.18 2013/03/11 20:19:30 tron Exp $");
+__RCSID("$NetBSD: xdr_reference.c,v 1.15.24.1 2013/03/14 22:03:15 riz Exp $");
 #endif
 #endif
 
@@ -75,7 +75,11 @@ __weak_alias(xdr_reference,_xdr_reference)
  * proc is the routine to handle the referenced structure.
  */
 bool_t
-xdr_reference(XDR *xdrs, caddr_t *pp, u_int size, xdrproc_t proc)
+xdr_reference(xdrs, pp, size, proc)
+	XDR *xdrs;
+	caddr_t *pp;		/* the pointer to work on */
+	u_int size;		/* size of the object pointed to */
+	xdrproc_t proc;		/* xdr routine to handle the object */
 {
 	caddr_t loc = *pp;
 	bool_t stat;
@@ -88,7 +92,7 @@ xdr_reference(XDR *xdrs, caddr_t *pp, u_int size, xdrproc_t proc)
 		case XDR_DECODE:
 			*pp = loc = mem_alloc(size);
 			if (loc == NULL) {
-				warn("%s: out of memory", __func__);
+				warnx("xdr_reference: out of memory");
 				return (FALSE);
 			}
 			memset(loc, 0, size);
@@ -128,7 +132,11 @@ xdr_reference(XDR *xdrs, caddr_t *pp, u_int size, xdrproc_t proc)
  *
  */
 bool_t
-xdr_pointer(XDR *xdrs, char **objpp, u_int obj_size, xdrproc_t xdr_obj)
+xdr_pointer(xdrs,objpp,obj_size,xdr_obj)
+	XDR *xdrs;
+	char **objpp;
+	u_int obj_size;
+	xdrproc_t xdr_obj;
 {
 
 	bool_t more_data;

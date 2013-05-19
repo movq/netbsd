@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-#	$NetBSD: makerumpif.sh,v 1.6 2013/02/14 10:54:54 pooka Exp $
+#	$NetBSD: makerumpif.sh,v 1.5 2010/09/01 19:32:11 pooka Exp $
 #
 # Copyright (c) 2009 Antti Kantee.  All rights reserved.
 #
@@ -47,25 +47,14 @@ boom ()
 	exit 1
 }
 
-unset TOPDIR
-if [ $# -eq 3 ]; then
-	if [ $1 = '-R' ]; then
-		TOPDIR=$2
-	else
-		usage
-	fi
-	shift; shift
-fi
-[ $# -ne 1 ] && usage
+[ $# != 1 ] && usage
 
 MYDIR=`pwd`
-if [ -z "${TOPDIR}" ]; then
-	while [ ! -f Makefile.rump  ]; do
-		[ `pwd` = '/' ] && boom Could not find rump topdir.
-		cd ..
-	done
-	TOPDIR="`pwd`"
-fi
+while [ ! -f Makefile.rump  ]; do
+	[ `pwd` = '/' ] && boom Could not find rump topdir.
+	cd ..
+done
+RUMPTOP="`pwd`"
 cd ${MYDIR}
 
 sed -e '
@@ -75,12 +64,12 @@ sed -e '
 		s/[ 	]*\\\n[ 	]*/ /
 		b again
 	}
-' ${1} | awk -F\| -v topdir=${TOPDIR} '
+' ${1} | awk -F\| -v rumptop=${RUMPTOP} '
 function fileheaders(file, srcstr)
 {
-	printf("/*\t$NetBSD: makerumpif.sh,v 1.6 2013/02/14 10:54:54 pooka Exp $\t*/\n\n") > file
+	printf("/*\t$NetBSD: makerumpif.sh,v 1.5 2010/09/01 19:32:11 pooka Exp $\t*/\n\n") > file
 	printf("/*\n * Automatically generated.  DO NOT EDIT.\n") > file
-	genstr = "$NetBSD: makerumpif.sh,v 1.6 2013/02/14 10:54:54 pooka Exp $"
+	genstr = "$NetBSD: makerumpif.sh,v 1.5 2010/09/01 19:32:11 pooka Exp $"
 	gsub("\\$", "", genstr)
 	printf(" * from: %s\n", srcstr) > file
 	printf(" * by:   %s\n", genstr) > file
@@ -102,9 +91,9 @@ NR == 1 {
 }
 
 $1 == "NAME"{myname = $2;next}
-$1 == "PUBHDR"{pubhdr = topdir "/" $2;print pubhdr;next}
-$1 == "PRIVHDR"{privhdr = topdir "/" $2;print privhdr;next}
-$1 == "WRAPPERS"{gencalls = topdir "/" $2;print gencalls;next}
+$1 == "PUBHDR"{pubhdr = rumptop "/" $2;print pubhdr;next}
+$1 == "PRIVHDR"{privhdr = rumptop "/" $2;print privhdr;next}
+$1 == "WRAPPERS"{gencalls = rumptop "/" $2;print gencalls;next}
 
 /^;/{next}
 /\\$/{sub("\\\n", "");getline nextline;$0 = $0 nextline}

@@ -1,4 +1,4 @@
-.\"	$NetBSD: realpath.3,v 1.16 2013/03/05 03:11:27 enami Exp $
+.\"	$NetBSD: realpath.3,v 1.12.46.1 2013/04/20 10:11:01 bouyer Exp $
 .\"
 .\" Copyright (c) 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -65,8 +65,7 @@ argument
 .Em must
 refer to a buffer capable of storing at least
 .Dv MAXPATHLEN
-characters, or be
-.Dv NULL .
+characters.
 .Pp
 The
 .Fn realpath
@@ -75,7 +74,7 @@ and return the absolute pathname corresponding to
 .Fa pathname .
 .Sh RETURN VALUES
 If
-.Fa resolvedname
+.Fa resolvednamed
 is
 .Dv NULL ,
 it will be allocated and the returned pointer can be deallocated using
@@ -92,7 +91,7 @@ returns
 and
 .Fa resolvedname
 was not allocated by
-.Fn realpath ,
+.Xr realpath ,
 it will contain the pathname which caused the problem.
 .Sh ERRORS
 The function
@@ -114,7 +113,7 @@ and
 .Sh STANDARDS
 .Fn realpath
 first appeared in
-.St -xpg4.2
+.St -xpg4.2 
 and is part of
 .St -p1003.1-2001 .
 .Sh HISTORY

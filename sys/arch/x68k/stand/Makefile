@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.13 2012/10/12 20:15:52 tsutsui Exp $
+#	$NetBSD: Makefile,v 1.8.162.2 2012/11/18 19:05:18 riz Exp $
 
 # host tools
 SUBDIR= newdisk installboot

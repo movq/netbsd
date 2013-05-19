@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_synch.c,v 1.305 2012/09/02 16:00:00 mlelstv Exp $	*/
+/*	$NetBSD: kern_synch.c,v 1.297.2.1 2012/08/19 17:36:41 riz Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2004, 2006, 2007, 2008, 2009
@@ -69,10 +69,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_synch.c,v 1.305 2012/09/02 16:00:00 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_synch.c,v 1.297.2.1 2012/08/19 17:36:41 riz Exp $");
 
 #include "opt_kstack.h"
 #include "opt_perfctrs.h"
+#include "opt_sa.h"
 #include "opt_dtrace.h"
 
 #define	__MUTEX_PRIVATE
@@ -88,6 +89,8 @@ __KERNEL_RCSID(0, "$NetBSD: kern_synch.c,v 1.305 2012/09/02 16:00:00 mlelstv Exp
 #include <sys/pserialize.h>
 #include <sys/resourcevar.h>
 #include <sys/sched.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscall_stats.h>
 #include <sys/sleepq.h>
 #include <sys/lockdebug.h>
@@ -136,6 +139,16 @@ u_int			sched_pstats_ticks	__cacheline_aligned;
 static struct evcnt	kpreempt_ev_crit	__cacheline_aligned;
 static struct evcnt	kpreempt_ev_klock	__cacheline_aligned;
 static struct evcnt	kpreempt_ev_immed	__cacheline_aligned;
+
+/*
+ * During autoconfiguration or after a panic, a sleep will simply lower the
+ * priority briefly to allow interrupts, then return.  The priority to be
+ * used (safepri) is machine-dependent, thus this value is initialized and
+ * maintained in the machine-dependent layers.  This priority will typically
+ * be 0, or the lowest priority that is safe for use on the interrupt stack;
+ * it can be made higher to block network software interrupts after panics.
+ */
+int	safepri;
 
 void
 synch_init(void)
@@ -244,6 +257,27 @@ kpause(const char *wmesg, bool intr, int timo, kmutex_t *mtx)
 
 	return error;
 }
+
+#ifdef KERN_SA
+/*
+ * sa_awaken:
+ *
+ *	We believe this lwp is an SA lwp. If it's yielding,
+ * let it know it needs to wake up.
+ *
+ *	We are called and exit with the lwp locked. We are
+ * called in the middle of wakeup operations, so we need
+ * to not touch the locks at all.
+ */
+void
+sa_awaken(struct lwp *l)
+{
+	/* LOCK_ASSERT(lwp_locked(l, NULL)); */
+
+	if (l == l->l_savp->savp_lwp && l->l_flag & LW_SA_YIELD)
+		l->l_flag &= ~LW_SA_IDLE;
+}
+#endif /* KERN_SA */
 
 /*
  * OBSOLETE INTERFACE
@@ -522,7 +556,6 @@ mi_switch(lwp_t *l)
 
 	binuptime(&bt);
 
-	KASSERTMSG(l == curlwp, "l %p curlwp %p", l, curlwp);
 	KASSERT((l->l_pflag & LP_RUNNING) != 0);
 	KASSERT(l->l_cpu == curcpu());
 	ci = l->l_cpu;
@@ -671,8 +704,7 @@ mi_switch(lwp_t *l)
 		 * the context switch.
 		 */
 		KASSERTMSG(ci->ci_mtx_count == -1,
-		    "%s: cpu%u: ci_mtx_count (%d) != -1 "
-		    "(block with spin-mutex held)",
+		    "%s: cpu%u: ci_mtx_count (%d) != -1",
 		     __func__, cpu_index(ci), ci->ci_mtx_count);
 		oldspl = MUTEX_SPIN_OLDSPL(ci);
 		ci->ci_mtx_count--;
@@ -713,17 +745,8 @@ mi_switch(lwp_t *l)
 		}
 
 		/* Switch to the new LWP.. */
-#ifdef MULTIPROCESSOR
-		KASSERT(curlwp == ci->ci_curlwp);
-#endif
-		KASSERTMSG(l == curlwp, "l %p curlwp %p", l, curlwp);
 		prevlwp = cpu_switchto(l, newl, returning);
 		ci = curcpu();
-#ifdef MULTIPROCESSOR
-		KASSERT(curlwp == ci->ci_curlwp);
-#endif
-		KASSERTMSG(l == curlwp, "l %p curlwp %p prevlwp %p",
-		    l, curlwp, prevlwp);
 
 		/*
 		 * Switched away - we have new curlwp.
@@ -752,10 +775,6 @@ mi_switch(lwp_t *l)
 
 		KASSERT(l->l_cpu == ci);
 		splx(oldspl);
-		/*
-		 * note that, unless the caller disabled preemption,
-		 * we can be preempted at any time after the above splx() call.
-		 */
 		retval = 1;
 	} else {
 		/* Nothing to do - just unlock and return. */
@@ -923,6 +942,11 @@ setrunnable(struct lwp *l)
 	default:
 		panic("setrunnable: lwp %p state was %d", l, l->l_stat);
 	}
+
+#ifdef KERN_SA
+	if (l->l_proc->p_sa)
+		sa_awaken(l);
+#endif /* KERN_SA */
 
 	/*
 	 * If the LWP was sleeping, start it again.

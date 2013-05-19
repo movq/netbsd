@@ -1,4 +1,4 @@
-/*	$NetBSD: res.h,v 1.3 2012/06/05 00:39:43 christos Exp $	*/
+/*	$NetBSD: res.h,v 1.2.6.1 2012/06/06 18:18:06 bouyer Exp $	*/
 
 /* Id: res.h,v 1.1 2003/06/04 00:25:41 marka Exp  */
 /*

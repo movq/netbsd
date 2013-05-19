@@ -1,5 +1,5 @@
 /*	$OpenBSD: if_zyd.c,v 1.52 2007/02/11 00:08:04 jsg Exp $	*/
-/*	$NetBSD: if_zyd.c,v 1.36 2013/01/22 12:40:43 jmcneill Exp $	*/
+/*	$NetBSD: if_zyd.c,v 1.29 2011/07/18 05:57:40 jruoho Exp $	*/
 
 /*-
  * Copyright (c) 2006 by Damien Bergamini <damien.bergamini@free.fr>
@@ -18,12 +18,12 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-/*-
+/*
  * ZyDAS ZD1211/ZD1211B USB WLAN driver.
  */
-
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_zyd.c,v 1.36 2013/01/22 12:40:43 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_zyd.c,v 1.29 2011/07/18 05:57:40 jruoho Exp $");
+
 
 #include <sys/param.h>
 #include <sys/sockio.h>
@@ -66,6 +66,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_zyd.c,v 1.36 2013/01/22 12:40:43 jmcneill Exp $")
 
 #include <dev/usb/if_zydreg.h>
 
+#ifdef USB_DEBUG
+#define ZYD_DEBUG
+#endif
+
 #ifdef ZYD_DEBUG
 #define DPRINTF(x)	do { if (zyddebug > 0) printf x; } while (0)
 #define DPRINTFN(n, x)	do { if (zyddebug > (n)) printf x; } while (0)
@@ -94,7 +98,6 @@ static const struct zyd_type {
 	ZYD_ZD1211_DEV(ASUSTEK,		WL159G),
 	ZYD_ZD1211_DEV(CYBERTAN,	TG54USB),
 	ZYD_ZD1211_DEV(DRAYTEK,		VIGOR550),
-	ZYD_ZD1211_DEV(PLANEX2,		GWUS54GD),
 	ZYD_ZD1211_DEV(PLANEX2,		GWUS54GZL),
 	ZYD_ZD1211_DEV(PLANEX3,		GWUS54GZ),
 	ZYD_ZD1211_DEV(PLANEX3,		GWUS54MINI),
@@ -114,39 +117,33 @@ static const struct zyd_type {
 	ZYD_ZD1211_DEV(ZYDAS,		ZD1211),
 	ZYD_ZD1211_DEV(ZYXEL,		AG225H),
 	ZYD_ZD1211_DEV(ZYXEL,		ZYAIRG220),
-	ZYD_ZD1211_DEV(ZYXEL,		G200V2),
 
 	ZYD_ZD1211B_DEV(ACCTON,		SMCWUSBG),
-	ZYD_ZD1211B_DEV(ACCTON,		WN4501H_LF_IR),
-	ZYD_ZD1211B_DEV(ACCTON,		WUS201),
 	ZYD_ZD1211B_DEV(ACCTON,		ZD1211B),
 	ZYD_ZD1211B_DEV(ASUSTEK,	A9T_WIFI),
 	ZYD_ZD1211B_DEV(BELKIN,		F5D7050C),
 	ZYD_ZD1211B_DEV(BELKIN,		ZD1211B),
-	ZYD_ZD1211B_DEV(BEWAN,		BWIFI_USB54AR),
 	ZYD_ZD1211B_DEV(CISCOLINKSYS,	WUSBF54G),
 	ZYD_ZD1211B_DEV(CYBERTAN,	ZD1211B),
 	ZYD_ZD1211B_DEV(FIBERLINE,	WL430U),
 	ZYD_ZD1211B_DEV(MELCO,		KG54L),
 	ZYD_ZD1211B_DEV(PHILIPS,	SNU5600),
-	ZYD_ZD1211B_DEV(PHILIPS,	SNU5630NS05),
-	ZYD_ZD1211B_DEV(PLANEX2,	GWUS54GXS),
 	ZYD_ZD1211B_DEV(SAGEM,		XG76NA),
-	ZYD_ZD1211B_DEV(SITECOMEU,	WL603),
 	ZYD_ZD1211B_DEV(SITECOMEU,	ZD1211B),
-	ZYD_ZD1211B_DEV(SONY,		IFU_WLM2),
 	ZYD_ZD1211B_DEV(UMEDIA,		TEW429UBC1),
+#if 0	/* Shall we needs? */
 	ZYD_ZD1211B_DEV(UNKNOWN1,	ZD1211B_1),
 	ZYD_ZD1211B_DEV(UNKNOWN1,	ZD1211B_2),
 	ZYD_ZD1211B_DEV(UNKNOWN2,	ZD1211B),
 	ZYD_ZD1211B_DEV(UNKNOWN3,	ZD1211B),
+#endif
 	ZYD_ZD1211B_DEV(USR,		USR5423),
 	ZYD_ZD1211B_DEV(VTECH,		ZD1211B),
 	ZYD_ZD1211B_DEV(ZCOM,		ZD1211B),
 	ZYD_ZD1211B_DEV(ZYDAS,		ZD1211B),
-	ZYD_ZD1211B_DEV(ZYDAS,		ZD1211B_2),
 	ZYD_ZD1211B_DEV(ZYXEL,		M202),
 	ZYD_ZD1211B_DEV(ZYXEL,		G220V2),
+	ZYD_ZD1211B_DEV(PLANEX2,	GWUS54GXS),
 };
 #define zyd_lookup(v, p)	\
 	((const struct zyd_type *)usb_lookup(zyd_devs, v, p))
@@ -352,7 +349,7 @@ zyd_complete_attach(struct zyd_softc *sc)
 	usbd_status error;
 	int i;
 
-	usb_init_task(&sc->sc_task, zyd_task, sc, 0);
+	usb_init_task(&sc->sc_task, zyd_task, sc);
 	callout_init(&(sc->sc_scan_ch), 0);
 
 	sc->amrr.amrr_min_success_threshold =  1;
@@ -361,8 +358,7 @@ zyd_complete_attach(struct zyd_softc *sc)
 
 	error = usbd_set_config_no(sc->sc_udev, ZYD_CONFIG_NO, 1);
 	if (error != 0) {
-		aprint_error_dev(sc->sc_dev, "failed to set configuration"
-		    ", err=%s\n", usbd_errstr(error));
+		aprint_error_dev(sc->sc_dev, "setting config no failed\n");
 		goto fail;
 	}
 
@@ -799,8 +795,7 @@ zyd_cmd(struct zyd_softc *sc, uint16_t code, const void *idata, int ilen,
 	struct zyd_cmd cmd;
 	struct rq rq;
 	uint16_t xferflags;
-	int error;
-	usbd_status uerror;
+	usbd_status error;
 	int s = 0;
 
 	if ((xfer = usbd_alloc_xfer(sc->sc_udev)) == NULL)
@@ -822,12 +817,12 @@ zyd_cmd(struct zyd_softc *sc, uint16_t code, const void *idata, int ilen,
 
 	usbd_setup_xfer(xfer, sc->zyd_ep[ZYD_ENDPT_IOUT], 0, &cmd,
 	    sizeof (uint16_t) + ilen, xferflags, ZYD_INTR_TIMEOUT, NULL);
-	uerror = usbd_transfer(xfer);
-	if (uerror != USBD_IN_PROGRESS && uerror != 0) {
+	error = usbd_transfer(xfer);
+	if (error != USBD_IN_PROGRESS && error != 0) {
 		if (flags & ZYD_CMD_FLAG_READ)
 			splx(s);
 		printf("%s: could not send command (error=%s)\n",
-		    device_xname(sc->sc_dev), usbd_errstr(uerror));
+		    device_xname(sc->sc_dev), usbd_errstr(error));
 		(void)usbd_free_xfer(xfer);
 		return EIO;
 	}
@@ -857,8 +852,6 @@ zyd_read16(struct zyd_softc *sc, uint16_t reg, uint16_t *val)
 	    ZYD_CMD_FLAG_READ);
 	if (error == 0)
 		*val = le16toh(tmp.val);
-	else
-		*val = 0;
 	return error;
 }
 
@@ -875,8 +868,6 @@ zyd_read32(struct zyd_softc *sc, uint16_t reg, uint32_t *val)
 	    ZYD_CMD_FLAG_READ);
 	if (error == 0)
 		*val = le16toh(tmp[0].val) << 16 | le16toh(tmp[1].val);
-	else
-		*val = 0;
 	return error;
 }
 

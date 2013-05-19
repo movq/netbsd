@@ -1,4 +1,4 @@
-/*	$NetBSD: swapon.c,v 1.11 2012/06/25 22:32:46 abs Exp $	*/
+/*	$NetBSD: swapon.c,v 1.10 2008/05/29 14:51:25 mrg Exp $	*/
 
 /*
  * Copyright (c) 1997 Matthew R. Green
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: swapon.c,v 1.11 2012/06/25 22:32:46 abs Exp $");
+__RCSID("$NetBSD: swapon.c,v 1.10 2008/05/29 14:51:25 mrg Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
@@ -36,7 +36,8 @@ __RCSID("$NetBSD: swapon.c,v 1.11 2012/06/25 22:32:46 abs Exp $");
 #include <unistd.h>
 
 int
-swapon(const char *name)
+swapon(name)
+	const char *name;
 {
 
 	return (swapctl(SWAP_ON, __UNCONST(name), 0));

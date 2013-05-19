@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_machdep.h,v 1.11 2012/09/23 00:31:05 chs Exp $	*/
+/*	$NetBSD: acpi_machdep.h,v 1.10.8.1 2012/11/22 00:39:00 riz Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.

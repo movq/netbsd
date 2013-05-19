@@ -1,4 +1,4 @@
-/*	$NetBSD: jobs.c,v 1.71 2012/12/31 14:10:15 dsl Exp $	*/
+/*	$NetBSD: jobs.c,v 1.69 2011/06/18 21:18:46 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)jobs.c	8.5 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: jobs.c,v 1.71 2012/12/31 14:10:15 dsl Exp $");
+__RCSID("$NetBSD: jobs.c,v 1.69 2011/06/18 21:18:46 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -249,14 +249,15 @@ SHELLPROC {
 
 
 #if JOBS
-static int
-do_fgcmd(const char *arg_ptr)
+int
+fgcmd(int argc, char **argv)
 {
 	struct job *jp;
 	int i;
 	int status;
 
-	jp = getjob(arg_ptr, 0);
+	nextopt("");
+	jp = getjob(*argptr, 0);
 	if (jp->jobctl == 0)
 		error("job not created under job control");
 	out1fmt("%s", jp->ps[0].cmd);
@@ -278,20 +279,6 @@ do_fgcmd(const char *arg_ptr)
 	status = waitforjob(jp);
 	INTON;
 	return status;
-}
-
-int
-fgcmd(int argc, char **argv)
-{
-	nextopt("");
-	return do_fgcmd(*argptr);
-}
-
-int
-fgcmd_percent(int argc, char **argv)
-{
-	nextopt("");
-	return do_fgcmd(*argv);
 }
 
 static void
@@ -811,8 +798,7 @@ makejob(union node *node, int nprocs)
 				jobtab = jp;
 			}
 			jp = jobtab + njobs;
-			for (i = 4 ; --i >= 0 ; )
-				jobtab[njobs++].used = 0;
+			for (i = 4 ; --i >= 0 ; jobtab[njobs++].used = 0);
 			INTON;
 			break;
 		}

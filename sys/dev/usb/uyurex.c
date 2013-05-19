@@ -1,4 +1,4 @@
-/*	$NetBSD: uyurex.c,v 1.9 2013/01/05 23:34:21 christos Exp $ */
+/*	$NetBSD: uyurex.c,v 1.7 2011/12/23 00:51:50 jakllsch Exp $ */
 /*	$OpenBSD: uyurex.c,v 1.3 2010/03/04 03:47:22 deraadt Exp $ */
 
 /*
@@ -17,12 +17,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-/*
- * Driver for Maywa-Denki & KAYAC YUREX BBU sensor
- */
-
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uyurex.c,v 1.9 2013/01/05 23:34:21 christos Exp $");
+/* Driver for Maywa-Denki & KAYAC YUREX BBU sensor */
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -42,6 +37,10 @@ __KERNEL_RCSID(0, "$NetBSD: uyurex.c,v 1.9 2013/01/05 23:34:21 christos Exp $");
 #include <dev/usb/usbdevs.h>
 #include <dev/usb/uhidev.h>
 #include <dev/usb/hid.h>
+
+#ifdef USB_DEBUG
+#define UYUREX_DEBUG
+#endif
 
 #define	CMD_NONE	0xf0
 #define CMD_EOF		0x0d

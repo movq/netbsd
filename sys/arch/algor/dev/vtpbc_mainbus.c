@@ -1,4 +1,4 @@
-/*	$NetBSD: vtpbc_mainbus.c,v 1.19 2012/10/27 17:17:24 chs Exp $	*/
+/*	$NetBSD: vtpbc_mainbus.c,v 1.18 2011/07/09 16:03:01 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vtpbc_mainbus.c,v 1.19 2012/10/27 17:17:24 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vtpbc_mainbus.c,v 1.18 2011/07/09 16:03:01 matt Exp $");
 
 #include "opt_algor_p4032.h"
 #include "opt_algor_p5064.h"
@@ -55,18 +55,19 @@ __KERNEL_RCSID(0, "$NetBSD: vtpbc_mainbus.c,v 1.19 2012/10/27 17:17:24 chs Exp $
 #endif
  
 struct vtpbc_softc {
+	struct device sc_dev;
 	struct vtpbc_config *sc_vtpbc;
 };
 
-int	vtpbc_mainbus_match(device_t, cfdata_t, void *);
-void	vtpbc_mainbus_attach(device_t, device_t, void *);
+int	vtpbc_mainbus_match(struct device *, struct cfdata *, void *);
+void	vtpbc_mainbus_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(vtpbc_mainbus, sizeof(struct vtpbc_softc),
+CFATTACH_DECL(vtpbc_mainbus, sizeof(struct vtpbc_softc),
     vtpbc_mainbus_match, vtpbc_mainbus_attach, NULL, NULL);
 extern struct cfdriver vtpbc_cd;
 
 int
-vtpbc_mainbus_match(device_t parent, cfdata_t cf, void *aux)
+vtpbc_mainbus_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -77,9 +78,9 @@ vtpbc_mainbus_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-vtpbc_mainbus_attach(device_t parent, device_t self, void *aux)
+vtpbc_mainbus_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct vtpbc_softc *sc = device_private(self);
+	struct vtpbc_softc *sc = (void *) self;
 	struct pcibus_attach_args pba;
 	struct vtpbc_config *vt;
 
@@ -94,9 +95,9 @@ vtpbc_mainbus_attach(device_t parent, device_t self, void *aux)
 	else
 		printf(": V3 V962, unknown revision %d\n", vt->vt_rev);
 
-	printf("%s: PCI memory space base: 0x%08lx\n", device_xname(self),
+	printf("%s: PCI memory space base: 0x%08lx\n", sc->sc_dev.dv_xname,
 	    (u_long) vt->vt_pci_membase);
-	printf("%s: PCI DMA window base: 0x%08lx\n", device_xname(self),
+	printf("%s: PCI DMA window base: 0x%08lx\n", sc->sc_dev.dv_xname,
 	    (u_long) vt->vt_dma_winbase);
 
 	pba.pba_flags = PCI_FLAGS_IO_OKAY | PCI_FLAGS_MEM_OKAY;

@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_table_test.c,v 1.6 2012/10/29 02:27:11 rmind Exp $	*/
+/*	$NetBSD: npf_table_test.c,v 1.2.2.7 2012/11/24 04:34:44 riz Exp $	*/
 
 /*
  * NPF tableset test.

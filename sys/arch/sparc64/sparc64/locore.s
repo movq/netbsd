@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.348 2013/04/28 23:42:23 nakayama Exp $	*/
+/*	$NetBSD: locore.s,v 1.338.8.4 2013/02/08 20:58:17 riz Exp $	*/
 
 /*
  * Copyright (c) 2006-2010 Matthew R. Green
@@ -1743,10 +1743,9 @@ winfixfill:
  *
  * The following is duplicated from datafault:
  */
+	wrpr	%g0, PSTATE_KERN|PSTATE_AG, %pstate	! We need to save volatile stuff to AG regs
 #ifdef TRAPS_USE_IG
-	wrpr	%g0, PSTATE_KERN|PSTATE_IG, %pstate	! We need to save volatile stuff to interrupt globals
-#else
-	wrpr	%g0, PSTATE_KERN|PSTATE_AG, %pstate	! We need to save volatile stuff to alternate globals
+	wrpr	%g0, PSTATE_KERN|PSTATE_IG, %pstate	! We need to save volatile stuff to AG regs
 #endif
 	wr	%g0, ASI_DMMU, %asi			! We need to re-load trap info
 	ldxa	[%g0 + TLB_TAG_ACCESS] %asi, %g1	! Get fault address from tag access register
@@ -2107,10 +2106,9 @@ winfixsave:
 	wrpr	%g1, %cwp
 	andn	%g2, CWP, %g2
 	wrpr	%g1, %g2, %tstate
+	wrpr	%g0, PSTATE_KERN|PSTATE_AG, %pstate
 #ifdef TRAPS_USE_IG
 	wrpr	%g0, PSTATE_KERN|PSTATE_IG, %pstate	! DEBUG
-#else
-	wrpr	%g0, PSTATE_KERN|PSTATE_AG, %pstate
 #endif
 	mov	%g6, %sp
 	done
@@ -2131,10 +2129,9 @@ winfixsave:
  *
  */
 datafault:
+	wrpr	%g0, PSTATE_KERN|PSTATE_AG, %pstate	! We need to save volatile stuff to AG regs
 #ifdef TRAPS_USE_IG
-	wrpr	%g0, PSTATE_KERN|PSTATE_IG, %pstate	! We need to save volatile stuff to interrupt globals
-#else
-	wrpr	%g0, PSTATE_KERN|PSTATE_AG, %pstate	! We need to save volatile stuff to alternate globals
+	wrpr	%g0, PSTATE_KERN|PSTATE_IG, %pstate	! We need to save volatile stuff to AG regs
 #endif
 	wr	%g0, ASI_DMMU, %asi			! We need to re-load trap info
 	ldxa	[%g0 + TLB_TAG_ACCESS] %asi, %g1	! Get fault address from tag access register
@@ -2377,10 +2374,9 @@ instr_miss:
  */
 
 textfault:
+	wrpr	%g0, PSTATE_KERN|PSTATE_AG, %pstate	! We need to save volatile stuff to AG regs
 #ifdef TRAPS_USE_IG
-	wrpr	%g0, PSTATE_KERN|PSTATE_IG, %pstate	! We need to save volatile stuff to interrupt globals
-#else
-	wrpr	%g0, PSTATE_KERN|PSTATE_AG, %pstate	! We need to save volatile stuff to alternate globals
+	wrpr	%g0, PSTATE_KERN|PSTATE_IG, %pstate	! We need to save volatile stuff to AG regs
 #endif
 	wr	%g0, ASI_IMMU, %asi
 	ldxa	[%g0 + TLB_TAG_ACCESS] %asi, %g1	! Get fault address from tag access register
@@ -3146,7 +3142,7 @@ setup_sparcintr:
 	LDPTR	[%g1], %g3		! Load list head
 	STPTR	%g3, [%g5+IH_PEND]	! Link our intrhand node in
 	mov	%g5, %g7
-	CASPTRA	[%g1] ASI_N, %g3, %g7
+	CASPTR	[%g1] ASI_N, %g3, %g7
 	cmp	%g7, %g3		! Did it work?
 	bne,pn	CCCR, 1b		! No, try again
 	 .empty
@@ -3210,9 +3206,9 @@ ret_from_intr_vector:
 
 /*
  * Ultra1 and Ultra2 CPUs use soft interrupts for everything.  What we do
- * on a soft interrupt, is we should check which bits in SOFTINT(%asr22)
+ * on a soft interrupt, is we should check which bits in ASR_SOFTINT(0x16)
  * are set, handle those interrupts, then clear them by setting the
- * appropriate bits in CLEAR_SOFTINT(%asr21).
+ * appropriate bits in ASR_CLEAR_SOFTINT(0x15).
  *
  * We have an array of 8 interrupt vector slots for each of 15 interrupt
  * levels.  If a vectored interrupt can be dispatched, the dispatch
@@ -3279,7 +3275,7 @@ ENTRY_NOPROFILE(sparc_interrupt)
 	 * time.
 	 */
 	rd	SOFTINT, %g1
-	set	TICK_INT|STICK_INT, %g5
+	set	0x10001, %g5
 	andcc	%g5, %g1, %g5
 	bz,pt	%icc, 0f
 	 sethi	%hi(CPUINFO_VA+CI_TICK_IH), %g3
@@ -3396,7 +3392,7 @@ sparc_intr_retry:
 	beq,pn	CCCR, intrcmplt		! Empty list?
 	 mov	-1, %l7
 	membar	#LoadStore
-	CASPTRA	[%l4] ASI_N, %l2, %l7	! Grab the entire list
+	CASPTR	[%l4] ASI_N, %l2, %l7	! Grab the entire list
 	cmp	%l7, %l2
 	bne,pn	CCCR, 1b
 	 add	%sp, CC64FSZ+STKB, %o2	! tf = %sp + CC64FSZ + STKB
@@ -3592,10 +3588,9 @@ return_from_trap:
 	ldx	[%sp + CC64FSZ + STKB + TF_G + (6*8)], %g6
 	ldx	[%sp + CC64FSZ + STKB + TF_G + (7*8)], %g7
 	/* Switch to alternate globals and load outs */
+	wrpr	%g0, PSTATE_KERN|PSTATE_AG, %pstate
 #ifdef TRAPS_USE_IG
 	wrpr	%g0, PSTATE_KERN|PSTATE_IG, %pstate	! DEBUG
-#else
-	wrpr	%g0, PSTATE_KERN|PSTATE_AG, %pstate
 #endif
 	ldx	[%sp + CC64FSZ + STKB + TF_O + (0*8)], %i0
 	ldx	[%sp + CC64FSZ + STKB + TF_O + (1*8)], %i1
@@ -5389,6 +5384,16 @@ ENTRY(lwp_trampoline)
 	ba,a,pt	%icc, return_from_trap
 	 nop
 
+	/*
+	 * Like lwp_trampoline, but for cpu_setfunc(), i.e. without newlwp
+	 * arguement and will not call lwp_startup.
+	 */
+ENTRY(setfunc_trampoline)
+	call	%l0			! re-use current frame
+	 mov	%l1, %o0
+	ba,a,pt	%icc, return_from_trap
+	 nop
+
 /*
  * pmap_zero_page_phys(pa)
  *
@@ -5899,7 +5904,7 @@ ENTRY(send_softint)
 	LDPTR	[%o3], %o5		! Load list head
 	STPTR	%o5, [%o2+IH_PEND]	! Link our intrhand node in
 	mov	%o2, %o4
-	CASPTRA	[%o3] ASI_N, %o5, %o4
+	CASPTR	[%o3] ASI_N, %o5, %o4
 	cmp	%o4, %o5		! Did it work?
 	bne,pn	CCCR, 2b		! No, try again
 	 .empty
@@ -6065,6 +6070,20 @@ Ltick_ovflw:
 	retl
 	 wr	%o2, TICK_CMPR
 #endif
+
+/*
+ * setstick(long)
+ */
+ENTRY(setstick)
+	retl
+	 wr %o0, STICK
+
+/*
+ * long getstick(void)
+ */
+ENTRY(getstick)
+	retl
+	 rd STICK, %o0
 
 /*
  * next_stick(long increment)

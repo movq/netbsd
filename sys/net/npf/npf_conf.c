@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_conf.c,v 1.2 2013/02/10 23:47:37 rmind Exp $	*/
+/*	$NetBSD: npf_conf.c,v 1.2.2.2 2013/02/11 21:49:48 riz Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_conf.c,v 1.2 2013/02/10 23:47:37 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_conf.c,v 1.2.2.2 2013/02/11 21:49:48 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

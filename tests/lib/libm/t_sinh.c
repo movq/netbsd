@@ -1,4 +1,4 @@
-/* $NetBSD: t_sinh.c,v 1.5 2013/04/09 12:11:04 isaki Exp $ */
+/* $NetBSD: t_sinh.c,v 1.4 2011/10/18 14:16:42 jruoho Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -29,53 +29,41 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_sinh.c,v 1.5 2013/04/09 12:11:04 isaki Exp $");
+__RCSID("$NetBSD: t_sinh.c,v 1.4 2011/10/18 14:16:42 jruoho Exp $");
 
 #include <atf-c.h>
 #include <math.h>
 #include <stdio.h>
 
-static const struct {
-	double x;
-	double y;
-	double e;
-} values[] = {
-	{ -10,   -11013.23287470339, 1e4, },
-	{ -2,    -3.626860407847019, 1,   },
-	{ -1,    -1.175201193643801, 1,   },
-	{ -0.05, -0.050020835937655, 1,   },
-	{ -0.001,-0.001000000166667, 1,   },
-	{  0.001, 0.001000000166667, 1,   },
-	{  0.05,  0.050020835937655, 1,   },
-	{  1,     1.175201193643801, 1,   },
-	{  2,     3.626860407847019, 1,   },
-	{  10,    11013.23287470339, 1e4, },
-};
-
 /*
  * sinh(3)
  */
-ATF_TC(sinh_inrange);
-ATF_TC_HEAD(sinh_inrange, tc)
+ATF_TC(sinh_def);
+ATF_TC_HEAD(sinh_def, tc)
 {
-	atf_tc_set_md_var(tc, "descr", "sinh(x) for some values");
+	atf_tc_set_md_var(tc, "descr", "Test the definition of sinh(3)");
 }
 
-ATF_TC_BODY(sinh_inrange, tc)
+ATF_TC_BODY(sinh_def, tc)
 {
 #ifndef __vax__
-	double eps;
-	double x;
-	double y;
+	const double x[] = { 0.005, 0.05, 0.0, 1.0, 10.0, 20.0 };
+	const double eps = 1.0e-4;
+	double y, z;
 	size_t i;
 
-	for (i = 0; i < __arraycount(values); i++) {
-		x = values[i].x;
-		y = values[i].y;
-		eps = 1e-15 * values[i].e;
+	for (i = 0; i < __arraycount(x); i++) {
 
-		if (fabs(sinh(x) - y) > eps)
-			atf_tc_fail_nonfatal("sinh(%g) != %g\n", x, y);
+		y = sinh(x[i]);
+		z = (exp(x[i]) - exp(-x[i])) / 2;
+
+		(void)fprintf(stderr,
+		    "sinh(%0.03f) = %f\n(exp(%0.03f) - "
+		    "exp(-%0.03f)) / 2 = %f\n", x[i], y, x[i], x[i], z);
+
+		if (fabs(y - z) > eps)
+			atf_tc_fail_nonfatal("sinh(%0.03f) != %0.03f\n",
+			    x[i], z);
 	}
 #endif
 }
@@ -167,27 +155,32 @@ ATF_TC_BODY(sinh_zero_pos, tc)
 /*
  * sinhf(3)
  */
-ATF_TC(sinhf_inrange);
-ATF_TC_HEAD(sinhf_inrange, tc)
+ATF_TC(sinhf_def);
+ATF_TC_HEAD(sinhf_def, tc)
 {
-	atf_tc_set_md_var(tc, "descr", "sinhf(x) for some values");
+	atf_tc_set_md_var(tc, "descr", "Test the definition of sinhf(3)");
 }
 
-ATF_TC_BODY(sinhf_inrange, tc)
+ATF_TC_BODY(sinhf_def, tc)
 {
 #ifndef __vax__
-	float eps;
-	float x;
-	float y;
+	const float x[] = { 0.005, 0.05, 0.0, 1.0, 10.0, 20.0 };
+	const float eps = 1.0e-2;
+	float y, z;
 	size_t i;
 
-	for (i = 0; i < __arraycount(values); i++) {
-		x = values[i].x;
-		y = values[i].y;
-		eps = 1e-6 * values[i].e;
+	for (i = 0; i < __arraycount(x); i++) {
 
-		if (fabsf(sinhf(x) - y) > eps)
-			atf_tc_fail_nonfatal("sinhf(%g) != %g\n", x, y);
+		y = sinhf(x[i]);
+		z = (expf(x[i]) - expf(-x[i])) / 2;
+
+		(void)fprintf(stderr,
+		    "sinhf(%0.03f) = %f\n(expf(%0.03f) - "
+		    "expf(-%0.03f)) / 2 = %f\n", x[i], y, x[i], x[i], z);
+
+		if (fabsf(y - z) > eps)
+			atf_tc_fail_nonfatal("sinhf(%0.03f) != %0.03f\n",
+			    x[i], z);
 	}
 #endif
 }
@@ -279,14 +272,14 @@ ATF_TC_BODY(sinhf_zero_pos, tc)
 ATF_TP_ADD_TCS(tp)
 {
 
-	ATF_TP_ADD_TC(tp, sinh_inrange);
+	ATF_TP_ADD_TC(tp, sinh_def);
 	ATF_TP_ADD_TC(tp, sinh_nan);
 	ATF_TP_ADD_TC(tp, sinh_inf_neg);
 	ATF_TP_ADD_TC(tp, sinh_inf_pos);
 	ATF_TP_ADD_TC(tp, sinh_zero_neg);
 	ATF_TP_ADD_TC(tp, sinh_zero_pos);
 
-	ATF_TP_ADD_TC(tp, sinhf_inrange);
+	ATF_TP_ADD_TC(tp, sinhf_def);
 	ATF_TP_ADD_TC(tp, sinhf_nan);
 	ATF_TP_ADD_TC(tp, sinhf_inf_neg);
 	ATF_TP_ADD_TC(tp, sinhf_inf_pos);

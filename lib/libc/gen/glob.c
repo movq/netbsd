@@ -1,4 +1,4 @@
-/*	$NetBSD: glob.c,v 1.35 2013/03/20 23:44:47 lukem Exp $	*/
+/*	$NetBSD: glob.c,v 1.31 2011/10/30 21:53:43 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)glob.c	8.3 (Berkeley) 10/13/93";
 #else
-__RCSID("$NetBSD: glob.c,v 1.35 2013/03/20 23:44:47 lukem Exp $");
+__RCSID("$NetBSD: glob.c,v 1.31 2011/10/30 21:53:43 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -132,7 +132,7 @@ struct glob_limit {
 #define	M_MASK		0xffff
 #define	M_ASCII		0x00ff
 
-typedef unsigned short Char;
+typedef u_short Char;
 
 #else
 
@@ -183,14 +183,14 @@ int
 glob(const char * __restrict pattern, int flags, int (*errfunc)(const char *,
     int), glob_t * __restrict pglob)
 {
-	const unsigned char *patnext;
+	const u_char *patnext;
 	int c;
 	Char *bufnext, *bufend, patbuf[MAXPATHLEN+1];
 	struct glob_limit limit = { 0, 0, 0, 0 };
 
 	_DIAGASSERT(pattern != NULL);
 
-	patnext = (const unsigned char *) pattern;
+	patnext = (const u_char *) pattern;
 	if (!(flags & GLOB_APPEND)) {
 		pglob->gl_pathc = 0;
 		pglob->gl_pathv = NULL;
@@ -612,6 +612,8 @@ glob2(Char *pathbuf, Char *pathend, Char *pathlim, const Char *pattern,
 	const Char *p;
 	Char *q;
 	int anymeta;
+	Char *pend;
+	ptrdiff_t diff;
 
 	_DIAGASSERT(pathbuf != NULL);
 	_DIAGASSERT(pathend != NULL);
@@ -663,7 +665,26 @@ glob2(Char *pathbuf, Char *pathend, Char *pathlim, const Char *pattern,
 			*q++ = *p++;
 		}
 
-                if (!anymeta) {
+                /*
+		 * No expansion, or path ends in slash-dot shash-dot-dot,
+		 * do next segment.
+		 */
+		if (pglob->gl_flags & GLOB_PERIOD) {
+			for (pend = pathend; pend > pathbuf && pend[-1] == '/';
+			    pend--)
+				continue;
+			diff = pend - pathbuf;
+		} else {
+			/* XXX: GCC */
+			diff = 0;
+			pend = pathend;
+		}
+			
+                if ((!anymeta) ||
+		    ((pglob->gl_flags & GLOB_PERIOD) &&
+		     (diff >= 1 && pend[-1] == DOT) &&
+		     (diff >= 2 && (pend[-2] == SLASH || pend[-2] == DOT)) &&
+		     (diff < 3 || pend[-3] == SLASH))) {
 			pathend = q;
 			pattern = p;
 			while (*pattern == SEP) {
@@ -770,7 +791,7 @@ glob3(Char *pathbuf, Char *pathend, Char *pathlim, const Char *pattern,
 	else
 		readdirfunc = (struct dirent *(*)(void *)) readdir;
 	while ((dp = (*readdirfunc)(dirp)) != NULL) {
-		unsigned char *sc;
+		u_char *sc;
 		Char *dc;
 
 		if ((pglob->gl_flags & GLOB_LIMIT) &&
@@ -801,7 +822,7 @@ glob3(Char *pathbuf, Char *pathend, Char *pathlim, const Char *pattern,
 		 * The resulting string contains EOS, so we can
 		 * use the pathlim character, if it is the nul
 		 */
-		for (sc = (unsigned char *) dp->d_name, dc = pathend; 
+		for (sc = (u_char *) dp->d_name, dc = pathend; 
 		     dc <= pathlim && (*dc++ = *sc++) != EOS;)
 			continue;
 

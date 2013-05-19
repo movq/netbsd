@@ -1,4 +1,4 @@
-#	$NetBSD: M403,v 1.59 2013/04/27 22:21:13 christos Exp $
+#	$NetBSD: M403,v 1.53 2011/11/22 21:24:59 tls Exp $
 #
 #	configuration file for MIPS Magnum 4000 system
 #
@@ -90,10 +90,13 @@ options 	NFSSERVER	# Network File System server
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI networking
+#options 	EON		# OSI tunneling over IP
 options 	NETATALK	# AppleTalk networking protocols
 options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 options 	PPP_DEFLATE	# Deflate compression support for PPP
@@ -112,7 +115,6 @@ options 	SCSIVERBOSE	# human readable SCSI error messages
 
 # wscons terminal emulation
 options 	WSEMUL_VT100	# VT100 emulation
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 
 # Kernel root file system and dump configuration.
 options 	NFS_BOOT_DHCP,NFS_BOOT_BOOTPARAM
@@ -186,8 +188,8 @@ wsmouse*	at pms?
 #### Pseudo devices
 
 # disk/mass storage pseudo-devices
-pseudo-device	ccd			# concatenated/striped disk devices
-#pseudo-device	raid			# RAIDframe disk driver
+pseudo-device	ccd		4	# concatenated/striped disk devices
+#pseudo-device	raid		4	# RAIDframe disk driver
 #pseudo-device	fss			# file system snapshot device
 pseudo-device	md			# memory disk device (ramdisk)
 pseudo-device	vnd			# disk-like interface to files
@@ -195,7 +197,7 @@ pseudo-device	vnd			# disk-like interface to files
 # network pseudo-devices
 pseudo-device	bpfilter		# Berkeley packet filter
 pseudo-device	ipfilter		# IP filter (firewall) and NAT
-pseudo-device	loop			# network loopback
+pseudo-device	loop		1	# network loopback
 pseudo-device	ppp			# Point-to-Point Protocol
 pseudo-device	sl			# Serial Line IP
 #pseudo-device	strip			# Starmode Radio IP (Metricom)
@@ -208,13 +210,13 @@ pseudo-device	vlan			# IEEE 802.1q encapsulation
 
 # miscellaneous pseudo-devices
 pseudo-device	pty			# pseudo-terminals
-#pseudo-device	sequencer		# MIDI sequencer
+#pseudo-device	sequencer	1	# MIDI sequencer
 # rnd works; RND_COM does not on port arc yet.
 #options 	RND_COM			# use "com" randomness as well (BROKEN)
 pseudo-device	clockctl		# user control of clock subsystem
 
 # a pseudo device needed for Coda	# also needs CODA (above)
-#pseudo-device	vcoda			# coda minicache <-> venus comm.
+#pseudo-device	vcoda		4	# coda minicache <-> venus comm.
 
 # mouse & keyboard multiplexor pseudo-devices
 #pseudo-device	wsmux

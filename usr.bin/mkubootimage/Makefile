@@ -1,7 +1,8 @@
-# $NetBSD: Makefile,v 1.3 2012/12/02 02:21:29 reed Exp $
+# $NetBSD: Makefile,v 1.2 2011/05/26 12:56:33 joerg Exp $
 
 PROG=	mkubootimage
 SRCS=	mkubootimage.c crc32.c
+NOMAN=	# defined
 
 CWARNFLAGS.clang+=	-Wno-conversion
 

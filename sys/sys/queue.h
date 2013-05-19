@@ -1,4 +1,4 @@
-/*	$NetBSD: queue.h,v 1.54 2013/04/10 22:22:16 christos Exp $	*/
+/*	$NetBSD: queue.h,v 1.53 2011/11/19 22:51:31 tls Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -124,13 +124,12 @@ struct {								\
 #endif
 
 #define	LIST_INIT(head) do {						\
-	(head)->lh_first = LIST_END(head);				\
+	(head)->lh_first = NULL;					\
 } while (/*CONSTCOND*/0)
 
 #define	LIST_INSERT_AFTER(listelm, elm, field) do {			\
 	QUEUEDEBUG_LIST_OP((listelm), field)				\
-	if (((elm)->field.le_next = (listelm)->field.le_next) != 	\
-	    LIST_END(head))						\
+	if (((elm)->field.le_next = (listelm)->field.le_next) != NULL)	\
 		(listelm)->field.le_next->field.le_prev =		\
 		    &(elm)->field.le_next;				\
 	(listelm)->field.le_next = (elm);				\
@@ -147,7 +146,7 @@ struct {								\
 
 #define	LIST_INSERT_HEAD(head, elm, field) do {				\
 	QUEUEDEBUG_LIST_INSERT_HEAD((head), (elm), field)		\
-	if (((elm)->field.le_next = (head)->lh_first) != LIST_END(head))\
+	if (((elm)->field.le_next = (head)->lh_first) != NULL)		\
 		(head)->lh_first->field.le_prev = &(elm)->field.le_next;\
 	(head)->lh_first = (elm);					\
 	(elm)->field.le_prev = &(head)->lh_first;			\
@@ -174,8 +173,7 @@ struct {								\
 /*
  * List access methods.
  */
-#define	LIST_EMPTY(head)		((head)->lh_first == LIST_END(head))
-#define	LIST_END(head)			NULL
+#define	LIST_EMPTY(head)		((head)->lh_first == NULL)
 #define	LIST_FIRST(head)		((head)->lh_first)
 #define	LIST_NEXT(elm, field)		((elm)->field.le_next)
 
@@ -448,7 +446,7 @@ struct name {								\
 #define TAILQ_HEAD(name, type)	_TAILQ_HEAD(name, struct type,)
 
 #define	TAILQ_HEAD_INITIALIZER(head)					\
-	{ TAILQ_END(head), &(head).tqh_first }
+	{ NULL, &(head).tqh_first }
 
 #define	_TAILQ_ENTRY(type, qual)					\
 struct {								\
@@ -492,13 +490,13 @@ struct {								\
 #endif
 
 #define	TAILQ_INIT(head) do {						\
-	(head)->tqh_first = TAILQ_END(head);				\
+	(head)->tqh_first = NULL;					\
 	(head)->tqh_last = &(head)->tqh_first;				\
 } while (/*CONSTCOND*/0)
 
 #define	TAILQ_INSERT_HEAD(head, elm, field) do {			\
 	QUEUEDEBUG_TAILQ_INSERT_HEAD((head), (elm), field)		\
-	if (((elm)->field.tqe_next = (head)->tqh_first) != TAILQ_END(head))\
+	if (((elm)->field.tqe_next = (head)->tqh_first) != NULL)	\
 		(head)->tqh_first->field.tqe_prev =			\
 		    &(elm)->field.tqe_next;				\
 	else								\
@@ -509,7 +507,7 @@ struct {								\
 
 #define	TAILQ_INSERT_TAIL(head, elm, field) do {			\
 	QUEUEDEBUG_TAILQ_INSERT_TAIL((head), (elm), field)		\
-	(elm)->field.tqe_next = TAILQ_END(head);			\
+	(elm)->field.tqe_next = NULL;					\
 	(elm)->field.tqe_prev = (head)->tqh_last;			\
 	*(head)->tqh_last = (elm);					\
 	(head)->tqh_last = &(elm)->field.tqe_next;			\
@@ -517,8 +515,7 @@ struct {								\
 
 #define	TAILQ_INSERT_AFTER(head, listelm, elm, field) do {		\
 	QUEUEDEBUG_TAILQ_OP((listelm), field)				\
-	if (((elm)->field.tqe_next = (listelm)->field.tqe_next) != 	\
-	    TAILQ_END(head))						\
+	if (((elm)->field.tqe_next = (listelm)->field.tqe_next) != NULL)\
 		(elm)->field.tqe_next->field.tqe_prev = 		\
 		    &(elm)->field.tqe_next;				\
 	else								\
@@ -538,7 +535,7 @@ struct {								\
 #define	TAILQ_REMOVE(head, elm, field) do {				\
 	QUEUEDEBUG_TAILQ_PREREMOVE((head), (elm), field)		\
 	QUEUEDEBUG_TAILQ_OP((elm), field)				\
-	if (((elm)->field.tqe_next) != TAILQ_END(head))			\
+	if (((elm)->field.tqe_next) != NULL)				\
 		(elm)->field.tqe_next->field.tqe_prev = 		\
 		    (elm)->field.tqe_prev;				\
 	else								\
@@ -549,23 +546,23 @@ struct {								\
 
 #define	TAILQ_FOREACH(var, head, field)					\
 	for ((var) = ((head)->tqh_first);				\
-	    (var) != TAILQ_END(head);					\
-	    (var) = ((var)->field.tqe_next))
+		(var);							\
+		(var) = ((var)->field.tqe_next))
 
 #define	TAILQ_FOREACH_SAFE(var, head, field, next)			\
 	for ((var) = ((head)->tqh_first);				\
-	    (var) != TAILQ_END(head) &&					\
-	    ((next) = TAILQ_NEXT(var, field), 1); (var) = (next))
+	        (var) != NULL && ((next) = TAILQ_NEXT(var, field), 1);	\
+		(var) = (next))
 
 #define	TAILQ_FOREACH_REVERSE(var, head, headname, field)		\
-	for ((var) = (*(((struct headname *)((head)->tqh_last))->tqh_last));\
-	    (var) != TAILQ_END(head);					\
-	    (var) = (*(((struct headname *)((var)->field.tqe_prev))->tqh_last)))
+	for ((var) = (*(((struct headname *)((head)->tqh_last))->tqh_last));	\
+		(var);							\
+		(var) = (*(((struct headname *)((var)->field.tqe_prev))->tqh_last)))
 
 #define	TAILQ_FOREACH_REVERSE_SAFE(var, head, headname, field, prev)	\
 	for ((var) = TAILQ_LAST((head), headname);			\
-	    (var) != TAILQ_END(head) && 				\
-	    ((prev) = TAILQ_PREV((var), headname, field), 1); (var) = (prev))
+		(var) && ((prev) = TAILQ_PREV((var), headname, field), 1);\
+		(var) = (prev))
 
 #define	TAILQ_CONCAT(head1, head2, field) do {				\
 	if (!TAILQ_EMPTY(head2)) {					\
@@ -579,9 +576,8 @@ struct {								\
 /*
  * Tail queue access methods.
  */
-#define	TAILQ_EMPTY(head)		((head)->tqh_first == TAILQ_END(head))
+#define	TAILQ_EMPTY(head)		((head)->tqh_first == NULL)
 #define	TAILQ_FIRST(head)		((head)->tqh_first)
-#define	TAILQ_END(head)			(NULL)
 #define	TAILQ_NEXT(elm, field)		((elm)->field.tqe_next)
 
 #define	TAILQ_LAST(head, headname) \

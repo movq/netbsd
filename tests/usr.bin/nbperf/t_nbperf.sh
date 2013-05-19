@@ -1,4 +1,4 @@
-# $NetBSD: t_nbperf.sh,v 1.2 2012/09/25 20:53:46 joerg Exp $
+# $NetBSD: t_nbperf.sh,v 1.2.2.2 2012/10/17 21:37:11 riz Exp $
 #
 # Copyright (c) 2012 The NetBSD Foundation, Inc.
 # All rights reserved.

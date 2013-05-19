@@ -36,14 +36,9 @@ testname = test-bison-yylval
 
 scanner.c: $(srcdir)/scanner.l
 	$(FLEX) $<
-scanner.h: scanner.c
-scanner.o: parser.h
 
 parser.c: $(srcdir)/parser.y
 	$(BISON) $(YFLAGS) $<
-parser.h: parser.c
-
-main.o: scanner.h parser.h
 
 $(testname)$(EXEEXT): $(OBJS)
 	$(CC) -o $@ $(LDFLAGS) $(OBJS) $(LOADLIBES)
@@ -53,3 +48,6 @@ test: $(testname)$(EXEEXT)
 
 .c.o:
 	$(CC) -c -o $@ $(AM_CPPFLAGS) $(CPPFLAGS) $(CFLAGS) $<
+
+parser.h: parser.c
+main.o: parser.h

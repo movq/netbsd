@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.1.1.9 2013/04/20 15:26:53 wiz Exp $	*/
+/*	$NetBSD: main.c,v 1.1.1.8 2010/01/30 21:33:36 joerg Exp $	*/
 
 #if HAVE_CONFIG_H
 #include "config.h"
@@ -7,7 +7,7 @@
 #if HAVE_SYS_CDEFS_H
 #include <sys/cdefs.h>
 #endif
-__RCSID("$NetBSD: main.c,v 1.1.1.9 2013/04/20 15:26:53 wiz Exp $");
+__RCSID("$NetBSD: main.c,v 1.1.1.8 2010/01/30 21:33:36 joerg Exp $");
 
 /*
  *
@@ -55,7 +55,7 @@ static void
 usage(void)
 {
 	fprintf(stderr, "%s\n%s\n%s\n%s\n",
-	    "usage: pkg_info [-BbcDdFfhIikLmNnpqRrSsVvX] [-E pkg-name] [-e pkg-name]",
+	    "usage: pkg_info [-BbcDdFfhIikLmNnpqrRSsVvX] [-e package] [-E package]",
 	    "                [-K pkg_dbdir] [-l prefix] pkg-name ...",
 	    "       pkg_info [-a | -u] [flags]",
 	    "       pkg_info [-Q variable] pkg-name ...");

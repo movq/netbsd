@@ -1,4 +1,4 @@
-/*	$NetBSD: coda_psdev.c,v 1.49 2012/08/04 12:31:57 christos Exp $	*/
+/*	$NetBSD: coda_psdev.c,v 1.47 2009/01/11 02:45:46 christos Exp $	*/
 
 /*
  *
@@ -54,7 +54,7 @@
 /* These routines are the device entry points for Venus. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: coda_psdev.c,v 1.49 2012/08/04 12:31:57 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: coda_psdev.c,v 1.47 2009/01/11 02:45:46 christos Exp $");
 
 extern int coda_nc_initialized;    /* Set if cache has been initialized */
 
@@ -76,7 +76,6 @@ extern int coda_nc_initialized;    /* Set if cache has been initialized */
 #include <sys/select.h>
 #include <sys/conf.h>
 #include <sys/atomic.h>
-#include <sys/module.h>
 
 #include <miscfs/syncfs/syncfs.h>
 
@@ -95,8 +94,6 @@ int coda_call_sleep = PZERO - 1;
 int coda_pcatch = PCATCH;
 #else
 #endif
-
-int coda_kernel_version = CODA_KERNEL_VERSION;
 
 #define ENTRY if(coda_psdev_print_entry) myprintf(("Entered %s\n",__func__))
 
@@ -125,8 +122,6 @@ struct vmsg {
     int		 vm_unique;
     void *	 vm_sleep;	/* Not used by Mach. */
 };
-
-struct coda_mntinfo coda_mnttbl[NVCODA];
 
 #define	VM_READ	    1
 #define	VM_WRITE    2
@@ -202,6 +197,7 @@ vc_nb_close(dev_t dev, int flag, int mode, struct lwp *l)
     }
 
     /* Let unmount know this is for real */
+    atomic_inc_uint(&mi->mi_vfsp->mnt_refcnt);
     VTOC(mi->mi_rootvp)->c_flags |= C_UNMOUNTING;
     coda_unmounting(mi->mi_vfsp);
 
@@ -725,43 +721,3 @@ coda_call(struct coda_mntinfo *mntinfo, int inSize, int *outSize,
 	return(error);
 }
 
-MODULE(MODULE_CLASS_DRIVER, vcoda, NULL);
-
-static int
-vcoda_modcmd(modcmd_t cmd, void *arg)
-{
-	int cmajor, dmajor, error = 0;
-
-	dmajor = cmajor = -1;
-
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-#ifdef _MODULE
-		vcodaattach(NVCODA);
-
-		return devsw_attach("vcoda", NULL, &dmajor,
-		    &vcoda_cdevsw, &cmajor);
-#endif
-		break;
-
-	case MODULE_CMD_FINI:
-#ifdef _MODULE
-		{
-			for  (size_t i = 0; i < NVCODA; i++) {
-				struct vcomm *vcp = &coda_mnttbl[i].mi_vcomm;
-				if (VC_OPEN(vcp))
-					return EBUSY;
-			}
-			return devsw_detach(NULL, &vcoda_cdevsw);
-		}
-#endif
-		break;
-
-	case MODULE_CMD_STAT:
-		return ENOTTY;
-
-	default:
-		return ENOTTY;
-	}
-	return error;
-}

@@ -52,22 +52,20 @@ int iscsi_perf_level = 0;
 iscsi_softc_t *sc = NULL;
 
 /* the list of sessions */
-session_list_t iscsi_sessions = TAILQ_HEAD_INITIALIZER(iscsi_sessions);
+session_list_t sessions = TAILQ_HEAD_INITIALIZER(sessions);
 
 /* connections to clean up */
-connection_list_t iscsi_cleanupc_list = TAILQ_HEAD_INITIALIZER(iscsi_cleanupc_list);
-session_list_t iscsi_cleanups_list = TAILQ_HEAD_INITIALIZER(iscsi_cleanups_list);
-
-bool iscsi_detaching = FALSE;
-struct lwp *iscsi_cleanproc = NULL;
+connection_list_t cleanup_list = TAILQ_HEAD_INITIALIZER(cleanup_list);
+bool detaching = FALSE;
+struct lwp *cleanproc = NULL;
 
 /* the number of active send threads (for cleanup thread) */
-uint32_t iscsi_num_send_threads = 0;
+uint32_t num_send_threads = 0;
 
 /* Our node name, alias, and ISID */
-uint8_t iscsi_InitiatorName[ISCSI_STRING_LENGTH] = "";
-uint8_t iscsi_InitiatorAlias[ISCSI_STRING_LENGTH] = "";
-login_isid_t iscsi_InitiatorISID;
+uint8_t InitiatorName[ISCSI_STRING_LENGTH] = "";
+uint8_t InitiatorAlias[ISCSI_STRING_LENGTH] = "";
+login_isid_t InitiatorISID;
 
 /******************************************************************************/
 
@@ -76,18 +74,17 @@ login_isid_t iscsi_InitiatorISID;
 */
 
 void iscsiattach(int);
-
-static void iscsi_attach(device_t parent, device_t self, void *aux);
-static int iscsi_match(device_t, cfdata_t, void *);
-static int iscsi_detach(device_t, int);
+void iscsi_attach(device_t parent, device_t self, void *aux);
+int iscsi_match(device_t, cfdata_t, void *);
+int iscsi_detach(device_t, int);
 
 
 CFATTACH_DECL_NEW(iscsi, sizeof(struct iscsi_softc), iscsi_match, iscsi_attach,
 			  iscsi_detach, NULL);
 
 
-static dev_type_open(iscsiopen);
-static dev_type_close(iscsiclose);
+int iscsiopen(dev_t, int, int, PTHREADOBJ);
+int iscsiclose(dev_t, int, int, PTHREADOBJ);
 
 struct cdevsw iscsi_cdevsw = {
 	iscsiopen, iscsiclose,
@@ -134,7 +131,7 @@ iscsiclose(dev_t dev, int flag, int mode, PTHREADOBJ p)
  *    Not much to do here, either - this is a pseudo-device.
  */
 
-static int
+int
 iscsi_match(device_t self, cfdata_t cfdata, void *arg)
 {
 	return 1;
@@ -181,7 +178,7 @@ iscsiattach(int n)
  * iscsi_attach:
  *    One-time inits go here. Not much for now, probably even less later.
  */
-static void
+void
 iscsi_attach(device_t parent, device_t self, void *aux)
 {
 
@@ -190,7 +187,7 @@ iscsi_attach(device_t parent, device_t self, void *aux)
 	sc = (iscsi_softc_t *) device_private(self);
 	sc->sc_dev = self;
 	if (kthread_create(PRI_NONE, 0, NULL, iscsi_cleanup_thread,
-	    NULL, &iscsi_cleanproc, "Cleanup") != 0) {
+	    NULL, &cleanproc, "Cleanup") != 0) {
 		panic("Can't create cleanup thread!");
 	}
 	aprint_normal("%s: attached.  major = %d\n", iscsi_cd.cd_name,
@@ -201,16 +198,16 @@ iscsi_attach(device_t parent, device_t self, void *aux)
  * iscsi_detach:
  *    Cleanup.
  */
-static int
+int
 iscsi_detach(device_t self, int flags)
 {
 
 	DEBOUT(("ISCSI: detach\n"));
 	kill_all_sessions();
-	iscsi_detaching = TRUE;
-	while (iscsi_cleanproc != NULL) {
-		wakeup(&iscsi_cleanupc_list);
-		tsleep(&iscsi_cleanupc_list, PWAIT, "detach_wait", 20 * hz);
+	detaching = TRUE;
+	while (cleanproc != NULL) {
+		wakeup(&cleanup_list);
+		tsleep(&cleanup_list, PWAIT, "detach_wait", 20);
 	}
 	return 0;
 }
@@ -331,23 +328,17 @@ map_session(session_t *session)
  *    telling the config system that the adapter has detached.
  *
  *    Parameter:  the session pointer
- *
- *    Returns:    1 on success, 0 on failure
  */
 
-int
+void
 unmap_session(session_t *session)
 {
 	device_t dev;
-	int rv = 1;
 
 	if ((dev = session->child_dev) != NULL) {
 		session->child_dev = NULL;
-		if (config_detach(dev, 0))
-			rv = 0;
+		config_detach(dev, DETACH_FORCE);
 	}
-
-	return rv;
 }
 
 /******************************************************************************/
@@ -369,7 +360,6 @@ iscsi_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 	struct scsipi_xfer *xs;
 	session_t *session;
 	int flags;
-	struct scsipi_xfer_mode *xm;
 
 	session = (session_t *) adapt;	/* adapter is first field in session */
 
@@ -409,9 +399,6 @@ iscsi_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 
 	case ADAPTER_REQ_SET_XFER_MODE:
 		DEB(5, ("ISCSI: scsipi_request SET_XFER_MODE\n"));
-		xm = (struct scsipi_xfer_mode *)arg;
-		xm->xm_mode = PERIPH_CAP_TQING;
-		scsipi_async_event(chan, ASYNC_EVENT_XFER_MODE, xm);
 		return;
 
 	default:
@@ -490,6 +477,8 @@ iscsi_done(ccb_t *ccb)
 		scsipi_done(xs);
 		DEB(99, ("scsipi_done returned\n"));
 	}
+
+	free_ccb(ccb);
 }
 
 /* Kernel Module support */

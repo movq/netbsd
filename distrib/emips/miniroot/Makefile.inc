@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.3 2012/10/26 18:15:55 tsutsui Exp $
+#	$NetBSD: Makefile.inc,v 1.2.4.1 2012/11/18 16:58:44 msaitoh Exp $
 
 DBG=		-Os
 

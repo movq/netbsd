@@ -1,4 +1,4 @@
-/*	$NetBSD: strxfrm.c,v 1.14 2013/05/17 12:55:57 joerg Exp $	*/
+/*	$NetBSD: strxfrm.c,v 1.11 2003/08/07 16:43:53 agc Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,18 +37,12 @@
 #if 0
 static char sccsid[] = "@(#)strxfrm.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: strxfrm.c,v 1.14 2013/05/17 12:55:57 joerg Exp $");
+__RCSID("$NetBSD: strxfrm.c,v 1.11 2003/08/07 16:43:53 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
-#include "namespace.h"
-
 #include <assert.h>
-#include <locale.h>
 #include <string.h>
-#include "setlocale_local.h"
-
-__weak_alias(strxfrm_l, _strxfrm_l)
 
 /*
  * Transform src, storing the result in dst, such that
@@ -56,14 +50,14 @@ __weak_alias(strxfrm_l, _strxfrm_l)
  * on the original untransformed strings would return.
  */
 size_t
-strxfrm_l(char *dst, const char *src, size_t n, locale_t loc)
+strxfrm(dst, src, n)
+	char *dst;
+	const char *src;
+	size_t n;
 {
 	size_t srclen, copysize;
 
 	_DIAGASSERT(src != NULL);
-
-	/* XXX: LC_COLLATE should be implemented. */
-	/* LINTED */(void)loc;
 
 	/*
 	 * Since locales are unimplemented, this is just a copy.
@@ -76,10 +70,4 @@ strxfrm_l(char *dst, const char *src, size_t n, locale_t loc)
 		dst[copysize] = 0;
 	}
 	return (srclen);
-}
-
-size_t
-strxfrm(char *dst, const char *src, size_t n)
-{
-	return strxfrm_l(dst, src, n, _current_locale());
 }

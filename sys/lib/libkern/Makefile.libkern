@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.libkern,v 1.23 2013/03/17 00:47:13 christos Exp $
+#	$NetBSD: Makefile.libkern,v 1.17 2012/02/05 14:19:03 dholland Exp $
 
 # 
 # Variable definitions for libkern.  
@@ -70,15 +70,12 @@ SRCS+=	strsep.c strstr.c
 SRCS+=	strlcpy.c strlcat.c
 
 SRCS+=	imax.c imin.c lmax.c lmin.c max.c min.c ulmax.c ulmin.c
-SRCS+=	memmove.c
+SRCS+=	memcpy.c memmove.c
 SRCS+=	strchr.c strrchr.c
 SRCS+=	memcmp.c
-
-SRCS+=	memcpy.c
 .if empty(SRCS:Mmemset2.*)
 SRCS+=	memset.c 
 .endif
-
 SRCS+=	popcount32.c popcount64.c
 SRCS+=	strtoul.c strtoll.c strtoull.c strtoumax.c
 
@@ -87,16 +84,13 @@ SRCS+=	random.c
 SRCS+=	rngtest.c
 
 SRCS+=	memchr.c
-SRCS+=	strcat.c strcmp.c strcpy.c strlen.c strnlen.c
+SRCS+=	strcat.c strcmp.c strcpy.c strlen.c
 SRCS+=	strncmp.c strncpy.c
 SRCS+=	strcasecmp.c strncasecmp.c
 
 SRCS+=	xlat_mbr_fstype.c
 
 SRCS+=	heapsort.c ptree.c rb.c
-
-# for crypto
-SRCS+=	explicit_bzero.c consttime_bcmp.c
 
 # Files to clean up
 CLEANFILES+= lib${LIB}.o lib${LIB}.po

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_an_pci.c,v 1.34 2012/09/23 01:10:59 chs Exp $	*/
+/*	$NetBSD: if_an_pci.c,v 1.33.2.1 2012/11/22 17:48:18 riz Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_an_pci.c,v 1.34 2012/09/23 01:10:59 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_an_pci.c,v 1.33.2.1 2012/11/22 17:48:18 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-#	$NetBSD: modes.inc,v 1.3 2013/02/18 21:15:25 riastradh Exp $
+#	$NetBSD: modes.inc,v 1.1.8.2 2013/02/19 04:47:13 riz Exp $
 #
 #	@(#) Copyright (c) 1995 Simon J. Gerraty
 #

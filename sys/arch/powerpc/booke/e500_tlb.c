@@ -1,4 +1,4 @@
-/*	$NetBSD: e500_tlb.c,v 1.12 2012/11/27 19:24:46 matt Exp $	*/
+/*	$NetBSD: e500_tlb.c,v 1.7.8.1 2012/05/09 22:42:32 riz Exp $	*/
 /*-
  * Copyright (c) 2010, 2011 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: e500_tlb.c,v 1.12 2012/11/27 19:24:46 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: e500_tlb.c,v 1.7.8.1 2012/05/09 22:42:32 riz Exp $");
 
 #include <sys/param.h>
 
@@ -202,7 +202,6 @@ hwtlb_write(const struct e500_hwtlb hwtlb, bool needs_sync)
 	 */
 	if (hwtlb.hwtlb_mas1 & MAS1_V) {
 		mtspr(SPR_MAS3, hwtlb.hwtlb_mas3);
-		//mtspr(SPR_MAS7, 0);
 	}
 	
 #if 0
@@ -213,7 +212,8 @@ hwtlb_write(const struct e500_hwtlb hwtlb, bool needs_sync)
 #endif
 	__asm volatile("tlbwe");
 	if (needs_sync) {
-		__asm volatile("tlbsync\n\tisync\n\tsync");
+		__asm volatile("tlbsync");
+		__asm volatile("isync");
 	}
 
 	mtspr(SPR_MAS0, saved_mas0);
@@ -318,7 +318,7 @@ e500_alloc_tlb1_entry(void)
 	const u_int slot = tlb1->tlb1_freelist[--tlb1->tlb1_numfree];
 	KASSERT((tlb1->tlb1_entries[slot].e_hwtlb.hwtlb_mas1 & MAS1_V) == 0);
 	tlb1->tlb1_entries[slot].e_hwtlb.hwtlb_mas0 = 
-	    MAS0_TLBSEL_TLB1 | __SHIFTIN(slot, MAS0_ESEL);
+	    MAS0_TLBSEL_TLB1 | __SHIFTOUT(slot, MAS0_ESEL);
 	return (int)slot;
 }
 
@@ -359,7 +359,6 @@ e500_tlb_invalidate_all(void)
 	 */
 #if 1
 	__asm volatile("tlbivax\t0, %0" :: "b"(4));	/* INV_ALL */
-	__asm volatile("tlbsync\n\tisync\n\tsync");
 #else
 	mtspr(SPR_MMUCSR0, MMUCSR0_TLB0_FL);
 	while (mfspr(SPR_MMUCSR0) != 0)
@@ -412,7 +411,7 @@ e500_tlb_invalidate_globals(void)
 			__asm volatile("tlbwe");
 		}
 	}
-	__asm volatile("isync\n\tsync");
+	__asm volatile("isync");
 	wrtee(msr);
 }
 
@@ -450,7 +449,7 @@ e500_tlb_invalidate_asids(tlb_asid_t asid_lo, tlb_asid_t asid_hi)
 			}
 		}
 	}
-	__asm volatile("isync\n\tsync");
+	__asm volatile("isync");
 	wrtee(msr);
 }
 
@@ -498,26 +497,9 @@ e500_tlb_invalidate_addr(vaddr_t va, tlb_asid_t asid)
 	/*
 	 * Bits 60 & 61 have meaning
 	 */
-	if (asid == KERNEL_PID) {
-		/*
-		 * For data accesses, the context-synchronizing instruction
-		 * before tlbwe or tlbivax ensures that all memory accesses
-		 * due to preceding instructions have completed to a point
-		 * at which they have reported all exceptions they will cause.
-		 */
-		__asm volatile("isync");
-	}
 	__asm volatile("tlbivax\t0, %0" :: "b"(va));
 	__asm volatile("tlbsync");
-	__asm volatile("tlbsync");	/* Why? */
-	if (asid == KERNEL_PID) {
-		/*
-		 * The context-synchronizing instruction after tlbwe or tlbivax
-		 * ensures that subsequent accesses (data and instruction) use
-		 * the updated value in any TLB entries affected.
-		 */
-		__asm volatile("isync\n\tsync");
-	}
+	__asm volatile("tlbsync");
 }
 
 static bool
@@ -544,10 +526,9 @@ e500_tlb_update_addr(vaddr_t va, tlb_asid_t asid, pt_entry_t pte, bool insert)
 	}
 	mtspr(SPR_MAS2, hwtlb.hwtlb_mas2);
 	mtspr(SPR_MAS3, hwtlb.hwtlb_mas3);
-	//mtspr(SPR_MAS7, 0);
 	__asm volatile("tlbwe");
-	if (asid == KERNEL_PID)
-		__asm volatile("isync\n\tsync");
+	if (asid == 0)
+		__asm volatile("isync");
 	wrtee(msr);
 #if 0
 	if (asid)
@@ -643,6 +624,11 @@ e500_tlb_walk(void *ctx, bool (*func)(void *, vaddr_t, uint32_t, uint32_t))
 			mtspr(SPR_MAS2, epn);
 			__asm volatile("tlbre");
 			hwtlb.hwtlb_mas1 = mfspr(SPR_MAS1);
+			/*
+			 * If this is a valid entry for AS space 1 and
+			 * its asid matches the constraints of the caller,
+			 * clear its valid bit.
+			 */
 			if (hwtlb.hwtlb_mas1 & MAS1_V) {
 				hwtlb.hwtlb_mas2 = mfspr(SPR_MAS2);
 				hwtlb.hwtlb_mas3 = mfspr(SPR_MAS3);
@@ -658,7 +644,7 @@ e500_tlb_walk(void *ctx, bool (*func)(void *, vaddr_t, uint32_t, uint32_t))
 }
 
 static struct e500_xtlb *
-e500_tlb_lookup_xtlb_pa(vaddr_t pa, u_int *slotp)
+e500_tlb_lookup_xtlb(vaddr_t va, u_int *slotp)
 {
 	struct e500_tlb1 * const tlb1 = &e500_tlb1;
 	struct e500_xtlb *xtlb = tlb1->tlb1_entries;
@@ -667,31 +653,9 @@ e500_tlb_lookup_xtlb_pa(vaddr_t pa, u_int *slotp)
 	 * See if we have a TLB entry for the pa.
 	 */
 	for (u_int i = 0; i < tlb1->tlb1_numentries; i++, xtlb++) {
-		psize_t mask = ~(xtlb->e_tlb.tlb_size - 1);
 		if ((xtlb->e_hwtlb.hwtlb_mas1 & MAS1_V)
-		    && ((pa ^ xtlb->e_tlb.tlb_pte) & mask) == 0) {
-			if (slotp != NULL)
-				*slotp = i;
-			return xtlb;
-		}
-	}
-
-	return NULL;
-}
-
-struct e500_xtlb *
-e500_tlb_lookup_xtlb(vaddr_t va, u_int *slotp)
-{
-	struct e500_tlb1 * const tlb1 = &e500_tlb1;
-	struct e500_xtlb *xtlb = tlb1->tlb1_entries;
-
-	/*
-	 * See if we have a TLB entry for the va.
-	 */
-	for (u_int i = 0; i < tlb1->tlb1_numentries; i++, xtlb++) {
-		vsize_t mask = ~(xtlb->e_tlb.tlb_size - 1);
-		if ((xtlb->e_hwtlb.hwtlb_mas1 & MAS1_V)
-		    && ((va ^ xtlb->e_tlb.tlb_va) & mask) == 0) {
+		    && xtlb->e_tlb.tlb_va <= va
+		    && va < xtlb->e_tlb.tlb_va + xtlb->e_tlb.tlb_size) {
 			if (slotp != NULL)
 				*slotp = i;
 			return xtlb;
@@ -711,10 +675,9 @@ e500_tlb_lookup_xtlb2(vaddr_t va, vsize_t len)
 	 * See if we have a TLB entry for the pa.
 	 */
 	for (u_int i = 0; i < tlb1->tlb1_numentries; i++, xtlb++) {
-		vsize_t mask = ~(xtlb->e_tlb.tlb_size - 1);
 		if ((xtlb->e_hwtlb.hwtlb_mas1 & MAS1_V)
-		    && ((va ^ xtlb->e_tlb.tlb_va) & mask) == 0
-		    && (((va + len - 1) ^ va) & mask) == 0) {
+		    && xtlb->e_tlb.tlb_va < va + len
+		    && va < xtlb->e_tlb.tlb_va + xtlb->e_tlb.tlb_size) {
 			return xtlb;
 		}
 	}
@@ -725,7 +688,7 @@ e500_tlb_lookup_xtlb2(vaddr_t va, vsize_t len)
 static void *
 e500_tlb_mapiodev(paddr_t pa, psize_t len, bool prefetchable)
 {
-	struct e500_xtlb * const xtlb = e500_tlb_lookup_xtlb_pa(pa, NULL);
+	struct e500_xtlb * const xtlb = e500_tlb_lookup_xtlb(pa, NULL);
 
 	/*
 	 * See if we have a TLB entry for the pa.  If completely falls within
@@ -733,11 +696,11 @@ e500_tlb_mapiodev(paddr_t pa, psize_t len, bool prefetchable)
 	 * is not cacheable.
 	 */
 	if (xtlb
+	    && pa + len <= xtlb->e_tlb.tlb_va + xtlb->e_tlb.tlb_size
 	    && (prefetchable
 		|| (xtlb->e_tlb.tlb_pte & PTE_WIG) == (PTE_I|PTE_G))) {
 		xtlb->e_refcnt++;
-		return (void *) (xtlb->e_tlb.tlb_va
-		    + pa - (xtlb->e_tlb.tlb_pte & PTE_RPN_MASK));
+		return (void *) pa;
 	}
 	return NULL;
 }
@@ -763,12 +726,13 @@ e500_tlb_ioreserve(vaddr_t va, vsize_t len, pt_entry_t pte)
 	KASSERT(len >= PAGE_SIZE);
 	KASSERT((len & (len - 1)) == 0);
 	KASSERT((va & (len - 1)) == 0);
-	KASSERT(((pte & PTE_RPN_MASK) & (len - 1)) == 0);
+	KASSERT((pte & (len - 1)) == 0);
 
 	if ((xtlb = e500_tlb_lookup_xtlb2(va, len)) != NULL) {
-		psize_t mask = ~(xtlb->e_tlb.tlb_size - 1);
-		KASSERT(len <= xtlb->e_tlb.tlb_size);
-		KASSERT((pte & mask) == (xtlb->e_tlb.tlb_pte & mask));
+		if (va < xtlb->e_tlb.tlb_va
+		    || xtlb->e_tlb.tlb_va + xtlb->e_tlb.tlb_size < va + len
+		    || va - xtlb->e_tlb.tlb_va != pte - xtlb->e_tlb.tlb_pte)
+			return EBUSY;
 		xtlb->e_refcnt++;
 		return 0;
 	}
@@ -784,7 +748,7 @@ e500_tlb_ioreserve(vaddr_t va, vsize_t len, pt_entry_t pte)
 	xtlb->e_tlb.tlb_asid = KERNEL_PID;
 
 	xtlb->e_hwtlb = tlb_to_hwtlb(xtlb->e_tlb);
-	xtlb->e_hwtlb.hwtlb_mas0 |= __SHIFTIN(slot, MAS0_ESEL);
+	xtlb->e_hwtlb.hwtlb_mas0 |= __SHIFTOUT(slot, MAS0_ESEL);
 	hwtlb_write(xtlb->e_hwtlb, true);
 	return 0;
 }
@@ -939,15 +903,6 @@ e500_tlb_init(vaddr_t endkernel, psize_t memsize)
 		if (xtlb->e_tlb.tlb_va == 0
 		    || xtlb->e_tlb.tlb_va + xtlb->e_tlb.tlb_size <= memsize) {
 			memmapped += xtlb->e_tlb.tlb_size;
-			/*
-			 * Let make sure main memory is setup so it's memory
-			 * coherent.  For some reason u-boot doesn't set it up
-			 * that way.
-			 */
-			if ((xtlb->e_hwtlb.hwtlb_mas2 & MAS2_M) == 0) {
-				xtlb->e_hwtlb.hwtlb_mas2 |= MAS2_M;
-				hwtlb_write(xtlb->e_hwtlb, true);
-			}
 		}
 	}
 
@@ -995,7 +950,7 @@ e500_tlb_init(vaddr_t endkernel, psize_t memsize)
 		kxtlb->e_tlb.tlb_asid = KERNEL_PID;
 
 		kxtlb->e_hwtlb = tlb_to_hwtlb(kxtlb->e_tlb);
-		kxtlb->e_hwtlb.hwtlb_mas0 |= __SHIFTIN(kslot, MAS0_ESEL);
+		kxtlb->e_hwtlb.hwtlb_mas0 |= __SHIFTOUT(kslot, MAS0_ESEL);
 		kxtlb->e_hwtlb.hwtlb_mas1 |= MAS1_TS;
 		hwtlb_write(kxtlb->e_hwtlb, true);
 

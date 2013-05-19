@@ -1,4 +1,4 @@
-/*	$NetBSD: undefined.c,v 1.48 2012/11/12 18:00:35 skrll Exp $	*/
+/*	$NetBSD: undefined.c,v 1.43 2011/11/16 16:59:47 he Exp $	*/
 
 /*
  * Copyright (c) 2001 Ben Harris.
@@ -54,16 +54,15 @@
 #include <sys/kgdb.h>
 #endif
 
-__KERNEL_RCSID(0, "$NetBSD: undefined.c,v 1.48 2012/11/12 18:00:35 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: undefined.c,v 1.43 2011/11/16 16:59:47 he Exp $");
 
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/queue.h>
 #include <sys/signal.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/syslog.h>
 #include <sys/vmmeter.h>
-#include <sys/cpu.h>
 #ifdef FAST_FPE
 #include <sys/acct.h>
 #endif
@@ -71,11 +70,10 @@ __KERNEL_RCSID(0, "$NetBSD: undefined.c,v 1.48 2012/11/12 18:00:35 skrll Exp $")
 
 #include <uvm/uvm_extern.h>
 
+#include <machine/cpu.h>
 #include <machine/frame.h>
-#include <machine/pcb.h>
-#include <machine/trap.h>
-
 #include <arm/undefined.h>
+#include <machine/trap.h>
 
 #include <arch/arm/arm/disassem.h>
 
@@ -101,7 +99,8 @@ install_coproc_handler(int coproc, undef_handler_t handler)
 	KASSERT(coproc >= 0 && coproc < NUM_UNKNOWN_HANDLERS);
 	KASSERT(handler != NULL); /* Used to be legal. */
 
-	uh = kmem_alloc(sizeof(*uh), KM_SLEEP);
+	/* XXX: M_TEMP??? */
+	uh = malloc(sizeof(*uh), M_TEMP, M_WAITOK);
 	uh->uh_handler = handler;
 	install_coproc_handler_static(coproc, uh);
 	return uh;
@@ -120,12 +119,8 @@ remove_coproc_handler(void *cookie)
 	struct undefined_handler *uh = cookie;
 
 	LIST_REMOVE(uh, uh_link);
-	kmem_free(uh, sizeof(*uh));
+	free(uh, M_TEMP);
 }
-
-static struct evcnt cp15_ev =
-    EVCNT_INITIALIZER(EVCNT_TYPE_TRAP, NULL, "cpu0", "undefined cp15 insn traps");
-EVCNT_ATTACH_STATIC(cp15_ev);
 
 static int
 cp15_trapper(u_int addr, u_int insn, struct trapframe *frame, int code)
@@ -157,7 +152,6 @@ cp15_trapper(u_int addr, u_int insn, struct trapframe *frame, int code)
 	if ((insn & 0xffff0fff) == 0xee1d0f70) {
 		*regp = (uintptr_t)l->l_private;
 		frame->tf_pc += INSN_SIZE;
-		cp15_ev.ev_count++;
 		return 0;
 	}
 
@@ -171,7 +165,6 @@ cp15_trapper(u_int addr, u_int insn, struct trapframe *frame, int code)
 		else
 			pcb->pcb_user_pid_rw = *regp;
 		frame->tf_pc += INSN_SIZE;
-		cp15_ev.ev_count++;
 		return 0;
 	}
 
@@ -201,7 +194,7 @@ gdb_trapper(u_int addr, u_int insn, struct trapframe *frame, int code)
 				KSI_INIT_TRAP(&ksi);
 				ksi.ksi_signo = SIGTRAP;
 				ksi.ksi_code = TRAP_BRKPT;
-				ksi.ksi_addr = (uint32_t *)addr;
+				ksi.ksi_addr = (u_int32_t *)addr;
 				ksi.ksi_trap = 0;
 				trapsignal(l, &ksi);
 				return 0;
@@ -242,10 +235,6 @@ undefined_init(void)
 #endif
 }
 
-static struct evcnt und_ev =
-    EVCNT_INITIALIZER(EVCNT_TYPE_TRAP, NULL, "cpu0", "undefined insn traps");
-EVCNT_ATTACH_STATIC(und_ev);
-
 void
 undefinedinstruction(trapframe_t *frame)
 {
@@ -259,8 +248,6 @@ undefinedinstruction(trapframe_t *frame)
 #ifdef VERBOSE_ARM32
 	int s;
 #endif
-
-	und_ev.ev_count++;
 
 	/* Enable interrupts if they were enabled before the exception. */
 #ifdef acorn26
@@ -318,7 +305,7 @@ undefinedinstruction(trapframe_t *frame)
 			KSI_INIT_TRAP(&ksi);
 			ksi.ksi_signo = SIGILL;
 			ksi.ksi_code = ILL_ILLOPC;
-			ksi.ksi_addr = (uint32_t *)(intptr_t) fault_pc;
+			ksi.ksi_addr = (u_int32_t *)(intptr_t) fault_pc;
 			trapsignal(l, &ksi);
 			userret(l);
 			return;
@@ -332,7 +319,7 @@ undefinedinstruction(trapframe_t *frame)
 		 * not really matter does it ?
 		 */
 
-		fault_instruction = *(uint32_t *)fault_pc;
+		fault_instruction = *(u_int32_t *)fault_pc;
 	}
 
 	/* Update vmmeter statistics */
@@ -365,12 +352,13 @@ undefinedinstruction(trapframe_t *frame)
 	}
 
 	if (user) {
+		struct pcb *pcb = lwp_getpcb(l);
 		/*
 		 * Modify the fault_code to reflect the USR/SVC state at
 		 * time of fault.
 		 */
 		fault_code = FAULT_USER;
-		lwp_settrapframe(l, frame);
+		pcb->pcb_tf = frame;
 	} else
 		fault_code = 0;
 
@@ -416,7 +404,7 @@ undefinedinstruction(trapframe_t *frame)
 		KSI_INIT_TRAP(&ksi);
 		ksi.ksi_signo = SIGILL;
 		ksi.ksi_code = ILL_ILLOPC;
-		ksi.ksi_addr = (uint32_t *)fault_pc;
+		ksi.ksi_addr = (u_int32_t *)fault_pc;
 		ksi.ksi_trap = fault_instruction;
 		trapsignal(l, &ksi);
 	}

@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.118 2013/04/27 21:43:34 christos Exp $
+# $NetBSD: GENERIC,v 1.110.2.1 2012/06/12 17:47:50 riz Exp $
 #
 # GENERIC machine description file
 # 
@@ -42,6 +42,10 @@ options 	RTC_OFFSET=0	# hardware clock is this many mins. west of GMT
 options 	CPU_SA110	# Support the SA110 core
 makeoptions	CPUFLAGS="-march=armv4 -mtune=strongarm"
 
+# FPA options
+
+#options 	ARMFPE		# ARM Ltd FPE
+
 # Default console is wscons, if igsfb(4) and pckbc(4) are configured,
 # or com(4) otherwise.  You can force a serial console with these options
 #options 	CONSDEVNAME="\"com\"",CONCOMADDR=0x3f8,CONSPEED=115200
@@ -82,10 +86,13 @@ options 	WAPBL		# File system journaling support
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/ IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking
 #options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
@@ -113,7 +120,6 @@ options 	NFS_BOOT_DHCP
 # Compatibility options
 
 #options 	COMPAT_43	# 4.3BSD compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
@@ -136,6 +142,7 @@ options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 # Device options
 
@@ -284,7 +291,7 @@ pseudo-device	swcrypto	# software crypto implementation
 pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
 pseudo-device	fss			# file system snapshot device
-#pseudo-device	cgd			# cryptographic disk devices
+#pseudo-device	cgd		4	# cryptographic disk devices
 
 # network pseudo-devices
 pseudo-device	bpfilter		# Berkeley packet filter
@@ -313,7 +320,7 @@ pseudo-device	wsmux			# mouse & keyboard multiplexor
 # Veriexec
 #
 # a pseudo device needed for veriexec
-#pseudo-device	veriexec
+#pseudo-device	veriexec		1
 #
 # Uncomment the fingerprint methods below that are desired. Note that
 # removing fingerprint methods will have almost no impact on the kernel

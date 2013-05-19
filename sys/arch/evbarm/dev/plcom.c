@@ -1,4 +1,4 @@
-/*	$NetBSD: plcom.c,v 1.45 2013/05/01 07:38:01 mlelstv Exp $	*/
+/*	$NetBSD: plcom.c,v 1.33.2.1 2012/08/09 06:36:43 jdc Exp $	*/
 
 /*-
  * Copyright (c) 2001 ARM Ltd
@@ -94,7 +94,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: plcom.c,v 1.45 2013/05/01 07:38:01 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: plcom.c,v 1.33.2.1 2012/08/09 06:36:43 jdc Exp $");
 
 #include "opt_plcom.h"
 #include "opt_ddb.h"
@@ -537,7 +537,7 @@ plcom_attach_subr(struct plcom_softc *sc)
 	 * Allow kgdb to "take over" this port.  If this is
 	 * the kgdb device, it has exclusive use.
 	 */
-	if (bus_space_is_equal(pi->pi_iot, plcomkgdb_info.pi_iot) &&
+	if (bus_space_is_equal(iot, plcomkgdb_info.pi_iot) &&
 	    pi->pi_iobase == plcomkgdb_info.pi_iobase) {
 		if (!ISSET(sc->sc_hwflags, PLCOM_HW_CONSOLE)) {
 			plcom_kgdb_attached = 1;
@@ -2382,7 +2382,7 @@ plcominit(struct plcom_instance *pi, int rate, int frequency, tcflag_t cflag)
 	/* Ought to do something like this, but we have no sc to
 	   dereference. */
 	/* XXX device_unit() abuse */
-	sc->sc_set_mcr(sc->sc_set_mcr_arg, device_unit(sc->sc_dev),
+	sc->sc_set_mcr(sc->sc_set_mcr_arg, device_unit(&sc->sc_dev),
 	    PL01X_MCR_DTR | PL01X_MCR_RTS);
 #endif
 
@@ -2450,7 +2450,6 @@ void
 plcomcnpollc(dev_t dev, int on)
 {
 
-	plcom_readaheadcount = 0;
 }
 
 #ifdef KGDB
@@ -2482,14 +2481,15 @@ plcom_kgdb_attach(struct plcom_instance *pi, int rate, int frequency,
 int
 plcom_kgdb_getc(void *arg)
 {
-	return plcom_common_getc(NODEV, &plcomkgdb_info);
+
+	return plcom_common_getc(NODEV, plcom_kgdb_iot, plcom_kgdb_ioh);
 }
 
 /* ARGSUSED */
 void
 plcom_kgdb_putc(void *arg, int c)
 {
-	plcom_common_putc(NODEV, &plcomkgdb_info, c);
+	plcom_common_putc(NODEV, plcom_kgdb_iot, plcom_kgdb_ioh, c);
 }
 #endif /* KGDB */
 
@@ -2509,7 +2509,7 @@ plcom_is_console(bus_space_tag_t iot, bus_addr_t iobase,
 	else if (!plcom_kgdb_attached &&
 	    bus_space_is_equal(iot, plcomkgdb_info.pi_iot) &&
 	    iobase == plcomkgdb_info.pi_iobase) 
-		help = plcomkgdb_info.pi_ioh;
+		help = plcom_kgdb_ioh;
 #endif
 	else
 		return 0;

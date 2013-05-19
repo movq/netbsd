@@ -1,4 +1,4 @@
-/*	$NetBSD: auth.c,v 1.21 2012/03/21 05:33:27 matt Exp $	*/
+/*	$NetBSD: auth.c,v 1.20 2012/01/09 15:25:33 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)auth.c	8.3 (Berkeley) 5/30/95"
 #else
-__RCSID("$NetBSD: auth.c,v 1.21 2012/03/21 05:33:27 matt Exp $");
+__RCSID("$NetBSD: auth.c,v 1.20 2012/01/09 15:25:33 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -167,8 +167,10 @@ static Authenticator NoAuth = { .type = 0 };
 static int	i_support = 0;
 static int	i_wont_support = 0;
 
-Authenticator *
-findauthenticator(int type, int way)
+	Authenticator *
+findauthenticator(type, way)
+	int type;
+	int way;
 {
 	Authenticator *ap = authenticators;
 
@@ -177,8 +179,10 @@ findauthenticator(int type, int way)
 	return(ap->type ? ap : 0);
 }
 
-void
-auth_init(const char *name, int server)
+	void
+auth_init(name, server)
+	const char *name;
+	int server;
 {
 	Authenticator *ap = authenticators;
 
@@ -203,8 +207,9 @@ auth_init(const char *name, int server)
 	}
 }
 
-void
-auth_disable_name(char *name)
+	void
+auth_disable_name(name)
+	char *name;
 {
 	int x;
 	for (x = 0; x < AUTHTYPE_CNT; ++x) {
@@ -215,8 +220,10 @@ auth_disable_name(char *name)
 	}
 }
 
-int
-getauthmask(char *type, int *maskp)
+	int
+getauthmask(type, maskp)
+	char *type;
+	int *maskp;
 {
 	register int x;
 
@@ -234,20 +241,24 @@ getauthmask(char *type, int *maskp)
 	return(0);
 }
 
-int
-auth_enable(char *type)
+	int
+auth_enable(type)
+	char *type;
 {
 	return(auth_onoff(type, 1));
 }
 
-int
-auth_disable(char *type)
+	int
+auth_disable(type)
+	char *type;
 {
 	return(auth_onoff(type, 0));
 }
 
-int
-auth_onoff(char *type, int on)
+	int
+auth_onoff(type, on)
+	char *type;
+	int on;
 {
 	int i, mask = -1;
 	Authenticator *ap;
@@ -277,8 +288,9 @@ auth_onoff(char *type, int on)
 	return(1);
 }
 
-int
-auth_togdebug(int on)
+	int
+auth_togdebug(on)
+	int on;
 {
 	if (on < 0)
 		auth_debug_mode ^= 1;
@@ -288,8 +300,9 @@ auth_togdebug(int on)
 	return(1);
 }
 
-int
-auth_status(char *s)
+	int
+auth_status(s)
+	char *s;
 {
 	Authenticator *ap;
 	int i, mask;
@@ -315,8 +328,8 @@ auth_status(char *s)
  * This routine is called by the server to start authentication
  * negotiation.
  */
-void
-auth_request(void)
+	void
+auth_request()
 {
 	static unsigned char str_request[64] = { IAC, SB,
 						 TELOPT_AUTHENTICATION,
@@ -355,8 +368,10 @@ auth_request(void)
  * with KERBEROS instead of LOGIN (which is against what the
  * protocol says)) you will have to hack this code...
  */
-void
-auth_send(unsigned char *data, int cnt)
+	void
+auth_send(data, cnt)
+	unsigned char *data;
+	int cnt;
 {
 	Authenticator *ap;
 	static unsigned char str_none[] = { IAC, SB, TELOPT_AUTHENTICATION,
@@ -439,8 +454,8 @@ auth_send(unsigned char *data, int cnt)
 #endif /* KANNAN */
 }
 
-void
-auth_send_retry(void)
+	void
+auth_send_retry()
 {
 	/*
 	 * if auth_send_cnt <= 0 then auth_send will end up rejecting
@@ -449,8 +464,10 @@ auth_send_retry(void)
 	auth_send(auth_send_data, auth_send_cnt);
 }
 
-void
-auth_is(unsigned char *data, int cnt)
+	void
+auth_is(data, cnt)
+	unsigned char *data;
+	int cnt;
 {
 	Authenticator *ap;
 
@@ -470,8 +487,10 @@ auth_is(unsigned char *data, int cnt)
 			Name, *data);
 }
 
-void
-auth_reply(unsigned char *data, int cnt)
+	void
+auth_reply(data, cnt)
+	unsigned char *data;
+	int cnt;
 {
 	Authenticator *ap;
 
@@ -486,8 +505,10 @@ auth_reply(unsigned char *data, int cnt)
 			Name, *data);
 }
 
-void
-auth_name(unsigned char *data, int cnt)
+	void
+auth_name(data, cnt)
+	unsigned char *data;
+	int cnt;
 {
 	unsigned char savename[256];
 
@@ -509,8 +530,10 @@ auth_name(unsigned char *data, int cnt)
 	auth_encrypt_user(savename);
 }
 
-int
-auth_sendname(unsigned char *cp, int len)
+	int
+auth_sendname(cp, len)
+	unsigned char *cp;
+	int len;
 {
 	static unsigned char str_request[256+6]
 			= { IAC, SB, TELOPT_AUTHENTICATION, TELQUAL_NAME, };
@@ -530,8 +553,10 @@ auth_sendname(unsigned char *cp, int len)
 	return(1);
 }
 
-void
-auth_finished(Authenticator *ap, int result)
+	void
+auth_finished(ap, result)
+	Authenticator *ap;
+	int result;
 {
 	if (!(authenticated = ap))
 		authenticated = &NoAuth;
@@ -539,14 +564,17 @@ auth_finished(Authenticator *ap, int result)
 }
 
 	/* ARGSUSED */
-static void
-auth_intr(int sig)
+	static void
+auth_intr(sig)
+	int sig;
 {
 	auth_finished(0, AUTH_REJECT);
 }
 
-int
-auth_wait(char *name, size_t l)
+	int
+auth_wait(name, l)
+	char *name;
+	size_t l;
 {
 	if (auth_debug_mode)
 		printf(">>>%s: in auth_wait.\r\n", Name);
@@ -577,14 +605,17 @@ auth_wait(char *name, size_t l)
 	return(validuser);
 }
 
-void
-auth_debug(int mode)
+	void
+auth_debug(mode)
+	int mode;
 {
 	auth_debug_mode = mode;
 }
 
-void
-auth_printsub(unsigned char *data, int cnt, unsigned char *buf, int buflen)
+	void
+auth_printsub(data, cnt, buf, buflen)
+	unsigned char *data, *buf;
+	int cnt, buflen;
 {
 	Authenticator *ap;
 
@@ -594,8 +625,10 @@ auth_printsub(unsigned char *data, int cnt, unsigned char *buf, int buflen)
 		auth_gen_printsub(data, cnt, buf, buflen);
 }
 
-void
-auth_gen_printsub(unsigned char *data, int cnt, unsigned char *buf, int buflen)
+	void
+auth_gen_printsub(data, cnt, buf, buflen)
+	unsigned char *data, *buf;
+	int cnt, buflen;
 {
 	register unsigned char *cp;
 	unsigned char tbuf[16];

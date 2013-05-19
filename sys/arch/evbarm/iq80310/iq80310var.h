@@ -1,4 +1,4 @@
-/*	$NetBSD: iq80310var.h,v 1.8 2012/10/03 16:51:44 chs Exp $	*/
+/*	$NetBSD: iq80310var.h,v 1.7.152.1 2012/10/17 21:53:58 riz Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.

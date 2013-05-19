@@ -30,7 +30,7 @@
 #include <machine/asm.h>
 #include "assym.h"
 
-RCSID("$NetBSD: spe_subr.S,v 1.3 2012/05/20 06:17:28 matt Exp $")
+RCSID("$NetBSD: spe_subr.S,v 1.2.16.1 2012/06/13 19:42:56 riz Exp $")
 
 	.text
 	.machine	e500x2

@@ -1,11 +1,9 @@
-#	$NetBSD: Makefile,v 1.120 2013/05/09 11:44:36 skrll Exp $
+#	$NetBSD: Makefile,v 1.110 2011/10/07 09:15:21 mrg Exp $
 #
 # NOTE: when changing ld.so, ensure that ldd still compiles.
 #
 
 WARNS?=4
-
-LDELFSO_MACHINE_ARCH?= ${MACHINE_ARCH}
 
 # This needs to be before bsd.init.mk
 .if defined(BSD_MK_COMPAT_FILE)
@@ -26,18 +24,18 @@ ARCHSUBDIR=	${MACHINE_CPU}
 .endif
 M=		${.CURDIR}/arch/${ARCHSUBDIR}
 
-.if ((${LDELFSO_MACHINE_ARCH} == "alpha") ||				\
+.if ((${MACHINE_ARCH} == "alpha") ||					\
      (${MACHINE_CPU} == "arm") ||					\
-     (${LDELFSO_MACHINE_ARCH} == "hppa") ||				\
-     (${LDELFSO_MACHINE_ARCH} == "i386") ||				\
-     (${LDELFSO_MACHINE_ARCH} == "m68k") ||				\
+     (${MACHINE_ARCH} == "hppa") ||					\
+     (${MACHINE_ARCH} == "i386") ||					\
+     (${MACHINE_ARCH} == "m68k") ||					\
      (${MACHINE_CPU} == "mips") ||					\
-     (${LDELFSO_MACHINE_ARCH} == "powerpc") ||				\
+     (${MACHINE_ARCH} == "powerpc") ||					\
      (${MACHINE_CPU} == "sh3") ||					\
-     (${LDELFSO_MACHINE_ARCH} == "sparc") ||				\
-     (${LDELFSO_MACHINE_ARCH} == "sparc64") ||				\
-     (${LDELFSO_MACHINE_ARCH} == "x86_64") ||				\
-     (${LDELFSO_MACHINE_ARCH} == "vax")) &&				\
+     (${MACHINE_ARCH} == "sparc") ||					\
+     (${MACHINE_ARCH} == "sparc64") ||					\
+     (${MACHINE_ARCH} == "x86_64") ||					\
+     (${MACHINE_ARCH} == "vax")) &&					\
     ${MKPIC} != "no"
 
 LDFLAGS+=	${${ACTIVE_CC} == "clang":? -Wl,-Bsymbolic : -symbolic} \
@@ -45,7 +43,7 @@ LDFLAGS+=	${${ACTIVE_CC} == "clang":? -Wl,-Bsymbolic : -symbolic} \
 LDFLAGS+=	-Wl,-static
 LDFLAGS+=	-Wl,--warn-shared-textrel
 
-COPTS+=		-fvisibility=hidden
+CFLAGS+=	-fvisibility=hidden
 
 # Adds SRCS, CPPFLAGS, LDFLAGS, etc.  Must go first so MD startup source
 # is first.
@@ -65,7 +63,7 @@ CLIBOBJ!=	cd ${NETBSDSRCDIR}/lib/libc && ${PRINTOBJDIR}
 
 SRCS+=		rtld.c reloc.c symbol.c xmalloc.c xprintf.c debug.c \
 		map_object.c load.c search.c headers.c paths.c expand.c \
-		tls.c symver.c diagassert.c
+		tls.c symver.c
 
 .if ${USE_FORT} == "yes"
 .PATH.c: ${NETBSDSRCDIR}/lib/libc/misc
@@ -93,14 +91,11 @@ CPPFLAGS+=	-DCOMBRELOC
 #CPPFLAGS+=	-DDEBUG
 #CPPFLAGS+=	-DRTLD_DEBUG
 #CPPFLAGS+=	-DRTLD_DEBUG_RELOC
-.if !empty(LDELFSO_MACHINE_ARCH:Mearm*)
-CPPFLAGS+=	-I${NETBSDSRCDIR}/lib/libexecinfo
-.endif
 #DBG=		-g
-COPTS+=		-O3 -fomit-frame-pointer
+DBG=		-O3 -fomit-frame-pointer
 
-.if ${LDELFSO_MACHINE_ARCH} == "i386" || ${LDELFSO_MACHINE_ARCH} == "x86_64"
-COPTS+=		-mno-3dnow -mno-mmx -mno-sse -mno-sse2 -mno-sse3
+.if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64"
+DBG+=		-mno-3dnow -mno-mmx -mno-sse -mno-sse2 -mno-sse3
 .endif
 
 
@@ -134,26 +129,12 @@ STRIPFLAG=
 
 .PATH: $M
 
-
 ${PROG}: ${OBJS} ${DPADD}
 	${_MKMSG_LINK} ${PROG}
 	${CC} ${LDFLAGS} -o ${PROG} ${OBJS} ${LDADD}
-.if ${MKDEBUG} != "no"
-	(  ${OBJCOPY} --only-keep-debug ${.TARGET} ${.TARGET}.debug \
-	   && ${OBJCOPY} --strip-debug -p -R .gnu_debuglink \
-	   --add-gnu-debuglink=${.TARGET}.debug ${.TARGET} \
-	) || (rm -f ${.TARGET}.debug; false)
-
-_PROGDEBUG.${PROG} := ${PROG}.debug
-.endif
-
 
 .if ${SHLINKINSTALLDIR} != "/usr/libexec"
 SYMLINKS+=	${SHLINKINSTALLDIR}/${PROG} /usr/libexec/${PROG}
-.if ${MKDEBUG} != "no"
-SYMLINKS+=	${DEBUGDIR}${BINDIR}/${PROG}.debug \
-		${DEBUGDIR}/usr${BINDIR}/${PROG}.debug
-.endif
 .endif
 
 .include <bsd.prog.mk>

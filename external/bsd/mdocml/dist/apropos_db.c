@@ -1,6 +1,6 @@
-/*	$Vendor-Id: apropos_db.c,v 1.31 2012/03/24 01:46:25 kristaps Exp $ */
+/*	$Vendor-Id: apropos_db.c,v 1.28 2011/12/25 14:58:39 schwarze Exp $ */
 /*
- * Copyright (c) 2011, 2012 Kristaps Dzonsons <kristaps@bsd.lv>
+ * Copyright (c) 2011 Kristaps Dzonsons <kristaps@bsd.lv>
  * Copyright (c) 2011 Ingo Schwarze <schwarze@openbsd.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
@@ -42,15 +42,19 @@
 #include "apropos_db.h"
 #include "mandoc.h"
 
-#define	RESFREE(_x) \
-	do { \
-		free((_x)->file); \
-		free((_x)->cat); \
-		free((_x)->title); \
-		free((_x)->arch); \
-		free((_x)->desc); \
-		free((_x)->matches); \
-	} while (/*CONSTCOND*/0)
+struct	rec {
+	struct res	 res; /* resulting record info */
+	/*
+	 * Maintain a binary tree for checking the uniqueness of `rec'
+	 * when adding elements to the results array.
+	 * Since the results array is dynamic, use offset in the array
+	 * instead of a pointer to the structure.
+	 */
+	int		 lhs;
+	int		 rhs;
+	int		 matched; /* expression is true */
+	int		*matches; /* partial truth evaluations */
+};
 
 struct	expr {
 	int		 regex; /* is regex? */
@@ -69,7 +73,7 @@ struct	type {
 };
 
 struct	rectree {
-	struct res	*node; /* record array for dir tree */
+	struct rec	*node; /* record array for dir tree */
 	int		 len; /* length of record array */
 };
 
@@ -123,17 +127,18 @@ static	int	 btree_read(const DBT *, const DBT *,
 			uint64_t *, recno_t *, char **);
 static	int	 expreval(const struct expr *, int *);
 static	void	 exprexec(const struct expr *,
-			const char *, uint64_t, struct res *);
+			const char *, uint64_t, struct rec *);
 static	int	 exprmark(const struct expr *,
 			const char *, uint64_t, int *);
 static	struct expr *exprexpr(int, char *[], int *, int *, size_t *);
 static	struct expr *exprterm(char *, int);
 static	DB	*index_open(void);
 static	int	 index_read(const DBT *, const DBT *, int,
-			const struct mchars *, struct res *);
+			const struct mchars *, struct rec *);
 static	void	 norm_string(const char *,
 			const struct mchars *, char **);
 static	size_t	 norm_utf8(unsigned int, char[7]);
+static	void	 recfree(struct rec *);
 static	int	 single_search(struct rectree *, const struct opts *,
 			const struct expr *, size_t terms,
 			struct mchars *, int);
@@ -148,7 +153,6 @@ btree_open(void)
 	DB		*db;
 
 	memset(&info, 0, sizeof(BTREEINFO));
-	info.lorder = 4321;
 	info.flags = R_DUP;
 
 	db = dbopen(MANDOC_DB, O_RDONLY, 0, DB_BTREE, &info);
@@ -356,7 +360,7 @@ index_open(void)
  */
 static int
 index_read(const DBT *key, const DBT *val, int index,
-		const struct mchars *mc, struct res *rec)
+		const struct mchars *mc, struct rec *rec)
 {
 	size_t		 left;
 	char		*np, *cp;
@@ -376,24 +380,24 @@ index_read(const DBT *key, const DBT *val, int index,
 
 	cp = val->data;
 	assert(sizeof(recno_t) == key->size);
-	memcpy(&rec->rec, key->data, key->size);
-	rec->volume = index;
+	memcpy(&rec->res.rec, key->data, key->size);
+	rec->res.volume = index;
 
 	if ('d' == (type = *cp++))
-		rec->type = RESTYPE_MDOC;
+		rec->res.type = RESTYPE_MDOC;
 	else if ('a' == type)
-		rec->type = RESTYPE_MAN;
+		rec->res.type = RESTYPE_MAN;
 	else if ('c' == type)
-		rec->type = RESTYPE_CAT;
+		rec->res.type = RESTYPE_CAT;
 	else
 		return(0);
 
 	left--;
-	INDEX_BREAD(rec->file);
-	INDEX_BREAD(rec->cat);
-	INDEX_BREAD(rec->title);
-	INDEX_BREAD(rec->arch);
-	INDEX_BREAD(rec->desc);
+	INDEX_BREAD(rec->res.file);
+	INDEX_BREAD(rec->res.cat);
+	INDEX_BREAD(rec->res.title);
+	INDEX_BREAD(rec->res.arch);
+	INDEX_BREAD(rec->res.desc);
 	return(1);
 }
 
@@ -406,19 +410,17 @@ index_read(const DBT *key, const DBT *val, int index,
 int
 apropos_search(int pathsz, char **paths, const struct opts *opts,
 		const struct expr *expr, size_t terms, void *arg,
-		size_t *sz, struct res **resp,
 		void (*res)(struct res *, size_t, void *))
 {
 	struct rectree	 tree;
 	struct mchars	*mc;
-	int		 i, rc;
+	struct res	*ress;
+	int		 i, mlen, rc;
 
 	memset(&tree, 0, sizeof(struct rectree));
 
 	rc = 0;
 	mc = mchars_alloc();
-	*sz = 0;
-	*resp = NULL;
 
 	/*
 	 * Main loop.  Change into the directory containing manpage
@@ -428,19 +430,37 @@ apropos_search(int pathsz, char **paths, const struct opts *opts,
 	for (i = 0; i < pathsz; i++) {
 		if (chdir(paths[i]))
 			continue;
-		if (single_search(&tree, opts, expr, terms, mc, i))
-			continue;
-
-		resfree(tree.node, tree.len);
-		mchars_free(mc);
-		return(0);
+		if ( ! single_search(&tree, opts, expr, terms, mc, i))
+			goto out;
 	}
 
-	(*res)(tree.node, tree.len, arg);
-	*sz = tree.len;
-	*resp = tree.node;
+	/*
+	 * Count matching files, transfer to a "clean" array, then feed
+	 * them to the output handler.
+	 */
+
+	for (mlen = i = 0; i < tree.len; i++)
+		if (tree.node[i].matched)
+			mlen++;
+
+	ress = mandoc_malloc(mlen * sizeof(struct res));
+
+	for (mlen = i = 0; i < tree.len; i++)
+		if (tree.node[i].matched)
+			memcpy(&ress[mlen++], &tree.node[i].res,
+					sizeof(struct res));
+
+	(*res)(ress, mlen, arg);
+	free(ress);
+
+	rc = 1;
+out:
+	for (i = 0; i < tree.len; i++)
+		recfree(&tree.node[i]);
+
+	free(tree.node);
 	mchars_free(mc);
-	return(1);
+	return(rc);
 }
 
 static int
@@ -452,8 +472,8 @@ single_search(struct rectree *tree, const struct opts *opts,
 	DBT		 key, val;
 	DB		*btree, *idx;
 	char		*buf;
-	struct res	*rs;
-	struct res	 r;
+	struct rec	*rs;
+	struct rec	 r;
 	uint64_t	 mask;
 	recno_t		 rec;
 
@@ -464,7 +484,7 @@ single_search(struct rectree *tree, const struct opts *opts,
 	buf	= NULL;
 	rs	= tree->node;
 
-	memset(&r, 0, sizeof(struct res));
+	memset(&r, 0, sizeof(struct rec));
 
 	if (NULL == (btree = btree_open()))
 		return(1);
@@ -492,10 +512,10 @@ single_search(struct rectree *tree, const struct opts *opts,
 		 */
 
 		for (leaf = root; leaf >= 0; )
-			if (rec > rs[leaf].rec &&
+			if (rec > rs[leaf].res.rec &&
 					rs[leaf].rhs >= 0)
 				leaf = rs[leaf].rhs;
-			else if (rec < rs[leaf].rec &&
+			else if (rec < rs[leaf].res.rec &&
 					rs[leaf].lhs >= 0)
 				leaf = rs[leaf].lhs;
 			else
@@ -507,7 +527,7 @@ single_search(struct rectree *tree, const struct opts *opts,
 		 * try to evaluate it now and continue anyway.
 		 */
 
-		if (leaf >= 0 && rs[leaf].rec == rec) {
+		if (leaf >= 0 && rs[leaf].res.rec == rec) {
 			if (0 == rs[leaf].matched)
 				exprexec(expr, buf, mask, &rs[leaf]);
 			continue;
@@ -531,18 +551,18 @@ single_search(struct rectree *tree, const struct opts *opts,
 
 		/* XXX: this should be elsewhere, I guess? */
 
-		if (opts->cat && strcasecmp(opts->cat, r.cat))
+		if (opts->cat && strcasecmp(opts->cat, r.res.cat))
 			continue;
 
-		if (opts->arch && *r.arch)
-			if (strcasecmp(opts->arch, r.arch))
+		if (opts->arch && *r.res.arch)
+			if (strcasecmp(opts->arch, r.res.arch))
 				continue;
 
 		tree->node = rs = mandoc_realloc
-			(rs, (tree->len + 1) * sizeof(struct res));
+			(rs, (tree->len + 1) * sizeof(struct rec));
 
-		memcpy(&rs[tree->len], &r, sizeof(struct res));
-		memset(&r, 0, sizeof(struct res));
+		memcpy(&rs[tree->len], &r, sizeof(struct rec));
+		memset(&r, 0, sizeof(struct rec));
 		rs[tree->len].matches =
 			mandoc_calloc(terms, sizeof(int));
 
@@ -551,7 +571,7 @@ single_search(struct rectree *tree, const struct opts *opts,
 		/* Append to our tree. */
 
 		if (leaf >= 0) {
-			if (rec > rs[leaf].rec)
+			if (rec > rs[leaf].res.rec)
 				rs[leaf].rhs = tree->len;
 			else
 				rs[leaf].lhs = tree->len;
@@ -565,18 +585,21 @@ single_search(struct rectree *tree, const struct opts *opts,
 	(*idx->close)(idx);
 
 	free(buf);
-	RESFREE(&r);
+	recfree(&r);
 	return(1 == ch);
 }
 
-void
-resfree(struct res *rec, size_t sz)
+static void
+recfree(struct rec *rec)
 {
-	size_t		 i;
 
-	for (i = 0; i < sz; i++)
-		RESFREE(&rec[i]);
-	free(rec);
+	free(rec->res.file);
+	free(rec->res.cat);
+	free(rec->res.title);
+	free(rec->res.arch);
+	free(rec->res.desc);
+
+	free(rec->matches);
 }
 
 /*
@@ -867,7 +890,7 @@ expreval(const struct expr *p, int *ms)
  */
 static void
 exprexec(const struct expr *e, const char *cp,
-		uint64_t mask, struct res *r)
+		uint64_t mask, struct rec *r)
 {
 
 	assert(0 == r->matched);

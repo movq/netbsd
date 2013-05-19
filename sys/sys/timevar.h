@@ -1,4 +1,4 @@
-/*	$NetBSD: timevar.h,v 1.33 2013/03/29 01:09:45 christos Exp $	*/
+/*	$NetBSD: timevar.h,v 1.30 2011/12/18 22:30:25 christos Exp $	*/
 
 /*
  *  Copyright (c) 2005, 2008 The NetBSD Foundation.
@@ -145,7 +145,7 @@ void	getnanotime(struct timespec *);
 void	getmicrotime(struct timeval *);
 
 /* Other functions */
-int	ts2timo(clockid_t, int, struct timespec *, int *, struct timespec *);
+int	abstimeout2timo(struct timespec *, int *);
 void	adjtime1(const struct timeval *, struct timeval *, struct proc *);
 int	clock_getres1(clockid_t, struct timespec *);
 int	clock_gettime1(clockid_t, struct timespec *);
@@ -165,8 +165,7 @@ int	ppsratecheck(struct timeval *, int *, int);
 int	ratecheck(struct timeval *, const struct timeval *);
 void	realtimerexpire(void *);
 int	settime(struct proc *p, struct timespec *);
-int	nanosleep1(struct lwp *, clockid_t, int, struct timespec *,
-	    struct timespec *);
+int	nanosleep1(struct lwp *l, struct timespec *, struct timespec *);
 int	settimeofday1(const struct timeval *, bool,
 	    const void *, struct lwp *, bool);
 int	timer_create1(timer_t *, clockid_t, struct sigevent *, copyin_t,
@@ -185,7 +184,7 @@ void	time_init(void);
 void	time_init2(void);
 bool	time_wraps(struct timespec *, struct timespec *);
 
-extern volatile time_t time_second;	/* current second in the epoch */
-extern volatile time_t time_uptime;	/* system uptime in seconds */
+extern time_t time_second;	/* current second in the epoch */
+extern time_t time_uptime;	/* system uptime in seconds */
 
 #endif /* !_SYS_TIMEVAR_H_ */

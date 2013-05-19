@@ -1,4 +1,4 @@
-/*	$NetBSD: scsitest.c,v 1.6 2013/03/15 16:14:12 martin Exp $	*/
+/*	$NetBSD: scsitest.c,v 1.1 2010/08/24 11:23:35 pooka Exp $	*/
 
 /*
  * Copyright (c) 2010 Antti Kantee.  All Rights Reserved.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scsitest.c,v 1.6 2013/03/15 16:14:12 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scsitest.c,v 1.1 2010/08/24 11:23:35 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/atomic.h>
@@ -53,8 +53,8 @@ __KERNEL_RCSID(0, "$NetBSD: scsitest.c,v 1.6 2013/03/15 16:14:12 martin Exp $");
 #include <rump/rumpuser.h>
 #include <rump/scsitest.h>
 
-int	scsitest_match(device_t, cfdata_t, void *);
-void	scsitest_attach(device_t, device_t, void *);
+int	scsitest_match(struct device *, struct cfdata *, void *);
+void	scsitest_attach(struct device *, struct device *, void *);
 
 struct scsitest {
 	struct scsipi_channel sc_channel;
@@ -176,7 +176,7 @@ scsitest_request(struct scsipi_channel *chan,
 		break;
 	}
 	case GET_CONFIGURATION: {
-		memset(xs->data, 0, sizeof(struct scsipi_get_conf_data));
+
 		break;
 	}
 	case SCSI_READ_6_COMMAND: {
@@ -206,7 +206,7 @@ scsitest_request(struct scsipi_channel *chan,
 }
 
 int
-scsitest_match(device_t parent, cfdata_t match, void *aux)
+scsitest_match(struct device *parent, struct cfdata *match, void *aux)
 {
 #ifdef USE_TOSI_ISO
 	uint64_t fsize;
@@ -218,12 +218,9 @@ scsitest_match(device_t parent, cfdata_t match, void *aux)
 		return 0;
 	mycdsize = fsize / CDBLOCKSIZE;
 
-	if ((isofd = rumpuser_open(MYCDISO, RUMPUSER_OPEN_RDWR, &error)) == -1)
+	if ((isofd = rumpuser_open(MYCDISO, O_RDWR, &error)) == -1)
 		return 0;
 #else
-	/*
-	 * We pretend to have a medium present initially, so != -1.
-	 */
 	isofd = -2;
 #endif
 
@@ -231,7 +228,7 @@ scsitest_match(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-scsitest_attach(device_t parent, device_t self, void *aux)
+scsitest_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct scsitest *sc = device_private(self);
 	

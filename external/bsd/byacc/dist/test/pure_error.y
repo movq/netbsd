@@ -1,17 +1,4 @@
-/*	$NetBSD: pure_error.y,v 1.1.1.4 2013/04/06 14:45:27 christos Exp $	*/
-
-%{
-
-#ifdef YYBISON
-#define YYSTYPE int
-#define YYLEX_PARAM &yylval
-#define YYLEX_DECL() yylex(YYSTYPE *yylval)
-#define YYERROR_DECL() yyerror(const char *s)
-int YYLEX_DECL();
-static void YYERROR_DECL();
-#endif
-
-%}
+/*	$NetBSD: pure_error.y,v 1.1.1.3 2011/09/10 21:22:05 christos Exp $	*/
 
 %%
 S: error
@@ -21,6 +8,7 @@ S: error
 
 #ifdef YYBYACC
 extern int YYLEX_DECL();
+static void YYERROR_DECL();
 #endif
 
 int

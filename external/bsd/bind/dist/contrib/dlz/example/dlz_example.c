@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_example.c,v 1.3 2012/06/05 00:39:40 christos Exp $	*/
+/*	$NetBSD: dlz_example.c,v 1.2.8.1 2012/06/05 21:15:40 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2011  Internet Systems Consortium, Inc. ("ISC")

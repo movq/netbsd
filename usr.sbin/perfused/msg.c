@@ -1,4 +1,4 @@
-/*  $NetBSD: msg.c,v 1.21 2012/07/21 05:49:42 manu Exp $ */
+/*  $NetBSD: msg.c,v 1.20.2.1 2012/08/12 13:13:21 martin Exp $ */
 
 /*-
  *  Copyright (c) 2010 Emmanuel Dreyfus. All rights reserved.

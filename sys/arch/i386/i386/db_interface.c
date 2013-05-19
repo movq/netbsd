@@ -1,4 +1,4 @@
-/*	$NetBSD: db_interface.c,v 1.70 2012/12/08 14:40:10 jakllsch Exp $	*/
+/*	$NetBSD: db_interface.c,v 1.67 2011/08/11 19:52:52 cherry Exp $	*/
 
 /*
  * Mach Operating System
@@ -33,13 +33,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.70 2012/12/08 14:40:10 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.67 2011/08/11 19:52:52 cherry Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
-
-#include "ioapic.h"
-#include "lapic.h"
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -56,13 +53,9 @@ __KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.70 2012/12/08 14:40:10 jakllsch E
 #include <machine/cpufunc.h>
 #include <machine/db_machdep.h>
 #include <machine/cpuvar.h>
-#if NIOAPIC > 0
 #include <machine/i82093var.h>
-#endif
-#if NLAPIC > 0
 #include <machine/i82489reg.h>
 #include <machine/i82489var.h>
-#endif
 
 #include <ddb/db_sym.h>
 #include <ddb/db_command.h>
@@ -71,7 +64,7 @@ __KERNEL_RCSID(0, "$NetBSD: db_interface.c,v 1.70 2012/12/08 14:40:10 jakllsch E
 #include <ddb/db_output.h>
 #include <ddb/ddbvar.h>
 
-extern const char *const trap_type[];
+extern char *trap_type[];
 extern int trap_types;
 
 int	db_active = 0;

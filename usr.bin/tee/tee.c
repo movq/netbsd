@@ -1,4 +1,4 @@
-/*	$NetBSD: tee.c,v 1.11 2013/03/06 11:44:11 yamt Exp $	*/
+/*	$NetBSD: tee.c,v 1.9 2009/04/13 23:45:50 lukem Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1993\
 #if 0
 static char sccsid[] = "@(#)tee.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: tee.c,v 1.11 2013/03/06 11:44:11 yamt Exp $");
+__RCSID("$NetBSD: tee.c,v 1.9 2009/04/13 23:45:50 lukem Exp $");
 #endif
 
 #include <sys/types.h>
@@ -61,15 +61,17 @@ typedef struct _list {
 } LIST;
 LIST *head;
 
-void	add(int, const char *);
-int	main(int, char **);
+void	add __P((int, const char *));
+int	main __P((int, char **));
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	LIST *p;
-	ssize_t rval;
-	int fd;
+	int n, fd, rval, wval;
+	char *bp;
 	int append, ch, exitval;
 	char *buf;
 #define	BSIZE (8 * 1024)
@@ -93,7 +95,7 @@ main(int argc, char *argv[])
 	argv += optind;
 	argc -= optind;
 
-	if ((buf = malloc(BSIZE)) == NULL)
+	if ((buf = malloc((size_t)BSIZE)) == NULL)
 		err(1, "malloc");
 
 	add(STDOUT_FILENO, "stdout");
@@ -108,10 +110,8 @@ main(int argc, char *argv[])
 
 	while ((rval = read(STDIN_FILENO, buf, BSIZE)) > 0)
 		for (p = head; p; p = p->next) {
-			const char *bp = buf;
-			size_t n = rval;
-			ssize_t wval;
-
+			n = rval;
+			bp = buf;
 			do {
 				if ((wval = write(p->fd, bp, n)) == -1) {
 					warn("%s", p->name);
@@ -137,11 +137,13 @@ main(int argc, char *argv[])
 }
 
 void
-add(int fd, const char *name)
+add(fd, name)
+	int fd;
+	const char *name;
 {
 	LIST *p;
 
-	if ((p = malloc(sizeof(LIST))) == NULL)
+	if ((p = malloc((size_t)sizeof(LIST))) == NULL)
 		err(1, "malloc");
 	p->fd = fd;
 	p->name = name;

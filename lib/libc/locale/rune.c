@@ -1,4 +1,4 @@
-/*	$NetBSD: rune.c,v 1.46 2013/04/13 10:21:20 joerg Exp $	*/
+/*	$NetBSD: rune.c,v 1.43.2.1 2012/08/20 19:27:04 riz Exp $	*/
 /*-
  * Copyright (c)2010 Citrus Project,
  * All rights reserved.
@@ -54,14 +54,10 @@
 
 typedef struct {
 	_RuneLocale rl;
-	unsigned short	rlp_ctype_tab  [_CTYPE_NUM_CHARS + 1];
+	unsigned char	rlp_ctype_tab  [_CTYPE_NUM_CHARS + 1];
 	short		rlp_tolower_tab[_CTYPE_NUM_CHARS + 1];
 	short		rlp_toupper_tab[_CTYPE_NUM_CHARS + 1];
 	char		rlp_codeset[33]; /* XXX */
-
-#ifdef __BUILD_LEGACY
-	unsigned char	rlp_compat_bsdctype[_CTYPE_NUM_CHARS + 1];
-#endif
 } _RuneLocalePriv;
 
 static __inline void
@@ -92,29 +88,19 @@ _rune_init_priv(_RuneLocalePriv *rlp)
 		rlp->rlp_ctype_tab  [i + 1] = 0;
 		rlp->rlp_tolower_tab[i + 1] = i;
 		rlp->rlp_toupper_tab[i + 1] = i;
-
-#ifdef __BUILD_LEGACY
-		rlp->rlp_compat_bsdctype[i + 1] = 0;
-#endif
 	}
 #endif
 	rlp->rlp_ctype_tab  [0] = 0;
 	rlp->rlp_tolower_tab[0] = EOF;
 	rlp->rlp_toupper_tab[0] = EOF;
 
-	rlp->rl.rl_ctype_tab   = (const unsigned short *)&rlp->rlp_ctype_tab[0];
+	rlp->rl.rl_ctype_tab   = (const unsigned char *)&rlp->rlp_ctype_tab[0];
 	rlp->rl.rl_tolower_tab = (const short *)&rlp->rlp_tolower_tab[0];
 	rlp->rl.rl_toupper_tab = (const short *)&rlp->rlp_toupper_tab[0];
 	rlp->rl.rl_codeset     = (const char *)&rlp->rlp_codeset[0];
 
 	_rune_wctype_init(&rlp->rl);
 	_rune_wctrans_init(&rlp->rl);
-
-#ifdef __BUILD_LEGACY
-	rlp->rlp_compat_bsdctype[0] = 0;
-	rlp->rl.rl_compat_bsdctype = (const unsigned char *)
-	    &rlp->rlp_compat_bsdctype[0];
-#endif
 }
 
 static __inline void
@@ -142,35 +128,6 @@ _rune_find_codeset(char *s, size_t n,
 	}
 	*s = '\0';
 }
-
-#ifdef __BUILD_LEGACY
-static __inline int
-_runetype_to_bsdctype(_RuneType bits)
-{
-	int ret;
-
-	if (bits == (_RuneType)0)
-		return 0;
-	ret = 0;
-	if (bits & _RUNETYPE_U)
-		ret |= _COMPAT_U;
-	if (bits & _RUNETYPE_L)
-		ret |= _COMPAT_L;
-	if (bits & _RUNETYPE_D)
-		ret |= _COMPAT_N;
-	if (bits & _RUNETYPE_S)
-		ret |= _COMPAT_S;
-	if (bits & _RUNETYPE_P)
-		ret |= _COMPAT_P;
-	if (bits & _RUNETYPE_C)
-		ret |= _COMPAT_C;
-	if ((bits & (_RUNETYPE_X | _RUNETYPE_D)) == _RUNETYPE_X)
-		ret |= _COMPAT_X;
-	if ((bits & (_RUNETYPE_R | _RUNETYPE_G)) == _RUNETYPE_R)
-		ret |= _COMPAT_B;
-	return ret;
-}
-#endif /* __BUILD_LEGACY */
 
 static __inline int
 _rune_read_file(const char * __restrict var, size_t lenvar,
@@ -285,7 +242,6 @@ do {									\
 
 	for (i = 0; i < _CTYPE_CACHE_SIZE; ++i) {
 		wint_t wc;
-		_RuneType rc;
 
 		ret = _citrus_ctype_btowc(rl->rl_citrus_ctype, i, &wc);
 		if (ret)
@@ -295,14 +251,8 @@ do {									\
 			rlp->rlp_tolower_tab[i + 1] = i;
 			rlp->rlp_toupper_tab[i + 1] = i;
 		} else {
-			rc = _runetype_priv(rl, wc);
-			rlp->rlp_ctype_tab[i + 1] = (unsigned short)
-			    ((rc & ~_RUNETYPE_SWM) >> 8);
-
-#ifdef __BUILD_LEGACY
-			rlp->rlp_compat_bsdctype[i + 1]
-			  = _runetype_to_bsdctype(rc);
-#endif
+			rlp->rlp_ctype_tab[i + 1] = (unsigned char)
+			    _runetype_to_ctype(_runetype_priv(rl, wc));
 
 #define CONVERT_MAP(name)						\
 do {									\

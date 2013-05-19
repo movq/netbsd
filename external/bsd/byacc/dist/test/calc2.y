@@ -1,4 +1,4 @@
-/*	$NetBSD: calc2.y,v 1.1.1.4 2013/04/06 14:45:29 christos Exp $	*/
+/*	$NetBSD: calc2.y,v 1.1.1.3 2011/09/10 21:22:06 christos Exp $	*/
 
 %parse-param { int regs[26] }
 %parse-param { int *base }
@@ -8,14 +8,6 @@
 %{
 # include <stdio.h>
 # include <ctype.h>
-
-#ifdef YYBISON
-#define YYLEX_PARAM base
-#define YYLEX_DECL() yylex(int *YYLEX_PARAM)
-#define YYERROR_DECL() yyerror(int regs[26], int *base, const char *s)
-int YYLEX_DECL();
-static void YYERROR_DECL();
-#endif
 
 %}
 
@@ -76,6 +68,7 @@ number:  DIGIT
 
 #ifdef YYBYACC
 extern int YYLEX_DECL();
+static void YYERROR_DECL();
 #endif
 
 int
@@ -97,7 +90,7 @@ YYERROR_DECL()
 }
 
 int
-YYLEX_DECL()
+yylex(int *base)
 {
 	/* lexical analysis routine */
 	/* returns LETTER for a lower case letter, yylval = 0 through 25 */

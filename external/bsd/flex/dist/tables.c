@@ -1,4 +1,4 @@
-/*	$NetBSD: tables.c,v 1.3 2013/04/06 14:27:52 christos Exp $	*/
+/*	$NetBSD: tables.c,v 1.2 2009/10/26 04:27:15 christos Exp $	*/
 
 /*  tables.c - tables serialization code
  *
@@ -59,10 +59,10 @@ int     yytbl_write16 (struct yytbl_writer *wr, flex_uint16_t v);
 int     yytbl_write8 (struct yytbl_writer *wr, flex_uint8_t v);
 int     yytbl_writen (struct yytbl_writer *wr, void *v, flex_int32_t len);
 static flex_int32_t yytbl_data_geti (const struct yytbl_data *tbl, int i);
-/* XXX Not used
+#ifdef notdef
 static flex_int32_t yytbl_data_getijk (const struct yytbl_data *tbl, int i,
 				  int j, int k);
- */
+#endif
 
 
 /** Initialize the table writer.
@@ -334,8 +334,6 @@ int yytbl_write8 (struct yytbl_writer *wr, flex_uint8_t v)
 }
 
 
-/* XXX Not Used */
-#if 0
 /** Extract data element [i][j] from array data tables. 
  * @param tbl data table
  * @param i index into higher dimension array. i should be zero for one-dimensional arrays.
@@ -343,6 +341,7 @@ int yytbl_write8 (struct yytbl_writer *wr, flex_uint8_t v)
  * @param k index into struct, must be 0 or 1. Only valid for YYTD_ID_TRANSITION table
  * @return data[i][j + k]
  */
+#ifdef notdef
 static flex_int32_t yytbl_data_getijk (const struct yytbl_data *tbl, int i,
 				  int j, int k)
 {
@@ -370,7 +369,7 @@ static flex_int32_t yytbl_data_getijk (const struct yytbl_data *tbl, int i,
 
 	return 0;
 }
-#endif /* Not used */
+#endif
 
 /** Extract data element [i] from array data tables treated as a single flat array of integers.
  * Be careful for 2-dimensional arrays or for YYTD_ID_TRANSITION, which is an array

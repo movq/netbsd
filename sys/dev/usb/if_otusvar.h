@@ -1,4 +1,4 @@
-/*	$NetBSD: if_otusvar.h,v 1.7 2013/03/30 01:10:00 christos Exp $	*/
+/*	$NetBSD: if_otusvar.h,v 1.1 2010/11/03 20:03:02 christos Exp $	*/
 /*	$OpenBSD: if_otusreg.h,v 1.6 2009/04/06 18:17:01 damien Exp $	*/
 
 /*-
@@ -17,8 +17,6 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-#ifndef _IF_OTUSVAR_H_
-#define _IF_OTUSVAR_H_
 
 #ifndef HAVE_EDCA
 /************************************************************
@@ -34,6 +32,56 @@ struct ieee80211_edca_ac_params {
 	u_int16_t	ac_txoplimit;	/* 32TU */
 	u_int8_t	ac_acm;
 };
+/************************************************************/
+#endif /* ! HAVE_EDCA */
+
+#ifndef HAVE_EDCA
+/************************************************************
+ * XXX: This block belongs in sys/net80211/ieee80211.h.
+ */
+
+/*
+ * EDCA Access Categories.
+ */
+enum ieee80211_edca_ac {
+	EDCA_AC_BK  = 1,	/* Background */
+	EDCA_AC_BE  = 0,	/* Best Effort */
+	EDCA_AC_VI  = 2,	/* Video */
+	EDCA_AC_VO  = 3		/* Voice */
+};
+#define EDCA_NUM_AC	4
+
+/* XXX: OpenBSD has more of these defined with the standard referenced */
+#define IEEE80211_QOS_ACK_POLICY_NOACK		0x0020
+#define IEEE80211_QOS_ACK_POLICY_MASK		0x0060
+
+static __inline int
+ieee80211_has_addr4(const struct ieee80211_frame *wh)
+{
+	return (wh->i_fc[1] & IEEE80211_FC1_DIR_MASK) ==
+	    IEEE80211_FC1_DIR_DSTODS;
+}
+
+static __inline int
+ieee80211_has_qos(const struct ieee80211_frame *wh)
+{
+	return (wh->i_fc[0] &
+	    (IEEE80211_FC0_TYPE_MASK | IEEE80211_FC0_SUBTYPE_QOS)) ==
+	    (IEEE80211_FC0_TYPE_DATA | IEEE80211_FC0_SUBTYPE_QOS);
+}
+
+static __inline u_int16_t
+ieee80211_get_qos(const struct ieee80211_frame *wh)
+{
+	const u_int8_t *frm;
+
+	if (ieee80211_has_addr4(wh))
+		frm = ((const struct ieee80211_qosframe_addr4 *)wh)->i_qos;
+	else
+		frm = ((const struct ieee80211_qosframe *)wh)->i_qos;
+
+	return le16toh(*(const u_int16_t *)frm);
+}
 /************************************************************/
 #endif /* ! HAVE_EDCA */
 
@@ -125,10 +173,9 @@ struct otus_rx_data {
 };
 
 struct otus_tx_data {
-	struct otus_softc		*sc;
-	usbd_xfer_handle		xfer;
-	uint8_t				*buf;
-	TAILQ_ENTRY(otus_tx_data)	next;
+	struct otus_softc	*sc;
+	usbd_xfer_handle	xfer;
+	uint8_t			*buf;
 };
 
 struct otus_host_cmd {
@@ -196,12 +243,13 @@ struct otus_softc {
 	struct ieee80211_amrr		sc_amrr;
 
 	unsigned int			sc_write_idx;
+	int				sc_tx_cur;
+	int				sc_tx_queued;
 	uint32_t			sc_led_state;
 
 	kmutex_t			sc_cmd_mtx;
 	kmutex_t			sc_task_mtx;
 	kmutex_t			sc_write_mtx;
-	kmutex_t			sc_tx_mtx;
 
 	const uint32_t			*sc_phy_vals;
 
@@ -213,7 +261,6 @@ struct otus_softc {
 	struct otus_host_cmd_ring	sc_cmdq;
 	struct otus_tx_cmd		sc_tx_cmd;
 	struct otus_tx_data		sc_tx_data[OTUS_TX_DATA_LIST_COUNT];
-	TAILQ_HEAD(, otus_tx_data)	sc_tx_free_list;
 	struct otus_rx_data		sc_rx_data[OTUS_RX_DATA_LIST_COUNT];
 
 	struct bpf_if *			sc_drvbpf;
@@ -229,9 +276,4 @@ struct otus_softc {
 	}				sc_txtapu;
 #define sc_txtap	sc_txtapu.th
 	int				sc_txtap_len;
-
-	uint8_t				sc_rx_error_msk;
-	int				sc_dying;
 };
-
-#endif /* _IF_OTUSVAR_H_ */

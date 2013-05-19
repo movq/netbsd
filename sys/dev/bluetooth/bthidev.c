@@ -1,4 +1,4 @@
-/*	$NetBSD: bthidev.c,v 1.24 2012/12/20 11:17:47 plunky Exp $	*/
+/*	$NetBSD: bthidev.c,v 1.21.2.2 2013/01/07 04:15:12 riz Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bthidev.c,v 1.24 2012/12/20 11:17:47 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bthidev.c,v 1.21.2.2 2013/01/07 04:15:12 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/condvar.h>

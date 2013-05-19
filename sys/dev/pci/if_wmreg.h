@@ -1,4 +1,4 @@
-/*	$NetBSD: if_wmreg.h,v 1.52 2013/04/21 19:59:41 msaitoh Exp $	*/
+/*	$NetBSD: if_wmreg.h,v 1.46.2.3 2013/02/18 18:05:30 riz Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -255,7 +255,6 @@ struct livengood_tcpip_ctxdesc {
 #define	EECD_EE_TYPE	(1U << 13)	/* EEPROM type
 					   (0 = Microwire, 1 = SPI) */
 #define EECD_SEC1VAL	(1U << 22)	/* Sector One Valid */
-#define EECD_SEC1VAL_VALMASK (EECD_EE_AUTORD | EECD_EE_PRES) /* Valid Mask */
 
 #define	UWIRE_OPC_ERASE	0x04		/* MicroWire "erase" opcode */
 #define	UWIRE_OPC_WRITE	0x05		/* MicroWire "write" opcode */
@@ -684,7 +683,6 @@ struct livengood_tcpip_ctxdesc {
 #define	PBA_26K		0x001a
 #define	PBA_30K		0x001e
 #define	PBA_32K		0x0020
-#define	PBA_34K		0x0022
 #define	PBA_35K		0x0023
 #define	PBA_40K		0x0028
 #define	PBA_48K		0x0030		/* 48K, default Rx allocation */
@@ -965,11 +963,9 @@ struct livengood_tcpip_ctxdesc {
 
 #define ICH_NVM_SIG_WORD	0x13
 #define ICH_NVM_SIG_MASK	0xc000
-#define ICH_NVM_VALID_SIG_MASK	0xc0
-#define ICH_NVM_SIG_VALUE	0x80
 
 /* for PCI express Capability registers */
-#define	WM_PCIE_DCSR2_16MS	0x00000005
+#define	WM_PCI_PCIE_DCSR2_16MS	0x00000005
 
 /* advanced TX descriptor for 82575 and newer */
 typedef union nq_txdesc {

@@ -1,4 +1,4 @@
-/*	$NetBSD: i386func.S,v 1.17 2012/08/29 22:43:35 rmind Exp $	*/
+/*	$NetBSD: i386func.S,v 1.16.8.1 2012/09/03 19:03:39 riz Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2007, 2008 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: i386func.S,v 1.17 2012/08/29 22:43:35 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i386func.S,v 1.16.8.1 2012/09/03 19:03:39 riz Exp $");
 
 #include <machine/specialreg.h>
 #include <machine/segments.h>

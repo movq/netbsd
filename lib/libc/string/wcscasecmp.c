@@ -1,4 +1,4 @@
-/*	$NetBSD: wcscasecmp.c,v 1.4 2013/05/17 12:55:57 joerg Exp $	*/
+/*	$NetBSD: wcscasecmp.c,v 1.2 2006/08/26 22:45:52 christos Exp $	*/
 
 /*
  * Copyright (C) 2006 Aleksey Cheusov
@@ -13,21 +13,18 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint) 
-__RCSID("$NetBSD: wcscasecmp.c,v 1.4 2013/05/17 12:55:57 joerg Exp $"); 
+__RCSID("$NetBSD: wcscasecmp.c,v 1.2 2006/08/26 22:45:52 christos Exp $"); 
 #endif /* LIBC_SCCS and not lint */ 
 
 #include "namespace.h"
 #include <assert.h>
 #include <wchar.h>
 #include <wctype.h>
-#include <locale.h>
-#include "setlocale_local.h"
 
 __weak_alias(wcscasecmp,_wcscasecmp)
-__weak_alias(wcscasecmp_l,_wcscasecmp_l)
 
 int
-wcscasecmp_l(const wchar_t *s1, const wchar_t *s2, locale_t loc)
+wcscasecmp(const wchar_t *s1, const wchar_t *s2)
 {
 	int lc1  = 0;
 	int lc2  = 0;
@@ -37,8 +34,8 @@ wcscasecmp_l(const wchar_t *s1, const wchar_t *s2, locale_t loc)
 	_DIAGASSERT(s2);
 
 	for (;;) {
-		lc1 = towlower_l(*s1, loc);
-		lc2 = towlower_l(*s2, loc);
+		lc1 = towlower(*s1);
+		lc2 = towlower(*s2);
 
 		diff = lc1 - lc2;
 		if (diff)
@@ -50,10 +47,4 @@ wcscasecmp_l(const wchar_t *s1, const wchar_t *s2, locale_t loc)
 		++s1;
 		++s2;
 	}
-}
-
-int
-wcscasecmp(const wchar_t *s1, const wchar_t *s2)
-{
-	return wcscasecmp_l(s1, s2, _current_locale());
 }

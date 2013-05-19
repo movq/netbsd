@@ -1,4 +1,4 @@
-/*	$NetBSD: midi.c,v 1.78 2012/04/09 10:18:16 plunky Exp $	*/
+/*	$NetBSD: midi.c,v 1.75 2012/01/10 17:53:51 njoly Exp $	*/
 
 /*
  * Copyright (c) 1998, 2008 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: midi.c,v 1.78 2012/04/09 10:18:16 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: midi.c,v 1.75 2012/01/10 17:53:51 njoly Exp $");
 
 #include "midi.h"
 #include "sequencer.h"
@@ -137,11 +137,13 @@ midiprobe(device_t parent, cfdata_t match, void *aux)
 static void
 midiattach(device_t parent, device_t self, void *aux)
 {
-	struct midi_softc *sc = device_private(self);
-	struct audio_attach_args *sa = aux;
+	struct midi_softc *sc;
+	struct audio_attach_args *sa;
 	const struct midi_hw_if *hwp;
 	void *hdlp;
 
+	sc = device_private(self);
+	sa = aux;
 	hwp = sa->hwif;
 	hdlp = sa->hdl;
 
@@ -163,7 +165,11 @@ midiattach(device_t parent, device_t self, void *aux)
 	sc->dev = self;
 	sc->hw_if = hwp;
 	sc->hw_hdl = hdlp;
-	midi_attach(sc);
+	midi_attach(sc, parent);
+        if (!device_pmf_is_registered(self))
+		if (!pmf_device_register(self, NULL, NULL))
+			aprint_error_dev(self,
+			    "couldn't establish power handler\n"); 
 }
 
 static int
@@ -233,7 +239,7 @@ mididetach(device_t self, int flags)
 }
 
 void
-midi_attach(struct midi_softc *sc)
+midi_attach(struct midi_softc *sc, device_t parent)
 {
 	struct midi_info mi;
 	kmutex_t *dummy;
@@ -259,6 +265,7 @@ midi_attach(struct midi_softc *sc)
 
 	sc->dying = 0;
 	sc->isopen = 0;
+	sc->sc_dev = parent;
 
 	mutex_enter(&hwif_softc_lock);
 	mutex_enter(sc->lock);
@@ -289,9 +296,6 @@ midi_attach(struct midi_softc *sc)
 	
 	aprint_naive("\n");
 	aprint_normal(": %s\n", mi.name);
-
-	if (!pmf_device_register(sc->dev, NULL, NULL))
-		aprint_error_dev(sc->dev, "couldn't establish power handler\n"); 
 }
 
 void
@@ -1766,6 +1770,8 @@ midi_register_hw_if_ext(struct midi_hw_if_ext *exthw)
 #endif /* NMIDI > 0 */
 
 #if NMIDI > 0 || NMIDIBUS > 0
+
+int	audioprint(void *, const char *);
 
 device_t
 midi_attach_mi(const struct midi_hw_if *mhwp, void *hdlp, device_t dev)

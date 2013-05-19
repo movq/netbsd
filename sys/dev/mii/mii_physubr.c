@@ -1,4 +1,4 @@
-/*	$NetBSD: mii_physubr.c,v 1.75 2012/10/03 07:08:58 mlelstv Exp $	*/
+/*	$NetBSD: mii_physubr.c,v 1.73 2011/12/10 02:46:07 buhrow Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mii_physubr.c,v 1.75 2012/10/03 07:08:58 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mii_physubr.c,v 1.73 2011/12/10 02:46:07 buhrow Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -408,7 +408,7 @@ mii_phy_update(struct mii_softc *sc, int cmd)
 	    sc->mii_media_status != mii->mii_media_status ||
 	    cmd == MII_MEDIACHG) {
 		mii_phy_statusmsg(sc);
-		(*mii->mii_statchg)(mii->mii_ifp);
+		(*mii->mii_statchg)(device_parent(sc->mii_dev));
 		sc->mii_media_active = mii->mii_media_active;
 		sc->mii_media_status = mii->mii_media_status;
 	}
@@ -680,12 +680,26 @@ mii_anar(int media)
 {
 	int rv;
 
-#ifdef DIAGNOSTIC
-	if (/* media < 0 || */ media >= MII_NMEDIA)
-		panic("mii_anar");
-#endif
-
-	rv = mii_media_table[media].mm_anar;
+	switch (media & (IFM_TMASK|IFM_NMASK|IFM_FDX)) {
+	case IFM_ETHER|IFM_10_T:
+		rv = ANAR_10|ANAR_CSMA;
+		break;
+	case IFM_ETHER|IFM_10_T|IFM_FDX:
+		rv = ANAR_10_FD|ANAR_CSMA;
+		break;
+	case IFM_ETHER|IFM_100_TX:
+		rv = ANAR_TX|ANAR_CSMA;
+		break;
+	case IFM_ETHER|IFM_100_TX|IFM_FDX:
+		rv = ANAR_TX_FD|ANAR_CSMA;
+		break;
+	case IFM_ETHER|IFM_100_T4:
+		rv = ANAR_T4|ANAR_CSMA;
+		break;
+	default:
+		rv = 0;
+		break;
+	}
 
 	return rv;
 }

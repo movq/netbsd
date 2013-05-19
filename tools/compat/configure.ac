@@ -1,4 +1,4 @@
-#	$NetBSD: configure.ac,v 1.76 2013/03/05 16:26:41 christos Exp $
+#	$NetBSD: configure.ac,v 1.74 2011/11/03 14:13:53 joerg Exp $
 #
 # Autoconf definition file for libnbcompat.
 #
@@ -79,7 +79,7 @@ AC_CHECK_HEADERS(sys/ioctl.h sys/mman.h sys/param.h \
 # Find headers that may not be available.
 AC_HEADER_DIRENT
 AC_CHECK_HEADERS(sys/mtio.h sys/sysmacros.h sys/syslimits.h \
-	getopt.h features.h malloc.h sys/poll.h pthread.h stddef.h rpc/types.h)
+	getopt.h features.h malloc.h sys/poll.h pthread.h stddef.h)
 AC_CHECK_HEADERS(sys/bswap.h machine/bswap.h sys/cdefs.h machine/endian.h \
 	sys/endian.h sys/featuretest.h err.h inttypes.h libgen.h paths.h \
 	stdint.h util.h resolv.h arpa/nameser.h,,
@@ -100,7 +100,6 @@ AC_CHECK_TYPES([id_t, long long, u_long, u_char, u_short, u_int, u_quad_t])
 AC_CHECK_TYPE(socklen_t, [AC_DEFINE([HAVE_SOCKLEN_T], 1,
 			  [Define if you have the socklen_t type.])],,
 [#include <sys/types.h>
-#include <rpc/types.h>
 #include <sys/socket.h>])
 
 dnl XXX - This is UGLY.  Need a better way to homogenize the bitsized types,
@@ -147,7 +146,7 @@ AC_CHECK_DECLS(sys_signame,,, [#include <signal.h>])
 # Library functions (where a .h check isn't enough).
 AC_FUNC_ALLOCA
 AC_CHECK_FUNCS(atoll asprintf asnprintf basename devname dirfd dirname \
-	dprintf esetfunc fgetln flock fpurge __fpurge futimes getline \
+	esetfunc fgetln flock fpurge __fpurge futimes getline \
 	getopt getopt_long group_from_gid gid_from_group \
 	heapsort isblank issetugid lchflags lchmod lchown lutimes mkstemp \
 	mkdtemp poll pread putc_unlocked pwcache_userdb pwcache_groupdb \

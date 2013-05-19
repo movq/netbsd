@@ -1,28 +1,19 @@
-#	$NetBSD: Makefile,v 1.49 2013/02/05 15:19:18 martin Exp $
+#	$NetBSD: Makefile,v 1.47 2010/07/06 05:59:53 mrg Exp $
 
 .include <bsd.own.mk>			# for MKPIC definition
-.include <bsd.endian.mk>		# for TARGET_ENDIANNESS
 
-.if ${MKPIC} != "no"
-.if ${TARGET_ENDIANNESS} == "1234" && ${MACHINE_CPU} == "arm"
-UUDECODE_FILES=	ld.so.${MACHINE_CPU}
-.else
-UUDECODE_FILES=	ld.so.${MACHINE_ARCH}
-.endif
+.if ${MKPIC} != "no" && exists(ld.so.${MACHINE_ARCH}.uue)
 
-.if exists(${UUDECODE_FILES}.uue)
 FILES=		ld.so
 FILESDIR=	/usr/libexec
 FILESMODE=	${BINMODE}
+UUDECODE_FILES=	ld.so.${MACHINE_ARCH}
 UUDECODE_FILES_RENAME_${UUDECODE_FILES}= ld.so
 
 all dependall: ${FILES}
 
-ld.so:	${UUDECODE_FILES}
+ld.so:	ld.so.${MACHINE_ARCH}
 
-.else
-UUDECODE_FILES=
-.endif
 .endif
 
 MAN= ld.aout_so.1

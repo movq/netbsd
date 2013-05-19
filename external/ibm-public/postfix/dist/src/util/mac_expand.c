@@ -1,4 +1,4 @@
-/*	$NetBSD: mac_expand.c,v 1.1.1.3 2013/01/02 18:59:15 tron Exp $	*/
+/*	$NetBSD: mac_expand.c,v 1.1.1.2 2011/03/02 19:32:44 tron Exp $	*/
 
 /*++
 /* NAME
@@ -50,12 +50,7 @@
 /*	Expand macros in lookup results. This should never be done with
 /*	data whose origin is untrusted.
 /* .IP MAC_EXP_FLAG_APPEND
-/*	Append text to the result buffer without truncating it.
-/* .IP MAC_EXP_FLAG_SCAN
-/*	Invoke the call-back function each macro name in the input
-/*	string, including macro names in the values of conditional
-/*	expressions.  Do not expand macros, and do not write to the
-/*	result argument.
+/*	Append text to the result buffer.
 /* .PP
 /*	The constant MAC_EXP_FLAG_NONE specifies a manifest null value.
 /* .RE
@@ -181,17 +176,17 @@ static int mac_expand_callback(int type, VSTRING *buf, char *ptr)
 	 */
 	switch (ch) {
 	case '?':
-	    if ((text != 0 && *text != 0) || (mc->flags & MAC_EXP_FLAG_SCAN))
+	    if (text != 0 && *text != 0)
 		mac_parse(cp, mac_expand_callback, (char *) mc);
 	    break;
 	case ':':
-	    if (text == 0 || *text == 0 || (mc->flags & MAC_EXP_FLAG_SCAN))
+	    if (text == 0 || *text == 0)
 		mac_parse(cp, mac_expand_callback, (char *) mc);
 	    break;
 	default:
 	    if (text == 0) {
 		mc->status |= MAC_PARSE_UNDEF;
-	    } else if (*text == 0 || (mc->flags & MAC_EXP_FLAG_SCAN)) {
+	    } else if (*text == 0) {
 		 /* void */ ;
 	    } else if (mc->flags & MAC_EXP_FLAG_RECURSE) {
 		vstring_strcpy(buf, text);
@@ -212,7 +207,7 @@ static int mac_expand_callback(int type, VSTRING *buf, char *ptr)
     /*
      * Literal text.
      */
-    else if ((mc->flags & MAC_EXP_FLAG_SCAN) == 0) {
+    else {
 	vstring_strcat(mc->result, vstring_str(buf));
     }
 
@@ -240,11 +235,10 @@ int     mac_expand(VSTRING *result, const char *pattern, int flags,
     mc.context = context;
     mc.status = 0;
     mc.level = 0;
-    if ((flags & (MAC_EXP_FLAG_APPEND | MAC_EXP_FLAG_SCAN)) == 0)
+    if ((flags & MAC_EXP_FLAG_APPEND) == 0)
 	VSTRING_RESET(result);
     status = mac_parse(pattern, mac_expand_callback, (char *) &mc);
-    if ((flags & MAC_EXP_FLAG_SCAN) == 0)
-	VSTRING_TERMINATE(result);
+    VSTRING_TERMINATE(result);
 
     return (status);
 }

@@ -28,7 +28,7 @@
 #if 0
 __FBSDID("$FreeBSD: release/9.0.0/lib/msun/src/s_tgammaf.c 176388 2008-02-18 17:27:11Z das $");
 #else
-__RCSID("$NetBSD: s_tgammaf.c,v 1.1 2012/05/05 17:54:14 christos Exp $");
+__RCSID("$NetBSD: s_tgammaf.c,v 1.1.2.2 2012/05/09 18:22:36 riz Exp $");
 #endif
 
 #include <math.h>

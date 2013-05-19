@@ -1,8 +1,8 @@
-# 	$NetBSD: NONPLUS64,v 1.38 2013/04/27 18:19:52 christos Exp $
+# 	$NetBSD: NONPLUS64,v 1.34 2011/11/22 21:25:38 tls Exp $
 
 include "arch/sparc64/conf/std.sparc64"
 
-#ident		"NONPLUS64-$Revision: 1.38 $"
+#ident		"NONPLUS64-$Revision: 1.34 $"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
@@ -44,6 +44,8 @@ options 	KTRACE
 options 	SYSVMSG		# System V message queues
 options 	SYSVSEM		# System V semaphores
 options 	SYSVSHM		# System V shared memory
+
+## Loadable kernel module support; still under development.
 
 options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -157,6 +159,7 @@ options 	QUOTA2		# new, in-filesystem UFS quotas
 options 	INET		# IP (Internet Protocol) v4
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	TCP_SIGNATURE	# TCP MD5 Signatures, for BGP routing sessions
@@ -164,10 +167,12 @@ options 	GATEWAY		# packet forwarding ("router switch")
 #options 	MROUTING	# packet forwarding of multicast packets
 #options 	PIM		# Protocol Independent Multicast
 #options 	DIRECTED_BROADCAST	# allow broadcasts through routers
+options 	ISO,TPIP	# OSI networking
+#options 	EON		# OSI tunneling over IP
 options 	NETATALK	# AppleTalk (over Ethernet) protocol
 options 	NTP		# Network Time Protocol in-kernel support
 #options 	PPS_SYNC	# Add serial line synchronization for NTP
-options 	PFIL_HOOKS	# Add pfil(9) packet filter hooks
+options 	PFIL_HOOKS	# Add pfil(9) hooks, intended for custom LKMs.
 #options 	IPFILTER_LOG	# Add ipmon(8) logging for ipfilter device
 #options 	IPFILTER_LOOKUP	# ippool(8) support
 options 	PPP_BSDCOMP	# Add BSD compression to ppp device
@@ -307,7 +312,7 @@ pseudo-device	vnd
 ## Concatenated and striped disks; with this, you can create a software-based
 ## disk array similar to a "RAID 0" setup.  See ccd(4).
 
-pseudo-device	ccd
+pseudo-device	ccd	4
 
 ## Memory disk device, used on boot floppies with compressed
 ## kernel-plus-root-disk images.

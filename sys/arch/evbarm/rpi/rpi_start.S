@@ -1,4 +1,4 @@
-/*	$NetBSD: rpi_start.S,v 1.7 2012/09/23 15:56:32 skrll Exp $	*/
+/*	$NetBSD: rpi_start.S,v 1.2.2.4 2013/02/13 01:36:14 riz Exp $	*/
 
 /*
  * Copyright (c) 2002, 2003  Genetec Corporation.  All rights reserved.
@@ -87,7 +87,7 @@
 #include <arm/armreg.h>
 #include "assym.h"
 
-RCSID("$NetBSD: rpi_start.S,v 1.7 2012/09/23 15:56:32 skrll Exp $")
+RCSID("$NetBSD: rpi_start.S,v 1.2.2.4 2013/02/13 01:36:14 riz Exp $")
 
 /*
  * Workaround Erratum 411920 

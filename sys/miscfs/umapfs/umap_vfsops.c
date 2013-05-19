@@ -1,4 +1,4 @@
-/*	$NetBSD: umap_vfsops.c,v 1.88 2012/04/30 22:51:28 rmind Exp $	*/
+/*	$NetBSD: umap_vfsops.c,v 1.86 2010/11/19 06:44:46 dholland Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umap_vfsops.c,v 1.88 2012/04/30 22:51:28 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umap_vfsops.c,v 1.86 2010/11/19 06:44:46 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -96,9 +96,8 @@ umapfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	}
 
 	/* only for root */
-	error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_MOUNT,
-	    KAUTH_REQ_SYSTEM_MOUNT_UMAP, NULL, NULL, NULL);
-	if (error)
+	if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+	    NULL)) != 0)
 		return error;
 
 #ifdef UMAPFS_DIAGNOSTIC
@@ -142,7 +141,10 @@ umapfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	printf("mp = %p\n", mp);
 #endif
 
-	amp = kmem_zalloc(sizeof(struct umap_mount), KM_SLEEP);
+	amp = (struct umap_mount *) malloc(sizeof(struct umap_mount),
+				M_UFSMNT, M_WAITOK);	/* XXX */
+	memset(amp, 0, sizeof(struct umap_mount));
+
 	mp->mnt_data = amp;
 	amp->umapm_vfs = lowerrootvp->v_mount;
 	if (amp->umapm_vfs->mnt_flag & MNT_LOCAL)
@@ -213,8 +215,8 @@ umapfs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		vput(lowerrootvp);
 		hashdone(amp->umapm_node_hashtbl, HASH_LIST,
 		    amp->umapm_node_hash);
-		kmem_free(amp, sizeof(struct umap_mount));
-		return error;
+		free(amp, M_UFSMNT);	/* XXX */
+		return (error);
 	}
 	/*
 	 * Unlock the node (either the lower or the alias)
@@ -272,9 +274,9 @@ umapfs_unmount(struct mount *mp, int mntflags)
 	 */
 	mutex_destroy(&amp->umapm_hashlock);
 	hashdone(amp->umapm_node_hashtbl, HASH_LIST, amp->umapm_node_hash);
-	kmem_free(amp, sizeof(struct umap_mount));
+	free(amp, M_UFSMNT);	/* XXX */
 	mp->mnt_data = NULL;
-	return 0;
+	return (0);
 }
 
 extern const struct vnodeopv_desc umapfs_vnodeop_opv_desc;

@@ -1,4 +1,4 @@
-/*	$NetBSD: drsc.c,v 1.32 2012/10/27 17:17:28 chs Exp $ */
+/*	$NetBSD: drsc.c,v 1.31 2010/12/20 00:25:25 matt Exp $ */
 
 /*
  * Copyright (c) 1996 Ignatios Souvatzis
@@ -59,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drsc.c,v 1.32 2012/10/27 17:17:28 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drsc.c,v 1.31 2010/12/20 00:25:25 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -80,8 +80,8 @@ __KERNEL_RCSID(0, "$NetBSD: drsc.c,v 1.32 2012/10/27 17:17:28 chs Exp $");
 
 #include <machine/cpu.h>	/* is_xxx(), */
 
-void drscattach(device_t, device_t, void *);
-int drscmatch(device_t, cfdata_t, void *);
+void drscattach(struct device *, struct device *, void *);
+int drscmatch(struct device *, struct cfdata *, void *);
 int drsc_dmaintr(struct siop_softc *);
 #ifdef DEBUG
 void drsc_dump(void);
@@ -90,7 +90,7 @@ void drsc_dump(void);
 #ifdef DEBUG
 #endif
 
-CFATTACH_DECL_NEW(drsc, sizeof(struct siop_softc),
+CFATTACH_DECL(drsc, sizeof(struct siop_softc),
     drscmatch, drscattach, NULL, NULL);
 
 static struct siop_softc *drsc_softc;
@@ -99,12 +99,12 @@ static struct siop_softc *drsc_softc;
  * One of us is on every DraCo motherboard,
  */
 int
-drscmatch(device_t parent, cfdata_t cf, void *aux)
+drscmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	static int drsc_matched = 0;
 
 	/* Allow only one instance. */
-	if (!is_draco() || !matchname(aux, "drsc") || drsc_matched)
+	if (!is_draco() || !matchname(auxp, "drsc") || drsc_matched)
 		return (0);
 
 	drsc_matched = 1;
@@ -112,9 +112,9 @@ drscmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-drscattach(device_t parent, device_t self, void *aux)
+drscattach(struct device *pdp, struct device *dp, void *auxp)
 {
-	struct siop_softc *sc = device_private(self);
+	struct siop_softc *sc = (struct siop_softc *)dp;
 	struct zbus_args *zap;
 	siop_regmap_p rp;
 	struct scsipi_adapter *adapt = &sc->sc_adapter;
@@ -122,9 +122,8 @@ drscattach(device_t parent, device_t self, void *aux)
 
 	printf("\n");
 
-	zap = aux;
+	zap = auxp;
 
-	sc->sc_dev = self;
 	sc->sc_siopp = rp = (siop_regmap_p)(DRCCADDR+PAGE_SIZE*DRSCSIPG);
 
 	/*
@@ -140,7 +139,7 @@ drscattach(device_t parent, device_t self, void *aux)
 	 * Fill in the scsipi_adapter.
 	 */
 	memset(adapt, 0, sizeof(*adapt));
-	adapt->adapt_dev = self;
+	adapt->adapt_dev = &sc->sc_dev;
 	adapt->adapt_nchannels = 1;
 	adapt->adapt_openings = 7;
 	adapt->adapt_max_periph = 1;
@@ -173,7 +172,7 @@ drscattach(device_t parent, device_t self, void *aux)
 	/*
 	 * attach all scsi units on us
 	 */
-	config_found(self, chan, scsiprint);
+	config_found(dp, chan, scsiprint);
 }
 
 /*
@@ -222,7 +221,7 @@ drsc_handler(void)
 	single_inst_bclr_b(*draco_intpen, DRIRQ_SCSI);
 #ifdef DEBUG
 	if (*draco_intpen & DRIRQ_SCSI)
-		printf("%s: intpen still 0x%x\n", device_xname(sc->sc_dev),
+		printf("%s: intpen still 0x%x\n", sc->sc_dev.dv_xname,
 		    *draco_intpen);
 #endif
 	softint_schedule(sc->sc_siop_si);

@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_wakecode.S,v 1.15 2012/04/19 18:00:34 jym Exp $	*/
+/*	$NetBSD: acpi_wakecode.S,v 1.14.18.1 2012/04/20 23:32:15 riz Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.

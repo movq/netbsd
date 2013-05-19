@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_lookup.c,v 1.200 2012/11/18 17:41:53 manu Exp $	*/
+/*	$NetBSD: vfs_lookup.c,v 1.192.8.1 2012/11/18 18:36:58 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_lookup.c,v 1.200 2012/11/18 17:41:53 manu Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_lookup.c,v 1.192.8.1 2012/11/18 18:36:58 msaitoh Exp $");
 
 #include "opt_magiclinks.h"
 
@@ -195,7 +195,7 @@ symlink_magic(struct proc *p, char *cp, size_t *len)
 ////////////////////////////////////////////////////////////
 
 /*
- * Determine the namei hash (for the namecache) for name.
+ * Determine the namei hash (for cn_hash) for name.
  * If *ep != NULL, hash from name to ep-1.
  * If *ep == NULL, hash from name until the first NUL or '/', and
  * return the location of this termination character in *ep.
@@ -220,22 +220,6 @@ namei_hash(const char *name, const char **ep)
 		*ep = name;
 	}
 	return (hash + (hash >> 5));
-}
-
-/*
- * Find the end of the first path component in NAME and return its
- * length.
- */
-static size_t
-namei_getcomponent(const char *name)
-{
-	size_t pos;
-
-	pos = 0;
-	while (name[pos] != '\0' && name[pos] != '/') {
-		pos++;
-	}
-	return pos;
 }
 
 ////////////////////////////////////////////////////////////
@@ -564,11 +548,7 @@ namei_getstartdir(struct namei_state *state)
 	curdir = cwdi->cwdi_cdir;
 
 	if (ndp->ni_pnbuf[0] != '/') {
-		if (ndp->ni_atdir != NULL) {
-			startdir = ndp->ni_atdir;
-		} else {
-			startdir = curdir;
-		}
+		startdir = curdir;
 		erootdir = NULL;
 	} else if (cnp->cn_flags & TRYEMULROOT && erootdir != NULL) {
 		startdir = erootdir;
@@ -599,16 +579,14 @@ namei_getstartdir(struct namei_state *state)
  * returns a reference to the passed-in starting dir.
  */
 static struct vnode *
-namei_getstartdir_for_nfsd(struct namei_state *state)
+namei_getstartdir_for_nfsd(struct namei_state *state, struct vnode *startdir)
 {
-	KASSERT(state->ndp->ni_atdir != NULL);
-
 	/* always use the real root, and never set an emulation root */
 	state->ndp->ni_rootdir = rootvnode;
 	state->ndp->ni_erootdir = NULL;
 
-	vref(state->ndp->ni_atdir);
-	return state->ndp->ni_atdir;
+	vref(startdir);
+	return startdir;
 }
 
 
@@ -650,7 +628,7 @@ namei_ktrace(struct namei_state *state)
  * appropriate.
  */
 static int
-namei_start(struct namei_state *state, int isnfsd,
+namei_start(struct namei_state *state, struct vnode *forcecwd,
 	    struct vnode **startdir_ret)
 {
 	struct nameidata *ndp = state->ndp;
@@ -669,17 +647,13 @@ namei_start(struct namei_state *state, int isnfsd,
 	ndp->ni_loopcnt = 0;
 
 	/* Get starting directory, set up root, and ktrace. */
-	if (isnfsd) {
-		startdir = namei_getstartdir_for_nfsd(state);
+	if (forcecwd != NULL) {
+		startdir = namei_getstartdir_for_nfsd(state, forcecwd);
 		/* no ktrace */
 	} else {
 		startdir = namei_getstartdir(state);
 		namei_ktrace(state);
 	}
-
-	/* NDAT may feed us with a non directory namei_getstartdir */
-	if (startdir->v_type != VDIR)
-		return ENOTDIR;
 
 	vn_lock(startdir, LK_EXCLUSIVE | LK_RETRY);
 
@@ -826,6 +800,7 @@ lookup_parsepath(struct namei_state *state)
 	/*
 	 * Search a new directory.
 	 *
+	 * The cn_hash value is for use by vfs_cache.
 	 * The last component of the filename is left accessible via
 	 * cnp->cn_nameptr for callers that need the name. Callers needing
 	 * the name set the SAVENAME flag. When done, they assume
@@ -835,8 +810,9 @@ lookup_parsepath(struct namei_state *state)
 	 * is held and locked.
 	 */
 	cnp->cn_consume = 0;
-	cnp->cn_namelen = namei_getcomponent(cnp->cn_nameptr);
-	cp = cnp->cn_nameptr + cnp->cn_namelen;
+	cp = NULL;
+	cnp->cn_hash = namei_hash(cnp->cn_nameptr, &cp);
+	cnp->cn_namelen = cp - cnp->cn_nameptr;
 	if (cnp->cn_namelen > KERNEL_NAME_MAX) {
 		return ENAMETOOLONG;
 	}
@@ -1121,15 +1097,15 @@ done:
  * (This is called up to twice if TRYEMULROOT is in effect.)
  */
 static int
-namei_oneroot(struct namei_state *state,
-	 int neverfollow, int inhibitmagic, int isnfsd)
+namei_oneroot(struct namei_state *state, struct vnode *forcecwd,
+	 int neverfollow, int inhibitmagic)
 {
 	struct nameidata *ndp = state->ndp;
 	struct componentname *cnp = state->cnp;
 	struct vnode *searchdir, *foundobj;
 	int error;
 
-	error = namei_start(state, isnfsd, &searchdir);
+	error = namei_start(state, forcecwd, &searchdir);
 	if (error) {
 		ndp->ni_dvp = NULL;
 		ndp->ni_vp = NULL;
@@ -1435,8 +1411,8 @@ namei_oneroot(struct namei_state *state,
  * Do namei; wrapper layer that handles TRYEMULROOT.
  */
 static int
-namei_tryemulroot(struct namei_state *state,
-	 int neverfollow, int inhibitmagic, int isnfsd)
+namei_tryemulroot(struct namei_state *state, struct vnode *forcecwd,
+	 int neverfollow, int inhibitmagic)
 {
 	int error;
 
@@ -1453,7 +1429,7 @@ namei_tryemulroot(struct namei_state *state,
     emul_retry:
 	state->attempt_retry = 0;
 
-	error = namei_oneroot(state, neverfollow, inhibitmagic, isnfsd);
+	error = namei_oneroot(state, forcecwd, neverfollow, inhibitmagic);
 	if (error) {
 		/*
 		 * Once namei has started up, the existence of ni_erootdir
@@ -1489,9 +1465,8 @@ namei(struct nameidata *ndp)
 	int error;
 
 	namei_init(&state, ndp);
-	error = namei_tryemulroot(&state,
-				  0/*!neverfollow*/, 0/*!inhibitmagic*/,
-				  0/*isnfsd*/);
+	error = namei_tryemulroot(&state, NULL,
+				  0/*!neverfollow*/, 0/*!inhibitmagic*/);
 	namei_cleanup(&state);
 
 	if (error) {
@@ -1522,12 +1497,9 @@ lookup_for_nfsd(struct nameidata *ndp, struct vnode *forcecwd, int neverfollow)
 	struct namei_state state;
 	int error;
 
-	KASSERT(ndp->ni_atdir == NULL);
-	ndp->ni_atdir = forcecwd;
-
 	namei_init(&state, ndp);
-	error = namei_tryemulroot(&state,
-				  neverfollow, 1/*inhibitmagic*/, 1/*isnfsd*/);
+	error = namei_tryemulroot(&state, forcecwd,
+				  neverfollow, 1/*inhibitmagic*/);
 	namei_cleanup(&state);
 
 	if (error) {
@@ -1556,19 +1528,16 @@ lookup_for_nfsd(struct nameidata *ndp, struct vnode *forcecwd, int neverfollow)
  * pieces of state the way they ought to be.
  */
 static int
-do_lookup_for_nfsd_index(struct namei_state *state)
+do_lookup_for_nfsd_index(struct namei_state *state, struct vnode *startdir)
 {
 	int error = 0;
 
 	struct componentname *cnp = state->cnp;
 	struct nameidata *ndp = state->ndp;
-	struct vnode *startdir;
 	struct vnode *foundobj;
 	const char *cp;			/* pointer into pathname argument */
 
 	KASSERT(cnp == &ndp->ni_cnd);
-
-	startdir = state->ndp->ni_atdir;
 
 	cnp->cn_nameptr = ndp->ni_pnbuf;
 	state->docache = 1;
@@ -1576,8 +1545,9 @@ do_lookup_for_nfsd_index(struct namei_state *state)
 	ndp->ni_dvp = NULL;
 
 	cnp->cn_consume = 0;
-	cnp->cn_namelen = namei_getcomponent(cnp->cn_nameptr);
-	cp = cnp->cn_nameptr + cnp->cn_namelen;
+	cp = NULL;
+	cnp->cn_hash = namei_hash(cnp->cn_nameptr, &cp);
+	cnp->cn_namelen = cp - cnp->cn_nameptr;
 	KASSERT(cnp->cn_namelen <= KERNEL_NAME_MAX);
 	ndp->ni_pathlen -= cnp->cn_namelen;
 	ndp->ni_next = cp;
@@ -1635,9 +1605,6 @@ lookup_for_nfsd_index(struct nameidata *ndp, struct vnode *startdir)
 	struct namei_state state;
 	int error;
 
-	KASSERT(ndp->ni_atdir == NULL);
-	ndp->ni_atdir = startdir;
-
 	/*
 	 * Note: the name sent in here (is not|should not be) allowed
 	 * to contain a slash.
@@ -1654,7 +1621,7 @@ lookup_for_nfsd_index(struct nameidata *ndp, struct vnode *startdir)
 	ndp->ni_cnd.cn_nameptr = NULL;
 
 	namei_init(&state, ndp);
-	error = do_lookup_for_nfsd_index(&state);
+	error = do_lookup_for_nfsd_index(&state, startdir);
 	namei_cleanup(&state);
 
 	return error;
@@ -1673,8 +1640,8 @@ relookup(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp, int d
 	int rdonly;			/* lookup read-only flag bit */
 	int error = 0;
 #ifdef DEBUG
-	size_t newlen;			/* DEBUG: check name len */
-	const char *cp;			/* DEBUG: check name ptr */
+	uint32_t newhash;		/* DEBUG: check name hash */
+	const char *cp;			/* DEBUG: check name ptr/len */
 #endif /* DEBUG */
 
 	(void)dummy;
@@ -1694,16 +1661,12 @@ relookup(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp, int d
 	 * responsibility for freeing the pathname buffer.
 	 */
 #ifdef DEBUG
-#if 0
 	cp = NULL;
 	newhash = namei_hash(cnp->cn_nameptr, &cp);
 	if ((uint32_t)newhash != (uint32_t)cnp->cn_hash)
 		panic("relookup: bad hash");
-#endif
-	newlen = namei_getcomponent(cnp->cn_nameptr);
-	if (cnp->cn_namelen != newlen)
+	if (cnp->cn_namelen != cp - cnp->cn_nameptr)
 		panic("relookup: bad len");
-	cp = cnp->cn_nameptr + cnp->cn_namelen;
 	while (*cp == '/')
 		cp++;
 	if (*cp != 0)
@@ -1797,14 +1760,7 @@ namei_simple_convert_flags(namei_simple_flags_t sflags)
 
 int
 namei_simple_kernel(const char *path, namei_simple_flags_t sflags,
-	struct vnode **vp_ret)
-{
-	return nameiat_simple_kernel(NULL, path, sflags, vp_ret);
-}
-
-int
-nameiat_simple_kernel(struct vnode *dvp, const char *path, 
-	namei_simple_flags_t sflags, struct vnode **vp_ret)
+			struct vnode **vp_ret)
 {
 	struct nameidata nd;
 	struct pathbuf *pb;
@@ -1819,10 +1775,6 @@ nameiat_simple_kernel(struct vnode *dvp, const char *path,
 		LOOKUP,
 		namei_simple_convert_flags(sflags),
 		pb);
-
-	if (dvp != NULL)
-		NDAT(&nd, dvp);
-
 	err = namei(&nd);
 	if (err != 0) {
 		pathbuf_destroy(pb);
@@ -1835,14 +1787,7 @@ nameiat_simple_kernel(struct vnode *dvp, const char *path,
 
 int
 namei_simple_user(const char *path, namei_simple_flags_t sflags,
-	struct vnode **vp_ret)
-{
-	return nameiat_simple_user(NULL, path, sflags, vp_ret);
-}
-
-int
-nameiat_simple_user(struct vnode *dvp, const char *path,
-	namei_simple_flags_t sflags, struct vnode **vp_ret)
+			struct vnode **vp_ret)
 {
 	struct pathbuf *pb;
 	struct nameidata nd;
@@ -1857,10 +1802,6 @@ nameiat_simple_user(struct vnode *dvp, const char *path,
 		LOOKUP,
 		namei_simple_convert_flags(sflags),
 		pb);
-
-	if (dvp != NULL)
-		NDAT(&nd, dvp);
-
 	err = namei(&nd);
 	if (err != 0) {
 		pathbuf_destroy(pb);

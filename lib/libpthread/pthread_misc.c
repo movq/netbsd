@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_misc.c,v 1.15 2013/03/21 16:49:12 christos Exp $	*/
+/*	$NetBSD: pthread_misc.c,v 1.14.8.1 2013/04/29 01:50:18 riz Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_misc.c,v 1.15 2013/03/21 16:49:12 christos Exp $");
+__RCSID("$NetBSD: pthread_misc.c,v 1.14.8.1 2013/04/29 01:50:18 riz Exp $");
 
 #include <errno.h>
 #include <string.h>

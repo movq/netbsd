@@ -1,4 +1,4 @@
-/*	$NetBSD: openpam_ttyconv.c,v 1.7 2013/04/06 02:20:33 christos Exp $	*/
+/*	$NetBSD: openpam_ttyconv.c,v 1.3 2012/01/03 18:56:49 christos Exp $	*/
 
 /*-
  * Copyright (c) 2002-2003 Networks Associates Technology, Inc.
@@ -34,7 +34,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Id: openpam_ttyconv.c 527 2012-02-26 03:23:59Z des 
+ * Id: openpam_ttyconv.c 437 2011-09-13 12:00:13Z des
  */
 
 #ifdef HAVE_CONFIG_H
@@ -60,28 +60,6 @@
 
 int openpam_ttyconv_timeout = 0;
 
-#ifdef GETPASS_ECHO
-static char *
-xprompt(const char *msg, FILE *infp, FILE *outfp, FILE *errfp, int fl)
-{
-	char *rv;
-	int fd[3];
-	fd[0] = fileno(infp);
-	fd[1] = fileno(outfp);
-	fd[2] = fileno(errfp);
-
-	rv = getpassfd(msg, NULL, 0, fd, GETPASS_NEED_TTY |
-	    GETPASS_FAIL_EOF | GETPASS_NO_SIGNAL |
-	    (fl == 0 ? GETPASS_ECHO : 0), openpam_ttyconv_timeout);
-	if (rv == NULL)
-		fprintf(errfp, " %s\n", strerror(errno));
-	else if (fl)
-		fputs("\n", errfp);
-	return rv;
-}
-#define prompt(m, i, o, e) xprompt(m, i, o, e, 0)
-#define prompt_echo_off(m, i, o, e) xprompt(m, i, o, e, 1)
-#else
 static void
 timeout(int sig)
 {
@@ -94,17 +72,18 @@ prompt(const char *msg, FILE *infp, FILE *outfp, FILE *errfp)
 {
 	char buf[PAM_MAX_RESP_SIZE];
 	struct sigaction action, saved_action;
-	sigset_t saved_sigset, the_sigset;
+	sigset_t saved_sigset, sigs;
 	unsigned int saved_alarm;
 	int eof, error, fd;
 	size_t len;
 	char *retval;
 	char ch;
 
-	sigemptyset(&the_sigset);
-	sigaddset(&the_sigset, SIGINT);
-	sigaddset(&the_sigset, SIGTSTP);
-	sigprocmask(SIG_SETMASK, &the_sigset, &saved_sigset);
+	saved_alarm = 0;
+	sigemptyset(&sigs);
+	sigaddset(&sigs, SIGINT);
+	sigaddset(&sigs, SIGTSTP);
+	sigprocmask(SIG_SETMASK, &sigs, &saved_sigset);
 	action.sa_handler = &timeout;
 	action.sa_flags = 0;
 	sigemptyset(&action.sa_mask);
@@ -188,7 +167,6 @@ prompt_echo_off(const char *msg, FILE *infp, FILE *outfp, FILE *errfp)
 		fputs("\n", outfp);
 	return (ret);
 }
-#endif
 
 /*
  * OpenPAM extension

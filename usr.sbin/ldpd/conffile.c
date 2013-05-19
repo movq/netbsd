@@ -1,4 +1,4 @@
-/* $NetBSD: conffile.c,v 1.5 2013/01/26 21:07:49 kefren Exp $ */
+/* $NetBSD: conffile.c,v 1.3 2011/06/14 11:28:51 kefren Exp $ */
 
 /*
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -45,7 +45,7 @@
 #define LINEMAXSIZE 1024
 
 extern int ldp_hello_time, ldp_keepalive_time, ldp_holddown_time, command_port,
-	min_label, max_label, no_default_route, loop_detection;
+	min_label, max_label, no_default_route;
 int confh;
 struct in_addr conf_ldp_id;
 
@@ -62,8 +62,6 @@ static int Fldpid(char*);
 static int Fneighbour(char*);
 static int Gneighbour(struct conf_neighbour *, char *);
 static int Fnodefault(char*);
-static int Floopdetection(char*);
-static int Fpassiveif(char*);
 
 struct conf_func {
 	char com[64];
@@ -81,8 +79,6 @@ struct conf_func main_commands[] = {
 	{ "neighbor", Fneighbour },
 	{ "neighbour", Fneighbour },
 	{ "no-default-route", Fnodefault },
-	{ "loop-detection", Floopdetection },
-	{ "passive-if", Fpassiveif },
 	{ "", NULL },
 };
 
@@ -96,7 +92,6 @@ conf_parsefile(char *fname)
 	char buf[LINEMAXSIZE + 1];
 
 	SLIST_INIT(&conei_head);
-	SLIST_INIT(&passifs_head);
 	conf_ldp_id.s_addr = 0;
 
 	confh = open(fname, O_RDONLY, 0);
@@ -315,28 +310,5 @@ Fnodefault(char *line)
 	if (nd < 0)
 		return E_CONF_PARAM;
 	no_default_route = nd;
-	return 0;
-}
-
-int
-Floopdetection(char *line)
-{
-	int loopd = atoi(line);
-	if (loopd < 0)
-		return E_CONF_PARAM;
-	loop_detection = loopd;
-	return 0;
-}
-
-int
-Fpassiveif(char *line)
-{
-	struct passive_if *pif;
-
-	if (strlen(line) > IF_NAMESIZE - 1)
-		return E_CONF_PARAM;
-	pif = calloc(1, sizeof(*pif));
-	strlcpy(pif->if_name, line, IF_NAMESIZE);
-	SLIST_INSERT_HEAD(&passifs_head, pif, listentry);
 	return 0;
 }

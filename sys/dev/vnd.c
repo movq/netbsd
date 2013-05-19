@@ -1,4 +1,4 @@
-/*	$NetBSD: vnd.c,v 1.221 2012/06/09 06:20:45 mlelstv Exp $	*/
+/*	$NetBSD: vnd.c,v 1.219.8.2 2012/07/05 18:12:46 riz Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2008 The NetBSD Foundation, Inc.
@@ -91,7 +91,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vnd.c,v 1.221 2012/06/09 06:20:45 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vnd.c,v 1.219.8.2 2012/07/05 18:12:46 riz Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_vnd.h"

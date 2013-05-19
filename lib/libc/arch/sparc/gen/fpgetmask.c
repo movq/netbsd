@@ -1,4 +1,4 @@
-/*	$NetBSD: fpgetmask.c,v 1.6 2012/03/21 00:38:34 christos Exp $	*/
+/*	$NetBSD: fpgetmask.c,v 1.5 2005/12/24 23:10:08 perry Exp $	*/
 
 /*
  * Written by J.T. Conklin, Apr 10, 1995
@@ -7,7 +7,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: fpgetmask.c,v 1.6 2012/03/21 00:38:34 christos Exp $");
+__RCSID("$NetBSD: fpgetmask.c,v 1.5 2005/12/24 23:10:08 perry Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -19,9 +19,9 @@ __weak_alias(fpgetmask,_fpgetmask)
 #endif
 
 fp_except
-fpgetmask(void)
+fpgetmask()
 {
-	unsigned int x;
+	int x;
 
 	__asm("st %%fsr,%0" : "=m" (*&x));
 	return (x >> 23) & 0x1f;

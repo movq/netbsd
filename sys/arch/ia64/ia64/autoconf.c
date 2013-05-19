@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.6 2012/07/29 18:05:43 mlelstv Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.5.18.1 2012/08/08 15:51:09 martin Exp $	*/
 
 /*
  * Copyright (c) 2006 The NetBSD Foundation, Inc.

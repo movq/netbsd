@@ -1,4 +1,4 @@
-/* $NetBSD: edid.c,v 1.12 2013/02/08 16:35:10 skrll Exp $ */
+/* $NetBSD: edid.c,v 1.11.10.1 2013/02/13 01:36:19 riz Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,7 +32,7 @@
  */ 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: edid.c,v 1.12 2013/02/08 16:35:10 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: edid.c,v 1.11.10.1 2013/02/13 01:36:19 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

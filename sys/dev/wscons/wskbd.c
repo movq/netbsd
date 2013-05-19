@@ -1,4 +1,4 @@
-/* $NetBSD: wskbd.c,v 1.132 2012/08/29 02:38:31 macallan Exp $ */
+/* $NetBSD: wskbd.c,v 1.130 2010/10/26 05:12:34 jruoho Exp $ */
 
 /*
  * Copyright (c) 1996, 1997 Christopher G. Demetriou.  All rights reserved.
@@ -105,7 +105,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wskbd.c,v 1.132 2012/08/29 02:38:31 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wskbd.c,v 1.130 2010/10/26 05:12:34 jruoho Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -207,10 +207,6 @@ struct wskbd_softc {
 
 	wskbd_hotkey_plugin *sc_hotkey;
 	void *sc_hotkeycookie;
-
-	/* optional table to translate scancodes in event mode */
-	int		sc_evtrans_len;
-	keysym_t	*sc_evtrans;
 };
 
 #define MOD_SHIFT_L		(1 << 0)
@@ -422,8 +418,6 @@ wskbd_attach(device_t parent, device_t self, void *aux)
 	sc->sc_isconsole = ap->console;
 	sc->sc_hotkey = NULL;
 	sc->sc_hotkeycookie = NULL;
-	sc->sc_evtrans_len = 0;
-	sc->sc_evtrans = NULL;
 
 #if NWSMUX > 0 || NWSDISPLAY > 0
 	sc->sc_base.me_ops = &wskbd_srcops;
@@ -750,17 +744,7 @@ wskbd_deliver_event(struct wskbd_softc *sc, u_int type, int value)
 #endif
 
 	event.type = type;
-	event.value = 0;
-	DPRINTF(("%d ->", value));
-	if (sc->sc_evtrans_len > 0) {
-		if (sc->sc_evtrans_len > value) {
-			DPRINTF(("%d", sc->sc_evtrans[value]));
-			event.value = sc->sc_evtrans[value];
-		}
-	} else {
-		event.value = value;
-	}
-	DPRINTF(("\n"));
+	event.value = value;
 	if (wsevent_inject(evar, &event, 1) != 0)
 		log(LOG_WARNING, "%s: event queue overflow\n",
 		    device_xname(sc->sc_base.me_dv));
@@ -1058,6 +1042,7 @@ wskbd_displayioctl(device_t dev, u_long cmd, void *data, int flag,
 	struct wskbd_keyrepeat_data *ukdp, *kkdp;
 	struct wskbd_map_data *umdp;
 	struct wskbd_mapdata md;
+	struct proc *p = l ? l->l_proc : NULL;
 	kbd_t enc;
 	void *tbuf;
 	int len, error;
@@ -1105,9 +1090,8 @@ getbell:
 		return (0);
 
 	case WSKBDIO_SETDEFAULTBELL:
-		if ((error = kauth_authorize_device(l->l_cred,
-		    KAUTH_DEVICE_WSCONS_KEYBOARD_BELL, NULL, NULL,
-		    NULL, NULL)) != 0)
+		if (p && (error = kauth_authorize_generic(l->l_cred,
+		    KAUTH_GENERIC_ISSUSER, NULL)) != 0)
 			return (error);
 		kbdp = &wskbd_default_bell_data;
 		goto setbell;
@@ -1145,9 +1129,8 @@ getkeyrepeat:
 		return (0);
 
 	case WSKBDIO_SETDEFAULTKEYREPEAT:
-		if ((error = kauth_authorize_device(l->l_cred,
-		    KAUTH_DEVICE_WSCONS_KEYBOARD_KEYREPEAT, NULL, NULL,
-		    NULL, NULL)) != 0)
+		if ((error = kauth_authorize_generic(l->l_cred,
+		    KAUTH_GENERIC_ISSUSER, NULL)) != 0)
 			return (error);
 		kkdp = &wskbd_default_keyrepeat_data;
 		goto setkeyrepeat;
@@ -1894,13 +1877,3 @@ wskbd_translate(struct wskbd_internal *id, u_int type, int value)
 	id->t_symbols[0] = res;
 	return (1);
 }
-
-void
-wskbd_set_evtrans(device_t dev, keysym_t *tab, int len)
-{
-	struct wskbd_softc *sc = device_private(dev);
-
-	sc->sc_evtrans_len = len;
-	sc->sc_evtrans = tab;
-}
-

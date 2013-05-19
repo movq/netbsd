@@ -1,4 +1,4 @@
-/* $NetBSD: lfs_cleanerd.c,v 1.32 2013/01/22 09:39:11 dholland Exp $	 */
+/* $NetBSD: lfs_cleanerd.c,v 1.29 2012/02/02 03:47:11 perseant Exp $	 */
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
 /* XXX these top few should really be fs-specific */
 int use_fs_idle;	/* Use fs idle rather than cpu idle time */
 int use_bytes;		/* Use bytes written rather than segments cleaned */
-double load_threshold;	/* How idle is idle (CPU idle) */
+int load_threshold;	/* How idle is idle (CPU idle) */
 int atatime;		/* How many segments (bytes) to clean at a time */
 
 int nfss;		/* Number of filesystems monitored by this cleanerd */
@@ -342,9 +342,9 @@ lfs_ientry(IFILE **ifpp, struct clfs *fs, ino_t ino, struct ubuf **bpp)
 
 #ifdef TEST_PATTERN
 /*
- * Check UFS_ROOTINO for file data.  The assumption is that we are running
+ * Check ROOTINO for file data.	 The assumption is that we are running
  * the "twofiles" test with the rest of the filesystem empty.  Files
- * created by "twofiles" match the test pattern, but UFS_ROOTINO and the
+ * created by "twofiles" match the test pattern, but ROOTINO and the
  * executable itself (assumed to be inode 3) should not match.
  */
 static void
@@ -950,7 +950,7 @@ static off_t
 check_hidden_cost(struct clfs *fs, BLOCK_INFO *bip, int bic, off_t *ifc)
 {
 	int start;
-	struct indir in[UFS_NIADDR + 1];
+	struct indir in[NIADDR + 1];
 	int num;
 	int i, j, ebic;
 	BLOCK_INFO *ebip;
@@ -974,7 +974,7 @@ check_hidden_cost(struct clfs *fs, BLOCK_INFO *bip, int bic, off_t *ifc)
 		}
 		if (bip[i].bi_lbn == LFS_UNUSED_LBN)
 			continue;
-		if (bip[i].bi_lbn < UFS_NDADDR)
+		if (bip[i].bi_lbn < NDADDR)
 			continue;
 
 		ufs_getlbns((struct lfs *)fs, NULL, (daddr_t)bip[i].bi_lbn, in, &num);

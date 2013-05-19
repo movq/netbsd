@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.lib.mk,v 1.335 2013/04/22 22:16:14 riastradh Exp $
+#	$NetBSD: bsd.lib.mk,v 1.320 2012/01/28 23:13:24 christos Exp $
 #	@(#)bsd.lib.mk	8.3 (Berkeley) 4/22/94
 
 .include <bsd.init.mk>
@@ -11,15 +11,15 @@ LIBISMODULE?=	no
 LIBISPRIVATE?=	no
 LIBISCXX?=	no
 
+_LIB_PREFIX=	lib
+
 .if ${LIBISMODULE} != "no"
-_LIB_PREFIX?=	# empty
+_LIB_PREFIX=	# empty
 MKDEBUGLIB:=	no
 MKLINT:=	no
 MKPICINSTALL:=	no
 MKPROFILE:=	no
 MKSTATICLIB:=	no
-.else
-_LIB_PREFIX?=	lib
 .endif
 
 .if ${LIBISPRIVATE} != "no"
@@ -54,12 +54,8 @@ AFLAGS+=        ${PIE_AFLAGS}
 LIBDO.${_lib}!=	cd "${_dir}" && ${PRINTOBJDIR}
 .MAKEOVERRIDES+=LIBDO.${_lib}
 .endif
-.if ${LIBDO.${_lib}} == "_external"
-LDADD+=		-l${_lib}
-.else
 LDADD+=		-L${LIBDO.${_lib}} -l${_lib}
-DPADD+=		${LIBDO.${_lib}}/lib${_lib}.so	# Don't use _LIB_PREFIX
-.endif
+DPADD+=		${LIBDO.${_lib}}/lib${_lib}.so
 .endfor
 .endif									# }
 
@@ -80,7 +76,7 @@ checkver:
 	@(cd "${.CURDIR}" && \
 	    HOST_SH=${HOST_SH:Q} AWK=${TOOL_AWK:Q} \
 	    ${HOST_SH} ${NETBSDSRCDIR}/lib/checkver -v ${SHLIB_VERSION_FILE} \
-		    -d ${_DEST.OBJ} ${LIB})
+		    -d ${DESTDIR}${_LIBSODIR} ${LIB})
 .endif
 .endif									# }
 
@@ -193,22 +189,12 @@ MKSHLIBOBJS= yes
 MKSHLIBOBJS= no
 .endif
 
-.if (defined(MKDEBUG) && (${MKDEBUG} != "no")) || \
-    (defined(CFLAGS) && !empty(CFLAGS:M*-g*))
-# We only add -g to the shared library objects
-# because we don't currently split .a archives.
-CSHLIBFLAGS+=	-g
-.if ${LIBISPRIVATE} == "yes"
-CFLAGS+=	-g
-.endif
-.endif
-
 # Platform-independent linker flags for ELF shared libraries
 SHLIB_SOVERSION=	${SHLIB_MAJOR}
-SHLIB_SHFLAGS=		-Wl,-soname,${_LIB}.so.${SHLIB_SOVERSION}
+SHLIB_SHFLAGS=		-Wl,-soname,${_LIB_PREFIX}${LIB}.so.${SHLIB_SOVERSION}
 SHLIB_SHFLAGS+=		-Wl,--warn-shared-textrel
-SHLIB_LDSTARTFILE?=	${_GCC_CRTI} ${_GCC_CRTBEGINS}
-SHLIB_LDENDFILE?=	${_GCC_CRTENDS} ${_GCC_CRTN}
+SHLIB_LDSTARTFILE?=	${_GCC_CRTDIR}/crti.o ${_GCC_CRTBEGINS}
+SHLIB_LDENDFILE?=	${_GCC_CRTENDS} ${_GCC_CRTDIR}/crtn.o
 
 CFLAGS+=	${COPTS}
 OBJCFLAGS+=	${OBJCOPTS}
@@ -221,27 +207,13 @@ CTFFLAGS+=	-g
 .endif
 .endif
 
-LIBSTRIPAOBJS=	yes
-.if !defined(CFLAGS) || empty(CFLAGS:M*-g*)
-LIBSTRIPCOBJS=	yes
-.endif
-.if !defined(OBJCFLAGS) || empty(OBJCFLAGS:M*-g*)
-LIBSTRIPOBJCOBJS=	yes
-.endif
-.if !defined(FFLAGS) || empty(FFLAGS:M*-g*)
-LIBSTRIPFOBJS=	yes
-.endif
-.if !defined(CSHLIBFLAGS) || empty(CSHLIBFLAGS:M*-g*) 
-LIBSTRIPSHLIBOBJS=	yes
-.endif
-
 .c.o:
 	${_MKTARGET_COMPILE}
 	${COMPILE.c} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC} -o ${.TARGET}
 .if defined(CTFCONVERT)
 	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
 .endif
-.if defined(LIBSTRIPCOBJS)
+.if !defined(CFLAGS) || empty(CFLAGS:M*-g*)
 	${OBJCOPY} ${OBJCOPYLIBFLAGS} ${.TARGET}
 .endif
 
@@ -251,7 +223,7 @@ LIBSTRIPSHLIBOBJS=	yes
 .if defined(CTFCONVERT)
 	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
 .endif
-.if defined(LIBSTRIPCOBJS)
+.if !defined(CFLAGS) || empty(CFLAGS:M*-g*)
 	${OBJCOPY} ${OBJCOPYLIBFLAGS} ${.TARGET}
 .endif
 
@@ -262,21 +234,21 @@ LIBSTRIPSHLIBOBJS=	yes
 .c.pico:
 	${_MKTARGET_COMPILE}
 	${COMPILE.c} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} ${CSHLIBFLAGS} ${.IMPSRC} -o ${.TARGET}
-.if defined(LIBSTRIPSHLIBOBJS)
+.if !defined(CFLAGS) || empty(CFLAGS:M*-g*)
 	${OBJCOPY} ${OBJCOPYLIBFLAGS} ${.TARGET}
 .endif
 
 .cc.o .cpp.o .cxx.o .C.o:
 	${_MKTARGET_COMPILE}
 	${COMPILE.cc} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC} -o ${.TARGET}
-.if defined(LIBSTRIPCOBJS)
+.if !defined(CFLAGS) || empty(CFLAGS:M*-g*)
 	${OBJCOPY} ${OBJCOPYLIBFLAGS} ${.TARGET}
 .endif
 
 .cc.po .cpp.po .cxx.po .C.po:
 	${_MKTARGET_COMPILE}
 	${COMPILE.cc} ${PROFFLAGS} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} -pg ${.IMPSRC} -o ${.TARGET}
-.if defined(LIBSTRIPCOBJS)
+.if !defined(CFLAGS) || empty(CFLAGS:M*-g*)
 	${OBJCOPY} ${OBJCOPYLIBFLAGS} ${.TARGET}
 .endif
 
@@ -287,7 +259,7 @@ LIBSTRIPSHLIBOBJS=	yes
 .cc.pico .cpp.pico .cxx.pico .C.pico:
 	${_MKTARGET_COMPILE}
 	${COMPILE.cc} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} ${CSHLIBFLAGS} ${.IMPSRC} -o ${.TARGET}
-.if defined(LIBSTRIPSHLIBOBJS)
+.if !defined(CFLAGS) || empty(CFLAGS:M*-g*)
 	${OBJCOPY} ${OBJCOPYLIBFLAGS} ${.TARGET}
 .endif
 
@@ -297,7 +269,7 @@ LIBSTRIPSHLIBOBJS=	yes
 .if defined(CTFCONVERT)
 	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
 .endif
-.if defined(LIBSTRIPFOBJS)
+.if !defined(FOPTS) || empty(FOPTS:M*-g*)
 	${OBJCOPY} ${OBJCOPYLIBFLAGS} ${.TARGET}
 .endif
 
@@ -307,7 +279,7 @@ LIBSTRIPSHLIBOBJS=	yes
 .if defined(CTFCONVERT)
 	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
 .endif
-.if defined(LIBSTRIPFOBJS)
+.if !defined(FOPTS) || empty(FOPTS:M*-g*)
 	${OBJCOPY} ${OBJCOPYLIBFLAGS} ${.TARGET}
 .endif
 
@@ -318,7 +290,7 @@ LIBSTRIPSHLIBOBJS=	yes
 .f.pico:
 	${_MKTARGET_COMPILE}
 	${COMPILE.f} ${FPICFLAGS} ${.IMPSRC} -o ${.TARGET}
-.if defined(LIBSTRIPFOBJS)
+.if !defined(FOPTS) || empty(FOPTS:M*-g*)
 	${OBJCOPY} ${OBJCOPYLIBFLAGS} ${.TARGET}
 .endif
 
@@ -332,7 +304,7 @@ LIBSTRIPSHLIBOBJS=	yes
 .if defined(CTFCONVERT)
 	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
 .endif
-.if defined(LIBSTRIPOBJCOBJS)
+.if !defined(OBJCFLAGS) || empty(OBJCFLAGS:M*-g*)
 	${OBJCOPY} ${OBJCOPYLIBFLAGS} ${.TARGET}
 .endif
 
@@ -342,21 +314,21 @@ LIBSTRIPSHLIBOBJS=	yes
 .if defined(CTFCONVERT)
 	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
 .endif
-.if defined(LIBSTRIPOBJCOBJS)
+.if !defined(OBJCFLAGS) || empty(OBJCFLAGS:M*-g*)
 	${OBJCOPY} ${OBJCOPYLIBFLAGS} ${.TARGET}
 .endif
 
 .m.go:
 	${_MKTARGET_COMPILE}
 	${COMPILE.m} ${DEBUGFLAGS} -g ${OBJCOPTS.${.IMPSRC:T}} ${.IMPSRC} -o ${.TARGET}
-.if defined(LIBSTRIPOBJCOBJS)
+.if !defined(OBJCFLAGS) || empty(OBJCFLAGS:M*-g*)
 	${OBJCOPY} ${OBJCOPYLIBFLAGS} ${.TARGET}
 .endif
 
 .m.pico:
 	${_MKTARGET_COMPILE}
 	${COMPILE.m} ${CSHLIBFLAGS} ${OBJCOPTS.${.IMPSRC:T}} ${.IMPSRC} -o ${.TARGET}
-.if defined(LIBSTRIPOBJCOBJS)
+.if !defined(OBJCFLAGS) || empty(OBJCFLAGS:M*-g*)
 	${OBJCOPY} ${OBJCOPYLIBFLAGS} ${.TARGET}
 .endif
 
@@ -366,9 +338,7 @@ LIBSTRIPSHLIBOBJS=	yes
 .if defined(CTFCONVERT)
 	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
 .endif
-.if defined(LIBSTRIPAOBJS)
 	${OBJCOPY} ${OBJCOPYLIBFLAGS} ${.TARGET}
-.endif
 
 .S.o:
 	${_MKTARGET_COMPILE}
@@ -376,9 +346,7 @@ LIBSTRIPSHLIBOBJS=	yes
 .if defined(CTFCONVERT)
 	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
 .endif
-.if defined(LIBSTRIPAOBJS)
 	${OBJCOPY} ${OBJCOPYLIBFLAGS} ${.TARGET}
-.endif
 
 .s.po:
 	${_MKTARGET_COMPILE}
@@ -386,9 +354,7 @@ LIBSTRIPSHLIBOBJS=	yes
 .if defined(CTFCONVERT)
 	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
 .endif
-.if defined(LIBSTRIPAOBJS)
 	${OBJCOPY} ${OBJCOPYLIBFLAGS} ${.TARGET}
-.endif
 
 .S.po:
 	${_MKTARGET_COMPILE}
@@ -396,9 +362,7 @@ LIBSTRIPSHLIBOBJS=	yes
 .if defined(CTFCONVERT)
 	${CTFCONVERT} ${CTFFLAGS} ${.TARGET}
 .endif
-.if defined(LIBSTRIPAOBJS)
 	${OBJCOPY} ${OBJCOPYLIBFLAGS} ${.TARGET}
-.endif
 
 .s.go:
 	${_MKTARGET_COMPILE}
@@ -411,79 +375,22 @@ LIBSTRIPSHLIBOBJS=	yes
 .s.pico:
 	${_MKTARGET_COMPILE}
 	${COMPILE.s} ${CAPICFLAGS} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC} -o ${.TARGET}
-.if defined(LIBSTRIPAOBJS)
 	${OBJCOPY} ${OBJCOPYLIBFLAGS} ${.TARGET}
-.endif
 
 .S.pico:
 	${_MKTARGET_COMPILE}
 	${COMPILE.S} ${CAPICFLAGS} ${COPTS.${.IMPSRC:T}} ${CPUFLAGS.${.IMPSRC:T}} ${CPPFLAGS.${.IMPSRC:T}} ${.IMPSRC} -o ${.TARGET}
-.if defined(LIBSTRIPAOBJS)
 	${OBJCOPY} ${OBJCOPYLIBFLAGS} ${.TARGET}
-.endif
-
-# Declare a few variables to make our life easier later.
-_LIB:=${_LIB_PREFIX}${LIB}
-_LIB.a:=${_LIB}.a
-_LIB_p.a:=${_LIB}_p.a
-_LIB_g.a:=${_LIB}_g.a
-_LIB_pic.a:=${_LIB}_pic.a
-_LIB.ln:=llib-l${LIB}.ln
-
-.if ${MKPIC} != "no" && defined(SHLIB_FULLVERSION)
-_LIB.so:=${_LIB}.so
-_LIB.so.major:=${_LIB}.so.${SHLIB_MAJOR}
-_LIB.so.full:=${_LIB}.so.${SHLIB_FULLVERSION}
-.if ${MKDEBUG} != "no"
-_LIB.so.debug:=${_LIB.so.full}.debug
-.endif
-.endif
-
-_DEST.LIB:=${DESTDIR}${LIBDIR}
-_DEST.OBJ:=${DESTDIR}${_LIBSODIR}
-_DEST.LINT:=${DESTDIR}${LINTLIBDIR}
-_DEST.DEBUG:=${DESTDIR}${DEBUGDIR}${LIBDIR}
-_DEST.ODEBUG:=${DESTDIR}${DEBUGDIR}${_LIBSODIR}
 
 .if defined(LIB)							# {
 .if (${MKPIC} == "no" || (defined(LDSTATIC) && ${LDSTATIC} != "") \
 	|| ${MKLINKLIB} != "no") && ${MKSTATICLIB} != "no"
-_LIBS=${_LIB.a}
+_LIBS=lib${LIB}.a
 .else
 _LIBS=
 .endif
 
-.if ${LIBISPRIVATE} != "no" \
-   && (defined(USE_COMBINE) && ${USE_COMBINE} == "yes" \
-   && !defined(NOCOMBINE))						# {
-.for f in ${SRCS:N*.h:N*.sh:C/\.[yl]$/.c/g}
-COMBINEFLAGS.${LIB}.$f := ${CPPFLAGS.$f:D1} ${CPUFLAGS.$f:D2} ${COPTS.$f:D3} ${OBJCOPTS.$f:D4} ${CXXFLAGS.$f:D5}
-.if empty(COMBINEFLAGS.${LIB}.${f}) && !defined(NOCOMBINE.$f)
-COMBINESRCS+=	${f}
-NODPSRCS+=	${f}
-.else
-OBJS+=  	${f:R:S/$/.o/}
-.endif
-.endfor
-
-.if !empty(COMBINESRCS)
-OBJS+=		${_LIB}_combine.o
-${_LIB}_combine.o: ${COMBINESRCS}
-	${_MKTARGET_COMPILE}
-	${COMPILE.c} -MD --combine ${.ALLSRC} -o ${.TARGET}
-.if defined(LIBSTRIPOBJS)
-	${OBJCOPY} -x ${.TARGET}
-.endif
-
-CLEANFILES+=	${_LIB}_combine.d
-
-.if exists("${_LIB}_combine.d")
-.include "${_LIB}_combine.d"
-.endif
-.endif   # empty(XSRCS.${LIB})
-.else							# } {
 OBJS+=${SRCS:N*.h:N*.sh:R:S/$/.o/g}
-.endif							# }
 
 STOBJS+=${OBJS}
 
@@ -495,13 +402,13 @@ libinstall::
 .endif
 
 .if ${MKDEBUGLIB} != "no"
-_LIBS+=${_LIB_g.a}
+_LIBS+=lib${LIB}_g.a
 GOBJS+=${OBJS:.o=.go}
 DEBUGFLAGS?=-DDEBUG
 .endif
 
 .if ${MKPROFILE} != "no"
-_LIBS+=${_LIB_p.a}
+_LIBS+=lib${LIB}_p.a
 POBJS+=${OBJS:.o=.po}
 PROFFLAGS?=-DGPROF -DPROF
 .endif
@@ -512,23 +419,27 @@ PROFFLAGS?=-DGPROF -DPROF
 # make _pic.a, which isn't really pic,
 # since it's needed for making shared lib.
 # but don't install it.
-SOLIB=${_LIB_pic.a}
+SOLIB=lib${LIB}_pic.a
 SOBJS+=${OBJS:.o=.pico}
 .else
-SOLIB=${_LIB.a}
+SOLIB=lib${LIB}.a
 .endif
 .else
-SOLIB=${_LIB_pic.a}
+SOLIB=lib${LIB}_pic.a
 _LIBS+=${SOLIB}
 SOBJS+=${OBJS:.o=.pico}
 .endif
 .if defined(SHLIB_FULLVERSION)
-_LIBS+=${_LIB.so.full}
+_LIB.so:=lib${LIB}.so.${SHLIB_FULLVERSION}
+.if ${MKDEBUG} != "no"
+_LIB.debug:=${_LIB.so}.debug
+.endif
+_LIBS+=lib${LIB}.so.${SHLIB_FULLVERSION}
 .endif
 .endif									# }
 
 .if ${MKLINT} != "no" && !empty(LOBJS)
-_LIBS+=${_LIB.ln}
+_LIBS+=llib-l${LIB}.ln
 .endif
 
 ALLOBJS=
@@ -549,7 +460,7 @@ _YLSRCS=	${SRCS:M*.[ly]:C/\..$/.c/} ${YHEADER:D${SRCS:M*.y:.y=.h}}
 
 .NOPATH: ${ALLOBJS} ${_LIBS} ${_YLSRCS}
 
-realall: ${SRCS} ${ALLOBJS:O} ${_LIBS} ${_LIB.so.debug}
+realall: ${SRCS} ${ALLOBJS:O} ${_LIBS} ${_LIB.debug}
 
 MKARZERO?=no
 
@@ -588,13 +499,13 @@ CLEANFILES+=	${_YLSRCS}
 
 ${STOBJS} ${POBJS} ${GOBJS} ${SOBJS} ${LOBJS}: ${DPSRCS}
 
-${_LIB.a}:: ${STOBJS} __archivebuild
+lib${LIB}.a:: ${STOBJS} __archivebuild
 
-${_LIB_p.a}:: ${POBJS} __archivebuild
+lib${LIB}_p.a:: ${POBJS} __archivebuild
 
-${_LIB_pic.a}:: ${SOBJS} __archivebuild
+lib${LIB}_pic.a:: ${SOBJS} __archivebuild
 
-${_LIB_g.a}:: ${GOBJS} __archivebuild
+lib${LIB}_g.a:: ${GOBJS} __archivebuild
 
 
 _LIBLDOPTS=
@@ -634,45 +545,44 @@ LIBCC:=	${CXX}
 LIBCC:=	${CC}
 .endif
 
-_LDADD.${_LIB}=	${LDADD} ${LDADD.${_LIB}}
-_LDFLAGS.${_LIB}=	${LDFLAGS} ${LDFLAGS.${_LIB}}
+_LDADD.lib${LIB}=	${LDADD} ${LDADD.lib${LIB}}
+_LDFLAGS.lib${LIB}=	${LDFLAGS} ${LDFLAGS.lib${LIB}}
 
-${_LIB.so.full}: ${SOLIB} ${DPADD} ${DPLIBC} \
+lib${LIB}.so.${SHLIB_FULLVERSION}: ${SOLIB} ${DPADD} ${DPLIBC} \
     ${SHLIB_LDSTARTFILE} ${SHLIB_LDENDFILE}
 	${_MKTARGET_BUILD}
-	rm -f ${.TARGET}
-	${LIBCC} ${LDLIBC} -Wl,-x -shared ${SHLIB_SHFLAGS} \
-	    ${_LDFLAGS.${_LIB}} -o ${.TARGET} ${_LIBLDOPTS} \
-	    -Wl,--whole-archive ${SOLIB} \
-	    -Wl,--no-whole-archive ${_LDADD.${_LIB}}
+	rm -f lib${LIB}.so.${SHLIB_FULLVERSION}
+	${LIBCC} ${LDLIBC} -Wl,-x -shared ${SHLIB_SHFLAGS} ${_LDFLAGS.lib${LIB}} \
+	    -o ${.TARGET} ${_LIBLDOPTS} \
+	    -Wl,--whole-archive ${SOLIB} -Wl,--no-whole-archive ${_LDADD.lib${LIB}}
 #  We don't use INSTALL_SYMLINK here because this is just
 #  happening inside the build directory/objdir. XXX Why does
 #  this spend so much effort on libraries that aren't live??? XXX
 .if defined(SHLIB_FULLVERSION) && defined(SHLIB_MAJOR) && \
     "${SHLIB_FULLVERSION}" != "${SHLIB_MAJOR}"
-	${HOST_LN} -sf ${_LIB.so.full} ${_LIB.so.major}.tmp
-	mv -f ${_LIB.so.major}.tmp ${_LIB.so.major}
+	${HOST_LN} -sf lib${LIB}.so.${SHLIB_FULLVERSION} lib${LIB}.so.${SHLIB_MAJOR}.tmp
+	mv -f lib${LIB}.so.${SHLIB_MAJOR}.tmp lib${LIB}.so.${SHLIB_MAJOR}
 .endif
-	${HOST_LN} -sf ${_LIB.so.full} ${_LIB.so}.tmp
-	mv -f ${_LIB.so}.tmp ${_LIB.so}
+	${HOST_LN} -sf lib${LIB}.so.${SHLIB_FULLVERSION} lib${LIB}.so.tmp
+	mv -f lib${LIB}.so.tmp lib${LIB}.so
 .if ${MKSTRIPIDENT} != "no"
 	${OBJCOPY} -R .ident ${.TARGET}
 .endif
 
-.if defined(_LIB.so.debug)
-${_LIB.so.debug}: ${_LIB.so.full}
+.if defined(_LIB.debug)
+${_LIB.debug}: ${_LIB.so}
 	${_MKTARGET_CREATE}
-	(  ${OBJCOPY} --only-keep-debug ${_LIB.so.full} ${_LIB.so.debug} \
+	(  ${OBJCOPY} --only-keep-debug ${_LIB.so} ${_LIB.debug} \
 	&& ${OBJCOPY} --strip-debug -p -R .gnu_debuglink \
-		--add-gnu-debuglink=${_LIB.so.debug} ${_LIB.so.full} \
-	) || (rm -f ${.TARGET}; false)
+		--add-gnu-debuglink=${_LIB.debug} ${_LIB.so} \
+	) || (rm -f ${_LIB.debug}; false)
 .endif
 
 .if !empty(LOBJS)							# {
 LLIBS?=		-lc
-${_LIB.ln}: ${LOBJS}
+llib-l${LIB}.ln: ${LOBJS}
 	${_MKTARGET_COMPILE}
-	rm -f ${.TARGET}
+	rm -f llib-l${LIB}.ln
 .if defined(DESTDIR)
 	${LINT} -C${LIB} ${.ALLSRC} -L${DESTDIR}/usr/libdata ${LLIBS}
 .else
@@ -684,7 +594,6 @@ lint: ${LOBJS}
 .if defined(LOBJS) && !empty(LOBJS)
 	${LINT} ${LINTFLAGS} ${LOBJS}
 .endif
-
 
 # If the number of entries in CLEANFILES is too large, then the
 # commands in bsd.clean.mk encounter errors like "exec(/bin/sh)
@@ -701,168 +610,170 @@ libclean3: .PHONY .MADE __cleanuse LIBCLEANFILES3
 libclean4: .PHONY .MADE __cleanuse LIBCLEANFILES4
 libclean5: .PHONY .MADE __cleanuse LIBCLEANFILES5
 CLEANFILES+= a.out [Ee]rrs mklog core *.core
-LIBCLEANFILES1+= ${_LIB.a}   ${STOBJS} ${STOBJS:=.tmp}
-LIBCLEANFILES2+= ${_LIB_p.a} ${POBJS}  ${POBJS:=.tmp}
-LIBCLEANFILES3+= ${_LIB_g.a} ${GOBJS}  ${GOBJS:=.tmp}
-LIBCLEANFILES4+= ${_LIB_pic.a}
-.if ${MKPIC} != "no" && defined(SHLIB_FULLVERSION)
-LIBCLEANFILES4+= ${_LIB.so}.* ${_LIB.so} ${_LIB.so.debug}
-.endif
+LIBCLEANFILES1+= lib${LIB}.a   ${STOBJS} ${STOBJS:=.tmp}
+LIBCLEANFILES2+= lib${LIB}_p.a ${POBJS}  ${POBJS:=.tmp}
+LIBCLEANFILES3+= lib${LIB}_g.a ${GOBJS}  ${GOBJS:=.tmp}
+LIBCLEANFILES4+= lib${LIB}_pic.a lib${LIB}.so.* lib${LIB}.so ${_LIB.debug}
 LIBCLEANFILES4+= ${SOBJS} ${SOBJS:=.tmp}
-LIBCLEANFILES5+= ${_LIB.ln} ${LOBJS}
+LIBCLEANFILES5+= llib-l${LIB}.ln ${LOBJS}
 
 .if !target(libinstall)							# {
 # Make sure it gets defined, in case MKPIC==no && MKLINKLIB==no
 libinstall::
 
 .if ${MKLINKLIB} != "no" && ${MKSTATICLIB} != "no"
-libinstall:: ${_DEST.LIB}/${_LIB.a}
-.PRECIOUS: ${_DEST.LIB}/${_LIB.a}
+libinstall:: ${DESTDIR}${LIBDIR}/lib${LIB}.a
+.PRECIOUS: ${DESTDIR}${LIBDIR}/lib${LIB}.a
 
 .if ${MKUPDATE} == "no"
-.if !defined(BUILD) && !make(all) && !make(${_LIB.a})
-${_DEST.LIB}/${_LIB.a}! .MADE
+.if !defined(BUILD) && !make(all) && !make(lib${LIB}.a)
+${DESTDIR}${LIBDIR}/lib${LIB}.a! .MADE
 .endif
-${_DEST.LIB}/${_LIB.a}! ${_LIB.a} __archiveinstall
+${DESTDIR}${LIBDIR}/lib${LIB}.a! lib${LIB}.a __archiveinstall
 .else
-.if !defined(BUILD) && !make(all) && !make(${_LIB.a})
-${_DEST.LIB}/${_LIB.a}: .MADE
+.if !defined(BUILD) && !make(all) && !make(lib${LIB}.a)
+${DESTDIR}${LIBDIR}/lib${LIB}.a: .MADE
 .endif
-${_DEST.LIB}/${_LIB.a}: ${_LIB.a} __archiveinstall
+${DESTDIR}${LIBDIR}/lib${LIB}.a: lib${LIB}.a __archiveinstall
 .endif
 .endif
 
 .if ${MKPROFILE} != "no"
-libinstall:: ${_DEST.LIB}/${_LIB_p.a}
-.PRECIOUS: ${_DEST.LIB}/${_LIB_p.a}
+libinstall:: ${DESTDIR}${LIBDIR}/lib${LIB}_p.a
+.PRECIOUS: ${DESTDIR}${LIBDIR}/lib${LIB}_p.a
 
 .if ${MKUPDATE} == "no"
-.if !defined(BUILD) && !make(all) && !make(${_LIB_p.a})
-${_DEST.LIB}/${_LIB_p.a}! .MADE
+.if !defined(BUILD) && !make(all) && !make(lib${LIB}_p.a)
+${DESTDIR}${LIBDIR}/lib${LIB}_p.a! .MADE
 .endif
-${_DEST.LIB}/${_LIB_p.a}! ${_LIB_p.a} __archiveinstall
+${DESTDIR}${LIBDIR}/lib${LIB}_p.a! lib${LIB}_p.a __archiveinstall
 .else
-.if !defined(BUILD) && !make(all) && !make(${_LIB_p.a})
-${_DEST.LIB}/${_LIB_p.a}: .MADE
+.if !defined(BUILD) && !make(all) && !make(lib${LIB}_p.a)
+${DESTDIR}${LIBDIR}/lib${LIB}_p.a: .MADE
 .endif
-${_DEST.LIB}/${_LIB_p.a}: ${_LIB_p.a} __archiveinstall
+${DESTDIR}${LIBDIR}/lib${LIB}_p.a: lib${LIB}_p.a __archiveinstall
 .endif
 .endif
 
 .if ${MKDEBUGLIB} != "no"
-libinstall:: ${_DEST.LIB}/${_LIB_g.a}
-.PRECIOUS: ${_DEST.LIB}/${_LIB_g.a}
+libinstall:: ${DESTDIR}${LIBDIR}/lib${LIB}_g.a
+.PRECIOUS: ${DESTDIR}${LIBDIR}/lib${LIB}_g.a
 
 .if ${MKUPDATE} == "no"
-.if !defined(BUILD) && !make(all) && !make(${_LIB_g.a})
-${_DEST.LIB}/${_LIB_g.a}! .MADE
+.if !defined(BUILD) && !make(all) && !make(lib${LIB}_g.a)
+${DESTDIR}${LIBDIR}/lib${LIB}_g.a! .MADE
 .endif
-${_DEST.LIB}/${_LIB_g.a}! ${_LIB_g.a} __archiveinstall
+${DESTDIR}${LIBDIR}/lib${LIB}_g.a! lib${LIB}_g.a __archiveinstall
 .else
-.if !defined(BUILD) && !make(all) && !make(${LIB_g.a})
-${_DEST.LIB}/${_LIB_g.a}: .MADE
+.if !defined(BUILD) && !make(all) && !make(lib${LIB}_g.a)
+${DESTDIR}${LIBDIR}/lib${LIB}_g.a: .MADE
 .endif
-${_DEST.LIB}/${_LIB_g.a}: ${_LIB_g.a} __archiveinstall
+${DESTDIR}${LIBDIR}/lib${LIB}_g.a: lib${LIB}_g.a __archiveinstall
 .endif
 .endif
 
 .if ${MKPIC} != "no" && ${MKPICINSTALL} != "no"
-libinstall:: ${_DEST.LIB}/${_LIB_pic.a}
-.PRECIOUS: ${_DEST.LIB}/${_LIB_pic.a}
+libinstall:: ${DESTDIR}${LIBDIR}/lib${LIB}_pic.a
+.PRECIOUS: ${DESTDIR}${LIBDIR}/lib${LIB}_pic.a
 
 .if ${MKUPDATE} == "no"
-.if !defined(BUILD) && !make(all) && !make(${_LIB_pic.a})
-${_DEST.LIB}/${_LIB_pic.a}! .MADE
+.if !defined(BUILD) && !make(all) && !make(lib${LIB}_pic.a)
+${DESTDIR}${LIBDIR}/lib${LIB}_pic.a! .MADE
 .endif
 .if ${MKPICLIB} == "no"
-${_DEST.LIB}/${_LIB_pic.a}! ${_LIB.a} __archivesymlinkpic
+${DESTDIR}${LIBDIR}/lib${LIB}_pic.a! lib${LIB}.a __archivesymlinkpic
 .else
-${_DEST.LIB}/${_LIB_pic.a}! ${_LIB_pic.a} __archiveinstall
+${DESTDIR}${LIBDIR}/lib${LIB}_pic.a! lib${LIB}_pic.a __archiveinstall
 .endif
 .else
-.if !defined(BUILD) && !make(all) && !make(${_LIB_pic.a})
-${_DEST.LIB}/${_LIB_pic.a}: .MADE
+.if !defined(BUILD) && !make(all) && !make(lib${LIB}_pic.a)
+${DESTDIR}${LIBDIR}/lib${LIB}_pic.a: .MADE
 .endif
 .if ${MKPICLIB} == "no"
-${_DEST.LIB}/${_LIB_pic.a}: ${_LIB.a} __archivesymlinkpic
+${DESTDIR}${LIBDIR}/lib${LIB}_pic.a: lib${LIB}.a __archivesymlinkpic
 .else
-${_DEST.LIB}/${_LIB_pic.a}: ${_LIB_pic.a} __archiveinstall
+${DESTDIR}${LIBDIR}/lib${LIB}_pic.a: lib${LIB}_pic.a __archiveinstall
 .endif
 .endif
 .endif
 
 .if ${MKPIC} != "no" && defined(SHLIB_FULLVERSION)
+_LIB_SO_TGT=		${DESTDIR}${_LIBSODIR}/${_LIB_PREFIX}${LIB}.so
+_LIB_SO_TGTLIBDIR=	   ${DESTDIR}${LIBDIR}/${_LIB_PREFIX}${LIB}.so
 
-libinstall:: ${_DEST.OBJ}/${_LIB.so.full}
-.PRECIOUS: ${_DEST.OBJ}/${_LIB.so.full}
+libinstall:: ${_LIB_SO_TGT}.${SHLIB_FULLVERSION}
+.PRECIOUS: ${_LIB_SO_TGT}.${SHLIB_FULLVERSION}
 
 .if ${MKUPDATE} == "no"
-.if !defined(BUILD) && !make(all) && !make(${_LIB.so.full})
-${_DEST.OBJ}/${_LIB.so.full}! .MADE
+.if !defined(BUILD) && !make(all) && !make(lib${LIB}.so.${SHLIB_FULLVERSION})
+${_LIB_SO_TGT}.${SHLIB_FULLVERSION}! .MADE
 .endif
-${_DEST.OBJ}/${_LIB.so.full}! ${_LIB.so.full}
+${_LIB_SO_TGT}.${SHLIB_FULLVERSION}! lib${LIB}.so.${SHLIB_FULLVERSION}
 .else
-.if !defined(BUILD) && !make(all) && !make(${_LIB.so.full})
-${_DEST.OBJ}/${_LIB.so.full}: .MADE
+.if !defined(BUILD) && !make(all) && !make(lib${LIB}.so.${SHLIB_FULLVERSION})
+${_LIB_SO_TGT}.${SHLIB_FULLVERSION}: .MADE
 .endif
-${_DEST.OBJ}/${_LIB.so.full}: ${_LIB.so.full}
+${_LIB_SO_TGT}.${SHLIB_FULLVERSION}: lib${LIB}.so.${SHLIB_FULLVERSION}
 .endif
 	${_MKTARGET_INSTALL}
 	${INSTALL_FILE} -o ${LIBOWN} -g ${LIBGRP} -m ${LIBMODE} \
-	    ${.ALLSRC} ${.TARGET}
+		${.ALLSRC} ${.TARGET}
 .if ${_LIBSODIR} != ${LIBDIR}
-	${INSTALL_SYMLINK} -l r ${_DEST.OBJ}/${_LIB.so.full} \
-	    ${_DEST.LIB}/${_LIB.so.full} 
+	${INSTALL_SYMLINK} -l r \
+		${_LIB_SO_TGT}.${SHLIB_FULLVERSION} \
+		${_LIB_SO_TGTLIBDIR}.${SHLIB_FULLVERSION}
 .endif
 .if defined(SHLIB_FULLVERSION) && defined(SHLIB_MAJOR) && \
     "${SHLIB_FULLVERSION}" != "${SHLIB_MAJOR}"
-	${INSTALL_SYMLINK} ${_LIB.so.full} ${_DEST.OBJ}/${_LIB.so.major}
+	${INSTALL_SYMLINK} \
+		${_LIB_PREFIX}${LIB}.so.${SHLIB_FULLVERSION} \
+		${_LIB_SO_TGT}.${SHLIB_MAJOR}
 .if ${_LIBSODIR} != ${LIBDIR}
-	${INSTALL_SYMLINK} -l r ${_DEST.OBJ}/${_LIB.so.full} \
-	    ${_DEST.LIB}/${_LIB.so.major}
+	${INSTALL_SYMLINK} -l r \
+		${_LIB_SO_TGT}.${SHLIB_FULLVERSION} \
+		${_LIB_SO_TGTLIBDIR}.${SHLIB_MAJOR}
 .endif
 .endif
 .if ${MKLINKLIB} != "no"
-	${INSTALL_SYMLINK}  ${_LIB.so.full} ${_DEST.OBJ}/${_LIB.so}
+	${INSTALL_SYMLINK} \
+		${_LIB_PREFIX}${LIB}.so.${SHLIB_FULLVERSION} \
+		${_LIB_SO_TGT}
 .if ${_LIBSODIR} != ${LIBDIR}
-	${INSTALL_SYMLINK} -l r ${_DEST.OBJ}/${_LIB.so.full} \
-	    ${_DEST.LIB}/${_LIB.so}
+	${INSTALL_SYMLINK} -l r \
+		${_LIB_SO_TGT}.${SHLIB_FULLVERSION} \
+		${_LIB_SO_TGTLIBDIR}
 .endif
 .endif
 .endif
 
-.if defined(_LIB.so.debug)
-libinstall:: ${_DEST.DEBUG}/${_LIB.so.debug}
-.PRECIOUS: ${_DEST.DEBUG}/${_LIB.so.debug}
+.if defined(_LIB.debug)
+libinstall:: ${DESTDIR}${DEBUGDIR}${LIBDIR}/${_LIB.debug}
+.PRECIOUS: ${DESTDIR}${DEBUGDIR}${LIBDIR}/${_LIB.debug}
 
-${_DEST.DEBUG}/${_LIB.so.debug}: ${_LIB.so.debug}
+${DESTDIR}${DEBUGDIR}${LIBDIR}/${_LIB.debug}: ${_LIB.debug}
 	${_MKTARGET_INSTALL}
 	${INSTALL_FILE} -o ${DEBUGOWN} -g ${DEBUGGRP} -m ${DEBUGMODE} \
-	    ${.ALLSRC} ${.TARGET}
-.if ${_LIBSODIR} != ${LIBDIR}
-	${INSTALL_SYMLINK} -l r ${_DEST.DEBUG}/${_LIB.so.debug} \
-	    ${_DEST.ODEBUG}/${_LIB.so.debug} 
-.endif
+		${.ALLSRC} ${.TARGET}
 .endif
 
 .if ${MKLINT} != "no" && !empty(LOBJS)
-libinstall:: ${_DEST.LINT}/${_LIB.ln}
-.PRECIOUS: ${_DEST.LINT}/${_LIB.ln}
+libinstall:: ${DESTDIR}${LINTLIBDIR}/llib-l${LIB}.ln
+.PRECIOUS: ${DESTDIR}${LINTLIBDIR}/llib-l${LIB}.ln
 
 .if ${MKUPDATE} == "no"
-.if !defined(BUILD) && !make(all) && !make(${_LIB.ln})
-${_DEST.LINT}/${_LIB.ln}! .MADE
+.if !defined(BUILD) && !make(all) && !make(llib-l${LIB}.ln)
+${DESTDIR}${LINTLIBDIR}/llib-l${LIB}.ln! .MADE
 .endif
-${_DEST.LINT}/${_LIB.ln}! ${_LIB.ln}
+${DESTDIR}${LINTLIBDIR}/llib-l${LIB}.ln! llib-l${LIB}.ln
 .else
-.if !defined(BUILD) && !make(all) && !make(${_LIB.ln})
-${_DEST.LINT}/${_LIB.ln}: .MADE
+.if !defined(BUILD) && !make(all) && !make(llib-l${LIB}.ln)
+${DESTDIR}${LINTLIBDIR}/llib-l${LIB}.ln: .MADE
 .endif
-${_DEST.LINT}/${_LIB.ln}: ${_LIB.ln}
+${DESTDIR}${LINTLIBDIR}/llib-l${LIB}.ln: llib-l${LIB}.ln
 .endif
 	${_MKTARGET_INSTALL}
 	${INSTALL_FILE} -o ${LIBOWN} -g ${LIBGRP} -m ${LIBMODE} \
-		${.ALLSRC} ${_DEST.LINT}
+		${.ALLSRC} ${DESTDIR}${LINTLIBDIR}
 .endif
 .endif	# !target(libinstall)						# }
 

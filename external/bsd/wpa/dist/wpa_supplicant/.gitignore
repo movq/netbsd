@@ -1,1 +1,8 @@
-*.service
+*.d
+.config
+eapol_test
+preauth_test
+wpa_cli
+wpa_passphrase
+wpa_supplicant
+wpa_priv

@@ -1,4 +1,4 @@
-/*	$NetBSD: mouse.c,v 1.10 2012/12/24 01:29:20 khorben Exp $ */
+/*	$NetBSD: mouse.c,v 1.8.22.1 2013/02/11 21:36:30 riz Exp $ */
 
 /*-
  * Copyright (c) 1998, 2006, 2012 The NetBSD Foundation, Inc.

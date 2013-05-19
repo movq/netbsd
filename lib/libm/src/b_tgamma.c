@@ -1,4 +1,4 @@
-/*	$NetBSD: b_tgamma.c,v 1.1 2012/05/05 17:54:14 christos Exp $	*/
+/*	$NetBSD: b_tgamma.c,v 1.1.2.2 2012/05/09 18:22:36 riz Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -38,7 +38,7 @@
 #if 0
 __FBSDID("$FreeBSD: release/9.0.0/lib/msun/bsdsrc/b_tgamma.c 176449 2008-02-22 02:26:51Z das $");
 #else
-__RCSID("$NetBSD: b_tgamma.c,v 1.1 2012/05/05 17:54:14 christos Exp $");
+__RCSID("$NetBSD: b_tgamma.c,v 1.1.2.2 2012/05/09 18:22:36 riz Exp $");
 #endif
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.19 2013/03/06 11:49:06 yamt Exp $	*/
+/*	$NetBSD: main.c,v 1.18 2011/08/30 19:20:20 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2009 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: main.c,v 1.19 2013/03/06 11:49:06 yamt Exp $");
+__RCSID("$NetBSD: main.c,v 1.18 2011/08/30 19:20:20 joerg Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -135,7 +135,6 @@ static bool		lflag;
 static bool		fflag;
 static int		nbufs;
 static bool		cflag;
-static bool		dflag;
 static bool		xflag;
 static int		lsfd;
 static int		displayed;
@@ -182,7 +181,7 @@ main(int argc, char **argv)
 	mflag = false;
 	Mflag = false;
 
-	while ((ch = getopt(argc, argv, "E:F:L:MN:T:b:cdeflmo:pstx")) != -1)
+	while ((ch = getopt(argc, argv, "E:F:L:MN:T:b:ceflmo:pstx")) != -1)
 		switch (ch) {
 		case 'E':
 			eventtype = matchname(eventnames, optarg);
@@ -206,9 +205,6 @@ main(int argc, char **argv)
 			break;
 		case 'c':
 			cflag = true;
-			break;
-		case 'd':
-			dflag = true;
 			break;
 		case 'e':
 			listnames(eventnames);
@@ -246,7 +242,7 @@ main(int argc, char **argv)
 	argc -= optind;
 	argv += optind;
 
-	if (*argv == NULL && !dflag)
+	if (*argv == NULL)
 		usage();
 
 	if (outf) {
@@ -312,9 +308,6 @@ main(int argc, char **argv)
 		errx(EXIT_FAILURE,
 		    "incompatible lockstat interface version (%d, kernel %d)",
 			LS_VERSION, ch);
-	if (dflag) {
-		goto disable;
-	}
 	if (ioctl(lsfd, IOC_LOCKSTAT_ENABLE, &le))
 		err(EXIT_FAILURE, "cannot enable tracing");
 
@@ -323,7 +316,6 @@ main(int argc, char **argv)
 	 */
 	spawn(argc, argv);
 
-disable:
 	/*
 	 * Stop tracing, and read the trace buffers from the kernel.
 	 */
@@ -403,8 +395,7 @@ usage(void)
 	    "%s [options] <command>\n\n"
 	    "-b nbuf\t\tset number of event buffers to allocate\n"
 	    "-c\t\treport percentage of total events by count, not time\n"
-	    "-d\t\tdisable lockstat\n"
-	    "-E event\tdisplay only one type of event\n"
+	    "-E event\t\tdisplay only one type of event\n"
 	    "-e\t\tlist event types\n"
 	    "-F func\t\tlimit trace to one function\n"
 	    "-f\t\ttrace only by function\n"

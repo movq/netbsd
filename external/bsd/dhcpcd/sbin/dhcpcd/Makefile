@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.13 2012/08/04 19:11:39 roy Exp $
+# $NetBSD: Makefile,v 1.11.2.1 2012/10/17 21:48:32 riz Exp $
 #
 
 PROG=		dhcpcd

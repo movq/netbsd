@@ -1,4 +1,4 @@
-/*	$NetBSD: mvsocreg.h,v 1.3 2012/10/19 06:14:44 msaitoh Exp $	*/
+/*	$NetBSD: mvsocreg.h,v 1.2.12.1 2012/12/11 04:44:03 riz Exp $	*/
 /*
  * Copyright (c) 2007, 2008 KIYOHARA Takashi
  * All rights reserved.

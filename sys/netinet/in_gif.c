@@ -1,4 +1,4 @@
-/*	$NetBSD: in_gif.c,v 1.63 2013/03/01 18:25:57 joerg Exp $	*/
+/*	$NetBSD: in_gif.c,v 1.62 2012/01/09 14:31:22 liamjfoy Exp $	*/
 /*	$KAME: in_gif.c,v 1.66 2001/07/29 04:46:09 itojun Exp $	*/
 
 /*
@@ -31,9 +31,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in_gif.c,v 1.63 2013/03/01 18:25:57 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_gif.c,v 1.62 2012/01/09 14:31:22 liamjfoy Exp $");
 
 #include "opt_inet.h"
+#include "opt_iso.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -138,6 +139,12 @@ in_gif_output(struct ifnet *ifp, int family, struct mbuf *m)
 		break;
 	    }
 #endif /* INET6 */
+#ifdef ISO
+	case AF_ISO:
+		proto = IPPROTO_EON;
+		tos = 0;
+		break;
+#endif
 	default:
 #ifdef DEBUG
 		printf("in_gif_output: warning: unknown family %d passed\n",
@@ -265,6 +272,11 @@ in_gif_input(struct mbuf *m, ...)
 		break;
 	    }
 #endif /* INET6 */
+#ifdef ISO
+	case IPPROTO_EON:
+		af = AF_ISO;
+		break;
+#endif
 	default:
 		ip_statinc(IP_STAT_NOGIF);
 		m_freem(m);

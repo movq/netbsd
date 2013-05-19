@@ -1,4 +1,4 @@
-/*	$NetBSD: master.c,v 1.8 2012/12/04 23:38:42 spz Exp $	*/
+/*	$NetBSD: master.c,v 1.5.4.3 2012/12/15 05:39:57 riz Exp $	*/
 
 /*
  * Copyright (C) 2004-2009, 2011, 2012  Internet Systems Consortium, Inc. ("ISC")

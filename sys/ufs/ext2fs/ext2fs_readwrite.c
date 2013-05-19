@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_readwrite.c,v 1.62 2012/11/21 23:11:23 jakllsch Exp $	*/
+/*	$NetBSD: ext2fs_readwrite.c,v 1.58.6.1 2012/05/07 03:01:12 riz Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_readwrite.c,v 1.62 2012/11/21 23:11:23 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_readwrite.c,v 1.58.6.1 2012/05/07 03:01:12 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -123,7 +123,7 @@ ext2fs_read(void *v)
 
 	if (vp->v_type == VLNK) {
 		if (ext2fs_size(ip) < ump->um_maxsymlinklen ||
-		    (ump->um_maxsymlinklen == 0 && ext2fs_nblock(ip) == 0))
+		    (ump->um_maxsymlinklen == 0 && ip->i_e2fs_nblock == 0))
 			panic("%s: short symlink", "ext2fs_read");
 	} else if (vp->v_type != VREG && vp->v_type != VDIR)
 		panic("%s: type %d", "ext2fs_read", vp->v_type);
@@ -377,19 +377,9 @@ out:
 	ip->i_flag |= IN_CHANGE | IN_UPDATE;
 	if (vp->v_mount->mnt_flag & MNT_RELATIME)
 		ip->i_flag |= IN_ACCESS;
-	if (resid > uio->uio_resid && ap->a_cred) {
-		if (ip->i_e2fs_mode & ISUID) {
-			if (kauth_authorize_vnode(ap->a_cred,
-			    KAUTH_VNODE_RETAIN_SUID, vp, NULL, EPERM) != 0)
-				ip->i_e2fs_mode &= ISUID;
-		}
-
-		if (ip->i_e2fs_mode & ISGID) {
-			if (kauth_authorize_vnode(ap->a_cred,
-			    KAUTH_VNODE_RETAIN_SGID, vp, NULL, EPERM) != 0)
-				ip->i_e2fs_mode &= ~ISGID;
-		}
-	}
+	if (resid > uio->uio_resid && ap->a_cred &&
+	    kauth_authorize_generic(ap->a_cred, KAUTH_GENERIC_ISSUSER, NULL))
+		ip->i_e2fs_mode &= ~(ISUID | ISGID);
 	if (resid > uio->uio_resid)
 		VN_KNOTE(vp, NOTE_WRITE | (extended ? NOTE_EXTEND : 0));
 	if (error) {

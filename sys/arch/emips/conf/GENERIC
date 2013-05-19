@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.10 2013/04/27 21:43:20 christos Exp $
+# $NetBSD: GENERIC,v 1.4 2011/11/22 21:25:05 tls Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include		"arch/emips/conf/std.emips"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC-$Revision: 1.10 $"
+#ident		"GENERIC-$Revision: 1.4 $"
 
 maxusers	64
 
@@ -52,6 +52,7 @@ options 	SYSVSEM		# System V-like semaphores
 #options 	SEMMNU=30	# number of undo structures in system
 options 	SYSVSHM		# System V-like memory sharing
 #options 	SHMMAXPGS=1024	# 1024 pages is the default
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 options 	USERCONF	# userconf(4) support
 #options 	PIPE_SOCKETPAIR	# smaller, but slower pipe(2)
@@ -99,11 +100,15 @@ options 	FFS_EI		# FFS Endian Independent support
 options 	INET		# Internet protocols
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	GATEWAY		# IP packet forwarding
 #options 	MROUTING	# Multicast routing support
 #options 	PIM		# Protocol Independent Multicast
+#options 	ISO		# OSI networking
+#options 	TPIP		# TPIP
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking protocols
 options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 options 	PPP_DEFLATE	# Deflate compression support for PPP
@@ -146,7 +151,6 @@ options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 #options 	FONT_GALLANT12x22
 
 #options 	WSEMUL_VT100
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 #options 	WS_KERNEL_FG=WSCOL_GREEN
 #options 	WS_KERNEL_BG=WSCOL_BLACK
 
@@ -187,7 +191,7 @@ lcd*    at	ebus0 addr ?    # lcd display
 # Pseudo-devices							#
 #########################################################################
 
-pseudo-device	loop			# network loopback
+pseudo-device	loop		 1	# network loopback
 pseudo-device	sl		 	# serial-line IP ports
 pseudo-device	ppp		 	# serial-line IP ports
 pseudo-device	pppoe			# PPP over Ethernet (RFC 2516)
@@ -206,9 +210,9 @@ pseudo-device	agr			# IEEE 802.3ad link aggregation
 
 pseudo-device	vnd		 	# virtual disk ick
 #options 	VND_COMPRESSION		# compressed vnd(4)
-pseudo-device	ccd		 	# concatenated disks
-#pseudo-device	cgd		 	# cryptographic disk devices
-#pseudo-device	raid			# RAIDframe disk driver
+pseudo-device	ccd		 4	# concatenated disks
+#pseudo-device	cgd		 4	# cryptographic disk devices
+#pseudo-device	raid		 8	# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # Options to enable various other RAIDframe RAID types.
 #options 	RF_INCLUDE_EVENODD=1

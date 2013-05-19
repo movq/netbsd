@@ -1,4 +1,4 @@
-/*	$NetBSD: dnssec-keyfromlabel.c,v 1.9 2013/03/24 18:44:38 christos Exp $	*/
+/*	$NetBSD: dnssec-keyfromlabel.c,v 1.6.4.2 2012/12/15 05:39:23 riz Exp $	*/
 
 /*
  * Copyright (C) 2007-2012  Internet Systems Consortium, Inc. ("ISC")
@@ -161,7 +161,6 @@ main(int argc, char **argv) {
 	if (argc == 1)
 		usage();
 
-	isc__mem_register();
 	RUNTIME_CHECK(isc_mem_create(0, 0, &mctx) == ISC_R_SUCCESS);
 
 	dns_result_register();

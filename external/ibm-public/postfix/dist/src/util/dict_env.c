@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_env.c,v 1.1.1.2 2013/01/02 18:59:12 tron Exp $	*/
+/*	$NetBSD: dict_env.c,v 1.1.1.1 2009/06/23 10:08:59 tron Exp $	*/
 
 /*++
 /* NAME
@@ -50,9 +50,8 @@
 
 /* dict_env_update - update environment array */
 
-static int dict_env_update(DICT *dict, const char *name, const char *value)
+static void dict_env_update(DICT *dict, const char *name, const char *value)
 {
-    dict->error = 0;
 
     /*
      * Optionally fold the key.
@@ -65,15 +64,13 @@ static int dict_env_update(DICT *dict, const char *name, const char *value)
     }
     if (setenv(name, value, 1))
 	msg_fatal("setenv: %m");
-
-    return (DICT_STAT_SUCCESS);
 }
 
 /* dict_env_lookup - access environment array */
 
 static const char *dict_env_lookup(DICT *dict, const char *name)
 {
-    dict->error = 0;
+    dict_errno = 0;
 
     /*
      * Optionally fold the key.
@@ -109,6 +106,5 @@ DICT   *dict_env_open(const char *name, int unused_flags, int dict_flags)
     dict->flags = dict_flags | DICT_FLAG_FIXED;
     if (dict_flags & DICT_FLAG_FOLD_FIX)
 	dict->fold_buf = vstring_alloc(10);
-    dict->owner.status = DICT_OWNER_TRUSTED;
     return (DICT_DEBUG (dict));
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: udivsi3.S,v 1.1 2012/10/30 12:42:13 christos Exp $	*/
+/*	$NetBSD: udivsi3.S,v 1.1.2.2 2012/11/19 18:38:02 riz Exp $	*/
 
 /*
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND

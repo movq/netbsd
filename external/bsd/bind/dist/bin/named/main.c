@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.10 2013/03/24 18:44:39 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.8.4.1 2012/06/05 21:15:21 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004-2012  Internet Systems Consortium, Inc. ("ISC")
@@ -1039,11 +1039,6 @@ main(int argc, char *argv[]) {
 #ifdef HAVE_LIBSCF
 	char *instance = NULL;
 #endif
-
-	isc__mem_register();
-	isc__task_register();
-	isc__timer_register();
-	isc__socket_register();
 
 	/*
 	 * Record version in core image.

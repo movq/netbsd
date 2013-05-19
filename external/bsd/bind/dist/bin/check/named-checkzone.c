@@ -1,4 +1,4 @@
-/*	$NetBSD: named-checkzone.c,v 1.4 2013/03/24 18:44:37 christos Exp $	*/
+/*	$NetBSD: named-checkzone.c,v 1.2.6.1 2012/06/05 21:15:45 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004-2011  Internet Systems Consortium, Inc. ("ISC")
@@ -122,10 +122,6 @@ main(int argc, char **argv) {
 	FILE *errout = stdout;
 	char *endp;
 
-	isc__mem_register();
-	isc__task_register();
-	isc__timer_register();
-	isc__socket_register();
 	outputstyle = &dns_master_style_full;
 
 	prog_name = strrchr(argv[0], '/');

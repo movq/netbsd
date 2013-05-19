@@ -1,4 +1,4 @@
-/*	$NetBSD: dump.h,v 1.50 2013/01/22 09:39:11 dholland Exp $	*/
+/*	$NetBSD: dump.h,v 1.46 2010/02/26 02:11:40 christos Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -72,7 +72,7 @@ struct ufsi {
 #define ufs_blkoff(u,loc)   /* calculates (loc % u->ufs_bsize) */ \
 	((loc) & (u)->ufs_qbmask)
 #define ufs_dblksize(u,d,b) \
-	((((b) >= UFS_NDADDR || DIP((d), size) >= ((b)+1) << (u)->ufs_bshift \
+	((((b) >= NDADDR || DIP((d), size) >= ((b)+1) << (u)->ufs_bshift \
 		? (u)->ufs_bsize \
 		: (ufs_fragroundup((u), ufs_blkoff(u, DIP((d), size)))))))
 struct ufsi *ufsib;
@@ -175,14 +175,14 @@ void	fs_mapinodes(ino_t, u_int64_t *, int *);
 /* operator interface functions */
 void	broadcast(const char *);
 void	lastdump(char);
-void	msg(const char *fmt, ...) __printflike(1, 2);
-void	msgtail(const char *fmt, ...) __printflike(1, 2);
+void	msg(const char *fmt, ...) __attribute__((__format__(__printf__,1,2)));
+void	msgtail(const char *fmt, ...) __attribute__((__format__(__printf__,1,2)));
 int	query(const char *);
-void	quit(const char *fmt, ...) __printflike(1, 2);
+void	quit(const char *fmt, ...) __attribute__((__format__(__printf__,1,2)));
 time_t	do_stats(void);
 void	statussig(int);
 void	timeest(void);
-time_t	unctime(const char *);
+time_t	unctime(char *);
 
 /* mapping routines */
 union	dinode;
@@ -212,7 +212,7 @@ void	close_rewind(void);
 void	dumpblock(daddr_t, int);
 void	startnewtape(int);
 void	trewind(int);
-void	writerec(const char *, int);
+void	writerec(char *, int);
 
 void	Exit(int);
 void	dumpabort(int);
@@ -281,6 +281,18 @@ void	putdumptime(void);
 		for (ddp = ddatev[i = 0]; i < nddates; ddp = ddatev[++i])
 
 void	sig(int signo);
+
+/*
+ * Compatibility with old systems.
+ */
+#ifdef COMPAT
+#include <sys/file.h>
+#define	strchr(a,b)	index(a,b)
+#define	strrchr(a,b)	rindex(a,b)
+extern char *strdup(), *ctime();
+extern int read(), write();
+extern int errno;
+#endif
 
 #ifndef	_PATH_FSTAB
 #define	_PATH_FSTAB	"/etc/fstab"

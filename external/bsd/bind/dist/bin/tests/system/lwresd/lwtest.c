@@ -1,4 +1,4 @@
-/*	$NetBSD: lwtest.c,v 1.4 2013/03/24 18:44:42 christos Exp $	*/
+/*	$NetBSD: lwtest.c,v 1.2.6.1 2012/06/05 21:15:36 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004, 2007, 2008  Internet Systems Consortium, Inc. ("ISC")
@@ -647,10 +647,6 @@ main(void) {
 	lwres_udp_port = 9210;
 	lwres_resolv_conf = "resolv.conf";
 
-	isc__mem_register();
-	isc__task_register();
-	isc__timer_register();
-	isc__socket_register();
 	ret = lwres_context_create(&ctx, NULL, NULL, NULL, 0);
 	CHECK(ret, "lwres_context_create");
 

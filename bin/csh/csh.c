@@ -1,4 +1,4 @@
-/* $NetBSD: csh.c,v 1.45 2013/01/23 16:39:03 christos Exp $ */
+/* $NetBSD: csh.c,v 1.43 2012/01/22 18:36:14 christos Exp $ */
 
 /*-
  * Copyright (c) 1980, 1991, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993\
 #if 0
 static char sccsid[] = "@(#)csh.c	8.2 (Berkeley) 10/12/93";
 #else
-__RCSID("$NetBSD: csh.c,v 1.45 2013/01/23 16:39:03 christos Exp $");
+__RCSID("$NetBSD: csh.c,v 1.43 2012/01/22 18:36:14 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -78,7 +78,7 @@ __RCSID("$NetBSD: csh.c,v 1.45 2013/01/23 16:39:03 christos Exp $");
  */
 
 Char *dumphist[] = {STRhistory, STRmh, 0, 0};
-Char *tildehist[] = {STRsource, STRmh, STRtildothist, 0};
+Char *loadhist[] = {STRsource, STRmh, STRtildothist, 0};
 
 int nofile = 0;
 int batch = 0;
@@ -105,9 +105,8 @@ static void mailchk(void);
 #ifndef _PATH_DEFPATH
 static Char **defaultpath(void);
 #endif
-#ifdef EDITING
-int	editing = 0;
-#endif
+
+int main(int, char *[]);
 
 int
 main(int argc, char *argv[])
@@ -542,8 +541,8 @@ notty:
 	 * Source history before .login so that it is available in .login
 	 */
 	if ((cp = value(STRhistfile)) != STRNULL)
-	    tildehist[2] = cp;
-	dosource(tildehist, NULL);
+	    loadhist[2] = cp;
+	dosource(loadhist, NULL);
         if (loginsh)
 	      (void)srccat(value(STRhome), STRsldotlogin);
     }
@@ -1342,9 +1341,6 @@ printprompt(void)
 {
     Char *cp;
 
-    if (editing)
-	return;
-
     if (!whyles) {
 	for (cp = value(STRprompt); *cp; cp++)
 	    if (*cp == HIST)
@@ -1362,30 +1358,3 @@ printprompt(void)
 	(void)fprintf(cshout, "? ");
     (void)fflush(cshout);
 }
-
-#ifdef EDIT
-char *
-printpromptstr(EditLine *elx) {
-    static char pbuf[1024];
-    static char qspace[] = "? ";
-    Char *cp;
-    size_t i;
-
-    if (whyles)
-	return qspace;
-
-    i = 0;
-    for (cp = value(STRprompt); *cp; cp++) {
-	if (i >= sizeof(pbuf))
-	    break;
-	if (*cp == HIST)
-	    i += snprintf(pbuf + i, sizeof(pbuf) - i, "%d", eventno + 1);
-	else
-	    pbuf[i++] = *cp;
-    }
-    if (i >= sizeof(pbuf))
-	i = sizeof(pbuf) - 1;
-    pbuf[i] = '\0';
-    return pbuf;
-}
-#endif

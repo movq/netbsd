@@ -82,6 +82,7 @@ static const struct {
 };
 
 struct ykbec_softc {
+	struct device		sc_dev;
 	bus_space_tag_t		sc_iot;
 	bus_space_handle_t	sc_ioh;
 	struct ksensor		sc_sensor[YKBEC_NSENSORS];
@@ -96,8 +97,8 @@ static int ykbec_chip_config;
 
 extern void loongson_set_isa_imr(uint);
 
-int	ykbec_match(device_t, cfdata_t, void *);
-void	ykbec_attach(device_t, device_t, void *);
+int	ykbec_match(struct device *, void *, void *);
+void	ykbec_attach(struct device *, struct device *, void *);
 
 const struct cfattach ykbec_ca = {
 	sizeof(struct ykbec_softc), ykbec_match, ykbec_attach
@@ -126,7 +127,7 @@ const char *ykbec_batstate[] = {
 #endif
 
 int
-ykbec_match(device_t parent, cfdata_t match, void *aux)
+ykbec_match(struct device *parent, void *match, void *aux)
 {
 	struct isa_attach_args *ia = aux;
 	bus_space_handle_t ioh;
@@ -152,10 +153,10 @@ ykbec_match(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-ykbec_attach(device_t parent, device_t self, void *aux)
+ykbec_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct isa_attach_args *ia = aux;
-	struct ykbec_softc *sc = device_private(self);
+	struct ykbec_softc *sc = (struct ykbec_softc *)self;
 	int i;
 
 	sc->sc_iot = ia->ia_iot;
@@ -166,7 +167,7 @@ ykbec_attach(device_t parent, device_t self, void *aux)
 	}
 
 	/* Initialize sensor data. */
-	strlcpy(sc->sc_sensordev.xname, device_xname(self),
+	strlcpy(sc->sc_sensordev.xname, sc->sc_dev.dv_xname,
 	    sizeof(sc->sc_sensordev.xname));
 	if (sensor_task_register(sc, ykbec_refresh, 5) == NULL) {
 		aprint_error(", unable to register update task\n");

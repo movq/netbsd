@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.own.mk,v 1.730 2013/05/03 16:05:11 matt Exp $
+#	$NetBSD: bsd.own.mk,v 1.696.2.4 2012/11/24 19:45:11 riz Exp $
 
 # This needs to be before bsd.init.mk
 .if defined(BSD_MK_COMPAT_FILE)
@@ -14,7 +14,7 @@ MAKECONF?=	/etc/mk.conf
 #
 # CPU model, derived from MACHINE_ARCH
 #
-MACHINE_CPU=	${MACHINE_ARCH:C/mipse[bl]/mips/:C/mips64e[bl]/mips/:C/sh3e[bl]/sh3/:S/m68000/m68k/:S/armeb/arm/:C/earm.*/arm/:S/earm/arm/:S/powerpc64/powerpc/}
+MACHINE_CPU=	${MACHINE_ARCH:C/mipse[bl]/mips/:C/mips64e[bl]/mips/:C/sh3e[bl]/sh3/:S/m68000/m68k/:S/armeb/arm/:S/powerpc64/powerpc/}
 
 #
 # Subdirectory used below ${RELEASEDIR} when building a release
@@ -49,20 +49,16 @@ TOOLCHAIN_MISSING?=	no
 #
 # Platforms still using GCC 4.1
 #
-.if ${MKGCC:Uyes} != "no"
 .if ${MACHINE_CPU}  == "vax"
 HAVE_GCC?=    4
 .else
 # Otherwise, default to GCC4.5
 HAVE_GCC?=    45
 .endif
-.endif
 
 .if \
-    ${MACHINE_CPU} == "arm" || \
     ${MACHINE_ARCH} == "i386" || \
     ${MACHINE_ARCH} == "powerpc" || \
-    ${MACHINE_CPU} == "sh3" || \
     ${MACHINE_ARCH} == "x86_64"
 USE_COMPILERCRTSTUFF?=	no
 .endif
@@ -70,27 +66,14 @@ USE_COMPILERCRTSTUFF?=	yes
 
 HAVE_GDB?=	7
 
-.if (${MACHINE_ARCH} == "alpha") || \
-    (${MACHINE_ARCH} == "hppa") || \
-    (${MACHINE_ARCH} == "ia64") || \
-    (${MACHINE_ARCH} == "mipsel") || (${MACHINE_ARCH} == "mipseb") || \
-    (${MACHINE_ARCH} == "mips64el") || (${MACHINE_ARCH} == "mips64eb")
-HAVE_SSP?=	no
-.else
-HAVE_SSP?=	yes
-.if ${USE_FORT:Uno} != "no"
-USE_SSP?=	yes
-.endif
-.endif
-
-.if empty(.MAKEFLAGS:tW:M*-V .OBJDIR*)
+.if empty(.MAKEFLAGS:M-V*)
 .if defined(MAKEOBJDIRPREFIX) || defined(MAKEOBJDIR)
 PRINTOBJDIR=	${MAKE} -r -V .OBJDIR -f /dev/null xxx
 .else
 PRINTOBJDIR=	${MAKE} -V .OBJDIR
 .endif
 .else
-PRINTOBJDIR=	echo /error/bsd.own.mk/PRINTOBJDIR # avoid infinite recursion
+PRINTOBJDIR=	echo # prevent infinite recursion
 .endif
 
 #
@@ -110,11 +93,8 @@ _SRC_TOP_!= cd "${.CURDIR}"; while :; do \
 .endif					# }
 
 #
-# If _SRC_TOP_ != "", we're within the NetBSD source tree.
-# * Set defaults for NETBSDSRCDIR and _SRC_TOP_OBJ_.
-# * Define _NETBSD_VERSION_DEPENDS.  Targets that depend on the
-#   NetBSD version, or on variables defined at build time, can
-#   declare a dependency on ${_NETBSD_VERSION_DEPENDS}.
+# If _SRC_TOP_ != "", we're within the NetBSD source tree, so set
+# defaults for NETBSDSRCDIR and _SRC_TOP_OBJ_.
 #
 .if (${_SRC_TOP_} != "")		# {
 
@@ -124,12 +104,6 @@ NETBSDSRCDIR?=	${_SRC_TOP_}
 _SRC_TOP_OBJ_!=		cd "${_SRC_TOP_}" && ${PRINTOBJDIR}
 .MAKEOVERRIDES+=	_SRC_TOP_OBJ_
 .endif
-
-_NETBSD_VERSION_DEPENDS=	${_SRC_TOP_OBJ_}/params
-_NETBSD_VERSION_DEPENDS+=	${NETBSDSRCDIR}/sys/sys/param.h
-_NETBSD_VERSION_DEPENDS+=	${NETBSDSRCDIR}/sys/conf/newvers.sh
-_NETBSD_VERSION_DEPENDS+=	${NETBSDSRCDIR}/sys/conf/osrelease.sh
-${_SRC_TOP_OBJ_}/params: .NOTMAIN .OPTIONAL # created by top level "make build"
 
 .endif	# _SRC_TOP_ != ""		# }
 
@@ -205,11 +179,6 @@ TOOL_CPP.gcc=		${EXTERNAL_TOOLCHAIN}/bin/${MACHINE_GNU_PLATFORM}-cpp
 TOOL_CXX.gcc=		${EXTERNAL_TOOLCHAIN}/bin/${MACHINE_GNU_PLATFORM}-c++
 TOOL_FC.gcc=		${EXTERNAL_TOOLCHAIN}/bin/${MACHINE_GNU_PLATFORM}-g77
 TOOL_OBJC.gcc=		${EXTERNAL_TOOLCHAIN}/bin/${MACHINE_GNU_PLATFORM}-gcc
-
-TOOL_CC.clang=		${EXTERNAL_TOOLCHAIN}/bin/${MACHINE_GNU_PLATFORM}-clang
-TOOL_CPP.clang=		${EXTERNAL_TOOLCHAIN}/bin/${MACHINE_GNU_PLATFORM}-clang-cpp
-TOOL_CXX.clang=		${EXTERNAL_TOOLCHAIN}/bin/${MACHINE_GNU_PLATFORM}-clang++
-TOOL_OBJC.clang=	${EXTERNAL_TOOLCHAIN}/bin/${MACHINE_GNU_PLATFORM}-clang
 .else									# } {
 # Define default locations for common tools.
 .if ${USETOOLS_BINUTILS:Uyes} == "yes"					#  {
@@ -289,7 +258,7 @@ TOOL_CTAGS=		${TOOLDIR}/bin/${_TOOL_PREFIX}ctags
 TOOL_CTFCONVERT=	${TOOLDIR}/bin/${_TOOL_PREFIX}ctfconvert
 TOOL_CTFMERGE=		${TOOLDIR}/bin/${_TOOL_PREFIX}ctfmerge
 TOOL_DB=		${TOOLDIR}/bin/${_TOOL_PREFIX}db
-TOOL_DISKLABEL=		${TOOLDIR}/bin/nbdisklabel
+TOOL_DISKLABEL=		${TOOLDIR}/bin/nbdisklabel-${MAKEWRAPPERMACHINE}
 TOOL_EQN=		${TOOLDIR}/bin/${_TOOL_PREFIX}eqn
 TOOL_FDISK=		${TOOLDIR}/bin/${MACHINE_GNU_PLATFORM}-fdisk
 TOOL_FGEN=		${TOOLDIR}/bin/${_TOOL_PREFIX}fgen
@@ -322,10 +291,8 @@ TOOL_MKCSMAPPER=	${TOOLDIR}/bin/${_TOOL_PREFIX}mkcsmapper
 TOOL_MKESDB=		${TOOLDIR}/bin/${_TOOL_PREFIX}mkesdb
 TOOL_MKLOCALE=		${TOOLDIR}/bin/${_TOOL_PREFIX}mklocale
 TOOL_MKMAGIC=		${TOOLDIR}/bin/${_TOOL_PREFIX}file
-TOOL_MKNOD=		${TOOLDIR}/bin/${_TOOL_PREFIX}mknod
 TOOL_MKTEMP=		${TOOLDIR}/bin/${_TOOL_PREFIX}mktemp
 TOOL_MKUBOOTIMAGE=	${TOOLDIR}/bin/${_TOOL_PREFIX}mkubootimage
-TOOL_ELFTOSB=		${TOOLDIR}/bin/${_TOOL_PREFIX}elftosb
 TOOL_MSGC=		MSGDEF=${TOOLDIR}/share/misc ${TOOLDIR}/bin/${_TOOL_PREFIX}msgc
 TOOL_MTREE=		${TOOLDIR}/bin/${_TOOL_PREFIX}mtree
 TOOL_NBPERF=		${TOOLDIR}/bin/${_TOOL_PREFIX}perf
@@ -413,7 +380,7 @@ TOOL_MAKEFS=		makefs
 TOOL_MAKEINFO=		makeinfo
 TOOL_MAKEWHATIS=	/usr/libexec/makewhatis
 TOOL_MANDOC_ASCII=	mandoc -Tascii
-TOOL_MANDOC_HTML=	mandoc -Thtml
+TOOL_MANDOC_HTML=	mandoc -Thtml -Oman=../html%S/%N.html -Ostyle=../style.css
 TOOL_MANDOC_LINT=	mandoc -Tlint
 TOOL_MDSETIMAGE=	mdsetimage
 TOOL_MENUC=		menuc
@@ -423,10 +390,8 @@ TOOL_MKCSMAPPER=	mkcsmapper
 TOOL_MKESDB=		mkesdb
 TOOL_MKLOCALE=		mklocale
 TOOL_MKMAGIC=		file
-TOOL_MKNOD=		mknod
 TOOL_MKTEMP=		mktemp
 TOOL_MKUBOOTIMAGE=	mkubootimage
-TOOL_ELFTOSB=		elftosb
 TOOL_MSGC=		msgc
 TOOL_MTREE=		mtree
 TOOL_NBPERF=		nbperf
@@ -477,11 +442,6 @@ CXX=		${TOOL_CXX.${ACTIVE_CXX}}
 FC=		${TOOL_FC.${ACTIVE_FC}}
 OBJC=		${TOOL_OBJC.${ACTIVE_OBJC}}
 
-.if exists(/usr/bin/${TOOL_CTFCONVERT}) || exists(${TOOL_CTFCONVERT})
-CTFCONVERT=	${TOOL_CTFCONVERT}
-CTFMERGE=	${TOOL_CTFMERGE}
-.endif
-
 # OBJCOPY flags to create a.out binaries for old firmware
 # shared among src/distrib and ${MACHINE}/conf/Makefile.${MACHINE}.inc
 .if ${MACHINE_CPU} == "arm"
@@ -489,7 +449,6 @@ OBJCOPY_ELF2AOUT_FLAGS?=	\
 	-O a.out-arm-netbsd	\
 	-R .ident		\
 	-R .ARM.attributes	\
-	-R .ARM.exidx		\
 	-R .arm.atpcs		\
 	-R .comment		\
 	-R .debug_abbrev	\
@@ -684,10 +643,6 @@ SHLIB_VERSION_FILE?= ${.CURDIR}/shlib_version
 # GNU sources and packages sometimes see architecture names differently.
 #
 GNU_ARCH.coldfire=m68k
-GNU_ARCH.earm=arm
-GNU_ARCH.earmeb=armeb
-GNU_ARCH.earmhf=arm
-GNU_ARCH.earmhfeb=armeb
 GNU_ARCH.i386=i486
 GCC_CONFIG_ARCH.i386=i486
 GCC_CONFIG_TUNE.i386=nocona
@@ -702,9 +657,7 @@ MACHINE_GNU_ARCH=${GNU_ARCH.${MACHINE_ARCH}:U${MACHINE_ARCH}}
 # In order to identify NetBSD to GNU packages, we sometimes need
 # an "elf" tag for historically a.out platforms.
 #
-.if (!empty(MACHINE_ARCH:Mearm*))
-MACHINE_GNU_PLATFORM?=${MACHINE_GNU_ARCH}--netbsdelf-${MACHINE_ARCH:C/eb//:S/earm/eabi/}
-.elif (${MACHINE_GNU_ARCH} == "arm" || \
+.if (${MACHINE_GNU_ARCH} == "arm" || \
      ${MACHINE_GNU_ARCH} == "armeb" || \
      ${MACHINE_ARCH} == "i386" || \
      ${MACHINE_CPU} == "m68k" || \
@@ -795,8 +748,6 @@ MK${var}:=	yes
 .if ${MACHINE_ARCH} == "x86_64" || ${MACHINE_ARCH} == "sparc64" || \
     ${MACHINE_ARCH} == "mips64eb" || ${MACHINE_ARCH} == "mips64el"
 MKCOMPAT?=	yes
-.elif !empty(MACHINE_ARCH:Mearm*)
-MKCOMPAT?=	no
 .else
 # Don't let this build where it really isn't supported.
 MKCOMPAT:=	no
@@ -812,25 +763,15 @@ MKCOMPATMODULES:=	no
 
 #
 # Default mips64 to softfloat now.
-# arm is always softfloat
 # emips is always softfloat.
 #
 .if ${MACHINE_ARCH} == "mips64eb" || ${MACHINE_ARCH} == "mips64el" || \
-    (${MACHINE_CPU} == "arm" && ${MACHINE_ARCH:M*hf*} == "") || \
     ${MACHINE} == "emips"
 MKSOFTFLOAT?=	yes
 .endif
 
 .if ${MACHINE} == "emips"
 SOFTFLOAT_BITS=	32
-.endif
-
-.if ${MACHINE_ARCH} == "i386" || \
-    ${MACHINE_ARCH} == "x86_64" || \
-    ${MACHINE_ARCH} == "sparc" 
-MKSLJIT?=	yes
-.else
-MKSLJIT?=	no
 .endif
 
 #
@@ -860,7 +801,7 @@ _MKVARS.yes= \
 	MKIEEEFP MKINET6 MKINFO MKIPFILTER MKISCSI \
 	MKKERBEROS \
 	MKKMOD \
-	MKLDAP MKLIBSTDCXX MKLINKLIB MKLINT MKLVM \
+	MKLDAP MKLINKLIB MKLINT MKLVM \
 	MKMAN MKMANDOC \
 	MKMDNS \
 	MKMAKEMANDB \
@@ -869,7 +810,6 @@ _MKVARS.yes= \
 	MKOBJ \
 	MKPAM MKPERFUSE \
 	MKPF MKPIC MKPICINSTALL MKPICLIB MKPOSTFIX MKPROFILE \
-	MKRUMP \
 	MKSHARE MKSKEY MKSTATICLIB \
 	MKX11FONTS \
 	MKYP
@@ -892,12 +832,11 @@ _MKVARS.no= \
 	MKBSDGREP MKBSDTAR \
 	MKCATPAGES MKCRYPTO_RC5 MKDEBUG \
 	MKDEBUGLIB MKDTRACE MKEXTSRC \
-	MKKYUA \
-	MKMANZ MKMCLINKER MKOBJDIRS \
-	MKLIBCXX MKLLVM MKPCC \
+	MKMANZ MKOBJDIRS \
+	MKLLVM MKPCC \
 	MKPIGZGZIP \
 	MKREPRO \
-	MKSOFTFLOAT MKSTRIPIDENT MKTPM \
+	MKSOFTFLOAT MKSTRIPIDENT \
 	MKUNPRIVED MKUPDATE MKX11 MKZFS
 .for var in ${_MKVARS.no}
 ${var}?=no
@@ -928,7 +867,6 @@ X11FLAVOUR?=	Xorg
 .if ${MKCXX} == "no"
 MKATF:=		no
 MKGROFF:=	no
-MKKYUA:=	no
 .endif
 
 .if ${MKCRYPTO} == "no"
@@ -1143,7 +1081,7 @@ X11SRCDIR.xf86-input-${_i}?=	${X11SRCDIRMIT}/xf86-input-${_i}/dist
 	r128 radeonhd rendition \
 	s3 s3virge savage siliconmotion sis suncg14 \
 	suncg6 sunffb sunleo suntcx \
-	tdfx tga trident tseng vesa vga via vmware wsfb xgi
+	tdfx tga trident tseng vesa vga via vmware wsfb
 X11SRCDIR.xf86-video-${_v}?=	${X11SRCDIRMIT}/xf86-video-${_v}/dist
 .endfor
 

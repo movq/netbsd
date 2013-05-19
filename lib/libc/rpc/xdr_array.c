@@ -1,4 +1,4 @@
-/*	$NetBSD: xdr_array.c,v 1.19 2013/03/11 20:19:29 tron Exp $	*/
+/*	$NetBSD: xdr_array.c,v 1.16.46.1 2013/03/14 22:03:11 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -37,7 +37,7 @@
 static char *sccsid = "@(#)xdr_array.c 1.10 87/08/11 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)xdr_array.c	2.1 88/07/29 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: xdr_array.c,v 1.19 2013/03/11 20:19:29 tron Exp $");
+__RCSID("$NetBSD: xdr_array.c,v 1.16.46.1 2013/03/14 22:03:11 riz Exp $");
 #endif
 #endif
 
@@ -74,8 +74,13 @@ __weak_alias(xdr_vector,_xdr_vector)
  * xdr procedure to call to handle each element of the array.
  */
 bool_t
-xdr_array(XDR *xdrs, caddr_t *addrp, u_int *sizep, u_int maxsize, u_int elsize,
-    xdrproc_t elproc)
+xdr_array(xdrs, addrp, sizep, maxsize, elsize, elproc)
+	XDR *xdrs;
+	caddr_t *addrp;		/* array pointer */
+	u_int *sizep;		/* number of elements */
+	u_int maxsize;		/* max numberof elements */
+	u_int elsize;		/* size in bytes of each element */
+	xdrproc_t elproc;	/* xdr routine to handle each element */
 {
 	u_int i;
 	caddr_t target = *addrp;
@@ -104,7 +109,7 @@ xdr_array(XDR *xdrs, caddr_t *addrp, u_int *sizep, u_int maxsize, u_int elsize,
 				return (TRUE);
 			*addrp = target = mem_alloc(nodesize);
 			if (target == NULL) {
-				warn("%s: out of memory", __func__);
+				warnx("xdr_array: out of memory");
 				return (FALSE);
 			}
 			memset(target, 0, nodesize);
@@ -146,8 +151,12 @@ xdr_array(XDR *xdrs, caddr_t *addrp, u_int *sizep, u_int maxsize, u_int elsize,
  * > xdr_elem: routine to XDR each element
  */
 bool_t
-xdr_vector(XDR *xdrs, char *basep, u_int nelem, u_int elemsize,
-    xdrproc_t xdr_elem)
+xdr_vector(xdrs, basep, nelem, elemsize, xdr_elem)
+	XDR *xdrs;
+	char *basep;
+	u_int nelem;
+	u_int elemsize;
+	xdrproc_t xdr_elem;	
 {
 	u_int i;
 	char *elptr;

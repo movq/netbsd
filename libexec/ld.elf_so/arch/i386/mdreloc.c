@@ -1,8 +1,8 @@
-/*	$NetBSD: mdreloc.c,v 1.35 2012/11/07 07:24:46 apb Exp $	*/
+/*	$NetBSD: mdreloc.c,v 1.34.6.1 2012/11/18 18:50:56 msaitoh Exp $	*/
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mdreloc.c,v 1.35 2012/11/07 07:24:46 apb Exp $");
+__RCSID("$NetBSD: mdreloc.c,v 1.34.6.1 2012/11/18 18:50:56 msaitoh Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>

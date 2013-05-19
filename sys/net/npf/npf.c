@@ -1,4 +1,4 @@
-/*	$NetBSD: npf.c,v 1.15 2013/02/09 03:35:31 rmind Exp $	*/
+/*	$NetBSD: npf.c,v 1.7.2.7 2013/02/11 21:49:49 riz Exp $	*/
 
 /*-
  * Copyright (c) 2009-2013 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf.c,v 1.15 2013/02/09 03:35:31 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf.c,v 1.7.2.7 2013/02/11 21:49:49 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -172,8 +172,7 @@ npf_dev_open(dev_t dev, int flag, int mode, lwp_t *l)
 {
 
 	/* Available only for super-user. */
-	if (kauth_authorize_network(l->l_cred, KAUTH_NETWORK_FIREWALL,
-	    KAUTH_REQ_NETWORK_FIREWALL_FW, NULL, NULL, NULL)) {
+	if (kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER, NULL)) {
 		return EPERM;
 	}
 	return 0;
@@ -192,8 +191,7 @@ npf_dev_ioctl(dev_t dev, u_long cmd, void *data, int flag, lwp_t *l)
 	int error;
 
 	/* Available only for super-user. */
-	if (kauth_authorize_network(l->l_cred, KAUTH_NETWORK_FIREWALL,
-	    KAUTH_REQ_NETWORK_FIREWALL_FW, NULL, NULL, NULL)) {
+	if (kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER, NULL)) {
 		return EPERM;
 	}
 

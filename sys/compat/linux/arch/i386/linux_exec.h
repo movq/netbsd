@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_exec.h,v 1.11 2012/03/21 03:20:22 chs Exp $	*/
+/*	$NetBSD: linux_exec.h,v 1.10.22.1 2012/03/25 11:25:26 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

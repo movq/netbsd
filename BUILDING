@@ -204,7 +204,7 @@ CONFIGURATION
      MKCATPAGES  Can be set to ``yes'' or ``no''.  Indicates whether prefor-
                  matted plaintext manual pages will be created during a build.
 
-                 Default: ``no''
+                 Default: ``yes''
 
      MKCRYPTO    Can be set to ``yes'' or ``no''.  Indicates whether crypto-
                  graphic code will be included in a build; provided for the
@@ -298,12 +298,6 @@ CONFIGURATION
                  by default at times due to toolchain problems with profiled
                  code.
 
-     MKREPRO     Can be set to ``yes'' or ``no''.  Create reproducable builds.
-                 This enables different switches to make two builds from the
-                 same source tree result in the same build results.
-
-                 Default: ``no''
-
      MKSHARE     Can be set to ``yes'' or ``no''.  Indicates whether files
                  destined to reside in DESTDIR/usr/share will be built and
                  installed during a build.  If set to ``no'', then all of
@@ -313,9 +307,9 @@ CONFIGURATION
                  Default: ``yes''
 
      MKSTRIPIDENT
-                 Can be set to ``yes'' or ``no''.  Indicates whether RCS IDs,
-                 for use with ident(1), should be stripped from program bina-
-                 ries and shared libraries.
+                 Can be set to ``yes'' or ``no''.  Indicates whether program
+                 binaries and shared libraries should be built to include RCS
+                 IDs for use with ident(1).
 
                  Default: ``no''
 
@@ -557,8 +551,9 @@ BUILDING
                    INSTALLWORLDDIR=/, it is highly recommended that you
                    upgrade your kernel and reboot.  After performing this
                    operation, it is recommended that you use etcupdate(8) to
-                   update files in INSTALLWORLDDIR/etc, and postinstall(8) to
-                   check for or fix inconsistencies.
+                   update files in INSTALLWORLDDIR/etc and that you use
+                   postinstall(8) to check for inconsistencies (and possibly
+                   to fix them).
 
      sets          Create distribution sets from DESTDIR into
                    RELEASEDIR/RELEASEMACHINEDIR/binary/sets.  Should be run
@@ -1002,4 +997,4 @@ HISTORY
      The build.sh based build scheme was introduced for NetBSD 1.6 as
      USE_NEW_TOOLCHAIN, and re-worked to TOOLCHAIN_MISSING after that.
 
-NetBSD                        September 19, 2012                        NetBSD
+NetBSD                         September 9, 2011                        NetBSD

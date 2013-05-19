@@ -1,4 +1,4 @@
-/*	$NetBSD: ptree.c,v 1.10 2012/10/06 22:15:09 matt Exp $	*/
+/*	$NetBSD: ptree.c,v 1.5.8.3 2012/11/24 18:15:22 jdc Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -40,7 +40,7 @@
 #include <sys/types.h>
 #include <sys/systm.h>
 #include <lib/libkern/libkern.h>
-__KERNEL_RCSID(0, "$NetBSD: ptree.c,v 1.10 2012/10/06 22:15:09 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ptree.c,v 1.5.8.3 2012/11/24 18:15:22 jdc Exp $");
 #else
 #include <stddef.h>
 #include <stdint.h>
@@ -53,7 +53,7 @@ __KERNEL_RCSID(0, "$NetBSD: ptree.c,v 1.10 2012/10/06 22:15:09 matt Exp $");
 #else
 #define	KASSERT(e)	do { } while (/*CONSTCOND*/ 0)
 #endif
-__RCSID("$NetBSD: ptree.c,v 1.10 2012/10/06 22:15:09 matt Exp $");
+__RCSID("$NetBSD: ptree.c,v 1.5.8.3 2012/11/24 18:15:22 jdc Exp $");
 #endif /* _KERNEL || _STANDALONE */
 
 #ifdef _LIBC

@@ -1,4 +1,4 @@
-/*	$NetBSD: in_proto.c,v 1.105 2013/03/02 02:42:22 christos Exp $	*/
+/*	$NetBSD: in_proto.c,v 1.102 2011/12/19 11:59:56 drochner Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -61,9 +61,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.105 2013/03/02 02:42:22 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.102 2011/12/19 11:59:56 drochner Exp $");
 
 #include "opt_mrouting.h"
+#include "opt_eon.h"			/* ISO CLNL over IP */
+#include "opt_iso.h"			/* ISO TP tunneled over IP */
 #include "opt_inet.h"
 #include "opt_ipsec.h"
 #include "opt_pim.h"
@@ -114,10 +116,28 @@ __KERNEL_RCSID(0, "$NetBSD: in_proto.c,v 1.105 2013/03/02 02:42:22 christos Exp 
  * TCP/IP protocol family: IP, ICMP, UDP, TCP.
  */
 
+#ifdef KAME_IPSEC
+#include <netinet6/ipsec.h>
+#include <netinet6/ah.h>
+#ifdef IPSEC_ESP
+#include <netinet6/esp.h>
+#endif
+#include <netinet6/ipcomp.h>
+#endif /* KAME_IPSEC */
+
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
 #include <netipsec/key.h>
 #endif	/* FAST_IPSEC */
+
+#ifdef TPIP
+#include <netiso/tp_param.h>
+#include <netiso/tp_var.h>
+#endif /* TPIP */
+
+#ifdef EON
+#include <netiso/eonvar.h>
+#endif /* EON */
 
 #include "carp.h"
 #if NCARP > 0
@@ -163,13 +183,32 @@ PR_WRAP_CTLOUTPUT(tcp_ctloutput)
 #define	udp_ctloutput	udp_ctloutput_wrapper
 #define	tcp_ctloutput	tcp_ctloutput_wrapper
 
-#if defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 PR_WRAP_CTLINPUT(ah4_ctlinput)
 
 #define	ah4_ctlinput	ah4_ctlinput_wrapper
+#endif
+
+#if defined(IPSEC_ESP) || defined(FAST_IPSEC)
 PR_WRAP_CTLINPUT(esp4_ctlinput)
 
 #define	esp4_ctlinput	esp4_ctlinput_wrapper
+#endif
+
+#ifdef TPIP
+PR_WRAP_CTLOUTPUT(tp_ctloutput)
+
+#define	tp_ctloutput	tp_ctloutput_wrapper
+
+PR_WRAP_CTLINPUT(tpip_ctlinput)
+
+#define	tpip_ctlinput	tpip_ctlinput_wrapper
+#endif
+
+#ifdef EON
+PR_WRAP_CTLINPUT(eonctlinput)
+
+#define	eonctlinput	eonctlinput_wrapper
 #endif
 
 const struct protosw inetsw[] = {
@@ -231,6 +270,33 @@ const struct protosw inetsw[] = {
 	.pr_init = ipflow_poolinit,
 },
 #endif /* GATEWAY */
+#ifdef KAME_IPSEC
+{	.pr_type = SOCK_RAW,
+	.pr_domain = &inetdomain,
+	.pr_protocol = IPPROTO_AH,
+	.pr_flags = PR_ATOMIC|PR_ADDR,
+	.pr_input = ah4_input,
+	.pr_ctlinput = ah4_ctlinput,
+	.pr_init = ah4_init,
+},
+#ifdef IPSEC_ESP
+{	.pr_type = SOCK_RAW,
+	.pr_domain = &inetdomain,
+	.pr_protocol = IPPROTO_ESP,
+	.pr_flags = PR_ATOMIC|PR_ADDR,
+	.pr_input = esp4_input,
+	.pr_ctlinput = esp4_ctlinput,
+	.pr_init = esp4_init,
+},
+#endif /* IPSEC_ESP */
+{	.pr_type = SOCK_RAW,
+	.pr_domain = &inetdomain,
+	.pr_protocol = IPPROTO_IPCOMP,
+	.pr_flags = PR_ATOMIC|PR_ADDR,
+	.pr_input = ipcomp4_input,
+	.pr_init = ipcomp4_init,
+},
+#endif /* KAME_IPSEC */
 #ifdef FAST_IPSEC
 {	.pr_type = SOCK_RAW,
 	.pr_domain = &inetdomain,
@@ -337,6 +403,45 @@ const struct protosw inetsw[] = {
 	.pr_usrreq = rip_usrreq,
 },
 #endif /* PIM */
+#ifdef TPIP
+{	.pr_type = SOCK_SEQPACKET,
+	.pr_domain = &inetdomain,
+	.pr_protocol = IPPROTO_TP,
+	.pr_flags = PR_CONNREQUIRED|PR_WANTRCVD|PR_LISTEN|PR_LASTHDR|PR_ABRTACPTDIS,
+	.pr_input = tpip_input, 
+	.pr_ctloutput = tp_ctloutput,
+	.pr_ctlinput = tpip_ctlinput,
+	.pr_usrreq = tp_usrreq,
+	.pr_init = tp_init,
+	.pr_slowtimo = tp_slowtimo,
+	.pr_drain = tp_drain,
+},
+#endif /* TPIP */
+#ifdef ISO
+/* EON (ISO CLNL over IP) */
+#ifdef EON
+{	.pr_type = SOCK_RAW,
+	.pr_domain = &inetdomain,
+	.pr_protocol = IPPROTO_EON,
+	.pr_flags = PR_LASTHDR,
+	.pr_input = eoninput, 
+	.pr_ctlinput = eonctlinput,
+	.pr_init = eonprotoinit,
+},
+#else
+{	.pr_type = SOCK_RAW,
+	.pr_domain = &inetdomain,
+	.pr_protocol = IPPROTO_EON,
+	.pr_flags = PR_ATOMIC|PR_ADDR|PR_LASTHDR,
+	.pr_input = encap4_input, 
+	.pr_output = rip_output,
+	.pr_ctloutput = rip_ctloutput,
+	.pr_ctlinput = rip_ctlinput,
+	.pr_usrreq = rip_usrreq,
+	.pr_init = encap_init,
+},
+#endif /* EON */
+#endif /* ISO */
 /* raw wildcard */
 {	.pr_type = SOCK_RAW,
 	.pr_domain = &inetdomain,

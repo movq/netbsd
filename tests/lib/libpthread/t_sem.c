@@ -1,4 +1,4 @@
-/* $NetBSD: t_sem.c,v 1.7 2012/03/09 19:46:37 joerg Exp $ */
+/* $NetBSD: t_sem.c,v 1.5 2010/11/03 16:10:22 christos Exp $ */
 
 /*
  * Copyright (c) 2008, 2010 The NetBSD Foundation, Inc.
@@ -86,7 +86,7 @@
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2008, 2010\
  The NetBSD Foundation, inc. All rights reserved.");
-__RCSID("$NetBSD: t_sem.c,v 1.7 2012/03/09 19:46:37 joerg Exp $");
+__RCSID("$NetBSD: t_sem.c,v 1.5 2010/11/03 16:10:22 christos Exp $");
 
 #include <errno.h>
 #include <fcntl.h>
@@ -230,17 +230,14 @@ alarm_ms(const int ms)
 static void *
 threadfunc(void *arg)
 {
-	int i, ret;
+	int i;
 
 	printf("Entering loop\n");
 	for (i = 0; i < 500; ) {
 		if ((i & 1) != 0) {
-			do {
-				ret = sem_wait(&sem);
-			} while (ret == -1 && errno == EINTR);
-			ATF_REQUIRE(ret == 0);
+			ATF_REQUIRE(sem_wait(&sem) != -1);
 		} else {
-			ret = sem_trywait(&sem);
+			const int ret = sem_trywait(&sem);
 			if (ret == -1) {
 				ATF_REQUIRE(errno == EAGAIN);
 				continue;
@@ -293,6 +290,13 @@ ATF_TC_HEAD(before_start_one_thread, tc)
 }
 ATF_TC_BODY(before_start_one_thread, tc)
 {
+	/* TODO(jmmv): This really is a race condition test.  However, we can't
+	 * yet mark it as such because ATF does not provide such functionality.
+	 * Let's just mark it as an unconditional expected timeout as I haven't
+	 * got it to pass any single time. */
+	atf_tc_expect_timeout("Race condition; it is probably unsafe to call "
+	    "sem_post from a signal handler when using the pthread version");
+
 	before_start_test(true);
 }
 

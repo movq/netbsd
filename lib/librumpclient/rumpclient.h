@@ -1,4 +1,4 @@
-/*	$NetBSD: rumpclient.h,v 1.15 2013/01/20 15:23:21 pooka Exp $	*/
+/*	$NetBSD: rumpclient.h,v 1.11 2011/12/16 23:19:28 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2010 Antti Kantee.  All Rights Reserved.
@@ -29,29 +29,13 @@
 #define _RUMP_RUMPCLIENT_H_
 
 #include <sys/types.h>
-
-#if !defined(__returns_twice)
-#ifdef __GNUC__
-#define __returns_twice __attribute__((__returns_twice__))
-#else /* __GNUC__ */
-#define __returns_twice
-#endif /* !__GNUC__ */
-#endif /* !__returns_twice */
-
-#if defined(__sun__) && !defined(RUMP_REGISTER_T)
-#define RUMP_REGISTER_T long
-typedef RUMP_REGISTER_T register_t;
-#endif
+#include <sys/null.h>
 
 struct rumpclient_fork;
 
 #define rumpclient_vfork() rumpclient__dofork(vfork)
 
-#ifdef __BEGIN_DECLS
 __BEGIN_DECLS
-#elif defined(__cplusplus)
-extern "C" {
-#endif
 
 int rumpclient_syscall(int, const void *, size_t, register_t *);
 int rumpclient_init(void);
@@ -77,7 +61,6 @@ enum rumpclient_closevariant {
 };
 int rumpclient__closenotify(int *, enum rumpclient_closevariant);
 
-
 /*
  * vfork needs to be implemented as an inline to make everything
  * run in the caller's stackframe.
@@ -89,7 +72,7 @@ rumpclient__dofork(pid_t (*forkfn)(void))
 	pid_t pid;
 	int childran = 0;
 
-	if (!(rf = rumpclient_prefork()))
+	if ((rf = rumpclient_prefork()) == NULL)
 		return -1;
                 
 	switch ((pid = forkfn())) {
@@ -111,10 +94,6 @@ rumpclient__dofork(pid_t (*forkfn)(void))
 	return pid;
 }
 
-#ifdef __END_DECLS
 __END_DECLS
-#elif defined(__cplusplus)
-}
-#endif
 
 #endif /* _RUMP_RUMPCLIENT_H_ */
