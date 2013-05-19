@@ -1,4 +1,4 @@
-/*	$NetBSD: scm.c,v 1.30 2013/03/08 20:56:44 christos Exp $	*/
+/*	$NetBSD: scm.c,v 1.29 2011/08/31 16:25:00 plunky Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -445,8 +445,7 @@ request(char *server, char *hostname, int *retry)
 	memcpy(&remoteaddr, res->ai_addr, res->ai_addrlen);
 	remotename = estrdup(hostname);
 	x = 0x01020304;
-	if (write(netfile, &x, sizeof(int)) == -1)
-		return (SCMERR);
+	(void) write(netfile, &x, sizeof(int));
 	swapmode = 0;		/* swap only on server, not client */
 	freeaddrinfo(res0);
 	return (SCMOK);
@@ -656,16 +655,14 @@ int
 scmerr(int error, const char *fmt, ...)
 {
 	va_list ap;
-	char hostname[MAXHOSTNAMELEN];
-	gethostname(hostname, sizeof(hostname));
 
 	va_start(ap, fmt);
 
 	(void) fflush(stdout);
 	if (progpid > 0)
-		fprintf(stderr, "%s@%s %d: ", program, hostname, progpid);
+		fprintf(stderr, "%s %d: ", program, progpid);
 	else
-		fprintf(stderr, "%s@%s: ", program, hostname);
+		fprintf(stderr, "%s: ", program);
 
 	vfprintf(stderr, fmt, ap);
 	va_end(ap);

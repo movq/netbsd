@@ -1,4 +1,4 @@
-/*	$NetBSD: specdev.h,v 1.41 2013/04/21 04:55:40 dholland Exp $	*/
+/*	$NetBSD: specdev.h,v 1.39 2009/11/14 18:36:57 elad Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -91,10 +91,17 @@ typedef struct specdev {
 /*
  * Special device management
  */
+#define	SPECHSZ	64
+#if	((SPECHSZ&(SPECHSZ-1)) == 0)
+#define	SPECHASH(rdev)	(((rdev>>5)+(rdev))&(SPECHSZ-1))
+#else
+#define	SPECHASH(rdev)	(((unsigned)((rdev>>5)+(rdev)))%SPECHSZ)
+#endif
+
+extern vnode_t	*specfs_hash[SPECHSZ];
+
 void	spec_node_init(vnode_t *, dev_t);
 void	spec_node_destroy(vnode_t *);
-int	spec_node_lookup_by_dev(enum vtype, dev_t, vnode_t **);
-int	spec_node_lookup_by_mount(struct mount *, vnode_t **);
 void	spec_node_revoke(vnode_t *);
 
 /*
@@ -109,7 +116,6 @@ struct	uio;
 
 int	spec_lookup(void *);
 #define	spec_create	genfs_badop
-#define	spec_whiteout	genfs_badop
 #define	spec_mknod	genfs_badop
 int	spec_open(void *);
 int	spec_close(void *);

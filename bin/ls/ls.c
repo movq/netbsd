@@ -1,4 +1,4 @@
-/*	$NetBSD: ls.c,v 1.70 2012/11/20 12:37:29 abs Exp $	*/
+/*	$NetBSD: ls.c,v 1.69 2011/08/29 14:44:21 joerg Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)ls.c	8.7 (Berkeley) 8/5/94";
 #else
-__RCSID("$NetBSD: ls.c,v 1.70 2012/11/20 12:37:29 abs Exp $");
+__RCSID("$NetBSD: ls.c,v 1.69 2011/08/29 14:44:21 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -117,7 +117,7 @@ usage(void)
 {
 
 	(void)fprintf(stderr,
-	    "usage: %s [-1AaBbCcdFfghikLlMmnopqRrSsTtuWwx] [file ...]\n",
+	    "usage: %s [-AaBbCcdFfghikLlMmnopqRrSsTtuWwx1] [file ...]\n",
 	    getprogname());
 	exit(EXIT_FAILURE);
 	/* NOTREACHED */
@@ -331,7 +331,7 @@ ls_main(int argc, char *argv[])
 		fts_options |= FTS_WHITEOUT;
 #endif
 
-	/* If -i, -l, or -s, figure out block size. */
+	/* If -l or -s, figure out block size. */
 	if (f_inode || f_longform || f_size) {
 		if (!kflag)
 			(void)getbsize(NULL, &blocksize);

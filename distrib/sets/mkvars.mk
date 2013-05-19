@@ -1,4 +1,4 @@
-# $NetBSD: mkvars.mk,v 1.10 2013/04/30 20:54:22 matt Exp $
+# $NetBSD: mkvars.mk,v 1.6 2011/11/02 14:42:43 he Exp $
 
 MKEXTRAVARS= \
 	MACHINE \
@@ -6,7 +6,7 @@ MKEXTRAVARS= \
 	MACHINE_CPU \
 	HAVE_GCC \
 	HAVE_GDB \
-	HAVE_SSP \
+	HAS_SSP \
 	OBJECT_FMT \
 	TOOLCHAIN_MISSING \
 	EXTSRCS \
@@ -16,8 +16,6 @@ MKEXTRAVARS= \
 	MKCOMPATMODULES \
 	MKDYNAMICROOT \
 	MKMANPAGES \
-	MKSLJIT \
-	MKSOFTFLOAT \
 	MKXORG \
 	X11FLAVOR \
 	USE_INET6 \
@@ -25,16 +23,12 @@ MKEXTRAVARS= \
 	USE_LDAP \
 	USE_YP \
 	NETBSDSRCDIR \
-	MAKEVERBOSE \
-	TARGET_ENDIANNESS \
-	EABI \
-	ARCH64
+	MAKEVERBOSE
 
 #####
 
 .include <bsd.own.mk>
 .include <bsd.sys.mk>
-.include <bsd.endian.mk>
 
 .if (${MKMAN} == "no" || empty(MANINSTALL:Mmaninstall))
 MKMANPAGES=no
@@ -49,18 +43,6 @@ MKX11:=no
 . else
 MKXORG:=no
 . endif
-.endif
-
-.if (!empty(MACHINE_ARCH:Mearm*))
-EABI=yes
-.else
-EABI=no
-.endif
-
-.if (!empty(MACHINE_ARCH:M*64*) || ${MACHINE_ARCH} == alpha)
-ARCH64=yes
-.else
-ARCH64=no
 .endif
 
 #####

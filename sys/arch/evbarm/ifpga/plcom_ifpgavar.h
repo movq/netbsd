@@ -1,4 +1,4 @@
-/*      $NetBSD: plcom_ifpgavar.h,v 1.2 2012/05/20 10:28:44 skrll Exp $ */
+/*      $NetBSD: plcom_ifpgavar.h,v 1.1.166.1 2012/08/09 06:36:44 jdc Exp $ */
 
 /*
  * Copyright (c) 2001 ARM Ltd

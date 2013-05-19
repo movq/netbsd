@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: posix_spawn_fileactions.c,v 1.2 2012/04/08 11:27:44 martin Exp $");
+__RCSID("$NetBSD: posix_spawn_fileactions.c,v 1.1.2.1 2012/04/12 17:05:37 riz Exp $");
 
 #include "namespace.h"
 

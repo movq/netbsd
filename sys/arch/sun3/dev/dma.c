@@ -1,4 +1,4 @@
-/*	$NetBSD: dma.c,v 1.22 2012/10/13 06:32:11 tsutsui Exp $ */
+/*	$NetBSD: dma.c,v 1.21 2008/12/16 22:35:27 christos Exp $ */
 
 /*
  * Copyright (c) 1994 Paul Kranenburg.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dma.c,v 1.22 2012/10/13 06:32:11 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dma.c,v 1.21 2008/12/16 22:35:27 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -389,7 +389,7 @@ espdmaintr(struct dma_softc *sc)
 		 * another target.  As such, don't print the warning.
 		 */
 		printf("%s: xfer (%d) > req (%d)\n",
-		    device_xname(sc->sc_dev), trans, sc->sc_dmasize);
+		    sc->sc_dev.dv_xname, trans, sc->sc_dmasize);
 #endif
 		trans = sc->sc_dmasize;
 	}

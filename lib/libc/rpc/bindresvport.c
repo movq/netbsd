@@ -1,4 +1,4 @@
-/*	$NetBSD: bindresvport.c,v 1.25 2013/03/11 20:19:28 tron Exp $	*/
+/*	$NetBSD: bindresvport.c,v 1.21.58.1 2013/03/14 22:03:08 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -37,7 +37,7 @@
 static char *sccsid = "@(#)bindresvport.c 1.8 88/02/08 SMI";
 static char *sccsid = "@(#)bindresvport.c	2.2 88/07/29 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: bindresvport.c,v 1.25 2013/03/11 20:19:28 tron Exp $");
+__RCSID("$NetBSD: bindresvport.c,v 1.21.58.1 2013/03/14 22:03:08 riz Exp $");
 #endif
 #endif
 
@@ -57,7 +57,6 @@ __RCSID("$NetBSD: bindresvport.c,v 1.25 2013/03/11 20:19:28 tron Exp $");
 #include <unistd.h>
 
 #include <rpc/rpc.h>
-#include "svc_fdset.h"
 
 #ifdef __weak_alias
 __weak_alias(bindresvport,_bindresvport)
@@ -68,7 +67,9 @@ __weak_alias(bindresvport_sa,_bindresvport_sa)
  * Bind a socket to a privileged IP port
  */
 int
-bindresvport(int sd, struct sockaddr_in *brsin)
+bindresvport(sd, brsin)
+	int sd;
+	struct sockaddr_in *brsin;
 {
 	return bindresvport_sa(sd, (struct sockaddr *)(void *)brsin);
 }
@@ -77,7 +78,9 @@ bindresvport(int sd, struct sockaddr_in *brsin)
  * Bind a socket to a privileged IP port
  */
 int
-bindresvport_sa(int sd, struct sockaddr *sa)
+bindresvport_sa(sd, sa)
+	int sd;
+	struct sockaddr *sa;
 {
 	int error, old;
 	struct sockaddr_storage myaddr;
@@ -135,7 +138,7 @@ bindresvport_sa(int sd, struct sockaddr *sa)
 		if (error < 0)
 			return (error);
 		error = setsockopt(sd, proto, portrange, &portlow,
-		    (socklen_t)sizeof(portlow));
+		    sizeof(portlow));
 		if (error < 0)
 			return (error);
 	}
@@ -147,7 +150,7 @@ bindresvport_sa(int sd, struct sockaddr *sa)
 
 		if (error < 0) {
 			if (setsockopt(sd, proto, portrange, &old,
-			    (socklen_t)sizeof(old)) < 0)
+			    sizeof(old)) < 0)
 				errno = saved_errno;
 			return (error);
 		}

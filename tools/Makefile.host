@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.host,v 1.30 2013/02/17 00:32:42 christos Exp $
+#	$NetBSD: Makefile.host,v 1.28 2011/04/10 16:52:36 joerg Exp $
 
 NOINFO=		# defined
 NOLINT=		# defined
@@ -7,10 +7,8 @@ NOMAN=		# defined
 .include <bsd.own.mk>
 
 .ifndef NOCOMPATLIB
-# Use TOOLDIR copy of libnbcompat and associated *.h files
-.-include	"${TOOLDIR}/share/compat/defs.mk"
-.elif !empty(.MAKE.OS:M*CYGWIN*)
-HOSTEXEEXT=.exe
+COMPATOBJ!=	cd ${.CURDIR}/../compat && ${PRINTOBJDIR}
+.-include	"${COMPATOBJ}/defs.mk"
 .endif
 
 # Resolve pathnames in variables.
@@ -45,7 +43,6 @@ HOSTPROGNAME?=	${HOSTPROG}
 HOST_BINDIR?=	${TOOLDIR}/bin
 HOST_CPPFLAGS:=	${HOST_CPPFLAGS} ${CPPFLAGS}
 HOST_CPPFLAGS:=	${HOST_CPPFLAGS:N-Wp,-iremap,*:N--sysroot=*}
-HOST_INSTALLPROG?=${HOST_BINDIR}/${HOSTPROGNAME}${HOSTEXEEXT}
 .undef LINKS
 
 SRCS?=		${HOSTPROG}.c
@@ -55,17 +52,14 @@ SRCS+=		${HOST_SRCS}
 
 # Install rule.
 realinstall: install.host install.files
-install.host: ${HOST_INSTALLPROG}
-${HOST_INSTALLPROG}:: ${HOSTPROG}
+install.host: ${HOST_BINDIR}/${HOSTPROGNAME}
+${HOST_BINDIR}/${HOSTPROGNAME}:: ${HOSTPROG}
 	${_MKTARGET_INSTALL}
 	mkdir -p ${HOST_BINDIR}
 	${HOST_INSTALL_FILE} -m ${BINMODE} ${HOSTPROG}${HOSTEXEEXT} ${.TARGET}
-.if !empty(.MAKE.OS:M*CYGWIN*)
-	${NETBSDSRCDIR}/tools/binstall/mkmanifest ${.TARGET}
-.endif
 
 .if ${MKUPDATE} == "no"
-.PHONY:		${HOST_INSTALLPROG}
+.PHONY:		${HOST_BINDIR}/${HOSTPROGNAME}
 .endif
 
 install.files:

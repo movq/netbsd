@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.268 2012/11/04 00:32:47 chs Exp $	*/
+/*	$NetBSD: locore.s,v 1.265 2011/08/15 02:19:44 mrg Exp $	*/
 
 /*
  * Copyright (c) 1996 Paul Kranenburg
@@ -4935,28 +4935,22 @@ Lnosaveoldlwp:
 	/*
 	 * Now running p.  
 	 */
-
-	/*
-	 * Check for restartable atomic sequences (RAS)
-	 */
-	ld	[%g3 + L_PROC], %o0	! now %o0 points to p
-	ld	[%o0 + P_RASLIST], %o1	! any RAS in p?
-	cmp	%o1, 0
-	be	Lsw_noras		! no, skip RAS check
-	 mov	%g1, %i0		! restore oldlwp (for return value)
-	ld	[%g3 + L_TF], %l3	! pointer to trap frame
-	call	_C_LABEL(ras_lookup)
-	 ld	[%l3 + TF_PC], %o1
-	cmp	%o0, -1
-	be	Lsw_noras
-	 add	%o0, 4, %o1
-	st	%o0, [%l3 + TF_PC]	! store rewound %pc
-	st	%o1, [%l3 + TF_NPC]	! and %npc
-
-Lsw_noras:
+#if defined(MULTIPROCESSOR)
+	ld	[%g3 + L_PROC], %o2	! p = l->l_proc;
+	ld	[%o2 + P_VMSPACE], %o3	! vm = p->p_vmspace;
+	ld	[%o3 + VM_PMAP], %o4	! pm = vm->vm_map.vm_pmap;
+	/* Add this CPU to the pmap's CPU set */
+	sethi	%hi(CPUINFO_VA + CPUINFO_CPUNO), %o0
+	ld	[%o0 + %lo(CPUINFO_VA + CPUINFO_CPUNO)], %o1
+	mov	1, %o2
+	ld	[%o4 + PMAP_CPUSET], %o0
+	sll	%o2, %o1, %o2
+	or	%o0, %o2, %o0		! pm->pm_cpuset |= cpu_number();
+	st	%o0, [%o4 + PMAP_CPUSET]
+#endif
 
 	ret
-	 restore			! return (oldlwp)
+	 restore %g0, %g1, %o0		! return (lastproc)
 
 /*
  * Call the idlespin() function if it exists, otherwise just return.
@@ -5009,6 +5003,9 @@ ENTRY(snapshot)
  *
  * If were setting up a kernel thread, the function *(%l0) will not
  * return.
+ *
+ * For KERN_SA applications, we provide an alternate entry point for
+ * cpu_setfunc() to use.
  */
 ENTRY(lwp_trampoline)
 	/*
@@ -5021,6 +5018,7 @@ ENTRY(lwp_trampoline)
 	call	lwp_startup
 	 mov	%l2, %o1
 
+_ENTRY(lwp_setfunc_trampoline)
 	call	%l0
 	 mov	%l1, %o0
 

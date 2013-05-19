@@ -1,4 +1,4 @@
-/*	$NetBSD: dumprmt.c,v 1.36 2013/01/13 22:54:24 dholland Exp $	*/
+/*	$NetBSD: dumprmt.c,v 1.34 2011/08/29 14:34:59 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)dumprmt.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: dumprmt.c,v 1.36 2013/01/13 22:54:24 dholland Exp $");
+__RCSID("$NetBSD: dumprmt.c,v 1.34 2011/08/29 14:34:59 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -73,7 +73,7 @@ static	int rmtstate = TS_CLOSED;
 static	int rmtape;
 static	char *rmtpeer;
 
-static	int	okname(const char *);
+static	int	okname(char *);
 static	int	rmtcall(const char *, const char *, int);
 __dead static	void	rmtconnaborted(int);
 static	int	rmtgetb(void);
@@ -157,10 +157,10 @@ rmtgetconn(void)
 }
 
 static int
-okname(const char *cp0)
+okname(char *cp0)
 {
-	const char *cp;
-	unsigned char c;
+	char *cp;
+	int c;
 
 	for (cp = cp0; *cp; cp++) {
 		c = *cp;

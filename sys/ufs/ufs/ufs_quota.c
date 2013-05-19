@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_quota.c,v 1.112 2012/09/09 04:27:49 manu Exp $	*/
+/*	$NetBSD: ufs_quota.c,v 1.108.2.2 2012/09/13 22:24:27 riz Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993, 1995
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_quota.c,v 1.112 2012/09/09 04:27:49 manu Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_quota.c,v 1.108.2.2 2012/09/13 22:24:27 riz Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_quota.h"
@@ -52,6 +52,7 @@ __KERNEL_RCSID(0, "$NetBSD: ufs_quota.c,v 1.112 2012/09/09 04:27:49 manu Exp $")
 
 #include <sys/quotactl.h>
 #include <ufs/ufs/quota.h>
+#include <ufs/ufs/quota1.h> /* for INITQFNAMES; should be moved to quota.h */
 #include <ufs/ufs/inode.h>
 #include <ufs/ufs/ufsmount.h>
 #include <ufs/ufs/ufs_extern.h>

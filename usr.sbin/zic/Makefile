@@ -1,10 +1,8 @@
-#	$NetBSD: Makefile,v 1.14 2013/03/06 18:21:41 christos Exp $
+#	$NetBSD: Makefile,v 1.9 2009/04/22 15:23:10 lukem Exp $
 
-.include "Makefile.inc"
+WARNS?=	2	# XXX -Wcast-qual in lib/libc/time
+
 .include <bsd.own.mk>
-
-COPTS.zic.c	+= -Wno-format-nonliteral
-COPTS.scheck.c	+= -Wno-format-nonliteral
 
 PROG=	zic
 SRCS=	zic.c scheck.c ialloc.c

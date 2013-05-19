@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.15 2012/07/11 19:01:02 christos Exp $
+# $NetBSD: Makefile,v 1.13 2011/10/13 17:23:28 plunky Exp $
 
 .include <bsd.own.mk>
 
@@ -12,6 +12,7 @@ SRCS+= symmetric.c validate.c writer.c
 SRCS+= ssh2pgp.c bufgap.c
 CPPFLAGS+= -I${.CURDIR} -I${EXTDIST}/include
 MAN= libnetpgp.3
+WARNS?= 4
 
 EXTDIST=${.CURDIR}/../dist
 
@@ -20,10 +21,9 @@ EXTDIST=${.CURDIR}/../dist
 INCS+= netpgp.h
 INCSDIR=/usr/include
 
-OPENSSL=${NETBSDSRCDIR}/crypto/external/bsd/openssl
 LIBDPLIBS+=	mj	${.CURDIR}/../libmj
-LIBDPLIBS+=	crypto		${OPENSSL}/lib/libcrypto
-LIBDPLIBS+=	z		${NETBSDSRCDIR}/lib/libz
-LIBDPLIBS+=	bz2		${NETBSDSRCDIR}/lib/libbz2
+LIBDPLIBS+=	crypto	${NETBSDSRCDIR}/crypto/external/bsd/openssl/lib/libcrypto
+LIBDPLIBS+=	z	${NETBSDSRCDIR}/lib/libz
+LIBDPLIBS+=	bz2	${NETBSDSRCDIR}/lib/libbz2
 
 .include <bsd.lib.mk>

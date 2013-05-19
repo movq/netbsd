@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_socket.c,v 1.41 2012/08/18 15:25:15 martin Exp $	*/
+/*	$NetBSD: netbsd32_socket.c,v 1.39.2.2 2012/08/18 22:01:40 riz Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_socket.c,v 1.41 2012/08/18 15:25:15 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_socket.c,v 1.39.2.2 2012/08/18 22:01:40 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

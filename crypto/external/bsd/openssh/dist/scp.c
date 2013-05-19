@@ -1,5 +1,5 @@
-/*	$NetBSD: scp.c,v 1.8 2013/04/12 18:09:19 joerg Exp $	*/
-/* $OpenBSD: scp.c,v 1.171 2011/09/09 22:37:01 djm Exp $ */
+/*	$NetBSD: scp.c,v 1.6 2011/09/16 15:36:18 joerg Exp $	*/
+/* $OpenBSD: scp.c,v 1.170 2010/12/09 14:13:33 jmc Exp $ */
 /*
  * scp - secure remote copy.  This is basically patched BSD rcp which
  * uses ssh to do the data transfer (instead of using rcmd).
@@ -73,7 +73,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: scp.c,v 1.8 2013/04/12 18:09:19 joerg Exp $");
+__RCSID("$NetBSD: scp.c,v 1.6 2011/09/16 15:36:18 joerg Exp $");
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/poll.h>
@@ -340,7 +340,7 @@ typedef struct {
 BUF *allocbuf(BUF *, int, int);
 __dead static void lostconn(int);
 int okname(char *);
-void run_err(const char *,...) __printflike(1, 2);
+void run_err(const char *,...);
 void verifydir(char *);
 
 struct passwd *pwd;
@@ -590,14 +590,12 @@ toremote(char *targ, int argc, char **argv)
 				host = cleanhostname(argv[i]);
 				suser = NULL;
 			}
-			xasprintf(&bp, "%s -f %s%s", cmd,
-			    *src == '-' ? "-- " : "", src);
+			xasprintf(&bp, "%s -f -- %s", cmd, src);
 			if (do_cmd(host, suser, bp, &remin, &remout) < 0)
 				exit(1);
 			(void) xfree(bp);
 			host = cleanhostname(thost);
-			xasprintf(&bp, "%s -t %s%s", cmd,
-			    *targ == '-' ? "-- " : "", targ);
+			xasprintf(&bp, "%s -t -- %s", cmd, targ);
 			if (do_cmd2(host, tuser, bp, remin, remout) < 0)
 				exit(1);
 			(void) xfree(bp);
@@ -643,8 +641,7 @@ toremote(char *targ, int argc, char **argv)
 				errs = 1;
 		} else {	/* local to remote */
 			if (remin == -1) {
-				xasprintf(&bp, "%s -t %s%s", cmd,
-				    *targ == '-' ? "-- " : "", targ);
+				xasprintf(&bp, "%s -t -- %s", cmd, targ);
 				host = cleanhostname(thost);
 				if (do_cmd(host, tuser, bp, &remin,
 				    &remout) < 0)
@@ -697,8 +694,7 @@ tolocal(int argc, char **argv)
 				suser = pwd->pw_name;
 		}
 		host = cleanhostname(host);
-		xasprintf(&bp, "%s -f %s%s",
-		    cmd, *src == '-' ? "-- " : "", src);
+		xasprintf(&bp, "%s -f -- %s", cmd, src);
 		if (do_cmd(host, suser, bp, &remin, &remout) < 0) {
 			(void) xfree(bp);
 			++errs;

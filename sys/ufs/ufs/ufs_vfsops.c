@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_vfsops.c,v 1.52 2013/01/22 09:39:18 dholland Exp $	*/
+/*	$NetBSD: ufs_vfsops.c,v 1.50 2012/02/01 05:34:43 dholland Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993, 1994
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_vfsops.c,v 1.52 2013/01/22 09:39:18 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_vfsops.c,v 1.50 2012/02/01 05:34:43 dholland Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -90,7 +90,7 @@ ufs_root(struct mount *mp, struct vnode **vpp)
 	struct vnode *nvp;
 	int error;
 
-	if ((error = VFS_VGET(mp, (ino_t)UFS_ROOTINO, &nvp)) != 0)
+	if ((error = VFS_VGET(mp, (ino_t)ROOTINO, &nvp)) != 0)
 		return (error);
 	*vpp = nvp;
 	return (0);
@@ -223,7 +223,6 @@ ufs_fhtovp(struct mount *mp, struct ufid *ufhp, struct vnode **vpp)
 		return (error);
 	}
 	ip = VTOI(nvp);
-	KASSERT(ip != NULL);
 	if (ip->i_mode == 0 || ip->i_gen != ufhp->ufid_gen) {
 		vput(nvp);
 		*vpp = NULLVP;

@@ -1,4 +1,4 @@
-/*	$NetBSD: loadfile_machdep.h,v 1.7 2012/03/20 13:03:33 minoura Exp $	 */
+/*	$NetBSD: loadfile_machdep.h,v 1.6.40.1 2012/11/18 19:05:20 riz Exp $	 */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

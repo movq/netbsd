@@ -1,4 +1,4 @@
-/*	$NetBSD: vstream.c,v 1.1.1.3 2013/01/02 18:59:14 tron Exp $	*/
+/*	$NetBSD: vstream.c,v 1.1.1.2 2011/03/02 19:32:46 tron Exp $	*/
 
 /*++
 /* NAME
@@ -102,12 +102,7 @@
 /*	const char *VSTREAM_PATH(stream)
 /*	VSTREAM	*stream;
 /*
-/*	char	*vstream_vprintf(format, ap)
-/*	const char *format;
-/*	va_list	*ap;
-/*
-/*	char	*vstream_vfprintf(stream, format, ap)
-/*	VSTREAM	*stream;
+/*	char	*vstream_vfprintf(vp, format, ap)
 /*	const char *format;
 /*	va_list	*ap;
 /*
@@ -116,9 +111,6 @@
 /*	int	command;
 /*
 /*	ssize_t	vstream_peek(stream)
-/*	VSTREAM	*stream;
-/*
-/*	const char *vstream_peek_data(stream)
 /*	VSTREAM	*stream;
 /*
 /*	int	vstream_setjmp(stream)
@@ -133,22 +125,6 @@
 /*
 /*	struct timeval vstream_ftimeval(stream)
 /*	VSTREAM	*stream;
-/*
-/*	int	vstream_rd_error(stream)
-/*	VSTREAM	*stream;
-/*
-/*	int	vstream_wr_error(stream)
-/*	VSTREAM	*stream;
-/*
-/*	int	vstream_rd_timeout(stream)
-/*	VSTREAM	*stream;
-/*
-/*	int	vstream_wr_timeout(stream)
-/*	VSTREAM	*stream;
-/*
-/*	int	vstream_fstat(stream, flags)
-/*	VSTREAM	*stream;
-/*	int	flags;
 /* DESCRIPTION
 /*	The \fIvstream\fR module implements light-weight buffered I/O
 /*	similar to the standard I/O routines.
@@ -273,20 +249,9 @@
 /* .IP "VSTREAM_CTL_READ_FN (ssize_t (*)(int, void *, size_t, int, void *))"
 /*	The argument specifies an alternative for the timed_read(3) function,
 /*	for example, a read function that performs decryption.
-/*	This function receives as arguments a file descriptor, buffer pointer,
-/*	buffer length, timeout value, and the VSTREAM's context value.
-/*	A timeout value <= 0 disables the time limit.
-/*	This function should return the positive number of bytes transferred,
-/*	0 upon EOF, and -1 upon error with errno set appropriately.
 /* .IP "VSTREAM_CTL_WRITE_FN (ssize_t (*)(int, void *, size_t, int, void *))"
 /*	The argument specifies an alternative for the timed_write(3) function,
 /*	for example, a write function that performs encryption.
-/*	This function receives as arguments a file descriptor, buffer pointer,
-/*	buffer length, timeout value, and the VSTREAM's context value.
-/*	A timeout value <= 0 disables the time limit.
-/*	This function should return the positive number of bytes transferred,
-/*	and -1 upon error with errno set appropriately. Instead of -1 it may
-/*	also return 0, e.g., upon remote party-initiated protocol shutdown.
 /* .IP "VSTREAM_CTL_CONTEXT (char *)"
 /*	The argument specifies application context that is passed on to
 /*	the application-specified read/write routines. No copy is made.
@@ -320,7 +285,7 @@
 /* .IP "VSTREAM_CTL_TIMEOUT (int)
 /*	The deadline for a descriptor to become readable in case of a read
 /*	request, or writable in case of a write request. Specify a value
-/*	of 0 to disable deadlines.
+/*	<= 0 to disable deadlines.
 /* .IP "VSTREAM_CTL_EXCEPT (no value)"
 /*	Enable exception handling with vstream_setjmp() and vstream_longjmp().
 /*	This involves allocation of additional memory that normally isn't
@@ -341,14 +306,6 @@
 /*	int. Use an explicit cast to avoid problems on LP64
 /*	environments and other environments where ssize_t is larger
 /*	than int.
-/* .IP VSTREAM_CTL_START_DEADLINE
-/*	Change the VSTREAM_CTL_TIMEOUT behavior, to limit the total
-/*	time for all subsequent file descriptor read or write
-/*	operations, and recharge the deadline timer.
-/* .IP VSTREAM_CTL_STOP_DEADLINE
-/*	Revert VSTREAM_CTL_TIMEOUT behavior to the default, i.e.
-/*	a time limit for individual file descriptor read or write
-/*	operations.
 /* .PP
 /*	vstream_fileno() gives access to the file handle associated with
 /*	a buffered stream. With streams that have separate read/write
@@ -390,8 +347,6 @@
 /*	vstream_vfprintf() provides an alternate interface
 /*	for formatting an argument list according to a format string.
 /*
-/*	vstream_vprintf() provides a similar alternative interface.
-/*
 /*	vstream_bufstat() provides input and output buffer status
 /*	information.  The command is one of the following:
 /* .IP VSTREAM_BST_IN_PEND
@@ -404,9 +359,6 @@
 /*	vstream_peek() returns the number of characters that can be
 /*	read from the named stream without refilling the read buffer.
 /*	This is an alias for vstream_bufstat(stream, VSTREAM_BST_IN_PEND).
-/*
-/*	vstream_peek_data() returns a pointer to the unread bytes
-/*	that exist according to vstream_peek().
 /*
 /*	vstream_setjmp() saves processing context and makes that context
 /*	available for use with vstream_longjmp().  Normally, vstream_setjmp()
@@ -425,18 +377,6 @@
 /*
 /*	vstream_ftimeval() is like vstream_ftime() but returns more
 /*	detail.
-/*
-/*	vstream_rd_mumble() and vstream_wr_mumble() report on
-/*	read and write error conditions, respectively.
-/*
-/*	vstream_fstat() queries stream status information about
-/*	user-requested features. The \fIflags\fR argument is the
-/*	bitwise OR of one or more of the following, and the result
-/*	value is the bitwise OR of the features that are activated.
-/* .IP VSTREAM_FLAG_DEADLINE
-/*	The deadline feature is activated.
-/* .IP VSTREAM_FLAG_DOUBLE
-/*	The double-buffering feature is activated.
 /* DIAGNOSTICS
 /*	Panics: interface violations. Fatal errors: out of memory.
 /* SEE ALSO
@@ -584,21 +524,6 @@ VSTREAM vstream_fstd[] = {
 #define VSTREAM_FFLUSH_SOME(stream) \
 	vstream_fflush_some((stream), (stream)->buf.len - (stream)->buf.cnt)
 
-/* Note: this does not change a negative result into a zero result. */
-#define VSTREAM_SUB_TIME(x, y, z) \
-    do { \
-	(x).tv_sec = (y).tv_sec - (z).tv_sec; \
-	(x).tv_usec = (y).tv_usec - (z).tv_usec; \
-	while ((x).tv_usec < 0) { \
-	    (x).tv_usec += 1000000; \
-	    (x).tv_sec -= 1; \
-	} \
-	while ((x).tv_usec >= 1000000) { \
-	    (x).tv_usec -= 1000000; \
-	    (x).tv_sec += 1; \
-	} \
-    } while (0)
-
 /* vstream_buf_init - initialize buffer */
 
 static void vstream_buf_init(VBUF *bp, int flags)
@@ -667,9 +592,6 @@ static int vstream_fflush_some(VSTREAM *stream, ssize_t to_flush)
     char   *data;
     ssize_t len;
     ssize_t n;
-    int     timeout;
-    struct timeval before;
-    struct timeval elapsed;
 
     /*
      * Sanity checks. It is illegal to flush a read-only stream. Otherwise,
@@ -708,43 +630,16 @@ static int vstream_fflush_some(VSTREAM *stream, ssize_t to_flush)
      * When flushing a buffer, allow for partial writes. These can happen
      * while talking to a network. Update the cached file seek position, if
      * any.
-     * 
-     * When deadlines are enabled, we count the elapsed time for each write
-     * operation instead of simply comparing the time-of-day clock with a
-     * per-stream deadline. The latter could result in anomalies when an
-     * application does lengthy processing between write operations. Keep in
-     * mind that a receiver may not be able to keep up when a sender suddenly
-     * floods it with a lot of data as it tries to catch up with a deadline.
      */
     for (data = (char *) bp->data, len = to_flush; len > 0; len -= n, data += n) {
-	if (bp->flags & VSTREAM_FLAG_DEADLINE) {
-	    timeout = stream->time_limit.tv_sec + (stream->time_limit.tv_usec > 0);
-	    if (timeout <= 0) {
-		bp->flags |= (VSTREAM_FLAG_WR_ERR | VSTREAM_FLAG_WR_TIMEOUT);
-		errno = ETIMEDOUT;
-		return (VSTREAM_EOF);
-	    }
-	    if (len == to_flush)
-		GETTIMEOFDAY(&before);
-	    else
-		before = stream->iotime;
-	} else
-	    timeout = stream->timeout;
-	if ((n = stream->write_fn(stream->fd, data, len, timeout, stream->context)) <= 0) {
-	    bp->flags |= VSTREAM_FLAG_WR_ERR;
-	    if (errno == ETIMEDOUT) {
-		bp->flags |= VSTREAM_FLAG_WR_TIMEOUT;
-		stream->time_limit.tv_sec = stream->time_limit.tv_usec = 0;
-	    }
+	if ((n = stream->write_fn(stream->fd, data, len, stream->timeout, stream->context)) <= 0) {
+	    bp->flags |= VSTREAM_FLAG_ERR;
+	    if (errno == ETIMEDOUT)
+		bp->flags |= VSTREAM_FLAG_TIMEOUT;
 	    return (VSTREAM_EOF);
 	}
-	if (timeout) {
+	if (stream->timeout)
 	    GETTIMEOFDAY(&stream->iotime);
-	    if (bp->flags & VSTREAM_FLAG_DEADLINE) {
-		VSTREAM_SUB_TIME(elapsed, stream->iotime, before);
-		VSTREAM_SUB_TIME(stream->time_limit, stream->time_limit, elapsed);
-	    }
-	}
 	if (msg_verbose > 2 && stream != VSTREAM_ERR && n != to_flush)
 	    msg_info("%s: %d flushed %ld/%ld", myname, stream->fd,
 		     (long) n, (long) to_flush);
@@ -805,9 +700,6 @@ static int vstream_buf_get_ready(VBUF *bp)
     VSTREAM *stream = VBUF_TO_APPL(bp, VSTREAM, buf);
     const char *myname = "vstream_buf_get_ready";
     ssize_t n;
-    struct timeval before;
-    struct timeval elapsed;
-    int     timeout;
 
     /*
      * Detect a change of I/O direction or position. If so, flush any
@@ -868,44 +760,19 @@ static int vstream_buf_get_ready(VBUF *bp)
      * Fill the buffer with as much data as we can handle, or with as much
      * data as is available right now, whichever is less. Update the cached
      * file seek position, if any.
-     * 
-     * When deadlines are enabled, we count the elapsed time for each read
-     * operation instead of simply comparing the time-of-day clock with a
-     * per-stream deadline. The latter could result in anomalies when an
-     * application does lengthy processing between read operations. Keep in
-     * mind that a sender may get blocked, and may not be able to keep up
-     * when a receiver suddenly wants to read a lot of data as it tries to
-     * catch up with a deadline.
      */
-    if (bp->flags & VSTREAM_FLAG_DEADLINE) {
-	timeout = stream->time_limit.tv_sec + (stream->time_limit.tv_usec > 0);
-	if (timeout <= 0) {
-	    bp->flags |= (VSTREAM_FLAG_RD_ERR | VSTREAM_FLAG_RD_TIMEOUT);
-	    errno = ETIMEDOUT;
-	    return (VSTREAM_EOF);
-	}
-	GETTIMEOFDAY(&before);
-    } else
-	timeout = stream->timeout;
-    switch (n = stream->read_fn(stream->fd, bp->data, bp->len, timeout, stream->context)) {
+    switch (n = stream->read_fn(stream->fd, bp->data, bp->len, stream->timeout, stream->context)) {
     case -1:
-	bp->flags |= VSTREAM_FLAG_RD_ERR;
-	if (errno == ETIMEDOUT) {
-	    bp->flags |= VSTREAM_FLAG_RD_TIMEOUT;
-	    stream->time_limit.tv_sec = stream->time_limit.tv_usec = 0;
-	}
+	bp->flags |= VSTREAM_FLAG_ERR;
+	if (errno == ETIMEDOUT)
+	    bp->flags |= VSTREAM_FLAG_TIMEOUT;
 	return (VSTREAM_EOF);
     case 0:
 	bp->flags |= VSTREAM_FLAG_EOF;
 	return (VSTREAM_EOF);
     default:
-	if (timeout) {
+	if (stream->timeout)
 	    GETTIMEOFDAY(&stream->iotime);
-	    if (bp->flags & VSTREAM_FLAG_DEADLINE) {
-		VSTREAM_SUB_TIME(elapsed, stream->iotime, before);
-		VSTREAM_SUB_TIME(stream->time_limit, stream->time_limit, elapsed);
-	    }
-	}
 	if (msg_verbose > 2)
 	    msg_info("%s: fd %d got %ld", myname, stream->fd, (long) n);
 	bp->cnt = -n;
@@ -1013,7 +880,7 @@ static int vstream_buf_space(VBUF *bp, ssize_t want)
 	if ((shortage = (want - bp->cnt)) > 0) {
 	    if ((bp->flags & VSTREAM_FLAG_FIXED)
 		|| shortage > __MAXINT__(ssize_t) -bp->len - stream->req_bufsize) {
-		bp->flags |= VSTREAM_FLAG_WR_ERR;
+		bp->flags |= VSTREAM_FLAG_ERR;
 	    } else {
 		incr = VSTREAM_ROUNDUP(shortage, stream->req_bufsize);
 		vstream_buf_alloc(bp, bp->len + incr);
@@ -1130,8 +997,7 @@ off_t   vstream_fseek(VSTREAM *stream, off_t offset, int whence)
      * Update the cached file seek position.
      */
     if ((stream->offset = lseek(stream->fd, offset, whence)) < 0) {
-	if (errno == ESPIPE)
-	    bp->flags |= VSTREAM_FLAG_NSEEK;
+	bp->flags |= VSTREAM_FLAG_NSEEK;
     } else {
 	bp->flags |= VSTREAM_FLAG_SEEK;
     }
@@ -1218,7 +1084,6 @@ VSTREAM *vstream_fdopen(int fd, int flags)
     stream->context = 0;
     stream->jbuf = 0;
     stream->iotime.tv_sec = stream->iotime.tv_usec = 0;
-    stream->time_limit.tv_sec = stream->time_limit.tv_usec = 0;
     stream->req_bufsize = VSTREAM_BUFSIZE;
     return (stream);
 }
@@ -1426,8 +1291,6 @@ void    vstream_control(VSTREAM *stream, int name,...)
 	    if (stream->timeout == 0)
 		GETTIMEOFDAY(&stream->iotime);
 	    stream->timeout = va_arg(ap, int);
-	    if (stream->timeout < 0)
-		msg_panic("%s: bad timeout %d", myname, stream->timeout);
 	    break;
 	case VSTREAM_CTL_EXCEPT:
 	    if (stream->jbuf == 0)
@@ -1473,37 +1336,11 @@ void    vstream_control(VSTREAM *stream, int name,...)
 		&& req_bufsize > stream->req_bufsize)
 		stream->req_bufsize = req_bufsize;
 	    break;
-
-	    /*
-	     * Make no gettimeofday() etc. system call until we really know
-	     * that we need to do I/O. This avoids a performance hit when
-	     * sending or receiving body content one line at a time.
-	     */
-	case VSTREAM_CTL_STOP_DEADLINE:
-	    stream->buf.flags &= ~VSTREAM_FLAG_DEADLINE;
-	    break;
-	case VSTREAM_CTL_START_DEADLINE:
-	    if (stream->timeout <= 0)
-		msg_panic("%s: bad timeout %d", myname, stream->timeout);
-	    stream->buf.flags |= VSTREAM_FLAG_DEADLINE;
-	    stream->time_limit.tv_sec = stream->timeout;
-	    stream->time_limit.tv_usec = 0;
-	    break;
 	default:
 	    msg_panic("%s: bad name %d", myname, name);
 	}
     }
     va_end(ap);
-}
-
-/* vstream_vprintf - formatted print to stdout */
-
-VSTREAM *vstream_vprintf(const char *format, va_list ap)
-{
-    VSTREAM *vp = VSTREAM_OUT;
-
-    vbuf_print(&vp->buf, format, ap);
-    return (vp);
 }
 
 /* vstream_vfprintf - formatted print engine */
@@ -1563,19 +1400,6 @@ ssize_t vstream_peek(VSTREAM *vp)
 	return (-vp->buf.cnt);
     } else if (vp->buf.flags & VSTREAM_FLAG_DOUBLE) {
 	return (-vp->read_buf.cnt);
-    } else {
-	return (0);
-    }
-}
-
-/* vstream_peek_data - peek at unread data */
-
-const char *vstream_peek_data(VSTREAM *vp)
-{
-    if (vp->buf.flags & VSTREAM_FLAG_READ) {
-	return ((const char *) vp->buf.ptr);
-    } else if (vp->buf.flags & VSTREAM_FLAG_DOUBLE) {
-	return ((const char *) vp->read_buf.ptr);
     } else {
 	return (0);
     }

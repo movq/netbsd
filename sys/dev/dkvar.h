@@ -1,4 +1,4 @@
-/* $NetBSD: dkvar.h,v 1.16 2012/05/25 10:53:46 elric Exp $ */
+/* $NetBSD: dkvar.h,v 1.15 2010/11/19 06:44:39 dholland Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -47,7 +47,8 @@ struct dk_geom {
  * are common to each of the pseudo-disk drivers.
  */
 struct dk_softc {
-	device_t		 sc_dev;
+	void			*sc_osc;	/* the softc of the underlying
+						 * driver */
 	u_int32_t		 sc_flags;	/* flags */
 	size_t			 sc_size;	/* size of disk */
 	struct dk_geom		 sc_geom;	/* geometry info */
@@ -95,7 +96,7 @@ struct dk_intf {
  * Functions that are exported to the pseudo disk implementations:
  */
 
-void	dk_sc_init(struct dk_softc *, const char *);
+void	dk_sc_init(struct dk_softc *, void *, const char *);
 
 int	dk_open(struct dk_intf *, struct dk_softc *, dev_t,
 		int, int, struct lwp *);
@@ -112,6 +113,5 @@ int	dk_dump(struct dk_intf *, struct dk_softc *, dev_t,
 void	dk_getdisklabel(struct dk_intf *, struct dk_softc *, dev_t);
 void	dk_getdefaultlabel(struct dk_intf *, struct dk_softc *,
 			   struct disklabel *);
-void	dk_set_properties(struct dk_intf *, struct dk_softc *);
 
 int	dk_lookup(struct pathbuf *, struct lwp *, struct vnode **);

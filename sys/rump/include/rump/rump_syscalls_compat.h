@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_syscalls_compat.h,v 1.10 2013/01/17 23:21:20 pooka Exp $	*/
+/*	$NetBSD: rump_syscalls_compat.h,v 1.7 2011/01/17 18:24:17 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2010, 2011 Antti Kantee.  All Rights Reserved.
@@ -28,8 +28,8 @@
 #ifndef _RUMP_RUMP_SYSCALLS_COMPAT_H_
 #define _RUMP_RUMP_SYSCALLS_COMPAT_H_
 
+#ifndef _KERNEL
 #ifdef __NetBSD__
-#include <sys/cdefs.h>
 #include <sys/param.h>
 
 /* time_t change */
@@ -51,17 +51,7 @@
 #define RUMP_SYS_RENAME_FHSTAT rump___sysimpl_fhstat40
 #endif /* __NetBSD_Prereq(5,99,7) */
 
-#else /* !__NetBSD__ */
-
-#ifndef __RENAME
-#ifdef __ELF__
-#define __RUMPSTRINGIFY(x) #x
-#else
-#define __RUMPSTRINGIFY(x) "_"#x
-#endif /* __ELF__ */
-#define __RENAME(x) __asm(__RUMPSTRINGIFY(x))
-#endif /* __RENAME */
-
 #endif /* __NetBSD__ */
+#endif /* _KERNEL */
 
 #endif /* _RUMP_RUMP_SYSCALLS_COMPAT_H_ */

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.14 2012/08/23 21:21:15 joerg Exp $
+#	$NetBSD: Makefile.inc,v 1.12 2011/05/30 14:41:26 joerg Exp $
 
 NOLINT=		# defined
 NOPICINSTALL=	# defined

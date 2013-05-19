@@ -1,4 +1,4 @@
-/*     $NetBSD: vfs_syscalls.h,v 1.18 2012/03/13 18:41:02 elad Exp $        */
+/*     $NetBSD: vfs_syscalls.h,v 1.17 2012/02/01 05:39:28 dholland Exp $        */
 
 /*
  * Copyright (c) 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -35,6 +35,8 @@
 struct stat;
 struct statvfs;
 struct quotactl_args;
+
+extern int dovfsusermount;
 
 /*
  * syscall helpers for compat code.

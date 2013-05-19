@@ -1,4 +1,4 @@
-/* $NetBSD: cpu_ucode.c,v 1.3 2012/10/17 20:19:55 drochner Exp $ */
+/* $NetBSD: cpu_ucode.c,v 1.1 2012/01/13 16:05:15 cegger Exp $ */
 /*
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -29,10 +29,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu_ucode.c,v 1.3 2012/10/17 20:19:55 drochner Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu_ucode.c,v 1.1 2012/01/13 16:05:15 cegger Exp $");
 
 #include "opt_cpu_ucode.h"
-#include "opt_compat_netbsd.h"
 
 #include <sys/param.h>
 #include <sys/cpuio.h>
@@ -48,68 +47,48 @@ __KERNEL_RCSID(0, "$NetBSD: cpu_ucode.c,v 1.3 2012/10/17 20:19:55 drochner Exp $
 static struct cpu_ucode_softc ucode_softc;
 
 int
-cpu_ucode_get_version(struct cpu_ucode_version *data)
+cpu_ucode_get_version(void *data)
 {
+	struct cpu_ucode *ucode = data;
 
 	switch (cpu_vendor) {
 	case CPUVENDOR_AMD:
-		return cpu_ucode_amd_get_version(data);
-	case CPUVENDOR_INTEL:
-		return cpu_ucode_intel_get_version(data);
+		return cpu_ucode_amd_get_version(ucode);
 	default:
+		ucode->version = (uint64_t)-1;
 		return EOPNOTSUPP;
 	}
 
 	return 0;
 }
 
-#ifdef COMPAT_60
 int
-compat6_cpu_ucode_get_version(struct compat6_cpu_ucode *data)
-{
-
-	switch (cpu_vendor) {
-	case CPUVENDOR_AMD:
-		return compat6_cpu_ucode_amd_get_version(data);
-	default:
-		return EOPNOTSUPP;
-	}
-
-	return 0;
-}
-#endif
-
-int
-cpu_ucode_md_open(firmware_handle_t *fwh, int loader_version, const char *fwname)
+cpu_ucode_md_open(firmware_handle_t *fwh, const char *fwname)
 {
 	switch (cpu_vendor) {
 	case CPUVENDOR_AMD:
 		return cpu_ucode_amd_firmware_open(fwh, fwname);
 	case CPUVENDOR_INTEL:
-		return cpu_ucode_intel_firmware_open(fwh, fwname);
+		return EOPNOTSUPP; /* not yet supported */
 	default:
 		return EOPNOTSUPP;
 	}
 }
 
 int
-cpu_ucode_apply(const struct cpu_ucode *data)
+cpu_ucode_apply(void *data)
 {
+	struct cpu_ucode *ucode = data;
 	struct cpu_ucode_softc *sc = &ucode_softc;
 	int error;
 
-	sc->loader_version = data->loader_version;
-
-	error = cpu_ucode_load(sc, data->fwname);
+	error = cpu_ucode_load(sc, ucode->fwname);
 	if (error)
 		return error;
 
 	switch (cpu_vendor) {
 	case CPUVENDOR_AMD:
-		error = cpu_ucode_amd_apply(sc, data->cpu_nr);
-		break;
-	case CPUVENDOR_INTEL:
-		error = cpu_ucode_intel_apply(sc, data->cpu_nr);
+		error = cpu_ucode_amd_apply(sc);
 		break;
 	default:
 		return EOPNOTSUPP;
@@ -121,28 +100,3 @@ cpu_ucode_apply(const struct cpu_ucode *data)
 	sc->sc_blobsize = 0;
 	return error;
 }
-
-#ifdef COMPAT_60
-int
-compat6_cpu_ucode_apply(const struct compat6_cpu_ucode *data)
-{
-	struct cpu_ucode_softc *sc = &ucode_softc;
-	int error;
-
-	if (cpu_vendor != CPUVENDOR_AMD)
-		return EOPNOTSUPP;
-
-	sc->loader_version = CPU_UCODE_LOADER_AMD;
-	error = cpu_ucode_load(sc, data->fwname);
-	if (error)
-		return error;
-
-	error = cpu_ucode_amd_apply(sc, CPU_UCODE_ALL_CPUS);
-
-	if (sc->sc_blob != NULL)
-		firmware_free(sc->sc_blob, 0);
-	sc->sc_blob = NULL;
-	sc->sc_blobsize = 0;
-	return error;
-}
-#endif

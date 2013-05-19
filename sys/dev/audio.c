@@ -1,4 +1,4 @@
-/*	$NetBSD: audio.c,v 1.261 2012/04/30 02:16:46 mrg Exp $	*/
+/*	$NetBSD: audio.c,v 1.257.2.4 2012/06/13 19:14:17 riz Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -155,7 +155,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: audio.c,v 1.261 2012/04/30 02:16:46 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: audio.c,v 1.257.2.4 2012/06/13 19:14:17 riz Exp $");
 
 #include "audio.h"
 #if NAUDIO > 0

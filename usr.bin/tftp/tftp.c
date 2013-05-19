@@ -1,4 +1,4 @@
-/*	$NetBSD: tftp.c,v 1.34 2012/07/16 09:20:26 he Exp $	*/
+/*	$NetBSD: tftp.c,v 1.32.4.1 2012/07/20 23:14:23 riz Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)tftp.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: tftp.c,v 1.34 2012/07/16 09:20:26 he Exp $");
+__RCSID("$NetBSD: tftp.c,v 1.32.4.1 2012/07/20 23:14:23 riz Exp $");
 #endif
 #endif /* not lint */
 
@@ -532,8 +532,12 @@ abort:						/* ok to ack, since user */
 }
 
 static int
-makerequest(int request, const char *name, struct tftphdr *tp, const char *mode,
-	off_t filesize)
+makerequest(request, name, tp, mode, filesize)
+	int request;
+	const char *name;
+	struct tftphdr *tp;
+	const char *mode;
+	off_t filesize;
 {
 	char *cp;
 
@@ -599,7 +603,9 @@ const struct errmsg {
  * offset by 100.
  */
 static void
-nak(int error, struct sockaddr *peer)
+nak(error, peer)
+	int error;
+	struct sockaddr *peer;
 {
 	const struct errmsg *pe;
 	struct tftphdr *tp;
@@ -628,7 +634,10 @@ nak(int error, struct sockaddr *peer)
 }
 
 static void
-tpacket(const char *s, struct tftphdr *tp, int n)
+tpacket(s, tp, n)
+	const char *s;
+	struct tftphdr *tp;
+	int n;
 {
 	static const char *opcodes[] =
 	   { "#0", "RRQ", "WRQ", "DATA", "ACK", "ERROR", "OACK" };
@@ -715,21 +724,23 @@ struct timeval tstart;
 struct timeval tstop;
 
 static void
-startclock(void)
+startclock()
 {
 
 	(void)gettimeofday(&tstart, NULL);
 }
 
 static void
-stopclock(void)
+stopclock()
 {
 
 	(void)gettimeofday(&tstop, NULL);
 }
 
 static void
-printstats(const char *direction, unsigned long amount)
+printstats(direction, amount)
+	const char *direction;
+	unsigned long amount;
 {
 	double delta;
 
@@ -745,7 +756,8 @@ printstats(const char *direction, unsigned long amount)
 
 static void
 /*ARGSUSED*/
-timer(int sig)
+timer(sig)
+	int sig;
 {
 
 	timeout += rexmtval;
@@ -757,7 +769,9 @@ timer(int sig)
 }
 
 static int
-cmpport(struct sockaddr *sa, struct sockaddr *sb)
+cmpport(sa, sb)
+	struct sockaddr *sa;
+	struct sockaddr *sb;
 {
 	char a[NI_MAXSERV], b[NI_MAXSERV];
 

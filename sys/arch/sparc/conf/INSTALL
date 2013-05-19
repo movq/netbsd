@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL,v 1.87 2013/04/27 21:43:41 christos Exp $
+#	$NetBSD: INSTALL,v 1.80 2011/12/18 05:49:32 dholland Exp $
 #
 # from: NetBSD: GENERIC,v 1.84 1999/06/06 13:00:03 mrg Exp
 #
@@ -49,10 +49,8 @@ options 	FONT_BOLD8x16		# a somewhat smaller font
 #options 	RASTERCONSOLE_BGCOL=WSCOL_WHITE
 
 # wscons stuff
-#options 	WSEMUL_SUN
-options 	WSEMUL_VT100
-options 	WSDISPLAY_DEFAULTSCREENS=1
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
+options 	WSEMUL_SUN
+#options 	WSEMUL_VT100
 options 	WSDISPLAY_COMPAT_RAWKBD
 options 	WSDISPLAY_CUSTOM_OUTPUT
 options 	WS_DEFAULT_FG=WSCOL_BLACK
@@ -81,6 +79,8 @@ config		netbsd	root on ? type ?
 #options 	SYSVMSG		# System V message queues
 #options 	SYSVSEM		# System V semaphores
 #options 	SYSVSHM		# System V shared memory
+
+## Loadable kernel module support; still under development.
 
 options 	USERCONF	# userconf(4) support
 options 	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
@@ -194,10 +194,12 @@ options 	INET		# IP (Internet Protocol) v4
 #options 	MROUTING	# packet forwarding of multicast packets
 #options 	PIM		# Protocol Independent Multicast
 #options 	DIRECTED_BROADCAST	# allow broadcasts through routers
+#options 	ISO,TPIP	# OSI networking
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk (over Ethernet) protocol
 #options 	NTP		# Network Time Protocol in-kernel support
 #options 	PPS_SYNC	# Add serial line synchronization for NTP
-#options 	PFIL_HOOKS	# Add pfil(9) packet filter hooks
+#options 	PFIL_HOOKS	# Add pfil(9) hooks, intended for custom LKMs.
 #options 	IPFILTER_LOG	# Add ipmon(8) logging for ipfilter device
 #options 	IPFILTER_LOOKUP	# ippool(8) support
 #options 	PPP_BSDCOMP	# Add BSD compression to ppp device
@@ -209,9 +211,6 @@ options 	INET		# IP (Internet Protocol) v4
 #### Main bus and CPU .. all systems.
 mainbus0 at root
 cpu0	at mainbus0
-
-#### SX rendering engine found in SS20 and SS10SX
-sx0	at mainbus0
 
 #### Bus types found on SPARC systems.
 
@@ -414,11 +413,11 @@ fd*	at fdc0					# the drive itself
 ## Concatenated and striped disks; with this, you can create a software-based
 ## disk array similar to a "RAID 0" setup.  See ccd(4).
 
-#pseudo-device	ccd
+#pseudo-device	ccd	4
 
 ## RAIDframe disk driver: software RAID driver.  See raid(4).
 
-#pseudo-device	raid
+#pseudo-device	raid	4
 
 ## Memory disk device, used on boot floppies with compressed
 ## kernel-plus-root-disk images.
@@ -590,7 +589,7 @@ wsdisplay*	at wsemuldisplaydev?
 
 ## Pseudo ttys, required for network logins and programs like screen.
 
-pseudo-device	pty			# pseudo-terminals
+pseudo-device	pty		2	# pseudo-terminals (Sysinst needs two)
 
 ## Random device, used to implement /dev/random (a source of random noise),
 ## and generate randomness for some kernel formulae.

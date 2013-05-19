@@ -1,4 +1,4 @@
-/*	$NetBSD: systm.h,v 1.258 2013/03/18 13:36:23 para Exp $	*/
+/*	$NetBSD: systm.h,v 1.256 2011/11/27 11:07:21 martin Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1988, 1991, 1993
@@ -62,6 +62,7 @@ struct tty;
 struct uio;
 struct vnode;
 struct vmspace;
+struct vm_map;
 
 extern const char *panicstr;	/* panic message */
 extern int doing_shutdown;	/* shutting down */
@@ -142,7 +143,6 @@ extern int nsysent;
 #define SYCALL_ARG6_64  0x0800000
 #define SYCALL_ARG7_64  0x1000000
 #define SYCALL_NOSYS    0x2000000 /* permanent nosys in sysent[] */
-#define	SYCALL_ARG_PTR	0x3000000 /* at least one argument is a pointer */
 #define SYCALL_RET_64_P(sy)	((sy)->sy_flags & SYCALL_RET_64)
 #define SYCALL_ARG_64_P(sy, n)	((sy)->sy_flags & (SYCALL_ARG0_64 << (n)))
 #define	SYCALL_ARG_64_MASK(sy)	(((sy)->sy_flags >> 17) & 0xff)
@@ -533,6 +533,6 @@ void assert_sleepable(void);
 #define	ASSERT_SLEEPABLE()	/* nothing */
 #endif /* defined(DEBUG) */
 
-vaddr_t calc_cache_size(vsize_t , int, int);
+vaddr_t calc_cache_size(struct vm_map *, int, int);
 
 #endif	/* !_SYS_SYSTM_H_ */

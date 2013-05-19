@@ -1,4 +1,4 @@
-/*	$NetBSD: socket.h,v 1.5 2013/03/24 18:42:00 christos Exp $	*/
+/*	$NetBSD: socket.h,v 1.3.4.1 2012/06/05 21:15:29 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004-2009, 2011, 2012  Internet Systems Consortium, Inc. ("ISC")
@@ -265,7 +265,6 @@ typedef enum {
 /*% Socket and socket manager methods */
 typedef struct isc_socketmgrmethods {
 	void		(*destroy)(isc_socketmgr_t **managerp);
-	void 		(*_maxudp)(isc_socketmgr_t *mgr, int maxudp);
 	isc_result_t	(*socketcreate)(isc_socketmgr_t *manager, int pf,
 					isc_sockettype_t type,
 					isc_socket_t **socketp);
@@ -277,16 +276,21 @@ typedef struct isc_socketmgrmethods {
 } isc_socketmgrmethods_t;
 
 typedef struct isc_socketmethods {
-	isc_result_t	(*open)(isc_socket_t *socket);
-	isc_result_t	(*close)(isc_socket_t *socket);
 	void		(*attach)(isc_socket_t *socket,
 				  isc_socket_t **socketp);
 	void		(*detach)(isc_socket_t **socketp);
 	isc_result_t	(*bind)(isc_socket_t *sock, isc_sockaddr_t *sockaddr,
 				unsigned int options);
+	isc_result_t	(*sendto)(isc_socket_t *sock, isc_region_t *region,
+				  isc_task_t *task, isc_taskaction_t action,
+				  const void *arg, isc_sockaddr_t *address,
+				  struct in6_pktinfo *pktinfo);
 	isc_result_t	(*connect)(isc_socket_t *sock, isc_sockaddr_t *addr,
 				   isc_task_t *task, isc_taskaction_t action,
 				   const void *arg);
+	isc_result_t	(*recv)(isc_socket_t *sock, isc_region_t *region,
+				unsigned int minimum, isc_task_t *task,
+				isc_taskaction_t action, const void *arg);
 	void		(*cancel)(isc_socket_t *sock, isc_task_t *task,
 				  unsigned int how);
 	isc_result_t	(*getsockname)(isc_socket_t *sock,
@@ -297,42 +301,6 @@ typedef struct isc_socketmethods {
 	isc_result_t		(*dup)(isc_socket_t *socket,
 				  isc_socket_t **socketp);
 	int 		(*getfd)(isc_socket_t *socket);
-	void 		(*setname)(isc_socket_t *socket, const char *, void *);
-	isc_result_t 	(*accept)(isc_socket_t *sock, isc_task_t *task,
-				  isc_taskaction_t action, const void *arg);
-	isc_result_t    (*filter)(isc_socket_t *sock, const char *filter);
-	isc_result_t    (*getpeername)(isc_socket_t *sock,
-				       isc_sockaddr_t *addressp);
-	isc_result_t	(*listen)(isc_socket_t *sock, unsigned int backlog);
-	isc_result_t	(*recv)(isc_socket_t *sock, isc_region_t *region,
-				unsigned int minimum, isc_task_t *task,
-				isc_taskaction_t action, const void *arg);
-	isc_result_t 	(*recvv)(isc_socket_t *sock, isc_bufferlist_t *buflist,
-				 unsigned int minimum, isc_task_t *task,
-				 isc_taskaction_t action, const void *arg);
-	isc_result_t 	(*recv2)(isc_socket_t *sock, isc_region_t *region,
-				 unsigned int minimum, isc_task_t *task,
-				 isc_socketevent_t *event, unsigned int flags);
-	isc_result_t 	(*send)(isc_socket_t *sock, isc_region_t *region,
-				isc_task_t *task, isc_taskaction_t action,
-				const void *arg);
-	isc_result_t 	(*sendv)(isc_socket_t *sock, isc_bufferlist_t *buflist,
-				 isc_task_t *task, isc_taskaction_t action,
-				 const void *arg);
-	isc_result_t	(*sendto)(isc_socket_t *sock, isc_region_t *region,
-				  isc_task_t *task, isc_taskaction_t action,
-				  const void *arg, isc_sockaddr_t *address,
-				  struct in6_pktinfo *pktinfo);
-	isc_result_t    (*sendtov)(isc_socket_t *sock,
-				   isc_bufferlist_t *buflist, isc_task_t *task,
-				   isc_taskaction_t action, const void *arg,
-				   isc_sockaddr_t *address,
-				   struct in6_pktinfo *pktinfo);
-	isc_result_t	(*sendto2)(isc_socket_t *sock, isc_region_t *region,
-				   isc_task_t *task, isc_sockaddr_t *address,
-				   struct in6_pktinfo *pktinfo,
-				   isc_socketevent_t *event,
-				   unsigned int flags);
 } isc_socketmethods_t;
 
 /*%
@@ -1172,12 +1140,12 @@ isc_socketmgr_renderxml(isc_socketmgr_t *mgr, xmlTextWriterPtr writer);
 
 #endif /* HAVE_LIBXML2 */
 
+#ifdef USE_SOCKETIMPREGISTER
 /*%<
  * See isc_socketmgr_create() above.
  */
 typedef isc_result_t
-(*isc_socketmgrcreatefunc_t)(isc_mem_t *mctx, isc_socketmgr_t **managerp,
-			     unsigned int maxsocks);
+(*isc_socketmgrcreatefunc_t)(isc_mem_t *mctx, isc_socketmgr_t **managerp);
 
 isc_result_t
 isc_socket_register(isc_socketmgrcreatefunc_t createfunc);
@@ -1195,6 +1163,7 @@ isc__socket_register(void);
  * usually do not have to care about this function: it would call
  * isc_lib_register(), which internally calls this function.
  */
+#endif /* USE_SOCKETIMPREGISTER */
 
 ISC_LANG_ENDDECLS
 

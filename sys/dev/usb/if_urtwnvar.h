@@ -1,4 +1,4 @@
-/*	$NetBSD: if_urtwnvar.h,v 1.6 2013/03/16 15:48:21 skrll Exp $	*/
+/*	$NetBSD: if_urtwnvar.h,v 1.1.6.2 2012/06/14 09:48:47 sborrill Exp $	*/
 /*	$OpenBSD: if_urtwnreg.h,v 1.3 2010/11/16 18:02:59 damien Exp $	*/
 
 /*-
@@ -16,19 +16,12 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-#ifndef _IF_URTWNVAR_H_
-#define _IF_URTWNVAR_H_
 
 /*
  * Driver definitions.
  */
 #define URTWN_RX_LIST_COUNT		1
-#ifndef URTWN_DOTG_WORKAROUND
 #define URTWN_TX_LIST_COUNT		8
-#else
-#define URTWN_TX_LIST_COUNT		1
-#endif
-
 #define URTWN_HOST_CMD_RING_COUNT	32
 
 #define URTWN_RXBUFSZ	(16 * 1024)
@@ -101,6 +94,7 @@ struct urtwn_host_cmd_ring {
 };
 
 #if 1	/* XXX: sys/net80211/ieee80211.h */
+#define	IEEE80211_QOS_ACKPOLICY_BA	0x60	/* Block ACK */
 
 #define	IEEE80211_HTINFO_2NDCHAN	0x03	/* secondary/ext chan offset */
 #define	IEEE80211_HTINFO_2NDCHAN_S	0
@@ -133,7 +127,6 @@ struct urtwn_softc {
 	kmutex_t			sc_task_mtx;
 	kmutex_t			sc_fwcmd_mtx;
 	kmutex_t			sc_tx_mtx;
-	kmutex_t			sc_write_mtx;
 
 	usbd_pipe_handle		rx_pipe;
 	int				rx_npipe;
@@ -153,8 +146,8 @@ struct urtwn_softc {
 	int				avg_pwdb;
 	int				thcal_state;
 	int				thcal_lctemp;
-	size_t				ntxchains;
-	size_t				nrxchains;
+	int				ntxchains;
+	int				nrxchains;
 	int				ledlink;
 	bool				iqk_inited;
 
@@ -184,5 +177,3 @@ struct urtwn_softc {
 #define sc_txtap	sc_txtapu.th
 	int				sc_txtap_len;
 };
-
-#endif /* _IF_URTWNVAR_H_ */

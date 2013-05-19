@@ -1,4 +1,4 @@
-/*	$NetBSD: getrpcent.c,v 1.23 2013/03/11 20:19:29 tron Exp $	*/
+/*	$NetBSD: getrpcent.c,v 1.22.4.1 2013/03/14 22:03:15 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -36,7 +36,7 @@
 #if 0
 static char *sccsid = "@(#)getrpcent.c 1.14 91/03/11 Copyr 1984 Sun Micro";
 #else
-__RCSID("$NetBSD: getrpcent.c,v 1.23 2013/03/11 20:19:29 tron Exp $");
+__RCSID("$NetBSD: getrpcent.c,v 1.22.4.1 2013/03/14 22:03:15 riz Exp $");
 #endif
 #endif
 

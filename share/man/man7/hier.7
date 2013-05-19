@@ -1,4 +1,4 @@
-.\"	$NetBSD: hier.7,v 1.103 2013/03/14 19:16:52 njoly Exp $
+.\"	$NetBSD: hier.7,v 1.99.6.1 2012/06/23 22:54:56 riz Exp $
 .\"
 .\" Copyright (c) 1990, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,7 +29,7 @@
 .\"
 .\"	@(#)hier.7	8.5 (Berkeley) 6/1/94
 .\"
-.Dd February 5, 2013
+.Dd June 3, 2012
 .Dt HIER 7
 .Os
 .Sh NAME
@@ -321,6 +321,9 @@ database form of master.passwd file; see
 .Xr syslogd 8
 configuration file; see
 .Xr syslog.conf 5
+.It Sy termcap
+terminal type database; see
+.Xr termcap 3
 .It Sy ttys
 terminal initialization information; see
 .Xr ttys 5
@@ -437,6 +440,9 @@ include files for Internet standard protocols; see
 .It Sy netinet6/
 include files for Internet protocol version 6; see
 .Xr inet6 4
+.It Sy netiso/
+include files for ISO standard protocols; see
+.Xr iso 4
 .It Sy netkey/
 include files for secret key management, used for security protocols; see
 .Xr ipsec 4
@@ -566,14 +572,23 @@ macro package
 .It Sy misc/
 miscellaneous system-wide text files
 .Pp
+<<<<<<< hier.7
+.Bl -tag -width "termcap" -compact
+.It Sy termcap
+=======
 .Bl -tag -width "terminfo.cdb" -compact
 .It Sy terminfo
+>>>>>>> 1.101
 terminal characteristics database;
 see
+<<<<<<< hier.7
+.Xr termcap 5
+=======
 .Xr terminfo 5
 .It Sy terminfo.cdb
 database form of terminfo file; see
 .Xr tic 1
+>>>>>>> 1.101
 .El
 .Pp
 .It Sy mk/
@@ -588,6 +603,11 @@ message catalogs; see
 .Xr catgets 3
 .It Sy skel/
 sample initialization files for new user accounts
+.It Sy tabset/
+tab description files for a variety of terminals, used in
+the termcap file;
+see
+.Xr termcap 5
 .It Sy tmac/
 text processing macros;
 see
@@ -1004,6 +1024,8 @@ AppleTalk networking support
 IP networking support
 .It Sy netinet6/
 IPv6 networking support
+.It Sy netiso/
+ISO networking support
 .It Sy netkey/
 Key database for IPsec networking support
 .It Sy netnatm/

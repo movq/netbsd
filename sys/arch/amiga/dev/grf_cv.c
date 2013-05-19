@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_cv.c,v 1.55 2012/11/08 18:04:56 rkujawa Exp $ */
+/*	$NetBSD: grf_cv.c,v 1.53 2011/12/15 14:25:13 phx Exp $ */
 
 /*
  * Copyright (c) 1995 Michael Teske
@@ -33,7 +33,7 @@
 #include "opt_amigacons.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grf_cv.c,v 1.55 2012/11/08 18:04:56 rkujawa Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grf_cv.c,v 1.53 2011/12/15 14:25:13 phx Exp $");
 
 #include "grfcv.h"
 #include "ite.h"
@@ -80,8 +80,8 @@ __KERNEL_RCSID(0, "$NetBSD: grf_cv.c,v 1.55 2012/11/08 18:04:56 rkujawa Exp $");
 #include <amiga/dev/grf_cvreg.h>
 #include <amiga/dev/zbusvar.h>
 
-int	grfcvmatch(device_t, cfdata_t, void *);
-void	grfcvattach(device_t, device_t, void *);
+int	grfcvmatch(struct device *, struct cfdata *, void *);
+void	grfcvattach(struct device *, struct device *, void *);
 int	grfcvprint(void *, const char *);
 
 int	cvintr(void *);
@@ -317,7 +317,7 @@ static struct wsscreen_descr cv_screen = {
 #endif  /* NWSDISPLAY > 0 */
 
 /* standard driver stuff */
-CFATTACH_DECL_NEW(grfcv, sizeof(struct grf_cv_softc),
+CFATTACH_DECL(grfcv, sizeof(struct grf_cv_softc),
     grfcvmatch, grfcvattach, NULL, NULL);
 
 static struct cfdata *cfdata;
@@ -441,14 +441,14 @@ cv_has_4mb(volatile void *fb)
 }
 
 int
-grfcvmatch(device_t paren, cfdata_t cf, void *aux)
+grfcvmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 #ifdef CV64CONSOLE
 	static int cvcons_unit = -1;
 #endif
 	struct zbus_args *zap;
 
-	zap = aux;
+	zap = auxp;
 
 	if (amiga_realconfig == 0)
 #ifdef CV64CONSOLE
@@ -464,8 +464,8 @@ grfcvmatch(device_t paren, cfdata_t cf, void *aux)
 
 #ifdef CV64CONSOLE
 	if (amiga_realconfig == 0) {
-		cvcons_unit = cf->cf_unit;
-		cfdata = cf;
+		cvcons_unit = cfp->cf_unit;
+		cfdata = cfp;
 	}
 #endif
 
@@ -473,35 +473,29 @@ grfcvmatch(device_t paren, cfdata_t cf, void *aux)
 }
 
 void
-grfcvattach(device_t parent, device_t self, void *aux)
+grfcvattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	static struct grf_cv_softc congrf;
-	static char attachflag = 0;
-	struct device temp;
 	struct zbus_args *zap;
 	struct grf_softc *gp;
 	struct grf_cv_softc *gcp;
+	static char attachflag = 0;
 
-	zap = aux;
+	zap = auxp;
 
 	/*
-	 * This function is called twice, once on console init (self == NULL)
+	 * This function is called twice, once on console init (dp == NULL)
 	 * and once on "normal" grf5 init.
 	 */
 
-	if (self == NULL) {
+	if (dp == NULL) /* console init */
 		gcp = &congrf;
-		gp = &gcp->gcs_sc;
-		gp->g_device = &temp;
-		temp.dv_private = gp;
-	} else {
-		gcp = device_private(self);
-		gp = &gcp->gcs_sc;
-		gp->g_device = self;
-	}
+	else
+		gcp = (struct grf_cv_softc *)dp;
 
+	gp = &gcp->gcs_sc;
 
-	if (self != NULL && congrf.gcs_sc.g_regkva != 0) {
+	if (dp != NULL && congrf.gcs_sc.g_regkva != 0) {
 		/*
 		 * inited earlier, just copy (not device struct)
 		 */
@@ -555,8 +549,8 @@ grfcvattach(device_t parent, device_t self, void *aux)
 	/*
 	 * attach grf
 	 */
-	if (amiga_config_found(cfdata, gp->g_device, gp, grfcvprint)) {
-		if (self != NULL)
+	if (amiga_config_found(cfdata, &gp->g_device, gp, grfcvprint)) {
+		if (dp != NULL)
 			printf("grfcv: CyberVision64 with %dMB being used\n",
 			    cv_fbsize/0x100000);
 		attachflag = 1;
@@ -567,7 +561,7 @@ grfcvattach(device_t parent, device_t self, void *aux)
 }
 
 int
-grfcvprint(void *aux, const char *pnp)
+grfcvprint(void *auxp, const char *pnp)
 {
 	if (pnp)
 		aprint_normal("ite at %s: ", pnp);

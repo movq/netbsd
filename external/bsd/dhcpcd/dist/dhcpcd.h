@@ -60,11 +60,6 @@ enum DHS {
 #define LINK_UNKNOWN	0
 #define LINK_DOWN 	-1
 
-#define IF_DATA_DHCP	0
-#define IF_DATA_IPV6RS	1
-#define IF_DATA_DHCP6	2
-#define IF_DATA_MAX	3
-
 struct if_state {
 	enum DHS state;
 	char profile[PROFILE_LEN];
@@ -90,7 +85,6 @@ struct if_state {
 struct interface {
 	char name[IF_NAMESIZE];
 	struct if_state *state;
-	void *if_data[IF_DATA_MAX];
 
 	unsigned int index;
 	int flags;
@@ -116,6 +110,10 @@ struct interface {
 	time_t start_uptime;
 
 	unsigned char *clientid;
+
+	unsigned char *rs;
+	size_t rslen;
+	int rsprobes;
 
 	struct interface *next;
 };

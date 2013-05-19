@@ -1,4 +1,4 @@
-/*	$NetBSD: plumisa_machdep.c,v 1.12 2012/10/27 17:17:54 chs Exp $ */
+/*	$NetBSD: plumisa_machdep.c,v 1.11 2009/08/19 15:12:31 dyoung Exp $ */
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: plumisa_machdep.c,v 1.12 2012/10/27 17:17:54 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: plumisa_machdep.c,v 1.11 2009/08/19 15:12:31 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,21 +51,22 @@ __KERNEL_RCSID(0, "$NetBSD: plumisa_machdep.c,v 1.12 2012/10/27 17:17:54 chs Exp
 #include "locators.h"
 
 int	plumisabprint(void *, const char *);
-int	plumisabmatch(device_t, cfdata_t, void *);
-void	plumisabattach(device_t, device_t, void *);
+int	plumisabmatch(struct device *, struct cfdata *, void *);
+void	plumisabattach(struct device *, struct device *, void *);
 
 struct plumisab_softc {
+	struct device sc_dev;
 	plum_chipset_tag_t sc_pc;
 	bus_space_tag_t sc_iot;
 	int sc_irq;
 	void *sc_ih;
 };
 
-CFATTACH_DECL_NEW(plumisab, sizeof(struct plumisab_softc),
+CFATTACH_DECL(plumisab, sizeof(struct plumisab_softc),
     plumisabmatch, plumisabattach, NULL, NULL);
 
 int
-plumisabmatch(device_t parent, cfdata_t match, void *aux)
+plumisabmatch(struct device *parent, struct cfdata *match, void *aux)
 {
 	struct plumiobus_attach_args *pba = aux;
 	platid_mask_t mask;
@@ -88,10 +89,10 @@ plumisabmatch(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-plumisabattach(device_t parent, device_t self, void *aux)
+plumisabattach(struct device *parent, struct device *self, void *aux)
 {
 	struct plumiobus_attach_args *pba = aux;
-	struct plumisab_softc *sc = device_private(self);
+	struct plumisab_softc *sc = (void*)self;
 	struct isabus_attach_args iba;
     
 	printf("\n");
@@ -132,7 +133,7 @@ plumisabprint(void *aux, const char *pnp)
 }
 
 void
-isa_attach_hook(device_t parent, device_t self,
+isa_attach_hook(struct device *parent, struct device *self,
     struct isabus_attach_args *iba)
 {
 

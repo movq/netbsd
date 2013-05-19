@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_mbuf.c,v 1.149 2013/05/08 11:08:45 pooka Exp $	*/
+/*	$NetBSD: uipc_mbuf.c,v 1.145.2.1 2013/02/08 19:18:12 riz Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2001 The NetBSD Foundation, Inc.
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_mbuf.c,v 1.149 2013/05/08 11:08:45 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_mbuf.c,v 1.145.2.1 2013/02/08 19:18:12 riz Exp $");
 
 #include "opt_mbuftrace.h"
 #include "opt_nmbclusters.h"
@@ -73,6 +73,7 @@ __KERNEL_RCSID(0, "$NetBSD: uipc_mbuf.c,v 1.149 2013/05/08 11:08:45 pooka Exp $"
 #include <sys/atomic.h>
 #include <sys/cpu.h>
 #include <sys/proc.h>
+#define MBTYPES
 #include <sys/mbuf.h>
 #include <sys/kernel.h>
 #include <sys/syslog.h>
@@ -150,7 +151,7 @@ static int
 nmbclusters_limit(void)
 {
 #if defined(PMAP_MAP_POOLPAGE)
-	/* direct mapping, doesn't use space in kmem_arena */
+	/* direct mapping, doesn't use space in kmem_map */
 	vsize_t max_size = physmem / 4;
 #else
 	vsize_t max_size = MIN(physmem / 4, nkmempages / 4);
@@ -706,7 +707,7 @@ m_copym0(struct mbuf *m, int off0, int len, int wait, int deep)
 		off += n->m_len;
 #ifdef DIAGNOSTIC
 		if (off > m->m_len)
-			panic("m_copym0 overrun %d %d", off, m->m_len);
+			panic("m_copym0 overrun");
 #endif
 		if (off == m->m_len) {
 			m = m->m_next;

@@ -1,4 +1,4 @@
-/*	$NetBSD: cpudevs_data.h,v 1.8 2012/02/26 07:51:56 skrll Exp $	*/
+/*	$NetBSD: cpudevs_data.h,v 1.7.2.1 2012/02/27 20:15:33 riz Exp $	*/
 
 /*
  * THIS FILE AUTOMATICALLY GENERATED. DO NOT EDIT.

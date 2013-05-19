@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_usrreq.c,v 1.141 2013/02/14 01:00:07 riastradh Exp $	*/
+/*	$NetBSD: uipc_usrreq.c,v 1.136.8.3 2013/02/18 22:00:49 riz Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000, 2004, 2008, 2009 The NetBSD Foundation, Inc.
@@ -96,7 +96,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_usrreq.c,v 1.141 2013/02/14 01:00:07 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_usrreq.c,v 1.136.8.3 2013/02/18 22:00:49 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

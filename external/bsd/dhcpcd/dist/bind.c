@@ -90,7 +90,8 @@ daemonise(void)
 			dup2(fd, STDIN_FILENO);
 			dup2(fd, STDOUT_FILENO);
 			dup2(fd, STDERR_FILENO);
-			close(fd);
+			if (fd > STDERR_FILENO)
+				close(fd);
 		}
 		break;
 	default:
@@ -222,9 +223,6 @@ bind_interface(void *arg)
 		add_timeout_sec(lease->renewaltime, start_renew, iface);
 		add_timeout_sec(lease->rebindtime, start_rebind, iface);
 		add_timeout_sec(lease->leasetime, start_expire, iface);
-		syslog(LOG_DEBUG,
-		    "%s: renew in %u seconds, rebind in %u seconds",
-		    iface->name, lease->renewaltime, lease->rebindtime);
 	}
 	ifo->options &= ~ DHCPCD_CSR_WARNED;
 	configure(iface);

@@ -1,4 +1,4 @@
-/*	$NetBSD: jail.c,v 1.10 2012/06/19 05:35:32 dholland Exp $	*/
+/*	$NetBSD: jail.c,v 1.9 2008/02/24 01:57:34 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)jail.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: jail.c,v 1.10 2012/06/19 05:35:32 dholland Exp $");
+__RCSID("$NetBSD: jail.c,v 1.9 2008/02/24 01:57:34 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -45,7 +45,7 @@ __RCSID("$NetBSD: jail.c,v 1.10 2012/06/19 05:35:32 dholland Exp $");
  * player out of jail.
  */
 void
-card(void)
+card()
 {
 	if (cur_p->loc != JAIL) {
 		printf("But you're not IN Jail\n");
@@ -64,7 +64,7 @@ card(void)
  *	This routine deals with paying your way out of jail.
  */
 void
-pay(void)
+pay()
 {
 	if (cur_p->loc != JAIL) {
 		printf("But you're not IN Jail\n");
@@ -80,7 +80,8 @@ pay(void)
  *	This routine deals with a move in jail
  */
 int
-move_jail(int r1, int r2)
+move_jail(r1, r2)
+	int r1, r2;
 {
 	if (r1 != r2) {
 		printf("Sorry, that doesn't get you out\n");
@@ -103,7 +104,7 @@ moveit:
 }
 
 void
-printturn(void)
+printturn()
 {
 	if (cur_p->loc != JAIL)
 		return;

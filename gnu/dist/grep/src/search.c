@@ -1,4 +1,4 @@
-/*	$NetBSD: search.c,v 1.4 2013/01/05 09:40:16 apb Exp $	*/
+/*	$NetBSD: search.c,v 1.3.20.1 2013/01/13 19:08:05 bouyer Exp $	*/
 
 /* search.c - searching subroutines using dfa, kwset and regex for grep.
    Copyright 1992, 1998, 2000 Free Software Foundation, Inc.

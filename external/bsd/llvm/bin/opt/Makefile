@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.8 2013/04/25 13:59:56 joerg Exp $
+#	$NetBSD: Makefile,v 1.2 2011/03/18 23:32:02 joerg Exp $
 
 PROG_CXX=	opt
 NOMAN=		yes
@@ -13,49 +13,18 @@ SRCS=	AnalysisWrappers.cpp \
 	opt.cpp
 
 LLVM_LIBS+= \
-	ObjCARC \
-	ipo \
-	IRReader \
 	AsmParser \
 	BitReader \
 	BitWriter \
-	AArch64CodeGen \
-	AArch64TargetInfo \
-	AArch64MCTargetDesc \
-	AArch64AsmPrinter \
-	AArch64Utils \
-	ARMCodeGen \
-	ARMTargetInfo \
-	ARMMCTargetDesc \
-	ARMAsmPrinter \
-	MipsCodeGen \
-	MipsTargetInfo \
-	MipsMCTargetDesc \
-	MipsAsmPrinter \
-	PowerPCCodeGen \
-	PowerPCTargetInfo \
-	PowerPCMCTargetDesc \
-	PowerPCAsmPrinter \
-	SparcCodeGen \
-	SparcTargetInfo \
-	SparcMCTargetDesc \
-	X86CodeGen \
-	X86MCTargetDesc \
-	X86TargetInfo \
-	X86Utils \
-	X86AsmPrinter \
-	SelectionDAG \
-	CodeGen \
-	Vectorize \
-	Target \
 	InstCombine \
 	Instrumentation \
+	ipo \
 	ScalarOpts \
-	Analysis \
-	MC \
 	TransformsUtils \
+	Analysis \
+	Target \
 	ipa \
-	IR \
+	Core \
 	Support
 
 .include "${.PARSEDIR}/../../link.mk"

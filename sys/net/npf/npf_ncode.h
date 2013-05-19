@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_ncode.h,v 1.11 2013/02/09 03:35:32 rmind Exp $	*/
+/*	$NetBSD: npf_ncode.h,v 1.5.6.5 2013/02/11 21:49:49 riz Exp $	*/
 
 /*-
  * Copyright (c) 2009-2010 The NetBSD Foundation, Inc.

@@ -2302,7 +2302,7 @@ write_symbol_vec (struct lto_streamer_cache_d *cache,
       enum gcc_plugin_symbol_kind kind;
       enum gcc_plugin_symbol_visibility visibility;
       int slot_num;
-      unsigned HOST_WIDEST_INT size;
+      uint64_t size;
       const char *comdat;
 
       /* None of the following kinds of symbols are needed in the
@@ -2367,9 +2367,10 @@ write_symbol_vec (struct lto_streamer_cache_d *cache,
 	}
 
       if (kind == GCCPK_COMMON
-	  && DECL_SIZE_UNIT (t)
-	  && TREE_CODE (DECL_SIZE_UNIT (t)) == INTEGER_CST)
-	size = TREE_INT_CST_LOW (DECL_SIZE_UNIT (t));
+	  && DECL_SIZE (t)
+	  && TREE_CODE (DECL_SIZE (t)) == INTEGER_CST)
+	size = (((uint64_t) TREE_INT_CST_HIGH (DECL_SIZE (t))) << 32)
+	  | TREE_INT_CST_LOW (DECL_SIZE (t));
       else
 	size = 0;
 

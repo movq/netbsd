@@ -1,4 +1,4 @@
-/*	$NetBSD: dk.c,v 1.65 2012/10/27 17:18:15 chs Exp $	*/
+/*	$NetBSD: dk.c,v 1.62.8.1 2012/07/05 18:12:47 riz Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2005, 2006, 2007 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dk.c,v 1.65 2012/10/27 17:18:15 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dk.c,v 1.62.8.1 2012/07/05 18:12:47 riz Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_dkwedge.h"
@@ -68,7 +68,7 @@ typedef enum {
 } dkwedge_state_t;
 
 struct dkwedge_softc {
-	device_t	sc_dev;	/* pointer to our pseudo-device */
+	struct device	*sc_dev;	/* pointer to our pseudo-device */
 	struct cfdata	sc_cfdata;	/* our cfdata structure */
 	uint8_t		sc_wname[128];	/* wedge name (Unicode, UTF-8) */
 
@@ -183,8 +183,7 @@ static int
 dkwedge_compute_pdev(const char *pname, dev_t *pdevp)
 {
 	const char *name, *cp;
-	devmajor_t pmaj;
-	int punit;
+	int punit, pmaj;
 	char devname[16];
 
 	name = pname;
@@ -321,7 +320,7 @@ dkwedge_add(struct dkwedge_info *dkw)
 
 			if (sc->sc_offset >= lsc->sc_offset &&
 			    sc->sc_offset <= llastblk) {
-				/* Overlaps the tail of the existing wedge. */
+				/* Overlaps the tail of the exsiting wedge. */
 				break;
 			}
 			if (lastblk >= lsc->sc_offset &&
@@ -400,7 +399,8 @@ dkwedge_add(struct dkwedge_info *dkw)
 	/*
 	 * Now that we know the unit #, attach a pseudo-device for
 	 * this wedge instance.  This will provide us with the
-	 * device_t necessary for glue to other parts of the system.
+	 * "struct device" necessary for glue to other parts of the
+	 * system.
 	 *
 	 * This should never fail, unless we're almost totally out of
 	 * memory.

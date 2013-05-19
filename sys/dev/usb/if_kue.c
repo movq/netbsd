@@ -1,5 +1,4 @@
-/*	$NetBSD: if_kue.c,v 1.79 2013/01/05 01:30:15 christos Exp $	*/
-
+/*	$NetBSD: if_kue.c,v 1.75 2012/02/02 19:43:07 tls Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999, 2000
  *	Bill Paul <wpaul@ee.columbia.edu>.  All rights reserved.
@@ -71,11 +70,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_kue.c,v 1.79 2013/01/05 01:30:15 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_kue.c,v 1.75 2012/02/02 19:43:07 tls Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -86,23 +83,25 @@ __KERNEL_RCSID(0, "$NetBSD: if_kue.c,v 1.79 2013/01/05 01:30:15 christos Exp $")
 #include <sys/socket.h>
 #include <sys/device.h>
 #include <sys/proc.h>
+
 #include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_arp.h>
 #include <net/if_dl.h>
-#include <net/bpf.h>
-#include <net/if_ether.h>
 
+#include <net/bpf.h>
+
+#include <net/if_ether.h>
 #ifdef INET
 #include <netinet/in.h>
 #include <netinet/if_inarp.h>
 #endif
 
+
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
 #include <dev/usb/usbdi_util.h>
-#include <dev/usb/usbdivar.h>
 #include <dev/usb/usbdevs.h>
 
 #include <dev/usb/if_kuereg.h>
@@ -419,8 +418,7 @@ kue_attach(device_t parent, device_t self, void *aux)
 
 	err = usbd_set_config_no(dev, KUE_CONFIG_NO, 1);
 	if (err) {
-		aprint_error_dev(self, "failed to set configuration"
-		    ", err=%s\n", usbd_errstr(err));
+		aprint_error_dev(self, " setting config no failed\n");
 		return;
 	}
 
@@ -987,6 +985,13 @@ kue_ioctl(struct ifnet *ifp, u_long command, void *data)
 
 	if (sc->kue_dying)
 		return (EIO);
+
+#ifdef DIAGNOSTIC
+	if (!curproc) {
+		printf("%s: no proc!!\n", device_xname(sc->kue_dev));
+		return EIO;
+	}
+#endif
 
 	s = splnet();
 

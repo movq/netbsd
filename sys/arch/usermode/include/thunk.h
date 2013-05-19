@@ -1,4 +1,4 @@
-/* $NetBSD: thunk.h,v 1.61 2012/03/03 21:15:16 reinoud Exp $ */
+/* $NetBSD: thunk.h,v 1.60.2.1 2012/03/07 23:44:23 riz Exp $ */
 
 /*-
  * Copyright (c) 2011 Jared D. McNeill <jmcneill@invisible.ca>

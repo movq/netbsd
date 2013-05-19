@@ -1,4 +1,4 @@
-/*	$NetBSD: exec.h,v 1.139 2012/08/05 01:43:59 matt Exp $	*/
+/*	$NetBSD: exec.h,v 1.134.2.1 2012/04/12 17:05:38 riz Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993

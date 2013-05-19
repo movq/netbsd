@@ -1,4 +1,4 @@
-/* $NetBSD: omrasopsvar.h,v 1.1 2012/07/20 19:31:53 tsutsui Exp $ */
+/* $NetBSD: omrasopsvar.h,v 1.1.2.2 2012/07/25 21:30:35 martin Exp $ */
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.

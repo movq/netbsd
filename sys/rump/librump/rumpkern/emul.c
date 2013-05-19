@@ -1,4 +1,4 @@
-/*	$NetBSD: emul.c,v 1.158 2013/04/30 16:03:44 pooka Exp $	*/
+/*	$NetBSD: emul.c,v 1.150.10.1 2013/02/08 20:48:12 riz Exp $	*/
 
 /*
  * Copyright (c) 2007-2011 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: emul.c,v 1.158 2013/04/30 16:03:44 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: emul.c,v 1.150.10.1 2013/02/08 20:48:12 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/null.h>
@@ -48,7 +48,6 @@ __KERNEL_RCSID(0, "$NetBSD: emul.c,v 1.158 2013/04/30 16:03:44 pooka Exp $");
 #include <sys/module.h>
 #include <sys/tty.h>
 #include <sys/reboot.h>
-#include <sys/syscall.h>
 #include <sys/syscallvar.h>
 #include <sys/xcall.h>
 #include <sys/sleepq.h>
@@ -96,8 +95,8 @@ int max_bdevsws = 255;
 
 int mem_no = 2;
 
-device_t booted_device;
-device_t booted_wedge;
+struct device *booted_device;
+struct device *booted_wedge;
 int booted_partition;
 
 /* XXX: unused */
@@ -129,9 +128,6 @@ struct loadavg averunnable = {
 struct emul emul_netbsd = {
 	.e_name = "netbsd-rump",
 	.e_sysent = rump_sysent,
-#ifndef __HAVE_MINIMAL_EMUL
-	.e_nsysent = SYS_NSYSENT,
-#endif
 	.e_vm_default_addr = uvm_default_mapaddr,
 #ifdef __HAVE_SYSCALL_INTERN
 	.e_syscall_intern = syscall_intern,
@@ -144,7 +140,7 @@ int
 kpause(const char *wmesg, bool intr, int timeo, kmutex_t *mtx)
 {
 	extern int hz;
-	int rv;
+	int rv, error;
 	uint64_t sec, nsec;
 
 	if (mtx)
@@ -152,11 +148,13 @@ kpause(const char *wmesg, bool intr, int timeo, kmutex_t *mtx)
 
 	sec = timeo / hz;
 	nsec = (timeo % hz) * (1000000000 / hz);
-	rv = rumpuser_clock_sleep(RUMPUSER_CLOCK_RELWALL, sec, nsec);
-	KASSERT(rv == 0);
-
+	rv = rumpuser_nanosleep(&sec, &nsec, &error);
+	
 	if (mtx)
 		mutex_enter(mtx);
+
+	if (rv)
+		return error;
 
 	return 0;
 }
@@ -190,7 +188,7 @@ lwp_update_creds(struct lwp *l)
 }
 
 vaddr_t
-calc_cache_size(vsize_t vasz, int pct, int va_pct)
+calc_cache_size(struct vm_map *map, int pct, int va_pct)
 {
 	paddr_t t;
 
@@ -223,6 +221,7 @@ static void
 rump_delay(unsigned int us)
 {
 	uint64_t sec, nsec;
+	int error;
 
 	sec = us / 1000000;
 	nsec = (us % 1000000) * 1000;
@@ -230,7 +229,7 @@ rump_delay(unsigned int us)
 	if (__predict_false(sec != 0))
 		printf("WARNING: over 1s delay\n");
 
-	rumpuser_clock_sleep(RUMPUSER_CLOCK_RELWALL, sec, nsec);
+	rumpuser_nanosleep(&sec, &nsec, &error);
 }
 void (*delay_func)(unsigned int) = rump_delay;
 
@@ -261,8 +260,9 @@ __weak_alias(tputchar,rump_tputchar);
 void
 cnputc(int c)
 {
+	int error;
 
-	rumpuser_putchar(c);
+	rumpuser_putchar(c, &error);
 }
 
 void
@@ -280,6 +280,37 @@ syscall_intern(struct proc *p)
 	/* no you don't */
 }
 #endif
+
+void
+xc_send_ipi(struct cpu_info *ci)
+{
+	const struct cpu_info *curci = curcpu();
+	CPU_INFO_ITERATOR cii;
+
+	/*
+	 * IPI are considered asynchronous, therefore no need to wait for
+	 * unicast call delivery (nor the order of calls matters).  Our LWP
+	 * needs to be bound to the CPU, since xc_unicast(9) may block.
+	 *
+	 * WARNING: These must be low-priority calls, as this routine is
+	 * used to emulate high-priority (XC_HIGHPRI) mechanism.
+	 */
+
+	if (ci) {
+		KASSERT(curci != ci);
+		(void)xc_unicast(0, (xcfunc_t)xc_ipi_handler, NULL, NULL, ci);
+		return;
+	}
+
+	curlwp->l_pflag |= LP_BOUND;
+	for (CPU_INFO_FOREACH(cii, ci)) {
+		if (curci == ci) {
+			continue;
+		}
+		(void)xc_unicast(0, (xcfunc_t)xc_ipi_handler, NULL, NULL, ci);
+	}
+	curlwp->l_pflag &= ~LP_BOUND;
+}
 
 int
 trace_enter(register_t code, const register_t *args, int narg)

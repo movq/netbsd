@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2012/05/31 20:10:06 joerg Exp $
+#	$NetBSD: Makefile,v 1.1.8.1 2012/06/23 22:54:56 riz Exp $
 
 PROG=		tic
 WARNS=		4

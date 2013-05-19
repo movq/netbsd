@@ -1,4 +1,4 @@
-#	$NetBSD: airport,v 1.51 2013/04/25 13:34:10 mbalmer Exp $
+#	$NetBSD: airport,v 1.40 2011/04/28 07:32:36 mbalmer Exp $
 #	@(#)airport	8.1 (Berkeley) 6/8/93
 #
 # Some of this information is from http://www.mapping.com/airportcodes.html.
@@ -2650,7 +2650,7 @@ GOE:Gonaila, Papua New Guinea
 GOF:San Angelo (Goodfellow AFB), TX, USA
 GOH:Godthab, Nuuk, Greenland
 GOI:Goa, India
-GOJ:Nizhniy Novgorod (Sormovo), Russia
+GOJ:Nizhniy Novgorod (Sormavo), Russia
 GOK:Guthrie Municipal Airport, OK, USA
 GOL:Gold Beach Municipal Airport, OR, USA
 GOM:Goma, Dem. Rep. of the Congo
@@ -3411,7 +3411,6 @@ JCX:Los Angeles (Citicorp Heliport), CA, USA
 JCY:Johnson City Airport, TX, USA
 JDA:John Day State Airport, OR, USA
 JDB:Dallas (Downtown Heliport), TX, USA
-JDC:Jingdezhen-Luojia Airport
 JDF:Juiz do Fora, MG, Brazil
 JDH:Jodhpur, India
 JDM:Miami (Heliport), FL, USA
@@ -3990,7 +3989,7 @@ KUB:Kuala Belait, Brunei
 KUC:Kuria, Kiribati
 KUD:Kudat, Sabah, Malaysia
 KUE:Kukundu, Solomon Islands
-KUF:Samara (Kurumoch), Russia
+KUF:Samara, Russia
 KUG:Kubin Island, Australia
 KUH:Kushiro, Japan
 KUI:Kawau Island, New Zealand
@@ -5801,7 +5800,7 @@ PAL:Palanquero, Colombia
 PAM:Panama City (Tyndall Air Force Base), FL, USA
 PAN:Pattani, Thailand
 PAO:Palo Alto Municipal, California, USA
-PAP:Aeroport international Toussaint Louverture, Port-au-Prince, Haiti
+PAP:Port-au-Prince, Haiti
 PAQ:Palmer Municipal Airport, AK, USA
 PAR:All Airports around Paris, France
 PAS:Paros, Greece
@@ -5891,7 +5890,7 @@ PET:Pelotas, RS, Brazil
 PEU:Puerto Lenpira, Honduras
 PEW:Peshawar, Pakistan
 PEY:Penong, South Australia, Australia
-PEZ:Penza (Ternovka), Russia
+PEZ:Penza, Penza, Russia
 PFA:Paf Warren, AK, USA
 PFB:Passo Fundo, RS, Brazil
 PFC:Pacific City (State Airport), OR, USA
@@ -6126,7 +6125,7 @@ PRC:Prescott (Ernest Love Field), AZ, USA
 PRD:Pardoo, Western Australia, Australia
 PRE:Pore, Colombia
 PRF:Port Johnson, AK, USA
-PRG:Prague [Ruzyne] (Vaclav Havel airport Prague), Czech Republic
+PRG:Prague [Ruzyne], Czech Republic
 PRH:Phrae, Thailand
 PRI:Praslin Island, Seychelles
 PRJ:Capri, Italy
@@ -6706,7 +6705,7 @@ ROR:Koror (Airai), Palau
 ROS:Rosario, Argentina
 ROT:Rotorua, New Zealand
 ROU:Ruse, Bulgaria
-ROV:Rostov-na-Donu, Russia
+ROV:Rostov, Russia
 ROW:Roswell (Industrial Air Center), NM, USA
 ROX:Roseau Municipal Airport, MN, USA
 ROY:Rio Mayo, Argentina
@@ -7502,7 +7501,6 @@ TCL:Tuscaloosa Municipal Airport, AL, USA
 TCM:Tacoma (McChord Air Force), WA, USA
 TCN:Tehuacan, Mexico
 TCO:Tumaco, Colombia
-TCP:Taba International Airport, Egypt
 TCQ:Tacna (Coronel Carlos Ciriani), Peru
 TCS:Truth or Consequences, NM, USA
 TCT:Takotna Airport, AK, USA
@@ -7994,7 +7992,7 @@ ULP:Quilpie, Queensland, Australia
 ULQ:Tulua, Colombia
 ULS:Mulatos, Colombia
 ULU:Gulu, Uganda
-ULV:Ulyanovsk (Barataevka), Russia
+ULY:Simbirsk (Ulyanovsk), Russia
 UMA:Punta de Maisi, Cuba
 UMB:Umnak, AK, USA
 UMC:Umba, Papua New Guinea
@@ -8215,13 +8213,13 @@ VNS:Varanasi, India
 VNW:Van Wert County Airport, OH, USA
 VNX:Vilanculos, Mozambique
 VNY:Los Angeles (Van Nuys Airport), CA, USA
-VOG:Volgograd (Gumrak, Stalingrad), Russia
+VOG:Volgograd (Stalingrad), Russia
 VOH:Vohemar, Madagascar
 VOI:Voinjama, Liberia
 VOK:Camp Douglas (Volk Field), WI, USA
 VOL:Volos, Greece
 VOT:Votuporanga, SP, Brazil
-VOZ:Voronezh (Chertovitskoe), Russia
+VOZ:Voronezh, Voronezh, Russia
 VPC:Cartersville Airport, GA, USA
 VPE:Ondjiva (Ngiva), Angola
 VPN:Vopnafjordur, Iceland

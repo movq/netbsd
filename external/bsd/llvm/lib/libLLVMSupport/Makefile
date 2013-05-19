@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.17 2013/04/28 00:41:01 joerg Exp $
+#	$NetBSD: Makefile,v 1.8 2012/01/11 23:24:48 joerg Exp $
 
 LIB=	LLVMSupport
 
@@ -16,31 +16,24 @@ SRCS+=	APFloat.cpp \
 	BranchProbability.cpp \
 	circular_raw_ostream.cpp \
 	CommandLine.cpp \
-	Compression.cpp \
 	ConstantRange.cpp \
-	ConvertUTF.c \
-	ConvertUTFWrapper.cpp \
 	CrashRecoveryContext.cpp \
 	DataExtractor.cpp \
-	DataStream.cpp \
 	Debug.cpp \
 	DeltaAlgorithm.cpp \
 	DAGDeltaAlgorithm.cpp \
 	Dwarf.cpp \
 	ErrorHandling.cpp \
-	FileOutputBuffer.cpp \
 	FileUtilities.cpp \
 	FoldingSet.cpp \
 	FormattedStream.cpp \
 	GraphWriter.cpp \
-	Hashing.cpp \
 	IntEqClasses.cpp \
 	IntervalMap.cpp \
 	IntrusiveRefCntPtr.cpp \
 	IsInf.cpp \
 	IsNAN.cpp \
-	Locale.cpp \
-	LockFileManager.cpp \
+	JSONParser.cpp \
 	ManagedStatic.cpp \
 	MemoryBuffer.cpp \
 	MemoryObject.cpp \
@@ -51,7 +44,6 @@ SRCS+=	APFloat.cpp \
 	SmallVector.cpp \
 	SourceMgr.cpp \
 	Statistic.cpp \
-	StreamableMemoryObject.cpp \
 	StringExtras.cpp \
 	StringMap.cpp \
 	StringPool.cpp \
@@ -62,9 +54,6 @@ SRCS+=	APFloat.cpp \
 	ToolOutputFile.cpp \
 	Triple.cpp \
 	Twine.cpp \
-	Watchdog.cpp \
-	YAMLParser.cpp \
-	YAMLTraits.cpp \
 	raw_os_ostream.cpp \
 	raw_ostream.cpp \
 	regcomp.c \
@@ -105,7 +94,6 @@ SRCS+=	Host.inc \
 	Program.inc \
 	RWMutex.inc \
 	Signals.inc \
-	Watchdog.inc \
 	system_error.inc \
 	ThreadLocal.inc \
 	TimeValue.inc

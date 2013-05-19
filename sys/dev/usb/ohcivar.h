@@ -1,4 +1,5 @@
-/*	$NetBSD: ohcivar.h,v 1.54 2013/01/29 00:00:15 christos Exp $	*/
+/*	$NetBSD: ohcivar.h,v 1.51 2011/05/28 15:47:17 tsutsui Exp $	*/
+/*	$FreeBSD: src/sys/dev/usb/ohcivar.h,v 1.13 1999/11/17 22:33:41 n_hibma Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -29,11 +30,6 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
-#ifndef _OHCIVAR_H_
-#define _OHCIVAR_H_
-
-#include <sys/pool.h>
 
 typedef struct ohci_soft_ed {
 	ohci_ed_t ed;
@@ -91,10 +87,6 @@ typedef struct ohci_softc {
 	bus_space_handle_t ioh;
 	bus_size_t sc_size;
 
-	kmutex_t sc_lock;
-	kmutex_t sc_intr_lock;
-	void *sc_rhsc_si;
-
 	usb_dma_t sc_hccadma;
 	struct ohci_hcca *sc_hcca;
 	ohci_soft_ed_t *sc_eds[OHCI_NO_EDS];
@@ -117,14 +109,15 @@ typedef struct ohci_softc {
 #define	OHCI_BIG_ENDIAN		1	/* big endian OHCI? never seen it */
 #define	OHCI_HOST_ENDIAN	2	/* if OHCI always matches CPU */
 
+#ifdef USB_USE_SOFTINTR
 	char sc_softwake;
-	kcondvar_t sc_softwake_cv;
+#endif /* USB_USE_SOFTINTR */
 
 	ohci_soft_ed_t *sc_freeeds;
 	ohci_soft_td_t *sc_freetds;
 	ohci_soft_itd_t *sc_freeitds;
 
-	pool_cache_t sc_xferpool;	/* free xfer pool */
+	SIMPLEQ_HEAD(, usbd_xfer) sc_free_xfers; /* free xfers */
 
 	usbd_xfer_handle sc_intrxfer;
 
@@ -156,5 +149,3 @@ void		ohci_childdet(device_t, device_t);
 int		ohci_activate(device_t, enum devact);
 bool		ohci_resume(device_t, const pmf_qual_t *);
 bool		ohci_suspend(device_t, const pmf_qual_t *);
-
-#endif /* _OHCIVAR_H_ */

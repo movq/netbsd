@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.94 2012/05/01 09:40:15 martin Exp $ */
+/*	$NetBSD: cpu.h,v 1.92 2011/07/30 19:29:12 martin Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -203,6 +203,7 @@ int	probeget(void *, int);
 void	write_all_windows(void);
 void	write_user_windows(void);
 void 	lwp_trampoline(void);
+void 	lwp_setfunc_trampoline(void);
 struct pcb;
 void	snapshot(struct pcb *);
 struct frame *getfp(void);
@@ -236,7 +237,7 @@ void kgdb_panic(void);
 
 /* emul.c */
 struct trapframe;
-int fixalign(struct lwp *, struct trapframe *, void **);
+int fixalign(struct lwp *, struct trapframe *);
 int emulinstr(int, struct trapframe *);
 
 /* cpu.c */

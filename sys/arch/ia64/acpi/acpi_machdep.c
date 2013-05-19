@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_machdep.c,v 1.6 2012/09/23 00:31:05 chs Exp $	*/
+/*	$NetBSD: acpi_machdep.c,v 1.5.8.1 2012/11/22 00:39:01 riz Exp $	*/
 /*
  * Copyright (c) 2009 KIYOHARA Takashi
  * All rights reserved.
@@ -28,7 +28,7 @@
  * Machine-dependent routines for ACPICA.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_machdep.c,v 1.6 2012/09/23 00:31:05 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_machdep.c,v 1.5.8.1 2012/11/22 00:39:01 riz Exp $");
 
 #include <sys/param.h>
 

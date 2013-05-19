@@ -1,4 +1,4 @@
-/*	$NetBSD: sdpd.h,v 1.2 2012/03/01 22:38:31 joerg Exp $	*/
+/*	$NetBSD: sdpd.h,v 1.1.10.1 2012/03/05 19:01:49 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.

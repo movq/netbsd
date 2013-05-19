@@ -1,4 +1,4 @@
-/* $NetBSD: mpii.c,v 1.1 2012/04/19 17:50:51 bouyer Exp $ */
+/* $NetBSD: mpii.c,v 1.1.2.2 2012/04/23 16:31:36 riz Exp $ */
 /*	OpenBSD: mpii.c,v 1.51 2012/04/11 13:29:14 naddy Exp 	*/
 /*
  * Copyright (c) 2010 Mike Belopuhov <mkb@crypt.org.ru>
@@ -20,7 +20,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpii.c,v 1.1 2012/04/19 17:50:51 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpii.c,v 1.1.2.2 2012/04/23 16:31:36 riz Exp $");
 
 #include "bio.h"
 

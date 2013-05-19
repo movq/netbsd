@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.51 2012/07/20 14:21:20 matt Exp $	*/
+/*	$NetBSD: syscall.c,v 1.49 2011/12/13 11:03:51 kiyohara Exp $	*/
 
 /*
  * Copyright (C) 2002 Matt Thomas
@@ -34,6 +34,7 @@
 
 #include "opt_altivec.h"
 #include "opt_multiprocessor.h"
+#include "opt_sa.h"
 /* DO NOT INCLUDE opt_compat_XXX.h */
 /* If needed, they will be included by file that includes this one */
 
@@ -43,6 +44,8 @@
 #include <sys/proc.h>
 #include <sys/reboot.h>
 #include <sys/systm.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscallvar.h>
 
 #include <uvm/uvm_extern.h>
@@ -61,7 +64,7 @@
 #define EMULNAME(x)	(x)
 #define EMULNAMEU(x)	(x)
 
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.51 2012/07/20 14:21:20 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.49 2011/12/13 11:03:51 kiyohara Exp $");
 
 void
 child_return(void *arg)
@@ -79,15 +82,113 @@ child_return(void *arg)
 }
 #endif
 
+static void EMULNAME(syscall_plain)(struct trapframe *);
+
 #include <powerpc/spr.h>
 
-static void EMULNAME(syscall)(struct trapframe *);
+void
+EMULNAME(syscall_plain)(struct trapframe *tf)
+{
+	struct lwp *l = curlwp;
+	struct proc *p = l->l_proc;
+	const struct sysent *callp;
+	size_t argsize;
+	register_t code;
+	register_t *params, rval[2];
+	register_t args[10];
+	int error;
+	int n;
+
+	LWP_CACHE_CREDS(l, p);
+	curcpu()->ci_ev_scalls.ev_count++;
+	curcpu()->ci_data.cpu_nsyscall++;
+
+	code = tf->tf_fixreg[0];
+	params = tf->tf_fixreg + FIRSTARG;
+	n = NARGREG;
+
+#ifdef KERN_SA
+	if (__predict_false((l->l_savp)
+            && (l->l_savp->savp_pflags & SAVP_FLAG_DELIVERING)))
+		l->l_savp->savp_pflags &= ~SAVP_FLAG_DELIVERING;
+#endif
+
+	{
+		switch (code) {
+		case EMULNAMEU(SYS_syscall):
+			/*
+			 * code is first argument,
+			 * followed by actual args.
+			 */
+			code = *params++;
+			n -= 1;
+			break;
+#if !defined(COMPAT_LINUX)
+		case EMULNAMEU(SYS___syscall):
+			params++;
+			code = *params++;
+			n -= 2;
+			break;
+#endif
+		default:
+			break;
+		}
+
+		callp = p->p_emul->e_sysent +
+		    (code & (EMULNAMEU(SYS_NSYSENT)-1));
+	}
+
+	argsize = callp->sy_argsize;
+
+	if (argsize > n * sizeof(register_t)) {
+		memcpy(args, params, n * sizeof(register_t));
+		error = copyin(MOREARGS(tf->tf_fixreg[1]),
+		    args + n,
+		    argsize - n * sizeof(register_t));
+		if (error)
+			goto bad;
+		params = args;
+	}
+
+	rval[0] = 0;
+	rval[1] = 0;
+
+	error = sy_call(callp, l, params, rval);
+
+	switch (error) {
+	case 0:
+		tf->tf_fixreg[FIRSTARG] = rval[0];
+		tf->tf_fixreg[FIRSTARG + 1] = rval[1];
+		tf->tf_cr &= ~0x10000000;
+		break;
+	case ERESTART:
+		/*
+		 * Set user's pc back to redo the system call.
+		 */
+		tf->tf_srr0 -= 4;
+		break;
+	case EJUSTRETURN:
+		/* nothing to do */
+		break;
+	default:
+	bad:
+		if (p->p_emul->e_errno)
+			error = p->p_emul->e_errno[error];
+		tf->tf_fixreg[FIRSTARG] = error;
+		tf->tf_cr |= 0x10000000;
+		break;
+	}
+
+	userret(l, tf);
+}
+
+static void EMULNAME(syscall_fancy)(struct trapframe *);
 
 void
-EMULNAME(syscall)(struct trapframe *tf)
+EMULNAME(syscall_fancy)(struct trapframe *tf)
 {
-	struct lwp * const l = curlwp;
-	struct proc * const p = l->l_proc;
+	struct lwp *l = curlwp;
+	struct proc *p = l->l_proc;
 	const struct sysent *callp;
 	size_t argsize;
 	register_t code;
@@ -104,6 +205,12 @@ EMULNAME(syscall)(struct trapframe *tf)
 	code = tf->tf_fixreg[0];
 	params = tf->tf_fixreg + FIRSTARG;
 	n = NARGREG;
+
+#ifdef KERN_SA
+	if (__predict_false((l->l_savp)
+            && (l->l_savp->savp_pflags & SAVP_FLAG_DELIVERING)))
+		l->l_savp->savp_pflags &= ~SAVP_FLAG_DELIVERING;
+#endif
 
 	realcode = code;
 	{
@@ -144,43 +251,38 @@ EMULNAME(syscall)(struct trapframe *tf)
 		params = args;
 	}
 
-	if (!__predict_false(p->p_trace_enabled)
-	    || __predict_false(callp->sy_flags & SYCALL_INDIRECT)
-	    || (error = trace_enter(realcode, params, callp->sy_narg)) == 0) {
-		rval[0] = 0;
-		rval[1] = 0;
-		error = sy_call(callp, l, params, rval);
-	}
+	if ((error = trace_enter(realcode, params, callp->sy_narg)) != 0)
+		goto out;
 
-	if (__predict_false(p->p_trace_enabled)
-	    && !__predict_false(callp->sy_flags & SYCALL_INDIRECT)) {
-		trace_exit(code, rval, error);
-	}
+	rval[0] = 0;
+	rval[1] = 0;
 
-	if (__predict_true(error == 0)) {
+	error = sy_call(callp, l, params, rval);
+out:
+	switch (error) {
+	case 0:
 		tf->tf_fixreg[FIRSTARG] = rval[0];
 		tf->tf_fixreg[FIRSTARG + 1] = rval[1];
 		tf->tf_cr &= ~0x10000000;
-	} else {
-		switch (error) {
-		case ERESTART:
-			/*
-			 * Set user's pc back to redo the system call.
-			 */
-			tf->tf_srr0 -= 4;
-			break;
-		case EJUSTRETURN:
-			/* nothing to do */
-			break;
-		default:
-		bad:
-			if (p->p_emul->e_errno)
-				error = p->p_emul->e_errno[error];
-			tf->tf_fixreg[FIRSTARG] = error;
-			tf->tf_cr |= 0x10000000;
-			break;
-		}
+		break;
+	case ERESTART:
+		/*
+		 * Set user's pc back to redo the system call.
+		 */
+		tf->tf_srr0 -= 4;
+		break;
+	case EJUSTRETURN:
+		/* nothing to do */
+		break;
+	default:
+	bad:
+		if (p->p_emul->e_errno)
+			error = p->p_emul->e_errno[error];
+		tf->tf_fixreg[FIRSTARG] = error;
+		tf->tf_cr |= 0x10000000;
+		break;
 	}
+	trace_exit(realcode, rval, error);
 
 	userret(l, tf);
 }
@@ -191,5 +293,8 @@ void
 EMULNAME(syscall_intern)(struct proc *p)
 {
 
-	p->p_md.md_syscall = EMULNAME(syscall);
+	if (trace_is_enabled(p))
+		p->p_md.md_syscall = EMULNAME(syscall_fancy);
+	else
+		p->p_md.md_syscall = EMULNAME(syscall_plain);
 }

@@ -1,4 +1,4 @@
-/* $NetBSD: lint1.h,v 1.27 2013/04/19 17:43:05 christos Exp $ */
+/* $NetBSD: lint1.h,v 1.25 2011/06/24 01:10:31 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -49,10 +49,6 @@
 #endif
 #define WORST_ALIGN(x) (((x) + AVAL) & ~AVAL)
 #endif
-
-#define LWARN_BAD	-3
-#define LWARN_ALL	-2
-#define LWARN_NONE	-1
 
 /*
  * Describes the position of a declaration or anything else.
@@ -141,7 +137,7 @@ typedef	struct {
 	struct	sym *elem;	/* list of enumerators */
 	struct	sym *etag;	/* symbol table entry of tag */
 	struct	sym *etdef;	/* symbol table entry of first typename */
-} tenum_t;
+} enum_t;
 
 /*
  * Types are represented by concatenation of structures of type type_t
@@ -161,7 +157,7 @@ struct type {
 	union {
 		int	_t_dim;		/* dimension */
 		str_t	*_t_str;	/* struct/union tag */
-		tenum_t	*_t_enum;	/* enum tag */
+		enum_t	*_t_enum;	/* enum tag */
 		struct	sym *_t_args;	/* arguments (if t_proto) */
 	} t_u;
 	struct {
@@ -247,7 +243,7 @@ typedef	struct sym {
 	val_t	s_value;	/* value (if enumcon) */
 	union {
 		str_t	*_s_st;	/* tag, if it is a struct/union member */
-		tenum_t	*_s_et;	/* tag, if it is a enumerator */
+		enum_t	*_s_et;	/* tag, if it is a enumerator */
 		tspec_t	_s_tsp;	/* type (only for keywords) */
 		tqual_t	_s_tqu;	/* qualifier (only for keywords) */
 		struct	sym *_s_args; /* arguments in old style function

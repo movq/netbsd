@@ -1,4 +1,4 @@
-/*	$NetBSD: ethers.c,v 1.23 2012/03/20 17:44:18 matt Exp $	*/
+/*	$NetBSD: ethers.c,v 1.21 2006/10/15 10:55:01 martin Exp $	*/
 
 /* 
  * ethers(3N) a la Sun.
@@ -9,7 +9,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: ethers.c,v 1.23 2012/03/20 17:44:18 matt Exp $");
+__RCSID("$NetBSD: ethers.c,v 1.21 2006/10/15 10:55:01 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
@@ -44,7 +44,8 @@ __weak_alias(ether_ntohost,_ether_ntohost)
 #endif
 
 char *
-ether_ntoa(const struct ether_addr *e)
+ether_ntoa(e)
+	const struct ether_addr *e;
 {
 	static char a[18];
 
@@ -58,7 +59,8 @@ ether_ntoa(const struct ether_addr *e)
 }
 
 struct ether_addr *
-ether_aton(const char *s)
+ether_aton(s)
+	const char *s;
 {
 	static struct ether_addr n;
 	u_int i[6];
@@ -79,7 +81,9 @@ ether_aton(const char *s)
 }
 
 int
-ether_ntohost(char *hostname, const struct ether_addr *e)
+ether_ntohost(hostname, e)
+	char *hostname;
+	const struct ether_addr *e;
 {
 	FILE *f; 
 	char *p;
@@ -139,14 +143,16 @@ ether_ntohost(char *hostname, const struct ether_addr *e)
 }
 
 int
-ether_hostton(const char *hostname, struct ether_addr *e)
+ether_hostton(hostname, e)
+	const char *hostname;
+	struct ether_addr *e;
 {
 	FILE *f;
 	char *p;
 	size_t len;
 	char try[MAXHOSTNAMELEN + 1];
 #ifdef YP
-	int hostlen = (int)strlen(hostname);
+	int hostlen = strlen(hostname);
 #endif
 
 	_DIAGASSERT(hostname != NULL);
@@ -191,7 +197,10 @@ ether_hostton(const char *hostname, struct ether_addr *e)
 }
 
 int
-ether_line(const char *l, struct ether_addr *e, char *hostname)
+ether_line(l, e, hostname)
+	const char *l;
+	struct ether_addr *e;
+	char *hostname;
 {
 	u_int i[6];
 

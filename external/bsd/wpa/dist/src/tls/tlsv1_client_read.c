@@ -1,6 +1,6 @@
 /*
- * TLS v1.0 (RFC 2246) and v1.1 (RFC 4346) client - read handshake message
- * Copyright (c) 2006-2011, Jouni Malinen <j@w1.fi>
+ * TLSv1 client - read handshake message
+ * Copyright (c) 2006-2007, Jouni Malinen <j@w1.fi>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -38,7 +38,6 @@ static int tls_process_server_hello(struct tlsv1_client *conn, u8 ct,
 	const u8 *pos, *end;
 	size_t left, len, i;
 	u16 cipher_suite;
-	u16 tls_version;
 
 	if (ct != TLS_CONTENT_TYPE_HANDSHAKE) {
 		wpa_printf(MSG_DEBUG, "TLSv1: Expected Handshake; "
@@ -80,21 +79,14 @@ static int tls_process_server_hello(struct tlsv1_client *conn, u8 ct,
 	/* ProtocolVersion server_version */
 	if (end - pos < 2)
 		goto decode_error;
-	tls_version = WPA_GET_BE16(pos);
-	if (tls_version != TLS_VERSION_1 &&
-	    (tls_version != TLS_VERSION_1_1 ||
-	     TLS_VERSION == TLS_VERSION_1)) {
+	if (WPA_GET_BE16(pos) != TLS_VERSION) {
 		wpa_printf(MSG_DEBUG, "TLSv1: Unexpected protocol version in "
-			   "ServerHello %u.%u", pos[0], pos[1]);
+			   "ServerHello");
 		tls_alert(conn, TLS_ALERT_LEVEL_FATAL,
 			  TLS_ALERT_PROTOCOL_VERSION);
 		return -1;
 	}
 	pos += 2;
-
-	wpa_printf(MSG_DEBUG, "TLSv1: Using TLS v%s",
-		   tls_version == TLS_VERSION_1_1 ? "1.1" : "1.0");
-	conn->rl.tls_version = tls_version;
 
 	/* Random random */
 	if (end - pos < TLS_RANDOM_LEN)
@@ -373,8 +365,7 @@ static int tls_process_certificate(struct tlsv1_client *conn, u8 ct,
 
 	if (conn->cred &&
 	    x509_certificate_chain_validate(conn->cred->trusted_certs, chain,
-					    &reason, conn->disable_time_checks)
-	    < 0) {
+					    &reason) < 0) {
 		int tls_reason;
 		wpa_printf(MSG_DEBUG, "TLSv1: Server certificate chain "
 			   "validation failed (reason=%d)", reason);

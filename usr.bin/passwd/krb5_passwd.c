@@ -1,4 +1,4 @@
-/* $NetBSD: krb5_passwd.c,v 1.20 2012/04/22 23:43:51 christos Exp $ */
+/* $NetBSD: krb5_passwd.c,v 1.19.6.1 2012/05/07 17:06:21 riz Exp $ */
 
 /*
  * Copyright (c) 2000, 2005 The NetBSD Foundation, Inc.

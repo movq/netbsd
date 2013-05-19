@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_dotg.c,v 1.1 2013/01/09 22:23:44 skrll Exp $	*/
+/*	$NetBSD: bcm2835_dotg.c,v 1.1.4.2 2013/02/13 01:36:14 riz Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_dotg.c,v 1.1 2013/01/09 22:23:44 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_dotg.c,v 1.1.4.2 2013/02/13 01:36:14 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

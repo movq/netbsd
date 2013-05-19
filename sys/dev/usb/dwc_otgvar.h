@@ -1,4 +1,4 @@
-/*	$NetBSD: dwc_otgvar.h,v 1.12 2013/02/15 17:07:09 skrll Exp $ */
+/*	$NetBSD: dwc_otgvar.h,v 1.11.2.4 2013/02/18 18:13:05 riz Exp $ */
 
 /* $FreeBSD: src/sys/dev/usb/controller/dwc_otg.h,v 1.12 2012/09/27 15:23:38 hselasky Exp $ */
 /*-
@@ -191,7 +191,6 @@ typedef struct dwc_otg_softc {
 	bus_space_handle_t sc_ioh;
 	bus_size_t sc_size;
 
-	kmutex_t sc_lock;
 	kmutex_t sc_intr_lock;
 
 	void *sc_rhc_si;

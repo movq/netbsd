@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.11 2012/02/29 20:07:57 tron Exp $
+#	$NetBSD: Makefile,v 1.10.42.1 2012/03/02 18:27:56 riz Exp $
 
 # we encode the inter-library dependencies in the SUBDIR order:
 # each library depends on at least one library in the previous group.

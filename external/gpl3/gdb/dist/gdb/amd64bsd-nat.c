@@ -23,7 +23,10 @@
 #include "regcache.h"
 #include "target.h"
 
+/* We include <signal.h> to make sure `struct fxsave64' is defined on
+   NetBSD, since NetBSD's <machine/reg.h> needs it.  */
 #include "gdb_assert.h"
+#include <signal.h>
 #include <sys/types.h>
 #include <sys/ptrace.h>
 #include <machine/reg.h>

@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.32 2013/03/08 17:01:54 martin Exp $
+# $NetBSD: Makefile,v 1.20.2.1 2012/05/21 15:25:58 riz Exp $
 
 MKMAN=	no
 
@@ -28,13 +28,11 @@ TESTS_C+=		t_kevent
 TESTS_C+=		t_kill
 TESTS_C+=		t_link
 TESTS_C+=		t_listen
-TESTS_C+=		t_lwp_ctl
 TESTS_C+=		t_lwp_create
 TESTS_C+=		t_mincore
 TESTS_C+=		t_mkdir
 TESTS_C+=		t_mkfifo
 TESTS_C+=		t_mknod
-TESTS_C+=		t_mlock
 TESTS_C+=		t_mmap
 TESTS_C+=		t_mprotect
 TESTS_C+=		t_msgctl
@@ -45,17 +43,15 @@ TESTS_C+=		t_msync
 TESTS_C+=		t_nanosleep
 TESTS_C+=		t_pipe
 TESTS_C+=		t_pipe2
+TESTS_C+=		t_posix_fadvise
 TESTS_C+=		t_poll
-TESTS_C+=		t_recvmmsg
 TESTS_C+=		t_revoke
 TESTS_C+=		t_select
 TESTS_C+=		t_setrlimit
 TESTS_C+=		t_setuid
 TESTS_C+=		t_sigaction
 TESTS_C+=		t_sigqueue
-TESTS_C+=		t_sigtimedwait
 TESTS_C+=		t_socketpair
-TESTS_C+=		t_swapcontext
 TESTS_C+=		t_stat
 TESTS_C+=		t_timer_create
 TESTS_C+=		t_truncate
@@ -67,11 +63,7 @@ TESTS_C+=		t_write
 SRCS.t_mprotect=	t_mprotect.c ${SRCS_EXEC_PROT}
 
 LDADD.t_getpid+=        -lpthread
-
-.if (${MKRUMP} != "no")
-TESTS_C+=		t_posix_fadvise
 LDADD.t_posix_fadvise+= -lrumpvfs -lrump -lrumpuser -lpthread
-.endif
 
 WARNS=			4
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_age.c,v 1.42 2013/03/30 03:21:02 christos Exp $ */
+/*	$NetBSD: if_age.c,v 1.40 2011/10/25 21:47:38 bouyer Exp $ */
 /*	$OpenBSD: if_age.c,v 1.1 2009/01/16 05:00:34 kevlo Exp $	*/
 
 /*-
@@ -31,7 +31,7 @@
 /* Driver for Attansic Technology Corp. L1 Gigabit Ethernet. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_age.c,v 1.42 2013/03/30 03:21:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_age.c,v 1.40 2011/10/25 21:47:38 bouyer Exp $");
 
 #include "vlan.h"
 
@@ -84,7 +84,7 @@ static bool	age_resume(device_t, const pmf_qual_t *);
 
 static int	age_miibus_readreg(device_t, int, int);
 static void	age_miibus_writereg(device_t, int, int, int);
-static void	age_miibus_statchg(struct ifnet *);
+static void	age_miibus_statchg(device_t);
 
 static int	age_init(struct ifnet *);
 static int	age_ioctl(struct ifnet *, u_long, void *);
@@ -208,7 +208,7 @@ age_attach(device_t parent, device_t self, void *aux)
 
 	/* Get PCI and chip id/revision. */
 	sc->age_rev = PCI_REVISION(pa->pa_class);
-	sc->age_chip_rev = CSR_READ_4(sc, AGE_MASTER_CFG) >>
+	sc->age_chip_rev = CSR_READ_4(sc, AGE_MASTER_CFG) >> 
 	    MASTER_CHIP_REV_SHIFT;
 
 	aprint_debug_dev(self, "PCI device revision : 0x%04x\n", sc->age_rev);
@@ -404,13 +404,16 @@ age_miibus_writereg(device_t dev, int phy, int reg, int val)
  *	Callback from MII layer when media changes.
  */
 static void
-age_miibus_statchg(struct ifnet *ifp)
+age_miibus_statchg(device_t dev)
 {
-	struct age_softc *sc = ifp->if_softc;
-	struct mii_data *mii = &sc->sc_miibus;
+	struct age_softc *sc = device_private(dev);
+	struct ifnet *ifp = &sc->sc_ec.ec_if;
+	struct mii_data *mii;
 
 	if ((ifp->if_flags & IFF_RUNNING) == 0)
 		return;
+
+	mii = &sc->sc_miibus;
 
 	sc->age_flags &= ~AGE_FLAG_LINK;
 	if ((mii->mii_media_status & IFM_AVALID) != 0) {
@@ -485,7 +488,7 @@ age_intr(void *arg)
         struct ifnet *ifp = &sc->sc_ec.ec_if;
 	struct cmb *cmb;
         uint32_t status;
-
+	
 	status = CSR_READ_4(sc, AGE_INTR_STATUS);
 	if (status == 0 || (status & AGE_INTRS) == 0)
 		return 0;
@@ -579,11 +582,11 @@ age_get_macaddr(struct age_softc *sc, uint8_t eaddr[])
 				break;
 		}
 		if (i == 0)
-			printf("%s: reloading EEPROM timeout!\n",
-			    device_xname(sc->sc_dev));
+			printf("%s: reloading EEPROM timeout!\n", 
+			    device_xname(sc->sc_dev));	
 	} else {
 		if (agedebug)
-			printf("%s: PCI VPD capability not found!\n",
+			printf("%s: PCI VPD capability not found!\n", 
 			    device_xname(sc->sc_dev));
 	}
 
@@ -686,7 +689,7 @@ age_dma_alloc(struct age_softc *sc)
 	/*
 	 * Create DMA stuffs for TX ring
 	 */
-	error = bus_dmamap_create(sc->sc_dmat, AGE_TX_RING_SZ, 1,
+	error = bus_dmamap_create(sc->sc_dmat, AGE_TX_RING_SZ, 1, 
 	    AGE_TX_RING_SZ, 0, BUS_DMA_NOWAIT, &sc->age_cdata.age_tx_ring_map);
 	if (error) {
 		sc->age_cdata.age_tx_ring_map = NULL;
@@ -694,8 +697,8 @@ age_dma_alloc(struct age_softc *sc)
 	}
 
 	/* Allocate DMA'able memory for TX ring */
-	error = bus_dmamem_alloc(sc->sc_dmat, AGE_TX_RING_SZ,
-	    ETHER_ALIGN, 0, &sc->age_rdata.age_tx_ring_seg, 1,
+	error = bus_dmamem_alloc(sc->sc_dmat, AGE_TX_RING_SZ, 
+	    ETHER_ALIGN, 0, &sc->age_rdata.age_tx_ring_seg, 1, 
 	    &nsegs, BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: could not allocate DMA'able memory for Tx ring, "
@@ -706,7 +709,7 @@ age_dma_alloc(struct age_softc *sc)
 	error = bus_dmamem_map(sc->sc_dmat, &sc->age_rdata.age_tx_ring_seg,
 	    nsegs, AGE_TX_RING_SZ, (void **)&sc->age_rdata.age_tx_ring,
 	    BUS_DMA_NOWAIT | BUS_DMA_COHERENT);
-	if (error)
+	if (error) 
 		return ENOBUFS;
 
 	memset(sc->age_rdata.age_tx_ring, 0, AGE_TX_RING_SZ);
@@ -717,18 +720,18 @@ age_dma_alloc(struct age_softc *sc)
 	if (error) {
 		printf("%s: could not load DMA'able memory for Tx ring, "
 		    "error = %i\n", device_xname(sc->sc_dev), error);
-		bus_dmamem_free(sc->sc_dmat,
+		bus_dmamem_free(sc->sc_dmat, 
 		    &sc->age_rdata.age_tx_ring_seg, 1);
 		return error;
 	}
 
-	sc->age_rdata.age_tx_ring_paddr =
+	sc->age_rdata.age_tx_ring_paddr = 
 	    sc->age_cdata.age_tx_ring_map->dm_segs[0].ds_addr;
 
 	/*
 	 * Create DMA stuffs for RX ring
 	 */
-	error = bus_dmamap_create(sc->sc_dmat, AGE_RX_RING_SZ, 1,
+	error = bus_dmamap_create(sc->sc_dmat, AGE_RX_RING_SZ, 1, 
 	    AGE_RX_RING_SZ, 0, BUS_DMA_NOWAIT, &sc->age_cdata.age_rx_ring_map);
 	if (error) {
 		sc->age_cdata.age_rx_ring_map = NULL;
@@ -736,8 +739,8 @@ age_dma_alloc(struct age_softc *sc)
 	}
 
 	/* Allocate DMA'able memory for RX ring */
-	error = bus_dmamem_alloc(sc->sc_dmat, AGE_RX_RING_SZ,
-	    ETHER_ALIGN, 0, &sc->age_rdata.age_rx_ring_seg, 1,
+	error = bus_dmamem_alloc(sc->sc_dmat, AGE_RX_RING_SZ, 
+	    ETHER_ALIGN, 0, &sc->age_rdata.age_rx_ring_seg, 1, 
 	    &nsegs, BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: could not allocate DMA'able memory for Rx ring, "
@@ -764,13 +767,13 @@ age_dma_alloc(struct age_softc *sc)
 		return error;
 	}
 
-	sc->age_rdata.age_rx_ring_paddr =
+	sc->age_rdata.age_rx_ring_paddr = 
 	    sc->age_cdata.age_rx_ring_map->dm_segs[0].ds_addr;
 
 	/*
 	 * Create DMA stuffs for RX return ring
 	 */
-	error = bus_dmamap_create(sc->sc_dmat, AGE_RR_RING_SZ, 1,
+	error = bus_dmamap_create(sc->sc_dmat, AGE_RR_RING_SZ, 1, 
 	    AGE_RR_RING_SZ, 0, BUS_DMA_NOWAIT, &sc->age_cdata.age_rr_ring_map);
 	if (error) {
 		sc->age_cdata.age_rr_ring_map = NULL;
@@ -778,8 +781,8 @@ age_dma_alloc(struct age_softc *sc)
 	}
 
 	/* Allocate DMA'able memory for RX return ring */
-	error = bus_dmamem_alloc(sc->sc_dmat, AGE_RR_RING_SZ,
-	    ETHER_ALIGN, 0, &sc->age_rdata.age_rr_ring_seg, 1,
+	error = bus_dmamem_alloc(sc->sc_dmat, AGE_RR_RING_SZ, 
+	    ETHER_ALIGN, 0, &sc->age_rdata.age_rr_ring_seg, 1, 
 	    &nsegs, BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: could not allocate DMA'able memory for Rx "
@@ -807,14 +810,14 @@ age_dma_alloc(struct age_softc *sc)
 		return error;
 	}
 
-	sc->age_rdata.age_rr_ring_paddr =
+	sc->age_rdata.age_rr_ring_paddr = 
 	    sc->age_cdata.age_rr_ring_map->dm_segs[0].ds_addr;
 
 	/*
-	 * Create DMA stuffs for CMB block
+	 * Create DMA stuffs for CMB block 
 	 */
-	error = bus_dmamap_create(sc->sc_dmat, AGE_CMB_BLOCK_SZ, 1,
-	    AGE_CMB_BLOCK_SZ, 0, BUS_DMA_NOWAIT,
+	error = bus_dmamap_create(sc->sc_dmat, AGE_CMB_BLOCK_SZ, 1, 
+	    AGE_CMB_BLOCK_SZ, 0, BUS_DMA_NOWAIT, 
 	    &sc->age_cdata.age_cmb_block_map);
 	if (error) {
 		sc->age_cdata.age_cmb_block_map = NULL;
@@ -822,8 +825,8 @@ age_dma_alloc(struct age_softc *sc)
 	}
 
 	/* Allocate DMA'able memory for CMB block */
-	error = bus_dmamem_alloc(sc->sc_dmat, AGE_CMB_BLOCK_SZ,
-	    ETHER_ALIGN, 0, &sc->age_rdata.age_cmb_block_seg, 1,
+	error = bus_dmamem_alloc(sc->sc_dmat, AGE_CMB_BLOCK_SZ, 
+	    ETHER_ALIGN, 0, &sc->age_rdata.age_cmb_block_seg, 1, 
 	    &nsegs, BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: could not allocate DMA'able memory for "
@@ -841,7 +844,7 @@ age_dma_alloc(struct age_softc *sc)
 
 	/*  Load the DMA map for CMB block. */
 	error = bus_dmamap_load(sc->sc_dmat, sc->age_cdata.age_cmb_block_map,
-	    sc->age_rdata.age_cmb_block, AGE_CMB_BLOCK_SZ, NULL,
+	    sc->age_rdata.age_cmb_block, AGE_CMB_BLOCK_SZ, NULL, 
 	    BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: could not load DMA'able memory for CMB block, "
@@ -851,14 +854,14 @@ age_dma_alloc(struct age_softc *sc)
 		return error;
 	}
 
-	sc->age_rdata.age_cmb_block_paddr =
+	sc->age_rdata.age_cmb_block_paddr = 
 	    sc->age_cdata.age_cmb_block_map->dm_segs[0].ds_addr;
 
 	/*
 	 * Create DMA stuffs for SMB block
 	 */
-	error = bus_dmamap_create(sc->sc_dmat, AGE_SMB_BLOCK_SZ, 1,
-	    AGE_SMB_BLOCK_SZ, 0, BUS_DMA_NOWAIT,
+	error = bus_dmamap_create(sc->sc_dmat, AGE_SMB_BLOCK_SZ, 1, 
+	    AGE_SMB_BLOCK_SZ, 0, BUS_DMA_NOWAIT, 
 	    &sc->age_cdata.age_smb_block_map);
 	if (error) {
 		sc->age_cdata.age_smb_block_map = NULL;
@@ -866,8 +869,8 @@ age_dma_alloc(struct age_softc *sc)
 	}
 
 	/* Allocate DMA'able memory for SMB block */
-	error = bus_dmamem_alloc(sc->sc_dmat, AGE_SMB_BLOCK_SZ,
-	    ETHER_ALIGN, 0, &sc->age_rdata.age_smb_block_seg, 1,
+	error = bus_dmamem_alloc(sc->sc_dmat, AGE_SMB_BLOCK_SZ, 
+	    ETHER_ALIGN, 0, &sc->age_rdata.age_smb_block_seg, 1, 
 	    &nsegs, BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: could not allocate DMA'able memory for "
@@ -885,7 +888,7 @@ age_dma_alloc(struct age_softc *sc)
 
 	/*  Load the DMA map for SMB block */
 	error = bus_dmamap_load(sc->sc_dmat, sc->age_cdata.age_smb_block_map,
-	    sc->age_rdata.age_smb_block, AGE_SMB_BLOCK_SZ, NULL,
+	    sc->age_rdata.age_smb_block, AGE_SMB_BLOCK_SZ, NULL, 
 	    BUS_DMA_NOWAIT);
 	if (error) {
 		printf("%s: could not load DMA'able memory for SMB block, "
@@ -895,7 +898,7 @@ age_dma_alloc(struct age_softc *sc)
 		return error;
 	}
 
-	sc->age_rdata.age_smb_block_paddr =
+	sc->age_rdata.age_smb_block_paddr = 
 	    sc->age_cdata.age_smb_block_map->dm_segs[0].ds_addr;
 
 	/* Create DMA maps for Tx buffers. */
@@ -919,7 +922,7 @@ age_dma_alloc(struct age_softc *sc)
 	    BUS_DMA_NOWAIT, &sc->age_cdata.age_rx_sparemap);
 	if (error) {
 		sc->age_cdata.age_rx_sparemap = NULL;
-		printf("%s: could not create spare Rx dmamap, error = %i.\n",
+		printf("%s: could not create spare Rx dmamap, error = %i.\n", 
 		    device_xname(sc->sc_dev), error);
 		return error;
 	}
@@ -979,11 +982,11 @@ age_dma_free(struct age_softc *sc)
 	sc->age_cdata.age_tx_ring_map = NULL;
 
 	/* Rx ring. */
-	if (sc->age_cdata.age_rx_ring_map != NULL)
+	if (sc->age_cdata.age_rx_ring_map != NULL) 
 		bus_dmamap_unload(sc->sc_dmat, sc->age_cdata.age_rx_ring_map);
 	if (sc->age_cdata.age_rx_ring_map != NULL &&
 	    sc->age_rdata.age_rx_ring != NULL)
-		bus_dmamem_free(sc->sc_dmat,
+		bus_dmamem_free(sc->sc_dmat, 
 		    &sc->age_rdata.age_rx_ring_seg, 1);
 	sc->age_rdata.age_rx_ring = NULL;
 	sc->age_cdata.age_rx_ring_map = NULL;
@@ -993,7 +996,7 @@ age_dma_free(struct age_softc *sc)
 		bus_dmamap_unload(sc->sc_dmat, sc->age_cdata.age_rr_ring_map);
 	if (sc->age_cdata.age_rr_ring_map != NULL &&
 	    sc->age_rdata.age_rr_ring != NULL)
-		bus_dmamem_free(sc->sc_dmat,
+		bus_dmamem_free(sc->sc_dmat, 
 		    &sc->age_rdata.age_rr_ring_seg, 1);
 	sc->age_rdata.age_rr_ring = NULL;
 	sc->age_cdata.age_rr_ring_map = NULL;
@@ -1013,7 +1016,7 @@ age_dma_free(struct age_softc *sc)
 		bus_dmamap_unload(sc->sc_dmat, sc->age_cdata.age_smb_block_map);
 	if (sc->age_cdata.age_smb_block_map != NULL &&
 	    sc->age_rdata.age_smb_block != NULL)
-		bus_dmamem_free(sc->sc_dmat,
+		bus_dmamem_free(sc->sc_dmat, 
 		    &sc->age_rdata.age_smb_block_seg, 1);
 	sc->age_rdata.age_smb_block = NULL;
 	sc->age_cdata.age_smb_block_map = NULL;
@@ -1094,18 +1097,18 @@ age_watchdog(struct ifnet *ifp)
 	age_start(ifp);
 }
 
-static bool
-age_shutdown(device_t self, int howto)
+static bool 
+age_shutdown(device_t self, int howto) 
 {
 	struct age_softc *sc;
 	struct ifnet *ifp;
 
 	sc = device_private(self);
 	ifp = &sc->sc_ec.ec_if;
-	age_stop(ifp, 1);
+	age_stop(ifp, 1); 
 
 	return true;
-}      
+}       
 
 
 static int
@@ -1210,7 +1213,7 @@ age_encap(struct age_softc *sc, struct mbuf **m_head)
 
 		*m_head = m_pullup(*m_head, MHLEN);
 		if (*m_head == NULL) {
-			printf("%s: can't defrag TX mbuf\n",
+			printf("%s: can't defrag TX mbuf\n", 
 			    device_xname(sc->sc_dev));
 			return ENOBUFS;
 		}
@@ -1272,13 +1275,13 @@ age_encap(struct age_softc *sc, struct mbuf **m_head)
 	for (i = 0; ; i++) {
 		desc = &sc->age_rdata.age_tx_ring[prod];
 		desc->addr = htole64(map->dm_segs[i].ds_addr);
-		desc->len =
+		desc->len = 
 		    htole32(AGE_TX_BYTES(map->dm_segs[i].ds_len) | vtag);
 		desc->flags = htole32(cflags);
 		sc->age_cdata.age_tx_cnt++;
 		if (i == (nsegs - 1))
 			break;
-	
+		
 		/* sync this descriptor and go to the next one */
 		bus_dmamap_sync(sc->sc_dmat, sc->age_cdata.age_tx_ring_map,
 		    prod * sizeof(struct tx_desc), sizeof(struct tx_desc),
@@ -1482,7 +1485,7 @@ age_rxeof(struct age_softc *sc, struct rx_rdesc *rxrd)
 			 */
 			if (status & AGE_RRD_IPV4) {
 				if (status & AGE_RRD_IPCSUM_NOK)
-					m->m_pkthdr.csum_flags |=
+					m->m_pkthdr.csum_flags |= 
 					    M_CSUM_IPv4_BAD;
 				if ((status & (AGE_RRD_TCP | AGE_RRD_UDP)) &&
 				    (status & AGE_RRD_TCP_UDPCSUM_NOK)) {
@@ -1531,7 +1534,7 @@ age_rxintr(struct age_softc *sc, int rr_prod)
 		return;
 
 	bus_dmamap_sync(sc->sc_dmat, sc->age_cdata.age_rr_ring_map, 0,
-	    sc->age_cdata.age_rr_ring_map->dm_mapsize,
+	    sc->age_cdata.age_rr_ring_map->dm_mapsize, 
 	    BUS_DMASYNC_POSTREAD);
 
 	for (prog = 0; rr_cons != rr_prod; prog++) {
@@ -1718,7 +1721,7 @@ age_init(struct ifnet *ifp)
 		reg |= MASTER_ITIMER_ENB;
 	CSR_WRITE_4(sc, AGE_MASTER_CFG, reg);
 	if (agedebug)
-		printf("%s: interrupt moderation is %d us.\n",
+		printf("%s: interrupt moderation is %d us.\n", 
 		    device_xname(sc->sc_dev), sc->age_int_mod);
 	CSR_WRITE_2(sc, AGE_INTR_CLR_TIMER, AGE_USECS(1000));
 
@@ -2227,7 +2230,7 @@ age_newbuf(struct age_softc *sc, struct age_rxdesc *rxd, int init)
 			bus_dmamap_unload(sc->sc_dmat,
 			    sc->age_cdata.age_rx_sparemap);
 			error = EFBIG;
-			printf("%s: too many segments?!\n",
+			printf("%s: too many segments?!\n", 
 			    device_xname(sc->sc_dev));
 		}
 		m_freem(m);
@@ -2249,7 +2252,7 @@ age_newbuf(struct age_softc *sc, struct age_rxdesc *rxd, int init)
 
 	desc = rxd->rx_desc;
 	desc->addr = htole64(rxd->rx_dmamap->dm_segs[0].ds_addr);
-	desc->len =
+	desc->len = 
 	    htole32((rxd->rx_dmamap->dm_segs[0].ds_len & AGE_RD_LEN_MASK) <<
 	    AGE_RD_LEN_SHIFT);
 
@@ -2287,7 +2290,7 @@ age_rxfilter(struct age_softc *sc)
 	 * Always accept broadcast frames.
 	 */
 	rxcfg |= MAC_CFG_BCAST;
-
+ 
 	if (ifp->if_flags & IFF_PROMISC || ec->ec_multicnt > 0) {
 		ifp->if_flags |= IFF_ALLMULTI;
 		if (ifp->if_flags & IFF_PROMISC)
@@ -2303,7 +2306,7 @@ age_rxfilter(struct age_softc *sc)
 		while (enm != NULL) {
 			crc = ether_crc32_le(enm->enm_addrlo, ETHER_ADDR_LEN);
 			mchash[crc >> 31] |= 1 << ((crc >> 26) & 0x1f);
-			ETHER_NEXT_MULTI(step, enm);
+			ETHER_NEXT_MULTI(step, enm);	
 		}
 	}
 

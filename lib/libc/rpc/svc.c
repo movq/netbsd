@@ -1,4 +1,4 @@
-/*	$NetBSD: svc.c,v 1.34 2013/03/11 20:19:29 tron Exp $	*/
+/*	$NetBSD: svc.c,v 1.30.8.1 2013/03/14 22:03:12 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -37,7 +37,7 @@
 static char *sccsid = "@(#)svc.c 1.44 88/02/08 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)svc.c	2.4 88/08/11 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: svc.c,v 1.34 2013/03/11 20:19:29 tron Exp $");
+__RCSID("$NetBSD: svc.c,v 1.30.8.1 2013/03/14 22:03:12 riz Exp $");
 #endif
 #endif
 
@@ -66,7 +66,6 @@ __RCSID("$NetBSD: svc.c,v 1.34 2013/03/11 20:19:29 tron Exp $");
 #include <rpc/pmap_clnt.h>
 #endif
 
-#include "svc_fdset.h"
 #include "rpc_internal.h"
 
 #ifdef __weak_alias
@@ -111,7 +110,7 @@ static struct svc_callout {
 	rpcprog_t	    sc_prog;
 	rpcvers_t	    sc_vers;
 	char		   *sc_netid;
-	void		    (*sc_dispatch)(struct svc_req *, SVCXPRT *);
+	void		    (*sc_dispatch) __P((struct svc_req *, SVCXPRT *));
 } *svc_head;
 
 #ifdef _REENTRANT
@@ -119,17 +118,18 @@ extern rwlock_t svc_lock;
 extern rwlock_t svc_fd_lock;
 #endif
 
-static struct svc_callout *svc_find(rpcprog_t, rpcvers_t,
-					 struct svc_callout **, char *);
-static void __xprt_do_unregister(SVCXPRT *xprt, bool_t dolock);
+static struct svc_callout *svc_find __P((rpcprog_t, rpcvers_t,
+					 struct svc_callout **, char *));
+static void __xprt_do_unregister __P((SVCXPRT *xprt, bool_t dolock));
 
 /* ***************  SVCXPRT related stuff **************** */
 
 /*
  * Activate a transport handle.
  */
-bool_t
-xprt_register(SVCXPRT *xprt)
+void
+xprt_register(xprt)
+	SVCXPRT *xprt;
 {
 	int sock;
 
@@ -141,25 +141,18 @@ xprt_register(SVCXPRT *xprt)
 	if (__svc_xports == NULL) {
 		__svc_xports = mem_alloc(FD_SETSIZE * sizeof(SVCXPRT *));
 		if (__svc_xports == NULL) {
-			warn("%s: out of memory", __func__);
+			warn("xprt_register");
 			goto out;
 		}
 		memset(__svc_xports, '\0', FD_SETSIZE * sizeof(SVCXPRT *));
 	}
-	if (sock >= FD_SETSIZE) {
-		warnx("%s: socket descriptor %d too large for setsize %u",
-		    __func__, sock, (unsigned)FD_SETSIZE);
-		goto out;
+	if (sock < FD_SETSIZE) {
+		__svc_xports[sock] = xprt;
+		FD_SET(sock, &svc_fdset);
+		svc_maxfd = max(svc_maxfd, sock);
 	}
-	__svc_xports[sock] = xprt;
-	FD_SET(sock, get_fdset());
-	*get_fdsetmax() = max(*get_fdsetmax(), sock);
-	rwlock_unlock(&svc_fd_lock);
-	return (TRUE);
-
 out:
 	rwlock_unlock(&svc_fd_lock);
-	return (FALSE);
 }
 
 void
@@ -178,7 +171,9 @@ __xprt_unregister_unlocked(SVCXPRT *xprt)
  * De-activate a transport handle. 
  */
 static void
-__xprt_do_unregister(SVCXPRT *xprt, bool_t dolock)
+__xprt_do_unregister(xprt, dolock)
+	SVCXPRT *xprt;
+	bool_t dolock;
 { 
 	int sock;
 
@@ -190,11 +185,10 @@ __xprt_do_unregister(SVCXPRT *xprt, bool_t dolock)
 		rwlock_wrlock(&svc_fd_lock);
 	if ((sock < FD_SETSIZE) && (__svc_xports[sock] == xprt)) {
 		__svc_xports[sock] = NULL;
-		FD_CLR(sock, get_fdset());
-		if (sock >= *get_fdsetmax()) {
-			for ((*get_fdsetmax())--; *get_fdsetmax() >= 0;
-			    (*get_fdsetmax())--)
-				if (__svc_xports[*get_fdsetmax()])
+		FD_CLR(sock, &svc_fdset);
+		if (sock >= svc_maxfd) {
+			for (svc_maxfd--; svc_maxfd>=0; svc_maxfd--)
+				if (__svc_xports[svc_maxfd])
 					break;
 		}
 	}
@@ -208,9 +202,12 @@ __xprt_do_unregister(SVCXPRT *xprt, bool_t dolock)
  * program number comes in.
  */
 bool_t
-svc_reg(SVCXPRT *xprt, const rpcprog_t prog, const rpcvers_t vers,
-	void (*dispatch)(struct svc_req *, SVCXPRT *),
-	const struct netconfig *nconf)
+svc_reg(xprt, prog, vers, dispatch, nconf)
+	SVCXPRT *xprt;
+	const rpcprog_t prog;
+	const rpcvers_t vers;
+	void (*dispatch) __P((struct svc_req *, SVCXPRT *));
+	const struct netconfig *nconf;
 {
 	bool_t dummy;
 	struct svc_callout *prev;
@@ -286,7 +283,9 @@ rpcb_it:
  * Remove a service program from the callout list.
  */
 void
-svc_unreg(const rpcprog_t prog, const rpcvers_t vers)
+svc_unreg(prog, vers)
+	const rpcprog_t prog;
+	const rpcvers_t vers;
 {
 	struct svc_callout *prev;
 	struct svc_callout *s;
@@ -317,8 +316,12 @@ svc_unreg(const rpcprog_t prog, const rpcvers_t vers)
  * program number comes in.
  */
 bool_t
-svc_register(SVCXPRT *xprt, u_long prog, u_long vers,
-	void (*dispatch)(struct svc_req *, SVCXPRT *), int protocol)
+svc_register(xprt, prog, vers, dispatch, protocol)
+	SVCXPRT *xprt;
+	u_long prog;
+	u_long vers;
+	void (*dispatch) __P((struct svc_req *, SVCXPRT *));
+	int protocol;
 {
 	struct svc_callout *prev;
 	struct svc_callout *s;
@@ -353,7 +356,9 @@ pmap_it:
  * Remove a service program from the callout list.
  */
 void
-svc_unregister(u_long prog, u_long vers)
+svc_unregister(prog, vers)
+	u_long prog;
+	u_long vers;
 {
 	struct svc_callout *prev;
 	struct svc_callout *s;
@@ -378,7 +383,11 @@ svc_unregister(u_long prog, u_long vers)
  * struct.
  */
 static struct svc_callout *
-svc_find(rpcprog_t prog, rpcvers_t vers, struct svc_callout **prev, char *netid)
+svc_find(prog, vers, prev, netid)
+	rpcprog_t prog;
+	rpcvers_t vers;
+	struct svc_callout **prev;
+	char *netid;
 {
 	struct svc_callout *s, *p;
 
@@ -403,7 +412,10 @@ svc_find(rpcprog_t prog, rpcvers_t vers, struct svc_callout **prev, char *netid)
  * Send a reply to an rpc request
  */
 bool_t
-svc_sendreply(SVCXPRT *xprt, xdrproc_t xdr_results, const char *xdr_location)
+svc_sendreply(xprt, xdr_results, xdr_location)
+	SVCXPRT *xprt;
+	xdrproc_t xdr_results;
+	const char *xdr_location;
 {
 	struct rpc_msg rply; 
 
@@ -422,7 +434,8 @@ svc_sendreply(SVCXPRT *xprt, xdrproc_t xdr_results, const char *xdr_location)
  * No procedure error reply
  */
 void
-svcerr_noproc(SVCXPRT *xprt)
+svcerr_noproc(xprt)
+	SVCXPRT *xprt;
 {
 	struct rpc_msg rply;
 
@@ -439,7 +452,8 @@ svcerr_noproc(SVCXPRT *xprt)
  * Can't decode args error reply
  */
 void
-svcerr_decode(SVCXPRT *xprt)
+svcerr_decode(xprt)
+	SVCXPRT *xprt;
 {
 	struct rpc_msg rply; 
 
@@ -456,7 +470,8 @@ svcerr_decode(SVCXPRT *xprt)
  * Some system error
  */
 void
-svcerr_systemerr(SVCXPRT *xprt)
+svcerr_systemerr(xprt)
+	SVCXPRT *xprt;
 {
 	struct rpc_msg rply; 
 
@@ -477,7 +492,8 @@ svcerr_systemerr(SVCXPRT *xprt)
  * protocol: the portmapper (or rpc binder).
  */
 void
-__svc_versquiet_on(SVCXPRT *xprt)
+__svc_versquiet_on(xprt)
+	SVCXPRT *xprt;
 {
 	u_long	tmp;
 
@@ -488,7 +504,8 @@ __svc_versquiet_on(SVCXPRT *xprt)
 }
 
 void
-__svc_versquiet_off(SVCXPRT *xprt)
+__svc_versquiet_off(xprt)
+	SVCXPRT *xprt;
 {
 	u_long	tmp;
 
@@ -499,13 +516,15 @@ __svc_versquiet_off(SVCXPRT *xprt)
 }
 
 void
-svc_versquiet(SVCXPRT *xprt)
+svc_versquiet(xprt)
+	SVCXPRT *xprt;
 {
 	__svc_versquiet_on(xprt);
 }
 
 int
-__svc_versquiet_get(SVCXPRT *xprt)
+__svc_versquiet_get(xprt)
+	SVCXPRT *xprt;
 {
 
 	_DIAGASSERT(xprt != NULL);
@@ -518,7 +537,9 @@ __svc_versquiet_get(SVCXPRT *xprt)
  * Authentication error reply
  */
 void
-svcerr_auth(SVCXPRT *xprt, enum auth_stat why)
+svcerr_auth(xprt, why)
+	SVCXPRT *xprt;
+	enum auth_stat why;
 {
 	struct rpc_msg rply;
 
@@ -535,7 +556,8 @@ svcerr_auth(SVCXPRT *xprt, enum auth_stat why)
  * Auth too weak error reply
  */
 void
-svcerr_weakauth(SVCXPRT *xprt)
+svcerr_weakauth(xprt)
+	SVCXPRT *xprt;
 {
 
 	_DIAGASSERT(xprt != NULL);
@@ -547,7 +569,8 @@ svcerr_weakauth(SVCXPRT *xprt)
  * Program unavailable error reply
  */
 void 
-svcerr_noprog(SVCXPRT *xprt)
+svcerr_noprog(xprt)
+	SVCXPRT *xprt;
 {
 	struct rpc_msg rply;  
 
@@ -564,7 +587,10 @@ svcerr_noprog(SVCXPRT *xprt)
  * Program version mismatch error reply
  */
 void  
-svcerr_progvers(SVCXPRT *xprt, rpcvers_t low_vers, rpcvers_t high_vers)
+svcerr_progvers(xprt, low_vers, high_vers)
+	SVCXPRT *xprt; 
+	rpcvers_t low_vers;
+	rpcvers_t high_vers;
 {
 	struct rpc_msg rply;
 
@@ -598,7 +624,8 @@ svcerr_progvers(SVCXPRT *xprt, rpcvers_t low_vers, rpcvers_t high_vers)
  */
 
 void
-svc_getreq(int rdfds)
+svc_getreq(rdfds)
+	int rdfds;
 {
 	fd_set readfds;
 
@@ -608,7 +635,8 @@ svc_getreq(int rdfds)
 }
 
 void
-svc_getreqset(fd_set *readfds)
+svc_getreqset(readfds)
+	fd_set *readfds;
 {
 	uint32_t mask, *maskp;
 	int sock, bit, fd;
@@ -627,7 +655,8 @@ svc_getreqset(fd_set *readfds)
 }
 
 void
-svc_getreq_common(int fd)
+svc_getreq_common(fd)
+	int fd;
 {
 	SVCXPRT *xprt;
 	struct svc_req r;
@@ -714,7 +743,9 @@ call_done:
 
 
 void
-svc_getreq_poll(struct pollfd *pfdp, int pollretval)
+svc_getreq_poll(pfdp, pollretval)
+	struct pollfd	*pfdp;
+	int	pollretval;
 {
 	int i;
 	int fds_found;
@@ -740,7 +771,7 @@ svc_getreq_poll(struct pollfd *pfdp, int pollretval)
 			 */
 			if (p->revents & POLLNVAL) {
 				rwlock_wrlock(&svc_fd_lock);
-				FD_CLR(p->fd, get_fdset());
+				FD_CLR(p->fd, &svc_fdset);
 				rwlock_unlock(&svc_fd_lock);
 			} else
 				svc_getreq_common(p->fd);

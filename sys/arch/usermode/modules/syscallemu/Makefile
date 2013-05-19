@@ -1,6 +1,6 @@
-#	$NetBSD: Makefile,v 1.3 2012/07/03 21:07:41 christos Exp $
+#	$NetBSD: Makefile,v 1.2 2012/01/06 13:16:20 jmcneill Exp $
 
-.include <bsd.own.mk>
+NETBSDSRCDIR?=	../../../../..
 
 S?=	${NETBSDSRCDIR}/sys
 M?=	${S}/modules

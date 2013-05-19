@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_loan.c,v 1.83 2012/07/30 23:56:48 matt Exp $	*/
+/*	$NetBSD: uvm_loan.c,v 1.81 2011/08/06 17:25:03 rmind Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_loan.c,v 1.83 2012/07/30 23:56:48 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_loan.c,v 1.81 2011/08/06 17:25:03 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -40,10 +40,6 @@ __KERNEL_RCSID(0, "$NetBSD: uvm_loan.c,v 1.83 2012/07/30 23:56:48 matt Exp $");
 #include <sys/mman.h>
 
 #include <uvm/uvm.h>
-
-#ifdef UVMHIST
-UVMHIST_DEFINE(loanhist);
-#endif
 
 /*
  * "loaned" pages are pages which are (read-only, copy-on-write) loaned
@@ -249,6 +245,7 @@ uvm_loan(struct vm_map *map, vaddr_t start, vsize_t len, void *v, int flags)
 
 	KASSERT(((flags & UVM_LOAN_TOANON) == 0) ^
 		((flags & UVM_LOAN_TOPAGE) == 0));
+	KASSERT((map->flags & VM_MAP_INTRSAFE) == 0);
 
 	/*
 	 * "output" is a pointer to the current place to put the loaned page.

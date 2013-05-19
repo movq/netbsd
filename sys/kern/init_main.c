@@ -1,4 +1,4 @@
-/*	$NetBSD: init_main.c,v 1.448 2013/03/18 13:36:21 para Exp $	*/
+/*	$NetBSD: init_main.c,v 1.441.2.3 2013/03/14 16:33:10 riz Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -97,13 +97,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.448 2013/03/18 13:36:21 para Exp $");
+__KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.441.2.3 2013/03/14 16:33:10 riz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_ipsec.h"
 #include "opt_modular.h"
 #include "opt_ntp.h"
 #include "opt_pipe.h"
+#include "opt_sa.h"
 #include "opt_syscall_debug.h"
 #include "opt_sysv.h"
 #include "opt_fileassoc.h"
@@ -194,6 +195,9 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.448 2013/03/18 13:36:21 para Exp $")
 #include <sys/ktrace.h>
 #endif
 #include <sys/kauth.h>
+#ifdef KERN_SA
+#include <sys/savar.h>
+#endif
 #include <net80211/ieee80211_netbsd.h>
 #ifdef PTRACE
 #include <sys/ptrace.h>
@@ -376,6 +380,9 @@ main(void)
 	cprng_init();		/* initialize cryptographic PRNG */
 
 	/* Initialize process and pgrp structures. */
+#ifdef KERN_SA
+	sa_init();
+#endif
 	procinit();
 	lwpinit();
 
@@ -444,8 +451,8 @@ main(void)
 	 * 10% of memory for vnodes and associated data structures in the
 	 * assumed worst case.  Do not provide fewer than NVNODE vnodes.
 	 */
-	usevnodes = calc_cache_size(vmem_size(kmem_arena, VMEM_FREE|VMEM_ALLOC),
-	    10, VNODE_KMEM_MAXPCT) / VNODE_COST;
+	usevnodes =
+	    calc_cache_size(kernel_map, 10, VNODE_VA_MAXPCT) / VNODE_COST;
 	if (usevnodes > desiredvnodes)
 		desiredvnodes = usevnodes;
 #endif
@@ -1078,17 +1085,20 @@ start_init(void *arg)
 }
 
 /*
- * calculate cache size (in bytes) from physmem and vsize.
+ * calculate cache size (in bytes) from physmem and vm_map size.
  */
 vaddr_t
-calc_cache_size(vsize_t vsize, int pct, int va_pct)
+calc_cache_size(struct vm_map *map, int pct, int va_pct)
 {
 	paddr_t t;
 
 	/* XXX should consider competing cache if any */
 	/* XXX should consider submaps */
 	t = (uintmax_t)physmem * pct / 100 * PAGE_SIZE;
-	if (vsize != 0) {
+	if (map != NULL) {
+		vsize_t vsize;
+
+		vsize = vm_map_max(map) - vm_map_min(map);
 		vsize = (uintmax_t)vsize * va_pct / 100;
 		if (t > vsize) {
 			t = vsize;
@@ -1111,7 +1121,7 @@ banner(void)
 	static char notice[] = " Notice: this software is "
 	    "protected by copyright";
 	char pbuf[81];
-	void (*pr)(const char *, ...) __printflike(1, 2);
+	void (*pr)(const char *, ...);
 	int i;
 
 	if ((boothowto & AB_SILENT) != 0) {

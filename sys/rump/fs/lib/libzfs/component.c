@@ -1,4 +1,4 @@
-/*	$NetBSD: component.c,v 1.6 2013/03/10 04:24:16 christos Exp $	*/
+/*	$NetBSD: component.c,v 1.5 2011/03/10 22:11:05 wiz Exp $	*/
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: component.c,v 1.6 2013/03/10 04:24:16 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: component.c,v 1.5 2011/03/10 22:11:05 wiz Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -53,5 +53,4 @@ RUMP_COMPONENT(RUMP_COMPONENT_VFS)
 	if ((error = rump_vfs_makeonedevnode(S_IFCHR,
 	    "/dev/zfs", cmaj, 0)) != 0)
 		panic("cannot create zfs dev nodes: %d", error);
-	devsw_detach(&zfs_bdevsw, &zfs_cdevsw);
 }

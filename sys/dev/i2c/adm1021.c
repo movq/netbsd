@@ -1,4 +1,4 @@
-/*	$NetBSD: adm1021.c,v 1.8 2012/10/27 17:18:17 chs Exp $ */
+/*	$NetBSD: adm1021.c,v 1.7 2011/06/20 20:16:19 pgoyette Exp $ */
 /*	$OpenBSD: adm1021.c,v 1.27 2007/06/24 05:34:35 dlg Exp $	*/
 
 /*
@@ -18,7 +18,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adm1021.c,v 1.8 2012/10/27 17:18:17 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adm1021.c,v 1.7 2011/06/20 20:16:19 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,6 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: adm1021.c,v 1.8 2012/10/27 17:18:17 chs Exp $");
 #define ADMTEMP_NUM_SENSORS	2
 
 struct admtemp_softc {
+	struct device	sc_dev;
 	i2c_tag_t	sc_tag;
 	i2c_addr_t	sc_addr;
 
@@ -111,7 +112,7 @@ admtemp_attach(device_t parent, device_t self, void *aux)
 	if (iic_exec(sc->sc_tag, I2C_OP_READ_WITH_STOP,
 	    sc->sc_addr, &cmd, sizeof cmd, &data, sizeof data, 0)) {
 		iic_release_bus(sc->sc_tag, 0);
-		aprint_error_dev(self, "cannot get control register\n");
+		aprint_error_dev(&sc->sc_dev, "cannot get control register\n");
 		return;
 	}
 	if (data & ADM1021_CONFIG_RUN) {
@@ -119,7 +120,7 @@ admtemp_attach(device_t parent, device_t self, void *aux)
 		if (iic_exec(sc->sc_tag, I2C_OP_READ_WITH_STOP,
 		    sc->sc_addr, &cmd, sizeof cmd, &stat, sizeof stat, 0)) {
 			iic_release_bus(sc->sc_tag, 0);
-			aprint_error_dev(self,
+			aprint_error_dev(&sc->sc_dev,
 			    "cannot read status register\n");
 			return;
 		}
@@ -128,7 +129,7 @@ admtemp_attach(device_t parent, device_t self, void *aux)
 			    sc->sc_addr, &cmd, sizeof cmd, &stat, sizeof stat,
 			    0)) {
 				iic_release_bus(sc->sc_tag, 0);
-				aprint_error_dev(self,
+				aprint_error_dev(&sc->sc_dev,
 				    "cannot read status register\n");
 				return;
 			}
@@ -144,7 +145,7 @@ admtemp_attach(device_t parent, device_t self, void *aux)
 		if (iic_exec(sc->sc_tag, I2C_OP_WRITE_WITH_STOP,
 		    sc->sc_addr, &cmd, sizeof cmd, &data, sizeof data, 0)) {
 			iic_release_bus(sc->sc_tag, 0);
-			aprint_error_dev(self,
+			aprint_error_dev(&sc->sc_dev,
 			    "cannot set control register\n");
 			return;
 		}
@@ -164,7 +165,7 @@ admtemp_attach(device_t parent, device_t self, void *aux)
 	if (sysmon_envsys_sensor_attach(
 	    sc->sc_sme, &sc->sc_sensor[ADMTEMP_INT])) {
 		sysmon_envsys_destroy(sc->sc_sme);
-		aprint_error_dev(self,
+		aprint_error_dev(&sc->sc_dev,
 		    "unable to attach internal at sysmon\n");
 		return;
 	}
@@ -172,7 +173,7 @@ admtemp_attach(device_t parent, device_t self, void *aux)
 	    sysmon_envsys_sensor_attach(
 	    sc->sc_sme, &sc->sc_sensor[ADMTEMP_EXT])) {
 		sysmon_envsys_destroy(sc->sc_sme);
-		aprint_error_dev(self,
+		aprint_error_dev(&sc->sc_dev,
 		    "unable to attach external at sysmon\n");
 		return;
 	}
@@ -180,7 +181,7 @@ admtemp_attach(device_t parent, device_t self, void *aux)
         sc->sc_sme->sme_cookie = sc;
         sc->sc_sme->sme_refresh = admtemp_refresh;
 	if (sysmon_envsys_register(sc->sc_sme)) {
-		aprint_error_dev(self,
+		aprint_error_dev(&sc->sc_dev,
 		    "unable to register with sysmon\n");
 		sysmon_envsys_destroy(sc->sc_sme);
 		return;

@@ -1,4 +1,4 @@
-/*	$NetBSD: symbol.c,v 1.63 2013/05/03 10:27:05 skrll Exp $	 */
+/*	$NetBSD: symbol.c,v 1.59 2011/11/25 14:39:02 joerg Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -40,7 +40,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: symbol.c,v 1.63 2013/05/03 10:27:05 skrll Exp $");
+__RCSID("$NetBSD: symbol.c,v 1.59 2011/11/25 14:39:02 joerg Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -58,6 +58,8 @@ __RCSID("$NetBSD: symbol.c,v 1.63 2013/05/03 10:27:05 skrll Exp $");
 
 #include "debug.h"
 #include "rtld.h"
+
+typedef void (*fptr_t)(void);
 
 /*
  * If the given object is already in the donelist, return true.  Otherwise
@@ -92,7 +94,6 @@ _rtld_is_exported(const Elf_Sym *def)
 		(fptr_t)dladdr,
 		(fptr_t)dlinfo,
 		(fptr_t)dl_iterate_phdr,
-		(fptr_t)_dlauxinfo,
 #if defined(__HAVE_TLS_VARIANT_I) || defined(__HAVE_TLS_VARIANT_II)
 		(fptr_t)_rtld_tls_allocate,
 		(fptr_t)_rtld_tls_free,
@@ -100,9 +101,6 @@ _rtld_is_exported(const Elf_Sym *def)
 #ifdef __i386__
 		(fptr_t)___tls_get_addr,
 #endif
-#endif
-#ifdef __ARM_EABI__
-		(fptr_t)__gnu_Unwind_Find_exidx,	/* for gcc EHABI */
 #endif
 		NULL
 	};
@@ -149,7 +147,7 @@ _rtld_symlook_list(const char *name, unsigned long hash, const Objlist *objlist,
 	const Elf_Sym *def;
 	const Obj_Entry *defobj;
 	const Objlist_Entry *elm;
-
+	
 	def = NULL;
 	defobj = NULL;
 	SIMPLEQ_FOREACH(elm, objlist, link) {
@@ -433,7 +431,7 @@ _rtld_find_symdef(unsigned long symnum, const Obj_Entry *refobj,
 		def = ref;
 		defobj = refobj;
 	}
-
+		
 	/*
 	 * If we found no definition and the reference is weak, treat the
 	 * symbol as having the value zero.
@@ -546,7 +544,7 @@ _rtld_symlook_default(const char *name, unsigned long hash,
 			defobj = obj;
 		}
 	}
-
+	
 	/* Search all dlopened DAGs containing the referencing object. */
 	SIMPLEQ_FOREACH(elm, &refobj->dldags, link) {
 		if (def != NULL && ELF_ST_BIND(def->st_info) != STB_WEAK)

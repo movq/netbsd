@@ -1,4 +1,4 @@
-/*	$NetBSD: bonito_mainbus.c,v 1.15 2012/10/27 17:17:24 chs Exp $	*/
+/*	$NetBSD: bonito_mainbus.c,v 1.14 2011/07/09 16:03:01 matt Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bonito_mainbus.c,v 1.15 2012/10/27 17:17:24 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bonito_mainbus.c,v 1.14 2011/07/09 16:03:01 matt Exp $");
 
 #include "opt_algor_p6032.h"
 
@@ -50,18 +50,19 @@ __KERNEL_RCSID(0, "$NetBSD: bonito_mainbus.c,v 1.15 2012/10/27 17:17:24 chs Exp 
 #endif
 
 struct bonito_softc {
+	struct device sc_dev;
 	struct bonito_config *sc_bonito;
 };
 
-int	bonito_mainbus_match(device_t, cfdata_t, void *);
-void	bonito_mainbus_attach(device_t, device_t, void *);
+int	bonito_mainbus_match(struct device *, struct cfdata *, void *);
+void	bonito_mainbus_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(bonito_mainbus, sizeof(struct bonito_softc),
+CFATTACH_DECL(bonito_mainbus, sizeof(struct bonito_softc),
     bonito_mainbus_match, bonito_mainbus_attach, NULL, NULL);
 extern struct cfdriver bonito_cd;
 
 int
-bonito_mainbus_match(device_t parent, cfdata_t cf, void *aux)
+bonito_mainbus_match(struct device *parent, struct cfdata *cf, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 
@@ -72,9 +73,9 @@ bonito_mainbus_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-bonito_mainbus_attach(device_t parent, device_t self, void *aux)
+bonito_mainbus_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct bonito_softc *sc = device_private(self);
+	struct bonito_softc *sc = (void *) self;
 	struct pcibus_attach_args pba;
 	struct bonito_config *bc;
 	pcireg_t rev;

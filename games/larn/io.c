@@ -1,4 +1,4 @@
-/*	$NetBSD: io.c,v 1.27 2012/06/19 05:30:43 dholland Exp $	*/
+/*	$NetBSD: io.c,v 1.26 2011/10/03 12:32:28 roy Exp $	*/
 
 /*
  * io.c			 Larn is copyrighted 1986 by Noah Morgan.
@@ -62,7 +62,7 @@
  */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: io.c,v 1.27 2012/06/19 05:30:43 dholland Exp $");
+__RCSID("$NetBSD: io.c,v 1.26 2011/10/03 12:32:28 roy Exp $");
 #endif /* not lint */
 
 #include "header.h"
@@ -144,7 +144,7 @@ static char     lgetwbuf[LINBUFSIZE];	/* get line (word) buffer */
  *	Attributes off, clear screen, set scrolling region, set tty mode
  */
 void
-setupvt100(void)
+setupvt100()
 {
 	clear();
 	setscroll();
@@ -157,7 +157,7 @@ setupvt100(void)
  *	Attributes off, clear screen, unset scrolling region, restore tty mode
  */
 void
-clearvt100(void)
+clearvt100()
 {
 	resetscroll();
 	clear();
@@ -168,7 +168,7 @@ clearvt100(void)
  *	ttgetch() 	Routine to read in one character from the terminal
  */
 int
-ttgetch(void)
+ttgetch()
 {
 	char            byt;
 #ifdef EXTRA
@@ -185,7 +185,7 @@ ttgetch(void)
  *	like: system("stty cbreak -echo")
  */
 void
-scbr(void)
+scbr()
 {
 	gtty(0, &ttx);
 	doraw(ttx);
@@ -198,7 +198,7 @@ scbr(void)
  *	like: system("stty -cbreak echo")
  */
 void
-sncbr(void)
+sncbr()
 {
 	gtty(0, &ttx);
 	unraw(ttx);
@@ -209,7 +209,7 @@ sncbr(void)
  *	newgame() 	Subroutine to save the initial time and seed rnd()
  */
 void
-newgame(void)
+newgame()
 {
 	long  *p, *pe;
 	for (p = c, pe = c + 100; p < pe; *p++ = 0);
@@ -265,7 +265,8 @@ lprintf(const char *fmt, ...)
  *	Returns nothing of value.
  */
 void
-lprint(long x)
+lprint(x)
+	long   x;
 {
 	if (lpnt >= lpend)
 		lflush();
@@ -284,7 +285,9 @@ lprint(long x)
  *	Returns nothing of value
  */
 void
-lwrite(char *buf, int len)
+lwrite(buf, len)
+	char  *buf;
+	int             len;
 {
 	char *s;
 	u_char *t;
@@ -324,7 +327,7 @@ lwrite(char *buf, int len)
  *  Returns 0 if EOF, otherwise the character
  */
 long 
-lgetc(void)
+lgetc()
 {
 	int    i;
 	if (ipoint != iepoint)
@@ -356,7 +359,7 @@ lgetc(void)
  *	Returns the int read
  */
 long 
-larn_lrint(void)
+larn_lrint()
 {
 	unsigned long i;
 	i = 255 & lgetc();
@@ -375,7 +378,9 @@ larn_lrint(void)
  *	Returns nothing of value
  */
 void
-lrfill(char *adr, int num)
+lrfill(adr, num)
+	char  *adr;
+	int             num;
 {
 	u_char  *pnt;
 	int    num2;
@@ -410,7 +415,7 @@ lrfill(char *adr, int num)
  *	Returns pointer to a buffer that contains word.  If EOF, returns a NULL
  */
 char *
-lgetw(void)
+lgetw()
 {
 	char  *lgp, cc;
 	int    n = LINBUFSIZE, quote = 0;
@@ -438,7 +443,7 @@ lgetw(void)
  * Returns pointer to a buffer that contains the line.  If EOF, returns NULL
  */
 char *
-lgetl(void)
+lgetl()
 {
 	int    i = LINBUFSIZE, ch;
 	char  *str = lgetwbuf;
@@ -462,7 +467,8 @@ lgetl(void)
  *	Returns -1 if error, otherwise the file descriptor opened.
  */
 int
-lcreat(char *str)
+lcreat(str)
+	char *str;
 {
 	lflush();
 	lpnt = lpbuf;
@@ -487,7 +493,8 @@ lcreat(char *str)
  *	Returns -1 if error, otherwise the file descriptor opened.
  */
 int
-lopen(char *str)
+lopen(str)
+	char           *str;
 {
 	ipoint = iepoint = MAXIBUF;
 	if (str == NULL)
@@ -509,7 +516,8 @@ lopen(char *str)
  *	Returns -1 if error, otherwise the file descriptor opened.
  */
 int
-lappend(char *str)
+lappend(str)
+	char           *str;
 {
 	lpnt = lpbuf;
 	lpend = lpbuf + BUFBIG;
@@ -529,7 +537,7 @@ lappend(char *str)
  *	Returns nothing of value.
  */
 void
-lrclose(void)
+lrclose()
 {
 	if (io_infd > 0) {
 		close(io_infd);
@@ -543,7 +551,7 @@ lrclose(void)
  *	Returns nothing of value.
  */
 void
-lwclose(void)
+lwclose()
 {
 	lflush();
 	if (io_outfd > 2) {
@@ -613,7 +621,8 @@ cursor(x, y)
  * cursor(x,y)	  Put cursor at specified coordinates staring at [1,1] (termcap)
  */
 void
-cursor(int x, int y)
+cursor(x, y)
+	int             x, y;
 {
 	if (lpnt >= lpend)
 		lflush();
@@ -628,7 +637,7 @@ cursor(int x, int y)
  *	Routine to position cursor at beginning of 24th line
  */
 void
-cursors(void)
+cursors()
 {
 	cursor(1, 24);
 }
@@ -646,7 +655,7 @@ static char    *outbuf = 0;     /* translated output buffer */
  * init_term()		Terminal initialization -- setup termcap info
  */
 void
-init_term(void)
+init_term()
 {
 	setupterm(NULL, 0, NULL); /* will exit if invalid term */
 	if (!cursor_address) {
@@ -674,7 +683,8 @@ init_term(void)
  * cl_line(x,y)  Clear the whole line indicated by 'y' and leave cursor at [x,y]
  */
 void
-cl_line(int x, int y)
+cl_line(x, y)
+	int             x, y;
 {
 #ifdef VT100
 	cursor(x, y);
@@ -690,7 +700,8 @@ cl_line(int x, int y)
  * cl_up(x,y) Clear screen from [x,1] to current position. Leave cursor at [x,y]
  */
 void
-cl_up(int x, int y)
+cl_up(x, y)
+	int    x, y;
 {
 #ifdef VT100
 	cursor(x, y);
@@ -710,7 +721,8 @@ cl_up(int x, int y)
  * cl_dn(x,y) 	Clear screen from [1,y] to end of display. Leave cursor at [x,y]
  */
 void
-cl_dn(int x, int y)
+cl_dn(x, y)
+	int    x, y;
 {
 #ifdef VT100
 	cursor(x, y);
@@ -755,7 +767,7 @@ standout(const char *str)
  * set_score_output() 	Called when output should be literally printed.
  */
 void
-set_score_output(void)
+set_score_output()
 {
 	enable_scroll = -1;
 }
@@ -771,7 +783,7 @@ set_score_output(void)
 static int      scrline = 18;	/* line # for wraparound instead of scrolling
 				 * if no DL */
 void
-lflush(void)
+lflush()
 {
 	int    lpoint;
 	u_char  *str;
@@ -919,7 +931,7 @@ ttputch(int ch)
  * flush_buf()			Flush buffer with decoded output.
  */
 static void
-flush_buf(void)
+flush_buf()
 {
 	if (vindex)
 		write(io_outfd, outbuf, vindex);
@@ -932,7 +944,8 @@ flush_buf(void)
  *	Processes only the \33[#m sequence (converts . files for termcap use
  */
 char *
-tmcapcnv(char *sd, char *ss)
+tmcapcnv(sd, ss)
+	char  *sd, *ss;
 {
 	int    tmstate = 0;	/* 0=normal, 1=\33 2=[ 3=# */
 	char            tmdigit = 0;	/* the # in \33[#m */
@@ -984,7 +997,7 @@ tmcapcnv(char *sd, char *ss)
  *	beep()	Routine to emit a beep if enabled (see no-beep in .larnopts)
  */
 void
-beep(void)
+beep()
 {
 	if (!nobeep)
 		*lpnt++ = '\7';

@@ -1,4 +1,4 @@
-/*	$NetBSD: ncr5380.c,v 1.65 2012/10/27 17:17:59 chs Exp $	*/
+/*	$NetBSD: ncr5380.c,v 1.64 2010/02/28 15:52:16 snj Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ncr5380.c,v 1.65 2012/10/27 17:17:59 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ncr5380.c,v 1.64 2010/02/28 15:52:16 snj Exp $");
 
 /*
  * Bit mask of targets you want debugging to be shown
@@ -167,8 +167,8 @@ extern inline void finish_req(SC_REQ *reqp)
 /*
  * Auto config stuff....
  */
-void	ncr_attach(device_t, device_t, void *);
-int	ncr_match(device_t, cfdata_t, void *);
+void	ncr_attach(struct device *, struct device *, void *);
+int	ncr_match(struct device *, struct cfdata *, void *);
 
 /*
  * Tricks to make driver-name configurable
@@ -178,28 +178,26 @@ int	ncr_match(device_t, cfdata_t, void *);
 #define CFSTRING(n)	__STRING(n)
 #define	CFDRNAME(n)	n
 
-CFATTACH_DECL_NEW(CFDRNAME(DRNAME), sizeof(struct ncr_softc),
+CFATTACH_DECL(CFDRNAME(DRNAME), sizeof(struct ncr_softc),
     ncr_match, ncr_attach, NULL, NULL);
 
 extern struct cfdriver CFNAME(DRNAME);
 
 int
-ncr_match(device_t parent, cfdata_t cf, void *aux)
+ncr_match(struct device *parent, struct cfdata *cf, void *aux)
 {
-
 	return (machine_match(parent, cf, aux, &CFNAME(DRNAME)));
 }
 
 void
-ncr_attach(device_t parent, device_t self, void *aux)
+ncr_attach(struct device *pdp, struct device *dp, void *auxp)
 {
 	struct ncr_softc	*sc;
 	int			i;
 
-	sc = device_private(self);
+	sc = (struct ncr_softc *)dp;
 
-	sc->sc_dev = self;
-	sc->sc_adapter.adapt_dev = self;
+	sc->sc_adapter.adapt_dev = &sc->sc_dev;
 	sc->sc_adapter.adapt_openings = 7;
 	sc->sc_adapter.adapt_max_periph = 1;
 	sc->sc_adapter.adapt_ioctl = NULL;
@@ -247,7 +245,7 @@ ncr_attach(device_t parent, device_t self, void *aux)
 	/*
 	 * attach all scsi units on us
 	 */
-	config_found(self, &sc->sc_channel, scsiprint);
+	config_found(dp, &sc->sc_channel, scsiprint);
 }
 
 /*
@@ -263,7 +261,7 @@ ncr5380_scsi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req,
 {
 	struct scsipi_xfer *xs;
 	struct scsipi_periph *periph; 
-	struct ncr_softc *sc = device_private(chan->chan_adapter->adapt_dev);
+	struct ncr_softc *sc = (void *)chan->chan_adapter->adapt_dev;
 	int	sps, flags;
 	SC_REQ	*reqp, *link, *tmp;
 
@@ -698,7 +696,7 @@ scsi_select(SC_REQ *reqp, int code)
 	u_int8_t		targ_bit;
 	struct ncr_softc	*sc;
 
-	sc = device_private(reqp->xs->xs_periph->periph_channel->chan_adapter->adapt_dev);
+	sc = (void *)reqp->xs->xs_periph->periph_channel->chan_adapter->adapt_dev;
 	DBG_SELPRINT ("Starting arbitration\n", 0);
 	PID("scsi_select1");
 
@@ -1900,7 +1898,7 @@ ncr_aprint(struct ncr_softc *sc, const char *fmt, ...)
 	va_list	ap;
 
 	va_start(ap, fmt);
-	printf("%s: ", device_xname(sc->sc_dev));
+	printf("%s: ", sc->sc_dev.dv_xname);
 	vprintf(fmt, ap);
 	va_end(ap);
 }

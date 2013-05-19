@@ -1,5 +1,4 @@
-/*	$NetBSD: umassvar.h,v 1.34 2012/08/24 12:20:02 drochner Exp $	*/
-
+/*	$NetBSD: umassvar.h,v 1.31 2011/07/31 16:32:02 jakllsch Exp $	*/
 /*-
  * Copyright (c) 1999 MAEKAWA Masahide <bishop@rr.iij4u.or.jp>,
  *		      Nick Hibma <n_hibma@freebsd.org>
@@ -134,7 +133,7 @@ typedef void (*umass_callback)(struct umass_softc *, void *, int, int);
 #define STATUS_WIRE_FAILED	3	/* couldn't even get command across */
 
 typedef void (*umass_wire_xfer)(struct umass_softc *, int, void *, int, void *,
-				int, int, u_int, int, umass_callback, void *);
+				int, int, u_int, umass_callback, void *);
 typedef void (*umass_wire_reset)(struct umass_softc *, int);
 typedef void (*umass_wire_state)(usbd_xfer_handle, usbd_private_handle,
 				 usbd_status);
@@ -162,9 +161,6 @@ struct umass_softc {
 
 	const struct umass_wire_methods *sc_methods;
 
-	kmutex_t		sc_lock;
-	kcondvar_t		sc_detach_cv;
-
 	u_int8_t		sc_wire;	/* wire protocol */
 #define	UMASS_WPROTO_UNSPEC	0
 #define	UMASS_WPROTO_BBB	1
@@ -184,6 +180,7 @@ struct umass_softc {
 #define	UMASS_QUIRK_WRONG_CSWTAG	0x00000002
 #define	UMASS_QUIRK_RBC_PAD_TO_12	0x00000004
 #define	UMASS_QUIRK_NOGETMAXLUN		0x00000008
+#define	UMASS_QUIRK_IGNORE_RESIDUE	0x00000010
 
 #define UMASS_QUIRK_USE_DEFAULTMATCH	-1
 
@@ -265,6 +262,7 @@ struct umass_softc {
 	struct timeval tv;
 #endif
 
+	int			sc_xfer_flags;
 	char			sc_dying;
 	int			sc_refcnt;
 	int			sc_sense;

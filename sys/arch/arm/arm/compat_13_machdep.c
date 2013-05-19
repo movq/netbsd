@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_13_machdep.c,v 1.17 2012/08/16 17:35:01 matt Exp $	*/
+/*	$NetBSD: compat_13_machdep.c,v 1.16 2009/11/21 20:32:17 rmind Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -38,7 +38,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.17 2012/08/16 17:35:01 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_13_machdep.c,v 1.16 2009/11/21 20:32:17 rmind Exp $");
 
 #include <sys/systm.h>
 #include <sys/signalvar.h>
@@ -57,8 +57,9 @@ compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args
 		syscallarg(struct sigcontext13 *) sigcntxp;
 	} */
 	struct sigcontext13 *scp, context;
-	struct trapframe * const tf = lwp_trapframe(l);
-	struct proc * const p = l->l_proc;
+	struct trapframe *tf;
+	struct proc *p = l->l_proc;
+	struct pcb *pcb;
 	sigset_t mask;
 
 	/*
@@ -78,6 +79,8 @@ compat_13_sys_sigreturn(struct lwp *l, const struct compat_13_sys_sigreturn_args
 		return EINVAL;
 
 	/* Restore register context. */
+	pcb = lwp_getpcb(l);
+	tf = pcb->pcb_tf;
 	tf->tf_r0    = context.sc_r0;
 	tf->tf_r1    = context.sc_r1;
 	tf->tf_r2    = context.sc_r2;

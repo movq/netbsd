@@ -1,4 +1,4 @@
-/*	$NetBSD: ip.h,v 1.34 2012/11/02 21:07:07 christos Exp $	*/
+/*	$NetBSD: ip.h,v 1.32.8.1 2012/11/28 21:41:01 riz Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993

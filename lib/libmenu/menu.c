@@ -1,4 +1,4 @@
-/*	$NetBSD: menu.c,v 1.18 2012/12/30 12:27:09 blymn Exp $	*/
+/*	$NetBSD: menu.c,v 1.16 2003/03/09 01:08:48 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn (blymn@baea.com.au, brett_lymn@yahoo.com.au)
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: menu.c,v 1.18 2012/12/30 12:27:09 blymn Exp $");
+__RCSID("$NetBSD: menu.c,v 1.16 2003/03/09 01:08:48 lukem Exp $");
 
 #include <ctype.h>
 #include <menu.h>
@@ -135,7 +135,8 @@ set_menu_unmark(MENU *m, char *mark)
  * Return the menu unmark string for the menu.
  */
 char *
-menu_unmark(MENU *menu)
+menu_unmark(menu)
+        MENU *menu;
 {
 	if (menu == NULL)
 		return _menui_default_menu.unmark.string;
@@ -180,7 +181,9 @@ menu_win(MENU *menu)
  * Set the menu subwindow for the menu.
  */
 int
-set_menu_sub(MENU *menu, WINDOW *sub)
+set_menu_sub(menu, sub)
+        MENU *menu;
+        WINDOW *sub;
 {
 	if (menu == NULL) {
 		_menui_default_menu.menu_subwin = sub;
@@ -445,8 +448,7 @@ MENU *
 new_menu(ITEM **items)
 {
         MENU *the_menu;
-        char mark[2];
-
+        
         if ((the_menu = (MENU *)malloc(sizeof(MENU))) == NULL)
                 return NULL;
 
@@ -483,12 +485,6 @@ new_menu(ITEM **items)
 			_menui_default_menu.unmark.string,
 			(unsigned) _menui_default_menu.unmark.length+ 1 );
 	}
-
-	/* default mark needs to be set */
-	mark[0] = '-';
-	mark[1] = '\0';
-
-	set_menu_mark(the_menu, mark);
 
           /* now attach the items, if any */
         if (items != NULL) {

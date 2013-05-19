@@ -1,4 +1,4 @@
-/*	$NetBSD: amiga_init.c,v 1.129 2012/11/26 22:58:24 rkujawa Exp $	*/
+/*	$NetBSD: amiga_init.c,v 1.126 2012/02/12 16:34:06 matt Exp $	*/
 
 /*
  * Copyright (c) 1994 Michael L. Hitch
@@ -35,11 +35,10 @@
 #include "opt_p5ppc68kboard.h"
 #include "opt_devreload.h"
 #include "opt_m68k_arch.h"
-#include "z3rambd.h"
 #include "ser.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amiga_init.c,v 1.129 2012/11/26 22:58:24 rkujawa Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amiga_init.c,v 1.126 2012/02/12 16:34:06 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -68,15 +67,13 @@ __KERNEL_RCSID(0, "$NetBSD: amiga_init.c,v 1.129 2012/11/26 22:58:24 rkujawa Exp
 #include <amiga/amiga/gayle.h>
 #include <amiga/amiga/memlist.h>
 #include <amiga/dev/zbusvar.h>
-#include <amiga/dev/z3rambdvar.h>
 
 #define RELOC(v, t)	*((t*)((u_int)&(v) + loadbase))
 
 extern u_int	lowram;
 extern u_int	Umap;
 extern u_long boot_partition;
-extern vaddr_t	m68k_uptbase;
-
+vaddr_t		amiga_uptbase;
 #ifdef P5PPC68KBOARD
 extern int	p5ppc;
 #endif
@@ -337,12 +334,7 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 		if (cd->rom.manid == 8512 && 
 		    (cd->rom.prodid == 100 || cd->rom.prodid == 110)) 
 			RELOC(ZBUSAVAIL, u_int) += m68k_round_page(0x1400000);
-#if NZ3RAMBD > 0
-		if (z3rambd_match_id(cd->rom.manid, cd->rom.prodid) > 0)
-		{
-			/* XXX: remove board from memlist */
-		} else
-#endif
+
 		if (bd_type != ERT_ZORROIII &&
 		    (bd_type != ERT_ZORROII || isztwopa(cd->addr)))
 			continue;	/* It's not Z2 or Z3 I/O board */
@@ -713,7 +705,7 @@ start_c(int id, u_int fphystart, u_int fphysize, u_int cphysize,
 	 * XXX 16 MB instead of 256 MB should be enough, but...
 	 * we need to fix the fastmem loading first. (see comment at line 375)
 	 */
-	RELOC(m68k_uptbase, vaddr_t) =
+	RELOC(amiga_uptbase, vaddr_t) =
 	    roundup(vstart + 0x10000000, 0x10000000);
 
 	/*

@@ -1,4 +1,4 @@
-/*	$NetBSD: gettemp.c,v 1.16 2013/04/22 20:57:36 christos Exp $	*/
+/*	$NetBSD: gettemp.c,v 1.14 2008/10/20 10:28:38 apb Exp $	*/
 
 /*
  * Copyright (c) 1987, 1993
@@ -40,7 +40,7 @@
 #if 0
 static char sccsid[] = "@(#)mktemp.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: gettemp.c,v 1.16 2013/04/22 20:57:36 christos Exp $");
+__RCSID("$NetBSD: gettemp.c,v 1.14 2008/10/20 10:28:38 apb Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -64,7 +64,10 @@ __RCSID("$NetBSD: gettemp.c,v 1.16 2013/04/22 20:57:36 christos Exp $");
 #endif
 
 int
-GETTEMP(char *path, int *doopen, int domkdir)
+GETTEMP(path, doopen, domkdir)
+	char *path;
+	int *doopen;
+	int domkdir;
 {
 	char *start, *trv;
 	struct stat sbuf;
@@ -119,16 +122,14 @@ GETTEMP(char *path, int *doopen, int domkdir)
 		if (trv <= path)
 			break;
 		if (*trv == '/') {
-			int e;
 			*trv = '\0';
-			e = stat(path, &sbuf);
-			*trv = '/';
-			if (e == -1)
-				return doopen == NULL && !domkdir;
+			if (stat(path, &sbuf))
+				return (0);
 			if (!S_ISDIR(sbuf.st_mode)) {
 				errno = ENOTDIR;
-				return doopen == NULL && !domkdir;
+				return (0);
 			}
+			*trv = '/';
 			break;
 		}
 	}
@@ -137,21 +138,21 @@ GETTEMP(char *path, int *doopen, int domkdir)
 		if (doopen) {
 			if ((*doopen =
 			    open(path, O_CREAT | O_EXCL | O_RDWR, 0600)) >= 0)
-				return 1;
+				return (1);
 			if (errno != EEXIST)
-				return 0;
+				return (0);
 		} else if (domkdir) {
 			if (mkdir(path, 0700) >= 0)
-				return 1;
+				return (1);
 			if (errno != EEXIST)
-				return 0;
+				return (0);
 		} else if (lstat(path, &sbuf))
-			return errno == ENOENT ? 1 : 0;
+			return (errno == ENOENT ? 1 : 0);
 
 		/* tricky little algorithm for backward compatibility */
 		for (trv = start;;) {
 			if (!*trv)
-				return 0;
+				return (0);
 			if (*trv == 'z')
 				*trv++ = 'a';
 			else {

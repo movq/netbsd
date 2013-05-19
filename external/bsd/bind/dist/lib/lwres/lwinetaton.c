@@ -1,4 +1,4 @@
-/*	$NetBSD: lwinetaton.c,v 1.3 2012/06/05 00:43:04 christos Exp $	*/
+/*	$NetBSD: lwinetaton.c,v 1.2.6.1 2012/06/05 21:14:54 bouyer Exp $	*/
 
 /*
  * Portions Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")

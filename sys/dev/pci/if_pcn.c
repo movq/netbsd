@@ -1,4 +1,4 @@
-/*	$NetBSD: if_pcn.c,v 1.56 2013/03/30 03:21:07 christos Exp $	*/
+/*	$NetBSD: if_pcn.c,v 1.54 2012/02/02 19:43:05 tls Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_pcn.c,v 1.56 2013/03/30 03:21:07 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_pcn.c,v 1.54 2012/02/02 19:43:05 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -403,7 +403,7 @@ static int	pcn_rxintr(struct pcn_softc *);
 
 static int	pcn_mii_readreg(device_t, int, int);
 static void	pcn_mii_writereg(device_t, int, int, int);
-static void	pcn_mii_statchg(struct ifnet *);
+static void	pcn_mii_statchg(device_t);
 
 static void	pcn_79c970_mediainit(struct pcn_softc *);
 static int	pcn_79c970_mediachange(struct ifnet *);
@@ -503,7 +503,7 @@ pcn_is_vmware(const char *enaddr)
 	 */
 	if (enaddr[0] == 0x00 && enaddr[1] == 0x0c && enaddr[2] == 0x29)
 		return (TRUE);
-
+	
 	/*
 	 * VMware uses the OUI 00:50:56 for manually-set MAC
 	 * addresses (and some auto-generated ones).
@@ -2117,9 +2117,9 @@ pcn_79c971_mediainit(struct pcn_softc *sc)
 	/*
 	 * The built-in 10BASE-T interface is mapped to the MII
 	 * on the PCNet-FAST.  Unfortunately, there's no EEPROM
-	 * word that tells us which PHY to use.
-	 * This driver used to ignore all but the first PHY to
-	 * answer, but this code was removed to support multiple
+	 * word that tells us which PHY to use. 
+	 * This driver used to ignore all but the first PHY to 
+	 * answer, but this code was removed to support multiple 
 	 * external PHYs. As the default instance will be the first
 	 * one to answer, no harm is done by letting the possibly
 	 * non-connected internal PHY show up.
@@ -2183,9 +2183,9 @@ pcn_mii_writereg(device_t self, int phy, int reg, int val)
  *	Callback from MII layer when media changes.
  */
 static void
-pcn_mii_statchg(struct ifnet *ifp)
+pcn_mii_statchg(device_t self)
 {
-	struct pcn_softc *sc = ifp->if_softc;
+	struct pcn_softc *sc = device_private(self);
 
 	if ((sc->sc_mii.mii_media_active & IFM_FDX) != 0)
 		pcn_bcr_write(sc, LE_BCR9, LE_B9_FDEN);

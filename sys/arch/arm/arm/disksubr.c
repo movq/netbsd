@@ -1,4 +1,4 @@
-/*	$NetBSD: disksubr.c,v 1.24 2013/03/09 16:02:25 christos Exp $	*/
+/*	$NetBSD: disksubr.c,v 1.23 2009/03/15 22:23:16 cegger Exp $	*/
 
 /*
  * Copyright (c) 1998 Christopher G. Demetriou.  All rights reserved.
@@ -97,7 +97,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.24 2013/03/09 16:02:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: disksubr.c,v 1.23 2009/03/15 22:23:16 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -195,8 +195,7 @@ readdisklabel(dev_t dev, void (*strat)(struct buf *),
 		goto done;
 	}
 	for (dlp = (struct disklabel *)bp->b_data;
-	    dlp <= (struct disklabel *)((char *)bp->b_data + lp->d_secsize
-		- sizeof(*dlp));
+	    dlp <= (struct disklabel *)((char *)bp->b_data + lp->d_secsize - sizeof(*dlp));
 	    dlp = (struct disklabel *)((char *)dlp + sizeof(long))) {
 		if (dlp->d_magic != DISKMAGIC || dlp->d_magic2 != DISKMAGIC) {
 			continue;
@@ -263,8 +262,7 @@ done:
  */
 
 int
-setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask,
-    struct cpu_disklabel *osdep)
+setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask, struct cpu_disklabel *osdep)
 {
 	int i;
 	struct partition *opp, *npp;
@@ -286,7 +284,7 @@ setdisklabel(struct disklabel *olp, struct disklabel *nlp, u_long openmask,
 	    || dkcksum(nlp) != 0)
 		return (EINVAL);
 
-	/* XXX add check if other acorn/dos partitions will be overwritten */
+	/* XXX missing check if other acorn/dos partitions will be overwritten */
 
 	while (openmask != 0) {
 		i = ffs(openmask) - 1;
@@ -341,11 +339,13 @@ writedisklabel(dev_t dev, void (*strat)(struct buf *),
 
 	if (osdep) {
 		if ((rv = filecore_label_locate(dev, strat,lp, osdep, &cyl,
-		      &netbsdpartoff)) != 0 ||
+		      &netbsdpartoff)) != 0||
 		    (rv = mbr_label_locate(dev, strat, lp, osdep, &cyl,
 		      &netbsdpartoff)) != 0) {
-			if (rv > 0)
+			if (rv < 0) {
+			    error = -rv;
 			    goto done;
+			}
 		} else {
 			/*
 			 * We didn't find anything we like; NetBSD native.
@@ -356,12 +356,10 @@ writedisklabel(dev_t dev, void (*strat)(struct buf *),
 		} 
 	}
 
-	/* writelabel: */
+/* writelabel: */
 
-#ifdef DEBUG_LABEL
-	printf("%s: Reading disklabel addr=%08x\n", __func__,
-	     netbsdpartoff * DEV_BSIZE);
-#endif
+/*	printf("writedisklabel: Reading disklabel addr=%08x\n",
+	     netbsdpartoff * DEV_BSIZE);*/
 
 	/* next, dig out disk label */
 
@@ -377,8 +375,7 @@ writedisklabel(dev_t dev, void (*strat)(struct buf *),
 	if ((error = biowait(bp)))
 		goto done;
 	for (dlp = (struct disklabel *)bp->b_data;
-	    dlp <= (struct disklabel *)((char *)bp->b_data + lp->d_secsize
-		- sizeof(*dlp));
+	    dlp <= (struct disklabel *)((char *)bp->b_data + lp->d_secsize - sizeof(*dlp));
 	    dlp = (struct disklabel *)((char *)dlp + sizeof(long))) {
 		if (dlp->d_magic == DISKMAGIC && dlp->d_magic2 == DISKMAGIC &&
 		    dkcksum(dlp) == 0) {

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.30 2012/12/02 12:48:32 apb Exp $
+#	$NetBSD: Makefile,v 1.29 2008/10/25 22:15:28 apb Exp $
 
 MODULE=		groff
 
@@ -29,9 +29,10 @@ _post_conf: .USE
 
 
 .include "${.CURDIR}/../Makefile.gnuhost"
-.-include "${TOOLDIR}/share/compat/defs.mk"
+COMPATOBJ!=	cd ${.CURDIR}/../compat && ${PRINTOBJDIR}
+.-include	"${COMPATOBJ}/defs.mk"
 
-.PATH:	${.CURDIR}/../../share/tmac ${.CURDIR}/../../gnu/usr.bin/groff/tmac
+.PATH:		${.CURDIR}/../../share/tmac ${.CURDIR}/../../gnu/usr.bin/groff/tmac
 
 _installtmac: .USE
 .if ${MKUPDATE} != "no"

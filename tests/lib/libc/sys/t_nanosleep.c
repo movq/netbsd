@@ -1,4 +1,4 @@
-/* $NetBSD: t_nanosleep.c,v 1.3 2013/03/31 16:47:16 christos Exp $ */
+/* $NetBSD: t_nanosleep.c,v 1.1 2011/07/07 06:57:54 jruoho Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_nanosleep.c,v 1.3 2013/03/31 16:47:16 christos Exp $");
+__RCSID("$NetBSD: t_nanosleep.c,v 1.1 2011/07/07 06:57:54 jruoho Exp $");
 
 #include <sys/time.h>
 #include <sys/wait.h>
@@ -96,28 +96,18 @@ ATF_TC_BODY(nanosleep_basic, tc)
 ATF_TC(nanosleep_err);
 ATF_TC_HEAD(nanosleep_err, tc)
 {
-	atf_tc_set_md_var(tc, "descr",
-	    "Test errors from nanosleep(2) (PR bin/14558)");
+	atf_tc_set_md_var(tc, "descr", "Test errors from nanosleep(2)");
 }
 
 ATF_TC_BODY(nanosleep_err, tc)
 {
 	struct timespec ts;
 
-	ts.tv_sec = 1;
-	ts.tv_nsec = -1;
-	errno = 0;
-	ATF_REQUIRE_ERRNO(EINVAL, nanosleep(&ts, NULL) == -1);
-
-	ts.tv_sec = 1;
-	ts.tv_nsec = 1000000000;
-	errno = 0;
-	ATF_REQUIRE_ERRNO(EINVAL, nanosleep(&ts, NULL) == -1);
-
 	ts.tv_sec = -1;
-	ts.tv_nsec = 0;
+	ts.tv_nsec = 1000;
+
 	errno = 0;
-	ATF_REQUIRE_ERRNO(0, nanosleep(&ts, NULL) == 0);
+	ATF_REQUIRE_ERRNO(EINVAL, nanosleep(&ts, NULL) == -1);
 
 	errno = 0;
 	ATF_REQUIRE_ERRNO(EFAULT, nanosleep((void *)-1, NULL) == -1);

@@ -1,7 +1,7 @@
-#	$NetBSD: Makefile,v 1.80 2013/03/21 16:49:11 christos Exp $
+#	$NetBSD: Makefile,v 1.73.2.1 2013/04/29 01:50:19 riz Exp $
 #
 
-WARNS?=	5
+WARNS=	4
 
 .include <bsd.own.mk>
 
@@ -47,7 +47,6 @@ SRCS+=	pthread_cond.c
 SRCS+=	pthread_lock.c 
 SRCS+=	pthread_misc.c
 SRCS+=	pthread_mutex.c
-SRCS+=	pthread_once.c
 SRCS+=	pthread_rwlock.c
 SRCS+=	pthread_specific.c
 SRCS+=	pthread_spin.c
@@ -59,11 +58,6 @@ SRCS+=	sem.c
 SRCS+= pthread_md.S
 .endif
 
-# The PTHREAD__COMPAT flag builds a libpthread that can be dropped
-# into a NetBSD 2/3/4 chroot with a NetBSD 5 or later kernel.
-# This makes threading work in the chroot, no other modifications
-# required.
-#
 .if defined(PTHREAD__COMPAT)
 SRCS+=		pthread_compat.c
 .PATH.c:	${.CURDIR}/../../common/lib/libc/arch/${ARCHSUBDIR}/atomic
@@ -73,23 +67,21 @@ SRCS+=		pthread_compat.c
 .include "../../common/lib/libc/arch/${ARCHSUBDIR}/atomic/Makefile.inc"
 .endif
 
-ALIGN_FUNCTIONS=	${${ACTIVE_CC} == "gcc":? -falign-functions=32 :}
-
 # The TSD routines are used in the implementation of profiling, and so
 # can't be profiled themselves.
-COPTS.pthread_specific.c+=	-fomit-frame-pointer ${ALIGN_FUNCTIONS}
+COPTS.pthread_specific.c+=	-fomit-frame-pointer -falign-functions=32
 pthread_specific.po: pthread_specific.o
 	${_MKTARGET_CREATE}
 	cp pthread_specific.o pthread_specific.po
 
 # Internal spinlock routines are performance critical.  Don't profile them,
 # it's incompatibile with -fomit-frame-pointer.
-COPTS.pthread_lock.c+=	-fomit-frame-pointer ${ALIGN_FUNCTIONS}
+COPTS.pthread_lock.c+=	-fomit-frame-pointer -falign-functions=32
 pthread_lock.po: pthread_lock.o
 	${_MKTARGET_CREATE}
 	cp pthread_lock.o pthread_lock.po
 
-COPTS.pthread_mutex.c+=	-fomit-frame-pointer ${ALIGN_FUNCTIONS}
+COPTS.pthread_mutex.c+=	-fomit-frame-pointer -falign-functions=32
 pthread_mutex.po: pthread_mutex.o
 	${_MKTARGET_CREATE}
 	cp pthread_mutex.o pthread_mutex.po
@@ -165,7 +157,6 @@ MLINKS+=	pthread_cond.3 pthread_cond_timedwait.3
 
 MLINKS+=	pthread_condattr.3 pthread_condattr_init.3
 MLINKS+=	pthread_condattr.3 pthread_condattr_destroy.3
-MLINKS+=	pthread_condattr.3 pthread_condattr_setclock.3
 
 MLINKS+=	pthread_getname_np.3 pthread_setname_np.3
 MLINKS+=	pthread_getspecific.3 pthread_setspecific.3
@@ -222,4 +213,4 @@ MLINKS+=	pthread_testcancel.3 pthread_setcanceltype.3
 # pthread_setspecific() and pthread_getspecific(), since the constness
 # of the argument to setspecific() has to be discarded *somewhere*
 # before returning it from getspecific().
-CWARNFLAGS+= -Wno-cast-qual
+CFLAGS+= -Wno-cast-qual

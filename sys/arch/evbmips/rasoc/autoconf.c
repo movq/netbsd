@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.4 2012/10/27 17:17:51 chs Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.2.8.1 2012/08/08 15:51:12 martin Exp $	*/
 /*-
  * Copyright (c) 2011 CradlePoint Technology, Inc.
  * All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.4 2012/10/27 17:17:51 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.2.8.1 2012/08/08 15:51:12 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -62,7 +62,7 @@ cpu_rootconf(void)
 }
 
 void
-device_register(device_t dev, void *aux)
+device_register(struct device *dev, void *aux)
 {
 	/* TBD */
 }

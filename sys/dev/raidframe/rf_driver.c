@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_driver.c,v 1.131 2012/12/10 08:36:03 msaitoh Exp $	*/
+/*	$NetBSD: rf_driver.c,v 1.129.10.1 2012/12/17 00:25:27 riz Exp $	*/
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -66,7 +66,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_driver.c,v 1.131 2012/12/10 08:36:03 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_driver.c,v 1.129.10.1 2012/12/17 00:25:27 riz Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_raid_diagnostic.h"
@@ -153,8 +153,6 @@ static RF_ShutdownList_t *globalShutdown;	/* non array-specific
 static int rf_ConfigureRDFreeList(RF_ShutdownList_t ** listp);
 static int rf_AllocEmergBuffers(RF_Raid_t *);
 static void rf_FreeEmergBuffers(RF_Raid_t *);
-static void rf_destroy_mutex_cond(RF_Raid_t *);
-static void rf_alloc_mutex_cond(RF_Raid_t *);
 
 /* called at system boot time */
 int
@@ -257,7 +255,16 @@ rf_Shutdown(RF_Raid_t *raidPtr)
 
 	rf_ShutdownList(&raidPtr->shutdownList);
 
-	rf_destroy_mutex_cond(raidPtr);
+	rf_destroy_cond2(raidPtr->waitForReconCond);
+	rf_destroy_cond2(raidPtr->adding_hot_spare_cv);
+
+	rf_destroy_mutex2(raidPtr->access_suspend_mutex);
+	rf_destroy_cond2(raidPtr->access_suspend_cv);
+
+	rf_destroy_cond2(raidPtr->outstandingCond);
+	rf_destroy_mutex2(raidPtr->rad_lock);
+
+	rf_destroy_mutex2(raidPtr->mutex);
 
 	rf_UnconfigureArray();
 
@@ -282,7 +289,6 @@ rf_Shutdown(RF_Raid_t *raidPtr)
 	rf_FreeEmergBuffers(raidPtr); \
 	rf_ShutdownList(&raidPtr->shutdownList); \
 	rf_UnconfigureArray(); \
-	rf_destroy_mutex_cond(raidPtr); \
 }
 
 #define DO_RAID_INIT_CONFIGURE(f) { \
@@ -335,8 +341,7 @@ rf_Configure(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr, RF_AutoConfig_t *ac)
 	}
 	rf_unlock_mutex2(configureMutex);
 
-	rf_alloc_mutex_cond(raidPtr);
-
+	rf_init_mutex2(raidPtr->mutex, IPL_VM);
 	/* set up the cleanup list.  Do this after ConfigureDebug so that
 	 * value of memDebug will be set */
 
@@ -358,8 +363,16 @@ rf_Configure(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr, RF_AutoConfig_t *ac)
 	DO_RAID_INIT_CONFIGURE(rf_ConfigureEngine);
 	DO_RAID_INIT_CONFIGURE(rf_ConfigureStripeLocks);
 
+	rf_init_cond2(raidPtr->outstandingCond, "rfocond");
+	rf_init_mutex2(raidPtr->rad_lock, IPL_VM);
+
 	raidPtr->nAccOutstanding = 0;
 	raidPtr->waitShutdown = 0;
+
+	rf_init_mutex2(raidPtr->access_suspend_mutex, IPL_VM);
+	rf_init_cond2(raidPtr->access_suspend_cv, "rfquiesce");
+
+	rf_init_cond2(raidPtr->waitForReconCond, "rfrcnw");
 
 	if (ac!=NULL) {
 		/* We have an AutoConfig structure..  Don't do the
@@ -392,6 +405,8 @@ rf_Configure(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr, RF_AutoConfig_t *ac)
 	raidPtr->parity_rewrite_in_progress = 0;
 	raidPtr->adding_hot_spare = 0;
 	raidPtr->recon_in_progress = 0;
+
+	rf_init_cond2(raidPtr->adding_hot_spare_cv, "raidhs");
 
 	raidPtr->maxOutstanding = cfgPtr->maxOutstandingDiskReqs;
 
@@ -909,37 +924,4 @@ rf_print_unable_to_add_shutdown(const char *file, int line, int rc)
 {
 	RF_ERRORMSG3("Unable to add to shutdown list file %s line %d rc=%d\n",
 		     file, line, rc);
-}
-
-static void
-rf_alloc_mutex_cond(RF_Raid_t *raidPtr)
-{
-
-	rf_init_mutex2(raidPtr->mutex, IPL_VM);
-
-	rf_init_cond2(raidPtr->outstandingCond, "rfocond");
-	rf_init_mutex2(raidPtr->rad_lock, IPL_VM);
-
-	rf_init_mutex2(raidPtr->access_suspend_mutex, IPL_VM);
-	rf_init_cond2(raidPtr->access_suspend_cv, "rfquiesce");
-
-	rf_init_cond2(raidPtr->waitForReconCond, "rfrcnw");
-
-	rf_init_cond2(raidPtr->adding_hot_spare_cv, "raidhs");
-}
-
-static void
-rf_destroy_mutex_cond(RF_Raid_t *raidPtr)
-{
-
-	rf_destroy_cond2(raidPtr->waitForReconCond);
-	rf_destroy_cond2(raidPtr->adding_hot_spare_cv);
-
-	rf_destroy_mutex2(raidPtr->access_suspend_mutex);
-	rf_destroy_cond2(raidPtr->access_suspend_cv);
-
-	rf_destroy_cond2(raidPtr->outstandingCond);
-	rf_destroy_mutex2(raidPtr->rad_lock);
-
-	rf_destroy_mutex2(raidPtr->mutex);
 }

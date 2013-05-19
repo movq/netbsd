@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_event.c,v 1.79 2012/11/24 15:14:32 christos Exp $	*/
+/*	$NetBSD: kern_event.c,v 1.75.2.1 2012/11/24 21:40:02 jdc Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_event.c,v 1.79 2012/11/24 15:14:32 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_event.c,v 1.75.2.1 2012/11/24 21:40:02 jdc Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -450,25 +450,14 @@ filt_kqueue(struct knote *kn, long hint)
 static int
 filt_procattach(struct knote *kn)
 {
-	struct proc *p;
+	struct proc *p, *curp;
 	struct lwp *curl;
 
 	curl = curlwp;
+	curp = curl->l_proc;
 
 	mutex_enter(proc_lock);
-	if (kn->kn_flags & EV_FLAG1) {
-		/*
-		 * NOTE_TRACK attaches to the child process too early
-		 * for proc_find, so do a raw look up and check the state
-		 * explicitly.
-		 */
-		p = proc_find_raw(kn->kn_id);
-		if (p != NULL && p->p_stat != SIDL)
-			p = NULL;
-	} else {
-		p = proc_find(kn->kn_id);
-	}
-
+	p = proc_find(kn->kn_id);
 	if (p == NULL) {
 		mutex_exit(proc_lock);
 		return ESRCH;
@@ -1478,6 +1467,7 @@ static int
 kqueue_kqfilter(file_t *fp, struct knote *kn)
 {
 	struct kqueue *kq;
+	filedesc_t *fdp;
 
 	kq = ((file_t *)kn->kn_obj)->f_data;
 
@@ -1487,6 +1477,7 @@ kqueue_kqfilter(file_t *fp, struct knote *kn)
 		return 1;
 
 	kn->kn_fop = &kqread_filtops;
+	fdp = curlwp->l_fd;
 	mutex_enter(&kq->kq_lock);
 	SLIST_INSERT_HEAD(&kq->kq_sel.sel_klist, kn, kn_selnext);
 	mutex_exit(&kq->kq_lock);

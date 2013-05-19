@@ -1,4 +1,4 @@
-/*	$NetBSD: subs.c,v 1.19 2012/10/13 19:19:39 dholland Exp $	*/
+/*	$NetBSD: subs.c,v 1.17 2009/08/12 05:17:57 dholland Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)subs.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: subs.c,v 1.19 2012/10/13 19:19:39 dholland Exp $");
+__RCSID("$NetBSD: subs.c,v 1.17 2009/08/12 05:17:57 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -153,17 +153,17 @@ writel(const char *l)
 }
 
 void
-proll(struct move *mm)
+proll(void)
 {
-	if (mm->d0)
-		mswap(mm);
+	if (d0)
+		swap;
 	if (cturn == 1)
 		writel("Red's roll:  ");
 	else
 		writel("White's roll:  ");
-	writec(mm->D0 + '0');
+	writec(D0 + '0');
 	writec('\040');
-	writec(mm->D1 + '0');
+	writec(D1 + '0');
 	if (tflag)
 		cline();
 }
@@ -227,7 +227,7 @@ gwrite(void)
 }
 
 int
-quit(struct move *mm)
+quit(void)
 {
 
 	if (tflag) {
@@ -240,7 +240,7 @@ quit(struct move *mm)
 		if (rfl) {
 			writel("Would you like to save this game?");
 			if (yorn(0))
-				save(mm, 0);
+				save(0);
 		}
 		cturn = 0;
 		return (1);
@@ -305,7 +305,7 @@ nexturn(void)
 }
 
 void
-getarg(struct move *mm, char ***arg)
+getarg(char ***arg)
 {
 	char  **s;
 
@@ -381,13 +381,13 @@ getarg(struct move *mm, char ***arg)
 				writel("No save file named\n");
 				getout(0);
 			} else
-				recover(mm, s[0]);
+				recover(s[0]);
 			break;
 		}
 		s++;
 	}
 	if (s[0] != 0)
-		recover(mm, s[0]);
+		recover(s[0]);
 }
 
 void
@@ -448,7 +448,7 @@ getout(int dummy __unused)
 }
 
 void
-roll(struct move *mm)
+roll(void)
 {
 	char    c;
 	int     row;
@@ -467,13 +467,13 @@ roll(struct move *mm)
 		if (c != '\n') {
 			while (c < '1' || c > '6')
 				c = readc();
-			mm->D0 = c - '0';
+			D0 = c - '0';
 			writec(' ');
 			writec(c);
 			c = readc();
 			while (c < '1' || c > '6')
 				c = readc();
-			mm->D1 = c - '0';
+			D1 = c - '0';
 			writec(' ');
 			writec(c);
 			if (tflag) {
@@ -491,7 +491,7 @@ roll(struct move *mm)
 		} else
 			writec('\n');
 	}
-	mm->D0 = rnum(6) + 1;
-	mm->D1 = rnum(6) + 1;
-	mm->d0 = 0;
+	D0 = rnum(6) + 1;
+	D1 = rnum(6) + 1;
+	d0 = 0;
 }

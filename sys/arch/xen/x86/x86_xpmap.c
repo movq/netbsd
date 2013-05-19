@@ -1,4 +1,4 @@
-/*	$NetBSD: x86_xpmap.c,v 1.49 2012/09/16 22:09:34 rmind Exp $	*/
+/*	$NetBSD: x86_xpmap.c,v 1.38.2.5 2012/06/12 19:00:25 riz Exp $	*/
 
 /*
  * Copyright (c) 2006 Mathieu Ropert <mro@adviseo.fr>
@@ -69,7 +69,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: x86_xpmap.c,v 1.49 2012/09/16 22:09:34 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: x86_xpmap.c,v 1.38.2.5 2012/06/12 19:00:25 riz Exp $");
 
 #include "opt_xen.h"
 #include "opt_ddb.h"
@@ -118,19 +118,6 @@ void xen_failsafe_handler(void);
 #define HYPERVISOR_mmu_update_self(req, count, success_count) \
 	HYPERVISOR_mmu_update((req), (count), (success_count), DOMID_SELF)
 
-/*
- * kcpuset internally uses an array of uint32_t while xen uses an array of
- * u_long. As we're little-endian we can cast one to the other.
- */
-typedef union {
-#ifdef _LP64
-	uint32_t xcpum_km[2];
-#else
-	uint32_t xcpum_km[1];
-#endif	
-	u_long   xcpum_xm;
-} xcpumask_t;
-
 void
 xen_failsafe_handler(void)
 {
@@ -173,16 +160,15 @@ void xpq_debug_dump(void);
 static mmu_update_t xpq_queue_array[MAXCPUS][XPQUEUE_SIZE];
 static int xpq_idx_array[MAXCPUS];
 
-#ifdef i386
-extern union descriptor tmpgdt[];
-#endif /* i386 */
+extern struct cpu_info * (*xpq_cpu)(void);
+
 void
 xpq_flush_queue(void)
 {
 	int i, ok = 0, ret;
 
-	mmu_update_t *xpq_queue = xpq_queue_array[curcpu()->ci_cpuid];
-	int xpq_idx = xpq_idx_array[curcpu()->ci_cpuid];
+	mmu_update_t *xpq_queue = xpq_queue_array[xpq_cpu()->ci_cpuid];
+	int xpq_idx = xpq_idx_array[xpq_cpu()->ci_cpuid];
 
 	XENPRINTK2(("flush queue %p entries %d\n", xpq_queue, xpq_idx));
 	for (i = 0; i < xpq_idx; i++)
@@ -198,7 +184,7 @@ retry:
 
 		printf("xpq_flush_queue: %d entries (%d successful) on "
 		    "cpu%d (%ld)\n",
-		    xpq_idx, ok, curcpu()->ci_index, curcpu()->ci_cpuid);
+		    xpq_idx, ok, xpq_cpu()->ci_index, xpq_cpu()->ci_cpuid);
 
 		if (ok != 0) {
 			xpq_queue += ok;
@@ -226,14 +212,14 @@ retry:
 		}
 		panic("HYPERVISOR_mmu_update failed, ret: %d\n", ret);
 	}
-	xpq_idx_array[curcpu()->ci_cpuid] = 0;
+	xpq_idx_array[xpq_cpu()->ci_cpuid] = 0;
 }
 
 static inline void
 xpq_increment_idx(void)
 {
 
-	if (__predict_false(++xpq_idx_array[curcpu()->ci_cpuid] == XPQUEUE_SIZE))
+	if (__predict_false(++xpq_idx_array[xpq_cpu()->ci_cpuid] == XPQUEUE_SIZE))
 		xpq_flush_queue();
 }
 
@@ -241,14 +227,14 @@ void
 xpq_queue_machphys_update(paddr_t ma, paddr_t pa)
 {
 
-	mmu_update_t *xpq_queue = xpq_queue_array[curcpu()->ci_cpuid];
-	int xpq_idx = xpq_idx_array[curcpu()->ci_cpuid];
+	mmu_update_t *xpq_queue = xpq_queue_array[xpq_cpu()->ci_cpuid];
+	int xpq_idx = xpq_idx_array[xpq_cpu()->ci_cpuid];
 
 	XENPRINTK2(("xpq_queue_machphys_update ma=0x%" PRIx64 " pa=0x%" PRIx64
 	    "\n", (int64_t)ma, (int64_t)pa));
 
 	xpq_queue[xpq_idx].ptr = ma | MMU_MACHPHYS_UPDATE;
-	xpq_queue[xpq_idx].val = pa >> PAGE_SHIFT;
+	xpq_queue[xpq_idx].val = (pa - XPMAP_OFFSET) >> PAGE_SHIFT;
 	xpq_increment_idx();
 #ifdef XENDEBUG_SYNC
 	xpq_flush_queue();
@@ -259,8 +245,8 @@ void
 xpq_queue_pte_update(paddr_t ptr, pt_entry_t val)
 {
 
-	mmu_update_t *xpq_queue = xpq_queue_array[curcpu()->ci_cpuid];
-	int xpq_idx = xpq_idx_array[curcpu()->ci_cpuid];
+	mmu_update_t *xpq_queue = xpq_queue_array[xpq_cpu()->ci_cpuid];
+	int xpq_idx = xpq_idx_array[xpq_cpu()->ci_cpuid];
 
 	KASSERT((ptr & 3) == 0);
 	xpq_queue[xpq_idx].ptr = (paddr_t)ptr | MMU_NORMAL_PT_UPDATE;
@@ -377,17 +363,17 @@ xpq_queue_invlpg(vaddr_t va)
 void
 xen_mcast_invlpg(vaddr_t va, kcpuset_t *kc)
 {
-	xcpumask_t xcpumask;
+	u_long xcpumask = 0;
 	mmuext_op_t op;
 
-	kcpuset_export_u32(kc, &xcpumask.xcpum_km[0], sizeof(xcpumask));
+	kcpuset_copybits(kc, &xcpumask, sizeof(xcpumask));
 
 	/* Flush pending page updates */
 	xpq_flush_queue();
 
 	op.cmd = MMUEXT_INVLPG_MULTI;
 	op.arg1.linear_addr = va;
-	op.arg2.vcpumask = &xcpumask.xcpum_xm;
+	op.arg2.vcpumask = &xcpumask;
 
 	if (HYPERVISOR_mmuext_op(&op, 1, NULL, DOMID_SELF) < 0) {
 		panic("xpq_queue_invlpg_all");
@@ -418,16 +404,16 @@ xen_bcast_invlpg(vaddr_t va)
 void
 xen_mcast_tlbflush(kcpuset_t *kc)
 {
-	xcpumask_t xcpumask;
+	u_long xcpumask = 0;
 	mmuext_op_t op;
 
-	kcpuset_export_u32(kc, &xcpumask.xcpum_km[0], sizeof(xcpumask));
+	kcpuset_copybits(kc, &xcpumask, sizeof(xcpumask));
 
 	/* Flush pending page updates */
 	xpq_flush_queue();
 
 	op.cmd = MMUEXT_TLB_FLUSH_MULTI;
-	op.arg2.vcpumask = &xcpumask.xcpum_xm;
+	op.arg2.vcpumask = &xcpumask;
 
 	if (HYPERVISOR_mmuext_op(&op, 1, NULL, DOMID_SELF) < 0) {
 		panic("xpq_queue_invlpg_all");
@@ -515,8 +501,8 @@ xpq_debug_dump(void)
 {
 	int i;
 
-	mmu_update_t *xpq_queue = xpq_queue_array[curcpu()->ci_cpuid];
-	int xpq_idx = xpq_idx_array[curcpu()->ci_cpuid];
+	mmu_update_t *xpq_queue = xpq_queue_array[xpq_cpu()->ci_cpuid];
+	int xpq_idx = xpq_idx_array[xpq_cpu()->ci_cpuid];
 
 	XENPRINTK2(("idx: %d\n", xpq_idx));
 	for (i = 0; i < xpq_idx; i++) {
@@ -892,18 +878,6 @@ xen_bootstrap_tables (vaddr_t old_pgd, vaddr_t new_pgd,
 			    page < new_pgd + ((new_count + l2_4_count) * PAGE_SIZE)) {
 				/* map new page tables RO */
 				pte[pl1_pi(page)] |= 0;
-#ifdef i386
-			} else if (page == (vaddr_t)tmpgdt) {
-				/*
-				 * Map bootstrap gdt R/O. Later, we
-				 * will re-add this to page to uvm
-				 * after making it writable.
-				 */
-
-				pte[pl1_pi(page)] = 0;
-				page += PAGE_SIZE;
-				continue;
-#endif /* i386 */
 			} else {
 				/* map page RW */
 				pte[pl1_pi(page)] |= PG_RW;
@@ -1105,7 +1079,7 @@ xen_set_user_pgd(paddr_t page)
 
 	xpq_flush_queue();
 	op.cmd = MMUEXT_NEW_USER_BASEPTR;
-	op.arg1.mfn = xpmap_ptom_masked(page) >> PAGE_SHIFT;
+	op.arg1.mfn = pfn_to_mfn(page >> PAGE_SHIFT);
         if (HYPERVISOR_mmuext_op(&op, 1, NULL, DOMID_SELF) < 0)
 		panic("xen_set_user_pgd: failed to install new user page"
 			" directory %#" PRIxPADDR, page);

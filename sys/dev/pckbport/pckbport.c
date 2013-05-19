@@ -1,4 +1,4 @@
-/* $NetBSD: pckbport.c,v 1.16 2013/03/06 04:22:03 christos Exp $ */
+/* $NetBSD: pckbport.c,v 1.14 2011/09/09 14:00:01 jakllsch Exp $ */
 
 /*
  * Copyright (c) 2004 Ben Harris
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pckbport.c,v 1.16 2013/03/06 04:22:03 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pckbport.c,v 1.14 2011/09/09 14:00:01 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -93,13 +93,10 @@ static const char * const pckbport_slot_names[] = { "kbd", "aux" };
 
 static struct pckbport_tag pckbport_cntag;
 
-#define	KBD_DELAY	DELAY(8)
+#define KBC_DEVCMD_ACK 0xfa
+#define KBC_DEVCMD_RESEND 0xfe
 
-#ifdef PCKBPORTDEBUG
-#define DPRINTF(a)	printf a
-#else
-#define DPRINTF(a)
-#endif
+#define	KBD_DELAY	DELAY(8)
 
 static int
 pckbport_poll_data1(pckbport_tag_t t, pckbport_slot_t slot)
@@ -264,29 +261,35 @@ pckbport_poll_cmd1(struct pckbport_tag *t, pckbport_slot_t slot,
 			if (c != -1)
 				break;
 		}
-		switch (c) {
-		case KBR_ACK:
+
+		if (c == KBC_DEVCMD_ACK) {
 			cmd->cmdidx++;
 			continue;
-		case KBR_BAT_DONE:
-		case KBR_BAT_FAIL:
-		case KBR_RESEND:
-			DPRINTF(("%s: %s\n", __func__, c == KBR_RESEND ?
-			    "RESEND" : (c == KBR_BAT_DONE ? "BAT_DONE" :
-			    "BAT_FAIL")));
+		}
+		if (c == KBC_DEVCMD_RESEND) {
+#ifdef PCKBPORTDEBUG
+			printf("pckbport_cmd: RESEND\n");
+#endif
 			if (cmd->retries++ < 5)
 				continue;
 			else {
-				DPRINTF(("%s: cmd failed\n", __func__));
+#ifdef PCKBPORTDEBUG
+				printf("pckbport: cmd failed\n");
+#endif
 				cmd->status = EIO;
 				return;
 			}
-		case -1:
-			DPRINTF(("%s: timeout\n", __func__));
+		}
+		if (c == -1) {
+#ifdef PCKBPORTDEBUG
+			printf("pckbport_cmd: timeout\n");
+#endif
 			cmd->status = EIO;
 			return;
 		}
-		DPRINTF(("%s: lost 0x%x\n", __func__, c));
+#ifdef PCKBPORTDEBUG
+		printf("pckbport_cmd: lost 0x%x\n", c);
+#endif
 	}
 
 	while (cmd->responseidx < cmd->responselen) {
@@ -300,7 +303,9 @@ pckbport_poll_cmd1(struct pckbport_tag *t, pckbport_slot_t slot,
 				break;
 		}
 		if (c == -1) {
-			DPRINTF(("%s: no data\n", __func__));
+#ifdef PCKBPORTDEBUG
+			printf("pckbport_cmd: no data\n");
+#endif
 			cmd->status = ETIMEDOUT;
 			return;
 		} else
@@ -339,12 +344,15 @@ void
 pckbport_cleanqueue(struct pckbport_slotdata *q)
 {
 	struct pckbport_devcmd *cmd;
+#ifdef PCKBPORTDEBUG
+	int i;
+#endif
 
 	while ((cmd = TAILQ_FIRST(&q->cmdqueue))) {
 		TAILQ_REMOVE(&q->cmdqueue, cmd, next);
 #ifdef PCKBPORTDEBUG
-		printf("%s: removing", __func__);
-		for (int i = 0; i < cmd->cmdlen; i++)
+		printf("pckbport_cleanqueue: removing");
+		for (i = 0; i < cmd->cmdlen; i++)
 			printf(" %02x", cmd->cmd[i]);
 		printf("\n");
 #endif
@@ -437,15 +445,17 @@ pckbport_cmdresponse(struct pckbport_tag *t, pckbport_slot_t slot, u_char data)
 		panic("pckbport_cmdresponse: no active command");
 #endif
 	if (cmd->cmdidx < cmd->cmdlen) {
-		if (data != KBR_ACK && data != KBR_RESEND)
+		if (data != KBC_DEVCMD_ACK && data != KBC_DEVCMD_RESEND)
 			return 0;
 
-		if (data == KBR_RESEND) {
+		if (data == KBC_DEVCMD_RESEND) {
 			if (cmd->retries++ < 5)
 				/* try again last command */
 				goto restart;
 			else {
-				DPRINTF(("%s: cmd failed\n", __func__));
+#ifdef PCKBPORTDEBUG
+				printf("pckbport: cmd failed\n");
+#endif
 				cmd->status = EIO;
 				/* dequeue */
 			}
@@ -574,11 +584,12 @@ pckbportintr(pckbport_tag_t t, pckbport_slot_t slot, int data)
 	if (CMD_IN_QUEUE(q) && pckbport_cmdresponse(t, slot, data))
 		return;
 
-	if (t->t_inputhandler[slot]) {
+	if (t->t_inputhandler[slot])
 		(*t->t_inputhandler[slot])(t->t_inputarg[slot], data);
-		return;
-	}
-	DPRINTF(("%s: slot %d lost %d\n", __func__, slot, data));
+#ifdef PCKBPORTDEBUG
+	else
+		printf("pckbportintr: slot %d lost %d\n", slot, data);
+#endif
 }
 
 int

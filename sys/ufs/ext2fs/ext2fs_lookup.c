@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_lookup.c,v 1.73 2013/01/22 09:39:15 dholland Exp $	*/
+/*	$NetBSD: ext2fs_lookup.c,v 1.67.2.1 2012/08/12 12:59:48 martin Exp $	*/
 
 /*
  * Modified for NetBSD 1.2E
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_lookup.c,v 1.73 2013/01/22 09:39:15 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_lookup.c,v 1.67.2.1 2012/08/12 12:59:48 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -70,8 +70,6 @@ __KERNEL_RCSID(0, "$NetBSD: ext2fs_lookup.c,v 1.73 2013/01/22 09:39:15 dholland 
 #include <ufs/ext2fs/ext2fs_extern.h>
 #include <ufs/ext2fs/ext2fs_dir.h>
 #include <ufs/ext2fs/ext2fs.h>
-
-#include <miscfs/genfs/genfs.h>
 
 extern	int dirchk;
 
@@ -325,10 +323,8 @@ ext2fs_lookup(void *v)
 	 * check the name cache to see if the directory/name pair
 	 * we are looking for is known already.
 	 */
-	if (cache_lookup(vdp, cnp->cn_nameptr, cnp->cn_namelen,
-			 cnp->cn_nameiop, cnp->cn_flags, NULL, vpp)) {
-		return *vpp == NULLVP ? ENOENT : 0;
-	}
+	if ((error = cache_lookup(vdp, vpp, cnp)) >= 0)
+		return (error);
 
 	/*
 	 * Suppress search for slots unless creating
@@ -541,8 +537,7 @@ searchloop:
 	 * Insert name into cache (as non-existent) if appropriate.
 	 */
 	if (nameiop != CREATE) {
-		cache_enter(vdp, *vpp, cnp->cn_nameptr, cnp->cn_namelen,
-			    cnp->cn_flags);
+		cache_enter(vdp, *vpp, cnp);
 	}
 	return ENOENT;
 
@@ -581,6 +576,11 @@ found:
 	 */
 	if (nameiop == DELETE && (flags & ISLASTCN)) {
 		/*
+		 * Write access to directory required to delete files.
+		 */
+		if ((error = VOP_ACCESS(vdp, VWRITE, cred)) != 0)
+			return (error);
+		/*
 		 * Return pointer to current entry in results->ulr_offset,
 		 * and distance past previous entry (if there
 		 * is a previous entry in this block) in results->ulr_count.
@@ -592,43 +592,28 @@ found:
 			results->ulr_count = results->ulr_offset - prevoff;
 		if (dp->i_number == foundino) {
 			vref(vdp);
-			tdp = vdp;
-		} else {
-			if (flags & ISDOTDOT)
-				VOP_UNLOCK(vdp); /* race to get the inode */
-			error = VFS_VGET(vdp->v_mount, foundino, &tdp);
-			if (flags & ISDOTDOT)
-				vn_lock(vdp, LK_EXCLUSIVE | LK_RETRY);
-			if (error)
-				return (error);
+			*vpp = vdp;
+			return (0);
 		}
-		/*
-		 * Write access to directory required to delete files.
-		 */
-		if ((error = VOP_ACCESS(vdp, VWRITE, cred)) != 0) {
-			if (dp->i_number == foundino)
-				vrele(tdp);
-			else
-				vput(tdp);
+		if (flags & ISDOTDOT)
+			VOP_UNLOCK(vdp); /* race to get the inode */
+		error = VFS_VGET(vdp->v_mount, foundino, &tdp);
+		if (flags & ISDOTDOT)
+			vn_lock(vdp, LK_EXCLUSIVE | LK_RETRY);
+		if (error)
 			return (error);
-		}
 		/*
 		 * If directory is "sticky", then user must own
 		 * the directory, or the file in it, else she
 		 * may not delete it (unless she's root). This
 		 * implements append-only directories.
 		 */
-		if (dp->i_e2fs_mode & ISVTX) {
-			error = kauth_authorize_vnode(cred, KAUTH_VNODE_DELETE,
-			    tdp, vdp, genfs_can_sticky(cred, dp->i_uid,
-			    VTOI(tdp)->i_uid));
-			if (error) {
-				if (dp->i_number == foundino)
-					vrele(tdp);
-				else
-					vput(tdp);
-				return (EPERM);
-			}
+		if ((dp->i_e2fs_mode & ISVTX) &&
+		    kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER, NULL) &&
+		    kauth_cred_geteuid(cred) != dp->i_uid &&
+		    VTOI(tdp)->i_uid != kauth_cred_geteuid(cred)) {
+			vput(tdp);
+			return (EPERM);
 		}
 		*vpp = tdp;
 		return (0);
@@ -702,7 +687,7 @@ found:
 	/*
 	 * Insert name into cache if appropriate.
 	 */
-	cache_enter(vdp, *vpp, cnp->cn_nameptr, cnp->cn_namelen, cnp->cn_flags);
+	cache_enter(vdp, *vpp, cnp);
 	return 0;
 }
 
@@ -1045,7 +1030,7 @@ ext2fs_checkpath(struct inode *source, struct inode *target,
 		error = EEXIST;
 		goto out;
 	}
-	rootino = UFS_ROOTINO;
+	rootino = ROOTINO;
 	error = 0;
 	if (target->i_number == rootino)
 		goto out;

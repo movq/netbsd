@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_bsc.c,v 1.1 2013/01/05 20:15:17 jakllsch Exp $	*/
+/*	$NetBSD: bcm2835_bsc.c,v 1.1.4.2 2013/02/13 01:36:14 riz Exp $	*/
 
 /*
  * Copyright (c) 2012 Jonathan A. Kollasch
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_bsc.c,v 1.1 2013/01/05 20:15:17 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_bsc.c,v 1.1.4.2 2013/02/13 01:36:14 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -49,7 +49,6 @@ __KERNEL_RCSID(0, "$NetBSD: bcm2835_bsc.c,v 1.1 2013/01/05 20:15:17 jakllsch Exp
 #include <sys/kernhist.h>
 
 KERNHIST_DECL(bsciichist);
-KERNHIST_DEFINE(bsciichist);
 
 struct bsciic_softc {
 	device_t sc_dev;

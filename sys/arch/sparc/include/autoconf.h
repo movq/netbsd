@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.h,v 1.48 2012/10/27 17:18:11 chs Exp $ */
+/*	$NetBSD: autoconf.h,v 1.47 2011/07/01 21:00:57 dyoung Exp $ */
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -150,7 +150,9 @@ int	obio_find_rom_map(bus_addr_t, int, bus_space_handle_t *);
  * its aux pointer to point to a pointer to the name (the address of
  * a romaux structure suffices, for instance). (OBSOLETE)
  */
-int	matchbyname(device_t, cfdata_t, void *);
+struct device;
+struct cfdata;
+int	matchbyname(struct device *, struct cfdata *cf, void *aux);
 
 /*
  * `clockfreq' produces a printable representation of a clock frequency
@@ -162,14 +164,15 @@ char	*clockfreq(int freq);
 struct bootpath {
 	char	name[16];	/* name of this node */
 	int	val[3];		/* up to three optional values */
-	device_t dev;	/* device that recognised this component */
+	struct device *dev;	/* device that recognised this component */
 };
 
 /* Parse a disk string into a dev_t, return device struct pointer */
-device_t parsedisk(char *, int, int, dev_t *);
+struct	device *parsedisk(char *, int, int, dev_t *);
 
 /* Establish a mountroot_hook, for benefit of floppy drive, mostly. */
-void	mountroot_hook_establish(void (*)(device_t), device_t);
+void	mountroot_hook_establish(void (*)(struct device *),
+				 struct device *);
 
 void	bootstrap(void);
 int	romgetcursoraddr(int **, int **);

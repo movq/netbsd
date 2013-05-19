@@ -1,4 +1,4 @@
-#	$NetBSD: OPENBLOCKS266,v 1.64 2013/04/27 21:43:24 christos Exp $
+#	$NetBSD: OPENBLOCKS266,v 1.58 2011/12/18 05:49:26 dholland Exp $
 #
 #	GENERIC -- everything that's currently supported
 #
@@ -7,7 +7,7 @@ include		"arch/evbppc/conf/std.obs266"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"OPENBLOCKS266-$Revision: 1.64 $"
+#ident 		"OPENBLOCKS266-$Revision: 1.58 $"
 
 maxusers	32
 
@@ -23,6 +23,8 @@ maxusers	32
 options 	SYSVMSG			# System V message queues
 options 	SYSVSEM			# System V semaphores
 options 	SYSVSHM			# System V shared memory
+options		P1003_1B_SEMAPHORE	# p1003.1b semaphore support
+
 
 #options 	USERCONF		# userconf(4) support
 #options	PIPE_SOCKETPAIR		# smaller, but slower pipe(2)
@@ -63,7 +65,6 @@ options 	COMPAT_20		# NetBSD 2.0,
 options 	COMPAT_30		# NetBSD 3.0,
 options 	COMPAT_40		# NetBSD 4.0,
 options 	COMPAT_50		# NetBSD 5.0 compatibility.
-options 	COMPAT_60		# NetBSD 6.0 compatibility.
 options 	COMPAT_43		# and 4.3BSD
 #options 	COMPAT_386BSD_MBRPART	# recognize old partition ID
 options		COMPAT_BSDPTY		# /dev/[pt]ty?? ptys.
@@ -116,11 +117,14 @@ options 	GATEWAY		# packet forwarding
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPv6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
 #options        DIRECTED_BROADCAST      # allow broadcasts through routers
+options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking protocols
 options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 options 	PPP_DEFLATE	# Deflate compression support for PPP
@@ -187,9 +191,9 @@ options 	MIIVERBOSE		# verbose PHY autoconfig messages
 #
 
 # disk/mass storage pseudo-devices
-#pseudo-device	ccd			# concatenated/striped disk devices
-#pseudo-device	cgd			# cryptographic disk devices
-#pseudo-device	raid			# RAIDframe disk driver
+#pseudo-device	ccd		4	# concatenated/striped disk devices
+#pseudo-device	cgd		4	# cryptographic disk devices
+#pseudo-device	raid		4	# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 #pseudo-device	fss			# file system snapshot device
 #pseudo-device	md			# memory disk device

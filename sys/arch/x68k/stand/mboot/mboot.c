@@ -1,4 +1,4 @@
-/*	$NetBSD: mboot.c,v 1.12 2012/04/06 09:44:44 isaki Exp $	*/
+/*	$NetBSD: mboot.c,v 1.9.8.2 2012/04/09 18:10:10 riz Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.

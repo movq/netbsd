@@ -1,4 +1,4 @@
-/*	$NetBSD: soundcard.h,v 1.22 2012/05/05 15:57:45 christos Exp $	*/
+/*	$NetBSD: soundcard.h,v 1.19.4.1 2012/05/07 16:55:33 riz Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.

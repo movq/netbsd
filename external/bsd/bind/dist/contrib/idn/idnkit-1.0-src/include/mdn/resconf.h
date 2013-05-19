@@ -1,4 +1,4 @@
-/*	$NetBSD: resconf.h,v 1.3 2012/06/05 00:39:48 christos Exp $	*/
+/*	$NetBSD: resconf.h,v 1.2.6.1 2012/06/06 18:18:07 bouyer Exp $	*/
 
 /* Id: resconf.h,v 1.1 2003/06/04 00:25:46 marka Exp  */
 /*

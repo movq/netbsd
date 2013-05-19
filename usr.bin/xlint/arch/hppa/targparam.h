@@ -1,4 +1,4 @@
-/*	$NetBSD: targparam.h,v 1.5 2012/03/27 19:24:01 christos Exp $	*/
+/*	$NetBSD: targparam.h,v 1.3 2005/01/26 09:04:49 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -34,7 +34,7 @@
 /*
  * Machine-dependent target parameters for lint1.
  */
-#include "schar.h"
+
 #include "ilp32.h"
 
 /*    
@@ -49,6 +49,6 @@
 
 #define	FLOAT_SIZE		(4 * CHAR_BIT)
 #define	DOUBLE_SIZE		(8 * CHAR_BIT)
-#define	LDOUBLE_SIZE		(8 * CHAR_BIT)
+#define	LDOUBLE_SIZE		(12 * CHAR_BIT) /* XXX double-check */
 
 #define	ENUM_SIZE		(4 * CHAR_BIT)

@@ -1,4 +1,4 @@
-/*	$NetBSD: readline.c,v 1.107 2013/01/13 15:46:57 christos Exp $	*/
+/*	$NetBSD: readline.c,v 1.100.2.1 2012/06/05 20:22:14 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include "config.h"
 #if !defined(lint) && !defined(SCCSID)
-__RCSID("$NetBSD: readline.c,v 1.107 2013/01/13 15:46:57 christos Exp $");
+__RCSID("$NetBSD: readline.c,v 1.100.2.1 2012/06/05 20:22:14 bouyer Exp $");
 #endif /* not lint && not SCCSID */
 
 #include <sys/types.h>
@@ -100,7 +100,6 @@ char *rl_basic_word_break_characters = break_chars;
 char *rl_completer_word_break_characters = NULL;
 char *rl_completer_quote_characters = NULL;
 Function *rl_completion_entry_function = NULL;
-char *(*rl_completion_word_break_hook)(void) = NULL;
 CPPFunction *rl_attempted_completion_function = NULL;
 Function *rl_pre_input_hook = NULL;
 Function *rl_startup1_hook = NULL;
@@ -1760,7 +1759,6 @@ rl_complete(int ignore __attribute__((__unused__)), int invoking_key)
 #ifdef WIDECHAR
 	static ct_buffer_t wbreak_conv, sprefix_conv;
 #endif
-	char *breakchars;
 
 	if (h == NULL || e == NULL)
 		rl_initialize();
@@ -1773,17 +1771,12 @@ rl_complete(int ignore __attribute__((__unused__)), int invoking_key)
 		return CC_REFRESH;
 	}
 
-	if (rl_completion_word_break_hook != NULL)
-		breakchars = (*rl_completion_word_break_hook)();
-	else
-		breakchars = rl_basic_word_break_characters;
-
 	/* Just look at how many global variables modify this operation! */
 	return fn_complete(e,
 	    (CPFunction *)rl_completion_entry_function,
 	    rl_attempted_completion_function,
 	    ct_decode_string(rl_basic_word_break_characters, &wbreak_conv),
-	    ct_decode_string(breakchars, &sprefix_conv),
+	    ct_decode_string(rl_special_prefixes, &sprefix_conv),
 	    _rl_completion_append_character_function,
 	    (size_t)rl_completion_query_items,
 	    &rl_completion_type, &rl_attempted_completion_over,
@@ -1927,12 +1920,12 @@ rl_add_defun(const char *name, Function *fun, int c)
 	map[(unsigned char)c] = fun;
 	el_set(e, EL_ADDFN, name, name, rl_bind_wrapper);
 	vis(dest, c, VIS_WHITE|VIS_NOSLASH, 0);
-	el_set(e, EL_BIND, dest, name, NULL);
+	el_set(e, EL_BIND, dest, name);
 	return 0;
 }
 
 void
-rl_callback_read_char(void)
+rl_callback_read_char()
 {
 	int count = 0, done = 0;
 	const char *buf = el_gets(e, &count);
@@ -2035,7 +2028,7 @@ rl_variable_bind(const char *var, const char *value)
 	 * The proper return value is undocument, but this is what the
 	 * readline source seems to do.
 	 */
-	return el_set(e, EL_BIND, "", var, value, NULL) == -1 ? 1 : 0;
+	return el_set(e, EL_BIND, "", var, value) == -1 ? 1 : 0;
 }
 
 void
@@ -2104,9 +2097,9 @@ void
 rl_get_screen_size(int *rows, int *cols)
 {
 	if (rows)
-		el_get(e, EL_GETTC, "li", rows, (void *)0);
+		el_get(e, EL_GETTC, "li", rows);
 	if (cols)
-		el_get(e, EL_GETTC, "co", cols, (void *)0);
+		el_get(e, EL_GETTC, "co", cols);
 }
 
 void
@@ -2114,9 +2107,9 @@ rl_set_screen_size(int rows, int cols)
 {
 	char buf[64];
 	(void)snprintf(buf, sizeof(buf), "%d", rows);
-	el_set(e, EL_SETTC, "li", buf, NULL);
+	el_set(e, EL_SETTC, "li", buf);
 	(void)snprintf(buf, sizeof(buf), "%d", cols);
-	el_set(e, EL_SETTC, "co", buf, NULL);
+	el_set(e, EL_SETTC, "co", buf);
 }
 
 char **
@@ -2266,9 +2259,4 @@ int
 rl_on_new_line(void)
 {
 	return 0;
-}
-
-void
-rl_free_line_state(void)
-{
 }

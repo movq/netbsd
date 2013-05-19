@@ -1,4 +1,4 @@
-/*	$NetBSD: monop.c,v 1.27 2012/06/19 05:35:32 dholland Exp $	*/
+/*	$NetBSD: monop.c,v 1.26 2011/12/01 07:05:52 ahoka Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\
 #if 0
 static char sccsid[] = "@(#)monop.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: monop.c,v 1.27 2012/06/19 05:35:32 dholland Exp $");
+__RCSID("$NetBSD: monop.c,v 1.26 2011/12/01 07:05:52 ahoka Exp $");
 #endif
 #endif /* not lint */
 
@@ -223,7 +223,9 @@ SQUARE	board[N_SQRS+1]	= {	/* board itself (+1 for Jail)		*/
  *	This program implements a monopoly game
  */
 int
-main(int ac, char *av[])
+main(ac, av)
+	int ac;
+	char *av[];
 {
 	/* Revoke setgid privileges */
 	setgid(getgid());
@@ -252,7 +254,8 @@ main(int ac, char *av[])
 
 /*ARGSUSED*/
 static void
-do_quit(int n __unused)
+do_quit(n)
+	int n __unused;
 {
 	quit();
 }
@@ -261,7 +264,7 @@ do_quit(int n __unused)
  *	This routine gets the names of the players
  */
 static void
-getplayers(void)
+getplayers()
 {
 	int i, j;
 	char buf[257];
@@ -315,7 +318,7 @@ blew_it:
  *	This routine figures out who goes first
  */
 static void
-init_players(void)
+init_players()
 {
 	int i, rl, cur_max;
 	bool over = 0;
@@ -347,7 +350,7 @@ again:
  *	This routine initializes the monopoly structures.
  */
 static void
-init_monops(void)
+init_monops()
 {
 	MON *mp;
 	int i;

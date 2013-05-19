@@ -1,4 +1,4 @@
-/*      $NetBSD: plcom_ifpga.c,v 1.16 2013/02/19 10:57:10 skrll Exp $ */
+/*      $NetBSD: plcom_ifpga.c,v 1.11.8.1 2012/08/09 06:36:44 jdc Exp $ */
 
 /*
  * Copyright (c) 2001 ARM Ltd
@@ -32,7 +32,7 @@
 /* Interface to plcom (PL010) serial driver. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: plcom_ifpga.c,v 1.16 2013/02/19 10:57:10 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: plcom_ifpga.c,v 1.11.8.1 2012/08/09 06:36:44 jdc Exp $");
 
 #include <sys/types.h>
 #include <sys/device.h>
@@ -77,11 +77,7 @@ plcom_ifpga_attach(device_t parent, device_t self, void *aux)
 	isc->sc_ioh = ifa->ifa_sc_ioh;
 
 	sc->sc_dev = self;
-#if defined(INTEGRATOR_CP)
-	sc->sc_pi.pi_type = PLCOM_TYPE_PL011;
-#else
 	sc->sc_pi.pi_type = PLCOM_TYPE_PL010;
-#endif
 	sc->sc_pi.pi_iot = ifa->ifa_iot;
 	sc->sc_pi.pi_iobase = ifa->ifa_addr;
 	sc->sc_pi.pi_size = IFPGA_UART_SIZE;
@@ -107,7 +103,7 @@ plcom_ifpga_attach(device_t parent, device_t self, void *aux)
 
 static void plcom_ifpga_set_mcr(void *aux, int unit, u_int mcr)
 {
-	struct plcom_ifpga_softc *isc = aux;
+	struct plcom_ifpga_softc *isc = (struct plcom_ifpga_softc *)aux;
 	u_int set, clr;
 
 	set = clr = 0;

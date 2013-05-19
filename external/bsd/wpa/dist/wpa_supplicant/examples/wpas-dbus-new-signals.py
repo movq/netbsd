@@ -59,12 +59,12 @@ def showBss(bss):
 			  dbus_interface=dbus.PROPERTIES_IFACE)
 	ssid = byte_array_to_string(val)
 
-	val = net_obj.Get(WPAS_DBUS_BSS_INTERFACE, 'WPA',
+	val = net_obj.Get(WPAS_DBUS_BSS_INTERFACE, 'WPAIE',
 			  dbus_interface=dbus.PROPERTIES_IFACE)
 	wpa = "no"
 	if val != None:
 		wpa = "yes"
-	val = net_obj.Get(WPAS_DBUS_BSS_INTERFACE, 'RSN',
+	val = net_obj.Get(WPAS_DBUS_BSS_INTERFACE, 'RSNIE',
 			  dbus_interface=dbus.PROPERTIES_IFACE)
 	wpa2 = "no"
 	if val != None:

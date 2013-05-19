@@ -67,7 +67,7 @@ struct dhcp_opt {
 	const char *var;
 };
 
-static const struct dhcp_opt dhcp_opts[] = {
+static const struct dhcp_opt const dhcp_opts[] = {
 	{ 1,	IPV4 | REQUEST,	"subnet_mask" },
 		/* RFC 3442 states that the CSR has to come before all other
 		 * routes. For completeness, we also specify static routes,
@@ -253,7 +253,7 @@ int make_option_mask(uint8_t *mask, const char *opts, int add)
 }
 
 static int
-validate_length(uint8_t option, int dl, int *type)
+valid_length(uint8_t option, int dl, int *type)
 {
 	const struct dhcp_opt *opt;
 	ssize_t sz;
@@ -270,13 +270,10 @@ validate_length(uint8_t option, int dl, int *type)
 
 		if (opt->type == 0 ||
 		    opt->type & (STRING | RFC3442 | RFC5969))
-			return dl;
+			return 0;
 
-		if (opt->type & IPV4 && opt->type & ARRAY) {
-			if (dl < (int)sizeof(uint32_t))
-				return -1;
-			return dl - (dl % sizeof(uint32_t));
-		}
+		if (opt->type & IPV4 && opt->type & ARRAY)
+			return (dl % sizeof(uint32_t) == 0 ? 0 : -1);
 
 		sz = 0;
 		if (opt->type & (UINT32 | IPV4))
@@ -286,20 +283,17 @@ validate_length(uint8_t option, int dl, int *type)
 		if (opt->type & UINT8)
 			sz = sizeof(uint8_t);
 		/* If we don't know the size, assume it's valid */
-		if (sz == 0)
-			return dl;
-		return (dl < sz ? -1 : sz);
+		return (sz == 0 || dl == sz ? 0 : -1);
 	}
 
 	/* unknown option, so let it pass */
-	return dl;
+	return 0;
 }
 
 #ifdef DEBUG_MEMORY
 static void
 free_option_buffer(void)
 {
-
 	free(opt_buffer);
 }
 #endif
@@ -315,7 +309,7 @@ get_option(const struct dhcp_message *dhcp, uint8_t opt, int *len, int *type)
 	uint8_t overl = 0;
 	uint8_t *bp = NULL;
 	const uint8_t *op = NULL;
-	ssize_t bl = 0;
+	int bl = 0;
 
 	while (p < e) {
 		o = *p++;
@@ -364,9 +358,7 @@ get_option(const struct dhcp_message *dhcp, uint8_t opt, int *len, int *type)
 	}
 
 exit:
-
-	bl = validate_length(opt, bl, type);
-	if (bl == -1) {
+	if (valid_length(opt, bl, type) == -1) {
 		errno = EINVAL;
 		return NULL;
 	}
@@ -439,14 +431,10 @@ get_option_uint8(uint8_t *i, const struct dhcp_message *dhcp, uint8_t option)
 ssize_t
 decode_rfc3397(char *out, ssize_t len, int pl, const uint8_t *p)
 {
-	const char *start;
-	ssize_t start_len;
 	const uint8_t *r, *q = p;
 	int count = 0, l, hops;
 	uint8_t ltype;
 
-	start = out;
-	start_len = len;
 	while (q - p < pl) {
 		r = NULL;
 		hops = 0;
@@ -486,19 +474,15 @@ decode_rfc3397(char *out, ssize_t len, int pl, const uint8_t *p)
 			}
 		}
 		/* change last dot to space */
-		if (out && out != start)
+		if (out)
 			*(out - 1) = ' ';
 		if (r)
 			q = r;
 	}
 
 	/* change last space to zero terminator */
-	if (out) {
-		if (out != start)
-			*(out - 1) = '\0';
-		else if (start_len > 0)
-			*out = '\0';
-	}
+	if (out)
+		*(out - 1) = 0;
 
 	return count;  
 }
@@ -789,9 +773,9 @@ route_netmask(uint32_t ip_in)
  * If we have a CSR then we only use that.
  * Otherwise we add static routes and then routers. */
 struct rt *
-get_option_routes(struct interface *ifp, const struct dhcp_message *dhcp)
+get_option_routes(const struct dhcp_message *dhcp,
+    const char *ifname, unsigned long long *opts)
 {
-	struct if_options *ifo = ifp->state->options;
 	const uint8_t *p;
 	const uint8_t *e;
 	struct rt *routes = NULL;
@@ -799,31 +783,25 @@ get_option_routes(struct interface *ifp, const struct dhcp_message *dhcp)
 	int len;
 
 	/* If we have CSR's then we MUST use these only */
-	if (!has_option_mask(ifo->nomask, DHO_CSR))
-		p = get_option(dhcp, DHO_CSR, &len, NULL);
-	else
-		p = NULL;
+	p = get_option(dhcp, DHO_CSR, &len, NULL);
 	/* Check for crappy MS option */
-	if (!p && !has_option_mask(ifo->nomask, DHO_MSCSR))
+	if (!p)
 		p = get_option(dhcp, DHO_MSCSR, &len, NULL);
 	if (p) {
 		routes = decode_rfc3442_rt(len, p);
 		if (routes) {
-			if (!(ifo->options & DHCPCD_CSR_WARNED)) {
+			if (!(*opts & DHCPCD_CSR_WARNED)) {
 				syslog(LOG_DEBUG,
 				    "%s: using Classless Static Routes",
-				    ifp->name);
-				ifo->options |= DHCPCD_CSR_WARNED;
+				    ifname);
+				*opts |= DHCPCD_CSR_WARNED;
 			}
 			return routes;
 		}
 	}
 
 	/* OK, get our static routes first. */
-	if (!has_option_mask(ifo->nomask, DHO_STATICROUTE))
-		p = get_option(dhcp, DHO_STATICROUTE, &len, NULL);
-	else
-		p = NULL;
+	p = get_option(dhcp, DHO_STATICROUTE, &len, NULL);
 	if (p) {
 		e = p + len;
 		while (p < e) {
@@ -842,10 +820,7 @@ get_option_routes(struct interface *ifp, const struct dhcp_message *dhcp)
 	}
 
 	/* Now grab our routers */
-	if (!has_option_mask(ifo->nomask, DHO_ROUTER))
-		p = get_option(dhcp, DHO_ROUTER, &len, NULL);
-	else
-		p = NULL;
+	p = get_option(dhcp, DHO_ROUTER, &len, NULL);
 	if (p) {
 		e = p + len;
 		while (p < e) {
@@ -1202,7 +1177,7 @@ read_lease(const struct interface *iface)
 	return dhcp;
 }
 
-ssize_t
+static ssize_t
 print_string(char *s, ssize_t len, int dl, const uint8_t *data)
 {
 	uint8_t c;

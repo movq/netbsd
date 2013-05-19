@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_static.c,v 1.1.1.2 2013/01/02 18:59:12 tron Exp $	*/
+/*	$NetBSD: dict_static.c,v 1.1.1.1 2009/06/23 10:08:59 tron Exp $	*/
 
 /*++
 /* NAME
@@ -8,7 +8,7 @@
 /* SYNOPSIS
 /*	#include <dict_static.h>
 /*
-/*	DICT	*dict_static_open(name, name, dict_flags)
+/*	DICT	*dict_static_open(name, dummy, dict_flags)
 /*	const char *name;
 /*	int	dummy;
 /*	int	dict_flags;
@@ -16,6 +16,8 @@
 /*	dict_static_open() implements a dummy dictionary that returns
 /*	as lookup result the dictionary name, regardless of the lookup
 /*	key value.
+/*
+/*	The \fIdummy\fR argument is ignored.
 /* SEE ALSO
 /*	dict(3) generic dictionary manager
 /* LICENSE
@@ -46,7 +48,9 @@
 
 static const char *dict_static_lookup(DICT *dict, const char *unused_name)
 {
-    DICT_ERR_VAL_RETURN(dict, DICT_ERR_NONE, dict->name);
+    dict_errno = 0;
+
+    return (dict->name);
 }
 
 /* dict_static_close - close static dictionary */
@@ -66,6 +70,5 @@ DICT   *dict_static_open(const char *name, int unused_flags, int dict_flags)
     dict->lookup = dict_static_lookup;
     dict->close = dict_static_close;
     dict->flags = dict_flags | DICT_FLAG_FIXED;
-    dict->owner.status = DICT_OWNER_TRUSTED;
     return (DICT_DEBUG (dict));
 }

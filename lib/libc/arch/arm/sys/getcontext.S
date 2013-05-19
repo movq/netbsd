@@ -1,4 +1,4 @@
-/*	$NetBSD: getcontext.S,v 1.8 2013/04/30 19:42:56 skrll Exp $	*/
+/*	$NetBSD: getcontext.S,v 1.6 2008/04/28 20:22:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,10 +30,9 @@
  */
 
 #include "SYS.h"
-#include "assym.h"
 
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: getcontext.S,v 1.8 2013/04/30 19:42:56 skrll Exp $")
+	RCSID("$NetBSD: getcontext.S,v 1.6 2008/04/28 20:22:55 martin Exp $")
 #endif /* SYSLIBC_SCCS && !lint */
 
 #ifdef WEAK_ALIAS
@@ -44,12 +43,12 @@ ENTRY(_getcontext)
 	mov	r2, r0			/* Must save argument pointer. */
 	SYSTRAP (getcontext)
 	bcs	PIC_SYM(CERROR, PLT)
-	str	lr, [r2, #_UC_REGS_PC]	/* Adjust PC. */
+	str	lr, [r2, #(36 + 15*4)]	/* Adjust PC. */
 #ifdef SOFTFLOAT
 	/* Ahem. */
 	/* Judging from the softfloat code we should at least save
 	   the exception codes and rounding mode here. */
 #endif
 	mov	r0, #0
-	str	r0, [r2, #_UC_REGS_R0]	/* Return 0. */
+	str	r0, [r2, #(36 + 0*4)]	/* Return 0. */
 	RET

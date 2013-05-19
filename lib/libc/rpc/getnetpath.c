@@ -1,4 +1,4 @@
-/*	$NetBSD: getnetpath.c,v 1.17 2013/03/11 20:19:29 tron Exp $	*/
+/*	$NetBSD: getnetpath.c,v 1.14.22.1 2013/03/14 22:03:10 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -36,7 +36,7 @@
 #if 0
 static        char sccsid[] = "@(#)getnetpath.c	1.11 91/12/19 SMI";
 #else
-__RCSID("$NetBSD: getnetpath.c,v 1.17 2013/03/11 20:19:29 tron Exp $");
+__RCSID("$NetBSD: getnetpath.c,v 1.14.22.1 2013/03/14 22:03:10 riz Exp $");
 #endif
 #endif
 
@@ -79,7 +79,7 @@ struct netpath_vars {
 #define NP_VALID	0xf00d
 #define NP_INVALID	0
 
-char *_get_next_token(char *, int);
+char *_get_next_token __P((char *, int));
 
 
 /*
@@ -94,7 +94,7 @@ char *_get_next_token(char *, int);
  */
 
 void *
-setnetpath(void)
+setnetpath()
 {
 	struct netpath_vars *np_sessionp;   /* this session's variables */
 	char *npp;				/* NETPATH env variable */
@@ -148,7 +148,8 @@ setnetpath(void)
  */
 
 struct netconfig *
-getnetpath(void *handlep)
+getnetpath(handlep)
+	void *handlep;
 {
 	struct netpath_vars *np_sessionp = (struct netpath_vars *)handlep;
 	struct netconfig *ncp = NULL;   /* temp. holds a netconfig session */
@@ -207,7 +208,8 @@ getnetpath(void *handlep)
  * (e.g. if setnetpath() was not called previously.
  */
 int
-endnetpath(void *handlep)
+endnetpath(handlep)
+	void *handlep;
 {
 	struct netpath_vars *np_sessionp = (struct netpath_vars *)handlep;
 	struct netpath_chain *chainp, *lastp;

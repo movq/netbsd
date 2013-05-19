@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.2 2012/10/12 20:15:52 tsutsui Exp $
+#	$NetBSD: Makefile.inc,v 1.1.14.1 2012/11/18 19:05:20 riz Exp $
 
 # MD libsa files
 

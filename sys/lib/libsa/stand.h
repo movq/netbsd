@@ -1,4 +1,4 @@
-/*	$NetBSD: stand.h,v 1.76 2012/05/21 21:34:16 dsl Exp $	*/
+/*	$NetBSD: stand.h,v 1.75.2.1 2012/06/03 21:42:52 jdc Exp $	*/
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: init_sysctl.c,v 1.197 2013/03/18 13:36:22 para Exp $ */
+/*	$NetBSD: init_sysctl.c,v 1.186.2.1 2013/03/14 16:33:09 riz Exp $ */
 
 /*-
  * Copyright (c) 2003, 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -30,14 +30,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: init_sysctl.c,v 1.197 2013/03/18 13:36:22 para Exp $");
+__KERNEL_RCSID(0, "$NetBSD: init_sysctl.c,v 1.186.2.1 2013/03/14 16:33:09 riz Exp $");
 
 #include "opt_sysv.h"
 #include "opt_compat_netbsd.h"
 #include "opt_modular.h"
+#include "opt_sa.h"
+#include "opt_posix.h"
 #include "pty.h"
-
-#define SYSCTL_PRIVATE
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -69,7 +69,17 @@ __KERNEL_RCSID(0, "$NetBSD: init_sysctl.c,v 1.197 2013/03/18 13:36:22 para Exp $
 #include <sys/ktrace.h>
 #include <sys/ksem.h>
 
+#ifdef KERN_SA
+#include <sys/sa.h>
+#endif
+
 #include <sys/cpu.h>
+
+#if defined(MODULAR) || defined(P1003_1B_SEMAPHORE)
+int posix_semaphores = 200112;
+#else
+int posix_semaphores;
+#endif
 
 int security_setidcore_dump;
 char security_setidcore_path[MAXPATHLEN] = "/var/crash/%n.core";
@@ -154,6 +164,7 @@ static int sysctl_kern_cptime(SYSCTLFN_PROTO);
 #if NPTY > 0
 static int sysctl_kern_maxptys(SYSCTLFN_PROTO);
 #endif /* NPTY > 0 */
+static int sysctl_kern_sbmax(SYSCTLFN_PROTO);
 static int sysctl_kern_urnd(SYSCTLFN_PROTO);
 static int sysctl_kern_arnd(SYSCTLFN_PROTO);
 static int sysctl_kern_lwp(SYSCTLFN_PROTO);
@@ -246,7 +257,7 @@ SYSCTL_SETUP(sysctl_kern_setup, "sysctl kern subtree setup")
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_STRING, "hostname",
 		       SYSCTL_DESCR("System hostname"),
-		       sysctl_setlen, 0, hostname, MAXHOSTNAMELEN,
+		       sysctl_setlen, 0, &hostname, MAXHOSTNAMELEN,
 		       CTL_KERN, KERN_HOSTNAME, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE|CTLFLAG_HEX,
@@ -328,7 +339,7 @@ SYSCTL_SETUP(sysctl_kern_setup, "sysctl kern subtree setup")
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_STRING, "domainname",
 		       SYSCTL_DESCR("YP domain name"),
-		       sysctl_setlen, 0, domainname, MAXHOSTNAMELEN,
+		       sysctl_setlen, 0, &domainname, MAXHOSTNAMELEN,
 		       CTL_KERN, KERN_DOMAINNAME, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_IMMEDIATE,
@@ -522,6 +533,12 @@ SYSCTL_SETUP(sysctl_kern_setup, "sysctl kern subtree setup")
 		       NULL, MAXPHYS, NULL, 0,
 		       CTL_KERN, KERN_MAXPHYS, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+		       CTLTYPE_INT, "sbmax",
+		       SYSCTL_DESCR("Maximum socket buffer size"),
+		       sysctl_kern_sbmax, 0, NULL, 0,
+		       CTL_KERN, KERN_SBMAX, CTL_EOL);
+	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_IMMEDIATE,
 		       CTLTYPE_INT, "monotonic_clock",
 		       SYSCTL_DESCR("Implementation version of the POSIX "
@@ -583,13 +600,13 @@ SYSCTL_SETUP(sysctl_kern_setup, "sysctl kern subtree setup")
 		       NULL, _POSIX_THREADS, NULL, 0,
 		       CTL_KERN, KERN_POSIX_THREADS, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_IMMEDIATE,
+		       CTLFLAG_PERMANENT,
 		       CTLTYPE_INT, "posix_semaphores",
 		       SYSCTL_DESCR("Version of IEEE Std 1003.1 and its "
 				    "Semaphores option to which the system "
 				    "attempts to conform"), NULL,
-		       200112, NULL, 0,
-		       CTL_KERN, KERN_POSIX_SEMAPHORES, CTL_EOL);
+		       0, &posix_semaphores,
+		       0, CTL_KERN, KERN_POSIX_SEMAPHORES, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
 		       CTLFLAG_PERMANENT|CTLFLAG_IMMEDIATE,
 		       CTLTYPE_INT, "posix_barriers",
@@ -683,7 +700,7 @@ SYSCTL_SETUP(sysctl_kern_setup, "sysctl kern subtree setup")
 		       CTLTYPE_STRING, "path",
 		       SYSCTL_DESCR("Path pattern for set-id coredumps."),
 		       sysctl_security_setidcorename, 0,
-		       security_setidcore_path,
+		       &security_setidcore_path,
 		       sizeof(security_setidcore_path),
 		       CTL_CREATE, CTL_EOL);
 	sysctl_createv(clog, 0, &rnode, NULL,
@@ -708,11 +725,20 @@ SYSCTL_SETUP(sysctl_kern_setup, "sysctl kern subtree setup")
 		       0,
 		       CTL_CREATE, CTL_EOL);
 	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_IMMEDIATE|CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
+#ifndef KERN_SA
+		       CTLFLAG_IMMEDIATE|
+#endif
+		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "no_sa_support",
 		       SYSCTL_DESCR("0 if the kernel supports SA, otherwise "
 		       "it doesn't"),
-		       NULL, 1, NULL, 0,
+		       NULL, 
+#ifndef KERN_SA
+		       1, NULL,
+#else
+		       0, &sa_system_disabled,
+#endif
+		       0,
 		       CTL_KERN, CTL_CREATE, CTL_EOL);
 	/* kern.posix. */
 	sysctl_createv(clog, 0, NULL, &rnode,
@@ -727,12 +753,6 @@ SYSCTL_SETUP(sysctl_kern_setup, "sysctl kern subtree setup")
 			SYSCTL_DESCR("Maximal number of semaphores"),
 			NULL, 0, &ksem_max, 0,
 			CTL_CREATE, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-			CTLFLAG_PERMANENT,
-			CTLTYPE_STRING, "configname",
-			SYSCTL_DESCR("Name of config file"),
-			NULL, 0, __UNCONST(kernel_ident), 0,
-			CTL_KERN, CTL_CREATE, CTL_EOL);
 }
 
 SYSCTL_SETUP(sysctl_hw_setup, "sysctl hw subtree setup")
@@ -954,16 +974,8 @@ sysctl_kern_maxvnodes(SYSCTLFN_ARGS)
 	if (error || newp == NULL)
 		return (error);
 
-	/*
-	 * sysctl passes down unsigned values, require them
-	 * to be positive
-	 */
-	if (new_vnodes <= 0)
-		return (EINVAL);
-
-	/* Limits: 75% of kmem and physical memory. */
-	new_max = calc_cache_size(vmem_size(kmem_arena, VMEM_FREE|VMEM_ALLOC),
-	    75, 75) / VNODE_COST;
+	/* Limits: 75% of KVA and physical memory. */
+	new_max = calc_cache_size(kernel_map, 75, 75) / VNODE_COST;
 	if (new_vnodes > new_max)
 		new_vnodes = new_max;
 
@@ -1337,6 +1349,30 @@ sysctl_kern_maxptys(SYSCTLFN_ARGS)
 #endif /* NPTY > 0 */
 
 /*
+ * sysctl helper routine for kern.sbmax. Basically just ensures that
+ * any new value is not too small.
+ */
+static int
+sysctl_kern_sbmax(SYSCTLFN_ARGS)
+{
+	int error, new_sbmax;
+	struct sysctlnode node;
+
+	new_sbmax = sb_max;
+	node = *rnode;
+	node.sysctl_data = &new_sbmax;
+	error = sysctl_lookup(SYSCTLFN_CALL(&node));
+	if (error || newp == NULL)
+		return (error);
+
+	KERNEL_LOCK(1, NULL);
+	error = sb_max_set(new_sbmax);
+	KERNEL_UNLOCK_ONE(NULL);
+
+	return (error);
+}
+
+/*
  * sysctl helper routine for kern.urandom node. Picks a random number
  * for you.
  */
@@ -1610,6 +1646,9 @@ sysctl_kern_drivers(SYSCTLFN_ARGS)
 	extern struct devsw_conv *devsw_conv;
 	extern int max_devsw_convs;
 
+	if (newp != NULL || namelen != 0)
+		return (EINVAL);
+
 	start = where = oldp;
 	buflen = *oldlenp;
 	if (where == NULL) {
@@ -1843,7 +1882,7 @@ sysctl_root_device(SYSCTLFN_ARGS)
 	struct sysctlnode node;
 
 	node = *rnode;
-	node.sysctl_data = __UNCONST(device_xname(root_device));
+	node.sysctl_data = root_device->dv_xname;
 	node.sysctl_size = strlen(device_xname(root_device)) + 1;
 	return (sysctl_lookup(SYSCTLFN_CALL(&node)));
 }

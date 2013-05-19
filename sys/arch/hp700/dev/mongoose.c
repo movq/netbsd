@@ -1,4 +1,4 @@
-/*	$NetBSD: mongoose.c,v 1.23 2012/05/23 16:11:37 skrll Exp $	*/
+/*	$NetBSD: mongoose.c,v 1.22 2011/07/01 18:33:09 dyoung Exp $	*/
 
 /*	$OpenBSD: mongoose.c,v 1.19 2010/01/01 20:28:42 kettenis Exp $	*/
 
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mongoose.c,v 1.23 2012/05/23 16:11:37 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mongoose.c,v 1.22 2011/07/01 18:33:09 dyoung Exp $");
 
 #define MONGOOSE_DEBUG 9
 
@@ -42,6 +42,7 @@ __KERNEL_RCSID(0, "$NetBSD: mongoose.c,v 1.23 2012/05/23 16:11:37 skrll Exp $");
 #include <machine/iomod.h>
 #include <machine/autoconf.h>
 
+#include <hp700/hp700/intr.h>
 #include <hp700/dev/cpudevs.h>
 #include <hp700/dev/viper.h>
 
@@ -357,7 +358,7 @@ mg_intr(void *v)
 	int s, irq = 0;
 
 	iv = &sc->sc_iv[irq];
-	s = splraise(iv->iv_pri);
+	s = splraise(imask[iv->iv_pri]);
 	(iv->iv_handler)(iv->iv_arg);
 	splx(s);
 
@@ -593,7 +594,6 @@ mgattach(device_t parent, device_t self, void *aux)
 {
 	struct confargs *ca = aux;
 	struct mongoose_softc *sc = device_private(self);
-	struct cpu_info *ci = &cpus[0];
 	struct hppa_bus_space_tag *bt;
 	union mongoose_attach_args ea;
 	char brid[EISA_IDSTRINGLEN];
@@ -616,13 +616,6 @@ mgattach(device_t parent, device_t self, void *aux)
 		    sizeof(struct mongoose_regs));
 		return;
 	}
-
-	ca->ca_irq = hp700_intr_allocate_bit(&ci->ci_ir, ca->ca_irq);
-	if (ca->ca_irq == HP700CF_IRQ_UNDEF) {
-		aprint_error(": can't allocate interrupt\n");
-		return;
-	}
-
 	sc->sc_ctrl = (struct mongoose_ctrl *)ioh;
 
 	viper_eisa_en();
@@ -716,6 +709,6 @@ mgattach(device_t parent, device_t self, void *aux)
 #undef	R
 
 	/* attach interrupt */
-	sc->sc_ih = hp700_intr_establish(IPL_NONE, mg_intr, sc, &ci->ci_ir,
+	sc->sc_ih = hp700_intr_establish(IPL_NONE, mg_intr, sc, &ir_cpu,
 	    ca->ca_irq);
 }

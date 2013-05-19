@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL,v 1.99 2013/04/27 18:19:55 christos Exp $
+#	$NetBSD: INSTALL,v 1.94.2.1 2012/11/24 19:22:17 jdc Exp $
 
 #
 #	INSTALL -- installation kernel.
@@ -8,7 +8,7 @@ include "arch/x68k/conf/std.x68k"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"INSTALL-$Revision: 1.99 $"
+#ident 		"INSTALL-$Revision: 1.94.2.1 $"
 
 makeoptions	COPTS="-Os"		# Optimise for space. Implies -O2
 
@@ -184,12 +184,15 @@ options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 options 	INET		# IP (Internet Protocol) v4
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	GATEWAY		# packet forwarding ("router switch")
 #options 	MROUTING	# packet forwarding of multicast packets
 #options 	PIM		# Protocol Independent Multicast
 #options 	DIRECTED_BROADCAST	# allow broadcasts through routers
+#options 	ISO,TPIP	# OSI networking
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk (over Ethernet) protocol
 #options 	NTP		# Network Time Protocol in-kernel support
 #options 	PPS_SYNC	# Add serial line synchronization for NTP
@@ -255,8 +258,8 @@ zstty0	at zsc0 channel 0		# built-in RS-232C
 sram0	at intio0 addr 0xed0000		# battery-backuped static RAM
 #pseudo-device	bell			# OPM bell
 
-#com0	at intio0 addr 0xefff00 intr 240	# PSX16550, port1
-#com1	at intio0 addr 0xefff10 intr 241	# PSX16550, port2
+#xcom0	at mainbus0			# NS16550 fast serial
+#xcom1	at mainbus0
 
 ## Audio device
 #vs0 at intio0 addr 0xe92000 dma 3 dmaintr 106
@@ -276,4 +279,4 @@ pseudo-device	md			# boot floppy image
 pseudo-device	loop
 pseudo-device	bpfilter
 pseudo-device	sl		
-pseudo-device	pty			# pseudo-terminals
+pseudo-device	pty		2	# pseudo-terminals (Sysinst needs two)

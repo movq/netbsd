@@ -1,4 +1,4 @@
-/* $NetBSD: syscall.c,v 1.6 2012/11/05 15:14:34 chs Exp $ */
+/* $NetBSD: syscall.c,v 1.5 2010/01/23 06:20:31 kiyohara Exp $ */
 
 /*
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -32,14 +32,13 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.6 2012/11/05 15:14:34 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.5 2010/01/23 06:20:31 kiyohara Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 
 #include <machine/frame.h>
-#include <machine/userret.h>
 
 void	syscall_intern(struct proc *);
 void	syscall_plain(struct lwp *, u_int64_t, struct trapframe *);
@@ -80,14 +79,4 @@ child_return(void *arg)
 {
 printf("%s: not yet\n", __func__);
 	return;
-}
-
-/*
- * Process the tail end of a posix_spawn() for the child.
- */
-void
-cpu_spawn_return(struct lwp *l)
-{
-
-	userret(l);
 }

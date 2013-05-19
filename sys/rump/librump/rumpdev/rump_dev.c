@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_dev.c,v 1.22 2013/01/14 16:50:54 pooka Exp $	*/
+/*	$NetBSD: rump_dev.c,v 1.19 2011/03/28 22:23:39 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rump_dev.c,v 1.22 2013/01/14 16:50:54 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rump_dev.c,v 1.19 2011/03/28 22:23:39 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -36,11 +36,13 @@ __KERNEL_RCSID(0, "$NetBSD: rump_dev.c,v 1.22 2013/01/14 16:50:54 pooka Exp $");
 
 int nocomponent(void);
 int nocomponent() {return 0;}
+__weak_alias(rump_device_components,nocomponent);
 __weak_alias(buf_syncwait,nocomponent);
 
 const char *rootspec = "rump0a"; /* usually comes from config */
 
-RUMP_COMPONENT(RUMP__FACTION_DEV)
+void
+rump_dev_init(void)
 {
 	extern int cold;
 
@@ -51,6 +53,7 @@ RUMP_COMPONENT(RUMP__FACTION_DEV)
 	config_init_mi();
 
 	rump_component_init(RUMP_COMPONENT_DEV);
+	rump_device_components();
 
 	rump_pdev_finalize();
 
@@ -80,14 +83,14 @@ cpu_rootconf(void)
 }
 
 void
-device_register(device_t dev, void *v)
+device_register(struct device *dev, void *v)
 {
 
 	/* nada */
 }
 
 void
-device_register_post_config(device_t dev, void *v)
+device_register_post_config(struct device *dev, void *v)
 {
 
 	/* nada */

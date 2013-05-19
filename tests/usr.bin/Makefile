@@ -1,13 +1,10 @@
-#	$NetBSD: Makefile,v 1.17 2012/11/20 08:02:06 agc Exp $
+#	$NetBSD: Makefile,v 1.6 2011/05/30 19:31:19 pgoyette Exp $
 #
 
 .include <bsd.own.mk>
 
 TESTSDIR=       ${TESTSBASE}/usr.bin
 
-TESTS_SUBDIRS=	awk basename bzip2 cc cmp config cut \
-		diff dirname find grep gzip id infocmp jot m4 make mkdep \
-		nbperf netpgpverify pr rump_server shmif_dumpbus sdiff \
-		sed sort tmux unifdef xlint
+TESTS_SUBDIRS+= diff mkdep pr rump_server shmif_dumpbus unifdef
 
 .include <bsd.test.mk>

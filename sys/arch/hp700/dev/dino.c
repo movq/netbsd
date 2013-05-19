@@ -1,4 +1,4 @@
-/*	$NetBSD: dino.c,v 1.36 2012/05/23 16:11:37 skrll Exp $ */
+/*	$NetBSD: dino.c,v 1.33 2012/01/27 18:52:55 para Exp $ */
 
 /*	$OpenBSD: dino.c,v 1.5 2004/02/13 20:39:31 mickey Exp $	*/
 
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dino.c,v 1.36 2012/05/23 16:11:37 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dino.c,v 1.33 2012/01/27 18:52:55 para Exp $");
 
 /* #include "cardbus.h" */
 
@@ -43,6 +43,7 @@ __KERNEL_RCSID(0, "$NetBSD: dino.c,v 1.36 2012/05/23 16:11:37 skrll Exp $");
 #include <machine/iomod.h>
 #include <machine/autoconf.h>
 #include <machine/intr.h>
+#include <hp700/hp700/intr.h>
 
 #include <hppa/include/vmparam.h>
 #include <hp700/dev/cpudevs.h>
@@ -1593,6 +1594,10 @@ dinomatch(device_t parent, cfdata_t cfdata, void *aux)
 	if (ca->ca_type.iodc_model == 0x78)
 		return 0;
 
+	/* Make sure we have an IRQ. */
+	if (ca->ca_irq == HP700CF_IRQ_UNDEF)
+		ca->ca_irq = hp700_intr_allocate_bit(&ir_cpu);
+
 	return 1;
 }
 
@@ -1603,7 +1608,6 @@ dinoattach(device_t parent, device_t self, void *aux)
 	struct confargs *ca = (struct confargs *)aux, nca;
 	struct pcibus_attach_args pba;
 	volatile struct dino_regs *r;
-	struct cpu_info *ci = &cpus[0];
 	const char *p = NULL;
 	u_int data;
 	int s, ver;
@@ -1612,9 +1616,8 @@ dinoattach(device_t parent, device_t self, void *aux)
 	sc->sc_bt = ca->ca_iot;
 	sc->sc_dmat = ca->ca_dmatag;
 
-	ca->ca_irq = hp700_intr_allocate_bit(&ci->ci_ir, ca->ca_irq);
 	if (ca->ca_irq == HP700CF_IRQ_UNDEF) {
-		aprint_error_dev(self, ": can't allocate interrupt");
+		aprint_error_dev(self, ": can't allocate IRQ");
 		return;
 	}
 
@@ -1652,10 +1655,10 @@ dinoattach(device_t parent, device_t self, void *aux)
 	r->imr = ~0;
 	data = r->irr0;
 	r->imr = 0;
-	r->iar0 = ci->ci_hpa | (31 - ca->ca_irq);
+	r->iar0 = cpu_gethpa(0) | (31 - ca->ca_irq);
 	splx(s);
 	/* Establish the interrupt register. */
-	hp700_interrupt_register_establish(ci, &sc->sc_ir);
+	hp700_interrupt_register_establish(&sc->sc_ir);
 	sc->sc_ir.ir_name = device_xname(self);
 	sc->sc_ir.ir_mask = &r->imr;
 	sc->sc_ir.ir_req = &r->irr0;
@@ -1663,7 +1666,7 @@ dinoattach(device_t parent, device_t self, void *aux)
 	/* Add the I/O interrupt register. */
 
 	sc->sc_ih = hp700_intr_establish(IPL_NONE, NULL, &sc->sc_ir,
-	    &ci->ci_ir, ca->ca_irq);
+	    &ir_cpu, ca->ca_irq);
 
 	/* TODO establish the bus error interrupt */
 

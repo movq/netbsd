@@ -1,4 +1,4 @@
-/* $NetBSD: sysmon_envsysvar.h,v 1.46 2012/12/14 03:31:10 pgoyette Exp $ */
+/* $NetBSD: sysmon_envsysvar.h,v 1.40.8.3 2012/10/19 17:28:02 riz Exp $ */
 
 /*-
  * Copyright (c) 2007, 2008 Juan Romero Pardines.
@@ -40,10 +40,6 @@
 #include <dev/sysmon/sysmonvar.h>
 #include <prop/proplib.h>
 
-#ifdef _KERNEL_OPT
-#include "opt_envsys.h"
-#endif
-
 enum sme_descr_type {
 	SME_DESC_UNITS = 1,
 	SME_DESC_STATES,
@@ -78,6 +74,7 @@ typedef struct sme_event {
 	struct sysmon_envsys	*see_sme;	/* device associated */
 	struct penvsys_state	see_pes;	/* our power envsys */
 	envsys_data_t		*see_edata;	/* our sensor data */
+	sysmon_envsys_lim_t	see_lims;	/* limit values */
 	int			see_type;	/* type of the event */
 	int			see_evstate;	/* state of prev event */
 	int			see_evvalue;	/* value of prev event */
@@ -110,8 +107,7 @@ extern	prop_dictionary_t sme_propd;	/* the global sensor dictionary */
 /* 
  * linked list for the sysmon envsys devices.
  */
-LIST_HEAD(sysmon_envsys_lh, sysmon_envsys);
-extern	struct sysmon_envsys_lh sysmon_envsys_list;
+LIST_HEAD(, sysmon_envsys) sysmon_envsys_list;
 
 /* 
  * functions to handle sysmon envsys devices.

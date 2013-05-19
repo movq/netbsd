@@ -1,4 +1,4 @@
-/* $NetBSD: device.h,v 1.143 2012/10/27 17:18:40 chs Exp $ */
+/* $NetBSD: device.h,v 1.140.6.1 2012/07/05 18:12:48 riz Exp $ */
 
 /*
  * Copyright (c) 1996, 2000 Christopher G. Demetriou
@@ -321,6 +321,19 @@ struct cfattach {
 };
 LIST_HEAD(cfattachlist, cfattach);
 
+#define	CFATTACH_DECL(name, ddsize, matfn, attfn, detfn, actfn) \
+struct cfattach __CONCAT(name,_ca) = {					\
+	.ca_name		= ___STRING(name),			\
+	.ca_devsize		= ddsize,				\
+	.ca_flags		= 0,					\
+	.ca_match 		= matfn,				\
+	.ca_attach		= attfn,				\
+	.ca_detach		= detfn,				\
+	.ca_activate		= actfn,				\
+	.ca_rescan		= NULL,					\
+	.ca_childdetached	= NULL,					\
+}
+
 #define	CFATTACH_DECL3_NEW(name, ddsize, matfn, attfn, detfn, actfn, \
 	rescanfn, chdetfn, __flags) \
 struct cfattach __CONCAT(name,_ca) = {					\
@@ -414,8 +427,8 @@ extern int booted_partition;		/* the partition on that device */
 extern daddr_t booted_startblk;		/* or the start of a wedge */
 extern uint64_t booted_nblks;		/* and the size of that wedge */
 
-struct vnode *opendisk(device_t);
-int getdisksize(struct vnode *, uint64_t *, unsigned int *);
+struct vnode *opendisk(struct device *);
+int getdisksize(struct vnode *, uint64_t *, unsigned *);
 struct dkwedge_info;
 int getdiskinfo(struct vnode *, struct dkwedge_info *);
 

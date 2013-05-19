@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.42 2013/04/27 21:43:30 christos Exp $
+#	$NetBSD: GENERIC,v 1.40 2011/12/18 05:49:28 dholland Exp $
 #
 #
 
@@ -80,7 +80,6 @@ options 	NFS_BOOT_DHCP
 #
 # builtin terminal emulations
 #options 	WSEMUL_VT100		# VT100 / VT220 emulation
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 # different kernel output - see dev/wscons/wsdisplayvar.h
 #options 	WS_KERNEL_FG=WSCOL_GREEN
 #options 	WS_KERNEL_BG=WSCOL_BLACK
@@ -299,7 +298,7 @@ pseudo-device	clockctl
 # Veriexec
 #
 # a pseudo device needed for veriexec
-#pseudo-device	veriexec
+#pseudo-device	veriexec		1
 #
 # Uncomment the fingerprint methods below that are desired. Note that
 # removing fingerprint methods will have almost no impact on the kernel

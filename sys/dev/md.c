@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.67 2012/06/30 10:52:31 tsutsui Exp $	*/
+/*	$NetBSD: md.c,v 1.66.14.1 2012/07/05 17:36:31 riz Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon W. Ross, Leo Weppelman.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: md.c,v 1.67 2012/06/30 10:52:31 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: md.c,v 1.66.14.1 2012/07/05 17:36:31 riz Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_md.h"

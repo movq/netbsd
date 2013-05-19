@@ -1,7 +1,4 @@
-/*	$NetBSD: elf_machdep.h,v 1.11 2013/04/24 22:35:23 matt Exp $	*/
-
-#ifndef _ARM_ELF_MACHDEP_H_
-#define _ARM_ELF_MACHDEP_H_
+/*	$NetBSD: elf_machdep.h,v 1.8 2009/05/30 05:56:52 skrll Exp $	*/
 
 #if defined(__ARMEB__)
 #define ELF32_MACHDEP_ENDIANNESS	ELFDATA2MSB
@@ -28,11 +25,6 @@
 #define EF_ARM_OLD_ABI		0x00000100
 #define EF_ARM_SOFT_FLOAT	0x00000200
 #define EF_ARM_EABIMASK		0xff000000
-#define	EF_ARM_EABI_VER1	0x01000000
-#define	EF_ARM_EABI_VER2	0x02000000
-#define	EF_ARM_EABI_VER3	0x03000000
-#define	EF_ARM_EABI_VER4	0x04000000
-#define	EF_ARM_EABI_VER5	0x05000000
 
 #define	ELF32_MACHDEP_ID_CASES						\
 		case EM_ARM:						\
@@ -117,25 +109,9 @@
 #define PF_ARM_PI		0x20000000
 #define PF_ARM_ENTRY		0x80000000
 
-/* Processor specific program header types */
-#define PT_ARM_EXIDX		(PT_LOPROC + 1)
-
 /* Processor specific section header flags */
 #define SHF_ENTRYSECT		0x10000000
 #define SHF_COMDEF		0x80000000
 
 /* Processor specific symbol types */
 #define STT_ARM_TFUNC		STT_LOPROC
-
-#ifdef _KERNEL
-#ifdef ELFSIZE
-#define	ELF_MD_PROBE_FUNC	ELFNAME2(arm_netbsd,probe)
-#endif
-
-struct exec_package;
-
-int arm_netbsd_elf32_probe(struct lwp *, struct exec_package *, void *, char *,
-	vaddr_t *);
-#endif
-
-#endif /* _ARM_ELF_MACHDEP_H_ */

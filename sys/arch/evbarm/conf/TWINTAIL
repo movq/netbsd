@@ -1,4 +1,4 @@
-#	$NetBSD: TWINTAIL,v 1.56 2013/03/02 02:42:11 christos Exp $
+#	$NetBSD: TWINTAIL,v 1.48 2011/12/18 05:49:26 dholland Exp $
 #
 #	TWINTAIL -- Genetec corp. G4255EB-X002 Evaluation Board Kernel
 #
@@ -43,8 +43,8 @@ file-system	MSDOSFS		# MS-DOS file system
 file-system	FDESC		# /dev/fd
 file-system	KERNFS		# /kern
 file-system	NULLFS		# loopback file system
-file-system	PROCFS		# /proc
 file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
+file-system	PROCFS		# /proc
 #file-system	UMAPFS		# NULLFS + uid and gid remapping
 file-system	UNION		# union file system
 file-system	PTYFS		# /dev/pts/N support
@@ -63,9 +63,12 @@ options 	WAPBL		# File system journaling support
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/ IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking
 #options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
@@ -85,7 +88,6 @@ options 	NFS_BOOT_DHCP
 # Compatibility options
 
 #options 	COMPAT_43	# 4.3BSD compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
@@ -104,6 +106,10 @@ options 	COMPAT_16	# NetBSD 1.6 compatibility.
 
 #options 	SYSVMSG		# System V-like message queues
 #options 	SYSVSEM		# System V-like semaphores
+#options 	SEMMNI=10	# number of semaphore identifiers
+#options 	SEMMNS=60	# number of semaphores in system
+#options 	SEMUME=10	# max number of undo entries per process
+#options 	SEMMNU=30	# number of undo structures in system
 #options 	SYSVSHM		# System V-like memory sharing
 
 # Device options
@@ -134,8 +140,7 @@ options 	DIAGNOSTIC	# internally consistency checks
 #options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
 #options 	KGDB
 #options  	DEBUG_KGDB
-makeoptions	DEBUG="-g"	# compile full symbol table
-#makeoptions	COPTS="-O2"
+makeoptions	DEBUG="-g -O2"	# compile full symbol table
 options 	SYMTAB_SPACE=620000
 #options 	AUDIO_DEBUG=2
 
@@ -184,13 +189,11 @@ wsdisplay*	at lcd? console ?
 options FONT_SONY8x16
 #options FONT_VT220L8x8
 options 	WSEMUL_VT100		# VT100 / VT220 emulation
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 options G4250_LCD_TOSHIBA_LTM035
 #options G4250_LCD_NEC_NL3224BC35
 
 kmkbd* at obio?
-wskbd* at kmkbd? # mux 1 # console ?
-options WSDISPLAY_COMPAT_RAWKBD
+wskbd* at kmkbd? # console ?
 
 # GB-225 option board
 opio0 	at obio?  intr 2
@@ -407,6 +410,6 @@ pseudo-device	pty			# pseudo-terminals
 pseudo-device	clockctl		# user control of clock subsystem
 
 # wscons pseudo-devices
-pseudo-device	wsmux			# mouse & keyboard multiplexor
+#pseudo-device	wsmux			# mouse & keyboard multiplexor
 #pseudo-device	wsfont
 pseudo-device	ksyms			# /dev/ksyms

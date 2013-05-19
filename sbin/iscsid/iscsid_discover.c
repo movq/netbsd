@@ -1,4 +1,4 @@
-/*	$NetBSD: iscsid_discover.c,v 1.4 2012/06/24 13:08:38 mlelstv Exp $	*/
+/*	$NetBSD: iscsid_discover.c,v 1.3.2.1 2012/07/03 20:48:40 jdc Exp $	*/
 
 /*-
  * Copyright (c) 2005,2006,2011 The NetBSD Foundation, Inc.

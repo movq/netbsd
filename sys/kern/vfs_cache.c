@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_cache.c,v 1.91 2012/11/05 17:27:39 dholland Exp $	*/
+/*	$NetBSD: vfs_cache.c,v 1.88.8.1 2012/08/12 12:59:49 martin Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_cache.c,v 1.91 2012/11/05 17:27:39 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_cache.c,v 1.88.8.1 2012/08/12 12:59:49 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_revcache.h"
@@ -109,16 +109,6 @@ struct nchcpu {
 };
 
 /*
- * The type for the hash code. While the hash function generates a
- * u32, the hash code has historically been passed around as a u_long,
- * and the value is modified by xor'ing a uintptr_t, so it's not
- * entirely clear what the best type is. For now I'll leave it
- * unchanged as u_long.
- */
-
-typedef u_long nchash_t;
-
-/*
  * Structures associated with name cacheing.
  */
 
@@ -129,8 +119,8 @@ static TAILQ_HEAD(, namecache) nclruhead __cacheline_aligned;
 static LIST_HEAD(nchashhead, namecache) *nchashtbl __read_mostly;
 static u_long	nchash __read_mostly;
 
-#define	NCHASH2(hash, dvp)	\
-	(((hash) ^ ((uintptr_t)(dvp) >> 3)) & nchash)
+#define	NCHASH(cnp, dvp)	\
+	(((cnp)->cn_hash ^ ((uintptr_t)(dvp) >> 3)) & nchash)
 
 static LIST_HEAD(ncvhashhead, namecache) *ncvhashtbl __read_mostly;
 static u_long	ncvhash __read_mostly;
@@ -161,28 +151,13 @@ static struct evcnt cache_ev_forced;
 
 static void cache_invalidate(struct namecache *);
 static struct namecache *cache_lookup_entry(
-    const struct vnode *, const char *, size_t);
+    const struct vnode *, const struct componentname *);
 static void cache_thread(void *);
 static void cache_invalidate(struct namecache *);
 static void cache_disassociate(struct namecache *);
 static void cache_reclaim(void);
 static int cache_ctor(void *, void *, int);
 static void cache_dtor(void *, void *);
-
-/*
- * Compute the hash for an entry.
- *
- * (This is for now a wrapper around namei_hash, whose interface is
- * for the time being slightly inconvenient.)
- */
-static nchash_t
-cache_hash(const char *name, size_t namelen)
-{
-	const char *endptr;
-
-	endptr = name + namelen;
-	return namei_hash(name, &endptr);
-}
 
 /*
  * Invalidate a cache entry and enqueue it for garbage collection.
@@ -282,20 +257,18 @@ cache_unlock_cpus(void)
  * at least one of the per-CPU locks must be held.
  */
 static struct namecache *
-cache_lookup_entry(const struct vnode *dvp, const char *name, size_t namelen)
+cache_lookup_entry(const struct vnode *dvp, const struct componentname *cnp)
 {
 	struct nchashhead *ncpp;
 	struct namecache *ncp;
-	nchash_t hash;
 
 	KASSERT(dvp != NULL);
-	hash = cache_hash(name, namelen);
-	ncpp = &nchashtbl[NCHASH2(hash, dvp)];
+	ncpp = &nchashtbl[NCHASH(cnp, dvp)];
 
 	LIST_FOREACH(ncp, ncpp, nc_hash) {
 		if (ncp->nc_dvp != dvp ||
-		    ncp->nc_nlen != namelen ||
-		    memcmp(ncp->nc_name, name, (u_int)ncp->nc_nlen))
+		    ncp->nc_nlen != cnp->cn_namelen ||
+		    memcmp(ncp->nc_name, cnp->cn_nameptr, (u_int)ncp->nc_nlen))
 		    	continue;
 	    	mutex_enter(&ncp->nc_lock);
 		if (__predict_true(ncp->nc_dvp == dvp)) {
@@ -315,86 +288,47 @@ cache_lookup_entry(const struct vnode *dvp, const char *name, size_t namelen)
  * holding long names (which would either waste space, or
  * add greatly to the complexity).
  *
- * Lookup is called with DVP pointing to the directory to search,
- * and CNP providing the name of the entry being sought: cn_nameptr
- * is the name, cn_namelen is its length, and cn_flags is the flags
- * word from the namei operation.
- *
- * DVP must be locked.
- *
- * There are three possible non-error return states:
- *    1. Nothing was found in the cache. Nothing is known about
- *       the requested name.
- *    2. A negative entry was found in the cache, meaning that the
- *       requested name definitely does not exist.
- *    3. A positive entry was found in the cache, meaning that the
- *       requested name does exist and that we are providing the
- *       vnode.
- * In these cases the results are:
- *    1. 0 returned; VN is set to NULL.
- *    2. 1 returned; VN is set to NULL.
- *    3. 1 returned; VN is set to the vnode found.
- *
- * The additional result argument ISWHT is set to zero, unless a
- * negative entry is found that was entered as a whiteout, in which
- * case ISWHT is set to one.
- *
- * The ISWHT_RET argument pointer may be null. In this case an
- * assertion is made that the whiteout flag is not set. File systems
- * that do not support whiteouts can/should do this.
- *
- * Filesystems that do support whiteouts should add ISWHITEOUT to
- * cnp->cn_flags if ISWHT comes back nonzero.
- *
- * When a vnode is returned, it is locked, as per the vnode lookup
- * locking protocol.
- *
- * There is no way for this function to fail, in the sense of
- * generating an error that requires aborting the namei operation.
- *
- * (Prior to October 2012, this function returned an integer status,
- * and a vnode, and mucked with the flags word in CNP for whiteouts.
- * The integer status was -1 for "nothing found", ENOENT for "a
- * negative entry found", 0 for "a positive entry found", and possibly
- * other errors, and the value of VN might or might not have been set
- * depending on what error occurred.)
+ * Lookup is called with ni_dvp pointing to the directory to search,
+ * ni_ptr pointing to the name of the entry being sought, ni_namelen
+ * tells the length of the name, and ni_hash contains a hash of
+ * the name. If the lookup succeeds, the vnode is locked, stored in ni_vp
+ * and a status of zero is returned. If the locking fails for whatever
+ * reason, the vnode is unlocked and the error is returned to caller.
+ * If the lookup determines that the name does not exist (negative cacheing),
+ * a status of ENOENT is returned. If the lookup fails, a status of -1
+ * is returned.
  */
 int
-cache_lookup(struct vnode *dvp, const char *name, size_t namelen,
-	     uint32_t nameiop, uint32_t cnflags,
-	     int *iswht_ret, struct vnode **vn_ret)
+cache_lookup(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp)
 {
 	struct namecache *ncp;
 	struct vnode *vp;
 	struct nchcpu *cpup;
 	int error;
 
-	/* Establish default result values */
-	if (iswht_ret != NULL) {
-		*iswht_ret = 0;
-	}
-	*vn_ret = NULL;
-
 	if (__predict_false(!doingcache)) {
-		return 0;
+		cnp->cn_flags &= ~MAKEENTRY;
+		*vpp = NULL;
+		return -1;
 	}
 
 	cpup = curcpu()->ci_data.cpu_nch;
 	mutex_enter(&cpup->cpu_lock);
-	if (__predict_false(namelen > NCHNAMLEN)) {
+	if (__predict_false(cnp->cn_namelen > NCHNAMLEN)) {
 		COUNT(cpup->cpu_stats, ncs_long);
+		cnp->cn_flags &= ~MAKEENTRY;
 		mutex_exit(&cpup->cpu_lock);
-		/* found nothing */
-		return 0;
+		*vpp = NULL;
+		return -1;
 	}
-	ncp = cache_lookup_entry(dvp, name, namelen);
+	ncp = cache_lookup_entry(dvp, cnp);
 	if (__predict_false(ncp == NULL)) {
 		COUNT(cpup->cpu_stats, ncs_miss);
 		mutex_exit(&cpup->cpu_lock);
-		/* found nothing */
-		return 0;
+		*vpp = NULL;
+		return -1;
 	}
-	if ((cnflags & MAKEENTRY) == 0) {
+	if ((cnp->cn_flags & MAKEENTRY) == 0) {
 		COUNT(cpup->cpu_stats, ncs_badhits);
 		/*
 		 * Last component and we are renaming or deleting,
@@ -404,27 +338,20 @@ cache_lookup(struct vnode *dvp, const char *name, size_t namelen,
 		cache_invalidate(ncp);
 		mutex_exit(&ncp->nc_lock);
 		mutex_exit(&cpup->cpu_lock);
-		/* found nothing */
-		return 0;
-	}
-	if (ncp->nc_vp == NULL) {
-		if (iswht_ret != NULL) {
-			/*
-			 * Restore the ISWHITEOUT flag saved earlier.
-			 */
-			KASSERT((ncp->nc_flags & ~ISWHITEOUT) == 0);
-			*iswht_ret = (ncp->nc_flags & ISWHITEOUT) != 0;
-		} else {
-			KASSERT(ncp->nc_flags == 0);
-		}
-
-		if (__predict_true(nameiop != CREATE ||
-		    (cnflags & ISLASTCN) == 0)) {
+		*vpp = NULL;
+		return -1;
+	} else if (ncp->nc_vp == NULL) {
+		/*
+		 * Restore the ISWHITEOUT flag saved earlier.
+		 */
+		KASSERT((ncp->nc_flags & ~ISWHITEOUT) == 0);
+		cnp->cn_flags |= ncp->nc_flags;
+		if (__predict_true(cnp->cn_nameiop != CREATE ||
+		    (cnp->cn_flags & ISLASTCN) == 0)) {
 			COUNT(cpup->cpu_stats, ncs_neghits);
 			mutex_exit(&ncp->nc_lock);
 			mutex_exit(&cpup->cpu_lock);
-			/* found neg entry; vn is already null from above */
-			return 1;
+			return ENOENT;
 		} else {
 			COUNT(cpup->cpu_stats, ncs_badhits);
 			/*
@@ -436,8 +363,8 @@ cache_lookup(struct vnode *dvp, const char *name, size_t namelen,
 			cache_invalidate(ncp);
 			mutex_exit(&ncp->nc_lock);
 			mutex_exit(&cpup->cpu_lock);
-			/* found nothing */
-			return 0;
+			*vpp = NULL;
+			return -1;
 		}
 	}
 
@@ -457,8 +384,8 @@ cache_lookup(struct vnode *dvp, const char *name, size_t namelen,
 			 * XXX badhits?
 			 */
 			COUNT(cpup->cpu_stats, ncs_falsehits);
-			/* found nothing */
-			return 0;
+			*vpp = NULL;
+			return -1;
 		}
 	}
 
@@ -472,7 +399,7 @@ cache_lookup(struct vnode *dvp, const char *name, size_t namelen,
 
 	if (vp == dvp) {	/* lookup on "." */
 		error = 0;
-	} else if (cnflags & ISDOTDOT) {
+	} else if (cnp->cn_flags & ISDOTDOT) {
 		VOP_UNLOCK(dvp);
 		error = vn_lock(vp, LK_EXCLUSIVE);
 		vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY);
@@ -484,73 +411,61 @@ cache_lookup(struct vnode *dvp, const char *name, size_t namelen,
 	 * Check that the lock succeeded.
 	 */
 	if (error) {
-		/* We don't have the right lock, but this is only for stats. */
+		/* Unlocked, but only for stats. */
 		COUNT(cpup->cpu_stats, ncs_badhits);
-
 		vrele(vp);
-		/* found nothing */
-		return 0;
+		*vpp = NULL;
+		return -1;
 	}
 
-	/* We don't have the right lock, but this is only for stats. */
+	/* Unlocked, but only for stats. */
 	COUNT(cpup->cpu_stats, ncs_goodhits);
-
-	/* found it */
-	*vn_ret = vp;
-	return 1;
+	*vpp = vp;
+	return 0;
 }
 
 int
-cache_lookup_raw(struct vnode *dvp, const char *name, size_t namelen,
-		 uint32_t cnflags,
-		 int *iswht_ret, struct vnode **vn_ret)
+cache_lookup_raw(struct vnode *dvp, struct vnode **vpp,
+    struct componentname *cnp)
 {
 	struct namecache *ncp;
 	struct vnode *vp;
 	struct nchcpu *cpup;
 	int error;
 
-	/* Establish default results. */
-	if (iswht_ret != NULL) {
-		*iswht_ret = 0;
-	}
-	*vn_ret = NULL;
-
 	if (__predict_false(!doingcache)) {
-		/* found nothing */
-		return 0;
+		cnp->cn_flags &= ~MAKEENTRY;
+		*vpp = NULL;
+		return (-1);
 	}
 
 	cpup = curcpu()->ci_data.cpu_nch;
 	mutex_enter(&cpup->cpu_lock);
-	if (__predict_false(namelen > NCHNAMLEN)) {
+	if (__predict_false(cnp->cn_namelen > NCHNAMLEN)) {
 		COUNT(cpup->cpu_stats, ncs_long);
+		cnp->cn_flags &= ~MAKEENTRY;
 		mutex_exit(&cpup->cpu_lock);
-		/* found nothing */
-		return 0;
+		*vpp = NULL;
+		return -1;
 	}
-	ncp = cache_lookup_entry(dvp, name, namelen);
+	ncp = cache_lookup_entry(dvp, cnp);
 	if (__predict_false(ncp == NULL)) {
 		COUNT(cpup->cpu_stats, ncs_miss);
 		mutex_exit(&cpup->cpu_lock);
-		/* found nothing */
-		return 0;
+		*vpp = NULL;
+		return -1;
 	}
 	vp = ncp->nc_vp;
 	if (vp == NULL) {
 		/*
 		 * Restore the ISWHITEOUT flag saved earlier.
 		 */
-		if (iswht_ret != NULL) {
-			KASSERT((ncp->nc_flags & ~ISWHITEOUT) == 0);
-			/*cnp->cn_flags |= ncp->nc_flags;*/
-			*iswht_ret = (ncp->nc_flags & ISWHITEOUT) != 0;
-		}
+		KASSERT((ncp->nc_flags & ~ISWHITEOUT) == 0);
+		cnp->cn_flags |= ncp->nc_flags;
 		COUNT(cpup->cpu_stats, ncs_neghits);
 		mutex_exit(&ncp->nc_lock);
 		mutex_exit(&cpup->cpu_lock);
-		/* found negative entry; vn is already null from above */
-		return 1;
+		return ENOENT;
 	}
 	if (vtryget(vp)) {
 		mutex_exit(&ncp->nc_lock);
@@ -567,17 +482,15 @@ cache_lookup_raw(struct vnode *dvp, const char *name, size_t namelen,
 			 * XXX badhits?
 			 */
 			COUNT(cpup->cpu_stats, ncs_falsehits);
-			/* found nothing */
-			return 0;
+			*vpp = NULL;
+			return -1;
 		}
 	}
 
 	/* Unlocked, but only for stats. */
 	COUNT(cpup->cpu_stats, ncs_goodhits); /* XXX can be "badhits" */
-
-	/* found it */
-	*vn_ret = vp;
-	return 1;
+	*vpp = vp;
+	return 0;
 }
 
 /*
@@ -671,18 +584,16 @@ cache_revlookup(struct vnode *vp, struct vnode **dvpp, char **bpp, char *bufp)
  * Add an entry to the cache
  */
 void
-cache_enter(struct vnode *dvp, struct vnode *vp,
-	    const char *name, size_t namelen, uint32_t cnflags)
+cache_enter(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 {
 	struct namecache *ncp;
 	struct namecache *oncp;
 	struct nchashhead *ncpp;
 	struct ncvhashhead *nvcpp;
-	nchash_t hash;
 
 	/* First, check whether we can/should add a cache entry. */
-	if ((cnflags & MAKEENTRY) == 0 ||
-	    __predict_false(namelen > NCHNAMLEN || !doingcache)) {
+	if ((cnp->cn_flags & MAKEENTRY) == 0 ||
+	    __predict_false(cnp->cn_namelen > NCHNAMLEN || !doingcache)) {
 		return;
 	}
 
@@ -701,7 +612,7 @@ cache_enter(struct vnode *dvp, struct vnode *vp,
 	 * Concurrent lookups in the same directory may race for a
 	 * cache entry.  if there's a duplicated entry, free it.
 	 */
-	oncp = cache_lookup_entry(dvp, name, namelen);
+	oncp = cache_lookup_entry(dvp, cnp);
 	if (oncp) {
 		cache_invalidate(oncp);
 		mutex_exit(&oncp->nc_lock);
@@ -718,7 +629,7 @@ cache_enter(struct vnode *dvp, struct vnode *vp,
 		 * For negative hits, save the ISWHITEOUT flag so we can
 		 * restore it later when the cache entry is used again.
 		 */
-		ncp->nc_flags = cnflags & ISWHITEOUT;
+		ncp->nc_flags = cnp->cn_flags & ISWHITEOUT;
 	}
 
 	/* Fill in cache info. */
@@ -730,12 +641,11 @@ cache_enter(struct vnode *dvp, struct vnode *vp,
 		ncp->nc_vlist.le_prev = NULL;
 		ncp->nc_vlist.le_next = NULL;
 	}
-	KASSERT(namelen <= NCHNAMLEN);
-	ncp->nc_nlen = namelen;
-	memcpy(ncp->nc_name, name, (unsigned)ncp->nc_nlen);
+	KASSERT(cnp->cn_namelen <= NCHNAMLEN);
+	ncp->nc_nlen = cnp->cn_namelen;
+	memcpy(ncp->nc_name, cnp->cn_nameptr, (unsigned)ncp->nc_nlen);
 	TAILQ_INSERT_TAIL(&nclruhead, ncp, nc_lru);
-	hash = cache_hash(name, namelen);
-	ncpp = &nchashtbl[NCHASH2(hash, dvp)];
+	ncpp = &nchashtbl[NCHASH(cnp, dvp)];
 
 	/*
 	 * Flush updates before making visible in table.  No need for a
@@ -900,7 +810,7 @@ nchreinit(void)
  * hide entries that would now be invalid
  */
 void
-cache_purge1(struct vnode *vp, const char *name, size_t namelen, int flags)
+cache_purge1(struct vnode *vp, const struct componentname *cnp, int flags)
 {
 	struct namecache *ncp, *ncnext;
 
@@ -925,8 +835,8 @@ cache_purge1(struct vnode *vp, const char *name, size_t namelen, int flags)
 			cache_disassociate(ncp);
 		}
 	}
-	if (name != NULL) {
-		ncp = cache_lookup_entry(vp, name, namelen);
+	if (cnp != NULL) {
+		ncp = cache_lookup_entry(vp, cnp);
 		if (ncp) {
 			cache_invalidate(ncp);
 			mutex_exit(&ncp->nc_lock);

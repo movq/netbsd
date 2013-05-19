@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_dbm.c,v 1.1.1.3 2013/01/02 18:59:12 tron Exp $	*/
+/*	$NetBSD: dict_dbm.c,v 1.1.1.2 2010/06/17 18:07:12 tron Exp $	*/
 
 /*++
 /* NAME
@@ -62,7 +62,6 @@
 #include "stringops.h"
 #include "dict.h"
 #include "dict_dbm.h"
-#include "warn_stat.h"
 
 /* Application-specific. */
 
@@ -85,13 +84,13 @@ static const char *dict_dbm_lookup(DICT *dict, const char *name)
     datum   dbm_value;
     const char *result = 0;
 
-    dict->error = 0;
-
     /*
      * Sanity check.
      */
     if ((dict->flags & (DICT_FLAG_TRY1NULL | DICT_FLAG_TRY0NULL)) == 0)
 	msg_panic("dict_dbm_lookup: no DICT_FLAG_TRY1NULL | DICT_FLAG_TRY0NULL flag");
+
+    dict_errno = 0;
 
     /*
      * Optionally fold the key.
@@ -150,14 +149,12 @@ static const char *dict_dbm_lookup(DICT *dict, const char *name)
 
 /* dict_dbm_update - add or update database entry */
 
-static int dict_dbm_update(DICT *dict, const char *name, const char *value)
+static void dict_dbm_update(DICT *dict, const char *name, const char *value)
 {
     DICT_DBM *dict_dbm = (DICT_DBM *) dict;
     datum   dbm_key;
     datum   dbm_value;
     int     status;
-
-    dict->error = 0;
 
     /*
      * Sanity check.
@@ -174,6 +171,7 @@ static int dict_dbm_update(DICT *dict, const char *name, const char *value)
 	vstring_strcpy(dict->fold_buf, name);
 	name = lowercase(vstring_str(dict->fold_buf));
     }
+
     dbm_key.dptr = (void *) name;
     dbm_value.dptr = (void *) value;
     dbm_key.dsize = strlen(name);
@@ -228,8 +226,6 @@ static int dict_dbm_update(DICT *dict, const char *name, const char *value)
     if ((dict->flags & DICT_FLAG_LOCK)
 	&& myflock(dict->lock_fd, INTERNAL_LOCK, MYFLOCK_OP_NONE) < 0)
 	msg_fatal("%s: unlock dictionary: %m", dict_dbm->dict.name);
-
-    return (status);
 }
 
 /* dict_dbm_delete - delete one entry from the dictionary */
@@ -239,8 +235,6 @@ static int dict_dbm_delete(DICT *dict, const char *name)
     DICT_DBM *dict_dbm = (DICT_DBM *) dict;
     datum   dbm_key;
     int     status = 1;
-
-    dict->error = 0;
 
     /*
      * Sanity check.
@@ -319,8 +313,6 @@ static int dict_dbm_sequence(DICT *dict, int function,
     datum   dbm_key;
     datum   dbm_value;
     int     status;
-
-    dict->error = 0;
 
     /*
      * Acquire a shared lock.
@@ -429,8 +421,7 @@ DICT   *dict_dbm_open(const char *path, int open_flags, int dict_flags)
     if (dict_flags & DICT_FLAG_LOCK) {
 	dbm_path = concatenate(path, ".dir", (char *) 0);
 	if ((lock_fd = open(dbm_path, open_flags, 0644)) < 0)
-	    return (dict_surrogate(DICT_TYPE_DBM, path, open_flags, dict_flags,
-				   "open database %s: %m", dbm_path));
+	    msg_fatal("open database %s: %m", dbm_path);
 	if (myflock(lock_fd, INTERNAL_LOCK, MYFLOCK_OP_SHARED) < 0)
 	    msg_fatal("shared-lock database %s for open: %m", dbm_path);
     }
@@ -439,8 +430,7 @@ DICT   *dict_dbm_open(const char *path, int open_flags, int dict_flags)
      * XXX SunOS 5.x has no const in dbm_open() prototype.
      */
     if ((dbm = dbm_open((char *) path, open_flags, 0644)) == 0)
-	return (dict_surrogate(DICT_TYPE_DBM, path, open_flags, dict_flags,
-			       "open database %s.{dir,pag}: %m", path));
+	msg_fatal("open database %s.{dir,pag}: %m", path);
 
     if (dict_flags & DICT_FLAG_LOCK) {
 	if (myflock(lock_fd, INTERNAL_LOCK, MYFLOCK_OP_NONE) < 0)
@@ -461,8 +451,6 @@ DICT   *dict_dbm_open(const char *path, int open_flags, int dict_flags)
     if (fstat(dict_dbm->dict.stat_fd, &st) < 0)
 	msg_fatal("dict_dbm_open: fstat: %m");
     dict_dbm->dict.mtime = st.st_mtime;
-    dict_dbm->dict.owner.uid = st.st_uid;
-    dict_dbm->dict.owner.status = (st.st_uid != 0);
 
     /*
      * Warn if the source file is newer than the indexed file, except when

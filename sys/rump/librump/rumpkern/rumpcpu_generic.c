@@ -1,4 +1,4 @@
-/*	$NetBSD: rumpcpu_generic.c,v 1.4 2012/06/22 12:45:43 rmind Exp $	*/
+/*	$NetBSD: rumpcpu_generic.c,v 1.3.14.1 2012/06/26 14:49:09 riz Exp $	*/
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rumpcpu_generic.c,v 1.4 2012/06/22 12:45:43 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rumpcpu_generic.c,v 1.3.14.1 2012/06/26 14:49:09 riz Exp $");
 
 #include <sys/param.h>
 

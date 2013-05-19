@@ -1,5 +1,3 @@
-/*	$NetBSD: min.c,v 1.1.1.2 2012/03/15 00:08:14 alnsn Exp $	*/
-
 /*
 * min.c -- a minimal Lua interpreter
 * loads stdin only with minimal error handling.

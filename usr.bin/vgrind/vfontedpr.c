@@ -1,4 +1,4 @@
-/*	$NetBSD: vfontedpr.c,v 1.14 2012/03/20 20:34:59 matt Exp $	*/
+/*	$NetBSD: vfontedpr.c,v 1.13 2008/07/21 14:19:27 lukem Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\
 #if 0
 static char sccsid[] = "@(#)vfontedpr.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: vfontedpr.c,v 1.14 2012/03/20 20:34:59 matt Exp $");
+__RCSID("$NetBSD: vfontedpr.c,v 1.13 2008/07/21 14:19:27 lukem Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -124,14 +124,16 @@ char    *l_strend;		/* delimiter for string constant */
 boolean	 l_toplex;		/* procedures only defined at top lex level */
 const char *language = "c";	/* the language indicator */
 
-int	main(int, char **);
+int	main __P((int, char **));
 
 #define	ps(x)	printf("%s", x)
 static char minus[] = "-";
 static char minusn[] = "-n";
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+    int argc;
+    char *argv[];
 {
     const char *fname = "";
     struct stat stbuf;
@@ -350,7 +352,8 @@ main(int argc, char *argv[])
 #define isidchr(c) (isalnum((unsigned char)(c)) || (c) == '_')
 
 static void
-putScp(char *os)
+putScp(os)
+    char *os;
 {
     char *s = os;			/* pointer to unmatched string */
     char dummy[BUFSIZ];			/* dummy to be used by expmatch */
@@ -529,10 +532,10 @@ skip:
 }
 
 static void
-putKcp(
-    char	*start,		/* start of string to write */
-    char	*end,		/* end of string to write */
-    boolean	force)		/* true if we should force nokeyw */
+putKcp(start, end, force)
+    char	*start;		/* start of string to write */
+    char	*end;		/* end of string to write */
+    boolean	force;		/* true if we should force nokeyw */
 {
     int i;
     int xfld = 0;
@@ -579,14 +582,16 @@ putKcp(
 
 
 static int
-tabs(char *s, char *os)
+tabs(s, os)
+    char *s, *os;
 {
 
     return (width(s, os) / 8);
 }
 
 static int
-width(char *s, char *os)
+width(s, os)
+	char *s, *os;
 {
 	int i = 0;
 
@@ -606,7 +611,8 @@ width(char *s, char *os)
 }
 
 static void
-putcp(int c)
+putcp(c)
+	int c;
 {
 
 	switch(c) {
@@ -670,7 +676,8 @@ putcp(int c)
  *	look for a process beginning on this line
  */
 static boolean
-isproc(char *s)
+isproc(s)
+    char *s;
 {
     pname[0] = '\0';
     if (!l_toplex || blklevel == 0)
@@ -685,7 +692,8 @@ isproc(char *s)
  */
 
 static int
-iskw(char *s)
+iskw(s)
+	char *s;
 {
 	char **ss = l_keywds;
 	int i = 1;
@@ -698,3 +706,4 @@ iskw(char *s)
 			return (i);
 	return (0);
 }
+

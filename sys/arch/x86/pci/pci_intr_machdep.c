@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_intr_machdep.c,v 1.26 2013/01/26 17:37:39 dyoung Exp $	*/
+/*	$NetBSD: pci_intr_machdep.c,v 1.23 2011/08/29 22:41:52 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 2009 The NetBSD Foundation, Inc.
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_intr_machdep.c,v 1.26 2013/01/26 17:37:39 dyoung Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_intr_machdep.c,v 1.23 2011/08/29 22:41:52 dyoung Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -91,8 +91,6 @@ __KERNEL_RCSID(0, "$NetBSD: pci_intr_machdep.c,v 1.26 2013/01/26 17:37:39 dyoung
 #include "acpica.h"
 #include "opt_mpbios.h"
 #include "opt_acpi.h"
-
-#include <machine/i82489reg.h>
 
 #if NIOAPIC > 0 || NACPICA > 0
 #include <machine/i82093reg.h>
@@ -142,17 +140,10 @@ pci_intr_map(const struct pci_attach_args *pa, pci_intr_handle_t *ihp)
 	}
 
 #if NIOAPIC > 0 || NACPICA > 0
-	KASSERT(rawpin >= PCI_INTERRUPT_PIN_A);
-	KASSERT(rawpin <= PCI_INTERRUPT_PIN_D);
 	pci_decompose_tag(pc, pa->pa_tag, &bus, &dev, &func);
 	if (mp_busses != NULL) {
-		/*
-		 * Note: PCI_INTERRUPT_PIN_A == 1 where intr_find_mpmapping
-		 * wants pci bus_pin encoding which uses INT_A == 0.
-		 */
-		if (intr_find_mpmapping(bus,
-		    (dev << 2) | (rawpin - PCI_INTERRUPT_PIN_A), ihp) == 0) {
-			if (APIC_IRQ_LEGACY_IRQ(*ihp) == 0)
+		if (intr_find_mpmapping(bus, (dev<<2)|(rawpin-1), ihp) == 0) {
+			if ((*ihp & 0xff) == 0)
 				*ihp |= line;
 			return 0;
 		}
@@ -393,8 +384,8 @@ pci_msi_establish(struct pci_attach_args *pa, int level,
 	is = ci->ci_isources[ih->ih_slot];
 	reg = pci_conf_read(pa->pa_pc, pa->pa_tag, co + PCI_MSI_CTL);
 	pci_conf_write(pa->pa_pc, pa->pa_tag, co + PCI_MSI_MADDR64_LO,
-		       LAPIC_MSIADDR_BASE |
-		       __SHIFTIN(ci->ci_cpuid, LAPIC_MSIADDR_DSTID_MASK));
+		       IOAPIC_MSIADDR_BASE |
+		       __SHIFTIN(ci->ci_cpuid, IOAPIC_MSIADDR_DSTID_MASK));
 	if (reg & PCI_MSI_CTL_64BIT_ADDR) {
 		pci_conf_write(pa->pa_pc, pa->pa_tag, co + PCI_MSI_MADDR64_HI,
 		    0);
@@ -402,17 +393,17 @@ pci_msi_establish(struct pci_attach_args *pa, int level,
 		 * EDGE
 		 */
 		pci_conf_write(pa->pa_pc, pa->pa_tag, co + PCI_MSI_MDATA64,
-		    __SHIFTIN(is->is_idtvec, LAPIC_MSIDATA_VECTOR_MASK) |
-		    LAPIC_MSIDATA_TRGMODE_EDGE | LAPIC_MSIDATA_LEVEL_ASSERT |
-		    LAPIC_MSIDATA_DM_FIXED);
+		    __SHIFTIN(is->is_idtvec, IOAPIC_MSIDATA_VECTOR_MASK) |
+		    IOAPIC_MSIDATA_TRGMODE_EDGE | IOAPIC_MSIDATA_LEVEL_ASSERT |
+		    IOAPIC_MSIDATA_DM_FIXED);
 	} else {
 		/* XXX according to the manual, ASSERT is unnecessary if
 		 * EDGE
 		 */
 		pci_conf_write(pa->pa_pc, pa->pa_tag, co + PCI_MSI_MDATA,
-		    __SHIFTIN(is->is_idtvec, LAPIC_MSIDATA_VECTOR_MASK) |
-		    LAPIC_MSIDATA_TRGMODE_EDGE | LAPIC_MSIDATA_LEVEL_ASSERT |
-		    LAPIC_MSIDATA_DM_FIXED);
+		    __SHIFTIN(is->is_idtvec, IOAPIC_MSIDATA_VECTOR_MASK) |
+		    IOAPIC_MSIDATA_TRGMODE_EDGE | IOAPIC_MSIDATA_LEVEL_ASSERT |
+		    IOAPIC_MSIDATA_DM_FIXED);
 	}
 	pci_conf_write(pa->pa_pc, pa->pa_tag, co + PCI_MSI_CTL,
 	    PCI_MSI_CTL_MSI_ENABLE);

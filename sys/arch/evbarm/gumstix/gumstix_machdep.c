@@ -1,4 +1,4 @@
-/*	$NetBSD: gumstix_machdep.c,v 1.46 2012/12/24 06:53:26 kiyohara Exp $ */
+/*	$NetBSD: gumstix_machdep.c,v 1.38 2011/07/07 08:48:34 mrg Exp $ */
 /*
  * Copyright (C) 2005, 2006, 2007  WIDE Project and SOUM Corporation.
  * All rights reserved.
@@ -171,13 +171,11 @@
 #include <machine/frame.h>
 
 #include <arm/arm32/machdep.h>
-#ifdef OVERO
 #include <arm/omap/omap2_gpmcreg.h>
 #include <arm/omap/omap2_prcm.h>
 #include <arm/omap/omap2_reg.h>
 #include <arm/omap/omap_var.h>
 #include <arm/omap/omap_com.h>
-#endif
 #include <arm/undefined.h>
 #include <arm/xscale/pxa2x0reg.h>
 #include <arm/xscale/pxa2x0var.h>
@@ -208,6 +206,20 @@
  */
 #define KERNEL_VM_SIZE		0x0C000000
 
+
+/*
+ * Address to call from cpu_reset() to reset the machine.
+ * This is machine architecture dependent as it varies depending
+ * on where the ROM appears when you turn the MMU off.
+ */
+
+u_int cpu_reset_address = 0;
+
+/* Define various stack sizes in pages */
+#define IRQ_STACK_SIZE	1
+#define ABT_STACK_SIZE	1
+#define UND_STACK_SIZE	1
+
 BootConfig bootconfig;		/* Boot config storage */
 static char bootargs[MAX_BOOT_STRING];
 const size_t bootargs_len = sizeof(bootargs) - 1;	/* without nul */
@@ -227,9 +239,18 @@ u_int free_pages;
 int max_processes = 64;			/* Default number */
 #endif	/* !PMAP_STATIC_L1S */
 
+/* Physical and virtual addresses for some global pages */
+pv_addr_t irqstack;
+pv_addr_t undstack;
+pv_addr_t abtstack;
+pv_addr_t kernelstack;
 pv_addr_t minidataclean;
 
 vm_offset_t msgbufphys;
+
+extern u_int data_abort_handler_address;
+extern u_int prefetch_abort_handler_address;
+extern u_int undefined_handler_address;
 
 #ifdef PMAP_DEBUG
 extern int pmap_debug_level;
@@ -532,8 +553,12 @@ initarm(void *arg)
 	pxa2x0_gpio_bootstrap(GUMSTIX_GPIO_VBASE);
 
 	pxa2x0_clkman_bootstrap(GUMSTIX_CLKMAN_VBASE);
-#elif defined(CPU_CORTEX)
-	cortex_pmc_ccnt_init();
+#elif defined(CPU_CORTEXA8)
+	{
+		void cortexa8_pmc_ccnt_init(void);
+
+		cortexa8_pmc_ccnt_init();
+	}
 #endif
 
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
@@ -549,7 +574,7 @@ initarm(void *arg)
 	kgdb_port_init();
 #endif
 
-	/*
+        /*
 	 * Examine the boot args string for options we need to know about
 	 * now.
 	 */
@@ -652,7 +677,7 @@ initarm(void *arg)
 
 #ifdef VERBOSE_INIT_ARM
 	printf("freestart = 0x%08lx, free_pages = %d (0x%08x)\n",
-	    physical_freestart, free_pages, free_pages);
+	       physical_freestart, free_pages, free_pages);
 #endif
 
 	/* Define a macro to simplify memory allocation */
@@ -867,11 +892,11 @@ initarm(void *arg)
 	/* Switch tables */
 #ifdef VERBOSE_INIT_ARM
 	printf("freestart = 0x%08lx, free_pages = %d (0x%x)\n",
-	    physical_freestart, free_pages, free_pages);
+	       physical_freestart, free_pages, free_pages);
 	printf("switching to new L1 page table  @%#lx...", kernel_l1pt.pv_pa);
 #endif
 
-	cpu_setttb(kernel_l1pt.pv_pa, true);
+	cpu_setttb(kernel_l1pt.pv_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 
@@ -1329,35 +1354,22 @@ kgdb_port_init(void)
 static void
 gumstix_device_register(device_t dev, void *aux)
 {
-	prop_dictionary_t dict = device_properties(dev);
 
-	if (device_is_a(dev, "ehci")) {
-		prop_dictionary_set_cstring(dict, "port0-mode", "none");
-		prop_dictionary_set_cstring(dict, "port1-mode", "phy");
-		prop_dictionary_set_cstring(dict, "port2-mode", "none");
-		prop_dictionary_set_bool(dict, "phy-reset", true);
-		prop_dictionary_set_int16(dict, "port0-gpio", -1);
-		prop_dictionary_set_int16(dict, "port1-gpio", 183);
-		prop_dictionary_set_int16(dict, "port2-gpio", -1);
-		prop_dictionary_set_uint16(dict, "dpll5-m", 120);
-		prop_dictionary_set_uint16(dict, "dpll5-n", 12);
-		prop_dictionary_set_uint16(dict, "dpll5-m2", 1);
-	}
 	if (device_is_a(dev, "ohci")) {
-		if (prop_dictionary_set_bool(dict,
+		if (prop_dictionary_set_bool(device_properties(dev),
 		    "Ganged-power-mask-on-port1", 1) == false) {
 			printf("WARNING: unable to set power-mask for port1"
-			    " property for %s\n", device_xname(dev));
+			    " property for %s\n", dev->dv_xname);
 		}
-		if (prop_dictionary_set_bool(dict,
+		if (prop_dictionary_set_bool(device_properties(dev),
 		    "Ganged-power-mask-on-port2", 1) == false) {
 			printf("WARNING: unable to set power-mask for port2"
-			    " property for %s\n", device_xname(dev));
+			    " property for %s\n", dev->dv_xname);
 		}
-		if (prop_dictionary_set_bool(dict,
+		if (prop_dictionary_set_bool(device_properties(dev),
 		    "Ganged-power-mask-on-port3", 1) == false) {
 			printf("WARNING: unable to set power-mask for port3"
-			    " property for %s\n", device_xname(dev));
+			    " property for %s\n", dev->dv_xname);
 		}
 	}
 }

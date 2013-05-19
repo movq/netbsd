@@ -1,4 +1,4 @@
-/*	$NetBSD: mvsoc_intr.c,v 1.5 2012/07/29 00:07:10 matt Exp $	*/
+/*	$NetBSD: mvsoc_intr.c,v 1.3 2011/08/13 15:38:47 jakllsch Exp $	*/
 /*
  * Copyright (c) 2010 KIYOHARA Takashi
  * All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mvsoc_intr.c,v 1.5 2012/07/29 00:07:10 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mvsoc_intr.c,v 1.3 2011/08/13 15:38:47 jakllsch Exp $");
 
 #define _INTR_PRIVATE
 
@@ -40,7 +40,6 @@ __KERNEL_RCSID(0, "$NetBSD: mvsoc_intr.c,v 1.5 2012/07/29 00:07:10 matt Exp $");
 #include <arm/marvell/mvsocreg.h>
 #include <arm/marvell/mvsocvar.h>
 
-int (*find_pending_irqs)(void);
 
 static void mvsoc_bridge_pic_unblock_irqs(struct pic_softc *, size_t, uint32_t);
 static void mvsoc_bridge_pic_block_irqs(struct pic_softc *, size_t, uint32_t);
@@ -97,8 +96,8 @@ void *
 mvsoc_bridge_intr_establish(int ih, int ipl, int (*ih_func)(void *), void *arg)
 {
 
-	return intr_establish(mvsoc_bridge_pic.pic_irqbase + ih, ipl,
-	    IST_LEVEL_HIGH, ih_func, arg);
+	return intr_establish(mvsoc_bridge_pic.pic_irqbase + ih, ipl, 0,
+	    ih_func, arg);
 }
 
 /* ARGSUSED */

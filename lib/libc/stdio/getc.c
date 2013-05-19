@@ -1,4 +1,4 @@
-/*	$NetBSD: getc.c,v 1.12 2012/03/15 18:22:30 christos Exp $	*/
+/*	$NetBSD: getc.c,v 1.11 2003/08/07 16:43:26 agc Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)getc.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: getc.c,v 1.12 2012/03/15 18:22:30 christos Exp $");
+__RCSID("$NetBSD: getc.c,v 1.11 2003/08/07 16:43:26 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -54,7 +54,8 @@ __RCSID("$NetBSD: getc.c,v 1.12 2012/03/15 18:22:30 christos Exp $");
 #undef getc_unlocked
 
 int
-getc(FILE *fp)
+getc(fp)
+	FILE *fp;
 {
 	int r;
 
@@ -67,10 +68,11 @@ getc(FILE *fp)
 }
 
 int
-getc_unlocked(FILE *fp)
+getc_unlocked(fp)
+	FILE *fp;
 {
 
 	_DIAGASSERT(fp != NULL);
 
-	return __sgetc(fp);
+	return (__sgetc(fp));
 }

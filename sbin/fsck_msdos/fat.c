@@ -1,4 +1,4 @@
-/*	$NetBSD: fat.c,v 1.24 2013/01/17 16:45:48 jakllsch Exp $	*/
+/*	$NetBSD: fat.c,v 1.22 2009/04/11 07:14:50 lukem Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997 Wolfgang Solfrank
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fat.c,v 1.24 2013/01/17 16:45:48 jakllsch Exp $");
+__RCSID("$NetBSD: fat.c,v 1.22 2009/04/11 07:14:50 lukem Exp $");
 #endif /* not lint */
 
 #include <stdlib.h>
@@ -596,18 +596,15 @@ checklost(int dosfs, struct bootblock *boot, struct fatEntry *fat)
 
 	if (boot->FSInfo) {
 		ret = 0;
-		if (boot->FSFree != 0xffffffffU &&
-		    boot->FSFree != boot->NumFree) {
-			pwarn("Free space in FSInfo block (%u) not correct (%u)\n",
+		if (boot->FSFree != boot->NumFree) {
+			pwarn("Free space in FSInfo block (%d) not correct (%d)\n",
 			      boot->FSFree, boot->NumFree);
 			if (ask(1, "fix")) {
 				boot->FSFree = boot->NumFree;
 				ret = 1;
 			}
 		}
-		if (boot->FSNext != 0xffffffffU &&
-		    (boot->FSNext >= boot->NumClusters ||
-		    (boot->NumFree && fat[boot->FSNext].next != CLUST_FREE))) {
+		if (boot->FSNext >= boot->NumClusters || (boot->NumFree && fat[boot->FSNext].next != CLUST_FREE)) {
 			pwarn("Next free cluster in FSInfo block (%u) %s\n",
 			      boot->FSNext,
 			      (boot->FSNext >= boot->NumClusters) ? "invalid" : "not free");

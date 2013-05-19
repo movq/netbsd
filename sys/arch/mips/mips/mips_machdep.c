@@ -1,4 +1,4 @@
-/*	$NetBSD: mips_machdep.c,v 1.256 2013/02/28 12:44:38 macallan Exp $	*/
+/*	$NetBSD: mips_machdep.c,v 1.252 2012/02/11 23:16:15 martin Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -111,7 +111,8 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: mips_machdep.c,v 1.256 2013/02/28 12:44:38 macallan Exp $");
+
+__KERNEL_RCSID(0, "$NetBSD: mips_machdep.c,v 1.252 2012/02/11 23:16:15 martin Exp $");
 
 #define __INTR_PRIVATE
 #include "opt_cputype.h"
@@ -133,6 +134,8 @@ __KERNEL_RCSID(0, "$NetBSD: mips_machdep.c,v 1.256 2013/02/28 12:44:38 macallan 
 #include <sys/kcore.h>
 #include <sys/kmem.h>
 #include <sys/ras.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/cpu.h>
 #include <sys/atomic.h>
 #include <sys/ucontext.h>
@@ -201,6 +204,13 @@ uint64_t mips3_cp0_tlb_entry_lo_probe(void);
 
 static void mips3_tlb_probe(void);
 #endif
+
+/*
+ * safepri is a safe priority for sleepq to set for a spin-wait during
+ * autoconfiguration or after a panic which will allows interrupts to
+ * be delivered.  Used as an argument to splx().
+ */
+int safepri = IPL_SOFTSERIAL;
 
 #if defined(MIPS1)
 static void	mips1_vector_init(const struct splsw *);
@@ -1656,13 +1666,6 @@ SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
                        CTLTYPE_INT, "llsc", NULL,
                        NULL, MIPS_HAS_LLSC, NULL, 0,
                        CTL_MACHDEP, CPU_LLSC, CTL_EOL);
-#ifdef MIPS3_LOONGSON2
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_IMMEDIATE,
-		       CTLTYPE_INT, "loongson-mmi", NULL,
-		       NULL, MIPS_HAS_LMMI, NULL, 0,
-		       CTL_MACHDEP, CPU_LMMI, CTL_EOL);
-#endif
 }
 
 /*

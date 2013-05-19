@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_intr.c,v 1.3 2013/01/08 12:15:42 skrll Exp $	*/
+/*	$NetBSD: bcm2835_intr.c,v 1.1.2.4 2013/02/13 01:36:14 riz Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_intr.c,v 1.3 2013/01/08 12:15:42 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_intr.c,v 1.1.2.4 2013/02/13 01:36:14 riz Exp $");
 
 #define _INTR_PRIVATE
 
@@ -84,7 +84,6 @@ struct bcm2835icu_softc *bcmicu_sc;
 
 #define write_bcm2835reg(o, v)	\
 	bus_space_write_4(bcmicu_sc->sc_iot, bcmicu_sc->sc_ioh, (o), (v))
-
 
 #define bcm2835_barrier() \
 	bus_space_barrier(bcmicu_sc->sc_iot, bcmicu_sc->sc_ioh, 0, \

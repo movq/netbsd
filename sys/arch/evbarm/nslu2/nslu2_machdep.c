@@ -1,4 +1,4 @@
-/*	$NetBSD: nslu2_machdep.c,v 1.23 2012/11/12 18:00:39 skrll Exp $	*/
+/*	$NetBSD: nslu2_machdep.c,v 1.19 2011/07/01 20:44:20 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -94,7 +94,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nslu2_machdep.c,v 1.23 2012/11/12 18:00:39 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nslu2_machdep.c,v 1.19 2011/07/01 20:44:20 dyoung Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -151,6 +151,20 @@ __KERNEL_RCSID(0, "$NetBSD: nslu2_machdep.c,v 1.23 2012/11/12 18:00:39 skrll Exp
  */
 #define	KERNEL_VM_SIZE		0x0C000000
 
+
+/*
+ * Address to call from cpu_reset() to reset the machine.
+ * This is machine architecture dependent as it varies depending
+ * on where the ROM appears when you turn the MMU off.
+ */
+
+u_int cpu_reset_address = 0x00000000;
+
+/* Define various stack sizes in pages */
+#define IRQ_STACK_SIZE	1
+#define ABT_STACK_SIZE	1
+#define UND_STACK_SIZE	1
+
 BootConfig bootconfig;		/* Boot config storage */
 char *boot_args = NULL;
 char *boot_file = NULL;
@@ -162,10 +176,17 @@ vm_offset_t physical_end;
 u_int free_pages;
 
 /* Physical and virtual addresses for some global pages */
+pv_addr_t irqstack;
+pv_addr_t undstack;
+pv_addr_t abtstack;
+pv_addr_t kernelstack;
 pv_addr_t minidataclean;
 
 vm_offset_t msgbufphys;
 
+extern u_int data_abort_handler_address;
+extern u_int prefetch_abort_handler_address;
+extern u_int undefined_handler_address;
 extern int end;
 
 #ifdef PMAP_DEBUG
@@ -473,7 +494,7 @@ initarm(void *arg)
 	bootconfig.dram[0].address = 0x10000000;
 	bootconfig.dram[0].pages = ixp425_sdram_size() / PAGE_SIZE;
 
-	kerneldatasize = (uint32_t)&end - (uint32_t)KERNEL_TEXT_BASE;
+	kerneldatasize = (u_int32_t)&end - (u_int32_t)KERNEL_TEXT_BASE;
 
 #ifdef VERBOSE_INIT_ARM
         printf("kernsize=0x%x\n", kerneldatasize);
@@ -716,7 +737,7 @@ initarm(void *arg)
 	printf("switching to new L1 page table  @%#lx...", kernel_l1pt.pv_pa);
 #endif
 	cpu_domains((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT);
-	cpu_setttb(kernel_l1pt.pv_pa, true);
+	cpu_setttb(kernel_l1pt.pv_pa);
 	cpu_tlb_flushID();
 	cpu_domains(DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2));
 

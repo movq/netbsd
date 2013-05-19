@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.h,v 1.9 2012/10/27 17:18:07 chs Exp $	*/
+/*	$NetBSD: isa_machdep.h,v 1.8 2011/07/01 21:01:30 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -92,6 +92,7 @@ struct powerpc_isa_chipset {
 
 typedef struct powerpc_isa_chipset *isa_chipset_tag_t;
 
+struct device;			/* XXX */
 struct isabus_attach_args;	/* XXX */
 struct pic_ops;			/* XXX */
 

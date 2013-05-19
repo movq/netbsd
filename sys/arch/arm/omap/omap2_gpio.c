@@ -1,4 +1,4 @@
-/*	$NetBSD: omap2_gpio.c,v 1.15 2013/04/18 01:33:18 khorben Exp $	*/
+/*	$NetBSD: omap2_gpio.c,v 1.8 2011/07/01 20:30:21 dyoung Exp $	*/
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -28,7 +28,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omap2_gpio.c,v 1.15 2013/04/18 01:33:18 khorben Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omap2_gpio.c,v 1.8 2011/07/01 20:30:21 dyoung Exp $");
 
 #define _INTR_PRIVATE
 
@@ -52,7 +52,6 @@ __KERNEL_RCSID(0, "$NetBSD: omap2_gpio.c,v 1.15 2013/04/18 01:33:18 khorben Exp 
 
 #include <arm/omap/omap2_reg.h>
 #include <arm/omap/omap2_obiovar.h>
-#include <arm/omap/omap2_gpio.h>
 #include <arm/pic/picvar.h>
 
 #if NGPIO > 0
@@ -187,8 +186,6 @@ gpio_pic_establish_irq(struct pic_softc *pic, struct intrsource *is)
 	case IST_LEVEL_HIGH: gpio->gpio_level_hi_mask |= irq_mask; break;
 	case IST_EDGE_FALLING: gpio->gpio_edge_falling_mask |= irq_mask; break;
 	case IST_EDGE_RISING: gpio->gpio_edge_rising_mask |= irq_mask; break;
-	case IST_EDGE_BOTH: gpio->gpio_edge_falling_mask |= irq_mask;
-			    gpio->gpio_edge_rising_mask |= irq_mask; break;
 	}
 	gpio->gpio_edge_mask =
 	    gpio->gpio_edge_rising_mask | gpio->gpio_edge_falling_mask;
@@ -280,7 +277,7 @@ omap2gpio_pin_ctl(void *arg, int pin, int flags)
 }
 
 static void
-gpio_attach1(device_t self)
+gpio_defer(device_t self)
 {
 	struct gpio_softc * const gpio = device_private(self);
 	struct gpio_chipset_tag * const gp = &gpio->gpio_chipset;
@@ -342,16 +339,6 @@ gpio_match(device_t parent, cfdata_t cfdata, void *aux)
 		return 1;
 #endif
 
-#ifdef OMAP_3430
-	if (oa->obio_addr == GPIO1_BASE_3430
-	    || oa->obio_addr == GPIO2_BASE_3430
-	    || oa->obio_addr == GPIO3_BASE_3430
-	    || oa->obio_addr == GPIO4_BASE_3430
-	    || oa->obio_addr == GPIO5_BASE_3430
-	    || oa->obio_addr == GPIO6_BASE_3430)
-		return 1;
-#endif
-
 #ifdef OMAP_3530
 	if (oa->obio_addr == GPIO1_BASE_3530
 	    || oa->obio_addr == GPIO2_BASE_3530
@@ -359,34 +346,6 @@ gpio_match(device_t parent, cfdata_t cfdata, void *aux)
 	    || oa->obio_addr == GPIO4_BASE_3530
 	    || oa->obio_addr == GPIO5_BASE_3530
 	    || oa->obio_addr == GPIO6_BASE_3530)
-		return 1;
-#endif
-
-#ifdef OMAP_4430
-	if (oa->obio_addr == GPIO1_BASE_4430
-	    || oa->obio_addr == GPIO2_BASE_4430
-	    || oa->obio_addr == GPIO3_BASE_4430
-	    || oa->obio_addr == GPIO4_BASE_4430
-	    || oa->obio_addr == GPIO5_BASE_4430
-	    || oa->obio_addr == GPIO6_BASE_4430)
-		return 1;
-#endif
-
-#ifdef TI_AM335X
-	if (oa->obio_addr == GPIO0_BASE_TI_AM335X
-	    || oa->obio_addr == GPIO1_BASE_TI_AM335X
-	    || oa->obio_addr == GPIO2_BASE_TI_AM335X
-	    || oa->obio_addr == GPIO3_BASE_TI_AM335X)
-		return 1;
-#endif
-
-#ifdef TI_DM37XX
-	if (oa->obio_addr == GPIO1_BASE_TI_DM37XX
-	    || oa->obio_addr == GPIO2_BASE_TI_DM37XX
-	    || oa->obio_addr == GPIO3_BASE_TI_DM37XX
-	    || oa->obio_addr == GPIO4_BASE_TI_DM37XX
-	    || oa->obio_addr == GPIO5_BASE_TI_DM37XX
-	    || oa->obio_addr == GPIO6_BASE_TI_DM37XX)
 		return 1;
 #endif
 
@@ -420,7 +379,7 @@ gpio_attach(device_t parent, device_t self, void *aux)
 
 	if (oa->obio_intrbase != OBIOCF_INTRBASE_DEFAULT) {
 		gpio->gpio_pic.pic_ops = &gpio_pic_ops;
-		strlcpy(gpio->gpio_pic.pic_name, device_xname(self),
+		strlcpy(gpio->gpio_pic.pic_name, self->dv_xname,
 		    sizeof(gpio->gpio_pic.pic_name));
 		gpio->gpio_pic.pic_maxsources = 32;
 		pic_add(&gpio->gpio_pic, oa->obio_intrbase);
@@ -433,61 +392,6 @@ gpio_attach(device_t parent, device_t self, void *aux)
 	}
 	aprint_normal("\n");
 #if NGPIO > 0
-#if 0
-	config_interrupts(self, gpio_attach1);
-#else
-	gpio_attach1(self);
-#endif
+	config_interrupts(self, gpio_defer);
 #endif
 }
-
-#if NGPIO > 0
-
-extern struct cfdriver omapgpio_cd;
-
-#define	GPIO_MODULE(pin)	((pin) / 32)
-#define GPIO_PIN(pin)		((pin) % 32)
-
-u_int
-omap2_gpio_read(u_int gpio)
-{
-	struct gpio_softc *sc;
-
-	sc = device_lookup_private(&omapgpio_cd, GPIO_MODULE(gpio));
-	if (sc == NULL)
-		panic("omap2gpio: GPIO Module for pin %d not configured.", gpio);
-
-	return omap2gpio_pin_read(sc, GPIO_PIN(gpio));
-}
-
-void
-omap2_gpio_write(u_int gpio, u_int value)
-{
-	struct gpio_softc *sc;
-
-	sc = device_lookup_private(&omapgpio_cd, GPIO_MODULE(gpio));
-	if (sc == NULL)
-		panic("omap2gpio: GPIO Module for pin %d not configured.", gpio);
-
-	omap2gpio_pin_write(sc, GPIO_PIN(gpio), value);
-}
-
-void
-omap2_gpio_ctl(u_int gpio, int flags)
-{
-	struct gpio_softc *sc;
-
-	sc = device_lookup_private(&omapgpio_cd, GPIO_MODULE(gpio));
-	if (sc == NULL)
-		panic("omap2gpio: GPIO Module for pin %d not configured.", gpio);
-
-	omap2gpio_pin_ctl(sc, GPIO_PIN(gpio), flags);
-}
-
-bool
-omap2_gpio_has_pin(u_int gpio)
-{
-	return device_lookup_private(&omapgpio_cd, GPIO_MODULE(gpio)) != NULL;
-}
-
-#endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: btsco.c,v 1.28 2012/04/03 09:32:53 plunky Exp $	*/
+/*	$NetBSD: btsco.c,v 1.26.2.2 2012/04/09 17:51:44 riz Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: btsco.c,v 1.28 2012/04/03 09:32:53 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: btsco.c,v 1.26.2.2 2012/04/09 17:51:44 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/audioio.h>

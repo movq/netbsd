@@ -1,15 +1,9 @@
-#	$NetBSD: Makefile,v 1.24 2013/01/30 13:47:36 he Exp $
+#	$NetBSD: Makefile,v 1.21 2009/04/03 22:36:35 perry Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"
 
 .include <bsd.kernobj.mk>
-
-#
-# `make' or `make all' builds all gzimg files defined in ${TARGETS}.
-# `make _KERNELNAME_' builds all gzimg files for specified kernels.
-#
-
 
 
 #	TARGETS is a list of:
@@ -62,12 +56,7 @@ TARGETS=	ADI_BRH		ADI_BRH		ADI_BRH_sd0	\
 		0x00140000	netbsd-wd0
 .endif
 
-# Default is to build for all TARGETS
-ALL_KERNELS?= +
-
 .for K G I R W in ${TARGETS}				# {
-.for configsel in ${ALL_KERNELS}			# {
-.if ${configsel} == "+" || ${configsel} == ${K}
 
 GZB${G}=	${DESTDIR}/usr/mdec/gzboot_${G}_${R}.bin
 
@@ -86,18 +75,7 @@ gzimg_${I}_flash_${R}.gz: .NOTMAIN gzimg_${I}_flash_${R}
 CLEANFILES+=	gzimg_${I}_flash_${R}.kern gzimg_${I}_flash_${R}.kern.gz \
 		gzimg_${I}_flash_${R}
 
-.if empty(GZKERNELS:M${K})
-GZKERNELS+=	$K
-.endif
-KZ${K}+=	gzimg_${I}_flash_${R}.gz
-
-.endif
 .endfor							# }
-.endfor							# }
-
-.for K in ${GZKERNELS}
-${K}: .PHONY ${KZ${K}}
-.endfor
 
 CLEANFILES+=	${GZIMGS}
 

@@ -17,7 +17,6 @@
 #include "common.h"
 #include "pcsc_funcs.h"
 #include "crypto/milenage.h"
-#include "crypto/random.h"
 #include "eap_peer/eap_i.h"
 #include "eap_config.h"
 #include "eap_common/eap_sim_common.h"
@@ -94,7 +93,7 @@ static void * eap_sim_init(struct eap_sm *sm)
 	if (data == NULL)
 		return NULL;
 
-	if (random_get_bytes(data->nonce_mt, EAP_SIM_NONCE_MT_LEN)) {
+	if (os_get_random(data->nonce_mt, EAP_SIM_NONCE_MT_LEN)) {
 		wpa_printf(MSG_WARNING, "EAP-SIM: Failed to get random data "
 			   "for NONCE_MT");
 		os_free(data);
@@ -266,20 +265,21 @@ static int eap_sim_supported_ver(int version)
 
 static void eap_sim_clear_identities(struct eap_sim_data *data, int id)
 {
-	if ((id & CLEAR_PSEUDONYM) && data->pseudonym) {
-		wpa_printf(MSG_DEBUG, "EAP-SIM: forgetting old pseudonym");
+	wpa_printf(MSG_DEBUG, "EAP-SIM: forgetting old%s%s%s",
+		   id & CLEAR_PSEUDONYM ? " pseudonym" : "",
+		   id & CLEAR_REAUTH_ID ? " reauth_id" : "",
+		   id & CLEAR_EAP_ID ? " eap_id" : "");
+	if (id & CLEAR_PSEUDONYM) {
 		os_free(data->pseudonym);
 		data->pseudonym = NULL;
 		data->pseudonym_len = 0;
 	}
-	if ((id & CLEAR_REAUTH_ID) && data->reauth_id) {
-		wpa_printf(MSG_DEBUG, "EAP-SIM: forgetting old reauth_id");
+	if (id & CLEAR_REAUTH_ID) {
 		os_free(data->reauth_id);
 		data->reauth_id = NULL;
 		data->reauth_id_len = 0;
 	}
-	if ((id & CLEAR_EAP_ID) && data->last_eap_identity) {
-		wpa_printf(MSG_DEBUG, "EAP-SIM: forgetting old eap_id");
+	if (id & CLEAR_EAP_ID) {
 		os_free(data->last_eap_identity);
 		data->last_eap_identity = NULL;
 		data->last_eap_identity_len = 0;
@@ -287,44 +287,24 @@ static void eap_sim_clear_identities(struct eap_sim_data *data, int id)
 }
 
 
-static int eap_sim_learn_ids(struct eap_sm *sm, struct eap_sim_data *data,
+static int eap_sim_learn_ids(struct eap_sim_data *data,
 			     struct eap_sim_attrs *attr)
 {
 	if (attr->next_pseudonym) {
-		const u8 *identity = NULL;
-		size_t identity_len = 0;
-		const u8 *realm = NULL;
-		size_t realm_len = 0;
-
-		wpa_hexdump_ascii(MSG_DEBUG,
-				  "EAP-SIM: (encr) AT_NEXT_PSEUDONYM",
-				  attr->next_pseudonym,
-				  attr->next_pseudonym_len);
 		os_free(data->pseudonym);
-		/* Look for the realm of the permanent identity */
-		identity = eap_get_config_identity(sm, &identity_len);
-		if (identity) {
-			for (realm = identity, realm_len = identity_len;
-			     realm_len > 0; realm_len--, realm++) {
-				if (*realm == '@')
-					break;
-			}
-		}
-		data->pseudonym = os_malloc(attr->next_pseudonym_len +
-					    realm_len);
+		data->pseudonym = os_malloc(attr->next_pseudonym_len);
 		if (data->pseudonym == NULL) {
 			wpa_printf(MSG_INFO, "EAP-SIM: (encr) No memory for "
 				   "next pseudonym");
-			data->pseudonym_len = 0;
 			return -1;
 		}
 		os_memcpy(data->pseudonym, attr->next_pseudonym,
 			  attr->next_pseudonym_len);
-		if (realm_len) {
-			os_memcpy(data->pseudonym + attr->next_pseudonym_len,
-				  realm, realm_len);
-		}
-		data->pseudonym_len = attr->next_pseudonym_len + realm_len;
+		data->pseudonym_len = attr->next_pseudonym_len;
+		wpa_hexdump_ascii(MSG_DEBUG,
+				  "EAP-SIM: (encr) AT_NEXT_PSEUDONYM",
+				  data->pseudonym,
+				  data->pseudonym_len);
 	}
 
 	if (attr->next_reauth_id) {
@@ -333,7 +313,6 @@ static int eap_sim_learn_ids(struct eap_sm *sm, struct eap_sim_data *data,
 		if (data->reauth_id == NULL) {
 			wpa_printf(MSG_INFO, "EAP-SIM: (encr) No memory for "
 				   "next reauth_id");
-			data->reauth_id_len = 0;
 			return -1;
 		}
 		os_memcpy(data->reauth_id, attr->next_reauth_id,
@@ -669,11 +648,11 @@ static struct wpabuf * eap_sim_process_challenge(struct eap_sm *sm,
 					    EAP_SIM_UNABLE_TO_PROCESS_PACKET);
 	}
 
-	/* Old reauthentication identity must not be used anymore. In
-	 * other words, if no new reauth identity is received, full
-	 * authentication will be used on next reauthentication (using
-	 * pseudonym identity or permanent identity). */
-	eap_sim_clear_identities(data, CLEAR_REAUTH_ID | CLEAR_EAP_ID);
+	/* Old reauthentication and pseudonym identities must not be used
+	 * anymore. In other words, if no new identities are received, full
+	 * authentication will be used on next reauthentication. */
+	eap_sim_clear_identities(data, CLEAR_PSEUDONYM | CLEAR_REAUTH_ID |
+				 CLEAR_EAP_ID);
 
 	if (attr->encr_data) {
 		u8 *decrypted;
@@ -684,7 +663,7 @@ static struct wpabuf * eap_sim_process_challenge(struct eap_sm *sm,
 			return eap_sim_client_error(
 				data, id, EAP_SIM_UNABLE_TO_PROCESS_PACKET);
 		}
-		eap_sim_learn_ids(sm, data, &eattr);
+		eap_sim_learn_ids(data, &eattr);
 		os_free(decrypted);
 	}
 
@@ -882,7 +861,7 @@ static struct wpabuf * eap_sim_process_reauthentication(
 				   data->nonce_s, data->mk, data->msk,
 				   data->emsk);
 	eap_sim_clear_identities(data, CLEAR_REAUTH_ID | CLEAR_EAP_ID);
-	eap_sim_learn_ids(sm, data, &eattr);
+	eap_sim_learn_ids(data, &eattr);
 
 	if (data->result_ind && attr->result_ind)
 		data->use_result_ind = 1;
@@ -1016,7 +995,7 @@ static void eap_sim_deinit_for_reauth(struct eap_sm *sm, void *priv)
 static void * eap_sim_init_for_reauth(struct eap_sm *sm, void *priv)
 {
 	struct eap_sim_data *data = priv;
-	if (random_get_bytes(data->nonce_mt, EAP_SIM_NONCE_MT_LEN)) {
+	if (os_get_random(data->nonce_mt, EAP_SIM_NONCE_MT_LEN)) {
 		wpa_printf(MSG_WARNING, "EAP-SIM: Failed to get random data "
 			   "for NONCE_MT");
 		os_free(data);

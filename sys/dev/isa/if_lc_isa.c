@@ -1,4 +1,4 @@
-/*	$NetBSD: if_lc_isa.c,v 1.34 2012/10/27 17:18:24 chs Exp $ */
+/*	$NetBSD: if_lc_isa.c,v 1.33 2009/05/12 09:10:15 cegger Exp $ */
 
 /*-
  * Copyright (c) 1994, 1995, 1997 Matt Thomas <matt@3am-software.com>
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_lc_isa.c,v 1.34 2012/10/27 17:18:24 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_lc_isa.c,v 1.33 2009/05/12 09:10:15 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,15 +62,15 @@ __KERNEL_RCSID(0, "$NetBSD: if_lc_isa.c,v 1.34 2012/10/27 17:18:24 chs Exp $");
 
 extern struct cfdriver lc_cd;
 
-static int lemac_isa_find(lemac_softc_t *, const char *, struct isa_attach_args *, int);
+static int lemac_isa_find(lemac_softc_t *, struct isa_attach_args *, int);
 static int lemac_isa_probe(device_t, cfdata_t, void *);
 static void lemac_isa_attach(device_t, device_t, void *);
 
-CFATTACH_DECL_NEW(lc_isa, sizeof(lemac_softc_t),
+CFATTACH_DECL(lc_isa, sizeof(lemac_softc_t),
     lemac_isa_probe, lemac_isa_attach, NULL, NULL);
 
 static int
-lemac_isa_find(lemac_softc_t *sc, const char *xname, struct isa_attach_args *ia, int attach)
+lemac_isa_find(lemac_softc_t *sc, struct isa_attach_args *ia, int attach)
 {
 	bus_addr_t maddr;
 	bus_size_t msiz;
@@ -142,14 +142,14 @@ lemac_isa_find(lemac_softc_t *sc, const char *xname, struct isa_attach_args *ia,
 	 */
 	if (ia->ia_irq[0].ir_irq != ISA_UNKNOWN_IRQ &&
 	    ia->ia_irq[0].ir_irq != irq)
-		printf("%s: overriding IRQ %d to %d\n", xname,
+		printf("%s: overriding IRQ %d to %d\n", device_xname(&sc->sc_dv),
 		       ia->ia_irq[0].ir_irq, irq);
 
 	if (attach) {
 		sc->sc_ats = shutdownhook_establish(lemac_shutdown, sc);
 		if (sc->sc_ats == NULL) {
 			aprint_normal("\n");
-			aprint_error("%s: warning: can't establish shutdown hook\n", xname);
+			aprint_error_dev(&sc->sc_dv, "warning: can't establish shutdown hook\n");
 		}
 
 		lemac_ifattach(sc);
@@ -187,19 +187,17 @@ lemac_isa_probe(device_t parent, cfdata_t match, void *aux)
 	struct isa_attach_args *ia = aux;
 	cfdata_t cf = match;
 	lemac_softc_t sc;
-	char xname[16];
+	snprintf(sc.sc_dv.dv_xname, sizeof(sc.sc_dv.dv_xname), "%s%d",
+	    lc_cd.cd_name, cf->cf_unit);
 
-	snprintf(xname, sizeof(xname), "%s%d", lc_cd.cd_name, cf->cf_unit);
-
-	return lemac_isa_find(&sc, xname, ia, 0);
+	return lemac_isa_find(&sc, ia, 0);
 }
 
 static void
 lemac_isa_attach(device_t parent, device_t self, void *aux)
 {
-	lemac_softc_t *sc = device_private(self);
+	lemac_softc_t *sc = (void *)self;
 	struct isa_attach_args *ia = aux;
 
-	sc->sc_dev = self;
-	(void) lemac_isa_find(sc, device_xname(self), ia, 1);
+	(void) lemac_isa_find(sc, ia, 1);
 }

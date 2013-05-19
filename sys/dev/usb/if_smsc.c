@@ -1,4 +1,4 @@
-/*	$NetBSD: if_smsc.c,v 1.10 2013/03/30 14:30:24 christos Exp $	*/
+/*	$NetBSD: if_smsc.c,v 1.7.2.2 2013/02/13 01:36:16 riz Exp $	*/
 
 /*	$OpenBSD: if_smsc.c,v 1.4 2012/09/27 12:38:11 jsg Exp $	*/
 /* $FreeBSD: src/sys/dev/usb/net/if_smsc.c,v 1.1 2012/08/15 04:03:55 gonzo Exp $ */
@@ -56,7 +56,7 @@
  * go through the packet data and decode the headers prior to sending.
  * On Linux they generally provide cues to the location of the csum and the
  * area to calculate it over, on FreeBSD we seem to have to do it all ourselves,
- * hence this is not as optimal and therefore h/w TX checksum is currently not
+ * hence this is not as optimal and therefore h/w tX checksum is currently not
  * implemented.
  */
 
@@ -170,7 +170,7 @@ struct mbuf	*smsc_newbuf(void);
 
 void		 smsc_tick(void *);
 void		 smsc_tick_task(void *);
-void		 smsc_miibus_statchg(struct ifnet *);
+void		 smsc_miibus_statchg(device_t);
 int		 smsc_miibus_readreg(device_t, int, int);
 void		 smsc_miibus_writereg(device_t, int, int, int);
 int		 smsc_ifmedia_upd(struct ifnet *);
@@ -307,9 +307,10 @@ smsc_miibus_writereg(device_t dev, int phy, int reg, int val)
 }
 
 void
-smsc_miibus_statchg(struct ifnet *ifp)
+smsc_miibus_statchg(device_t dev)
 {
-	struct smsc_softc *sc = ifp->if_softc;
+	struct smsc_softc *sc = device_private(dev);
+	struct ifnet *ifp = &sc->sc_ec.ec_if;
 	struct mii_data *mii = &sc->sc_mii;
 	int err;
 	uint32_t flow;
@@ -574,7 +575,7 @@ smsc_init(struct ifnet *ifp)
 
 	/* Load the multicast filter. */
 	smsc_setmulti(sc);
-
+	
 	/* Open RX and TX pipes. */
 	err = usbd_open_pipe(sc->sc_iface, sc->sc_ed[SMSC_ENDPT_RX],
 	    USBD_EXCLUSIVE_USE, &sc->sc_ep[SMSC_ENDPT_RX]);
@@ -798,7 +799,7 @@ smsc_chip_init(struct smsc_softc *sc)
 	 * There is a so called 'turbo mode' that the linux driver supports, it
 	 * seems to allow you to jam multiple frames per Rx transaction.
 	 * By default this driver supports that and therefore allows multiple
-	 * frames per USB transfer.
+	 * frames per URB.
 	 *
 	 * The xfer buffer size needs to reflect this as well, therefore based
 	 * on the calculations in the Linux driver the RX bufsize is set to
@@ -832,7 +833,7 @@ smsc_chip_init(struct smsc_softc *sc)
 	}
 
 	/*
-	 * The following settings are used for 'turbo mode', a.k.a multiple
+	 * The following setings are used for 'turbo mode', a.k.a multiple
 	 * frames per Rx transaction (again info taken form Linux driver).
 	 */
 #ifdef SMSC_TURBO
@@ -996,8 +997,8 @@ smsc_attach(device_t parent, device_t self, void *aux)
 		return;
 	}
 	/* Setup the endpoints for the SMSC LAN95xx device(s) */
-	usb_init_task(&sc->sc_tick_task, smsc_tick_task, sc, 0);
-	usb_init_task(&sc->sc_stop_task, (void (*)(void *))smsc_stop, sc, 0);
+	usb_init_task(&sc->sc_tick_task, smsc_tick_task, sc);
+	usb_init_task(&sc->sc_stop_task, (void (*)(void *))smsc_stop, sc);
 	mutex_init(&sc->sc_mii_lock, MUTEX_DEFAULT, IPL_NONE);
 
 	err = usbd_device2interface_handle(dev, SMSC_IFACE_IDX, &sc->sc_iface);
@@ -1044,7 +1045,7 @@ smsc_attach(device_t parent, device_t self, void *aux)
 	ifp->if_stop = smsc_stop;
 
         sc->sc_ec.ec_capabilities = ETHERCAP_VLAN_MTU;
-
+	
 	/* Setup some of the basics */
 	sc->sc_phyno = 1;
 
@@ -1136,7 +1137,7 @@ smsc_detach(device_t self, int flags)
 
 	if (--sc->sc_refcnt >= 0) {
 		/* Wait for processes to go away */
-		usb_detach_waitold(sc->sc_dev);
+		usb_detach_wait(sc->sc_dev);
 	}
 
 	if (ifp->if_flags & IFF_RUNNING)
@@ -1160,7 +1161,7 @@ smsc_detach(device_t self, int flags)
 
 	if (--sc->sc_refcnt >= 0) {
 		/* Wait for processes to go away. */
-		usb_detach_waitold(sc->sc_dev);
+		usb_detach_wait(sc->sc_dev);
 	}
 	splx(s);
 
@@ -1193,7 +1194,7 @@ smsc_tick_task(void *xsc)
 
 	mii_tick(mii);
 	if ((sc->sc_flags & SMSC_FLAG_LINK) == 0)
-		smsc_miibus_statchg(ifp);
+		smsc_miibus_statchg(sc->sc_dev);
 	callout_reset(&sc->sc_stat_ch, hz, smsc_tick, sc);
 
 	splx(s);
@@ -1227,7 +1228,7 @@ smsc_unlock_mii(struct smsc_softc *sc)
 {
 	mutex_exit(&sc->sc_mii_lock);
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(sc->sc_dev);
 }
 
 void
@@ -1308,7 +1309,7 @@ smsc_rxeof(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
 		m->m_pkthdr.rcvif = ifp;
 
 		pktlen -= 2;	// JDM
-
+		
 		m->m_pkthdr.len = m->m_len = pktlen;
 #define ETHER_ALIGN 2
 		m_adj(m, ETHER_ALIGN);

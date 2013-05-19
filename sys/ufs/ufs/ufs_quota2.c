@@ -1,4 +1,4 @@
-/* $NetBSD: ufs_quota2.c,v 1.35 2012/09/27 07:47:56 bouyer Exp $ */
+/* $NetBSD: ufs_quota2.c,v 1.34.2.1 2012/10/01 19:55:22 riz Exp $ */
 /*-
   * Copyright (c) 2010 Manuel Bouyer
   * All rights reserved.
@@ -26,7 +26,7 @@
   */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_quota2.c,v 1.35 2012/09/27 07:47:56 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_quota2.c,v 1.34.2.1 2012/10/01 19:55:22 riz Exp $");
 
 #include <sys/buf.h>
 #include <sys/param.h>

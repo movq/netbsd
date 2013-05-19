@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu_fscale.c,v 1.16 2013/03/26 11:30:20 isaki Exp $	*/
+/*	$NetBSD: fpu_fscale.c,v 1.15 2011/07/18 14:11:27 isaki Exp $	*/
 
 /*
  * Copyright (c) 1995 Ken Nakata
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fpu_fscale.c,v 1.16 2013/03/26 11:30:20 isaki Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fpu_fscale.c,v 1.15 2011/07/18 14:11:27 isaki Exp $");
 
 #include <sys/types.h>
 #include <sys/signal.h>
@@ -51,12 +51,12 @@ int
 fpu_emul_fscale(struct fpemu *fe, struct instruction *insn)
 {
 	struct frame *frame;
-	uint32_t *fpregs;
+	u_int *fpregs;
 	int word1, sig;
 	int regnum, format;
 	int scale, sign, exp;
-	uint32_t m0, m1;
-	uint32_t buf[3], fpsr;
+	u_int m0, m1;
+	u_int buf[3], fpsr;
 #if DEBUG_FPE
 	int flags;
 	char regname;
@@ -208,7 +208,7 @@ fpu_emul_fscale(struct fpemu *fe, struct instruction *insn)
 			exp += scale;
 			if (exp < 0) {
 				/* underflow */
-				uint32_t grs;	/* guard, round and sticky */
+				u_int grs;	/* guard, round and sticky */
 
 				exp = 0;
 				grs = m1 << (32 + exp);

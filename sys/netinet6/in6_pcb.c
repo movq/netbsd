@@ -1,4 +1,4 @@
-/*	$NetBSD: in6_pcb.c,v 1.122 2013/04/12 21:30:40 christos Exp $	*/
+/*	$NetBSD: in6_pcb.c,v 1.118 2011/12/31 20:41:59 christos Exp $	*/
 /*	$KAME: in6_pcb.c,v 1.84 2001/02/08 18:02:08 itojun Exp $	*/
 
 /*
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in6_pcb.c,v 1.122 2013/04/12 21:30:40 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in6_pcb.c,v 1.118 2011/12/31 20:41:59 christos Exp $");
 
 #include "opt_inet.h"
 #include "opt_ipsec.h"
@@ -91,13 +91,18 @@ __KERNEL_RCSID(0, "$NetBSD: in6_pcb.c,v 1.122 2013/04/12 21:30:40 christos Exp $
 #include <netinet/ip.h>
 #include <netinet/in_pcb.h>
 #include <netinet/ip6.h>
-#include <netinet/portalgo.h>
+#include <netinet/rfc6056.h>
 #include <netinet6/ip6_var.h>
 #include <netinet6/in6_pcb.h>
 #include <netinet6/scope6_var.h>
 #include <netinet6/nd6.h>
 
 #include "faith.h"
+
+#ifdef KAME_IPSEC
+#include <netinet6/ipsec.h>
+#include <netkey/key.h>
+#endif /* KAME_IPSEC */
 
 #ifdef FAST_IPSEC
 #include <netipsec/ipsec.h>
@@ -157,7 +162,7 @@ in6_pcballoc(struct socket *so, void *v)
 	struct inpcbtable *table = v;
 	struct in6pcb *in6p;
 	int s;
-#if defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 	int error;
 #endif
 
@@ -172,9 +177,9 @@ in6_pcballoc(struct socket *so, void *v)
 	in6p->in6p_socket = so;
 	in6p->in6p_hops = -1;	/* use kernel default */
 	in6p->in6p_icmp6filt = NULL;
-	in6p->in6p_portalgo = PORTALGO_DEFAULT;
+	in6p->in6p_rfc6056algo = RFC6056_ALGO_DEFAULT;
 	in6p->in6p_bindportonsend = false;
-#if defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 	error = ipsec_init_pcbpolicy(so, &in6p->in6p_sp);
 	if (error != 0) {
 		s = splnet();
@@ -452,10 +457,6 @@ in6_pcbconnect(void *v, struct mbuf *nam, struct lwp *l)
 	if (sin6->sin6_port == 0)
 		return (EADDRNOTAVAIL);
 
-	if (IN6_IS_ADDR_MULTICAST(&sin6->sin6_addr) &&
-	    in6p->in6p_socket->so_type == SOCK_STREAM)
-		return EADDRNOTAVAIL;
-
 	if (sin6->sin6_scope_id == 0 && !ip6_use_defzone)
 		scope_ambiguous = 1;
 	if ((error = sa6_embedscope(sin6, ip6_use_defzone)) != 0)
@@ -566,7 +567,7 @@ in6_pcbconnect(void *v, struct mbuf *nam, struct lwp *l)
 	if (ip6_auto_flowlabel)
 		in6p->in6p_flowinfo |=
 		    (htonl(ip6_randomflowlabel()) & IPV6_FLOWLABEL_MASK);
-#if defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 	if (in6p->in6p_socket->so_type == SOCK_STREAM)
 		ipsec_pcbconn(in6p->in6p_sp);
 #endif
@@ -580,7 +581,7 @@ in6_pcbdisconnect(struct in6pcb *in6p)
 	in6p->in6p_fport = 0;
 	in6_pcbstate(in6p, IN6P_BOUND);
 	in6p->in6p_flowinfo &= ~IPV6_FLOWLABEL_MASK;
-#if defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 	ipsec_pcbdisconn(in6p->in6p_sp);
 #endif
 	if (in6p->in6p_socket->so_state & SS_NOFDREF)
@@ -596,7 +597,7 @@ in6_pcbdetach(struct in6pcb *in6p)
 	if (in6p->in6p_af != AF_INET6)
 		return;
 
-#if defined(FAST_IPSEC)
+#if defined(KAME_IPSEC) || defined(FAST_IPSEC)
 	ipsec6_delete_pcbpolicy(in6p);
 #endif /* IPSEC */
 	so->so_pcb = 0;
@@ -1053,6 +1054,7 @@ in6_pcblookup_port(struct inpcbtable *table, struct in6_addr *laddr6,
 	}
 	return (match);
 }
+#undef continue
 
 /*
  * WARNING: return value (rtentry) could be IPv4 one if in6pcb is connected to

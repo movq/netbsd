@@ -1,4 +1,4 @@
-/*	$NetBSD: ses.c,v 1.45 2013/04/07 18:50:33 wiz Exp $ */
+/*	$NetBSD: ses.c,v 1.43.8.1 2013/04/29 03:17:01 riz Exp $ */
 /*
  * Copyright (C) 2000 National Aeronautics & Space Administration
  * All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ses.c,v 1.45 2013/04/07 18:50:33 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ses.c,v 1.43.8.1 2013/04/29 03:17:01 riz Exp $");
 
 #include "opt_scsi.h"
 
@@ -150,7 +150,7 @@ static void ses_log(struct ses_softc *, const char *, ...)
  */
 
 struct ses_softc {
-	device_t	sc_dev;
+	struct device	sc_device;
 	struct scsipi_periph *sc_periph;
 	enctyp		ses_type;	/* type of enclosure */
 	encvec		ses_vec;	/* vector to handlers */
@@ -171,7 +171,7 @@ static void ses_attach(device_t, device_t, void *);
 static int ses_detach(device_t, int);
 static enctyp ses_device_type(struct scsipibus_attach_args *);
 
-CFATTACH_DECL_NEW(ses, sizeof (struct ses_softc),
+CFATTACH_DECL(ses, sizeof (struct ses_softc),
     ses_match, ses_attach, ses_detach, NULL);
 
 extern struct cfdriver ses_cd;
@@ -184,7 +184,8 @@ static const struct scsipi_periphsw ses_switch = {
 };
 
 static int
-ses_match(device_t parent, cfdata_t match, void *aux)
+ses_match(device_t parent, cfdata_t match,
+    void *aux)
 {
 	struct scsipibus_attach_args *sa = aux;
 
@@ -219,10 +220,9 @@ ses_attach(device_t parent, device_t self, void *aux)
 	struct scsipibus_attach_args *sa = aux;
 	struct scsipi_periph *periph = sa->sa_periph;
 
-	softc->sc_dev = self;
 	SC_DEBUG(periph, SCSIPI_DB2, ("ssattach: "));
 	softc->sc_periph = periph;
-	periph->periph_dev = self;
+	periph->periph_dev = &softc->sc_device;
 	periph->periph_switch = &ses_switch;
 	periph->periph_openings = 1;
 
@@ -274,7 +274,7 @@ ses_attach(device_t parent, device_t self, void *aux)
 		tname = "SAF-TE Compliant Device";
 		break;
 	}
-	printf("\n%s: %s\n", device_xname(softc->sc_dev), tname);
+	printf("\n%s: %s\n", device_xname(&softc->sc_device), tname);
 }
 
 static enctyp
@@ -524,7 +524,7 @@ ses_log(struct ses_softc *ssc, const char *fmt, ...)
 {
 	va_list ap;
 
-	printf("%s: ", device_xname(ssc->sc_dev));
+	printf("%s: ", device_xname(&ssc->sc_device));
 	va_start(ap, fmt);
 	vprintf(fmt, ap);
 	va_end(ap);

@@ -228,10 +228,7 @@ single_def_use_enter_block (struct dom_walk_data *walk_data ATTRIBUTE_UNUSED,
 
   process_uses (df_get_artificial_uses (bb_index), DF_REF_AT_TOP);
   process_defs (df_get_artificial_defs (bb_index), DF_REF_AT_TOP);
-
-  /* We don't call df_simulate_initialize_forwards, as it may overestimate
-     the live registers if there are unused artificial defs.  We prefer
-     liveness to be underestimated.  */
+  df_simulate_initialize_forwards (bb, local_lr);
 
   FOR_BB_INSNS (bb, insn)
     if (INSN_P (insn))

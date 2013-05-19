@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.35 2012/10/27 17:17:35 chs Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.33.10.1 2012/08/08 15:51:12 martin Exp $	*/
 /*	$OpenBSD: autoconf.c,v 1.9 1997/05/18 13:45:20 pefo Exp $	*/
 
 /*
@@ -88,7 +88,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.35 2012/10/27 17:17:35 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.33.10.1 2012/08/08 15:51:12 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -164,7 +164,7 @@ cpu_rootconf(void)
 {
 
 	printf("boot device: %s\n",
-	    booted_device ? device_xname(booted_device) : "<unknown>");
+	    booted_device ? booted_device->dv_xname : "<unknown>");
 
 	booted_partition = booted_device ? bootdev_data->partition : 0;
 	rootconf();
@@ -264,13 +264,13 @@ getpno(const char **cp, int *np)
  * Attempt to find the device from which we were booted.
  */
 void
-device_register(device_t dev, void *aux)
+device_register(struct device *dev, void *aux)
 {
 	struct bootdev_data *b = bootdev_data;
-	device_t parent = device_parent(dev);
+	struct device *parent = device_parent(dev);
 
 	static int found = 0, initted = 0, scsiboot = 0;
-	static device_t scsibusdev = NULL;
+	static struct device *scsibusdev = NULL;
 
 	if (b == NULL)
 		return;	/* There is no hope. */
@@ -288,7 +288,7 @@ device_register(device_t dev, void *aux)
 		if (device_unit(dev) == b->bus) {
 			scsibusdev = dev;
 #if 0
-			printf("\nscsibus = %s\n", device_xname(dev));
+			printf("\nscsibus = %s\n", dev->dv_xname);
 #endif
 		}
 		return;
@@ -304,7 +304,7 @@ device_register(device_t dev, void *aux)
 		    sa->sa_periph->periph_target == b->unit) {
 			booted_device = dev;
 #if 0
-			printf("\nbooted_device = %s\n", device_xname(dev));
+			printf("\nbooted_device = %s\n", dev->dv_xname);
 #endif
 			found = 1;
 		}
@@ -314,7 +314,7 @@ device_register(device_t dev, void *aux)
 	if (device_unit(dev) == b->unit) {
 		booted_device = dev;
 #if 0
-		printf("\nbooted_device = %s\n", device_xname(dev));
+		printf("\nbooted_device = %s\n", dev->dv_xname);
 #endif
 		found = 1;
 	}

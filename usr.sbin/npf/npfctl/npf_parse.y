@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_parse.y,v 1.24 2013/05/19 20:45:34 rmind Exp $	*/
+/*	$NetBSD: npf_parse.y,v 1.3.2.12 2013/03/31 17:43:16 riz Exp $	*/
 
 /*-
  * Copyright (c) 2011-2012 The NetBSD Foundation, Inc.
@@ -86,7 +86,6 @@ yyerror(const char *fmt, ...)
 
 %}
 
-%token			ALG
 %token			ALL
 %token			ANY
 %token			APPLY
@@ -132,7 +131,6 @@ yyerror(const char *fmt, ...)
 %token			RETURN
 %token			RETURNICMP
 %token			RETURNRST
-%token			RULESET
 %token			SEPLINE
 %token			SLASH
 %token			STATEFUL
@@ -156,7 +154,7 @@ yyerror(const char *fmt, ...)
 
 %type	<str>		addr, some_name, list_elem, table_store, string
 %type	<str>		proc_param_val, opt_apply
-%type	<num>		ifindex, port, opt_final, on_ifindex, number
+%type	<num>		ifindex, port, opt_final, on_ifindex
 %type	<num>		afamily, opt_family
 %type	<num>		block_or_pass, rule_dir, block_opts
 %type	<num>		opt_stateful, icmp_type, table_type, map_sd, map_type
@@ -197,7 +195,6 @@ line
 	| map
 	| group
 	| rproc
-	| alg
 	|
 	;
 
@@ -240,12 +237,12 @@ list_elem
 		npfvar_add_element(vp, NPFVAR_STRING, $1, strlen($1) + 1);
 		npfvar_add_elements(cvar, vp);
 	}
-	| number MINUS number
+	| NUM MINUS NUM
 	{
 		npfvar_t *vp = npfctl_parse_port_range($1, $3);
 		npfvar_add_elements(cvar, vp);
 	}
-	| number
+	| NUM
 	{
 		npfvar_t *vp = npfvar_create(".num");
 		npfvar_add_element(vp, NPFVAR_NUM, &$1, sizeof($1));
@@ -313,23 +310,12 @@ map
 	{
 		npfctl_build_natseg($3, $5, $2, &$4, &$6, NULL);
 	}
-	| MAP RULESET PAR_OPEN group_attr PAR_CLOSE
-	{
-		npfctl_build_maprset($4.rg_name, $4.rg_attr, $4.rg_ifnum);
-	}
 	;
 
 rproc
 	: PROCEDURE STRING CURLY_OPEN procs CURLY_CLOSE
 	{
 		npfctl_build_rproc($2, $4);
-	}
-	;
-
-alg
-	: ALG STRING
-	{
-		npfctl_build_alg($2);
 	}
 	;
 
@@ -378,7 +364,7 @@ proc_param
 
 proc_param_val
 	: some_name	{ $$ = $1; }
-	| number	{ (void)asprintf(&$$, "%ld", $1); }
+	| NUM		{ (void)asprintf(&$$, "%ld", $1); }
 	| FPNUM		{ (void)asprintf(&$$, "%lf", $1); }
 	|		{ $$ = NULL; }
 	;
@@ -396,15 +382,6 @@ group
 		npfctl_build_group_end();
 	}
 	;
-
-ruleset
-	: RULESET PAR_OPEN group_attr PAR_CLOSE
-	{
-		/* Ruleset is a dynamic group. */
-		npfctl_build_group($3.rg_name, $3.rg_attr | NPF_RULE_DYNAMIC,
-		    $3.rg_ifnum, $3.rg_default);
-		npfctl_build_group_end();
-	}
 
 group_attr
 	: group_opt COMMA group_attr
@@ -466,20 +443,19 @@ group_opt
 	;
 
 ruleset_block
-	: CURLY_OPEN ruleset_def CURLY_CLOSE
+	: CURLY_OPEN ruleset CURLY_CLOSE
+	| /* Empty (for a dynamic ruleset). */
 	;
 
-ruleset_def
-	: rule_group SEPLINE ruleset_def
+ruleset
+	: rule_group SEPLINE ruleset
 	| rule_group
 	;
 
 rule_group
 	: rule
 	| group
-	| ruleset
 	|
-	;
 
 rule
 	: block_or_pass opt_stateful rule_dir opt_final on_ifindex
@@ -542,7 +518,7 @@ opt_proto
 		$$.op_proto = npfctl_protono($2);
 		$$.op_opts = NULL;
 	}
-	| PROTO number
+	| PROTO NUM
 	{
 		$$.op_proto = $2;
 		$$.op_opts = NULL;
@@ -613,7 +589,11 @@ filt_addr
 	;
 
 addr_and_mask
-	: addr SLASH number
+	: addr SLASH NUM
+	{
+		$$ = npfctl_parse_fam_addr_mask($1, NULL, &$3);
+	}
+	| addr SLASH HEX
 	{
 		$$ = npfctl_parse_fam_addr_mask($1, NULL, &$3);
 	}
@@ -695,7 +675,7 @@ port_range
 	;
 
 port
-	: number	{ $$ = $1; }
+	: NUM		{ $$ = $1; }
 	| IDENTIFIER	{ $$ = npfctl_portno($1); }
 	| STRING	{ $$ = npfctl_portno($1); }
 	;
@@ -705,7 +685,7 @@ icmp_type_and_code
 	{
 		$$ = npfctl_parse_icmp($<num>0, $2, -1);
 	}
-	| ICMPTYPE icmp_type CODE number
+	| ICMPTYPE icmp_type CODE NUM
 	{
 		$$ = npfctl_parse_icmp($<num>0, $2, $4);
 	}
@@ -746,7 +726,7 @@ tcp_flags
 	;
 
 icmp_type
-	: number	{ $$ = $1; }
+	: NUM		{ $$ = $1; }
 	| IDENTIFIER	{ $$ = npfctl_icmptype($<num>-1, $1); }
 	| VAR_ID
 	{
@@ -826,11 +806,6 @@ ifindex
 			break;
 		}
 	}
-	;
-
-number
-	: HEX		{ $$ = $1; }
-	| NUM		{ $$ = $1; }
 	;
 
 some_name

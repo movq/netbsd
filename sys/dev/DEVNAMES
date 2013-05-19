@@ -1,4 +1,4 @@
-#	$NetBSD: DEVNAMES,v 1.284 2013/01/29 00:54:13 rkujawa Exp $
+#	$NetBSD: DEVNAMES,v 1.271.2.1 2012/07/04 20:41:46 jdc Exp $
 #
 # This file contains all used device names and defined attributes in
 # alphabetical order. New devices added to the system somewhere should first
@@ -13,8 +13,6 @@ a2kbbc			amiga
 a2kbbc			amigappc
 a34kbbc			amiga
 a34kbbc			amigappc
-a9tmr			arm
-a9wdt			arm
 aac			MI
 abtn			macppc
 abus			vax
@@ -95,9 +93,6 @@ arcmsr			MI
 arcpp			acorn26
 arcvideo		acorn26
 aria			MI
-armgic			arm
-arml2cc			arm
-armperiph		arm
 arp			MI		Attribute
 artsata			MI
 asc			acorn32
@@ -175,16 +170,6 @@ bioscall		i386		Attribute
 bivideo			hpcmips
 bktr			MI
 bm			macppc
-bcmcca			arm
-bcmccb			arm
-bcmeth			arm
-bcmi2c			arm
-bcmmdio			arm
-bcmnand			arm
-bcmpax			arm
-bcmrng			arm
-bcmsw			arm
-bcmusb			arm
 bmd			x68k
 bmtphy			MI
 boca			MI
@@ -273,8 +258,6 @@ clock			sun2
 clock			sun3
 clock			x68k
 clockctl		MI
-clockport		amiga
-clockportbus		amiga
 cmdide			MI
 cmi			vax
 cmpci			MI
@@ -288,7 +271,6 @@ cpcbus			MI		Attribute
 cpciic			MI
 cpctim			MI
 cprofb			MI
-cpsw			evbarm
 cpu			acorn26
 cpu			acorn32
 cpu			algor
@@ -369,7 +351,6 @@ drsupio			amigappc
 dsrtc			cats
 dsrtc			evbppc
 dtide			MI
-dtimer			arm
 duart			powerpc
 dvbox			hp300
 dwlpx			alpha
@@ -394,7 +375,6 @@ eeprom			sparc
 eeprom			sparc64
 eeprom			sun3
 ef			MI
-efa			amiga
 eg			MI
 ega			MI
 eh			acorn26
@@ -406,9 +386,6 @@ el			MI
 elink			MI		Attribute
 elmc			MI (MCA)
 emac			evbppc
-em4k			amiga
-empb			amiga
-empm			amiga
 empsc			amiga
 empsc			amigappc
 emuxki			MI
@@ -486,7 +463,6 @@ fdc			sun3
 fdc			x68k
 fddi			MI		Attribute
 fea			MI
-fec			arm
 ffb			sparc64
 fhpib			hp300
 finsio			MI
@@ -520,7 +496,6 @@ gem			MI
 gentbi			MI
 geodeide		MI
 gfe			MI
-gic			arm
 gio			sgimips
 giobus			sgimips		Attribute
 glxtphy			MI
@@ -623,7 +598,6 @@ i2c_eeprom		MI		Attribute
 i8042			shark		Attribute
 i82586			MI		Attribute
 iavc			MI
-ibmcd			MI
 ibus			pmax
 ibus			vax
 ichlpcib		i386
@@ -852,13 +826,11 @@ mcbus			alpha
 mcclock			algor
 mcclock			alpha
 mcclock			evbmips
-mcclock			evbppc
 mcclock			pmax
 mcclock			prep
 mcd			MI
 mcmem			alpha
 mcpcia			alpha
-mdio			evbppc
 mec			sgimips
 mediabay		macppc
 melody			amiga
@@ -902,8 +874,6 @@ mms			dreamcast
 mms			i386
 motoi2c			MI		Attribute
 moxa			MI
-mppb			amiga
-mppb			amigappc
 mpt			MI
 mpu			MI
 mr			MI
@@ -1015,12 +985,6 @@ optiide			MI
 osiop			MI
 otgsc			amiga
 otgsc			amigappc
-p5bus			amiga
-p5bus			amigappc
-p5membar		amiga
-p5membar		amigappc
-p5pb			amiga
-p5pb			amigappc
 panel			cobalt
 pad			MI
 par			amiga
@@ -1121,8 +1085,6 @@ psh3lcd			hpcsh
 psh3tp			hpcsh
 psm			sparc64
 psycho			sparc64
-ptcd			amd64
-ptcd			i386
 ptsc			acorn32
 puc			MI
 pvr			dreamcast
@@ -1178,8 +1140,6 @@ rtfps			MI
 rtii			MI
 rtk			MI
 rtl80x9			MI		Attribute
-rum			MI
-run			MI
 rx			MI
 ry			vax
 rz			pmax
@@ -1312,7 +1272,6 @@ tcom			MI
 tctrl			sparc
 tcx			sparc
 tcx			sparc64
-tdvfb			MI
 te			vax
 tea5757			MI
 tfb			MI
@@ -1424,13 +1383,10 @@ up			vax
 upc			MI
 upl			MI
 uplcom			MI
-ural			MI
 urio			MI
 url			MI
 urlphy			MI
 urndis			MI
-urtw			MI
-urtwn			MI
 usb			MI
 usbus			MI		Attribute
 uscanner		MI
@@ -1518,6 +1474,7 @@ xb			alpha
 xbd			xen
 xbox			MI
 xcfb			pmax
+xcom			x68k
 xd			MI
 xd			sun3
 xdc			MI
@@ -1528,7 +1485,6 @@ xencons			xen
 xenevt			xen
 xennet			xen
 xge			MI
-xhci			MI
 xi			MI
 xmi			MI
 xsii			pmax

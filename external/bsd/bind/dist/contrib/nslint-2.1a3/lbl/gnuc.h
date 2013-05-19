@@ -1,4 +1,4 @@
-/*	$NetBSD: gnuc.h,v 1.3 2012/06/05 00:40:00 christos Exp $	*/
+/*	$NetBSD: gnuc.h,v 1.2.6.1 2012/06/05 21:15:34 bouyer Exp $	*/
 
 /* @(#) Header: /u0/home/explorer/proj/ISC/git-conversion/cvsroot/bind9/contrib/nslint-2.1a3/lbl/gnuc.h,v 1.1 2001/12/21 04:12:05 marka Exp  (LBL) */
 

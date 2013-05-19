@@ -1,4 +1,4 @@
-/*	$NetBSD: io.c,v 1.27 2012/10/13 20:36:06 dholland Exp $	*/
+/*	$NetBSD: io.c,v 1.26 2011/05/23 22:48:52 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)io.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: io.c,v 1.27 2012/10/13 20:36:06 dholland Exp $");
+__RCSID("$NetBSD: io.c,v 1.26 2011/05/23 22:48:52 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -59,7 +59,7 @@ __RCSID("$NetBSD: io.c,v 1.27 2012/10/13 20:36:06 dholland Exp $");
 #define	CTRL(X)			(X - 'A' + 1)
 
 static int msgcrd(CARD, BOOLEAN, const char *, BOOLEAN);
-static void printcard(WINDOW *, unsigned, CARD, BOOLEAN);
+static void printcard(WINDOW *, int, CARD, BOOLEAN);
 static int incard(CARD *);
 static void wait_for(int);
 static int readchar(void);
@@ -121,7 +121,7 @@ msgcrd(CARD c, BOOLEAN brfrank, const char *mid, BOOLEAN brfsuit)
  *	Print out a card.
  */
 static void
-printcard(WINDOW *win, unsigned cardno, CARD c, BOOLEAN blank)
+printcard(WINDOW *win, int cardno, CARD c, BOOLEAN blank)
 {
 	prcard(win, cardno * 2, cardno, c, blank);
 }
@@ -154,9 +154,9 @@ prcard(WINDOW *win, int y, int x, CARD c, BOOLEAN blank)
  *	Print a hand of n cards
  */
 void
-prhand(const CARD h[], unsigned n, WINDOW *win, BOOLEAN blank)
+prhand(const CARD h[], int n, WINDOW *win, BOOLEAN blank)
 {
-	unsigned i;
+	int i;
 
 	werase(win);
 	for (i = 0; i < n; i++)
@@ -519,7 +519,7 @@ over:
 char *
 get_line(void)
 {
-	size_t pos;
+	char *sp;
 	int c, oy, ox;
 	WINDOW *oscr;
 
@@ -528,36 +528,36 @@ get_line(void)
 	getyx(stdscr, oy, ox);
 	refresh();
 	/* loop reading in the string, and put it in a temporary buffer */
-	for (pos = 0; (c = readchar()) != '\n'; clrtoeol(), refresh()) {
+	for (sp = linebuf; (c = readchar()) != '\n'; clrtoeol(), refresh()) {
 			if (c == erasechar()) {	/* process erase character */
-				if (pos > 0) {
+				if (sp > linebuf) {
 					int i;
 
-					pos--;
-					for (i = strlen(unctrl(linebuf[pos])); i; i--)
+					sp--;
+					for (i = strlen(unctrl(*sp)); i; i--)
 						addch('\b');
 				}
 				continue;
 			} else
 				if (c == killchar()) {	/* process kill
 							 * character */
-					pos = 0;
+					sp = linebuf;
 					move(oy, ox);
 					continue;
 				} else
-					if (pos == 0 && c == ' ')
+					if (sp == linebuf && c == ' ')
 						continue;
-		if (pos >= LINESIZE - 1 || !(isprint(c) || c == ' '))
+		if (sp >= &linebuf[LINESIZE - 1] || !(isprint(c) || c == ' '))
 			putchar(CTRL('G'));
 		else {
 			if (islower(c))
 				c = toupper(c);
-			linebuf[pos++] = c;
+			*sp++ = c;
 			addstr(unctrl(c));
 			Mpos++;
 		}
 	}
-	linebuf[pos] = '\0';
+	*sp = '\0';
 	stdscr = oscr;
 	return (linebuf);
 }

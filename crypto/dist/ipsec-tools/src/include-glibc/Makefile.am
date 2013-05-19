@@ -1,6 +1,6 @@
 
 .includes: ${top_builddir}/config.status
-	ln -snf $(KERNEL_INCLUDE)/linux
+	ln -sf $(KERNEL_INCLUDE)/linux
 	touch .includes
 
 all: .includes

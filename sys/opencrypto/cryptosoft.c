@@ -1,4 +1,4 @@
-/*	$NetBSD: cryptosoft.c,v 1.41 2013/02/02 21:38:24 christos Exp $ */
+/*	$NetBSD: cryptosoft.c,v 1.39 2011/11/28 08:05:06 tls Exp $ */
 /*	$FreeBSD: src/sys/opencrypto/cryptosoft.c,v 1.2.2.1 2002/11/21 23:34:23 sam Exp $	*/
 /*	$OpenBSD: cryptosoft.c,v 1.35 2002/04/26 08:43:50 deraadt Exp $	*/
 
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cryptosoft.c,v 1.41 2013/02/02 21:38:24 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cryptosoft.c,v 1.39 2011/11/28 08:05:06 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -32,7 +32,6 @@ __KERNEL_RCSID(0, "$NetBSD: cryptosoft.c,v 1.41 2013/02/02 21:38:24 christos Exp
 #include <sys/mbuf.h>
 #include <sys/sysctl.h>
 #include <sys/errno.h>
-#include <sys/cprng.h>
 
 #include "opt_ocf.h"
 #include <opencrypto/cryptodev.h>
@@ -1090,11 +1089,11 @@ swcr_freesession(void *arg, u_int64_t tid)
 			axf = swd->sw_axf;
 
 			if (swd->sw_ictx) {
-				explicit_bzero(swd->sw_ictx, axf->ctxsize);
+				memset(swd->sw_ictx, 0, axf->ctxsize);
 				free(swd->sw_ictx, M_CRYPTO_DATA);
 			}
 			if (swd->sw_octx) {
-				explicit_bzero(swd->sw_octx, axf->ctxsize);
+				memset(swd->sw_octx, 0, axf->ctxsize);
 				free(swd->sw_octx, M_CRYPTO_DATA);
 			}
 			break;
@@ -1104,11 +1103,11 @@ swcr_freesession(void *arg, u_int64_t tid)
 			axf = swd->sw_axf;
 
 			if (swd->sw_ictx) {
-				explicit_bzero(swd->sw_ictx, axf->ctxsize);
+				memset(swd->sw_ictx, 0, axf->ctxsize);
 				free(swd->sw_ictx, M_CRYPTO_DATA);
 			}
 			if (swd->sw_octx) {
-				explicit_bzero(swd->sw_octx, swd->sw_klen);
+				memset(swd->sw_octx, 0, swd->sw_klen);
 				free(swd->sw_octx, M_CRYPTO_DATA);
 			}
 			break;
@@ -1121,10 +1120,8 @@ swcr_freesession(void *arg, u_int64_t tid)
 		case CRYPTO_AES_256_GMAC:
 			axf = swd->sw_axf;
 
-			if (swd->sw_ictx) {
-				explicit_bzero(swd->sw_ictx, axf->ctxsize);
+			if (swd->sw_ictx)
 				free(swd->sw_ictx, M_CRYPTO_DATA);
-			}
 			break;
 
 		case CRYPTO_DEFLATE_COMP:

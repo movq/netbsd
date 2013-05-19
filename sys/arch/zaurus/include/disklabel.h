@@ -1,4 +1,4 @@
-/*	$NetBSD: disklabel.h,v 1.4 2013/05/07 20:42:47 matt Exp $	*/
+/*	$NetBSD: disklabel.h,v 1.3 2011/08/30 12:39:59 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1994 Christopher G. Demetriou
@@ -30,15 +30,34 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _ZAURUS_DISKLABEL_H_
-#define _ZAURUS_DISKLABEL_H_
+#ifndef _MACHINE_DISKLABEL_H_
+#define _MACHINE_DISKLABEL_H_
 
+#define LABELUSESMBR	1		/* use MBR partitionning */
+#define	LABELSECTOR	1		/* sector containing label */
+#define	LABELOFFSET	0		/* offset of label in sector */
+#define	MAXPARTITIONS	16		/* number of partitions */
 #define	RAW_PART	3		/* raw partition: XX?d (XXX) */
 
+/* Pull in MBR partition definitions. */
 #if HAVE_NBTOOL_CONFIG_H
-#include <nbinclude/arm/disklabel.h>
+#include <nbinclude/sys/bootblock.h>
 #else
-#include <arm/disklabel.h>
+#include <sys/bootblock.h>
 #endif /* HAVE_NBTOOL_CONFIG_H */
 
-#endif /* _ZAURUS_DISKLABEL_H_ */
+#ifndef __ASSEMBLER__
+#if HAVE_NBTOOL_CONFIG_H
+#include <nbinclude/sys/dkbad.h>
+#else
+#include <sys/dkbad.h>
+#endif /* HAVE_NBTOOL_CONFIG_H */
+
+struct cpu_disklabel {
+	struct mbr_partition dosparts[MBR_PART_COUNT];
+#define __HAVE_DISKLABEL_DKBAD
+	struct dkbad bad;
+};
+#endif	/* __ASSEMBLER__ */
+
+#endif /* _MACHINE_DISKLABEL_H_ */

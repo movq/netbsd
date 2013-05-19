@@ -1,4 +1,4 @@
-/*	$NetBSD: smb_conn.c,v 1.29 2012/04/29 20:27:31 dsl Exp $	*/
+/*	$NetBSD: smb_conn.c,v 1.27 2010/12/17 13:05:29 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smb_conn.c,v 1.29 2012/04/29 20:27:31 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smb_conn.c,v 1.27 2010/12/17 13:05:29 pooka Exp $");
 
 /*
  * Connection engine.
@@ -87,10 +87,9 @@ __KERNEL_RCSID(0, "$NetBSD: smb_conn.c,v 1.29 2012/04/29 20:27:31 dsl Exp $");
 
 static struct smb_connobj smb_vclist;
 static int smb_vcnext = 1;	/* next unique id for VC */
-static kauth_listener_t smb_listener;
+
 
 MALLOC_DEFINE(M_SMBCONN, "SMB conn", "SMB connection");
-MALLOC_DECLARE(M_SMBCONN);
 
 static void smb_co_init(struct smb_connobj *cp, int level, const char *objname);
 static void smb_co_done(struct smb_connobj *cp);
@@ -101,106 +100,6 @@ static void smb_vc_gone(struct smb_connobj *cp, struct smb_cred *scred);
 static smb_co_free_t smb_share_free;
 static smb_co_gone_t smb_share_gone;
 
-static int
-smb_listener_cb(kauth_cred_t cred, kauth_action_t action, void *cookie,
-    void *arg0, void *arg1, void *arg2, void *arg3)
-{
-	int result, ismember = 0;
-	enum kauth_network_req req;
-
-	if (action != KAUTH_NETWORK_SMB)
-		return KAUTH_RESULT_DEFER;
-
-	result = KAUTH_RESULT_DEFER;
-	req = (enum kauth_network_req)arg0;
-
-	switch (req) {
-	case KAUTH_REQ_NETWORK_SMB_SHARE_ACCESS: {
-		struct smb_share *ssp = arg1;
-		mode_t mode = (mode_t)(uintptr_t)arg2;
-
-		/* Owner can access. */
-		if (kauth_cred_geteuid(cred) == ssp->ss_uid) {
-			result = KAUTH_RESULT_ALLOW;
-			break;
-		}
-
-		/* Try group permissions if member or other if not. */
-		mode >>= 3;
-		if (kauth_cred_ismember_gid(cred, ssp->ss_grp, &ismember) != 0 ||
-		    !ismember)
-			mode >>= 3;
-
-		if ((ssp->ss_mode & mode) == mode)
-			result = KAUTH_RESULT_ALLOW;
-
-		break;
-		}
-
-	case KAUTH_REQ_NETWORK_SMB_SHARE_CREATE: {
-		struct smb_sharespec *shspec = arg1;
-
-		/*
-		 * Only superuser can create shares with different uid and gid
-		 */
-		if (shspec->owner != SMBM_ANY_OWNER &&
-		    shspec->owner != kauth_cred_geteuid(cred))
-			break;
-		if (shspec->group != SMBM_ANY_GROUP &&
-		    (kauth_cred_ismember_gid(cred, shspec->group, &ismember) != 0 || !ismember))
-			break;
-
-		result = KAUTH_RESULT_ALLOW;
-
-		break;
-		}
-
-	case KAUTH_REQ_NETWORK_SMB_VC_ACCESS: {
-		struct smb_vc *vcp = arg1;
-		mode_t mode = (mode_t)(uintptr_t)arg2;
-
-		/* Owner can access. */
-		if (kauth_cred_geteuid(cred) == vcp->vc_uid) {
-			result = KAUTH_RESULT_ALLOW;
-			break;
-		}
-
-		/* Try group permissions if member or other if not. */
-		mode >>= 3;
-		if (kauth_cred_ismember_gid(cred, vcp->vc_grp, &ismember) != 0 ||
-		    !ismember)
-			mode >>= 3;
-
-		if ((vcp->vc_mode & mode) == mode)
-			result = KAUTH_RESULT_ALLOW;
-
-		break;
-		}
-
-	case KAUTH_REQ_NETWORK_SMB_VC_CREATE: {
-		struct smb_vcspec *vcspec = arg1;
-
-		/*
-		 * Only superuser can create VCs with different uid and gid
-		 */
-		if (vcspec->owner != SMBM_ANY_OWNER &&
-		    vcspec->owner != kauth_cred_geteuid(cred))
-			break;
-		if (vcspec->group != SMBM_ANY_GROUP &&
-		    (kauth_cred_ismember_gid(cred, vcspec->group, &ismember) != 0 || !ismember))
-			break;
-
-		result = KAUTH_RESULT_ALLOW;
-
-		break;
-		}
-
-	default:
-		break;
-	}
-
-	return result;
-}
 
 int
 smb_sm_init(void)
@@ -210,8 +109,6 @@ smb_sm_init(void)
 	mutex_enter(&smb_vclist.co_interlock);
 	smb_co_unlock(&smb_vclist);
 	mutex_exit(&smb_vclist.co_interlock);
-	smb_listener = kauth_listen_scope(KAUTH_SCOPE_NETWORK,
-	    smb_listener_cb, NULL);
 	return 0;
 }
 
@@ -225,7 +122,6 @@ smb_sm_done(void)
 		panic("%d connections still active", smb_vclist.co_usecount - 1);
 #endif
 	smb_co_done(&smb_vclist);
-	kauth_unlisten_scope(smb_listener);
 	return 0;
 }
 
@@ -522,14 +418,20 @@ smb_vc_create(struct smb_vcspec *vcspec,
 	gid_t gid = vcspec->group;
 	uid_t realuid;
 	char *domain = vcspec->domain;
-	int error;
-
-	error = kauth_authorize_network(cred, KAUTH_NETWORK_SMB,
-	    KAUTH_REQ_NETWORK_SMB_VC_CREATE, vcspec, NULL, NULL);
-	if (error)
-		return EPERM;
+	int error, isroot, ismember = 0;
 
 	realuid = kauth_cred_geteuid(cred);
+	isroot = (smb_suser(cred) == 0);
+	/*
+	 * Only superuser can create VCs with different uid and gid
+	 */
+	if (uid != SMBM_ANY_OWNER && uid != realuid && !isroot)
+		return EPERM;
+
+	if (gid != SMBM_ANY_GROUP &&
+	    (kauth_cred_ismember_gid(cred, gid, &ismember) != 0 || !ismember) &&
+	    !isroot)
+		return EPERM;
 
 	vcp = smb_zmalloc(sizeof(*vcp), M_SMBCONN, M_WAITOK);
 	smb_co_init(VCTOCP(vcp), SMBL_VC, "smb_vc");
@@ -697,14 +599,15 @@ int
 smb_vc_access(struct smb_vc *vcp, struct smb_cred *scred, mode_t mode)
 {
 	kauth_cred_t cred = scred->scr_cred;
-	int error;
+	int ismember = 0;
 
-	error = kauth_authorize_network(cred, KAUTH_NETWORK_SMB,
-	    KAUTH_REQ_NETWORK_SMB_VC_ACCESS, vcp, KAUTH_ARG(mode), NULL);
-	if (error)
-		return EACCES;
-
-	return 0;
+	if (smb_suser(cred) == 0 || kauth_cred_geteuid(cred) == vcp->vc_uid)
+		return 0;
+	mode >>= 3;
+	if (kauth_cred_ismember_gid(cred, vcp->vc_grp, &ismember) != 0 ||
+	    !ismember)
+		mode >>= 3;
+	return (vcp->vc_mode & mode) == mode ? 0 : EACCES;
 }
 
 static int
@@ -825,15 +728,19 @@ smb_share_create(struct smb_vc *vcp, struct smb_sharespec *shspec,
 	uid_t realuid;
 	uid_t uid = shspec->owner;
 	gid_t gid = shspec->group;
-	int error;
-
-	error = kauth_authorize_network(cred, KAUTH_NETWORK_SMB,
-	    KAUTH_REQ_NETWORK_SMB_SHARE_CREATE, shspec, NULL, NULL);
-	if (error)
-		return EPERM;
+	int error, isroot, ismember = 0;
 
 	realuid = kauth_cred_geteuid(cred);
-
+	isroot = smb_suser(cred) == 0;
+	/*
+	 * Only superuser can create shares with different uid and gid
+	 */
+	if (uid != SMBM_ANY_OWNER && uid != realuid && !isroot)
+		return EPERM;
+	if (gid != SMBM_ANY_GROUP &&
+	    (kauth_cred_ismember_gid(cred, gid, &ismember) != 0 || !ismember) &&
+	    !isroot)
+		return EPERM;
 	error = smb_vc_lookupshare(vcp, shspec, scred, &ssp);
 	if (!error) {
 		smb_share_put(ssp, scred);
@@ -939,14 +846,15 @@ int
 smb_share_access(struct smb_share *ssp, struct smb_cred *scred, mode_t mode)
 {
 	kauth_cred_t cred = scred->scr_cred;
-	int error;
+	int ismember = 0;
 
-	error = kauth_authorize_network(cred, KAUTH_NETWORK_SMB,
-	    KAUTH_REQ_NETWORK_SMB_SHARE_ACCESS, ssp, KAUTH_ARG(mode), NULL);
-	if (error)
-		return EACCES;
-
-	return 0;
+	if (smb_suser(cred) == 0 || kauth_cred_geteuid(cred) == ssp->ss_uid)
+		return 0;
+	mode >>= 3;
+	if (kauth_cred_ismember_gid(cred, ssp->ss_grp, &ismember) != 0 ||
+	    !ismember)
+		mode >>= 3;
+	return (ssp->ss_mode & mode) == mode ? 0 : EACCES;
 }
 
 int

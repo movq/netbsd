@@ -1,12 +1,12 @@
-/*	$NetBSD: uaudio.c,v 1.136 2013/05/12 09:54:55 wiz Exp $	*/
+/*	$NetBSD: uaudio.c,v 1.128 2011/12/23 00:51:44 jakllsch Exp $	*/
 
 /*
- * Copyright (c) 1999, 2012 The NetBSD Foundation, Inc.
+ * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
  * by Lennart Augustsson (lennart@augustsson.net) at
- * Carlstedt Research & Technology, and Matthew R. Green (mrg@eterna.com.au).
+ * Carlstedt Research & Technology.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uaudio.c,v 1.136 2013/05/12 09:54:55 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uaudio.c,v 1.128 2011/12/23 00:51:44 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,7 +54,6 @@ __KERNEL_RCSID(0, "$NetBSD: uaudio.c,v 1.136 2013/05/12 09:54:55 wiz Exp $");
 #include <sys/module.h>
 #include <sys/bus.h>
 #include <sys/cpu.h>
-#include <sys/atomic.h>
 
 #include <sys/audioio.h>
 #include <dev/audio_if.h>
@@ -91,7 +90,7 @@ __KERNEL_RCSID(0, "$NetBSD: uaudio.c,v 1.136 2013/05/12 09:54:55 wiz Exp $");
 			printf("%s[%d:%d]: "x, __func__, l->l_proc->p_pid, l->l_lid, y); \
 		} \
 	} while (0)
-int	uaudiodebug = 0;
+int	uaudiodebug = 6;
 #else
 #define DPRINTF(x,y...)
 #define DPRINTFN_CLEAN(n,x...)
@@ -394,7 +393,7 @@ CFATTACH_DECL2_NEW(uaudio, sizeof(struct uaudio_softc),
     uaudio_match, uaudio_attach, uaudio_detach, uaudio_activate, NULL,
     uaudio_childdet);
 
-int
+int 
 uaudio_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct usbif_attach_arg *uaa = aux;
@@ -408,7 +407,7 @@ uaudio_match(device_t parent, cfdata_t match, void *aux)
 	return UMATCH_IFACECLASS_IFACESUBCLASS;
 }
 
-void
+void 
 uaudio_attach(device_t parent, device_t self, void *aux)
 {
 	struct uaudio_softc *sc = device_private(self);
@@ -422,7 +421,7 @@ uaudio_attach(device_t parent, device_t self, void *aux)
 	sc->sc_dev = self;
 	sc->sc_udev = uaa->device;
 	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_SCHED);
+	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_USB);
 
 	strlcpy(sc->sc_adev.name, "USB audio", sizeof(sc->sc_adev.name));
 	strlcpy(sc->sc_adev.version, "", sizeof(sc->sc_adev.version));
@@ -498,7 +497,11 @@ uaudio_attach(device_t parent, device_t self, void *aux)
 			   sc->sc_dev);
 
 	DPRINTF("%s", "doing audio_attach_mi\n");
+#if defined(__OpenBSD__)
+	audio_attach_mi(&uaudio_hw_if, sc, &sc->sc_dev);
+#else
 	sc->sc_audiodev = audio_attach_mi(&uaudio_hw_if, sc, sc->sc_dev);
+#endif
 
 	return;
 }
@@ -1848,8 +1851,6 @@ uaudio_identify_as(struct uaudio_softc *sc,
 					aprint_error("%s: please increase "
 					       "AUFMT_MAX_FREQUENCIES to %d\n",
 					       __func__, t1desc->bSamFreqType);
-					auf->frequency_type =
-					    AUFMT_MAX_FREQUENCIES;
 					break;
 				}
 				auf->frequency[j] = UA_GETSAMP(t1desc, j);
@@ -2096,7 +2097,7 @@ uaudio_query_devinfo(void *addr, mixer_devinfo_t *mi)
 	struct mixerctl *mc;
 	int n, nctls, i;
 
-	DPRINTFN(7, "index=%d\n", mi->index);
+	DPRINTFN(2, "index=%d\n", mi->index);
 	sc = addr;
 	if (sc->sc_dying)
 		return EIO;
@@ -2219,13 +2220,16 @@ uaudio_halt_out_dma(void *addr)
 
 	DPRINTF("%s", "enter\n");
 
+	KERNEL_LOCK(1, curlwp);
 	mutex_spin_exit(&sc->sc_intr_lock);
 	if (sc->sc_playchan.pipe != NULL) {
 		uaudio_chan_close(sc, &sc->sc_playchan);
+		sc->sc_playchan.pipe = NULL;
 		uaudio_chan_free_buffers(sc, &sc->sc_playchan);
 		sc->sc_playchan.intr = NULL;
 	}
 	mutex_spin_enter(&sc->sc_intr_lock);
+	KERNEL_UNLOCK_ONE(curlwp);
 
 	return 0;
 }
@@ -2237,13 +2241,16 @@ uaudio_halt_in_dma(void *addr)
 
 	DPRINTF("%s", "enter\n");
 
+	KERNEL_LOCK(1, curlwp);
 	mutex_spin_exit(&sc->sc_intr_lock);
 	if (sc->sc_recchan.pipe != NULL) {
 		uaudio_chan_close(sc, &sc->sc_recchan);
+		sc->sc_recchan.pipe = NULL;
 		uaudio_chan_free_buffers(sc, &sc->sc_recchan);
 		sc->sc_recchan.intr = NULL;
 	}
 	mutex_spin_enter(&sc->sc_intr_lock);
+	KERNEL_UNLOCK_ONE(curlwp);
 
 	return 0;
 }
@@ -2457,10 +2464,10 @@ uaudio_ctl_get(struct uaudio_softc *sc, int which, struct mixerctl *mc,
 	int val;
 
 	DPRINTFN(5,"which=%d chan=%d\n", which, chan);
-	mutex_exit(&sc->sc_lock);
+	KERNEL_LOCK(1, curlwp);
 	val = uaudio_get(sc, which, UT_READ_CLASS_INTERFACE, mc->wValue[chan],
 			 mc->wIndex, MIX_SIZE(mc->type));
-	mutex_enter(&sc->sc_lock);
+	KERNEL_UNLOCK_ONE(curlwp);
 	return uaudio_value2bsd(mc, val);
 }
 
@@ -2470,10 +2477,10 @@ uaudio_ctl_set(struct uaudio_softc *sc, int which, struct mixerctl *mc,
 {
 
 	val = uaudio_bsd2value(mc, val);
-	mutex_exit(&sc->sc_lock);
+	KERNEL_LOCK(1, curlwp);
 	uaudio_set(sc, which, UT_WRITE_CLASS_INTERFACE, mc->wValue[chan],
 		   mc->wIndex, MIX_SIZE(mc->type), val);
-	mutex_enter(&sc->sc_lock);
+	KERNEL_UNLOCK_ONE(curlwp);
 }
 
 Static int
@@ -2571,7 +2578,7 @@ uaudio_trigger_input(void *addr, void *start, void *end, int blksize,
 	struct uaudio_softc *sc;
 	struct chan *ch;
 	usbd_status err;
-	int i;
+	int i, s;
 
 	sc = addr;
 	if (sc->sc_dying)
@@ -2585,15 +2592,18 @@ uaudio_trigger_input(void *addr, void *start, void *end, int blksize,
 		    "fraction=0.%03d\n", ch->sample_size, ch->bytes_per_frame,
 		    ch->fraction);
 
+	KERNEL_LOCK(1, curlwp);
 	mutex_spin_exit(&sc->sc_intr_lock);
 	err = uaudio_chan_alloc_buffers(sc, ch);
 	if (err) {
 		mutex_spin_enter(&sc->sc_intr_lock);
+		KERNEL_UNLOCK_ONE(curlwp);
 		return EIO;
 	}
 
 	err = uaudio_chan_open(sc, ch);
 	mutex_spin_enter(&sc->sc_intr_lock);
+	KERNEL_UNLOCK_ONE(curlwp);
 	if (err) {
 		uaudio_chan_free_buffers(sc, ch);
 		return EIO;
@@ -2602,10 +2612,14 @@ uaudio_trigger_input(void *addr, void *start, void *end, int blksize,
 	ch->intr = intr;
 	ch->arg = arg;
 
+	KERNEL_LOCK(1, curlwp);
 	mutex_spin_exit(&sc->sc_intr_lock);
+	s = splusb();
 	for (i = 0; i < UAUDIO_NCHANBUFS-1; i++) /* XXX -1 shouldn't be needed */
 		uaudio_chan_rtransfer(ch);
+	splx(s);
 	mutex_spin_enter(&sc->sc_intr_lock);
+	KERNEL_UNLOCK_ONE(curlwp);
 
 	return 0;
 }
@@ -2618,7 +2632,7 @@ uaudio_trigger_output(void *addr, void *start, void *end, int blksize,
 	struct uaudio_softc *sc;
 	struct chan *ch;
 	usbd_status err;
-	int i;
+	int i, s;
 
 	sc = addr;
 	if (sc->sc_dying)
@@ -2632,15 +2646,18 @@ uaudio_trigger_output(void *addr, void *start, void *end, int blksize,
 		    "fraction=0.%03d\n", ch->sample_size, ch->bytes_per_frame,
 		    ch->fraction);
 
+	KERNEL_LOCK(1, curlwp);
 	mutex_spin_exit(&sc->sc_intr_lock);
 	err = uaudio_chan_alloc_buffers(sc, ch);
 	if (err) {
 		mutex_spin_enter(&sc->sc_intr_lock);
+		KERNEL_UNLOCK_ONE(curlwp);
 		return EIO;
 	}
 
 	err = uaudio_chan_open(sc, ch);
 	mutex_spin_enter(&sc->sc_intr_lock);
+	KERNEL_UNLOCK_ONE(curlwp);
 	if (err) {
 		uaudio_chan_free_buffers(sc, ch);
 		return EIO;
@@ -2649,10 +2666,14 @@ uaudio_trigger_output(void *addr, void *start, void *end, int blksize,
 	ch->intr = intr;
 	ch->arg = arg;
 
+	KERNEL_LOCK(1, curlwp);
 	mutex_spin_exit(&sc->sc_intr_lock);
+	s = splusb();
 	for (i = 0; i < UAUDIO_NCHANBUFS-1; i++) /* XXX */
 		uaudio_chan_ptransfer(ch);
+	splx(s);
 	mutex_spin_enter(&sc->sc_intr_lock);
+	KERNEL_UNLOCK_ONE(curlwp);
 
 	return 0;
 }
@@ -2662,7 +2683,6 @@ Static usbd_status
 uaudio_chan_open(struct uaudio_softc *sc, struct chan *ch)
 {
 	struct as_info *as;
-	usb_device_descriptor_t *ddesc;
 	int endpt;
 	usbd_status err;
 
@@ -2679,24 +2699,24 @@ uaudio_chan_open(struct uaudio_softc *sc, struct chan *ch)
 	/*
 	 * Roland SD-90 freezes by a SAMPLING_FREQ_CONTROL request.
 	 */
-	ddesc = usbd_get_device_descriptor(sc->sc_udev);
-	if ((UGETW(ddesc->idVendor) != USB_VENDOR_ROLAND) &&
-	    (UGETW(ddesc->idProduct) != USB_PRODUCT_ROLAND_SD90)) {
+	if ((UGETW(sc->sc_udev->ddesc.idVendor) != USB_VENDOR_ROLAND) &&
+	    (UGETW(sc->sc_udev->ddesc.idProduct) != USB_PRODUCT_ROLAND_SD90)) {
 		err = uaudio_set_speed(sc, endpt, ch->sample_rate);
 		if (err) {
 			DPRINTF("set_speed failed err=%s\n", usbd_errstr(err));
 		}
 	}
 
+	ch->pipe = 0;
+	ch->sync_pipe = 0;
 	DPRINTF("create pipe to 0x%02x\n", endpt);
-	err = usbd_open_pipe(as->ifaceh, endpt, USBD_MPSAFE, &ch->pipe);
+	err = usbd_open_pipe(as->ifaceh, endpt, 0, &ch->pipe);
 	if (err)
 		return err;
 	if (as->edesc1 != NULL) {
 		endpt = as->edesc1->bEndpointAddress;
 		DPRINTF("create sync-pipe to 0x%02x\n", endpt);
-		err = usbd_open_pipe(as->ifaceh, endpt, USBD_MPSAFE,
-		    &ch->sync_pipe);
+		err = usbd_open_pipe(as->ifaceh, endpt, 0, &ch->sync_pipe);
 	}
 	return err;
 }
@@ -2704,7 +2724,6 @@ uaudio_chan_open(struct uaudio_softc *sc, struct chan *ch)
 Static void
 uaudio_chan_close(struct uaudio_softc *sc, struct chan *ch)
 {
-	usbd_pipe_handle pipe;
 	struct as_info *as;
 
 	as = &sc->sc_alts[ch->altidx];
@@ -2714,15 +2733,13 @@ uaudio_chan_close(struct uaudio_softc *sc, struct chan *ch)
 		DPRINTF("set null alt=%d\n", sc->sc_nullalt);
 		usbd_set_interface(as->ifaceh, sc->sc_nullalt);
 	}
-	pipe = atomic_swap_ptr(&ch->pipe, NULL);
-	if (pipe) {
-		usbd_abort_pipe(pipe);
-		usbd_close_pipe(pipe);
+	if (ch->pipe) {
+		usbd_abort_pipe(ch->pipe);
+		usbd_close_pipe(ch->pipe);
 	}
-	pipe = atomic_swap_ptr(&ch->sync_pipe, NULL);
-	if (pipe) {
-		usbd_abort_pipe(pipe);
-		usbd_close_pipe(pipe);
+	if (ch->sync_pipe) {
+		usbd_abort_pipe(ch->sync_pipe);
+		usbd_close_pipe(ch->sync_pipe);
 	}
 }
 
@@ -2766,7 +2783,7 @@ uaudio_chan_free_buffers(struct uaudio_softc *sc, struct chan *ch)
 		usbd_free_xfer(ch->chanbufs[i].xfer);
 }
 
-/* Called with USB lock held. */
+/* Called at splusb() */
 Static void
 uaudio_chan_ptransfer(struct chan *ch)
 {
@@ -2869,7 +2886,7 @@ uaudio_chan_pintr(usbd_xfer_handle xfer, usbd_private_handle priv,
 	uaudio_chan_ptransfer(ch);
 }
 
-/* Called with USB lock held. */
+/* Called at splusb() */
 Static void
 uaudio_chan_rtransfer(struct chan *ch)
 {
@@ -3112,7 +3129,9 @@ uaudio_set_speed(struct uaudio_softc *sc, int endpt, u_int speed)
 	data[1] = speed >> 8;
 	data[2] = speed >> 16;
 
+	KERNEL_LOCK(1, curlwp);
 	err = usbd_do_request(sc->sc_udev, &req, data);
+	KERNEL_UNLOCK_ONE(curlwp);
 
 	return err;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_alloc.c,v 1.133 2013/01/22 09:39:15 dholland Exp $	*/
+/*	$NetBSD: ffs_alloc.c,v 1.130 2011/11/28 08:05:07 tls Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -70,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_alloc.c,v 1.133 2013/01/22 09:39:15 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_alloc.c,v 1.130 2011/11/28 08:05:07 tls Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -382,6 +382,7 @@ ffs_realloccg(struct inode *ip, daddr_t lbprev, daddr_t bpref, int osize,
 	 */
 	if (bpp != NULL &&
 	    (error = bread(ITOV(ip), lbprev, osize, NOCRED, 0, &bp)) != 0) {
+		brelse(bp, 0);
 		return (error);
 	}
 #if defined(QUOTA) || defined(QUOTA2)
@@ -835,7 +836,7 @@ ffs_blkpref_ufs1(struct inode *ip, daddr_t lbn, int indx, int flags,
 	}
 
 	if (indx % fs->fs_maxbpg == 0 || bap[indx - 1] == 0) {
-		if (lbn < UFS_NDADDR + NINDIR(fs)) {
+		if (lbn < NDADDR + NINDIR(fs)) {
 			cg = ino_to_cg(fs, ip->i_number);
 			return (cgbase(fs, cg) + fs->fs_frag);
 		}
@@ -899,7 +900,7 @@ ffs_blkpref_ufs2(struct inode *ip, daddr_t lbn, int indx, int flags,
 	}
 
 	if (indx % fs->fs_maxbpg == 0 || bap[indx - 1] == 0) {
-		if (lbn < UFS_NDADDR + NINDIR(fs)) {
+		if (lbn < NDADDR + NINDIR(fs)) {
 			cg = ino_to_cg(fs, ip->i_number);
 			return (cgbase(fs, cg) + fs->fs_frag);
 		}
@@ -1069,8 +1070,7 @@ ffs_fragextend(struct inode *ip, int cg, daddr_t bprev, int osize, int nsize)
 	return (bprev);
 
  fail:
- 	if (bp != NULL)
-		brelse(bp, 0);
+ 	brelse(bp, 0);
  	mutex_enter(&ump->um_lock);
  	return (0);
 }
@@ -1182,8 +1182,7 @@ ffs_alloccg(struct inode *ip, int cg, daddr_t bpref, int size, int flags)
 	return blkno;
 
  fail:
- 	if (bp != NULL)
-		brelse(bp, 0);
+ 	brelse(bp, 0);
  	mutex_enter(&ump->um_lock);
  	return (0);
 }
@@ -1467,6 +1466,7 @@ ffs_blkalloc_ump(struct ufsmount *ump, daddr_t bno, long size)
 	error = bread(ump->um_devvp, fsbtodb(fs, cgtod(fs, cg)),
 		(int)fs->fs_cgsize, NOCRED, B_MODIFY, &bp);
 	if (error) {
+		brelse(bp, 0);
 		return error;
 	}
 	cgp = (struct cg *)bp->b_data;
@@ -1552,8 +1552,9 @@ ffs_blkalloc_ump(struct ufsmount *ump, daddr_t bno, long size)
  *
  * => um_lock not held on entry or exit
  */
-static void
-ffs_blkfree_cg(struct fs *fs, struct vnode *devvp, daddr_t bno, long size)
+void
+ffs_blkfree(struct fs *fs, struct vnode *devvp, daddr_t bno, long size,
+    ino_t inum)
 {
 	struct cg *cgp;
 	struct buf *bp;
@@ -1573,10 +1574,17 @@ ffs_blkfree_cg(struct fs *fs, struct vnode *devvp, daddr_t bno, long size)
 	ump = VFSTOUFS(devvp->v_specmountpoint);
 	KASSERT(fs == ump->um_fs);
 	cgblkno = fsbtodb(fs, cgtod(fs, cg));
+	if (ffs_snapblkfree(fs, devvp, bno, size, inum))
+		return;
+
+	error = ffs_check_bad_allocation(__func__, fs, bno, size, dev, inum);
+	if (error)
+		return;
 
 	error = bread(devvp, cgblkno, (int)fs->fs_cgsize,
 	    NOCRED, B_MODIFY, &bp);
 	if (error) {
+		brelse(bp, 0);
 		return;
 	}
 	cgp = (struct cg *)bp->b_data;
@@ -1588,225 +1596,6 @@ ffs_blkfree_cg(struct fs *fs, struct vnode *devvp, daddr_t bno, long size)
 	ffs_blkfree_common(ump, fs, dev, bp, bno, size, devvp_is_snapshot);
 
 	bdwrite(bp);
-}
-
-struct discardopdata {
-	struct work wk; /* must be first */
-	struct vnode *devvp;
-	daddr_t bno;
-	long size;
-};
-
-struct discarddata {
-	struct fs *fs;
-	struct discardopdata *entry;
-	long maxsize;
-	kmutex_t entrylk;
-	struct workqueue *wq;
-	int wqcnt, wqdraining;
-	kmutex_t wqlk;
-	kcondvar_t wqcv;
-	/* timer for flush? */
-};
-
-static void
-ffs_blkfree_td(struct fs *fs, struct discardopdata *td)
-{
-	long todo;
-
-	while (td->size) {
-		todo = min(td->size,
-		  lfragtosize(fs, (fs->fs_frag - fragnum(fs, td->bno))));
-		ffs_blkfree_cg(fs, td->devvp, td->bno, todo);
-		td->bno += numfrags(fs, todo);
-		td->size -= todo;
-	}
-}
-
-static void
-ffs_discardcb(struct work *wk, void *arg)
-{
-	struct discardopdata *td = (void *)wk;
-	struct discarddata *ts = arg;
-	struct fs *fs = ts->fs;
-	struct disk_discard_range ta;
-	int error;
-
-	ta.bno = fsbtodb(fs, td->bno);
-	ta.size = td->size >> DEV_BSHIFT;
-	error = VOP_IOCTL(td->devvp, DIOCDISCARD, &ta, FWRITE, FSCRED);
-#ifdef TRIMDEBUG
-	printf("trim(%" PRId64 ",%ld):%d\n", td->bno, td->size, error);
-#endif
-
-	ffs_blkfree_td(fs, td);
-	kmem_free(td, sizeof(*td));
-	mutex_enter(&ts->wqlk);
-	ts->wqcnt--;
-	if (ts->wqdraining && !ts->wqcnt)
-		cv_signal(&ts->wqcv);
-	mutex_exit(&ts->wqlk);
-}
-
-void *
-ffs_discard_init(struct vnode *devvp, struct fs *fs)
-{
-	struct disk_discard_params tp;
-	struct discarddata *ts;
-	int error;
-
-	error = VOP_IOCTL(devvp, DIOCGDISCARDPARAMS, &tp, FREAD, FSCRED);
-	if (error) {
-		printf("DIOCGDISCARDPARAMS: %d\n", error);
-		return NULL;
-	}
-	if (tp.maxsize * DEV_BSIZE < fs->fs_bsize) {
-		printf("tp.maxsize=%ld, fs_bsize=%d\n", tp.maxsize, fs->fs_bsize);
-		return NULL;
-	}
-
-	ts = kmem_zalloc(sizeof (*ts), KM_SLEEP);
-	error = workqueue_create(&ts->wq, "trimwq", ffs_discardcb, ts,
-				 0, 0, 0);
-	if (error) {
-		kmem_free(ts, sizeof (*ts));
-		return NULL;
-	}
-	mutex_init(&ts->entrylk, MUTEX_DEFAULT, IPL_NONE);
-	mutex_init(&ts->wqlk, MUTEX_DEFAULT, IPL_NONE);
-	cv_init(&ts->wqcv, "trimwqcv");
-	ts->maxsize = max(tp.maxsize * DEV_BSIZE, 100*1024); /* XXX */
-	ts->fs = fs;
-	return ts;
-}
-
-void
-ffs_discard_finish(void *vts, int flags)
-{
-	struct discarddata *ts = vts;
-	struct discardopdata *td = NULL;
-	int res = 0;
-
-	/* wait for workqueue to drain */
-	mutex_enter(&ts->wqlk);
-	if (ts->wqcnt) {
-		ts->wqdraining = 1;
-		res = cv_timedwait(&ts->wqcv, &ts->wqlk, mstohz(5000));
-	}
-	mutex_exit(&ts->wqlk);
-	if (res)
-		printf("ffs_discarddata drain timeout\n");
-
-	mutex_enter(&ts->entrylk);
-	if (ts->entry) {
-		td = ts->entry;
-		ts->entry = NULL;
-	}
-	mutex_exit(&ts->entrylk);
-	if (td) {
-		/* XXX don't tell disk, its optional */
-		ffs_blkfree_td(ts->fs, td);
-#ifdef TRIMDEBUG
-		printf("finish(%" PRId64 ",%ld)\n", td->bno, td->size);
-#endif
-		kmem_free(td, sizeof(*td));
-	}
-
-	cv_destroy(&ts->wqcv);
-	mutex_destroy(&ts->entrylk);
-	mutex_destroy(&ts->wqlk);
-	workqueue_destroy(ts->wq);
-	kmem_free(ts, sizeof(*ts));
-}
-
-void
-ffs_blkfree(struct fs *fs, struct vnode *devvp, daddr_t bno, long size,
-    ino_t inum)
-{
-	struct ufsmount *ump;
-	int error;
-	dev_t dev;
-	struct discarddata *ts;
-	struct discardopdata *td;
-
-	dev = devvp->v_rdev;
-	ump = VFSTOUFS(devvp->v_specmountpoint);
-	if (ffs_snapblkfree(fs, devvp, bno, size, inum))
-		return;
-
-	error = ffs_check_bad_allocation(__func__, fs, bno, size, dev, inum);
-	if (error)
-		return;
-
-	if (!ump->um_discarddata) {
-		ffs_blkfree_cg(fs, devvp, bno, size);
-		return;
-	}
-
-#ifdef TRIMDEBUG
-	printf("blkfree(%" PRId64 ",%ld)\n", bno, size);
-#endif
-	ts = ump->um_discarddata;
-	td = NULL;
-
-	mutex_enter(&ts->entrylk);
-	if (ts->entry) {
-		td = ts->entry;
-		/* ffs deallocs backwards, check for prepend only */
-		if (td->bno == bno + numfrags(fs, size)
-		    && td->size + size <= ts->maxsize) {
-			td->bno = bno;
-			td->size += size;
-			if (td->size < ts->maxsize) {
-#ifdef TRIMDEBUG
-				printf("defer(%" PRId64 ",%ld)\n", td->bno, td->size);
-#endif
-				mutex_exit(&ts->entrylk);
-				return;
-			}
-			size = 0; /* mark done */
-		}
-		ts->entry = NULL;
-	}
-	mutex_exit(&ts->entrylk);
-
-	if (td) {
-#ifdef TRIMDEBUG
-		printf("enq old(%" PRId64 ",%ld)\n", td->bno, td->size);
-#endif
-		mutex_enter(&ts->wqlk);
-		ts->wqcnt++;
-		mutex_exit(&ts->wqlk);
-		workqueue_enqueue(ts->wq, &td->wk, NULL);
-	}
-	if (!size)
-		return;
-
-	td = kmem_alloc(sizeof(*td), KM_SLEEP);
-	td->devvp = devvp;
-	td->bno = bno;
-	td->size = size;
-
-	if (td->size < ts->maxsize) { /* XXX always the case */
-		mutex_enter(&ts->entrylk);
-		if (!ts->entry) { /* possible race? */
-#ifdef TRIMDEBUG
-			printf("defer(%" PRId64 ",%ld)\n", td->bno, td->size);
-#endif
-			ts->entry = td;
-			td = NULL;
-		}
-		mutex_exit(&ts->entrylk);
-	}
-	if (td) {
-#ifdef TRIMDEBUG
-		printf("enq new(%" PRId64 ",%ld)\n", td->bno, td->size);
-#endif
-		mutex_enter(&ts->wqlk);
-		ts->wqcnt++;
-		mutex_exit(&ts->wqlk);
-		workqueue_enqueue(ts->wq, &td->wk, NULL);
-	}
 }
 
 /*
@@ -1847,6 +1636,7 @@ ffs_blkfree_snap(struct fs *fs, struct vnode *devvp, daddr_t bno, long size,
 	error = bread(devvp, cgblkno, (int)fs->fs_cgsize,
 	    NOCRED, B_MODIFY, &bp);
 	if (error) {
+		brelse(bp, 0);
 		return;
 	}
 	cgp = (struct cg *)bp->b_data;
@@ -2007,6 +1797,7 @@ ffs_freefile(struct mount *mp, ino_t ino, int mode)
 	error = bread(devvp, cgbno, (int)fs->fs_cgsize,
 	    NOCRED, B_MODIFY, &bp);
 	if (error) {
+		brelse(bp, 0);
 		return (error);
 	}
 	cgp = (struct cg *)bp->b_data;
@@ -2048,6 +1839,7 @@ ffs_freefile_snap(struct fs *fs, struct vnode *devvp, ino_t ino, int mode)
 	error = bread(devvp, cgbno, (int)fs->fs_cgsize,
 	    NOCRED, B_MODIFY, &bp);
 	if (error) {
+		brelse(bp, 0);
 		return (error);
 	}
 	cgp = (struct cg *)bp->b_data;
@@ -2131,6 +1923,7 @@ ffs_checkfreefile(struct fs *fs, struct vnode *devvp, ino_t ino)
 	if ((u_int)ino >= fs->fs_ipg * fs->fs_ncg)
 		return 1;
 	if (bread(devvp, cgbno, (int)fs->fs_cgsize, NOCRED, 0, &bp)) {
+		brelse(bp, 0);
 		return 1;
 	}
 	cgp = (struct cg *)bp->b_data;

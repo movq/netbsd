@@ -1,4 +1,4 @@
-# $NetBSD: t_nat_exec.sh,v 1.18 2013/05/16 07:43:02 martin Exp $
+# $NetBSD: t_nat_exec.sh,v 1.6 2012/02/15 17:55:24 riz Exp $
 #
 # Copyright (c) 2008, 2010 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -33,26 +33,18 @@
 nattest()
 {
 	h_copydata $1
-	infmt=$2
-	outfmt=$3
-	shift
-	shift
-	shift
-	args=$@
 
-	if [ $outfmt = hex ] ; then
-		format="-xF $infmt"
+	if [ $3 = hex ] ; then
+		format="-xF $2"
 	else
-		format="-F $infmt"
+		format="-F $2"
 	fi
 
-	format="$format"
-
-	test -f in  && test -f reg || atf_fail "Test input file missing"
+	format="$4 $5 $format"
 
 	{ while read rule; do
 		atf_check -o save:save -x \
-		    "echo \"$rule\" | ipftest $format -RDbN - -i in $args"
+		    "echo \"$rule\" | ipftest $format -RbN - -i in"
 		cat save >>out
 		echo "-------------------------------" >>out
 	done; } <reg
@@ -60,84 +52,40 @@ nattest()
 	diff -u exp out || atf_fail "results differ"
 }
 
-test_case n1 nattest text text
-test_case n2 nattest text text
+#broken_test_case n1 nattest text text
+#broken_test_case n2 nattest text text
 test_case n3 nattest text text
-test_case n4 nattest text text
-test_case n5 nattest text text
-test_case n6 nattest text text
+#broken_test_case n4 nattest text text
+#broken_test_case n5 nattest text text
+#broken_test_case n6 nattest text text
 test_case n7 nattest text text
-failing_test_case_be n8 nattest "See PR kern/47665" hex hex -T update_ipid=0
-failing_test_case_be n9 nattest "See PR kern/47665" hex hex -T update_ipid=0
-test_case n10 nattest hex hex -T update_ipid=0
-test_case n11 nattest text text
-failing_test_case n12 nattest "Known to be broken" hex hex -T update_ipid=0 -v
+test_case n8 nattest hex hex -T fr_update_ipid=0
+test_case n9 nattest hex hex -T fr_update_ipid=0
+test_case n10 nattest hex hex -T fr_update_ipid=0
+#broken_test_case n11 nattest text text
+test_case n12 nattest hex hex -T fr_update_ipid=0
 test_case n13 nattest text text
-failing_test_case_be n14 nattest "See PR kern/47665" text text
-test_case n15 nattest text text -T update_ipid=0
+test_case n14 nattest text text
 test_case n16 nattest hex hex -D
 test_case n17 nattest hex hex -D
-test_case n100 nattest text text
-test_case n101 nattest text text
-test_case n102 nattest text text
-test_case n103 nattest text text
-test_case n104 nattest hex hex -T update_ipid=0
-test_case n105 nattest hex hex -T update_ipid=0
-test_case n106 nattest hex hex -T update_ipid=0
-test_case n200 nattest hex hex -T update_ipid=0
-test_case n1_6 nattest text text -6
-test_case n2_6 nattest text text -6
-#test_case n3_6 nattest text text -6
-test_case n4_6 nattest text text -6
-test_case n5_6 nattest text text -6
-test_case n6_6 nattest text text -6
-test_case n7_6 nattest text text -6
-failing_test_case_be n8_6 nattest "See PR kern/47665" hex hex -6
-failing_test_case_be n9_6 nattest "See PR kern/47665" hex hex -6
-test_case n11_6 nattest text text -6
-test_case n12_6 nattest hex hex -6
-test_case n15_6 nattest text text -6
-failing_test_case n17_6 nattest "Test golden output file missing" hex hex -6
 
 atf_init_test_cases()
 {
-	atf_add_test_case n1
-	atf_add_test_case n2
 	atf_add_test_case n3
-	atf_add_test_case n4
-	atf_add_test_case n5
-	atf_add_test_case n6
 	atf_add_test_case n7
 	atf_add_test_case n8
 	atf_add_test_case n9
 	atf_add_test_case n10
-	atf_add_test_case n11
 	atf_add_test_case n12
 	atf_add_test_case n13
 	atf_add_test_case n14
 	atf_add_test_case n16
 	atf_add_test_case n17
-	atf_add_test_case n100
-	atf_add_test_case n101
-	atf_add_test_case n102
-	atf_add_test_case n103
-	atf_add_test_case n104
-	atf_add_test_case n105
-	atf_add_test_case n106
-	atf_add_test_case n200
 
-	atf_add_test_case n1_6
-	atf_add_test_case n2_6
-#	atf_add_test_case n3_6
-	atf_add_test_case n4_6
-	atf_add_test_case n5_6
-	atf_add_test_case n6_6
-	atf_add_test_case n7_6
-	atf_add_test_case n8_6
-	atf_add_test_case n9_6
-	atf_add_test_case n11_6
-	atf_add_test_case n12_6
-	atf_add_test_case n15_6
-	atf_add_test_case n17_6
-
+	#atf_add_test_case n1
+	#atf_add_test_case n2
+	#atf_add_test_case n4
+	#atf_add_test_case n5
+	#atf_add_test_case n6
+	#atf_add_test_case n11
 }

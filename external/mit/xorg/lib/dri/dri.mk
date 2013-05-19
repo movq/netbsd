@@ -1,4 +1,4 @@
-# $NetBSD: dri.mk,v 1.12 2012/03/10 20:52:30 tron Exp $
+# $NetBSD: dri.mk,v 1.10.8.2 2012/03/10 21:37:55 riz Exp $
 
 # XXX DRI_LIB_DEPS
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.44 2013/04/21 06:24:42 isaki Exp $ */
+/*	$NetBSD: md.c,v 1.43 2012/01/05 21:32:36 christos Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -297,7 +297,7 @@ md_post_extract(void)
 void
 md_cleanup_install(void)
 {
-#ifndef DEBUG
+#ifdef notyet			/* sed is too large for ramdisk */
 	enable_rc_conf();
 #endif
 }

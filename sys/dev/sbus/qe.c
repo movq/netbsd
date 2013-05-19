@@ -1,4 +1,4 @@
-/*	$NetBSD: qe.c,v 1.62 2012/06/23 17:21:12 jdc Exp $	*/
+/*	$NetBSD: qe.c,v 1.60.2.1 2012/07/04 19:38:54 riz Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: qe.c,v 1.62 2012/06/23 17:21:12 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: qe.c,v 1.60.2.1 2012/07/04 19:38:54 riz Exp $");
 
 #define QEDEBUG
 

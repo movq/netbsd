@@ -1,4 +1,4 @@
-/* $NetBSD: mfivar.h,v 1.20 2012/09/19 21:24:29 bouyer Exp $ */
+/* $NetBSD: mfivar.h,v 1.14.16.3 2012/10/24 03:23:44 riz Exp $ */
 /* $OpenBSD: mfivar.h,v 1.28 2006/08/31 18:18:46 marco Exp $ */
 /*
  * Copyright (c) 2006 Marco Peereboom <marco@peereboom.us>

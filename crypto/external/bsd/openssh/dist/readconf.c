@@ -1,5 +1,5 @@
-/*	$NetBSD: readconf.c,v 1.10 2013/05/14 05:18:11 mlelstv Exp $	*/
-/* $OpenBSD: readconf.c,v 1.196 2013/02/22 04:45:08 dtucker Exp $ */
+/*	$NetBSD: readconf.c,v 1.6 2011/09/07 17:49:19 christos Exp $	*/
+/* $OpenBSD: readconf.c,v 1.193 2011/05/24 07:15:47 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -14,7 +14,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: readconf.c,v 1.10 2013/05/14 05:18:11 mlelstv Exp $");
+__RCSID("$NetBSD: readconf.c,v 1.6 2011/09/07 17:49:19 christos Exp $");
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
@@ -147,7 +147,6 @@ typedef enum {
 	oKexAlgorithms, oIPQoS, oRequestTTY,
 	oNoneEnabled, oTcpRcvBufPoll, oTcpRcvBuf, oNoneSwitch, oHPNDisabled,
 	oHPNBufferSize,
-	oSendVersionFirst,
 	oDeprecated, oUnsupported
 } OpCodes;
 
@@ -273,7 +272,6 @@ static struct {
 	{ "noneswitch", oNoneSwitch },
 	{ "hpndisabled", oHPNDisabled },
 	{ "hpnbuffersize", oHPNBufferSize },
-	{ "sendversionfirst", oSendVersionFirst },
 
 	{ NULL, oBadOption }
 };
@@ -321,7 +319,6 @@ add_remote_forward(Options *options, const Forward *newfwd)
 	fwd->listen_port = newfwd->listen_port;
 	fwd->connect_host = newfwd->connect_host;
 	fwd->connect_port = newfwd->connect_port;
-	fwd->handle = newfwd->handle;
 	fwd->allocated_port = 0;
 }
 
@@ -353,26 +350,6 @@ clear_forwardings(Options *options)
 	options->tun_open = SSH_TUNMODE_NO;
 }
 
-void
-add_identity_file(Options *options, const char *dir, const char *filename,
-    int userprovided)
-{
-	char *path;
-
-	if (options->num_identity_files >= SSH_MAX_IDENTITY_FILES)
-		fatal("Too many identity files specified (max %d)",
-		    SSH_MAX_IDENTITY_FILES);
-
-	if (dir == NULL) /* no dir, filename is absolute */
-		path = xstrdup(filename);
-	else
-		(void)xasprintf(&path, "%.100s%.100s", dir, filename);
-
-	options->identity_file_userprovided[options->num_identity_files] =
-	    userprovided;
-	options->identity_files[options->num_identity_files++] = path;
-}
-
 /*
  * Returns the number of the token pointed to by cp or oBadOption.
  */
@@ -400,7 +377,7 @@ parse_token(const char *cp, const char *filename, int linenum)
 int
 process_config_line(Options *options, const char *host,
 		    char *line, const char *filename, int linenum,
-		    int *activep, int userconfig)
+		    int *activep)
 {
 	char *s, **charptr, *endofnumber, *keyword, *arg, *arg2;
 	char **cpptr, fwdarg[256];
@@ -682,7 +659,9 @@ parse_yesnoask:
 			if (*intptr >= SSH_MAX_IDENTITY_FILES)
 				fatal("%.200s line %d: Too many identity files specified (max %d).",
 				    filename, linenum, SSH_MAX_IDENTITY_FILES);
-			add_identity_file(options, NULL, arg, userconfig);
+			charptr = &options->identity_files[*intptr];
+			*charptr = xstrdup(arg);
+			*intptr = *intptr + 1;
 		}
 		break;
 
@@ -1144,10 +1123,6 @@ parse_int:
 			*intptr = value;
 		break;
 
-	case oSendVersionFirst:
-		intptr = &options->send_version_first;
-		goto parse_flag;
-
 	case oDeprecated:
 		debug("%s line %d: Deprecated option \"%s\"",
 		    filename, linenum, keyword);
@@ -1179,7 +1154,7 @@ parse_int:
 
 int
 read_config_file(const char *filename, const char *host, Options *options,
-    int flags)
+    int checkperm)
 {
 	FILE *f;
 	char line[1024];
@@ -1189,7 +1164,7 @@ read_config_file(const char *filename, const char *host, Options *options,
 	if ((f = fopen(filename, "r")) == NULL)
 		return 0;
 
-	if (flags & SSHCONF_CHECKPERM) {
+	if (checkperm) {
 		struct stat sb;
 
 		if (fstat(fileno(f), &sb) == -1)
@@ -1210,8 +1185,7 @@ read_config_file(const char *filename, const char *host, Options *options,
 	while (fgets(line, sizeof(line), f)) {
 		/* Update line number counter. */
 		linenum++;
-		if (process_config_line(options, host, line, filename, linenum,
-		    &active, flags & SSHCONF_USERCONF) != 0)
+		if (process_config_line(options, host, line, filename, linenum, &active) != 0)
 			bad_options++;
 	}
 	fclose(f);
@@ -1323,7 +1297,6 @@ initialize_options(Options * options)
 	options->hpn_buffer_size = -1;
 	options->tcp_rcv_buf_poll = -1;
 	options->tcp_rcv_buf = -1;
-	options->send_version_first = -1;
 }
 
 /*
@@ -1334,6 +1307,8 @@ initialize_options(Options * options)
 void
 fill_default_options(Options * options)
 {
+	int len;
+
 	if (options->forward_agent == -1)
 		options->forward_agent = 0;
 	if (options->forward_x11 == -1)
@@ -1411,16 +1386,30 @@ fill_default_options(Options * options)
 		options->protocol = SSH_PROTO_2;
 	if (options->num_identity_files == 0) {
 		if (options->protocol & SSH_PROTO_1) {
-			add_identity_file(options, "~/",
-			    _PATH_SSH_CLIENT_IDENTITY, 0);
+			len = 2 + strlen(_PATH_SSH_CLIENT_IDENTITY) + 1;
+			options->identity_files[options->num_identity_files] =
+			    xmalloc(len);
+			snprintf(options->identity_files[options->num_identity_files++],
+			    len, "~/%.100s", _PATH_SSH_CLIENT_IDENTITY);
 		}
 		if (options->protocol & SSH_PROTO_2) {
-			add_identity_file(options, "~/",
-			    _PATH_SSH_CLIENT_ID_RSA, 0);
-			add_identity_file(options, "~/",
-			    _PATH_SSH_CLIENT_ID_DSA, 0);
-			add_identity_file(options, "~/",
-			    _PATH_SSH_CLIENT_ID_ECDSA, 0);
+			len = 2 + strlen(_PATH_SSH_CLIENT_ID_RSA) + 1;
+			options->identity_files[options->num_identity_files] =
+			    xmalloc(len);
+			snprintf(options->identity_files[options->num_identity_files++],
+			    len, "~/%.100s", _PATH_SSH_CLIENT_ID_RSA);
+
+			len = 2 + strlen(_PATH_SSH_CLIENT_ID_DSA) + 1;
+			options->identity_files[options->num_identity_files] =
+			    xmalloc(len);
+			snprintf(options->identity_files[options->num_identity_files++],
+			    len, "~/%.100s", _PATH_SSH_CLIENT_ID_DSA);
+
+			len = 2 + strlen(_PATH_SSH_CLIENT_ID_ECDSA) + 1;
+			options->identity_files[options->num_identity_files] =
+			    xmalloc(len);
+			snprintf(options->identity_files[options->num_identity_files++],
+			    len, "~/%.100s", _PATH_SSH_CLIENT_ID_ECDSA);
 		}
 	}
 	if (options->escape_char == -1)
@@ -1506,8 +1495,6 @@ fill_default_options(Options * options)
 		options->ip_qos_bulk = IPTOS_THROUGHPUT;
 	if (options->request_tty == -1)
 		options->request_tty = REQUEST_TTY_AUTO;
-	if (options->send_version_first == -1)
-		options->send_version_first = 1;
 	/* options->local_command should not be set by default */
 	/* options->proxy_command should not be set by default */
 	/* options->user will be set in the main program if appropriate */

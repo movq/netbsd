@@ -1,4 +1,4 @@
-/*	$NetBSD: bpf.h,v 1.59 2012/03/15 00:57:56 christos Exp $	*/
+/*	$NetBSD: bpf.h,v 1.58.8.1 2012/06/12 18:25:10 riz Exp $	*/
 
 /*
  * Copyright (c) 1990, 1991, 1993

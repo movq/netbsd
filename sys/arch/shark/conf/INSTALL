@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL,v 1.54 2013/04/27 22:21:16 christos Exp $
+#	$NetBSD: INSTALL,v 1.49.2.1 2012/06/12 17:47:54 riz Exp $
 #
 #	Shark installation kernel
 #
@@ -31,6 +31,10 @@ options 	NSIO		# We are using the National Semi SuperIO
 # compatibility with old version of OFW, which may have incorrect
 # properties and/or may set up devices incorrectly.
 options 	COMPAT_OLD_OFW
+
+# FPA options
+
+#options 	ARMFPE		# ARM Ltd FPE
 
 # File systems
 
@@ -65,6 +69,8 @@ options 	WAPBL		# File system journaling support
 options 	INET		# IP + ICMP + TCP + UDP
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking
 #options 	PFIL_HOOKS	# pfil(9) packet filter hooks (Required
 				# if you enable the pseudo-device ipl).
@@ -239,20 +245,20 @@ scr*		at ofisascr?
 # Joystick @OFW
 #joy*		at ofisa?
 
-pseudo-device	loop			# network loopback
+pseudo-device	loop	1		# network loopback
 pseudo-device	bpfilter		# packet filter
 #pseudo-device	sl			# CSLIP
 #pseudo-device	ppp			# PPP
 #pseudo-device	tun			# network tunneling over tty
-#pseudo-device	ipfilter 		# ip filter
+#pseudo-device	ipfilter 1		# ip filter
 
 pseudo-device	pty			# pseudo-terminals
 #pseudo-device	vnd			# disk-like interface to files
-#pseudo-device	ccd			# concatenated disk devices
+#pseudo-device	ccd	2		# concatenated disk devices
 #pseudo-device	fss			# file system snapshot device
 
 pseudo-device	md			# Ramdisk driver
 #pseudo-device	profiler 1		# fiq based profiling device
-#pseudo-device	sequencer		# MIDI sequencer
+#pseudo-device	sequencer 1		# MIDI sequencer
 pseudo-device	wsmux			# mouse & keyboard multiplexor
 #pseudo-device	wsfont

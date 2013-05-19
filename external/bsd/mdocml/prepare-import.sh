@@ -2,6 +2,7 @@
 
 set -e
 
+cd dist
 rm -rf ChangeLog.xsl style.css index.css *.sgml
 
 uuencode external.png < external.png > external.png.uu

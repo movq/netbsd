@@ -1,4 +1,4 @@
-/*	$NetBSD: dev_mkdb.c,v 1.29 2012/06/03 21:42:47 joerg Exp $	*/
+/*	$NetBSD: dev_mkdb.c,v 1.28.4.1 2012/06/23 22:54:58 riz Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dev_mkdb.c,v 1.29 2012/06/03 21:42:47 joerg Exp $");
+__RCSID("$NetBSD: dev_mkdb.c,v 1.28.4.1 2012/06/23 22:54:58 riz Exp $");
 
 #include <sys/queue.h>
 #include <sys/stat.h>

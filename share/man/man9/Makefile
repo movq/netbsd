@@ -1,4 +1,4 @@
-#       $NetBSD: Makefile,v 1.370 2013/03/28 11:17:41 wiz Exp $
+#       $NetBSD: Makefile,v 1.362.2.1 2012/08/08 15:51:07 martin Exp $
 
 #	Makefile for section 9 (kernel function and variable) manual pages.
 
@@ -19,7 +19,7 @@ MAN=	accept_filter.9 accf_data.9 accf_http.9 \
 	dopowerhooks.9 do_setresuid.9 doshutdownhooks.9 driver.9 \
 	edid.9 errno.9 ethersubr.9 evcnt.9 extattr.9 extent.9 \
 	fetch.9 file.9 fileassoc.9 filedesc.9 firmload.9 flash.9 \
-	fork1.9 fsetown.9 fstrans.9 getiobuf.9 genfs.9 \
+	fork1.9 fsetown.9 fstrans.9 getiobuf.9 \
 	hash.9 hashinit.9 hardclock.9 humanize_number.9 hz.9 \
 	ieee80211.9 ieee80211_crypto.9 ieee80211_input.9 ieee80211_ioctl.9 \
 	ieee80211_node.9 ieee80211_output.9 ieee80211_proto.9 \
@@ -38,7 +38,7 @@ MAN=	accept_filter.9 accf_data.9 accf_http.9 \
 	mstohz.9 mutex.9 m_tag.9 namecache.9 \
 	namei.9 npf_ncode.9 nullop.9 opencrypto.9 optstr.9 \
 	panic.9 pathbuf.9 pci.9 pci_configure_bus.9 pci_intr.9 pckbport.9 \
-	pcmcia.9 pcq.9 pcu.9 percpu.9 pfil.9 physio.9 pmap.9 pmatch.9 \
+	pcmcia.9 pcq.9 percpu.9 pfil.9 physio.9 pmap.9 pmatch.9 \
 	pmc.9 pmf.9 pool.9 pool_cache.9 powerhook_establish.9 ppsratecheck.9 \
 	preempt.9 proc_find.9 pserialize.9 putter.9 \
 	radio.9 ras.9 rasops.9 ratecheck.9 resettodr.9 rnd.9 roundup.9 \
@@ -56,7 +56,7 @@ MAN=	accept_filter.9 accf_data.9 accf_http.9 \
 	vattr.9 veriexec.9 vcons.9 vfs.9 vfs_hooks.9 vfsops.9 vfssubr.9 \
 	video.9 vme.9 \
 	vnfileops.9 vnode.9 vnodeops.9 vnsubr.9 \
-	ubc.9 usbd_status.9 usbdi.9 uvm.9 uvm_km.9 uvm_map.9 vmem.9 \
+	ubc.9 usbdi.9 uvm.9 uvm_km.9 uvm_map.9 vmem.9 \
 	wdc.9 workqueue.9 \
 	wscons.9 wsdisplay.9 wsfont.9 wskbd.9 wsmouse.9 \
 	xcall.9
@@ -117,7 +117,6 @@ MLINKS+=autoconf.9 config_search_loc.9 \
 	autoconf.9 config_attach.9 \
 	autoconf.9 config_attach_pseudo.9 \
 	autoconf.9 config_detach.9 \
-	autoconf.9 config_detach_children.9 \
 	autoconf.9 config_deactivate.9 \
 	autoconf.9 config_defer.9 \
 	autoconf.9 config_interrupts.9 \
@@ -405,13 +404,10 @@ MLINKS+=kcpuset.9 kcpuset_create.9 \
 	kcpuset.9 kcpuset_fill.9 \
 	kcpuset.9 kcpuset_set.9 \
 	kcpuset.9 kcpuset_clear.9 \
-	kcpuset.9 kcpuset_isotherset.9 \
 	kcpuset.9 kcpuset_isset.9 \
 	kcpuset.9 kcpuset_iszero.9 \
-	kcpuset.9 kcpuset_countset.9 \
 	kcpuset.9 kcpuset_match.9 \
 	kcpuset.9 kcpuset_merge.9 \
-	kcpuset.9 kcpuset_export_32.9 \
 	kcpuset.9 kcpuset_atomic_set.9 \
 	kcpuset.9 kcpuset_atomic_clear.9
 MLINKS+=kmem.9 kmem_alloc.9 \
@@ -633,11 +629,6 @@ MLINKS+=pcq.9 pcq_create.9 \
 	pcq.9 pcq_peek.9 \
 	pcq.9 pcq_maxitems.9 \
 	pcq.9 pcq_put.9
-MLINKS+=pcu.9 pcu_load.9 \
-	pcu.9 pcu_save.9 \
-	pcu.9 pcu_save_all.9 \
-	pcu.9 pcu_discard.9 \
-	pcu.9 pcu_used_p.9
 MLINKS+=pmf.9 pmf_device_register.9 pmf.9 pmf_device_register1.9 \
 	pmf.9 pmf_device_deregister.9 \
 	pmf.9 pmf_device_suspend.9 pmf.9 pmf_device_resume.9 \
@@ -816,9 +807,7 @@ MLINKS+=uvm.9 uvm_init.9 uvm.9 uvm_init_limits.9 uvm.9 uvm_setpagesize.9 \
 	uvm.9 uvm_vsunlock.9 uvm.9 uvm_meter.9 \
 	uvm.9 uvm_fork.9 uvm.9 uvm_grow.9 \
 	uvm.9 uvn_findpages.9 \
-	uvm.9 uvm_loan.9 uvm.9 uvm_unloan.9 \
-	uvm.9 atop.9 uvm.9 ptoa.9 \
-	uvm.9 round_page.9 uvm.9 trunc_page.9
+	uvm.9 uvm_loan.9 uvm.9 uvm_unloan.9
 MLINKS+=uvm_km.9 uvm_km_alloc.9 uvm_km.9 uvm_km_free.9 \
 	uvm_km.9 uvm_km_suballoc.9
 MLINKS+=uvm_map.9 uvm_unmap.9 uvm_map.9 uvm_map_pageable.9 \

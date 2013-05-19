@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.117 2012/02/19 21:06:34 rmind Exp $	     */
+/*	$NetBSD: vm_machdep.c,v 1.116 2011/07/03 02:18:21 matt Exp $	     */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -31,11 +31,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.117 2012/02/19 21:06:34 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.116 2011/07/03 02:18:21 matt Exp $");
 
 #include "opt_execfmt.h"
 #include "opt_compat_ultrix.h"
 #include "opt_multiprocessor.h"
+#include "opt_sa.h"
 #include "opt_cputype.h"
 
 #include <sys/param.h>
@@ -173,6 +174,32 @@ cpu_lwp_pc(struct lwp *l)
 {
 	return l->l_md.md_utf->tf_pc;
 }
+
+#if KERN_SA > 0
+void
+cpu_setfunc(struct lwp *l, void (*func)(void *), void *arg)
+{
+	struct trapframe * const tf = l->l_md.md_utf;
+	struct callsframe *cf;
+	extern int sret;
+
+	panic("cpu_setfunc() called\n");
+
+	cf = (struct callsframe *)tf - 1;
+	cf->ca_cond = 0;
+	cf->ca_maskpsw = 0x20000000;	/* CALLS, no saved registers */
+	cf->ca_pc = (unsigned)&sret;
+	cf->ca_argno = 1;
+	cf->ca_arg1 = (long)arg;
+
+	struct pcb * const pcb = lwp_getpcb(l);
+
+	pcb->KSP = (long)cf;
+	pcb->FP = (long)cf;
+	pcb->AP = (long)&cf->ca_argno;
+	pcb->PC = (long)func + 2;
+}
+#endif
 
 void
 cpu_lwp_free(struct lwp *l, int proc)

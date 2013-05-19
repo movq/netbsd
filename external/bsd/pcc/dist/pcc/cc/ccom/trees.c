@@ -1,5 +1,5 @@
 /*	Id: trees.c,v 1.306 2012/03/22 18:51:40 plunky Exp 	*/	
-/*	$NetBSD: trees.c,v 1.1.1.5 2012/03/26 14:26:54 plunky Exp $	*/
+/*	$NetBSD: trees.c,v 1.1.1.4.4.1 2012/04/03 16:36:22 riz Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.

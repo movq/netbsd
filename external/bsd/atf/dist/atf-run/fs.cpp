@@ -44,7 +44,6 @@ extern "C" {
 #include <cstdlib>
 #include <cstring>
 
-#include "atf-c++/detail/auto_array.hpp"
 #include "atf-c++/detail/process.hpp"
 #include "atf-c++/detail/sanity.hpp"
 
@@ -138,9 +137,9 @@ retry_chmod:
                 subdirs = d.names();
                 ok = true;
             } catch (const atf::system_error& e) {
-                retries--;
                 if (retries == 0)
                     throw e;
+                retries--;
                 ::sleep(retry_delay_in_seconds);
             }
         }
@@ -201,7 +200,7 @@ retry_unmount:
 
 impl::temp_dir::temp_dir(const atf::fs::path& p)
 {
-    atf::auto_array< char > buf(new char[p.str().length() + 1]);
+    atf::utils::auto_array< char > buf(new char[p.str().length() + 1]);
     std::strcpy(buf.get(), p.c_str());
     if (::mkdtemp(buf.get()) == NULL)
         throw system_error(IMPL_NAME "::temp_dir::temp_dir(" +

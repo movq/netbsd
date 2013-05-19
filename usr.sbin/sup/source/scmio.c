@@ -1,4 +1,4 @@
-/*	$NetBSD: scmio.c,v 1.22 2013/03/08 20:56:44 christos Exp $	*/
+/*	$NetBSD: scmio.c,v 1.21 2011/08/31 16:25:00 plunky Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -667,8 +667,7 @@ readfile(int f)
 		} else
 			x = readdata((size_t)XFERSIZE(count), buf, false);
 		if (x == SCMOK) {
-			if (write(f, buf, (size_t)XFERSIZE(count)) == -1)
-				return SCMERR;
+			(void) write(f, buf, (size_t)XFERSIZE(count));
 			count -= XFERSIZE(count);
 		}
 	}
@@ -741,8 +740,7 @@ crosspatch(void)
 				if (c <= 0) {
 					break;
 				}
-				if (write(1, buf, (size_t)c) == -1)
-					break;
+				(void) write(1, buf, (size_t)c);
 			}
 		}
 		if (set[0].revents & POLLIN) {
@@ -752,8 +750,7 @@ crosspatch(void)
 			else {
 				if (c <= 0)
 					break;
-				if (write(netfile, buf, (size_t)c) == -1)
-					break;
+				(void) write(netfile, buf, (size_t)c);
 			}
 		}
 	}

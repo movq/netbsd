@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.23 2012/08/31 13:12:52 macallan Exp $ */
+/*	$NetBSD: intr.c,v 1.20.2.2 2012/09/03 19:11:30 riz Exp $ */
 
 /*-
  * Copyright (c) 2007 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.23 2012/08/31 13:12:52 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.20.2.2 2012/09/03 19:11:30 riz Exp $");
 
 #include "opt_interrupt.h"
 #include "opt_multiprocessor.h"

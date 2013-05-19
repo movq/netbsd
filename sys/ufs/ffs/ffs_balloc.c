@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_balloc.c,v 1.56 2013/01/22 09:39:15 dholland Exp $	*/
+/*	$NetBSD: ffs_balloc.c,v 1.54 2011/04/23 07:36:02 hannken Exp $	*/
 
 /*
  * Copyright (c) 2002 Networks Associates Technology, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_balloc.c,v 1.56 2013/01/22 09:39:15 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_balloc.c,v 1.54 2011/04/23 07:36:02 hannken Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_quota.h"
@@ -104,11 +104,11 @@ ffs_balloc_ufs1(struct vnode *vp, off_t off, int size, kauth_cred_t cred,
 	struct inode *ip = VTOI(vp);
 	struct fs *fs = ip->i_fs;
 	struct ufsmount *ump = ip->i_ump;
-	struct indir indirs[UFS_NIADDR + 2];
+	struct indir indirs[NIADDR + 2];
 	daddr_t newb, pref, nb;
 	int32_t *bap;	/* XXX ondisk32 */
 	int deallocated, osize, nsize, num, i, error;
-	int32_t *blkp, *allocblk, allociblk[UFS_NIADDR + 1];
+	int32_t *blkp, *allocblk, allociblk[NIADDR + 1];
 	int32_t *allocib;
 	int unwindidx = -1;
 #ifdef FFS_EI
@@ -135,7 +135,7 @@ ffs_balloc_ufs1(struct vnode *vp, off_t off, int size, kauth_cred_t cred,
 	 */
 
 	lastlbn = lblkno(fs, ip->i_size);
-	if (lastlbn < UFS_NDADDR && lastlbn < lbn) {
+	if (lastlbn < NDADDR && lastlbn < lbn) {
 		nb = lastlbn;
 		osize = blksize(fs, ip, nb);
 		if (osize < fs->fs_bsize && osize > 0) {
@@ -161,10 +161,10 @@ ffs_balloc_ufs1(struct vnode *vp, off_t off, int size, kauth_cred_t cred,
 	}
 
 	/*
-	 * The first UFS_NDADDR blocks are direct blocks
+	 * The first NDADDR blocks are direct blocks
 	 */
 
-	if (lbn < UFS_NDADDR) {
+	if (lbn < NDADDR) {
 		nb = ufs_rw32(ip->i_ffs1_db[lbn], needswap);
 		if (nb != 0 && ip->i_size >= lblktosize(fs, lbn + 1)) {
 
@@ -179,6 +179,7 @@ ffs_balloc_ufs1(struct vnode *vp, off_t off, int size, kauth_cred_t cred,
 				error = bread(vp, lbn, fs->fs_bsize, NOCRED,
 					      B_MODIFY, bpp);
 				if (error) {
+					brelse(*bpp, 0);
 					return (error);
 				}
 			}
@@ -204,6 +205,7 @@ ffs_balloc_ufs1(struct vnode *vp, off_t off, int size, kauth_cred_t cred,
 					error = bread(vp, lbn, osize, NOCRED,
 						      B_MODIFY, bpp);
 					if (error) {
+						brelse(*bpp, 0);
 						return (error);
 					}
 				}
@@ -301,6 +303,7 @@ ffs_balloc_ufs1(struct vnode *vp, off_t off, int size, kauth_cred_t cred,
 		error = bread(vp,
 		    indirs[i].in_lbn, (int)fs->fs_bsize, NOCRED, 0, &bp);
 		if (error) {
+			brelse(bp, 0);
 			goto fail;
 		}
 		bap = (int32_t *)bp->b_data;	/* XXX ondisk32 */
@@ -419,6 +422,7 @@ ffs_balloc_ufs1(struct vnode *vp, off_t off, int size, kauth_cred_t cred,
 			error = bread(vp, lbn, (int)fs->fs_bsize,
 			    NOCRED, B_MODIFY, &nbp);
 			if (error) {
+				brelse(nbp, 0);
 				goto fail;
 			}
 		} else {
@@ -483,6 +487,7 @@ fail:
 			    (int)fs->fs_bsize, NOCRED, 0, &bp);
 			if (r) {
 				panic("Could not unwind indirect block, error %d", r);
+				brelse(bp, 0);
 			} else {
 				bap = (int32_t *)bp->b_data; /* XXX ondisk32 */
 				bap[indirs[unwindidx].in_off] = 0;
@@ -521,11 +526,11 @@ ffs_balloc_ufs2(struct vnode *vp, off_t off, int size, kauth_cred_t cred,
 	struct inode *ip = VTOI(vp);
 	struct fs *fs = ip->i_fs;
 	struct ufsmount *ump = ip->i_ump;
-	struct indir indirs[UFS_NIADDR + 2];
+	struct indir indirs[NIADDR + 2];
 	daddr_t newb, pref, nb;
 	int64_t *bap;
 	int deallocated, osize, nsize, num, i, error;
-	daddr_t *blkp, *allocblk, allociblk[UFS_NIADDR + 1];
+	daddr_t *blkp, *allocblk, allociblk[NIADDR + 1];
 	int64_t *allocib;
 	int unwindidx = -1;
 #ifdef FFS_EI
@@ -550,7 +555,7 @@ ffs_balloc_ufs2(struct vnode *vp, off_t off, int size, kauth_cred_t cred,
 	 * Check for allocating external data.
 	 */
 	if (flags & IO_EXT) {
-		if (lbn >= UFS_NXADDR)
+		if (lbn >= NXADDR)
 			return (EFBIG);
 		/*
 		 * If the next write will extend the data into a new block,
@@ -591,6 +596,7 @@ ffs_balloc_ufs2(struct vnode *vp, off_t off, int size, kauth_cred_t cred,
 			error = bread(vp, -1 - lbn, fs->fs_bsize,
 			    NOCRED, 0, &bp);
 			if (error) {
+				brelse(bp, 0);
 				return (error);
 			}
 			mutex_enter(&bp->b_interlock);
@@ -610,6 +616,7 @@ ffs_balloc_ufs2(struct vnode *vp, off_t off, int size, kauth_cred_t cred,
 				error = bread(vp, -1 - lbn, osize,
 				    NOCRED, 0, &bp);
 				if (error) {
+					brelse(bp, 0);
 					return (error);
 				}
 				mutex_enter(&bp->b_interlock);
@@ -658,7 +665,7 @@ ffs_balloc_ufs2(struct vnode *vp, off_t off, int size, kauth_cred_t cred,
 	 */
 
 	lastlbn = lblkno(fs, ip->i_size);
-	if (lastlbn < UFS_NDADDR && lastlbn < lbn) {
+	if (lastlbn < NDADDR && lastlbn < lbn) {
 		nb = lastlbn;
 		osize = blksize(fs, ip, nb);
 		if (osize < fs->fs_bsize && osize > 0) {
@@ -684,10 +691,10 @@ ffs_balloc_ufs2(struct vnode *vp, off_t off, int size, kauth_cred_t cred,
 	}
 
 	/*
-	 * The first UFS_NDADDR blocks are direct blocks
+	 * The first NDADDR blocks are direct blocks
 	 */
 
-	if (lbn < UFS_NDADDR) {
+	if (lbn < NDADDR) {
 		nb = ufs_rw64(ip->i_ffs2_db[lbn], needswap);
 		if (nb != 0 && ip->i_size >= lblktosize(fs, lbn + 1)) {
 
@@ -702,6 +709,7 @@ ffs_balloc_ufs2(struct vnode *vp, off_t off, int size, kauth_cred_t cred,
 				error = bread(vp, lbn, fs->fs_bsize, NOCRED,
 					      B_MODIFY, bpp);
 				if (error) {
+					brelse(*bpp, 0);
 					return (error);
 				}
 			}
@@ -727,6 +735,7 @@ ffs_balloc_ufs2(struct vnode *vp, off_t off, int size, kauth_cred_t cred,
 					error = bread(vp, lbn, osize, NOCRED,
 						      B_MODIFY, bpp);
 					if (error) {
+						brelse(*bpp, 0);
 						return (error);
 					}
 				}
@@ -824,6 +833,7 @@ ffs_balloc_ufs2(struct vnode *vp, off_t off, int size, kauth_cred_t cred,
 		error = bread(vp,
 		    indirs[i].in_lbn, (int)fs->fs_bsize, NOCRED, 0, &bp);
 		if (error) {
+			brelse(bp, 0);
 			goto fail;
 		}
 		bap = (int64_t *)bp->b_data;
@@ -942,6 +952,7 @@ ffs_balloc_ufs2(struct vnode *vp, off_t off, int size, kauth_cred_t cred,
 			error = bread(vp, lbn, (int)fs->fs_bsize,
 			    NOCRED, B_MODIFY, &nbp);
 			if (error) {
+				brelse(nbp, 0);
 				goto fail;
 			}
 		} else {
@@ -1008,6 +1019,7 @@ fail:
 			    (int)fs->fs_bsize, NOCRED, 0, &bp);
 			if (r) {
 				panic("Could not unwind indirect block, error %d", r);
+				brelse(bp, 0);
 			} else {
 				bap = (int64_t *)bp->b_data;
 				bap[indirs[unwindidx].in_off] = 0;

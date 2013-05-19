@@ -1,4 +1,4 @@
-/*	$NetBSD: i80321_pci.c,v 1.14 2012/10/14 14:20:57 msaitoh Exp $	*/
+/*	$NetBSD: i80321_pci.c,v 1.12 2012/02/12 16:31:01 matt Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i80321_pci.c,v 1.14 2012/10/14 14:20:57 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i80321_pci.c,v 1.12 2012/02/12 16:31:01 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,7 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: i80321_pci.c,v 1.14 2012/10/14 14:20:57 msaitoh Exp 
 #include "opt_i80321.h"
 #include "pci.h"
 
-void		i80321_pci_attach_hook(device_t, device_t,
+void		i80321_pci_attach_hook(struct device *, struct device *,
 		    struct pcibus_attach_args *);
 int		i80321_pci_bus_maxdevs(void *, int);
 pcitag_t	i80321_pci_make_tag(void *, int, int, int);
@@ -70,7 +70,6 @@ void		i80321_pci_decompose_tag(void *, pcitag_t, int *, int *,
 		    int *);
 pcireg_t	i80321_pci_conf_read(void *, pcitag_t, int);
 void		i80321_pci_conf_write(void *, pcitag_t, int, pcireg_t);
-void		i80321_pci_conf_interrupt(void *, int, int, int, int, int *);
 
 #define	PCI_CONF_LOCK(s)	(s) = disable_interrupts(I32_bit)
 #define	PCI_CONF_UNLOCK(s)	restore_interrupts((s))
@@ -91,7 +90,6 @@ i80321_pci_init(pci_chipset_tag_t pc, void *cookie)
 	pc->pc_decompose_tag = i80321_pci_decompose_tag;
 	pc->pc_conf_read = i80321_pci_conf_read;
 	pc->pc_conf_write = i80321_pci_conf_write;
-	pc->pc_conf_interrupt = i80321_pci_conf_interrupt;
 
 #if NPCI > 0 && defined(PCI_NETBSD_CONFIGURE)
 	/*
@@ -133,12 +131,12 @@ i80321_pci_init(pci_chipset_tag_t pc, void *cookie)
 }
 
 void
-i80321_pci_conf_interrupt(void *v, int a, int b, int c, int d, int *p)
+pci_conf_interrupt(pci_chipset_tag_t pc, int a, int b, int c, int d, int *p)
 {
 }
 
 void
-i80321_pci_attach_hook(device_t parent, device_t self,
+i80321_pci_attach_hook(struct device *parent, struct device *self,
     struct pcibus_attach_args *pba)
 {
 

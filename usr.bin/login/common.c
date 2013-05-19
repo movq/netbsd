@@ -1,4 +1,4 @@
-/*	$NetBSD: common.c,v 1.6 2012/05/19 00:02:44 christos Exp $	*/
+/*	$NetBSD: common.c,v 1.3.8.3 2012/05/19 17:32:46 riz Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1987, 1988, 1991, 1993, 1994
@@ -29,7 +29,7 @@
  * SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: common.c,v 1.6 2012/05/19 00:02:44 christos Exp $");
+__RCSID("$NetBSD: common.c,v 1.3.8.3 2012/05/19 17:32:46 riz Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

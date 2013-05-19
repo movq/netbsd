@@ -1,4 +1,4 @@
-/*	$NetBSD: pic_ohare.c,v 1.12 2013/04/21 15:42:11 kiyohara Exp $ */
+/*	$NetBSD: pic_ohare.c,v 1.10 2011/07/07 01:26:37 mrg Exp $ */
 
 /*-
  * Copyright (c) 2007 Michael Lorenz
@@ -27,12 +27,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pic_ohare.c,v 1.12 2013/04/21 15:42:11 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pic_ohare.c,v 1.10 2011/07/07 01:26:37 mrg Exp $");
 
 #include "opt_interrupt.h"
 
 #include <sys/param.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/kernel.h>
 
 #include <machine/pio.h>
@@ -118,7 +118,7 @@ setup_ohare(uint32_t addr, int is_gc)
 	struct pic_ops *pic;
 	int i;
 
-	ohare = kmem_alloc(sizeof(struct ohare_ops), KM_SLEEP);
+	ohare = malloc(sizeof(struct ohare_ops), M_DEVBUF, M_NOWAIT);
 	KASSERT(ohare != NULL);
 	pic = &ohare->pic;
 
@@ -160,7 +160,7 @@ setup_ohare2(uint32_t addr, int irq)
 
 	pic = setup_ohare(addr, 0);
 	strcpy(pic->pic.pic_name, "ohare2");
-	intr_establish(irq, IST_LEVEL, IPL_HIGH, pic_handle_intr, pic);
+	intr_establish(irq, IST_LEVEL, IPL_NONE, pic_handle_intr, pic);
 }
 
 static void
@@ -238,7 +238,6 @@ ohare_get_irq(struct pic_ops *pic, int mode)
 
 	bit = 31 - __builtin_clz(ohare->pending_events);
 	mask = 1 << bit;
-
 	if ((ohare->pending_events & ~mask) == 0) {
 
 		ohare->pending_events = 0;
@@ -266,14 +265,8 @@ ohare_get_irq(struct pic_ops *pic, int mode)
 	evt = ohare->pending_events & ohare->irqs[lvl];
 
 	if (evt == 0) {
-#ifdef OHARE_DEBUG
 		aprint_verbose("%s: spurious interrupt\n", 
 		    ohare->pic.pic_name);
-		printf("levels: %08x\n", in32rb(INT_LEVEL_REG));
-		printf("states: %08x\n", in32rb(INT_STATE_REG));
-		printf("enable: %08x\n", in32rb(INT_ENABLE_REG));
-		printf("events: %08x\n", ohare->pending_events);
-#endif
 		evt = ohare->pending_events;
 	}
 

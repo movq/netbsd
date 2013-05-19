@@ -1,4 +1,4 @@
-/*	$NetBSD: installboot.c,v 1.6 2012/10/14 16:20:04 tsutsui Exp $	*/
+/*	$NetBSD: installboot.c,v 1.5.96.1 2012/11/18 19:05:22 riz Exp $	*/
 
 /*
  * Copyright (c) 2001 Minoura Makoto

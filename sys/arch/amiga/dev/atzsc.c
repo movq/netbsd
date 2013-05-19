@@ -1,4 +1,4 @@
-/*	$NetBSD: atzsc.c,v 1.43 2012/10/27 17:17:27 chs Exp $ */
+/*	$NetBSD: atzsc.c,v 1.42 2010/02/09 18:13:10 phx Exp $ */
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atzsc.c,v 1.43 2012/10/27 17:17:27 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atzsc.c,v 1.42 2010/02/09 18:13:10 phx Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -87,8 +87,8 @@ __KERNEL_RCSID(0, "$NetBSD: atzsc.c,v 1.43 2012/10/27 17:17:27 chs Exp $");
 #include <amiga/dev/atzscreg.h>
 #include <amiga/dev/zbusvar.h>
 
-void atzscattach(device_t, device_t, void *);
-int atzscmatch(device_t, cfdata_t, void *);
+void atzscattach(struct device *, struct device *, void *);
+int atzscmatch(struct device *, struct cfdata *, void *);
 
 void atzsc_enintr(struct sbic_softc *);
 void atzsc_dmastop(struct sbic_softc *);
@@ -104,18 +104,18 @@ void atzsc_dump(void);
 int	atzsc_dmadebug = 0;
 #endif
 
-CFATTACH_DECL_NEW(atzsc, sizeof(struct sbic_softc),
+CFATTACH_DECL(atzsc, sizeof(struct sbic_softc),
     atzscmatch, atzscattach, NULL, NULL);
 
 /*
  * if we are a A2091 SCSI
  */
 int
-atzscmatch(device_t parent, cfdata_t cf, void *aux)
+atzscmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	struct zbus_args *zap;
 
-	zap = aux;
+	zap = auxp;
 
 	/*
 	 * Check manufacturer and product id.
@@ -128,17 +128,16 @@ atzscmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-atzscattach(device_t parent, device_t self, void *aux)
+atzscattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	volatile struct sdmac *rp;
-	struct sbic_softc *sc = device_private(self);
+	struct sbic_softc *sc = (struct sbic_softc *)dp;
 	struct zbus_args *zap;
 	struct scsipi_adapter *adapt = &sc->sc_adapter;
 	struct scsipi_channel *chan = &sc->sc_channel;
 
-	zap = aux;
+	zap = auxp;
 
-	sc->sc_dev = self;
 	sc->sc_cregs = rp = zap->va;
 	/*
 	 * disable ints and reset bank register
@@ -183,7 +182,7 @@ atzscattach(device_t parent, device_t self, void *aux)
 	 * Fill in the scsipi_adapter.
 	 */
 	memset(adapt, 0, sizeof(*adapt));
-	adapt->adapt_dev = self;
+	adapt->adapt_dev = &sc->sc_dev;
 	adapt->adapt_nchannels = 1;
 	adapt->adapt_openings = 7;
 	adapt->adapt_max_periph = 1;
@@ -211,7 +210,7 @@ atzscattach(device_t parent, device_t self, void *aux)
 	/*
 	 * attach all scsi units on us
 	 */
-	config_found(self, chan, scsiprint);
+	config_found(dp, chan, scsiprint);
 }
 
 void
@@ -308,7 +307,7 @@ atzsc_dmaintr(void *arg)
 
 #ifdef DEBUG
 	if (atzsc_dmadebug & DDB_FOLLOW)
-		printf("%s: dmaintr 0x%x\n", device_xname(dev->sc_dev), stat);
+		printf("%s: dmaintr 0x%x\n", dev->sc_dev.dv_xname, stat);
 #endif
 
 	/*

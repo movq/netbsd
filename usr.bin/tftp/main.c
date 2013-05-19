@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.32 2012/07/16 09:20:26 he Exp $	*/
+/*	$NetBSD: main.c,v 1.30.2.1 2012/07/20 23:14:23 riz Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -36,7 +36,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1993\
 #if 0
 static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.32 2012/07/16 09:20:26 he Exp $");
+__RCSID("$NetBSD: main.c,v 1.30.2.1 2012/07/20 23:14:23 riz Exp $");
 #endif
 #endif /* not lint */
 
@@ -541,14 +541,17 @@ get(int argc, char *argv[])
 }
 
 static void
-getUsage(char *s)
+getUsage(s)
+	char *s;
 {
 	(void)printf("Usage: %s host:file host:file ... file, or\n", s);
 	(void)printf("       %s file file ... file if connected\n", s);
 }
 
 void
-setblksize(int argc, char *argv[])
+setblksize(argc, argv)
+	int argc;
+	char *argv[];
 {
 	int t;
 

@@ -1,4 +1,4 @@
-/* $NetBSD: thinkpad_acpi.c,v 1.44 2013/03/30 19:05:20 christos Exp $ */
+/* $NetBSD: thinkpad_acpi.c,v 1.39 2011/06/20 15:00:04 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: thinkpad_acpi.c,v 1.44 2013/03/30 19:05:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: thinkpad_acpi.c,v 1.39 2011/06/20 15:00:04 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -55,28 +55,15 @@ typedef struct thinkpad_softc {
 	ACPI_HANDLE		sc_powhdl;
 	ACPI_HANDLE		sc_cmoshdl;
 
-#define	TP_PSW_SLEEP		0	/* FnF4 */
-#define	TP_PSW_HIBERNATE	1	/* FnF12 */
-#define	TP_PSW_DISPLAY_CYCLE	2	/* FnF7 */
-#define	TP_PSW_LOCK_SCREEN	3	/* FnF2 */
-#define	TP_PSW_BATTERY_INFO	4	/* FnF3 */
-#define	TP_PSW_EJECT_BUTTON	5	/* FnF9 */
-#define	TP_PSW_ZOOM_BUTTON	6	/* FnSPACE */
-#define	TP_PSW_VENDOR_BUTTON	7	/* ThinkVantage */
-#define	TP_PSW_FNF1_BUTTON	8	/* FnF1 */
-#define	TP_PSW_WIRELESS_BUTTON	9	/* FnF5 */
-#define	TP_PSW_WWAN_BUTTON	10	/* FnF6 */
-#define	TP_PSW_POINTER_BUTTON	11	/* FnF8 */
-#define	TP_PSW_FNF10_BUTTON	12	/* FnF10 */
-#define	TP_PSW_FNF11_BUTTON	13	/* FnF11 */
-#define	TP_PSW_BRIGHTNESS_UP	14
-#define	TP_PSW_BRIGHTNESS_DOWN	15
-#define	TP_PSW_THINKLIGHT	16
-#define	TP_PSW_VOLUME_UP	17
-#define	TP_PSW_VOLUME_DOWN	18
-#define	TP_PSW_VOLUME_MUTE	19
-#define	TP_PSW_LAST		20
-
+#define	TP_PSW_SLEEP		0
+#define	TP_PSW_HIBERNATE	1
+#define	TP_PSW_DISPLAY_CYCLE	2
+#define	TP_PSW_LOCK_SCREEN	3
+#define	TP_PSW_BATTERY_INFO	4
+#define	TP_PSW_EJECT_BUTTON	5
+#define	TP_PSW_ZOOM_BUTTON	6
+#define	TP_PSW_VENDOR_BUTTON	7
+#define	TP_PSW_LAST		8
 	struct sysmon_pswitch	sc_smpsw[TP_PSW_LAST];
 	bool			sc_smpsw_valid;
 
@@ -92,20 +79,20 @@ typedef struct thinkpad_softc {
 #define	THINKPAD_NOTIFY_BatteryInfo	0x003
 #define	THINKPAD_NOTIFY_SleepButton	0x004
 #define	THINKPAD_NOTIFY_WirelessSwitch	0x005
-#define	THINKPAD_NOTIFY_wWANSwitch	0x006
+#define	THINKPAD_NOTIFY_FnF6		0x006
 #define	THINKPAD_NOTIFY_DisplayCycle	0x007
 #define	THINKPAD_NOTIFY_PointerSwitch	0x008
 #define	THINKPAD_NOTIFY_EjectButton	0x009
-#define	THINKPAD_NOTIFY_FnF10		0x00a	/* XXX: Not seen on T61 */
+#define	THINKPAD_NOTIFY_FnF10		0x00a
 #define	THINKPAD_NOTIFY_FnF11		0x00b
 #define	THINKPAD_NOTIFY_HibernateButton	0x00c
 #define	THINKPAD_NOTIFY_BrightnessUp	0x010
 #define	THINKPAD_NOTIFY_BrightnessDown	0x011
 #define	THINKPAD_NOTIFY_ThinkLight	0x012
 #define	THINKPAD_NOTIFY_Zoom		0x014
-#define	THINKPAD_NOTIFY_VolumeUp	0x015	/* XXX: Not seen on T61 */
-#define	THINKPAD_NOTIFY_VolumeDown	0x016	/* XXX: Not seen on T61 */
-#define	THINKPAD_NOTIFY_VolumeMute	0x017	/* XXX: Not seen on T61 */
+#define	THINKPAD_NOTIFY_VolumeUp	0x015
+#define	THINKPAD_NOTIFY_VolumeDown	0x016
+#define	THINKPAD_NOTIFY_VolumeMute	0x017
 #define	THINKPAD_NOTIFY_ThinkVantage	0x018
 
 #define	THINKPAD_CMOS_BRIGHTNESS_UP	0x04
@@ -133,7 +120,6 @@ static void	thinkpad_temp_refresh(struct sysmon_envsys *, envsys_data_t *);
 static void	thinkpad_fan_refresh(struct sysmon_envsys *, envsys_data_t *);
 
 static void	thinkpad_wireless_toggle(thinkpad_softc_t *);
-static void	thinkpad_wwan_toggle(thinkpad_softc_t *);
 
 static bool	thinkpad_resume(device_t, const pmf_qual_t *);
 static void	thinkpad_brightness_up(device_t);
@@ -146,7 +132,6 @@ CFATTACH_DECL_NEW(thinkpad, sizeof(thinkpad_softc_t),
 
 static const char * const thinkpad_ids[] = {
 	"IBM0068",
-	"LEN0068",
 	NULL
 };
 
@@ -258,20 +243,6 @@ thinkpad_attach(device_t parent, device_t self, void *opaque)
 	psw[TP_PSW_EJECT_BUTTON].smpsw_name = PSWITCH_HK_EJECT_BUTTON;
 	psw[TP_PSW_ZOOM_BUTTON].smpsw_name = PSWITCH_HK_ZOOM_BUTTON;
 	psw[TP_PSW_VENDOR_BUTTON].smpsw_name = PSWITCH_HK_VENDOR_BUTTON;
-#ifndef THINKPAD_NORMAL_HOTKEYS
-	psw[TP_PSW_FNF1_BUTTON].smpsw_name     = PSWITCH_HK_FNF1_BUTTON;
-	psw[TP_PSW_WIRELESS_BUTTON].smpsw_name = PSWITCH_HK_WIRELESS_BUTTON;
-	psw[TP_PSW_WWAN_BUTTON].smpsw_name     = PSWITCH_HK_WWAN_BUTTON;
-	psw[TP_PSW_POINTER_BUTTON].smpsw_name  = PSWITCH_HK_POINTER_BUTTON;
-	psw[TP_PSW_FNF10_BUTTON].smpsw_name    = PSWITCH_HK_FNF10_BUTTON;
-	psw[TP_PSW_FNF11_BUTTON].smpsw_name    = PSWITCH_HK_FNF11_BUTTON;
-	psw[TP_PSW_BRIGHTNESS_UP].smpsw_name   = PSWITCH_HK_BRIGHTNESS_UP;
-	psw[TP_PSW_BRIGHTNESS_DOWN].smpsw_name = PSWITCH_HK_BRIGHTNESS_DOWN;
-	psw[TP_PSW_THINKLIGHT].smpsw_name      = PSWITCH_HK_THINKLIGHT;
-	psw[TP_PSW_VOLUME_UP].smpsw_name       = PSWITCH_HK_VOLUME_UP;
-	psw[TP_PSW_VOLUME_DOWN].smpsw_name     = PSWITCH_HK_VOLUME_DOWN;
-	psw[TP_PSW_VOLUME_MUTE].smpsw_name     = PSWITCH_HK_VOLUME_MUTE;
-#endif /* THINKPAD_NORMAL_HOTKEYS */
 
 	for (i = 0; i < TP_PSW_LAST; i++) {
 		/* not supported yet */
@@ -370,39 +341,12 @@ thinkpad_get_hotkeys(void *opaque)
 		switch (event) {
 		case THINKPAD_NOTIFY_BrightnessUp:
 			thinkpad_brightness_up(self);
-#ifndef THINKPAD_NORMAL_HOTKEYS
-			if (sc->sc_smpsw_valid == false)
-				break;
-			sysmon_pswitch_event(&sc->sc_smpsw[TP_PSW_BRIGHTNESS_UP],
-			    PSWITCH_EVENT_PRESSED);
-#endif
 			break;
 		case THINKPAD_NOTIFY_BrightnessDown:
 			thinkpad_brightness_down(self);
-#ifndef THINKPAD_NORMAL_HOTKEYS
-			if (sc->sc_smpsw_valid == false)
-				break;
-			sysmon_pswitch_event(&sc->sc_smpsw[TP_PSW_BRIGHTNESS_DOWN],
-			    PSWITCH_EVENT_PRESSED);
-#endif
 			break;
 		case THINKPAD_NOTIFY_WirelessSwitch:
 			thinkpad_wireless_toggle(sc);
-#ifndef THINKPAD_NORMAL_HOTKEYS
-			if (sc->sc_smpsw_valid == false)
-				break;
-			sysmon_pswitch_event(&sc->sc_smpsw[TP_PSW_WIRELESS_BUTTON],
-			    PSWITCH_EVENT_PRESSED);
-#endif
-			break;
-		case THINKPAD_NOTIFY_wWANSwitch:
-			thinkpad_wwan_toggle(sc);
-#ifndef THINKPAD_NORMAL_HOTKEYS
-			if (sc->sc_smpsw_valid == false)
-				break;
-			sysmon_pswitch_event(&sc->sc_smpsw[TP_PSW_WWAN_BUTTON],
-			    PSWITCH_EVENT_PRESSED);
-#endif
 			break;
 		case THINKPAD_NOTIFY_SleepButton:
 			if (sc->sc_smpsw_valid == false)
@@ -460,60 +404,8 @@ thinkpad_get_hotkeys(void *opaque)
 			    &sc->sc_smpsw[TP_PSW_VENDOR_BUTTON],
 			    PSWITCH_EVENT_PRESSED);
 			break;
-#ifndef THINKPAD_NORMAL_HOTKEYS
 		case THINKPAD_NOTIFY_FnF1:
-			if (sc->sc_smpsw_valid == false)
-				break;
-			sysmon_pswitch_event(&sc->sc_smpsw[TP_PSW_FNF1_BUTTON],
-			    PSWITCH_EVENT_PRESSED);
-			break;
-		case THINKPAD_NOTIFY_PointerSwitch:
-			if (sc->sc_smpsw_valid == false)
-				break;
-			sysmon_pswitch_event(&sc->sc_smpsw[TP_PSW_POINTER_BUTTON],
-			    PSWITCH_EVENT_PRESSED);
-			break;
-		case THINKPAD_NOTIFY_FnF11:
-			if (sc->sc_smpsw_valid == false)
-				break;
-			sysmon_pswitch_event(&sc->sc_smpsw[TP_PSW_FNF11_BUTTON],
-			    PSWITCH_EVENT_PRESSED);
-			break;
-		case THINKPAD_NOTIFY_ThinkLight:
-			if (sc->sc_smpsw_valid == false)
-				break;
-			sysmon_pswitch_event(&sc->sc_smpsw[TP_PSW_THINKLIGHT],
-			    PSWITCH_EVENT_PRESSED);
-			break;
-		/*
-		 * For some reason the next four aren't seen on my T61.
-		 */
-		case THINKPAD_NOTIFY_FnF10:
-			if (sc->sc_smpsw_valid == false)
-				break;
-			sysmon_pswitch_event(&sc->sc_smpsw[TP_PSW_FNF10_BUTTON],
-			    PSWITCH_EVENT_PRESSED);
-			break;
-		case THINKPAD_NOTIFY_VolumeUp:
-			if (sc->sc_smpsw_valid == false)
-				break;
-			sysmon_pswitch_event(&sc->sc_smpsw[TP_PSW_VOLUME_UP],
-			    PSWITCH_EVENT_PRESSED);
-			break;
-		case THINKPAD_NOTIFY_VolumeDown:
-			if (sc->sc_smpsw_valid == false)
-				break;
-			sysmon_pswitch_event(&sc->sc_smpsw[TP_PSW_VOLUME_DOWN],
-			    PSWITCH_EVENT_PRESSED);
-			break;
-		case THINKPAD_NOTIFY_VolumeMute:
-			if (sc->sc_smpsw_valid == false)
-				break;
-			sysmon_pswitch_event(&sc->sc_smpsw[TP_PSW_VOLUME_MUTE],
-			    PSWITCH_EVENT_PRESSED);
-			break;
-#else
-		case THINKPAD_NOTIFY_FnF1:
+		case THINKPAD_NOTIFY_FnF6:
 		case THINKPAD_NOTIFY_PointerSwitch:
 		case THINKPAD_NOTIFY_FnF10:
 		case THINKPAD_NOTIFY_FnF11:
@@ -523,7 +415,6 @@ thinkpad_get_hotkeys(void *opaque)
 		case THINKPAD_NOTIFY_VolumeMute:
 			/* XXXJDM we should deliver hotkeys as keycodes */
 			break;
-#endif /* THINKPAD_NORMAL_HOTKEYS */
 		default:
 			aprint_debug_dev(self, "notify event 0x%03x\n", event);
 			break;
@@ -582,7 +473,6 @@ thinkpad_sensors_init(thinkpad_softc_t *sc)
 
 		sc->sc_sensor[i].units = ENVSYS_STEMP;
 		sc->sc_sensor[i].state = ENVSYS_SINVALID;
-		sc->sc_sensor[i].flags = ENVSYS_FHAS_ENTROPY;
 
 		(void)snprintf(sc->sc_sensor[i].desc,
 		    sizeof(sc->sc_sensor[i].desc), "temperature %d", i);
@@ -596,7 +486,6 @@ thinkpad_sensors_init(thinkpad_softc_t *sc)
 
 		sc->sc_sensor[i].units = ENVSYS_SFANRPM;
 		sc->sc_sensor[i].state = ENVSYS_SINVALID;
-		sc->sc_sensor[i].flags = ENVSYS_FHAS_ENTROPY;
 
 		(void)snprintf(sc->sc_sensor[i].desc,
 		    sizeof(sc->sc_sensor[i].desc), "fan speed %d", j);
@@ -699,13 +588,6 @@ thinkpad_wireless_toggle(thinkpad_softc_t *sc)
 	/* Ignore return value, as the hardware may not support bluetooth */
 	(void)AcpiEvaluateObject(sc->sc_node->ad_handle, "BTGL", NULL, NULL);
 	(void)AcpiEvaluateObject(sc->sc_node->ad_handle, "GWAN", NULL, NULL);
-}
-
-static void
-thinkpad_wwan_toggle(thinkpad_softc_t *sc)
-{
-	/* Ignore return value, as the hardware may not support wireless WAN */
-	(void)AcpiEvaluateObject(sc->sc_node->ad_handle, "WTGL", NULL, NULL);
 }
 
 static uint8_t

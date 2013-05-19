@@ -1,4 +1,4 @@
-/*	$NetBSD: macros.h,v 1.2 2012/12/04 23:38:56 spz Exp $	*/
+/*	$NetBSD: macros.h,v 1.1.1.1.4.1 2012/12/15 05:40:15 riz Exp $	*/
 
 /*
  * Automated Testing Framework (atf)

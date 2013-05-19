@@ -1,4 +1,4 @@
-/* $NetBSD: socketops.h,v 1.5 2013/01/28 20:06:52 kefren Exp $ */
+/* $NetBSD: socketops.h,v 1.2 2011/06/14 11:28:51 kefren Exp $ */
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -42,7 +42,11 @@
 #define	LDP_AF_INET6	2
 
 int	set_ttl(int);
-int	create_hello_sockets(void);
+int	set_mcast_ttl(int);
+int	set_tos(int);
+int	socket_reuse_port(int);
+int	bind_socket(int, uint32_t);
+int	create_hello_socket(void);
 int	create_listening_socket(void);
 void	send_hello(void);
 int	get_message_id(void);
@@ -56,17 +60,10 @@ int	send_tlv(struct ldp_peer *, struct tlv *);
 int	send_addresses(struct ldp_peer *);
 
 struct	hello_info {
-	union sockunion transport_address;
-	struct in_addr ldp_id;
+	struct in_addr address, transport_address, ldp_id;
 	int keepalive;
 	SLIST_ENTRY(hello_info) infos;
 };
 SLIST_HEAD(,hello_info) hello_info_head;
-
-struct	hello_socket {
-	int type, socket;
-	SLIST_ENTRY(hello_socket) listentry;
-};
-SLIST_HEAD(,hello_socket) hello_socket_head;
 
 #endif	/* !_SOCKETOPS_H_ */

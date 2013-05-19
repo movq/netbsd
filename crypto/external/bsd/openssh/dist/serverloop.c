@@ -1,5 +1,5 @@
-/*	$NetBSD: serverloop.c,v 1.6 2013/03/29 16:19:45 christos Exp $	*/
-/* $OpenBSD: serverloop.c,v 1.164 2012/12/07 01:51:35 dtucker Exp $ */
+/*	$NetBSD: serverloop.c,v 1.4 2011/09/07 17:49:19 christos Exp $	*/
+/* $OpenBSD: serverloop.c,v 1.160 2011/05/15 08:09:01 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -37,7 +37,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: serverloop.c,v 1.6 2013/03/29 16:19:45 christos Exp $");
+__RCSID("$NetBSD: serverloop.c,v 1.4 2011/09/07 17:49:19 christos Exp $");
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/socket.h>
@@ -291,16 +291,7 @@ wait_until_can_do_something(fd_set **readsetp, fd_set **writesetp, int *maxfdp,
 {
 	struct timeval tv, *tvp;
 	int ret;
-	time_t minwait_secs = 0;
 	int client_alive_scheduled = 0;
-
-	/* Allocate and update select() masks for channel descriptors. */
-	channel_prepare_select(readsetp, writesetp, maxfdp, nallocp,
-	    &minwait_secs, 0);
-
-	if (minwait_secs != 0)
-		max_time_milliseconds = MIN(max_time_milliseconds,
-		    (u_int)minwait_secs * 1000);
 
 	/*
 	 * if using client_alive, set the max timeout accordingly,
@@ -315,6 +306,9 @@ wait_until_can_do_something(fd_set **readsetp, fd_set **writesetp, int *maxfdp,
 		client_alive_scheduled = 1;
 		max_time_milliseconds = options.client_alive_interval * 1000;
 	}
+
+	/* Allocate and update select() masks for channel descriptors. */
+	channel_prepare_select(readsetp, writesetp, maxfdp, nallocp, 0);
 
 	if (compat20) {
 #if 0
@@ -694,7 +688,7 @@ server_loop(pid_t pid, int fdin_arg, int fdout_arg, int fderr_arg)
 		    &nalloc, max_time_milliseconds);
 
 		if (received_sigterm) {
-			logit("Exiting on signal %d", (int)received_sigterm);
+			logit("Exiting on signal %ld", (long)received_sigterm);
 			/* Clean up sessions, utmp, etc. */
 			cleanup_exit(255);
 		}
@@ -847,7 +841,7 @@ server_loop2(Authctxt *authctxt)
 		    &nalloc, 0);
 
 		if (received_sigterm) {
-			logit("Exiting on signal %d", (int)received_sigterm);
+			logit("Exiting on signal %ld", (long)received_sigterm);
 			/* Clean up sessions, utmp, etc. */
 			cleanup_exit(255);
 		}
@@ -944,7 +938,7 @@ server_input_window_size(int type, u_int32_t seq, void *ctxt)
 static Channel *
 server_request_direct_tcpip(void)
 {
-	Channel *c = NULL;
+	Channel *c;
 	char *target, *originator;
 	u_short target_port, originator_port;
 
@@ -957,16 +951,9 @@ server_request_direct_tcpip(void)
 	debug("server_request_direct_tcpip: originator %s port %d, target %s "
 	    "port %d", originator, originator_port, target, target_port);
 
-	/* XXX fine grained permissions */
-	if ((options.allow_tcp_forwarding & FORWARD_LOCAL) != 0 &&
-	    !no_port_forwarding_flag) {
-		c = channel_connect_to(target, target_port,
-		    "direct-tcpip", "direct-tcpip");
-	} else {
-		logit("refused local port forward: "
-		    "originator %s port %d, target %s port %d",
-		    originator, originator_port, target, target_port);
-	}
+	/* XXX check permission */
+	c = channel_connect_to(target, target_port,
+	    "direct-tcpip", "direct-tcpip");
 
 	xfree(originator);
 	xfree(target);
@@ -1128,7 +1115,7 @@ server_input_global_request(int type, u_int32_t seq, void *ctxt)
 		    listen_address, listen_port);
 
 		/* check permissions */
-		if ((options.allow_tcp_forwarding & FORWARD_REMOTE) == 0 ||
+		if (!options.allow_tcp_forwarding ||
 		    no_port_forwarding_flag ||
 		    (!want_reply && listen_port == 0) ||
 		    (listen_port != 0 && listen_port < IPPORT_RESERVED &&

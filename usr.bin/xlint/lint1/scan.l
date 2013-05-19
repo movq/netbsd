@@ -1,5 +1,5 @@
 %{
-/* $NetBSD: scan.l,v 1.52 2013/04/19 18:51:14 christos Exp $ */
+/* $NetBSD: scan.l,v 1.49 2011/10/02 19:45:10 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: scan.l,v 1.52 2013/04/19 18:51:14 christos Exp $");
+__RCSID("$NetBSD: scan.l,v 1.49 2011/10/02 19:45:10 christos Exp $");
 #endif
 
 #include <stdlib.h>
@@ -604,7 +604,7 @@ icon(int base)
 			warning(252);
 		}
 		break;
-		/* LINTED206: (enumeration values not handled in switch) */
+		/* LINTED (enumeration values not handled in switch) */
 	case STRUCT:
 	case VOID:
 	case LDOUBLE:
@@ -953,7 +953,7 @@ getescc(int d)
 				/* bad octal digit %c */
 				warning(77, c);
 			pbc = c;
-			if (v > TARG_UCHAR_MAX) {
+			if (v > UCHAR_MAX) {
 				/* character escape does not fit in char. */
 				warning(76);
 				v &= CHAR_MASK;
@@ -1084,7 +1084,7 @@ directive(void)
  *	CONSTCOND CONSTANTCOND CONSTANTCONDITION
  *	FALLTHRU FALLTHROUGH
  *	LINTLIBRARY
- *	LINTEDn NOSTRICTn
+ *	LINTED NOSTRICT
  *	LONGLONG
  *	NOTREACHED
  *	PRINTFLIKEn
@@ -1111,9 +1111,9 @@ comment(void)
 		{ "FALLTHRU",		0,	fallthru	},
 		{ "FALLTHROUGH",	0,	fallthru	},
 		{ "LINTLIBRARY",	0,	lintlib		},
-		{ "LINTED",		1,	linted		},
+		{ "LINTED",		0,	linted		},
 		{ "LONGLONG",		0,	longlong	},
-		{ "NOSTRICT",		1,	linted		},
+		{ "NOSTRICT",		0,	linted		},
 		{ "NOTREACHED",		0,	notreach	},
 		{ "PRINTFLIKE",		1,	printflike	},
 		{ "PROTOLIB",		1,	protolib	},
@@ -1222,7 +1222,7 @@ void
 clrwflgs(void)
 {
 
-	lwarn = LWARN_ALL;
+	nowarn = 0;
 	quadflg = 0;
 	ccflg = 0;
 }

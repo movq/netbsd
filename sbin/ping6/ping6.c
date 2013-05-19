@@ -1,4 +1,4 @@
-/*	$NetBSD: ping6.c,v 1.81 2012/09/10 04:32:24 msaitoh Exp $	*/
+/*	$NetBSD: ping6.c,v 1.80.2.1 2012/10/22 19:45:46 riz Exp $	*/
 /*	$KAME: ping6.c,v 1.164 2002/11/16 14:05:37 itojun Exp $	*/
 
 /*
@@ -77,7 +77,7 @@ static char sccsid[] = "@(#)ping.c	8.1 (Berkeley) 6/5/93";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ping6.c,v 1.81 2012/09/10 04:32:24 msaitoh Exp $");
+__RCSID("$NetBSD: ping6.c,v 1.80.2.1 2012/10/22 19:45:46 riz Exp $");
 #endif
 #endif
 

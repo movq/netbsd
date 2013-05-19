@@ -1,4 +1,4 @@
-/*	$NetBSD: cdf_time.c,v 1.5 2013/01/03 23:05:38 christos Exp $	*/
+/*	$NetBSD: cdf_time.c,v 1.3.6.1 2012/03/07 23:18:28 riz Exp $	*/
 
 /*-
  * Copyright (c) 2008 Christos Zoulas
@@ -30,9 +30,9 @@
 
 #ifndef lint
 #if 0
-FILE_RCSID("@(#)$File: cdf_time.c,v 1.12 2012/05/15 17:14:36 christos Exp $")
+FILE_RCSID("@(#)$File: cdf_time.c,v 1.11 2011/12/13 13:48:41 christos Exp $")
 #else
-__RCSID("$NetBSD: cdf_time.c,v 1.5 2013/01/03 23:05:38 christos Exp $");
+__RCSID("$NetBSD: cdf_time.c,v 1.3.6.1 2012/03/07 23:18:28 riz Exp $");
 #endif
 #endif
 
@@ -172,13 +172,15 @@ cdf_timespec_to_timestamp(cdf_timestamp_t *t, const struct timespec *ts)
 }
 
 char *
-cdf_ctime(const time_t *sec, char *buf)
+cdf_ctime(const time_t *sec)
 {
-	char *ptr = ctime_r(sec, buf);
+	static char ctbuf[26];
+	char *ptr = ctime(sec);
 	if (ptr != NULL)
-		return buf;
-	(void)snprintf(buf, 26, "*Bad* 0x%16.16llx\n", (long long)*sec);
-	return buf;
+		return ptr;
+	(void)snprintf(ctbuf, sizeof(ctbuf), "*Bad* 0x%16.16llx\n",
+	    (long long)*sec);
+	return ctbuf;
 }
 
 
@@ -187,13 +189,12 @@ int
 main(int argc, char *argv[])
 {
 	struct timespec ts;
-	char buf[25];
 	static const cdf_timestamp_t tst = 0x01A5E403C2D59C00ULL;
 	static const char *ref = "Sat Apr 23 01:30:00 1977";
 	char *p, *q;
 
 	cdf_timestamp_to_timespec(&ts, tst);
-	p = cdf_ctime(&ts.tv_sec, buf);
+	p = cdf_ctime(&ts.tv_sec);
 	if ((q = strchr(p, '\n')) != NULL)
 		*q = '\0';
 	if (strcmp(ref, p) != 0)

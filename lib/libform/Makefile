@@ -1,7 +1,5 @@
-#	$NetBSD: Makefile,v 1.10 2012/03/21 05:38:49 matt Exp $
+#	$NetBSD: Makefile,v 1.9 2008/03/11 23:06:04 joerg Exp $
 #
-
-WARNS=	2
 
 CPPFLAGS+=-I${.CURDIR}
 .if defined(DEBUG_FORMS)

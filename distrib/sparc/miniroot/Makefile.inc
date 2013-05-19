@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.19 2012/08/18 09:33:25 mrg Exp $
+#	$NetBSD: Makefile.inc,v 1.18.8.1 2012/08/18 22:11:45 riz Exp $
 
 IMAGESIZE=	8192k
 DBG=		-Os

@@ -1,4 +1,4 @@
-/*	$NetBSD: gemini_pci.c,v 1.14 2012/10/27 17:17:38 chs Exp $	*/
+/*	$NetBSD: gemini_pci.c,v 1.11 2012/01/27 18:52:50 para Exp $	*/
 
 /* adapted from:
  *	NetBSD: i80312_pci.c,v 1.9 2005/12/11 12:16:51 christos Exp
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gemini_pci.c,v 1.14 2012/10/27 17:17:38 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gemini_pci.c,v 1.11 2012/01/27 18:52:50 para Exp $");
 
 #include <sys/cdefs.h>
 
@@ -75,7 +75,7 @@ __KERNEL_RCSID(0, "$NetBSD: gemini_pci.c,v 1.14 2012/10/27 17:17:38 chs Exp $");
 #include "opt_pci.h"
 #include "pci.h"
 
-void		gemini_pci_attach_hook(device_t, device_t,
+void		gemini_pci_attach_hook(struct device *, struct device *,
 		    struct pcibus_attach_args *);
 int		gemini_pci_bus_maxdevs(void *, int);
 pcitag_t	gemini_pci_make_tag(void *, int, int, int);
@@ -83,8 +83,8 @@ void		gemini_pci_decompose_tag(void *, pcitag_t, int *, int *,
 		    int *);
 pcireg_t	gemini_pci_conf_read(void *, pcitag_t, int);
 void		gemini_pci_conf_write(void *, pcitag_t, int, pcireg_t);
-int		gemini_pci_conf_hook(void *, int, int, int, pcireg_t);
-void		gemini_pci_conf_interrupt(void *, int, int, int, int, int *);
+int		gemini_pci_conf_hook(pci_chipset_tag_t, int, int, int,
+		    pcireg_t);
 
 int		gemini_pci_intr_map(const struct pci_attach_args *,
 		    pci_intr_handle_t *);
@@ -184,7 +184,6 @@ gemini_pci_init(pci_chipset_tag_t pc, void *cookie)
 	pc->pc_intr_disestablish = gemini_pci_intr_disestablish;
 
 	pc->pc_conf_hook = gemini_pci_conf_hook;
-	pc->pc_conf_interrupt = gemini_pci_conf_interrupt;
 
 	/*
 	 * initialize copy of CFG_CMD
@@ -234,12 +233,12 @@ gemini_pci_init(pci_chipset_tag_t pc, void *cookie)
 }
 
 void
-gemini_pci_conf_interrupt(void *v, int a, int b, int c, int d, int *p)
+pci_conf_interrupt(pci_chipset_tag_t pc, int a, int b, int c, int d, int *p)
 {
 }
 
 int
-gemini_pci_conf_hook(void *v, int bus, int device, int function, pcireg_t id)
+gemini_pci_conf_hook(pci_chipset_tag_t pc, int bus, int device, int function, pcireg_t id)
 {
 	int rv;
 
@@ -249,7 +248,7 @@ gemini_pci_conf_hook(void *v, int bus, int device, int function, pcireg_t id)
 }
 
 void
-gemini_pci_attach_hook(device_t parent, device_t self,
+gemini_pci_attach_hook(struct device *parent, struct device *self,
 	struct pcibus_attach_args *pba)
 {
 	/* Nothing to do. */
@@ -448,3 +447,4 @@ gemini_pci_intr_handler(void *v)
 
 	return rv;
 }
+

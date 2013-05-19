@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: bootconf.sh,v 1.15 2012/12/31 23:21:27 christos Exp $
+# $NetBSD: bootconf.sh,v 1.14 2010/11/01 14:42:08 christos Exp $
 #
 
 # PROVIDE: bootconf
@@ -74,7 +74,6 @@ bootconf_start()
 	*)
 		rm -f /etc/etc.current
 		ln -s etc.$conf /etc/etc.current
-		sync
 		;;
 	esac
 

@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL,v 1.66 2013/04/27 21:43:43 christos Exp $
+#	$NetBSD: INSTALL,v 1.58.2.3 2012/07/25 15:09:34 martin Exp $
 #
 # INSTALL kernel; all supported devices but nothing fancy.
 #
@@ -79,8 +79,7 @@ options 	WAPBL		# File system journaling support
 
 # WS console uses VT100 terminal emulation
 options 	WSEMUL_VT100
-options 	WSDISPLAY_DEFAULTSCREENS=1
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
+#options 	WSDISPLAY_DEFAULTSCREENS=8
 
 # System V shared memory & semaphores support.
 #options 	SYSVMSG
@@ -105,7 +104,6 @@ options 	COMPAT_20
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 #options 	COMPAT_ULTRIX
 options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
@@ -246,14 +244,14 @@ wskbd*		at lkkbd? console ?
 #pseudo-device   accf_data		# "dataready" accept filter
 #pseudo-device   accf_http		# "httpready" accept filter
 
-pseudo-device	loop	
-pseudo-device	pty			# pseudo-terminals
+pseudo-device	loop	1
+pseudo-device	pty		2	# pseudo-terminals (Sysinst needs two)
 pseudo-device	bpfilter
 #pseudo-device	tun	
 #pseudo-device	gre			# generic L3 over IP tunnel
 #pseudo-device	vnd	
-#pseudo-device	ccd	
-pseudo-device	raid			# RAIDframe disk driver
+#pseudo-device	ccd	4
+pseudo-device	raid	8		# RAIDframe disk driver
 #pseudo-device	fss			# file system snapshot device
 
 pseudo-device	md	

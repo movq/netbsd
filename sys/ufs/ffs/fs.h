@@ -1,4 +1,4 @@
-/*	$NetBSD: fs.h,v 1.60 2013/01/22 09:39:16 dholland Exp $	*/
+/*	$NetBSD: fs.h,v 1.56 2011/03/06 17:08:38 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -672,7 +672,7 @@ struct ocg {
 #define	lfragtosize(fs, frag)	/* calculates ((off_t)frag * fs->fs_fsize) */ \
 	(((off_t)(frag)) << (fs)->fs_fshift)
 #define	lblktosize(fs, blk)	/* calculates ((off_t)blk * fs->fs_bsize) */ \
-	((uint64_t)(((off_t)(blk)) << (fs)->fs_bshift))
+	(((off_t)(blk)) << (fs)->fs_bshift)
 #define	lblkno(fs, loc)		/* calculates (loc / fs->fs_bsize) */ \
 	((loc) >> (fs)->fs_bshift)
 #define	numfrags(fs, loc)	/* calculates (loc / fs->fs_fsize) */ \
@@ -703,14 +703,14 @@ struct ocg {
  * Determining the size of a file block in the file system.
  */
 #define	blksize(fs, ip, lbn) \
-	(((lbn) >= UFS_NDADDR || (ip)->i_size >= lblktosize(fs, (lbn) + 1)) \
+	(((lbn) >= NDADDR || (ip)->i_size >= lblktosize(fs, (lbn) + 1)) \
 	    ? (fs)->fs_bsize \
-	    : ((int32_t)fragroundup(fs, blkoff(fs, (ip)->i_size))))
+	    : (fragroundup(fs, blkoff(fs, (ip)->i_size))))
 
 #define	sblksize(fs, size, lbn) \
-	(((lbn) >= UFS_NDADDR || (size) >= ((lbn) + 1) << (fs)->fs_bshift) \
+	(((lbn) >= NDADDR || (size) >= ((lbn) + 1) << (fs)->fs_bshift) \
 	  ? (fs)->fs_bsize \
-	  : ((int32_t)fragroundup(fs, blkoff(fs, (uint64_t)(size)))))
+	  : (fragroundup(fs, blkoff(fs, (size)))))
 
 
 /*

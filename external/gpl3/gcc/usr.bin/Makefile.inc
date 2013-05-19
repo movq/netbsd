@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.12 2012/12/02 12:55:27 apb Exp $
+#	$NetBSD: Makefile.inc,v 1.10 2011/08/07 11:41:50 mrg Exp $
 
 .ifndef _EXTERNAL_GPL3_GCC_USR_BIN_MAKEFILE_INC_
 _EXTERNAL_GPL3_GCC_USR_BIN_MAKEFILE_INC_=1
@@ -24,7 +24,8 @@ CPPFLAGS+=	-I.
 DPSRCS+= gmp.h mpfr.h mpf2mpfr.h mpc.h mpc-log.h
 
 .if ${USETOOLS} == "yes"
-NBCOMPATLIB=   -L${TOOLDIR}/lib -lnbcompat
+COMPATOBJDIR!=	cd ${NETBSDSRCDIR}/tools/compat && ${PRINTOBJDIR}
+NBCOMPATLIB=	-L${COMPATOBJDIR} -lnbcompat
 .endif
 
 GNUHOSTDIST=	${DIST}
@@ -64,7 +65,7 @@ DATESTAMPSTR=		"\"\""
 # XXX pull this out of our configs
 G_BUGURL=<http://www.NetBSD.org/Misc/send-pr.html>
 G_BUGURL_s="\"${G_BUG_URL}\""
-G_PKGVERSION=(NetBSD nb1 20120916) 
+G_PKGVERSION=(NetBSD nb2 20110806) 
 G_PKGVERSION_s="\"${G_PKGVERSION} \""
 
 VER_CPPFLAGS=			-DBUGURL=${G_BUGURL_s} \

@@ -1,4 +1,6 @@
-# $NetBSD: Makefile,v 1.30 2013/04/25 13:59:56 joerg Exp $
+# $NetBSD: Makefile,v 1.18 2012/01/17 15:51:55 joerg Exp $
+
+.include <bsd.own.mk>
 
 .include <bsd.own.mk>
 
@@ -9,8 +11,7 @@ SUBDIR=	\
 	libLLVMBitReader \
 	libLLVMBitWriter \
 	libLLVMCodeGen \
-	libLLVMIR \
-	libLLVMIRReader \
+	libLLVMCore \
 	libLLVMInstCombine \
 	libLLVMInstrumentation \
 	libLLVMipa \
@@ -19,15 +20,12 @@ SUBDIR=	\
 	libLLVMMC \
 	libLLVMMCDisassembler \
 	libLLVMMCParser \
-	libLLVMObjCARC \
 	libLLVMScalarOpts \
 	libLLVMSelectionDAG \
 	libLLVMSupport \
 	libLLVMTableGen \
 	libLLVMTarget \
 	libLLVMTransformsUtils \
-	libLLVMVectorize \
-	libLLVMAArch64CodeGen \
 	libLLVMARMCodeGen \
 	libLLVMMipsCodeGen \
 	libLLVMPowerPCCodeGen \
@@ -35,14 +33,6 @@ SUBDIR=	\
 	libLLVMX86CodeGen
 
 SUBDIR+= .WAIT
-
-SUBDIR+= \
-	libLLVMAArch64AsmParser \
-	libLLVMAArch64AsmPrinter \
-	libLLVMAArch64Disassembler \
-	libLLVMAArch64MCTargetDesc \
-	libLLVMAArch64TargetInfo \
-	libLLVMAArch64Utils
 
 SUBDIR+= \
 	libLLVMARMAsmParser \
@@ -54,7 +44,6 @@ SUBDIR+= \
 SUBDIR+= \
 	libLLVMMipsAsmParser \
 	libLLVMMipsAsmPrinter \
-	libLLVMMipsDisassembler \
 	libLLVMMipsMCTargetDesc \
 	libLLVMMipsTargetInfo
 
@@ -79,6 +68,8 @@ SUBDIR+= \
 SUBDIR+= \
 	libLLVMArchive \
 	libLLVMDebugInfo \
+	libLLVMCBackend \
+	libLLVMCBackendInfo \
 	libLLVMCppBackend \
 	libLLVMCppBackendInfo \
 	libLLVMExecutionEngine \
@@ -87,7 +78,6 @@ SUBDIR+= \
 	libLLVMJIT \
 	libLLVMMCJIT \
 	libLLVMObject \
-	libLLVMOption \
 	libLLVMRuntimeDyld
 .endif
 
@@ -98,46 +88,17 @@ SUBDIR+= \
 	libclangBasic \
 	libclangCodeGen \
 	libclangDriver \
-	libclangEdit \
 	libclangFrontend \
 	libclangFrontendTool \
+	libclangIndex \
 	libclangLex \
 	libclangParse \
-	libclangRewriteFrontend \
-	libclangRewriteCore \
+	libclangRewrite \
 	libclangSema \
 	libclangSerialization \
 	libclangStaticAnalyzerCheckers \
 	libclangStaticAnalyzerCore \
 	.WAIT \
 	libclangStaticAnalyzerFrontend
-
-.if ${NO_LLVM_DEVELOPER:Uno} == "no" && ${LLVM_DEVELOPER:U} == "yes"
-SUBDIR+= \
-	libclangASTMatchers \
-	libclangFormat \
-	libclangTooling
-.endif
-
-.if ${MKMCLINKER} != "no"
-SUBDIR+= \
-	libMCLinkerADT \
-	libMCLinkerCodeGen \
-	libMCLinkerCore \
-	libMCLinkerFragment \
-	libMCLinkerLD \
-	libMCLinkerMC \
-	libMCLinkerObject \
-	libMCLinkerSupport \
-	libMCLinkerTarget
-
-SUBDIR+= \
-	libMCLinkerARMCodeGen libMCLinkerARMTargetInfo
-SUBDIR+= \
-	libMCLinkerMipsCodeGen libMCLinkerMipsTargetInfo
-SUBDIR+= \
-	libMCLinkerX86CodeGen libMCLinkerX86TargetInfo
-
-.endif
 
 .include <bsd.subdir.mk>

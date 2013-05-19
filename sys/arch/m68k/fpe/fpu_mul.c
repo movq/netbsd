@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu_mul.c,v 1.8 2013/03/26 11:30:21 isaki Exp $ */
+/*	$NetBSD: fpu_mul.c,v 1.6 2009/03/14 15:36:09 dsl Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fpu_mul.c,v 1.8 2013/03/26 11:30:21 isaki Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fpu_mul.c,v 1.6 2009/03/14 15:36:09 dsl Exp $");
 
 #include <sys/types.h>
 
@@ -77,6 +77,8 @@ __KERNEL_RCSID(0, "$NetBSD: fpu_mul.c,v 1.8 2013/03/26 11:30:21 isaki Exp $");
  *
  * Since we do not have efficient multiword arithmetic, we code the
  * accumulator as four separate words, just like any other mantissa.
+ * We use local `register' variables in the hope that this is faster
+ * than memory.  We keep x->fp_mant in locals for the same reason.
  *
  * In the algorithm above, the bits in y are inspected one at a time.
  * We will pick them up 32 at a time and then deal with those 32, one
@@ -97,11 +99,11 @@ __KERNEL_RCSID(0, "$NetBSD: fpu_mul.c,v 1.8 2013/03/26 11:30:21 isaki Exp $");
  * until we reach a nonzero word.
  */
 struct fpn *
-fpu_mul(struct fpemu *fe)
+fpu_mul(register struct fpemu *fe)
 {
-	struct fpn *x = &fe->fe_f1, *y = &fe->fe_f2;
-	uint32_t a2, a1, a0, x2, x1, x0, bit, m;
-	int sticky;
+	register struct fpn *x = &fe->fe_f1, *y = &fe->fe_f2;
+	register u_int a2, a1, a0, x2, x1, x0, bit, m;
+	register int sticky;
 	FPU_DECL_CARRY
 
 	/*

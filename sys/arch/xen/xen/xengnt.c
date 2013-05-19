@@ -1,4 +1,4 @@
-/*      $NetBSD: xengnt.c,v 1.25 2012/10/24 13:07:46 royger Exp $      */
+/*      $NetBSD: xengnt.c,v 1.22.2.2 2012/10/31 16:15:09 riz Exp $      */
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xengnt.c,v 1.25 2012/10/24 13:07:46 royger Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xengnt.c,v 1.22.2.2 2012/10/31 16:15:09 riz Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -176,7 +176,7 @@ xengnt_more_entries(void)
 
 	setup.dom = DOMID_SELF;
 	setup.nr_frames = nframes_new;
-	set_xen_guest_handle(setup.frame_list, pages);
+	xenguest_handle(setup.frame_list) = pages;
 
 	/*
 	 * setup the grant table, made of nframes_new frames

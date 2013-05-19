@@ -1,4 +1,4 @@
-/*	$NetBSD: zs.c,v 1.88 2012/08/10 14:33:35 tsutsui Exp $	*/
+/*	$NetBSD: zs.c,v 1.86 2011/10/26 00:56:59 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.88 2012/08/10 14:33:35 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zs.c,v 1.86 2011/10/26 00:56:59 mrg Exp $");
 
 #include "opt_kgdb.h"
 
@@ -674,6 +674,13 @@ struct consdev consdev_prom = {
 	nullcnpollc,
 };
 
+/*
+ * The console table pointer is statically initialized
+ * to point to the PROM (output only) table, so that
+ * early calls to printf will work.
+ */
+struct consdev *cn_tab = &consdev_prom;
+
 void 
 nullcnprobe(struct consdev *cn)
 {
@@ -707,7 +714,7 @@ prom_cnputc(dev_t dev, int c)
 
 extern struct consdev consdev_kd;
 
-static const struct {
+static struct {
 	int zs_unit, channel;
 } zstty_conf[NZS*2] = {
 	/* XXX: knowledge from the config file here... */
@@ -717,7 +724,7 @@ static const struct {
 	{ 0, 1 },	/* ttyd */
 };
 
-static const char * const prom_inSrc_name[] = {
+static const char *prom_inSrc_name[] = {
 	"keyboard/display",
 	"ttya", "ttyb",
 	"ttyc", "ttyd" };

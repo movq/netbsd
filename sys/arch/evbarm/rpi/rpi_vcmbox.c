@@ -1,4 +1,4 @@
-/* $NetBSD: rpi_vcmbox.c,v 1.2 2013/01/07 22:32:24 jmcneill Exp $ */
+/* $NetBSD: rpi_vcmbox.c,v 1.2.4.2 2013/02/13 01:36:15 riz Exp $ */
 
 /*-
  * Copyright (c) 2013 Jared D. McNeill <jmcneill@invisible.ca>
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rpi_vcmbox.c,v 1.2 2013/01/07 22:32:24 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rpi_vcmbox.c,v 1.2.4.2 2013/02/13 01:36:15 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -355,7 +355,7 @@ vcmbox_create_sensors(struct vcmbox_softc *sc)
 	sc->sc_sensor[VCMBOX_SENSOR_TEMP].sensor = VCMBOX_SENSOR_TEMP;
 	sc->sc_sensor[VCMBOX_SENSOR_TEMP].units = ENVSYS_STEMP;
 	sc->sc_sensor[VCMBOX_SENSOR_TEMP].state = ENVSYS_SINVALID;
-	sc->sc_sensor[VCMBOX_SENSOR_TEMP].flags = ENVSYS_FHAS_ENTROPY;
+	sc->sc_sensor[VCMBOX_SENSOR_TEMP].flags = 0;
 	strlcpy(sc->sc_sensor[VCMBOX_SENSOR_TEMP].desc,
 	    vcmbox_sensor_name[VCMBOX_SENSOR_TEMP],
 	    sizeof(sc->sc_sensor[VCMBOX_SENSOR_TEMP].desc));

@@ -1,4 +1,4 @@
-/*	$NetBSD: cdefs_elf.h,v 1.43 2013/02/07 18:53:34 gdt Exp $	*/
+/*	$NetBSD: cdefs_elf.h,v 1.37 2011/03/24 07:28:28 plunky Exp $	*/
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -132,10 +132,10 @@
 #ifndef __lint__
 #define	__link_set_make_entry(set, sym)					\
 	static void const * const __link_set_##set##_sym_##sym		\
-	    __section("link_set_" #set) __used = (const void *)&sym
+	    __section("link_set_" #set) __used = &sym
 #define	__link_set_make_entry2(set, sym, n)				\
 	static void const * const __link_set_##set##_sym_##sym##_##n	\
-	    __section("link_set_" #set) __used = (const void *)&sym[n]
+	    __section("link_set_" #set) __used = &sym[n]
 #else
 #define	__link_set_make_entry(set, sym)					\
 	extern void const * const __link_set_##set##_sym_##sym
@@ -153,8 +153,8 @@
 #define	__link_set_add_bss2(set, sym, n)    __link_set_make_entry2(set, sym, n)
 
 #define	__link_set_decl(set, ptype)					\
-	extern ptype * const __start_link_set_##set[] __dso_hidden;	\
-	extern ptype * const __stop_link_set_##set[] __dso_hidden
+	extern ptype * const __start_link_set_##set[];			\
+	extern ptype * const __stop_link_set_##set[]			\
 
 #define	__link_set_start(set)	(__start_link_set_##set)
 #define	__link_set_end(set)	(__stop_link_set_##set)

@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_mount.c,v 1.19 2013/04/28 21:34:31 mlelstv Exp $	*/
+/*	$NetBSD: vfs_mount.c,v 1.12.6.1 2012/05/19 15:01:35 riz Exp $	*/
 
 /*-
  * Copyright (c) 1997-2011 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_mount.c,v 1.19 2013/04/28 21:34:31 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_mount.c,v 1.12.6.1 2012/05/19 15:01:35 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -96,7 +96,7 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_mount.c,v 1.19 2013/04/28 21:34:31 mlelstv Exp $
 
 /* Root filesystem and device. */
 vnode_t *			rootvnode;
-device_t			root_device;
+struct device *			root_device;
 
 /* Mounted filesystem list. */
 struct mntlist			mountlist;
@@ -139,7 +139,7 @@ vfs_mountalloc(struct vfsops *vfsops, vnode_t *vp)
 	mp->mnt_op = vfsops;
 	mp->mnt_refcnt = 1;
 	TAILQ_INIT(&mp->mnt_vnodelist);
-	mutex_init(&mp->mnt_unmounting, MUTEX_DEFAULT, IPL_NONE);
+	rw_init(&mp->mnt_unmounting);
 	mutex_init(&mp->mnt_renamelock, MUTEX_DEFAULT, IPL_NONE);
 	mutex_init(&mp->mnt_updating, MUTEX_DEFAULT, IPL_NONE);
 	error = vfs_busy(mp, NULL);
@@ -263,7 +263,7 @@ vfs_destroy(struct mount *mp)
 	 */
 	KASSERT(mp->mnt_refcnt == 0);
 	specificdata_fini(mount_specificdata_domain, &mp->mnt_specdataref);
-	mutex_destroy(&mp->mnt_unmounting);
+	rw_destroy(&mp->mnt_unmounting);
 	mutex_destroy(&mp->mnt_updating);
 	mutex_destroy(&mp->mnt_renamelock);
 	if (mp->mnt_op != NULL) {
@@ -276,9 +276,6 @@ vfs_destroy(struct mount *mp)
  * Mark a mount point as busy, and gain a new reference to it.  Used to
  * prevent the file system from being unmounted during critical sections.
  *
- * vfs_busy can be called multiple times and by multiple threads
- * and must be accompanied by the same number of vfs_unbusy calls.
- *
  * => The caller must hold a pre-existing reference to the mount.
  * => Will fail if the file system is being unmounted, or is unmounted.
  */
@@ -288,18 +285,21 @@ vfs_busy(struct mount *mp, struct mount **nextp)
 
 	KASSERT(mp->mnt_refcnt > 0);
 
-	mutex_enter(&mp->mnt_unmounting);
+	if (__predict_false(!rw_tryenter(&mp->mnt_unmounting, RW_READER))) {
+		if (nextp != NULL) {
+			KASSERT(mutex_owned(&mountlist_lock));
+			*nextp = CIRCLEQ_NEXT(mp, mnt_list);
+		}
+		return EBUSY;
+	}
 	if (__predict_false((mp->mnt_iflag & IMNT_GONE) != 0)) {
-		mutex_exit(&mp->mnt_unmounting);
+		rw_exit(&mp->mnt_unmounting);
 		if (nextp != NULL) {
 			KASSERT(mutex_owned(&mountlist_lock));
 			*nextp = CIRCLEQ_NEXT(mp, mnt_list);
 		}
 		return ENOENT;
 	}
-	++mp->mnt_busynest;
-	KASSERT(mp->mnt_busynest != 0);
-	mutex_exit(&mp->mnt_unmounting);
 	if (nextp != NULL) {
 		mutex_exit(&mountlist_lock);
 	}
@@ -309,8 +309,6 @@ vfs_busy(struct mount *mp, struct mount **nextp)
 
 /*
  * Unbusy a busy filesystem.
- *
- * Every successful vfs_busy() call must be undone by a vfs_unbusy() call.
  *
  * => If keepref is true, preserve reference added by vfs_busy().
  * => If nextp != NULL, acquire mountlist_lock.
@@ -324,10 +322,7 @@ vfs_unbusy(struct mount *mp, bool keepref, struct mount **nextp)
 	if (nextp != NULL) {
 		mutex_enter(&mountlist_lock);
 	}
-	mutex_enter(&mp->mnt_unmounting);
-	KASSERT(mp->mnt_busynest != 0);
-	mp->mnt_busynest--;
-	mutex_exit(&mp->mnt_unmounting);
+	rw_exit(&mp->mnt_unmounting);
 	if (!keepref) {
 		vfs_destroy(mp);
 	}
@@ -648,6 +643,7 @@ mount_domount(struct lwp *l, vnode_t **vpp, struct vfsops *vfsops,
 {
 	vnode_t *vp = *vpp;
 	struct mount *mp;
+	struct vattr va;
 	struct pathbuf *pb;
 	struct nameidata nd;
 	int error;
@@ -663,6 +659,24 @@ mount_domount(struct lwp *l, vnode_t **vpp, struct vfsops *vfsops,
 	if (vp->v_type != VDIR) {
 		vfs_delref(vfsops);
 		return ENOTDIR;
+	}
+
+	/*
+	 * If the user is not root, ensure that they own the directory
+	 * onto which we are attempting to mount.
+	 */
+	vn_lock(vp, LK_SHARED | LK_RETRY);
+	error = VOP_GETATTR(vp, &va, l->l_cred);
+	VOP_UNLOCK(vp);
+	if (error != 0) {
+		vfs_delref(vfsops);
+		return error;
+	}
+	if ((va.va_uid != kauth_cred_geteuid(l->l_cred) &&
+	    (error = kauth_authorize_generic(l->l_cred,
+	    KAUTH_GENERIC_ISSUSER, NULL)) != 0)) {
+		vfs_delref(vfsops);
+		return error;
 	}
 
 	if (flags & MNT_EXPORTED) {
@@ -801,22 +815,9 @@ dounmount(struct mount *mp, int flags, struct lwp *l)
 	 * mount point.  See dounmount() for details.
 	 */
 	mutex_enter(&syncer_mutex);
-
-	/*
-	 * Abort unmount attempt when the filesystem is in use
-	 */
-	mutex_enter(&mp->mnt_unmounting);
-	if (mp->mnt_busynest != 0) {
-		mutex_exit(&mp->mnt_unmounting);
-		mutex_exit(&syncer_mutex);
-		return EBUSY;
-	}
-
-	/*
-	 * Abort unmount attempt when the filesystem is not mounted
-	 */
+	rw_enter(&mp->mnt_unmounting, RW_WRITER);
 	if ((mp->mnt_iflag & IMNT_GONE) != 0) {
-		mutex_exit(&mp->mnt_unmounting);
+		rw_exit(&mp->mnt_unmounting);
 		mutex_exit(&syncer_mutex);
 		return ENOENT;
 	}
@@ -839,7 +840,6 @@ dounmount(struct mount *mp, int flags, struct lwp *l)
 		mutex_exit(&syncer_mutex);
 	}
 	mp->mnt_iflag |= IMNT_UNMOUNT;
-	mutex_enter(&mp->mnt_updating);
 	async = mp->mnt_flag & MNT_ASYNC;
 	mp->mnt_flag &= ~MNT_ASYNC;
 	cache_purgevfs(mp);	/* remove cache entries for this file sys */
@@ -854,41 +854,28 @@ dounmount(struct mount *mp, int flags, struct lwp *l)
 		error = VFS_UNMOUNT(mp, flags);
 	}
 	if (error) {
-		mp->mnt_iflag &= ~IMNT_UNMOUNT;
-		mutex_exit(&mp->mnt_unmounting);
 		if ((mp->mnt_flag & (MNT_RDONLY | MNT_ASYNC)) == 0)
 			(void) vfs_allocate_syncvnode(mp);
+		mp->mnt_iflag &= ~IMNT_UNMOUNT;
 		mp->mnt_flag |= async;
-		mutex_exit(&mp->mnt_updating);
+		rw_exit(&mp->mnt_unmounting);
 		if (used_syncer)
 			mutex_exit(&syncer_mutex);
 		return (error);
 	}
-	mutex_exit(&mp->mnt_updating);
 	vfs_scrubvnlist(mp);
-
-	/*
-	 * release mnt_umounting lock here, because other code calls
-	 * vfs_busy() while holding the mountlist_lock.
-	 *
-	 * mark filesystem as gone to prevent further umounts
-	 * after mnt_umounting lock is gone, this also prevents
-	 * vfs_busy() from succeeding.
-	 */
-	mp->mnt_iflag |= IMNT_GONE;
-	mutex_exit(&mp->mnt_unmounting);
-
 	mutex_enter(&mountlist_lock);
 	if ((coveredvp = mp->mnt_vnodecovered) != NULLVP)
 		coveredvp->v_mountedhere = NULL;
 	CIRCLEQ_REMOVE(&mountlist, mp, mnt_list);
+	mp->mnt_iflag |= IMNT_GONE;
 	mutex_exit(&mountlist_lock);
 	if (TAILQ_FIRST(&mp->mnt_vnodelist) != NULL)
 		panic("unmount: dangling vnode");
 	if (used_syncer)
 		mutex_exit(&syncer_mutex);
 	vfs_hooks_unmount(mp);
-
+	rw_exit(&mp->mnt_unmounting);
 	vfs_destroy(mp);	/* reference from mount() */
 	if (coveredvp != NULLVP) {
 		vrele(coveredvp);
@@ -905,7 +892,7 @@ bool
 vfs_unmountall(struct lwp *l)
 {
 
-	printf("unmounting file systems...\n");
+	printf("unmounting file systems...");
 	return vfs_unmountall1(l, true, true);
 }
 
@@ -936,7 +923,7 @@ vfs_unmount_forceone(struct lwp *l)
 	}
 
 #ifdef DEBUG
-	printf("forcefully unmounting %s (%s)...\n",
+	printf("\nforcefully unmounting %s (%s)...",
 	    nmp->mnt_stat.f_mntonname, nmp->mnt_stat.f_mntfromname);
 #endif
 	atomic_inc_uint(&nmp->mnt_refcnt);
@@ -967,7 +954,7 @@ vfs_unmountall1(struct lwp *l, bool force, bool verbose)
 	     mp = nmp) {
 		nmp = CIRCLEQ_PREV(mp, mnt_list);
 #ifdef DEBUG
-		printf("unmounting %p %s (%s)...\n",
+		printf("\nunmounting %p %s (%s)...",
 		    (void *)mp, mp->mnt_stat.f_mntonname,
 		    mp->mnt_stat.f_mntfromname);
 #endif
@@ -985,7 +972,7 @@ vfs_unmountall1(struct lwp *l, bool force, bool verbose)
 		}
 	}
 	if (verbose) {
-		printf("unmounting done\n");
+		printf(" done\n");
 	}
 	if (any_error && verbose) {
 		printf("WARNING: some file systems would not unmount\n");
@@ -1284,14 +1271,19 @@ vfs_mountedon(vnode_t *vp)
 	if (vp->v_type != VBLK)
 		return ENOTBLK;
 	if (vp->v_specmountpoint != NULL)
-		return EBUSY;
-	if (spec_node_lookup_by_dev(vp->v_type, vp->v_rdev, &vq) == 0) {
-		if (vq->v_specmountpoint != NULL)
+		return (EBUSY);
+	mutex_enter(&device_lock);
+	for (vq = specfs_hash[SPECHASH(vp->v_rdev)]; vq != NULL;
+	    vq = vq->v_specnext) {
+		if (vq->v_type != vp->v_type || vq->v_rdev != vp->v_rdev)
+			continue;
+		if (vq->v_specmountpoint != NULL) {
 			error = EBUSY;
-		vrele(vq);
+			break;
+		}
 	}
-
-	return error;
+	mutex_exit(&device_lock);
+	return (error);
 }
 
 /*

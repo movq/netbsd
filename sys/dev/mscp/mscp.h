@@ -1,4 +1,4 @@
-/*	$NetBSD: mscp.h,v 1.9 2012/07/10 22:30:23 abs Exp $	*/
+/*	$NetBSD: mscp.h,v 1.8.116.1 2012/07/12 17:17:26 riz Exp $	*/
 
 /*
  * Copyright (c) 1988 Regents of the University of California.

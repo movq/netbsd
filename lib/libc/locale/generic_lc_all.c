@@ -1,4 +1,4 @@
-/* $NetBSD: generic_lc_all.c,v 1.5 2013/04/14 23:30:16 joerg Exp $ */
+/* $NetBSD: generic_lc_all.c,v 1.3 2009/10/04 21:05:18 tnozaki Exp $ */
 
 /*-
  * Copyright (c)2008 Citrus Project,
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: generic_lc_all.c,v 1.5 2013/04/14 23:30:16 joerg Exp $");
+__RCSID("$NetBSD: generic_lc_all.c,v 1.3 2009/10/04 21:05:18 tnozaki Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>
@@ -51,15 +51,15 @@ __RCSID("$NetBSD: generic_lc_all.c,v 1.5 2013/04/14 23:30:16 joerg Exp $");
 
 const char *
 _generic_LC_ALL_setlocale(const char * __restrict name,
-    struct _locale * __restrict locale)
+    struct _locale_impl_t * __restrict locale)
 {
-	_locale_set_t sl;
+	_locale_category_t *l;
 	char head[_LOCALENAME_LEN_MAX * (_LC_LAST - 1)], *tail;
 	const char *tokens[_LC_LAST], *s, *t;
 	int load_locale_success, i, j;
 
-	sl = _find_category(1);
-	_DIAGASSERT(sl != NULL);
+	l = _find_category(1);
+	_DIAGASSERT(l != NULL);
 	load_locale_success = 0;
 	if (name != NULL) {
 		strlcpy(&head[0], name, sizeof(head));
@@ -82,20 +82,20 @@ _generic_LC_ALL_setlocale(const char * __restrict name,
 			if (tail != NULL)
 				return NULL;
 		}
-		if ((*sl)(tokens[1], locale) != NULL)
+		if ((*l->setlocale)(tokens[1], locale) != NULL)
 			load_locale_success = 1;
 	}
-	s = (*sl)(NULL, locale);
+	s = (*l->setlocale)(NULL, locale);
 	_DIAGASSERT(s != NULL);
 	strlcpy(&locale->query[0], s, sizeof(locale->query));
 	for (i = 2, j = 0; i < _LC_LAST; ++i) {
-		sl = _find_category(i);
-		_DIAGASSERT(sl != NULL);
+		l = _find_category(i);
+		_DIAGASSERT(l != NULL);
 		if (name != NULL) {
-			if ((*sl)(tokens[i], locale) != NULL)
+			if ((*l->setlocale)(tokens[i], locale) != NULL)
 				load_locale_success = 1;
 		}
-		t = (*sl)(NULL, locale);
+		t = (*l->setlocale)(NULL, locale);
 		_DIAGASSERT(t != NULL);
 		if (j == 0) {
 			if (!strcmp(s, t))
@@ -115,3 +115,10 @@ _generic_LC_ALL_setlocale(const char * __restrict name,
 	return (const char *)&locale->query[0];
 }
 
+/*
+ * macro requrired by generic_lc_template.h
+ */
+#define _CATEGORY_ID	LC_ALL
+
+#include "generic_lc_template.h"
+_LOCALE_CATEGORY_ENTRY(_generic_LC_ALL_);

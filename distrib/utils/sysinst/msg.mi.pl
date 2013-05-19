@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.pl,v 1.90 2013/03/23 15:53:48 gson Exp $	*/
+/*	$NetBSD: msg.mi.pl,v 1.78.2.4 2012/11/18 22:04:43 riz Exp $	*/
 /*	Based on english version: */
 /*	NetBSD: msg.mi.pl,v 1.36 2004/04/17 18:55:35 atatat Exp       */
 
@@ -37,7 +37,7 @@
 /* MI Message catalog -- polish, machine independent */
 
 message usage
-{uzycie: sysinst [-D] [-f plik_definicja] [-r wersja]
+{uzycie: sysinst [-r wersja] [-f plik-definicji]
 }
 
 /*
@@ -774,7 +774,7 @@ message set_X11_prog
 {Programowanie X11}
 
 message set_source
-{Source and debug sets}
+{Source sets}
 
 message set_syssrc
 {Kernel sources}
@@ -790,12 +790,6 @@ message set_gnusrc
 
 message set_xsrc
 {X11 sources}
-
-message set_debug
-{Debug symbols}
-
-message set_xdebug
-{X11 debug symbols}
 
 message cur_distsets_row
 {%-30s %3s}
@@ -957,7 +951,6 @@ message other {inny  }
 message Perform_IPv6_autoconfiguration {Wykonac autokonfiguracje IPv6?}
 message Perform_DHCP_autoconfiguration {Wykonac autkonfiguracje DHCP?}
 message Root_shell {Powloka root'a}
-message User_shell {Powloka user'a}
 
 .if AOUT2ELF
 message aoutfail
@@ -1020,7 +1013,6 @@ message enable_sshd {Wlacz sshd}
 message enable_ntpd {Wlacz ntpd}
 message run_ntpdate {uruchom ntpdate podczas startu systemu}
 message enable_mdnsd {Wlacz mdnsd}
-message add_a_user {Add a user}
 message configmenu {Skonfiguruj dodatkowe elementy w razie potrzeby.}
 message doneconfig {Konfiguracja zakonczona}
 message Install_pkgin {Zainstaluj pkgin i uaktualnij podsumowanie pakietow}
@@ -1051,5 +1043,3 @@ message pkgin_failed
 pakietow binarnych.
 Sprawdz sciezke pakietow i sprobuj ponownie.}
 message failed {Nie powiodlo sie}
-message addusername {8 character username to add:}
-message addusertowheel {Do you wish to add this user to group wheel?}

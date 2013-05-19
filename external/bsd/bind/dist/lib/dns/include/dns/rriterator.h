@@ -1,4 +1,4 @@
-/*	$NetBSD: rriterator.h,v 1.3 2012/06/05 00:41:53 christos Exp $	*/
+/*	$NetBSD: rriterator.h,v 1.2.6.1 2012/06/05 21:14:55 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2009, 2011  Internet Systems Consortium, Inc. ("ISC")

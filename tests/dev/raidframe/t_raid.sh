@@ -1,5 +1,5 @@
 #! /usr/bin/atf-sh
-#	$NetBSD: t_raid.sh,v 1.12 2013/02/19 21:08:24 joerg Exp $
+#	$NetBSD: t_raid.sh,v 1.11 2011/10/15 11:31:40 gson Exp $
 #
 # Copyright (c) 2010 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -51,7 +51,6 @@ smalldisk_head()
 {
 	atf_set "descr" "Checks the raidframe works on small disks " \
 	    "(PR kern/44239)"
-	atf_set "require.progs" "rump_server"
 }
 
 smalldisk_body()
@@ -80,7 +79,6 @@ atf_test_case raid1_compfail cleanup
 raid1_compfail_head()
 {
 	atf_set "descr" "Checks that RAID1 works after component failure"
-	atf_set "require.progs" "rump_server"
 }
 
 raid1_compfail_body()
@@ -130,7 +128,6 @@ raid1_comp0fail_head()
 {
 	atf_set "descr" "Checks configuring RAID1 after component 0 fails" \
 		"(PR kern/44251)"
-	atf_set "require.progs" "rump_server"
 }
 
 raid1_comp0fail_body()
@@ -168,7 +165,6 @@ raid1_normal_head()
 {
 	atf_set "descr" "Checks that RAID1 -c configurations work " \
 		"in the normal case"
-	atf_set "require.progs" "rump_server"
 }
 
 raid1_normal_body()
@@ -217,7 +213,6 @@ atf_test_case raid5_compfail cleanup
 raid5_compfail_head()
 {
 	atf_set "descr" "Checks that RAID5 works after component failure"
-	atf_set "require.progs" "rump_server"
 }
 
 raid5_compfail_body()
@@ -267,7 +262,6 @@ raid5_normal_head()
 {
         atf_set "descr" "Checks that RAID5 works after normal shutdown " \
 		"and 'raidctl -c' startup"
-	atf_set "require.progs" "rump_server"
 }
 
 raid5_normal_body()

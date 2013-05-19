@@ -1,4 +1,4 @@
-/* $NetBSD: video.c,v 1.29 2013/01/07 15:07:40 prlw1 Exp $ */
+/* $NetBSD: video.c,v 1.28 2012/02/02 17:21:18 drochner Exp $ */
 
 /*
  * Copyright (c) 2008 Patrick Mahoney <pat@polycrystal.org>
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: video.c,v 1.29 2013/01/07 15:07:40 prlw1 Exp $");
+__KERNEL_RCSID(0, "$NetBSD: video.c,v 1.28 2012/02/02 17:21:18 drochner Exp $");
 
 #include "video.h"
 #if NVIDEO > 0
@@ -1604,8 +1604,7 @@ videoopen(dev_t dev, int flags, int ifmt, struct lwp *l)
 
 	sc = device_private(device_lookup(&video_cd, VIDEOUNIT(dev)));
 	if (sc == NULL) {
-		DPRINTF(("videoopen: failed to get softc for unit %d\n",
-			VIDEOUNIT(dev)));
+		DPRINTF(("videoopen: failed to get softc\n"));
 		return ENXIO;
 	}
 	

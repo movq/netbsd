@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_rwlock.c,v 1.33 2013/03/21 16:49:12 christos Exp $ */
+/*	$NetBSD: pthread_rwlock.c,v 1.32.22.1 2013/04/29 01:50:18 riz Exp $ */
 
 /*-
  * Copyright (c) 2002, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_rwlock.c,v 1.33 2013/03/21 16:49:12 christos Exp $");
+__RCSID("$NetBSD: pthread_rwlock.c,v 1.32.22.1 2013/04/29 01:50:18 riz Exp $");
 
 #include <sys/types.h>
 #include <sys/lwpctl.h>

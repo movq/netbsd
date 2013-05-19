@@ -1,10 +1,8 @@
-.\"	$NetBSD: pr.1,v 1.22 2012/08/01 02:36:17 ginsbach Exp $
+.\"	$NetBSD: pr.1,v 1.17 2009/03/11 13:57:11 joerg Exp $
 .\"
 .\" Copyright (c) 1991 Keith Muller.
 .\" Copyright (c) 1993
 .\"	The Regents of the University of California.  All rights reserved.
-.\" Copyright (c) 1994-1995, 1997, 1999-2003, 2009, 2012
-.\"	The NetBSD Foundation, Inc.
 .\"
 .\" This code is derived from software contributed to Berkeley by
 .\" Keith Muller of the University of California, San Diego.
@@ -34,8 +32,9 @@
 .\" SUCH DAMAGE.
 .\"
 .\"     from: @(#)pr.1	8.1 (Berkeley) 6/6/93
+.\"	$NetBSD: pr.1,v 1.17 2009/03/11 13:57:11 joerg Exp $
 .\"
-.Dd July 31, 2012
+.Dd June 6, 1993
 .Dt PR 1
 .Os
 .Sh NAME
@@ -43,26 +42,55 @@
 .Nd print files
 .Sh SYNOPSIS
 .Nm
+.Bk -words
 .Op Ar \&+page
+.Ek
+.Bk -words
 .Op Fl Ar column
-.Op Fl adFfmprt
+.Ek
+.Op Fl adFmrt
+.Bk -words
 .Oo
-.Fl e Ns Oo Ar char Oc Ns Op Ar gap
+.Op Fl e
+.Op Ar char
+.Op Ar gap
 .Oc
+.Ek
+.Bk -words
 .Op Fl h Ar header
+.Ek
+.Bk -words
 .Oo
-.Fl i Ns Oo Ar char Oc Ns Op Ar gap
+.Op Fl i
+.Op Ar char
+.Op Ar gap
 .Oc
+.Ek
+.Bk -words
 .Op Fl l Ar lines
-.Oo
-.Fl n Ns Oo Ar char Oc Ns Op Ar width
-.Oc
+.Ek
+.Bk -words
 .Op Fl o Ar offset
+.Ek
+.Bk -words
 .Oo
-.Fl s Ns Op Ar char
+.Op Fl s
+.Op Ar char
 .Oc
+.Ek
+.Bk -words
 .Op Fl T Ar timefmt
+.Ek
+.Bk -words
+.Oo
+.Op Fl n
+.Op Ar char
+.Op Ar width
+.Oc
+.Ek
+.Bk -words
 .Op Fl w Ar width
+.Ek
 .Op -
 .Op Ar file ...
 .Sh DESCRIPTION
@@ -88,7 +116,7 @@ utility has completed processing.
 When multiple column output is specified,
 text columns are of equal width.
 By default text columns are separated by at least one
-.Aq Em blank .
+.Em \*[Lt]blank\*[Gt] .
 Input lines that do not fit into a text column are truncated.
 Lines are not truncated under single column output.
 .Sh OPTIONS
@@ -126,16 +154,11 @@ This option requires the use of the
 .Fl column
 option.
 .It Fl d
-Produce output that is double spaced.
-An extra
-.Aq Em newline
-character is output following every
-.Aq newline
-found in the input.
-.It Fl e Ns Oo Ar char Oc Ns Op Ar gap
-Expand each input
-.Aq tab
-to the next greater column
+Produce output that is double spaced. An extra
+.Em \*[Lt]newline\*[Gt]
+character is output following every \*[Lt]newline\*[Gt] found in the input.
+.It Fl e Ar \&[char\&]\&[gap\&]
+Expand each input \*[Lt]tab\*[Gt] to the next greater column
 position specified by the formula
 .Ar n*gap+1 ,
 where
@@ -145,67 +168,44 @@ If
 .Ar gap
 is zero or is omitted the default is 8.
 All
-.Aq Em tab
+.Em \*[Lt]tab\*[Gt]
 characters in the input are expanded into the appropriate
 number of
-.Ao Em space Ac Ns s .
+.Em \*[Lt]space\*[Gt]s .
 If any nondigit character,
 .Ar char ,
 is specified, it is used as the input tab character.
-If the first character of
-.Ar char
-is a digit then
-.Ar char
-is treated as
-.Ar gap .
 .It Fl F
 Use a
-.Aq Em form-feed
+.Em \*[Lt]form-feed\*[Gt]
 character for new pages,
 instead of the default behavior that uses a
 sequence of
-.Aq Em newline
+.Em \*[Lt]newline\*[Gt]
 characters.
-.It Fl f
-Same as
-.Fl F .
-Additionally pause before beginning the first page
-if the standard output is associated with a terminal.
 .It Fl h Ar header
 Use the string
 .Ar header
 to replace the
 .Ar file name
 in the header line.
-.It Fl i Ns Oo Ar char Oc Ns Op Ar gap
-In output, replace multiple
-.Ao space Ac Ns s
-with
-.Ao tab Ac Ns s
-whenever two or more
-adjacent
-.Ao space Ac Ns s
-reach column positions
+.It Fl i Ar \&[char\&]\&[gap\&]
+In output, replace multiple \*[Lt]space\*[Gt]s with \*[Lt]tab\*[Gt]s whenever two or more
+adjacent \*[Lt]space\*[Gt]s reach column positions
 .Ar gap+1 ,
 .Ar 2*gap+1 ,
 etc.
 If
 .Ar gap
 is zero or omitted, default
-.Aq Em tab
+.Em \*[Lt]tab\*[Gt]
 settings at every eighth column position
 is used.
 If any nondigit character,
 .Ar char ,
 is specified, it is used as the output
-.Aq Em tab
+.Em \*[Lt]tab\*[Gt]
 character.
-If the first character of
-.Ar char
-is a digit then
-.Ar char
-is treated as
-.Ar gap .
 .It Fl l Ar lines
 Override the 66 line default and reset the page length to
 .Ar lines .
@@ -231,7 +231,7 @@ The options
 and
 .Fl i
 are assumed.
-.It Fl n Ns Oo Ar char Oc Ns Op Ar width
+.It Fl n Ar \&[char\&]\&[width\&]
 Provide
 .Ar width
 digit line numbering.
@@ -246,43 +246,32 @@ output.
 If
 .Ar char
 (any nondigit character) is given, it is appended to the line number to
-separate it from whatever follows.
-The default for
+separate it from whatever follows. The default for
 .Ar char
 is a
-.Aq Em tab .
+.Em \*[Lt]tab\*[Gt] .
 Line numbers longer than
 .Ar width
 columns are truncated.
 .It Fl o Ar offset
 Each line of output is preceded by
 .Ar offset
-.Ao Em space Ac Ns s .
+.Em \*[Lt]spaces\*[Gt]s .
 If the
 .Fl o
 option is not specified, the default is zero.
 The space taken is in addition to the output line width.
-.It Fl p
-Pause before beginning each page if the
-standard output is associated with a terminal.
-.Nm
-will write an
-.Aq Em alert
-to standard error and wait for a
-.Aq Em carriage-return
-to be read on
-.Pa /dev/tty .
 .It Fl r
 Write no diagnostic reports on failure to open a file.
-.It Fl s Ns Op Ar char
+.It Fl s Ar char
 Separate text columns by the single character
 .Ar char
 instead of by the appropriate number of
-.Ao Em space Ac Ns s
+.Em \*[Lt]space\*[Gt]s
 (default for
 .Ar char
 is the
-.Aq Em tab
+.Em \*[Lt]tab\*[Gt]
 character).
 .It Fl T
 Specify an
@@ -357,5 +346,5 @@ file printing is complete (when printing to a terminal).
 The
 .Nm
 utility is
-.St -p1003.1-2008
+.St -p1003.2
 compatible.

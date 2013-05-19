@@ -1,4 +1,4 @@
-/*	$NetBSD: hash_bigkey.c,v 1.24 2012/03/13 21:13:32 christos Exp $	*/
+/*	$NetBSD: hash_bigkey.c,v 1.23 2009/02/12 06:33:13 lukem Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -37,7 +37,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: hash_bigkey.c,v 1.24 2012/03/13 21:13:32 christos Exp $");
+__RCSID("$NetBSD: hash_bigkey.c,v 1.23 2009/02/12 06:33:13 lukem Exp $");
 
 /*
  * PACKAGE: hash
@@ -107,9 +107,7 @@ __big_insert(HTAB *hashp, BUFHEAD *bufp, const DBT *key, const DBT *val)
 	_DBFIT(temp, uint16_t);
 	space = (uint16_t)temp;
 	while (key_size) {
-		size_t kspace = MIN(space, key_size);
-		_DBFIT(kspace, uint16_t);
-		move_bytes = (uint16_t)kspace;
+		move_bytes = MIN(space, key_size);
 		off = OFFSET(p) - move_bytes;
 		memmove(cp + off, key_data, (size_t)move_bytes);
 		key_size -= move_bytes;
@@ -129,9 +127,7 @@ __big_insert(HTAB *hashp, BUFHEAD *bufp, const DBT *key, const DBT *val)
 		if (!key_size) {
 			space = FREESPACE(p);
 			if (space) {
-				size_t vspace = MIN(space, val_size);
-				_DBFIT(vspace, uint16_t);
-				move_bytes = (uint16_t)vspace;
+				move_bytes = MIN(space, val_size);
 				/*
 				 * If the data would fit exactly in the
 				 * remaining space, we must overflow it to the
@@ -167,9 +163,7 @@ __big_insert(HTAB *hashp, BUFHEAD *bufp, const DBT *key, const DBT *val)
 	_DBFIT(temp, uint16_t);
 	space = (uint16_t)temp;
 	while (val_size) {
-		size_t vspace = MIN(space, val_size);
-		_DBFIT(vspace, uint16_t);
-		move_bytes = (uint16_t)vspace;
+		move_bytes = MIN(space, val_size);
 		/*
 		 * Here's the hack to make sure that if the data ends on the
 		 * same page as the key ends, FREESPACE is at least one.

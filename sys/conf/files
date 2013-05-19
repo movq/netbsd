@@ -1,4 +1,4 @@
-#	$NetBSD: files,v 1.1070 2013/04/28 03:11:32 christos Exp $
+#	$NetBSD: files,v 1.1043.2.2 2013/02/13 01:36:15 riz Exp $
 #	@(#)files.newconf	7.5 (Berkeley) 5/10/93
 
 version 	20100430
@@ -61,6 +61,7 @@ defflag				CPU_IN_CKSUM
 
 defflag opt_dtrace.h		KDTRACE_HOOKS
 
+defflag opt_posix.h		P1003_1B_SEMAPHORE
 defflag	opt_sysv.h		SYSVMSG SYSVSEM	SYSVSHM
 defparam opt_sysvparam.h	SHMMAXPGS SEMMNI SEMMNS SEMUME SEMMNU
 
@@ -69,6 +70,11 @@ defflag	opt_ntp.h		PPS_SYNC NTP
 defflag	opt_ptm.h		NO_DEV_PTM COMPAT_BSDPTY
 
 defparam opt_kmempages.h	NKMEMPAGES NKMEMPAGES_MIN NKMEMPAGES_MAX
+defflag	opt_malloclog.h		MALLOCLOG
+defparam opt_malloclog.h	MALLOCLOGSIZE
+defflag	opt_malloc_debug.h	MALLOC_DEBUG
+defflag	opt_pool.h		POOL_DIAGNOSTIC
+defparam opt_poollog.h		POOL_LOGSIZE
 
 defflag	opt_revcache.h		NAMECACHE_ENTER_REVERSE
 
@@ -82,7 +88,6 @@ defflag	opt_dkwedge.h		DKWEDGE_AUTODISCOVER
 				DKWEDGE_METHOD_BSDLABEL
 				DKWEDGE_METHOD_GPT
 				DKWEDGE_METHOD_MBR
-				DKWEDGE_METHOD_APPLE
 
 defflag	opt_veriexec.h		VERIFIED_EXEC_FP_SHA1
 				VERIFIED_EXEC_FP_SHA256
@@ -118,10 +123,10 @@ defparam opt_wapbl.h		WAPBL_DEBUG_PRINT
 
 # compatibility options
 #
+defflag	opt_sa.h		KERN_SA
 defflag opt_compat_netbsd.h	COMPAT_NETBSD
-defflag	opt_compat_netbsd.h	COMPAT_60: COMPAT_NETBSD
-defflag	opt_compat_netbsd.h	COMPAT_50: COMPAT_60, COMPAT_NETBSD
-defflag	opt_compat_netbsd.h	COMPAT_40: COMPAT_50, COMPAT_NETBSD
+defflag	opt_compat_netbsd.h	COMPAT_50: COMPAT_NETBSD
+defflag	opt_compat_netbsd.h	COMPAT_40: COMPAT_50, KERN_SA, COMPAT_NETBSD
 defflag	opt_compat_netbsd.h	COMPAT_30: COMPAT_40, COMPAT_NETBSD
 defflag	opt_compat_netbsd.h	COMPAT_20: COMPAT_30, COMPAT_NETBSD
 defflag	opt_compat_netbsd.h	COMPAT_16: COMPAT_20, COMPAT_NETBSD
@@ -186,16 +191,14 @@ include "dev/sysmon/files.sysmon"
 define	bpf_filter
 defparam opt_bpf.h	BPF_BUFSIZE
 
-defflag	opt_bpfjit.h	BPFJIT
-
-file	net/bpfjit.c	sljit & bpfjit
-
 include "net80211/files.net80211"
 include "netatalk/files.netatalk"
 include "netbt/files.netbt"
 include "netinet/files.netinet"
 include "netinet6/files.netinet6"
+include "netinet6/files.ipsec"
 include "netipsec/files.netipsec"
+include "netiso/files.netiso"
 include "netmpls/files.netmpls"
 include "netnatm/files.netnatm"
 include "netsmb/files.netsmb"
@@ -209,6 +212,7 @@ obsolete defflag		HDLC		# obsolete
 obsolete defflag		LLC		# obsolete
 obsolete defflag opt_ns.h	NS NSIP		# obsolete
 obsolete defflag		IPX		# obsolete
+obsolete defflag opt_iso.h	TPCONS
 obsolete defparam opt_md.h	MEMORY_RBFLAGS	# superseded by
 						# MEMORY_DISK_RBFLAGS
 
@@ -293,7 +297,6 @@ define	videobus	{ }
 define	ata	        {[channel = -1]}
 define	sata
 define	sata_fis
-define	sata_pmp
 define	scsi_core
 define	scsi		{[channel = -1]}: scsi_core
 define	ata_hl		{[drive = -1]}
@@ -632,9 +635,9 @@ include "external/isc/atheros_hal/conf/files.ath_hal"
 # Atheros 5210/5211/5212 multi-mode 802.11
 #
 device	ath: arp, wlan, ifnet
-file	dev/ic/ath.c			ath
-file	dev/ic/ath_netbsd.c		ath
-file	dev/ic/athrate-sample.c		ath
+file	dev/ic/ath.c					ath
+file	dev/ic/ath_netbsd.c				ath
+file	dev/ic/athrate-sample.c				ath
 
 # ADMtek ADM8211 802.11
 #
@@ -652,10 +655,6 @@ file	dev/ic/rtwphyio.c		rtw
 device	ral: arp, ether, ifnet, wlan, firmload
 file	dev/ic/rt2560.c			ral
 file	dev/ic/rt2661.c			ral
-
-# Marvell Libertas Open
-device  malo: arp, ether, ifnet, wlan, firmload
-file    dev/ic/malo.c           malo
 
 # 3Com Etherlink-III Ethernet controller
 #
@@ -982,17 +981,17 @@ file	dev/ic/lpt_upc.c		lpt_upc
 # AHCI-compatible SATA controllers
 define ahcisata_core
 file dev/ic/ahcisata_core.c ahcisata_core
-device ahcisata: ata, ata_dma, ata_udma, sata, sata_fis, sata_pmp, ahcisata_core
+device ahcisata: ata, ata_dma, ata_udma, sata, sata_fis, ahcisata_core
 
 # Silicon Image SteelVine SATA-II controllers
 define	siisata
 file	dev/ic/siisata.c		siisata
-device	siisata: ata, ata_dma, ata_udma, sata, sata_fis, sata_pmp, siisata
+device	siisata: ata, ata_dma, ata_udma, sata, sata_fis, siisata
 
 # Marvell Serial-ATA Host Controller
 define mvsata
 file dev/ic/mvsata.c			mvsata
-device mvsata: ata, ata_dma, ata_udma, wdc_common, sata, sata_pmp, mvsata
+device mvsata: ata, ata_dma, ata_udma, wdc_common, sata, mvsata
 defflag opt_mvsata.h		MVSATA_WITHOUTDMA
 
 # DECchip 21x4x Ethernet controller family, and assorted clones.
@@ -1009,11 +1008,6 @@ file	dev/ic/aic6915.c		sf
 #
 define	mk48txx
 file	dev/ic/mk48txx.c		mk48txx
-
-# OKI MSM6242B
-#
-define	msm6242b
-file	dev/ic/msm6242b.c		msm6242b
 
 # Intersil 7170 time-of-day clock
 #
@@ -1191,15 +1185,10 @@ file	dev/usb/uhci.c			uhci			needs-flag
 device	ohci: usbus, usbroothub, usb_dma
 file	dev/usb/ohci.c			ohci			needs-flag
 
-# EHCI USB2 controller
+# EHCI USB controller
 #
 device	ehci: usbus, usbroothub, usb_dma
 file	dev/usb/ehci.c			ehci			needs-flag
-
-# XHCI USB3 controller
-#
-device	xhci: usbus, usbroothub, usb_dma
-file	dev/usb/xhci.c			xhci			needs-flag
 
 # SL811HS/T USB controller
 defflag	opt_slhci.h	SLHCI_DEBUG SLHCI_TRY_LSVH SLHCI_PROFILE_TRANSFER
@@ -1435,21 +1424,21 @@ include "secmodel/files.secmodel"
 #
 # kernel sources
 #
-file	compat/common/compat_mod.c	compat_netbsd | compat_netbsd32
+file	compat/common/compat_mod.c	compat_netbsd
+file	compat/sa/compat_sa.c
 file	conf/debugsyms.c
 file	dev/auconv.c			auconv | mulaw
 file	dev/audio.c			audio | midi | midibus	needs-flag
 file	dev/audiobell.c			audiobell
 file	dev/aurateconv.c		aurateconv		needs-flag
 file	dev/bio.c			bio			needs-flag
-file	dev/ccd.c			ccd
-file	dev/cgd.c			cgd
+file	dev/ccd.c			ccd			needs-flag
+file	dev/cgd.c			cgd			needs-flag
 file	dev/cgd_crypto.c		cgd
 file	dev/clock_subr.c
-file	dev/clockctl.c			clockctl
+file	dev/clockctl.c			clockctl		needs-flag
 file	dev/dksubr.c			cgd | xbd | ccd | raid | dm
 file	dev/dkwedge/dk.c
-file	dev/dkwedge/dkwedge_apple.c	dkwedge_method_apple
 file	dev/dkwedge/dkwedge_bsdlabel.c	dkwedge_method_bsdlabel
 file	dev/dkwedge/dkwedge_gpt.c	dkwedge_method_gpt
 file	dev/dkwedge/dkwedge_mbr.c	dkwedge_method_mbr
@@ -1468,7 +1457,7 @@ file	dev/radio.c			radio			needs-flag
 file	dev/rndpseudo.c			rnd			needs-flag
 file	dev/sequencer.c			sequencer		needs-flag
 file	dev/video.c			video			needs-flag
-file	dev/vnd.c			vnd	
+file	dev/vnd.c			vnd			needs-flag
 file	kern/bufq_disksort.c		bufq_disksort
 file	kern/bufq_fcfs.c		bufq_fcfs
 file	kern/bufq_priocscan.c		bufq_priocscan
@@ -1508,6 +1497,8 @@ file	kern/kern_ksyms.c		ksyms | ddb | modular needs-flag
 file	kern/kern_lock.c
 file	kern/kern_lwp.c
 file	kern/kern_malloc.c
+file	kern/kern_malloc_stdtype.c
+file	kern/kern_malloc_debug.c	malloc_debug
 file	kern/kern_module.c
 file	kern/kern_module_vfs.c
 file	kern/kern_mutex.c
@@ -1621,7 +1612,7 @@ file	kern/uipc_mbuf.c
 file	kern/uipc_mbuf2.c
 file	net/link_proto.c
 file	kern/uipc_proto.c
-file	kern/uipc_sem.c
+file	kern/uipc_sem.c			p1003_1b_semaphore
 file	kern/uipc_socket.c
 file	kern/uipc_socket2.c
 file	kern/uipc_syscalls.c
@@ -1671,24 +1662,24 @@ file	net/if_ecosubr.c		eco
 file	net/if_etherip.c		etherip			needs-flag
 file	net/if_ethersubr.c		ether | fddi | netatalk | token |
 					    wlan
-file	net/if_faith.c			faith & (inet | inet6)	needs-flag
+file	net/if_faith.c			faith & inet & inet6	needs-flag
 file	net/if_fddisubr.c		fddi			needs-flag
 file	net/if_gif.c			gif			needs-flag
 file	net/if_gre.c			gre			needs-flag
 file	net/if_hippisubr.c		hippi			needs-flag
 file	net/if_ieee1394subr.c		ieee1394
-file	net/if_loop.c			loop	
+file	net/if_loop.c			loop			needs-flag
 file	net/if_media.c
 file	net/if_mpls.c			ifmpls			needs-flag
 file	net/if_ppp.c			ppp			needs-flag
 file	net/if_srt.c			srt
-file	net/if_stf.c			stf & (inet | inet6)	needs-flag
+file	net/if_stf.c			stf & inet & inet6	needs-flag
 file	net/if_sl.c			sl			needs-flag
 file	net/if_spppsubr.c		sppp
 file	net/if_strip.c			strip			needs-flag
 file	net/if_tokensubr.c		token			needs-flag
-file	net/if_tap.c			tap	
-file	net/if_tun.c			tun
+file	net/if_tap.c			tap			needs-flag
+file	net/if_tun.c			tun			needs-flag
 file	net/if_vlan.c			vlan			needs-flag
 file	net/if_pppoe.c			pppoe			needs-flag
 file	net/pfil.c			pfil_hooks | ipfilter | pf
@@ -1779,15 +1770,3 @@ include "dev/nor/files.nor"
 # iscsi
 #
 include "dev/iscsi/files.iscsi"
-
-# Atheros AR9k (802.11a/g/n) driver
-defflag opt_athn.h	ATHN_DEBUG
-device	athn: arp, ether, ifnet, wlan
-file	dev/ic/athn.c			athn
-file	dev/ic/arn5008.c		athn
-file	dev/ic/arn5416.c		athn
-file	dev/ic/arn9003.c		athn
-file	dev/ic/arn9280.c		athn
-file	dev/ic/arn9285.c		athn
-file	dev/ic/arn9287.c		athn
-file	dev/ic/arn9380.c		athn

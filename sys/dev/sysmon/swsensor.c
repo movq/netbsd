@@ -1,4 +1,4 @@
-/*	$NetBSD: swsensor.c,v 1.13 2012/08/27 20:29:11 pgoyette Exp $ */
+/*	$NetBSD: swsensor.c,v 1.12.8.1 2012/10/17 21:13:38 riz Exp $ */
 /*
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: swsensor.c,v 1.13 2012/08/27 20:29:11 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: swsensor.c,v 1.12.8.1 2012/10/17 21:13:38 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>

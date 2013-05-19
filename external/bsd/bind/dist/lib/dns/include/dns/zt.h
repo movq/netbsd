@@ -1,4 +1,4 @@
-/*	$NetBSD: zt.h,v 1.3 2012/06/05 00:41:57 christos Exp $	*/
+/*	$NetBSD: zt.h,v 1.2.6.1 2012/06/05 21:14:56 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004-2007, 2011  Internet Systems Consortium, Inc. ("ISC")

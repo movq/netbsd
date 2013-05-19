@@ -1,4 +1,4 @@
-/*      $NetBSD: xpci_xenbus.c,v 1.12 2012/12/05 01:46:22 jakllsch Exp $      */
+/*      $NetBSD: xpci_xenbus.c,v 1.10 2012/02/02 19:43:01 tls Exp $      */
 
 /*
  * Copyright (c) 2009 Manuel Bouyer.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xpci_xenbus.c,v 1.12 2012/12/05 01:46:22 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xpci_xenbus.c,v 1.10 2012/02/02 19:43:01 tls Exp $");
 
 #include "opt_xen.h"
 
@@ -423,7 +423,7 @@ xpci_do_op(struct xen_pci_op *op)
 	   _XEN_PCIF_active)) {
 		hypervisor_clear_event(xpci_sc->sc_evtchn);
 		/* HYPERVISOR_yield(); */
-	}
+	} 
 	memcpy(op, active_op, sizeof(struct xen_pci_op));
 	__cpu_simple_unlock(&pci_conf_lock);
 	splx(s);
@@ -499,7 +499,7 @@ xpci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, int size,
 	op.bus = bus;
 	op.devfn = (dev << 3) | func;
 	op.offset = reg;
-	op.size   = size;
+	op.size   = 4;
 	op.value = data;
 	xpci_do_op(&op);
 	DPRINTF((" err %d\n", op.err));

@@ -1,6 +1,6 @@
 #!/bin/sh -
 #
-#	$NetBSD: sensor_indicator,v 1.5 2012/08/27 21:50:19 pgoyette Exp $
+#	$NetBSD: sensor_indicator,v 1.4.32.1 2012/10/17 21:21:43 riz Exp $
 #
 # Generic script for indicator and integer sensors.
 #

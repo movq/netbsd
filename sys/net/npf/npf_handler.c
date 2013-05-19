@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_handler.c,v 1.26 2013/02/09 03:35:31 rmind Exp $	*/
+/*	$NetBSD: npf_handler.c,v 1.13.2.9 2013/02/11 21:49:48 riz Exp $	*/
 
 /*-
  * Copyright (c) 2009-2013 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_handler.c,v 1.26 2013/02/09 03:35:31 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_handler.c,v 1.13.2.9 2013/02/11 21:49:48 riz Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

@@ -1,5 +1,5 @@
 %{
-/* $NetBSD: cgram.y,v 1.55 2013/04/19 17:43:05 christos Exp $ */
+/* $NetBSD: cgram.y,v 1.53 2011/12/25 20:11:22 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: cgram.y,v 1.55 2013/04/19 17:43:05 christos Exp $");
+__RCSID("$NetBSD: cgram.y,v 1.53 2011/12/25 20:11:22 christos Exp $");
 #endif
 
 #include <stdlib.h>
@@ -63,7 +63,7 @@ int	mblklev;
  * Save the no-warns state and restore it to avoid the problem where
  * if (expr) { stmt } / * NOLINT * / stmt;
  */
-static int olwarn = LWARN_BAD;
+static int onowarn = -1;
 
 static	int	toicon(tnode_t *, int);
 static	void	idecl(sym_t *, int, sbuf_t *);
@@ -76,34 +76,34 @@ static inline void CLRWFLGS(const char *file, size_t line)
 	printf("%s, %d: clear flags %s %zu\n", curr_pos.p_file,
 	    curr_pos.p_line, file, line);
 	clrwflgs();
-	olwarn = LWARN_BAD;
+	onowarn = -1;
 }
 
 static inline void SAVE(const char *file, size_t line);
 static inline void SAVE(const char *file, size_t line)
 {
-	if (olwarn != LWARN_BAD)
+	if (onowarn != -1)
 		abort();
 	printf("%s, %d: save flags %s %zu = %d\n", curr_pos.p_file,
-	    curr_pos.p_line, file, line, lwarn);
-	olwarn = lwarn;
+	    curr_pos.p_line, file, line, nowarn);
+	onowarn = nowarn;
 }
 
 static inline void RESTORE(const char *file, size_t line);
 static inline void RESTORE(const char *file, size_t line)
 {
-	if (olwarn != LWARN_BAD) {
-		lwarn = olwarn;
+	if (onowarn != -1) {
+		nowarn = onowarn;
 		printf("%s, %d: restore flags %s %zu = %d\n", curr_pos.p_file,
-		    curr_pos.p_line, file, line, lwarn);
-		olwarn = LWARN_BAD;
+		    curr_pos.p_line, file, line, nowarn);
+		onowarn = -1;
 	} else
 		CLRWFLGS(file, line);
 }
 #else
-#define CLRWFLGS(f, l) clrwflgs(), olwarn = LWARN_BAD
-#define SAVE(f, l)	olwarn = lwarn
-#define RESTORE(f, l) (void)(olwarn == LWARN_BAD ? (clrwflgs(), 0) : (lwarn = olwarn))
+#define CLRWFLGS(f, l) clrwflgs(), onowarn = -1
+#define SAVE(f, l)	onowarn = nowarn
+#define RESTORE(f, l) (void)(onowarn == -1 ? (clrwflgs(), 0) : (nowarn = onowarn))
 #endif
 %}
 
@@ -373,7 +373,7 @@ func_def:
 		funcdef($1);
 		blklev++;
 		pushdecl(ARG);
-		if (lwarn == LWARN_NONE)
+		if (nowarn)
 			$1->s_used = 1;
 	  } opt_arg_declaration_list {
 		popdecl();
@@ -1873,13 +1873,13 @@ toicon(tnode_t *tn, int required)
 		i = (int)v->v_quad;
 		if (isutyp(t)) {
 			if (uq_gt((uint64_t)v->v_quad,
-				  (uint64_t)TARG_INT_MAX)) {
+				  (uint64_t)INT_MAX)) {
 				/* integral constant too large */
 				warning(56);
 			}
 		} else {
-			if (q_gt(v->v_quad, (int64_t)TARG_INT_MAX) ||
-			    q_lt(v->v_quad, (int64_t)TARG_INT_MIN)) {
+			if (q_gt(v->v_quad, (int64_t)INT_MAX) ||
+			    q_lt(v->v_quad, (int64_t)INT_MIN)) {
 				/* integral constant too large */
 				warning(56);
 			}

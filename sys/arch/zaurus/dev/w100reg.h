@@ -1,4 +1,4 @@
-/* $NetBSD: w100reg.h,v 1.2 2012/08/12 08:59:58 nonaka Exp $ */
+/* $NetBSD */
 
 #define W100_REG_PCLK_CTRL               0x0090
 

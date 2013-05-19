@@ -1,4 +1,4 @@
-/*	$NetBSD: spx.c,v 1.6 2012/05/14 08:44:13 abs Exp $ */
+/*	$NetBSD: spx.c,v 1.5.2.1 2012/06/11 20:44:43 riz Exp $ */
 /*
  * SPX/LCSPX/SPXg/SPXgt accelerated framebuffer driver for NetBSD/VAX
  * Copyright (c) 2005 Blaz Antonic
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spx.c,v 1.6 2012/05/14 08:44:13 abs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spx.c,v 1.5.2.1 2012/06/11 20:44:43 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

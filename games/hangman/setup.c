@@ -1,4 +1,4 @@
-/*	$NetBSD: setup.c,v 1.11 2012/06/19 05:45:00 dholland Exp $	*/
+/*	$NetBSD: setup.c,v 1.10 2003/08/07 09:37:22 agc Exp $	*/
 
 /*-
  * Copyright (c) 1983, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)setup.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: setup.c,v 1.11 2012/06/19 05:45:00 dholland Exp $");
+__RCSID("$NetBSD: setup.c,v 1.10 2003/08/07 09:37:22 agc Exp $");
 #endif
 #endif				/* not lint */
 
@@ -47,7 +47,7 @@ __RCSID("$NetBSD: setup.c,v 1.11 2012/06/19 05:45:00 dholland Exp $");
  *	Set up the strings on the screen.
  */
 void
-setup(void)
+setup()
 {
 	const char *const *sp;
 	static struct stat sbuf;

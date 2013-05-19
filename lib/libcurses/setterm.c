@@ -1,4 +1,4 @@
-/*	$NetBSD: setterm.c,v 1.50 2013/05/05 14:24:05 jdc Exp $	*/
+/*	$NetBSD: setterm.c,v 1.48.4.1 2013/05/11 21:48:23 riz Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)setterm.c	8.8 (Berkeley) 10/25/94";
 #else
-__RCSID("$NetBSD: setterm.c,v 1.50 2013/05/05 14:24:05 jdc Exp $");
+__RCSID("$NetBSD: setterm.c,v 1.48.4.1 2013/05/11 21:48:23 riz Exp $");
 #endif
 #endif /* not lint */
 
@@ -82,7 +82,7 @@ _cursesi_setterm(char *type, SCREEN *screen)
 	__CTRACE(__CTRACE_INIT, "setterm: tty = %s\n", type);
 #endif
 
-	/* Try TIOCGWINSZ, and, if it fails, the terminfo entry. */
+	/* Try TIOCGWINSZ, and, if it fails, the termcap entry. */
 	if (ioctl(fileno(screen->outfd), TIOCGWINSZ, &win) != -1 &&
 	    win.ws_row != 0 && win.ws_col != 0) {
 		screen->LINES = win.ws_row;

@@ -1,4 +1,4 @@
-/*	$NetBSD: route.c,v 1.140 2013/03/01 18:25:17 joerg Exp $	*/
+/*	$NetBSD: route.c,v 1.136.2.1 2012/10/17 21:57:07 riz Exp $	*/
 
 /*
  * Copyright (c) 1983, 1989, 1991, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1989, 1991, 1993\
 #if 0
 static char sccsid[] = "@(#)route.c	8.6 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: route.c,v 1.140 2013/03/01 18:25:17 joerg Exp $");
+__RCSID("$NetBSD: route.c,v 1.136.2.1 2012/10/17 21:57:07 riz Exp $");
 #endif
 #endif /* not lint */
 
@@ -56,6 +56,7 @@ __RCSID("$NetBSD: route.c,v 1.140 2013/03/01 18:25:17 joerg Exp $");
 #include <net80211/ieee80211_netbsd.h>
 #include <netinet/in.h>
 #include <netatalk/at.h>
+#include <netiso/iso.h>
 #include <netmpls/mpls.h>
 #include <arpa/inet.h>
 #include <netdb.h>
@@ -70,6 +71,10 @@ __RCSID("$NetBSD: route.c,v 1.140 2013/03/01 18:25:17 joerg Exp $");
 #include <paths.h>
 #include <err.h>
 
+#include <rump/rump.h>
+#include <rump/rump_syscalls.h>
+#include <rump/rumpclient.h>
+
 #include "keywords.h"
 #include "extern.h"
 #include "prog_ops.h"
@@ -83,6 +88,7 @@ union sockunion {
 	struct	sockaddr_at sat;
 	struct	sockaddr_dl sdl;
 #ifndef SMALL
+	struct	sockaddr_iso siso;
 	struct	sockaddr_mpls smpls;
 #endif /* SMALL */
 	struct	sockaddr_storage sstorage;
@@ -572,6 +578,11 @@ routename(const struct sockaddr *sa, struct sockaddr *nm, int flags)
 #endif
 
 #ifndef SMALL
+	case AF_ISO:
+		(void)snprintf(line, sizeof line, "iso %s",
+		    iso_ntoa(&((const struct sockaddr_iso *)sa)->siso_addr));
+		break;
+
 	case AF_APPLETALK:
 		(void)snprintf(line, sizeof(line), "atalk %d.%d",
 		    ((const struct sockaddr_at *)sa)->sat_addr.s_net,
@@ -732,6 +743,11 @@ netname(const struct sockaddr *sa, struct sockaddr *nm)
 #endif
 
 #ifndef SMALL
+	case AF_ISO:
+		(void)snprintf(line, sizeof line, "iso %s",
+		    iso_ntoa(&((const struct sockaddr_iso *)sa)->siso_addr));
+		break;
+
 	case AF_APPLETALK:
 		(void)snprintf(line, sizeof(line), "atalk %d.%d",
 		    ((const struct sockaddr_at *)sa)->sat_addr.s_net,
@@ -851,6 +867,11 @@ newroute(int argc, char *const *argv)
 				break;
 
 #ifndef SMALL
+			case K_OSI:
+			case K_ISO:
+				af = AF_ISO;
+				aflen = sizeof(struct sockaddr_iso);
+				break;
 			case K_MPLS:
 				af = AF_MPLS;
 				aflen = sizeof(struct sockaddr_mpls);
@@ -1010,10 +1031,6 @@ newroute(int argc, char *const *argv)
 			}
 		}
 	}
-	if ((rtm_addrs & RTA_DST) == 0)
-		errx(EXIT_FAILURE, "missing destination specification");
-	if (*cmd == 'a' && (rtm_addrs & RTA_GATEWAY) == 0)
-		errx(EXIT_FAILURE, "missing gateway specification");
 	if (forcehost && forcenet)
 		errx(EXIT_FAILURE, "-host and -net conflict");
 	else if (forcehost)
@@ -1274,6 +1291,18 @@ getaddr(int which, const char *s, struct hostent **hpp, struct sou *soup)
 			return 1;
 	    }
 #endif
+
+#ifndef SMALL
+	case AF_OSI:
+		su->siso.siso_addr = *iso_addr(s);
+		if (which == RTA_NETMASK || which == RTA_GENMASK) {
+			const char *cp = TSEL(&su->siso);
+			su->siso.siso_nlen = 0;
+			do {--cp ;} while ((cp > (char *)su) && (*cp == 0));
+			su->siso.siso_len = 1 + cp - (char *)su;
+		}
+		return 1;
+#endif /* SMALL */
 
 	case PF_ROUTE:
 		su->sa.sa_len = sizeof(*su);
@@ -1638,6 +1667,12 @@ mask_addr(struct sou *soup)
 #endif /* SMALL */
 	case 0:
 		return;
+#ifndef SMALL
+	case AF_ISO:
+		olen = MIN(soup->so_dst->siso.siso_nlen,
+			   MAX(soup->so_mask->sa.sa_len - 6, 0));
+		break;
+#endif /* SMALL */
 	}
 	cp1 = soup->so_mask->sa.sa_len + 1 + (char *)soup->so_dst;
 	cp2 = soup->so_dst->sa.sa_len + 1 + (char *)soup->so_dst;
@@ -1646,6 +1681,13 @@ mask_addr(struct sou *soup)
 	cp2 = soup->so_mask->sa.sa_len + 1 + (char *)soup->so_mask;
 	while (cp1 > soup->so_dst->sa.sa_data)
 		*--cp1 &= *--cp2;
+#ifndef SMALL
+	switch (soup->so_dst->sa.sa_family) {
+	case AF_ISO:
+		soup->so_dst->siso.siso_nlen = olen;
+		break;
+	}
+#endif /* SMALL */
 }
 
 const char * const msgtypes[] = {
@@ -2103,6 +2145,10 @@ sodump(sup su, const char *which)
 		break;
 #endif
 #ifndef SMALL
+	case AF_ISO:
+		(void)printf("%s: iso %s; ",
+		    which, iso_ntoa(&su->siso.siso_addr));
+		break;
 	case AF_MPLS:
 	    {
 		union mpls_shim ms;

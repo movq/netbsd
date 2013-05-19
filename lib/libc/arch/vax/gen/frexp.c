@@ -1,4 +1,4 @@
-/*	$NetBSD: frexp.c,v 1.5 2012/06/25 22:32:43 abs Exp $	*/
+/*	$NetBSD: frexp.c,v 1.4 2003/08/07 16:42:31 agc Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)frexp.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: frexp.c,v 1.5 2012/06/25 22:32:43 abs Exp $");
+__RCSID("$NetBSD: frexp.c,v 1.4 2003/08/07 16:42:31 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -42,7 +42,9 @@ __RCSID("$NetBSD: frexp.c,v 1.5 2012/06/25 22:32:43 abs Exp $");
 #include <math.h>
 
 double
-frexp(double value, int *eptr)
+frexp(value, eptr)
+	double value;
+	int *eptr;
 {
 	union {
                 double v;

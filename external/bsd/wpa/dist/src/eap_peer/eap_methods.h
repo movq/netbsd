@@ -109,6 +109,5 @@ int eap_peer_wsc_register(void);
 int eap_peer_ikev2_register(void);
 int eap_peer_vendor_test_register(void);
 int eap_peer_tnc_register(void);
-int eap_peer_pwd_register(void);
 
 #endif /* EAP_METHODS_H */

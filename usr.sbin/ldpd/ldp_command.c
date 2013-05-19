@@ -1,4 +1,4 @@
-/* $NetBSD: ldp_command.c,v 1.10 2013/01/28 21:08:14 kefren Exp $ */
+/* $NetBSD: ldp_command.c,v 1.7 2011/12/24 23:54:26 christos Exp $ */
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -167,7 +167,6 @@ create_command_socket(int port)
 		close(s);
 		return -1;
 	}
-	debugp("Command socket created (%d)\n", s);
 	return s;
 }
 
@@ -417,10 +416,10 @@ show_neighbours(int s, char *recvspace)
 		    inet_ntoa(p->ldp_id));
 		writestr(s, sendspace);
 		snprintf(sendspace, MAXSEND, "Transport address: %s\n",
-		    satos(p->transport_address));
+		    inet_ntoa(p->transport_address));
 		writestr(s, sendspace);
 		snprintf(sendspace, MAXSEND, "Next-hop address: %s\n",
-		    satos(p->address));
+		    inet_ntoa(p->address));
 		writestr(s, sendspace);
 		snprintf(sendspace, MAXSEND, "State: %s\n",
 		    ldp_state_to_name(p->state));
@@ -466,11 +465,8 @@ show_neighbours(int s, char *recvspace)
 		snprintf(sendspace, MAXSEND,"Addresses bounded to this peer: ");
 		writestr(s, sendspace);
 		SLIST_FOREACH(wp, &p->ldp_peer_address_head, addresses) {
-			/* XXX: TODO */
-			if (wp->address.sa.sa_family != AF_INET)
-				continue;
 			snprintf(sendspace, MAXSEND, "%s ",
-			    inet_ntoa(wp->address.sin.sin_addr));
+			    inet_ntoa(wp->address));
 			writestr(s, sendspace);
 		}
 		sendspace[0] = sendspace[1] = '\n';
@@ -491,11 +487,7 @@ show_labels(int s, char *recvspace)
 			continue;
 		SLIST_FOREACH(lm, &p->label_mapping_head, mappings) {
 			char lma[256];
-			/* XXX: TODO */
-			if (lm->address.sa.sa_family != AF_INET)
-				continue;
-			strlcpy(lma, inet_ntoa(lm->address.sin.sin_addr),
-			    sizeof(lma));
+			strlcpy(lma, inet_ntoa(lm->address), sizeof(lma));
 			snprintf(sendspace, MAXSEND, "%s:%d\t%s/%d\n",
 			    inet_ntoa(p->ldp_id), lm->label, lma, lm->prefix);
 			writestr(s, sendspace);
@@ -519,7 +511,7 @@ show_bindings(int s, char *recvspace)
 		writestr(s, sendspace);
 		if (l->p)
 			snprintf(sendspace, MAXSEND, "\t%s:%d\n",
-			    satos(l->p->address), l->label);
+			    inet_ntoa(l->p->address), l->label);
 		else
 			snprintf(sendspace, MAXSEND, "\n");
 		writestr(s, sendspace);
@@ -547,12 +539,8 @@ show_hellos(int s, char *recvspace)
 	struct hello_info *hi;
 
 	SLIST_FOREACH(hi, &hello_info_head, infos) {
-		snprintf(sendspace, MAXSEND,
-		    "ID: %s\nKeepalive: %ds\nTransport address: %s\n\n",
-		    inet_ntoa(hi->ldp_id),
-		    hi->keepalive,
-		    hi->transport_address.sa.sa_family != 0 ?
-		    satos(&hi->transport_address.sa) : "None");
+		snprintf(sendspace, MAXSEND, "%s: %ds\n", inet_ntoa(hi->ldp_id),
+		    hi->keepalive);
 		writestr(s, sendspace);
 	}
 	return 1;

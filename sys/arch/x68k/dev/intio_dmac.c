@@ -1,4 +1,4 @@
-/*	$NetBSD: intio_dmac.c,v 1.34 2012/10/14 16:36:31 tsutsui Exp $	*/
+/*	$NetBSD: intio_dmac.c,v 1.33.14.1 2012/11/18 21:56:36 riz Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
 #include "opt_m68k_arch.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intio_dmac.c,v 1.34 2012/10/14 16:36:31 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intio_dmac.c,v 1.33.14.1 2012/11/18 21:56:36 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

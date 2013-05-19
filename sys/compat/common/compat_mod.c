@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_mod.c,v 1.19 2013/03/29 01:02:49 christos Exp $	*/
+/*	$NetBSD: compat_mod.c,v 1.14.8.1 2013/03/14 16:33:09 riz Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_mod.c,v 1.19 2013/03/29 01:02:49 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_mod.c,v 1.14.8.1 2013/03/14 16:33:09 riz Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
@@ -69,8 +69,7 @@ MODULE(MODULE_CLASS_MISC, compat, NULL);
 int	ttcompat(struct tty *, u_long, void *, int, struct lwp *);
 
 #ifdef COMPAT_16
-#if !defined(__amd64__) || defined(COMPAT_NETBSD32)
-#define COMPAT_SIGCONTEXT
+#if !(defined(__amd64__) && !defined(COMPAT_NETBSD32))
 extern char sigcode[], esigcode[];
 struct uvm_object *emul_netbsd_object;
 #endif
@@ -166,7 +165,7 @@ static const struct syscall_package compat_syscalls[] = {
 #endif
 
 #if defined(COMPAT_16)
-#if defined(COMPAT_SIGCONTEXT)
+#if !(defined(__amd64__) && !defined(COMPAT_NETBSD32))
 	{ SYS_compat_16___sigaction14, 0, (sy_call_t *)compat_16_sys___sigaction14 },
 	{ SYS_compat_16___sigreturn14, 0, (sy_call_t *)compat_16_sys___sigreturn14 },
 #endif
@@ -243,9 +242,6 @@ static const struct syscall_package compat_syscalls[] = {
 	{ SYS_compat_50_aio_suspend, 0, (sy_call_t *)compat_50_sys_aio_suspend },
 	{ SYS_compat_50_quotactl, 0, (sy_call_t *)compat_50_sys_quotactl },
 #endif
-#if defined(COMPAT_60)
-	{ SYS_compat_60__lwp_park, 0, (sy_call_t *)compat_60_sys__lwp_park },
-#endif
 	{ 0, 0, NULL },
 };
 
@@ -268,7 +264,7 @@ compat_modcmd(modcmd_t cmd, void *arg)
 		ttcompatvec = ttcompat;
 #endif
 #ifdef COMPAT_16
-#if defined(COMPAT_SIGCONTEXT)
+#if !(defined(__amd64__) && !defined(COMPAT_NETBSD32))
 		KASSERT(emul_netbsd.e_sigobject == NULL);
 		rw_enter(&exec_lock, RW_WRITER);
 		emul_netbsd.e_sigcode = sigcode;
@@ -319,7 +315,7 @@ compat_modcmd(modcmd_t cmd, void *arg)
 		}
 #endif
 #ifdef COMPAT_16
-#if defined(COMPAT_SIGCONTEXT)
+#if !(defined(__amd64__) && !defined(COMPAT_NETBSD32))
 		/*
 		 * The sigobject may persist if still in use, but
 		 * is reference counted so will die eventually.

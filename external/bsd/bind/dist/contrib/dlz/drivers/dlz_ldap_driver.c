@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_ldap_driver.c,v 1.4 2012/06/05 00:39:38 christos Exp $	*/
+/*	$NetBSD: dlz_ldap_driver.c,v 1.3.4.1 2012/06/05 21:15:35 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2002 Stichting NLnet, Netherlands, stichting@nlnet.nl.

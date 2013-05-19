@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.13 2013/04/30 02:28:16 matt Exp $
+#	$NetBSD: Makefile,v 1.8 2011/10/22 10:41:50 tron Exp $
 
 REQUIRETOOLS=	yes
 NOLINT=		# defined
@@ -20,13 +20,9 @@ G_LIB2ADD_HACK+=	${GNUHOSTDIST}/gcc/config/floatunsidf.c \
 .endif
 
 SRCS+=		${LIB2FUNCS} ${LIB2FUNCS_ST} ${LIB2DIVMOD} \
-		${G_LIB2ADD_HACK:T:S/.asm/.S/} ${G_LIB2ADD:T:S/.asm/.S/} \
-		${G_LIB2ADD_ST} ${LIB1ASMFUNCS}
+		${G_LIB2ADD_HACK:T:S/.asm/.S/} ${G_LIB2ADD:T:S/.asm/.S/} ${G_LIB2ADD_ST} ${LIB1ASMFUNCS}
 .if ${MKPIC} == "no"
-LIBGCC_MACHINE_ARCH?=${MACHINE_ARCH}
-.if empty(LIBGCC_MACHINE_ARCH:Mearm*)
-SRCS+=		${LIB2_EH} ${LIB2_EHASM}
-.endif
+SRCS+=		${LIB2_EH}
 .else
 CPPFLAGS+=	-DPIC
 .endif
@@ -35,7 +31,7 @@ CPPFLAGS+=	-DPIC
 # gcc/config/$PLATFORM/foo.asm to it.  So far, only rs6000 uses it,
 # so we hack it for now.
 #.for file in ${G_LIB2ADD_ST}
-.   if ${LIBGCC_MACHINE_ARCH} == "powerpc"  # XXX XXX why does the above work?*
+.   if ${MACHINE_ARCH} == "powerpc"  # XXX XXX why does the above work?*
 .for file in crtsavfpr.S crtresfpr.S crtsavgpr.S crtresgpr.S crtresxfpr.S crtresxgpr.S
 BUILDSYMLINKS+=	${GNUHOSTDIST}/gcc/config/rs6000/${file:S/.S$/.asm/} ${file}
 .endfor
@@ -71,7 +67,7 @@ CLEANFILES+=	${SOBJS:=.tmp1} ${SOBJS:=.tmp2}
 	${COMPILE.S} ${CAPICFLAGS} ${CFLAGS:M-[ID]*} ${.IMPSRC} -o ${.TARGET}.tmp1
 	${NM} -pg ${.TARGET}.tmp1 | \
 	    ${TOOL_AWK} 'NF == 3 { print "\t.hidden", $$3 }' | \
-	    ${CC} ${COPTS} -Wl,-x -r -nostdinc -nostdlib -o ${.TARGET}.tmp2 ${.TARGET}.tmp1 -xassembler -
+	    ${CC} -Wl,-x -r -nostdinc -nostdlib -o ${.TARGET}.tmp2 ${.TARGET}.tmp1 -xassembler -
 .if defined(COPTS) && !empty(COPTS:M*-g*)
 	mv ${.TARGET}.tmp2 ${.TARGET}
 .else

@@ -1,4 +1,4 @@
-/* $NetBSD: vr4181ip.c,v 1.4 2012/10/27 17:17:55 chs Exp $ */
+/* $NetBSD: vr4181ip.c,v 1.3 2005/12/11 12:17:34 christos Exp $ */
 
 /*-
  * Copyright (c) 1999, 2002
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vr4181ip.c,v 1.4 2012/10/27 17:17:55 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vr4181ip.c,v 1.3 2005/12/11 12:17:34 christos Exp $");
 
 #include "opt_vr41xx.h"
 
@@ -49,9 +49,9 @@ __KERNEL_RCSID(0, "$NetBSD: vr4181ip.c,v 1.4 2012/10/27 17:17:55 chs Exp $");
 #include <hpcmips/vr/icureg.h>
 #include <hpcmips/vr/cmureg.h>
 
-static void vr4181ipattach(device_t, device_t, void *);
+static void vr4181ipattach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(vr4181ip, sizeof(struct vrip_softc),
+CFATTACH_DECL(vr4181ip, sizeof(struct vrip_softc),
 	      vripmatch, vr4181ipattach, NULL, NULL);
 
 static const struct vrip_unit vr4181ip_units[] = {
@@ -121,9 +121,9 @@ static int			registered = 0;
 
 
 static void
-vr4181ipattach(device_t parent, device_t self, void *aux)
+vr4181ipattach(struct device *parent, struct device *self, void *aux)
 {
-	struct vrip_softc *sc = device_private(self);
+	struct vrip_softc *sc = (struct vrip_softc*) self;
 
 	printf("\n");
 

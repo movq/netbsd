@@ -1,10 +1,8 @@
-#	$NetBSD: Makefile.buildboot,v 1.16 2013/05/02 04:22:44 matt Exp $
+#	$NetBSD: Makefile.buildboot,v 1.14 2011/01/22 19:19:14 joerg Exp $
 
 S?=	${.CURDIR}/../../../..
 
 .PATH: ${.CURDIR}/../lib
-
-KLINK_MACHINE=	acorn32
 
 SRCS=	${PROGSOURCE}
 NOMAN=# defined
@@ -31,23 +29,27 @@ LINKFLAGS+=-N -Ttext ${RELOC}
 .endif
 
 .include <bsd.own.mk>
-.include <bsd.klinks.mk>
 
 SRCS+=		vers.c
 CLEANFILES+=	vers.c
 .PHONY: vers.c
 vers.c: ${.CURDIR}/version
 	${HOST_SH} ${S}/conf/newvers_stand.sh ${${MKREPRO} == "yes" :?:-D} \
-	    ${.CURDIR}/version ${KLINK_MACHINE} ${NEWVERSWHAT}
+	    ${.CURDIR}/version ${MACHINE} ${NEWVERSWHAT}
 
 CPPFLAGS+=	-D_STANDALONE 
 CPPFLAGS+=	-I. -I${.CURDIR}/../../.. -I${.CURDIR}/../../../..
 CPPFLAGS+=	-I${.CURDIR}/../lib
-CPPFLAGS+=	-mabi=apcs-gnu -mfloat-abi=soft -march=armv3m
-CPUFLAGS=
 CFLAGS=		-O2
 CFLAGS+=	-ffreestanding
 CFLAGS+=	-Wall -Wstrict-prototypes -Wmissing-prototypes
+
+.if !make(obj) && !make(clean) && !make(cleandir)
+.BEGIN:
+	-rm -f machine ${MACHINE_ARCH}
+	ln -s $S/arch/${MACHINE}/include machine
+	ln -s $S/arch/${MACHINE_ARCH}/include ${MACHINE_ARCH}
+.endif
 
 CLEANFILES+= machine ${MACHINE_ARCH}
 

@@ -1,6 +1,6 @@
 #!/bin/sh -
 #
-#	$NetBSD: weekly,v 1.29 2012/08/29 20:34:19 wiz Exp $
+#	$NetBSD: weekly,v 1.25.2.4 2012/11/20 23:11:47 riz Exp $
 #	from: @(#)weekly	8.2 (Berkeley) 1/2/94
 #
 

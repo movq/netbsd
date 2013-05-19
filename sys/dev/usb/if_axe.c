@@ -1,4 +1,4 @@
-/*	$NetBSD: if_axe.c,v 1.64 2013/01/22 12:40:42 jmcneill Exp $	*/
+/*	$NetBSD: if_axe.c,v 1.51 2012/02/02 19:43:07 tls Exp $	*/
 /*	$OpenBSD: if_axe.c,v 1.96 2010/01/09 05:33:08 jsg Exp $ */
 
 /*
@@ -77,7 +77,7 @@
  *   to send any packets.
  *
  * Note that this device appears to only support loading the station
- * address via autoload from the EEPROM (i.e. there's no way to manaully
+ * address via autload from the EEPROM (i.e. there's no way to manaully
  * set it).
  *
  * (Adam Weinberger wanted me to name this driver if_gir.c.)
@@ -89,11 +89,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_axe.c,v 1.64 2013/01/22 12:40:42 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_axe.c,v 1.51 2012/02/02 19:43:07 tls Exp $");
 
-#ifdef _KERNEL_OPT
+#if defined(__NetBSD__)
+#ifndef _MODULE
 #include "opt_inet.h"
 #endif
+#endif
+
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -145,8 +148,6 @@ static const struct axe_type axe_devs[] = {
 	{ { USB_VENDOR_ASIX,		USB_PRODUCT_ASIX_AX88172}, 0 },
 	{ { USB_VENDOR_ASIX,		USB_PRODUCT_ASIX_AX88772}, AX772 },
 	{ { USB_VENDOR_ASIX,		USB_PRODUCT_ASIX_AX88772A}, AX772 },
-	{ { USB_VENDOR_ASIX,		USB_PRODUCT_ASIX_AX88772B}, AX772 | AX772B },
-	{ { USB_VENDOR_ASIX,		USB_PRODUCT_ASIX_AX88772B_1}, AX772 | AX772B },
 	{ { USB_VENDOR_ASIX,		USB_PRODUCT_ASIX_AX88178}, AX178 },
 	{ { USB_VENDOR_ATEN,		USB_PRODUCT_ATEN_UC210T}, 0 },
 	{ { USB_VENDOR_BELKIN,		USB_PRODUCT_BELKIN_F5D5055 }, AX178 },
@@ -155,11 +156,9 @@ static const struct axe_type axe_devs[] = {
 	{ { USB_VENDOR_COREGA,		USB_PRODUCT_COREGA_FETHER_USB2_TX }, 0},
 	{ { USB_VENDOR_DLINK,		USB_PRODUCT_DLINK_DUBE100}, 0 },
 	{ { USB_VENDOR_DLINK,		USB_PRODUCT_DLINK_DUBE100B1 }, AX772 },
-	{ { USB_VENDOR_DLINK,		USB_PRODUCT_DLINK_DUBE100C1 }, AX772 | AX772B },
 	{ { USB_VENDOR_GOODWAY,		USB_PRODUCT_GOODWAY_GWUSB2E}, 0 },
 	{ { USB_VENDOR_IODATA,		USB_PRODUCT_IODATA_ETGUS2 }, AX178 },
 	{ { USB_VENDOR_JVC,		USB_PRODUCT_JVC_MP_PRX1}, 0 },
-	{ { USB_VENDOR_LENOVO,		USB_PRODUCT_LENOVO_ETHERNET }, AX772 | AX772B },
 	{ { USB_VENDOR_LINKSYS2,	USB_PRODUCT_LINKSYS2_USB200M}, 0 },
 	{ { USB_VENDOR_LINKSYS4,	USB_PRODUCT_LINKSYS4_USB1000 }, AX178 },
 	{ { USB_VENDOR_LOGITEC,		USB_PRODUCT_LOGITEC_LAN_GTJU2}, AX178 },
@@ -197,7 +196,7 @@ static void	axe_stop(struct ifnet *, int);
 static void	axe_watchdog(struct ifnet *);
 static int	axe_miibus_readreg(device_t, int, int);
 static void	axe_miibus_writereg(device_t, int, int, int);
-static void	axe_miibus_statchg(struct ifnet *);
+static void	axe_miibus_statchg(device_t);
 static int	axe_cmd(struct axe_softc *, int, int, int, void *);
 static void	axe_reset(struct axe_softc *sc);
 static int	axe_ifmedia_upd(struct ifnet *);
@@ -225,7 +224,7 @@ axe_unlock_mii(struct axe_softc *sc)
 
 	mutex_exit(&sc->axe_mii_lock);
 	if (--sc->axe_refcnt < 0)
-		usb_detach_wakeupold((sc->axe_dev));
+		usb_detach_wakeup((sc->axe_dev));
 }
 
 static int
@@ -325,9 +324,9 @@ axe_miibus_writereg(device_t dev, int phy, int reg, int aval)
 }
 
 static void
-axe_miibus_statchg(struct ifnet *ifp)
+axe_miibus_statchg(device_t dev)
 {
-	struct axe_softc *sc = ifp->if_softc;
+	struct axe_softc *sc = device_private(dev);
 	struct mii_data *mii = &sc->axe_mii;
 	int val, err;
 
@@ -603,15 +602,14 @@ axe_attach(device_t parent, device_t self, void *aux)
 
 	err = usbd_set_config_no(dev, AXE_CONFIG_NO, 1);
 	if (err) {
-		aprint_error_dev(self, "failed to set configuration"
-		    ", err=%s\n", usbd_errstr(err));
+		aprint_error_dev(self, "getting interface handle failed\n");
 		return;
 	}
 
 	sc->axe_flags = axe_lookup(uaa->vendor, uaa->product)->axe_flags;
 
 	mutex_init(&sc->axe_mii_lock, MUTEX_DEFAULT, IPL_NONE);
-	usb_init_task(&sc->axe_tick_task, axe_tick_task, sc, 0);
+	usb_init_task(&sc->axe_tick_task, axe_tick_task, sc);
 
 	err = usbd_device2interface_handle(dev, AXE_IFACE_IDX, &sc->axe_iface);
 	if (err) {
@@ -783,7 +781,7 @@ axe_detach(device_t self, int flags)
 
 	if (--sc->axe_refcnt >= 0) {
 		/* Wait for processes to go away. */
-		usb_detach_waitold(sc->axe_dev);
+		usb_detach_wait((sc->axe_dev));
 	}
 	splx(s);
 
@@ -923,14 +921,12 @@ axe_rxeof(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
 			total_len -= sizeof(hdr);
 			buf += sizeof(hdr);
 
-			if (((le16toh(hdr.len) & AXE_RH1M_RXLEN_MASK) ^
-			    (le16toh(hdr.ilen) & AXE_RH1M_RXLEN_MASK)) !=
-			    AXE_RH1M_RXLEN_MASK) {
+			if ((hdr.len ^ hdr.ilen) != 0xffff) {
 				ifp->if_ierrors++;
 				goto done;
 			}
 
-			rxlen = le16toh(hdr.len) & AXE_RH1M_RXLEN_MASK;
+			rxlen = le16toh(hdr.len);
 			if (total_len < rxlen) {
 				pktlen = total_len;
 				total_len = 0;
@@ -1248,9 +1244,7 @@ axe_init(struct ifnet *ifp)
 
 	/* Enable receiver, set RX mode */
 	rxmode = AXE_RXCMD_BROADCAST | AXE_RXCMD_MULTICAST | AXE_RXCMD_ENABLE;
-	if (sc->axe_flags & AX772B)
-		rxmode |= AXE_772B_RXCMD_RH1M;
-	else if (sc->axe_flags & AX178 || sc->axe_flags & AX772) {
+	if (sc->axe_flags & AX178 || sc->axe_flags & AX772) {
 		if (sc->axe_udev->speed == USB_SPEED_HIGH) {
 			/* Largest possible USB buffer size for AX88178 */
 			rxmode |= AXE_178_RXCMD_MFB;
@@ -1458,7 +1452,7 @@ axe_stop(struct ifnet *ifp, int disable)
 	sc->axe_link = 0;
 }
 
-MODULE(MODULE_CLASS_DRIVER, if_axe, "bpf");
+MODULE(MODULE_CLASS_DRIVER, if_axe, NULL);
 
 #ifdef _MODULE
 #include "ioconf.c"

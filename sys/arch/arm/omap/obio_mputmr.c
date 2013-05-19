@@ -1,4 +1,4 @@
-/* $NetBSD: obio_mputmr.c,v 1.7 2013/01/16 03:30:48 jmcneill Exp $ */
+/* $NetBSD: obio_mputmr.c,v 1.5 2011/07/01 20:30:21 dyoung Exp $ */
 
 /*
  * Based on omap_mputmr.c
@@ -101,7 +101,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obio_mputmr.c,v 1.7 2013/01/16 03:30:48 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obio_mputmr.c,v 1.5 2011/07/01 20:30:21 dyoung Exp $");
 
 #include "opt_omap.h"
 #include "opt_cpuoptions.h"
@@ -121,10 +121,8 @@ __KERNEL_RCSID(0, "$NetBSD: obio_mputmr.c,v 1.7 2013/01/16 03:30:48 jmcneill Exp
 #include <arm/omap/omap2_obiovar.h>
 
 #include <arm/omap/omap2_mputmrvar.h>
-
-#if defined(OMAP_2430) || defined(OMAP_2420)
 #include <arm/omap/omap2_mputmrreg.h>
-#endif
+
 
 #include <arm/omap/omap2_reg.h>
 
@@ -157,12 +155,10 @@ typedef struct {
 static const gptimer_instance_t gptimer_instance_tab[] = {
 	GPT_ENTRY( 2), GPT_ENTRY( 3), GPT_ENTRY( 4), GPT_ENTRY( 5),
 	GPT_ENTRY( 6), GPT_ENTRY( 7), GPT_ENTRY( 8), GPT_ENTRY( 9),
-	GPT_ENTRY(10), GPT_ENTRY(11),
-#ifdef GPT12_BASE
-	GPT_ENTRY(12),
-#endif
+	GPT_ENTRY(10), GPT_ENTRY(11), GPT_ENTRY(12),
 };
 #undef	GPT_ENTRY
+#define GPTIMER_INSTANCE_CNT	__arraycount(gptimer_instance_tab)
 
 static const gptimer_instance_t *
 		gpt_lookup(struct obio_attach_args *);
@@ -187,14 +183,11 @@ obiomputmr_match(device_t parent, cfdata_t match, void *aux)
 	if (obio->obio_size == 0)
 		obio->obio_size = 256;	/* Per the OMAP TRM. */
 
-	if (gpt_lookup(obio) != NULL) {
-		/* We implicitly trust the config file. */
-		return 1;
-	}
+	if (gpt_lookup(obio) == NULL)
+		return 0;
 
-	KASSERT(obio->obio_addr != GPT2_BASE);
-
-	return 0;
+	/* We implicitly trust the config file. */
+	return 1;
 }
 
 void
@@ -235,11 +228,9 @@ obiomputmr_attach(device_t parent, device_t self, void *aux)
 	aprint_normal("\n");
 	aprint_naive("\n");
 
-#if defined(OMAP_2430) || defined(OMAP_2420)
 	/* Stop the timer from counting, but keep the timer module working. */
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, MPU_CNTL_TIMER,
 			  MPU_CLOCK_ENABLE);
-#endif
 
 	timer_factors tf;
 	calc_timer_factors(ints_per_sec, &tf);
@@ -265,7 +256,6 @@ obiomputmr_attach(device_t parent, device_t self, void *aux)
 		break;
 	}
 
-#if defined(OMAP_2430) || defined(OMAP_2420)
 	/* Set the reload value. */
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, MPU_LOAD_TIMER, tf.reload);
 	/* Set the PTV and the other required bits and pieces. */
@@ -275,7 +265,6 @@ obiomputmr_attach(device_t parent, device_t self, void *aux)
 			    | MPU_AR
 			    | MPU_ST));
 	/* The clock is now running, but is not generating interrupts. */
-#endif
 }
 
 static const gptimer_instance_t *
@@ -285,8 +274,7 @@ gpt_lookup(struct obio_attach_args *obio)
 	uint i;
 
 	for (i = 0, ip = gptimer_instance_tab;
-	     i < __arraycount(gptimer_instance_tab);
-	     i++, ip++) {
+	     i < GPTIMER_INSTANCE_CNT; i++, ip++) {
 		if (ip->addr == obio->obio_addr && ip->intr == obio->obio_intr)
 			return ip;
 	}
@@ -300,15 +288,15 @@ gpt_enable(
 	struct obio_attach_args *obio,
 	const gptimer_instance_t *ip)
 {
+	bus_space_handle_t ioh;
+	uint32_t r;
+	int err;
+
 	KASSERT(ip != NULL);
 
 	aprint_normal(" #%d", ip->gptn);
 
-#if defined(OMAP_2430) || defined(OMAP_2420)
-	bus_space_handle_t ioh;
-	uint32_t r;
-
-	int err = bus_space_map(obio->obio_iot, OMAP2_CM_BASE,
+	err = bus_space_map(obio->obio_iot, OMAP2_CM_BASE,
 	    OMAP2_CM_SIZE, 0, &ioh);
 	KASSERT(err == 0);
 
@@ -325,5 +313,4 @@ gpt_enable(
 	bus_space_write_4(obio->obio_iot, ioh, OMAP2_CM_ICLKEN1_CORE, r);
 
 	bus_space_unmap(obio->obio_iot, ioh, OMAP2_CM_SIZE);
-#endif
 }

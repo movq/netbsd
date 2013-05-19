@@ -1,4 +1,4 @@
-/*	$NetBSD: dtrace_subr.c,v 1.7 2012/06/16 17:31:47 chs Exp $	*/
+/*	$NetBSD: dtrace_subr.c,v 1.5.4.1 2012/11/22 17:39:28 riz Exp $	*/
 
 /*
  * CDDL HEADER START
@@ -129,11 +129,11 @@ xcall_func(void *arg0, void *arg1)
 }
 
 void
-dtrace_xcall(processorid_t cpu, dtrace_xcall_t func, void *arg)
+dtrace_xcall(processorid_t xcpu, dtrace_xcall_t func, void *arg)
 {
 	uint64_t where;
 
-	if (cpu == DTRACE_CPUALL) {
+	if (xcpu == DTRACE_CPUALL) {
 		where = xc_broadcast(0, xcall_func, func, arg);
 	} else {
 		struct cpu_info *cinfo = cpu_lookup(cpu);

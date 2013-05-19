@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.34 2013/01/06 11:29:35 kiyohara Exp $	*/
+/*	$NetBSD: machdep.c,v 1.30 2011/10/01 15:59:28 chs Exp $	*/
 
 /*-
  * Copyright (c) 2003,2004 Marcel Moolenaar
@@ -93,6 +93,8 @@
 #include <sys/cpu.h>
 #include <sys/exec.h>
 #include <sys/ksyms.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/msgbuf.h>
 #include <sys/mutex.h>
 #include <sys/proc.h>
@@ -133,6 +135,7 @@ vsize_t ia64_unwindtablen;
 struct vm_map *phys_map = NULL;
 
 void *msgbufaddr;
+int physmem;
 
 vaddr_t kernstart, kernend;
 
@@ -221,6 +224,7 @@ cpu_startup(void)
 	 * information.
 	 */
 	ia64_probe_sapics();
+	/*XXX: ia64_mca_init();*/
 }
 
 void
@@ -663,6 +667,11 @@ ia64_init(void)
 	if (boothowto & RB_KDB)
 		Debugger();
 #endif
+
+	extern void main(void);
+	main();
+
+	panic("Wheeee!!! main() returned!!! \n");
 }
 
 uint64_t
@@ -769,6 +778,12 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 }
 
 void
+cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted, void *sas, void *ap, void *sp, sa_upcall_t upcall)
+{
+	return;
+}
+
+void
 cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 {
 	return;
@@ -776,12 +791,6 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 
 int
 cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
-{
-	return EINVAL;
-}
-
-int
-cpu_mcontext_validate(struct lwp *l, const mcontext_t *mcp)
 {
 	return EINVAL;
 }

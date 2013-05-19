@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.24 2013/03/04 20:10:50 christos Exp $
+#	$NetBSD: Makefile,v 1.16 2012/01/31 21:17:57 mlelstv Exp $
 
 PROG=		crash
 MAN=		crash.8
@@ -15,12 +15,7 @@ DPADD+=	${LIBUTIL} ${LIBKVM} ${LIBEDIT} ${LIBTERMINFO}
     || ${MACHINE} == "hp700" \
     || ${MACHINE} == "i386" \
     || ${MACHINE} == "sparc64" \
-    || (${MACHINE_ARCH} == "arm" && ${MACHINE} != "acorn26") \
     || ${MACHINE_ARCH} == "m68k"
-SRCS+=	db_trace.c
-.if ${MACHINE_ARCH} != "m68k"
-SRCS+=	db_machdep.c
-.endif
 REALCRASH=yes
 .else
 REALCRASH=no
@@ -45,27 +40,30 @@ SRCS+=	db_sym.c db_variables.c db_write_cmd.c
 .PATH:	${S}/arch/${MACHINE_ARCH}/${MACHINE_ARCH}
 SRCS+=	db_disasm.c
 
-CPPFLAGS+=	-I${S}/arch
-
 . if    ${MACHINE} == "amd64" \
      || ${MACHINE} == "i386"
 MACHINE_FAMILY = x86
-. elif  ${MACHINE_ARCH} == "m68k" \
-     || ${MACHINE_ARCH} == "arm"
-MACHINE_FAMILY = ${MACHINE_ARCH}
-. elif    ${MACHINE} == "sparc64" \
-     || ${MACHINE} == "sparc64"
-MACHINE_FAMILY = sparc
+.PATH:	${S}/arch/x86/x86
+SRCS+=	db_trace.c
+SRCS+=	db_machdep.c
 . else
 MACHINE_FAMILY = ${MACHINE}
 . endif
 
-.if ${MACHINE_ARCH} == "arm"
-.PATH:	${S}/arch/arm/arm32
-SRCS+=disassem.c cpufunc_asm.S
-.endif
+. if ${MACHINE} == "hp700"
+SRCS+=	db_trace.c db_machdep.c
+. endif
 
-.PATH:	${S}/arch/${MACHINE_FAMILY}/${MACHINE_FAMILY}
+. if ${MACHINE} == "sparc64"
+SRCS+=	db_trace.c db_interface.c
+. endif
+
+. if	${MACHINE_ARCH} == "m68k"
+MACHINE_FAMILY = m68k
+.PATH:	${S}/arch/m68k/m68k
+CPPFLAGS+=	-I${S}/arch
+SRCS+=	db_trace.c db_interface.c
+. endif
 
 # crash main source
 SRCS+=	crash.c
@@ -82,8 +80,8 @@ COPTS.db_output.c += -Wno-format-nonliteral
 
 # vers.c
 SRCS+=	vers.c
-vers.c:	${S}/conf/newvers.sh ${_NETBSD_VERSION_DEPENDS}
-	${HOST_SH} ${S}/conf/newvers.sh -r -n
+vers.c:	${S}/conf/newvers.sh
+	${HOST_SH} ${S}/conf/newvers.sh -r
 CLEANFILES+=	vers.c version
 
 .else				# } {

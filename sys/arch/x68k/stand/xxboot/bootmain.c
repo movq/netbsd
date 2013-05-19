@@ -1,4 +1,4 @@
-/*	$NetBSD: bootmain.c,v 1.4 2012/11/17 19:10:46 tsutsui Exp $	*/
+/*	$NetBSD: bootmain.c,v 1.4.2.3 2012/11/24 20:20:27 jdc Exp $	*/
 
 /*-
  * Copyright (c) 1993, 1994 Takumi Nakamura.

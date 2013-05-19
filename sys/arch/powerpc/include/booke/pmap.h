@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.11 2012/10/02 23:51:39 christos Exp $	*/
+/*	$NetBSD: pmap.h,v 1.8.8.1 2012/05/09 22:42:31 riz Exp $	*/
 /*-
  * Copyright (c) 2010, 2011 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -58,7 +58,7 @@
 
 #define	PMAP_NEED_PROCWR
 
-#include <uvm/pmap/vmpagemd.h>
+#include <common/pmap/tlb/vmpagemd.h>
 
 #include <powerpc/booke/pte.h>
 
@@ -71,7 +71,7 @@
 #define	KERNEL_PID	0
 
 #define	PMAP_TLB_NUM_PIDS		256
-#define	PMAP_INVALID_SEGTAB_ADDRESS	((pmap_segtab_t *)0xfeeddead)
+#define	PMAP_INVALID_SEGTAB_ADDRESS	((struct pmap_segtab *)0xfeeddead)
 
 #define	pmap_phys_address(x)		(x)
 
@@ -144,6 +144,6 @@ pmap_md_tlb_asid_max(void)
 #define	POOL_VTOPHYS(va)	((paddr_t)(vaddr_t)(va))
 #define	POOL_PHYSTOV(pa)	((vaddr_t)(paddr_t)(pa))
 
-#include <uvm/pmap/pmap.h>
+#include <common/pmap/tlb/pmap.h>
 
 #endif /* !_POWERPC_BOOKE_PMAP_H_ */

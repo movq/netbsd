@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.7 2012/02/23 11:05:02 nonaka Exp $
+#	$NetBSD: Makefile,v 1.6.2.1 2012/02/24 16:33:10 riz Exp $
 
 # build GCC's libgomp, so that -fopenmp works.
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: brh_7seg.c,v 1.6 2012/11/12 18:00:38 skrll Exp $	*/
+/*	$NetBSD: brh_7seg.c,v 1.5 2011/07/01 20:38:16 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: brh_7seg.c,v 1.6 2012/11/12 18:00:38 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: brh_7seg.c,v 1.5 2011/07/01 20:38:16 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -184,7 +184,7 @@ brh_7seg_xlate(char c)
 	if (c >= '0' && c <= '9')
 		rv = digitmap[c - '0'];
 	else if (c == '.')
-		rv = (uint8_t) ~SEG_DP;
+		rv = (u_int8_t) ~SEG_DP;
 	else
 		rv = 0xff;
 

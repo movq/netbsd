@@ -1,4 +1,4 @@
-/*	$NetBSD: t_renamerace.c,v 1.27 2013/03/17 02:48:31 jmmv Exp $	*/
+/*	$NetBSD: t_renamerace.c,v 1.24.4.1 2012/03/17 17:40:08 bouyer Exp $	*/
 
 /*
  * Modified for rump and atf from a program supplied
@@ -20,18 +20,6 @@
 
 #include <rump/rump.h>
 #include <rump/rump_syscalls.h>
-
-/* Bump the size of the test file system image to a larger value.
- *
- * These tests cause a lot of churn in the file system by creating and
- * deleting files/directories in quick succession.  A faster CPU will cause
- * more churn because the tests are capped by a run time period in seconds,
- * not number of operations.
- *
- * This is all fine except for LFS, because the lfs_cleanerd cannot keep up
- * with the churn and thus causes the test to fail on fast machines.  Hence
- * the reason for this hack. */
-#define FSTEST_IMGSIZE (50000 * 512)
 
 #include "../common/h_fsmacros.h"
 #include "../../h_macros.h"
@@ -141,8 +129,12 @@ renamerace_dirs(const atf_tc_t *tc, const char *mp)
 		atf_tc_skip("rename not supported by file system");
 
 	/* XXX: msdosfs also sometimes hangs */
-	if (FSTYPE_MSDOS(tc))
+	if (FSTYPE_EXT2FS(tc) || FSTYPE_MSDOS(tc))
 		atf_tc_expect_signal(-1, "PR kern/43626");
+
+	/* XXX: unracy execution not caught */
+	if (FSTYPE_P2K_FFS(tc))
+		atf_tc_expect_fail("PR kern/44336"); /* child dies */
 
 	RZ(rump_pub_lwproc_rfork(RUMP_RFCFDG));
 	RL(wrkpid = rump_sys_getpid());
@@ -162,8 +154,14 @@ renamerace_dirs(const atf_tc_t *tc, const char *mp)
 	 * Doesn't always trigger when run on a slow backend
 	 * (i.e. not on tmpfs/mfs).  So do the usual kludge.
 	 */
-	if (FSTYPE_MSDOS(tc))
+	if (FSTYPE_EXT2FS(tc) || FSTYPE_MSDOS(tc))
 		abort();
+
+	if (FSTYPE_P2K_FFS(tc)) {
+		/* XXX: some races may hang test run if we don't unmount */
+		puffs_fstest_unmount(tc, mp, MNT_FORCE);
+		atf_tc_fail("problem did not trigger");
+	}
 }
 
 ATF_TC_FSAPPLY(renamerace, "rename(2) race with file unlinked mid-operation");

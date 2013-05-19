@@ -1,4 +1,4 @@
-/*	$NetBSD: rndc.c,v 1.6 2013/03/24 18:44:39 christos Exp $	*/
+/*	$NetBSD: rndc.c,v 1.4.4.1 2012/06/05 21:15:47 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004-2012  Internet Systems Consortium, Inc. ("ISC")
@@ -721,9 +721,6 @@ main(int argc, char **argv) {
 	int ch;
 	int i;
 
-	isc__mem_register();
-	isc__task_register();
-	isc__socket_register();
 	result = isc_file_progname(*argv, program, sizeof(program));
 	if (result != ISC_R_SUCCESS)
 		memcpy(program, "rndc", 5);

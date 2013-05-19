@@ -1,4 +1,4 @@
-/*	$NetBSD: expand.h,v 1.19 2012/12/22 20:15:22 dsl Exp $	*/
+/*	$NetBSD: expand.h,v 1.18.4.1 2013/02/02 15:43:27 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993

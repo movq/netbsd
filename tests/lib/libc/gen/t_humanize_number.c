@@ -1,4 +1,4 @@
-/*	$NetBSD: t_humanize_number.c,v 1.8 2012/03/18 07:14:08 jruoho Exp $	*/
+/*	$NetBSD: t_humanize_number.c,v 1.5.4.1 2012/03/17 17:49:55 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2010, 2011 The NetBSD Foundation, Inc.
@@ -247,8 +247,7 @@ ATF_TC(humanize_number_big);
 ATF_TC_HEAD(humanize_number_big, tc)
 {
 
-	atf_tc_set_md_var(tc, "descr", "Test humanize "
-	    "big numbers (PR lib/44097)");
+	atf_tc_set_md_var(tc, "descr", "Test humanize big numbers");
 }
 
 ATF_TC_BODY(humanize_number_big, tc)
@@ -256,22 +255,26 @@ ATF_TC_BODY(humanize_number_big, tc)
 	char buf[1024];
 	int rv;
 
+	atf_tc_expect_fail("PR lib/44097");
+
 	/*
 	 * Seems to work.
 	 */
 	(void)memset(buf, 0, sizeof(buf));
 
-	rv = humanize_number(buf, 10, 10000, "", HN_AUTOSCALE, HN_NOSPACE);
+	rv = humanize_number(buf, 10, 10000, "",
+	    HN_AUTOSCALE, HN_NOSPACE);
 
 	ATF_REQUIRE(rv != -1);
-	ATF_CHECK_STREQ(buf, "10000");
+	ATF_REQUIRE(strcmp(buf, "10000") == 0);
 
 	/*
 	 * A bogus value with large number.
 	 */
 	(void)memset(buf, 0, sizeof(buf));
 
-	rv = humanize_number(buf, 10, INT64_MAX, "", HN_AUTOSCALE, HN_NOSPACE);
+	rv = humanize_number(buf, 10, INT64_MAX, "",
+	    HN_AUTOSCALE, HN_NOSPACE);
 
 	ATF_REQUIRE(rv != -1);
 	ATF_REQUIRE(strcmp(buf, "0") != 0);
@@ -290,14 +293,12 @@ ATF_TC_BODY(humanize_number_big, tc)
 	/*
 	 * Tight buffer.
 	 *
-	 * The man page says that len must be at least 4.
-	 * 3 works, but anything less that will not. This
-	 * is because baselen starts with 2 for positive
-	 * numbers.
+	 * The man page says that len must be at least 4, but...
 	 */
 	(void)memset(buf, 0, sizeof(buf));
 
-	rv = humanize_number(buf, 3, 1, "", HN_AUTOSCALE, HN_NOSPACE);
+	rv = humanize_number(buf, 1, 1, "",
+	    HN_AUTOSCALE, HN_NOSPACE);
 
 	ATF_REQUIRE(rv != -1);
 }

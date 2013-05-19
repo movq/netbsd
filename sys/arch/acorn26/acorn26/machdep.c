@@ -1,4 +1,4 @@
-/* $NetBSD: machdep.c,v 1.37 2012/08/16 17:35:01 matt Exp $ */
+/* $NetBSD: machdep.c,v 1.35 2011/06/15 15:03:51 tsutsui Exp $ */
 
 /*-
  * Copyright (c) 1998 Ben Harris
@@ -32,7 +32,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.37 2012/08/16 17:35:01 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.35 2011/06/15 15:03:51 tsutsui Exp $");
 
 #include <sys/buf.h>
 #include <sys/kernel.h>
@@ -124,9 +124,9 @@ haltsys:
 		 * anyone can tell me how to fake a control-reset in
 		 * software, I'd be most grateful.
 		 */
-		*(volatile uint8_t *)0x9c2 = 2; /* Zero page magic */
-		*(volatile uint32_t *)0
-			= *(volatile uint32_t *)MEMC_ROM_LOW_BASE;
+		*(volatile u_int8_t *)0x9c2 = 2; /* Zero page magic */
+		*(volatile u_int32_t *)0
+			= *(volatile u_int32_t *)MEMC_ROM_LOW_BASE;
 		/* reboot in SVC mode, IRQs and FIQs disabled */
 		__asm volatile("movs pc, %0" : :
 		    "r" (R15_MODE_SVC | R15_FIQ_DISABLE | R15_IRQ_DISABLE));
@@ -168,6 +168,8 @@ cpu_startup(void)
 
 	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
 	printf("avail memory = %s\n", pbuf);
+
+	curpcb = lwp_getpcb(&lwp0);
 
 #if 0
 	/* Test exception handlers */

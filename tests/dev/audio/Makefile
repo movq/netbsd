@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2012/12/02 18:39:53 pgoyette Exp $
+#	$NetBSD: Makefile,v 1.3 2010/10/31 13:54:31 he Exp $
 #
 
 .include <bsd.own.mk>
@@ -7,11 +7,9 @@ TESTSDIR=	${TESTSBASE}/dev/audio
 FILESDIR=	${TESTSDIR}
 
 TESTS_SH=	t_pad
+TESTS_C=	h_pad
 
-BINDIR=		${TESTSDIR}
-MKMAN=no
-
-PROGS=		h_pad
+ATFFILE=	yes	# for h_pad ... or rather not for it
 
 LDADD+=	-lrumpdev_pad -lrumpdev_audio -lrumpdev -lrumpvfs
 LDADD+=	-lrump

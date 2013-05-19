@@ -1,21 +1,21 @@
-#	$NetBSD: Makefile,v 1.203 2013/04/28 04:05:41 joerg Exp $
+#	$NetBSD: Makefile,v 1.181.2.2 2012/11/18 22:38:32 riz Exp $
 #	from: @(#)Makefile	5.25.1.1 (Berkeley) 5/7/91
 
 .include <bsd.own.mk>
 
-SUBDIR=		csu .WAIT
+SUBDIR=		csu
 
 .if (${MKGCC} != "no")
 . if ${HAVE_GCC} == 4
 .  if (${USE_COMPILERCRTSTUFF} == "yes")
-SUBDIR+=	../gnu/lib/crtstuff4 .WAIT
+SUBDIR+=	../gnu/lib/crtstuff4
 .  endif
-SUBDIR+=	../gnu/lib/libgcc4 .WAIT
+SUBDIR+=	../gnu/lib/libgcc4
 . else
 .  if (${USE_COMPILERCRTSTUFF} == "yes")
-SUBDIR+=	../external/gpl3/gcc/lib/crtstuff .WAIT
+SUBDIR+=	../external/gpl3/gcc/lib/crtstuff
 .  endif
-SUBDIR+=	../external/gpl3/gcc/lib/libgcc .WAIT
+SUBDIR+=	../external/gpl3/gcc/lib/libgcc
 . endif
 .endif
 
@@ -36,25 +36,15 @@ SUBDIR+=	libarch \
 		libintl libipsec libisns libkvm libm \
 		libossaudio libpci libpmc libposix libprop libpthread \
 		libpthread_dbg libpuffs libresolv librmt librpcsvc librt \
-		libtelnet libterminfo \
+		librumpclient libtelnet libterminfo \
 		libusbhid libutil libwrap liby libz
 
-.if (${MACHINE_CPU} == "arm")
-LIBC_MACHINE_ARCH?=${MACHINE_ARCH}
-.if empty(LIBC_MACHINE_ARCH:M*hf*)
-SUBDIR+=	libc_vfp
-.endif
-.endif
-.if (${MKRUMP} != "no")
-SUBDIR+=	librumpclient
-.endif
 .if (${MKSKEY} != "no")
 SUBDIR+=	libskey
 .endif
 
 .if (${MKCRYPTO} != "no")
 SUBDIR+=	../crypto/external/bsd/netpgp/libmj
-SUBDIR+=	../crypto/external/bsd/netpgp/lib/verify
 .endif
 
 .if (${MKMDNS} != "no")
@@ -63,10 +53,15 @@ SUBDIR+=	../external/apache2/mDNSResponder/lib
 
 SUBDIR+=	../external/bsd/am-utils/lib
 
+.if (${MKATF} != "no")
+SUBDIR+=	../external/bsd/atf/lib
+.endif
+
 SUBDIR+=	../external/bsd/flex/lib
 SUBDIR+=	../external/bsd/tre/lib
 SUBDIR+=	../external/bsd/libdwarf/lib
 SUBDIR+=	../external/bsd/libelf/lib
+SUBDIR+=	../external/bsd/libevent/lib
 SUBDIR+=	../external/bsd/liblzf/lib
 SUBDIR+=	../external/bsd/libpcap/lib
 
@@ -104,21 +99,18 @@ SUBDIR+=	.WAIT
 SUBDIR+=	libcurses	# depends on libterminfo
 SUBDIR+=	libdm		# depends on libprop
 SUBDIR+=	libedit		# depends on libterminfo
-SUBDIR+=	libexecinfo 	# depends on libelf
 SUBDIR+=	libppath	# depends on libprop
 SUBDIR+=	libperfuse	# depends on libpuffs
 SUBDIR+=	libquota	# depends on libprop and librpcsvc
 SUBDIR+=	librefuse	# depends on libpuffs
-.if (${MKRUMP} != "no")
 SUBDIR+=	librumpuser	# depends on libpthread
 SUBDIR+=	librumphijack	# depends on librumpclient and libpthread
-.endif
 
 .if (${MKNPF} != "no")
 SUBDIR+=	libnpf		# depends on libprop
-SUBDIR+=	npf
 .endif
 
+SUBDIR+=	npf
 .if (${MKCRYPTO} != "no")
 SUBDIR+=	../crypto/external/bsd/openssl/lib # depends on libcrypt
 .endif
@@ -139,11 +131,7 @@ SUBDIR+=	../external/gpl2/lvm2/lib	# depends on libprop
 SUBDIR+=	../external/gpl3/binutils/lib	# libbfd depends on libz
 .endif
 
-.if (${MKLIBCXX} != "no")
-SUBDIR+=	../external/bsd/libc++
-.endif
-
-.if (${MKGCC} != "no" && ${MKCXX} != "no" && ${MKLIBSTDCXX} != "no")
+.if (${MKGCC} != "no" && ${MKCXX} != "no")
 . if ${HAVE_GCC} == 4
 SUBDIR+=	../gnu/lib/libstdc++-v3_4	# depends on libm
 SUBDIR+=	../gnu/lib/libsupc++4
@@ -156,20 +144,10 @@ SUBDIR+=	../external/gpl3/gcc/lib/libsupc++
 #==================== 2nd library dependency barrier ====================
 SUBDIR+=	.WAIT
 
-.if (${MKATF} != "no")
-SUBDIR+=	../external/bsd/atf/lib		# depends on libstdc++
-.endif
-
-.if (${MKKYUA} != "no")
-SUBDIR+=	../external/bsd/lutok/lib	# depends on lua and libstdc++
-.endif
-
 SUBDIR+=	libform		# depends on libcurses
 SUBDIR+=	libmenu		# depends on libcurses
 SUBDIR+=	libradius	# depends on libcrypto if (${MKCRYPTO} != "no")
-.if (${MKRUMP} != "no")
 SUBDIR+=	librump		# depends on librumpuser
-.endif
 
 .if (${MKKERBEROS} != "no")
 SUBDIR+=	../crypto/external/bsd/heimdal/lib	# depends on libcrypto
@@ -181,7 +159,6 @@ SUBDIR+=	../crypto/external/bsd/openssh/lib # depends on libcrypto, libz
 SUBDIR+=	../crypto/external/bsd/netpgp/lib  # depends on libcrypto, ...
 .endif
 
-SUBDIR+=	../external/bsd/libevent/lib	# depends on libcrypto
 SUBDIR+=	../external/bsd/bind/lib	# depends on libcrypto
 SUBDIR+=	../external/bsd/fetch/lib	# depends on libssl
 
@@ -192,11 +169,9 @@ SUBDIR+=	../external/bsd/openldap/lib	# depends on libcrypto, ...
 #==================== 3rd library dependency barrier ====================
 SUBDIR+=	.WAIT
 
-.if (${MKRUMP} != "no")
 SUBDIR+=	librumpdev	# depends on librump
 SUBDIR+=	librumpnet	# depends on librump
 SUBDIR+=	librumpvfs	# depends on librump
-.endif
 
 .if (${MKPAM} != "no")
 SUBDIR+=	libpam		# depends on heimdal
@@ -206,43 +181,19 @@ SUBDIR+=	libpam		# depends on heimdal
 SUBDIR+=	../crypto/external/bsd/libsaslc	# depends on heimdal, openssl
 .endif
 
-.if ${MKSLJIT} != "no"
-SUBDIR+=	../external/bsd/sljit/lib
-SUBDIR+=	.WAIT
-SUBDIR+=	libbpfjit
-.endif
-
 SUBDIR+=	../external/bsd/mdocml/lib
 
-.if (${MKRUMP} != "no")
 #==================== 4th library dependency barrier ====================
 SUBDIR+=	.WAIT
 
 SUBDIR+=	libukfs		# depends on librumpvfs, librump
-
-.if (${MKTPM} != "no")
-SUBDIR+=	../crypto/external/cpl/trousers/lib
-.endif
 
 #==================== 5th library dependency barrier ====================
 SUBDIR+=	.WAIT
 
 SUBDIR+=	libp2k		# depends on libukfs, librumpvfs, libpuffs
 
-.if (${MKTPM} != "no")
-SUBDIR+=	../crypto/external/cpl/tpm-tools/lib	# depends on trousers
-.endif
-
-.if !defined(BSD_MK_COMPAT_FILE)
-SUBDIR+=	../sys/rump/dev/lib
-SUBDIR+=	../sys/rump/fs/lib
-SUBDIR+=	../sys/rump/kern/lib
-SUBDIR+=	../sys/rump/net/lib
-.endif
-.endif
-
 # Lua bindings come last, they might depend on anything
 SUBDIR+=	lua
 
-.include <bsd.buildinstall.mk>
 .include <bsd.subdir.mk>

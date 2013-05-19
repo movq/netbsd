@@ -1,4 +1,4 @@
-/*	$NetBSD: gdrom.c,v 1.35 2012/07/27 07:42:26 abs Exp $	*/
+/*	$NetBSD: gdrom.c,v 1.34.14.1 2012/07/30 08:37:06 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 Marcus Comstedt
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: gdrom.c,v 1.35 2012/07/27 07:42:26 abs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gdrom.c,v 1.34.14.1 2012/07/30 08:37:06 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

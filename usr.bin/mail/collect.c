@@ -1,4 +1,4 @@
-/*	$NetBSD: collect.c,v 1.46 2012/06/12 19:03:26 christos Exp $	*/
+/*	$NetBSD: collect.c,v 1.44 2011/09/16 15:39:27 joerg Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)collect.c	8.2 (Berkeley) 4/19/94";
 #else
-__RCSID("$NetBSD: collect.c,v 1.46 2012/06/12 19:03:26 christos Exp $");
+__RCSID("$NetBSD: collect.c,v 1.44 2011/09/16 15:39:27 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -97,7 +97,7 @@ exwrite(const char name[], FILE *fp, int f)
 		(void)fprintf(stderr, "File exists\n");
 		return -1;
 	}
-	if ((of = Fopen(name, "we")) == NULL) {
+	if ((of = Fopen(name, "w")) == NULL) {
 		warn("%s", name);
 		return -1;
 	}
@@ -165,7 +165,7 @@ mespipe(FILE *fp, char cmd[])
 	(void)snprintf(tempname, sizeof(tempname),
 	    "%s/mail.ReXXXXXXXXXX", tmpdir);
 	if ((fd = mkstemp(tempname)) == -1 ||
-	    (nf = Fdopen(fd, "we+")) == NULL) {
+	    (nf = Fdopen(fd, "w+")) == NULL) {
 		if (fd != -1)
 			(void)close(fd);
 		warn("%s", tempname);
@@ -286,7 +286,7 @@ savedeadletter(FILE *fp)
 		return;
 	cp = getdeadletter();
 	m = umask(077);
-	dbuf = Fopen(cp, "ae");
+	dbuf = Fopen(cp, "a");
 	(void)umask(m);
 	if (dbuf == NULL)
 		return;
@@ -355,11 +355,11 @@ coll_stop(int signo)
 PUBLIC FILE *
 collect(struct header *hp, int printheaders)
 {
-	sig_t volatile old_sigint = sig_current(SIGINT);
-	sig_t volatile old_sighup = sig_current(SIGHUP);
-	sig_t volatile old_sigtstp = sig_current(SIGTSTP);
-	sig_t volatile old_sigttin = sig_current(SIGTTIN);
-	sig_t volatile old_sigttou = sig_current(SIGTTOU);
+	volatile sig_t old_sigint;
+	volatile sig_t old_sighup;
+	volatile sig_t old_sigtstp;
+	volatile sig_t old_sigttin;
+	volatile sig_t old_sigttou;
 	FILE *fbuf;
 	int lc, cc;
 	int c, fd, t;
@@ -397,7 +397,7 @@ collect(struct header *hp, int printheaders)
 	(void)snprintf(mailtempname, sizeof(mailtempname),
 	    "%s/mail.RsXXXXXXXXXX", tmpdir);
 	if ((fd = mkstemp(mailtempname)) == -1 ||
-	    (collf = Fdopen(fd, "we+")) == NULL) {
+	    (collf = Fdopen(fd, "w+")) == NULL) {
 		if (fd != -1)
 			(void)close(fd);
 		warn("%s", mailtempname);
@@ -628,7 +628,7 @@ collect(struct header *hp, int printheaders)
 				(void)snprintf(tempname, sizeof(tempname),
 				    "%s/mail.ReXXXXXXXXXX", tmpdir);
 				if ((fd = mkstemp(tempname)) == -1 ||
-				    (fbuf = Fdopen(fd, "we+")) == NULL) {
+				    (fbuf = Fdopen(fd, "w+")) == NULL) {
 					if (fd != -1)
 						(void)close(fd);
 					warn("%s", tempname);
@@ -660,7 +660,7 @@ collect(struct header *hp, int printheaders)
 				(void)printf("%s: Directory\n", cp);
 				break;
 			}
-			else if ((fbuf = Fopen(cp, "re")) == NULL) {
+			else if ((fbuf = Fopen(cp, "r")) == NULL) {
 				warn("%s", cp);
 				break;
 			}

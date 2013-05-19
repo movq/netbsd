@@ -1,4 +1,4 @@
-/*	$NetBSD: mha.c,v 1.53 2012/10/10 16:55:50 tsutsui Exp $	*/
+/*	$NetBSD: mha.c,v 1.52.18.1 2012/10/17 22:26:05 riz Exp $	*/
 
 /*-
  * Copyright (c) 1996-1999 The NetBSD Foundation, Inc.
@@ -59,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mha.c,v 1.53 2012/10/10 16:55:50 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mha.c,v 1.52.18.1 2012/10/17 22:26:05 riz Exp $");
 
 #include "opt_ddb.h"
 

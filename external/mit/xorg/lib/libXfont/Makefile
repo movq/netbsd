@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.9 2012/04/04 10:59:45 joerg Exp $
+#	$NetBSD: Makefile,v 1.8 2011/08/11 23:15:39 joerg Exp $
 
 .include <bsd.own.mk>
 
@@ -46,6 +46,7 @@ CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/freetype2
 CPPFLAGS+=	-I${XFONTDIR}/src/stubs
 CPPFLAGS+=	-I${XFONTDIR}/../include
 
+
 LIBDPLIBS=\
 	Xt	${.CURDIR}/../libXt \
 	SM	${.CURDIR}/../libSM \
@@ -64,7 +65,7 @@ COPTS.register.c+=	-Wno-error
 
 PKGDIST=	${LIB}
 
-CWARNFLAGS.clang+=	-Wno-tautological-compare -Wno-string-plus-int
+CWARNFLAGS.clang+=	-Wno-tautological-compare
 
 .include <bsd.x11.mk>
 .include <bsd.lib.mk>

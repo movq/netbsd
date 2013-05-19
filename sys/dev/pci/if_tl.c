@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tl.c,v 1.99 2013/03/30 03:21:08 christos Exp $	*/
+/*	$NetBSD: if_tl.c,v 1.97 2012/02/02 19:43:05 tls Exp $	*/
 
 /*
  * Copyright (c) 1997 Manuel Bouyer.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tl.c,v 1.99 2013/03/30 03:21:08 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tl.c,v 1.97 2012/02/02 19:43:05 tls Exp $");
 
 #undef TLDEBUG
 #define TL_PRIV_STATS
@@ -142,7 +142,7 @@ static void ether_printheader(struct ether_header *);
 int tl_mii_read(device_t, int, int);
 void tl_mii_write(device_t, int, int, int);
 
-void tl_statchg(struct ifnet *);
+void tl_statchg(device_t);
 
 	/* I2C glue */
 static int tl_i2c_acquire_bus(void *, int);
@@ -747,7 +747,7 @@ tl_init(struct ifnet *ifp)
 		error = 0;
 	else if (error != 0) {
 		errstring = "could not set media";
-		goto bad;
+		goto bad; 
 	}
 
 	/* start ticks calls */
@@ -891,9 +891,9 @@ tl_mii_write(device_t self, int phy, int reg, int val)
 }
 
 void
-tl_statchg(struct ifnet *ifp)
+tl_statchg(device_t self)
 {
-	tl_softc_t *sc = ifp->if_softc;
+	tl_softc_t *sc = device_private(self);
 	uint32_t reg;
 
 #ifdef TLDEBUG

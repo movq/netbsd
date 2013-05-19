@@ -1,4 +1,4 @@
-/*	$NetBSD: inetd.c,v 1.121 2012/12/13 19:38:40 christos Exp $	*/
+/*	$NetBSD: inetd.c,v 1.120 2012/01/04 16:09:43 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2003 The NetBSD Foundation, Inc.
@@ -66,7 +66,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1991, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)inetd.c	8.4 (Berkeley) 4/13/94";
 #else
-__RCSID("$NetBSD: inetd.c,v 1.121 2012/12/13 19:38:40 christos Exp $");
+__RCSID("$NetBSD: inetd.c,v 1.120 2012/01/04 16:09:43 drochner Exp $");
 #endif
 #endif /* not lint */
 
@@ -842,14 +842,14 @@ config(void)
 			if (sep->se_fd != -1)
 				break;
 			n = strlen(sep->se_service);
-			if (n >= sizeof(sep->se_ctrladdr_un.sun_path)) {
+			if (n > sizeof(sep->se_ctrladdr_un.sun_path)) {
 				syslog(LOG_ERR, "%s: address too long",
 				    sep->se_service);
 				sep->se_checked = 0;
 				continue;
 			}
 			(void)unlink(sep->se_service);
-			strlcpy(sep->se_ctrladdr_un.sun_path,
+			strncpy(sep->se_ctrladdr_un.sun_path,
 			    sep->se_service, n);
 			sep->se_ctrladdr_un.sun_family = AF_LOCAL;
 			sep->se_ctrladdr_size = (int)(n +
@@ -1367,22 +1367,22 @@ more:
 		sep->se_socktype = SOCK_STREAM;
 
 		/* one and only one accept filter */
-		accf = strchr(arg, ':');	
+		accf = index(arg, ':');	
 		if (accf) {
-	    		if (accf != strrchr(arg, ':') ||/* more than one */
+	    		if (accf != rindex(arg, ':') ||	/* more than one */
 	    		    *(accf + 1) == '\0') {	/* nothing beyond */
 				sep->se_socktype = -1;
 			} else {
 				accf++;			/* skip delimiter */
-				strlcpy(sep->se_accf.af_name, accf,
+				strncpy(sep->se_accf.af_name, accf,
 					sizeof(sep->se_accf.af_name));
-				accf_arg = strchr(accf, ',');
+				accf_arg = index(accf, ',');
 				if (accf_arg) {	/* zero or one arg, no more */
-					if (strrchr(accf, ',') != accf_arg) {
+					if ((rindex(accf, ',') != accf_arg)) {
 						sep->se_socktype = -1;
 					} else {
 						accf_arg++;
-						strlcpy(sep->se_accf.af_arg,
+						strncpy(sep->se_accf.af_arg,
 							accf_arg,
 							sizeof(sep->se_accf.af_arg));
 					}

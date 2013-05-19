@@ -1,4 +1,4 @@
-/* $NetBSD: _strtoul.h,v 1.7 2013/05/17 12:55:56 joerg Exp $ */
+/* $NetBSD: _strtoul.h,v 1.1 2008/08/20 12:42:26 joerg Exp $ */
 
 /*-
  * Copyright (c) 1990, 1993
@@ -40,20 +40,9 @@
  *      __UINT     : return type
  *      __UINT_MAX : upper limit of the return type
  */
-#if defined(_KERNEL) || defined(_STANDALONE) || \
-    defined(HAVE_NBTOOL_CONFIG_H) || defined(BCS_ONLY)
+
 __UINT
 _FUNCNAME(const char *nptr, char **endptr, int base)
-#else
-#include <locale.h>
-#include "setlocale_local.h"
-#define INT_FUNCNAME_(pre, name, post)	pre ## name ## post
-#define INT_FUNCNAME(pre, name, post)	INT_FUNCNAME_(pre, name, post)
-
-static __UINT
-INT_FUNCNAME(_int_, _FUNCNAME, _l)(const char *nptr, char **endptr,
-				   int base, locale_t loc)
-#endif
 {
 	const char *s;
 	__UINT acc, cutoff;
@@ -79,16 +68,9 @@ INT_FUNCNAME(_int_, _FUNCNAME, _l)(const char *nptr, char **endptr,
 	 * assume decimal; if base is already 16, allow 0x.
 	 */
 	s = nptr;
-#if defined(_KERNEL) || defined(_STANDALONE) || \
-    defined(HAVE_NBTOOL_CONFIG_H) || defined(BCS_ONLY)
 	do {
 		c = *s++;
 	} while (isspace(c));
-#else
-	do {
-		c = *s++;
-	} while (isspace_l(c, loc));
-#endif
 	if (c == '-') {
 		neg = 1;
 		c = *s++;
@@ -109,15 +91,13 @@ INT_FUNCNAME(_int_, _FUNCNAME, _l)(const char *nptr, char **endptr,
 	/*
 	 * See strtol for comments as to the logic used.
 	 */
-	cutoff = ((__UINT)__UINT_MAX / (__UINT)base);
-	cutlim = (int)((__UINT)__UINT_MAX % (__UINT)base);
+	cutoff = __UINT_MAX / (__UINT)base;
+	cutlim = (int)(__UINT_MAX % (__UINT)base);
 	for (acc = 0, any = 0;; c = *s++) {
-		if (c >= '0' && c <= '9')
+		if (isdigit(c))
 			i = c - '0';
-		else if (c >= 'a' && c <= 'z')
-			i = (c - 'a') + 10;
-		else if (c >= 'A' && c <= 'Z')
-			i = (c - 'A') + 10;
+		else if (isalpha(c))
+			i = c - (isupper(c) ? 'A' - 10 : 'a' - 10);
 		else
 			break;
 		if (i >= base)
@@ -146,18 +126,3 @@ INT_FUNCNAME(_int_, _FUNCNAME, _l)(const char *nptr, char **endptr,
 		*endptr = __UNCONST(any ? s - 1 : nptr);
 	return(acc);
 }
-
-#if !defined(_KERNEL) && !defined(_STANDALONE) && \
-    !defined(HAVE_NBTOOL_CONFIG_H) && !defined(BCS_ONLY)
-__UINT
-_FUNCNAME(const char *nptr, char **endptr, int base)
-{
-	return INT_FUNCNAME(_int_, _FUNCNAME, _l)(nptr, endptr, base, _current_locale());
-}
-
-__UINT
-INT_FUNCNAME(, _FUNCNAME, _l)(const char *nptr, char **endptr, int base, locale_t loc)
-{
-	return INT_FUNCNAME(_int_, _FUNCNAME, _l)(nptr, endptr, base, loc);
-}
-#endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.15 2012/06/19 05:45:00 dholland Exp $	*/
+/*	$NetBSD: main.c,v 1.14 2008/08/08 16:10:47 drochner Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1993\
 #if 0
 static char sccsid[] = "@(#)main.c	8.1 (Berkeley) 5/31/93";
 #else
-__RCSID("$NetBSD: main.c,v 1.15 2012/06/19 05:45:00 dholland Exp $");
+__RCSID("$NetBSD: main.c,v 1.14 2008/08/08 16:10:47 drochner Exp $");
 #endif
 #endif /* not lint */
 
@@ -50,7 +50,9 @@ __RCSID("$NetBSD: main.c,v 1.15 2012/06/19 05:45:00 dholland Exp $");
  * This game written by Ken Arnold.
  */
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	int ch;
 
@@ -90,7 +92,8 @@ main(int argc, char *argv[])
  *	Die properly.
  */
 void
-die(int dummy __unused)
+die(dummy)
+	int dummy __unused;
 {
 	mvcur(0, COLS - 1, LINES - 1, 0);
 	endwin();

@@ -1,4 +1,4 @@
-/*	$NetBSD: dfa.c,v 1.3 2013/01/05 09:40:16 apb Exp $	*/
+/*	$NetBSD: dfa.c,v 1.2.56.1 2013/01/13 19:08:05 bouyer Exp $	*/
 
 /* dfa.c - deterministic extended regexp routines for GNU
    Copyright 1988, 1998, 2000 Free Software Foundation, Inc.

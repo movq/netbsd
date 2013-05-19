@@ -1,4 +1,4 @@
-/*	$NetBSD: at91aicvar.h,v 1.5 2012/11/12 18:00:36 skrll Exp $	*/
+/*	$NetBSD: at91aicvar.h,v 1.3 2009/10/23 06:53:13 snj Exp $	*/
 
 /*
  * Copyright (c) 2007 Embedtronics Oy
@@ -42,7 +42,7 @@ struct intrhand {
 struct intrq {
 	TAILQ_HEAD(, intrhand) iq_list;	/* handler list */
 	struct evcnt iq_ev;		/* event counter */
-	uint32_t iq_levels;		/* IPL_*'s this IRQ has */
+	u_int32_t iq_levels;		/* IPL_*'s this IRQ has */
 	char iq_name[IRQNAMESIZE];	/* interrupt name */
 	int iq_type;			/* interrupt request type: */
 #define	_INTR_LOW_LEVEL		1		/* interrupt when signal at low level */
@@ -57,6 +57,6 @@ void at91aic_init(void);
 void *at91aic_intr_establish(int irq, int ipl, int type, int (*ih_func)(void *), void *arg);
 void at91aic_intr_disestablish(void *cookie);
 void at91aic_intr_poll(void *ihp, int flags);
-void at91aic_intr_dispatch(struct trapframe *frame);
+void at91aic_intr_dispatch(struct irqframe *frame);
 
 #endif /* _AT91AICVAR_H_ */

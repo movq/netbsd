@@ -1,4 +1,4 @@
-# 	$NetBSD: GENERIC,v 1.109 2013/04/27 21:43:10 christos Exp $
+# 	$NetBSD: GENERIC,v 1.101 2011/12/18 05:49:22 dholland Exp $
 #
 #	GENERIC --- NetBSD/acorn32 complete configuration
 #
@@ -22,7 +22,7 @@ include		"arch/acorn32/conf/std.acorn32"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident		"GENERIC-$Revision: 1.109 $"
+#ident		"GENERIC-$Revision: 1.101 $"
 
 # estimated number of users
 maxusers	32
@@ -41,6 +41,9 @@ options 	CPU_ARM7	# Support the ARM7 core
 
 # For StrongARM only kernels
 #makeoptions	COPTS="-O2 -march=armv3m -mtune=strongarm"
+
+# FPA options
+#options 	ARMFPE		# ARM Ltd FPE
 
 # File systems
 
@@ -80,10 +83,13 @@ options 	GATEWAY		# packet forwarding
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 options 	NETATALK	# AppleTalk networking
 options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
@@ -107,7 +113,6 @@ options 	PPP_FILTER	# Active filter support for PPP (requires bpf)
 # Compatibility options
 
 options 	COMPAT_43	# 4.3BSD compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
@@ -128,6 +133,7 @@ options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
 options 	SYSVSHM		# System V-like memory sharing
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 # Device options
 
@@ -196,7 +202,7 @@ options 	WSEMUL_VT100
 options         WS_KERNEL_FG=WSCOL_GREEN
 
 #options 	WSDISPLAY_COMPAT_RAWKBD
-options		WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
+options		WSDISPLAY_COMPAT_USL
 options		WSDISPLAY_SCROLLSUPPORT
 
 vidcvideo0	at vidc?		# wscons driver for VIDC
@@ -318,9 +324,9 @@ pseudo-device	agr			# IEEE 802.3ad link aggregation
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
-pseudo-device	ccd			# concatenated disk devices
-#pseudo-device	cgd			# cryptographic disk devices
-pseudo-device	raid			# RAIDframe disk driver
+pseudo-device	ccd	2		# concatenated disk devices
+#pseudo-device	cgd	4		# cryptographic disk devices
+pseudo-device	raid	8		# RAIDframe disk driver
 options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # Options to enable various other RAIDframe RAID types.
 # options	RF_INCLUDE_EVENODD=1
@@ -346,7 +352,7 @@ pseudo-device   accf_http		# "httpready" accept filter
 # Veriexec
 #
 # a pseudo device needed for veriexec
-#pseudo-device	veriexec
+#pseudo-device	veriexec		1
 #
 # Uncomment the fingerprint methods below that are desired. Note that
 # removing fingerprint methods will have almost no impact on the kernel

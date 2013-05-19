@@ -66,6 +66,11 @@ struct eap_ssl_data {
 	int include_tls_length;
 
 	/**
+	 * tls_ia - Whether TLS/IA is enabled for this TLS connection
+	 */
+	int tls_ia;
+
+	/**
 	 * eap - EAP state machine allocated with eap_peer_sm_init()
 	 */
 	struct eap_sm *eap;

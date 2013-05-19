@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835reg.h,v 1.10 2013/01/26 11:58:43 jmcneill Exp $	*/
+/*	$NetBSD: bcm2835reg.h,v 1.1.2.4 2013/02/13 01:36:14 riz Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.

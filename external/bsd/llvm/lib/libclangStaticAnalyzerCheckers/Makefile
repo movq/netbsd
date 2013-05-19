@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.20 2013/04/25 13:59:58 joerg Exp $
+#	$NetBSD: Makefile,v 1.11 2012/01/11 23:24:49 joerg Exp $
 
 LIB=	clangStaticAnalyzerCheckers
 
@@ -6,16 +6,15 @@ LIB=	clangStaticAnalyzerCheckers
 
 .PATH: ${CLANG_SRCDIR}/lib/StaticAnalyzer/Checkers
 
-SRCS+=	AllocationDiagnostics.cpp \
+SRCS+=	AdjustedReturnValueChecker.cpp \
 	AnalyzerStatsChecker.cpp \
 	ArrayBoundChecker.cpp \
 	ArrayBoundCheckerV2.cpp \
+	AttrNonNullChecker.cpp \
 	BasicObjCFoundationChecks.cpp \
-	BoolAssignmentChecker.cpp \
 	BuiltinFunctionChecker.cpp \
 	ClangCheckers.cpp \
 	CStringChecker.cpp \
-	CStringSyntaxChecker.cpp \
 	CallAndMessageChecker.cpp \
 	CastSizeChecker.cpp \
 	CastToStructChecker.cpp \
@@ -25,18 +24,14 @@ SRCS+=	AllocationDiagnostics.cpp \
 	CheckSizeofPointer.cpp \
 	CheckerDocumentation.cpp \
 	ChrootChecker.cpp \
-	CommonBugCategories.cpp \
 	DeadStoresChecker.cpp \
 	DebugCheckers.cpp \
 	DereferenceChecker.cpp \
-	DirectIvarAssignment.cpp \
 	DivZeroChecker.cpp \
-	DynamicTypePropagation.cpp \
-	ExprInspectionChecker.cpp \
 	FixedAddressChecker.cpp \
 	GenericTaintChecker.cpp \
 	IdempotentOperationChecker.cpp \
-	IvarInvalidationChecker.cpp \
+	IteratorsChecker.cpp \
 	LLVMConventionsChecker.cpp \
 	MacOSKeychainAPIChecker.cpp \
 	MacOSXAPIChecker.cpp \
@@ -46,11 +41,8 @@ SRCS+=	AllocationDiagnostics.cpp \
 	NSAutoreleasePoolChecker.cpp \
 	NSErrorChecker.cpp \
 	NoReturnFunctionChecker.cpp \
-	NonNullParamChecker.cpp \
+	OSAtomicChecker.cpp \
 	ObjCAtSyncChecker.cpp \
-	ObjCContainersASTChecker.cpp \
-	ObjCContainersChecker.cpp \
-	ObjCMissingSuperCallChecker.cpp \
 	ObjCSelfInitChecker.cpp \
 	ObjCUnusedIVarsChecker.cpp \
 	PointerArithChecker.cpp \
@@ -59,11 +51,9 @@ SRCS+=	AllocationDiagnostics.cpp \
 	RetainCountChecker.cpp \
 	ReturnPointerRangeChecker.cpp \
 	ReturnUndefChecker.cpp \
-	SimpleStreamChecker.cpp \
 	StackAddrEscapeChecker.cpp \
 	StreamChecker.cpp \
 	TaintTesterChecker.cpp \
-	TraversalChecker.cpp \
 	UndefBranchChecker.cpp \
 	UndefCapturedBlockVarChecker.cpp \
 	UndefResultChecker.cpp \

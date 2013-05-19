@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc_asm_arm11x6.S,v 1.2 2012/09/22 00:33:37 matt Exp $	*/
+/*	$NetBSD: cpufunc_asm_arm11x6.S,v 1.1.2.2 2012/08/09 06:36:45 jdc Exp $	*/
 
 /*
  * Copyright (c) 2007 Microsoft
@@ -63,7 +63,7 @@
 #include <machine/cpu.h>
 #include <machine/asm.h>
 
-RCSID("$NetBSD: cpufunc_asm_arm11x6.S,v 1.2 2012/09/22 00:33:37 matt Exp $")
+RCSID("$NetBSD: cpufunc_asm_arm11x6.S,v 1.1.2.2 2012/08/09 06:36:45 jdc Exp $")
 
 #if 0
 #define Invalidate_I_cache(Rtmp1, Rtmp2) \
@@ -116,16 +116,14 @@ RCSID("$NetBSD: cpufunc_asm_arm11x6.S,v 1.2 2012/09/22 00:33:37 matt Exp $")
 
 ENTRY(arm11x6_setttb)
 #ifdef PMAP_CACHE_VIVT
-	Flush_D_cache(r2)
-	Invalidate_I_cache(r2, r3)
+	Flush_D_cache(r1)
+	Invalidate_I_cache(r1, r2)
 #else
-	mov	r2, #0
+	mov	r1, #0
 #endif
 	mcr	p15, 0, r0, c2, c0, 0	/* load new TTB */
-
-	cmp	r1, #0
-	mcrne	p15, 0, r2, c8, c7, 0	/* invalidate I+D TLBs */
-	mcrne	p15, 0, r2, c7, c10, 4	/* drain write buffer */
+	mcr	p15, 0, r1, c8, c7, 0	/* invalidate I+D TLBs */
+	mcr	p15, 0, r1, c7, c10, 4	/* drain write buffer */
 	RET
 
 ENTRY_NP(arm11x6_idcache_wbinv_all)

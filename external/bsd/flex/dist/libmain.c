@@ -1,4 +1,4 @@
-/*	$NetBSD: libmain.c,v 1.2 2012/02/18 19:17:54 christos Exp $	*/
+/*	$NetBSD: libmain.c,v 1.1.1.1.8.1 2012/02/23 02:11:51 riz Exp $	*/
 
 /* libmain - flex run-time support library "main" function */
 

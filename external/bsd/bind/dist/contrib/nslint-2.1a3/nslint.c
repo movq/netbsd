@@ -1,4 +1,4 @@
-/*	$NetBSD: nslint.c,v 1.3 2012/06/05 00:40:00 christos Exp $	*/
+/*	$NetBSD: nslint.c,v 1.2.6.1 2012/06/05 21:15:32 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001

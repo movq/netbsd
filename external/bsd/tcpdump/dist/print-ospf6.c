@@ -25,9 +25,9 @@
 #ifndef lint
 #if 0
 static const char rcsid[] _U_ =
-    "@(#) Header: /tcpdump/master/tcpdump/print-ospf6.c,v 1.15 2006-09-13 06:31:11 guy Exp  (LBL)";
+    "@(#) Header: /tcpdump/master/tcpdump/print-ospf6.c,v 1.15 2006-09-13 06:31:11 guy Exp (LBL)";
 #else
-__RCSID("$NetBSD: print-ospf6.c,v 1.3 2013/04/06 19:33:08 christos Exp $");
+__RCSID("$NetBSD: print-ospf6.c,v 1.2 2010/12/05 05:11:30 christos Exp $");
 #endif
 #endif
 
@@ -165,25 +165,17 @@ trunc:
 }
 
 static int
-ospf6_print_lsaprefix(const u_int8_t *tptr, u_int lsa_length)
+ospf6_print_lsaprefix(register const struct lsa6_prefix *lsapp)
 {
-	const struct lsa6_prefix *lsapp = (struct lsa6_prefix *)tptr;
 	u_int wordlen;
 	struct in6_addr prefix;
 
-	if (lsa_length < sizeof (*lsapp) - 4)
-		goto trunc;
-	lsa_length -= sizeof (*lsapp) - 4;
-	TCHECK2(*lsapp, sizeof (*lsapp) - 4);
+	TCHECK(*lsapp);
 	wordlen = (lsapp->lsa_p_len + 31) / 32;
 	if (wordlen * 4 > sizeof(struct in6_addr)) {
 		printf(" bogus prefixlen /%d", lsapp->lsa_p_len);
 		goto trunc;
 	}
-	if (lsa_length < wordlen * 4)
-		goto trunc;
-	lsa_length -= wordlen * 4;
-	TCHECK2(lsapp->lsa_p_prefix, wordlen * 4);
 	memset(&prefix, 0, sizeof(prefix));
 	memcpy(&prefix, lsapp->lsa_p_prefix, wordlen * 4);
 	printf("\n\t\t%s/%d", ip6addr_string(&prefix),
@@ -207,6 +199,7 @@ trunc:
 static int
 ospf6_print_lsa(register const struct lsa6 *lsap)
 {
+	register const u_char *ls_end, *ls_opt;
 	register const struct rlalink6 *rlp;
 #if 0
 	register const struct tos_metric *tosp;
@@ -222,45 +215,34 @@ ospf6_print_lsa(register const struct lsa6 *lsap)
 	register const u_int32_t *lp;
 #endif
 	register u_int prefixes;
-	register int bytelen;
-	register u_int length, lsa_length;
+	register int bytelen, length, lsa_length;
 	u_int32_t flags32;
-	const u_int8_t *tptr;
+        u_int8_t *tptr;
 
 	if (ospf6_print_lshdr(&lsap->ls_hdr))
 		return (1);
 	TCHECK(lsap->ls_hdr.ls_length);
         length = EXTRACT_16BITS(&lsap->ls_hdr.ls_length);
-
-	/*
-	 * The LSA length includes the length of the header;
-	 * it must have a value that's at least that length.
-	 * If it does, find the length of what follows the
-	 * header.
-	 */
-        if (length < sizeof(struct lsa6_hdr))
-        	return (1);
         lsa_length = length - sizeof(struct lsa6_hdr);
+	ls_end = (u_char *)lsap + length;
         tptr = (u_int8_t *)lsap+sizeof(struct lsa6_hdr);
 
 	switch (EXTRACT_16BITS(&lsap->ls_hdr.ls_type)) {
 	case LS_TYPE_ROUTER | LS_SCOPE_AREA:
-		if (lsa_length < sizeof (lsap->lsa_un.un_rla.rla_options))
-			return (1);
-		lsa_length -= sizeof (lsap->lsa_un.un_rla.rla_options);
 		TCHECK(lsap->lsa_un.un_rla.rla_options);
                 printf("\n\t      Options [%s]",
                        bittok2str(ospf6_option_values, "none",
                                   EXTRACT_32BITS(&lsap->lsa_un.un_rla.rla_options)));
+
+		TCHECK(lsap->lsa_un.un_rla.rla_flags);
                 printf(", RLA-Flags [%s]",
                        bittok2str(ospf6_rla_flag_values, "none",
                                   lsap->lsa_un.un_rla.rla_flags));
 
+
+		TCHECK(lsap->lsa_un.un_rla.rla_link);
 		rlp = lsap->lsa_un.un_rla.rla_link;
-		while (lsa_length != 0) {
-			if (lsa_length < sizeof (*rlp))
-				return (1);
-			lsa_length -= sizeof (*rlp);
+		while (rlp + 1 <= (struct rlalink6 *)ls_end) {
 			TCHECK(*rlp);
 			switch (rlp->link_type) {
 
@@ -299,20 +281,13 @@ ospf6_print_lsa(register const struct lsa6 *lsap)
 		break;
 
 	case LS_TYPE_NETWORK | LS_SCOPE_AREA:
-		if (lsa_length < sizeof (lsap->lsa_un.un_nla.nla_options))
-			return (1);
-		lsa_length -= sizeof (lsap->lsa_un.un_nla.nla_options);
 		TCHECK(lsap->lsa_un.un_nla.nla_options);
                 printf("\n\t      Options [%s]",
                        bittok2str(ospf6_option_values, "none",
                                   EXTRACT_32BITS(&lsap->lsa_un.un_nla.nla_options)));
-
 		printf("\n\t      Connected Routers:");
 		ap = lsap->lsa_un.un_nla.nla_router;
-		while (lsa_length != 0) {
-			if (lsa_length < sizeof (*ap))
-				return (1);
-			lsa_length -= sizeof (*ap);
+		while ((u_char *)ap < ls_end) {
 			TCHECK(*ap);
 			printf("\n\t\t%s", ipaddr_string(ap));
 			++ap;
@@ -320,27 +295,18 @@ ospf6_print_lsa(register const struct lsa6 *lsap)
 		break;
 
 	case LS_TYPE_INTER_AP | LS_SCOPE_AREA:
-		if (lsa_length < sizeof (lsap->lsa_un.un_inter_ap.inter_ap_metric))
-			return (1);
-		lsa_length -= sizeof (lsap->lsa_un.un_inter_ap.inter_ap_metric);
 		TCHECK(lsap->lsa_un.un_inter_ap.inter_ap_metric);
 		printf(", metric %u",
 			EXTRACT_32BITS(&lsap->lsa_un.un_inter_ap.inter_ap_metric) & SLA_MASK_METRIC);
-
-		tptr = (u_int8_t *)lsap->lsa_un.un_inter_ap.inter_ap_prefix;
-		while (lsa_length != 0) {
-			bytelen = ospf6_print_lsaprefix(tptr, lsa_length);
-			if (bytelen < 0)
+		lsapp = lsap->lsa_un.un_inter_ap.inter_ap_prefix;
+		while (lsapp + sizeof(lsapp) <= (struct lsa6_prefix *)ls_end) {
+			bytelen = ospf6_print_lsaprefix(lsapp);
+			if (bytelen)
 				goto trunc;
-			lsa_length -= bytelen;
-			tptr += bytelen;
+			lsapp = (struct lsa6_prefix *)(((u_char *)lsapp) + bytelen);
 		}
 		break;
-
-	case LS_TYPE_ASE | LS_SCOPE_AS:
-		if (lsa_length < sizeof (lsap->lsa_un.un_asla.asla_metric))
-			return (1);
-		lsa_length -= sizeof (lsap->lsa_un.un_asla.asla_metric);
+	case LS_SCOPE_AS | LS_TYPE_ASE:
 		TCHECK(lsap->lsa_un.un_asla.asla_metric);
 		flags32 = EXTRACT_32BITS(&lsap->lsa_un.un_asla.asla_metric);
                 printf("\n\t     Flags [%s]",
@@ -348,63 +314,48 @@ ospf6_print_lsa(register const struct lsa6 *lsap)
 		printf(" metric %u",
 		       EXTRACT_32BITS(&lsap->lsa_un.un_asla.asla_metric) &
 		       ASLA_MASK_METRIC);
-
-		tptr = (u_int8_t *)lsap->lsa_un.un_asla.asla_prefix;
-		lsapp = (struct lsa6_prefix *)tptr;
-		bytelen = ospf6_print_lsaprefix(tptr, lsa_length);
+		lsapp = lsap->lsa_un.un_asla.asla_prefix;
+		bytelen = ospf6_print_lsaprefix(lsapp);
 		if (bytelen < 0)
 			goto trunc;
-		lsa_length -= bytelen;
-		tptr += bytelen;
-
-		if ((flags32 & ASLA_FLAG_FWDADDR) != 0) {
+		if ((ls_opt = (u_char *)(((u_char *)lsapp) + bytelen)) < ls_end) {
 			struct in6_addr *fwdaddr6;
 
-			fwdaddr6 = (struct in6_addr *)tptr;
-			if (lsa_length < sizeof (*fwdaddr6))
-				return (1);
-			lsa_length -= sizeof (*fwdaddr6);
-			TCHECK(*fwdaddr6);
-			printf(" forward %s",
-			       ip6addr_string(fwdaddr6));
-			tptr += sizeof(*fwdaddr6);
-		}
+			if ((flags32 & ASLA_FLAG_FWDADDR) != 0) {
+				fwdaddr6 = (struct in6_addr *)ls_opt;
+				TCHECK(*fwdaddr6);
+				printf(" forward %s",
+				       ip6addr_string(fwdaddr6));
 
-		if ((flags32 & ASLA_FLAG_ROUTETAG) != 0) {
-			if (lsa_length < sizeof (u_int32_t))
-				return (1);
-			lsa_length -= sizeof (u_int32_t);
-			TCHECK(*(u_int32_t *)tptr);
-			printf(" tag %s",
-			       ipaddr_string((u_int32_t *)tptr));
-			tptr += sizeof(u_int32_t);
-		}
+				ls_opt += sizeof(struct in6_addr);
+			}
 
-		if (lsapp->lsa_p_metric) {
-			if (lsa_length < sizeof (u_int32_t))
-				return (1);
-			lsa_length -= sizeof (u_int32_t);
-			TCHECK(*(u_int32_t *)tptr);
-			printf(" RefLSID: %s",
-			       ipaddr_string((u_int32_t *)tptr));
-			tptr += sizeof(u_int32_t);
+			if ((flags32 & ASLA_FLAG_ROUTETAG) != 0) {
+				TCHECK(*(u_int32_t *)ls_opt);
+				printf(" tag %s",
+				       ipaddr_string((u_int32_t *)ls_opt));
+
+				ls_opt += sizeof(u_int32_t);
+			}
+
+			if (lsapp->lsa_p_metric) {
+				TCHECK(*(u_int32_t *)ls_opt);
+				printf(" RefLSID: %s",
+				       ipaddr_string((u_int32_t *)ls_opt));
+
+				ls_opt += sizeof(u_int32_t);
+			}
 		}
 		break;
 
 	case LS_TYPE_LINK:
 		/* Link LSA */
 		llsap = &lsap->lsa_un.un_llsa;
-		if (lsa_length < sizeof (llsap->llsa_priandopt))
-			return (1);
-		lsa_length -= sizeof (llsap->llsa_priandopt);
-		TCHECK(llsap->llsa_priandopt);
+		TCHECK(llsap->llsa_options);
                 printf("\n\t      Options [%s]",
                        bittok2str(ospf6_option_values, "none",
                                   EXTRACT_32BITS(&llsap->llsa_options)));
-
-		if (lsa_length < sizeof (llsap->llsa_lladdr) + sizeof (llsap->llsa_nprefix))
-			return (1);
-		lsa_length -= sizeof (llsap->llsa_lladdr) + sizeof (llsap->llsa_nprefix);
+		TCHECK(llsap->llsa_nprefix);
                 prefixes = EXTRACT_32BITS(&llsap->llsa_nprefix);
 		printf("\n\t      Priority %d, Link-local address %s, Prefixes %d:",
                        llsap->llsa_priority,
@@ -412,63 +363,57 @@ ospf6_print_lsa(register const struct lsa6 *lsap)
                        prefixes);
 
 		tptr = (u_int8_t *)llsap->llsa_prefix;
-		while (prefixes > 0) {
-			bytelen = ospf6_print_lsaprefix(tptr, lsa_length);
-			if (bytelen < 0)
-				goto trunc;
-			prefixes--;
-			lsa_length -= bytelen;
-			tptr += bytelen;
-		}
+                while (prefixes > 0) {
+                    lsapp = (struct lsa6_prefix *)tptr;
+                    if ((bytelen = ospf6_print_lsaprefix(lsapp)) == -1) {
+                        goto trunc;
+                    }
+                    prefixes--;
+                    tptr += bytelen;
+                }
 		break;
 
 	case LS_TYPE_INTRA_AP | LS_SCOPE_AREA:
 		/* Intra-Area-Prefix LSA */
-		if (lsa_length < sizeof (lsap->lsa_un.un_intra_ap.intra_ap_rtid))
-			return (1);
-		lsa_length -= sizeof (lsap->lsa_un.un_intra_ap.intra_ap_rtid);
 		TCHECK(lsap->lsa_un.un_intra_ap.intra_ap_rtid);
 		ospf6_print_ls_type(
 			EXTRACT_16BITS(&lsap->lsa_un.un_intra_ap.intra_ap_lstype),
 			&lsap->lsa_un.un_intra_ap.intra_ap_lsid);
-
-		if (lsa_length < sizeof (lsap->lsa_un.un_intra_ap.intra_ap_nprefix))
-			return (1);
-		lsa_length -= sizeof (lsap->lsa_un.un_intra_ap.intra_ap_nprefix);
 		TCHECK(lsap->lsa_un.un_intra_ap.intra_ap_nprefix);
                 prefixes = EXTRACT_16BITS(&lsap->lsa_un.un_intra_ap.intra_ap_nprefix);
 		printf("\n\t      Prefixes %d:", prefixes);
 
-		tptr = (u_int8_t *)lsap->lsa_un.un_intra_ap.intra_ap_prefix;
-		while (prefixes > 0) {
-			bytelen = ospf6_print_lsaprefix(tptr, lsa_length);
-			if (bytelen < 0)
-				goto trunc;
-			prefixes--;
-			lsa_length -= bytelen;
-			tptr += bytelen;
-		}
+                tptr = (u_int8_t *)lsap->lsa_un.un_intra_ap.intra_ap_prefix;
+
+                while (prefixes > 0) {
+                    lsapp = (struct lsa6_prefix *)tptr;
+                    if ((bytelen = ospf6_print_lsaprefix(lsapp)) == -1) {
+                        goto trunc;
+                    }
+                    prefixes--;
+                    tptr += bytelen;
+                }
 		break;
 
         case LS_TYPE_GRACE | LS_SCOPE_LINKLOCAL:
                 if (ospf_print_grace_lsa(tptr, lsa_length) == -1) {
                     return 1;
                 }
-                break;
+            
+            break;
 
         case LS_TYPE_INTRA_ATE | LS_SCOPE_LINKLOCAL:
-                if (ospf_print_te_lsa(tptr, lsa_length) == -1) {
-                    return 1;
-                }
-                break;
+            if (ospf_print_te_lsa(tptr, lsa_length) == -1) {
+                return 1;
+            }
+            break;
 
 	default:
-                if(!print_unknown_data(tptr,
-                                       "\n\t      ",
-                                       lsa_length)) {
-                    return (1);
-                }
-                break;
+            if(!print_unknown_data(tptr,
+                                   "\n\t      ",
+                                   lsa_length)) {
+                return (1);
+            }
 	}
 
 	return (0);

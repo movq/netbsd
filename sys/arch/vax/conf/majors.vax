@@ -1,4 +1,4 @@
-#	$NetBSD: majors.vax,v 1.24 2012/06/22 20:42:23 abs Exp $
+#	$NetBSD: majors.vax,v 1.23.8.1 2012/07/04 20:41:46 jdc Exp $
 #
 # Device majors for vax
 #

@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.309 2013/04/27 21:43:32 christos Exp $
+# $NetBSD: GENERIC,v 1.297.2.1 2012/09/03 18:51:36 riz Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include		"arch/macppc/conf/std.macppc"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.309 $"
+#ident 		"GENERIC-$Revision: 1.297.2.1 $"
 
 maxusers	32
 
@@ -38,6 +38,7 @@ options 	KTRACE		# system call tracing via ktrace(1)
 options 	SYSVMSG		# System V message queues
 options 	SYSVSEM		# System V semaphores
 options 	SYSVSHM		# System V shared memory
+options 	P1003_1B_SEMAPHORE # p1003.1b semaphore support
 
 options 	MODULAR		# new style module(7) framework
 
@@ -75,19 +76,11 @@ options 	COMPAT_20	# NetBSD 2.0,
 options 	COMPAT_30	# NetBSD 3.0,
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_43	# and 4.3BSD
 #options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	COMPAT_LINUX	# Linux binary compatibility
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
-
-# Wedge support
-options         DKWEDGE_AUTODISCOVER    # Automatically add dk(4) instances
-options         DKWEDGE_METHOD_GPT      # Supports GPT partitions as wedges
-# The following two options can break /etc/fstab, so handle with care
-#options        DKWEDGE_METHOD_BSDLABEL # Support disklabel entries as wedges
-#options        DKWEDGE_METHOD_MBR      # Support MBR partitions as wedges
 
 # File systems
 file-system 	FFS		# UFS
@@ -130,10 +123,13 @@ options 	NFS_BOOT_DHCP	# Support DHCP NFS root
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 options 	NETATALK	# AppleTalk networking protocols
 options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 options 	PPP_DEFLATE	# Deflate compression support for PPP
@@ -169,9 +165,6 @@ options 	USBVERBOSE	# verbose USB device autoconfig messages
 # wscons options
 #options 	WSEMUL_SUN			# sun terminal emulation
 options 	WSEMUL_VT100			# VT100 / VT220 emulation
-options 	WSDISPLAY_COMPAT_PCVT		# emulate some ioctls
-options 	WSDISPLAY_COMPAT_SYSCONS	# emulate some ioctls
-options 	WSDISPLAY_COMPAT_USL		# VT handling
 
 options 	WS_DEFAULT_FG=WSCOL_BLACK
 options 	WS_DEFAULT_BG=WSCOL_LIGHT_WHITE
@@ -290,11 +283,10 @@ trm*	at pci? dev ? function ?	# Tekram DC-395U/UW/F, DC-315/U SCSI
 chipsfb*	at pci?	function ?	# C&T 65550
 machfb*		at pci? function ?	# ATI Mach 64, Rage, Rage Pro
 
-radeonfb*	at pci? function ?	# ATI Radeon. R3xx is problematic
-options 	RADEONFB_MMAP_BARS	# allow mmap()ing BARs - needed for X
+#radeonfb*	at pci? function ?	# ATI Radeon. R3xx is problematic
+#options 	RADEONFB_MMAP_BARS	# allow mmap()ing BARs - needed for X
 
 voodoofb*	at pci? function ?	# 3Dfx Voodoo3 
-tdvfb*		at pci? function ?	# 3Dfx Voodoo2
 r128fb*		at pci? function ?	# ATI Rage 128
 genfb*		at pci? function ?
 
@@ -530,7 +522,7 @@ ugen*	at uhub? port ? configuration ? interface ?	# USB Generic driver
 # USB 802.11 adapters
 atu*	at uhub? port ?		# Atmel at76c50x 802.11b
 otus*	at uhub? port ?		# Atheros AR9001U
-ural*	at uhub? port ?		# Ralink Technology RT2500USB 802.11a/b/g
+ral*	at uhub? port ?		# Ralink Technology RT25x0 802.11a/b/g
 rum*	at uhub? port ?		# Ralink Technology RT2501/RT2601 802.11a/b/g
 #zyd*	at uhub? port ?		# Zydas ZD1211
 
@@ -581,9 +573,9 @@ pseudo-device   accf_http		# "httpready" accept filter
 #pseudo-device	swcrypto		# software crypto implementation
 pseudo-device	vnd			# disk-like interface to files
 #options 	VND_COMPRESSION		# compressed vnd(4)
-pseudo-device	ccd			# concatenated/striped disk devices
-#pseudo-device	cgd			# cryptographic disk devices
-pseudo-device	raid			# RAIDframe disk driver
+pseudo-device	ccd		4	# concatenated/striped disk devices
+#pseudo-device	cgd		4	# cryptographic disk devices
+pseudo-device	raid		8	# RAIDframe disk driver
 options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # Options to enable various other RAIDframe RAID types.
 # options 	RF_INCLUDE_EVENODD=1
@@ -622,13 +614,10 @@ pseudo-device	nsmb			# SMB requester
 #pseudo-device	pflog			# PF log if
 pseudo-device	putter			# for puffs and pud
 
-# userland interface to drivers, including autoconf and properties retrieval
-pseudo-device   drvctl
-
 # Veriexec
 #
 # a pseudo device needed for veriexec
-#pseudo-device	veriexec
+#pseudo-device	veriexec		1
 #
 # Uncomment the fingerprint methods below that are desired. Note that
 # removing fingerprint methods will have almost no impact on the kernel

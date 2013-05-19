@@ -1,4 +1,4 @@
-/*	$NetBSD: ktrace.c,v 1.46 2013/01/24 17:47:58 christos Exp $	*/
+/*	$NetBSD: ktrace.c,v 1.45 2011/09/16 15:39:26 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1993\
 #if 0
 static char sccsid[] = "@(#)ktrace.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: ktrace.c,v 1.46 2013/01/24 17:47:58 christos Exp $");
+__RCSID("$NetBSD: ktrace.c,v 1.45 2011/09/16 15:39:26 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -70,6 +70,7 @@ static int rpid(char *);
 __dead static void usage(void);
 static int do_ktrace(const char *, int, int, int, int, int);
 __dead static void no_ktrace(int);
+static void fset(int fd, int flag);
 static void fclear(int fd, int flag);
 
 #ifdef KTRUSS
@@ -269,6 +270,17 @@ rpid(char *p)
 }
 
 static void
+fset(int fd, int flag)
+{
+	int oflag = fcntl(fd, F_GETFL, 0);
+
+	if (oflag == -1)
+		err(EXIT_FAILURE, "Cannot get file flags");
+	if (fcntl(fd, F_SETFL, oflag | flag) == -1)
+		err(EXIT_FAILURE, "Cannot set file flags");
+}
+
+static void
 fclear(int fd, int flag)
 {
 	int oflag = fcntl(fd, F_GETFL, 0);
@@ -328,9 +340,11 @@ do_ktrace(const char *tracefile, int vers, int ops, int trpoints, int pid,
 	    (!tracefile || strcmp(tracefile, "-") == 0)) {
 		int pi[2], dofork;
 
-		if (pipe2(pi, O_CLOEXEC) == -1)
+		if (pipe(pi) < 0)
 			err(EXIT_FAILURE, "pipe(2)");
 
+		fset(pi[0], FD_CLOEXEC);
+		fset(pi[1], FD_CLOEXEC);
 		dofork = (pid == getpid());
 
 		if (dofork) {

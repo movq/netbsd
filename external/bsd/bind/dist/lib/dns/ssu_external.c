@@ -1,4 +1,4 @@
-/*	$NetBSD: ssu_external.c,v 1.4 2012/06/05 00:41:41 christos Exp $	*/
+/*	$NetBSD: ssu_external.c,v 1.3.4.1 2012/06/05 21:15:00 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2011, 2012  Internet Systems Consortium, Inc. ("ISC")

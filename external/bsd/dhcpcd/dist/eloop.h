@@ -46,7 +46,6 @@ void add_q_timeout_tv(int queue, const struct timeval *, void (*)(void *),
     void *);
 void delete_q_timeout(int, void (*)(void *), void *);
 void delete_q_timeouts(int, void *, void (*)(void *), ...);
-void eloop_init(void);
 void start_eloop(void);
 
 #endif

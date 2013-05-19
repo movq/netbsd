@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.345 2012/08/04 17:18:38 martin Exp $	*/
+/*	$NetBSD: machdep.c,v 1.343 2012/01/27 18:52:57 para Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.345 2012/08/04 17:18:38 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.343 2012/01/27 18:52:57 para Exp $");
 
 #include "opt_adb.h"
 #include "opt_ddb.h"
@@ -191,6 +191,13 @@ void *	mac68k_bell_cookie;
 struct vm_map *phys_map = NULL;
 
 int	maxmem;			/* max memory per process */
+int	physmem = MAXMEM;	/* max supported memory, changes to actual */
+
+/*
+ * safepri is a safe priority for sleep to set for a spin-wait
+ * during autoconfiguration or after a panic.
+ */
+int	safepri = PSL_LOWIPL;
 
 /*
  * Extent maps to manage all memory space, including I/O ranges.  Allocate

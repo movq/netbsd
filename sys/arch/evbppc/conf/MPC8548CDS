@@ -1,4 +1,4 @@
-#	$NetBSD: MPC8548CDS,v 1.16 2013/03/02 02:42:13 christos Exp $
+#	$NetBSD: MPC8548CDS,v 1.9 2011/12/18 05:49:26 dholland Exp $
 #
 #	MPC8548CDS -- everything that's currently supported
 #
@@ -7,7 +7,7 @@ include		"arch/evbppc/conf/std.mpc85xx"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-ident 		"MPC8548CDS-$Revision: 1.16 $"
+ident 		"MPC8548CDS-$Revision: 1.9 $"
 
 maxusers	32
 
@@ -59,15 +59,10 @@ options 	COMPAT_20	# NetBSD 2.0,
 options 	COMPAT_30	# NetBSD 3.0,
 options 	COMPAT_40	# NetBSD 4.0,
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_43	# and 4.3BSD
 #options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
-
-# Wedge support
-options 	DKWEDGE_AUTODISCOVER	# Automatically add dk(4) instances
-options 	DKWEDGE_METHOD_GPT	# Supports GPT partitions as wedges
 
 # File systems
 file-system 	FFS		# UFS
@@ -108,11 +103,14 @@ options 	TCP_CSUM_COUNTERS
 options 	UDP_CSUM_COUNTERS
 #options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
 #options        DIRECTED_BROADCAST      # allow broadcasts through routers
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking protocols
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
 #options 	PPP_DEFLATE	# Deflate compression support for PPP
@@ -134,7 +132,6 @@ options 	SCSIVERBOSE	# human readable SCSI error messages
 # wscons options
 #options 	WSEMUL_SUN		# sun terminal emulation
 #options 	WSEMUL_VT100		# VT100 / VT220 emulation
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 
 # Kernel root file system and dump configuration.
 config		netbsd		root on ? type ?
@@ -160,9 +157,8 @@ duart*		at cpunode?
 com*		at duart? port ?
 options		CONSPEED=115200
 
-tsec0		at cpunode? phy 0	# Enhanced 3-Speed Ethernet Controller
-mdio0		at tsec0
-tsec1		at cpunode? mdio 0 phy 1 # Enhanced 3-Speed Ethernet Controller
+tsec0		at cpunode? flags 1	# Enhanced 3-Speed Ethernet Controller
+tsec1		at cpunode? flags 1	# Enhanced 3-Speed Ethernet Controller
 makphy*		at mii?			# Marvell PHY
 ukphy*		at mii?
 #options 	ETSEC_EVENT_COUNTERS
@@ -213,7 +209,6 @@ wd*		at atabus? drive ?
 pseudo-device	loop			# network loopback
 pseudo-device	bpfilter		# packet filter
 pseudo-device	clockctl		# user control of clock subsystem
-pseudo-device	drvctl			# user control of drive subsystem
 pseudo-device	ksyms			# /dev/ksyms
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	kttcp			# kernel ttcp

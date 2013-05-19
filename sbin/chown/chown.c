@@ -1,4 +1,4 @@
-/*	$NetBSD: chown.c,v 1.8 2012/10/24 01:12:51 enami Exp $	*/
+/*	$NetBSD: chown.c,v 1.5 2011/08/29 14:34:59 joerg Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993, 1994, 2003
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994, 2003\
 #if 0
 static char sccsid[] = "@(#)chown.c	8.8 (Berkeley) 4/4/94";
 #else
-__RCSID("$NetBSD: chown.c,v 1.8 2012/10/24 01:12:51 enami Exp $");
+__RCSID("$NetBSD: chown.c,v 1.5 2011/08/29 14:34:59 joerg Exp $");
 #endif
 #endif /* not lint */
 
@@ -58,7 +58,6 @@ __RCSID("$NetBSD: chown.c,v 1.8 2012/10/24 01:12:51 enami Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <getopt.h>
 
 static void	a_gid(const char *);
 static void	a_uid(const char *);
@@ -68,14 +67,7 @@ __dead static void	usage(void);
 static uid_t uid;
 static gid_t gid;
 static int ischown;
-static const char *myname;
-
-struct option chown_longopts[] = {
-	{ "reference",		required_argument,	0,
-						1 },
-	{ NULL,			0,			0,
-						0 },
-};
+static char *myname;
 
 int
 main(int argc, char **argv)
@@ -83,24 +75,17 @@ main(int argc, char **argv)
 	FTS *ftsp;
 	FTSENT *p;
 	int Hflag, Lflag, Rflag, ch, fflag, fts_options, hflag, rval, vflag;
-	char *cp, *reference;
+	char *cp;
 	int (*change_owner)(const char *, uid_t, gid_t);
-
-	setprogname(*argv);
 
 	(void)setlocale(LC_ALL, "");
 
-	myname = getprogname();
+	myname = (cp = strrchr(*argv, '/')) ? cp + 1 : *argv;
 	ischown = (myname[2] == 'o');
-	reference = NULL;
 
 	Hflag = Lflag = Rflag = fflag = hflag = vflag = 0;
-	while ((ch = getopt_long(argc, argv, "HLPRfhv",
-	    chown_longopts, NULL)) != -1)
+	while ((ch = getopt(argc, argv, "HLPRfhv")) != -1)
 		switch (ch) {
-		case 1:
-			reference = optarg;
-			break;
 		case 'H':
 			Hflag = 1;
 			Lflag = 0;
@@ -138,7 +123,7 @@ main(int argc, char **argv)
 	argv += optind;
 	argc -= optind;
 
-	if (argc == 0 || (argc == 1 && reference == NULL))
+	if (argc < 2)
 		usage();
 
 	fts_options = FTS_PHYSICAL;
@@ -158,35 +143,24 @@ main(int argc, char **argv)
 
 	uid = (uid_t)-1;
 	gid = (gid_t)-1;
-	if (reference == NULL) {
-		if (ischown) {
-			if ((cp = strchr(*argv, ':')) != NULL) {
+	if (ischown) {
+		if ((cp = strchr(*argv, ':')) != NULL) {
+			*cp++ = '\0';
+			a_gid(cp);
+		}
+#ifdef SUPPORT_DOT
+		else if ((cp = strrchr(*argv, '.')) != NULL) {
+			if (uid_from_user(*argv, &uid) == -1) {
 				*cp++ = '\0';
 				a_gid(cp);
 			}
-#ifdef SUPPORT_DOT
-			else if ((cp = strrchr(*argv, '.')) != NULL) {
-				if (uid_from_user(*argv, &uid) == -1) {
-					*cp++ = '\0';
-					a_gid(cp);
-				}
-			}
+		}
 #endif
-			a_uid(*argv);
-		} else
-			a_gid(*argv);
-		argv++;
-	} else {
-		struct stat st;
+		a_uid(*argv);
+	} else
+		a_gid(*argv);
 
-		if (stat(reference, &st) == -1)
-			err(EXIT_FAILURE, "Cannot stat `%s'", reference);
-		if (ischown)
-			uid = st.st_uid;
-		gid = st.st_gid;
-	}
-
-	if ((ftsp = fts_open(argv, fts_options, NULL)) == NULL)
+	if ((ftsp = fts_open(++argv, fts_options, NULL)) == NULL)
 		err(EXIT_FAILURE, "fts_open");
 
 	for (rval = EXIT_SUCCESS; (p = fts_read(ftsp)) != NULL;) {
@@ -294,9 +268,7 @@ usage(void)
 {
 
 	(void)fprintf(stderr,
-	    "Usage: %s [-R [-H | -L | -P]] [-fhv] %s file ...\n"
-	    "\t%s [-R [-H | -L | -P]] [-fhv] --reference=rfile file ...\n",
-	    myname, ischown ? "owner:group|owner|:group" : "group",
-	    myname);
+	    "usage: %s [-R [-H | -L | -P]] [-fhv] %s file ...\n",
+	    myname, ischown ? "[owner][:group]" : "group");
 	exit(EXIT_FAILURE);
 }

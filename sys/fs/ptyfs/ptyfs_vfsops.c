@@ -1,4 +1,4 @@
-/*	$NetBSD: ptyfs_vfsops.c,v 1.44 2012/09/18 23:42:52 christos Exp $	*/
+/*	$NetBSD: ptyfs_vfsops.c,v 1.42.18.1 2012/10/01 17:35:05 riz Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1995
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ptyfs_vfsops.c,v 1.44 2012/09/18 23:42:52 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ptyfs_vfsops.c,v 1.42.18.1 2012/10/01 17:35:05 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

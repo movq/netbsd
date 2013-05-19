@@ -1,4 +1,4 @@
-/*	$NetBSD: socket.h,v 1.108 2013/01/31 14:30:47 joerg Exp $	*/
+/*	$NetBSD: socket.h,v 1.106 2012/01/29 18:33:07 roy Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -495,12 +495,6 @@ struct msghdr {
 #if defined(_NETBSD_SOURCE)
 #define	MSG_CMSG_CLOEXEC 0x0800		/* close on exec receiving fd */
 #define	MSG_NBIO	0x1000		/* use non-blocking I/O */
-#define	MSG_WAITFORONE	0x2000		/* recvmmsg() wait for one message */
-
-struct mmsghdr {
-	struct msghdr msg_hdr;
-	unsigned int msg_len;
-};
 #endif
 
 /* Extra flags used internally only */
@@ -602,7 +596,6 @@ const struct sockaddr *sockaddr_any_by_family(int);
 const void *sockaddr_anyaddr(const struct sockaddr *, socklen_t *);
 int sockaddr_cmp(const struct sockaddr *, const struct sockaddr *);
 struct sockaddr *sockaddr_dup(const struct sockaddr *, int);
-void sockaddr_format(const struct sockaddr *, char *, size_t);
 void sockaddr_free(struct sockaddr *);
 __END_DECLS
 #endif /* _KERNEL */
@@ -636,13 +629,6 @@ __RENAME(__socket30)
 #endif
 			     ;
 int	socketpair(int, int, int, int *);
-
-#if defined(_NETBSD_SOURCE)
-int	sendmmsg(int, struct mmsghdr *, unsigned int, unsigned int);
-struct timespec;
-int	recvmmsg(int, struct mmsghdr *, unsigned int, unsigned int,
-    struct timespec *);
-#endif
 __END_DECLS
 #endif /* !_KERNEL */
 

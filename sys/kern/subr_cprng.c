@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_cprng.c,v 1.16 2013/03/28 18:06:48 tls Exp $ */
+/*	$NetBSD: subr_cprng.c,v 1.5.2.8 2013/03/29 00:44:28 msaitoh Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -46,7 +46,7 @@
 
 #include <sys/cprng.h>
 
-__KERNEL_RCSID(0, "$NetBSD: subr_cprng.c,v 1.16 2013/03/28 18:06:48 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_cprng.c,v 1.5.2.8 2013/03/29 00:44:28 msaitoh Exp $");
 
 void
 cprng_init(void)
@@ -300,7 +300,7 @@ rekeyany:
 	 */
 	if (__predict_false(c->drbg.reseed_counter == 1) &&
 	    (flags & FASYNC) == 0) {
-		rngtest_t *rt = kmem_intr_alloc(sizeof(*rt), KM_NOSLEEP);
+		rngtest_t *rt = kmem_alloc(sizeof(*rt), KM_NOSLEEP);
 
 		if (rt) {
 
@@ -322,7 +322,7 @@ rekeyany:
 				len = 0;
 			}
 			memset(rt, 0, sizeof(*rt));
-			kmem_intr_free(rt, sizeof(*rt));
+			kmem_free(rt, sizeof(*rt));
 		}
 	}
 #endif

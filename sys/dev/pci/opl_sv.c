@@ -1,4 +1,4 @@
-/*	$NetBSD: opl_sv.c,v 1.16 2012/04/09 10:18:17 plunky Exp $	*/
+/*	$NetBSD: opl_sv.c,v 1.15 2011/12/07 17:38:50 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: opl_sv.c,v 1.16 2012/04/09 10:18:17 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: opl_sv.c,v 1.15 2011/12/07 17:38:50 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -72,7 +72,7 @@ opl_sv_attach(device_t parent, device_t self, void *aux)
 	struct  sv_softc *ssc = device_private(parent);
 	struct opl_softc *sc = device_private(self);
 
-	sc->dev = self;
+	sc->mididev.dev = self;
 	sc->ioh = ssc->sc_oplioh;
 	sc->iot = ssc->sc_opliot;
 	sc->offs = 0;

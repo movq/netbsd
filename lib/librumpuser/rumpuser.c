@@ -1,4 +1,4 @@
-/*	$NetBSD: rumpuser.c,v 1.53 2013/05/15 15:57:01 pooka Exp $	*/
+/*	$NetBSD: rumpuser.c,v 1.16 2011/11/28 08:05:05 tls Exp $	*/
 
 /*
  * Copyright (c) 2007-2010 Antti Kantee.  All Rights Reserved.
@@ -25,32 +25,37 @@
  * SUCH DAMAGE.
  */
 
-#include "rumpuser_port.h"
-
+#include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: rumpuser.c,v 1.53 2013/05/15 15:57:01 pooka Exp $");
+__RCSID("$NetBSD: rumpuser.c,v 1.16 2011/11/28 08:05:05 tls Exp $");
 #endif /* !lint */
 
+/* thank the maker for this */
+#ifdef __linux__
+#define _XOPEN_SOURCE 500
+#define _BSD_SOURCE
+#define _FILE_OFFSET_BITS 64
+#include <features.h>
+#endif
+
+#include <sys/param.h>
+#include <sys/event.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/uio.h>
-#include <sys/stat.h>
-#include <sys/time.h>
 
 #ifdef __NetBSD__
 #include <sys/disk.h>
 #include <sys/disklabel.h>
 #include <sys/dkio.h>
-#endif
-
-#if defined(__NetBSD__) || defined(__FreeBSD__) || defined(__DragonFly__)
 #include <sys/sysctl.h>
 #endif
 
 #include <assert.h>
+#include <err.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <netdb.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdarg.h>
 #include <stdint.h>
@@ -64,50 +69,24 @@ __RCSID("$NetBSD: rumpuser.c,v 1.53 2013/05/15 15:57:01 pooka Exp $");
 
 #include "rumpuser_int.h"
 
-struct rumpuser_hyperup rumpuser__hyp;
-
 int
-rumpuser_init(int version, const struct rumpuser_hyperup *hyp)
+rumpuser_getversion()
 {
 
-	if (version != RUMPUSER_VERSION) {
-		fprintf(stderr, "rumpuser mismatch, kern: %d, hypervisor %d\n",
-		    version, RUMPUSER_VERSION);
-		return 1;
-	}
-
-#ifdef RUMPUSER_USE_DEVRANDOM
-	uint32_t rv;
-	int fd;
-
-	if ((fd = open("/dev/urandom", O_RDONLY)) == -1) {
-		srandom(time(NULL));
-	} else {
-		if (read(fd, &rv, sizeof(rv)) != sizeof(rv))
-			srandom(time(NULL));
-		else
-			srandom(rv);
-		close(fd);
-	}
-#endif
-
-	rumpuser__thrinit();
-	rumpuser__hyp = *hyp;
-
-	return 0;
+	return RUMPUSER_VERSION;
 }
 
 int
-rumpuser_getfileinfo(const char *path, uint64_t *sizep, int *ftp)
+rumpuser_getfileinfo(const char *path, uint64_t *sizep, int *ftp, int *error)
 {
 	struct stat sb;
-	uint64_t size = 0;
-	int needsdev = 0, rv = 0, ft = 0;
+	uint64_t size;
+	int needsdev = 0, rv = 0, ft;
 	int fd = -1;
 
 	if (stat(path, &sb) == -1) {
-		rv = errno;
-		goto out;
+		seterror(errno);
+		return -1;
 	}
 
 	switch (sb.st_mode & S_IFMT) {
@@ -152,7 +131,8 @@ rumpuser_getfileinfo(const char *path, uint64_t *sizep, int *ftp)
 
 		fd = open(path, O_RDONLY);
 		if (fd == -1) {
-			rv = errno;
+			seterror(errno);
+			rv = -1;
 			goto out;
 		}
 
@@ -163,7 +143,8 @@ rumpuser_getfileinfo(const char *path, uint64_t *sizep, int *ftp)
 		}
 		fprintf(stderr, "error: device size query not implemented on "
 		    "this platform\n");
-		rv = EOPNOTSUPP;
+		seterror(EOPNOTSUPP);
+		rv = -1;
 		goto out;
 #else
 		struct disklabel lab;
@@ -172,7 +153,8 @@ rumpuser_getfileinfo(const char *path, uint64_t *sizep, int *ftp)
 
 		fd = open(path, O_RDONLY);
 		if (fd == -1) {
-			rv = errno;
+			seterror(errno);
+			rv = -1;
 			goto out;
 		}
 
@@ -194,7 +176,8 @@ rumpuser_getfileinfo(const char *path, uint64_t *sizep, int *ftp)
 			goto out;
 		}
 
-		rv = errno;
+		seterror(errno);
+		rv = -1;
 #endif /* __NetBSD__ */
 	}
 
@@ -206,11 +189,32 @@ rumpuser_getfileinfo(const char *path, uint64_t *sizep, int *ftp)
 	if (fd != -1)
 		close(fd);
 
-	ET(rv);
+	return rv;
 }
 
 int
-rumpuser_malloc(size_t howmuch, int alignment, void **memp)
+rumpuser_nanosleep(uint64_t *sec, uint64_t *nsec, int *error)
+{
+	struct timespec rqt, rmt;
+	int rv;
+
+	/*LINTED*/
+	rqt.tv_sec = *sec;
+	/*LINTED*/
+	rqt.tv_nsec = *nsec;
+
+	KLOCK_WRAP(rv = nanosleep(&rqt, &rmt));
+	if (rv == -1)
+		seterror(errno);
+
+	*sec = rmt.tv_sec;
+	*nsec = rmt.tv_nsec;
+
+	return rv;
+}
+
+void *
+rumpuser_malloc(size_t howmuch, int alignment)
 {
 	void *mem;
 	int rv;
@@ -225,384 +229,308 @@ rumpuser_malloc(size_t howmuch, int alignment, void **memp)
 			    alignment);
 			abort();
 		}
+		mem = NULL;
 	}
 
-	*memp = mem;
-	ET(rv);
+	return mem;
 }
 
-/*ARGSUSED1*/
+void *
+rumpuser_realloc(void *ptr, size_t howmuch)
+{
+
+	return realloc(ptr, howmuch);
+}
+
 void
-rumpuser_free(void *ptr, size_t size)
+rumpuser_free(void *ptr)
 {
 
 	free(ptr);
 }
 
-int
+void *
 rumpuser_anonmmap(void *prefaddr, size_t size, int alignbit,
-	int exec, void **memp)
+	int exec, int *error)
 {
-	void *mem;
-	int prot, rv;
-
-#ifndef MAP_ALIGNED
-#define MAP_ALIGNED(a) 0
-	if (alignbit)
-		fprintf(stderr, "rumpuser_anonmmap: warning, requested "
-		    "alignment not supported by hypervisor\n");
-#endif
+	void *rv;
+	int prot;
 
 	prot = PROT_READ|PROT_WRITE;
 	if (exec)
 		prot |= PROT_EXEC;
-	mem = mmap(prefaddr, size, prot,
-	    MAP_PRIVATE | MAP_ANON | MAP_ALIGNED(alignbit), -1, 0);
-	if (mem == MAP_FAILED) {
-		rv = errno;
-	} else {
-		*memp = mem;
-		rv = 0;
+	/* XXX: MAP_ALIGNED() is not portable */
+	rv = mmap(prefaddr, size, prot,
+	    MAP_ANON | MAP_ALIGNED(alignbit), -1, 0);
+	if (rv == MAP_FAILED) {
+		seterror(errno);
+		return NULL;
 	}
-
-	ET(rv);
+	return rv;
 }
 
 void
 rumpuser_unmap(void *addr, size_t len)
 {
-
-	munmap(addr, len);
-}
-
-int
-rumpuser_open(const char *path, int ruflags, int *fdp)
-{
-	int fd, flags, rv;
-
-	switch (ruflags & RUMPUSER_OPEN_ACCMODE) {
-	case RUMPUSER_OPEN_RDONLY:
-		flags = O_RDONLY;
-		break;
-	case RUMPUSER_OPEN_WRONLY:
-		flags = O_WRONLY;
-		break;
-	case RUMPUSER_OPEN_RDWR:
-		flags = O_RDWR;
-		break;
-	default:
-		rv = EINVAL;
-		goto out;
-	}
-
-#define TESTSET(_ru_, _h_) if (ruflags & _ru_) flags |= _h_;
-	TESTSET(RUMPUSER_OPEN_CREATE, O_CREAT);
-	TESTSET(RUMPUSER_OPEN_EXCL, O_EXCL);
-#undef TESTSET
-
-	KLOCK_WRAP(fd = open(path, flags, 0644));
-	if (fd == -1) {
-		rv = errno;
-	} else {
-		*fdp = fd;
-		rv = 0;
-	}
-
- out:
-	ET(rv);
-}
-
-int
-rumpuser_close(int fd)
-{
-	int nlocks;
-
-	rumpkern_unsched(&nlocks, NULL);
-	fsync(fd);
-	close(fd);
-	rumpkern_sched(nlocks, NULL);
-
-	ET(0);
-}
-
-/*
- * Assume "struct rumpuser_iovec" and "struct iovec" are the same.
- * If you encounter POSIX platforms where they aren't, add some
- * translation for iovlen > 1.
- */
-int
-rumpuser_iovread(int fd, struct rumpuser_iovec *ruiov, size_t iovlen,
-	int64_t roff, size_t *retp)
-{
-	struct iovec *iov = (struct iovec *)ruiov;
-	off_t off = (off_t)roff;
-	ssize_t nn;
 	int rv;
 
-	if (off == RUMPUSER_IOV_NOSEEK) {
-		KLOCK_WRAP(nn = readv(fd, iov, iovlen));
-	} else {
-		int nlocks;
+	rv = munmap(addr, len);
+	assert(rv == 0);
+}
 
-		rumpkern_unsched(&nlocks, NULL);
-		if (lseek(fd, off, SEEK_SET) == off) {
-			nn = readv(fd, iov, iovlen);
-		} else {
-			nn = -1;
-		}
-		rumpkern_sched(nlocks, NULL);
+void *
+rumpuser_filemmap(int fd, off_t offset, size_t len, int flags, int *error)
+{
+	void *rv;
+	int mmflags, prot;
+
+	if (flags & RUMPUSER_FILEMMAP_TRUNCATE)
+		ftruncate(fd, offset + len);
+
+	mmflags = MAP_FILE;
+	if (flags & RUMPUSER_FILEMMAP_SHARED)
+		mmflags |= MAP_SHARED;
+	else
+		mmflags |= MAP_PRIVATE;
+
+	prot = 0;
+	if (flags & RUMPUSER_FILEMMAP_READ)
+		prot |= PROT_READ;
+	if (flags & RUMPUSER_FILEMMAP_WRITE)
+		prot |= PROT_WRITE;
+
+	rv = mmap(NULL, len, PROT_READ|PROT_WRITE, mmflags, fd, offset);
+	if (rv == MAP_FAILED) {
+		seterror(errno);
+		return NULL;
 	}
 
-	if (nn == -1) {
-		rv = errno;
-	} else {
-		*retp = (size_t)nn;
-		rv = 0;
-	}
-
-	ET(rv);
+	seterror(0);
+	return rv;
 }
 
 int
-rumpuser_iovwrite(int fd, const struct rumpuser_iovec *ruiov, size_t iovlen,
-	int64_t roff, size_t *retp)
+rumpuser_memsync(void *addr, size_t len, int *error)
 {
-	const struct iovec *iov = (const struct iovec *)ruiov;
-	off_t off = (off_t)roff;
-	ssize_t nn;
-	int rv;
 
-	if (off == RUMPUSER_IOV_NOSEEK) {
-		KLOCK_WRAP(nn = writev(fd, iov, iovlen));
-	} else {
-		int nlocks;
-
-		rumpkern_unsched(&nlocks, NULL);
-		if (lseek(fd, off, SEEK_SET) == off) {
-			nn = writev(fd, iov, iovlen);
-		} else {
-			nn = -1;
-		}
-		rumpkern_sched(nlocks, NULL);
-	}
-
-	if (nn == -1) {
-		rv = errno;
-	} else {
-		*retp = (size_t)nn;
-		rv = 0;
-	}
-
-	ET(rv);
+	DOCALL_KLOCK(int, (msync(addr, len, MS_SYNC)));
 }
 
 int
-rumpuser_syncfd(int fd, int flags, uint64_t start, uint64_t len)
+rumpuser_open(const char *path, int flags, int *error)
 {
-	int rv = 0;
-	
-	/*
-	 * For now, assume fd is regular file and does not care
-	 * about read syncing
-	 */
-	if ((flags & RUMPUSER_SYNCFD_BOTH) == 0) {
-		rv = EINVAL;
-		goto out;
-	}
-	if ((flags & RUMPUSER_SYNCFD_WRITE) == 0) {
-		rv = 0;
-		goto out;
-	}
 
-#ifdef __NetBSD__
-	{
-	int fsflags = FDATASYNC;
-
-	if (fsflags & RUMPUSER_SYNCFD_SYNC)
-		fsflags |= FDISKSYNC;
-	if (fsync_range(fd, fsflags, start, len) == -1)
-		rv = errno;
-	}
-#else
-	/* el-simplo */
-	if (fsync(fd) == -1)
-		rv = errno;
-#endif
-
- out:
-	ET(rv);
+	DOCALL(int, (open(path, flags, 0644)));
 }
 
 int
-rumpuser_clock_gettime(int enum_rumpclock, int64_t *sec, long *nsec)
+rumpuser_ioctl(int fd, u_long cmd, void *data, int *error)
 {
-	enum rumpclock rclk = enum_rumpclock;
-	struct timespec ts;
-	clockid_t clk;
-	int rv;
 
-	switch (rclk) {
-	case RUMPUSER_CLOCK_RELWALL:
-		clk = CLOCK_REALTIME;
-		break;
-	case RUMPUSER_CLOCK_ABSMONO:
-#ifdef HAVE_CLOCK_NANOSLEEP
-		clk = CLOCK_MONOTONIC;
-#else
-		clk = CLOCK_REALTIME;
-#endif
-		break;
-	default:
-		abort();
-	}
-
-	if (clock_gettime(clk, &ts) == -1) {
-		rv = errno;
-	} else {
-		*sec = ts.tv_sec;
-		*nsec = ts.tv_nsec;
-		rv = 0;
-	}
-
-	ET(rv);
+	DOCALL_KLOCK(int, (ioctl(fd, cmd, data)));
 }
 
 int
-rumpuser_clock_sleep(int enum_rumpclock, int64_t sec, long nsec)
+rumpuser_close(int fd, int *error)
 {
-	enum rumpclock rclk = enum_rumpclock;
-	struct timespec rqt, rmt;
-	int nlocks;
-	int rv;
 
-	rumpkern_unsched(&nlocks, NULL);
-
-	/*LINTED*/
-	rqt.tv_sec = sec;
-	/*LINTED*/
-	rqt.tv_nsec = nsec;
-
-	switch (rclk) {
-	case RUMPUSER_CLOCK_RELWALL:
-		do {
-			rv = nanosleep(&rqt, &rmt);
-			rqt = rmt;
-		} while (rv == -1 && errno == EINTR);
-		if (rv == -1) {
-			rv = errno;
-		}
-		break;
-	case RUMPUSER_CLOCK_ABSMONO:
-		do {
-#ifdef HAVE_CLOCK_NANOSLEEP
-			rv = clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME,
-			    &rqt, NULL);
-#else
-			/* le/la/der/die/das sigh. timevalspec tailspin */
-			struct timespec ts, tsr;
-			clock_gettime(CLOCK_REALTIME, &ts);
-			if (ts.tv_sec == rqt.tv_sec ?
-			    ts.tv_nsec > rqt.tv_nsec : ts.tv_sec > rqt.tv_sec) {
-				rv = 0;
-			} else {
-				tsr.tv_sec = rqt.tv_sec - ts.tv_sec;
-				tsr.tv_nsec = rqt.tv_nsec - ts.tv_nsec;
-				if (tsr.tv_nsec < 0) {
-					tsr.tv_sec--;
-					tsr.tv_nsec += 1000*1000*1000;
-				}
-				rv = nanosleep(&tsr, NULL);
-			}
-#endif
-		} while (rv == -1 && errno == EINTR);
-		if (rv == -1) {
-			rv = errno;
-		}
-		break;
-	default:
-		abort();
-	}
-
-	rumpkern_sched(nlocks, NULL);
-
-	ET(rv);
-}
-
-static int
-gethostncpu(void)
-{
-	int ncpu = 1;
-
-#if defined(__NetBSD__) || defined(__FreeBSD__) || defined(__DragonFly__)
-	size_t sz = sizeof(ncpu);
-
-	sysctlbyname("hw.ncpu", &ncpu, &sz, NULL, 0);
-#elif defined(__linux__) || defined(__CYGWIN__)
-	FILE *fp;
-	char *line = NULL;
-	size_t n = 0;
-
-	/* If anyone knows a better way, I'm all ears */
-	if ((fp = fopen("/proc/cpuinfo", "r")) != NULL) {
-		ncpu = 0;
-		while (getline(&line, &n, fp) != -1) {
-			if (strncmp(line,
-			    "processor", sizeof("processor")-1) == 0)
-			    	ncpu++;
-		}
-		if (ncpu == 0)
-			ncpu = 1;
-		free(line);
-		fclose(fp);
-	}
-#elif __sun__
-	/* XXX: this is just a rough estimate ... */
-	ncpu = sysconf(_SC_NPROCESSORS_ONLN);
-#endif
-	
-	return ncpu;
+	DOCALL(int, close(fd));
 }
 
 int
-rumpuser_getparam(const char *name, void *buf, size_t blen)
+rumpuser_fsync(int fd, int *error)
 {
-	int rv;
 
-	if (strcmp(name, RUMPUSER_PARAM_NCPU) == 0) {
-		int ncpu;
+	DOCALL_KLOCK(int, fsync(fd));
+}
 
-		if (getenv_r("RUMP_NCPU", buf, blen) == -1) {
-			ncpu = gethostncpu();
-			snprintf(buf, blen, "%d", ncpu);
-		}
-		rv = 0;
-	} else if (strcmp(name, RUMPUSER_PARAM_HOSTNAME) == 0) {
-		char tmp[MAXHOSTNAMELEN];
+ssize_t
+rumpuser_read(int fd, void *data, size_t size, int *error)
+{
+	ssize_t rv;
 
-		if (gethostname(tmp, sizeof(tmp)) == -1) {
-			snprintf(buf, blen, "rump-%05d", (int)getpid());
-		} else {
-			snprintf(buf, blen, "rump-%05d.%s",
-			    (int)getpid(), tmp);
-		}
-		rv = 0;
-	} else if (*name == '_') {
-		rv = EINVAL;
-	} else {
-		if (getenv_r(name, buf, blen) == -1)
-			rv = errno;
-		else
-			rv = 0;
-	}
+	KLOCK_WRAP(rv = read(fd, data, size));
+	if (rv == -1)
+		seterror(errno);
 
-	ET(rv);
+	return rv;
+}
+
+ssize_t
+rumpuser_pread(int fd, void *data, size_t size, off_t offset, int *error)
+{
+	ssize_t rv;
+
+	KLOCK_WRAP(rv = pread(fd, data, size, offset));
+	if (rv == -1)
+		seterror(errno);
+
+	return rv;
 }
 
 void
-rumpuser_putchar(int c)
+rumpuser_read_bio(int fd, void *data, size_t size, off_t offset,
+	rump_biodone_fn biodone, void *biodonecookie)
+{
+	ssize_t rv;
+	int error = 0;
+
+	rv = rumpuser_pread(fd, data, size, offset, &error);
+	/* check against <0 instead of ==-1 to get typing below right */
+	if (rv < 0)
+		rv = 0;
+
+	/* LINTED: see above */
+	biodone(biodonecookie, rv, error);
+}
+
+ssize_t
+rumpuser_write(int fd, const void *data, size_t size, int *error)
+{
+	ssize_t rv;
+
+	KLOCK_WRAP(rv = write(fd, data, size));
+	if (rv == -1)
+		seterror(errno);
+
+	return rv;
+}
+
+ssize_t
+rumpuser_pwrite(int fd, const void *data, size_t size, off_t offset, int *error)
+{
+	ssize_t rv;
+
+	KLOCK_WRAP(rv = pwrite(fd, data, size, offset));
+	if (rv == -1)
+		seterror(errno);
+
+	return rv;
+}
+
+void
+rumpuser_write_bio(int fd, const void *data, size_t size, off_t offset,
+	rump_biodone_fn biodone, void *biodonecookie)
+{
+	ssize_t rv;
+	int error = 0;
+
+	rv = rumpuser_pwrite(fd, data, size, offset, &error);
+	/* check against <0 instead of ==-1 to get typing below right */
+	if (rv < 0)
+		rv = 0;
+
+	/* LINTED: see above */
+	biodone(biodonecookie, rv, error);
+}
+
+ssize_t
+rumpuser_readv(int fd, const struct rumpuser_iovec *riov, int iovcnt,
+	int *error)
+{
+	struct iovec *iovp;
+	ssize_t rv;
+	int i;
+
+	iovp = malloc(iovcnt * sizeof(struct iovec));
+	if (iovp == NULL) {
+		seterror(ENOMEM);
+		return -1;
+	}
+	for (i = 0; i < iovcnt; i++) {
+		iovp[i].iov_base = riov[i].iov_base;
+		/*LINTED*/
+		iovp[i].iov_len = riov[i].iov_len;
+	}
+
+	KLOCK_WRAP(rv = readv(fd, iovp, iovcnt));
+	if (rv == -1)
+		seterror(errno);
+	free(iovp);
+
+	return rv;
+}
+
+ssize_t
+rumpuser_writev(int fd, const struct rumpuser_iovec *riov, int iovcnt,
+	int *error)
+{
+	struct iovec *iovp;
+	ssize_t rv;
+	int i;
+
+	iovp = malloc(iovcnt * sizeof(struct iovec));
+	if (iovp == NULL) {
+		seterror(ENOMEM);
+		return -1;
+	}
+	for (i = 0; i < iovcnt; i++) {
+		iovp[i].iov_base = riov[i].iov_base;
+		/*LINTED*/
+		iovp[i].iov_len = riov[i].iov_len;
+	}
+
+	KLOCK_WRAP(rv = writev(fd, iovp, iovcnt));
+	if (rv == -1)
+		seterror(errno);
+	free(iovp);
+
+	return rv;
+}
+
+int
+rumpuser_gettime(uint64_t *sec, uint64_t *nsec, int *error)
+{
+	struct timeval tv;
+	int rv;
+
+	rv = gettimeofday(&tv, NULL);
+	if (rv == -1) {
+		seterror(errno);
+		return rv;
+	}
+
+	*sec = tv.tv_sec;
+	*nsec = tv.tv_usec * 1000;
+
+	return 0;
+}
+
+int
+rumpuser_getenv(const char *name, char *buf, size_t blen, int *error)
 {
 
-	putchar(c);
+	DOCALL(int, getenv_r(name, buf, blen));
+}
+
+int
+rumpuser_gethostname(char *name, size_t namelen, int *error)
+{
+	char tmp[MAXHOSTNAMELEN];
+
+	if (gethostname(tmp, sizeof(tmp)) == -1) {
+		snprintf(name, namelen, "rump-%05d.rumpdomain", getpid());
+	} else {
+		snprintf(name, namelen, "rump-%05d.%s.rumpdomain",
+		    getpid(), tmp);
+	}
+
+	*error = 0;
+	return 0;
+}
+
+int
+rumpuser_poll(struct pollfd *fds, int nfds, int timeout, int *error)
+{
+
+	DOCALL_KLOCK(int, (poll(fds, (nfds_t)nfds, timeout)));
+}
+
+int
+rumpuser_putchar(int c, int *error)
+{
+
+	DOCALL(int, (putchar(c)));
 }
 
 void
@@ -622,60 +550,99 @@ rumpuser_seterrno(int error)
 	errno = error;
 }
 
+int
+rumpuser_writewatchfile_setup(int kq, int fd, intptr_t opaque, int *error)
+{
+	struct kevent kev;
+
+	if (kq == -1) {
+		kq = kqueue();
+		if (kq == -1) {
+			seterror(errno);
+			return -1;
+		}
+	}
+
+	EV_SET(&kev, fd, EVFILT_VNODE, EV_ADD|EV_ENABLE|EV_CLEAR,
+	    NOTE_WRITE, 0, opaque);
+	if (kevent(kq, &kev, 1, NULL, 0, NULL) == -1) {
+		seterror(errno);
+		return -1;
+	}
+
+	return kq;
+}
+
+int
+rumpuser_writewatchfile_wait(int kq, intptr_t *opaque, int *error)
+{
+	struct kevent kev;
+	int rv;
+
+ again:
+	KLOCK_WRAP(rv = kevent(kq, NULL, 0, &kev, 1, NULL));
+	if (rv == -1) {
+		if (errno == EINTR)
+			goto again;
+		seterror(errno);
+		return -1;
+	}
+
+	if (opaque)
+		*opaque = kev.udata;
+	return rv;
+}
+
 /*
  * This is meant for safe debugging prints from the kernel.
  */
-void
+int
 rumpuser_dprintf(const char *format, ...)
 {
 	va_list ap;
-
-	va_start(ap, format);
-	vfprintf(stderr, format, ap);
-	va_end(ap);
-}
-
-int
-rumpuser_kill(int64_t pid, int sig)
-{
 	int rv;
 
-#ifdef __NetBSD__
-	int error;
+	va_start(ap, format);
+	rv = vfprintf(stderr, format, ap);
+	va_end(ap);
 
-	if (pid == RUMPUSER_PID_SELF) {
-		error = raise(sig);
-	} else {
-		error = kill((pid_t)pid, sig);
-	}
-	if (error == -1)
-		rv = errno;
-	else
-		rv = 0;
-#else
-	/* XXXfixme: signal numbers may not match on non-NetBSD */
-	rv = EOPNOTSUPP;
-#endif
-
-	ET(rv);
+	return rv;
 }
 
 int
-rumpuser_getrandom(void *buf, size_t buflen, int flags, size_t *retp)
+rumpuser_kill(int64_t pid, int sig, int *error)
 {
-	size_t origlen = buflen;
-	uint32_t *p = buf;
-	uint32_t tmp;
-	int chunk;
 
-	do {
-		chunk = buflen < 4 ? buflen : 4; /* portable MIN ... */
-		tmp = RUMPUSER_RANDOM();
-		memcpy(p, &tmp, chunk);
-		p++;
-		buflen -= chunk;
-	} while (chunk);
+#ifdef __NetBSD__
+	if (pid == RUMPUSER_PID_SELF) {
+		DOCALL(int, raise(sig));
+	} else {
+		DOCALL(int, kill((pid_t)pid, sig));
+	}
+#else
+	/* XXXfixme: signal numbers may not match on non-NetBSD */
+	seterror(EOPNOTSUPP);
+	return -1;
+#endif
+}
 
-	*retp = origlen;
-	ET(0);
+int
+rumpuser_getnhostcpu(void)
+{
+	int ncpu;
+	size_t sz = sizeof(ncpu);
+
+#ifdef __NetBSD__
+	if (sysctlbyname("hw.ncpu", &ncpu, &sz, NULL, 0) == -1)
+		return 1;
+	return ncpu;
+#else
+	return 1;
+#endif
+}
+
+uint32_t
+rumpuser_arc4random(void)
+{
+	return arc4random();
 }

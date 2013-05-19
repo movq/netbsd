@@ -1,4 +1,4 @@
-/*	$NetBSD: svc_auth_unix.c,v 1.21 2013/03/11 20:19:29 tron Exp $	*/
+/*	$NetBSD: svc_auth_unix.c,v 1.18.58.1 2013/03/14 22:03:09 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -37,7 +37,7 @@
 static char *sccsid = "@(#)svc_auth_unix.c 1.28 88/02/08 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)svc_auth_unix.c	2.3 88/08/01 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: svc_auth_unix.c,v 1.21 2013/03/11 20:19:29 tron Exp $");
+__RCSID("$NetBSD: svc_auth_unix.c,v 1.18.58.1 2013/03/14 22:03:09 riz Exp $");
 #endif
 #endif
 
@@ -64,7 +64,9 @@ __RCSID("$NetBSD: svc_auth_unix.c,v 1.21 2013/03/11 20:19:29 tron Exp $");
  * Unix longhand authenticator
  */
 enum auth_stat
-_svcauth_unix(struct svc_req *rqst, struct rpc_msg *msg)
+_svcauth_unix(rqst, msg)
+	struct svc_req *rqst;
+	struct rpc_msg *msg;
 {
 	enum auth_stat stat;
 	XDR xdrs;
@@ -106,8 +108,7 @@ _svcauth_unix(struct svc_req *rqst, struct rpc_msg *msg)
 			stat = AUTH_BADCRED;
 			goto done;
 		}
-		_DIAGASSERT(__type_fit(u_int, gid_len));
-		aup->aup_len = (u_int)gid_len;
+		aup->aup_len = gid_len;
 		for (i = 0; i < gid_len; i++) {
 			aup->aup_gids[i] = (int)IXDR_GET_INT32(buf);
 		}
@@ -142,7 +143,9 @@ done:
  */
 /*ARGSUSED*/
 enum auth_stat 
-_svcauth_short(struct svc_req *rqst, struct rpc_msg *msg)
+_svcauth_short(rqst, msg)
+	struct svc_req *rqst;
+	struct rpc_msg *msg;
 {
 	return (AUTH_REJECTEDCRED);
 }

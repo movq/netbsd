@@ -1,4 +1,4 @@
-.\"	$NetBSD: netconfig.5,v 1.9 2013/03/15 19:32:31 njoly Exp $
+.\"	$NetBSD: netconfig.5,v 1.7 2009/03/11 13:50:39 joerg Exp $
 .Dd November 17, 2000
 .Dt NETCONFIG 5
 .Os
@@ -6,14 +6,13 @@
 .Nm netconfig
 .Nd network configuration data base
 .Sh SYNOPSIS
-.Pa /etc/netconfig
+.Fa /etc/netconfig
 .Sh DESCRIPTION
 The
 .Nm
 file defines a list of
 .Dq transport names ,
-describing their semantics and protocol.
-In
+describing their semantics and protocol. In
 .Nx ,
 this file is only used by the RPC library code.
 .Pp
@@ -38,7 +37,7 @@ Connection-oriented, ordered transport.
 A raw connection.
 .El
 .It Em flags
-This field is either blank (specified by
+This field is  either blank (specified by
 .Dq \&- ) ,
 or contains a
 .Dq v ,
@@ -46,8 +45,7 @@ meaning visible to the
 .Xr getnetconfig 3
 function.
 .It Em family
-The protocol family of the transport.
-This is currently one of:
+The protocol family of the transport. This is currently one of:
 .Bl -tag -width loopback -offset indent
 .It Sy inet6
 The IPv6
@@ -63,10 +61,9 @@ The
 protocol family.
 .El
 .It Em protoname
-The name of the protocol used for this transport.
-Can currently be either
+The name of the protocol used for this transport. Can currently be either
 .Nm udp ,
-.Nm tcp ,
+.Nm tcp
 or empty.
 .It Em device
 This field is always empty in
@@ -78,8 +75,7 @@ This field is always empty in
 .Pp
 The order of entries in this file will determine which transport will
 be preferred by the RPC library code, given a match on a specified
-network type.
-For example, if a sample network config file would
+network type. For example, if a sample network config file would
 look like this:
 .Pp
 .Bd -literal -offset indent
@@ -117,7 +113,7 @@ struct netconfig {
 };
 .Ed
 .Sh FILES
-.Pa /etc/netconfig
+.Nm /etc/netconfig
 .Sh SEE ALSO
 .Xr getnetconfig 3 ,
 .Xr getnetpath 3

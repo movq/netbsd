@@ -1,4 +1,4 @@
-/* $NetBSD: cpufunc_asm_arm1136.S,v 1.3 2012/07/21 12:19:15 skrll Exp $ */
+/* $NetBSD: cpufunc_asm_arm1136.S,v 1.2.40.1 2012/08/09 06:36:45 jdc Exp $ */
 
 /*
  * Copyright (c) 2007 Microsoft
@@ -33,7 +33,7 @@
 #include <machine/cpu.h>
 #include <machine/asm.h>
 
-RCSID("$NetBSD: cpufunc_asm_arm1136.S,v 1.3 2012/07/21 12:19:15 skrll Exp $")
+RCSID("$NetBSD: cpufunc_asm_arm1136.S,v 1.2.40.1 2012/08/09 06:36:45 jdc Exp $")
 
 ENTRY_NP(arm1136_sleep_rev0)		/* errata 336501 */
 	mov	r0, #0

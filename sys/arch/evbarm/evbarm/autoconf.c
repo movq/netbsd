@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.16 2013/01/21 20:20:32 jakllsch Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.12.40.1 2012/08/08 15:51:10 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.16 2013/01/21 20:20:32 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.12.40.1 2012/08/08 15:51:10 martin Exp $");
 
 #include "opt_md.h"
 
@@ -45,61 +45,8 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.16 2013/01/21 20:20:32 jakllsch Exp $
 
 #include <machine/autoconf.h>
 #include <machine/intr.h>
-#include <machine/bootconfig.h>
 
-void	(*evbarm_device_register)(device_t, void *);
-
-#ifndef MEMORY_DISK_IS_ROOT
-static void get_device(char *name);
-static void set_root_device(void);
-#endif
-
-#ifndef MEMORY_DISK_IS_ROOT
-/* Decode a device name to a major and minor number */
-
-static void
-get_device(char *name)
-{
-	int unit, part;
-	char devname[16], *cp;
-	device_t dv;
-
-	if (strncmp(name, "/dev/", 5) == 0)
-		name += 5;
-
-	if (devsw_name2blk(name, devname, sizeof(devname)) == -1)
-		return;
-
-	name += strlen(devname);
-	unit = part = 0;
-
-	cp = name;
-	while (*cp >= '0' && *cp <= '9')
-		unit = (unit * 10) + (*cp++ - '0');
-	if (cp == name)
-		return;
-
-	if (*cp >= 'a' && *cp < ('a' + MAXPARTITIONS))
-		part = *cp - 'a';
-	else if (*cp != '\0' && *cp != ' ')
-		return;
-	if ((dv = device_find_by_driver_unit(devname, unit)) != NULL) {
-		booted_device = dv;
-		booted_partition = part;
-	}
-}
-
-/* Set the rootdev variable from the root specifier in the boot args */
-
-static void
-set_root_device(void)
-{
-	char *ptr;
-	if (boot_args &&
-	    get_bootconf_option(boot_args, "root", BOOTOPT_TYPE_STRING, &ptr))
-		get_device(ptr);
-}
-#endif
+void	(*evbarm_device_register)(struct device *, void *);
 
 /*
  * Set up the root device from the boot args
@@ -107,11 +54,8 @@ set_root_device(void)
 void
 cpu_rootconf(void)
 {
-#ifndef MEMORY_DISK_IS_ROOT
-	set_root_device();
-#endif
 	aprint_normal("boot device: %s\n",
-	    booted_device != NULL ? device_xname(booted_device) : "<unknown>");
+	    booted_device != NULL ? booted_device->dv_xname : "<unknown>");
 	rootconf();
 }
 
@@ -139,7 +83,7 @@ cpu_configure(void)
 }
 
 void
-device_register(device_t dev, void *aux)
+device_register(struct device *dev, void *aux)
 {
 
 	if (evbarm_device_register != NULL)

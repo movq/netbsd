@@ -1,4 +1,4 @@
-/*	$NetBSD: filecore_lookup.c,v 1.17 2012/12/20 08:03:42 hannken Exp $	*/
+/*	$NetBSD: filecore_lookup.c,v 1.13.14.1 2012/08/12 12:59:51 martin Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993, 1994 The Regents of the University of California.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: filecore_lookup.c,v 1.17 2012/12/20 08:03:42 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: filecore_lookup.c,v 1.13.14.1 2012/08/12 12:59:51 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/namei.h>
@@ -169,10 +169,8 @@ filecore_lookup(void *v)
 	 * check the name cache to see if the directory/name pair
 	 * we are looking for is known already.
 	 */
-	if (cache_lookup(vdp, cnp->cn_nameptr, cnp->cn_namelen,
-			 cnp->cn_nameiop, cnp->cn_flags, NULL, vpp)) {
-		return *vpp == NULLVP ? ENOENT : 0;
-	}
+	if ((error = cache_lookup(vdp, vpp, cnp)) >= 0)
+		return (error);
 
 	name = cnp->cn_nameptr;
 	namelen = cnp->cn_namelen;
@@ -204,6 +202,7 @@ filecore_lookup(void *v)
 
 	error = filecore_dbread(dp, &bp);
 	if (error) {
+		brelse(bp, 0);
 		return error;
 	}
 
@@ -247,8 +246,7 @@ notfound:
 	/*
 	 * Insert name into cache (as non-existent) if appropriate.
 	 */
-	cache_enter(vdp, *vpp, cnp->cn_nameptr, cnp->cn_namelen,
-		    cnp->cn_flags);
+	cache_enter(vdp, *vpp, cnp);
 	return (nameiop == CREATE || nameiop == RENAME) ? EROFS : ENOENT;
 
 found:
@@ -316,7 +314,6 @@ found:
 	/*
 	 * Insert name into cache if appropriate.
 	 */
-	cache_enter(vdp, *vpp, cnp->cn_nameptr, cnp->cn_namelen,
-		    cnp->cn_flags);
+	cache_enter(vdp, *vpp, cnp);
 	return 0;
 }

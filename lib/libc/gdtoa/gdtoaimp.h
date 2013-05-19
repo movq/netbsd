@@ -1,4 +1,4 @@
-/* $NetBSD: gdtoaimp.h,v 1.14 2013/04/19 10:41:53 joerg Exp $ */
+/* $NetBSD: gdtoaimp.h,v 1.12 2011/06/04 14:18:10 christos Exp $ */
 
 /****************************************************************
 
@@ -179,7 +179,6 @@ THIS SOFTWARE.
 
 /* #define IEEE_{BIG,LITTLE}_ENDIAN in ${ARCHDIR}/gdtoa/arith.h */
 
-#include <assert.h>
 #include <stdint.h>
 #define Short   int16_t
 #define UShort uint16_t
@@ -601,7 +600,7 @@ extern void memcpy_D2A ANSI((void*, const void*, size_t));
  extern char *dtoa ANSI((double d, int mode, int ndigits,
 			int *decpt, int *sign, char **rve));
  extern char *g__fmt ANSI((char*, char*, char*, int, ULong, size_t));
- extern int gethex ANSI((CONST char**, CONST FPI*, Long*, Bigint**, int, locale_t));
+ extern int gethex ANSI((CONST char**, CONST FPI*, Long*, Bigint**, int));
  extern void hexdig_init_D2A(Void);
  extern int hexnan ANSI((CONST char**, CONST FPI*, ULong*));
  extern int hi0bits_D2A ANSI((ULong));
@@ -618,7 +617,7 @@ extern void memcpy_D2A ANSI((void*, const void*, size_t));
  extern double ratio ANSI((Bigint*, Bigint*));
  extern void rshift ANSI((Bigint*, int));
  extern char *rv_alloc ANSI((size_t));
- extern Bigint *s2b ANSI((CONST char*, int, int, ULong, size_t));
+ extern Bigint *s2b ANSI((CONST char*, int, int, ULong, int));
  extern Bigint *set_ones ANSI((Bigint*, int));
  extern char *strcp ANSI((char*, const char*));
  extern int strtoIg ANSI((CONST char*, char**, FPI*, Long*, Bigint**, int*));

@@ -1,4 +1,4 @@
-/*	$NetBSD: miivar.h,v 1.61 2013/03/15 06:18:13 msaitoh Exp $	*/
+/*	$NetBSD: miivar.h,v 1.59 2010/05/30 17:44:08 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2001 The NetBSD Foundation, Inc.
@@ -42,7 +42,6 @@
  * Media Independent Interface datat structure definitions.
  */
 
-struct ifnet;
 struct mii_softc;
 
 /*
@@ -50,7 +49,7 @@ struct mii_softc;
  */
 typedef	int (*mii_readreg_t)(device_t, int, int);
 typedef	void (*mii_writereg_t)(device_t, int, int, int);
-typedef	void (*mii_statchg_t)(struct ifnet *);
+typedef	void (*mii_statchg_t)(device_t);
 
 /*
  * A network interface driver has one of these structures in its softc.
@@ -113,7 +112,6 @@ struct mii_softc {
 
 	LIST_ENTRY(mii_softc) mii_list;	/* entry on parent's PHY list */
 
-	uint32_t mii_mpd_oui;		/* the PHY's OUI (MII_OUI())*/
 	uint32_t mii_mpd_model;		/* the PHY's model (MII_MODEL())*/
 	uint32_t mii_mpd_rev;		/* the PHY's revision (MII_REV())*/
 	int mii_phy;			/* our MII address */

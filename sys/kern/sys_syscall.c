@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_syscall.c,v 1.10 2012/05/05 19:44:02 christos Exp $	*/
+/*	$NetBSD: sys_syscall.c,v 1.9 2008/04/29 06:53:03 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -30,10 +30,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_syscall.c,v 1.10 2012/05/05 19:44:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_syscall.c,v 1.9 2008/04/29 06:53:03 martin Exp $");
 
 #include <sys/syscall_stats.h>
-#include <sys/syscallvar.h>
 
 /*
  * MI indirect system call support.
@@ -75,7 +74,7 @@ SYS_SYSCALL(struct lwp *l, const struct CONCAT(SYS_SYSCALL, _args) *uap,
 		return ENOSYS;
 
 	if (__predict_true(!p->p_trace_enabled))
-		return sy_call(callp, l, &uap->args, rval);
+		return callp->sy_call(l, &uap->args, rval);
 
 	narg = callp->sy_narg;
 #ifdef NETBSD32_SYSCALL
@@ -86,7 +85,7 @@ SYS_SYSCALL(struct lwp *l, const struct CONCAT(SYS_SYSCALL, _args) *uap,
 	error = trace_enter(code, TRACE_ARGS, narg);
 	if (__predict_false(error != 0))
 		return error;
-	error = sy_call(callp, l, &uap->args, rval);
+	error = callp->sy_call(l, &uap->args, rval);
 	trace_exit(code, rval, error);
 	return error;
 

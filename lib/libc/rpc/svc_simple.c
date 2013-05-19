@@ -1,4 +1,4 @@
-/*	$NetBSD: svc_simple.c,v 1.33 2013/03/11 20:19:29 tron Exp $	*/
+/*	$NetBSD: svc_simple.c,v 1.30.24.1 2013/03/14 22:03:14 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -50,7 +50,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: svc_simple.c,v 1.33 2013/03/11 20:19:29 tron Exp $");
+__RCSID("$NetBSD: svc_simple.c,v 1.30.24.1 2013/03/14 22:03:14 riz Exp $");
 #endif
 
 #include "namespace.h"
@@ -70,10 +70,10 @@ __RCSID("$NetBSD: svc_simple.c,v 1.33 2013/03/11 20:19:29 tron Exp $");
 __weak_alias(rpc_reg,_rpc_reg)
 #endif
 
-static void universal(struct svc_req *, SVCXPRT *);
+static void universal __P((struct svc_req *, SVCXPRT *));
 
 static struct proglst {
-	char *(*p_progname)(char *);
+	char *(*p_progname) __P((char *));
 	rpcprog_t p_prognum;
 	rpcvers_t p_versnum;
 	rpcproc_t p_procnum;
@@ -85,6 +85,8 @@ static struct proglst {
 	struct proglst *p_nxt;
 } *proglst;
 
+static const char rpc_reg_err[] = "%s: %s";
+static const char rpc_reg_msg[] = "rpc_reg: ";
 static const char __reg_err1[] = "can't find appropriate transport";
 static const char __reg_err2[] = "can't get protocol info";
 static const char __reg_err3[] = "unsupported transport size";
@@ -102,14 +104,13 @@ static const char __no_mem_str[] = "out of memory";
  */
 
 int
-rpc_reg(
-	rpcprog_t prognum,		/* program number */
-	rpcvers_t versnum,		/* version number */
-	rpcproc_t procnum,		/* procedure number */
-	char *(*progname)(char *),	/* Server routine */
-	xdrproc_t inproc,		/* in XDR procedure */
-	xdrproc_t outproc,		/* out XDR procedure */
-	char *nettype)			/* nettype */
+rpc_reg(prognum, versnum, procnum, progname, inproc, outproc, nettype)
+	rpcprog_t prognum;			/* program number */
+	rpcvers_t versnum;			/* version number */
+	rpcproc_t procnum;			/* procedure number */
+	char *(*progname) __P((char *)); /* Server routine */
+	xdrproc_t inproc, outproc;	/* in/out XDR procedures */
+	char *nettype;			/* nettype */
 {
 	struct netconfig *nconf;
 	int done = FALSE;
@@ -119,15 +120,15 @@ rpc_reg(
 #endif
 
 	if (procnum == NULLPROC) {
-		warnx("%s: can't reassign procedure number %u", __func__,
-		    NULLPROC);
+		warnx("%s can't reassign procedure number %u", rpc_reg_msg,
+			NULLPROC);
 		return (-1);
 	}
 
 	if (nettype == NULL)
 		nettype = __UNCONST("netpath");	/* The default behavior */
 	if ((handle = __rpc_setconf(nettype)) == NULL) {
-		warnx("%s: %s", __func__, __reg_err1);
+		warnx(rpc_reg_err, rpc_reg_msg, __reg_err1);
 		return (-1);
 	}
 /* VARIABLES PROTECTED BY proglst_lock: proglst */
@@ -161,19 +162,19 @@ rpc_reg(
 			if (svcxprt == NULL)
 				continue;
 			if (!__rpc_fd2sockinfo(svcxprt->xp_fd, &si)) {
-				warnx("%s: %s", __func__, __reg_err2);
+				warnx(rpc_reg_err, rpc_reg_msg, __reg_err2);
 				SVC_DESTROY(svcxprt);
 				continue;
 			}
 			recvsz = __rpc_get_t_size(si.si_af, si.si_proto, 0);
 			if (recvsz == 0) {
-				warnx("%s: %s", __func__, __reg_err3);
+				warnx(rpc_reg_err, rpc_reg_msg, __reg_err3);
 				SVC_DESTROY(svcxprt);
 				continue;
 			}
-			if (((xdrbuf = mem_alloc((size_t)recvsz)) == NULL) ||
+			if (((xdrbuf = malloc((size_t)recvsz)) == NULL) ||
 				((netid = strdup(nconf->nc_netid)) == NULL)) {
-				warnx("%s: %s", __func__, __no_mem_str);
+				warnx(rpc_reg_err, rpc_reg_msg, __no_mem_str);
 				if (xdrbuf != NULL)
 					free(xdrbuf);
 				if (netid != NULL)
@@ -200,9 +201,9 @@ rpc_reg(
 		}
 
 		if (!svc_reg(svcxprt, prognum, versnum, universal, nconf)) {
-			warnx("%s: couldn't register prog %u vers %u for %s",
-			    __func__, (unsigned)prognum,
-			    (unsigned)versnum, netid);
+			warnx("%s couldn't register prog %u vers %u for %s",
+				rpc_reg_msg, (unsigned)prognum,
+				(unsigned)versnum, netid);
 			if (madenow) {
 				SVC_DESTROY(svcxprt);
 				free(xdrbuf);
@@ -213,7 +214,7 @@ rpc_reg(
 
 		pl = malloc(sizeof(*pl));
 		if (pl == NULL) {
-			warn("%s: %s", __func__, __no_mem_str);
+			warnx(rpc_reg_err, rpc_reg_msg, __no_mem_str);
 			if (madenow) {
 				SVC_DESTROY(svcxprt);
 				free(xdrbuf);
@@ -239,8 +240,8 @@ rpc_reg(
 	mutex_unlock(&proglst_lock);
 
 	if (done == FALSE) {
-		warnx("%s: can't find suitable transport for %s",
-		    __func__, nettype);
+		warnx("%s cant find suitable transport for %s",
+			rpc_reg_msg, nettype);
 		return (-1);
 	}
 	return (0);
@@ -252,7 +253,9 @@ rpc_reg(
  */
 
 static void
-universal(struct svc_req *rqstp, SVCXPRT *transp)
+universal(rqstp, transp)
+	struct svc_req *rqstp;
+	SVCXPRT *transp;
 {
 	rpcprog_t prog;
 	rpcvers_t vers;
@@ -273,7 +276,7 @@ universal(struct svc_req *rqstp, SVCXPRT *transp)
 	if (rqstp->rq_proc == NULLPROC) {
 		if (svc_sendreply(transp, (xdrproc_t) xdr_void, NULL) ==
 		    FALSE) {
-			warnx("%s: svc_sendreply failed", __func__);
+			warnx("svc_sendreply failed");
 		}
 		return;
 	}
@@ -307,8 +310,9 @@ universal(struct svc_req *rqstp, SVCXPRT *transp)
 				return;
 			}
 			if (!svc_sendreply(transp, pl->p_outproc, outdata)) {
-				warnx("%s: trouble replying to prog %u vers %u",
-				    __func__, (unsigned)prog, (unsigned)vers);
+				warnx(
+			"rpc: rpc_reg trouble replying to prog %u vers %u",
+				(unsigned)prog, (unsigned)vers);
 				mutex_unlock(&proglst_lock);
 				return;
 			}
@@ -319,7 +323,7 @@ universal(struct svc_req *rqstp, SVCXPRT *transp)
 		}
 	mutex_unlock(&proglst_lock);
 	/* This should never happen */
-	warnx("%s: never registered prog %u vers %u", __func__,
-	    (unsigned)prog, (unsigned)vers);
+	warnx("rpc: rpc_reg: never registered prog %u vers %u",
+		(unsigned)prog, (unsigned)vers);
 	return;
 }

@@ -1,4 +1,4 @@
-	$NetBSD: syscalls.master,v 1.97 2013/03/29 01:04:30 christos Exp $
+	$NetBSD: syscalls.master,v 1.91.2.1 2012/04/12 17:05:37 riz Exp $
 
 ;	from: NetBSD: syscalls.master,v 1.81 1998/07/05 08:49:50 jonathan Exp
 ;	@(#)syscalls.master	8.2 (Berkeley) 1/13/94
@@ -41,6 +41,7 @@
 #include "opt_ntp.h"
 #include "opt_sysv.h"
 #include "opt_compat_43.h"
+#include "opt_posix.h"
 #endif
 
 #include <sys/param.h>
@@ -516,6 +517,7 @@
 			    netbsd32_timespec50p_t timeout); }
 245	UNIMPL
 246	UNIMPL
+#if defined(P1003_1B_SEMAPHORE) || (!defined(_KERNEL_OPT) && defined(_LIBC))
 247	STD		{ int|netbsd32||_ksem_init(unsigned int value, \
 			    netbsd32_semidp_t idp); }
 248	STD		{ int|netbsd32||_ksem_open(netbsd32_charp name, \
@@ -529,8 +531,19 @@
 254	STD		{ int|netbsd32||_ksem_getvalue(netbsd32_intptr_t id, \
 			    netbsd32_intp value); }
 255	STD		{ int|netbsd32||_ksem_destroy(netbsd32_intptr_t id); }
-256	STD		{ int|netbsd32||_ksem_timedwait(intptr_t id, \
-				const netbsd32_timespecp_t abstime); }
+256	UNIMPL		sys__ksem_timedwait
+#else
+247	EXCL		sys__ksem_init
+248	EXCL		sys__ksem_open
+249	EXCL 		sys__ksem_unlink
+250	EXCL		sys__ksem_close
+251	EXCL		sys__ksem_post
+252	EXCL		sys__ksem_wait
+253	EXCL		sys__ksem_trywait
+254	EXCL		sys__ksem_getvalue
+255	EXCL		sys__ksem_destroy
+256	UNIMPL		sys__ksem_timedwait
+#endif
 257	UNIMPL
 258	UNIMPL
 259	UNIMPL
@@ -663,12 +676,15 @@
 327	UNIMPL
 328	UNIMPL
 329	UNIMPL
-330	OBSOL		netbsd32_sa_register
-331	OBSOL		netbsd32_sa_stacks
-332	OBSOL		sa_enable
-333	OBSOL		netbsd32_sa_setconcurrency
-334	OBSOL		sa_yield
-335	OBSOL		netbsd32_sa_preempt
+330	STD		{ int|netbsd32||sa_register(netbsd32_sa_upcall_t new, \
+			    netbsd32_sa_upcallp_t old, int flags, \
+			    netbsd32_ssize_t stackinfo_offset); }
+331	STD		{ int|netbsd32||sa_stacks(int num, \
+			    netbsd32_stackp_t stacks); }
+332	NOARGS		{ int|sys||sa_enable(void); }
+333	STD		{ int|netbsd32||sa_setconcurrency(int concurrency); }
+334	NOARGS		{ int|sys||sa_yield(void); }
+335	STD		{ int|netbsd32||sa_preempt(int sa_id); }
 336	OBSOL		sys_sa_unblockyield
 337	UNIMPL
 338	UNIMPL
@@ -890,7 +906,7 @@
 			    netbsd32_timespecp_t timeout); }
 432	UNIMPL 		netbsd32___mq_timedsend50
 433	UNIMPL 		netbsd32___mq_timedreceive50
-434	COMPAT_60 	{ int|netbsd32||_lwp_park( \
+434	STD 		{ int|netbsd32|50|_lwp_park( \
 			    const netbsd32_timespecp_t ts, \
 			    lwpid_t unpark, const netbsd32_voidp hint, \
 			    const netbsd32_voidp unparkhint); }
@@ -1030,17 +1046,3 @@
 				const netbsd32_posix_spawnattrp attrp, \
 				netbsd32_charpp argv, netbsd32_charpp envp); }
 
-475	UNIMPL		{ int|netbsd32||recvmmsg(int s, struct mmsghdr *mmsg, \
-			    unsigned int vlen, unsigned int flags, \
-			    netbsd32_timespecp_t timeout); }
-476	UNIMPL		{ int|netbsd32||sendmmsg(int s, struct mmsghdr *mmsg, \
-			    unsigned int vlen, unsigned int flags); }
-477	STD 		{ int|netbsd32||clock_nanosleep(\
-			    netbsd32_clockid_t clock_id, \
-			    int flags, const netbsd32_timespecp_t rqtp, \
-			    netbsd32_timespecp_t rmtp); }
-478	STD 		{ int|netbsd32|60|_lwp_park(\
-			    netbsd32_clockid_t clock_id, \
-			    int flags, const netbsd32_timespecp_t ts, \
-			    lwpid_t unpark, netbsd32_voidp hint, \
-			    netbsd32_voidp unparkhint); }

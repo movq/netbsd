@@ -1,4 +1,4 @@
-/* $NetBSD: udf_vnops.c,v 1.75 2013/03/18 19:35:41 plunky Exp $ */
+/* $NetBSD: udf_vnops.c,v 1.69.6.2 2012/08/12 12:59:51 martin Exp $ */
 
 /*
  * Copyright (c) 2006, 2008 Reinoud Zandijk
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__KERNEL_RCSID(0, "$NetBSD: udf_vnops.c,v 1.75 2013/03/18 19:35:41 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udf_vnops.c,v 1.69.6.2 2012/08/12 12:59:51 martin Exp $");
 #endif /* not lint */
 
 
@@ -687,11 +687,10 @@ udf_lookup(void *v)
 
 	DPRINTF(LOOKUP, ("\tlooking up cnp->cn_nameptr '%s'\n",
 	    cnp->cn_nameptr));
-	/* look in the namecache */
-	if (cache_lookup(dvp, cnp->cn_nameptr, cnp->cn_namelen,
-			 cnp->cn_nameiop, cnp->cn_flags, NULL, vpp)) {
-		return *vpp == NULLVP ? ENOENT : 0;
-	}
+	/* look in the nami cache; returns 0 on success!! */
+	error = cache_lookup(dvp, vpp, cnp);
+	if (error >= 0)
+		return error;
 
 	DPRINTF(LOOKUP, ("\tNOT found in cache\n"));
 
@@ -797,8 +796,7 @@ out:
 	 * might be seen as negative caching.
 	 */
 	if (nameiop != CREATE)
-		cache_enter(dvp, *vpp, cnp->cn_nameptr, cnp->cn_namelen,
-			    cnp->cn_flags);
+		cache_enter(dvp, *vpp, cnp);
 
 	DPRINTFIF(LOOKUP, error, ("udf_lookup returing error %d\n", error));
 
@@ -973,8 +971,7 @@ udf_chown(struct vnode *vp, uid_t new_uid, gid_t new_gid,
 		return EINVAL;
 
 	/* check permissions */
-	error = kauth_authorize_vnode(cred, KAUTH_VNODE_CHANGE_OWNERSHIP,
-	    vp, NULL, genfs_can_chown(cred, uid, gid, new_uid, new_gid));
+	error = genfs_can_chown(vp, cred, uid, gid, new_uid, new_gid);
 	if (error)
 		return (error);
 
@@ -1012,8 +1009,7 @@ udf_chmod(struct vnode *vp, mode_t mode, kauth_cred_t cred)
 	udf_getownership(udf_node, &uid, &gid);
 
 	/* check permissions */
-	error = kauth_authorize_vnode(cred, KAUTH_VNODE_WRITE_SECURITY, vp,
-	    NULL, genfs_can_chmod(vp->v_type, cred, uid, gid, mode));
+	error = genfs_can_chmod(vp, cred, uid, gid, mode);
 	if (error)
 		return (error);
 
@@ -1121,8 +1117,7 @@ udf_chtimes(struct vnode *vp,
 	udf_getownership(udf_node, &uid, &gid);
 
 	/* check permissions */
-	error = kauth_authorize_vnode(cred, KAUTH_VNODE_WRITE_TIMES, vp,
-	    NULL, genfs_can_chtimes(vp, setattrflags, uid, cred));
+	error = genfs_can_chtimes(vp, setattrflags, uid, cred);
 	if (error)
 		return (error);
 
@@ -1377,9 +1372,9 @@ udf_check_permitted(struct vnode *vp, struct vattr *vap, mode_t mode,
 {
 
 	/* ask the generic genfs_can_access to advice on security */
-	return kauth_authorize_vnode(cred, KAUTH_ACCESS_ACTION(mode,
-	    vp->v_type, vap->va_mode), vp, NULL, genfs_can_access(vp->v_type,
-	    vap->va_mode, vap->va_uid, vap->va_gid, mode, cred));
+	return genfs_can_access(vp->v_type,
+			vap->va_mode, vap->va_uid, vap->va_gid,
+			mode, cred);
 }
 
 int

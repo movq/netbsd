@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_reconmap.c,v 1.34 2012/02/20 22:42:05 oster Exp $	*/
+/*	$NetBSD: rf_reconmap.c,v 1.33.8.1 2012/02/23 02:22:05 riz Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -34,7 +34,7 @@
  *************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_reconmap.c,v 1.34 2012/02/20 22:42:05 oster Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_reconmap.c,v 1.33.8.1 2012/02/23 02:22:05 riz Exp $");
 
 #include "rf_raid.h"
 #include <sys/time.h>

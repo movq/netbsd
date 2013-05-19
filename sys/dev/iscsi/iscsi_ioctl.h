@@ -1,4 +1,4 @@
-/*	$NetBSD: iscsi_ioctl.h,v 1.3 2013/04/04 22:17:13 dsl Exp $	*/
+/*	$NetBSD: iscsi_ioctl.h,v 1.2 2011/10/29 16:04:39 christos Exp $	*/
 
 /*-
  * Copyright (c) 2004,2005,2006,2011 The NetBSD Foundation, Inc.
@@ -32,7 +32,6 @@
 #define _ISCSI_IOCTL_H
 
 #include <dev/iscsi/iscsi.h>
-#include <sys/scsiio.h>
 
 /* ==================  Interface Structures ======================== */
 

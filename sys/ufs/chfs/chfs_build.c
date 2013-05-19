@@ -1,4 +1,4 @@
-/*	$NetBSD: chfs_build.c,v 1.5 2012/10/19 12:44:39 ttoth Exp $	*/
+/*	$NetBSD: chfs_build.c,v 1.2 2011/11/24 21:22:39 agc Exp $	*/
 
 /*-
  * Copyright (c) 2010 Department of Software Engineering,
@@ -31,13 +31,9 @@
  */
 
 #include "chfs.h"
+//#include </root/xipffs/netbsd.chfs/chfs.h>
 
 
-/*
- * chfs_calc_trigger_levels - setup filesystem parameters
- * Setups filesystem parameters (reserved blocks and GC trigger level)
- * for a specific flash.
- */
 void
 chfs_calc_trigger_levels(struct chfs_mount *chmp)
 {
@@ -45,7 +41,7 @@ chfs_calc_trigger_levels(struct chfs_mount *chmp)
 
 	chmp->chm_resv_blocks_deletion = 2;
 
-	size = chmp->chm_ebh->flash_size / 50;  /* 2% of flash size */
+	size = chmp->chm_ebh->flash_size / 50;  //2% of flash size
 	size += chmp->chm_ebh->peb_nr * 100;
 	size += chmp->chm_ebh->eb_size - 1;
 
@@ -60,18 +56,22 @@ chfs_calc_trigger_levels(struct chfs_mount *chmp)
 }
 
 
-/*
+/**
  * chfs_build_set_vnodecache_nlink - set pvno and nlink in vnodecaches
- * Travels vc's directory entries and sets the pvno and nlink
+ * @chmp: CHFS main descriptor structure
+ * @vc: vnode cache
+ * This function travels @vc's directory entries and sets the pvno and nlink
  * attribute of the vnode where the dirent's vno points.
  */
 void
 chfs_build_set_vnodecache_nlink(struct chfs_mount *chmp,
     struct chfs_vnode_cache *vc)
 {
-	struct chfs_dirent *fd, *tmpfd;
+	struct chfs_dirent *fd;
+	//dbg("set nlink\n");
 
-	TAILQ_FOREACH_SAFE(fd, &vc->scan_dirents, fds, tmpfd) {
+//	for (fd = vc->scan_dirents; fd; fd = fd->next) {
+	TAILQ_FOREACH(fd, &vc->scan_dirents, fds) {
 		struct chfs_vnode_cache *child_vc;
 
 		if (!fd->vno)
@@ -82,10 +82,9 @@ chfs_build_set_vnodecache_nlink(struct chfs_mount *chmp,
 		mutex_exit(&chmp->chm_lock_vnocache);
 		if (!child_vc) {
 			chfs_mark_node_obsolete(chmp, fd->nref);
-			TAILQ_REMOVE(&vc->scan_dirents, fd, fds);
 			continue;
 		}
-		if (fd->type == CHT_DIR) {
+		if (fd->type == VDIR) {
 			if (child_vc->nlink < 1)
 				child_vc->nlink = 1;
 
@@ -95,20 +94,26 @@ chfs_build_set_vnodecache_nlink(struct chfs_mount *chmp,
 				    fd->name, (unsigned long long)fd->vno,
 				    (unsigned long long)vc->vno);
 			} else {
+				//dbg("child_vc->pvno =
+				//	vc->vno; pvno = %d\n", child_vc->pvno);
 				child_vc->pvno = vc->vno;
 			}
 		}
 		child_vc->nlink++;
+		//dbg("child_vc->nlink++;\n");
+		//child_vc->nlink++;
 		vc->nlink++;
 	}
 }
 
-/*
+/**
  * chfs_build_remove_unlinked vnode
  */
+/* static */
 void
 chfs_build_remove_unlinked_vnode(struct chfs_mount *chmp,
     struct chfs_vnode_cache *vc,
+//    struct chfs_dirent **unlinked)
     struct chfs_dirent_list *unlinked)
 {
 	struct chfs_node_ref *nref;
@@ -117,28 +122,28 @@ chfs_build_remove_unlinked_vnode(struct chfs_mount *chmp,
 	dbg("START\n");
 	dbg("vno: %llu\n", (unsigned long long)vc->vno);
 
-	KASSERT(mutex_owned(&chmp->chm_lock_mountfields));
 	nref = vc->dnode;
-	/* The vnode cache is at the end of the data node's chain */
+	KASSERT(mutex_owned(&chmp->chm_lock_mountfields));
+	// The vnode cache is at the end of the data node's chain
 	while (nref != (struct chfs_node_ref *)vc) {
 		struct chfs_node_ref *next = nref->nref_next;
 		dbg("mark dnode\n");
 		chfs_mark_node_obsolete(chmp, nref);
 		nref = next;
 	}
-	vc->dnode = (struct chfs_node_ref *)vc;
 	nref = vc->dirents;
-	/* The vnode cache is at the end of the dirent node's chain */
+	// The vnode cache is at the end of the dirent node's chain
 	while (nref != (struct chfs_node_ref *)vc) {
 		struct chfs_node_ref *next = nref->nref_next;
 		dbg("mark dirent\n");
 		chfs_mark_node_obsolete(chmp, nref);
 		nref = next;
 	}
-	vc->dirents = (struct chfs_node_ref *)vc;
 	if (!TAILQ_EMPTY(&vc->scan_dirents)) {
 		TAILQ_FOREACH_SAFE(fd, &vc->scan_dirents, fds, tmpfd) {
+//		while (vc->scan_dirents) {
 			struct chfs_vnode_cache *child_vc;
+//			fd = vc->scan_dirents;
 			dbg("dirent dump:\n");
 			dbg(" ->vno:     %llu\n", (unsigned long long)fd->vno);
 			dbg(" ->version: %llu\n", (unsigned long long)fd->version);
@@ -146,6 +151,7 @@ chfs_build_remove_unlinked_vnode(struct chfs_mount *chmp,
 			dbg(" ->nsize:   %d\n", fd->nsize);
 			dbg(" ->name:    %s\n", fd->name);
 			dbg(" ->type:    %d\n", fd->type);
+//			vc->scan_dirents = fd->next;
 			TAILQ_REMOVE(&vc->scan_dirents, fd, fds);
 
 			if (!fd->vno) {
@@ -159,13 +165,16 @@ chfs_build_remove_unlinked_vnode(struct chfs_mount *chmp,
 				chfs_free_dirent(fd);
 				continue;
 			}
-			/*
+			/**
 			 * Decrease nlink in child. If it is 0, add to unlinked
 			 * dirents or just free it otherwise.
 			 */
 			child_vc->nlink--;
 
 			if (!child_vc->nlink) {
+				//dbg("nlink is 0\n");
+//				fd->next = *unlinked;
+//				*unlinked = fd;
 				// XXX HEAD or TAIL?
 				// original code did HEAD, but we could add
 				// it to the TAIL easily with TAILQ.
@@ -180,23 +189,24 @@ chfs_build_remove_unlinked_vnode(struct chfs_mount *chmp,
 
 	nref = vc->v;
 	while ((struct chfs_vnode_cache *)nref != vc) {
-		chfs_mark_node_obsolete(chmp, nref);
+		if (!CHFS_REF_OBSOLETE(nref))
+			chfs_mark_node_obsolete(chmp, nref);
 		nref = nref->nref_next;
 	}
-	vc->v = (struct chfs_node_ref *)vc;
 
 	mutex_enter(&chmp->chm_lock_vnocache);
 	if (vc->vno != CHFS_ROOTINO)
-		vc->state = VNO_STATE_UNCHECKED;
+		chfs_vnode_cache_set_state(chmp, vc, VNO_STATE_UNCHECKED);
 	mutex_exit(&chmp->chm_lock_vnocache);
 	dbg("END\n");
 }
 
-/*
+/**
  * chfs_build_filesystem - build in-memory representation of filesystem
+ * @chmp: super block information
  *
  * Step 1:
- * Scans through the eraseblocks mapped in EBH.
+ * This function scans through the eraseblocks mapped in EBH.
  * During scan builds up the map of vnodes and directory entries and puts them
  * into the vnode_cache.
  * Step 2:
@@ -210,6 +220,7 @@ chfs_build_filesystem(struct chfs_mount *chmp)
 	int i,err = 0;
 	struct chfs_vnode_cache *vc;
 	struct chfs_dirent *fd, *tmpfd;
+//	struct chfs_dirent *unlinked = NULL;
 	struct chfs_node_ref **nref;
 	struct chfs_dirent_list unlinked;
 	struct chfs_vnode_cache *notregvc;
@@ -218,13 +229,17 @@ chfs_build_filesystem(struct chfs_mount *chmp)
 
 	mutex_enter(&chmp->chm_lock_mountfields);
 
-	/* Step 1 */
+	/**
+	 * Step 1
+	 */
 	chmp->chm_flags |= CHFS_MP_FLAG_SCANNING;
 	for (i = 0; i < chmp->chm_ebh->peb_nr; i++) {
+		//dbg("processing block: %d\n", i);
 		chmp->chm_blocks[i].lnr = i;
 		chmp->chm_blocks[i].free_size = chmp->chm_ebh->eb_size;
-		/* If the LEB is add to free list skip it. */
+		//If the LEB is add to free list skip it.
 		if (chmp->chm_ebh->lmap[i] < 0) {
+			//dbg("block %d is unmapped\n", i);
 			TAILQ_INSERT_TAIL(&chmp->chm_free_queue,
 			    &chmp->chm_blocks[i], queue);
 			chmp->chm_nr_free_blocks++;
@@ -243,6 +258,7 @@ chfs_build_filesystem(struct chfs_mount *chmp)
 			    &chmp->chm_blocks[i], queue);
 			break;
 		case CHFS_BLK_STATE_PARTDIRTY:
+			//dbg("free size: %d\n", chmp->chm_blocks[i].free_size);
 			if (chmp->chm_blocks[i].free_size > chmp->chm_wbuf_pagesize &&
 			    (!chmp->chm_nextblock ||
 				chmp->chm_blocks[i].free_size >
@@ -288,7 +304,9 @@ chfs_build_filesystem(struct chfs_mount *chmp)
 	 * Need check at erase + write + read...
 	 */
 
-	/* Step 2 */
+	/**
+	 * Step 2
+	 */
 	chmp->chm_flags |= CHFS_MP_FLAG_BUILDING;
 	for (i = 0; i < VNODECACHE_SIZE; i++) {
 		vc = chmp->chm_vnocache_hash[i];
@@ -300,7 +318,10 @@ chfs_build_filesystem(struct chfs_mount *chmp)
 		}
 	}
 
-	/* Step 3 */
+	/**
+	 * Step 3
+	 * Scan for vnodes with 0 nlink.
+	 */
 	for (i =  0; i < VNODECACHE_SIZE; i++) {
 		vc = chmp->chm_vnocache_hash[i];
 		while (vc) {
@@ -309,13 +330,18 @@ chfs_build_filesystem(struct chfs_mount *chmp)
 				continue;
 			}
 
+			//dbg("remove unlinked start i: %d\n", i);
 			chfs_build_remove_unlinked_vnode(chmp,
 			    vc, &unlinked);
+			//dbg("remove unlinked end\n");
 			vc = vc->next;
 		}
 	}
 	/* Remove the newly unlinked vnodes. They are on the unlinked list */
 	TAILQ_FOREACH_SAFE(fd, &unlinked, fds, tmpfd) {
+//	while (unlinked) {
+//		fd = unlinked;
+//		unlinked = fd->next;
 		TAILQ_REMOVE(&unlinked, fd, fds);
 		mutex_enter(&chmp->chm_lock_vnocache);
 		vc = chfs_vnode_cache_get(chmp, fd->vno);
@@ -334,25 +360,37 @@ chfs_build_filesystem(struct chfs_mount *chmp)
 		vc = chmp->chm_vnocache_hash[i];
 		while (vc) {
 			TAILQ_FOREACH_SAFE(fd, &vc->scan_dirents, fds, tmpfd) {
+//			while (vc->scan_dirents) {
+//				fd = vc->scan_dirents;
+//				vc->scan_dirents = fd->next;
 				TAILQ_REMOVE(&vc->scan_dirents, fd, fds);
 				if (fd->vno == 0) {
+					//for (nref = &vc->dirents;
+					//     *nref != fd->nref;
+					//     nref = &((*nref)->next));
+
 					nref = &fd->nref;
 					*nref = fd->nref->nref_next;
-				} else if (fd->type == CHT_DIR) {
-					/* set state every non-VREG file's vc */
+					//fd->nref->nref_next = NULL;
+				} else if (fd->type == VDIR) {
+					//set state every non-VREG file's vc
 					mutex_enter(&chmp->chm_lock_vnocache);
-					notregvc = chfs_vnode_cache_get(chmp, fd->vno);
-					notregvc->state = VNO_STATE_PRESENT;
+					notregvc =
+					    chfs_vnode_cache_get(chmp,
+						fd->vno);
+					chfs_vnode_cache_set_state(chmp,
+					    notregvc, VNO_STATE_PRESENT);
 					mutex_exit(&chmp->chm_lock_vnocache);
 				}
 				chfs_free_dirent(fd);
 			}
+//			vc->scan_dirents = NULL;
 			KASSERT(TAILQ_EMPTY(&vc->scan_dirents));
 			vc = vc->next;
 		}
 	}
 
-	/* Set up chmp->chm_wbuf_ofs for the first write */
+	//Set up chmp->chm_wbuf_ofs for the first write
 	if (chmp->chm_nextblock) {
 		dbg("free_size: %d\n", chmp->chm_nextblock->free_size);
 		chmp->chm_wbuf_ofs = chmp->chm_ebh->eb_size -

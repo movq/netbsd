@@ -1,4 +1,4 @@
-/*	$NetBSD: ul.c,v 1.16 2012/03/20 20:34:59 matt Exp $	*/
+/*	$NetBSD: ul.c,v 1.15 2010/02/03 15:34:46 roy Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1993\
 #if 0
 static char sccsid[] = "@(#)ul.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: ul.c,v 1.16 2012/03/20 20:34:59 matt Exp $");
+__RCSID("$NetBSD: ul.c,v 1.15 2010/02/03 15:34:46 roy Exp $");
 #endif /* not lint */
 
 #include <stdio.h>
@@ -98,7 +98,9 @@ void	setulmode __P((int));
 #define	PRINT(s)	if (s == NULL) /* void */; else tputs(s, 1, outchar)
 
 int
-main(int argc, char **argv)
+main(argc, argv)
+	int argc;
+	char **argv;
 {
 	int c;
 	const char *termtype;
@@ -146,7 +148,8 @@ main(int argc, char **argv)
 }
 
 void
-filter(FILE *f)
+filter(f)
+	FILE *f;
 {
 	int c;
 
@@ -259,7 +262,7 @@ filter(FILE *f)
 }
 
 void
-flushln(void)
+flushln()
 {
 	int lastmode;
 	int i;
@@ -301,7 +304,7 @@ flushln(void)
  * We don't do anything with halfline ups and downs, or Greek.
  */
 void
-overstrike(void)
+overstrike()
 {
 	int i;
 	char lbuf[256];
@@ -339,7 +342,7 @@ overstrike(void)
 }
 
 void
-iattr(void)
+iattr()
 {
 	int i;
 	char lbuf[256];
@@ -363,7 +366,7 @@ iattr(void)
 }
 
 void
-initbuf(void)
+initbuf()
 {
 
 	memset((char *)obuf, 0, sizeof (obuf));	/* depends on NORMAL == 0 */
@@ -373,7 +376,7 @@ initbuf(void)
 }
 
 void
-fwd(void)
+fwd()
 {
 	int oldcol, oldmax;
 
@@ -385,7 +388,7 @@ fwd(void)
 }
 
 void
-reverse(void)
+reverse()
 {
 	upln++;
 	fwd();
@@ -395,7 +398,8 @@ reverse(void)
 }
 
 int
-outchar(int c)
+outchar(c)
+	int c;
 {
 	return (putchar(c & 0177));
 }
@@ -403,7 +407,8 @@ outchar(int c)
 static int curmode = 0;
 
 void
-outc(int c)
+outc(c)
+	int c;
 {
 	putchar(c);
 	if (underline_char && !enter_underline_mode && (curmode & UNDERL)) {
@@ -416,7 +421,8 @@ outc(int c)
 }
 
 void
-setulmode(int newmode)
+setulmode(newmode)
+	int newmode;
 {
 	if (!iflag) {
 		if (curmode != NORMAL && newmode != NORMAL)

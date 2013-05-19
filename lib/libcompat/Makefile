@@ -1,8 +1,6 @@
-#	$NetBSD: Makefile,v 1.32 2013/02/07 20:15:07 christos Exp $
+#	$NetBSD: Makefile,v 1.30 2010/03/22 01:29:30 mrg Exp $
 
 .include <bsd.own.mk>
-
-WARNS=	2
 
 LIB=	compat
 CPPFLAGS+=-DLIBC_SCCS -DSYSLIBC_SCCS -D__LIBCOMPAT_SOURCE__
@@ -46,7 +44,7 @@ MAN+=	cuserid.3
 
 
 # regexp sources
-SRCS+=	regexp.c regsub.c
+SRCS+=	regerror.c regexp.c regsub.c
 MAN+=	regexp.3
 
 .include <bsd.lib.mk>

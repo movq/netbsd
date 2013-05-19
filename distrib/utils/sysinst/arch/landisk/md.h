@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.6 2013/05/14 13:41:48 tsutsui Exp $	*/
+/*	$NetBSD: md.h,v 1.5 2011/04/04 08:30:33 mbalmer Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -57,7 +57,7 @@
  */
 #define SET_KERNEL_1_NAME	"kern-GENERIC"
 
-#define MD_SETS_SELECTED	SET_KERNEL_1, SET_SYSTEM, SET_X11_NOSERVERS
+#define MD_SETS_SELECTED	SET_KERNEL_1, SET_SYSTEM
 
 /*
  * Machine-specific command to write a new label to a disk.

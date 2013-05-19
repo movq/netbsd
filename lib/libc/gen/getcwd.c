@@ -1,4 +1,4 @@
-/*	$NetBSD: getcwd.c,v 1.53 2012/06/21 23:29:23 enami Exp $	*/
+/*	$NetBSD: getcwd.c,v 1.50.6.1 2013/04/20 10:11:01 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993, 1995
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)getcwd.c	8.5 (Berkeley) 2/7/95";
 #else
-__RCSID("$NetBSD: getcwd.c,v 1.53 2012/06/21 23:29:23 enami Exp $");
+__RCSID("$NetBSD: getcwd.c,v 1.50.6.1 2013/04/20 10:11:01 bouyer Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -71,11 +71,10 @@ char *
 realpath(const char * __restrict path, char * __restrict resolved)
 {
 	struct stat sb;
-	int idx = 0, nlnk = 0;
+	int idx = 0, n, nlnk = 0;
 	const char *q;
 	char *p, wbuf[2][MAXPATHLEN], *fres;
 	size_t len;
-	ssize_t n;
 
 	/* POSIX sez we must test for this */
 	if (path == NULL) {
@@ -183,7 +182,7 @@ loop:
 		}
 		n = readlink(resolved, wbuf[idx], sizeof(wbuf[0]) - 1);
 		if (n < 0)
-			goto out;
+			return (NULL);
 		if (n == 0) {
 			errno = ENOENT;
 			goto out;

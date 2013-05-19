@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.1 2012/05/09 21:59:10 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.1.2.2 2012/05/19 15:23:42 riz Exp $
 
 PROG=	${.CURDIR:T}
 SRCS=	${PROG}.c keygen.c util.c os.c

@@ -1,4 +1,4 @@
-/*	$NetBSD: stuirda.c,v 1.15 2012/06/12 20:25:58 joerg Exp $	*/
+/*	$NetBSD: stuirda.c,v 1.13.2.1 2012/06/15 11:22:07 sborrill Exp $	*/
 
 /*
  * Copyright (c) 2001,2007 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: stuirda.c,v 1.15 2012/06/12 20:25:58 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: stuirda.c,v 1.13.2.1 2012/06/15 11:22:07 sborrill Exp $");
 
 #include <sys/param.h>
 
@@ -329,7 +329,7 @@ stuirda_write(void *h, struct uio *uio, int flag)
 
 	mutex_exit(&sc->sc_wr_buf_lk);
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(sc->sc_dev);
 
 	DPRINTFN(1,("%s: sc=%p done\n", __func__, sc));
 	return (error);

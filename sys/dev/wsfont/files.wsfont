@@ -1,4 +1,4 @@
-# 	$NetBSD: files.wsfont,v 1.19 2012/04/05 02:46:21 macallan Exp $
+# 	$NetBSD: files.wsfont,v 1.18.2.1 2012/04/09 18:03:50 riz Exp $
 
 defpseudo wsfont
 

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2013/03/23 16:15:59 christos Exp $
+#	$NetBSD: Makefile,v 1.2 2011/08/14 09:06:12 christos Exp $
 #
 
 USE_FORT?= yes	# data driven bugs?
@@ -9,7 +9,6 @@ USE_FORT?= yes	# data driven bugs?
 
 LIB=		magic
 LIBDPLIBS+=	z	${NETBSDSRCDIR}/lib/libz
-CPPFLAGS+=-I.
 
 .if ${MACHINE_ARCH} == "i386"
 # Set lint to exit on warnings
@@ -34,10 +33,5 @@ INCS=		magic.h
 INCSDIR=	/usr/include
 
 COPTS.softmagic.c = -Wno-format-nonliteral
-
-magic.c:	magic.h
-magic.h:        magic.h.in
-	${TOOL_SED} -e "s/X.YY/514/" < ${.ALLSRC} > ${.TARGET}
-
 
 .include <bsd.lib.mk>

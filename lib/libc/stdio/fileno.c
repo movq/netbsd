@@ -1,4 +1,4 @@
-/*	$NetBSD: fileno.c,v 1.13 2012/03/15 18:22:30 christos Exp $	*/
+/*	$NetBSD: fileno.c,v 1.12 2004/05/09 17:27:53 kleink Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)fileno.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: fileno.c,v 1.13 2012/03/15 18:22:30 christos Exp $");
+__RCSID("$NetBSD: fileno.c,v 1.12 2004/05/09 17:27:53 kleink Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -52,12 +52,13 @@ __RCSID("$NetBSD: fileno.c,v 1.13 2012/03/15 18:22:30 christos Exp $");
  * A subroutine version of the macro fileno.
  */
 #undef fileno
-int _fileno(FILE *);	/* XXX */
+int _fileno __P((FILE *));	/* XXX */
 
 __weak_alias(fileno,_fileno)
 
 int
-_fileno(FILE *fp)
+_fileno(fp)
+	FILE *fp;
 {
 	int r;
 

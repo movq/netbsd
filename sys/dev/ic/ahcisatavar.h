@@ -1,4 +1,4 @@
-/*	$NetBSD: ahcisatavar.h,v 1.14 2012/09/20 17:53:48 matt Exp $	*/
+/*	$NetBSD: ahcisatavar.h,v 1.7 2010/07/27 22:07:50 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -54,13 +54,7 @@ struct ahci_softc {
 	bus_dma_segment_t sc_cmd_hdr_seg;
 	int sc_cmd_hdr_nseg;
 	int sc_atac_capflags;
-	int sc_ahci_quirks;
-#define AHCI_PCI_QUIRK_FORCE	__BIT(0)  /* force attach */
-#define AHCI_PCI_QUIRK_BAD64	__BIT(1)  /* broken 64-bit DMA */
-#define AHCI_QUIRK_BADPMP	__BIT(2)  /* broken PMP support, ignore */
-#define AHCI_QUIRK_BADPMPRESET	__BIT(3)  /* broken PMP support for reset */
 
-	uint32_t sc_ahci_cap;	/* copy of AHCI_CAP */
 	int sc_ncmds; /* number of command slots */
 	struct ata_channel *sc_chanarray[AHCI_MAX_PORTS];
 	struct ahci_channel {

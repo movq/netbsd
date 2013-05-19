@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_commondata.c,v 1.9 2013/03/11 20:19:29 tron Exp $	*/
+/*	$NetBSD: rpc_commondata.c,v 1.8.58.1 2013/03/14 22:03:14 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -36,7 +36,7 @@
 #if 0
 static char *sccsid = "@(#)rpc_commondata.c	2.1 88/07/29 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: rpc_commondata.c,v 1.9 2013/03/11 20:19:29 tron Exp $");
+__RCSID("$NetBSD: rpc_commondata.c,v 1.8.58.1 2013/03/14 22:03:14 riz Exp $");
 #endif
 #endif
 

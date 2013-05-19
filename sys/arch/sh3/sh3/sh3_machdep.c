@@ -1,4 +1,4 @@
-/*	$NetBSD: sh3_machdep.c,v 1.101 2012/09/21 09:05:08 ryo Exp $	*/
+/*	$NetBSD: sh3_machdep.c,v 1.97.2.1 2012/05/21 15:25:58 riz Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2002 The NetBSD Foundation, Inc.
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sh3_machdep.c,v 1.101 2012/09/21 09:05:08 ryo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sh3_machdep.c,v 1.97.2.1 2012/05/21 15:25:58 riz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -84,6 +84,8 @@ __KERNEL_RCSID(0, "$NetBSD: sh3_machdep.c,v 1.101 2012/09/21 09:05:08 ryo Exp $"
 #include <sys/proc.h>
 #include <sys/signalvar.h>
 #include <sys/ras.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscallargs.h>
 #include <sys/ucontext.h>
 #include <sys/cpu.h>
@@ -328,6 +330,47 @@ dumpsys(void)
 }
 
 /*
+ * void cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted,
+ *     void *sas, void *ap, void *sp, sa_upcall_t upcall):
+ *
+ * Send an upcall to userland.
+ */
+void
+cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted, void *sas,
+    void *ap, void *sp, sa_upcall_t upcall)
+{
+	struct trapframe *tf;
+	struct saframe *sf, frame;
+
+	tf = l->l_md.md_regs;
+
+	/* Build the stack frame. */
+#if 0 /* First 4 args in regs (see below). */
+	frame.sa_type = type;
+	frame.sa_sas = sas;
+	frame.sa_events = nevents;
+	frame.sa_interrupted = ninterrupted;
+#endif
+	frame.sa_arg = ap;
+
+	sf = (struct saframe *)sp - 1;
+	if (copyout(&frame, sf, sizeof(frame)) != 0) {
+		/* Copying onto the stack didn't work.  Die. */
+		sigexit(l, SIGILL);
+		/* NOTREACHED */
+	}
+
+	tf->tf_r4 = type;
+	tf->tf_r5 = (int) sas;
+	tf->tf_r6 = nevents;
+	tf->tf_r7 = ninterrupted;
+
+	tf->tf_spc = (int) upcall;
+	tf->tf_pr = 0;		/* no return */
+	tf->tf_r15 = (int) sf;
+}
+
+/*
  * Get the base address of the signal frame either on the lwp's stack
  * or on the signal stack and set *onstack accordingly.  Caller then
  * just subtracts the size of appropriate struct sigframe_foo.
@@ -432,7 +475,7 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 	    (void *) gr[_REG_PC])) != -1)
 		gr[_REG_PC] = ras_pc;
 
-	*flags |= (_UC_CPU|_UC_TLSBASE);
+	*flags |= _UC_CPU;
 
 	/* FPU context is currently not handled by the kernel. */
 	memset(&mcp->__fpregs, 0, sizeof (mcp->__fpregs));
@@ -465,8 +508,7 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		if (error)
 			return error;
 
-		/* done in lwp_setprivate */
-		/* tf->tf_gbr    = gr[_REG_GBR];  */
+		tf->tf_gbr    = gr[_REG_GBR];
 		tf->tf_spc    = gr[_REG_PC];
 		tf->tf_ssr    = gr[_REG_SR];
 		tf->tf_macl   = gr[_REG_MACL];
@@ -489,8 +531,7 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		tf->tf_r0     = gr[_REG_R0];
 		tf->tf_r15    = gr[_REG_R15];
 
-		if (flags & _UC_TLSBASE)
-			lwp_setprivate(l, (void *)(uintptr_t)gr[_REG_GBR]);
+		lwp_setprivate(l, (void *)(uintptr_t)gr[_REG_GBR]);
 	}
 
 #if 0
@@ -518,7 +559,7 @@ setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 {
 	struct trapframe *tf;
 
-	l->l_md.md_flags &= ~(MDL_USEDFPU | MDL_SSTEP);
+	l->l_md.md_flags &= ~(MDP_USEDFPU | MDP_SSTEP);
 
 	tf = l->l_md.md_regs;
 

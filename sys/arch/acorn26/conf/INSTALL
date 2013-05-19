@@ -1,4 +1,4 @@
-# $NetBSD: INSTALL,v 1.40 2013/04/27 22:21:12 christos Exp $
+# $NetBSD: INSTALL,v 1.34 2011/12/18 05:49:22 dholland Exp $
 
 # INSTALL configuration, used to generate installation media
 
@@ -63,10 +63,13 @@ options 	EXEC_SCRIPT
 options 	INET		# Internet protocol suite
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking
 #options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
@@ -115,8 +118,6 @@ options 	MEMORY_DISK_RBFLAGS=RB_SINGLE	# boot in single-user mode
 options 	WSEMUL_NODUMB
 options 	WSEMUL_SUN
 #options 	WSEMUL_VT100
-options 	WSDISPLAY_DEFAULTSCREENS=1
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 options 	FONT_VT220L8x8		# 8x8 font for console
 options 	RASOPS_SMALL
 
@@ -187,8 +188,8 @@ arcvideo0	at root			# On-board video
 wsdisplay0	at arcvideo0
 
 #pseudo-device	bpfilter
-#pseudo-device	ccd
-#pseudo-device	raid			# RAIDframe disk driver
+#pseudo-device	ccd		4
+#pseudo-device	raid		4	# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 #pseudo-device	fss			# file system snapshot device
 #pseudo-device	ipfilter
@@ -203,6 +204,6 @@ pseudo-device	pty
 #pseudo-device	gre			# generic L3 over IP tunnel
 #pseudo-device	gif			# IPv[46] over IPv[46] tunnel (RFC1933)
 #pseudo-device	faith			# IPv[46] tcp relay translation i/f
-#pseudo-device	sequencer		# MIDI sequencer
+#pseudo-device	sequencer	1	# MIDI sequencer
 pseudo-device	wsmux			# keyboard/mouse multiplexor
 

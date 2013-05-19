@@ -1,4 +1,4 @@
-/*	$NetBSD: netstat.h,v 1.46 2013/03/01 18:26:11 joerg Exp $	*/
+/*	$NetBSD: netstat.h,v 1.43 2011/06/21 19:42:45 kefren Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -84,6 +84,11 @@ void	arp_stats __P((u_long, const char *));
 void	carp_stats __P((u_long, const char *));
 void	pfsync_stats __P((u_long, const char*));
 #ifdef IPSEC
+/* run-time selector for which  implementation (KAME, FAST_IPSEC) to show */
+void	ipsec_switch __P((u_long, const char *));
+/* KAME ipsec version */
+void	ipsec_stats __P((u_long, const char *));
+/* FAST_IPSEC version */
 void	fast_ipsec_stats __P((u_long, const char *));
 #endif
 
@@ -118,6 +123,7 @@ void	pr_rthdr __P((int, int));
 void	pr_family __P((int));
 void	rt_stats __P((u_long));
 char	*ns_phost __P((struct sockaddr *));
+void	upHex __P((char *));
 
 void	p_rttables(int);
 void	p_flags(int, const char *);
@@ -138,6 +144,7 @@ const char *atalk_print __P((const struct sockaddr *, int));
 const char *atalk_print2 __P((const struct sockaddr *, const struct sockaddr *,
     int));
 char	*ns_print __P((struct sockaddr *));
+void	routepr __P((u_long));
 
 void	nsprotopr __P((u_long, const char *));
 void	spp_stats __P((u_long, const char *));
@@ -150,6 +157,15 @@ void	ddp_stats __P((u_long, const char *));
 void	intpr __P((int, u_long, void (*) __P((const char *))));
 
 void	unixpr __P((u_long));
+
+void	esis_stats __P((u_long, const char *));
+void	clnp_stats __P((u_long, const char *));
+void	cltp_stats __P((u_long, const char *));
+void	iso_protopr __P((u_long, const char *));
+void	iso_protopr1 __P((u_long, int));
+void	tp_protopr __P((u_long, const char *));
+void	tp_inproto __P((u_long));
+void	tp_stats __P((u_long, const char *));
 
 void	mroutepr __P((u_long, u_long, u_long, u_long));
 void	mrt_stats __P((u_long, u_long));

@@ -1,4 +1,4 @@
-/*	$NetBSD: quotacheck.c,v 1.46 2013/01/22 09:39:20 dholland Exp $	*/
+/*	$NetBSD: quotacheck.c,v 1.44 2011/03/06 23:25:42 christos Exp $	*/
 
 /*
  * Copyright (c) 1980, 1990, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1990, 1993\
 #if 0
 static char sccsid[] = "@(#)quotacheck.c	8.6 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: quotacheck.c,v 1.46 2013/01/22 09:39:20 dholland Exp $");
+__RCSID("$NetBSD: quotacheck.c,v 1.44 2011/03/06 23:25:42 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -70,7 +70,6 @@ __RCSID("$NetBSD: quotacheck.c,v 1.46 2013/01/22 09:39:20 dholland Exp $");
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <util.h>
 
 #include "fsutil.h"
 #include "quotautil.h"
@@ -249,17 +248,10 @@ main(int argc, char *argv[])
 	if (setfsent() == 0)
 		err(1, "%s: can't open", FSTAB);
 	while ((fs = getfsent()) != NULL) {
-		const char *fsspec;
-		char buf[MAXPATHLEN];
-		fsspec = getfsspecname(buf, sizeof(buf), fs->fs_spec);
-		if (fsspec == NULL) {
-			warn("%s", buf);
-			continue;
-		}
 		if (((argnum = oneof(fs->fs_file, argv, argc)) >= 0 ||
-		    (argnum = oneof(fsspec, argv, argc)) >= 0) &&
+		    (argnum = oneof(fs->fs_spec, argv, argc)) >= 0) &&
 		    (auxdata = needchk(fs)) &&
-		    (name = blockcheck(fsspec))) {
+		    (name = blockcheck(fs->fs_spec))) {
 			done |= 1 << argnum;
 			errs += chkquota(fs->fs_type, name, fs->fs_file,
 			    auxdata, NULL);
@@ -430,7 +422,7 @@ chkquota(const char *type, const char *fsname, const char *mntpt, void *v,
 				    cg * 100 / sblock.fs_ncg);
 				got_siginfo = 0;
 			}
-			if (ino < UFS_ROOTINO)
+			if (ino < ROOTINO)
 				continue;
 			if ((dp = getnextinode(ino)) == NULL)
 				continue;
@@ -793,7 +785,7 @@ setinodebuf(ino_t inum)
 	if (inodebuf == NULL &&
 	    (inodebuf = malloc((unsigned)inobufsize)) == NULL)
 		errx(1, "Cannot allocate space for inode buffer");
-	while (nextino < UFS_ROOTINO)
+	while (nextino < ROOTINO)
 		getnextinode(nextino);
 }
 

@@ -1,13 +1,5 @@
-/*	$NetBSD: code_error.y,v 1.1.1.4 2013/04/06 14:45:29 christos Exp $	*/
+/*	$NetBSD: code_error.y,v 1.1.1.3 2011/09/10 21:22:09 christos Exp $	*/
 
-%{
-
-#ifdef YYBISON
-int yylex(void);
-static void yyerror(const char *);
-#endif
-
-%}
 %%
 S: error
 %%
@@ -16,6 +8,7 @@ S: error
 
 #ifdef YYBYACC
 extern int YYLEX_DECL();
+static void YYERROR_DECL();
 #endif
 
 int

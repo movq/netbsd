@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.266 2012/12/08 12:36:30 kiyohara Exp $	*/
+/*	$NetBSD: trap.c,v 1.262 2011/09/07 09:24:55 reinoud Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000, 2005, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -68,13 +68,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.266 2012/12/08 12:36:30 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.262 2011/09/07 09:24:55 reinoud Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_lockdebug.h"
 #include "opt_multiprocessor.h"
 #include "opt_vm86.h"
+#include "opt_kvm86.h"
 #include "opt_kstack_dr0.h"
 #include "opt_xen.h"
 #include "opt_dtrace.h"
@@ -91,6 +92,8 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.266 2012/12/08 12:36:30 kiyohara Exp $");
 #include <sys/syscall.h>
 #include <sys/cpu.h>
 #include <sys/ucontext.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -102,9 +105,7 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.266 2012/12/08 12:36:30 kiyohara Exp $");
 #include <machine/db_machdep.h>
 
 #include "mca.h"
-#if NMCA > 0
 #include <machine/mca_machdep.h>
-#endif
 
 #include <x86/nmi.h>
 
@@ -132,6 +133,13 @@ static inline int xmm_si_code(struct lwp *);
 void trap(struct trapframe *);
 void trap_tss(struct i386tss *, int, int);
 void trap_return_fault_return(struct trapframe *) __dead;
+
+#ifdef KVM86
+#include <machine/kvm86.h>
+#define KVM86MODE (kvm86_incall)
+#else
+#define KVM86MODE (0)
+#endif
 
 const char * const trap_type[] = {
 	"privileged instruction fault",		/*  0 T_PRIVINFLT */
@@ -256,24 +264,16 @@ onfault_handler(const struct pcb *pcb, const struct trapframe *tf)
 }
 
 static void
-trap_print(const struct trapframe *frame, const lwp_t *l)
+trap_print(int type, struct trapframe *frame)
 {
-	const int type = frame->tf_trapno;
-
-	if (frame->tf_trapno < trap_types) {
-		printf("fatal %s", trap_type[type]);
-	} else {
-		printf("unknown trap %d", type);
-	}
+	if (frame->tf_trapno < trap_types)
+		printf("fatal %s", trap_type[frame->tf_trapno]);
+	else
+		printf("unknown trap %d", frame->tf_trapno);
 	printf(" in %s mode\n", (type & T_USER) ? "user" : "supervisor");
-
-	printf("trap type %d code %x eip %x cs %x eflags %x cr2 %lx "
-	    "ilevel %x esp %x\n",
-	    type, frame->tf_err, frame->tf_eip, frame->tf_cs, frame->tf_eflags,
-	    (long)rcr2(), curcpu()->ci_ilevel, frame->tf_esp);
-
-	printf("curlwp %p pid %d lid %d lowest kstack %p\n",
-	    l, l->l_proc->p_pid, l->l_lid, KSTACK_LOWEST_ADDR(l));
+	printf("trap type %d code %x eip %x cs %x eflags %x cr2 %lx ilevel %x\n",
+	    type, frame->tf_err, frame->tf_eip, frame->tf_cs,
+	    frame->tf_eflags, (long)rcr2(), curcpu()->ci_ilevel);
 }
 
 static void
@@ -331,10 +331,15 @@ trap(struct trapframe *frame)
 
 #ifdef DEBUG
 	if (trapdebug) {
-		trap_print(frame, l);
+		printf("trap %d code %x eip %x cs %x eflags %x cr2 %lx cpl %x\n",
+		    type, frame->tf_err, frame->tf_eip, frame->tf_cs,
+		    frame->tf_eflags, rcr2(), curcpu()->ci_ilevel);
+		printf("curlwp %p%s", curlwp, curlwp ? " " : "\n");
+		if (curlwp)
+			printf("pid %d lid %d\n", l->l_proc->p_pid, l->l_lid);
 	}
 #endif
-	if (type != T_NMI &&
+	if (type != T_NMI && !KVM86MODE &&
 	    !KERNELMODE(frame->tf_cs, frame->tf_eflags)) {
 		type |= T_USER;
 		l->l_md.md_regs = frame;
@@ -366,6 +371,9 @@ trap(struct trapframe *frame)
 	switch (type) {
 
 	case T_ASTFLT:
+		if (KVM86MODE) {
+			break;
+		}
 		/*FALLTHROUGH*/
 
 	default:
@@ -373,8 +381,7 @@ trap(struct trapframe *frame)
 		if (type == T_TRCTRAP)
 			check_dr0();
 		else
-			trap_print(frame, l);
-
+			trap_print(type, frame);
 		if (kdb_trap(type, 0, frame))
 			return;
 		if (kgdb_trap(type, frame))
@@ -390,6 +397,12 @@ trap(struct trapframe *frame)
 		/*NOTREACHED*/
 
 	case T_PROTFLT:
+#ifdef KVM86
+		if (KVM86MODE) {
+			kvm86_gpfault(frame);
+			return;
+		}
+#endif
 	case T_SEGNPFLT:
 	case T_ALIGNFLT:
 	case T_TSSFLT:
@@ -586,11 +599,9 @@ kernelfault:
 		case T_DIVIDE|T_USER:
 			ksi.ksi_code = FPE_INTDIV;
 			break;
-#if NNPX > 0
 		case T_ARITHTRAP|T_USER:
 			ksi.ksi_code = npxtrap(l);
 			break;
-#endif
 		default:
 			ksi.ksi_code = 0;
 			break;
@@ -625,6 +636,10 @@ kernelfault:
 		extern struct vm_map *kernel_map;
 
 		cr2 = rcr2();
+		if (l->l_flag & LW_SA) {
+			l->l_savp->savp_faultaddr = (vaddr_t)cr2;
+			l->l_pflag |= LP_SA_PAGEFAULT;
+		}
 faultcommon:
 		vm = p->p_vmspace;
 		if (__predict_false(vm == NULL)) {
@@ -713,6 +728,7 @@ faultcommon:
 				 */
 				pfail = kpreempt(0);
 			}
+			l->l_pflag &= ~LP_SA_PAGEFAULT;
 			goto out;
 		}
 		KSI_INIT_TRAP(&ksi);
@@ -743,6 +759,7 @@ faultcommon:
 			ksi.ksi_signo = SIGSEGV;
 		}
 		(*p->p_emul->e_trapsignal)(l, &ksi);
+		l->l_pflag &= ~LP_SA_PAGEFAULT;
 		break;
 	}
 
@@ -784,9 +801,7 @@ faultcommon:
 		if (kdb_trap(type, 0, frame))
 			return;
 		/* machine/parity/power fail/"kitchen sink" faults */
-#if NMCA > 0
 		mca_nmi();
-#endif
 		x86_nmi();
 	}
 
@@ -815,5 +830,15 @@ startlwp(void *arg)
 	KASSERT(error == 0);
 
 	kmem_free(uc, sizeof(ucontext_t));
+	userret(l);
+}
+
+/*
+ * XXX_SA: This is a terrible name.
+ */
+void
+upcallret(struct lwp *l)
+{
+	KERNEL_UNLOCK_LAST(l);
 	userret(l);
 }

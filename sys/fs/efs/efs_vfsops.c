@@ -1,4 +1,4 @@
-/*	$NetBSD: efs_vfsops.c,v 1.24 2012/12/20 08:03:42 hannken Exp $	*/
+/*	$NetBSD: efs_vfsops.c,v 1.22 2011/06/12 03:35:52 rmind Exp $	*/
 
 /*
  * Copyright (c) 2006 Stephen M. Rumble <rumble@ephemeral.org>
@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: efs_vfsops.c,v 1.24 2012/12/20 08:03:42 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: efs_vfsops.c,v 1.22 2011/06/12 03:35:52 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -83,6 +83,7 @@ efs_mount_common(struct mount *mp, const char *path, struct vnode *devvp,
 	if (err) {
 		EFS_DPRINTF(("superblock read failed\n"));
 		free(emp, M_EFSMNT);
+		brelse(bp, 0);
 		return (err);
 	}
 	memcpy(&emp->em_sb, bp->b_data, sizeof(emp->em_sb));
@@ -117,6 +118,7 @@ efs_mount_common(struct mount *mp, const char *path, struct vnode *devvp,
 				skip = true;
 			} else {
 				free(emp, M_EFSMNT);
+				brelse(rbp, 0);
 				return (err);
 			}
 		}
@@ -132,8 +134,8 @@ efs_mount_common(struct mount *mp, const char *path, struct vnode *devvp,
 					return (EIO);
 				}
 			}
-			brelse(rbp, 0);
 		}
+		brelse(rbp, 0);
 	}
 
 	/* ensure we can read last block */
@@ -143,11 +145,11 @@ efs_mount_common(struct mount *mp, const char *path, struct vnode *devvp,
 		    "fsck_efs(8)\n");
 		if (!(mp->mnt_flag & MNT_FORCE)) {
 			free(emp, M_EFSMNT);
+			brelse(bp, 0);
 			return (err);
 		}
-	} else {
-		brelse(bp, 0);
 	}
+	brelse(bp, 0);
 
 	mp->mnt_data = emp;
 	mp->mnt_flag |= MNT_LOCAL;
@@ -221,8 +223,7 @@ efs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 	 * If mount by non-root, then verify that user has necessary
 	 * permissions on the device.
 	 */
-	err = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_MOUNT,
-	    KAUTH_REQ_SYSTEM_MOUNT_DEVICE, mp, devvp, KAUTH_ARG(VREAD));
+	err = genfs_can_mount(devvp, VREAD, l->l_cred);
 	if (err) {
 		vput(devvp);
 		return (err);

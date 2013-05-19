@@ -1,4 +1,4 @@
-/*	$NetBSD: lom.c,v 1.11 2013/01/24 11:06:20 nakayama Exp $	*/
+/*	$NetBSD: lom.c,v 1.9 2011/06/20 17:01:45 pgoyette Exp $	*/
 /*	$OpenBSD: lom.c,v 1.21 2010/02/28 20:44:39 kettenis Exp $	*/
 /*
  * Copyright (c) 2009 Mark Kettenis
@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lom.c,v 1.11 2013/01/24 11:06:20 nakayama Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lom.c,v 1.9 2011/06/20 17:01:45 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -363,7 +363,7 @@ lom_attach(device_t parent, device_t self, void *aux)
 			sysctl_createv(NULL, 0, NULL, &newnode,
 			    CTLFLAG_READWRITE, CTLTYPE_INT, nodename[i],
 			    SYSCTL_DESCR(nodedesc[i]),
-			    lom_sysctl_alarm, 0, (void *)sc, 0,
+			    lom_sysctl_alarm, 0, sc, 0,
 			    CTL_HW, node->sysctl_num, CTL_CREATE, CTL_EOL);
 			if (newnode != NULL)
 				sc->sc_sysctl_num[i] = newnode->sysctl_num;
@@ -857,7 +857,7 @@ lom2_intr(void *arg)
 		return (1);
 	}
 
-	KASSERT(sc->sc_state == LOM_STATE_DATA);
+	KASSERT(sc->sc_state = LOM_STATE_DATA);
 	lc->lc_data = obr;
 
 	TAILQ_REMOVE(&sc->sc_queue, lc, lc_next);

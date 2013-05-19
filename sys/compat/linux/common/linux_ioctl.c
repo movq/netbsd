@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_ioctl.c,v 1.57 2012/09/19 21:24:29 bouyer Exp $	*/
+/*	$NetBSD: linux_ioctl.c,v 1.56.8.1 2012/10/24 03:23:44 riz Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_ioctl.c,v 1.57 2012/09/19 21:24:29 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_ioctl.c,v 1.56.8.1 2012/10/24 03:23:44 riz Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "sequencer.h"

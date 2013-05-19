@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gem_pci.c,v 1.46 2013/03/30 03:21:05 christos Exp $ */
+/*	$NetBSD: if_gem_pci.c,v 1.44 2012/01/30 19:41:20 drochner Exp $ */
 
 /*
  *
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_gem_pci.c,v 1.46 2013/03/30 03:21:05 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_gem_pci.c,v 1.44 2012/01/30 19:41:20 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -276,7 +276,7 @@ gem_pci_attach(device_t parent, device_t self, void *aux)
 			}
 #ifdef GEM_DEBUG
 			/* PROM dump */
-			printf("%s: PROM dump (0x0000 to %04zx)\n", device_xname(sc->sc_dev),
+			printf("%s: PROM dump (0x0000 to %04lx)\n", device_xname(sc->sc_dev),
 			    (sizeof buf) - 1);
 			i = 0;
 			j = 0;
@@ -313,7 +313,7 @@ gem_pci_attach(device_t parent, device_t self, void *aux)
 				    gempromvalid(buf + PROMDATA_DATA2) &&
 				    (vpdoff = (buf[PROMDATA_PTR_VPD] |
 					(buf[PROMDATA_PTR_VPD + 1] << 8))) >= 0x1c) {
-
+	
 					/*
 					 * The VPD of gem is not in PCI 2.2 standard
 					 * format.  The length in the resource header

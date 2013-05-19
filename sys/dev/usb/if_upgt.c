@@ -1,4 +1,4 @@
-/*	$NetBSD: if_upgt.c,v 1.9 2013/03/30 03:15:53 christos Exp $	*/
+/*	$NetBSD: if_upgt.c,v 1.5 2011/12/23 00:51:43 jakllsch Exp $	*/
 /*	$OpenBSD: if_upgt.c,v 1.49 2010/04/20 22:05:43 tedu Exp $ */
 
 /*
@@ -18,7 +18,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_upgt.c,v 1.9 2013/03/30 03:15:53 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_upgt.c,v 1.5 2011/12/23 00:51:43 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/callout.h>
@@ -31,6 +31,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_upgt.c,v 1.9 2013/03/30 03:15:53 christos Exp $")
 #include <sys/sockio.h>
 #include <sys/systm.h>
 #include <sys/vnode.h>
+
 #include <sys/bus.h>
 #include <sys/endian.h>
 #include <sys/intr.h>
@@ -51,7 +52,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_upgt.c,v 1.9 2013/03/30 03:15:53 christos Exp $")
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
 #include <dev/usb/usbdi_util.h>
-#include <dev/usb/usbdivar.h>
 #include <dev/usb/usbdevs.h>
 
 #include <dev/usb/if_upgtvar.h>
@@ -244,10 +244,9 @@ upgt_attach(device_t parent, device_t self, void *aux)
 		return;
 
 	/* set configuration number */
-	error = usbd_set_config_no(sc->sc_udev, UPGT_CONFIG_NO, 0);
-	if (error != 0) {
-		aprint_error_dev(sc->sc_dev, "failed to set configuration"
-		    ", err=%s\n", usbd_errstr(error));
+	if (usbd_set_config_no(sc->sc_udev, UPGT_CONFIG_NO, 0) != 0) {
+		aprint_error_dev(sc->sc_dev,
+		    "could not set configuration no\n");
 		return;
 	}
 
@@ -295,8 +294,8 @@ upgt_attach(device_t parent, device_t self, void *aux)
 	}
 
 	/* setup tasks and timeouts */
-	usb_init_task(&sc->sc_task_newstate, upgt_newstate_task, sc, 0);
-	usb_init_task(&sc->sc_task_tx, upgt_tx_task, sc, 0);
+	usb_init_task(&sc->sc_task_newstate, upgt_newstate_task, sc);
+	usb_init_task(&sc->sc_task_tx, upgt_tx_task, sc);
 	callout_init(&sc->scan_to, 0);
 	callout_setfunc(&sc->scan_to, upgt_next_scan, sc);
 	callout_init(&sc->led_to, 0);
@@ -727,7 +726,7 @@ upgt_fw_verify(struct upgt_softc *sc)
 		if (*uc != 0)
 			break;
 	}
-	if (offset == sc->sc_fw_size) {
+	if (offset == sc->sc_fw_size) { 
 		aprint_error_dev(sc->sc_dev,
 		    "firmware Boot Record Area not found\n");
 		return EIO;

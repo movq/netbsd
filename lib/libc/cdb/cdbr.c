@@ -1,4 +1,4 @@
-/*	$NetBSD: cdbr.c,v 1.4 2012/09/27 00:37:43 joerg Exp $	*/
+/*	$NetBSD: cdbr.c,v 1.2.8.2 2012/10/17 21:39:17 riz Exp $	*/
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -36,7 +36,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: cdbr.c,v 1.4 2012/09/27 00:37:43 joerg Exp $");
+__RCSID("$NetBSD: cdbr.c,v 1.2.8.2 2012/10/17 21:39:17 riz Exp $");
 
 #include "namespace.h"
 

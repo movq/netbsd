@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.9 2012/07/26 06:21:57 skrll Exp $
+#	$NetBSD: Makefile,v 1.8.2.1 2012/08/09 06:36:50 jdc Exp $
 
 # Makefile for evbarm tags file and boot blocks
 

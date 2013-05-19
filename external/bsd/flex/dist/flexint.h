@@ -1,4 +1,4 @@
-/*	$NetBSD: flexint.h,v 1.1.1.2 2013/04/06 14:05:42 christos Exp $	*/
+/*	$NetBSD: flexint.h,v 1.1.1.1 2009/10/26 00:26:19 christos Exp $	*/
 
 /* flex integer type definitions */
 
@@ -30,6 +30,7 @@ typedef int flex_int32_t;
 typedef unsigned char flex_uint8_t; 
 typedef unsigned short int flex_uint16_t;
 typedef unsigned int flex_uint32_t;
+#endif /* ! C99 */
 
 /* Limits of integral types. */
 #ifndef INT8_MIN
@@ -60,6 +61,5 @@ typedef unsigned int flex_uint32_t;
 #define UINT32_MAX             (4294967295U)
 #endif
 
-#endif /* ! C99 */
 
 #endif /* ! FLEXINT_H */

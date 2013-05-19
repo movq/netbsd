@@ -1,4 +1,4 @@
-/*	$NetBSD: getaddrinfo.c,v 1.4 2012/12/04 23:38:56 spz Exp $	*/
+/*	$NetBSD: getaddrinfo.c,v 1.2.6.2 2012/12/15 05:40:13 riz Exp $	*/
 
 /*
  * Copyright (C) 2004-2008, 2012  Internet Systems Consortium, Inc. ("ISC")

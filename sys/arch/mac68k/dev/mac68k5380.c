@@ -1,4 +1,4 @@
-/*	$NetBSD: mac68k5380.c,v 1.48 2012/12/06 13:28:17 hauke Exp $	*/
+/*	$NetBSD: mac68k5380.c,v 1.46 2011/07/17 20:54:43 joerg Exp $	*/
 
 /*
  * Copyright (c) 1995 Allen Briggs
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mac68k5380.c,v 1.48 2012/12/06 13:28:17 hauke Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mac68k5380.c,v 1.46 2011/07/17 20:54:43 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -139,7 +139,7 @@ static void	do_ncr5380_drq_intr(void *);
 
 static void	scsi_clr_ipend(void);
 static void	scsi_mach_init(struct ncr_softc *);
-static int	machine_match(device_t, cfdata_t, void *,
+static int	machine_match(struct device *, struct cfdata *, void *,
 			      struct cfdriver *);
 static int	pdma_ready(void);
 static int	transfer_pdma(u_char *, u_char *, u_long *);
@@ -181,7 +181,7 @@ scsi_mach_init(struct ncr_softc *sc)
 }
 
 static int
-machine_match(device_t parent, cfdata_t cf, void *aux,
+machine_match(struct device *parent, struct cfdata *cf, void *aux,
 	      struct cfdriver *cd)
 {
 	if (!mac68k_machine.scsi80)
@@ -409,8 +409,9 @@ extern	int			*nofault, m68k_fault_addr;
 			data = (u_int8_t *) pending_5380_data;
 			drq = (volatile u_int8_t *) ncr_5380_with_drq;
 			while (count) {
-				*data++ = *drq++;
-				count--;
+#define R1	*data++ = *drq++
+				R1; count--;
+#undef R1
 			}
 			pending_5380_data += resid;
 			pending_5380_count -= resid;
@@ -439,8 +440,9 @@ extern	int			*nofault, m68k_fault_addr;
 		data = (u_int8_t *) long_data;
 		drq = (volatile u_int8_t *) long_drq;
 		while (count) {
-			*data++ = *drq++;
-			count--;
+#define R1	*data++ = *drq++
+			R1; count--;
+#undef R1
 		}
 		pending_5380_count -= dcount;
 		pending_5380_data += dcount;

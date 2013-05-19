@@ -1,7 +1,7 @@
-/*	$NetBSD: voodoofb.c,v 1.43 2012/11/09 19:50:22 rkujawa Exp $	*/
+/*	$NetBSD: voodoofb.c,v 1.38 2012/01/30 19:41:23 drochner Exp $	*/
 
 /*
- * Copyright (c) 2005, 2006, 2012 Michael Lorenz
+ * Copyright (c) 2005, 2006 Michael Lorenz
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: voodoofb.c,v 1.43 2012/11/09 19:50:22 rkujawa Exp $");
+__KERNEL_RCSID(0, "$NetBSD: voodoofb.c,v 1.38 2012/01/30 19:41:23 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,11 +82,6 @@ struct voodoofb_softc {
 	bus_size_t sc_regsize, sc_fbsize, sc_ioregsize;
 
 	void *sc_ih;
-
-#define MAX_CLOCK_VB	270000	/* Voodoo Banshee */
-#define MAX_CLOCK_V3	300000	/* Voodoo3 */
-#define MAX_CLOCK_V45	350000	/* Voodoo4/5 (not yet) */
-	uint32_t sc_max_clock;
 	
 	size_t sc_memsize;
 	int sc_memtype;
@@ -344,10 +339,6 @@ voodoofb_match(device_t parent, cfdata_t match, void *aux)
 	if ((PCI_VENDOR(pa->pa_id)==PCI_VENDOR_3DFX) && 
 	    (PCI_PRODUCT(pa->pa_id)>=PCI_PRODUCT_3DFX_VOODOO3))
 		return 100;
-
-	if ((PCI_VENDOR(pa->pa_id)==PCI_VENDOR_3DFX) && 
-	    (PCI_PRODUCT(pa->pa_id)>=PCI_PRODUCT_3DFX_BANSHEE))
-		return 100;
 	return 0;
 }
 
@@ -379,11 +370,6 @@ voodoofb_attach(device_t parent, device_t self, void *aux)
 	sc->sc_memt = pa->pa_memt;
 	sc->sc_iot = pa->pa_iot;
 	sc->sc_pa = *pa;
-
-	if (PCI_PRODUCT(pa->pa_id)>=PCI_PRODUCT_3DFX_BANSHEE)
-		sc->sc_max_clock = MAX_CLOCK_VB;
-	else
-		sc->sc_max_clock = MAX_CLOCK_V3;
 
 	/* the framebuffer */
 	if (pci_mapreg_info(sc->sc_pc, sc->sc_pcitag, 0x14, PCI_MAPREG_TYPE_MEM,
@@ -1179,14 +1165,6 @@ voodoofb_ioctl(void *v, void *vs, u_long cmd, void *data, int flag,
 					   sc->sc_cmap_green[i],
 					   sc->sc_cmap_blue[i]);
 				}
-
-				/* zap the glyph cache */
-				for (i = 0; i < 256; i++) {
-					sc->sc_glyphs_defattr[i] = 0;
-					sc->sc_glyphs_kernattr[i] = 0;
-				}
-				sc->sc_usedglyphs = 0;
-
 				voodoofb_clearscreen(sc);
 				vcons_redraw_screen(ms);
 			} else {
@@ -1217,8 +1195,8 @@ voodoofb_mmap(void *v, void *vs, off_t offset, int prot)
 	 * restrict all other mappings to processes with superuser privileges
 	 * or the kernel itself
 	 */
-	if (kauth_authorize_machdep(kauth_cred_get(), KAUTH_MACHDEP_UNMANAGEDMEM,
-	    NULL, NULL, NULL, NULL) != 0) {
+	if (kauth_authorize_generic(kauth_cred_get(), KAUTH_GENERIC_ISSUSER,
+	    NULL) != 0) {
 		aprint_error_dev(sc->sc_dev, "mmap() rejected.\n");
 		return -1;
 	}
@@ -1672,6 +1650,7 @@ voodoofb_init(struct voodoofb_softc *sc)
 	voodoofb_wait_idle(sc);
 }
 
+#define MAX_CLOCK 250000	/* all Voodoo3 should support that */
 #define MAX_HRES  1700		/*
 				 * XXX in theory we can go higher but I
 				 * couldn't get anything above 1680 x 1200
@@ -1679,7 +1658,7 @@ voodoofb_init(struct voodoofb_softc *sc)
 				 * disabled so people won't end up with a
 				 * blank screen
 				 */
-#define MODE_IS_VALID(m, mclk) (((m)->dot_clock <= (mclk)) && \
+#define MODE_IS_VALID(m) (((m)->dot_clock <= MAX_CLOCK) && \
 					    ((m)->hdisplay < MAX_HRES))
 static void
 voodoofb_setup_i2c(struct voodoofb_softc *sc)
@@ -1727,7 +1706,7 @@ voodoofb_setup_i2c(struct voodoofb_softc *sc)
 			if ((sc->sc_edid_info.edid_preferred_mode != NULL)) {
 				struct videomode *m =
 				    sc->sc_edid_info.edid_preferred_mode;
-				if (MODE_IS_VALID(m, sc->sc_max_clock)) {
+				if (MODE_IS_VALID(m)) {
 					sc->sc_videomode = m;
 				} else {
 					aprint_error_dev(sc->sc_dev,
@@ -1739,7 +1718,7 @@ voodoofb_setup_i2c(struct voodoofb_softc *sc)
 			 * best one we can support
 			 */
 			if (sc->sc_videomode == NULL) {
-				int n = 0;
+				int n;
 				struct videomode *m =
 				     sc->sc_edid_info.edid_modes;
 
@@ -1748,8 +1727,7 @@ voodoofb_setup_i2c(struct voodoofb_softc *sc)
 				    sc->sc_edid_info.edid_nmodes);
 				while ((sc->sc_videomode == NULL) &&
 				       (n < sc->sc_edid_info.edid_nmodes)) {
-					if (MODE_IS_VALID(&m[n], 
-					    sc->sc_max_clock)) {
+					if (MODE_IS_VALID(&m[n])) {
 						sc->sc_videomode = &m[n];
 					}
 					n++;

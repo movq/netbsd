@@ -1,4 +1,4 @@
-/*	$NetBSD: iscsi_test.c,v 1.3 2012/12/29 11:05:30 mlelstv Exp $	*/
+/*	$NetBSD: iscsi_test.c,v 1.2 2011/11/29 03:50:31 tls Exp $	*/
 
 /*-
  * Copyright (c) 2006,2011 The NetBSD Foundation, Inc.
@@ -294,7 +294,7 @@ test_mod(test_pars_t *tp, pdu_t *pdu, iscsi_pdu_kind_t kind, int rxtx, int err)
 {
 	mod_desc_t *mod;
 	uint32_t mpoff, off;
-	int i, rc = 0, s;
+	int i, rc = 0;
 
 	tp->pdu_count[kind][rxtx]++;
 	tp->pdu_count[ANY_PDU][rxtx]++;
@@ -363,10 +363,9 @@ test_mod(test_pars_t *tp, pdu_t *pdu, iscsi_pdu_kind_t kind, int rxtx, int err)
 
 		if (!off || (mpoff != 0 && mpoff < off)) {
 			/* This might happen in some cases. Just discard the modification. */
-			s = splbio();
+			CS_BEGIN;
 			TAILQ_REMOVE(&tp->mods, mod, link);
-			splx(s);
-
+			CS_END;
 			update_options(tp, mod);
 
 			if (mod->pars.options & ISCSITEST_OPT_WAIT_FOR_COMPLETION) {
@@ -414,7 +413,8 @@ test_mod(test_pars_t *tp, pdu_t *pdu, iscsi_pdu_kind_t kind, int rxtx, int err)
 			if (ccb != NULL &&
 				(ccb->disp == CCBDISP_WAIT || ccb->disp == CCBDISP_SCSIPI)) {
 				/* simulate timeout */
-				wake_ccb(ccb, ISCSI_STATUS_TIMEOUT);
+				ccb->status = ISCSI_STATUS_TIMEOUT;
+				wake_ccb(ccb);
 			}
 		}
 
@@ -436,13 +436,14 @@ test_mod(test_pars_t *tp, pdu_t *pdu, iscsi_pdu_kind_t kind, int rxtx, int err)
 		}
 	}
 
-	s = splbio();
+	CS_BEGIN;
 	TAILQ_REMOVE(&tp->mods, mod, link);
+
 	update_options(tp, mod);
+
 	/* we've modified a PDU - copy current count into last count */
 	memcpy(tp->pdu_last, tp->pdu_count, sizeof(tp->pdu_last));
-	splx(s);
-
+	CS_END;
 	if (mod->pars.options & ISCSITEST_OPT_WAIT_FOR_COMPLETION) {
 		wakeup(mod);
 	}
@@ -940,7 +941,6 @@ void
 test_cancel(iscsi_test_cancel_parameters_t *par)
 {
 	test_pars_t *tp;
-	int s;
 
 	if ((tp = find_test_id(par->test_id)) == NULL) {
 		par->status = ISCSI_STATUS_INVALID_ID;
@@ -948,12 +948,11 @@ test_cancel(iscsi_test_cancel_parameters_t *par)
 	}
 	DEB(1, ("Test Cancel, id %d\n", par->test_id));
 
-	s = splbio();
+	CS_BEGIN;
 	if (tp->connection)
 		tp->connection->test_pars = NULL;
 	TAILQ_REMOVE(&test_list, tp, link);
-	splx(s);
-
+	CS_END;
 	free_negs(tp);
 	free_mods(tp, ISCSI_STATUS_TEST_CANCELED);
 	free(tp, M_TEMP);
@@ -981,7 +980,6 @@ test_send_pdu(struct proc *p, iscsi_test_send_pdu_parameters_t *par)
 	void *pdu_ptr = par->pdu_ptr;
 	struct uio *uio;
 	uint32_t i, pad, dsl, size;
-	int s;
 
 	if ((tp = find_test_id(par->test_id)) == NULL) {
 		par->status = ISCSI_STATUS_INVALID_ID;
@@ -996,7 +994,7 @@ test_send_pdu(struct proc *p, iscsi_test_send_pdu_parameters_t *par)
 		par->status = ISCSI_STATUS_TEST_INACTIVE;
 		return;
 	}
-	if ((pdu = get_pdu(conn, TRUE)) == NULL) {
+	if ((pdu = get_pdu(conn)) == NULL) {
 		par->status = ISCSI_STATUS_TEST_CONNECTION_CLOSED;
 		return;
 	}
@@ -1070,8 +1068,8 @@ test_send_pdu(struct proc *p, iscsi_test_send_pdu_parameters_t *par)
 	pdu->disp = PDUDISP_SIGNAL;
 	pdu->flags = PDUF_BUSY | PDUF_NOUPDATE;
 
-	s = splbio();
-	/* Enqueue for sending */
+	CS_BEGIN;
+    /* Enqueue for sending */
 	if (pdu->pdu.Opcode & OP_IMMEDIATE)
 		TAILQ_INSERT_HEAD(&conn->pdus_to_send, pdu, send_chain);
 	else
@@ -1079,8 +1077,7 @@ test_send_pdu(struct proc *p, iscsi_test_send_pdu_parameters_t *par)
 
 	wakeup(&conn->pdus_to_send);
 	tsleep(pdu, PINOD, "test_send_pdu", 0);
-	splx(s);
-
+	CS_END;
 	unmap_databuf(p, pdu_ptr, psize);
 	par->status = ISCSI_STATUS_SUCCESS;
 	if (par->options & ISCSITEST_KILL_CONNECTION)

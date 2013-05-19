@@ -1,4 +1,4 @@
-#	$NetBSD: dot.cshrc,v 1.24 2012/03/11 17:28:47 he Exp $
+#	$NetBSD: dot.cshrc,v 1.22.4.1 2012/03/17 17:22:54 bouyer Exp $
 
 alias	h	history
 alias	j	jobs -l

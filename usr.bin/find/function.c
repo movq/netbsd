@@ -1,4 +1,4 @@
-/*	$NetBSD: function.c,v 1.72 2013/05/04 06:29:32 uebayasi Exp $	*/
+/*	$NetBSD: function.c,v 1.67 2011/09/22 12:49:57 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "from: @(#)function.c	8.10 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: function.c,v 1.72 2013/05/04 06:29:32 uebayasi Exp $");
+__RCSID("$NetBSD: function.c,v 1.67 2011/09/22 12:49:57 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -215,10 +215,12 @@ c_amin(char ***argvp, int isok)
  *	file.
  */
 int
-f_anewer(PLAN *plan, FTSENT *entry)
+f_anewer(plan, entry)
+	PLAN *plan;
+	FTSENT *entry;
 {
 
-	return timespeccmp(&entry->fts_statp->st_atim, &plan->ts_data, >);
+	return (entry->fts_statp->st_atime > plan->t_data);
 }
 
 PLAN *
@@ -234,7 +236,7 @@ c_anewer(char ***argvp, int isok)
 	if (stat(filename, &sb))
 		err(1, "%s", filename);
 	new = palloc(N_ANEWER, f_anewer);
-	new->ts_data = sb.st_atim;
+	new->t_data = sb.st_atime;
 	return (new);
 }
 
@@ -265,7 +267,6 @@ c_atime(char ***argvp, int isok)
 	TIME_CORRECT(new, N_ATIME);
 	return (new);
 }
-
 /*
  * -cmin n functions --
  *
@@ -305,7 +306,7 @@ int
 f_cnewer(PLAN *plan, FTSENT *entry)
 {
 
-	return timespeccmp(&entry->fts_statp->st_ctim, &plan->ts_data, >);
+	return (entry->fts_statp->st_ctime > plan->t_data);
 }
 
 PLAN *
@@ -321,7 +322,7 @@ c_cnewer(char ***argvp, int isok)
 	if (stat(filename, &sb))
 		err(1, "%s", filename);
 	new = palloc(N_CNEWER, f_cnewer);
-	new->ts_data = sb.st_ctim;
+	new->t_data = sb.st_ctime;
 	return (new);
 }
 
@@ -356,7 +357,7 @@ c_ctime(char ***argvp, int isok)
 /*
  * -delete functions --
  *
- *	Always true.  Makes its best shot and continues on regardless.
+ *	True always.  Makes its best shot and continues on regardless.
  */
 int
 f_delete(PLAN *plan __unused, FTSENT *entry)
@@ -638,8 +639,8 @@ c_exec(char ***argvp, int isok)
 		new->flags |= F_NEEDOK;
 
 	/*
-	 * Terminate if we encounter an arg exactly equal to ";", or an
-	 * arg exactly equal to "+" following an arg exactly equal to
+	 * Terminate if we encounter an arg exacty equal to ";", or an
+	 * arg exacty equal to "+" following an arg exacty equal to
 	 * "{}".
 	 */
 	for (ap = argv = *argvp, brace = 0;; ++ap) {
@@ -1213,7 +1214,6 @@ c_mindepth(char ***argvp, int isok)
 	new->min_data = atoi(arg);
 	return (new);
 }
-
 /*
  * -mmin n functions --
  *
@@ -1241,7 +1241,6 @@ c_mmin(char ***argvp, int isok)
 	TIME_CORRECT(new, N_MMIN);
 	return (new);
 }
-
 /*
  * -mtime n functions --
  *
@@ -1330,7 +1329,7 @@ int
 f_newer(PLAN *plan, FTSENT *entry)
 {
 
-	return timespeccmp(&entry->fts_statp->st_mtim, &plan->ts_data, >);
+	return (entry->fts_statp->st_mtime > plan->t_data);
 }
 
 PLAN *
@@ -1346,7 +1345,7 @@ c_newer(char ***argvp, int isok)
 	if (stat(filename, &sb))
 		err(1, "%s", filename);
 	new = palloc(N_NEWER, f_newer);
-	new->ts_data = sb.st_mtim;
+	new->t_data = sb.st_mtime;
 	return (new);
 }
 

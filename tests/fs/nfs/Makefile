@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.8 2012/02/24 13:53:46 joerg Exp $
+#	$NetBSD: Makefile,v 1.7 2012/02/13 22:40:43 bouyer Exp $
 #
 
 .include <bsd.own.mk>
@@ -25,5 +25,7 @@ LDADD+=-lrumpnet_netinet -lrumpnet_net -lrumpnet
 LDADD+=-lrump -lrumpuser -lpthread                    		# base
 
 LDADD+=-lutil
+
+NOCLANGERROR=	# defined
 
 .include <bsd.test.mk>

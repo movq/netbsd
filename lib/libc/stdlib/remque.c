@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: remque.c,v 1.3 2012/06/25 22:32:45 abs Exp $");
+__RCSID("$NetBSD: remque.c,v 1.2 2005/07/06 17:17:15 drochner Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <assert.h>
@@ -40,7 +40,8 @@ struct qelem {
 };
 
 void
-remque(void *element)
+remque(element)
+	void *element;
 {
 	struct qelem *e = (struct qelem *) element;
 

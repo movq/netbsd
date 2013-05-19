@@ -1,3 +1,3 @@
-/*	$NetBSD: bus_defs.h,v 1.3 2012/07/28 23:18:48 matt Exp $	*/
+/*	$NetBSD: bus_defs.h,v 1.1 2011/07/01 17:09:59 dyoung Exp $	*/
 
 #include <arm/bus_defs.h>

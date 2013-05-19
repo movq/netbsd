@@ -1,4 +1,4 @@
-#	$NetBSD: files.usb,v 1.128 2013/03/30 02:37:18 christos Exp $
+#	$NetBSD: files.usb,v 1.120.2.3 2013/02/13 01:36:16 riz Exp $
 #
 # Config file and device description for machine-independent USB code.
 # Included by ports that need it.  Ports that use it must provide
@@ -8,10 +8,8 @@ defflag	USBVERBOSE
 defflag	opt_usb.h	USB_FRAG_DMA_WORKAROUND
 defflag	opt_usb.h	EHCI_DEBUG OHCI_DEBUG UHCI_DEBUG UHUB_DEBUG USB_DEBUG
 
-defflag	opt_umodem.h	UMODEM_DEBUG
 defflag	opt_uvideo.h	UVIDEO_DEBUG
 defflag	opt_umass.h	UMASS_DEBUG
-defflag	opt_uatp.h	UATP_DEBUG
 
 define	usbroothubif { }
 define	usbdevif { [port = -1], [configuration = -1], [interface = -1],
@@ -92,11 +90,6 @@ file	dev/usb/ukbdmap.c		ukbd | btkbd
 device	ums: hid, wsmousedev
 attach	ums at uhidbus
 file	dev/usb/ums.c			ums
-
-# USB Apple trackpad
-device	uatp: hid, wsmousedev
-attach	uatp at uhidbus
-file	dev/usb/uatp.c			uatp
 
 # Touchscreens
 device	uts: hid, wsmousedev, tpcalib
@@ -237,11 +230,6 @@ file	dev/usb/uyap.c			uyap
 device	udsbr: radiodev
 attach	udsbr at usbdevif
 file	dev/usb/udsbr.c			udsbr
-
-# Silicon Labs USB radio module (FM)
-device	slurm: radiodev
-attach	slurm at usbifif
-file	dev/usb/slurm.c			slurm
 
 # TEMPerHUM HID
 device	uthum: hid, sysmon_envsys
@@ -391,8 +379,7 @@ attach	usmsc at usbdevif
 file	dev/usb/if_smsc.c		usmsc
 
 # Ralink Technology RT2500USB
-device	ural: arp, ether, ifnet, wlan, firmload
-attach	ural at usbdevif
+attach	ral at usbdevif with ural
 file	dev/usb/if_ural.c		ural
 
 device	rum: ether, ifnet, arp, wlan, firmload
@@ -438,18 +425,3 @@ file	dev/usb/if_urtwn.c              urtwn
 device	urtw: ether, ifnet, arp, wlan
 attach	urtw at usbdevif
 file	dev/usb/if_urtw.c		urtw
-
-# Ralink Technology RT2700U/RT2800U/RT3000U
-device	run: ether, ifnet, arp, wlan, firmload
-attach	run at usbdevif
-file	dev/usb/if_run.c		run
-
-# Atheros AR9002U
-attach	athn at usbdevif with athn_usb: firmload
-file	dev/usb/if_athn_usb.c		athn_usb		needs-flag
-
-# XXX: ljt
-# Realtek RTL8188SU/RTL8191SU/RTL8192SU
-device	rsu: arp, ether, firmload, ifnet, wlan
-attach	rsu at usbdevif
-file	dev/usb/if_rsu.c		rsu

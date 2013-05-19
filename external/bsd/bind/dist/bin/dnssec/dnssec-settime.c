@@ -1,4 +1,4 @@
-/*	$NetBSD: dnssec-settime.c,v 1.6 2013/03/24 18:44:38 christos Exp $	*/
+/*	$NetBSD: dnssec-settime.c,v 1.3.4.2 2012/12/15 05:39:23 riz Exp $	*/
 
 /*
  * Copyright (C) 2009-2012  Internet Systems Consortium, Inc. ("ISC")
@@ -158,7 +158,6 @@ main(int argc, char **argv) {
 	isc_boolean_t   changed = ISC_FALSE;
 	isc_log_t       *log = NULL;
 
-	isc__mem_register();
 	if (argc == 1)
 		usage();
 

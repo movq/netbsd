@@ -1,4 +1,4 @@
-	$NetBSD: syscalls.master,v 1.262 2013/03/29 01:08:17 christos Exp $
+	$NetBSD: syscalls.master,v 1.254 2012/02/11 23:16:17 martin Exp $
 
 ;	@(#)syscalls.master	8.2 (Berkeley) 1/13/94
 
@@ -26,7 +26,6 @@
 ;	INDIR	included, but don't define the syscall args structure,
 ;		and allow it to be "really" varargs.
 ;	NOERR	included, syscall does not set errno
-;	EXTERN	implemented, but as 3rd party module
 ;
 ; arguments:
 ;	PAD	argument not part of the C interface, used only for padding
@@ -404,8 +403,7 @@
 ;
 ; Syscalls 210-219 are reserved for dynamically loaded syscalls
 ;
-210	EXTERN	MODULAR { int|sys||afssys(long id, long a1, long a2, \
-			  long a3, long a4, long a5, long a6); }
+210	UNIMPL
 211	UNIMPL
 212	UNIMPL
 213	UNIMPL
@@ -496,8 +494,7 @@
 254	STD MODULAR RUMP { int|sys||_ksem_getvalue(intptr_t id, \
 			    unsigned int *value); }
 255	STD MODULAR RUMP { int|sys||_ksem_destroy(intptr_t id); }
-256	STD MODULAR RUMP { int|sys||_ksem_timedwait(intptr_t id, \
-				const struct timespec *abstime); }
+256	UNIMPL		sys__ksem_timedwait
 257	STD MODULAR	{ mqd_t|sys||mq_open(const char * name, int oflag, \
 			    mode_t mode, struct mq_attr *attr); }
 258	STD MODULAR	{ int|sys||mq_close(mqd_t mqdes); }
@@ -629,13 +626,14 @@
 328	UNIMPL
 329	UNIMPL
 ; SA system calls.
-330	COMPAT_60 	{ int|sys||sa_register(void *new, void **old, \
-				int flags, ssize_t stackinfo_offset); }
-331	COMPAT_60 	{ int|sys||sa_stacks(int num, stack_t *stacks); }
-332	COMPAT_60 	{ int|sys||sa_enable(void); }
-333	COMPAT_60 	{ int|sys||sa_setconcurrency(int concurrency); }
-334	COMPAT_60 	{ int|sys||sa_yield(void); }
-335	COMPAT_60 	{ int|sys||sa_preempt(int sa_id); }
+330	STD 		{ int|sys||sa_register(sa_upcall_t new, \
+				sa_upcall_t *old, int flags, \
+				ssize_t stackinfo_offset); }
+331	STD 		{ int|sys||sa_stacks(int num, stack_t *stacks); }
+332	STD 		{ int|sys||sa_enable(void); }
+333	STD 		{ int|sys||sa_setconcurrency(int concurrency); }
+334	STD 		{ int|sys||sa_yield(void); }
+335	STD 		{ int|sys||sa_preempt(int sa_id); }
 336	OBSOL 		sys_sa_unblockyield
 ;
 ; Syscalls 337-339 are reserved for other scheduler activation syscalls.
@@ -834,7 +832,7 @@
 433	STD MODULAR	{ ssize_t|sys|50|mq_timedreceive(mqd_t mqdes, \
 			    char *msg_ptr, size_t msg_len, unsigned *msg_prio, \
 			    const struct timespec *abs_timeout); }
-434	COMPAT_60 MODULAR { int|sys||_lwp_park(const struct timespec *ts, \
+434	STD 		{ int|sys|50|_lwp_park(const struct timespec *ts, \
 				lwpid_t unpark, const void *hint, \
 				const void *unparkhint); }
 435	STD	RUMP	{ int|sys|50|kevent(int fd, \
@@ -930,17 +928,7 @@
 473	STD  RUMP	{ int|sys||__quotactl(const char *path, \
 			    struct quotactl_args *args); }
 474	NOERR		{ int|sys||posix_spawn(pid_t *pid, const char *path, \
-			    const struct posix_spawn_file_actions *file_actions, \
-			    const struct posix_spawnattr *attrp, \
-			    char *const *argv, char *const *envp); }
-475	STD		{ int|sys||recvmmsg(int s, struct mmsghdr *mmsg, \
-			    unsigned int vlen, unsigned int flags, \
-			    struct timespec *timeout); }
-476	STD		{ int|sys||sendmmsg(int s, struct mmsghdr *mmsg, \
-			    unsigned int vlen, unsigned int flags); }
-477	STD 		{ int|sys||clock_nanosleep(clockid_t clock_id, \
-			    int flags, const struct timespec *rqtp, \
-			    struct timespec *rmtp); }
-478	STD 		{ int|sys|60|_lwp_park(clockid_t clock_id, int flags, \
-			    const struct timespec *ts, lwpid_t unpark, \
-			    const void *hint, const void *unparkhint); }
+				const struct posix_spawn_file_actions *file_actions, \
+				const struct posix_spawnattr *attrp, \
+				char *const *argv, char *const *envp); }
+

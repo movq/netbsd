@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.22 2012/10/27 17:17:52 chs Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.19.8.1 2012/08/08 15:51:11 martin Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -36,26 +36,23 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.22 2012/10/27 17:17:52 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.19.8.1 2012/08/08 15:51:11 martin Exp $");
 
 #include "opt_md.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/conf.h>
-#include <sys/device.h>
+#include <sys/reboot.h>
 #include <sys/disklabel.h>
-#include <sys/intr.h>
+#include <sys/device.h>
+#include <sys/conf.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
-#include <sys/reboot.h>
-
-#include <uvm/uvm_extern.h>
-
-#include <arm/arm32/machdep.h>
 
 #include <machine/bootconfig.h>
 #include <machine/config_hook.h>
+#include <machine/intr.h>
+#include <arm/arm32/machdep.h>
 
 #include "opt_cputypes.h"
 #if defined(CPU_SA1100) || defined(CPU_SA1110)
@@ -130,7 +127,7 @@ cpu_rootconf(void)
 	set_root_device();
 
 	printf("boot device: %s\n",
-	    booted_device != NULL ? device_xname(booted_device) : "<unknown>");
+	    booted_device != NULL ? booted_device->dv_xname : "<unknown>");
 #endif
 	rootconf();
 }
@@ -180,7 +177,7 @@ cpu_configure(void)
 }
 
 void
-device_register(device_t dev, void *aux)
+device_register(struct device *dev, void *aux)
 {
 }
 

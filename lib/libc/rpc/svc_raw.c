@@ -1,4 +1,4 @@
-/*	$NetBSD: svc_raw.c,v 1.24 2013/03/11 20:19:29 tron Exp $	*/
+/*	$NetBSD: svc_raw.c,v 1.21.22.1 2013/03/14 22:03:08 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -41,7 +41,7 @@
 #if 0
 static char sccsid[] = "@(#)svc_raw.c 1.25 89/01/31 Copyr 1984 Sun Micro";
 #else
-__RCSID("$NetBSD: svc_raw.c,v 1.24 2013/03/11 20:19:29 tron Exp $");
+__RCSID("$NetBSD: svc_raw.c,v 1.21.22.1 2013/03/14 22:03:08 riz Exp $");
 #endif
 #endif
 
@@ -83,19 +83,19 @@ static struct svc_raw_private {
 extern mutex_t	svcraw_lock;
 #endif
 
-static enum xprt_stat svc_raw_stat(SVCXPRT *);
-static bool_t svc_raw_recv(SVCXPRT *, struct rpc_msg *);
-static bool_t svc_raw_reply(SVCXPRT *, struct rpc_msg *);
-static bool_t svc_raw_getargs(SVCXPRT *, xdrproc_t, caddr_t);
-static bool_t svc_raw_freeargs(SVCXPRT *, xdrproc_t, caddr_t);
-static void svc_raw_destroy(SVCXPRT *);
-static void svc_raw_ops(SVCXPRT *);
-static bool_t svc_raw_control(SVCXPRT *, const u_int, void *);
+static enum xprt_stat svc_raw_stat __P((SVCXPRT *));
+static bool_t svc_raw_recv __P((SVCXPRT *, struct rpc_msg *));
+static bool_t svc_raw_reply __P((SVCXPRT *, struct rpc_msg *));
+static bool_t svc_raw_getargs __P((SVCXPRT *, xdrproc_t, caddr_t));
+static bool_t svc_raw_freeargs __P((SVCXPRT *, xdrproc_t, caddr_t));
+static void svc_raw_destroy __P((SVCXPRT *));
+static void svc_raw_ops __P((SVCXPRT *));
+static bool_t svc_raw_control __P((SVCXPRT *, const u_int, void *));
 
 char *__rpc_rawcombuf = NULL;
 
 SVCXPRT *
-svc_raw_create(void)
+svc_raw_create()
 {
 	struct svc_raw_private *srp;
 /* VARIABLES PROTECTED BY svcraw_lock: svc_raw_private, srp */
@@ -119,8 +119,7 @@ svc_raw_create(void)
 	svc_raw_ops(&srp->server);
 	srp->server.xp_verf.oa_base = srp->verf_body;
 	xdrmem_create(&srp->xdr_stream, srp->raw_buf, UDPMSGSIZE, XDR_DECODE);
-	if (!xprt_register(&srp->server))
-		goto out;
+	xprt_register(&srp->server);
 	mutex_unlock(&svcraw_lock);
 	return (&srp->server);
 out:
@@ -132,14 +131,17 @@ out:
 
 /*ARGSUSED*/
 static enum xprt_stat
-svc_raw_stat(SVCXPRT *xprt) /* args needed to satisfy ANSI-C typechecking */
+svc_raw_stat(xprt)
+SVCXPRT *xprt; /* args needed to satisfy ANSI-C typechecking */
 {
 	return (XPRT_IDLE);
 }
 
 /*ARGSUSED*/
 static bool_t
-svc_raw_recv(SVCXPRT *xprt, struct rpc_msg *msg)
+svc_raw_recv(xprt, msg)
+	SVCXPRT *xprt;
+	struct rpc_msg *msg;
 {
 	struct svc_raw_private *srp;
 	XDR *xdrs;
@@ -163,7 +165,9 @@ svc_raw_recv(SVCXPRT *xprt, struct rpc_msg *msg)
 
 /*ARGSUSED*/
 static bool_t
-svc_raw_reply(SVCXPRT *xprt, struct rpc_msg *msg)
+svc_raw_reply(xprt, msg)
+	SVCXPRT *xprt;
+	struct rpc_msg *msg;
 {
 	struct svc_raw_private *srp;
 	XDR *xdrs;
@@ -188,7 +192,10 @@ svc_raw_reply(SVCXPRT *xprt, struct rpc_msg *msg)
 
 /*ARGSUSED*/
 static bool_t
-svc_raw_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, caddr_t args_ptr)
+svc_raw_getargs(xprt, xdr_args, args_ptr)
+	SVCXPRT *xprt;
+	xdrproc_t xdr_args;
+	caddr_t args_ptr;
 {
 	struct svc_raw_private *srp;
 
@@ -204,7 +211,10 @@ svc_raw_getargs(SVCXPRT *xprt, xdrproc_t xdr_args, caddr_t args_ptr)
 
 /*ARGSUSED*/
 static bool_t
-svc_raw_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, caddr_t args_ptr)
+svc_raw_freeargs(xprt, xdr_args, args_ptr)
+	SVCXPRT *xprt;
+	xdrproc_t xdr_args;
+	caddr_t args_ptr;
 {
 	struct svc_raw_private *srp;
 	XDR *xdrs;
@@ -224,19 +234,24 @@ svc_raw_freeargs(SVCXPRT *xprt, xdrproc_t xdr_args, caddr_t args_ptr)
 
 /*ARGSUSED*/
 static void
-svc_raw_destroy(SVCXPRT *xprt)
+svc_raw_destroy(xprt)
+SVCXPRT *xprt;
 {
 }
 
 /*ARGSUSED*/
 static bool_t
-svc_raw_control(SVCXPRT *xprt, const u_int rq, void *in)
+svc_raw_control(xprt, rq, in)
+	SVCXPRT *xprt;
+	const u_int	rq;
+	void		*in;
 {
 	return (FALSE);
 }
 
 static void
-svc_raw_ops(SVCXPRT *xprt)
+svc_raw_ops(xprt)
+	SVCXPRT *xprt;
 {
 	static struct xp_ops ops;
 	static struct xp_ops2 ops2;

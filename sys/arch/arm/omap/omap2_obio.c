@@ -1,7 +1,7 @@
-/*	$Id: omap2_obio.c,v 1.20 2013/04/17 14:35:34 bouyer Exp $	*/
+/*	$Id: omap2_obio.c,v 1.12 2011/07/01 20:30:21 dyoung Exp $	*/
 
 /* adapted from: */
-/*	$NetBSD: omap2_obio.c,v 1.20 2013/04/17 14:35:34 bouyer Exp $ */
+/*	$NetBSD: omap2_obio.c,v 1.12 2011/07/01 20:30:21 dyoung Exp $ */
 
 
 /*
@@ -103,7 +103,7 @@
 
 #include "opt_omap.h"
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omap2_obio.c,v 1.20 2013/04/17 14:35:34 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omap2_obio.c,v 1.12 2011/07/01 20:30:21 dyoung Exp $");
 
 #include "locators.h"
 #include "obio.h"
@@ -129,6 +129,16 @@ typedef struct {
 	ulong		cs_addr;
 	ulong		cs_size;
 } obio_csconfig_t;
+
+struct obio_softc {
+	device_t		sc_dev;
+	bus_dma_tag_t		sc_dmat;
+	bus_space_tag_t		sc_iot;
+	bus_space_handle_t	sc_ioh;
+	bus_addr_t		sc_base;
+	bus_size_t		sc_size;
+};
+
 
 /* prototypes */
 static int	obio_match(device_t, cfdata_t, void *);
@@ -177,21 +187,7 @@ obio_match(device_t parent, cfdata_t match, void *aux)
 		return 1;
 #endif
 
-#ifdef TI_AM335X
-	if (obio_attached == 0)
-		return 1;
-#endif
-
 	return 0;
-}
-
-static void
-obio_attach1(device_t self)
-{
-	/*
-	 * Attach the rest of our devices
-	 */
-	config_search_ia(obio_search, self, "obio", NULL);
 }
 
 static void
@@ -226,20 +222,15 @@ obio_attach(device_t parent, device_t self, void *aux)
 	else if (mb->mb_iobase == OMAP2_OBIO_3_BASE)
 		obio_attached |= 8;
 #endif
-#ifdef TI_AM335X
-	obio_attached = 1;
-#endif
 
 	/*
 	 * Attach critical devices first.
 	 */
 	obio_attach_critical(sc);
-
 	/*
-	 * Attach the rest of our devices once all obio devices
-	 * have attached.
+	 * Then attach the rest of our devices
 	 */
-	config_defer(self, obio_attach1);
+	config_search_ia(obio_search, self, "obio", NULL);
 }
 
 static int
@@ -357,37 +348,16 @@ static const struct {
 	bus_addr_t addr;
 	bool required;
 } critical_devs[] = {
-#if defined(OMAP_2430) || defined(OMAP_2420)
+#ifdef OMAP_3530
+	{ .name = "avic", .addr = INTC_BASE_3530, .required = true },
+#else
 	{ .name = "avic", .addr = INTC_BASE, .required = true },
-#endif
-#if defined(OMAP_3430)
-	{ .name = "avic", .addr = INTC_BASE_3430, .required = true },
-#endif
-#if defined(OMAP_3530)
-	{ .name = "avic",    .addr = INTC_BASE_3530, .required = true },
 #endif
 	{ .name = "gpio1", .addr = GPIO1_BASE, .required = false },
 	{ .name = "gpio2", .addr = GPIO2_BASE, .required = false },
 	{ .name = "gpio3", .addr = GPIO3_BASE, .required = false },
-#if defined(GPIO4_BASE)
-	{ .name = "gpio4", .addr = GPIO4_BASE, .required = false },
-#endif
-#if defined(GPIO5_BASE)
-	{ .name = "gpio5", .addr = GPIO5_BASE, .required = false },
-#endif
-#if defined(GPIO6_BASE)
-	{ .name = "gpio6", .addr = GPIO6_BASE, .required = false },
-#endif
 #if 0
 	{ .name = "dmac", .addr = DMAC_BASE, .required = true },
-#endif
-#if defined(TI_AM335X)
-	{ .name = "omapicu", .addr = 0x48200000, .required = true },
-	{ .name = "prcm", .addr = 0x44e00000, .required = true },
-	{ .name = "sitaracm", .addr = 0x44e10000, .required = true },
-#endif
-#if defined(OMAP_3530)
-	{ .name = "omapdma", .addr = OMAP3530_SDMA_BASE, .required = true },
 #endif
 };
 

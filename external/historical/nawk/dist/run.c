@@ -1233,13 +1233,13 @@ static char regexpr[] = "(regexpr)";
 Cell *split(Node **a, int nnn)	/* split(a[0], a[1], a[2]); a[3] is type */
 {
 	Cell *x = 0, *y, *ap;
-	char *s, *origs;
+	char *s;
 	int sep;
 	char *t, temp, num[50], *fs = 0;
 	int n, tempstat, arg3type;
 
 	y = execute(a[0]);	/* source string */
-	origs = s = strdup(getsval(y));
+	s = getsval(y);
 	arg3type = ptoi(a[3]);
 	if (a[2] == 0)		/* fs string */
 		fs = *FS;
@@ -1259,12 +1259,6 @@ Cell *split(Node **a, int nnn)	/* split(a[0], a[1], a[2]); a[3] is type */
 	ap->sval = (char *) makesymtab(NSYMTAB);
 
 	n = 0;
-        if (arg3type == REGEXPR && strlen((char*)((fa*)a[2])->restr) == 0) {
-		/* split(s, a, //); have to arrange that it looks like empty sep */
-		arg3type = 0;
-		fs = EMPTY;
-		sep = 0;
-	}
 	if (*s != '\0' && (strlen(fs) > 1 || arg3type == REGEXPR)) {	/* reg expr */
 		fa *pfa;
 		if (arg3type == REGEXPR) {	/* it's ready already */
@@ -1359,7 +1353,6 @@ Cell *split(Node **a, int nnn)	/* split(a[0], a[1], a[2]); a[3] is type */
 	}
 	tempfree(ap);
 	tempfree(y);
-	free(origs);
 	if (a[2] != 0 && arg3type == STRING) {
 		tempfree(x);
 	}
@@ -1611,8 +1604,7 @@ Cell *bltin(Node **a, int n)	/* builtin functions. a[0] is type, a[1] is arg lis
 			u = time((time_t *)0);
 		else
 			u = getfval(x);
-		tmp = (unsigned int) u;
-		srand(tmp);
+		srand(tmp = (unsigned int) u);
 		u = srand_seed;
 		srand_seed = tmp;
 		break;
@@ -1735,7 +1727,6 @@ struct files {
 	const char	*fname;
 	int	mode;	/* '|', 'a', 'w' => LE/LT, GT */
 } *files;
-
 size_t nfiles;
 
 void stdinit(void)	/* in case stdin, etc., are not constants */

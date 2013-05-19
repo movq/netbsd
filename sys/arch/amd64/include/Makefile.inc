@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.4 2012/06/11 15:18:05 chs Exp $
+# $NetBSD: Makefile.inc,v 1.3.24.1 2012/11/22 17:39:28 riz Exp $
 
 CFLAGS+=	-mno-red-zone
 

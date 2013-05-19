@@ -1,4 +1,4 @@
-/*	$NetBSD: catopen.c,v 1.31 2012/07/30 23:02:41 yamt Exp $	*/
+/*	$NetBSD: catopen.c,v 1.29 2012/01/20 16:31:30 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: catopen.c,v 1.31 2012/07/30 23:02:41 yamt Exp $");
+__RCSID("$NetBSD: catopen.c,v 1.29 2012/01/20 16:31:30 joerg Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #define _NLS_PRIVATE
@@ -65,10 +65,12 @@ __RCSID("$NetBSD: catopen.c,v 1.31 2012/07/30 23:02:41 yamt Exp $");
 __weak_alias(catopen, _catopen)
 #endif
 
-static nl_catd load_msgcat(const char *);
+static nl_catd load_msgcat __P((const char *));
 
 nl_catd
-_catopen(const char *name, int oflag)
+_catopen(name, oflag)
+	const char *name;
+	int oflag;
 {
 	char tmppath[PATH_MAX+1];
 	const char *nlspath;
@@ -87,13 +89,10 @@ _catopen(const char *name, int oflag)
 
 	if (issetugid() || (nlspath = getenv("NLSPATH")) == NULL)
 		nlspath = NLS_DEFAULT_PATH;
-	/*
-	 * histrical note:
-	 * http://www.hauN.org/ml/b-l-j/a/800/828.html (in japanese)
-	 */
 	if (oflag == NL_CAT_LOCALE) {
 		lang = setlocale(LC_MESSAGES, NULL);
-	} else {
+	}
+	else {
 		lang = getenv("LANG");
 	}
 	if (lang == NULL || strchr(lang, '/'))
@@ -148,7 +147,8 @@ _catopen(const char *name, int oflag)
 }
 
 static nl_catd
-load_msgcat(const char *path)
+load_msgcat(path)
+	const char *path;
 {
 	struct stat st;
 	nl_catd catd;

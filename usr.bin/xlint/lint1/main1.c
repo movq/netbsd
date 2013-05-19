@@ -1,4 +1,4 @@
-/*	$NetBSD: main1.c,v 1.21 2013/04/19 17:43:05 christos Exp $	*/
+/*	$NetBSD: main1.c,v 1.19 2008/07/31 15:21:34 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: main1.c,v 1.21 2013/04/19 17:43:05 christos Exp $");
+__RCSID("$NetBSD: main1.c,v 1.19 2008/07/31 15:21:34 christos Exp $");
 #endif
 
 #include <sys/types.h>
@@ -180,7 +180,7 @@ main(int argc, char *argv[])
 
 				errno = 0;
 				msg = strtol(ptr, &eptr, 0);
-				if ((msg == TARG_LONG_MIN || msg == TARG_LONG_MAX) &&
+				if ((msg == LONG_MIN || msg == LONG_MAX) &&
 				    errno == ERANGE)
 				    err(1, "invalid error message id '%s'",
 					ptr);
@@ -222,9 +222,9 @@ main(int argc, char *argv[])
 	yyparse();
 
 	/* Following warnings cannot be suppressed by LINTED */
-	lwarn = LWARN_ALL;
+	nowarn = 0;
 #ifdef DEBUG
-	printf("%s, %d: lwarn = %d\n", curr_pos.p_file, curr_pos.p_line, lwarn);
+	printf("%s, %d: nowarn = 0\n", curr_pos.p_file, curr_pos.p_line);
 #endif
 
 	chkglsyms();

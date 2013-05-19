@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_mod.h,v 1.1 2013/02/21 01:39:54 pgoyette Exp $	*/
+/*	$NetBSD: compat_mod.h,v 1.1.6.2 2013/03/14 16:33:09 riz Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*      $NetBSD: rumpuser_sp.c,v 1.58 2013/04/30 12:39:20 pooka Exp $	*/
+/*      $NetBSD: rumpuser_sp.c,v 1.45 2011/03/08 15:34:37 pooka Exp $	*/
 
 /*
  * Copyright (c) 2010, 2011 Antti Kantee.  All Rights Reserved.
@@ -34,13 +34,11 @@
  * work correctly from one hardware architecture to another.
  */
 
-#include "rumpuser_port.h"
-
-#if !defined(lint)
-__RCSID("$NetBSD: rumpuser_sp.c,v 1.58 2013/04/30 12:39:20 pooka Exp $");
-#endif /* !lint */
+#include <sys/cdefs.h>
+__RCSID("$NetBSD: rumpuser_sp.c,v 1.45 2011/03/08 15:34:37 pooka Exp $");
 
 #include <sys/types.h>
+#include <sys/atomic.h>
 #include <sys/mman.h>
 #include <sys/socket.h>
 
@@ -61,7 +59,6 @@ __RCSID("$NetBSD: rumpuser_sp.c,v 1.58 2013/04/30 12:39:20 pooka Exp $");
 
 #include <rump/rump.h> /* XXX: for rfork flags */
 #include <rump/rumpuser.h>
-
 #include "rumpuser_int.h"
 
 #include "sp_common.c"
@@ -83,52 +80,12 @@ static struct spclient spclist[MAXCLI];
 static unsigned int disco;
 static volatile int spfini;
 
+static struct rumpuser_sp_ops spops;
+
 static char banner[MAXBANNER];
 
 #define PROTOMAJOR 0
-#define PROTOMINOR 4
-
-
-/* how to use atomic ops on Linux? */
-#if defined(__linux__) || defined(__CYGWIN__)
-static pthread_mutex_t discomtx = PTHREAD_MUTEX_INITIALIZER;
-
-static void
-signaldisco(void)
-{
-
-	pthread_mutex_lock(&discomtx);
-	disco++;
-	pthread_mutex_unlock(&discomtx);
-}
-
-static unsigned int
-getdisco(void)
-{
-	unsigned int discocnt;
-
-	pthread_mutex_lock(&discomtx);
-	discocnt = disco;
-	disco = 0;
-	pthread_mutex_unlock(&discomtx);
-
-	return discocnt;
-}
-
-#elif defined(__FreeBSD__) || defined(__DragonFly__)
-
-#include <machine/atomic.h>
-#define signaldisco()	atomic_add_int(&disco, 1)
-#define getdisco()	atomic_readandclear_int(&disco)
-
-#else /* NetBSD */
-
-#include <sys/atomic.h>
-#define signaldisco() atomic_inc_uint(&disco)
-#define getdisco() atomic_swap_uint(&disco, 0)
-
-#endif
-
+#define PROTOMINOR 3
 
 struct prefork {
 	uint32_t pf_auth[AUTHLEN];
@@ -177,18 +134,18 @@ static void
 lwproc_switch(struct lwp *l)
 {
 
-	rumpuser__hyp.hyp_schedule();
-	rumpuser__hyp.hyp_lwproc_switch(l);
-	rumpuser__hyp.hyp_unschedule();
+	spops.spop_schedule();
+	spops.spop_lwproc_switch(l);
+	spops.spop_unschedule();
 }
 
 static void
 lwproc_release(void)
 {
 
-	rumpuser__hyp.hyp_schedule();
-	rumpuser__hyp.hyp_lwproc_release();
-	rumpuser__hyp.hyp_unschedule();
+	spops.spop_schedule();
+	spops.spop_lwproc_release();
+	spops.spop_unschedule();
 }
 
 static int
@@ -196,9 +153,9 @@ lwproc_rfork(struct spclient *spc, int flags, const char *comm)
 {
 	int rv;
 
-	rumpuser__hyp.hyp_schedule();
-	rv = rumpuser__hyp.hyp_lwproc_rfork(spc, flags, comm);
-	rumpuser__hyp.hyp_unschedule();
+	spops.spop_schedule();
+	rv = spops.spop_lwproc_rfork(spc, flags, comm);
+	spops.spop_unschedule();
 
 	return rv;
 }
@@ -208,9 +165,9 @@ lwproc_newlwp(pid_t pid)
 {
 	int rv;
 
-	rumpuser__hyp.hyp_schedule();
-	rv = rumpuser__hyp.hyp_lwproc_newlwp(pid);
-	rumpuser__hyp.hyp_unschedule();
+	spops.spop_schedule();
+	rv = spops.spop_lwproc_newlwp(pid);
+	spops.spop_unschedule();
 
 	return rv;
 }
@@ -220,9 +177,9 @@ lwproc_curlwp(void)
 {
 	struct lwp *l;
 
-	rumpuser__hyp.hyp_schedule();
-	l = rumpuser__hyp.hyp_lwproc_curlwp();
-	rumpuser__hyp.hyp_unschedule();
+	spops.spop_schedule();
+	l = spops.spop_lwproc_curlwp();
+	spops.spop_unschedule();
 
 	return l;
 }
@@ -232,9 +189,9 @@ lwproc_getpid(void)
 {
 	pid_t p;
 
-	rumpuser__hyp.hyp_schedule();
-	p = rumpuser__hyp.hyp_getpid();
-	rumpuser__hyp.hyp_unschedule();
+	spops.spop_schedule();
+	p = spops.spop_getpid();
+	spops.spop_unschedule();
 
 	return p;
 }
@@ -243,32 +200,29 @@ static void
 lwproc_execnotify(const char *comm)
 {
 
-	rumpuser__hyp.hyp_schedule();
-	rumpuser__hyp.hyp_execnotify(comm);
-	rumpuser__hyp.hyp_unschedule();
+	spops.spop_schedule();
+	spops.spop_execnotify(comm);
+	spops.spop_unschedule();
 }
 
 static void
 lwproc_lwpexit(void)
 {
 
-	rumpuser__hyp.hyp_schedule();
-	rumpuser__hyp.hyp_lwpexit();
-	rumpuser__hyp.hyp_unschedule();
+	spops.spop_schedule();
+	spops.spop_lwpexit();
+	spops.spop_unschedule();
 }
 
 static int
-rumpsyscall(int sysnum, void *data, register_t *regrv)
+rumpsyscall(int sysnum, void *data, register_t *retval)
 {
-	long retval[2] = {0, 0};
 	int rv;
 
-	rumpuser__hyp.hyp_schedule();
-	rv = rumpuser__hyp.hyp_syscall(sysnum, data, retval);
-	rumpuser__hyp.hyp_unschedule();
+	spops.spop_schedule();
+	rv = spops.spop_syscall(sysnum, data, retval);
+	spops.spop_unschedule();
 
-	regrv[0] = retval[0];
-	regrv[1] = retval[1];
 	return rv;
 }
 
@@ -290,7 +244,7 @@ nextreq(struct spclient *spc)
  */
 
 static void
-send_error_resp(struct spclient *spc, uint64_t reqno, enum rumpsp_err error)
+send_error_resp(struct spclient *spc, uint64_t reqno, int error)
 {
 	struct rsp_hdr rhdr;
 	struct iovec iov[1];
@@ -551,7 +505,7 @@ spcrelease(struct spclient *spc)
 	spc->spc_fd = -1;
 	spc->spc_state = SPCSTATE_NEW;
 
-	signaldisco();
+	atomic_inc_uint(&disco);
 }
 
 static void
@@ -782,7 +736,7 @@ sp_copyin(void *arg, const void *raddr, void *laddr, size_t *len, int wantstr)
 	void *rdata = NULL; /* XXXuninit */
 	int rv, nlocks;
 
-	rumpkern_unsched(&nlocks, NULL);
+	rumpuser__kunlock(0, &nlocks, NULL);
 
 	rv = copyin_req(spc, raddr, len, wantstr, &rdata);
 	if (rv)
@@ -792,28 +746,24 @@ sp_copyin(void *arg, const void *raddr, void *laddr, size_t *len, int wantstr)
 	free(rdata);
 
  out:
-	rumpkern_sched(nlocks, NULL);
+	rumpuser__klock(nlocks, NULL);
 	if (rv)
-		rv = EFAULT;
-	ET(rv);
+		return EFAULT;
+	return 0;
 }
 
 int
 rumpuser_sp_copyin(void *arg, const void *raddr, void *laddr, size_t len)
 {
-	int rv;
 
-	rv = sp_copyin(arg, raddr, laddr, &len, 0);
-	ET(rv);
+	return sp_copyin(arg, raddr, laddr, &len, 0);
 }
 
 int
 rumpuser_sp_copyinstr(void *arg, const void *raddr, void *laddr, size_t *len)
 {
-	int rv;
 
-	rv = sp_copyin(arg, raddr, laddr, len, 1);
-	ET(rv);
+	return sp_copyin(arg, raddr, laddr, len, 1);
 }
 
 static int
@@ -822,31 +772,27 @@ sp_copyout(void *arg, const void *laddr, void *raddr, size_t dlen)
 	struct spclient *spc = arg;
 	int nlocks, rv;
 
-	rumpkern_unsched(&nlocks, NULL);
+	rumpuser__kunlock(0, &nlocks, NULL);
 	rv = send_copyout_req(spc, raddr, laddr, dlen);
-	rumpkern_sched(nlocks, NULL);
+	rumpuser__klock(nlocks, NULL);
 
 	if (rv)
-		rv = EFAULT;
-	ET(rv);
+		return EFAULT;
+	return 0;
 }
 
 int
 rumpuser_sp_copyout(void *arg, const void *laddr, void *raddr, size_t dlen)
 {
-	int rv;
 
-	rv = sp_copyout(arg, laddr, raddr, dlen);
-	ET(rv);
+	return sp_copyout(arg, laddr, raddr, dlen);
 }
 
 int
 rumpuser_sp_copyoutstr(void *arg, const void *laddr, void *raddr, size_t *dlen)
 {
-	int rv;
 
-	rv = sp_copyout(arg, laddr, raddr, *dlen);
-	ET(rv);
+	return sp_copyout(arg, laddr, raddr, *dlen);
 }
 
 int
@@ -856,7 +802,7 @@ rumpuser_sp_anonmmap(void *arg, size_t howmuch, void **addr)
 	void *resp, *rdata;
 	int nlocks, rv;
 
-	rumpkern_unsched(&nlocks, NULL);
+	rumpuser__kunlock(0, &nlocks, NULL);
 
 	rv = anonmmap_req(spc, howmuch, &rdata);
 	if (rv) {
@@ -874,8 +820,11 @@ rumpuser_sp_anonmmap(void *arg, size_t howmuch, void **addr)
 	*addr = resp;
 
  out:
-	rumpkern_sched(nlocks, NULL);
-	ET(rv);
+	rumpuser__klock(nlocks, NULL);
+
+	if (rv)
+		return rv;
+	return 0;
 }
 
 int
@@ -884,9 +833,9 @@ rumpuser_sp_raise(void *arg, int signo)
 	struct spclient *spc = arg;
 	int rv, nlocks;
 
-	rumpkern_unsched(&nlocks, NULL);
+	rumpuser__kunlock(0, &nlocks, NULL);
 	rv = send_raise_req(spc, signo);
-	rumpkern_sched(nlocks, NULL);
+	rumpuser__klock(nlocks, NULL);
 
 	return rv;
 }
@@ -903,7 +852,7 @@ schedulework(struct spclient *spc, enum sbatype sba_type)
 	reqno = spc->spc_hdr.rsp_reqno;
 	while ((sba = malloc(sizeof(*sba))) == NULL) {
 		if (nworker == 0 || retries > 10) {
-			send_error_resp(spc, reqno, RUMPSP_ERR_TRYAGAIN);
+			send_error_resp(spc, reqno, EAGAIN);
 			spcfreebuf(spc);
 			return;
 		}
@@ -954,12 +903,12 @@ static void
 handlereq(struct spclient *spc)
 {
 	uint64_t reqno;
-	int error;
+	int error, i;
 
 	reqno = spc->spc_hdr.rsp_reqno;
 	if (__predict_false(spc->spc_state == SPCSTATE_NEW)) {
 		if (spc->spc_hdr.rsp_type != RUMPSP_HANDSHAKE) {
-			send_error_resp(spc, reqno, RUMPSP_ERR_AUTH);
+			send_error_resp(spc, reqno, EAUTH);
 			shutdown(spc->spc_fd, SHUT_RDWR);
 			spcfreebuf(spc);
 			return;
@@ -992,8 +941,7 @@ handlereq(struct spclient *spc)
 			int cancel;
 
 			if (spc->spc_off-HDRSZ != sizeof(*rfp)) {
-				send_error_resp(spc, reqno,
-				    RUMPSP_ERR_MALFORMED_REQUEST);
+				send_error_resp(spc, reqno, EINVAL);
 				shutdown(spc->spc_fd, SHUT_RDWR);
 				spcfreebuf(spc);
 				return;
@@ -1016,8 +964,7 @@ handlereq(struct spclient *spc)
 			spcfreebuf(spc);
 
 			if (!pf) {
-				send_error_resp(spc, reqno,
-				    RUMPSP_ERR_INVALID_PREFORK);
+				send_error_resp(spc, reqno, ESRCH);
 				shutdown(spc->spc_fd, SHUT_RDWR);
 				return;
 			}
@@ -1040,8 +987,7 @@ handlereq(struct spclient *spc)
 			 * interfaces some day if anyone cares)
 			 */
 			if ((error = lwproc_rfork(spc, 0, NULL)) != 0) {
-				send_error_resp(spc, reqno,
-				    RUMPSP_ERR_RFORK_FAILED);
+				send_error_resp(spc, reqno, error);
 				shutdown(spc->spc_fd, SHUT_RDWR);
 				lwproc_release();
 				return;
@@ -1053,7 +999,7 @@ handlereq(struct spclient *spc)
 
 			send_handshake_resp(spc, reqno, 0);
 		} else {
-			send_error_resp(spc, reqno, RUMPSP_ERR_AUTH);
+			send_error_resp(spc, reqno, EAUTH);
 			shutdown(spc->spc_fd, SHUT_RDWR);
 			spcfreebuf(spc);
 			return;
@@ -1072,7 +1018,6 @@ handlereq(struct spclient *spc)
 	if (__predict_false(spc->spc_hdr.rsp_type == RUMPSP_PREFORK)) {
 		struct prefork *pf;
 		uint32_t auth[AUTHLEN];
-		size_t randlen;
 		int inexec;
 
 		DPRINTF(("rump_sp: prefork handler executing for %p\n", spc));
@@ -1082,14 +1027,14 @@ handlereq(struct spclient *spc)
 		inexec = spc->spc_inexec;
 		pthread_mutex_unlock(&spc->spc_mtx);
 		if (inexec) {
-			send_error_resp(spc, reqno, RUMPSP_ERR_INEXEC);
+			send_error_resp(spc, reqno, EBUSY);
 			shutdown(spc->spc_fd, SHUT_RDWR);
 			return;
 		}
 
 		pf = malloc(sizeof(*pf));
 		if (pf == NULL) {
-			send_error_resp(spc, reqno, RUMPSP_ERR_NOMEM);
+			send_error_resp(spc, reqno, ENOMEM);
 			return;
 		}
 
@@ -1101,15 +1046,16 @@ handlereq(struct spclient *spc)
 		lwproc_switch(spc->spc_mainlwp);
 		if ((error = lwproc_rfork(spc, RUMP_RFFDG, NULL)) != 0) {
 			DPRINTF(("rump_sp: fork failed: %d (%p)\n",error, spc));
-			send_error_resp(spc, reqno, RUMPSP_ERR_RFORK_FAILED);
+			send_error_resp(spc, reqno, error);
 			lwproc_switch(NULL);
 			free(pf);
 			return;
 		}
 
 		/* Ok, we have a new process context and a new curlwp */
-		rumpuser_getrandom(auth, sizeof(auth), 0, &randlen);
-		memcpy(pf->pf_auth, auth, sizeof(pf->pf_auth));
+		for (i = 0; i < AUTHLEN; i++) {
+			pf->pf_auth[i] = auth[i] = arc4random();
+		}
 		pf->pf_lwp = lwproc_curlwp();
 		lwproc_switch(NULL);
 
@@ -1128,8 +1074,7 @@ handlereq(struct spclient *spc)
 		int inexec;
 
 		if (spc->spc_hdr.rsp_handshake != HANDSHAKE_EXEC) {
-			send_error_resp(spc, reqno,
-			    RUMPSP_ERR_MALFORMED_REQUEST);
+			send_error_resp(spc, reqno, EINVAL);
 			shutdown(spc->spc_fd, SHUT_RDWR);
 			spcfreebuf(spc);
 			return;
@@ -1139,7 +1084,7 @@ handlereq(struct spclient *spc)
 		inexec = spc->spc_inexec;
 		pthread_mutex_unlock(&spc->spc_mtx);
 		if (inexec) {
-			send_error_resp(spc, reqno, RUMPSP_ERR_INEXEC);
+			send_error_resp(spc, reqno, EBUSY);
 			shutdown(spc->spc_fd, SHUT_RDWR);
 			spcfreebuf(spc);
 			return;
@@ -1166,7 +1111,7 @@ handlereq(struct spclient *spc)
 	}
 
 	if (__predict_false(spc->spc_hdr.rsp_type != RUMPSP_SYSCALL)) {
-		send_error_resp(spc, reqno, RUMPSP_ERR_MALFORMED_REQUEST);
+		send_error_resp(spc, reqno, EINVAL);
 		spcfreebuf(spc);
 		return;
 	}
@@ -1200,9 +1145,8 @@ spserver(void *arg)
 
 	pthread_attr_init(&pattr_detached);
 	pthread_attr_setdetachstate(&pattr_detached, PTHREAD_CREATE_DETACHED);
-#if NOTYET
+	/* XXX: doesn't stacksize currently work on NetBSD */
 	pthread_attr_setstacksize(&pattr_detached, 32*1024);
-#endif
 
 	pthread_mutex_init(&sbamtx, NULL);
 	pthread_cond_init(&sbacv, NULL);
@@ -1213,7 +1157,7 @@ spserver(void *arg)
 		int discoed;
 
 		/* g/c hangarounds (eventually) */
-		discoed = getdisco();
+		discoed = atomic_swap_uint(&disco, 0);
 		while (discoed--) {
 			nfds--;
 			idx = maxidx;
@@ -1267,8 +1211,8 @@ spserver(void *arg)
 						break;
 					default:
 						send_error_resp(spc,
-						  spc->spc_hdr.rsp_reqno,
-						  RUMPSP_ERR_MALFORMED_REQUEST);
+						    spc->spc_hdr.rsp_reqno,
+						    ENOENT);
 						spcfreebuf(spc);
 						break;
 					}
@@ -1302,7 +1246,7 @@ spserver(void *arg)
 static unsigned cleanupidx;
 static struct sockaddr *cleanupsa;
 int
-rumpuser_sp_init(const char *url,
+rumpuser_sp_init(const char *url, const struct rumpuser_sp_ops *spopsp,
 	const char *ostype, const char *osrelease, const char *machine)
 {
 	pthread_t pt;
@@ -1313,29 +1257,25 @@ rumpuser_sp_init(const char *url,
 	int error, s;
 
 	p = strdup(url);
-	if (p == NULL) {
-		error = ENOMEM;
-		goto out;
-	}
+	if (p == NULL)
+		return ENOMEM;
 	error = parseurl(p, &sap, &idx, 1);
 	free(p);
 	if (error)
-		goto out;
+		return error;
 
 	snprintf(banner, sizeof(banner), "RUMPSP-%d.%d-%s-%s/%s\n",
 	    PROTOMAJOR, PROTOMINOR, ostype, osrelease, machine);
 
 	s = socket(parsetab[idx].domain, SOCK_STREAM, 0);
-	if (s == -1) {
-		error = errno;
-		goto out;
-	}
+	if (s == -1)
+		return errno;
 
+	spops = *spopsp;
 	sarg = malloc(sizeof(*sarg));
 	if (sarg == NULL) {
 		close(s);
-		error = ENOMEM;
-		goto out;
+		return ENOMEM;
 	}
 
 	sarg->sps_sock = s;
@@ -1347,26 +1287,23 @@ rumpuser_sp_init(const char *url,
 	/* sloppy error recovery */
 
 	/*LINTED*/
-	if (bind(s, sap, parsetab[idx].slen) == -1) {
-		error = errno;
+	if (bind(s, sap, sap->sa_len) == -1) {
 		fprintf(stderr, "rump_sp: server bind failed\n");
-		goto out;
+		return errno;
 	}
 
 	if (listen(s, MAXCLI) == -1) {
-		error = errno;
 		fprintf(stderr, "rump_sp: server listen failed\n");
-		goto out;
+		return errno;
 	}
 
 	if ((error = pthread_create(&pt, NULL, spserver, sarg)) != 0) {
 		fprintf(stderr, "rump_sp: cannot create wrkr thread\n");
-		goto out;
+		return errno;
 	}
 	pthread_detach(pt);
 
- out:
-	ET(error);
+	return 0;
 }
 
 void

@@ -1,4 +1,4 @@
-/*	$NetBSD: efs_vnops.c,v 1.30 2013/03/18 19:35:36 plunky Exp $	*/
+/*	$NetBSD: efs_vnops.c,v 1.24.10.1 2012/08/12 12:59:49 martin Exp $	*/
 
 /*
  * Copyright (c) 2006 Stephen M. Rumble <rumble@ephemeral.org>
@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: efs_vnops.c,v 1.30 2013/03/18 19:35:36 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: efs_vnops.c,v 1.24.10.1 2012/08/12 12:59:49 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -73,10 +73,9 @@ efs_lookup(void *v)
 	if (err)
 		return (err);
 
-	if (cache_lookup(ap->a_dvp, cnp->cn_nameptr, cnp->cn_namelen,
-			 cnp->cn_nameiop, cnp->cn_flags, NULL, ap->a_vpp)) {
-		return *ap->a_vpp == NULLVP ? ENOENT : 0;
-	}
+	err = cache_lookup(ap->a_dvp, ap->a_vpp, cnp);
+	if (err != -1)
+		return (err);
 
 	/*
 	 * Handle the three lookup types: '.', '..', and everything else.
@@ -104,8 +103,7 @@ efs_lookup(void *v)
 		    EFS_VTOI(ap->a_dvp), ap->a_cnp, &ino);
 		if (err) {
 			if (err == ENOENT && nameiop != CREATE)
-				cache_enter(ap->a_dvp, NULL, cnp->cn_nameptr,
-					    cnp->cn_namelen, cnp->cn_flags);
+				cache_enter(ap->a_dvp, NULL, cnp);
 			if (err == ENOENT && (nameiop == CREATE ||
 			    nameiop == RENAME)) {
 				err = VOP_ACCESS(ap->a_dvp, VWRITE,
@@ -122,8 +120,7 @@ efs_lookup(void *v)
 		*ap->a_vpp = vp;
 	}
 
-	cache_enter(ap->a_dvp, *ap->a_vpp, cnp->cn_nameptr, cnp->cn_namelen,
-		    cnp->cn_flags);
+	cache_enter(ap->a_dvp, *ap->a_vpp, cnp);
 
 	return 0;
 }
@@ -149,9 +146,8 @@ efs_check_permitted(struct vnode *vp, struct efs_inode *eip, mode_t mode,
     kauth_cred_t cred)
 {
 
-	return kauth_authorize_vnode(cred, KAUTH_ACCESS_ACTION(mode,
-	    vp->v_type, eip->ei_mode), vp, NULL, genfs_can_access(vp->v_type,
-	    eip->ei_mode, eip->ei_uid, eip->ei_gid, mode, cred));
+	return genfs_can_access(vp->v_type, eip->ei_mode, eip->ei_uid,
+	    eip->ei_gid, mode, cred);
 }
 
 static int
@@ -350,6 +346,7 @@ efs_readdir(void *v)
 			err = efs_bread(VFSTOEFS(ap->a_vp->v_mount),
 			    ex.ex_bn + i, NULL, &bp);
 			if (err) {
+				brelse(bp, 0);
 				goto exit_err;
 			}
 
@@ -529,6 +526,7 @@ efs_readlink(void *v)
 				err = efs_bread(VFSTOEFS(ap->a_vp->v_mount),
 				    ex.ex_bn + i, NULL, &bp);
 				if (err) {
+					brelse(bp, 0);
 					free(buf, M_EFSTMP);
 					return (err);
 				}

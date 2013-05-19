@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_object.h,v 1.33 2012/09/14 22:20:50 rmind Exp $	*/
+/*	$NetBSD: uvm_object.h,v 1.32.2.1 2012/11/22 20:25:21 riz Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.

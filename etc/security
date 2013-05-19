@@ -1,6 +1,6 @@
 #!/bin/sh -
 #
-#	$NetBSD: security,v 1.112 2013/05/01 05:36:25 agc Exp $
+#	$NetBSD: security,v 1.110 2011/03/02 17:00:28 christos Exp $
 #	from: @(#)security	8.1 (Berkeley) 6/9/93
 #
 
@@ -20,9 +20,6 @@ TZ=UTC; export TZ
 
 if [ -s /etc/security.conf ]; then
 	. /etc/security.conf
-fi
-if [ -s /etc/pkgpath.conf ]; then
-	. /etc/pkgpath.conf
 fi
 
 # Set reasonable defaults (if they're not set in security.conf)
@@ -290,18 +287,14 @@ if checkyesno check_passwd; then
 		column $OUTPUT
 	fi
 
-	awk -v "permit_dups_list=$check_passwd_permit_dups" \
-	'
-	BEGIN {
-		split(permit_dups_list, a);
-		for (i in a) permit_dups[a[i]]++;
-	}
-	{
-		if (!permit_dups[$1])
-			print $2;
-	}' < $MPBYUID | uniq -d > $TMP2
+# To not exclude 'toor', a standard duplicate root account, from the duplicate
+# account test, uncomment the line below (without egrep in it)and comment
+# out the line (with egrep in it) below it.
+#
+#	< $MPBYUID uniq -d -f 1 | awk '{ print $2 }' > $TMP2
+	< $MPBYUID egrep -v '^toor ' | uniq -d -f 1 | awk '{ print $2 }' > $TMP2
 	if [ -s $TMP2 ] ; then
-		printf "\n$MP has duplicate user ids.\n"
+		printf "\n$MP has duplicate user id's.\n"
 		while read uid; do
 			grep -w $uid $MPBYUID
 		done < $TMP2 | column
@@ -929,7 +922,7 @@ fi
 if checkyesno check_pkgs && have_pkgs; then
 	pkgs=$work_dir/pkgs
 	migrate_file "$backup_dir/pkgs" "$pkgs"
-	pkg_dbdir=$(${pkg_admin} config-var PKG_DBDIR)
+	pkg_dbdir=$(pkg_admin config-var PKG_DBDIR)
 	: ${pkg_dbdir:=/var/db/pkg}
 	(	cd $pkg_dbdir
 		$pkg_info | sort
@@ -1012,7 +1005,7 @@ fi
 
 if have_pkgs; then
 	if checkyesno check_pkg_vulnerabilities; then
-		${pkg_admin} ${_compat_K_flag} audit >${OUTPUT} 2>&1
+		pkg_admin ${_compat_K_flag} audit >${OUTPUT} 2>&1
 		if [ -s ${OUTPUT} ]; then
 			printf "\nInstalled vulnerable packages:\n"
 			cat ${OUTPUT}
@@ -1020,7 +1013,7 @@ if have_pkgs; then
 	fi
 
 	if checkyesno check_pkg_signatures; then
-		${pkg_admin} ${_compat_K_flag} check >${OUTPUT} 2>&1
+		pkg_admin ${_compat_K_flag} check >${OUTPUT} 2>&1
 		if [ $? -ne 0 ]; then
 			printf "\nFiles with invalid signatures:\n"
 			cat ${OUTPUT}

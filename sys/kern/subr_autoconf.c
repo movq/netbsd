@@ -1,4 +1,4 @@
-/* $NetBSD: subr_autoconf.c,v 1.226 2013/02/09 00:31:21 christos Exp $ */
+/* $NetBSD: subr_autoconf.c,v 1.222 2012/01/30 23:31:27 matt Exp $ */
 
 /*
  * Copyright (c) 1996, 2000 Christopher G. Demetriou
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_autoconf.c,v 1.226 2013/02/09 00:31:21 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_autoconf.c,v 1.222 2012/01/30 23:31:27 matt Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ddb.h"
@@ -146,7 +146,7 @@ static struct cftable initcftable;
 
 struct matchinfo {
 	cfsubmatch_t fn;
-	device_t parent;
+	struct	device *parent;
 	const int *locs;
 	void	*aux;
 	struct	cfdata *match;
@@ -239,8 +239,7 @@ frob_cfdrivervec(struct cfdriver * const *cfdriverv,
 	cfdriver_fn drv_do, cfdriver_fn drv_undo,
 	const char *style, bool dopanic)
 {
-	void (*pr)(const char *, ...) __printflike(1, 2) =
-	    dopanic ? panic : printf;
+	void (*pr)(const char *, ...) = dopanic ? panic : printf;
 	int i = 0, error = 0, e2;
 
 	for (i = 0; cfdriverv[i] != NULL; i++) {
@@ -271,8 +270,7 @@ frob_cfattachvec(const struct cfattachinit *cfattachv,
 	const char *style, bool dopanic)
 {
 	const struct cfattachinit *cfai = NULL;
-	void (*pr)(const char *, ...) __printflike(1, 2) =
-	    dopanic ? panic : printf;
+	void (*pr)(const char *, ...) = dopanic ? panic : printf;
 	int j = 0, error = 0, e2;
 
 	for (cfai = &cfattachv[0]; cfai->cfai_name != NULL; cfai++) {
@@ -449,7 +447,7 @@ config_create_interruptthreads(void)
 
 	for (i = 0; i < interrupt_config_threads; i++) {
 		(void)kthread_create(PRI_NONE, 0, NULL,
-		    config_interrupts_thread, NULL, NULL, "configintr");
+		    config_interrupts_thread, NULL, NULL, "config");
 	}
 }
 
@@ -476,7 +474,7 @@ config_create_mountrootthreads(void)
 
 	for (i = 0; i < mountroot_config_threads; i++) {
 		(void)kthread_create(PRI_NONE, 0, NULL,
-		    config_mountroot_thread, NULL, NULL, "configroot");
+		    config_mountroot_thread, NULL, NULL, "config");
 	}
 }
 
@@ -858,7 +856,7 @@ config_cfdata_attach(cfdata_t cf, int scannow)
  * found through any attachment in the config data table.
  */
 static int
-dev_in_cfdata(device_t d, cfdata_t cf)
+dev_in_cfdata(const struct device *d, const struct cfdata *cf)
 {
 	const struct cfdata *cf1;
 
@@ -1587,12 +1585,7 @@ config_attach_pseudo(cfdata_t cf)
 #if 0	/* XXXJRT not yet */
 	device_register(dev, NULL);	/* like a root node */
 #endif
-
-	/* Let userland know */
-	devmon_report_device(dev, true);
-
 	(*dev->dv_cfattach->ca_attach)(ROOT, dev, NULL);
-
 	config_process_deferred(&deferred_config_queue, dev);
 	return dev;
 }

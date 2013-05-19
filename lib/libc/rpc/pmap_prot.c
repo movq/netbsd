@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_prot.c,v 1.12 2013/03/11 20:19:29 tron Exp $	*/
+/*	$NetBSD: pmap_prot.c,v 1.10.66.1 2013/03/14 22:03:11 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -37,7 +37,7 @@
 static char *sccsid = "@(#)pmap_prot.c 1.17 87/08/11 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)pmap_prot.c	2.1 88/07/29 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: pmap_prot.c,v 1.12 2013/03/11 20:19:29 tron Exp $");
+__RCSID("$NetBSD: pmap_prot.c,v 1.10.66.1 2013/03/14 22:03:11 riz Exp $");
 #endif
 #endif
 
@@ -62,7 +62,9 @@ __weak_alias(xdr_pmap,_xdr_pmap)
 
 
 bool_t
-xdr_pmap(XDR *xdrs, struct pmap *regs)
+xdr_pmap(xdrs, regs)
+	XDR *xdrs;
+	struct pmap *regs;
 {
 
 	_DIAGASSERT(xdrs != NULL);

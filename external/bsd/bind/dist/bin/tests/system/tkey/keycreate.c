@@ -1,4 +1,4 @@
-/*	$NetBSD: keycreate.c,v 1.4 2013/03/24 18:44:43 christos Exp $	*/
+/*	$NetBSD: keycreate.c,v 1.2.6.1 2012/06/05 21:15:45 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007, 2009, 2011  Internet Systems Consortium, Inc. ("ISC")
@@ -216,10 +216,6 @@ main(int argc, char *argv[]) {
 	isc_result_t result;
 	int type;
 
-	isc__mem_register();
-	isc__task_register();
-	isc__timer_register();
-	isc__socket_register();
 	RUNCHECK(isc_app_start());
 
 	if (argc < 2) {

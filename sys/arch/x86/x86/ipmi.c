@@ -1,4 +1,4 @@
-/*	$NetBSD: ipmi.c,v 1.54 2013/03/19 06:34:28 msaitoh Exp $ */
+/*	$NetBSD: ipmi.c,v 1.52.2.1 2012/04/12 17:09:01 riz Exp $ */
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipmi.c,v 1.54 2013/03/19 06:34:28 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipmi.c,v 1.52.2.1 2012/04/12 17:09:01 riz Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -208,9 +208,9 @@ int	getbits(uint8_t *, int, int);
 int	ipmi_sensor_type(int, int, int);
 
 void	ipmi_smbios_probe(struct smbios_ipmi *, struct ipmi_attach_args *);
-void	ipmi_refresh_sensors(struct ipmi_softc *);
-int	ipmi_map_regs(struct ipmi_softc *, struct ipmi_attach_args *);
-void	ipmi_unmap_regs(struct ipmi_softc *);
+void	ipmi_refresh_sensors(struct ipmi_softc *sc);
+int	ipmi_map_regs(struct ipmi_softc *sc, struct ipmi_attach_args *ia);
+void	ipmi_unmap_regs(struct ipmi_softc *sc);
 
 void	*scan_sig(long, long, int, int, const void *);
 
@@ -408,7 +408,8 @@ bt_sendmsg(struct ipmi_softc *sc, int len, const uint8_t *data)
 }
 
 int
-bt_recvmsg(struct ipmi_softc *sc, int maxlen, int *rxlen, uint8_t *data)
+bt_recvmsg(struct ipmi_softc *sc, int maxlen, int *rxlen,
+    uint8_t *data)
 {
 	uint8_t len, v, i;
 
@@ -502,7 +503,8 @@ int	smic_write_cmd_data(struct ipmi_softc *, uint8_t, const uint8_t *);
 int	smic_read_data(struct ipmi_softc *, uint8_t *);
 
 int
-smic_wait(struct ipmi_softc *sc, uint8_t mask, uint8_t val, const char *lbl)
+smic_wait(struct ipmi_softc *sc, uint8_t mask, uint8_t val,
+    const char *lbl)
 {
 	int v;
 

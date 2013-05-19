@@ -1,4 +1,4 @@
-/*	$NetBSD: becc_pci.c,v 1.13 2012/10/14 14:20:57 msaitoh Exp $	*/
+/*	$NetBSD: becc_pci.c,v 1.11 2012/01/27 18:52:51 para Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: becc_pci.c,v 1.13 2012/10/14 14:20:57 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: becc_pci.c,v 1.11 2012/01/27 18:52:51 para Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,7 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: becc_pci.c,v 1.13 2012/10/14 14:20:57 msaitoh Exp $"
 #include "opt_pci.h"
 #include "pci.h"
 
-void		becc_pci_attach_hook(device_t, device_t,
+void		becc_pci_attach_hook(struct device *, struct device *,
 		    struct pcibus_attach_args *);
 int		becc_pci_bus_maxdevs(void *, int);
 pcitag_t	becc_pci_make_tag(void *, int, int, int);
@@ -70,7 +70,6 @@ void		becc_pci_decompose_tag(void *, pcitag_t, int *, int *,
 		    int *);
 pcireg_t	becc_pci_conf_read(void *, pcitag_t, int);
 void		becc_pci_conf_write(void *, pcitag_t, int, pcireg_t);
-void		becc_pci_conf_interrupt(void *, int, int, int, int, int *);
 
 int		becc_pci_intr_map(const struct pci_attach_args *,
 		    pci_intr_handle_t *);
@@ -104,7 +103,6 @@ becc_pci_init(pci_chipset_tag_t pc, void *cookie)
 	pc->pc_decompose_tag = becc_pci_decompose_tag;
 	pc->pc_conf_read = becc_pci_conf_read;
 	pc->pc_conf_write = becc_pci_conf_write;
-	pc->pc_conf_interrupt = becc_pci_conf_interrupt;
 
 	pc->pc_intr_v = cookie;
 	pc->pc_intr_map = becc_pci_intr_map;
@@ -132,7 +130,7 @@ becc_pci_init(pci_chipset_tag_t pc, void *cookie)
 	    sc->sc_owin_xlate[0] + BECC_PCI_MEM1_SIZE - 1,
 	    NULL, 0, EX_NOWAIT);
 
-	aprint_normal("%s: configuring PCI bus\n", device_xname(sc->sc_dev));
+	aprint_normal("%s: configuring PCI bus\n", sc->sc_dev.dv_xname);
 	pci_configure_bus(pc, ioext, memext, NULL, 0, arm_dcache_align);
 
 	extent_destroy(ioext);
@@ -141,12 +139,12 @@ becc_pci_init(pci_chipset_tag_t pc, void *cookie)
 }
 
 void
-becc_pci_conf_interrupt(void *v, int a, int b, int c, int d, int *p)
+pci_conf_interrupt(pci_chipset_tag_t pc, int a, int b, int c, int d, int *p)
 {
 }
 
 void
-becc_pci_attach_hook(device_t parent, device_t self,
+becc_pci_attach_hook(struct device *parent, struct device *self,
     struct pcibus_attach_args *pba)
 {
 

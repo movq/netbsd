@@ -1,4 +1,4 @@
-/* $NetBSD: acpi_cpu_cstate.c,v 1.59 2012/02/25 17:22:52 jruoho Exp $ */
+/* $NetBSD: acpi_cpu_cstate.c,v 1.58.8.1 2012/02/27 20:11:56 riz Exp $ */
 
 /*-
  * Copyright (c) 2010, 2011 Jukka Ruohonen <jruohonen@iki.fi>
@@ -27,7 +27,7 @@
  * SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_cpu_cstate.c,v 1.59 2012/02/25 17:22:52 jruoho Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_cpu_cstate.c,v 1.58.8.1 2012/02/27 20:11:56 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/cpu.h>

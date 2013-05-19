@@ -1,4 +1,4 @@
-/*	$NetBSD: in.h,v 1.88 2013/04/27 21:35:24 joerg Exp $	*/
+/*	$NetBSD: in.h,v 1.86 2009/09/14 10:36:50 degroote Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1990, 1993
@@ -39,7 +39,6 @@
 #ifndef _NETINET_IN_H_
 #define	_NETINET_IN_H_
 
-#include <sys/featuretest.h>
 #include <machine/int_types.h>
 
 #ifndef uint8_t
@@ -278,7 +277,6 @@ struct ip_opts {
 #define	IP_MULTICAST_LOOP	11   /* u_char; set/get IP multicast loopback */
 #define	IP_ADD_MEMBERSHIP	12   /* ip_mreq; add an IP group membership */
 #define	IP_DROP_MEMBERSHIP	13   /* ip_mreq; drop an IP group membership */
-#define	IP_PORTALGO		18   /* int; port selection algo (rfc6056) */
 #define	IP_PORTRANGE		19   /* int; range to use for ephemeral port */
 #define	IP_RECVIF		20   /* bool; receive reception if w/dgram */
 #define	IP_ERRORMTU		21   /* int; get MTU of last xmit = EMSGSIZE */

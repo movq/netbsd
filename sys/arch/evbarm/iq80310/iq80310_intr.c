@@ -1,4 +1,4 @@
-/*	$NetBSD: iq80310_intr.c,v 1.32 2012/10/03 16:51:44 chs Exp $	*/
+/*	$NetBSD: iq80310_intr.c,v 1.29.8.2 2012/10/17 21:53:58 riz Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iq80310_intr.c,v 1.32 2012/10/03 16:51:44 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iq80310_intr.c,v 1.29.8.2 2012/10/17 21:53:58 riz Exp $");
 
 #ifndef EVBARM_SPL_NOINLINE
 #define	EVBARM_SPL_NOINLINE
@@ -92,7 +92,7 @@ static const int si_to_ipl[SI_NQUEUES] = {
 };
 #endif
 
-void	iq80310_intr_dispatch(struct trapframe *frame);
+void	iq80310_intr_dispatch(struct irqframe *frame);
 
 static inline uint32_t
 iq80310_intstat_read(void)
@@ -415,7 +415,7 @@ iq80310_intr_disestablish(void *cookie)
 }
 
 void
-iq80310_intr_dispatch(struct trapframe *frame)
+iq80310_intr_dispatch(struct irqframe *frame)
 {
 	struct intrq *iq;
 	struct intrhand *ih;

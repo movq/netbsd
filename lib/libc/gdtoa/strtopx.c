@@ -1,4 +1,4 @@
-/* $NetBSD: strtopx.c,v 1.6 2013/04/18 21:54:11 joerg Exp $ */
+/* $NetBSD: strtopx.c,v 1.5 2011/03/20 23:15:35 christos Exp $ */
 
 /****************************************************************
 
@@ -54,7 +54,11 @@ THIS SOFTWARE.
 #endif
 
  int
-strtopx(CONST char *s, char **sp, void *V, locale_t loc)
+#ifdef KR_headers
+strtopx(s, sp, V) CONST char *s; char **sp; void *V;
+#else
+strtopx(CONST char *s, char **sp, void *V)
+#endif
 {
 	static const FPI fpi0 = { 64, 1-16383-64+1, 32766 - 16383 - 64 + 1, 1, SI };
 	ULong bits[2];
@@ -67,7 +71,7 @@ strtopx(CONST char *s, char **sp, void *V, locale_t loc)
 #define fpi &fpi0
 #endif
 
-	k = strtodg(s, sp, fpi, &expt, bits, loc);
+	k = strtodg(s, sp, fpi, &expt, bits);
 	if (k == STRTOG_NoMemory)
 		return k;
 	switch(k & STRTOG_Retmask) {

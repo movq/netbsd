@@ -1,4 +1,4 @@
-#	$NetBSD: files.arm,v 1.117 2013/05/19 15:51:10 rkujawa Exp $
+#	$NetBSD: files.arm,v 1.103.2.1 2012/08/09 06:36:47 jdc Exp $
 
 # temporary define to allow easy moving to ../arch/arm/arm32
 defflag				ARM32
@@ -8,7 +8,7 @@ defflag	opt_cputypes.h		CPU_ARM2 CPU_ARM250 CPU_ARM3
 defflag	opt_cputypes.h		CPU_ARM6 CPU_ARM7 CPU_ARM7TDMI CPU_ARM8
 				CPU_ARM9 CPU_ARM9E CPU_ARM10 CPU_ARM11
 				CPU_SA110 CPU_SA1100 CPU_SA1110 CPU_IXP12X0
-				CPU_FA526 CPU_CORTEX CPU_PJ4B
+				CPU_FA526 CPU_CORTEX
 				CPU_XSCALE_80200 CPU_XSCALE_80321
 				CPU_XSCALE_PXA250 CPU_XSCALE_PXA270
 				CPU_XSCALE_IXP425 
@@ -16,11 +16,8 @@ defflag	opt_cputypes.h		CPU_ARM6 CPU_ARM7 CPU_ARM7TDMI CPU_ARM8
 defflag	opt_cputypes.h		CPU_ARM1136: CPU_ARM11
 defflag	opt_cputypes.h		CPU_ARM1176: CPU_ARM11
 defflag	opt_cputypes.h		CPU_ARM11MPCORE: CPU_ARM11
-defflag	opt_cputypes.h		CPU_CORTEXA5: CPU_CORTEX
-defflag	opt_cputypes.h		CPU_CORTEXA7: CPU_CORTEX
 defflag	opt_cputypes.h		CPU_CORTEXA8: CPU_CORTEX
 defflag	opt_cputypes.h		CPU_CORTEXA9: CPU_CORTEX
-defflag	opt_cputypes.h		CPU_CORTEXA15: CPU_CORTEX
 defflag opt_cputypes.h		FPU_VFP
 
 defparam opt_cpuoptions.h	XSCALE_CCLKCFG
@@ -30,8 +27,8 @@ defflag  opt_cpuoptions.h	XSCALE_NO_COALESCE_WRITES
 defflag  opt_cpuoptions.h	XSCALE_CACHE_READ_WRITE_ALLOCATE
 defflag  opt_cpuoptions.h	ARM32_DISABLE_ALIGNMENT_FAULTS
 defflag  opt_cpuoptions.h	ARM9_CACHE_WRITE_THROUGH
-defflag  opt_cpuoptions.h	TPIDRPRW_IS_CURLWP
-defflag  opt_cpuoptions.h	TPIDRPRW_IS_CURCPU
+defflag  opt_cpuoptions.h	PROCESS_ID_IS_CURLWP
+defflag  opt_cpuoptions.h	PROCESS_ID_IS_CURCPU
 defflag  opt_cpuoptions.h	ARM11_PMC CORTEX_PMC
 defflag  opt_cpuoptions.h	ARM11_CACHE_WRITE_THROUGH
 defflag	 opt_cpuoptions.h	ARM11MPCORE_COMPAT_MMU
@@ -44,24 +41,24 @@ defparam opt_arm_intr_impl.h	ARM_INTR_IMPL
 # ARM-specific debug options
 defflag	opt_arm_debug.h		ARM_LOCK_CAS_DEBUG
 
-# Board-specific bus_space(9)/bus_dma(9) definitions
+# Board-specific bus_space(9) definitions
 defflag  opt_arm_bus_space.h	__BUS_SPACE_HAS_STREAM_METHODS
-				_ARM32_NEED_BUS_DMA_BOUNCE
-				BUSDMA_COUNTERS
 
 # Floating point emulator
-obsolete defflag				ARMFPE
+defflag				ARMFPE
+file	arch/arm/fpe-arm/armfpe_glue.S		armfpe
+file	arch/arm/fpe-arm/armfpe_init.c		armfpe
+file	arch/arm/fpe-arm/armfpe.S		armfpe
 
 # VFP support
-file	arch/arm/vfp/vfp_init.c			arm32
-#file	arch/arm/vfp/pmap_vfp.S			arm32 & fpu_vfp
+file	arch/arm/vfp/vfp_init.c			fpu_vfp
 
 # PMAP_DEBUG (heavily abused option)
 defflag				PMAP_DEBUG
 
 # New PMAP options
 defflag	opt_arm32_pmap.h	ARM32_NEW_VM_LAYOUT PMAPCOUNTERS
-				PMAP_STEAL_MEMORY PMAP_NEED_ALLOC_POOLPAGE
+				PMAP_STEAL_MEMORY
 
 # MI console support
 file	dev/cons.c
@@ -78,7 +75,7 @@ file	arch/arm/arm/fiq.c
 file	arch/arm/arm/fiq_subr.S
 
 # mainbus files
-device	mainbus { [base = -1], [size = 0], [dack = -1], [irq = -1], [intrbase = -1], [core = -1] }
+device	mainbus { [base = -1], [size = 0], [dack = -1], [irq = -1] }
 attach	mainbus at root
 file	arch/arm/mainbus/mainbus.c		mainbus & arm32
 file	arch/arm/mainbus/mainbus_io.c		mainbus & arm32
@@ -136,8 +133,7 @@ file	arch/arm/arm/cpufunc_asm_armv5.S	cpu_arm10 | cpu_arm11mpcore
 file	arch/arm/arm/cpufunc_asm_armv5_ec.S	cpu_arm9e | cpu_arm10 |
 							cpu_sheeva
 file	arch/arm/arm/cpufunc_asm_armv6.S	cpu_arm11 | cpu_cortex
-file	arch/arm/arm/cpufunc_asm_armv7.S	cpu_cortex | cpu_pj4b
-file	arch/arm/arm/cpufunc_asm_pj4b.S		cpu_pj4b
+file	arch/arm/arm/cpufunc_asm_armv7.S	cpu_cortex
 file	arch/arm/arm/cpufunc_asm_sa1.S		cpu_sa110 | cpu_sa1100 |
 							cpu_sa1110 |
 							cpu_ixp12x0
@@ -151,7 +147,6 @@ file	arch/arm/arm/cpufunc_asm_xscale.S	cpu_xscale_80200 |
 						    cpu_cortex
 file	arch/arm/arm/cpufunc_asm_ixp12x0.S	cpu_ixp12x0
 file	arch/arm/arm/cpufunc_asm_sheeva.S	cpu_sheeva
-file	arch/arm/arm/cpu_exec.c
 file	arch/arm/arm/fusu.S
 file	arch/arm/arm/idle_machdep.c
 file	arch/arm/arm/lock_cas.S
@@ -188,10 +183,6 @@ file	arch/arm/arm32/cortex_pmc.c		cortex_pmc
 
 # arm32 library functions
 file	arch/arm/arm32/bcopy_page.S		arm32
-
-#
-include "compat/netbsd32/files.netbsd32"
-file	arch/arm/arm32/netbsd32_machdep.c	arm32 & compat_netbsd32
 
 # Linux binary compatibility (COMPAT_LINUX)
 include "compat/ossaudio/files.ossaudio"

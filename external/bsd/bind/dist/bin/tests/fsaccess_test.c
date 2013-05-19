@@ -1,4 +1,4 @@
-/*	$NetBSD: fsaccess_test.c,v 1.4 2013/03/24 18:44:40 christos Exp $	*/
+/*	$NetBSD: fsaccess_test.c,v 1.2.6.1 2012/06/05 21:15:19 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
@@ -38,10 +38,6 @@ main(void) {
 	isc_fsaccess_t access;
 	isc_result_t result;
 
-	isc__mem_register();
-	isc__task_register();
-	isc__timer_register();
-	isc__socket_register();
 	remove(PATH);
 	fopen(PATH, "w");
 	chmod(PATH, 0);

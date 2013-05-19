@@ -1,4 +1,4 @@
-/*	$NetBSD: nbperf.h,v 1.4 2013/01/31 16:32:02 joerg Exp $	*/
+/*	$NetBSD: nbperf.h,v 1.3.8.1 2013/02/14 22:06:18 jdc Exp $	*/
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
  * All rights reserved.

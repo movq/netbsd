@@ -1,4 +1,4 @@
-/* $NetBSD: main.c,v 1.22 2012/12/25 17:02:35 phx Exp $ */
+/* $NetBSD: main.c,v 1.17.2.1 2012/06/03 21:42:51 jdc Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -111,7 +111,6 @@ static int parse_cmdline(char **, int, char *, char *);
 static int is_space(char);
 #ifdef DEBUG
 static void sat_test(void);
-static void findflash(void);
 #endif
 
 #define	BNAME_DEFAULT "wd0:"
@@ -120,14 +119,15 @@ static void findflash(void);
 void
 main(int argc, char *argv[], char *bootargs_start, char *bootargs_end)
 {
-	unsigned long marks[MARK_MAX];
 	struct brdprop *brdprop;
+	unsigned long marks[MARK_MAX];
 	char *new_argv[MAX_ARGS];
-	char *bname;
 	ssize_t len;
-	int err, fd, howto, i, n;
+	int n, i, fd, howto;
+	char *bname;
 
-	printf("\n>> %s altboot, revision %s\n", bootprog_name, bootprog_rev);
+	printf("\n");
+	printf(">> %s altboot, revision %s\n", bootprog_name, bootprog_rev);
 
 	brdprop = brd_lookup(brdtype);
 	printf(">> %s, cpu %u MHz, bus %u MHz, %dMB SDRAM\n", brdprop->verbose,
@@ -218,9 +218,10 @@ main(int argc, char *argv[], char *bootargs_start, char *bootargs_end)
 	}
 
 	/* intialize a disk driver */
-	for (i = 0, n = 0; i < nata; i++)
-		n += dskdv_init(&lata[i]);
-	if (n == 0)
+	for (n = 0; n < nata; n++)
+		if (dskdv_init(&lata[n]) != 0)
+			break;
+	if (n >= nata)
 		printf("IDE/SATA device driver was not found\n");
 
 	/* initialize a network interface */
@@ -233,22 +234,13 @@ main(int argc, char *argv[], char *bootargs_start, char *bootargs_end)
 	/* wait 2s for user to enter interactive mode */
 	for (n = 200; n >= 0; n--) {
 		if (n % 100 == 0)
-			printf("\rHit any key to enter interactive mode: %d",
+			printf("Hit any key to enter interactive mode: %d\r",
 			    n / 100);
 		if (tstchar()) {
 #ifdef DEBUG
-			unsigned c;
-
-			c = toupper(getchar());
-			if (c == 'C') {
+			if (toupper(getchar()) == 'C') {
 				/* controller test terminal */
 				sat_test();
-				n = 200;
-				continue;
-			}
-			else if (c == 'F') {
-				/* find strings in Flash ROM */
-				findflash();
 				n = 200;
 				continue;
 			}
@@ -281,112 +273,83 @@ main(int argc, char *argv[], char *bootargs_start, char *bootargs_end)
 		if (i >= sizeof(bootargs) / sizeof(bootargs[0]))
 			break;	/* break on first unknown string */
 	}
-
-	/*
-	 * If no device name is given, we construct a list of drives
-	 * which have valid disklabels.
-	 */
-	if (n >= argc) {
-		n = 0;
-		argc = 0;
-		argv = alloc(MAX_UNITS * (sizeof(char *) + sizeof("wdN:")));
-		bname = (char *)(argv + MAX_UNITS);
-		for (i = 0; i < MAX_UNITS; i++) {
-			if (!dlabel_valid(i))
-				continue;
-			sprintf(bname, "wd%d:", i);
-			argv[argc++] = bname;
-			bname += sizeof("wdN:");
-		}
-		/* use default drive if no valid disklabel is found */
-		if (argc == 0) {
-			argc = 1;
-			argv[0] = BNAME_DEFAULT;
-		}
-	}
-
-	/* try to boot off kernel from the drive list */
-	while (n < argc) {
-		bname = argv[n++];
-
+	if (n >= argc)
+		bname = BNAME_DEFAULT;
+	else {
+		bname = argv[n];
 		if (check_bootname(bname) == 0) {
 			printf("%s not a valid bootname\n", bname);
-			continue;
+			goto loadfail;
 		}
+	}
 
-		if ((fd = open(bname, 0)) < 0) {
-			if (errno == ENOENT)
-				printf("\"%s\" not found\n", bi_path.bootpath);
-			continue;
-		}
-		printf("loading \"%s\" ", bi_path.bootpath);
-		marks[MARK_START] = 0;
+	if ((fd = open(bname, 0)) < 0) {
+		if (errno == ENOENT)
+			printf("\"%s\" not found\n", bi_path.bootpath);
+		goto loadfail;
+	}
+	printf("loading \"%s\" ", bi_path.bootpath);
+	marks[MARK_START] = 0;
 
-		if (howto == -1) {
-			/* load another altboot binary and replace ourselves */
-			len = read(fd, (void *)0x100000, 0x1000000 - 0x100000);
-			if (len == -1)
-				goto loadfail;
-			close(fd);
-			netif_shutdown_all();
-
-			memcpy((void *)0xf0000, newaltboot,
-			    newaltboot_end - newaltboot);
-			__syncicache((void *)0xf0000,
-			    newaltboot_end - newaltboot);
-			printf("Restarting...\n");
-			run((void *)1, argv, (void *)0x100000, (void *)len,
-			    (void *)0xf0000);
-		}
-
-		err = fdloadfile(fd, marks, LOAD_KERNEL);
+	if (howto == -1) {
+		/* load another altboot binary and replace ourselves */
+		len = read(fd, (void *)0x100000, 0x1000000 - 0x100000);
+		if (len == -1)
+			goto loadfail;
 		close(fd);
-		if (err < 0)
-			continue;
-
-		printf("entry=%p, ssym=%p, esym=%p\n",
-		    (void *)marks[MARK_ENTRY],
-		    (void *)marks[MARK_SYM],
-		    (void *)marks[MARK_END]);
-
-		bootinfo = (void *)0x4000;
-		bi_init(bootinfo);
-		bi_add(&bi_cons, BTINFO_CONSOLE, sizeof(bi_cons));
-		bi_add(&bi_mem, BTINFO_MEMORY, sizeof(bi_mem));
-		bi_add(&bi_clk, BTINFO_CLOCK, sizeof(bi_clk));
-		bi_add(&bi_path, BTINFO_BOOTPATH, sizeof(bi_path));
-		bi_add(&bi_rdev, BTINFO_ROOTDEVICE, sizeof(bi_rdev));
-		bi_add(&bi_fam, BTINFO_PRODFAMILY, sizeof(bi_fam));
-		if (brdtype == BRD_SYNOLOGY || brdtype == BRD_DLINKDSM) {
-			/* need to pass this MAC address to kernel */
-			bi_add(&bi_net, BTINFO_NET, sizeof(bi_net));
-		}
-
-		if (modules_enabled) {
-			if (fsmod != NULL)
-				module_add(fsmod);
-			kmodloadp = marks[MARK_END];
-			btinfo_modulelist = NULL;
-			module_load(bname);
-			if (btinfo_modulelist != NULL &&
-			    btinfo_modulelist->num > 0)
-				bi_add(btinfo_modulelist, BTINFO_MODULELIST,
-				    btinfo_modulelist_size);
-		}
-
-		launchfixup();
 		netif_shutdown_all();
 
-		__syncicache((void *)marks[MARK_ENTRY],
-		    (u_int)marks[MARK_SYM] - (u_int)marks[MARK_ENTRY]);
+		memcpy((void *)0xf0000, newaltboot,
+		    newaltboot_end - newaltboot);
+		__syncicache((void *)0xf0000, newaltboot_end - newaltboot);
+		printf("Restarting...\n");
+		run((void *)1, argv, (void *)0x100000, (void *)len,
+		    (void *)0xf0000);
+	} else if (fdloadfile(fd, marks, LOAD_KERNEL) < 0)
+		goto loadfail;
+	close(fd);
 
-		run((void *)marks[MARK_SYM], (void *)marks[MARK_END],
-		    (void *)howto, bootinfo, (void *)marks[MARK_ENTRY]);
+	printf("entry=%p, ssym=%p, esym=%p\n",
+	    (void *)marks[MARK_ENTRY],
+	    (void *)marks[MARK_SYM],
+	    (void *)marks[MARK_END]);
 
-		/* should never come here */
-		printf("exec returned. Restarting...\n");
-		_rtt();
+	bootinfo = (void *)0x4000;
+	bi_init(bootinfo);
+	bi_add(&bi_cons, BTINFO_CONSOLE, sizeof(bi_cons));
+	bi_add(&bi_mem, BTINFO_MEMORY, sizeof(bi_mem));
+	bi_add(&bi_clk, BTINFO_CLOCK, sizeof(bi_clk));
+	bi_add(&bi_path, BTINFO_BOOTPATH, sizeof(bi_path));
+	bi_add(&bi_rdev, BTINFO_ROOTDEVICE, sizeof(bi_rdev));
+	bi_add(&bi_fam, BTINFO_PRODFAMILY, sizeof(bi_fam));
+	if (brdtype == BRD_SYNOLOGY || brdtype == BRD_DLINKDSM) {
+		/* need to set this MAC address in kernel driver later */
+		bi_add(&bi_net, BTINFO_NET, sizeof(bi_net));
 	}
+
+	if (modules_enabled) {
+		if (fsmod != NULL)
+			module_add(fsmod);
+		kmodloadp = marks[MARK_END];
+		btinfo_modulelist = NULL;
+		module_load(bname);
+		if (btinfo_modulelist != NULL && btinfo_modulelist->num > 0)
+			bi_add(btinfo_modulelist, BTINFO_MODULELIST,
+			    btinfo_modulelist_size);
+	}
+
+	netif_shutdown_all();
+
+	__syncicache((void *)marks[MARK_ENTRY],
+	    (u_int)marks[MARK_SYM] - (u_int)marks[MARK_ENTRY]);
+
+	run((void *)marks[MARK_SYM], (void *)marks[MARK_END],
+	    (void *)howto, bootinfo, (void *)marks[MARK_ENTRY]);
+
+	/* should never come here */
+	printf("exec returned. Restarting...\n");
+	_rtt();
+
   loadfail:
 	printf("load failed. Restarting...\n");
 	_rtt();
@@ -674,40 +637,6 @@ is_space(char c)
 }
 
 #ifdef DEBUG
-static void
-findflash(void)
-{
-	char buf[256];
-	int i, n;
-	unsigned char c, *p;
-
-	for (;;) {
-		printf("\nfind> ");
-		gets(buf);
-		if (tolower((unsigned)buf[0]) == 'x')
-			break;
-		for (i = 0, n = 0, c = 0; buf[i]; i++) {
-			c <<= 4;
-			c |= hex2nibble(buf[i]);
-			if (i & 1)
-				buf[n++] = c;
-		}
-		printf("Searching for:");
-		for (i = 0; i < n; i++)
-			printf(" %02x", buf[i]);
-		printf("\n");
-		for (p = (unsigned char *)0xff000000;
-		     p <= (unsigned char *)(0xffffffff-n); p++) {
-			for (i = 0; i < n; i++) {
-				if (p[i] != buf[i])
-					break;
-			}
-			if (i >= n)
-				printf("Found at %08x\n", (unsigned)p);
-		}
-	}
-}
-
 static void
 sat_test(void)
 {

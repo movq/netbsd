@@ -1,4 +1,4 @@
-/*	$NetBSD: gsstest.c,v 1.5 2013/03/24 18:44:42 christos Exp $	*/
+/*	$NetBSD: gsstest.c,v 1.3.4.1 2012/06/05 21:15:35 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2006, 2007, 2009-2011  Internet Systems Consortium, Inc. ("ISC")
@@ -459,10 +459,6 @@ main(int argc, char *argv[]) {
 	UNUSED(argv);
 	UNUSED(argc);
 
-	isc__mem_register();
-	isc__task_register();
-	isc__timer_register();
-	isc__socket_register();
 	RUNCHECK(isc_app_start());
 
 	dns_result_register();

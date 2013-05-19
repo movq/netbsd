@@ -1,4 +1,4 @@
-/*	$NetBSD: ehcivar.h,v 1.42 2013/02/02 14:15:55 matt Exp $ */
+/*	$NetBSD: ehcivar.h,v 1.38 2011/01/18 08:29:24 matt Exp $ */
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -29,11 +29,6 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _EHCIVAR_H_
-#define _EHCIVAR_H_
-
-#include <sys/pool.h>
-
 typedef struct ehci_soft_qtd {
 	ehci_qtd_t qtd;
 	struct ehci_soft_qtd *nextqtd; /* mirrors nextqtd in TD */
@@ -44,8 +39,7 @@ typedef struct ehci_soft_qtd {
 	LIST_ENTRY(ehci_soft_qtd) hnext;
 	u_int16_t len;
 } ehci_soft_qtd_t;
-#define EHCI_SQTD_ALIGN	MAX(EHCI_QTD_ALIGN, CACHE_LINE_SIZE)
-#define EHCI_SQTD_SIZE ((sizeof (struct ehci_soft_qtd) + EHCI_SQTD_ALIGN - 1) & -EHCI_SQTD_ALIGN)
+#define EHCI_SQTD_SIZE ((sizeof (struct ehci_soft_qtd) + EHCI_QTD_ALIGN - 1) / EHCI_QTD_ALIGN * EHCI_QTD_ALIGN)
 #define EHCI_SQTD_CHUNK (EHCI_PAGE_SIZE / EHCI_SQTD_SIZE)
 
 typedef struct ehci_soft_qh {
@@ -115,11 +109,6 @@ struct ehci_soft_islot {
 
 typedef struct ehci_softc {
 	device_t sc_dev;
-	kmutex_t sc_lock;
-	kmutex_t sc_intr_lock;
-	kcondvar_t sc_doorbell;
-	void *sc_doorbell_si;
-	void *sc_pcd_si;
 	struct usbd_bus sc_bus;
 	bus_space_tag_t iot;
 	bus_space_handle_t ioh;
@@ -151,6 +140,7 @@ typedef struct ehci_softc {
 	struct ehci_soft_itd **sc_softitds;
 
 	TAILQ_HEAD(, ehci_xfer) sc_intrhead;
+	kmutex_t sc_intrhead_lock;
 
 	ehci_soft_qh_t *sc_freeqhs;
 	ehci_soft_qtd_t *sc_freeqtds;
@@ -162,13 +152,16 @@ typedef struct ehci_softc {
 	u_int8_t sc_conf;		/* device configuration */
 	usbd_xfer_handle sc_intrxfer;
 	char sc_isreset[EHCI_MAX_PORTS];
+#ifdef USB_USE_SOFTINTR
 	char sc_softwake;
-	kcondvar_t sc_softwake_cv;
+#endif /* USB_USE_SOFTINTR */
 
 	u_int32_t sc_eintrs;
 	ehci_soft_qh_t *sc_async_head;
 
-	pool_cache_t sc_xferpool;	/* free xfer pool */
+	SIMPLEQ_HEAD(, usbd_xfer) sc_free_xfers; /* free xfers */
+
+	kmutex_t sc_doorbell_lock;
 
 	struct callout sc_tmo_intrlist;
 
@@ -201,5 +194,3 @@ void		ehci_childdet(device_t, device_t);
 bool		ehci_suspend(device_t, const pmf_qual_t *);
 bool		ehci_resume(device_t, const pmf_qual_t *);
 bool		ehci_shutdown(device_t, int);
-
-#endif /* _EHCIVAR_H_ */

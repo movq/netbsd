@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_wakeup.c,v 1.32 2012/08/26 01:04:03 jakllsch Exp $	*/
+/*	$NetBSD: acpi_wakeup.c,v 1.29.8.2 2012/09/03 18:55:11 riz Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2011 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.32 2012/08/26 01:04:03 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.29.8.2 2012/09/03 18:55:11 riz Exp $");
 
 /*-
  * Copyright (c) 2001 Takanori Watanabe <takawata@jp.freebsd.org>
@@ -62,7 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.32 2012/08/26 01:04:03 jakllsch Ex
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.32 2012/08/26 01:04:03 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.29.8.2 2012/09/03 18:55:11 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -414,9 +414,9 @@ acpi_md_sleep_init(void)
 	pmap_update(pmap_kernel());
 }
 
-SYSCTL_SETUP(sysctl_md_acpi_setup, "ACPI x86 sysctl setup")
+SYSCTL_SETUP(sysctl_md_acpi_setup, "acpi x86 sysctl setup")
 {
-	const struct sysctlnode *rnode;
+	const struct sysctlnode *rnode, *mnode;
 	int err;
 
 	err = sysctl_createv(clog, 0, NULL, &rnode,
@@ -424,14 +424,14 @@ SYSCTL_SETUP(sysctl_md_acpi_setup, "ACPI x86 sysctl setup")
 	    NULL, NULL, 0, NULL, 0, CTL_HW, CTL_EOL);
 
 	if (err != 0)
-		return;
+		goto out;
 
 	err = sysctl_createv(clog, 0, &rnode, &rnode,
 	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "acpi", NULL,
 	    NULL, 0, NULL, 0, CTL_CREATE, CTL_EOL);
 
 	if (err != 0)
-		return;
+		goto out;
 
 	err = sysctl_createv(clog, 0, &rnode, &rnode,
 	    CTLFLAG_PERMANENT, CTLTYPE_NODE,
@@ -439,7 +439,7 @@ SYSCTL_SETUP(sysctl_md_acpi_setup, "ACPI x86 sysctl setup")
 	    NULL, 0, NULL, 0, CTL_CREATE, CTL_EOL);
 
 	if (err != 0)
-		return;
+		goto out;
 
 	(void)sysctl_createv(NULL, 0, &rnode, NULL,
 	    CTLFLAG_READWRITE, CTLTYPE_BOOL, "beep",
@@ -449,6 +449,29 @@ SYSCTL_SETUP(sysctl_md_acpi_setup, "ACPI x86 sysctl setup")
 	(void)sysctl_createv(NULL, 0, &rnode, NULL,
 	    CTLFLAG_READWRITE, CTLTYPE_INT, "vbios",
 	    NULL, sysctl_md_acpi_vbios_reset,
+	    0, NULL, 0, CTL_CREATE, CTL_EOL);
+
+	/*
+	 * All ACPI-specific sysctl(9) nodes are centralized
+	 * under hw.acpi. The two variables below are provided
+	 * for backwards compatibility.
+	 */
+out:
+	err = sysctl_createv(NULL, 0, NULL, &mnode,
+	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "machdep",
+	    NULL, NULL, 0, NULL, 0, CTL_MACHDEP, CTL_EOL);
+
+	if (err != 0)
+		return;
+
+	(void)sysctl_createv(NULL, 0, &mnode, NULL,
+	    CTLFLAG_READWRITE, CTLTYPE_INT, "acpi_vbios_reset",
+	    NULL, sysctl_md_acpi_vbios_reset,
+	    0, NULL, 0, CTL_CREATE, CTL_EOL);
+
+	(void)sysctl_createv(NULL, 0, &mnode, NULL,
+	    CTLFLAG_READWRITE, CTLTYPE_BOOL, "acpi_beep_on_reset",
+	    NULL, sysctl_md_acpi_beep_on_reset,
 	    0, NULL, 0, CTL_CREATE, CTL_EOL);
 }
 

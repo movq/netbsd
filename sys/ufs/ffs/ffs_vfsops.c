@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_vfsops.c,v 1.282 2013/01/22 09:39:16 dholland Exp $	*/
+/*	$NetBSD: ffs_vfsops.c,v 1.275.2.2 2012/09/13 22:27:43 riz Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_vfsops.c,v 1.282 2013/01/22 09:39:16 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_vfsops.c,v 1.275.2.2 2012/09/13 22:27:43 riz Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -114,8 +114,6 @@ MODULE(MODULE_CLASS_VFS, ffs, NULL);
 static int	ffs_vfs_fsync(vnode_t *, int);
 
 static struct sysctllog *ffs_sysctl_log;
-
-static kauth_listener_t ffs_snapshot_listener;
 
 /* how many times ffs_init() was called */
 int ffs_initcount = 0;
@@ -175,22 +173,6 @@ static const struct ufs_ops ffs_ufsops = {
 	.uo_balloc = ffs_balloc,
 	.uo_unmark_vnode = (void (*)(vnode_t *))nullop,
 };
-
-static int
-ffs_snapshot_cb(kauth_cred_t cred, kauth_action_t action, void *cookie,
-    void *arg0, void *arg1, void *arg2, void *arg3)
-{
-	vnode_t *vp = arg2;
-	int result = KAUTH_RESULT_DEFER;;
-
-	if (action != KAUTH_SYSTEM_FS_SNAPSHOT)
-		return result;
-
-	if (VTOI(vp)->i_uid == kauth_cred_geteuid(cred))
-		result = KAUTH_RESULT_ALLOW;
-
-	return result;
-}
 
 static int
 ffs_modcmd(modcmd_t cmd, void *arg)
@@ -265,19 +247,12 @@ ffs_modcmd(modcmd_t cmd, void *arg)
 		
 #endif /* UFS_EXTATTR */
 
-		ffs_snapshot_listener = kauth_listen_scope(KAUTH_SCOPE_SYSTEM,
-		    ffs_snapshot_cb, NULL);
-		if (ffs_snapshot_listener == NULL)
-			printf("ffs_modcmd: can't listen on system scope.\n");
-
 		break;
 	case MODULE_CMD_FINI:
 		error = vfs_detach(&ffs_vfsops);
 		if (error != 0)
 			break;
 		sysctl_teardown(&ffs_sysctl_log);
-		if (ffs_snapshot_listener != NULL)
-			kauth_unlisten_scope(ffs_snapshot_listener);
 		break;
 	default:
 		error = ENOTTY;
@@ -429,9 +404,7 @@ ffs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 		    (mp->mnt_flag & MNT_RDONLY) == 0)
 			accessmode |= VWRITE;
 		vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
-		error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_MOUNT,
-		    KAUTH_REQ_SYSTEM_MOUNT_DEVICE, mp, devvp,
-		    KAUTH_ARG(accessmode));
+		error = genfs_can_mount(devvp, accessmode, l->l_cred);
 		VOP_UNLOCK(devvp);
 	}
 
@@ -580,10 +553,6 @@ ffs_mount(struct mount *mp, const char *path, void *data, size_t *data_len)
 			}
 		}
 #endif
-
-		if ((mp->mnt_flag & MNT_DISCARD) && !(ump->um_discarddata))
-			ump->um_discarddata = ffs_discard_init(devvp, fs);
-
 		if (args->fspec == NULL)
 			return 0;
 	}
@@ -676,6 +645,7 @@ ffs_reload(struct mount *mp, kauth_cred_t cred, struct lwp *l)
 	error = bread(devvp, fs->fs_sblockloc / DEV_BSIZE, fs->fs_sbsize,
 		      NOCRED, 0, &bp);
 	if (error) {
+		brelse(bp, 0);
 		return (error);
 	}
 	newfs = kmem_alloc(fs->fs_sbsize, KM_SLEEP);
@@ -730,6 +700,7 @@ ffs_reload(struct mount *mp, kauth_cred_t cred, struct lwp *l)
 		error = bread(devvp, (daddr_t)(APPLEUFS_LABEL_OFFSET / DEV_BSIZE),
 			APPLEUFS_LABEL_SIZE, cred, 0, &bp);
 		if (error && error != EINVAL) {
+			brelse(bp, 0);
 			return (error);
 		}
 		if (error == 0) {
@@ -737,8 +708,8 @@ ffs_reload(struct mount *mp, kauth_cred_t cred, struct lwp *l)
 				(struct appleufslabel *)bp->b_data, NULL);
 			if (error == 0)
 				ump->um_flags |= UFS_ISAPPLEUFS;
-			brelse(bp, 0);
 		}
+		brelse(bp, 0);
 		bp = NULL;
 	}
 #else
@@ -791,6 +762,7 @@ ffs_reload(struct mount *mp, kauth_cred_t cred, struct lwp *l)
 		error = bread(devvp, fsbtodb(fs, fs->fs_csaddr + i), bsize,
 			      NOCRED, 0, &bp);
 		if (error) {
+			brelse(bp, 0);
 			return (error);
 		}
 #ifdef FFS_EI
@@ -852,6 +824,7 @@ ffs_reload(struct mount *mp, kauth_cred_t cred, struct lwp *l)
 		error = bread(devvp, fsbtodb(fs, ino_to_fsba(fs, ip->i_number)),
 			      (int)fs->fs_bsize, NOCRED, 0, &bp);
 		if (error) {
+			brelse(bp, 0);
 			vput(vp);
 			(void)vunmark(mvp);
 			break;
@@ -1306,9 +1279,6 @@ ffs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 		ufs_extattr_uepm_init(&ump->um_extattr);	
 #endif /* UFS_EXTATTR */
 
-	if (mp->mnt_flag & MNT_DISCARD)
-		ump->um_discarddata = ffs_discard_init(devvp, fs);
-
 	return (0);
 out:
 #ifdef WAPBL
@@ -1465,11 +1435,6 @@ ffs_unmount(struct mount *mp, int mntflags)
 	extern int doforce;
 #endif
 
-	if (ump->um_discarddata) {
-		ffs_discard_finish(ump->um_discarddata, mntflags);
-		ump->um_discarddata = NULL;
-	}
-
 	flags = 0;
 	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
@@ -1609,7 +1574,7 @@ ffs_statvfs(struct mount *mp, struct statvfs *sbp)
 		sbp->f_bavail = sbp->f_bfree - sbp->f_bresvd;
 	else
 		sbp->f_bavail = 0;
-	sbp->f_files =  fs->fs_ncg * fs->fs_ipg - UFS_ROOTINO;
+	sbp->f_files =  fs->fs_ncg * fs->fs_ipg - ROOTINO;
 	sbp->f_ffree = fs->fs_cstotal.cs_nifree + fs->fs_pendinginodes;
 	sbp->f_favail = sbp->f_ffree;
 	sbp->f_fresvd = 0;
@@ -1875,6 +1840,7 @@ ffs_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
 		 */
 
 		vput(vp);
+		brelse(bp, 0);
 		*vpp = NULL;
 		return (error);
 	}
@@ -1936,7 +1902,7 @@ ffs_fhtovp(struct mount *mp, struct fid *fhp, struct vnode **vpp)
 
 	memcpy(&ufh, fhp, sizeof(ufh));
 	fs = VFSTOUFS(mp)->um_fs;
-	if (ufh.ufid_ino < UFS_ROOTINO ||
+	if (ufh.ufid_ino < ROOTINO ||
 	    ufh.ufid_ino >= fs->fs_ncg * fs->fs_ipg)
 		return (ESTALE);
 	return (ufs_fhtovp(mp, &ufh, vpp));

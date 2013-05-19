@@ -1,4 +1,4 @@
-/* $NetBSD: acpi_cpu.c,v 1.49 2012/03/27 18:37:57 jruoho Exp $ */
+/* $NetBSD: acpi_cpu.c,v 1.48 2011/11/14 02:44:59 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2010, 2011 Jukka Ruohonen <jruohonen@iki.fi>
@@ -27,7 +27,7 @@
  * SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_cpu.c,v 1.49 2012/03/27 18:37:57 jruoho Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_cpu.c,v 1.48 2011/11/14 02:44:59 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/cpu.h>
@@ -83,7 +83,6 @@ static const struct {
 	const char	 *vers;
 } acpicpu_quirks[] = {
 	{ "Supermicro", "PDSMi-LN4", "0123456789" },
-	{ "ASUSTeK Computer INC.", "M2A-MX", "Rev 1.xx" },
 };
 
 CFATTACH_DECL_NEW(acpicpu, sizeof(struct acpicpu_softc),
@@ -99,9 +98,9 @@ acpicpu_match(device_t parent, cfdata_t match, void *aux)
 	if (acpi_softc == NULL)
 		return 0;
 
-	manu = pmf_get_platform("board-vendor");
-	prod = pmf_get_platform("board-product");
-	vers = pmf_get_platform("board-version");
+	manu = pmf_get_platform("system-vendor");
+	prod = pmf_get_platform("system-product");
+	vers = pmf_get_platform("system-version");
 
 	if (manu != NULL && prod != NULL && vers != NULL) {
 

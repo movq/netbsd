@@ -1,4 +1,4 @@
-/*	$NetBSD: limits.h,v 1.33 2012/11/18 17:41:53 manu Exp $	*/
+/*	$NetBSD: limits.h,v 1.31 2011/10/06 16:02:52 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -144,19 +144,24 @@
  * we are done implementing them.
  */
 #if !defined(_INCOMPLETE_XOPEN_C063)
+#define __stub_linkat
+#define __stub_renameat
+#define __stub_mkfifoat
+#define __stub_mknodat
+#define __stub_mkdirat
+#define __stub_faccessat
+#define __stub_fchmodat
+#define __stub_fchownat
 #define __stub_fexecve
+#define __stub_fstatat
+#define __stub_utimensat
+#define __stub_openat
+#define __stub_readlinkat
+#define __stub_symlinkat
+#define __stub_unlinkat
 #endif
 
 #include <machine/limits.h>
-
-#ifdef __CHAR_UNSIGNED__
-# define CHAR_MIN     0
-# define CHAR_MAX     UCHAR_MAX
-#else
-# define CHAR_MIN     SCHAR_MIN
-# define CHAR_MAX     SCHAR_MAX
-#endif
-
 #include <sys/syslimits.h>
 
 #endif /* !_LIMITS_H_ */

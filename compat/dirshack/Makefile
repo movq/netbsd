@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2012/08/17 16:22:27 joerg Exp $
+#	$NetBSD: Makefile,v 1.2 2011/04/17 01:29:06 mrg Exp $
 
 # hacky method to get compat multilib base objdirs created before
 # make tries to go create the subdirs used for builds.
@@ -14,8 +14,6 @@
 # handles these subdirs as normal, with the base objdir created.
 
 .include <bsd.own.mk>
-
-TARGETS+=	build_install
 
 .if ${MKCOMPAT} != "no"
 .if make(obj)

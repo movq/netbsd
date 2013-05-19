@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.190 2012/05/01 09:40:15 martin Exp $ */
+/*	$NetBSD: trap.c,v 1.188 2011/07/30 19:29:12 martin Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.190 2012/05/01 09:40:15 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.188 2011/07/30 19:29:12 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_compat_svr4.h"
@@ -65,6 +65,8 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.190 2012/05/01 09:40:15 martin Exp $");
 #include <sys/resource.h>
 #include <sys/signal.h>
 #include <sys/wait.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscall.h>
 #include <sys/syslog.h>
 #include <sys/kauth.h>
@@ -565,7 +567,7 @@ badtrap:
 
 	case T_ALIGN:
 		if ((p->p_md.md_flags & MDP_FIXALIGN) != 0) {
-			n = fixalign(l, tf, NULL);
+			n = fixalign(l, tf);
 			if (n == 0) {
 				ADVANCE;
 				break;
@@ -575,7 +577,7 @@ badtrap:
 		KSI_INIT_TRAP(&ksi);
 		ksi.ksi_trap = type;
 		ksi.ksi_code = BUS_ADRALN;
-		fixalign(l, tf, &ksi.ksi_addr);
+		ksi.ksi_addr = (void *)pc;
 		break;
 
 	case T_FPE:
@@ -880,6 +882,16 @@ mem_access_fault(unsigned type, int ser, u_int v, int pc, int psr,
 		}
 	} else {
 		l->l_md.md_tf = tf;
+		/*
+		 * WRS: Can drop LP_SA_NOBLOCK test iff can only get
+		 * here from a usermode-initiated access. LP_SA_NOBLOCK
+		 * should never be set there - it's kernel-only.
+		 */
+		if ((l->l_flag & LW_SA)
+		    && (~l->l_pflag & LP_SA_NOBLOCK)) {
+			l->l_savp->savp_faultaddr = (vaddr_t)v;
+			l->l_pflag |= LP_SA_PAGEFAULT;
+		}
 	}
 
 	/*
@@ -967,6 +979,7 @@ kfault:
 	}
 out:
 	if ((psr & PSR_PS) == 0) {
+		l->l_pflag &= ~LP_SA_PAGEFAULT;
 		userret(l, pc, sticks);
 		share_fpu(l, tf);
 	}
@@ -1194,6 +1207,16 @@ mem_access_fault4m(unsigned type, u_int sfsr, u_int sfva, struct trapframe *tf)
 		}
 	} else {
 		l->l_md.md_tf = tf;
+		/*
+		 * WRS: Can drop LP_SA_NOBLOCK test iff can only get
+		 * here from a usermode-initiated access. LP_SA_NOBLOCK
+		 * should never be set there - it's kernel-only.
+		 */
+		if ((l->l_flag & LW_SA)
+		    && (~l->l_pflag & LP_SA_NOBLOCK)) {
+			l->l_savp->savp_faultaddr = (vaddr_t)sfva;
+			l->l_pflag |= LP_SA_PAGEFAULT;
+		}
 	}
 
 	vm = p->p_vmspace;
@@ -1254,12 +1277,24 @@ kfault:
 	}
 out:
 	if ((psr & PSR_PS) == 0) {
+		l->l_pflag &= ~LP_SA_PAGEFAULT;
 out_nounlock:
 		userret(l, pc, sticks);
 		share_fpu(l, tf);
 	}
 }
 #endif /* SUN4M */
+
+/*
+ * XXX This is a terrible name.
+ */
+void
+upcallret(struct lwp *l)
+{
+
+	KERNEL_UNLOCK_LAST(l);
+	userret(l, l->l_md.md_tf->tf_pc, 0);
+}
 
 /*
  * Start a new LWP

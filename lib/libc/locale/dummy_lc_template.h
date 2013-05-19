@@ -1,4 +1,4 @@
-/* $NetBSD: dummy_lc_template.h,v 1.4 2013/04/14 23:30:16 joerg Exp $ */
+/* $NetBSD: dummy_lc_template.h,v 1.2 2009/01/11 02:46:28 christos Exp $ */
 
 /*-
  * Copyright (c)2008 Citrus Project,
@@ -31,9 +31,9 @@
 
 #include "generic_lc_template_decl.h"
 
-const char *
+static const char *
 _PREFIX(setlocale)(const char * __restrict name,
-    struct _locale * __restrict locale)
+    struct _locale_impl_t * __restrict locale)
 {
 	if (name != NULL) {
 		if (*name == '\0')
@@ -50,5 +50,7 @@ _PREFIX(setlocale)(const char * __restrict name,
 	}
 	return locale->part_name[(size_t)_CATEGORY_ID];
 }
+
+#include "generic_lc_template.h"
 
 #endif /*_DUMMY_LC_TEMPLATE_H_*/

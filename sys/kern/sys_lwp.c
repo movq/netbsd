@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_lwp.c,v 1.56 2013/03/29 01:08:17 christos Exp $	*/
+/*	$NetBSD: sys_lwp.c,v 1.52.14.2 2012/10/01 23:07:07 riz Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_lwp.c,v 1.56 2013/03/29 01:08:17 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_lwp.c,v 1.52.14.2 2012/10/01 23:07:07 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -50,6 +50,8 @@ __KERNEL_RCSID(0, "$NetBSD: sys_lwp.c,v 1.56 2013/03/29 01:08:17 christos Exp $"
 #include <sys/cpu.h>
 
 #include <uvm/uvm_extern.h>
+
+#include "opt_sa.h"
 
 #define	LWP_UNPARK_MAX		1024
 
@@ -72,11 +74,20 @@ lwp_sys_init(void)
 int
 do_lwp_create(lwp_t *l, void *arg, u_long flags, lwpid_t *new_lwp)
 {
-	struct proc *p = l->l_proc;
-	struct lwp *l2;
-	struct schedstate_percpu *spc;
-	vaddr_t uaddr;
+ 	struct proc *p = l->l_proc;
+ 	struct lwp *l2;
+ 	struct schedstate_percpu *spc;
+ 	vaddr_t uaddr;
 	int error;
+
+#ifdef KERN_SA
+	mutex_enter(p->p_lock);
+	if ((p->p_sflag & (PS_SA | PS_WEXIT)) != 0 || p->p_sa != NULL) {
+		mutex_exit(p->p_lock);
+		return EINVAL;
+	}
+	mutex_exit(p->p_lock);
+#endif
 
 	/* XXX check against resource limits */
 
@@ -214,6 +225,14 @@ sys__lwp_suspend(struct lwp *l, const struct sys__lwp_suspend_args *uap,
 	int error;
 
 	mutex_enter(p->p_lock);
+
+#ifdef KERN_SA
+	if ((p->p_sflag & PS_SA) != 0 || p->p_sa != NULL) {
+		mutex_exit(p->p_lock);
+		return EINVAL;
+	}
+#endif
+
 	if ((t = lwp_find(p, SCARG(uap, target))) == NULL) {
 		mutex_exit(p->p_lock);
 		return ESRCH;
@@ -532,7 +551,7 @@ lwp_unpark(lwpid_t target, const void *hint)
 }
 
 int
-lwp_park(clockid_t clock_id, int flags, struct timespec *ts, const void *hint)
+lwp_park(struct timespec *ts, const void *hint)
 {
 	sleepq_t *sq;
 	kmutex_t *mp;
@@ -540,9 +559,12 @@ lwp_park(clockid_t clock_id, int flags, struct timespec *ts, const void *hint)
 	int timo, error;
 	lwp_t *l;
 
+	/* Fix up the given timeout value. */
 	if (ts != NULL) {
-		if ((error = ts2timo(clock_id, flags, ts, &timo, NULL)) != 0)
+		error = abstimeout2timo(ts, &timo);
+		if (error) {
 			return error;
+		}
 		KASSERT(timo != 0);
 	} else {
 		timo = 0;
@@ -588,12 +610,10 @@ lwp_park(clockid_t clock_id, int flags, struct timespec *ts, const void *hint)
  * requests that it be unparked.
  */
 int
-sys____lwp_park60(struct lwp *l, const struct sys____lwp_park60_args *uap,
+sys____lwp_park50(struct lwp *l, const struct sys____lwp_park50_args *uap,
     register_t *retval)
 {
 	/* {
-		syscallarg(clockid_t)			clock_id;
-		syscallarg(int)				flags;
 		syscallarg(const struct timespec *)	ts;
 		syscallarg(lwpid_t)			unpark;
 		syscallarg(const void *)		hint;
@@ -617,8 +637,7 @@ sys____lwp_park60(struct lwp *l, const struct sys____lwp_park60_args *uap,
 			return error;
 	}
 
-	return lwp_park(SCARG(uap, clock_id), SCARG(uap, flags), tsp,
-	    SCARG(uap, hint));
+	return lwp_park(tsp, SCARG(uap, hint));
 }
 
 int

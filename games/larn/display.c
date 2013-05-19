@@ -1,9 +1,9 @@
-/*	$NetBSD: display.c,v 1.10 2012/06/19 05:30:43 dholland Exp $	*/
+/*	$NetBSD: display.c,v 1.9 2009/08/12 08:04:05 dholland Exp $	*/
 
 /* display.c		Larn is copyrighted 1986 by Noah Morgan. */
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: display.c,v 1.10 2012/06/19 05:30:43 dholland Exp $");
+__RCSID("$NetBSD: display.c,v 1.9 2009/08/12 08:04:05 dholland Exp $");
 #endif /* not lint */
 
 #include "header.h"
@@ -26,26 +26,26 @@ static char always = 0;
 	now for the bottom line of the display
  */
 void
-bottomline(void)
+bottomline()
 {
 	recalc();
 	bot1f = 1;
 }
 
 void
-bottomhp(void)
+bottomhp()
 {
 	bot2f = 1;
 }
 
 void
-bottomspell(void)
+bottomspell()
 {
 	bot3f = 1;
 }
 
 void
-bottomdo(void)
+bottomdo()
 {
 	if (bot1f) {
 		bot3f = bot1f = bot2f = 0;
@@ -63,7 +63,7 @@ bottomdo(void)
 }
 
 void
-bot_linex(void)
+bot_linex()
 {
 	int    i;
 	if (cbak[SPELLS] <= -50 || (always)) {
@@ -142,7 +142,7 @@ bot_linex(void)
 	called from ogold()
  */
 void
-bottomgold(void)
+bottomgold()
 {
 	botsub(makecode(GOLD, 69, 19), "%-6ld");
 	/* botsub(GOLD,"%-6ld",69,19); */
@@ -244,7 +244,8 @@ botsub(int idx, const char *str)
 static int d_xmin = 0, d_xmax = MAXX, d_ymin = 0, d_ymax = MAXY;
 
 void
-draws(int xmin, int xmax, int ymin, int ymax)
+draws(xmin, xmax, ymin, ymax)
+	int             xmin, xmax, ymin, ymax;
 {
 	int    i, idx;
 	if (xmin == 0 && xmax == MAXX) {	/* clear section of screen as
@@ -282,7 +283,7 @@ draws(int xmin, int xmax, int ymin, int ymax)
 u_char            screen[MAXX][MAXY];	/* template for the screen */
 static u_char d_flag;
 void
-drawscreen(void)
+drawscreen()
 {
 	int    i, j, kk;
 	int             lastx, lasty;	/* variables used to optimize the
@@ -375,7 +376,8 @@ drawscreen(void)
 	subroutine to display a cell location on the screen
  */
 void
-showcell(int x, int y)
+showcell(x, y)
+	int             x, y;
 {
 	int    i, j, kk, mm;
 	if (c[BLINDCOUNT])
@@ -439,7 +441,8 @@ showcell(int x, int y)
 	used in godirect() in monster.c for missile weapons display
  */
 void
-show1cell(int x, int y)
+show1cell(x, y)
+	int             x, y;
 {
 	if (c[BLINDCOUNT])
 		return;		/* see nothing if blind		 */
@@ -472,7 +475,7 @@ show1cell(int x, int y)
 	cursor values start from 1 up
  */
 void
-showplayer(void)
+showplayer()
 {
 	cursor(playerx + 1, playery + 1);
 	oldx = playerx;
@@ -491,8 +494,8 @@ showplayer(void)
 short           diroffx[] = {0, 0, 1, 0, -1, 1, -1, 1, -1};
 short           diroffy[] = {0, 1, 0, -1, 0, -1, -1, 1, 1};
 int
-moveplayer(int dir)
-				/* from = present room #  direction =
+moveplayer(dir)
+	int             dir;	/* from = present room #  direction =
 				 * [1-north] [2-east] [3-south] [4-west]
 				 * [5-northeast] [6-northwest] [7-southeast]
 				 * [8-southwest] if direction=0, don't
@@ -547,7 +550,8 @@ moveplayer(int dir)
  */
 static int      lincount, count;
 void
-seemagic(int arg)
+seemagic(arg)
+	int             arg;
 {
 	int    i, number = 0;
 	count = lincount = 0;

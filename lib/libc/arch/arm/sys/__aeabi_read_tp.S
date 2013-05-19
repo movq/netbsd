@@ -1,4 +1,4 @@
-/* $NetBSD: __aeabi_read_tp.S,v 1.3 2012/11/20 22:02:46 matt Exp $ */
+/* $NetBSD: __aeabi_read_tp.S,v 1.2.2.1 2012/11/24 04:23:27 riz Exp $ */
 
 #include "SYS.h"
 

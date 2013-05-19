@@ -1,4 +1,4 @@
-/*	$NetBSD: sqlitedb.c,v 1.3 2012/06/05 00:40:04 christos Exp $	*/
+/*	$NetBSD: sqlitedb.c,v 1.2.6.1 2012/06/05 21:15:39 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2007  Internet Software Consortium.

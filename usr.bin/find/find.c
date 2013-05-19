@@ -1,4 +1,4 @@
-/*	$NetBSD: find.c,v 1.29 2012/03/20 20:34:57 matt Exp $	*/
+/*	$NetBSD: find.c,v 1.27 2010/12/28 15:28:31 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "from: @(#)find.c	8.5 (Berkeley) 8/5/94";
 #else
-__RCSID("$NetBSD: find.c,v 1.29 2012/03/20 20:34:57 matt Exp $");
+__RCSID("$NetBSD: find.c,v 1.27 2010/12/28 15:28:31 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -258,7 +258,7 @@ find_execute(PLAN *plan, char **paths)
 	}
 
 	sig_unlock(&s);
-	if (g_entry == NULL && errno)
+	if (errno)
 		err(1, "fts_read");
 	(void)fts_close(tree);
 
@@ -282,7 +282,10 @@ find_execute(PLAN *plan, char **paths)
  *	If any func() returns non-zero, then so will find_traverse().
  */
 int
-find_traverse(PLAN *plan, int (*func)(PLAN *, void *), void *arg)
+find_traverse(plan, func, arg)
+	PLAN *plan;
+	int (*func)(PLAN *, void *);
+	void *arg;
 {
 	PLAN *p;
 	int r, rval;

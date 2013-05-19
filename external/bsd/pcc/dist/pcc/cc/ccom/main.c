@@ -1,5 +1,5 @@
 /*	Id: main.c,v 1.118 2012/03/22 18:51:40 plunky Exp 	*/	
-/*	$NetBSD: main.c,v 1.1.1.5 2012/03/26 14:26:49 plunky Exp $	*/
+/*	$NetBSD: main.c,v 1.1.1.4.4.1 2012/04/03 16:36:21 riz Exp $	*/
 
 /*
  * Copyright (c) 2002 Anders Magnusson. All rights reserved.

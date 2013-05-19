@@ -1,4 +1,4 @@
-/*	$NetBSD: imx31_clock.c,v 1.5 2012/10/27 17:17:39 chs Exp $ */
+/*	$NetBSD: imx31_clock.c,v 1.3 2011/07/01 20:27:50 dyoung Exp $ */
 /*
  * Copyright (c) 2009,2010  Genetec corp.  All rights reserved.
  * Written by Hashimoto Kenichi for Genetec corp.
@@ -98,7 +98,7 @@ imxclock_attach(device_t parent, device_t self, void *aux)
 		epit2_sc = sc;
 		break;
 	default:
-		panic("%s: invalid address %p", device_xname(self), (void *)aipsa->aipsa_addr);
+		panic("%s: invalid address %p", self->dv_xname, (void *)aipsa->aipsa_addr);
 		break;
 	}
 
@@ -106,8 +106,6 @@ imxclock_attach(device_t parent, device_t self, void *aux)
 		aipsa->aipsa_size, 0, &sc->sc_ioh)) {
 		panic("%s: Cannot map registers", device_xname(self));
 	}
-
-	sc->sc_clksrc = EPITCR_CLKSRC_HIGH;
 }
 
 int

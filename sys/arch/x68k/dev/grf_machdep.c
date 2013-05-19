@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_machdep.c,v 1.32 2012/10/27 17:18:13 chs Exp $	*/
+/*	$NetBSD: grf_machdep.c,v 1.30 2011/02/08 20:20:25 rmind Exp $	*/
 
 /*
  * Copyright (c) 1991 University of Utah.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grf_machdep.c,v 1.32 2012/10/27 17:18:13 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grf_machdep.c,v 1.30 2011/02/08 20:20:25 rmind Exp $");
 
 #include "locators.h"
 
@@ -58,7 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: grf_machdep.c,v 1.32 2012/10/27 17:18:13 chs Exp $")
 #include <x68k/x68k/iodevice.h>
 
 /* grfbus: is this necessary? */
-int grfbusprint(void *, const char *);
+int grfbusprint(void *auxp, const char *);
 int grfbusmatch(device_t, cfdata_t, void *);
 void grfbusattach(device_t, device_t, void *);
 int grfbussearch(device_t, cfdata_t, const int *, void *);
@@ -79,32 +79,32 @@ CFATTACH_DECL_NEW(grf, sizeof(struct grf_softc),
 extern struct cfdriver grfbus_cd;
 
 int
-grfbusmatch(device_t parent, cfdata_t cf, void *aux)
+grfbusmatch(device_t pdp, cfdata_t cfp, void *auxp)
 {
-	if (strcmp(aux, grfbus_cd.cd_name))
+	if (strcmp(auxp, grfbus_cd.cd_name))
 		return (0);
 
 	return (1);
 }
 
 void
-grfbusattach(device_t parent, device_t self, void *aux)
+grfbusattach(device_t pdp, device_t dp, void *auxp)
 {
 
 	aprint_normal("\n");
-	config_search_ia(grfbussearch, self, "grfb", NULL);
+	config_search_ia(grfbussearch, dp, "grfb", NULL);
 }
 
 int
-grfbussearch(device_t self, cfdata_t match, const int *ldesc, void *aux)
+grfbussearch(device_t dp, cfdata_t match, const int *ldesc, void *aux)
 {
 
-	config_found(self, &match->cf_loc[GRFBCF_ADDR], grfbusprint);
+	config_found(dp, &match->cf_loc[GRFBCF_ADDR], grfbusprint);
 	return (0);
 }
 
 int
-grfbusprint(void *aux, const char *name)
+grfbusprint(void *auxp, const char *name)
 {
 
 	if (name == NULL)
@@ -130,17 +130,17 @@ grfmatch(device_t parent, cfdata_t cfp, void *aux)
 struct grf_softc congrf;
 
 void
-grfattach(device_t parent, device_t self, void *aux)
+grfattach(device_t parent, device_t dp, void *aux)
 {
 	struct grf_softc *gp;
 	struct cfdata *cf;
 	int addr;
 
-	cf = device_cfdata(self);
+	cf = device_cfdata(dp);
 	addr = cf->cf_loc[GRFBCF_ADDR];
 
-	gp = device_private(self);
-	gp->g_device = self;
+	gp = device_private(dp);
+	gp->g_device = dp;
 	gp->g_cfaddr = addr;
 	grfinit(gp, addr);
 
@@ -155,11 +155,11 @@ grfattach(device_t parent, device_t self, void *aux)
 	/*
 	 * try and attach an ite
 	 */
-	config_found(self, gp, grfprint);
+	config_found(dp, gp, grfprint);
 }
 
 int
-grfprint(void *aux, const char *pnp)
+grfprint(void *auxp, const char *pnp)
 {
 
 	if (pnp)

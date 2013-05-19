@@ -1,5 +1,3 @@
-/*	$NetBSD: all.c,v 1.1.1.2 2012/03/15 00:08:14 alnsn Exp $	*/
-
 /*
 * all.c -- Lua core, libraries and interpreter in a single file
 */

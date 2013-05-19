@@ -1,4 +1,4 @@
-#	$NetBSD: link.mk,v 1.3 2013/02/27 21:25:08 joerg Exp $
+#	$NetBSD: link.mk,v 1.1 2011/02/06 01:13:43 joerg Exp $
 
 .include <bsd.own.mk>
 
@@ -7,12 +7,6 @@ LIB_BASE=	${NETBSDSRCDIR}/tools/llvm-lib
 .else
 LIB_BASE=	${LLVM_TOPLEVEL}/lib
 .endif
-
-.for l in ${MCLINKER_LIBS}
-MCLINKER_OBJDIR.${l}!=	cd ${LIB_BASE}/libMCLinker${l} && ${PRINTOBJDIR}
-LDADD+=	-L${MCLINKER_OBJDIR.${l}} -lMCLinker${l}
-DPADD+=	${MCLINKER_OBJDIR.${l}}/libMCLinker${l}.a
-.endfor
 
 .for l in ${CLANG_LIBS}
 CLANG_OBJDIR.${l}!=	cd ${LIB_BASE}/lib${l} && ${PRINTOBJDIR}
@@ -27,7 +21,7 @@ DPADD+=	${LLVM_OBJDIR.${l}}/libLLVM${l}.a
 .endfor
 
 .if defined(HOSTPROG)
-LDADD_NEED_DL=	cat ${LLVM_TOOLCONF_OBJDIR}/need-dl 2> /dev/null
+LDADD_NEED_DL=	cat ${LLVM_TOOLCONF_OBJDIR}/need-dl
 LDADD+=	${LDADD_NEED_DL:sh}
 .endif
 

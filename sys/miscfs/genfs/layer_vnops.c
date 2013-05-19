@@ -1,4 +1,4 @@
-/*	$NetBSD: layer_vnops.c,v 1.51 2012/10/10 06:55:25 dholland Exp $	*/
+/*	$NetBSD: layer_vnops.c,v 1.50.8.1 2012/11/18 18:36:58 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1999 National Aeronautics & Space Administration
@@ -170,7 +170,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: layer_vnops.c,v 1.51 2012/10/10 06:55:25 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: layer_vnops.c,v 1.50.8.1 2012/11/18 18:36:58 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

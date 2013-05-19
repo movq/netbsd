@@ -943,7 +943,7 @@ command command_table[] = {
     { ' ', cmd_update, "update screen" },
     { '?', cmd_help, "help; show this text" },
     { 'h', cmd_help, NULL },
-    { '1', cmd_percpustates, "toggle the display of cpu states per cpu" },
+    { '1', cmd_percpustates, "toggle the detail per cpu of cpustates" },
     { 'C', cmd_color, "toggle the use of color" },
     { 'H', cmd_threads, "toggle the display of individual threads" },
     { 't', cmd_threads, NULL },

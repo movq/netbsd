@@ -1,4 +1,4 @@
-/*	$NetBSD: parser.c,v 1.83 2012/06/17 20:48:27 wiz Exp $	*/
+/*	$NetBSD: parser.c,v 1.80 2011/08/31 16:24:55 plunky Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,12 +37,11 @@
 #if 0
 static char sccsid[] = "@(#)parser.c	8.7 (Berkeley) 5/16/95";
 #else
-__RCSID("$NetBSD: parser.c,v 1.83 2012/06/17 20:48:27 wiz Exp $");
+__RCSID("$NetBSD: parser.c,v 1.80 2011/08/31 16:24:55 plunky Exp $");
 #endif
 #endif /* not lint */
 
 #include <stdlib.h>
-#include <limits.h>
 
 #include "shell.h"
 #include "parser.h"
@@ -1109,7 +1108,7 @@ readtoken1(int firstc, char const *syn, char *eofmark, int striptabs)
 			case CEOF:
 				goto endword;		/* exit outer loop */
 			default:
-				if (varnest == 0 && !ISDBLQUOTE())
+				if (varnest == 0)
 					goto endword;	/* exit outer loop */
 				USTPUTC(c, out);
 			}
@@ -1362,9 +1361,9 @@ parsebackq: {
 	struct nodelist **nlpp;
 	int savepbq;
 	union node *n;
-	char *volatile str = NULL;
+	char *volatile str;
 	struct jmploc jmploc;
-	struct jmploc *volatile savehandler = NULL;
+	struct jmploc *volatile savehandler;
 	int savelen;
 	int saveprompt;
 

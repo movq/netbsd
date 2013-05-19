@@ -1,4 +1,4 @@
-/*	$NetBSD: dig.c,v 1.5 2013/03/24 18:44:37 christos Exp $	*/
+/*	$NetBSD: dig.c,v 1.3.4.1 2012/06/05 21:15:40 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004-2011  Internet Systems Consortium, Inc. ("ISC")
@@ -33,7 +33,6 @@
 #include <isc/string.h>
 #include <isc/util.h>
 #include <isc/task.h>
-#include <isc/timer.h>
 
 #include <dns/byaddr.h>
 #include <dns/fixedname.h>
@@ -1823,10 +1822,6 @@ int
 main(int argc, char **argv) {
 	isc_result_t result;
 
-	isc__mem_register();
-	isc__task_register();
-	isc__timer_register();
-	isc__socket_register();
 	ISC_LIST_INIT(lookup_list);
 	ISC_LIST_INIT(server_list);
 	ISC_LIST_INIT(search_list);

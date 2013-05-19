@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tap.c,v 1.70 2013/01/28 15:05:03 yamt Exp $	*/
+/*	$NetBSD: if_tap.c,v 1.66 2010/11/22 21:31:51 christos Exp $	*/
 
 /*
  *  Copyright (c) 2003, 2004, 2008, 2009 The NetBSD Foundation.
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tap.c,v 1.70 2013/01/28 15:05:03 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tap.c,v 1.66 2010/11/22 21:31:51 christos Exp $");
 
 #if defined(_KERNEL_OPT)
 
@@ -46,7 +46,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_tap.c,v 1.70 2013/01/28 15:05:03 yamt Exp $");
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/conf.h>
-#include <sys/cprng.h>
 #include <sys/device.h>
 #include <sys/file.h>
 #include <sys/filedesc.h>
@@ -94,10 +93,11 @@ SYSCTL_SETUP_PROTO(sysctl_tap_setup);
 #endif
 
 /*
- * Since we're an Ethernet device, we need the 2 following
- * components: a struct ethercom and a struct ifmedia
- * since we don't attach a PHY to ourselves.
- * We could emulate one, but there's no real point.
+ * Since we're an Ethernet device, we need the 3 following
+ * components: a leading struct device, a struct ethercom,
+ * and also a struct ifmedia since we don't attach a PHY to
+ * ourselves. We could emulate one, but there's no real
+ * point.
  */
 
 struct tap_softc {
@@ -266,6 +266,8 @@ tap_attach(device_t parent, device_t self, void *aux)
 	uint8_t enaddr[ETHER_ADDR_LEN] =
 	    { 0xf2, 0x0b, 0xa4, 0xff, 0xff, 0xff };
 	char enaddrstr[3 * ETHER_ADDR_LEN];
+	struct timeval tv;
+	uint32_t ui;
 
 	sc->sc_dev = self;
 	sc->sc_sih = softint_establish(SOFTINT_CLOCK, tap_softintr, sc);
@@ -277,10 +279,12 @@ tap_attach(device_t parent, device_t self, void *aux)
 
 	/*
 	 * In order to obtain unique initial Ethernet address on a host,
-	 * do some randomisation.  It's not meant for anything but avoiding
-	 * hard-coding an address.
+	 * do some randomisation using the current uptime.  It's not meant
+	 * for anything but avoiding hard-coding an address.
 	 */
-	cprng_fast(&enaddr[3], 3);
+	getmicrouptime(&tv);
+	ui = (tv.tv_sec ^ tv.tv_usec) & 0xffffff;
+	memcpy(enaddr+3, (uint8_t *)&ui, 3);
 
 	aprint_verbose_dev(self, "Ethernet address %s\n",
 	    ether_snprintf(enaddrstr, sizeof(enaddrstr), enaddr));
@@ -343,7 +347,7 @@ tap_attach(device_t parent, device_t self, void *aux)
 	if ((error = sysctl_createv(NULL, 0, NULL,
 	    &node, CTLFLAG_READWRITE,
 	    CTLTYPE_STRING, device_xname(self), NULL,
-	    tap_sysctl_handler, 0, (void *)sc, 18,
+	    tap_sysctl_handler, 0, sc, 18,
 	    CTL_NET, AF_LINK, tap_node, device_unit(sc->sc_dev),
 	    CTL_EOL)) != 0)
 		aprint_error_dev(self, "sysctl_createv returned %d, ignoring\n",
@@ -1052,7 +1056,7 @@ tap_dev_write(int unit, struct uio *uio, int flags)
 	m->m_pkthdr.rcvif = ifp;
 
 	bpf_mtap(ifp, m);
-	s = splnet();
+	s =splnet();
 	(*ifp->if_input)(ifp, m);
 	splx(s);
 

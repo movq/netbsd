@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_msgif.c,v 1.93 2012/11/05 17:27:38 dholland Exp $	*/
+/*	$NetBSD: puffs_msgif.c,v 1.89.8.1 2012/08/12 13:13:21 martin Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007  Antti Kantee.  All Rights Reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: puffs_msgif.c,v 1.93 2012/11/05 17:27:38 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: puffs_msgif.c,v 1.89.8.1 2012/08/12 13:13:21 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -915,7 +915,7 @@ puffsop_flush(struct puffs_mount *pmp, struct puffs_flush *pf)
 			rv = EINVAL;
 			break;
 		}
-		cache_purge1(vp, NULL, 0, PURGE_CHILDREN);
+		cache_purge1(vp, NULL, PURGE_CHILDREN);
 		break;
 
 	case PUFFS_INVAL_PAGECACHE_NODE_RANGE:

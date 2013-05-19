@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.35 2013/02/28 13:28:36 macallan Exp $
+#	$NetBSD: Makefile,v 1.31.4.2 2013/02/13 20:52:05 riz Exp $
 
 .include "../../../Makefile.serverlib"
 .include "../../../Makefile.servermod"
@@ -35,8 +35,11 @@ CPPFLAGS.${_FN}+=	-DUSE_I386_IOPL -DPCVT_SUPPORT -DWSCONS_SUPPORT \
 .if ${MACHINE} == "macppc" || ${MACHINE} == "prep" || ${MACHINE} == "bebox" || ${MACHINE} == "ofppc"
 SRCS.bsd+=	ppc_video.c pm_noop.c lnx_agp.c
 .for _FN in ${SRCS.bsd}
-CPPFLAGS.${_FN}=	-DWSCONS_SUPPORT -DPCVT_SUPPORT -DUSESTDRES -DHAVE_SYSV_IPC
+CPPFLAGS.${_FN}=	-DWSCONS_SUPPORT -DUSESTDRES -DHAVE_SYSV_IPC
 .endfor
+.if ${MACHINE} == "ofppc"
+CPPFLAGS.${_FN}+=	-DPCVT_SUPPORT
+.endif
 .endif
 
 .if ${MACHINE_ARCH} == "alpha"
@@ -50,7 +53,7 @@ CPPFLAGS.${_FN}=	-DWSCONS_SUPPORT -DUSESTDRES -DHAVE_SYSV_IPC -DUSE_ALPHA_PIO
 SRCS.bsd+=	ppc_video.c pm_noop.c agp_noop.c
 SRCS.bus+=	netbsdSbus.c
 .for _FN in ${SRCS.bsd}
-CPPFLAGS.${_FN}=	-DWSCONS_SUPPORT -DPCVT_SUPPORT -DUSESTDRES -DHAVE_SYSV_IPC
+CPPFLAGS.${_FN}=	-DWSCONS_SUPPORT -DUSESTDRES -DHAVE_SYSV_IPC
 .endfor
 .endif
 
@@ -61,7 +64,7 @@ CPPFLAGS.${_FN}=	-DWSCONS_SUPPORT -DPCVT_SUPPORT -DUSESTDRES -DHAVE_SYSV_IPC
     ${MACHINE} == "evbmips"
 SRCS.bsd+=	ppc_video.c pm_noop.c agp_noop.c
 .for _FN in ${SRCS.bsd}
-CPPFLAGS.${_FN}=	-DWSCONS_SUPPORT -DPCVT_SUPPORT  -DUSESTDRES -DHAVE_SYSV_IPC
+CPPFLAGS.${_FN}=	-DWSCONS_SUPPORT -DUSESTDRES -DHAVE_SYSV_IPC
 .endfor
 .endif
 
@@ -73,7 +76,10 @@ CPPFLAGS.${_FN}=	-DWSCONS_SUPPORT -DPCVT_SUPPORT  -DUSESTDRES -DHAVE_SYSV_IPC
     ${MACHINE} == "zaurus"
 SRCS.bsd+=      ppc_video.c pm_noop.c agp_noop.c
 .for _FN in ${SRCS.bsd}
-CPPFLAGS.${_FN}=        -DWSCONS_SUPPORT -DPCVT_SUPPORT -DUSESTDRES -DHAVE_SYSV_IPC
+CPPFLAGS.${_FN}=        -DWSCONS_SUPPORT -DUSESTDRES -DHAVE_SYSV_IPC
+.if ${MACHINE} == "cats"
+CPPFLAGS.${_FN}+=	-DPCVT_SUPPORT
+.endif
 .endfor
 .endif
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.61 2012/05/23 16:11:37 skrll Exp $	*/
+/*	$NetBSD: locore.S,v 1.58 2012/01/03 06:11:21 skrll Exp $	*/
 /*	$OpenBSD: locore.S,v 1.158 2008/07/28 19:08:46 miod Exp $	*/
 
 /*
@@ -64,18 +64,23 @@
 
 #include <sys/errno.h>
 #include <machine/param.h>
+#include <machine/cpu.h>
 #include <machine/asm.h>
 #include <machine/psl.h>
 #include <machine/trap.h>
 #include <machine/iomod.h>
 #include <machine/pdc.h>
+#include <machine/intr.h>
+#include <machine/frame.h>
 #include <machine/reg.h>
-#include <machine/cpu.h>
 
 #include "assym.h"
 
 /* Some aliases for the macros in assym.h. */
 #define	TRAPFRAME_SIZEOF	trapframe_SIZEOF
+
+#define	ccr	cr10
+#define	rctr	cr0
 
 /*
  * Very crude debugging macros that write to com1.
@@ -239,7 +244,7 @@ L$start_zero_tf:
 	/*
 	 * disable all coprocessors
 	 */
-	mtctl	%r0, CR_CCR
+	mtctl	%r0, %ccr
 
 #ifdef MULTIPROCESSOR
 
@@ -441,7 +446,7 @@ LEAF_ENTRY_NOPROFILE(hw_cpu_spinup_trampoline)
 	/*
 	 * disable all coprocessors
 	 */
-	mtctl   %r0, CR_CCR
+	mtctl   %r0, %ccr
 
 	/*
 	 * to keep the spl() routines consistent we need to put the correct
@@ -655,8 +660,6 @@ EXIT(pdc_call)
  */
 LEAF_ENTRY(splraise)
 	GET_CURCPU(%t1)
-	sh2addl	%arg0, %t1, %arg0
-	ldw	CI_IMASK(%arg0), %arg0
 	ldw	CI_CPL(%t1), %ret0
 	or	%ret0, %arg0, %arg0
 	bv	%r0(%rp)
@@ -744,6 +747,110 @@ ENTRY(hp700_intr_schedule,0)
 	bv	%r0(%rp)
 	mtctl	%arg1, %eiem
 EXIT(hp700_intr_schedule)
+
+/*
+ *
+ * int hp700_intr_ipending_new(struct hp700_int_reg *int_reg, int int_req);
+ *
+ * This assembles the mask of new pending interrupts.
+ *
+ */
+ENTRY(hp700_intr_ipending_new,HPPA_FRAME_SIZE)
+
+	/* Start stack calling convention. */
+	stw	%rp, HPPA_FRAME_CRP(%sp)
+	copy	%r3, %r1
+	copy	%sp, %r3
+	stw,ma	%r1, HPPA_FRAME_SIZE(%sp)
+
+	/*
+	 * Get this interrupt register's interrupt bits map
+	 * and start with the least significant bit and with
+	 * a zero ipending_new value.
+	 */
+	ldo	IR_BITS_MAP(%arg0), %arg0
+	ldi	31, %arg2
+	copy	%r0, %ret0
+
+	/*
+	 * The top of this loop finds the next set bit in
+	 * the request register.  Note that if the bvb does
+	 * not branch, the addib is nullified, and control
+	 * falls out of the loop.  If the bvb does branch,
+	 * the addib runs with the mtsar in its delay slot.
+	 * If the addib branches, the mtsar is nullified.
+	 */
+L$hp700_inew_loop:
+	mtsar	%arg2
+	bvb,>=,n %arg1, L$hp700_inew_loop
+	addib,<,n -1, %arg2, L$hp700_inew_done
+
+	/*
+	 * If the map entry for this bit has IR_BIT_REG
+	 * set, branch to descend into the next interrupt
+	 * register.  Otherwise, set the bits in our ipending_new
+	 * value and loop.
+	 */
+	ldwx,s  %arg2(%arg0), %t1
+	ldil	L%IR_BIT_REG, %t2
+	ldo	R%IR_BIT_REG(%t2), %t2
+	and	%t1, %t2, %t3
+	combt,=,n	%t2, %t3, L$hp700_inew_descend
+	addib,>= -1, %arg2, L$hp700_inew_loop
+	or	%t1, %ret0, %ret0
+
+L$hp700_inew_done:
+
+	/* End stack calling convention. */
+	ldw	HPPA_FRAME_CRP(%r3), %rp
+	ldo	HPPA_FRAME_SIZE(%r3), %sp
+	bv	%r0(%rp)
+	ldw,mb	-HPPA_FRAME_SIZE(%sp), %r3
+
+L$hp700_inew_descend:
+
+	/*
+	 * If the next interrupt register index is zero,
+	 * this interrupt bit is unused.  (Index zero
+	 * is the CPU interrupt register, which you can
+	 * never descend into since it's the root.)
+	 */
+	andcm,<> %t1, %t2, %t1
+	b,n	L$hp700_inew_unused
+
+	/* Save our state. */
+	stw	%arg0, HPPA_FRAME_ARG(0)(%r3)
+	stw	%arg1, HPPA_FRAME_ARG(1)(%r3)
+	stw	%arg2, HPPA_FRAME_ARG(2)(%r3)
+	stw	%ret0, HPPA_FRAME_ARG(3)(%r3)
+
+	/* Get our new interrupt register. */
+	ldil	L%hp700_interrupt_registers, %arg0
+	ldo	R%hp700_interrupt_registers(%arg0), %arg0
+	sh2add	%t1, %arg0, %arg0
+	ldw	0(%arg0), %arg0
+
+	/*
+	 * Read the interrupt request register and make
+	 * our recursive call.  The read also serves to
+	 * acknowledge the interrupt to the I/O subsystem.
+	 */
+	ldw	IR_REQ(%arg0), %arg1
+	bl	hp700_intr_ipending_new, %rp
+	ldw	0(%arg1), %arg1
+
+	/* Restore our state. */
+	ldw	HPPA_FRAME_ARG(0)(%r3), %arg0
+	ldw	HPPA_FRAME_ARG(1)(%r3), %arg1
+	ldw	HPPA_FRAME_ARG(2)(%r3), %arg2
+	ldw	HPPA_FRAME_ARG(3)(%r3), %ret1
+	or	%ret1, %ret0, %ret0
+
+L$hp700_inew_unused:
+	addib,>= -1, %arg2, L$hp700_inew_loop
+	nop
+	b,n	L$hp700_inew_done
+EXIT(hp700_intr_ipending_new)
 
 /*
  * void cpu_die(void);
@@ -930,6 +1037,13 @@ switch_exited:
 	ldw	HPPA_FRAME_ARG(0)(%r3), %arg0
 
 noras:
+	/*
+	 * As an optimization, hppa_fpu_bootstrap
+	 * replaces this branch instruction with a
+	 * nop if there is a hardware FPU.
+	 */
+ALTENTRY(hppa_fpu_nop1)
+	b,n	switch_return
 
 	/*
 	 * We do have a hardware FPU.  If the LWP
@@ -940,13 +1054,13 @@ noras:
 	 * states.
 	 */
 	GET_CURCPU(%t1)
-	mfctl	CR_CCR, %r1
+	mfctl	%ccr, %r1
 	mfctl	CR_FPPADDR, %t2
 	ldw	CI_FPU_STATE(%t1), %t1
 	depi	0, 25, 2, %r1		; disables the FPU
 	comb,<>,n %t1, %t2, 0		; nullify if LWPs different
 	depi	3, 25, 2, %r1		; enables the FPU
-	mtctl	%r1, CR_CCR
+	mtctl	%r1, %ccr
 
 switch_return:
 	copy	%arg0, %ret0

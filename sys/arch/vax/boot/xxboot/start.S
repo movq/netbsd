@@ -1,4 +1,4 @@
-/*	$NetBSD: start.S,v 1.5 2013/04/04 12:48:07 martin Exp $ */
+/*	$NetBSD: start.S,v 1.4.118.1 2013/04/20 09:58:23 bouyer Exp $ */
 /*
  * Copyright (c) 1995 Ludd, University of Lule}, Sweden.
  * All rights reserved.

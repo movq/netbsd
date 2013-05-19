@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.185 2012/11/03 19:39:21 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.182 2012/02/11 23:31:24 martin Exp $
 #	from: @(#)Makefile.inc	8.6 (Berkeley) 5/4/95
 
 # gen sources
@@ -29,8 +29,8 @@ SRCS+= 	_errno.c alarm.c alphasort.c arc4random.c assert.c basename.c clock.c \
 	sigset.c sigsetops.c sleep.c \
 	stringlist.c sysconf.c sysctl.c sysctlbyname.c sysctlgetmibinfo.c \
 	sysctlnametomib.c syslog.c telldir.c time.c \
-	times.c toascii.c tolower_.c ttyname.c ttyslot.c toupper_.c ualarm.c \
-	ulimit.c uname.c unvis.c usleep.c utime.c utimens.c utmp.c \
+	times.c toascii.c tolower_.c ttyname.c ttyslot.c \
+	toupper_.c ualarm.c ulimit.c uname.c unvis.c usleep.c utime.c utmp.c \
 	utmpx.c valloc.c vis.c wait.c wait3.c waitpid.c warn.c warnx.c \
 	vwarn.c vwarnx.c verr.c verrx.c wordexp.c
 
@@ -117,8 +117,6 @@ MLINKS+=cgetcap.3 cgetclose.3 cgetcap.3 cgetent.3 \
 	cgetcap.3 cgetnum.3 cgetcap.3 cgetset.3 cgetcap.3 cgetstr.3 \
 	cgetcap.3 cgetustr.3
 MLINKS+=getcwd.3 getwd.3
-MLINKS+=getpass.3 getpass_r.3
-MLINKS+=getpass.3 getpassfd.3
 MLINKS+=getdiskbyname.3 setdisktab.3
 MLINKS+=getdomainname.3 setdomainname.3
 MLINKS+=getfsent.3 endfsent.3 getfsent.3 getfsfile.3 getfsent.3 getfsspec.3 \

@@ -1,4 +1,4 @@
-/* $NetBSD: atppc_puc.c,v 1.13 2012/10/27 17:18:28 chs Exp $ */
+/* $NetBSD: atppc_puc.c,v 1.12 2010/11/13 13:52:05 uebayasi Exp $ */
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 #include "opt_atppc.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atppc_puc.c,v 1.13 2012/10/27 17:18:28 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atppc_puc.c,v 1.12 2010/11/13 13:52:05 uebayasi Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -159,10 +159,11 @@ atppc_puc_dma_setup(struct atppc_puc_softc *psc)
 
 /* Start DMA operation over PCI bus */
 static int
-atppc_puc_dma_start(struct atppc_softc *sc, void *buf, u_int nbytes,
+atppc_puc_dma_start(struct atppc_softc *dev, void *buf, u_int nbytes,
 	u_int8_t mode)
 {
-	struct atppc_puc_softc *psc = (struct atppc_puc_softc *)sc;
+	struct atppc_puc_softc *psc = (struct atppc_puc_softc *) dev;
+	struct atppc_softc *sc = &psc->sc_atppc;
 
 	bus_dmamap_sync(sc->sc_dmat, psc->sc_dmamap, 0, nbytes,
 	    (mode == ATPPC_DMA_MODE_WRITE) ? BUS_DMASYNC_PREWRITE
@@ -173,10 +174,11 @@ atppc_puc_dma_start(struct atppc_softc *sc, void *buf, u_int nbytes,
 
 /* Stop DMA operation over PCI bus */
 static int
-atppc_puc_dma_finish(struct atppc_softc *sc)
+atppc_puc_dma_finish(struct atppc_softc *dev)
 {
 
-	struct atppc_puc_softc *psc = (struct atppc_puc_softc *)sc;
+	struct atppc_puc_softc *psc = (struct atppc_puc_softc *) dev;
+	struct atppc_softc *sc = &psc->sc_atppc;
 
 	/*
 	 * We don't know direction of DMA, so sync both. We can safely

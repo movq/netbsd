@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_sem.c,v 1.40 2013/03/29 01:08:17 christos Exp $	*/
+/*	$NetBSD: uipc_sem.c,v 1.35 2011/04/17 20:37:43 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_sem.c,v 1.40 2013/03/29 01:08:17 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_sem.c,v 1.35 2011/04/17 20:37:43 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -88,28 +88,38 @@ MODULE(MODULE_CLASS_MISC, ksem, NULL);
 
 #define	KS_UNLINKED		0x01
 
+typedef struct ksem {
+	LIST_ENTRY(ksem)	ks_entry;	/* global list entry */
+	kmutex_t		ks_lock;	/* lock on this ksem */
+	kcondvar_t		ks_cv;		/* condition variable */
+	u_int			ks_ref;		/* number of references */
+	u_int			ks_value;	/* current value */
+	u_int			ks_waiters;	/* number of waiters */
+	char *			ks_name;	/* name, if named */
+	size_t			ks_namelen;	/* length of name */
+	int			ks_flags;	/* for KS_UNLINKED */
+	mode_t			ks_mode;	/* protection bits */
+	uid_t			ks_uid;		/* creator uid */
+	gid_t			ks_gid;		/* creator gid */
+} ksem_t;
+
 static kmutex_t		ksem_lock	__cacheline_aligned;
 static LIST_HEAD(,ksem)	ksem_head	__cacheline_aligned;
 static u_int		nsems_total	__cacheline_aligned;
 static u_int		nsems		__cacheline_aligned;
 
-static kauth_listener_t	ksem_listener;
-
 static int		ksem_sysinit(void);
 static int		ksem_sysfini(bool);
 static int		ksem_modcmd(modcmd_t, void *);
 static int		ksem_close_fop(file_t *);
-static int		ksem_stat_fop(file_t *, struct stat *);
-static int		ksem_read_fop(file_t *, off_t *, struct uio *,
-    kauth_cred_t, int);
 
 static const struct fileops semops = {
-	.fo_read = ksem_read_fop,
+	.fo_read = fbadop_read,
 	.fo_write = fbadop_write,
 	.fo_ioctl = fbadop_ioctl,
 	.fo_fcntl = fnullop_fcntl,
 	.fo_poll = fnullop_poll,
-	.fo_stat = ksem_stat_fop,
+	.fo_stat = fbadop_stat,
 	.fo_close = ksem_close_fop,
 	.fo_kqfilter = fnullop_kqfilter,
 	.fo_restart = fnullop_restart,
@@ -125,30 +135,8 @@ static const struct syscall_package ksem_syscalls[] = {
 	{ SYS__ksem_trywait, 0, (sy_call_t *)sys__ksem_trywait },
 	{ SYS__ksem_getvalue, 0, (sy_call_t *)sys__ksem_getvalue },
 	{ SYS__ksem_destroy, 0, (sy_call_t *)sys__ksem_destroy },
-	{ SYS__ksem_timedwait, 0, (sy_call_t *)sys__ksem_timedwait },
 	{ 0, 0, NULL },
 };
-
-static int
-ksem_listener_cb(kauth_cred_t cred, kauth_action_t action, void *cookie,
-    void *arg0, void *arg1, void *arg2, void *arg3)
-{
-	ksem_t *ks;
-	mode_t mode;
-
-	if (action != KAUTH_SYSTEM_SEMAPHORE)
-		return KAUTH_RESULT_DEFER;
-
-	ks = arg1;
-	mode = ks->ks_mode;
-
-	if ((kauth_cred_geteuid(cred) == ks->ks_uid && (mode & S_IWUSR) != 0) ||
-	    (kauth_cred_getegid(cred) == ks->ks_gid && (mode & S_IWGRP) != 0) ||
-	    (mode & S_IWOTH) != 0)
-		return KAUTH_RESULT_ALLOW;
-
-	return KAUTH_RESULT_DEFER;
-}
 
 static int
 ksem_sysinit(void)
@@ -164,10 +152,6 @@ ksem_sysinit(void)
 	if (error) {
 		(void)ksem_sysfini(false);
 	}
-
-	ksem_listener = kauth_listen_scope(KAUTH_SCOPE_SYSTEM,
-	    ksem_listener_cb, NULL);
-
 	return error;
 }
 
@@ -191,7 +175,6 @@ ksem_sysfini(bool interface)
 			return EBUSY;
 		}
 	}
-	kauth_unlisten_scope(ksem_listener);
 	mutex_destroy(&ksem_lock);
 	return 0;
 }
@@ -232,13 +215,16 @@ static int
 ksem_perm(lwp_t *l, ksem_t *ks)
 {
 	kauth_cred_t uc = l->l_cred;
+	mode_t mode = ks->ks_mode;
 
 	KASSERT(mutex_owned(&ks->ks_lock));
+	if ((kauth_cred_geteuid(uc) == ks->ks_uid && (mode & S_IWUSR) != 0) ||
+	    (kauth_cred_getegid(uc) == ks->ks_gid && (mode & S_IWGRP) != 0) ||
+	    (mode & S_IWOTH) != 0 ||
+	    kauth_authorize_generic(uc, KAUTH_GENERIC_ISSUSER, NULL) == 0)
+		return 0;
 
-	if (kauth_authorize_system(uc, KAUTH_SYSTEM_SEMAPHORE, 0, ks, NULL, NULL) != 0)
-		return EACCES;
-
-	return 0;
+	return EACCES;
 }
 
 /*
@@ -254,11 +240,12 @@ ksem_get(int fd, ksem_t **ksret)
 	file_t *fp;
 
 	fp = fd_getfile(fd);
-	if (__predict_false(fp == NULL))
-		return EINVAL;
+	if (__predict_false(fp == NULL)) {
+		return EBADF;
+	}
 	if (__predict_false(fp->f_type != DTYPE_SEM)) {
 		fd_putfile(fd);
-		return EINVAL;
+		return EBADF;
 	}
 	ks = fp->f_data;
 	mutex_enter(&ks->ks_lock);
@@ -524,53 +511,6 @@ sys__ksem_close(struct lwp *l, const struct sys__ksem_close_args *uap,
 }
 
 static int
-ksem_read_fop(file_t *fp, off_t *offset, struct uio *uio, kauth_cred_t cred,
-    int flags)
-{
-	size_t len;
-	char *name;
-	ksem_t *ks = fp->f_data;
-
-	mutex_enter(&ks->ks_lock);
-	len = ks->ks_namelen;
-	name = ks->ks_name;
-	mutex_exit(&ks->ks_lock);
-	if (name == NULL || len == 0)
-		return 0;
-	return uiomove(name, len, uio);
-}
-
-static int
-ksem_stat_fop(file_t *fp, struct stat *ub)
-{
-	ksem_t *ks = fp->f_data;
-
-	mutex_enter(&ks->ks_lock);
-
-	memset(ub, 0, sizeof(*ub));
-
-	ub->st_mode = ks->ks_mode | ((ks->ks_name && ks->ks_namelen)
-	    ? _S_IFLNK : _S_IFREG);
-	ub->st_uid = ks->ks_uid;
-	ub->st_gid = ks->ks_gid;
-	ub->st_size = ks->ks_value;
-	ub->st_blocks = (ub->st_size) ? 1 : 0;
-	ub->st_nlink = ks->ks_ref;
-	ub->st_blksize = 4096;
-
-	nanotime(&ub->st_atimespec);
-	ub->st_mtimespec = ub->st_ctimespec = ub->st_birthtimespec =
-	    ub->st_atimespec;
-
-	/*
-	 * Left as 0: st_dev, st_ino, st_rdev, st_flags, st_gen.
-	 * XXX (st_dev, st_ino) should be unique.
-	 */
-	mutex_exit(&ks->ks_lock);
-	return 0;
-}
-
-static int
 ksem_close_fop(file_t *fp)
 {
 	ksem_t *ks = fp->f_data;
@@ -672,10 +612,10 @@ out:
 	return error;
 }
 
-int
-do_ksem_wait(lwp_t *l, intptr_t id, bool try, struct timespec *abstime)
+static int
+ksem_wait(lwp_t *l, intptr_t id, bool try)
 {
-	int fd = (int)id, error, timeo;
+	int fd = (int)id, error;
 	ksem_t *ks;
 
 	error = ksem_get(fd, &ks);
@@ -685,16 +625,7 @@ do_ksem_wait(lwp_t *l, intptr_t id, bool try, struct timespec *abstime)
 	KASSERT(mutex_owned(&ks->ks_lock));
 	while (ks->ks_value == 0) {
 		ks->ks_waiters++;
-		if (!try && abstime != NULL) {
-			error = ts2timo(CLOCK_REALTIME, TIMER_ABSTIME, abstime,
-			    &timeo, NULL);
-			if (error != 0)
-				goto out;
-		} else {
-			timeo = 0;
-		}
-		error = try ? EAGAIN : cv_timedwait_sig(&ks->ks_cv,
-		    &ks->ks_lock, timeo);
+		error = try ? EAGAIN : cv_wait_sig(&ks->ks_cv, &ks->ks_lock);
 		ks->ks_waiters--;
 		if (error)
 			goto out;
@@ -714,31 +645,7 @@ sys__ksem_wait(struct lwp *l, const struct sys__ksem_wait_args *uap,
 		intptr_t id;
 	} */
 
-	return do_ksem_wait(l, SCARG(uap, id), false, NULL);
-}
-
-int
-sys__ksem_timedwait(struct lwp *l, const struct sys__ksem_timedwait_args *uap,
-    register_t *retval)
-{
-	/* {
-		intptr_t id;
-		const struct timespec *abstime;
-	} */
-	struct timespec ts;
-	int error;
-
-	error = copyin(SCARG(uap, abstime), &ts, sizeof(ts));
-	if (error != 0)
-		return error;
-
-	if (ts.tv_sec < 0 || ts.tv_nsec < 0 || ts.tv_nsec >= 1000000000)
-		return EINVAL;
-
-	error = do_ksem_wait(l, SCARG(uap, id), false, &ts);
-	if (error == EWOULDBLOCK)
-		error = ETIMEDOUT;
-	return error;
+	return ksem_wait(l, SCARG(uap, id), false);
 }
 
 int
@@ -749,7 +656,7 @@ sys__ksem_trywait(struct lwp *l, const struct sys__ksem_trywait_args *uap,
 		intptr_t id;
 	} */
 
-	return do_ksem_wait(l, SCARG(uap, id), true, NULL);
+	return ksem_wait(l, SCARG(uap, id), true);
 }
 
 int

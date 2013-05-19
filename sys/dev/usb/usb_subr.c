@@ -1,4 +1,4 @@
-/*	$NetBSD: usb_subr.c,v 1.190 2013/03/20 11:14:51 skrll Exp $	*/
+/*	$NetBSD: usb_subr.c,v 1.180 2011/06/09 19:08:33 matt Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/usb_subr.c,v 1.18 1999/11/17 22:33:47 n_hibma Exp $	*/
 
 /*
@@ -32,12 +32,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: usb_subr.c,v 1.190 2013/03/20 11:14:51 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: usb_subr.c,v 1.180 2011/06/09 19:08:33 matt Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
 #include "opt_usbverbose.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -298,33 +296,20 @@ usbd_devinfo_free(char *devinfop)
 
 /* Delay for a certain number of ms */
 void
-usb_delay_ms_locked(usbd_bus_handle bus, u_int ms, kmutex_t *lock)
+usb_delay_ms(usbd_bus_handle bus, u_int ms)
 {
 	/* Wait at least two clock ticks so we know the time has passed. */
 	if (bus->use_polling || cold)
 		delay((ms+1) * 1000);
 	else
-		kpause("usbdly", false, (ms*hz+999)/1000 + 1, lock);
-}
-
-void
-usb_delay_ms(usbd_bus_handle bus, u_int ms)
-{
-	usb_delay_ms_locked(bus, ms, NULL);
-}
-
-/* Delay given a device handle. */
-void
-usbd_delay_ms_locked(usbd_device_handle dev, u_int ms, kmutex_t *lock)
-{
-	usb_delay_ms_locked(dev->bus, ms, lock);
+		tsleep(&ms, PRIBIO, "usbdly", (ms*hz+999)/1000 + 1);
 }
 
 /* Delay given a device handle. */
 void
 usbd_delay_ms(usbd_device_handle dev, u_int ms)
 {
-	usb_delay_ms_locked(dev->bus, ms, NULL);
+	usb_delay_ms(dev->bus, ms);
 }
 
 usbd_status
@@ -739,19 +724,12 @@ usbd_status
 usbd_setup_pipe(usbd_device_handle dev, usbd_interface_handle iface,
 		struct usbd_endpoint *ep, int ival, usbd_pipe_handle *pipe)
 {
-	return usbd_setup_pipe_flags(dev, iface, ep, ival, pipe, 0);
-}
-
-usbd_status
-usbd_setup_pipe_flags(usbd_device_handle dev, usbd_interface_handle iface,
-    struct usbd_endpoint *ep, int ival, usbd_pipe_handle *pipe, uint8_t flags)
-{
 	usbd_pipe_handle p;
 	usbd_status err;
 
-	p = malloc(dev->bus->pipe_size, M_USB, M_NOWAIT);
 	DPRINTFN(1,("usbd_setup_pipe: dev=%p iface=%p ep=%p pipe=%p\n",
-		    dev, iface, ep, p));
+		    dev, iface, ep, pipe));
+	p = malloc(dev->bus->pipe_size, M_USB, M_NOWAIT);
 	if (p == NULL)
 		return (USBD_NOMEM);
 	p->device = dev;
@@ -759,12 +737,11 @@ usbd_setup_pipe_flags(usbd_device_handle dev, usbd_interface_handle iface,
 	p->endpoint = ep;
 	ep->refcnt++;
 	p->refcnt = 1;
-	p->intrxfer = NULL;
+	p->intrxfer = 0;
 	p->running = 0;
 	p->aborting = 0;
 	p->repeat = 0;
 	p->interval = ival;
-	p->flags = flags;
 	SIMPLEQ_INIT(&p->queue);
 	err = dev->bus->methods->open_pipe(p);
 	if (err) {
@@ -774,8 +751,6 @@ usbd_setup_pipe_flags(usbd_device_handle dev, usbd_interface_handle iface,
 		free(p, M_USB);
 		return (err);
 	}
-	usb_init_task(&p->async_task, usbd_clear_endpoint_stall_async_cb, p,
-	    USB_TASKQ_MPSAFE);
 	*pipe = p;
 	return (USBD_NORMAL_COMPLETION);
 }
@@ -784,13 +759,8 @@ usbd_setup_pipe_flags(usbd_device_handle dev, usbd_interface_handle iface,
 void
 usbd_kill_pipe(usbd_pipe_handle pipe)
 {
-	int s;
-
 	usbd_abort_pipe(pipe);
-	usbd_lock_pipe(pipe);
 	pipe->methods->close(pipe);
-	usbd_unlock_pipe(pipe);
-	usb_rem_task(pipe->device, &pipe->async_task);
 	pipe->endpoint->refcnt--;
 	free(pipe, M_USB);
 }
@@ -1133,11 +1103,7 @@ usbd_new_device(device_t parent, usbd_bus_handle bus, int depth,
 	 * (which uses 64 bytes so it shouldn't be less),
 	 * highspeed devices must support 64 byte packets anyway
 	 */
-	if (speed == USB_SPEED_HIGH || speed == USB_SPEED_FULL)
-		USETW(dev->def_ep_desc.wMaxPacketSize, 64);
-	else
-		USETW(dev->def_ep_desc.wMaxPacketSize, USB_MAX_IPACKET);
-
+	USETW(dev->def_ep_desc.wMaxPacketSize, 64);
 	dev->def_ep_desc.bInterval = 0;
 
 	/* doesn't matter, just don't let it uninitialized */
@@ -1175,8 +1141,8 @@ usbd_new_device(device_t parent, usbd_bus_handle bus, int depth,
 	dev->cookie.cookie = ++usb_cookie_no;
 
 	/* Establish the default pipe. */
-	err = usbd_setup_pipe_flags(dev, 0, &dev->def_ep, USBD_DEFAULT_INTERVAL,
-			      &dev->default_pipe, USBD_MPSAFE);
+	err = usbd_setup_pipe(dev, 0, &dev->def_ep, USBD_DEFAULT_INTERVAL,
+			      &dev->default_pipe);
 	if (err) {
 		usbd_remove_device(dev, up);
 		return (err);
@@ -1263,8 +1229,8 @@ usbd_new_device(device_t parent, usbd_bus_handle bus, int depth,
 
 	/* Re-establish the default pipe with the new address. */
 	usbd_kill_pipe(dev->default_pipe);
-	err = usbd_setup_pipe_flags(dev, 0, &dev->def_ep, USBD_DEFAULT_INTERVAL,
-	    &dev->default_pipe, USBD_MPSAFE);
+	err = usbd_setup_pipe(dev, 0, &dev->def_ep, USBD_DEFAULT_INTERVAL,
+	    &dev->default_pipe);
 	if (err) {
 		DPRINTFN(-1, ("usbd_new_device: setup default pipe failed\n"));
 		usbd_remove_device(dev, up);
@@ -1314,7 +1280,6 @@ usbd_reload_device_desc(usbd_device_handle dev)
 void
 usbd_remove_device(usbd_device_handle dev, struct usbd_port *up)
 {
-
 	DPRINTF(("usbd_remove_device: %p\n", dev));
 
 	if (dev->default_pipe != NULL)

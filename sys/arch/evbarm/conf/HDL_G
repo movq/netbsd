@@ -1,4 +1,4 @@
-# $NetBSD: HDL_G,v 1.36 2013/04/27 21:43:21 christos Exp $
+# $NetBSD: HDL_G,v 1.25 2011/12/18 05:49:25 dholland Exp $
 #
 #       HDL_G -- I-O DATA HDL-G Kernel
 #
@@ -41,7 +41,6 @@ file-system	NULLFS		# loopback file system
 #file-system 	OVERLAY		# overlay file system
 file-system	PROCFS		# /proc
 file-system	PTYFS		# /dev/pts/N support
-#file-system	PUFFS		# Userspace file systems (e.g. ntfs-3g & sshfs)
 file-system	SMBFS		# experimental - CIFS; also needs nsmb (below)
 file-system	TMPFS		# Efficient memory file-system
 #file-system	UDF		# experimental - OSTA UDF CD/DVD file-system
@@ -65,10 +64,13 @@ options 	WAPBL		# File system journaling support
 options 	INET		# IP + ICMP + TCP + UDP
 options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/ IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking
 #options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
@@ -100,7 +102,6 @@ options 	COMPAT_20	# NetBSD 2.0 compatibility.
 options 	COMPAT_30	# NetBSD 3.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
-options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_43	# 4.3BSD compatibility.
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 
@@ -111,7 +112,12 @@ options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 options 	SYSVMSG		# System V-like message queues
 options 	SYSVSEM		# System V-like semaphores
+#options 	SEMMNI=10	# number of semaphore identifiers
+#options 	SEMMNS=60	# number of semaphores in system
+#options 	SEMUME=10	# max number of undo entries per process
+#options 	SEMMNU=30	# number of undo structures in system
 options 	SYSVSHM		# System V-like memory sharing
+options 	P1003_1B_SEMAPHORE	# p1003.1b semaphore support
 
 # Device options
 
@@ -138,7 +144,7 @@ options 	USERCONF	# userconf(4) support
 options 	DDB		# in-kernel debugger
 #options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
 #makeoptions	DEBUG="-g"	# compile full symbol table
-options 	SYMTAB_SPACE=750000
+options 	SYMTAB_SPACE=590000
 
 #config		netbsd		root on ? type ?
 config		netbsd		root on wd0a type ?
@@ -325,7 +331,7 @@ url*	at uhub? port ?		# Realtek RTL8150L based adapters
 
 # USB 802.11b adapters
 atu*	at uhub? port ?		# Atmel AT76C50XX based adapters
-ural*	at uhub? port ?		# Ralink Technology RT2500USB 802.11a/b/g
+ral*	at uhub? port ?		# Ralink Technology RT25x0 802.11a/b/g
 
 # Prolific PL2301/PL2302 host-to-host adapter
 upl*	at uhub? port ?
@@ -386,9 +392,9 @@ midi*   at midibus?
 # Pseudo-Devices
 
 # disk/mass storage pseudo-devices
-#pseudo-device	ccd			# concatenated/striped disk devices
-#pseudo-device	cgd			# cryptographic disk devices
-#pseudo-device	raid			# RAIDframe disk driver
+#pseudo-device	ccd		4	# concatenated/striped disk devices
+#pseudo-device	cgd		4	# cryptographic disk devices
+#pseudo-device	raid		8	# RAIDframe disk driver
 #options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 # Options to enable various other RAIDframe RAID types.
 #options 	RF_INCLUDE_EVENODD=1
@@ -399,10 +405,9 @@ midi*   at midibus?
 #options 	RF_INCLUDE_PARITY_DECLUSTERING=1
 #options 	RF_INCLUDE_PARITY_DECLUSTERING_DS=1
 #pseudo-device	fss			# file system snapshot device
-#pseudo-device	putter			# for puffs and pud
 
 #pseudo-device	md			# memory disk device (ramdisk)
-pseudo-device	vnd			# disk-like interface to files
+pseudo-device	vnd		4	# disk-like interface to files
 options 	VND_COMPRESSION		# compressed vnd(4)
 
 # network pseudo-devices
@@ -434,14 +439,14 @@ pseudo-device	clockctl		# user control of clock subsystem
 pseudo-device	ksyms			# /dev/ksyms
 
 # a pseudo device needed for Coda	# also needs CODA (above)
-#pseudo-device	vcoda			# coda minicache <-> venus comm.
+#pseudo-device	vcoda		4	# coda minicache <-> venus comm.
 
 # a pseudo device needed for SMBFS
 pseudo-device	nsmb			# experimental - SMB requester
 
 # a pseudo device needed for verified exec
-#pseudo-device	veriexec
+#pseudo-device	veriexec	1
 
 # data mover pseudo-devices
-pseudo-device	swdmover		# software dmover(9) back-end
+pseudo-device	swdmover		# softare dmover(9) back-end
 pseudo-device	dmoverio		# /dev/dmover dmover(9) interface

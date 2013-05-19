@@ -1,4 +1,4 @@
-/*	$NetBSD: ntfs_vnops.c,v 1.55 2013/03/18 19:35:38 plunky Exp $	*/
+/*	$NetBSD: ntfs_vnops.c,v 1.49.10.2 2012/08/12 12:59:50 martin Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ntfs_vnops.c,v 1.55 2013/03/18 19:35:38 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ntfs_vnops.c,v 1.49.10.2 2012/08/12 12:59:50 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -424,9 +424,8 @@ ntfs_check_permitted(struct vnode *vp, struct ntnode *ip, mode_t mode,
 
 	file_mode = ip->i_mp->ntm_mode | (S_IXUSR|S_IXGRP|S_IXOTH);
 
-	return kauth_authorize_vnode(cred, KAUTH_ACCESS_ACTION(mode, vp->v_type,
-	    file_mode), vp, NULL, genfs_can_access(vp->v_type, file_mode,
-	    ip->i_mp->ntm_uid, ip->i_mp->ntm_gid, mode, cred));
+	return genfs_can_access(vp->v_type, file_mode, ip->i_mp->ntm_uid,
+	    ip->i_mp->ntm_gid, mode, cred);
 }
 
 int
@@ -682,10 +681,8 @@ ntfs_lookup(void *v)
 	 * check the name cache to see if the directory/name pair
 	 * we are looking for is known already.
 	 */
-	if (cache_lookup(ap->a_dvp, cnp->cn_nameptr, cnp->cn_namelen,
-			 cnp->cn_nameiop, cnp->cn_flags, NULL, ap->a_vpp)) {
-		return *ap->a_vpp == NULLVP ? ENOENT : 0;
-	}
+	if ((error = cache_lookup(ap->a_dvp, ap->a_vpp, cnp)) >= 0)
+		return (error);
 
 	if(cnp->cn_namelen == 1 && cnp->cn_nameptr[0] == '.') {
 		dprintf(("ntfs_lookup: faking . directory in %llu\n",
@@ -727,8 +724,7 @@ ntfs_lookup(void *v)
 		    (unsigned long long)VTONT(*ap->a_vpp)->i_number));
 	}
 
-	cache_enter(dvp, *ap->a_vpp, cnp->cn_nameptr, cnp->cn_namelen,
-		    cnp->cn_flags);
+	cache_enter(dvp, *ap->a_vpp, cnp);
 
 	return error;
 }

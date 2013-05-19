@@ -1,4 +1,4 @@
-/*	$NetBSD: byaddr_test.c,v 1.4 2013/03/24 18:44:40 christos Exp $	*/
+/*	$NetBSD: byaddr_test.c,v 1.2.6.1 2012/06/05 21:15:19 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007  Internet Systems Consortium, Inc. ("ISC")
@@ -94,10 +94,6 @@ main(int argc, char *argv[]) {
 	unsigned int options = 0;
 	dns_cache_t *cache;
 
-	isc__mem_register();
-	isc__task_register();
-	isc__timer_register();
-	isc__socket_register();
 	RUNTIME_CHECK(isc_app_start() == ISC_R_SUCCESS);
 
 	dns_result_register();

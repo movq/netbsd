@@ -1,4 +1,4 @@
-/*	$NetBSD: spl.S,v 1.38 2012/11/10 16:28:06 cherry Exp $	*/
+/*	$NetBSD: spl.S,v 1.36 2011/03/18 15:18:16 joerg Exp $	*/
 
 /*
  * Copyright (c) 1998, 2007, 2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: spl.S,v 1.38 2012/11/10 16:28:06 cherry Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spl.S,v 1.36 2011/03/18 15:18:16 joerg Exp $");
 
 #include "opt_vm86.h"
 #include "opt_ddb.h"
@@ -73,7 +73,7 @@ END(splraise)
  * void spllower(int s);
  *
  * spllower() for i486 and Pentium.  Must be the same size as
- * cx8_spllower().  This must use pushf/cli/popf as it is used
+ * i686_spllower().  This must use pushf/cli/popf as it is used
  * early in boot where interrupts are disabled via eflags/IE.
  */
 ENTRY(spllower)
@@ -321,6 +321,42 @@ doreti_checkast:
 1:	.asciz	"DORETI: INTERRUPT ENABLED"
 #endif /* defined(DEBUG) */
 IDTVEC_END(doreti)
+
+#ifdef XEN
+/*
+ * void evtchn_do_event(int evtch, struct intrframe *regs)
+ */
+
+ENTRY(call_evtchn_do_event)
+	IDEPTH_INCR
+	/*
+	 * IDEPTH_INCR leaves old %esp in %eax.
+	 */
+	pushl	8(%eax)	/* regs */
+	pushl	4(%eax)	/* evtch */
+	call	_C_LABEL(evtchn_do_event)
+	addl	$8, %esp
+	IDEPTH_DECR
+	ret
+END(call_evtchn_do_event)
+#ifdef DOM0OPS
+/*
+ * void xenevt_event(int port)
+ */
+
+ENTRY(call_xenevt_event)
+	IDEPTH_INCR
+	/*
+	 * IDEPTH_INCR leaves old %esp in %eax.
+	 */
+	pushl	4(%eax)	/* evtch */
+	call	_C_LABEL(xenevt_event)
+	addl	$4, %esp
+	IDEPTH_DECR
+	ret
+END(call_xenevt_event)
+#endif /* DOM0OPS */
+#endif /* XEN */
 
 #ifndef XEN
 /*

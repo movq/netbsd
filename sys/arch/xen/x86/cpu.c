@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.93 2012/06/24 13:56:10 jym Exp $	*/
+/*	$NetBSD: cpu.c,v 1.80.2.5 2012/06/12 19:00:24 riz Exp $	*/
 /* NetBSD: cpu.c,v 1.18 2004/02/20 17:35:01 yamt Exp  */
 
 /*-
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.93 2012/06/24 13:56:10 jym Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.80.2.5 2012/06/12 19:00:24 riz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
@@ -402,7 +402,6 @@ cpu_attach_common(device_t parent, device_t self, void *aux)
 	ci->ci_cpuid = cpunum;
 
 	KASSERT(HYPERVISOR_shared_info != NULL);
-	KASSERT(cpunum < XEN_LEGACY_MAX_VCPUS);
 	ci->ci_vcpu = &HYPERVISOR_shared_info->vcpu_info[cpunum];
 
 	KASSERT(ci->ci_func == 0);
@@ -428,7 +427,6 @@ cpu_attach_common(device_t parent, device_t self, void *aux)
 		KASSERT(ci->ci_data.cpu_idlelwp != NULL);
 	}
 
-	KASSERT(ci->ci_cpuid == ci->ci_index);
 	pmap_reference(pmap_kernel());
 	ci->ci_pmap = pmap_kernel();
 	ci->ci_tlbstate = TLBSTATE_STALE;
@@ -447,6 +445,7 @@ cpu_attach_common(device_t parent, device_t self, void *aux)
 
 		/* Every processor needs to init it's own ipi h/w (similar to lapic) */
 		xen_ipi_init();
+		/* XXX: clock_init() */
 
 		/* Make sure DELAY() is initialized. */
 		DELAY(1);
@@ -459,6 +458,9 @@ cpu_attach_common(device_t parent, device_t self, void *aux)
 	case CPU_ROLE_SP:
 		atomic_or_32(&ci->ci_flags, CPUF_SP);
 		cpu_identify(ci);
+#if 0
+		x86_errata();
+#endif
 		x86_cpu_idle_init();
 
 		break;
@@ -466,6 +468,9 @@ cpu_attach_common(device_t parent, device_t self, void *aux)
 	case CPU_ROLE_BP:
 		atomic_or_32(&ci->ci_flags, CPUF_BSP);
 		cpu_identify(ci);
+#if 0
+		x86_errata();
+#endif
 		x86_cpu_idle_init();
 
 		break;
@@ -535,6 +540,23 @@ cpu_init(struct cpu_info *ci)
 {
 
 	/*
+	 * On a P6 or above, enable global TLB caching if the
+	 * hardware supports it.
+	 */
+	if (cpu_feature[0] & CPUID_PGE)
+		lcr4(rcr4() | CR4_PGE);	/* enable global TLB caching */
+
+#ifdef XXXMTRR
+	/*
+	 * On a P6 or above, initialize MTRR's if the hardware supports them.
+	 */
+	if (cpu_feature[0] & CPUID_MTRR) {
+		if ((ci->ci_flags & CPUF_AP) == 0)
+			i686_mtrr_init_first();
+		mtrr_init_cpu(ci);
+	}
+#endif
+	/*
 	 * If we have FXSAVE/FXRESTOR, use them.
 	 */
 	if (cpu_feature[0] & CPUID_FXSR) {
@@ -556,6 +578,8 @@ cpu_init(struct cpu_info *ci)
 #endif
 
 	atomic_or_32(&ci->ci_flags, CPUF_RUNNING);
+
+	/* XXX: register vcpu_register_runstate_memory_area, and figure out how to make sure this VCPU is running ? */
 }
 
 
@@ -693,13 +717,15 @@ cpu_hatch(void *v)
 	KASSERT((ci->ci_flags & CPUF_RUNNING) == 0);
 
 	pcb = lwp_getpcb(curlwp);
-	pcb->pcb_cr3 = pmap_pdirpa(pmap_kernel(), 0);
+	pcb->pcb_cr3 = pmap_pdirpa(pmap_kernel(), 0); /* XXX: consider using pmap_load() ? */
 	pcb = lwp_getpcb(ci->ci_data.cpu_idlelwp);
 
 	xen_ipi_init();
 
 	xen_initclocks();
 	
+	/* XXX: lapic_initclocks(); */
+
 #ifdef __x86_64__
 	fpuinit(ci);
 #endif
@@ -712,6 +738,9 @@ cpu_hatch(void *v)
 	s = splhigh();
 	x86_enable_intr();
 	splx(s);
+#if 0
+	x86_errata();
+#endif
 
 	aprint_debug_dev(ci->ci_dev, "running\n");
 
@@ -780,7 +809,7 @@ gdt_prepframes(paddr_t *frames, vaddr_t base, uint32_t entries)
 }
 
 #ifdef __x86_64__
-extern char *ldtstore;
+extern char *ldtstore; /* XXX: Xen MP todo */
 
 static void
 xen_init_amd64_vcpuctxt(struct cpu_info *ci,
@@ -804,10 +833,12 @@ xen_init_amd64_vcpuctxt(struct cpu_info *ci,
 
 	memset(initctx, 0, sizeof *initctx);
 
-	gdt_ents = roundup(gdt_size, PAGE_SIZE) >> PAGE_SHIFT; 
+	gdt_ents = roundup(gdt_size, PAGE_SIZE) >> PAGE_SHIFT; /* XXX: re-investigate roundup(gdt_size... ) for gdt_ents. */
 	KASSERT(gdt_ents <= 16);
 
 	gdt_prepframes(frames, (vaddr_t) ci->ci_gdt, gdt_ents);
+
+	/* XXX: The stuff in here is amd64 specific. move to mptramp.[Sc] ? */
 
 	/* Initialise the vcpu context: We use idle_loop()'s pcb context. */
 
@@ -858,7 +889,7 @@ xen_init_amd64_vcpuctxt(struct cpu_info *ci,
 	initctx->kernel_sp = pcb->pcb_rsp0;
 	initctx->ctrlreg[0] = pcb->pcb_cr0;
 	initctx->ctrlreg[1] = 0; /* "resuming" from kernel - no User cr3. */
-	initctx->ctrlreg[2] = (vaddr_t) targetrip;
+	initctx->ctrlreg[2] = pcb->pcb_cr2; /* XXX: */
 	/* 
 	 * Use pmap_kernel() L4 PD directly, until we setup the
 	 * per-cpu L4 PD in pmap_cpu_init_late()
@@ -900,7 +931,7 @@ xen_init_i386_vcpuctxt(struct cpu_info *ci,
 
 	memset(initctx, 0, sizeof *initctx);
 
-	gdt_ents = roundup(gdt_size, PAGE_SIZE) >> PAGE_SHIFT;
+	gdt_ents = roundup(gdt_size, PAGE_SIZE) >> PAGE_SHIFT; /* XXX: re-investigate roundup(gdt_size... ) for gdt_ents. */
 	KASSERT(gdt_ents <= 16);
 
 	gdt_prepframes(frames, (vaddr_t) ci->ci_gdt, gdt_ents);
@@ -962,7 +993,7 @@ xen_init_i386_vcpuctxt(struct cpu_info *ci,
 	initctx->kernel_sp = pcb->pcb_esp0;
 	initctx->ctrlreg[0] = pcb->pcb_cr0;
 	initctx->ctrlreg[1] = 0; /* "resuming" from kernel - no User cr3. */
-	initctx->ctrlreg[2] = (vaddr_t) targeteip;
+	initctx->ctrlreg[2] = pcb->pcb_cr2; /* XXX: */
 #ifdef PAE
 	initctx->ctrlreg[3] = xen_pfn_to_cr3(x86_btop(xpmap_ptom(ci->ci_pae_l3_pdirpa)));
 #else /* PAE */
@@ -1028,6 +1059,14 @@ mp_cpu_start(struct cpu_info *ci, vaddr_t target)
 void
 mp_cpu_start_cleanup(struct cpu_info *ci)
 {
+#if 0
+	/*
+	 * Ensure the NVRAM reset byte contains something vaguely sane.
+	 */
+
+	outb(IO_RTC, NVRAM_RESET);
+	outb(IO_RTC+1, NVRAM_RESET_RST);
+#endif
 	if (vcpu_is_up(ci)) {
 		aprint_debug_dev(ci->ci_dev, "is started.\n");
 	}
@@ -1037,6 +1076,14 @@ mp_cpu_start_cleanup(struct cpu_info *ci)
 
 }
 
+/* curcpu() uses %fs - shim for until cpu_init_msrs(), below */
+static struct cpu_info *cpu_primary(void)
+{
+	return &cpu_info_primary;
+}
+/* XXX: rename to something more generic. users other than xpq exist */
+struct cpu_info	* (*xpq_cpu)(void) = cpu_primary;
+
 void
 cpu_init_msrs(struct cpu_info *ci, bool full)
 {
@@ -1045,6 +1092,7 @@ cpu_init_msrs(struct cpu_info *ci, bool full)
 		HYPERVISOR_set_segment_base (SEGBASE_FS, 0);
 		HYPERVISOR_set_segment_base (SEGBASE_GS_KERNEL, (uint64_t) ci);
 		HYPERVISOR_set_segment_base (SEGBASE_GS_USER, 0);
+		xpq_cpu = x86_curcpu;
 	}
 #endif	/* __x86_64__ */
 
@@ -1106,14 +1154,12 @@ x86_cpu_idle_xen(void)
 void
 cpu_load_pmap(struct pmap *pmap, struct pmap *oldpmap)
 {
-	KASSERT(pmap != pmap_kernel());
-
 #if defined(__x86_64__) || defined(PAE)
 	struct cpu_info *ci = curcpu();
 	cpuid_t cid = cpu_index(ci);
 
 	mutex_enter(&ci->ci_kpm_mtx);
-	/* make new pmap visible to xen_kpm_sync() */
+	/* make new pmap visible to pmap_kpm_sync_xcall() */
 	kcpuset_atomic_set(pmap->pm_xen_ptp_cpus, cid);
 #endif
 #ifdef i386
@@ -1158,15 +1204,21 @@ cpu_load_pmap(struct pmap *pmap, struct pmap *oldpmap)
 			}
 		}
 
-		xen_set_user_pgd(pmap_pdirpa(pmap, 0));
-		ci->ci_xen_current_user_pgd = pmap_pdirpa(pmap, 0);
+		if (__predict_true(pmap != pmap_kernel())) {
+			xen_set_user_pgd(pmap_pdirpa(pmap, 0));
+			ci->ci_xen_current_user_pgd = pmap_pdirpa(pmap, 0);
+		}
+		else {
+			xpq_queue_pt_switch(l4_pd_ma);
+			ci->ci_xen_current_user_pgd = 0;
+		}
 
 		tlbflush();
 	}
 
 #endif /* __x86_64__ */
 #if defined(__x86_64__) || defined(PAE)
-	/* old pmap no longer visible to xen_kpm_sync() */
+	/* old pmap no longer visible to pmap_kpm_sync_xcall() */
 	if (oldpmap != pmap_kernel()) {
 		kcpuset_atomic_clear(oldpmap->pm_xen_ptp_cpus, cid);
 	}
@@ -1187,7 +1239,7 @@ cpu_load_pmap(struct pmap *pmap, struct pmap *oldpmap)
   * considered to be a canonical "SHADOW" PDIR with the following
   * properties: 
   * - Its recursive mapping points to itself
-  * - per-cpu recursive mappings point to themselves on __x86_64__
+  * - per-cpu recurseive mappings point to themselves on __x86_64__
   * - per-cpu L4 pages' kernel entries are expected to be in sync with
   *   the shadow
   */

@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_vfs.c,v 1.76 2013/04/29 19:31:46 pooka Exp $	*/
+/*	$NetBSD: rump_vfs.c,v 1.67 2011/07/04 11:31:37 mrg Exp $	*/
 
 /*
  * Copyright (c) 2008 Antti Kantee.  All Rights Reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rump_vfs.c,v 1.76 2013/04/29 19:31:46 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rump_vfs.c,v 1.67 2011/07/04 11:31:37 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -73,33 +73,17 @@ pvfs_rele(struct proc *p)
 	cwdfree(p->p_cwdi);
 }
 
-static void
-fini(void)
+void
+rump_vfs_init(void)
 {
-
-	vfs_shutdown();
-}
-
-static void
-drainbufs(int npages)
-{
-
-	mutex_enter(&bufcache_lock);
-	buf_drain(npages);
-	mutex_exit(&bufcache_lock);
-}
-
-RUMP_COMPONENT(RUMP__FACTION_VFS)
-{
+	extern struct devsw_conv devsw_conv0[];
+	extern int max_devsw_convs;
 	extern struct vfsops rumpfs_vfsops;
 	char buf[64];
+	int error;
 	int rv, i;
 
-	/* initialize indirect interfaces */
-	rump_vfs_fini = fini;
-	rump_vfs_drainbufs = drainbufs;
-
-	if (rumpuser_getparam("RUMP_NVNODES", buf, sizeof(buf)) == 0) {
+	if (rumpuser_getenv("RUMP_NVNODES", buf, sizeof(buf), &error) == 0) {
 		desiredvnodes = strtoul(buf, NULL, 10);
 	} else {
 		desiredvnodes = 1<<10;
@@ -125,6 +109,12 @@ RUMP_COMPONENT(RUMP__FACTION_VFS)
 	spec_init();
 	fstrans_init();
 
+	if (rump_threads) {
+		if ((rv = kthread_create(PRI_BIO, KTHREAD_MPSAFE, NULL,
+		    rumpuser_biothread, rump_biodone, NULL, "rmpabio")) != 0)
+			panic("syncer thread create failed: %d", rv);
+	}
+
 	root_device = &rump_rootdev;
 
 	/* bootstrap cwdi (rest done in vfs_mountroot() */
@@ -136,6 +126,7 @@ RUMP_COMPONENT(RUMP__FACTION_VFS)
 
 	/* "mtree": create /dev */
 	do_sys_mkdir("/dev", 0777, UIO_SYSSPACE);
+	rump_devnull_init();
 
 	rump_proc_vfs_init = pvfs_init;
 	rump_proc_vfs_release = pvfs_rele;
@@ -157,7 +148,7 @@ RUMP_COMPONENT(RUMP__FACTION_VFS)
 	{
 	char *mbase;
 
-	if (rumpuser_getparam("RUMP_MODULEBASE", buf, sizeof(buf)) == 0)
+	if (rumpuser_getenv("RUMP_MODULEBASE", buf, sizeof(buf), &error) == 0)
 		mbase = buf;
 	else
 		mbase = module_base;
@@ -170,27 +161,16 @@ RUMP_COMPONENT(RUMP__FACTION_VFS)
 
 	module_init_class(MODULE_CLASS_VFS);
 
-	/*
-	 * Don't build device names for a large set of devices by
-	 * default.  While the pseudo-devfs is a fun experiment,
-	 * creating many many device nodes may increase rump kernel
-	 * bootstrap time by ~40%.  Device nodes should be created
-	 * per-demand in the component constructors.
-	 */
-#if 0
-	{
-	extern struct devsw_conv devsw_conv0[];
-	extern int max_devsw_convs;
 	rump_vfs_builddevs(devsw_conv0, max_devsw_convs);
-	}
-#else
-	rump_vfs_builddevs(NULL, 0);
-#endif
-
-	/* attach null device and create /dev/{null,zero} */
-	rump_devnull_init();
 
 	rump_component_init(RUMP_COMPONENT_VFS);
+}
+
+void
+rump_vfs_fini(void)
+{
+
+	vfs_shutdown();
 }
 
 struct rumpcn {
@@ -204,6 +184,7 @@ rump_makecn(u_long nameiop, u_long flags, const char *name, size_t namelen,
 {
 	struct rumpcn *rcn;
 	struct componentname *cnp;
+	const char *cp = NULL;
 
 	rcn = kmem_zalloc(sizeof(*rcn), KM_SLEEP);
 	cnp = &rcn->rcn_cn;
@@ -216,6 +197,7 @@ rump_makecn(u_long nameiop, u_long flags, const char *name, size_t namelen,
 	cnp->cn_flags = flags & (MODMASK | PARAMASK);
 
 	cnp->cn_namelen = namelen;
+	cnp->cn_hash = namei_hash(name, &cp);
 
 	cnp->cn_cred = creds;
 
@@ -285,11 +267,11 @@ rump_namei(uint32_t op, uint32_t flags, const char *namep,
 }
 
 void
-rump_getvninfo(struct vnode *vp, enum rump_vtype *vtype,
+rump_getvninfo(struct vnode *vp, enum vtype *vtype,
 	voff_t *vsize, dev_t *vdev)
 {
 
-	*vtype = (enum rump_vtype)vp->v_type;
+	*vtype = vp->v_type;
 	*vsize = vp->v_size;
 	if (vp->v_specnode)
 		*vdev = vp->v_rdev;
@@ -340,10 +322,10 @@ rump_vattr_init(void)
 }
 
 void
-rump_vattr_settype(struct vattr *vap, enum rump_vtype vt)
+rump_vattr_settype(struct vattr *vap, enum vtype vt)
 {
 
-	vap->va_type = (enum vtype)vt;
+	vap->va_type = vt;
 }
 
 void
@@ -504,4 +486,13 @@ rump_biodone(void *arg, size_t count, int error)
 	bp->b_error = error;
 
 	biodone(bp);
+}
+
+void
+rump_vfs_drainbufs(int npages)
+{
+
+	mutex_enter(&bufcache_lock);
+	buf_drain(npages);
+	mutex_exit(&bufcache_lock);
 }

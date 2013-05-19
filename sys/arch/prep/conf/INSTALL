@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL,v 1.59 2013/04/27 21:43:39 christos Exp $
+#	$NetBSD: INSTALL,v 1.57 2011/12/18 05:49:31 dholland Exp $
 #
 #	INSTALL -- Installation kernel
 #
@@ -62,7 +62,6 @@ options 	INET		# IP + ICMP + TCP + UDP
 #
 # builtin terminal emulations
 options 	WSEMUL_VT100		# VT100 / VT220 emulation
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 # different kernel output - see dev/wscons/wsdisplayvar.h
 options 	WS_KERNEL_FG=WSCOL_GREEN
 #options 	WS_KERNEL_BG=WSCOL_BLACK
@@ -265,7 +264,7 @@ include "arch/prep/conf/INSTALL.local"
 # disk/mass storage pseudo-devices
 pseudo-device	md			# memory disk device (ramdisk)
 #pseudo-device	fss			# file system snapshot device
-pseudo-device	raid			# RAIDframe disk driver
+pseudo-device	raid		8	# RAIDframe disk driver
 options 	RAID_AUTOCONFIG		# auto-configuration of RAID components
 
 # network pseudo-devices

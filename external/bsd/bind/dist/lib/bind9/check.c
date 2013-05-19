@@ -1,4 +1,4 @@
-/*	$NetBSD: check.c,v 1.5 2012/12/04 23:38:41 spz Exp $	*/
+/*	$NetBSD: check.c,v 1.3.4.2 2012/12/15 05:39:56 riz Exp $	*/
 
 /*
  * Copyright (C) 2004-2012  Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_sig.c,v 1.41 2013/03/08 09:32:59 apb Exp $	*/
+/*	$NetBSD: sys_sig.c,v 1.36.6.1 2012/07/21 00:00:13 riz Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -66,13 +66,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_sig.c,v 1.41 2013/03/08 09:32:59 apb Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_sig.c,v 1.36.6.1 2012/07/21 00:00:13 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/signalvar.h>
 #include <sys/proc.h>
 #include <sys/pool.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscallargs.h>
 #include <sys/kauth.h>
 #include <sys/wait.h>
@@ -399,33 +401,30 @@ sigaction1(struct lwp *l, int signum, const struct sigaction *nsa,
 	 * again for this process.
 	 */
 	if (nsa != NULL) {
-		if (__predict_false(vers < 2)) {
-			if (p->p_flag & PK_32)
-				v0v1valid = true;
-			else if ((p->p_lflag & PL_SIGCOMPAT) == 0) {
-				kernconfig_lock();
-				if (sendsig_sigcontext_vec == NULL) {
-					(void)module_autoload("compat",
-					    MODULE_CLASS_ANY);
-				}
-				if (sendsig_sigcontext_vec != NULL) {
-					/*
-					 * We need to remember if the
-					 * sigcontext method may be useable,
-					 * because libc may use it even
-					 * if siginfo is available.
-					 */
-					v0v1valid = true;
-				}
-				mutex_enter(proc_lock);
-				/*
-				 * Prevent unload of compat module while
-				 * this process remains.
-				 */
-				p->p_lflag |= PL_SIGCOMPAT;
-				mutex_exit(proc_lock);
-				kernconfig_unlock();
+		if (__predict_false(vers < 2) &&
+		    (p->p_lflag & PL_SIGCOMPAT) == 0) {
+			kernconfig_lock();
+			if (sendsig_sigcontext_vec == NULL) {
+				(void)module_autoload("compat",
+				    MODULE_CLASS_ANY);
 			}
+			if (sendsig_sigcontext_vec != NULL) {
+				/*
+				 * We need to remember if the
+				 * sigcontext method may be useable,
+				 * because libc may use it even
+				 * if siginfo is available.
+				 */
+				v0v1valid = true;
+			}
+			mutex_enter(proc_lock);
+			/*
+			 * Prevent unload of compat module while
+			 * this process remains.
+			 */
+			p->p_lflag |= PL_SIGCOMPAT;
+			mutex_exit(proc_lock);
+			kernconfig_unlock();
 		}
 
 		switch (vers) {
@@ -555,44 +554,43 @@ out:
 int
 sigprocmask1(struct lwp *l, int how, const sigset_t *nss, sigset_t *oss)
 {
-	sigset_t *mask = &l->l_sigmask;
-	bool more;
+	int more;
+	struct proc *p = l->l_proc;
+	sigset_t *mask;
+	mask = (p->p_sa != NULL) ? &p->p_sa->sa_sigmask : &l->l_sigmask;
 
-	KASSERT(mutex_owned(l->l_proc->p_lock));
+	KASSERT(mutex_owned(p->p_lock));
 
-	if (oss) {
+	if (oss)
 		*oss = *mask;
+	if (nss) {
+		switch (how) {
+		case SIG_BLOCK:
+			sigplusset(nss, mask);
+			more = 0;
+			break;
+		case SIG_UNBLOCK:
+			sigminusset(nss, mask);
+			more = 1;
+			break;
+		case SIG_SETMASK:
+			*mask = *nss;
+			more = 1;
+			break;
+		default:
+			return (EINVAL);
+		}
+		sigminusset(&sigcantmask, mask);
+		if (more && sigispending(l, 0)) {
+			/*
+			 * Check for pending signals on return to user.
+			 */
+			lwp_lock(l);
+			l->l_flag |= LW_PENDSIG;
+			lwp_unlock(l);
+		}
 	}
 
-	if (nss == NULL) {
-		return 0;
-	}
-
-	switch (how) {
-	case SIG_BLOCK:
-		sigplusset(nss, mask);
-		more = false;
-		break;
-	case SIG_UNBLOCK:
-		sigminusset(nss, mask);
-		more = true;
-		break;
-	case SIG_SETMASK:
-		*mask = *nss;
-		more = true;
-		break;
-	default:
-		return EINVAL;
-	}
-	sigminusset(&sigcantmask, mask);
-	if (more && sigispending(l, 0)) {
-		/*
-		 * Check for pending signals on return to user.
-		 */
-		lwp_lock(l);
-		l->l_flag |= LW_PENDSIG;
-		lwp_unlock(l);
-	}
 	return 0;
 }
 
@@ -715,9 +713,6 @@ sigtimedwait1(struct lwp *l, const struct sys_____sigtimedwait50_args *uap,
 
 	/*
 	 * Calculate timeout, if it was specified.
-	 *
-	 * NULL pointer means an infinite timeout.
-	 * {.tv_sec = 0, .tv_nsec = 0} means do not block.
 	 */
 	if (SCARG(uap, timeout)) {
 		error = (*fetchts)(SCARG(uap, timeout), &ts, sizeof(ts));
@@ -728,12 +723,8 @@ sigtimedwait1(struct lwp *l, const struct sys_____sigtimedwait50_args *uap,
 			return error;
 
 		timo = tstohz(&ts);
-		if (timo == 0) {
-			if (ts.tv_sec == 0 && ts.tv_nsec == 0)
-				timo = -1; /* do not block */
-			else
-				timo = 1; /* the shortest possible timeout */
-		}
+		if (timo == 0 && ts.tv_sec == 0 && ts.tv_nsec != 0)
+			timo++;
 
 		/*
 		 * Remember current uptime, it would be used in
@@ -742,7 +733,7 @@ sigtimedwait1(struct lwp *l, const struct sys_____sigtimedwait50_args *uap,
 		getnanouptime(&tsstart);
 	} else {
 		memset(&tsstart, 0, sizeof(tsstart)); /* XXXgcc */
-		timo = 0; /* infinite timeout */
+		timo = 0;
 	}
 
 	error = (*fetchss)(SCARG(uap, set), &l->l_sigwaitset,
@@ -759,6 +750,13 @@ sigtimedwait1(struct lwp *l, const struct sys_____sigtimedwait50_args *uap,
 
 	mutex_enter(p->p_lock);
 
+	/* SA processes can have no more than 1 sigwaiter. */
+	if ((p->p_sflag & PS_SA) != 0 && !LIST_EMPTY(&p->p_sigwaiters)) {
+		mutex_exit(p->p_lock);
+		error = EINVAL;
+		goto out;
+	}
+
 	/* Check for pending signals in the process, if no - then in LWP. */
 	if ((signum = sigget(&p->p_sigpend, &ksi, 0, &l->l_sigwaitset)) == 0)
 		signum = sigget(&l->l_sigpend, &ksi, 0, &l->l_sigwaitset);
@@ -767,12 +765,6 @@ sigtimedwait1(struct lwp *l, const struct sys_____sigtimedwait50_args *uap,
 		/* If found a pending signal, just copy it out to the user. */
 		mutex_exit(p->p_lock);
 		goto out;
-	}
-
-	if (timo < 0) {
-		/* If not allowed to block, return an error */
-		mutex_exit(p->p_lock);
-		return EAGAIN;
 	}
 
 	/*

@@ -1,10 +1,9 @@
-#	$NetBSD: Makefile.buildboot,v 1.15 2013/05/02 04:22:44 matt Exp $
+#	$NetBSD: Makefile.buildboot,v 1.12 2011/01/22 19:19:14 joerg Exp $
 
 S?=	${.CURDIR}/../../../..
 
 .PATH: ${.CURDIR}/../lib
 
-KLINK_MACHINE= acorn26
 SRCS=	${PROGSOURCE}
 NOMAN=# defined
 BINDIR=/usr/mdec
@@ -20,7 +19,6 @@ LIBCRTEND=
 RISCOSTYPE ?= ff8
 
 .include <bsd.own.mk>
-.include <bsd.klinks.mk>
 
 SRCS+=		vers.c
 CLEANFILES+=	vers.c
@@ -29,11 +27,9 @@ vers.c: ${.CURDIR}/version
 	${HOST_SH} ${S}/conf/newvers_stand.sh ${${MKREPRO} == "yes" :?:-D} \
 	    ${.CURDIR}/version ${MACHINE} ${NEWVERSWHAT}
 
-CPUFLAGS=
 CPPFLAGS+=	-D_STANDALONE -DHIMEM=0x28000
 CPPFLAGS+=	-I. -I${.CURDIR}/../../.. -I${.CURDIR}/../../../..
 CPPFLAGS+=	-I${.CURDIR}/../lib
-CPPFLAGS+=	-mabi=apcs-gnu -mfloat-abi=soft -march=armv2
 CFLAGS=		-O2
 CFLAGS+=	-ffreestanding
 CFLAGS+=	-Wall -Wstrict-prototypes -Wmissing-prototypes
@@ -77,7 +73,6 @@ RELOC=8000
 LINKFLAGS=-N
 
 ${PROG}: ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN} ${LIBRISCOS}
-	${_MKTARGET_LINK}
 	${LD} -o ${.TARGET} ${LINKFLAGS} -Ttext ${RELOC} ${OBJS} \
 	    ${LIBSA} ${LIBZ} ${LIBKERN} ${LIBRISCOS} ${LIBSA}
 	${SIZE} ${.TARGET}

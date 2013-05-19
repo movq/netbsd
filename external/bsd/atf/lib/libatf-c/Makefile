@@ -1,13 +1,15 @@
-# $NetBSD: Makefile,v 1.17 2013/03/14 07:10:06 jmmv Exp $
+# $NetBSD: Makefile,v 1.14 2012/01/16 22:42:40 jmmv Exp $
 
 NOLINT=		# defined
 
-.include <bsd.init.mk>
+.include <bsd.own.mk>
 
 LIB=		atf-c
+NOPIC=		# defined; interface is still too unstable
 
 CWARNFLAGS+=	-Wno-missing-noreturn
 
+SRCDIR=		${NETBSDSRCDIR}/external/bsd/atf/dist
 .PATH:		${SRCDIR}
 .PATH:		${SRCDIR}/atf-c
 .PATH:		${SRCDIR}/atf-c/detail
@@ -87,8 +89,8 @@ FILES+=		atf-c.pc
 FILESDIR=	/usr/lib/pkgconfig
 
 realall: atf-c.pc
-atf-c.pc: Makefile atf-c.pc.in bconfig.h
-	${TOOL_SED} -e 's,__ATF_VERSION__,${ATF_VERSION},g' \
+atf-c.pc: Makefile atf-c.pc.in
+	${TOOL_SED} -e 's,__ATF_VERSION__,0.15,g' \
 	    -e 's,__CC__,gcc,g' \
 	    -e 's,__INCLUDEDIR__,/usr/include,g' \
 	    -e 's,__LIBDIR__,/usr/lib,g' \

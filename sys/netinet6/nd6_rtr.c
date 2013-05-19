@@ -1,4 +1,4 @@
-/*	$NetBSD: nd6_rtr.c,v 1.86 2013/02/18 16:45:50 christos Exp $	*/
+/*	$NetBSD: nd6_rtr.c,v 1.82 2011/11/19 22:51:29 tls Exp $	*/
 /*	$KAME: nd6_rtr.c,v 1.95 2001/02/07 08:09:47 itojun Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nd6_rtr.c,v 1.86 2013/02/18 16:45:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nd6_rtr.c,v 1.82 2011/11/19 22:51:29 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -79,9 +79,8 @@ static void defrouter_delreq(struct nd_defrouter *);
 static void nd6_rtmsg(int, struct rtentry *);
 
 static int in6_init_prefix_ltimes(struct nd_prefix *);
-static void in6_init_address_ltimes(struct nd_prefix *,
-	struct in6_addrlifetime *);
-static void purge_detached(struct ifnet *);
+static void in6_init_address_ltimes(struct nd_prefix *ndpr,
+	struct in6_addrlifetime *lt6);
 
 static int rt6_deleteroute(struct rtentry *, void *);
 
@@ -489,7 +488,6 @@ defrtrlist_del(struct nd_defrouter *dr)
 	struct nd_ifinfo *ndi = ND_IFINFO(dr->ifp);
 	struct nd_defrouter *deldr = NULL;
 	struct nd_prefix *pr;
-	struct in6_ifextra *ext = dr->ifp->if_afdata[AF_INET6];
 
 	/*
 	 * Flush all the routing table entries that use the router
@@ -522,12 +520,6 @@ defrtrlist_del(struct nd_defrouter *dr)
 	 */
 	if (deldr)
 		defrouter_select();
-
-	ext->ndefrouters--;
-	if (ext->ndefrouters < 0) {
-		log(LOG_WARNING, "defrtrlist_del: negative count on %s\n",
-		    dr->ifp->if_xname);
-	}
 
 	free(dr, M_IP6NDP);
 }
@@ -744,7 +736,6 @@ static struct nd_defrouter *
 defrtrlist_update(struct nd_defrouter *new)
 {
 	struct nd_defrouter *dr, *n;
-	struct in6_ifextra *ext = new->ifp->if_afdata[AF_INET6];
 	int s = splsoftnet();
 
 	if ((dr = defrouter_lookup(&new->rtaddr, new->ifp)) != NULL) {
@@ -784,12 +775,6 @@ defrtrlist_update(struct nd_defrouter *new)
 		}
 		splx(s);
 		return (dr);
-	}
-
-	if (ip6_maxifdefrouters >= 0 &&
-	    ext->ndefrouters >= ip6_maxifdefrouters) {
-		splx(s);
-		return (NULL);
 	}
 
 	/* entry does not exist */
@@ -832,8 +817,6 @@ insert:
 		TAILQ_INSERT_TAIL(&nd_defrouter, n, dr_entry);
 
 	defrouter_select();
-
-	ext->ndefrouters++;
 
 	splx(s);
 
@@ -892,43 +875,6 @@ nd6_prefix_lookup(struct nd_prefixctl *key)
 	return (search);
 }
 
-static void
-purge_detached(struct ifnet *ifp)
-{
-	struct nd_prefix *pr, *pr_next;
-	struct in6_ifaddr *ia;
-	struct ifaddr *ifa, *ifa_next;
-
-	for (pr = nd_prefix.lh_first; pr; pr = pr_next) {
-		pr_next = pr->ndpr_next;
-
-		/*
-		 * This function is called when we need to make more room for
-		 * new prefixes rather than keeping old, possibly stale ones.
-		 * Detached prefixes would be a good candidate; if all routers
-		 * that advertised the prefix expired, the prefix is also
-		 * probably stale.
-		 */
-		if (pr->ndpr_ifp != ifp ||
-		    IN6_IS_ADDR_LINKLOCAL(&pr->ndpr_prefix.sin6_addr) ||
-		    ((pr->ndpr_stateflags & NDPRF_DETACHED) == 0 &&
-		    !LIST_EMPTY(&pr->ndpr_advrtrs)))
-			continue;
-
-		for (ifa = ifp->if_addrlist.tqh_first; ifa; ifa = ifa_next) {
-			ifa_next = ifa->ifa_list.tqe_next;
-			if (ifa->ifa_addr->sa_family != AF_INET6)
-				continue;
-			ia = (struct in6_ifaddr *)ifa;
-			if ((ia->ia6_flags & IN6_IFF_AUTOCONF) ==
-			    IN6_IFF_AUTOCONF && ia->ia6_ndpr == pr) {
-				in6_purgeaddr(ifa);
-			}
-		}
-		if (pr->ndpr_refcnt == 0)
-			prelist_remove(pr);
-	}
-}
 int
 nd6_prelist_add(struct nd_prefixctl *pr, struct nd_defrouter *dr, 
 	struct nd_prefix **newp)
@@ -936,14 +882,6 @@ nd6_prelist_add(struct nd_prefixctl *pr, struct nd_defrouter *dr,
 	struct nd_prefix *new = NULL;
 	int i, s;
 	int error;
-	struct in6_ifextra *ext = pr->ndpr_ifp->if_afdata[AF_INET6];
-
-	if (ip6_maxifprefixes >= 0) { 
-		if (ext->nprefixes >= ip6_maxifprefixes / 2) 
-			purge_detached(pr->ndpr_ifp);
-		if (ext->nprefixes >= ip6_maxifprefixes)
-			return ENOMEM;
-	}
 
 	error = 0;
 	new = malloc(sizeof(*new), M_IP6NDP, M_NOWAIT|M_ZERO);
@@ -992,8 +930,6 @@ nd6_prelist_add(struct nd_prefixctl *pr, struct nd_defrouter *dr,
 	if (dr)
 		pfxrtr_add(new, dr);
 
-	ext->nprefixes++;
-
 	return 0;
 }
 
@@ -1002,7 +938,6 @@ prelist_remove(struct nd_prefix *pr)
 {
 	struct nd_pfxrouter *pfr, *next;
 	int e, s;
-	struct in6_ifextra *ext = pr->ndpr_ifp->if_afdata[AF_INET6];
 
 	/* make sure to invalidate the prefix until it is really freed. */
 	pr->ndpr_vltime = 0;
@@ -1036,14 +971,6 @@ prelist_remove(struct nd_prefix *pr)
 		next = LIST_NEXT(pfr, pfr_entry);
 
 		free(pfr, M_IP6NDP);
-	}
-
-	if (ext) {
-		ext->nprefixes--;
-		if (ext->nprefixes < 0) {
-			log(LOG_WARNING, "prelist_remove: negative count on "
-			    "%s\n", pr->ndpr_ifp->if_xname);
-		}
 	}
 	splx(s);
 
@@ -1676,7 +1603,6 @@ nd6_prefix_onlink(struct nd_prefix *pr)
 	 * ifa->ifa_rtrequest = nd6_rtrequest;
 	 */
 	memset(&mask6, 0, sizeof(mask6));
-	mask6.sin6_family = AF_INET6;
 	mask6.sin6_len = sizeof(mask6);
 	mask6.sin6_addr = pr->ndpr_mask;
 	/* rtrequest() will probably set RTF_UP, but we're not sure. */

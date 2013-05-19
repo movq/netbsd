@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_vfsops.c,v 1.87 2012/04/30 22:51:28 rmind Exp $	*/
+/*	$NetBSD: procfs_vfsops.c,v 1.86 2011/09/27 01:23:59 christos Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_vfsops.c,v 1.87 2012/04/30 22:51:28 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_vfsops.c,v 1.86 2011/09/27 01:23:59 christos Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -154,7 +154,8 @@ procfs_mount(
 	if (*data_len >= sizeof *args && args->version != PROCFS_ARGSVERSION)
 		return EINVAL;
 
-	pmnt = kmem_zalloc(sizeof(struct procfsmount), KM_SLEEP);
+	pmnt = (struct procfsmount *) malloc(sizeof(struct procfsmount),
+	    M_UFSMNT, M_WAITOK);   /* XXX need new malloc type */
 
 	mp->mnt_stat.f_namemax = PROCFS_MAXNAMLEN;
 	mp->mnt_flag |= MNT_LOCAL;
@@ -190,10 +191,10 @@ procfs_unmount(struct mount *mp, int mntflags)
 
 	exechook_disestablish(VFSTOPROC(mp)->pmnt_exechook);
 
-	kmem_free(mp->mnt_data, sizeof(struct procfsmount));
+	free(mp->mnt_data, M_UFSMNT);
 	mp->mnt_data = NULL;
 
-	return 0;
+	return (0);
 }
 
 int

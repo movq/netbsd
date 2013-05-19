@@ -1,5 +1,3 @@
-/*	$NetBSD: pcap-dag.c,v 1.1.1.3 2013/04/06 15:57:40 christos Exp $	*/
-
 /*
  * pcap-dag.c: Packet capture interface for Endace DAG card.
  *
@@ -19,7 +17,7 @@
 
 #ifndef lint
 static const char rcsid[] _U_ =
-	"@(#) Header: /tcpdump/master/libpcap/pcap-dag.c,v 1.39 2008-04-14 20:40:58 guy Exp  (LBL)";
+	"@(#) Header: /tcpdump/master/libpcap/pcap-dag.c,v 1.39 2008-04-14 20:40:58 guy Exp (LBL)";
 #endif
 
 #ifdef HAVE_CONFIG_H
@@ -881,8 +879,8 @@ dag_platform_finddevs(pcap_if_t **devlistp, char *errbuf)
 	int dagstream;
 	int dagfd;
 
-	/* Try all the DAGs 0-31 */
-	for (c = 0; c < 32; c++) {
+	/* Try all the DAGs 0-9 */
+	for (c = 0; c < 9; c++) {
 		snprintf(name, 12, "dag%d", c);
 		if (-1 == dag_parse_name(name, dagname, DAGNAME_BUFSIZE, &dagstream))
 		{
@@ -899,7 +897,7 @@ dag_platform_finddevs(pcap_if_t **devlistp, char *errbuf)
 			{
 				int stream, rxstreams;
 				rxstreams = dag_rx_get_stream_count(dagfd);
-				for(stream=0;stream<DAG_STREAM_MAX;stream+=2) {
+				for(stream=0;stream<16;stream+=2) {
 					if (0 == dag_attach_stream(dagfd, stream, 0, 0)) {
 						dag_detach_stream(dagfd, stream);
 
@@ -909,11 +907,6 @@ dag_platform_finddevs(pcap_if_t **devlistp, char *errbuf)
 							 * Failure.
 							 */
 							ret = -1;
-						}
-						
-						rxstreams--;
-						if(rxstreams <= 0) {
-							break;
 						}
 					}
 				}				

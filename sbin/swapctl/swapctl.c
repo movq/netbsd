@@ -1,4 +1,4 @@
-/*	$NetBSD: swapctl.c,v 1.39 2013/01/01 19:01:10 dsl Exp $	*/
+/*	$NetBSD: swapctl.c,v 1.36 2011/08/27 18:57:50 joerg Exp $	*/
 
 /*
  * Copyright (c) 1996, 1997, 1999 Matthew R. Green
@@ -64,12 +64,11 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: swapctl.c,v 1.39 2013/01/01 19:01:10 dsl Exp $");
+__RCSID("$NetBSD: swapctl.c,v 1.36 2011/08/27 18:57:50 joerg Exp $");
 #endif
 
 
 #include <sys/param.h>
-#include <sys/ioctl.h>
 #include <sys/stat.h>
 #include <sys/swap.h>
 #include <sys/sysctl.h>
@@ -151,7 +150,6 @@ static int	pri;		/* uses 0 as default pri */
 static	void change_priority(char *);
 static	int  add_swap(char *, int);
 static	int  delete_swap(char *);
-static	void set_dumpdev1(char *);
 static	void set_dumpdev(char *);
 static	int get_dumpdev(void);
 __dead static	void do_fstab(int);
@@ -447,14 +445,8 @@ static int
 add_swap(char *path, int priority)
 {
 	struct stat sb;
-	char buf[MAXPATHLEN];
-	char *spec;
 
-	if (getfsspecname(buf, sizeof(buf), path) == NULL)
-		goto oops;
-	spec = buf;
-
-	if (stat(spec, &sb) < 0)
+	if (stat(path, &sb) < 0)
 		goto oops;
 
 	if (sb.st_mode & S_IROTH) 
@@ -463,7 +455,7 @@ add_swap(char *path, int priority)
 		warnx("WARNING: %s is writable by the world", path);
 
 	if (fflag || oflag) {
-		set_dumpdev1(spec);
+		set_dumpdev(path);
 		if (oflag)
 			exit(0);
 		else
@@ -473,7 +465,7 @@ add_swap(char *path, int priority)
 	if (nflag)
 		return 1;
 
-	if (swapctl(SWAP_ON, spec, priority) < 0) {
+	if (swapctl(SWAP_ON, path, priority) < 0) {
 oops:
 		err(1, "%s", path);
 	}
@@ -486,50 +478,31 @@ oops:
 static int
 delete_swap(char *path)
 {
-	char buf[MAXPATHLEN];
-	char *spec;
-
-	if (getfsspecname(buf, sizeof(buf), path) == NULL)
-		err(1, "%s", path);
-	spec = buf;
 
 	if (nflag)
 		return 1;
 
-	if (swapctl(SWAP_OFF, spec, pri) < 0) 
+	if (swapctl(SWAP_OFF, path, pri) < 0) 
 		err(1, "%s", path);
 	return (1);
 }
 
 static void
-set_dumpdev1(char *spec)
+set_dumpdev(char *path)
 {
 	int rv = 0;
 
 	if (!nflag) {
-		if (strcmp(spec, "none") == 0) 
+		if (strcmp(path, "none") == 0) 
 			rv = swapctl(SWAP_DUMPOFF, NULL, 0);
 		else
-			rv = swapctl(SWAP_DUMPDEV, spec, 0);
+			rv = swapctl(SWAP_DUMPDEV, path, 0);
 	}
 
 	if (rv == -1)
-		err(1, "could not set dump device to %s", spec);
+		err(1, "could not set dump device to %s", path);
 	else
-		printf("%s: setting dump device to %s\n", getprogname(), spec);
-}
-
-static void
-set_dumpdev(char *path)
-{
-	char buf[MAXPATHLEN];
-	char *spec;
-
-	if (getfsspecname(buf, sizeof(buf), path) == NULL)
-		err(1, "%s", path);
-	spec = buf;
-
-	return set_dumpdev1(spec);
+		printf("%s: setting dump device to %s\n", getprogname(), path);
 }
 
 static int
@@ -722,18 +695,13 @@ do_fstab(int add)
 #define PRIORITYEQ	"priority="
 #define NFSMNTPT	"nfsmntpt="
 	while ((fp = getfsent()) != NULL) {
-		char buf[MAXPATHLEN];
-		char *spec, *fsspec;
+		char *spec;
 
-		if (getfsspecname(buf, sizeof(buf), fp->fs_spec) == NULL) {
-			warn("%s", buf);
-			continue;
-		}
-		fsspec = spec = buf;
+		spec = fp->fs_spec;
 		cmd[0] = '\0';
 
 		if (strcmp(fp->fs_type, "dp") == 0 && add) {
-			set_dumpdev1(spec);
+			set_dumpdev(spec);
 			continue;
 		}
 
@@ -742,7 +710,7 @@ do_fstab(int add)
 
 		/* handle dp as mnt option */
 		if (strstr(fp->fs_mntops, "dp") && add)
-			set_dumpdev1(spec);
+			set_dumpdev(spec);
 
 		isblk = 0;
 
@@ -779,14 +747,14 @@ do_fstab(int add)
 			}
 			if (add) {
 				snprintf(cmd, sizeof(cmd), "%s %s %s",
-					PATH_MOUNT, fsspec, spec);
+					PATH_MOUNT, fp->fs_spec, spec);
 				if (system(cmd) != 0) {
-					warnx("%s: mount failed", fsspec);
+					warnx("%s: mount failed", fp->fs_spec);
 					continue;
 				}
 			} else {
 				snprintf(cmd, sizeof(cmd), "%s %s",
-					PATH_UMOUNT, fsspec);
+					PATH_UMOUNT, fp->fs_spec);
 			}
 		} else {
 			/*
@@ -815,35 +783,35 @@ do_fstab(int add)
 				success = 1;
 				printf(
 			    	"%s: adding %s as swap device at priority %d\n",
-				    getprogname(), fsspec, (int)priority);
+				    getprogname(), fp->fs_spec, (int)priority);
 			} else {
 				error = 1;
 				fprintf(stderr,
 				    "%s: failed to add %s as swap device\n",
-				    getprogname(), fsspec);
+				    getprogname(), fp->fs_spec);
 			}
 		} else {
 			if (delete_swap(spec)) {
 				success = 1;
 				printf(
 				    "%s: removing %s as swap device\n",
-				    getprogname(), fsspec);
+				    getprogname(), fp->fs_spec);
 			} else {
 				error = 1;
 				fprintf(stderr,
 				    "%s: failed to remove %s as swap device\n",
-				    getprogname(), fsspec);
+				    getprogname(), fp->fs_spec);
 			}
 			if (cmd[0]) {
 				if (system(cmd) != 0) {
-					warnx("%s: umount failed", fsspec);
+					warnx("%s: umount failed", fp->fs_spec);
 					error = 1;
 					continue;
 				}
 			}
 		}
 
-		if (spec != fsspec)
+		if (spec != fp->fs_spec)
 			free(spec);
 	}
 	if (error)

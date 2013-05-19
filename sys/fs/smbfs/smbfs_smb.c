@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_smb.c,v 1.44 2012/11/30 23:24:21 nakayama Exp $	*/
+/*	$NetBSD: smbfs_smb.c,v 1.42.8.2 2012/12/10 21:16:25 riz Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_smb.c,v 1.44 2012/11/30 23:24:21 nakayama Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_smb.c,v 1.42.8.2 2012/12/10 21:16:25 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

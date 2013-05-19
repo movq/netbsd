@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_node.h,v 1.13 2012/11/28 13:34:24 nakayama Exp $	*/
+/*	$NetBSD: smbfs_node.h,v 1.12.94.1 2012/12/10 21:12:51 riz Exp $	*/
 
 /*
  * Copyright (c) 2000-2001, Boris Popov

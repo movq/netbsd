@@ -1,15 +1,15 @@
-/*	$NetBSD: util.c,v 1.53 2012/06/04 22:45:05 sjg Exp $	*/
+/*	$NetBSD: util.c,v 1.51 2011/04/02 07:58:30 mbalmer Exp $	*/
 
 /*
  * Missing stuff from OS's
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: util.c,v 1.53 2012/06/04 22:45:05 sjg Exp $";
+static char rcsid[] = "$NetBSD: util.c,v 1.51 2011/04/02 07:58:30 mbalmer Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: util.c,v 1.53 2012/06/04 22:45:05 sjg Exp $");
+__RCSID("$NetBSD: util.c,v 1.51 2011/04/02 07:58:30 mbalmer Exp $");
 #endif
 #endif
 
@@ -48,26 +48,17 @@ findenv(const char *name, int *offset)
 	size_t i, len;
 	char *p, *q;
 
-	len = strlen(name);
 	for (i = 0; (q = environ[i]); i++) {
 		p = strchr(q, '=');
-		if (p == NULL || p - q != len)
+		if (p == NULL)
 			continue;
-		if (strncmp(name, q, len) == 0) {
+		if (strncmp(name, q, len = p - q) == 0) {
 			*offset = i;
 			return q + len + 1;
 		}
 	}
 	*offset = i;
 	return NULL;
-}
-
-char *
-getenv(const char *name)
-{
-    int offset;
-
-    return(findenv(name, &offset));
 }
 
 int
@@ -92,6 +83,7 @@ unsetenv(const char *name)
 int
 setenv(const char *name, const char *value, int rewrite)
 {
+	static char **saveenv;	/* copy of previously allocated space */
 	char *c, **newenv;
 	const char *cc;
 	size_t l_value, size;
@@ -114,20 +106,20 @@ setenv(const char *name, const char *value, int rewrite)
 			goto copy;
 	} else {					/* create new slot */
 		size = sizeof(char *) * (offset + 2);
-		if (savedEnv == environ) {		/* just increase size */
-			if ((newenv = realloc(savedEnv, size)) == NULL)
+		if (saveenv == environ) {		/* just increase size */
+			if ((newenv = realloc(saveenv, size)) == NULL)
 				return -1;
-			savedEnv = newenv;
+			saveenv = newenv;
 		} else {				/* get new space */
 			/*
 			 * We don't free here because we don't know if
 			 * the first allocation is valid on all OS's
 			 */
-			if ((savedEnv = malloc(size)) == NULL)
+			if ((saveenv = malloc(size)) == NULL)
 				return -1;
-			(void)memcpy(savedEnv, environ, size - sizeof(char *));
+			(void)memcpy(saveenv, environ, size - sizeof(char *));
 		}
-		environ = savedEnv;
+		environ = saveenv;
 		environ[offset + 1] = NULL;
 	}
 	for (cc = name; *cc && *cc != '='; ++cc)	/* no `=' in name */

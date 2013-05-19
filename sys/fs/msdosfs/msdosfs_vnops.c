@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_vnops.c,v 1.86 2013/03/18 19:35:37 plunky Exp $	*/
+/*	$NetBSD: msdosfs_vnops.c,v 1.79.4.2 2012/05/07 03:01:13 riz Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msdosfs_vnops.c,v 1.86 2013/03/18 19:35:37 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msdosfs_vnops.c,v 1.79.4.2 2012/05/07 03:01:13 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -221,11 +221,9 @@ msdosfs_check_permitted(struct vnode *vp, struct denode *dep, mode_t mode,
 	else
 		file_mode = S_IRUSR|S_IXUSR|S_IRGRP|S_IXGRP|S_IROTH|S_IXOTH;
 
-	file_mode &= (vp->v_type == VDIR ? pmp->pm_dirmask : pmp->pm_mask);
-
-	return kauth_authorize_vnode(cred, KAUTH_ACCESS_ACTION(mode,
-	    vp->v_type, file_mode), vp, NULL, genfs_can_access(vp->v_type,
-	    file_mode, pmp->pm_uid, pmp->pm_gid, mode, cred));
+	return genfs_can_access(vp->v_type,
+	    file_mode & (vp->v_type == VDIR ? pmp->pm_dirmask : pmp->pm_mask),
+	    pmp->pm_uid, pmp->pm_gid, mode, cred);
 }
 
 int
@@ -379,9 +377,8 @@ msdosfs_setattr(void *v)
 			error = EROFS;
 			goto bad;
 		}
-		error = kauth_authorize_vnode(cred, KAUTH_VNODE_WRITE_TIMES,
-		    ap->a_vp, NULL, genfs_can_chtimes(ap->a_vp, vap->va_vaflags,
-		    pmp->pm_uid, cred));
+		error = genfs_can_chtimes(ap->a_vp, vap->va_vaflags,
+		    pmp->pm_uid, cred);
 		if (error)
 			goto bad;
 		if ((pmp->pm_flags & MSDOSFSMNT_NOWIN95) == 0 &&
@@ -403,9 +400,9 @@ msdosfs_setattr(void *v)
 			error = EROFS;
 			goto bad;
 		}
-		error = kauth_authorize_vnode(cred, KAUTH_VNODE_WRITE_FLAGS, vp,
-		    NULL, genfs_can_chflags(cred, vp->v_type, pmp->pm_uid, false));
-		if (error)
+		if (kauth_cred_geteuid(cred) != pmp->pm_uid &&
+		    (error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
+		    NULL)))
 			goto bad;
 		/* We ignore the read and execute bits. */
 		if (vap->va_mode & S_IWUSR)
@@ -423,9 +420,9 @@ msdosfs_setattr(void *v)
 			error = EROFS;
 			goto bad;
 		}
-		error = kauth_authorize_vnode(cred, KAUTH_VNODE_WRITE_FLAGS, vp,
-		    NULL, genfs_can_chflags(cred, vp->v_type, pmp->pm_uid, false));
-		if (error)
+		if (kauth_cred_geteuid(cred) != pmp->pm_uid &&
+		    (error = kauth_authorize_generic(cred, KAUTH_GENERIC_ISSUSER,
+		    NULL)))
 			goto bad;
 		if (vap->va_flags & SF_ARCHIVED)
 			dep->de_Attributes &= ~ATTR_ARCHIVE;
@@ -525,10 +522,11 @@ msdosfs_read(void *v)
 		 */
 		error = bread(pmp->pm_devvp, de_bn2kb(pmp, lbn), blsize,
 		    NOCRED, 0, &bp);
+		n = MIN(n, pmp->pm_bpcluster - bp->b_resid);
 		if (error) {
+			brelse(bp, 0);
 			goto bad;
 		}
-		n = MIN(n, pmp->pm_bpcluster - bp->b_resid);
 		error = uiomove((char *)bp->b_data + on, (int) n, uio);
 		brelse(bp, 0);
 	} while (error == 0 && uio->uio_resid > 0 && n != 0);
@@ -1102,6 +1100,7 @@ abortit:
 		    pmp->pm_bpcluster, NOCRED, B_MODIFY, &bp);
 		if (error) {
 			/* XXX should really panic here, fs is corrupt */
+			brelse(bp, 0);
 			VOP_UNLOCK(fvp);
 			goto bad;
 		}
@@ -1493,6 +1492,7 @@ msdosfs_readdir(void *v)
 		error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize,
 		    NOCRED, 0, &bp);
 		if (error) {
+			brelse(bp, 0);
 			goto bad;
 		}
 		n = MIN(n, blsize - bp->b_resid);

@@ -1,12 +1,11 @@
-/*	$NetBSD: umidi.c,v 1.65 2013/01/22 21:29:53 jmcneill Exp $	*/
+/*	$NetBSD: umidi.c,v 1.59.2.1 2012/02/20 21:16:59 sborrill Exp $	*/
 /*
- * Copyright (c) 2001, 2012 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Takuya SHIOZAKI (tshiozak@NetBSD.org), (full-size transfers, extended
- * hw_if) Chapman Flack (chap@NetBSD.org), and Matthew R. Green
- * (mrg@eterna.com.au).
+ * by Takuya SHIOZAKI (tshiozak@NetBSD.org) and (full-size transfers, extended
+ * hw_if) Chapman Flack (chap@NetBSD.org).
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -31,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umidi.c,v 1.65 2013/01/22 21:29:53 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umidi.c,v 1.59.2.1 2012/02/20 21:16:59 sborrill Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -52,7 +51,6 @@ __KERNEL_RCSID(0, "$NetBSD: umidi.c,v 1.65 2013/01/22 21:29:53 jmcneill Exp $");
 #include <dev/usb/usbdi.h>
 #include <dev/usb/usbdi_util.h>
 
-#include <dev/auconv.h>
 #include <dev/usb/usbdevs.h>
 #include <dev/usb/uaudioreg.h>
 #include <dev/usb/umidireg.h>
@@ -211,6 +209,7 @@ umidi_attach(device_t parent, device_t self, void *aux)
 	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_USB);
 	cv_init(&sc->sc_cv, "umidopcl");
 
+	KERNEL_LOCK(1, curlwp);
 	err = alloc_all_endpoints(sc);
 	if (err != USBD_NORMAL_COMPLETION) {
 		aprint_error_dev(self,
@@ -243,6 +242,7 @@ umidi_attach(device_t parent, device_t self, void *aux)
 		aprint_error_dev(self,
 		    "attach_all_mididevs failed. (err=%d)\n", err);
 	}
+	KERNEL_UNLOCK_ONE(curlwp);
 
 #ifdef UMIDI_DEBUG
 	dump_sc(sc);
@@ -300,6 +300,7 @@ umidi_detach(device_t self, int flags)
 	DPRINTFN(1,("umidi_detach\n"));
 
 	sc->sc_dying = 1;
+	KERNEL_LOCK(1, curlwp);
 	detach_all_mididevs(sc, flags);
 	free_all_mididevs(sc);
 	free_all_jacks(sc);
@@ -307,6 +308,7 @@ umidi_detach(device_t self, int flags)
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
 			   sc->sc_dev);
+	KERNEL_UNLOCK_ONE(curlwp);
 
 	mutex_destroy(&sc->sc_lock);
 	cv_destroy(&sc->sc_cv);
@@ -365,8 +367,10 @@ umidi_close(void *addr)
 {
 	struct umidi_mididev *mididev = addr;
 
+	/* XXX SMP */
 	mididev->closing = 1;
 
+	KERNEL_LOCK(1, curlwp);
 	mutex_spin_exit(&mididev->sc->sc_lock);
 
 	if ((mididev->flags & FWRITE) && mididev->out_jack)
@@ -374,7 +378,9 @@ umidi_close(void *addr)
 	if ((mididev->flags & FREAD) && mididev->in_jack)
 		close_in_jack(mididev->in_jack);
 
+	/* XXX SMP */
 	mutex_spin_enter(&mididev->sc->sc_lock);
+	KERNEL_UNLOCK_ONE(curlwp);
 
 	mididev->opened = 0;
 }
@@ -513,10 +519,10 @@ alloc_pipe(struct umidi_endpoint *ep)
 	    goto quit;
 	}
 	ep->next_slot = ep->buffer;
-	err = usbd_open_pipe(sc->sc_iface, ep->addr, USBD_MPSAFE, &ep->pipe);
+	err = usbd_open_pipe(sc->sc_iface, ep->addr, 0, &ep->pipe);
 	if (err)
 	    usbd_free_xfer(ep->xfer);
-	ep->solicit_cookie = softint_establish(SOFTINT_CLOCK | SOFTINT_MPSAFE, out_solicit, ep);
+	ep->solicit_cookie = softint_establish(SOFTINT_CLOCK, out_solicit, ep);
 quit:
 	return err;
 }
@@ -1132,7 +1138,9 @@ open_in_jack(struct umidi_jack *jack, void *arg, void (*intr)(void *, int))
 	jack->u.in.intr = intr;
 	jack->opened = 1;
 	if (ep->num_open++ == 0 && UE_GET_DIR(ep->addr)==UE_DIR_IN) {
+		KERNEL_LOCK(1, curlwp);
 		err = start_input_transfer(ep);
+		KERNEL_UNLOCK_ONE(curlwp);
 		if (err != USBD_NORMAL_COMPLETION &&
 		    err != USBD_IN_PROGRESS) {
 			ep->num_open--;
@@ -1446,11 +1454,13 @@ start_output_transfer(struct umidi_endpoint *ep)
 	length = (ep->next_slot - ep->buffer) * sizeof *ep->buffer;
 	DPRINTFN(200,("umidi out transfer: start %p end %p length %u\n",
 	    ep->buffer, ep->next_slot, length));
+	KERNEL_LOCK(1, curlwp);
 	usbd_setup_xfer(ep->xfer, ep->pipe,
 			(usbd_private_handle)ep,
 			ep->buffer, length,
 			USBD_NO_COPY, USBD_NO_TIMEOUT, out_intr);
 	rv = usbd_transfer(ep->xfer);
+	KERNEL_UNLOCK_ONE(curlwp);
 	
 	/*
 	 * Once the transfer is scheduled, no more adding to partial

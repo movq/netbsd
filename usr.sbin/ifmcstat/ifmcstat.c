@@ -1,4 +1,4 @@
-/*	$NetBSD: ifmcstat.c,v 1.11 2012/10/26 16:52:52 seanb Exp $	*/
+/*	$NetBSD: ifmcstat.c,v 1.10 2009/04/19 07:49:07 lukem Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -140,12 +140,7 @@ int main()
 	struct	arpcom	arpcom;
 #else
 	struct ethercom ec;
-	union {
-		struct sockaddr_storage st;
-		struct sockaddr_dl sdl;
-	} su;
-	struct sockaddr_dl *sdlp;
-	sdlp = &su.sdl;
+	struct sockaddr_dl sdl;
 #endif
 
 	if ((kvmd = kvm_openfiles(NULL, NULL, NULL, O_RDONLY, buf)) == NULL) {
@@ -177,13 +172,10 @@ int main()
 #endif
 
 #ifdef __NetBSD__
-		KREAD(ifnet.if_sadl, sdlp, struct sockaddr_dl);
-		if (sdlp->sdl_type == IFT_ETHER) {
-			/* If we didn't get all of it, try again */
-			if (sdlp->sdl_len > sizeof(struct sockaddr_dl))
-				kread((u_long)ifnet.if_sadl, (void *)sdlp, sdlp->sdl_len);
+		KREAD(ifnet.if_sadl, &sdl, struct sockaddr_dl);
+		if (sdl.sdl_type == IFT_ETHER) {
 			printf("\tenaddr %s",
-			       ether_ntoa((struct ether_addr *)LLADDR(sdlp)));
+			       ether_ntoa((struct ether_addr *)LLADDR(&sdl)));
 			KREAD(ifp, &ec, struct ethercom);
 			printf(" multicnt %d", ec.ec_multicnt);
 			acmc(ec.ec_multiaddrs.lh_first);

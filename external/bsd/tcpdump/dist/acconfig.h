@@ -8,6 +8,12 @@
 /* Define if you enable support for the libsmi. */
 #undef LIBSMI
 
+/* define if you have struct __res_state_ext */
+#undef HAVE_RES_STATE_EXT
+
+/* define if your struct __res_state has the nsort member */
+#undef HAVE_NEW_RES_STATE
+
 /* define if you have the addrinfo function. */
 #undef HAVE_ADDRINFO
 
@@ -16,6 +22,15 @@
 
 /* define ifyou have the h_errno variable. */
 #undef HAVE_H_ERRNO
+
+/* define if IN6ADDRSZ is defined (XXX not used!) */
+#undef HAVE_IN6ADDRSZ
+
+/* define if INADDRSZ is defined (XXX not used!) */
+#undef HAVE_INADDRSZ
+
+/* define if RES_USE_INET6 is defined */
+#undef HAVE_RES_USE_INET6
 
 /* define if you have struct sockaddr_storage */
 #undef HAVE_SOCKADDR_STORAGE
@@ -52,6 +67,9 @@
 
 /* define if you have getrpcbynumber() */
 #undef HAVE_GETRPCBYNUMBER
+
+/* AIX hack. */
+#undef _SUN
 
 /* Workaround for missing 64-bit formats */
 #undef PRId64

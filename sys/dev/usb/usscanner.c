@@ -1,4 +1,4 @@
-/*	$NetBSD: usscanner.c,v 1.36 2012/12/27 16:42:32 skrll Exp $	*/
+/*	$NetBSD: usscanner.c,v 1.32 2011/12/23 00:51:49 jakllsch Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -47,13 +47,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: usscanner.c,v 1.36 2012/12/27 16:42:32 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: usscanner.c,v 1.32 2011/12/23 00:51:49 jakllsch Exp $");
 
 #include "scsibus.h"
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/lwp.h>
 #include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/conf.h>
@@ -196,8 +195,7 @@ usscanner_attach(device_t parent, device_t self, void *aux)
 
 	err = usbd_set_config_no(dev, USSCANNER_CONFIG_NO, 1);
 	if (err) {
-		aprint_error_dev(self, "failed to set configuration"
-		    ", err=%s\n", usbd_errstr(err));
+		aprint_error_dev(self, "setting config no failed\n");
 		return;
 	}
 
@@ -373,7 +371,7 @@ usscanner_detach(device_t self, int flags)
 	s = splusb();
 	if (--sc->sc_refcnt >= 0) {
 		/* Wait for processes to go away. */
-		usb_detach_waitold(sc->sc_dev);
+		usb_detach_wait(sc->sc_dev);
 	}
 	splx(s);
 
@@ -484,9 +482,7 @@ usscanner_intr_cb(usbd_xfer_handle xfer, usbd_private_handle priv,
 	sc->sc_state = UAS_IDLE;
 
 	s = splbio();
-	KERNEL_LOCK(1, curlwp);
 	scsipi_done(sc->sc_xs);
-	KERNEL_UNLOCK_ONE(curlwp);
 	splx(s);
 }
 
@@ -764,9 +760,7 @@ usscanner_scsipi_request(struct scsipi_channel *chan, scsipi_adapter_req_t req, 
 
  done:
 		sc->sc_state = UAS_IDLE;
-		KERNEL_LOCK(1, curlwp);
 		scsipi_done(xs);
-		KERNEL_UNLOCK_ONE(curlwp);
 		return;
 
 	case ADAPTER_REQ_GROW_RESOURCES:

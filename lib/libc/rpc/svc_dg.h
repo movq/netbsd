@@ -1,4 +1,4 @@
-/*	$NetBSD: svc_dg.h,v 1.2 2013/03/11 20:19:29 tron Exp $	*/
+/*	$NetBSD: svc_dg.h,v 1.1.66.1 2013/03/14 22:03:10 riz Exp $	*/
 /*
  * Copyright (c) 2010, Oracle America, Inc.
  *

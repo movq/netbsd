@@ -1,4 +1,4 @@
-/*	$NetBSD: server.c,v 1.11 2012/03/01 22:38:31 joerg Exp $	*/
+/*	$NetBSD: server.c,v 1.10.4.1 2012/03/05 19:01:49 sborrill Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: server.c,v 1.11 2012/03/01 22:38:31 joerg Exp $");
+__RCSID("$NetBSD: server.c,v 1.10.4.1 2012/03/05 19:01:49 sborrill Exp $");
 
 #include <sys/select.h>
 #include <sys/stat.h>

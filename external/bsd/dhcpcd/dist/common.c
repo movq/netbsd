@@ -251,7 +251,6 @@ writepid(int fd, pid_t pid)
 	return 0;
 }
 
-#ifndef xmalloc
 void *
 xmalloc(size_t s)
 {
@@ -263,9 +262,16 @@ xmalloc(size_t s)
 	exit (EXIT_FAILURE);
 	/* NOTREACHED */
 }
-#endif
 
-#ifndef xrealloc
+void *
+xzalloc(size_t s)
+{
+	void *value = xmalloc(s);
+
+	memset(value, 0, s);
+	return value;
+}
+
 void *
 xrealloc(void *ptr, size_t s)
 {
@@ -277,9 +283,7 @@ xrealloc(void *ptr, size_t s)
 	exit(EXIT_FAILURE);
 	/* NOTREACHED */
 }
-#endif
 
-#ifndef xstrdup
 char *
 xstrdup(const char *str)
 {
@@ -294,14 +298,4 @@ xstrdup(const char *str)
 	syslog(LOG_ERR, "memory exhausted (xstrdup)");
 	exit(EXIT_FAILURE);
 	/* NOTREACHED */
-}
-#endif
-
-void *
-xzalloc(size_t s)
-{
-	void *value = xmalloc(s);
-
-	memset(value, 0, s);
-	return value;
 }

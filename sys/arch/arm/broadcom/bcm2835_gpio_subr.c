@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_gpio_subr.c,v 1.2 2013/01/09 01:58:41 jmcneill Exp $	*/
+/*	$NetBSD: bcm2835_gpio_subr.c,v 1.2.4.2 2013/02/13 01:36:14 riz Exp $	*/
 
 /*
  * Copyright (c) 2013 Jonathan A. Kollasch
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_gpio_subr.c,v 1.2 2013/01/09 01:58:41 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_gpio_subr.c,v 1.2.4.2 2013/02/13 01:36:14 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

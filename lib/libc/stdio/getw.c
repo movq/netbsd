@@ -1,4 +1,4 @@
-/*	$NetBSD: getw.c,v 1.10 2012/03/15 18:22:30 christos Exp $	*/
+/*	$NetBSD: getw.c,v 1.9 2003/08/07 16:43:27 agc Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)getw.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: getw.c,v 1.10 2012/03/15 18:22:30 christos Exp $");
+__RCSID("$NetBSD: getw.c,v 1.9 2003/08/07 16:43:27 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -46,11 +46,12 @@ __RCSID("$NetBSD: getw.c,v 1.10 2012/03/15 18:22:30 christos Exp $");
 #include <stdio.h>
 
 int
-getw(FILE *fp)
+getw(fp)
+	FILE *fp;
 {
 	int x;
 
 	_DIAGASSERT(fp != NULL);
 
-	return fread((void *)&x, sizeof(x), 1, fp) == 1 ? x : EOF;
+	return (fread((void *)&x, sizeof(x), 1, fp) == 1 ? x : EOF);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: innetgr.c,v 1.8 2012/03/20 20:34:57 matt Exp $	*/
+/*	$NetBSD: innetgr.c,v 1.7 2008/04/28 20:24:13 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: innetgr.c,v 1.8 2012/03/20 20:34:57 matt Exp $");
+__RCSID("$NetBSD: innetgr.c,v 1.7 2008/04/28 20:24:13 martin Exp $");
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,7 +41,7 @@ static void usage __P((void)) __dead;
 int main __P((int, char *[]));
 
 static void
-usage(void)
+usage()
 {
 
 	(void)fprintf(stderr,
@@ -51,7 +51,9 @@ usage(void)
 }
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	int c, ok, verbose = 0;
 	char *user = NULL;

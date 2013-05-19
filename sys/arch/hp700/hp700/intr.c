@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.41 2012/05/23 16:11:37 skrll Exp $	*/
+/*	$NetBSD: intr.c,v 1.36.10.1 2012/04/03 15:34:42 riz Exp $	*/
 /*	$OpenBSD: intr.c,v 1.27 2009/12/31 12:52:35 jsing Exp $	*/
 
 /*
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.41 2012/05/23 16:11:37 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.36.10.1 2012/04/03 15:34:42 riz Exp $");
 
 #define __MUTEX_PRIVATE
 
@@ -50,6 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.41 2012/05/23 16:11:37 skrll Exp $");
 #include <machine/intr.h>
 #include <machine/reg.h>
 
+#include <hp700/hp700/intr.h>
 #include <hp700/hp700/machdep.h>
 
 #include <machine/mutex.h>
@@ -58,52 +59,89 @@ __KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.41 2012/05/23 16:11:37 skrll Exp $");
 #include "opt_lockdebug.h"
 #endif
 
-static int hp700_intr_ipl_next(struct cpu_info *);
-void hp700_intr_calculatemasks(struct cpu_info *);
-int hp700_intr_ipending(struct hp700_interrupt_register *, int);
-void hp700_intr_dispatch(int , int , struct trapframe *);
+/* The priority level masks. */
+int imask[NIPL];
+
+/* Shared interrupts */
+int ishared;
 
 /* The list of all interrupt registers. */
 struct hp700_interrupt_register *hp700_interrupt_registers[HP700_INTERRUPT_BITS];
 
+/*
+ * The array of interrupt handler structures, one per bit.
+ */
+static struct hp700_interrupt_bit {
+
+	/* The interrupt register this bit is in. */
+	struct hp700_interrupt_register *ib_reg;
+
+	/*
+	 * The priority level associated with this bit, e.g, IPL_BIO, IPL_NET,
+	 * etc.
+	 */
+	int ib_ipl;
+
+	/*
+	 * The spl mask for this bit.  This starts out as the spl bit assigned
+	 * to this particular interrupt, and later gets fleshed out by the mask
+	 * calculator to be the full mask that we need to raise spl to when we
+	 * get this interrupt.
+	 */
+	int ib_spl;
+
+	/* The interrupt name. */
+	char ib_name[16];
+
+	/* The interrupt event count. */
+	struct evcnt ib_evcnt;
+
+	/*
+	 * The interrupt handler and argument for this bit.  If the argument is
+	 * NULL, the handler gets the trapframe.
+	 */
+	int (*ib_handler)(void *);
+	void *ib_arg;
+
+} hp700_interrupt_bits[HP700_INTERRUPT_BITS];
+
+/* The CPU interrupt register. */
+struct hp700_interrupt_register ir_cpu;
 
 /*
  * This establishes a new interrupt register.
  */
 void
-hp700_interrupt_register_establish(struct cpu_info *ci, 
-    struct hp700_interrupt_register *ir)
+hp700_interrupt_register_establish(struct hp700_interrupt_register *ir)
 {
 	int idx;
 
 	/* Initialize the register structure. */
 	memset(ir, 0, sizeof(*ir));
-	ir->ir_ci = ci;
-
 	for (idx = 0; idx < HP700_INTERRUPT_BITS; idx++)
 		ir->ir_bits_map[idx] = IR_BIT_UNUSED;
 
-	ir->ir_bits = ~0;
 	/* Add this structure to the list. */
 	for (idx = 0; idx < HP700_INTERRUPT_BITS; idx++)
 		if (hp700_interrupt_registers[idx] == NULL)
 			break;
 	if (idx == HP700_INTERRUPT_BITS)
-		panic("%s: too many regs", __func__);
+		panic("hp700_interrupt_register_establish: too many regs");
 	hp700_interrupt_registers[idx] = ir;
 }
 
 /*
- * This initialise interrupts for a CPU.
+ * This bootstraps interrupts.
  */
 void
-hp700_intr_initialise(struct cpu_info *ci)
+hp700_intr_bootstrap(void)
 {
+	struct cpu_info *ci = curcpu();
 	int i;
 
 	/* Initialize all prority level masks to mask everything. */
 	for (i = 0; i < NIPL; i++)
-		ci->ci_imask[i] = -1;
+		imask[i] = -1;
 
 	/* We are now at the highest priority level. */
 	ci->ci_cpl = -1;
@@ -111,14 +149,18 @@ hp700_intr_initialise(struct cpu_info *ci)
 	/* There are no pending interrupts. */
 	ci->ci_ipending = 0;
 
-	/* We are not running an interrupt handler. */
+	/* We are not running an interrupt. */
 	ci->ci_intr_depth = 0;
 
 	/* There are no interrupt handlers. */
-	memset(ci->ci_ib, 0, sizeof(ci->ci_ib));
+	memset(hp700_interrupt_bits, 0, sizeof(hp700_interrupt_bits));
 
 	/* There are no interrupt registers. */
 	memset(hp700_interrupt_registers, 0, sizeof(hp700_interrupt_registers));
+
+	/* Initialize the CPU interrupt register description. */
+	hp700_interrupt_register_establish(&ir_cpu);
+	ir_cpu.ir_name = "cpu0";
 }
 
 /*
@@ -129,7 +171,6 @@ hp700_intr_establish(int ipl, int (*handler)(void *), void *arg,
     struct hp700_interrupt_register *ir, int bit_pos)
 {
 	struct hp700_interrupt_bit *ib;
-	struct cpu_info *ci = ir->ir_ci;
 	int idx;
 
 	/* Panic on a bad interrupt bit. */
@@ -137,48 +178,41 @@ hp700_intr_establish(int ipl, int (*handler)(void *), void *arg,
 		panic("%s: bad interrupt bit %d", __func__, bit_pos);
 
 	/*
-	 * Panic if this interrupt bit is already handled, but allow
-	 * shared interrupts for cascaded registers, e.g. dino and gsc
-	 * XXX This could be improved.
+	 * Panic if this interrupt bit is already handled, but allow shared
+	 * interrupts for PCI.
 	 */
-	if (handler != NULL) {
-		if (IR_BIT_USED_P(ir->ir_bits_map[31 ^ bit_pos]))
-			panic("%s: interrupt already handled", __func__);
-	}
-	
+	if (ir->ir_bits_map[31 ^ bit_pos] != IR_BIT_UNUSED &&
+	    !IR_BIT_NESTED_P(ir->ir_bits_map[31 ^ bit_pos]) &&
+	    handler == NULL)
+		panic("hp700_intr_establish: int already handled");
+
 	/*
 	 * If this interrupt bit leads us to another interrupt register,
 	 * simply note that in the mapping for the bit.
 	 */
 	if (handler == NULL) {
-		for (idx = 1; idx < HP700_INTERRUPT_BITS; idx++)
+		for (idx = 0; idx < HP700_INTERRUPT_BITS; idx++)
 			if (hp700_interrupt_registers[idx] == arg)
 				break;
 		if (idx == HP700_INTERRUPT_BITS)
-			panic("%s: unknown int reg", __func__);
+			panic("hp700_intr_establish: unknown int reg");
+		ir->ir_bits_map[31 ^ bit_pos] = IR_BIT_REG | idx;
 		
-		ir->ir_bits_map[31 ^ bit_pos] = IR_BIT_REG(idx);
-
 		return NULL;
 	}
 
 	/*
 	 * Otherwise, allocate a new bit in the spl.
 	 */
-	idx = hp700_intr_ipl_next(ir->ir_ci);
-
+	idx = _hp700_intr_ipl_next();
 	ir->ir_bits &= ~(1 << bit_pos);
-	ir->ir_rbits &= ~(1 << bit_pos);
-	if (!IR_BIT_USED_P(ir->ir_bits_map[31 ^ bit_pos])) {
+	if (ir->ir_bits_map[31 ^ bit_pos] == IR_BIT_UNUSED)
 		ir->ir_bits_map[31 ^ bit_pos] = 1 << idx;
-	} else {
-		int j;
-		
+	else {
 		ir->ir_bits_map[31 ^ bit_pos] |= 1 << idx;
-		j = (ir - hp700_interrupt_registers[0]);
-		ci->ci_ishared |= (1 << j);
+		ishared |= ir->ir_bits_map[31 ^ bit_pos];
 	}
-	ib = &ci->ci_ib[idx];
+	ib = &hp700_interrupt_bits[idx];
 
 	/* Fill this interrupt bit. */
 	ib->ib_reg = ir;
@@ -191,8 +225,6 @@ hp700_intr_establish(int ipl, int (*handler)(void *), void *arg,
 	ib->ib_handler = handler;
 	ib->ib_arg = arg;
 
-	hp700_intr_calculatemasks(ci);
-
 	return ib;
 }
 
@@ -201,48 +233,35 @@ hp700_intr_establish(int ipl, int (*handler)(void *), void *arg,
  * It returns the bit position, or -1 if no bits were available.
  */
 int
-hp700_intr_allocate_bit(struct hp700_interrupt_register *ir, int irq)
+hp700_intr_allocate_bit(struct hp700_interrupt_register *ir)
 {
 	int bit_pos;
-	int last_bit;
 	u_int mask;
-	int *bits;
 
-	if (irq == -1) {
-		bit_pos = 31;
-		last_bit = 0;
-		bits = &ir->ir_bits;
-	} else {
-		bit_pos = irq;
-		last_bit = irq;
-		bits = &ir->ir_rbits;
-	}
-	for (mask = (1 << bit_pos); bit_pos >= last_bit; bit_pos--) {
-		if (*bits & mask)
+	for (bit_pos = 31, mask = (1 << bit_pos);
+	     bit_pos >= 0;
+	     bit_pos--, mask >>= 1)
+		if (ir->ir_bits & mask)
 			break;
-		mask >>= 1;
-	}
-	if (bit_pos >= last_bit) {
-		*bits &= ~mask;
-		return bit_pos;
-	}
+	if (bit_pos >= 0)
+		ir->ir_bits &= ~mask;
 
-	return -1;
+	return bit_pos;
 }
 
 /*
- * This returns the next available spl bit.
+ * This returns the next available spl bit.  This is not intended for wide use.
  */
-static int
-hp700_intr_ipl_next(struct cpu_info *ci)
+int
+_hp700_intr_ipl_next(void)
 {
 	int idx;
 
 	for (idx = 0; idx < HP700_INTERRUPT_BITS; idx++)
-		if (ci->ci_ib[idx].ib_reg == NULL)
+		if (hp700_interrupt_bits[idx].ib_reg == NULL)
 			break;
 	if (idx == HP700_INTERRUPT_BITS)
-		panic("%s: too many devices", __func__);
+		panic("_hp700_intr_spl_bit: too many devices");
 	return idx;
 }
 
@@ -250,73 +269,91 @@ hp700_intr_ipl_next(struct cpu_info *ci)
  * This finally initializes interrupts.
  */
 void
-hp700_intr_calculatemasks(struct cpu_info *ci)
+hp700_intr_init(void)
 {
 	struct hp700_interrupt_bit *ib;
 	struct hp700_interrupt_register *ir;
+	struct cpu_info *ci = curcpu();
 	int idx, bit_pos;
 	int mask;
-	int ipl;
+	int eiem;
 
 	/*
 	 * Put together the initial imask for each level.
 	 */
-	memset(ci->ci_imask, 0, sizeof(ci->ci_imask));
+	memset(imask, 0, sizeof(imask));
 	for (bit_pos = 0; bit_pos < HP700_INTERRUPT_BITS; bit_pos++) {
-		ib = &ci->ci_ib[bit_pos];
+		ib = hp700_interrupt_bits + bit_pos;
 		if (ib->ib_reg == NULL)
 			continue;
-		ci->ci_imask[ib->ib_ipl] |= ib->ib_spl;
+		imask[ib->ib_ipl] |= ib->ib_spl;
 	}
+
+	/* The following bits cribbed from i386/isa/isa_machdep.c: */
 
 	/*
 	 * IPL_NONE is used for hardware interrupts that are never blocked,
 	 * and do not block anything else.
 	 */
-	ci->ci_imask[IPL_NONE] = 0;
+	imask[IPL_NONE] = 0;
 
 	/*
 	 * Enforce a hierarchy that gives slow devices a better chance at not
 	 * dropping data.
 	 */
-	for (ipl = NIPL - 1; ipl > 0; ipl--)
-		ci->ci_imask[ipl - 1] |= ci->ci_imask[ipl];
+	imask[IPL_SOFTCLOCK] |= imask[IPL_NONE];
+	imask[IPL_SOFTBIO] |= imask[IPL_SOFTCLOCK];
+	imask[IPL_SOFTNET] |= imask[IPL_SOFTBIO];
+	imask[IPL_SOFTSERIAL] |= imask[IPL_SOFTNET];
+	imask[IPL_VM] |= imask[IPL_SOFTSERIAL];
+	imask[IPL_SCHED] |= imask[IPL_VM];
+	imask[IPL_HIGH] |= imask[IPL_SCHED];
+
+	/* Now go back and flesh out the spl levels on each bit. */
+	for (bit_pos = 0; bit_pos < HP700_INTERRUPT_BITS; bit_pos++) {
+		ib = hp700_interrupt_bits + bit_pos;
+		if (ib->ib_reg == NULL)
+			continue;
+		ib->ib_spl = imask[ib->ib_ipl];
+	}
+
+	/* Print out the levels. */
+	printf("vmmask %08x schedmask %08x highmask %08x\n",
+	    imask[IPL_VM], imask[IPL_SCHED], imask[IPL_HIGH]);
+#if 0
+	for (bit_pos = 0; bit_pos < NIPL; bit_pos++)
+		printf("imask[%d] == %08x\n", bit_pos, imask[bit_pos]);
+#endif
 
 	/*
 	 * Load all mask registers, loading %eiem last.  This will finally
 	 * enable interrupts, but since cpl and ipending should be -1 and 0,
 	 * respectively, no interrupts will get dispatched until the priority
 	 * level is lowered.
+	 *
+	 * Because we're paranoid, we force these values for cpl and ipending,
+	 * even though they should be unchanged since hp700_intr_bootstrap().
 	 */
-	KASSERT(ci->ci_cpl == -1);
-	KASSERT(ci->ci_ipending == 0);
-
+	ci->ci_cpl = -1;
+	ci->ci_ipending = 0;
+	eiem = 0;
 	for (idx = 0; idx < HP700_INTERRUPT_BITS; idx++) {
 		ir = hp700_interrupt_registers[idx];
-		if (ir == NULL || ir->ir_ci != ci)
+		if (ir == NULL)
 			continue;
 		mask = 0;
 		for (bit_pos = 0; bit_pos < HP700_INTERRUPT_BITS; bit_pos++) {
-			if (IR_BIT_USED_P(ir->ir_bits_map[31 ^ bit_pos]))
+			if (ir->ir_bits_map[31 ^ bit_pos] !=
+			    IR_BIT_UNUSED)
 				mask |= (1 << bit_pos);
 		}
-		if (ir->ir_iscpu)
-			ir->ir_ci->ci_eiem = mask;
+		if (ir == &ir_cpu)
+			eiem = mask;
 		else if (ir->ir_mask != NULL)
 			*ir->ir_mask = mask;
 	}
+	mtctl(eiem, CR_EIEM);
 }
-
-void
-hp700_intr_enable(void)
-{
-	struct cpu_info *ci = curcpu();
-
-	mtctl(ci->ci_eiem, CR_EIEM);
-	ci->ci_psw |= PSW_I;
-	hppa_enable_irq();
-}
-
 
 /*
  * Service interrupts.  This doesn't necessarily dispatch them.  This is called
@@ -326,15 +363,18 @@ hp700_intr_enable(void)
 void
 hppa_intr(struct trapframe *frame)
 {
-	struct cpu_info *ci = curcpu();
 	int eirr;
+	int ipending_new;
+	int pending;
 	int i;
+	struct hp700_interrupt_register *ir;
+	int hp700_intr_ipending_new(struct hp700_interrupt_register *, int);
+	struct cpu_info *ci = curcpu();
 
 #ifndef LOCKDEBUG
 	extern char mutex_enter_crit_start[];
 	extern char mutex_enter_crit_end[];
 
-#ifndef	MULTIPROCESSOR
 	extern char _lock_cas_ras_start[];
 	extern char _lock_cas_ras_end[];
 
@@ -344,7 +384,6 @@ hppa_intr(struct trapframe *frame)
 		frame->tf_iioq_head = (u_int)_lock_cas_ras_start;
 		frame->tf_iioq_tail = (u_int)_lock_cas_ras_start + 4;
 	}
-#endif
 
 	/*
 	 * If we interrupted in the middle of mutex_enter(), we must patch up
@@ -367,32 +406,36 @@ hppa_intr(struct trapframe *frame)
 	mfctl(CR_EIRR, eirr);
 	mtctl(eirr, CR_EIRR);
 
-	ci->ci_ipending |= hp700_intr_ipending(&ci->ci_ir, eirr);
+	ci->ci_ipending |= hp700_intr_ipending_new(&ir_cpu, eirr);
 
-	i = 0;
 	/* If we have interrupts to dispatch, do so. */
-	while (ci->ci_ipending & ~ci->ci_cpl) {
-		int shared;
-		
+	if (ci->ci_ipending & ~ci->ci_cpl)
 		hp700_intr_dispatch(ci->ci_cpl, frame->tf_eiem, frame);
 
-		shared = ci->ci_ishared;
-		while (shared) {
-			struct hp700_interrupt_register *sir;
-			int sbit, lvl;
+	/* We are done if there are no shared interrupts. */
+	if (ishared == 0)
+		return;
 
-			sbit = ffs(shared) - 1;
-			sir = hp700_interrupt_registers[sbit];
-			lvl = *sir->ir_level;
-
-			ci->ci_ipending |= hp700_intr_ipending(sir, lvl);
-			shared &= ~(1 << sbit);
+	for (i = 0; i < HP700_INTERRUPT_BITS; i++) {
+		ir = hp700_interrupt_registers[i];
+		if (ir == NULL || ir->ir_level == NULL)
+			continue;
+		/*
+		 * For shared interrupts look if the interrupt line is still
+		 * asserted. If it is, reschedule the corresponding interrupt.
+		 */
+		ipending_new = *ir->ir_level;
+		while (ipending_new != 0) {
+			pending = ffs(ipending_new) - 1;
+			ci->ci_ipending |=
+			    ir->ir_bits_map[31 ^ pending] & ishared;
+			ipending_new &= ~(1 << pending);
 		}
-		i++;
-		KASSERTMSG(i <= 2,
-		    "%s: ci->ipending %08x ci->ci_cpl %08x shared %08x\n",
-		    __func__, ci->ci_ipending, ci->ci_cpl, shared);
 	}
+
+	/* If we still have interrupts to dispatch, do so. */
+	if (ci->ci_ipending & ~ci->ci_cpl)
+		hp700_intr_dispatch(ci->ci_cpl, frame->tf_eiem, frame);
 }
 
 /*
@@ -403,18 +446,16 @@ void
 hp700_intr_dispatch(int ncpl, int eiem, struct trapframe *frame)
 {
 	struct cpu_info *ci = curcpu();
-	struct hp700_interrupt_bit *ib;
-	struct clockframe clkframe;
 	int ipending_run;
+	u_int old_hppa_intr_depth;
 	int bit_pos;
+	struct hp700_interrupt_bit *ib;
 	void *arg;
+	struct clockframe clkframe;
 	int handled;
-	bool locked = false;
 
-	/*
-	 * Increment our depth
-	 */
-	ci->ci_intr_depth++;
+	/* Increment our depth, grabbing the previous value. */
+	old_hppa_intr_depth = ci->ci_intr_depth++;
 
 	/* Loop while we have interrupts to dispatch. */
 	for (;;) {
@@ -431,12 +472,12 @@ hp700_intr_dispatch(int ncpl, int eiem, struct trapframe *frame)
 		 * If this interrupt handler takes the clockframe
 		 * as an argument, conjure one up.
 		 */
-		ib = &ci->ci_ib[bit_pos];
+		ib = &hp700_interrupt_bits[bit_pos];
 		ib->ib_evcnt.ev_count++;
 		arg = ib->ib_arg;
 		if (arg == NULL) {
-			clkframe.cf_flags = (ci->ci_intr_depth ? 
-			    TFF_INTR : 0);
+			clkframe.cf_flags = (old_hppa_intr_depth ?
+						TFF_INTR : 0);
 			clkframe.cf_spl = ncpl;
 			if (frame != NULL) {
 				clkframe.cf_flags |= frame->tf_flags;
@@ -451,13 +492,8 @@ hp700_intr_dispatch(int ncpl, int eiem, struct trapframe *frame)
 		 * and reenable interrupts.
 		 */
 		ci->ci_ipending &= ~(1 << bit_pos);
-		ci->ci_cpl = ncpl | ci->ci_imask[ib->ib_ipl];
+		ci->ci_cpl = ncpl | ib->ib_spl;
 		mtctl(eiem, CR_EIEM);
-
-		if (ib->ib_ipl == IPL_VM) {
-			KERNEL_LOCK(1, NULL);
-			locked = true;
-		}
 
 		/* Count and dispatch the interrupt. */
 		ci->ci_data.cpu_nintr++;
@@ -467,43 +503,14 @@ hp700_intr_dispatch(int ncpl, int eiem, struct trapframe *frame)
 			printf("%s: can't handle interrupt\n",
 				ib->ib_evcnt.ev_name);
 #endif
-		if (locked) {
-			KERNEL_UNLOCK_ONE(NULL);
-			locked = false;
-		}
-		
+
 		/* Disable interrupts and loop. */
 		mtctl(0, CR_EIEM);
 	}
 
 	/* Interrupts are disabled again, restore cpl and the depth. */
 	ci->ci_cpl = ncpl;
-	ci->ci_intr_depth--;
-}
-
-
-int
-hp700_intr_ipending(struct hp700_interrupt_register *ir, int eirr)
-{
-	int pending = 0;
-	int idx;
-
-	for (idx = 31; idx >= 0; idx--) {
-		if ((eirr & (1 << idx)) == 0)
-			continue;
-		if (IR_BIT_NESTED_P(ir->ir_bits_map[31 ^ idx])) {
-			struct hp700_interrupt_register *nir;
-			int reg = ir->ir_bits_map[31 ^ idx] & ~IR_BIT_MASK;
-
-			nir = hp700_interrupt_registers[reg];
-			pending |= hp700_intr_ipending(nir, *(nir->ir_req));
-		} else {
-			pending |= ir->ir_bits_map[31 ^ idx];
-		}
-	}
-
-	
-	return pending;
+	ci->ci_intr_depth = old_hppa_intr_depth;
 }
 
 bool

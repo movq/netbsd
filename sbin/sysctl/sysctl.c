@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctl.c,v 1.149 2012/12/13 05:27:01 msaitoh Exp $ */
+/*	$NetBSD: sysctl.c,v 1.140.2.1 2012/12/25 21:01:14 snj Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@ __COPYRIGHT("@(#) Copyright (c) 1993\
 #if 0
 static char sccsid[] = "@(#)sysctl.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: sysctl.c,v 1.149 2012/12/13 05:27:01 msaitoh Exp $");
+__RCSID("$NetBSD: sysctl.c,v 1.140.2.1 2012/12/25 21:01:14 snj Exp $");
 #endif
 #endif /* not lint */
 
@@ -80,7 +80,6 @@ __RCSID("$NetBSD: sysctl.c,v 1.149 2012/12/13 05:27:01 msaitoh Exp $");
 #include <sys/stat.h>
 #include <sys/sched.h>
 #include <sys/socket.h>
-#include <sys/bitops.h>
 #include <netinet/in.h>
 #include <netinet/ip_var.h>
 #include <netinet/tcp.h>
@@ -123,7 +122,8 @@ __RCSID("$NetBSD: sysctl.c,v 1.149 2012/12/13 05:27:01 msaitoh Exp $");
 /*
  * generic routines
  */
-static const struct handlespec *findhandler(const char *, regex_t *, size_t *);
+static const struct handlespec *findhandler(const char *, int, regex_t *,
+    size_t *);
 static void canonicalize(const char *, char *);
 static void purge_tree(struct sysctlnode *);
 static void print_tree(int *, u_int, struct sysctlnode *, u_int, int, regex_t *,
@@ -147,7 +147,7 @@ static void getdesc(int *, u_int, struct sysctlnode *);
 static void trim_whitespace(char *, int);
 static void sysctlerror(int);
 static void sysctlparseerror(u_int, const char *);
-static void sysctlperror(const char *, ...) __printflike(1, 2);
+static void sysctlperror(const char *, ...);
 #define EXIT(n) do { \
 	if (fn == NULL) exit(n); else return; } while (/*CONSTCOND*/0)
 
@@ -172,7 +172,6 @@ static void proc_limit(HANDLER_PROTO);
 static void machdep_diskinfo(HANDLER_PROTO);
 #endif /* CPU_DISKINFO */
 static void mode_bits(HANDLER_PROTO);
-static void reserve(HANDLER_PROTO);
 
 static const struct handlespec {
 	const char *ps_re;
@@ -214,8 +213,6 @@ static const struct handlespec {
 
 	{ "/net/inet.*/tcp.*/deb.*",		printother, NULL, "trpt" },
 
-	{ "/net/inet.*/ip.*/anonportalgo/reserve", reserve, reserve, NULL },
-
 	{ "/net/ns/spp/deb.*",			printother, NULL, "trsp" },
 
 	{ "/hw/diskstats",			printother, NULL, "iostat" },
@@ -252,8 +249,6 @@ size_t	nr;
 char	*fn;
 int	req, stale, errs;
 FILE	*warnfp = stderr;
-
-#define MAXPORTS	0x10000
 
 /*
  * vah-riables n stuff
@@ -390,7 +385,7 @@ main(int argc, char *argv[])
  * ********************************************************************
  */
 static const struct handlespec *
-findhandler(const char *s, regex_t *re, size_t *lastcompiled)
+findhandler(const char *s, int w, regex_t *re, size_t *lastcompiled)
 {
 	const struct handlespec *p;
 	size_t i, l;
@@ -411,7 +406,8 @@ findhandler(const char *s, regex_t *re, size_t *lastcompiled)
 		}
 		j = regexec(&re[i], s, 1, &match, 0);
 		if (j == 0) {
-			if (match.rm_so == 0 && match.rm_eo == (int)l)
+			if (match.rm_so == 0 && match.rm_eo == (int)l &&
+			    (w ? p[i].ps_w : p[i].ps_p) != NULL)
 				return &p[i];
 		}
 		else if (j != REG_NOMATCH) {
@@ -674,13 +670,8 @@ print_tree(int *name, u_int namelen, struct sysctlnode *pnode, u_int type,
 	}
 
 	canonicalize(gsname, canonname);
-	p = findhandler(canonname, re, lastcompiled);
+	p = findhandler(canonname, 0, re, lastcompiled);
 	if (type != CTLTYPE_NODE && p != NULL) {
-		if (p->ps_p == NULL) {
-			sysctlperror("Cannot print `%s': %s\n", gsname, 
-			    strerror(EOPNOTSUPP));
-			exit(1);
-		}
 		(*p->ps_p)(gsname, gdname, NULL, name, namelen, pnode, type,
 			   __UNCONST(p->ps_d));
 		*sp = *dp = '\0';
@@ -914,13 +905,8 @@ parse(char *l, regex_t *re, size_t *lastcompiled)
 	}
 
 	canonicalize(gsname, canonname);
-	if (type != CTLTYPE_NODE && (w = findhandler(canonname, re,
+	if (type != CTLTYPE_NODE && (w = findhandler(canonname, 1, re,
 	    lastcompiled)) != NULL) {
-		if (w->ps_w == NULL) {
-			sysctlperror("Cannot write `%s': %s\n", gsname, 
-			    strerror(EOPNOTSUPP));
-			exit(1);
-		}
 		(*w->ps_w)(gsname, gdname, value, name, namelen, node, type,
 			   __UNCONST(w->ps_d));
 		gsname[0] = '\0';
@@ -1182,9 +1168,6 @@ parse_create(char *l)
 					break;
 				case 'p':
 					flags |= CTLFLAG_PRIVATE;
-					break;
-				case 'u':
-					flags |= CTLFLAG_UNSIGNED;
 					break;
 				case 'x':
 					flags |= CTLFLAG_HEX;
@@ -1896,8 +1879,6 @@ display_number(const struct sysctlnode *node, const char *name,
 			printf("0x%0*x", (int)sz * 2, i);
 		else if (node->sysctl_flags & CTLFLAG_HEX)
 			printf("%#x", i);
-		else if (node->sysctl_flags & CTLFLAG_UNSIGNED)
-			printf("%u", i);
 		else
 			printf("%d", i);
 		break;
@@ -1916,8 +1897,6 @@ display_number(const struct sysctlnode *node, const char *name,
 			printf("0x%0*" PRIx64, (int)sz * 2, q);
 		else if (node->sysctl_flags & CTLFLAG_HEX)
 			printf("%#" PRIx64, q);
-		else if (node->sysctl_flags & CTLFLAG_UNSIGNED)
-			printf("%" PRIu64, q);
 		else
 			printf("%" PRIu64, q);
 		break;
@@ -2689,102 +2668,6 @@ mode_bits(HANDLER_ARGS)
 			strmode(mm, buf);
 			rc = snprintf(outbuf, sizeof(outbuf), "%04o (%s)", mm, buf + 1);
 			display_string(pnode, sname, outbuf, rc, DISPLAY_NEW);
-		}
-	}
-}
-
-typedef __BITMAP_TYPE(, uint32_t, 0x10000) bitmap;
-
-static char *
-bitmask_print(const bitmap *o)
-{
-	char *s, *os;
-
-	s = os = NULL;
-	for (size_t i = 0; i < MAXPORTS; i++)
-		if (__BITMAP_ISSET(i, o)) {
-			int rv;
-
-			if (os)
-			    	rv = asprintf(&s, "%s,%zu", os, i);
-			else
-			    	rv = asprintf(&s, "%zu", i);
-			if (rv == -1)
-				err(1, "");
-			free(os);
-			os = s;
-		}
-	if (s == NULL && (s = strdup("")) == NULL)
-		err(1, "");
-	return s;
-}
-
-static void
-bitmask_scan(const void *v, bitmap *o)
-{
-	char *s = strdup(v);
-	if (s == NULL)
-		err(1, "");
-
-	__BITMAP_ZERO(o);
-	for (s = strtok(s, ","); s; s = strtok(NULL, ",")) {
-		char *e;
-		errno = 0;
-		unsigned long l = strtoul(s, &e, 0);
-		if ((l == ULONG_MAX && errno == ERANGE) || s == e || *e)
-			errx(1, "Invalid port: %s", s);
-		if (l >= MAXPORTS)
-			errx(1, "Port out of range: %s", s);
-		__BITMAP_SET(l, o);
-	}
-}
-
-
-static void
-reserve(HANDLER_ARGS)
-{
-	int rc;
-	size_t osz, nsz;
-	bitmap o, n;
-
-	if (fn)
-		trim_whitespace(value, 3);
-
-	osz = sizeof(o);
-	if (value) {
-		bitmask_scan(value, &n);
-		value = (char *)&n;
-		nsz = sizeof(n);
-	} else
-		nsz = 0;
-
-	rc = prog_sysctl(name, namelen, &o, &osz, value, nsz);
-	if (rc == -1) {
-		sysctlerror(value == NULL);
-		return;
-	}
-
-	if (value && qflag)
-		return;
-
-	if (rflag || xflag)
-		display_struct(pnode, sname, &o, sizeof(o),
-		    value ? DISPLAY_OLD : DISPLAY_VALUE);
-	else {
-		char *s = bitmask_print(&o);
-		display_string(pnode, sname, s, strlen(s),
-		    value ? DISPLAY_OLD : DISPLAY_VALUE);
-		free(s);
-	}
-
-	if (value) {
-		if (rflag || xflag)
-			display_struct(pnode, sname, &n, sizeof(n),
-			    DISPLAY_NEW);
-		else {
-			char *s = bitmask_print(&n);
-			display_string(pnode, sname, s, strlen(s), DISPLAY_NEW);
-			free(s);
 		}
 	}
 }

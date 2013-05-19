@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.131 2012/08/02 14:03:22 matt Exp $     */
+/*	$NetBSD: trap.c,v 1.129 2012/02/02 14:30:48 matt Exp $     */
 
 /*
  * Copyright (c) 1994 Ludd, University of Lule}, Sweden.
@@ -33,7 +33,7 @@
  /* All bugs are subject to removal without further notice */
 		
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.131 2012/08/02 14:03:22 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.129 2012/02/02 14:30:48 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
@@ -44,6 +44,8 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.131 2012/08/02 14:03:22 matt Exp $");
 #include <sys/exec.h>
 #include <sys/kauth.h>
 #include <sys/proc.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/signalvar.h>
 
 #include <uvm/uvm_extern.h>
@@ -219,6 +221,11 @@ if(faultdebug)printf("trap accflt type %lx, code %lx, pc %lx, psl %lx\n",
 		else
 			ftype = VM_PROT_READ;
 
+		if ((usermode) && (l->l_flag & LW_SA)) {
+			l->l_savp->savp_faultaddr = (vaddr_t)tf->tf_code;
+			l->l_pflag |= LP_SA_PAGEFAULT;
+		}
+
 		pcb->pcb_onfault = NULL;
 		rv = uvm_fault(map, addr, ftype);
 		pcb->pcb_onfault = onfault;
@@ -262,6 +269,9 @@ if(faultdebug)printf("trap accflt type %lx, code %lx, pc %lx, psl %lx\n",
 			if (map != kernel_map && addr > 0
 			    && (void *)addr >= vm->vm_maxsaddr)
 				uvm_grow(p, addr);
+		}
+		if (usermode) {
+			l->l_pflag &= ~LP_SA_PAGEFAULT;
 		}
 		break;
 
@@ -327,10 +337,7 @@ if(faultdebug)printf("trap accflt type %lx, code %lx, pc %lx, psl %lx\n",
 	}
 	if (trapsig) {
 		ksiginfo_t ksi;
-		if ((sig == SIGSEGV || sig == SIGILL)
-		    && cpu_printfataltraps
-		    && (p->p_slflag & PSL_TRACED) == 0
-		    && !sigismember(&p->p_sigctx.ps_sigcatch, sig))
+		if ((sig == SIGSEGV || sig == SIGILL) && cpu_printfataltraps)
 			printf("pid %d.%d (%s): sig %d: type %lx, code %lx, pc %lx, psl %lx\n",
 			       p->p_pid, l->l_lid, p->p_comm, sig, tf->tf_trap,
 			       tf->tf_code, tf->tf_pc, tf->tf_psl);
@@ -394,3 +401,12 @@ startlwp(void *arg)
 	/* XXX - profiling spoiled here */
 	userret(l, l->l_md.md_utf, l->l_proc->p_sticks);
 }
+
+void
+upcallret(struct lwp *l)
+{
+
+	/* XXX - profiling */
+	userret(l, l->l_md.md_utf, l->l_proc->p_sticks);
+}
+

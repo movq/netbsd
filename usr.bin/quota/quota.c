@@ -1,4 +1,4 @@
-/*	$NetBSD: quota.c,v 1.49 2012/05/12 19:53:22 dholland Exp $	*/
+/*	$NetBSD: quota.c,v 1.48.2.1 2012/05/19 15:31:21 riz Exp $	*/
 
 /*
  * Copyright (c) 1980, 1990, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1990, 1993\
 #if 0
 static char sccsid[] = "@(#)quota.c	8.4 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: quota.c,v 1.49 2012/05/12 19:53:22 dholland Exp $");
+__RCSID("$NetBSD: quota.c,v 1.48.2.1 2012/05/19 15:31:21 riz Exp $");
 #endif
 #endif /* not lint */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: gio.c,v 1.33 2012/10/27 17:18:09 chs Exp $	*/
+/*	$NetBSD: gio.c,v 1.32 2011/07/01 18:53:46 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gio.c,v 1.33 2012/10/27 17:18:09 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gio.c,v 1.32 2011/07/01 18:53:46 dyoung Exp $");
 
 #include "opt_ddb.h"
 
@@ -78,13 +78,19 @@ extern int pic_gio32_arb_config(int, uint32_t);
 #endif
 
 
-static int	gio_match(device_t, cfdata_t, void *);
-static void	gio_attach(device_t, device_t, void *);
-static int	gio_print(void *, const char *);
-static int	gio_search(device_t, cfdata_t, const int *, void *);
-static int	gio_submatch(device_t, cfdata_t, const int *, void *);
+struct gio_softc {
+	struct	device sc_dev;
+};
 
-CFATTACH_DECL_NEW(gio, 0,
+static int	gio_match(struct device *, struct cfdata *, void *);
+static void	gio_attach(struct device *, struct device *, void *);
+static int	gio_print(void *, const char *);
+static int	gio_search(struct device *, struct cfdata *,
+			   const int *, void *);
+static int	gio_submatch(struct device *, struct cfdata *,
+			     const int *, void *);
+
+CFATTACH_DECL(gio, sizeof(struct gio_softc),
     gio_match, gio_attach, NULL, NULL);
 
 struct gio_probe {
@@ -168,7 +174,7 @@ static const struct gio_probe gfx_bases[] = {
 #define MAXGFX 8
 
 static int
-gio_match(device_t parent, cfdata_t match, void *aux)
+gio_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	if (mach_type == MACH_SGI_IP12 || mach_type == MACH_SGI_IP20 ||
 	    mach_type == MACH_SGI_IP22)
@@ -178,7 +184,7 @@ gio_match(device_t parent, cfdata_t match, void *aux)
 }
 
 static void
-gio_attach(device_t parent, device_t self, void *aux)
+gio_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct gio_attach_args ga;
 	uint32_t gfx[MAXGFX];
@@ -312,7 +318,8 @@ gio_print(void *aux, const char *pnp)
 }
 
 static int
-gio_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
+gio_search(struct device *parent, struct cfdata *cf,
+	   const int *ldesc, void *aux)
 {
 	struct gio_attach_args *ga = aux;
 
@@ -334,7 +341,8 @@ gio_search(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
 }
 
 static int
-gio_submatch(device_t parent, cfdata_t cf, const int *ldesc, void *aux)
+gio_submatch(struct device *parent, struct cfdata *cf,
+	     const int *ldesc, void *aux)
 {
 	struct gio_attach_args *ga = aux;
 

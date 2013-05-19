@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_pserialize.c,v 1.7 2013/02/07 23:37:58 rmind Exp $	*/
+/*	$NetBSD: subr_pserialize.c,v 1.5.2.2 2013/02/11 20:42:32 riz Exp $	*/
 
 /*-
  * Copyright (c) 2010, 2011 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_pserialize.c,v 1.7 2013/02/07 23:37:58 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_pserialize.c,v 1.5.2.2 2013/02/11 20:42:32 riz Exp $");
 
 #include <sys/param.h>
 

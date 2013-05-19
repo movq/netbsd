@@ -1,4 +1,4 @@
-/*	$NetBSD: st_atapi.c,v 1.29 2012/04/19 17:45:21 bouyer Exp $ */
+/*	$NetBSD: st_atapi.c,v 1.27.2.2 2012/04/23 16:28:30 riz Exp $ */
 
 /*
  * Copyright (c) 2001 Manuel Bouyer.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: st_atapi.c,v 1.29 2012/04/19 17:45:21 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: st_atapi.c,v 1.27.2.2 2012/04/23 16:28:30 riz Exp $");
 
 #include "opt_scsi.h"
 

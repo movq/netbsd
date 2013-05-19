@@ -58,6 +58,6 @@ struct lto_section_slot
   size_t len;
 };
 
-extern HOST_WIDEST_INT lto_parse_hex (const char *p);
+int64_t lto_parse_hex (const char *p);
 
 #endif /* LTO_H */

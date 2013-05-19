@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.75 2013/01/14 00:06:11 christos Exp $	*/
+/*	$NetBSD: trap.c,v 1.69.2.1 2012/06/03 21:45:10 jdc Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.75 2013/01/14 00:06:11 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.69.2.1 2012/06/03 21:45:10 jdc Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -87,6 +87,8 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.75 2013/01/14 00:06:11 christos Exp $");
 #include <sys/syscall.h>
 #include <sys/cpu.h>
 #include <sys/ucontext.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -153,6 +155,8 @@ int	trapdebug = 0;
 
 #define	IDTVEC(name)	__CONCAT(X, name)
 
+#undef TRAP_SIGDEBUG
+
 #ifdef TRAP_SIGDEBUG
 static void frame_dump(struct trapframe *);
 #endif
@@ -182,27 +186,6 @@ onfault_handler(const struct pcb *pcb, const struct trapframe *tf)
 	return NULL;
 }
 
-static void
-trap_print(const struct trapframe *frame, const lwp_t *l)
-{
-	const int type = frame->tf_trapno;
-
-	if (frame->tf_trapno < trap_types) {
-		printf("fatal %s", trap_type[type]);
-	} else {
-		printf("unknown trap %d", type);
-	}
-	printf(" in %s mode\n", (type & T_USER) ? "user" : "supervisor");
-
-	printf("trap type %d code %lx rip %lx cs %lx rflags %lx cr2 %lx "
-	    "ilevel %x rsp %lx\n",
-	    type, frame->tf_err, (u_long)frame->tf_rip, frame->tf_cs,
-	    frame->tf_rflags, rcr2(), curcpu()->ci_ilevel, frame->tf_rsp);
-
-	printf("curlwp %p pid %d.%d lowest kstack %p\n",
-	    l, l->l_proc->p_pid, l->l_lid, KSTACK_LOWEST_ADDR(l));
-}
-
 /*
  * trap(frame): exception, fault, and trap interface to BSD kernel.
  *
@@ -211,6 +194,7 @@ trap_print(const struct trapframe *frame, const lwp_t *l)
  * exception has been processed. Note that the effect is as if the arguments
  * were passed call by reference.
  */
+
 void
 trap(struct trapframe *frame)
 {
@@ -244,7 +228,13 @@ trap(struct trapframe *frame)
 
 #ifdef DEBUG
 	if (trapdebug) {
-		trap_print(frame, l);
+		printf("trap %d code %lx eip %lx cs %lx rflags %lx cr2 %lx "
+		       "cpl %x\n",
+		    type, frame->tf_err, frame->tf_rip, frame->tf_cs,
+		    frame->tf_rflags, rcr2(), curcpu()->ci_ilevel);
+		printf("curlwp %p%s", curlwp, curlwp ? " " : "\n");
+		if (curlwp)
+			printf("pid %d lid %d\n", l->l_proc->p_pid, l->l_lid);
 	}
 #endif
 	if (type != T_NMI && !KERNELMODE(frame->tf_cs, frame->tf_rflags)) {
@@ -278,8 +268,15 @@ trap(struct trapframe *frame)
 
 	default:
 	we_re_toast:
-		trap_print(frame, l);
-
+		if (frame->tf_trapno < trap_types)
+			printf("fatal %s", trap_type[frame->tf_trapno]);
+		else
+			printf("unknown trap %ld", (u_long)frame->tf_trapno);
+		printf(" in %s mode\n", (type & T_USER) ? "user" : "supervisor");
+		printf("trap type %d code %lx rip %lx cs %lx rflags %lx cr2 "
+		       " %lx cpl %x rsp %lx\n",
+		    type, frame->tf_err, (u_long)frame->tf_rip, frame->tf_cs,
+		    frame->tf_rflags, rcr2(), curcpu()->ci_ilevel, frame->tf_rsp);
 		if (kdb_trap(type, 0, frame))
 			return;
 		if (kgdb_trap(type, frame))
@@ -341,7 +338,7 @@ kernelfault:
 		switch (*(uint16_t *)frame->tf_rip) {
 		case 0xcf48:	/* iretq */
 			/*
-			 * The 'iretq' instruction faulted, so we have the
+			 * The 'iretq' instruction faulted, wo we have the
 			 * 'user' registers saved after the kernel
 			 * %rip:%cs:%fl:%rsp:%ss of the iret, and below that
 			 * the user %rip:%cs:%fl:%rsp:%ss the 'iret' was
@@ -390,8 +387,8 @@ kernelfault:
 	case T_STKFLT|T_USER:
 	case T_ALIGNFLT|T_USER:
 #ifdef TRAP_SIGDEBUG
-		printf("pid %d.%d (%s): BUS/SEGV (%x) at rip %lx addr %lx\n",
-		    p->p_pid, l->l_lid, p->p_comm, type, frame->tf_rip, rcr2());
+		printf("pid %d (%s): BUS/SEGV (%x) at rip %lx addr %lx\n",
+		    p->p_pid, p->p_comm, type, frame->tf_rip, rcr2());
 		frame_dump(frame);
 #endif
 		KSI_INIT_TRAP(&ksi);
@@ -424,8 +421,8 @@ kernelfault:
 	case T_PRIVINFLT|T_USER:	/* privileged instruction fault */
 	case T_FPOPFLT|T_USER:		/* coprocessor operand fault */
 #ifdef TRAP_SIGDEBUG
-		printf("pid %d.%d (%s): ILL at rip %lx addr %lx\n",
-		    p->p_pid, l->l_lid, p->p_comm, frame->tf_rip, rcr2());
+		printf("pid %d (%s): ILL at rip %lx addr %lx\n",
+		    p->p_pid, p->p_comm, frame->tf_rip, rcr2());
 		frame_dump(frame);
 #endif
 		KSI_INIT_TRAP(&ksi);
@@ -463,8 +460,8 @@ kernelfault:
 
 #if 0 /* handled by fpudna() */
 	case T_DNA|T_USER: {
-		printf("pid %d.%d killed due to lack of floating point\n",
-		    p->p_pid, l->l_lid);
+		printf("pid %d killed due to lack of floating point\n",
+		    p->p_pid);
 		KSI_INIT_TRAP(&ksi);
 		ksi.ksi_signo = SIGKILL;
 		ksi.ksi_trap = type & ~T_USER;
@@ -529,6 +526,10 @@ kernelfault:
 		if (p->p_emul->e_usertrap != NULL &&
 		    (*p->p_emul->e_usertrap)(l, cr2, frame) != 0)
 			return;
+		if (l->l_flag & LW_SA) {
+			l->l_savp->savp_faultaddr = (vaddr_t)cr2;
+			l->l_pflag |= LP_SA_PAGEFAULT;
+		}
 faultcommon:
 		vm = p->p_vmspace;
 		if (__predict_false(vm == NULL)) {
@@ -617,6 +618,7 @@ faultcommon:
 				 */
 				pfail = kpreempt(0);
 			}
+			l->l_pflag &= ~LP_SA_PAGEFAULT;
 			goto out;
 		}
 		KSI_INIT_TRAP(&ksi);
@@ -639,19 +641,20 @@ faultcommon:
 		}
 		if (error == ENOMEM) {
 			ksi.ksi_signo = SIGKILL;
-			printf("UVM: pid %d.%d (%s), uid %d killed: out of swap\n",
-			       p->p_pid, l->l_lid, p->p_comm,
+			printf("UVM: pid %d (%s), uid %d killed: out of swap\n",
+			       p->p_pid, p->p_comm,
 			       l->l_cred ?
 			       kauth_cred_geteuid(l->l_cred) : -1);
 		} else {
 #ifdef TRAP_SIGDEBUG
-			printf("pid %d.%d (%s): SEGV at rip %lx addr %lx\n",
-			    p->p_pid, l->l_lid, p->p_comm, frame->tf_rip, va);
+			printf("pid %d (%s): SEGV at rip %lx addr %lx\n",
+			    p->p_pid, p->p_comm, frame->tf_rip, va);
 			frame_dump(frame);
 #endif
 			ksi.ksi_signo = SIGSEGV;
 		}
 		(*p->p_emul->e_trapsignal)(l, &ksi);
+		l->l_pflag &= ~LP_SA_PAGEFAULT;
 		break;
 	}
 
@@ -722,6 +725,16 @@ startlwp(void *arg)
 	KASSERT(error == 0);
 
 	kmem_free(uc, sizeof(ucontext_t));
+	userret(l);
+}
+
+/*
+ * XXX_SA: This is a terrible name.
+ */
+void
+upcallret(struct lwp *l)
+{
+	KERNEL_UNLOCK_LAST(l);
 	userret(l);
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: tree.c,v 1.73 2013/04/19 18:51:14 christos Exp $	*/
+/*	$NetBSD: tree.c,v 1.68 2011/02/05 17:14:14 christos Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: tree.c,v 1.73 2013/04/19 18:51:14 christos Exp $");
+__RCSID("$NetBSD: tree.c,v 1.68 2011/02/05 17:14:14 christos Exp $");
 #endif
 
 #include <stdlib.h>
@@ -182,9 +182,7 @@ getnnode(sym_t *sym, int ntok)
 				error(99, sym->s_name);
 			} else {
 				int fixtype;
-				if (strcmp(sym->s_name, "__FUNCTION__") == 0 ||
-				    strcmp(sym->s_name, "__PRETTY_FUNCTION__")
-				    == 0) {
+				if (strcmp(sym->s_name, "__FUNCTION__") == 0) {
 					gnuism(316);
 					fixtype = 1;
 				} else if (strcmp(sym->s_name, "__func__") == 0) {
@@ -1039,7 +1037,7 @@ typeok(op_t op, int arg, tnode_t *ln, tnode_t *rn)
 		if (!modtab[ln->tn_op].m_sideeff)
 			nulleff(ln);
 		break;
-		/* LINTED206: (enumeration values not handled in switch) */
+		/* LINTED (enumeration values not handled in switch) */
 	case CON:
 	case CASE:
 	case PUSH:
@@ -1876,24 +1874,24 @@ cvtcon(op_t op, int arg, type_t *tp, val_t *nv, val_t *v)
 		case BOOL:
 			max = 1;		min = 0;		break;
 		case CHAR:
-			max = TARG_CHAR_MAX;	min = TARG_CHAR_MIN;	break;
+			max = CHAR_MAX;		min = CHAR_MIN;		break;
 		case UCHAR:
-			max = TARG_UCHAR_MAX;	min = 0;		break;
+			max = UCHAR_MAX;	min = 0;		break;
 		case SCHAR:
-			max = TARG_SCHAR_MAX;	min = TARG_SCHAR_MIN;	break;
+			max = SCHAR_MAX;	min = SCHAR_MIN;	break;
 		case SHORT:
-			max = TARG_SHRT_MAX;	min = TARG_SHRT_MIN;	break;
+			max = SHRT_MAX;		min = SHRT_MIN;		break;
 		case USHORT:
-			max = TARG_USHRT_MAX;	min = 0;		break;
+			max = USHRT_MAX;	min = 0;		break;
 		case ENUM:
 		case INT:
-			max = TARG_INT_MAX;	min = TARG_INT_MIN;	break;
+			max = INT_MAX;		min = INT_MIN;		break;
 		case UINT:
-			max = (u_int)TARG_UINT_MAX;min = 0;		break;
+			max = (u_int)UINT_MAX;	min = 0;		break;
 		case LONG:
-			max = TARG_LONG_MAX;	min = TARG_LONG_MIN;	break;
+			max = LONG_MAX;		min = LONG_MIN;		break;
 		case ULONG:
-			max = (u_long)TARG_ULONG_MAX; min = 0;		break;
+			max = (u_long)ULONG_MAX; min = 0;		break;
 		case QUAD:
 			max = QUAD_MAX;		min = QUAD_MIN;		break;
 		case UQUAD:
@@ -2678,7 +2676,7 @@ fold(tnode_t *tn)
 		break;
 	case UMINUS:
 		q = -sl;
-		if (sl != 0 && msb(q, t, -1) == msb(sl, t, -1))
+		if (msb(q, t, -1) == msb(sl, t, -1))
 			ovfl = 1;
 		break;
 	case COMPL:
@@ -2822,7 +2820,7 @@ foldtst(tnode_t *tn)
 
 	switch (tn->tn_op) {
 	case NOT:
-		if (hflag && !ccflg)
+		if (hflag)
 			/* constant argument to NOT */
 			warning(239);
 		v->v_quad = !l;
@@ -3580,7 +3578,7 @@ chkmisc(tnode_t *tn, int vctx, int tctx, int eqwarn, int fcall, int rvdisc,
 	case NAME:
 	case STRING:
 		return;
-		/* LINTED206: (enumeration values not handled in switch) */
+		/* LINTED (enumeration values not handled in switch) */
 	case OR:
 	case XOR:
 	case NE:
@@ -3969,7 +3967,7 @@ precconf(tnode_t *tn)
 			}
 		}
 		break;
-		/* LINTED206: (enumeration values not handled in switch) */
+		/* LINTED (enumeration values not handled in switch) */
 	case DECAFT:
 	case XORASS:
 	case SHLASS:

@@ -1,4 +1,4 @@
-/*	$NetBSD: xx.c,v 1.2 2012/11/17 16:02:00 tsutsui Exp $	*/
+/*	$NetBSD: xx.c,v 1.2.2.3 2012/11/24 20:20:27 jdc Exp $	*/
 
 /*
  * Copyright (c) 2010 MINOURA Makoto.

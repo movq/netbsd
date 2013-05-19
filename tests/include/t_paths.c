@@ -1,4 +1,4 @@
-/*	$NetBSD: t_paths.c,v 1.12 2012/06/03 21:42:47 joerg Exp $ */
+/*	$NetBSD: t_paths.c,v 1.11.2.1 2012/06/23 22:54:55 riz Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_paths.c,v 1.12 2012/06/03 21:42:47 joerg Exp $");
+__RCSID("$NetBSD: t_paths.c,v 1.11.2.1 2012/06/23 22:54:55 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/stat.h>

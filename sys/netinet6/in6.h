@@ -1,4 +1,4 @@
-/*	$NetBSD: in6.h,v 1.71 2013/04/27 21:35:24 joerg Exp $	*/
+/*	$NetBSD: in6.h,v 1.69 2011/05/24 18:07:11 spz Exp $	*/
 /*	$KAME: in6.h,v 1.83 2001/03/29 02:55:07 jinmei Exp $	*/
 
 /*
@@ -63,8 +63,6 @@
 
 #ifndef _NETINET6_IN6_H_
 #define _NETINET6_IN6_H_
-
-#include <sys/featuretest.h>
 
 #ifndef __KAME_NETINET_IN_H_INCLUDED_
 #error "do not include netinet6/in6.h directly, include netinet/in.h.  see RFC2553"
@@ -387,7 +385,6 @@ extern const struct in6_addr in6addr_linklocal_allrouters;
 #define IPV6_LEAVE_GROUP	13 /* ip6_mreq; leave a group membership */
 #define IPV6_PORTRANGE		14 /* int; range to choose for unspec port */
 #if defined(_NETBSD_SOURCE)
-#define IPV6_PORTALGO		17 /* int; port selection algo (rfc6056) */
 #define ICMP6_FILTER		18 /* icmp6_filter; icmp6 filter */
 #endif
 /* RFC2292 options */

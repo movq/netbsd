@@ -1,4 +1,4 @@
-/*	$NetBSD: profile.c,v 1.4 2012/12/07 03:11:17 chs Exp $	*/
+/*	$NetBSD: profile.c,v 1.3 2011/07/17 20:54:33 joerg Exp $	*/
 
 /*
  * CDDL HEADER START
@@ -38,9 +38,7 @@
 #include <sys/cpuvar.h>
 #include <sys/fcntl.h>
 #include <sys/filio.h>
-#ifdef __FreeBSD__
 #include <sys/kdb.h>
-#endif
 #include <sys/kernel.h>
 #include <sys/kmem.h>
 #include <sys/kthread.h>
@@ -53,17 +51,9 @@
 #include <sys/poll.h>
 #include <sys/proc.h>
 #include <sys/selinfo.h>
-#ifdef __FreeBSD__
 #include <sys/smp.h>
-#endif
 #include <sys/uio.h>
 #include <sys/unistd.h>
-
-#ifdef __NetBSD__
-#include <sys/atomic.h>
-#include <sys/cpu.h>
-#define ASSERT(x) KASSERT(x)
-#endif
 
 #include <sys/cyclic.h>
 #include <sys/dtrace.h>
@@ -107,7 +97,6 @@
  * and the static definition doesn't seem to be overly brittle.  Still, we
  * allow for a manual override in case we get it completely wrong.
  */
-#ifdef __FreeBSD__
 #ifdef __amd64
 #define	PROF_ARTIFICIAL_FRAMES	7
 #else
@@ -122,11 +111,6 @@
 #endif
 #endif
 #endif
-#endif
-#endif
-
-#ifdef __NetBSD__
-#define	PROF_ARTIFICIAL_FRAMES	3
 #endif
 
 typedef struct profile_probe {
@@ -143,16 +127,14 @@ typedef struct profile_probe_percpu {
 	profile_probe_t	*profc_probe;
 } profile_probe_percpu_t;
 
-#ifdef __FreeBSD__
 static d_open_t	profile_open;
-#endif
 static int	profile_unload(void);
 static void	profile_create(hrtime_t, char *, int);
 static void	profile_destroy(void *, dtrace_id_t, void *);
-static int	profile_enable(void *, dtrace_id_t, void *);
+static void	profile_enable(void *, dtrace_id_t, void *);
 static void	profile_disable(void *, dtrace_id_t, void *);
 static void	profile_load(void *);
-static void	profile_provide(void *, const dtrace_probedesc_t *);
+static void	profile_provide(void *, dtrace_probedesc_t *);
 
 static int profile_rates[] = {
     97, 199, 499, 997, 1999,
@@ -179,13 +161,11 @@ static uint32_t profile_max = PROFILE_MAX_DEFAULT;
 					/* maximum number of profile probes */
 static uint32_t profile_total;		/* current number of profile probes */
 
-#ifdef __FreeBSD__
 static struct cdevsw profile_cdevsw = {
 	.d_version	= D_VERSION,
 	.d_open		= profile_open,
 	.d_name		= "profile",
 };
-#endif
 
 static dtrace_pattr_t profile_attr = {
 { DTRACE_STABILITY_EVOLVING, DTRACE_STABILITY_EVOLVING, DTRACE_CLASS_COMMON },
@@ -208,9 +188,7 @@ static dtrace_pops_t profile_pops = {
 	profile_destroy
 };
 
-#ifdef __FreeBSD__
 static struct cdev		*profile_cdev;
-#endif
 static dtrace_provider_id_t	profile_id;
 static hrtime_t			profile_interval_min = NANOSEC / 5000;	/* 5000 hz */
 static int			profile_aframes = 0;			/* override */
@@ -221,7 +199,7 @@ profile_fire(void *arg)
 	profile_probe_percpu_t *pcpu = arg;
 	profile_probe_t *prof = pcpu->profc_probe;
 	hrtime_t late;
-	solaris_cpu_t *c = &solaris_cpu[cpu_number()];
+	solaris_cpu_t *c = &solaris_cpu[curcpu];
 
 	late = gethrtime() - pcpu->profc_expected;
 	pcpu->profc_expected += pcpu->profc_interval;
@@ -234,7 +212,7 @@ static void
 profile_tick(void *arg)
 {
 	profile_probe_t *prof = arg;
-	solaris_cpu_t *c = &solaris_cpu[cpu_number()];
+	solaris_cpu_t *c = &solaris_cpu[curcpu];
 
 	dtrace_probe(prof->prof_id, c->cpu_profile_pc,
 	    c->cpu_profile_upc, 0, 0, 0);
@@ -269,14 +247,14 @@ profile_create(hrtime_t interval, char *name, int kind)
 
 /*ARGSUSED*/
 static void
-profile_provide(void *arg, const dtrace_probedesc_t *desc)
+profile_provide(void *arg, dtrace_probedesc_t *desc)
 {
 	int i, j, rate, kind;
 	hrtime_t val = 0, mult = 1, len = 0;
 	char *name, *suffix = NULL;
 
 	const struct {
-		const char *prefix;
+		char *prefix;
 		int kind;
 	} types[] = {
 		{ PROF_PREFIX_PROFILE, PROF_PROFILE },
@@ -285,7 +263,7 @@ profile_provide(void *arg, const dtrace_probedesc_t *desc)
 	};
 
 	const struct {
-		const char *name;
+		char *name;
 		hrtime_t mult;
 	} suffixes[] = {
 		{ "ns", 	NANOSEC / NANOSEC },
@@ -303,7 +281,7 @@ profile_provide(void *arg, const dtrace_probedesc_t *desc)
 		{ "d",		NANOSEC * (hrtime_t)(24 * 60 * 60) },
 		{ "day",	NANOSEC * (hrtime_t)(24 * 60 * 60) },
 		{ "hz",		0 },
-		{ NULL,		0 }
+		{ NULL }
 	};
 
 	if (desc == NULL) {
@@ -333,7 +311,7 @@ profile_provide(void *arg, const dtrace_probedesc_t *desc)
 		return;
 	}
 
-	name = (char *)desc->dtpd_name;
+	name = desc->dtpd_name;
 
 	for (i = 0; types[i].prefix != NULL; i++) {
 		len = strlen(types[i].prefix);
@@ -443,7 +421,7 @@ profile_offline(void *arg, cpu_t *cpu, void *oarg)
 }
 
 /* ARGSUSED */
-static int
+static void
 profile_enable(void *arg, dtrace_id_t id, void *parg)
 {
 	profile_probe_t *prof = parg;
@@ -472,7 +450,6 @@ profile_enable(void *arg, dtrace_id_t id, void *parg)
 	} else {
 		prof->prof_cyclic = cyclic_add_omni(&omni);
 	}
-	return 0;
 }
 
 /* ARGSUSED */
@@ -491,11 +468,9 @@ profile_disable(void *arg, dtrace_id_t id, void *parg)
 static void
 profile_load(void *dummy)
 {
-#ifdef __FreeBSD__
 	/* Create the /dev/dtrace/profile entry. */
 	profile_cdev = make_dev(&profile_cdevsw, 0, UID_ROOT, GID_WHEEL, 0600,
 	    "dtrace/profile");
-#endif
 
 	if (dtrace_register("profile", &profile_attr, DTRACE_PRIV_USER,
 	    NULL, &profile_pops, NULL, &profile_id) != 0)
@@ -511,14 +486,10 @@ profile_unload()
 	if ((error = dtrace_unregister(profile_id)) != 0)
 		return (error);
 
-#ifdef __FreeBSD__
 	destroy_dev(profile_cdev);
-#endif
 
 	return (error);
 }
-
-#ifdef __FreeBSD__
 
 /* ARGSUSED */
 static int
@@ -559,28 +530,3 @@ MODULE_VERSION(profile, 1);
 MODULE_DEPEND(profile, dtrace, 1, 1, 1);
 MODULE_DEPEND(profile, cyclic, 1, 1, 1);
 MODULE_DEPEND(profile, opensolaris, 1, 1, 1);
-
-#endif
-
-#ifdef __NetBSD__
-
-static int
-profile_modcmd(modcmd_t cmd, void *data)
-{
-	switch (cmd) {
-	case MODULE_CMD_INIT:
-		profile_load(NULL);
-		return 0;
-
-	case MODULE_CMD_FINI:
-		profile_unload();
-		return 0;
-
-	default:
-		return ENOTTY;
-	}
-}
-
-MODULE(MODULE_CLASS_MISC, profile, "dtrace,cyclic");
-
-#endif

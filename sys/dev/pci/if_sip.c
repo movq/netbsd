@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sip.c,v 1.156 2013/03/30 03:21:07 christos Exp $	*/
+/*	$NetBSD: if_sip.c,v 1.153.2.1 2012/11/22 17:48:16 riz Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sip.c,v 1.156 2013/03/30 03:21:07 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sip.c,v 1.153.2.1 2012/11/22 17:48:16 riz Exp $");
 
 
 
@@ -293,7 +293,7 @@ struct sip_softc {
 		/* VLAN_ATTACHED */
 		int		is_vlan;
 	}	sc_prev;
-	
+		
 	short	sc_if_flags;
 
 	int	sc_rxptr;		/* next ready Rx descriptor/descsoft */
@@ -585,15 +585,15 @@ static void	gsip_rxintr(struct sip_softc *);
 
 static int	sipcom_dp83820_mii_readreg(device_t, int, int);
 static void	sipcom_dp83820_mii_writereg(device_t, int, int, int);
-static void	sipcom_dp83820_mii_statchg(struct ifnet *);
+static void	sipcom_dp83820_mii_statchg(device_t);
 
 static int	sipcom_sis900_mii_readreg(device_t, int, int);
 static void	sipcom_sis900_mii_writereg(device_t, int, int, int);
-static void	sipcom_sis900_mii_statchg(struct ifnet *);
+static void	sipcom_sis900_mii_statchg(device_t);
 
 static int	sipcom_dp83815_mii_readreg(device_t, int, int);
 static void	sipcom_dp83815_mii_writereg(device_t, int, int, int);
-static void	sipcom_dp83815_mii_statchg(struct ifnet *);
+static void	sipcom_dp83815_mii_statchg(device_t);
 
 static void	sipcom_mediastatus(struct ifnet *, struct ifmediareq *);
 
@@ -620,7 +620,7 @@ CFATTACH_DECL3_NEW(sip, sizeof(struct sip_softc),
 struct sip_variant {
 	int	(*sipv_mii_readreg)(device_t, int, int);
 	void	(*sipv_mii_writereg)(device_t, int, int, int);
-	void	(*sipv_mii_statchg)(struct ifnet *);
+	void	(*sipv_mii_statchg)(device_t);
 	void	(*sipv_set_filter)(struct sip_softc *);
 	void	(*sipv_read_macaddr)(struct sip_softc *,
 		    const struct pci_attach_args *, u_int8_t *);
@@ -1397,7 +1397,7 @@ sipcom_set_extsts(struct sip_softc *sc, int lasttx, struct mbuf *m0,
 	 */
 	if ((mtag = VLAN_OUTPUT_TAG(&sc->sc_ethercom, m0)) != NULL) {
 		sc->sc_txdescs[lasttx].sipd_extsts |=
-		    htole32(EXTSTS_VPKT |
+		    htole32(EXTSTS_VPKT | 
 				(bswap16(VLAN_TAG_VALUE(mtag)) &
 				 EXTSTS_VTCI));
 	}
@@ -3377,9 +3377,9 @@ sipcom_dp83820_mii_writereg(device_t self, int phy, int reg, int val)
  *	Callback from MII layer when media changes.
  */
 static void
-sipcom_dp83820_mii_statchg(struct ifnet *ifp)
+sipcom_dp83820_mii_statchg(device_t self)
 {
-	struct sip_softc *sc = ifp->if_softc;
+	struct sip_softc *sc = device_private(self);
 	struct mii_data *mii = &sc->sc_mii;
 	u_int32_t cfg, pcr;
 
@@ -3539,9 +3539,9 @@ sipcom_sis900_mii_writereg(device_t self, int phy, int reg, int val)
  *	Callback from MII layer when media changes.
  */
 static void
-sipcom_sis900_mii_statchg(struct ifnet *ifp)
+sipcom_sis900_mii_statchg(device_t self)
 {
-	struct sip_softc *sc = ifp->if_softc;
+	struct sip_softc *sc = device_private(self);
 	struct mii_data *mii = &sc->sc_mii;
 	u_int32_t flowctl;
 
@@ -3651,9 +3651,9 @@ sipcom_dp83815_mii_writereg(device_t self, int phy, int reg, int val)
  *	Callback from MII layer when media changes.
  */
 static void
-sipcom_dp83815_mii_statchg(struct ifnet *ifp)
+sipcom_dp83815_mii_statchg(device_t self)
 {
-	struct sip_softc *sc = ifp->if_softc;
+	struct sip_softc *sc = device_private(self);
 
 	/*
 	 * Update TXCFG for full-duplex operation.

@@ -1,4 +1,4 @@
-/*	$NetBSD: par.c,v 1.38 2012/10/27 17:17:30 chs Exp $ */
+/*	$NetBSD: par.c,v 1.37 2009/05/31 23:07:18 phx Exp $ */
 
 /*
  * Copyright (c) 1982, 1990 The Regents of the University of California.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: par.c,v 1.38 2012/10/27 17:17:30 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: par.c,v 1.37 2009/05/31 23:07:18 phx Exp $");
 
 /*
  * parallel port interface
@@ -57,7 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: par.c,v 1.38 2012/10/27 17:17:30 chs Exp $");
 #include <amiga/dev/parioctl.h>
 
 struct	par_softc {
-	device_t sc_dev;
+	struct device sc_dev;
 
 	int	sc_flags;
 	struct	parparam sc_param;
@@ -101,10 +101,10 @@ void partimo(void *);
 void parstart(void *);
 void parintr(void *);
 
-void parattach(device_t, device_t, void *);
-int parmatch(device_t, cfdata_t, void *);
+void parattach(struct device *, struct device *, void *);
+int parmatch(struct device *, struct cfdata *, void *);
 
-CFATTACH_DECL_NEW(par, sizeof(struct par_softc),
+CFATTACH_DECL(par, sizeof(struct par_softc),
     parmatch, parattach, NULL, NULL);
 
 dev_type_open(paropen);
@@ -120,11 +120,11 @@ const struct cdevsw par_cdevsw = {
 
 /*ARGSUSED*/
 int
-parmatch(device_t parent, cfdata_t cf, void *aux)
+parmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	static int par_found = 0;
 
-	if (!matchname((char *)aux, "par") || par_found)
+	if (!matchname((char *)auxp, "par") || par_found)
 		return(0);
 
 	par_found = 1;
@@ -132,11 +132,9 @@ parmatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-parattach(device_t parent, device_t self, void *aux)
+parattach(struct device *pdp, struct device *dp, void *auxp)
 {
-	par_softcp = device_private(self);
-
-	par_softcp->sc_dev = self;
+	par_softcp = (struct par_softc *)dp;
 
 #ifdef DEBUG
 	if ((pardebug & PDB_NOCHECK) == 0)
@@ -209,7 +207,7 @@ parstart(void *arg)
 
 #ifdef DEBUG
 	if (pardebug & PDB_FOLLOW)
-		printf("parstart(%x)\n", device_unit(sc->sc_dev));
+		printf("parstart(%x)\n", device_unit(&sc->sc_dev));
 #endif
 	sc->sc_flags &= ~PARF_DELAY;
 	wakeup(sc);
@@ -222,7 +220,7 @@ partimo(void *arg)
 
 #ifdef DEBUG
 	if (pardebug & PDB_FOLLOW)
-		printf("partimo(%x)\n", device_unit(sc->sc_dev));
+		printf("partimo(%x)\n", device_unit(&sc->sc_dev));
 #endif
 	sc->sc_flags &= ~(PARF_UIO|PARF_TIMO);
 	wakeup(sc);

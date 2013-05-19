@@ -1,4 +1,4 @@
-/*	$NetBSD: btms.c,v 1.11 2012/10/27 17:18:15 chs Exp $	*/
+/*	$NetBSD: btms.c,v 1.9.18.1 2012/04/03 17:31:19 riz Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: btms.c,v 1.11 2012/10/27 17:18:15 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: btms.c,v 1.9.18.1 2012/04/03 17:31:19 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -302,9 +302,9 @@ btms_detach(device_t self, int flags)
  */
 
 static int
-btms_wsmouse_enable(void *cookie)
+btms_wsmouse_enable(void *self)
 {
-	struct btms_softc *sc = cookie;
+	struct btms_softc *sc = self;
 
 	if (sc->sc_enabled)
 		return EBUSY;
@@ -314,9 +314,10 @@ btms_wsmouse_enable(void *cookie)
 }
 
 static int
-btms_wsmouse_ioctl(void *cookie, unsigned long cmd, void *data,
+btms_wsmouse_ioctl(void *self, unsigned long cmd, void *data,
     int flag, struct lwp *l)
 {
+	/* struct btms_softc *sc = self; */
 
 	switch (cmd) {
 	case WSMOUSEIO_GTYPE:
@@ -331,9 +332,9 @@ btms_wsmouse_ioctl(void *cookie, unsigned long cmd, void *data,
 }
 
 static void
-btms_wsmouse_disable(void *cookie)
+btms_wsmouse_disable(void *self)
 {
-	struct btms_softc *sc = cookie;
+	struct btms_softc *sc = self;
 
 	sc->sc_enabled = 0;
 }
@@ -344,9 +345,9 @@ btms_wsmouse_disable(void *cookie)
  */
 
 static void
-btms_input(struct bthidev *hidev, uint8_t *data, int len)
+btms_input(struct bthidev *self, uint8_t *data, int len)
 {
-	struct btms_softc *sc = (struct btms_softc *)hidev;
+	struct btms_softc *sc = (struct btms_softc *)self;
 	int dx, dy, dz, dw;
 	uint32_t buttons;
 	int i, s;

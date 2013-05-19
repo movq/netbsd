@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2012/07/13 19:32:51 christos Exp $
+#	$NetBSD: Makefile,v 1.5.4.1 2012/08/14 07:55:56 riz Exp $
 
 WARNS?=	2	# XXX -Wcast-qual
 
@@ -10,7 +10,7 @@ BINDIR=/usr/bin
 USE_FORT?= yes	# cryptographic software
 
 # RCSid:
-#	$Id: Makefile,v 1.6 2012/07/13 19:32:51 christos Exp $
+#	$Id: Makefile,v 1.5.4.1 2012/08/14 07:55:56 riz Exp $
 #
 #	@(#) Copyright (c) 1995 Simon J. Gerraty
 #

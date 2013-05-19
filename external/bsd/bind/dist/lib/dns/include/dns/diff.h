@@ -1,4 +1,4 @@
-/*	$NetBSD: diff.h,v 1.3 2012/06/05 00:41:47 christos Exp $	*/
+/*	$NetBSD: diff.h,v 1.2.6.1 2012/06/05 21:14:55 bouyer Exp $	*/
 
 /*
  * Copyright (C) 2004-2010  Internet Systems Consortium, Inc. ("ISC")

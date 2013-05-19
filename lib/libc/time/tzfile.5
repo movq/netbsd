@@ -1,5 +1,6 @@
-.\"	$NetBSD: tzfile.5,v 1.19 2013/03/02 21:24:28 christos Exp $
+.\"	$NetBSD: tzfile.5,v 1.16 2011/09/04 10:10:26 christos Exp $
 .\"
+.\" @(#)tzfile.5	7.11
 .\" This file is in the public domain, so clarified as of
 .\" 1996-06-05 by Arthur David Olson (arthur_david_olson@nih.gov).
 .Dd September 16, 2001
@@ -141,7 +142,7 @@ is zero or the time argument is less than the first transition time recorded
 in the file.
 .Pp
 For version-2-format time zone files,
-the above header and data are followed by a second header and data,
+the above header and data is followed by a second header and data,
 identical in format except that
 eight bytes are used for each transition time or leap second time.
 After the second header and data comes a newline-enclosed,
@@ -152,8 +153,7 @@ such instants).
 .Sh SEE ALSO
 .Xr ctime 3 ,
 .Xr localtime 3 ,
-.Xr time 3 ,
-.Xr zdump 8
+.Xr time 3
 .\" @(#)tzfile.5	8.3
 .\" This file is in the public domain, so clarified as of
 .\" 1996-06-05 by Arthur David Olson.

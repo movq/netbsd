@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.5 2013/03/13 21:17:43 macallan Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.1.8.1 2012/08/08 15:51:09 martin Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.5 2013/03/13 21:17:43 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.1.8.1 2012/08/08 15:51:09 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,13 +44,11 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.5 2013/03/13 21:17:43 macallan Exp $"
 #include <sys/conf.h>
 #include <sys/device.h>
 #include <sys/cpu.h>
-#include <evbmips/loongson/autoconf.h>
 
 static void	findroot(void);
 
 enum devclass bootdev_class = DV_DULL;
 char          bootdev[16];
-extern const struct platform *sys_platform;
 
 void
 cpu_configure(void)
@@ -77,7 +75,7 @@ cpu_rootconf(void)
 	findroot();
 
 	printf("boot device: %s\n",
-		booted_device ? device_xname(booted_device) : "<unknown>");
+		booted_device ? booted_device->dv_xname : "<unknown>");
 
 	rootconf();
 }
@@ -113,20 +111,14 @@ findroot(void)
 }
 
 void
-device_register(device_t dev, void *aux)
+device_register(struct device *dev, void *aux)
 {
 	prop_dictionary_t dict;
 
 	if ((booted_device == NULL) && (netboot == 1))
 		if (device_class(dev) == DV_IFNET)
 			booted_device = dev;
-
-	if (sys_platform->device_register != NULL) {
-		sys_platform->device_register(dev, aux);
-	}
-
-	/* is this yeeloong specific? */
-	if (device_is_a(dev, "lynxfb")) {
+	if (device_is_a(dev, "genfb")) {
 		dict = device_properties(dev);
 		/*
 		 * this is a hack
@@ -137,6 +129,6 @@ device_register(device_t dev, void *aux)
 		prop_dictionary_set_uint32(dict, "height", 600);
 		prop_dictionary_set_uint32(dict, "depth", 16);
 		prop_dictionary_set_uint32(dict, "linebytes", 2048);
-		prop_dictionary_set_bool(dict, "swapBR", 1);
+		prop_dictionary_set_uint32(dict, "address", 0x04000000);
 	}
 }

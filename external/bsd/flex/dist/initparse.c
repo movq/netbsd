@@ -17,10 +17,27 @@ static const char yysccsid[] = "@(#)yaccpar	1.9 (Berkeley) 02/21/93";
 #define yyerrok        (yyerrflag = 0)
 #define YYRECOVERING() (yyerrflag != 0)
 
-#define YYPREFIX "yy"
+/* compatibility with bison */
+#ifdef YYPARSE_PARAM
+/* compatibility with FreeBSD */
+# ifdef YYPARSE_PARAM_TYPE
+#  define YYPARSE_DECL() yyparse(YYPARSE_PARAM_TYPE YYPARSE_PARAM)
+# else
+#  define YYPARSE_DECL() yyparse(void *YYPARSE_PARAM)
+# endif
+#else
+# define YYPARSE_DECL() yyparse(void)
+#endif
 
+/* Pure parsers. */
 #define YYPURE 0
+#ifdef YYLEX_PARAM
+# define YYLEX yylex(YYLEX_PARAM)
+#else
+# define YYLEX yylex()
+#endif
 
+#define YYPREFIX "yy"
 /*  Copyright (c) 1990 The Regents of the University of California. */
 /*  All rights reserved. */
 
@@ -100,43 +117,6 @@ int previous_continued_action;	/* whether the previous rule's action was '|' */
  * following should ensure that the default token type is "int".
  */
 #define YYSTYPE int
-
-
-#ifndef YYSTYPE
-typedef int YYSTYPE;
-#endif
-
-/* compatibility with bison */
-#ifdef YYPARSE_PARAM
-/* compatibility with FreeBSD */
-# ifdef YYPARSE_PARAM_TYPE
-#  define YYPARSE_DECL() yyparse(YYPARSE_PARAM_TYPE YYPARSE_PARAM)
-# else
-#  define YYPARSE_DECL() yyparse(void *YYPARSE_PARAM)
-# endif
-#else
-# define YYPARSE_DECL() yyparse(void)
-#endif
-
-/* Parameters sent to lex. */
-#ifdef YYLEX_PARAM
-# define YYLEX_DECL() yylex(void *YYLEX_PARAM)
-# define YYLEX yylex(YYLEX_PARAM)
-#else
-# define YYLEX_DECL() yylex(void)
-# define YYLEX yylex()
-#endif
-
-/* Parameters sent to yyerror. */
-#ifndef YYERROR_DECL
-#define YYERROR_DECL() yyerror(const char *s)
-#endif
-#ifndef YYERROR_CALL
-#define YYERROR_CALL(msg) yyerror(msg)
-#endif
-
-extern int YYPARSE_DECL();
-
 
 #define CHAR 257
 #define NUMBER 258
@@ -481,14 +461,16 @@ static const char *yyrule[] = {
 
 };
 #endif
+#ifndef YYSTYPE
+typedef int YYSTYPE;
+#endif
+#if YYDEBUG
+#include <stdio.h>
+#endif
 
-int      yydebug;
-int      yynerrs;
-
-int      yyerrflag;
-int      yychar;
-YYSTYPE  yyval;
-YYSTYPE  yylval;
+extern int YYPARSE_DECL();
+static int yygrowstack(short **, short **, short **,
+    YYSTYPE **, YYSTYPE **, unsigned *);
 
 /* define the initial stack-sizes */
 #ifdef YYSTACKSIZE
@@ -505,16 +487,12 @@ YYSTYPE  yylval;
 
 #define YYINITSTACKSIZE 500
 
-typedef struct {
-    unsigned stacksize;
-    short    *s_base;
-    short    *s_mark;
-    short    *s_last;
-    YYSTYPE  *l_base;
-    YYSTYPE  *l_mark;
-} YYSTACKDATA;
-/* variables for the parser stack */
-static YYSTACKDATA yystack;
+int      yydebug;
+int      yyerrflag;
+    int      yynerrs;
+    int      yychar;
+    YYSTYPE  yylval;
+
 
 
 /* build_eof_action - build the "<<EOF>>" action for the active start
@@ -536,10 +514,6 @@ void build_eof_action()
 		else
 			{
 			sceof[scon_stk[i]] = true;
-
-			if (previous_continued_action /* && previous action was regular */)
-				add_action("YY_RULE_SETUP\n");
-
 			snprintf( action_text, sizeof(action_text), "case YY_STATE_EOF(%s):\n",
 				scname[scon_stk[i]] );
 			add_action( action_text );
@@ -657,59 +631,39 @@ void yyerror( msg )
 const char *msg;
 	{
 	}
-
-#if YYDEBUG
-#include <stdio.h>		/* needed for printf */
-#endif
-
-#include <stdlib.h>	/* needed for malloc, etc */
-#include <string.h>	/* needed for memset */
-
 /* allocate initial stack or double stack size, up to YYMAXDEPTH */
-static int yygrowstack(YYSTACKDATA *data)
+static int yygrowstack(short **yyss, short **yyssp, short **yysslim,
+    YYSTYPE **yyvs, YYSTYPE **yyvsp, unsigned *yystacksize)
 {
     int i;
     unsigned newsize;
     short *newss;
     YYSTYPE *newvs;
 
-    if ((newsize = data->stacksize) == 0)
+    if ((newsize = *yystacksize) == 0)
         newsize = YYINITSTACKSIZE;
     else if (newsize >= YYMAXDEPTH)
         return -1;
     else if ((newsize *= 2) > YYMAXDEPTH)
         newsize = YYMAXDEPTH;
 
-    i = (int) (data->s_mark - data->s_base);
-    newss = (short *)realloc(data->s_base, newsize * sizeof(*newss));
+    i = *yyssp - *yyss;
+    newss = (short *)realloc(*yyss, newsize * sizeof(*newss));
     if (newss == 0)
         return -1;
 
-    data->s_base = newss;
-    data->s_mark = newss + i;
-
-    newvs = (YYSTYPE *)realloc(data->l_base, newsize * sizeof(*newvs));
+    *yyss  = newss;
+    *yyssp = newss + i;
+    newvs = (YYSTYPE *)realloc(*yyvs, newsize * sizeof(*newvs));
     if (newvs == 0)
         return -1;
 
-    data->l_base = newvs;
-    data->l_mark = newvs + i;
-
-    data->stacksize = newsize;
-    data->s_last = data->s_base + newsize - 1;
+    *yyvs = newvs;
+    *yyvsp = newvs + i;
+    *yystacksize = newsize;
+    *yysslim = *yyss + newsize - 1;
     return 0;
 }
-
-#if YYPURE || defined(YY_NO_LEAKS)
-static void yyfreestack(YYSTACKDATA *data)
-{
-    free(data->s_base);
-    free(data->l_base);
-    memset(data, 0, sizeof(*data));
-}
-#else
-#define yyfreestack(data) /* nothing */
-#endif
 
 #define YYABORT  goto yyabort
 #define YYREJECT goto yyabort
@@ -720,6 +674,15 @@ int
 YYPARSE_DECL()
 {
     int yym, yyn, yystate;
+
+    YYSTYPE  yyval;
+    /* variables for the parser stack */
+    short   *yyssp;
+    short   *yyss;
+    short   *yysslim;
+    YYSTYPE *yyvs;
+    YYSTYPE *yyvsp;
+    unsigned yystacksize;
 #if YYDEBUG
     const char *yys;
 
@@ -736,21 +699,19 @@ YYPARSE_DECL()
     yychar = YYEMPTY;
     yystate = 0;
 
-#if YYPURE
-    memset(&yystack, 0, sizeof(yystack));
-#endif
-
-    if (yystack.s_base == NULL && yygrowstack(&yystack)) goto yyoverflow;
-    yystack.s_mark = yystack.s_base;
-    yystack.l_mark = yystack.l_base;
+    yystacksize = 0;
+    yyvs = yyvsp = NULL;
+    yyss = yyssp = NULL;
+    if (yygrowstack(&yyss, &yyssp, &yysslim, &yyvs, &yyvsp, &yystacksize))
+        goto yyoverflow;
     yystate = 0;
-    *yystack.s_mark = 0;
+    *yyssp = 0;
 
 yyloop:
     if ((yyn = yydefred[yystate]) != 0) goto yyreduce;
     if (yychar < 0)
     {
-        if ((yychar = YYLEX) < 0) yychar = 0;
+        if ((yychar = yylex()) < 0) yychar = 0;
 #if YYDEBUG
         if (yydebug)
         {
@@ -770,13 +731,14 @@ yyloop:
             printf("%sdebug: state %d, shifting to state %d\n",
                     YYPREFIX, yystate, yytable[yyn]);
 #endif
-        if (yystack.s_mark >= yystack.s_last && yygrowstack(&yystack))
+        if (yyssp >= yysslim && yygrowstack(&yyss, &yyssp, &yysslim,
+            &yyvs, &yyvsp, &yystacksize))
         {
             goto yyoverflow;
         }
         yystate = yytable[yyn];
-        *++yystack.s_mark = yytable[yyn];
-        *++yystack.l_mark = yylval;
+        *++yyssp = yytable[yyn];
+        *++yyvsp = yylval;
         yychar = YYEMPTY;
         if (yyerrflag > 0)  --yyerrflag;
         goto yyloop;
@@ -802,21 +764,22 @@ yyinrecovery:
         yyerrflag = 3;
         for (;;)
         {
-            if ((yyn = yysindex[*yystack.s_mark]) && (yyn += YYERRCODE) >= 0 &&
+            if ((yyn = yysindex[*yyssp]) && (yyn += YYERRCODE) >= 0 &&
                     yyn <= YYTABLESIZE && yycheck[yyn] == YYERRCODE)
             {
 #if YYDEBUG
                 if (yydebug)
                     printf("%sdebug: state %d, error recovery shifting\
- to state %d\n", YYPREFIX, *yystack.s_mark, yytable[yyn]);
+ to state %d\n", YYPREFIX, *yyssp, yytable[yyn]);
 #endif
-                if (yystack.s_mark >= yystack.s_last && yygrowstack(&yystack))
+                if (yyssp >= yysslim && yygrowstack(&yyss, &yyssp,
+                    &yysslim, &yyvs, &yyvsp, &yystacksize))
                 {
                     goto yyoverflow;
                 }
                 yystate = yytable[yyn];
-                *++yystack.s_mark = yytable[yyn];
-                *++yystack.l_mark = yylval;
+                *++yyssp = yytable[yyn];
+                *++yyvsp = yylval;
                 goto yyloop;
             }
             else
@@ -824,11 +787,11 @@ yyinrecovery:
 #if YYDEBUG
                 if (yydebug)
                     printf("%sdebug: error recovery discarding state %d\n",
-                            YYPREFIX, *yystack.s_mark);
+                            YYPREFIX, *yyssp);
 #endif
-                if (yystack.s_mark <= yystack.s_base) goto yyabort;
-                --yystack.s_mark;
-                --yystack.l_mark;
+                if (yyssp <= yyss) goto yyabort;
+                --yyssp;
+                --yyvsp;
             }
         }
     }
@@ -857,7 +820,7 @@ yyreduce:
 #endif
     yym = yylen[yyn];
     if (yym)
-        yyval = yystack.l_mark[1-yym];
+        yyval = yyvsp[1-yym];
     else
         memset(&yyval, 0, sizeof yyval);
     switch (yyn)
@@ -944,10 +907,10 @@ case 21:
 	{ tablesext = true; tablesfilename = copy_string( nmstr ); }
 break;
 case 22:
-	{ scon_stk_ptr = yystack.l_mark[-3]; }
+	{ scon_stk_ptr = yyvsp[-3]; }
 break;
 case 23:
-	{ scon_stk_ptr = yystack.l_mark[-3]; }
+	{ scon_stk_ptr = yyvsp[-3]; }
 break;
 case 25:
 	{
@@ -963,7 +926,7 @@ case 25:
 break;
 case 26:
 	{
-			pat = yystack.l_mark[0];
+			pat = yyvsp[0];
 			finish_rule( pat, variable_trail_rule,
 				headcnt, trailcnt , previous_continued_action);
 
@@ -999,7 +962,7 @@ case 26:
 break;
 case 27:
 	{
-			pat = yystack.l_mark[0];
+			pat = yyvsp[0];
 			finish_rule( pat, variable_trail_rule,
 				headcnt, trailcnt , previous_continued_action);
 
@@ -1051,7 +1014,7 @@ case 30:
 	{ yyval = scon_stk_ptr; }
 break;
 case 31:
-	{ yyval = yystack.l_mark[-2]; }
+	{ yyval = yyvsp[-2]; }
 break;
 case 32:
 	{
@@ -1100,15 +1063,15 @@ case 37:
 break;
 case 38:
 	{
-			if ( transchar[lastst[yystack.l_mark[0]]] != SYM_EPSILON )
+			if ( transchar[lastst[yyvsp[0]]] != SYM_EPSILON )
 				/* Provide final transition \now/ so it
 				 * will be marked as a trailing context
 				 * state.
 				 */
-				yystack.l_mark[0] = link_machines( yystack.l_mark[0],
+				yyvsp[0] = link_machines( yyvsp[0],
 						mkstate( SYM_EPSILON ) );
 
-			mark_beginning_as_normal( yystack.l_mark[0] );
+			mark_beginning_as_normal( yyvsp[0] );
 			current_state_type = STATE_NORMAL;
 
 			if ( previous_continued_action )
@@ -1143,7 +1106,7 @@ case 38:
 				 * trail rule, and add_accept() can create
 				 * a new state ...
 				 */
-				add_accept( yystack.l_mark[-1],
+				add_accept( yyvsp[-1],
 					num_rules | YY_TRAILING_HEAD_MASK );
 				variable_trail_rule = true;
 				}
@@ -1151,7 +1114,7 @@ case 38:
 			else
 				trailcnt = rulelen;
 
-			yyval = link_machines( yystack.l_mark[-1], yystack.l_mark[0] );
+			yyval = link_machines( yyvsp[-1], yyvsp[0] );
 			}
 break;
 case 39:
@@ -1188,7 +1151,7 @@ case 40:
 				/* Again, see the comment in the rule for
 				 * "re2 re" above.
 				 */
-				add_accept( yystack.l_mark[-1],
+				add_accept( yyvsp[-1],
 					num_rules | YY_TRAILING_HEAD_MASK );
 				variable_trail_rule = true;
 				}
@@ -1196,13 +1159,13 @@ case 40:
 			trlcontxt = true;
 
 			eps = mkstate( SYM_EPSILON );
-			yyval = link_machines( yystack.l_mark[-1],
+			yyval = link_machines( yyvsp[-1],
 				link_machines( eps, mkstate( '\n' ) ) );
 			}
 break;
 case 41:
 	{
-			yyval = yystack.l_mark[0];
+			yyval = yyvsp[0];
 
 			if ( trlcontxt )
 				{
@@ -1219,11 +1182,11 @@ break;
 case 42:
 	{
 			varlength = true;
-			yyval = mkor( yystack.l_mark[-2], yystack.l_mark[0] );
+			yyval = mkor( yyvsp[-2], yyvsp[0] );
 			}
 break;
 case 43:
-	{ yyval = yystack.l_mark[0]; }
+	{ yyval = yyvsp[0]; }
 break;
 case 44:
 	{
@@ -1248,7 +1211,7 @@ case 44:
 			rulelen = 0;
 
 			current_state_type = STATE_TRAILING_CONTEXT;
-			yyval = yystack.l_mark[-1];
+			yyval = yyvsp[-1];
 			}
 break;
 case 45:
@@ -1256,37 +1219,37 @@ case 45:
 			/* This is where concatenation of adjacent patterns
 			 * gets done.
 			 */
-			yyval = link_machines( yystack.l_mark[-1], yystack.l_mark[0] );
+			yyval = link_machines( yyvsp[-1], yyvsp[0] );
 			}
 break;
 case 46:
-	{ yyval = yystack.l_mark[0]; }
+	{ yyval = yyvsp[0]; }
 break;
 case 47:
 	{
 			varlength = true;
 
-			if ( yystack.l_mark[-3] > yystack.l_mark[-1] || yystack.l_mark[-3] < 0 )
+			if ( yyvsp[-3] > yyvsp[-1] || yyvsp[-3] < 0 )
 				{
 				synerr( _("bad iteration values") );
-				yyval = yystack.l_mark[-5];
+				yyval = yyvsp[-5];
 				}
 			else
 				{
-				if ( yystack.l_mark[-3] == 0 )
+				if ( yyvsp[-3] == 0 )
 					{
-					if ( yystack.l_mark[-1] <= 0 )
+					if ( yyvsp[-1] <= 0 )
 						{
 						synerr(
 						_("bad iteration values") );
-						yyval = yystack.l_mark[-5];
+						yyval = yyvsp[-5];
 						}
 					else
 						yyval = mkopt(
-							mkrep( yystack.l_mark[-5], 1, yystack.l_mark[-1] ) );
+							mkrep( yyvsp[-5], 1, yyvsp[-1] ) );
 					}
 				else
-					yyval = mkrep( yystack.l_mark[-5], yystack.l_mark[-3], yystack.l_mark[-1] );
+					yyval = mkrep( yyvsp[-5], yyvsp[-3], yyvsp[-1] );
 				}
 			}
 break;
@@ -1294,14 +1257,14 @@ case 48:
 	{
 			varlength = true;
 
-			if ( yystack.l_mark[-2] <= 0 )
+			if ( yyvsp[-2] <= 0 )
 				{
 				synerr( _("iteration value must be positive") );
-				yyval = yystack.l_mark[-4];
+				yyval = yyvsp[-4];
 				}
 
 			else
-				yyval = mkrep( yystack.l_mark[-4], yystack.l_mark[-2], INFINITE_REPEAT );
+				yyval = mkrep( yyvsp[-4], yyvsp[-2], INFINITE_REPEAT );
 			}
 break;
 case 49:
@@ -1312,62 +1275,62 @@ case 49:
 			 */
 			varlength = true;
 
-			if ( yystack.l_mark[-1] <= 0 )
+			if ( yyvsp[-1] <= 0 )
 				{
 				  synerr( _("iteration value must be positive")
 					  );
-				yyval = yystack.l_mark[-3];
+				yyval = yyvsp[-3];
 				}
 
 			else
-				yyval = link_machines( yystack.l_mark[-3],
-						copysingl( yystack.l_mark[-3], yystack.l_mark[-1] - 1 ) );
+				yyval = link_machines( yyvsp[-3],
+						copysingl( yyvsp[-3], yyvsp[-1] - 1 ) );
 			}
 break;
 case 50:
 	{
 			varlength = true;
 
-			yyval = mkclos( yystack.l_mark[-1] );
+			yyval = mkclos( yyvsp[-1] );
 			}
 break;
 case 51:
 	{
 			varlength = true;
-			yyval = mkposcl( yystack.l_mark[-1] );
+			yyval = mkposcl( yyvsp[-1] );
 			}
 break;
 case 52:
 	{
 			varlength = true;
-			yyval = mkopt( yystack.l_mark[-1] );
+			yyval = mkopt( yyvsp[-1] );
 			}
 break;
 case 53:
 	{
 			varlength = true;
 
-			if ( yystack.l_mark[-3] > yystack.l_mark[-1] || yystack.l_mark[-3] < 0 )
+			if ( yyvsp[-3] > yyvsp[-1] || yyvsp[-3] < 0 )
 				{
 				synerr( _("bad iteration values") );
-				yyval = yystack.l_mark[-5];
+				yyval = yyvsp[-5];
 				}
 			else
 				{
-				if ( yystack.l_mark[-3] == 0 )
+				if ( yyvsp[-3] == 0 )
 					{
-					if ( yystack.l_mark[-1] <= 0 )
+					if ( yyvsp[-1] <= 0 )
 						{
 						synerr(
 						_("bad iteration values") );
-						yyval = yystack.l_mark[-5];
+						yyval = yyvsp[-5];
 						}
 					else
 						yyval = mkopt(
-							mkrep( yystack.l_mark[-5], 1, yystack.l_mark[-1] ) );
+							mkrep( yyvsp[-5], 1, yyvsp[-1] ) );
 					}
 				else
-					yyval = mkrep( yystack.l_mark[-5], yystack.l_mark[-3], yystack.l_mark[-1] );
+					yyval = mkrep( yyvsp[-5], yyvsp[-3], yyvsp[-1] );
 				}
 			}
 break;
@@ -1375,14 +1338,14 @@ case 54:
 	{
 			varlength = true;
 
-			if ( yystack.l_mark[-2] <= 0 )
+			if ( yyvsp[-2] <= 0 )
 				{
 				synerr( _("iteration value must be positive") );
-				yyval = yystack.l_mark[-4];
+				yyval = yyvsp[-4];
 				}
 
 			else
-				yyval = mkrep( yystack.l_mark[-4], yystack.l_mark[-2], INFINITE_REPEAT );
+				yyval = mkrep( yyvsp[-4], yyvsp[-2], INFINITE_REPEAT );
 			}
 break;
 case 55:
@@ -1393,15 +1356,15 @@ case 55:
 			 */
 			varlength = true;
 
-			if ( yystack.l_mark[-1] <= 0 )
+			if ( yyvsp[-1] <= 0 )
 				{
 				synerr( _("iteration value must be positive") );
-				yyval = yystack.l_mark[-3];
+				yyval = yyvsp[-3];
 				}
 
 			else
-				yyval = link_machines( yystack.l_mark[-3],
-						copysingl( yystack.l_mark[-3], yystack.l_mark[-1] - 1 ) );
+				yyval = link_machines( yyvsp[-3],
+						copysingl( yyvsp[-3], yyvsp[-1] - 1 ) );
 			}
 break;
 case 56:
@@ -1440,65 +1403,67 @@ case 56:
 break;
 case 57:
 	{
-				/* Sort characters for fast searching.
+				/* Sort characters for fast searching.  We
+				 * use a shell sort since this list could
+				 * be large.
 				 */
-				qsort( ccltbl + cclmap[yystack.l_mark[0]], ccllen[yystack.l_mark[0]], sizeof (*ccltbl), cclcmp );
+				cshell( ccltbl + cclmap[yyvsp[0]], ccllen[yyvsp[0]], true );
 
 			if ( useecs )
-				mkeccl( ccltbl + cclmap[yystack.l_mark[0]], ccllen[yystack.l_mark[0]],
+				mkeccl( ccltbl + cclmap[yyvsp[0]], ccllen[yyvsp[0]],
 					nextecm, ecgroup, csize, csize );
 
 			++rulelen;
 
-			if (ccl_has_nl[yystack.l_mark[0]])
+			if (ccl_has_nl[yyvsp[0]])
 				rule_has_nl[num_rules] = true;
 
-			yyval = mkstate( -yystack.l_mark[0] );
+			yyval = mkstate( -yyvsp[0] );
 			}
 break;
 case 58:
 	{
 			++rulelen;
 
-			if (ccl_has_nl[yystack.l_mark[0]])
+			if (ccl_has_nl[yyvsp[0]])
 				rule_has_nl[num_rules] = true;
 
-			yyval = mkstate( -yystack.l_mark[0] );
+			yyval = mkstate( -yyvsp[0] );
 			}
 break;
 case 59:
-	{ yyval = yystack.l_mark[-1]; }
+	{ yyval = yyvsp[-1]; }
 break;
 case 60:
-	{ yyval = yystack.l_mark[-1]; }
+	{ yyval = yyvsp[-1]; }
 break;
 case 61:
 	{
 			++rulelen;
 
-			if (yystack.l_mark[0] == nlch)
+			if (yyvsp[0] == nlch)
 				rule_has_nl[num_rules] = true;
 
-            if (sf_case_ins() && has_case(yystack.l_mark[0]))
+            if (sf_case_ins() && has_case(yyvsp[0]))
                 /* create an alternation, as in (a|A) */
-                yyval = mkor (mkstate(yystack.l_mark[0]), mkstate(reverse_case(yystack.l_mark[0])));
+                yyval = mkor (mkstate(yyvsp[0]), mkstate(reverse_case(yyvsp[0])));
             else
-                yyval = mkstate( yystack.l_mark[0] );
+                yyval = mkstate( yyvsp[0] );
 			}
 break;
 case 62:
-	{ yyval = ccl_set_diff  (yystack.l_mark[-2], yystack.l_mark[0]); }
+	{ yyval = ccl_set_diff  (yyvsp[-2], yyvsp[0]); }
 break;
 case 63:
-	{ yyval = ccl_set_union (yystack.l_mark[-2], yystack.l_mark[0]); }
+	{ yyval = ccl_set_union (yyvsp[-2], yyvsp[0]); }
 break;
 case 65:
-	{ yyval = yystack.l_mark[-1]; }
+	{ yyval = yyvsp[-1]; }
 break;
 case 66:
 	{
-			cclnegate( yystack.l_mark[-1] );
-			yyval = yystack.l_mark[-1];
+			cclnegate( yyvsp[-1] );
+			yyval = yyvsp[-1];
 			}
 break;
 case 67:
@@ -1512,78 +1477,78 @@ case 67:
 			     * sure what range the user is trying to express.
 			     * Examples: [@-z] or [S-t]
 			     */
-			    if (has_case (yystack.l_mark[-2]) != has_case (yystack.l_mark[0])
-				     || (has_case (yystack.l_mark[-2]) && (b_islower (yystack.l_mark[-2]) != b_islower (yystack.l_mark[0])))
-				     || (has_case (yystack.l_mark[-2]) && (b_isupper (yystack.l_mark[-2]) != b_isupper (yystack.l_mark[0]))))
+			    if (has_case (yyvsp[-2]) != has_case (yyvsp[0])
+				     || (has_case (yyvsp[-2]) && (b_islower (yyvsp[-2]) != b_islower (yyvsp[0])))
+				     || (has_case (yyvsp[-2]) && (b_isupper (yyvsp[-2]) != b_isupper (yyvsp[0]))))
 			      format_warn3 (
 			      _("the character range [%c-%c] is ambiguous in a case-insensitive scanner"),
-					    yystack.l_mark[-2], yystack.l_mark[0]);
+					    yyvsp[-2], yyvsp[0]);
 
 			    /* If the range spans uppercase characters but not
 			     * lowercase (or vice-versa), then should we automatically
 			     * include lowercase characters in the range?
 			     * Example: [@-_] spans [a-z] but not [A-Z]
 			     */
-			    else if (!has_case (yystack.l_mark[-2]) && !has_case (yystack.l_mark[0]) && !range_covers_case (yystack.l_mark[-2], yystack.l_mark[0]))
+			    else if (!has_case (yyvsp[-2]) && !has_case (yyvsp[0]) && !range_covers_case (yyvsp[-2], yyvsp[0]))
 			      format_warn3 (
 			      _("the character range [%c-%c] is ambiguous in a case-insensitive scanner"),
-					    yystack.l_mark[-2], yystack.l_mark[0]);
+					    yyvsp[-2], yyvsp[0]);
 			  }
 
-			if ( yystack.l_mark[-2] > yystack.l_mark[0] )
+			if ( yyvsp[-2] > yyvsp[0] )
 				synerr( _("negative range in character class") );
 
 			else
 				{
-				for ( i = yystack.l_mark[-2]; i <= yystack.l_mark[0]; ++i )
-					ccladd( yystack.l_mark[-3], i );
+				for ( i = yyvsp[-2]; i <= yyvsp[0]; ++i )
+					ccladd( yyvsp[-3], i );
 
 				/* Keep track if this ccl is staying in
 				 * alphabetical order.
 				 */
-				cclsorted = cclsorted && (yystack.l_mark[-2] > lastchar);
-				lastchar = yystack.l_mark[0];
+				cclsorted = cclsorted && (yyvsp[-2] > lastchar);
+				lastchar = yyvsp[0];
 
                 /* Do it again for upper/lowercase */
-                if (sf_case_ins() && has_case(yystack.l_mark[-2]) && has_case(yystack.l_mark[0])){
-                    yystack.l_mark[-2] = reverse_case (yystack.l_mark[-2]);
-                    yystack.l_mark[0] = reverse_case (yystack.l_mark[0]);
+                if (sf_case_ins() && has_case(yyvsp[-2]) && has_case(yyvsp[0])){
+                    yyvsp[-2] = reverse_case (yyvsp[-2]);
+                    yyvsp[0] = reverse_case (yyvsp[0]);
                     
-                    for ( i = yystack.l_mark[-2]; i <= yystack.l_mark[0]; ++i )
-                        ccladd( yystack.l_mark[-3], i );
+                    for ( i = yyvsp[-2]; i <= yyvsp[0]; ++i )
+                        ccladd( yyvsp[-3], i );
 
-                    cclsorted = cclsorted && (yystack.l_mark[-2] > lastchar);
-                    lastchar = yystack.l_mark[0];
+                    cclsorted = cclsorted && (yyvsp[-2] > lastchar);
+                    lastchar = yyvsp[0];
                 }
 
 				}
 
-			yyval = yystack.l_mark[-3];
+			yyval = yyvsp[-3];
 			}
 break;
 case 68:
 	{
-			ccladd( yystack.l_mark[-1], yystack.l_mark[0] );
-			cclsorted = cclsorted && (yystack.l_mark[0] > lastchar);
-			lastchar = yystack.l_mark[0];
+			ccladd( yyvsp[-1], yyvsp[0] );
+			cclsorted = cclsorted && (yyvsp[0] > lastchar);
+			lastchar = yyvsp[0];
 
             /* Do it again for upper/lowercase */
-            if (sf_case_ins() && has_case(yystack.l_mark[0])){
-                yystack.l_mark[0] = reverse_case (yystack.l_mark[0]);
-                ccladd (yystack.l_mark[-1], yystack.l_mark[0]);
+            if (sf_case_ins() && has_case(yyvsp[0])){
+                yyvsp[0] = reverse_case (yyvsp[0]);
+                ccladd (yyvsp[-1], yyvsp[0]);
 
-                cclsorted = cclsorted && (yystack.l_mark[0] > lastchar);
-                lastchar = yystack.l_mark[0];
+                cclsorted = cclsorted && (yyvsp[0] > lastchar);
+                lastchar = yyvsp[0];
             }
 
-			yyval = yystack.l_mark[-1];
+			yyval = yyvsp[-1];
 			}
 break;
 case 69:
 	{
 			/* Too hard to properly maintain cclsorted. */
 			cclsorted = false;
-			yyval = yystack.l_mark[-1];
+			yyval = yyvsp[-1];
 			}
 break;
 case 70:
@@ -1685,26 +1650,26 @@ case 94:
 break;
 case 95:
 	{
-			if ( yystack.l_mark[0] == nlch )
+			if ( yyvsp[0] == nlch )
 				rule_has_nl[num_rules] = true;
 
 			++rulelen;
 
-            if (sf_case_ins() && has_case(yystack.l_mark[0]))
-                yyval = mkor (mkstate(yystack.l_mark[0]), mkstate(reverse_case(yystack.l_mark[0])));
+            if (sf_case_ins() && has_case(yyvsp[0]))
+                yyval = mkor (mkstate(yyvsp[0]), mkstate(reverse_case(yyvsp[0])));
             else
-                yyval = mkstate (yystack.l_mark[0]);
+                yyval = mkstate (yyvsp[0]);
 
-			yyval = link_machines( yystack.l_mark[-1], yyval);
+			yyval = link_machines( yyvsp[-1], yyval);
 			}
 break;
 case 96:
 	{ yyval = mkstate( SYM_EPSILON ); }
 break;
     }
-    yystack.s_mark -= yym;
-    yystate = *yystack.s_mark;
-    yystack.l_mark -= yym;
+    yyssp -= yym;
+    yystate = *yyssp;
+    yyvsp -= yym;
     yym = yylhs[yyn];
     if (yystate == 0 && yym == 0)
     {
@@ -1714,11 +1679,11 @@ break;
  state %d\n", YYPREFIX, YYFINAL);
 #endif
         yystate = YYFINAL;
-        *++yystack.s_mark = YYFINAL;
-        *++yystack.l_mark = yyval;
+        *++yyssp = YYFINAL;
+        *++yyvsp = yyval;
         if (yychar < 0)
         {
-            if ((yychar = YYLEX) < 0) yychar = 0;
+            if ((yychar = yylex()) < 0) yychar = 0;
 #if YYDEBUG
             if (yydebug)
             {
@@ -1741,24 +1706,27 @@ break;
 #if YYDEBUG
     if (yydebug)
         printf("%sdebug: after reduction, shifting from state %d \
-to state %d\n", YYPREFIX, *yystack.s_mark, yystate);
+to state %d\n", YYPREFIX, *yyssp, yystate);
 #endif
-    if (yystack.s_mark >= yystack.s_last && yygrowstack(&yystack))
+    if (yyssp >= yysslim && yygrowstack(&yyss, &yyssp,
+        &yysslim, &yyvs, &yyvsp, &yystacksize))
     {
         goto yyoverflow;
     }
-    *++yystack.s_mark = (short) yystate;
-    *++yystack.l_mark = yyval;
+    *++yyssp = (short) yystate;
+    *++yyvsp = yyval;
     goto yyloop;
 
 yyoverflow:
     yyerror("yacc stack overflow");
 
 yyabort:
-    yyfreestack(&yystack);
+	 free(yyss);
+	 free(yyvs);
     return (1);
 
 yyaccept:
-    yyfreestack(&yystack);
+	 free(yyss);
+	 free(yyvs);
     return (0);
 }

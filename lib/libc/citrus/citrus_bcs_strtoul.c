@@ -1,4 +1,4 @@
-/* $NetBSD: citrus_bcs_strtoul.c,v 1.5 2013/04/26 21:20:48 joerg Exp $ */
+/* $NetBSD: citrus_bcs_strtoul.c,v 1.3 2009/01/11 02:46:24 christos Exp $ */
 
 /*-
  * Copyright (c) 2005 The DragonFly Project.  All rights reserved.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: citrus_bcs_strtoul.c,v 1.5 2013/04/26 21:20:48 joerg Exp $");
+__RCSID("$NetBSD: citrus_bcs_strtoul.c,v 1.3 2009/01/11 02:46:24 christos Exp $");
 #endif /* not lint */
 
 #include <assert.h>
@@ -44,8 +44,6 @@ __RCSID("$NetBSD: citrus_bcs_strtoul.c,v 1.5 2013/04/26 21:20:48 joerg Exp $");
 
 #include "citrus_namespace.h"
 #include "citrus_bcs.h"
-
-#define	BCS_ONLY
 
 #define	_FUNCNAME	_bcs_strtoul
 #define	__UINT		unsigned long int

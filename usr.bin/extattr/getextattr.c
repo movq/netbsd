@@ -1,4 +1,4 @@
-/*	$NetBSD: getextattr.c,v 1.10 2012/06/17 08:09:29 manu Exp $	*/
+/*	$NetBSD: getextattr.c,v 1.9.4.1 2012/06/24 16:35:30 jdc Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 Networks Associates Technology, Inc.

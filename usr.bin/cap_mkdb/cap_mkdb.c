@@ -1,4 +1,4 @@
-/*	$NetBSD: cap_mkdb.c,v 1.29 2013/03/26 20:58:35 christos Exp $	*/
+/*	$NetBSD: cap_mkdb.c,v 1.27.4.1 2013/03/31 20:39:38 riz Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -40,7 +40,7 @@ __COPYRIGHT("@(#) Copyright (c) 1992, 1993\
 #if 0
 static char sccsid[] = "@(#)cap_mkdb.c	8.2 (Berkeley) 4/27/95";
 #endif
-__RCSID("$NetBSD: cap_mkdb.c,v 1.29 2013/03/26 20:58:35 christos Exp $");
+__RCSID("$NetBSD: cap_mkdb.c,v 1.27.4.1 2013/03/31 20:39:38 riz Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>

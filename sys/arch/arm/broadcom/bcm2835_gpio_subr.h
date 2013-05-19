@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_gpio_subr.h,v 1.1 2013/01/05 19:55:18 jakllsch Exp $	*/
+/*	$NetBSD: bcm2835_gpio_subr.h,v 1.1.4.2 2013/02/13 01:36:14 riz Exp $	*/
 
 /*
  * Copyright (c) 2013 Jonathan A. Kollasch

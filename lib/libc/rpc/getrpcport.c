@@ -1,4 +1,4 @@
-/*	$NetBSD: getrpcport.c,v 1.18 2013/03/11 20:19:29 tron Exp $	*/
+/*	$NetBSD: getrpcport.c,v 1.16.66.1 2013/03/14 22:03:15 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -37,7 +37,7 @@
 static char *sccsid = "@(#)getrpcport.c 1.3 87/08/11 SMI";
 static char *sccsid = "@(#)getrpcport.c	2.1 88/07/29 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: getrpcport.c,v 1.18 2013/03/11 20:19:29 tron Exp $");
+__RCSID("$NetBSD: getrpcport.c,v 1.16.66.1 2013/03/14 22:03:15 riz Exp $");
 #endif
 #endif
 
@@ -63,7 +63,9 @@ __weak_alias(getrpcport,_getrpcport)
 #endif
 
 int
-getrpcport(char *host, int prognum, int versnum, int proto)
+getrpcport(host, prognum, versnum, proto)
+	char *host;
+	int prognum, versnum, proto;
 {
 	struct sockaddr_in addr;
 	struct hostent *hp;

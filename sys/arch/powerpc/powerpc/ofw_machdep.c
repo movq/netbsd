@@ -1,4 +1,4 @@
-/*	$NetBSD: ofw_machdep.c,v 1.23 2013/05/12 13:42:39 macallan Exp $	*/
+/*	$NetBSD: ofw_machdep.c,v 1.19 2012/02/01 09:54:03 matt Exp $	*/
 
 /*
  * Copyright (C) 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofw_machdep.c,v 1.23 2013/05/12 13:42:39 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofw_machdep.c,v 1.19 2012/02/01 09:54:03 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -50,12 +50,6 @@ __KERNEL_RCSID(0, "$NetBSD: ofw_machdep.c,v 1.23 2013/05/12 13:42:39 macallan Ex
 #include <machine/powerpc.h>
 #include <machine/autoconf.h>
 
-#ifdef DEBUG
-#define DPRINTF aprint_error
-#else
-#define DPRINTF while(0) printf
-#endif
-
 #define	OFMEM_REGIONS	32
 static struct mem_region OFmem[OFMEM_REGIONS + 1], OFavail[OFMEM_REGIONS + 3];
 
@@ -69,134 +63,74 @@ static struct mem_region OFmem[OFMEM_REGIONS + 1], OFavail[OFMEM_REGIONS + 3];
 void
 mem_regions(struct mem_region **memp, struct mem_region **availp)
 {
-	const char *macrisc[] = {"MacRISC", "MacRISC2", "MacRISC4", NULL};
-	int hroot, hmem, i, cnt, regcnt, acells, scells;
-	int numregs;
-	uint32_t regs[OFMEM_REGIONS * 4]; /* 2 values + 2 for 64bit */
-
-	DPRINTF("calling mem_regions\n");
-	/* determine acell size */
-	if ((hroot = OF_finddevice("/")) == -1)
-		goto error;
-	cnt = OF_getprop(hroot, "#address-cells", &acells, sizeof(int));
-	if (cnt <= 0)
-		acells = 1;
-
-	/* determine scell size */
-	cnt = OF_getprop(hroot, "#size-cells", &scells, sizeof(int));
-	if (cnt <= 0)
-		scells = 1;
-
-	/* Get memory */
-	memset(regs, 0, sizeof(regs));
-	if ((hmem = OF_finddevice("/memory")) == -1)
-		goto error;
-	regcnt = OF_getprop(hmem, "reg", regs,
-	    sizeof(regs[0]) * OFMEM_REGIONS * 4);
-	if (regcnt <= 0)
-		goto error;
-
-	/* how many mem regions did we get? */
-	numregs = regcnt / (sizeof(uint32_t) * (acells + scells));
-	DPRINTF("regcnt=%d num=%d acell=%d scell=%d\n",
-	    regcnt, numregs, acells, scells);
-
-	/* move the data into OFmem */
-	memset(OFmem, 0, sizeof(OFmem));
-	for (i = 0, cnt = 0; i < numregs; i++) {
-		uint64_t addr, size;
-
-		if (acells > 1)
-			memcpy(&addr, &regs[i * (acells + scells)],
-			    sizeof(int32_t) * acells);
-		else
-			addr = regs[i * (acells + scells)];
-
-		if (scells > 1)
-			memcpy(&size, &regs[i * (acells + scells) + acells],
-			    sizeof(int32_t) * scells);
-		else
-			size = regs[i * (acells + scells) + acells];
-
-		/* skip entry of 0 size */
-		if (size == 0)
-			continue;
-#ifndef _LP64
-		if (addr > 0xFFFFFFFF || size > 0xFFFFFFFF ||
-			(addr + size) > 0xFFFFFFFF) {
-			aprint_error("Base addr of %llx or size of %llx too"
-			    " large for 32 bit OS. Skipping.", addr, size);
-			continue;
-		}
-#endif
-		OFmem[cnt].start = addr;
-		OFmem[cnt].size = size;
-		aprint_normal("mem region %d start=%llx size=%llx\n",
-		    cnt, addr, size);
-		cnt++;
-	}
-
-	DPRINTF("available\n");
-
-	/* now do the same thing again, for the available counts */
-	memset(regs, 0, sizeof(regs));
-	regcnt = OF_getprop(hmem, "available", regs,
-	    sizeof(regs[0]) * OFMEM_REGIONS * 4);
-	if (regcnt <= 0)
-		goto error;
-
-	DPRINTF("%08x %08x %08x %08x\n", regs[0], regs[1], regs[2], regs[3]);
+	int phandle, i, cnt, regcnt;
+	struct mem_region_avail {
+		paddr_t start;
+		paddr_t size;
+	} OFavail_G5[OFMEM_REGIONS + 3] __attribute((unused));
 
 	/*
-	 * according to comments in FreeBSD all Apple OF has 32bit values in
-	 * "available", no matter what the cell sizes are
+	 * Get memory.
 	 */
-	if (of_compatible(hroot, macrisc) != -1) {
-		DPRINTF("this appears to be a mac...\n");
-		acells = 1;
-		scells = 1;
-	}
-		
-	/* how many mem regions did we get? */
-	numregs = regcnt / (sizeof(uint32_t) * (acells + scells));
-	DPRINTF("regcnt=%d num=%d acell=%d scell=%d\n",
-	    regcnt, numregs, acells, scells);
+	if ((phandle = OF_finddevice("/memory")) == -1)
+		goto error;
 
-	DPRINTF("to OF_avail\n");
+	memset(OFmem, 0, sizeof OFmem);
+	regcnt = OF_getprop(phandle, "reg",
+		OFmem, sizeof OFmem[0] * OFMEM_REGIONS);
+	if (regcnt <= 0)
+		goto error;
 
-	/* move the data into OFavail */
-	memset(OFavail, 0, sizeof(OFavail));
-	for (i = 0, cnt = 0; i < numregs; i++) {
-		uint64_t addr, size;
+	/* Remove zero sized entry in the returned data. */
+	regcnt /= sizeof OFmem[0];
+	for (i = 0; i < regcnt; )
+		if (OFmem[i].size == 0) {
+			memmove(&OFmem[i], &OFmem[i + 1],
+				(regcnt - i) * sizeof OFmem[0]);
+			regcnt--;
+		} else
+			i++;
 
-		DPRINTF("%d\n", i);
-		if (acells > 1)
-			memcpy(&addr, &regs[i * (acells + scells)],
-			    sizeof(int32_t) * acells);
-		else
-			addr = regs[i * (acells + scells)];
+#if defined (PMAC_G5)
+	/* XXXSL: the G5 implementation of OFW is defines the /memory reg/available
+	 * properties differently. Try to fix it up here with minimal damage to the
+	 * rest of the code
+ 	 */
+	{
+		int count;
+		memset(OFavail_G5, 0, sizeof OFavail_G5);
+		count = OF_getprop(phandle, "available",
+			OFavail_G5, sizeof OFavail_G5[0] * OFMEM_REGIONS);
 
-		if (scells > 1)
-			memcpy(&size, &regs[i * (acells + scells) + acells],
-			    sizeof(int32_t) * scells);
-		else
-			size = regs[i * (acells + scells) + acells];
-		/* skip entry of 0 size */
-		if (size == 0)
-			continue;
-#ifndef _LP64
-		if (addr > 0xFFFFFFFF || size > 0xFFFFFFFF ||
-			(addr + size) > 0xFFFFFFFF) {
-			aprint_verbose("Base addr of %llx or size of %llx too"
-			    " large for 32 bit OS. Skipping.", addr, size);
-			continue;
+		if (count <= 0)
+			goto error;
+
+		count /= sizeof OFavail_G5[0];
+		cnt = count * sizeof(OFavail[0]);
+
+		for (i = 0; i < count; i++ )
+		{
+			OFavail[i].start_hi = 0;
+			OFavail[i].start = OFavail_G5[i].start;
+			OFavail[i].size = OFavail_G5[i].size;
 		}
+	}
+#else
+	memset(OFavail, 0, sizeof OFavail);
+	cnt = OF_getprop(phandle, "available",
+		OFavail, sizeof OFavail[0] * OFMEM_REGIONS);
 #endif
-		OFavail[cnt].start = addr;
-		OFavail[cnt].size = size;
-		aprint_normal("avail region %d start=%llx size=%llx\n",
-		    cnt, addr, size);
-		cnt++;
+	if (cnt <= 0)
+		goto error;
+
+	cnt /= sizeof OFavail[0];
+	for (i = 0; i < cnt; ) {
+		if (OFavail[i].size == 0) {
+			memmove(&OFavail[i], &OFavail[i + 1],
+				(cnt - i) * sizeof OFavail[0]);
+			cnt--;
+		} else
+			i++;
 	}
 
 	if (strncmp(model_name, "Pegasos", 7) == 0) {

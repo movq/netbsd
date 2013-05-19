@@ -1,4 +1,4 @@
-/*	$NetBSD: parse.c,v 1.17 2013/03/01 18:25:16 joerg Exp $	*/
+/*	$NetBSD: parse.c,v 1.16 2010/07/01 16:44:05 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2008 David Young.  All rights reserved.
@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: parse.c,v 1.17 2013/03/01 18:25:16 joerg Exp $");
+__RCSID("$NetBSD: parse.c,v 1.16 2010/07/01 16:44:05 dyoung Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -44,6 +44,7 @@ __RCSID("$NetBSD: parse.c,v 1.17 2013/03/01 18:25:16 joerg Exp $");
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <netatalk/at.h>
+#include <netiso/iso.h>
 
 #include "env.h"
 #include "parse.h"
@@ -300,6 +301,7 @@ paddr_match(const struct parser *p, const struct match *im, struct match *om,
 	union {
 		struct sockaddr sa;
 		struct sockaddr_at sat;
+		struct sockaddr_iso siso;
 		struct sockaddr_in sin;
 		struct sockaddr_storage ss;
 	} u;
@@ -408,6 +410,13 @@ paddr_match(const struct parser *p, const struct match *im, struct match *om,
 			u.sat.sat_addr.s_node = node;
 			sa = &u.sa;
 		}
+		break;
+	case AF_ISO:
+		u.siso.siso_len = sizeof(u.siso);
+		u.siso.siso_family = AF_ISO;
+		/* XXX iso_addr(3) matches ANYTHING! */
+		u.siso.siso_addr = *iso_addr(arg0);
+		sa = &u.sa;
 		break;
 	case AF_LINK:
 		if (parse_linkaddr(arg0, &u.ss) == -1)

@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_kmguard.c,v 1.10 2012/02/20 19:14:23 bouyer Exp $	*/
+/*	$NetBSD: uvm_kmguard.c,v 1.9.2.1 2012/02/22 18:56:49 riz Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_kmguard.c,v 1.10 2012/02/20 19:14:23 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_kmguard.c,v 1.9.2.1 2012/02/22 18:56:49 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

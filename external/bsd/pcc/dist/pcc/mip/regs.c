@@ -1,5 +1,5 @@
 /*	Id: regs.c,v 1.228 2012/03/22 18:51:41 plunky Exp 	*/	
-/*	$NetBSD: regs.c,v 1.1.1.5 2012/03/26 14:27:16 plunky Exp $	*/
+/*	$NetBSD: regs.c,v 1.1.1.4.4.1 2012/04/03 16:36:23 riz Exp $	*/
 /*
  * Copyright (c) 2005 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.

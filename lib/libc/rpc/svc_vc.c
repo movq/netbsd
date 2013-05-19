@@ -1,4 +1,4 @@
-/*	$NetBSD: svc_vc.c,v 1.30 2013/03/11 20:19:29 tron Exp $	*/
+/*	$NetBSD: svc_vc.c,v 1.24.6.1 2013/03/14 22:03:15 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -37,7 +37,7 @@
 static char *sccsid = "@(#)svc_tcp.c 1.21 87/08/11 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)svc_tcp.c	2.2 88/08/01 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: svc_vc.c,v 1.30 2013/03/11 20:19:29 tron Exp $");
+__RCSID("$NetBSD: svc_vc.c,v 1.24.6.1 2013/03/14 22:03:15 riz Exp $");
 #endif
 #endif
 
@@ -70,7 +70,6 @@ __RCSID("$NetBSD: svc_vc.c,v 1.30 2013/03/11 20:19:29 tron Exp $");
 
 #include <rpc/rpc.h>
 
-#include "svc_fdset.h"
 #include "rpc_internal.h"
 
 #ifdef __weak_alias
@@ -148,7 +147,7 @@ svc_vc_create(int fd, u_int sendsize, u_int recvsize)
 
 	r = mem_alloc(sizeof(*r));
 	if (r == NULL) {
-		warn("%s: out of memory", __func__);
+		warnx("svc_vc_create: out of memory");
 		return NULL;
 	}
 	r->sendsize = __rpc_get_t_size(si.si_af, si.si_proto, (int)sendsize);
@@ -156,7 +155,7 @@ svc_vc_create(int fd, u_int sendsize, u_int recvsize)
 	r->maxrec = __svc_maxrec;
 	xprt = mem_alloc(sizeof(SVCXPRT));
 	if (xprt == NULL) {
-		warn("%s: out of memory", __func__);
+		warnx("svc_vc_create: out of memory");
 		goto cleanup_svc_vc_create;
 	}
 	xprt->xp_tp = NULL;
@@ -170,7 +169,7 @@ svc_vc_create(int fd, u_int sendsize, u_int recvsize)
 
 	slen = sizeof (struct sockaddr_storage);
 	if (getsockname(fd, (struct sockaddr *)(void *)&sslocal, &slen) < 0) {
-		warn("%s: could not retrieve local addr", __func__);
+		warnx("svc_vc_create: could not retrieve local addr");
 		goto cleanup_svc_vc_create;
 	}
 
@@ -178,21 +177,19 @@ svc_vc_create(int fd, u_int sendsize, u_int recvsize)
 	 * We want to be able to check credentials on local sockets.
 	 */
 	if (sslocal.ss_family == AF_LOCAL)
-		if (setsockopt(fd, 0, LOCAL_CREDS, &one, (socklen_t)sizeof one)
-		    == -1)
+		if (setsockopt(fd, 0, LOCAL_CREDS, &one, sizeof one) < 0)
 			goto cleanup_svc_vc_create;
 
 	xprt->xp_ltaddr.maxlen = xprt->xp_ltaddr.len = sslocal.ss_len;
 	xprt->xp_ltaddr.buf = mem_alloc((size_t)sslocal.ss_len);
 	if (xprt->xp_ltaddr.buf == NULL) {
-		warn("%s: out of memory", __func__);
+		warnx("svc_vc_create: no mem for local addr");
 		goto cleanup_svc_vc_create;
 	}
 	memcpy(xprt->xp_ltaddr.buf, &sslocal, (size_t)sslocal.ss_len);
 
 	xprt->xp_rtaddr.maxlen = sizeof (struct sockaddr_storage);
-	if (!xprt_register(xprt))
-		goto cleanup_svc_vc_create;
+	xprt_register(xprt);
 	return xprt;
 cleanup_svc_vc_create:
 	if (xprt)
@@ -221,26 +218,26 @@ svc_fd_create(int fd, u_int sendsize, u_int recvsize)
 
 	slen = sizeof (struct sockaddr_storage);
 	if (getsockname(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
-		warn("%s: could not retrieve local addr", __func__);
+		warnx("svc_fd_create: could not retrieve local addr");
 		goto freedata;
 	}
 	ret->xp_ltaddr.maxlen = ret->xp_ltaddr.len = ss.ss_len;
 	ret->xp_ltaddr.buf = mem_alloc((size_t)ss.ss_len);
 	if (ret->xp_ltaddr.buf == NULL) {
-		warn("%s: out of memory", __func__);
+		warnx("svc_fd_create: no mem for local addr");
 		goto freedata;
 	}
 	memcpy(ret->xp_ltaddr.buf, &ss, (size_t)ss.ss_len);
 
 	slen = sizeof (struct sockaddr_storage);
 	if (getpeername(fd, (struct sockaddr *)(void *)&ss, &slen) < 0) {
-		warn("%s: could not retrieve remote addr", __func__);
+		warnx("svc_fd_create: could not retrieve remote addr");
 		goto freedata;
 	}
 	ret->xp_rtaddr.maxlen = ret->xp_rtaddr.len = ss.ss_len;
 	ret->xp_rtaddr.buf = mem_alloc((size_t)ss.ss_len);
 	if (ret->xp_rtaddr.buf == NULL) {
-		warn("%s: out of memory", __func__);
+		warnx("svc_fd_create: no mem for local addr");
 		goto freedata;
 	}
 	memcpy(ret->xp_rtaddr.buf, &ss, (size_t)ss.ss_len);
@@ -272,11 +269,11 @@ makefd_xprt(int fd, u_int sendsize, u_int recvsize)
 
 	xprt = mem_alloc(sizeof(SVCXPRT));
 	if (xprt == NULL)
-		goto outofmem;
+		goto out;
 	memset(xprt, 0, sizeof *xprt);
 	cd = mem_alloc(sizeof(struct cf_conn));
 	if (cd == NULL)
-		goto outofmem;
+		goto out;
 	cd->strm_stat = XPRT_IDLE;
 	xdrrec_create(&(cd->xdrs), sendsize, recvsize,
 	    (caddr_t)(void *)xprt, read_vc, write_vc);
@@ -287,15 +284,12 @@ makefd_xprt(int fd, u_int sendsize, u_int recvsize)
 	xprt->xp_fd = fd;
 	if (__rpc_fd2sockinfo(fd, &si) && __rpc_sockinfo2netid(&si, &netid))
 		if ((xprt->xp_netid = strdup(netid)) == NULL)
-			goto outofmem;
+			goto out;
 
-	if (!xprt_register(xprt))
-		goto out;
+	xprt_register(xprt);
 	return xprt;
-
-outofmem:
-	warn("svc_tcp: makefd_xprt");
 out:
+	warn("svc_tcp: makefd_xprt");
 	if (xprt)
 		mem_free(xprt, sizeof(SVCXPRT));
 	return NULL;
@@ -329,7 +323,7 @@ again:
 		 * running out.
 		 */
 		if (errno == EMFILE || errno == ENFILE) {
-			cleanfds = *get_fdset();
+			cleanfds = svc_fdset;
 			if (__svc_clean_idle(&cleanfds, 0, FALSE))
 				goto again;
 		}
@@ -524,7 +518,7 @@ read_vc(caddr_t xprtp, caddr_t buf, int len)
 	cfp = (struct cf_conn *)xprt->xp_p1;
 
 	if (cfp->nonblock) {
-		len = (int)read(sock, buf, (size_t)len);
+		len = read(sock, buf, (size_t)len);
 		if (len < 0) {
 			if (errno == EAGAIN)
 				len = 0;
@@ -553,7 +547,7 @@ read_vc(caddr_t xprtp, caddr_t buf, int len)
 		}
 	} while ((pollfd.revents & POLLIN) == 0);
 
-	if ((len = (int)read(sock, buf, (size_t)len)) > 0) {
+	if ((len = read(sock, buf, (size_t)len)) > 0) {
 		gettimeofday(&cfp->last_recv_time, NULL);
 		return len;
 	}
@@ -586,7 +580,7 @@ write_vc(caddr_t xprtp, caddr_t buf, int len)
 		gettimeofday(&tv0, NULL);
 
 	for (cnt = len; cnt > 0; cnt -= i, buf += i) {
-		if ((i = (int)write(xprt->xp_fd, buf, (size_t)cnt)) < 0) {
+		if ((i = write(xprt->xp_fd, buf, (size_t)cnt)) < 0) {
 			if (errno != EAGAIN || !cd->nonblock) {
 				cd->strm_stat = XPRT_DIED;
 				return -1;
@@ -727,7 +721,8 @@ svc_vc_ops(SVCXPRT *xprt)
 }
 
 static void
-svc_vc_rendezvous_ops(SVCXPRT *xprt)
+svc_vc_rendezvous_ops(xprt)
+	SVCXPRT *xprt;
 {
 	static struct xp_ops ops;
 	static struct xp_ops2 ops2;

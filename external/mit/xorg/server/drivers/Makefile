@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.63 2012/07/19 19:23:52 macallan Exp $
+#	$NetBSD: Makefile,v 1.60.4.2 2013/02/13 20:52:07 riz Exp $
 
 # xf86-input drivers
 
@@ -61,8 +61,7 @@ SUBDIR+= \
 	xf86-video-tseng \
 	xf86-video-vmware \
 	xf86-video-vesa \
-	xf86-video-wsfb \
-	xf86-video-xgi
+	xf86-video-wsfb
 #	xf86-video-rendition
 
 .if ${MACHINE_ARCH} == "i386"

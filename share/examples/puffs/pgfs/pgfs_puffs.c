@@ -1,4 +1,4 @@
-/*	$NetBSD: pgfs_puffs.c,v 1.4 2012/04/11 14:26:44 yamt Exp $	*/
+/*	$NetBSD: pgfs_puffs.c,v 1.1 2011/10/12 01:05:00 yamt Exp $	*/
 
 /*-
  * Copyright (c)2010,2011 YAMAMOTO Takashi,
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: pgfs_puffs.c,v 1.4 2012/04/11 14:26:44 yamt Exp $");
+__RCSID("$NetBSD: pgfs_puffs.c,v 1.1 2011/10/12 01:05:00 yamt Exp $");
 #endif /* not lint */
 
 #include <assert.h>
@@ -91,7 +91,7 @@ pgfs_node_getattr(struct puffs_usermount *pu, puffs_cookie_t opc,
 	DPRINTF("%llu\n", fileid);
 	lock = fileid_lock(fileid, puffs_cc_getcc(pu));
 retry:
-	xc = begin_readonly(pu, "getattr");
+	xc = begin_readonly(pu);
 	error = getattr(xc, fileid, va, GETATTR_ALL);
 	if (error != 0) {
 		goto got_error;
@@ -156,7 +156,7 @@ next:
 	if (offset == PGFS_DIRCOOKIE_DOTDOT) {
 		if (parent_fileid != PGFS_ROOT_FILEID) {
 			if (xc == NULL) {
-				xc = begin(pu, "readdir1");
+				xc = begin(pu);
 			}
 			error = lookupp(xc, parent_fileid, &child_fileid);
 			if (error != 0) {
@@ -177,7 +177,7 @@ next:
 	}
 	/* offset > PGFS_DIRCOOKIE_EOD; normal entries */
 	if (xc == NULL) {
-		xc = begin(pu, "readdir2");
+		xc = begin(pu);
 	}
 	if (!fetching) {
 		static struct cmd *c;
@@ -264,7 +264,7 @@ done:
 	}
 	if (xc == NULL) {
 retry:
-		xc = begin(pu, "readdir3");
+		xc = begin(pu);
 	}
 	error = update_atime(xc, parent_fileid);
 	if (error != 0) {
@@ -303,7 +303,7 @@ pgfs_node_lookup(struct puffs_usermount *pu, puffs_cookie_t opc,
 	DPRINTF("%llu %s\n", parent_fileid, name);
 	assert(strcmp(name, ".")); /* . is handled by framework */
 retry:
-	xc = begin_readonly(pu, "lookup");
+	xc = begin_readonly(pu);
 	error = getattr(xc, parent_fileid, &dva,
 	    GETATTR_TYPE|GETATTR_MODE|GETATTR_UID|GETATTR_GID);
 	if (error != 0) {
@@ -331,7 +331,7 @@ retry:
 
 		CREATECMD(c, "SELECT child_fileid "
 			"FROM dirent "
-			"WHERE parent_fileid = $1 AND name = $2",
+			"WHERE parent_fileid = $1 AND name = $2;",
 			INT8OID, TEXTOID);
 		error = sendcmd(xc, c, parent_fileid, name);
 		if (error != 0) {
@@ -394,7 +394,7 @@ pgfs_node_mkdir(struct puffs_usermount *pu, puffs_cookie_t opc,
 		return errno;
 	}
 retry:
-	xc = begin(pu, "mkdir");
+	xc = begin(pu);
 	error = mklinkfile(xc, parent_fileid, pcn->pcn_name, VDIR,
 	    va->va_mode, uid, gid, &new_fileid);
 	if (error == 0) {
@@ -436,7 +436,7 @@ pgfs_node_create(struct puffs_usermount *pu, puffs_cookie_t opc,
 		return errno;
 	}
 retry:
-	xc = begin(pu, "create");
+	xc = begin(pu);
 	error = mklinkfile_lo(xc, parent_fileid, pcn->pcn_name, VREG,
 	    va->va_mode,
 	    uid, gid, &new_fileid, NULL);
@@ -477,7 +477,7 @@ pgfs_node_write(struct puffs_usermount *pu, puffs_cookie_t opc,
 	}
 	lock = fileid_lock(fileid, puffs_cc_getcc(pu));
 retry:
-	xc = begin(pu, "write");
+	xc = begin(pu);
 	error = update_mctime(xc, fileid);
 	if (error != 0) {
 		goto got_error;
@@ -546,7 +546,7 @@ pgfs_node_read(struct puffs_usermount *pu, puffs_cookie_t opc,
 	DPRINTF("%llu off %" PRIu64 " sz %zu\n",
 	    fileid, (uint64_t)offset, *resid);
 retry:
-	xc = begin(pu, "read");
+	xc = begin(pu);
 	/*
 	 * try to update atime first as it's prune to conflict with other
 	 * transactions.  eg. read-ahead requests can conflict each other.
@@ -597,7 +597,7 @@ pgfs_node_link(struct puffs_usermount *pu, puffs_cookie_t dir_opc,
 
 	DPRINTF("%llu %llu %s\n", dir_fileid, targ_fileid, pcn->pcn_name);
 retry:
-	xc = begin(pu, "link");
+	xc = begin(pu);
 	error = getattr(xc, targ_fileid, &va, GETATTR_TYPE);
 	if (error != 0) {
 		goto got_error;
@@ -638,7 +638,7 @@ pgfs_node_remove(struct puffs_usermount *pu, puffs_cookie_t opc,
 	int error;
 
 retry:
-	xc = begin(pu, "remove");
+	xc = begin(pu);
 	error = getattr(xc, targ_fileid, &va, GETATTR_TYPE);
 	if (error != 0) {
 		goto got_error;
@@ -655,7 +655,6 @@ retry:
 	if (error != 0) {
 		goto got_error;
 	}
-	puffs_setback(puffs_cc_getcc(pu), PUFFS_SETBACK_INACT_N2);
 	return 0;
 got_error:
 	rollback(xc);
@@ -677,7 +676,7 @@ pgfs_node_rmdir(struct puffs_usermount *pu, puffs_cookie_t opc,
 	int error;
 
 retry:
-	xc = begin(pu, "rmdir");
+	xc = begin(pu);
 	error = getattr(xc, targ_fileid, &va, GETATTR_TYPE);
 	if (error != 0) {
 		goto got_error;
@@ -705,7 +704,6 @@ retry:
 	if (error != 0) {
 		goto got_error;
 	}
-	puffs_setback(puffs_cc_getcc(pu), PUFFS_SETBACK_INACT_N2);
 	return 0;
 got_error:
 	rollback(xc);
@@ -720,6 +718,7 @@ pgfs_node_inactive(struct puffs_usermount *pu, puffs_cookie_t opc)
 {
 	struct Xconn *xc;
 	fileid_t fileid = cookie_to_fileid(opc);
+	struct vattr va;
 	int error;
 
 	/*
@@ -732,10 +731,18 @@ pgfs_node_inactive(struct puffs_usermount *pu, puffs_cookie_t opc)
 
 	DPRINTF("%llu\n", fileid);
 retry:
-	xc = begin(pu, "inactive");
-	error = cleanupfile(xc, fileid);
+	xc = begin(pu);
+	error = getattr(xc, fileid, &va, GETATTR_NLINK|GETATTR_TYPE);
 	if (error != 0) {
+		DPRINTF("%llu GETATTR fail\n", fileid);
 		goto got_error;
+	}
+	if (va.va_nlink == 0) {
+		DPRINTF("%llu nlink=0\n", fileid);
+		error = cleanupfile(xc, fileid, &va);
+		if (error != 0) {
+			goto got_error;
+		}
 	}
 	error = commit(xc);
 	if (error != 0) {
@@ -780,7 +787,7 @@ pgfs_node_setattr(struct puffs_usermount *pu, puffs_cookie_t opc,
 	}
 	lock = fileid_lock(fileid, puffs_cc_getcc(pu));
 retry:
-	xc = begin(pu, "setattr");
+	xc = begin(pu);
 	error = getattr(xc, fileid, &ova, attrs);
 	if (error != 0) {
 		goto got_error;
@@ -963,7 +970,7 @@ pgfs_node_rename(struct puffs_usermount *pu, puffs_cookie_t src_dir,
 	DPRINTF("%llu %llu %llu %llu\n", fileid_src_dir, fileid_src,
 	    fileid_targ_dir, fileid_targ);
 retry:
-	xc = begin(pu, "rename");
+	xc = begin(pu);
 	error = getattr(xc, fileid_src, &va_src, GETATTR_TYPE);
 	if (error != 0) {
 		goto got_error;
@@ -1053,7 +1060,7 @@ pgfs_node_symlink(struct puffs_usermount *pu, puffs_cookie_t opc,
 		return errno;
 	}
 retry:
-	xc = begin(pu, "symlink");
+	xc = begin(pu);
 	error = mklinkfile_lo(xc, parent_fileid, pcn->pcn_name, VLNK,
 	    va->va_mode, uid, gid, &new_fileid, &loid);
 	if (error != 0) {
@@ -1097,7 +1104,7 @@ pgfs_node_readlink(struct puffs_usermount *pu, puffs_cookie_t opc,
 	int error;
 
 	DPRINTF("%llu\n", fileid);
-	xc = begin_readonly(pu, "readlink");
+	xc = begin_readonly(pu);
 	error = lo_open_by_fileid(xc, fileid, INV_READ, &fd);
 	if (error != 0) {
 		rollback(xc);
@@ -1128,7 +1135,7 @@ pgfs_node_access(struct puffs_usermount *pu, puffs_cookie_t opc,
 
 	DPRINTF("%llu\n", fileid);
 retry:
-	xc = begin_readonly(pu, "access");
+	xc = begin_readonly(pu);
 	error = getattr(xc, fileid, &va,
 	    GETATTR_TYPE|GETATTR_MODE|GETATTR_UID|GETATTR_GID);
 	if (error != 0) {
@@ -1173,7 +1180,7 @@ pgfs_fs_statvfs(struct puffs_usermount *pu, struct statvfs *sbp)
 	int error;
 
 retry:
-	xc = begin_readonly(pu, "statvfs");
+	xc = begin_readonly(pu);
 	/*
 	 * use an estimate which we can retrieve quickly, instead of
 	 * "SELECT count(*) from file".

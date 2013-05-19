@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.138 2012/10/27 17:18:10 chs Exp $	*/
+/*	$NetBSD: machdep.c,v 1.136 2011/07/28 04:06:09 uebayasi Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.138 2012/10/27 17:18:10 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.136 2011/07/28 04:06:09 uebayasi Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -113,6 +113,9 @@ void mcclock_poweroff(void);
 #endif
 
 struct sgimips_intrhand intrtab[NINTR];
+
+/* Our exported CPU info; we can have only one. */
+struct cpu_info cpu_info_store;
 
 /* Maps for VM objects. */
 struct vm_map *phys_map = NULL;
@@ -954,7 +957,7 @@ mips_machdep_find_l2cache(struct arcbios_component *comp, struct arcbios_treewal
 
 	switch (comp->Type) {
 	case COMPONENT_TYPE_SecondaryICache:
-		panic("%s: split L2 cache", device_xname(self));
+		panic("%s: split L2 cache", self->dv_xname);
 	case COMPONENT_TYPE_SecondaryDCache:
 	case COMPONENT_TYPE_SecondaryCache:
 		mci->mci_sdcache_size = COMPONENT_KEY_Cache_CacheSize(comp->Key);

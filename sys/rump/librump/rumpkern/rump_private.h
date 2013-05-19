@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_private.h,v 1.74 2013/03/10 16:51:31 pooka Exp $	*/
+/*	$NetBSD: rump_private.h,v 1.70 2011/03/21 16:41:09 pooka Exp $	*/
 
 /*
  * Copyright (c) 2007-2011 Antti Kantee.  All Rights Reserved.
@@ -61,12 +61,6 @@ enum rump_component_type {
 	RUMP_COMPONENT_VFS,
 	RUMP_COMPONENT_KERN,
 		RUMP_COMPONENT_KERN_VFS,
-	RUMP_COMPONENT_POSTINIT,
-
-	RUMP__FACTION_DEV,
-	RUMP__FACTION_VFS,
-	RUMP__FACTION_NET,
-
 	RUMP_COMPONENT_MAX,
 };
 struct rump_component {
@@ -109,7 +103,6 @@ extern bool rump_ttycomponent;
 struct lwp *	rump__lwproc_alloclwp(struct proc *);
 
 void	rump_cpus_bootstrap(int *);
-void	rump_biglock_init(void);
 void	rump_scheduler_init(int);
 void	rump_schedule(void);
 void	rump_unschedule(void);
@@ -138,10 +131,5 @@ void	rump_softint_run(struct cpu_info *);
 
 void	*rump_hypermalloc(size_t, int, bool, const char *);
 void	rump_hyperfree(void *, size_t);
-
-void	rump_xc_highpri(struct cpu_info *);
-
-void	rump_thread_init(void);
-void	rump_thread_allow(void);
 
 #endif /* _SYS_RUMP_PRIVATE_H_ */

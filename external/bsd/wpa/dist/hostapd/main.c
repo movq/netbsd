@@ -1,6 +1,6 @@
 /*
  * hostapd / main()
- * Copyright (c) 2002-2011, Jouni Malinen <j@w1.fi>
+ * Copyright (c) 2002-2010, Jouni Malinen <j@w1.fi>
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 as
@@ -19,7 +19,6 @@
 
 #include "utils/common.h"
 #include "utils/eloop.h"
-#include "crypto/random.h"
 #include "crypto/tls.h"
 #include "common/version.h"
 #include "drivers/driver.h"
@@ -36,16 +35,6 @@
 extern int wpa_debug_level;
 extern int wpa_debug_show_keys;
 extern int wpa_debug_timestamp;
-
-extern struct wpa_driver_ops *wpa_drivers[];
-
-
-struct hapd_global {
-	void **drv_priv;
-	size_t drv_count;
-};
-
-static struct hapd_global global;
 
 
 struct hapd_interfaces {
@@ -244,7 +233,6 @@ static int hostapd_driver_init(struct hostapd_iface *iface)
 	struct hostapd_data *hapd = iface->bss[0];
 	struct hostapd_bss_config *conf = hapd->conf;
 	u8 *b = conf->bssid;
-	struct wpa_driver_capa capa;
 
 	if (hapd->driver == NULL || hapd->driver->hapd_init == NULL) {
 		wpa_printf(MSG_ERROR, "No hostapd driver wrapper available");
@@ -256,24 +244,6 @@ static int hostapd_driver_init(struct hostapd_iface *iface)
 		b = NULL;
 
 	os_memset(&params, 0, sizeof(params));
-	for (i = 0; wpa_drivers[i]; i++) {
-		if (wpa_drivers[i] != hapd->driver)
-			continue;
-
-		if (global.drv_priv[i] == NULL &&
-		    wpa_drivers[i]->global_init) {
-			global.drv_priv[i] = wpa_drivers[i]->global_init();
-			if (global.drv_priv[i] == NULL) {
-				wpa_printf(MSG_ERROR, "Failed to initialize "
-					   "driver '%s'",
-					   wpa_drivers[i]->name);
-				return -1;
-			}
-		}
-
-		params.global_priv = global.drv_priv[i];
-		break;
-	}
 	params.bssid = b;
 	params.ifname = hapd->conf->iface;
 	params.ssid = (const u8 *) hapd->conf->ssid.ssid;
@@ -301,10 +271,6 @@ static int hostapd_driver_init(struct hostapd_iface *iface)
 		hapd->driver = NULL;
 		return -1;
 	}
-
-	if (hapd->driver->get_capa &&
-	    hapd->driver->get_capa(hapd->drv_priv, &capa) == 0)
-		iface->drv_flags = capa.flags;
 
 	return 0;
 }
@@ -397,13 +363,8 @@ static void handle_dump_state(int sig, void *signal_ctx)
 #endif /* CONFIG_NATIVE_WINDOWS */
 
 
-static int hostapd_global_init(struct hapd_interfaces *interfaces,
-			       const char *entropy_file)
+static int hostapd_global_init(struct hapd_interfaces *interfaces)
 {
-	int i;
-
-	os_memset(&global, 0, sizeof(global));
-
 	hostapd_logger_register_cb(hostapd_logger_cb);
 
 	if (eap_server_register_methods()) {
@@ -416,8 +377,6 @@ static int hostapd_global_init(struct hapd_interfaces *interfaces,
 		return -1;
 	}
 
-	random_init(entropy_file);
-
 #ifndef CONFIG_NATIVE_WINDOWS
 	eloop_register_signal(SIGHUP, handle_reload, interfaces);
 	eloop_register_signal(SIGUSR1, handle_dump_state, interfaces);
@@ -428,37 +387,15 @@ static int hostapd_global_init(struct hapd_interfaces *interfaces,
 	openlog("hostapd", 0, LOG_DAEMON);
 #endif /* CONFIG_NATIVE_WINDOWS */
 
-	for (i = 0; wpa_drivers[i]; i++)
-		global.drv_count++;
-	if (global.drv_count == 0) {
-		wpa_printf(MSG_ERROR, "No drivers enabled");
-		return -1;
-	}
-	global.drv_priv = os_zalloc(global.drv_count * sizeof(void *));
-	if (global.drv_priv == NULL)
-		return -1;
-
 	return 0;
 }
 
 
 static void hostapd_global_deinit(const char *pid_file)
 {
-	int i;
-
-	for (i = 0; wpa_drivers[i] && global.drv_priv; i++) {
-		if (!global.drv_priv[i])
-			continue;
-		wpa_drivers[i]->global_deinit(global.drv_priv[i]);
-	}
-	os_free(global.drv_priv);
-	global.drv_priv = NULL;
-
 #ifdef EAP_SERVER_TNC
 	tncs_global_deinit();
 #endif /* EAP_SERVER_TNC */
-
-	random_deinit();
 
 	eloop_destroy();
 
@@ -511,7 +448,7 @@ static void show_version(void)
 		"hostapd v" VERSION_STR "\n"
 		"User space daemon for IEEE 802.11 AP management,\n"
 		"IEEE 802.1X/WPA/WPA2/EAP/RADIUS Authenticator\n"
-		"Copyright (c) 2002-2012, Jouni Malinen <j@w1.fi> "
+		"Copyright (c) 2002-2010, Jouni Malinen <j@w1.fi> "
 		"and contributors\n");
 }
 
@@ -521,32 +458,19 @@ static void usage(void)
 	show_version();
 	fprintf(stderr,
 		"\n"
-		"usage: hostapd [-hdBKtv] [-P <PID file>] [-e <entropy file>] "
+		"usage: hostapd [-hdBKtv] [-P <PID file>] "
 		"<configuration file(s)>\n"
 		"\n"
 		"options:\n"
 		"   -h   show this usage\n"
 		"   -d   show more debug messages (-dd for even more)\n"
 		"   -B   run daemon in the background\n"
-		"   -e   entropy file\n"
 		"   -P   PID file\n"
 		"   -K   include key data in debug messages\n"
-#ifdef CONFIG_DEBUG_FILE
-		"   -f   log output to debug file instead of stdout\n"
-#endif /* CONFIG_DEBUG_FILE */
 		"   -t   include timestamps in some debug messages\n"
 		"   -v   show hostapd version\n");
 
 	exit(1);
-}
-
-
-static const char * hostapd_msg_ifname_cb(void *ctx)
-{
-	struct hostapd_data *hapd = ctx;
-	if (hapd && hapd->iconf && hapd->iconf->bss)
-		return hapd->iconf->bss->iface;
-	return NULL;
 }
 
 
@@ -557,14 +481,12 @@ int main(int argc, char *argv[])
 	size_t i;
 	int c, debug = 0, daemonize = 0;
 	char *pid_file = NULL;
-	const char *log_file = NULL;
-	const char *entropy_file = NULL;
 
 	if (os_program_init())
 		return -1;
 
 	for (;;) {
-		c = getopt(argc, argv, "Bde:f:hKP:tv");
+		c = getopt(argc, argv, "BdhKP:tv");
 		if (c < 0)
 			break;
 		switch (c) {
@@ -578,12 +500,6 @@ int main(int argc, char *argv[])
 			break;
 		case 'B':
 			daemonize++;
-			break;
-		case 'e':
-			entropy_file = optarg;
-			break;
-		case 'f':
-			log_file = optarg;
 			break;
 		case 'K':
 			wpa_debug_show_keys++;
@@ -609,20 +525,15 @@ int main(int argc, char *argv[])
 	if (optind == argc)
 		usage();
 
-	wpa_msg_register_ifname_cb(hostapd_msg_ifname_cb);
-
-	if (log_file)
-		wpa_debug_open_file(log_file);
-
 	interfaces.count = argc - optind;
-	interfaces.iface = os_zalloc(interfaces.count *
+	interfaces.iface = os_malloc(interfaces.count *
 				     sizeof(struct hostapd_iface *));
 	if (interfaces.iface == NULL) {
-		wpa_printf(MSG_ERROR, "malloc failed");
+		wpa_printf(MSG_ERROR, "malloc failed\n");
 		return -1;
 	}
 
-	if (hostapd_global_init(&interfaces, entropy_file))
+	if (hostapd_global_init(&interfaces))
 		return -1;
 
 	/* Initialize interfaces */
@@ -647,9 +558,6 @@ int main(int argc, char *argv[])
 
 	hostapd_global_deinit(pid_file);
 	os_free(pid_file);
-
-	if (log_file)
-		wpa_debug_close_file();
 
 	os_program_deinit();
 

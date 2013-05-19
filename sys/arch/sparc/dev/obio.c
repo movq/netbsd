@@ -1,4 +1,4 @@
-/*	$NetBSD: obio.c,v 1.74 2013/03/24 17:50:26 jdc Exp $	*/
+/*	$NetBSD: obio.c,v 1.72 2011/07/01 18:50:41 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 1997,1998 The NetBSD Foundation, Inc.
@@ -30,13 +30,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.74 2013/03/24 17:50:26 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.72 2011/07/01 18:50:41 dyoung Exp $");
 
 #include "locators.h"
-
-#ifdef _KERNEL_OPT
-#include "sbus.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,9 +47,7 @@ __KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.74 2013/03/24 17:50:26 jdc Exp $");
 #include <uvm/uvm_extern.h>
 
 #include <sys/bus.h>
-#if NSBUS > 0
 #include <sparc/dev/sbusvar.h>
-#endif
 #include <machine/autoconf.h>
 #include <machine/oldmon.h>
 #include <machine/cpu.h>
@@ -69,16 +63,15 @@ struct obio4_softc {
 };
 
 union obio_softc {
+	struct	device sc_dev;		/* base device */
 	struct	obio4_softc sc_obio;	/* sun4 obio */
-#if NSBUS > 0
 	struct	sbus_softc sc_sbus;	/* sun4m obio is another sbus slot */
-#endif
 };
 
 
 /* autoconfiguration driver */
-static	int obiomatch(device_t, cfdata_t, void *);
-static	void obioattach(device_t, device_t, void *);
+static	int obiomatch(device_t, struct cfdata *, void *);
+static	void obioattach(device_t, struct device *, void *);
 
 CFATTACH_DECL_NEW(obio, sizeof(union obio_softc),
     obiomatch, obioattach, NULL, NULL);
@@ -105,7 +98,6 @@ static	int _obio_bus_map(bus_space_tag_t, bus_addr_t, bus_size_t, int,
 static struct sparc_bus_space_tag obio_space_tag;
 #endif
 
-#if NSBUS > 0
 /*
  * Translate obio `interrupts' property value to processor IPL (see sbus.c)
  * Apparently, the `interrupts' property on obio devices is just
@@ -114,7 +106,6 @@ static struct sparc_bus_space_tag obio_space_tag;
 static int intr_obio2ipl[] = {
 	0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15
 };
-#endif
 
 static int
 obiomatch(device_t parent, struct cfdata *cf, void *aux)
@@ -138,8 +129,8 @@ obioattach(device_t parent, device_t self, void *aux)
 
 	if (CPU_ISSUN4) {
 #if defined(SUN4)
-		union obio_softc *usc = device_private(self);
-		struct obio4_softc *sc = &usc->sc_obio;
+		struct obio4_softc *sc = 
+		    &((union obio_softc *)device_private(self))->sc_obio;
 		struct obio4_busattachargs oa;
 		const char *const *cpp;
 		static const char *const special4[] = {
@@ -173,13 +164,12 @@ obioattach(device_t parent, device_t self, void *aux)
 #endif
 		return;
 	} else if (CPU_ISSUN4M) {
-#if NSBUS > 0
 		/*
 		 * Attach the on-board I/O bus at on a sun4m.
 		 * In this case we treat the obio bus as another sbus slot.
 		 */
-		union obio_softc *usc = device_private(self);
-		struct sbus_softc *sc = &usc->sc_sbus;
+		struct sbus_softc *sc =
+		    &((union obio_softc *)device_private(self))->sc_sbus;
 
 		static const char *const special4m[] = {
 			/* find these first */
@@ -200,7 +190,6 @@ obioattach(device_t parent, device_t self, void *aux)
 		sc->sc_intr2ipl = intr_obio2ipl;
 
 		sbus_attach_common(sc, "obio", ma->ma_node, special4m);
-#endif
 	} else {
 		printf("obio on this machine?\n");
 	}

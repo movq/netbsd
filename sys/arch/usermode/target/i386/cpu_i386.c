@@ -1,4 +1,4 @@
-/* $NetBSD: cpu_i386.c,v 1.4 2012/03/03 21:15:16 reinoud Exp $ */
+/* $NetBSD: cpu_i386.c,v 1.3.2.1 2012/03/07 23:44:23 riz Exp $ */
 
 /*-
  * Copyright (c) 2011 Reinoud Zandijk <reinoud@netbsd.org>
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu_i386.c,v 1.4 2012/03/03 21:15:16 reinoud Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu_i386.c,v 1.3.2.1 2012/03/07 23:44:23 riz Exp $");
 
 #include <sys/types.h>
 #include <sys/systm.h>

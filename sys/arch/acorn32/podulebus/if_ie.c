@@ -1,4 +1,4 @@
-/* $NetBSD: if_ie.c,v 1.32 2012/10/27 17:17:23 chs Exp $ */
+/* $NetBSD: if_ie.c,v 1.30 2011/06/03 07:35:37 matt Exp $ */
 
 /*
  * Copyright (c) 1995 Melvin Tang-Richardson.
@@ -53,7 +53,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ie.c,v 1.32 2012/10/27 17:17:23 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ie.c,v 1.30 2011/06/03 07:35:37 matt Exp $");
 
 #define IGNORE_ETHER1_IDROM_CHECKSUM
 
@@ -125,7 +125,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ie.c,v 1.32 2012/10/27 17:17:23 chs Exp $");
 /* Some data structres local to this file */
 
 struct ie_softc {
-	device_t	sc_dev;
+	struct device	sc_dev;
 	int 		sc_podule_number;
 	podule_t	*sc_podule;
 	irqhandler_t 	sc_ih;
@@ -198,7 +198,7 @@ static void start_receiver(struct ie_softc *);
  * Our cfattach structure for the autoconfig system to chew on
  */
 
-CFATTACH_DECL_NEW(ie, sizeof(struct ie_softc),
+CFATTACH_DECL(ie, sizeof(struct ie_softc),
     ieprobe, ieattach, NULL, NULL);
 
 /* Let's go! */
@@ -305,22 +305,20 @@ ieprobe(device_t parent, cfdata_t cf, void *aux)
  * Attach our driver to the interfaces it uses
  */
   
-void
-ieattach(device_t parent, device_t self, void *aux)
+void ieattach ( device_t parent, device_t self, void *aux )
 {
 	struct ie_softc *sc = device_private(self);
 	struct podule_attach_args *pa = aux;
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	int i;
 	char idrom[32];
-	uint8_t hwaddr[ETHER_ADDR_LEN];
+	u_int8_t hwaddr[ETHER_ADDR_LEN];
 
 	/* Check a few things about the attach args */
 
 	if (pa->pa_podule_number == -1)
 		panic("Podule has disappeared !");
 
-	sc->sc_dev = self;
 	sc->sc_podule_number = pa->pa_podule_number;
 	sc->sc_podule = pa->pa_podule;
 	podules[sc->sc_podule_number].attached = 1;
@@ -449,7 +447,7 @@ ieattach(device_t parent, device_t self, void *aux)
 
 	/* Fill in my application form to attach to the inet system */
 
-	memcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
+	memcpy(ifp->if_xname, device_xname(&sc->sc_dev), IFNAMSIZ);
 	ifp->if_softc = sc;
 	ifp->if_start = iestart;
 	ifp->if_ioctl = ieioctl;
@@ -477,7 +475,7 @@ ieattach(device_t parent, device_t self, void *aux)
 	if (irq_claim(sc->sc_podule->interrupt, &sc->sc_ih)) {
 		sc->sc_irqmode = 0;
 		printf(" POLLED");
-		panic("%s: Cannot install IRQ handler", device_xname(sc->sc_dev));
+		panic("%s: Cannot install IRQ handler", sc->sc_dev.dv_xname);
 	} else {
 		sc->sc_irqmode = 1;
 		printf(" IRQ");
@@ -684,7 +682,7 @@ iewatchdog(struct ifnet *ifp)
 {
 	struct ie_softc *sc = ifp->if_softc;
 
-	log(LOG_ERR, "%s: device timeout\n", device_xname(sc->sc_dev));
+	log(LOG_ERR, "%s: device timeout\n", device_xname(&sc->sc_dev));
 	++ifp->if_oerrors;
 	iereset(sc);
 }
@@ -872,13 +870,13 @@ ieinit(struct ie_softc *sc)
     if ( command_and_wait(sc, IE_CU_START, &scb, &cmd, ptr, sizeof cmd,
 	IE_STAT_COMPL) )
     {
-	printf ( "%s: command failed: timeout\n", device_xname(sc->sc_dev));
+	printf ( "%s: command failed: timeout\n", device_xname(&sc->sc_dev));
 	return 0;
     }
 
     if ( !(cmd.com.ie_cmd_status & IE_STAT_OK) )
     {
-	printf ( "%s: command failed: !IE_STAT_OK\n", device_xname(sc->sc_dev));
+	printf ( "%s: command failed: !IE_STAT_OK\n", device_xname(&sc->sc_dev));
 	return 0;
     }
 
@@ -894,13 +892,13 @@ ieinit(struct ie_softc *sc)
     if ( command_and_wait(sc, IE_CU_START, &scb, &iasetup_cmd, ptr, sizeof cmd,
 	IE_STAT_COMPL) )
     {
-	printf ( "%s: iasetup failed : timeout\n", device_xname(sc->sc_dev));
+	printf ( "%s: iasetup failed : timeout\n", device_xname(&sc->sc_dev));
 	return 0;
     }
 
     if ( !(cmd.com.ie_cmd_status & IE_STAT_OK) )
     {
-	printf ( "%s: iasetup failed : !IE_STAT_OK\n", device_xname(sc->sc_dev));
+	printf ( "%s: iasetup failed : !IE_STAT_OK\n", device_xname(&sc->sc_dev));
 	return 0;
     }
 

@@ -1,4 +1,4 @@
-/* $NetBSD: softfloat.c,v 1.3 2013/01/10 08:16:11 matt Exp $ */
+/* $NetBSD: softfloat.c,v 1.1 2002/05/21 23:51:07 bjh21 Exp $ */
 
 /*
  * This version hacked for use with gcc -msoft-float by bjh21.
@@ -53,7 +53,7 @@ this code that are retained.
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: softfloat.c,v 1.3 2013/01/10 08:16:11 matt Exp $");
+__RCSID("$NetBSD: softfloat.c,v 1.1 2002/05/21 23:51:07 bjh21 Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #ifdef SOFTFLOAT_FOR_GCC
@@ -79,14 +79,8 @@ __RCSID("$NetBSD: softfloat.c,v 1.3 2013/01/10 08:16:11 matt Exp $");
 Floating-point rounding mode and exception flags.
 -------------------------------------------------------------------------------
 */
-#ifndef set_float_rounding_mode
 fp_rnd float_rounding_mode = float_round_nearest_even;
 fp_except float_exception_flags = 0;
-#endif
-#ifndef set_float_exception_inexact_flag
-#define set_float_exception_inexact_flag() \
-	((void)(float_exception_flags |= float_flag_inexact))
-#endif
 
 /*
 -------------------------------------------------------------------------------
@@ -243,14 +237,14 @@ static float32 roundAndPackFloat32( flag zSign, int16 zExp, bits32 zSig )
             isTiny =
                    ( float_detect_tininess == float_tininess_before_rounding )
                 || ( zExp < -1 )
-                || ( zSig + roundIncrement < (uint32)0x80000000 );
+                || ( zSig + roundIncrement < 0x80000000 );
             shift32RightJamming( zSig, - zExp, &zSig );
             zExp = 0;
             roundBits = zSig & 0x7F;
             if ( isTiny && roundBits ) float_raise( float_flag_underflow );
         }
     }
-    if ( roundBits ) set_float_exception_inexact_flag();
+    if ( roundBits ) float_exception_flags |= float_flag_inexact;
     zSig = ( zSig + roundIncrement )>>7;
     zSig &= ~ ( ( ( roundBits ^ 0x40 ) == 0 ) & roundNearestEven );
     if ( zSig == 0 ) zExp = 0;
@@ -287,7 +281,7 @@ floating-point value `a'.
 INLINE bits32 extractFloat64Frac1( float64 a )
 {
 
-    return (bits32)(FLOAT64_DEMANGLE(a) & LIT64(0x00000000FFFFFFFF));
+    return FLOAT64_DEMANGLE(a) & LIT64( 0x00000000FFFFFFFF );
 
 }
 
@@ -300,7 +294,7 @@ floating-point value `a'.
 INLINE bits32 extractFloat64Frac0( float64 a )
 {
 
-    return (bits32)((FLOAT64_DEMANGLE(a) >> 32) & 0x000FFFFF);
+    return ( FLOAT64_DEMANGLE(a)>>32 ) & 0x000FFFFF;
 
 }
 
@@ -312,7 +306,7 @@ Returns the exponent bits of the double-precision floating-point value `a'.
 INLINE int16 extractFloat64Exp( float64 a )
 {
 
-    return (int16)((FLOAT64_DEMANGLE(a) >> 52) & 0x7FF);
+    return ( FLOAT64_DEMANGLE(a)>>52 ) & 0x7FF;
 
 }
 
@@ -324,7 +318,7 @@ Returns the sign bit of the double-precision floating-point value `a'.
 INLINE flag extractFloat64Sign( float64 a )
 {
 
-    return (flag)(FLOAT64_DEMANGLE(a) >> 63);
+    return FLOAT64_DEMANGLE(a)>>63;
 
 }
 
@@ -478,7 +472,7 @@ static float64
             }
         }
     }
-    if ( zSig2 ) set_float_exception_inexact_flag();
+    if ( zSig2 ) float_exception_flags |= float_flag_inexact;
     if ( increment ) {
         add64( zSig0, zSig1, 0, 1, &zSig0, &zSig1 );
         zSig1 &= ~ ( ( zSig2 + zSig2 == 0 ) & roundNearestEven );
@@ -541,7 +535,7 @@ float32 int32_to_float32( int32 a )
     if ( a == 0 ) return 0;
     if ( a == (sbits32) 0x80000000 ) return packFloat32( 1, 0x9E, 0 );
     zSign = ( a < 0 );
-    return normalizeRoundAndPackFloat32(zSign, 0x9C, (uint32)(zSign ? - a : a));
+    return normalizeRoundAndPackFloat32( zSign, 0x9C, zSign ? - a : a );
 
 }
 
@@ -621,7 +615,7 @@ int32 float32_to_int32( float32 a )
             aSigExtra = aSig<<( shiftCount & 31 );
             z = aSig>>( - shiftCount );
         }
-        if ( aSigExtra ) set_float_exception_inexact_flag();
+        if ( aSigExtra ) float_exception_flags |= float_flag_inexact;
         roundingMode = float_rounding_mode;
         if ( roundingMode == float_round_nearest_even ) {
             if ( (sbits32) aSigExtra < 0 ) {
@@ -676,13 +670,13 @@ int32 float32_to_int32_round_to_zero( float32 a )
         return (sbits32) 0x80000000;
     }
     else if ( aExp <= 0x7E ) {
-        if ( aExp | aSig ) set_float_exception_inexact_flag();
+        if ( aExp | aSig ) float_exception_flags |= float_flag_inexact;
         return 0;
     }
     aSig = ( aSig | 0x00800000 )<<8;
     z = aSig>>( - shiftCount );
     if ( (bits32) ( aSig<<( shiftCount & 31 ) ) ) {
-        set_float_exception_inexact_flag();
+        float_exception_flags |= float_flag_inexact;
     }
     if ( aSign ) z = - z;
     return z;
@@ -746,7 +740,7 @@ float32 float32_round_to_int( float32 a )
     }
     if ( aExp <= 0x7E ) {
         if ( (bits32) ( a<<1 ) == 0 ) return a;
-        set_float_exception_inexact_flag();
+        float_exception_flags |= float_flag_inexact;
         aSign = extractFloat32Sign( a );
         switch ( float_rounding_mode ) {
          case float_round_nearest_even:
@@ -778,7 +772,7 @@ float32 float32_round_to_int( float32 a )
         }
     }
     z &= ~ roundBitsMask;
-    if ( z != a ) set_float_exception_inexact_flag();
+    if ( z != a ) float_exception_flags |= float_flag_inexact;
     return z;
 
 }
@@ -1469,7 +1463,7 @@ int32 float64_to_int32( float64 a )
         float_raise( float_flag_invalid );
         return aSign ? (sbits32) 0x80000000 : 0x7FFFFFFF;
     }
-    if ( aSigExtra ) set_float_exception_inexact_flag();
+    if ( aSigExtra ) float_exception_flags |= float_flag_inexact;
     return z;
 
 }
@@ -1509,7 +1503,7 @@ int32 float64_to_int32_round_to_zero( float64 a )
     else {
         if ( aExp < 0x3FF ) {
             if ( aExp | aSig0 | aSig1 ) {
-                set_float_exception_inexact_flag();
+                float_exception_flags |= float_flag_inexact;
             }
             return 0;
         }
@@ -1523,7 +1517,7 @@ int32 float64_to_int32_round_to_zero( float64 a )
         float_raise( float_flag_invalid );
         return aSign ? (sbits32) 0x80000000 : 0x7FFFFFFF;
     }
-    if ( aSigExtra ) set_float_exception_inexact_flag();
+    if ( aSigExtra ) float_exception_flags |= float_flag_inexact;
     return z;
 
 }
@@ -1613,7 +1607,7 @@ float64 float64_round_to_int( float64 a )
     else {
         if ( aExp <= 0x3FE ) {
             if ( ( ( (bits32) ( a.high<<1 ) ) | a.low ) == 0 ) return a;
-            set_float_exception_inexact_flag();
+            float_exception_flags |= float_flag_inexact;
             aSign = extractFloat64Sign( a );
             switch ( float_rounding_mode ) {
              case float_round_nearest_even:
@@ -1656,7 +1650,7 @@ float64 float64_round_to_int( float64 a )
         z.high &= ~ roundBitsMask;
     }
     if ( ( z.low != a.low ) || ( z.high != a.high ) ) {
-        set_float_exception_inexact_flag();
+        float_exception_flags |= float_flag_inexact;
     }
     return z;
 

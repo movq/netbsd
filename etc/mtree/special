@@ -1,4 +1,4 @@
-#	$NetBSD: special,v 1.145 2013/05/16 07:37:05 yamt Exp $
+#	$NetBSD: special,v 1.141 2011/12/17 13:37:49 tsutsui Exp $
 #	@(#)special	8.2 (Berkeley) 1/23/94
 #
 # This file may be overwritten on upgrades.
@@ -193,7 +193,6 @@
 ./etc/rc.d/cgd			type=file mode=0555
 ./etc/rc.d/cleartmp		type=file mode=0555
 ./etc/rc.d/cron			type=file mode=0555
-./etc/rc.d/devpubd		type=file mode=0555
 ./etc/rc.d/dhclient		type=file mode=0555
 ./etc/rc.d/dhcpd		type=file mode=0555
 ./etc/rc.d/dhcrelay		type=file mode=0555
@@ -221,7 +220,6 @@
 ./etc/rc.d/isibootd		type=file mode=0555
 ./etc/rc.d/kdc			type=file mode=0555
 ./etc/rc.d/ldconfig		type=file mode=0555
-./etc/rc.d/ldpd			type=file mode=0555
 ./etc/rc.d/local		type=file mode=0555
 ./etc/rc.d/lpd			type=file mode=0555
 ./etc/rc.d/lvm			type=file mode=0555
@@ -311,8 +309,6 @@
 ./etc/ssh/ssh_config		type=file mode=0644 optional
 ./etc/ssh/ssh_host_dsa_key	type=file mode=0600 optional tags=nodiff
 ./etc/ssh/ssh_host_dsa_key.pub	type=file mode=0644 optional
-./etc/ssh/ssh_host_ecdsa_key	type=file mode=0600 optional tags=nodiff
-./etc/ssh/ssh_host_ecdsa_key.pub	type=file mode=0644 optional
 ./etc/ssh/ssh_host_key		type=file mode=0600 optional tags=nodiff
 ./etc/ssh/ssh_host_key.pub	type=file mode=0644 optional
 ./etc/ssh/ssh_host_rsa_key	type=file mode=0600 optional tags=nodiff

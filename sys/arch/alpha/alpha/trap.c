@@ -1,4 +1,4 @@
-/* $NetBSD: trap.c,v 1.128 2012/02/19 21:05:59 rmind Exp $ */
+/* $NetBSD: trap.c,v 1.127 2012/02/06 02:14:12 matt Exp $ */
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -93,11 +93,13 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.128 2012/02/19 21:05:59 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.127 2012/02/06 02:14:12 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/syscall.h>
 #include <sys/buf.h>
 #include <sys/kauth.h>
@@ -405,7 +407,12 @@ trap(const u_long a0, const u_long a1, const u_long a2, const u_long entry,
 #endif
 			}
 
-			if (!user) {
+			if (user) {
+				if (l->l_flag & LW_SA) {
+					l->l_savp->savp_faultaddr = (vaddr_t)a0;
+					l->l_pflag |= LP_SA_PAGEFAULT;
+				}
+			} else {
 				struct cpu_info *ci = curcpu();
 
 				if (l == NULL) {
@@ -481,6 +488,8 @@ do_fault:
 					rv = EFAULT;
 			}
 			if (rv == 0) {
+				if (user)
+					l->l_pflag &= ~LP_SA_PAGEFAULT;
 				goto out;
 			}
 
@@ -509,6 +518,7 @@ do_fault:
 				ksi.ksi_code = SEGV_ACCERR;
 			else
 				ksi.ksi_code = SEGV_MAPERR;
+			l->l_pflag &= ~LP_SA_PAGEFAULT;
 			break;
 		    }
 
@@ -1133,5 +1143,16 @@ startlwp(void *arg)
 	KASSERT(error == 0);
 
 	kmem_free(uc, sizeof(ucontext_t));
+	userret(l);
+}
+
+/*
+ * XXX This is a terrible name.
+ */
+void
+upcallret(struct lwp *l)
+{
+	KERNEL_UNLOCK_LAST(l);
+
 	userret(l);
 }

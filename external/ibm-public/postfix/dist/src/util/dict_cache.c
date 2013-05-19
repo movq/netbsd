@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_cache.c,v 1.1.1.2 2013/01/02 18:59:12 tron Exp $	*/
+/*	$NetBSD: dict_cache.c,v 1.1.1.1 2010/06/17 18:07:12 tron Exp $	*/
 
 /*++
 /* NAME
@@ -143,19 +143,10 @@
 /* .IP table
 /*	A bare dictonary handle.
 /* DIAGNOSTICS
-/*	When a request is satisfied, the lookup routine returns
-/*	non-null, and the update, delete and sequence routines
-/*	return zero.  The cache->error value is zero when a request
-/*	could not be satisfied because an item did not exist (delete,
-/*	sequence) or if it could not be updated. The cache->error
-/*	value is non-zero only when a request could not be satisfied,
-/*	and the cause was a database error.
-/*
-/*	Cache access errors are logged with a warning message. To
-/*	avoid spamming the log, each type of operation logs no more
-/*	than one cache access error per second, per cache. Specify
-/*	the DICT_CACHE_FLAG_VERBOSE flag (see above) to log all
-/*	warnings.
+/*	These routines terminate with a fatal run-time error
+/*	for unrecoverable database errors. This allows the
+/*	program to restart and reset the database to an
+/*	empty initial state.
 /* BUGS
 /*	There should be a way to suspend automatic program suicide
 /*	until a cache cleanup run is completed. Some entries may
@@ -208,11 +199,9 @@
   * underlying database.
   */
 struct DICT_CACHE {
-    char   *name;			/* full name including proxy: */
     int     cache_flags;		/* see below */
     int     user_flags;			/* logging */
     DICT   *db;				/* database handle */
-    int     error;			/* last operation only */
 
     /* Delete-behind support. */
     char   *saved_curr_key;		/* "current" cache lookup key */
@@ -224,21 +213,9 @@ struct DICT_CACHE {
     char   *exp_context;		/* call-back context */
     int     retained;			/* entries retained in cleanup run */
     int     dropped;			/* entries removed in cleanup run */
-
-    /* Rate-limited logging support. */
-    int     log_delay;
-    time_t  upd_log_stamp;		/* last update warning */
-    time_t  get_log_stamp;		/* last lookup warning */
-    time_t  del_log_stamp;		/* last delete warning */
-    time_t  seq_log_stamp;		/* last sequence warning */
 };
 
 #define DC_FLAG_DEL_SAVED_CURRENT_KEY	(1<<0)	/* delete-behind is scheduled */
-
- /*
-  * Don't log cache access errors more than once per second.
-  */
-#define DC_DEF_LOG_DELAY	1
 
  /*
   * Macros to make obscure code more readable.
@@ -267,7 +244,6 @@ const char *dict_cache_lookup(DICT_CACHE *cp, const char *cache_key)
 {
     const char *myname = "dict_cache_lookup";
     const char *cache_val;
-    DICT   *db = cp->db;
 
     /*
      * Search for the cache entry. Don't return an entry that is scheduled
@@ -278,29 +254,22 @@ const char *dict_cache_lookup(DICT_CACHE *cp, const char *cache_key)
 	if (cp->user_flags & DICT_CACHE_FLAG_VERBOSE)
 	    msg_info("%s: key=%s (pretend not found  - scheduled for deletion)",
 		     myname, cache_key);
-	DICT_ERR_VAL_RETURN(cp, DICT_ERR_NONE, (char *) 0);
+	return (0);
     } else {
-	cache_val = dict_get(db, cache_key);
-	if (cache_val == 0 && db->error != 0)
-	    msg_rate_delay(&cp->get_log_stamp, cp->log_delay, msg_warn,
-			   "%s: cache lookup for '%s' failed due to error",
-			   cp->name, cache_key);
+	cache_val = dict_get(cp->db, cache_key);
 	if (cp->user_flags & DICT_CACHE_FLAG_VERBOSE)
 	    msg_info("%s: key=%s value=%s", myname, cache_key,
-		     cache_val ? cache_val : db->error ?
-		     "error" : "(not found)");
-	DICT_ERR_VAL_RETURN(cp, db->error, cache_val);
+		     cache_val ? cache_val : "(not found)");
+	return (cache_val);
     }
 }
 
 /* dict_cache_update - save entry to cache */
 
-int     dict_cache_update(DICT_CACHE *cp, const char *cache_key,
+void    dict_cache_update(DICT_CACHE *cp, const char *cache_key,
 			          const char *cache_val)
 {
     const char *myname = "dict_cache_update";
-    DICT   *db = cp->db;
-    int     put_res;
 
     /*
      * Store the cache entry and cancel the delete-behind operation.
@@ -313,11 +282,7 @@ int     dict_cache_update(DICT_CACHE *cp, const char *cache_key,
     }
     if (cp->user_flags & DICT_CACHE_FLAG_VERBOSE)
 	msg_info("%s: key=%s value=%s", myname, cache_key, cache_val);
-    put_res = dict_put(db, cache_key, cache_val);
-    if (put_res != 0)
-	msg_rate_delay(&cp->upd_log_stamp, cp->log_delay, msg_warn,
-		  "%s: could not update entry for %s", cp->name, cache_key);
-    DICT_ERR_VAL_RETURN(cp, db->error, put_res);
+    dict_put(cp->db, cache_key, cache_val);
 }
 
 /* dict_cache_delete - delete entry from cache */
@@ -325,8 +290,7 @@ int     dict_cache_update(DICT_CACHE *cp, const char *cache_key,
 int     dict_cache_delete(DICT_CACHE *cp, const char *cache_key)
 {
     const char *myname = "dict_cache_delete";
-    int     del_res;
-    DICT   *db = cp->db;
+    int     zero_means_found;
 
     /*
      * Delete the entry, unless we would delete the current first/next entry.
@@ -338,18 +302,14 @@ int     dict_cache_delete(DICT_CACHE *cp, const char *cache_key)
 	if (cp->user_flags & DICT_CACHE_FLAG_VERBOSE)
 	    msg_info("%s: key=%s (current entry - schedule for delete-behind)",
 		     myname, cache_key);
-	DICT_ERR_VAL_RETURN(cp, DICT_ERR_NONE, DICT_STAT_SUCCESS);
+	zero_means_found = 0;
     } else {
-	del_res = dict_del(db, cache_key);
-	if (del_res != 0)
-	    msg_rate_delay(&cp->del_log_stamp, cp->log_delay, msg_warn,
-		  "%s: could not delete entry for %s", cp->name, cache_key);
+	zero_means_found = dict_del(cp->db, cache_key);
 	if (cp->user_flags & DICT_CACHE_FLAG_VERBOSE)
 	    msg_info("%s: key=%s (%s)", myname, cache_key,
-		     del_res == 0 ? "found" :
-		     db->error ? "error" : "not found");
-	DICT_ERR_VAL_RETURN(cp, db->error, del_res);
+		     zero_means_found == 0 ? "found" : "not found");
     }
+    return (zero_means_found);
 }
 
 /* dict_cache_sequence - look up the first/next cache entry */
@@ -359,31 +319,26 @@ int     dict_cache_sequence(DICT_CACHE *cp, int first_next,
 			            const char **cache_val)
 {
     const char *myname = "dict_cache_sequence";
-    int     seq_res;
+    int     zero_means_found;
     const char *raw_cache_key;
     const char *raw_cache_val;
     char   *previous_curr_key;
     char   *previous_curr_val;
-    DICT   *db = cp->db;
 
     /*
      * Find the first or next database entry. Hide the record with the cache
      * cleanup completion time stamp.
      */
-    seq_res = dict_seq(db, first_next, &raw_cache_key, &raw_cache_val);
-    if (seq_res == 0
+    zero_means_found =
+	dict_seq(cp->db, first_next, &raw_cache_key, &raw_cache_val);
+    if (zero_means_found == 0
 	&& strcmp(raw_cache_key, DC_LAST_CACHE_CLEANUP_COMPLETED) == 0)
-	seq_res =
-	    dict_seq(db, DICT_SEQ_FUN_NEXT, &raw_cache_key, &raw_cache_val);
+	zero_means_found =
+	    dict_seq(cp->db, DICT_SEQ_FUN_NEXT, &raw_cache_key, &raw_cache_val);
     if (cp->user_flags & DICT_CACHE_FLAG_VERBOSE)
 	msg_info("%s: key=%s value=%s", myname,
-		 seq_res == 0 ? raw_cache_key : db->error ?
-		 "(error)" : "(not found)",
-		 seq_res == 0 ? raw_cache_val : db->error ?
-		 "(error)" : "(not found)");
-    if (db->error)
-	msg_rate_delay(&cp->seq_log_stamp, cp->log_delay, msg_warn,
-		       "%s: sequence error", cp->name);
+		 zero_means_found == 0 ? raw_cache_key : "(not found)",
+		 zero_means_found == 0 ? raw_cache_val : "(not found)");
 
     /*
      * Save the current cache_key and cache_val before they are clobbered by
@@ -395,7 +350,7 @@ int     dict_cache_sequence(DICT_CACHE *cp, int first_next,
      */
     previous_curr_key = cp->saved_curr_key;
     previous_curr_val = cp->saved_curr_val;
-    if (seq_res == 0) {
+    if (zero_means_found == 0) {
 	cp->saved_curr_key = mystrdup(raw_cache_key);
 	cp->saved_curr_val = mystrdup(raw_cache_val);
     } else {
@@ -406,15 +361,14 @@ int     dict_cache_sequence(DICT_CACHE *cp, int first_next,
     /*
      * Delete behind.
      */
-    if (db->error == 0 && DC_IS_SCHEDULED_FOR_DELETE_BEHIND(cp)) {
+    if (DC_IS_SCHEDULED_FOR_DELETE_BEHIND(cp)) {
 	DC_CANCEL_DELETE_BEHIND(cp);
 	if (cp->user_flags & DICT_CACHE_FLAG_VERBOSE)
 	    msg_info("%s: delete-behind key=%s value=%s",
 		     myname, previous_curr_key, previous_curr_val);
-	if (dict_del(db, previous_curr_key) != 0)
-	    msg_rate_delay(&cp->del_log_stamp, cp->log_delay, msg_warn,
-			   "%s: could not delete entry for %s",
-			   cp->name, previous_curr_key);
+	if (dict_del(cp->db, previous_curr_key) != 0)
+	    msg_warn("database %s: could not delete entry for %s",
+		     cp->db->name, previous_curr_key);
     }
 
     /*
@@ -430,7 +384,7 @@ int     dict_cache_sequence(DICT_CACHE *cp, int first_next,
      */
     *cache_key = (cp)->saved_curr_key;
     *cache_val = (cp)->saved_curr_val;
-    DICT_ERR_VAL_RETURN(cp, db->error, seq_res);
+    return (zero_means_found);
 }
 
 /* dict_cache_delete_behind_reset - reset "delete behind" state */
@@ -451,7 +405,7 @@ static void dict_cache_clean_stat_log_reset(DICT_CACHE *cp,
 {
     if (cp->user_flags & DICT_CACHE_FLAG_STATISTICS)
 	msg_info("cache %s %s cleanup: retained=%d dropped=%d entries",
-		 cp->name, full_partial, cp->retained, cp->dropped);
+		 cp->db->name, full_partial, cp->retained, cp->dropped);
     cp->retained = cp->dropped = 0;
 }
 
@@ -480,7 +434,7 @@ static void dict_cache_clean_event(int unused_event, char *cache_context)
 	cp->retained = cp->dropped = 0;
 	first_next = DICT_SEQ_FUN_FIRST;
 	if (cp->user_flags & DICT_CACHE_FLAG_VERBOSE)
-	    msg_info("%s: start %s cache cleanup", myname, cp->name);
+	    msg_info("%s: start %s cache cleanup", myname, cp->db->name);
     }
 
     /*
@@ -499,12 +453,12 @@ static void dict_cache_clean_event(int unused_event, char *cache_context)
 	    cp->dropped++;
 	    if (cp->user_flags & DICT_CACHE_FLAG_VERBOSE)
 		msg_info("%s: drop %s cache entry for %s",
-			 myname, cp->name, cache_key);
+			 myname, cp->db->name, cache_key);
 	} else {
 	    cp->retained++;
 	    if (cp->user_flags & DICT_CACHE_FLAG_VERBOSE)
 		msg_info("%s: keep %s cache entry for %s",
-			 myname, cp->name, cache_key);
+			 myname, cp->db->name, cache_key);
 	}
 	next_interval = 0;
     }
@@ -512,13 +466,9 @@ static void dict_cache_clean_event(int unused_event, char *cache_context)
     /*
      * Cache cleanup completed. Report vital statistics.
      */
-    else if (cp->error != 0) {
-	msg_warn("%s: cache cleanup scan terminated due to error", cp->name);
-	dict_cache_clean_stat_log_reset(cp, "partial");
-	next_interval = cp->exp_interval;
-    } else {
+    else {
 	if (cp->user_flags & DICT_CACHE_FLAG_VERBOSE)
-	    msg_info("%s: done %s cache cleanup scan", myname, cp->name);
+	    msg_info("%s: done %s cache cleanup scan", myname, cp->db->name);
 	dict_cache_clean_stat_log_reset(cp, "full");
 	stamp_buf = vstring_alloc(100);
 	vstring_sprintf(stamp_buf, "%ld", (long) event_time());
@@ -551,14 +501,12 @@ void    dict_cache_control(DICT_CACHE *cp,...)
 	    break;
 	case DICT_CACHE_CTL_FLAGS:
 	    cp->user_flags = va_arg(ap, int);
-	    cp->log_delay = (cp->user_flags & DICT_CACHE_FLAG_VERBOSE) ?
-		0 : DC_DEF_LOG_DELAY;
 	    break;
 	case DICT_CACHE_CTL_INTERVAL:
 	    cp->exp_interval = va_arg(ap, int);
 	    if (cp->exp_interval < 0)
 		msg_panic("%s: bad %s cache cleanup interval %d",
-			  myname, cp->name, cp->exp_interval);
+			  myname, cp->db->name, cp->exp_interval);
 	    break;
 	case DICT_CACHE_CTL_VALIDATOR:
 	    cp->exp_validator = va_arg(ap, DICT_CACHE_VALIDATOR_FN);
@@ -582,7 +530,7 @@ void    dict_cache_control(DICT_CACHE *cp,...)
 	 */
 	if (cache_cleanup_is_active)
 	    msg_panic("%s: %s cache cleanup is already scheduled",
-		      myname, cp->name);
+		      myname, cp->db->name);
 
 	/*
 	 * The next start time depends on the last completion time.
@@ -597,7 +545,7 @@ void    dict_cache_control(DICT_CACHE *cp,...)
 	    next_interval = cp->exp_interval;
 	if ((cp->user_flags & DICT_CACHE_FLAG_VERBOSE) && next_interval > 0)
 	    msg_info("%s cache cleanup will start after %ds",
-		     cp->name, (int) next_interval);
+		     cp->db->name, (int) next_interval);
 	event_request_timer(dict_cache_clean_event, (char *) cp,
 			    (int) next_interval);
     }
@@ -630,7 +578,6 @@ DICT_CACHE *dict_cache_open(const char *dbname, int open_flags, int dict_flags)
      * Create the DICT_CACHE object.
      */
     cp = (DICT_CACHE *) mymalloc(sizeof(*cp));
-    cp->name = mystrdup(dbname);
     cp->cache_flags = 0;
     cp->user_flags = 0;
     cp->db = dict;
@@ -641,9 +588,6 @@ DICT_CACHE *dict_cache_open(const char *dbname, int open_flags, int dict_flags)
     cp->exp_context = 0;
     cp->retained = 0;
     cp->dropped = 0;
-    cp->log_delay = DC_DEF_LOG_DELAY;
-    cp->upd_log_stamp = cp->get_log_stamp =
-	cp->del_log_stamp = cp->seq_log_stamp = 0;
 
     return (cp);
 }
@@ -656,7 +600,6 @@ void    dict_cache_close(DICT_CACHE *cp)
     /*
      * Destroy the DICT_CACHE object.
      */
-    myfree(cp->name);
     dict_cache_control(cp, DICT_CACHE_CTL_INTERVAL, 0, DICT_CACHE_CTL_END);
     dict_close(cp->db);
     if (cp->saved_curr_key)
@@ -677,5 +620,5 @@ const char *dict_cache_name(DICT_CACHE *cp)
      * execute still presents overhead for the processor pipeline, processor
      * cache, etc).
      */
-    return (cp->name);
+    return (cp->db->name);
 }

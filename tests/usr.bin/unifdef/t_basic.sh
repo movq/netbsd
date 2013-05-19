@@ -1,4 +1,4 @@
-# $NetBSD: t_basic.sh,v 1.6 2012/10/15 17:49:58 njoly Exp $
+# $NetBSD: t_basic.sh,v 1.4 2011/05/11 22:08:12 njoly Exp $
 #
 # Copyright (c) 2011 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -30,33 +30,18 @@
 
 atf_test_case basic
 basic_head() {
-	atf_set "descr" "A basic test of unifdef(1) (PR bin/42628)"
+	atf_set "descr" "A basic test of unifdef(1)"
 	atf_set "require.progs" "unifdef"
 }
 
 basic_body() {
 
+	# See PR bin/42628.
+	#
 	atf_check -s ignore -o file:$(atf_get_srcdir)/d_basic.out \
 		-x "unifdef -U__FreeBSD__ $(atf_get_srcdir)/d_basic.in"
 }
 
-atf_test_case lastline
-lastline_head() {
-	atf_set "descr" "Checks with directive on last line (PR bin/47068)"
-}
-
-lastline_body() {
-
-	# With newline after cpp directive
-	printf '#ifdef foo\n#endif\n' >input
-	atf_check -o file:input unifdef -Ubar input
-
-	# Without newline after cpp directive
-	printf '#ifdef foo\n#endif' >input
-	atf_check -o file:input unifdef -Ubar input
-}
-
 atf_init_test_cases() {
 	atf_add_test_case basic
-	atf_add_test_case lastline
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: tcdrain.c,v 1.9 2012/06/25 22:32:46 abs Exp $	*/
+/*	$NetBSD: tcdrain.c,v 1.8 2003/08/07 16:44:13 agc Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)termios.c	8.2 (Berkeley) 2/21/94";
 #else
-__RCSID("$NetBSD: tcdrain.c,v 1.9 2012/06/25 22:32:46 abs Exp $");
+__RCSID("$NetBSD: tcdrain.c,v 1.8 2003/08/07 16:44:13 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -50,7 +50,8 @@ __weak_alias(tcdrain,_tcdrain)
 #endif
 
 int
-tcdrain(int fd)
+tcdrain(fd)
+	int fd;
 {
 
 	_DIAGASSERT(fd != -1);

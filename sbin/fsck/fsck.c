@@ -1,4 +1,4 @@
-/*	$NetBSD: fsck.c,v 1.51 2012/04/07 04:52:20 christos Exp $	*/
+/*	$NetBSD: fsck.c,v 1.50 2011/08/27 17:34:44 joerg Exp $	*/
 
 /*
  * Copyright (c) 1996 Christos Zoulas. All rights reserved.
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fsck.c,v 1.51 2012/04/07 04:52:20 christos Exp $");
+__RCSID("$NetBSD: fsck.c,v 1.50 2011/08/27 17:34:44 joerg Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -100,7 +100,6 @@ main(int argc, char *argv[])
 	const char *vfstype = NULL;
 	char globopt[3];
 	int ret = FSCK_EXIT_OK;
-	char buf[MAXPATHLEN];
 
 	globopt[0] = '-';
 	globopt[2] = '\0';
@@ -213,9 +212,7 @@ main(int argc, char *argv[])
 			type = vfstype;
 		}
 		else {
-			spec = getfsspecname(buf, sizeof(buf), fs->fs_spec);
-			if (spec == NULL)
-				err(FSCK_EXIT_CHECK_FAILED, "%s", buf);
+			spec = fs->fs_spec;
 			type = fs->fs_vfstype;
 			if (BADTYPE(fs->fs_type))
 				errx(FSCK_EXIT_CHECK_FAILED,

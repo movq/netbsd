@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_node.c,v 1.49 2012/11/29 11:58:49 nakayama Exp $	*/
+/*	$NetBSD: smbfs_node.c,v 1.47.8.1 2012/12/10 21:12:51 riz Exp $	*/
 
 /*
  * Copyright (c) 2000-2001 Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smbfs_node.c,v 1.49 2012/11/29 11:58:49 nakayama Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smbfs_node.c,v 1.47.8.1 2012/12/10 21:12:51 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

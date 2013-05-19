@@ -1,4 +1,4 @@
-/*	$NetBSD: omap2_prcm.h,v 1.2 2012/12/11 18:51:38 riastradh Exp $	*/
+/*	$NetBSD: omap2_prcm.h,v 1.1 2010/08/28 13:02:32 ahoka Exp $	*/
 
 /*-
  * Copyright (c) 2010 Adam Hoka
@@ -26,16 +26,9 @@
  * SUCH DAMAGE.
  */
 
-#ifndef _ARM_OMAP_OMAP2_PRCM_H_
-#define _ARM_OMAP_OMAP2_PRCM_H_
+#ifndef _OMAP2_PRCM_H_
+#define _OMAP2_PRCM_H_
 
-struct omap_module;
+void prcm_cold_reset(void);
 
-uint32_t	prcm_read_4(bus_size_t, bus_size_t);
-void		prcm_write_4(bus_size_t, bus_size_t, uint32_t);
-void		prcm_cold_reset(void);
-
-void		prcm_module_enable(const struct omap_module *);
-void		prcm_module_disable(const struct omap_module *);
-
-#endif  /* _ARM_OMAP_OMAP2_PRCM_H_ */
+#endif

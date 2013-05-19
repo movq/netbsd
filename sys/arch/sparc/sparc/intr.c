@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.117 2013/04/07 16:32:41 jdc Exp $ */
+/*	$NetBSD: intr.c,v 1.115.10.1 2012/05/07 03:06:16 riz Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.117 2013/04/07 16:32:41 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.115.10.1 2012/05/07 03:06:16 riz Exp $");
 
 #include "opt_multiprocessor.h"
 #include "opt_sparc_arch.h"
@@ -443,10 +443,9 @@ nmi_hard_msiiep(void)
 	}
 
 	if (si & MSIIEP_SYS_IPR_PIO_ERR) {
-		printf("pio: addr=%08x, cmd=%x stat=%04x\n",
+		printf("pio: addr=%08x, cmd=%x\n",
 		       mspcic_read_stream_4(pcic_pio_err_addr),
-		       mspcic_read_stream_1(pcic_pio_err_cmd),
-		       mspcic_read_stream_2(pcic_stat));
+		       mspcic_read_stream_1(pcic_pio_err_cmd));
 		fatal = 0;
 	}
 

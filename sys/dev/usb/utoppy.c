@@ -1,4 +1,4 @@
-/*	$NetBSD: utoppy.c,v 1.21 2012/10/27 17:18:38 chs Exp $	*/
+/*	$NetBSD: utoppy.c,v 1.17 2011/12/23 00:51:49 jakllsch Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: utoppy.c,v 1.21 2012/10/27 17:18:38 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: utoppy.c,v 1.17 2011/12/23 00:51:49 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,11 +43,9 @@ __KERNEL_RCSID(0, "$NetBSD: utoppy.c,v 1.21 2012/10/27 17:18:38 chs Exp $");
 #include <sys/uio.h>
 #include <sys/conf.h>
 #include <sys/vnode.h>
-#include <sys/bus.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
-#include <dev/usb/usbdivar.h>
 #include <dev/usb/usbdi_util.h>
 #include <dev/usb/usbdevs.h>
 #include <dev/usb/usb_quirks.h>
@@ -345,14 +343,14 @@ utoppy_detach(device_t self, int flags)
 
 	s = splusb();
 	if (--sc->sc_refcnt >= 0)
-		usb_detach_waitold(sc->sc_dev);
+		usb_detach_wait(sc->sc_dev);
 	splx(s);
 
 	/* locate the major number */
 	maj = cdevsw_lookup_major(&utoppy_cdevsw);
 
 	/* Nuke the vnodes for any open instances (calls close). */
-	mn = device_unit(self);
+	mn = self->dv_unit;
 	vdevgone(maj, mn, mn, VCHR);
 
 	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
@@ -521,10 +519,7 @@ utoppy_bulk_transfer_cb(usbd_xfer_handle xfer,
     usbd_status status)
 {
 
-	if (xfer->pipe->device->bus->lock)
-		cv_broadcast(&xfer->cv);
-	else
-		wakeup(xfer);
+	wakeup(xfer);
 }
 
 static usbd_status
@@ -537,17 +532,14 @@ utoppy_bulk_transfer(usbd_xfer_handle xfer, usbd_pipe_handle pipe,
 
 	usbd_setup_xfer(xfer, pipe, 0, buf, *size, flags, timeout,
 	    utoppy_bulk_transfer_cb);
-	usbd_lock_pipe(pipe);	/* don't want callback until tsleep() */
+	s = splusb();
 	err = usbd_transfer(xfer);
 	if (err != USBD_IN_PROGRESS) {
-		usbd_unlock_pipe(pipe);
+		splx(s);
 		return (err);
 	}
-	if (pipe->device->bus->lock)
-		error = cv_wait_sig(&xfer->cv, pipe->device->bus->lock);
-	else
-		error = tsleep((void *)xfer, PZERO, lbl, 0);
-	usbd_unlock_pipe(pipe);
+	error = tsleep((void *)xfer, PZERO, lbl, 0);
+	splx(s);
 	if (error) {
 		usbd_abort_pipe(pipe);
 		return (USBD_INTERRUPTED);
@@ -1424,7 +1416,7 @@ utoppyopen(dev_t dev, int flag, int mode,
 	    utoppy_state_string(sc->sc_state)));
 
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(sc->sc_dev);
 
 	return (error);
 }
@@ -1562,7 +1554,7 @@ utoppyread(dev_t dev, struct uio *uio, int flags)
 	    device_xname(sc->sc_dev), err, utoppy_state_string(sc->sc_state)));
 
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(sc->sc_dev);
 
 	return (err);
 }
@@ -1665,7 +1657,7 @@ utoppywrite(dev_t dev, struct uio *uio, int flags)
 	}
 
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(sc->sc_dev);
 
 	return (err);
 }
@@ -1930,7 +1922,7 @@ utoppyioctl(dev_t dev, u_long cmd, void *data, int flag,
 		utoppy_cancel(sc);
 
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(sc->sc_dev);
 
 	return (err);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: dwc_otg.c,v 1.49 2013/04/08 21:12:33 skrll Exp $	*/
+/*	$NetBSD: dwc_otg.c,v 1.45.2.5 2013/03/30 23:03:19 riz Exp $	*/
 
 /*-
  * Copyright (c) 2012 Hans Petter Selasky. All rights reserved.
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dwc_otg.c,v 1.49 2013/04/08 21:12:33 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dwc_otg.c,v 1.45.2.5 2013/03/30 23:03:19 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -71,6 +71,7 @@ __KERNEL_RCSID(0, "$NetBSD: dwc_otg.c,v 1.49 2013/04/08 21:12:33 skrll Exp $");
 #include <sys/proc.h>
 #include <sys/queue.h>
 #include <sys/cpu.h>
+#include <sys/bus.h>
 
 #include <machine/endian.h>
 
@@ -151,7 +152,6 @@ Static void		dwc_otg_freem(struct usbd_bus *, usb_dma_t *);
 
 Static usbd_xfer_handle	dwc_otg_allocx(struct usbd_bus *);
 Static void		dwc_otg_freex(struct usbd_bus *, usbd_xfer_handle);
-Static void		dwc_otg_get_lock(struct usbd_bus *, kmutex_t **);
 
 #if 0
 Static usbd_status	dwc_otg_setup_isoc(usbd_pipe_handle pipe);
@@ -256,7 +256,6 @@ Static void dwc_otg_core_reset(struct dwc_otg_softc *sc);
 static inline void
 dwc_otg_root_intr(struct dwc_otg_softc *sc)
 {
-
 	softint_schedule(sc->sc_rhc_si);
 }
 
@@ -283,7 +282,6 @@ Static const struct usbd_bus_methods dwc_otg_bus_methods = {
 	.freem =	dwc_otg_freem,
 	.allocx =	dwc_otg_allocx,
 	.freex =	dwc_otg_freex,
-	.get_lock =	dwc_otg_get_lock,
 };
 
 Static const struct usbd_pipe_methods dwc_otg_root_ctrl_methods = {
@@ -405,21 +403,11 @@ dwc_otg_freex(struct usbd_bus *bus, usbd_xfer_handle xfer)
 
 
 Static void
-dwc_otg_get_lock(struct usbd_bus *bus, kmutex_t **lock)
-{
-	struct dwc_otg_softc *sc = DWC_OTG_BUS2SC(bus);
-
-	*lock = &sc->sc_lock;
-}
-
-Static void
 dwc_otg_softintr(void *v)
 {
 	struct usbd_bus *bus = v;
 	struct dwc_otg_softc *sc = DWC_OTG_BUS2SC(bus);
 	struct dwc_otg_xfer *dxfer;
-
-	KASSERT(sc->sc_bus.use_polling || mutex_owned(&sc->sc_lock));
 
 	DOTG_EVCNT_INCR(sc->sc_ev_soft_intr);
 
@@ -434,7 +422,7 @@ dwc_otg_softintr(void *v)
 		 * sc_complete queue
 		 */
 		if (dxfer->xfer.hcflags & UXFER_ABORTING) {
-			cv_broadcast(&dxfer->xfer.hccv);
+			wakeup(&dxfer->xfer.hcflags);
 			continue;
 		}
 
@@ -464,7 +452,6 @@ dwc_otg_waitintr(struct dwc_otg_softc *sc, usbd_xfer_handle xfer)
 		DPRINTFN(15, "0x%08x\n", intrs);
 
 		if (intrs) {
-			KASSERT(mutex_owned(&sc->sc_lock));
 			mutex_spin_enter(&sc->sc_intr_lock);
 			dwc_otg_interrupt(sc);
 			mutex_spin_exit(&sc->sc_intr_lock);
@@ -476,10 +463,8 @@ dwc_otg_waitintr(struct dwc_otg_softc *sc, usbd_xfer_handle xfer)
 	/* Timeout */
 	DPRINTF("timeout\n");
 
-	mutex_enter(&sc->sc_lock);
 	xfer->status = USBD_TIMEOUT;
 	usb_transfer_complete(xfer);
-	mutex_exit(&sc->sc_lock);
 }
 
 Static void
@@ -492,15 +477,12 @@ dwc_otg_timeout(void *addr)
 	DPRINTF("dxfer=%p\n", dxfer);
 
 	if (sc->sc_dying) {
-		mutex_enter(&sc->sc_lock);
 		dwc_otg_abort_xfer(&dxfer->xfer, USBD_TIMEOUT);
-		mutex_exit(&sc->sc_lock);
 		return;
 	}
 
 	/* Execute the abort in a process context. */
-	usb_init_task(&dxfer->abort_task, dwc_otg_timeout_task, addr,
-	    USB_TASKQ_MPSAFE);
+	usb_init_task(&dxfer->abort_task, dwc_otg_timeout_task, addr);
 	usb_add_task(dxfer->xfer.pipe->device, &dxfer->abort_task,
 	    USB_TASKQ_HC);
 }
@@ -509,13 +491,10 @@ Static void
 dwc_otg_timeout_task(void *addr)
 {
 	usbd_xfer_handle xfer = addr;
-	struct dwc_otg_softc *sc = DWC_OTG_XFER2SC(xfer);
 
 	DPRINTF("xfer=%p\n", xfer);
 
-	mutex_enter(&sc->sc_lock);
 	dwc_otg_abort_xfer(xfer, USBD_TIMEOUT);
-	mutex_exit(&sc->sc_lock);
 }
 
 usbd_status
@@ -588,7 +567,6 @@ dwc_otg_poll(struct usbd_bus *bus)
 {
 	struct dwc_otg_softc *sc = DWC_OTG_BUS2SC(bus);
 
-	KASSERT(sc->sc_bus.use_polling || mutex_owned(&sc->sc_lock));
 	mutex_spin_enter(&sc->sc_intr_lock);
 	dwc_otg_interrupt(sc);
 	mutex_spin_exit(&sc->sc_intr_lock);
@@ -601,12 +579,7 @@ dwc_otg_poll(struct usbd_bus *bus)
 Static void
 dwc_otg_close_pipe(usbd_pipe_handle pipe)
 {
-	struct dwc_otg_pipe *dpipe = DWC_OTG_PIPE2DPIPE(pipe);
-	struct dwc_otg_softc *sc = DWC_OTG_DPIPE2SC(dpipe);
 
-	dpipe = dpipe;
-
-	KASSERT(mutex_owned(&sc->sc_lock));
 }
 
 /*
@@ -618,16 +591,19 @@ dwc_otg_abort_xfer(usbd_xfer_handle xfer, usbd_status status)
 	struct dwc_otg_xfer *dxfer = DWC_OTG_XFER2DXFER(xfer);
 	struct dwc_otg_softc *sc = DWC_OTG_XFER2SC(xfer);
 	bool wake;
+	int s;
 
 	DPRINTF("xfer=%p\n", xfer);
 
-	KASSERT(mutex_owned(&sc->sc_lock));
 	KASSERT(!cpu_intr_p() && !cpu_softintr_p());
 
 	if (sc->sc_dying) {
-		xfer->status = status;
+                /* If we're dying, just do the software part. */
+		s = splusb();
+		xfer->status = status;  /* make software ignore it */
 		callout_stop(&xfer->timeout_handle);
 		usb_transfer_complete(xfer);
+		splx(s);
 		return;
 	}
 
@@ -639,16 +615,15 @@ dwc_otg_abort_xfer(usbd_xfer_handle xfer, usbd_status status)
 		xfer->status = status;
 		xfer->hcflags |= UXFER_ABORTWAIT;
 		while (xfer->hcflags & UXFER_ABORTING)
-			cv_wait(&xfer->hccv, &sc->sc_lock);
+			tsleep(&xfer->hcflags, PZERO, "dotgaw", 0);
 		return;
 	}
+	mutex_spin_enter(&sc->sc_intr_lock);
+	xfer->hcflags |= UXFER_ABORTING;
 
 	/*
 	 * Step 1: Make interrupt routine and hardware ignore xfer.
 	 */
-	mutex_spin_enter(&sc->sc_intr_lock);
-	xfer->hcflags |= UXFER_ABORTING;
-
 	xfer->status = status;	/* make software ignore it */
 	callout_stop(&xfer->timeout_handle);
 
@@ -677,7 +652,7 @@ dwc_otg_abort_xfer(usbd_xfer_handle xfer, usbd_status status)
 	}
 
 	while (dxfer->state != DXFER_ABORTING) {
-		cv_wait(&xfer->hccv, &sc->sc_lock);
+		tsleep(&xfer->hcflags, PZERO, "dotgxw", 0);
 	}
 
 	dxfer->state = DXFER_DONE;
@@ -688,10 +663,9 @@ dwc_otg_abort_xfer(usbd_xfer_handle xfer, usbd_status status)
 	xfer->hcflags &= ~(UXFER_ABORTING | UXFER_ABORTWAIT);
 	usb_transfer_complete(xfer);
 	if (wake) {
-		cv_broadcast(&xfer->hccv);
+		wakeup(&xfer->hcflags);
 	}
 
-	KASSERT(mutex_owned(&sc->sc_lock));
 }
 
 Static void
@@ -782,12 +756,9 @@ Static const usb_hub_descriptor_t dwc_otg_hubd = {
 Static usbd_status
 dwc_otg_root_ctrl_transfer(usbd_xfer_handle xfer)
 {
-	struct dwc_otg_softc *sc = DWC_OTG_XFER2SC(xfer);
 	usbd_status err;
 
-	mutex_enter(&sc->sc_lock);
 	err = usb_insert_transfer(xfer);
-	mutex_exit(&sc->sc_lock);
 	if (err)
 		return err;
 
@@ -1163,10 +1134,10 @@ dwc_otg_root_ctrl_start(usbd_xfer_handle xfer)
 	err = USBD_NORMAL_COMPLETION;
 
 fail:
-	mutex_enter(&sc->sc_lock);
+
 	xfer->status = err;
 	usb_transfer_complete(xfer);
-	mutex_exit(&sc->sc_lock);
+
 
 	return USBD_IN_PROGRESS;
 }
@@ -1199,15 +1170,12 @@ dwc_otg_root_ctrl_done(usbd_xfer_handle xfer)
 Static usbd_status
 dwc_otg_root_intr_transfer(usbd_xfer_handle xfer)
 {
-	struct dwc_otg_softc *sc = DWC_OTG_XFER2SC(xfer);
 	usbd_status err;
 
 	DPRINTF("\n");
 
 	/* Insert last in queue. */
-	mutex_enter(&sc->sc_lock);
 	err = usb_insert_transfer(xfer);
-	mutex_exit(&sc->sc_lock);
 	if (err)
 		return err;
 
@@ -1225,10 +1193,8 @@ dwc_otg_root_intr_start(usbd_xfer_handle xfer)
 	if (sc->sc_dying)
 		return USBD_IOERROR;
 
-	mutex_enter(&sc->sc_lock);
 	KASSERT(sc->sc_intrxfer == NULL);
 	sc->sc_intrxfer = xfer;
-	mutex_exit(&sc->sc_lock);
 
 	return USBD_IN_PROGRESS;
 }
@@ -1237,12 +1203,7 @@ dwc_otg_root_intr_start(usbd_xfer_handle xfer)
 Static void
 dwc_otg_root_intr_abort(usbd_xfer_handle xfer)
 {
-#ifdef DIAGNOSTIC
-	struct dwc_otg_softc *sc = DWC_OTG_XFER2SC(xfer);
-#endif
 	DPRINTF("xfer=%p\n", xfer);
-
-	KASSERT(mutex_owned(&sc->sc_lock));
 
 	if (xfer->pipe->intrxfer == xfer) {
 		DPRINTF("remove\n");
@@ -1259,8 +1220,6 @@ dwc_otg_root_intr_close(usbd_pipe_handle pipe)
 
 	DPRINTF("\n");
 
-	KASSERT(mutex_owned(&sc->sc_lock));
-
 	sc->sc_intrxfer = NULL;
 }
 
@@ -1275,7 +1234,6 @@ dwc_otg_root_intr_done(usbd_xfer_handle xfer)
 Static usbd_status
 dwc_otg_device_ctrl_transfer(usbd_xfer_handle xfer)
 {
-	struct dwc_otg_softc *sc = DWC_OTG_XFER2SC(xfer);
 	usbd_status err;
 
 	DPRINTF("\n");
@@ -1284,9 +1242,7 @@ dwc_otg_device_ctrl_transfer(usbd_xfer_handle xfer)
 	dwc_otg_setup_ctrl_chain(xfer);
 
 	/* Insert last in queue. */
-	mutex_enter(&sc->sc_lock);
 	err = usb_insert_transfer(xfer);
-	mutex_exit(&sc->sc_lock);
 	if (err)
 		return err;
 
@@ -1301,10 +1257,8 @@ dwc_otg_device_ctrl_start(usbd_xfer_handle xfer)
 
 	DPRINTF("\n");
 
-	mutex_enter(&sc->sc_lock);
 	xfer->status = USBD_IN_PROGRESS;
 	dwc_otg_xfer_start(xfer);
-	mutex_exit(&sc->sc_lock);
 
 	if (sc->sc_bus.use_polling)
 		dwc_otg_waitintr(sc, xfer);
@@ -1315,10 +1269,6 @@ dwc_otg_device_ctrl_start(usbd_xfer_handle xfer)
 Static void
 dwc_otg_device_ctrl_abort(usbd_xfer_handle xfer)
 {
-#ifdef DIAGNOSTIC
-	struct dwc_otg_softc *sc = DWC_OTG_XFER2SC(xfer);
-#endif
-	KASSERT(mutex_owned(&sc->sc_lock));
 
 	DPRINTF("xfer=%p\n", xfer);
 	dwc_otg_abort_xfer(xfer, USBD_CANCELLED);
@@ -1341,10 +1291,10 @@ dwc_otg_device_ctrl_close(usbd_pipe_handle pipe)
 Static void
 dwc_otg_device_ctrl_done(usbd_xfer_handle xfer)
 {
-	struct dwc_otg_softc *sc = DWC_OTG_XFER2SC(xfer);
+
 
 	DPRINTF("xfer=%p\n", xfer);
-	KASSERT(mutex_owned(&sc->sc_lock));
+
 
 	dwc_otg_xfer_end(xfer);
 }
@@ -1354,7 +1304,6 @@ dwc_otg_device_ctrl_done(usbd_xfer_handle xfer)
 Static usbd_status
 dwc_otg_device_bulk_transfer(usbd_xfer_handle xfer)
 {
-	struct dwc_otg_softc *sc = DWC_OTG_XFER2SC(xfer);
 	usbd_status err;
 
 	DPRINTF("\n");
@@ -1368,9 +1317,7 @@ dwc_otg_device_bulk_transfer(usbd_xfer_handle xfer)
 	dwc_otg_setup_bulk_chain(xfer);
 
 	/* Insert last in queue. */
-	mutex_enter(&sc->sc_lock);
 	err = usb_insert_transfer(xfer);
-	mutex_exit(&sc->sc_lock);
 	if (err)
 		return err;
 
@@ -1385,10 +1332,8 @@ dwc_otg_device_bulk_start(usbd_xfer_handle xfer)
 
 	DPRINTF("xfer=%p\n", xfer);
 
-	mutex_enter(&sc->sc_lock);
 	xfer->status = USBD_IN_PROGRESS;
 	dwc_otg_xfer_start(xfer);
-	mutex_exit(&sc->sc_lock);
 
 	if (sc->sc_bus.use_polling)
 		dwc_otg_waitintr(sc, xfer);
@@ -1399,10 +1344,6 @@ dwc_otg_device_bulk_start(usbd_xfer_handle xfer)
 Static void
 dwc_otg_device_bulk_abort(usbd_xfer_handle xfer)
 {
-#ifdef DIAGNOSTIC
-	struct dwc_otg_softc *sc = DWC_OTG_XFER2SC(xfer);
-#endif
-	KASSERT(mutex_owned(&sc->sc_lock));
 
 	DPRINTF("xfer=%p\n", xfer);
 	dwc_otg_abort_xfer(xfer, USBD_CANCELLED);
@@ -1438,7 +1379,6 @@ dwc_otg_device_bulk_done(usbd_xfer_handle xfer)
 Static usbd_status
 dwc_otg_device_intr_transfer(usbd_xfer_handle xfer)
 {
-	struct dwc_otg_softc *sc = DWC_OTG_XFER2SC(xfer);
 	usbd_status err;
 
 	DPRINTF("\n");
@@ -1447,9 +1387,7 @@ dwc_otg_device_intr_transfer(usbd_xfer_handle xfer)
 	dwc_otg_setup_intr_chain(xfer);
 
 	/* Insert last in queue. */
-	mutex_enter(&sc->sc_lock);
 	err = usb_insert_transfer(xfer);
-	mutex_exit(&sc->sc_lock);
 	if (err)
 		return err;
 
@@ -1464,10 +1402,8 @@ dwc_otg_device_intr_start(usbd_xfer_handle xfer)
 
 	DPRINTF("\n");
 
-	mutex_enter(&sc->sc_lock);
 	xfer->status = USBD_IN_PROGRESS;
 	dwc_otg_xfer_start(xfer);
-	mutex_exit(&sc->sc_lock);
 
 	if (sc->sc_bus.use_polling)
 		dwc_otg_waitintr(sc, xfer);
@@ -1480,12 +1416,7 @@ dwc_otg_device_intr_start(usbd_xfer_handle xfer)
 Static void
 dwc_otg_device_intr_abort(usbd_xfer_handle xfer)
 {
-#ifdef DIAGNOSTIC
-	struct dwc_otg_softc *sc = DWC_OTG_XFER2SC(xfer);
-#endif
 	DPRINTF("xfer=%p\n", xfer);
-
-	KASSERT(mutex_owned(&sc->sc_lock));
 
 	if (xfer->pipe->intrxfer == xfer) {
 		DPRINTF("remove\n");
@@ -1534,15 +1465,12 @@ dwc_otg_device_intr_done(usbd_xfer_handle xfer)
 usbd_status
 dwc_otg_device_isoc_transfer(usbd_xfer_handle xfer)
 {
-	struct dwc_otg_softc *sc = DWC_OTG_XFER2SC(xfer);
 	usbd_status err;
 
 	DPRINTF("\n");
 
 	/* Insert last in queue. */
-	mutex_enter(&sc->sc_lock);
 	err = usb_insert_transfer(xfer);
-	mutex_exit(&sc->sc_lock);
 
 	err = USBD_IOERROR;
 	if (err)
@@ -1671,7 +1599,6 @@ dwc_otg_do_poll(struct usbd_bus *bus)
 {
 	struct dwc_otg_softc *sc = DWC_OTG_BUS2SC(bus);
 
-	KASSERT(mutex_owned(&sc->sc_lock));
 	mutex_spin_enter(&sc->sc_intr_lock);
 	dwc_otg_interrupt_poll(sc);
 	mutex_spin_exit(&sc->sc_intr_lock);
@@ -1687,7 +1614,7 @@ dwc_otg_worker(struct work *wk, void *priv)
 
 	DOTG_EVCNT_INCR(sc->sc_ev_work);
 
-	mutex_enter(&sc->sc_lock);
+
 	if (dwork == &sc->sc_timer_work) {
 		dwc_otg_timer(sc);
 	} else {
@@ -1698,10 +1625,9 @@ dwc_otg_worker(struct work *wk, void *priv)
 			dwc_otg_start_standard_chain(xfer);
 		} else {
 			dxfer->state = DXFER_ABORTING;
-			cv_broadcast(&xfer->hccv);
+			wakeup(&xfer->hcflags);
 		}
 	}
-	mutex_exit(&sc->sc_lock);
 }
 
 int dwc_otg_intr(void *p)
@@ -2149,7 +2075,7 @@ dwc_otg_wakeup_peer(struct dwc_otg_softc *sc)
 		DWC_OTG_WRITE_4(sc, DOTG_DCTL, temp);
 
 		/* Wait 8ms for remote wakeup to complete. */
-		usb_delay_ms_locked(&sc->sc_bus, 8, &sc->sc_lock);
+		usb_delay_ms(&sc->sc_bus, 8);
 
 		temp &= ~DCTL_RMTWKUPSIG;
 		DWC_OTG_WRITE_4(sc, DOTG_DCTL, temp);
@@ -2158,21 +2084,21 @@ dwc_otg_wakeup_peer(struct dwc_otg_softc *sc)
 		DWC_OTG_WRITE_4(sc, DOTG_PCGCCTL, 0);
 
 		/* wait 10ms */
-		usb_delay_ms_locked(&sc->sc_bus, 10, &sc->sc_lock);
+		usb_delay_ms(&sc->sc_bus, 10);
 
 		/* resume port */
 		sc->sc_hprt_val |= HPRT_PRTRES;
 		DWC_OTG_WRITE_4(sc, DOTG_HPRT, sc->sc_hprt_val);
 
 		/* Wait 100ms for resume signalling to complete. */
-		usb_delay_ms_locked(&sc->sc_bus, 100, &sc->sc_lock);
+		usb_delay_ms(&sc->sc_bus, 100);
 
 		/* clear suspend and resume */
 		sc->sc_hprt_val &= ~(HPRT_PRTSUSP | HPRT_PRTRES);
 		DWC_OTG_WRITE_4(sc, DOTG_HPRT, sc->sc_hprt_val);
 
 		/* Wait 4ms */
-		usb_delay_ms_locked(&sc->sc_bus, 4, &sc->sc_lock);
+		usb_delay_ms(&sc->sc_bus, 4);
 	}
 
 	/* need to fake resume IRQ */
@@ -2349,7 +2275,7 @@ dwc_otg_host_channel_disable(struct dwc_otg_softc *sc, uint8_t x)
 	}
 }
 
-Static void
+static void
 dwc_otg_host_channel_free(struct dwc_otg_td *td)
 {
 	struct dwc_otg_softc *sc;
@@ -2917,12 +2843,16 @@ dwc_otg_host_data_tx(struct dwc_otg_td *td)
 	uint32_t count;
 	uint32_t hcint;
 	uint32_t hcchar;
+	uint8_t ep_type;
 
 	if (dwc_otg_host_channel_alloc(td))
 		return 1;		/* busy */
 
 	/* get pointer to softc */
 	sc = DWC_OTG_TD2SC(td);
+
+	ep_type = ((td->hcchar &
+	    HCCHAR_EPTYPE_MASK) >> HCCHAR_EPTYPE_SHIFT);
 
 	hcint = sc->sc_chan_state[td->channel].hcint;
 
@@ -3221,8 +3151,6 @@ dwc_otg_timer(struct dwc_otg_softc *sc)
 {
 	struct dwc_otg_xfer *xfer;
 	struct dwc_otg_td *td;
-
-	KASSERT(mutex_owned(&sc->sc_lock));
 
 	/* increment timer value */
 	sc->sc_tmr_val++;
@@ -3965,7 +3893,6 @@ dwc_otg_start_standard_chain(usbd_xfer_handle xfer)
 
 	if (dwc_otg_xfer_do_fifo(xfer)) {
 
-		KASSERT(mutex_owned(&sc->sc_lock));
 		/* put transfer on interrupt queue */
 
 		dxfer->state = DXFER_ACTIVE;
@@ -3987,19 +3914,20 @@ dwc_otg_rhc(void *addr)
 {
 	struct dwc_otg_softc *sc = addr;
 	usbd_xfer_handle xfer;
+	usbd_pipe_handle pipe;
 	u_char *p;
 
 	DPRINTF("\n");
-	mutex_enter(&sc->sc_lock);
 	xfer = sc->sc_intrxfer;
 
 	if (xfer == NULL) {
 		/* Just ignore the change. */
-		mutex_exit(&sc->sc_lock);
 		return;
 
 	}
 	/* set port bit */
+	pipe = xfer->pipe;
+
 	p = KERNADDR(&xfer->dmabuf, 0);
 
 	p[0] = 0x02;	/* we only have one port (1 << 1) */
@@ -4008,7 +3936,6 @@ dwc_otg_rhc(void *addr)
 	xfer->status = USBD_NORMAL_COMPLETION;
 
 	usb_transfer_complete(xfer);
-	mutex_exit(&sc->sc_lock);
 
 }
 
@@ -4098,7 +4025,6 @@ dwc_otg_init(struct dwc_otg_softc *sc)
 
 	callout_init(&sc->sc_timer, CALLOUT_MPSAFE);
 
-	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_SOFTUSB);
 	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_SCHED);
 
 	TAILQ_INIT(&sc->sc_active);
@@ -4330,10 +4256,8 @@ dwc_otg_init(struct dwc_otg_softc *sc)
 
 	dwc_otg_vbus_interrupt(sc);
 
-	mutex_enter(&sc->sc_lock);
 	/* catch any lost interrupts */
 	dwc_otg_do_poll(&sc->sc_bus);
-	mutex_exit(&sc->sc_lock);
 
 	return 0;
 }
@@ -4397,8 +4321,6 @@ dwc_otg_xfer_start(usbd_xfer_handle xfer)
 {
  	struct dwc_otg_xfer *dxfer = DWC_OTG_XFER2DXFER(xfer);
 	struct dwc_otg_softc *sc = DWC_OTG_XFER2SC(xfer);
-
-	KASSERT(mutex_owned(&sc->sc_lock));
 
 	if (sc->sc_bus.use_polling) {
 		dwc_otg_start_standard_chain(xfer);

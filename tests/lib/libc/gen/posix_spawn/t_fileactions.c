@@ -1,4 +1,4 @@
-/* $NetBSD: t_fileactions.c,v 1.5 2012/04/09 19:42:07 martin Exp $ */
+/* $NetBSD: t_fileactions.c,v 1.2.2.2 2012/04/12 17:05:37 riz Exp $ */
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.

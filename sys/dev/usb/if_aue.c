@@ -1,5 +1,4 @@
-/*	$NetBSD: if_aue.c,v 1.131 2013/04/27 15:57:41 tsutsui Exp $	*/
-
+/*	$NetBSD: if_aue.c,v 1.124 2012/02/02 19:43:07 tls Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999, 2000
  *	Bill Paul <wpaul@ee.columbia.edu>.  All rights reserved.
@@ -78,11 +77,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_aue.c,v 1.131 2013/04/27 15:57:41 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_aue.c,v 1.124 2012/02/02 19:43:07 tls Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -241,7 +238,7 @@ Static int aue_eeprom_getword(struct aue_softc *, int);
 Static void aue_read_mac(struct aue_softc *, u_char *);
 Static int aue_miibus_readreg(device_t, int, int);
 Static void aue_miibus_writereg(device_t, int, int, int);
-Static void aue_miibus_statchg(struct ifnet *);
+Static void aue_miibus_statchg(device_t);
 
 Static void aue_lock_mii(struct aue_softc *);
 Static void aue_unlock_mii(struct aue_softc *);
@@ -427,7 +424,7 @@ aue_unlock_mii(struct aue_softc *sc)
 {
 	mutex_exit(&sc->aue_mii_lock);
 	if (--sc->aue_refcnt < 0)
-		usb_detach_wakeupold(sc->aue_dev);
+		usb_detach_wakeup((sc->aue_dev));
 }
 
 Static int
@@ -518,10 +515,10 @@ aue_miibus_writereg(device_t dev, int phy, int reg, int data)
 }
 
 Static void
-aue_miibus_statchg(struct ifnet *ifp)
+aue_miibus_statchg(device_t dev)
 {
-	struct aue_softc *sc = ifp->if_softc;
-	struct mii_data	*mii = GET_MII(sc);
+	struct aue_softc *sc = device_private(dev);
+	struct mii_data		*mii = GET_MII(sc);
 
 	DPRINTFN(5,("%s: %s: enter\n", device_xname(sc->aue_dev), __func__));
 
@@ -549,8 +546,8 @@ aue_miibus_statchg(struct ifnet *ifp)
 	 */
 	if (!sc->aue_dying && (sc->aue_flags & LSYS)) {
 		u_int16_t auxmode;
-		auxmode = aue_miibus_readreg(sc->aue_dev, 0, 0x1b);
-		aue_miibus_writereg(sc->aue_dev, 0, 0x1b, auxmode | 0x04);
+		auxmode = aue_miibus_readreg(dev, 0, 0x1b);
+		aue_miibus_writereg(dev, 0, 0x1b, auxmode | 0x04);
 	}
 	DPRINTFN(5,("%s: %s: exit\n", device_xname(sc->aue_dev), __func__));
 }
@@ -689,9 +686,9 @@ aue_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct usb_attach_arg *uaa = aux;
 
-	/*
+	/* 
 	 * Some manufacturers use the same vendor and product id for
-	 * different devices. We need to sanity check the DeviceClass
+	 * different devices. We need to sanity check the DeviceClass 
 	 * in this case
 	 * Currently known guilty products:
 	 * 0x050d/0x0121 Belkin Bluetooth and USB2LAN
@@ -702,13 +699,13 @@ aue_match(device_t parent, cfdata_t match, void *aux)
 	if (uaa->vendor == USB_VENDOR_BELKIN &&
 		uaa->product == USB_PRODUCT_BELKIN_USB2LAN) {
 		usb_device_descriptor_t *dd;
-
+		
 		dd = usbd_get_device_descriptor(uaa->device);
 		if (dd != NULL &&
 			dd->bDeviceClass != UDCLASS_IN_INTERFACE)
 			return (UMATCH_NONE);
 	}
-
+	
 	return (aue_lookup(uaa->vendor, uaa->product) != NULL ?
 		UMATCH_VENDOR_PRODUCT : UMATCH_NONE);
 }
@@ -747,13 +744,12 @@ aue_attach(device_t parent, device_t self, void *aux)
 
 	err = usbd_set_config_no(dev, AUE_CONFIG_NO, 1);
 	if (err) {
-		aprint_error_dev(self, "failed to set configuration"
-		    ", err=%s\n", usbd_errstr(err));
+		aprint_error_dev(self, "setting config no failed\n");
 		return;
 	}
 
-	usb_init_task(&sc->aue_tick_task, aue_tick_task, sc, 0);
-	usb_init_task(&sc->aue_stop_task, (void (*)(void *))aue_stop, sc, 0);
+	usb_init_task(&sc->aue_tick_task, aue_tick_task, sc);
+	usb_init_task(&sc->aue_stop_task, (void (*)(void *))aue_stop, sc);
 	mutex_init(&sc->aue_mii_lock, MUTEX_DEFAULT, IPL_NONE);
 
 	err = usbd_device2interface_handle(dev, AUE_IFACE_IDX, &iface);
@@ -927,7 +923,7 @@ aue_detach(device_t self, int flags)
 
 	if (--sc->aue_refcnt >= 0) {
 		/* Wait for processes to go away. */
-		usb_detach_waitold(sc->aue_dev);
+		usb_detach_wait((sc->aue_dev));
 	}
 	splx(s);
 
@@ -1074,7 +1070,7 @@ aue_intr(usbd_xfer_handle xfer, usbd_private_handle priv,
 		}
 		sc->aue_intr_errs++;
 		if (usbd_ratecheck(&sc->aue_rx_notice)) {
-			aprint_debug_dev(sc->aue_dev,
+			aprint_error_dev(sc->aue_dev,
 			    "%u usb errors on intr: %s\n", sc->aue_intr_errs,
 			    usbd_errstr(status));
 			sc->aue_intr_errs = 0;

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2013/01/23 15:02:58 joerg Exp $
+#	$NetBSD: Makefile,v 1.1 2011/07/05 17:22:22 joerg Exp $
 
 LIB=	LLVMARMAsmParser
 
@@ -9,7 +9,8 @@ CPPFLAGS+=	-I${ARM_OBJDIR} -I${LLVM_SRCDIR}/lib/Target/ARM
 
 .PATH: ${LLVM_SRCDIR}/lib/Target/ARM/AsmParser
 
-SRCS+=	ARMAsmParser.cpp
+SRCS+=	ARMAsmLexer.cpp \
+	ARMAsmParser.cpp
 
 .if defined(HOSTLIB)
 .include <bsd.hostlib.mk>

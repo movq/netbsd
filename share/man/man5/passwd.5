@@ -1,4 +1,4 @@
-.\"	$NetBSD: passwd.5,v 1.30 2012/04/22 10:19:00 wiz Exp $
+.\"	$NetBSD: passwd.5,v 1.28 2009/05/13 22:35:02 wiz Exp $
 .\"
 .\" Copyright (c) 1988, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -52,7 +52,7 @@
 .\"
 .\"     @(#)passwd.5	8.1 (Berkeley) 6/5/93
 .\"
-.Dd April 5, 2012
+.Dd June 21, 2007
 .Dt PASSWD 5
 .Os
 .Sh NAME
@@ -187,7 +187,7 @@ field is a key for a user's login class.
 Login classes are defined in
 .Xr login.conf 5 ,
 which is a
-.Xr capfile 5
+.Xr termcap 5
 style database of user attributes, accounting, resource and
 environment settings.
 .Pp
@@ -361,24 +361,6 @@ Hesiod or
 On some systems, the
 .Em passwd
 field may also be overridden.
-.Sh COMPATIBILITY
-The password file format has changed since
-.Bx 4.3 .
-The following awk script can be used to convert your old-style password
-file into a new style password file.
-The additional fields
-.Dq class ,
-.Dq change
-and
-.Dq expire
-are added, but are turned off by default.
-To set them,
-use the current day in seconds from the epoch + whatever number of seconds
-of offset you want.
-.Bd -literal -offset indent
-BEGIN { FS = ":"}
-{ print $1 ":" $2 ":" $3 ":" $4 "::0:0:" $5 ":" $6 ":" $7 }
-.Ed
 .Sh SEE ALSO
 .Xr chpass 1 ,
 .Xr login 1 ,
@@ -397,6 +379,24 @@ BEGIN { FS = ":"}
 .Pp
 .%T "Managing NFS and NIS"
 (O'Reilly \*[Am] Associates)
+.Sh COMPATIBILITY
+The password file format has changed since
+.Bx 4.3 .
+The following awk script can be used to convert your old-style password
+file into a new style password file.
+The additional fields
+.Dq class ,
+.Dq change
+and
+.Dq expire
+are added, but are turned off by default.
+To set them,
+use the current day in seconds from the epoch + whatever number of seconds
+of offset you want.
+.Bd -literal -offset indent
+BEGIN { FS = ":"}
+{ print $1 ":" $2 ":" $3 ":" $4 "::0:0:" $5 ":" $6 ":" $7 }
+.Ed
 .Sh HISTORY
 A
 .Nm

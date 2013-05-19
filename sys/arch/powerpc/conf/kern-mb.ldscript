@@ -1,4 +1,4 @@
-/* $NetBSD: kern-mb.ldscript,v 1.1 2012/03/29 15:42:15 matt Exp $ */
+/* $NetBSD: kern-mb.ldscript,v 1.1.6.2 2012/05/09 22:42:31 riz Exp $ */
 
 /*  ldscript for NetBSD/powerpc kernels and LKMs */
 OUTPUT_ARCH(powerpc)

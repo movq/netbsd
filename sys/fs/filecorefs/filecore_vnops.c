@@ -1,4 +1,4 @@
-/*	$NetBSD: filecore_vnops.c,v 1.36 2013/03/18 19:35:36 plunky Exp $	*/
+/*	$NetBSD: filecore_vnops.c,v 1.33 2011/05/23 22:00:31 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1994 The Regents of the University of California.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: filecore_vnops.c,v 1.36 2013/03/18 19:35:36 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: filecore_vnops.c,v 1.33 2011/05/23 22:00:31 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -126,10 +126,8 @@ filecore_check_permitted(struct vnode *vp, struct filecore_node *ip,
 {
 	struct filecore_mnt *fcmp = ip->i_mnt;
 
-	return kauth_authorize_vnode(cred, KAUTH_ACCESS_ACTION(mode,
-	    vp->v_type, filecore_mode(ip)), vp, NULL,
-	    genfs_can_access(vp->v_type, filecore_mode(ip), fcmp->fc_uid,
-	    fcmp->fc_gid, mode, cred));
+	return genfs_can_access(vp->v_type, filecore_mode(ip),
+	    fcmp->fc_uid, fcmp->fc_gid, mode, cred);
 }
 
 int
@@ -261,10 +259,14 @@ filecore_read(void *v)
 			    vp, (long long)lbn, size, bp, error);
 #endif
 		}
+		n = MIN(n, size - bp->b_resid);
 		if (error) {
+#ifdef FILECORE_DEBUG_BR
+			printf("brelse(%p) vn1\n", bp);
+#endif
+			brelse(bp, 0);
 			return (error);
 		}
-		n = MIN(n, size - bp->b_resid);
 
 		error = uiomove((char *)(bp->b_data) + on, (int)n, uio);
 #ifdef FILECORE_DEBUG_BR
@@ -319,6 +321,7 @@ filecore_readdir(void *v)
 
 	error = filecore_dbread(dp, &bp);
 	if (error) {
+		brelse(bp, 0);
 		return error;
 	}
 

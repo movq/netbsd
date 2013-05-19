@@ -1,4 +1,4 @@
--- $NetBSD: gpio.lua,v 1.2 2012/02/25 09:13:38 mbalmer Exp $
+-- $NetBSD: gpio.lua,v 1.1.4.1 2012/02/25 09:58:25 sborrill Exp $
 
 require 'gpio'
 

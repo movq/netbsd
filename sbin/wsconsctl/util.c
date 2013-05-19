@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.31 2012/12/24 01:20:12 khorben Exp $ */
+/*	$NetBSD: util.c,v 1.30.2.1 2013/02/11 21:36:30 riz Exp $ */
 
 /*-
  * Copyright (c) 1998, 2006, 2012 The NetBSD Foundation, Inc.

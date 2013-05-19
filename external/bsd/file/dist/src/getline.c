@@ -1,4 +1,4 @@
-/*	$NetBSD: getline.c,v 1.1.1.3 2013/03/23 15:49:15 christos Exp $	*/
+/*	$NetBSD: getline.c,v 1.1.1.1.6.1 2012/03/07 23:18:29 riz Exp $	*/
 
 /*	NetBSD: fgetln.c,v 1.9 2008/04/29 06:53:03 martin Exp 	*/
 
@@ -39,7 +39,7 @@
 #include <errno.h>
 #include <string.h>
 
-public ssize_t
+ssize_t
 getdelim(char **buf, size_t *bufsiz, int delimiter, FILE *fp)
 {
 	char *ptr, *eptr;

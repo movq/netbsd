@@ -1,4 +1,4 @@
-/*	$NetBSD: u3g.c,v 1.28 2013/03/14 13:08:56 nonaka Exp $	*/
+/*	$NetBSD: u3g.c,v 1.24.2.1 2013/02/11 21:44:22 riz Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: u3g.c,v 1.28 2013/03/14 13:08:56 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: u3g.c,v 1.24.2.1 2013/02/11 21:44:22 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -113,19 +113,16 @@ struct u3g_softc {
 	device_t		sc_dev;
 	usbd_device_handle	sc_udev;
 	bool			sc_dying;	/* We're going away */
+
+	device_t		sc_ucom;	/* Child ucom(4) handle */
 	int			sc_ifaceno;	/* Device interface number */
 
-	struct u3g_com {
-		device_t	c_dev;		/* Child ucom(4) handle */
+	bool			sc_open;	/* Device is in use */
+	bool			sc_purging;	/* Purging stale data */
+	struct timeval		sc_purge_start;	/* Control duration of purge */
 
-		bool		c_open;		/* Device is in use */
-		bool		c_purging;	/* Purging stale data */
-		struct timeval	c_purge_start;	/* Control duration of purge */
-
-		u_char		c_msr;		/* Emulated 'msr' */
-		uint16_t	c_outpins;	/* Output pin state */
-	} sc_com[10];
-	size_t			sc_ncom;
+	u_char			sc_msr;		/* Emulated 'msr' */
+	uint16_t		sc_outpins;	/* Output pin state */
 
 	usbd_pipe_handle	sc_intr_pipe;	/* Interrupt pipe */
 	u_char			*sc_intr_buff;	/* Interrupt buffer */
@@ -191,7 +188,6 @@ static const struct usb_devno u3g_devs[] = {
 	{ USB_VENDOR_HUAWEI, USB_PRODUCT_HUAWEI_EM770W },
 	{ USB_VENDOR_HUAWEI, USB_PRODUCT_HUAWEI_K3765 },
 	{ USB_VENDOR_HUAWEI, USB_PRODUCT_HUAWEI_MOBILE },
-	{ USB_VENDOR_HUAWEI, USB_PRODUCT_HUAWEI_E171 },
 	/* OEM: Merlin */
 	{ USB_VENDOR_MERLIN, USB_PRODUCT_MERLIN_V620 },
 	/* OEM: Novatel */
@@ -221,7 +217,6 @@ static const struct usb_devno u3g_devs[] = {
 	/* OEM: Qualcomm, Inc. */
 	{ USB_VENDOR_QUALCOMMINC, USB_PRODUCT_QUALCOMMINC_CDMA_MSM },
 	{ USB_VENDOR_QUALCOMMINC, USB_PRODUCT_QUALCOMMINC_ZTE_MF626 },
-	{ USB_VENDOR_QUALCOMM, USB_PRODUCT_QUALCOMM_NTT_DOCOMO_L02C_MODEM },
 
 	/* OEM: Sierra Wireless: */
 	{ USB_VENDOR_SIERRA, USB_PRODUCT_SIERRA_AC595U },
@@ -250,7 +245,7 @@ static const struct usb_devno u3g_devs[] = {
 	{ USB_VENDOR_SIERRA, USB_PRODUCT_SIERRA_MC8781 },
 	{ USB_VENDOR_SIERRA, USB_PRODUCT_SIERRA_MINI5725 },
 	{ USB_VENDOR_SIERRA, USB_PRODUCT_SIERRA_USB305 },
-	{ USB_VENDOR_SIERRA, USB_PRODUCT_SIERRA_250U },
+
 	/* Toshiba */
 	{ USB_VENDOR_TOSHIBA, USB_PRODUCT_TOSHIBA_HSDPA_MODEM_EU870DT1 },
 
@@ -428,25 +423,6 @@ u3g_huawei_k3765_reinit(usbd_device_handle dev)
 }
 
 static int
-u3g_huawei_e171_reinit(usbd_device_handle dev)
-{
-	unsigned char cmd[31];
-
-	/* magic string adapted from some webpage */
-	memset(cmd, 0, sizeof(cmd));
-	cmd[0] = 0x55; 
-	cmd[1] = 0x53;
-	cmd[2] = 0x42;
-	cmd[3] = 0x43;
-	cmd[15]= 0x11;
-	cmd[16]= 0x06;
-	cmd[17]= 0x20;
-	cmd[20]= 0x01;
-
-	return send_bulkmsg(dev, cmd, sizeof(cmd));
-}
-
-static int
 u3g_sierra_reinit(usbd_device_handle dev)
 {
 	/* Some Sierra devices presents themselves as a umass device with
@@ -504,9 +480,6 @@ u3ginit_match(device_t parent, cfdata_t match, void *aux)
 		case USB_PRODUCT_HUAWEI_K3765INIT:
 			return u3g_huawei_k3765_reinit(uaa->device);
 			break;
-		case USB_PRODUCT_HUAWEI_E171INIT:
-			return u3g_huawei_e171_reinit(uaa->device);
-			break;
 		default:
 			return u3g_huawei_reinit(uaa->device);
 			break;
@@ -531,11 +504,6 @@ u3ginit_match(device_t parent, cfdata_t match, void *aux)
 
 	case USB_VENDOR_QUALCOMMINC:
 		if (uaa->product == USB_PRODUCT_QUALCOMMINC_ZTE_STOR)
-			return u3g_novatel_reinit(uaa->device);
-		break;
-
-	case USB_VENDOR_QUALCOMM:
-		if (uaa->product == USB_PRODUCT_QUALCOMM_NTT_DOCOMO_L02C_STORAGE)
 			return u3g_novatel_reinit(uaa->device);
 		break;
 
@@ -655,16 +623,20 @@ u3g_attach(device_t parent, device_t self, void *aux)
 	uca.ibufsize = U3G_BUFF_SIZE;
 	uca.obufsize = U3G_BUFF_SIZE;
 	uca.ibufsizepad = U3G_BUFF_SIZE;
+	uca.portno = uaa->ifaceno;
 	uca.opkthdrlen = 0;
 	uca.device = dev;
 	uca.iface = iface;
 	uca.methods = &u3g_methods;
 	uca.arg = sc;
-	uca.portno = -1;
 	uca.bulkin = uca.bulkout = -1;
 
-
+	sc->sc_outpins = 0;
+	sc->sc_msr = UMSR_DSR | UMSR_CTS | UMSR_DCD;
 	sc->sc_ifaceno = uaa->ifaceno;
+	sc->sc_open = false;
+	sc->sc_purging = false;
+
 	intr_address = -1;
 	intr_size = 0;
 
@@ -690,32 +662,24 @@ u3g_attach(device_t parent, device_t self, void *aux)
 		    UE_GET_XFERTYPE(ed->bmAttributes) == UE_BULK) {
 			uca.bulkout = ed->bEndpointAddress;
 		}
-		if (uca.bulkin != -1 && uca.bulkout != -1) {
-			struct u3g_com *com;
-			if (sc->sc_ncom == __arraycount(sc->sc_com)) {
-				aprint_error_dev(self, "Need to configure "
-				    "more than %zu ttys", sc->sc_ncom);
-				continue;
-			}
-			uca.portno = sc->sc_ncom++;
-			com = &sc->sc_com[uca.portno];
-			com->c_outpins = 0;
-			com->c_msr = UMSR_DSR | UMSR_CTS | UMSR_DCD;
-			com->c_open = false;
-			com->c_purging = false;
-			com->c_dev = config_found_sm_loc(self, "ucombus",
-				NULL, &uca, ucomprint, ucomsubmatch);
-			uca.bulkin = -1;
-			uca.bulkout = -1;
-		}
 	}
 
-	if (sc->sc_ncom == 0) {
-		aprint_error_dev(self, "Missing bulk in/out for interface %d\n",
+	if (uca.bulkin == -1) {
+		aprint_error_dev(self, "Missing bulk in for interface %d\n",
 		    sc->sc_ifaceno);
 		sc->sc_dying = true;
 		return;
 	}
+
+	if (uca.bulkout == -1) {
+		aprint_error_dev(self, "Missing bulk out for interface %d\n",
+		    sc->sc_ifaceno);
+		sc->sc_dying = true;
+		return;
+	}
+
+	sc->sc_ucom = config_found_sm_loc(self, "ucombus",
+	    NULL, &uca, ucomprint, ucomsubmatch);
 
 	/*
 	 * If the interface has an interrupt pipe, open it immediately so
@@ -752,14 +716,13 @@ u3g_detach(device_t self, int flags)
 
 	pmf_device_deregister(self);
 
-	for (size_t i = 0; i < sc->sc_ncom; i++)
-		if (sc->sc_com[i].c_dev != NULL) {
-			rv = config_detach(sc->sc_com[i].c_dev, flags);
-			if (rv != 0) {
-				aprint_verbose_dev(self, "Can't deallocate "
-				    "port (%d)", rv);
-			}
+	if (sc->sc_ucom != NULL) {
+		rv = config_detach(sc->sc_ucom, flags);
+		if (rv != 0) {
+			aprint_verbose_dev(self, "Can't deallocate "
+			    "port (%d)", rv);
 		}
+	}
 
 	if (sc->sc_intr_pipe != NULL) {
 		(void) usbd_abort_pipe(sc->sc_intr_pipe);
@@ -779,32 +742,30 @@ u3g_childdet(device_t self, device_t child)
 {
 	struct u3g_softc *sc = device_private(self);
 
-	for (size_t i = 0; i < sc->sc_ncom; i++)
-		    if (sc->sc_com[i].c_dev == child)
-			    sc->sc_com[i].c_dev = NULL;
+	if (sc->sc_ucom == child)
+		sc->sc_ucom = NULL;
 }
 
 static int
 u3g_activate(device_t self, enum devact act)
 {
 	struct u3g_softc *sc = device_private(self);
-	int rv = 0;
+	int rv;
 
 	switch (act) {
 	case DVACT_DEACTIVATE:
-		for (size_t i = 0; i < sc->sc_ncom; i++)
-			if (sc->sc_com[i].c_dev != NULL &&
-			    config_deactivate(sc->sc_com[i].c_dev) && rv == 0)
+		if (sc->sc_ucom != NULL && config_deactivate(sc->sc_ucom))
 			rv = -1;
 		else
 			rv = 0;
 		break;
 
 	default:
+		rv = 0;
 		break;
 	}
 
-	return rv;
+	return (rv);
 }
 
 static void
@@ -812,8 +773,6 @@ u3g_intr(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
 {
 	struct u3g_softc *sc = (struct u3g_softc *)priv;
 	u_char *buf;
-	int portno = 0;	/* XXX */
-	struct u3g_com *com = &sc->sc_com[portno];
 
 	if (sc->sc_dying)
 		return;
@@ -829,7 +788,7 @@ u3g_intr(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
 	if (buf[0] == 0xa1 && buf[1] == 0x20) {
 		u_char msr;
 
-		msr = com->c_msr & ~(UMSR_DCD | UMSR_DSR | UMSR_RI);
+		msr = sc->sc_msr & ~(UMSR_DCD | UMSR_DSR | UMSR_RI);
 
 		if (buf[8] & U3G_INPIN_DCD)
 			msr |= UMSR_DCD;
@@ -840,10 +799,10 @@ u3g_intr(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
 		if (buf[8] & U3G_INPIN_RI)
 			msr |= UMSR_RI;
 
-		if (msr != com->c_msr) {
-			com->c_msr = msr;
-			if (com->c_open)
-				ucom_status_change(device_private(com->c_dev));
+		if (msr != sc->sc_msr) {
+			sc->sc_msr = msr;
+			if (sc->sc_open)
+				ucom_status_change(device_private(sc->sc_ucom));
 		}
 	}
 }
@@ -857,7 +816,7 @@ u3g_get_status(void *arg, int portno, u_char *lsr, u_char *msr)
 	if (lsr != NULL)
 		*lsr = 0;	/* LSR isn't supported */
 	if (msr != NULL)
-		*msr = sc->sc_com[portno].c_msr;
+		*msr = sc->sc_msr;
 }
 
 /*ARGSUSED*/
@@ -868,7 +827,6 @@ u3g_set(void *arg, int portno, int reg, int onoff)
 	usb_device_request_t req;
 	uint16_t mask, new_state;
 	usbd_status err;
-	struct u3g_com *com = &sc->sc_com[portno];
 
 	if (sc->sc_dying)
 		return;
@@ -884,14 +842,14 @@ u3g_set(void *arg, int portno, int reg, int onoff)
 		return;
 	}
 
-	new_state = com->c_outpins & ~mask;
+	new_state = sc->sc_outpins & ~mask;
 	if (onoff)
 		new_state |= mask;
 
-	if (new_state == com->c_outpins)
+	if (new_state == sc->sc_outpins)
 		return;
 
-	com->c_outpins = new_state;
+	sc->sc_outpins = new_state;
 
 	req.bmRequestType = UT_WRITE_CLASS_INTERFACE;
 	req.bRequest = U3G_SET_PIN;
@@ -914,26 +872,23 @@ u3g_open(void *arg, int portno)
 	usb_interface_descriptor_t *id;
 	usbd_interface_handle ih;
 	usbd_status err;
-	struct u3g_com *com = &sc->sc_com[portno];
-	int i, nin;
+	int i;
 
 	if (sc->sc_dying)
 		return (0);
 
-	err = usbd_device2interface_handle(sc->sc_udev, sc->sc_ifaceno, &ih);
+	err = usbd_device2interface_handle(sc->sc_udev, portno, &ih);
 	if (err)
 		return (EIO);
 
 	id = usbd_get_interface_descriptor(ih);
 
-	for (nin = i = 0; i < id->bNumEndpoints; i++) {
+	for (i = 0; i < id->bNumEndpoints; i++) {
 		ed = usbd_interface2endpoint_descriptor(ih, i);
 		if (ed == NULL)	
 			return (EIO);
 
-		if (UE_GET_DIR(ed->bEndpointAddress) == UE_DIR_IN &&
-		    UE_GET_XFERTYPE(ed->bmAttributes) == UE_BULK &&
-		    nin++ == portno) {
+		if (UE_GET_XFERTYPE(ed->bmAttributes) == UE_BULK) {
 			/* Issue ENDPOINT_HALT request */
 			req.bmRequestType = UT_WRITE_ENDPOINT;
 			req.bRequest = UR_CLEAR_FEATURE;
@@ -946,9 +901,9 @@ u3g_open(void *arg, int portno)
 		}
 	}
 
-	com->c_open = true;
-	com->c_purging = true;
-	getmicrotime(&com->c_purge_start);
+	sc->sc_open = true;
+	sc->sc_purging = true;
+	getmicrotime(&sc->sc_purge_start);
 
 	return (0);
 }
@@ -958,9 +913,8 @@ static void
 u3g_close(void *arg, int portno)
 {
 	struct u3g_softc *sc = arg;
-	struct u3g_com *com = &sc->sc_com[portno];
 
-	com->c_open = false;
+	sc->sc_open = false;
 }
 
 /*ARGSUSED*/
@@ -969,23 +923,22 @@ u3g_read(void *arg, int portno, u_char **cpp, uint32_t *ccp)
 {
 	struct u3g_softc *sc = arg;
 	struct timeval curr_tv, diff_tv;
-	struct u3g_com *com = &sc->sc_com[portno];
 
 	/*
 	 * If we're not purging input data following first open, do nothing.
 	 */
-	if (com->c_purging == false)
+	if (sc->sc_purging == false)
 		return;
 
 	/*
 	 * Otherwise check if the purge timeout has expired
 	 */
 	getmicrotime(&curr_tv);
-	timersub(&curr_tv, &com->c_purge_start, &diff_tv);
+	timersub(&curr_tv, &sc->sc_purge_start, &diff_tv);
 
 	if (diff_tv.tv_sec >= U3G_PURGE_SECS) {
 		/* Timeout expired. */
-		com->c_purging = false;
+		sc->sc_purging = false;
 	} else {
 		/* Still purging. Adjust the caller's byte count. */
 		*ccp = 0;
@@ -997,11 +950,10 @@ static void
 u3g_write(void *arg, int portno, u_char *to, u_char *from, u_int32_t *count)
 {
 	struct u3g_softc *sc = arg;
-	struct u3g_com *com = &sc->sc_com[portno];
 
 	/*
 	 * Stop purging as soon as the first data is written to the device.
 	 */
-	com->c_purging = false;
+	sc->sc_purging = false;
 	memcpy(to, from, *count);
 }

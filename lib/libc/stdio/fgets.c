@@ -1,4 +1,4 @@
-/*	$NetBSD: fgets.c,v 1.28 2012/03/15 18:22:30 christos Exp $	*/
+/*	$NetBSD: fgets.c,v 1.27 2009/10/25 20:44:13 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)fgets.c	8.2 (Berkeley) 12/22/93";
 #else
-__RCSID("$NetBSD: fgets.c,v 1.28 2012/03/15 18:22:30 christos Exp $");
+__RCSID("$NetBSD: fgets.c,v 1.27 2009/10/25 20:44:13 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -57,7 +57,10 @@ __RCSID("$NetBSD: fgets.c,v 1.28 2012/03/15 18:22:30 christos Exp $");
  * Return first argument, or NULL if no characters were read.
  */
 char *
-fgets(char *buf, int n, FILE *fp)
+fgets(buf, n, fp)
+	char *buf;
+	int n;
+	FILE *fp;
 {
 	int len;
 	char *s;
@@ -117,7 +120,7 @@ fgets(char *buf, int n, FILE *fp)
 			(void)memcpy(s, p, (size_t)len);
 			s[len] = 0;
 			FUNLOCKFILE(fp);
-			return buf;
+			return (buf);
 		}
 		fp->_r -= len;
 		fp->_p += len;
@@ -127,5 +130,5 @@ fgets(char *buf, int n, FILE *fp)
 	} while (n != 0);
 	*s = 0;
 	FUNLOCKFILE(fp);
-	return buf;
+	return (buf);
 }

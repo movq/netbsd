@@ -1,4 +1,4 @@
-/*	$NetBSD: cpuio.h,v 1.9 2013/01/05 16:36:38 dsl Exp $	*/
+/*	$NetBSD: cpuio.h,v 1.7 2012/01/16 10:36:16 cegger Exp $	*/
 
 /*-
  * Copyright (c) 2007, 2009, 2012 The NetBSD Foundation, Inc.
@@ -62,34 +62,13 @@ typedef struct cpustate {
 #define	IOC_CPU_GETSTATE	_IOWR('c', 1, cpustate_t)
 #define	IOC_CPU_GETCOUNT	_IOR('c', 2, int)
 #define	IOC_CPU_MAPID		_IOWR('c', 3, int)
-/* 4 and 5 reserved for compat nb6 x86 amd ucode loader */
-
-struct cpu_ucode_version {
-	int loader_version;	/* IN: md version number */
-	void *data;		/* OUT: CPU ID data */
-};
-
-#define IOC_CPU_UCODE_GET_VERSION	_IOWR('c', 6, struct cpu_ucode_version)
-
-#ifdef __i386__
-/* In order to read the info from an amd64 kernel we need ... */
-struct cpu_ucode_version_64 {
-	int loader_version;	/* IN: md version number */
-	int pad1;
-	void *data;		/* OUT: CPU ID data */
-	int must_be_zero;
-};
-#define IOC_CPU_UCODE_GET_VERSION_64	_IOWR('c', 6, struct cpu_ucode_version_64)
-#endif
 
 struct cpu_ucode {
-	int loader_version;	/* md version number */
-	int cpu_nr;		/* CPU index or special value below */
-#define CPU_UCODE_ALL_CPUS (-1)
-#define CPU_UCODE_CURRENT_CPU (-2)
+	uint64_t version;
 	char fwname[PATH_MAX];
 };
 
-#define IOC_CPU_UCODE_APPLY		_IOW('c', 7, struct cpu_ucode)
+#define IOC_CPU_UCODE_GET_VERSION	_IOR('c', 4, struct cpu_ucode)
+#define IOC_CPU_UCODE_APPLY		_IOW('c', 5, struct cpu_ucode)
 
 #endif /* !_SYS_CPUIO_H_ */

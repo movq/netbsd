@@ -1,4 +1,4 @@
-/*	$NetBSD: apropos-utils.h,v 1.9 2013/04/02 17:16:50 christos Exp $	*/
+/*	$NetBSD: apropos-utils.h,v 1.2.2.1 2012/05/09 03:41:00 riz Exp $	*/
 /*-
  * Copyright (c) 2011 Abhinav Upadhyay <er.abhinav.upadhyay@gmail.com>
  * All rights reserved.
@@ -35,7 +35,7 @@
 
 #include "sqlite3.h"
 
-#define MANCONF "/etc/man.conf"
+#define DBPATH "/var/db/man.db"
 #define SECMAX 9
 
 /* Flags for opening the database */
@@ -74,7 +74,6 @@ typedef struct query_args {
 	int *sec_nums;		// Section in which to do the search
 	int nrec;			// number of records to fetch
 	int offset;		//From which position to start processing the records
-	int legacy;
 	const char *machine;
 	int (*callback) (void *, const char *, const char *, const char *,
 		const char *, size_t);	// The callback function
@@ -82,18 +81,12 @@ typedef struct query_args {
 	char **errmsg;		// buffer for storing the error msg
 } query_args;
 
-typedef enum query_format {
-    APROPOS_NONE,
-    APROPOS_PAGER,
-    APROPOS_TERM,
-    APROPOS_HTML
-} query_format;
-
 char *lower(char *);
 void concat(char **, const char *);
 void concat2(char **, const char *, size_t);
-sqlite3 *init_db(int, const char *);
+sqlite3 *init_db(int);
 void close_db(sqlite3 *);
-char *get_dbpath(const char *);
-int run_query(sqlite3 *, query_format, query_args *);
-#endif
+int run_query(sqlite3 *, const char *[3], query_args *);
+int run_query_html(sqlite3 *, query_args *);
+int run_query_pager(sqlite3 *, query_args *);
+#endif 

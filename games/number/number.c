@@ -1,4 +1,4 @@
-/*	$NetBSD: number.c,v 1.15 2012/06/19 05:46:09 dholland Exp $	*/
+/*	$NetBSD: number.c,v 1.14 2010/05/13 17:52:11 tnozaki Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)number.c	8.3 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: number.c,v 1.15 2012/06/19 05:46:09 dholland Exp $");
+__RCSID("$NetBSD: number.c,v 1.14 2010/05/13 17:52:11 tnozaki Exp $");
 #endif
 #endif /* not lint */
 
@@ -86,7 +86,9 @@ static void usage(void) __dead;
 static int lflag;
 
 int
-main(int argc, char *argv[])
+main(argc, argv)
+	int argc;
+	char *argv[];
 {
 	int ch, first;
 	char line[256];
@@ -123,7 +125,8 @@ main(int argc, char *argv[])
 }
 
 void
-convert(char *line)
+convert(line)
+	char *line;
 {
 	int flen, len, rval;
 	char *p, *fraction;
@@ -191,7 +194,9 @@ badnum:			errx(1, "illegal number: %s", line);
 }
 
 int
-unit(int len, const char *p)
+unit(len, p)
+	int len;
+	const char *p;
 {
 	int off, rval;
 
@@ -225,7 +230,9 @@ unit(int len, const char *p)
 }
 
 int
-number(const char *p, int len)
+number(p, len)
+	const char *p;
+	int len;
 {
 	int val, rval;
 
@@ -263,7 +270,8 @@ number(const char *p, int len)
 }
 
 void
-pfract(int len)
+pfract(len)
+	int len;
 {
 	static const char *const pref[] = { "", "ten-", "hundred-" };
 
@@ -281,7 +289,7 @@ pfract(int len)
 }
 
 void
-usage(void)
+usage()
 {
 	(void)fprintf(stderr, "usage: number [# ...]\n");
 	exit(1);

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_vr.c,v 1.112 2012/12/27 16:23:48 jmcneill Exp $	*/
+/*	$NetBSD: if_vr.c,v 1.110.2.1 2013/02/08 19:35:23 riz Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999 The NetBSD Foundation, Inc.
@@ -97,7 +97,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_vr.c,v 1.112 2012/12/27 16:23:48 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_vr.c,v 1.110.2.1 2013/02/08 19:35:23 riz Exp $");
 
 
 
@@ -308,7 +308,7 @@ static void	vr_tick(void *);
 
 static int	vr_mii_readreg(device_t, int, int);
 static void	vr_mii_writereg(device_t, int, int, int);
-static void	vr_mii_statchg(struct ifnet *);
+static void	vr_mii_statchg(device_t);
 
 static void	vr_setmulti(struct vr_softc *);
 static void	vr_reset(struct vr_softc *);
@@ -401,9 +401,9 @@ vr_mii_writereg(device_t self, int phy, int reg, int val)
 }
 
 static void
-vr_mii_statchg(struct ifnet *ifp)
+vr_mii_statchg(device_t self)
 {
-	struct vr_softc *sc = ifp->if_softc;
+	struct vr_softc *sc = device_private(self);
 	int i;
 
 	/*

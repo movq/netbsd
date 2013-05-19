@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.powerpc,v 1.51 2013/03/10 07:18:20 christos Exp $
+#	$NetBSD: Makefile.powerpc,v 1.49.2.1 2012/05/17 18:22:27 riz Exp $
 #
 # Makefile for NetBSD
 #
@@ -58,8 +58,6 @@ AFLAGS+=	${AOPTS} -D_NOREGNAMES
 OPT_MODULAR=	%MODULAR%
 .if !empty(OPT_MODULAR)
 KERN_AS=	obj
-.else
-KERN_AS=	library
 .endif
 
 ##

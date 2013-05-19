@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_lookup.c,v 1.23 2012/12/20 08:03:42 hannken Exp $	*/
+/*	$NetBSD: cd9660_lookup.c,v 1.19.8.1 2012/08/12 12:59:50 martin Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993, 1994
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd9660_lookup.c,v 1.23 2012/12/20 08:03:42 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd9660_lookup.c,v 1.19.8.1 2012/08/12 12:59:50 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/namei.h>
@@ -151,10 +151,8 @@ cd9660_lookup(void *v)
 	 * check the name cache to see if the directory/name pair
 	 * we are looking for is known already.
 	 */
-	if (cache_lookup(vdp, cnp->cn_nameptr, cnp->cn_namelen,
-			 cnp->cn_nameiop, cnp->cn_flags, NULL, vpp)) {
-		return *vpp == NULLVP ? ENOENT : 0;
-	}
+	if ((error = cache_lookup(vdp, vpp, cnp)) >= 0)
+		return (error);
 
 	len = cnp->cn_namelen;
 	name = cnp->cn_nameptr;
@@ -338,7 +336,7 @@ notfound:
 	/*
 	 * Insert name into cache (as non-existent) if appropriate.
 	 */
-	cache_enter(vdp, *vpp, cnp->cn_nameptr, cnp->cn_namelen, cnp->cn_flags);
+	cache_enter(vdp, *vpp, cnp);
 	return (nameiop == CREATE || nameiop == RENAME) ? EROFS : ENOENT;
 
 found:
@@ -401,7 +399,7 @@ found:
 	/*
 	 * Insert name into cache if appropriate.
 	 */
-	cache_enter(vdp, *vpp, cnp->cn_nameptr, cnp->cn_namelen, cnp->cn_flags);
+	cache_enter(vdp, *vpp, cnp);
 	return 0;
 }
 
@@ -425,6 +423,7 @@ cd9660_blkatoff(struct vnode *vp, off_t offset, char **res, struct buf **bpp)
 	bsize = blksize(imp, ip, lbn);
 
 	if ((error = bread(vp, lbn, bsize, NOCRED, 0, &bp)) != 0) {
+		brelse(bp, 0);
 		*bpp = NULL;
 		return (error);
 	}

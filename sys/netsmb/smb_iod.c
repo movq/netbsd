@@ -1,4 +1,4 @@
-/*	$NetBSD: smb_iod.c,v 1.40 2012/04/29 20:27:31 dsl Exp $	*/
+/*	$NetBSD: smb_iod.c,v 1.39 2010/12/17 13:05:29 pooka Exp $	*/
 
 /*
  * Copyright (c) 2000-2001 Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smb_iod.c,v 1.40 2012/04/29 20:27:31 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smb_iod.c,v 1.39 2010/12/17 13:05:29 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,8 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: smb_iod.c,v 1.40 2012/04/29 20:27:31 dsl Exp $");
 
 #define	smb_iod_wakeup(iod)	wakeup(&(iod)->iod_flags)
 
-MALLOC_DEFINE(M_SMBIOD, "SMBIOD", "SMB network io daemon");
-MALLOC_DECLARE(M_SMBIOD);
+static MALLOC_DEFINE(M_SMBIOD, "SMBIOD", "SMB network io daemon");
 
 static int smb_iod_next;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: vrdsu.c,v 1.11 2012/10/27 17:17:56 chs Exp $	*/
+/*	$NetBSD: vrdsu.c,v 1.10 2009/03/18 10:22:29 cegger Exp $	*/
 
 /*
  * Copyright (c) 1999 Shin Takemura All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vrdsu.c,v 1.11 2012/10/27 17:17:56 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vrdsu.c,v 1.10 2009/03/18 10:22:29 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,17 +41,18 @@ __KERNEL_RCSID(0, "$NetBSD: vrdsu.c,v 1.11 2012/10/27 17:17:56 chs Exp $");
 #include <hpcmips/vr/vrdsuvar.h>
 
 struct vrdsu_softc {
+	struct device sc_dev;
 	bus_space_tag_t sc_iot;
 	bus_space_handle_t sc_ioh;
 };
 
-static int vrdsumatch(device_t, cfdata_t, void *);
-static void vrdsuattach(device_t, device_t, void *);
+static int vrdsumatch(struct device *, struct cfdata *, void *);
+static void vrdsuattach(struct device *, struct device *, void *);
 
 static void vrdsu_write(struct vrdsu_softc *, int, unsigned short);
 static unsigned short vrdsu_read(struct vrdsu_softc *, int);
 
-CFATTACH_DECL_NEW(vrdsu, sizeof(struct vrdsu_softc),
+CFATTACH_DECL(vrdsu, sizeof(struct vrdsu_softc),
     vrdsumatch, vrdsuattach, NULL, NULL);
 
 struct vrdsu_softc *the_dsu_sc = NULL;
@@ -71,16 +72,16 @@ vrdsu_read(struct vrdsu_softc *sc, int port)
 }
 
 static int
-vrdsumatch(device_t parent, cfdata_t cf, void *aux)
+vrdsumatch(struct device *parent, struct cfdata *cf, void *aux)
 {
 
 	return (1);
 }
 
 static void
-vrdsuattach(device_t parent, device_t self, void *aux)
+vrdsuattach(struct device *parent, struct device *self, void *aux)
 {
-	struct vrdsu_softc *sc = device_private(self);
+	struct vrdsu_softc *sc = (struct vrdsu_softc *)self;
 	struct vrip_attach_args *va = aux;
 
 	sc->sc_iot = va->va_iot;

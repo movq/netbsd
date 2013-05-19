@@ -1,4 +1,4 @@
-/*	$NetBSD: aster.c,v 1.23 2012/10/27 17:17:26 chs Exp $ */
+/*	$NetBSD: aster.c,v 1.22 2011/07/19 15:55:26 dyoung Exp $ */
 
 /*-
  * Copyright (c) 1998,2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aster.c,v 1.23 2012/10/27 17:17:26 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aster.c,v 1.22 2011/07/19 15:55:26 dyoung Exp $");
 
 /*
  * zbus ISDN Blaster, ISDN Master driver.
@@ -54,23 +54,24 @@ __KERNEL_RCSID(0, "$NetBSD: aster.c,v 1.23 2012/10/27 17:17:26 chs Exp $");
 
 
 struct aster_softc {
+	struct device sc_dev;
 	struct bus_space_tag sc_bst;
 };
 
-int astermatch(device_t, cfdata_t, void *);
-void asterattach(device_t, device_t, void *);
-int asterprint(void *, const char *);
+int astermatch(struct device *, struct cfdata *, void *);
+void asterattach(struct device *, struct device *, void *);
+int asterprint(void *auxp, const char *);
 
-CFATTACH_DECL_NEW(aster, sizeof(struct aster_softc),
+CFATTACH_DECL(aster, sizeof(struct aster_softc),
     astermatch, asterattach, NULL, NULL);
 
 int
-astermatch(device_t parent, cfdata_t cf, void *aux)
+astermatch(struct device *parent, struct cfdata *cfp, void *auxp)
 {
 
 	struct zbus_args *zap;
 
-	zap = aux;
+	zap = auxp;
 
 	if (zap->manid == 5001 && zap->prodid == 1)	/* VMC ISDN Blaster */
 		return (1);
@@ -92,14 +93,14 @@ astermatch(device_t parent, cfdata_t cf, void *aux)
 }
 
 void
-asterattach(device_t parent, device_t self, void *aux)
+asterattach(struct device *parent, struct device *self, void *auxp)
 {
 	struct aster_softc *astrsc;
 	struct zbus_args *zap;
 	struct supio_attach_args supa;
 
-	astrsc = device_private(self);
-	zap = aux;
+	astrsc = (struct aster_softc *)self;
+	zap = auxp;
 
 	astrsc->sc_bst.base = (u_long)zap->va + 0;
 	astrsc->sc_bst.absm = &amiga_bus_stride_2;
@@ -144,11 +145,10 @@ asterattach(device_t parent, device_t self, void *aux)
 }
 
 int
-asterprint(void *aux, const char *pnp)
+asterprint(void *auxp, const char *pnp)
 {
 	struct supio_attach_args *supa;
-
-	supa = aux;
+	supa = auxp;
 
 	if (pnp == NULL)
 		return(QUIET);

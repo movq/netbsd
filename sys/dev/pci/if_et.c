@@ -1,15 +1,15 @@
-/*	$NetBSD: if_et.c,v 1.7 2013/03/30 03:21:04 christos Exp $	*/
+/*	$NetBSD: if_et.c,v 1.3.2.1 2012/11/19 18:41:59 riz Exp $	*/
 /*	$OpenBSD: if_et.c,v 1.11 2008/06/08 06:18:07 jsg Exp $	*/
 /*
  * Copyright (c) 2007 The DragonFly Project.  All rights reserved.
- *
+ * 
  * This code is derived from software contributed to The DragonFly Project
  * by Sepherosa Ziehau <sepherosa@gmail.com>
- *
+ * 
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
  * are met:
- *
+ * 
  * 1. Redistributions of source code must retain the above copyright
  *    notice, this list of conditions and the following disclaimer.
  * 2. Redistributions in binary form must reproduce the above copyright
@@ -19,7 +19,7 @@
  * 3. Neither the name of The DragonFly Project nor the names of its
  *    contributors may be used to endorse or promote products derived
  *    from this software without specific, prior written permission.
- *
+ * 
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
  * LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
@@ -32,12 +32,12 @@
  * OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT
  * OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
- *
+ * 
  * $DragonFly: src/sys/dev/netif/et/if_et.c,v 1.1 2007/10/12 14:12:42 sephe Exp $
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_et.c,v 1.7 2013/03/30 03:21:04 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_et.c,v 1.3.2.1 2012/11/19 18:41:59 riz Exp $");
 
 #include "opt_inet.h"
 #include "vlan.h"
@@ -55,7 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_et.c,v 1.7 2013/03/30 03:21:04 christos Exp $");
 #include <sys/socket.h>
 
 #include <sys/bus.h>
-
+ 
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
@@ -71,7 +71,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_et.c,v 1.7 2013/03/30 03:21:04 christos Exp $");
 #endif
 
 #include <net/bpf.h>
-
+ 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
 
@@ -81,6 +81,17 @@ __KERNEL_RCSID(0, "$NetBSD: if_et.c,v 1.7 2013/03/30 03:21:04 christos Exp $");
 
 #include <dev/pci/if_etreg.h>
 
+/* XXX temporary porting goop */
+#define KKASSERT(cond) if (!(cond)) panic("KKASSERT: %s in %s", #cond, __func__)
+#undef KASSERT
+#define KASSERT(cond, complaint) if (!(cond)) panic complaint
+
+/* these macros in particular need to die, so gross */
+#define __LOWEST_SET_BIT(__mask) ((((__mask) - 1) & (__mask)) ^ (__mask))
+#define __SHIFTOUT(__x, __mask) (((__x) & (__mask)) / __LOWEST_SET_BIT(__mask))
+#define __SHIFTIN(__x, __mask) ((__x) * __LOWEST_SET_BIT(__mask))
+/* XXX end porting goop */
+
 int	et_match(device_t, cfdata_t, void *);
 void	et_attach(device_t, device_t, void *);
 int	et_detach(device_t, int flags);
@@ -88,7 +99,7 @@ int	et_shutdown(device_t);
 
 int	et_miibus_readreg(device_t, int, int);
 void	et_miibus_writereg(device_t, int, int, int);
-void	et_miibus_statchg(struct ifnet *);
+void	et_miibus_statchg(device_t);
 
 int	et_init(struct ifnet *ifp);
 int	et_ioctl(struct ifnet *, u_long, void *);
@@ -109,6 +120,7 @@ int	et_dma_mem_create(struct et_softc *, bus_size_t,
 void	et_dma_mem_destroy(struct et_softc *, void *, bus_dmamap_t);
 int	et_dma_mbuf_create(struct et_softc *);
 void	et_dma_mbuf_destroy(struct et_softc *, int, const int[]);
+void	et_dma_ring_addr(void *, bus_dma_segment_t *, int, int);
 
 int	et_init_tx_ring(struct et_softc *);
 int	et_init_rx_ring(struct et_softc *);
@@ -171,7 +183,7 @@ et_match(device_t dev, cfdata_t match, void *aux)
 	const struct et_product *ep;
 	int i;
 
-	for (i = 0; i < __arraycount(et_devices); i++) {
+	for (i = 0; i < sizeof(et_devices) / sizeof(et_devices[0]); i++) {
 		ep = &et_devices[i];
 		if (PCI_VENDOR(pa->pa_id) == ep->vendor &&
 		    PCI_PRODUCT(pa->pa_id) == ep->product)
@@ -437,9 +449,9 @@ et_miibus_writereg(device_t dev, int phy, int reg, int val0)
 }
 
 void
-et_miibus_statchg(struct ifnet *ifp)
+et_miibus_statchg(device_t dev)
 {
-	struct et_softc *sc = ifp->if_softc;
+	struct et_softc *sc = device_private(dev);
 	struct mii_data *mii = &sc->sc_miibus;
 	uint32_t cfg2, ctrl;
 
@@ -505,7 +517,7 @@ et_bus_config(struct et_softc *sc)
 	 */
 	pci_conf_read(sc->sc_pct, sc->sc_pcitag, ET_PCIR_EEPROM_MISC);
 	val = pci_conf_read(sc->sc_pct, sc->sc_pcitag, ET_PCIR_EEPROM_MISC);
-
+	
 	if (val & ET_PCIM_EEPROM_STATUS_ERROR) {
 		aprint_error_dev(sc->sc_dev, "EEPROM status error 0x%02x\n", val);
 		return ENXIO;
@@ -729,7 +741,7 @@ et_dma_free(struct et_softc *sc)
 	 * Destroy RX stat ring DMA stuffs
 	 */
 	et_dma_mem_destroy(sc, rxst_ring->rsr_stat, rxst_ring->rsr_dmap);
-			  
+			   
 	/*
 	 * Destroy RX status DMA stuffs
 	 */
@@ -818,9 +830,9 @@ et_dma_mbuf_destroy(struct et_softc *sc, int tx_done, const int rx_done[])
 		for (j = 0; j < rx_done[i]; ++j) {
 			struct et_rxbuf *rb = &rbd->rbd_buf[j];
 
-			KASSERTMSG(rb->rb_mbuf == NULL,
-			    "RX mbuf in %d RX ring is not freed yet\n", i);
-			bus_dmamap_destroy(sc->sc_dmat, rb->rb_dmap);
+			KASSERT(rb->rb_mbuf == NULL,
+			    ("RX mbuf in %d RX ring is not freed yet\n", i));
+			bus_dmamap_destroy(sc->sc_dmat, rb->rb_dmap); 
 		}
 	}
 
@@ -830,7 +842,7 @@ et_dma_mbuf_destroy(struct et_softc *sc, int tx_done, const int rx_done[])
 	for (i = 0; i < tx_done; ++i) {
 		struct et_txbuf *tb = &tbd->tbd_buf[i];
 
-		KASSERTMSG(tb->tb_mbuf == NULL, "TX mbuf is not freed yet\n");
+		KASSERT(tb->tb_mbuf == NULL, ("TX mbuf is not freed yet\n"));
 		bus_dmamap_destroy(sc->sc_dmat, tb->tb_dmap);
 	}
 
@@ -887,6 +899,13 @@ et_dma_mem_destroy(struct et_softc *sc, void *addr, bus_dmamap_t dmap)
 {
 	bus_dmamap_unload(sc->sc_dmat, dmap);
 	bus_dmamem_free(sc->sc_dmat, (bus_dma_segment_t *)&addr, 1);
+}
+
+void
+et_dma_ring_addr(void *arg, bus_dma_segment_t *seg, int nseg, int error)
+{
+	KASSERT(nseg == 1, ("too many segments\n"));
+	*((bus_addr_t *)arg) = seg->ds_addr;
 }
 
 void
@@ -1710,7 +1729,7 @@ et_rxeof(struct et_softc *sc)
 		int buflen, buf_idx, ring_idx;
 		uint32_t rxstat_pos, rxring_pos;
 
-		KASSERT(rxst_ring->rsr_index < ET_RX_NSTAT);
+		KKASSERT(rxst_ring->rsr_index < ET_RX_NSTAT);
 		st = &rxst_ring->rsr_stat[rxst_ring->rsr_index];
 
 		buflen = __SHIFTOUT(st->rxst_info2, ET_RXST_INFO2_LEN);
@@ -1772,7 +1791,7 @@ et_rxeof(struct et_softc *sc)
 			    ring_idx, buf_idx, rx_ring->rr_index);
 		}
 
-		KASSERT(rx_ring->rr_index < ET_RX_NDESC);
+		KKASSERT(rx_ring->rr_index < ET_RX_NDESC);
 		if (++rx_ring->rr_index == ET_RX_NDESC) {
 			rx_ring->rr_index = 0;
 			rx_ring->rr_wrap ^= 1;
@@ -1798,10 +1817,10 @@ et_encap(struct et_softc *sc, struct mbuf **m0)
 	maxsegs = ET_TX_NDESC - tbd->tbd_used;
 	if (maxsegs > ET_NSEG_MAX)
 		maxsegs = ET_NSEG_MAX;
-	KASSERTMSG(maxsegs >= ET_NSEG_SPARE,
-		"not enough spare TX desc (%d)\n", maxsegs);
+	KASSERT(maxsegs >= ET_NSEG_SPARE,
+		("not enough spare TX desc (%d)\n", maxsegs));
 
-	KASSERT(tx_ring->tr_ready_index < ET_TX_NDESC);
+	KKASSERT(tx_ring->tr_ready_index < ET_TX_NDESC);
 	first_idx = tx_ring->tr_ready_index;
 	map = tbd->tbd_buf[first_idx].tb_dmap;
 
@@ -1886,7 +1905,7 @@ et_encap(struct et_softc *sc, struct mbuf **m0)
 			last_idx = idx;
 		}
 
-		KASSERT(tx_ring->tr_ready_index < ET_TX_NDESC);
+		KKASSERT(tx_ring->tr_ready_index < ET_TX_NDESC);
 		if (++tx_ring->tr_ready_index == ET_TX_NDESC) {
 			tx_ring->tr_ready_index = 0;
 			tx_ring->tr_ready_wrap ^= 1;
@@ -1895,17 +1914,17 @@ et_encap(struct et_softc *sc, struct mbuf **m0)
 	td = &tx_ring->tr_desc[first_idx];
 	td->td_ctrl2 |= ET_TDCTRL2_FIRST_FRAG;	/* First frag */
 
-	KASSERT(last_idx >= 0);
+	KKASSERT(last_idx >= 0);
 	tbd->tbd_buf[first_idx].tb_dmap = tbd->tbd_buf[last_idx].tb_dmap;
 	tbd->tbd_buf[last_idx].tb_dmap = map;
 	tbd->tbd_buf[last_idx].tb_mbuf = m;
 
 	tbd->tbd_used += map->dm_nsegs;
-	KASSERT(tbd->tbd_used <= ET_TX_NDESC);
+	KKASSERT(tbd->tbd_used <= ET_TX_NDESC);
 
 	bus_dmamap_sync(sc->sc_dmat, tx_ring->tr_dmap, 0,
 	    tx_ring->tr_dmap->dm_mapsize, BUS_DMASYNC_PREWRITE);
-		
+			
 
 	tx_ready_pos = __SHIFTIN(tx_ring->tr_ready_index,
 		       ET_TX_READY_POS_INDEX);
@@ -1941,7 +1960,7 @@ et_txeof(struct et_softc *sc)
 	while (tbd->tbd_start_index != end || tbd->tbd_start_wrap != wrap) {
 		struct et_txbuf *tb;
 
-		KASSERT(tbd->tbd_start_index < ET_TX_NDESC);
+		KKASSERT(tbd->tbd_start_index < ET_TX_NDESC);
 		tb = &tbd->tbd_buf[tbd->tbd_start_index];
 
 		bzero(&tx_ring->tr_desc[tbd->tbd_start_index],
@@ -1961,7 +1980,7 @@ et_txeof(struct et_softc *sc)
 			tbd->tbd_start_wrap ^= 1;
 		}
 
-		KASSERT(tbd->tbd_used > 0);
+		KKASSERT(tbd->tbd_used > 0);
 		tbd->tbd_used--;
 	}
 
@@ -2021,7 +2040,7 @@ et_newbuf(struct et_rxbuf_data *rbd, int buf_idx, int init, int len0)
 	bus_dmamap_t dmap;
 	int error, len;
 
-	KASSERT(buf_idx < ET_RX_NDESC);
+	KKASSERT(buf_idx < ET_RX_NDESC);
 	rb = &rbd->rbd_buf[buf_idx];
 
 	if (len0 >= MINCLSIZE) {

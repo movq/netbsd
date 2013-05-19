@@ -1,4 +1,4 @@
-/*	$NetBSD: walk.c,v 1.28 2013/02/03 06:16:53 christos Exp $	*/
+/*	$NetBSD: walk.c,v 1.25 2012/01/28 02:35:46 christos Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -41,11 +41,10 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: walk.c,v 1.28 2013/02/03 06:16:53 christos Exp $");
+__RCSID("$NetBSD: walk.c,v 1.25 2012/01/28 02:35:46 christos Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>
-#include <sys/stat.h>
 
 #include <assert.h>
 #include <errno.h>
@@ -55,7 +54,7 @@ __RCSID("$NetBSD: walk.c,v 1.28 2013/02/03 06:16:53 christos Exp $");
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <util.h>
+#include <sys/stat.h>
 
 #include "makefs.h"
 #include "mtree.h"
@@ -76,8 +75,7 @@ static	fsinode	*link_check(fsinode *);
  *	at the start of the list, and without ".." entries.
  */
 fsnode *
-walk_dir(const char *root, const char *dir, fsnode *parent, fsnode *join,
-    int replace)
+walk_dir(const char *root, const char *dir, fsnode *parent, fsnode *join)
 {
 	fsnode		*first, *cur, *prev, *last;
 	DIR		*dirp;
@@ -155,30 +153,12 @@ walk_dir(const char *root, const char *dir, fsnode *parent, fsnode *join,
 						printf("merging %s with %p\n",
 						    path, cur->child);
 					cur->child = walk_dir(root, rp, cur,
-					    cur->child, replace);
+					    cur->child);
 					continue;
 				}
-				if (!replace)
-					errx(1, "Can't merge %s `%s' with "
-					    "existing %s",
-					    inode_type(stbuf.st_mode), path,
-					    inode_type(cur->type));
-				else {
-					if (debug & DEBUG_WALK_DIR_NODE)
-						printf("replacing %s %s\n",
-						    inode_type(stbuf.st_mode),
-						    path);
-					if (cur == join->next)
-						join->next = cur->next;
-					else {
-						fsnode *p;
-						for (p = join->next;
-						    p->next != cur; p = p->next)
-							continue;
-						p->next = cur->next;
-					}
-					free(cur);
-				}
+				errx(1, "Can't merge %s `%s' with existing %s",
+				    inode_type(stbuf.st_mode), path,
+				    inode_type(cur->type));
 			}
 		}
 
@@ -199,8 +179,7 @@ walk_dir(const char *root, const char *dir, fsnode *parent, fsnode *join,
 				first = cur;
 			cur->first = first;
 			if (S_ISDIR(cur->type)) {
-				cur->child = walk_dir(root, rp, cur, NULL,
-				    replace);
+				cur->child = walk_dir(root, rp, cur, NULL);
 				continue;
 			}
 		}
@@ -226,7 +205,8 @@ walk_dir(const char *root, const char *dir, fsnode *parent, fsnode *join,
 			if (llen == -1)
 				err(1, "Readlink `%s'", path);
 			slink[llen] = '\0';
-			cur->symlink = estrdup(slink);
+			if ((cur->symlink = strdup(slink)) == NULL)
+				err(1, "Memory allocation error");
 		}
 	}
 	assert(first != NULL);
@@ -244,10 +224,11 @@ create_fsnode(const char *root, const char *path, const char *name,
 {
 	fsnode *cur;
 
-	cur = ecalloc(1, sizeof(*cur));
-	cur->path = estrdup(path);
-	cur->name = estrdup(name);
-	cur->inode = ecalloc(1, sizeof(*cur->inode));
+	if ((cur = calloc(1, sizeof(fsnode))) == NULL ||
+	    (cur->path = strdup(path)) == NULL ||
+	    (cur->name = strdup(name)) == NULL ||
+	    (cur->inode = calloc(1, sizeof(fsinode))) == NULL)
+		err(1, "Memory allocation error");
 	cur->root = root;
 	cur->type = stbuf->st_mode & S_IFMT;
 	cur->inode->nlink = 1;
@@ -406,7 +387,7 @@ apply_specdir(const char *dir, NODE *specnode, fsnode *dirnode, int speconly)
 			if (strcmp(curnode->name, curfsnode->name) == 0)
 				break;
 		}
-		if ((size_t)snprintf(path, sizeof(path), "%s/%s",
+		if (snprintf(path, sizeof(path), "%s/%s",
 		    dir, curnode->name) >= sizeof(path))
 			errx(1, "Pathname too long.");
 		if (curfsnode == NULL) {	/* need new entry */
@@ -465,7 +446,9 @@ apply_specdir(const char *dir, NODE *specnode, fsnode *dirnode, int speconly)
 			if (curfsnode->type == S_IFLNK) {
 				assert(curnode->slink != NULL);
 					/* for symlinks, copy the target */
-				curfsnode->symlink = estrdup(curnode->slink);
+				if ((curfsnode->symlink =
+				    strdup(curnode->slink)) == NULL)
+					err(1, "Memory allocation error");
 			}
 		}
 		apply_specentry(dir, curnode, curfsnode);
@@ -521,7 +504,8 @@ apply_specentry(const char *dir, NODE *specnode, fsnode *dirnode)
 		assert(specnode->slink != NULL);
 		ASEPRINT("symlink", "%s", dirnode->symlink, specnode->slink);
 		free(dirnode->symlink);
-		dirnode->symlink = estrdup(specnode->slink);
+		if ((dirnode->symlink = strdup(specnode->slink)) == NULL)
+			err(1, "Memory allocation error");
 	}
 	if (specnode->flags & F_TIME) {
 		ASEPRINT("time", "%ld",
@@ -656,7 +640,10 @@ link_check(fsinode *entry)
 		htused = 0;
 
 		ohtable = htable;
-		htable = ecalloc(htmask+1, sizeof(*htable));
+		htable = calloc(htmask+1, sizeof(*htable));
+		if (!htable)
+			err(1, "Memory allocation error");
+
 		/* populate newly allocated hashtable */
 		if (ohtable) {
 			int i;

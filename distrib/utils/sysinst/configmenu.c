@@ -1,4 +1,4 @@
-/* $NetBSD: configmenu.c,v 1.7 2013/03/26 20:56:54 garbled Exp $ */
+/* $NetBSD: configmenu.c,v 1.5.2.2 2012/05/18 02:28:52 sborrill Exp $ */
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -43,7 +43,6 @@ static int set_network(struct menudesc*, void *);
 static int set_timezone_menu(struct menudesc *, void *);
 static int set_root_shell(struct menudesc *, void *);
 static int change_root_password(struct menudesc *, void *);
-static int add_new_user(struct menudesc *, void *);
 static int set_binpkg(struct menudesc *, void *);
 static int set_pkgsrc(struct menudesc *, void *);
 static void config_list_init(void);
@@ -68,7 +67,6 @@ enum {
 	CONFIGOPT_NTPD,
 	CONFIGOPT_NTPDATE,
 	CONFIGOPT_MDNSD,
-	CONFIGOPT_ADDUSER,
 	CONFIGOPT_LAST
 };
 
@@ -92,7 +90,6 @@ configinfo config_list[] = {
 	{MSG_enable_ntpd, CONFIGOPT_NTPD, "ntpd", toggle_rcvar, NULL},
 	{MSG_run_ntpdate, CONFIGOPT_NTPDATE, "ntpdate", toggle_rcvar, NULL},
 	{MSG_enable_mdnsd, CONFIGOPT_MDNSD, "mdnsd", toggle_rcvar, NULL},
-	{MSG_add_a_user, CONFIGOPT_ADDUSER, NULL, add_new_user, ""},
 	{NULL,		CONFIGOPT_LAST,	NULL, NULL, NULL}
 };
 
@@ -237,29 +234,6 @@ check_root_password(void)
 		rval = 1;
 	free(buf);
 	return rval;
-}
-
-static int
-add_new_user(struct menudesc *menu, void *arg)
-{
-	char username[STRSIZE];
-	int inwheel=0;
-
-	msg_prompt(MSG_addusername, NULL, username, sizeof username -1);
-	process_menu(MENU_yesno, deconst(MSG_addusertowheel));
-	inwheel = yesno;
-	ushell = "/bin/csh";
-	process_menu(MENU_usersh, NULL);
-	if (inwheel)
-		run_program(RUN_PROGRESS | RUN_CHROOT,
-		    "/usr/sbin/useradd -m -s %s -G wheel %s",
-		    ushell, username);
-	else
-		run_program(RUN_PROGRESS | RUN_CHROOT,
-		    "/usr/sbin/useradd -m -s %s %s", ushell, username);
-	run_program(RUN_DISPLAY | RUN_PROGRESS | RUN_CHROOT,
-	    "passwd -l %s", username);
-	return 0;
 }
 
 static int

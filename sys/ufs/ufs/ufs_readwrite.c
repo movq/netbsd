@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_readwrite.c,v 1.105 2013/01/22 09:39:18 dholland Exp $	*/
+/*	$NetBSD: ufs_readwrite.c,v 1.101.2.1 2012/05/07 03:01:14 riz Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: ufs_readwrite.c,v 1.105 2013/01/22 09:39:18 dholland Exp $");
+__KERNEL_RCSID(1, "$NetBSD: ufs_readwrite.c,v 1.101.2.1 2012/05/07 03:01:14 riz Exp $");
 
 #ifdef LFS_READWRITE
 #define	FS			struct lfs
@@ -310,7 +310,7 @@ WRITE(void *v)
 	 * the fragment if there is one.
 	 */
 
-	if (nsize > osize && lblkno(fs, osize) < UFS_NDADDR &&
+	if (nsize > osize && lblkno(fs, osize) < NDADDR &&
 	    lblkno(fs, osize) != lblkno(fs, nsize) &&
 	    blkroundup(fs, osize) != osize) {
 		off_t eob;
@@ -447,7 +447,7 @@ WRITE(void *v)
 
 #ifdef LFS_READWRITE
 		error = lfs_reserve(fs, vp, NULL,
-		    btofsb(fs, (UFS_NIADDR + 1) << fs->lfs_bshift));
+		    btofsb(fs, (NIADDR + 1) << fs->lfs_bshift));
 		if (error)
 			break;
 		need_unreserve = true;
@@ -481,7 +481,7 @@ WRITE(void *v)
 #ifdef LFS_READWRITE
 		(void)VOP_BWRITE(bp->b_vp, bp);
 		lfs_reserve(fs, vp, NULL,
-		    -btofsb(fs, (UFS_NIADDR + 1) << fs->lfs_bshift));
+		    -btofsb(fs, (NIADDR + 1) << fs->lfs_bshift));
 		need_unreserve = false;
 #else
 		if (ioflag & IO_SYNC)
@@ -497,7 +497,7 @@ WRITE(void *v)
 #ifdef LFS_READWRITE
 	if (need_unreserve) {
 		lfs_reserve(fs, vp, NULL,
-		    -btofsb(fs, (UFS_NIADDR + 1) << fs->lfs_bshift));
+		    -btofsb(fs, (NIADDR + 1) << fs->lfs_bshift));
 	}
 #endif
 
@@ -510,22 +510,10 @@ out:
 	ip->i_flag |= IN_CHANGE | IN_UPDATE;
 	if (vp->v_mount->mnt_flag & MNT_RELATIME)
 		ip->i_flag |= IN_ACCESS;
-	if (resid > uio->uio_resid && ap->a_cred) {
-		if (ip->i_mode & ISUID) {
-			if (kauth_authorize_vnode(ap->a_cred,
-			    KAUTH_VNODE_RETAIN_SUID, vp, NULL, EPERM) != 0) {
-				ip->i_mode &= ~ISUID;
-				DIP_ASSIGN(ip, mode, ip->i_mode);
-			}
-		}
-
-		if (ip->i_mode & ISGID) {
-			if (kauth_authorize_vnode(ap->a_cred,
-			    KAUTH_VNODE_RETAIN_SGID, vp, NULL, EPERM) != 0) {
-				ip->i_mode &= ~ISGID;
-				DIP_ASSIGN(ip, mode, ip->i_mode);
-			}
-		}
+	if (resid > uio->uio_resid && ap->a_cred &&
+	    kauth_authorize_generic(ap->a_cred, KAUTH_GENERIC_ISSUSER, NULL)) {
+		ip->i_mode &= ~(ISUID | ISGID);
+		DIP_ASSIGN(ip, mode, ip->i_mode);
 	}
 	if (resid > uio->uio_resid)
 		VN_KNOTE(vp, NOTE_WRITE | (extended ? NOTE_EXTEND : 0));

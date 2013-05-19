@@ -1,4 +1,4 @@
-/*	$NetBSD: supfilesrv.c,v 1.50 2013/04/09 16:38:18 christos Exp $	*/
+/*	$NetBSD: supfilesrv.c,v 1.47 2011/08/31 16:25:00 plunky Exp $	*/
 
 /*
  * Copyright (c) 1992 Carnegie Mellon University
@@ -370,51 +370,6 @@ int stat_info_ok(struct stat *, struct stat *);
 int link_nofollow(int);
 int link_nofollow(int);
 
-struct hostpid {
-	char name[MAXHOSTNAMELEN];
-	pid_t pid;
-} *hp;
-
-static void
-addchild(pid_t pid)
-{
-	size_t i;
-	for (i = 0; i < maxchildren; i++)
-		if (hp[i].pid == 0) {
-			hp[i].pid = pid;
-			strcpy(hp[i].name, remotehost());
-			nchildren++;
-			return;
-		}
-	logerr("Out of space adding child %s", remotehost());
-}
-
-static void
-removechild(pid_t pid)
-{
-	size_t i;
-	for (i = 0; i < maxchildren; i++)
-		if (hp[i].pid == pid) {
-			hp[i].pid = 0;
-			nchildren--;
-			return;
-		}
-	logerr("Child with pid %jd not found", (intmax_t)pid);
-}
-
-static int
-checkchild(void)
-{
-	const char *h = remotehost();
-	size_t i;
-	for (i = 0; i < maxchildren; i++)
-		if (hp[i].pid && strcmp(hp[i].name, h) == 0) {
-			logerr("Ignoring connection frm %s", h);
-			return 0;
-		}
-	return 1;
-}
-
 /*************************************
  ***    M A I N   R O U T I N E    ***
  *************************************/
@@ -440,12 +395,8 @@ main(int argc, char **argv)
 
 #ifdef HAS_DAEMON
 	if (!live)		/* if not debugging, turn into daemon */
-		if (daemon(0, 0) == -1)
-		    goaway("Daemon failed (%s)", strerror(errno));
+		daemon(0, 0);
 #endif
-	hp = malloc(sizeof(*hp) * maxchildren);
-	if (hp == NULL)
-		goaway("Cannot allocate memory");
 
 	logopen("supfile");
 	tloc = time(NULL);
@@ -496,7 +447,7 @@ main(int argc, char **argv)
 		 * If we are being bombarded, don't even spend time forking
 		 * or conversing
 		 */
-		if (nchildren > maxchildren) {
+		if (nchildren >= maxchildren + 5) {
 			(void) servicekill();
 			continue;
 		}
@@ -525,10 +476,8 @@ main(int argc, char **argv)
 			exit(0);
 		}
 		(void) servicekill();	/* parent */
-		if (pid > 0) {
-			addchild(pid);
-			setproctitle("Master [%d/%d]", nchildren, maxchildren);
-		}
+		if (pid > 0)
+			nchildren++;
 		(void) sigprocmask(SIG_SETMASK, &oset, NULL);
 	}
 }
@@ -551,7 +500,7 @@ chldsig(int snum __unused)
 					    (intmax_t)pid);
 					break;
 				}
-				removechild(pid);
+				nchildren--;
 				break;
 			default:
 				logerr("killing pid %jd: (%s)\n", (intmax_t)
@@ -1001,17 +950,12 @@ srvsetup(void)
 		(void) fclose(f);
 	}
 	x = stat(".", &sbuf);
-	if (prefix) {
-		int serrno = errno;
-		if (chdir(basedir) < 0)
-			goaway("Can't chdir to %s (%s)", basedir,
-			    strerror(errno));
-		errno = serrno;
-	}
+	if (prefix)
+		(void) chdir(basedir);
 	if (x < 0)
 		goaway("Can't stat base/prefix directory (%s)",
 		    strerror(errno));
-	if (nchildren >= maxchildren || !checkchild()) {
+	if (nchildren >= maxchildren) {
 		setupack = FSETUPBUSY;
 		(void) msgsetupack();
 		if (protver >= 6)
@@ -1584,8 +1528,7 @@ srvfinishup(time_t starttime)
 		ioctl(logfd, FIOCNOSPC, &l);
 	}
 #endif				/* MACH */
-	if (write(logfd, tmpbuf, (p - tmpbuf)) == -1)
-		logerr("%s: write failed (%s)", remotehost(), strerror(errno));
+	(void) write(logfd, tmpbuf, (p - tmpbuf));
 	(void) close(logfd);
 }
 /***************************************************
@@ -1622,7 +1565,7 @@ Hinsert(HASH ** table, int num1, int num2, char *name, TREE * tree)
 	HASH *h;
 	int hno;
 	hno = HASHFUNC(num1, num2);
-	h = malloc(sizeof(*h));
+	h = (HASH *) malloc(sizeof(HASH));
 	if (h == NULL)
 		goaway("Cannot allocate memory");
 	h->Hnum1 = num1;
@@ -1882,10 +1825,10 @@ fmttime(time_t time)
 	static char buf[STRINGLENGTH];
 	unsigned int len;
 
-	(void) strcpy(buf, ctime(&time) + 4);
-	len = strlen(buf);
-	if (len > 2)
-		buf[len - 2] = '\0';
+	(void) strcpy(buf, ctime(&time));
+	len = strlen(buf + 4) - 6;
+	(void) strncpy(buf, buf + 4, len);
+	buf[len] = '\0';
 	return (buf);
 }
 /*

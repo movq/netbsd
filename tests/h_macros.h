@@ -1,4 +1,4 @@
-/* $NetBSD: h_macros.h,v 1.9 2013/05/17 15:42:09 christos Exp $ */
+/* $NetBSD: h_macros.h,v 1.7 2011/06/16 15:33:24 joerg Exp $ */
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -29,7 +29,6 @@
 #ifndef SRC_TESTS_H_MACROS_H_
 #define SRC_TESTS_H_MACROS_H_
 
-#include <sys/types.h>
 #include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -51,7 +50,7 @@ do {									\
 	ATF_REQUIRE_MSG(RZ_rv == 0, "%s: %s", #x, strerror(RZ_rv));	\
 } while (/*CONSTCOND*/0)
 
-static __inline __printflike(1, 2) void
+static __inline void
 atf_tc_fail_errno(const char *fmt, ...)
 {
 	va_list ap;

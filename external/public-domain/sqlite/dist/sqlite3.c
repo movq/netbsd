@@ -132872,7 +132872,7 @@ SQLITE_API int sqlite3_extension_init(
 **    May you share freely, never taking more than you give.
 **
 *************************************************************************
-** $Id: sqlite3.c,v 1.8 2013/02/14 21:07:25 martin Exp $
+** $Id: sqlite3.c,v 1.6 2012/02/06 17:24:49 matt Exp $
 **
 ** This file implements an integration between the ICU library 
 ** ("International Components for Unicode", an open-source library 

@@ -1,5 +1,5 @@
 #!/bin/sh
-# $NetBSD: genman,v 1.5 2013/01/25 12:52:45 roy Exp $
+# $NetBSD: genman,v 1.4.8.1 2013/03/14 15:48:29 riz Exp $
 
 # Copyright (c) 2009, 2013 The NetBSD Foundation, Inc.
 #

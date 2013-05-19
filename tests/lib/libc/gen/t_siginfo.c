@@ -1,4 +1,4 @@
-/* $NetBSD: t_siginfo.c,v 1.20 2013/04/12 17:30:50 christos Exp $ */
+/* $NetBSD: t_siginfo.c,v 1.12 2011/10/01 17:46:10 christos Exp $ */
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -31,7 +31,6 @@
 
 #include <sys/inttypes.h>
 #include <sys/resource.h>
-#include <sys/sysctl.h>
 #include <sys/time.h>
 #include <sys/ucontext.h>
 #include <sys/wait.h>
@@ -48,11 +47,6 @@
 #ifdef _FLOAT_IEEE754
 #include <ieeefp.h>
 #endif
-
-#include "isqemu.h"
-
-/* for sigbus */
-volatile char *addr;
 
 /* for sigchild */
 pid_t child;
@@ -81,7 +75,7 @@ sig_debug(int signo, siginfo_t *info, ucontext_t *ctx)
 		for (i = 0; i < __arraycount(ctx->uc_sigmask.__bits); i++)
 			printf("uc_sigmask[%d] 0x%x\n", i,
 			    ctx->uc_sigmask.__bits[i]);
-		printf("uc_stack %p %lu 0x%x\n", ctx->uc_stack.ss_sp,
+		printf("uc_stack %p %lu 0x%x\n", ctx->uc_stack.ss_sp, 
 		    (unsigned long)ctx->uc_stack.ss_size,
 		    ctx->uc_stack.ss_flags);
 		for (i = 0; i < __arraycount(ctx->uc_mcontext.__gregs); i++)
@@ -107,10 +101,10 @@ sigalrm_action(int signo, siginfo_t *info, void *ptr)
 ATF_TC(sigalarm);
 
 ATF_TC_HEAD(sigalarm, tc)
-{
+{ 
 
 	atf_tc_set_md_var(tc, "descr",
-	    "Checks that signal trampoline correctly calls SIGALRM handler");
+	    "Checks that signal trampoline correctly calls SIGALRM handler"); 
 }
 
 ATF_TC_BODY(sigalarm, tc)
@@ -124,7 +118,7 @@ ATF_TC_BODY(sigalarm, tc)
 		alarm(1);
 		sleep(1);
 	}
-	atf_tc_fail("SIGALRM handler wasn't called");
+	atf_tc_fail("SIGALRM handler wasn't called"); 
 }
 
 static void
@@ -193,7 +187,7 @@ ATF_TC_BODY(sigchild_normal, tc)
 {
 	sigset_t set;
 
-	sigchild_setup();
+	sigchild_setup(); 
 
 	status = 25;
 	code = CLD_EXITED;
@@ -220,10 +214,10 @@ ATF_TC_HEAD(sigchild_dump, tc)
 }
 
 ATF_TC_BODY(sigchild_dump, tc)
-{
+{ 
 	sigset_t set;
 
-	sigchild_setup();
+	sigchild_setup(); 
 
 	status = SIGSEGV;
 	code = CLD_DUMPED;
@@ -252,10 +246,10 @@ ATF_TC_HEAD(sigchild_kill, tc)
 }
 
 ATF_TC_BODY(sigchild_kill, tc)
-{
+{ 
 	sigset_t set;
 
-	sigchild_setup();
+	sigchild_setup(); 
 
 	status = SIGPIPE;
 	code = CLD_KILLED;
@@ -301,12 +295,16 @@ ATF_TC_HEAD(sigfpe_flt, tc)
 }
 
 ATF_TC_BODY(sigfpe_flt, tc)
-{
+{ 
 	struct sigaction sa;
 	double d = strtod("0", NULL);
 
-	if (isQEMU())
-		atf_tc_skip("Test does not run correctly under QEMU");
+	if (system("cpuctl identify 0 | grep -q QEMU") == 0)
+		atf_tc_skip("Test does not run correctly under qemu");
+	if (system("cpuctl identify 0 | grep -q "
+	    "'cpu0: Intel Pentium II (Klamath) (686-class), id 0x633'") == 0)
+		atf_tc_skip("Test does not run correctly under qemu "
+		    "(heuristic match)");
 	if (strcmp(atf_config_get("atf_arch"),"powerpc") == 0)
 		atf_tc_skip("Test not valid on powerpc");
 	if (sigsetjmp(sigfpe_flt_env, 0) == 0) {
@@ -334,6 +332,9 @@ sigfpe_int_action(int signo, siginfo_t *info, void *ptr)
 		atf_tc_fail("INTDIV handler called more than once");
 
 	ATF_REQUIRE_EQ(info->si_signo, SIGFPE);
+	if (info->si_code == FPE_FLTDIV)
+		atf_tc_expect_fail("PR port-i386/43655 : integer div-by-zero "
+		    "reports FPE_FLTDIV instead of FPE_INTDIV");
 	ATF_REQUIRE_EQ(info->si_code, FPE_INTDIV);
 	atf_tc_expect_pass();
 	ATF_REQUIRE_EQ(info->si_errno, 0);
@@ -347,11 +348,11 @@ ATF_TC_HEAD(sigfpe_int, tc)
 
 	atf_tc_set_md_var(tc, "descr",
 	    "Checks that signal trampoline correctly calls SIGFPE handler "
-	    "for integer div-by-zero (PR port-i386/43655)");
+	    "for integer div-by-zero");
 }
 
 ATF_TC_BODY(sigfpe_int, tc)
-{
+{ 
 	struct sigaction sa;
 	long l = strtol("0", NULL, 10);
 
@@ -407,80 +408,6 @@ ATF_TC_BODY(sigsegv, tc)
 	atf_tc_fail("Test did not fault as expected");
 }
 
-static void
-sigbus_action(int signo, siginfo_t *info, void *ptr)
-{
-
-	printf("si_addr = %p\n", info->si_addr);
-	sig_debug(signo, info, (ucontext_t *)ptr);
-
-	ATF_REQUIRE_EQ(info->si_signo, SIGBUS);
-	ATF_REQUIRE_EQ(info->si_errno, 0);
-	ATF_REQUIRE_EQ(info->si_code, BUS_ADRALN);
-
-	if (strcmp(atf_config_get("atf_arch"), "i386") == 0 ||
-	    strcmp(atf_config_get("atf_arch"), "x86_64") == 0) {
-		atf_tc_expect_fail("x86 architecture does not correctly "
-		    "report the address where the unaligned access occured");
-	}
-	ATF_REQUIRE_EQ(info->si_addr, (volatile void *)addr);
-
-	atf_tc_pass();
-	/* NOTREACHED */
-}
-
-ATF_TC(sigbus_adraln);
-ATF_TC_HEAD(sigbus_adraln, tc)
-{
-
-	atf_tc_set_md_var(tc, "descr",
-	    "Checks that signal trampoline correctly calls SIGBUS handler "
-	    "for invalid address alignment");
-}
-
-ATF_TC_BODY(sigbus_adraln, tc)
-{
-	const char *arch = atf_config_get("atf_arch");
-	struct sigaction sa;
-
-	if (strcmp(arch, "alpha") == 0) {
-		int rv, val;
-		size_t len = sizeof(val);
-		rv = sysctlbyname("machdep.unaligned_sigbus", &val, &len,
-			NULL, 0);
-		ATF_REQUIRE(rv == 0);
-		if (val == 0)
-			atf_tc_skip("SIGBUS signal not enabled for"
-				    " unaligned accesses");
-
-	}
-
-	sa.sa_flags = SA_SIGINFO;
-	sa.sa_sigaction = sigbus_action;
-	sigemptyset(&sa.sa_mask);
-	sigaction(SIGBUS, &sa, NULL);
-
-	/* Enable alignement checks for x86. 0x40000 is PSL_AC. */
-#if defined(__i386__)
-	__asm__("pushf; orl $0x40000, (%esp); popf");
-#elif defined(__amd64__)
-	__asm__("pushf; orl $0x40000, (%rsp); popf");
-#endif
-
-	addr = calloc(2, sizeof(int));
-	ATF_REQUIRE(addr != NULL);
-
-	if (isQEMU())
-		atf_tc_expect_fail("QEMU fails to trap unaligned accesses");
-
-	/* Force an unaligned access */
-	addr++;
-	printf("now trying to access unaligned address %p\n", addr);
-	ATF_REQUIRE_EQ(*(volatile int *)addr, 0);
-
-	atf_tc_fail("Test did not fault as expected");
-}
-
 ATF_TP_ADD_TCS(tp)
 {
 
@@ -491,7 +418,6 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_ADD_TC(tp, sigfpe_flt);
 	ATF_TP_ADD_TC(tp, sigfpe_int);
 	ATF_TP_ADD_TC(tp, sigsegv);
-	ATF_TP_ADD_TC(tp, sigbus_adraln);
 
 	return atf_no_error();
 }

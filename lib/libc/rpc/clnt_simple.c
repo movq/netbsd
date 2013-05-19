@@ -1,4 +1,4 @@
-/*	$NetBSD: clnt_simple.c,v 1.32 2013/03/11 20:19:29 tron Exp $	*/
+/*	$NetBSD: clnt_simple.c,v 1.30.8.1 2013/03/14 22:03:10 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -41,7 +41,7 @@
 #if 0
 static char sccsid[] = "@(#)clnt_simple.c 1.49 89/01/31 Copyr 1984 Sun Micro";
 #else
-__RCSID("$NetBSD: clnt_simple.c,v 1.32 2013/03/11 20:19:29 tron Exp $");
+__RCSID("$NetBSD: clnt_simple.c,v 1.30.8.1 2013/03/14 22:03:10 riz Exp $");
 #endif
 #endif
 
@@ -87,7 +87,7 @@ struct rpc_call_private {
 static struct rpc_call_private *rpc_call_private_main;
 
 #ifdef _REENTRANT
-static void rpc_call_destroy(void *);
+static void rpc_call_destroy __P((void *));
 
 static void
 rpc_call_destroy(void *vp)
@@ -120,16 +120,15 @@ rpc_call_setup(void)
  * The total time available is 25 seconds.
  */
 enum clnt_stat
-rpc_call(
-	const char *	host,		/* host name */
-	rpcprog_t	prognum,	/* program number */
-	rpcvers_t	versnum,	/* version number */
-	rpcproc_t	procnum,	/* procedure number */
-	xdrproc_t	inproc,		/* in XDR procedures */
-	const char *	in,		/* recv data */
-	xdrproc_t	outproc,	/* out XDR procedures */
-	char *		out,		/* send data */
-	const char *	nettype)	/* nettype */
+rpc_call(host, prognum, versnum, procnum, inproc, in, outproc, out, nettype)
+	const char *host;			/* host name */
+	rpcprog_t prognum;			/* program number */
+	rpcvers_t versnum;			/* version number */
+	rpcproc_t procnum;			/* procedure number */
+	xdrproc_t inproc, outproc;	/* in/out XDR procedures */
+	const char *in;
+	char  *out;			/* recv/send data */
+	const char *nettype;			/* nettype */
 {
 	struct rpc_call_private *rcp = (struct rpc_call_private *) 0;
 	enum clnt_stat clnt_stat;

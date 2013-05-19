@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2013/01/17 22:25:36 christos Exp $
+#	$NetBSD: Makefile,v 1.3 2011/04/17 12:52:26 tron Exp $
 
 HOSTLIB=dwarf
 
@@ -15,7 +15,6 @@ SRCS=	dwarf_abbrev.c		\
 	dwarf_errno.c		\
 	dwarf_finish.c		\
 	dwarf_form.c		\
-	dwarf_func.c		\
 	dwarf_init.c		\
 	dwarf_loc.c
 
@@ -26,8 +25,8 @@ INCS=		dwarf.h libdwarf.h
 INCSDIR=	/usr/include
 
 .ifndef NOCOMPATLIB
-COMPATLIB_NO_LIB= yes # only the include files, not the library
-.-include	"${TOOLDIR}/share/compat/defs.mk"
+COMPATOBJ!=     cd ${.CURDIR}/../compat && ${PRINTOBJDIR}
+CPPFLAGS+=	-I${COMPATOBJ}
 .endif
 
 CPPFLAGS+=	-I${.CURDIR}/../compat -I${LIBDWARF_DIR} -I${LIBELF_DIR}
@@ -46,7 +45,7 @@ CPPFLAGS+=	-DHAVE_NBTOOL_CONFIG_H=1 -D_FILE_OFFSET_BITS=64
 
 .PATH:		${LIBDWARF_DIR}
 
-HOST_CPPFLAGS:=	${CPPFLAGS} ${HOST_CPPFLAGS}
+HOST_CPPFLAGS:=	${CPPFLAGS}
 CPPFLAGS:=	# empty
 
 .include "${.CURDIR}/../Makefile.nbincludes"

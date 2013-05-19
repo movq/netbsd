@@ -1,4 +1,4 @@
-/*	$NetBSD: gencat.c,v 1.35 2012/03/09 18:54:28 ginsbach Exp $	*/
+/*	$NetBSD: gencat.c,v 1.34 2011/12/29 22:58:27 wiz Exp $	*/
 
 /*
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: gencat.c,v 1.35 2012/03/09 18:54:28 ginsbach Exp $");
+__RCSID("$NetBSD: gencat.c,v 1.34 2011/12/29 22:58:27 wiz Exp $");
 #endif
 
 /***********************************************************
@@ -345,13 +345,11 @@ getmsg(int fd, char *cptr, char quote)
 {
 	static char *msg = NULL;
 	static size_t msglen = 0;
-	size_t  clen, i;
-	int     in_quote = 0;
+	size_t    clen, i;
 	char   *tptr;
 
 	if (quote && *cptr == quote) {
 		++cptr;
-		in_quote = 1;
 	} 
 
 	clen = strlen(cptr) + 1;
@@ -368,26 +366,11 @@ getmsg(int fd, char *cptr, char quote)
 		if (quote && *cptr == quote) {
 			char   *tmp;
 			tmp = cptr + 1;
-			if (!in_quote) {
-				/* XXX hard error? */
+			if (*tmp && (!isspace((unsigned char) *tmp) || *wskip(tmp))) {
 				warning(cptr, "unexpected quote character, ignoring");
 				*tptr++ = *cptr++;
 			} else {
-				cptr++;
-				/* don't use wskip() */
-				while (*cptr && isspace((unsigned char) *cptr))
-#ifndef _BACKWARDS_COMPAT
-					cptr++;
-#else
-					*tptr++ = *cptr++;
-#endif
-				/* XXX hard error? */
-				if (*cptr)
-					warning(tmp, "unexpected extra characters, ignoring");
-				in_quote = 0;
-#ifndef _BACKWARDS_COMPAT
-				break;
-#endif
+				*cptr = '\0';
 			}
 		} else {
 			if (*cptr == '\\') {
@@ -454,10 +437,6 @@ getmsg(int fd, char *cptr, char quote)
 			}
 		}
 	}
-
-	if (in_quote)
-		warning(cptr, "unterminated quoted message, ignoring");
-
 	*tptr = '\0';
 	return (msg);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: kauai.c,v 1.34 2013/04/28 00:42:29 macallan Exp $	*/
+/*	$NetBSD: kauai.c,v 1.28 2011/07/01 18:41:52 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2003 Tsubai Masanari.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kauai.c,v 1.34 2013/04/28 00:42:29 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kauai.c,v 1.28 2011/07/01 18:41:52 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -112,11 +112,11 @@ kauai_attach(device_t parent, device_t self, void *aux)
 	pci_intr_handle_t ih;
 	paddr_t regbase, dmabase;
 	int node, reg[5], i;
-	uint32_t intrs[4], intr;
 
 	sc->sc_wdcdev.sc_atac.atac_dev = self;
 
 	sc->sc_dmacmd = dbdma_alloc(sizeof(dbdma_command_t) * 20);
+
 	node = pcidev_to_ofdev(pa->pa_pc, pa->pa_tag);
 	if (node == 0) {
 		aprint_error(": cannot find kauai node\n");
@@ -132,30 +132,12 @@ kauai_attach(device_t parent, device_t self, void *aux)
 
 	/*
 	 * XXX PCI_INTERRUPT_REG seems to be wired to 0.
-	 * XXX So use fixed intrpin and intrline values if the interrupts
-	 * XXX property contains no IRQ line
+	 * XXX So use fixed intrpin and intrline values.
 	 */
-	intr = 0;
-	pa->pa_intrpin = 1;
-	if (OF_getprop(node, "interrupts", intrs, sizeof(intrs)) >= 4) {
-		intr = intrs[0];
-		/*
-		 * the interrupts property on my iBook G4's kauai contains
-		 * 0x00000001 0x00000000, so fix that up here
-		 * TODO: use parent's interrupt-map property to do this right
-		 */
-		if (intr < 10)
-			intr = 0;
-		aprint_debug_dev(self,
-		    "got %d from interrupts property\n", intr);
-	}	
-	if (intr == 0) {
-		if (PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_APPLE_SHASTA_ATA) {
-			intr = 38;
-		} else
-			intr = 39;		
+	if (pci_conf_read(pa->pa_pc, pa->pa_tag, PCI_INTERRUPT_REG) == 0) {
+		pa->pa_intrpin = 1;
+		pa->pa_intrline = 39;
 	}
-	pa->pa_intrline = intr;
 
 	if (pci_intr_map(pa, &ih)) {
 		aprint_error(": unable to map interrupt\n");
@@ -199,18 +181,18 @@ kauai_attach(device_t parent, device_t self, void *aux)
 	sc->sc_chanptr = chp;
 	sc->sc_wdcdev.sc_atac.atac_channels = &sc->sc_chanptr;
 	sc->sc_wdcdev.sc_atac.atac_nchannels = 1;
-	sc->sc_wdcdev.wdc_maxdrives = 2;
 	sc->sc_wdcdev.dma_arg = sc;
 	sc->sc_wdcdev.dma_init = kauai_dma_init;
 	sc->sc_wdcdev.dma_start = kauai_dma_start;
 	sc->sc_wdcdev.dma_finish = kauai_dma_finish;
 	sc->sc_wdcdev.sc_atac.atac_set_modes = kauai_set_modes;
 	sc->sc_calc_timing = calc_timing_kauai;
-	sc->sc_dmareg = mapiodev(dmabase, 0x1000, false);
+	sc->sc_dmareg = (void *)dmabase;
 
 	chp->ch_channel = 0;
 	chp->ch_atac = &sc->sc_wdcdev.sc_atac;
 	chp->ch_queue = &sc->sc_queue;
+	chp->ch_ndrive = 2;
 	wdc_init_shadow_regs(chp);
 
 	wdcattach(chp);
@@ -226,15 +208,14 @@ kauai_set_modes(struct ata_channel *chp)
 	struct ata_drive_datas *drvp;
 	int drive;
 
-	if (drvp0->drive_type != ATA_DRIVET_NONE &&
-	    drvp1->drive_type != ATA_DRIVET_NONE) {
+	if ((drvp0->drive_flags & DRIVE) && (drvp1->drive_flags & DRIVE)) {
 		drvp0->PIO_mode = drvp1->PIO_mode =
 		    min(drvp0->PIO_mode, drvp1->PIO_mode);
 	}
 
 	for (drive = 0; drive < 2; drive++) {
 		drvp = &chp->ch_drive[drive];
-		if (drvp->drive_type !=  ATA_DRIVET_NONE) {
+		if (drvp->drive_flags & DRIVE) {
 			(*sc->sc_calc_timing)(sc, drive);
 			bus_space_write_4(wdr->cmd_iot, wdr->cmd_baseioh,
 			    PIO_CONFIG_REG, sc->sc_piotiming_r[drive]);
@@ -284,12 +265,12 @@ calc_timing_kauai(struct kauai_softc *sc, int drive)
 	pioconf = pio_timing_kauai[piomode];
 
 	dmaconf = 0;
-	if (drvp->drive_flags & ATA_DRIVE_DMA)
+	if (drvp->drive_flags & DRIVE_DMA)
 		dmaconf |= dma_timing_kauai[dmamode];
-	if (drvp->drive_flags & ATA_DRIVE_UDMA)
+	if (drvp->drive_flags & DRIVE_UDMA)
 		dmaconf |= udma_timing_kauai[udmamode];
 
-	if (drvp->drive_flags & ATA_DRIVE_UDMA)
+	if (drvp->drive_flags & DRIVE_UDMA)
 		dmaconf |= 1;
 
 	sc->sc_piotiming_r[drive] = sc->sc_piotiming_w[drive] = pioconf;

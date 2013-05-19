@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.186 2013/01/22 11:58:39 isaki Exp $	*/
+/*	$NetBSD: machdep.c,v 1.181.2.1 2012/05/09 20:01:51 riz Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.186 2013/01/22 11:58:39 isaki Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.181.2.1 2012/05/09 20:01:51 riz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -107,7 +107,9 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.186 2013/01/22 11:58:39 isaki Exp $");
 #include <machine/autoconf.h>
 #include <arch/x68k/dev/intiovar.h>
 
-extern void doboot(void) __attribute__((__noreturn__));
+void initcpu(void);
+void identifycpu(void);
+void doboot(void) __attribute__((__noreturn__));
 
 /* the following is used externally (sysctl_hw) */
 char	machine[] = MACHINE;	/* from <machine/param.h> */
@@ -122,10 +124,16 @@ extern u_int lowram;
 extern int end, *esym;
 
 int	maxmem;			/* max memory per process */
+int	physmem = MAXMEM;	/* max supported memory, changes to actual */
+
+/*
+ * safepri is a safe priority for sleep to set for a spin-wait
+ * during autoconfiguration or after a panic.
+ */
+int	safepri = PSL_LOWIPL;
 
 /* prototypes for local functions */
 void	identifycpu(void);
-static int check_emulator(char *, int);
 void	initcpu(void);
 int	cpu_dumpsize(void);
 int	cpu_dump(int (*)(dev_t, daddr_t, void *, size_t), daddr_t *);
@@ -305,7 +313,6 @@ identifycpu(void)
 	/* there's alot of XXX in here... */
 	const char *cpu_type, *mach, *mmu, *fpu;
 	char clock[16];
-	char emubuf[20];
 
 	/*
 	 * check machine type constant
@@ -336,9 +343,6 @@ identifycpu(void)
 		mach = "000?(unknown model)";
 		break;
 	}
-
-	emubuf[0] = '\0';
-	check_emulator(emubuf, sizeof(emubuf));
 
 	cpuspeed = 2048 / delay_divisor;
 	sprintf(clock, "%dMHz", cpuspeed);
@@ -372,57 +376,9 @@ identifycpu(void)
 		fpu = fpu_descr[fputype];
 	else
 		fpu = ", unknown FPU";
-	sprintf(cpu_model, "X68%s (%s CPU%s%s, %s clock)%s%s",
-	    mach, cpu_type, mmu, fpu, clock,
-		emubuf[0] ? " on " : "", emubuf);
+	sprintf(cpu_model, "X68%s (%s CPU%s%s, %s clock)",
+	    mach, cpu_type, mmu, fpu, clock);
 	printf("%s\n", cpu_model);
-}
-
-/*
- * If it is an emulator, store the name in buf and return 1.
- * Otherwise return 0.
- */
-static int
-check_emulator(char *buf, int bufsize)
-{
-	int xm6major;
-	int xm6minor;
-	int xm6imark;
-	int xm6imajor;
-	int xm6iminor;
-
-	/* XM6 and its family */
-	intio_set_sysport_sramwp('X');
-	if (intio_get_sysport_sramwp() == '6') {
-		xm6major = intio_get_sysport_sramwp();
-		xm6minor = intio_get_sysport_sramwp();
-		xm6imark = intio_get_sysport_sramwp();
-		switch (xm6imark) {
-		case 0xff:	/* Original XM6 or unknown compatibles */
-			snprintf(buf, bufsize, "XM6 v%d.%02d",
-				xm6major, xm6minor);
-			break;
-
-		case 'i':	/* XM6i */
-			xm6imajor = intio_get_sysport_sramwp();
-			xm6iminor = intio_get_sysport_sramwp();
-			snprintf(buf, bufsize, "XM6i v%d.%02d",
-				xm6imajor, xm6iminor);
-			break;
-
-		case 'g':	/* XM6 TypeG */
-			snprintf(buf, bufsize, "XM6 TypeG v%d.%02d",
-				xm6major, xm6minor);
-			break;
-
-		default:	/* Other XM6 compatibles? */
-			/* XXX what should I do? */
-			return 0;
-		}
-		return 1;
-	}
-
-	return 0;
 }
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.es,v 1.51 2013/03/23 15:53:48 gson Exp $	*/
+/*	$NetBSD: msg.mi.es,v 1.39.2.5 2012/11/18 22:04:42 riz Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -35,7 +35,7 @@
 /* MI Message catalog -- spanish, machine independent */
 
 message usage
-{uso: sysinst [-D] [-f fichero_definición] [-r versión]
+{uso: sysinst [-r versión] [-f fichero-definición]
 }
 
 /*
@@ -797,7 +797,7 @@ message set_X11_prog
 {Programación de X11}
 
 message set_source
-{Source and debug sets}
+{Source sets}
 
 message set_syssrc
 {Kernel sources}
@@ -813,12 +813,6 @@ message set_gnusrc
 
 message set_xsrc
 {X11 sources}
-
-message set_debug
-{Debug symbols}
-
-message set_xdebug
-{X11 debug symbols}
 
 message cur_distsets_row
 {%-27s %3s}
@@ -986,7 +980,6 @@ message other {otro }
 message Perform_IPv6_autoconfiguration {¿Realizar autoconfiguración IPv6?}
 message Perform_DHCP_autoconfiguration {¿Realizar autoconfiguración DHCP ?}
 message Root_shell {Shell de root}
-message User_shell {Shell de user}
 
 .if AOUT2ELF
 message aoutfail
@@ -1064,7 +1057,6 @@ message enable_sshd {Activar sshd}
 message enable_ntpd {Activar ntpd}
 message run_ntpdate {Ejecutar ntpdate durante el arranque}
 message enable_mdnsd {Activar mdnsd}
-message add_a_user {Add a user}
 message configmenu {Configurar elementos adicionales bajo demanda.}
 message doneconfig {Terminar configuración}
 message Install_pkgin {Instalar pkgin y actualizar la lista de paquetes}
@@ -1096,5 +1088,3 @@ message pkgin_failed
 paquetes binarios.  Por favor verifique el camino a los paquetes y
 reinténtelo de nuevo.}
 message failed {Error}
-message addusername {8 character username to add:}
-message addusertowheel {Do you wish to add this user to group wheel?}

@@ -1,4 +1,4 @@
-/*	$NetBSD: bswap.c,v 1.2 2013/05/03 16:05:12 matt Exp $	*/
+/*	$NetBSD: bswap.c,v 1.1 2010/01/05 15:45:26 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 2009 Izumi Tsutsui.  All rights reserved.
@@ -59,8 +59,6 @@
 #include "nbtool_config.h"
 #endif
 
-#include <string.h>
-
 #include <sys/types.h>
 #if HAVE_NBTOOL_CONFIG_H
 #include <nbinclude/sys/disklabel.h>
@@ -71,8 +69,11 @@
 #include "bswap.h"
 #include "dkcksum.h"
 
-static void
-bswaplabel(struct disklabel *nlp, const struct disklabel *olp)
+#if TARGET_BYTE_ORDER != BYTE_ORDER
+static void bswaplabel(struct disklabel *nlp, struct disklabel *olp);
+
+void
+bswaplabel(struct disklabel *nlp, struct disklabel *olp)
 {
 	int i;
 
@@ -136,37 +137,31 @@ bswaplabel(struct disklabel *nlp, const struct disklabel *olp)
 }
 
 void
-targettohlabel(struct disklabel *hlp, const struct disklabel *tlp)
+targettohlabel(struct disklabel *hlp, struct disklabel *tlp)
 {
 
-	if (bswap32(tlp->d_magic) == DISKMAGIC)
-		bswaplabel(hlp, tlp);
-	else
-		*hlp = *tlp;
+	bswaplabel(hlp, tlp);
 	/* update checksum in host endian */
 	hlp->d_checksum = 0;
 	hlp->d_checksum = dkcksum(hlp);
 }
 
 void
-htotargetlabel(struct disklabel *tlp, const struct disklabel *hlp)
+htotargetlabel(struct disklabel *tlp, struct disklabel *hlp)
 {
 
-	if (bswap_p)
-		bswaplabel(tlp, hlp);
-	else
-		*tlp = *hlp;
-
+	bswaplabel(tlp, hlp);
 	/* update checksum in target endian */
 	tlp->d_checksum = 0;
-	tlp->d_checksum = dkcksum_target(tlp);
+	tlp->d_checksum = dkcksum_re(tlp);
 }
 
 uint16_t
-dkcksum_target(struct disklabel *lp)
+dkcksum_re(struct disklabel *lp)
 {
 	uint16_t npartitions;
 
+	/* we can assume lp is reversed, but check it again for sanity */
 	if (lp->d_magic == DISKMAGIC)
 		npartitions = lp->d_npartitions;
 	else if (bswap32(lp->d_magic) == DISKMAGIC)
@@ -174,8 +169,9 @@ dkcksum_target(struct disklabel *lp)
 	else
 		npartitions = 0;
 
-	if (npartitions > maxpartitions)
+	if (npartitions > MAXPARTITIONS)
 		npartitions = 0;
 
 	return dkcksum_sized(lp, npartitions);
 }
+#endif

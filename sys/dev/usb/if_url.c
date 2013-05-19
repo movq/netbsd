@@ -1,5 +1,4 @@
-/*	$NetBSD: if_url.c,v 1.47 2013/01/22 12:40:43 jmcneill Exp $	*/
-
+/*	$NetBSD: if_url.c,v 1.41 2012/02/02 19:43:07 tls Exp $	*/
 /*
  * Copyright (c) 2001, 2002
  *     Shingo WATANABE <nabe@nabechan.org>.  All rights reserved.
@@ -44,11 +43,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_url.c,v 1.47 2013/01/22 12:40:43 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_url.c,v 1.41 2012/02/02 19:43:07 tls Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -113,7 +110,7 @@ Static void url_lock_mii(struct url_softc *);
 Static void url_unlock_mii(struct url_softc *);
 Static int url_int_miibus_readreg(device_t, int, int);
 Static void url_int_miibus_writereg(device_t, int, int, int);
-Static void url_miibus_statchg(struct ifnet *);
+Static void url_miibus_statchg(device_t);
 Static int url_init(struct ifnet *);
 Static void url_setmulti(struct url_softc *);
 Static void url_reset(struct url_softc *);
@@ -167,7 +164,7 @@ static const struct url_type {
 
 
 /* Probe */
-int
+int 
 url_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct usb_attach_arg *uaa = aux;
@@ -176,7 +173,7 @@ url_match(device_t parent, cfdata_t match, void *aux)
 		UMATCH_VENDOR_PRODUCT : UMATCH_NONE);
 }
 /* Attach */
-void
+void 
 url_attach(device_t parent, device_t self, void *aux)
 {
 	struct url_softc *sc = device_private(self);
@@ -204,14 +201,13 @@ url_attach(device_t parent, device_t self, void *aux)
 	/* Move the device into the configured state. */
 	err = usbd_set_config_no(dev, URL_CONFIG_NO, 1);
 	if (err) {
-		aprint_error_dev(self, "failed to set configuration"
-		    ", err=%s\n", usbd_errstr(err));
+		aprint_error_dev(self, "setting config no failed\n");
 		goto bad;
 	}
 
-	usb_init_task(&sc->sc_tick_task, url_tick_task, sc, 0);
+	usb_init_task(&sc->sc_tick_task, url_tick_task, sc);
 	rw_init(&sc->sc_mii_rwlock);
-	usb_init_task(&sc->sc_stop_task, (void (*)(void *))url_stop_task, sc, 0);
+	usb_init_task(&sc->sc_stop_task, (void (*)(void *)) url_stop_task, sc);
 
 	/* get control interface */
 	err = usbd_device2interface_handle(dev, URL_IFACE_INDEX, &iface);
@@ -331,7 +327,7 @@ url_attach(device_t parent, device_t self, void *aux)
 }
 
 /* detach */
-int
+int 
 url_detach(device_t self, int flags)
 {
 	struct url_softc *sc = device_private(self);
@@ -354,7 +350,7 @@ url_detach(device_t self, int flags)
 
 	if (--sc->sc_refcnt >= 0) {
 		/* Wait for processes to go away */
-		usb_detach_waitold(sc->sc_dev);
+		usb_detach_wait(sc->sc_dev);
 	}
 
 	if (ifp->if_flags & IFF_RUNNING)
@@ -414,7 +410,7 @@ url_mem(struct url_softc *sc, int cmd, int offset, void *buf, int len)
 	sc->sc_refcnt++;
 	err = usbd_do_request(sc->sc_udev, &req, buf);
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(sc->sc_dev);
 	if (err) {
 		DPRINTF(("%s: url_mem(): %s failed. off=%04x, err=%d\n",
 			 device_xname(sc->sc_dev),
@@ -755,7 +751,7 @@ url_openpipes(struct url_softc *sc)
 
  done:
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(sc->sc_dev);
 
 	return (error);
 }
@@ -922,7 +918,7 @@ url_send(struct url_softc *sc, struct mbuf *m, int idx)
 	sc->sc_refcnt++;
 	err = usbd_transfer(c->url_xfer);
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(sc->sc_dev);
 	if (err != USBD_IN_PROGRESS) {
 		printf("%s: url_send error=%s\n", device_xname(sc->sc_dev),
 		       usbd_errstr(err));
@@ -971,7 +967,7 @@ url_txeof(usbd_xfer_handle xfer, usbd_private_handle priv,
 			sc->sc_refcnt++;
 			usbd_clear_endpoint_stall_async(sc->sc_pipe_tx);
 			if (--sc->sc_refcnt < 0)
-				usb_detach_wakeupold(sc->sc_dev);
+				usb_detach_wakeup(sc->sc_dev);
 		}
 		splx(s);
 		return;
@@ -1018,7 +1014,7 @@ url_rxeof(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
 			sc->sc_refcnt++;
 			usbd_clear_endpoint_stall_async(sc->sc_pipe_rx);
 			if (--sc->sc_refcnt < 0)
-				usb_detach_wakeupold(sc->sc_dev);
+				usb_detach_wakeup(sc->sc_dev);
 		}
 		goto done;
 	}
@@ -1078,7 +1074,7 @@ url_rxeof(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
 	sc->sc_refcnt++;
 	usbd_transfer(xfer);
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(sc->sc_dev);
 
 	DPRINTF(("%s: %s: start rx\n", device_xname(sc->sc_dev), __func__));
 }
@@ -1343,7 +1339,7 @@ url_unlock_mii(struct url_softc *sc)
 
 	rw_exit(&sc->sc_mii_rwlock);
 	if (--sc->sc_refcnt < 0)
-		usb_detach_wakeupold(sc->sc_dev);
+		usb_detach_wakeup(sc->sc_dev);
 }
 
 Static int
@@ -1487,13 +1483,16 @@ url_int_miibus_writereg(device_t dev, int phy, int reg, int data)
 }
 
 Static void
-url_miibus_statchg(struct ifnet *ifp)
+url_miibus_statchg(device_t dev)
 {
 #ifdef URL_DEBUG
-	if (ifp == NULL)
+	struct url_softc *sc;
+
+	if (dev == NULL)
 		return;
 
-	DPRINTF(("%s: %s: enter\n", ifp->if_xname, __func__));
+	sc = device_private(dev);
+	DPRINTF(("%s: %s: enter\n", device_xname(sc->sc_dev), __func__));
 #endif
 	/* Nothing to do */
 }
@@ -1582,3 +1581,4 @@ url_ext_miibus_writereg(device_t dev, int phy, int reg, int data)
 	return;
 }
 #endif
+

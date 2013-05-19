@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_kmem.c,v 1.50 2013/04/22 13:22:25 yamt Exp $	*/
+/*	$NetBSD: subr_kmem.c,v 1.42.2.3 2013/04/20 10:17:55 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -57,52 +57,11 @@
 
 /*
  * allocator of kernel wired memory.
- */
-
-/*
- * This allocator has some debug features enabled with "option DEBUG".
  *
- * KMEM_POISON
- *	Try to detect modify-after-free bugs.
- *
- *	Fill freed (in the sense of kmem_free) memory with a garbage pattern.
- *	Check the pattern on allocation.
- *
- * KMEM_REDZONE
- *	Try to detect overrun bugs.
- *
- *	Allocate some more bytes for each allocation.
- *	The extra bytes are checked by KMEM_POISON on kmem_free.
- *
- * KMEM_SIZE
- *	Try to detect alloc/free size mismatch bugs.
- *
- *	Prefix each allocations with a fixed-sized header and record
- *	the exact user-requested allocation size in it.
- *	When freeing, compare it with kmem_free's "size" argument.
- *
- * KMEM_GUARD
- *	See the below "kmguard" section.
- */
-
-/*
- * kmguard
- *
- * A kernel with "option DEBUG" has "kmguard" debugging feature compiled in.
- * See the comment in uvm/uvm_kmguard.c for what kind of bugs it tries to
- * detect.  Even if compiled in, it's disabled by default because it's very
- * expensive.  You can enable it on boot by:
- *
- * 	boot -d
- * 	db> w kmem_guard_depth 0t30000
- * 	db> c
- *
- * The default value of kmem_guard_depth is 0, which means disabled.
- * It can be changed by KMEM_GUARD_DEPTH kernel config option.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_kmem.c,v 1.50 2013/04/22 13:22:25 yamt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_kmem.c,v 1.42.2.3 2013/04/20 10:17:55 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/callback.h>
@@ -179,11 +138,8 @@ static pool_cache_t kmem_cache_big[KMEM_CACHE_BIG_COUNT] __cacheline_aligned;
 static size_t kmem_cache_big_maxidx __read_mostly;
 
 
-#if defined(DEBUG) && defined(_HARDKERNEL)
-#ifndef KMEM_GUARD_DEPTH
-#define KMEM_GUARD_DEPTH 0
-#endif
-int kmem_guard_depth = KMEM_GUARD_DEPTH;
+#if defined(DEBUG)
+int kmem_guard_depth = 0;
 size_t kmem_guard_size;
 static struct uvm_kmguard kmem_guard;
 static void *kmem_freecheck;
@@ -226,22 +182,21 @@ CTASSERT(KM_NOSLEEP == PR_NOWAIT);
  */
 
 void *
-kmem_intr_alloc(size_t requested_size, km_flag_t kmflags)
+kmem_intr_alloc(size_t size, km_flag_t kmflags)
 {
 	size_t allocsz, index;
-	size_t size;
 	pool_cache_t pc;
 	uint8_t *p;
 
-	KASSERT(requested_size > 0);
+	KASSERT(size > 0);
 
 #ifdef KMEM_GUARD
-	if (requested_size <= kmem_guard_size) {
-		return uvm_kmguard_alloc(&kmem_guard, requested_size,
+	if (size <= kmem_guard_size) {
+		return uvm_kmguard_alloc(&kmem_guard, size,
 		    (kmflags & KM_SLEEP) != 0);
 	}
 #endif
-	size = kmem_roundup_size(requested_size);
+	size = kmem_roundup_size(size);
 	allocsz = size + REDZONE_SIZE + SIZE_SIZE;
 
 	if ((index = ((allocsz -1) >> KMEM_SHIFT))
@@ -250,7 +205,7 @@ kmem_intr_alloc(size_t requested_size, km_flag_t kmflags)
 	} else if ((index = ((allocsz - 1) >> KMEM_BIG_SHIFT))
             < kmem_cache_big_maxidx) {
 		pc = kmem_cache_big[index];
-	} else {
+	} else {	
 		int ret = uvm_km_kmem_alloc(kmem_va_arena,
 		    (vsize_t)round_page(size),
 		    ((kmflags & KM_SLEEP) ? VM_SLEEP : VM_NOSLEEP)
@@ -267,7 +222,7 @@ kmem_intr_alloc(size_t requested_size, km_flag_t kmflags)
 	if (__predict_true(p != NULL)) {
 		kmem_poison_check(p, size);
 		FREECHECK_OUT(&kmem_freecheck, p);
-		kmem_size_set(p, requested_size);
+		kmem_size_set(p, size);
 
 		return p + SIZE_SIZE;
 	}
@@ -295,22 +250,21 @@ kmem_intr_zalloc(size_t size, km_flag_t kmflags)
  */
 
 void
-kmem_intr_free(void *p, size_t requested_size)
+kmem_intr_free(void *p, size_t size)
 {
 	size_t allocsz, index;
-	size_t size;
 	pool_cache_t pc;
 
 	KASSERT(p != NULL);
-	KASSERT(requested_size > 0);
+	KASSERT(size > 0);
 
 #ifdef KMEM_GUARD
-	if (requested_size <= kmem_guard_size) {
-		uvm_kmguard_free(&kmem_guard, requested_size, p);
+	if (size <= kmem_guard_size) {
+		uvm_kmguard_free(&kmem_guard, size, p);
 		return;
 	}
 #endif
-	size = kmem_roundup_size(requested_size);
+	size = kmem_roundup_size(size);
 	allocsz = size + REDZONE_SIZE + SIZE_SIZE;
 
 	if ((index = ((allocsz -1) >> KMEM_SHIFT))
@@ -327,7 +281,7 @@ kmem_intr_free(void *p, size_t requested_size)
 	}
 
 	p = (uint8_t *)p - SIZE_SIZE;
-	kmem_size_check(p, requested_size);
+	kmem_size_check(p, size);
 	FREECHECK_IN(&kmem_freecheck, p);
 	LOCKDEBUG_MEM_CHECK(p, size);
 	kmem_poison_check((uint8_t *)p + SIZE_SIZE + size,
@@ -423,7 +377,7 @@ kmem_create_caches(const struct kmem_cache_info *array,
 		pa = &pool_allocator_kmem;
 #if defined(KMEM_POISON)
 		pc = pool_cache_init(cache_size, align, 0, flags,
-		    name, pa, ipl, kmem_poison_ctor,
+		    name, pa, ipl,kmem_poison_ctor,
 		    NULL, (void *)cache_size);
 #else /* defined(KMEM_POISON) */
 		pc = pool_cache_init(cache_size, align, 0, flags,
@@ -526,7 +480,7 @@ kmem_poison_check(void *p, size_t sz)
 static void
 kmem_size_set(void *p, size_t sz)
 {
-
+	
 	memcpy(p, &sz, sizeof(sz));
 }
 
@@ -552,7 +506,7 @@ kmem_asprintf(const char *fmt, ...)
 	int size, len;
 	va_list va;
 	char *str;
-
+	
 	va_start(va, fmt);
 	len = vsnprintf(NULL, 0, fmt, va);
 	va_end(va);

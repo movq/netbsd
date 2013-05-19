@@ -1,4 +1,4 @@
-/*	$NetBSD: pyro.c,v 1.12 2012/10/27 17:18:12 chs Exp $	*/
+/*	$NetBSD: pyro.c,v 1.10 2011/08/12 06:41:50 mrg Exp $	*/
 /*	from: $OpenBSD: pyro.c,v 1.20 2010/12/05 15:15:14 kettenis Exp $	*/
 
 /*
@@ -29,9 +29,6 @@
  * ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pyro.c,v 1.12 2012/10/27 17:18:12 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -122,7 +119,7 @@ int pyro_dmamap_create(bus_dma_tag_t, bus_size_t, int,
     bus_size_t, bus_size_t, int, bus_dmamap_t *);
 
 int
-pyro_match(device_t parent, cfdata_t match, void *aux)
+pyro_match(struct device *parent, cfdata_t match, void *aux)
 {
 	struct mainbus_attach_args *ma = aux;
 	char *str;
@@ -139,7 +136,7 @@ pyro_match(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-pyro_attach(device_t parent, device_t self, void *aux)
+pyro_attach(struct device *parent, struct device *self, void *aux)
 {
 	struct pyro_softc *sc = device_private(self);
 	struct mainbus_attach_args *ma = aux;

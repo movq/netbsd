@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.5 2012/12/02 12:55:27 apb Exp $
+#	$NetBSD: Makefile,v 1.4 2009/03/30 11:22:46 tsutsui Exp $
 
 HOSTPROG=	macppc_mkboothfs
 SRCS=		mkboothfs.c
@@ -9,7 +9,9 @@ CLEANFILES+=	boothfs
 .include <bsd.own.mk>
 
 .ifndef NOCOMPATLIB
-.-include	"${TOOLDIR}/share/compat/defs.mk"
+COMPATOBJ!=	cd ${NETBSDSRCDIR}/tools/compat && ${PRINTOBJDIR}
+.-include       "${COMPATOBJ}/defs.mk"
+HOST_CPPFLAGS+=	-I${NETBSDSRCDIR}/tools/compat
 .endif
 
 

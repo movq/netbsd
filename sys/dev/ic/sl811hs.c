@@ -1,4 +1,4 @@
-/*	$NetBSD: sl811hs.c,v 1.33 2012/06/10 06:15:52 mrg Exp $	*/
+/*	$NetBSD: sl811hs.c,v 1.31 2011/11/27 14:36:20 rmind Exp $	*/
 
 /*
  * Not (c) 2007 Matthew Orgass
@@ -84,7 +84,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sl811hs.c,v 1.33 2012/06/10 06:15:52 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sl811hs.c,v 1.31 2011/11/27 14:36:20 rmind Exp $");
 
 #include "opt_slhci.h"
 
@@ -694,7 +694,6 @@ const struct usbd_bus_methods slhci_bus_methods = {
 	slhci_freem,
 	slhci_allocx,
 	slhci_freex,
-	NULL, /* slhci_get_lock */
 };
 
 const struct usbd_pipe_methods slhci_pipe_methods = {
@@ -1471,6 +1470,7 @@ slhci_do_callback(struct slhci_softc *sc, struct usbd_xfer *xfer, int *s)
 
 	int repeat;
 
+	sc->sc_bus.intr_context++;
 	start_cc_time(&t_callback, (u_int)xfer);
 	simple_unlock(&sc->sc_lock);
 	splx(*s);
@@ -1482,6 +1482,7 @@ slhci_do_callback(struct slhci_softc *sc, struct usbd_xfer *xfer, int *s)
 	*s = splhardusb();
 	simple_lock(&sc->sc_lock);
 	stop_cc_time(&t_callback);
+	sc->sc_bus.intr_context--;
 
 	if (repeat && !sc->sc_bus.use_polling)
 		slhci_do_repeat(sc, xfer);
@@ -3659,7 +3660,8 @@ slhci_log_sc(void)
 
 	DDOLOG("frame=%d rootintr=%p", t->frame, t->rootintr, 0,0);
 
-	DDOLOG("use_polling=%d", ssc->sc_bus.use_polling, 0, 0, 0);
+	DDOLOG("use_polling=%d intr_context=%d", ssc->sc_bus.use_polling,
+	    ssc->sc_bus.intr_context, 0,0);
 }
 
 void

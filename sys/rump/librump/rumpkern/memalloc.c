@@ -1,4 +1,4 @@
-/*	$NetBSD: memalloc.c,v 1.21 2013/04/27 15:34:53 pooka Exp $	*/
+/*	$NetBSD: memalloc.c,v 1.12 2012/02/04 22:11:43 para Exp $	*/
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
@@ -26,14 +26,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: memalloc.c,v 1.21 2013/04/27 15:34:53 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: memalloc.c,v 1.12 2012/02/04 22:11:43 para Exp $");
 
 #include <sys/param.h>
 #include <sys/kmem.h>
 #include <sys/malloc.h>
+#include <sys/percpu.h>
 #include <sys/pool.h>
-
-#include <uvm/uvm_extern.h>
+#include <sys/vmem.h>
 
 #include <rump/rumpuser.h>
 
@@ -44,15 +44,65 @@ __KERNEL_RCSID(0, "$NetBSD: memalloc.c,v 1.21 2013/04/27 15:34:53 pooka Exp $");
  * libc malloc.
  *
  * Supported:
+ *   + malloc
  *   + kmem
  *   + pool
  *   + pool_cache
  */
 
 /*
+ * malloc
+ */
+
+void
+malloc_type_attach(struct malloc_type *type)
+{
+
+	return;
+}
+
+void
+malloc_type_detach(struct malloc_type *type)
+{
+
+	return;
+}
+
+void *
+kern_malloc(unsigned long size, struct malloc_type *type, int flags)
+{
+	void *rv;
+
+	rv = rumpuser_malloc(size, 0);
+
+	if (__predict_false(rv == NULL && (flags & (M_CANFAIL|M_NOWAIT)) == 0))
+		panic("malloc %lu bytes failed", size);
+
+	if (rv && flags & M_ZERO)
+		memset(rv, 0, size);
+
+	return rv;
+}
+
+void *
+kern_realloc(void *ptr, unsigned long size, struct malloc_type *type, int flags)
+{
+
+	return rumpuser_realloc(ptr, size);
+}
+
+void
+kern_free(void *ptr, struct malloc_type *type)
+{
+
+	rumpuser_free(ptr);
+}
+
+/*
  * Kmem
  */
 
+#ifdef RUMP_USE_UNREAL_ALLOCATORS
 void
 kmem_init()
 {
@@ -83,12 +133,8 @@ void
 kmem_free(void *p, size_t size)
 {
 
-	rumpuser_free(p, size);
+	rumpuser_free(p);
 }
-
-__strong_alias(kmem_intr_alloc, kmem_alloc);
-__strong_alias(kmem_intr_zalloc, kmem_zalloc);
-__strong_alias(kmem_intr_free, kmem_free);
 
 /*
  * pool & pool_cache
@@ -112,7 +158,6 @@ pool_init(struct pool *pp, size_t size, u_int align, u_int align_offset,
 
 	pp->pr_size = size;
 	pp->pr_align = align;
-	pp->pr_wchan = wchan;
 }
 
 void
@@ -156,7 +201,7 @@ pool_cache_destroy(pool_cache_t pc)
 {
 
 	pool_destroy(&pc->pc_pool);
-	rumpuser_free(pc, sizeof(*pc));
+	rumpuser_free(pc);
 }
 
 void *
@@ -213,7 +258,7 @@ void
 pool_put(struct pool *pp, void *item)
 {
 
-	rumpuser_free(item, pp->pr_size);
+	rumpuser_free(item);
 }
 
 void
@@ -254,8 +299,15 @@ pool_cache_set_drain_hook(pool_cache_t pc, void (*fn)(void *, int), void *arg)
 	pc->pc_pool.pr_drain_hook_arg = arg;
 }
 
+void
+pool_drain_start(struct pool **ppp, uint64_t *wp)
+{
+
+	/* nada */
+}
+
 bool
-pool_drain(struct pool **ppp)
+pool_drain_end(struct pool *pp, uint64_t w)
 {
 
 	/* can't reclaim anything in this model */
@@ -286,8 +338,68 @@ pool_page_free(struct pool *pp, void *item)
 	return pool_put(pp, item);
 }
 
-struct pool_allocator pool_allocator_kmem = {
-        .pa_alloc = pool_page_alloc,
-        .pa_free = pool_page_free,
-        .pa_pagesz = 0
-};
+void
+vmem_rehash_start()
+{
+
+	return;
+}
+
+/*
+ * A simplified percpu is included in here since subr_percpu.c uses
+ * the vmem allocator and I don't want to reimplement vmem.  So use
+ * this simplified percpu for non-vmem systems.
+ */
+
+static kmutex_t pcmtx;
+
+void
+percpu_init(void)
+{
+
+	mutex_init(&pcmtx, MUTEX_DEFAULT, IPL_NONE);
+}
+
+void
+percpu_init_cpu(struct cpu_info *ci)
+{
+
+	/* nada */
+}
+
+void *
+percpu_getref(percpu_t *pc)
+{
+
+	mutex_enter(&pcmtx);
+	return pc;
+}
+
+void
+percpu_putref(percpu_t *pc)
+{
+
+	mutex_exit(&pcmtx);
+}
+
+percpu_t *
+percpu_alloc(size_t size)
+{
+
+	return kmem_alloc(size, KM_SLEEP);
+}
+
+void
+percpu_free(percpu_t *pc, size_t size)
+{
+
+	kmem_free(pc, size);
+}
+
+void
+percpu_foreach(percpu_t *pc, percpu_callback_t cb, void *arg)
+{
+
+	cb(pc, arg, rump_cpu);
+}
+#endif /* RUMP_USE_UNREAL_ALLOCATORS */

@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.6 2013/03/23 16:15:58 christos Exp $	*/
+/*	$NetBSD: print.c,v 1.3.4.1 2012/03/07 23:18:29 riz Exp $	*/
 
 /*
  * Copyright (c) Ian F. Darwin 1986-1995.
@@ -35,9 +35,9 @@
 
 #ifndef lint
 #if 0
-FILE_RCSID("@(#)$File: print.c,v 1.76 2013/02/26 18:25:00 christos Exp $")
+FILE_RCSID("@(#)$File: print.c,v 1.71 2011/09/20 15:28:09 christos Exp $")
 #else
-__RCSID("$NetBSD: print.c,v 1.6 2013/03/23 16:15:58 christos Exp $");
+__RCSID("$NetBSD: print.c,v 1.3.4.1 2012/03/07 23:18:29 riz Exp $");
 #endif
 #endif  /* lint */
 
@@ -51,33 +51,31 @@ __RCSID("$NetBSD: print.c,v 1.6 2013/03/23 16:15:58 christos Exp $");
 
 #define SZOF(a)	(sizeof(a) / sizeof(a[0]))
 
-#include "cdf.h"
-
 #ifndef COMPILE_ONLY
 protected void
 file_mdump(struct magic *m)
 {
-	static const char optyp[] = { FILE_OPS };
-	char tbuf[26];
+	private const char optyp[] = { FILE_OPS };
 
 	(void) fprintf(stderr, "%u: %.*s %u", m->lineno,
 	    (m->cont_level & 7) + 1, ">>>>>>>>", m->offset);
 
 	if (m->flag & INDIR) {
 		(void) fprintf(stderr, "(%s,",
-		    /* Note: type is unsigned */
-		    (m->in_type < file_nnames) ? file_names[m->in_type] :
-		    "*bad in_type*");
+			       /* Note: type is unsigned */
+			       (m->in_type < file_nnames) ? 
+					file_names[m->in_type] : "*bad*");
 		if (m->in_op & FILE_OPINVERSE)
 			(void) fputc('~', stderr);
 		(void) fprintf(stderr, "%c%u),",
-		    ((size_t)(m->in_op & FILE_OPS_MASK) <
-		    SZOF(optyp)) ? optyp[m->in_op & FILE_OPS_MASK] : '?',
-		    m->in_offset);
+			       ((size_t)(m->in_op & FILE_OPS_MASK) <
+			       SZOF(optyp)) ? 
+					optyp[m->in_op & FILE_OPS_MASK] : '?',
+				m->in_offset);
 	}
 	(void) fprintf(stderr, " %s%s", (m->flag & UNSIGNED) ? "u" : "",
-	    /* Note: type is unsigned */
-	    (m->type < file_nnames) ? file_names[m->type] : "*bad type");
+		       /* Note: type is unsigned */
+		       (m->type < file_nnames) ? file_names[m->type] : "*bad*");
 	if (m->mask_op & FILE_OPINVERSE)
 		(void) fputc('~', stderr);
 
@@ -140,7 +138,6 @@ file_mdump(struct magic *m)
 		case FILE_MELONG:
 		case FILE_BESHORT:
 		case FILE_BELONG:
-		case FILE_INDIRECT:
 			(void) fprintf(stderr, "%d", m->value.l);
 			break;
 		case FILE_BEQUAD:
@@ -162,31 +159,26 @@ file_mdump(struct magic *m)
 		case FILE_BEDATE:
 		case FILE_MEDATE:
 			(void)fprintf(stderr, "%s,",
-			    file_fmttime(m->value.l, FILE_T_LOCAL, tbuf));
+			    file_fmttime(m->value.l, 1));
 			break;
 		case FILE_LDATE:
 		case FILE_LELDATE:
 		case FILE_BELDATE:
 		case FILE_MELDATE:
 			(void)fprintf(stderr, "%s,",
-			    file_fmttime(m->value.l, 0, tbuf));
+			    file_fmttime(m->value.l, 0));
+			break;
 		case FILE_QDATE:
 		case FILE_LEQDATE:
 		case FILE_BEQDATE:
 			(void)fprintf(stderr, "%s,",
-			    file_fmttime(m->value.q, FILE_T_LOCAL, tbuf));
+			    file_fmttime((uint32_t)m->value.q, 1));
 			break;
 		case FILE_QLDATE:
 		case FILE_LEQLDATE:
 		case FILE_BEQLDATE:
 			(void)fprintf(stderr, "%s,",
-			    file_fmttime(m->value.q, 0, tbuf));
-			break;
-		case FILE_QWDATE:
-		case FILE_LEQWDATE:
-		case FILE_BEQWDATE:
-			(void)fprintf(stderr, "%s,",
-			    file_fmttime(m->value.q, FILE_T_WINDOWS, tbuf));
+			    file_fmttime((uint32_t)m->value.q, 0));
 			break;
 		case FILE_FLOAT:
 		case FILE_BEFLOAT:
@@ -201,12 +193,8 @@ file_mdump(struct magic *m)
 		case FILE_DEFAULT:
 			/* XXX - do anything here? */
 			break;
-		case FILE_USE:
-		case FILE_NAME:
-			(void) fprintf(stderr, "'%s'", m->value.s);
-			break;
 		default:
-			(void) fprintf(stderr, "*bad type %d*", m->type);
+			(void) fputs("*bad*", stderr);
 			break;
 		}
 	}
@@ -234,20 +222,14 @@ file_magwarn(struct magic_set *ms, const char *f, ...)
 }
 
 protected const char *
-file_fmttime(uint64_t v, int flags, char *buf)
+file_fmttime(uint32_t v, int local)
 {
 	char *pp;
 	time_t t = (time_t)v;
 	struct tm *tm;
 
-	if (flags & FILE_T_WINDOWS) {
-		struct timespec ts;
-		cdf_timestamp_to_timespec(&ts, t);
-		t = ts.tv_sec;
-	}
-
-	if (flags & FILE_T_LOCAL) {
-		pp = ctime_r(&t, buf);
+	if (local) {
+		pp = ctime(&t);
 	} else {
 #ifndef HAVE_DAYLIGHT
 		private int daylight = 0;
@@ -269,7 +251,7 @@ file_fmttime(uint64_t v, int flags, char *buf)
 		tm = gmtime(&t);
 		if (tm == NULL)
 			goto out;
-		pp = asctime_r(tm, buf);
+		pp = asctime(tm);
 	}
 
 	if (pp == NULL)
@@ -277,5 +259,5 @@ file_fmttime(uint64_t v, int flags, char *buf)
 	pp[strcspn(pp, "\n")] = '\0';
 	return pp;
 out:
-	return strcpy(buf, "*Invalid time*");
+	return "*Invalid time*";
 }

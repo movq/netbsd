@@ -1,4 +1,4 @@
-/*	$NetBSD: clnt_dg.c,v 1.29 2013/05/07 21:08:44 christos Exp $	*/
+/*	$NetBSD: clnt_dg.c,v 1.25.4.1 2013/03/14 22:03:08 riz Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -41,7 +41,7 @@
 #if 0
 static char sccsid[] = "@(#)clnt_dg.c 1.19 89/03/16 Copyr 1988 Sun Micro";
 #else
-__RCSID("$NetBSD: clnt_dg.c,v 1.29 2013/05/07 21:08:44 christos Exp $");
+__RCSID("$NetBSD: clnt_dg.c,v 1.25.4.1 2013/03/14 22:03:08 riz Exp $");
 #endif
 #endif
 
@@ -64,8 +64,6 @@ __RCSID("$NetBSD: clnt_dg.c,v 1.29 2013/05/07 21:08:44 christos Exp $");
 #include <signal.h>
 #include <unistd.h>
 #include <err.h>
-
-#include "svc_fdset.h"
 #include "rpc_internal.h"
 
 #ifdef __weak_alias
@@ -75,15 +73,15 @@ __weak_alias(clnt_dg_create,_clnt_dg_create)
 #define	RPC_MAX_BACKOFF		30 /* seconds */
 
 
-static struct clnt_ops *clnt_dg_ops(void);
-static bool_t time_not_ok(struct timeval *);
-static enum clnt_stat clnt_dg_call(CLIENT *, rpcproc_t, xdrproc_t,
-    const char *, xdrproc_t, caddr_t, struct timeval);
-static void clnt_dg_geterr(CLIENT *, struct rpc_err *);
-static bool_t clnt_dg_freeres(CLIENT *, xdrproc_t, caddr_t);
-static void clnt_dg_abort(CLIENT *);
-static bool_t clnt_dg_control(CLIENT *, u_int, char *);
-static void clnt_dg_destroy(CLIENT *);
+static struct clnt_ops *clnt_dg_ops __P((void));
+static bool_t time_not_ok __P((struct timeval *));
+static enum clnt_stat clnt_dg_call __P((CLIENT *, rpcproc_t, xdrproc_t,
+    const char *, xdrproc_t, caddr_t, struct timeval));
+static void clnt_dg_geterr __P((CLIENT *, struct rpc_err *));
+static bool_t clnt_dg_freeres __P((CLIENT *, xdrproc_t, caddr_t));
+static void clnt_dg_abort __P((CLIENT *));
+static bool_t clnt_dg_control __P((CLIENT *, u_int, char *));
+static void clnt_dg_destroy __P((CLIENT *));
 
 
 
@@ -157,13 +155,13 @@ struct cu_data {
  * If svcaddr is NULL, returns NULL.
  */
 CLIENT *
-clnt_dg_create(
-	int fd,				/* open file descriptor */
-	const struct netbuf *svcaddr,	/* servers address */
-	rpcprog_t program,		/* program number */
-	rpcvers_t version,		/* version number */
-	u_int sendsz,			/* buffer recv size */
-	u_int recvsz)			/* buffer send size */
+clnt_dg_create(fd, svcaddr, program, version, sendsz, recvsz)
+	int fd;				/* open file descriptor */
+	const struct netbuf *svcaddr;	/* servers address */
+	rpcprog_t program;		/* program number */
+	rpcvers_t version;		/* version number */
+	u_int sendsz;			/* buffer recv size */
+	u_int recvsz;			/* buffer send size */
 {
 	CLIENT *cl = NULL;		/* client handle */
 	struct cu_data *cu = NULL;	/* private data */
@@ -175,7 +173,7 @@ clnt_dg_create(
 	struct __rpc_sockinfo si;
 	int one = 1;
 
-	__clnt_sigfillset(&newmask);
+	sigfillset(&newmask);
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
 	mutex_lock(&clnt_fd_lock);
 	if (dg_fd_locks == NULL) {
@@ -188,7 +186,9 @@ clnt_dg_create(
 		fd_allocsz = dtbsize * sizeof (int);
 		dg_fd_locks = mem_alloc(fd_allocsz);
 		if (dg_fd_locks == NULL) {
-			goto err0;
+			mutex_unlock(&clnt_fd_lock);
+			thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
+			goto err1;
 		} else
 			memset(dg_fd_locks, '\0', fd_allocsz);
 
@@ -198,7 +198,9 @@ clnt_dg_create(
 		if (dg_cv == NULL) {
 			mem_free(dg_fd_locks, fd_allocsz);
 			dg_fd_locks = NULL;
-			goto err0;
+			mutex_unlock(&clnt_fd_lock);
+			thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
+			goto err1;
 		} else {
 			int i;
 
@@ -247,13 +249,8 @@ clnt_dg_create(
 	cu->cu_rlen = svcaddr->len;
 	cu->cu_outbuf = &cu->cu_inbuf[recvsz];
 	/* Other values can also be set through clnt_control() */
-#ifdef RUMP_RPC
 	cu->cu_wait.tv_sec = 15;	/* heuristically chosen */
 	cu->cu_wait.tv_usec = 0;
-#else
-	cu->cu_wait.tv_sec = 0;		/* for testing, 10x / second */
-	cu->cu_wait.tv_usec = 100000;
-#endif
 	cu->cu_total.tv_sec = -1;
 	cu->cu_total.tv_usec = -1;
 	cu->cu_sendsz = sendsz;
@@ -290,9 +287,6 @@ clnt_dg_create(
 	cl->cl_tp = NULL;
 	cl->cl_netid = NULL;
 	return (cl);
-err0:
-	mutex_unlock(&clnt_fd_lock);
-	thr_sigsetmask(SIG_SETMASK, &(mask), NULL);
 err1:
 	warnx(mem_err_clnt_dg);
 	rpc_createerr.cf_stat = RPC_SYSTEMERROR;
@@ -307,14 +301,14 @@ err2:
 }
 
 static enum clnt_stat
-clnt_dg_call(
-	CLIENT *	cl,		/* client handle */
-	rpcproc_t	proc,		/* procedure number */
-	xdrproc_t	xargs,		/* xdr routine for args */
-	const char *	argsp,		/* pointer to args */
-	xdrproc_t	xresults,	/* xdr routine for results */
-	caddr_t		resultsp,	/* pointer to results */
-	struct timeval	utimeout)	/* seconds to wait before giving up */
+clnt_dg_call(cl, proc, xargs, argsp, xresults, resultsp, utimeout)
+	CLIENT	*cl;			/* client handle */
+	rpcproc_t	proc;		/* procedure number */
+	xdrproc_t	xargs;		/* xdr routine for args */
+	const char *	argsp;		/* pointer to args */
+	xdrproc_t	xresults;	/* xdr routine for results */
+	caddr_t		resultsp;	/* pointer to results */
+	struct timeval	utimeout;	/* seconds to wait before giving up */
 {
 	struct cu_data *cu;
 	XDR *xdrs;
@@ -340,7 +334,7 @@ clnt_dg_call(
 
 	cu = (struct cu_data *)cl->cl_private;
 
-	__clnt_sigfillset(&newmask);
+	sigfillset(&newmask);
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
 	mutex_lock(&clnt_fd_lock);
 	while (dg_fd_locks[cu->cu_fd])
@@ -505,7 +499,9 @@ out:
 }
 
 static void
-clnt_dg_geterr(CLIENT *cl, struct rpc_err *errp)
+clnt_dg_geterr(cl, errp)
+	CLIENT *cl;
+	struct rpc_err *errp;
 {
 	struct cu_data *cu;
 
@@ -517,7 +513,10 @@ clnt_dg_geterr(CLIENT *cl, struct rpc_err *errp)
 }
 
 static bool_t
-clnt_dg_freeres(CLIENT *cl, xdrproc_t xdr_res, caddr_t res_ptr)
+clnt_dg_freeres(cl, xdr_res, res_ptr)
+	CLIENT *cl;
+	xdrproc_t xdr_res;
+	caddr_t res_ptr;
 {
 	struct cu_data *cu;
 	XDR *xdrs;
@@ -531,7 +530,7 @@ clnt_dg_freeres(CLIENT *cl, xdrproc_t xdr_res, caddr_t res_ptr)
 	cu = (struct cu_data *)cl->cl_private;
 	xdrs = &(cu->cu_outxdrs);
 
-	__clnt_sigfillset(&newmask);
+	sigfillset(&newmask);
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
 	mutex_lock(&clnt_fd_lock);
 	while (dg_fd_locks[cu->cu_fd])
@@ -546,12 +545,16 @@ clnt_dg_freeres(CLIENT *cl, xdrproc_t xdr_res, caddr_t res_ptr)
 
 /*ARGSUSED*/
 static void
-clnt_dg_abort(CLIENT *h)
+clnt_dg_abort(h)
+	CLIENT *h;
 {
 }
 
 static bool_t
-clnt_dg_control(CLIENT *cl, u_int request, char *info)
+clnt_dg_control(cl, request, info)
+	CLIENT *cl;
+	u_int request;
+	char *info;
 {
 	struct cu_data *cu;
 	struct netbuf *addr;
@@ -565,7 +568,7 @@ clnt_dg_control(CLIENT *cl, u_int request, char *info)
 
 	cu = (struct cu_data *)cl->cl_private;
 
-	__clnt_sigfillset(&newmask);
+	sigfillset(&newmask);
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
 	mutex_lock(&clnt_fd_lock);
 	while (dg_fd_locks[cu->cu_fd])
@@ -691,7 +694,8 @@ clnt_dg_control(CLIENT *cl, u_int request, char *info)
 }
 
 static void
-clnt_dg_destroy(CLIENT *cl)
+clnt_dg_destroy(cl)
+	CLIENT *cl;
 {
 	struct cu_data *cu;
 	int cu_fd;
@@ -705,7 +709,7 @@ clnt_dg_destroy(CLIENT *cl)
 	cu = (struct cu_data *)cl->cl_private;
 	cu_fd = cu->cu_fd;
 
-	__clnt_sigfillset(&newmask);
+	sigfillset(&newmask);
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
 	mutex_lock(&clnt_fd_lock);
 	while (dg_fd_locks[cu_fd])
@@ -725,7 +729,7 @@ clnt_dg_destroy(CLIENT *cl)
 }
 
 static struct clnt_ops *
-clnt_dg_ops(void)
+clnt_dg_ops()
 {
 	static struct clnt_ops ops;
 #ifdef _REENTRANT
@@ -736,7 +740,7 @@ clnt_dg_ops(void)
 
 /* VARIABLES PROTECTED BY ops_lock: ops */
 
-	__clnt_sigfillset(&newmask);
+	sigfillset(&newmask);
 	thr_sigsetmask(SIG_SETMASK, &newmask, &mask);
 	mutex_lock(&ops_lock);
 	if (ops.cl_call == NULL) {
@@ -756,7 +760,8 @@ clnt_dg_ops(void)
  * Make sure that the time is not garbage.  -1 value is allowed.
  */
 static bool_t
-time_not_ok(struct timeval *t)
+time_not_ok(t)
+	struct timeval *t;
 {
 
 	_DIAGASSERT(t != NULL);

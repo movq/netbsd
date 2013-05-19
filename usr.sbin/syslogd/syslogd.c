@@ -1,4 +1,4 @@
-/*	$NetBSD: syslogd.c,v 1.114 2013/01/17 18:54:28 christos Exp $	*/
+/*	$NetBSD: syslogd.c,v 1.105 2011/08/31 16:25:00 plunky Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)syslogd.c	8.3 (Berkeley) 4/4/94";
 #else
-__RCSID("$NetBSD: syslogd.c,v 1.114 2013/01/17 18:54:28 christos Exp $");
+__RCSID("$NetBSD: syslogd.c,v 1.105 2011/08/31 16:25:00 plunky Exp $");
 #endif
 #endif /* not lint */
 
@@ -70,7 +70,6 @@ __RCSID("$NetBSD: syslogd.c,v 1.114 2013/01/17 18:54:28 christos Exp $");
  * TLS, syslog-protocol, and syslog-sign code by Martin Schuette.
  */
 #define SYSLOG_NAMES
-#include <poll.h>
 #include "syslogd.h"
 #include "extern.h"
 
@@ -267,7 +266,6 @@ void		free_cred_SLIST(struct peer_cred_head *);
 static inline void
 		free_incoming_tls_sockets(void);
 #endif /* !DISABLE_TLS */
-static int writev1(int, struct iovec *, size_t);
 
 /* for make_timestamp() */
 #define TIMESTAMPBUFSIZE 35
@@ -336,10 +334,9 @@ main(int argc, char *argv[])
 			UseNameService = 0;
 			break;
 		case 'o':		/* message format */
-#define EQ(a)		(strncmp(optarg, # a, sizeof(# a) - 1) == 0)
-			if (EQ(bsd) || EQ(rfc3264))
+			if (!strncmp(optarg, "rfc3164", sizeof("rfc3164")-1))
 				BSDOutputFormat = true;
-			else if (EQ(syslog) || EQ(rfc5424))
+			else if (!strncmp(optarg, "syslog", sizeof("syslog")-1))
 				BSDOutputFormat = false;
 			else
 				usage();
@@ -473,7 +470,7 @@ getgroup:
 	if (funixsize == 0)
 		logpath_add(&LogPaths, &funixsize,
 		    &funixmaxsize, _PATH_LOG);
-	funix = malloc(sizeof(*funix) * funixsize);
+	funix = (int *)malloc(sizeof(int) * funixsize);
 	if (funix == NULL) {
 		logerror("Couldn't allocate funix descriptors");
 		die(0, 0, NULL);
@@ -507,10 +504,9 @@ getgroup:
 	(void) SSL_library_init();
 	OpenSSL_add_all_digests();
 	/* OpenSSL PRNG needs /dev/urandom, thus initialize before chroot() */
-	if (!RAND_status()) {
-		errno = 0;
+	if (!RAND_status())
 		logerror("Unable to initialize OpenSSL PRNG");
-	} else {
+	else {
 		DPRINTF(D_TLS, "Initializing PRNG\n");
 	}
 #endif /* (!defined(DISABLE_TLS) && !defined(DISABLE_SIGN)) */
@@ -529,7 +525,7 @@ getgroup:
 	 * All files are open, we can drop privileges and chroot
 	 */
 	DPRINTF(D_MISC, "Attempt to chroot to `%s'\n", root);
-	if (chroot(root) == -1) {
+	if (chroot(root)) {
 		logerror("Failed to chroot to `%s'", root);
 		die(0, 0, NULL);
 	}
@@ -1837,7 +1833,7 @@ logmsg(struct buf_msg *buffer)
 	/* log the message to the particular outputs */
 	if (!Initialized) {
 		f = &consfile;
-		f->f_file = open(ctty, O_WRONLY | O_NDELAY, 0);
+		f->f_file = open(ctty, O_WRONLY, 0);
 
 		if (f->f_file >= 0) {
 			DELREF(f->f_prevmsg);
@@ -2197,9 +2193,7 @@ fprintlog(struct filed *f, struct buf_msg *passedbuffer, struct buf_queue *qentr
 	    && (f->f_type != F_TLS)
 	    && (f->f_type != F_PIPE)
 	    && (f->f_type != F_FILE)) {
-		errno = 0;
-		logerror("Warning: unexpected message type %d in buffer",
-		    f->f_type);
+		logerror("Warning: unexpected message in buffer");
 		DELREF(buffer);
 		return;
 	}
@@ -2337,8 +2331,8 @@ fprintlog(struct filed *f, struct buf_msg *passedbuffer, struct buf_queue *qentr
 			if ((f->f_file = p_open(f->f_un.f_pipe.f_pname,
 			    &f->f_un.f_pipe.f_pid)) < 0) {
 				f->f_type = F_UNUSED;
-				logerror("%s", f->f_un.f_pipe.f_pname);
 				message_queue_freeall(f);
+				logerror("%s", f->f_un.f_pipe.f_pname);
 				break;
 			} else if (!qentry) /* prevent recursion */
 				SEND_QUEUE(f);
@@ -2367,8 +2361,8 @@ fprintlog(struct filed *f, struct buf_msg *passedbuffer, struct buf_queue *qentr
 				if ((f->f_file = p_open(f->f_un.f_pipe.f_pname,
 				     &f->f_un.f_pipe.f_pid)) < 0) {
 					f->f_type = F_UNUSED;
-					logerror("%s", f->f_un.f_pipe.f_pname);
 					message_queue_freeall(f);
+					logerror("%s", f->f_un.f_pipe.f_pname);
 					break;
 				}
 				if (writev(f->f_file, iov, v - iov) < 0) {
@@ -2406,8 +2400,7 @@ fprintlog(struct filed *f, struct buf_msg *passedbuffer, struct buf_queue *qentr
 		DPRINTF(D_MISC, "Logging to %s %s\n",
 			TypeInfo[f->f_type].name, f->f_un.f_fname);
 	again:
-		if ((f->f_type == F_FILE ? writev(f->f_file, iov, v - iov) :
-		    writev1(f->f_file, iov, v - iov)) < 0) {
+		if (writev(f->f_file, iov, v - iov) < 0) {
 			e = errno;
 			if (f->f_type == F_FILE && e == ENOSPC) {
 				int lasterror = f->f_lasterror;
@@ -2422,7 +2415,7 @@ fprintlog(struct filed *f, struct buf_msg *passedbuffer, struct buf_queue *qentr
 			 */
 			if ((e == EIO || e == EBADF) && f->f_type != F_FILE) {
 				f->f_file = open(f->f_un.f_fname,
-				    O_WRONLY|O_APPEND|O_NONBLOCK, 0);
+				    O_WRONLY|O_APPEND, 0);
 				if (f->f_file < 0) {
 					f->f_type = F_UNUSED;
 					logerror("%s", f->f_un.f_fname);
@@ -2562,14 +2555,6 @@ wallmsg(struct filed *f, struct iovec *iov, size_t iovcnt)
 			if (!f->f_un.f_uname[i][0])
 				break;
 			if (strcmp(f->f_un.f_uname[i], ep->name) == 0) {
-				struct stat st;
-				char tty[MAXPATHLEN];
-				snprintf(tty, sizeof(tty), "%s/%s", _PATH_DEV,
-				    ep->line);
-				if (stat(tty, &st) != -1 &&
-				    (st.st_mode & S_IWGRP) == 0)
-					break;
-
 				if ((p = ttymsg(iov, iovcnt, ep->line,
 				    TTYMSGTIME)) != NULL) {
 					errno = 0;	/* already in msg */
@@ -3815,7 +3800,6 @@ cfline(size_t linenum, const char *line, struct filed *f, const char *prog,
 		error = getaddrinfo(f->f_un.f_forw.f_hname, "syslog", &hints,
 		    &res);
 		if (error) {
-			errno = 0;
 			logerror("%s", gai_strerror(error));
 			break;
 		}
@@ -3835,17 +3819,14 @@ cfline(size_t linenum, const char *line, struct filed *f, const char *prog,
 			logerror("%s", p);
 			break;
 		}
-		if (isatty(f->f_file)) {
-			f->f_type = F_TTY;
-			if (strcmp(p, ctty) == 0)
-				f->f_type = F_CONSOLE;
-			if (fcntl(f->f_file, F_SETFL, O_NONBLOCK) == -1)
-				logerror("Warning: cannot change tty fd for"
-				    " `%s' to non-blocking.", p);
-		} else
-			f->f_type = F_FILE;
 		if (syncfile)
 			f->f_flags |= FFLAG_SYNC;
+		if (isatty(f->f_file))
+			f->f_type = F_TTY;
+		else
+			f->f_type = F_FILE;
+		if (strcmp(p, ctty) == 0)
+			f->f_type = F_CONSOLE;
 		break;
 
 	case '|':
@@ -3972,8 +3953,8 @@ socksetup(int af, const char *hostname)
 	hints.ai_socktype = SOCK_DGRAM;
 	error = getaddrinfo(hostname, "syslog", &hints, &res);
 	if (error) {
-		errno = 0;
 		logerror("%s", gai_strerror(error));
+		errno = 0;
 		die(0, 0, NULL);
 	}
 
@@ -4047,6 +4028,7 @@ p_open(char *prog, pid_t *rpid)
 	int pfd[2], nulldesc, i;
 	pid_t pid;
 	char *argv[4];	/* sh -c cmd NULL */
+	char errmsg[200];
 
 	if (pipe(pfd) == -1)
 		return -1;
@@ -4101,8 +4083,10 @@ p_open(char *prog, pid_t *rpid)
 	 */
 	if (fcntl(pfd[1], F_SETFL, O_NONBLOCK) == -1) {
 		/* This is bad. */
-		logerror("Warning: cannot change pipe to pid %d to "
+		(void) snprintf(errmsg, sizeof(errmsg),
+		    "Warning: cannot change pipe to pid %d to "
 		    "non-blocking.", (int) pid);
+		logerror("%s", errmsg);
 	}
 	*rpid = pid;
 	return pfd[1];
@@ -4127,6 +4111,7 @@ deadq_enter(pid_t pid, const char *name)
 
 	p = malloc(sizeof(*p));
 	if (p == NULL) {
+		errno = 0;
 		logerror("panic: out of memory!");
 		exit(1);
 	}
@@ -4655,7 +4640,6 @@ copy_config_value_quoted(const char *keyword, char **mem, const char **p)
 		return false;
 	q = *p += strlen(keyword);
 	if (!(q = strchr(*p, '"'))) {
-		errno = 0;
 		logerror("unterminated \"\n");
 		return false;
 	}
@@ -4680,7 +4664,6 @@ copy_config_value(const char *keyword, char **mem,
 	while (isspace((unsigned char)**p))
 		*p += 1;
 	if (**p != '=') {
-		errno = 0;
 		logerror("expected \"=\" in file %s, line %d", file, line);
 		return false;
 	}
@@ -4708,46 +4691,4 @@ copy_config_value_word(char **mem, const char **p)
 
 	*p = ++q;
 	return true;
-}
-
-static int
-writev1(int fd, struct iovec *iov, size_t count)
-{
-	ssize_t nw = 0, tot = 0;
-	size_t ntries = 5;
-
-	if (count == 0)
-		return 0;
-	while (ntries--) {
-		switch ((nw = writev(fd, iov, count))) {
-		case -1:
-			if (errno == EAGAIN || errno == EWOULDBLOCK) {
-				struct pollfd pfd;
-				pfd.fd = fd;
-				pfd.events = POLLOUT;
-				pfd.revents = 0;
-				(void)poll(&pfd, 1, 500);
-				continue;
-			}
-			return -1;
-		case 0:
-			return 0;
-		default:
-			tot += nw;
-			while (nw > 0) {
-				if (iov->iov_len > (size_t)nw) {
-					iov->iov_len -= nw;
-					iov->iov_base =
-					    (char *)iov->iov_base + nw;
-					break;
-				} else {
-					if (--count == 0)
-						return tot;
-					nw -= iov->iov_len;
-					iov++;
-				}
-			}
-		}
-	}
-	return tot == 0 ? nw : tot;
 }

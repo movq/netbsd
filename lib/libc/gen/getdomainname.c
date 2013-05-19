@@ -1,4 +1,4 @@
-/*	$NetBSD: getdomainname.c,v 1.13 2012/06/25 22:32:43 abs Exp $	*/
+/*	$NetBSD: getdomainname.c,v 1.12 2003/08/07 16:42:49 agc Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)gethostname.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: getdomainname.c,v 1.13 2012/06/25 22:32:43 abs Exp $");
+__RCSID("$NetBSD: getdomainname.c,v 1.12 2003/08/07 16:42:49 agc Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -51,7 +51,9 @@ __weak_alias(getdomainname,_getdomainname)
 #endif
 
 int
-getdomainname(char *name, size_t namelen)
+getdomainname(name, namelen)
+	char *name;
+	size_t namelen;
 {
 	int mib[2];
 	size_t size;

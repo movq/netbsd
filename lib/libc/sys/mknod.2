@@ -1,4 +1,4 @@
-.\"	$NetBSD: mknod.2,v 1.26 2013/01/13 08:15:02 dholland Exp $
+.\"	$NetBSD: mknod.2,v 1.22 2011/07/08 19:25:51 wiz Exp $
 .\"
 .\" Copyright (c) 1980, 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,12 +29,11 @@
 .\"
 .\"     @(#)mknod.2	8.1 (Berkeley) 6/4/93
 .\"
-.Dd November 18, 2012
+.Dd July 3, 2011
 .Dt MKNOD 2
 .Os
 .Sh NAME
-.Nm mknod ,
-.Nm mknodat
+.Nm mknod
 .Nd make a special file node
 .Sh LIBRARY
 .Lb libc
@@ -42,8 +41,6 @@
 .In sys/stat.h
 .Ft int
 .Fn mknod "const char *path" "mode_t mode" "dev_t dev"
-.Ft int
-.Fn mknodat "int fd" "const char *path" "mode_t mode" "dev_t dev"
 .Sh DESCRIPTION
 The device special file
 .Fa path
@@ -57,32 +54,6 @@ are extracted from
 modified by the
 .Xr umask 2
 of the parent process.
-.Pp
-.Fn mknodat
-works the same way as
-.Fn mknod
-except if
-.Fa path
-is relative.
-In that case, it is looked up from a directory whose file
-descriptor was passed as
-.Fa fd .
-Search permission is required on this directory.
-.\"    (These alternatives await a decision about the semantics of O_SEARCH)
-.\" Search permission is required on this directory
-.\" except if
-.\" .Fa fd
-.\" was opened with the
-.\" .Dv O_SEARCH
-.\" flag.
-.\"    - or -
-.\" This file descriptor must have been opened with the
-.\" .Dv O_SEARCH
-.\" flag.
-.Fa fd
-can be set to
-.Dv AT_FDCWD
-in order to specify the current directory.
 .Pp
 .Fn mknod
 requires super-user privileges.
@@ -145,14 +116,6 @@ The named file resides on a read-only file system.
 .Xr mkfifo 2 ,
 .Xr stat 2 ,
 .Xr umask 2
-.Sh STANDARDS
-The
-.Fn mknod
-function conforms to
-.St -p1003.1-90 .
-.Fn mknodat
-conforms to
-.St -p1003.1-2008 .
 .Sh HISTORY
 A
 .Fn mknod

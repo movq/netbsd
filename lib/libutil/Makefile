@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.74 2013/05/02 07:17:09 matt Exp $
+#	$NetBSD: Makefile,v 1.70 2012/01/07 18:40:55 christos Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/4/93
 
 USE_SHLIBDIR=	yes
@@ -7,13 +7,11 @@ USE_SHLIBDIR=	yes
 
 .include "${NETBSDSRCDIR}/common/lib/libutil/Makefile.inc"
 
-WARNS?=	5
+WARNS=	4
 LIB=	util
 CPPFLAGS+=-DLIBC_SCCS -I${.CURDIR}
-LINTFLAGS+=-w
-SRCS+=	efun.c \
-	getbootfile.c getbyteorder.c getlabelsector.c getmaxpartitions.c \
-	getfsspecname.c getmntopts.c getrawpartition.c getdiskrawname.c \
+SRCS+=	efun.c getbootfile.c getlabelsector.c getmaxpartitions.c \
+	getmntopts.c getrawpartition.c \
 	disklabel_dkcksum.c disklabel_scan.c \
 	if_media.c \
 	login.c loginx.c login_cap.c login_tty.c logout.c logoutx.c \
@@ -23,10 +21,8 @@ SRCS+=	efun.c \
 	secure_path.c sockaddr_snprintf.c stat_flags.c \
 	strpct.c ttyaction.c ttymsg.c
 
-MAN=	efun.3 \
-	getbootfile.3 getbyteorder.3 getfstypename.3 getlabelsector.3 \
+MAN=	efun.3 getbootfile.3 getfstypename.3 getlabelsector.3 \
 	getmaxpartitions.3 getmntopts.3 getrawpartition.3 \
-	getdiskrawname.3 getfsspecname.3 \
 	login.3 login_cap.3 loginx.3 \
 	disklabel_dkcksum.3 disklabel_scan.3 \
 	opendisk.3 openpty.3 parsedate.3 pidfile.3 pidlock.3 \
@@ -42,7 +38,6 @@ YPREFIX=__pd
 
 MLINKS+=getlabelsector.3 getlabeloffset.3
 MLINKS+=getlabelsector.3 getlabelusesmbr.3
-MLINKS+=getdiskrawname.3 getdiskcookedname.3
 MLINKS+=login.3 logout.3
 MLINKS+=login.3 logwtmp.3
 MLINKS+=login_cap.3 login_getclass.3

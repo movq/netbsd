@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_cond.c,v 1.61 2013/04/01 13:28:21 christos Exp $	*/
+/*	$NetBSD: pthread_cond.c,v 1.56.8.3 2013/04/29 01:50:18 riz Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -46,12 +46,12 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_cond.c,v 1.61 2013/04/01 13:28:21 christos Exp $");
+__RCSID("$NetBSD: pthread_cond.c,v 1.56.8.3 2013/04/29 01:50:18 riz Exp $");
 
-#include <stdlib.h>
 #include <errno.h>
 #include <sys/time.h>
 #include <sys/types.h>
+#include <stdlib.h>
 
 #include "pthread.h"
 #include "pthread_int.h"
@@ -125,16 +125,13 @@ pthread_cond_destroy(pthread_cond_t *cond)
 	return 0;
 }
 
-int
+inline int
 pthread_cond_timedwait(pthread_cond_t *cond, pthread_mutex_t *mutex,
 		       const struct timespec *abstime)
 {
 	pthread_t self;
 	int retval;
 	struct timespec mono;
-
-	if (__predict_false(__uselibcstub))
-		return __libc_cond_timedwait_stub(cond, mutex, abstime);
 
 	pthread__error(EINVAL, "Invalid condition variable",
 	    cond->ptc_magic == _PT_COND_MAGIC);

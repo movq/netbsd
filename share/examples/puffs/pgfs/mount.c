@@ -1,4 +1,4 @@
-/*	$NetBSD: mount.c,v 1.4 2013/04/22 13:28:28 yamt Exp $	*/
+/*	$NetBSD: mount.c,v 1.1 2011/10/12 01:05:00 yamt Exp $	*/
 
 /*-
  * Copyright (c)2010,2011 YAMAMOTO Takashi,
@@ -28,40 +28,23 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mount.c,v 1.4 2013/04/22 13:28:28 yamt Exp $");
+__RCSID("$NetBSD: mount.c,v 1.1 2011/10/12 01:05:00 yamt Exp $");
 #endif /* not lint */
 
 #include <err.h>
 #include <errno.h>
-#include <locale.h>
 #include <mntopts.h>
 #include <paths.h>
 #include <puffs.h>
 #include <stdbool.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <util.h>
 
 #include "pgfs.h"
 #include "pgfs_db.h"
 
 #define	PGFS_MNT_ALT_DUMMY	1
 #define	PGFS_MNT_ALT_DEBUG	2
-
-static char *
-xstrcpy(const char *str)
-{
-	char *n;
-	size_t len;
-
-	if (str == NULL) {
-		return NULL;
-	}
-	len = strlen(str);
-	n = emalloc(len + 1);
-	memcpy(n, str, len + 1);
-	return n;
-}
 
 int
 main(int argc, char *argv[])
@@ -90,12 +73,10 @@ main(int argc, char *argv[])
 		  .m_flag = PGFS_MNT_ALT_DUMMY, .m_altloc = 1, },
 		MOPT_NULL,
 	};
-	uint32_t pflags = PUFFS_KFLAG_IAONDEMAND;
+	uint32_t pflags = PUFFS_KFLAG_NOCACHE_NAME|PUFFS_KFLAG_WTCACHE;
 	unsigned int nconn = 8;
 	bool debug = false;
 	bool dosync;
-
-	setlocale(LC_ALL, "");
 
 	mntflags = 0;
 	altmntflags = 0;
@@ -110,8 +91,8 @@ main(int argc, char *argv[])
 				err(EXIT_FAILURE, "getmntopts");
 			}
 			getmnt_silent = 1; /* XXX silly api */
-			dbname = xstrcpy(getmntoptstr(mp, "dbname"));
-			dbuser = xstrcpy(getmntoptstr(mp, "dbuser"));
+			dbname = getmntoptstr(mp, "dbname");
+			dbuser = getmntoptstr(mp, "dbuser");
 			v = getmntoptnum(mp, "nconn");
 			getmnt_silent = 0;
 			if (v != -1) {
@@ -159,8 +140,6 @@ main(int argc, char *argv[])
 		err(EXIT_FAILURE, "puffs_init");
 	}
 	error = pgfs_connectdb(pu, dbname, dbuser, debug, dosync, nconn);
-	free(__UNCONST(dbname));
-	free(__UNCONST(dbuser));
 	if (error != 0) {
 		errno = error;
 		err(EXIT_FAILURE, "pgfs_connectdb");

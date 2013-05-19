@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.distrib,v 1.9 2012/02/17 00:33:25 riz Exp $
+#	$NetBSD: Makefile.distrib,v 1.8.8.1 2012/02/17 00:42:27 riz Exp $
 #
 # Makefile snippet to setup various make variables variables used in distrib/:
 #

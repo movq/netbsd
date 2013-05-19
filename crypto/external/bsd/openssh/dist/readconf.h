@@ -1,5 +1,5 @@
-/*	$NetBSD: readconf.h,v 1.9 2013/04/29 17:59:50 mlelstv Exp $	*/
-/* $OpenBSD: readconf.h,v 1.93 2013/02/22 04:45:09 dtucker Exp $ */
+/*	$NetBSD: readconf.h,v 1.6 2011/09/07 17:49:19 christos Exp $	*/
+/* $OpenBSD: readconf.h,v 1.90 2011/05/24 07:15:47 djm Exp $ */
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -25,7 +25,6 @@ typedef struct {
 	char	 *connect_host;		/* Host to connect. */
 	int	  connect_port;		/* Port to connect on connect_host. */
 	int	  allocated_port;	/* Dynamically allocated listen port */
-	int	  handle;		/* Handle for dynamic listen ports */
 }       Forward;
 /* Data structure for representing option data. */
 
@@ -111,7 +110,6 @@ typedef struct {
 
 	int     num_identity_files;	/* Number of files for RSA/DSA identities. */
 	char   *identity_files[SSH_MAX_IDENTITY_FILES];
-	int    identity_file_userprovided[SSH_MAX_IDENTITY_FILES];
 	Key    *identity_keys[SSH_MAX_IDENTITY_FILES];
 
 	/* Local TCP/IP forward requests. */
@@ -153,7 +151,6 @@ typedef struct {
 	int	use_roaming;
 
 	int	request_tty;
-	int	send_version_first;
 }       Options;
 
 #define SSHCTL_MASTER_NO	0
@@ -167,20 +164,15 @@ typedef struct {
 #define REQUEST_TTY_YES		2
 #define REQUEST_TTY_FORCE	3
 
-#define SSHCONF_CHECKPERM	1  /* check permissions on config file */
-#define SSHCONF_USERCONF	2  /* user provided config file not system */
-
 void     initialize_options(Options *);
 void     fill_default_options(Options *);
 int	 read_config_file(const char *, const char *, Options *, int);
 int	 parse_forward(Forward *, const char *, int, int);
 
 int
-process_config_line(Options *, const char *, char *, const char *, int, int *,
-    int);
+process_config_line(Options *, const char *, char *, const char *, int, int *);
 
 void	 add_local_forward(Options *, const Forward *);
 void	 add_remote_forward(Options *, const Forward *);
-void	 add_identity_file(Options *, const char *, const char *, int);
 
 #endif				/* READCONF_H */

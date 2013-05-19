@@ -1,4 +1,4 @@
-/*	$NetBSD: npftest.c,v 1.8 2012/09/14 15:37:03 joerg Exp $	*/
+/*	$NetBSD: npftest.c,v 1.3.2.5 2012/11/18 21:48:56 riz Exp $	*/
 
 /*
  * NPF testing framework.

@@ -1,4 +1,4 @@
-.\"	$NetBSD: install,v 1.39 2012/10/06 05:28:46 jnemeth Exp $
+.\"	$NetBSD: install,v 1.38.6.1 2012/10/09 23:51:14 riz Exp $
 .
 .Ss2 Open Firmware boot syntax
 .

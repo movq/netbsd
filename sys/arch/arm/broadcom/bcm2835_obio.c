@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_obio.c,v 1.18 2013/03/24 19:52:11 jmcneill Exp $	*/
+/*	$NetBSD: bcm2835_obio.c,v 1.1.2.3 2013/02/13 01:36:14 riz Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_obio.c,v 1.18 2013/03/24 19:52:11 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_obio.c,v 1.1.2.3 2013/02/13 01:36:14 riz Exp $");
 
 #include "locators.h"
 #include "obio.h"
@@ -89,13 +89,6 @@ static const struct ambadev_locators bcm2835_ambadev_locs[] = {
 		.ad_addr = BCM2835_STIMER_BASE,
 		.ad_size = BCM2835_STIMER_SIZE,
 		.ad_intr = BCM2835_INT_TIMER3,
-	},
-	{
-		/* VCHIQ */
-		.ad_name = "bcmvchiq",
-		.ad_addr = BCM2835_VCHIQ_BASE,
-		.ad_size = BCM2835_VCHIQ_SIZE,
-		.ad_intr = BCM2835_INT_ARMDOORBELL0,
 	},
 	{
 		/* Power Management, Reset controller and Watchdog registers */

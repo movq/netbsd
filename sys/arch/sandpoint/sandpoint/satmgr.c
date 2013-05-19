@@ -1,4 +1,4 @@
-/* $NetBSD: satmgr.c,v 1.24 2013/02/19 15:58:19 phx Exp $ */
+/* $NetBSD: satmgr.c,v 1.15.2.1 2012/02/23 18:31:46 riz Exp $ */
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/param.h>
-#include <sys/systm.h>
+#include <sys/systm.h>	
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/conf.h>
@@ -81,8 +81,6 @@ struct satmgr_softc {
 	char			sc_btn_buf[8];
 	int			sc_btn_cnt;
 	char			sc_cmd_buf[8];
-	kmutex_t		sc_replk;
-	kcondvar_t		sc_repcv;
 	int			sc_sysctl_wdog;
 	int			sc_sysctl_fanlow;
 	int			sc_sysctl_fanhigh;
@@ -122,36 +120,31 @@ static void rxintr(struct satmgr_softc *);
 static void txintr(struct satmgr_softc *);
 static void startoutput(struct satmgr_softc *);
 static void swintr(void *);
-static void minit(device_t);
-static void sinit(device_t);
-static void qinit(device_t);
-static void iinit(device_t);
+static void sinit(struct satmgr_softc *);
+static void qinit(struct satmgr_softc *);
+static void iinit(struct satmgr_softc *);
 static void kreboot(struct satmgr_softc *);
-static void mreboot(struct satmgr_softc *);
 static void sreboot(struct satmgr_softc *);
 static void qreboot(struct satmgr_softc *);
 static void ireboot(struct satmgr_softc *);
 static void kpwroff(struct satmgr_softc *);
-static void mpwroff(struct satmgr_softc *);
 static void spwroff(struct satmgr_softc *);
 static void qpwroff(struct satmgr_softc *);
 static void dpwroff(struct satmgr_softc *);
 static void ipwroff(struct satmgr_softc *);
 static void kbutton(struct satmgr_softc *, int);
-static void mbutton(struct satmgr_softc *, int);
 static void sbutton(struct satmgr_softc *, int);
 static void qbutton(struct satmgr_softc *, int);
 static void dbutton(struct satmgr_softc *, int);
 static void ibutton(struct satmgr_softc *, int);
-static void msattalk(struct satmgr_softc *, const char *);
-static void isattalk(struct satmgr_softc *, int, int, int, int, int, int);
-static int  mbtnintr(void *);
+static void idosync(void *);
+static void iprepcmd(struct satmgr_softc *, int, int, int, int, int, int);
 static void guarded_pbutton(void *);
 static void sched_sysmon_pbutton(void *);
 
 struct satops {
 	const char *family;
-	void (*init)(device_t);
+	void (*init)(struct satmgr_softc *);
 	void (*reboot)(struct satmgr_softc *);
 	void (*pwroff)(struct satmgr_softc *);
 	void (*dispatch)(struct satmgr_softc *, int);
@@ -161,7 +154,6 @@ static struct satops satmodel[] = {
     { "dlink",    NULL,  NULL,    dpwroff, dbutton },
     { "iomega",   iinit, ireboot, ipwroff, ibutton },
     { "kurobox",  NULL,  kreboot, kpwroff, kbutton },
-    { "kurot4",   minit, mreboot, mpwroff, mbutton },
     { "qnap",     qinit, qreboot, qpwroff, qbutton },
     { "synology", sinit, sreboot, spwroff, sbutton }
 };
@@ -201,7 +193,7 @@ satmgr_attach(device_t parent, device_t self, void *aux)
 	int i, sataddr, epicirq;
 
 	found = 1;
-
+	
 	if ((pfam = lookup_bootinfo(BTINFO_PRODFAMILY)) == NULL)
 		goto notavail;
 	ops = NULL;
@@ -237,8 +229,6 @@ satmgr_attach(device_t parent, device_t self, void *aux)
 	cv_init(&sc->sc_rdcv, "satrd");
 	cv_init(&sc->sc_wrcv, "satwr");
 	sc->sc_btn_cnt = 0;
-	mutex_init(&sc->sc_replk, MUTEX_DEFAULT, IPL_SERIAL);
-	cv_init(&sc->sc_repcv, "stalk");
 
 	epicirq = (eaa->eumb_unit == 0) ? 24 : 25;
 	intr_establish(epicirq + I8259_ICU, IST_LEVEL, IPL_SERIAL, hwintr, sc);
@@ -310,14 +300,10 @@ satmgr_attach(device_t parent, device_t self, void *aux)
 			satmgr_sysctl_fanhigh, 0, NULL, 0,
 			CTL_CREATE, CTL_EOL);
 	}
-	else if (strcmp(ops->family, "kurot4") == 0) {
-		intr_establish(2 + I8259_ICU,
-			IST_LEVEL, IPL_SERIAL, mbtnintr, sc);
-	}
 
 	md_reboot = satmgr_reboot;	/* cpu_reboot() hook */
-	if (ops->init != NULL)		/* init sat.cpu, LEDs, etc. */
-		config_interrupts(self, ops->init);
+	if (ops->init != NULL)
+		(*ops->init)(sc);	/* init sat.cpu, LEDs, etc. */
 	return;
 
   notavail:
@@ -398,7 +384,7 @@ satmgr_sysctl_fanlow(SYSCTLFN_ARGS)
 	if (t < 0 || t > 99)
 		return EINVAL;
 	sc->sc_sysctl_fanlow = t;
-	isattalk(sc, 'b', 'b', 10, 'a',
+	iprepcmd(sc, 'b', 'b', 10, 'a',
 	    sc->sc_sysctl_fanhigh, sc->sc_sysctl_fanlow);
 	return 0;
 }
@@ -420,7 +406,7 @@ satmgr_sysctl_fanhigh(SYSCTLFN_ARGS)
 	if (t < 0 || t > 99)
 		return EINVAL;
 	sc->sc_sysctl_fanhigh = t;
-	isattalk(sc, 'b', 'b', 10, 'a',
+	iprepcmd(sc, 'b', 'b', 10, 'a',
 	    sc->sc_sysctl_fanhigh, sc->sc_sysctl_fanlow);
 	return 0;
 }
@@ -559,7 +545,7 @@ satpoll(dev_t dev, int events, struct lwp *l)
 {
 	struct satmgr_softc *sc;
 	int revents = 0;
-
+		
 	sc = device_lookup_private(&satmgr_cd, 0);
 	mutex_enter(&sc->sc_lock);
 	if (events & (POLLIN | POLLRDNORM)) {
@@ -594,7 +580,7 @@ filt_read(struct knote *kn, long hint)
 
 static const struct filterops read_filtops = {
 	1, NULL, filt_rdetach, filt_read
-};
+};			
 
 static int
 satkqfilter(dev_t dev, struct knote *kn)
@@ -694,7 +680,6 @@ startoutput(struct satmgr_softc *sc)
 {
 	int n;
 
-	mutex_enter(&sc->sc_replk);
 	n = min(sc->sc_wr_cnt, 16);
 	while (n-- > 0) {
 		CSR_WRITE(sc, THR, *sc->sc_wr_ptr);
@@ -702,7 +687,6 @@ startoutput(struct satmgr_softc *sc)
 			sc->sc_wr_ptr = &sc->sc_wr_buf[0];
 		sc->sc_wr_cnt -= 1;
 	}
-	mutex_exit(&sc->sc_replk);
 }
 
 static void
@@ -735,14 +719,14 @@ static void
 kreboot(struct satmgr_softc *sc)
 {
 
-	send_sat(sc, "CCGG"); /* perform reboot */
+	send_sat(sc, "CCGG");
 }
 
 static void
 kpwroff(struct satmgr_softc *sc)
 {
 
-	send_sat(sc, "EEGG"); /* force power off */
+	send_sat(sc, "EEGG");
 }
 
 static void
@@ -770,9 +754,8 @@ kbutton(struct satmgr_softc *sc, int ch)
 }
 
 static void
-sinit(device_t self)
+sinit(struct satmgr_softc *sc)
 {
-	struct satmgr_softc *sc = device_private(self);
 
 	send_sat(sc, "8");	/* status LED green */
 }
@@ -807,9 +790,8 @@ sbutton(struct satmgr_softc *sc, int ch)
 }
 
 static void
-qinit(device_t self)
+qinit(struct satmgr_softc *sc)
 {
-	struct satmgr_softc *sc = device_private(self);
 
 	send_sat(sc, "V");	/* status LED green */
 }
@@ -847,11 +829,8 @@ static void
 dpwroff(struct satmgr_softc *sc)
 {
 
-	send_sat(sc, "ZWC\n");
-
 	/*
-	 * When this line is reached, then this board revision doesn't
-	 * support hardware-shutdown, so we flash the power LED
+	 * The DSM-G600 has no hardware-shutdown, so we flash the power LED
 	 * to indicate that the device can be switched off.
 	 */
 	send_sat(sc, "SYN\nSYN\n");
@@ -863,26 +842,29 @@ static void
 dbutton(struct satmgr_softc *sc, int ch)
 {
 
-	if (sc->sc_btn_cnt < sizeof(sc->sc_btn_buf))
-		sc->sc_btn_buf[sc->sc_btn_cnt++] = ch;
 	if (ch == '\n' || ch == '\r') {
-		if (memcmp(sc->sc_btn_buf, "PKO", 3) == 0) {
-			/* notified after 5 seconds guard time */
-			sysmon_task_queue_sched(0, sched_sysmon_pbutton, sc);
+		if (sc->sc_btn_cnt == 3) {
+			if (strncmp(sc->sc_btn_buf, "PKO", 3) == 0) {
+				/* notified after 5 seconds guard time */
+				sysmon_task_queue_sched(0,
+				    sched_sysmon_pbutton, sc);
+			} else if (strncmp(sc->sc_btn_buf, "RKO", 3) == 0) {
+				/* notified after 5 seconds guard time */
+			}
 		}
 		sc->sc_btn_cnt = 0;
-	}
+	} else if (sc->sc_btn_cnt < 7)
+		sc->sc_btn_buf[sc->sc_btn_cnt++] = ch;
 }
 
 static void
-iinit(device_t self)
+iinit(struct satmgr_softc *sc)
 {
-	struct satmgr_softc *sc = device_private(self);
 
 	/* LED blue, auto-fan, turn on at 50C, turn off at 45C */
 	sc->sc_sysctl_fanhigh = 50;
 	sc->sc_sysctl_fanlow = 45;
-	isattalk(sc, 'b', 'b', 10, 'a',
+	iprepcmd(sc, 'b', 'b', 10, 'a',
 	    sc->sc_sysctl_fanhigh, sc->sc_sysctl_fanlow);
 }
 
@@ -890,34 +872,62 @@ static void
 ireboot(struct satmgr_softc *sc)
 {
 
-	isattalk(sc, 'g', 0, 0, 0, 0, 0);
+	iprepcmd(sc, 'g', 0, 0, 0, 0, 0);
 }
 
 static void
 ipwroff(struct satmgr_softc *sc)
 {
 
-	isattalk(sc, 'c', 0, 0, 0, 0, 0);
+	iprepcmd(sc, 'c', 0, 0, 0, 0, 0);
 }
 
 static void
 ibutton(struct satmgr_softc *sc, int ch)
 {
+	int i;
+	char cksum;
 
-	mutex_enter(&sc->sc_replk);
-	if (++sc->sc_btn_cnt >= 8) {
-		cv_signal(&sc->sc_repcv);
+	sc->sc_btn_buf[sc->sc_btn_cnt++] = ch;
+
+	if (sc->sc_btn_cnt >= 8) {
 		sc->sc_btn_cnt = 0;
+
+		if (callout_active(&sc->sc_ch_sync) == true) {
+			/* now we can send a pending command packet */
+			callout_stop(&sc->sc_ch_sync);
+			for (i = 0, cksum = 0; i < 7; i++)
+				cksum += sc->sc_cmd_buf[i];
+			sc->sc_cmd_buf[7] = cksum & 0x7f;
+			send_sat_len(sc, sc->sc_cmd_buf, 8);
+		}
 	}
-	mutex_exit(&sc->sc_replk);
 }
 
 static void
-isattalk(struct satmgr_softc *sc, int pow, int led, int rat, int fan,
+idosync(void *arg)
+{
+	/*
+	 * Send 0-bytes until the 68HC908 sends a reply packet.
+	 * This means we are synchronized again, and the pending command,
+	 * constructed by iprepcmd(), is transmitted automatically.
+	 */
+	struct satmgr_softc *sc = arg;
+	unsigned lsr;
+
+	/* we're now in callout(9) context */
+	do {
+		lsr = CSR_READ(sc, LSR);
+	} while ((lsr & LSR_TXRDY) == 0);
+	callout_schedule(&sc->sc_ch_sync, hz / 5);
+	CSR_WRITE(sc, THR, 0);
+}
+
+static void
+iprepcmd(struct satmgr_softc *sc, int pow, int led, int rat, int fan,
     int fhi, int flo)
 {
 	char *p = sc->sc_cmd_buf;
-	int i, cksum;
 
 	/*
 	 * Construct the command packet. Values of -1 (0xff) will be
@@ -930,117 +940,13 @@ isattalk(struct satmgr_softc *sc, int pow, int led, int rat, int fan,
 	p[4] = fhi;
 	p[5] = flo;
 	p[6] = 7; /* host id */
-	for (i = 0, cksum = 0; i < 7; i++)
-		cksum += p[i];
-	p[7] = cksum & 0x7f;
-	send_sat_len(sc, p, 8);
 
-	mutex_enter(&sc->sc_replk);
-	sc->sc_btn_cnt = 0;
-	cv_wait(&sc->sc_repcv, &sc->sc_replk);
-	mutex_exit(&sc->sc_replk);
-}
-
-
-static void
-minit(device_t self)
-{
-	struct satmgr_softc *sc = device_private(self);
-#if 0
-	static char msg[35] = "\x20\x92NetBSD/sandpoint";
-	int m, n;
-
-	m = strlen(osrelease);
-	n = (16 - m) / 2;
-	memset(&msg[18], ' ', 16);
-	memcpy(&msg[18 + n], osrelease, m);
-
-	msattalk(sc, "\x00\x03");	/* boot has completed */
-	msattalk(sc, msg);		/* NB banner at disp2 */
-	msattalk(sc, "\x01\x32\x80");	/* select disp2 */
-	msattalk(sc, "\x00\x27");	/* show disp2 */
-#else
-	msattalk(sc, "\x00\x03");	/* boot has completed */
-#endif
-}
-
-static void
-mreboot(struct satmgr_softc *sc)
-{
-
-	msattalk(sc, "\x01\x35\x00");	/* stop watchdog timer */
-	msattalk(sc, "\x00\x0c");	/* shutdown in progress */
-	msattalk(sc, "\x00\x03");	/* boot has completed */
-	msattalk(sc, "\x00\x0e");	/* perform reboot */
-}
-
-static void
-mpwroff(struct satmgr_softc *sc)
-{
-
-	msattalk(sc, "\x01\x35\x00");	/* stop watchdog timer */
-	msattalk(sc, "\x00\x0c");	/* shutdown in progress */
-	msattalk(sc, "\x00\x03");	/* boot has completed */
-	msattalk(sc, "\x00\x06");	/* force power off */
-}
-
-static void
-msattalk(struct satmgr_softc *sc, const char *cmd)
-{
-	int len, i;
-	uint8_t pa;
-
-	if (cmd[0] != 0x80)
-		len = 2 + cmd[0]; /* cmd[0] is data portion length */
-	else
-		len = 2; /* read report */
-
-	for (i = 0, pa = 0; i < len; i++)
-		pa += cmd[i];
-	pa = 0 - pa; /* parity formula */
-
-	send_sat_len(sc, cmd, len);
-	send_sat_len(sc, &pa, 1);
-
-	mutex_enter(&sc->sc_replk);
-	sc->sc_btn_cnt = 0;
-	cv_wait(&sc->sc_repcv, &sc->sc_replk);
-	mutex_exit(&sc->sc_replk);
-}
-
-static void
-mbutton(struct satmgr_softc *sc, int ch)
-{
-
-	mutex_enter(&sc->sc_replk);
-	if (sc->sc_btn_cnt < 4) /* record the first four */
-		sc->sc_btn_buf[sc->sc_btn_cnt] = ch;
-	sc->sc_btn_cnt++;
-	if (sc->sc_btn_cnt == sc->sc_btn_buf[0] + 3) {
-		if (sc->sc_btn_buf[1] == 0x36 && (sc->sc_btn_buf[2]&01) == 0) {
-			/* power button pressed */
-			sysmon_task_queue_sched(0, sched_sysmon_pbutton, sc);
-		}
-		else {
-			/* unblock the talker */
-			cv_signal(&sc->sc_repcv);
-		}
-		sc->sc_btn_cnt = 0;
-	}
-	mutex_exit(&sc->sc_replk);
-}
-
-static int
-mbtnintr(void *arg)
-{
-	/* notified after 3 seconds guard time */
-	struct satmgr_softc *sc = arg;
-
-	send_sat(sc, "\x80\x36\x4a"); /* query button state with parity */
-	mutex_enter(&sc->sc_replk);
-	sc->sc_btn_cnt = 0;
-	mutex_exit(&sc->sc_replk);
-	return 1;
+	/* synchronize transmitter, before packet can be sent */
+	callout_reset(&sc->sc_ch_sync, hz / 5, idosync, sc);
+	/*
+	 * XXX We should protect ourselves against other writers, while
+	 * XXX synchronization is active!
+	 */
 }
 
 static void
@@ -1050,7 +956,7 @@ guarded_pbutton(void *arg)
 
 	/* we're now in callout(9) context */
 	sysmon_task_queue_sched(0, sched_sysmon_pbutton, sc);
-	send_sat(sc, "UU"); /* make front panel LED flashing */
+	send_sat(sc, "UU");
 }
 
 static void

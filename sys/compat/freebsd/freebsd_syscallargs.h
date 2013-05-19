@@ -1,4 +1,4 @@
-/* $NetBSD: freebsd_syscallargs.h,v 1.81 2012/03/10 21:51:57 joerg Exp $ */
+/* $NetBSD: freebsd_syscallargs.h,v 1.80 2011/03/06 17:08:33 bouyer Exp $ */
 
 /*
  * System call argument lists.
@@ -583,6 +583,7 @@ struct sys___sigpending14_args;
 struct sys_lchflags_args;
 
 struct sys_uuidgen_args;
+#if defined(P1003_1B_SEMAPHORE) || !defined(_KERNEL)
 
 struct sys__ksem_close_args;
 
@@ -597,6 +598,8 @@ struct sys__ksem_unlink_args;
 struct sys__ksem_getvalue_args;
 
 struct sys__ksem_destroy_args;
+#else
+#endif
 
 /*
  * System call prototypes.
@@ -1089,6 +1092,7 @@ int	sys_lchflags(struct lwp *, const struct sys_lchflags_args *, register_t *);
 
 int	sys_uuidgen(struct lwp *, const struct sys_uuidgen_args *, register_t *);
 
+#if defined(P1003_1B_SEMAPHORE) || !defined(_KERNEL)
 int	sys__ksem_close(struct lwp *, const struct sys__ksem_close_args *, register_t *);
 
 int	sys__ksem_post(struct lwp *, const struct sys__ksem_post_args *, register_t *);
@@ -1103,4 +1107,6 @@ int	sys__ksem_getvalue(struct lwp *, const struct sys__ksem_getvalue_args *, reg
 
 int	sys__ksem_destroy(struct lwp *, const struct sys__ksem_destroy_args *, register_t *);
 
+#else
+#endif
 #endif /* _FREEBSD_SYS_SYSCALLARGS_H_ */

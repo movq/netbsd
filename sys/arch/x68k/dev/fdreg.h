@@ -1,4 +1,4 @@
-/*	$NetBSD: fdreg.h,v 1.6 2012/10/14 18:38:32 tsutsui Exp $	*/
+/*	$NetBSD: fdreg.h,v 1.4.118.1 2012/11/18 21:56:37 riz Exp $	*/
 
 /*-
  * Copyright (c) 1991 The Regents of the University of California.

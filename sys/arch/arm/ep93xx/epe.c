@@ -1,4 +1,4 @@
-/*	$NetBSD: epe.c,v 1.29 2012/11/12 18:00:36 skrll Exp $	*/
+/*	$NetBSD: epe.c,v 1.26 2011/07/01 19:31:17 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2004 Jesse Off
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: epe.c,v 1.29 2012/11/12 18:00:36 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: epe.c,v 1.26 2011/07/01 19:31:17 dyoung Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -91,22 +91,22 @@ __KERNEL_RCSID(0, "$NetBSD: epe.c,v 1.29 2012/11/12 18:00:36 skrll Exp $");
 #define CTRLPAGE_DMASYNC(x, y, z) \
 	bus_dmamap_sync(sc->sc_dmat, sc->ctrlpage_dmamap, (x), (y), (z))
 #else
-#define EPE_READ(x) *(volatile uint32_t *) \
+#define EPE_READ(x) *(volatile u_int32_t *) \
 	(EP93XX_AHB_VBASE + EP93XX_AHB_EPE + (EPE_ ## x))
-#define EPE_WRITE(x, y) *(volatile uint32_t *) \
+#define EPE_WRITE(x, y) *(volatile u_int32_t *) \
 	(EP93XX_AHB_VBASE + EP93XX_AHB_EPE + (EPE_ ## x)) = y
 #define CTRLPAGE_DMASYNC(x, y, z)
 #endif /* ! EPE_FAST */
 
-static int	epe_match(device_t , cfdata_t, void *);
-static void	epe_attach(device_t, device_t, void *);
+static int	epe_match(struct device *, struct cfdata *, void *);
+static void	epe_attach(struct device *, struct device *, void *);
 static void	epe_init(struct epe_softc *);
 static int      epe_intr(void* arg);
 static int	epe_gctx(struct epe_softc *);
 static int	epe_mediachange(struct ifnet *);
-int		epe_mii_readreg (device_t, int, int);
-void		epe_mii_writereg (device_t, int, int, int);
-void		epe_statchg (struct ifnet *);
+int		epe_mii_readreg (struct device *, int, int);
+void		epe_mii_writereg (struct device *, int, int, int);
+void		epe_statchg (struct device *);
 void		epe_tick (void *);
 static int	epe_ifioctl (struct ifnet *, u_long, void *);
 static void	epe_ifstart (struct ifnet *);
@@ -115,32 +115,32 @@ static int	epe_ifinit (struct ifnet *);
 static void	epe_ifstop (struct ifnet *, int);
 static void	epe_setaddr (struct ifnet *);
 
-CFATTACH_DECL_NEW(epe, sizeof(struct epe_softc),
+CFATTACH_DECL(epe, sizeof(struct epe_softc),
     epe_match, epe_attach, NULL, NULL);
 
 static int
-epe_match(device_t parent, cfdata_t match, void *aux)
+epe_match(struct device *parent, struct cfdata *match, void *aux)
 {
 	return 2;
 }
 
 static void
-epe_attach(device_t parent, device_t self, void *aux)
+epe_attach(struct device *parent, struct device *self, void *aux)
 {
-	struct epe_softc		*sc = device_private(self);
+	struct epe_softc		*sc;
 	struct epsoc_attach_args	*sa;
 	prop_data_t			 enaddr;
 
-	aprint_normal("\n");
+	printf("\n");
+	sc = (struct epe_softc*) self;
 	sa = aux;
-	sc->sc_dev = self;
 	sc->sc_iot = sa->sa_iot;
 	sc->sc_intr = sa->sa_intr;
 	sc->sc_dmat = sa->sa_dmat;
 
 	if (bus_space_map(sa->sa_iot, sa->sa_addr, sa->sa_size, 
 		0, &sc->sc_ioh))
-		panic("%s: Cannot map registers", device_xname(self));
+		panic("%s: Cannot map registers", self->dv_xname);
 
 	/* Fetch the Ethernet address from property if set. */
 	enaddr = prop_dictionary_get(device_properties(self), "mac-address");
@@ -162,21 +162,21 @@ static int
 epe_gctx(struct epe_softc *sc)
 {
 	struct ifnet * ifp = &sc->sc_ec.ec_if;
-	uint32_t *cur, ndq = 0;
+	u_int32_t *cur, ndq = 0;
 
 	/* Handle transmit completions */
-	cur = (uint32_t *)(EPE_READ(TXStsQCurAdd) -
+	cur = (u_int32_t *)(EPE_READ(TXStsQCurAdd) -
 		sc->ctrlpage_dsaddr + (char*)sc->ctrlpage);
 
 	if (sc->TXStsQ_cur != cur) { 
-		CTRLPAGE_DMASYNC(TX_QLEN * 2 * sizeof(uint32_t), 
-			TX_QLEN * sizeof(uint32_t), BUS_DMASYNC_PREREAD);
+		CTRLPAGE_DMASYNC(TX_QLEN * 2 * sizeof(u_int32_t), 
+			TX_QLEN * sizeof(u_int32_t), BUS_DMASYNC_PREREAD);
 	} else {
 		return 0;
 	}
 
 	do {
-		uint32_t tbi = *sc->TXStsQ_cur & 0x7fff;
+		u_int32_t tbi = *sc->TXStsQ_cur & 0x7fff;
 		struct mbuf *m = sc->txq[tbi].m;
 
 		if ((*sc->TXStsQ_cur & TXStsQ_TxWE) == 0) {
@@ -211,20 +211,20 @@ epe_intr(void *arg)
 {
 	struct epe_softc *sc = (struct epe_softc *)arg;
 	struct ifnet * ifp = &sc->sc_ec.ec_if;
-	uint32_t ndq = 0, irq, *cur;
+	u_int32_t ndq = 0, irq, *cur;
 
 	irq = EPE_READ(IntStsC);
 begin:
-	cur = (uint32_t *)(EPE_READ(RXStsQCurAdd) -
+	cur = (u_int32_t *)(EPE_READ(RXStsQCurAdd) -
 		sc->ctrlpage_dsaddr + (char*)sc->ctrlpage);
-	CTRLPAGE_DMASYNC(TX_QLEN * 3 * sizeof(uint32_t),
-		RX_QLEN * 4 * sizeof(uint32_t), 
+	CTRLPAGE_DMASYNC(TX_QLEN * 3 * sizeof(u_int32_t),
+		RX_QLEN * 4 * sizeof(u_int32_t), 
 		BUS_DMASYNC_PREREAD);
 	while (sc->RXStsQ_cur != cur) {
 		if ((sc->RXStsQ_cur[0] & (RXStsQ_RWE|RXStsQ_RFP|RXStsQ_EOB)) == 
 			(RXStsQ_RWE|RXStsQ_RFP|RXStsQ_EOB)) {
-			uint32_t bi = (sc->RXStsQ_cur[1] >> 16) & 0x7fff;
-			uint32_t fl = sc->RXStsQ_cur[1] & 0xffff;
+			u_int32_t bi = (sc->RXStsQ_cur[1] >> 16) & 0x7fff;
+			u_int32_t fl = sc->RXStsQ_cur[1] & 0xffff;
 			struct mbuf *m;
 
 			MGETHDR(m, M_DONTWAIT, MT_DATA);
@@ -267,8 +267,8 @@ begin:
 
 	if (ndq > 0) {
 		ifp->if_ipackets += ndq;
-		CTRLPAGE_DMASYNC(TX_QLEN * 3 * sizeof(uint32_t),
- 			RX_QLEN * 4 * sizeof(uint32_t), 
+		CTRLPAGE_DMASYNC(TX_QLEN * 3 * sizeof(u_int32_t),
+ 			RX_QLEN * 4 * sizeof(u_int32_t), 
 			BUS_DMASYNC_PREWRITE|BUS_DMASYNC_PREREAD);
 		EPE_WRITE(RXStsEnq, ndq);
 		EPE_WRITE(RXDEnq, ndq);
@@ -303,7 +303,7 @@ epe_init(struct epe_softc *sc)
 	/* Read ethernet MAC, should already be set by bootrom */
 	bus_space_read_region_1(sc->sc_iot, sc->sc_ioh, EPE_IndAd,
 		sc->sc_enaddr, ETHER_ADDR_LEN);
-	aprint_normal_dev(sc->sc_dev, "MAC address %s\n", 
+	printf("%s: MAC address %s\n", sc->sc_dev.dv_xname,
 		ether_sprintf(sc->sc_enaddr));
 
 	/* Soft Reset the MAC */
@@ -334,7 +334,7 @@ epe_init(struct epe_softc *sc)
 			sc->ctrlpage, PAGE_SIZE, NULL, BUS_DMA_WAITOK);
 	}
 	if (err != 0) {
-		panic("%s: Cannot get DMA memory", device_xname(sc->sc_dev));
+		panic("%s: Cannot get DMA memory", sc->sc_dev.dv_xname);
 	}
 	sc->ctrlpage_dsaddr = sc->ctrlpage_dmamap->dm_segs[0].ds_addr;
 	memset(sc->ctrlpage, 0, PAGE_SIZE);
@@ -342,7 +342,7 @@ epe_init(struct epe_softc *sc)
 	/* Set up pointers to start of each queue in kernel addr space.
 	 * Each descriptor queue or status queue entry uses 2 words
 	 */
-	sc->TXDQ = (uint32_t *)sc->ctrlpage;
+	sc->TXDQ = (u_int32_t *)sc->ctrlpage;
 	sc->TXDQ_cur = sc->TXDQ;
 	sc->TXDQ_avail = TX_QLEN - 1;
 	sc->TXStsQ = &sc->TXDQ[TX_QLEN * 2];
@@ -355,24 +355,24 @@ epe_init(struct epe_softc *sc)
 	 * with the physical addresses. 
 	 */
 	addr = (char *)sc->ctrlpage_dmamap->dm_segs[0].ds_addr;
-	EPE_WRITE(TXDQBAdd, (uint32_t)addr);
-	EPE_WRITE(TXDQCurAdd, (uint32_t)addr);
-	EPE_WRITE(TXDQBLen, TX_QLEN * 2 * sizeof(uint32_t)); 
+	EPE_WRITE(TXDQBAdd, (u_int32_t)addr);
+	EPE_WRITE(TXDQCurAdd, (u_int32_t)addr);
+	EPE_WRITE(TXDQBLen, TX_QLEN * 2 * sizeof(u_int32_t)); 
 
-	addr += (sc->TXStsQ - sc->TXDQ) * sizeof(uint32_t);
-	EPE_WRITE(TXStsQBAdd, (uint32_t)addr);
-	EPE_WRITE(TXStsQCurAdd, (uint32_t)addr);
-	EPE_WRITE(TXStsQBLen, TX_QLEN * sizeof(uint32_t));
+	addr += (sc->TXStsQ - sc->TXDQ) * sizeof(u_int32_t);
+	EPE_WRITE(TXStsQBAdd, (u_int32_t)addr);
+	EPE_WRITE(TXStsQCurAdd, (u_int32_t)addr);
+	EPE_WRITE(TXStsQBLen, TX_QLEN * sizeof(u_int32_t));
 
-	addr += (sc->RXDQ - sc->TXStsQ) * sizeof(uint32_t);
-	EPE_WRITE(RXDQBAdd, (uint32_t)addr);
-	EPE_WRITE(RXDCurAdd, (uint32_t)addr);
-	EPE_WRITE(RXDQBLen, RX_QLEN * 2 * sizeof(uint32_t));
+	addr += (sc->RXDQ - sc->TXStsQ) * sizeof(u_int32_t);
+	EPE_WRITE(RXDQBAdd, (u_int32_t)addr);
+	EPE_WRITE(RXDCurAdd, (u_int32_t)addr);
+	EPE_WRITE(RXDQBLen, RX_QLEN * 2 * sizeof(u_int32_t));
 	
-	addr += (sc->RXStsQ - sc->RXDQ) * sizeof(uint32_t);
-	EPE_WRITE(RXStsQBAdd, (uint32_t)addr);
-	EPE_WRITE(RXStsQCurAdd, (uint32_t)addr);
-	EPE_WRITE(RXStsQBLen, RX_QLEN * 2 * sizeof(uint32_t));
+	addr += (sc->RXStsQ - sc->RXDQ) * sizeof(u_int32_t);
+	EPE_WRITE(RXStsQBAdd, (u_int32_t)addr);
+	EPE_WRITE(RXStsQCurAdd, (u_int32_t)addr);
+	EPE_WRITE(RXStsQBLen, RX_QLEN * 2 * sizeof(u_int32_t));
 
 	/* Populate the RXDQ with mbufs */
 	for(i = 0; i < RX_QLEN; i++) {
@@ -402,8 +402,8 @@ epe_init(struct epe_softc *sc)
 	}
 
 	/* Divide HCLK by 32 for MDC clock */
-	if (device_cfdata(sc->sc_dev)->cf_flags)
-		mdcdiv = device_cfdata(sc->sc_dev)->cf_flags;
+	if (device_cfdata(&sc->sc_dev)->cf_flags)
+		mdcdiv = device_cfdata(&sc->sc_dev)->cf_flags;
 	EPE_WRITE(SelfCtl, (SelfCtl_MDCDIV(mdcdiv)|SelfCtl_PSPRS));
 
 	sc->sc_mii.mii_ifp = ifp;
@@ -413,7 +413,7 @@ epe_init(struct epe_softc *sc)
 	sc->sc_ec.ec_mii = &sc->sc_mii;
 	ifmedia_init(&sc->sc_mii.mii_media, IFM_IMASK, epe_mediachange,
 		ether_mediastatus);
-	mii_attach(sc->sc_dev, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
+	mii_attach((struct device *)sc, &sc->sc_mii, 0xffffffff, MII_PHY_ANY,
 		MII_OFFSET_ANY, 0);
 	ifmedia_set(&sc->sc_mii.mii_media, IFM_ETHER|IFM_AUTO);
 
@@ -434,7 +434,7 @@ epe_init(struct epe_softc *sc)
 	 */
 	sc->sc_ec.ec_capabilities |= ETHERCAP_VLAN_MTU;
 
-        strcpy(ifp->if_xname, device_xname(sc->sc_dev));
+        strcpy(ifp->if_xname, sc->sc_dev.dv_xname);
         ifp->if_flags = IFF_BROADCAST|IFF_SIMPLEX|IFF_NOTRAILERS|IFF_MULTICAST;
         ifp->if_ioctl = epe_ifioctl;
         ifp->if_start = epe_ifstart;
@@ -457,13 +457,12 @@ epe_mediachange(struct ifnet *ifp)
 }
 
 int
-epe_mii_readreg(device_t self, int phy, int reg)
+epe_mii_readreg(struct device *self, int phy, int reg)
 {
+	u_int32_t d, v;
 	struct epe_softc *sc;
-	uint32_t d, v;
 
-	sc = device_private(self);
-
+	sc = (struct epe_softc *)self;
 	d = EPE_READ(SelfCtl);
 	EPE_WRITE(SelfCtl, d & ~SelfCtl_PSPRS); /* no preamble suppress */
 	EPE_WRITE(MIICmd, (MIICmd_READ | (phy << 5) | reg));
@@ -474,13 +473,12 @@ epe_mii_readreg(device_t self, int phy, int reg)
 }
 
 void
-epe_mii_writereg(device_t self, int phy, int reg, int val)
+epe_mii_writereg(struct device *self, int phy, int reg, int val)
 {
 	struct epe_softc *sc;
-	uint32_t d;
+	u_int32_t d;
 
-	sc = device_private(self);
-
+	sc = (struct epe_softc *)self;
 	d = EPE_READ(SelfCtl);
 	EPE_WRITE(SelfCtl, d & ~SelfCtl_PSPRS); /* no preamble suppress */
 	EPE_WRITE(MIIData, val);
@@ -491,10 +489,10 @@ epe_mii_writereg(device_t self, int phy, int reg, int val)
 
 	
 void
-epe_statchg(struct ifnet *ifp)
+epe_statchg(struct device *self)
 {
-        struct epe_softc *sc = ifp->if_softc;
-        uint32_t reg;
+        struct epe_softc *sc = (struct epe_softc *)self;
+        u_int32_t reg;
 
         /*
          * We must keep the MAC and the PHY in sync as
@@ -514,13 +512,13 @@ epe_tick(void *arg)
 	struct epe_softc* sc = (struct epe_softc *)arg;
 	struct ifnet * ifp = &sc->sc_ec.ec_if;
 	int s;
-	uint32_t misses;
+	u_int32_t misses;
 
 	ifp->if_collisions += EPE_READ(TXCollCnt);
 	/* These misses are ok, they will happen if the RAM/CPU can't keep up */
 	misses = EPE_READ(RXMissCnt);
 	if (misses > 0) 
-		printf("%s: %d rx misses\n", device_xname(sc->sc_dev), misses);
+		printf("%s: %d rx misses\n", sc->sc_dev.dv_xname, misses);
 	
 	s = splnet();
 	if (epe_gctx(sc) > 0 && IFQ_IS_EMPTY(&ifp->if_snd) == 0) {
@@ -598,7 +596,7 @@ more:
 				goto stop;
 			}
 		}
-		mn->m_data = (void *)(((uint32_t)mn->m_data + 0x3) & (~0x3)); 
+		mn->m_data = (void *)(((u_int32_t)mn->m_data + 0x3) & (~0x3)); 
 		m_copydata(m, 0, m->m_pkthdr.len, mtod(mn, void *));
 		mn->m_pkthdr.len = mn->m_len = m->m_pkthdr.len;
 		IFQ_DEQUEUE(&ifp->if_snd, m);
@@ -648,7 +646,7 @@ stop:
 	if (ndq > 0) {
 		sc->TXDQ_avail -= ndq;
 		sc->TXDQ_cur = &sc->TXDQ[bi];
-		CTRLPAGE_DMASYNC(0, TX_QLEN * 2 * sizeof(uint32_t),
+		CTRLPAGE_DMASYNC(0, TX_QLEN * 2 * sizeof(u_int32_t),
 			BUS_DMASYNC_PREWRITE|BUS_DMASYNC_PREREAD);
 		EPE_WRITE(TXDEnq, ndq);
 	}
@@ -668,7 +666,7 @@ epe_ifwatchdog(struct ifnet *ifp)
 	if ((ifp->if_flags & IFF_RUNNING) == 0)
 		return;
        	printf("%s: device timeout, BMCtl = 0x%08x, BMSts = 0x%08x\n", 
-		device_xname(sc->sc_dev), EPE_READ(BMCtl), EPE_READ(BMSts));
+		sc->sc_dev.dv_xname, EPE_READ(BMCtl), EPE_READ(BMSts));
 }
 
 static int
@@ -720,9 +718,9 @@ epe_setaddr(struct ifnet *ifp)
 	struct ethercom *ac = &sc->sc_ec;
 	struct ether_multi *enm;
 	struct ether_multistep step;
-	uint8_t ias[2][ETHER_ADDR_LEN];
-	uint32_t h, nma = 0, hashes[2] = { 0, 0 };
-	uint32_t rxctl = EPE_READ(RXCtl);
+	u_int8_t ias[2][ETHER_ADDR_LEN];
+	u_int32_t h, nma = 0, hashes[2] = { 0, 0 };
+	u_int32_t rxctl = EPE_READ(RXCtl);
 
 	/* disable receiver temporarily */
 	EPE_WRITE(RXCtl, rxctl & ~RXCtl_SRxON);

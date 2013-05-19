@@ -1,4 +1,4 @@
-/*	$NetBSD: dumpfs.c,v 1.60 2013/04/02 13:31:47 taca Exp $	*/
+/*	$NetBSD: dumpfs.c,v 1.58.4.1 2013/04/20 10:03:04 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1983, 1992, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1992, 1993\
 #if 0
 static char sccsid[] = "@(#)dumpfs.c	8.5 (Berkeley) 4/29/95";
 #else
-__RCSID("$NetBSD: dumpfs.c,v 1.60 2013/04/02 13:31:47 taca Exp $");
+__RCSID("$NetBSD: dumpfs.c,v 1.58.4.1 2013/04/20 10:03:04 bouyer Exp $");
 #endif
 #endif /* not lint */
 
@@ -913,24 +913,18 @@ usage(void)
 static int
 openpartition(const char *name, int flags, char *device, size_t devicelen)
 {
-	char		rawspec[MAXPATHLEN], xbuf[MAXPATHLEN], *p;
+	char		rawspec[MAXPATHLEN], *p;
 	struct fstab	*fs;
 	int		fd, oerrno;
 
 	fs = getfsfile(name);
 	if (fs) {
-		const char *fsspec;
-		fsspec = getfsspecname(xbuf, sizeof(xbuf), fs->fs_spec);
-		if (fsspec == NULL) {
-			warn("%s", xbuf);
-			return -1;
-		}
-		if ((p = strrchr(fsspec, '/')) != NULL) {
+		if ((p = strrchr(fs->fs_spec, '/')) != NULL) {
 			snprintf(rawspec, sizeof(rawspec), "%.*s/r%s",
-			    (int)(p - fsspec), fsspec, p + 1);
+			    (int)(p - fs->fs_spec), fs->fs_spec, p + 1);
 			name = rawspec;
 		} else
-			name = fsspec;
+			name = fs->fs_spec;
 	}
 	fd = opendisk(name, flags, device, devicelen, 0);
 	if (fd == -1 && errno == ENOENT) {

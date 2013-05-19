@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_impl.h,v 1.30 2013/05/19 20:45:34 rmind Exp $	*/
+/*	$NetBSD: npf_impl.h,v 1.10.2.14 2013/02/18 18:26:14 riz Exp $	*/
 
 /*-
  * Copyright (c) 2009-2013 The NetBSD Foundation, Inc.
@@ -220,7 +220,6 @@ int		npf_table_remove(npf_tableset_t *, u_int,
 int		npf_table_lookup(npf_tableset_t *, u_int,
 		    const int, const npf_addr_t *);
 int		npf_table_list(npf_tableset_t *, u_int, void *, size_t);
-int		npf_table_flush(npf_tableset_t *, u_int);
 
 /* Ruleset interface. */
 npf_ruleset_t *	npf_ruleset_create(size_t);
@@ -325,10 +324,9 @@ npf_nat_t *	npf_nat_restore(prop_dictionary_t, npf_session_t *);
 /* ALG interface. */
 void		npf_alg_sysinit(void);
 void		npf_alg_sysfini(void);
-npf_alg_t *	npf_alg_register(const char *, npf_alg_func_t, npf_alg_func_t,
+npf_alg_t *	npf_alg_register(npf_alg_func_t, npf_alg_func_t,
 		    npf_alg_sfunc_t);
 int		npf_alg_unregister(npf_alg_t *);
-npf_alg_t *	npf_alg_construct(const char *);
 bool		npf_alg_match(npf_cache_t *, nbuf_t *, npf_nat_t *, int);
 void		npf_alg_exec(npf_cache_t *, nbuf_t *, npf_nat_t *, int);
 npf_session_t *	npf_alg_session(npf_cache_t *, nbuf_t *, int);

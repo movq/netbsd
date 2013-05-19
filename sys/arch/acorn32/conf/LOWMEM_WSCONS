@@ -1,4 +1,4 @@
-#	$NetBSD: LOWMEM_WSCONS,v 1.62 2013/04/27 18:19:21 christos Exp $
+#	$NetBSD: LOWMEM_WSCONS,v 1.57 2011/11/22 21:24:52 tls Exp $
 #
 #	LOWMEM_WSCONS -- RiscPC config with wscons for SMALL machines
 #
@@ -28,6 +28,10 @@ options 	CPU_ARM7	# Support the ARM7 core
 
 # For small kernels
 makeoptions	COPTS="-Os -fno-inline -Dinline= -D__inline__= -D_inline_= "
+
+# FPA options
+
+#options 	ARMFPE		# ARM Ltd FPE
 
 # File systems
 
@@ -60,10 +64,13 @@ options 	FFS_NO_SNAPSHOT	# No FFS snapshot support
 options 	INET		# IP + ICMP + TCP + UDP
 #options 	INET6		# IPV6
 #options 	IPSEC		# IP security
+#options 	IPSEC_ESP	# IP security (encryption part; define w/ IPSEC)
 #options 	IPSEC_NAT_T	# IPsec NAT traversal (NAT-T)
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
 #options 	PIM		# Protocol Independent Multicast
+#options 	ISO,TPIP	# OSI
+#options 	EON		# OSI tunneling over IP
 #options 	NETATALK	# AppleTalk networking
 #options 	PFIL_HOOKS	# pfil(9) packet filter hooks
 #options 	PPP_BSDCOMP	# BSD-Compress compression support for PPP
@@ -154,7 +161,6 @@ vidc0		at mainbus?
 options 	WSEMUL_VT100
 
 #options 	WSDISPLAY_COMPAT_RAWKBD
-#options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 
 #options 	FONT_BOLD8x16
 #options 	FONT_GALLANT12x22	# Very nice font
@@ -275,7 +281,7 @@ pseudo-device	ppp			# PPP
 #pseudo-device	strip			# STRIP
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	vnd			# disk-like interface to files
-#pseudo-device	ccd			# concatenated disk devices
+#pseudo-device	ccd	2		# concatenated disk devices
 #pseudo-device	fss			# file system snapshot device
 pseudo-device	md			# Ramdisk driver
 pseudo-device	clockctl		# user control of clock subsystem

@@ -1,4 +1,4 @@
-/*	$NetBSD: uftdi.c,v 1.57 2013/03/24 23:00:48 cheusov Exp $	*/
+/*	$NetBSD: uftdi.c,v 1.51.2.2 2012/10/23 20:01:14 riz Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uftdi.c,v 1.57 2013/03/24 23:00:48 cheusov Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uftdi.c,v 1.51.2.2 2012/10/23 20:01:14 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -125,8 +125,6 @@ static const struct usb_devno uftdi_devs[] = {
 	{ USB_VENDOR_BBELECTRONICS, USB_PRODUCT_BBELECTRONICS_USOTL4 },
 	{ USB_VENDOR_FALCOM, USB_PRODUCT_FALCOM_TWIST },
 	{ USB_VENDOR_FALCOM, USB_PRODUCT_FALCOM_SAMBA },
-	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_SERIAL_232H },
-	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_SERIAL_232RL },
 	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_SERIAL_2232C },
 	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_SERIAL_4232H },
 	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_SERIAL_8U100AX },
@@ -153,8 +151,6 @@ static const struct usb_devno uftdi_devs[] = {
 	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_LCD_CFA_634 },
 	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_LCD_CFA_635 },
 	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_OPENRD_JTAGKEY },
-	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_BEAGLEBONE },
-	{ USB_VENDOR_FTDI, USB_PRODUCT_FTDI_MAXSTREAM_PKG_U },
 	{ USB_VENDOR_xxFTDI, USB_PRODUCT_xxFTDI_SHEEVAPLUG_JTAG },
 	{ USB_VENDOR_INTREPIDCS, USB_PRODUCT_INTREPIDCS_VALUECAN },
 	{ USB_VENDOR_INTREPIDCS, USB_PRODUCT_INTREPIDCS_NEOVI },
@@ -525,15 +521,6 @@ uftdi_param(void *vsc, int portno, struct termios *t)
 	DPRINTF(("uftdi_param: sc=%p\n", sc));
 
 	if (sc->sc_dying)
-		return (EIO);
-
-	req.bmRequestType = UT_WRITE_VENDOR_DEVICE;
-	req.bRequest = FTDI_SIO_SET_BITMODE;
-	USETW(req.wValue, FTDI_BITMODE_RESET << 8 | 0x00);
-	USETW(req.wIndex, portno);
-	USETW(req.wLength, 0);
-	err = usbd_do_request(sc->sc_udev, &req, NULL);
-	if (err)
 		return (EIO);
 
 	switch (sc->sc_type) {

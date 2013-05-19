@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.272 2013/02/04 22:19:43 macallan Exp $ */
+/*	$NetBSD: machdep.c,v 1.265.2.1 2012/05/21 15:25:56 riz Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.272 2013/02/04 22:19:43 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.265.2.1 2012/05/21 15:25:56 riz Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
@@ -85,6 +85,8 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.272 2013/02/04 22:19:43 macallan Exp $
 #include <sys/signal.h>
 #include <sys/signalvar.h>
 #include <sys/proc.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/buf.h>
 #include <sys/device.h>
 #include <sys/ras.h>
@@ -157,6 +159,8 @@ static struct vm_map module_map_store;
 extern struct vm_map *module_map;
 #endif
 
+int	physmem;
+
 extern	void *msgbufaddr;
 
 /*
@@ -166,6 +170,12 @@ extern	void *msgbufaddr;
 #ifndef MAX_DMA_SEGS
 #define MAX_DMA_SEGS	20
 #endif
+
+/*
+ * safepri is a safe priority for sleep to set for a spin-wait
+ * during autoconfiguration or after a panic.
+ */
+int   safepri = 0;
 
 void	dumpsys(void);
 void	stackdump(void);
@@ -395,32 +405,6 @@ sysctl_machdep_boot(SYSCTLFN_ARGS)
 	return (sysctl_lookup(SYSCTLFN_CALL(&node)));
 }
 
-/*
- * figure out which VIS version the CPU supports
- * this assumes all CPUs in the system are the same
- */
-static int
-get_vis(void)
-{
-	int vis = 0;
-
-	if (GETVER_CPU_MANUF() == MANUF_FUJITSU) {
-		/* as far as I can tell SPARC64-III and up have VIS 1.0 */
-		if (GETVER_CPU_IMPL() >= IMPL_SPARC64_III) {
-			vis = 1;
-		}
-		/* XXX - which, if any, SPARC64 support VIS 2.0? */
-	} else { 
-		/* this better be Sun */
-		vis = 1;	/* all UltraSPARCs support at least VIS 1.0 */
-		if (CPU_IS_USIII_UP()) {
-			vis = 2;
-		}
-		/* UltraSPARC T4 supports VIS 3.0 */
-	}
-	return vis;
-}
-
 SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
 {
 
@@ -450,11 +434,6 @@ SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
 		       CTLTYPE_INT, "cpu_arch", NULL,
 		       NULL, 9, NULL, 0,
 		       CTL_MACHDEP, CPU_ARCH, CTL_EOL);
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_IMMEDIATE,
-		       CTLTYPE_INT, "vis", NULL,
-		       NULL, get_vis(), NULL, 0,
-		       CTL_MACHDEP, CPU_VIS, CTL_EOL);
 }
 
 void *
@@ -545,6 +524,45 @@ sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	/* Remember that we're now on the signal stack. */
 	if (onstack)
 		l->l_sigstk.ss_flags |= SS_ONSTACK;
+}
+
+/*
+ * Set the lwp to begin execution in the upcall handler.  The upcall
+ * handler will then simply call the upcall routine and then exit.
+ *
+ * Because we have a bunch of different signal trampolines, the first
+ * two instructions in the signal trampoline call the upcall handler.
+ * Signal dispatch should skip the first two instructions in the signal
+ * trampolines.
+ */
+void 
+cpu_upcall(struct lwp *l, int type, int nevents, int ninterrupted,
+	void *sas, void *ap, void *sp, sa_upcall_t upcall)
+{
+       	struct trapframe64 *tf;
+	vaddr_t addr;
+
+	tf = l->l_md.md_tf;
+	addr = (vaddr_t) upcall;
+
+	/* Arguments to the upcall... */
+	tf->tf_out[0] = type;
+	tf->tf_out[1] = (vaddr_t) sas;
+	tf->tf_out[2] = nevents;
+	tf->tf_out[3] = ninterrupted;
+	tf->tf_out[4] = (vaddr_t) ap;
+
+	/*
+	 * Ensure the stack is double-word aligned, and provide a
+	 * valid C call frame.
+	 */
+	sp = (void *)(((vaddr_t)sp & ~0xf) - CCFSZ);
+
+	/* Arrange to begin execution at the upcall handler. */
+	tf->tf_pc = addr;
+	tf->tf_npc = addr + 4;
+	tf->tf_out[6] = (vaddr_t)sp - STACK_OFFSET;
+	tf->tf_out[7] = -1;		/* "you lose" if upcall returns */
 }
 
 struct pcb dumppcb;
@@ -2326,6 +2344,7 @@ sparc_bus_map(bus_space_tag_t t, bus_addr_t addr, bus_size_t size,
 			(unsigned long long)size,
 			(unsigned long long)hp->_ptr));
 		return (0);
+		/* FALLTHROUGH */
 	case PCI_IO_BUS_SPACE:
 		map_little = 1;
 		break;
@@ -2477,7 +2496,7 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 
 	/* First ensure consistent stack state (see sendsig). */ /* XXX? */
 	write_user_windows();
-	if (rwindow_save(l)) {
+	if ((l->l_flag & LW_SA_SWITCHING) == 0 && rwindow_save(l)) {
 		mutex_enter(l->l_proc->p_lock);
 		sigexit(l, SIGILL);
 	}
@@ -2522,7 +2541,7 @@ cpu_getmcontext(struct lwp *l, mcontext_t *mcp, unsigned int *flags)
 		gr[_REG_nPC] = ras_pc + 4;
 	}
 
-	*flags |= (_UC_CPU|_UC_TLSBASE);
+	*flags |= _UC_CPU;
 
 	mcp->__gwins = NULL;
 
@@ -2611,8 +2630,7 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		tf->tf_global[4] = (uint64_t)gr[_REG_G4];
 		tf->tf_global[5] = (uint64_t)gr[_REG_G5];
 		tf->tf_global[6] = (uint64_t)gr[_REG_G6];
-		/* done in lwp_setprivate */
-		/* tf->tf_global[7] = (uint64_t)gr[_REG_G7]; */
+		tf->tf_global[7] = (uint64_t)gr[_REG_G7];
 		tf->tf_out[0]    = (uint64_t)gr[_REG_O0];
 		tf->tf_out[1]    = (uint64_t)gr[_REG_O1];
 		tf->tf_out[2]    = (uint64_t)gr[_REG_O2];
@@ -2624,9 +2642,6 @@ cpu_setmcontext(struct lwp *l, const mcontext_t *mcp, unsigned int flags)
 		/* %asi restored above; %fprs not yet supported. */
 
 		/* XXX mcp->__gwins */
-
-		if (flags & _UC_TLSBASE)
-			lwp_setprivate(l, (void *)(uintptr_t)gr[_REG_G7]);
 	}
 
 	/* Restore FP register context, if any. */

@@ -1,7 +1,7 @@
 #
 # NEWS3400 config file
 #
-# 	$NetBSD: WAPIKO,v 1.44 2013/04/27 18:19:47 christos Exp $
+# 	$NetBSD: WAPIKO,v 1.42 2011/11/22 21:25:30 tls Exp $
 #
 include		"arch/newsmips/conf/std.newsmips"
 
@@ -91,7 +91,6 @@ sd*	at scsibus? target ? lun ?	# SCSI disks
 #cd*	at scsibus? target ? lun ?	# SCSI CD-ROMs
 
 options 	WSEMUL_VT100		# VT100 / VT220 emulation
-options 	WSDISPLAY_COMPAT_USL		# wsconscfg VT handling
 options 	FONT_GALLANT12x22
 
 wsdisplay0 at fb? console ?
@@ -99,7 +98,7 @@ wskbd0	at kb? console ?
 wsmouse0 at ms?
 
 pseudo-device	vnd			# disk-like interface to files
-#pseudo-device	ccd			# concatenated and striped disks
+#pseudo-device	ccd		4	# concatenated and striped disks
 #pseudo-device	fss			# file system snapshot device
 pseudo-device	loop			# loopback interface; required
 pseudo-device	pty			# pseudo-terminals

@@ -1,4 +1,4 @@
-/*	$NetBSD: query.c,v 1.10 2012/12/04 23:38:38 spz Exp $	*/
+/*	$NetBSD: query.c,v 1.7.2.3 2012/12/15 05:39:25 riz Exp $	*/
 
 /*
  * Copyright (C) 2004-2012  Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-/*	$NetBSD: setmode.c,v 1.34 2012/06/25 22:32:43 abs Exp $	*/
+/*	$NetBSD: setmode.c,v 1.31 2005/10/01 20:08:01 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1994
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)setmode.c	8.2 (Berkeley) 3/25/94";
 #else
-__RCSID("$NetBSD: setmode.c,v 1.34 2012/06/25 22:32:43 abs Exp $");
+__RCSID("$NetBSD: setmode.c,v 1.31 2005/10/01 20:08:01 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -77,10 +77,10 @@ typedef struct bitcmd {
 #define	CMD2_OBITS	0x08
 #define	CMD2_UBITS	0x10
 
-static BITCMD	*addcmd(BITCMD *, mode_t, mode_t, mode_t, mode_t);
-static void	 compress_mode(BITCMD *);
+static BITCMD	*addcmd __P((BITCMD *, mode_t, mode_t, mode_t, mode_t));
+static void	 compress_mode __P((BITCMD *));
 #ifdef SETMODE_DEBUG
-static void	 dumpmode(BITCMD *);
+static void	 dumpmode __P((BITCMD *));
 #endif
 
 /*
@@ -90,7 +90,9 @@ static void	 dumpmode(BITCMD *);
  * bits) followed by a '+' (set bits).
  */
 mode_t
-getmode(const void *bbox, mode_t omode)
+getmode(bbox, omode)
+	const void *bbox;
+	mode_t omode;
 {
 	const BITCMD *set;
 	mode_t clrval, newmode, value;
@@ -176,7 +178,8 @@ common:			if (set->cmd2 & CMD2_CLR) {
 #define	STANDARD_BITS	(S_ISUID|S_ISGID|S_IRWXU|S_IRWXG|S_IRWXO)
 
 void *
-setmode(const char *p)
+setmode(p)
+	const char *p;
 {
 	int serrno;
 	char op, *ep;
@@ -364,7 +367,9 @@ out:
 }
 
 static BITCMD *
-addcmd(BITCMD *set, mode_t op, mode_t who, mode_t oparg, mode_t mask)
+addcmd(set, op, who, oparg, mask)
+	BITCMD *set;
+	mode_t oparg, who, op, mask;
 {
 
 	_DIAGASSERT(set != NULL);
@@ -411,7 +416,8 @@ addcmd(BITCMD *set, mode_t op, mode_t who, mode_t oparg, mode_t mask)
 
 #ifdef SETMODE_DEBUG
 static void
-dumpmode(BITCMD *set)
+dumpmode(set)
+	BITCMD *set;
 {
 
 	_DIAGASSERT(set != NULL);
@@ -434,7 +440,8 @@ dumpmode(BITCMD *set)
  * compacted, but it's not worth the effort.
  */
 static void
-compress_mode(BITCMD *set)
+compress_mode(set)
+	BITCMD *set;
 {
 	BITCMD *nset;
 	int setbits, clrbits, Xbits, op;

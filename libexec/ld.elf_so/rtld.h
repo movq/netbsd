@@ -1,4 +1,4 @@
-/*	$NetBSD: rtld.h,v 1.116 2013/05/09 15:38:14 christos Exp $	 */
+/*	$NetBSD: rtld.h,v 1.107 2011/12/02 09:06:49 skrll Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -48,10 +48,6 @@
 
 #if defined(_RTLD_SOURCE)
 
-#ifdef __ARM_EABI__
-#include "unwind.h"
-#endif
-
 #ifndef	RTLD_DEFAULT_LIBRARY_PATH
 #define	RTLD_DEFAULT_LIBRARY_PATH	"/usr/lib"
 #endif
@@ -92,7 +88,7 @@ typedef struct Struct_Objlist_Entry {
 typedef SIMPLEQ_HEAD(Struct_Objlist, Struct_Objlist_Entry) Objlist;
 
 typedef struct Struct_Name_Entry {
-	SIMPLEQ_ENTRY(Struct_Name_Entry) link;
+	STAILQ_ENTRY(Struct_Name_Entry)	link;
 	char	name[1];
 } Name_Entry;
 
@@ -117,6 +113,7 @@ typedef struct Struct_Ver_Entry {
 
 /* Ver_Entry.flags */
 #define VER_INFO_HIDDEN	0x01
+
 
 #define RTLD_MAX_ENTRY 10
 #define RTLD_MAX_LIBRARY 4
@@ -143,8 +140,6 @@ typedef struct _rtld_library_xform_t {
 
 #define RTLD_MAGIC	0xd550b87a
 #define RTLD_VERSION	1
-
-typedef void (*fptr_t)(void);
 
 typedef struct Struct_Obj_Entry {
 	Elf32_Word      magic;		/* Magic number (sanity check) */
@@ -193,8 +188,8 @@ typedef struct Struct_Obj_Entry {
 	Search_Path    *rpaths;		/* Search path specified in object */
 	Needed_Entry   *needed;		/* Shared objects needed by this (%) */
 
-	fptr_t		init;		/* Initialization function to call */
-	fptr_t		fini;		/* Termination function to call */
+	void            (*init)(void); 	/* Initialization function to call */
+	void            (*fini)(void);	/* Termination function to call */
 
 	/*
 	 * BACKWARDS COMPAT Entry points for dlopen() and friends.
@@ -219,9 +214,9 @@ typedef struct Struct_Obj_Entry {
 			mainref:1,	/* True if on _rtld_list_main */
 			globalref:1,	/* True if on _rtld_list_global */
 			init_done:1,	/* True if .init has been added */
-			init_called:1,	/* True if .init function has been
+			init_called:1,	/* True if .init function has been 
 					 * called */
-			fini_called:1,	/* True if .fini function has been
+			fini_called:1,	/* True if .fini function has been 
 					 * called */
 			z_now:1,	/* True if object's symbols should be
 					   bound immediately */
@@ -255,8 +250,8 @@ typedef struct Struct_Obj_Entry {
 	uint8_t         nbuckets_s1;
 	uint8_t         nbuckets_s2;
 	size_t		pathlen;	/* Pathname length */
-	SIMPLEQ_HEAD(, Struct_Name_Entry) names; /* List of names for this
-						  * object we know about. */
+	STAILQ_HEAD(, Struct_Name_Entry) names;	/* List of names for this object we
+						   know about. */
 
 #ifdef __powerpc__
 	Elf_Addr       *gotptr;		/* GOT table (secure-plt only) */
@@ -282,16 +277,6 @@ typedef struct Struct_Obj_Entry {
 	Ver_Entry	*vertab;	/* Versions required/defined by this
 					 * object */
 	int		vertabnum;	/* Number of entries in vertab */
-
-	/* init_array/fini_array */
-	fptr_t		*init_array;	/* start of init array */
-	size_t		init_arraysz;	/* # of entries in it */
-	fptr_t		*fini_array;	/* start of fini array */
-	size_t		fini_arraysz;	/* # of entries in it */
-#ifdef __ARM_EABI__
-	void		*exidx_start;
-	size_t		exidx_sz;
-#endif
 } Obj_Entry;
 
 typedef struct Struct_DoneList {
@@ -346,21 +331,12 @@ __dso_public int dlinfo(void *, int, void *);
 __dso_public int dl_iterate_phdr(int (*)(struct dl_phdr_info *, size_t, void *),
     void *);
 
-__dso_public void *_dlauxinfo(void) __pure;
-
-#ifdef __ARM_EABI__
-/*
- * This is used by libgcc to find the start and length of the exception table
- * associated with a PC.
- */
-__dso_public _Unwind_Ptr __gnu_Unwind_Find_exidx(_Unwind_Ptr, int *);
-#endif
-
 /* These aren't exported */
-void _rtld_error(const char *, ...) __printflike(1,2);
-void _rtld_die(void) __dead;
+void _rtld_error(const char *, ...)
+     __attribute__((__format__(__printf__,1,2)));
+void _rtld_die(void) __attribute__((__noreturn__));
 void *_rtld_objmain_sym(const char *);
-__dso_public void _rtld_debug_state(void) __noinline;
+__dso_public void _rtld_debug_state(void);
 void _rtld_linkmap_add(Obj_Entry *);
 void _rtld_linkmap_delete(Obj_Entry *);
 void _rtld_objlist_push_head(Objlist *, Obj_Entry *);
@@ -410,7 +386,7 @@ const Elf_Sym *_rtld_symlook_obj(const char *, unsigned long,
     const Obj_Entry *, u_int, const Ver_Entry *);
 const Elf_Sym *_rtld_find_symdef(unsigned long, const Obj_Entry *,
     const Obj_Entry **, u_int);
-const Elf_Sym *_rtld_find_plt_symdef(unsigned long, const Obj_Entry *,
+const Elf_Sym *_rtld_find_plt_symdef(unsigned long, const Obj_Entry *, 
     const Obj_Entry **, bool);
 
 const Elf_Sym *_rtld_symlook_list(const char *, unsigned long,
@@ -425,7 +401,6 @@ void _rtld_combreloc_reset(const Obj_Entry *);
 #endif
 
 /* symver.c */
-void _rtld_object_add_name(Obj_Entry *, const char *);
 int _rtld_object_match_name(const Obj_Entry *, const char *);
 int _rtld_verify_object_versions(Obj_Entry *);
 
@@ -472,7 +447,7 @@ Obj_Entry *_rtld_obj_new(void);
 
 /* function descriptors */
 #ifdef __HAVE_FUNCTION_DESCRIPTORS
-Elf_Addr _rtld_function_descriptor_alloc(const Obj_Entry *,
+Elf_Addr _rtld_function_descriptor_alloc(const Obj_Entry *, 
     const Elf_Sym *, Elf_Addr);
 const void *_rtld_function_descriptor_function(const void *);
 #endif /* __HAVE_FUNCTION_DESCRIPTORS */

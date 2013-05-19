@@ -1,4 +1,4 @@
-/*	$NetBSD: component.c,v 1.3 2013/04/04 01:38:47 pooka Exp $	*/
+/*	$NetBSD: component.c,v 1.1 2010/11/22 21:20:32 pooka Exp $	*/
 
 /*
  * Copyright (c) 2010 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: component.c,v 1.3 2013/04/04 01:38:47 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: component.c,v 1.1 2010/11/22 21:20:32 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -55,14 +55,7 @@ RUMP_COMPONENT(RUMP_COMPONENT_DEV)
 	bmaj = cmaj = NODEVMAJOR;
 	if ((error = devsw_attach("md", &md_bdevsw, &bmaj,
 	    &md_cdevsw, &cmaj)) != 0)
-		panic("md devsw attach failed: %d", error);
-
-        if ((error = rump_vfs_makedevnodes(S_IFBLK, "/dev/md0", 'a',
-            bmaj, 0, 7)) != 0)
-                panic("cannot create cooked md dev nodes: %d", error);
-        if ((error = rump_vfs_makedevnodes(S_IFCHR, "/dev/rmd0", 'a',
-            cmaj, 0, 7)) != 0)
-                panic("cannot create raw md dev nodes: %d", error);
+		panic("audio devsw attach failed: %d", error);
 
 	rump_pdev_add(mdattach, 0);
 }

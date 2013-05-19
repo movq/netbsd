@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: rc.shutdown,v 1.9 2012/06/25 07:22:45 jnemeth Exp $
+# $NetBSD: rc.shutdown,v 1.8.60.1 2012/07/02 21:20:52 jdc Exp $
 #
 # rc.shutdown --
 #	Run the scripts in /etc/rc.d with reverse rcorder.

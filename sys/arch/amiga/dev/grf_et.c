@@ -1,4 +1,4 @@
-/*	$NetBSD: grf_et.c,v 1.31 2012/11/08 18:04:56 rkujawa Exp $ */
+/*	$NetBSD: grf_et.c,v 1.29 2011/12/15 14:25:13 phx Exp $ */
 
 /*
  * Copyright (c) 1997 Klaus Burkert
@@ -37,7 +37,7 @@
 #include "opt_amigacons.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grf_et.c,v 1.31 2012/11/08 18:04:56 rkujawa Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grf_et.c,v 1.29 2011/12/15 14:25:13 phx Exp $");
 
 #include "grfet.h"
 #include "ite.h"
@@ -105,8 +105,8 @@ int	et_blank(struct grf_softc *gp, int *on);
 static int et_getControllerType(struct grf_softc *gp);
 static int et_getDACType(struct grf_softc *gp);
 
-int	grfetmatch(device_t, cfdata_t, void *);
-void	grfetattach(device_t, device_t, void *);
+int	grfetmatch(struct device *, struct cfdata *, void *);
+void	grfetattach(struct device *, struct device *, void *);
 int	grfetprint(void *, const char *);
 void	et_memset(volatile unsigned char *d, unsigned char c, int l);
 
@@ -180,18 +180,18 @@ static unsigned char et_imageptr[8 * 64], et_maskptr[8 * 64];
 static unsigned char et_sprred[2], et_sprgreen[2], et_sprblue[2];
 
 /* standard driver stuff */
-CFATTACH_DECL_NEW(grfet, sizeof(struct grf_softc),
+CFATTACH_DECL(grfet, sizeof(struct grf_softc),
     grfetmatch, grfetattach, NULL, NULL);
 
 static struct cfdata *cfdata;
 
 int
-grfetmatch(device_t parent, cfdata_t cf, void *aux)
+grfetmatch(struct device *pdp, struct cfdata *cfp, void *auxp)
 {
 	struct zbus_args *zap;
 	static int regprod, regprod2 = 0, fbprod;
 
-	zap = aux;
+	zap = auxp;
 
 #ifndef TSENGCONSOLE
 	if (amiga_realconfig == 0)
@@ -259,7 +259,7 @@ grfetmatch(device_t parent, cfdata_t cf, void *aux)
 
 #ifdef TSENGCONSOLE
 	if (amiga_realconfig == 0) {
-		cfdata = cf;
+		cfdata = cfp;
 	}
 #endif
 
@@ -268,15 +268,14 @@ grfetmatch(device_t parent, cfdata_t cf, void *aux)
 
 
 void
-grfetattach(device_t parent, device_t self, void *aux)
+grfetattach(struct device *pdp, struct device *dp, void *auxp)
 {
 	static struct grf_softc congrf;
-	static char attachflag = 0;
-	struct device temp;
 	struct zbus_args *zap;
 	struct grf_softc *gp;
+	static char attachflag = 0;
 
-	zap = aux;
+	zap = auxp;
 
 	printf("\n");
 
@@ -285,16 +284,12 @@ grfetattach(device_t parent, device_t self, void *aux)
 		return;
 
 	/* do all that messy console/grf stuff */
-	if (self == NULL) {
+	if (dp == NULL)
 		gp = &congrf;
-		gp->g_device = &temp;
-		temp.dv_private = gp;
-	} else {
-		gp = device_private(self);
-		gp->g_device = self;
-	}
+	else
+		gp = (struct grf_softc *) dp;
 
-	if (self != NULL && congrf.g_regkva != 0) {
+	if (dp != NULL && congrf.g_regkva != 0) {
 		/*
 		 * inited earlier, just copy (not device struct)
 		 */
@@ -325,7 +320,7 @@ grfetattach(device_t parent, device_t self, void *aux)
 	/*
 	 * attach grf (once)
 	 */
-	if (amiga_config_found(cfdata, gp->g_device, gp, grfetprint)) {
+	if (amiga_config_found(cfdata, &gp->g_device, gp, grfetprint)) {
 		attachflag = 1;
 		printf("grfet: %dMB ", et_fbsize / 0x100000);
 		switch (ettype) {
@@ -375,7 +370,7 @@ grfetattach(device_t parent, device_t self, void *aux)
 
 
 int
-grfetprint(void *aux, const char *pnp)
+grfetprint(void *auxp, const char *pnp)
 {
 	if (pnp)
 		aprint_normal("ite at %s: ", pnp);

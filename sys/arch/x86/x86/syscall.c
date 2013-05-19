@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.11 2012/07/10 21:18:07 dsl Exp $	*/
+/*	$NetBSD: syscall.c,v 1.9 2012/02/11 23:16:16 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000, 2009 The NetBSD Foundation, Inc.
@@ -30,13 +30,18 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.11 2012/07/10 21:18:07 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.9 2012/02/11 23:16:16 martin Exp $");
+
+#include "opt_sa.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/proc.h>
 #include <sys/signal.h>
+#include <sys/sa.h>
+#include <sys/savar.h>
 #include <sys/ktrace.h>
+#include <sys/mman.h>
 #include <sys/syscall.h>
 #include <sys/syscallvar.h>
 #include <sys/syscall_stats.h>
@@ -112,7 +117,7 @@ syscall(struct trapframe *frame)
 	struct proc *p;
 	struct lwp *l;
 	int error;
-	register_t code, rval[2];
+	register_t code, rval[2], rip_call;
 #ifdef __x86_64__
 	/* Verify that the syscall args will fit in the trapframe space */
 	CTASSERT(offsetof(struct trapframe, tf_arg9) >=
@@ -126,11 +131,24 @@ syscall(struct trapframe *frame)
 	p = l->l_proc;
 	LWP_CACHE_CREDS(l, p);
 
+	/*
+	 * The offset to adjust the PC by depends on whether we entered the
+	 * kernel through the trap or call gate.  We saved the instruction
+	 * size in tf_err on entry.
+	 */
+	rip_call = X86_TF_RIP(frame) - frame->tf_err;
+
 	code = X86_TF_RAX(frame) & (SYS_NSYSENT - 1);
 	callp = p->p_emul->e_sysent + code;
 
 	SYSCALL_COUNT(syscall_counts, code);
 	SYSCALL_TIME_SYS_ENTRY(l, syscall_times, code);
+
+#ifdef KERN_SA
+	if (__predict_false((l->l_savp)
+	    && (l->l_savp->savp_pflags & SAVP_FLAG_DELIVERING)))
+		l->l_savp->savp_pflags &= ~SAVP_FLAG_DELIVERING;
+#endif
 
 #ifdef __x86_64__
 	/*
@@ -173,12 +191,7 @@ syscall(struct trapframe *frame)
 	} else {
 		switch (error) {
 		case ERESTART:
-			/*
-			 * The offset to adjust the PC by depends on whether we
-			 * entered the kernel through the trap or call gate.
-			 * We saved the instruction size in tf_err on entry.
-			 */
-			X86_TF_RIP(frame) -= frame->tf_err;
+			X86_TF_RIP(frame) = rip_call;
 			break;
 		case EJUSTRETURN:
 			/* nothing to do */
@@ -212,6 +225,13 @@ syscall_vm86(struct trapframe *frame)
 
 	l = curlwp;
 	p = l->l_proc;
+
+#ifdef KERN_SA
+	/* While this is probably not needed, it's probably better to include than not */
+	if (__predict_false((l->l_savp)
+	    && (l->l_savp->savp_pflags & SAVP_FLAG_DELIVERING)))
+		l->l_savp->savp_pflags &= ~SAVP_FLAG_DELIVERING;
+#endif
 
 	(*p->p_emul->e_trapsignal)(l, &ksi);
 	userret(l);

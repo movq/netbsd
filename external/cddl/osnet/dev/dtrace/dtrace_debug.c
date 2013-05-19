@@ -1,4 +1,4 @@
-/*	$NetBSD: dtrace_debug.c,v 1.6 2013/04/14 16:39:59 christos Exp $	*/
+/*	$NetBSD: dtrace_debug.c,v 1.4 2011/08/31 21:57:16 christos Exp $	*/
 
 /*-
  * Copyright (C) 2008 John Birrell <jb@freebsd.org>.
@@ -78,18 +78,6 @@ dtrace_cmpset_long(volatile u_long *dst, u_long exp, u_long src)
 
 	return (res);
 }
-#elif defined(__arm__)
-static __inline int
-dtrace_cmpset_long(volatile u_long *dst, u_long exp, u_long src)
-{
-	u_char res;
-	if (*dst == src) {
-		res = *dst;
-		*dst = src;
-		return res;
-	}
-	return exp;
-}
 #endif
 
 #define DTRACE_DEBUG_BUFR_SIZE	(32 * 1024)
@@ -106,17 +94,17 @@ static char dtrace_debug_bufr[DTRACE_DEBUG_BUFR_SIZE];
 static volatile u_long	dtrace_debug_flag[MAXCPUS];
 
 static void
-dtrace_debug_lock(int cpu)
+dtrace_debug_lock(int xcpu)
 {
-	while (dtrace_cmpset_long(&dtrace_debug_flag[cpu], 0, 1) == 0)
+	while (dtrace_cmpset_long(&dtrace_debug_flag[xcpu], 0, 1) == 0)
 		/* Loop until the lock is obtained. */
 		;
 }
 
 static void
-dtrace_debug_unlock(int cpu)
+dtrace_debug_unlock(int xcpu)
 {
-	dtrace_debug_flag[cpu] = 0;
+	dtrace_debug_flag[xcpu] = 0;
 }
 
 static void

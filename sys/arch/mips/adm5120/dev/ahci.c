@@ -1,4 +1,4 @@
-/*	$NetBSD: ahci.c,v 1.9 2012/10/27 17:18:01 chs Exp $	*/
+/*	$NetBSD: ahci.c,v 1.7 2011/07/01 18:38:49 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2007 Ruslan Ermilov and Vsevolod Lobko.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ahci.c,v 1.9 2012/10/27 17:18:01 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ahci.c,v 1.7 2011/07/01 18:38:49 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -239,10 +239,10 @@ struct ahci_pipe {
 	u_int32_t toggle;
 };
 
-static int	ahci_match(device_t, cfdata_t, void *);
+static int	ahci_match(device_t, struct cfdata *, void *);
 static void	ahci_attach(device_t, device_t, void *);
 
-CFATTACH_DECL_NEW(ahci, sizeof(struct ahci_softc),
+CFATTACH_DECL(ahci, sizeof(struct ahci_softc),
     ahci_match, ahci_attach, NULL, NULL);
 
 static int
@@ -460,7 +460,9 @@ ahci_poll_hub(void *arg)
 	xfer->actlen = 1;
 	xfer->status = USBD_NORMAL_COMPLETION;
 	s = splusb();
+	xfer->device->bus->intr_context++;
 	usb_transfer_complete(xfer);
+	xfer->device->bus->intr_context--;
 	splx(s);
 }
 
@@ -1287,7 +1289,9 @@ ahci_poll_device(void *arg)
 
 	xfer->status = USBD_NORMAL_COMPLETION;
 	s = splusb();
+	xfer->device->bus->intr_context++;
 	usb_transfer_complete(xfer);
+	xfer->device->bus->intr_context--;
 	splx(s);
 }
 

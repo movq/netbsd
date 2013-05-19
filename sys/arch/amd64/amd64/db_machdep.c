@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.c,v 1.4 2012/10/03 17:43:22 riastradh Exp $	*/
+/*	$NetBSD: db_machdep.c,v 1.1.16.2 2012/10/17 22:34:15 riz Exp $	*/
 
 /* 
  * Mach Operating System
@@ -26,7 +26,7 @@
  * rights to redistribute these changes.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: db_machdep.c,v 1.4 2012/10/03 17:43:22 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: db_machdep.c,v 1.1.16.2 2012/10/17 22:34:15 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -213,7 +213,8 @@ db_frame_info(long *frame, db_addr_t callpc, const char **namep,
 		if (!strcmp(name, "trap")) {
 			*is_trap = TRAP;
 			narg = 0;
-		} else if (!strcmp(name, "syscall")) {
+		} else if (!strcmp(name, "syscall_plain") ||
+		           !strcmp(name, "syscall_fancy")) {
 			*is_trap = SYSCALL;
 			narg = 0;
 		} else if (name[0] == 'X') {

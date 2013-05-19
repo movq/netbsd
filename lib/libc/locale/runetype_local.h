@@ -1,4 +1,4 @@
-/*	$NetBSD: runetype_local.h,v 1.13 2013/04/13 10:21:21 joerg Exp $	*/
+/*	$NetBSD: runetype_local.h,v 1.12 2010/06/20 02:23:15 tnozaki Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -42,8 +42,7 @@
 #include <sys/types.h>
 #include <stdio.h>
 
-#include "ctype_local.h"
-#include "runetype_file.h"
+#include "runetype_misc.h"
 
 #define _RUNE_ISCACHED(c)	((c)>=0 && (c)<_CTYPE_CACHE_SIZE)
 
@@ -124,13 +123,9 @@ typedef struct _RuneLocale {
 	_WCTransEntry			rl_wctrans[_WCTRANS_NINDEXES];
 	_WCTypeEntry			rl_wctype[_WCTYPE_NINDEXES];
 
-	const unsigned short		*rl_ctype_tab;
+	const unsigned char		*rl_ctype_tab;
 	const short			*rl_tolower_tab;
 	const short			*rl_toupper_tab;
-
-#ifdef __BUILD_LEGACY
-	const unsigned char		*rl_compat_bsdctype;
-#endif
 } _RuneLocale;
 
 /*

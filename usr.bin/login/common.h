@@ -1,4 +1,4 @@
-/*	$NetBSD: common.h,v 1.4 2012/05/19 00:02:44 christos Exp $	*/
+/*	$NetBSD: common.h,v 1.1.8.2 2012/05/19 17:32:46 riz Exp $	*/
 
 /*-
  * Copyright (c) 1980, 1987, 1988, 1991, 1993, 1994

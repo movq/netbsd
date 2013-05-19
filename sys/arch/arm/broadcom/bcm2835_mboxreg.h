@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_mboxreg.h,v 1.1 2012/08/20 07:45:24 skrll Exp $	*/
+/*	$NetBSD: bcm2835_mboxreg.h,v 1.1.6.2 2012/11/19 19:12:59 riz Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.

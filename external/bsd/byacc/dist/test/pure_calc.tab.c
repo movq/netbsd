@@ -1,4 +1,4 @@
-/*	$NetBSD: pure_calc.tab.c,v 1.1.1.4 2013/04/06 14:45:28 christos Exp $	*/
+/*	$NetBSD: pure_calc.tab.c,v 1.1.1.3 2011/09/10 21:22:03 christos Exp $	*/
 
 #ifndef lint
 static const char yysccsid[] = "@(#)yaccpar	1.9 (Berkeley) 02/21/93";
@@ -104,16 +104,7 @@ static const char yysccsid[] = "@(#)yaccpar	1.9 (Berkeley) 02/21/93";
 int regs[26];
 int base;
 
-#ifdef YYBISON
-#define YYSTYPE int
-#define YYLEX_PARAM &yylval
-#define YYLEX_DECL() yylex(YYSTYPE *yylval)
-#define YYERROR_DECL() yyerror(const char *s)
-int YYLEX_DECL();
-static void YYERROR_DECL();
-#endif
-
-#line 115 "pure_calc.tab.c"
+#line 106 "pure_calc.tab.c"
 
 #ifndef YYSTYPE
 typedef int YYSTYPE;
@@ -133,11 +124,7 @@ typedef int YYSTYPE;
 
 /* Parameters sent to lex. */
 #ifdef YYLEX_PARAM
-# ifdef YYLEX_PARAM_TYPE
-#  define YYLEX_DECL() yylex(YYSTYPE *yylval, YYLEX_PARAM_TYPE YYLEX_PARAM)
-# else
-#  define YYLEX_DECL() yylex(YYSTYPE *yylval, void * YYLEX_PARAM)
-# endif
+# define YYLEX_DECL() yylex(YYSTYPE *yylval, void *YYLEX_PARAM)
 # define YYLEX yylex(&yylval, YYLEX_PARAM)
 #else
 # define YYLEX_DECL() yylex(YYSTYPE *yylval)
@@ -145,12 +132,8 @@ typedef int YYSTYPE;
 #endif
 
 /* Parameters sent to yyerror. */
-#ifndef YYERROR_DECL
 #define YYERROR_DECL() yyerror(const char *s)
-#endif
-#ifndef YYERROR_CALL
 #define YYERROR_CALL(msg) yyerror(msg)
-#endif
 
 extern int YYPARSE_DECL();
 
@@ -306,11 +289,12 @@ typedef struct {
     YYSTYPE  *l_base;
     YYSTYPE  *l_mark;
 } YYSTACKDATA;
-#line 72 "pure_calc.y"
+#line 63 "pure_calc.y"
  /* start of programs */
 
 #ifdef YYBYACC
-static int YYLEX_DECL();
+extern int YYLEX_DECL();
+static void YYERROR_DECL();
 #endif
 
 int
@@ -323,13 +307,13 @@ main (void)
 }
 
 static void
-YYERROR_DECL()
+yyerror(const char *s)
 {
     fprintf(stderr, "%s\n", s);
 }
 
 int
-YYLEX_DECL()
+yylex(YYSTYPE *value)
 {
 	/* lexical analysis routine */
 	/* returns LETTER for a lower case letter, yylval = 0 through 25 */
@@ -343,16 +327,16 @@ YYLEX_DECL()
     /* c is now nonblank */
 
     if( islower( c )) {
-	*yylval = c - 'a';
+	*value = c - 'a';
 	return ( LETTER );
     }
     if( isdigit( c )) {
-	*yylval = c - '0';
+	*value = c - '0';
 	return ( DIGIT );
     }
     return( c );
 }
-#line 354 "pure_calc.tab.c"
+#line 338 "pure_calc.tab.c"
 
 #if YYDEBUG
 #include <stdio.h>		/* needed for printf */
@@ -376,7 +360,7 @@ static int yygrowstack(YYSTACKDATA *data)
     else if ((newsize *= 2) > YYMAXDEPTH)
         newsize = YYMAXDEPTH;
 
-    i = (int) (data->s_mark - data->s_base);
+    i = data->s_mark - data->s_base;
     newss = (short *)realloc(data->s_base, newsize * sizeof(*newss));
     if (newss == 0)
         return -1;
@@ -566,66 +550,66 @@ yyreduce:
     switch (yyn)
     {
 case 3:
-#line 34 "pure_calc.y"
+#line 25 "pure_calc.y"
 	{  yyerrok ; }
 break;
 case 4:
-#line 38 "pure_calc.y"
+#line 29 "pure_calc.y"
 	{  printf("%d\n",yystack.l_mark[0]);}
 break;
 case 5:
-#line 40 "pure_calc.y"
+#line 31 "pure_calc.y"
 	{  regs[yystack.l_mark[-2]] = yystack.l_mark[0]; }
 break;
 case 6:
-#line 44 "pure_calc.y"
+#line 35 "pure_calc.y"
 	{  yyval = yystack.l_mark[-1]; }
 break;
 case 7:
-#line 46 "pure_calc.y"
+#line 37 "pure_calc.y"
 	{  yyval = yystack.l_mark[-2] + yystack.l_mark[0]; }
 break;
 case 8:
-#line 48 "pure_calc.y"
+#line 39 "pure_calc.y"
 	{  yyval = yystack.l_mark[-2] - yystack.l_mark[0]; }
 break;
 case 9:
-#line 50 "pure_calc.y"
+#line 41 "pure_calc.y"
 	{  yyval = yystack.l_mark[-2] * yystack.l_mark[0]; }
 break;
 case 10:
-#line 52 "pure_calc.y"
+#line 43 "pure_calc.y"
 	{  yyval = yystack.l_mark[-2] / yystack.l_mark[0]; }
 break;
 case 11:
-#line 54 "pure_calc.y"
+#line 45 "pure_calc.y"
 	{  yyval = yystack.l_mark[-2] % yystack.l_mark[0]; }
 break;
 case 12:
-#line 56 "pure_calc.y"
+#line 47 "pure_calc.y"
 	{  yyval = yystack.l_mark[-2] & yystack.l_mark[0]; }
 break;
 case 13:
-#line 58 "pure_calc.y"
+#line 49 "pure_calc.y"
 	{  yyval = yystack.l_mark[-2] | yystack.l_mark[0]; }
 break;
 case 14:
-#line 60 "pure_calc.y"
+#line 51 "pure_calc.y"
 	{  yyval = - yystack.l_mark[0]; }
 break;
 case 15:
-#line 62 "pure_calc.y"
+#line 53 "pure_calc.y"
 	{  yyval = regs[yystack.l_mark[0]]; }
 break;
 case 17:
-#line 67 "pure_calc.y"
+#line 58 "pure_calc.y"
 	{  yyval = yystack.l_mark[0]; base = (yystack.l_mark[0]==0) ? 8 : 10; }
 break;
 case 18:
-#line 69 "pure_calc.y"
+#line 60 "pure_calc.y"
 	{  yyval = base * yystack.l_mark[-1] + yystack.l_mark[0]; }
 break;
-#line 627 "pure_calc.tab.c"
+#line 611 "pure_calc.tab.c"
     }
     yystack.s_mark -= yym;
     yystate = *yystack.s_mark;

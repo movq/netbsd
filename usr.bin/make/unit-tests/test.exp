@@ -43,14 +43,6 @@ UT_OK=good
 UT_OKDIR=unit-tests
 UT_TEST=export-all
 UT_ZOO=hoopie
-make:
-UT_TEST=export-env
-UT_ENV=not-exported
-UT_EXP=not-exported
-env:
-UT_TEST=export-env
-UT_ENV=exported
-UT_EXP=exported
 At first, I am
 happy
 and now: sad
@@ -88,24 +80,6 @@ make: Graph cycles through `cycle.2.98'
 make: Graph cycles through `cycle.2.97'
 cycle.1.99
 cycle.1.99
-x=one
-x="two and three"
-x=four
-x="five"
-x=-I/this
-x=-I"This or that"
-x=-Ithat
-x="-DTHIS=\"this and that\""
-cfl=-I/this -I"This or that" -Ithat "-DTHIS=\"this and that\""
-a=one b="two and three"
-a=four b="five"
-a=ONE b="TWO AND THREE"
-a=FOUR b="FIVE"
-We expect an error next:
-make: "forloop" line 38: Wrong number of words (9) in .for substitution list with 2 vars
-make: Fatal errors encountered -- cannot continue
-make: stopped in unit-tests
-OK
 .for with :S;... OK
 b2af338b
 3360ac65
@@ -318,9 +292,6 @@ LIST:tw:C/ /,/g="one two three four five six"
 LIST:tw:C/ /,/1g="one two three four five six"
 LIST:tw:tW:C/ /,/="one,two three four five six"
 LIST:tW:tw:C/ /,/="one two three four five six"
-Making the.c
-Making the.h
-Making the.o from the.h the.c
 .TARGET="phony" .PREFIX="phony" .IMPSRC=""
 .TARGET="all" .PREFIX="all" .IMPSRC=""
 .TARGET="ok" .PREFIX="ok" .IMPSRC=""

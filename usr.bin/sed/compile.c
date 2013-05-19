@@ -1,4 +1,4 @@
-/*	$NetBSD: compile.c,v 1.38 2012/12/14 08:16:51 msaitoh Exp $	*/
+/*	$NetBSD: compile.c,v 1.37.8.1 2012/12/25 21:10:35 snj Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -76,7 +76,7 @@
 #if 0
 static char sccsid[] = "@(#)compile.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: compile.c,v 1.38 2012/12/14 08:16:51 msaitoh Exp $");
+__RCSID("$NetBSD: compile.c,v 1.37.8.1 2012/12/25 21:10:35 snj Exp $");
 #endif
 #endif /* not lint */
 

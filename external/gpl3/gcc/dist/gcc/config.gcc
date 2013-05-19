@@ -722,33 +722,10 @@ arm*-*-freebsd*)
 	tmake_file="${tmake_file} arm/t-arm arm/t-strongarm-elf"
 	;;
 arm*-*-netbsdelf*)
-	tm_file="dbxelf.h elfos.h netbsd.h netbsd-elf.h arm/elf.h arm/aout.h arm/arm.h"
+	tm_file="dbxelf.h elfos.h netbsd.h netbsd-elf.h arm/elf.h arm/aout.h arm/arm.h arm/netbsd-elf.h"
+	tmake_file="${tmake_file} arm/t-arm arm/t-netbsd"
 	case ${target} in
-	armeb*) tm_defines="${tm_defines} TARGET_BIG_ENDIAN_DEFAULT=1" ;;
-	esac
-	tmake_file="${tmake_file} arm/t-arm"
-	case ${target} in
-	arm*-*-netbsdelf-*eabi*)
-	    tm_file="$tm_file arm/bpabi.h arm/netbsd-elf.h arm/netbsd-eabi.h"
-	    #tmake_file="$tmake_file arm/t-arm-elf"
-	    #tmake_file="$tmake_file arm/t-bpabi"
-	    tmake_file="$tmake_file arm/t-netbsd-eabi"
-  	    # The BPABI long long divmod functions return a 128-bit value in
-	    # registers r0-r3.  Correctly modeling that requires the use of
-	    # TImode.
-	    need_64bit_hwint=yes
-	    # The EABI requires the use of __cxa_atexit.
-	    default_use_cxa_atexit=yes
-	    ;;
-	*)
-	    tm_file="$tm_file arm/netbsd-elf.h"
-	    tmake_file="$tmake_file arm/t-netbsd"
-	    ;;
-	esac
-	case ${target} in
-	arm*-*-netbsdelf-*eabihf*)
-	    tm_defines="${tm_defines} TARGET_DEFAULT_FLOAT_ABI=ARM_FLOAT_ABI_HARD"
-	    ;;
+	armeb*) tm_defines="${tm_defines} TARGET_ENDIAN_DEFAULT=MASK_BIG_END" ;;
 	esac
 	;;
 arm*-*-netbsd*)
@@ -760,7 +737,7 @@ arm*-*-netbsd*)
 arm*-*-linux*)			# ARM GNU/Linux with ELF
 	tm_file="dbxelf.h elfos.h linux.h glibc-stdint.h arm/elf.h arm/linux-gas.h arm/linux-elf.h"
 	case $target in
-	arm*b-*-linux*)
+	arm*b-*)
 		tm_defines="${tm_defines} TARGET_BIG_ENDIAN_DEFAULT=1"
 		;;
 	esac
@@ -860,7 +837,7 @@ avr-*-rtems*)
 	extra_objs="avr-devices.o"
 	;;
 avr-*-*)
-	tm_file="avr/avr.h dbxelf.h avr/avr-stdint.h"
+	tm_file="avr/avr.h dbxelf.h newlib-stdint.h"
 	use_gcc_stdint=wrap
 	extra_gcc_objs="driver-avr.o avr-devices.o"
 	extra_objs="avr-devices.o"
@@ -1509,9 +1486,6 @@ ia64*-*-netbsd*)
 	tm_file="${tm_file} dbxelf.h elfos.h netbsd.h netbsd-elf.h ia64/sysv4.h ia64/netbsd.h"
 	target_cpu_default="MASK_GNU_AS|MASK_GNU_LD"
 	tmake_file="${tmake_file} ia64/t-ia64"
-	if test x$with_system_libunwind != xyes ; then
-		tmake_file="${tmake_file} t-libunwind-elf ia64/t-glibc-libunwind"
-	fi
 	extra_parts="crtbegin.o crtend.o crtbeginS.o crtendS.o crtfastmath.o"
 	;;
 ia64*-*-freebsd*)
@@ -2498,7 +2472,7 @@ sparc*-*-solaris2*)
 	tm_file="${tm_file} sparc/sol2.h"
 	case ${target} in
 	    sparc64-*-* | sparcv9-*-*)
-		tm_file="sparc/sol2-64.h ${tm_file}"
+		tm_file="${tm_file} sparc/sol2-64.h"
 		;;
 	    *)
 		test x$with_cpu != x || with_cpu=v9

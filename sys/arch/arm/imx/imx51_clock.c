@@ -1,4 +1,4 @@
-/*	$NetBSD: imx51_clock.c,v 1.4 2012/10/27 17:17:39 chs Exp $ */
+/*	$NetBSD: imx51_clock.c,v 1.2 2011/07/01 20:27:50 dyoung Exp $ */
 /*
  * Copyright (c) 2009  Genetec corp.  All rights reserved.
  * Written by Hashimoto Kenichi for Genetec corp.
@@ -25,7 +25,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imx51_clock.c,v 1.4 2012/10/27 17:17:39 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imx51_clock.c,v 1.2 2011/07/01 20:27:50 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -48,7 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: imx51_clock.c,v 1.4 2012/10/27 17:17:39 chs Exp $");
 #include <arm/imx/imx51reg.h>
 #include <arm/imx/imx51var.h>
 #include <arm/imx/imxepitreg.h>
-#include <arm/imx/imx51_ccmvar.h>
+//#include <arm/imx/imx51_ccmvar.h> notyet
 #include <arm/imx/imxclockvar.h>
 
 #include "imxccm.h"	/* if CCM driver is configured into the kernel */
@@ -90,6 +90,8 @@ imxclock_attach(device_t parent, device_t self, void *aux)
 	sc->sc_iot = aa->aa_iot;
 	sc->sc_intr = aa->aa_irq;
 
+	KASSERT((sc->sc_intr == IRQ_EPIT1) || (sc->sc_intr == IRQ_EPIT2));
+
 	switch ( aa->aa_addr ) {
 	case EPIT1_BASE:
 		epit1_sc = sc;
@@ -98,14 +100,12 @@ imxclock_attach(device_t parent, device_t self, void *aux)
 		epit2_sc = sc;
 		break;
 	default:
-		panic("%s: invalid address %p", device_xname(self), (void *)aa->aa_addr);
+		panic("%s: invalid address %p", self->dv_xname, (void *)aa->aa_addr);
 		break;
 	}
 
 	if (bus_space_map(aa->aa_iot, aa->aa_addr, aa->aa_size, 0, &sc->sc_ioh))
 		panic("%s: Cannot map registers", device_xname(self));
-
-	sc->sc_clksrc = EPITCR_CLKSRC_IPG;
 }
 
 int
@@ -113,7 +113,11 @@ imxclock_get_timerfreq(struct imxclock_softc *sc)
 {
 	unsigned int ipg_freq;
 #if NIMXCCM > 0
-	ipg_freq = imx51_get_clock(IMX51CLK_IPG_CLK_ROOT);
+	struct imx51_clocks clk;
+
+	imx51_get_clocks(&clk);
+
+	ipg_freq = clk.ipg_clk;
 #else
 #ifndef	IMX51_IPGCLK_FREQ
 #error	IMX51_IPGCLK_FREQ need to be defined.

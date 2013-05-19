@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.251 2013/04/16 06:57:06 jdc Exp $ */
+/*	$NetBSD: autoconf.c,v 1.242.8.2 2012/08/08 15:51:11 martin Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.251 2013/04/16 06:57:06 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.242.8.2 2012/08/08 15:51:11 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -101,9 +101,6 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.251 2013/04/16 06:57:06 jdc Exp $");
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcivar.h>
 #include <sparc/sparc/msiiepreg.h>
-#ifdef MSIIEP
-#include <sparc/sparc/pci_fixup.h>
-#endif
 
 #ifdef DDB
 #include <machine/db_machdep.h>
@@ -161,7 +158,7 @@ int autoconf_debug = 0;
  * device names with our internal names.
  */
 int
-matchbyname(device_t parent, cfdata_t cf, void *aux)
+matchbyname(struct device *parent, struct cfdata *cf, void *aux)
 {
 
 	printf("%s: WARNING: matchbyname\n", cf->cf_name);
@@ -269,8 +266,6 @@ void
 bootstrap(void)
 {
 	extern uint8_t u0[];
-	extern struct consdev consdev_prom;
-
 #if NKSYMS || defined(DDB) || defined(MODULAR)
 	struct btinfo_symtab *bi_sym;
 #else
@@ -278,7 +273,6 @@ bootstrap(void)
 #endif
 	struct btinfo_boothowto *bi_howto;
 
-	cn_tab = &consdev_prom;
 	prom_init();
 
 	/* Find the number of CPUs as early as possible */
@@ -363,6 +357,7 @@ bootstrap(void)
 
 	if ((bi_howto = lookup_bootinfo(BTINFO_BOOTHOWTO)) != NULL) {
 		boothowto = bi_howto->boothowto;
+printf("initialized boothowt from bootloader: %x\n", boothowto);
 	}
 }
 
@@ -1093,90 +1088,84 @@ mainbus_attach(device_t parent, device_t dev, void *aux)
 extern struct sparc_bus_dma_tag mainbus_dma_tag;
 extern struct sparc_bus_space_tag mainbus_space_tag;
 
-	struct boot_special {
-		const char *const dev;
-#define BS_EARLY	1	/* attach device early */
-#define	BS_IGNORE	2	/* ignore root device */
-#define	BS_OPTIONAL	4	/* device not alwas present */
-		unsigned int flags;
-	};
-
 	struct mainbus_attach_args ma;
 	char namebuf[32];
 #if defined(SUN4C) || defined(SUN4M) || defined(SUN4D)
-	const char *sp = NULL;
+	const char *const *ssp, *sp = NULL;
 	int node0, node;
-	const struct boot_special *openboot_special, *ssp;
+	const char *const *openboot_special;
 #endif
 
 #if defined(SUN4C)
-	static const struct boot_special openboot_special4c[] = {
-		/* find these first */
-		{ "memory-error", BS_EARLY },
-			/* as early as convenient, in case of error */
-		{ "eeprom", BS_EARLY },
-		{ "counter-timer", BS_EARLY },
-		{ "auxiliary-io", BS_EARLY },
+	static const char *const openboot_special4c[] = {
+		/* find these first (end with empty string) */
+		"memory-error",	/* as early as convenient, in case of error */
+		"eeprom",
+		"counter-timer",
+		"auxiliary-io",
+		"",
 
-		/* ignore these */
-		{ "aliases", BS_IGNORE },
-		{ "interrupt-enable", BS_IGNORE },
-		{ "memory", BS_IGNORE },
-		{ "openprom", BS_IGNORE },
-		{ "options", BS_IGNORE },
-		{ "packages", BS_IGNORE },
-		{ "virtual-memory", BS_IGNORE },
-
-		/* sentinel */
-		{ NULL, 0 }
+		/* ignore these (end with NULL) */
+		"aliases",
+		"interrupt-enable",
+		"memory",
+		"openprom",
+		"options",
+		"packages",
+		"virtual-memory",
+		NULL
 	};
 #else
 #define openboot_special4c	((void *)0)
 #endif
 #if defined(SUN4M)
-	static const struct boot_special openboot_special4m[] = {
+	static const char *const openboot_special4m[] = {
 		/* find these first */
-		{ "SUNW,sx", BS_EARLY|BS_OPTIONAL },
-		{ "obio", BS_EARLY|BS_OPTIONAL },
-				/* smart enough to get eeprom/etc mapped */
-		{ "pci", BS_EARLY|BS_OPTIONAL },	/* ms-IIep */
+#if !defined(MSIIEP)
+		"obio",		/* smart enough to get eeprom/etc mapped */
+#else
+		"pci",		/* ms-IIep */
+#endif
+		"",
 
+		/* ignore these (end with NULL) */
 		/*
 		 * These are _root_ devices to ignore. Others must be handled
 		 * elsewhere.
 		 */
-		{ "virtual-memory", BS_IGNORE },
-		{ "aliases", BS_IGNORE },
-		{ "chosen", BS_IGNORE },	/* OpenFirmware */
-		{ "memory", BS_IGNORE },
-		{ "openprom", BS_IGNORE },
-		{ "options", BS_IGNORE },
-		{ "packages", BS_IGNORE },
-		{ "udp", BS_IGNORE },		/* OFW in Krups */
+		"SUNW,sx",		/* XXX: no driver for SX yet */
+		"virtual-memory",
+		"aliases",
+		"chosen",		/* OpenFirmware */
+		"memory",
+		"openprom",
+		"options",
+		"packages",
+		"udp",			/* OFW in Krups */
 		/* we also skip any nodes with device_type == "cpu" */
-
-		{ NULL, 0 }
+		NULL
 	};
 #else
 #define openboot_special4m	((void *)0)
 #endif
 #if defined(SUN4D)
-	static const struct boot_special openboot_special4d[] = {
+	static const char *const openboot_special4d[] = {
+		"",
+
+		/* ignore these (end with NULL) */
 		/*
 		 * These are _root_ devices to ignore. Others must be handled
 		 * elsewhere.
 		 */
-		{ "mem-unit", BS_IGNORE },
-			/* XXX might need this for memory errors */
-		{ "boards", BS_IGNORE },
-		{ "openprom", BS_IGNORE },
-		{ "virtual-memory", BS_IGNORE },
-		{ "memory", BS_IGNORE },
-		{ "aliases", BS_IGNORE },
-		{ "options", BS_IGNORE },
-		{ "packages", BS_IGNORE },
-
-		{ NULL, 0 }
+		"mem-unit",	/* XXX might need this for memory errors */
+		"boards",
+		"openprom",
+		"virtual-memory",
+		"memory",
+		"aliases",
+		"options",
+		"packages",
+		NULL
 	};
 #else
 #define	openboot_special4d	((void *)0)
@@ -1290,12 +1279,10 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 		config_found(dev, (void *)&ma, mbprint);
 	}
 
-	for (ssp = openboot_special; (sp = ssp->dev) != NULL; ssp++) {
+	for (ssp = openboot_special; *(sp = *ssp) != 0; ssp++) {
 		struct openprom_addr romreg;
 
-		if (!(ssp->flags & BS_EARLY)) continue;
 		if ((node = findnode(node0, sp)) == 0) {
-			if (ssp->flags & BS_OPTIONAL) continue;
 			printf("could not find %s in OPENPROM\n", sp);
 			panic(sp);
 		}
@@ -1341,15 +1328,11 @@ extern struct sparc_bus_space_tag mainbus_space_tag;
 #endif
 		cp = prom_getpropstringA(node, "name", namebuf, sizeof namebuf);
 		DPRINTF(ACDB_PROBE, (" name %s\n", namebuf));
-		for (ssp = openboot_special; (sp = ssp->dev) != NULL; ssp++) {
-			if (!(ssp->flags & (BS_EARLY|BS_IGNORE))) continue;
+		for (ssp = openboot_special; (sp = *ssp) != NULL; ssp++)
 			if (strcmp(cp, sp) == 0)
 				break;
-		}
 		if (sp != NULL)
-			continue;
-			/* an "early" device already configured, or an
-			   ignored device */
+			continue; /* an "early" device already configured */
 
 		memset(&ma, 0, sizeof ma);
 		ma.ma_bustag = &mainbus_space_tag;
@@ -1515,11 +1498,11 @@ romgetcursoraddr(int **rowp, int **colp)
 #define BUSCLASS_PCIC		9
 #define BUSCLASS_PCI		10
 
-static int bus_class(device_t);
+static int bus_class(struct device *);
 static const char *bus_compatible(const char *);
-static int instance_match(device_t, void *, struct bootpath *);
-static void nail_bootdev(device_t, struct bootpath *);
-static void set_network_props(device_t, void *);
+static int instance_match(struct device *, void *, struct bootpath *);
+static void nail_bootdev(struct device *, struct bootpath *);
+static void set_network_props(struct device *, void *);
 
 static struct {
 	const char	*name;
@@ -1578,7 +1561,7 @@ bus_compatible(const char *bpname)
 }
 
 static int
-bus_class(device_t dev)
+bus_class(struct device *dev)
 {
 	int i, class;
 
@@ -1601,7 +1584,7 @@ bus_class(device_t dev)
 }
 
 static void
-set_network_props(device_t dev, void *aux)
+set_network_props(struct device *dev, void *aux)
 {
 	struct mainbus_attach_args *ma;
 	struct sbus_attach_args *sa;
@@ -1640,7 +1623,7 @@ set_network_props(device_t dev, void *aux)
 }
 
 int
-instance_match(device_t dev, void *aux, struct bootpath *bp)
+instance_match(struct device *dev, void *aux, struct bootpath *bp)
 {
 	struct mainbus_attach_args *ma;
 	struct sbus_attach_args *sa;
@@ -1738,12 +1721,12 @@ instance_match(device_t dev, void *aux, struct bootpath *bp)
 }
 
 void
-nail_bootdev(device_t dev, struct bootpath *bp)
+nail_bootdev(struct device *dev, struct bootpath *bp)
 {
 
 	if (bp->dev != NULL)
 		panic("device_register: already got a boot device: %s",
-			device_xname(bp->dev));
+			bp->dev->dv_xname);
 
 	/*
 	 * Mark this bootpath component by linking it to the matched
@@ -1759,23 +1742,12 @@ nail_bootdev(device_t dev, struct bootpath *bp)
 	bootpath_store(1, NULL);
 }
 
-/*
- * We use device_register() to:
- *   set device properties on PCI devices
- *   find the bootpath
- */
 void
-device_register(device_t dev, void *aux)
+device_register(struct device *dev, void *aux)
 {
 	struct bootpath *bp = bootpath_store(0, NULL);
 	const char *bpname;
 
-#ifdef MSIIEP
-	/* Check for PCI devices */
-	if (bus_class(device_parent(dev)) == BUSCLASS_PCI)
-		set_pci_props(dev);
-#endif
-		
 	/*
 	 * If device name does not match current bootpath component
 	 * then there's nothing interesting to consider.
@@ -1790,8 +1762,8 @@ device_register(device_t dev, void *aux)
 
 	DPRINTF(ACDB_BOOTDEV,
 	    ("\n%s: device_register: dvname %s(%s) bpname %s(%s)\n",
-	    device_xname(dev), device_cfdata(dev)->cf_name,
-	    device_xname(dev), bpname, bp->name));
+	    dev->dv_xname, device_cfdata(dev)->cf_name, dev->dv_xname,
+	    bpname, bp->name));
 
 	/* First, match by name */
 	if (!device_is_a(dev, bpname))
@@ -1819,7 +1791,7 @@ device_register(device_t dev, void *aux)
 			booted_device = bp->dev = dev;
 			bootpath_store(1, bp + 1);
 			DPRINTF(ACDB_BOOTDEV, ("\t-- found bus controller %s\n",
-			    device_xname(dev)));
+			    dev->dv_xname));
 			return;
 		}
 	} else if (device_is_a(dev, "le") ||
@@ -1835,7 +1807,7 @@ device_register(device_t dev, void *aux)
 		if (instance_match(dev, aux, bp) != 0) {
 			nail_bootdev(dev, bp);
 			DPRINTF(ACDB_BOOTDEV, ("\t-- found ethernet controller %s\n",
-			    device_xname(dev)));
+			    dev->dv_xname));
 			return;
 		}
 	} else if (device_is_a(dev, "sd") ||
@@ -1889,7 +1861,7 @@ device_register(device_t dev, void *aux)
 		    periph->periph_lun == lun) {
 			nail_bootdev(dev, bp);
 			DPRINTF(ACDB_BOOTDEV, ("\t-- found [cs]d disk %s\n",
-			    device_xname(dev)));
+			    dev->dv_xname));
 			return;
 		}
 #endif /* NSCSIBUS */
@@ -1900,7 +1872,7 @@ device_register(device_t dev, void *aux)
 		if (instance_match(dev, aux, bp) != 0) {
 			nail_bootdev(dev, bp);
 			DPRINTF(ACDB_BOOTDEV, ("\t-- found x[dy] disk %s\n",
-			    device_xname(dev)));
+			    dev->dv_xname));
 			return;
 		}
 
@@ -1914,7 +1886,7 @@ device_register(device_t dev, void *aux)
 		 */
 		nail_bootdev(dev, bp);
 		DPRINTF(ACDB_BOOTDEV, ("\t-- found floppy drive %s\n",
-		    device_xname(dev)));
+		    dev->dv_xname));
 		return;
 	} else {
 		/*

@@ -1,4 +1,4 @@
-/*	$NetBSD: parse.c,v 1.188 2013/03/22 16:07:59 sjg Exp $	*/
+/*	$NetBSD: parse.c,v 1.180 2011/11/06 19:46:56 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1993
@@ -69,14 +69,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: parse.c,v 1.188 2013/03/22 16:07:59 sjg Exp $";
+static char rcsid[] = "$NetBSD: parse.c,v 1.180 2011/11/06 19:46:56 christos Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)parse.c	8.3 (Berkeley) 3/19/94";
 #else
-__RCSID("$NetBSD: parse.c,v 1.188 2013/03/22 16:07:59 sjg Exp $");
+__RCSID("$NetBSD: parse.c,v 1.180 2011/11/06 19:46:56 christos Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -210,7 +210,6 @@ typedef enum {
     ExShell,	    /* .SHELL */
     Silent,	    /* .SILENT */
     SingleShell,    /* .SINGLESHELL */
-    Stale,	    /* .STALE */
     Suffixes,	    /* .SUFFIXES */
     Wait,	    /* .WAIT */
     Attribute	    /* Generic attribute */
@@ -334,7 +333,6 @@ static const struct {
 { ".SHELL", 	  ExShell,    	0 },
 { ".SILENT",	  Silent,   	OP_SILENT },
 { ".SINGLESHELL", SingleShell,	0 },
-{ ".STALE",	  Stale,	0 },
 { ".SUFFIXES",	  Suffixes, 	0 },
 { ".USE",   	  Attribute,   	OP_USE },
 { ".USEBEFORE",   Attribute,   	OP_USEBEFORE },
@@ -346,9 +344,9 @@ static const struct {
 
 static int ParseIsEscaped(const char *, const char *);
 static void ParseErrorInternal(const char *, size_t, int, const char *, ...)
-    MAKE_ATTR_PRINTFLIKE(4,5);
+     __attribute__((__format__(__printf__, 4, 5)));
 static void ParseVErrorInternal(FILE *, const char *, size_t, int, const char *, va_list)
-    MAKE_ATTR_PRINTFLIKE(5, 0);
+     __attribute__((__format__(__printf__, 5, 0)));
 static int ParseFindKeyword(const char *);
 static int ParseLinkSrc(void *, void *);
 static int ParseDoOp(void *, void *);
@@ -363,9 +361,6 @@ static void ParseDoInclude(char *);
 static void ParseSetParseFile(const char *);
 #ifdef SYSVINCLUDE
 static void ParseTraditionalInclude(char *);
-#endif
-#ifdef GMAKEEXPORT
-static void ParseGmakeExport(char *);
 #endif
 static int ParseEOF(void);
 static char *ParseReadLine(void);
@@ -907,8 +902,6 @@ ParseDoOp(void *gnp, void *opp)
 	gn->type |= op & ~OP_OPMASK;
 
 	cohort = Targ_FindNode(gn->name, TARG_NOHASH);
-	if (doing_depend)
-	    ParseMark(cohort);
 	/*
 	 * Make the cohort invisible as well to avoid duplicating it into
 	 * other variables. True, parents of this target won't tend to do
@@ -981,8 +974,6 @@ ParseDoSrc(int tOp, const char *src)
 		 */
 		snprintf(wait_src, sizeof wait_src, ".WAIT_%u", ++wait_number);
 		gn = Targ_FindNode(wait_src, TARG_NOHASH);
-		if (doing_depend)
-		    ParseMark(gn);
 		gn->type = OP_WAIT | OP_PHONY | OP_DEPENDS | OP_NOTMAIN;
 		Lst_ForEach(targets, ParseLinkSrc, gn);
 		return;
@@ -1014,8 +1005,6 @@ ParseDoSrc(int tOp, const char *src)
 	 * source and the current one.
 	 */
 	gn = Targ_FindNode(src, TARG_CREATE);
-	if (doing_depend)
-	    ParseMark(gn);
 	if (predecessor != NULL) {
 	    (void)Lst_AtEnd(predecessor->order_succ, gn);
 	    (void)Lst_AtEnd(gn->order_pred, predecessor);
@@ -1047,8 +1036,6 @@ ParseDoSrc(int tOp, const char *src)
 
 	/* Find/create the 'src' node and attach to all targets */
 	gn = Targ_FindNode(src, TARG_CREATE);
-	if (doing_depend)
-	    ParseMark(gn);
 	if (tOp) {
 	    gn->type |= tOp;
 	} else {
@@ -1294,7 +1281,6 @@ ParseDoDependency(char *line)
 		 *	    	    	apply the .DEFAULT commands.
 		 *	.PHONY		The list of targets
 		 *	.NOPATH		Don't search for file in the path
-		 *	.STALE
 		 *	.BEGIN
 		 *	.END
 		 *	.ERROR
@@ -1305,45 +1291,42 @@ ParseDoDependency(char *line)
 		 *  	.ORDER	    	Must set initial predecessor to NULL
 		 */
 		switch (specType) {
-		case ExPath:
-		    if (paths == NULL) {
-			paths = Lst_Init(FALSE);
-		    }
-		    (void)Lst_AtEnd(paths, dirSearchPath);
-		    break;
-		case Main:
-		    if (!Lst_IsEmpty(create)) {
-			specType = Not;
-		    }
-		    break;
-		case Begin:
-		case End:
-		case Stale:
-		case dotError:
-		case Interrupt:
-		    gn = Targ_FindNode(line, TARG_CREATE);
-		    if (doing_depend)
-			ParseMark(gn);
-		    gn->type |= OP_NOTMAIN|OP_SPECIAL;
-		    (void)Lst_AtEnd(targets, gn);
-		    break;
-		case Default:
-		    gn = Targ_NewGN(".DEFAULT");
-		    gn->type |= (OP_NOTMAIN|OP_TRANSFORM);
-		    (void)Lst_AtEnd(targets, gn);
-		    DEFAULT = gn;
-		    break;
-		case NotParallel:
-		    maxJobs = 1;
-		    break;
-		case SingleShell:
-		    compatMake = TRUE;
-		    break;
-		case Order:
-		    predecessor = NULL;
-		    break;
-		default:
-		    break;
+		    case ExPath:
+			if (paths == NULL) {
+			    paths = Lst_Init(FALSE);
+			}
+			(void)Lst_AtEnd(paths, dirSearchPath);
+			break;
+		    case Main:
+			if (!Lst_IsEmpty(create)) {
+			    specType = Not;
+			}
+			break;
+		    case Begin:
+		    case End:
+		    case dotError:
+		    case Interrupt:
+			gn = Targ_FindNode(line, TARG_CREATE);
+			gn->type |= OP_NOTMAIN|OP_SPECIAL;
+			(void)Lst_AtEnd(targets, gn);
+			break;
+		    case Default:
+			gn = Targ_NewGN(".DEFAULT");
+			gn->type |= (OP_NOTMAIN|OP_TRANSFORM);
+			(void)Lst_AtEnd(targets, gn);
+			DEFAULT = gn;
+			break;
+		    case NotParallel:
+			maxJobs = 1;
+			break;
+		    case SingleShell:
+			compatMake = TRUE;
+			break;
+		    case Order:
+			predecessor = NULL;
+			break;
+		    default:
+			break;
 		}
 	    } else if (strncmp(line, ".PATH", 5) == 0) {
 		/*
@@ -1402,8 +1385,6 @@ ParseDoDependency(char *line)
 		} else {
 		    gn = Suff_AddTransform(targName);
 		}
-		if (doing_depend)
-		    ParseMark(gn);
 
 		(void)Lst_AtEnd(targets, gn);
 	    }
@@ -1451,7 +1432,6 @@ ParseDoDependency(char *line)
 		Parse_Error(PARSE_WARNING, "Special and mundane targets don't mix. Mundane ones ignored");
 		break;
 	    case Default:
-	    case Stale:
 	    case Begin:
 	    case End:
 	    case dotError:
@@ -2422,55 +2402,6 @@ ParseTraditionalInclude(char *line)
 }
 #endif
 
-#ifdef GMAKEEXPORT
-/*-
- *---------------------------------------------------------------------
- * ParseGmakeExport  --
- *	Parse export <variable>=<value>
- *
- *	And set the environment with it.
- *
- * Results:
- *	None
- *
- * Side Effects:
- *	None
- *---------------------------------------------------------------------
- */
-static void
-ParseGmakeExport(char *line)
-{
-    char	  *variable = &line[6];
-    char	  *value;
-
-    if (DEBUG(PARSE)) {
-	    fprintf(debug_file, "ParseGmakeExport: %s\n", variable);
-    }
-
-    /*
-     * Skip over whitespace
-     */
-    while (isspace((unsigned char)*variable))
-	variable++;
-
-    for (value = variable; *value && *value != '='; value++)
-	continue;
-
-    if (*value != '=') {
-	Parse_Error(PARSE_FATAL,
-		     "Variable/Value missing from \"export\"");
-	return;
-    }
-    *value++ = '\0';			/* terminate variable */
-
-    /*
-     * Expand the value before putting it in the environment.
-     */
-    value = Var_Subst(NULL, value, VAR_CMD, FALSE);
-    setenv(variable, value, 1);
-}
-#endif
-
 /*-
  *---------------------------------------------------------------------
  * ParseEOF  --
@@ -2593,9 +2524,7 @@ ParseGetLine(int flags, int *length)
 	    }
 	    if (ch == '#' && comment == NULL) {
 		/* Remember first '#' for comment stripping */
-		/* Unless previous char was '[', as in modifier :[#] */
-		if (!(ptr > line && ptr[-1] == '['))
-		    comment = line_end;
+		comment = line_end;
 	    }
 	    ptr++;
 	    if (ch == '\n')
@@ -2917,17 +2846,6 @@ Parse_File(const char *name, int fd)
 		 * It's an S3/S5-style "include".
 		 */
 		ParseTraditionalInclude(line);
-		continue;
-	    }
-#endif
-#ifdef GMAKEEXPORT
-	    if (strncmp(line, "export", 6) == 0 &&
-		isspace((unsigned char) line[6]) &&
-		strchr(line, ':') == NULL) {
-		/*
-		 * It's a Gmake "export".
-		 */
-		ParseGmakeExport(line);
 		continue;
 	    }
 #endif

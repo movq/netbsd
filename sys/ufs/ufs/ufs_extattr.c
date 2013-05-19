@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_extattr.c,v 1.41 2012/12/08 13:42:36 manu Exp $	*/
+/*	$NetBSD: ufs_extattr.c,v 1.36.2.2 2012/09/13 22:35:44 riz Exp $	*/
 
 /*-
  * Copyright (c) 1999-2002 Robert N. M. Watson
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_extattr.c,v 1.41 2012/12/08 13:42:36 manu Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_extattr.c,v 1.36.2.2 2012/09/13 22:35:44 riz Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ffs.h"
@@ -106,58 +106,6 @@ static struct ufs_extattr_list_entry *ufs_extattr_find_attr(struct ufsmount *,
 static int	ufs_extattr_get_header(struct vnode *, 
 		    struct ufs_extattr_list_entry *, 
 		    struct ufs_extattr_header *, off_t *);
-
-/*
- * Convert a FreeBSD extended attribute and namespace to a consistent string
- * representation.
- *
- * The returned value, if not NULL, is guaranteed to be an allocated object
- * of its size as returned by strlen() + 1 and must be freed by the caller.
- */
-static char *
-from_freebsd_extattr(int attrnamespace, const char *attrname)
-{
-	const char *namespace;
-	char *attr;
-	size_t len;
-
-	if (attrnamespace == EXTATTR_NAMESPACE_SYSTEM)
-		namespace = "system";
-	else if (attrnamespace == EXTATTR_NAMESPACE_USER)
-		namespace = "user";
-	else
-		return NULL;
-
-	/* <namespace>.<attrname>\0 */
-	len = strlen(namespace) + 1 + strlen(attrname) + 1;
-
-	attr = kmem_alloc(len, KM_SLEEP);
-
-	snprintf(attr, len, "%s.%s", namespace, attrname);
-
-	return attr;
-}
-
-/*
- * Internal wrapper around a conversion-check-free sequence.
- */
-static int
-internal_extattr_check_cred(vnode_t *vp, int attrnamespace, const char *name,
-    kauth_cred_t cred, int access_mode)
-{
-	char *attr;
-	int error;
-
-	attr = from_freebsd_extattr(attrnamespace, name);
-	if (attr == NULL)
-		return EINVAL;
-
-	error = extattr_check_cred(vp, attr, cred, access_mode);
-
-	kmem_free(attr, strlen(attr) + 1);
-
-	return error;
-}
 
 /*
  * Per-FS attribute lock protecting attribute operations.
@@ -251,12 +199,15 @@ ufs_extattr_autocreate_attr(struct vnode *vp, int attrnamespace,
 	}
 
 	/*
-	 * XXX unlock/lock should only be done when setting extattr
-	 * on backing store or one of its parent directory 
-	 * including root, but we always do it for now.
+	 * When setting attribute on the root vnode, we get it 
+	 * already locked, and vn_open/namei/VFS_ROOT will try to
+	 * look it, causing a panic. Unlock it first.
 	 */ 
-	KASSERT(VOP_ISLOCKED(vp) == LK_EXCLUSIVE);
-	VOP_UNLOCK(vp);
+	if (vp->v_vflag && VV_ROOT) {
+		KASSERT(VOP_ISLOCKED(vp) == LK_EXCLUSIVE);
+		VOP_UNLOCK(vp);
+	}
+	KASSERT(VOP_ISLOCKED(vp) == 0);
 
 	pb = pathbuf_create(path);
 	NDINIT(&nd, CREATE, LOCKPARENT, pb);
@@ -264,10 +215,12 @@ ufs_extattr_autocreate_attr(struct vnode *vp, int attrnamespace,
 	error = vn_open(&nd, O_CREAT|O_RDWR, 0600);
 
 	/*
-	 * Reacquire the lock on the vnode
+	 * Reacquire the lock on the vnode if it was root.
 	 */
 	KASSERT(VOP_ISLOCKED(vp) == 0);
-	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+	if (vp->v_vflag && VV_ROOT)
+		vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+	KASSERT(VOP_ISLOCKED(vp) == LK_EXCLUSIVE);
 
 	if (error != 0) {
 		pathbuf_destroy(pb);
@@ -903,9 +856,8 @@ ufs_extattrctl(struct mount *mp, int cmd, struct vnode *filename_vp,
 	/*
 	 * Only privileged processes can configure extended attributes.
 	 */
-	error = kauth_authorize_system(l->l_cred, KAUTH_SYSTEM_FS_EXTATTR,
-	    0, mp, NULL, NULL);
-	if (error) {
+	if ((error = kauth_authorize_generic(l->l_cred, KAUTH_GENERIC_ISSUSER,
+	    NULL)) != 0) {
 		if (filename_vp != NULL)
 			VOP_UNLOCK(filename_vp);
 		return (error);
@@ -1102,8 +1054,7 @@ ufs_extattr_get(struct vnode *vp, int attrnamespace, const char *name,
 	if (strlen(name) == 0)
 		return (EINVAL);
 
-	error = internal_extattr_check_cred(vp, attrnamespace, name, cred,
-	    VREAD);
+	error = extattr_check_cred(vp, attrnamespace, cred, l, IREAD);
 	if (error)
 		return (error);
 
@@ -1217,12 +1168,7 @@ ufs_extattr_list(struct vnode *vp, int attrnamespace,
 	if (!(ump->um_extattr.uepm_flags & UFS_EXTATTR_UEPM_STARTED))
 		return (EOPNOTSUPP);
 
-	/*
-	 * XXX: We can move this inside the loop and iterate on individual
-	 *	attributes.
-	 */
-	error = internal_extattr_check_cred(vp, attrnamespace, "", cred,
-	    VREAD);
+	error = extattr_check_cred(vp, attrnamespace, cred, l, IREAD);
 	if (error)
 		return (error);
 
@@ -1387,8 +1333,7 @@ ufs_extattr_set(struct vnode *vp, int attrnamespace, const char *name,
 	if (!ufs_extattr_valid_attrname(attrnamespace, name))
 		return (EINVAL);
 
-	error = internal_extattr_check_cred(vp, attrnamespace, name, cred,
-	    VWRITE);
+	error = extattr_check_cred(vp, attrnamespace, cred, l, IWRITE);
 	if (error)
 		return (error);
 
@@ -1500,8 +1445,7 @@ ufs_extattr_rm(struct vnode *vp, int attrnamespace, const char *name,
 	if (!ufs_extattr_valid_attrname(attrnamespace, name))
 		return (EINVAL);
 
-	error = internal_extattr_check_cred(vp, attrnamespace, name, cred,
-	    VWRITE);
+	error = extattr_check_cred(vp, attrnamespace, cred, l, IWRITE);
 	if (error)
 		return (error);
 

@@ -1,4 +1,4 @@
-/* $NetBSD: except.c,v 1.29 2012/08/16 17:35:01 matt Exp $ */
+/* $NetBSD: except.c,v 1.27 2010/12/20 00:25:23 matt Exp $ */
 /*-
  * Copyright (c) 1998, 1999, 2000 Ben Harris
  * All rights reserved.
@@ -31,7 +31,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: except.c,v 1.29 2012/08/16 17:35:01 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: except.c,v 1.27 2010/12/20 00:25:23 matt Exp $");
 
 #include "opt_ddb.h"
 
@@ -81,10 +81,10 @@ int want_resched;
 void
 checkvectors(void)
 {
-	uint32_t *ptr;
+	u_int32_t *ptr;
 
 	/* Check that the vectors are valid */
-	for (ptr = (uint32_t *)0; ptr < (uint32_t *)0x1c; ptr++)
+	for (ptr = (u_int32_t *)0; ptr < (u_int32_t *)0x1c; ptr++)
 		if (*ptr != 0xe59ff114)
 			panic("CPU vectors mangled");
 }
@@ -93,8 +93,9 @@ checkvectors(void)
 void
 prefetch_abort_handler(struct trapframe *tf)
 {
-	struct lwp * const l = curlwp;
-	struct proc * const p = l->l_proc;
+	vaddr_t pc;
+	struct proc *p;
+	struct lwp *l;
 
 	/* Enable interrupts if they were enabled before the trap. */
 	if ((tf->tf_r15 & R15_IRQ_DISABLE) == 0)
@@ -108,11 +109,18 @@ prefetch_abort_handler(struct trapframe *tf)
 	 */
 
 	curcpu()->ci_data.cpu_ntrap++;
+	l = curlwp;
+	if (l == NULL)
+		l = &lwp0;
+	p = l->l_proc;
 
-	if (TRAP_USERMODE(tf)) {
-		lwp_settrapframe(l, tf);
+	if ((tf->tf_r15 & R15_MODE) == R15_MODE_USR) {
+		struct pcb *pcb = lwp_getpcb(l);
+		pcb->pcb_tf = tf;
 		LWP_CACHE_CREDS(l, p);
-	} else {
+	}
+
+	if ((tf->tf_r15 & R15_MODE) != R15_MODE_USR) {
 #ifdef DDB
 		db_printf("Prefetch abort in kernel mode\n");
 		kdb_trap(T_FAULT, tf);
@@ -126,7 +134,7 @@ prefetch_abort_handler(struct trapframe *tf)
 	}
 
 	/* User-mode prefetch abort */
-	vaddr_t pc = tf->tf_r15 & R15_PC;
+	pc = tf->tf_r15 & R15_PC;
 
 	do_fault(tf, l, &p->p_vmspace->vm_map, pc, VM_PROT_EXECUTE);
 
@@ -136,13 +144,13 @@ prefetch_abort_handler(struct trapframe *tf)
 void
 data_abort_handler(struct trapframe *tf)
 {
-	struct lwp * const l = curlwp;
-	struct proc * const p = l->l_proc;
+	vaddr_t pc, va;
+	vsize_t asize;
+	struct proc *p;
+	struct lwp *l;
 	vm_prot_t atype;
 	bool usrmode, twopages;
 	struct vm_map *map;
-	vaddr_t pc, va;
-	vsize_t asize;
 
 	/*
 	 * Data aborts in kernel mode are possible (copyout etc), so
@@ -159,8 +167,13 @@ data_abort_handler(struct trapframe *tf)
 	if ((tf->tf_r15 & R15_IRQ_DISABLE) == 0)
 		int_on();
 	curcpu()->ci_data.cpu_ntrap++;
+	l = curlwp;
+	if (l == NULL)
+		l = &lwp0;
+	p = l->l_proc;
 	if ((tf->tf_r15 & R15_MODE) == R15_MODE_USR) {
-		lwp_settrapframe(l, tf);
+		struct pcb *pcb = lwp_getpcb(l);
+		pcb->pcb_tf = tf;
 		LWP_CACHE_CREDS(l, p);
 	}
 	pc = tf->tf_r15 & R15_PC;
@@ -177,7 +190,7 @@ data_abort_handler(struct trapframe *tf)
 	if (twopages)
 		do_fault(tf, l, map, va + asize - 4, atype);
 
-	if (TRAP_USERMODE(tf))
+	if ((tf->tf_r15 & R15_MODE) == R15_MODE_USR)
 		userret(l);
 }
 
@@ -189,13 +202,16 @@ do_fault(struct trapframe *tf, struct lwp *l,
     struct vm_map *map, vaddr_t va, vm_prot_t atype)
 {
 	int error;
+	struct pcb *pcb;
+	void *onfault;
+	bool user;
 
 	if (pmap_fault(map->pmap, va, atype))
 		return;
 
-	struct pcb * const pcb = lwp_getpcb(l);
-	void * const onfault = pcb->pcb_onfault;
-	const bool user = TRAP_USERMODE(tf);
+	pcb = lwp_getpcb(l);
+	onfault = pcb->pcb_onfault;
+	user = (tf->tf_r15 & R15_MODE) == R15_MODE_USR;
 
 	if (cpu_intr_p()) {
 		KASSERT(!user);
@@ -443,7 +459,7 @@ data_abort_usrmode(struct trapframe *tf)
 {
 	register_t insn;
 
-	if (TRAP_USERMODE(tf))
+	if ((tf->tf_r15 & R15_MODE) == R15_MODE_USR)
 		return true;
 	insn = *(register_t *)(tf->tf_r15 & R15_PC);
 	if ((insn & 0x0d200000) == 0x04200000)
@@ -455,30 +471,33 @@ data_abort_usrmode(struct trapframe *tf)
 void
 address_exception_handler(struct trapframe *tf)
 {
-	struct lwp * const l = curlwp;
-	struct pcb * const pcb = lwp_getpcb(l);
+	struct lwp *l;
+	vaddr_t pc;
 	ksiginfo_t ksi;
 
 	/* Enable interrupts if they were enabled before the trap. */
 	if ((tf->tf_r15 & R15_IRQ_DISABLE) == 0)
 		int_on();
-
 	curcpu()->ci_data.cpu_ntrap++;
-	if (TRAP_USERMODE(tf)) {
-		lwp_settrapframe(l, tf);
+	l = curlwp;
+	if (l == NULL)
+		l = &lwp0;
+	if ((tf->tf_r15 & R15_MODE) == R15_MODE_USR) {
+		struct pcb *pcb = lwp_getpcb(l);
+		pcb->pcb_tf = tf;
 		LWP_CACHE_CREDS(l, l->l_proc);
 	}
 
-	if (pcb->pcb_onfault != NULL) {
+	if (curpcb->pcb_onfault != NULL) {
 		tf->tf_r0 = EFAULT;
 		tf->tf_r15 = (tf->tf_r15 & ~R15_PC) |
-		    (uintptr_t)pcb->pcb_onfault;
+		    (register_t)curpcb->pcb_onfault;
 		return;
 	}
 
-	vaddr_t pc = tf->tf_r15 & R15_PC;
+	pc = tf->tf_r15 & R15_PC;
 
-	if (!TRAP_USERMODE(tf)) {
+	if ((tf->tf_r15 & R15_MODE) != R15_MODE_USR) {
 #ifdef DDB
 		db_printf("Address exception in kernel mode\n");
 		kdb_trap(T_FAULT, tf);

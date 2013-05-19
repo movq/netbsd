@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.115 2012/07/28 19:08:23 matt Exp $	*/
+/*	$NetBSD: machdep.c,v 1.107.2.2 2012/02/27 20:15:33 riz Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.115 2012/07/28 19:08:23 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.107.2.2 2012/02/27 20:15:33 riz Exp $");
 
 #include "opt_cputype.h"
 #include "opt_ddb.h"
@@ -121,6 +121,7 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.115 2012/07/28 19:08:23 matt Exp $");
 #include <ddb/db_extern.h>
 #endif
 
+#include <hp700/hp700/intr.h>
 #include <hp700/hp700/machdep.h>
 #include <hp700/hp700/pim.h>
 #include <hp700/dev/cpudevs.h>
@@ -131,24 +132,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.115 2012/07/28 19:08:23 matt Exp $");
 
 #include "ksyms.h"
 #include "lcd.h"
-
-#ifdef MACHDEPDEBUG
-
-#define	DPRINTF(s)	do {		\
-	if (machdepdebug)		\
-		printf s;		\
-} while(0)
-
-#define	DPRINTFN(l,s)	do {		\
-	if (machdepdebug >= (1))	\
-		printf s;		\
-} while(0)
-
-int machdepdebug = 1;
-#else
-#define	DPRINTF(s)	/* */
-#define	DPRINTFN(l,s)	/* */
-#endif
 
 /*
  * Different kinds of flags used throughout the kernel.
@@ -228,7 +211,7 @@ int	cpu_modelno;
 int	cpu_revision;
 
 #if NLCD > 0
-bool	lcd_blink_p;
+int	lcd_blink_p;
 #endif
 
 /*
@@ -240,6 +223,7 @@ int (*cpu_ibtlb_ins)(int, pa_space_t, vaddr_t, paddr_t, vsize_t, u_int);
 int (*cpu_dbtlb_ins)(int, pa_space_t, vaddr_t, paddr_t, vsize_t, u_int);
 
 dev_t	bootdev;
+int	physmem;		/* # pages supported by pmap */
 int	totalphysmem;		/* # pages in system */
 int	availphysmem;		/* # pages available to kernel */
 int	esym;
@@ -474,14 +458,17 @@ hppa_init(paddr_t start, void *bi)
 	delay_init();
 
 	/* fetch the monarch/"default" cpu hpa */
-	error = pdcproc_hpa_processor(&hppa_mcpuhpa);
+	
+	error =  pdcproc_hpa_processor(&hppa_mcpuhpa);
 	if (error < 0)
 		panic("%s: PDC_HPA failed", __func__);
 	
 	/* cache parameters */
 	error = pdcproc_cache(&pdc_cache);
 	if (error < 0) {
-		DPRINTF(("WARNING: PDC_CACHE error %d\n", error));
+#ifdef DEBUG
+		printf("WARNING: PDC_CACHE error %d\n", error);
+#endif
 	}
 
 	dcache_line_mask = pdc_cache.dc_conf.cc_line * 16 - 1;
@@ -490,7 +477,9 @@ hppa_init(paddr_t start, void *bi)
 	icache_stride = pdc_cache.ic_stride;
 
 	error = pdcproc_cache_spidbits(&pdc_spidbits);
-	DPRINTF(("SPID bits: 0x%x, error = %d\n", pdc_spidbits.spidbits, error));
+#ifdef DEBUG
+	printf("SPID bits: 0x%x, error = %d\n", pdc_spidbits.spidbits, error);
+#endif
 
 	/* Calculate the OS_HPMC handler checksums. */
 	p = &os_hpmc;
@@ -579,14 +568,17 @@ do {									\
 	 * WITHOUT TAKING SPECIAL MEASURES.
 	 */
 
-	DPRINTF(("%s: PDC_CHASSIS\n", __func__));
-
+#ifdef DEBUG
+	printf("%s: PDC_CHASSIS\n", __func__);
+#endif
 	/* they say PDC_COPROC might turn fault light on */
 	pdcproc_chassis_display(PDC_OSTAT(PDC_OSTAT_RUN) | 0xCEC0);
 
-	DPRINTF(("%s: intr bootstrap\n", __func__));
+#ifdef DEBUG
+	printf("%s: intr bootstrap\n", __func__);
+#endif
 	/* Bootstrap interrupt masking and dispatching. */
-	hp700_intr_initialise(ci);
+	hp700_intr_bootstrap();
 
 	/*
 	 * Initialize any debugger.
@@ -666,34 +658,39 @@ cpuid(void)
 	/* identify system type */
 	error = pdcproc_model_info(&pdc_model);
 	if (error < 0) {
-		DPRINTF(("WARNING: PDC_MODEL_INFO error %d\n", error));
-		
+#ifdef DEBUG
+		printf("WARNING: PDC_MODEL_INFO error %d\n", error);
+#endif
 		pdc_model.hwmodel = 0;
 		pdc_model.hv = 0;
 	} else {
-		DPRINTF(("pdc_model.hwmodel/hv %x/%x\n", pdc_model.hwmodel,
-		    pdc_model.hv));
+#ifdef DEBUG
+		printf("pdc_model.hwmodel/hv %x/%x\n", pdc_model.hwmodel,
+		    pdc_model.hv);
+#endif
 	}
 	cpu_modelno = pdc_model.hwmodel;
 	model = hppa_mod_info(HPPA_TYPE_BOARD, cpu_modelno);
-
-	DPRINTF(("%s: model %s\n", __func__, model));
-
+#ifdef DEBUG
+	printf("%s: model %s\n", __func__, model);
+#endif
 	pdc_settype(cpu_modelno);
 
 	memset(&pdc_cpuid, 0, sizeof(pdc_cpuid));
 	error = pdcproc_model_cpuid(&pdc_cpuid);
 	if (error < 0) {
-		DPRINTF(("WARNING: PDC_MODEL_CPUID error %d. "
-		    "Using cpu_modelno based cpu_type.\n", error));
-
+#ifdef DEBUG
+		printf("WARNING: PDC_MODEL_CPUID error %d. "
+		    "Using cpu_modelno based cpu_type.\n", error);
+#endif
 		cpu_type = cpu_model_cpuid(cpu_modelno);
 	} else {
-		DPRINTF(("%s: cpuid.version  = %x\n", __func__,
-		    pdc_cpuid.version));
-		DPRINTF(("%s: cpuid.revision = %x\n", __func__,
-		    pdc_cpuid.revision));
-
+#ifdef DEBUG
+		printf("%s: cpuid.version  = %x\n", __func__,
+		    pdc_cpuid.version);
+		printf("%s: cpuid.revision = %x\n", __func__,
+		    pdc_cpuid.revision);
+#endif
 		cpu_version = pdc_cpuid.version;
 
 		/* XXXNH why? */
@@ -707,50 +704,62 @@ cpuid(void)
 	memset(&pdc_coproc, 0, sizeof(pdc_coproc));
 	error = pdcproc_coproc(&pdc_coproc);
 	if (error < 0) {
-		DPRINTF(("WARNING: PDC_COPROC error %d\n", error));
+		printf("WARNING: PDC_COPROC error %d\n", error);
 		pdc_coproc.ccr_enable = 0;
 	} else {
-		DPRINTF(("pdc_coproc: 0x%x, 0x%x; model %x rev %x\n",
+#ifdef DEBUG
+		printf("pdc_coproc: 0x%x, 0x%x; model %x rev %x\n",
 		    pdc_coproc.ccr_enable, pdc_coproc.ccr_present,
-		    pdc_coproc.fpu_model, pdc_coproc.fpu_revision));
+		    pdc_coproc.fpu_model, pdc_coproc.fpu_revision);
 
+#endif
 		/* a kludge to detect PCXW */
 		if (pdc_coproc.fpu_model == HPPA_FPU_PCXW)
 			cpu_version = HPPA_CPU_PCXW;
 	}
 	mtctl(pdc_coproc.ccr_enable & CCR_MASK, CR_CCR);
-	DPRINTF(("%s: bootstrap fpu\n", __func__));
-
+#ifdef DEBUG
+	printf("%s: bootstrap fpu\n", __func__);
+#endif
+	
 	usebtlb = 0;
 	if (cpu_version == HPPA_CPU_PCXW || cpu_version > HPPA_CPU_PCXL2) {
-		DPRINTF(("WARNING: BTLB no supported on cpu %d\n", cpu_version));
+#ifdef DEBUG
+		printf("WARNING: BTLB no supported on cpu %d\n", cpu_version);
+#endif
 	} else {
 
 		/* BTLB params */
 		error = pdcproc_block_tlb(&pdc_btlb);
 		if (error < 0) {
-			DPRINTF(("WARNING: PDC_BTLB error %d\n", error));
+#ifdef DEBUG
+			printf("WARNING: PDC_BTLB error %d\n", error);
+#endif
 		} else {
-			DPRINTFN(10, ("btlb info: minsz=%d, maxsz=%d\n",
-			    pdc_btlb.min_size, pdc_btlb.max_size));
-			DPRINTFN(10, ("btlb fixed: i=%d, d=%d, c=%d\n",
+#define BTLBDEBUG 1
+
+#ifdef BTLBDEBUG
+			printf("btlb info: minsz=%d, maxsz=%d\n",
+			    pdc_btlb.min_size, pdc_btlb.max_size);
+			printf("btlb fixed: i=%d, d=%d, c=%d\n",
 			    pdc_btlb.finfo.num_i,
 			    pdc_btlb.finfo.num_d,
-			    pdc_btlb.finfo.num_c));
-			DPRINTFN(10, ("btlb varbl: i=%d, d=%d, c=%d\n",
+			    pdc_btlb.finfo.num_c);
+			printf("btlb varbl: i=%d, d=%d, c=%d\n",
 			    pdc_btlb.vinfo.num_i,
 			    pdc_btlb.vinfo.num_d,
-			    pdc_btlb.vinfo.num_c));
-
+			    pdc_btlb.vinfo.num_c);
+#endif /* BTLBDEBUG */
 			/* purge TLBs and caches */
 			if (pdcproc_btlb_purgeall() < 0)
-				DPRINTFN(10, ("WARNING: BTLB purge failed\n"));
+				printf("WARNING: BTLB purge failed\n");
 
 			hppa_btlb_size_min = pdc_btlb.min_size;
 			hppa_btlb_size_max = pdc_btlb.max_size;
-
-			DPRINTF(("hppa_btlb_size_min 0x%x\n", hppa_btlb_size_min));
-			DPRINTF(("hppa_btlb_size_max 0x%x\n", hppa_btlb_size_max));
+#ifdef DEBUG
+			printf("hppa_btlb_size_min 0x%x\n", hppa_btlb_size_min);
+			printf("hppa_btlb_size_max 0x%x\n", hppa_btlb_size_max);
+#endif
 
 			if (pdc_btlb.finfo.num_c)
 				cpu_features |= HPPA_FTRS_BTLBU;
@@ -766,11 +775,13 @@ cpuid(void)
 			pmap_hptsize = pdc_hwtlb.max_size;
 		else if (pmap_hptsize && pmap_hptsize < pdc_hwtlb.min_size)
 			pmap_hptsize = pdc_hwtlb.min_size;
-
-		DPRINTF(("%s: pmap_hptsize 0x%x\n", __func__, pmap_hptsize));
+#ifdef DEBUG
+		printf("%s: pmap_hptsize 0x%x\n", __func__, pmap_hptsize);
+#endif
 	} else {
-		DPRINTF(("WARNING: no HPT support, fine!\n"));
-
+#ifdef DEBUG
+		printf("WARNING: no HPT support, fine!\n");
+#endif
 		pmap_hptsize = 0;
 	}
 
@@ -907,7 +918,7 @@ cpu_startup(void)
 #ifdef DEBUG
 	if (totalphysmem > physmem) {
 		format_bytes(pbuf[0], sizeof(pbuf[0]), ptoa(totalphysmem - physmem));
-		DPRINTF(("lost mem = %s\n", pbuf[0]));
+		printf("lost mem = %s\n", pbuf[0]);
 	}
 #endif
 
@@ -1056,7 +1067,7 @@ ibtlb_g(int i, pa_space_t sp, vaddr_t va, paddr_t pa, vsize_t sz, u_int prot)
 	error = pdcproc_btlb_insert(sp, va, pa, sz, prot, i);
 	if (error < 0) {
 #ifdef BTLBDEBUG
-		DPRINTF(("WARNING: BTLB insert failed (%d)\n", error));
+		printf("WARNING: BTLB insert failed (%d)\n", error);
 #endif
 	}
 	return error;
@@ -1088,22 +1099,21 @@ _hp700_btlb_insert(struct btlb_slot *btlb_slot)
 	default:		prot = "??????"; break;
 	}
 
-	DPRINTFN(10, (
-	    "  [ BTLB %d: %s 0x%08x @ 0x%x:0x%08x len 0x%08x prot 0x%08x]  ",
-	    btlb_slot->btlb_slot_number,
-	    prot,
-	    (u_int)btlb_slot->btlb_slot_pa_frame << PGSHIFT,
-	    btlb_slot->btlb_slot_va_space,
-	    (u_int)btlb_slot->btlb_slot_va_frame << PGSHIFT,
-	    (u_int)btlb_slot->btlb_slot_frames << PGSHIFT,
-	    btlb_slot->btlb_slot_tlbprot));
+	printf("  [ BTLB slot %d: %s 0x%08x @ 0x%x:0x%08x len 0x%08x prot 0x%08x]  ",
+		btlb_slot->btlb_slot_number,
+		prot,
+		(u_int)btlb_slot->btlb_slot_pa_frame << PGSHIFT,
+		btlb_slot->btlb_slot_va_space,
+		(u_int)btlb_slot->btlb_slot_va_frame << PGSHIFT,
+		(u_int)btlb_slot->btlb_slot_frames << PGSHIFT,
+		btlb_slot->btlb_slot_tlbprot);
 
 	/*
 	 * Non-I/O space mappings are entered by the pmap,
 	 * so we do print a newline to make things look better.
 	 */
 	if (btlb_slot->btlb_slot_pa_frame < (HPPA_IOSPACE >> PGSHIFT))
-		DPRINTFN(10, ("\n"));
+		printf("\n");
 #endif
 
 	/* Insert this mapping. */
@@ -1116,7 +1126,7 @@ _hp700_btlb_insert(struct btlb_slot *btlb_slot)
 		btlb_slot->btlb_slot_number);
 	if (error < 0) {
 #ifdef BTLBDEBUG
-		DPRINTF(("WARNING: BTLB insert failed (%d)\n", error);
+		printf("WARNING: BTLB insert failed (%d)\n", error);
 #endif
 	}
 	return (error ? EINVAL : 0);
@@ -1171,7 +1181,7 @@ hppa_btlb_insert(pa_space_t space, vaddr_t va, paddr_t pa, vsize_t *sizep,
 	frames >>= PGSHIFT;
 	if (frames > pdc_btlb.max_size) {
 #ifdef BTLBDEBUG
-		DPRINTF(("btlb_insert: too big (%u < %u < %u)\n",
+		printf("btlb_insert: too big (%u < %u < %u)\n",
 		    pdc_btlb.min_size, (u_int) frames, pdc_btlb.max_size);
 #endif
 		return -(ENOMEM);
@@ -1237,7 +1247,9 @@ hppa_btlb_insert(pa_space_t space, vaddr_t va, paddr_t pa, vsize_t *sizep,
 		 * If there were no applicable slots.
 		 */
 		if (btlb_slot_best == NULL) {
-			DPRINTFN(10, ("BTLB full\n"));
+#ifdef BTLBDEBUG
+			printf("BTLB full\n");
+#endif
 			return -(ENOMEM);
 		}
 			
@@ -1291,7 +1303,9 @@ hppa_btlb_reload(void)
 			error = _hp700_btlb_insert(btlb_slot);
 		btlb_slot++;
 	}
-	DPRINTF(("\n"));
+#ifdef DEBUG
+	printf("\n");
+#endif
 	return (error);
 }
 
@@ -1322,9 +1336,10 @@ hppa_btlb_purge(pa_space_t space, vaddr_t va, vsize_t *sizep)
 				btlb_slot->btlb_slot_number,
 				btlb_slot->btlb_slot_frames);
 			if (error < 0) {
-				DPRINTFN(10, ("WARNING: BTLB purge failed (%d)\n",
-					error));
-
+#ifdef BTLBDEBUG
+				printf("WARNING: BTLB purge failed (%d)\n",
+					error);
+#endif
 				return (error);
 			}
 
@@ -1925,8 +1940,7 @@ sysctl_machdep_boot(SYSCTLFN_ARGS)
 static int
 sysctl_machdep_heartbeat(SYSCTLFN_ARGS)
 {
-	int error;
-	bool oldval;
+	int oldval, error;
 	struct sysctlnode node = *rnode;
 	
 	oldval = lcd_blink_p;
@@ -1938,7 +1952,7 @@ sysctl_machdep_heartbeat(SYSCTLFN_ARGS)
 	if (error || newp == NULL)
 		return (error);
 
-	if (!oldval && lcd_blink_p)
+	if (!oldval && lcd_blink_p > oldval)
 		blink_lcd_timeout(NULL);
 
 	return 0;

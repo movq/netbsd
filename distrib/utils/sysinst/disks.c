@@ -1,4 +1,4 @@
-/*	$NetBSD: disks.c,v 1.127 2012/11/17 20:34:24 tsutsui Exp $ */
+/*	$NetBSD: disks.c,v 1.123.2.3 2012/11/24 19:32:28 jdc Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.

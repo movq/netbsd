@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_sqlite.c,v 1.1.1.3 2013/01/02 18:58:57 tron Exp $	*/
+/*	$NetBSD: dict_sqlite.c,v 1.1.1.1.8.1 2012/02/19 18:28:54 riz Exp $	*/
 
 /*++
 /* NAME
@@ -49,7 +49,7 @@
 /*	returning the lookup result unchanged.
 /* .IP expansion_limit
 /*	Limit (if any) on the total number of lookup result values.
-/*	Lookups which exceed the limit fail with dict->error=DICT_ERR_RETRY.
+/*	Lookups which exceed the limit fail with dict_errno=DICT_ERR_RETRY.
 /*	Note that each non-empty (and non-NULL) column of a
 /*	multi-column result row counts as one result.
 /* .IP "select_field, where_field, additional_conditions"
@@ -157,12 +157,11 @@ static const char *dict_sqlite_lookup(DICT *dict, const char *name)
     const char *retval;
     int     expansion = 0;
     int     status;
-    int     domain_rc;
 
     /*
      * In case of return without lookup (skipped key, etc.).
      */
-    dict->error = 0;
+    dict_errno = 0;
 
     /*
      * Don't frustrate future attempts to make Postfix UTF-8 transparent.
@@ -187,14 +186,12 @@ static const char *dict_sqlite_lookup(DICT *dict, const char *name)
     /*
      * Apply the optional domain filter for email address lookups.
      */
-    if ((domain_rc = db_common_check_domain(dict_sqlite->ctx, name)) == 0) {
+    if (db_common_check_domain(dict_sqlite->ctx, name) == 0) {
 	if (msg_verbose)
 	    msg_info("%s: %s: Skipping lookup of '%s'",
 		     myname, dict_sqlite->parser->name, name);
 	return (0);
     }
-    if (domain_rc < 0)
-	DICT_ERR_VAL_RETURN(dict, domain_rc, (char *) 0);
 
     /*
      * Expand the query and query the database.
@@ -239,7 +236,7 @@ static const char *dict_sqlite_lookup(DICT *dict, const char *name)
 		&& ++expansion > dict_sqlite->expansion_limit) {
 		msg_warn("%s: %s: Expansion limit exceeded for key '%s'",
 			 myname, dict_sqlite->parser->name, name);
-		dict->error = DICT_ERR_RETRY;
+		dict_errno = DICT_ERR_RETRY;
 		break;
 	    }
 	}
@@ -248,7 +245,7 @@ static const char *dict_sqlite_lookup(DICT *dict, const char *name)
 	    msg_warn("%s: %s: SQL step failed for query '%s': %s\n",
 		     myname, dict_sqlite->parser->name,
 		     vstring_str(query), sqlite3_errmsg(dict_sqlite->db));
-	    dict->error = DICT_ERR_RETRY;
+	    dict_errno = DICT_ERR_RETRY;
 	    break;
 	}
     }
@@ -261,7 +258,7 @@ static const char *dict_sqlite_lookup(DICT *dict, const char *name)
 		  myname, dict_sqlite->parser->name,
 		  vstring_str(query), sqlite3_errmsg(dict_sqlite->db));
 
-    return ((dict->error == 0 && *(retval = vstring_str(result)) != 0) ?
+    return ((dict_errno == 0 && *(retval = vstring_str(result)) != 0) ?
 	    retval : 0);
 }
 
@@ -276,6 +273,7 @@ static void sqlite_parse_config(DICT_SQLITE *dict_sqlite, const char *sqlitecf)
      * query interface if necessary. This simplifies migration from one SQL
      * database type to another.
      */
+    dict_sqlite->parser = cfg_parser_alloc(sqlitecf);
     dict_sqlite->dbpath = cfg_get_str(dict_sqlite->parser, "dbpath", "", 1, 0);
     dict_sqlite->query = cfg_get_str(dict_sqlite->parser, "query", NULL, 0, 0);
     if (dict_sqlite->query == 0) {
@@ -312,22 +310,13 @@ static void sqlite_parse_config(DICT_SQLITE *dict_sqlite, const char *sqlitecf)
 DICT   *dict_sqlite_open(const char *name, int open_flags, int dict_flags)
 {
     DICT_SQLITE *dict_sqlite;
-    CFG_PARSER *parser;
 
     /*
      * Sanity checks.
      */
     if (open_flags != O_RDONLY)
-	return (dict_surrogate(DICT_TYPE_SQLITE, name, open_flags, dict_flags,
-			       "%s:%s map requires O_RDONLY access mode",
-			       DICT_TYPE_SQLITE, name));
-
-    /*
-     * Open the configuration file.
-     */
-    if ((parser = cfg_parser_alloc(name)) == 0)
-	return (dict_surrogate(DICT_TYPE_SQLITE, name, open_flags, dict_flags,
-			       "open %s: %m", name));
+	msg_fatal("%s:%s map requires O_RDONLY access mode",
+		  DICT_TYPE_SQLITE, name);
 
     dict_sqlite = (DICT_SQLITE *) dict_alloc(DICT_TYPE_SQLITE, name,
 					     sizeof(DICT_SQLITE));
@@ -335,14 +324,11 @@ DICT   *dict_sqlite_open(const char *name, int open_flags, int dict_flags)
     dict_sqlite->dict.close = dict_sqlite_close;
     dict_sqlite->dict.flags = dict_flags;
 
-    dict_sqlite->parser = parser;
     sqlite_parse_config(dict_sqlite, name);
 
     if (sqlite3_open(dict_sqlite->dbpath, &dict_sqlite->db))
 	msg_fatal("%s:%s: Can't open database: %s\n",
 		  DICT_TYPE_SQLITE, name, sqlite3_errmsg(dict_sqlite->db));
-
-    dict_sqlite->dict.owner = cfg_get_owner(dict_sqlite->parser);
 
     return (DICT_DEBUG (&dict_sqlite->dict));
 }
