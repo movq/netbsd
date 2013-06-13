@@ -1,6 +1,6 @@
-/*	$NetBSD: res_sendsigned.c,v 1.1 2012/11/15 18:48:49 christos Exp $	*/
+/*	$NetBSD: res_sendsigned.c,v 1.1.10.2 2013/06/13 04:20:30 msaitoh Exp $	*/
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: res_sendsigned.c,v 1.1 2012/11/15 18:48:49 christos Exp $");
+__RCSID("$NetBSD: res_sendsigned.c,v 1.1.10.2 2013/06/13 04:20:30 msaitoh Exp $");
 
 #include "port_before.h"
 #include "fd_setsize.h"

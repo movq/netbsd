@@ -1,4 +1,4 @@
-/*	$NetBSD: ns_verify.c,v 1.2 2012/11/16 02:16:38 christos Exp $	*/
+/*	$NetBSD: ns_verify.c,v 1.2.10.2 2013/06/13 04:20:30 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
