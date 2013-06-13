@@ -1,4 +1,4 @@
-/*	$NetBSD: res_update.c,v 1.1 2012/11/15 18:48:49 christos Exp $	*/
+/*	$NetBSD: res_update.c,v 1.1.10.2 2013/06/13 04:20:30 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
@@ -26,7 +26,7 @@
 #if 0
 static const char rcsid[] = "Id: res_update.c,v 1.13 2005/04/27 04:56:43 sra Exp ";
 #else
-__RCSID("$NetBSD: res_update.c,v 1.1 2012/11/15 18:48:49 christos Exp $");
+__RCSID("$NetBSD: res_update.c,v 1.1.10.2 2013/06/13 04:20:30 msaitoh Exp $");
 #endif
 
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: support.c,v 1.1 2012/11/15 18:48:49 christos Exp $	*/
+/*	$NetBSD: support.c,v 1.1.10.2 2013/06/13 04:20:30 msaitoh Exp $	*/
 
 /*
  * Portions Copyright (c) 1995-1998 by Trusted Information Systems, Inc.
@@ -20,7 +20,7 @@
 #if 0
 static const char rcsid[] = "Header: /proj/cvs/prod/libbind/dst/support.c,v 1.6 2005/10/11 00:10:13 marka Exp ";
 #else
-__RCSID("$NetBSD: support.c,v 1.1 2012/11/15 18:48:49 christos Exp $");
+__RCSID("$NetBSD: support.c,v 1.1.10.2 2013/06/13 04:20:30 msaitoh Exp $");
 #endif
 
 #include "port_before.h"

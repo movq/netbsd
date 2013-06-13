@@ -1,4 +1,4 @@
-/*	$NetBSD: res_mkupdate.c,v 1.2 2012/11/19 13:45:00 christos Exp $	*/
+/*	$NetBSD: res_mkupdate.c,v 1.2.8.2 2013/06/13 04:20:30 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
@@ -26,7 +26,7 @@
 #if 0
 static const char rcsid[] = "Id: res_mkupdate.c,v 1.10 2008/12/11 09:59:00 marka Exp ";
 #else
-__RCSID("$NetBSD: res_mkupdate.c,v 1.2 2012/11/19 13:45:00 christos Exp $");
+__RCSID("$NetBSD: res_mkupdate.c,v 1.2.8.2 2013/06/13 04:20:30 msaitoh Exp $");
 #endif
 
 #include "port_before.h"

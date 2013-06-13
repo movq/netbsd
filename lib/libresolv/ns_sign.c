@@ -1,4 +1,4 @@
-/*	$NetBSD: ns_sign.c,v 1.1 2012/11/15 18:48:48 christos Exp $	*/
+/*	$NetBSD: ns_sign.c,v 1.1.10.2 2013/06/13 04:20:30 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 2004 by Internet Systems Consortium, Inc. ("ISC")
@@ -20,7 +20,7 @@
 #if 0
 static const char rcsid[] = "Id: ns_sign.c,v 1.6 2006/03/09 23:57:56 marka Exp ";
 #else
-__RCSID("$NetBSD: ns_sign.c,v 1.1 2012/11/15 18:48:48 christos Exp $");
+__RCSID("$NetBSD: ns_sign.c,v 1.1.10.2 2013/06/13 04:20:30 msaitoh Exp $");
 #endif
 
 /* Import. */

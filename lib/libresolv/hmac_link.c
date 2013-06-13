@@ -1,4 +1,4 @@
-/*	$NetBSD: hmac_link.c,v 1.2 2012/11/16 02:16:38 christos Exp $	*/
+/*	$NetBSD: hmac_link.c,v 1.2.10.2 2013/06/13 04:20:30 msaitoh Exp $	*/
 
 /*
  * Portions Copyright (c) 1995-1998 by Trusted Information Systems, Inc.
@@ -20,7 +20,7 @@
 #if 0
 static const char rcsid[] = "Header: /proj/cvs/prod/libbind/dst/hmac_link.c,v 1.8 2007/09/24 17:18:25 each Exp ";
 #else
-__RCSID("$NetBSD: hmac_link.c,v 1.2 2012/11/16 02:16:38 christos Exp $");
+__RCSID("$NetBSD: hmac_link.c,v 1.2.10.2 2013/06/13 04:20:30 msaitoh Exp $");
 #endif
 
 /*%
