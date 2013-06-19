@@ -1,4 +1,4 @@
-/*	$NetBSD: ihphy.c,v 1.6 2013/06/11 07:22:08 msaitoh Exp $	*/
+/*	$NetBSD: ihphy.c,v 1.6.2.2 2013/06/19 07:50:15 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ihphy.c,v 1.6 2013/06/11 07:22:08 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ihphy.c,v 1.6.2.2 2013/06/19 07:50:15 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -81,9 +81,8 @@ __KERNEL_RCSID(0, "$NetBSD: ihphy.c,v 1.6 2013/06/11 07:22:08 msaitoh Exp $");
 static int	ihphymatch(device_t, cfdata_t, void *);
 static void	ihphyattach(device_t, device_t, void *);
 
-CFATTACH_DECL3_NEW(ihphy, sizeof(struct mii_softc),
-    ihphymatch, ihphyattach, mii_phy_detach, mii_phy_activate, NULL, NULL,
-    DVF_DETACH_SHUTDOWN);
+CFATTACH_DECL_NEW(ihphy, sizeof(struct mii_softc),
+    ihphymatch, ihphyattach, mii_phy_detach, mii_phy_activate);
 
 static int	ihphy_service(struct mii_softc *, struct mii_data *, int);
 static void	ihphy_status(struct mii_softc *);
@@ -212,6 +211,12 @@ ihphy_service(struct mii_softc *sc, struct mii_data *mii, int cmd)
 		 * If we're not currently selected, just return.
 		 */
 		if (IFM_INST(ife->ifm_media) != sc->mii_inst)
+			return 0;
+
+		/*
+		 * Only used for autonegotiation.
+		 */
+		if (IFM_SUBTYPE(ife->ifm_media) != IFM_AUTO)
 			return 0;
 
 		if (mii_phy_tick(sc) == EJUSTRETURN)

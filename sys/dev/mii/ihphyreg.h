@@ -1,4 +1,4 @@
-/*	$NetBSD: ihphyreg.h,v 1.1 2010/11/27 20:15:27 christos Exp $	*/
+/*	$NetBSD: ihphyreg.h,v 1.1.32.2 2013/06/19 07:50:15 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
