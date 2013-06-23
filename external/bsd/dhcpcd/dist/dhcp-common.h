@@ -1,4 +1,4 @@
-/* $NetBSD: dhcp-common.h,v 1.1.1.1 2013/06/21 19:33:08 roy Exp $ */
+/* $NetBSD: dhcp-common.h,v 1.1.1.1.2.2 2013/06/23 06:26:31 tls Exp $ */
 
 /*
  * dhcpcd - DHCP client daemon

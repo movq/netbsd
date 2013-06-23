@@ -1,4 +1,4 @@
-/*	$NetBSD: thread.h,v 1.1.1.1 2013/04/11 16:43:34 christos Exp $	*/
+/*	$NetBSD: thread.h,v 1.1.1.1.4.2 2013/06/23 06:28:18 tls Exp $	*/
 /*
  * Copyright (c) 2008-2012 Niels Provos and Nick Mathewson
  *

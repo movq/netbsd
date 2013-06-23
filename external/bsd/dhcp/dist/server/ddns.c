@@ -1,4 +1,4 @@
-/*	$NetBSD: ddns.c,v 1.3 2013/03/24 23:03:06 christos Exp $	*/
+/*	$NetBSD: ddns.c,v 1.3.4.2 2013/06/23 06:26:30 tls Exp $	*/
 
 /* ddns.c
 
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: ddns.c,v 1.3 2013/03/24 23:03:06 christos Exp $");
+__RCSID("$NetBSD: ddns.c,v 1.3.4.2 2013/06/23 06:26:30 tls Exp $");
 
 #include "dhcpd.h"
 #include "dst/md5.h"

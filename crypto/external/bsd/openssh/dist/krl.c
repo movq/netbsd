@@ -1,4 +1,4 @@
-/*	$NetBSD: krl.c,v 1.2 2013/03/29 16:19:45 christos Exp $	*/
+/*	$NetBSD: krl.c,v 1.2.4.2 2013/06/23 06:26:14 tls Exp $	*/
 /*
  * Copyright (c) 2012 Damien Miller <djm@mindrot.org>
  *
@@ -17,7 +17,7 @@
 
 /* $OpenBSD: krl.c,v 1.9 2013/01/27 10:06:12 djm Exp $ */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: krl.c,v 1.2 2013/03/29 16:19:45 christos Exp $");
+__RCSID("$NetBSD: krl.c,v 1.2.4.2 2013/06/23 06:26:14 tls Exp $");
 
 #include "includes.h"
 #include <sys/types.h>

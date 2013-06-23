@@ -1,4 +1,4 @@
-/*	$NetBSD: tr.c,v 1.1.1.2 2013/03/27 00:31:36 christos Exp $	*/
+/*	$NetBSD: tr.c,v 1.1.1.2.4.2 2013/06/23 06:26:28 tls Exp $	*/
 
 /* tr.c
 
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: tr.c,v 1.1.1.2 2013/03/27 00:31:36 christos Exp $");
+__RCSID("$NetBSD: tr.c,v 1.1.1.2.4.2 2013/06/23 06:26:28 tls Exp $");
 
 #include "dhcpd.h"
 

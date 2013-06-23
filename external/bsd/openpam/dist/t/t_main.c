@@ -1,4 +1,4 @@
-/*	$NetBSD: t_main.c,v 1.1.1.1 2013/04/06 01:23:33 christos Exp $	*/
+/*	$NetBSD: t_main.c,v 1.1.1.1.4.2 2013/06/23 06:28:28 tls Exp $	*/
 
 /*-
  * Copyright (c) 2012 Dag-Erling Smørgrav

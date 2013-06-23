@@ -1,4 +1,4 @@
-/*	$NetBSD: iscprint.c,v 1.1.1.3 2013/03/27 00:31:40 christos Exp $	*/
+/*	$NetBSD: iscprint.c,v 1.1.1.3.4.2 2013/06/23 06:26:29 tls Exp $	*/
 
 /*
  * Copyright (C) 2004  Internet Systems Consortium, Inc. ("ISC")
@@ -18,7 +18,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: iscprint.c,v 1.1.1.3 2013/03/27 00:31:40 christos Exp $");
+__RCSID("$NetBSD: iscprint.c,v 1.1.1.3.4.2 2013/06/23 06:26:29 tls Exp $");
 
 
 /* Id: iscprint.c,v 1.2 2005/03/17 20:30:41 dhankins Exp  */

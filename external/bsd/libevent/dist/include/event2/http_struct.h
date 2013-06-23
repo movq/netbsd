@@ -1,4 +1,4 @@
-/*	$NetBSD: http_struct.h,v 1.1.1.1 2013/04/11 16:43:34 christos Exp $	*/
+/*	$NetBSD: http_struct.h,v 1.1.1.1.4.2 2013/06/23 06:28:17 tls Exp $	*/
 /*
  * Copyright (c) 2000-2007 Niels Provos <provos@citi.umich.edu>
  * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson

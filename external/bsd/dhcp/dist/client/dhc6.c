@@ -1,4 +1,4 @@
-/*	$NetBSD: dhc6.c,v 1.5 2013/06/20 12:24:08 christos Exp $	*/
+/*	$NetBSD: dhc6.c,v 1.5.2.2 2013/06/23 06:26:27 tls Exp $	*/
 
 /* dhc6.c - DHCPv6 client routines. */
 
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dhc6.c,v 1.5 2013/06/20 12:24:08 christos Exp $");
+__RCSID("$NetBSD: dhc6.c,v 1.5.2.2 2013/06/23 06:26:27 tls Exp $");
 
 #include "dhcpd.h"
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ip.h,v 1.1.1.1 2013/03/24 15:45:50 christos Exp $	*/
+/*	$NetBSD: ip.h,v 1.1.1.1.4.2 2013/06/23 06:26:29 tls Exp $	*/
 
 /*	NetBSD: ip.h,v 1.9 1995/05/15 01:22:44 cgd Exp 	*/
 

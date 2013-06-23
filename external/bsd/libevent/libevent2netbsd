@@ -1,5 +1,5 @@
 #!/bin/sh
-# $NetBSD: libevent2netbsd,v 1.1 2013/04/11 16:56:11 christos Exp $
+# $NetBSD: libevent2netbsd,v 1.1.4.2 2013/06/23 06:28:16 tls Exp $
 
 # Extract the new tarball and rename the libevent-X.Y.Z directory
 # to dist.  Run this script and check for additional files and

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2013/02/27 21:25:11 joerg Exp $
+#	$NetBSD: Makefile,v 1.1.6.2 2013/06/23 06:28:25 tls Exp $
 
 LIB=	MCLinkerX86TargetInfo
 

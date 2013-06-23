@@ -1,4 +1,4 @@
-/*	$NetBSD: errwarn.c,v 1.1.1.2 2013/03/27 00:31:40 christos Exp $	*/
+/*	$NetBSD: errwarn.c,v 1.1.1.2.4.2 2013/06/23 06:26:29 tls Exp $	*/
 
 /* errwarn.c
 
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: errwarn.c,v 1.1.1.2 2013/03/27 00:31:40 christos Exp $");
+__RCSID("$NetBSD: errwarn.c,v 1.1.1.2.4.2 2013/06/23 06:26:29 tls Exp $");
 
 #include "dhcpd.h"
 

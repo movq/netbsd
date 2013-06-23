@@ -1,4 +1,4 @@
-/*	$NetBSD: test-weof.c,v 1.1.1.1 2013/04/11 16:43:33 christos Exp $	*/
+/*	$NetBSD: test-weof.c,v 1.1.1.1.4.2 2013/06/23 06:28:18 tls Exp $	*/
 /*
  * Copyright (c) 2002-2007 Niels Provos <provos@citi.umich.edu>
  * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
@@ -27,7 +27,7 @@
  */
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: test-weof.c,v 1.1.1.1 2013/04/11 16:43:33 christos Exp $");
+__RCSID("$NetBSD: test-weof.c,v 1.1.1.1.4.2 2013/06/23 06:28:18 tls Exp $");
 
 #ifdef WIN32
 #include <winsock2.h>

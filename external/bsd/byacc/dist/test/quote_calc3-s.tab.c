@@ -1,4 +1,4 @@
-/*	$NetBSD: quote_calc3-s.tab.c,v 1.1.1.1 2013/04/06 14:45:28 christos Exp $	*/
+/*	$NetBSD: quote_calc3-s.tab.c,v 1.1.1.1.4.2 2013/06/23 06:26:26 tls Exp $	*/
 
 #ifndef lint
 static const char yysccsid[] = "@(#)yaccpar	1.9 (Berkeley) 02/21/93";

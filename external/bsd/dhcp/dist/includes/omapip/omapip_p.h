@@ -1,4 +1,4 @@
-/*	$NetBSD: omapip_p.h,v 1.1.1.3 2013/03/27 00:31:39 christos Exp $	*/
+/*	$NetBSD: omapip_p.h,v 1.1.1.3.4.2 2013/06/23 06:26:29 tls Exp $	*/
 
 /* omapip_p.h
 

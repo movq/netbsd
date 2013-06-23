@@ -1,4 +1,4 @@
-/*	$NetBSD: trace.c,v 1.1.1.2 2013/03/24 22:50:37 christos Exp $	*/
+/*	$NetBSD: trace.c,v 1.1.1.2.4.2 2013/06/23 06:26:29 tls Exp $	*/
 
 /* trace.c
 
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: trace.c,v 1.1.1.2 2013/03/24 22:50:37 christos Exp $");
+__RCSID("$NetBSD: trace.c,v 1.1.1.2.4.2 2013/06/23 06:26:29 tls Exp $");
 
 #include "dhcpd.h"
 #include <omapip/omapip_p.h>

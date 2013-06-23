@@ -1,4 +1,4 @@
-/*	$NetBSD: realloc.c,v 1.1.1.1 2013/04/06 14:05:53 christos Exp $	*/
+/*	$NetBSD: realloc.c,v 1.1.1.1.4.2 2013/06/23 06:26:34 tls Exp $	*/
 
 #include <config.h>
 

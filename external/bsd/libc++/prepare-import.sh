@@ -1,5 +1,5 @@
 #!/bin/sh
-# $NetBSD: prepare-import.sh,v 1.1 2013/05/17 23:00:22 joerg Exp $
+# $NetBSD: prepare-import.sh,v 1.1.2.2 2013/06/23 06:26:39 tls Exp $
 #
 # Checkout libc++ and libcxxrt in the corresponding subdirectories of
 # dist.  Run this script and check for additional files and

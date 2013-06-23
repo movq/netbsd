@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: find_exidx.c,v 1.3 2013/05/03 10:27:06 skrll Exp $");
+__RCSID("$NetBSD: find_exidx.c,v 1.3.2.2 2013/06/23 06:28:50 tls Exp $");
 #endif /* not lint */
 
 #include "debug.h"

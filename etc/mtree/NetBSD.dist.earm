@@ -1,4 +1,4 @@
-#	$NetBSD: NetBSD.dist.earm,v 1.1 2013/04/27 07:59:09 matt Exp $
+#	$NetBSD: NetBSD.dist.earm,v 1.1.4.2 2013/06/23 06:26:21 tls Exp $
 
 ./lib/oabi
 ./lib/oabi/npf

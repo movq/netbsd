@@ -1,4 +1,4 @@
-/*	$NetBSD: icmp.c,v 1.2 2013/03/25 01:11:02 christos Exp $	*/
+/*	$NetBSD: icmp.c,v 1.2.4.2 2013/06/23 06:26:27 tls Exp $	*/
 
 /* dhcp.c
 
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: icmp.c,v 1.2 2013/03/25 01:11:02 christos Exp $");
+__RCSID("$NetBSD: icmp.c,v 1.2.4.2 2013/06/23 06:26:27 tls Exp $");
 
 #include "dhcpd.h"
 #include "netinet/ip.h"

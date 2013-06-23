@@ -1,4 +1,4 @@
-/*	$NetBSD: mdb.c,v 1.1.1.2 2013/03/24 22:50:42 christos Exp $	*/
+/*	$NetBSD: mdb.c,v 1.1.1.2.4.2 2013/06/23 06:26:30 tls Exp $	*/
 
 /* mdb.c
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: mdb.c,v 1.1.1.2 2013/03/24 22:50:42 christos Exp $");
+__RCSID("$NetBSD: mdb.c,v 1.1.1.2.4.2 2013/06/23 06:26:30 tls Exp $");
 
 #include "dhcpd.h"
 #include "omapip/hash.h"

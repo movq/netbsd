@@ -1,4 +1,4 @@
-/*	$NetBSD: vnduncompress.c,v 1.2 2013/05/06 22:53:24 riastradh Exp $	*/
+/*	$NetBSD: vnduncompress.c,v 1.2.2.2 2013/06/23 06:29:02 tls Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: vnduncompress.c,v 1.2 2013/05/06 22:53:24 riastradh Exp $");
+__RCSID("$NetBSD: vnduncompress.c,v 1.2.2.2 2013/06/23 06:29:02 tls Exp $");
 
 #include <sys/endian.h>
 

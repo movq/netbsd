@@ -1,4 +1,4 @@
-/*	$NetBSD: common.h,v 1.1 2013/05/03 23:28:15 riastradh Exp $	*/
+/*	$NetBSD: common.h,v 1.1.2.2 2013/06/23 06:29:02 tls Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

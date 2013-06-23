@@ -1,4 +1,4 @@
-/*	$NetBSD: evthread.c,v 1.1.1.1 2013/04/11 16:43:25 christos Exp $	*/
+/*	$NetBSD: evthread.c,v 1.1.1.1.4.2 2013/06/23 06:28:17 tls Exp $	*/
 /*
  * Copyright (c) 2008-2012 Niels Provos, Nick Mathewson
  *
@@ -27,7 +27,7 @@
 
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: evthread.c,v 1.1.1.1 2013/04/11 16:43:25 christos Exp $");
+__RCSID("$NetBSD: evthread.c,v 1.1.1.1.4.2 2013/06/23 06:28:17 tls Exp $");
 
 #ifndef _EVENT_DISABLE_THREAD_SUPPORT
 

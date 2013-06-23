@@ -1,4 +1,4 @@
-/*	$NetBSD: statement.h,v 1.1.1.2 2013/03/27 00:31:39 christos Exp $	*/
+/*	$NetBSD: statement.h,v 1.1.1.2.4.2 2013/06/23 06:26:29 tls Exp $	*/
 
 /* statement.h
 

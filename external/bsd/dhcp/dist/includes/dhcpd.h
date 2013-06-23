@@ -1,4 +1,4 @@
-/*	$NetBSD: dhcpd.h,v 1.5 2013/06/20 12:26:34 christos Exp $	*/
+/*	$NetBSD: dhcpd.h,v 1.5.2.2 2013/06/23 06:26:29 tls Exp $	*/
 
 /* dhcpd.h
 
