@@ -1,4 +1,4 @@
-/*	$NetBSD: rumpuser_bio.c,v 1.7 2013/05/15 14:58:24 pooka Exp $	*/
+/*	$NetBSD: rumpuser_bio.c,v 1.7.2.2 2013/06/23 06:21:08 tls Exp $	*/
 
 /*-
  * Copyright (c) 2013 Antti Kantee.  All Rights Reserved.

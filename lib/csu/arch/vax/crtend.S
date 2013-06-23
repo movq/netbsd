@@ -1,4 +1,4 @@
-/*	$NetBSD: crtend.S,v 1.1 2013/06/21 15:54:08 matt Exp $	*/
+/*	$NetBSD: crtend.S,v 1.1.2.2 2013/06/23 06:21:03 tls Exp $	*/
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -30,7 +30,7 @@
 
 #include <vax/asm.h>
 
-RCSID("$NetBSD: crtend.S,v 1.1 2013/06/21 15:54:08 matt Exp $")
+RCSID("$NetBSD: crtend.S,v 1.1.2.2 2013/06/23 06:21:03 tls Exp $")
 
 	.section	.ctors, "aw", @progbits
 	.p2align 2

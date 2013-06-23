@@ -1,4 +1,4 @@
-#	$NetBSD: mod.mk,v 1.5 2013/03/13 13:16:38 christos Exp $
+#	$NetBSD: mod.mk,v 1.5.4.2 2013/06/23 06:21:09 tls Exp $
 
 .include <bsd.own.mk>
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: getbyteorder.c,v 1.1 2013/05/02 07:17:10 matt Exp $	*/
+/*	$NetBSD: getbyteorder.c,v 1.1.2.2 2013/06/23 06:21:09 tls Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: getbyteorder.c,v 1.1 2013/05/02 07:17:10 matt Exp $");
+__RCSID("$NetBSD: getbyteorder.c,v 1.1.2.2 2013/06/23 06:21:09 tls Exp $");
 #endif
 
 #include <sys/param.h>

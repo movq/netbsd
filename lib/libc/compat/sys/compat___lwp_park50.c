@@ -1,4 +1,4 @@
-/*	$NetBSD: compat___lwp_park50.c,v 1.1 2013/03/29 02:09:58 christos Exp $	*/
+/*	$NetBSD: compat___lwp_park50.c,v 1.1.2.2 2013/06/23 06:21:04 tls Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: compat___lwp_park50.c,v 1.1 2013/03/29 02:09:58 christos Exp $");
+__RCSID("$NetBSD: compat___lwp_park50.c,v 1.1.2.2 2013/06/23 06:21:04 tls Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #define __LIBC12_SOURCE__
