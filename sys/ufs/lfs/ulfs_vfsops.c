@@ -1,4 +1,4 @@
-/*	$NetBSD: ulfs_vfsops.c,v 1.8 2013/06/08 02:12:56 dholland Exp $	*/
+/*	$NetBSD: ulfs_vfsops.c,v 1.8.2.2 2013/06/23 06:18:39 tls Exp $	*/
 /*  from NetBSD: ufs_vfsops.c,v 1.52 2013/01/22 09:39:18 dholland Exp  */
 
 /*
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ulfs_vfsops.c,v 1.8 2013/06/08 02:12:56 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ulfs_vfsops.c,v 1.8.2.2 2013/06/23 06:18:39 tls Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_lfs.h"

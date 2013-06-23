@@ -1,4 +1,4 @@
-/*	$NetBSD: ulfsmount.h,v 1.7 2013/06/08 02:13:33 dholland Exp $	*/
+/*	$NetBSD: ulfsmount.h,v 1.7.2.2 2013/06/23 06:18:39 tls Exp $	*/
 /*  from NetBSD: ufsmount.h,v 1.39 2012/10/19 17:09:08 drochner Exp  */
 
 /*

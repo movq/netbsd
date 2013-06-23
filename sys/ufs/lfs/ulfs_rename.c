@@ -1,4 +1,4 @@
-/*	$NetBSD: ulfs_rename.c,v 1.9 2013/06/19 17:51:26 dholland Exp $	*/
+/*	$NetBSD: ulfs_rename.c,v 1.9.2.2 2013/06/23 06:18:39 tls Exp $	*/
 /*  from NetBSD: ufs_rename.c,v 1.6 2013/01/22 09:39:18 dholland Exp  */
 
 /*-
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ulfs_rename.c,v 1.9 2013/06/19 17:51:26 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ulfs_rename.c,v 1.9.2.2 2013/06/23 06:18:39 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>

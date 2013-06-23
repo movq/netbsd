@@ -1,4 +1,4 @@
-/*	$NetBSD: ulfs_readwrite.c,v 1.4 2013/06/18 18:18:58 christos Exp $	*/
+/*	$NetBSD: ulfs_readwrite.c,v 1.4.2.2 2013/06/23 06:18:39 tls Exp $	*/
 /*  from NetBSD: ufs_readwrite.c,v 1.105 2013/01/22 09:39:18 dholland Exp  */
 
 /*-
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: ulfs_readwrite.c,v 1.4 2013/06/18 18:18:58 christos Exp $");
+__KERNEL_RCSID(1, "$NetBSD: ulfs_readwrite.c,v 1.4.2.2 2013/06/23 06:18:39 tls Exp $");
 
 #ifdef LFS_READWRITE
 #define	FS			struct lfs
