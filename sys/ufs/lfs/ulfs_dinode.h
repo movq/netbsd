@@ -1,4 +1,4 @@
-/*	$NetBSD: ulfs_dinode.h,v 1.11 2013/06/08 22:19:01 dholland Exp $	*/
+/*	$NetBSD: ulfs_dinode.h,v 1.11.2.2 2013/06/23 06:18:39 tls Exp $	*/
 /*  from NetBSD: dinode.h,v 1.22 2013/01/22 09:39:18 dholland Exp  */
 
 /*

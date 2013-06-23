@@ -1,4 +1,4 @@
-/*	$NetBSD: ulfs_extern.h,v 1.6 2013/06/08 02:12:56 dholland Exp $	*/
+/*	$NetBSD: ulfs_extern.h,v 1.6.2.2 2013/06/23 06:18:39 tls Exp $	*/
 /*  from NetBSD: ufs_extern.h,v 1.72 2012/05/09 00:21:18 riastradh Exp  */
 
 /*-
