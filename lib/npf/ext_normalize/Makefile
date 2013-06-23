@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2013/03/10 21:41:06 christos Exp $
+# $NetBSD: Makefile,v 1.1.4.2 2013/06/23 06:21:09 tls Exp $
 
 MOD=	ext_normalize
 .include "${.CURDIR}/../mod.mk"

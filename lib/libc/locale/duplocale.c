@@ -1,4 +1,4 @@
-/* $NetBSD: duplocale.c,v 1.1 2013/04/30 00:45:05 joerg Exp $ */
+/* $NetBSD: duplocale.c,v 1.1.2.2 2013/06/23 06:21:05 tls Exp $ */
 
 /*-
  * Copyright (c)2008, 2011 Citrus Project,
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: duplocale.c,v 1.1 2013/04/30 00:45:05 joerg Exp $");
+__RCSID("$NetBSD: duplocale.c,v 1.1.2.2 2013/06/23 06:21:05 tls Exp $");
 
 #include "namespace.h"
 

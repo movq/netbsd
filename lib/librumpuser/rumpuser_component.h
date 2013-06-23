@@ -1,4 +1,4 @@
-/*	$NetBSD: rumpuser_component.h,v 1.3 2013/04/30 12:39:20 pooka Exp $	*/
+/*	$NetBSD: rumpuser_component.h,v 1.3.2.2 2013/06/23 06:21:08 tls Exp $	*/
 
 /*
  * Copyright (c) 2013 Antti Kantee.  All Rights Reserved.
