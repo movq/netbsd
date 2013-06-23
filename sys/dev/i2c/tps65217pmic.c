@@ -1,4 +1,4 @@
-/*	$NetBSD: tps65217pmic.c,v 1.5 2013/05/16 21:25:27 rkujawa Exp $ */
+/*	$NetBSD: tps65217pmic.c,v 1.5.2.2 2013/06/23 06:20:17 tls Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tps65217pmic.c,v 1.5 2013/05/16 21:25:27 rkujawa Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tps65217pmic.c,v 1.5.2.2 2013/06/23 06:20:17 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

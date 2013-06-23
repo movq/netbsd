@@ -1,4 +1,4 @@
-	$NetBSD: syscalls.master,v 1.2 2013/05/15 21:39:30 pooka Exp $
+	$NetBSD: syscalls.master,v 1.2.2.2 2013/06/23 06:20:27 tls Exp $
 
 ;	@(#)syscalls.master	8.2 (Berkeley) 1/13/94
 

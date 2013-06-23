@@ -1,4 +1,4 @@
-/*	$NetBSD: armadaxp_start.S,v 1.2 2013/05/29 23:50:34 rkujawa Exp $	*/
+/*	$NetBSD: armadaxp_start.S,v 1.2.2.2 2013/06/23 06:20:03 tls Exp $	*/
 /*******************************************************************************
 Copyright (C) Marvell International Ltd. and its affiliates
 
@@ -42,7 +42,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <arm/armreg.h>
 #include <arm/arm32/pmap.h>
 
-RCSID("$NetBSD: armadaxp_start.S,v 1.2 2013/05/29 23:50:34 rkujawa Exp $")
+RCSID("$NetBSD: armadaxp_start.S,v 1.2.2.2 2013/06/23 06:20:03 tls Exp $")
 
 #define	CPWAIT_BRANCH							 \
 	sub	pc, pc, #4

@@ -1,4 +1,4 @@
-/*	$NetBSD: athnreg.h,v 1.1 2013/03/30 02:53:02 christos Exp $	*/
+/*	$NetBSD: athnreg.h,v 1.1.4.2 2013/06/23 06:20:17 tls Exp $	*/
 /*	$OpenBSD: athnreg.h,v 1.18 2012/06/10 21:23:36 kettenis Exp $	*/
 
 /*-

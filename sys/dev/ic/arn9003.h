@@ -1,4 +1,4 @@
-/*	$NetBSD: arn9003.h,v 1.1 2013/03/30 02:53:01 christos Exp $	*/
+/*	$NetBSD: arn9003.h,v 1.1.4.2 2013/06/23 06:20:17 tls Exp $	*/
 /*
  * Copyright (c) 2001, 2004 The NetBSD Foundation, Inc.
  * All rights reserved.

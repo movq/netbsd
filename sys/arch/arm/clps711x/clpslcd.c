@@ -1,4 +1,4 @@
-/*      $NetBSD: clpslcd.c,v 1.1 2013/04/28 11:57:13 kiyohara Exp $      */
+/*      $NetBSD: clpslcd.c,v 1.1.4.2 2013/06/23 06:20:00 tls Exp $      */
 /*
  * Copyright (c) 2013 KIYOHARA Takashi
  * All rights reserved.
@@ -25,7 +25,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clpslcd.c,v 1.1 2013/04/28 11:57:13 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clpslcd.c,v 1.1.4.2 2013/06/23 06:20:00 tls Exp $");
 
 #include "rnd.h"
 

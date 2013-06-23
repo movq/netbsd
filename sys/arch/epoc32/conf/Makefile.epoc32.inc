@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.epoc32.inc,v 1.1 2013/04/28 12:11:25 kiyohara Exp $
+#	$NetBSD: Makefile.epoc32.inc,v 1.1.4.2 2013/06/23 06:20:02 tls Exp $
 
 MACHINE_ARCH=		arm
 CPPFLAGS+=		-D${MACHINE}

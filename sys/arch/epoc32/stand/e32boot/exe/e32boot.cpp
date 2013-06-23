@@ -1,4 +1,4 @@
-/*	$NetBSD: e32boot.cpp,v 1.3 2013/06/20 15:30:00 kiyohara Exp $	*/
+/*	$NetBSD: e32boot.cpp,v 1.3.2.2 2013/06/23 06:20:03 tls Exp $	*/
 /*
  * Copyright (c) 2012, 2013 KIYOHARA Takashi
  * All rights reserved.

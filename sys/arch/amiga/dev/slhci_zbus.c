@@ -1,4 +1,4 @@
-/*	$NetBSD: slhci_zbus.c,v 1.1 2013/04/27 22:27:33 rkujawa Exp $ */
+/*	$NetBSD: slhci_zbus.c,v 1.1.4.2 2013/06/23 06:19:59 tls Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: slhci_zbus.c,v 1.1 2013/04/27 22:27:33 rkujawa Exp $");
+__KERNEL_RCSID(0, "$NetBSD: slhci_zbus.c,v 1.1.4.2 2013/06/23 06:19:59 tls Exp $");
 
 /*
  * Thylacine driver.

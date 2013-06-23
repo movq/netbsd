@@ -1,3 +1,3 @@
-/*	$NetBSD: types.h,v 1.3 2013/05/07 20:42:46 matt Exp $	*/
+/*	$NetBSD: types.h,v 1.3.4.2 2013/06/23 06:20:03 tls Exp $	*/
 
 #include <arm/arm32/types.h>

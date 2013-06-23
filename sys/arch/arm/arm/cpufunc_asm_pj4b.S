@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc_asm_pj4b.S,v 1.2 2013/05/19 16:53:58 rkujawa Exp $ */
+/*	$NetBSD: cpufunc_asm_pj4b.S,v 1.2.2.2 2013/06/23 06:19:59 tls Exp $ */
 
 /*******************************************************************************
 Copyright (C) Marvell International Ltd. and its affiliates

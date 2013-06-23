@@ -1,4 +1,4 @@
-/* $NetBSD: vchiq_kmod_netbsd.c,v 1.2 2013/03/25 22:59:25 jmcneill Exp $ */
+/* $NetBSD: vchiq_kmod_netbsd.c,v 1.2.4.2 2013/06/23 06:20:23 tls Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vchiq_kmod_netbsd.c,v 1.2 2013/03/25 22:59:25 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vchiq_kmod_netbsd.c,v 1.2.4.2 2013/06/23 06:20:23 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

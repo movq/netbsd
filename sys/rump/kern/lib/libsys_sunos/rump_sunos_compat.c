@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_sunos_compat.c,v 1.1 2013/04/09 13:08:33 pooka Exp $	*/
+/*	$NetBSD: rump_sunos_compat.c,v 1.1.4.2 2013/06/23 06:20:28 tls Exp $	*/
 
 /*
  * Copyright (c) 2013 Antti Kantee.  All Rights Reserved.

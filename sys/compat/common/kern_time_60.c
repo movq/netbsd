@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_time_60.c,v 1.1 2013/03/29 01:02:50 christos Exp $	*/
+/*	$NetBSD: kern_time_60.c,v 1.1.4.2 2013/06/23 06:20:15 tls Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_time_60.c,v 1.1 2013/03/29 01:02:50 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_time_60.c,v 1.1.4.2 2013/06/23 06:20:15 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

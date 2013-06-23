@@ -1,4 +1,4 @@
-/*	$NetBSD: rumpcomp_user.c,v 1.7 2013/06/01 11:46:14 pooka Exp $	*/
+/*	$NetBSD: rumpcomp_user.c,v 1.7.2.2 2013/06/23 06:20:29 tls Exp $	*/
 
 /*
  * Copyright (c) 2008 Antti Kantee.  All Rights Reserved.

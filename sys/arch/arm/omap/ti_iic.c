@@ -1,4 +1,4 @@
-/* $NetBSD: ti_iic.c,v 1.4 2013/04/25 13:04:27 rkujawa Exp $ */
+/* $NetBSD: ti_iic.c,v 1.4.4.2 2013/06/23 06:20:01 tls Exp $ */
 
 /*
  * Copyright (c) 2013 Manuel Bouyer.  All rights reserved.
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ti_iic.c,v 1.4 2013/04/25 13:04:27 rkujawa Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ti_iic.c,v 1.4.4.2 2013/06/23 06:20:01 tls Exp $");
 
 #include "opt_omap.h"
 #include "locators.h"

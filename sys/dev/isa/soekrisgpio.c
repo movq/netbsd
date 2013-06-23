@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: soekrisgpio.c,v 1.2 2013/06/10 07:14:02 kardel Exp $");
+__KERNEL_RCSID(0, "$NetBSD: soekrisgpio.c,v 1.2.2.2 2013/06/23 06:20:17 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

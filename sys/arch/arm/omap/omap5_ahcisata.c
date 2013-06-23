@@ -1,4 +1,4 @@
-/* $NetBSD: omap5_ahcisata.c,v 1.1 2013/06/15 21:55:09 matt Exp $ */
+/* $NetBSD: omap5_ahcisata.c,v 1.1.2.2 2013/06/23 06:20:01 tls Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omap5_ahcisata.c,v 1.1 2013/06/15 21:55:09 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omap5_ahcisata.c,v 1.1.2.2 2013/06/23 06:20:01 tls Exp $");
 
 #include "locators.h"
 

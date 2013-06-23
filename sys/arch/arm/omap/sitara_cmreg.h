@@ -1,4 +1,4 @@
-/*	$NetBSD: sitara_cmreg.h,v 1.1 2013/04/17 15:04:39 bouyer Exp $	*/
+/*	$NetBSD: sitara_cmreg.h,v 1.1.4.2 2013/06/23 06:20:01 tls Exp $	*/
 
 /*
  * Copyright (c) 2013 Manuel Bouyer.  All rights reserved.

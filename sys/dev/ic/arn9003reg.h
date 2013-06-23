@@ -1,4 +1,4 @@
-/*	$NetBSD: arn9003reg.h,v 1.1 2013/03/30 02:53:01 christos Exp $	*/
+/*	$NetBSD: arn9003reg.h,v 1.1.4.2 2013/06/23 06:20:17 tls Exp $	*/
 /*	$OpenBSD: ar9003reg.h,v 1.8 2012/10/20 09:53:32 stsp Exp $	*/
 
 /*-

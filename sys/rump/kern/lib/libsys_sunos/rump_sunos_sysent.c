@@ -1,4 +1,4 @@
-/* $NetBSD: rump_sunos_sysent.c,v 1.2 2013/05/15 21:41:25 pooka Exp $ */
+/* $NetBSD: rump_sunos_sysent.c,v 1.2.2.2 2013/06/23 06:20:28 tls Exp $ */
 
 /*
  * System call switch table.
@@ -8,7 +8,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rump_sunos_sysent.c,v 1.2 2013/05/15 21:41:25 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rump_sunos_sysent.c,v 1.2.2.2 2013/06/23 06:20:28 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

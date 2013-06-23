@@ -1,5 +1,5 @@
 #
-#	$NetBSD: mk.armadaxp,v 1.2 2013/05/29 23:50:35 rkujawa Exp $
+#	$NetBSD: mk.armadaxp,v 1.2.2.2 2013/06/23 06:20:04 tls Exp $
 #
 
 SYSTEM_FIRST_OBJ=	armadaxp_start.o
