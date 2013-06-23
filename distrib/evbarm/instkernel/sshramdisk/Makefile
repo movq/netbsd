@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2013/03/19 22:16:53 garbled Exp $
+#	$NetBSD: Makefile,v 1.1.6.2 2013/06/23 06:26:17 tls Exp $
 
 .include <bsd.own.mk>
 .include "${NETBSDSRCDIR}/distrib/common/Makefile.distrib"

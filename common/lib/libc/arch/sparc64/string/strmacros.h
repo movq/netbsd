@@ -1,4 +1,4 @@
-/*	$NetBSD: strmacros.h,v 1.1 2013/03/17 00:42:32 christos Exp $	*/
+/*	$NetBSD: strmacros.h,v 1.1.6.2 2013/06/23 06:26:13 tls Exp $	*/
 
 /*
  * Copyright (c) 1996-2002 Eduardo Horvath

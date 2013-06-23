@@ -1,4 +1,4 @@
-/*	$NetBSD: hello-world.c,v 1.1.1.1 2013/04/11 16:43:31 christos Exp $	*/
+/*	$NetBSD: hello-world.c,v 1.1.1.1.4.2 2013/06/23 06:28:18 tls Exp $	*/
 /*
   This exmple program provides a trivial server program that listens for TCP
   connections on port 9995.  When they arrive, it writes a short message to

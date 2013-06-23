@@ -1,4 +1,4 @@
-/*	$NetBSD: regress_buffer.c,v 1.2 2013/04/11 16:56:42 christos Exp $	*/
+/*	$NetBSD: regress_buffer.c,v 1.2.4.2 2013/06/23 06:28:18 tls Exp $	*/
 /*
  * Copyright (c) 2003-2007 Niels Provos <provos@citi.umich.edu>
  * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
@@ -33,7 +33,7 @@
 
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: regress_buffer.c,v 1.2 2013/04/11 16:56:42 christos Exp $");
+__RCSID("$NetBSD: regress_buffer.c,v 1.2.4.2 2013/06/23 06:28:18 tls Exp $");
 
 #include <sys/types.h>
 #include <sys/stat.h>

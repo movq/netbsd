@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2013/03/24 15:54:30 christos Exp $
+# $NetBSD: Makefile,v 1.1.4.2 2013/06/23 06:26:27 tls Exp $
 
 SRCS   = dhcrelay.c
 PROG   = dhcrelay

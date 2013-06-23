@@ -1,4 +1,4 @@
-#	$NetBSD: pxe.defs,v 1.1 2013/03/24 15:54:32 christos Exp $
+#	$NetBSD: pxe.defs,v 1.1.4.2 2013/06/23 06:26:31 tls Exp $
 #
 # Copyright 2001 Wasabi Systems, Inc.
 # All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: salloc.c,v 1.1.1.2 2013/03/24 22:50:43 christos Exp $	*/
+/*	$NetBSD: salloc.c,v 1.1.1.2.4.2 2013/06/23 06:26:30 tls Exp $	*/
 
 /* salloc.c
 
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: salloc.c,v 1.1.1.2 2013/03/24 22:50:43 christos Exp $");
+__RCSID("$NetBSD: salloc.c,v 1.1.1.2.4.2 2013/06/23 06:26:30 tls Exp $");
 
 #include "dhcpd.h"
 #include <omapip/omapip_p.h>

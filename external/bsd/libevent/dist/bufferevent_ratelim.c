@@ -1,4 +1,4 @@
-/*	$NetBSD: bufferevent_ratelim.c,v 1.2 2013/04/11 16:56:41 christos Exp $	*/
+/*	$NetBSD: bufferevent_ratelim.c,v 1.2.4.2 2013/06/23 06:28:17 tls Exp $	*/
 /*
  * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
  * Copyright (c) 2002-2006 Niels Provos <provos@citi.umich.edu>

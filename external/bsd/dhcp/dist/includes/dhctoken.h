@@ -1,4 +1,4 @@
-/*	$NetBSD: dhctoken.h,v 1.1.1.3 2013/03/27 00:31:38 christos Exp $	*/
+/*	$NetBSD: dhctoken.h,v 1.1.1.3.4.2 2013/06/23 06:26:29 tls Exp $	*/
 
 /* dhctoken.h
 

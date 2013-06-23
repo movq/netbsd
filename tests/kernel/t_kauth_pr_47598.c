@@ -27,7 +27,7 @@
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2013\
  The NetBSD Foundation, inc. All rights reserved.");
-__RCSID("$NetBSD: t_kauth_pr_47598.c,v 1.2 2013/02/28 20:41:21 martin Exp $");
+__RCSID("$NetBSD: t_kauth_pr_47598.c,v 1.2.4.2 2013/06/23 06:28:56 tls Exp $");
 
 #include <errno.h>
 #include <unistd.h>

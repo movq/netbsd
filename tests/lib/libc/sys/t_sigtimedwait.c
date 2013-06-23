@@ -1,4 +1,4 @@
-/* $NetBSD: t_sigtimedwait.c,v 1.2 2013/03/08 23:18:00 martin Exp $ */
+/* $NetBSD: t_sigtimedwait.c,v 1.2.4.2 2013/06/23 06:28:56 tls Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_sigtimedwait.c,v 1.2 2013/03/08 23:18:00 martin Exp $");
+__RCSID("$NetBSD: t_sigtimedwait.c,v 1.2.4.2 2013/06/23 06:28:56 tls Exp $");
 
 #include <sys/time.h>
 #include <errno.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: unit_test_sample.c,v 1.1.1.1 2013/03/24 15:45:50 christos Exp $	*/
+/*	$NetBSD: unit_test_sample.c,v 1.1.1.1.4.2 2013/06/23 06:26:30 tls Exp $	*/
 
 #include "config.h"
 #include "t_api.h"

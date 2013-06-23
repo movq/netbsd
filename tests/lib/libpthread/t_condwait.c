@@ -1,4 +1,4 @@
-/* $NetBSD: t_condwait.c,v 1.4 2013/04/12 17:18:11 christos Exp $ */
+/* $NetBSD: t_condwait.c,v 1.4.2.2 2013/06/23 06:28:57 tls Exp $ */
 
 /*
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -26,7 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_condwait.c,v 1.4 2013/04/12 17:18:11 christos Exp $");
+__RCSID("$NetBSD: t_condwait.c,v 1.4.2.2 2013/06/23 06:28:57 tls Exp $");
 
 #include <errno.h>
 #include <pthread.h>

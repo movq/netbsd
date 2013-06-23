@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.1 2013/05/01 13:12:00 kiyohara Exp $
+#	$NetBSD: Makefile.inc,v 1.1.4.2 2013/06/23 06:26:21 tls Exp $
 #
 #	etc.epoc32/Makefile.inc -- epoc32-specific etc Makefile targets
 #

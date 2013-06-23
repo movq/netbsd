@@ -1,4 +1,4 @@
-/*	$NetBSD: dns.c,v 1.4 2013/03/27 00:38:07 christos Exp $	*/
+/*	$NetBSD: dns.c,v 1.4.4.2 2013/06/23 06:26:27 tls Exp $	*/
 
 /* dns.c
 
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dns.c,v 1.4 2013/03/27 00:38:07 christos Exp $");
+__RCSID("$NetBSD: dns.c,v 1.4.4.2 2013/06/23 06:26:27 tls Exp $");
 
 #include "dhcpd.h"
 #include "arpa/nameser.h"

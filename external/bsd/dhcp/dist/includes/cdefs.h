@@ -1,4 +1,4 @@
-/*	$NetBSD: cdefs.h,v 1.1.1.2 2013/03/24 22:50:34 christos Exp $	*/
+/*	$NetBSD: cdefs.h,v 1.1.1.2.4.2 2013/06/23 06:26:29 tls Exp $	*/
 
 /* cdefs.h
 

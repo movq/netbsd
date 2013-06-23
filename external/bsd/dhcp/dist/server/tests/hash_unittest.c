@@ -1,4 +1,4 @@
-/*	$NetBSD: hash_unittest.c,v 1.1.1.2 2013/03/27 00:31:47 christos Exp $	*/
+/*	$NetBSD: hash_unittest.c,v 1.1.1.2.4.2 2013/06/23 06:26:30 tls Exp $	*/
 
 /*
  * Copyright (c) 2012 by Internet Systems Consortium, Inc. ("ISC")
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: hash_unittest.c,v 1.1.1.2 2013/03/27 00:31:47 christos Exp $");
+__RCSID("$NetBSD: hash_unittest.c,v 1.1.1.2.4.2 2013/06/23 06:26:30 tls Exp $");
 
 #include "config.h"
 #include <atf-c.h>

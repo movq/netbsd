@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-#	$NetBSD: dhcp2netbsd,v 1.2 2013/03/27 00:38:41 christos Exp $
+#	$NetBSD: dhcp2netbsd,v 1.2.4.2 2013/06/23 06:26:26 tls Exp $
 #
 # Copyright (c) 2003, 2011 The NetBSD Foundation, Inc.
 # All rights reserved.

@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2013/03/30 02:47:56 christos Exp $
+# $NetBSD: Makefile,v 1.1.4.2 2013/06/23 06:26:22 tls Exp $
 
 NOMAN=	# define
 

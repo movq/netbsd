@@ -1,4 +1,4 @@
-/*	$NetBSD: minheap-internal.h,v 1.2 2013/04/12 18:11:15 joerg Exp $	*/
+/*	$NetBSD: minheap-internal.h,v 1.2.4.2 2013/06/23 06:28:17 tls Exp $	*/
 /*
  * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
  *

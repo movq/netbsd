@@ -1,4 +1,4 @@
-/*	$NetBSD: omshell.c,v 1.1.1.1 2013/03/24 15:45:48 christos Exp $	*/
+/*	$NetBSD: omshell.c,v 1.1.1.1.4.2 2013/06/23 06:26:28 tls Exp $	*/
 
 /* omshell.c
 
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: omshell.c,v 1.1.1.1 2013/03/24 15:45:48 christos Exp $");
+__RCSID("$NetBSD: omshell.c,v 1.1.1.1.4.2 2013/06/23 06:26:28 tls Exp $");
 
 #include "config.h"
 

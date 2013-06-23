@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2013/04/27 23:02:21 joerg Exp $
+#	$NetBSD: Makefile,v 1.1.4.2 2013/06/23 06:26:39 tls Exp $
 
 SUBDIR=	include lib
 

@@ -1,4 +1,4 @@
-# $Id: export-env,v 1.1 2013/03/22 16:36:46 sjg Exp $
+# $Id: export-env,v 1.1.4.2 2013/06/23 06:29:01 tls Exp $
 
 # our normal .export, subsequent changes affect the environment
 UT_TEST=this

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2013/05/17 22:57:27 joerg Exp $
+#	$NetBSD: Makefile,v 1.3.2.2 2013/06/23 06:28:16 tls Exp $
 
 LIB=		c++
 WARNS=		4

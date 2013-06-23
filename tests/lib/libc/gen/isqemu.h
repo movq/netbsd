@@ -1,4 +1,4 @@
-/*	$NetBSD: isqemu.h,v 1.3 2013/04/14 12:46:29 martin Exp $	*/
+/*	$NetBSD: isqemu.h,v 1.3.2.2 2013/06/23 06:28:56 tls Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

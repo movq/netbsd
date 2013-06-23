@@ -1,4 +1,4 @@
-/* $NetBSD: dhcp6.h,v 1.1.1.2 2013/06/22 09:25:34 roy Exp $ */
+/* $NetBSD: dhcp6.h,v 1.1.1.2.2.2 2013/06/23 06:26:31 tls Exp $ */
 
 /*
  * dhcpcd - DHCP client daemon
@@ -84,10 +84,6 @@
 #define D6_OPTION_FQDN			39
 #define D6_OPTION_POSIX_TIMEZONE	41
 #define D6_OPTION_TZDB_TIMEZONE		42
-
-#define D6_FQDN_PTR	0x00
-#define D6_FQDN_BOTH	0x01
-#define D6_FQDN_NONE	0x04
 
 #include "dhcp.h"
 #include "ipv6.h"

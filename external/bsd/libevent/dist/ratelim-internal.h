@@ -1,4 +1,4 @@
-/*	$NetBSD: ratelim-internal.h,v 1.2 2013/04/11 16:56:41 christos Exp $	*/
+/*	$NetBSD: ratelim-internal.h,v 1.2.4.2 2013/06/23 06:28:17 tls Exp $	*/
 /*
  * Copyright (c) 2009-2012 Niels Provos and Nick Mathewson
  *

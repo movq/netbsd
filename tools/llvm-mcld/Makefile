@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2013/02/27 21:25:14 joerg Exp $
+#	$NetBSD: Makefile,v 1.1.4.2 2013/06/23 06:28:59 tls Exp $
 
 HOSTPROGNAME=	ld.mcld
 HOSTPROG_CXX=	ld.mcld

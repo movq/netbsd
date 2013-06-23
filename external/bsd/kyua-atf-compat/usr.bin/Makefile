@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2013/02/25 00:20:09 jmmv Exp $
+# $NetBSD: Makefile,v 1.1.6.2 2013/06/23 06:26:39 tls Exp $
 
 SUBDIR= atf-report atf-run atf2kyua
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: remote.c,v 1.1.1.1 2013/03/24 15:45:48 christos Exp $	*/
+/*	$NetBSD: remote.c,v 1.1.1.1.4.2 2013/06/23 06:26:28 tls Exp $	*/
 
 /* remote.c
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: remote.c,v 1.1.1.1 2013/03/24 15:45:48 christos Exp $");
+__RCSID("$NetBSD: remote.c,v 1.1.1.1.4.2 2013/06/23 06:26:28 tls Exp $");
 
 #include "dhcpd.h"
 #include <omapip/omapip_p.h>

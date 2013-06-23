@@ -1,4 +1,4 @@
-/*	$NetBSD: tinytest_local.h,v 1.1.1.1 2013/04/11 16:43:32 christos Exp $	*/
+/*	$NetBSD: tinytest_local.h,v 1.1.1.1.4.2 2013/06/23 06:28:18 tls Exp $	*/
 
 #ifdef WIN32
 #include <winsock2.h>

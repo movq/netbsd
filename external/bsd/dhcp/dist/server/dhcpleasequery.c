@@ -1,4 +1,4 @@
-/*	$NetBSD: dhcpleasequery.c,v 1.4 2013/03/27 00:38:09 christos Exp $	*/
+/*	$NetBSD: dhcpleasequery.c,v 1.4.4.2 2013/06/23 06:26:30 tls Exp $	*/
 
 /*
  * Copyright (C) 2011-2012 by Internet Systems Consortium, Inc. ("ISC")
@@ -18,7 +18,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dhcpleasequery.c,v 1.4 2013/03/27 00:38:09 christos Exp $");
+__RCSID("$NetBSD: dhcpleasequery.c,v 1.4.4.2 2013/06/23 06:26:30 tls Exp $");
 
 
 #include "dhcpd.h"
