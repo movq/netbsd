@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_cygwin_compat.c,v 1.1 2013/04/10 16:44:54 pooka Exp $	*/
+/*	$NetBSD: rump_cygwin_compat.c,v 1.1.4.2 2013/06/23 06:20:27 tls Exp $	*/
 
 /*
  * Copyright (c) 2013 Antti Kantee.  All Rights Reserved.

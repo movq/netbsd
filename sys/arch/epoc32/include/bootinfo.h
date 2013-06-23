@@ -1,4 +1,4 @@
-/*	$NetBSD: bootinfo.h,v 1.2 2013/06/20 13:38:03 kiyohara Exp $	*/
+/*	$NetBSD: bootinfo.h,v 1.2.2.2 2013/06/23 06:20:02 tls Exp $	*/
 /*
  * Copyright (c) 2012 KIYOHARA Takashi
  * All rights reserved.

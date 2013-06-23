@@ -1,4 +1,4 @@
-/* $NetBSD: rump_linux_syscall.h,v 1.2 2013/04/08 20:58:27 pooka Exp $ */
+/* $NetBSD: rump_linux_syscall.h,v 1.2.4.2 2013/06/23 06:20:28 tls Exp $ */
 
 /*
  * System call numbers.

@@ -1,4 +1,4 @@
-/*	$NetBSD: tps65217pmicreg.h,v 1.5 2013/05/07 01:16:25 jakllsch Exp $ */
+/*	$NetBSD: tps65217pmicreg.h,v 1.5.4.2 2013/06/23 06:20:17 tls Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

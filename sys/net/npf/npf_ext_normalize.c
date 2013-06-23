@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_ext_normalize.c,v 1.1 2013/03/12 20:47:48 christos Exp $	*/
+/*	$NetBSD: npf_ext_normalize.c,v 1.1.6.2 2013/06/23 06:20:25 tls Exp $	*/
 
 /*-
  * Copyright (c) 2009-2012 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_ext_normalize.c,v 1.1 2013/03/12 20:47:48 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_ext_normalize.c,v 1.1.6.2 2013/06/23 06:20:25 tls Exp $");
 
 #include <sys/types.h>
 #include <sys/module.h>

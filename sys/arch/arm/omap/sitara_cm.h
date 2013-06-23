@@ -1,4 +1,4 @@
-/* $NetBSD: sitara_cm.h,v 1.1 2013/04/17 14:31:02 bouyer Exp $ */
+/* $NetBSD: sitara_cm.h,v 1.1.4.2 2013/06/23 06:20:01 tls Exp $ */
 /*
  * Copyright (c) 2010
  *	Ben Gray <ben.r.gray@gmail.com>.

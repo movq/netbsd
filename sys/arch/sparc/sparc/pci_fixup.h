@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_fixup.h,v 1.1 2013/04/16 06:57:06 jdc Exp $	*/
+/*	$NetBSD: pci_fixup.h,v 1.1.4.2 2013/06/23 06:20:12 tls Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.

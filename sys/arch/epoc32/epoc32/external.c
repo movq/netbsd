@@ -1,4 +1,4 @@
-/*	$NetBSD: external.c,v 1.1 2013/04/28 12:11:26 kiyohara Exp $	*/
+/*	$NetBSD: external.c,v 1.1.4.2 2013/06/23 06:20:02 tls Exp $	*/
 /*
  * Copyright (c) 2012 KIYOHARA Takashi
  * All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: external.c,v 1.1 2013/04/28 12:11:26 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: external.c,v 1.1.4.2 2013/06/23 06:20:02 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

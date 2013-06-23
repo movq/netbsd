@@ -1,4 +1,4 @@
-/*	$NetBSD: arn9285.c,v 1.2 2013/04/03 14:20:02 christos Exp $	*/
+/*	$NetBSD: arn9285.c,v 1.2.4.2 2013/06/23 06:20:17 tls Exp $	*/
 /*	$OpenBSD: ar9285.c,v 1.19 2012/06/10 21:23:36 kettenis Exp $	*/
 
 /*-
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arn9285.c,v 1.2 2013/04/03 14:20:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arn9285.c,v 1.2.4.2 2013/06/23 06:20:17 tls Exp $");
 
 #ifndef _MODULE
 #include "athn_usb.h"

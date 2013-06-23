@@ -1,4 +1,4 @@
-/*	$NetBSD: clpssocvar.h,v 1.1 2013/04/28 11:57:13 kiyohara Exp $	*/
+/*	$NetBSD: clpssocvar.h,v 1.1.4.2 2013/06/23 06:20:00 tls Exp $	*/
 /*
  * Copyright (c) 2013 KIYOHARA Takashi
  * All rights reserved.

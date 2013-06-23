@@ -1,3 +1,3 @@
-/*	$NetBSD: profile.h,v 1.1 2013/05/01 13:12:00 kiyohara Exp $	*/
+/*	$NetBSD: profile.h,v 1.1.4.2 2013/06/23 06:20:03 tls Exp $	*/
 
 #include <arm/profile.h>

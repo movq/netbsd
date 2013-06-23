@@ -1,4 +1,4 @@
-/*	$NetBSD: n900_cambtn.c,v 1.2 2013/06/03 01:47:58 khorben Exp $ */
+/*	$NetBSD: n900_cambtn.c,v 1.2.2.2 2013/06/23 06:20:04 tls Exp $ */
 
 /*
  * Camera button driver for the Nokia N900.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: n900_cambtn.c,v 1.2 2013/06/03 01:47:58 khorben Exp $");
+__KERNEL_RCSID(0, "$NetBSD: n900_cambtn.c,v 1.2.2.2 2013/06/23 06:20:04 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

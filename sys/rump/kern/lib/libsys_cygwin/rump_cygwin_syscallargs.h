@@ -1,4 +1,4 @@
-/* $NetBSD: rump_cygwin_syscallargs.h,v 1.2 2013/05/15 21:41:25 pooka Exp $ */
+/* $NetBSD: rump_cygwin_syscallargs.h,v 1.2.2.2 2013/06/23 06:20:27 tls Exp $ */
 
 /*
  * System call argument lists.

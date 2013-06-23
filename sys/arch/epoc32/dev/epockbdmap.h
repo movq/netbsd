@@ -1,4 +1,4 @@
-/*	$NetBSD: epockbdmap.h,v 1.2 2013/06/20 13:42:02 kiyohara Exp $	*/
+/*	$NetBSD: epockbdmap.h,v 1.2.2.2 2013/06/23 06:20:02 tls Exp $	*/
 /*
  * Copyright (c) 2013 KIYOHARA Takashi
  * All rights reserved.

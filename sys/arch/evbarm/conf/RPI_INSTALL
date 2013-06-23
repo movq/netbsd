@@ -1,4 +1,4 @@
-#	$NetBSD: RPI_INSTALL,v 1.1 2013/03/19 22:16:54 garbled Exp $
+#	$NetBSD: RPI_INSTALL,v 1.1.6.2 2013/06/23 06:20:04 tls Exp $
 #
 #	RPI_INSTALL -- RPI kernel with installation-sized
 #	ramdisk

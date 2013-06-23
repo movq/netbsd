@@ -1,4 +1,4 @@
-/*	$NetBSD: athnvar.h,v 1.4 2013/04/06 16:50:48 martin Exp $	*/
+/*	$NetBSD: athnvar.h,v 1.4.4.2 2013/06/23 06:20:17 tls Exp $	*/
 /*	$OpenBSD: athnvar.h,v 1.33 2012/10/20 09:54:20 stsp Exp $	*/
 
 /*-

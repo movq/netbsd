@@ -1,3 +1,3 @@
-/*	$NetBSD: ieeefp.h,v 1.1 2013/05/01 13:11:59 kiyohara Exp $	*/
+/*	$NetBSD: ieeefp.h,v 1.1.4.2 2013/06/23 06:20:03 tls Exp $	*/
 
 #include <arm/ieeefp.h>

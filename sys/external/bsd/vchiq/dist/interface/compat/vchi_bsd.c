@@ -26,7 +26,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $Id: vchi_bsd.c,v 1.2 2013/03/24 14:26:16 jmcneill Exp $
+ * $Id: vchi_bsd.c,v 1.2.4.2 2013/06/23 06:20:23 tls Exp $
  */
 
 #include <sys/types.h>

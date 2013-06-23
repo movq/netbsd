@@ -1,4 +1,4 @@
-/* $NetBSD: bcm2835_vcaudio.c,v 1.2 2013/04/14 15:11:52 skrll Exp $ */
+/* $NetBSD: bcm2835_vcaudio.c,v 1.2.4.2 2013/06/23 06:20:00 tls Exp $ */
 
 /*-
  * Copyright (c) 2013 Jared D. McNeill <jmcneill@invisible.ca>
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_vcaudio.c,v 1.2 2013/04/14 15:11:52 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_vcaudio.c,v 1.2.4.2 2013/06/23 06:20:00 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

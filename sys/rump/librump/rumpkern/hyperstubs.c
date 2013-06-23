@@ -1,4 +1,4 @@
-/*	$NetBSD: hyperstubs.c,v 1.2 2013/04/30 14:28:52 pooka Exp $	*/
+/*	$NetBSD: hyperstubs.c,v 1.2.4.2 2013/06/23 06:20:28 tls Exp $	*/
 
 /*
  * Copyright (c) 2013 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hyperstubs.c,v 1.2 2013/04/30 14:28:52 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hyperstubs.c,v 1.2.4.2 2013/06/23 06:20:28 tls Exp $");
 
 #include <sys/errno.h>
 

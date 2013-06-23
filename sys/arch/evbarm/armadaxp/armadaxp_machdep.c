@@ -1,4 +1,4 @@
-/*	$NetBSD: armadaxp_machdep.c,v 1.2 2013/05/29 23:50:34 rkujawa Exp $	*/
+/*	$NetBSD: armadaxp_machdep.c,v 1.2.2.2 2013/06/23 06:20:03 tls Exp $	*/
 /*******************************************************************************
 Copyright (C) Marvell International Ltd. and its affiliates
 
@@ -37,7 +37,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *******************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: armadaxp_machdep.c,v 1.2 2013/05/29 23:50:34 rkujawa Exp $");
+__KERNEL_RCSID(0, "$NetBSD: armadaxp_machdep.c,v 1.2.2.2 2013/06/23 06:20:03 tls Exp $");
 
 #include "opt_machdep.h"
 #include "opt_mvsoc.h"

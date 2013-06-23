@@ -1,4 +1,4 @@
-/*	$NetBSD: clps711x_space.c,v 1.1 2013/04/28 11:57:13 kiyohara Exp $ */
+/*	$NetBSD: clps711x_space.c,v 1.1.4.2 2013/06/23 06:20:00 tls Exp $ */
 
 /*
  * Copyright (c) 2004 Jesse Off
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: clps711x_space.c,v 1.1 2013/04/28 11:57:13 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: clps711x_space.c,v 1.1.4.2 2013/06/23 06:20:00 tls Exp $");
 
 /*
  * bus_space I/O functions for clps711x

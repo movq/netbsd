@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_worker.c,v 1.1 2013/06/02 02:20:04 rmind Exp $	*/
+/*	$NetBSD: npf_worker.c,v 1.1.2.2 2013/06/23 06:20:25 tls Exp $	*/
 
 /*-
  * Copyright (c) 2010-2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_worker.c,v 1.1 2013/06/02 02:20:04 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_worker.c,v 1.1.2.2 2013/06/23 06:20:25 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

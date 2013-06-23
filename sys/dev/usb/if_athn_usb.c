@@ -1,4 +1,4 @@
-/*	$NetBSD: if_athn_usb.c,v 1.5 2013/04/03 14:20:18 christos Exp $	*/
+/*	$NetBSD: if_athn_usb.c,v 1.5.4.2 2013/06/23 06:20:22 tls Exp $	*/
 /*	$OpenBSD: if_athn_usb.c,v 1.12 2013/01/14 09:50:31 jsing Exp $	*/
 
 /*-
@@ -22,7 +22,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_athn_usb.c,v 1.5 2013/04/03 14:20:18 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_athn_usb.c,v 1.5.4.2 2013/06/23 06:20:22 tls Exp $");
 
 #ifdef	_KERNEL_OPT
 #include "opt_inet.h"

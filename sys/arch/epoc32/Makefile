@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2013/05/01 13:11:59 kiyohara Exp $
+#	$NetBSD: Makefile,v 1.1.4.2 2013/06/23 06:20:02 tls Exp $
 
 # Makefile for epoc32 tags file and boot blocks
 

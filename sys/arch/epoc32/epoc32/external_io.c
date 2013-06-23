@@ -1,4 +1,4 @@
-/*	$NetBSD: external_io.c,v 1.2 2013/06/22 13:32:54 kiyohara Exp $	*/
+/*	$NetBSD: external_io.c,v 1.2.2.2 2013/06/23 06:20:02 tls Exp $	*/
 
 /*
  * Copyright (c) 1997 Mark Brinicombe.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: external_io.c,v 1.2 2013/06/22 13:32:54 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: external_io.c,v 1.2.2.2 2013/06/23 06:20:02 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -74,7 +74,7 @@ struct bus_space external_bs_tag = {
 
 	/* read (single) */
 	external_bs_r_1,
-	bs_notimpl_bs_r_2,
+	external_bs_r_2,
 	external_bs_r_4,
 	bs_notimpl_bs_r_8,
 
@@ -92,7 +92,7 @@ struct bus_space external_bs_tag = {
 
 	/* write (single) */
 	external_bs_w_1,
-	bs_notimpl_bs_w_2,
+	external_bs_w_2,
 	external_bs_w_4,
 	bs_notimpl_bs_w_8,
 
@@ -130,8 +130,7 @@ struct bus_space external_bs_tag = {
 /* bus space functions */
 
 int
-external_bs_subregion(void *t, bus_space_handle_t bsh, bus_size_t offset,
-		      bus_size_t size, bus_space_handle_t *nbshp)
+external_bs_subregion(void *t, bus_space_handle_t bsh, bus_size_t offset, bus_size_t size, bus_space_handle_t *nbshp)
 {
 
 	*nbshp = bsh + offset;
@@ -155,13 +154,8 @@ external_bs_rr_2(void *cookie, bus_space_handle_t bsh,
 {
 	int i;
 
-	for (i = 0; count - i > 1 && i < count; i += 2)
-		*(uint32_t *)(&datap[i]) =
-		    external_bs_r_4(cookie, bsh, offset + (i << 1));
-	for (; i < count; i++)
-		datap[i] =
-		    external_bs_r_1(cookie, bsh, offset + (i << 1)) |
-		    external_bs_r_1(cookie, bsh, offset + (i << 1) + 1);
+	for (i = 0; i < count; i++)
+		datap[i] = external_bs_r_2(cookie, bsh, offset + i);
 }
 
 void
@@ -179,16 +173,9 @@ external_bs_wr_2(void *cookie, bus_space_handle_t bsh,
 		 bus_size_t offset, uint16_t const *datap, bus_size_t count)
 {
 	int i;
-	uint16_t v;
 
-	for (i = 0; count - i > 1 && i < count; i += 2)
-		external_bs_w_4(cookie, bsh, offset + (i << 1),
-		    *(const uint32_t *)(&datap[i]));
-	for (; i < count; i++) {
-		v = datap[i];
-		external_bs_w_1(cookie, bsh, offset + (i << 1), v & 0xff);
-		external_bs_w_1(cookie, bsh, offset + (i << 1) + 1, v >> 8);
-	}
+	for (i = 0; i < count; i++)
+		external_bs_w_2(cookie, bsh, offset + i, datap[i]);
 }
 
 void
@@ -207,11 +194,6 @@ external_bs_sr_2(void *cookie, bus_space_handle_t bsh,
 {
 	int i;
 
-	for (i = 0; count - i > 1 && i < count; i += 2)
-		external_bs_w_4(cookie, bsh, offset + (i << 1),
-		    value | (value << 16));
-	for (; i < count; i++) {
-		external_bs_w_1(cookie, bsh, offset + (i << 1), value & 0xff);
-		external_bs_w_1(cookie, bsh, offset + (i << 1) + 1, value >> 8);
-	}
+	for (i = 0; i < count; i++)
+		external_bs_w_2(cookie, bsh, offset + i, value);
 }

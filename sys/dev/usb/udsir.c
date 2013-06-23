@@ -1,4 +1,4 @@
-/*	$NetBSD: udsir.c,v 1.1 2013/05/28 12:03:26 kiyohara Exp $	*/
+/*	$NetBSD: udsir.c,v 1.1.2.2 2013/06/23 06:20:22 tls Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: udsir.c,v 1.1 2013/05/28 12:03:26 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udsir.c,v 1.1.2.2 2013/06/23 06:20:22 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

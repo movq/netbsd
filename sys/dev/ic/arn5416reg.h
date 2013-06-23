@@ -1,4 +1,4 @@
-/*	$NetBSD: arn5416reg.h,v 1.1 2013/03/30 02:53:01 christos Exp $	*/
+/*	$NetBSD: arn5416reg.h,v 1.1.4.2 2013/06/23 06:20:17 tls Exp $	*/
 /*	$OpenBSD: ar5416reg.h,v 1.5 2012/10/20 09:54:20 stsp Exp $	*/
 
 /*-
