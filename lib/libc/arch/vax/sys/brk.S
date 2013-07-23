@@ -31,26 +31,23 @@
 
 #if defined(SYSLIBC_SCCS) && !defined(lint)
 	/* .asciz "@(#)brk.s	8.1 (Berkeley) 6/4/93" */
-RCSID("$NetBSD: brk.S,v 1.14 2013/07/18 12:27:01 matt Exp $")
+RCSID("$NetBSD: brk.S,v 1.13 2011/01/25 02:38:15 matt Exp $")
 #endif /* SYSLIBC_SCCS and not lint */
 
-	.globl	_C_LABEL(__curbrk)
+	.globl	CURBRK
 	.globl	_C_LABEL(__minbrk)
-	.hidden _C_LABEL(__curbrk)
-	.hidden	_C_LABEL(__minbrk)
 
 #ifdef WEAK_ALIAS
 WEAK_ALIAS(brk, _brk)
 #endif
 
 ENTRY(_brk, 0)
-	moval	_C_LABEL(__minbrk),%r5		# gtr > _end 
-	cmpl	(%r5),4(%ap)			# gtr > _end 
+	cmpl	_C_LABEL(__minbrk),4(%ap)	# gtr > _end 
 	blequ	1f				#   is fine
-	movl	(%r5),4(%ap)			# shrink back to _end
+	movl	_C_LABEL(__minbrk),4(%ap)	# shrink back to _end
 1:	chmk	$ SYS_break			# do it
 	jcs	err
-	movl	4(%ap),_C_LABEL(__curbrk)
+	movl	4(%ap),CURBRK
 	clrl	%r0
 	ret
 err:

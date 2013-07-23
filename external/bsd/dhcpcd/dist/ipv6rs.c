@@ -1,5 +1,5 @@
 #include <sys/cdefs.h>
- __RCSID("$NetBSD: ipv6rs.c,v 1.1.1.13 2013/07/19 11:52:57 roy Exp $");
+ __RCSID("$NetBSD: ipv6rs.c,v 1.1.1.12 2013/06/21 19:33:07 roy Exp $");
 
 /*
  * dhcpcd - DHCP client daemon
@@ -608,7 +608,8 @@ ipv6rs_handledata(__unused void *arg)
 
 	/* We don't want to spam the log with the fact we got an RA every
 	 * 30 seconds or so, so only spam the log if it's different. */
-	if (rap == NULL || (rap->data_len != len ||
+	if (options & DHCPCD_DEBUG || rap == NULL ||
+	    (rap->data_len != len ||
 	     memcmp(rap->data, (unsigned char *)icp, rap->data_len) != 0))
 	{
 		if (rap) {
@@ -619,11 +620,10 @@ ipv6rs_handledata(__unused void *arg)
 			rap->nslen = 0;
 		}
 		new_data = 1;
-	} else
-		new_data = 0;
-	if (new_data || ifp->options->options & DHCPCD_DEBUG)
 		syslog(LOG_INFO, "%s: Router Advertisement from %s",
 		    ifp->name, sfrom);
+	} else
+		new_data = 0;
 
 	if (rap == NULL) {
 		rap = calloc(1, sizeof(*rap));
@@ -915,7 +915,7 @@ ipv6rs_handledata(__unused void *arg)
 		script_runreason(ifp, "TEST");
 		goto handle_flag;
 	}
-	if (ifp->options->options & DHCPCD_IPV6RA_OWN)
+	if (options & DHCPCD_IPV6RA_OWN)
 		ipv6ns_probeaddrs(&rap->addrs);
 	ipv6_buildroutes();
 
@@ -938,12 +938,10 @@ ipv6rs_handledata(__unused void *arg)
 
 handle_flag:
 	if (rap->flags & ND_RA_FLAG_MANAGED) {
-		if (rap->lifetime && new_data &&
-		    dhcp6_start(ifp, DH6S_INIT) == -1)
+		if (rap->lifetime && dhcp6_start(ifp, DH6S_INIT) == -1)
 			syslog(LOG_ERR, "dhcp6_start: %s: %m", ifp->name);
 	} else if (rap->flags & ND_RA_FLAG_OTHER) {
-		if (rap->lifetime && new_data &&
-		    dhcp6_start(ifp, DH6S_INFORM) == -1)
+		if (rap->lifetime && dhcp6_start(ifp, DH6S_INFORM) == -1)
 			syslog(LOG_ERR, "dhcp6_start: %s: %m", ifp->name);
 	} else {
 		if (rap->lifetime && new_data)

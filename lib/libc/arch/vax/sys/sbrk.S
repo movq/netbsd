@@ -31,14 +31,12 @@
 
 #if defined(SYSLIBC_SCCS) && !defined(lint)
 	/* .asciz "@(#)sbrk.s	8.1 (Berkeley) 6/4/93" */
-RCSID("$NetBSD: sbrk.S,v 1.12 2013/07/18 12:27:01 matt Exp $")
+RCSID("$NetBSD: sbrk.S,v 1.11 2011/01/25 02:38:15 matt Exp $")
 #endif /* SYSLIBC_SCCS and not lint */
 
 	.globl	_end
 	.globl	_C_LABEL(__minbrk)
-	.globl	_C_LABEL(__curbrk)
-	.hidden	_C_LABEL(__minbrk)
-	.hidden	_C_LABEL(__curbrk)
+	.globl	CURBRK
 
 #ifdef WEAK_ALIAS
 WEAK_ALIAS(sbrk, _sbrk)
@@ -47,20 +45,19 @@ WEAK_ALIAS(sbrk, _sbrk)
 	.data
 _C_LABEL(__minbrk):
 	.long	_end
-_C_LABEL(__curbrk):
+CURBRK:
 	.long	_end
 	.text
 
 ENTRY(_sbrk, 0)
-	moval	_C_LABEL(__curbrk),%r5
-	addl3	(%r5),4(%ap),-(%sp)
+	addl3	CURBRK,4(%ap),-(%sp)
 	pushl	$1
 	movl	%ap,%r3
 	movl	%sp,%ap
 	chmk	$ SYS_break
 	jcs 	err
-	movl	(%r5),%r0
-	addl2	4(%r3),(%r5)
+	movl	CURBRK,%r0
+	addl2	4(%r3),CURBRK
 	ret
 err:
 	jmp	CERROR+2
