@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.1 2013/07/18 22:08:59 matt Exp $
+#	$NetBSD: Makefile.inc,v 1.1.2.2 2013/07/23 21:07:22 riastradh Exp $
 #
 #	etc.evbcf/Makefile.inc -- evbcf-specific etc Makefile targets
 #

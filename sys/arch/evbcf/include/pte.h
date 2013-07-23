@@ -1,4 +1,4 @@
-/*	$NetBSD: pte.h,v 1.1 2013/07/18 22:08:59 matt Exp $	*/
+/*	$NetBSD: pte.h,v 1.1.2.2 2013/07/23 21:07:34 riastradh Exp $	*/
 
 #ifndef _MODULE
 #include <m68k/pte_coldfire.h>
