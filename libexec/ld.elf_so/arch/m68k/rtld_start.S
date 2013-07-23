@@ -1,4 +1,4 @@
-/*	$NetBSD: rtld_start.S,v 1.10 2013/07/18 21:57:42 matt Exp $	*/
+/*	$NetBSD: rtld_start.S,v 1.9 2008/04/28 20:23:03 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002, 2003 The NetBSD Foundation, Inc.
@@ -38,9 +38,8 @@
 .rtld_start:
 	subql	#8,%sp			| storage for obj and cleanup
 
-	GOT_SETUP(%a0)
-	LEA_LCL(_DYNAMIC,%a1)
-
+	lea	(%pc,_GLOBAL_OFFSET_TABLE_@GOTPC),%a0
+	lea	(%pc,_DYNAMIC),%a1
 	movel	%a1,%a5
 	subl	(%a0),%a5
 
@@ -64,7 +63,7 @@
 	.globl	_rtld_bind_start
 	.type	_rtld_bind_start,@function
 _rtld_bind_start:
-	INTERRUPT_SAVEREG
+	moveml	%d0-%d1/%a0-%a1,-(%sp)	| preserve caller-saved registers
 	movel	20(%sp),-(%sp)		| push reloff
 	movel	(16+4)(%sp),-(%sp)	| push obj
 	jbsr	_rtld_bind@PLTPC	| %a0 = _rtld_bind(obj, reloff)
@@ -74,7 +73,7 @@ _rtld_bind_start:
 #else
 	movel	%d0,(16+4)(%sp)		| write fake `return' address over obj
 #endif
-	INTERRUPT_RESTOREREG		| restore caller-saved registers
+	moveml	(%sp)+,%d0-%d1/%a0-%a1	| restore caller-saved registers
 	addql	#4,%sp			| skip reloff
 	rts				| `return' right into function
 	.size	_rtld_bind_start,.-_rtld_bind_start

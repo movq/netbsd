@@ -1,4 +1,4 @@
-/*	$NetBSD: strftime.c,v 1.28 2013/07/17 23:09:26 christos Exp $	*/
+/*	$NetBSD: strftime.c,v 1.26 2013/05/17 12:55:57 joerg Exp $	*/
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
@@ -6,7 +6,7 @@
 static char	elsieid[] = "@(#)strftime.c	7.64";
 static char	elsieid[] = "@(#)strftime.c	8.3";
 #else
-__RCSID("$NetBSD: strftime.c,v 1.28 2013/07/17 23:09:26 christos Exp $");
+__RCSID("$NetBSD: strftime.c,v 1.26 2013/05/17 12:55:57 joerg Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -314,10 +314,11 @@ label:
 					mkt = mktime(&tm);
 					/* CONSTCOND */
 					if (TYPE_SIGNED(time_t))
-						(void)snprintf(buf, sizeof(buf),
-						    "%jd", (intmax_t) mkt);
-					else	(void)snprintf(buf, sizeof(buf),
-						    "%ju", (uintmax_t) mkt);
+						(void) snprintf(buf, sizeof(buf),
+						    "%lld", (long long) mkt);
+					else	(void) snprintf(buf, sizeof(buf),
+						    "%llu", (unsigned long long)
+						    mkt);
 					pt = _add(buf, pt, ptlim);
 				}
 				continue;
@@ -645,8 +646,8 @@ static char *
 _yconv(const int a, const int b, const int convert_top, const int convert_yy,
     char *pt, const char *const ptlim)
 {
-	int	lead;
-	int	trail;
+	register int	lead;
+	register int	trail;
 
 #define DIVISOR	100
 	trail = a % DIVISOR + b % DIVISOR;

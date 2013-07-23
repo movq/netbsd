@@ -1,4 +1,4 @@
-/* $NetBSD: ldp_command.c,v 1.12 2013/07/18 06:07:45 kefren Exp $ */
+/* $NetBSD: ldp_command.c,v 1.11 2013/07/16 02:54:32 kefren Exp $ */
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -74,8 +74,11 @@ static int set_func(int, char *);
 static int exit_func(int, char *);
  
 /* Show functions */
+static int show_neighbours(int, char *);
+static int show_bindings(int, char *);
 static int show_debug(int, char *);
 static int show_hellos(int, char *);
+static int show_labels(int, char *);
 static int show_parameters(int, char *);
 static int show_version(int, char *);
 static int show_warning(int, char *);
@@ -399,7 +402,7 @@ exit_func(int s, char *recvspace)
 /*
  * Show functions
  */
-int
+static int
 show_neighbours(int s, char *recvspace)
 {
 	struct ldp_peer *p;
@@ -477,7 +480,7 @@ show_neighbours(int s, char *recvspace)
 }
 
 /* Shows labels grabbed from unsolicited label maps */
-int
+static int
 show_labels(int s, char *recvspace)
 {
 	struct ldp_peer *p;
@@ -501,7 +504,7 @@ show_labels(int s, char *recvspace)
 	return 1;
 }
 
-int
+static int
 show_bindings(int s, char *recvspace)
 {
 	struct label *l;

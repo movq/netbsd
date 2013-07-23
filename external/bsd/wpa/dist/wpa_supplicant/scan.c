@@ -373,7 +373,9 @@ static void wpas_add_interworking_elements(struct wpa_supplicant *wpa_s,
 #endif /* CONFIG_INTERWORKING */
 
 
-static struct wpabuf * wpa_supplicant_extra_ies(struct wpa_supplicant *wpa_s)
+static struct wpabuf *
+wpa_supplicant_extra_ies(struct wpa_supplicant *wpa_s,
+			 struct wpa_driver_scan_params *params)
 {
 	struct wpabuf *extra_ie = NULL;
 #ifdef CONFIG_WPS
@@ -581,7 +583,7 @@ static void wpa_supplicant_scan(void *eloop_ctx, void *timeout_ctx)
 	}
 
 	wpa_supplicant_optimize_freqs(wpa_s, &params);
-	extra_ie = wpa_supplicant_extra_ies(wpa_s);
+	extra_ie = wpa_supplicant_extra_ies(wpa_s, &params);
 
 	if (params.freqs == NULL && wpa_s->next_scan_freqs) {
 		wpa_dbg(wpa_s, MSG_DEBUG, "Optimize scan based on previously "
@@ -697,8 +699,8 @@ int wpa_supplicant_req_sched_scan(struct wpa_supplicant *wpa_s)
 {
 	struct wpa_driver_scan_params params;
 	enum wpa_states prev_state;
-	struct wpa_ssid *ssid = NULL;
-	struct wpabuf *extra_ie = NULL;
+	struct wpa_ssid *ssid;
+	struct wpabuf *wps_ie = NULL;
 	int ret;
 	unsigned int max_sched_scan_ssids;
 
@@ -784,11 +786,8 @@ int wpa_supplicant_req_sched_scan(struct wpa_supplicant *wpa_s)
 		return 0;
 	}
 
-	extra_ie = wpa_supplicant_extra_ies(wpa_s);
-	if (extra_ie) {
-		params.extra_ies = wpabuf_head(extra_ie);
-		params.extra_ies_len = wpabuf_len(extra_ie);
-	}
+	if (wpa_s->wps)
+		wps_ie = wpa_supplicant_extra_ies(wpa_s, &params);
 
 	wpa_dbg(wpa_s, MSG_DEBUG,
 		"Starting sched scan: interval %d timeout %d",
@@ -796,7 +795,7 @@ int wpa_supplicant_req_sched_scan(struct wpa_supplicant *wpa_s)
 
 	ret = wpa_supplicant_start_sched_scan(wpa_s, &params,
 					      wpa_s->sched_scan_interval);
-	wpabuf_free(extra_ie);
+	wpabuf_free(wps_ie);
 	os_free(params.filter_ssids);
 	if (ret) {
 		wpa_msg(wpa_s, MSG_WARNING, "Failed to initiate sched scan");

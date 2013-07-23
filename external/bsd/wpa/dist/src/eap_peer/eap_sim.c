@@ -438,8 +438,7 @@ static struct wpabuf * eap_sim_response_challenge(struct eap_sim_data *data,
 
 
 static struct wpabuf * eap_sim_response_reauth(struct eap_sim_data *data,
-					       u8 id, int counter_too_small,
-					       const u8 *nonce_s)
+					       u8 id, int counter_too_small)
 {
 	struct eap_sim_msg *msg;
 	unsigned int counter;
@@ -474,7 +473,7 @@ static struct wpabuf * eap_sim_response_reauth(struct eap_sim_data *data,
 	}
 	wpa_printf(MSG_DEBUG, "   AT_MAC");
 	eap_sim_msg_add_mac(msg, EAP_SIM_AT_MAC);
-	return eap_sim_msg_finish(msg, data->k_aut, nonce_s,
+	return eap_sim_msg_finish(msg, data->k_aut, data->nonce_s,
 				  EAP_SIM_NONCE_S_LEN);
 }
 
@@ -870,7 +869,7 @@ static struct wpabuf * eap_sim_process_reauthentication(
 		data->reauth_id = NULL;
 		data->reauth_id_len = 0;
 		os_free(decrypted);
-		return eap_sim_response_reauth(data, id, 1, eattr.nonce_s);
+		return eap_sim_response_reauth(data, id, 1);
 	}
 	data->counter = eattr.counter;
 
@@ -901,7 +900,7 @@ static struct wpabuf * eap_sim_process_reauthentication(
 		eap_sim_clear_identities(data, CLEAR_REAUTH_ID | CLEAR_EAP_ID);
 	}
 	os_free(decrypted);
-	return eap_sim_response_reauth(data, id, 0, data->nonce_s);
+	return eap_sim_response_reauth(data, id, 0);
 }
 
 
