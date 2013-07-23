@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2013/07/18 22:08:59 matt Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2013/07/23 21:07:34 riastradh Exp $
 
 INCSDIR= /usr/include/evbcf
 

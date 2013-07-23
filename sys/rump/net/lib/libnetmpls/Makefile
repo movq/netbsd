@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2013/07/18 15:59:28 kefren Exp $
+# $NetBSD: Makefile,v 1.1.2.2 2013/07/23 21:07:37 riastradh Exp $
 #
 
 .PATH:	${.CURDIR}/../../../../net ${.CURDIR}/../../../../netmpls

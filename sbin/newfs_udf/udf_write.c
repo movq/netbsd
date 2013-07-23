@@ -1,4 +1,4 @@
-/* $NetBSD: udf_write.c,v 1.2 2013/07/18 12:50:51 reinoud Exp $ */
+/* $NetBSD: udf_write.c,v 1.2.2.2 2013/07/23 21:07:31 riastradh Exp $ */
 
 /*
  * Copyright (c) 2006, 2008, 2013 Reinoud Zandijk
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: udf_write.c,v 1.2 2013/07/18 12:50:51 reinoud Exp $");
+__RCSID("$NetBSD: udf_write.c,v 1.2.2.2 2013/07/23 21:07:31 riastradh Exp $");
 #endif /* not lint */
 
 #define _EXPOSE_MMC
