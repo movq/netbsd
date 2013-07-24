@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_os_netbsd.h,v 1.1.2.1 2013/07/24 00:51:31 riastradh Exp $	*/
+/*	$NetBSD: drm_os_netbsd.h,v 1.1.2.2 2013/07/24 01:49:31 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -35,5 +35,7 @@
 #if defined(_KERNEL_OPT)
 #include "opt_drm.h"
 #endif
+
+#include <drm/drm_wait_netbsd.h>
 
 #endif  /* _DRM_DRM_OS_NETBSD_H_ */
