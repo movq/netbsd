@@ -1,4 +1,4 @@
-/*	$NetBSD: highmem.h,v 1.1.2.1 2013/07/24 00:33:12 riastradh Exp $	*/
+/*	$NetBSD: highmem.h,v 1.1.2.2 2013/07/24 03:31:12 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -31,5 +31,23 @@
 
 #ifndef _LINUX_HIGHMEM_H_
 #define _LINUX_HIGHMEM_H_
+
+#include <sys/types.h>
+#include <sys/queue.h>
+
+#include <uvm/uvm_extern.h>
+
+#include <linux/kernel.h>
+#include <linux/mm_types.h>
+
+/* XXX Make the nm output a little more greppable...  */
+#define	kmap_atomic	linux_kmap_atomic
+#define	kunmap_atomic	linux_kunmap_atomic
+
+int	linux_kmap_init(void);
+void	linux_kmap_fini(void);
+
+void *	kmap_atomic(struct page *);
+void	kunmap_atomic(void *);
 
 #endif  /* _LINUX_HIGHMEM_H_ */
