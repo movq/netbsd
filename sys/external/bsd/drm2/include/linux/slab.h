@@ -1,4 +1,4 @@
-/*	$NetBSD: slab.h,v 1.1.2.5 2013/07/24 02:37:13 riastradh Exp $	*/
+/*	$NetBSD: slab.h,v 1.1.2.6 2013/07/24 03:30:42 riastradh Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -38,34 +38,52 @@
 
 #include <uvm/uvm_extern.h>	/* For PAGE_SIZE.  */
 
+#include <linux/gfp.h>
+
 /* XXX Should use kmem, but Linux kfree doesn't take the size.  */
 
-#define	GFP_KERNEL	M_WAITOK
-#define	GFP_ATOMIC	M_NOWAIT
-
-static inline void *
-kmalloc(size_t size, int flags)
+static inline int
+linux_gfp_to_malloc(gfp_t gfp)
 {
-	return malloc(size, M_TEMP, flags);
+	int flags = 0;
+
+	/* XXX Handle other cases as they arise.  */
+	KASSERT((gfp == GFP_ATOMIC) || (gfp == GFP_KERNEL));
+
+	if (ISSET(gfp, __GFP_WAIT))
+		flags |= M_WAITOK;
+	else
+		flags |= M_NOWAIT;
+
+	if (ISSET(gfp, __GFP_ZERO))
+		flags |= M_ZERO;
+
+	return flags;
 }
 
 static inline void *
-kzalloc(size_t size, int flags)
+kmalloc(size_t size, gfp_t gfp)
 {
-	return malloc(size, M_TEMP, (flags | M_ZERO));
+	return malloc(size, M_TEMP, linux_gfp_to_malloc(gfp));
 }
 
 static inline void *
-kcalloc(size_t n, size_t size, int flags)
+kzalloc(size_t size, gfp_t gfp)
+{
+	return malloc(size, M_TEMP, (linux_gfp_to_malloc(gfp) | M_ZERO));
+}
+
+static inline void *
+kcalloc(size_t n, size_t size, gfp_t gfp)
 {
 	KASSERT((SIZE_MAX / n) <= size);
-	return malloc((n * size), M_TEMP, (flags | M_ZERO));
+	return malloc((n * size), M_TEMP, (linux_gfp_to_malloc(gfp) | M_ZERO));
 }
 
 static inline void *
-krealloc(void *ptr, size_t size, int flags)
+krealloc(void *ptr, size_t size, gfp_t gfp)
 {
-	return realloc(ptr, size, M_TEMP, flags);
+	return realloc(ptr, size, M_TEMP, linux_gfp_to_malloc(gfp));
 }
 
 static inline void
