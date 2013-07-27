@@ -1,4 +1,4 @@
-/*	$NetBSD: eui48_108.h,v 1.1 2013/07/27 15:23:16 christos Exp $	*/
+/*	$NetBSD: eui48_108.h,v 1.1.1.1 2013/07/27 15:23:16 christos Exp $	*/
 
 /*
  * Copyright (C) 2013  Internet Systems Consortium, Inc. ("ISC")
