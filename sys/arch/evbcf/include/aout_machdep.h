@@ -1,3 +1,3 @@
-/*	$NetBSD: aout_machdep.h,v 1.1 2013/07/18 22:08:59 matt Exp $	*/
+/*	$NetBSD: aout_machdep.h,v 1.1.4.2 2013/08/28 23:59:15 rmind Exp $	*/
 
 #include <m68k/aout_machdep.h>

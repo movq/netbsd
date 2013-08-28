@@ -1,4 +1,4 @@
-/*	$NetBSD: if_virt.h,v 1.2 2013/07/04 11:58:11 pooka Exp $	*/
+/*	$NetBSD: if_virt.h,v 1.2.4.2 2013/08/28 23:59:37 rmind Exp $	*/
 
 /*
  * NOTE!  This file is supposed to work on !NetBSD platforms.

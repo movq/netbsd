@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_kernel.h,v 1.1 2013/07/28 01:05:52 dholland Exp $	*/
+/*	$NetBSD: lfs_kernel.h,v 1.1.2.2 2013/08/28 23:59:38 rmind Exp $	*/
 
 /*  from NetBSD: lfs.h,v 1.157 2013/06/28 16:14:06 matt Exp  */
 

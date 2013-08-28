@@ -1,4 +1,4 @@
-/* $NetBSD: component.c,v 1.1 2013/07/18 15:59:28 kefren Exp $ */
+/* $NetBSD: component.c,v 1.1.4.2 2013/08/28 23:59:37 rmind Exp $ */
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: component.c,v 1.1 2013/07/18 15:59:28 kefren Exp $");
+__KERNEL_RCSID(0, "$NetBSD: component.c,v 1.1.4.2 2013/08/28 23:59:37 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/domain.h>

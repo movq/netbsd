@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ne_xsh.c,v 1.4 2013/08/13 15:43:25 rkujawa Exp $ */
+/*	$NetBSD: if_ne_xsh.c,v 1.4.2.2 2013/08/28 23:59:10 rmind Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

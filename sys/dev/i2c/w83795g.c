@@ -1,4 +1,4 @@
-/*	$NetBSD: w83795g.c,v 1.1 2013/08/06 15:58:25 soren Exp $	*/
+/*	$NetBSD: w83795g.c,v 1.1.4.2 2013/08/28 23:59:25 rmind Exp $	*/
 
 /*
  * Copyright (c) 2013 Soren S. Jorvang.  All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: w83795g.c,v 1.1 2013/08/06 15:58:25 soren Exp $");
+__KERNEL_RCSID(0, "$NetBSD: w83795g.c,v 1.1.4.2 2013/08/28 23:59:25 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
