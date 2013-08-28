@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.1 2013/08/08 06:50:24 matt Exp $
+# $NetBSD: Makefile.inc,v 1.1.2.2 2013/08/28 23:59:37 rmind Exp $
 
 CPPFLAGS+=	-DARCH_ELFSIZE=32
 

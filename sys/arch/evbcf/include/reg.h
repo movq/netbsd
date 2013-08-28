@@ -1,4 +1,4 @@
-/*	$NetBSD: reg.h,v 1.1 2013/07/18 22:08:59 matt Exp $	*/
+/*	$NetBSD: reg.h,v 1.1.4.2 2013/08/28 23:59:16 rmind Exp $	*/
 
 #ifndef _MACHINE_REG_H_
 #define	_MACHINE_REG_H_
