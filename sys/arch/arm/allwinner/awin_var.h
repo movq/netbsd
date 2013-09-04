@@ -1,4 +1,4 @@
-/* $NetBSD: awin_var.h,v 1.1 2013/09/03 18:02:26 matt Exp $ */
+/* $NetBSD: awin_var.h,v 1.2 2013/09/04 02:39:01 matt Exp $ */
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -34,9 +34,37 @@
 #include <sys/types.h>
 #include <sys/bus.h>
 
+struct awin_locators {
+	const char *loc_name;
+	bus_size_t loc_offset;
+	bus_size_t loc_size;
+	int loc_port; 
+	int loc_intr;
+#define	AWINIO_INTR_DEFAULT	0
+	int loc_flags;
+#define	AWINIO_REQUIRED		__BIT(8)
+#define	AWINIO_ONLY		__BITS(7,0)
+#define	AWINIO_ONLY_A20		__BIT(1)
+#define	AWINIO_ONLY_A10		__BIT(0)
+};
+
+struct awinio_attach_args {
+	struct awin_locators aio_loc;
+	bus_space_tag_t aio_core_bst;
+	bus_space_tag_t aio_core_a4x_bst;
+	bus_space_handle_t aio_core_bsh;
+	bus_dma_tag_t aio_dmat;
+};
+
 extern struct bus_space awin_bs_tag;
 extern struct bus_space awin_a4x_bs_tag;
+extern bus_space_handle_t awin_core_bsh;
+extern struct arm32_bus_dma_tag awin_dma_tag;
 
-bool	awinwdt_enable(bool);
+psize_t awin_memprobe(void);
+void	awin_bootstrap(vaddr_t, vaddr_t); 
+void	awin_reset(void);
+
+bool	awin_wdt_enable(bool);
 
 #endif /* _ARM_ALLWINNER_AWIN_VAR_H_ */
