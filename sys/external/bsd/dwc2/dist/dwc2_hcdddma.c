@@ -1,4 +1,4 @@
-/*	$NetBSD: dwc2_hcdddma.c,v 1.1 2013/09/05 07:53:12 skrll Exp $	*/
+/*	$NetBSD: dwc2_hcdddma.c,v 1.1.1.1 2013/09/05 07:53:12 skrll Exp $	*/
 
 /*
  * hcd_ddma.c - DesignWare HS OTG Controller descriptor DMA routines
