@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_sockmap.h,v 1.1 2013/09/25 19:06:37 tron Exp $	*/
+/*	$NetBSD: dict_sockmap.h,v 1.1.1.1 2013/09/25 19:06:37 tron Exp $	*/
 
 #ifndef _DICT_SOCKMAP_H_INCLUDED_
 #define _DICT_SOCKMAP_H_INCLUDED_

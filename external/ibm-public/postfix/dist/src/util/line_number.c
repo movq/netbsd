@@ -1,4 +1,4 @@
-/*	$NetBSD: line_number.c,v 1.1 2013/09/25 19:06:37 tron Exp $	*/
+/*	$NetBSD: line_number.c,v 1.1.1.1 2013/09/25 19:06:37 tron Exp $	*/
 
 /*++
 /* NAME
