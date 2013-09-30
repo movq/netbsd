@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_nfsdstate.c,v 1.1 2013/09/30 07:19:52 dholland Exp $	*/
+/*	$NetBSD: nfs_nfsdstate.c,v 1.1.1.1 2013/09/30 07:19:52 dholland Exp $	*/
 /*-
  * Copyright (c) 2009 Rick Macklem, University of Guelph
  * All rights reserved.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("FreeBSD: head/sys/fs/nfsserver/nfs_nfsdstate.c 245909 2013-01-25 15:25:24Z jhb "); */
-__RCSID("$NetBSD: nfs_nfsdstate.c,v 1.1 2013/09/30 07:19:52 dholland Exp $");
+__RCSID("$NetBSD: nfs_nfsdstate.c,v 1.1.1.1 2013/09/30 07:19:52 dholland Exp $");
 
 #ifndef APPLEKEXT
 #include <fs/nfs/nfsport.h>

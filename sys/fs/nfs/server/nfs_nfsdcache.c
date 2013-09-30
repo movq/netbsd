@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_nfsdcache.c,v 1.1 2013/09/30 07:19:57 dholland Exp $	*/
+/*	$NetBSD: nfs_nfsdcache.c,v 1.1.1.1 2013/09/30 07:19:57 dholland Exp $	*/
 /*-
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("FreeBSD: head/sys/fs/nfsserver/nfs_nfsdcache.c 254337 2013-08-14 21:11:26Z rmacklem "); */
-__RCSID("$NetBSD: nfs_nfsdcache.c,v 1.1 2013/09/30 07:19:57 dholland Exp $");
+__RCSID("$NetBSD: nfs_nfsdcache.c,v 1.1.1.1 2013/09/30 07:19:57 dholland Exp $");
 
 /*
  * Here is the basic algorithm:
