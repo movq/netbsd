@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_nfsdkrpc.c,v 1.1 2013/09/30 07:19:53 dholland Exp $	*/
+/*	$NetBSD: nfs_nfsdkrpc.c,v 1.1.1.1 2013/09/30 07:19:53 dholland Exp $	*/
 /*-
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("FreeBSD: head/sys/fs/nfsserver/nfs_nfsdkrpc.c 249596 2013-04-17 22:42:43Z ken "); */
-__RCSID("$NetBSD: nfs_nfsdkrpc.c,v 1.1 2013/09/30 07:19:53 dholland Exp $");
+__RCSID("$NetBSD: nfs_nfsdkrpc.c,v 1.1.1.1 2013/09/30 07:19:53 dholland Exp $");
 
 #include "opt_inet6.h"
 #include "opt_kgssapi.h"
