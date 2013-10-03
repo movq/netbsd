@@ -1,4 +1,6 @@
-/* Copyright (C) 2009-2013 Free Software Foundation, Inc.
+/* Obstack wrapper for GDB.
+
+   Copyright (C) 2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,26 +18,30 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
-#include "gdb_usleep.h"
-#include "gdb_select.h"
-#include "gdb_usleep.h"
+#include "gdb_obstack.h"
 
-#include <sys/time.h>
+/* Concatenate NULL terminated variable argument list of `const char *'
+   strings; return the new string.  Space is found in the OBSTACKP.
+   Argument list must be terminated by a sentinel expression `(char *)
+   NULL'.  */
 
-int
-gdb_usleep (int usec)
+char *
+obconcat (struct obstack *obstackp, ...)
 {
-  struct timeval delay;
-  int retval;
+  va_list ap;
 
-  delay.tv_sec = usec / 1000000;
-  delay.tv_usec = usec % 1000000;
-  retval = gdb_select (0, 0, 0, 0, &delay);
+  va_start (ap, obstackp);
+  for (;;)
+    {
+      const char *s = va_arg (ap, const char *);
 
-  if (retval < 0)
-    retval = -1;
-  else
-    retval = 0;
+      if (s == NULL)
+	break;
 
-  return retval;
+      obstack_grow_str (obstackp, s);
+    }
+  va_end (ap);
+  obstack_1grow (obstackp, 0);
+
+  return obstack_finish (obstackp);
 }
