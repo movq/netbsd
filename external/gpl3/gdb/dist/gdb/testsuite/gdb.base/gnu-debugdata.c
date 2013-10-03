@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 1997-2013 Free Software Foundation, Inc.
+   Copyright 2012-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,14 +15,16 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include <stdio.h>
+#include <signal.h>
 
-#ifdef PROTOTYPES
-int main (void)
-#else
-main()
-#endif
+static int
+debugdata_function (void)
 {
-  printf("Hello from vforked-prog...\n");
-  return 0;
+  return raise (SIGSEGV) + 1;
+}
+
+int
+main (void)
+{
+  return debugdata_function () + 1;
 }

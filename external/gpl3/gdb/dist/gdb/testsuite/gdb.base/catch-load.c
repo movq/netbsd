@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 1997-2013 Free Software Foundation, Inc.
+   Copyright 2012-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,14 +15,21 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+#include <dlfcn.h>
 #include <stdio.h>
 
-#ifdef PROTOTYPES
-int main (void)
-#else
-main()
-#endif
+/* This is updated by the .exp file.  */
+char *libname = "catch-load-so.so";
+
+int
+main ()
 {
-  printf("Hello from vforked-prog...\n");
+  void *h;
+
+  h = dlopen (libname, RTLD_LAZY);
+
+  dlclose (h);
+
+  h = NULL;			/* final breakpoint here */
   return 0;
 }

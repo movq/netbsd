@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 1997-2013 Free Software Foundation, Inc.
+   Copyright 2011-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,14 +15,56 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include <stdio.h>
+#include <unistd.h>
 
-#ifdef PROTOTYPES
-int main (void)
-#else
-main()
-#endif
+static void
+marker () {}
+
+int
+main (void)
 {
-  printf("Hello from vforked-prog...\n");
+  int pid;
+
+  pid = vfork ();
+  if (pid == -1)
+    {
+      return 1;
+    }
+  else if (pid != 0)
+    {
+    }
+  else
+    {
+      _exit (0);
+    }
+
+  pid = vfork ();
+  if (pid == -1)
+    {
+      return 1;
+    }
+  else if (pid != 0)
+    {
+    }
+  else
+    {
+      _exit (0);
+    }
+
+  pid = vfork ();
+  if (pid == -1)
+    {
+      return 1;
+    }
+  else if (pid != 0)
+    {
+    }
+  else
+    {
+      _exit (0);
+    }
+
+  marker ();
   return 0;
+
 }
