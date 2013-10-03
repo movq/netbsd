@@ -1,6 +1,7 @@
-/* MI Command Set - MI Console.
-   Copyright (C) 2000-2013 Free Software Foundation, Inc.
-   Contributed by Cygnus Solutions (a Red Hat company).
+/* MI Command Set - breakpoint and watchpoint commands.
+   Copyright (C) 2012-2013 Free Software Foundation, Inc.
+
+   Contributed by Intel Corporation.
 
    This file is part of GDB.
 
@@ -17,14 +18,13 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef MI_CONSOLE_H
-#define MI_CONSOLE_H
+#ifndef MI_CMD_BREAK_H
+#define MI_CMD_BREAK_H
 
-extern struct ui_file *mi_console_file_new (struct ui_file *raw,
-					    const char *prefix,
-					    char quote);
 
-extern void mi_console_set_raw (struct ui_file *console,
-				struct ui_file *raw);
+/* Setup the reporting of the insertion of a new breakpoint or
+   catchpoint.  */
+struct cleanup *setup_breakpoint_reporting (void);
 
 #endif
+
