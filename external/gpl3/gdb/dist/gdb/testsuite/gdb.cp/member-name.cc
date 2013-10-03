@@ -16,67 +16,58 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
    */
 
-struct A
+struct B
 {
-  virtual ~A ();
-  int a1;
+  static int b;
 };
 
-A::~A()
-{
-  a1 = 800;
-}
-
-struct B : public A
-{
-  virtual ~B ();
-  int b1;
-  int b2;
-};
-
-B::~B()
-{
-  a1 = 900;
-  b1 = 901;
-  b2 = 902;
-}
+int B::b = 23;
 
 struct C : public B
 {
-  A *c1;
-  A *c2;
+  static int x;
+
+  struct inner
+  {
+    static int z;
+  };
+
+  int y;
+
+  C ()
+  {
+    // First breakpoint here
+    y = x + inner::z;
+  }
+
+  int m ()
+  {
+    // Second breakpoint here
+    return x - y;
+  }
 };
 
-// Stop the compiler from optimizing away data.
-void refer (A *)
+int C::x = 23;
+int C::inner::z = 0;
+
+template<typename T>
+struct Templ
 {
-  ;
+  static int y;
+
+  int m()
+  {
+    // Third breakpoint here
+    return Templ::y;
+  }
+};
+
+template<typename T> int Templ<T>::y = 23;
+
+int main ()
+{
+  C c;
+  Templ<int> t;
+
+  return c.m() + t.m();
 }
-
-struct empty {};
-
-// Stop the compiler from optimizing away data.
-void refer (empty *)
-{
-  ;
-}
-
-int main (void)
-{
-  A alpha, *aap, *abp, *acp;
-  B beta, *bbp;
-  C gamma;
-  empty e;
-
-  alpha.a1 = 100;
-  beta.a1 = 200; beta.b1 = 201; beta.b2 = 202;
-  gamma.c1 = 0; gamma.c2 = (A *) ~0UL;
-
-  aap = &alpha; refer (aap);
-  abp = &beta;  refer (abp);
-  bbp = &beta;  refer (bbp);
-  acp = &gamma; refer (acp);
-  refer (&e);
-
-  return 0;  // marker return 0
-} // marker close brace

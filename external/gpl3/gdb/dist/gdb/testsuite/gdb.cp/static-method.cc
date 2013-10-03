@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2009-2013 Free Software Foundation, Inc.
+   Copyright 2011-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,24 +15,32 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-extern "C" int c_func (void)
+namespace xxx
 {
-  return 0; /* Breakpoint in c_func.  */
+  namespace
+  {
+    static int func (void) { return 0; } // xxx::func
+    class A
+    {
+    public:
+      static int func (void) { return 0; } // xxx::A::func
+    };
+  }
 }
 
-extern "C" int c_funcs_1 (void)
+int
+test_function (void)
 {
-  return 1; /* Breakpoint in c_funcs_1.  */
+  return xxx::func () + xxx::A::func ();
 }
 
-extern "C" int c_funcs_2 (void)
+int
+main (void)
 {
-  return 2; /* Breakpoint in c_funcs_2.  */
-}
+  int i, x;
 
-int main()
-{
-  c_func ();
-  c_funcs_1 ();
-  c_funcs_2 ();
+  for (i = 0; i < 1000; ++i)
+    x += test_function ();
+
+  return x;
 }

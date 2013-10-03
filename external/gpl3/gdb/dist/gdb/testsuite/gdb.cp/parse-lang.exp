@@ -1,4 +1,4 @@
-# Copyright 2008-2013 Free Software Foundation, Inc.
+# Copyright 2012-2013 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,25 +13,19 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# Stress test namespace lookup
-
-
 standard_testfile .cc
-
-if [get_compiler_info] {
-    return -1
-}
 
 if {[prepare_for_testing $testfile.exp $testfile $srcfile {debug c++}]} {
     return -1
 }
 
-if ![runto_main] then {
-    perror "couldn't run to breakpoint main"
-    continue
-}
+# Place the breakpoint before inferior gets started.  Then the breakpoint
+# condition will be re-evaluated in non-C++ startup code.
+gdb_breakpoint "C::m if v == 42"
 
-############################################
-# Test that the search can fail efficiently
+gdb_breakpoint "marker"
 
-gdb_test "print y" "No symbol \"y\" in current context."
+# runto_main would delete the breakpoint.
+gdb_run_cmd
+
+gdb_test "" {Breakpoint [0-9]+, C::m .*} "breakpoint hit"
