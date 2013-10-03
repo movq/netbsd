@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2010-2013 Free Software Foundation, Inc.
+   Copyright 2012-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,25 +15,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-/* This program will be compiled with watch-notconst2.S in order to generate a
-   single binary.
-
-   The purpose of this test is to see if GDB can still watch the
-   variable `x' (define in watch-notconst2.c:f) even when we compile
-   the program using -O2 optimization.  */
-
-int
-g (int j)
+void
+nodebug (void)
 {
-  int l = j + 2;
-  return l;
-}
-
-extern int f (int i);
-
-int
-main (int argc, char **argv)
-{
-  f (1);
-  return 0;
 }

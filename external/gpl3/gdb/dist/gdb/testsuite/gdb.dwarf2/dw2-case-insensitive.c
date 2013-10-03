@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2010-2013 Free Software Foundation, Inc.
+   Copyright 2011-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,25 +15,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-/* This program will be compiled with watch-notconst2.S in order to generate a
-   single binary.
+/* Use DW_LANG_Fortran90 for case insensitive DWARF.  */
 
-   The purpose of this test is to see if GDB can still watch the
-   variable `x' (define in watch-notconst2.c:f) even when we compile
-   the program using -O2 optimization.  */
-
-int
-g (int j)
+void
+FUNC_lang (void)
 {
-  int l = j + 2;
-  return l;
 }
 
-extern int f (int i);
+/* Symbol is present only in ELF .symtab.  */
+
+void
+FUNC_symtab (void)
+{
+}
 
 int
-main (int argc, char **argv)
+main (void)
 {
-  f (1);
+  FUNC_lang ();
+  FUNC_symtab ();
   return 0;
 }

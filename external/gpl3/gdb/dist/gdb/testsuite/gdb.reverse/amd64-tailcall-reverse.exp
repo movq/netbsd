@@ -1,5 +1,5 @@
-# Copyright 2009-2013 Free Software Foundation, Inc.
-
+# Copyright (C) 2012-2013 Free Software Foundation, Inc.
+#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 3 of the License, or
@@ -12,23 +12,24 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-load_lib dwarf.exp
 
-# Test DW_OP_stack_value and DW_OP_implicit_value.
-
-# This test can only be run on targets which support DWARF-2 and use gas.
-if {![dwarf2_support]} {
-    return 0  
-}
-# This test can only be run on x86 targets.
-if {![is_x86_like_target]} {
-    return 0  
+if ![supports_reverse] {
+    return
 }
 
+set opts {}
 standard_testfile .S
 
-if {[prepare_for_testing $testfile.exp $testfile \
-	 [list $srcfile] [list {additional_flags=-nostdlib}]]} {
+if [info exists COMPILE] {
+    # make check RUNTESTFLAGS="gdb.reverse/amd64-tailcall-reverse.exp COMPILE=1"
+    standard_testfile
+    lappend opts debug optimize=-O2
+} elseif { ![istarget x86_64-*-* ] || ![is_lp64_target] } {
+    verbose "Skipping ${testfile}."
+    return
+}
+
+if { [prepare_for_testing ${testfile}.exp ${testfile} ${srcfile} $opts] } {
     return -1
 }
 
@@ -36,8 +37,13 @@ if ![runto_main] {
     return -1
 }
 
-gdb_test "break valop.c:19" "Breakpoint 2.*" "set breakpoint for valop"
-gdb_continue_to_breakpoint "continue to breakpoint for valop"
+if [supports_process_record] {
+    gdb_test_no_output "record"
+}
 
-gdb_test "print uses_stack_op" " = 24" "print uses_stack_op"
-gdb_test "print uses_lit_op" " = 2147483648" "print uses_lit_op"
+gdb_test "next" {f \(\);} "next to f"
+gdb_test "next" {v = 3;} "next to v = 3"
+
+# FAIL was:
+# 29        g ();
+gdb_test "reverse-next" {f \(\);}
