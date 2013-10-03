@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2010-2013 Free Software Foundation, Inc.
+   Copyright 2011-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,15 +15,39 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-void
-_start (void)
-{
-  extern void marker (void);
+#include <signal.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
 
-  marker ();
+volatile char *p = NULL;
+
+extern long
+bowler (void)
+{
+  return *p;
 }
 
-void
-marker (void)
+extern void
+keeper (int sig)
 {
+  static int recurse = 0;
+  if (++recurse < 3)
+    bowler ();
+
+  _exit (0);
+}
+
+int
+main (void)
+{
+  struct sigaction act;
+  memset (&act, 0, sizeof act);
+  act.sa_handler = keeper;
+  act.sa_flags = SA_NODEFER;
+  sigaction (SIGSEGV, &act, NULL);
+  sigaction (SIGBUS, &act, NULL);
+
+  bowler ();
+  return 0;
 }
