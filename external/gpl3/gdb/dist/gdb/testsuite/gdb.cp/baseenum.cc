@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 1998-2013 Free Software Foundation, Inc.
+   Copyright 2003-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -16,19 +16,66 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
    */
 
-template<class T> T add(T v1, T v2);
-
-void add1()
+class A
 {
-  unsigned char c;
-  int i;
-  float f;
-  
-  c = 'b';
-  i = 3;
-  f = 6.5;
+public:
+  enum E {X,Y,Z};
+};
 
-  c = add(c, c);
-  i = add(i, i);
-  f = add(f, f);
+class B1 : public A
+{
+};
+
+class B2 : public A
+{
+};
+
+class C : public B1, public B2
+{
+public:
+  void test(E e);
+};
+
+void C::test(E e)
+{
+  if (e == X)  // breakpoint 1
+    {
+    }
 }
+
+namespace N
+{
+  class A
+  {
+  public:
+    enum E {X, Y, Z};
+  };
+
+  class B1 {};
+  class B2 : public A {};
+
+  class C : public B1, public B2
+  {
+  public:
+    void test (E e);
+  };
+
+  void
+  C::test (E e)
+  {
+    if (e == X) // breakpoint 2
+      {
+      }
+  }
+}
+
+int main()
+{
+  C c;
+  c.test(A::X);
+
+  N::C nc;
+  nc.test (N::A::X);
+  return 0;
+}
+

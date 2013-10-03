@@ -1,5 +1,5 @@
-# Copyright 2011-2013 Free Software Foundation, Inc.
-#
+# Copyright 2012-2013 Free Software Foundation, Inc.
+
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 3 of the License, or
@@ -13,22 +13,24 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# This file is part of the gdb testsuite.
-
-if {[skip_cplus_tests]} { continue }
+# Test searching enum constant symbols derived from base classes.
 
 standard_testfile .cc
 
-if {[prepare_for_testing $testfile $testfile $srcfile {c++ debug}]} {
+if {[prepare_for_testing $testfile.exp $testfile $srcfile {debug c++}]} {
     return -1
 }
 
-gdb_test_no_output "set language c++"
-
-gdb_test "p *u" {You can't do that without a process to debug.} "test crash"
-
-if ![runto_main] {
+if {![runto_main]} {
+    untested "could not run to main"
     return -1
 }
 
-gdb_test "p *v" " = 42" "test typedef"
+gdb_breakpoint [gdb_get_line_number "breakpoint 1" $srcfile]
+gdb_continue_to_breakpoint "breakpoint 1"
+gdb_test "print X" "= A::X" "Print enum constant X of class A"
+
+gdb_breakpoint [gdb_get_line_number "breakpoint 2" $srcfile]
+gdb_continue_to_breakpoint "breakpoint 2"
+gdb_test "print X" "= N::A::X" \
+         "Print enum constant X of class A in namespace N"

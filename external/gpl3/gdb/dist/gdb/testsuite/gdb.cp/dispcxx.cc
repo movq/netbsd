@@ -1,8 +1,6 @@
-/* Test gdb support for setting file:line breakpoints on inline fns.
+/* Test for displays in C++.
 
-   This testcase is part of GDB, the GNU debugger.
-
-   Copyright 2008-2013 Free Software Foundation, Inc.
+   Copyright 2012-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -16,20 +14,26 @@
 
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-   */
+*/
 
-#include "mb-inline.h"
+struct K {
+  void method () { }
 
-int
-afn ()
-{
-  return foo (0) + multi_line_foo (0);
+  int k;
+
+  K() : k(23) { }
+
+  int m2 ()
+  {
+    k += 7;			// Break here
+    return k;
+  }
+};
+
+int main() {
+  K k;
+
+  k.method();
+  return k.m2();
 }
 
-int
-main ()
-{
-  int a = afn ();
-  int b = bfn ();
-  return a * b;
-}
