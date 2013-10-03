@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2010-2013 Free Software Foundation, Inc.
+   Copyright (C) 2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,32 +15,12 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-int global = 0;
-int global2 = 0;
-
-int func(int *foo)
+int
+main (void)
 {
-  (*foo)++;
-  global++;
-  global2++;
-}
+  int x = 5;
 
-void func2(int *foo)
-{
-  global2++;
-}
-
-int main()
-{
-  int q = 0;
-
-  func2 (&q);
-  global2++;
-
-  while (1)
-    {
-      func(&q);
-    }
-
-  return 0;
+  ++x; /* Next without dprintf. */
+  ++x; /* Set dprintf here. */
+  return x - 7;
 }

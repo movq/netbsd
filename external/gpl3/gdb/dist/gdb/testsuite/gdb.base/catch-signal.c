@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2010-2013 Free Software Foundation, Inc.
+   Copyright 2012-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,32 +15,32 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-int global = 0;
-int global2 = 0;
+#include <signal.h>
+#include <unistd.h>
 
-int func(int *foo)
+void
+do_nothing (void)
 {
-  (*foo)++;
-  global++;
-  global2++;
 }
 
-void func2(int *foo)
+void
+handle (int sig)
 {
-  global2++;
+  do_nothing (); /* handle marker */
 }
 
-int main()
+int
+main ()
 {
-  int q = 0;
+  signal (SIGHUP, handle);
+  signal (SIGUSR1, SIG_IGN);
 
-  func2 (&q);
-  global2++;
+  raise (SIGHUP);		/* first HUP */
 
-  while (1)
-    {
-      func(&q);
-    }
+  raise (SIGHUP);		/* second HUP */
 
-  return 0;
+  raise (SIGHUP);		/* third HUP */
+
+  raise (SIGHUP);		/* fourth HUP */
 }
+
