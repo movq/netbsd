@@ -1,6 +1,7 @@
-/* Target-dependent code for NetBSD/vax.
+/* Target-dependent code for Newlib AArch64.
 
-   Copyright (C) 2004-2013 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
+   Contributed by ARM Ltd.
 
    This file is part of GDB.
 
@@ -18,31 +19,29 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
-#include "arch-utils.h"
+
+#include "gdbarch.h"
+#include "aarch64-tdep.h"
 #include "osabi.h"
 
-#include "vax-tdep.h"
-#include "solib-svr4.h"
-
-#include "gdb_string.h"
-
-/* NetBSD ELF.  */
+/* Implement the 'init_osabi' method of struct gdb_osabi_handler.  */
 
 static void
-vaxnbsd_elf_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
+aarch64_newlib_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
-  /* NetBSD ELF uses SVR4-style shared libraries.  */
-  set_solib_svr4_fetch_link_map_offsets
-    (gdbarch, svr4_ilp32_fetch_link_map_offsets);
+  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+
+  /* Jump buffer - support for longjmp.
+     Offset of original PC in jump buffer (in registers).  */
+  tdep->jb_pc = 11;
 }
-
 
 /* Provide a prototype to silence -Wmissing-prototypes.  */
-void _initialize_vaxnbsd_tdep (void);
+extern initialize_file_ftype _initialize_aarch64_newlib_tdep;
 
 void
-_initialize_vaxnbsd_tdep (void)
+_initialize_aarch64_newlib_tdep (void)
 {
-  gdbarch_register_osabi (bfd_arch_vax, 0, GDB_OSABI_NETBSD_ELF,
-			  vaxnbsd_elf_init_abi);
+  gdbarch_register_osabi (bfd_arch_aarch64, 0, GDB_OSABI_NEWLIB,
+			  aarch64_newlib_init_abi);
 }

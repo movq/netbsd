@@ -1,6 +1,5 @@
-/* Handle SOM shared libraries for GDB, the GNU Debugger.
-
-   Copyright (C) 2004-2013 Free Software Foundation, Inc.
+/* Target-dependent definitions for Renesas Super-H, for GDB.
+   Copyright (C) 2012-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,19 +16,9 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef SOLIB_SOM_H
-#define SOLIB_SOM_H
+#ifndef SH64_TDEP_H
+#define SH64_TDEP_H
 
-struct objfile;
-struct section_offsets;
-struct gdbarch;
+extern gdbarch_init_ftype sh64_gdbarch_init;
 
-extern int hpux_major_release;
-
-void som_solib_select (struct gdbarch *gdbarch);
-
-int som_solib_section_offsets (struct objfile *objfile,
-			       struct section_offsets *offsets);
-
-#endif
-
+#endif /* SH64_TDEP_H */
