@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2006-2013 Free Software Foundation, Inc.
+   Copyright 2011-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,15 +15,29 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-void bar (void);
-void
-foo (void)
-{ 
-  bar ();
-}                                                                                                       
+/*
+    This source is used to check that GDB correctly
+    passes on environment variables down to inferior.
+    One of the tests checks that 'unset' variables also are removed from
+    inferior environment list.  */
 
-void
-bar (void)
-{ 
-  puts ("bar in u2");
-}                                                                                                       
+#include <stdio.h>
+
+int main (int argc, char **argv, char **envp)
+
+{
+    int i, j;
+
+    j = 0;
+    for (i = 0; envp[i]; i++)
+      {
+	if (strncmp ("TEST_GDB", envp[i], 8) == 0)
+	  {
+	    printf ("%s\n", envp[i]);
+	    j++;
+	  }
+      }
+    printf ("Program found %d variables starting with TEST_GDB\n", j);
+    return 0; /* set breakpoint here.  */
+}
+

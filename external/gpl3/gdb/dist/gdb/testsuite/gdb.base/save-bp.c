@@ -1,6 +1,6 @@
-/* This testcase is part of GDB, the GNU debugger.
+/* Copyright 2011-2013 Free Software Foundation, Inc.
 
-   Copyright 2006-2013 Free Software Foundation, Inc.
+   This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,15 +15,22 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-void bar (void);
 void
-foo (void)
-{ 
-  bar ();
-}                                                                                                       
+break_me (void)
+{
+}
 
-void
-bar (void)
-{ 
-  puts ("bar in u2");
-}                                                                                                       
+int
+main (void)
+{
+  int i;
+  break_me (); /* BREAK HERE.  */
+  break_me (); /* Try a thread-specific breakpoint.  */
+
+  for (i = 0; i < 5; i++)
+    break_me (); /* Try a condition-specific breakpoint.  */
+
+  break_me (); /* Finally, try a breakpoint with commands.  */
+  return 0;
+}
+

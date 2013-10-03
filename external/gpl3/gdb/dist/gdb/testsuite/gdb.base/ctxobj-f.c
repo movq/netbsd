@@ -1,6 +1,5 @@
 /* This testcase is part of GDB, the GNU debugger.
-
-   Copyright 2006-2013 Free Software Foundation, Inc.
+   Copyright 2012-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,15 +14,19 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-void bar (void);
-void
-foo (void)
-{ 
-  bar ();
-}                                                                                                       
+extern int this_version_num;
 
-void
-bar (void)
-{ 
-  puts ("bar in u2");
-}                                                                                                       
+#ifndef GET_VERSION
+#error GET_VERSION macro is undefined
+#endif
+
+int
+GET_VERSION (void)
+{
+  int v = this_version_num;
+
+  if (v > 999)
+    v = 999;
+
+  return v;  /* STOP */
+}

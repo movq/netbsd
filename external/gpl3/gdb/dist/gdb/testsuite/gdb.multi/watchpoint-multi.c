@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2010-2013 Free Software Foundation, Inc.
+   Copyright 2012-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,65 +15,37 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include <signal.h>
+#include <pthread.h>
 #include <assert.h>
-#include <string.h>
-#include <unistd.h>
 
-#ifndef SA_SIGINFO
-# error "SA_SIGINFO is required for this test"
-#endif
-
-static int
-callme (void)
-{
-  return 42;
-}
-
-static int
-pass (void)
-{
-  return 1;
-}
-
-static int
-fail (void)
-{
-  return 1;
-}
+static volatile int a, b, c;
 
 static void
-handler (int sig, siginfo_t *siginfo, void *context)
+marker_exit (void)
 {
-  assert (sig == SIGUSR1);
-  assert (siginfo->si_signo == SIGUSR1);
-  if (siginfo->si_pid == getpid ())
-    pass ();
-  else
-    fail ();
+  a = 1;
+}
+
+static void *
+start (void *arg)
+{
+  b = 2;
+  c = 3;
+
+  return NULL;
 }
 
 int
 main (void)
 {
-  struct sigaction sa;
+  pthread_t thread;
   int i;
 
-  callme ();
-
-  memset (&sa, 0, sizeof (sa));
-  sa.sa_sigaction = handler;
-  sa.sa_flags = SA_SIGINFO;
-
-  i = sigemptyset (&sa.sa_mask);
+  i = pthread_create (&thread, NULL, start, NULL);
+  assert (i == 0);
+  i = pthread_join (thread, NULL);
   assert (i == 0);
 
-  i = sigaction (SIGUSR1, &sa, NULL);
-  assert (i == 0);
-
-  i = raise (SIGUSR1);
-  assert (i == 0);
-
-  sleep (600);
+  marker_exit ();
   return 0;
 }

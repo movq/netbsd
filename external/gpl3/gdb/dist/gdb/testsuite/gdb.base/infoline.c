@@ -1,6 +1,6 @@
-/* This testcase is part of GDB, the GNU debugger.
+/* Copyright 2011-2013 Free Software Foundation, Inc.
 
-   Copyright 2006-2013 Free Software Foundation, Inc.
+   This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,15 +15,16 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-void bar (void);
-void
-foo (void)
-{ 
-  bar ();
-}                                                                                                       
+int twice (int i) { /* THIS LINE */
+  /* We purposefully put the return type, function prototype and
+     opening curly brace on the same line, in an effort to make sure
+     that the function prologue would be associated to that line.  */
+  return 2 * i;
+}
 
-void
-bar (void)
-{ 
-  puts ("bar in u2");
-}                                                                                                       
+int
+main (void)
+{
+  int t = twice (1);
+  return 0;
+}
