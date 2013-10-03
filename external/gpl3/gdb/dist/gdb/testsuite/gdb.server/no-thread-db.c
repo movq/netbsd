@@ -1,8 +1,8 @@
-/* Test step/next in a shared library
+/* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2004-2013 Free Software Foundation, Inc.
+   Copyright 2012-2013 Free Software Foundation, Inc.
 
-   This file is part of GDB.
+   Contributed by Intel Corporation.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -17,10 +17,12 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-int hithere2()
-{
-  int a;
-  a = 21;
-  return a;
-}
+__thread int foo;
 
+int
+main ()
+{
+  foo = 1;
+  /* after tls assignment */
+  return foo;
+}
