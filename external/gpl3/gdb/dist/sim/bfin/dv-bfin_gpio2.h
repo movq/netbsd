@@ -1,7 +1,8 @@
-/* Blackfin Direct Memory Access (DMA) Controller model.
+/* Blackfin General Purpose Ports (GPIO) model
+   For "new style" GPIOs on BF54x parts.
 
    Copyright (C) 2010-2013 Free Software Foundation, Inc.
-   Contributed by Analog Devices, Inc.
+   Contributed by Analog Devices, Inc. and Mike Frysinger.
 
    This file is part of simulators.
 
@@ -18,12 +19,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef DV_BFIN_DMAC_H
-#define DV_BFIN_DMAC_H
-
-#define BFIN_DMAC_MDMA_BASE	0x100
-
-struct hw *bfin_dmac_get_peer (struct hw *dma, bu16 pmap);
-bu16 bfin_dmac_default_pmap (struct hw *dma);
+#ifndef DV_BFIN_GPIO2_H
+#define DV_BFIN_GPIO2_H
 
 #endif
