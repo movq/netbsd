@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2009-2013 Free Software Foundation, Inc.
+   Copyright 2012-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,20 +15,36 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifdef PROTOTYPES
-int shr2(int x)
-#else
-int shr2(x) int x;
-#endif
+static volatile int v;
+
+static __attribute__((noinline, noclone)) void
+fn1 (int x)
 {
-  return 2*x;
+  v++;
 }
 
-#ifdef PROTOTYPES
-int shr2_local(int x)
-#else
-int shr2_local(x) int x;
-#endif
+static int
+fn2 (int x, int y)
 {
-  return 2*x;
+  if (y)
+    {
+      fn1 (x);
+      y = -2 + x;	/* break-here */
+      y = y * y * y + y;
+      fn1 (x + y);
+    }
+  return x;
+}
+
+__attribute__((noinline, noclone)) int
+fn3 (int x, int y)
+{
+  return fn2 (x, y);
+}
+
+int
+main ()
+{
+  fn3 (6, 25);
+  return 0;
 }
