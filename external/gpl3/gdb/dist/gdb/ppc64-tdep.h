@@ -1,4 +1,6 @@
-/* Copyright (C) 2006-2013 Free Software Foundation, Inc.
+/* Common target-dependent code for ppc64.
+
+   Copyright (C) 1986-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -15,10 +17,20 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-/* Hook in rs6000-aix-tdep.c for determining the TOC address when
-   calling functions in the inferior.  */
-extern CORE_ADDR (*rs6000_find_toc_address_hook) (CORE_ADDR);
+#ifndef PPC64_TDEP_H
+#define PPC64_TDEP_H
 
-/* Minimum possible text address in AIX.  */
-#define AIX_TEXT_SEGMENT_BASE 0x10000000
+struct gdbarch;
+struct frame_info;
+struct target_ops;
 
+extern CORE_ADDR ppc64_skip_trampoline_code (struct frame_info *frame,
+					     CORE_ADDR pc);
+
+extern CORE_ADDR ppc64_convert_from_func_ptr_addr (struct gdbarch *gdbarch,
+						   CORE_ADDR addr,
+						   struct target_ops *targ);
+
+extern void ppc64_elf_make_msymbol_special (asymbol *,
+					    struct minimal_symbol *);
+#endif /* PPC64_TDEP_H  */
