@@ -1,7 +1,6 @@
-/* Test program exit in non-stop mode.
-   Copyright 2009-2013 Free Software Foundation, Inc.
+/* This testcase is part of GDB, the GNU debugger.
 
-   This file is part of GDB.
+   Copyright 2008-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -16,39 +15,23 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include <pthread.h>
-#include <stdio.h>
-
-#define NTHREADS 4
-void* thread_function (void*);
-
-void *
-thread_function (void *arg)
+class basic_string
 {
-  int x = * (int *) arg;
+};
 
-  printf ("Thread <%d> executing\n", x);
-
-  return NULL;
-}
-
-int
-main ()
+template<typename T>
+class templ
 {
-  pthread_t thread_id[NTHREADS];
-  int args[NTHREADS];
-  int i;
+public:
+  T x;
+  templ<T> *value;
+};
 
-  for (i = 0; i < NTHREADS; ++i)
-    {
-      args[i] = i;
-      pthread_create (&thread_id[i], NULL, thread_function, &args[i]);
-    }
+templ<basic_string> s;
 
-  for (i = 0; i < NTHREADS; ++i)
-    {
-      pthread_join (thread_id[i], NULL); 
-    }
+basic_string bs;
 
+int main()
+{
   return 0;
 }

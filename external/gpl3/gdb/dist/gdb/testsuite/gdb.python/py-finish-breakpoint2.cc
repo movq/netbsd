@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2010-2013 Free Software Foundation, Inc.
+   Copyright 2011-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,18 +13,47 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+   along with this program.  If not, see  <http://www.gnu.org/licenses/>.
 */
 
-#include <unistd.h>
+
+#include <iostream>
+
+void
+throw_exception_1 (int e)
+{
+  throw new int (e);
+}
+
+void
+throw_exception (int e)
+{
+  throw_exception_1 (e);
+}
 
 int
-main (int argc, char **argv)
+main (void)
 {
-  volatile int my_number = 1;
-
-  while (my_number > 0)
+  int i;
+  try
     {
-      usleep (1);
+      throw_exception_1 (10);
     }
+  catch (const int *e)
+    {
+        std::cerr << "Exception #" << *e << std::endl;
+    }
+  i += 1; /* Break after exception 1.  */
+
+  try
+    {
+      throw_exception (10);
+    }
+  catch (const int *e)
+    {
+        std::cerr << "Exception #" << *e << std::endl;
+    }
+  i += 1; /* Break after exception 2.  */
+
+  return i;
 }

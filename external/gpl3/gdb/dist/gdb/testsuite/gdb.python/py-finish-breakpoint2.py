@@ -1,7 +1,5 @@
-# This test code is part of GDB, the GNU debugger.
+# Copyright (C) 2011-2013 Free Software Foundation, Inc.
 
-# Copyright 2010-2013 Free Software Foundation, Inc.
-#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 3 of the License, or
@@ -15,16 +13,21 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# Auxiliary function to set the language to fortran.
-# The result is 1 (true) for success, 0 (false) for failure.
+# This file is part of the GDB testsuite.  It tests python Finish
+# Breakpoints.
 
-proc set_lang_fortran {} {
-    if [gdb_test_no_output "set language fortran"] {
-	return 0
-    }
-    if [gdb_test "show language" ".* source language is \"fortran\"." \
-	   "set language to \"fortran\""] {
-	return 0
-    }
-    return 1;
-}
+class ExceptionFinishBreakpoint(gdb.FinishBreakpoint):
+    def __init__(self, frame):
+        gdb.FinishBreakpoint.__init__ (self, frame, internal=1)
+        self.silent = True
+        print ("init ExceptionFinishBreakpoint")
+        
+    def stop(self):
+        print ("stopped at ExceptionFinishBreakpoint")
+        return True 
+    
+    def out_of_scope(self):
+        print ("exception did not finish ...")
+
+
+print ("Python script imported")

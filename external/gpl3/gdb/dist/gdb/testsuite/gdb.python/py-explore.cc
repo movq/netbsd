@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2010-2013 Free Software Foundation, Inc.
+   Copyright 2012-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,18 +13,42 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+   along with this program.  If not, see  <http://www.gnu.org/licenses/>.
 */
 
-#include <unistd.h>
+class A {
+ public:
+  virtual ~A() { }
+};
+
+class B : public A {
+ public:
+  virtual ~B() { }
+
+  int i;
+  char c;
+};
+
+typedef int *int_ptr;
 
 int
-main (int argc, char **argv)
+func (const A &a)
 {
-  volatile int my_number = 1;
+  int val = 10;
+  int &int_ref = val;
+  int_ptr ptr = &val;
+  int_ptr &int_ptr_ref = ptr;
+  B b;
 
-  while (my_number > 0)
-    {
-      usleep (1);
-    }
+  b.i = 10;
+  b.c = 'a';
+
+  return 0; /* Break here.  */
+}
+
+int
+main ()
+{
+  A obj;
+  return func (obj);
 }

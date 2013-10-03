@@ -1,7 +1,5 @@
-# This test code is part of GDB, the GNU debugger.
+# Copyright (C) 2012-2013 Free Software Foundation, Inc.
 
-# Copyright 2010-2013 Free Software Foundation, Inc.
-#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 3 of the License, or
@@ -15,16 +13,23 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# Auxiliary function to set the language to fortran.
-# The result is 1 (true) for success, 0 (false) for failure.
+import gdb
 
-proc set_lang_fortran {} {
-    if [gdb_test_no_output "set language fortran"] {
-	return 0
-    }
-    if [gdb_test "show language" ".* source language is \"fortran\"." \
-	   "set language to \"fortran\""] {
-	return 0
-    }
-    return 1;
-}
+class Recognizer(object):
+    def __init__(self):
+        self.enabled = True
+
+    def recognize(self, type_obj):
+        if type_obj.tag == 'basic_string':
+            return 'string'
+        return None
+
+class StringTypePrinter(object):
+    def __init__(self):
+        self.name = 'string'
+        self.enabled = True
+
+    def instantiate(self):
+        return Recognizer()
+
+gdb.type_printers.append(StringTypePrinter())
