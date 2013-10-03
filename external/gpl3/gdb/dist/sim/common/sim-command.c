@@ -1,7 +1,9 @@
-/* Version information for GDB.
-   Copyright (C) 1999-2013 Free Software Foundation, Inc.
+/* Miscellaneous simulator utilities.
 
-   This file is part of GDB.
+   Copyright (C) 2005-2013 Free Software Foundation, Inc.
+   Contributed by Analog Devices, Inc.
+
+   This file is part of simulators.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -16,10 +18,17 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef VERSION_H
-#define VERSION_H
+#include "sim-main.h"
+#include "sim-options.h"
+#include "sim-utils.h"
 
-/* Version number of GDB, as a string.  */
-extern const char version[];
+/* Generic implementation of sim_do_command that works with simulators
+   which add custom options via sim_add_option_table().  */
 
-#endif /* #ifndef VERSION_H */
+void
+sim_do_command (SIM_DESC sd, char *cmd)
+{
+  if (sim_args_command (sd, cmd) != SIM_RC_OK)
+    sim_io_eprintf (sd, "Unknown sim command: \"%s\".  Try \"sim help\".\n",
+		    cmd);
+}
