@@ -15,29 +15,12 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-namespace A
+void
+pendfunc2 (int x)
 {
-  class outer
-  {
-  public:
-    void foo (void) const;
-    void foo (int) const;
-    void foo (char *) const;
-    bool func (void) { return true; }
-    void hibob (int) const;
-    void hibob (char *) const;
-  };
+}
 
-  namespace B
-  {
-    class inner
-    {
-    public:
-      void foo (void) const;
-      void foo (int) const;
-      void foo (char *) const;
-      void hibob (int) const;
-      void hibob (char *) const;
-    };
-  }
+void
+pendfunc3 (int y)
+{
 }

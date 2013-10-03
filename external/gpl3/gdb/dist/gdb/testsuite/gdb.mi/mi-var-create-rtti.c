@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2011-2013 Free Software Foundation, Inc.
+   Copyright 2012-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,29 +15,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-namespace A
+int
+main (void)
 {
-  class outer
-  {
-  public:
-    void foo (void) const;
-    void foo (int) const;
-    void foo (char *) const;
-    bool func (void) { return true; }
-    void hibob (int) const;
-    void hibob (char *) const;
-  };
+  int i = 0;
 
-  namespace B
-  {
-    class inner
-    {
-    public:
-      void foo (void) const;
-      void foo (int) const;
-      void foo (char *) const;
-      void hibob (int) const;
-      void hibob (char *) const;
-    };
-  }
+  return i; /* next-line */
 }

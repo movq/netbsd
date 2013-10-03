@@ -15,29 +15,37 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-namespace A
-{
-  class outer
-  {
-  public:
-    void foo (void) const;
-    void foo (int) const;
-    void foo (char *) const;
-    bool func (void) { return true; }
-    void hibob (int) const;
-    void hibob (char *) const;
-  };
+#include <stdio.h>
+#include <dlfcn.h>
 
-  namespace B
-  {
-    class inner
-    {
-    public:
-      void foo (void) const;
-      void foo (int) const;
-      void foo (char *) const;
-      void hibob (int) const;
-      void hibob (char *) const;
-    };
-  }
+extern void pendfunc (int x);
+int watch = 0;
+
+static void
+marker () {}
+
+int main()
+{
+  const char *libname = "pendshr2.sl";
+  void *h;
+  int (*p_func) (int);
+
+  pendfunc (3);
+  pendfunc (4);
+  pendfunc (3);
+
+  marker ();
+
+  h = dlopen (libname, RTLD_LAZY);
+  if (h == NULL) return 1;
+
+  p_func = dlsym (h, "pendfunc2");
+  if (p_func == NULL) return 2;
+
+  (*p_func) (4);
+
+  marker ();
+
+  dlclose (h);
+  return 0;
 }

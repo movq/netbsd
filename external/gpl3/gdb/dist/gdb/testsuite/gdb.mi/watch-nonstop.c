@@ -15,29 +15,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-namespace A
-{
-  class outer
-  {
-  public:
-    void foo (void) const;
-    void foo (int) const;
-    void foo (char *) const;
-    bool func (void) { return true; }
-    void hibob (int) const;
-    void hibob (char *) const;
-  };
+int global;
 
-  namespace B
-  {
-    class inner
-    {
-    public:
-      void foo (void) const;
-      void foo (int) const;
-      void foo (char *) const;
-      void hibob (int) const;
-      void hibob (char *) const;
-    };
-  }
+int main ()
+{
+  sleep (60);
+  return 0;
 }
