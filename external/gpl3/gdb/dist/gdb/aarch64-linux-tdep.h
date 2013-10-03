@@ -1,6 +1,7 @@
-/* Common target-dependent definitions for NetBSD systems.
-   Copyright (C) 2002-2013 Free Software Foundation, Inc.
-   Contributed by Wasabi Systems, Inc.
+/* GNU/Linux on AArch64 target support, prototypes.
+
+   Copyright (C) 2012-2013 Free Software Foundation, Inc.
+   Contributed by ARM Ltd.
 
    This file is part of GDB.
 
@@ -17,12 +18,9 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef NBSD_TDEP_H
-#define NBSD_TDEP_H
+struct regcache;
 
-struct link_map_offsets *nbsd_ilp32_solib_svr4_fetch_link_map_offsets (void);
-struct link_map_offsets *nbsd_lp64_solib_svr4_fetch_link_map_offsets (void);
-
-int nbsd_pc_in_sigtramp (CORE_ADDR, const char *);
-
-#endif /* NBSD_TDEP_H */
+extern void aarch64_linux_supply_gregset (struct regcache *regcache,
+					  const gdb_byte *gregs_buf);
+extern void aarch64_linux_supply_fpregset (struct regcache *regcache,
+					   const gdb_byte *fpregs_buf);

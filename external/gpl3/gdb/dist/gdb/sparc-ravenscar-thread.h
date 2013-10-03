@@ -1,6 +1,6 @@
-/* Common target-dependent definitions for NetBSD systems.
-   Copyright (C) 2002-2013 Free Software Foundation, Inc.
-   Contributed by Wasabi Systems, Inc.
+/* Ravenscar SPARC target support.
+
+   Copyright (C) 2012-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,12 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef NBSD_TDEP_H
-#define NBSD_TDEP_H
+#ifndef SPARC_RAVENSCAR_THREAD_H
+#define SPARC_RAVENSCAR_THREAD_H
 
-struct link_map_offsets *nbsd_ilp32_solib_svr4_fetch_link_map_offsets (void);
-struct link_map_offsets *nbsd_lp64_solib_svr4_fetch_link_map_offsets (void);
+struct gdbarch;
 
-int nbsd_pc_in_sigtramp (CORE_ADDR, const char *);
-
-#endif /* NBSD_TDEP_H */
+extern void register_sparc_ravenscar_ops (struct gdbarch *gdbarch);
+#endif

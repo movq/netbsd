@@ -1,6 +1,6 @@
-/* Common target-dependent definitions for NetBSD systems.
-   Copyright (C) 2002-2013 Free Software Foundation, Inc.
-   Contributed by Wasabi Systems, Inc.
+/* Target-dependent code for GDB on PowerPC systems running FreeBSD.
+
+   Copyright (C) 2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,12 +17,13 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef NBSD_TDEP_H
-#define NBSD_TDEP_H
+#ifndef PPCFBSD_TDEP_H
+#define PPCFBSD_TDEP_H
 
-struct link_map_offsets *nbsd_ilp32_solib_svr4_fetch_link_map_offsets (void);
-struct link_map_offsets *nbsd_lp64_solib_svr4_fetch_link_map_offsets (void);
+struct regset;
 
-int nbsd_pc_in_sigtramp (CORE_ADDR, const char *);
+/* From ppcfbsd-tdep.c ...  */
+const struct regset *ppc_fbsd_gregset (int);
+const struct regset *ppc_fbsd_fpregset (void);
 
-#endif /* NBSD_TDEP_H */
+#endif /* PPCFBSD_TDEP_H  */
