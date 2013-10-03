@@ -1,4 +1,4 @@
-# Copyright 1999-2013 Free Software Foundation, Inc.
+# Copyright 2011-2013 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,8 +13,8 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-
-# Some basic checks for the CLI.
+# Verify that when "-exec-step N" trips on a breakpoint, we get a
+# *stop event with reason breakpoint-hit.
 
 load_lib mi-support.exp
 set MIFLAGS "-i=mi"
@@ -24,13 +24,20 @@ if [mi_gdb_start] {
     continue
 }
 
-mi_gdb_test "show architecture" \
-	"&\"show architecture\\\\n\"\r\n~\"The target architecture.*\"\r\n\\^done" \
-	"show architecture"
+standard_testfile
 
-mi_gdb_test "47show architecture" \
-	"&\"show architecture\\\\n\"\r\n~\"The target architecture.*\"\r\n47\\^done" \
-	"47show architecture"
+set opts {debug}
+if [build_executable ${testfile}.exp ${testfile} ${srcfile} $opts] {
+    return -1
+}
 
-mi_gdb_exit
-return 0
+if {[mi_run_to_main] < 0} {
+    return -1
+}
+
+mi_create_breakpoint do_nothing 2 keep do_nothing .* .* .* \
+    "breakpoint at do_nothing"
+
+mi_send_resuming_command "exec-step 3" ""
+mi_expect_stop "breakpoint-hit" "do_nothing" "\[^\n\]*" "$srcfile" \
+    "\[0-9\]*" {"" "disp=\"keep\""} "breakpoint-hit reported"

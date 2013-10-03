@@ -1,6 +1,4 @@
-/* This testcase is part of GDB, the GNU debugger.
-
-   Copyright 2007-2013 Free Software Foundation, Inc.
+/* Copyright 2011-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,19 +11,13 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+*/
 
-#include <stdio.h>
+extern void solibfunction(void);
 
-int k = 0;
-
-extern void pendfunc (int x);
-
-int main()
+int main ()
 {
-  pendfunc (3); /* break main here */
-  pendfunc (4);
-  k = 1;
-  pendfunc (3);
+  solibfunction ();
   return 0;
 }
