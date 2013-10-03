@@ -1,6 +1,5 @@
 /* This testcase is part of GDB, the GNU debugger.
-
-   Copyright 2007-2013 Free Software Foundation, Inc.
+   Copyright 2012-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,42 +14,21 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-struct s
-{
-  int a;
-  int b;
-};
-
-union u
-{
-  int a;
-  float b;
-};
-
-enum color { red, green, blue };
-
-static void
-break_me (void)
-{
-}
-
-static void
-call_me (int i, float f, struct s s, struct s *ss, union u u, enum color e)
-{
-  break_me ();
-}
+extern int get_version_1 (void);
+extern int get_version_2 (void);
 
 int
 main (void)
 {
-  struct s s;
-  union u u;
+  int v1 = get_version_1 ();
+  int v2 = get_version_2 ();
 
-  s.a = 3;
-  s.b = 5;
-  u.a = 7;
-
-  call_me (3, 5.0, s, &s, u, green);
+  if (v1 != 104)  /* STOP */
+    return 1;
+  /* The value returned by get_version_2 depends on the target system.  */
+  if (v2 != 104 || v2 != 203)
+    return 2;
 
   return 0;
 }
+

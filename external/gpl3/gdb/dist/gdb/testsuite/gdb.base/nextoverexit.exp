@@ -1,5 +1,4 @@
-# Copyright 2010-2013 Free Software Foundation, Inc.
-#
+# Copyright 2012-2013 Free Software Foundation, Inc.
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 3 of the License, or
@@ -12,21 +11,23 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-#
 
-set testfile "anon"
+set testfile "nextoverexit"
+set executable $testfile
 set srcfile $testfile.c
-if { [prepare_for_testing $testfile.exp $testfile $srcfile {debug}] } {
+set binfile $objdir/$subdir/$testfile
+
+if {[prepare_for_testing $testfile.exp $testfile $testfile.c]} {
     return -1
 }
 
-if { ![runto main] } then {
-    fail "run to main"
-    return
+if {![runto_main]} {
+    return -1
 }
 
-set loc [gdb_get_line_number "break here"]
-gdb_test "break $loc" ".*Breakpoint 2 .*" "set breakpoint in anon.c"
-gdb_continue_to_breakpoint "continue to breakpoint in anon.c"
-
-gdb_test "print val.data.six" " = 6" "print val.data.six"
+# Make sure we do not see any warnings.
+gdb_test_multiple "next" "next over exit" {
+    -re "$inferior_exited_re normally.\[\r\n\]+$gdb_prompt $" {
+	pass "next over exit"
+    }
+}
