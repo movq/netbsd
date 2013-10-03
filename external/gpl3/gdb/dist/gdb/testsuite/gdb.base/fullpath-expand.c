@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2009-2013 Free Software Foundation, Inc.
+   Copyright 2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,21 +15,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-extern TYPE func (void);
-
-static void
-marker (void)
-{
-}
-
-TYPE t;
+extern void func (void);
 
 int
 main (void)
 {
-  t = func ();
-
-  marker ();
-
+  func ();
   return 0;
 }

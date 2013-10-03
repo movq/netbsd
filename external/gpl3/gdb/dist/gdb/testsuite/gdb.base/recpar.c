@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2009-2013 Free Software Foundation, Inc.
+   Copyright 2012-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,21 +15,28 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-extern TYPE func (void);
-
-static void
-marker (void)
+int
+foo (int n)
 {
-}
+  int val = n;
 
-TYPE t;
+  {
+    char val = n ? 'y' : 'n'; /* Hides upper-level `val'.  */
+
+    if (val == 'y') /* BREAK */
+      return n + foo (n - 1);
+  }
+
+  return 0;
+}
 
 int
 main (void)
 {
-  t = func ();
+  int res = foo (5);
 
-  marker ();
+  if (res != 15) /* Dummy use of variable res.  */
+    return 1;
 
   return 0;
 }

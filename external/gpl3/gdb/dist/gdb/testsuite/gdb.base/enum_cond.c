@@ -1,6 +1,5 @@
 /* This testcase is part of GDB, the GNU debugger.
-
-   Copyright 2009-2013 Free Software Foundation, Inc.
+   Copyright 2012-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,21 +14,35 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-extern TYPE func (void);
-
-static void
-marker (void)
+enum EE
 {
-}
+  VALUE = 1
+};
 
-TYPE t;
+struct x
+{
+  unsigned char before;
+  enum EE e;
+  unsigned char after;
+};
+
+
+int
+call_me (struct x param)
+{
+  return param.e;
+}
 
 int
 main (void)
 {
-  t = func ();
+  struct x val;
 
-  marker ();
+  val.before = 0xff;
+  val.e = VALUE;
+  val.after = 0xff;
 
+  call_me (val);
   return 0;
 }
+

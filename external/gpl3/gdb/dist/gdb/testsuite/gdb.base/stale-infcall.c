@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2009-2013 Free Software Foundation, Inc.
+   Copyright 2012-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,21 +15,52 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-extern TYPE func (void);
+#include <setjmp.h>
+#include <string.h>
+#include <stdlib.h>
 
-static void
-marker (void)
+#define BUFSIZE 0x1000
+
+static jmp_buf jmp;
+
+void
+infcall (void)
 {
+  longjmp (jmp, 1); /* test-next */
 }
 
-TYPE t;
+static void
+run1 (void)
+{
+  char buf[BUFSIZE / 2];
+  int dummy = 0;
+
+  dummy++; /* break-run1 */
+}
+
+static char buf_zero[BUFSIZE];
+
+static void
+run2 (void)
+{
+  char buf[BUFSIZE];
+
+  memset (buf, 0, sizeof (buf));
+
+  if (memcmp (buf, buf_zero, sizeof (buf)) != 0) /* break-run2 */
+    abort (); /* break-fail */
+}
 
 int
-main (void)
+main ()
 {
-  t = func ();
+  if (setjmp (jmp) == 0) /* test-pass */
+    infcall ();
 
-  marker ();
+  if (setjmp (jmp) == 0) /* test-fail */
+    run1 ();
+  else
+    run2 ();
 
-  return 0;
+  return 0; /* break-exit */
 }

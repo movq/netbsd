@@ -1,6 +1,5 @@
 /* This testcase is part of GDB, the GNU debugger.
-
-   Copyright 2009-2013 Free Software Foundation, Inc.
+   Copyright 2012-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,21 +14,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-extern TYPE func (void);
-
-static void
-marker (void)
-{
-}
-
-TYPE t;
+int this_version_id = 104;
 
 int
-main (void)
+get_version_1 (void)
 {
-  t = func ();
-
-  marker ();
-
-  return 0;
+  return this_version_id;
 }

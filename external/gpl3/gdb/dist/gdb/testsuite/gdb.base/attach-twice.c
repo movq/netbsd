@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2009-2013 Free Software Foundation, Inc.
+   Copyright 2011-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,21 +15,28 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-extern TYPE func (void);
-
-static void
-marker (void)
-{
-}
-
-TYPE t;
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/ptrace.h>
+#include <errno.h>
 
 int
 main (void)
 {
-  t = func ();
+  long l;
 
-  marker ();
-
+  switch (fork ())
+  {
+    case -1:
+      perror ("fork");
+      exit (1);
+    case 0:
+      errno = 0;
+      ptrace (PTRACE_ATTACH, getppid (), NULL, NULL);
+      if (errno != 0)
+	perror ("PTRACE_ATTACH");
+      break;
+  }
+  sleep (600);
   return 0;
 }
