@@ -1,8 +1,6 @@
-/* Low level child interface to ptrace.
+/* Header for skipping over uninteresting files and functions when debugging.
 
-   Copyright (C) 2004-2013 Free Software Foundation, Inc.
-
-   This file is part of GDB.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -17,20 +15,14 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef INF_PTRACE_H
-#define INF_PTRACE_H
+#if !defined (SKIP_H)
+#define SKIP_H
 
-/* Create a prototype ptrace target.  The client can override it with
-   local methods.  */
+struct symtab_and_line;
 
-extern struct target_ops *inf_ptrace_target (void);
+/* Returns 1 if the given FUNCTION_NAME is marked for skip and shouldn't be
+   stepped into.  Otherwise, returns 0.  */
+int function_name_is_marked_for_skip (const char *function_name,
+				    const struct symtab_and_line *function_sal);
 
-/* Create a "traditional" ptrace target.  REGISTER_U_OFFSET should be
-   a function returning the offset within the user area where a
-   particular register is stored.  */
-
-extern struct target_ops *
-  inf_ptrace_trad_target (CORE_ADDR (*register_u_offset)
-					(struct gdbarch *, int, int));
-
-#endif
+#endif /* !defined (SKIP_H) */

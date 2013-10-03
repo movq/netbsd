@@ -1,6 +1,6 @@
-/* Low level child interface to ptrace.
+/* Native-dependent code for AMD64 BSD's.
 
-   Copyright (C) 2004-2013 Free Software Foundation, Inc.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,20 +17,19 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef INF_PTRACE_H
-#define INF_PTRACE_H
+#ifndef AMD64BSD_NAT_H
+#define AMD64BSD_NAT_H
 
-/* Create a prototype ptrace target.  The client can override it with
-   local methods.  */
+/* Low level amd64 debug register functions.  */
 
-extern struct target_ops *inf_ptrace_target (void);
+extern void amd64bsd_dr_set_control (unsigned long control);
 
-/* Create a "traditional" ptrace target.  REGISTER_U_OFFSET should be
-   a function returning the offset within the user area where a
-   particular register is stored.  */
+extern void amd64bsd_dr_set_addr (int regnum, CORE_ADDR addr);
 
-extern struct target_ops *
-  inf_ptrace_trad_target (CORE_ADDR (*register_u_offset)
-					(struct gdbarch *, int, int));
+extern CORE_ADDR amd64bsd_dr_get_addr (int regnum);
 
-#endif
+extern unsigned long amd64bsd_dr_get_status (void);
+
+extern unsigned long amd64bsd_dr_get_control (void);
+
+#endif /* amd64bsd-nat.h */
