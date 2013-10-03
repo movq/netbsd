@@ -1,4 +1,7 @@
-/* Copyright 2009-2013 Free Software Foundation, Inc.
+/* This testcase is part of GDB, the GNU debugger.
+
+   Copyright 2013 Free Software Foundation, Inc.
+
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation; either version 3 of the License, or
@@ -10,18 +13,14 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-   Contributed by Jan Kratochvil <jan.kratochvil@redhat.com>.  */
-
-void
-libsym (void)
+void pendfunc1 (int x)
 {
+  int y = x + 4;
 }
 
-#ifdef SYMB
-void
-libsymb (void)
+void pendfunc (int x)
 {
+  pendfunc1 (x);
 }
-#endif
