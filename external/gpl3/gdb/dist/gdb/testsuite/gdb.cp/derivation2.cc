@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2009-2013 Free Software Foundation, Inc.
+   Copyright 2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -14,21 +14,36 @@
 
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
+   */
 
-   Contributed by Markus Deuling <deuling@de.ibm.com>  */
+/* A copy of some classes in derivation.cc so that we can test symbol lookup
+   in other CUs.  */
 
-#include <stdio.h>
-#include <ea.h>
+class A2 {
+public:
+    typedef int value_type;
+    value_type a;
 
-int
-main (unsigned long long speid, unsigned long long argp,
-      unsigned long long envp)
+    A2()
+    {
+        a=1;
+    }
+};
+
+class D2 : public A2 {
+public:
+    value_type d;
+
+    D2()
+    {
+        d=7;
+    }
+};
+
+void
+foo2 ()
 {
-  int a;
-  __ea int *myarray = malloc_ea (3 * sizeof (int));
-
-  memset_ea (myarray, 0, 3 * sizeof (int));
-  a = ++myarray[0]; /* Marker SPUEA1  */
-  printf("a: %d, myarray[0]: %d\n", a, myarray[0]); /* Marker SPUEA2  */
-  return 0;
+  D2 d2_instance;
+  d2_instance.a = 42;
+  d2_instance.d = 43;
 }
