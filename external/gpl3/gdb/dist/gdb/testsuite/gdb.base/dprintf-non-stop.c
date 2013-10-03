@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2005-2013 Free Software Foundation, Inc.
+   Copyright (C) 2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,12 +15,16 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-int array[] = {1, 2, 3, 4};
+void
+foo ()
+{
+}
 
 int
-main (void)
+main ()
 {
-  array[0] = 5;
-
+  sleep (1);
+  foo ();
+  sleep (3);
   return 0;
 }
