@@ -1,6 +1,6 @@
-/* Test program with deliberately incorrect execution mode transition
+/* Test PC adjustment from Thumb-mode "bx pc" instruction.
 
-   Copyright 2011-2013 Free Software Foundation, Inc.
+   Copyright 2012-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,24 +17,18 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-	.text
-	.align 2
-	.global foo
+	.syntax unified
 	.thumb
-	/* .thumb_func deliberately omitted */
-foo:
-	mov r0,#42
-	bx lr
-
-        .text
-	.align  2
-	.global main
+	.text
+	.p2align 2
+	.global	main
 	.thumb
 	.thumb_func
-	.type	main, %function
+	.type main, %function
 main:
-        push	{r3, lr}
-	blx	foo
-        pop	{r3, pc}
+	bx	pc
+	nop
+.code 32
+	mov	r0, #0
+	bx	lr
 	.size	main, .-main
-
