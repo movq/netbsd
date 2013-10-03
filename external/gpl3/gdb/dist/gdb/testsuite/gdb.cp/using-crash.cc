@@ -1,7 +1,4 @@
-/* This test script is part of GDB, the GNU debugger.
-
-   Copyright 2006-2013 Free Software Foundation, Inc.
-
+/* Copyright 2012-2013 Free Software Foundation, Inc.
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
    the Free Software Foundation; either version 3 of the License, or
@@ -14,33 +11,33 @@
 
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
-   */
+*/
 
-int func(int x)
+#include <iostream>
+using namespace std;
+
+class c1;
+
+void foo ();
+
+int
+main ()
 {
-   return x;
+  foo ();
+  return 0;
 }
 
-struct Foo {
-  Foo() : x_(1) { }
-  int func() const { return x_; }
- private:
-  int x_;
+void
+foo ()
+{
+  c1 *p = 0;
+}
+
+class b1 { public: int x; };
+
+class c1 : public b1
+{
+ public:
+  using b1::x;
+  c1 () {}
 };
-
-typedef Foo *FooHandle;
-
-extern "C" {
-  int foo(int);
-}
-
-int main()
-{
-    Foo f;
-    Foo *pf = &f;
-    Foo* &rf = pf;
-    FooHandle handle = pf;
-    rf->func(); /* set breakpoint here */
-    foo(0);
-    return func(0);
-}

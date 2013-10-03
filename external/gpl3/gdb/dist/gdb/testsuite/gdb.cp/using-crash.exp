@@ -1,5 +1,4 @@
-# Copyright 2009-2013 Free Software Foundation, Inc.
-
+# Copyright 2012-2013 Free Software Foundation, Inc.
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 3 of the License, or
@@ -19,13 +18,15 @@ if {[prepare_for_testing $testfile.exp $testfile $srcfile {debug c++}]} {
     return -1
 }
 
-if ![runto_main] {
-    untested abstract-origin
-    return -1
+runto "foo"
+
+# This would cause reading debug info with using_directives pointing to
+# freed memory.
+# http://sourceware.org/bugzilla/show_bug.cgi?id=14601
+# Note: You may need to compile with -fdebug-types-section to see the crash.
+set test "reload file"
+if { [gdb_file_cmd "$binfile"] == 0 } {
+    pass $test
+} else {
+    fail $test
 }
-
-gdb_breakpoint [gdb_get_line_number "break-here"]
-gdb_continue_to_breakpoint "break-here"
-
-# The Bug was: No symbol "problem" in current context.
-gdb_test "p problem" " = \\(int \\*\\) 0x.*"

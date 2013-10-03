@@ -1,6 +1,4 @@
-/* This test script is part of GDB, the GNU debugger.
-
-   Copyright 2006-2013 Free Software Foundation, Inc.
+/* Copyright 2012-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -16,31 +14,34 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
    */
 
-int func(int x)
+template<typename S>
+class Simple
 {
-   return x;
-}
-
-struct Foo {
-  Foo() : x_(1) { }
-  int func() const { return x_; }
- private:
-  int x_;
+  S val;
 };
 
-typedef Foo *FooHandle;
+template<typename T>
+class Base
+{
+};
 
-extern "C" {
-  int foo(int);
-}
+template<typename T>
+class Holder : public Base<T>
+{
+public:
+  Simple<T> t;
+  Simple<T*> tstar;
+
+  typedef Simple< Simple<T> > Z;
+
+  Z z;
+
+  double method(void) { return 23.0; }
+};
+
+Holder<int> value;
 
 int main()
 {
-    Foo f;
-    Foo *pf = &f;
-    Foo* &rf = pf;
-    FooHandle handle = pf;
-    rf->func(); /* set breakpoint here */
-    foo(0);
-    return func(0);
+  return 0;
 }

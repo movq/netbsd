@@ -1,4 +1,4 @@
-/* This test case is part of GDB, the GNU debugger.
+/* This testcase is part of GDB, the GNU debugger.
 
    Copyright 2011-2013 Free Software Foundation, Inc.
 
@@ -15,29 +15,7 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-template <typename T>
-class GDB
+int
+main ()
 {
- public:
-   static int simple (void) { return 0; }
-   static int harder (T a) { return 1; }
-   template <typename X>
-   static X even_harder (T a) { return static_cast<X> (a); }
-   int operator == (GDB const& other)
-   { return 1; }
-  void a (void) const { }
-  void b (void) volatile { }
-  void c (void) const volatile { }
-};
-
-int main(int argc, char **argv)
-{
-   GDB<int> a, b;
-   a.a ();
-   a.b ();
-   a.c ();
-   if (a == b)
-     return GDB<char>::harder('a') + GDB<int>::harder(3)
-	+ GDB<char>::even_harder<int> ('a');
-   return GDB<int>::simple ();
 }
