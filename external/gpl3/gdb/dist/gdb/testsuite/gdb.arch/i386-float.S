@@ -1,6 +1,4 @@
-/* This testcase is part of GDB, the GNU debugger.
-
-   Copyright 2008-2013 Free Software Foundation, Inc.
+/* Copyright 2009-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,13 +11,24 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-/*
- * Aux function for machine state test.
- */
+   This file is part of the gdb testsuite.  */
 
-void 
-hide (int x)
-{
-}
+#define CONCAT1(a, b) CONCAT2(a, b)
+#define CONCAT2(a, b) a ## b
+
+#ifdef SYMBOL_PREFIX
+# define SYMBOL(str)     CONCAT1(SYMBOL_PREFIX, str)
+#else
+# define SYMBOL(str)     str
+#endif
+
+	.text
+	.globl SYMBOL(main)
+SYMBOL(main):
+	fninit
+	fldt    val
+	ret
+.data
+	val: .byte 0x00,0x00,0x45,0x07,0x11,0x19,0x22,0xe9,0xfe,0xbf

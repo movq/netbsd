@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2008-2013 Free Software Foundation, Inc.
+   Copyright 2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,11 +15,32 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-/*
- * Aux function for machine state test.
- */
+#include <stdlib.h>
 
-void 
-hide (int x)
+volatile int v = 1;
+
+static __attribute__ ((noinline, noclone, noreturn)) void
+noret (int x, ...)
 {
+  abort ();
+}
+
+static __attribute__ ((noinline, noclone)) void
+mayret (int x)
+{
+  if (v)
+    noret (x);
+}
+
+static __attribute__ ((noinline, noclone)) void
+tailcall (int x)
+{
+  mayret (x);
+}
+
+int
+main (void)
+{
+  tailcall (1);
+  return 0;
 }
