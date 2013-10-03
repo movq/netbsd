@@ -1,4 +1,6 @@
-/* Copyright (C) 2008-2013 Free Software Foundation, Inc.
+/* Process record and replay target for GDB, the GNU debugger.
+
+   Copyright (C) 2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -15,18 +17,14 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#ifndef WINDOWS_NAT_H
-#define WINDOWS_NAT_H
+#ifndef RECORD_FULL_H
+#define RECORD_FULL_H
 
-extern void windows_set_context_register_offsets (const int *offsets);
+extern int record_full_memory_query;
 
-/* A pointer to a function that should return non-zero iff REGNUM
-   corresponds to one of the segment registers.  */
-typedef int (segment_register_p_ftype) (int regnum);
+extern int record_full_arch_list_add_reg (struct regcache *regcache, int num);
+extern int record_full_arch_list_add_mem (CORE_ADDR addr, int len);
+extern int record_full_arch_list_add_end (void);
+extern struct cleanup *record_full_gdb_operation_disable_set (void);
 
-/* Set the function that should be used by this module to determine
-   whether a given register is a segment register or not.  */
-extern void windows_set_segment_register_p (segment_register_p_ftype *fun);
-
-#endif
-
+#endif /* RECORD_FULL_H */
