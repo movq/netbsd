@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2010-2013 Free Software Foundation, Inc.
+   Copyright 2012-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,20 +15,17 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-int my_global_symbol = 42;
+static int v;
 
-static int my_static_symbol;
-
-int
-main ()
+static void
+callee (void)
 {
-  return my_global_func ();
+  v++;
 }
 
 int
-my_global_func ()
+main (void)
 {
-  my_static_symbol = my_global_symbol;
-  my_global_symbol = my_static_symbol + my_global_symbol;
-  return my_global_symbol;
+  callee ();
+  return 0;
 }

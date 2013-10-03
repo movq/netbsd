@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2010-2013 Free Software Foundation, Inc.
+   Copyright 2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,20 +15,15 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-int my_global_symbol = 42;
+#include <unistd.h>
 
-static int my_static_symbol;
+int v;
 
-int
-main ()
+int main()
 {
-  return my_global_func ();
-}
+  /* Don't let the test case run forever.  */
+  alarm (60);
 
-int
-my_global_func ()
-{
-  my_static_symbol = my_global_symbol;
-  my_global_symbol = my_static_symbol + my_global_symbol;
-  return my_global_symbol;
+  for (;;)
+    ;
 }

@@ -1,6 +1,6 @@
-/* This testcase is part of GDB, the GNU debugger.
+/* This test program is part of GDB, the GNU debugger.
 
-   Copyright 2010-2013 Free Software Foundation, Inc.
+   Copyright 2011-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,22 +13,20 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.
+   */
 
-int my_global_symbol = 42;
-
-static int my_static_symbol;
+float
+foo ()
+{
+  float x = 0.0;
+  x = 1.0 / x;
+  return x;
+}
 
 int
 main ()
 {
-  return my_global_func ();
-}
-
-int
-my_global_func ()
-{
-  my_static_symbol = my_global_symbol;
-  my_global_symbol = my_static_symbol + my_global_symbol;
-  return my_global_symbol;
+  foo ();
+  return 0;
 }

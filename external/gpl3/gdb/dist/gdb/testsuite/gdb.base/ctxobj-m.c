@@ -1,6 +1,5 @@
 /* This testcase is part of GDB, the GNU debugger.
-
-   Copyright 2010-2013 Free Software Foundation, Inc.
+   Copyright 2012-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,20 +14,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-int my_global_symbol = 42;
-
-static int my_static_symbol;
-
-int
-main ()
-{
-  return my_global_func ();
-}
+extern int get_version_1 (void);
+extern int get_version_2 (void);
 
 int
-my_global_func ()
+main (void)
 {
-  my_static_symbol = my_global_symbol;
-  my_global_symbol = my_static_symbol + my_global_symbol;
-  return my_global_symbol;
+  int v1 = get_version_1 ();
+  int v2 = get_version_2 ();
+
+  if (v1 != 104)
+    return 1;
+
+  /* The value returned by get_version_2 depends on the target.
+     On GNU/Linux, for instance, it should return 104.  But on
+     x86-windows, for instance, it will return 203.  */
+  if (v2 != 104 && v2 != 203)
+    return 2;
+
+  return 0;
 }
+
