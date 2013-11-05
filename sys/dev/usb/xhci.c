@@ -1,4 +1,4 @@
-/*	$NetBSD: xhci.c,v 1.6 2013/11/04 08:08:58 skrll Exp $	*/
+/*	$NetBSD: xhci.c,v 1.6.2.2 2013/11/05 18:36:31 matt Exp $	*/
 
 /*
  * Copyright (c) 2013 Jonathan A. Kollasch
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xhci.c,v 1.6 2013/11/04 08:08:58 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xhci.c,v 1.6.2.2 2013/11/05 18:36:31 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -87,7 +87,9 @@ static usbd_status xhci_allocm(struct usbd_bus *, usb_dma_t *, uint32_t);
 static void xhci_freem(struct usbd_bus *, usb_dma_t *);
 static usbd_xfer_handle xhci_allocx(struct usbd_bus *);
 static void xhci_freex(struct usbd_bus *, usbd_xfer_handle);
+#if __NetBSD_Prereq__(6,99,0)
 static void xhci_get_lock(struct usbd_bus *, kmutex_t **);
+#endif
 static usbd_status xhci_new_device(device_t, usbd_bus_handle, int, int, int,
     struct usbd_port *);
 
@@ -155,7 +157,9 @@ static const struct usbd_bus_methods xhci_bus_methods = {
 	.freem = xhci_freem,
 	.allocx = xhci_allocx,
 	.freex = xhci_freex,
+#if __NetBSD_Prereq__(6,99,0)
 	.get_lock = xhci_get_lock,
+#endif
 	.new_device = xhci_new_device,
 };
 
@@ -215,14 +219,12 @@ xhci_read_4(const struct xhci_softc * const sc, bus_size_t offset)
 	return bus_space_read_4(sc->sc_iot, sc->sc_ioh, offset);
 }
 
-#if 0 /* unused */
 static inline void
 xhci_write_4(const struct xhci_softc * const sc, bus_size_t offset,
     uint32_t value)
 {
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, offset, value);
 }
-#endif /* unused */
 
 static inline uint32_t
 xhci_cap_read_4(const struct xhci_softc * const sc, bus_size_t offset)
@@ -243,7 +245,6 @@ xhci_op_write_4(const struct xhci_softc * const sc, bus_size_t offset,
 	bus_space_write_4(sc->sc_iot, sc->sc_obh, offset, value);
 }
 
-#if 0 /* unused */
 static inline uint64_t
 xhci_op_read_8(const struct xhci_softc * const sc, bus_size_t offset)
 {
@@ -263,7 +264,6 @@ xhci_op_read_8(const struct xhci_softc * const sc, bus_size_t offset)
 
 	return value;
 }
-#endif /* unused */
 
 static inline void
 xhci_op_write_8(const struct xhci_softc * const sc, bus_size_t offset,
@@ -296,7 +296,6 @@ xhci_rt_write_4(const struct xhci_softc * const sc, bus_size_t offset,
 	bus_space_write_4(sc->sc_iot, sc->sc_rbh, offset, value);
 }
 
-#if 0 /* unused */
 static inline uint64_t
 xhci_rt_read_8(const struct xhci_softc * const sc, bus_size_t offset)
 {
@@ -316,7 +315,6 @@ xhci_rt_read_8(const struct xhci_softc * const sc, bus_size_t offset)
 
 	return value;
 }
-#endif /* unused */
 
 static inline void
 xhci_rt_write_8(const struct xhci_softc * const sc, bus_size_t offset,
@@ -336,13 +334,11 @@ xhci_rt_write_8(const struct xhci_softc * const sc, bus_size_t offset,
 	}
 }
 
-#if 0 /* unused */
 static inline uint32_t
 xhci_db_read_4(const struct xhci_softc * const sc, bus_size_t offset)
 {
 	return bus_space_read_4(sc->sc_iot, sc->sc_dbh, offset);
 }
-#endif /* unused */
 
 static inline void
 xhci_db_write_4(const struct xhci_softc * const sc, bus_size_t offset,
@@ -371,6 +367,8 @@ xhci_ep_get_type(usb_endpoint_descriptor_t * const ed)
 	case UE_INTERRUPT:
 		eptype = 0x3;
 		break;
+	default:
+		panic("%s:%d", __func__, __LINE__);
 	}
 
 	if ((UE_GET_XFERTYPE(ed->bmAttributes) == UE_CONTROL) ||
@@ -407,14 +405,12 @@ xhci_slot_get_dcv(struct xhci_softc * const sc, struct xhci_slot * const xs,
 	return KERNADDR(&xs->xs_dc_dma, sc->sc_ctxsz * dci);
 }
 
-#if 0 /* unused */
 static inline bus_addr_t
 xhci_slot_get_dcp(struct xhci_softc * const sc, struct xhci_slot * const xs,
     const u_int dci)
 {
 	return DMAADDR(&xs->xs_dc_dma, sc->sc_ctxsz * dci);
 }
-#endif /* unused */
 
 static inline void *
 xhci_slot_get_icv(struct xhci_softc * const sc, struct xhci_slot * const xs,
@@ -520,13 +516,13 @@ xhci_activate(device_t self, enum devact act)
 }
 
 bool
-xhci_suspend(device_t dv, const pmf_qual_t *qual)
+xhci_suspend(device_t dv PMF_FN_ARGS)
 {
 	return false;
 }
 
 bool
-xhci_resume(device_t dv, const pmf_qual_t *qual)
+xhci_resume(device_t dv PMF_FN_ARGS)
 {
 	return false;
 }
@@ -1366,8 +1362,8 @@ xhci_allocx(struct usbd_bus *bus)
 
 	xfer = pool_cache_get(sc->sc_xferpool, PR_NOWAIT);
 	if (xfer != NULL) {
-		memset(xfer, 0, sizeof(struct xhci_xfer));
 #ifdef DIAGNOSTIC
+		memset(xfer, 0, sizeof(struct xhci_xfer));
 		xfer->busy_free = XFER_BUSY;
 #endif
 	}
@@ -1392,6 +1388,7 @@ xhci_freex(struct usbd_bus *bus, usbd_xfer_handle xfer)
 	pool_cache_put(sc->sc_xferpool, xfer);
 }
 
+#if __NetBSD_Prereq__(6,99,0)
 static void
 xhci_get_lock(struct usbd_bus *bus, kmutex_t **lock)
 {
@@ -1399,6 +1396,7 @@ xhci_get_lock(struct usbd_bus *bus, kmutex_t **lock)
 
 	*lock = &sc->sc_lock;
 }
+#endif
 
 extern u_int32_t usb_cookie_no;
 
@@ -1524,8 +1522,7 @@ xhci_new_device(device_t parent, usbd_bus_handle bus, int depth,
 		if (err)
 			return err;
 		USETW(dev->def_ep_desc.wMaxPacketSize, dd->bMaxPacketSize);
-		device_printf(sc->sc_dev, "%s bMaxPacketSize %u\n", __func__,
-		    dd->bMaxPacketSize);
+		device_printf(sc->sc_dev, "%s bMaxPacketSize %u\n", __func__, dd->bMaxPacketSize);
 		xhci_update_ep0_mps(sc, xs, dd->bMaxPacketSize);
 		err = usbd_reload_device_desc(dev);
 		if (err)
@@ -1851,6 +1848,8 @@ xhci_init_slot(struct xhci_softc * const sc, uint32_t slot, int depth,
 		xspeed = 4;
 		mps = USB_3_MAX_CTRL_PACKET;
 		break;
+	default:
+		panic("%s:%d", __func__, __LINE__);
 	}
 
 	xs = &sc->sc_slots[slot];
@@ -2244,9 +2243,8 @@ xhci_root_ctrl_start(usbd_xfer_handle xfer)
 		hubd.bNbrPorts = sc->sc_hs_port_count;
 		USETW(hubd.wHubCharacteristics, UHD_PWR_NO_SWITCH);
 		hubd.bPwrOn2PwrGood = 200;
-		for (i = 0, l = sc->sc_maxports; l > 0; i++, l -= 8)
-			hubd.DeviceRemovable[i++] = 0; /* XXX can't find out? */
-		hubd.bDescLength = USB_HUB_DESCRIPTOR_SIZE + i;
+		for (i = 0, l = sc->sc_maxports; l > 0; i++, l -= 8, v >>= 8)
+			hubd.DeviceRemovable[i++] = 0; /* XXX can't find out? */		hubd.bDescLength = USB_HUB_DESCRIPTOR_SIZE + i;
 		l = min(len, hubd.bDescLength);
 		totlen = l;
 		memcpy(buf, &hubd, l);
@@ -2856,8 +2854,12 @@ xhci_timeout(void *addr)
 		return;
 	}
 
+#ifdef USB_TASKQ_MPSAFE
 	usb_init_task(&xx->xx_abort_task, xhci_timeout_task, addr,
 	    USB_TASKQ_MPSAFE);
+#else
+	usb_init_task(&xx->xx_abort_task, xhci_timeout_task, addr);
+#endif
 	usb_add_task(xx->xx_xfer.pipe->device, &xx->xx_abort_task,
 	    USB_TASKQ_HC);
 }
