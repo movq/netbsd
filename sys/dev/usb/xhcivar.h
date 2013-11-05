@@ -1,4 +1,4 @@
-/*	$NetBSD: xhcivar.h,v 1.2 2013/10/28 17:49:33 matt Exp $	*/
+/*	$NetBSD: xhcivar.h,v 1.2.2.2 2013/11/05 18:36:31 matt Exp $	*/
 
 /*
  * Copyright (c) 2013 Jonathan A. Kollasch
@@ -121,8 +121,9 @@ int             xhci_intr(void *);
 int             xhci_detach(struct xhci_softc *, int);
 int             xhci_activate(device_t, enum devact);
 void            xhci_childdet(device_t, device_t);
-bool            xhci_suspend(device_t, const pmf_qual_t *);
-bool            xhci_resume(device_t, const pmf_qual_t *);
+
+bool            xhci_suspend(device_t PMF_FN_PROTO);
+bool            xhci_resume(device_t PMF_FN_PROTO);
 bool            xhci_shutdown(device_t, int);
 
 #define XHCI_TRANSFER_RING_TRBS 256
