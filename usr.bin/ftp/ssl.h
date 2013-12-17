@@ -1,4 +1,4 @@
-/*	$NetBSD: ssl.h,v 1.1 2012/12/21 18:07:36 christos Exp $	*/
+/*	$NetBSD: ssl.h,v 1.1.10.2 2013/12/17 21:07:59 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.

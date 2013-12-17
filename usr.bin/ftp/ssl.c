@@ -1,7 +1,7 @@
-/*	$NetBSD: ssl.c,v 1.2 2012/12/24 22:12:28 christos Exp $	*/
+/*	$NetBSD: ssl.c,v 1.2.10.2 2013/12/17 21:07:59 bouyer Exp $	*/
 
 /*-
- * Copyright (c) 1998-2004 Dag-Erling CoÃ¯dan SmÃ¸rgrav
+ * Copyright (c) 1998-2004 Dag-Erling Coïdan Smørgrav
  * Copyright (c) 2008, 2010 Joerg Sonnenberger <joerg@NetBSD.org>
  * All rights reserved.
  *
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ssl.c,v 1.2 2012/12/24 22:12:28 christos Exp $");
+__RCSID("$NetBSD: ssl.c,v 1.2.10.2 2013/12/17 21:07:59 bouyer Exp $");
 #endif
 
 #include <time.h>
