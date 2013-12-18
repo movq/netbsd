@@ -1,4 +1,4 @@
-/*	$NetBSD: hostent.h,v 1.2 2013/08/27 09:56:12 christos Exp $	*/
+/*	$NetBSD: hostent.h,v 1.2.2.2 2013/12/18 20:23:36 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
