@@ -1,4 +1,4 @@
-/*	$NetBSD: acafhreg.h,v 1.1 2013/12/22 02:21:51 rkujawa Exp $ */
+/*	$NetBSD: acafhreg.h,v 1.2 2013/12/22 23:02:38 rkujawa Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -32,6 +32,7 @@
 #ifndef _AMIGA_ACAFHREG_H_
 
 #define GAYLE_IDE_BASE		0xDA0000 /* ACA500 has Gayle-compatible IDE */
+#define ACAFH_CLOCKPORT_BASE	0xD80001
 
 #define ACAFH_MSB_SHIFT		0xF
 #define ACAFH_MSB_MASK		0x8000
