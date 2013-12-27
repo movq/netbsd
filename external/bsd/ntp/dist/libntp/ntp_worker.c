@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_worker.c,v 1.1 2013/12/27 23:30:47 christos Exp $	*/
+/*	$NetBSD: ntp_worker.c,v 1.1.1.1 2013/12/27 23:30:47 christos Exp $	*/
 
 /*
  * ntp_worker.c
