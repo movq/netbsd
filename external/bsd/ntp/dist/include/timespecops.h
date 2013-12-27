@@ -1,4 +1,4 @@
-/*	$NetBSD: timespecops.h,v 1.1 2013/12/27 23:30:46 christos Exp $	*/
+/*	$NetBSD: timespecops.h,v 1.1.1.1 2013/12/27 23:30:46 christos Exp $	*/
 
 /*
  * timespecops.h -- calculations on 'struct timespec' values

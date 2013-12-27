@@ -1,4 +1,4 @@
-/*	$NetBSD: test-ratelim.c,v 1.1 2013/12/27 23:31:27 christos Exp $	*/
+/*	$NetBSD: test-ratelim.c,v 1.1.1.1 2013/12/27 23:31:27 christos Exp $	*/
 
 /*
  * Copyright (c) 2009-2012 Niels Provos and Nick Mathewson

@@ -1,4 +1,4 @@
-/*	$NetBSD: dns_struct.h,v 1.1 2013/12/27 23:31:33 christos Exp $	*/
+/*	$NetBSD: dns_struct.h,v 1.1.1.1 2013/12/27 23:31:33 christos Exp $	*/
 
 /*
  * Copyright (c) 2000-2007 Niels Provos <provos@citi.umich.edu>

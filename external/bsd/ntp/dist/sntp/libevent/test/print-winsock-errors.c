@@ -1,4 +1,4 @@
-/*	$NetBSD: print-winsock-errors.c,v 1.1 2013/12/27 23:31:27 christos Exp $	*/
+/*	$NetBSD: print-winsock-errors.c,v 1.1.1.1 2013/12/27 23:31:27 christos Exp $	*/
 
 #include <winsock2.h>
 #include <windows.h>

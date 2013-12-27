@@ -1,4 +1,4 @@
-/*	$NetBSD: le-proxy.c,v 1.1 2013/12/27 23:31:31 christos Exp $	*/
+/*	$NetBSD: le-proxy.c,v 1.1.1.1 2013/12/27 23:31:31 christos Exp $	*/
 
 /*
   This example code shows how to write an (optionally encrypting) SSL proxy

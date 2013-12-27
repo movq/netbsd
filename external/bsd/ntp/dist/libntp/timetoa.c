@@ -1,4 +1,4 @@
-/*	$NetBSD: timetoa.c,v 1.1 2013/12/27 23:30:48 christos Exp $	*/
+/*	$NetBSD: timetoa.c,v 1.1.1.1 2013/12/27 23:30:48 christos Exp $	*/
 
 /*
  * timetoa.c -- time_t related string formatting
