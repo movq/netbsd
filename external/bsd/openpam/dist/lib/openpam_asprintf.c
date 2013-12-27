@@ -1,4 +1,4 @@
-/*	$NetBSD: openpam_asprintf.c,v 1.1 2013/12/27 19:27:40 christos Exp $	*/
+/*	$NetBSD: openpam_asprintf.c,v 1.1.1.1 2013/12/27 19:27:40 christos Exp $	*/
 
 /*-
  * Copyright (c) 2012 Dag-Erling Smørgrav
