@@ -1,8 +1,8 @@
-/* $NetBSD: duid.h,v 1.1.1.3 2013/06/21 19:33:08 roy Exp $ */
+/* $NetBSD: duid.h,v 1.1.1.4 2014/01/03 22:10:44 roy Exp $ */
 
 /*
  * dhcpcd - DHCP client daemon
- * Copyright (c) 2006-2008 Roy Marples <roy@marples.name>
+ * Copyright (c) 2006-2013 Roy Marples <roy@marples.name>
  * All rights reserved
 
  * Redistribution and use in source and binary forms, with or without
@@ -32,6 +32,9 @@
 
 #include "net.h"
 
-size_t get_duid(unsigned char *duid, const struct interface *iface);
+extern unsigned char *duid;
+extern size_t duid_len;
+
+size_t duid_init(const struct interface *);
 
 #endif
