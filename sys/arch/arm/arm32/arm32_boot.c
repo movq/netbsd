@@ -1,4 +1,4 @@
-/*	$NetBSD: arm32_boot.c,v 1.5 2013/08/18 06:28:18 matt Exp $	*/
+/*	$NetBSD: arm32_boot.c,v 1.5.2.2 2014/02/15 16:18:36 matt Exp $	*/
 
 /*
  * Copyright (c) 2002, 2003, 2005  Genetec Corporation.  All rights reserved.
@@ -123,7 +123,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: arm32_boot.c,v 1.5 2013/08/18 06:28:18 matt Exp $");
+__KERNEL_RCSID(1, "$NetBSD: arm32_boot.c,v 1.5.2.2 2014/02/15 16:18:36 matt Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -164,7 +164,8 @@ initarm_common(vaddr_t kvm_base, vsize_t kvm_size,
 	 * Moved from cpu_startup() as data_abort_handler() references
 	 * this during uvm init.
 	 */
-	uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
+	//uvm_lwp_setuarea(&lwp0, kernelstack.pv_va);
+	lwp0.l_addr = (void *)kernelstack.pv_va;
 
 #ifdef VERBOSE_INIT_ARM
 	printf("bootstrap done.\n");

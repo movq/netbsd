@@ -1,4 +1,4 @@
-/*	$NetBSD: cpufunc_asm_arm11x6.S,v 1.3 2013/08/18 06:28:18 matt Exp $	*/
+/*	$NetBSD: cpufunc_asm_arm11x6.S,v 1.3.2.2 2014/02/15 16:18:35 matt Exp $	*/
 
 /*
  * Copyright (c) 2007 Microsoft
@@ -61,9 +61,8 @@
 
 #include "assym.h"
 #include <machine/asm.h>
-#include <arm/locore.h>
 
-RCSID("$NetBSD: cpufunc_asm_arm11x6.S,v 1.3 2013/08/18 06:28:18 matt Exp $")
+RCSID("$NetBSD: cpufunc_asm_arm11x6.S,v 1.3.2.2 2014/02/15 16:18:35 matt Exp $")
 
 #if 0
 #define Invalidate_I_cache(Rtmp1, Rtmp2) \

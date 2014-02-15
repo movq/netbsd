@@ -1,4 +1,4 @@
-/*	$NetBSD: pl310.c,v 1.12 2013/06/17 05:13:07 matt Exp $	*/
+/*	$NetBSD: pl310.c,v 1.12.6.2 2014/02/15 16:18:36 matt Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -30,13 +30,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pl310.c,v 1.12 2013/06/17 05:13:07 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pl310.c,v 1.12.6.2 2014/02/15 16:18:36 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
 #include <sys/cpu.h>
 #include <sys/device.h>
 #include <sys/atomic.h>
+
+#include <arm/locore.h>
 
 #include <arm/cortex/mpcore_var.h>
 #include <arm/cortex/pl310_reg.h>

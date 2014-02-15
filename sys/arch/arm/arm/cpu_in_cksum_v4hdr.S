@@ -29,7 +29,7 @@
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: cpu_in_cksum_v4hdr.S,v 1.4 2012/12/20 07:16:01 matt Exp $")
+RCSID("$NetBSD: cpu_in_cksum_v4hdr.S,v 1.4.14.2 2014/02/15 16:18:35 matt Exp $")
 
 ENTRY(cpu_in_cksum_v4hdr)
 #ifdef _ARM_ARCH_DWORD_OK

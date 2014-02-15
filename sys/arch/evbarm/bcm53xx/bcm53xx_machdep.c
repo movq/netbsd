@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm53xx_machdep.c,v 1.7 2013/06/30 22:02:56 matt Exp $	*/
+/*	$NetBSD: bcm53xx_machdep.c,v 1.7.4.2 2014/02/15 16:18:37 matt Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 #define IDM_PRIVATE
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm53xx_machdep.c,v 1.7 2013/06/30 22:02:56 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm53xx_machdep.c,v 1.7.4.2 2014/02/15 16:18:37 matt Exp $");
 
 #include "opt_evbarm_boardtype.h"
 #include "opt_broadcom.h"
@@ -83,9 +83,12 @@ BootConfig bootconfig;
 static char bootargs[MAX_BOOT_STRING];
 char *boot_args = NULL;     
 
+int physmem;
+
 u_int uboot_args[4] = { 0 };
 
 static void bcm53xx_system_reset(void);
+static size_t bcm53xx_page_to_pggroup(struct vm_page *, size_t);
 
 /*
  * Macros to translate between physical and virtual for a subset of the
@@ -173,8 +176,13 @@ static const struct pmap_devmap devmap[] = {
 };
 
 static const struct boot_physmem bp_first256 = {
+#ifdef BCM5301X
 	.bp_start = 0x80000000 / NBPG,
 	.bp_pages = 0x10000000 / NBPG,
+#elif defined(BCM563XX)
+	.bp_start = 0x60000000 / NBPG,
+	.bp_pages = 0x20000000 / NBPG,
+#endif
 	.bp_freelist = VM_FREELIST_ISADMA,
 	.bp_flags = 0,
 };
@@ -248,7 +256,7 @@ initarm(void *arg)
 	if ((memsize >> 20) > MEMSIZE)
 		memsize = MEMSIZE*1024*1024;
 #endif
-	const bool bigmem_p = (memsize >> 20) > 256; 
+	const bool bigmem_p = (memsize >> PGSHIFT) > bp_first256.bp_pages;
 
 	arm32_bootmem_init(KERN_VTOPHYS(KERNEL_BASE), memsize,
 	    (paddr_t)KERNEL_BASE_phys);
@@ -275,6 +283,7 @@ initarm(void *arg)
 		 * If we have more than 256MB
 		 */
 		arm_poolpage_vmfreelist = bp_first256.bp_freelist;
+		arm_page_to_pggroup = bcm53xx_page_to_pggroup;
 	}
 
 	/*
@@ -283,6 +292,20 @@ initarm(void *arg)
 	 */
 	return initarm_common(KERNEL_VM_BASE, KERNEL_VM_SIZE,
 	    (bigmem_p ? &bp_first256 : NULL), (bigmem_p ? 1 : 0));
+}
+
+static size_t
+bcm53xx_page_to_pggroup(struct vm_page *pg, size_t ncolors)
+{
+	const struct boot_physmem * const bp = &bp_first256;
+	const paddr_t pfn = VM_PAGE_TO_PHYS(pg) >> PGSHIFT;
+	const u_int color = VM_PGCOLOR_BUCKET(pg);
+
+	if (arm_poolpage_vmfreelist != VM_FREELIST_DEFAULT
+	    && bp->bp_start <= pfn && pfn < bp->bp_start + bp->bp_pages)
+		return VM_FREELIST_ISADMA * ncolors + color;
+
+	return VM_FREELIST_DEFAULT * ncolors + color;
 }
 
 void

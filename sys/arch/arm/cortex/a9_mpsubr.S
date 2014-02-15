@@ -1,4 +1,4 @@
-/*	$NetBSD: a9_mpsubr.S,v 1.12 2014/01/24 05:14:11 matt Exp $	*/
+/*	$NetBSD: a9_mpsubr.S,v 1.12.2.2 2014/02/15 16:18:36 matt Exp $	*/
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -114,23 +114,29 @@ arm_boot_l1pt_init:
 #define	CPU_CONTROL_SWP_ENABLE		0
 #endif
 #ifdef __ARMEL__
-#undef CPU_CONTROL_EX_BEND		// needs to clear on LE systems
-#define	CPU_CONTROL_EX_BEND		0
+#define CPU_CONTROL_EX_BEND_SET		0
+#else
+#define CPU_CONTROL_EX_BEND_SET		CPU_CONTROL_EX_BEND
 #endif
 #ifdef ARM32_DISABLE_ALIGNMENT_FAULTS
-#undef CPU_CONTROL_AFLT_ENABLE
-#define CPU_CONTROL_AFLT_ENABLE		0
+#define CPU_CONTROL_CLR \
+	(CPU_CONTROL_AFLT_ENABLE)
+#define CPU_CONTROL_AFLT_ENABLE_SET	0
+#else
+#define CPU_CONTROL_AFLT_ENABLE_SET	CPU_CONTROL_AFLT_ENABLE
 #endif
 
 #define	CPU_CONTROL_SET \
 	(CPU_CONTROL_MMU_ENABLE		|	\
-	 CPU_CONTROL_AFLT_ENABLE	|	\
-	 CPU_CONTROL_EX_BEND		|	\
+	 CPU_CONTROL_AFLT_ENABLE_SET	|	\
 	 CPU_CONTROL_DC_ENABLE		|	\
 	 CPU_CONTROL_SWP_ENABLE		|	\
 	 CPU_CONTROL_BPRD_ENABLE	|	\
 	 CPU_CONTROL_IC_ENABLE		|	\
+	 CPU_CONTROL_EX_BEND_SET	|	\
 	 CPU_CONTROL_UNAL_ENABLE)
+
+#
 
 arm_cpuinit:
 	/*
@@ -140,26 +146,42 @@ arm_cpuinit:
 	 */
 	mov	ip, lr
 	mov	r10, r0
+	mov	r1, #0
 
-	mcr     p15, 0, r10, c7, c5, 0	/* invalidate I cache */
+	mcr     p15, 0, r1, c7, c5, 0	/* invalidate I cache */
 
-	mrc	p15, 0, r2, c1, c0, 0	/*  "       "   "     */
+	mrc	p15, 0, r2, c1, c0, 0	/* read SCTRL */
 	bic	r2, r2, #CPU_CONTROL_DC_ENABLE	@ clear data cache enable
 	bic	r2, r2, #CPU_CONTROL_IC_ENABLE	@ clear instruction cache enable
-	mcr	p15, 0, r2, c1, c0, 0	/*  "       "   "     */
+
+#ifdef __ARMEB__
+	/*
+	 * SCTRL.EE determines the endianness of translation table lookups.
+	 * So we need to make sure it's set before starting to use the new
+	 * translation tables (which are big endian).
+	 */
+	orr	r2, r2, #CPU_CONTROL_EX_BEND
+	bic	r2, r2, #CPU_CONTROL_MMU_ENABLE
+	pli	[pc, #32]		/* preload the next few cachelines */
+	pli	[pc, #64]
+	pli	[pc, #96]
+	pli	[pc, #128]
+#endif
+
+	mcr	p15, 0, r2, c1, c0, 0	/* write SCTRL */
 
 	XPUTC(#70)
-	mov	r1, #0
 	dsb				/* Drain the write buffers. */
-
+1:
 	XPUTC(#71)
-	mrc	p15, 0, r2, c0, c0, 5	/* get MPIDR */
-	cmp	r2, #0
+	mrc	p15, 0, r1, c0, c0, 5	/* get MPIDR */
+	cmp	r1, #0
 	orrlt	r10, r10, #0x5b		/* MP, cachable (Normal WB) */
 	orrge	r10, r10, #0x1b		/* Non-MP, cacheable, normal WB */
-	mcr	p15, 0, r10, c2, c0, 0	/* Set Translation Table Base */
+	mcr	p15, 0, r1, c2, c0, 0	/* Set Translation Table Base */
 
 	XPUTC(#49)
+	mov	r1, #0
 	mcr	p15, 0, r1, c2, c0, 2	/* Set Translation Table Control */
 
 	XPUTC(#72)
@@ -177,16 +199,19 @@ arm_cpuinit:
 	XPUTC(#74)
 	mrc	p15, 0, r0, c1, c0, 0
 
-	movw	r3, #:lower16:CPU_CONTROL_SET
+	movw	r3, #LOWER16(CPU_CONTROL_SET)
 #if (CPU_CONTROL_SET & 0xffff0000)
-	movt	r3, #:upper16:CPU_CONTROL_SET
+	movt	r3, #UPPER16(CPU_CONTROL_SET)
 #endif
 	orr	r0, r0, r3
+#ifdef CPU_CONTROL_CLR
+	bic	r0, r0, #CPU_CONTROL_CLR
+#endif
 	
 	dsb
 	.align 5
 	@ turn mmu on!
-	mov	r0, r0
+	mov	r0, r0			/* fetch instruction cacheline */
 	mcr	p15, 0, r0, c1, c0, 0
 
 	/*
@@ -194,7 +219,7 @@ arm_cpuinit:
 	 */
 	mrc	p15, 0, r0, c0, c0, 0	/* Read an arbitrary value. */
 	mov	r0, r0			/* Stall until read completes. */
-	XPUTC(#76)
+1:	XPUTC(#76)
 
 	bx	ip			/* return */
 

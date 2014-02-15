@@ -33,12 +33,14 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: bcm53xx_rng.c,v 1.5 2013/12/17 13:13:26 joerg Exp $");
+__KERNEL_RCSID(1, "$NetBSD: bcm53xx_rng.c,v 1.5.2.2 2014/02/15 16:18:36 matt Exp $");
 
+#include <sys/param.h>
 #include <sys/bus.h>
 #include <sys/callout.h>
 #include <sys/device.h>
 #include <sys/intr.h>
+#include <sys/mutex.h>
 #include <sys/rnd.h>
 #include <sys/systm.h>
 
@@ -52,7 +54,8 @@ struct bcmrng_softc {
 	device_t sc_dev;
 	bus_space_tag_t sc_bst;
 	bus_space_handle_t sc_bsh;
-	krndsource_t sc_rnd_source;
+	rndsource_element_t sc_rnd_source;
+	//krndsource_t sc_rnd_source;
 	struct callout sc_rnd_callout;
 	kmutex_t *sc_lock;
 #ifdef RNG_USE_INTR

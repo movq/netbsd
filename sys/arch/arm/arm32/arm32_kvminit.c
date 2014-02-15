@@ -1,4 +1,4 @@
-/*	$NetBSD: arm32_kvminit.c,v 1.22 2013/08/29 15:46:17 riz Exp $	*/
+/*	$NetBSD: arm32_kvminit.c,v 1.22.2.2 2014/02/15 16:18:36 matt Exp $	*/
 
 /*
  * Copyright (c) 2002, 2003, 2005  Genetec Corporation.  All rights reserved.
@@ -122,7 +122,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arm32_kvminit.c,v 1.22 2013/08/29 15:46:17 riz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arm32_kvminit.c,v 1.22.2.2 2014/02/15 16:18:36 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

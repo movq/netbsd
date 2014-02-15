@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: armperiph.c,v 1.4 2013/06/20 05:30:21 matt Exp $");
+__KERNEL_RCSID(1, "$NetBSD: armperiph.c,v 1.4.6.2 2014/02/15 16:18:36 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

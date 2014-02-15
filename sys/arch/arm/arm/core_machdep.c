@@ -1,4 +1,4 @@
-/*	$NetBSD: core_machdep.c,v 1.4 2014/01/04 00:10:02 dsl Exp $	*/
+/*	$NetBSD: core_machdep.c,v 1.4.2.2 2014/02/15 16:18:35 matt Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -37,7 +37,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: core_machdep.c,v 1.4 2014/01/04 00:10:02 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: core_machdep.c,v 1.4.2.2 2014/02/15 16:18:35 matt Exp $");
 
 #include <sys/core.h>
 #include <sys/exec.h>
@@ -56,8 +56,7 @@ __KERNEL_RCSID(0, "$NetBSD: core_machdep.c,v 1.4 2014/01/04 00:10:02 dsl Exp $")
  * Dump the machine specific segment at the start of a core dump.
  */
 int
-cpu_coredump(struct lwp *l, struct coredump_iostate *iocookie,
-    struct core *chdr)
+cpu_coredump(struct lwp *l, void *iocookie, struct core *chdr)
 {
 	int error;
 	struct {
@@ -80,7 +79,7 @@ cpu_coredump(struct lwp *l, struct coredump_iostate *iocookie,
 	if (error)
 		return error;
 	/* Save floating point registers. */
-	error = process_read_fpregs(l, &cpustate.fpregs, NULL);
+	error = process_read_fpregs(l, &cpustate.fpregs);
 	if (error)
 		return error;
 

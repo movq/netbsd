@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm53xx_var.h,v 1.6 2013/10/28 22:51:16 matt Exp $	*/
+/*	$NetBSD: bcm53xx_var.h,v 1.6.2.2 2014/02/15 16:18:36 matt Exp $	*/
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.

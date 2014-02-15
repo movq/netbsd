@@ -1,4 +1,4 @@
-/*	$NetBSD: bcmgen_space.c,v 1.4 2013/10/28 22:51:16 matt Exp $	*/
+/*	$NetBSD: bcmgen_space.c,v 1.4.2.2 2014/02/15 16:18:36 matt Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcmgen_space.c,v 1.4 2013/10/28 22:51:16 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcmgen_space.c,v 1.4.2.2 2014/02/15 16:18:36 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -199,7 +199,7 @@ bcmgen_bs_map(void *t, bus_addr_t bpa, bus_size_t size, int flag,
 		? 0
 		: PMAP_NOCACHE;
 	for (pa = startpa; pa < endpa; pa += PAGE_SIZE, va += PAGE_SIZE) {
-		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE, pmapflags);
+		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE | pmapflags);
 	}
 	pmap_update(pmap_kernel());
 

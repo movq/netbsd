@@ -1,5 +1,6 @@
-#	$NetBSD: mk.bcm53xx,v 1.4 2013/10/28 22:35:07 matt Exp $
-CPPFLAGS+= -mcpu=cortex-a9 -mfpu=neon
+#	$NetBSD: mk.bcm53xx,v 1.4.2.2 2014/02/15 16:18:37 matt Exp $
+CPPFLAGS+= -mcpu=cortex-a9
+#CPPFLAGS+= -mfpu=neon
 #CPPFLAGS+= -mabi=aapcs-linux -Wa,-meabi=5
 
 .if !empty(MACHINE_ARCH:M*eb)

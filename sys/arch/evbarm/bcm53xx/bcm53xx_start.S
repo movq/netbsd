@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm53xx_start.S,v 1.10 2014/01/24 04:15:33 matt Exp $	*/
+/*	$NetBSD: bcm53xx_start.S,v 1.10.2.2 2014/02/15 16:18:37 matt Exp $	*/
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -45,7 +45,7 @@
 #define	CONADDR		0x18000300
 #endif
 
-RCSID("$NetBSD: bcm53xx_start.S,v 1.10 2014/01/24 04:15:33 matt Exp $")
+RCSID("$NetBSD: bcm53xx_start.S,v 1.10.2.2 2014/02/15 16:18:37 matt Exp $")
 
 #undef VERBOSE_INIT_ARM
 #define VERBOSE_INIT_ARM
@@ -74,9 +74,7 @@ _C_LABEL(bcm53xx_start):
 	/*
 	 * Save any arguments u-boot passed us.
 	 */
-	movw	r4, #:lower16:(uboot_args-.LPIC0)
-	movt	r4, #:upper16:(uboot_args-.LPIC0)
-	bic	r4, r4, #0xf0000000
+	ldr	r4, .Luboot_args_pic0
 	add	r4, r4, pc
 	stmia	r4, {r0-r3}
 .LPIC0:
@@ -123,11 +121,9 @@ _C_LABEL(bcm53xx_start):
 
 	XPUTC(#89)
 
-	movw	r0, #:lower16:uboot_args
-	movt	r0, #:upper16:uboot_args
+	ldr	r0, .Luboot_args
 	ldr	r2, [r0]
-	movw	r1, #:lower16:(uboot_args-.LPIC1)
-	movt	r1, #:upper16:(uboot_args-.LPIC1)
+	ldr	r1, .Luboot_args_pic1
 	add	r1, r1, pc
 	ldr	r1, [r1]
 .LPIC1:
@@ -149,8 +145,7 @@ _C_LABEL(bcm53xx_start):
 	/*
 	 * Jump to start in locore.S, which in turn will call initarm and main.
 	 */
-	movw	ip, #:lower16:start
-	movt	ip, #:upper16:start
+	ldr	ip, .Lstart
 	bx	ip
 	nop
 	nop
@@ -158,6 +153,14 @@ _C_LABEL(bcm53xx_start):
 	nop
 
 	/* NOTREACHED */
+.Luboot_args_pic0:
+	.word	uboot_args - .LPIC0
+.Luboot_args_pic1:
+	.word	uboot_args - .LPIC0
+.Luboot_args:
+	.word	uboot_args
+.Lstart:
+	.word	start
 
 .Lsku_rom_lut:
 	.word	0xffff0400

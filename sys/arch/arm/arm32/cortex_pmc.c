@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-/* __KERNEL_RCSID(0, "$NetBSD: cortex_pmc.c,v 1.2 2012/08/29 19:10:15 matt Exp $"); */
+/* __KERNEL_RCSID(0, "$NetBSD: cortex_pmc.c,v 1.2.12.2 2014/02/15 16:18:36 matt Exp $"); */
 #include "opt_perfctrs.h"
 #include <sys/types.h>
 #include <sys/param.h>

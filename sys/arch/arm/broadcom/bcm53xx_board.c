@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm53xx_board.c,v 1.17 2013/10/28 22:51:16 matt Exp $	*/
+/*	$NetBSD: bcm53xx_board.c,v 1.17.2.2 2014/02/15 16:18:36 matt Exp $	*/
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: bcm53xx_board.c,v 1.17 2013/10/28 22:51:16 matt Exp $");
+__KERNEL_RCSID(1, "$NetBSD: bcm53xx_board.c,v 1.17.2.2 2014/02/15 16:18:36 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -77,7 +77,7 @@ struct arm32_dma_range bcm53xx_dma_ranges[] = {
 		.dr_sysbase = 0x90000000,
 		.dr_busbase = 0x90000000,
 	},
-#elif defined(BCM56340)
+#elif defined(BCM563XX)
 	[0] = {
 		.dr_sysbase = 0x60000000,
 		.dr_busbase = 0x60000000,
@@ -85,7 +85,7 @@ struct arm32_dma_range bcm53xx_dma_ranges[] = {
 	}, [1] = {
 		.dr_sysbase = 0xa0000000,
 		.dr_busbase = 0xa0000000,
-	}.
+	},
 #endif
 };
 
