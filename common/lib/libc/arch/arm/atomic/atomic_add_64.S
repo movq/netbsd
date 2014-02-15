@@ -1,6 +1,7 @@
-/*	$NetBSD: atomic_add_64.S,v 1.10 2013/11/30 20:43:53 joerg Exp $	*/
+/*	$NetBSD: atomic_add_64.S,v 1.10.2.2 2014/02/15 10:27:44 matt Exp $	*/
+
 /*-
- * Copyright (c) 2012 The NetBSD Foundation, Inc.
+ * Copyright (c) 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -33,30 +34,21 @@
 #ifdef _ARM_ARCH_6
 
 ENTRY_NP(_atomic_add_64_nv)
-	push	{r3,r4}			/* save temporary */
-	mov	ip, r0			/* need r0 for return value */
-#ifndef __ARM_EABI__
+	push	{r4}
+	mov	r4, r0			/* need r0 for return value */
 	mov	r3, r2
 	mov	r2, r1
-#endif
-1:	ldrexd	r0, r1, [ip]		/* load old value */
-	adds	LO, LO, NLO		/* calculate new value lo */
-	adcs	HI, HI, NHI		/* calculate new value hi */
-	strexd	r4, r0, r1, [ip]	/* try to store */
-	cmp	r4, #0			/*   succeed? */
+1:	ldrexd	r0, [r4]		/* load old value */
+	adds	LO, LO, NLO		/* calculate new value (return value) */
+	adc	HI, HI, NHI		/* calculate new value (return value) */
+	strexd	ip, r0, [r4]		/* try to store */
+	cmp	ip, #0			/*   succeed? */
 	bne	1b			/*     no, try again? */
-#ifdef _ARM_ARCH_7
-	dmb
-#else
-	mcr	p15, 0, r4, c7, c10, 5	/* data memory barrier */
-#endif
-	pop	{r3,r4}			/* restore temporary */
-	RET				/* return new value */
+	pop	{r4}
+	bx	lr			/* return new value */
 END(_atomic_add_64_nv)
-
-STRONG_ALIAS(_atomic_add_64,_atomic_add_64_nv)
 ATOMIC_OP_ALIAS(atomic_add_64_nv,_atomic_add_64_nv)
-ATOMIC_OP_ALIAS(atomic_add_64,_atomic_add_64)
-STRONG_ALIAS(__sync_add_and_fetch_8,_atomic_add_64_nv)
+ATOMIC_OP_ALIAS(atomic_add_64,_atomic_add_64_nv)
+STRONG_ALIAS(_atomic_add_64,_atomic_add_64_nv)
 
 #endif /* _ARM_ARCH_6 */

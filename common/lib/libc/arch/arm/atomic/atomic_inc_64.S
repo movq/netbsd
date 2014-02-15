@@ -1,6 +1,7 @@
-/*	$NetBSD: atomic_inc_64.S,v 1.9 2013/11/30 21:09:11 joerg Exp $	*/
+/*	$NetBSD: atomic_inc_64.S,v 1.9.2.2 2014/02/15 10:27:44 matt Exp $	*/
+
 /*-
- * Copyright (c) 2012 The NetBSD Foundation, Inc.
+ * Copyright (c) 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -33,23 +34,17 @@
 #ifdef _ARM_ARCH_6
 
 ENTRY_NP(_atomic_inc_64_nv)
-	mov	ip, r0			/* need r0 for return value */
-1:	ldrexd	r0, r1, [ip]		/* load old value */
+	mov	r3, r0			/* need r0 for return value */
+1:	ldrexd	r0, [r3]		/* load old value */
 	adds	LO, LO, #1		/* calculate new value (return value) */
-	adcs	HI, HI, #0		/* fold carry into high */
-	strexd	r2, r0, r1, [ip]	/* try to store */
-	cmp	r2, #0			/*   succeed? */
+	adc	HI, HI, #0		/* calculate new value (return value) */
+	strexd	ip, r0, [r3]		/* try to store */
+	cmp	ip, #0			/*   succeed? */
 	bne	1b			/*     no, try again? */
-#ifdef _ARM_ARCH_7
-	dmb
-#else
-	mcr	p15, 0, r2, c7, c10, 5	/* data memory barrier */
-#endif
-	RET				/* return new value */
+	bx	lr			/* return new value */
 END(_atomic_inc_64_nv)
-
-STRONG_ALIAS(_atomic_inc_64,_atomic_inc_64_nv)
 ATOMIC_OP_ALIAS(atomic_inc_64_nv,_atomic_inc_64_nv)
-ATOMIC_OP_ALIAS(atomic_inc_64,_atomic_inc_64)
+ATOMIC_OP_ALIAS(atomic_inc_64,_atomic_inc_64_nv)
+STRONG_ALIAS(_atomic_inc_64,_atomic_inc_64_nv)
 
 #endif /* _ARM_ARCH_6 */

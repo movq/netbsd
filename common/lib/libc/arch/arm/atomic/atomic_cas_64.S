@@ -1,6 +1,6 @@
-/*	$NetBSD: atomic_cas_64.S,v 1.5 2013/11/30 21:09:11 joerg Exp $	*/
+/*	$NetBSD: atomic_cas_64.S,v 1.5.2.2 2014/02/15 10:27:44 matt Exp $	*/
 /*-
- * Copyright (c) 2012 The NetBSD Foundation, Inc.
+ * Copyright (c) 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -36,40 +36,24 @@
  * and kernel.
  */
 ENTRY_NP(_atomic_cas_64)
-	push	{r4, r5, r6}		/* save temporaries */
-	mov	ip, r0			/* we need r0 for return value */
-#ifdef __ARM_EABI__
-	ldrd	r4, r5, [sp]		/* fetch new value */
-#else
-	ldr	r4, [sp, #0]		/* fetch new value */
-	ldr	r5, [sp, #4]		/* fetch new value */
-	mov	r3, r2			/* r2 will be overwritten by r1 which ... */
-	mov	r2, r1			/* r1 will be overwritten by ldrexd */
-#endif
+	push	{r4-r6}
+	mov	r3, r2
+	mov	r2, r1
+	ldr	r4, [sp, #0]
+	ldr	r5, [sp, #4]
+	mov	r6, r0			/* we need r0 for return value */
 1:
-	ldrexd	r0, r1, [ip]		/* load current value */
-	cmp	r0, r2			/*   compare to old? 1st half */
-#ifdef __thumb__
-	bne	2f			/*     jump to return if different */
-	cmp	r1, r3			/*   compare to old? 2nd half */
-#else
-	cmpeq	r1, r3			/*   compare to old? 2nd half */
-#endif
-	bne	2f			/*     jump to return if different */
-	strexd	r6, r4, r5, [ip]	/* store new value */
-	cmp	r6, #0			/*   succeed? */
+	ldrexd	r0, [r6]		/* load old value */
+	cmp	r0, r2			/*   compare? */
+	cmpeq	r1, r3			/*   compare? */
+	bne	2f			/*     return if different */
+	strexd	ip, r4, [r6]		/* store new value */
+	cmp	ip, #0			/*   succeed? */
 	bne	1b			/*     nope, try again. */
-#ifdef _ARM_ARCH_7
-	dsb
-#else
-	mcr	p15, 0, ip, c7, c10, 4	/* data synchronization barrier */
-#endif
-2:
-	pop	{r4, r5, r6}		/* restore temporaries */
-	RET				/* return. */
+2:	pop	{r4-r6}
+	bx	lr			/*    yes, return. */
 END(_atomic_cas_64)
 
 ATOMIC_OP_ALIAS(atomic_cas_64,_atomic_cas_64)
-STRONG_ALIAS(__sync_val_compare_and_swap_8,_atomic_cas_64)
 
 #endif /* _ARM_ARCH_6 */
