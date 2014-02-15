@@ -1,4 +1,4 @@
-/*	$NetBSD: a9tmr.c,v 1.6 2013/06/20 05:30:21 matt Exp $	*/
+/*	$NetBSD: a9tmr.c,v 1.6.6.2 2014/02/15 16:18:36 matt Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: a9tmr.c,v 1.6 2013/06/20 05:30:21 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: a9tmr.c,v 1.6.6.2 2014/02/15 16:18:36 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

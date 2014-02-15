@@ -34,11 +34,13 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: bcm53xx_pax.c,v 1.10 2013/04/21 19:59:39 msaitoh Exp $");
+__KERNEL_RCSID(1, "$NetBSD: bcm53xx_pax.c,v 1.10.8.2 2014/02/15 16:18:36 matt Exp $");
 
+#include <sys/param.h>
 #include <sys/bus.h>
 #include <sys/device.h>
 #include <sys/extent.h>
+#include <sys/malloc.h>			// for extent
 #include <sys/intr.h>
 #include <sys/kmem.h>
 #include <sys/systm.h>
@@ -46,6 +48,8 @@ __KERNEL_RCSID(1, "$NetBSD: bcm53xx_pax.c,v 1.10 2013/04/21 19:59:39 msaitoh Exp
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pciconf.h>
+
+#include <arm/locore.h>
 
 #include <arm/broadcom/bcm53xx_reg.h>
 #include <arm/broadcom/bcm53xx_var.h>
@@ -351,7 +355,7 @@ bcmpax_ccb_attach(device_t parent, device_t self, void *aux)
 		}
 
 		struct extent *memext = extent_create("pcimem", base,
-		     base + size, NULL, 0, EX_NOWAIT);
+		     base + size, M_DEVBUF, NULL, 0, EX_NOWAIT);
 
 		error = pci_configure_bus(&sc->sc_pc,
 		    NULL, memext, NULL, 0, arm_pcache.dcache_line_size);

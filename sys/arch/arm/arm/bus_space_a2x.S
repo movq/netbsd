@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_space_a2x.S,v 1.4 2013/10/28 22:50:25 matt Exp $	*/
+/*	$NetBSD: bus_space_a2x.S,v 1.4.2.2 2014/02/15 16:18:35 matt Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 #include <arm/locore.h>
 #include <arm/byte_swap.h>
 
-RCSID("$NetBSD: bus_space_a2x.S,v 1.4 2013/10/28 22:50:25 matt Exp $")
+RCSID("$NetBSD: bus_space_a2x.S,v 1.4.2.2 2014/02/15 16:18:35 matt Exp $")
 
 /*
  * bus_space_read_[124](void *cookie, bus_space_handle_t handle,

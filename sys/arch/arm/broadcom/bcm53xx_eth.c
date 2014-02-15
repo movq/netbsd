@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: bcm53xx_eth.c,v 1.25 2013/10/28 22:51:16 matt Exp $");
+__KERNEL_RCSID(1, "$NetBSD: bcm53xx_eth.c,v 1.25.2.2 2014/02/15 16:18:36 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/atomic.h>
@@ -43,7 +43,8 @@ __KERNEL_RCSID(1, "$NetBSD: bcm53xx_eth.c,v 1.25 2013/10/28 22:51:16 matt Exp $"
 #include <sys/device.h>
 #include <sys/ioctl.h>
 #include <sys/intr.h>
-#include <sys/kmem.h>
+//#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/mutex.h>
 #include <sys/socket.h>
 #include <sys/systm.h>
@@ -760,13 +761,13 @@ bcmeth_mapcache_destroy(
 	struct bcmeth_softc *sc,
 	struct bcmeth_mapcache *dmc)
 {
-	const size_t dmc_size =
-	    offsetof(struct bcmeth_mapcache, dmc_maps[dmc->dmc_maxmaps]);
-
 	for (u_int i = 0; i < dmc->dmc_maxmaps; i++) {
 		bus_dmamap_destroy(sc->sc_dmat, dmc->dmc_maps[i]);
 	}
-	kmem_intr_free(dmc, dmc_size);
+	//const size_t dmc_size =
+	//    offsetof(struct bcmeth_mapcache, dmc_maps[dmc->dmc_maxmaps]);
+	//kmem_intr_free(dmc, dmc_size);
+	free(dmc, M_DEVBUF);
 }
 
 static int
@@ -780,7 +781,8 @@ bcmeth_mapcache_create(
 	const size_t dmc_size =
 	    offsetof(struct bcmeth_mapcache, dmc_maps[maxmaps]);
 	struct bcmeth_mapcache * const dmc =
-		kmem_intr_zalloc(dmc_size, KM_NOSLEEP);
+		malloc(dmc_size, M_DEVBUF, M_NOWAIT|M_ZERO);
+		//kmem_intr_zalloc(dmc_size, KM_NOSLEEP);
 
 	dmc->dmc_maxmaps = maxmaps;
 	dmc->dmc_nmaps = maxmaps;
@@ -800,7 +802,8 @@ bcmeth_mapcache_create(
 				bus_dmamap_destroy(sc->sc_dmat,
 				    dmc->dmc_maps[i]);
 			}
-			kmem_intr_free(dmc, dmc_size);
+			free(dmc, M_DEVBUF);
+			//kmem_intr_free(dmc, dmc_size);
 			return error;
 		}
 		KASSERT(dmc->dmc_maps[i] != NULL);

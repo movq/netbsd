@@ -1,4 +1,4 @@
-#	$NetBSD: files.bcm53xx,v 1.1 2012/09/01 00:15:11 matt Exp $
+#	$NetBSD: files.bcm53xx,v 1.1.16.2 2014/02/15 16:18:37 matt Exp $
 #
 # BCM5301X evaluation board configuration info
 #

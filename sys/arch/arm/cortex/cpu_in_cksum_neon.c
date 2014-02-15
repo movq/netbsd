@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: cpu_in_cksum_neon.c,v 1.1 2012/12/17 00:44:03 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu_in_cksum_neon.c,v 1.1.14.2 2014/02/15 16:18:36 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/cpu.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: gtmr_var.h,v 1.3 2013/09/12 15:38:04 matt Exp $ */
+/* $NetBSD: gtmr_var.h,v 1.3.2.2 2014/02/15 16:18:36 matt Exp $ */
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
  * All rights reserved.

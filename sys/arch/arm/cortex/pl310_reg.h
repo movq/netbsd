@@ -1,4 +1,4 @@
-/* $NetBSD: pl310_reg.h,v 1.2 2012/09/07 11:49:00 matt Exp $ */
+/* $NetBSD: pl310_reg.h,v 1.2.16.2 2014/02/15 16:18:36 matt Exp $ */
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.

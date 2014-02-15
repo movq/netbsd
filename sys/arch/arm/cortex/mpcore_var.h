@@ -1,4 +1,4 @@
-/* $NetBSD: mpcore_var.h,v 1.2 2013/06/20 05:30:21 matt Exp $ */
+/* $NetBSD: mpcore_var.h,v 1.2.6.2 2014/02/15 16:18:36 matt Exp $ */
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.

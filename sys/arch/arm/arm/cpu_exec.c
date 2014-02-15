@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu_exec.c,v 1.8 2013/12/20 06:50:28 matt Exp $	*/
+/*	$NetBSD: cpu_exec.c,v 1.8.2.2 2014/02/15 16:18:35 matt Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu_exec.c,v 1.8 2013/12/20 06:50:28 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu_exec.c,v 1.8.2.2 2014/02/15 16:18:35 matt Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_compat_netbsd32.h"

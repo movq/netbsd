@@ -29,7 +29,7 @@
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: cpu_in_cksum_buffer.S,v 1.8 2012/12/23 13:24:22 matt Exp $")
+RCSID("$NetBSD: cpu_in_cksum_buffer.S,v 1.8.14.2 2014/02/15 16:18:35 matt Exp $")
 
 /*
  * Special note:

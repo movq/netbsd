@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.h,v 1.12 2014/02/01 01:19:50 joerg Exp $	*/
+/*	$NetBSD: locore.h,v 1.12.2.2 2014/02/15 16:18:36 matt Exp $	*/
 
 /*
  * Copyright (c) 1994-1996 Mark Brinicombe.
@@ -197,7 +197,7 @@ read_thumb_insn(vaddr_t va, bool user_p)
 	va &= ~1;
 	uint32_t insn;
 	if (user_p) {
-#ifdef _ARM_ARCH_T2
+#if defined(_ARM_ARCH_T2) && 0
 		__asm __volatile("ldrht %0, [%1], #0" : "=&r"(insn) : "r"(va));
 #else
 		__asm __volatile("ldrt %0, [%1]" : "=&r"(insn) : "r"(va & ~3));
@@ -244,15 +244,6 @@ void	swi_handler(trapframe_t *);
 
 /* arm_machdep.c */
 void	ucas_ras_check(trapframe_t *);
-
-/* vfp_init.c */
-void	vfp_attach(void);
-void	vfp_discardcontext(bool);
-void	vfp_savecontext(void);
-void	vfp_kernel_acquire(void);
-void	vfp_kernel_release(void);
-bool	vfp_used_p(void);
-extern const pcu_ops_t arm_vfp_ops;
 
 #endif	/* !_LOCORE */
 

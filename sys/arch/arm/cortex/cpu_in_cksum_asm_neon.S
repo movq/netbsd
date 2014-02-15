@@ -29,7 +29,7 @@
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: cpu_in_cksum_asm_neon.S,v 1.3 2012/12/22 18:58:29 matt Exp $")
+RCSID("$NetBSD: cpu_in_cksum_asm_neon.S,v 1.3.14.2 2014/02/15 16:18:36 matt Exp $")
 
 /*
  * uint32_t
