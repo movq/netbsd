@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.1 2014/02/25 18:42:04 mrg Exp $
+#	$NetBSD: Makefile.inc,v 1.1.1.1 2014/02/25 18:42:04 mrg Exp $
 
 .if ${MKGCC} != "no"
 LIBGCC_MACHINE_ARCH?=${MACHINE_ARCH:S/earmv5/earm/}

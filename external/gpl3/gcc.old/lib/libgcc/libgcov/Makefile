@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2014/02/25 18:42:04 mrg Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2014/02/25 18:42:04 mrg Exp $
 
 REQUIRETOOLS=	yes
 NOPIC=		# defined

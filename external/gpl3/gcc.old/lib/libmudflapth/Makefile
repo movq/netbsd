@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2014/02/25 18:42:26 mrg Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2014/02/25 18:42:26 mrg Exp $
 
 NOLINT=yes			# core dumps
 UNSUPPORTED_COMPILER.clang=     # defined

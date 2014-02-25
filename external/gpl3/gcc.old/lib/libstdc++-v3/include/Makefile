@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2014/02/25 18:42:26 mrg Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2014/02/25 18:42:26 mrg Exp $
 
 SUBDIR=		backward ext bits debug decimal parallel tr1 tr1_impl
 #SUBDIR+=	pb_assoc
