@@ -1,4 +1,4 @@
-/*	$NetBSD: sample-gai.c,v 1.1 2014/02/28 17:40:16 christos Exp $	*/
+/*	$NetBSD: sample-gai.c,v 1.1.1.1 2014/02/28 17:40:16 christos Exp $	*/
 
 /*
  * Copyright (C) 2009, 2012, 2013  Internet Systems Consortium, Inc. ("ISC")
