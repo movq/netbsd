@@ -1,4 +1,4 @@
-/*	$NetBSD: cubie_machdep.c,v 1.14 2014/02/26 02:01:29 jmcneill Exp $ */
+/*	$NetBSD: cubie_machdep.c,v 1.14.2.2 2014/03/24 18:46:38 matt Exp $ */
 
 /*
  * Machine dependent functions for kernel setup for TI OSK5912 board.
@@ -125,7 +125,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cubie_machdep.c,v 1.14 2014/02/26 02:01:29 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cubie_machdep.c,v 1.14.2.2 2014/03/24 18:46:38 matt Exp $");
 
 #include "opt_machdep.h"
 #include "opt_ddb.h"

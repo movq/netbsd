@@ -40,7 +40,7 @@
 #include <arm/allwinner/awin_reg.h>
 #include <evbarm/cubie/platform.h>  
 
-RCSID("$NetBSD: cubie_start.S,v 1.6 2014/02/21 22:22:48 matt Exp $")
+RCSID("$NetBSD: cubie_start.S,v 1.6.2.2 2014/03/24 18:46:38 matt Exp $")
 
 #if defined(VERBOSE_INIT_ARM)
 #define	XPUTC(n)	mov r0, n; bl xputc
@@ -83,8 +83,7 @@ _C_LABEL(cubie_start):
 	 * lower 28 bits of what the linker gave us.
 	 */
 	adr	r4, _C_LABEL(cubie_start)
-	movw	r5, #:lower16:uboot_args
-	movt	r5, #:upper16:uboot_args
+	ldr	r5, =uboot_args
 	bfi	r4, r5, #0, #28
 
 	stmia	r4, {r0-r3}		// Save the arguments
@@ -95,8 +94,8 @@ _C_LABEL(cubie_start):
 	XPUTC(#67)
 
 #if defined(MULTIPROCESSOR) && 0
-	movw	r0, #:lower16:(AWIN_CORE_PBASE+AWIN_CPUCFG_OFFSET)
-	movt	r0, #:upper16:(AWIN_CORE_PBASE+AWIN_CPUCFG_OFFSET)
+	movw	r0, #((AWIN_CORE_PBASE+AWIN_CPUCFG_OFFSET)&0xffff)
+	movt	r0, #((AWIN_CORE_PBASE+AWIN_CPUCFG_OFFSET)>>16)
 
 	/* Set where the other CPU(s) are going to execute */
 	adr	r1, cortex_mpstart
@@ -112,8 +111,8 @@ _C_LABEL(cubie_start):
 	 * Set up a preliminary mapping in the MMU to allow us to run
 	 * at KERNEL_BASE with caches on.
 	 */
-	movw	r0, #:lower16:TEMP_L1_TABLE
-	movt	r0, #:upper16:TEMP_L1_TABLE
+	movw	r0, #(TEMP_L1_TABLE & 0xffff)
+	movt	r0, #(TEMP_L1_TABLE >> 16)
 	adr	r1, .Lmmu_init_table
 	bl	arm_boot_l1pt_init
 
@@ -122,8 +121,8 @@ _C_LABEL(cubie_start):
 	/*
 	 * Turn on the MMU, Caches, etc.
 	 */
-	movw	r0, #:lower16:TEMP_L1_TABLE
-	movt	r0, #:upper16:TEMP_L1_TABLE
+	movw	r0, #(TEMP_L1_TABLE & 0xffff)
+	movt	r0, #(TEMP_L1_TABLE >> 16)
 	bl	arm_cpuinit
 
 	XPUTC(#90)
@@ -133,8 +132,7 @@ _C_LABEL(cubie_start):
 	/*
 	 * Jump to start in locore.S, which in turn will call initarm and main.
 	 */
-	movw	ip, #:lower16:start
-	movt	ip, #:upper16:start
+	ldr	ip, =start
 	bx	ip		/* Jump to start (flushes pipeline). */
 
 	/* NOTREACHED */
