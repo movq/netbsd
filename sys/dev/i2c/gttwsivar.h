@@ -1,4 +1,4 @@
-/*	$NetBSD: gttwsivar.h,v 1.1 2013/09/06 00:56:12 matt Exp $	*/
+/*	$NetBSD: gttwsivar.h,v 1.1.2.2 2014/03/24 18:48:52 matt Exp $	*/
 /*
  * Copyright (c) 2008 Eiji Kawauchi.
  * All rights reserved.
