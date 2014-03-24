@@ -1,5 +1,5 @@
 #
-#	$NetBSD: CUBIEBOARD,v 1.10 2014/02/26 00:32:21 matt Exp $
+#	$NetBSD: CUBIEBOARD,v 1.10.2.2 2014/03/24 18:46:38 matt Exp $
 #
 #	CUBIEBOARD -- Allwinner A10/A20 Eval Board Kernel
 #
@@ -133,7 +133,7 @@ options 	DIAGNOSTIC	# internally consistency checks
 #options 	DEBUG
 #options 	PMAP_DEBUG	# Enable pmap_debug_level code
 #options 	IPKDB		# remote kernel debugging
-#options 	VERBOSE_INIT_ARM # verbose bootstraping messages
+options 	VERBOSE_INIT_ARM # verbose bootstraping messages
 options 	DDB		# in-kernel debugger
 options		DDB_ONPANIC=1
 options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
@@ -268,7 +268,7 @@ awe0		at awinio0 port ?
 # 10/100/1000 Ethernet (A10/A20)
 awge0		at awinio0 port ?
 
-include "dev/usb/usbdevices.config"
+#include "dev/usb/usbdevices.config"
 
 rlphy*		at mii? phy ?
 ukphy*		at mii? phy ?
