@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: awin_ahcisata.c,v 1.11 2014/02/24 16:40:29 matt Exp $");
+__KERNEL_RCSID(1, "$NetBSD: awin_ahcisata.c,v 1.11.2.2 2014/03/24 18:43:15 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -188,7 +188,9 @@ awin_ahci_attach(device_t parent, device_t self, void *aux)
 	sc->sc_ahcit = aio->aio_core_bst;
 	sc->sc_ahcis = loc->loc_size;
 	sc->sc_ahci_ports = 1;
+#ifdef AHCI_QUIRK_BADPMP
 	sc->sc_ahci_quirks = AHCI_QUIRK_BADPMP;
+#endif
 	sc->sc_save_init_data = true;
 	sc->sc_channel_start = awin_ahci_channel_start;
 

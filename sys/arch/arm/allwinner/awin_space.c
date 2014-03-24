@@ -1,4 +1,4 @@
-/*	$NetBSD: awin_space.c,v 1.3 2014/02/20 21:45:49 matt Exp $	*/
+/*	$NetBSD: awin_space.c,v 1.3.2.2 2014/03/24 18:43:15 matt Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: awin_space.c,v 1.3 2014/02/20 21:45:49 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awin_space.c,v 1.3.2.2 2014/03/24 18:43:15 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -315,7 +315,7 @@ awin_bs_map(void *t, bus_addr_t bpa, bus_size_t size, int flag,
 		? 0
 		: PMAP_NOCACHE;
 	for (pa = startpa; pa < endpa; pa += PAGE_SIZE, va += PAGE_SIZE) {
-		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE, pmapflags);
+		pmap_kenter_pa(va, pa, VM_PROT_READ | VM_PROT_WRITE | pmapflags);
 	}
 	pmap_update(pmap_kernel());
 

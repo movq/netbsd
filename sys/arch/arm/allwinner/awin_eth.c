@@ -31,8 +31,9 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: awin_eth.c,v 1.3 2013/09/08 04:06:44 matt Exp $");
+__KERNEL_RCSID(1, "$NetBSD: awin_eth.c,v 1.3.2.2 2014/03/24 18:43:15 matt Exp $");
 
+#include <sys/param.h>
 #include <sys/bus.h>
 #include <sys/device.h>
 #include <sys/intr.h>
@@ -53,7 +54,7 @@ static void awin_eth_attach(device_t, device_t, void *);
 
 static int awin_eth_miibus_read_reg(device_t, int, int);
 static void awin_eth_miibus_write_reg(device_t, int, int, int);
-static void awin_eth_miibus_statchg(struct ifnet *);
+static void awin_eth_miibus_statchg(device_t);
 
 struct awin_eth_softc {
 	device_t sc_dev;
@@ -192,9 +193,9 @@ awin_eth_miibus_write_reg(device_t self, int phy, int reg, int val)
 }
 
 void
-awin_eth_miibus_statchg(struct ifnet *ifp)
+awin_eth_miibus_statchg(device_t self)
 {
-	struct awin_eth_softc * const sc = ifp->if_softc;
+	struct awin_eth_softc * const sc = device_private(self);
 	struct mii_data * const mii = &sc->sc_mii;
 
 	/*

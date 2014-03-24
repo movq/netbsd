@@ -1,4 +1,4 @@
-/* $NetBSD: awin_mmc.c,v 1.3 2014/02/26 02:01:02 jmcneill Exp $ */
+/* $NetBSD: awin_mmc.c,v 1.3.2.2 2014/03/24 18:43:15 matt Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "locators.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: awin_mmc.c,v 1.3 2014/02/26 02:01:02 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awin_mmc.c,v 1.3.2.2 2014/03/24 18:43:15 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -55,7 +55,9 @@ static int	awin_mmc_write_protect(sdmmc_chipset_handle_t);
 static int	awin_mmc_bus_power(sdmmc_chipset_handle_t, uint32_t);
 static int	awin_mmc_bus_clock(sdmmc_chipset_handle_t, int);
 static int	awin_mmc_bus_width(sdmmc_chipset_handle_t, int);
+#if 0
 static int	awin_mmc_bus_rod(sdmmc_chipset_handle_t, int);
+#endif
 static void	awin_mmc_exec_command(sdmmc_chipset_handle_t,
 				      struct sdmmc_command *);
 static void	awin_mmc_card_enable_intr(sdmmc_chipset_handle_t, int);
@@ -70,7 +72,9 @@ static struct sdmmc_chip_functions awin_mmc_chip_functions = {
 	.bus_power = awin_mmc_bus_power,
 	.bus_clock = awin_mmc_bus_clock,
 	.bus_width = awin_mmc_bus_width,
+#if 0
 	.bus_rod = awin_mmc_bus_rod,
+#endif
 	.exec_command = awin_mmc_exec_command,
 	.card_enable_intr = awin_mmc_card_enable_intr,
 	.card_intr_ack = awin_mmc_card_intr_ack,
@@ -211,13 +215,21 @@ awin_mmc_attach(device_t parent, device_t self, void *aux)
 	saa.saa_clkmin = 400;
 	saa.saa_clkmax = 52000;
 	saa.saa_caps = SMC_CAPS_4BIT_MODE|
+#ifdef SMC_CAPS_8BIT_MODE
 		       SMC_CAPS_8BIT_MODE|
+#endif
+#ifdef SMC_CAPS_SD_HIGHSPEED
 		       SMC_CAPS_SD_HIGHSPEED|
+#endif
+#ifdef SMC_CAPS_MMC_HIGHSPEED
 		       SMC_CAPS_MMC_HIGHSPEED|
+#endif
 		       SMC_CAPS_AUTO_STOP;
+#ifdef SMC_CAPS_POOL_CARD_DET
 	if (sc->sc_has_gpio_detect) {
 		saa.saa_caps |= SMC_CAPS_POLL_CARD_DET;
 	}
+#endif
 
 	sc->sc_sdmmc_dev = config_found(self, &saa, NULL);
 }
@@ -382,11 +394,13 @@ awin_mmc_bus_width(sdmmc_chipset_handle_t sch, int width)
 	return 0;
 }
 
+#if 0
 static int
 awin_mmc_bus_rod(sdmmc_chipset_handle_t sch, int on)
 {
 	return -1;
 }
+#endif
 
 static int
 awin_mmc_xfer_wait(struct awin_mmc_softc *sc, struct sdmmc_command *cmd)
