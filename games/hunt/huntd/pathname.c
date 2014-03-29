@@ -1,4 +1,4 @@
-/*	$NetBSD: pathname.c,v 1.5 2009/07/04 04:29:55 dholland Exp $	*/
+/*	$NetBSD: pathname.c,v 1.6 2014/03/29 21:24:26 dholland Exp $	*/
 /*
  * Copyright (c) 1983-2003, Regents of the University of California.
  * All rights reserved.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: pathname.c,v 1.5 2009/07/04 04:29:55 dholland Exp $");
+__RCSID("$NetBSD: pathname.c,v 1.6 2014/03/29 21:24:26 dholland Exp $");
 #endif /* not lint */
 
 /*
@@ -43,11 +43,12 @@ __RCSID("$NetBSD: pathname.c,v 1.5 2009/07/04 04:29:55 dholland Exp $");
 
 #include <sys/types.h>
 
+#include "hunt_common.h"
+
 #ifdef DEBUG
 
-char *Driver = "/home/socr/a/conrad/games/src/hunt/huntd.dbg";
 #ifdef INTERNET
-u_short Test_port = ('h' << 8) | 't';
+u_short Test_port = TEST_PORT;
 #else
 char *Sock_name = "/tmp/hunt";
 char *Stat_name = "/tmp/hunt.stats";
@@ -55,9 +56,8 @@ char *Stat_name = "/tmp/hunt.stats";
 
 #else
 
-const char *Driver = HUNTD;
 #ifdef INTERNET
-u_short Test_port = ('h' << 8) | 't';
+u_short Test_port = TEST_PORT;
 #else
 char *Sock_name = "/tmp/hunt";
 char *Stat_name = "/tmp/hunt.stats";
