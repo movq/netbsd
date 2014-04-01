@@ -1,4 +1,4 @@
-/*	$NetBSD: efidef.h,v 1.1 2014/04/01 16:16:07 jakllsch Exp $	*/
+/*	$NetBSD: efidef.h,v 1.1.1.1 2014/04/01 16:16:07 jakllsch Exp $	*/
 
 #ifndef _EFI_DEF_H
 #define _EFI_DEF_H

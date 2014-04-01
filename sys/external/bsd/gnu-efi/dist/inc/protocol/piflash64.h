@@ -1,4 +1,4 @@
-/*	$NetBSD: piflash64.h,v 1.1 2014/04/01 16:16:07 jakllsch Exp $	*/
+/*	$NetBSD: piflash64.h,v 1.1.1.1 2014/04/01 16:16:07 jakllsch Exp $	*/
 
 #ifndef _PIFLASH64_H
 #define _PIFLASH64_H

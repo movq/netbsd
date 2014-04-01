@@ -1,4 +1,4 @@
-/*	$NetBSD: pe.h,v 1.1 2014/04/01 16:16:07 jakllsch Exp $	*/
+/*	$NetBSD: pe.h,v 1.1.1.1 2014/04/01 16:16:07 jakllsch Exp $	*/
 
 /* 
     PE32+ header file

@@ -1,4 +1,4 @@
-/*	$NetBSD: tpause.c,v 1.1 2014/04/01 16:16:06 jakllsch Exp $	*/
+/*	$NetBSD: tpause.c,v 1.1.1.1 2014/04/01 16:16:06 jakllsch Exp $	*/
 
 #include <efi.h>
 #include <efilib.h>

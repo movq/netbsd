@@ -1,4 +1,4 @@
-/*	$NetBSD: crt0-efi-ia64.S,v 1.1 2014/04/01 16:16:08 jakllsch Exp $	*/
+/*	$NetBSD: crt0-efi-ia64.S,v 1.1.1.1 2014/04/01 16:16:08 jakllsch Exp $	*/
 
 /* crt0-efi-ia64.S - IA-64 EFI startup code.
    Copyright (C) 1999 Hewlett-Packard Co.

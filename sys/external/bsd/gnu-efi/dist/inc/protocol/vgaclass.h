@@ -1,4 +1,4 @@
-/*	$NetBSD: vgaclass.h,v 1.1 2014/04/01 16:16:07 jakllsch Exp $	*/
+/*	$NetBSD: vgaclass.h,v 1.1.1.1 2014/04/01 16:16:07 jakllsch Exp $	*/
 
 #ifndef _VGA_CLASS_H
 #define _VGA_CLASS_H

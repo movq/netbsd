@@ -1,4 +1,4 @@
-/*	$NetBSD: trivial.S,v 1.1 2014/04/01 16:16:06 jakllsch Exp $	*/
+/*	$NetBSD: trivial.S,v 1.1.1.1 2014/04/01 16:16:06 jakllsch Exp $	*/
 
 	.text
 	.align 4

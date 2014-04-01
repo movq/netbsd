@@ -1,4 +1,4 @@
-/*	$NetBSD: efipciio.h,v 1.1 2014/04/01 16:16:07 jakllsch Exp $	*/
+/*	$NetBSD: efipciio.h,v 1.1.1.1 2014/04/01 16:16:07 jakllsch Exp $	*/
 
 #ifndef _EFI_PCI_IO_H
 #define _EFI_PCI_IO_H
