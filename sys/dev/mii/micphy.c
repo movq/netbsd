@@ -1,4 +1,4 @@
-/*	$NetBSD: micphy.c,v 1.1 2014/02/26 04:13:44 ozaki-r Exp $	*/
+/*	$NetBSD: micphy.c,v 1.1.4.2 2014/05/18 17:45:39 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
@@ -59,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: micphy.c,v 1.1 2014/02/26 04:13:44 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: micphy.c,v 1.1.4.2 2014/05/18 17:45:39 rmind Exp $");
 
 #include "opt_mii.h"
 

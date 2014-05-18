@@ -1,4 +1,4 @@
-/*	$NetBSD: bpf_component.c,v 1.1 2014/03/13 02:01:04 pooka Exp $	*/
+/*	$NetBSD: bpf_component.c,v 1.1.4.2 2014/05/18 17:46:15 rmind Exp $	*/
 
 /*
  * Copyright (c) 2010 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bpf_component.c,v 1.1 2014/03/13 02:01:04 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bpf_component.c,v 1.1.4.2 2014/05/18 17:46:15 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>

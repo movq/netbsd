@@ -1,4 +1,4 @@
-/*	$NetBSD: lif.c,v 1.1 2014/02/24 07:23:43 skrll Exp $	*/
+/*	$NetBSD: lif.c,v 1.1.4.2 2014/05/18 17:45:11 rmind Exp $	*/
 
 /*	$OpenBSD: lif.c,v 1.7 2001/06/09 03:54:41 mickey Exp $	*/
 

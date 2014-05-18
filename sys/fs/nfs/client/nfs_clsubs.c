@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_clsubs.c,v 1.1.1.1 2013/09/30 07:18:58 dholland Exp $	*/
+/*	$NetBSD: nfs_clsubs.c,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $	*/
 /*-
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("FreeBSD: head/sys/fs/nfsclient/nfs_clsubs.c 234386 2012-04-17 16:28:22Z mckusick "); */
-__RCSID("$NetBSD: nfs_clsubs.c,v 1.1.1.1 2013/09/30 07:18:58 dholland Exp $");
+__RCSID("$NetBSD: nfs_clsubs.c,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $");
 
 #include "opt_kdtrace.h"
 

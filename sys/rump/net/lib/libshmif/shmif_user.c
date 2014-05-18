@@ -1,4 +1,4 @@
-/*      $NetBSD: shmif_user.c,v 1.1 2014/03/13 01:42:59 pooka Exp $	*/
+/*      $NetBSD: shmif_user.c,v 1.1.4.2 2014/05/18 17:46:20 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2009, 2010 Antti Kantee.  All Rights Reserved.

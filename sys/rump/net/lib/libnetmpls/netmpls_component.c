@@ -1,4 +1,4 @@
-/* $NetBSD: netmpls_component.c,v 1.1 2014/03/13 02:05:29 pooka Exp $ */
+/* $NetBSD: netmpls_component.c,v 1.1.4.2 2014/05/18 17:46:20 rmind Exp $ */
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netmpls_component.c,v 1.1 2014/03/13 02:05:29 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netmpls_component.c,v 1.1.4.2 2014/05/18 17:46:20 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/domain.h>

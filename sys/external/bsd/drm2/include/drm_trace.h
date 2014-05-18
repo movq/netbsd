@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_trace.h,v 1.2 2014/03/18 18:20:42 riastradh Exp $	*/
+/*	$NetBSD: drm_trace.h,v 1.2.4.2 2014/05/18 17:46:00 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-#	$NetBSD: files.exynos,v 1.6 2014/05/09 21:49:43 reinoud Exp $
+#	$NetBSD: files.exynos,v 1.6.2.2 2014/05/18 17:44:59 rmind Exp $
 #
 # Configuration info for Samsung Exynos SoC ARM Peripherals
 #

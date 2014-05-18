@@ -1,4 +1,4 @@
-/*	$NetBSD: imx51_wdog.c,v 1.1 2014/03/22 04:55:00 hkenken Exp $	*/
+/*	$NetBSD: imx51_wdog.c,v 1.1.4.2 2014/05/18 17:44:58 rmind Exp $	*/
 
 /*
  * Copyright (c) 2010  Genetec Corporation.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imx51_wdog.c,v 1.1 2014/03/22 04:55:00 hkenken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imx51_wdog.c,v 1.1.4.2 2014/05/18 17:44:58 rmind Exp $");
 
 #include "opt_imx.h"
 

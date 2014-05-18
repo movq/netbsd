@@ -1,4 +1,4 @@
-/*	$NetBSD: rtsxvar.h,v 1.1 2014/03/19 15:26:41 nonaka Exp $	*/
+/*	$NetBSD: rtsxvar.h,v 1.1.4.2 2014/05/18 17:45:37 rmind Exp $	*/
 /*	$OpenBSD: rtsxvar.h,v 1.2 2013/11/06 13:51:02 stsp Exp $	*/
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: ite_sti.c,v 1.1 2014/04/13 15:45:27 tsutsui Exp $	*/
+/*	$NetBSD: ite_sti.c,v 1.1.2.2 2014/05/18 17:45:08 rmind Exp $	*/
 /*	$OpenBSD: ite_sti.c,v 1.2 2011/08/18 20:02:58 miod Exp $	*/
 /*
  * Copyright (c) 2006, 2011, Miodrag Vallat

@@ -1,4 +1,4 @@
-/*	$NetBSD: luasystm.c,v 1.2 2014/03/24 20:21:02 christos Exp $ */
+/*	$NetBSD: luasystm.c,v 1.2.4.2 2014/05/18 17:46:12 rmind Exp $ */
 
 /*
  * Copyright (c) 2011, 2013 Marc Balmer <mbalmer@NetBSD.org>.

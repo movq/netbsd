@@ -1,4 +1,4 @@
-/* $NetBSD: hytp14reg.h,v 1.1 2014/05/18 11:46:23 kardel Exp $ */
+/* $NetBSD: hytp14reg.h,v 1.1.2.2 2014/05/18 17:45:37 rmind Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -83,6 +83,9 @@
 #endif
 /*
  * $Log: hytp14reg.h,v $
+ * Revision 1.1.2.2  2014/05/18 17:45:37  rmind
+ * sync with head
+ *
  * Revision 1.1  2014/05/18 11:46:23  kardel
  * add HYT-221/271/939 humidity/temperature I2C sensor
  * extend envsys(4) framework by %rH (relative humidity)

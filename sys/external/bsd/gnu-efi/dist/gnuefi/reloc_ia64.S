@@ -1,4 +1,4 @@
-/*	$NetBSD: reloc_ia64.S,v 1.1.1.1 2014/04/01 16:16:08 jakllsch Exp $	*/
+/*	$NetBSD: reloc_ia64.S,v 1.1.1.1.4.2 2014/05/18 17:46:02 rmind Exp $	*/
 
 /* reloc_ia64.S - position independent IA-64 ELF shared object relocator
    Copyright (C) 1999 Hewlett-Packard Co.

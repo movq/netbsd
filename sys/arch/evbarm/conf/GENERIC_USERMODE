@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC_USERMODE,v 1.1 2013/11/10 20:01:55 jmcneill Exp $
+# $NetBSD: GENERIC_USERMODE,v 1.1.4.2 2014/05/18 17:45:03 rmind Exp $
 
 machine usermode
 include "arch/usermode/conf/GENERIC.common"
@@ -13,5 +13,5 @@ options		KVMSIZE= 0x10000000	# KVM space reserved in VM map, 256 Mb
 options		NKMEMPAGES_MAX=32768	# 128 Mb max
 
 #options 	INCLUDE_CONFIG_FILE
-#ident 		"GENERIC_USERMODE-$Revision: 1.1 $"
+#ident 		"GENERIC_USERMODE-$Revision: 1.1.4.2 $"
 

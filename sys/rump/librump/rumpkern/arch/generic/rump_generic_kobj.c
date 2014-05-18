@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_generic_kobj.c,v 1.1 2014/02/12 22:28:43 pooka Exp $	*/
+/*	$NetBSD: rump_generic_kobj.c,v 1.1.4.2 2014/05/18 17:46:18 rmind Exp $	*/
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rump_generic_kobj.c,v 1.1 2014/02/12 22:28:43 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rump_generic_kobj.c,v 1.1.4.2 2014/05/18 17:46:18 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/kobj.h>

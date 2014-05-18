@@ -1,4 +1,4 @@
-/*	$NetBSD: apple_smc_acpi.c,v 1.3 2014/04/01 17:49:40 riastradh Exp $	*/
+/*	$NetBSD: apple_smc_acpi.c,v 1.3.4.2 2014/05/18 17:45:35 rmind Exp $	*/
 
 /*
  * Apple System Management Controller: ACPI Attachment
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: apple_smc_acpi.c,v 1.3 2014/04/01 17:49:40 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apple_smc_acpi.c,v 1.3.4.2 2014/05/18 17:45:35 rmind Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

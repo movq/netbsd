@@ -1,4 +1,4 @@
-/*	$NetBSD: ct.c,v 1.1 2014/02/24 07:23:43 skrll Exp $	*/
+/*	$NetBSD: ct.c,v 1.1.4.2 2014/05/18 17:45:11 rmind Exp $	*/
 
 /*	$OpenBSD: ct.c,v 1.5 1999/04/20 20:01:01 mickey Exp $	*/
 

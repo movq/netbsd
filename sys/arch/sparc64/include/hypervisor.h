@@ -1,4 +1,4 @@
-/*	$NetBSD: hypervisor.h,v 1.2 2013/12/07 16:54:43 palle Exp $ */
+/*	$NetBSD: hypervisor.h,v 1.2.4.2 2014/05/18 17:45:26 rmind Exp $ */
 /*	$OpenBSD: hypervisor.h,v 1.14 2011/06/26 17:23:46 kettenis Exp $	*/
 
 /*

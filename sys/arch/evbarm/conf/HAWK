@@ -1,4 +1,4 @@
-# $NetBSD: HAWK,v 1.1 2013/10/02 16:48:26 matt Exp $
+# $NetBSD: HAWK,v 1.1.4.2 2014/05/18 17:45:03 rmind Exp $
 #
 #	HAWK -- TI OMAPL138 based Board Kernel
 #

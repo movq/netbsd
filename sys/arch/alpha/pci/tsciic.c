@@ -1,4 +1,4 @@
-/*	$NetBSD: tsciic.c,v 1.1 2014/02/21 12:23:30 jdc Exp $	*/
+/*	$NetBSD: tsciic.c,v 1.1.4.2 2014/05/18 17:44:53 rmind Exp $	*/
 
 /*
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: tsciic.c,v 1.1 2014/02/21 12:23:30 jdc Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tsciic.c,v 1.1.4.2 2014/05/18 17:44:53 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

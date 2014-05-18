@@ -1,4 +1,4 @@
-/*	$NetBSD: nfsdport.h,v 1.1.1.1 2013/09/30 07:19:40 dholland Exp $	*/
+/*	$NetBSD: nfsdport.h,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $	*/
 /*-
  * Copyright (c) 2009 Rick Macklem, University of Guelph
  * All rights reserved.
@@ -25,7 +25,7 @@
  * SUCH DAMAGE.
  *
  * FreeBSD: head/sys/fs/nfs/nfsdport.h 247602 2013-03-02 00:53:12Z pjd 
- * $NetBSD: nfsdport.h,v 1.1.1.1 2013/09/30 07:19:40 dholland Exp $
+ * $NetBSD: nfsdport.h,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $
  */
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: netwalker.h,v 1.2 2014/05/06 11:08:51 hkenken Exp $	*/
+/*	$NetBSD: netwalker.h,v 1.2.2.2 2014/05/18 17:45:05 rmind Exp $	*/
 
 /*
  * Copyright (c) 2014  Genetec Corporation.  All rights reserved.

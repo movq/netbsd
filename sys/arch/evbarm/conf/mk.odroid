@@ -1,4 +1,4 @@
-#	$NetBSD: mk.odroid,v 1.1 2014/04/13 02:26:26 matt Exp $
+#	$NetBSD: mk.odroid,v 1.1.2.2 2014/05/18 17:45:03 rmind Exp $
 
 .if !empty(MACHINE_ARCH:M*eb)
 EXTRA_LINKFLAGS+=	--be8

@@ -1,4 +1,4 @@
-/*	$NetBSD: imxwdogvar.h,v 1.1 2014/03/22 04:55:00 hkenken Exp $	*/
+/*	$NetBSD: imxwdogvar.h,v 1.1.4.2 2014/05/18 17:44:58 rmind Exp $	*/
 
 /*
  * Copyright (c) 2010  Genetec Corporation.  All rights reserved.

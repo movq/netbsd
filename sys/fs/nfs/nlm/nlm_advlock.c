@@ -1,4 +1,4 @@
-/*	$NetBSD: nlm_advlock.c,v 1.1.1.1 2013/09/30 07:19:43 dholland Exp $	*/
+/*	$NetBSD: nlm_advlock.c,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $	*/
 /*-
  * Copyright (c) 2008 Isilon Inc http://www.isilon.com/
  * Authors: Doug Rabson <dfr@rabson.org>
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("FreeBSD: head/sys/nlm/nlm_advlock.c 239328 2012-08-16 13:01:56Z kib "); */
-__RCSID("$NetBSD: nlm_advlock.c,v 1.1.1.1 2013/09/30 07:19:43 dholland Exp $");
+__RCSID("$NetBSD: nlm_advlock.c,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/fcntl.h>

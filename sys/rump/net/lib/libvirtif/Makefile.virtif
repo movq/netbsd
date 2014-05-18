@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.virtif,v 1.4 2014/03/13 21:11:12 pooka Exp $
+#	$NetBSD: Makefile.virtif,v 1.4.4.2 2014/05/18 17:46:20 rmind Exp $
 #
 
 .if !defined(VIRTIF)

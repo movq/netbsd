@@ -1,4 +1,4 @@
-/*	$NetBSD: imxspivar.h,v 1.1 2014/03/22 09:28:08 hkenken Exp $	*/
+/*	$NetBSD: imxspivar.h,v 1.1.4.2 2014/05/18 17:44:58 rmind Exp $	*/
 
 /*
  * Copyright (c) 2014  Genetec Corporation.  All rights reserved.

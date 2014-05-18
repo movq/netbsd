@@ -1,4 +1,4 @@
-/*	$NetBSD: mpl115areg.h,v 1.1 2013/09/08 14:59:42 rkujawa Exp $ */
+/*	$NetBSD: mpl115areg.h,v 1.1.4.2 2014/05/18 17:45:37 rmind Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

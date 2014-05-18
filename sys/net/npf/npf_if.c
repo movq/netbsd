@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_if.c,v 1.2 2013/11/11 15:28:37 martin Exp $	*/
+/*	$NetBSD: npf_if.c,v 1.2.4.2 2014/05/18 17:46:13 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_if.c,v 1.2 2013/11/11 15:28:37 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_if.c,v 1.2.4.2 2014/05/18 17:46:13 rmind Exp $");
 
 #ifdef _KERNEL_OPT
 #include "pf.h"

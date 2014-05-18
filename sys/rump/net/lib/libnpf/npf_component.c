@@ -1,11 +1,11 @@
-/*	$NetBSD: npf_component.c,v 1.1 2014/03/13 02:07:24 pooka Exp $	*/
+/*	$NetBSD: npf_component.c,v 1.1.4.2 2014/05/18 17:46:20 rmind Exp $	*/
 
 /*
  * Public Domain.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_component.c,v 1.1 2014/03/13 02:07:24 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_component.c,v 1.1.4.2 2014/05/18 17:46:20 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>

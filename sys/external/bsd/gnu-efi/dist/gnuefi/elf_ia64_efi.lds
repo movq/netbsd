@@ -1,4 +1,4 @@
-/*	$NetBSD: elf_ia64_efi.lds,v 1.1.1.1 2014/04/01 16:16:08 jakllsch Exp $	*/
+/*	$NetBSD: elf_ia64_efi.lds,v 1.1.1.1.4.2 2014/05/18 17:46:02 rmind Exp $	*/
 
 OUTPUT_FORMAT("elf64-ia64-little")
 OUTPUT_ARCH(ia64)

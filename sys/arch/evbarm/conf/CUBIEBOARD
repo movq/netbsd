@@ -1,5 +1,5 @@
 #
-#	$NetBSD: CUBIEBOARD,v 1.10 2014/02/26 00:32:21 matt Exp $
+#	$NetBSD: CUBIEBOARD,v 1.10.6.2 2014/05/18 17:45:03 rmind Exp $
 #
 #	CUBIEBOARD -- Allwinner A10/A20 Eval Board Kernel
 #

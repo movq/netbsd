@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_socket_generic.h,v 1.1 2014/01/25 13:49:27 njoly Exp $	*/
+/*	$NetBSD: linux_socket_generic.h,v 1.1.4.2 2014/05/18 17:45:32 rmind Exp $	*/
 
 #ifndef _LINUX_SOCKET_GENERIC_H
 #define _LINUX_SOCKET_GENERIC_H

@@ -1,4 +1,4 @@
-/*	$NetBSD: dwc2_hw.h,v 1.2 2013/09/25 06:19:22 skrll Exp $	*/
+/*	$NetBSD: dwc2_hw.h,v 1.2.4.2 2014/05/18 17:46:02 rmind Exp $	*/
 
 /*
  * hw.h - DesignWare HS OTG Controller hardware definitions

@@ -58,7 +58,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: omapl1x_bus_dma.c,v 1.1 2013/10/02 16:48:26 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omapl1x_bus_dma.c,v 1.1.4.2 2014/05/18 17:44:59 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

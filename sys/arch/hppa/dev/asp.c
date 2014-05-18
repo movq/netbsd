@@ -1,4 +1,4 @@
-/*	$NetBSD: asp.c,v 1.1 2014/02/24 07:23:42 skrll Exp $	*/
+/*	$NetBSD: asp.c,v 1.1.4.2 2014/05/18 17:45:10 rmind Exp $	*/
 
 /*	$OpenBSD: asp.c,v 1.5 2000/02/09 05:04:22 mickey Exp $	*/
 
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: asp.c,v 1.1 2014/02/24 07:23:42 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: asp.c,v 1.1.4.2 2014/05/18 17:45:10 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

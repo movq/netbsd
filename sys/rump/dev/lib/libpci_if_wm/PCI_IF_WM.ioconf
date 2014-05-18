@@ -1,4 +1,4 @@
-#	$NetBSD: PCI_IF_WM.ioconf,v 1.1 2014/04/04 14:49:09 pooka Exp $
+#	$NetBSD: PCI_IF_WM.ioconf,v 1.1.4.2 2014/05/18 17:46:16 rmind Exp $
 #
 
 ioconf pci_if_wm

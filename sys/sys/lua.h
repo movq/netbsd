@@ -1,4 +1,4 @@
-/*	$NetBSD: lua.h,v 1.3 2013/10/29 17:35:40 mbalmer Exp $ */
+/*	$NetBSD: lua.h,v 1.3.4.2 2014/05/18 17:46:21 rmind Exp $ */
 
 /*
  * Copyright (c) 2011, 2013 Marc Balmer <mbalmer@NetBSD.org>.

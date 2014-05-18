@@ -1,4 +1,4 @@
-/*	$NetBSD: bootp_subr.c,v 1.1.1.1 2013/09/30 07:19:31 dholland Exp $	*/
+/*	$NetBSD: bootp_subr.c,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $	*/
 /*-
  * Copyright (c) 1995 Gordon Ross, Adam Glass
  * Copyright (c) 1992 Regents of the University of California.
@@ -43,7 +43,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("FreeBSD: head/sys/nfs/bootp_subr.c 253847 2013-07-31 19:14:00Z ian "); */
-__RCSID("$NetBSD: bootp_subr.c,v 1.1.1.1 2013/09/30 07:19:31 dholland Exp $");
+__RCSID("$NetBSD: bootp_subr.c,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $");
 
 #include "opt_bootp.h"
 #include "opt_nfs.h"

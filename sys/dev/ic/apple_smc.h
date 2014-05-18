@@ -1,4 +1,4 @@
-/*	$NetBSD: apple_smc.h,v 1.3 2014/04/01 17:48:52 riastradh Exp $	*/
+/*	$NetBSD: apple_smc.h,v 1.3.4.2 2014/05/18 17:45:37 rmind Exp $	*/
 
 /*
  * Apple System Management Controller Interface

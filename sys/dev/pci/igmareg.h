@@ -1,4 +1,4 @@
-/*	$NetBSD: igmareg.h,v 1.1 2014/01/21 14:52:07 mlelstv Exp $	*/
+/*	$NetBSD: igmareg.h,v 1.1.4.2 2014/05/18 17:45:40 rmind Exp $	*/
 
 /*
  * Copyright (c) 2014 Michael van Elst

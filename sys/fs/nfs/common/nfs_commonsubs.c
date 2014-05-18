@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_commonsubs.c,v 1.1.1.1 2013/09/30 07:19:38 dholland Exp $	*/
+/*	$NetBSD: nfs_commonsubs.c,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $	*/
 /*-
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("FreeBSD: head/sys/fs/nfs/nfs_commonsubs.c 253506 2013-07-20 22:35:32Z rmacklem "); */
-__RCSID("$NetBSD: nfs_commonsubs.c,v 1.1.1.1 2013/09/30 07:19:38 dholland Exp $");
+__RCSID("$NetBSD: nfs_commonsubs.c,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $");
 
 /*
  * These functions support the macros and help fiddle mbuf chains for

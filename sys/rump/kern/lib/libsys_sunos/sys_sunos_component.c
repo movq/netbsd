@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_sunos_component.c,v 1.1 2014/03/13 02:04:14 pooka Exp $	*/
+/*	$NetBSD: sys_sunos_component.c,v 1.1.4.2 2014/05/18 17:46:18 rmind Exp $	*/
 
 #include <sys/param.h>
 #include <sys/proc.h>

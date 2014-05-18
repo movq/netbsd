@@ -1,4 +1,4 @@
-#	$NetBSD: files.drmkms_pci,v 1.2 2014/03/18 18:20:43 riastradh Exp $
+#	$NetBSD: files.drmkms_pci,v 1.2.4.2 2014/05/18 17:46:01 rmind Exp $
 
 define	drmkms_pci: drmkms
 

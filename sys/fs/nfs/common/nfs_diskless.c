@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_diskless.c,v 1.1.1.1 2013/09/30 07:19:32 dholland Exp $	*/
+/*	$NetBSD: nfs_diskless.c,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $	*/
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
  * All rights reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("FreeBSD: head/sys/nfs/nfs_diskless.c 221436 2011-05-04 13:27:45Z ru "); */
-__RCSID("$NetBSD: nfs_diskless.c,v 1.1.1.1 2013/09/30 07:19:32 dholland Exp $");
+__RCSID("$NetBSD: nfs_diskless.c,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $");
 
 #include "opt_bootp.h"
 

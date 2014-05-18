@@ -1,4 +1,4 @@
-/*	$NetBSD: hand.c,v 1.1.1.1 2014/04/01 16:16:07 jakllsch Exp $	*/
+/*	$NetBSD: hand.c,v 1.1.1.1.4.2 2014/05/18 17:46:03 rmind Exp $	*/
 
 /*++
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_at_mainbus.c,v 1.3 2014/04/14 21:34:08 pooka Exp $	*/
+/*	$NetBSD: pci_at_mainbus.c,v 1.3.2.2 2014/05/18 17:46:15 rmind Exp $	*/
 
 /*
  * Copyright (c) 2010 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_at_mainbus.c,v 1.3 2014/04/14 21:34:08 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_at_mainbus.c,v 1.3.2.2 2014/05/18 17:46:15 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>

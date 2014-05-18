@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_fops.c,v 1.3 2014/04/03 05:48:02 riastradh Exp $	*/
+/*	$NetBSD: drm_fops.c,v 1.3.4.2 2014/05/18 17:46:00 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_fops.c,v 1.3 2014/04/03 05:48:02 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_fops.c,v 1.3.4.2 2014/05/18 17:46:00 rmind Exp $");
 
 #include <drm/drmP.h>
 

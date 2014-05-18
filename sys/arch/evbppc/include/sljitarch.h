@@ -1,3 +1,3 @@
-/*	$NetBSD: sljitarch.h,v 1.1 2013/11/17 14:34:11 alnsn Exp $	*/
+/*	$NetBSD: sljitarch.h,v 1.1.4.2 2014/05/18 17:45:07 rmind Exp $	*/
 
 #include <powerpc/sljitarch.h>

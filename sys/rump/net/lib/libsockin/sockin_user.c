@@ -1,4 +1,4 @@
-/*	$NetBSD: sockin_user.c,v 1.1 2014/03/13 01:40:30 pooka Exp $	*/
+/*	$NetBSD: sockin_user.c,v 1.1.4.2 2014/05/18 17:46:20 rmind Exp $	*/
 
 /*
  * Copyright (c) 2008 Antti Kantee.  All Rights Reserved.

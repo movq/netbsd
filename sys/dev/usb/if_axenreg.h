@@ -1,4 +1,4 @@
-/*	$NetBSD: if_axenreg.h,v 1.1 2013/10/26 09:16:20 nonaka Exp $	*/
+/*	$NetBSD: if_axenreg.h,v 1.1.4.2 2014/05/18 17:45:47 rmind Exp $	*/
 /*	$OpenBSD: if_axenreg.h,v 1.1 2013/10/07 05:37:41 yuo Exp $	*/
 
 /*

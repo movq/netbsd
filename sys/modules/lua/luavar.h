@@ -1,4 +1,4 @@
-/*	$NetBSD: luavar.h,v 1.1 2013/10/16 19:44:57 mbalmer Exp $ */
+/*	$NetBSD: luavar.h,v 1.1.4.2 2014/05/18 17:46:11 rmind Exp $ */
 
 /*
  * Copyright (c) 2011, Marc Balmer <mbalmer@NetBSD.org>.

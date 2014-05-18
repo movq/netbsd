@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.4 2014/04/18 18:32:00 martin Exp $	*/
+/*	$NetBSD: machdep.c,v 1.4.2.2 2014/05/18 17:45:11 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.4 2014/04/18 18:32:00 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.4.2.2 2014/05/18 17:45:11 rmind Exp $");
 
 #include "opt_cputype.h"
 #include "opt_ddb.h"

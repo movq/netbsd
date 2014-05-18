@@ -1,4 +1,4 @@
-/*      $NetBSD: rumpdev_pci.c,v 1.3 2014/04/15 13:47:06 pooka Exp $	*/
+/*      $NetBSD: rumpdev_pci.c,v 1.3.2.2 2014/05/18 17:46:15 rmind Exp $	*/
 
 /*
  * Copyright (c) 2013 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rumpdev_pci.c,v 1.3 2014/04/15 13:47:06 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rumpdev_pci.c,v 1.3.2.2 2014/05/18 17:46:15 rmind Exp $");
 
 #include <sys/cdefs.h>
 #include <sys/param.h>
