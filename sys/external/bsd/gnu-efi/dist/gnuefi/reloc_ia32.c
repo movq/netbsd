@@ -1,4 +1,4 @@
-/*	$NetBSD: reloc_ia32.c,v 1.1.1.1 2014/04/01 16:16:08 jakllsch Exp $	*/
+/*	$NetBSD: reloc_ia32.c,v 1.1.1.1.4.2 2014/05/18 17:46:02 rmind Exp $	*/
 
 /* reloc_ia32.c - position independent x86 ELF shared object relocator
    Copyright (C) 1999 Hewlett-Packard Co.

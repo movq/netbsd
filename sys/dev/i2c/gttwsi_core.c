@@ -1,4 +1,4 @@
-/*	$NetBSD: gttwsi_core.c,v 1.1 2013/09/06 00:56:12 matt Exp $	*/
+/*	$NetBSD: gttwsi_core.c,v 1.1.6.2 2014/05/18 17:45:37 rmind Exp $	*/
 /*
  * Copyright (c) 2008 Eiji Kawauchi.
  * All rights reserved.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gttwsi_core.c,v 1.1 2013/09/06 00:56:12 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gttwsi_core.c,v 1.1.6.2 2014/05/18 17:45:37 rmind Exp $");
 #include "locators.h"
 
 #include <sys/param.h>

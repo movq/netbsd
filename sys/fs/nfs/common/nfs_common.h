@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_common.h,v 1.1.1.1 2013/09/30 07:19:32 dholland Exp $	*/
+/*	$NetBSD: nfs_common.h,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $	*/
 /*-
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,7 +32,7 @@
  *
  *	@(#)nfsm_subs.h	8.2 (Berkeley) 3/30/95
  * FreeBSD: head/sys/nfs/nfs_common.h 245568 2013-01-17 19:03:24Z jhb 
- * $NetBSD: nfs_common.h,v 1.1.1.1 2013/09/30 07:19:32 dholland Exp $
+ * $NetBSD: nfs_common.h,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $
  */
 
 #ifndef _NFS_NFS_COMMON_H_

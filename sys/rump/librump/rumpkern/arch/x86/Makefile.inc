@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.1 2014/02/12 22:28:43 pooka Exp $
+#	$NetBSD: Makefile.inc,v 1.1.4.2 2014/05/18 17:46:19 rmind Exp $
 #
 
 .PATH:	${RUMPTOP}/librump/rumpkern/arch/x86

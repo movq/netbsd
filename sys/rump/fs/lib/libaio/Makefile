@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2014/04/10 00:09:09 pooka Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2014/05/18 17:46:16 rmind Exp $
 #
 
 .PATH:  ${.CURDIR}/../../../../kern

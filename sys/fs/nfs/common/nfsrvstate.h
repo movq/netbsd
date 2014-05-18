@@ -1,4 +1,4 @@
-/*	$NetBSD: nfsrvstate.h,v 1.1.1.1 2013/09/30 07:19:42 dholland Exp $	*/
+/*	$NetBSD: nfsrvstate.h,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $	*/
 /*-
  * Copyright (c) 2009 Rick Macklem, University of Guelph
  * All rights reserved.
@@ -25,7 +25,7 @@
  * SUCH DAMAGE.
  *
  * FreeBSD: head/sys/fs/nfs/nfsrvstate.h 205941 2010-03-30 23:11:50Z rmacklem 
- * $NetBSD: nfsrvstate.h,v 1.1.1.1 2013/09/30 07:19:42 dholland Exp $
+ * $NetBSD: nfsrvstate.h,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $
  */
 
 #ifndef _NFS_NFSRVSTATE_H_

@@ -1,4 +1,4 @@
-/*	$NetBSD: ssiovar.h,v 1.1 2014/02/24 07:23:43 skrll Exp $	*/
+/*	$NetBSD: ssiovar.h,v 1.1.4.2 2014/05/18 17:45:10 rmind Exp $	*/
 
 /*	$OpenBSD: ssiovar.h,v 1.1 2007/06/19 22:51:26 kettenis Exp $	*/
 

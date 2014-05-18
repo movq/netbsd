@@ -1,4 +1,4 @@
-/*	$NetBSD: efidevp.h,v 1.1.1.1 2014/04/01 16:16:07 jakllsch Exp $	*/
+/*	$NetBSD: efidevp.h,v 1.1.1.1.4.2 2014/05/18 17:46:02 rmind Exp $	*/
 
 #ifndef _DEVPATH_H
 #define _DEVPATH_H

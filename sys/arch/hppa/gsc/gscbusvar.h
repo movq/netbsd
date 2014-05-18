@@ -1,4 +1,4 @@
-/*	$NetBSD: gscbusvar.h,v 1.1 2014/02/24 07:23:43 skrll Exp $	*/
+/*	$NetBSD: gscbusvar.h,v 1.1.4.2 2014/05/18 17:45:11 rmind Exp $	*/
 
 /*	$OpenBSD: gscbusvar.h,v 1.3 1999/08/16 02:48:39 mickey Exp $	*/
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_idr.c,v 1.2 2014/03/18 18:20:43 riastradh Exp $	*/
+/*	$NetBSD: linux_idr.c,v 1.2.4.2 2014/05/18 17:46:01 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_idr.c,v 1.2 2014/03/18 18:20:43 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_idr.c,v 1.2.4.2 2014/05/18 17:46:01 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/atomic.h>

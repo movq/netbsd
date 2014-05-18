@@ -1,4 +1,4 @@
-/*	$NetBSD: init.h,v 1.3 2014/04/25 23:54:59 riastradh Exp $	*/
+/*	$NetBSD: init.h,v 1.3.2.2 2014/05/18 17:46:01 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

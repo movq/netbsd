@@ -1,4 +1,4 @@
-/*	$NetBSD: xdr_subs.h,v 1.1.1.1 2013/09/30 07:19:42 dholland Exp $	*/
+/*	$NetBSD: xdr_subs.h,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $	*/
 /*-
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  *
  * FreeBSD: head/sys/fs/nfs/xdr_subs.h 191783 2009-05-04 15:23:58Z rmacklem 
- * $NetBSD: xdr_subs.h,v 1.1.1.1 2013/09/30 07:19:42 dholland Exp $
+ * $NetBSD: xdr_subs.h,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $
  */
 
 #ifndef _NFS_XDR_SUBS_H_

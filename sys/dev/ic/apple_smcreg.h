@@ -1,4 +1,4 @@
-/*	$NetBSD: apple_smcreg.h,v 1.1 2014/04/01 17:47:36 riastradh Exp $	*/
+/*	$NetBSD: apple_smcreg.h,v 1.1.4.2 2014/05/18 17:45:37 rmind Exp $	*/
 
 /*
  * Apple System Management Controller Registers

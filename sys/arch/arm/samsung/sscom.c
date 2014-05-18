@@ -1,4 +1,4 @@
-/*	$NetBSD: sscom.c,v 1.5 2014/04/20 22:45:27 matt Exp $ */
+/*	$NetBSD: sscom.c,v 1.5.2.2 2014/05/18 17:44:59 rmind Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 Fujitsu Component Limited
@@ -98,7 +98,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sscom.c,v 1.5 2014/04/20 22:45:27 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sscom.c,v 1.5.2.2 2014/05/18 17:44:59 rmind Exp $");
 
 #include "opt_sscom.h"
 #include "opt_ddb.h"

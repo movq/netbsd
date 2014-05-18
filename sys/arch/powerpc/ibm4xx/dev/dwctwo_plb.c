@@ -1,4 +1,4 @@
-/* $NetBSD: dwctwo_plb.c,v 1.2 2013/11/21 13:52:27 kiyohara Exp $ */
+/* $NetBSD: dwctwo_plb.c,v 1.2.4.2 2014/05/18 17:45:22 rmind Exp $ */
 /*
  * Copyright (c) 2013 KIYOHARA Takashi
  * All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dwctwo_plb.c,v 1.2 2013/11/21 13:52:27 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dwctwo_plb.c,v 1.2.4.2 2014/05/18 17:45:22 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

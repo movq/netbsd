@@ -1,4 +1,4 @@
-/*	$NetBSD: gffb.c,v 1.8 2014/03/14 21:59:41 mrg Exp $	*/
+/*	$NetBSD: gffb.c,v 1.8.4.2 2014/05/18 17:45:39 rmind Exp $	*/
 
 /*
  * Copyright (c) 2013 Michael Lorenz
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gffb.c,v 1.8 2014/03/14 21:59:41 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gffb.c,v 1.8.4.2 2014/05/18 17:45:39 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

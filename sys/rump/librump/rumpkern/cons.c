@@ -1,4 +1,4 @@
-/*	$NetBSD: cons.c,v 1.3 2013/09/08 04:37:17 pooka Exp $	*/
+/*	$NetBSD: cons.c,v 1.3.4.2 2014/05/18 17:46:18 rmind Exp $	*/
 
 /*
  * Copyright (c) 2013 Antti Kantee.  All Rights Reserved.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cons.c,v 1.3 2013/09/08 04:37:17 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cons.c,v 1.3.4.2 2014/05/18 17:46:18 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/file.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: ralink_pci.c,v 1.1 2014/04/29 17:21:24 matt Exp $ */
+/* $NetBSD: ralink_pci.c,v 1.1.2.2 2014/05/18 17:45:17 rmind Exp $ */
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: ralink_pci.c,v 1.1 2014/04/29 17:21:24 matt Exp $");
+__KERNEL_RCSID(1, "$NetBSD: ralink_pci.c,v 1.1.2.2 2014/05/18 17:45:17 rmind Exp $");
 
 #include <sys/param.h>
 

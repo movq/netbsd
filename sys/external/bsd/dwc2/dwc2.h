@@ -1,4 +1,4 @@
-/*	$NetBSD: dwc2.h,v 1.2 2013/11/01 15:03:39 skrll Exp $	*/
+/*	$NetBSD: dwc2.h,v 1.2.4.2 2014/05/18 17:46:01 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

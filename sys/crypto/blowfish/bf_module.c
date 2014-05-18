@@ -1,4 +1,4 @@
-/*	$NetBSD: bf_module.c,v 1.1 2014/01/01 15:18:57 pgoyette Exp $	*/
+/*	$NetBSD: bf_module.c,v 1.1.4.2 2014/05/18 17:45:34 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bf_module.c,v 1.1 2014/01/01 15:18:57 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bf_module.c,v 1.1.4.2 2014/05/18 17:45:34 rmind Exp $");
 
 #include <sys/errno.h>
 #include <sys/module.h>

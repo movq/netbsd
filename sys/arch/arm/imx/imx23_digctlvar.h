@@ -1,4 +1,4 @@
-/* $Id: imx23_digctlvar.h,v 1.1 2013/10/07 17:36:40 matt Exp $ */
+/* $Id: imx23_digctlvar.h,v 1.1.4.2 2014/05/18 17:44:58 rmind Exp $ */
 
 /*
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

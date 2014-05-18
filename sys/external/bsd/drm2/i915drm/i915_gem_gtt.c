@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_gem_gtt.c,v 1.6 2014/05/14 15:58:24 riastradh Exp $	*/
+/*	$NetBSD: i915_gem_gtt.c,v 1.6.2.2 2014/05/18 17:46:00 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_gem_gtt.c,v 1.6 2014/05/14 15:58:24 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_gem_gtt.c,v 1.6.2.2 2014/05/18 17:46:00 rmind Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

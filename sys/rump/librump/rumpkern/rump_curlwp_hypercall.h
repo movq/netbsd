@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_curlwp_hypercall.h,v 1.2 2014/03/16 15:30:05 pooka Exp $	*/
+/*	$NetBSD: rump_curlwp_hypercall.h,v 1.2.4.2 2014/05/18 17:46:18 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2014 Antti Kantee.  All Rights Reserved.

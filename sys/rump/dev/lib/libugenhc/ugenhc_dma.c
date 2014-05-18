@@ -1,4 +1,4 @@
-/*	$NetBSD: ugenhc_dma.c,v 1.1 2013/09/19 17:55:22 pooka Exp $	*/
+/*	$NetBSD: ugenhc_dma.c,v 1.1.4.2 2014/05/18 17:46:16 rmind Exp $	*/
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.

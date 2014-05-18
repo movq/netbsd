@@ -1,4 +1,4 @@
-/* $NetBSD: hawk.h,v 1.1 2013/10/02 16:48:26 matt Exp $ */
+/* $NetBSD: hawk.h,v 1.1.4.2 2014/05/18 17:45:04 rmind Exp $ */
 /*
  * Copyright (c) 2013 Linu Cherian
  *

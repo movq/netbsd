@@ -1,4 +1,4 @@
-/*	$NetBSD: rumpdev_bus_dma.c,v 1.3 2014/04/14 21:43:00 pooka Exp $	*/
+/*	$NetBSD: rumpdev_bus_dma.c,v 1.3.2.2 2014/05/18 17:46:15 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2013 Antti Kantee

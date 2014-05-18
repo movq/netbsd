@@ -1,4 +1,4 @@
-/*	$NetBSD: luapmf.c,v 1.3 2013/12/16 23:35:48 lneto Exp $ */
+/*	$NetBSD: luapmf.c,v 1.3.4.2 2014/05/18 17:46:11 rmind Exp $ */
 
 /*
  * Copyright (c) 2011, 2013 Marc Balmer <mbalmer@NetBSD.org>.

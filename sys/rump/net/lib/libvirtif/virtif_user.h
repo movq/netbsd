@@ -1,4 +1,4 @@
-/*	$NetBSD: virtif_user.h,v 1.3 2014/03/14 10:06:22 pooka Exp $	*/
+/*	$NetBSD: virtif_user.h,v 1.3.4.2 2014/05/18 17:46:20 rmind Exp $	*/
 
 /*
  * Copyright (c) 2013 Antti Kantee.  All Rights Reserved.

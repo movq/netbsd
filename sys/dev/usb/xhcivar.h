@@ -1,4 +1,4 @@
-/*	$NetBSD: xhcivar.h,v 1.4 2014/03/10 13:12:02 skrll Exp $	*/
+/*	$NetBSD: xhcivar.h,v 1.4.4.2 2014/05/18 17:45:48 rmind Exp $	*/
 
 /*
  * Copyright (c) 2013 Jonathan A. Kollasch

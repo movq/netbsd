@@ -1,4 +1,4 @@
-/*      $NetBSD: gencp_acafh.c,v 1.1 2013/12/22 23:02:38 rkujawa Exp $ */
+/*      $NetBSD: gencp_acafh.c,v 1.1.4.2 2014/05/18 17:44:54 rmind Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

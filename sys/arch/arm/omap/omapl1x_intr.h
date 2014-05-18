@@ -1,4 +1,4 @@
-/* $NetBSD: omapl1x_intr.h,v 1.1 2013/10/02 16:48:26 matt Exp $ */
+/* $NetBSD: omapl1x_intr.h,v 1.1.4.2 2014/05/18 17:44:59 rmind Exp $ */
 /*
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions

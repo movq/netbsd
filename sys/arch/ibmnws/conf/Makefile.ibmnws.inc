@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.ibmnws.inc,v 1.1 2014/05/08 13:58:34 phx Exp $
+#	$NetBSD: Makefile.ibmnws.inc,v 1.1.2.2 2014/05/18 17:45:14 rmind Exp $
 
 SYSTEM_LD_TAIL_EXTRA=; \
 		echo "Convert kernel $@ into NCD firmware image."; \

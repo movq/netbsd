@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_errno_generic.h,v 1.1 2013/12/17 22:14:24 njoly Exp $	*/
+/*	$NetBSD: linux_errno_generic.h,v 1.1.4.2 2014/05/18 17:45:32 rmind Exp $	*/
 
 #ifndef _LINUX_ERRNO_GENERIC_H
 #define _LINUX_ERRNO_GENERIC_H

@@ -37,7 +37,7 @@
  */ 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hytp14.c,v 1.1 2014/05/18 11:46:23 kardel Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hytp14.c,v 1.1.2.2 2014/05/18 17:45:37 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

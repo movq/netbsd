@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_commonkrpc.c,v 1.1.1.1 2013/09/30 07:19:36 dholland Exp $	*/
+/*	$NetBSD: nfs_commonkrpc.c,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $	*/
 /*-
  * Copyright (c) 1989, 1991, 1993, 1995
  *	The Regents of the University of California.  All rights reserved.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("FreeBSD: head/sys/fs/nfs/nfs_commonkrpc.c 253049 2013-07-09 01:05:28Z rmacklem "); */
-__RCSID("$NetBSD: nfs_commonkrpc.c,v 1.1.1.1 2013/09/30 07:19:36 dholland Exp $");
+__RCSID("$NetBSD: nfs_commonkrpc.c,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $");
 
 /*
  * Socket operations for use by nfs

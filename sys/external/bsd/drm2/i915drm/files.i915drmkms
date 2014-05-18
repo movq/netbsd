@@ -1,4 +1,4 @@
-#	$NetBSD: files.i915drmkms,v 1.2 2014/03/18 18:20:42 riastradh Exp $
+#	$NetBSD: files.i915drmkms,v 1.2.4.2 2014/05/18 17:46:00 rmind Exp $
 
 device	i915drmkms: drmkms, drmkmsbus, drmkms_pci, genfb, wsemuldisplaydev
 attach	i915drmkms at pci

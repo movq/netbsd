@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_nfsdport.c,v 1.1.1.1 2013/09/30 07:19:57 dholland Exp $	*/
+/*	$NetBSD: nfs_nfsdport.c,v 1.1.1.1.4.2 2014/05/18 17:46:06 rmind Exp $	*/
 /*-
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("FreeBSD: head/sys/fs/nfsserver/nfs_nfsdport.c 255219 2013-09-05 00:09:56Z pjd "); */
-__RCSID("$NetBSD: nfs_nfsdport.c,v 1.1.1.1 2013/09/30 07:19:57 dholland Exp $");
+__RCSID("$NetBSD: nfs_nfsdport.c,v 1.1.1.1.4.2 2014/05/18 17:46:06 rmind Exp $");
 
 #include <sys/capability.h>
 

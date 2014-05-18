@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_clnode.c,v 1.1.1.1 2013/09/30 07:19:20 dholland Exp $	*/
+/*	$NetBSD: nfs_clnode.c,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $	*/
 /*-
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("FreeBSD: head/sys/fs/nfsclient/nfs_clnode.c 248084 2013-03-09 02:32:23Z attilio "); */
-__RCSID("$NetBSD: nfs_clnode.c,v 1.1.1.1 2013/09/30 07:19:20 dholland Exp $");
+__RCSID("$NetBSD: nfs_clnode.c,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $");
 
 #include "opt_kdtrace.h"
 

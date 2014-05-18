@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_fha.h,v 1.1.1.1 2013/09/30 07:19:33 dholland Exp $	*/
+/*	$NetBSD: nfs_fha.h,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $	*/
 /*-
  * Copyright (c) 2008 Isilon Inc http://www.isilon.com/
  *
@@ -24,7 +24,7 @@
  * SUCH DAMAGE.
  */
 /* FreeBSD: head/sys/nfs/nfs_fha.h 249596 2013-04-17 22:42:43Z ken  */
-/* $NetBSD: nfs_fha.h,v 1.1.1.1 2013/09/30 07:19:33 dholland Exp $ */
+/* $NetBSD: nfs_fha.h,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $ */
 
 #ifndef	_NFS_FHA_H
 #define	_NFS_FHA_H 1

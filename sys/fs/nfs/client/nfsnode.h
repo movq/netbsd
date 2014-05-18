@@ -1,4 +1,4 @@
-/*	$NetBSD: nfsnode.h,v 1.1.1.1 2013/09/30 07:19:30 dholland Exp $	*/
+/*	$NetBSD: nfsnode.h,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $	*/
 /*-
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  *
  * FreeBSD: head/sys/fs/nfsclient/nfsnode.h 244042 2012-12-08 22:52:39Z rmacklem 
- * $NetBSD: nfsnode.h,v 1.1.1.1 2013/09/30 07:19:30 dholland Exp $
+ * $NetBSD: nfsnode.h,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $
  */
 
 #ifndef _NFSCLIENT_NFSNODE_H_

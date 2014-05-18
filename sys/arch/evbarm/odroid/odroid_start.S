@@ -1,4 +1,4 @@
-/*	$NetBSD: odroid_start.S,v 1.2 2014/04/14 19:45:40 reinoud Exp $	*/
+/*	$NetBSD: odroid_start.S,v 1.2.2.2 2014/05/18 17:45:05 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -46,7 +46,7 @@
 
 #include <evbarm/odroid/platform.h>
 
-RCSID("$NetBSD: odroid_start.S,v 1.2 2014/04/14 19:45:40 reinoud Exp $")
+RCSID("$NetBSD: odroid_start.S,v 1.2.2.2 2014/05/18 17:45:05 rmind Exp $")
 
 
 #if defined(VERBOSE_INIT_ARM)

@@ -1,4 +1,4 @@
-/* $NetBSD: umcs.h,v 1.1 2014/03/16 09:34:45 martin Exp $ */
+/* $NetBSD: umcs.h,v 1.1.4.2 2014/05/18 17:45:48 rmind Exp $ */
 /* $FreeBSD: head/sys/dev/usb/serial/umcs.h 252123 2013-06-23 20:19:51Z thomas $ */
 
 /*-

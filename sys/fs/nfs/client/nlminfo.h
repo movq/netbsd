@@ -1,4 +1,4 @@
-/*	$NetBSD: nlminfo.h,v 1.1.1.1 2013/09/30 07:19:30 dholland Exp $	*/
+/*	$NetBSD: nlminfo.h,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $	*/
 /*-
  * Copyright (c) 1998 Berkeley Software Design, Inc. All rights reserved.
  * Redistribution and use in source and binary forms, with or without
@@ -26,7 +26,7 @@
  * SUCH DAMAGE.
  *
  * FreeBSD: head/sys/fs/nfsclient/nlminfo.h 191783 2009-05-04 15:23:58Z rmacklem 
- * $NetBSD: nlminfo.h,v 1.1.1.1 2013/09/30 07:19:30 dholland Exp $
+ * $NetBSD: nlminfo.h,v 1.1.1.1.4.2 2014/05/18 17:46:05 rmind Exp $
  */
 
 /*
