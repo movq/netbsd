@@ -1,4 +1,4 @@
-/*	$NetBSD: sti_sgcvar.h,v 1.1 2014/04/20 04:12:54 tsutsui Exp $	*/
+/*	$NetBSD: sti_sgcvar.h,v 1.1.4.2 2014/05/21 20:56:36 bouyer Exp $	*/
 /*-
  * Copyright (c) 2014 Izumi Tsutsui.  All rights reserved.
  *

@@ -1,4 +1,4 @@
-/*	$NetBSD: mcclock_frodo.c,v 1.1 2014/04/19 05:37:54 tsutsui Exp $	*/
+/*	$NetBSD: mcclock_frodo.c,v 1.1.4.2 2014/05/21 20:56:36 bouyer Exp $	*/
 /*-
  * Copyright (c) 2014 Izumi Tsutsui.  All rights reserved.
  *
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mcclock_frodo.c,v 1.1 2014/04/19 05:37:54 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mcclock_frodo.c,v 1.1.4.2 2014/05/21 20:56:36 bouyer Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
