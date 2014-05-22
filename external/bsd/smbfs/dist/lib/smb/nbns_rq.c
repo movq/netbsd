@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: nbns_rq.c,v 1.2 2013/12/25 22:03:15 christos Exp $");
+__RCSID("$NetBSD: nbns_rq.c,v 1.2.4.2 2014/05/22 15:51:13 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/socket.h>

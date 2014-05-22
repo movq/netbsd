@@ -1,4 +1,4 @@
-# $NetBSD: dot.nsmbrc,v 1.2 2013/12/25 22:03:14 christos Exp $
+# $NetBSD: dot.nsmbrc,v 1.2.4.2 2014/05/22 15:51:12 yamt Exp $
 # Id: dot.nsmbrc,v 1.6 2000/07/16 01:52:06 bp Exp 
 #
 # Example for .nsmbrc file
