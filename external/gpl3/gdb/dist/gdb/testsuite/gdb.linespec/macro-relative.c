@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2010-2013 Free Software Foundation, Inc.
+   Copyright 2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,40 +15,15 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-asm (".globl cu_text_start");
-asm ("cu_text_start:");
+/* GCC cannot compile directly a .h file.  */
 
-asm (".globl func_nofb_start");
-asm ("func_nofb_start:");
+/* Use trailing "./header.h" to match the #include line in "one/header.h".  */
 
-void
-func_nofb (void)
+#include "../one/./header.h"
+
+int
+main (void)
 {
-  /* int func_nofb_var; */
-  /* int func_nofb_var2; */
-
-  extern void func_nofb_marker (void);
-  func_nofb_marker ();
+  header_two_func ();
+  return 0;
 }
-
-asm (".globl func_nofb_end");
-asm ("func_nofb_end:");
-
-asm (".globl func_loopfb_start");
-asm ("func_loopfb_start:");
-
-void
-func_loopfb (void)
-{
-  /* int func_loopfb_var; */
-  /* int func_loopfb_var2; */
-
-  extern void func_loopfb_marker (void);
-  func_loopfb_marker ();
-}
-
-asm (".globl func_loopfb_end");
-asm ("func_loopfb_end:");
-
-asm (".globl cu_text_end");
-asm ("cu_text_end:");
