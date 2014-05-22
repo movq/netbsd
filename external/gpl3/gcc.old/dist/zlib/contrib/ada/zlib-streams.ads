@@ -6,7 +6,7 @@
 --  Open source license information is in the zlib.ads file.  --
 ----------------------------------------------------------------
 
---  $Id: zlib-streams.ads,v 1.1.1.1 2014/02/25 18:42:01 mrg Exp $
+--  $Id: zlib-streams.ads,v 1.1.1.1.4.2 2014/05/22 15:58:31 yamt Exp $
 
 package ZLib.Streams is
 
