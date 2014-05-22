@@ -1,4 +1,4 @@
-# $NetBSD: inst.profile,v 1.1 2013/03/19 22:16:53 garbled Exp $
+# $NetBSD: inst.profile,v 1.1.12.2 2014/05/22 12:01:28 yamt Exp $
 
 PATH=/sbin:/bin:/usr/bin:/usr/sbin:/
 export PATH

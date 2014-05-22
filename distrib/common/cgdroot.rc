@@ -1,4 +1,4 @@
-#	$NetBSD: cgdroot.rc,v 1.1 2013/07/15 00:25:38 khorben Exp $
+#	$NetBSD: cgdroot.rc,v 1.1.6.2 2014/05/22 12:01:27 yamt Exp $
 #
 # Copyright (c) 2013 Pierre Pronchery <khorben@defora.org>
 # All rights reserved.
