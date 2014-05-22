@@ -1,4 +1,4 @@
-/*	$NetBSD: vi_db.h,v 1.3 2013/11/29 22:56:19 christos Exp $ */
+/*	$NetBSD: vi_db.h,v 1.3.4.2 2014/05/22 15:50:33 yamt Exp $ */
 
 #include <db.h>
 

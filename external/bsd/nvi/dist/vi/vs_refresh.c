@@ -1,4 +1,4 @@
-/*	$NetBSD: vs_refresh.c,v 1.6 2014/01/26 21:43:45 christos Exp $ */
+/*	$NetBSD: vs_refresh.c,v 1.6.4.2 2014/05/22 15:50:36 yamt Exp $ */
 /*-
  * Copyright (c) 1992, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -16,7 +16,7 @@
 static const char sccsid[] = "Id: vs_refresh.c,v 10.50 2001/06/25 15:19:37 skimo Exp  (Berkeley) Date: 2001/06/25 15:19:37 ";
 #endif /* not lint */
 #else
-__RCSID("$NetBSD: vs_refresh.c,v 1.6 2014/01/26 21:43:45 christos Exp $");
+__RCSID("$NetBSD: vs_refresh.c,v 1.6.4.2 2014/05/22 15:50:36 yamt Exp $");
 #endif
 
 #include <sys/types.h>

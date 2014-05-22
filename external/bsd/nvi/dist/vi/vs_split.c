@@ -1,4 +1,4 @@
-/*	$NetBSD: vs_split.c,v 1.7 2014/01/26 21:43:45 christos Exp $ */
+/*	$NetBSD: vs_split.c,v 1.7.4.2 2014/05/22 15:50:36 yamt Exp $ */
 /*-
  * Copyright (c) 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -16,7 +16,7 @@
 static const char sccsid[] = "Id: vs_split.c,v 10.42 2001/06/25 15:19:38 skimo Exp  (Berkeley) Date: 2001/06/25 15:19:38 ";
 #endif /* not lint */
 #else
-__RCSID("$NetBSD: vs_split.c,v 1.7 2014/01/26 21:43:45 christos Exp $");
+__RCSID("$NetBSD: vs_split.c,v 1.7.4.2 2014/05/22 15:50:36 yamt Exp $");
 #endif
 
 #include <sys/types.h>

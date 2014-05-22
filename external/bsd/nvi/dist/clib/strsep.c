@@ -37,7 +37,7 @@
 static const char sccsid[] = "@(#)strsep.c	8.1 (Berkeley) 6/4/93";
 #endif /* LIBC_SCCS and not lint */
 #else
-__RCSID("$NetBSD: strsep.c,v 1.2 2014/01/26 21:43:45 christos Exp $");
+__RCSID("$NetBSD: strsep.c,v 1.2.4.2 2014/05/22 15:50:33 yamt Exp $");
 #endif
 
 #include <string.h>

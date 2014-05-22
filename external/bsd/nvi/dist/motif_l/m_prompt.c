@@ -15,7 +15,7 @@
 static const char sccsid[] = "Id: m_prompt.c,v 8.8 2003/11/05 17:10:00 skimo Exp  (Berkeley) Date: 2003/11/05 17:10:00 ";
 #endif /* not lint */
 #else
-__RCSID("$NetBSD: m_prompt.c,v 1.2 2014/01/26 21:43:45 christos Exp $");
+__RCSID("$NetBSD: m_prompt.c,v 1.2.4.2 2014/05/22 15:50:35 yamt Exp $");
 #endif
 
 #include <sys/types.h>

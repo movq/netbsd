@@ -1,4 +1,4 @@
-/*	$NetBSD: gs.c,v 1.4 2013/12/01 02:34:54 christos Exp $ */
+/*	$NetBSD: gs.c,v 1.4.4.2 2014/05/22 15:50:33 yamt Exp $ */
 /*-
  * Copyright (c) 2000
  *	Sven Verdoolaege.  All rights reserved.

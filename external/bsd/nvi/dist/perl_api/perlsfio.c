@@ -13,7 +13,7 @@
 static const char sccsid[] = "Id: perlsfio.c,v 8.3 2000/04/30 17:00:15 skimo Exp  (Berkeley) Date: 2000/04/30 17:00:15 ";
 #endif /* not lint */
 #else
-__RCSID("$NetBSD: perlsfio.c,v 1.3 2014/01/26 21:43:45 christos Exp $");
+__RCSID("$NetBSD: perlsfio.c,v 1.3.4.2 2014/05/22 15:50:35 yamt Exp $");
 #endif
 
 #include <sys/types.h>

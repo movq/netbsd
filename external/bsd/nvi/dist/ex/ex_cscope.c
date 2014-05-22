@@ -1,4 +1,4 @@
-/*	$NetBSD: ex_cscope.c,v 1.5 2014/01/26 21:43:45 christos Exp $ */
+/*	$NetBSD: ex_cscope.c,v 1.5.4.2 2014/05/22 15:50:34 yamt Exp $ */
 /*-
  * Copyright (c) 1994, 1996
  *	Rob Mayoff.  All rights reserved.
@@ -16,7 +16,7 @@
 static const char sccsid[] = "Id: ex_cscope.c,v 10.21 2003/11/05 17:11:54 skimo Exp  (Berkeley) Date: 2003/11/05 17:11:54 ";
 #endif /* not lint */
 #else
-__RCSID("$NetBSD: ex_cscope.c,v 1.5 2014/01/26 21:43:45 christos Exp $");
+__RCSID("$NetBSD: ex_cscope.c,v 1.5.4.2 2014/05/22 15:50:34 yamt Exp $");
 #endif
 
 #include <sys/param.h>

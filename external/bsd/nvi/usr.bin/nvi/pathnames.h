@@ -1,4 +1,4 @@
-/* $Id: pathnames.h,v 1.1 2013/11/22 16:00:45 christos Exp $ (Berkeley) $Date: 2013/11/22 16:00:45 $ */
+/* $Id: pathnames.h,v 1.1.4.2 2014/05/22 15:50:36 yamt Exp $ (Berkeley) $Date: 2014/05/22 15:50:36 $ */
 
 #ifndef	_PATH_BSHELL
 #define	_PATH_BSHELL	"/bin/sh"

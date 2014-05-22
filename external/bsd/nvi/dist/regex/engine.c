@@ -1,4 +1,4 @@
-/*	$NetBSD: engine.c,v 1.3 2014/01/07 21:48:12 christos Exp $ */
+/*	$NetBSD: engine.c,v 1.3.4.2 2014/05/22 15:50:35 yamt Exp $ */
 /*-
  * Copyright (c) 1992, 1993, 1994 Henry Spencer.
  * Copyright (c) 1992, 1993, 1994
