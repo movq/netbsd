@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2013/07/15 00:29:49 khorben Exp $
+#	$NetBSD: Makefile,v 1.1.6.2 2014/05/22 12:01:27 yamt Exp $
 
 MINIROOT=	cgdroot
 RAMDISK=	ramdisk-cgdroot

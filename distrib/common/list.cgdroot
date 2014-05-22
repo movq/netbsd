@@ -1,4 +1,4 @@
-#	$NetBSD: list.cgdroot,v 1.1 2013/07/15 00:25:38 khorben Exp $
+#	$NetBSD: list.cgdroot,v 1.1.6.2 2014/05/22 12:01:27 yamt Exp $
 #
 # list file (c.f. parselist.awk) for cgd full-disk encryption.
 #
