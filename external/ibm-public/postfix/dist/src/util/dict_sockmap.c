@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_sockmap.c,v 1.3 2013/11/14 02:27:29 christos Exp $	*/
+/*	$NetBSD: dict_sockmap.c,v 1.3.4.2 2014/05/22 14:08:04 yamt Exp $	*/
 
 /*++
 /* NAME
