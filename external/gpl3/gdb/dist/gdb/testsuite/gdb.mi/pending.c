@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2010-2013 Free Software Foundation, Inc.
+   Copyright 2011-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,34 +13,39 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see  <http://www.gnu.org/licenses/>.
-*/
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+#include <stdio.h>
+#include <dlfcn.h>
 
-int result = 0;
+extern void pendfunc (int x);
+int watch = 0;
 
-int multiply (int i)
+static void
+marker () {}
+
+int main()
 {
-  return i * i;
-}
+  const char *libname = "pendshr2.sl";
+  void *h;
+  int (*p_func) (int);
 
-int add (int i)
-{
-  return i + i; 
-}
+  pendfunc (3);
+  pendfunc (4);
+  pendfunc (3);
 
+  marker ();
 
-int main (int argc, char *argv[])
-{
-  int foo = 5;
-  int bar = 42;
-  int i;
+  h = dlopen (libname, RTLD_LAZY);
+  if (h == NULL) return 1;
 
-  for (i = 0; i < 10; i++)
-    {
-      result += multiply (foo);  /* Break at multiply. */
-      result += add (bar); /* Break at add. */
-    }
+  p_func = dlsym (h, "pendfunc2");
+  if (p_func == NULL) return 2;
 
-  return 0; /* Break at end. */
+  (*p_func) (4);
+
+  marker ();
+
+  dlclose (h);
+  return 0;
 }

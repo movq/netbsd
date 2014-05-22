@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2010-2013 Free Software Foundation, Inc.
+   Copyright 2012-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -13,34 +13,39 @@
    GNU General Public License for more details.
 
    You should have received a copy of the GNU General Public License
-   along with this program.  If not, see  <http://www.gnu.org/licenses/>.
-*/
+   along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
+#include <pthread.h>
+#include <assert.h>
 
-int result = 0;
+static volatile int a, b, c;
 
-int multiply (int i)
+static void
+marker_exit (void)
 {
-  return i * i;
+  a = 1;
 }
 
-int add (int i)
+static void *
+start (void *arg)
 {
-  return i + i; 
+  b = 2;
+  c = 3;
+
+  return NULL;
 }
 
-
-int main (int argc, char *argv[])
+int
+main (void)
 {
-  int foo = 5;
-  int bar = 42;
+  pthread_t thread;
   int i;
 
-  for (i = 0; i < 10; i++)
-    {
-      result += multiply (foo);  /* Break at multiply. */
-      result += add (bar); /* Break at add. */
-    }
+  i = pthread_create (&thread, NULL, start, NULL);
+  assert (i == 0);
+  i = pthread_join (thread, NULL);
+  assert (i == 0);
 
-  return 0; /* Break at end. */
+  marker_exit ();
+  return 0;
 }

@@ -1,4 +1,4 @@
-# Copyright (C) 2011-2013 Free Software Foundation, Inc.
+# Copyright 2011-2013 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,27 +13,27 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-load_lib gdb-python.exp
+load_lib mi-support.exp
+set MIFLAGS "-i=mi2"
 
-standard_testfile
-
-if { [prepare_for_testing ${testfile}.exp ${testfile} ${srcfile}] } {
-    return -1
+gdb_exit
+if [mi_gdb_start] {
+    continue
 }
 
-# Skip all tests if Python scripting is not enabled.
-if { [skip_python_tests] } { continue }
+# Check console 'set prompt' does not affect the MI output.
 
-if ![runto main] then {
-    fail "Can't run to function f"
-    return 0
-}
+mi_gdb_test {-interpreter-exec console "set prompt (banana) "} \
+    ".*=cmd-param-changed,param=\"prompt\",value=\"\\(banana\\) \".*\\^done" \
+    "console set prompt"
+mi_gdb_test "-break-list" ".*}" "-break-list"
 
-gdb_breakpoint [gdb_get_line_number "break-here"]
-gdb_continue_to_breakpoint "Block break here."
+gdb_exit
+gdb_start
 
-gdb_test "info frame" "inlined into frame 1\r\n.*"
+# Check 'set prompt' affects console output even for "interpreter-exec mi".
 
-gdb_test "up" "#1  g .*"
+set gdb_prompt {\(banana\)}
+gdb_test_no_output "set prompt (banana) "
 
-gdb_test "python print (gdb.selected_frame().read_var('l'))" "\r\n42"
+gdb_test "interpreter-exec mi -break-list" "\r\n\\^done,.*}"
