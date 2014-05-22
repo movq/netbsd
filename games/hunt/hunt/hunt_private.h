@@ -1,4 +1,4 @@
-/*	$NetBSD: hunt_private.h,v 1.9 2014/03/30 05:30:28 dholland Exp $	*/
+/*	$NetBSD: hunt_private.h,v 1.9.4.2 2014/05/22 11:36:23 yamt Exp $	*/
 
 /*
  * Copyright (c) 1983-2003, Regents of the University of California.

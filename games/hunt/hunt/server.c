@@ -1,4 +1,4 @@
-/*	$NetBSD: server.c,v 1.8 2014/03/30 04:57:37 dholland Exp $	*/
+/*	$NetBSD: server.c,v 1.8.4.2 2014/05/22 11:36:23 yamt Exp $	*/
 /*
  * Copyright (c) 1983-2003, Regents of the University of California.
  * All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: server.c,v 1.8 2014/03/30 04:57:37 dholland Exp $");
+__RCSID("$NetBSD: server.c,v 1.8.4.2 2014/05/22 11:36:23 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/stat.h>

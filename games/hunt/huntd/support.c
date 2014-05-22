@@ -1,4 +1,4 @@
-/*	$NetBSD: support.c,v 1.2 2014/03/29 22:30:27 dholland Exp $	*/
+/*	$NetBSD: support.c,v 1.2.4.2 2014/05/22 11:36:23 yamt Exp $	*/
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -36,7 +36,7 @@
 
 #include "hunt.h"
 
-__RCSID("$NetBSD: support.c,v 1.2 2014/03/29 22:30:27 dholland Exp $");
+__RCSID("$NetBSD: support.c,v 1.2.4.2 2014/05/22 11:36:23 yamt Exp $");
 
 void
 complain(int level, const char *fmt, ...)

@@ -1,4 +1,4 @@
-/*	$NetBSD: hals_end.c,v 1.1 2013/11/12 17:46:21 mbalmer Exp $ */
+/*	$NetBSD: hals_end.c,v 1.1.4.2 2014/05/22 11:36:22 yamt Exp $ */
 
 /*
  * hals_end Copyright (C) 2003-2007 marc balmer.  BSD license applies.
