@@ -1,4 +1,4 @@
-/* $NetBSD: udf_rename.c,v 1.10 2013/07/16 10:49:36 reinoud Exp $ */
+/* $NetBSD: udf_rename.c,v 1.10.8.2 2014/05/22 11:41:02 yamt Exp $ */
 
 /*
  * Copyright (c) 2013 Reinoud Zandijk
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: udf_rename.c,v 1.10 2013/07/16 10:49:36 reinoud Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udf_rename.c,v 1.10.8.2 2014/05/22 11:41:02 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/errno.h>

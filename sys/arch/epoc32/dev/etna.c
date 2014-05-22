@@ -1,4 +1,4 @@
-/*	$NetBSD: etna.c,v 1.3 2013/10/13 06:55:34 riz Exp $	*/
+/*	$NetBSD: etna.c,v 1.3.4.2 2014/05/22 11:39:38 yamt Exp $	*/
 /*
  * Copyright (c) 2012 KIYOHARA Takashi
  * All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: etna.c,v 1.3 2013/10/13 06:55:34 riz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: etna.c,v 1.3.4.2 2014/05/22 11:39:38 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

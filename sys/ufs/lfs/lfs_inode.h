@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_inode.h,v 1.5 2013/06/18 08:01:00 dholland Exp $	*/
+/*	$NetBSD: lfs_inode.h,v 1.5.10.2 2014/05/22 11:41:19 yamt Exp $	*/
 /*  from NetBSD: ulfs_inode.h,v 1.5 2013/06/06 00:51:50 dholland Exp  */
 /*  from NetBSD: inode.h,v 1.64 2012/11/19 00:36:21 jakllsch Exp  */
 

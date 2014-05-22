@@ -1,4 +1,4 @@
-/*	$NetBSD: nfssvc.h,v 1.1.1.1 2013/09/30 07:19:34 dholland Exp $	*/
+/*	$NetBSD: nfssvc.h,v 1.1.1.1.6.2 2014/05/22 11:41:01 yamt Exp $	*/
 /*-
  * Copyright (c) 1989, 1993, 1995
  *	The Regents of the University of California.  All rights reserved.
@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  *
  * FreeBSD: head/sys/nfs/nfssvc.h 243782 2012-12-02 01:16:04Z rmacklem 
- * $NetBSD: nfssvc.h,v 1.1.1.1 2013/09/30 07:19:34 dholland Exp $
+ * $NetBSD: nfssvc.h,v 1.1.1.1.6.2 2014/05/22 11:41:01 yamt Exp $
  */
 
 #ifndef _NFS_NFSSVC_H_

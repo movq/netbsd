@@ -1,4 +1,4 @@
-/*	$NetBSD: mcp980xreg.h,v 1.2 2013/10/15 13:43:51 rkujawa Exp $ */
+/*	$NetBSD: mcp980xreg.h,v 1.2.4.2 2014/05/22 11:40:21 yamt Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

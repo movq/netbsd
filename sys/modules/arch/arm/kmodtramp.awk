@@ -1,4 +1,4 @@
-#	$NetBSD: kmodtramp.awk,v 1.1 2013/08/07 17:06:22 matt Exp $
+#	$NetBSD: kmodtramp.awk,v 1.1.6.2 2014/05/22 11:41:06 yamt Exp $
 #
 BEGIN {
 	print "#include <machine/asm.h>"

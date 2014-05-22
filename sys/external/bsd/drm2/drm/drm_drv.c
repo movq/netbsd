@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_drv.c,v 1.4 2014/05/01 15:19:16 riastradh Exp $	*/
+/*	$NetBSD: drm_drv.c,v 1.4.4.2 2014/05/22 11:40:55 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_drv.c,v 1.4 2014/05/01 15:19:16 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_drv.c,v 1.4.4.2 2014/05/22 11:40:55 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

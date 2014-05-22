@@ -1,4 +1,4 @@
-/*      $NetBSD: wmrtc.c,v 1.1 2013/04/28 12:11:26 kiyohara Exp $      */
+/*      $NetBSD: wmrtc.c,v 1.1.12.2 2014/05/22 11:39:39 yamt Exp $      */
 /*
  * Copyright (c) 2012 KIYOHARA Takashi
  * All rights reserved.
@@ -25,7 +25,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wmrtc.c,v 1.1 2013/04/28 12:11:26 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wmrtc.c,v 1.1.12.2 2014/05/22 11:39:39 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

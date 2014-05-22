@@ -1,4 +1,4 @@
-/*	$NetBSD: sockin_user.h,v 1.1 2014/03/13 01:40:30 pooka Exp $	*/
+/*	$NetBSD: sockin_user.h,v 1.1.6.2 2014/05/22 11:41:17 yamt Exp $	*/
 
 /*
  * Copyright (c) 2008 Antti Kantee.  All Rights Reserved.

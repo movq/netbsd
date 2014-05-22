@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_rng.c,v 1.9 2013/08/29 21:54:11 riastradh Exp $ */
+/*	$NetBSD: bcm2835_rng.c,v 1.9.4.2 2014/05/22 11:39:31 yamt Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_rng.c,v 1.9 2013/08/29 21:54:11 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_rng.c,v 1.9.4.2 2014/05/22 11:39:31 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

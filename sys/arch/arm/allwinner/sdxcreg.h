@@ -1,4 +1,4 @@
-/* $NetBSD: sdxcreg.h,v 1.1 2013/09/07 19:48:57 matt Exp $ */
+/* $NetBSD: sdxcreg.h,v 1.1.8.2 2014/05/22 11:39:30 yamt Exp $ */
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
  * All rights reserved.

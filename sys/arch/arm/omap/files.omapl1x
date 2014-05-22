@@ -1,4 +1,4 @@
-# $NetBSD: files.omapl1x,v 1.1 2013/10/02 16:48:26 matt Exp $
+# $NetBSD: files.omapl1x,v 1.1.6.2 2014/05/22 11:39:33 yamt Exp $
 #
 # Configuration info for Texas Instruments OMAP-L1x CPU support
 # Based on files.omap2 and files.omap

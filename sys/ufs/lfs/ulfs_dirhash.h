@@ -1,4 +1,4 @@
-/*	$NetBSD: ulfs_dirhash.h,v 1.5 2013/06/08 02:14:46 dholland Exp $	*/
+/*	$NetBSD: ulfs_dirhash.h,v 1.5.10.2 2014/05/22 11:41:19 yamt Exp $	*/
 /*  from NetBSD: dirhash.h,v 1.6 2008/06/04 11:33:19 ad Exp  */
 
 /*

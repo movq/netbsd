@@ -1,4 +1,4 @@
-/*	$NetBSD: salproc.h,v 1.1.1.1 2014/04/01 16:16:07 jakllsch Exp $	*/
+/*	$NetBSD: salproc.h,v 1.1.1.1.6.2 2014/05/22 11:40:57 yamt Exp $	*/
 
 #ifndef _SAL_PROC_H
 #define _SAL_PROC_H

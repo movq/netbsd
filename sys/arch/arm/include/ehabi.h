@@ -26,7 +26,7 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-/* $NetBSD: ehabi.h,v 1.1 2013/08/12 23:22:12 matt Exp $ */
+/* $NetBSD: ehabi.h,v 1.1.6.2 2014/05/22 11:39:32 yamt Exp $ */
 
 #ifndef _ARM_EHABI_H_
 #define	_ARM_EHABI_H_

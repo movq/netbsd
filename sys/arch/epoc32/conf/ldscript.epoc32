@@ -1,4 +1,4 @@
-/*	$NetBSD: ldscript.epoc32,v 1.2 2014/01/30 15:36:43 matt Exp $	*/
+/*	$NetBSD: ldscript.epoc32,v 1.2.4.2 2014/05/22 11:39:38 yamt Exp $	*/
 
 OUTPUT_ARCH(arm)
 ENTRY(KERNEL_BASE_phys)

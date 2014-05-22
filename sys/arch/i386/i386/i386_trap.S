@@ -1,4 +1,4 @@
-/*	$NetBSD: i386_trap.S,v 1.5 2014/02/12 23:24:09 dsl Exp $	*/
+/*	$NetBSD: i386_trap.S,v 1.5.4.2 2014/05/22 11:39:51 yamt Exp $	*/
 
 /*
  * Copyright 2002 (c) Wasabi Systems, Inc.
@@ -66,7 +66,7 @@
 
 #if 0
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: i386_trap.S,v 1.5 2014/02/12 23:24:09 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i386_trap.S,v 1.5.4.2 2014/05/22 11:39:51 yamt Exp $");
 #endif
 
 /*

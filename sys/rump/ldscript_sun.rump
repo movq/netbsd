@@ -1,4 +1,4 @@
-# $NetBSD: ldscript_sun.rump,v 1.1 2013/03/15 12:13:07 pooka Exp $
+# $NetBSD: ldscript_sun.rump,v 1.1.14.2 2014/05/22 11:41:11 yamt Exp $
 
 $mapfile_version 2
 LOAD_SEGMENT rumpkern_linksets {

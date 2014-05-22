@@ -1,4 +1,4 @@
-#	$NetBSD: mk.goldengate,v 1.1 2013/02/19 16:12:36 matt Exp $
+#	$NetBSD: mk.goldengate,v 1.1.14.2 2014/05/22 11:39:40 yamt Exp $
 CPPFLAGS+= -mcpu=cortex-a9 -mfpu=neon
 
 SYSTEM_FIRST_OBJ=	g2_start.o

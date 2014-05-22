@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.2 2014/03/18 18:20:41 riastradh Exp $	*/
+/*	$NetBSD: pmap.h,v 1.2.4.2 2014/05/22 11:39:44 yamt Exp $	*/
 
 #ifndef _MODULE
 

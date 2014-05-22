@@ -1,4 +1,4 @@
-/*	$NetBSD: em4k.c,v 1.3 2014/03/22 01:52:44 christos Exp $ */
+/*	$NetBSD: em4k.c,v 1.3.4.2 2014/05/22 11:39:29 yamt Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_dmi.c,v 1.1 2014/04/25 23:54:59 riastradh Exp $	*/
+/*	$NetBSD: linux_dmi.c,v 1.1.4.2 2014/05/22 11:40:56 yamt Exp $	*/
 
 /*-
  * Copyright (C) 2014 NONAKA Kimihiro <nonaka@netbsd.org>
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_dmi.c,v 1.1 2014/04/25 23:54:59 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_dmi.c,v 1.1.4.2 2014/05/22 11:40:56 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

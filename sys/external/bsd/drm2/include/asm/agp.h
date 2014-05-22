@@ -1,4 +1,4 @@
-/*	$NetBSD: agp.h,v 1.2 2014/03/18 18:20:42 riastradh Exp $	*/
+/*	$NetBSD: agp.h,v 1.2.6.2 2014/05/22 11:40:55 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: old_xdr_subs.h,v 1.1.1.1 2013/09/30 07:19:34 dholland Exp $	*/
+/*	$NetBSD: old_xdr_subs.h,v 1.1.1.1.6.2 2014/05/22 11:41:01 yamt Exp $	*/
 /*-
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -32,7 +32,7 @@
  *
  *	@(#)xdr_subs.h	8.3 (Berkeley) 3/30/95
  * FreeBSD: head/sys/nfs/xdr_subs.h 139823 2005-01-07 01:45:51Z imp 
- * $NetBSD: old_xdr_subs.h,v 1.1.1.1 2013/09/30 07:19:34 dholland Exp $
+ * $NetBSD: old_xdr_subs.h,v 1.1.1.1.6.2 2014/05/22 11:41:01 yamt Exp $
  */
 
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: kernel.h,v 1.2 2014/04/01 14:57:58 riastradh Exp $	*/
+/*	$NetBSD: kernel.h,v 1.2.6.2 2014/05/22 11:40:42 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

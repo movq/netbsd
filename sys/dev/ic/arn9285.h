@@ -1,4 +1,4 @@
-/*	$NetBSD: arn9285.h,v 1.1 2013/03/30 02:53:01 christos Exp $	*/
+/*	$NetBSD: arn9285.h,v 1.1.12.2 2014/05/22 11:40:21 yamt Exp $	*/
 /*
  * Copyright (c) 2001, 2004 The NetBSD Foundation, Inc.
  * All rights reserved.

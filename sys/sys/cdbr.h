@@ -1,4 +1,4 @@
-/*	$NetBSD: cdbr.h,v 1.1 2013/12/11 01:24:08 joerg Exp $	*/
+/*	$NetBSD: cdbr.h,v 1.1.6.2 2014/05/22 11:41:18 yamt Exp $	*/
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
  * All rights reserved.

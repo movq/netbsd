@@ -1,4 +1,4 @@
-#	$NetBSD: GENERIC,v 1.2 2013/06/25 13:56:59 kiyohara Exp $
+#	$NetBSD: GENERIC,v 1.2.8.2 2014/05/22 11:39:38 yamt Exp $
 #
 # GENERIC machine description file
 #
@@ -22,7 +22,7 @@ include		"arch/epoc32/conf/std.epoc32"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.2 $"
+#ident 		"GENERIC-$Revision: 1.2.8.2 $"
 
 maxusers	32			# estimated number of users
 

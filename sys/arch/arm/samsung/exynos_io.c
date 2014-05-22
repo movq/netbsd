@@ -34,7 +34,7 @@
 #include "opt_exynos.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: exynos_io.c,v 1.6 2014/05/14 09:03:09 reinoud Exp $");
+__KERNEL_RCSID(1, "$NetBSD: exynos_io.c,v 1.6.4.2 2014/05/22 11:39:34 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -78,7 +78,6 @@ exyo_match(device_t parent, cfdata_t cf, void *aux)
 	return 1;
 }
 
-
 static int
 exyo_print(void *aux, const char *pnp)
 {
@@ -90,12 +89,10 @@ exyo_print(void *aux, const char *pnp)
 	return QUIET;
 }
 
-
 void
 exyo_device_register(device_t self, void *aux)
 {
 }
-
 
 void
 exyo_device_register_post_config(device_t self, void *aux)

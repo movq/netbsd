@@ -1,4 +1,4 @@
-/*	$NetBSD: epoc32_start.S,v 1.1 2013/04/28 12:11:26 kiyohara Exp $	*/
+/*	$NetBSD: epoc32_start.S,v 1.1.12.2 2014/05/22 11:39:38 yamt Exp $	*/
 /*
  * Copyright (c) 2012, 2013 KIYOHARA Takashi
  * All rights reserved.

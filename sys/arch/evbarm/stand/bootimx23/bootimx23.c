@@ -1,4 +1,4 @@
-/* $Id: bootimx23.c,v 1.1 2013/10/07 17:36:40 matt Exp $ */
+/* $Id: bootimx23.c,v 1.1.6.2 2014/05/22 11:39:43 yamt Exp $ */
 
 /*
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2014/03/13 02:08:44 pooka Exp $
+#	$NetBSD: Makefile,v 1.2.4.2 2014/05/22 11:41:17 yamt Exp $
 #
 
 LIB=	rumpnet_netinet6

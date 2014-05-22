@@ -1,4 +1,4 @@
-/*	$NetBSD: amd64_trap.S,v 1.2 2014/02/12 19:53:49 dsl Exp $	*/
+/*	$NetBSD: amd64_trap.S,v 1.2.4.2 2014/05/22 11:39:28 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2007, 2008 The NetBSD Foundation, Inc.
@@ -66,7 +66,7 @@
 
 #if 0
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: amd64_trap.S,v 1.2 2014/02/12 19:53:49 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amd64_trap.S,v 1.2.4.2 2014/05/22 11:39:28 yamt Exp $");
 #endif
 
 /*

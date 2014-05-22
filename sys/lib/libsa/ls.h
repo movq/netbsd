@@ -1,4 +1,4 @@
-/* $NetBSD: ls.h,v 1.1 2014/03/20 03:13:31 christos Exp $ */
+/* $NetBSD: ls.h,v 1.1.6.2 2014/05/22 11:41:04 yamt Exp $ */
 
 /*-
  * Copyright (c) 2014

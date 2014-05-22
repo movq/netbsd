@@ -1,4 +1,4 @@
-/*	$NetBSD: sitara_cmreg.h,v 1.1 2013/04/17 15:04:39 bouyer Exp $	*/
+/*	$NetBSD: sitara_cmreg.h,v 1.1.12.2 2014/05/22 11:39:33 yamt Exp $	*/
 
 /*
  * Copyright (c) 2013 Manuel Bouyer.  All rights reserved.

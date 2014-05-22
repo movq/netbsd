@@ -1,4 +1,4 @@
-/*	$NetBSD: sljitarch.h,v 1.2 2013/11/25 23:53:44 alnsn Exp $	*/
+/*	$NetBSD: sljitarch.h,v 1.2.6.2 2014/05/22 11:40:04 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

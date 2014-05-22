@@ -1,4 +1,4 @@
-/*	$NetBSD: n900_acad.c,v 1.6 2013/06/03 01:47:58 khorben Exp $ */
+/*	$NetBSD: n900_acad.c,v 1.6.10.2 2014/05/22 11:39:42 yamt Exp $ */
 
 /*
  * AC adapter driver for the Nokia N900.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: n900_acad.c,v 1.6 2013/06/03 01:47:58 khorben Exp $");
+__KERNEL_RCSID(0, "$NetBSD: n900_acad.c,v 1.6.10.2 2014/05/22 11:39:42 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: vchiq_netbsd.h,v 1.1 2013/03/08 12:32:31 jmcneill Exp $ */
+/* $NetBSD: vchiq_netbsd.h,v 1.1.14.2 2014/05/22 11:40:59 yamt Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

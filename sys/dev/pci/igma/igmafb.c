@@ -1,4 +1,4 @@
-/*	$NetBSD: igmafb.c,v 1.1 2014/01/21 14:52:07 mlelstv Exp $	*/
+/*	$NetBSD: igmafb.c,v 1.1.6.2 2014/05/22 11:40:34 yamt Exp $	*/
 
 /*
  * Copyright (c) 2012 Michael van Elst
@@ -21,7 +21,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: igmafb.c,v 1.1 2014/01/21 14:52:07 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: igmafb.c,v 1.1.6.2 2014/05/22 11:40:34 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: acafhreg.h,v 1.4 2014/01/03 00:33:06 rkujawa Exp $ */
+/*	$NetBSD: acafhreg.h,v 1.4.6.2 2014/05/22 11:39:28 yamt Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

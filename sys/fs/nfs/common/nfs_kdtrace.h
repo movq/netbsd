@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_kdtrace.h,v 1.1.1.1 2013/09/30 07:19:33 dholland Exp $	*/
+/*	$NetBSD: nfs_kdtrace.h,v 1.1.1.1.6.2 2014/05/22 11:41:00 yamt Exp $	*/
 /*-
  * Copyright (c) 2009 Robert N. M. Watson
  * All rights reserved.
@@ -28,7 +28,7 @@
  * SUCH DAMAGE.
  *
  * FreeBSD: head/sys/nfs/nfs_kdtrace.h 222813 2011-06-07 08:46:13Z attilio 
- * $NetBSD: nfs_kdtrace.h,v 1.1.1.1 2013/09/30 07:19:33 dholland Exp $
+ * $NetBSD: nfs_kdtrace.h,v 1.1.1.1.6.2 2014/05/22 11:41:00 yamt Exp $
  */
 
 #ifndef _NFSCLIENT_NFS_KDTRACE_H_

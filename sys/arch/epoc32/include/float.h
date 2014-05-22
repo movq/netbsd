@@ -1,3 +1,3 @@
-/*	$NetBSD: float.h,v 1.1 2013/05/01 13:11:59 kiyohara Exp $	*/
+/*	$NetBSD: float.h,v 1.1.12.2 2014/05/22 11:39:38 yamt Exp $	*/
 
 #include <arm/float.h>

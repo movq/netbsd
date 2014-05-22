@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.3 2013/08/18 21:57:01 matt Exp $	*/
+/*	$NetBSD: machdep.c,v 1.3.4.2 2014/05/22 11:39:38 yamt Exp $	*/
 /*
  * Copyright (c) 2012, 2013 KIYOHARA Takashi
  * All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.3 2013/08/18 21:57:01 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.3.4.2 2014/05/22 11:39:38 yamt Exp $");
 
 #include "clpscom.h"
 #include "clpslcd.h"

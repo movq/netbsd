@@ -1,4 +1,4 @@
-/*	$NetBSD: dwc2_hcd.c,v 1.12 2014/04/03 06:34:58 skrll Exp $	*/
+/*	$NetBSD: dwc2_hcd.c,v 1.12.6.2 2014/05/22 11:40:56 yamt Exp $	*/
 
 /*
  * hcd.c - DesignWare HS OTG Controller host-mode routines
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dwc2_hcd.c,v 1.12 2014/04/03 06:34:58 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dwc2_hcd.c,v 1.12.6.2 2014/05/22 11:40:56 yamt Exp $");
 
 #include <sys/types.h>
 #include <sys/kmem.h>

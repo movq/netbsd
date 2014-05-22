@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu_cordic.c,v 1.2 2013/04/20 01:48:20 isaki Exp $	*/
+/*	$NetBSD: fpu_cordic.c,v 1.2.12.2 2014/05/22 11:39:55 yamt Exp $	*/
 
 /*
  * Copyright (c) 2013 Tetsuya Isaki. All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fpu_cordic.c,v 1.2 2013/04/20 01:48:20 isaki Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fpu_cordic.c,v 1.2.12.2 2014/05/22 11:39:55 yamt Exp $");
 
 #include <machine/ieee.h>
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd.cpp,v 1.2 2013/06/20 13:36:48 kiyohara Exp $	*/
+/*	$NetBSD: netbsd.cpp,v 1.2.10.2 2014/05/22 11:39:39 yamt Exp $	*/
 /*
  * Copyright (c) 2012 KIYOHARA Takashi
  * All rights reserved.

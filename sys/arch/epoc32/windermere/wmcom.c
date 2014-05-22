@@ -1,4 +1,4 @@
-/*      $NetBSD: wmcom.c,v 1.2 2014/03/16 05:20:23 dholland Exp $      */
+/*      $NetBSD: wmcom.c,v 1.2.4.2 2014/05/22 11:39:39 yamt Exp $      */
 /*
  * Copyright (c) 2012 KIYOHARA Takashi
  * All rights reserved.
@@ -25,7 +25,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wmcom.c,v 1.2 2014/03/16 05:20:23 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wmcom.c,v 1.2.4.2 2014/05/22 11:39:39 yamt Exp $");
 
 #include "rnd.h"
 

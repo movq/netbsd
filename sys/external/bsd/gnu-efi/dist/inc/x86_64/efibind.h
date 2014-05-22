@@ -1,4 +1,4 @@
-/*	$NetBSD: efibind.h,v 1.2 2014/04/01 16:22:45 jakllsch Exp $	*/
+/*	$NetBSD: efibind.h,v 1.2.6.2 2014/05/22 11:40:58 yamt Exp $	*/
 
 /*++
 

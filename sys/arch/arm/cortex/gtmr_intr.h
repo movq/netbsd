@@ -1,4 +1,4 @@
-/*	$NetBSD: gtmr_intr.h,v 1.1 2013/06/16 16:44:39 matt Exp $	*/
+/*	$NetBSD: gtmr_intr.h,v 1.1.12.2 2014/05/22 11:39:32 yamt Exp $	*/
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
  * All rights reserved.

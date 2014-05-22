@@ -1,4 +1,4 @@
-/*	$NetBSD: ulfs_quotacommon.h,v 1.4 2013/06/08 02:04:31 dholland Exp $	*/
+/*	$NetBSD: ulfs_quotacommon.h,v 1.4.10.2 2014/05/22 11:41:19 yamt Exp $	*/
 /*  from NetBSD: quota.h,v 1.30 2012/08/26 02:32:14 dholland Exp  */
 
 /*

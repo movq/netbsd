@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_curlwp.h,v 1.2 2014/03/16 15:30:05 pooka Exp $	*/
+/*	$NetBSD: rump_curlwp.h,v 1.2.6.2 2014/05/22 11:41:15 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2014 Antti Kantee.  All Rights Reserved.

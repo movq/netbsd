@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_tlb.h,v 1.6 2014/04/03 14:46:25 matt Exp $	*/
+/*	$NetBSD: pmap_tlb.h,v 1.6.4.2 2014/05/22 11:41:19 yamt Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993

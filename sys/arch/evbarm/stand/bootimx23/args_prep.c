@@ -1,4 +1,4 @@
-/* $Id: args_prep.c,v 1.1 2013/02/23 16:22:39 jkunz Exp $ */
+/* $Id: args_prep.c,v 1.1.14.2 2014/05/22 11:39:43 yamt Exp $ */
 
 /*
  * Copyright (c) 2012 The NetBSD Foundation, Inc.

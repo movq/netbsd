@@ -1,4 +1,4 @@
-|	$NetBSD: vectors.s,v 1.2 2014/03/18 18:20:41 riastradh Exp $
+|	$NetBSD: vectors.s,v 1.2.4.2 2014/05/22 11:39:43 yamt Exp $
 
 | Copyright (c) 1997 Jason R. Thorpe.  All rights reserved.
 | Copyright (c) 1988 University of Utah

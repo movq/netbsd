@@ -1,4 +1,4 @@
-/*	$NetBSD: armadaxp_start.S,v 1.3 2014/03/29 14:53:57 matt Exp $	*/
+/*	$NetBSD: armadaxp_start.S,v 1.3.4.2 2014/05/22 11:39:39 yamt Exp $	*/
 /*******************************************************************************
 Copyright (C) Marvell International Ltd. and its affiliates
 
@@ -44,7 +44,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <evbarm/marvell/marvellvar.h>
 #include "assym.h"
 
-RCSID("$NetBSD: armadaxp_start.S,v 1.3 2014/03/29 14:53:57 matt Exp $")
+RCSID("$NetBSD: armadaxp_start.S,v 1.3.4.2 2014/05/22 11:39:39 yamt Exp $")
 
 #ifdef KERNEL_BASES_EQUAL
 #error KERNEL_BASE_VIRT should not equal KERNEL_BASE_PHYS

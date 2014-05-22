@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2013/05/02 03:56:40 matt Exp $
+#	$NetBSD: Makefile,v 1.2.12.2 2014/05/22 11:39:38 yamt Exp $
 
 INCSDIR=	/usr/include/epoc32
 INCS=

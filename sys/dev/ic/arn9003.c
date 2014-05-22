@@ -1,4 +1,4 @@
-/*	$NetBSD: arn9003.c,v 1.6 2014/02/23 15:29:12 christos Exp $	*/
+/*	$NetBSD: arn9003.c,v 1.6.4.2 2014/05/22 11:40:21 yamt Exp $	*/
 /*	$OpenBSD: ar9003.c,v 1.25 2012/10/20 09:53:32 stsp Exp $	*/
 
 /*-
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arn9003.c,v 1.6 2014/02/23 15:29:12 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arn9003.c,v 1.6.4.2 2014/05/22 11:40:21 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/sockio.h>

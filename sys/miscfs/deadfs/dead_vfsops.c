@@ -1,4 +1,4 @@
-/*	$NetBSD: dead_vfsops.c,v 1.2 2014/03/23 15:21:16 hannken Exp $	*/
+/*	$NetBSD: dead_vfsops.c,v 1.2.6.2 2014/05/22 11:41:05 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dead_vfsops.c,v 1.2 2014/03/23 15:21:16 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dead_vfsops.c,v 1.2.6.2 2014/05/22 11:41:05 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

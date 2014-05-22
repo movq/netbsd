@@ -1,4 +1,4 @@
-/*	$NetBSD: reloc_x86_64.c,v 1.1.1.1 2014/04/01 16:16:08 jakllsch Exp $	*/
+/*	$NetBSD: reloc_x86_64.c,v 1.1.1.1.6.2 2014/05/22 11:40:57 yamt Exp $	*/
 
 /* reloc_x86_64.c - position independent x86_64 ELF shared object relocator
    Copyright (C) 1999 Hewlett-Packard Co.

@@ -1,4 +1,4 @@
-/*	$NetBSD: exynos_wdt.c,v 1.4 2014/04/19 16:43:08 reinoud Exp $	*/
+/*	$NetBSD: exynos_wdt.c,v 1.4.4.2 2014/05/22 11:39:34 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 #include "exynos_wdt.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exynos_wdt.c,v 1.4 2014/04/19 16:43:08 reinoud Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exynos_wdt.c,v 1.4.4.2 2014/05/22 11:39:34 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

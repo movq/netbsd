@@ -1,4 +1,4 @@
-/*	$NetBSD: exynos_usb.c,v 1.4 2014/05/21 13:02:46 reinoud Exp $	*/
+/*	$NetBSD: exynos_usb.c,v 1.4.2.2 2014/05/22 11:39:34 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: exynos_usb.c,v 1.4 2014/05/21 13:02:46 reinoud Exp $");
+__KERNEL_RCSID(1, "$NetBSD: exynos_usb.c,v 1.4.2.2 2014/05/22 11:39:34 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -64,12 +64,14 @@ __KERNEL_RCSID(1, "$NetBSD: exynos_usb.c,v 1.4 2014/05/21 13:02:46 reinoud Exp $
 
 #include <arm/samsung/exynos_reg.h>
 #include <arm/samsung/exynos_var.h>
-#include <arm/samsung/exynos_io.h>
 
+
+static int exynos_usb_ports = 0;
 
 struct exynos_usb_softc {
 	device_t	 sc_self;
-	const struct exyo_usb_locinfo *sc_locinfo;
+	int		 sc_port;
+	int		 sc_irq;
 
 	/* keep our tags here */
 	bus_dma_tag_t	 sc_dmat;
@@ -82,57 +84,49 @@ struct exynos_usb_softc {
 	device_t	 sc_ehci_dev;
 
 	void		*sc_intrh;
-} exynos_usb_sc;
+};
 
 struct exynos_usb_attach_args {
 	const char *name;
 };
 
 static int exynos_usb_intr(void *arg);
-static void exynos_usb_init(struct exynos_usb_softc *sc);
 
 
 static int	exynos_usb_match(device_t, cfdata_t, void *);
 static void	exynos_usb_attach(device_t, device_t, void *);
 
-CFATTACH_DECL_NEW(exyo_usb, 0,
+CFATTACH_DECL_NEW(exyo_usb, sizeof(struct exynos_usb_softc),
     exynos_usb_match, exynos_usb_attach, NULL, NULL);
 
 
 static int
 exynos_usb_match(device_t parent, cfdata_t cf, void *aux)
 {
-	/* there can only be one */
-	if (exynos_usb_sc.sc_self)
+	struct exyo_attach_args *exyoaa = (struct exyo_attach_args *) aux;
+
+	/* no multiple attachments on same port nr */
+	if (exynos_usb_ports & __BIT(exyoaa->exyo_loc.loc_port))
 		return 0;
 
 	return 1;
 }
 
 
+#define OHCI_OFFSET 0x10000
 static void
 exynos_usb_attach(device_t parent, device_t self, void *aux)
 {
-	struct exynos_usb_softc * const sc = &exynos_usb_sc;
+	struct exynos_usb_softc * const sc = device_private(self);
 	struct exyo_attach_args *exyoaa = (struct exyo_attach_args *) aux;
-	struct exyo_locators *loc = &exyoaa->exyo_loc;
 
-	/* no locators expected */
-	KASSERT(loc->loc_offset == 0);
-	KASSERT(loc->loc_size   == 0);
-	KASSERT(loc->loc_port   == EXYOCF_PORT_DEFAULT);
+	/* mark we're here */
+	exynos_usb_ports |= __BIT(exyoaa->exyo_loc.loc_port);
 
-	/* copy our device handle */
+	/* copy our attachment info */
 	sc->sc_self = self;
-#ifdef EXYNOS4
-	if (IS_EXYNOS4_P())
-		sc->sc_locinfo = &exynos4_usb_locinfo;
-#endif
-#ifdef EXYNOS5
-	if (IS_EXYNOS5_P())
-		sc->sc_locinfo = &exynos5_usb_locinfo;
-#endif
-	KASSERT(sc->sc_locinfo);
+	sc->sc_port = exyoaa->exyo_loc.loc_port;
+	sc->sc_irq  = exyoaa->exyo_loc.loc_intr;
 
 	/* get our bushandles */
 	sc->sc_bst  = exyoaa->exyo_core_bst;
@@ -140,10 +134,11 @@ exynos_usb_attach(device_t parent, device_t self, void *aux)
 //	sc->sc_dmat = exyoaa->exyo_coherent_dmat;
 
 	bus_space_subregion(sc->sc_bst, exyoaa->exyo_core_bsh,
-		sc->sc_locinfo->uloc_ehci_offset, EXYNOS_BLOCK_SIZE,
+		exyoaa->exyo_loc.loc_offset, exyoaa->exyo_loc.loc_size,
 		&sc->sc_ehci_bsh);
 	bus_space_subregion(sc->sc_bst, exyoaa->exyo_core_bsh,
-		sc->sc_locinfo->uloc_ohci_offset, EXYNOS_BLOCK_SIZE,
+		exyoaa->exyo_loc.loc_offset + OHCI_OFFSET,
+		exyoaa->exyo_loc.loc_size,
 		&sc->sc_ohci_bsh);
 
 	aprint_naive("\n");
@@ -163,22 +158,18 @@ exynos_usb_attach(device_t parent, device_t self, void *aux)
 	    caplength + EHCI_USBINTR, 0);
 #endif
 
-	/*
-	 * Init USB subsystem
-	 */
-	exynos_usb_init(sc);
+	/* TBD Init USB subsystem */
 
 	/* claim shared interrupt for OHCI/EHCI */
-	sc->sc_intrh = intr_establish(sc->sc_locinfo->uloc_usbhost_irq,
-		IPL_USB, IST_LEVEL, exynos_usb_intr, sc);
+	sc->sc_intrh = intr_establish(sc->sc_irq, IPL_USB, IST_LEVEL,
+		exynos_usb_intr, sc);
 	if (!sc->sc_intrh) {
 		aprint_error(": unable to establish interrupt at irq %d\n",
-			sc->sc_locinfo->uloc_usbhost_irq);
+			sc->sc_irq);
 		/* disable? TBD */
 		return;
 	}
-	aprint_normal_dev(sc->sc_self, "USB2 host interrupting on irq %d\n",
-		sc->sc_locinfo->uloc_usbhost_irq);
+	aprint_normal_dev(sc->sc_self, "interrupting on irq %d\n", sc->sc_irq);
 
 #if NOHCI > 0
 	/* attach OHCI */
@@ -246,7 +237,7 @@ exynos_ohci_match(device_t parent, cfdata_t cf, void *aux)
 static void
 exynos_ohci_attach(device_t parent, device_t self, void *aux)
 {
-	struct exynos_usb_softc *usbsc = &exynos_usb_sc;
+	struct exynos_usb_softc *usbsc = device_private(parent);
 	struct ohci_softc *sc = device_private(self);
 	int r;
 
@@ -274,8 +265,7 @@ exynos_ohci_attach(device_t parent, device_t self, void *aux)
 		return;
 	}
 	sc->sc_child = config_found(self, &sc->sc_bus, usbctlprint);
-	aprint_normal_dev(sc->sc_dev, "interrupting on irq %d\n",
-		usbsc->sc_locinfo->uloc_usbhost_irq);
+	aprint_normal_dev(sc->sc_dev, "interrupting on irq %d\n", usbsc->sc_irq);
 }
 #endif
 
@@ -303,7 +293,7 @@ exynos_ehci_match(device_t parent, cfdata_t cf, void *aux)
 static void
 exynos_ehci_attach(device_t parent, device_t self, void *aux)
 {
-	struct exynos_usb_softc *usbsc = &exynos_usb_sc;
+	struct exynos_usb_softc *usbsc = device_private(parent);
 	struct ehci_softc *sc = device_private(self);
 	int r;
 
@@ -335,15 +325,7 @@ exynos_ehci_attach(device_t parent, device_t self, void *aux)
 		return;
 	}
 	sc->sc_child = config_found(self, &sc->sc_bus, usbctlprint);
-	aprint_normal_dev(sc->sc_dev, "interrupting on irq %d\n",
-		usbsc->sc_locinfo->uloc_usbhost_irq);
+	aprint_normal_dev(sc->sc_dev, "interrupting on irq %d\n", usbsc->sc_irq);
 }
 #endif
-
-
-static void
-exynos_usb_init(struct exynos_usb_softc *sc)
-{
-	/* TBD */
-}
 

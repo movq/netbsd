@@ -1,4 +1,4 @@
-/*	$NetBSD: hvcall.S,v 1.3 2013/12/08 14:41:28 palle Exp $ */
+/*	$NetBSD: hvcall.S,v 1.3.6.2 2014/05/22 11:40:10 yamt Exp $ */
 /*	$OpenBSD: hvcall.S,v 1.10 2011/06/25 20:45:00 kettenis Exp $	*/
 
 /*

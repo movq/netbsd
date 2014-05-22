@@ -1,4 +1,4 @@
-/* $Id: imx23_apbdmavar.h,v 1.1 2013/03/03 10:33:56 jkunz Exp $ */
+/* $Id: imx23_apbdmavar.h,v 1.1.14.2 2014/05/22 11:39:32 yamt Exp $ */
 
 /*
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/* $NetBSD: am335x_cm_padconf.c,v 1.2 2013/05/06 18:53:40 rkujawa Exp $ */
+/* $NetBSD: am335x_cm_padconf.c,v 1.2.12.2 2014/05/22 11:39:33 yamt Exp $ */
 /*-
  * Copyright (c) 2012 Damjan Marion <dmarion@FreeBSD.org>
  * All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: am335x_cm_padconf.c,v 1.2 2013/05/06 18:53:40 rkujawa Exp $");
+__KERNEL_RCSID(0, "$NetBSD: am335x_cm_padconf.c,v 1.2.12.2 2014/05/22 11:39:33 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

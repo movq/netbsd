@@ -1,4 +1,4 @@
-/*	$NetBSD: apple_smc_fan.c,v 1.4 2014/04/01 17:49:05 riastradh Exp $	*/
+/*	$NetBSD: apple_smc_fan.c,v 1.4.6.2 2014/05/22 11:40:21 yamt Exp $	*/
 
 /*
  * Apple System Management Controller: Fans
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: apple_smc_fan.c,v 1.4 2014/04/01 17:49:05 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apple_smc_fan.c,v 1.4.6.2 2014/05/22 11:40:21 yamt Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

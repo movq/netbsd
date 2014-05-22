@@ -1,4 +1,4 @@
-/*	$NetBSD: tps65217pmic.c,v 1.9 2014/01/08 16:49:48 jakllsch Exp $ */
+/*	$NetBSD: tps65217pmic.c,v 1.9.4.2 2014/05/22 11:40:21 yamt Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tps65217pmic.c,v 1.9 2014/01/08 16:49:48 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tps65217pmic.c,v 1.9.4.2 2014/05/22 11:40:21 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

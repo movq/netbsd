@@ -1,4 +1,4 @@
-/* $NetBSD: sitara_cm.c,v 1.1 2013/04/17 14:31:02 bouyer Exp $ */
+/* $NetBSD: sitara_cm.c,v 1.1.12.2 2014/05/22 11:39:33 yamt Exp $ */
 /*
  * Copyright (c) 2010
  *	Ben Gray <ben.r.gray@gmail.com>.
@@ -47,7 +47,7 @@
  *
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sitara_cm.c,v 1.1 2013/04/17 14:31:02 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sitara_cm.c,v 1.1.12.2 2014/05/22 11:39:33 yamt Exp $");
 
 #include "opt_omap.h"
 

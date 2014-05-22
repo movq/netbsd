@@ -1,3 +1,3 @@
-/* $NetBSD: fenv.h,v 1.1 2013/05/01 12:01:55 matt Exp $ */
+/* $NetBSD: fenv.h,v 1.1.12.2 2014/05/22 11:39:33 yamt Exp $ */
 
 #include <arm/fenv.h>

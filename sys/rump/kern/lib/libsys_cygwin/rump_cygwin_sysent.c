@@ -1,4 +1,4 @@
-/* $NetBSD: rump_cygwin_sysent.c,v 1.2 2013/05/15 21:41:25 pooka Exp $ */
+/* $NetBSD: rump_cygwin_sysent.c,v 1.2.10.2 2014/05/22 11:41:14 yamt Exp $ */
 
 /*
  * System call switch table.
@@ -8,7 +8,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rump_cygwin_sysent.c,v 1.2 2013/05/15 21:41:25 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rump_cygwin_sysent.c,v 1.2.10.2 2014/05/22 11:41:14 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

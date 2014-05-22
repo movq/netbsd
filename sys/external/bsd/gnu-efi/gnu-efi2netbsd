@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-#	$NetBSD: gnu-efi2netbsd,v 1.1 2014/04/01 16:10:56 jakllsch Exp $
+#	$NetBSD: gnu-efi2netbsd,v 1.1.6.2 2014/05/22 11:40:57 yamt Exp $
 #
 # Copyright (c) 2011 The NetBSD Foundation, Inc.
 # All rights reserved.

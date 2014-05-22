@@ -1,4 +1,4 @@
-/*	$NetBSD: ulfs_bmap.c,v 1.5 2013/07/28 01:10:49 dholland Exp $	*/
+/*	$NetBSD: ulfs_bmap.c,v 1.5.4.2 2014/05/22 11:41:19 yamt Exp $	*/
 /*  from NetBSD: ufs_bmap.c,v 1.50 2013/01/22 09:39:18 dholland Exp  */
 
 /*
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ulfs_bmap.c,v 1.5 2013/07/28 01:10:49 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ulfs_bmap.c,v 1.5.4.2 2014/05/22 11:41:19 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

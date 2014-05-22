@@ -40,7 +40,7 @@
 #include <arm/allwinner/awin_reg.h>
 #include <evbarm/cubie/platform.h>  
 
-RCSID("$NetBSD: cubie_start.S,v 1.9 2014/04/18 06:53:13 matt Exp $")
+RCSID("$NetBSD: cubie_start.S,v 1.9.4.2 2014/05/22 11:39:40 yamt Exp $")
 
 #if defined(VERBOSE_INIT_ARM)
 #define	XPUTC(n)	mov r0, n; bl xputc

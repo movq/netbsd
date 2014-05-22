@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu.c,v 1.9 2014/02/25 22:16:52 dsl Exp $	*/
+/*	$NetBSD: fpu.c,v 1.9.6.2 2014/05/22 11:40:14 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.  All
@@ -100,7 +100,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fpu.c,v 1.9 2014/02/25 22:16:52 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fpu.c,v 1.9.6.2 2014/05/22 11:40:14 yamt Exp $");
 
 #include "opt_multiprocessor.h"
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_fha_new.c,v 1.1.1.1 2013/09/30 07:19:46 dholland Exp $	*/
+/*	$NetBSD: nfs_fha_new.c,v 1.1.1.1.6.2 2014/05/22 11:41:01 yamt Exp $	*/
 /*-
  * Copyright (c) 2008 Isilon Inc http://www.isilon.com/
  * Copyright (c) 2013 Spectra Logic Corporation
@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("FreeBSD: head/sys/fs/nfsserver/nfs_fha_new.c 249596 2013-04-17 22:42:43Z ken "); */
-__RCSID("$NetBSD: nfs_fha_new.c,v 1.1.1.1 2013/09/30 07:19:46 dholland Exp $");
+__RCSID("$NetBSD: nfs_fha_new.c,v 1.1.1.1.6.2 2014/05/22 11:41:01 yamt Exp $");
 
 #include <fs/nfs/nfsport.h>
 

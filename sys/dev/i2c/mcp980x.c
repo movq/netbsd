@@ -1,4 +1,4 @@
-/*	$NetBSD: mcp980x.c,v 1.5 2013/10/28 11:24:08 rkujawa Exp $ */
+/*	$NetBSD: mcp980x.c,v 1.5.4.2 2014/05/22 11:40:21 yamt Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mcp980x.c,v 1.5 2013/10/28 11:24:08 rkujawa Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mcp980x.c,v 1.5.4.2 2014/05/22 11:40:21 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

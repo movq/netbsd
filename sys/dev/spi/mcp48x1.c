@@ -1,4 +1,4 @@
-/*      $NetBSD: mcp48x1.c,v 1.1 2014/02/25 20:09:37 rkujawa Exp $ */
+/*      $NetBSD: mcp48x1.c,v 1.1.6.2 2014/05/22 11:40:36 yamt Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mcp48x1.c,v 1.1 2014/02/25 20:09:37 rkujawa Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mcp48x1.c,v 1.1.6.2 2014/05/22 11:40:36 yamt Exp $");
 
 /* 
  * Driver for Microchip MCP4801/MCP4811/MCP4821 DAC. 

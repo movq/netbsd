@@ -1,4 +1,4 @@
-/*	$NetBSD: em4kvar.h,v 1.1 2013/01/29 00:49:42 rkujawa Exp $ */
+/*	$NetBSD: em4kvar.h,v 1.1.14.2 2014/05/22 11:39:29 yamt Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: efi_pxe.h,v 1.1.1.1 2014/04/01 16:16:07 jakllsch Exp $	*/
+/*	$NetBSD: efi_pxe.h,v 1.1.1.1.6.2 2014/05/22 11:40:57 yamt Exp $	*/
 
 #ifndef _EFI_PXE_H
 #define _EFI_PXE_H

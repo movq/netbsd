@@ -1,4 +1,4 @@
-/*	$NetBSD: mct.c,v 1.2 2014/05/09 22:21:46 reinoud Exp $	*/
+/*	$NetBSD: mct.c,v 1.2.4.2 2014/05/22 11:39:34 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: mct.c,v 1.2 2014/05/09 22:21:46 reinoud Exp $");
+__KERNEL_RCSID(1, "$NetBSD: mct.c,v 1.2.4.2 2014/05/22 11:39:34 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

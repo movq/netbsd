@@ -1,4 +1,4 @@
-/* $NetBSD: linksyms_sun.c,v 1.1 2013/03/15 12:13:07 pooka Exp $ */
+/* $NetBSD: linksyms_sun.c,v 1.1.14.2 2014/05/22 11:41:11 yamt Exp $ */
 
 int __start_link_set_rump_components[0]
 	__attribute__((__section__("link_set_start_rump_components")));

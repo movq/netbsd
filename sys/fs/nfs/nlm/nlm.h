@@ -1,4 +1,4 @@
-/*	$NetBSD: nlm.h,v 1.1.1.1 2013/09/30 07:19:46 dholland Exp $	*/
+/*	$NetBSD: nlm.h,v 1.1.1.1.6.2 2014/05/22 11:41:01 yamt Exp $	*/
 /*-
  * Copyright (c) 2008 Isilon Inc http://www.isilon.com/
  * Authors: Doug Rabson <dfr@rabson.org>
@@ -26,7 +26,7 @@
  * SUCH DAMAGE.
  *
  * FreeBSD: head/sys/nlm/nlm.h 197840 2009-10-07 19:50:14Z zml 
- * $NetBSD: nlm.h,v 1.1.1.1 2013/09/30 07:19:46 dholland Exp $
+ * $NetBSD: nlm.h,v 1.1.1.1.6.2 2014/05/22 11:41:01 yamt Exp $
  */
 
 #ifndef _NLM_NLM_H_

@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_clnfsiod.c,v 1.1.1.1 2013/09/30 07:19:30 dholland Exp $	*/
+/*	$NetBSD: nfs_clnfsiod.c,v 1.1.1.1.6.2 2014/05/22 11:41:00 yamt Exp $	*/
 /*-
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("FreeBSD: head/sys/fs/nfsclient/nfs_clnfsiod.c 249630 2013-04-18 23:20:16Z rmacklem "); */
-__RCSID("$NetBSD: nfs_clnfsiod.c,v 1.1.1.1 2013/09/30 07:19:30 dholland Exp $");
+__RCSID("$NetBSD: nfs_clnfsiod.c,v 1.1.1.1.6.2 2014/05/22 11:41:00 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

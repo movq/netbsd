@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.2 2013/05/01 22:57:37 matt Exp $
+#	$NetBSD: Makefile.inc,v 1.2.12.2 2014/05/22 11:39:39 yamt Exp $
 
 # Require pkgsrc/cross/psion-gcc.
 ARM_EPOC_PE_GCC?=	/usr/pkg/bin/arm-epoc-pe-gcc

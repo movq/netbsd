@@ -1,4 +1,4 @@
-/*	$NetBSD: gtmr.c,v 1.7 2014/04/13 02:22:21 matt Exp $	*/
+/*	$NetBSD: gtmr.c,v 1.7.2.2 2014/05/22 11:39:32 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gtmr.c,v 1.7 2014/04/13 02:22:21 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gtmr.c,v 1.7.2.2 2014/05/22 11:39:32 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

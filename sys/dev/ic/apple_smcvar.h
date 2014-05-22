@@ -1,4 +1,4 @@
-/*	$NetBSD: apple_smcvar.h,v 1.4 2014/04/01 17:49:05 riastradh Exp $	*/
+/*	$NetBSD: apple_smcvar.h,v 1.4.6.2 2014/05/22 11:40:21 yamt Exp $	*/
 
 /*
  * Apple System Management Controller State

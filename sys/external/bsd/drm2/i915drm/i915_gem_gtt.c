@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_gem_gtt.c,v 1.11 2014/05/20 15:50:11 riastradh Exp $	*/
+/*	$NetBSD: i915_gem_gtt.c,v 1.11.2.2 2014/05/22 11:40:55 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_gem_gtt.c,v 1.11 2014/05/20 15:50:11 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_gem_gtt.c,v 1.11.2.2 2014/05/22 11:40:55 yamt Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -345,7 +345,7 @@ i915_gem_restore_gtt_mappings(struct drm_device *dev)
 	struct drm_i915_gem_object *obj;
 
 	i915_ggtt_clear_range(dev, (dev_priv->mm.gtt_start >> PAGE_SHIFT),
-	    ((dev_priv->mm.gtt_end - dev_priv->mm.gtt_start) >> PAGE_SHIFT));
+	    ((dev_priv->mm.gtt_start - dev_priv->mm.gtt_end) >> PAGE_SHIFT));
 
 	list_for_each_entry(obj, &dev_priv->mm.bound_list, gtt_list) {
 		i915_gem_clflush_object(obj);
@@ -402,10 +402,10 @@ agp_gtt_init(struct drm_device *dev)
 
 	gtt->gma_bus_addr = agp_i810_sc->as_apaddr;
 	gtt->gtt_mappable_entries = (agp_i810_sc->as_apsize >> AGP_PAGE_SHIFT);
-	gtt->stolen_size = (isc->stolen << AGP_PAGE_SHIFT);
+	gtt->stolen_size = (isc->stolen >> AGP_PAGE_SHIFT);
 	gtt->gtt_total_entries =
-	    (gtt->gtt_mappable_entries + (gtt->stolen_size >> AGP_PAGE_SHIFT));
-	gtt->gtt_bsh = isc->gtt_bsh;
+	    (gtt->gtt_mappable_entries + gtt->stolen_size);
+	gtt->gtt_bsh = isc->bsh;
 
 	product = PCI_PRODUCT(dev->pdev->pd_pa.pa_id);
 	if (((product == PCI_PRODUCT_INTEL_IRONLAKE_M_HB) ||
@@ -481,17 +481,13 @@ static void
 agp_ggtt_clear_range(struct drm_device *dev, unsigned start_page,
     unsigned npages)
 {
-	struct drm_i915_private *const dev_priv = dev->dev_private;
-	struct intel_gtt *const gtt = dev_priv->mm.gtt;
-	const bus_addr_t addr = gtt->gtt_scratch_map->dm_segs[0].ds_addr;
 	struct agp_i810_softc *const isc = agp_i810_sc->as_chipc;
 	unsigned page;
 
 	for (page = start_page; npages--; page++)
-		agp_i810_write_gtt_entry(isc, (off_t)page << PAGE_SHIFT,
-		    (addr | 1));
+		agp_i810_write_gtt_entry(isc, (off_t)page << PAGE_SHIFT, 0);
 
-	agp_i810_post_gtt_entry(isc, ((off_t)(page - 1) << PAGE_SHIFT));
+	agp_i810_post_gtt_entry(isc, ((page - 1) << PAGE_SHIFT));
 }
 
 /*
@@ -569,12 +565,12 @@ gen6_gtt_init(struct drm_device *dev)
 	struct drm_i915_private *const dev_priv = dev->dev_private;
 	struct pci_attach_args *const pa = &dev->pdev->pd_pa;
 	struct intel_gtt *gtt = dev_priv->mm.gtt;
-	bus_addr_t gtt_addr;
-	bus_size_t gtt_size;
 	uint16_t snb_gmch_ctl, ggms, gms;
 	int ret;
 
 	gtt->do_idle_maps = false;
+
+	gtt->gma_bus_addr = dev->bus_maps[2].bm_base;
 
 	snb_gmch_ctl = pci_conf_read(pa->pa_pc, pa->pa_tag, SNB_GMCH_CTRL);
 
@@ -590,45 +586,36 @@ gen6_gtt_init(struct drm_device *dev)
 		gtt->stolen_size = sizes[gms] << 20;
 	}
 
-	/* GGMS: GTT Graphics Memory Size, in megabytes.  */
+	/* GGMS: GTT Graphics Memory Size.  */
 	ggms = __SHIFTOUT(snb_gmch_ctl, SNB_GMCH_GGMS);
-	CTASSERT(SNB_GMCH_GGMS_MASK <= (INT_MAX >> 20));
 	gtt->gtt_total_entries = (ggms << 20) / sizeof(gtt_pte_t);
 
-	/* Linux sez:  For GEN6+ the PTEs for the ggtt live at 2MB + BAR0 */
-	gtt_addr = (2<<20);
-	gtt_size = (gtt->gtt_total_entries * sizeof(gtt_pte_t));
-	if ((gtt_addr > (__type_max(bus_addr_t) - dev->bus_maps[0].bm_base)) ||
-	    (gtt_size > (__type_max(bus_addr_t) -
-		(dev->bus_maps[0].bm_base + gtt_addr)))) {
-		DRM_ERROR("GTT doesn't fit in BAR0:"
-		    " base 0x%"PRIxMAX
-		    " size 0x%"PRIxMAX","
-		    " gtt_addr 0x%"PRIxMAX""
-		    " gtt_total_entries 0x%"PRIxMAX"\n",
-		    (uintmax_t)dev->bus_maps[0].bm_base,
-		    (uintmax_t)dev->bus_maps[0].bm_size,
-		    (uintmax_t)gtt_addr,
-		    (uintmax_t)gtt->gtt_total_entries);
-		ret = -ENODEV;
-		goto fail0;
-	}
-
-	if (bus_space_map(dev->bst, (dev->bus_maps[0].bm_base + gtt_addr),
-		gtt_size, 0, &gtt->gtt_bsh)) {
-		DRM_ERROR("unable to map GTT\n");
-		ret = -ENODEV;
-		goto fail0;
-	}
-
-	gtt->gma_bus_addr = dev->bus_maps[2].bm_base;
 	gtt->gtt_mappable_entries = (dev->bus_maps[2].bm_size >> PAGE_SHIFT);
 	if (((gtt->gtt_mappable_entries >> 8) < 64) ||
 	    (gtt->gtt_total_entries < gtt->gtt_mappable_entries)) {
 		DRM_ERROR("unknown GMADR entries: %d\n",
 		    gtt->gtt_mappable_entries);
 		ret = -ENXIO;
-		goto fail1;
+		goto fail0;
+	}
+
+	/* Linux sez:  For GEN6+ the PTEs for the ggtt live at 2MB + BAR0 */
+	if (dev->bus_maps[0].bm_size < (gtt->gtt_total_entries *
+		sizeof(gtt_pte_t))) {
+		DRM_ERROR("BAR0 too small for GTT: 0x%"PRIxMAX" < 0x%"PRIxMAX
+		    "\n",
+		    (uintmax_t)dev->bus_maps[0].bm_size,
+		    (uintmax_t)(gtt->gtt_total_entries * sizeof(gtt_pte_t)));
+		ret = -ENODEV;
+		goto fail0;
+	}
+	if (bus_space_map(dev->bst, (dev->bus_maps[0].bm_base + (2<<20)),
+		(gtt->gtt_total_entries * sizeof(gtt_pte_t)),
+		0,
+		&gtt->gtt_bsh)) {
+		DRM_ERROR("unable to map GTT\n");
+		ret = -ENODEV;
+		goto fail0;
 	}
 
 	ret = i915_gem_gtt_init_scratch_page(gtt, dev->dmat);
@@ -640,7 +627,8 @@ gen6_gtt_init(struct drm_device *dev)
 
 fail2: __unused
 	i915_gem_gtt_fini_scratch_page(gtt, dev->dmat);
-fail1:	bus_space_unmap(dev->bst, gtt->gtt_bsh, gtt_size);
+fail1:	bus_space_unmap(dev->bst, gtt->gtt_bsh,
+	    (gtt->gtt_total_entries * sizeof(gtt_pte_t)));
 fail0:	return ret;
 }
 
@@ -716,15 +704,15 @@ gen6_ggtt_clear_range(struct drm_device *dev, unsigned start_page,
 	struct drm_i915_private *const dev_priv = dev->dev_private;
 	const bus_space_tag_t bst = dev->bst;
 	const bus_space_handle_t bsh = dev_priv->mm.gtt->gtt_bsh;
-	const bus_addr_t scratch_addr =
-	    dev_priv->mm.gtt->gtt_scratch_map->dm_segs[0].ds_addr;
-	const gtt_pte_t scratch_pte = gen6_pte_encode(dev, scratch_addr,
+	const gtt_pte_t scratch_pte = gen6_pte_encode(dev,
+	    dev_priv->mm.gtt->gtt_scratch_map->dm_segs[0].ds_addr,
 	    I915_CACHE_LLC);
 	unsigned int i;
 
 	KASSERT(start_page < dev_priv->mm.gtt->gtt_total_entries);
 	KASSERT(npages <= (dev_priv->mm.gtt->gtt_total_entries - start_page));
-	KASSERT(scratch_addr == gen6_pte_decode(scratch_pte));
+	KASSERT(dev_priv->mm.gtt->gtt_scratch_map->dm_segs[0].ds_addr ==
+	    gen6_pte_decode(scratch_pte));
 
 	for (i = 0; i < npages; i++)
 		bus_space_write_4(bst, bsh, 4*(start_page + i), scratch_pte);

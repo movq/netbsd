@@ -1,4 +1,4 @@
-/*	$NetBSD: esp_podule.c,v 1.1 2013/07/11 13:44:50 kiyohara Exp $	*/
+/*	$NetBSD: esp_podule.c,v 1.1.8.2 2014/05/22 11:40:35 yamt Exp $	*/
 /*
  * Copyright (c) 2013 KIYOHARA Takashi
  * All rights reserved.
@@ -25,7 +25,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: esp_podule.c,v 1.1 2013/07/11 13:44:50 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: esp_podule.c,v 1.1.8.2 2014/05/22 11:40:35 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>

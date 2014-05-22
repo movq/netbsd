@@ -1,4 +1,4 @@
-/*	$NetBSD: efi_stub.S,v 1.1.1.1 2014/04/01 16:16:07 jakllsch Exp $	*/
+/*	$NetBSD: efi_stub.S,v 1.1.1.1.6.2 2014/05/22 11:40:58 yamt Exp $	*/
 
 /*
  * Function calling ABI conversion from Linux to EFI for x86_64

@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_cygwin_compat.c,v 1.1 2013/04/10 16:44:54 pooka Exp $	*/
+/*	$NetBSD: rump_cygwin_compat.c,v 1.1.12.2 2014/05/22 11:41:14 yamt Exp $	*/
 
 /*
  * Copyright (c) 2013 Antti Kantee.  All Rights Reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: netwalker_btn.c,v 1.2 2014/05/06 11:08:51 hkenken Exp $	*/
+/*	$NetBSD: netwalker_btn.c,v 1.2.4.2 2014/05/22 11:39:42 yamt Exp $	*/
 
 /*
  * Copyright (c) 2014  Genetec Corporation.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netwalker_btn.c,v 1.2 2014/05/06 11:08:51 hkenken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netwalker_btn.c,v 1.2.4.2 2014/05/22 11:39:42 yamt Exp $");
 
 #include "opt_imxspi.h"
 #include "opt_mousebtn.h"

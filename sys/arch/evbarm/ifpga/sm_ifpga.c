@@ -1,4 +1,4 @@
-/*	$NetBSD: sm_ifpga.c,v 1.2 2013/02/23 08:23:03 skrll Exp $	*/
+/*	$NetBSD: sm_ifpga.c,v 1.2.14.2 2014/05/22 11:39:41 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2013 Sergio Lopez <slp@sinrega.org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sm_ifpga.c,v 1.2 2013/02/23 08:23:03 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sm_ifpga.c,v 1.2.14.2 2014/05/22 11:39:41 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
