@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2013/10/20 14:53:22 joerg Exp $
+#	$NetBSD: Makefile,v 1.2.4.2 2014/05/22 16:13:21 yamt Exp $
 
 PROG_CXX=	lldb
 NOMAN=		yes
