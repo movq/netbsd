@@ -1,4 +1,4 @@
-/*	$NetBSD: openpam_dump_policy.c,v 1.1.1.2 2013/12/27 19:16:14 christos Exp $	*/
+/*	$NetBSD: openpam_dump_policy.c,v 1.1.1.2.4.2 2014/05/22 15:50:46 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2011 Dag-Erling Smørgrav

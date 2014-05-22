@@ -1,4 +1,4 @@
-/*	$NetBSD: t.h,v 1.1.1.2 2013/12/27 19:16:12 christos Exp $	*/
+/*	$NetBSD: t.h,v 1.1.1.2.4.2 2014/05/22 15:50:48 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2012 Dag-Erling Smørgrav
