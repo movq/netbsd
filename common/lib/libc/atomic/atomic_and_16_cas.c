@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_add.S,v 1.5 2009/03/08 12:08:19 he Exp $	*/
+/*	$NetBSD: atomic_and_16_cas.c,v 1.1.24.1 2014/05/22 11:26:30 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,7 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- *      
+ *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
  * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
@@ -29,33 +29,21 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "atomic_op_asm.h"
+#include "atomic_op_namespace.h"
 
-#include "../../powerpc/atomic/atomic_add.S"
+#include <sys/atomic.h>
 
-	.text
+uint16_t fetch_and_and_2(volatile uint16_t *, uint16_t, ...)
+    asm("__sync_fetch_and_and_2");
 
-ENTRY(_atomic_add_64)
-1:	ldarx	%r10,0,%r3
-	add	%r10,%r10,%r4
-	stdcx.	%r10,0,%r3
-	bne-	1b
-	blr
-ATOMIC_OP_ALIAS(atomic_add_64,_atomic_add_64)
-ATOMIC_OP_ALIAS(atomic_add_long,_atomic_add_64)
-STRONG_ALIAS(_atomic_add_long,_atomic_add_64)
-ATOMIC_OP_ALIAS(atomic_add_ptr,_atomic_add_64)
-STRONG_ALIAS(_atomic_add_ptr,_atomic_add_64)
+uint16_t
+fetch_and_and_2(volatile uint16_t *addr, uint16_t val, ...)
+{
+	uint16_t old, new;
 
-ENTRY(_atomic_add_64_nv)
-1:	ldarx	%r10,0,%r3
-	add	%r10,%r10,%r4
-	stdcx.	%r10,0,%r3
-	bne-	1b
-	mr	%r3,%r10
-	blr
-ATOMIC_OP_ALIAS(atomic_add_64_nv,_atomic_add_64_nv)
-ATOMIC_OP_ALIAS(atomic_add_long_nv,_atomic_add_64_nv)
-STRONG_ALIAS(_atomic_add_long_nv,_atomic_add_64_nv)
-ATOMIC_OP_ALIAS(atomic_add_ptr_nv,_atomic_add_64_nv)
-STRONG_ALIAS(_atomic_add_ptr_nv,_atomic_add_64_nv)
+	do {
+		old = *addr;
+		new = old & val;
+	} while (atomic_cas_16(addr, old, new) != old);
+	return old;
+}

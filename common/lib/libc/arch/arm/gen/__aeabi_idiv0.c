@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 
-__RCSID("$NetBSD: __aeabi_idiv0.c,v 1.3 2014/01/29 22:29:43 joerg Exp $");
+__RCSID("$NetBSD: __aeabi_idiv0.c,v 1.3.4.2 2014/05/22 11:26:28 yamt Exp $");
 
 #if defined(_KERNEL) || defined(_STANDALONE)
 #include <sys/systm.h>

@@ -1,7 +1,7 @@
-/*	$NetBSD: atomic_and.S,v 1.5 2009/03/08 12:08:19 he Exp $	*/
+/*	$NetBSD: atomic_swap_16_cas.c,v 1.1.24.1 2014/05/22 11:26:30 yamt Exp $	*/
 
 /*-
- * Copyright (c) 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2014 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,7 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- *      
+ *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
  * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
@@ -29,29 +29,22 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "atomic_op_asm.h"
+#include "atomic_op_namespace.h"
 
-#include "../../powerpc/atomic/atomic_and.S"
+#include <sys/atomic.h>
 
-	.text
+uint16_t
+atomic_swap_16(volatile uint16_t *addr, uint16_t new)
+	asm("__sync_lock_test_and_set_2");
 
-ENTRY(_atomic_and_64)
-1:	ldarx	%r10,0,%r3
-	and	%r10,%r10,%r4
-	stdcx.	%r10,0,%r3
-	bne-	1b
-	blr
-ATOMIC_OP_ALIAS(atomic_and_64,_atomic_and_64)
-ATOMIC_OP_ALIAS(atomic_and_ulong,_atomic_and_64)
-STRONG_ALIAS(_atomic_and_ulong,_atomic_and_64)
+uint16_t
+atomic_swap_16(volatile uint16_t *addr, uint16_t new)
+{
+	uint16_t old;
 
-ENTRY(_atomic_and_64_nv)
-1:	ldarx	%r10,0,%r3
-	and	%r10,%r10,%r4
-	stdcx.	%r10,0,%r3
-	bne-	1b
-	mr	%r3,%r10
-	blr
-ATOMIC_OP_ALIAS(atomic_and_64_nv,_atomic_and_64_nv)
-ATOMIC_OP_ALIAS(atomic_and_ulong_nv,_atomic_and_64_nv)
-STRONG_ALIAS(_atomic_and_ulong_nv,_atomic_and_64_nv)
+	do {
+		old = *addr;
+	} while (atomic_cas_16(addr, old, new) != old);
+
+	return old;
+}

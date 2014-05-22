@@ -1,7 +1,7 @@
-/*	$NetBSD: atomic_cas.S,v 1.6 2009/03/08 12:08:19 he Exp $	*/
+/*	$NetBSD: atomic_or_8_cas.c,v 1.1.24.1 2014/05/22 11:26:30 yamt Exp $	*/
 
 /*-
- * Copyright (c) 2007, 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,7 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- *      
+ *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
  * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
@@ -29,30 +29,36 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "atomic_op_asm.h"
+#include "atomic_op_namespace.h"
 
-#include "../../powerpc/atomic/atomic_cas.S"
+#include <sys/atomic.h>
 
-	.text
+uint8_t fetch_and_or_1(volatile uint8_t *, uint8_t, ...)
+    asm("__sync_fetch_and_or_1");
+uint8_t or_and_fetch_1(volatile uint8_t *, uint8_t, ...)
+    asm("__sync_or_and_fetch_1");
 
-ENTRY(_atomic_cas_64)
-1:	ldarx	%r10,0,%r3
-	cmpd	%r10,%r4
-	bne-	2f
-	stdcx.	%r5,0,%r3
-	bne-	1b
-2:	mr	%r3,%r10
-	blr
+uint8_t
+fetch_and_or_1(volatile uint8_t *addr, uint8_t val, ...)
+{
+	uint8_t old, new;
 
-ATOMIC_OP_ALIAS(atomic_cas_64,_atomic_cas_64)
-ATOMIC_OP_ALIAS(atomic_cas_ulong,_atomic_cas_64)
-STRONG_ALIAS(_atomic_cas_ulong,_atomic_cas_64)
-ATOMIC_OP_ALIAS(atomic_cas_ptr,_atomic_cas_64)
-STRONG_ALIAS(_atomic_cas_ptr,_atomic_cas_64)
+	do {
+		old = *addr;
+		new = old | val;
+	} while (atomic_cas_8(addr, old, new) != old);
+	return old;
+}
 
-ATOMIC_OP_ALIAS(atomic_cas_64_ni,_atomic_cas_64)
-STRONG_ALIAS(_atomic_cas_64_ni,_atomic_cas_64)
-ATOMIC_OP_ALIAS(atomic_cas_ulong_ni,_atomic_cas_64)
-STRONG_ALIAS(_atomic_cas_ulong_ni,_atomic_cas_64)
-ATOMIC_OP_ALIAS(atomic_cas_ptr_ni,_atomic_cas_64)
-STRONG_ALIAS(_atomic_cas_ptr_ni,_atomic_cas_64)
+uint8_t
+or_and_fetch_1(volatile uint8_t *addr, uint8_t val, ...)
+{
+	uint8_t old, new;
+
+	do {
+		old = *addr;
+		new = old | val;
+	} while (atomic_cas_8(addr, old, new) != old);
+	return old;
+}
+

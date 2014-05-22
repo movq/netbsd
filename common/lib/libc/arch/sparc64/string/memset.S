@@ -1,4 +1,4 @@
-/*	$NetBSD: memset.S,v 1.2 2013/03/17 02:12:41 christos Exp $	*/
+/*	$NetBSD: memset.S,v 1.2.12.2 2014/05/22 11:26:30 yamt Exp $	*/
 
 /*
  * Copyright (c) 1996-2002 Eduardo Horvath
@@ -25,7 +25,7 @@
  */
 #include "strmacros.h"
 #if defined(LIBC_SCCS) && !defined(lint)
-RCSID("$NetBSD: memset.S,v 1.2 2013/03/17 02:12:41 christos Exp $")
+RCSID("$NetBSD: memset.S,v 1.2.12.2 2014/05/22 11:26:30 yamt Exp $")
 #endif  /* LIBC_SCCS and not lint */
 
 

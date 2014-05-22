@@ -32,7 +32,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: strtoimax.c,v 1.2 2013/12/02 12:20:44 joerg Exp $");
+__RCSID("$NetBSD: strtoimax.c,v 1.2.4.2 2014/05/22 11:26:30 yamt Exp $");
 
 #ifdef _LIBC
 #include "namespace.h"

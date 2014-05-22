@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_xor_64.S,v 1.3 2014/03/04 16:15:28 matt Exp $	*/
+/*	$NetBSD: atomic_xor_64.S,v 1.3.4.2 2014/05/22 11:26:28 yamt Exp $	*/
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
  * All rights reserved.

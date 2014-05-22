@@ -1,4 +1,4 @@
-/*	$NetBSD: mi_vector_hash.c,v 1.1 2013/12/11 01:24:08 joerg Exp $	*/
+/*	$NetBSD: mi_vector_hash.c,v 1.1.4.2 2014/05/22 11:26:30 yamt Exp $	*/
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -43,7 +43,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: mi_vector_hash.c,v 1.1 2013/12/11 01:24:08 joerg Exp $");
+__RCSID("$NetBSD: mi_vector_hash.c,v 1.1.4.2 2014/05/22 11:26:30 yamt Exp $");
 
 #if !HAVE_NBTOOL_CONFIG_H || HAVE_SYS_ENDIAN_H
 #include <sys/endian.h>

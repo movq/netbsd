@@ -1,4 +1,4 @@
-/* $NetBSD: strchr.S,v 1.4 2013/08/20 08:07:30 matt Exp $ */
+/* $NetBSD: strchr.S,v 1.4.4.2 2014/05/22 11:26:28 yamt Exp $ */
 
 #include <machine/asm.h>
 

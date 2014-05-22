@@ -1,4 +1,4 @@
-/* $NetBSD: explicit_memset.c,v 1.3 2013/08/28 17:47:07 riastradh Exp $ */
+/* $NetBSD: explicit_memset.c,v 1.3.4.2 2014/05/22 11:26:30 yamt Exp $ */
 
 #if !defined(_KERNEL) && !defined(_STANDALONE)
 #include "namespace.h"

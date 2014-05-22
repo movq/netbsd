@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_op_asm.h,v 1.4 2010/03/22 02:22:32 mrg Exp $	*/
+/*	$NetBSD: atomic_and_8_cas.c,v 1.1.24.1 2014/05/22 11:26:30 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -15,7 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- *      
+ *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
  * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
@@ -29,20 +29,21 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _ATOMIC_OP_ASM_H_
-#define	_ATOMIC_OP_ASM_H_
+#include "atomic_op_namespace.h"
 
-#define _NOREGNAMES
-#include <machine/asm.h>
+#include <sys/atomic.h>
 
-#if defined(_KERNEL)
+uint8_t fetch_and_and_1(volatile uint8_t *, uint8_t, ...)
+    asm("__sync_fetch_and_and_1");
 
-#define	ATOMIC_OP_ALIAS(a,s)	STRONG_ALIAS(a,s)
+uint8_t
+fetch_and_and_1(volatile uint8_t *addr, uint8_t val, ...)
+{
+	uint8_t old, new;
 
-#else /* _KERNEL */
-
-#define	ATOMIC_OP_ALIAS(a,s)	WEAK_ALIAS(a,s)
-
-#endif /* _KERNEL */
-
-#endif /* _ATOMIC_OP_ASM_H_ */
+	do {
+		old = *addr;
+		new = old & val;
+	} while (atomic_cas_8(addr, old, new) != old);
+	return old;
+}

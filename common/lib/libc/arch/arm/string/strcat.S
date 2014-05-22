@@ -1,4 +1,4 @@
-/* $NetBSD: strcat.S,v 1.1 2013/01/23 05:46:17 matt Exp $ */
+/* $NetBSD: strcat.S,v 1.1.14.2 2014/05/22 11:26:28 yamt Exp $ */
 
 #if defined(_STANDALONE)
 #include "strcat_naive.S"

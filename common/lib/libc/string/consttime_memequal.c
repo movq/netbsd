@@ -1,4 +1,4 @@
-/* $NetBSD: consttime_memequal.c,v 1.4 2013/08/28 19:31:14 riastradh Exp $ */
+/* $NetBSD: consttime_memequal.c,v 1.4.4.2 2014/05/22 11:26:30 yamt Exp $ */
 
 #if !defined(_KERNEL) && !defined(_STANDALONE)
 #include "namespace.h"
