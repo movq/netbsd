@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-#	$NetBSD: tcpdump2netbsd,v 1.1 2013/04/06 19:33:07 christos Exp $
+#	$NetBSD: tcpdump2netbsd,v 1.1.8.2 2014/05/22 15:51:19 yamt Exp $
 #
 # Copyright (c) 2000 The NetBSD Foundation, Inc.
 # All rights reserved.
