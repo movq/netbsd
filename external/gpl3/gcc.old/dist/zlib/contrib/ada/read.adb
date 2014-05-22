@@ -6,7 +6,7 @@
 --  Open source license information is in the zlib.ads file.  --
 ----------------------------------------------------------------
 
---  $Id: read.adb,v 1.1.1.1 2014/02/25 18:42:01 mrg Exp $
+--  $Id: read.adb,v 1.1.1.1.4.2 2014/05/22 15:58:31 yamt Exp $
 
 --  Test/demo program for the generic read interface.
 
