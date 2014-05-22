@@ -1,4 +1,4 @@
-/* $NetBSD: bufgap.c,v 1.1 2014/03/09 00:15:45 agc Exp $ */
+/* $NetBSD: bufgap.c,v 1.1.4.2 2014/05/22 13:21:33 yamt Exp $ */
 
 /*-
  * Copyright (c) 1996-2009 The NetBSD Foundation, Inc.

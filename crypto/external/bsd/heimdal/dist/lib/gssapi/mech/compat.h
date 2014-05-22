@@ -1,4 +1,4 @@
-/*	$NetBSD: compat.h,v 1.1.1.1 2014/04/24 12:45:29 pettai Exp $	*/
+/*	$NetBSD: compat.h,v 1.1.1.1.2.2 2014/05/22 13:21:26 yamt Exp $	*/
 
 /*
  * Copyright (c) 2010, PADL Software Pty Ltd.
