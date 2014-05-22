@@ -1,4 +1,4 @@
-/*	$NetBSD: utils.c,v 1.4 2014/01/22 06:15:31 riastradh Exp $	*/
+/*	$NetBSD: utils.c,v 1.4.4.2 2014/05/22 11:42:51 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: utils.c,v 1.4 2014/01/22 06:15:31 riastradh Exp $");
+__RCSID("$NetBSD: utils.c,v 1.4.4.2 2014/05/22 11:42:51 yamt Exp $");
 
 #include <sys/types.h>
 

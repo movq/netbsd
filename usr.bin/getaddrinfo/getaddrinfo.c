@@ -1,4 +1,4 @@
-/*	$NetBSD: getaddrinfo.c,v 1.4 2014/04/22 02:23:03 ginsbach Exp $	*/
+/*	$NetBSD: getaddrinfo.c,v 1.4.2.2 2014/05/22 11:42:44 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: getaddrinfo.c,v 1.4 2014/04/22 02:23:03 ginsbach Exp $");
+__RCSID("$NetBSD: getaddrinfo.c,v 1.4.2.2 2014/05/22 11:42:44 yamt Exp $");
 
 #include <sys/types.h>
 #include <sys/socket.h>

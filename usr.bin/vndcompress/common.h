@@ -1,4 +1,4 @@
-/*	$NetBSD: common.h,v 1.6 2014/01/22 06:18:00 riastradh Exp $	*/
+/*	$NetBSD: common.h,v 1.6.4.2 2014/05/22 11:42:51 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
