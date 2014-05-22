@@ -1,6 +1,6 @@
-/* -Wl,--dynamic-list symbols exported for libthread_db.
+/* Target-dependent code for GDB on PowerPC systems running FreeBSD.
 
-   Copyright (C) 2010-2013 Free Software Foundation, Inc.
+   Copyright (C) 2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,24 +17,13 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-{
-  ps_get_thread_area;
-  ps_getpid;
-  ps_lcontinue;
-  ps_lgetfpregs;
-  ps_lgetregs;
-  ps_lgetxregs;
-  ps_lgetxregsize;
-  ps_lsetfpregs;
-  ps_lsetregs;
-  ps_lsetxregs;
-  ps_lstop;
-  ps_pcontinue;
-  ps_pdread;
-  ps_pdwrite;
-  ps_pglobal_lookup;
-  ps_plog;
-  ps_pstop;
-  ps_ptread;
-  ps_ptwrite;
-};
+#ifndef PPCFBSD_TDEP_H
+#define PPCFBSD_TDEP_H
+
+struct regset;
+
+/* From ppcfbsd-tdep.c ...  */
+const struct regset *ppc_fbsd_gregset (int);
+const struct regset *ppc_fbsd_fpregset (void);
+
+#endif /* PPCFBSD_TDEP_H  */
