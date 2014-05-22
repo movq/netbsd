@@ -1,4 +1,4 @@
-/*	$NetBSD: master_monitor.c,v 1.1.1.1 2013/09/25 19:06:32 tron Exp $	*/
+/*	$NetBSD: master_monitor.c,v 1.1.1.1.4.2 2014/05/22 14:08:02 yamt Exp $	*/
 
 /*++
 /* NAME

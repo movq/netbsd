@@ -1,4 +1,4 @@
-/*	$NetBSD: haproxy_srvr.c,v 1.1.1.1 2013/09/25 19:06:30 tron Exp $	*/
+/*	$NetBSD: haproxy_srvr.c,v 1.1.1.1.4.2 2014/05/22 14:08:02 yamt Exp $	*/
 
 /*++
 /* NAME

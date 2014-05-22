@@ -1,4 +1,4 @@
-/*	$NetBSD: smtpd_haproxy.c,v 1.1.1.1 2013/09/25 19:06:35 tron Exp $	*/
+/*	$NetBSD: smtpd_haproxy.c,v 1.1.1.1.4.2 2014/05/22 14:08:03 yamt Exp $	*/
 
 /*++
 /* NAME
