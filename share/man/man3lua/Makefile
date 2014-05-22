@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2013/11/13 20:55:08 mbalmer Exp $
+#	$NetBSD: Makefile,v 1.4.4.2 2014/05/22 11:37:50 yamt Exp $
 
 MAN=	gpio.3lua intro.3lua sqlite.3lua syslog.3lua
 
