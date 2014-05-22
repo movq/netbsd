@@ -1,4 +1,4 @@
-/*	$NetBSD: regress_bufferevent.c,v 1.1.1.1 2013/12/27 23:31:27 christos Exp $	*/
+/*	$NetBSD: regress_bufferevent.c,v 1.1.1.1.4.2 2014/05/22 15:50:14 yamt Exp $	*/
 
 /*
  * Copyright (c) 2003-2007 Niels Provos <provos@citi.umich.edu>

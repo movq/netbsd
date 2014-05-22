@@ -1,4 +1,4 @@
-/*	$NetBSD: win32select.c,v 1.1.1.1 2013/12/27 23:31:24 christos Exp $	*/
+/*	$NetBSD: win32select.c,v 1.1.1.1.4.2 2014/05/22 15:50:13 yamt Exp $	*/
 
 /*
  * Copyright 2007-2012 Niels Provos and Nick Mathewson

@@ -1,4 +1,4 @@
-/*	$NetBSD: evconfig-private.h,v 1.1.1.1 2013/12/27 23:31:33 christos Exp $	*/
+/*	$NetBSD: evconfig-private.h,v 1.1.1.1.4.2 2014/05/22 15:50:13 yamt Exp $	*/
 
 #if !defined(EVENT_EVCONFIG__PRIVATE_H_) && !defined(__MINGW32__)
 #define EVENT_EVCONFIG__PRIVATE_H_

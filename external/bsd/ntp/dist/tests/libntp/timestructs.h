@@ -1,4 +1,4 @@
-/*	$NetBSD: timestructs.h,v 1.1.1.1 2013/12/27 23:31:39 christos Exp $	*/
+/*	$NetBSD: timestructs.h,v 1.1.1.1.4.2 2014/05/22 15:50:16 yamt Exp $	*/
 
 /*
  * timestructs.h -- test bed adaptors for time structs.
