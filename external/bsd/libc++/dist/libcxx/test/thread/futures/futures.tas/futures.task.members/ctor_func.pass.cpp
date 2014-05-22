@@ -35,8 +35,6 @@ public:
 int A::n_moves = 0;
 int A::n_copies = 0;
 
-int func(int i) { return i; }
-
 int main()
 {
     {
@@ -59,19 +57,5 @@ int main()
         assert(f.get() == 105.0);
         assert(A::n_copies > 0);
         assert(A::n_moves > 0);
-    }
-    {
-        std::packaged_task<int(int)> p(&func);
-        assert(p.valid());
-        std::future<int> f = p.get_future();
-        p(4);
-        assert(f.get() == 4);
-    }
-    {
-        std::packaged_task<int(int)> p(func);
-        assert(p.valid());
-        std::future<int> f = p.get_future();
-        p(4);
-        assert(f.get() == 4);
     }
 }

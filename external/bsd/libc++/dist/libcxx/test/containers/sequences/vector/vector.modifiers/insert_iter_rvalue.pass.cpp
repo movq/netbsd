@@ -20,7 +20,6 @@
 #include "../../../stack_allocator.h"
 #include "../../../MoveOnly.h"
 #include "min_allocator.h"
-#include "asan_testing.h"
 
 int main()
 {
@@ -29,7 +28,6 @@ int main()
         std::vector<MoveOnly> v(100);
         std::vector<MoveOnly>::iterator i = v.insert(v.cbegin() + 10, MoveOnly(3));
         assert(v.size() == 101);
-        assert(is_contiguous_container_asan_correct(v)); 
         assert(i == v.begin() + 10);
         int j;
         for (j = 0; j < 10; ++j)
@@ -42,7 +40,6 @@ int main()
         std::vector<MoveOnly, stack_allocator<MoveOnly, 300> > v(100);
         std::vector<MoveOnly, stack_allocator<MoveOnly, 300> >::iterator i = v.insert(v.cbegin() + 10, MoveOnly(3));
         assert(v.size() == 101);
-        assert(is_contiguous_container_asan_correct(v)); 
         assert(i == v.begin() + 10);
         int j;
         for (j = 0; j < 10; ++j)
@@ -64,7 +61,6 @@ int main()
         std::vector<MoveOnly, min_allocator<MoveOnly>> v(100);
         std::vector<MoveOnly, min_allocator<MoveOnly>>::iterator i = v.insert(v.cbegin() + 10, MoveOnly(3));
         assert(v.size() == 101);
-        assert(is_contiguous_container_asan_correct(v)); 
         assert(i == v.begin() + 10);
         int j;
         for (j = 0; j < 10; ++j)

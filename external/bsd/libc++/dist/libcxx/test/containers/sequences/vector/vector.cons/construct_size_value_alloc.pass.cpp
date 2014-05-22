@@ -14,7 +14,6 @@
 #include <vector>
 #include <cassert>
 #include "min_allocator.h"
-#include "asan_testing.h"
 
 template <class C>
 void
@@ -25,7 +24,6 @@ test(typename C::size_type n, const typename C::value_type& x,
     assert(c.__invariants());
     assert(a == c.get_allocator());
     assert(c.size() == n);
-    assert(is_contiguous_container_asan_correct(c)); 
     for (typename C::const_iterator i = c.cbegin(), e = c.cend(); i != e; ++i)
         assert(*i == x);
 }

@@ -33,8 +33,6 @@ test0(F f)
     assert(f(ap) == 'a');
     const A* cap = &a;
     assert(f(cap) == 'a');
-    const F& cf = f;
-    assert(cf(ap) == 'a');
     }
 }
 
@@ -49,8 +47,6 @@ test1(F f)
     assert(f(ap, 2) == 'b');
     const A* cap = &a;
     assert(f(cap, 2) == 'b');
-    const F& cf = f;
-    assert(cf(ap, 2) == 'b');
     }
 }
 
@@ -65,8 +61,6 @@ test2(F f)
     assert(f(ap, 2, 3.5) == 'c');
     const A* cap = &a;
     assert(f(cap, 2, 3.5) == 'c');
-    const F& cf = f;
-    assert(cf(ap, 2, 3.5) == 'c');
     }
 }
 

@@ -32,7 +32,7 @@ condition_variable::notify_all() _NOEXCEPT
 }
 
 void
-condition_variable::wait(unique_lock<mutex>& lk) _NOEXCEPT
+condition_variable::wait(unique_lock<mutex>& lk)
 {
     if (!lk.owns_lock())
         __throw_system_error(EPERM,
@@ -44,7 +44,7 @@ condition_variable::wait(unique_lock<mutex>& lk) _NOEXCEPT
 
 void
 condition_variable::__do_timed_wait(unique_lock<mutex>& lk,
-     chrono::time_point<chrono::system_clock, chrono::nanoseconds> tp) _NOEXCEPT
+               chrono::time_point<chrono::system_clock, chrono::nanoseconds> tp)
 {
     using namespace chrono;
     if (!lk.owns_lock())

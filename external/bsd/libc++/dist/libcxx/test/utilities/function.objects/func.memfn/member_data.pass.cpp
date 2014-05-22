@@ -32,8 +32,6 @@ test(F f)
     assert(a.data_ == 6);
     const A* cap = ap;
     assert(f(cap) == f(ap));
-    const F& cf = f;
-    assert(cf(ap) == f(ap));
     }
 }
 
