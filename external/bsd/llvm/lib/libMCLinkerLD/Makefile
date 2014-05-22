@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2013/03/13 13:21:18 joerg Exp $
+#	$NetBSD: Makefile,v 1.2.12.2 2014/05/22 16:14:44 yamt Exp $
 
 LIB=	MCLinkerLD
 

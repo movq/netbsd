@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2013/09/02 14:34:57 joerg Exp $
+#	$NetBSD: Makefile,v 1.1.4.2 2014/05/22 16:14:47 yamt Exp $
 
 LIB=	lldReaderWriterYAML
 
