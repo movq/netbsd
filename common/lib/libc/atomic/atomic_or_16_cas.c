@@ -1,11 +1,11 @@
-/*	$NetBSD: atomic_cas_68000.S,v 1.3.2.1 2014/05/22 11:26:29 yamt Exp $	*/
+/*	$NetBSD: atomic_or_16_cas.c,v 1.1.24.1 2014/05/22 11:26:30 yamt Exp $	*/
 
 /*-
- * Copyright (c) 2008 The NetBSD Foundation, Inc.
+ * Copyright (c) 2007 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Steve C. Woodford.
+ * by Jason R. Thorpe.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -15,7 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- *      
+ *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
  * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
@@ -29,50 +29,36 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/ras.h>
-#include "atomic_op_asm.h"
+#include "atomic_op_namespace.h"
 
-	.text
+#include <sys/atomic.h>
 
-ENTRY(_atomic_cas_up)
-	.hidden	_C_LABEL(_atomic_cas_up)
+uint16_t fetch_and_or_2(volatile uint16_t *, uint16_t, ...)
+    asm("__sync_fetch_and_or_2");
+uint16_t or_and_fetch_2(volatile uint16_t *, uint16_t, ...)
+    asm("__sync_or_and_fetch_2");
 
-	movl	4(%sp), %a0		/* Fetch ptr */
+uint16_t
+fetch_and_or_2(volatile uint16_t *addr, uint16_t val, ...)
+{
+	uint16_t old, new;
 
-RAS_START_ASM_HIDDEN(_atomic_cas)
-	movl	(%a0), %d0		/* d0 = *ptr */
-	cmpl	8(%sp), %d0		/* Same as old? */
-	jne	1f			/* Nope */
-	movl	12(%sp), (%a0)		/* *ptr = new */
-RAS_END_ASM_HIDDEN(_atomic_cas)
-1:	rts
-END(_atomic_cas_up)
+	do {
+		old = *addr;
+		new = old | val;
+	} while (atomic_cas_16(addr, old, new) != old);
+	return old;
+}
 
-ENTRY(_atomic_cas_16_up)
-	.hidden	_C_LABEL(_atomic_cas_16_up)
+uint16_t
+or_and_fetch_2(volatile uint16_t *addr, uint16_t val, ...)
+{
+	uint16_t old, new;
 
-	movl	4(%sp), %a0		/* Fetch ptr */
+	do {
+		old = *addr;
+		new = old | val;
+	} while (atomic_cas_16(addr, old, new) != old);
+	return old;
+}
 
-RAS_START_ASM_HIDDEN(_atomic_cas_16)
-	movw	(%a0), %d0		/* d0 = *ptr */
-	cmpw	8(%sp), %d0		/* Same as old? */
-	jne	1f			/* Nope */
-	movw	12(%sp), (%a0)		/* *ptr = new */
-RAS_END_ASM_HIDDEN(_atomic_cas_16)
-1:	rts
-END(_atomic_cas_16_up)
-
-
-ENTRY(_atomic_cas_8_up)
-	.hidden	_C_LABEL(_atomic_cas_8_up)
-
-	movl	4(%sp), %a0		/* Fetch ptr */
-
-RAS_START_ASM_HIDDEN(_atomic_cas_8)
-	movb	(%a0), %d0		/* d0 = *ptr */
-	cmpb	8(%sp), %d0		/* Same as old? */
-	jne	1f			/* Nope */
-	movb	12(%sp), (%a0)		/* *ptr = new */
-RAS_END_ASM_HIDDEN(_atomic_cas_8)
-1:	rts
-END(_atomic_cas_8_up)

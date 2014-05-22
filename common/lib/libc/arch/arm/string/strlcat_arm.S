@@ -29,7 +29,7 @@
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: strlcat_arm.S,v 1.6 2014/05/06 16:02:11 joerg Exp $")
+RCSID("$NetBSD: strlcat_arm.S,v 1.6.2.2 2014/05/22 11:26:28 yamt Exp $")
 
 /* LINTSTUB: size_t strlcat(char *, const char *, size_t) */
 ENTRY(strlcat)

@@ -1,7 +1,7 @@
-/*	$NetBSD: atomic_inc.S,v 1.5 2009/03/08 12:08:19 he Exp $	*/
+/*	$NetBSD: atomic_cas_8_cas.c,v 1.1.24.1 2014/05/22 11:26:30 yamt Exp $	*/
 
 /*-
- * Copyright (c) 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2014 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,7 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- *      
+ *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
  * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
@@ -29,33 +29,19 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "atomic_op_asm.h"
+#include "atomic_op_namespace.h"
 
-#include "../../powerpc/atomic/atomic_inc.S"
+#if !defined(_KERNEL) && !defined(_STANDALONE)
+#include <stdbool.h>
+#endif
+#include <sys/atomic.h>
 
-	.text
+bool bool_compare_and_swap_1(volatile uint8_t *, uint8_t, uint8_t, ...)
+    asm("__sync_bool_compare_and_swap_1");
 
-ENTRY(_atomic_inc_64)
-1:	ldarx	%r10,0,%r3
-	addi	%r10,%r10,1
-	stdcx.	%r10,0,%r3
-	bne-	1b
-	blr
-ATOMIC_OP_ALIAS(atomic_inc_64,_atomic_inc_64)
-ATOMIC_OP_ALIAS(atomic_inc_ulong,_atomic_inc_64)
-STRONG_ALIAS(_atomic_inc_ulong,_atomic_inc_64)
-ATOMIC_OP_ALIAS(atomic_inc_ptr,_atomic_inc_64)
-STRONG_ALIAS(_atomic_inc_ptr,_atomic_inc_64)
-
-ENTRY(_atomic_inc_64_nv)
-1:	ldarx	%r10,0,%r3
-	addi	%r10,%r10,1
-	stdcx.	%r10,0,%r3
-	bne-	1b
-	mr	%r3,%r10
-	blr
-ATOMIC_OP_ALIAS(atomic_inc_64_nv,_atomic_inc_64_nv)
-ATOMIC_OP_ALIAS(atomic_inc_ulong_nv,_atomic_inc_64_nv)
-STRONG_ALIAS(_atomic_inc_ulong_nv,_atomic_inc_64_nv)
-ATOMIC_OP_ALIAS(atomic_inc_ptr_nv,_atomic_inc_64_nv)
-STRONG_ALIAS(_atomic_inc_ptr_nv,_atomic_inc_64_nv)
+bool
+bool_compare_and_swap_1(volatile uint8_t *addr, uint8_t oldval,
+	uint8_t newval, ...)
+{
+	return atomic_cas_8(addr, oldval, newval) == oldval;
+}

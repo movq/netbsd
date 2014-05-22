@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_nand_32_cas.c,v 1.1 2014/02/21 10:52:50 martin Exp $	*/
+/*	$NetBSD: atomic_nand_32_cas.c,v 1.1.4.2 2014/05/22 11:26:30 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

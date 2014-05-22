@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: atomic_simplelock.c,v 1.2 2013/08/16 01:47:41 matt Exp $");
+__RCSID("$NetBSD: atomic_simplelock.c,v 1.2.4.2 2014/05/22 11:26:28 yamt Exp $");
 
 #include <sys/types.h>
 

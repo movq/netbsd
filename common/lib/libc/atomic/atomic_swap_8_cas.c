@@ -1,7 +1,7 @@
-/*	$NetBSD: atomic_swap.S,v 1.5 2009/03/08 12:08:19 he Exp $	*/
+/*	$NetBSD: atomic_swap_8_cas.c,v 1.1.24.1 2014/05/22 11:26:30 yamt Exp $	*/
 
 /*-
- * Copyright (c) 2007 The NetBSD Foundation, Inc.
+ * Copyright (c) 2014 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -15,7 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- *      
+ *
  * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
  * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
  * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
@@ -29,20 +29,22 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "atomic_op_asm.h"
+#include "atomic_op_namespace.h"
 
-#include "../../powerpc/atomic/atomic_swap.S"
+#include <sys/atomic.h>
 
-	.text
+uint8_t
+atomic_swap_8(volatile uint8_t *addr, uint8_t new)
+	asm("__sync_lock_test_and_set_1");
 
-ENTRY(_atomic_swap_64)
-1:	ldarx	%r10,0,%r3
-	stdcx.	%r4,0,%r3
-	bne-	1b
-	mr	%r3,%r10
-	blr
-ATOMIC_OP_ALIAS(atomic_swap_64,_atomic_swap_64)
-ATOMIC_OP_ALIAS(atomic_swap_ulong,_atomic_swap_64)
-STRONG_ALIAS(_atomic_swap_ulong,_atomic_swap_64)
-ATOMIC_OP_ALIAS(atomic_swap_ptr,_atomic_swap_64)
-STRONG_ALIAS(_atomic_swap_ptr,_atomic_swap_64)
+uint8_t
+atomic_swap_8(volatile uint8_t *addr, uint8_t new)
+{
+	uint8_t old;
+
+	do {
+		old = *addr;
+	} while (atomic_cas_8(addr, old, new) != old);
+
+	return old;
+}
