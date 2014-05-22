@@ -1,4 +1,4 @@
-# Copyright 2011-2013 Free Software Foundation, Inc.
+# Copyright 2012-2013 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -13,26 +13,22 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-# Test single-stepping into incorrectly marked Thumb routine
+# [RFA] DWARF frame unwinder executes one too many rows
+# http://sourceware.org/ml/gdb-patches/2012-07/msg00650.html
 
-if {![istarget arm*-*]} then {
-    verbose "Skipping ARM tests."
-    return
+if { ![is_x86_like_target] } {
+    return 0
 }
 
-set testfile "thumb-singlestep"
+set testfile "i386-cfi-notcurrent"
 set srcfile ${testfile}.S
 
-set additional_flags "additional_flags=-mthumb"
-if [prepare_for_testing ${testfile}.exp ${testfile} ${srcfile} [list debug $additional_flags]] {
-    untested ${testfile}.exp
+if [prepare_for_testing ${testfile}.exp ${testfile} ${srcfile} {nodebug}] {
     return -1
 }
 
-if ![runto_main] then {
-    untested ${testfile}.exp
+if ![runto f] {
     return -1
 }
 
-gdb_test "si" "foo \\(\\) at .*${srcfile}.*mov r0,#42.*" "step into foo"
-
+gdb_test "backtrace" "#0 \[^\r\n\]* f \[^\r\n\]*\r\n#1 \[^\r\n\]* g \[^\r\n\]*\r\n#2 \[^\r\n\]* main \[^\r\n\]*"

@@ -1,8 +1,6 @@
-/* Test program with deliberately incorrect execution mode transition
+/* This testcase is part of GDB, the GNU debugger.
 
    Copyright 2011-2013 Free Software Foundation, Inc.
-
-   This file is part of GDB.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -17,24 +15,24 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-	.text
-	.align 2
-	.global foo
-	.thumb
-	/* .thumb_func deliberately omitted */
-foo:
-	mov r0,#42
-	bx lr
+static volatile int v, fail;
 
-        .text
-	.align  2
-	.global main
-	.thumb
-	.thumb_func
-	.type	main, %function
-main:
-        push	{r3, lr}
-	blx	foo
-        pop	{r3, pc}
-	.size	main, .-main
+static void
+func (int i, ...)
+{
+  v = i;
+}
 
+static void
+marker (void)
+{
+}
+
+int
+main (void)
+{
+  func (1);
+  fail = 1;
+  marker ();
+  return 0;
+}
