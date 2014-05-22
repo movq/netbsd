@@ -1,4 +1,4 @@
-/*	$NetBSD: bufferevent_ssl.h,v 1.1.1.1 2013/04/11 16:43:34 christos Exp $	*/
+/*	$NetBSD: bufferevent_ssl.h,v 1.1.1.1.10.2 2014/05/22 15:48:10 yamt Exp $	*/
 /*
  * Copyright (c) 2009-2012 Niels Provos and Nick Mathewson
  *

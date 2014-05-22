@@ -1,4 +1,4 @@
-/*	$NetBSD: signal-test.c,v 1.1.1.1 2013/04/11 16:43:31 christos Exp $	*/
+/*	$NetBSD: signal-test.c,v 1.1.1.1.10.2 2014/05/22 15:48:10 yamt Exp $	*/
 /*
  * Compile with:
  * cc -I/usr/local/include -o signal-test \

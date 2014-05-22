@@ -1,4 +1,4 @@
-/*	$NetBSD: evmap.c,v 1.2 2013/04/11 16:56:41 christos Exp $	*/
+/*	$NetBSD: evmap.c,v 1.2.10.2 2014/05/22 15:48:09 yamt Exp $	*/
 /*
  * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
  *
@@ -26,7 +26,7 @@
  */
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: evmap.c,v 1.2 2013/04/11 16:56:41 christos Exp $");
+__RCSID("$NetBSD: evmap.c,v 1.2.10.2 2014/05/22 15:48:09 yamt Exp $");
 
 #ifdef WIN32
 #include <winsock2.h>

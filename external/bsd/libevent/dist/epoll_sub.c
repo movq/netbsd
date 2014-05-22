@@ -1,4 +1,4 @@
-/*	$NetBSD: epoll_sub.c,v 1.1.1.1 2013/04/11 16:43:26 christos Exp $	*/
+/*	$NetBSD: epoll_sub.c,v 1.1.1.1.10.2 2014/05/22 15:48:09 yamt Exp $	*/
 /*
  * Copyright 2003-2009 Niels Provos <provos@citi.umich.edu>
  * Copyright 2009-2012 Niels Provos and Nick Mathewson

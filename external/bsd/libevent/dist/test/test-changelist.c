@@ -1,4 +1,4 @@
-/*	$NetBSD: test-changelist.c,v 1.1.1.1 2013/04/11 16:43:33 christos Exp $	*/
+/*	$NetBSD: test-changelist.c,v 1.1.1.1.10.2 2014/05/22 15:48:10 yamt Exp $	*/
 /*
  * Copyright (c) 2010-2012 Niels Provos and Nick Mathewson
  *
@@ -27,7 +27,7 @@
 
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: test-changelist.c,v 1.1.1.1 2013/04/11 16:43:33 christos Exp $");
+__RCSID("$NetBSD: test-changelist.c,v 1.1.1.1.10.2 2014/05/22 15:48:10 yamt Exp $");
 
 #ifdef WIN32
 #include <winsock2.h>
