@@ -1,4 +1,4 @@
-/*	$NetBSD: crtbegin.S,v 1.7 2014/03/16 11:41:30 joerg Exp $	*/
+/*	$NetBSD: crtbegin.S,v 1.7.4.2 2014/05/22 11:36:44 yamt Exp $	*/
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -30,7 +30,7 @@
 
 #include <vax/asm.h>
 
-RCSID("$NetBSD: crtbegin.S,v 1.7 2014/03/16 11:41:30 joerg Exp $")
+RCSID("$NetBSD: crtbegin.S,v 1.7.4.2 2014/05/22 11:36:44 yamt Exp $")
 
 	.section	.ctors, "aw", @progbits
 	.p2align 2

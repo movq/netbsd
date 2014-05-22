@@ -1,7 +1,7 @@
-/*	$NetBSD: svc_fdset.c,v 1.1 2013/03/05 19:55:23 christos Exp $	*/
+/*	$NetBSD: svc_fdset.c,v 1.1.10.2 2014/05/22 11:36:53 yamt Exp $	*/
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: svc_fdset.c,v 1.1 2013/03/05 19:55:23 christos Exp $");
+__RCSID("$NetBSD: svc_fdset.c,v 1.1.10.2 2014/05/22 11:36:53 yamt Exp $");
 
 #include <pthread.h>
 #include <stdlib.h>

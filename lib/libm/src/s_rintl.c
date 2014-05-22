@@ -1,4 +1,4 @@
-/*	$NetBSD: s_rintl.c,v 1.5 2013/08/21 13:04:44 martin Exp $	*/
+/*	$NetBSD: s_rintl.c,v 1.5.4.2 2014/05/22 11:36:57 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2008 David Schultz <das@FreeBSD.ORG>
@@ -30,7 +30,7 @@
 #if 0
 __FBSDID("$FreeBSD: src/lib/msun/src/s_rintl.c,v 1.5 2008/02/22 11:59:05 bde Exp $");
 #else
-__RCSID("$NetBSD: s_rintl.c,v 1.5 2013/08/21 13:04:44 martin Exp $");
+__RCSID("$NetBSD: s_rintl.c,v 1.5.4.2 2014/05/22 11:36:57 yamt Exp $");
 #endif
 
 #include <float.h>

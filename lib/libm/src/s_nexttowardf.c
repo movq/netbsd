@@ -1,4 +1,4 @@
-/*	$NetBSD: s_nexttowardf.c,v 1.3 2013/02/09 23:14:44 christos Exp $	*/
+/*	$NetBSD: s_nexttowardf.c,v 1.3.10.2 2014/05/22 11:36:57 yamt Exp $	*/
 
 /*
  * ====================================================
@@ -15,7 +15,7 @@
 #if 0
 __FBSDID("$FreeBSD: src/lib/msun/src/s_nexttowardf.c,v 1.3 2011/02/10 07:38:38 das Exp $");
 #else
-__RCSID("$NetBSD: s_nexttowardf.c,v 1.3 2013/02/09 23:14:44 christos Exp $");
+__RCSID("$NetBSD: s_nexttowardf.c,v 1.3.10.2 2014/05/22 11:36:57 yamt Exp $");
 #endif
 
 #include <string.h>

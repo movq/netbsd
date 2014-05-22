@@ -1,4 +1,4 @@
-/*	$NetBSD: s_fma.c,v 1.6 2013/02/14 09:24:50 matt Exp $	*/
+/*	$NetBSD: s_fma.c,v 1.6.10.2 2014/05/22 11:36:57 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2005-2011 David Schultz <das@FreeBSD.ORG>
@@ -30,7 +30,7 @@
 #if 0
 __FBSDID("$FreeBSD: src/lib/msun/src/s_fma.c,v 1.8 2011/10/21 06:30:43 das Exp $");
 #else
-__RCSID("$NetBSD: s_fma.c,v 1.6 2013/02/14 09:24:50 matt Exp $");
+__RCSID("$NetBSD: s_fma.c,v 1.6.10.2 2014/05/22 11:36:57 yamt Exp $");
 #endif
 
 #include <machine/ieee.h>

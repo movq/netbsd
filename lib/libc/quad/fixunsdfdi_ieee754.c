@@ -1,4 +1,4 @@
-/*	$NetBSD: fixunsdfdi_ieee754.c,v 1.1 2013/08/24 00:51:48 matt Exp $	*/
+/*	$NetBSD: fixunsdfdi_ieee754.c,v 1.1.4.2 2014/05/22 11:36:53 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: fixunsdfdi_ieee754.c,v 1.1 2013/08/24 00:51:48 matt Exp $");
+__RCSID("$NetBSD: fixunsdfdi_ieee754.c,v 1.1.4.2 2014/05/22 11:36:53 yamt Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #if defined(SOFTFLOAT) || defined(__ARM_EABI__)

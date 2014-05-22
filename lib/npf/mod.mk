@@ -1,4 +1,4 @@
-#	$NetBSD: mod.mk,v 1.6 2013/09/11 23:04:11 joerg Exp $
+#	$NetBSD: mod.mk,v 1.6.4.2 2014/05/22 11:37:01 yamt Exp $
 
 .include <bsd.own.mk>
 

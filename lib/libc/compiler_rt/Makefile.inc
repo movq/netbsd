@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.20 2014/05/20 12:23:47 joerg Exp $
+# $NetBSD: Makefile.inc,v 1.20.2.2 2014/05/22 11:36:51 yamt Exp $
 
 COMPILER_RT_SRCDIR=	${NETBSDSRCDIR}/sys/external/bsd/compiler_rt/dist
 
@@ -171,10 +171,7 @@ GENERIC_SRCS+= \
 
 GENERIC_SRCS+= \
 	GCDAProfiling.c \
-	InstrProfiling.c \
-	InstrProfilingBuffer.c \
-	InstrProfilingFile.c \
-	InstrProfilingPlatformOther.c
+	PGOProfiling.c
 
 .if ${LIBC_MACHINE_ARCH} == "powerpc"
 GENERIC_SRCS+= \
@@ -213,12 +210,9 @@ GENERIC_SRCS+= \
 SRCS+=	${src:R}.S
 .  else
 SRCS+=	${src}
-.    if ${src:E} != "cc"
 COPTS.${src}+=	-Wno-missing-prototypes \
 		-Wno-old-style-definition \
 		-Wno-strict-prototypes \
-		-Wno-uninitialized \
-		-Wno-cast-qual
-.    endif
+		-Wno-uninitialized
 .  endif
 .endfor

@@ -1,4 +1,4 @@
-/*	$NetBSD: fixdfsi.S,v 1.1 2013/07/17 06:39:06 matt Exp $	*/
+/*	$NetBSD: fixdfsi.S,v 1.1.6.2 2014/05/22 11:36:47 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -39,7 +39,7 @@
 #if 0
 	RCSID("from: @(#)fixdfsi.s	5.1 (Berkeley) 6/7/90")
 #else
-	RCSID("$NetBSD: fixdfsi.S,v 1.1 2013/07/17 06:39:06 matt Exp $")
+	RCSID("$NetBSD: fixdfsi.S,v 1.1.6.2 2014/05/22 11:36:47 yamt Exp $")
 #endif
 #endif /* LIBC_SCCS and not lint */
 

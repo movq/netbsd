@@ -1,4 +1,4 @@
-/*	$NetBSD: errc.c,v 1.1 2014/01/16 17:21:38 christos Exp $	*/
+/*	$NetBSD: errc.c,v 1.1.4.2 2014/05/22 11:36:52 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: errc.c,v 1.1 2014/01/16 17:21:38 christos Exp $");
+__RCSID("$NetBSD: errc.c,v 1.1.4.2 2014/05/22 11:36:52 yamt Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"

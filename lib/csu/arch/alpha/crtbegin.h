@@ -1,4 +1,4 @@
-/* $NetBSD: crtbegin.h,v 1.1 2013/07/11 16:40:27 matt Exp $ */
+/* $NetBSD: crtbegin.h,v 1.1.6.2 2014/05/22 11:36:43 yamt Exp $ */
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
  * All rights reserved.

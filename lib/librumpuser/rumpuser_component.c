@@ -1,4 +1,4 @@
-/*	$NetBSD: rumpuser_component.c,v 1.6 2013/05/07 15:18:35 pooka Exp $	*/
+/*	$NetBSD: rumpuser_component.c,v 1.6.8.2 2014/05/22 11:37:00 yamt Exp $	*/
 
 /*
  * Copyright (c) 2013 Antti Kantee.  All Rights Reserved.
@@ -28,7 +28,7 @@
 #include "rumpuser_port.h"
 
 #if !defined(lint)
-__RCSID("$NetBSD: rumpuser_component.c,v 1.6 2013/05/07 15:18:35 pooka Exp $");
+__RCSID("$NetBSD: rumpuser_component.c,v 1.6.8.2 2014/05/22 11:37:00 yamt Exp $");
 #endif /* !lint */
 
 #include <stdint.h>

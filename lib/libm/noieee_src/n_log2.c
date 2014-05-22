@@ -1,4 +1,4 @@
-/*      $NetBSD: n_log2.c,v 1.1 2014/03/06 10:57:01 martin Exp $ */
+/*      $NetBSD: n_log2.c,v 1.1.4.2 2014/05/22 11:36:57 yamt Exp $ */
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
  * All rights reserved.

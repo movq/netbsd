@@ -1,4 +1,4 @@
-/*	$NetBSD: s_frexpl.c,v 1.3 2013/02/12 21:40:19 martin Exp $	*/
+/*	$NetBSD: s_frexpl.c,v 1.3.10.2 2014/05/22 11:36:57 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2004-2005 David Schultz <das@FreeBSD.ORG>
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: s_frexpl.c,v 1.3 2013/02/12 21:40:19 martin Exp $");
+__RCSID("$NetBSD: s_frexpl.c,v 1.3.10.2 2014/05/22 11:36:57 yamt Exp $");
 
 #include <machine/ieee.h>
 #include <float.h>

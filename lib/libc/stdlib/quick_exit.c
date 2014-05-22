@@ -1,4 +1,4 @@
-/*	$NetBSD: quick_exit.c,v 1.1 2013/04/26 18:29:55 christos Exp $	*/
+/*	$NetBSD: quick_exit.c,v 1.1.8.2 2014/05/22 11:36:54 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2011 David Chisnall
@@ -28,7 +28,7 @@
  * $FreeBSD: src/lib/libc/stdlib/quick_exit.c,v 1.4 2012/11/17 01:49:41 svnexp Exp $
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: quick_exit.c,v 1.1 2013/04/26 18:29:55 christos Exp $");
+__RCSID("$NetBSD: quick_exit.c,v 1.1.8.2 2014/05/22 11:36:54 yamt Exp $");
 
 #include "namespace.h"
 #include "reentrant.h"

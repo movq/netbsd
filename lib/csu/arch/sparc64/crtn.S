@@ -1,4 +1,4 @@
-/* $NetBSD: crtn.S,v 1.1 2013/07/11 06:57:15 martin Exp $ */
+/* $NetBSD: crtn.S,v 1.1.6.2 2014/05/22 11:36:44 yamt Exp $ */
 
 /*
  * Copyright (c) 2001 Matthew R. Green
@@ -61,7 +61,7 @@
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: crtn.S,v 1.1 2013/07/11 06:57:15 martin Exp $")
+RCSID("$NetBSD: crtn.S,v 1.1.6.2 2014/05/22 11:36:44 yamt Exp $")
 
 	.section ".init", "ax", @progbits
 	.align 4

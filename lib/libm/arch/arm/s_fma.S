@@ -29,7 +29,7 @@
 
 #include <arm/asm.h>
 
-RCSID("$NetBSD: s_fma.S,v 1.1 2013/02/11 17:41:13 matt Exp $")
+RCSID("$NetBSD: s_fma.S,v 1.1.10.2 2014/05/22 11:36:56 yamt Exp $")
 
 STRONG_ALIAS(_fmal, _fma)
 WEAK_ALIAS(fmal, _fmal)
