@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.options,v 1.1 2014/03/01 10:00:49 mrg Exp $
+#	$NetBSD: Makefile.options,v 1.1.4.2 2014/05/22 16:53:35 yamt Exp $
 
 .ifndef _EXTERNAL_GPL3_GCC_USR_BIN_MAKEFILE_OPTIONS_
 _EXTERNAL_GPL3_GCC_USR_BIN_MAKEFILE_OPTIONS_=1
