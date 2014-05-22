@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.10 2014/01/16 13:55:46 christos Exp $
+# $NetBSD: Makefile.inc,v 1.10.4.2 2014/05/22 15:44:30 yamt Exp $
 
 WARNS?=	1	# XXX -Wshadow -Wcast-qual -Wsign-compare
 

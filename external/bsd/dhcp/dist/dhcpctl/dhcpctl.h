@@ -1,4 +1,4 @@
-/*	$NetBSD: dhcpctl.h,v 1.1.1.3 2013/03/27 00:31:38 christos Exp $	*/
+/*	$NetBSD: dhcpctl.h,v 1.1.1.3.10.2 2014/05/22 15:44:32 yamt Exp $	*/
 
 /* Id: dhcpctl.h,v 1.17.24.1 2009/11/20 01:49:01 sar Exp 
 

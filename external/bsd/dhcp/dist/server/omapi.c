@@ -1,4 +1,4 @@
-/*	$NetBSD: omapi.c,v 1.1.1.2 2013/03/24 22:50:43 christos Exp $	*/
+/*	$NetBSD: omapi.c,v 1.1.1.2.10.2 2014/05/22 15:44:34 yamt Exp $	*/
 
 /* omapi.c
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: omapi.c,v 1.1.1.2 2013/03/24 22:50:43 christos Exp $");
+__RCSID("$NetBSD: omapi.c,v 1.1.1.2.10.2 2014/05/22 15:44:34 yamt Exp $");
 
 /* Many, many thanks to Brian Murrell and BCtel for this code - BCtel
    provided the funding that resulted in this code and the entire

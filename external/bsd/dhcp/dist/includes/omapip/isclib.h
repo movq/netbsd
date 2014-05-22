@@ -1,4 +1,4 @@
-/*	$NetBSD: isclib.h,v 1.1.1.1 2013/03/24 15:45:50 christos Exp $	*/
+/*	$NetBSD: isclib.h,v 1.1.1.1.10.2 2014/05/22 15:44:33 yamt Exp $	*/
 
 /* isclib.h
 

@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2013/03/24 15:54:30 christos Exp $
+# $NetBSD: Makefile,v 1.1.10.2 2014/05/22 15:44:30 yamt Exp $
 
 SUBDIR=	clientscript server client relay omshell
 

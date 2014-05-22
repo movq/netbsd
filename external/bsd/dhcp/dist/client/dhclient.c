@@ -1,4 +1,4 @@
-/*	$NetBSD: dhclient.c,v 1.8 2014/02/04 22:34:39 christos Exp $	*/
+/*	$NetBSD: dhclient.c,v 1.8.4.2 2014/05/22 15:44:31 yamt Exp $	*/
 
 /* dhclient.c
 
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dhclient.c,v 1.8 2014/02/04 22:34:39 christos Exp $");
+__RCSID("$NetBSD: dhclient.c,v 1.8.4.2 2014/05/22 15:44:31 yamt Exp $");
 
 #include "dhcpd.h"
 #include <syslog.h>
@@ -897,7 +897,7 @@ int find_subnet (struct subnet **sp,
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dhclient.c,v 1.8 2014/02/04 22:34:39 christos Exp $");
+__RCSID("$NetBSD: dhclient.c,v 1.8.4.2 2014/05/22 15:44:31 yamt Exp $");
 
 void state_reboot (cpp)
 	void *cpp;

@@ -1,4 +1,4 @@
-/*	$NetBSD: isclib.c,v 1.1.1.2 2013/03/27 00:31:40 christos Exp $	*/
+/*	$NetBSD: isclib.c,v 1.1.1.2.10.2 2014/05/22 15:44:33 yamt Exp $	*/
 
 /*
  * Copyright(c) 2009-2010 by Internet Systems Consortium, Inc.("ISC")
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: isclib.c,v 1.1.1.2 2013/03/27 00:31:40 christos Exp $");
+__RCSID("$NetBSD: isclib.c,v 1.1.1.2.10.2 2014/05/22 15:44:33 yamt Exp $");
 
 /*Trying to figure out what we need to define to get things to work.
   It looks like we want/need the export library but need the fdwatchcommand

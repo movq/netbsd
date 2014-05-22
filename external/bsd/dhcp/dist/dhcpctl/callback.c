@@ -1,4 +1,4 @@
-/*	$NetBSD: callback.c,v 1.1.1.1 2013/03/24 15:45:48 christos Exp $	*/
+/*	$NetBSD: callback.c,v 1.1.1.1.10.2 2014/05/22 15:44:32 yamt Exp $	*/
 
 /* callback.c
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: callback.c,v 1.1.1.1 2013/03/24 15:45:48 christos Exp $");
+__RCSID("$NetBSD: callback.c,v 1.1.1.1.10.2 2014/05/22 15:44:32 yamt Exp $");
 
 #include "dhcpd.h"
 #include <omapip/omapip_p.h>

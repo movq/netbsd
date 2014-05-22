@@ -1,4 +1,4 @@
-/*	$NetBSD: base64.c,v 1.5 2013/03/27 00:38:08 christos Exp $	*/
+/*	$NetBSD: base64.c,v 1.5.10.2 2014/05/22 15:44:33 yamt Exp $	*/
 
 /*
  * Copyright (c) 2004,2009 by Internet Systems Consortium, Inc. ("ISC")
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: base64.c,v 1.5 2013/03/27 00:38:08 christos Exp $");
+__RCSID("$NetBSD: base64.c,v 1.5.10.2 2014/05/22 15:44:33 yamt Exp $");
 
 /*
  * Portions Copyright (c) 1995 by International Business Machines, Inc.

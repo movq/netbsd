@@ -1,4 +1,4 @@
-/*	$NetBSD: ldap.c,v 1.1.1.3 2013/03/27 00:31:46 christos Exp $	*/
+/*	$NetBSD: ldap.c,v 1.1.1.3.10.2 2014/05/22 15:44:34 yamt Exp $	*/
 
 /* ldap.c
 
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: ldap.c,v 1.1.1.3 2013/03/27 00:31:46 christos Exp $");
+__RCSID("$NetBSD: ldap.c,v 1.1.1.3.10.2 2014/05/22 15:44:34 yamt Exp $");
 
 
 #include "dhcpd.h"
