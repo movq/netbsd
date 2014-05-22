@@ -1,4 +1,4 @@
-/*	$NetBSD: pathnames.h,v 1.1 2014/03/29 22:11:19 dholland Exp $	*/
+/*	$NetBSD: pathnames.h,v 1.1.4.2 2014/05/22 11:36:23 yamt Exp $	*/
 /*
  * Copyright (c) 1983-2003, Regents of the University of California.
  * All rights reserved.
