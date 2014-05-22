@@ -1,4 +1,4 @@
-/*	$NetBSD: zlib.h,v 1.1 2014/03/09 00:15:45 agc Exp $	*/
+/*	$NetBSD: zlib.h,v 1.1.4.2 2014/05/22 13:21:34 yamt Exp $	*/
 
 /* zlib.h -- interface of the 'zlib' general purpose compression library
   version 1.2.3, July 18th, 2005
@@ -35,7 +35,7 @@
 
 #include "config.h"
 
-/*	$NetBSD: zlib.h,v 1.1 2014/03/09 00:15:45 agc Exp $	*/
+/*	$NetBSD: zlib.h,v 1.1.4.2 2014/05/22 13:21:34 yamt Exp $	*/
 
 /* zconf.h -- configuration of the zlib compression library
  * Copyright (C) 1995-2005 Jean-loup Gailly.
