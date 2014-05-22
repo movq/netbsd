@@ -1,4 +1,4 @@
-/*	$NetBSD: work_fork.c,v 1.2 2014/01/20 19:03:33 kardel Exp $	*/
+/*	$NetBSD: work_fork.c,v 1.2.4.2 2014/05/22 15:50:08 yamt Exp $	*/
 
 /*
  * work_fork.c - fork implementation for blocking worker child.

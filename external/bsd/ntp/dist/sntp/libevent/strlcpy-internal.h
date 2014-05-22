@@ -1,4 +1,4 @@
-/*	$NetBSD: strlcpy-internal.h,v 1.1.1.1 2013/12/27 23:31:17 christos Exp $	*/
+/*	$NetBSD: strlcpy-internal.h,v 1.1.1.1.4.2 2014/05/22 15:50:13 yamt Exp $	*/
 
 #ifndef STRLCPY_INTERNAL_H_INCLUDED_
 #define STRLCPY_INTERNAL_H_INCLUDED_

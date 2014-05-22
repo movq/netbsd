@@ -1,4 +1,4 @@
-/*	$NetBSD: bind9.h,v 1.1.1.1 2013/12/27 23:30:42 christos Exp $	*/
+/*	$NetBSD: bind9.h,v 1.1.1.1.4.2 2014/05/22 15:50:06 yamt Exp $	*/
 
 /*
  * Copyright (C) 2009  Internet Systems Consortium, Inc. ("ISC")

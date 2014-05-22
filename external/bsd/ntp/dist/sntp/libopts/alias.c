@@ -1,4 +1,4 @@
-/*	$NetBSD: alias.c,v 1.1.1.1 2013/12/27 23:31:36 christos Exp $	*/
+/*	$NetBSD: alias.c,v 1.1.1.1.4.2 2014/05/22 15:50:14 yamt Exp $	*/
 
 
 /**
