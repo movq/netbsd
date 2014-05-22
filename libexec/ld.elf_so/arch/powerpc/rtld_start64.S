@@ -1,4 +1,4 @@
-/*	$NetBSD: rtld_start64.S,v 1.2 2014/03/06 19:19:40 matt Exp $	*/
+/*	$NetBSD: rtld_start64.S,v 1.2.4.2 2014/05/22 11:37:14 yamt Exp $	*/
 
 /*-
  * Copyright (C) 1998	Tsubai Masanari
