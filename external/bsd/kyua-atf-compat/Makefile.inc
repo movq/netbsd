@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.1 2013/02/25 00:20:08 jmmv Exp $
+# $NetBSD: Makefile.inc,v 1.1.12.2 2014/05/22 15:45:21 yamt Exp $
 
 SRCDIR=		${NETBSDSRCDIR}/external/bsd/kyua-atf-compat/dist
 .PATH:		${SRCDIR}
