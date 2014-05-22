@@ -29,7 +29,7 @@
 __FBSDID("$FreeBSD: src/sbin/gpt/show.c,v 1.14 2006/06/22 22:22:32 marcel Exp $");
 #endif
 #ifdef __RCSID
-__RCSID("$NetBSD: backup.c,v 1.1 2013/12/19 06:46:51 jnemeth Exp $");
+__RCSID("$NetBSD: backup.c,v 1.1.4.2 2014/05/22 11:37:28 yamt Exp $");
 #endif
 
 #include <sys/bootblock.h>

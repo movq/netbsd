@@ -1,4 +1,4 @@
-/* $NetBSD: udf_write.h,v 1.4 2013/08/05 20:52:08 reinoud Exp $ */
+/* $NetBSD: udf_write.h,v 1.4.4.2 2014/05/22 11:37:31 yamt Exp $ */
 
 /*
  * Copyright (c) 2006, 2008, 2013 Reinoud Zandijk
