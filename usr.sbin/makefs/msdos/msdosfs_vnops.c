@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_vnops.c,v 1.15 2013/10/19 17:16:37 christos Exp $ */
+/*	$NetBSD: msdosfs_vnops.c,v 1.15.4.2 2014/05/22 11:43:05 yamt Exp $ */
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -51,7 +51,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msdosfs_vnops.c,v 1.15 2013/10/19 17:16:37 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msdosfs_vnops.c,v 1.15.4.2 2014/05/22 11:43:05 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/mman.h>

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.2 2013/08/05 18:45:00 reinoud Exp $
+#	$NetBSD: Makefile.inc,v 1.2.4.2 2014/05/22 11:43:05 yamt Exp $
 #
 
 UDF=	${NETBSDSRCDIR}/sys/fs/udf

@@ -1,4 +1,4 @@
-/* $NetBSD: udf.c,v 1.16 2013/12/19 23:00:50 joerg Exp $ */
+/* $NetBSD: udf.c,v 1.16.4.2 2014/05/22 11:43:05 yamt Exp $ */
 
 /*
  * Copyright (c) 2006, 2008, 2013 Reinoud Zandijk
@@ -30,7 +30,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: udf.c,v 1.16 2013/12/19 23:00:50 joerg Exp $");
+__RCSID("$NetBSD: udf.c,v 1.16.4.2 2014/05/22 11:43:05 yamt Exp $");
 
 #include <stdio.h>
 #include <stdlib.h>

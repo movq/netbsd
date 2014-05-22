@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.5 2013/01/26 16:50:46 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.5.10.2 2014/05/22 11:43:05 yamt Exp $
 #
 
 MSDOS=	${NETBSDSRCDIR}/sys/fs/msdosfs
