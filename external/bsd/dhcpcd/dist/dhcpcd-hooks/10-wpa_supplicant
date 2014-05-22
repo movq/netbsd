@@ -1,4 +1,4 @@
-# $NetBSD: 10-wpa_supplicant,v 1.1.1.4 2014/03/01 11:00:43 roy Exp $
+# $NetBSD: 10-wpa_supplicant,v 1.1.1.4.4.2 2014/05/22 15:44:40 yamt Exp $
 
 # Start, reconfigure and stop wpa_supplicant per wireless interface.
 # This is needed because wpa_supplicant lacks hotplugging of any kind
