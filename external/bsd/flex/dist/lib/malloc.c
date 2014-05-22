@@ -1,4 +1,4 @@
-/*	$NetBSD: malloc.c,v 1.1.1.1 2013/04/06 14:05:53 christos Exp $	*/
+/*	$NetBSD: malloc.c,v 1.1.1.1.10.2 2014/05/22 15:45:07 yamt Exp $	*/
 
      #include <config.h>
      #undef malloc
