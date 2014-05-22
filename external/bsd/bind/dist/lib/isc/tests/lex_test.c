@@ -1,4 +1,4 @@
-/*	$NetBSD: lex_test.c,v 1.2 2013/12/31 20:24:42 christos Exp $	*/
+/*	$NetBSD: lex_test.c,v 1.2.4.2 2014/05/22 15:43:21 yamt Exp $	*/
 
 /*
  * Copyright (C) 2013  Internet Systems Consortium, Inc. ("ISC")

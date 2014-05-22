@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_pthread.h,v 1.1.1.1 2014/02/28 17:40:09 christos Exp $	*/
+/*	$NetBSD: dlz_pthread.h,v 1.1.1.1.4.2 2014/05/22 15:43:09 yamt Exp $	*/
 
 /*
  * Copyright (C) 2013  Internet Systems Consortium, Inc. ("ISC")

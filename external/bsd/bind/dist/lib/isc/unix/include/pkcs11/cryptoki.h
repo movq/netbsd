@@ -1,4 +1,4 @@
-/*	$NetBSD: cryptoki.h,v 1.1.1.1 2014/02/28 17:40:15 christos Exp $	*/
+/*	$NetBSD: cryptoki.h,v 1.1.1.1.4.2 2014/05/22 15:43:22 yamt Exp $	*/
 
 /* cryptoki.h include file for PKCS #11. */
 /*

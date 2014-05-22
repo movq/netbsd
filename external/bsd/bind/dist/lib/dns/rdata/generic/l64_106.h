@@ -1,4 +1,4 @@
-/*	$NetBSD: l64_106.h,v 1.1.1.1 2013/07/27 15:23:16 christos Exp $	*/
+/*	$NetBSD: l64_106.h,v 1.1.1.1.4.2 2014/05/22 15:43:18 yamt Exp $	*/
 
 /*
  * Copyright (C) 2013  Internet Systems Consortium, Inc. ("ISC")

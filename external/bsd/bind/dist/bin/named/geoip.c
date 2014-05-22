@@ -1,4 +1,4 @@
-/*	$NetBSD: geoip.c,v 1.1.1.1 2014/02/28 17:40:06 christos Exp $	*/
+/*	$NetBSD: geoip.c,v 1.1.1.1.4.2 2014/05/22 15:42:46 yamt Exp $	*/
 
 /*
  * Copyright (C) 2013, 2014  Internet Systems Consortium, Inc. ("ISC")
