@@ -1,4 +1,4 @@
-/*	$NetBSD: options.c,v 1.2 2013/11/28 22:33:42 christos Exp $	*/
+/*	$NetBSD: options.c,v 1.2.4.2 2014/05/22 15:51:08 yamt Exp $	*/
 
 /*
  * options.c - handles option processing for PPP.
@@ -47,7 +47,7 @@
 #define RCSID	"Id: options.c,v 1.102 2008/06/15 06:53:06 paulus Exp "
 static const char rcsid[] = RCSID;
 #else
-__RCSID("$NetBSD: options.c,v 1.2 2013/11/28 22:33:42 christos Exp $");
+__RCSID("$NetBSD: options.c,v 1.2.4.2 2014/05/22 15:51:08 yamt Exp $");
 #endif
 
 #include <ctype.h>

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2013/11/28 22:33:42 christos Exp $
+#	$NetBSD: Makefile,v 1.1.4.2 2014/05/22 15:51:08 yamt Exp $
 
 SUBDIR=	usr.sbin
 

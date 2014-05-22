@@ -1,4 +1,4 @@
-/*	$NetBSD: deflate.c,v 1.2 2013/11/28 22:33:42 christos Exp $	*/
+/*	$NetBSD: deflate.c,v 1.2.4.2 2014/05/22 15:51:08 yamt Exp $	*/
 
 /*
  * ppp_deflate.c - interface the zlib procedures for Deflate compression
@@ -38,7 +38,7 @@
  * Id: deflate.c,v 1.5 2004/01/17 05:47:55 carlsonj Exp
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: deflate.c,v 1.2 2013/11/28 22:33:42 christos Exp $");
+__RCSID("$NetBSD: deflate.c,v 1.2.4.2 2014/05/22 15:51:08 yamt Exp $");
 
 #include <sys/types.h>
 #include <stdio.h>
