@@ -1,4 +1,4 @@
-/*	$NetBSD: h_dns_server.c,v 1.4 2014/03/29 16:10:54 gson Exp $	*/
+/*	$NetBSD: h_dns_server.c,v 1.4.4.2 2014/05/22 11:42:20 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: h_dns_server.c,v 1.4 2014/03/29 16:10:54 gson Exp $");
+__RCSID("$NetBSD: h_dns_server.c,v 1.4.4.2 2014/05/22 11:42:20 yamt Exp $");
 
 #include <ctype.h>
 #include <err.h>

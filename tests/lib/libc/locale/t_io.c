@@ -1,4 +1,4 @@
-/* $NetBSD: t_io.c,v 1.4 2014/01/21 00:32:16 yamt Exp $ */
+/* $NetBSD: t_io.c,v 1.4.4.2 2014/05/22 11:42:20 yamt Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2011\
  The NetBSD Foundation, inc. All rights reserved.");
-__RCSID("$NetBSD: t_io.c,v 1.4 2014/01/21 00:32:16 yamt Exp $");
+__RCSID("$NetBSD: t_io.c,v 1.4.4.2 2014/05/22 11:42:20 yamt Exp $");
 
 #include <sys/param.h>
 #include <errno.h>

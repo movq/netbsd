@@ -1,4 +1,4 @@
-/* $NetBSD: h_null.c,v 1.3 2014/01/17 19:35:33 pgoyette Exp $ */
+/* $NetBSD: h_null.c,v 1.3.4.2 2014/05/22 11:42:17 yamt Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

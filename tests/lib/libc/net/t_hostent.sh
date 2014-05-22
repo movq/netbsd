@@ -1,4 +1,4 @@
-# $NetBSD: t_hostent.sh,v 1.10 2014/01/13 11:08:14 gson Exp $
+# $NetBSD: t_hostent.sh,v 1.10.4.2 2014/05/22 11:42:20 yamt Exp $
 #
 # Copyright (c) 2008 The NetBSD Foundation, Inc.
 # All rights reserved.

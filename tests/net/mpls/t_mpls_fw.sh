@@ -1,4 +1,4 @@
-# $NetBSD: t_mpls_fw.sh,v 1.4 2014/03/18 18:20:44 riastradh Exp $
+# $NetBSD: t_mpls_fw.sh,v 1.4.4.2 2014/05/22 11:42:22 yamt Exp $
 #
 # Copyright (c) 2013 The NetBSD Foundation, Inc.
 # All rights reserved.

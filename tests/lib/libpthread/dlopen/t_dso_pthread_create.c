@@ -1,4 +1,4 @@
-/*	$NetBSD: t_dso_pthread_create.c,v 1.1 2013/03/21 16:50:21 christos Exp $ */
+/*	$NetBSD: t_dso_pthread_create.c,v 1.1.10.2 2014/05/22 11:42:22 yamt Exp $ */
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_dso_pthread_create.c,v 1.1 2013/03/21 16:50:21 christos Exp $");
+__RCSID("$NetBSD: t_dso_pthread_create.c,v 1.1.10.2 2014/05/22 11:42:22 yamt Exp $");
 
 #include <sys/resource.h>
 #include <atf-c.h>

@@ -1,7 +1,7 @@
-/*	$NetBSD: t_rpc.c,v 1.3 2013/02/28 15:56:53 christos Exp $	*/
+/*	$NetBSD: t_rpc.c,v 1.3.10.2 2014/05/22 11:42:20 yamt Exp $	*/
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_rpc.c,v 1.3 2013/02/28 15:56:53 christos Exp $");
+__RCSID("$NetBSD: t_rpc.c,v 1.3.10.2 2014/05/22 11:42:20 yamt Exp $");
 
 #include <sys/types.h>
 #include <sys/socket.h>

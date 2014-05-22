@@ -1,4 +1,4 @@
-/* $NetBSD: t_libm.h,v 1.6 2014/03/25 17:30:14 joerg Exp $ */
+/* $NetBSD: t_libm.h,v 1.6.4.2 2014/05/22 11:42:21 yamt Exp $ */
 
 /*
  * Check result of fn(arg) is correct within the bounds.

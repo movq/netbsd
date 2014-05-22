@@ -1,4 +1,4 @@
-/*	$NetBSD: h_pthread_dlopen.c,v 1.1 2013/03/21 16:50:22 christos Exp $ */
+/*	$NetBSD: h_pthread_dlopen.c,v 1.1.10.2 2014/05/22 11:42:22 yamt Exp $ */
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: h_pthread_dlopen.c,v 1.1 2013/03/21 16:50:22 christos Exp $");
+__RCSID("$NetBSD: h_pthread_dlopen.c,v 1.1.10.2 2014/05/22 11:42:22 yamt Exp $");
 
 #if 0
 #include <atf-c.h>
