@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.gcc_path,v 1.1 2014/02/26 09:54:32 mrg Exp $
+#	$NetBSD: Makefile.gcc_path,v 1.1.4.2 2014/05/22 16:53:12 yamt Exp $
 
 # Define some commom paths
 

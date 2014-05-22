@@ -1,3 +1,3 @@
-# $NetBSD: Makefile.inc,v 1.3 2014/03/01 10:00:47 mrg Exp $
+# $NetBSD: Makefile.inc,v 1.3.4.2 2014/05/22 16:53:33 yamt Exp $
 
 .include "../Makefile.inc"
