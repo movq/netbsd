@@ -1,4 +1,4 @@
-#	$NetBSD: NetBSD.dist.powerpc64,v 1.1 2014/03/07 04:18:06 matt Exp $
+#	$NetBSD: NetBSD.dist.powerpc64,v 1.1.4.2 2014/05/22 11:27:20 yamt Exp $
 
 ./lib/powerpc
 ./lib/powerpc/npf
