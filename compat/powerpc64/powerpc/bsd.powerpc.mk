@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.powerpc.mk,v 1.2 2014/03/07 05:48:30 matt Exp $
+#	$NetBSD: bsd.powerpc.mk,v 1.2.4.2 2014/05/22 11:26:35 yamt Exp $
 
 LD+=			-m elf32ppc_nbsd
 MLIBDIR=		powerpc

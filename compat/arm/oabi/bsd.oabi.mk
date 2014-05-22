@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.oabi.mk,v 1.2 2013/12/15 18:08:37 joerg Exp $
+#	$NetBSD: bsd.oabi.mk,v 1.2.4.2 2014/05/22 11:26:35 yamt Exp $
 
 MLIBDIR=		oabi
 .if ${MACHINE_ARCH:M*eb} != ""
