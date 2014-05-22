@@ -1,4 +1,4 @@
-/*	$NetBSD: bsd-comp.c,v 1.2 2013/11/28 22:33:42 christos Exp $	*/
+/*	$NetBSD: bsd-comp.c,v 1.2.4.2 2014/05/22 15:51:08 yamt Exp $	*/
 
 /* Because this code is derived from the 4.3BSD compress source:
  *
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: bsd-comp.c,v 1.2 2013/11/28 22:33:42 christos Exp $");
+__RCSID("$NetBSD: bsd-comp.c,v 1.2.4.2 2014/05/22 15:51:08 yamt Exp $");
 
 /*
  * Id: bsd-comp.c,v 1.4 2004/01/17 05:47:55 carlsonj Exp

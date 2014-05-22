@@ -1,4 +1,4 @@
-/*	$NetBSD: pppcrypt.c,v 1.2 2013/11/28 22:33:42 christos Exp $	*/
+/*	$NetBSD: pppcrypt.c,v 1.2.4.2 2014/05/22 15:51:08 yamt Exp $	*/
 
 /*
  * pppcrypt.c - PPP/DES linkage for MS-CHAP and EAP SRP-SHA1
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pppcrypt.c,v 1.2 2013/11/28 22:33:42 christos Exp $");
+__RCSID("$NetBSD: pppcrypt.c,v 1.2.4.2 2014/05/22 15:51:08 yamt Exp $");
 
 #include <errno.h>
 #include <stdlib.h>

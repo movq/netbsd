@@ -1,4 +1,4 @@
-/*	$NetBSD: auth.c,v 1.2 2013/11/28 22:33:42 christos Exp $	*/
+/*	$NetBSD: auth.c,v 1.2.4.2 2014/05/22 15:51:08 yamt Exp $	*/
 
 /*
  * auth.c - PPP authentication and phase control.
@@ -75,7 +75,7 @@
 #define RCSID	"Id: auth.c,v 1.117 2008/07/01 12:27:56 paulus Exp "
 static const char rcsid[] = RCSID;
 #else
-__RCSID("$NetBSD: auth.c,v 1.2 2013/11/28 22:33:42 christos Exp $");
+__RCSID("$NetBSD: auth.c,v 1.2.4.2 2014/05/22 15:51:08 yamt Exp $");
 #endif
 
 #include <stdio.h>
