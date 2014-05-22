@@ -1,4 +1,4 @@
-/*	$NetBSD: savestr.c,v 1.1.1.1 2014/02/28 17:40:10 christos Exp $	*/
+/*	$NetBSD: savestr.c,v 1.1.1.1.4.2 2014/05/22 15:43:10 yamt Exp $	*/
 
 /*
  * Copyright (c) 1997
