@@ -1,4 +1,4 @@
-/* $NetBSD: newlocale.c,v 1.3 2013/09/13 13:13:32 joerg Exp $ */
+/* $NetBSD: newlocale.c,v 1.3.4.2 2014/05/22 11:36:52 yamt Exp $ */
 
 /*-
  * Copyright (c)2008, 2011 Citrus Project,
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: newlocale.c,v 1.3 2013/09/13 13:13:32 joerg Exp $");
+__RCSID("$NetBSD: newlocale.c,v 1.3.4.2 2014/05/22 11:36:52 yamt Exp $");
 
 #include "namespace.h"
 #include <assert.h>

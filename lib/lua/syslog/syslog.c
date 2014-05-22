@@ -1,4 +1,4 @@
-/*	$NetBSD: syslog.c,v 1.1 2013/11/12 14:32:03 mbalmer Exp $ */
+/*	$NetBSD: syslog.c,v 1.1.4.2 2014/05/22 11:37:01 yamt Exp $ */
 
 /*
  * Copyright (c) 2013 Marc Balmer <marc@msys.ch>

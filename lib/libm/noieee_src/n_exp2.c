@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: n_exp2.c,v 1.3 2014/03/23 15:26:47 martin Exp $");
+__RCSID("$NetBSD: n_exp2.c,v 1.3.4.2 2014/05/22 11:36:57 yamt Exp $");
 #ifdef __FBSDID
 __FBSDID("$FreeBSD: src/lib/msun/src/s_exp2.c,v 1.7 2008/02/22 02:27:34 das Exp $");
 #endif

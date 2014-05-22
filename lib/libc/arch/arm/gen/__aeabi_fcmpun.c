@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: __aeabi_fcmpun.c,v 1.1 2013/01/26 07:04:22 matt Exp $");
+__RCSID("$NetBSD: __aeabi_fcmpun.c,v 1.1.10.2 2014/05/22 11:36:46 yamt Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <arm/aeabi.h>

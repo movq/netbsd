@@ -1,4 +1,4 @@
-/*	$NetBSD: s_fmaf.c,v 1.2 2013/02/11 01:29:58 christos Exp $	*/
+/*	$NetBSD: s_fmaf.c,v 1.2.10.2 2014/05/22 11:36:57 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2005-2011 David Schultz <das@FreeBSD.ORG>
@@ -30,7 +30,7 @@
 #if 0
 __FBSDID("$FreeBSD: src/lib/msun/src/s_fmaf.c,v 1.3 2011/10/15 04:16:58 das Exp $");
 #else
-__RCSID("$NetBSD: s_fmaf.c,v 1.2 2013/02/11 01:29:58 christos Exp $");
+__RCSID("$NetBSD: s_fmaf.c,v 1.2.10.2 2014/05/22 11:36:57 yamt Exp $");
 #endif
 
 #include <fenv.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: floatunsisf_ieee754.c,v 1.1 2013/08/23 16:01:35 matt Exp $	*/
+/*	$NetBSD: floatunsisf_ieee754.c,v 1.1.4.2 2014/05/22 11:36:52 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: floatunsisf_ieee754.c,v 1.1 2013/08/23 16:01:35 matt Exp $");
+__RCSID("$NetBSD: floatunsisf_ieee754.c,v 1.1.4.2 2014/05/22 11:36:52 yamt Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #if defined(SOFTFLOAT) || defined(__ARM_EABI__)

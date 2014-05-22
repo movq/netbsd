@@ -29,7 +29,7 @@
 
 #include <arm/asm.h>
 
-RCSID("$NetBSD: lrint.S,v 1.1 2013/02/11 12:43:03 matt Exp $")
+RCSID("$NetBSD: lrint.S,v 1.1.10.2 2014/05/22 11:36:56 yamt Exp $")
 
 STRONG_ALIAS(_lrintl, _lrint)
 WEAK_ALIAS(lrintl, _lrintl)

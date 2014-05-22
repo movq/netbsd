@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: fenv.c,v 1.3 2013/05/01 04:04:54 matt Exp $");
+__RCSID("$NetBSD: fenv.c,v 1.3.8.2 2014/05/22 11:36:56 yamt Exp $");
 
 #include <sys/types.h>
 #include <assert.h>

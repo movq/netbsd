@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2013/08/25 14:20:30 matt Exp $
+#	$NetBSD: Makefile,v 1.6.4.2 2014/05/22 11:36:56 yamt Exp $
 
 .include <bsd.obj.mk>		# Pull in OBJDIR name rules.
 .include <bsd.own.mk>

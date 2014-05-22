@@ -1,4 +1,4 @@
-/* $NetBSD: mknodat.c,v 1.1 2013/10/17 18:01:11 njoly Exp $ */
+/* $NetBSD: mknodat.c,v 1.1.4.2 2014/05/22 11:36:54 yamt Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

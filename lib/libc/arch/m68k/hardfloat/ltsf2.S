@@ -1,4 +1,4 @@
-/*	$NetBSD: ltsf2.S,v 1.2 2014/03/18 18:20:37 riastradh Exp $	*/
+/*	$NetBSD: ltsf2.S,v 1.2.4.2 2014/05/22 11:36:47 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -36,7 +36,7 @@
 #include <machine/asm.h>
 
 #if defined(LIBC_SCCS) && !defined(lint)
-RCSID("$NetBSD: ltsf2.S,v 1.2 2014/03/18 18:20:37 riastradh Exp $")
+RCSID("$NetBSD: ltsf2.S,v 1.2.4.2 2014/05/22 11:36:47 yamt Exp $")
 #endif /* LIBC_SCCS and not lint */
 
 STRONG_ALIAS(__gesf2,__ltsf2)

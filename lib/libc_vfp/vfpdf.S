@@ -29,7 +29,7 @@
 
 #include <arm/asm.h>
 
-RCSID("$NetBSD: vfpdf.S,v 1.2 2013/06/23 06:19:55 matt Exp $")
+RCSID("$NetBSD: vfpdf.S,v 1.2.6.2 2014/05/22 11:36:55 yamt Exp $")
 
 /*
  * This file provides softfloat compatible routines which use VFP instructions

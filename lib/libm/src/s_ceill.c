@@ -12,7 +12,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: s_ceill.c,v 1.1 2013/11/11 23:57:34 joerg Exp $");
+__RCSID("$NetBSD: s_ceill.c,v 1.1.4.2 2014/05/22 11:36:57 yamt Exp $");
 #if 0
 __FBSDID("$FreeBSD: head/lib/msun/src/s_ceill.c 176280 2008-02-14 15:10:34Z bde $");
 #endif

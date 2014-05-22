@@ -1,4 +1,4 @@
-/* $NetBSD: freelocale.c,v 1.2 2013/05/17 12:55:57 joerg Exp $ */
+/* $NetBSD: freelocale.c,v 1.2.8.2 2014/05/22 11:36:52 yamt Exp $ */
 
 /*-
  * Copyright (c)2008, 2011 Citrus Project,
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: freelocale.c,v 1.2 2013/05/17 12:55:57 joerg Exp $");
+__RCSID("$NetBSD: freelocale.c,v 1.2.8.2 2014/05/22 11:36:52 yamt Exp $");
 
 #include "namespace.h"
 

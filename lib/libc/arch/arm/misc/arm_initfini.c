@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 
-__RCSID("$NetBSD: arm_initfini.c,v 1.7 2013/09/08 13:15:53 matt Exp $");
+__RCSID("$NetBSD: arm_initfini.c,v 1.7.4.2 2014/05/22 11:36:46 yamt Exp $");
 
 #include "namespace.h"
 

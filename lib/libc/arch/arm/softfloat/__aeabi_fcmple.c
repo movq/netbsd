@@ -1,4 +1,4 @@
-/* $NetBSD: __aeabi_fcmple.c,v 1.1 2013/04/16 10:37:39 matt Exp $ */
+/* $NetBSD: __aeabi_fcmple.c,v 1.1.8.2 2014/05/22 11:36:46 yamt Exp $ */
 
 /*
  * Written by Ben Harris, 2000.  This file is in the Public Domain.
@@ -10,7 +10,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: __aeabi_fcmple.c,v 1.1 2013/04/16 10:37:39 matt Exp $");
+__RCSID("$NetBSD: __aeabi_fcmple.c,v 1.1.8.2 2014/05/22 11:36:46 yamt Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 int __aeabi_fcmple(float32, float32);

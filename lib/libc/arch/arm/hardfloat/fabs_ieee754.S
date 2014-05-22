@@ -29,7 +29,7 @@
 
 #include <arm/asm.h>
 
-RCSID("$NetBSD: fabs_ieee754.S,v 1.1 2014/01/17 22:19:46 joerg Exp $")
+RCSID("$NetBSD: fabs_ieee754.S,v 1.1.4.2 2014/05/22 11:36:46 yamt Exp $")
 
 	.fpu	vfp
 
