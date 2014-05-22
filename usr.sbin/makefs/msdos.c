@@ -1,4 +1,4 @@
-/*	$NetBSD: msdos.c,v 1.14 2013/02/03 03:21:21 christos Exp $	*/
+/*	$NetBSD: msdos.c,v 1.14.10.2 2014/05/22 11:43:05 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: msdos.c,v 1.14 2013/02/03 03:21:21 christos Exp $");
+__RCSID("$NetBSD: msdos.c,v 1.14.10.2 2014/05/22 11:43:05 yamt Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>

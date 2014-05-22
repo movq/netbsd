@@ -1,4 +1,4 @@
-/*	$NetBSD: sparc.c,v 1.1 2013/03/04 20:10:51 christos Exp $	*/
+/*	$NetBSD: sparc.c,v 1.1.10.2 2014/05/22 11:43:02 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: sparc.c,v 1.1 2013/03/04 20:10:51 christos Exp $");
+__RCSID("$NetBSD: sparc.c,v 1.1.10.2 2014/05/22 11:43:02 yamt Exp $");
 #endif /* not lint */
 
 #include <ddb/ddb.h>

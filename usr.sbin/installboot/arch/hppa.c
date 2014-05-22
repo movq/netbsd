@@ -1,4 +1,4 @@
-/*	$NetBSD: hppa.c,v 1.1 2014/02/24 07:23:44 skrll Exp $	*/
+/*	$NetBSD: hppa.c,v 1.1.4.2 2014/05/22 11:43:04 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(__lint)
-__RCSID("$NetBSD: hppa.c,v 1.1 2014/02/24 07:23:44 skrll Exp $");
+__RCSID("$NetBSD: hppa.c,v 1.1.4.2 2014/05/22 11:43:04 yamt Exp $");
 #endif	/* !__lint */
 
 /* We need the target disklabel.h, not the hosts one..... */

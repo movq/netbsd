@@ -1,4 +1,4 @@
-/*	$NetBSD: arm.c,v 1.1 2013/01/31 23:40:48 matt Exp $	*/
+/*	$NetBSD: arm.c,v 1.1.10.2 2014/05/22 11:43:02 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: arm.c,v 1.1 2013/01/31 23:40:48 matt Exp $");
+__RCSID("$NetBSD: arm.c,v 1.1.10.2 2014/05/22 11:43:02 yamt Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>

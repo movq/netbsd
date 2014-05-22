@@ -1,4 +1,4 @@
-/*	$NetBSD: msdos.h,v 1.2 2013/01/26 00:31:49 christos Exp $	*/
+/*	$NetBSD: msdos.h,v 1.2.10.2 2014/05/22 11:43:05 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
