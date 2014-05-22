@@ -1,7 +1,7 @@
 /*
  * cvt_pt.c
  *
- *	Covert partition type.	$Revision: 1.2 $
+ *	Covert partition type.	$Revision: 1.2.10.2 $
  *
  *	Copyright (c)  1999, Eryk Vershen
  * 
