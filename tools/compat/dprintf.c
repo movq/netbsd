@@ -1,4 +1,4 @@
-/*	$NetBSD: dprintf.c,v 1.2 2013/03/05 16:29:09 christos Exp $	*/
+/*	$NetBSD: dprintf.c,v 1.2.10.2 2014/05/22 11:42:30 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2013 NetBSD Foundation, Inc.

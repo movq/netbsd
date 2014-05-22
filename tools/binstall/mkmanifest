@@ -10,7 +10,7 @@ makeone() {
 	esac
 cat << _EOF > ${1%.exe}.exe.manifest
 <?xml version="1.0" encoding="UTF-8" standalone="yes"?>
-<!-- $NetBSD: mkmanifest,v 1.1 2013/02/17 00:36:40 christos Exp $ -->
+<!-- $NetBSD: mkmanifest,v 1.1.10.2 2014/05/22 11:42:30 yamt Exp $ -->
 <assembly xmlns="urn:schemas-microsoft-com:asm.v1" manifestVersion="1.0">
   <assemblyIdentity version="1.0.0.0"
      processorArchitecture="X86"
