@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2014/02/24 07:23:40 skrll Exp $
+#	$NetBSD: Makefile,v 1.1.4.2 2014/05/22 11:37:51 yamt Exp $
 #	from: @(#)Makefile	8.1 (Berkeley) 6/18/93
 
 MAN=	asp.4 astro.4 cpu.4 dino.4 elroy.4 gsc.4 gsckbc.4 harmony.4 intro.4 \

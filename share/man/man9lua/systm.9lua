@@ -1,4 +1,4 @@
-.\"	$NetBSD: systm.9lua,v 1.2 2014/01/06 13:03:33 wiz Exp $
+.\"	$NetBSD: systm.9lua,v 1.2.4.2 2014/05/22 11:37:53 yamt Exp $
 .\"
 .\" Copyright (c) 2013 Marc Balmer <mbalmer@NetBSD.org>. All rights reserved.
 .\"

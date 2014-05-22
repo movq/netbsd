@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.host.mk,v 1.2 2014/04/10 19:02:18 plunky Exp $
+#	$NetBSD: bsd.host.mk,v 1.2.2.2 2014/05/22 11:37:53 yamt Exp $
 
 .if !defined(_BSD_HOST_MK_)
 _BSD_HOST_MK_=1

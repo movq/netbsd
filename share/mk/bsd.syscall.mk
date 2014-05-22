@@ -1,4 +1,4 @@
-# $NetBSD: bsd.syscall.mk,v 1.2 2014/01/16 01:19:46 christos Exp $
+# $NetBSD: bsd.syscall.mk,v 1.2.4.2 2014/05/22 11:37:53 yamt Exp $
 #
 .include <bsd.own.mk>
 
