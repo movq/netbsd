@@ -1,5 +1,4 @@
-# Copyright 2004-2013 Free Software Foundation, Inc.
-
+# Copyright 2012-2013 Free Software Foundation, Inc.
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 3 of the License, or
@@ -12,23 +11,22 @@
 #
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
-load_lib dwarf.exp
 
-# Minimal DWARF-2 unit test
+standard_testfile .cc
 
-# This test can only be run on targets which support DWARF-2 and use gas.
-if {![dwarf2_support]} {
-    return 0
-}
-
-standard_testfile .S
-set dwarf_srcfile "file1.txt"
-
-if {[prepare_for_testing_full $testfile.exp \
-	 [list $testfile debug main.c debug $srcfile nodebug]]} {
+if {[prepare_for_testing $testfile.exp $testfile $srcfile {debug c++}]} {
     return -1
 }
 
-# Force the debugger to create the file1.txt symtab, to make sure that
-# the debugger does not crash doing so.
-gdb_test "list file1.txt:1" "File 1 Line 1.*File 1 Line 8" "list file1.txt"
+runto "foo"
+
+# This would cause reading debug info with using_directives pointing to
+# freed memory.
+# http://sourceware.org/bugzilla/show_bug.cgi?id=14601
+# Note: You may need to compile with -fdebug-types-section to see the crash.
+set test "reload file"
+if { [gdb_file_cmd "$binfile"] == 0 } {
+    pass $test
+} else {
+    fail $test
+}

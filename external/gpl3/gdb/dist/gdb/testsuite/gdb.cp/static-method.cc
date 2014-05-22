@@ -1,6 +1,6 @@
 /* This testcase is part of GDB, the GNU debugger.
 
-   Copyright 2009-2013 Free Software Foundation, Inc.
+   Copyright 2011-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -15,16 +15,32 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-extern void func_nofb (void);
-extern void func_loopfb (void);
+namespace xxx
+{
+  namespace
+  {
+    static int func (void) { return 0; } // xxx::func
+    class A
+    {
+    public:
+      static int func (void) { return 0; } // xxx::A::func
+    };
+  }
+}
+
+int
+test_function (void)
+{
+  return xxx::func () + xxx::A::func ();
+}
 
 int
 main (void)
 {
-  int main_var = 1;
+  int i, x;
 
-  func_nofb ();
-  func_loopfb ();
+  for (i = 0; i < 1000; ++i)
+    x += test_function ();
 
-  return 0;
+  return x;
 }
