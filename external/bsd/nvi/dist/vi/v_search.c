@@ -1,4 +1,4 @@
-/*	$NetBSD: v_search.c,v 1.6 2014/01/26 21:43:45 christos Exp $ */
+/*	$NetBSD: v_search.c,v 1.6.4.2 2014/05/22 15:50:36 yamt Exp $ */
 /*-
  * Copyright (c) 1992, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -16,7 +16,7 @@
 static const char sccsid[] = "Id: v_search.c,v 10.30 2001/09/11 20:52:46 skimo Exp  (Berkeley) Date: 2001/09/11 20:52:46 ";
 #endif /* not lint */
 #else
-__RCSID("$NetBSD: v_search.c,v 1.6 2014/01/26 21:43:45 christos Exp $");
+__RCSID("$NetBSD: v_search.c,v 1.6.4.2 2014/05/22 15:50:36 yamt Exp $");
 #endif
 
 #include <sys/types.h>

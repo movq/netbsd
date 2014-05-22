@@ -1,4 +1,4 @@
-/*	$NetBSD: m_motif.h,v 1.2 2013/11/22 15:52:06 christos Exp $	*/
+/*	$NetBSD: m_motif.h,v 1.2.4.2 2014/05/22 15:50:35 yamt Exp $	*/
 /*-
  * Copyright (c) 1996
  *	Rob Zimmermann.  All rights reserved.

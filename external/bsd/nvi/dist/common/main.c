@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.6 2014/01/26 21:43:45 christos Exp $ */
+/*	$NetBSD: main.c,v 1.6.4.2 2014/05/22 15:50:33 yamt Exp $ */
 /*-
  * Copyright (c) 1992, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -20,7 +20,7 @@ static const char copyright[] =
 	Keith Bostic.  All rights reserved.\n";
 #endif /* not lint */
 #else
-__RCSID("$NetBSD: main.c,v 1.6 2014/01/26 21:43:45 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.6.4.2 2014/05/22 15:50:33 yamt Exp $");
 #endif
 
 #include <sys/cdefs.h>
@@ -29,7 +29,7 @@ __RCSID("$NetBSD: main.c,v 1.6 2014/01/26 21:43:45 christos Exp $");
 static const char sccsid[] = "Id: main.c,v 10.63 2001/11/01 15:24:43 skimo Exp  (Berkeley) Date: 2001/11/01 15:24:43 ";
 #endif /* not lint */
 #else
-__RCSID("$NetBSD: main.c,v 1.6 2014/01/26 21:43:45 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.6.4.2 2014/05/22 15:50:33 yamt Exp $");
 #endif
 
 #include <sys/types.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: trace.c,v 1.4 2014/01/26 21:43:45 christos Exp $	*/
+/*	$NetBSD: trace.c,v 1.4.4.2 2014/05/22 15:50:33 yamt Exp $	*/
 /*-
  * Copyright (c) 1996
  *	Rob Zimmermann.  All rights reserved.
@@ -16,7 +16,7 @@
 static const char sccsid[] = "Id: trace.c,v 8.4 1997/08/03 15:04:23 bostic Exp  (Berkeley) Date: 1997/08/03 15:04:23 ";
 #endif /* not lint */
 #else
-__RCSID("$NetBSD: trace.c,v 1.4 2014/01/26 21:43:45 christos Exp $");
+__RCSID("$NetBSD: trace.c,v 1.4.4.2 2014/05/22 15:50:33 yamt Exp $");
 #endif
 
 #include <sys/queue.h>

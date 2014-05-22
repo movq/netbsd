@@ -1,4 +1,4 @@
-/*	$NetBSD: common.h,v 1.3 2014/01/07 02:14:02 joerg Exp $ */
+/*	$NetBSD: common.h,v 1.3.4.2 2014/05/22 15:50:33 yamt Exp $ */
 /*-
  * Copyright (c) 1991, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.

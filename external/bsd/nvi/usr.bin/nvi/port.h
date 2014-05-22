@@ -1,4 +1,4 @@
-/* $Id: port.h,v 1.2 2013/11/29 22:56:19 christos Exp $ (Berkeley) $Date: 2013/11/29 22:56:19 $ */
+/* $Id: port.h,v 1.2.4.2 2014/05/22 15:50:36 yamt Exp $ (Berkeley) $Date: 2014/05/22 15:50:36 $ */
 
 /*
  * Declare the basic types, if they aren't already declared.  Named and

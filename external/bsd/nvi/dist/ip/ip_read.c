@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_read.c,v 1.7 2014/01/26 21:43:45 christos Exp $	*/
+/*	$NetBSD: ip_read.c,v 1.7.4.2 2014/05/22 15:50:35 yamt Exp $	*/
 /*-
  * Copyright (c) 1996
  *	Keith Bostic.  All rights reserved.
@@ -14,7 +14,7 @@
 static const char sccsid[] = "Id: ip_read.c,v 8.23 2001/06/25 15:19:24 skimo Exp  (Berkeley) Date: 2001/06/25 15:19:24 ";
 #endif /* not lint */
 #else
-__RCSID("$NetBSD: ip_read.c,v 1.7 2014/01/26 21:43:45 christos Exp $");
+__RCSID("$NetBSD: ip_read.c,v 1.7.4.2 2014/05/22 15:50:35 yamt Exp $");
 #endif
 
 #include <sys/types.h>

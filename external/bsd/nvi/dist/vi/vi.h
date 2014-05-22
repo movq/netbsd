@@ -1,4 +1,4 @@
-/*	$NetBSD: vi.h,v 1.2 2013/11/22 15:52:06 christos Exp $ */
+/*	$NetBSD: vi.h,v 1.2.4.2 2014/05/22 15:50:36 yamt Exp $ */
 /*-
  * Copyright (c) 1992, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.

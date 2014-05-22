@@ -9,7 +9,7 @@ i\
 }' -e '/^#endif.*not\ lint.*/ {
 a\
 #else\
-__RCSID("$NetBSD: addrcsid,v 1.1 2014/01/26 21:46:49 christos Exp $");\
+__RCSID("$NetBSD: addrcsid,v 1.1.4.2 2014/05/22 15:50:32 yamt Exp $");\
 #endif
 }' $i > tmp$$ && mv tmp$$ $i
 done

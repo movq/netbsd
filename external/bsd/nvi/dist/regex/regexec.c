@@ -1,4 +1,4 @@
-/*	$NetBSD: regexec.c,v 1.5 2014/01/26 21:47:00 christos Exp $ */
+/*	$NetBSD: regexec.c,v 1.5.4.2 2014/05/22 15:50:35 yamt Exp $ */
 /*-
  * Copyright (c) 1992, 1993, 1994 Henry Spencer.
  * Copyright (c) 1992, 1993, 1994
@@ -44,7 +44,7 @@
 static char sccsid[] = "@(#)regexec.c	8.2 (Berkeley) 3/16/94";
 #endif /* LIBC_SCCS and not lint */
 #else
-__RCSID("$NetBSD: regexec.c,v 1.5 2014/01/26 21:47:00 christos Exp $");
+__RCSID("$NetBSD: regexec.c,v 1.5.4.2 2014/05/22 15:50:35 yamt Exp $");
 #endif
 
 /*
