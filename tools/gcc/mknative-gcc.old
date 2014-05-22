@@ -1,5 +1,5 @@
 #!/bin/sh
-#	$NetBSD: mknative-gcc.old,v 1.1 2014/02/26 09:54:34 mrg Exp $
+#	$NetBSD: mknative-gcc.old,v 1.1.4.2 2014/05/22 11:42:30 yamt Exp $
 #
 # was: NetBSD: mknative-gcc,v 1.75 2014/02/16 11:26:31 skrll Exp
 #
