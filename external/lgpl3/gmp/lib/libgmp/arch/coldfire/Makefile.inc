@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.3 2013/12/04 00:49:17 mrg Exp $
+#	$NetBSD: Makefile.inc,v 1.3.4.2 2014/05/22 14:09:11 yamt Exp $
 
 SRCS+= \
 	random.c \
