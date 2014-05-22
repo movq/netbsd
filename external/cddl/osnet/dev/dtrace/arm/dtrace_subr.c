@@ -1,4 +1,4 @@
-/*	$NetBSD: dtrace_subr.c,v 1.2 2014/03/10 03:04:57 ozaki-r Exp $	*/
+/*	$NetBSD: dtrace_subr.c,v 1.2.4.2 2014/05/22 14:01:22 yamt Exp $	*/
 
 /*
  * CDDL HEADER START

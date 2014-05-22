@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.ctf,v 1.2 2014/03/09 22:01:31 christos Exp $
+#	$NetBSD: Makefile.ctf,v 1.2.4.2 2014/05/22 14:01:22 yamt Exp $
 
 CPPFLAGS+=	-I${OSNETDIR}/sys \
 		-I${OSNETDIR}/include \

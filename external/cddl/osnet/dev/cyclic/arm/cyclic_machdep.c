@@ -1,4 +1,4 @@
-/*	$NetBSD: cyclic_machdep.c,v 1.1 2014/03/05 06:35:44 ozaki-r Exp $	*/
+/*	$NetBSD: cyclic_machdep.c,v 1.1.4.2 2014/05/22 14:01:22 yamt Exp $	*/
 
 /*
  * Copyright 2006-2008 John Birrell <jb@FreeBSD.org>
