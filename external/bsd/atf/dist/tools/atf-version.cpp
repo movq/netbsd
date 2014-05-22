@@ -27,19 +27,42 @@
 // IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 //
 
-#include "atf-c++/macros.hpp"
+#include <cstdlib>
+#include <iostream>
 
-ATF_TEST_CASE(main);
-ATF_TEST_CASE_HEAD(main)
+#include "application.hpp"
+#include "version.hpp"
+
+class atf_version : public tools::application::app {
+    static const char* m_description;
+
+public:
+    atf_version(void);
+
+    int main(void);
+};
+
+const char* atf_version::m_description =
+    "atf-version is a tool that shows information about the currently "
+    "installed version of ATF.";
+
+atf_version::atf_version(void) :
+    app(m_description, "atf-version(1)", "atf(7)")
 {
-    set_md_var("descr", "Helper test case that always fails");
-}
-ATF_TEST_CASE_BODY(main)
-{
-    fail("This always fails");
 }
 
-ATF_INIT_TEST_CASES(tcs)
+int
+atf_version::main(void)
 {
-    ATF_ADD_TEST_CASE(tcs, main);
+    std::cout <<
+        "Automated Testing Framework " ATF_VERSION " (atf-" ATF_VERSION ")\n"
+        "Copyright (c) 2007 The NetBSD Foundation, Inc.\n";
+
+    return EXIT_SUCCESS;
+}
+
+int
+main(int argc, char* const* argv)
+{
+    return atf_version().run(argc, argv);
 }
