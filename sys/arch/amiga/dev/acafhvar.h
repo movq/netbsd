@@ -1,4 +1,4 @@
-/*	$NetBSD: acafhvar.h,v 1.3 2013/12/26 20:38:11 rkujawa Exp $ */
+/*	$NetBSD: acafhvar.h,v 1.3.6.2 2014/05/22 11:39:28 yamt Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

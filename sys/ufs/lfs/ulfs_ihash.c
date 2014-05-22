@@ -1,4 +1,4 @@
-/*	$NetBSD: ulfs_ihash.c,v 1.4 2014/02/27 16:51:39 hannken Exp $	*/
+/*	$NetBSD: ulfs_ihash.c,v 1.4.4.2 2014/05/22 11:41:19 yamt Exp $	*/
 /*  from NetBSD: ufs_ihash.c,v 1.31 2011/06/12 03:36:02 rmind Exp  */
 
 /*
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ulfs_ihash.c,v 1.4 2014/02/27 16:51:39 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ulfs_ihash.c,v 1.4.4.2 2014/05/22 11:41:19 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

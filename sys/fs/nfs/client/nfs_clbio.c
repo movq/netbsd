@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_clbio.c,v 1.2 2013/12/09 09:35:17 wiz Exp $	*/
+/*	$NetBSD: nfs_clbio.c,v 1.2.6.2 2014/05/22 11:41:00 yamt Exp $	*/
 /*-
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("FreeBSD: head/sys/fs/nfsclient/nfs_clbio.c 252072 2013-06-21 22:26:18Z rmacklem "); */
-__RCSID("$NetBSD: nfs_clbio.c,v 1.2 2013/12/09 09:35:17 wiz Exp $");
+__RCSID("$NetBSD: nfs_clbio.c,v 1.2.6.2 2014/05/22 11:41:00 yamt Exp $");
 
 #include "opt_kdtrace.h"
 

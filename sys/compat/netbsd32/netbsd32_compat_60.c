@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_compat_60.c,v 1.1 2013/03/29 01:13:54 christos Exp $	*/
+/*	$NetBSD: netbsd32_compat_60.c,v 1.1.12.2 2014/05/22 11:40:17 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_60.c,v 1.1 2013/03/29 01:13:54 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_60.c,v 1.1.12.2 2014/05/22 11:40:17 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

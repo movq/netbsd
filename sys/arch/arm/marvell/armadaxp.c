@@ -1,4 +1,4 @@
-/*	$NetBSD: armadaxp.c,v 1.8 2014/04/05 22:41:50 matt Exp $	*/
+/*	$NetBSD: armadaxp.c,v 1.8.2.2 2014/05/22 11:39:33 yamt Exp $	*/
 /*******************************************************************************
 Copyright (C) Marvell International Ltd. and its affiliates
 
@@ -37,7 +37,7 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 *******************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: armadaxp.c,v 1.8 2014/04/05 22:41:50 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: armadaxp.c,v 1.8.2.2 2014/05/22 11:39:33 yamt Exp $");
 
 #define _INTR_PRIVATE
 

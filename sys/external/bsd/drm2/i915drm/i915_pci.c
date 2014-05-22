@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_pci.c,v 1.8 2014/04/25 19:02:51 riastradh Exp $	*/
+/*	$NetBSD: i915_pci.c,v 1.8.4.2 2014/05/22 11:40:55 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_pci.c,v 1.8 2014/04/25 19:02:51 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_pci.c,v 1.8.4.2 2014/05/22 11:40:55 yamt Exp $");
 
 #ifdef _KERNEL_OPT
 #include "vga.h"

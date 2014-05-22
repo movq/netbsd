@@ -1,4 +1,4 @@
-/* $NetBSD: syscallemu_arm.c,v 1.1 2013/11/10 19:58:38 jmcneill Exp $ */
+/* $NetBSD: syscallemu_arm.c,v 1.1.6.2 2014/05/22 11:40:11 yamt Exp $ */
 
 /*-
  * Copyright (c) 2011 Reinoud Zandijk <reinoud@NetBSD.org>
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: syscallemu_arm.c,v 1.1 2013/11/10 19:58:38 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscallemu_arm.c,v 1.1.6.2 2014/05/22 11:40:11 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>

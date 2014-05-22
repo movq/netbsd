@@ -1,4 +1,4 @@
-/*	$NetBSD: time_component.c,v 1.2 2014/04/02 19:37:17 pooka Exp $	*/
+/*	$NetBSD: time_component.c,v 1.2.6.2 2014/05/22 11:41:14 yamt Exp $	*/
 
 /*
  * Copyright (c) 2014 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: time_component.c,v 1.2 2014/04/02 19:37:17 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: time_component.c,v 1.2.6.2 2014/05/22 11:41:14 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/timevar.h>

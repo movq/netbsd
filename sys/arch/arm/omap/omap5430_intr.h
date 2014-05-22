@@ -1,4 +1,4 @@
-/*	$NetBSD: omap5430_intr.h,v 1.2 2014/04/09 19:50:01 matt Exp $	*/
+/*	$NetBSD: omap5430_intr.h,v 1.2.2.2 2014/05/22 11:39:33 yamt Exp $	*/
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.

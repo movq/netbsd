@@ -1,3 +1,3 @@
-/*	$NetBSD: endian_machdep.h,v 1.2 2014/03/18 18:20:41 riastradh Exp $	*/
+/*	$NetBSD: endian_machdep.h,v 1.2.4.2 2014/05/22 11:39:44 yamt Exp $	*/
 
 #include <m68k/endian_machdep.h>

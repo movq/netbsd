@@ -1,4 +1,4 @@
-/*	$NetBSD: viper.h,v 1.1 2014/02/24 07:23:43 skrll Exp $	*/
+/*	$NetBSD: viper.h,v 1.1.6.2 2014/05/22 11:39:50 yamt Exp $	*/
 
 /*	$OpenBSD: viper.h,v 1.2 1999/06/29 20:56:10 mickey Exp $	*/
 

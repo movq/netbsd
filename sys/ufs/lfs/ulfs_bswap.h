@@ -1,4 +1,4 @@
-/*	$NetBSD: ulfs_bswap.h,v 1.6 2013/10/18 15:15:22 christos Exp $	*/
+/*	$NetBSD: ulfs_bswap.h,v 1.6.4.2 2014/05/22 11:41:19 yamt Exp $	*/
 /*  from NetBSD: ufs_bswap.h,v 1.19 2009/10/19 18:41:17 bouyer Exp  */
 
 /*

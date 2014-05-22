@@ -1,4 +1,4 @@
-/*	$NetBSD: sxreg.h,v 1.11 2013/06/19 00:41:16 macallan Exp $	*/
+/*	$NetBSD: sxreg.h,v 1.11.8.2 2014/05/22 11:40:08 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

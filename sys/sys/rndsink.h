@@ -1,4 +1,4 @@
-/*	$NetBSD: rndsink.h,v 1.1 2013/06/23 02:35:24 riastradh Exp $	*/
+/*	$NetBSD: rndsink.h,v 1.1.8.2 2014/05/22 11:41:18 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

@@ -29,7 +29,7 @@
 // The table contains unsigned byte sized elements which are 1/2 the distance
 // from lr to the target label.
 //
-	.p2align 2
+	.align 2
 DEFINE_COMPILERRT_PRIVATE_FUNCTION(__switchu8)
 	ldrb    ip, [lr, #-1]           // get first byte in table
 	cmp     r0, ip                  // compare with index
@@ -39,4 +39,7 @@ DEFINE_COMPILERRT_PRIVATE_FUNCTION(__switchu8)
 	add     ip, lr, r0, lsl #1      // compute label = lr + element*2
 	bx      ip                      // jump to computed label
 END_COMPILERRT_FUNCTION(__switchu8)
+
+	// tell linker it can break up file at label boundaries
+	.subsections_via_symbols
 

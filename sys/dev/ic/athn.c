@@ -1,4 +1,4 @@
-/*	$NetBSD: athn.c,v 1.8 2014/02/23 15:29:12 christos Exp $	*/
+/*	$NetBSD: athn.c,v 1.8.4.2 2014/05/22 11:40:22 yamt Exp $	*/
 /*	$OpenBSD: athn.c,v 1.75 2013/01/14 09:50:31 jsing Exp $	*/
 
 /*-
@@ -23,7 +23,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: athn.c,v 1.8 2014/02/23 15:29:12 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: athn.c,v 1.8.4.2 2014/05/22 11:40:22 yamt Exp $");
 
 #ifndef _MODULE
 #include "athn_usb.h"		/* for NATHN_USB */

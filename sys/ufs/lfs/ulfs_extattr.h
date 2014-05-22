@@ -1,4 +1,4 @@
-/*	$NetBSD: ulfs_extattr.h,v 1.2 2013/06/06 00:48:04 dholland Exp $	*/
+/*	$NetBSD: ulfs_extattr.h,v 1.2.10.2 2014/05/22 11:41:19 yamt Exp $	*/
 /*  from NetBSD: extattr.h,v 1.10 2011/10/09 21:15:34 chs Exp  */
 
 /*-

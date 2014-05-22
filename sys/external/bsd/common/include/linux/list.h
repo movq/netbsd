@@ -1,4 +1,4 @@
-/*	$NetBSD: list.h,v 1.1 2013/09/05 15:28:07 skrll Exp $	*/
+/*	$NetBSD: list.h,v 1.1.6.2 2014/05/22 11:40:42 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

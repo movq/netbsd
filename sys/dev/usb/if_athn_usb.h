@@ -1,4 +1,4 @@
-/*	$NetBSD: if_athn_usb.h,v 1.2 2013/03/30 14:14:31 christos Exp $	*/
+/*	$NetBSD: if_athn_usb.h,v 1.2.12.2 2014/05/22 11:40:36 yamt Exp $	*/
 /*	$OpenBSD: if_athn_usb.h,v 1.3 2012/11/10 14:35:06 mikeb Exp $	*/
 
 /*-

@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC_601,v 1.1 2014/03/03 16:09:43 macallan Exp $
+# $NetBSD: GENERIC_601,v 1.1.6.2 2014/05/22 11:39:56 yamt Exp $
 #
 # GENERIC machine description file
 # 
@@ -28,7 +28,7 @@ include		"arch/macppc/conf/std.macppc.601"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-ident 		"GENERIC-$Revision: 1.1 $"
+ident 		"GENERIC-$Revision: 1.1.6.2 $"
 
 maxusers	32
 

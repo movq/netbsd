@@ -1,4 +1,4 @@
-/*	$NetBSD: tty_component.c,v 1.1 2014/03/13 02:02:30 pooka Exp $	*/
+/*	$NetBSD: tty_component.c,v 1.1.6.2 2014/05/22 11:41:15 yamt Exp $	*/
 
 /*
  * Copyright (c) 2010 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tty_component.c,v 1.1 2014/03/13 02:02:30 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tty_component.c,v 1.1.6.2 2014/05/22 11:41:15 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>

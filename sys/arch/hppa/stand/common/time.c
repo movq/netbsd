@@ -1,4 +1,4 @@
-/*	$NetBSD: time.c,v 1.1 2014/02/24 07:23:43 skrll Exp $	*/
+/*	$NetBSD: time.c,v 1.1.6.2 2014/05/22 11:39:51 yamt Exp $	*/
 
 /*	$OpenBSD: time.c,v 1.3 1999/02/13 04:43:18 mickey Exp $	*/
 

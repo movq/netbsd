@@ -1,4 +1,4 @@
-/*	$NetBSD: rpcv2.h,v 1.1.1.1 2013/09/30 07:19:42 dholland Exp $	*/
+/*	$NetBSD: rpcv2.h,v 1.1.1.1.6.2 2014/05/22 11:41:01 yamt Exp $	*/
 /*-
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  *
  * FreeBSD: head/sys/fs/nfs/rpcv2.h 191783 2009-05-04 15:23:58Z rmacklem 
- * $NetBSD: rpcv2.h,v 1.1.1.1 2013/09/30 07:19:42 dholland Exp $
+ * $NetBSD: rpcv2.h,v 1.1.1.1.6.2 2014/05/22 11:41:01 yamt Exp $
  */
 
 #ifndef _NFS_RPCV2_H_

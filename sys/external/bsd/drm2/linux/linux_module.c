@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_module.c,v 1.2 2014/03/18 18:20:43 riastradh Exp $	*/
+/*	$NetBSD: linux_module.c,v 1.2.6.2 2014/05/22 11:40:56 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_module.c,v 1.2 2014/03/18 18:20:43 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_module.c,v 1.2.6.2 2014/05/22 11:40:56 yamt Exp $");
 
 #include <sys/module.h>
 

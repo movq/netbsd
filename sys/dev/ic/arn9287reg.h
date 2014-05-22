@@ -1,4 +1,4 @@
-/*	$NetBSD: arn9287reg.h,v 1.1 2013/03/30 02:53:02 christos Exp $	*/
+/*	$NetBSD: arn9287reg.h,v 1.1.12.2 2014/05/22 11:40:21 yamt Exp $	*/
 /*	$OpenBSD: ar9287reg.h,v 1.3 2010/07/15 19:07:43 damien Exp $	*/
 
 /*-

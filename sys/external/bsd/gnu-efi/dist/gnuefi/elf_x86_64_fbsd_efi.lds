@@ -1,4 +1,4 @@
-/*	$NetBSD: elf_x86_64_fbsd_efi.lds,v 1.1.1.1 2014/04/01 16:16:08 jakllsch Exp $	*/
+/*	$NetBSD: elf_x86_64_fbsd_efi.lds,v 1.1.1.1.6.2 2014/05/22 11:40:57 yamt Exp $	*/
 
 /* Same as elf_x86_64_efi.lds, except for OUTPUT_FORMAT below - KEEP IN SYNC */
 OUTPUT_FORMAT("elf64-x86-64-freebsd", "elf64-x86-64-freebsd", "elf64-x86-64-freebsd")

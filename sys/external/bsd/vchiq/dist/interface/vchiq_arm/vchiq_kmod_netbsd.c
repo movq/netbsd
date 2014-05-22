@@ -1,4 +1,4 @@
-/* $NetBSD: vchiq_kmod_netbsd.c,v 1.2 2013/03/25 22:59:25 jmcneill Exp $ */
+/* $NetBSD: vchiq_kmod_netbsd.c,v 1.2.12.2 2014/05/22 11:40:59 yamt Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vchiq_kmod_netbsd.c,v 1.2 2013/03/25 22:59:25 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vchiq_kmod_netbsd.c,v 1.2.12.2 2014/05/22 11:40:59 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

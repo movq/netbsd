@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_generic_pmap.c,v 1.2 2014/02/12 22:30:45 pooka Exp $	*/
+/*	$NetBSD: rump_generic_pmap.c,v 1.2.6.2 2014/05/22 11:41:15 yamt Exp $	*/
 
 /*
  * Copyright (c) 2010 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rump_generic_pmap.c,v 1.2 2014/02/12 22:30:45 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rump_generic_pmap.c,v 1.2.6.2 2014/05/22 11:41:15 yamt Exp $");
 
 #include <sys/param.h>
 

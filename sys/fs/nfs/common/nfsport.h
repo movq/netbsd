@@ -1,4 +1,4 @@
-/*	$NetBSD: nfsport.h,v 1.1.1.1 2013/09/30 07:19:41 dholland Exp $	*/
+/*	$NetBSD: nfsport.h,v 1.1.1.1.6.2 2014/05/22 11:41:01 yamt Exp $	*/
 /*-
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  *
  * FreeBSD: head/sys/fs/nfs/nfsport.h 254337 2013-08-14 21:11:26Z rmacklem 
- * $NetBSD: nfsport.h,v 1.1.1.1 2013/09/30 07:19:41 dholland Exp $
+ * $NetBSD: nfsport.h,v 1.1.1.1.6.2 2014/05/22 11:41:01 yamt Exp $
  */
 
 #ifndef _NFS_NFSPORT_H_

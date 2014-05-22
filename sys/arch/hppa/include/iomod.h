@@ -1,4 +1,4 @@
-/*	$NetBSD: iomod.h,v 1.1 2014/02/24 07:23:43 skrll Exp $	*/
+/*	$NetBSD: iomod.h,v 1.1.6.2 2014/05/22 11:39:50 yamt Exp $	*/
 
 /*	$OpenBSD: iomod.h,v 1.18 2007/10/20 16:41:45 miod Exp $	*/
 

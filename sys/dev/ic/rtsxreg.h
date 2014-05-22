@@ -1,4 +1,4 @@
-/*	$NetBSD: rtsxreg.h,v 1.1 2014/03/19 15:26:41 nonaka Exp $	*/
+/*	$NetBSD: rtsxreg.h,v 1.1.6.2 2014/05/22 11:40:22 yamt Exp $	*/
 /*	$OpenBSD: rtsxreg.h,v 1.3 2013/11/26 20:33:16 deraadt Exp $	*/
 
 /*

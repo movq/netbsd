@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.1 2014/02/24 07:23:43 skrll Exp $	*/
+/*	$NetBSD: locore.S,v 1.1.6.2 2014/05/22 11:39:50 yamt Exp $	*/
 /*	$OpenBSD: locore.S,v 1.158 2008/07/28 19:08:46 miod Exp $	*/
 
 /*

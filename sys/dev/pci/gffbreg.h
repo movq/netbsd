@@ -1,4 +1,4 @@
-/*	$NetBSD: gffbreg.h,v 1.3 2013/10/23 13:15:47 macallan Exp $	*/
+/*	$NetBSD: gffbreg.h,v 1.3.6.2 2014/05/22 11:40:24 yamt Exp $	*/
 
 /*
  * Copyright (c) 2013 Michael Lorenz
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gffbreg.h,v 1.3 2013/10/23 13:15:47 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gffbreg.h,v 1.3.6.2 2014/05/22 11:40:24 yamt Exp $");
 
 #ifndef GFFBREG_H
 #define GFFBREG_H

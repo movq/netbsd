@@ -1,4 +1,4 @@
-/*	$NetBSD: oj6sh.c,v 1.1 2014/03/29 12:00:27 hkenken Exp $	*/
+/*	$NetBSD: oj6sh.c,v 1.1.6.2 2014/05/22 11:40:36 yamt Exp $	*/
 
 /*
  * Copyright (c) 2014  Genetec Corporation.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: oj6sh.c,v 1.1 2014/03/29 12:00:27 hkenken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: oj6sh.c,v 1.1.6.2 2014/05/22 11:40:36 yamt Exp $");
 
 #include "opt_oj6sh.h"
 

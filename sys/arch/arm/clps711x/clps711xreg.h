@@ -1,4 +1,4 @@
-/*	$NetBSD: clps711xreg.h,v 1.1 2013/04/28 11:57:13 kiyohara Exp $	*/
+/*	$NetBSD: clps711xreg.h,v 1.1.12.2 2014/05/22 11:39:31 yamt Exp $	*/
 /*
  * Copyright (c) 2013 KIYOHARA Takashi
  * All rights reserved.

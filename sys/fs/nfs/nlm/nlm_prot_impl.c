@@ -1,4 +1,4 @@
-/*	$NetBSD: nlm_prot_impl.c,v 1.1.1.1 2013/09/30 07:19:45 dholland Exp $	*/
+/*	$NetBSD: nlm_prot_impl.c,v 1.1.1.1.6.2 2014/05/22 11:41:01 yamt Exp $	*/
 /*-
  * Copyright (c) 2008 Isilon Inc http://www.isilon.com/
  * Authors: Doug Rabson <dfr@rabson.org>
@@ -30,7 +30,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("FreeBSD: head/sys/nlm/nlm_prot_impl.c 255333 2013-09-06 23:14:31Z rmacklem "); */
-__RCSID("$NetBSD: nlm_prot_impl.c,v 1.1.1.1 2013/09/30 07:19:45 dholland Exp $");
+__RCSID("$NetBSD: nlm_prot_impl.c,v 1.1.1.1.6.2 2014/05/22 11:41:01 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/fail.h>

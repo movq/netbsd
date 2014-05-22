@@ -1,4 +1,4 @@
-#	$NetBSD: files.newnfs,v 1.1.1.1 2013/09/30 07:18:57 dholland Exp $
+#	$NetBSD: files.newnfs,v 1.1.1.1.6.2 2014/05/22 11:41:00 yamt Exp $
 
 deffs NEW_NFSCLIENT
 defflag opt_newnfs.h			NEW_NFS_BOOT_BOOTP

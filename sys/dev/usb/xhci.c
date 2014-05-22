@@ -1,4 +1,4 @@
-/*	$NetBSD: xhci.c,v 1.16 2014/03/10 13:21:22 skrll Exp $	*/
+/*	$NetBSD: xhci.c,v 1.16.6.2 2014/05/22 11:40:37 yamt Exp $	*/
 
 /*
  * Copyright (c) 2013 Jonathan A. Kollasch
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xhci.c,v 1.16 2014/03/10 13:21:22 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xhci.c,v 1.16.6.2 2014/05/22 11:40:37 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

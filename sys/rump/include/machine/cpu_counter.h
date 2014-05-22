@@ -1,7 +1,7 @@
-/*	$NetBSD: component.c,v 1.5 2011/03/10 22:11:05 wiz Exp $	*/
+/*	$NetBSD: cpu_counter.h,v 1.2.12.1 2014/05/22 11:41:14 yamt Exp $	*/
 
-/*
- * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
+/*-
+ * Copyright (c) 2014 Antti Kantee.  All Rights Reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -25,32 +25,19 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: component.c,v 1.5 2011/03/10 22:11:05 wiz Exp $");
+#ifndef _SYS_RUMP_CPU_COUNTER_H_
+#define _SYS_RUMP_CPU_COUNTER_H_
 
-#include <sys/param.h>
-#include <sys/conf.h>
-#include <sys/device.h>
-#include <sys/stat.h>
+#include <sys/types.h>
 
-#include "rump_private.h"
-#include "rump_vfs_private.h"
+#ifdef __HAVE_CPU_COUNTER
+/*
+ * A very simple MI cpu "counter".  Could start filling in MD ones ...
+ */
+#define cpu_hascounter() 0
+#define cpu_counter() 0
+#define cpu_counter32() 0
+#define cpu_frequency(a) 0
+#endif /* __HAVE_CPU_COUNTER */
 
-RUMP_COMPONENT(RUMP_COMPONENT_VFS)
-{
-	extern const struct bdevsw zfs_bdevsw;
-	extern const struct cdevsw zfs_cdevsw;
-	devmajor_t bmaj, cmaj;
-	int error;
-
-	/* go, mydevfs */
-	bmaj = cmaj = -1;
-
-	if ((error = devsw_attach("zfs", &zfs_bdevsw, &bmaj,
-	    &zfs_cdevsw, &cmaj)) != 0 && error != EEXIST)
-		panic("cannot attach zfs: %d", error);
-
-	if ((error = rump_vfs_makeonedevnode(S_IFCHR,
-	    "/dev/zfs", cmaj, 0)) != 0)
-		panic("cannot create zfs dev nodes: %d", error);
-}
+#endif /* _SYS_RUMP_CPU_COUNTER_H_ */

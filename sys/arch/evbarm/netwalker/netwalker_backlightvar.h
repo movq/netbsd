@@ -1,4 +1,4 @@
-/*	$NetBSD: netwalker_backlightvar.h,v 1.1 2014/05/06 11:22:53 hkenken Exp $	*/
+/*	$NetBSD: netwalker_backlightvar.h,v 1.1.4.2 2014/05/22 11:39:42 yamt Exp $	*/
 
 /*
  * Copyright (c) 2014  Genetec Corporation.  All rights reserved.

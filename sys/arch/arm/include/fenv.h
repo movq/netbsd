@@ -1,4 +1,4 @@
-/*	$NetBSD: fenv.h,v 1.2 2014/01/29 00:22:09 matt Exp $	*/
+/*	$NetBSD: fenv.h,v 1.2.4.2 2014/05/22 11:39:32 yamt Exp $	*/
 
 /* 
  * Based on ieeefp.h written by J.T. Conklin, Apr 28, 1995

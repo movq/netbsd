@@ -1,4 +1,4 @@
-/*	$NetBSD: elf_ia32_efi.lds,v 1.1.1.1 2014/04/01 16:16:08 jakllsch Exp $	*/
+/*	$NetBSD: elf_ia32_efi.lds,v 1.1.1.1.6.2 2014/05/22 11:40:57 yamt Exp $	*/
 
 OUTPUT_FORMAT("elf32-i386", "elf32-i386", "elf32-i386")
 OUTPUT_ARCH(i386)

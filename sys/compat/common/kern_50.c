@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_50.c,v 1.1 2014/04/04 18:17:36 njoly Exp $	*/
+/*	$NetBSD: kern_50.c,v 1.1.6.2 2014/05/22 11:40:15 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_50.c,v 1.1 2014/04/04 18:17:36 njoly Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_50.c,v 1.1.6.2 2014/05/22 11:40:15 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/lwp.h>

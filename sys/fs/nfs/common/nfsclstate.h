@@ -1,4 +1,4 @@
-/*	$NetBSD: nfsclstate.h,v 1.1.1.1 2013/09/30 07:19:40 dholland Exp $	*/
+/*	$NetBSD: nfsclstate.h,v 1.1.1.1.6.2 2014/05/22 11:41:01 yamt Exp $	*/
 /*-
  * Copyright (c) 2009 Rick Macklem, University of Guelph
  * All rights reserved.
@@ -25,7 +25,7 @@
  * SUCH DAMAGE.
  *
  * FreeBSD: head/sys/fs/nfs/nfsclstate.h 244042 2012-12-08 22:52:39Z rmacklem 
- * $NetBSD: nfsclstate.h,v 1.1.1.1 2013/09/30 07:19:40 dholland Exp $
+ * $NetBSD: nfsclstate.h,v 1.1.1.1.6.2 2014/05/22 11:41:01 yamt Exp $
  */
 
 #ifndef _NFS_NFSCLSTATE_H_

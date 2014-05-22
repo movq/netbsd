@@ -1,4 +1,4 @@
-/*	$NetBSD: wm_at_pci.c,v 1.1 2014/04/04 14:49:09 pooka Exp $	*/
+/*	$NetBSD: wm_at_pci.c,v 1.1.6.2 2014/05/22 11:41:12 yamt Exp $	*/
 
 /*
  * Copyright (c) 2010 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wm_at_pci.c,v 1.1 2014/04/04 14:49:09 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wm_at_pci.c,v 1.1.6.2 2014/05/22 11:41:12 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>

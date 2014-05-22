@@ -1,4 +1,4 @@
-/*	$NetBSD: pim.h,v 1.1 2014/02/24 07:23:43 skrll Exp $	*/
+/*	$NetBSD: pim.h,v 1.1.6.2 2014/05/22 11:39:50 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_kmap.c,v 1.4 2014/03/28 23:22:27 riastradh Exp $	*/
+/*	$NetBSD: linux_kmap.c,v 1.4.6.2 2014/05/22 11:40:56 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_kmap.c,v 1.4 2014/03/28 23:22:27 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_kmap.c,v 1.4.6.2 2014/05/22 11:40:56 yamt Exp $");
 
 #include <sys/types.h>
 #include <sys/kmem.h>

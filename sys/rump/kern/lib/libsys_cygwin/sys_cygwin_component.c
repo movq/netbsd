@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_cygwin_component.c,v 1.1 2014/03/13 02:03:16 pooka Exp $	*/
+/*	$NetBSD: sys_cygwin_component.c,v 1.1.6.2 2014/05/22 11:41:14 yamt Exp $	*/
 
 #include <sys/param.h>
 #include <sys/proc.h>

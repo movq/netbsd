@@ -1,4 +1,4 @@
-/*	$NetBSD: sljitarch.h,v 1.1 2014/02/01 17:01:35 nakayama Exp $	*/
+/*	$NetBSD: sljitarch.h,v 1.1.6.2 2014/05/22 11:40:09 yamt Exp $	*/
 
 /* Only 32-bit SPARCs are supported. */
 #ifndef __arch64__

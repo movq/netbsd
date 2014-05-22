@@ -1,4 +1,4 @@
-/*	$NetBSD: epockbd.c,v 1.2 2013/06/22 13:53:30 kiyohara Exp $	*/
+/*	$NetBSD: epockbd.c,v 1.2.10.2 2014/05/22 11:39:38 yamt Exp $	*/
 /*
  * Copyright (c) 2013 KIYOHARA Takashi
  * All rights reserved.
@@ -25,7 +25,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: epockbd.c,v 1.2 2013/06/22 13:53:30 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: epockbd.c,v 1.2.10.2 2014/05/22 11:39:38 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

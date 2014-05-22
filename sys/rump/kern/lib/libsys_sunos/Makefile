@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2014/03/16 14:14:40 pooka Exp $
+#	$NetBSD: Makefile,v 1.3.4.2 2014/05/22 11:41:14 yamt Exp $
 #
 
 LIB=	rumpkern_sys_sunos

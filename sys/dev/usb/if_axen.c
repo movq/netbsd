@@ -1,4 +1,4 @@
-/*	$NetBSD: if_axen.c,v 1.2 2013/10/29 16:10:49 joerg Exp $	*/
+/*	$NetBSD: if_axen.c,v 1.2.6.2 2014/05/22 11:40:36 yamt Exp $	*/
 /*	$OpenBSD: if_axen.c,v 1.3 2013/10/21 10:10:22 yuo Exp $	*/
 
 /*
@@ -23,7 +23,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_axen.c,v 1.2 2013/10/29 16:10:49 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_axen.c,v 1.2.6.2 2014/05/22 11:40:36 yamt Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_inet.h"

@@ -1,4 +1,4 @@
-/*	$NetBSD: ulfs_inode.h,v 1.12 2014/05/17 07:08:35 dholland Exp $	*/
+/*	$NetBSD: ulfs_inode.h,v 1.12.2.2 2014/05/22 11:41:19 yamt Exp $	*/
 /*  from NetBSD: inode.h,v 1.64 2012/11/19 00:36:21 jakllsch Exp  */
 
 /*
@@ -58,12 +58,59 @@
  */
 #define	MARK_VNODE(vp)			lfs_mark_vnode(vp)
 #define	UNMARK_VNODE(vp)		lfs_unmark_vnode(vp)
+#define	SET_DIROP_CREATE(dvp, vpp)	lfs_set_dirop_create((dvp), (vpp))
+#define	SET_DIROP_REMOVE(dvp, vp)	lfs_set_dirop((dvp), (vp))
+int lfs_set_dirop_create(struct vnode *, struct vnode **);
 int lfs_set_dirop(struct vnode *, struct vnode *);
-void lfs_unset_dirop(struct lfs *, struct vnode *, const char *);
+
+#define	SET_ENDOP_BASE(fs, dvp, str)					\
+	do {								\
+		mutex_enter(&lfs_lock);				\
+		--(fs)->lfs_dirops;					\
+		if (!(fs)->lfs_dirops) {				\
+			if ((fs)->lfs_nadirop) {			\
+				panic("SET_ENDOP: %s: no dirops but "	\
+					" nadirop=%d", (str),		\
+					(fs)->lfs_nadirop);		\
+			}						\
+			wakeup(&(fs)->lfs_writer);			\
+			mutex_exit(&lfs_lock);				\
+			lfs_check((dvp), LFS_UNUSED_LBN, 0);		\
+		} else							\
+			mutex_exit(&lfs_lock);				\
+	} while(0)
+#define SET_ENDOP_CREATE(fs, dvp, nvpp, str)				\
+	do {								\
+		UNMARK_VNODE(dvp);					\
+		if (nvpp && *nvpp)					\
+			UNMARK_VNODE(*nvpp);				\
+		/* Check for error return to stem vnode leakage */	\
+		if (nvpp && *nvpp && !((*nvpp)->v_uflag & VU_DIROP))	\
+			ungetnewvnode(*(nvpp));				\
+		SET_ENDOP_BASE((fs), (dvp), (str));			\
+		lfs_reserve((fs), (dvp), NULL, -LFS_NRESERVE(fs));	\
+		vrele(dvp);						\
+	} while(0)
+#define SET_ENDOP_CREATE_AP(ap, str)					\
+	SET_ENDOP_CREATE(VTOI((ap)->a_dvp)->i_lfs, (ap)->a_dvp,		\
+			 (ap)->a_vpp, (str))
+#define SET_ENDOP_REMOVE(fs, dvp, ovp, str)				\
+	do {								\
+		UNMARK_VNODE(dvp);					\
+		if (ovp)						\
+			UNMARK_VNODE(ovp);				\
+		SET_ENDOP_BASE((fs), (dvp), (str));			\
+		lfs_reserve((fs), (dvp), (ovp), -LFS_NRESERVE(fs));	\
+		vrele(dvp);						\
+		if (ovp)						\
+			vrele(ovp);					\
+	} while(0)
+
+
 
 /* Misc. definitions */
 #define BW_CLEAN	1		/* Flag for lfs_bwrite_ext() */
-#define PG_DELWRI	PG_PAGER1	/* Local def for delayed pageout */
+#define PG_DELWRI	PG_PAGER2	/* Local def for delayed pageout */
 
 /* Resource limits */
 #define	LFS_MAX_RESOURCE(x, u)	(((x) >> 2) - 10 * (u))

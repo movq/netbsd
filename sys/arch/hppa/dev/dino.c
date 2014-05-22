@@ -1,4 +1,4 @@
-/*	$NetBSD: dino.c,v 1.2 2014/03/31 20:51:20 christos Exp $ */
+/*	$NetBSD: dino.c,v 1.2.6.2 2014/05/22 11:39:50 yamt Exp $ */
 
 /*	$OpenBSD: dino.c,v 1.5 2004/02/13 20:39:31 mickey Exp $	*/
 
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dino.c,v 1.2 2014/03/31 20:51:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dino.c,v 1.2.6.2 2014/05/22 11:39:50 yamt Exp $");
 
 /* #include "cardbus.h" */
 

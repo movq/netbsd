@@ -1,4 +1,4 @@
-/*	$NetBSD: ti_iicreg.h,v 1.1 2013/04/17 14:33:06 bouyer Exp $	*/
+/*	$NetBSD: ti_iicreg.h,v 1.1.12.2 2014/05/22 11:39:33 yamt Exp $	*/
 
 /*
  * Copyright (c) 2013 Manuel Bouyer.  All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: ulfs_quota.c,v 1.10 2013/11/22 02:02:35 dholland Exp $	*/
+/*	$NetBSD: ulfs_quota.c,v 1.10.4.2 2014/05/22 11:41:19 yamt Exp $	*/
 /*  from NetBSD: ufs_quota.c,v 1.115 2013/11/16 17:04:53 dholland Exp  */
 
 /*
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ulfs_quota.c,v 1.10 2013/11/22 02:02:35 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ulfs_quota.c,v 1.10.4.2 2014/05/22 11:41:19 yamt Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_quota.h"

@@ -1,4 +1,4 @@
-/*	$NetBSD: ulfs_dirhash.c,v 1.8 2014/02/25 18:30:13 pooka Exp $	*/
+/*	$NetBSD: ulfs_dirhash.c,v 1.8.4.2 2014/05/22 11:41:19 yamt Exp $	*/
 /*  from NetBSD: ufs_dirhash.c,v 1.34 2009/10/05 23:48:08 rmind Exp  */
 
 /*
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ulfs_dirhash.c,v 1.8 2014/02/25 18:30:13 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ulfs_dirhash.c,v 1.8.4.2 2014/05/22 11:41:19 yamt Exp $");
 
 /*
  * This implements a hash-based lookup scheme for ULFS directories.

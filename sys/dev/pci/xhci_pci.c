@@ -1,4 +1,4 @@
-/*	$NetBSD: xhci_pci.c,v 1.3 2014/03/29 19:28:25 christos Exp $	*/
+/*	$NetBSD: xhci_pci.c,v 1.3.6.2 2014/05/22 11:40:34 yamt Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xhci_pci.c,v 1.3 2014/03/29 19:28:25 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xhci_pci.c,v 1.3.6.2 2014/05/22 11:40:34 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

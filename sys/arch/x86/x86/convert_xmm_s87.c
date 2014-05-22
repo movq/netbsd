@@ -1,4 +1,4 @@
-/*	$NetBSD: convert_xmm_s87.c,v 1.3 2014/02/15 22:20:42 dsl Exp $	*/
+/*	$NetBSD: convert_xmm_s87.c,v 1.3.6.2 2014/05/22 11:40:13 yamt Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000, 2001, 2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: convert_xmm_s87.c,v 1.3 2014/02/15 22:20:42 dsl Exp $");
+__KERNEL_RCSID(0, "$NetBSD: convert_xmm_s87.c,v 1.3.6.2 2014/05/22 11:40:13 yamt Exp $");
 
 
 #include <sys/param.h>

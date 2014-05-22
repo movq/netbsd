@@ -1,4 +1,4 @@
-/*	$NetBSD: ulfs_lookup.c,v 1.19 2014/02/07 15:29:23 hannken Exp $	*/
+/*	$NetBSD: ulfs_lookup.c,v 1.19.4.2 2014/05/22 11:41:19 yamt Exp $	*/
 /*  from NetBSD: ufs_lookup.c,v 1.122 2013/01/22 09:39:18 dholland Exp  */
 
 /*
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ulfs_lookup.c,v 1.19 2014/02/07 15:29:23 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ulfs_lookup.c,v 1.19.4.2 2014/05/22 11:41:19 yamt Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_lfs.h"

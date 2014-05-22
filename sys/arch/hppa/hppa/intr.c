@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.1 2014/02/24 07:23:43 skrll Exp $	*/
+/*	$NetBSD: intr.c,v 1.1.6.2 2014/05/22 11:39:50 yamt Exp $	*/
 /*	$OpenBSD: intr.c,v 1.27 2009/12/31 12:52:35 jsing Exp $	*/
 
 /*
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.1 2014/02/24 07:23:43 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.1.6.2 2014/05/22 11:39:50 yamt Exp $");
 
 #define __MUTEX_PRIVATE
 

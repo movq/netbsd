@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_lock.c,v 1.1.1.1 2013/09/30 07:19:33 dholland Exp $	*/
+/*	$NetBSD: nfs_lock.c,v 1.1.1.1.6.2 2014/05/22 11:41:00 yamt Exp $	*/
 /*-
  * Copyright (c) 1997 Berkeley Software Design, Inc. All rights reserved.
  *
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("FreeBSD: head/sys/nfs/nfs_lock.c 227293 2011-11-07 06:44:47Z ed "); */
-__RCSID("$NetBSD: nfs_lock.c,v 1.1.1.1 2013/09/30 07:19:33 dholland Exp $");
+__RCSID("$NetBSD: nfs_lock.c,v 1.1.1.1.6.2 2014/05/22 11:41:00 yamt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

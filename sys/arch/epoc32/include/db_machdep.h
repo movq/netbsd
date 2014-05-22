@@ -1,3 +1,3 @@
-/*	$NetBSD: db_machdep.h,v 1.1 2013/04/28 12:11:26 kiyohara Exp $	*/
+/*	$NetBSD: db_machdep.h,v 1.1.12.2 2014/05/22 11:39:38 yamt Exp $	*/
 
 #include <arm/db_machdep.h>
