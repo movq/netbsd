@@ -1,4 +1,4 @@
-/*	$NetBSD: openpam_dlfunc.h,v 1.2 2013/12/27 20:10:21 christos Exp $	*/
+/*	$NetBSD: openpam_dlfunc.h,v 1.2.4.2 2014/05/22 15:50:47 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2013 Dag-Erling Smørgrav

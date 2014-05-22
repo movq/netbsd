@@ -1,4 +1,4 @@
-/*	$NetBSD: openpam_straddch.c,v 1.2 2013/12/29 22:55:32 christos Exp $	*/
+/*	$NetBSD: openpam_straddch.c,v 1.2.4.2 2014/05/22 15:50:47 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2012 Dag-Erling Smørgrav
