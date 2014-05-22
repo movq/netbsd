@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-#	$NetBSD: rump_wmd.sh,v 1.4 2014/01/28 13:58:25 pooka Exp $
+#	$NetBSD: rump_wmd.sh,v 1.4.4.2 2014/05/22 11:42:49 yamt Exp $
 #
 # Copyright (c) 2014 Antti Kantee <pooka@iki.fi>
 #
