@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.2 2013/10/18 23:41:40 jmmv Exp $
+# $NetBSD: Makefile,v 1.2.4.2 2014/05/22 15:45:34 yamt Exp $
 
 KYUA_LIBS=	cli engine store engine utils
 

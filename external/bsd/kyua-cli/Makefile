@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.2 2013/02/24 03:06:15 jmmv Exp $
+# $NetBSD: Makefile,v 1.2.12.2 2014/05/22 15:45:27 yamt Exp $
 
 SUBDIR= etc lib .WAIT share tests usr.bin
 
