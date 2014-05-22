@@ -1,4 +1,4 @@
-/*	$NetBSD: findalldevstest.c,v 1.1.1.1 2013/04/06 15:57:51 christos Exp $	*/
+/*	$NetBSD: findalldevstest.c,v 1.1.1.1.10.2 2014/05/22 15:48:21 yamt Exp $	*/
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"

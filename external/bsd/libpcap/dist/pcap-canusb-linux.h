@@ -1,4 +1,4 @@
-/*	$NetBSD: pcap-canusb-linux.h,v 1.1.1.2 2013/12/31 16:57:21 christos Exp $	*/
+/*	$NetBSD: pcap-canusb-linux.h,v 1.1.1.2.4.2 2014/05/22 15:48:19 yamt Exp $	*/
 
 /*
  * Copyright (c) 2009 Felix Obenhuber

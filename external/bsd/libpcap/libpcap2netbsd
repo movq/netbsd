@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-#	$NetBSD: libpcap2netbsd,v 1.1 2013/04/06 17:29:53 christos Exp $
+#	$NetBSD: libpcap2netbsd,v 1.1.10.2 2014/05/22 15:48:19 yamt Exp $
 #
 # Copyright (c) 2011 The NetBSD Foundation, Inc.
 # All rights reserved.
