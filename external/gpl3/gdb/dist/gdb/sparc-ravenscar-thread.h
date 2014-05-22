@@ -1,8 +1,6 @@
-/* XML target description support for GDB.
+/* Ravenscar SPARC target support.
 
-   Copyright (C) 2006-2013 Free Software Foundation, Inc.
-
-   Contributed by CodeSourcery.
+   Copyright (C) 2012-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,15 +17,10 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-struct target_ops;
-struct target_desc;
+#ifndef SPARC_RAVENSCAR_THREAD_H
+#define SPARC_RAVENSCAR_THREAD_H
 
-/* Read an XML target description from FILENAME.  Parse it, and return
-   the parsed description.  */
+struct gdbarch;
 
-const struct target_desc *file_read_description_xml (const char *filename);
-
-/* Read an XML target description using OPS.  Parse it, and return the
-   parsed description.  */
-
-const struct target_desc *target_read_description_xml (struct target_ops *);
+extern void register_sparc_ravenscar_ops (struct gdbarch *gdbarch);
+#endif

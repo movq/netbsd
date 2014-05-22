@@ -1,8 +1,5 @@
-/* XML target description support for GDB.
-
-   Copyright (C) 2006-2013 Free Software Foundation, Inc.
-
-   Contributed by CodeSourcery.
+/* Target-dependent definitions for Renesas Super-H, for GDB.
+   Copyright (C) 2012-2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,15 +16,9 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-struct target_ops;
-struct target_desc;
+#ifndef SH64_TDEP_H
+#define SH64_TDEP_H
 
-/* Read an XML target description from FILENAME.  Parse it, and return
-   the parsed description.  */
+extern gdbarch_init_ftype sh64_gdbarch_init;
 
-const struct target_desc *file_read_description_xml (const char *filename);
-
-/* Read an XML target description using OPS.  Parse it, and return the
-   parsed description.  */
-
-const struct target_desc *target_read_description_xml (struct target_ops *);
+#endif /* SH64_TDEP_H */

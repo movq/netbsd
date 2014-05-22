@@ -1,8 +1,6 @@
-/* XML target description support for GDB.
+/* Process record and replay target for GDB, the GNU debugger.
 
-   Copyright (C) 2006-2013 Free Software Foundation, Inc.
-
-   Contributed by CodeSourcery.
+   Copyright (C) 2013 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,15 +17,14 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-struct target_ops;
-struct target_desc;
+#ifndef RECORD_FULL_H
+#define RECORD_FULL_H
 
-/* Read an XML target description from FILENAME.  Parse it, and return
-   the parsed description.  */
+extern int record_full_memory_query;
 
-const struct target_desc *file_read_description_xml (const char *filename);
+extern int record_full_arch_list_add_reg (struct regcache *regcache, int num);
+extern int record_full_arch_list_add_mem (CORE_ADDR addr, int len);
+extern int record_full_arch_list_add_end (void);
+extern struct cleanup *record_full_gdb_operation_disable_set (void);
 
-/* Read an XML target description using OPS.  Parse it, and return the
-   parsed description.  */
-
-const struct target_desc *target_read_description_xml (struct target_ops *);
+#endif /* RECORD_FULL_H */

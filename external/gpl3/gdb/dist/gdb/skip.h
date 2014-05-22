@@ -1,10 +1,6 @@
-/* XML target description support for GDB.
+/* Header for skipping over uninteresting files and functions when debugging.
 
-   Copyright (C) 2006-2013 Free Software Foundation, Inc.
-
-   Contributed by CodeSourcery.
-
-   This file is part of GDB.
+   Copyright (C) 2011-2013 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -19,15 +15,14 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-struct target_ops;
-struct target_desc;
+#if !defined (SKIP_H)
+#define SKIP_H
 
-/* Read an XML target description from FILENAME.  Parse it, and return
-   the parsed description.  */
+struct symtab_and_line;
 
-const struct target_desc *file_read_description_xml (const char *filename);
+/* Returns 1 if the given FUNCTION_NAME is marked for skip and shouldn't be
+   stepped into.  Otherwise, returns 0.  */
+int function_name_is_marked_for_skip (const char *function_name,
+				    const struct symtab_and_line *function_sal);
 
-/* Read an XML target description using OPS.  Parse it, and return the
-   parsed description.  */
-
-const struct target_desc *target_read_description_xml (struct target_ops *);
+#endif /* !defined (SKIP_H) */
