@@ -1,4 +1,4 @@
-/*	$NetBSD: dwarf_funcs.m4,v 1.2 2014/03/09 16:58:03 christos Exp $	*/
+/*	$NetBSD: dwarf_funcs.m4,v 1.2.4.2 2014/05/22 15:44:46 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2009 Kai Wang
@@ -28,7 +28,7 @@
 
 #include "_libdwarf.h"
 
-__RCSID("$NetBSD: dwarf_funcs.m4,v 1.2 2014/03/09 16:58:03 christos Exp $");
+__RCSID("$NetBSD: dwarf_funcs.m4,v 1.2.4.2 2014/05/22 15:44:46 yamt Exp $");
 ELFTC_VCSID("Id: dwarf_funcs.m4 2073 2011-10-27 03:30:47Z jkoshy ");
 
 /* WARNING: GENERATED FROM __file__. */

@@ -1,4 +1,4 @@
-/*	$NetBSD: gelf_ehdr.c,v 1.2 2014/03/09 16:58:04 christos Exp $	*/
+/*	$NetBSD: gelf_ehdr.c,v 1.2.4.2 2014/05/22 15:44:47 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2006,2008 Joseph Koshy
@@ -40,7 +40,7 @@
 
 #include "_libelf.h"
 
-__RCSID("$NetBSD: gelf_ehdr.c,v 1.2 2014/03/09 16:58:04 christos Exp $");
+__RCSID("$NetBSD: gelf_ehdr.c,v 1.2.4.2 2014/05/22 15:44:47 yamt Exp $");
 ELFTC_VCSID("Id: gelf_ehdr.c 2268 2011-12-03 17:05:11Z jkoshy ");
 
 Elf32_Ehdr *

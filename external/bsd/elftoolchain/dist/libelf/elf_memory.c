@@ -1,4 +1,4 @@
-/*	$NetBSD: elf_memory.c,v 1.2 2014/03/09 16:58:04 christos Exp $	*/
+/*	$NetBSD: elf_memory.c,v 1.2.4.2 2014/05/22 15:44:47 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2006,2008 Joseph Koshy
@@ -30,7 +30,7 @@
 
 #include "_libelf.h"
 
-__RCSID("$NetBSD: elf_memory.c,v 1.2 2014/03/09 16:58:04 christos Exp $");
+__RCSID("$NetBSD: elf_memory.c,v 1.2.4.2 2014/05/22 15:44:47 yamt Exp $");
 ELFTC_VCSID("Id: elf_memory.c 2368 2011-12-29 06:34:28Z jkoshy ");
 
 Elf *

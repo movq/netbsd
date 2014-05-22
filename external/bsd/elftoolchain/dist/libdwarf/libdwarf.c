@@ -1,4 +1,4 @@
-/*	$NetBSD: libdwarf.c,v 1.2 2014/03/09 16:58:04 christos Exp $	*/
+/*	$NetBSD: libdwarf.c,v 1.2.4.2 2014/05/22 15:44:46 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2009 Kai Wang
@@ -28,7 +28,7 @@
 
 #include "_libdwarf.h"
 
-__RCSID("$NetBSD: libdwarf.c,v 1.2 2014/03/09 16:58:04 christos Exp $");
+__RCSID("$NetBSD: libdwarf.c,v 1.2.4.2 2014/05/22 15:44:46 yamt Exp $");
 ELFTC_VCSID("Id: libdwarf.c 2070 2011-10-27 03:05:32Z jkoshy ");
 
 struct _libdwarf_globals _libdwarf = {

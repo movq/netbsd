@@ -1,4 +1,4 @@
-/*	$NetBSD: elf_end.c,v 1.2 2014/03/09 16:58:04 christos Exp $	*/
+/*	$NetBSD: elf_end.c,v 1.2.4.2 2014/05/22 15:44:46 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2006,2008-2009,2011 Joseph Koshy
@@ -42,7 +42,7 @@
 #include <sys/mman.h>
 #endif
 
-__RCSID("$NetBSD: elf_end.c,v 1.2 2014/03/09 16:58:04 christos Exp $");
+__RCSID("$NetBSD: elf_end.c,v 1.2.4.2 2014/05/22 15:44:46 yamt Exp $");
 ELFTC_VCSID("Id: elf_end.c 2240 2011-11-28 06:36:48Z jkoshy ");
 
 int
