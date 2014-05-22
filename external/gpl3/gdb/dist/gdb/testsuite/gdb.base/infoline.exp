@@ -1,5 +1,5 @@
-# Copyright 2010-2013 Free Software Foundation, Inc.
-
+# Copyright (C) 2011-2013 Free Software Foundation, Inc.
+#
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
 # the Free Software Foundation; either version 3 of the License, or
@@ -13,26 +13,18 @@
 # You should have received a copy of the GNU General Public License
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
-set testfile "watchpoint-delete"
+set testfile infoline
 set srcfile ${testfile}.c
-set binfile ${objdir}/${subdir}/${testfile}
 
-if { [prepare_for_testing ${testfile}.exp ${testfile} ${srcfile}] } {
-    untested ${testfile}.exp
+if { [prepare_for_testing ${testfile}.exp ${testfile}] } {
     return -1
 }
 
-# It is more compatible this way.
-gdb_test_no_output "set can-use-hw-watchpoints 0"
+clean_restart ${testfile}
 
-if ![runto_main] {
-    return -1
-}
-
-# Ensure there is a parent frame to create related bp_watchpoint_scope.
-gdb_breakpoint [gdb_get_line_number "break-here"]
-gdb_continue_to_breakpoint "break-here" ".* break-here .*"
-
-gdb_test "watch x" {Watchpoint [0-9]+: x}
-
-gdb_test_no_output {delete $bpnum}
+# Verify that the "info line" command does not skip function prologues.
+# If it did, GDB would tell us that the line we're interested in starts
+# at <twice+N> where N is different from zero.
+set fun_decl_line [gdb_get_line_number "THIS LINE"]
+gdb_test "info line ${srcfile}:${fun_decl_line}" \
+         "Line ${fun_decl_line} of \".*${testfile}\.c\" starts at address 0x\[0-9a-f\]+ <twice> and ends at .*"
