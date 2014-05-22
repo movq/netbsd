@@ -1,4 +1,4 @@
-/*	$NetBSD: libelf_align.c,v 1.3 2014/04/18 02:28:06 christos Exp $	*/
+/*	$NetBSD: libelf_align.c,v 1.3.2.2 2014/05/22 15:44:47 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2006,2008 Joseph Koshy
@@ -38,7 +38,7 @@
 
 #include "_libelf.h"
 
-__RCSID("$NetBSD: libelf_align.c,v 1.3 2014/04/18 02:28:06 christos Exp $");
+__RCSID("$NetBSD: libelf_align.c,v 1.3.2.2 2014/05/22 15:44:47 yamt Exp $");
 ELFTC_VCSID("Id: libelf_align.c 2225 2011-11-26 18:55:54Z jkoshy ");
 
 struct align {

@@ -1,4 +1,4 @@
-/*	$NetBSD: uthash.h,v 1.2 2014/03/09 16:58:03 christos Exp $	*/
+/*	$NetBSD: uthash.h,v 1.2.4.2 2014/05/22 15:44:45 yamt Exp $	*/
 
 /*
 Copyright (c) 2003-2013, Troy D. Hanson     http://uthash.sourceforge.net

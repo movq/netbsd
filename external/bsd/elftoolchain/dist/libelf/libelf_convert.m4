@@ -1,4 +1,4 @@
-/*	$NetBSD: libelf_convert.m4,v 1.2 2014/03/09 16:58:04 christos Exp $	*/
+/*	$NetBSD: libelf_convert.m4,v 1.2.4.2 2014/05/22 15:44:47 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2006-2011 Joseph Koshy
@@ -38,7 +38,7 @@
 
 #include "_libelf.h"
 
-__RCSID("$NetBSD: libelf_convert.m4,v 1.2 2014/03/09 16:58:04 christos Exp $");
+__RCSID("$NetBSD: libelf_convert.m4,v 1.2.4.2 2014/05/22 15:44:47 yamt Exp $");
 ELFTC_VCSID("Id: libelf_convert.m4 2361 2011-12-28 12:03:05Z jkoshy ");
 
 /* WARNING: GENERATED FROM __file__. */

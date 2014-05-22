@@ -1,4 +1,4 @@
-/*	$NetBSD: elf_flag.c,v 1.2 2014/03/09 16:58:04 christos Exp $	*/
+/*	$NetBSD: elf_flag.c,v 1.2.4.2 2014/05/22 15:44:46 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2006,2008-2009,2011 Joseph Koshy
@@ -32,7 +32,7 @@
 
 #include "_libelf.h"
 
-__RCSID("$NetBSD: elf_flag.c,v 1.2 2014/03/09 16:58:04 christos Exp $");
+__RCSID("$NetBSD: elf_flag.c,v 1.2.4.2 2014/05/22 15:44:46 yamt Exp $");
 ELFTC_VCSID("Id: elf_flag.c 2272 2011-12-03 17:07:31Z jkoshy ");
 
 unsigned int

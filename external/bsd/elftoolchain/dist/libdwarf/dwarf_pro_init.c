@@ -1,4 +1,4 @@
-/*	$NetBSD: dwarf_pro_init.c,v 1.2 2014/03/09 16:58:04 christos Exp $	*/
+/*	$NetBSD: dwarf_pro_init.c,v 1.2.4.2 2014/05/22 15:44:46 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2009 Kai Wang
@@ -28,7 +28,7 @@
 
 #include "_libdwarf.h"
 
-__RCSID("$NetBSD: dwarf_pro_init.c,v 1.2 2014/03/09 16:58:04 christos Exp $");
+__RCSID("$NetBSD: dwarf_pro_init.c,v 1.2.4.2 2014/05/22 15:44:46 yamt Exp $");
 ELFTC_VCSID("Id: dwarf_pro_init.c 2074 2011-10-27 03:34:33Z jkoshy ");
 
 Dwarf_P_Debug
