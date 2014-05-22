@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2013/10/16 19:48:21 mbalmer Exp $
+#	$NetBSD: Makefile,v 1.1.4.2 2014/05/22 11:37:29 yamt Exp $
 
 PROG=	luactl
 SRCS=	luactl.c
