@@ -31,10 +31,5 @@ int main()
     assert(m.empty());
     assert(m.begin() == m.end());
     }
-    {
-    std::multiset<int> m = {};
-    assert(m.empty());
-    assert(m.begin() == m.end());
-    }
 #endif
 }

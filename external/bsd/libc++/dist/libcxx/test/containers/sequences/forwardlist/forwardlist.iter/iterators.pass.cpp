@@ -127,13 +127,10 @@ int main()
         std::forward_list<int>::const_iterator cii{};
         assert ( ii1 == ii2 );
         assert ( ii1 == ii4 );
- 
-        assert (!(ii1 != ii2 ));
+        assert ( ii1 == cii );
 
-        assert ( (ii1 == cii ));
-        assert ( (cii == ii1 ));
-        assert (!(ii1 != cii ));
-        assert (!(cii != ii1 ));
+        assert ( !(ii1 != ii2 ));
+        assert ( !(ii1 != cii ));
 
 //         std::forward_list<int> c;
 //         assert ( ii1 != c.cbegin());

@@ -17,7 +17,6 @@
 #include "DefaultOnly.h"
 #include "min_allocator.h"
 #include "test_allocator.h"
-#include "asan_testing.h"
 
 template <class C>
 void
@@ -28,7 +27,6 @@ test2(typename C::size_type n, typename C::allocator_type const& a = typename C:
     assert(c.__invariants());
     assert(c.size() == n);
     assert(c.get_allocator() == a);
-    assert(is_contiguous_container_asan_correct(c)); 
 #ifndef _LIBCPP_HAS_NO_RVALUE_REFERENCES
     for (typename C::const_iterator i = c.cbegin(), e = c.cend(); i != e; ++i)
         assert(*i == typename C::value_type());
@@ -44,7 +42,6 @@ test1(typename C::size_type n)
     assert(c.__invariants());
     assert(c.size() == n);
     assert(c.get_allocator() == typename C::allocator_type());
-    assert(is_contiguous_container_asan_correct(c)); 
 #ifndef _LIBCPP_HAS_NO_RVALUE_REFERENCES
     for (typename C::const_iterator i = c.cbegin(), e = c.cend(); i != e; ++i)
         assert(*i == typename C::value_type());

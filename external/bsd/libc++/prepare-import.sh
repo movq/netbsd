@@ -1,5 +1,5 @@
 #!/bin/sh
-# $NetBSD: prepare-import.sh,v 1.2 2014/05/15 23:59:12 joerg Exp $
+# $NetBSD: prepare-import.sh,v 1.2.2.2 2014/05/22 15:46:09 yamt Exp $
 #
 # Checkout libc++ and libcxxrt in the corresponding subdirectories of
 # dist.  Run this script and check for additional files and
@@ -9,7 +9,7 @@ set -e
 
 cd dist/libcxx
 rm -rf .svn cmake Makefile CMakeLists.txt lib src/support www .arcconfig
-rm -rf include/support */CMakeLists.txt
+rm -rf include/support
 cd ../libcxxrt
 rm -rf .git CMakeLists.txt */CMakeLists.txt src/doxygen_config
 

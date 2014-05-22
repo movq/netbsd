@@ -43,12 +43,4 @@ int main()
     test(x, y, y);
     test(y, x, y);
     }
-#if _LIBCPP_STD_VER > 11
-    {
-    constexpr int x = 1;
-    constexpr int y = 0;
-    static_assert(std::min(x, y) == y, "" );
-    static_assert(std::min(y, x) == y, "" );
-    }
-#endif
 }

@@ -13,7 +13,6 @@
 
 #include <queue>
 #include <cassert>
-#include <functional>
 
 template <class C>
 C

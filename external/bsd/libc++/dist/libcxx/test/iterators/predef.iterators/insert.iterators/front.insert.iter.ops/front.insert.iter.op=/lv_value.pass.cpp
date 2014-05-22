@@ -17,7 +17,6 @@
 #include <iterator>
 #include <list>
 #include <cassert>
-#include "nasty_containers.hpp"
 
 template <class C>
 void
@@ -43,5 +42,4 @@ public:
 int main()
 {
     test(std::list<Copyable>());
-    test(nasty_list<Copyable>());
 }

@@ -13,12 +13,6 @@
 
 #include <limits>
 
-#if (defined(__i386__) || defined(__x86_64__))
-static const bool integral_types_trap = true;
-#else
-static const bool integral_types_trap = false;
-#endif
-
 template <class T, bool expected>
 void
 test()
@@ -32,26 +26,22 @@ test()
 int main()
 {
     test<bool, false>();
-    test<char, integral_types_trap>();
-    test<signed char, integral_types_trap>();
-    test<unsigned char, integral_types_trap>();
-    test<wchar_t, integral_types_trap>();
+    test<char, true>();
+    test<signed char, true>();
+    test<unsigned char, true>();
+    test<wchar_t, true>();
 #ifndef _LIBCPP_HAS_NO_UNICODE_CHARS
-    test<char16_t, integral_types_trap>();
-    test<char32_t, integral_types_trap>();
+    test<char16_t, true>();
+    test<char32_t, true>();
 #endif  // _LIBCPP_HAS_NO_UNICODE_CHARS
-    test<short, integral_types_trap>();
-    test<unsigned short, integral_types_trap>();
-    test<int, integral_types_trap>();
-    test<unsigned int, integral_types_trap>();
-    test<long, integral_types_trap>();
-    test<unsigned long, integral_types_trap>();
-    test<long long, integral_types_trap>();
-    test<unsigned long long, integral_types_trap>();
-#ifndef _LIBCPP_HAS_NO_INT128
-    test<__int128_t, integral_types_trap>();
-    test<__uint128_t, integral_types_trap>();
-#endif
+    test<short, true>();
+    test<unsigned short, true>();
+    test<int, true>();
+    test<unsigned int, true>();
+    test<long, true>();
+    test<unsigned long, true>();
+    test<long long, true>();
+    test<unsigned long long, true>();
     test<float, false>();
     test<double, false>();
     test<long double, false>();

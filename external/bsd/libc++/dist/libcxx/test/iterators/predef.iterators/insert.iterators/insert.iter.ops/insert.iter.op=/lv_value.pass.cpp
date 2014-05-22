@@ -18,7 +18,6 @@
 #include <iterator>
 #include <vector>
 #include <cassert>
-#include "nasty_containers.hpp"
 
 template <class C>
 void
@@ -46,7 +45,6 @@ insert3at(C& c, typename C::iterator i,
 
 int main()
 {
-    {
     typedef std::vector<int> C;
     C c1;
     for (int i = 0; i < 3; ++i)
@@ -63,23 +61,4 @@ int main()
     c2 = c1;
     insert3at(c2, c2.begin()+3, 'a', 'b', 'c');
     test(c1, 3, 'a', 'b', 'c', c2);
-    }
-    {
-    typedef nasty_vector<int> C;
-    C c1;
-    for (int i = 0; i < 3; ++i)
-        c1.push_back(i);
-    C c2 = c1;
-    insert3at(c2, c2.begin(), 'a', 'b', 'c');
-    test(c1, 0, 'a', 'b', 'c', c2);
-    c2 = c1;
-    insert3at(c2, c2.begin()+1, 'a', 'b', 'c');
-    test(c1, 1, 'a', 'b', 'c', c2);
-    c2 = c1;
-    insert3at(c2, c2.begin()+2, 'a', 'b', 'c');
-    test(c1, 2, 'a', 'b', 'c', c2);
-    c2 = c1;
-    insert3at(c2, c2.begin()+3, 'a', 'b', 'c');
-    test(c1, 3, 'a', 'b', 'c', c2);
-    }
 }
