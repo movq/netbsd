@@ -1,4 +1,4 @@
-/* $NetBSD: auth.h,v 1.1.1.1 2014/02/25 13:14:30 roy Exp $ */
+/* $NetBSD: auth.h,v 1.1.1.1.4.2 2014/05/22 15:44:40 yamt Exp $ */
 
 /*
  * dhcpcd - DHCP client daemon
