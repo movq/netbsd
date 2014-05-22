@@ -1,4 +1,4 @@
-/* $NetBSD: h_xcbcmac.c,v 1.4 2014/01/16 23:56:04 joerg Exp $ */
+/* $NetBSD: h_xcbcmac.c,v 1.4.4.2 2014/05/22 11:42:17 yamt Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-# $NetBSD: t_vmstat.sh,v 1.1 2014/01/07 16:47:13 gson Exp $
+# $NetBSD: t_vmstat.sh,v 1.1.4.2 2014/05/22 11:42:24 yamt Exp $
 #
 # Copyright (c) 2013 The NetBSD Foundation, Inc.
 # All rights reserved.

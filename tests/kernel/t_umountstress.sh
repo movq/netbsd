@@ -1,4 +1,4 @@
-# $NetBSD: t_umountstress.sh,v 1.5 2013/05/31 14:40:48 gson Exp $
+# $NetBSD: t_umountstress.sh,v 1.5.8.2 2014/05/22 11:42:19 yamt Exp $
 #
 # Copyright (c) 2013 The NetBSD Foundation, Inc.
 # All rights reserved.

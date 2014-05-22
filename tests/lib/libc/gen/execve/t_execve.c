@@ -1,4 +1,4 @@
-/*	$NetBSD: t_execve.c,v 1.1 2014/04/29 06:29:02 uebayasi Exp $	*/
+/*	$NetBSD: t_execve.c,v 1.1.2.2 2014/05/22 11:42:20 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

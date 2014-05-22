@@ -1,4 +1,4 @@
-/* $NetBSD: t_mktemp.c,v 1.1 2013/04/22 21:05:12 christos Exp $ */
+/* $NetBSD: t_mktemp.c,v 1.1.8.2 2014/05/22 11:42:21 yamt Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_mktemp.c,v 1.1 2013/04/22 21:05:12 christos Exp $");
+__RCSID("$NetBSD: t_mktemp.c,v 1.1.8.2 2014/05/22 11:42:21 yamt Exp $");
 
 #include <atf-c.h>
 #include <stdlib.h>

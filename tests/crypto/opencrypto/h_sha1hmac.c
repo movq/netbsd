@@ -1,4 +1,4 @@
-/* $NetBSD: h_sha1hmac.c,v 1.2 2014/01/18 02:31:14 joerg Exp $ */
+/* $NetBSD: h_sha1hmac.c,v 1.2.4.2 2014/05/22 11:42:17 yamt Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

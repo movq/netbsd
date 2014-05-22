@@ -1,4 +1,4 @@
-/*	$NetBSD: fstest_udf.c,v 1.4 2013/07/02 15:00:55 reinoud Exp $	*/
+/*	$NetBSD: fstest_udf.c,v 1.4.6.2 2014/05/22 11:42:18 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.

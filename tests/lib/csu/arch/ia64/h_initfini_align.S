@@ -1,8 +1,8 @@
-/*	$NetBSD: h_initfini_align.S,v 1.2 2014/03/16 09:27:04 cherry Exp $	*/
+/*	$NetBSD: h_initfini_align.S,v 1.2.4.2 2014/05/22 11:42:19 yamt Exp $	*/
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: h_initfini_align.S,v 1.2 2014/03/16 09:27:04 cherry Exp $")
+RCSID("$NetBSD: h_initfini_align.S,v 1.2.4.2 2014/05/22 11:42:19 yamt Exp $")
 
 ENTRY(check_stack_alignment, 0)
 	.prologue

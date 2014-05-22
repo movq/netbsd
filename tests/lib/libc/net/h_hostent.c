@@ -1,4 +1,4 @@
-/*	$NetBSD: h_hostent.c,v 1.2 2014/01/09 02:18:10 christos Exp $	*/
+/*	$NetBSD: h_hostent.c,v 1.2.4.2 2014/05/22 11:42:20 yamt Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: h_hostent.c,v 1.2 2014/01/09 02:18:10 christos Exp $");
+__RCSID("$NetBSD: h_hostent.c,v 1.2.4.2 2014/05/22 11:42:20 yamt Exp $");
 
 #include <stdio.h>
 #include <string.h>

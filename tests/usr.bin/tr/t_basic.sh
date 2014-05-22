@@ -1,4 +1,4 @@
-# $NetBSD: t_basic.sh,v 1.3 2013/08/11 01:50:02 dholland Exp $
+# $NetBSD: t_basic.sh,v 1.3.4.2 2014/05/22 11:42:24 yamt Exp $
 #
 # Copyright (c) 2013 The NetBSD Foundation, Inc.
 # All rights reserved.
