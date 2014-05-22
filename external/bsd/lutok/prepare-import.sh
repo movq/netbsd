@@ -1,5 +1,5 @@
 #!/bin/sh
-# $NetBSD: prepare-import.sh,v 1.1 2013/02/16 21:29:45 jmmv Exp $
+# $NetBSD: prepare-import.sh,v 1.1.12.2 2014/05/22 15:49:33 yamt Exp $
 #
 # Use this script to recreate the 'dist' subdirectory from a newly released
 # distfile.  The script takes care of unpacking the distfile, removing any
