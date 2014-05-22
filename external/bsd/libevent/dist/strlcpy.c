@@ -1,4 +1,4 @@
-/*	$NetBSD: strlcpy.c,v 1.1.1.1 2013/04/11 16:43:21 christos Exp $	*/
+/*	$NetBSD: strlcpy.c,v 1.1.1.1.10.2 2014/05/22 15:48:10 yamt Exp $	*/
 /*	$OpenBSD: strlcpy.c,v 1.5 2001/05/13 15:40:16 deraadt Exp $	*/
 
 /*
@@ -36,7 +36,7 @@ static char *rcsid = "$OpenBSD: strlcpy.c,v 1.5 2001/05/13 15:40:16 deraadt Exp 
 
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: strlcpy.c,v 1.1.1.1 2013/04/11 16:43:21 christos Exp $");
+__RCSID("$NetBSD: strlcpy.c,v 1.1.1.1.10.2 2014/05/22 15:48:10 yamt Exp $");
 
 #ifndef _EVENT_HAVE_STRLCPY
 #include "strlcpy-internal.h"

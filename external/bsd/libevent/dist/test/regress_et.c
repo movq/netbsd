@@ -1,4 +1,4 @@
-/*	$NetBSD: regress_et.c,v 1.2 2013/04/11 16:56:42 christos Exp $	*/
+/*	$NetBSD: regress_et.c,v 1.2.10.2 2014/05/22 15:48:10 yamt Exp $	*/
 /*
  * Copyright (c) 2009-2012 Niels Provos and Nick Mathewson
  *
@@ -27,7 +27,7 @@
 #include "../util-internal.h"
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: regress_et.c,v 1.2 2013/04/11 16:56:42 christos Exp $");
+__RCSID("$NetBSD: regress_et.c,v 1.2.10.2 2014/05/22 15:48:10 yamt Exp $");
 
 #ifdef WIN32
 #include <winsock2.h>

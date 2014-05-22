@@ -1,4 +1,4 @@
-/*	$NetBSD: listener.c,v 1.1.1.1 2013/04/11 16:43:26 christos Exp $	*/
+/*	$NetBSD: listener.c,v 1.1.1.1.10.2 2014/05/22 15:48:09 yamt Exp $	*/
 /*
  * Copyright (c) 2009-2012 Niels Provos, Nick Mathewson
  *
@@ -29,7 +29,7 @@
 
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: listener.c,v 1.1.1.1 2013/04/11 16:43:26 christos Exp $");
+__RCSID("$NetBSD: listener.c,v 1.1.1.1.10.2 2014/05/22 15:48:09 yamt Exp $");
 
 #ifdef WIN32
 #ifndef _WIN32_WINNT

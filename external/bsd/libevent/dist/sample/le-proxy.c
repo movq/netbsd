@@ -1,4 +1,4 @@
-/*	$NetBSD: le-proxy.c,v 1.1.1.1 2013/04/11 16:43:31 christos Exp $	*/
+/*	$NetBSD: le-proxy.c,v 1.1.1.1.10.2 2014/05/22 15:48:10 yamt Exp $	*/
 /*
   This example code shows how to write an (optionally encrypting) SSL proxy
   with Libevent's bufferevent layer.

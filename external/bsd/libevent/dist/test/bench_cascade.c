@@ -1,4 +1,4 @@
-/*	$NetBSD: bench_cascade.c,v 1.1.1.1 2013/04/11 16:43:32 christos Exp $	*/
+/*	$NetBSD: bench_cascade.c,v 1.1.1.1.10.2 2014/05/22 15:48:10 yamt Exp $	*/
 /*
  * Copyright 2007-2012 Niels Provos and Nick Mathewson
  *
@@ -28,7 +28,7 @@
 
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: bench_cascade.c,v 1.1.1.1 2013/04/11 16:43:32 christos Exp $");
+__RCSID("$NetBSD: bench_cascade.c,v 1.1.1.1.10.2 2014/05/22 15:48:10 yamt Exp $");
 
 #include <sys/types.h>
 #include <sys/stat.h>

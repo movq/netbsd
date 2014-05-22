@@ -1,4 +1,4 @@
-/*	$NetBSD: regress_thread.c,v 1.4 2013/04/12 20:00:21 christos Exp $	*/
+/*	$NetBSD: regress_thread.c,v 1.4.10.2 2014/05/22 15:48:10 yamt Exp $	*/
 /*
  * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
  *
@@ -30,7 +30,7 @@
 
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: regress_thread.c,v 1.4 2013/04/12 20:00:21 christos Exp $");
+__RCSID("$NetBSD: regress_thread.c,v 1.4.10.2 2014/05/22 15:48:10 yamt Exp $");
 
 #include <sys/types.h>
 #include <stdio.h>
