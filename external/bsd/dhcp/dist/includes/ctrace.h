@@ -1,4 +1,4 @@
-/*	$NetBSD: ctrace.h,v 1.1.1.2 2013/03/27 00:31:38 christos Exp $	*/
+/*	$NetBSD: ctrace.h,v 1.1.1.2.10.2 2014/05/22 15:44:33 yamt Exp $	*/
 
 /* trace.h
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: prandom.c,v 1.1.1.3 2013/03/27 00:31:37 christos Exp $	*/
+/*	$NetBSD: prandom.c,v 1.1.1.3.10.2 2014/05/22 15:44:33 yamt Exp $	*/
 
 #ifndef LINT
 static const char rcsid[] = "Header: /tmp/cvstest/DHCP/dst/prandom.c,v 1.8.6.2 2012/03/09 11:28:11 tomasz Exp ";
@@ -22,7 +22,7 @@ static const char rcsid[] = "Header: /tmp/cvstest/DHCP/dst/prandom.c,v 1.8.6.2 2
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: prandom.c,v 1.1.1.3 2013/03/27 00:31:37 christos Exp $");
+__RCSID("$NetBSD: prandom.c,v 1.1.1.3.10.2 2014/05/22 15:44:33 yamt Exp $");
 
 
 #include <stdio.h>

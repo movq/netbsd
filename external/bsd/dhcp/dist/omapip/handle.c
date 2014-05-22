@@ -1,4 +1,4 @@
-/*	$NetBSD: handle.c,v 1.1.1.2 2013/03/24 22:50:36 christos Exp $	*/
+/*	$NetBSD: handle.c,v 1.1.1.2.10.2 2014/05/22 15:44:33 yamt Exp $	*/
 
 /* handle.c
 
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: handle.c,v 1.1.1.2 2013/03/24 22:50:36 christos Exp $");
+__RCSID("$NetBSD: handle.c,v 1.1.1.2.10.2 2014/05/22 15:44:33 yamt Exp $");
 
 #include "dhcpd.h"
 

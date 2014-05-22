@@ -1,4 +1,4 @@
-/*	$NetBSD: failover.c,v 1.1.1.2 2013/03/24 22:50:42 christos Exp $	*/
+/*	$NetBSD: failover.c,v 1.1.1.2.10.2 2014/05/22 15:44:34 yamt Exp $	*/
 
 /* failover.c
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: failover.c,v 1.1.1.2 2013/03/24 22:50:42 christos Exp $");
+__RCSID("$NetBSD: failover.c,v 1.1.1.2.10.2 2014/05/22 15:44:34 yamt Exp $");
 
 #include "cdefs.h"
 #include "dhcpd.h"

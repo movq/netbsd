@@ -1,4 +1,4 @@
-/*	$NetBSD: inet_addr.c,v 1.1.1.2 2013/03/27 00:31:40 christos Exp $	*/
+/*	$NetBSD: inet_addr.c,v 1.1.1.2.10.2 2014/05/22 15:44:33 yamt Exp $	*/
 
 /*	NetBSD: inet_addr.c,v 1.6 1996/02/02 15:22:23 mrg Exp 	*/
 
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: inet_addr.c,v 1.1.1.2 2013/03/27 00:31:40 christos Exp $");
+__RCSID("$NetBSD: inet_addr.c,v 1.1.1.2.10.2 2014/05/22 15:44:33 yamt Exp $");
 
 
 #if defined(LIBC_SCCS) && !defined(lint)

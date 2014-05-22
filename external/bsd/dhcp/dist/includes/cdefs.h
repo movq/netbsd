@@ -1,4 +1,4 @@
-/*	$NetBSD: cdefs.h,v 1.1.1.2 2013/03/24 22:50:34 christos Exp $	*/
+/*	$NetBSD: cdefs.h,v 1.1.1.2.10.2 2014/05/22 15:44:33 yamt Exp $	*/
 
 /* cdefs.h
 

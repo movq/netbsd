@@ -1,4 +1,4 @@
-/*	$NetBSD: dst_api.c,v 1.3 2013/03/27 00:38:08 christos Exp $	*/
+/*	$NetBSD: dst_api.c,v 1.3.10.2 2014/05/22 15:44:33 yamt Exp $	*/
 
 #ifndef LINT
 static const char rcsid[] = "Header: /tmp/cvstest/DHCP/dst/dst_api.c,v 1.9.6.1 2012/04/11 15:43:55 sar Exp ";
@@ -24,7 +24,7 @@ static const char rcsid[] = "Header: /tmp/cvstest/DHCP/dst/dst_api.c,v 1.9.6.1 2
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: dst_api.c,v 1.3 2013/03/27 00:38:08 christos Exp $");
+__RCSID("$NetBSD: dst_api.c,v 1.3.10.2 2014/05/22 15:44:33 yamt Exp $");
 
 /*
  * This file contains the interface between the DST API and the crypto API.

@@ -1,4 +1,4 @@
-/*	$NetBSD: ns_name.c,v 1.6 2014/03/07 05:51:44 matt Exp $	*/
+/*	$NetBSD: ns_name.c,v 1.6.4.2 2014/05/22 15:44:31 yamt Exp $	*/
 
 /*
  * Copyright (c) 2004,2009 by Internet Systems Consortium, Inc. ("ISC")
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: ns_name.c,v 1.6 2014/03/07 05:51:44 matt Exp $");
+__RCSID("$NetBSD: ns_name.c,v 1.6.4.2 2014/05/22 15:44:31 yamt Exp $");
 
 #ifndef lint
 static const char rcsid[] = "Id: ns_name.c,v 1.2 2009/10/28 04:12:29 sar Exp ";

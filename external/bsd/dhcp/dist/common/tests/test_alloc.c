@@ -1,4 +1,4 @@
-/*	$NetBSD: test_alloc.c,v 1.1.1.2 2013/03/24 22:50:33 christos Exp $	*/
+/*	$NetBSD: test_alloc.c,v 1.1.1.2.10.2 2014/05/22 15:44:32 yamt Exp $	*/
 
 /*
  * Copyright (c) 2007,2009,2012 by Internet Systems Consortium, Inc. ("ISC")

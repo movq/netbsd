@@ -1,4 +1,4 @@
-/*	$NetBSD: hmac_link.c,v 1.1.1.3 2013/03/27 00:31:37 christos Exp $	*/
+/*	$NetBSD: hmac_link.c,v 1.1.1.3.10.2 2014/05/22 15:44:33 yamt Exp $	*/
 
 #ifdef HMAC_MD5
 #ifndef LINT
@@ -24,7 +24,7 @@ static const char rcsid[] = "Header: /tmp/cvstest/DHCP/dst/hmac_link.c,v 1.5.6.1
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: hmac_link.c,v 1.1.1.3 2013/03/27 00:31:37 christos Exp $");
+__RCSID("$NetBSD: hmac_link.c,v 1.1.1.3.10.2 2014/05/22 15:44:33 yamt Exp $");
 
 
 /* 

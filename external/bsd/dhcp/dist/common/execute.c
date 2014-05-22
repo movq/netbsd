@@ -1,4 +1,4 @@
-/*	$NetBSD: execute.c,v 1.1.1.2 2013/03/24 22:50:31 christos Exp $	*/
+/*	$NetBSD: execute.c,v 1.1.1.2.10.2 2014/05/22 15:44:31 yamt Exp $	*/
 
 /* execute.c
 
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: execute.c,v 1.1.1.2 2013/03/24 22:50:31 christos Exp $");
+__RCSID("$NetBSD: execute.c,v 1.1.1.2.10.2 2014/05/22 15:44:31 yamt Exp $");
 
 #include "dhcpd.h"
 #include <omapip/omapip_p.h>

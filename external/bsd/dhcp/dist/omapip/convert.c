@@ -1,4 +1,4 @@
-/*	$NetBSD: convert.c,v 1.1.1.1 2013/03/24 15:45:57 christos Exp $	*/
+/*	$NetBSD: convert.c,v 1.1.1.1.10.2 2014/05/22 15:44:33 yamt Exp $	*/
 
 /* convert.c
 
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: convert.c,v 1.1.1.1 2013/03/24 15:45:57 christos Exp $");
+__RCSID("$NetBSD: convert.c,v 1.1.1.1.10.2 2014/05/22 15:44:33 yamt Exp $");
 
 #include "dhcpd.h"
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: ddns.c,v 1.3 2013/03/24 23:03:06 christos Exp $	*/
+/*	$NetBSD: ddns.c,v 1.3.10.2 2014/05/22 15:44:34 yamt Exp $	*/
 
 /* ddns.c
 
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: ddns.c,v 1.3 2013/03/24 23:03:06 christos Exp $");
+__RCSID("$NetBSD: ddns.c,v 1.3.10.2 2014/05/22 15:44:34 yamt Exp $");
 
 #include "dhcpd.h"
 #include "dst/md5.h"
