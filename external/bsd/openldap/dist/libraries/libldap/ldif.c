@@ -1,4 +1,4 @@
-/*	$NetBSD: ldif.c,v 1.1 2014/05/28 09:58:41 tron Exp $	*/
+/*	$NetBSD: ldif.c,v 1.1.1.1 2014/05/28 09:58:41 tron Exp $	*/
 
 /* ldif.c - routines for dealing with LDIF files */
 /* $OpenLDAP$ */

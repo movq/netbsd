@@ -1,4 +1,4 @@
-/*	$NetBSD: bind.c,v 1.1 2014/05/28 09:58:49 tron Exp $	*/
+/*	$NetBSD: bind.c,v 1.1.1.1 2014/05/28 09:58:49 tron Exp $	*/
 
 /* bind.c - mdb backend bind routine */
 /* $OpenLDAP$ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: fetch.c,v 1.1 2014/05/28 09:58:41 tron Exp $	*/
+/*	$NetBSD: fetch.c,v 1.1.1.1 2014/05/28 09:58:41 tron Exp $	*/
 
 /* fetch.c - routines for fetching data at URLs */
 /* $OpenLDAP$ */

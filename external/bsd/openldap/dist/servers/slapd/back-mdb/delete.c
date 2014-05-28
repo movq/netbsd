@@ -1,4 +1,4 @@
-/*	$NetBSD: delete.c,v 1.1 2014/05/28 09:58:49 tron Exp $	*/
+/*	$NetBSD: delete.c,v 1.1.1.1 2014/05/28 09:58:49 tron Exp $	*/
 
 /* delete.c - mdb backend delete routine */
 /* $OpenLDAP$ */

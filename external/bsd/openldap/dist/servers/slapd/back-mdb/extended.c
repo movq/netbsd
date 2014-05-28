@@ -1,4 +1,4 @@
-/*	$NetBSD: extended.c,v 1.1 2014/05/28 09:58:49 tron Exp $	*/
+/*	$NetBSD: extended.c,v 1.1.1.1 2014/05/28 09:58:49 tron Exp $	*/
 
 /* extended.c - mdb backend extended routines */
 /* $OpenLDAP$ */

@@ -1,4 +1,4 @@
-/*	$NetBSD: mdb_copy.c,v 1.1 2014/05/28 09:58:42 tron Exp $	*/
+/*	$NetBSD: mdb_copy.c,v 1.1.1.1 2014/05/28 09:58:42 tron Exp $	*/
 
 /* mdb_copy.c - memory-mapped database backup tool */
 /*

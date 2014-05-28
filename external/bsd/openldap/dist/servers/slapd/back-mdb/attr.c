@@ -1,4 +1,4 @@
-/*	$NetBSD: attr.c,v 1.1 2014/05/28 09:58:49 tron Exp $	*/
+/*	$NetBSD: attr.c,v 1.1.1.1 2014/05/28 09:58:49 tron Exp $	*/
 
 /* attr.c - backend routines for dealing with attributes */
 /* $OpenLDAP$ */

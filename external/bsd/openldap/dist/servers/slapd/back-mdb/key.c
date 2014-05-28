@@ -1,4 +1,4 @@
-/*	$NetBSD: key.c,v 1.1 2014/05/28 09:58:50 tron Exp $	*/
+/*	$NetBSD: key.c,v 1.1.1.1 2014/05/28 09:58:50 tron Exp $	*/
 
 /* index.c - routines for dealing with attribute indexes */
 /* $OpenLDAP$ */

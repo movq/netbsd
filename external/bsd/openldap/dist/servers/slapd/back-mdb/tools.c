@@ -1,4 +1,4 @@
-/*	$NetBSD: tools.c,v 1.1 2014/05/28 09:58:50 tron Exp $	*/
+/*	$NetBSD: tools.c,v 1.1.1.1 2014/05/28 09:58:50 tron Exp $	*/
 
 /* tools.c - tools for slap tools */
 /* $OpenLDAP$ */
