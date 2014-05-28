@@ -1,4 +1,4 @@
-/*	$NetBSD: config.c,v 1.1 2014/05/28 09:58:49 tron Exp $	*/
+/*	$NetBSD: config.c,v 1.1.1.1 2014/05/28 09:58:49 tron Exp $	*/
 
 /* config.c - mdb backend configuration file routine */
 /* $OpenLDAP$ */

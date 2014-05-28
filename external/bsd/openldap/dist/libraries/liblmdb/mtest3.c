@@ -1,4 +1,4 @@
-/*	$NetBSD: mtest3.c,v 1.1 2014/05/28 09:58:42 tron Exp $	*/
+/*	$NetBSD: mtest3.c,v 1.1.1.1 2014/05/28 09:58:42 tron Exp $	*/
 
 /* mtest3.c - memory-mapped database tester/toy */
 /*

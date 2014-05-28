@@ -1,4 +1,4 @@
-/*	$NetBSD: compare.c,v 1.1 2014/05/28 09:58:49 tron Exp $	*/
+/*	$NetBSD: compare.c,v 1.1.1.1 2014/05/28 09:58:49 tron Exp $	*/
 
 /* compare.c - mdb backend compare routine */
 /* $OpenLDAP$ */

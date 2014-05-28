@@ -1,4 +1,4 @@
-/*	$NetBSD: proto-mdb.h,v 1.1 2014/05/28 09:58:50 tron Exp $	*/
+/*	$NetBSD: proto-mdb.h,v 1.1.1.1 2014/05/28 09:58:50 tron Exp $	*/
 
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.

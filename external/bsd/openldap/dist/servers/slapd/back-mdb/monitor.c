@@ -1,4 +1,4 @@
-/*	$NetBSD: monitor.c,v 1.1 2014/05/28 09:58:50 tron Exp $	*/
+/*	$NetBSD: monitor.c,v 1.1.1.1 2014/05/28 09:58:50 tron Exp $	*/
 
 /* monitor.c - monitor mdb backend */
 /* $OpenLDAP$ */

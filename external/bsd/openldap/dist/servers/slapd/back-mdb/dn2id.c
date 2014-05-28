@@ -1,4 +1,4 @@
-/*	$NetBSD: dn2id.c,v 1.1 2014/05/28 09:58:49 tron Exp $	*/
+/*	$NetBSD: dn2id.c,v 1.1.1.1 2014/05/28 09:58:49 tron Exp $	*/
 
 /* dn2id.c - routines to deal with the dn2id index */
 /* $OpenLDAP$ */

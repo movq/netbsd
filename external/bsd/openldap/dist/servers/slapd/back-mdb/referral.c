@@ -1,4 +1,4 @@
-/*	$NetBSD: referral.c,v 1.1 2014/05/28 09:58:50 tron Exp $	*/
+/*	$NetBSD: referral.c,v 1.1.1.1 2014/05/28 09:58:50 tron Exp $	*/
 
 /* referral.c - MDB backend referral handler */
 /* $OpenLDAP$ */

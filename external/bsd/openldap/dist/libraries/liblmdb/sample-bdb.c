@@ -1,4 +1,4 @@
-/*	$NetBSD: sample-bdb.c,v 1.1 2014/05/28 09:58:42 tron Exp $	*/
+/*	$NetBSD: sample-bdb.c,v 1.1.1.1 2014/05/28 09:58:42 tron Exp $	*/
 
 /* sample-bdb.c - BerkeleyDB toy/sample
  *

@@ -1,4 +1,4 @@
-/*	$NetBSD: lastbind.c,v 1.1 2014/05/28 09:58:27 tron Exp $	*/
+/*	$NetBSD: lastbind.c,v 1.1.1.1 2014/05/28 09:58:27 tron Exp $	*/
 
 /* lastbind.c - Record timestamp of the last successful bind to entries */
 /* $OpenLDAP$ */

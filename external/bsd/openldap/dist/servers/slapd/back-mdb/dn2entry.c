@@ -1,4 +1,4 @@
-/*	$NetBSD: dn2entry.c,v 1.1 2014/05/28 09:58:49 tron Exp $	*/
+/*	$NetBSD: dn2entry.c,v 1.1.1.1 2014/05/28 09:58:49 tron Exp $	*/
 
 /* dn2entry.c - routines to deal with the dn2id / id2entry glue */
 /* $OpenLDAP$ */
