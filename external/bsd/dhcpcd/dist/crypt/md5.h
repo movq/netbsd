@@ -1,4 +1,4 @@
-/* $NetBSD: md5.h,v 1.1 2014/06/14 20:51:09 roy Exp $ */
+/* $NetBSD: md5.h,v 1.1.1.1 2014/06/14 20:51:09 roy Exp $ */
 
 /*
  * This code implements the MD5 message-digest algorithm.
