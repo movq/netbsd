@@ -1,4 +1,4 @@
-/* $NetBSD: if.h,v 1.1 2014/06/14 20:51:09 roy Exp $ */
+/* $NetBSD: if.h,v 1.1.1.1 2014/06/14 20:51:09 roy Exp $ */
 
 /*
  * dhcpcd - DHCP client daemon
