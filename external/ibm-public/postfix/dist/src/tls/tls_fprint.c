@@ -1,4 +1,4 @@
-/*	$NetBSD: tls_fprint.c,v 1.1 2014/07/06 19:27:54 tron Exp $	*/
+/*	$NetBSD: tls_fprint.c,v 1.1.1.1 2014/07/06 19:27:54 tron Exp $	*/
 
 /*++
 /* NAME

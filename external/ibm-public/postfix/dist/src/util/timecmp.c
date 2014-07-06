@@ -1,4 +1,4 @@
-/*	$NetBSD: timecmp.c,v 1.1 2014/07/06 19:27:59 tron Exp $	*/
+/*	$NetBSD: timecmp.c,v 1.1.1.1 2014/07/06 19:27:59 tron Exp $	*/
 
 /*++
 /* NAME

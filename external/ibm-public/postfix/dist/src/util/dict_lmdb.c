@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_lmdb.c,v 1.1 2014/07/06 19:27:58 tron Exp $	*/
+/*	$NetBSD: dict_lmdb.c,v 1.1.1.1 2014/07/06 19:27:58 tron Exp $	*/
 
 /*++
 /* NAME
