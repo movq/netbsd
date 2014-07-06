@@ -1,4 +1,4 @@
-/*	$NetBSD: posttls-finger.c,v 1.1 2014/07/06 19:27:55 tron Exp $	*/
+/*	$NetBSD: posttls-finger.c,v 1.1.1.1 2014/07/06 19:27:55 tron Exp $	*/
 
 /*++
 /* NAME
