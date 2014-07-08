@@ -1,4 +1,4 @@
-/*	$NetBSD: delv.c,v 1.1 2014/07/08 04:45:12 spz Exp $	*/
+/*	$NetBSD: delv.c,v 1.1.1.1 2014/07/08 04:45:12 spz Exp $	*/
 
 /*
  * Copyright (C) 2014  Internet Systems Consortium, Inc. ("ISC")
