@@ -1,4 +1,4 @@
-/*	$NetBSD: lua-bozo.c,v 1.9 2014/01/02 08:21:38 mrg Exp $	*/
+/*	$NetBSD: lua-bozo.c,v 1.9.6.2 2014/07/09 09:42:39 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 2013 Marc Balmer <marc@msys.ch>
