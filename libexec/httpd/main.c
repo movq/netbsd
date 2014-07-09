@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.7 2014/01/02 08:21:38 mrg Exp $	*/
+/*	$NetBSD: main.c,v 1.7.4.2 2014/07/09 15:21:21 msaitoh Exp $	*/
 
 /*	$eterna: main.c,v 1.6 2011/11/18 09:21:15 mrg Exp $	*/
 /* from: eterna: bozohttpd.c,v 1.159 2009/05/23 02:14:30 mrg Exp 	*/
