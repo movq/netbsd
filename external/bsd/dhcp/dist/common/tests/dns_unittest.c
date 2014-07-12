@@ -1,4 +1,4 @@
-/*	$NetBSD: dns_unittest.c,v 1.1 2014/07/12 11:57:48 spz Exp $	*/
+/*	$NetBSD: dns_unittest.c,v 1.1.1.1 2014/07/12 11:57:48 spz Exp $	*/
 /*
  * Copyright (C) 2013 Internet Systems Consortium, Inc. ("ISC")
  *
