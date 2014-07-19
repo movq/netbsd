@@ -1,9 +1,0 @@
-include "arch/i386/conf/NO_DRM"
-
-i915drmkms* 	at pci? dev ? function ?
-
-no options 	DIAGNOSTIC
-options 	DIAGNOSTIC	# expensive kernel consistency check
-options 	DEBUG		# expensive debugging checks/support
-options 	LOCKDEBUG	# debug locks
-makeoptions 	DEBUG="-g"	# compile full symbol table
