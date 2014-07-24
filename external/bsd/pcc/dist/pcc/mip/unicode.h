@@ -1,5 +1,5 @@
 /*	Id: unicode.h,v 1.3 2014/06/06 15:31:56 plunky Exp 	*/	
-/*	$NetBSD: unicode.h,v 1.1 2014/07/24 19:29:28 plunky Exp $	*/
+/*	$NetBSD: unicode.h,v 1.1.1.1 2014/07/24 19:29:28 plunky Exp $	*/
 
 #ifndef _UNICODE_H
 #define _UNICODE_H

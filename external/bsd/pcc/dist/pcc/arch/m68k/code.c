@@ -1,5 +1,5 @@
 /*	Id: code.c,v 1.4 2014/04/19 07:47:51 ragge Exp 	*/	
-/*	$NetBSD: code.c,v 1.1 2014/07/24 19:21:16 plunky Exp $	*/
+/*	$NetBSD: code.c,v 1.1.1.1 2014/07/24 19:21:16 plunky Exp $	*/
 /*
  * Copyright (c) 2014 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
