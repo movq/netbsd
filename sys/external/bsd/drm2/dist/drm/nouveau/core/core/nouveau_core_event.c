@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_core_event.c,v 1.1 2014/08/06 12:36:23 riastradh Exp $	*/
+/*	$NetBSD: nouveau_core_event.c,v 1.1.1.1 2014/08/06 12:36:23 riastradh Exp $	*/
 
 /*
  * Copyright 2013 Red Hat Inc.
@@ -23,7 +23,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_core_event.c,v 1.1 2014/08/06 12:36:23 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_core_event.c,v 1.1.1.1 2014/08/06 12:36:23 riastradh Exp $");
 
 #include <core/os.h>
 #include <core/event.h>

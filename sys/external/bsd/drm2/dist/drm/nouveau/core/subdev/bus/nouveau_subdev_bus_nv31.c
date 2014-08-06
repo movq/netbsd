@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_subdev_bus_nv31.c,v 1.1 2014/08/06 12:36:29 riastradh Exp $	*/
+/*	$NetBSD: nouveau_subdev_bus_nv31.c,v 1.1.1.1 2014/08/06 12:36:29 riastradh Exp $	*/
 
 /*
  * Copyright 2012 Nouveau Community
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_bus_nv31.c,v 1.1 2014/08/06 12:36:29 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_bus_nv31.c,v 1.1.1.1 2014/08/06 12:36:29 riastradh Exp $");
 
 #include "nv04.h"
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_dispnv04_dfp.c,v 1.1 2014/08/06 12:36:32 riastradh Exp $	*/
+/*	$NetBSD: nouveau_dispnv04_dfp.c,v 1.1.1.1 2014/08/06 12:36:32 riastradh Exp $	*/
 
 /*
  * Copyright 2003 NVIDIA, Corporation
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_dispnv04_dfp.c,v 1.1 2014/08/06 12:36:32 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_dispnv04_dfp.c,v 1.1.1.1 2014/08/06 12:36:32 riastradh Exp $");
 
 #include <drm/drmP.h>
 #include <drm/drm_crtc_helper.h>

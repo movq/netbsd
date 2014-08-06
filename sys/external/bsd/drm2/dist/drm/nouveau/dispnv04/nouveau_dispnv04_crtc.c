@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_dispnv04_crtc.c,v 1.1 2014/08/06 12:36:32 riastradh Exp $	*/
+/*	$NetBSD: nouveau_dispnv04_crtc.c,v 1.1.1.1 2014/08/06 12:36:32 riastradh Exp $	*/
 
 /*
  * Copyright 1993-2003 NVIDIA, Corporation
@@ -25,7 +25,7 @@
  * DEALINGS IN THE SOFTWARE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_dispnv04_crtc.c,v 1.1 2014/08/06 12:36:32 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_dispnv04_crtc.c,v 1.1.1.1 2014/08/06 12:36:32 riastradh Exp $");
 
 #include <linux/pm_runtime.h>
 
