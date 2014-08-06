@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_core_enum.c,v 1.1 2014/08/06 12:36:23 riastradh Exp $	*/
+/*	$NetBSD: nouveau_core_enum.c,v 1.1.1.1 2014/08/06 12:36:23 riastradh Exp $	*/
 
 /*
  * Copyright (C) 2010 Nouveau Project
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_core_enum.c,v 1.1 2014/08/06 12:36:23 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_core_enum.c,v 1.1.1.1 2014/08/06 12:36:23 riastradh Exp $");
 
 #include <core/os.h>
 #include <core/enum.h>

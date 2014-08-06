@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_engine_ppp_nvc0.c,v 1.1 2014/08/06 12:36:27 riastradh Exp $	*/
+/*	$NetBSD: nouveau_engine_ppp_nvc0.c,v 1.1.1.1 2014/08/06 12:36:27 riastradh Exp $	*/
 
 /*
  * Copyright 2012 Maarten Lankhorst
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_ppp_nvc0.c,v 1.1 2014/08/06 12:36:27 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_ppp_nvc0.c,v 1.1.1.1 2014/08/06 12:36:27 riastradh Exp $");
 
 #include <engine/falcon.h>
 #include <engine/ppp.h>

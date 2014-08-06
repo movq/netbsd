@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_subdev_mc_nv4c.c,v 1.1 2014/08/06 12:36:31 riastradh Exp $	*/
+/*	$NetBSD: nouveau_subdev_mc_nv4c.c,v 1.1.1.1 2014/08/06 12:36:31 riastradh Exp $	*/
 
 /*
  * Copyright 2014 Ilia Mirkin
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_mc_nv4c.c,v 1.1 2014/08/06 12:36:31 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_mc_nv4c.c,v 1.1.1.1 2014/08/06 12:36:31 riastradh Exp $");
 
 #include "nv04.h"
 

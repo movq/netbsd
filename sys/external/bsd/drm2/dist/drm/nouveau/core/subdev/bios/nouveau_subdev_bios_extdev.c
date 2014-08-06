@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_subdev_bios_extdev.c,v 1.1 2014/08/06 12:36:28 riastradh Exp $	*/
+/*	$NetBSD: nouveau_subdev_bios_extdev.c,v 1.1.1.1 2014/08/06 12:36:28 riastradh Exp $	*/
 
 /*
  * Copyright 2012 Nouveau Community
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_bios_extdev.c,v 1.1 2014/08/06 12:36:28 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_bios_extdev.c,v 1.1.1.1 2014/08/06 12:36:28 riastradh Exp $");
 
 #include <subdev/bios.h>
 #include <subdev/bios/dcb.h>

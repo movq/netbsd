@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_engine_graph_ctxnv50.c,v 1.1 2014/08/06 12:36:25 riastradh Exp $	*/
+/*	$NetBSD: nouveau_engine_graph_ctxnv50.c,v 1.1.1.1 2014/08/06 12:36:25 riastradh Exp $	*/
 
 /*
  * Copyright 2009 Marcin Kościelnicki
@@ -23,7 +23,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_graph_ctxnv50.c,v 1.1 2014/08/06 12:36:25 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_graph_ctxnv50.c,v 1.1.1.1 2014/08/06 12:36:25 riastradh Exp $");
 
 #include <core/gpuobj.h>
 
