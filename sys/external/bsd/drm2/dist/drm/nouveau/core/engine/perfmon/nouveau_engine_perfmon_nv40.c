@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_engine_perfmon_nv40.c,v 1.1.1.1 2014/08/06 12:36:27 riastradh Exp $	*/
+/*	$NetBSD: nouveau_engine_perfmon_nv40.c,v 1.1.1.1.2.2 2014/08/10 06:55:32 tls Exp $	*/
 
 /*
  * Copyright 2013 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_perfmon_nv40.c,v 1.1.1.1 2014/08/06 12:36:27 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_perfmon_nv40.c,v 1.1.1.1.2.2 2014/08/10 06:55:32 tls Exp $");
 
 #include "nv40.h"
 

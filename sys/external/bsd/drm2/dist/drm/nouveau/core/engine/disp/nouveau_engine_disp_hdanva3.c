@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_engine_disp_hdanva3.c,v 1.1.1.1 2014/08/06 12:36:24 riastradh Exp $	*/
+/*	$NetBSD: nouveau_engine_disp_hdanva3.c,v 1.1.1.1.2.2 2014/08/10 06:55:31 tls Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_disp_hdanva3.c,v 1.1.1.1 2014/08/06 12:36:24 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_disp_hdanva3.c,v 1.1.1.1.2.2 2014/08/10 06:55:31 tls Exp $");
 
 #include <core/os.h>
 #include <core/class.h>

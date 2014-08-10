@@ -1,4 +1,4 @@
-/*	$NetBSD: ww_mutex.h,v 1.4 2014/07/26 21:36:40 riastradh Exp $	*/
+/*	$NetBSD: ww_mutex.h,v 1.4.2.2 2014/08/10 06:55:39 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
