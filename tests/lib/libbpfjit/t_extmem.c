@@ -1,4 +1,4 @@
-/*	$NetBSD: t_extmem.c,v 1.3 2014/07/14 19:11:15 alnsn Exp $ */
+/*	$NetBSD: t_extmem.c,v 1.3.2.2 2014/08/10 06:57:21 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 Alexander Nasonov.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_extmem.c,v 1.3 2014/07/14 19:11:15 alnsn Exp $");
+__RCSID("$NetBSD: t_extmem.c,v 1.3.2.2 2014/08/10 06:57:21 tls Exp $");
 
 #include <atf-c.h>
 #include <stdint.h>
