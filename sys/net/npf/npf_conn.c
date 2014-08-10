@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_conn.c,v 1.9 2014/07/26 16:42:03 rmind Exp $	*/
+/*	$NetBSD: npf_conn.c,v 1.9.2.2 2014/08/10 06:56:16 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 Mindaugas Rasiukevicius <rmind at netbsd org>
@@ -99,7 +99,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_conn.c,v 1.9 2014/07/26 16:42:03 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_conn.c,v 1.9.2.2 2014/08/10 06:56:16 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
