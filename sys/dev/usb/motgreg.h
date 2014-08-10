@@ -1,4 +1,4 @@
-/* $NetBSD: motgreg.h,v 1.1 2014/07/16 18:22:23 bouyer Exp $ */
+/* $NetBSD: motgreg.h,v 1.1.2.2 2014/08/10 06:54:59 tls Exp $ */
 /* FreeBSD: head/sys/dev/usb/controller/musb_otg.h 267122 2014-06-05 18:23:51Z hselasky */
 /*-
  * Copyright (c) 2008 Hans Petter Selasky. All rights reserved.
