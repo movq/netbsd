@@ -1,4 +1,4 @@
-/* $NetBSD: timeout.c,v 1.4 2014/08/05 08:20:02 christos Exp $ */
+/* $NetBSD: timeout.c,v 1.4.2.2 2014/08/10 06:59:06 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 Baptiste Daroussin <bapt@FreeBSD.org>
@@ -32,7 +32,7 @@
 #if 0
 __FBSDID("$FreeBSD: head/usr.bin/timeout/timeout.c 268763 2014-07-16 13:52:05Z bapt $");
 #else
-__RCSID("$NetBSD: timeout.c,v 1.4 2014/08/05 08:20:02 christos Exp $");
+__RCSID("$NetBSD: timeout.c,v 1.4.2.2 2014/08/10 06:59:06 tls Exp $");
 #endif
 #endif /* not lint */
 
