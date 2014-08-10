@@ -32,7 +32,7 @@
 #include "gpio.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: exynos_gpio.c,v 1.6 2014/05/21 12:18:24 reinoud Exp $");
+__KERNEL_RCSID(1, "$NetBSD: exynos_gpio.c,v 1.6.4.2 2014/08/10 06:53:52 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

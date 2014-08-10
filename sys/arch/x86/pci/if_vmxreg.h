@@ -1,4 +1,4 @@
-/*	$NetBSD: if_vmxreg.h,v 1.1 2014/06/10 01:42:39 hikaru Exp $	*/
+/*	$NetBSD: if_vmxreg.h,v 1.1.2.2 2014/08/10 06:54:11 tls Exp $	*/
 /*	$OpenBSD: if_vmxreg.h,v 1.3 2013/08/28 10:19:19 reyk Exp $	*/
 
 /*

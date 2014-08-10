@@ -1,4 +1,4 @@
-#	$NetBSD: ODROID_INSTALL,v 1.2 2014/05/01 18:43:45 martin Exp $
+#	$NetBSD: ODROID_INSTALL,v 1.2.6.2 2014/08/10 06:53:55 tls Exp $
 #
 #	ODROID_INSTALL -- ODROID kernel with installation-sized
 #	ramdisk

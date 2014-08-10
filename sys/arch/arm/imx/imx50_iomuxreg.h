@@ -1,4 +1,4 @@
-/*	$NetBSD: imx50_iomuxreg.h,v 1.1 2014/07/25 07:49:56 hkenken Exp $	*/
+/*	$NetBSD: imx50_iomuxreg.h,v 1.1.2.2 2014/08/10 06:53:51 tls Exp $	*/
 
 /*
  * Copyright (c) 2012  Genetec Corporation.  All rights reserved.

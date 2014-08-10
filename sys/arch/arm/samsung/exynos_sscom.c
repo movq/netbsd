@@ -1,4 +1,4 @@
-/*	$NetBSD: exynos_sscom.c,v 1.5 2014/04/27 20:22:46 reinoud Exp $ */
+/*	$NetBSD: exynos_sscom.c,v 1.5.6.2 2014/08/10 06:53:52 tls Exp $ */
 
 /*
  * Copyright (c) 2014 Reinoud Zandijk
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exynos_sscom.c,v 1.5 2014/04/27 20:22:46 reinoud Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exynos_sscom.c,v 1.5.6.2 2014/08/10 06:53:52 tls Exp $");
 
 #include "opt_sscom.h"
 #include "opt_ddb.h"

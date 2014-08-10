@@ -1,4 +1,4 @@
-/* $NetBSD: tifbreg.h,v 1.1 2014/07/16 18:30:43 bouyer Exp $ */
+/* $NetBSD: tifbreg.h,v 1.1.2.2 2014/08/10 06:53:52 tls Exp $ */
 /*-
  * Copyright 2013 Oleksandr Tymoshenko <gonzo@freebsd.org>
  * All rights reserved.

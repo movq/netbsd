@@ -1,4 +1,4 @@
-/* $NetBSD: tiotgreg.h,v 1.1 2014/07/16 18:27:19 bouyer Exp $ */
+/* $NetBSD: tiotgreg.h,v 1.1.2.2 2014/08/10 06:53:52 tls Exp $ */
 /*
  * Copyright (c) 2013 Manuel Bouyer.  All rights reserved.
  *
