@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_drvname.c,v 1.1 2014/07/25 01:38:26 mrg Exp $	*/
+/*	$NetBSD: pci_drvname.c,v 1.1.2.2 2014/08/10 06:52:09 tls Exp $	*/
 
 /*
  * Copyright (c) 2014 Matthew R. Green
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pci_drvname.c,v 1.1 2014/07/25 01:38:26 mrg Exp $");
+__RCSID("$NetBSD: pci_drvname.c,v 1.1.2.2 2014/08/10 06:52:09 tls Exp $");
 
 #include <sys/types.h>
 #include <sys/ioctl.h>
