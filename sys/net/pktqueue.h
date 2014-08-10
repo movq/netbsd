@@ -1,4 +1,4 @@
-/*	$NetBSD: pktqueue.h,v 1.4 2014/06/16 00:40:10 ozaki-r Exp $	*/
+/*	$NetBSD: pktqueue.h,v 1.4.2.2 2014/08/10 06:56:16 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

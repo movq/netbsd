@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_conn.h,v 1.5 2014/07/25 23:21:46 rmind Exp $	*/
+/*	$NetBSD: npf_conn.h,v 1.5.2.2 2014/08/10 06:56:16 tls Exp $	*/
 
 /*-
  * Copyright (c) 2009-2014 The NetBSD Foundation, Inc.
