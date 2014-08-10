@@ -1,4 +1,4 @@
-/* $NetBSD: t_sysctl.c,v 1.1 2014/08/09 07:04:03 gson Exp $ */
+/* $NetBSD: t_sysctl.c,v 1.1.2.2 2014/08/10 06:57:19 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2014\
  The NetBSD Foundation, inc. All rights reserved.");
-__RCSID("$NetBSD: t_sysctl.c,v 1.1 2014/08/09 07:04:03 gson Exp $");
+__RCSID("$NetBSD: t_sysctl.c,v 1.1.2.2 2014/08/10 06:57:19 tls Exp $");
 
 #include <sys/sysctl.h>
 #include <errno.h>
