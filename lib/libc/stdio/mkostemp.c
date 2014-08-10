@@ -1,4 +1,4 @@
-/*	$NetBSD: mkostemp.c,v 1.1 2014/06/18 17:47:58 christos Exp $	*/
+/*	$NetBSD: mkostemp.c,v 1.1.2.2 2014/08/10 06:51:51 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

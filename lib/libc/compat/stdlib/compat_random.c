@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_random.c,v 1.2 2014/06/12 18:50:12 christos Exp $	*/
+/*	$NetBSD: compat_random.c,v 1.2.2.2 2014/08/10 06:51:50 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: compat_random.c,v 1.2 2014/06/12 18:50:12 christos Exp $");
+__RCSID("$NetBSD: compat_random.c,v 1.2.2.2 2014/08/10 06:51:50 tls Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #define __LIBC12_SOURCE__
