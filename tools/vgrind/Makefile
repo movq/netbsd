@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2014/07/15 16:04:35 christos Exp $
+#	$NetBSD: Makefile,v 1.2.2.2 2014/08/10 06:57:47 tls Exp $
 
 HOSTPROGNAME=	nbvfontedpr
 HOST_BINDIR=	${TOOLDIR}/libexec
