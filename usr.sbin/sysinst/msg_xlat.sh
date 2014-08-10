@@ -1,5 +1,5 @@
 #! /bin/sh
-#	$NetBSD: msg_xlat.sh,v 1.1 2014/07/26 19:30:44 dholland Exp $
+#	$NetBSD: msg_xlat.sh,v 1.1.2.2 2014/08/10 07:00:24 tls Exp $
 
 #-
 # Copyright (c) 2003 The NetBSD Foundation, Inc.

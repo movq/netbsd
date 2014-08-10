@@ -1,4 +1,4 @@
-/*	$NetBSD: defs.h,v 1.3 2014/08/06 10:03:49 martin Exp $	*/
+/*	$NetBSD: defs.h,v 1.3.2.2 2014/08/10 07:00:24 tls Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
