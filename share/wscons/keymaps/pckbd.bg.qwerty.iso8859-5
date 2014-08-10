@@ -1,4 +1,4 @@
-# $NetBSD: pckbd.bg.qwerty.iso8859-5,v 1.1 2014/07/13 12:29:01 mbalmer Exp $
+# $NetBSD: pckbd.bg.qwerty.iso8859-5,v 1.1.2.2 2014/08/10 06:53:32 tls Exp $
 #
 # This is a phonetic ISO8859-5 keymap. Cyrillic input is toggled by
 # pressing the AltGr key. 
