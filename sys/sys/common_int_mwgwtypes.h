@@ -1,4 +1,4 @@
-/*	$NetBSD: common_int_mwgwtypes.h,v 1.1 2014/07/25 21:43:13 joerg Exp $	*/
+/*	$NetBSD: common_int_mwgwtypes.h,v 1.1.2.2 2014/08/10 06:56:54 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
