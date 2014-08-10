@@ -1,4 +1,4 @@
-/*      $NetBSD: sljit_rump.h,v 1.1 2014/07/22 20:25:13 alnsn Exp $	*/
+/*      $NetBSD: sljit_rump.h,v 1.1.2.2 2014/08/10 06:56:50 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 Alexander Nasonov.

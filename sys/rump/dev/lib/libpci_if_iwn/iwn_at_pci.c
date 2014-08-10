@@ -1,4 +1,4 @@
-/*	$NetBSD: iwn_at_pci.c,v 1.1 2014/04/07 01:45:36 pooka Exp $	*/
+/*	$NetBSD: iwn_at_pci.c,v 1.1.6.2 2014/08/10 06:56:50 tls Exp $	*/
 
 /*
  * Copyright (c) 2010 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: iwn_at_pci.c,v 1.1 2014/04/07 01:45:36 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: iwn_at_pci.c,v 1.1.6.2 2014/08/10 06:56:50 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
