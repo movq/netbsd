@@ -1,4 +1,4 @@
-# $NetBSD: t_dotcmd.sh,v 1.1 2014/05/31 14:29:06 christos Exp $
+# $NetBSD: t_dotcmd.sh,v 1.1.2.2 2014/08/10 06:57:02 tls Exp $
 #
 # Copyright (c) 2014 The NetBSD Foundation, Inc.
 # All rights reserved.
