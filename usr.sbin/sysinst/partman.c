@@ -1,4 +1,4 @@
-/*	$NetBSD: partman.c,v 1.4 2014/08/08 20:59:35 riz Exp $ */
+/*	$NetBSD: partman.c,v 1.4.2.2 2014/08/10 07:00:24 tls Exp $ */
 
 /*
  * Copyright 2012 Eugene Lozovoy

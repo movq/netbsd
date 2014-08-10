@@ -1,4 +1,4 @@
-/*	$NetBSD: disks.c,v 1.4 2014/08/08 20:24:27 riz Exp $ */
+/*	$NetBSD: disks.c,v 1.4.2.2 2014/08/10 07:00:24 tls Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.

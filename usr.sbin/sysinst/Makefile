@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2014/07/26 19:56:30 dholland Exp $
+#	$NetBSD: Makefile,v 1.2.2.2 2014/08/10 07:00:24 tls Exp $
 #
 # sysinst is usually built when the crunched install binary is built,
 # but can be built here as a normal program for testing.

@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mi.pl,v 1.2 2014/08/03 16:09:38 martin Exp $	*/
+/*	$NetBSD: msg.mi.pl,v 1.2.2.2 2014/08/10 07:00:24 tls Exp $	*/
 /*	Based on english version: */
 /*	NetBSD: msg.mi.pl,v 1.36 2004/04/17 18:55:35 atatat Exp       */
 
