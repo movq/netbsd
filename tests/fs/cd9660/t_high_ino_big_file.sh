@@ -1,4 +1,4 @@
-# $NetBSD: t_high_ino_big_file.sh,v 1.4 2014/07/07 22:06:02 pgoyette Exp $
+# $NetBSD: t_high_ino_big_file.sh,v 1.4.2.2 2014/08/10 06:57:07 tls Exp $
 #
 # Copyright (c) 2014 The NetBSD Foundation, Inc.
 # All rights reserved.
