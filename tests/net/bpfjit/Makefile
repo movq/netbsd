@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.4 2014/07/09 13:50:48 alnsn Exp $
+# $NetBSD: Makefile,v 1.4.2.2 2014/08/10 06:57:30 tls Exp $
 #
 
 .include <bsd.own.mk>
