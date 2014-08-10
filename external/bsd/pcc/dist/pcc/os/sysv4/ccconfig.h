@@ -1,5 +1,5 @@
 /*	Id: ccconfig.h,v 1.1 2012/08/30 17:38:19 ragge Exp 	*/	
-/*	$NetBSD: ccconfig.h,v 1.1.1.1 2014/07/24 19:29:37 plunky Exp $	*/
+/*	$NetBSD: ccconfig.h,v 1.1.1.1.2.2 2014/08/10 07:10:08 tls Exp $	*/
 
 /*
  * Copyright (c) 2008 Adam Hoka.
