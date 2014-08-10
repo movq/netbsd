@@ -1,4 +1,4 @@
-/*	$NetBSD: gss_acquire_cred_with_password.c,v 1.1.1.1 2014/04/24 12:45:29 pettai Exp $	*/
+/*	$NetBSD: gss_acquire_cred_with_password.c,v 1.1.1.1.4.2 2014/08/10 06:47:28 tls Exp $	*/
 
 /*
  * Copyright (c) 2011, PADL Software Pty Ltd.
