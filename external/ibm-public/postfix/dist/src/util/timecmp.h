@@ -1,4 +1,4 @@
-/*	$NetBSD: timecmp.h,v 1.1.1.1 2014/07/06 19:27:59 tron Exp $	*/
+/*	$NetBSD: timecmp.h,v 1.1.1.1.2.2 2014/08/10 07:12:50 tls Exp $	*/
 
 #ifndef _TIMECMP_H_INCLUDED_
 #define _TIMECMP_H_INCLUDED_

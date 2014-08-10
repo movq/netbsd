@@ -1,4 +1,4 @@
-/*	$NetBSD: tlsmgrmem.h,v 1.1.1.1 2014/07/06 19:27:55 tron Exp $	*/
+/*	$NetBSD: tlsmgrmem.h,v 1.1.1.1.2.2 2014/08/10 07:12:49 tls Exp $	*/
 
 /*++
 /* NAME

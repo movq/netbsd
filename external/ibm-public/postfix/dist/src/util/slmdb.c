@@ -1,4 +1,4 @@
-/*	$NetBSD: slmdb.c,v 1.1.1.1 2014/07/06 19:27:58 tron Exp $	*/
+/*	$NetBSD: slmdb.c,v 1.1.1.1.2.2 2014/08/10 07:12:50 tls Exp $	*/
 
 /*++
 /* NAME
