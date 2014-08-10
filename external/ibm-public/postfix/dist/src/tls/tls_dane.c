@@ -1,4 +1,4 @@
-/*	$NetBSD: tls_dane.c,v 1.1.1.1 2014/07/06 19:27:54 tron Exp $	*/
+/*	$NetBSD: tls_dane.c,v 1.1.1.1.2.2 2014/08/10 07:12:50 tls Exp $	*/
 
 /*++
 /* NAME

@@ -1,4 +1,4 @@
-/*	$NetBSD: mkmap_lmdb.c,v 1.1.1.1 2014/07/06 19:27:51 tron Exp $	*/
+/*	$NetBSD: mkmap_lmdb.c,v 1.1.1.1.2.2 2014/08/10 07:12:48 tls Exp $	*/
 
 /*++
 /* NAME
