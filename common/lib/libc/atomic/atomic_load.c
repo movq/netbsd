@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_load.c,v 1.2 2014/07/06 01:19:45 joerg Exp $	*/
+/*	$NetBSD: atomic_load.c,v 1.2.2.2 2014/08/10 06:47:06 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: atomic_load.c,v 1.2 2014/07/06 01:19:45 joerg Exp $");
+__RCSID("$NetBSD: atomic_load.c,v 1.2.2.2 2014/08/10 06:47:06 tls Exp $");
 
 #include "atomic_op_namespace.h"
 
