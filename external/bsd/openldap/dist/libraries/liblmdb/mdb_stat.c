@@ -1,4 +1,4 @@
-/*	$NetBSD: mdb_stat.c,v 1.1.1.1 2014/05/28 09:58:42 tron Exp $	*/
+/*	$NetBSD: mdb_stat.c,v 1.1.1.1.2.2 2014/08/10 07:09:47 tls Exp $	*/
 
 /* mdb_stat.c - memory-mapped database status tool */
 /*

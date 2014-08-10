@@ -1,4 +1,4 @@
-/*	$NetBSD: slapd-mtread.c,v 1.1.1.1 2014/05/28 09:58:54 tron Exp $	*/
+/*	$NetBSD: slapd-mtread.c,v 1.1.1.1.2.2 2014/08/10 07:09:52 tls Exp $	*/
 
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.

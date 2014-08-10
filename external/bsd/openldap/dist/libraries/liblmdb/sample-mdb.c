@@ -1,4 +1,4 @@
-/*	$NetBSD: sample-mdb.c,v 1.1.1.1 2014/05/28 09:58:42 tron Exp $	*/
+/*	$NetBSD: sample-mdb.c,v 1.1.1.1.2.2 2014/08/10 07:09:47 tls Exp $	*/
 
 /* sample-mdb.c - MDB toy/sample
  *
