@@ -1,4 +1,4 @@
-/*	$NetBSD: exynos_usb.c,v 1.7 2014/06/21 09:11:04 skrll Exp $	*/
+/*	$NetBSD: exynos_usb.c,v 1.7.2.2 2014/08/10 06:53:52 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: exynos_usb.c,v 1.7 2014/06/21 09:11:04 skrll Exp $");
+__KERNEL_RCSID(1, "$NetBSD: exynos_usb.c,v 1.7.2.2 2014/08/10 06:53:52 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

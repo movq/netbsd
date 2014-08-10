@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_gpio.c,v 1.2 2014/05/19 08:33:41 skrll Exp $	*/
+/*	$NetBSD: bcm2835_gpio.c,v 1.2.4.2 2014/08/10 06:53:51 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_gpio.c,v 1.2 2014/05/19 08:33:41 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_gpio.c,v 1.2.4.2 2014/08/10 06:53:51 tls Exp $");
 
 /*
  * Driver for BCM2835 GPIO

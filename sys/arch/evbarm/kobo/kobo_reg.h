@@ -1,4 +1,4 @@
-/*	$NetBSD: kobo_reg.h,v 1.1 2014/07/25 11:22:50 hkenken Exp $	*/
+/*	$NetBSD: kobo_reg.h,v 1.1.2.2 2014/08/10 06:53:55 tls Exp $	*/
 
 /*
  * Copyright (c) 2012  Genetec Corporation.  All rights reserved.

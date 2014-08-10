@@ -1,4 +1,4 @@
-/* $NetBSD: tiotg.c,v 1.2 2014/07/17 19:58:18 bouyer Exp $ */
+/* $NetBSD: tiotg.c,v 1.2.2.2 2014/08/10 06:53:52 tls Exp $ */
 /*
  * Copyright (c) 2013 Manuel Bouyer.  All rights reserved.
  *
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tiotg.c,v 1.2 2014/07/17 19:58:18 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tiotg.c,v 1.2.2.2 2014/08/10 06:53:52 tls Exp $");
 
 #include "opt_omap.h"
 #include "locators.h"

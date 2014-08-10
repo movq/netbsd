@@ -1,4 +1,4 @@
-/*	$NetBSD: kobo_start.S,v 1.1 2014/07/25 11:22:50 hkenken Exp $	*/
+/*	$NetBSD: kobo_start.S,v 1.1.2.2 2014/08/10 06:53:55 tls Exp $	*/
 
 /*-
  * Copyright (c) 2009 SHIMIZU Ryo <ryo@nerv.org>
@@ -66,7 +66,7 @@
 #include <arm/imx/imxuartreg.h>
 #include <evbarm/kobo/kobo_reg.h>
 
-RCSID("$NetBSD: kobo_start.S,v 1.1 2014/07/25 11:22:50 hkenken Exp $")
+RCSID("$NetBSD: kobo_start.S,v 1.1.2.2 2014/08/10 06:53:55 tls Exp $")
 
 #if defined(VERBOSE_INIT_ARM)
 #define DEBUG_STARTUP

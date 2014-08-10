@@ -1,4 +1,4 @@
-/*	$NetBSD: if_vmx.c,v 1.4 2014/07/19 06:12:24 hikaru Exp $	*/
+/*	$NetBSD: if_vmx.c,v 1.4.2.2 2014/08/10 06:54:11 tls Exp $	*/
 /*	$OpenBSD: if_vmx.c,v 1.16 2014/01/22 06:04:17 brad Exp $	*/
 
 /*
@@ -18,7 +18,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_vmx.c,v 1.4 2014/07/19 06:12:24 hikaru Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_vmx.c,v 1.4.2.2 2014/08/10 06:54:11 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

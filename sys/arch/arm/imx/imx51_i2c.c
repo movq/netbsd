@@ -1,4 +1,4 @@
-/*	$NetBSD: imx51_i2c.c,v 1.1 2014/07/25 07:07:47 hkenken Exp $	*/
+/*	$NetBSD: imx51_i2c.c,v 1.1.2.2 2014/08/10 06:53:51 tls Exp $	*/
 
 /*
  * Copyright (c) 2012 Genetec Corporation.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imx51_i2c.c,v 1.1 2014/07/25 07:07:47 hkenken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imx51_i2c.c,v 1.1.2.2 2014/08/10 06:53:51 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

@@ -1,4 +1,4 @@
-#	$NetBSD: ZYXELKX,v 1.2 2014/07/20 10:06:11 alnsn Exp $
+#	$NetBSD: ZYXELKX,v 1.2.2.2 2014/08/10 06:53:56 tls Exp $
 
 include		"arch/evbmips/conf/std.rasoc"
 
