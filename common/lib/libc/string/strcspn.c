@@ -1,4 +1,4 @@
-/*	$NetBSD: strcspn.c,v 1.1 2014/07/19 18:38:33 lneto Exp $	*/
+/*	$NetBSD: strcspn.c,v 1.1.2.2 2014/08/10 06:47:06 tls Exp $	*/
 
 /*-
  * Copyright (c) 2008 Joerg Sonnenberger
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: strcspn.c,v 1.1 2014/07/19 18:38:33 lneto Exp $");
+__RCSID("$NetBSD: strcspn.c,v 1.1.2.2 2014/08/10 06:47:06 tls Exp $");
 
 #if !defined(_KERNEL) && !defined(_STANDALONE)
 #include <assert.h>
