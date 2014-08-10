@@ -1,4 +1,4 @@
-#	$NetBSD: gcc-version.mk,v 1.1 2014/05/29 07:40:37 mrg Exp $
+#	$NetBSD: gcc-version.mk,v 1.1.2.2 2014/08/10 06:57:41 tls Exp $
 
 # common location for tools and native build
 
