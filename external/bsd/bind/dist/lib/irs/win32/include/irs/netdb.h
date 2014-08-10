@@ -1,4 +1,4 @@
-/*	$NetBSD: netdb.h,v 1.1.1.1 2014/07/08 04:49:26 spz Exp $	*/
+/*	$NetBSD: netdb.h,v 1.1.1.1.2.2 2014/08/10 07:06:43 tls Exp $	*/
 
 /*
  * Copyright (C) 2014  Internet Systems Consortium, Inc. ("ISC")
