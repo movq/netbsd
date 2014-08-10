@@ -1,4 +1,4 @@
-/*	$NetBSD: perftcpdns.c,v 1.2 2014/07/08 05:43:39 spz Exp $	*/
+/*	$NetBSD: perftcpdns.c,v 1.2.2.2 2014/08/10 07:06:40 tls Exp $	*/
 
 /*
  * Copyright (C) 2013, 2014  Internet Systems Consortium, Inc. ("ISC")
