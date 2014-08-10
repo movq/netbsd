@@ -26,7 +26,7 @@
 #include "rumpuser_port.h"
 
 #if !defined(lint)
-__RCSID("$NetBSD: rumpuser_random.c,v 1.2 2014/07/25 14:00:31 justin Exp $");
+__RCSID("$NetBSD: rumpuser_random.c,v 1.2.2.2 2014/08/10 06:52:26 tls Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>
