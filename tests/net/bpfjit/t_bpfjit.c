@@ -1,4 +1,4 @@
-/*	$NetBSD: t_bpfjit.c,v 1.2 2014/07/08 21:44:26 alnsn Exp $ */
+/*	$NetBSD: t_bpfjit.c,v 1.2.2.2 2014/08/10 06:57:30 tls Exp $ */
 
 /*-
  * Copyright (c) 2011-2012, 2014 Alexander Nasonov.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_bpfjit.c,v 1.2 2014/07/08 21:44:26 alnsn Exp $");
+__RCSID("$NetBSD: t_bpfjit.c,v 1.2.2.2 2014/08/10 06:57:30 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
