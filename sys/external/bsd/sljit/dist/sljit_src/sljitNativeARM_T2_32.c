@@ -1,4 +1,4 @@
-/*	$NetBSD: sljitNativeARM_T2_32.c,v 1.2 2014/06/17 19:33:20 alnsn Exp $	*/
+/*	$NetBSD: sljitNativeARM_T2_32.c,v 1.2.2.2 2014/08/10 06:55:41 tls Exp $	*/
 
 /*
  *    Stack-less Just-In-Time compiler

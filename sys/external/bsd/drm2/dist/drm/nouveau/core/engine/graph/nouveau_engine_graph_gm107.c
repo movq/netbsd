@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_engine_graph_gm107.c,v 1.1.1.1 2014/08/06 12:36:25 riastradh Exp $	*/
+/*	$NetBSD: nouveau_engine_graph_gm107.c,v 1.1.1.1.2.2 2014/08/10 06:55:32 tls Exp $	*/
 
 /*
  * Copyright 2013 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_graph_gm107.c,v 1.1.1.1 2014/08/06 12:36:25 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_graph_gm107.c,v 1.1.1.1.2.2 2014/08/10 06:55:32 tls Exp $");
 
 #include <subdev/bios.h>
 #include <subdev/bios/P0260.h>

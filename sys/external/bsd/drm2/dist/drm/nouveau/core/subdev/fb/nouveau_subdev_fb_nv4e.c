@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_subdev_fb_nv4e.c,v 1.1.1.1 2014/08/06 12:36:30 riastradh Exp $	*/
+/*	$NetBSD: nouveau_subdev_fb_nv4e.c,v 1.1.1.1.2.2 2014/08/10 06:55:34 tls Exp $	*/
 
 /*
  * Copyright (C) 2010 Francisco Jerez.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_fb_nv4e.c,v 1.1.1.1 2014/08/06 12:36:30 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_fb_nv4e.c,v 1.1.1.1.2.2 2014/08/10 06:55:34 tls Exp $");
 
 #include "nv04.h"
 

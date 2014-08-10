@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_subdev_clock_pllnv04.c,v 1.1.1.1 2014/08/06 12:36:29 riastradh Exp $	*/
+/*	$NetBSD: nouveau_subdev_clock_pllnv04.c,v 1.1.1.1.2.2 2014/08/10 06:55:34 tls Exp $	*/
 
 /*
  * Copyright 1993-2003 NVIDIA, Corporation
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_clock_pllnv04.c,v 1.1.1.1 2014/08/06 12:36:29 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_clock_pllnv04.c,v 1.1.1.1.2.2 2014/08/10 06:55:34 tls Exp $");
 
 #include <subdev/bios.h>
 #include <subdev/bios/pll.h>

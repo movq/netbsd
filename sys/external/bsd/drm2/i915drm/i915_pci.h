@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_pci.h,v 1.1 2014/07/24 21:18:40 riastradh Exp $	*/
+/*	$NetBSD: i915_pci.h,v 1.1.2.2 2014/08/10 06:55:39 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

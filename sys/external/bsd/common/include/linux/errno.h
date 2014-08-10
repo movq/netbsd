@@ -1,4 +1,4 @@
-/*	$NetBSD: errno.h,v 1.3 2014/07/16 20:56:24 riastradh Exp $	*/
+/*	$NetBSD: errno.h,v 1.3.2.2 2014/08/10 06:55:27 tls Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

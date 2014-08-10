@@ -1,4 +1,4 @@
-/*	$NetBSD: screen_info.h,v 1.1 2014/08/06 13:53:12 riastradh Exp $	*/
+/*	$NetBSD: screen_info.h,v 1.1.2.2 2014/08/10 06:55:39 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
