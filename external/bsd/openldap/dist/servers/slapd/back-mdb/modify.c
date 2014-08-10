@@ -1,4 +1,4 @@
-/*	$NetBSD: modify.c,v 1.1.1.1 2014/05/28 09:58:50 tron Exp $	*/
+/*	$NetBSD: modify.c,v 1.1.1.1.2.2 2014/08/10 07:09:49 tls Exp $	*/
 
 /* modify.c - mdb backend modify routine */
 /* $OpenLDAP$ */
