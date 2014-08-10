@@ -1,4 +1,4 @@
-/*      $NetBSD: mcp23s17.c,v 1.1 2014/04/06 17:59:39 kardel Exp $ */
+/*      $NetBSD: mcp23s17.c,v 1.1.6.2 2014/08/10 06:54:58 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mcp23s17.c,v 1.1 2014/04/06 17:59:39 kardel Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mcp23s17.c,v 1.1.6.2 2014/08/10 06:54:58 tls Exp $");
 
 /* 
  * Driver for Microchip MCP23S17 GPIO

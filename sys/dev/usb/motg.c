@@ -1,4 +1,4 @@
-/*	$NetBSD: motg.c,v 1.6 2014/08/05 06:35:55 skrll Exp $	*/
+/*	$NetBSD: motg.c,v 1.6.2.2 2014/08/10 06:54:59 tls Exp $	*/
 
 /*
  * Copyright (c) 1998, 2004, 2011, 2012, 2014 The NetBSD Foundation, Inc.
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: motg.c,v 1.6 2014/08/05 06:35:55 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: motg.c,v 1.6.2.2 2014/08/10 06:54:59 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: tps65217pmicvar.h,v 1.1 2014/07/20 23:01:22 bouyer Exp $ */
+/*	$NetBSD: tps65217pmicvar.h,v 1.1.2.2 2014/08/10 06:54:51 tls Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: motgvar.h,v 1.2 2014/07/17 19:58:18 bouyer Exp $	*/
+/*	$NetBSD: motgvar.h,v 1.2.2.2 2014/08/10 06:54:59 tls Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
