@@ -1,4 +1,4 @@
-/* $NetBSD: h_stpncpy.c,v 1.2 2014/04/07 15:09:20 christos Exp $ */
+/* $NetBSD: h_stpncpy.c,v 1.2.4.2 2014/08/10 06:57:21 tls Exp $ */
 
 /*
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2008\
  The NetBSD Foundation, inc. All rights reserved.");
-__RCSID("$NetBSD: h_stpncpy.c,v 1.2 2014/04/07 15:09:20 christos Exp $");
+__RCSID("$NetBSD: h_stpncpy.c,v 1.2.4.2 2014/08/10 06:57:21 tls Exp $");
 
 #include <stdio.h>
 #include <string.h>
