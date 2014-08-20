@@ -1,11 +1,8 @@
-/*	$NetBSD: loadfile_machdep.h,v 1.8.22.1 2014/08/20 00:03:18 tls Exp $	 */
+/*	$NetBSD: autoconf.c,v 1.9.4.2 2014/08/20 00:03:18 tls Exp $	*/
 
 /*-
- * Copyright (c) 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
- *
- * This code is derived from software contributed to The NetBSD Foundation
- * by Christos Zoulas.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,32 +26,40 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifndef _PMAX_LOADFILE_MACHDEP_H_
-#define _PMAX_LOADFILE_MACHDEP_H_
+#include <sys/cdefs.h>
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.9.4.2 2014/08/20 00:03:18 tls Exp $");
 
-#define BOOT_ECOFF
-#define BOOT_ELF32
-#define BOOT_ELF64
+#include <sys/param.h>
+#include <sys/systm.h>
+#include <sys/device.h>
+#include <sys/conf.h>
 
-#define LOAD_KERNEL	(LOAD_ALL & ~LOAD_TEXTA)
-#define COUNT_KERNEL	(COUNT_ALL & ~COUNT_TEXTA)
+#include <playstation2/ee/sifvar.h>			/* sif_init */
+#include <playstation2/playstation2/interrupt.h>	/* interrupt_init */
 
-#define LOADADDR(a)		(((u_long)(a)) + offset)
-#define ALIGNENTRY(a)		((u_long)(a))
-#define READ(f, b, c)		read((f), (void *)LOADADDR(b), (c))
-#define BCOPY(s, d, c)		memcpy((void *)LOADADDR(d), (void *)(s), (c))
-#define BZERO(d, c)		memset((void *)LOADADDR(d), 0, (c))
-#define	WARN(a)			do { \
-					(void)printf a; \
-					if (errno) \
-						(void)printf(": %s\n", \
-						             strerror(errno)); \
-					else \
-						(void)printf("\n"); \
-				} while(/* CONSTCOND */0)
-#define PROGRESS(a)		(void) printf a
-#define ALLOC(a)		alloc(a)
-#define DEALLOC(a, b)		dealloc(a, b)
-#define OKMAGIC(a)		((a) == OMAGIC)
+void
+cpu_configure(void)
+{
+	/*
+	 * During autoconfiguration, SIF BIOS uses DMAC SIF0 interrupt.
+	 * so enable DMAC interrupt here. (EIE | INT1 | IE)
+	 */
+	interrupt_init();
 
-#endif	/* !_PMAX_LOADFILE_MACHDEP_H_ */
+	/* Enable SIF BIOS for IOP access */
+	sif_init();
+
+	if (config_rootfound("mainbus", NULL) == NULL)
+		panic("no mainbus found");
+
+	/* Enable all interrupts */
+	spl0();
+}
+
+void
+cpu_rootconf(void)
+{
+
+	setroot(NULL, 0);
+}
+
