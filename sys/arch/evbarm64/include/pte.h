@@ -1,4 +1,4 @@
-/* $NetBSD: pte.h,v 1.1 2014/08/10 05:47:38 matt Exp $ */
+/* $NetBSD: pte.h,v 1.1.4.2 2014/08/20 00:02:57 tls Exp $ */
 
 #ifndef _MODULE
 #include <aarch64/pte.h>

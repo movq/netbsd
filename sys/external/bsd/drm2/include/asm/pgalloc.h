@@ -1,4 +1,4 @@
-/*	$NetBSD: pgalloc.h,v 1.2 2014/03/18 18:20:42 riastradh Exp $	*/
+/*	$NetBSD: pgalloc.h,v 1.2.10.2 2014/08/20 00:04:21 tls Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

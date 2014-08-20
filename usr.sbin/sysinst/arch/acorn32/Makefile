@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2014/07/26 19:30:44 dholland Exp $
+#	$NetBSD: Makefile,v 1.1.6.2 2014/08/20 00:05:14 tls Exp $
 #
 # Makefile for acorn32
 #

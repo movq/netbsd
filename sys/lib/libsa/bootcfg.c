@@ -1,4 +1,4 @@
-/*	$NetBSD: bootcfg.c,v 1.2 2014/08/10 07:40:49 isaki Exp $	*/
+/*	$NetBSD: bootcfg.c,v 1.2.4.2 2014/08/20 00:04:30 tls Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.

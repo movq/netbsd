@@ -1,4 +1,4 @@
-/*	$NetBSD: ssio.c,v 1.2 2014/03/29 19:28:28 christos Exp $	*/
+/*	$NetBSD: ssio.c,v 1.2.10.2 2014/08/20 00:03:04 tls Exp $	*/
 
 /*	$OpenBSD: ssio.c,v 1.7 2009/03/08 22:19:04 miod Exp $	*/
 

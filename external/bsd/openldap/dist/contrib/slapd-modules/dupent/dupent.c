@@ -1,4 +1,4 @@
-/*	$NetBSD: dupent.c,v 1.1.1.1 2014/05/28 09:58:27 tron Exp $	*/
+/*	$NetBSD: dupent.c,v 1.1.1.1.6.2 2014/08/19 23:51:56 tls Exp $	*/
 
 /* dupent.c - LDAP Control for a Duplicate Entry Representation of Search Results */
 /* $OpenLDAP$ */

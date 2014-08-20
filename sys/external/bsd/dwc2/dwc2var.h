@@ -1,4 +1,4 @@
-/*	$NetBSD: dwc2var.h,v 1.3 2013/10/22 12:57:40 skrll Exp $	*/
+/*	$NetBSD: dwc2var.h,v 1.3.10.2 2014/08/20 00:04:22 tls Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

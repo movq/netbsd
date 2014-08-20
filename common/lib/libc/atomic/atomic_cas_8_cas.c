@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_cas_8_cas.c,v 1.3 2014/02/21 16:06:48 martin Exp $	*/
+/*	$NetBSD: atomic_cas_8_cas.c,v 1.3.6.2 2014/08/19 23:45:14 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

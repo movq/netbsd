@@ -1,4 +1,4 @@
-/*	$NetBSD: ldexp_881.c,v 1.1 2013/07/17 06:39:06 matt Exp $	*/
+/*	$NetBSD: ldexp_881.c,v 1.1.10.2 2014/08/20 00:02:10 tls Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: ldexp_881.c,v 1.1 2013/07/17 06:39:06 matt Exp $");
+__RCSID("$NetBSD: ldexp_881.c,v 1.1.10.2 2014/08/20 00:02:10 tls Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>

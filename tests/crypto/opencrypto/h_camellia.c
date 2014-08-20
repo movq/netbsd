@@ -1,4 +1,4 @@
-/* $NetBSD: h_camellia.c,v 1.3 2014/01/17 19:39:51 pgoyette Exp $ */
+/* $NetBSD: h_camellia.c,v 1.3.8.2 2014/08/20 00:04:46 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

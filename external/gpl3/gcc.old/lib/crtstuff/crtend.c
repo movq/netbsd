@@ -1,4 +1,4 @@
-/*	$NetBSD: crtend.c,v 1.1.1.1 2014/02/25 18:42:04 mrg Exp $	*/
+/*	$NetBSD: crtend.c,v 1.1.1.1.8.2 2014/08/19 23:58:06 tls Exp $	*/
 
 /*
  * Written by Jason R. Thorpe, August 24, 2004.

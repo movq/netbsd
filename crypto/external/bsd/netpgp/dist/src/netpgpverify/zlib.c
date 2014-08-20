@@ -1,4 +1,4 @@
-/*	$NetBSD: zlib.c,v 1.1 2014/03/09 00:15:45 agc Exp $	*/
+/*	$NetBSD: zlib.c,v 1.1.8.2 2014/08/19 23:45:24 tls Exp $	*/
 
 /* inflate.c -- zlib decompression
  * Copyright (C) 1995-2005 Mark Adler
@@ -361,7 +361,7 @@ int ZEXPORT inflateInit_( z_streamp strm, const char *version, int stream_size)
 local void
 fixedtables(struct inflate_state FAR *state)
 {
-/*	$NetBSD: zlib.c,v 1.1 2014/03/09 00:15:45 agc Exp $	*/
+/*	$NetBSD: zlib.c,v 1.1.8.2 2014/08/19 23:45:24 tls Exp $	*/
 
     /* inffixed.h -- table for decoding fixed codes
      * Generated automatically by makefixed().

@@ -1,4 +1,4 @@
-/* $NetBSD: reg.h,v 1.1 2014/08/10 05:47:38 matt Exp $ */
+/* $NetBSD: reg.h,v 1.1.4.2 2014/08/20 00:02:39 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

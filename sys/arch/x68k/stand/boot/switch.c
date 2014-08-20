@@ -1,4 +1,4 @@
-/*	$NetBSD: switch.c,v 1.2 2014/08/10 07:40:50 isaki Exp $	*/
+/*	$NetBSD: switch.c,v 1.2.4.2 2014/08/20 00:03:28 tls Exp $	*/
 
 /*
  * Copyright (c) 2014 Tetsuya Isaki. All rights reserved.

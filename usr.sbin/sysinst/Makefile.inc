@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.5 2014/08/06 12:16:12 martin Exp $
+#	$NetBSD: Makefile.inc,v 1.5.6.2 2014/08/20 00:05:13 tls Exp $
 #
 # Makefile for sysinst
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_va_copy.h,v 1.1.1.1 2014/07/06 19:27:57 tron Exp $	*/
+/*	$NetBSD: compat_va_copy.h,v 1.1.1.1.6.2 2014/08/19 23:59:45 tls Exp $	*/
 
 #ifndef _COMPAT_VA_COPY_H_INCLUDED_
 #define _COMPAT_VA_COPY_H_INCLUDED_

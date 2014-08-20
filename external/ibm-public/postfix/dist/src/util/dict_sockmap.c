@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_sockmap.c,v 1.4 2014/07/06 19:45:50 tron Exp $	*/
+/*	$NetBSD: dict_sockmap.c,v 1.4.4.2 2014/08/19 23:59:45 tls Exp $	*/
 
 /*++
 /* NAME

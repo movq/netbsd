@@ -1,4 +1,4 @@
-/*	$NetBSD: dmi.h,v 1.3 2014/04/25 23:54:59 riastradh Exp $	*/
+/*	$NetBSD: dmi.h,v 1.3.8.2 2014/08/20 00:04:21 tls Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

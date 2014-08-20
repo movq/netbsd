@@ -1,4 +1,4 @@
-/*	$NetBSD: bootcfg.h,v 1.1 2014/06/28 09:16:18 rtr Exp $	*/
+/*	$NetBSD: bootcfg.h,v 1.1.6.2 2014/08/20 00:04:30 tls Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.

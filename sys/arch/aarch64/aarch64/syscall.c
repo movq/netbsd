@@ -1,4 +1,4 @@
-/*	$NetBSD: syscall.c,v 1.1 2014/08/10 05:47:37 matt Exp $	*/
+/*	$NetBSD: syscall.c,v 1.1.4.2 2014/08/20 00:02:39 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -58,7 +58,7 @@
 #define EMULNAME(x)	(x)
 #define EMULNAMEU(x)	(x)
 
-__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.1 2014/08/10 05:47:37 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: syscall.c,v 1.1.4.2 2014/08/20 00:02:39 tls Exp $");
 
 void
 cpu_spawn_return(struct lwp *l)

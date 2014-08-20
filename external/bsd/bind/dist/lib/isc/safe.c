@@ -1,4 +1,4 @@
-/*	$NetBSD: safe.c,v 1.2 2013/12/31 20:24:42 christos Exp $	*/
+/*	$NetBSD: safe.c,v 1.2.8.2 2014/08/19 23:46:32 tls Exp $	*/
 
 /*
  * Copyright (C) 2013  Internet Systems Consortium, Inc. ("ISC")

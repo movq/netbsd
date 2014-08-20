@@ -11,7 +11,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: w_fmodl.c,v 1.4 2013/11/21 13:41:10 martin Exp $");
+__RCSID("$NetBSD: w_fmodl.c,v 1.4.8.2 2014/08/20 00:02:18 tls Exp $");
 
 /*
  * wrapper fmodl(x,y)

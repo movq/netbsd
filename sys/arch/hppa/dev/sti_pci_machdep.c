@@ -1,4 +1,4 @@
-/*	$NetBSD: sti_pci_machdep.c,v 1.1 2014/02/24 07:23:43 skrll Exp $	*/
+/*	$NetBSD: sti_pci_machdep.c,v 1.1.10.2 2014/08/20 00:03:04 tls Exp $	*/
 
 /*	$OpenBSD: sti_pci_machdep.c,v 1.2 2009/04/10 17:11:27 miod Exp $	*/
 

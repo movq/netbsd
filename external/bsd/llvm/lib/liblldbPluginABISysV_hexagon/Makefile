@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2014/08/10 17:35:07 joerg Exp $
+#	$NetBSD: Makefile,v 1.1.4.2 2014/08/19 23:51:28 tls Exp $
 
 LIB=	lldbPluginABISysV_hexagon
 

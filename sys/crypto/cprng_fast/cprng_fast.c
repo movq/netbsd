@@ -1,4 +1,4 @@
-/*	$NetBSD: cprng_fast.c,v 1.11 2014/08/11 22:36:49 justin Exp $	*/
+/*	$NetBSD: cprng_fast.c,v 1.11.2.2 2014/08/20 00:03:34 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cprng_fast.c,v 1.11 2014/08/11 22:36:49 justin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cprng_fast.c,v 1.11.2.2 2014/08/20 00:03:34 tls Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -264,7 +264,7 @@ cprng_fast_put(struct cprng_fast *cprng, int s)
 	percpu_putref(cprng_fast_percpu);
 }
 
-static void
+static inline void
 cprng_fast_schedule_reseed(struct cprng_fast *cprng __unused)
 {
 

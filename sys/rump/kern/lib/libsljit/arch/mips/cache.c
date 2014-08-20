@@ -1,4 +1,4 @@
-/*      $NetBSD: cache.c,v 1.1 2014/07/22 20:25:13 alnsn Exp $	*/
+/*      $NetBSD: cache.c,v 1.1.6.2 2014/08/20 00:04:40 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 Alexander Nasonov.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cache.c,v 1.1 2014/07/22 20:25:13 alnsn Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cache.c,v 1.1.6.2 2014/08/20 00:04:40 tls Exp $");
 
 /*
  * Barebone implementation of mips cache routines for rump.

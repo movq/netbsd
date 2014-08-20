@@ -1,5 +1,5 @@
 #include <sys/cdefs.h>
- __RCSID("$NetBSD: dhcpcd-embedded.c,v 1.1.1.7 2014/07/30 15:44:09 roy Exp $");
+ __RCSID("$NetBSD: dhcpcd-embedded.c,v 1.1.1.7.4.2 2014/08/19 23:46:43 tls Exp $");
 
 /*
  * DO NOT EDIT

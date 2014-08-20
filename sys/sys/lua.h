@@ -1,4 +1,4 @@
-/*	$NetBSD: lua.h,v 1.6 2014/07/19 17:20:02 lneto Exp $ */
+/*	$NetBSD: lua.h,v 1.6.4.2 2014/08/20 00:04:44 tls Exp $ */
 
 /*
  * Copyright (c) 2014 by Lourival Vieira Neto <lneto@NetBSD.org>.

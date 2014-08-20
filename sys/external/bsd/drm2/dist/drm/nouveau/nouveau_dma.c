@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_dma.c,v 1.2 2014/08/06 15:01:33 riastradh Exp $	*/
+/*	$NetBSD: nouveau_dma.c,v 1.2.6.2 2014/08/20 00:04:10 tls Exp $	*/
 
 /*
  * Copyright (C) 2007 Ben Skeggs.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_dma.c,v 1.2 2014/08/06 15:01:33 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_dma.c,v 1.2.6.2 2014/08/20 00:04:10 tls Exp $");
 
 #include <core/client.h>
 

@@ -11,7 +11,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: e_fmodl.c,v 1.2 2013/11/14 15:25:22 martin Exp $");
+__RCSID("$NetBSD: e_fmodl.c,v 1.2.8.2 2014/08/20 00:02:18 tls Exp $");
 #if 0
 __FBSDID("$FreeBSD: head/lib/msun/src/e_fmodl.c 181063 2008-07-31 20:09:47Z das $");
 #endif

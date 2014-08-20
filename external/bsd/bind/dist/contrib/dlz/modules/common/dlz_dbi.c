@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_dbi.c,v 1.1.1.2 2014/07/08 04:46:54 spz Exp $	*/
+/*	$NetBSD: dlz_dbi.c,v 1.1.1.2.4.2 2014/08/19 23:46:22 tls Exp $	*/
 
 /*
  * Copyright (C) 2002 Stichting NLnet, Netherlands, stichting@nlnet.nl.

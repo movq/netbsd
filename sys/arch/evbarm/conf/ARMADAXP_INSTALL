@@ -1,4 +1,4 @@
-#	$NetBSD: ARMADAXP_INSTALL,v 1.2 2014/05/01 18:43:45 martin Exp $
+#	$NetBSD: ARMADAXP_INSTALL,v 1.2.6.2 2014/08/20 00:02:53 tls Exp $
 #
 #	ARMADAXP_INSTALL -- ARMADAXP kernel with installation-sized
 #	ramdisk

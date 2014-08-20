@@ -1,4 +1,4 @@
-/* $NetBSD: h_cbcdes.c,v 1.2 2014/01/17 14:16:08 pgoyette Exp $ */
+/* $NetBSD: h_cbcdes.c,v 1.2.8.2 2014/08/20 00:04:46 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

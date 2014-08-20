@@ -1,4 +1,4 @@
-/* $NetBSD: atomic_cas_16.S,v 1.1 2014/08/10 05:47:35 matt Exp $ */
+/* $NetBSD: atomic_cas_16.S,v 1.1.4.2 2014/08/19 23:45:12 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

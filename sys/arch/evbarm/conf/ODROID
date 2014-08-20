@@ -1,5 +1,5 @@
 #
-#	$NetBSD: ODROID,v 1.8 2014/08/18 06:31:24 christos Exp $
+#	$NetBSD: ODROID,v 1.8.2.2 2014/08/20 00:02:53 tls Exp $
 #
 #	ODROID -- ODROID series Exynos Kernel
 #
@@ -98,7 +98,6 @@ options		NFS_BOOT_RWSIZE=1024
 
 options		COMPAT_NETBSD32	# allow running arm (e.g. non-earm) binaries
 #options 	COMPAT_43	# 4.3BSD compatibility.
-options 	COMPAT_70	# NetBSD 7.0 compatibility.
 options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
 options 	COMPAT_40	# NetBSD 4.0 compatibility.
@@ -129,9 +128,8 @@ options 	SYSVSHM		# System V-like memory sharing
 #options 	MINIROOTSIZE=1000	# Size in blocks
 #options 	MEMORY_DISK_IS_ROOT	# use memory disk as root
 
-# Wedge support
-options 	DKWEDGE_AUTODISCOVER	# Automatically add dk(4) instances
-options 	DKWEDGE_METHOD_GPT	# Supports GPT partitions as wedges
+options 	DKWEDGE_AUTODISCOVER
+options 	DKWEDGE_METHOD_GPT
 
 # Miscellaneous kernel options
 options 	KTRACE		# system call tracing, a la ktrace(1)
@@ -155,7 +153,7 @@ options		DDB_ONPANIC=1
 options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
 #options 	KGDB
 makeoptions	DEBUG="-g"	# compile full symbol table
-makeoptions	COPY_SYMTAB=1
+options 	SYMTAB_SPACE=800000
 
 ## USB Debugging options
 options USB_DEBUG

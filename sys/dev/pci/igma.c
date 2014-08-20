@@ -1,4 +1,4 @@
-/*	$NetBSD: igma.c,v 1.2 2014/07/13 01:02:20 mlelstv Exp $	*/
+/*	$NetBSD: igma.c,v 1.2.4.2 2014/08/20 00:03:43 tls Exp $	*/
 
 /*
  * Copyright (c) 2014 Michael van Elst
@@ -21,7 +21,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: igma.c,v 1.2 2014/07/13 01:02:20 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: igma.c,v 1.2.4.2 2014/08/20 00:03:43 tls Exp $");
 
 #include "vga.h"
 

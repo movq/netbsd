@@ -1,4 +1,4 @@
-/* $NetBSD: sscom_reg.h,v 1.2 2014/04/14 21:16:15 reinoud Exp $ */
+/* $NetBSD: sscom_reg.h,v 1.2.10.2 2014/08/20 00:02:48 tls Exp $ */
 
 /*
  * Copyright (c) 2002, 2003 Fujitsu Component Limited

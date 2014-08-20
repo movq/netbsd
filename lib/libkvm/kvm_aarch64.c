@@ -1,4 +1,4 @@
-/* $NetBSD: kvm_aarch64.c,v 1.1 2014/08/10 05:47:37 matt Exp $ */
+/* $NetBSD: kvm_aarch64.c,v 1.1.4.2 2014/08/20 00:02:17 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -49,7 +49,7 @@
 
 #include "kvm_private.h"
 
-__RCSID("$NetBSD: kvm_aarch64.c,v 1.1 2014/08/10 05:47:37 matt Exp $");
+__RCSID("$NetBSD: kvm_aarch64.c,v 1.1.4.2 2014/08/20 00:02:17 tls Exp $");
 
 /*ARGSUSED*/
 void

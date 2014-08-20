@@ -1,4 +1,4 @@
-/*	$NetBSD: scsitest_component.c,v 1.1 2014/04/24 21:46:44 pooka Exp $	*/
+/*	$NetBSD: scsitest_component.c,v 1.1.8.2 2014/08/20 00:04:46 tls Exp $	*/
 
 /*
  * Copyright (c) 2010 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scsitest_component.c,v 1.1 2014/04/24 21:46:44 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scsitest_component.c,v 1.1.8.2 2014/08/20 00:04:46 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>

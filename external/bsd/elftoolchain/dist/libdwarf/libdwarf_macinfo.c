@@ -1,4 +1,4 @@
-/*	$NetBSD: libdwarf_macinfo.c,v 1.2 2014/03/09 16:58:04 christos Exp $	*/
+/*	$NetBSD: libdwarf_macinfo.c,v 1.2.8.2 2014/08/19 23:46:44 tls Exp $	*/
 
 /*-
  * Copyright (c) 2009-2011 Kai Wang
@@ -28,7 +28,7 @@
 
 #include "_libdwarf.h"
 
-__RCSID("$NetBSD: libdwarf_macinfo.c,v 1.2 2014/03/09 16:58:04 christos Exp $");
+__RCSID("$NetBSD: libdwarf_macinfo.c,v 1.2.8.2 2014/08/19 23:46:44 tls Exp $");
 ELFTC_VCSID("Id: libdwarf_macinfo.c 2974 2013-12-23 06:46:22Z kaiwang27 ");
 
 #define	_FILEINDEX_STACK_SIZE	16384

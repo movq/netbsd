@@ -1,4 +1,4 @@
-/* $NetBSD: t_floatunditf.c,v 1.5 2014/02/02 08:16:22 martin Exp $ */
+/* $NetBSD: t_floatunditf.c,v 1.5.8.2 2014/08/20 00:04:49 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

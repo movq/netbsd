@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2014/05/10 14:15:25 martin Exp $
+# $NetBSD: Makefile,v 1.1.8.2 2014/08/20 00:04:47 tls Exp $
 
 TESTSDIR=	${TESTSBASE}/fs/cd9660
 WARNS=		4

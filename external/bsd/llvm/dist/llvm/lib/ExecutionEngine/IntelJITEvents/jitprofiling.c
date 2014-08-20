@@ -30,7 +30,7 @@
 
 #include "jitprofiling.h"
 
-static const char rcsid[] = "\n@(#) $Revision: 1.1.1.1 $\n";
+static const char rcsid[] = "\n@(#) $Revision: 1.1.1.1.8.2 $\n";
 
 #define DLL_ENVIRONMENT_VAR             "VS_PROFILER"
 

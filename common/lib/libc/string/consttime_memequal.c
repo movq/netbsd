@@ -1,4 +1,4 @@
-/* $NetBSD: consttime_memequal.c,v 1.5 2014/06/24 16:39:39 drochner Exp $ */
+/* $NetBSD: consttime_memequal.c,v 1.5.4.2 2014/08/19 23:45:14 tls Exp $ */
 
 /*
  * Written by Matthias Drochner <drochner@NetBSD.org>.

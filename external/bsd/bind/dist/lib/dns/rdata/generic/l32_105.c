@@ -1,4 +1,4 @@
-/*	$NetBSD: l32_105.c,v 1.1.1.2 2014/02/28 17:40:14 christos Exp $	*/
+/*	$NetBSD: l32_105.c,v 1.1.1.2.8.2 2014/08/19 23:46:30 tls Exp $	*/
 
 /*
  * Copyright (C) 2013, 2014  Internet Systems Consortium, Inc. ("ISC")

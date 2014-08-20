@@ -1,4 +1,4 @@
-/*	$NetBSD: intelfb.c,v 1.9 2014/08/09 12:46:07 jmcneill Exp $	*/
+/*	$NetBSD: intelfb.c,v 1.9.6.2 2014/08/20 00:04:20 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intelfb.c,v 1.9 2014/08/09 12:46:07 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intelfb.c,v 1.9.6.2 2014/08/20 00:04:20 tls Exp $");
 
 #ifdef _KERNEL_OPT
 #include "vga.h"

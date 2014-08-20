@@ -1,4 +1,4 @@
-/* $NetBSD: explicit_memset.c,v 1.4 2014/06/24 16:39:39 drochner Exp $ */
+/* $NetBSD: explicit_memset.c,v 1.4.4.2 2014/08/19 23:45:14 tls Exp $ */
 
 /*
  * Written by Matthias Drochner <drochner@NetBSD.org>.

@@ -1,4 +1,4 @@
-/*	$NetBSD: gffb.c,v 1.9 2014/06/29 03:43:06 tsutsui Exp $	*/
+/*	$NetBSD: gffb.c,v 1.9.4.2 2014/08/20 00:03:42 tls Exp $	*/
 
 /*
  * Copyright (c) 2013 Michael Lorenz
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gffb.c,v 1.9 2014/06/29 03:43:06 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gffb.c,v 1.9.4.2 2014/08/20 00:03:42 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: find.c,v 1.2 2013/12/28 03:20:15 christos Exp $	*/
+/*	$NetBSD: find.c,v 1.2.8.2 2014/08/19 23:51:47 tls Exp $	*/
 
 /**
  * @file check.c

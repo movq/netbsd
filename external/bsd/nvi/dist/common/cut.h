@@ -1,4 +1,4 @@
-/*	$NetBSD: cut.h,v 1.3 2013/11/25 22:43:46 christos Exp $ */
+/*	$NetBSD: cut.h,v 1.3.8.2 2014/08/19 23:51:51 tls Exp $ */
 /*-
  * Copyright (c) 1991, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.

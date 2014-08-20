@@ -1,4 +1,4 @@
-/*	$NetBSD: tifb.c,v 1.1 2014/07/16 18:30:43 bouyer Exp $	*/
+/*	$NetBSD: tifb.c,v 1.1.6.2 2014/08/20 00:02:47 tls Exp $	*/
 
 /*
  * Copyright (c) 2010 Michael Lorenz
@@ -57,7 +57,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tifb.c,v 1.1 2014/07/16 18:30:43 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tifb.c,v 1.1.6.2 2014/08/20 00:02:47 tls Exp $");
 
 #include "opt_omap.h"
 

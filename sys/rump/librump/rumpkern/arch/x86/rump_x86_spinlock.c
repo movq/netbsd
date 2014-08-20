@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_x86_spinlock.c,v 1.1 2014/02/12 22:28:43 pooka Exp $	*/
+/*	$NetBSD: rump_x86_spinlock.c,v 1.1.10.2 2014/08/20 00:04:41 tls Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2006 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rump_x86_spinlock.c,v 1.1 2014/02/12 22:28:43 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rump_x86_spinlock.c,v 1.1.10.2 2014/08/20 00:04:41 tls Exp $");
 
 #define _HARDKERNEL /* XXX: non-inline prototypes */
 #define SPINLOCK_BODY

@@ -1,5 +1,5 @@
 #!/bin/sh
-# $NetBSD: addrcsid,v 1.1 2014/03/09 16:58:03 christos Exp $
+# $NetBSD: addrcsid,v 1.1.8.2 2014/08/19 23:46:43 tls Exp $
 
 # This is meant to be run after import to add rcsids to new files.
 

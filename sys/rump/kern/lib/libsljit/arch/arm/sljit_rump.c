@@ -1,4 +1,4 @@
-/*      $NetBSD: sljit_rump.c,v 1.1 2014/07/23 07:16:14 alnsn Exp $	*/
+/*      $NetBSD: sljit_rump.c,v 1.1.6.2 2014/08/20 00:04:40 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 Alexander Nasonov.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sljit_rump.c,v 1.1 2014/07/23 07:16:14 alnsn Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sljit_rump.c,v 1.1.6.2 2014/08/20 00:04:40 tls Exp $");
 
 #ifndef _KERNEL
 

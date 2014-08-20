@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.2 2014/07/27 04:16:09 dholland Exp $
+#	$NetBSD: Makefile.inc,v 1.2.4.2 2014/08/19 23:58:23 tls Exp $
 
 .ifndef _EXTERNAL_GPL3_GCC_USR_BIN_MAKEFILE_INC_
 _EXTERNAL_GPL3_GCC_USR_BIN_MAKEFILE_INC_=1

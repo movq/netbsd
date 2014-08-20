@@ -1,4 +1,4 @@
-/*	$NetBSD: strcasestr.c,v 1.1.1.1 2014/06/13 01:48:21 christos Exp $	*/
+/*	$NetBSD: strcasestr.c,v 1.1.1.1.6.2 2014/08/19 23:46:47 tls Exp $	*/
 /*	NetBSD: strcasestr.c,v 1.3 2005/11/29 03:12:00 christos Exp 	*/
 
 /*-

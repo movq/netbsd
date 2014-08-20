@@ -1,6 +1,6 @@
 #!/bin/sh
 
-#	$NetBSD: nouveau2netbsd,v 1.2 2014/08/05 19:49:13 riastradh Exp $
+#	$NetBSD: nouveau2netbsd,v 1.2.6.2 2014/08/20 00:04:22 tls Exp $
 #
 # $ /path/to/nouveau2netbsd > /path/to/files.nouveau.new
 #

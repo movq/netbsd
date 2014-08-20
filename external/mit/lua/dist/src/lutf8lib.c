@@ -1,7 +1,7 @@
-/*	$NetBSD: lutf8lib.c,v 1.1 2014/07/19 18:38:34 lneto Exp $	*/
+/*	$NetBSD: lutf8lib.c,v 1.1.6.2 2014/08/20 00:00:08 tls Exp $	*/
 
 /*
-** $Id: lutf8lib.c,v 1.1 2014/07/19 18:38:34 lneto Exp $
+** $Id: lutf8lib.c,v 1.1.6.2 2014/08/20 00:00:08 tls Exp $
 ** Standard library for UTF-8 manipulation
 ** See Copyright Notice in lua.h
 */

@@ -1,4 +1,4 @@
-.\"	$NetBSD: intro.9lua,v 1.4 2014/01/06 13:03:01 wiz Exp $
+.\"	$NetBSD: intro.9lua,v 1.4.8.2 2014/08/20 00:02:38 tls Exp $
 .\"
 .\" Copyright (c) 2013 Marc Balmer <mbalmer@NetBSD.org>. All rights reserved.
 .\"

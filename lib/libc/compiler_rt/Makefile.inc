@@ -1,8 +1,8 @@
-# $NetBSD: Makefile.inc,v 1.26 2014/08/17 16:14:59 matt Exp $
+# $NetBSD: Makefile.inc,v 1.26.2.2 2014/08/20 00:02:14 tls Exp $
 
 COMPILER_RT_SRCDIR=	${NETBSDSRCDIR}/sys/external/bsd/compiler_rt/dist
 
-.if ${LIBC_MACHINE_ARCH} == "powerpc" || ${LIBC_MACHINE_ARCH} == "powerpc64"
+.if ${LIBC_MACHINE_ARCH} == "powerpc"
 COMPILER_RT_CPU_DIR=	${COMPILER_RT_SRCDIR}/lib/builtins/ppc
 COMPILER_RT_ARCH_DIR=	${COMPILER_RT_SRCDIR}/lib/builtins/ppc
 .else
@@ -136,15 +136,9 @@ GENERIC_SRCS+= \
 
 # These have h/w instructions which are always used.
 .if ${LIBC_MACHINE_ARCH} != "alpha" && ${LIBC_MACHINE_CPU} != "powerpc" \
-    && ${LIBC_MACHINE_CPU} != "aarch64"
-GENERIC_SRCS+= \
-	clzsi2.c
-.endif
-
-# These have h/w instructions which are always used.
-.if ${LIBC_MACHINE_ARCH} != "alpha" && ${LIBC_MACHINE_CPU} != "powerpc" \
     && ${LIBC_MACHINE_CPU} != "aarch64" && ${LIBC_MACHINE_ARCH} != "vax"
 GENERIC_SRCS+= \
+	clzsi2.c \
 	ctzsi2.c \
 	divmodsi4.c \
 	divsi3.c \
@@ -206,7 +200,7 @@ GENERIC_SRCS+= \
 	InstrProfilingFile.c \
 	InstrProfilingPlatformOther.c
 
-.if ${LIBC_MACHINE_ARCH} == "powerpc" || ${LIBC_MACHINE_ARCH} == "powerpc64"
+.if ${LIBC_MACHINE_ARCH} == "powerpc"
 GENERIC_SRCS+= \
 	fixtfdi.c \
 	fixunstfdi.c \

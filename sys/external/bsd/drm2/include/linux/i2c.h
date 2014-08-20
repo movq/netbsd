@@ -1,4 +1,4 @@
-/*	$NetBSD: i2c.h,v 1.5 2014/08/06 15:01:33 riastradh Exp $	*/
+/*	$NetBSD: i2c.h,v 1.5.4.2 2014/08/20 00:04:21 tls Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

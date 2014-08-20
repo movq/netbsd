@@ -1,4 +1,4 @@
-/* $NetBSD: strlen.S,v 1.1 2014/08/10 05:47:35 matt Exp $ */
+/* $NetBSD: strlen.S,v 1.1.4.2 2014/08/19 23:45:12 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: strlen.S,v 1.1 2014/08/10 05:47:35 matt Exp $")
+RCSID("$NetBSD: strlen.S,v 1.1.4.2 2014/08/19 23:45:12 tls Exp $")
 
 #ifdef STRNLEN
 #define FUNCNAME	strnlen

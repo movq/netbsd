@@ -1,4 +1,4 @@
-/*	$NetBSD: firmware.h,v 1.6 2014/08/06 13:51:12 riastradh Exp $	*/
+/*	$NetBSD: firmware.h,v 1.6.4.2 2014/08/20 00:04:21 tls Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

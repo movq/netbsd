@@ -1,4 +1,4 @@
-/* $NetBSD: s_fmaf.S,v 1.1 2014/08/10 05:47:37 matt Exp $ */
+/* $NetBSD: s_fmaf.S,v 1.1.4.2 2014/08/20 00:02:18 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: s_fmaf.S,v 1.1 2014/08/10 05:47:37 matt Exp $")
+RCSID("$NetBSD: s_fmaf.S,v 1.1.4.2 2014/08/20 00:02:18 tls Exp $")
 
 WEAK_ALIAS(fmaf, _fmaf)
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: pktqueue.c,v 1.8 2014/07/04 01:50:22 ozaki-r Exp $	*/
+/*	$NetBSD: pktqueue.c,v 1.8.6.2 2014/08/20 00:04:34 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pktqueue.c,v 1.8 2014/07/04 01:50:22 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pktqueue.c,v 1.8.6.2 2014/08/20 00:04:34 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

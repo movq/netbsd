@@ -1,4 +1,4 @@
-/* $NetBSD: exynos_var.h,v 1.12 2014/06/11 14:54:32 reinoud Exp $ */
+/* $NetBSD: exynos_var.h,v 1.12.6.2 2014/08/20 00:02:47 tls Exp $ */
 /*-
  * Copyright (c) 2013, 2014 The NetBSD Foundation, Inc.
  * All rights reserved.

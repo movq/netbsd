@@ -1,4 +1,4 @@
-/*	$NetBSD: v_event.c,v 1.3 2014/01/26 21:43:45 christos Exp $ */
+/*	$NetBSD: v_event.c,v 1.3.8.2 2014/08/19 23:51:53 tls Exp $ */
 /*-
  * Copyright (c) 1996
  *	Keith Bostic.  All rights reserved.
@@ -14,7 +14,7 @@
 static const char sccsid[] = "Id: v_event.c,v 8.21 2001/06/25 15:19:31 skimo Exp  (Berkeley) Date: 2001/06/25 15:19:31 ";
 #endif /* not lint */
 #else
-__RCSID("$NetBSD: v_event.c,v 1.3 2014/01/26 21:43:45 christos Exp $");
+__RCSID("$NetBSD: v_event.c,v 1.3.8.2 2014/08/19 23:51:53 tls Exp $");
 #endif
 
 #include <sys/types.h>

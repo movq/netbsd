@@ -1,4 +1,4 @@
-/* $NetBSD: awin_mmc.c,v 1.3 2014/02/26 02:01:02 jmcneill Exp $ */
+/* $NetBSD: awin_mmc.c,v 1.3.12.2 2014/08/20 00:02:44 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "locators.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: awin_mmc.c,v 1.3 2014/02/26 02:01:02 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awin_mmc.c,v 1.3.12.2 2014/08/20 00:02:44 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

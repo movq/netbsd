@@ -1,4 +1,4 @@
-/*	$NetBSD: netinet6_component.c,v 1.2 2014/06/05 23:48:17 rmind Exp $	*/
+/*	$NetBSD: netinet6_component.c,v 1.2.4.2 2014/08/20 00:04:43 tls Exp $	*/
 
 /*
  * Copyright (c) 2013 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netinet6_component.c,v 1.2 2014/06/05 23:48:17 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netinet6_component.c,v 1.2.4.2 2014/08/20 00:04:43 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/domain.h>

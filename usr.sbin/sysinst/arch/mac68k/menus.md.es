@@ -1,4 +1,4 @@
-/*	$NetBSD: menus.md.es,v 1.2 2014/08/03 16:09:40 martin Exp $	*/
+/*	$NetBSD: menus.md.es,v 1.2.6.2 2014/08/20 00:05:16 tls Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.

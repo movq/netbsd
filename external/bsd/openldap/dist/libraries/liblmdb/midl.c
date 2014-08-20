@@ -1,4 +1,4 @@
-/*	$NetBSD: midl.c,v 1.1.1.1 2014/05/28 09:58:42 tron Exp $	*/
+/*	$NetBSD: midl.c,v 1.1.1.1.6.2 2014/08/19 23:52:00 tls Exp $	*/
 
 /**	@file midl.c
  *	@brief ldap bdb back-end ID List functions */

@@ -1,4 +1,4 @@
-/* $NetBSD: features.c,v 1.1 2014/02/27 09:37:02 matt Exp $ */
+/* $NetBSD: features.c,v 1.1.8.2 2014/08/19 23:45:12 tls Exp $ */
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
  * All rights reserved.

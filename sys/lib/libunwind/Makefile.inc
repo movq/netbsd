@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.9 2014/06/30 20:42:31 joerg Exp $
+#	$NetBSD: Makefile.inc,v 1.9.4.2 2014/08/20 00:04:30 tls Exp $
 
 .PATH:	${NETBSDSRCDIR}/sys/lib/libunwind
 

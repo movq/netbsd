@@ -1,5 +1,5 @@
 #!/bin/sh
-# $NetBSD: prepare-import.sh,v 1.4 2014/05/16 00:08:17 joerg Exp $
+# $NetBSD: prepare-import.sh,v 1.4.6.2 2014/08/20 00:03:57 tls Exp $
 #
 # Checkout compiler_rt into dist.
 # Run this script and check for additional files and directories to prune,

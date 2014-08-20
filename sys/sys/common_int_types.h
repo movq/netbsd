@@ -1,4 +1,4 @@
-/*	$NetBSD: common_int_types.h,v 1.1 2014/07/25 21:43:13 joerg Exp $	*/
+/*	$NetBSD: common_int_types.h,v 1.1.6.2 2014/08/20 00:04:44 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: imxecspireg.h,v 1.1 2014/03/22 09:28:08 hkenken Exp $	*/
+/*	$NetBSD: imxecspireg.h,v 1.1.10.2 2014/08/20 00:02:46 tls Exp $	*/
 
 /*
  * Copyright (c) 2012  Genetec Corporation.  All rights reserved.

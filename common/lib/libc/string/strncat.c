@@ -1,4 +1,4 @@
-/*	$NetBSD: strncat.c,v 1.2 2013/12/27 20:26:53 christos Exp $	*/
+/*	$NetBSD: strncat.c,v 1.2.8.2 2014/08/19 23:45:14 tls Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)strncat.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: strncat.c,v 1.2 2013/12/27 20:26:53 christos Exp $");
+__RCSID("$NetBSD: strncat.c,v 1.2.8.2 2014/08/19 23:45:14 tls Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

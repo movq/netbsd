@@ -1,4 +1,4 @@
-/*	$NetBSD: crt0-efi-ia32.S,v 1.1.1.1 2014/04/01 16:16:08 jakllsch Exp $	*/
+/*	$NetBSD: crt0-efi-ia32.S,v 1.1.1.1.10.2 2014/08/20 00:04:23 tls Exp $	*/
 
 /* crt0-efi-ia32.S - x86 EFI startup code.
    Copyright (C) 1999 Hewlett-Packard Co.

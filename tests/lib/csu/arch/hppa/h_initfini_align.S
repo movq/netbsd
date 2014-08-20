@@ -1,8 +1,8 @@
-/*	$NetBSD: h_initfini_align.S,v 1.1 2013/11/15 11:48:30 skrll Exp $	*/
+/*	$NetBSD: h_initfini_align.S,v 1.1.8.2 2014/08/20 00:04:48 tls Exp $	*/
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: h_initfini_align.S,v 1.1 2013/11/15 11:48:30 skrll Exp $")
+RCSID("$NetBSD: h_initfini_align.S,v 1.1.8.2 2014/08/20 00:04:48 tls Exp $")
 
 LEAF_ENTRY(check_stack_alignment)
 	extru	%sp,31,6,%ret0

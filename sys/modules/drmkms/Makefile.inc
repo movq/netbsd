@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.4 2014/07/16 20:56:25 riastradh Exp $
+# $NetBSD: Makefile.inc,v 1.4.4.2 2014/08/20 00:04:32 tls Exp $
 
 # Common makefile cruft for drm2 code.
 

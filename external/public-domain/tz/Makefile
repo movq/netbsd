@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2014/08/08 09:14:40 apb Exp $
+# $NetBSD: Makefile,v 1.1.6.2 2014/08/20 00:00:20 tls Exp $
 
 SUBDIR+=	share
 

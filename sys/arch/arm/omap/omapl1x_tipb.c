@@ -97,7 +97,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: omapl1x_tipb.c,v 1.1 2013/10/02 16:48:26 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omapl1x_tipb.c,v 1.1.10.2 2014/08/20 00:02:47 tls Exp $");
 
 #include "locators.h"
 

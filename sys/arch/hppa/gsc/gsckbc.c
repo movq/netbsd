@@ -1,4 +1,4 @@
-/* $NetBSD: gsckbc.c,v 1.1 2014/02/24 07:23:43 skrll Exp $ */
+/* $NetBSD: gsckbc.c,v 1.1.10.2 2014/08/20 00:03:04 tls Exp $ */
 /*
  * Copyright (c) 2004 Jochen Kunz.
  * All rights reserved.
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gsckbc.c,v 1.1 2014/02/24 07:23:43 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gsckbc.c,v 1.1.10.2 2014/08/20 00:03:04 tls Exp $");
 
 /* autoconfig and device stuff */
 #include <sys/param.h>

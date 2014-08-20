@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_clrpcops.c,v 1.1.1.1 2013/09/30 07:19:18 dholland Exp $	*/
+/*	$NetBSD: nfs_clrpcops.c,v 1.1.1.1.10.2 2014/08/20 00:04:26 tls Exp $	*/
 /*-
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("FreeBSD: head/sys/fs/nfsclient/nfs_clrpcops.c 245977 2013-01-27 09:34:25Z kib "); */
-__RCSID("$NetBSD: nfs_clrpcops.c,v 1.1.1.1 2013/09/30 07:19:18 dholland Exp $");
+__RCSID("$NetBSD: nfs_clrpcops.c,v 1.1.1.1.10.2 2014/08/20 00:04:26 tls Exp $");
 
 /*
  * Rpc op calls, generally called from the vnode op calls or through the

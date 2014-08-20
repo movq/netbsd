@@ -1,4 +1,4 @@
-/*	$NetBSD: crtn.S,v 1.1 2013/07/13 18:52:35 skrll Exp $	*/
+/*	$NetBSD: crtn.S,v 1.1.10.2 2014/08/20 00:02:06 tls Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: crtn.S,v 1.1 2013/07/13 18:52:35 skrll Exp $")
+RCSID("$NetBSD: crtn.S,v 1.1.10.2 2014/08/20 00:02:06 tls Exp $")
 
 #define	MD_SECTION_EPILOGUE(sect)			\
 	.section #sect,"ax",@progbits			! \

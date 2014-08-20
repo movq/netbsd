@@ -1,4 +1,4 @@
-#	$NetBSD: CUBIETRUCK_INSTALL,v 1.1 2014/04/11 04:19:47 matt Exp $
+#	$NetBSD: CUBIETRUCK_INSTALL,v 1.1.10.2 2014/08/20 00:02:53 tls Exp $
 #
 #	CUBIETRUCK_INSTALL -- CUBIETRUCK kernel with installation-sized
 #	ramdisk

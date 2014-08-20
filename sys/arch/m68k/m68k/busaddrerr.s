@@ -1,4 +1,4 @@
-/*	$NetBSD: busaddrerr.s,v 1.1 2014/03/15 09:22:36 tsutsui Exp $	*/
+/*	$NetBSD: busaddrerr.s,v 1.1.10.2 2014/08/20 00:03:10 tls Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.

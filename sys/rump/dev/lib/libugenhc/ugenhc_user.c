@@ -1,4 +1,4 @@
-/*	$NetBSD: ugenhc_user.c,v 1.1 2014/03/13 01:38:11 pooka Exp $	*/
+/*	$NetBSD: ugenhc_user.c,v 1.1.10.2 2014/08/20 00:04:38 tls Exp $	*/
 
 /*
  * Copyright (c) 2007-2010 Antti Kantee.  All Rights Reserved.

@@ -1,4 +1,4 @@
-/* $NetBSD: xhcireg.h,v 1.1 2013/09/14 00:40:31 jakllsch Exp $ */
+/* $NetBSD: xhcireg.h,v 1.1.12.2 2014/08/20 00:03:51 tls Exp $ */
 /* $FreeBSD$ */
 
 /*-

@@ -1,4 +1,4 @@
-/*	$NetBSD: ugenhc_dma.c,v 1.1 2013/09/19 17:55:22 pooka Exp $	*/
+/*	$NetBSD: ugenhc_dma.c,v 1.1.10.2 2014/08/20 00:04:38 tls Exp $	*/
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.

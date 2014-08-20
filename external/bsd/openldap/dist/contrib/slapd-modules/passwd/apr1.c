@@ -1,4 +1,4 @@
-/*	$NetBSD: apr1.c,v 1.1.1.1 2014/05/28 09:58:28 tron Exp $	*/
+/*	$NetBSD: apr1.c,v 1.1.1.1.6.2 2014/08/19 23:51:57 tls Exp $	*/
 
 /* $OpenLDAP$ */
 /*

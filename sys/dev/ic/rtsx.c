@@ -1,4 +1,4 @@
-/*	$NetBSD: rtsx.c,v 1.1 2014/03/19 15:26:41 nonaka Exp $	*/
+/*	$NetBSD: rtsx.c,v 1.1.10.2 2014/08/20 00:03:38 tls Exp $	*/
 /*	$OpenBSD: rtsx.c,v 1.7 2013/12/08 18:31:03 stsp Exp $	*/
 
 /*
@@ -23,7 +23,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtsx.c,v 1.1 2014/03/19 15:26:41 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtsx.c,v 1.1.10.2 2014/08/20 00:03:38 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

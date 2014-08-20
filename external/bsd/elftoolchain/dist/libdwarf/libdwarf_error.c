@@ -1,4 +1,4 @@
-/*	$NetBSD: libdwarf_error.c,v 1.2 2014/03/09 16:58:04 christos Exp $	*/
+/*	$NetBSD: libdwarf_error.c,v 1.2.8.2 2014/08/19 23:46:44 tls Exp $	*/
 
 /*-
  * Copyright (c) 2010 Joseph Koshy
@@ -28,7 +28,7 @@
 
 #include "_libdwarf.h"
 
-__RCSID("$NetBSD: libdwarf_error.c,v 1.2 2014/03/09 16:58:04 christos Exp $");
+__RCSID("$NetBSD: libdwarf_error.c,v 1.2.8.2 2014/08/19 23:46:44 tls Exp $");
 ELFTC_VCSID("Id: libdwarf_error.c 2070 2011-10-27 03:05:32Z jkoshy ");
 
 void

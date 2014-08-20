@@ -1,4 +1,4 @@
-/*	$NetBSD: recv_pass_attr.c,v 1.1.1.1 2013/09/25 19:06:37 tron Exp $	*/
+/*	$NetBSD: recv_pass_attr.c,v 1.1.1.1.8.2 2014/08/19 23:59:45 tls Exp $	*/
 
 /*++
 /* NAME

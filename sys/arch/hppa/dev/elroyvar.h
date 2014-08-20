@@ -1,4 +1,4 @@
-/*	$NetBSD: elroyvar.h,v 1.2 2014/03/31 20:51:20 christos Exp $	*/
+/*	$NetBSD: elroyvar.h,v 1.2.10.2 2014/08/20 00:03:04 tls Exp $	*/
 
 /*	$OpenBSD: elroyvar.h,v 1.3 2007/06/17 14:51:21 kettenis Exp $	*/
 

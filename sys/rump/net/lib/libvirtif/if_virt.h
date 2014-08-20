@@ -1,4 +1,4 @@
-/*	$NetBSD: if_virt.h,v 1.3 2014/03/03 13:56:40 pooka Exp $	*/
+/*	$NetBSD: if_virt.h,v 1.3.8.2 2014/08/20 00:04:43 tls Exp $	*/
 
 /*
  * NOTE!  This file is supposed to work on !NetBSD platforms.

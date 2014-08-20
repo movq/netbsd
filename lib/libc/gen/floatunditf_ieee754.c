@@ -1,4 +1,4 @@
-/*	$NetBSD: floatunditf_ieee754.c,v 1.1 2014/01/30 15:06:18 joerg Exp $	*/
+/*	$NetBSD: floatunditf_ieee754.c,v 1.1.8.2 2014/08/20 00:02:14 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 Joerg Sonnenberger <joerg@NetBSD.org>.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: floatunditf_ieee754.c,v 1.1 2014/01/30 15:06:18 joerg Exp $");
+__RCSID("$NetBSD: floatunditf_ieee754.c,v 1.1.8.2 2014/08/20 00:02:14 tls Exp $");
 
 #include <math.h>
 #include <machine/ieee.h>

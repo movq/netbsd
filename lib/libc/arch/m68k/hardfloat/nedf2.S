@@ -1,4 +1,4 @@
-/*	$NetBSD: nedf2.S,v 1.2 2014/03/18 18:20:37 riastradh Exp $	*/
+/*	$NetBSD: nedf2.S,v 1.2.8.2 2014/08/20 00:02:10 tls Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -36,7 +36,7 @@
 #include <machine/asm.h>
 
 #if defined(LIBC_SCCS) && !defined(lint)
-RCSID("$NetBSD: nedf2.S,v 1.2 2014/03/18 18:20:37 riastradh Exp $")
+RCSID("$NetBSD: nedf2.S,v 1.2.8.2 2014/08/20 00:02:10 tls Exp $")
 #endif /* LIBC_SCCS and not lint */
 
 STRONG_ALIAS(__eqdf2,__nedf2)

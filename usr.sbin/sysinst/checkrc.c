@@ -1,4 +1,4 @@
-/* $NetBSD: checkrc.c,v 1.1 2014/07/26 19:30:44 dholland Exp $ */
+/* $NetBSD: checkrc.c,v 1.1.6.2 2014/08/20 00:05:13 tls Exp $ */
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.

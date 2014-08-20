@@ -1,4 +1,4 @@
-/*	$NetBSD: nfsrvcache.h,v 1.1.1.1 2013/09/30 07:19:42 dholland Exp $	*/
+/*	$NetBSD: nfsrvcache.h,v 1.1.1.1.10.2 2014/08/20 00:04:27 tls Exp $	*/
 /*-
  * Copyright (c) 1989, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -31,7 +31,7 @@
  * SUCH DAMAGE.
  *
  * FreeBSD: head/sys/fs/nfs/nfsrvcache.h 254337 2013-08-14 21:11:26Z rmacklem 
- * $NetBSD: nfsrvcache.h,v 1.1.1.1 2013/09/30 07:19:42 dholland Exp $
+ * $NetBSD: nfsrvcache.h,v 1.1.1.1.10.2 2014/08/20 00:04:27 tls Exp $
  */
 
 #ifndef _NFS_NFSRVCACHE_H_

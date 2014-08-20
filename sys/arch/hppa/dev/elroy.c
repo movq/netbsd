@@ -1,4 +1,4 @@
-/*	$NetBSD: elroy.c,v 1.1 2014/02/24 07:23:42 skrll Exp $	*/
+/*	$NetBSD: elroy.c,v 1.1.10.2 2014/08/20 00:03:04 tls Exp $	*/
 
 /*	$OpenBSD: elroy.c,v 1.5 2009/03/30 21:24:57 kettenis Exp $	*/
 

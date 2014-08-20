@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_module.c,v 1.4 2014/07/16 20:59:58 riastradh Exp $	*/
+/*	$NetBSD: linux_module.c,v 1.4.4.2 2014/08/20 00:04:22 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_module.c,v 1.4 2014/07/16 20:59:58 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_module.c,v 1.4.4.2 2014/08/20 00:04:22 tls Exp $");
 
 #include <sys/module.h>
 #ifndef _MODULE

@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.4 2014/08/19 13:36:04 martin Exp $	*/
+/*	$NetBSD: util.c,v 1.4.2.2 2014/08/20 00:05:14 tls Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -1105,9 +1105,10 @@ get_and_unpack_sets(int update, msg setupdone_msg, msg success_msg, msg failure_
 	if (!update) {
 		struct stat sb1, sb2;
 
-		if (stat(target_expand("/"), &sb1) == 0
-		    && stat(target_expand("/var"), &sb2) == 0
-		    && sb1.st_dev != sb2.st_dev) {
+		stat(target_expand("/"), &sb1);
+		stat(target_expand("/var"), &sb2);
+
+		if (sb1.st_dev != sb2.st_dev) {
 			add_rc_conf("random_file=/etc/entropy-file\n");
 			if (target_file_exists_p("/boot.cfg")) {
 				run_program(RUN_CHROOT|RUN_FATAL,

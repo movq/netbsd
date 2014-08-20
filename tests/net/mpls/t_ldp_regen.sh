@@ -1,4 +1,4 @@
-# $NetBSD: t_ldp_regen.sh,v 1.3 2014/01/03 13:14:50 pooka Exp $
+# $NetBSD: t_ldp_regen.sh,v 1.3.8.2 2014/08/20 00:04:52 tls Exp $
 #
 # Copyright (c) 2013 The NetBSD Foundation, Inc.
 # All rights reserved.

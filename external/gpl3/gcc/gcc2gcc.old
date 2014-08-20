@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-#	$NetBSD: gcc2gcc.old,v 1.4 2014/02/27 09:08:49 mrg Exp $
+#	$NetBSD: gcc2gcc.old,v 1.4.8.2 2014/08/19 23:53:09 tls Exp $
 
 # run it like eg:
 #

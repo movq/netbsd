@@ -1,4 +1,4 @@
-/*	$NetBSD: ip.h,v 1.3 2013/11/27 18:25:13 christos Exp $	*/
+/*	$NetBSD: ip.h,v 1.3.8.2 2014/08/19 23:51:52 tls Exp $	*/
 /*-
  * Copyright (c) 1996
  *	Keith Bostic.  All rights reserved.

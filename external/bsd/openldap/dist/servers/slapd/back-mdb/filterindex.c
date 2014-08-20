@@ -1,4 +1,4 @@
-/*	$NetBSD: filterindex.c,v 1.1.1.1 2014/05/28 09:58:49 tron Exp $	*/
+/*	$NetBSD: filterindex.c,v 1.1.1.1.6.2 2014/08/19 23:52:02 tls Exp $	*/
 
 /* filterindex.c - generate the list of candidate entries from a filter */
 /* $OpenLDAP$ */

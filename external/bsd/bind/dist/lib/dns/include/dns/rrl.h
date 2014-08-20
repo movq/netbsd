@@ -1,4 +1,4 @@
-/*	$NetBSD: rrl.h,v 1.2 2013/12/31 20:24:41 christos Exp $	*/
+/*	$NetBSD: rrl.h,v 1.2.8.2 2014/08/19 23:46:29 tls Exp $	*/
 
 /*
  * Copyright (C) 2013  Internet Systems Consortium, Inc. ("ISC")

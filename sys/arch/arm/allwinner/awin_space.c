@@ -1,4 +1,4 @@
-/*	$NetBSD: awin_space.c,v 1.3 2014/02/20 21:45:49 matt Exp $	*/
+/*	$NetBSD: awin_space.c,v 1.3.12.2 2014/08/20 00:02:44 tls Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: awin_space.c,v 1.3 2014/02/20 21:45:49 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awin_space.c,v 1.3.12.2 2014/08/20 00:02:44 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

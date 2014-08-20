@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2014/02/24 07:23:41 skrll Exp $
+#	$NetBSD: Makefile,v 1.1.8.2 2014/08/20 00:02:36 tls Exp $
 
 MAN=	boot.8 mkboot.8
 MANSUBDIR=/hppa

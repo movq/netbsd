@@ -1,4 +1,4 @@
-/*	$NetBSD: ipi.h,v 1.2 2014/05/25 15:34:19 rmind Exp $	*/
+/*	$NetBSD: ipi.h,v 1.2.6.2 2014/08/20 00:04:44 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: cl_bsd.c,v 1.3 2014/01/26 21:43:45 christos Exp $ */
+/*	$NetBSD: cl_bsd.c,v 1.3.8.2 2014/08/19 23:51:50 tls Exp $ */
 /*-
  * Copyright (c) 1995, 1996
  *	Keith Bostic.  All rights reserved.
@@ -14,7 +14,7 @@
 static const char sccsid[] = "Id: cl_bsd.c,v 8.32 2000/12/01 13:56:17 skimo Exp  (Berkeley) Date: 2000/12/01 13:56:17 ";
 #endif /* not lint */
 #else
-__RCSID("$NetBSD: cl_bsd.c,v 1.3 2014/01/26 21:43:45 christos Exp $");
+__RCSID("$NetBSD: cl_bsd.c,v 1.3.8.2 2014/08/19 23:51:50 tls Exp $");
 #endif
 
 #include <sys/types.h>

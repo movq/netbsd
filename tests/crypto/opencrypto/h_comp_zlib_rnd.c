@@ -1,4 +1,4 @@
-/* $NetBSD: h_comp_zlib_rnd.c,v 1.1 2014/01/14 17:51:39 pgoyette Exp $ */
+/* $NetBSD: h_comp_zlib_rnd.c,v 1.1.8.2 2014/08/20 00:04:46 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

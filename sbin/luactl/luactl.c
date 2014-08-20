@@ -1,4 +1,4 @@
-/*	$NetBSD: luactl.c,v 1.2 2013/10/29 16:11:15 joerg Exp $ */
+/*	$NetBSD: luactl.c,v 1.2.8.2 2014/08/20 00:02:25 tls Exp $ */
 
 /*
  * Copyright (c) 2011, Marc Balmer <mbalmer@NetBSD.org>.

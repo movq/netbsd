@@ -1,8 +1,8 @@
-/*	$NetBSD: omkbdmap.c,v 1.1 2014/07/20 11:14:56 tsutsui Exp $	*/
+/*	$NetBSD: omkbdmap.c,v 1.1.6.2 2014/08/20 00:03:10 tls Exp $	*/
 /*	$OpenBSD: omkbdmap.c,v 1.2 2013/11/16 18:31:44 miod Exp $	*/
 
 /* Partially from:
- *	$NetBSD: omkbdmap.c,v 1.1 2014/07/20 11:14:56 tsutsui Exp $
+ *	$NetBSD: omkbdmap.c,v 1.1.6.2 2014/08/20 00:03:10 tls Exp $
  *
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
  * All rights reserved.

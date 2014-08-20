@@ -1,4 +1,4 @@
-/* $NetBSD: copyinout.S,v 1.1 2014/08/10 05:47:37 matt Exp $ */
+/* $NetBSD: copyinout.S,v 1.1.4.2 2014/08/20 00:02:39 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 #include <aarch64/asm.h>
 #include "assym.h"
 
-RCSID("$NetBSD: copyinout.S,v 1.1 2014/08/10 05:47:37 matt Exp $");
+RCSID("$NetBSD: copyinout.S,v 1.1.4.2 2014/08/20 00:02:39 tls Exp $");
 
 /* LINTSTUB: int copyin(const void *uaddr, void *kaddr, size_t len); */
 

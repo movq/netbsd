@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_pages.c,v 1.1 2014/05/16 09:34:03 dholland Exp $	*/
+/*	$NetBSD: lfs_pages.c,v 1.1.8.2 2014/08/20 00:04:44 tls Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -60,7 +60,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lfs_pages.c,v 1.1 2014/05/16 09:34:03 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lfs_pages.c,v 1.1.8.2 2014/08/20 00:04:44 tls Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"

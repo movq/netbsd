@@ -1,4 +1,4 @@
-# $NetBSD: t_rfc4182.sh,v 1.3 2014/03/18 18:20:44 riastradh Exp $
+# $NetBSD: t_rfc4182.sh,v 1.3.8.2 2014/08/20 00:04:52 tls Exp $
 #
 # Copyright (c) 2013 The NetBSD Foundation, Inc.
 # All rights reserved.

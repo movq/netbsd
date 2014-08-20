@@ -1,4 +1,4 @@
-/*	$NetBSD: dwc2_core.h,v 1.5 2014/04/03 06:34:58 skrll Exp $	*/
+/*	$NetBSD: dwc2_core.h,v 1.5.10.2 2014/08/20 00:04:22 tls Exp $	*/
 
 /*
  * core.h - DesignWare HS OTG Controller common declarations

@@ -1,4 +1,4 @@
-# $NetBSD: md.evbcf,v 1.2 2013/08/11 22:29:02 joerg Exp $
+# $NetBSD: md.evbcf,v 1.2.8.2 2014/08/19 23:45:43 tls Exp $
 ./usr/include/evbcf				comp-c-include
 ./usr/include/evbcf/ansi.h			comp-c-include
 ./usr/include/evbcf/aout_machdep.h		comp-c-include

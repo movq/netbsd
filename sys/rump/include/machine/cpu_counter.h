@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu_counter.h,v 1.3 2014/03/11 20:25:05 pooka Exp $	*/
+/*	$NetBSD: cpu_counter.h,v 1.3.6.2 2014/08/20 00:04:39 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 Antti Kantee.  All Rights Reserved.

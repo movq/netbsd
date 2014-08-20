@@ -1,4 +1,4 @@
-/*	$NetBSD: arc4random.c,v 1.1.1.1 2013/12/27 23:31:19 christos Exp $	*/
+/*	$NetBSD: arc4random.c,v 1.1.1.1.8.2 2014/08/19 23:51:45 tls Exp $	*/
 
 /* Portable arc4random.c based on arc4random.c from OpenBSD.
  * Portable version by Chris Davis, adapted for Libevent by Nick Mathewson

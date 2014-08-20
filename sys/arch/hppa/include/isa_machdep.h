@@ -1,4 +1,4 @@
-/*	$NetBSD: isa_machdep.h,v 1.1 2014/02/24 07:23:43 skrll Exp $	*/
+/*	$NetBSD: isa_machdep.h,v 1.1.10.2 2014/08/20 00:03:05 tls Exp $	*/
 
 /*	$OpenBSD: isa_machdep.h,v 1.2 1999/05/05 02:36:54 todd Exp $	*/
 

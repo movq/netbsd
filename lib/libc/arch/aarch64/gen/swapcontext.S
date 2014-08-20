@@ -1,4 +1,4 @@
-/* $NetBSD: swapcontext.S,v 1.1 2014/08/10 05:47:36 matt Exp $ */
+/* $NetBSD: swapcontext.S,v 1.1.4.2 2014/08/20 00:02:08 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 #include "assym.h"
 
 #if defined(LIBC_SCCS) && !defined(lint)
-        RCSID("$NetBSD: swapcontext.S,v 1.1 2014/08/10 05:47:36 matt Exp $")
+        RCSID("$NetBSD: swapcontext.S,v 1.1.4.2 2014/08/20 00:02:08 tls Exp $")
 #endif /* LIBC_SCCS && !lint */
 
 /* LINTSTUB: int swapcontext(ucontext_t * restrict, ucontext_t * restrict); */

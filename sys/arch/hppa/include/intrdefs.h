@@ -1,4 +1,4 @@
-/*	$NetBSD: intrdefs.h,v 1.2 2014/05/19 22:47:53 rmind Exp $	*/
+/*	$NetBSD: intrdefs.h,v 1.2.6.2 2014/08/20 00:03:05 tls Exp $	*/
 
 #ifndef _HPPA_INTRDEFS_H_
 #define _HPPA_INTRDEFS_H_

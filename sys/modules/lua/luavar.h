@@ -1,4 +1,4 @@
-/*	$NetBSD: luavar.h,v 1.2 2014/07/19 17:14:40 lneto Exp $ */
+/*	$NetBSD: luavar.h,v 1.2.4.2 2014/08/20 00:04:33 tls Exp $ */
 
 /*
  * Copyright (c) 2011, Marc Balmer <mbalmer@NetBSD.org>.

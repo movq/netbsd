@@ -1,4 +1,4 @@
-/*	$NetBSD: netwalker_lid.c,v 1.1 2014/05/06 11:08:51 hkenken Exp $	*/
+/*	$NetBSD: netwalker_lid.c,v 1.1.10.2 2014/08/20 00:02:55 tls Exp $	*/
 
 /*
  * Copyright (c) 2014  Genetec Corporation.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netwalker_lid.c,v 1.1 2014/05/06 11:08:51 hkenken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netwalker_lid.c,v 1.1.10.2 2014/08/20 00:02:55 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

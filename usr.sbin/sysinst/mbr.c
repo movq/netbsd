@@ -1,4 +1,4 @@
-/*	$NetBSD: mbr.c,v 1.3 2014/08/19 06:49:21 martin Exp $ */
+/*	$NetBSD: mbr.c,v 1.3.2.2 2014/08/20 00:05:13 tls Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -1148,7 +1148,8 @@ set_mbr_label(menudesc *m, int opt, void *arg)
 #ifdef BOOTSEL
 	if (mbri->mbrb.mbrbs_nametab[opt][0] != 0) {
 		int x, y;
-
+		if (opt >= MBR_PART_COUNT)
+			opt = 0;
 		getyx(m->mw, y, x);
 		if (x > 52) {
 			x = 52;

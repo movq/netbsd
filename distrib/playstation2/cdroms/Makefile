@@ -1,4 +1,4 @@
-#       $NetBSD: Makefile,v 1.3 2014/03/31 11:25:47 martin Exp $
+#       $NetBSD: Makefile,v 1.3.6.2 2014/08/19 23:45:42 tls Exp $
 
 SUBDIR=		installcd
 TARGETS+=	release iso_image

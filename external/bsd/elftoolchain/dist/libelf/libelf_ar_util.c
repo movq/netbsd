@@ -1,4 +1,4 @@
-/*	$NetBSD: libelf_ar_util.c,v 1.2 2014/03/09 16:58:04 christos Exp $	*/
+/*	$NetBSD: libelf_ar_util.c,v 1.2.8.2 2014/08/19 23:46:45 tls Exp $	*/
 
 /*-
  * Copyright (c) 2006,2009,2010 Joseph Koshy
@@ -40,7 +40,7 @@
 #include "_libelf.h"
 #include "_libelf_ar.h"
 
-__RCSID("$NetBSD: libelf_ar_util.c,v 1.2 2014/03/09 16:58:04 christos Exp $");
+__RCSID("$NetBSD: libelf_ar_util.c,v 1.2.8.2 2014/08/19 23:46:45 tls Exp $");
 ELFTC_VCSID("Id: libelf_ar_util.c 2365 2011-12-29 04:36:44Z jkoshy ");
 
 /*

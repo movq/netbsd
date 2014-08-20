@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2013/09/29 12:12:02 joerg Exp $
+#	$NetBSD: Makefile,v 1.1.8.2 2014/08/19 23:51:30 tls Exp $
 
 LIB=	lldbPluginSymbolVendorELF
 

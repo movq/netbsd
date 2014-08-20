@@ -28,7 +28,7 @@
  */
 #include <machine/asm.h>
 
-RCSID("$NetBSD: strcpy_thumb.S,v 1.1 2013/08/20 21:32:50 matt Exp $")
+RCSID("$NetBSD: strcpy_thumb.S,v 1.1.8.2 2014/08/19 23:45:12 tls Exp $")
 
 #ifdef _LIBC
 #ifdef STRLCPY

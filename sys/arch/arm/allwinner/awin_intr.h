@@ -1,4 +1,4 @@
-/* $NetBSD: awin_intr.h,v 1.3 2013/09/07 00:35:52 matt Exp $ */
+/* $NetBSD: awin_intr.h,v 1.3.12.2 2014/08/20 00:02:44 tls Exp $ */
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
  * All rights reserved.

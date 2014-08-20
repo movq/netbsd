@@ -40,7 +40,7 @@
 static const char sccsid[] = "@(#)memset.c	8.1 (Berkeley) 6/4/93";
 #endif /* LIBC_SCCS and not lint */
 #else
-__RCSID("$NetBSD: memset.c,v 1.2 2014/01/26 21:43:45 christos Exp $");
+__RCSID("$NetBSD: memset.c,v 1.2.8.2 2014/08/19 23:51:51 tls Exp $");
 #endif
 
 #include <sys/types.h>

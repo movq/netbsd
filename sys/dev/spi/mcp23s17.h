@@ -1,4 +1,4 @@
-/*      $NetBSD: mcp23s17.h,v 1.1 2014/04/06 17:59:39 kardel Exp $ */
+/*      $NetBSD: mcp23s17.h,v 1.1.10.2 2014/08/20 00:03:50 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

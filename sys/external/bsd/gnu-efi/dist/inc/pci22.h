@@ -1,4 +1,4 @@
-/*	$NetBSD: pci22.h,v 1.1.1.1 2014/04/01 16:16:07 jakllsch Exp $	*/
+/*	$NetBSD: pci22.h,v 1.1.1.1.10.2 2014/08/20 00:04:23 tls Exp $	*/
 
 #ifndef _PCI22_H
 #define _PCI22_H

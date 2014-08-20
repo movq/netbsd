@@ -1,4 +1,4 @@
-/*	$NetBSD: gtkvi.h,v 1.2 2013/11/22 15:52:05 christos Exp $	*/
+/*	$NetBSD: gtkvi.h,v 1.2.8.2 2014/08/19 23:51:52 tls Exp $	*/
 #ifndef __GTK_VI_H__
 #define __GTK_VI_H__
 

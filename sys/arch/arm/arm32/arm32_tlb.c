@@ -27,7 +27,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: arm32_tlb.c,v 1.2 2014/04/11 02:39:03 matt Exp $");
+__KERNEL_RCSID(1, "$NetBSD: arm32_tlb.c,v 1.2.8.2 2014/08/20 00:02:45 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

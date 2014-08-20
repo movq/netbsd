@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.3 2013/12/04 15:05:49 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.3.8.2 2014/08/19 23:52:11 tls Exp $	*/
 
 /*
  * main.c - Point-to-Point Protocol main module
@@ -73,7 +73,7 @@
 #define RCSID	"Id: main.c,v 1.156 2008/06/23 11:47:18 paulus Exp "
 static const char rcsid[] = RCSID;
 #else
-__RCSID("$NetBSD: main.c,v 1.3 2013/12/04 15:05:49 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.3.8.2 2014/08/19 23:52:11 tls Exp $");
 #endif
 
 #include <stdio.h>

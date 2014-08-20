@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_linux_component.c,v 1.2 2014/04/04 18:24:12 njoly Exp $	*/
+/*	$NetBSD: sys_linux_component.c,v 1.2.10.2 2014/08/20 00:04:40 tls Exp $	*/
 
 #include <sys/param.h>
 #include <sys/proc.h>

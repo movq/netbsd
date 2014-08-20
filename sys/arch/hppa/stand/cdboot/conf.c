@@ -1,4 +1,4 @@
-/*	$NetBSD: conf.c,v 1.1 2014/02/24 07:23:43 skrll Exp $	*/
+/*	$NetBSD: conf.c,v 1.1.10.2 2014/08/20 00:03:05 tls Exp $	*/
 
 /*	$OpenBSD: conf.c,v 1.12 2000/05/30 22:02:28 mickey Exp $	*/
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: pkcs11dh_link.c,v 1.1.1.2 2014/07/08 04:48:45 spz Exp $	*/
+/*	$NetBSD: pkcs11dh_link.c,v 1.1.1.2.4.2 2014/08/19 23:46:28 tls Exp $	*/
 
 /*
  * Copyright (C) 2014  Internet Systems Consortium, Inc. ("ISC")

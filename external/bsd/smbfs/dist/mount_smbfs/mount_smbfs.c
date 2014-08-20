@@ -1,4 +1,4 @@
-/* $NetBSD: mount_smbfs.c,v 1.4 2013/12/26 16:52:36 christos Exp $ */
+/* $NetBSD: mount_smbfs.c,v 1.4.8.2 2014/08/19 23:52:13 tls Exp $ */
 
 /*
  * Copyright (c) 2000-2002, Boris Popov
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: mount_smbfs.c,v 1.4 2013/12/26 16:52:36 christos Exp $");
+__RCSID("$NetBSD: mount_smbfs.c,v 1.4.8.2 2014/08/19 23:52:13 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/stat.h>

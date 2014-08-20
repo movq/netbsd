@@ -1,4 +1,4 @@
-/*	$NetBSD: pcap-dbus.c,v 1.1.1.1 2013/12/31 16:57:18 christos Exp $	*/
+/*	$NetBSD: pcap-dbus.c,v 1.1.1.1.8.2 2014/08/19 23:47:16 tls Exp $	*/
 
 /*
  * Copyright (c) 2012 Jakub Zawadzki

@@ -1,4 +1,4 @@
-/*	$NetBSD: igmavar.h,v 1.1 2014/01/21 14:52:07 mlelstv Exp $	*/
+/*	$NetBSD: igmavar.h,v 1.1.10.2 2014/08/20 00:03:43 tls Exp $	*/
 
 /*
  * Copyright (c) 2014 Michael van Elst

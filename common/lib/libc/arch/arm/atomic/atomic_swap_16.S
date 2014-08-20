@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_swap_16.S,v 1.3 2014/06/28 20:18:55 joerg Exp $ */
+/*	$NetBSD: atomic_swap_16.S,v 1.3.4.2 2014/08/19 23:45:12 tls Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

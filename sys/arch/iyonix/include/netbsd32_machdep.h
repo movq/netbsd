@@ -1,3 +1,3 @@
-/* $NetBSD: netbsd32_machdep.h,v 1.1 2014/08/03 16:16:27 martin Exp $ */
+/* $NetBSD: netbsd32_machdep.h,v 1.1.6.2 2014/08/20 00:03:09 tls Exp $ */
 
 #include <arm/netbsd32_machdep.h>

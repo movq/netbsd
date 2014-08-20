@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2014/07/24 20:20:49 plunky Exp $
+#	$NetBSD: Makefile,v 1.1.6.2 2014/08/19 23:52:10 tls Exp $
 
 WARNS?=	2
 

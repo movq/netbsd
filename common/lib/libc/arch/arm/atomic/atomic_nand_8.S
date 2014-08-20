@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_nand_8.S,v 1.2 2014/03/04 16:15:28 matt Exp $	*/
+/*	$NetBSD: atomic_nand_8.S,v 1.2.8.2 2014/08/19 23:45:12 tls Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

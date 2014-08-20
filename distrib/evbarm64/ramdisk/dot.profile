@@ -1,4 +1,4 @@
-# $NetBSD: dot.profile,v 1.1 2014/08/10 05:47:35 matt Exp $
+# $NetBSD: dot.profile,v 1.1.4.2 2014/08/19 23:45:38 tls Exp $
 #
 # Copyright (c) 1997 Perry E. Metzger
 # Copyright (c) 1994 Christopher G. Demetriou

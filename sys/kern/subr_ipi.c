@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_ipi.c,v 1.2 2014/05/25 15:34:19 rmind Exp $	*/
+/*	$NetBSD: subr_ipi.c,v 1.2.6.2 2014/08/20 00:04:29 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_ipi.c,v 1.2 2014/05/25 15:34:19 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_ipi.c,v 1.2.6.2 2014/08/20 00:04:29 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

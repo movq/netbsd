@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_dma_hacks.h,v 1.7 2014/07/26 14:27:40 riastradh Exp $	*/
+/*	$NetBSD: bus_dma_hacks.h,v 1.7.4.2 2014/08/20 00:04:21 tls Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: ttm_agp_backend.c,v 1.3 2014/08/14 16:50:22 riastradh Exp $	*/
+/*	$NetBSD: ttm_agp_backend.c,v 1.3.2.2 2014/08/20 00:04:22 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ttm_agp_backend.c,v 1.3 2014/08/14 16:50:22 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ttm_agp_backend.c,v 1.3.2.2 2014/08/20 00:04:22 tls Exp $");
 
 #include <sys/types.h>
 #include <sys/kmem.h>
@@ -57,11 +57,11 @@ ttm_agp_tt_create(struct ttm_bo_device *bdev, struct agp_bridge_data *bridge,
 {
 	struct ttm_agp *ttm_agp;
 
-	ttm_agp = kmem_zalloc(sizeof(*ttm_agp), KM_SLEEP);
+	ttm_agp = kmem_alloc(sizeof(*ttm_agp), KM_SLEEP);
 	ttm_agp->agp = &bridge->abd_sc;
 	ttm_agp->ttm_dma.ttm.func = &ttm_agp_backend_func;
 
-	if (ttm_dma_tt_init(&ttm_agp->ttm_dma, bdev, size, page_flags,
+	if (ttm_tt_init(&ttm_agp->ttm_dma.ttm, bdev, size, page_flags,
 		dummy_read_page) != 0)
 		goto fail;
 

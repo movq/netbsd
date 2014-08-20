@@ -1,4 +1,4 @@
-/* $NetBSD: return_one.S,v 1.1 2014/08/10 05:47:38 matt Exp $ */
+/* $NetBSD: return_one.S,v 1.1.4.2 2014/08/20 00:04:49 tls Exp $ */
 
 #include <machine/asm.h>
 

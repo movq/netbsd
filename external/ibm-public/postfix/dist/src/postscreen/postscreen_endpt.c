@@ -1,4 +1,4 @@
-/*	$NetBSD: postscreen_endpt.c,v 1.1.1.2 2014/07/06 19:27:54 tron Exp $	*/
+/*	$NetBSD: postscreen_endpt.c,v 1.1.1.2.4.2 2014/08/19 23:59:44 tls Exp $	*/
 
 /*++
 /* NAME

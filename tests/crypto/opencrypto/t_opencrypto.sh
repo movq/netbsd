@@ -1,4 +1,4 @@
-#	$NetBSD: t_opencrypto.sh,v 1.4 2014/01/18 15:15:16 pgoyette Exp $
+#	$NetBSD: t_opencrypto.sh,v 1.4.8.2 2014/08/20 00:04:46 tls Exp $
 #
 # Copyright (c) 2014 The NetBSD Foundation, Inc.
 # All rights reserved.

@@ -11,7 +11,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: w_sqrtl.c,v 1.2 2013/11/20 11:39:00 joerg Exp $");
+__RCSID("$NetBSD: w_sqrtl.c,v 1.2.8.2 2014/08/20 00:02:18 tls Exp $");
 
 /*
  * wrapper sqrtl(x)

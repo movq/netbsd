@@ -1,4 +1,4 @@
-/*	$NetBSD: back-mdb.h,v 1.1.1.1 2014/05/28 09:58:49 tron Exp $	*/
+/*	$NetBSD: back-mdb.h,v 1.1.1.1.6.2 2014/08/19 23:52:02 tls Exp $	*/
 
 /* back-mdb.h - mdb back-end header file */
 /* $OpenLDAP$ */

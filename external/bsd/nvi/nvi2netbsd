@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-#	$NetBSD: nvi2netbsd,v 1.1 2013/11/22 16:00:45 christos Exp $
+#	$NetBSD: nvi2netbsd,v 1.1.8.2 2014/08/19 23:51:50 tls Exp $
 #
 # Copyright (c) 2000 The NetBSD Foundation, Inc.
 # All rights reserved.
