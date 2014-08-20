@@ -1,4 +1,4 @@
-/*	$NetBSD: h_bpf.h,v 1.2 2014/07/08 21:44:26 alnsn Exp $	*/
+/*	$NetBSD: h_bpf.h,v 1.2.6.2 2014/08/20 00:04:51 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 Alexander Nasonov.

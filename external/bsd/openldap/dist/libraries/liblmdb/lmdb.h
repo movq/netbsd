@@ -1,4 +1,4 @@
-/*	$NetBSD: lmdb.h,v 1.1.1.1 2014/05/28 09:58:42 tron Exp $	*/
+/*	$NetBSD: lmdb.h,v 1.1.1.1.6.2 2014/08/19 23:52:00 tls Exp $	*/
 
 /** @file lmdb.h
  *	@brief Lightning memory-mapped database library

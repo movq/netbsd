@@ -1,4 +1,4 @@
-/*	$NetBSD: smb_kernelops.c,v 1.1 2013/12/25 22:03:47 christos Exp $	*/
+/*	$NetBSD: smb_kernelops.c,v 1.1.8.2 2014/08/19 23:52:13 tls Exp $	*/
 
 /*
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: smb_kernelops.c,v 1.1 2013/12/25 22:03:47 christos Exp $");
+__RCSID("$NetBSD: smb_kernelops.c,v 1.1.8.2 2014/08/19 23:52:13 tls Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>

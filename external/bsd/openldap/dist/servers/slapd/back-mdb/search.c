@@ -1,4 +1,4 @@
-/*	$NetBSD: search.c,v 1.1.1.1 2014/05/28 09:58:50 tron Exp $	*/
+/*	$NetBSD: search.c,v 1.1.1.1.6.2 2014/08/19 23:52:02 tls Exp $	*/
 
 /* search.c - search operation */
 /* $OpenLDAP$ */

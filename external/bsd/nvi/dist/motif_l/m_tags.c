@@ -15,7 +15,7 @@
 static const char sccsid[] = "Id: m_tags.c,v 8.9 2003/11/05 17:10:00 skimo Exp  (Berkeley) Date: 2003/11/05 17:10:00 ";
 #endif /* not lint */
 #else
-__RCSID("$NetBSD: m_tags.c,v 1.2 2014/01/26 21:43:45 christos Exp $");
+__RCSID("$NetBSD: m_tags.c,v 1.2.8.2 2014/08/19 23:51:53 tls Exp $");
 #endif
 
 /*

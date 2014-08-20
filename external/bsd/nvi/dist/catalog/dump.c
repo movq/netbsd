@@ -1,4 +1,4 @@
-/*	$NetBSD: dump.c,v 1.4 2014/01/28 20:43:55 joerg Exp $ */
+/*	$NetBSD: dump.c,v 1.4.8.2 2014/08/19 23:51:50 tls Exp $ */
 /*-
  * Copyright (c) 1992, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -15,7 +15,7 @@ static char copyright[] =
 	The Regents of the University of California.  All rights reserved.\n";
 #endif /* not lint */
 #else
-__RCSID("$NetBSD: dump.c,v 1.4 2014/01/28 20:43:55 joerg Exp $");
+__RCSID("$NetBSD: dump.c,v 1.4.8.2 2014/08/19 23:51:50 tls Exp $");
 #endif
 #endif
 

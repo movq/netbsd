@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: unwind_stub.c,v 1.2 2013/08/12 23:42:14 matt Exp $");
+__KERNEL_RCSID(1, "$NetBSD: unwind_stub.c,v 1.2.10.2 2014/08/20 00:04:30 tls Exp $");
 
 #include <arm/ehabi.h>
 

@@ -1,4 +1,4 @@
-#	$NetBSD: KOBO_INSTALL,v 1.1 2014/07/25 11:22:50 hkenken Exp $
+#	$NetBSD: KOBO_INSTALL,v 1.1.6.2 2014/08/20 00:02:53 tls Exp $
 #
 #	KOBO_INSTALL -- KOBO kernel with installation-sized
 #	ramdisk

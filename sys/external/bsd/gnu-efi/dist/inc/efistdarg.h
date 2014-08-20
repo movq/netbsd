@@ -1,4 +1,4 @@
-/*	$NetBSD: efistdarg.h,v 1.2 2014/04/08 17:55:18 jakllsch Exp $	*/
+/*	$NetBSD: efistdarg.h,v 1.2.8.2 2014/08/20 00:04:23 tls Exp $	*/
 
 #ifndef _EFISTDARG_H_
 #define _EFISTDARG_H_

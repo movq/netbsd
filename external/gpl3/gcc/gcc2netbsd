@@ -1,6 +1,6 @@
 #! /bin/sh
 #
-#	$NetBSD: gcc2netbsd,v 1.5 2014/02/23 05:46:28 mrg Exp $
+#	$NetBSD: gcc2netbsd,v 1.5.8.2 2014/08/19 23:53:09 tls Exp $
 #
 # Copyright (c) 2011 The NetBSD Foundation, Inc.
 # All rights reserved.

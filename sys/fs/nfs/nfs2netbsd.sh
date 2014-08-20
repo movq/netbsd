@@ -8,7 +8,7 @@
 #
 # The current directory should be empty.
 #
-# $NetBSD: nfs2netbsd.sh,v 1.1 2013/09/30 07:23:37 dholland Exp $
+# $NetBSD: nfs2netbsd.sh,v 1.1.10.2 2014/08/20 00:04:26 tls Exp $
 
 FTOP="$1"
 

@@ -1,4 +1,4 @@
-#       $NetBSD: files.drmkms_linux,v 1.7 2014/07/17 13:52:22 riastradh Exp $
+#       $NetBSD: files.drmkms_linux,v 1.7.4.2 2014/08/20 00:04:22 tls Exp $
 
 define	drmkms_linux: i2cexec, i2c_bitbang
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: apple_smc_temp.c,v 1.4 2014/04/01 17:49:05 riastradh Exp $	*/
+/*	$NetBSD: apple_smc_temp.c,v 1.4.10.2 2014/08/20 00:03:37 tls Exp $	*/
 
 /*
  * Apple System Management Controller: Temperature Sensors
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: apple_smc_temp.c,v 1.4 2014/04/01 17:49:05 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apple_smc_temp.c,v 1.4.10.2 2014/08/20 00:03:37 tls Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

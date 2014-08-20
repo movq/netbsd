@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2013/07/15 00:22:10 khorben Exp $
+#	$NetBSD: Makefile,v 1.1.10.2 2014/08/19 23:45:37 tls Exp $
 
 IMAGE=		ramdisk-cgdroot.fs
 IMAGESIZE=	5000k

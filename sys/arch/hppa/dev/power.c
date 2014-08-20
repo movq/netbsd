@@ -1,4 +1,4 @@
-/*	$NetBSD: power.c,v 1.1 2014/02/24 07:23:42 skrll Exp $	*/
+/*	$NetBSD: power.c,v 1.1.10.2 2014/08/20 00:03:04 tls Exp $	*/
 
 /*
  * Copyright (c) 2004 Jochen Kunz.

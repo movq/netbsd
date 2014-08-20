@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.1 2014/08/10 05:47:36 matt Exp $
+# $NetBSD: Makefile.inc,v 1.1.4.2 2014/08/20 00:02:08 tls Exp $
 
 SRCS+=	byte_swap_2.S byte_swap_4.S byte_swap_8.S
 SRCS+=	flt_rounds.c

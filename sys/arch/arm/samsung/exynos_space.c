@@ -1,4 +1,4 @@
-/*	$NetBSD: exynos_space.c,v 1.1 2014/04/13 02:26:26 matt Exp $	*/
+/*	$NetBSD: exynos_space.c,v 1.1.10.2 2014/08/20 00:02:47 tls Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exynos_space.c,v 1.1 2014/04/13 02:26:26 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exynos_space.c,v 1.1.10.2 2014/08/20 00:02:47 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

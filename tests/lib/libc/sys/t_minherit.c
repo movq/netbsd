@@ -1,4 +1,4 @@
-/* $NetBSD: t_minherit.c,v 1.1 2014/07/18 12:34:52 christos Exp $ */
+/* $NetBSD: t_minherit.c,v 1.1.6.2 2014/08/20 00:04:50 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_minherit.c,v 1.1 2014/07/18 12:34:52 christos Exp $");
+__RCSID("$NetBSD: t_minherit.c,v 1.1.6.2 2014/08/20 00:04:50 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/mman.h>

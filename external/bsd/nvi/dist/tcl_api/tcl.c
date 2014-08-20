@@ -17,7 +17,7 @@
 static const char sccsid[] = "Id: tcl.c,v 8.19 2001/08/24 12:17:27 skimo Exp  (Berkeley) Date: 2001/08/24 12:17:27 ";
 #endif /* not lint */
 #else
-__RCSID("$NetBSD: tcl.c,v 1.3 2014/01/26 21:43:45 christos Exp $");
+__RCSID("$NetBSD: tcl.c,v 1.3.8.2 2014/08/19 23:51:53 tls Exp $");
 #endif
 
 #include <sys/types.h>

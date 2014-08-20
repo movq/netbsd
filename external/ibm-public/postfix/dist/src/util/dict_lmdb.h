@@ -1,4 +1,4 @@
-/*	$NetBSD: dict_lmdb.h,v 1.1.1.1 2014/07/06 19:27:58 tron Exp $	*/
+/*	$NetBSD: dict_lmdb.h,v 1.1.1.1.6.2 2014/08/19 23:59:45 tls Exp $	*/
 
 #ifndef _DICT_LMDB_H_INCLUDED_
 #define _DICT_LMDB_H_INCLUDED_

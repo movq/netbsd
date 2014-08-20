@@ -1,4 +1,4 @@
-/* $NetBSD: udf_write.c,v 1.8 2013/08/25 14:13:47 reinoud Exp $ */
+/* $NetBSD: udf_write.c,v 1.8.8.2 2014/08/20 00:02:27 tls Exp $ */
 
 /*
  * Copyright (c) 2006, 2008, 2013 Reinoud Zandijk
@@ -30,7 +30,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: udf_write.c,v 1.8 2013/08/25 14:13:47 reinoud Exp $");
+__RCSID("$NetBSD: udf_write.c,v 1.8.8.2 2014/08/20 00:02:27 tls Exp $");
 
 #include <stdio.h>
 #include <stdlib.h>

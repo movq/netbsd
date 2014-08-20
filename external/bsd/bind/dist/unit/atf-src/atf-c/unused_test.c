@@ -1,4 +1,4 @@
-/*	$NetBSD: unused_test.c,v 1.2 2013/12/31 20:24:43 christos Exp $	*/
+/*	$NetBSD: unused_test.c,v 1.2.8.2 2014/08/19 23:46:37 tls Exp $	*/
 
 /*
  * Automated Testing Framework (atf)

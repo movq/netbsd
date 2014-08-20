@@ -1,4 +1,4 @@
-/*	$NetBSD: utils.h,v 1.3 2014/01/22 06:15:22 riastradh Exp $	*/
+/*	$NetBSD: utils.h,v 1.3.8.2 2014/08/20 00:05:05 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

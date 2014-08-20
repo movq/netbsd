@@ -15,7 +15,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: s_cbrtl.c,v 1.1 2013/11/19 19:24:34 joerg Exp $");
+__RCSID("$NetBSD: s_cbrtl.c,v 1.1.8.2 2014/08/20 00:02:18 tls Exp $");
 #if 0
 __FBSDID("$FreeBSD: head/lib/msun/src/s_cbrtl.c 238924 2012-07-30 21:58:28Z kargl $");
 #endif

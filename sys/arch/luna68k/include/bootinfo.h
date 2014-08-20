@@ -1,4 +1,4 @@
-/*	$NetBSD: bootinfo.h,v 1.1 2014/01/11 08:07:16 tsutsui Exp $	*/
+/*	$NetBSD: bootinfo.h,v 1.1.10.2 2014/08/20 00:03:10 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 Izumi Tsutsui.  All rights reserved.

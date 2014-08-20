@@ -1,4 +1,4 @@
-/*	$NetBSD: netwalker_spi.c,v 1.1 2014/03/29 12:00:27 hkenken Exp $	*/
+/*	$NetBSD: netwalker_spi.c,v 1.1.10.2 2014/08/20 00:02:55 tls Exp $	*/
 
 /*-
  * Copyright (c) 2009  Genetec Corporation.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netwalker_spi.c,v 1.1 2014/03/29 12:00:27 hkenken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netwalker_spi.c,v 1.1.10.2 2014/08/20 00:02:55 tls Exp $");
 
 #include "opt_imxspi.h"
 

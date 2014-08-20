@@ -1,4 +1,4 @@
-/*	$NetBSD: event-config.h,v 1.1.1.1 2013/12/27 23:31:33 christos Exp $	*/
+/*	$NetBSD: event-config.h,v 1.1.1.1.8.2 2014/08/19 23:51:46 tls Exp $	*/
 
 /* event2/event-config.h
  *

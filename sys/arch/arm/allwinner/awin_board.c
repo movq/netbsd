@@ -1,4 +1,4 @@
-/*	$NetBSD: awin_board.c,v 1.14 2014/04/11 16:32:38 matt Exp $	*/
+/*	$NetBSD: awin_board.c,v 1.14.8.2 2014/08/20 00:02:44 tls Exp $	*/
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: awin_board.c,v 1.14 2014/04/11 16:32:38 matt Exp $");
+__KERNEL_RCSID(1, "$NetBSD: awin_board.c,v 1.14.8.2 2014/08/20 00:02:44 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

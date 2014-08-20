@@ -1,4 +1,4 @@
-/* $NetBSD: all_sync_ops_linkable.c,v 1.4 2014/02/21 10:26:25 martin Exp $ */
+/* $NetBSD: all_sync_ops_linkable.c,v 1.4.8.2 2014/08/20 00:04:50 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

@@ -1,3 +1,3 @@
-/*      $NetBSD: bswap.h,v 1.1 2014/08/10 05:47:38 matt Exp $      */
+/*      $NetBSD: bswap.h,v 1.1.4.2 2014/08/20 00:02:39 tls Exp $      */
 
 #include <arm/bswap.h>

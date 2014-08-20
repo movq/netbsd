@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>
 
-__RCSID("$NetBSD: powerpc_initfini.c,v 1.1 2013/08/30 21:28:59 matt Exp $");
+__RCSID("$NetBSD: powerpc_initfini.c,v 1.1.8.2 2014/08/20 00:02:11 tls Exp $");
 
 #include "namespace.h"
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: readufs_ffs.c,v 1.1 2014/02/24 07:23:43 skrll Exp $	*/
+/*	$NetBSD: readufs_ffs.c,v 1.1.10.2 2014/08/20 00:03:05 tls Exp $	*/
 /*	from Id: readufs_ffs.c,v 1.8 2004/06/12 04:26:39 itohy Exp	*/
 
 /*

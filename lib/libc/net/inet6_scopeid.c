@@ -34,7 +34,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: inet6_scopeid.c,v 1.2 2013/10/19 15:47:02 christos Exp $");
+__RCSID("$NetBSD: inet6_scopeid.c,v 1.2.8.2 2014/08/20 00:02:15 tls Exp $");
 
 #include <sys/endian.h>
 #include <string.h>

@@ -66,7 +66,7 @@
 #include "rumpuser_port.h"
 
 #if !defined(lint)
-__RCSID("$NetBSD: rumpfiber.c,v 1.3 2014/07/25 14:00:31 justin Exp $");
+__RCSID("$NetBSD: rumpfiber.c,v 1.3.6.2 2014/08/20 00:02:21 tls Exp $");
 #endif /* !lint */
 
 #include <sys/ioctl.h>

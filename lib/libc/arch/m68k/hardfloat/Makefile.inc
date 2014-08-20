@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.2 2014/03/18 18:20:37 riastradh Exp $
+#	$NetBSD: Makefile.inc,v 1.2.8.2 2014/08/20 00:02:10 tls Exp $
 
 SRCS+=	modf.S
 SRCS+=	flt_rounds.c fpgetmask.c fpgetround.c fpgetsticky.c fpsetmask.c \

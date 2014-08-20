@@ -1,4 +1,4 @@
-/*	$NetBSD: mdb.c,v 1.1.1.1 2014/05/28 09:58:43 tron Exp $	*/
+/*	$NetBSD: mdb.c,v 1.1.1.1.6.2 2014/08/19 23:52:00 tls Exp $	*/
 
 /** @file mdb.c
  *	@brief memory-mapped database library

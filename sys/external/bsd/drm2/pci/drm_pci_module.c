@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_pci_module.c,v 1.2 2014/03/18 18:20:43 riastradh Exp $	*/
+/*	$NetBSD: drm_pci_module.c,v 1.2.10.2 2014/08/20 00:04:22 tls Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_pci_module.c,v 1.2 2014/03/18 18:20:43 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_pci_module.c,v 1.2.10.2 2014/08/20 00:04:22 tls Exp $");
 
 #include <sys/module.h>
 

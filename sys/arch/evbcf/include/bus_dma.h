@@ -1,4 +1,4 @@
-/* $NetBSD: bus_dma.h,v 1.2 2014/03/18 18:20:41 riastradh Exp $	*/
+/* $NetBSD: bus_dma.h,v 1.2.8.2 2014/08/20 00:02:57 tls Exp $	*/
 
 /*
  * This file was extracted from from next68k/include/bus.h

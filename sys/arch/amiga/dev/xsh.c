@@ -1,4 +1,4 @@
-/*	$NetBSD: xsh.c,v 1.2 2013/08/09 12:56:31 rkujawa Exp $ */
+/*	$NetBSD: xsh.c,v 1.2.10.2 2014/08/20 00:02:43 tls Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xsh.c,v 1.2 2013/08/09 12:56:31 rkujawa Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xsh.c,v 1.2.10.2 2014/08/20 00:02:43 tls Exp $");
 
 /*
  * X-Surf 100 driver. 

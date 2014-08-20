@@ -1,4 +1,4 @@
-/*	$NetBSD: tcc.c,v 1.1.1.1 2014/04/01 16:16:06 jakllsch Exp $	*/
+/*	$NetBSD: tcc.c,v 1.1.1.1.10.2 2014/08/20 00:04:23 tls Exp $	*/
 
 /*
  * Test if our calling convention gymnastics actually work

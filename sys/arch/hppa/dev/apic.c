@@ -1,4 +1,4 @@
-/*	$NetBSD: apic.c,v 1.2 2014/03/31 20:51:20 christos Exp $	*/
+/*	$NetBSD: apic.c,v 1.2.10.2 2014/08/20 00:03:04 tls Exp $	*/
 
 /*	$OpenBSD: apic.c,v 1.14 2011/05/01 21:59:39 kettenis Exp $	*/
 

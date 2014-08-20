@@ -1,4 +1,4 @@
-/* $NetBSD: hytp14reg.h,v 1.2 2014/06/29 09:06:05 kardel Exp $ */
+/* $NetBSD: hytp14reg.h,v 1.2.6.2 2014/08/20 00:03:37 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: savestr.h,v 1.1.1.1 2014/02/28 17:40:10 christos Exp $	*/
+/*	$NetBSD: savestr.h,v 1.1.1.1.8.2 2014/08/19 23:46:23 tls Exp $	*/
 
 /*
  * Copyright (c) 1997

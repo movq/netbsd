@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2014/07/13 14:54:22 christos Exp $
+#	$NetBSD: Makefile,v 1.2.6.2 2014/08/19 23:46:39 tls Exp $
 
 LIB=irs
 #USE_SHLIBDIR=   yes

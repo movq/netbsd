@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2014/03/18 18:20:43 riastradh Exp $
+#	$NetBSD: Makefile,v 1.2.10.2 2014/08/20 00:04:32 tls Exp $
 
 # XXX This module is not fit for use yet; too much of the PCI/AGP
 # support in upstream is compile-time-conditional.

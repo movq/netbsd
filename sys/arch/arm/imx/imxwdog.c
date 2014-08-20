@@ -1,4 +1,4 @@
-/*	$NetBSD: imxwdog.c,v 1.2 2014/05/02 03:05:41 hkenken Exp $	*/
+/*	$NetBSD: imxwdog.c,v 1.2.8.2 2014/08/20 00:02:46 tls Exp $	*/
 
 /*
  * Copyright (c) 2010  Genetec Corporation.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imxwdog.c,v 1.2 2014/05/02 03:05:41 hkenken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imxwdog.c,v 1.2.8.2 2014/08/20 00:02:46 tls Exp $");
 
 #include "opt_imx.h"
 

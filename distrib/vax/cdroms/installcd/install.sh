@@ -1,5 +1,5 @@
 #! /bin/sh -m
-# $NetBSD: install.sh,v 1.1 2014/05/21 14:21:35 martin Exp $
+# $NetBSD: install.sh,v 1.1.6.2 2014/08/19 23:45:49 tls Exp $
 #
 # -
 #  Copyright (c) 2010 The NetBSD Foundation, Inc.

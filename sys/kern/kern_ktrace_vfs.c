@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_ktrace_vfs.c,v 1.1 2013/12/09 16:45:23 pooka Exp $	*/
+/*	$NetBSD: kern_ktrace_vfs.c,v 1.1.10.2 2014/08/20 00:04:29 tls Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_ktrace_vfs.c,v 1.1 2013/12/09 16:45:23 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_ktrace_vfs.c,v 1.1.10.2 2014/08/20 00:04:29 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

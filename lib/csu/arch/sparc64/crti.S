@@ -1,4 +1,4 @@
-/* $NetBSD: crti.S,v 1.1 2013/07/11 06:57:15 martin Exp $ */
+/* $NetBSD: crti.S,v 1.1.10.2 2014/08/20 00:02:06 tls Exp $ */
 
 /*
  * Copyright (c) 2001 Matthew R. Green
@@ -61,7 +61,7 @@
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: crti.S,v 1.1 2013/07/11 06:57:15 martin Exp $")
+RCSID("$NetBSD: crti.S,v 1.1.10.2 2014/08/20 00:02:06 tls Exp $")
 
 #include "sysident.S"
 

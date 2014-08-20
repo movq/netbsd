@@ -1,4 +1,4 @@
-/*	$NetBSD: i386_trap_ipkdb.S,v 1.2 2013/11/22 01:07:20 riz Exp $	*/
+/*	$NetBSD: i386_trap_ipkdb.S,v 1.2.8.2 2014/08/20 00:03:06 tls Exp $	*/
 
 /*
  * Copyright 2002 (c) Wasabi Systems, Inc.
@@ -66,7 +66,7 @@
 
 #if 0
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: i386_trap_ipkdb.S,v 1.2 2013/11/22 01:07:20 riz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i386_trap_ipkdb.S,v 1.2.8.2 2014/08/20 00:03:06 tls Exp $");
 #endif
 
 #ifdef IPKDB

@@ -1,4 +1,4 @@
-/*	$NetBSD: iocp-internal.h,v 1.1.1.1 2013/12/27 23:31:25 christos Exp $	*/
+/*	$NetBSD: iocp-internal.h,v 1.1.1.1.8.2 2014/08/19 23:51:46 tls Exp $	*/
 
 /*
  * Copyright (c) 2009-2012 Niels Provos and Nick Mathewson

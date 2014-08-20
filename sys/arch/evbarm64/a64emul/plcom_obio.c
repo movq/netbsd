@@ -1,4 +1,4 @@
-/* $NetBSD: plcom_obio.c,v 1.1 2014/08/10 05:47:38 matt Exp $ */
+/* $NetBSD: plcom_obio.c,v 1.1.4.2 2014/08/20 00:02:57 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: plcom_obio.c,v 1.1 2014/08/10 05:47:38 matt Exp $");
+__KERNEL_RCSID(1, "$NetBSD: plcom_obio.c,v 1.1.4.2 2014/08/20 00:02:57 tls Exp $");
 
 /* Interface to plcom (PL011) serial driver. */
 

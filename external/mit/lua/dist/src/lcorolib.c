@@ -1,7 +1,7 @@
-/*	$NetBSD: lcorolib.c,v 1.1 2014/07/19 18:38:34 lneto Exp $	*/
+/*	$NetBSD: lcorolib.c,v 1.1.6.2 2014/08/20 00:00:08 tls Exp $	*/
 
 /*
-** $Id: lcorolib.c,v 1.1 2014/07/19 18:38:34 lneto Exp $
+** $Id: lcorolib.c,v 1.1.6.2 2014/08/20 00:00:08 tls Exp $
 ** Coroutine Library
 ** See Copyright Notice in lua.h
 */

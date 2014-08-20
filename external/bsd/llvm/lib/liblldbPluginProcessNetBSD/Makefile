@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2014/05/30 18:28:16 joerg Exp $
+#	$NetBSD: Makefile,v 1.2.4.2 2014/08/19 23:51:30 tls Exp $
 
 LIB=	lldbPluginProcessNetBSD
 

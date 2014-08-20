@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_minimal.h,v 1.1.1.1 2014/02/28 17:40:09 christos Exp $	*/
+/*	$NetBSD: dlz_minimal.h,v 1.1.1.1.8.2 2014/08/19 23:46:22 tls Exp $	*/
 
 /*
  * Copyright (C) 2011  Internet Systems Consortium, Inc. ("ISC")

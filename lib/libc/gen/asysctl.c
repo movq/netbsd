@@ -1,4 +1,4 @@
-/*	$NetBSD: asysctl.c,v 1.1 2014/06/13 15:45:05 joerg Exp $ */
+/*	$NetBSD: asysctl.c,v 1.1.6.2 2014/08/20 00:02:14 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: asysctl.c,v 1.1 2014/06/13 15:45:05 joerg Exp $");
+__RCSID("$NetBSD: asysctl.c,v 1.1.6.2 2014/08/20 00:02:14 tls Exp $");
 
 #include "namespace.h"
 #include <sys/sysctl.h>

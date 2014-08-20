@@ -1,4 +1,4 @@
-/*	$NetBSD: util2.c,v 1.2 2013/11/22 15:52:05 christos Exp $	*/
+/*	$NetBSD: util2.c,v 1.2.8.2 2014/08/19 23:51:51 tls Exp $	*/
 #include "config.h"
 
 #include <sys/types.h>

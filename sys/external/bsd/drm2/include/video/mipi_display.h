@@ -1,4 +1,4 @@
-/*	$NetBSD: mipi_display.h,v 1.1 2014/07/16 20:56:25 riastradh Exp $	*/
+/*	$NetBSD: mipi_display.h,v 1.1.6.2 2014/08/20 00:04:22 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

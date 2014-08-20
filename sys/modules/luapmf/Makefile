@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2014/07/19 18:38:35 lneto Exp $
+#	$NetBSD: Makefile,v 1.3.4.2 2014/08/20 00:04:34 tls Exp $
 
 .include "../Makefile.inc"
 

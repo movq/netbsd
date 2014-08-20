@@ -1,4 +1,4 @@
-/*	$NetBSD: id2entry.c,v 1.1.1.1 2014/05/28 09:58:49 tron Exp $	*/
+/*	$NetBSD: id2entry.c,v 1.1.1.1.6.2 2014/08/19 23:52:02 tls Exp $	*/
 
 /* id2entry.c - routines to deal with the id2entry database */
 /* $OpenLDAP$ */

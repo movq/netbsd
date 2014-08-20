@@ -1,4 +1,4 @@
-/*	$NetBSD: stpcpy_chk.c,v 1.5 2014/04/06 19:29:25 christos Exp $	*/
+/*	$NetBSD: stpcpy_chk.c,v 1.5.6.2 2014/08/20 00:02:16 tls Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: stpcpy_chk.c,v 1.5 2014/04/06 19:29:25 christos Exp $");
+__RCSID("$NetBSD: stpcpy_chk.c,v 1.5.6.2 2014/08/20 00:02:16 tls Exp $");
 
 /*LINTLIBRARY*/
 

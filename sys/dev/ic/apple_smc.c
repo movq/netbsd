@@ -1,4 +1,4 @@
-/*	$NetBSD: apple_smc.c,v 1.6 2014/04/25 23:54:59 riastradh Exp $	*/
+/*	$NetBSD: apple_smc.c,v 1.6.8.2 2014/08/20 00:03:37 tls Exp $	*/
 
 /*
  * Apple System Management Controller
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: apple_smc.c,v 1.6 2014/04/25 23:54:59 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apple_smc.c,v 1.6.8.2 2014/08/20 00:03:37 tls Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

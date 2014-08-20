@@ -1,4 +1,4 @@
-/*	$NetBSD: ex_filter.c,v 1.3 2014/01/26 21:43:45 christos Exp $ */
+/*	$NetBSD: ex_filter.c,v 1.3.8.2 2014/08/19 23:51:52 tls Exp $ */
 /*-
  * Copyright (c) 1991, 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -16,7 +16,7 @@
 static const char sccsid[] = "Id: ex_filter.c,v 10.44 2003/11/05 17:11:54 skimo Exp  (Berkeley) Date: 2003/11/05 17:11:54 ";
 #endif /* not lint */
 #else
-__RCSID("$NetBSD: ex_filter.c,v 1.3 2014/01/26 21:43:45 christos Exp $");
+__RCSID("$NetBSD: ex_filter.c,v 1.3.8.2 2014/08/19 23:51:52 tls Exp $");
 #endif
 
 #include <sys/types.h>

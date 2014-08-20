@@ -1,4 +1,4 @@
-/* $NetBSD: h_aesctr1.c,v 1.4 2014/01/19 13:40:59 pgoyette Exp $ */
+/* $NetBSD: h_aesctr1.c,v 1.4.8.2 2014/08/20 00:04:46 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

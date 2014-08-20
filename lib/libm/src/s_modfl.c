@@ -36,7 +36,7 @@
  * $FreeBSD: head/lib/msun/src/s_modfl.c 165855 2007-01-07 07:54:21Z das $
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: s_modfl.c,v 1.1 2014/06/16 12:54:43 joerg Exp $");
+__RCSID("$NetBSD: s_modfl.c,v 1.1.6.2 2014/08/20 00:02:18 tls Exp $");
 
 #include "namespace.h"
 

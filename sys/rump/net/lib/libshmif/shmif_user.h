@@ -1,4 +1,4 @@
-/*	$NetBSD: shmif_user.h,v 1.1 2014/03/13 01:42:59 pooka Exp $	*/
+/*	$NetBSD: shmif_user.h,v 1.1.10.2 2014/08/20 00:04:43 tls Exp $	*/
 
 /*
  * Copyright (c) 2013 Antti Kantee.  All Rights Reserved.

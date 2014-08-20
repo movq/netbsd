@@ -29,7 +29,7 @@
 
 #include <mips/asm.h>
 
-RCSID("$NetBSD: crtn.S,v 1.2 2013/06/30 08:00:34 matt Exp $")
+RCSID("$NetBSD: crtn.S,v 1.2.10.2 2014/08/20 00:02:06 tls Exp $")
 
 	.section ".init", "ax", @progbits
 	REG_L	ra, CALLFRAME_RA(sp)

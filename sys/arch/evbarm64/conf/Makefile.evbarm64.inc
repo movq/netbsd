@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.evbarm64.inc,v 1.1 2014/08/10 05:47:38 matt Exp $
+#	$NetBSD: Makefile.evbarm64.inc,v 1.1.4.2 2014/08/20 00:02:57 tls Exp $
 
 #
 # If this is a install kernel and the ramdisk image exists in the object

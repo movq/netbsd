@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_perf_test.c,v 1.4 2014/06/25 00:21:42 rmind Exp $	*/
+/*	$NetBSD: npf_perf_test.c,v 1.4.4.2 2014/08/20 00:05:11 tls Exp $	*/
 
 /*
  * NPF benchmarking.

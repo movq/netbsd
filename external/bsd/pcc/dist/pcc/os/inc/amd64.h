@@ -1,5 +1,5 @@
 /*	Id: amd64.h,v 1.1 2012/12/28 12:38:15 ragge Exp 	*/	
-/*	$NetBSD: amd64.h,v 1.1.1.1 2014/07/24 19:29:37 plunky Exp $	*/
+/*	$NetBSD: amd64.h,v 1.1.1.1.6.2 2014/08/19 23:52:10 tls Exp $	*/
 
 /*
  * Copyright (c) 2012 Anders Magnusson (ragge@ludd.luth.se).

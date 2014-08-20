@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_module.c,v 1.7 2014/07/17 13:47:19 riastradh Exp $	*/
+/*	$NetBSD: drm_module.c,v 1.7.4.2 2014/08/20 00:04:20 tls Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_module.c,v 1.7 2014/07/17 13:47:19 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_module.c,v 1.7.4.2 2014/08/20 00:04:20 tls Exp $");
 
 #include <sys/types.h>
 #include <sys/device.h>

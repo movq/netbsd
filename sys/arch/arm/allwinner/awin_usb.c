@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: awin_usb.c,v 1.12 2014/06/24 05:07:31 skrll Exp $");
+__KERNEL_RCSID(1, "$NetBSD: awin_usb.c,v 1.12.4.2 2014/08/20 00:02:44 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

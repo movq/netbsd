@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.1 2014/02/24 07:23:43 skrll Exp $	*/
+/*	$NetBSD: intr.h,v 1.1.10.2 2014/08/20 00:03:05 tls Exp $	*/
 /*	$OpenBSD: intr.h,v 1.26 2009/12/29 13:11:40 jsing Exp $	*/
 
 /*-

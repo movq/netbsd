@@ -1,4 +1,4 @@
-/*	$NetBSD: db_machdep.h,v 1.2 2014/03/18 18:20:41 riastradh Exp $	*/
+/*	$NetBSD: db_machdep.h,v 1.2.8.2 2014/08/20 00:02:57 tls Exp $	*/
 
 /* Just use the common m68k definition */
 #include <m68k/db_machdep.h>

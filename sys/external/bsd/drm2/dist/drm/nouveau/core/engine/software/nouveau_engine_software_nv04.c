@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_engine_software_nv04.c,v 1.1.1.1 2014/08/06 12:36:27 riastradh Exp $	*/
+/*	$NetBSD: nouveau_engine_software_nv04.c,v 1.1.1.1.6.2 2014/08/20 00:04:13 tls Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_software_nv04.c,v 1.1.1.1 2014/08/06 12:36:27 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_software_nv04.c,v 1.1.1.1.6.2 2014/08/20 00:04:13 tls Exp $");
 
 #include <core/os.h>
 #include <core/class.h>

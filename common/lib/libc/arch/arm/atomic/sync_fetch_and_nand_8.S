@@ -1,4 +1,4 @@
-/*	$NetBSD: sync_fetch_and_nand_8.S,v 1.2 2013/11/30 21:09:11 joerg Exp $	*/
+/*	$NetBSD: sync_fetch_and_nand_8.S,v 1.2.8.2 2014/08/19 23:45:12 tls Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

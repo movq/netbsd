@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_rndsink.c,v 1.8 2014/03/01 14:15:15 riastradh Exp $	*/
+/*	$NetBSD: kern_rndsink.c,v 1.8.8.2 2014/08/20 00:04:29 tls Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_rndsink.c,v 1.8 2014/03/01 14:15:15 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_rndsink.c,v 1.8.8.2 2014/08/20 00:04:29 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

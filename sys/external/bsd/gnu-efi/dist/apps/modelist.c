@@ -1,4 +1,4 @@
-/*	$NetBSD: modelist.c,v 1.1.1.1 2014/04/01 16:16:06 jakllsch Exp $	*/
+/*	$NetBSD: modelist.c,v 1.1.1.1.10.2 2014/08/20 00:04:23 tls Exp $	*/
 
 #include <efi.h>
 #include <efilib.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: postconf_lookup.c,v 1.1.1.2 2014/07/06 19:27:53 tron Exp $	*/
+/*	$NetBSD: postconf_lookup.c,v 1.1.1.2.4.2 2014/08/19 23:59:43 tls Exp $	*/
 
 /*++
 /* NAME

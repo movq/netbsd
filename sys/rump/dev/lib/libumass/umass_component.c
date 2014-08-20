@@ -1,4 +1,4 @@
-/*	$NetBSD: umass_component.c,v 1.1 2014/03/13 01:54:59 pooka Exp $	*/
+/*	$NetBSD: umass_component.c,v 1.1.10.2 2014/08/20 00:04:38 tls Exp $	*/
 
 #include <sys/param.h>
 #include <sys/conf.h>

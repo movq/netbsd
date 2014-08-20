@@ -15,7 +15,7 @@
 static const char sccsid[] = "Id: db.c,v 10.48 2002/06/08 19:32:52 skimo Exp  (Berkeley) Date: 2002/06/08 19:32:52 ";
 #endif /* not lint */
 #else
-__RCSID("$NetBSD: vi_db.c,v 1.6 2014/01/26 21:43:45 christos Exp $");
+__RCSID("$NetBSD: vi_db.c,v 1.6.8.2 2014/08/19 23:51:51 tls Exp $");
 #endif
 
 #include <sys/types.h>

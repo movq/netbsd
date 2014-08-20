@@ -1,4 +1,4 @@
-/*	$NetBSD: ipc_method.c,v 1.6 2013/11/27 20:52:24 christos Exp $	*/
+/*	$NetBSD: ipc_method.c,v 1.6.8.2 2014/08/19 23:51:52 tls Exp $	*/
 /*-
  * Copyright (c) 1996
  *	Rob Zimmermann.  All rights reserved.

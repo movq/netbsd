@@ -1,4 +1,4 @@
-/*	$NetBSD: libelf_phdr.c,v 1.2 2014/03/09 16:58:04 christos Exp $	*/
+/*	$NetBSD: libelf_phdr.c,v 1.2.8.2 2014/08/19 23:46:45 tls Exp $	*/
 
 /*-
  * Copyright (c) 2006,2008 Joseph Koshy
@@ -39,7 +39,7 @@
 
 #include "_libelf.h"
 
-__RCSID("$NetBSD: libelf_phdr.c,v 1.2 2014/03/09 16:58:04 christos Exp $");
+__RCSID("$NetBSD: libelf_phdr.c,v 1.2.8.2 2014/08/19 23:46:45 tls Exp $");
 ELFTC_VCSID("Id: libelf_phdr.c 2931 2013-03-23 11:41:07Z jkoshy ");
 
 void *

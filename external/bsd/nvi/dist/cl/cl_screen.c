@@ -1,4 +1,4 @@
-/*	$NetBSD: cl_screen.c,v 1.4 2014/01/26 21:43:45 christos Exp $ */
+/*	$NetBSD: cl_screen.c,v 1.4.8.2 2014/08/19 23:51:50 tls Exp $ */
 /*-
  * Copyright (c) 1993, 1994
  *	The Regents of the University of California.  All rights reserved.
@@ -16,7 +16,7 @@
 static const char sccsid[] = "Id: cl_screen.c,v 10.56 2002/05/03 19:59:44 skimo Exp  (Berkeley) Date: 2002/05/03 19:59:44 ";
 #endif /* not lint */
 #else
-__RCSID("$NetBSD: cl_screen.c,v 1.4 2014/01/26 21:43:45 christos Exp $");
+__RCSID("$NetBSD: cl_screen.c,v 1.4.8.2 2014/08/19 23:51:50 tls Exp $");
 #endif
 
 #include <sys/types.h>

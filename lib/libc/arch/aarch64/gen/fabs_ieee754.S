@@ -1,4 +1,4 @@
-/* $NetBSD: fabs_ieee754.S,v 1.1 2014/08/10 05:47:36 matt Exp $ */
+/* $NetBSD: fabs_ieee754.S,v 1.1.4.2 2014/08/20 00:02:08 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: fabs_ieee754.S,v 1.1 2014/08/10 05:47:36 matt Exp $")
+RCSID("$NetBSD: fabs_ieee754.S,v 1.1.4.2 2014/08/20 00:02:08 tls Exp $")
 
 ENTRY(fabs)
 	fabs	d0, d0

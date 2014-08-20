@@ -1,4 +1,4 @@
-/* $Id: compat.h,v 1.1 2013/11/22 16:00:45 christos Exp $ (Berkeley) $Date: 2013/11/22 16:00:45 $ */
+/* $Id: compat.h,v 1.1.8.2 2014/08/19 23:51:54 tls Exp $ (Berkeley) $Date: 2014/08/19 23:51:54 $ */
 
 /*
  * Declare the basic types, if they aren't already declared.  Named and

@@ -1,4 +1,4 @@
-/*	$NetBSD: pool_test.c,v 1.1.1.1 2013/07/27 15:23:20 christos Exp $	*/
+/*	$NetBSD: pool_test.c,v 1.1.1.1.8.2 2014/08/19 23:46:33 tls Exp $	*/
 
 /*
  * Copyright (C) 2013  Internet Systems Consortium, Inc. ("ISC")

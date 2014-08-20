@@ -1,4 +1,4 @@
-/*	$NetBSD: mem.c,v 1.1 2014/02/24 07:23:42 skrll Exp $	*/
+/*	$NetBSD: mem.c,v 1.1.10.2 2014/08/20 00:03:04 tls Exp $	*/
 
 /*	$OpenBSD: mem.c,v 1.30 2007/09/22 16:21:32 krw Exp $	*/
 /*
@@ -73,7 +73,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.1 2014/02/24 07:23:42 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mem.c,v 1.1.10.2 2014/08/20 00:03:04 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

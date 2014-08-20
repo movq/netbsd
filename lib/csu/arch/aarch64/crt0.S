@@ -1,4 +1,4 @@
-/*	$NetBSD: crt0.S,v 1.1 2014/08/10 05:47:36 matt Exp $	*/
+/*	$NetBSD: crt0.S,v 1.1.4.2 2014/08/20 00:02:05 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <aarch64/asm.h>
 
-RCSID("$NetBSD: crt0.S,v 1.1 2014/08/10 05:47:36 matt Exp $")
+RCSID("$NetBSD: crt0.S,v 1.1.4.2 2014/08/20 00:02:05 tls Exp $")
 
 STRONG_ALIAS(_start,__start)
 

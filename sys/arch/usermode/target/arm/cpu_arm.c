@@ -1,4 +1,4 @@
-/* $NetBSD: cpu_arm.c,v 1.2 2013/11/11 13:52:04 jmcneill Exp $ */
+/* $NetBSD: cpu_arm.c,v 1.2.10.2 2014/08/20 00:03:27 tls Exp $ */
 
 /*-
  * Copyright (c) 2011 Reinoud Zandijk <reinoud@netbsd.org>
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu_arm.c,v 1.2 2013/11/11 13:52:04 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu_arm.c,v 1.2.10.2 2014/08/20 00:03:27 tls Exp $");
 
 #include <sys/types.h>
 #include <sys/systm.h>

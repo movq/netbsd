@@ -1,4 +1,4 @@
-/*	$NetBSD: partman.c,v 1.6 2014/08/19 13:44:31 martin Exp $ */
+/*	$NetBSD: partman.c,v 1.6.2.2 2014/08/20 00:05:14 tls Exp $ */
 
 /*
  * Copyright 2012 Eugene Lozovoy
@@ -1736,7 +1736,7 @@ pm_wedges_fill(pm_devs_t *pm_cur)
 		if (wedges[i].pm == pm_cur && ! wedges[i].allocated)
 			wedges[i].pm = NULL;
 
-	for (i = 0; i < min(MAXPARTITIONS,MAX_WEDGES); i++)
+	for (i = 0; i < MAXPARTITIONS && i < MAX_WEDGES; i++)
 		if (pm_cur->bsdlabel[i].pi_fstype != FS_UNUSED) {
 			current = pm_wedge_getfree();
 			if (current < 0) {
@@ -2414,18 +2414,17 @@ pm_submenu(menudesc *m, void *arg)
 
 	switch (((part_entry_t *)arg)[m->cursel].type) {
 		case PM_DISK_T:
-			if (pm_cur != NULL && pm_cur->gpt) {
+			if (pm_cur->gpt) {
 				process_menu(MENU_pmgptentry, &part_num);
 				pm_wedges_fill(pm_cur);
-			} else {
+			} else
 				process_menu(MENU_pmdiskentry, &part_num);
-			}
 			break;
 		case PM_WEDGE_T:
 		case PM_PART_T:
 			part_num = ((part_entry_t *)arg)[m->cursel].dev_num;
 			process_menu(MENU_pmpartentry, &part_num);
-			if (pm_cur != NULL && pm_cur->gpt)
+			if (pm_cur->gpt)
 				pm_wedges_fill(pm_cur);
 			break;
 		case PM_SPEC_T:
@@ -2598,7 +2597,7 @@ pm_upddevlist(menudesc *m, void *arg)
 		if (pm_i->found > 0)
 			pm_i->found = 0;
 	/* Detect all present devices */
-	(void)find_disks("partman");
+	find_disks("partman");
 	pm_lvm_find();
 	pm_clean();
 

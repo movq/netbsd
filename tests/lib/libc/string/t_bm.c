@@ -1,4 +1,4 @@
-/* $Id: t_bm.c,v 1.1 2014/06/23 10:53:20 shm Exp $ */
+/* $Id: t_bm.c,v 1.1.6.2 2014/08/20 00:04:50 tls Exp $ */
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$Id: t_bm.c,v 1.1 2014/06/23 10:53:20 shm Exp $");
+__RCSID("$Id: t_bm.c,v 1.1.6.2 2014/08/20 00:04:50 tls Exp $");
 
 #include <atf-c.h>
 #include <stdio.h>

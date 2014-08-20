@@ -1,4 +1,4 @@
-/*	$NetBSD: agp_i810var.h,v 1.5 2014/06/10 14:00:56 riastradh Exp $	*/
+/*	$NetBSD: agp_i810var.h,v 1.5.4.2 2014/08/20 00:03:41 tls Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson

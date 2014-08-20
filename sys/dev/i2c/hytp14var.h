@@ -1,4 +1,4 @@
-/* $NetBSD: hytp14var.h,v 1.2 2014/08/10 16:44:35 tls Exp $ */
+/* $NetBSD: hytp14var.h,v 1.2.4.2 2014/08/20 00:03:37 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -68,6 +68,9 @@ struct hytp14_sensor {
 #endif
 /*
  * $Log: hytp14var.h,v $
+ * Revision 1.2.4.2  2014/08/20 00:03:37  tls
+ * Rebase to HEAD as of a few days ago.
+ *
  * Revision 1.2  2014/08/10 16:44:35  tls
  * Merge tls-earlyentropy branch into HEAD.
  *

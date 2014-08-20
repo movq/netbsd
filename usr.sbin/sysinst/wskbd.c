@@ -1,4 +1,4 @@
-/*	$NetBSD: wskbd.c,v 1.1 2014/07/26 19:30:44 dholland Exp $	*/
+/*	$NetBSD: wskbd.c,v 1.1.6.2 2014/08/20 00:05:14 tls Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: wskbd.c,v 1.1 2014/07/26 19:30:44 dholland Exp $");
+__RCSID("$NetBSD: wskbd.c,v 1.1.6.2 2014/08/20 00:05:14 tls Exp $");
 
 #include <unistd.h>
 #include <stdlib.h>

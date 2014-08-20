@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_compat.h,v 1.1.1.1 2013/12/27 23:31:32 christos Exp $	*/
+/*	$NetBSD: rpc_compat.h,v 1.1.1.1.8.2 2014/08/19 23:51:46 tls Exp $	*/
 
 /*
  * Copyright (c) 2006-2007 Niels Provos <provos@citi.umich.edu>

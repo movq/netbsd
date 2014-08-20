@@ -1,4 +1,4 @@
-/*	$NetBSD: dev_hppa.c,v 1.2 2014/03/26 17:57:17 christos Exp $	*/
+/*	$NetBSD: dev_hppa.c,v 1.2.10.2 2014/08/20 00:03:05 tls Exp $	*/
 
 /*	$OpenBSD: dev_hppa.c,v 1.5 1999/04/20 20:01:01 mickey Exp $	*/
 

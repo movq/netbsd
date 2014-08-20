@@ -1,7 +1,7 @@
-/*	$NetBSD: nouveau_dispnv04_cursor.c,v 1.1.1.1 2014/08/06 12:36:32 riastradh Exp $	*/
+/*	$NetBSD: nouveau_dispnv04_cursor.c,v 1.1.1.1.6.2 2014/08/20 00:04:16 tls Exp $	*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_dispnv04_cursor.c,v 1.1.1.1 2014/08/06 12:36:32 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_dispnv04_cursor.c,v 1.1.1.1.6.2 2014/08/20 00:04:16 tls Exp $");
 
 #include <drm/drmP.h>
 #include <drm/drm_mode.h>

@@ -1,4 +1,4 @@
-.\" $NetBSD: referargs,v 1.1 2014/07/05 19:22:02 dholland Exp $
+.\" $NetBSD: referargs,v 1.1.6.2 2014/08/19 23:45:11 tls Exp $
 .\"
 .\" Arguments for refer; these were previously passed on the refer(1)
 .\" command line: -e -p Rv7man

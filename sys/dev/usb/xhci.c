@@ -1,4 +1,4 @@
-/*	$NetBSD: xhci.c,v 1.26 2014/08/12 13:50:42 skrll Exp $	*/
+/*	$NetBSD: xhci.c,v 1.26.2.2 2014/08/20 00:03:51 tls Exp $	*/
 
 /*
  * Copyright (c) 2013 Jonathan A. Kollasch
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xhci.c,v 1.26 2014/08/12 13:50:42 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xhci.c,v 1.26.2.2 2014/08/20 00:03:51 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -853,15 +853,9 @@ int
 xhci_intr(void *v)
 {
 	struct xhci_softc * const sc = v;
-	int ret = 0;
 
-	if (sc == NULL)
+	if (sc == NULL || sc->sc_dying || !device_has_power(sc->sc_dev))
 		return 0;
-
-	mutex_spin_enter(&sc->sc_intr_lock);
-
-	if (sc->sc_dying || !device_has_power(sc->sc_dev))
-		goto done;
 
 	DPRINTF(("%s: %s\n", __func__, device_xname(sc->sc_dev)));
 
@@ -870,13 +864,10 @@ xhci_intr(void *v)
 #ifdef DIAGNOSTIC
 		DPRINTFN(16, ("xhci_intr: ignored interrupt while polling\n"));
 #endif
-		goto done;
+		return 0;
 	}
 
-	ret = xhci_intr1(sc);
-done:
-	mutex_spin_exit(&sc->sc_intr_lock);
-	return ret;
+	return xhci_intr1(sc);
 }
 
 int
@@ -1323,9 +1314,7 @@ xhci_poll(struct usbd_bus *bus)
 
 	DPRINTF(("%s: %s\n", __func__, device_xname(sc->sc_dev)));
 
-	mutex_spin_enter(&sc->sc_intr_lock);
 	xhci_intr1(sc);
-	mutex_spin_exit(&sc->sc_intr_lock);
 
 	return;
 }
@@ -1445,10 +1434,7 @@ xhci_new_device(device_t parent, usbd_bus_handle bus, int depth,
 	dev->def_ep_desc.bEndpointAddress = USB_CONTROL_ENDPOINT;
 	dev->def_ep_desc.bmAttributes = UE_CONTROL;
 	/* XXX */
-	if (speed == USB_SPEED_LOW)
-		USETW(dev->def_ep_desc.wMaxPacketSize, USB_MAX_IPACKET);
-	else
-		USETW(dev->def_ep_desc.wMaxPacketSize, 64);
+	USETW(dev->def_ep_desc.wMaxPacketSize, 64);
 	dev->def_ep_desc.bInterval = 0;
 
 	/* doesn't matter, just don't let it uninitialized */

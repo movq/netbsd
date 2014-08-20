@@ -1,4 +1,4 @@
-/* $NetBSD: ldbl_dummy.c,v 1.1 2013/11/12 17:36:14 joerg Exp $ */
+/* $NetBSD: ldbl_dummy.c,v 1.1.8.2 2014/08/20 00:02:18 tls Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: ldbl_dummy.c,v 1.1 2013/11/12 17:36:14 joerg Exp $");
+__RCSID("$NetBSD: ldbl_dummy.c,v 1.1.8.2 2014/08/20 00:02:18 tls Exp $");
 
 #include "namespace.h"
 #include <math.h>

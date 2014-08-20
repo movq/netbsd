@@ -1,4 +1,4 @@
-/*	$NetBSD: authorize_localname.c,v 1.1.1.1 2014/04/24 12:45:29 pettai Exp $	*/
+/*	$NetBSD: authorize_localname.c,v 1.1.1.1.8.2 2014/08/19 23:45:17 tls Exp $	*/
 
 /*
  * Copyright (c) 2011, PADL Software Pty Ltd.

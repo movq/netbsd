@@ -1,4 +1,4 @@
-dnl	$Id: configure.ac,v 1.2 2013/11/25 23:03:18 christos Exp $
+dnl	$Id: configure.ac,v 1.2.8.2 2014/08/19 23:51:51 tls Exp $
 dnl Process this file with autoconf to produce a configure script.
 
 AC_INIT([vi], [1.81.6])

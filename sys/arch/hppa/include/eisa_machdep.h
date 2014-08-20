@@ -1,4 +1,4 @@
-/*	$NetBSD: eisa_machdep.h,v 1.3 2014/03/31 20:51:20 christos Exp $	*/
+/*	$NetBSD: eisa_machdep.h,v 1.3.10.2 2014/08/20 00:03:05 tls Exp $	*/
 
 /*	$OpenBSD: eisa_machdep.h,v 1.2 2000/04/18 20:55:02 mickey Exp $	*/
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: list.h,v 1.4 2014/07/16 20:59:57 riastradh Exp $	*/
+/*	$NetBSD: list.h,v 1.4.4.2 2014/08/20 00:03:56 tls Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

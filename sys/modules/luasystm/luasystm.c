@@ -1,4 +1,4 @@
-/*	$NetBSD: luasystm.c,v 1.5 2014/07/19 18:38:35 lneto Exp $ */
+/*	$NetBSD: luasystm.c,v 1.5.4.2 2014/08/20 00:04:34 tls Exp $ */
 
 /*
  * Copyright (c) 2011, 2013 Marc Balmer <mbalmer@NetBSD.org>.

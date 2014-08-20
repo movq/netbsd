@@ -1,8 +1,8 @@
-/*	$NetBSD: h_initfini_align.S,v 1.1 2013/12/11 17:31:56 matt Exp $	*/
+/*	$NetBSD: h_initfini_align.S,v 1.1.8.2 2014/08/20 00:04:49 tls Exp $	*/
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: h_initfini_align.S,v 1.1 2013/12/11 17:31:56 matt Exp $")
+RCSID("$NetBSD: h_initfini_align.S,v 1.1.8.2 2014/08/20 00:04:49 tls Exp $")
 
 /*
  * LINTSTUB: bool check_stack_alignment(void);

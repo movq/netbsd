@@ -1,4 +1,4 @@
-/* $NetBSD: flt_rounds.c,v 1.1 2014/08/10 05:47:36 matt Exp $ */
+/* $NetBSD: flt_rounds.c,v 1.1.4.2 2014/08/20 00:02:08 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: flt_rounds.c,v 1.1 2014/08/10 05:47:36 matt Exp $");
+__RCSID("$NetBSD: flt_rounds.c,v 1.1.4.2 2014/08/20 00:02:08 tls Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/param.h>

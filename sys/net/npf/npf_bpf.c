@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_bpf.c,v 1.11 2014/07/20 00:37:41 rmind Exp $	*/
+/*	$NetBSD: npf_bpf.c,v 1.11.4.2 2014/08/20 00:04:35 tls Exp $	*/
 
 /*-
  * Copyright (c) 2009-2013 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_bpf.c,v 1.11 2014/07/20 00:37:41 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_bpf.c,v 1.11.4.2 2014/08/20 00:04:35 tls Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

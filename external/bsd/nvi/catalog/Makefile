@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2013/11/22 16:11:08 christos Exp $
+#	$NetBSD: Makefile,v 1.2.8.2 2014/08/19 23:51:50 tls Exp $
 #
 #	@(#)Makefile	8.29 (Berkeley) 10/19/96
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_hwmon.c,v 1.1.1.2 2014/08/06 12:36:23 riastradh Exp $	*/
+/*	$NetBSD: nouveau_hwmon.c,v 1.1.1.2.6.2 2014/08/20 00:04:11 tls Exp $	*/
 
 /*
  * Copyright 2010 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_hwmon.c,v 1.1.1.2 2014/08/06 12:36:23 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_hwmon.c,v 1.1.1.2.6.2 2014/08/20 00:04:11 tls Exp $");
 
 #ifdef CONFIG_ACPI
 #include <linux/acpi.h>

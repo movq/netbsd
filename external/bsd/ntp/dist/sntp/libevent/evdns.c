@@ -1,4 +1,4 @@
-/*	$NetBSD: evdns.c,v 1.1.1.1 2013/12/27 23:31:26 christos Exp $	*/
+/*	$NetBSD: evdns.c,v 1.1.1.1.8.2 2014/08/19 23:51:45 tls Exp $	*/
 
 /* Copyright 2006-2007 Niels Provos
  * Copyright 2007-2012 Nick Mathewson and Niels Provos

@@ -1,4 +1,4 @@
-/* $NetBSD: fenv.c,v 1.1 2014/08/10 05:47:37 matt Exp $ */
+/* $NetBSD: fenv.c,v 1.1.4.2 2014/08/20 00:02:18 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: fenv.c,v 1.1 2014/08/10 05:47:37 matt Exp $");
+__RCSID("$NetBSD: fenv.c,v 1.1.4.2 2014/08/20 00:02:18 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

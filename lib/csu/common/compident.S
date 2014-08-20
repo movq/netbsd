@@ -1,4 +1,4 @@
-/* $NetBSD: compident.S,v 1.3 2014/05/14 14:59:14 joerg Exp $ */
+/* $NetBSD: compident.S,v 1.3.6.2 2014/08/20 00:02:07 tls Exp $ */
 
 /*-
  * Copyright (c) 2002, 2008 The NetBSD Foundation, Inc.

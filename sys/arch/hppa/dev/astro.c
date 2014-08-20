@@ -1,4 +1,4 @@
-/*	$NetBSD: astro.c,v 1.1 2014/02/24 07:23:42 skrll Exp $	*/
+/*	$NetBSD: astro.c,v 1.1.10.2 2014/08/20 00:03:04 tls Exp $	*/
 
 /*	$OpenBSD: astro.c,v 1.8 2007/10/06 23:50:54 krw Exp $	*/
 

@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2013/08/04 05:42:47 dholland Exp $
+# $NetBSD: Makefile,v 1.1.8.2 2014/08/20 00:00:22 tls Exp $
 
 PROG=cgram
 DPADD=${LIBCURSES} ${LIBTERMINFO}

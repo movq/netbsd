@@ -1,4 +1,4 @@
-/*	$NetBSD: rumpuser_sigtrans.c,v 1.1 2014/02/20 00:42:27 pooka Exp $	*/
+/*	$NetBSD: rumpuser_sigtrans.c,v 1.1.8.2 2014/08/20 00:02:21 tls Exp $	*/
 
 /*
  * pseudo-automatically generated.  PLEASE DO EDIT (e.g. in case there

@@ -1,4 +1,4 @@
-/* $NetBSD: h_md5.c,v 1.5 2014/01/18 20:10:34 pgoyette Exp $ */
+/* $NetBSD: h_md5.c,v 1.5.8.2 2014/08/20 00:04:46 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

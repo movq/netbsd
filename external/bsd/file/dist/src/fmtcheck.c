@@ -1,4 +1,4 @@
-/*	$NetBSD: fmtcheck.c,v 1.1.1.1 2014/06/13 01:48:21 christos Exp $	*/
+/*	$NetBSD: fmtcheck.c,v 1.1.1.1.6.2 2014/08/19 23:46:47 tls Exp $	*/
 /*	NetBSD: fmtcheck.c,v 1.8 2008/04/28 20:22:59 martin Exp 	*/
 
 /*-

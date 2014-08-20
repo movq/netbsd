@@ -1,4 +1,4 @@
-#	$NetBSD: kmodwrap.awk,v 1.2 2013/08/07 17:29:15 matt Exp $
+#	$NetBSD: kmodwrap.awk,v 1.2.10.2 2014/08/20 00:04:32 tls Exp $
 
 $2 == "*UND*" {
 	undef[$4]=".";

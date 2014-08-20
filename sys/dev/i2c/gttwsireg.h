@@ -1,4 +1,4 @@
-/* $NetBSD: gttwsireg.h,v 1.1 2013/09/06 00:56:12 matt Exp $ */
+/* $NetBSD: gttwsireg.h,v 1.1.12.2 2014/08/20 00:03:37 tls Exp $ */
 
 /*
  * Copyright (c) 2008 Eiji Kawauchi.

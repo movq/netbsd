@@ -1,4 +1,4 @@
-/*	$NetBSD: geom.c,v 1.1 2014/07/26 19:30:44 dholland Exp $	*/
+/*	$NetBSD: geom.c,v 1.1.6.2 2014/08/20 00:05:13 tls Exp $	*/
 
 /*
  * Copyright (c) 1995, 1997 Jason R. Thorpe.

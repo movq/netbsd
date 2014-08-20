@@ -1,4 +1,4 @@
-/* $NetBSD: pte_coldfire.h,v 1.2 2014/03/18 18:20:41 riastradh Exp $ */
+/* $NetBSD: pte_coldfire.h,v 1.2.8.2 2014/08/20 00:03:10 tls Exp $ */
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
  * All rights reserved.

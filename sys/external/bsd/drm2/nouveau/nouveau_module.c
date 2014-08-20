@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_module.c,v 1.1 2014/08/06 13:36:07 riastradh Exp $	*/
+/*	$NetBSD: nouveau_module.c,v 1.1.6.2 2014/08/20 00:04:22 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_module.c,v 1.1 2014/08/06 13:36:07 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_module.c,v 1.1.6.2 2014/08/20 00:04:22 tls Exp $");
 
 #include <sys/types.h>
 #include <sys/module.h>

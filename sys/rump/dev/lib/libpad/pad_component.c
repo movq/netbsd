@@ -1,4 +1,4 @@
-/*	$NetBSD: pad_component.c,v 1.1 2014/03/13 01:52:04 pooka Exp $	*/
+/*	$NetBSD: pad_component.c,v 1.1.10.2 2014/08/20 00:04:37 tls Exp $	*/
 
 /*-
  * Copyright (c) 2010 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pad_component.c,v 1.1 2014/03/13 01:52:04 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pad_component.c,v 1.1.10.2 2014/08/20 00:04:37 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>

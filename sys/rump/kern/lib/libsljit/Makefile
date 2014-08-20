@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2014/07/23 07:16:14 alnsn Exp $
+#	$NetBSD: Makefile,v 1.3.4.2 2014/08/20 00:04:40 tls Exp $
 #
 # Public Domain.
 #

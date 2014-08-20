@@ -1,5 +1,5 @@
 /*	Id: unicode.c,v 1.7 2014/06/06 15:31:56 plunky Exp 	*/	
-/*	$NetBSD: unicode.c,v 1.1.1.1 2014/07/24 19:29:28 plunky Exp $	*/
+/*	$NetBSD: unicode.c,v 1.1.1.1.6.2 2014/08/19 23:52:09 tls Exp $	*/
 /*
  * Copyright (c) 2014 Eric Olson <ejolson@renomath.org>
  * Some rights reserved.

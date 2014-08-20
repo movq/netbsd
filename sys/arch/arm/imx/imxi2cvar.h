@@ -1,4 +1,4 @@
-/*	$NetBSD: imxi2cvar.h,v 1.1 2014/07/25 07:07:47 hkenken Exp $	*/
+/*	$NetBSD: imxi2cvar.h,v 1.1.6.2 2014/08/20 00:02:46 tls Exp $	*/
 
 /*
 * Copyright (c) 2012  Genetec Corporation.  All rights reserved.

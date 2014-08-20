@@ -1,4 +1,4 @@
-/*	$NetBSD: slmdb.h,v 1.1.1.1 2014/07/06 19:27:58 tron Exp $	*/
+/*	$NetBSD: slmdb.h,v 1.1.1.1.6.2 2014/08/19 23:59:45 tls Exp $	*/
 
 #ifndef _SLMDB_H_INCLUDED_
 #define _SLMDB_H_INCLUDED_

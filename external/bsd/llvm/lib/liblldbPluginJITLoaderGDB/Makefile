@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2014/05/30 18:28:16 joerg Exp $
+#	$NetBSD: Makefile,v 1.1.6.2 2014/08/19 23:51:29 tls Exp $
 
 LIB=	lldbPluginJITLoaderGDB
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: virtif_user.c,v 1.3 2014/03/14 10:06:22 pooka Exp $	*/
+/*	$NetBSD: virtif_user.c,v 1.3.10.2 2014/08/20 00:04:43 tls Exp $	*/
 
 /*
  * Copyright (c) 2013 Antti Kantee.  All Rights Reserved.

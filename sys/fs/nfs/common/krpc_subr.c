@@ -44,7 +44,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("FreeBSD: head/sys/nfs/krpc_subr.c 248207 2013-03-12 13:42:47Z glebius "); */
-__RCSID("$NetBSD: krpc_subr.c,v 1.1.1.1 2013/09/30 07:19:32 dholland Exp $");
+__RCSID("$NetBSD: krpc_subr.c,v 1.1.1.1.10.2 2014/08/20 00:04:27 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

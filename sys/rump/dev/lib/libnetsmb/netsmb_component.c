@@ -1,4 +1,4 @@
-/*	$NetBSD: netsmb_component.c,v 1.2 2014/07/18 16:25:17 maxv Exp $	*/
+/*	$NetBSD: netsmb_component.c,v 1.2.4.2 2014/08/20 00:04:37 tls Exp $	*/
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netsmb_component.c,v 1.2 2014/07/18 16:25:17 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netsmb_component.c,v 1.2.4.2 2014/08/20 00:04:37 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>

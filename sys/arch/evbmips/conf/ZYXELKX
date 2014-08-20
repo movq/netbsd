@@ -1,8 +1,8 @@
-#	$NetBSD: ZYXELKX,v 1.4 2014/08/17 21:17:43 joerg Exp $
+#	$NetBSD: ZYXELKX,v 1.4.2.2 2014/08/20 00:02:58 tls Exp $
 
 include		"arch/evbmips/conf/std.rasoc"
 
-makeoptions	COPY_SYMTAB=1		# size for embedded symbol table
+options 	SYMTAB_SPACE=450000		# size for embedded symbol table
 
 options 	RALINK_CONSOLE_EARLY
 options 	MT7620
@@ -69,7 +69,6 @@ options 	DDB_ONPANIC=1		# see also sysctl(7): `ddb.onpanic'
 #options 	COMPAT_40	# NetBSD 4.0
 options 	COMPAT_50	# NetBSD 5.0 compatibility.
 options 	COMPAT_60	# NetBSD 6.0 compatibility.
-options 	COMPAT_70	# NetBSD 7.0 compatibility.
 #options 	COMPAT_43	# 4.3BSD, 386BSD, and BSDI
 #options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.

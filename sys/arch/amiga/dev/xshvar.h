@@ -1,4 +1,4 @@
-/*	$NetBSD: xshvar.h,v 1.1 2013/08/08 21:23:52 rkujawa Exp $ */
+/*	$NetBSD: xshvar.h,v 1.1.10.2 2014/08/20 00:02:43 tls Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

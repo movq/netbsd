@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.1 2014/08/10 05:47:36 matt Exp $
+# $NetBSD: Makefile.inc,v 1.1.4.2 2014/08/20 00:02:08 tls Exp $
 
 SRCS+=	__sigaction14_sigtramp.c __sigtramp2.S
 #SRCS+= qdivrem.c

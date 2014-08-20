@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: ctx.c,v 1.2 2013/12/25 22:03:15 christos Exp $");
+__RCSID("$NetBSD: ctx.c,v 1.2.8.2 2014/08/19 23:52:13 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/sysctl.h>

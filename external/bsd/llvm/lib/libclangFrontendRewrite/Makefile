@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2014/08/10 17:34:22 joerg Exp $
+#	$NetBSD: Makefile,v 1.1.4.2 2014/08/19 23:51:26 tls Exp $
 
 LIB=	clangFrontendRewrite
 

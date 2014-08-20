@@ -8,7 +8,7 @@
 --  Continuous test for ZLib multithreading. If the test would fail
 --  we should provide thread safe allocation routines for the Z_Stream.
 --
---  $Id: mtest.adb,v 1.1.1.1 2014/02/25 18:42:01 mrg Exp $
+--  $Id: mtest.adb,v 1.1.1.1.8.2 2014/08/19 23:58:03 tls Exp $
 
 with ZLib;
 with Ada.Streams;

@@ -28,7 +28,7 @@
 #if 0
 __FBSDID("$FreeBSD: head/lib/msun/src/e_sqrtl.c 176720 2008-03-02 01:47:58Z das $");
 #endif
-__RCSID("$NetBSD: e_sqrtl.c,v 1.4 2013/11/22 20:15:06 martin Exp $");
+__RCSID("$NetBSD: e_sqrtl.c,v 1.4.8.2 2014/08/20 00:02:18 tls Exp $");
 
 #include <machine/ieee.h>
 #include <float.h>

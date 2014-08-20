@@ -1,4 +1,4 @@
-/*	$NetBSD: midl.h,v 1.1.1.1 2014/05/28 09:58:42 tron Exp $	*/
+/*	$NetBSD: midl.h,v 1.1.1.1.6.2 2014/08/19 23:52:00 tls Exp $	*/
 
 /**	@file midl.h
  *	@brief mdb ID List header file.

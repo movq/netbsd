@@ -1,4 +1,4 @@
-/*	$NetBSD: w83795greg.h,v 1.1 2013/08/06 15:58:25 soren Exp $	*/
+/*	$NetBSD: w83795greg.h,v 1.1.12.2 2014/08/20 00:03:37 tls Exp $	*/
 
 /*
  * Copyright (c) 2013 Soren S. Jorvang.  All rights reserved.

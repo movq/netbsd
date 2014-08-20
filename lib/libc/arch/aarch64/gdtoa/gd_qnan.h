@@ -1,4 +1,4 @@
-/* $NetBSD: gd_qnan.h,v 1.1 2014/08/10 05:47:36 matt Exp $ */
+/* $NetBSD: gd_qnan.h,v 1.1.4.2 2014/08/20 00:02:08 tls Exp $ */
 
 #define f_QNAN 0x7fc00000
 #ifdef __AARCH64EB__

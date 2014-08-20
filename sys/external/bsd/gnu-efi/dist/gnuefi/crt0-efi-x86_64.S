@@ -1,4 +1,4 @@
-/*	$NetBSD: crt0-efi-x86_64.S,v 1.1.1.1 2014/04/01 16:16:08 jakllsch Exp $	*/
+/*	$NetBSD: crt0-efi-x86_64.S,v 1.1.1.1.10.2 2014/08/20 00:04:23 tls Exp $	*/
 
 /* crt0-efi-x86_64.S - x86_64 EFI startup code.
    Copyright (C) 1999 Hewlett-Packard Co.

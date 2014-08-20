@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.1 2013/08/14 09:31:42 pooka Exp $
+#	$NetBSD: Makefile.inc,v 1.1.10.2 2014/08/20 00:04:43 tls Exp $
 #
 
 .PATH:	${.CURDIR}/../../../../netinet6

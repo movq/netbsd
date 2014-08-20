@@ -1,4 +1,4 @@
-/* $NetBSD: unicode.h,v 1.1 2013/08/05 14:11:30 reinoud Exp $ */
+/* $NetBSD: unicode.h,v 1.1.8.2 2014/08/20 00:02:27 tls Exp $ */
 
 /*-
  * Copyright (c) 2001, 2004 The NetBSD Foundation, Inc.

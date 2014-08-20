@@ -1,7 +1,7 @@
-/*	$NetBSD: nouveau_subdev_bios_init.c,v 1.1.1.1 2014/08/06 12:36:29 riastradh Exp $	*/
+/*	$NetBSD: nouveau_subdev_bios_init.c,v 1.1.1.1.6.2 2014/08/20 00:04:14 tls Exp $	*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_bios_init.c,v 1.1.1.1 2014/08/06 12:36:29 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_bios_init.c,v 1.1.1.1.6.2 2014/08/20 00:04:14 tls Exp $");
 
 #include <core/engine.h>
 #include <core/device.h>

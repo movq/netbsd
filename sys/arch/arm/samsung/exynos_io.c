@@ -34,7 +34,7 @@
 #include "opt_exynos.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: exynos_io.c,v 1.6 2014/05/14 09:03:09 reinoud Exp $");
+__KERNEL_RCSID(1, "$NetBSD: exynos_io.c,v 1.6.10.2 2014/08/20 00:02:47 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

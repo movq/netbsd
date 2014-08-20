@@ -1,4 +1,4 @@
-/* $NetBSD: cdio_mmc_structs.h,v 1.1 2013/08/05 18:44:16 reinoud Exp $ */
+/* $NetBSD: cdio_mmc_structs.h,v 1.1.8.2 2014/08/20 00:05:09 tls Exp $ */
 
 /*
  * Copyright (c) 2006, 2008, 2013 Reinoud Zandijk

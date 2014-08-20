@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.5 2014/08/19 13:30:32 martin Exp $	*/
+/*	$NetBSD: main.c,v 1.5.2.2 2014/08/20 00:05:13 tls Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -390,10 +390,7 @@ toplevel(void)
 	 * XXX must be idempotent, since we get run each time the main
 	 *     menu is displayed.
 	 */
-	char *home = getenv("HOME");
-	if (home != NULL)
-		if (chdir(home) != 0)
-			(void)chdir("/");
+	chdir(getenv("HOME"));
 	unwind_mounts();
 
 	/* Display banner message in (english, francais, deutsch..) */

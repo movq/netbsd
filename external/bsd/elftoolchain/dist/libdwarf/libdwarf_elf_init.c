@@ -1,4 +1,4 @@
-/*	$NetBSD: libdwarf_elf_init.c,v 1.2 2014/03/09 16:58:04 christos Exp $	*/
+/*	$NetBSD: libdwarf_elf_init.c,v 1.2.8.2 2014/08/19 23:46:44 tls Exp $	*/
 
 /*-
  * Copyright (c) 2009 Kai Wang
@@ -28,7 +28,7 @@
 
 #include "_libdwarf.h"
 
-__RCSID("$NetBSD: libdwarf_elf_init.c,v 1.2 2014/03/09 16:58:04 christos Exp $");
+__RCSID("$NetBSD: libdwarf_elf_init.c,v 1.2.8.2 2014/08/19 23:46:44 tls Exp $");
 ELFTC_VCSID("Id: libdwarf_elf_init.c 2972 2013-12-23 06:46:04Z kaiwang27 ");
 
 static const char *debug_name[] = {

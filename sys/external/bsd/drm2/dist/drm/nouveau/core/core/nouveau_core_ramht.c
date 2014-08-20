@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_core_ramht.c,v 1.1.1.1 2014/08/06 12:36:24 riastradh Exp $	*/
+/*	$NetBSD: nouveau_core_ramht.c,v 1.1.1.1.6.2 2014/08/20 00:04:11 tls Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -23,7 +23,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_core_ramht.c,v 1.1.1.1 2014/08/06 12:36:24 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_core_ramht.c,v 1.1.1.1.6.2 2014/08/20 00:04:11 tls Exp $");
 
 #include <core/object.h>
 #include <core/ramht.h>

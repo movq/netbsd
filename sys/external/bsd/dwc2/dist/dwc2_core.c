@@ -1,4 +1,4 @@
-/*	$NetBSD: dwc2_core.c,v 1.6 2014/04/03 06:34:58 skrll Exp $	*/
+/*	$NetBSD: dwc2_core.c,v 1.6.10.2 2014/08/20 00:04:22 tls Exp $	*/
 
 /*
  * core.c - DesignWare HS OTG Controller common routines
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dwc2_core.c,v 1.6 2014/04/03 06:34:58 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dwc2_core.c,v 1.6.10.2 2014/08/20 00:04:22 tls Exp $");
 
 #include <sys/types.h>
 #include <sys/bus.h>

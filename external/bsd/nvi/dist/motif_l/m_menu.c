@@ -15,7 +15,7 @@
 static const char sccsid[] = "Id: m_menu.c,v 8.26 2003/11/05 17:09:59 skimo Exp  (Berkeley) Date: 2003/11/05 17:09:59 ";
 #endif /* not lint */
 #else
-__RCSID("$NetBSD: m_menu.c,v 1.2 2014/01/26 21:43:45 christos Exp $");
+__RCSID("$NetBSD: m_menu.c,v 1.2.8.2 2014/08/19 23:51:52 tls Exp $");
 #endif
 
 #include <sys/queue.h>

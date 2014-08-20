@@ -1,6 +1,6 @@
 #!/usr/bin/awk -f
 
-#	$NetBSD: tables.awk,v 1.2 2014/02/27 01:17:13 ginsbach Exp $
+#	$NetBSD: tables.awk,v 1.2.8.2 2014/08/20 00:04:59 tls Exp $
 
 # Copyright (c) 2013 The NetBSD Foundation, Inc.
 # All rights reserved.

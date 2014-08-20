@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2014/01/15 22:21:34 joerg Exp $
+#	$NetBSD: Makefile,v 1.1.8.2 2014/08/19 23:51:25 tls Exp $
 
 LIB=	LLVMSparcDisassembler
 

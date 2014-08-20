@@ -1,4 +1,4 @@
-/* $NetBSD: ptrace.h,v 1.2 2014/08/11 22:09:08 matt Exp $ */
+/* $NetBSD: ptrace.h,v 1.2.2.2 2014/08/20 00:02:39 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -51,7 +51,7 @@
 
 #elif defined(__arm__)
 
-#include <arm/ptrace.h>
+#include <arm/asm.h>
 
 #endif
 

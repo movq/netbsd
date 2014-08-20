@@ -1,4 +1,4 @@
-/*	$NetBSD: vnd_component.c,v 1.1 2014/07/17 08:16:12 prlw1 Exp $	*/
+/*	$NetBSD: vnd_component.c,v 1.1.6.2 2014/08/20 00:04:38 tls Exp $	*/
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vnd_component.c,v 1.1 2014/07/17 08:16:12 prlw1 Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vnd_component.c,v 1.1.6.2 2014/08/20 00:04:38 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: amiga_bus_simple_0x1000.c,v 1.1 2014/01/03 00:33:06 rkujawa Exp $ */
+/* $NetBSD: amiga_bus_simple_0x1000.c,v 1.1.10.2 2014/08/20 00:02:42 tls Exp $ */
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: amiga_bus_simple_0x1000.c,v 1.1 2014/01/03 00:33:06 rkujawa Exp $");
+__KERNEL_RCSID(1, "$NetBSD: amiga_bus_simple_0x1000.c,v 1.1.10.2 2014/08/20 00:02:42 tls Exp $");
 
 #define AMIGA_SIMPLE_BUS_STRIDE 0x1000		/* 1 byte per 0x1000 bytes */
 #define AMIGA_SIMPLE_BUS_WORD_METHODS

@@ -1,4 +1,4 @@
-/*	$NetBSD: elf_errmsg.c,v 1.2 2014/03/09 16:58:04 christos Exp $	*/
+/*	$NetBSD: elf_errmsg.c,v 1.2.8.2 2014/08/19 23:46:45 tls Exp $	*/
 
 /*-
  * Copyright (c) 2006,2008,2011 Joseph Koshy
@@ -34,7 +34,7 @@
 
 #include "_libelf.h"
 
-__RCSID("$NetBSD: elf_errmsg.c,v 1.2 2014/03/09 16:58:04 christos Exp $");
+__RCSID("$NetBSD: elf_errmsg.c,v 1.2.8.2 2014/08/19 23:46:45 tls Exp $");
 ELFTC_VCSID("Id: elf_errmsg.c 2225 2011-11-26 18:55:54Z jkoshy ");
 
 /*

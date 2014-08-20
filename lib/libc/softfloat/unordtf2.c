@@ -1,4 +1,4 @@
-/* $NetBSD: unordtf2.c,v 1.2 2014/01/30 19:11:41 matt Exp $ */
+/* $NetBSD: unordtf2.c,v 1.2.8.2 2014/08/20 00:02:15 tls Exp $ */
 
 /*
  * Written by Richard Earnshaw, 2003.  This file is in the Public Domain.
@@ -10,7 +10,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: unordtf2.c,v 1.2 2014/01/30 19:11:41 matt Exp $");
+__RCSID("$NetBSD: unordtf2.c,v 1.2.8.2 2014/08/20 00:02:15 tls Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #ifdef FLOAT128

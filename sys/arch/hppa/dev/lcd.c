@@ -1,4 +1,4 @@
-/*	$NetBSD: lcd.c,v 1.1 2014/02/24 07:23:42 skrll Exp $	*/
+/*	$NetBSD: lcd.c,v 1.1.10.2 2014/08/20 00:03:04 tls Exp $	*/
 /*	OpenBSD: lcd.c,v 1.2 2007/07/20 22:13:45 kettenis Exp 	*/
 
 /*

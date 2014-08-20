@@ -1,4 +1,4 @@
-/*	$NetBSD: wdc_acafh.c,v 1.3 2014/01/03 00:33:06 rkujawa Exp $ */
+/*	$NetBSD: wdc_acafh.c,v 1.3.10.2 2014/08/20 00:02:43 tls Exp $ */
 
 /*-
  * Copyright (c) 2000, 2003, 2013 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wdc_acafh.c,v 1.3 2014/01/03 00:33:06 rkujawa Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wdc_acafh.c,v 1.3.10.2 2014/08/20 00:02:43 tls Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

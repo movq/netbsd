@@ -1,4 +1,4 @@
-/* $NetBSD: t_modf.c,v 1.1 2014/06/16 12:54:43 joerg Exp $ */
+/* $NetBSD: t_modf.c,v 1.1.6.2 2014/08/20 00:04:50 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

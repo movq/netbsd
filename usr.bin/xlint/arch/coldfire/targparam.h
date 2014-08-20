@@ -1,4 +1,4 @@
-/*	$NetBSD: targparam.h,v 1.2 2014/03/18 18:20:46 riastradh Exp $	*/
+/*	$NetBSD: targparam.h,v 1.2.8.2 2014/08/20 00:05:05 tls Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Jochen Pohl

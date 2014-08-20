@@ -1,4 +1,4 @@
-/* $NetBSD: t_fmod.c,v 1.2 2014/02/27 17:26:02 joerg Exp $ */
+/* $NetBSD: t_fmod.c,v 1.2.8.2 2014/08/20 00:04:50 tls Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/* $NetBSD: memcpy.S,v 1.1 2014/08/10 05:47:35 matt Exp $ */
+/* $NetBSD: memcpy.S,v 1.1.4.2 2014/08/19 23:45:12 tls Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <machine/asm.h>
 
-RCSID("$NetBSD: memcpy.S,v 1.1 2014/08/10 05:47:35 matt Exp $")
+RCSID("$NetBSD: memcpy.S,v 1.1.4.2 2014/08/19 23:45:12 tls Exp $")
 
 /* LINTSTUB: void *memcpy(void * restrict, const void * restrict, size_t); */
 

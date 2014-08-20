@@ -1,3 +1,3 @@
-/*	$NetBSD: asm.h,v 1.2 2014/03/18 18:20:41 riastradh Exp $	*/
+/*	$NetBSD: asm.h,v 1.2.8.2 2014/08/20 00:02:57 tls Exp $	*/
 
 #include <m68k/asm.h>

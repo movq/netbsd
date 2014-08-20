@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2013/11/12 14:32:03 mbalmer Exp $
+#	$NetBSD: Makefile,v 1.1.8.2 2014/08/20 00:02:21 tls Exp $
 
 LUA_MODULES=		syslog
 LUA_SRCS.syslog=	syslog.c

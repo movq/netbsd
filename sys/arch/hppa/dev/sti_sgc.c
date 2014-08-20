@@ -1,4 +1,4 @@
-/*	$NetBSD: sti_sgc.c,v 1.1 2014/02/24 07:23:43 skrll Exp $	*/
+/*	$NetBSD: sti_sgc.c,v 1.1.10.2 2014/08/20 00:03:04 tls Exp $	*/
 
 /*	$OpenBSD: sti_sgc.c,v 1.38 2009/02/06 22:51:04 miod Exp $	*/
 
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sti_sgc.c,v 1.1 2014/02/24 07:23:43 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sti_sgc.c,v 1.1.10.2 2014/08/20 00:03:04 tls Exp $");
 
 #include "opt_cputype.h"
 

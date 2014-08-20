@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_rump.c,v 1.2 2014/01/10 19:44:47 njoly Exp $	*/
+/*	$NetBSD: linux_rump.c,v 1.2.10.2 2014/08/20 00:04:40 tls Exp $	*/
 
 #include <sys/param.h>
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: crtfm.c,v 1.1 2013/08/05 13:38:35 matt Exp $	*/
+/*	$NetBSD: crtfm.c,v 1.1.8.2 2014/08/20 00:02:05 tls Exp $	*/
 
 /*
  * Copyright (c) 2002 Wasabi Systems, Inc.

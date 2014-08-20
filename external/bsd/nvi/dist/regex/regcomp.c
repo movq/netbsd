@@ -1,4 +1,4 @@
-/*	$NetBSD: regcomp.c,v 1.5 2014/01/26 21:47:00 christos Exp $ */
+/*	$NetBSD: regcomp.c,v 1.5.8.2 2014/08/19 23:51:53 tls Exp $ */
 /*-
  * Copyright (c) 1992, 1993, 1994 Henry Spencer.
  * Copyright (c) 1992, 1993, 1994
@@ -44,7 +44,7 @@
 static char sccsid[] = "@(#)regcomp.c	8.4 (Berkeley) 3/19/94";
 #endif /* LIBC_SCCS and not lint */
 #else
-__RCSID("$NetBSD: regcomp.c,v 1.5 2014/01/26 21:47:00 christos Exp $");
+__RCSID("$NetBSD: regcomp.c,v 1.5.8.2 2014/08/19 23:51:53 tls Exp $");
 #endif
 
 #include <sys/types.h>

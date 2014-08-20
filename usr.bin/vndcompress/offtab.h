@@ -1,4 +1,4 @@
-/*	$NetBSD: offtab.h,v 1.2 2014/01/22 06:15:22 riastradh Exp $	*/
+/*	$NetBSD: offtab.h,v 1.2.8.2 2014/08/20 00:05:05 tls Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

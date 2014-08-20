@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.common-target,v 1.1 2014/03/01 10:00:49 mrg Exp $
+#	$NetBSD: Makefile.common-target,v 1.1.8.2 2014/08/19 23:56:57 tls Exp $
 
 #.ifndef _EXTERNAL_GPL3_GCC_USR_BIN_MAKEFILE_COMMON_TARGET_
 #_EXTERNAL_GPL3_GCC_USR_BIN_MAKEFILE_COMMON_TARGET_=1

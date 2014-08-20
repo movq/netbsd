@@ -1,4 +1,4 @@
-/*	$NetBSD: uturn.c,v 1.1 2014/02/24 07:23:43 skrll Exp $	*/
+/*	$NetBSD: uturn.c,v 1.1.10.2 2014/08/20 00:03:04 tls Exp $	*/
 
 /*	$OpenBSD: uturn.c,v 1.6 2007/12/29 01:26:14 kettenis Exp $	*/
 

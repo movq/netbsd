@@ -1,4 +1,4 @@
-/*	$NetBSD: crtend.S,v 1.3 2013/09/05 00:28:11 matt Exp $	*/
+/*	$NetBSD: crtend.S,v 1.3.8.2 2014/08/20 00:02:06 tls Exp $	*/
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -30,7 +30,7 @@
 
 #include <mips/asm.h>
 
-RCSID("$NetBSD: crtend.S,v 1.3 2013/09/05 00:28:11 matt Exp $")
+RCSID("$NetBSD: crtend.S,v 1.3.8.2 2014/08/20 00:02:06 tls Exp $")
 
 	.section	.ctors, "aw", @progbits
 	.p2align 	PTR_SCALESHIFT

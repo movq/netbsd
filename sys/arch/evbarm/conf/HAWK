@@ -1,4 +1,4 @@
-# $NetBSD: HAWK,v 1.4 2014/08/17 21:17:43 joerg Exp $
+# $NetBSD: HAWK,v 1.4.2.2 2014/08/20 00:02:53 tls Exp $
 #
 #	HAWK -- TI OMAPL138 based Board Kernel
 #
@@ -99,7 +99,7 @@ options 	DDB_ONPANIC=1
 options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
 #options 	KGDB
 #makeoptions	DEBUG="-g"	# compile full symbol table
-#makeoptions	COPY_SYMTAB=1
+#options 	SYMTAB_SPACE=200000
 
 ## USB Debugging options
 options USB_DEBUG

@@ -1,4 +1,4 @@
-/*	$NetBSD: i915_pci.c,v 1.15 2014/07/24 22:13:23 riastradh Exp $	*/
+/*	$NetBSD: i915_pci.c,v 1.15.4.2 2014/08/20 00:04:20 tls Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i915_pci.c,v 1.15 2014/07/24 22:13:23 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i915_pci.c,v 1.15.4.2 2014/08/20 00:04:20 tls Exp $");
 
 #include <sys/types.h>
 #include <sys/queue.h>
