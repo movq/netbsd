@@ -1,11 +1,11 @@
-/*	$NetBSD: loadfile_machdep.h,v 1.5.44.1 2014/08/20 00:03:17 tls Exp $	*/
+/*	$NetBSD: sbusreg.h,v 1.4.6.2 2014/08/20 00:03:17 tls Exp $	*/
 
 /*-
- * Copyright (c) 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Christos Zoulas.
+ * by UCHIYAMA Yasushi.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,25 +29,15 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define BOOT_ELF32
+#define SBUS_SMFLG_REG			MIPS_PHYS_TO_KSEG1(0x1000f230)
+#define   SMFLG_PCMCIA_INT	0x00000100
+#define   SMFLG_USB_INT		0x00000400
 
-#define LOAD_KERNEL	(LOAD_ALL & ~LOAD_TEXTA)
-#define COUNT_KERNEL	(COUNT_ALL & ~COUNT_TEXTA)
+#define SBUS_AIF_INTSR_REG16		MIPS_PHYS_TO_KSEG1(0x18000004)
+#define SBUS_AIF_INTEN_REG16		MIPS_PHYS_TO_KSEG1(0x18000006)
 
-#define LOADADDR(a)		(((u_long)(a)) + offset)
-#define ALIGNENTRY(a)		((u_long)(a))
-#define READ(f, b, c)		read((f), (void *)LOADADDR(b), (c))
-#define BCOPY(s, d, c)		memcpy((void *)LOADADDR(d), (void *)(s), (c))
-#define BZERO(d, c)		memset((void *)LOADADDR(d), 0, (c))
-#define	WARN(a)			do { \
-					(void)printf a; \
-					if (errno) \
-						(void)printf(": %s\n", \
-						             strerror(errno)); \
-					else \
-						(void)printf("\n"); \
-				} while(/* CONSTCOND */0)
-#define PROGRESS(a)		(void) printf a
-#define ALLOC(a)		alloc(a)
-#define DEALLOC(a, b)		dealloc(a, b)
-#define OKMAGIC(a)		((a) == OMAGIC)
+#define SBUS_PCMCIA_EXC1_REG16		MIPS_PHYS_TO_KSEG1(0x1f801476)
+#define SBUS_PCMCIA_CSC1_REG16		MIPS_PHYS_TO_KSEG1(0x1f801464)
+#define SBUS_PCMCIA_IMR1_REG16		MIPS_PHYS_TO_KSEG1(0x1f801468)
+#define SBUS_PCMCIA_TIMR_REG16		MIPS_PHYS_TO_KSEG1(0x1f80147e)
+#define SBUS_PCMCIA3_TIMR_REG16		MIPS_PHYS_TO_KSEG1(0x1f801466)

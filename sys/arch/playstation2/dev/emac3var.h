@@ -1,11 +1,11 @@
-/*	$NetBSD: loadfile_machdep.h,v 1.5.44.1 2014/08/20 00:03:17 tls Exp $	*/
+/*	$NetBSD: emac3var.h,v 1.5.6.2 2014/08/20 00:03:17 tls Exp $	*/
 
 /*-
- * Copyright (c) 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Christos Zoulas.
+ * by UCHIYAMA Yasushi.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,25 +29,30 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define BOOT_ELF32
+struct emac3_softc {
+	struct device dev;
+	struct mii_data mii;
+	u_int8_t eaddr[ETHER_ADDR_LEN];
+	u_int32_t mode1_reg;
+};
 
-#define LOAD_KERNEL	(LOAD_ALL & ~LOAD_TEXTA)
-#define COUNT_KERNEL	(COUNT_ALL & ~COUNT_TEXTA)
+int emac3_init(struct emac3_softc *);
+int emac3_reset(struct emac3_softc *);
+void emac3_exit(struct emac3_softc *);
 
-#define LOADADDR(a)		(((u_long)(a)) + offset)
-#define ALIGNENTRY(a)		((u_long)(a))
-#define READ(f, b, c)		read((f), (void *)LOADADDR(b), (c))
-#define BCOPY(s, d, c)		memcpy((void *)LOADADDR(d), (void *)(s), (c))
-#define BZERO(d, c)		memset((void *)LOADADDR(d), 0, (c))
-#define	WARN(a)			do { \
-					(void)printf a; \
-					if (errno) \
-						(void)printf(": %s\n", \
-						             strerror(errno)); \
-					else \
-						(void)printf("\n"); \
-				} while(/* CONSTCOND */0)
-#define PROGRESS(a)		(void) printf a
-#define ALLOC(a)		alloc(a)
-#define DEALLOC(a, b)		dealloc(a, b)
-#define OKMAGIC(a)		((a) == OMAGIC)
+void emac3_enable(void);
+void emac3_disable(void);
+
+void emac3_intr_enable(void);
+void emac3_intr_disable(void);
+void emac3_intr_clear(void);
+int emac3_intr(void *);
+
+void emac3_tx_kick(void);
+int emac3_tx_done(void);
+
+void emac3_setmulti(struct emac3_softc *, struct ethercom *);
+
+int emac3_phy_readreg(struct device *, int, int);
+void emac3_phy_writereg(struct device *, int, int, int);
+void emac3_phy_statchg(struct device *);

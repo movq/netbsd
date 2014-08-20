@@ -1,11 +1,11 @@
-/*	$NetBSD: loadfile_machdep.h,v 1.5.44.1 2014/08/20 00:03:17 tls Exp $	*/
+/*	$NetBSD: spdvar.h,v 1.5.6.2 2014/08/20 00:03:17 tls Exp $	*/
 
 /*-
- * Copyright (c) 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Christos Zoulas.
+ * by UCHIYAMA Yasushi.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,25 +29,31 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define BOOT_ELF32
+enum spd_slot {
+	SPD_HDD,
+	SPD_NIC
+};
 
-#define LOAD_KERNEL	(LOAD_ALL & ~LOAD_TEXTA)
-#define COUNT_KERNEL	(COUNT_ALL & ~COUNT_TEXTA)
+struct spd_attach_args {
+	enum spd_slot spa_slot;
+	const char *spa_product_name;
+};
 
-#define LOADADDR(a)		(((u_long)(a)) + offset)
-#define ALIGNENTRY(a)		((u_long)(a))
-#define READ(f, b, c)		read((f), (void *)LOADADDR(b), (c))
-#define BCOPY(s, d, c)		memcpy((void *)LOADADDR(d), (void *)(s), (c))
-#define BZERO(d, c)		memset((void *)LOADADDR(d), 0, (c))
-#define	WARN(a)			do { \
-					(void)printf a; \
-					if (errno) \
-						(void)printf(": %s\n", \
-						             strerror(errno)); \
-					else \
-						(void)printf("\n"); \
-				} while(/* CONSTCOND */0)
-#define PROGRESS(a)		(void) printf a
-#define ALLOC(a)		alloc(a)
-#define DEALLOC(a, b)		dealloc(a, b)
-#define OKMAGIC(a)		((a) == OMAGIC)
+/* interrupt */
+void *spd_intr_establish(enum spd_slot, int (*)(void *), void *);
+void spd_intr_disestablish(void *);
+
+/* EEPROM */
+void spd_eeprom_read(int, u_int16_t *, int);
+
+/* HDD LED */
+#define SPD_LED_OFF()							\
+{									\
+		*(volatile u_int8_t *)SPD_IO_DIR_REG8 = SPD_IO_LED;	\
+		*(volatile u_int8_t *)SPD_IO_DATA_REG8 = SPD_IO_LED;\
+}
+#define SPD_LED_ON()							\
+{									\
+		*(volatile u_int8_t *)SPD_IO_DIR_REG8 = SPD_IO_LED;	\
+		*(volatile u_int8_t *)SPD_IO_DATA_REG8 = 0;		\
+}

@@ -1,11 +1,11 @@
-/*	$NetBSD: loadfile_machdep.h,v 1.5.44.1 2014/08/20 00:03:17 tls Exp $	*/
+/*	$NetBSD: spdreg.h,v 1.4.6.2 2014/08/20 00:03:17 tls Exp $	*/
 
 /*-
- * Copyright (c) 1999 The NetBSD Foundation, Inc.
+ * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
- * by Christos Zoulas.
+ * by UCHIYAMA Yasushi.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,25 +29,36 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#define BOOT_ELF32
+/*
+ * spd (PlayStation 2 HDD UNIT) common register define.
+ */
 
-#define LOAD_KERNEL	(LOAD_ALL & ~LOAD_TEXTA)
-#define COUNT_KERNEL	(COUNT_ALL & ~COUNT_TEXTA)
+/* interrupt */
+#define SPD_INTR_ENABLE_REG16		MIPS_PHYS_TO_KSEG1(0x1400002a)
+#define SPD_INTR_STATUS_REG16		MIPS_PHYS_TO_KSEG1(0x14000028)
+#define SPD_INTR_CLEAR_REG16		MIPS_PHYS_TO_KSEG1(0x14000128)
+#define   SPD_INTR_EMAC3	0x0040
+#define   SPD_INTR_RXEND	0x0020
+#define   SPD_INTR_TXEND	0x0010
+#define   SPD_INTR_RXDNV	0x0008
+#define   SPD_INTR_TXDNV	0x0004
+#define   SPD_INTR_HDD		0x0001
 
-#define LOADADDR(a)		(((u_long)(a)) + offset)
-#define ALIGNENTRY(a)		((u_long)(a))
-#define READ(f, b, c)		read((f), (void *)LOADADDR(b), (c))
-#define BCOPY(s, d, c)		memcpy((void *)LOADADDR(d), (void *)(s), (c))
-#define BZERO(d, c)		memset((void *)LOADADDR(d), 0, (c))
-#define	WARN(a)			do { \
-					(void)printf a; \
-					if (errno) \
-						(void)printf(": %s\n", \
-						             strerror(errno)); \
-					else \
-						(void)printf("\n"); \
-				} while(/* CONSTCOND */0)
-#define PROGRESS(a)		(void) printf a
-#define ALLOC(a)		alloc(a)
-#define DEALLOC(a, b)		dealloc(a, b)
-#define OKMAGIC(a)		((a) == OMAGIC)
+/* I/O port */
+#define SPD_IO_DIR_REG8			MIPS_PHYS_TO_KSEG1(0x1400002c)
+#define SPD_IO_DATA_REG8		MIPS_PHYS_TO_KSEG1(0x1400002e)
+	/* HDD LED */
+#define   SPD_IO_LED		0x0001
+	/* EEPROM (ethernet address) */
+#define   SPD_IO_OUT		0x0010
+#define   SPD_IO_IN		0x0020
+#define   SPD_IO_CLK		0x0040
+#define   SPD_IO_CS		0x0080
+
+/* HDD interface */
+#define SPD_XFR_CTRL_REG8		MIPS_PHYS_TO_KSEG1(0x14000032)
+#define SPD_HDD_IO_BASE			MIPS_PHYS_TO_KSEG1(0x14000040)
+#define SPD_IF_CTRL_REG8		MIPS_PHYS_TO_KSEG1(0x14000064)
+#define   SPD_IF_CTRL_ATA_RST	0x80
+#define   SPD_IF_CTRL_DMA_EN	0x04
+
