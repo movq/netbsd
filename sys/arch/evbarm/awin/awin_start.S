@@ -41,7 +41,7 @@
 #include <arm/allwinner/awin_reg.h>
 #include <evbarm/awin/platform.h>  
 
-RCSID("$NetBSD: awin_start.S,v 1.1 2014/08/31 19:13:01 matt Exp $")
+RCSID("$NetBSD: awin_start.S,v 1.1.2.2 2014/09/10 09:37:51 martin Exp $")
 
 #if defined(VERBOSE_INIT_ARM)
 #define	XPUTC(n)	mov r0, n; bl xputc
