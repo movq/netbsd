@@ -1,4 +1,4 @@
-/*	$NetBSD: platform.h,v 1.1 2014/08/31 19:13:01 matt Exp $	*/
+/*	$NetBSD: platform.h,v 1.1.2.2 2014/09/10 09:37:51 martin Exp $	*/
 /*
  * Copyright (c) 2007 Microsoft
  * All rights reserved.
