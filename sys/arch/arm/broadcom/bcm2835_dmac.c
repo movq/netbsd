@@ -1,4 +1,4 @@
-/* $NetBSD: bcm2835_dmac.c,v 1.2 2014/09/07 15:21:27 jmcneill Exp $ */
+/* $NetBSD: bcm2835_dmac.c,v 1.2.2.2 2014/09/11 14:20:11 martin Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "opt_ddb.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_dmac.c,v 1.2 2014/09/07 15:21:27 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_dmac.c,v 1.2.2.2 2014/09/11 14:20:11 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

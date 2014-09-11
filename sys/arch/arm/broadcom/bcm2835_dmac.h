@@ -1,4 +1,4 @@
-/* $NetBSD: bcm2835_dmac.h,v 1.1 2014/09/07 14:16:44 jmcneill Exp $ */
+/* $NetBSD: bcm2835_dmac.h,v 1.1.2.2 2014/09/11 14:20:11 martin Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
