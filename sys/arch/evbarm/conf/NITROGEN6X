@@ -1,4 +1,4 @@
-# $NetBSD: NITROGEN6X,v 1.2 2014/09/27 04:03:24 matt Exp $
+# $NetBSD: NITROGEN6X,v 1.3 2014/10/06 10:37:20 ryo Exp $
 #
 # Nitrogen6X
 # - http://boundarydevices.com/products/nitrogen6x-board-imx6-arm-cortex-a9-sbc/
@@ -55,7 +55,7 @@ options 	IRQSTATS	# manage IRQ statistics
 
 #makeoptions	COPTS="-O2"
 options 	DDB			# in-kernel debugger
-options 	DDB_KEYCODE=0x1d	# ^]
+#options 	DDB_KEYCODE=0x1d	# ^]
 #options 	DDB_COMMANDONENTER="bt"	# execute command when ddb is entered
 options 	DDB_ONPANIC=1		# see also sysctl(7): `ddb.onpanic'
 options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
@@ -185,7 +185,7 @@ options 	MIIVERBOSE	# verbose PHY autoconfig messages
 options 	USBVERBOSE	# verbose USB device autoconfig messages
 
 # Kernel root file system and dump configuration.
-config		netbsd		root on wd0a type ?
+config		netbsd	root on ? type ?
 
 #
 # Device configuration
@@ -224,6 +224,9 @@ imxccm0		at axi? addr 0x020c4000
 
 # On-Chip OTP Controller
 imxocotp0	at axi? addr 0x021bc000
+
+# Secure Non-Volatile Storage
+imxsnvs0	at axi? addr 0x020cc000
 
 # IOMUX
 imxiomux0	at axi? addr 0x020e0000
