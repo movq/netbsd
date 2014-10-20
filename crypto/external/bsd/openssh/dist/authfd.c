@@ -1,5 +1,5 @@
-/*	$NetBSD: authfd.c,v 1.7 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: authfd.c,v 1.93 2014/04/29 18:01:49 markus Exp $ */
+/*	$NetBSD: authfd.c,v 1.1 2009/06/07 22:19:04 christos Exp $	*/
+/* $OpenBSD: authfd.c,v 1.80 2006/08/03 03:34:41 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -36,12 +36,14 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: authfd.c,v 1.7 2014/10/19 16:30:58 christos Exp $");
+
 #include <sys/types.h>
 #include <sys/un.h>
 #include <sys/socket.h>
 
+#include <openssl/evp.h>
+
+#include <openssl/crypto.h>
 #include <fcntl.h>
 #include <stdlib.h>
 #include <signal.h>
@@ -99,7 +101,6 @@ ssh_get_authentication_socket(void)
 	if (!authsocket)
 		return -1;
 
-	memset(&sunaddr, 0, sizeof(sunaddr));
 	sunaddr.sun_family = AF_UNIX;
 	strlcpy(sunaddr.sun_path, authsocket, sizeof(sunaddr.sun_path));
 
@@ -108,11 +109,11 @@ ssh_get_authentication_socket(void)
 		return -1;
 
 	/* close on exec */
-	if (fcntl(sock, F_SETFD, FD_CLOEXEC) == -1) {
+	if (fcntl(sock, F_SETFD, 1) == -1) {
 		close(sock);
 		return -1;
 	}
-	if (connect(sock, (struct sockaddr *)(void *)&sunaddr, sizeof sunaddr) < 0) {
+	if (connect(sock, (struct sockaddr *)&sunaddr, sizeof sunaddr) < 0) {
 		close(sock);
 		return -1;
 	}
@@ -203,7 +204,7 @@ ssh_get_authentication_connection(void)
 	if (sock < 0)
 		return NULL;
 
-	auth = xcalloc(1, sizeof(*auth));
+	auth = xmalloc(sizeof(*auth));
 	auth->fd = sock;
 	buffer_init(&auth->identities);
 	auth->howmany = 0;
@@ -221,7 +222,7 @@ ssh_close_authentication_connection(AuthenticationConnection *auth)
 {
 	buffer_free(&auth->identities);
 	close(auth->fd);
-	free(auth);
+	xfree(auth);
 }
 
 /* Lock/unlock agent */
@@ -310,10 +311,8 @@ ssh_get_first_identity(AuthenticationConnection *auth, char **comment, int versi
 Key *
 ssh_get_next_identity(AuthenticationConnection *auth, char **comment, int version)
 {
-#ifdef WITH_SSH1
 	int keybits;
 	u_int bits;
-#endif
 	u_char *blob;
 	u_int blen;
 	Key *key = NULL;
@@ -327,7 +326,6 @@ ssh_get_next_identity(AuthenticationConnection *auth, char **comment, int versio
 	 * error if the packet is too short or contains corrupt data.
 	 */
 	switch (version) {
-#ifdef WITH_SSH1
 	case 1:
 		key = key_new(KEY_RSA1);
 		bits = buffer_get_int(&auth->identities);
@@ -339,12 +337,11 @@ ssh_get_next_identity(AuthenticationConnection *auth, char **comment, int versio
 			logit("Warning: identity keysize mismatch: actual %d, announced %u",
 			    BN_num_bits(key->rsa->n), bits);
 		break;
-#endif
 	case 2:
 		blob = buffer_get_string(&auth->identities, &blen);
 		*comment = buffer_get_string(&auth->identities, NULL);
 		key = key_from_blob(blob, blen);
-		free(blob);
+		xfree(blob);
 		break;
 	default:
 		return NULL;
@@ -362,7 +359,6 @@ ssh_get_next_identity(AuthenticationConnection *auth, char **comment, int versio
  * supported) and 1 corresponding to protocol version 1.1.
  */
 
-#ifdef WITH_SSH1
 int
 ssh_decrypt_challenge(AuthenticationConnection *auth,
     Key* key, BIGNUM *challenge,
@@ -412,7 +408,6 @@ ssh_decrypt_challenge(AuthenticationConnection *auth,
 	buffer_free(&buffer);
 	return success;
 }
-#endif
 
 /* ask agent to sign data, returns -1 on error, 0 on success */
 int
@@ -439,7 +434,7 @@ ssh_agent_sign(AuthenticationConnection *auth,
 	buffer_put_string(&msg, blob, blen);
 	buffer_put_string(&msg, data, datalen);
 	buffer_put_int(&msg, flags);
-	free(blob);
+	xfree(blob);
 
 	if (ssh_request_reply(auth, &msg, &msg) == 0) {
 		buffer_free(&msg);
@@ -460,7 +455,6 @@ ssh_agent_sign(AuthenticationConnection *auth,
 
 /* Encode key for a message to the agent. */
 
-#ifdef WITH_SSH1
 static void
 ssh_encode_identity_rsa1(Buffer *b, RSA *key, const char *comment)
 {
@@ -474,12 +468,28 @@ ssh_encode_identity_rsa1(Buffer *b, RSA *key, const char *comment)
 	buffer_put_bignum(b, key->p);	/* ssh key->q, SSL key->p */
 	buffer_put_cstring(b, comment);
 }
-#endif
 
 static void
 ssh_encode_identity_ssh2(Buffer *b, Key *key, const char *comment)
 {
-	key_private_serialize(key, b);
+	buffer_put_cstring(b, key_ssh_name(key));
+	switch (key->type) {
+	case KEY_RSA:
+		buffer_put_bignum2(b, key->rsa->n);
+		buffer_put_bignum2(b, key->rsa->e);
+		buffer_put_bignum2(b, key->rsa->d);
+		buffer_put_bignum2(b, key->rsa->iqmp);
+		buffer_put_bignum2(b, key->rsa->p);
+		buffer_put_bignum2(b, key->rsa->q);
+		break;
+	case KEY_DSA:
+		buffer_put_bignum2(b, key->dsa->p);
+		buffer_put_bignum2(b, key->dsa->q);
+		buffer_put_bignum2(b, key->dsa->g);
+		buffer_put_bignum2(b, key->dsa->pub_key);
+		buffer_put_bignum2(b, key->dsa->priv_key);
+		break;
+	}
 	buffer_put_cstring(b, comment);
 }
 
@@ -498,7 +508,6 @@ ssh_add_identity_constrained(AuthenticationConnection *auth, Key *key,
 	buffer_init(&msg);
 
 	switch (key->type) {
-#ifdef WITH_SSH1
 	case KEY_RSA1:
 		type = constrained ?
 		    SSH_AGENTC_ADD_RSA_ID_CONSTRAINED :
@@ -506,19 +515,8 @@ ssh_add_identity_constrained(AuthenticationConnection *auth, Key *key,
 		buffer_put_char(&msg, type);
 		ssh_encode_identity_rsa1(&msg, key->rsa, comment);
 		break;
-#endif
-#ifdef WITH_OPENSSL
 	case KEY_RSA:
-	case KEY_RSA_CERT:
-	case KEY_RSA_CERT_V00:
 	case KEY_DSA:
-	case KEY_DSA_CERT:
-	case KEY_DSA_CERT_V00:
-	case KEY_ECDSA:
-	case KEY_ECDSA_CERT:
-#endif
-	case KEY_ED25519:
-	case KEY_ED25519_CERT:
 		type = constrained ?
 		    SSH2_AGENTC_ADD_ID_CONSTRAINED :
 		    SSH2_AGENTC_ADD_IDENTITY;
@@ -546,6 +544,12 @@ ssh_add_identity_constrained(AuthenticationConnection *auth, Key *key,
 	return decode_reply(type);
 }
 
+int
+ssh_add_identity(AuthenticationConnection *auth, Key *key, const char *comment)
+{
+	return ssh_add_identity_constrained(auth, key, comment, 0, 0);
+}
+
 /*
  * Removes an identity from the authentication server.  This call is not
  * meant to be used by normal applications.
@@ -561,19 +565,16 @@ ssh_remove_identity(AuthenticationConnection *auth, Key *key)
 
 	buffer_init(&msg);
 
-#ifdef WITH_SSH1
 	if (key->type == KEY_RSA1) {
 		buffer_put_char(&msg, SSH_AGENTC_REMOVE_RSA_IDENTITY);
 		buffer_put_int(&msg, BN_num_bits(key->rsa->n));
 		buffer_put_bignum(&msg, key->rsa->e);
 		buffer_put_bignum(&msg, key->rsa->n);
-	} else
-#endif
-	if (key->type != KEY_UNSPEC) {
+	} else if (key->type == KEY_DSA || key->type == KEY_RSA) {
 		key_to_blob(key, &blob, &blen);
 		buffer_put_char(&msg, SSH2_AGENTC_REMOVE_IDENTITY);
 		buffer_put_string(&msg, blob, blen);
-		free(blob);
+		xfree(blob);
 	} else {
 		buffer_free(&msg);
 		return 0;

@@ -1,5 +1,5 @@
-/*	$NetBSD: sshconnect.h,v 1.5 2014/10/19 16:30:59 christos Exp $	*/
-/* $OpenBSD: sshconnect.h,v 1.28 2013/10/16 02:31:47 djm Exp $ */
+/*	$NetBSD: sshconnect.h,v 1.1 2009/06/07 22:19:27 christos Exp $	*/
+/* $OpenBSD: sshconnect.h,v 1.24 2007/09/04 11:15:56 djm Exp $ */
 
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
@@ -32,23 +32,17 @@ struct Sensitive {
 	int	external_keysign;
 };
 
-struct addrinfo;
-int	 ssh_connect(const char *, struct addrinfo *, struct sockaddr_storage *,
-    u_short, int, int, int *, int, int);
-void	 ssh_kill_proxy_command(void);
+int
+ssh_connect(const char *, struct sockaddr_storage *, u_short, int, int,
+    int *, int, int, const char *);
 
-void	 ssh_login(Sensitive *, const char *, struct sockaddr *, u_short,
-    struct passwd *, int);
-
-void	 ssh_exchange_identification(int);
+void
+ssh_login(Sensitive *, const char *, struct sockaddr *, struct passwd *, int);
 
 int	 verify_host_key(char *, struct sockaddr *, Key *);
 
-void	 get_hostfile_hostname_ipaddr(char *, struct sockaddr *, u_short,
-    char **, char **);
-
 void	 ssh_kex(char *, struct sockaddr *);
-void	 ssh_kex2(char *, struct sockaddr *, u_short);
+void	 ssh_kex2(char *, struct sockaddr *);
 
 void	 ssh_userauth1(const char *, const char *, char *, Sensitive *);
 void	 ssh_userauth2(const char *, const char *, char *, Sensitive *);

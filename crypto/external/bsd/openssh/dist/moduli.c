@@ -1,5 +1,5 @@
-/*	$NetBSD: moduli.c,v 1.7 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: moduli.c,v 1.28 2013/10/24 00:49:49 dtucker Exp $ */
+/*	$NetBSD: moduli.c,v 1.1 2009/06/07 22:19:11 christos Exp $	*/
+/* $OpenBSD: moduli.c,v 1.21 2008/06/26 09:19:40 djm Exp $ */
 /*
  * Copyright 1994 Phil Karn <karn@qualcomm.com>
  * Copyright 1996-1998, 2003 William Allen Simpson <wsimpson@greendragon.com>
@@ -37,27 +37,21 @@
  * First step: generate candidate primes (memory intensive)
  * Second step: test primes' safety (processor intensive)
  */
-#include "includes.h"
-__RCSID("$NetBSD: moduli.c,v 1.7 2014/10/19 16:30:58 christos Exp $");
 
-#include <sys/param.h>
 #include <sys/types.h>
 
 #include <openssl/bn.h>
 #include <openssl/dh.h>
 
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
 #include <time.h>
-#include <unistd.h>
 
 #include "xmalloc.h"
 #include "dh.h"
 #include "log.h"
-#include "misc.h"
 
 /*
  * File output defines
@@ -140,8 +134,7 @@ static u_int32_t largebits, largememory;	/* megabytes */
 static BIGNUM *largebase;
 
 int gen_candidates(FILE *, u_int32_t, u_int32_t, BIGNUM *);
-int prime_test(FILE *, FILE *, u_int32_t, u_int32_t, char *, unsigned long,
-    unsigned long);
+int prime_test(FILE *, FILE *, u_int32_t, u_int32_t);
 
 /*
  * print moduli out in consistent form,
@@ -433,132 +426,13 @@ gen_candidates(FILE *out, u_int32_t memory, u_int32_t power, BIGNUM *start)
 
 	time(&time_stop);
 
-	free(LargeSieve);
-	free(SmallSieve);
-	free(TinySieve);
+	xfree(LargeSieve);
+	xfree(SmallSieve);
+	xfree(TinySieve);
 
 	logit("%.24s Found %u candidates", ctime(&time_stop), r);
 
 	return (ret);
-}
-
-static void
-write_checkpoint(char *cpfile, u_int32_t lineno)
-{
-	FILE *fp;
-	char tmp[MAXPATHLEN];
-	int r;
-
-	r = snprintf(tmp, sizeof(tmp), "%s.XXXXXXXXXX", cpfile);
-	if (r == -1 || r >= MAXPATHLEN) {
-		logit("write_checkpoint: temp pathname too long");
-		return;
-	}
-	if ((r = mkstemp(tmp)) == -1) {
-		logit("mkstemp(%s): %s", tmp, strerror(errno));
-		return;
-	}
-	if ((fp = fdopen(r, "w")) == NULL) {
-		logit("write_checkpoint: fdopen: %s", strerror(errno));
-		close(r);
-		return;
-	}
-	if (fprintf(fp, "%lu\n", (unsigned long)lineno) > 0 && fclose(fp) == 0
-	    && rename(tmp, cpfile) == 0)
-		debug3("wrote checkpoint line %lu to '%s'",
-		    (unsigned long)lineno, cpfile);
-	else
-		logit("failed to write to checkpoint file '%s': %s", cpfile,
-		    strerror(errno));
-}
-
-static unsigned long
-read_checkpoint(char *cpfile)
-{
-	FILE *fp;
-	unsigned long lineno = 0;
-
-	if ((fp = fopen(cpfile, "r")) == NULL)
-		return 0;
-	if (fscanf(fp, "%lu\n", &lineno) < 1)
-		logit("Failed to load checkpoint from '%s'", cpfile);
-	else
-		logit("Loaded checkpoint from '%s' line %lu", cpfile, lineno);
-	fclose(fp);
-	return lineno;
-}
-
-static unsigned long
-count_lines(FILE *f)
-{
-	unsigned long count = 0;
-	char lp[QLINESIZE + 1];
-
-	if (fseek(f, 0, SEEK_SET) != 0) {
-		debug("input file is not seekable");
-		return ULONG_MAX;
-	}
-	while (fgets(lp, QLINESIZE + 1, f) != NULL)
-		count++;
-	rewind(f);
-	debug("input file has %lu lines", count);
-	return count;
-}
-
-static char *
-fmt_time(time_t seconds)
-{
-	int day, hr, min;
-	static char buf[128];
-
-	min = (seconds / 60) % 60;
-	hr = (seconds / 60 / 60) % 24;
-	day = seconds / 60 / 60 / 24;
-	if (day > 0)
-		snprintf(buf, sizeof buf, "%dd %d:%02d", day, hr, min);
-	else
-		snprintf(buf, sizeof buf, "%d:%02d", hr, min);
-	return buf;
-}
-
-static void
-print_progress(unsigned long start_lineno, unsigned long current_lineno,
-    unsigned long end_lineno)
-{
-	static time_t time_start, time_prev;
-	time_t time_now, elapsed;
-	unsigned long num_to_process, processed, remaining, percent, eta;
-	double time_per_line;
-	char *eta_str;
-
-	time_now = monotime();
-	if (time_start == 0) {
-		time_start = time_prev = time_now;
-		return;
-	}
-	/* print progress after 1m then once per 5m */
-	if (time_now - time_prev < 5 * 60)
-		return;
-	time_prev = time_now;
-	elapsed = time_now - time_start;
-	processed = current_lineno - start_lineno;
-	remaining = end_lineno - current_lineno;
-	num_to_process = end_lineno - start_lineno;
-	time_per_line = (double)elapsed / processed;
-	/* if we don't know how many we're processing just report count+time */
-	time(&time_now);
-	if (end_lineno == ULONG_MAX) {
-		logit("%.24s processed %lu in %s", ctime(&time_now),
-		    processed, fmt_time(elapsed));
-		return;
-	}
-	percent = 100 * processed / num_to_process;
-	eta = time_per_line * remaining;
-	eta_str = xstrdup(fmt_time(eta));
-	logit("%.24s processed %lu of %lu (%lu%%) in %s, ETA %s",
-	    ctime(&time_now), processed, num_to_process, percent,
-	    fmt_time(elapsed), eta_str);
-	free(eta_str);
 }
 
 /*
@@ -568,15 +442,13 @@ print_progress(unsigned long start_lineno, unsigned long current_lineno,
  * The result is a list of so-call "safe" primes
  */
 int
-prime_test(FILE *in, FILE *out, u_int32_t trials, u_int32_t generator_wanted,
-    char *checkpoint_file, unsigned long start_lineno, unsigned long num_lines)
+prime_test(FILE *in, FILE *out, u_int32_t trials, u_int32_t generator_wanted)
 {
 	BIGNUM *q, *p, *a;
 	BN_CTX *ctx;
 	char *cp, *lp;
 	u_int32_t count_in = 0, count_out = 0, count_possible = 0;
 	u_int32_t generator_known, in_tests, in_tries, in_type, in_size;
-	unsigned long last_processed = 0, end_lineno;
 	time_t time_start, time_stop;
 	int res;
 
@@ -584,11 +456,6 @@ prime_test(FILE *in, FILE *out, u_int32_t trials, u_int32_t generator_wanted,
 		error("Minimum primality trials is %d", TRIAL_MINIMUM);
 		return (-1);
 	}
-
-	if (num_lines == 0)
-		end_lineno = count_lines(in);
-	else
-		end_lineno = start_lineno + num_lines;
 
 	time(&time_start);
 
@@ -602,27 +469,10 @@ prime_test(FILE *in, FILE *out, u_int32_t trials, u_int32_t generator_wanted,
 	debug2("%.24s Final %u Miller-Rabin trials (%x generator)",
 	    ctime(&time_start), trials, generator_wanted);
 
-	if (checkpoint_file != NULL)
-		last_processed = read_checkpoint(checkpoint_file);
-	last_processed = start_lineno = MAX(last_processed, start_lineno);
-	if (end_lineno == ULONG_MAX)
-		debug("process from line %lu from pipe", last_processed);
-	else
-		debug("process from line %lu to line %lu", last_processed,
-		    end_lineno);
-
 	res = 0;
 	lp = xmalloc(QLINESIZE + 1);
-	while (fgets(lp, QLINESIZE + 1, in) != NULL && count_in < end_lineno) {
+	while (fgets(lp, QLINESIZE + 1, in) != NULL) {
 		count_in++;
-		if (count_in <= last_processed) {
-			debug3("skipping line %u, before checkpoint or "
-			    "specified start line", count_in);
-			continue;
-		}
-		if (checkpoint_file != NULL)
-			write_checkpoint(checkpoint_file, count_in);
-		print_progress(start_lineno, count_in, end_lineno);
 		if (strlen(lp) < 14 || *lp == '!' || *lp == '#') {
 			debug2("%10u: comment or short line", count_in);
 			continue;
@@ -749,7 +599,7 @@ prime_test(FILE *in, FILE *out, u_int32_t trials, u_int32_t generator_wanted,
 		 * that p is also prime. A single pass will weed out the
 		 * vast majority of composite q's.
 		 */
-		if (BN_is_prime_ex(q, 1, ctx, NULL) <= 0) {
+		if (BN_is_prime(q, 1, NULL, ctx, NULL) <= 0) {
 			debug("%10u: q failed first possible prime test",
 			    count_in);
 			continue;
@@ -762,14 +612,14 @@ prime_test(FILE *in, FILE *out, u_int32_t trials, u_int32_t generator_wanted,
 		 * will show up on the first Rabin-Miller iteration so it
 		 * doesn't hurt to specify a high iteration count.
 		 */
-		if (!BN_is_prime_ex(p, trials, ctx, NULL)) {
+		if (!BN_is_prime(p, trials, NULL, ctx, NULL)) {
 			debug("%10u: p is not prime", count_in);
 			continue;
 		}
 		debug("%10u: p is almost certainly prime", count_in);
 
 		/* recheck q more rigorously */
-		if (!BN_is_prime_ex(q, trials - 1, ctx, NULL)) {
+		if (!BN_is_prime(q, trials - 1, NULL, ctx, NULL)) {
 			debug("%10u: q is not prime", count_in);
 			continue;
 		}
@@ -786,13 +636,10 @@ prime_test(FILE *in, FILE *out, u_int32_t trials, u_int32_t generator_wanted,
 	}
 
 	time(&time_stop);
-	free(lp);
+	xfree(lp);
 	BN_free(p);
 	BN_free(q);
 	BN_CTX_free(ctx);
-
-	if (checkpoint_file != NULL)
-		unlink(checkpoint_file);
 
 	logit("%.24s Found %u safe primes of %u candidates in %ld seconds",
 	    ctime(&time_stop), count_out, count_possible,

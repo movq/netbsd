@@ -1,5 +1,5 @@
-/*	$NetBSD: gss-genr.c,v 1.6 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: gss-genr.c,v 1.22 2013/11/08 00:39:15 djm Exp $ */
+/*	$NetBSD: gss-genr.c,v 1.1 2009/06/07 22:19:08 christos Exp $	*/
+/* $OpenBSD: gss-genr.c,v 1.19 2007/06/12 11:56:15 dtucker Exp $ */
 
 /*
  * Copyright (c) 2001-2007 Simon Wilkinson. All rights reserved.
@@ -25,15 +25,11 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD");
 #ifdef GSSAPI
 
 #include <sys/param.h>
 
-#include <stdarg.h>
 #include <string.h>
-#include <unistd.h>
 #include <stdarg.h>
 
 #include "xmalloc.h"
@@ -60,10 +56,10 @@ void
 ssh_gssapi_set_oid_data(Gssctxt *ctx, void *data, size_t len)
 {
 	if (ctx->oid != GSS_C_NO_OID) {
-		free(ctx->oid->elements);
-		free(ctx->oid);
+		xfree(ctx->oid->elements);
+		xfree(ctx->oid);
 	}
-	ctx->oid = xcalloc(1, sizeof(gss_OID_desc));
+	ctx->oid = xmalloc(sizeof(gss_OID_desc));
 	ctx->oid->length = len;
 	ctx->oid->elements = xmalloc(len);
 	memcpy(ctx->oid->elements, data, len);
@@ -84,7 +80,7 @@ ssh_gssapi_error(Gssctxt *ctxt)
 
 	s = ssh_gssapi_last_error(ctxt, NULL, NULL);
 	debug("%s", s);
-	free(s);
+	xfree(s);
 }
 
 char *
@@ -165,8 +161,8 @@ ssh_gssapi_delete_ctx(Gssctxt **ctx)
 	if ((*ctx)->name != GSS_C_NO_NAME)
 		gss_release_name(&ms, &(*ctx)->name);
 	if ((*ctx)->oid != GSS_C_NO_OID) {
-		free((*ctx)->oid->elements);
-		free((*ctx)->oid);
+		xfree((*ctx)->oid->elements);
+		xfree((*ctx)->oid);
 		(*ctx)->oid = GSS_C_NO_OID;
 	}
 	if ((*ctx)->creds != GSS_C_NO_CREDENTIAL)
@@ -176,7 +172,7 @@ ssh_gssapi_delete_ctx(Gssctxt **ctx)
 	if ((*ctx)->client_creds != GSS_C_NO_CREDENTIAL)
 		gss_release_cred(&ms, &(*ctx)->client_creds);
 
-	free(*ctx);
+	xfree(*ctx);
 	*ctx = NULL;
 }
 
@@ -223,7 +219,7 @@ ssh_gssapi_import_name(Gssctxt *ctx, const char *host)
 	    &gssbuf, GSS_C_NT_HOSTBASED_SERVICE, &ctx->name)))
 		ssh_gssapi_error(ctx);
 
-	free(gssbuf.value);
+	xfree(gssbuf.value);
 	return (ctx->major);
 }
 
@@ -254,7 +250,7 @@ ssh_gssapi_check_mechanism(Gssctxt **ctx, gss_OID oid, const char *host)
 {
 	gss_buffer_desc token = GSS_C_EMPTY_BUFFER;
 	OM_uint32 major, minor;
-	gss_OID_desc spnego_oid = {6, __UNCONST("\x2B\x06\x01\x05\x05\x02")};
+	gss_OID_desc spnego_oid = {6, (void *)"\x2B\x06\x01\x05\x05\x02"};
 
 	/* RFC 4462 says we MUST NOT do SPNEGO */
 	if (oid->length == spnego_oid.length && 

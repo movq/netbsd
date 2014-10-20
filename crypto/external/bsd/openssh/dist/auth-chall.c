@@ -1,5 +1,5 @@
-/*	$NetBSD: auth-chall.c,v 1.5 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: auth-chall.c,v 1.14 2014/06/24 01:13:21 djm Exp $ */
+/*	$NetBSD: auth-chall.c,v 1.1 2009/06/07 22:19:01 christos Exp $	*/
+/* $OpenBSD: auth-chall.c,v 1.12 2006/08/03 03:34:41 deraadt Exp $ */
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
  *
@@ -24,25 +24,13 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: auth-chall.c,v 1.5 2014/10/19 16:30:58 christos Exp $");
 #include <sys/types.h>
-#include <stdarg.h>
-#include <stdlib.h>
-#include <stdio.h>
 
 #include "xmalloc.h"
 #include "key.h"
 #include "hostfile.h"
 #include "auth.h"
 #include "log.h"
-#ifdef USE_PAM
-#include "misc.h"
-#include "buffer.h"
-#include "servconf.h"
-extern ServerOptions options;
-void remove_kbdint_device(const char *);
-#endif
 
 /* limited protocol v1 interface to kbd-interactive authentication */
 
@@ -55,11 +43,6 @@ get_challenge(Authctxt *authctxt)
 	char *challenge, *name, *info, **prompts;
 	u_int i, numprompts;
 	u_int *echo_on;
-
-#ifdef USE_PAM
-	if (!options.use_pam)
-		remove_kbdint_device("pam");
-#endif
 
 	device = devices[0]; /* we always use the 1st device for protocol 1 */
 	if (device == NULL)
@@ -76,11 +59,11 @@ get_challenge(Authctxt *authctxt)
 		fatal("get_challenge: numprompts < 1");
 	challenge = xstrdup(prompts[0]);
 	for (i = 0; i < numprompts; i++)
-		free(prompts[i]);
-	free(prompts);
-	free(name);
-	free(echo_on);
-	free(info);
+		xfree(prompts[i]);
+	xfree(prompts);
+	xfree(name);
+	xfree(echo_on);
+	xfree(info);
 
 	return (challenge);
 }
@@ -94,7 +77,7 @@ verify_response(Authctxt *authctxt, const char *response)
 		return 0;
 	if (authctxt->kbdintctxt == NULL)
 		return 0;
-	resp[0] = __UNCONST(response);
+	resp[0] = (char *)response;
 	if (device->respond(authctxt->kbdintctxt, 1, resp) == 0)
 		authenticated = 1;
 	device->free_ctx(authctxt->kbdintctxt);

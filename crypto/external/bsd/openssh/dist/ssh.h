@@ -1,5 +1,5 @@
-/*	$NetBSD: ssh.h,v 1.4 2014/10/19 16:30:59 christos Exp $	*/
-/* $OpenBSD: ssh.h,v 1.79 2010/06/25 07:14:46 djm Exp $ */
+/*	$NetBSD: ssh.h,v 1.1 2009/06/07 22:19:25 christos Exp $	*/
+/* $OpenBSD: ssh.h,v 1.78 2006/08/03 03:34:42 deraadt Exp $ */
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -18,6 +18,9 @@
 
 /* Default port number. */
 #define SSH_DEFAULT_PORT	22
+
+/* Maximum number of TCP/IP ports forwarded per direction. */
+#define SSH_MAX_FORWARDS_PER_DIRECTION	100
 
 /*
  * Maximum number of RSA authentication identity files that can be specified
@@ -83,9 +86,6 @@
 
 /* Used to identify ``EscapeChar none'' */
 #define SSH_ESCAPECHAR_NONE		-2
-
-/* Name of Kerberos service for SSH to use. */
-#define KRB4_SERVICE_NAME		"rcmd"
 
 /*
  * unprivileged user when UsePrivilegeSeparation=yes;

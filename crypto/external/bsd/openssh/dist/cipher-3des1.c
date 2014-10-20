@@ -1,5 +1,5 @@
-/*	$NetBSD: cipher-3des1.c,v 1.6 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: cipher-3des1.c,v 1.11 2014/07/02 04:59:06 djm Exp $ */
+/*	$NetBSD: cipher-3des1.c,v 1.1 2009/06/07 22:19:06 christos Exp $	*/
+/* $OpenBSD: cipher-3des1.c,v 1.6 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Copyright (c) 2003 Markus Friedl.  All rights reserved.
  *
@@ -24,8 +24,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: cipher-3des1.c,v 1.6 2014/10/19 16:30:58 christos Exp $");
 #include <sys/types.h>
 
 #include <openssl/evp.h>
@@ -34,7 +32,6 @@ __RCSID("$NetBSD: cipher-3des1.c,v 1.6 2014/10/19 16:30:58 christos Exp $");
 
 #include "xmalloc.h"
 #include "log.h"
-#include "ssherr.h"
 
 /*
  * This is used by SSH1:
@@ -56,7 +53,7 @@ struct ssh1_3des_ctx
 };
 
 const EVP_CIPHER * evp_ssh1_3des(void);
-int ssh1_3des_iv(EVP_CIPHER_CTX *, int, u_char *, int);
+void ssh1_3des_iv(EVP_CIPHER_CTX *, int, u_char *, int);
 
 static int
 ssh1_3des_init(EVP_CIPHER_CTX *ctx, const u_char *key, const u_char *iv,
@@ -66,15 +63,14 @@ ssh1_3des_init(EVP_CIPHER_CTX *ctx, const u_char *key, const u_char *iv,
 	u_char *k1, *k2, *k3;
 
 	if ((c = EVP_CIPHER_CTX_get_app_data(ctx)) == NULL) {
-		if ((c = calloc(1, sizeof(*c))) == NULL)
-			return 0;
+		c = xmalloc(sizeof(*c));
 		EVP_CIPHER_CTX_set_app_data(ctx, c);
 	}
 	if (key == NULL)
-		return 1;
+		return (1);
 	if (enc == -1)
 		enc = ctx->encrypt;
-	k1 = k2 = k3 = __UNCONST(key);
+	k1 = k2 = k3 = (u_char *) key;
 	k2 += 8;
 	if (EVP_CIPHER_CTX_key_length(ctx) >= 16+8) {
 		if (enc)
@@ -88,26 +84,28 @@ ssh1_3des_init(EVP_CIPHER_CTX *ctx, const u_char *key, const u_char *iv,
 	if (EVP_CipherInit(&c->k1, EVP_des_cbc(), k1, NULL, enc) == 0 ||
 	    EVP_CipherInit(&c->k2, EVP_des_cbc(), k2, NULL, !enc) == 0 ||
 	    EVP_CipherInit(&c->k3, EVP_des_cbc(), k3, NULL, enc) == 0) {
-		explicit_bzero(c, sizeof(*c));
-		free(c);
+		memset(c, 0, sizeof(*c));
+		xfree(c);
 		EVP_CIPHER_CTX_set_app_data(ctx, NULL);
-		return 0;
+		return (0);
 	}
-	return 1;
+	return (1);
 }
 
 static int
-ssh1_3des_cbc(EVP_CIPHER_CTX *ctx, u_char *dest, const u_char *src, size_t len)
+ssh1_3des_cbc(EVP_CIPHER_CTX *ctx, u_char *dest, const u_char *src, u_int len)
 {
 	struct ssh1_3des_ctx *c;
 
-	if ((c = EVP_CIPHER_CTX_get_app_data(ctx)) == NULL)
-		return 0;
-	if (EVP_Cipher(&c->k1, dest, __UNCONST(src), len) == 0 ||
+	if ((c = EVP_CIPHER_CTX_get_app_data(ctx)) == NULL) {
+		error("ssh1_3des_cbc: no context");
+		return (0);
+	}
+	if (EVP_Cipher(&c->k1, dest, (u_char *)src, len) == 0 ||
 	    EVP_Cipher(&c->k2, dest, dest, len) == 0 ||
 	    EVP_Cipher(&c->k3, dest, dest, len) == 0)
-		return 0;
-	return 1;
+		return (0);
+	return (1);
 }
 
 static int
@@ -119,32 +117,33 @@ ssh1_3des_cleanup(EVP_CIPHER_CTX *ctx)
 		EVP_CIPHER_CTX_cleanup(&c->k1);
 		EVP_CIPHER_CTX_cleanup(&c->k2);
 		EVP_CIPHER_CTX_cleanup(&c->k3);
-		explicit_bzero(c, sizeof(*c));
-		free(c);
+		memset(c, 0, sizeof(*c));
+		xfree(c);
 		EVP_CIPHER_CTX_set_app_data(ctx, NULL);
 	}
-	return 1;
+	return (1);
 }
 
-int
+void
 ssh1_3des_iv(EVP_CIPHER_CTX *evp, int doset, u_char *iv, int len)
 {
 	struct ssh1_3des_ctx *c;
 
 	if (len != 24)
-		return SSH_ERR_INVALID_ARGUMENT;
+		fatal("%s: bad 3des iv length: %d", __func__, len);
 	if ((c = EVP_CIPHER_CTX_get_app_data(evp)) == NULL)
-		return SSH_ERR_INTERNAL_ERROR;
+		fatal("%s: no 3des context", __func__);
 	if (doset) {
+		debug3("%s: Installed 3DES IV", __func__);
 		memcpy(c->k1.iv, iv, 8);
 		memcpy(c->k2.iv, iv + 8, 8);
 		memcpy(c->k3.iv, iv + 16, 8);
 	} else {
+		debug3("%s: Copying 3DES IV", __func__);
 		memcpy(iv, c->k1.iv, 8);
 		memcpy(iv + 8, c->k2.iv, 8);
 		memcpy(iv + 16, c->k3.iv, 8);
 	}
-	return 0;
 }
 
 const EVP_CIPHER *
@@ -161,5 +160,5 @@ evp_ssh1_3des(void)
 	ssh1_3des.cleanup = ssh1_3des_cleanup;
 	ssh1_3des.do_cipher = ssh1_3des_cbc;
 	ssh1_3des.flags = EVP_CIPH_CBC_MODE | EVP_CIPH_VARIABLE_LENGTH;
-	return &ssh1_3des;
+	return (&ssh1_3des);
 }

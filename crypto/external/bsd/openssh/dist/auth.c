@@ -1,5 +1,5 @@
-/*	$NetBSD: auth.c,v 1.10 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: auth.c,v 1.106 2014/07/15 15:54:14 millert Exp $ */
+/*	$NetBSD: auth.c,v 1.1 2009/06/07 22:19:02 christos Exp $	*/
+/* $OpenBSD: auth.c,v 1.80 2008/11/04 07:58:09 djm Exp $ */
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
  *
@@ -24,8 +24,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: auth.c,v 1.10 2014/10/19 16:30:58 christos Exp $");
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/param.h>
@@ -46,7 +44,6 @@ __RCSID("$NetBSD: auth.c,v 1.10 2014/10/19 16:30:58 christos Exp $");
 #include "groupaccess.h"
 #include "log.h"
 #include "buffer.h"
-#include "misc.h"
 #include "servconf.h"
 #include "key.h"
 #include "hostfile.h"
@@ -54,18 +51,12 @@ __RCSID("$NetBSD: auth.c,v 1.10 2014/10/19 16:30:58 christos Exp $");
 #include "auth-options.h"
 #include "canohost.h"
 #include "uidswap.h"
+#include "misc.h"
 #include "packet.h"
 #ifdef GSSAPI
 #include "ssh-gss.h"
 #endif
-#include "authfile.h"
 #include "monitor_wrap.h"
-#include "krl.h"
-#include "compat.h"
-
-#ifdef HAVE_LOGIN_CAP
-#include <login_cap.h>
-#endif
 
 /* import */
 extern ServerOptions options;
@@ -87,161 +78,33 @@ int auth_debug_init;
 int
 allowed_user(struct passwd * pw)
 {
-#ifdef HAVE_LOGIN_CAP
-	extern login_cap_t *lc;
-	int match_name, match_ip;
-	char *cap_hlist, *hp;
-#endif
 	struct stat st;
 	const char *hostname = NULL, *ipaddr = NULL;
+	char *shell;
 	u_int i;
 
 	/* Shouldn't be called if pw is NULL, but better safe than sorry... */
 	if (!pw || !pw->pw_name)
 		return 0;
 
-#ifdef HAVE_LOGIN_CAP
-	hostname = get_canonical_hostname(options.use_dns);
-	ipaddr = get_remote_ipaddr();
-
-	lc = login_getclass(pw->pw_class);
-
 	/*
-	 * Check the deny list.
+	 * Get the shell from the password data.  An empty shell field is
+	 * legal, and means /bin/sh.
 	 */
-	cap_hlist = login_getcapstr(lc, "host.deny", NULL, NULL);
-	if (cap_hlist != NULL) {
-		hp = strtok(cap_hlist, ",");
-		while (hp != NULL) {
-			match_name = match_hostname(hostname,
-			    hp, strlen(hp));
-			match_ip = match_hostname(ipaddr,
-			    hp, strlen(hp));
-			/*
-			 * Only a positive match here causes a "deny".
-			 */
-			if (match_name > 0 || match_ip > 0) {
-				free(cap_hlist);
-				login_close(lc);
-				return 0;
-			}
-			hp = strtok(NULL, ",");
-		}
-		free(cap_hlist);
+	shell = (pw->pw_shell[0] == '\0') ? _PATH_BSHELL : pw->pw_shell;
+
+	/* deny if shell does not exists or is not executable */
+	if (stat(shell, &st) != 0) {
+		logit("User %.100s not allowed because shell %.100s does not exist",
+		    pw->pw_name, shell);
+		return 0;
 	}
-
-	/*
-	 * Check the allow list.  If the allow list exists, and the
-	 * remote host is not in it, the user is implicitly denied.
-	 */
-	cap_hlist = login_getcapstr(lc, "host.allow", NULL, NULL);
-	if (cap_hlist != NULL) {
-		hp = strtok(cap_hlist, ",");
-		if (hp == NULL) {
-			/* Just in case there's an empty string... */
-			free(cap_hlist);
-			login_close(lc);
-			return 0;
-		}
-		while (hp != NULL) {
-			match_name = match_hostname(hostname,
-			    hp, strlen(hp));
-			match_ip = match_hostname(ipaddr,
-			    hp, strlen(hp));
-			/*
-			 * Negative match causes an immediate "deny".
-			 * Positive match causes us to break out
-			 * of the loop (allowing a fallthrough).
-			 */
-			if (match_name < 0 || match_ip < 0) {
-				free(cap_hlist);
-				login_close(lc);
-				return 0;
-			}
-			if (match_name > 0 || match_ip > 0)
-				break;
-			hp = strtok(NULL, ",");
-		}
-		free(cap_hlist);
-		if (hp == NULL) {
-			login_close(lc);
-			return 0;
-		}
+	if (S_ISREG(st.st_mode) == 0 ||
+	    (st.st_mode & (S_IXOTH|S_IXUSR|S_IXGRP)) == 0) {
+		logit("User %.100s not allowed because shell %.100s is not executable",
+		    pw->pw_name, shell);
+		return 0;
 	}
-
-	login_close(lc);
-#endif
-
-#ifdef USE_PAM
-	if (!options.use_pam) {
-#endif
-	/*
-	 * password/account expiration.
-	 */
-	if (pw->pw_change || pw->pw_expire) {
-		struct timeval tv;
-
-		(void)gettimeofday(&tv, (struct timezone *)NULL);
-		if (pw->pw_expire) {
-			if (tv.tv_sec >= pw->pw_expire) {
-				logit("User %.100s not allowed because account has expired",
-				    pw->pw_name);
-				return 0;	/* expired */
-			}
-		}
-#ifdef _PASSWORD_CHGNOW
-		if (pw->pw_change == _PASSWORD_CHGNOW) {
-			logit("User %.100s not allowed because password needs to be changed",
-			    pw->pw_name);
-
-			return 0;	/* can't force password change (yet) */
-		}
-#endif
-		if (pw->pw_change) {
-			if (tv.tv_sec >= pw->pw_change) {
-				logit("User %.100s not allowed because password has expired",
-				    pw->pw_name);
-				return 0;	/* expired */
-			}
-		}
-	}
-#ifdef USE_PAM
-	}
-#endif
-
-	/*
-	 * Deny if shell does not exist or is not executable unless we
-	 * are chrooting.
-	 */
-	/*
-	 * XXX Should check to see if it is executable by the
-	 * XXX requesting user.  --thorpej
-	 */
-	if (options.chroot_directory == NULL ||
-	    strcasecmp(options.chroot_directory, "none") == 0) {
-		char *shell = xstrdup((pw->pw_shell[0] == '\0') ?
-		    _PATH_BSHELL : pw->pw_shell); /* empty = /bin/sh */
-
-		if (stat(shell, &st) != 0) {
-			logit("User %.100s not allowed because shell %.100s "
-			    "does not exist", pw->pw_name, shell);
-			free(shell);
-			return 0;
-		}
-		if (S_ISREG(st.st_mode) == 0 ||
-		    (st.st_mode & (S_IXOTH|S_IXUSR|S_IXGRP)) == 0) {
-			logit("User %.100s not allowed because shell %.100s "
-			    "is not executable", pw->pw_name, shell);
-			free(shell);
-			return 0;
-		}
-		free(shell);
-	}
-	/*
-	 * XXX Consider nuking {Allow,Deny}{Users,Groups}.  We have the
-	 * XXX login_cap(3) mechanism which covers all other types of
-	 * XXX logins, too.
-	 */
 
 	if (options.num_deny_users > 0 || options.num_allow_users > 0 ||
 	    options.num_deny_groups > 0 || options.num_allow_groups > 0) {
@@ -311,28 +174,10 @@ allowed_user(struct passwd * pw)
 }
 
 void
-auth_info(Authctxt *authctxt, const char *fmt, ...)
-{
-	va_list ap;
-        int i;
-
-	free(authctxt->info);
-	authctxt->info = NULL;
-
-	va_start(ap, fmt);
-	i = vasprintf(&authctxt->info, fmt, ap);
-	va_end(ap);
-
-	if (i < 0 || authctxt->info == NULL)
-		fatal("vasprintf failed");
-}
-
-void
-auth_log(Authctxt *authctxt, int authenticated, int partial,
-    const char *method, const char *submethod)
+auth_log(Authctxt *authctxt, int authenticated, char *method, char *info)
 {
 	void (*authlog) (const char *fmt,...) = verbose;
-	const char *authmsg;
+	char *authmsg;
 
 	if (use_privsep && !mm_is_monitor() && !authctxt->postponed)
 		return;
@@ -346,44 +191,24 @@ auth_log(Authctxt *authctxt, int authenticated, int partial,
 
 	if (authctxt->postponed)
 		authmsg = "Postponed";
-	else if (partial)
-		authmsg = "Partial";
 	else
 		authmsg = authenticated ? "Accepted" : "Failed";
 
-	authlog("%s %s%s%s for %s%.100s from %.200s port %d %s%s%s",
+	authlog("%s %s for %s%.100s from %.200s port %d%s",
 	    authmsg,
 	    method,
-	    submethod != NULL ? "/" : "", submethod == NULL ? "" : submethod,
 	    authctxt->valid ? "" : "invalid user ",
 	    authctxt->user,
 	    get_remote_ipaddr(),
 	    get_remote_port(),
-	    compat20 ? "ssh2" : "ssh1",
-	    authctxt->info != NULL ? ": " : "",
-	    authctxt->info != NULL ? authctxt->info : "");
-	free(authctxt->info);
-	authctxt->info = NULL;
-}
-
-void
-auth_maxtries_exceeded(Authctxt *authctxt)
-{
-	packet_disconnect("Too many authentication failures for "
-	    "%s%.100s from %.200s port %d %s",
-	    authctxt->valid ? "" : "invalid user ",
-	    authctxt->user,
-	    get_remote_ipaddr(),
-	    get_remote_port(),
-	    compat20 ? "ssh2" : "ssh1");
-	/* NOTREACHED */
+	    info);
 }
 
 /*
  * Check whether root logins are disallowed.
  */
 int
-auth_root_allowed(const char *method)
+auth_root_allowed(char *method)
 {
 	switch (options.permit_root_login) {
 	case PERMIT_YES:
@@ -411,7 +236,7 @@ auth_root_allowed(const char *method)
  *
  * This returns a buffer allocated by xmalloc.
  */
-char *
+static char *
 expand_authorized_keys(const char *filename, struct passwd *pw)
 {
 	char *file, ret[MAXPATHLEN];
@@ -430,17 +255,20 @@ expand_authorized_keys(const char *filename, struct passwd *pw)
 	i = snprintf(ret, sizeof(ret), "%s/%s", pw->pw_dir, file);
 	if (i < 0 || (size_t)i >= sizeof(ret))
 		fatal("expand_authorized_keys: path too long");
-	free(file);
+	xfree(file);
 	return (xstrdup(ret));
 }
 
 char *
-authorized_principals_file(struct passwd *pw)
+authorized_keys_file(struct passwd *pw)
 {
-	if (options.authorized_principals_file == NULL ||
-	    strcasecmp(options.authorized_principals_file, "none") == 0)
-		return NULL;
-	return expand_authorized_keys(options.authorized_principals_file, pw);
+	return expand_authorized_keys(options.authorized_keys_file, pw);
+}
+
+char *
+authorized_keys_file2(struct passwd *pw)
+{
+	return expand_authorized_keys(options.authorized_keys_file2, pw);
 }
 
 /* return ok if key exists in sysfile or userfile */
@@ -448,15 +276,16 @@ HostStatus
 check_key_in_hostfiles(struct passwd *pw, Key *key, const char *host,
     const char *sysfile, const char *userfile)
 {
+	Key *found;
 	char *user_hostfile;
 	struct stat st;
 	HostStatus host_status;
-	struct hostkeys *hostkeys;
-	const struct hostkey_entry *found;
 
-	hostkeys = init_hostkeys();
-	load_hostkeys(hostkeys, host, sysfile);
-	if (userfile != NULL) {
+	/* Check if we know the host and its host key. */
+	found = key_new(key->type);
+	host_status = check_host_in_hostfile(sysfile, host, key, found, NULL);
+
+	if (host_status != HOST_OK && userfile != NULL) {
 		user_hostfile = tilde_expand_filename(userfile, pw->pw_uid);
 		if (options.strict_modes &&
 		    (stat(user_hostfile, &st) == 0) &&
@@ -465,66 +294,56 @@ check_key_in_hostfiles(struct passwd *pw, Key *key, const char *host,
 			logit("Authentication refused for %.100s: "
 			    "bad owner or modes for %.200s",
 			    pw->pw_name, user_hostfile);
-			auth_debug_add("Ignored %.200s: bad ownership or modes",
-			    user_hostfile);
 		} else {
 			temporarily_use_uid(pw);
-			load_hostkeys(hostkeys, host, user_hostfile);
+			host_status = check_host_in_hostfile(user_hostfile,
+			    host, key, found, NULL);
 			restore_uid();
 		}
-		free(user_hostfile);
+		xfree(user_hostfile);
 	}
-	host_status = check_key_in_hostkeys(hostkeys, key, &found);
-	if (host_status == HOST_REVOKED)
-		error("WARNING: revoked key for %s attempted authentication",
-		    found->host);
-	else if (host_status == HOST_OK)
-		debug("%s: key for %s found at %s:%ld", __func__,
-		    found->host, found->file, found->line);
-	else
-		debug("%s: key for host %s not found", __func__, host);
+	key_free(found);
 
-	free_hostkeys(hostkeys);
-
+	debug2("check_key_in_hostfiles: key %s for %s", host_status == HOST_OK ?
+	    "ok" : "not found", host);
 	return host_status;
 }
 
+
 /*
- * Check a given path for security. This is defined as all components
+ * Check a given file for security. This is defined as all components
  * of the path to the file must be owned by either the owner of
  * of the file or root and no directories must be group or world writable.
  *
  * XXX Should any specific check be done for sym links ?
  *
- * Takes a file name, its stat information (preferably from fstat() to
- * avoid races), the uid of the expected owner, their home directory and an
+ * Takes an open file descriptor, the file name, a uid and and
  * error buffer plus max size as arguments.
  *
  * Returns 0 on success and -1 on failure
  */
-int
-auth_secure_path(const char *name, struct stat *stp, const char *pw_dir,
-    uid_t uid, char *err, size_t errlen)
+static int
+secure_filename(FILE *f, const char *file, struct passwd *pw,
+    char *err, size_t errlen)
 {
+	uid_t uid = pw->pw_uid;
 	char buf[MAXPATHLEN], homedir[MAXPATHLEN];
 	char *cp;
 	int comparehome = 0;
 	struct stat st;
 
-	if (realpath(name, buf) == NULL) {
-		snprintf(err, errlen, "realpath %s failed: %s", name,
+	if (realpath(file, buf) == NULL) {
+		snprintf(err, errlen, "realpath %s failed: %s", file,
 		    strerror(errno));
 		return -1;
 	}
-	if (pw_dir != NULL && realpath(pw_dir, homedir) != NULL)
+	if (realpath(pw->pw_dir, homedir) != NULL)
 		comparehome = 1;
 
-	if (!S_ISREG(stp->st_mode)) {
-		snprintf(err, errlen, "%s is not a regular file", buf);
-		return -1;
-	}
-	if ((stp->st_uid != 0 && stp->st_uid != uid) ||
-	    (stp->st_mode & 022) != 0) {
+	/* check the open file to avoid races */
+	if (fstat(fileno(f), &st) < 0 ||
+	    (st.st_uid != 0 && st.st_uid != uid) ||
+	    (st.st_mode & 022) != 0) {
 		snprintf(err, errlen, "bad ownership or modes for file %s",
 		    buf);
 		return -1;
@@ -538,6 +357,7 @@ auth_secure_path(const char *name, struct stat *stp, const char *pw_dir,
 		}
 		strlcpy(buf, cp, sizeof(buf));
 
+		debug3("secure_filename: checking '%s'", buf);
 		if (stat(buf, &st) < 0 ||
 		    (st.st_uid != 0 && st.st_uid != uid) ||
 		    (st.st_mode & 022) != 0) {
@@ -546,10 +366,12 @@ auth_secure_path(const char *name, struct stat *stp, const char *pw_dir,
 			return -1;
 		}
 
-		/* If are past the homedir then we can stop */
-		if (comparehome && strcmp(homedir, buf) == 0)
+		/* If are passed the homedir then we can stop */
+		if (comparehome && strcmp(homedir, buf) == 0) {
+			debug3("secure_filename: terminating check at '%s'",
+			    buf);
 			break;
-
+		}
 		/*
 		 * dirname should always complete with a "/" path,
 		 * but we can be paranoid and check for "." too
@@ -560,50 +382,28 @@ auth_secure_path(const char *name, struct stat *stp, const char *pw_dir,
 	return 0;
 }
 
-/*
- * Version of secure_path() that accepts an open file descriptor to
- * avoid races.
- *
- * Returns 0 on success and -1 on failure
- */
-static int
-secure_filename(FILE *f, const char *file, struct passwd *pw,
-    char *err, size_t errlen)
-{
-	struct stat st;
-
-	/* check the open file to avoid races */
-	if (fstat(fileno(f), &st) < 0) {
-		snprintf(err, errlen, "cannot stat file %s: %s",
-		    file, strerror(errno));
-		return -1;
-	}
-	return auth_secure_path(file, &st, pw->pw_dir, pw->pw_uid, err, errlen);
-}
-
-static FILE *
-auth_openfile(const char *file, struct passwd *pw, int strict_modes,
-    int log_missing, const char *file_type)
+FILE *
+auth_openkeyfile(const char *file, struct passwd *pw, int strict_modes)
 {
 	char line[1024];
 	struct stat st;
 	int fd;
 	FILE *f;
 
-	if ((fd = open(file, O_RDONLY|O_NONBLOCK)) == -1) {
-		if (log_missing || errno != ENOENT)
-			debug("Could not open %s '%s': %s", file_type, file,
-			   strerror(errno));
+	/*
+	 * Open the file containing the authorized keys
+	 * Fail quietly if file does not exist
+	 */
+	if ((fd = open(file, O_RDONLY|O_NONBLOCK)) == -1)
 		return NULL;
-	}
 
 	if (fstat(fd, &st) < 0) {
 		close(fd);
 		return NULL;
 	}
 	if (!S_ISREG(st.st_mode)) {
-		logit("User %s %s %s is not a regular file",
-		    pw->pw_name, file_type, file);
+		logit("User %s authorized keys %s is not a regular file",
+		    pw->pw_name, file);
 		close(fd);
 		return NULL;
 	}
@@ -612,45 +412,25 @@ auth_openfile(const char *file, struct passwd *pw, int strict_modes,
 		close(fd);
 		return NULL;
 	}
-	if (strict_modes &&
+	if (options.strict_modes &&
 	    secure_filename(f, file, pw, line, sizeof(line)) != 0) {
 		fclose(f);
 		logit("Authentication refused: %s", line);
-		auth_debug_add("Ignored %s: %s", file_type, line);
 		return NULL;
 	}
 
 	return f;
 }
 
-
-FILE *
-auth_openkeyfile(const char *file, struct passwd *pw, int strict_modes)
-{
-	return auth_openfile(file, pw, strict_modes, 1, "authorized keys");
-}
-
-FILE *
-auth_openprincipals(const char *file, struct passwd *pw, int strict_modes)
-{
-	return auth_openfile(file, pw, strict_modes, 0,
-	    "authorized principals");
-}
-
 struct passwd *
 getpwnamallow(const char *user)
 {
-#ifdef HAVE_LOGIN_CAP
- 	extern login_cap_t *lc;
-#ifdef BSD_AUTH
- 	auth_session_t *as;
-#endif
-#endif
+	extern login_cap_t *lc;
+	auth_session_t *as;
 	struct passwd *pw;
-	struct connection_info *ci = get_connection_info(1, options.use_dns);
 
-	ci->user = user;
-	parse_server_match_config(&options, ci);
+	parse_server_match_config(&options, user,
+	    get_canonical_hostname(options.use_dns), get_remote_ipaddr());
 
 	pw = getpwnam(user);
 	if (pw == NULL) {
@@ -660,12 +440,10 @@ getpwnamallow(const char *user)
 	}
 	if (!allowed_user(pw))
 		return (NULL);
-#ifdef HAVE_LOGIN_CAP
 	if ((lc = login_getclass(pw->pw_class)) == NULL) {
 		debug("unable to get login class: %s", user);
 		return (NULL);
 	}
-#ifdef BSD_AUTH
 	if ((as = auth_open()) == NULL || auth_setpwd(as, pw) != 0 ||
 	    auth_approval(as, lc, pw->pw_name, "ssh") <= 0) {
 		debug("Approval failure for %s", user);
@@ -673,54 +451,9 @@ getpwnamallow(const char *user)
 	}
 	if (as != NULL)
 		auth_close(as);
-#endif
-#endif
 	if (pw != NULL)
 		return (pwcopy(pw));
 	return (NULL);
-}
-
-/* Returns 1 if key is revoked by revoked_keys_file, 0 otherwise */
-int
-auth_key_is_revoked(Key *key)
-{
-#ifdef WITH_OPENSSL
-	char *key_fp;
-
-	if (options.revoked_keys_file == NULL)
-		return 0;
-	switch (ssh_krl_file_contains_key(options.revoked_keys_file, key)) {
-	case 0:
-		return 0;	/* Not revoked */
-	case -2:
-		break;		/* Not a KRL */
-	default:
-		goto revoked;
-	}
-#endif
-	debug3("%s: treating %s as a key list", __func__,
-	    options.revoked_keys_file);
-	switch (key_in_file(key, options.revoked_keys_file, 0)) {
-	case 0:
-		/* key not revoked */
-		return 0;
-	case -1:
-		/* Error opening revoked_keys_file: refuse all keys */
-		error("Revoked keys file is unreadable: refusing public key "
-		    "authentication");
-		return 1;
-#ifdef WITH_OPENSSL
-	case 1:
- revoked:
-		/* Key revoked */
-		key_fp = key_fingerprint(key, SSH_FP_MD5, SSH_FP_HEX);
-		error("WARNING: authentication attempt with a revoked "
-		    "%s key %s ", key_type(key), key_fp);
-		free(key_fp);
-		return 1;
-#endif
-	}
-	fatal("key_in_file returned junk");
 }
 
 void
@@ -748,7 +481,7 @@ auth_debug_send(void)
 	while (buffer_len(&auth_debug)) {
 		msg = buffer_get_string(&auth_debug, NULL);
 		packet_send_debug("%s", msg);
-		free(msg);
+		xfree(msg);
 	}
 }
 
@@ -767,19 +500,17 @@ struct passwd *
 fakepw(void)
 {
 	static struct passwd fake;
-	static char nouser[] = "NOUSER";
-	static char nonexist[] = "/nonexist";
 
 	memset(&fake, 0, sizeof(fake));
-	fake.pw_name = nouser;
-	fake.pw_passwd = __UNCONST(
-	    "$2a$06$r3.juUaHZDlIbQaO2dS9FuYxL1W9M81R1Tc92PoSNmzvpEqLkLGrK");
-	fake.pw_gecos = nouser;
+	fake.pw_name = "NOUSER";
+	fake.pw_passwd =
+	    "$2a$06$r3.juUaHZDlIbQaO2dS9FuYxL1W9M81R1Tc92PoSNmzvpEqLkLGrK";
+	fake.pw_gecos = "NOUSER";
 	fake.pw_uid = (uid_t)-1;
 	fake.pw_gid = (gid_t)-1;
-	fake.pw_class = __UNCONST("");
-	fake.pw_dir = nonexist;
-	fake.pw_shell = nonexist;
+	fake.pw_class = "";
+	fake.pw_dir = "/nonexist";
+	fake.pw_shell = "/nonexist";
 
 	return (&fake);
 }

@@ -1,5 +1,5 @@
-/*	$NetBSD: sshlogin.c,v 1.5 2014/10/19 16:30:59 christos Exp $	*/
-/* $OpenBSD: sshlogin.c,v 1.29 2014/07/15 15:54:14 millert Exp $ */
+/*	$NetBSD: sshlogin.c,v 1.1 2009/06/07 22:19:30 christos Exp $	*/
+/* $OpenBSD: sshlogin.c,v 1.26 2007/09/11 15:47:17 gilles Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -40,8 +40,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: sshlogin.c,v 1.5 2014/10/19 16:30:59 christos Exp $");
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/socket.h>
@@ -53,18 +51,12 @@ __RCSID("$NetBSD: sshlogin.c,v 1.5 2014/10/19 16:30:59 christos Exp $");
 #include <time.h>
 #include <unistd.h>
 #include <util.h>
-#ifdef SUPPORT_UTMP
 #include <utmp.h>
-#endif
-#ifdef SUPPORT_UTMPX
-#include <utmpx.h>
-#endif
 #include <stdarg.h>
 
 #include "sshlogin.h"
 #include "log.h"
 #include "buffer.h"
-#include "misc.h"
 #include "servconf.h"
 
 extern Buffer loginmsg;
@@ -79,27 +71,15 @@ time_t
 get_last_login_time(uid_t uid, const char *logname,
     char *buf, size_t bufsize)
 {
-#ifdef SUPPORT_UTMPX
-	struct lastlogx llx, *llxp;
-#endif
-#ifdef SUPPORT_UTMP
 	struct lastlog ll;
+	char *lastlog;
 	int fd;
-#endif
 	off_t pos, r;
 
+	lastlog = _PATH_LASTLOG;
 	buf[0] = '\0';
-#ifdef SUPPORT_UTMPX
-	if ((llxp = getlastlogx(_PATH_LASTLOGX, uid, &llx)) != NULL) {
-		if (bufsize > sizeof(llxp->ll_host) + 1)
-			bufsize = sizeof(llxp->ll_host) + 1;
-		strncpy(buf, llxp->ll_host, bufsize - 1);
-		buf[bufsize - 1] = 0;
-		return llxp->ll_tv.tv_sec;
-	}
-#endif
-#ifdef SUPPORT_UTMP
-	fd = open(_PATH_LASTLOG, O_RDONLY);
+
+	fd = open(lastlog, O_RDONLY);
 	if (fd < 0)
 		return 0;
 
@@ -107,12 +87,10 @@ get_last_login_time(uid_t uid, const char *logname,
 	r = lseek(fd, pos, SEEK_SET);
 	if (r == -1) {
 		error("%s: lseek: %s", __func__, strerror(errno));
-		close(fd);
 		return (0);
 	}
 	if (r != pos) {
 		debug("%s: truncated lastlog", __func__);
-		close(fd);
 		return (0);
 	}
 	if (read(fd, &ll, sizeof(ll)) != sizeof(ll)) {
@@ -125,9 +103,6 @@ get_last_login_time(uid_t uid, const char *logname,
 	strncpy(buf, ll.ll_host, bufsize - 1);
 	buf[bufsize - 1] = '\0';
 	return (time_t)ll.ll_time;
-#else
-	return 0;
-#endif
 }
 
 /*
@@ -147,8 +122,8 @@ store_lastlog_message(const char *user, uid_t uid)
 	    sizeof(hostname));
 
 	if (last_login_time != 0) {
-		if ((time_string = ctime(&last_login_time)) != NULL)
-			time_string[strcspn(time_string, "\n")] = '\0';
+		time_string = ctime(&last_login_time);
+		time_string[strcspn(time_string, "\n")] = '\0';
 		if (strcmp(hostname, "") == 0)
 			snprintf(buf, sizeof(buf), "Last login: %s\r\n",
 			    time_string);
@@ -167,40 +142,28 @@ void
 record_login(pid_t pid, const char *tty, const char *user, uid_t uid,
     const char *host, struct sockaddr *addr, socklen_t addrlen)
 {
-#if defined(SUPPORT_UTMP) || defined(SUPPORT_UTMPX)
 	int fd;
-#endif
-	struct timeval tv;
-#ifdef SUPPORT_UTMP
-	struct utmp u;
 	struct lastlog ll;
-#endif
-#ifdef SUPPORT_UTMPX
-	struct utmpx ux, *uxp = &ux;
-	struct lastlogx llx;
-#endif
-	(void)gettimeofday(&tv, NULL);
-	/*
-	 * XXX: why do we need to handle logout cases here?
-	 * Isn't the function below taking care of this?
-	 */
+	char *lastlog;
+	struct utmp u;
+
 	/* save previous login details before writing new */
 	store_lastlog_message(user, uid);
 
-#ifdef SUPPORT_UTMP
 	/* Construct an utmp/wtmp entry. */
 	memset(&u, 0, sizeof(u));
 	strncpy(u.ut_line, tty + 5, sizeof(u.ut_line));
-	u.ut_time = (time_t)tv.tv_sec;
+	u.ut_time = time(NULL);
 	strncpy(u.ut_name, user, sizeof(u.ut_name));
 	strncpy(u.ut_host, host, sizeof(u.ut_host));
 
 	login(&u);
+	lastlog = _PATH_LASTLOG;
 
 	/* Update lastlog unless actually recording a logout. */
-	if (*user != '\0') {
+	if (strcmp(user, "") != 0) {
 		/*
-		 * It is safer to memset the lastlog structure first because
+		 * It is safer to bzero the lastlog structure first because
 		 * some systems might have some extra fields in it (e.g. SGI)
 		 */
 		memset(&ll, 0, sizeof(ll));
@@ -209,78 +172,21 @@ record_login(pid_t pid, const char *tty, const char *user, uid_t uid,
 		ll.ll_time = time(NULL);
 		strncpy(ll.ll_line, tty + 5, sizeof(ll.ll_line));
 		strncpy(ll.ll_host, host, sizeof(ll.ll_host));
-		fd = open(_PATH_LASTLOG, O_RDWR);
+		fd = open(lastlog, O_RDWR);
 		if (fd >= 0) {
 			lseek(fd, (off_t) ((long) uid * sizeof(ll)), SEEK_SET);
 			if (write(fd, &ll, sizeof(ll)) != sizeof(ll))
-				logit("Could not write %.100s: %.100s", _PATH_LASTLOG, strerror(errno));
+				logit("Could not write %.100s: %.100s", lastlog, strerror(errno));
 			close(fd);
 		}
 	}
-#endif
-#ifdef SUPPORT_UTMPX
-	/* Construct an utmpx/wtmpx entry. */
-	memset(&ux, 0, sizeof(ux));
-	strncpy(ux.ut_line, tty + 5, sizeof(ux.ut_line));
-	if (*user) {
-		ux.ut_pid = pid;
-		ux.ut_type = USER_PROCESS;
-		ux.ut_tv = tv;
-		strncpy(ux.ut_name, user, sizeof(ux.ut_name));
-		strncpy(ux.ut_host, host, sizeof(ux.ut_host));
-		/* XXX: need ut_id, use last 4 char of tty */
-		if (strlen(tty) > sizeof(ux.ut_id)) {
-			strncpy(ux.ut_id,
-			    tty + strlen(tty) - sizeof(ux.ut_id),
-			    sizeof(ux.ut_id));
-		} else
-			strncpy(ux.ut_id, tty, sizeof(ux.ut_id));
-		/* XXX: It would be better if we had sockaddr_storage here */
-		if (addrlen > sizeof(ux.ut_ss))
-			addrlen = sizeof(ux.ut_ss);
-		(void)memcpy(&ux.ut_ss, addr, addrlen);
-		if (pututxline(&ux) == NULL)
-			logit("could not add utmpx line: %.100s",
-			    strerror(errno));
-		/* Update lastlog. */
-		(void)gettimeofday(&llx.ll_tv, NULL);
-		strncpy(llx.ll_line, tty + 5, sizeof(llx.ll_line));
-		strncpy(llx.ll_host, host, sizeof(llx.ll_host));
-		(void)memcpy(&llx.ll_ss, addr, addrlen);
-		if (updlastlogx(_PATH_LASTLOGX, uid, &llx) == -1)
-			logit("Could not update %.100s: %.100s",
-			    _PATH_LASTLOGX, strerror(errno));
-	} else {
-		if ((uxp = getutxline(&ux)) == NULL)
-			logit("could not find utmpx line for %.100s", tty);
-		else {
-			uxp->ut_type = DEAD_PROCESS;
-			uxp->ut_tv = tv;
-			/* XXX: we don't record exit info yet */
-			if (pututxline(&ux) == NULL)
-				logit("could not replace utmpx line: %.100s",
-				    strerror(errno));
-		}
-	}
-	endutxent();
-	updwtmpx(_PATH_WTMPX, uxp);
-#endif
 }
 
 /* Records that the user has logged out. */
 void
 record_logout(pid_t pid, const char *tty)
 {
-#if defined(SUPPORT_UTMP) || defined(SUPPORT_UTMPX)
 	const char *line = tty + 5;	/* /dev/ttyq8 -> ttyq8 */
-#endif
-#ifdef SUPPORT_UTMP
 	if (logout(line))
 		logwtmp(line, "", "");
-#endif
-#ifdef SUPPORT_UTMPX
-	/* XXX: no exit info yet */
-	if (logoutx(line, 0, DEAD_PROCESS))
-		logwtmpx(line, "", "", 0, DEAD_PROCESS);
-#endif
 }

@@ -1,5 +1,5 @@
-/*	$NetBSD: canohost.c,v 1.7 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: canohost.c,v 1.71 2014/07/15 15:54:14 millert Exp $ */
+/*	$NetBSD: canohost.c,v 1.1 2009/06/07 22:19:04 christos Exp $	*/
+/* $OpenBSD: canohost.c,v 1.64 2009/02/12 03:00:56 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -13,22 +13,18 @@
  * called by a name other than "ssh" or "Secure Shell".
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: canohost.c,v 1.7 2014/10/19 16:30:58 christos Exp $");
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <sys/un.h>
 
 #include <netinet/in.h>
 
+#include <ctype.h>
 #include <errno.h>
 #include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdarg.h>
-#include <time.h>
-#include <unistd.h>
 
 #include "xmalloc.h"
 #include "packet.h"
@@ -37,18 +33,17 @@ __RCSID("$NetBSD: canohost.c,v 1.7 2014/10/19 16:30:58 christos Exp $");
 #include "misc.h"
 
 static void check_ip_options(int, char *);
-static char *canonical_host_ip = NULL;
-static int cached_port = -1;
 
 /*
  * Return the canonical name of the host at the other end of the socket. The
- * caller should free the returned string.
+ * caller should free the returned string with xfree.
  */
 
 static char *
 get_remote_hostname(int sock, int use_dns)
 {
 	struct sockaddr_storage from;
+	int i;
 	socklen_t fromlen;
 	struct addrinfo hints, *ai, *aitop;
 	char name[NI_MAXHOST], ntop[NI_MAXHOST], ntop2[NI_MAXHOST];
@@ -94,9 +89,13 @@ get_remote_hostname(int sock, int use_dns)
 		return xstrdup(ntop);
 	}
 
-	/* Names are stores in lowercase. */
-	lowercase(name);
-
+	/*
+	 * Convert it to all lowercase (which is expected by the rest
+	 * of this software).
+	 */
+	for (i = 0; name[i]; i++)
+		if (isupper(name[i]))
+			name[i] = (char)tolower(name[i]);
 	/*
 	 * Map it back to an IP address and check that the given
 	 * address actually is an address of this host.  This is
@@ -150,7 +149,8 @@ check_ip_options(int sock, char *ipaddr)
 {
 	u_char options[200];
 	char text[sizeof(options) * 3 + 1];
-	socklen_t option_size, i;
+	socklen_t option_size;
+	u_int i;
 	int ipproto;
 	struct protoent *ip;
 
@@ -193,7 +193,7 @@ get_canonical_hostname(int use_dns)
 	if (packet_connection_is_on_socket())
 		host = get_remote_hostname(packet_get_connection_in(), use_dns);
 	else
-		host = __UNCONST("UNKNOWN");
+		host = "UNKNOWN";
 
 	if (use_dns)
 		canonical_host_name = host;
@@ -227,12 +227,6 @@ get_socket_address(int sock, int remote, int flags)
 		    < 0)
 			return NULL;
 	}
-
-	if (addr.ss_family == AF_UNIX) {
-		/* Get the Unix domain socket path. */
-		return xstrdup(((struct sockaddr_un *)&addr)->sun_path);
-	}
-
 	/* Get the address in ascii. */
 	if ((r = getnameinfo((struct sockaddr *)&addr, addrlen, ntop,
 	    sizeof(ntop), NULL, 0, flags)) != 0) {
@@ -264,30 +258,9 @@ get_local_ipaddr(int sock)
 }
 
 char *
-get_local_name(int fd)
+get_local_name(int sock)
 {
-	char *host, myname[NI_MAXHOST];
-
-	/* Assume we were passed a socket */
-	if ((host = get_socket_address(fd, 0, NI_NAMEREQD)) != NULL)
-		return host;
-
-	/* Handle the case where we were passed a pipe */
-	if (gethostname(myname, sizeof(myname)) == -1) {
-		verbose("get_local_name: gethostname: %s", strerror(errno));
-	} else {
-		host = xstrdup(myname);
-	}
-
-	return host;
-}
-
-void
-clear_cached_addr(void)
-{
-	free(canonical_host_ip);
-	canonical_host_ip = NULL;
-	cached_port = -1;
+	return get_socket_address(sock, 0, NI_NAMEREQD);
 }
 
 /*
@@ -298,6 +271,8 @@ clear_cached_addr(void)
 const char *
 get_remote_ipaddr(void)
 {
+	static char *canonical_host_ip = NULL;
+
 	/* Check whether we have cached the ipaddr. */
 	if (canonical_host_ip == NULL) {
 		if (packet_connection_is_on_socket()) {
@@ -348,11 +323,6 @@ get_sock_port(int sock, int local)
 			return -1;
 		}
 	}
-
-	/* Unix domain sockets don't have a port number. */
-	if (from.ss_family == AF_UNIX)
-		return 0;
-
 	/* Return port number. */
 	if ((r = getnameinfo((struct sockaddr *)&from, fromlen, NULL, 0,
 	    strport, sizeof(strport), NI_NUMERICSERV)) != 0)
@@ -386,11 +356,13 @@ get_peer_port(int sock)
 int
 get_remote_port(void)
 {
-	/* Cache to avoid getpeername() on a dead connection */
-	if (cached_port == -1)
-		cached_port = get_port(0);
+	static int port = -1;
 
-	return cached_port;
+	/* Cache to avoid getpeername() on a dead connection */
+	if (port == -1)
+		port = get_port(0);
+
+	return port;
 }
 
 int

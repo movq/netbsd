@@ -1,5 +1,5 @@
-/*	$NetBSD: misc.h,v 1.7 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: misc.h,v 1.54 2014/07/15 15:54:14 millert Exp $ */
+/*	$NetBSD: misc.h,v 1.1 2009/06/07 22:19:11 christos Exp $	*/
+/* $OpenBSD: misc.h,v 1.38 2008/06/12 20:38:28 dtucker Exp $ */
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -16,25 +16,6 @@
 #ifndef _MISC_H
 #define _MISC_H
 
-/* Data structure for representing a forwarding request. */
-struct Forward {
-	char	 *listen_host;		/* Host (address) to listen on. */
-	int	  listen_port;		/* Port to forward. */
-	char	 *listen_path;		/* Path to bind domain socket. */
-	char	 *connect_host;		/* Host to connect. */
-	int	  connect_port;		/* Port to connect on connect_host. */
-	char	 *connect_path;		/* Path to connect domain socket. */
-	int	  allocated_port;	/* Dynamically allocated listen port */
-	int	  handle;		/* Handle for dynamic listen ports */
-};
-
-/* Common server and client forwarding options. */
-struct ForwardOptions {
-	int	 gateway_ports; /* Allow remote connects to forwarded ports. */
-	mode_t	 streamlocal_bind_mask; /* umask for streamlocal binds */
-	int	 streamlocal_bind_unlink; /* unlink socket before bind */
-};
-
 /* misc.c */
 
 char	*chop(char *);
@@ -50,23 +31,11 @@ char	*cleanhostname(char *);
 char	*colon(char *);
 long	 convtime(const char *);
 char	*tilde_expand_filename(const char *, uid_t);
-char	*percent_expand(const char *, ...)
-#if __GNUC_PREREQ__(4, 0)
-    __attribute__((__sentinel__))
-#endif
-    ;
+char	*percent_expand(const char *, ...) __attribute__((__sentinel__));
 char	*tohex(const void *, size_t);
 void	 sanitise_stdfd(void);
-struct timeval;
 void	 ms_subtract_diff(struct timeval *, int *);
 void	 ms_to_timeval(struct timeval *, int);
-time_t	 monotime(void);
-void	 lowercase(char *s);
-int	 unix_listener(const char *, int, int);
-
-int	bcrypt_pbkdf(const char *, size_t, const u_int8_t *, size_t,
-    u_int8_t *, size_t, unsigned int);
-long long strtonum(const char *, long long, long long, const char **);
 
 struct passwd *pwcopy(struct passwd *);
 const char *ssh_gai_strerror(int);
@@ -77,9 +46,9 @@ struct arglist {
 	u_int   num;
 	u_int   nalloc;
 };
-void	 addargs(arglist *, const char *, ...)
+void	 addargs(arglist *, char *, ...)
 	     __attribute__((format(printf, 2, 3)));
-void	 replacearg(arglist *, u_int, const char *, ...)
+void	 replacearg(arglist *, u_int, char *, ...)
 	     __attribute__((format(printf, 3, 4)));
 void	 freeargs(arglist *);
 
@@ -96,9 +65,6 @@ int	 tun_open(int, int);
 #define SSH_TUNID_ERR		(SSH_TUNID_ANY - 1)
 #define SSH_TUNID_MAX		(SSH_TUNID_ANY - 2)
 
-/* Fake port to indicate that host field is really a path. */
-#define PORT_STREAMLOCAL	-2
-
 /* Functions to extract or store big-endian words of various sizes */
 u_int64_t	get_u64(const void *)
     __attribute__((__bounded__( __minbytes__, 1, 8)));
@@ -113,24 +79,6 @@ void		put_u32(void *, u_int32_t)
 void		put_u16(void *, u_int16_t)
     __attribute__((__bounded__( __minbytes__, 1, 2)));
 
-/* Little-endian store/load, used by umac.c */
-u_int32_t	get_u32_le(const void *)
-    __attribute__((__bounded__(__minbytes__, 1, 4)));
-void		put_u32_le(void *, u_int32_t)
-    __attribute__((__bounded__(__minbytes__, 1, 4)));
-
-struct bwlimit {
-	size_t buflen;
-	u_int64_t rate, thresh, lamt;
-	struct timeval bwstart, bwend;
-};
-
-void bandwidth_limit_init(struct bwlimit *, u_int64_t, size_t);
-void bandwidth_limit(struct bwlimit *, size_t);
-
-int parse_ipqos(const char *);
-const char *iptos2str(int);
-void mktemp_proto(char *, size_t);
 
 /* readpass.c */
 

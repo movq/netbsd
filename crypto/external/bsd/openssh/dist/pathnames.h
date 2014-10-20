@@ -1,5 +1,5 @@
-/*	$NetBSD: pathnames.h,v 1.8 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: pathnames.h,v 1.24 2013/12/06 13:39:49 markus Exp $ */
+/*	$NetBSD: pathnames.h,v 1.1 2009/06/07 22:19:14 christos Exp $	*/
+/* $OpenBSD: pathnames.h,v 1.17 2008/12/29 02:23:26 stevesk Exp $ */
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -33,9 +33,7 @@
 #define _PATH_HOST_CONFIG_FILE		SSHDIR "/ssh_config"
 #define _PATH_HOST_KEY_FILE		SSHDIR "/ssh_host_key"
 #define _PATH_HOST_DSA_KEY_FILE		SSHDIR "/ssh_host_dsa_key"
-#define _PATH_HOST_ECDSA_KEY_FILE	SSHDIR "/ssh_host_ecdsa_key"
 #define _PATH_HOST_RSA_KEY_FILE		SSHDIR "/ssh_host_rsa_key"
-#define _PATH_HOST_ED25519_KEY_FILE	SSHDIR "/ssh_host_ed25519_key"
 #define _PATH_DH_MODULI			ETCDIR "/moduli"
 /* Backwards compatibility */
 #define _PATH_DH_PRIMES			ETCDIR "/primes"
@@ -59,19 +57,17 @@
  * readable by anyone except the user him/herself, though this does not
  * contain anything particularly secret.
  */
-#define _PATH_SSH_USER_HOSTFILE		"~/" _PATH_SSH_USER_DIR "/known_hosts"
+#define _PATH_SSH_USER_HOSTFILE		"~/.ssh/known_hosts"
 /* backward compat for protocol 2 */
-#define _PATH_SSH_USER_HOSTFILE2	"~/" _PATH_SSH_USER_DIR "/known_hosts2"
+#define _PATH_SSH_USER_HOSTFILE2	"~/.ssh/known_hosts2"
 
 /*
  * Name of the default file containing client-side authentication key. This
  * file should only be readable by the user him/herself.
  */
-#define _PATH_SSH_CLIENT_IDENTITY	_PATH_SSH_USER_DIR "/identity"
-#define _PATH_SSH_CLIENT_ID_DSA		_PATH_SSH_USER_DIR "/id_dsa"
-#define _PATH_SSH_CLIENT_ID_ECDSA	_PATH_SSH_USER_DIR "/id_ecdsa"
-#define _PATH_SSH_CLIENT_ID_RSA		_PATH_SSH_USER_DIR "/id_rsa"
-#define _PATH_SSH_CLIENT_ID_ED25519	_PATH_SSH_USER_DIR "/id_ed25519"
+#define _PATH_SSH_CLIENT_IDENTITY	".ssh/identity"
+#define _PATH_SSH_CLIENT_ID_DSA		".ssh/id_dsa"
+#define _PATH_SSH_CLIENT_ID_RSA		".ssh/id_rsa"
 
 /*
  * Configuration file in user's home directory.  This file need not be
@@ -79,7 +75,7 @@
  * particularly secret.  If the user's home directory resides on an NFS
  * volume where root is mapped to nobody, this may need to be world-readable.
  */
-#define _PATH_SSH_USER_CONFFILE		_PATH_SSH_USER_DIR "/config"
+#define _PATH_SSH_USER_CONFFILE		".ssh/config"
 
 /*
  * File containing a list of those rsa keys that permit logging in as this
@@ -89,10 +85,10 @@
  * may need to be world-readable.  (This file is read by the daemon which is
  * running as root.)
  */
-#define _PATH_SSH_USER_PERMITTED_KEYS	_PATH_SSH_USER_DIR "/authorized_keys"
+#define _PATH_SSH_USER_PERMITTED_KEYS	".ssh/authorized_keys"
 
 /* backward compat for protocol v2 */
-#define _PATH_SSH_USER_PERMITTED_KEYS2	_PATH_SSH_USER_DIR "/authorized_keys2"
+#define _PATH_SSH_USER_PERMITTED_KEYS2	".ssh/authorized_keys2"
 
 /*
  * Per-user and system-wide ssh "rc" files.  These files are executed with
@@ -100,7 +96,7 @@
  * passed "proto cookie" as arguments if X11 forwarding with spoofing is in
  * use.  xauth will be run if neither of these exists.
  */
-#define _PATH_SSH_USER_RC		_PATH_SSH_USER_DIR "/rc"
+#define _PATH_SSH_USER_RC		".ssh/rc"
 #define _PATH_SSH_SYSTEM_RC		SSHDIR "/sshrc"
 
 /*
@@ -111,25 +107,15 @@
 #define _PATH_RHOSTS_EQUIV		"/etc/hosts.equiv"
 
 /*
- * X11 base directory
- */
-#ifndef X11BASE
-#define X11BASE				"/usr/X11R6"
-#endif
-
-/*
  * Default location of askpass
  */
-#define _PATH_SSH_ASKPASS_DEFAULT	X11BASE "/bin/ssh-askpass"
+#define _PATH_SSH_ASKPASS_DEFAULT	"/usr/X11R6/bin/ssh-askpass"
 
 /* Location of ssh-keysign for hostbased authentication */
 #define _PATH_SSH_KEY_SIGN		"/usr/libexec/ssh-keysign"
 
-/* Location of ssh-pkcs11-helper to support keys in tokens */
-#define _PATH_SSH_PKCS11_HELPER		"/usr/libexec/ssh-pkcs11-helper"
-
 /* xauth for X11 forwarding */
-#define _PATH_XAUTH			X11BASE "/bin/xauth"
+#define _PATH_XAUTH			"/usr/X11R6/bin/xauth"
 
 /* UNIX domain socket for X11 server; displaynum will replace %u */
 #define _PATH_UNIX_X "/tmp/.X11-unix/X%u"
@@ -142,13 +128,7 @@
 #define _PATH_LS			"ls"
 
 /* chroot directory for unprivileged user when UsePrivilegeSeparation=yes */
-#ifdef __OpenBSD__
 #define _PATH_PRIVSEP_CHROOT_DIR	"/var/empty"
-#else
-#define _PATH_PRIVSEP_CHROOT_DIR	"/var/chroot/sshd"
-#endif
-
-#define _PATH_URANDOM			"/dev/urandom"
 
 /* for passwd change */
 #define _PATH_PASSWD_PROG		"/usr/bin/passwd"

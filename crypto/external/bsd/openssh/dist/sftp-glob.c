@@ -1,5 +1,5 @@
-/*	$NetBSD: sftp-glob.c,v 1.7 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: sftp-glob.c,v 1.26 2013/11/08 11:15:19 dtucker Exp $ */
+/*	$NetBSD: sftp-glob.c,v 1.1 2009/06/07 22:19:20 christos Exp $	*/
+/* $OpenBSD: sftp-glob.c,v 1.22 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Copyright (c) 2001-2004 Damien Miller <djm@openbsd.org>
  *
@@ -16,14 +16,11 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: sftp-glob.c,v 1.7 2014/10/19 16:30:58 christos Exp $");
 #include <sys/types.h>
 #include <sys/stat.h>
 
 #include <dirent.h>
 #include <glob.h>
-#include <stdlib.h>
 #include <string.h>
 
 #include "xmalloc.h"
@@ -49,10 +46,10 @@ fudge_opendir(const char *path)
 {
 	struct SFTP_OPENDIR *r;
 
-	r = xcalloc(1, sizeof(*r));
+	r = xmalloc(sizeof(*r));
 
-	if (do_readdir(cur.conn, __UNCONST(path), &r->dir)) {
-		free(r);
+	if (do_readdir(cur.conn, (char *)path, &r->dir)) {
+		xfree(r);
 		return(NULL);
 	}
 
@@ -80,7 +77,7 @@ static void
 fudge_closedir(struct SFTP_OPENDIR *od)
 {
 	free_sftp_dirents(od->dir);
-	free(od);
+	xfree(od);
 }
 
 static int
@@ -88,7 +85,7 @@ fudge_lstat(const char *path, struct stat *st)
 {
 	Attrib *a;
 
-	if (!(a = do_lstat(cur.conn, path, 1)))
+	if (!(a = do_lstat(cur.conn, (char *)path, 0)))
 		return(-1);
 
 	attrib_to_stat(a, st);
@@ -101,7 +98,7 @@ fudge_stat(const char *path, struct stat *st)
 {
 	Attrib *a;
 
-	if (!(a = do_stat(cur.conn, path, 1)))
+	if (!(a = do_stat(cur.conn, (char *)path, 0)))
 		return(-1);
 
 	attrib_to_stat(a, st);
@@ -122,5 +119,5 @@ remote_glob(struct sftp_conn *conn, const char *pattern, int flags,
 	memset(&cur, 0, sizeof(cur));
 	cur.conn = conn;
 
-	return(glob(pattern, flags|GLOB_ALTDIRFUNC|GLOB_LIMIT, errfunc, pglob));
+	return(glob(pattern, flags | GLOB_ALTDIRFUNC, errfunc, pglob));
 }

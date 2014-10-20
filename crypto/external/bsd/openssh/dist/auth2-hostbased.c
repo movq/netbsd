@@ -1,5 +1,5 @@
-/*	$NetBSD: auth2-hostbased.c,v 1.6 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: auth2-hostbased.c,v 1.18 2014/07/15 15:54:14 millert Exp $ */
+/*	$NetBSD: auth2-hostbased.c,v 1.1 2009/06/07 22:19:02 christos Exp $	*/
+/* $OpenBSD: auth2-hostbased.c,v 1.12 2008/07/17 08:51:07 djm Exp $ */
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
  *
@@ -24,8 +24,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: auth2-hostbased.c,v 1.6 2014/10/19 16:30:58 christos Exp $");
+
 #include <sys/types.h>
 
 #include <pwd.h>
@@ -37,7 +36,6 @@ __RCSID("$NetBSD: auth2-hostbased.c,v 1.6 2014/10/19 16:30:58 christos Exp $");
 #include "packet.h"
 #include "buffer.h"
 #include "log.h"
-#include "misc.h"
 #include "servconf.h"
 #include "compat.h"
 #include "key.h"
@@ -102,13 +100,7 @@ userauth_hostbased(Authctxt *authctxt)
 		    "(received %d, expected %d)", key->type, pktype);
 		goto done;
 	}
-	if (key_type_plain(key->type) == KEY_RSA &&
-	    (datafellows & SSH_BUG_RSASIGMD5) != 0) {
-		error("Refusing RSA key because peer uses unsafe "
-		    "signature format");
-		goto done;
-	}
-	service = datafellows & SSH_BUG_HBSERVICE ? __UNCONST("ssh-userauth") :
+	service = datafellows & SSH_BUG_HBSERVICE ? "ssh-userauth" :
 	    authctxt->service;
 	buffer_init(&b);
 	buffer_put_string(&b, session_id2, session_id2_len);
@@ -124,10 +116,6 @@ userauth_hostbased(Authctxt *authctxt)
 #ifdef DEBUG_PK
 	buffer_dump(&b);
 #endif
-
-	pubkey_auth_info(authctxt, key,
-	    "client user \"%.100s\", client host \"%.100s\"", cuser, chost);
-
 	/* test for allowed key and correct signature */
 	authenticated = 0;
 	if (PRIVSEP(hostbased_key_allowed(authctxt->pw, cuser, chost, key)) &&
@@ -140,11 +128,11 @@ done:
 	debug2("userauth_hostbased: authenticated %d", authenticated);
 	if (key != NULL)
 		key_free(key);
-	free(pkalg);
-	free(pkblob);
-	free(cuser);
-	free(chost);
-	free(sig);
+	xfree(pkalg);
+	xfree(pkblob);
+	xfree(cuser);
+	xfree(chost);
+	xfree(sig);
 	return authenticated;
 }
 
@@ -153,13 +141,9 @@ int
 hostbased_key_allowed(struct passwd *pw, const char *cuser, char *chost,
     Key *key)
 {
-	const char *resolvedname, *ipaddr, *lookup, *reason;
+	const char *resolvedname, *ipaddr, *lookup;
 	HostStatus host_status;
 	int len;
-	char *fp;
-
-	if (auth_key_is_revoked(key))
-		return 0;
 
 	resolvedname = get_canonical_hostname(options.use_dns);
 	ipaddr = get_remote_ipaddr();
@@ -187,40 +171,16 @@ hostbased_key_allowed(struct passwd *pw, const char *cuser, char *chost,
 	}
 	debug2("userauth_hostbased: access allowed by auth_rhosts2");
 
-	if (key_is_cert(key) && 
-	    key_cert_check_authority(key, 1, 0, lookup, &reason)) {
-		error("%s", reason);
-		auth_debug_add("%s", reason);
-		return 0;
-	}
-
 	host_status = check_key_in_hostfiles(pw, key, lookup,
 	    _PATH_SSH_SYSTEM_HOSTFILE,
 	    options.ignore_user_known_hosts ? NULL : _PATH_SSH_USER_HOSTFILE);
 
 	/* backward compat if no key has been found. */
-	if (host_status == HOST_NEW) {
+	if (host_status == HOST_NEW)
 		host_status = check_key_in_hostfiles(pw, key, lookup,
 		    _PATH_SSH_SYSTEM_HOSTFILE2,
 		    options.ignore_user_known_hosts ? NULL :
 		    _PATH_SSH_USER_HOSTFILE2);
-	}
-
-	if (host_status == HOST_OK) {
-		if (key_is_cert(key)) {
-			fp = key_fingerprint(key->cert->signature_key,
-			    SSH_FP_MD5, SSH_FP_HEX);
-			verbose("Accepted certificate ID \"%s\" signed by "
-			    "%s CA %s from %s@%s", key->cert->key_id,
-			    key_type(key->cert->signature_key), fp,
-			    cuser, lookup);
-		} else {
-			fp = key_fingerprint(key, SSH_FP_MD5, SSH_FP_HEX);
-			verbose("Accepted %s public key %s from %s@%s",
-			    key_type(key), fp, cuser, lookup);
-		}
-		free(fp);
-	}
 
 	return (host_status == HOST_OK);
 }

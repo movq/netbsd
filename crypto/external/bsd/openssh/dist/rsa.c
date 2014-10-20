@@ -1,5 +1,5 @@
-/*	$NetBSD: rsa.c,v 1.4 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: rsa.c,v 1.32 2014/06/24 01:13:21 djm Exp $ */
+/*	$NetBSD: rsa.c,v 1.1 2009/06/07 22:19:16 christos Exp $	*/
+/* $OpenBSD: rsa.c,v 1.29 2006/11/06 21:25:28 markus Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -61,128 +61,89 @@
  *     [gone - had to be deleted - what a pity]
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: rsa.c,v 1.4 2014/10/19 16:30:58 christos Exp $");
 #include <sys/types.h>
 
 #include <string.h>
 
+#include "xmalloc.h"
 #include "rsa.h"
 #include "log.h"
-#include "ssherr.h"
 
-int
+void
 rsa_public_encrypt(BIGNUM *out, BIGNUM *in, RSA *key)
 {
-	u_char *inbuf = NULL, *outbuf = NULL;
-	int len, ilen, olen, r = SSH_ERR_INTERNAL_ERROR;
+	u_char *inbuf, *outbuf;
+	int len, ilen, olen;
 
 	if (BN_num_bits(key->e) < 2 || !BN_is_odd(key->e))
-		return SSH_ERR_INVALID_ARGUMENT;
+		fatal("rsa_public_encrypt() exponent too small or not odd");
 
 	olen = BN_num_bytes(key->n);
-	if ((outbuf = malloc(olen)) == NULL) {
-		r = SSH_ERR_ALLOC_FAIL;
-		goto out;
-	}
+	outbuf = xmalloc(olen);
 
 	ilen = BN_num_bytes(in);
-	if ((inbuf = malloc(ilen)) == NULL) {
-		r = SSH_ERR_ALLOC_FAIL;
-		goto out;
-	}
+	inbuf = xmalloc(ilen);
 	BN_bn2bin(in, inbuf);
 
 	if ((len = RSA_public_encrypt(ilen, inbuf, outbuf, key,
-	    RSA_PKCS1_PADDING)) <= 0) {
-		r = SSH_ERR_LIBCRYPTO_ERROR;
-		goto out;
-	}
+	    RSA_PKCS1_PADDING)) <= 0)
+		fatal("rsa_public_encrypt() failed");
 
-	if (BN_bin2bn(outbuf, len, out) == NULL) {
-		r = SSH_ERR_LIBCRYPTO_ERROR;
-		goto out;
-	}
-	r = 0;
+	if (BN_bin2bn(outbuf, len, out) == NULL)
+		fatal("rsa_public_encrypt: BN_bin2bn failed");
 
- out:
-	if (outbuf != NULL) {
-		explicit_bzero(outbuf, olen);
-		free(outbuf);
-	}
-	if (inbuf != NULL) {
-		explicit_bzero(inbuf, ilen);
-		free(inbuf);
-	}
-	return r;
+	memset(outbuf, 0, olen);
+	memset(inbuf, 0, ilen);
+	xfree(outbuf);
+	xfree(inbuf);
 }
 
 int
 rsa_private_decrypt(BIGNUM *out, BIGNUM *in, RSA *key)
 {
-	u_char *inbuf = NULL, *outbuf = NULL;
-	int len, ilen, olen, r = SSH_ERR_INTERNAL_ERROR;
+	u_char *inbuf, *outbuf;
+	int len, ilen, olen;
 
 	olen = BN_num_bytes(key->n);
-	if ((outbuf = malloc(olen)) == NULL) {
-		r = SSH_ERR_ALLOC_FAIL;
-		goto out;
-	}
+	outbuf = xmalloc(olen);
 
 	ilen = BN_num_bytes(in);
-	if ((inbuf = malloc(ilen)) == NULL) {
-		r = SSH_ERR_ALLOC_FAIL;
-		goto out;
-	}
+	inbuf = xmalloc(ilen);
 	BN_bn2bin(in, inbuf);
 
 	if ((len = RSA_private_decrypt(ilen, inbuf, outbuf, key,
 	    RSA_PKCS1_PADDING)) <= 0) {
-		r = SSH_ERR_LIBCRYPTO_ERROR;
-		goto out;
-	} else if (BN_bin2bn(outbuf, len, out) == NULL) {
-		r = SSH_ERR_LIBCRYPTO_ERROR;
-		goto out;
+		error("rsa_private_decrypt() failed");
+	} else {
+		if (BN_bin2bn(outbuf, len, out) == NULL)
+			fatal("rsa_private_decrypt: BN_bin2bn failed");
 	}
-	r = 0;
- out:
-	if (outbuf != NULL) {
-		explicit_bzero(outbuf, olen);
-		free(outbuf);
-	}
-	if (inbuf != NULL) {
-		explicit_bzero(inbuf, ilen);
-		free(inbuf);
-	}
-	return r;
+	memset(outbuf, 0, olen);
+	memset(inbuf, 0, ilen);
+	xfree(outbuf);
+	xfree(inbuf);
+	return len;
 }
 
 /* calculate p-1 and q-1 */
-int
+void
 rsa_generate_additional_parameters(RSA *rsa)
 {
-	BIGNUM *aux = NULL;
-	BN_CTX *ctx = NULL;
-	int r;
+	BIGNUM *aux;
+	BN_CTX *ctx;
 
+	if ((aux = BN_new()) == NULL)
+		fatal("rsa_generate_additional_parameters: BN_new failed");
 	if ((ctx = BN_CTX_new()) == NULL)
-		return SSH_ERR_ALLOC_FAIL;
-	if ((aux = BN_new()) == NULL) {
-		r = SSH_ERR_ALLOC_FAIL;
-		goto out;
-	}
+		fatal("rsa_generate_additional_parameters: BN_CTX_new failed");
 
 	if ((BN_sub(aux, rsa->q, BN_value_one()) == 0) ||
 	    (BN_mod(rsa->dmq1, rsa->d, aux, ctx) == 0) ||
 	    (BN_sub(aux, rsa->p, BN_value_one()) == 0) ||
-	    (BN_mod(rsa->dmp1, rsa->d, aux, ctx) == 0)) {
-		r = SSH_ERR_LIBCRYPTO_ERROR;
-		goto out;
-	}
-	r = 0;
- out:
+	    (BN_mod(rsa->dmp1, rsa->d, aux, ctx) == 0))
+		fatal("rsa_generate_additional_parameters: BN_sub/mod failed");
+
 	BN_clear_free(aux);
 	BN_CTX_free(ctx);
-	return r;
 }
 

@@ -1,5 +1,5 @@
-/*	$NetBSD: compat.c,v 1.8 2014/10/20 03:05:13 christos Exp $	*/
-/* $OpenBSD: compat.c,v 1.85 2014/04/20 02:49:32 djm Exp $ */
+/*	$NetBSD: compat.c,v 1.1 2009/06/07 22:19:08 christos Exp $	*/
+/* $OpenBSD: compat.c,v 1.78 2008/09/11 14:22:37 markus Exp $ */
 /*
  * Copyright (c) 1999, 2000, 2001, 2002 Markus Friedl.  All rights reserved.
  *
@@ -24,8 +24,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: compat.c,v 1.8 2014/10/20 03:05:13 christos Exp $");
 #include <sys/types.h>
 
 #include <stdlib.h>
@@ -46,8 +44,6 @@ int datafellows = 0;
 void
 enable_compat20(void)
 {
-	if (compat20)
-		return;
 	debug("Enabling compatibility mode for protocol 2.0");
 	compat20 = 1;
 }
@@ -63,7 +59,7 @@ compat_datafellows(const char *version)
 {
 	int i;
 	static struct {
-		const char	*pat;
+		char	*pat;
 		int	bugs;
 	} check[] = {
 		{ "OpenSSH-2.0*,"
@@ -95,10 +91,6 @@ compat_datafellows(const char *version)
 		{ "OpenSSH_3.*",	SSH_OLD_FORWARD_ADDR },
 		{ "Sun_SSH_1.0*",	SSH_BUG_NOREKEY|SSH_BUG_EXTEOF},
 		{ "OpenSSH_4*",		0 },
-		{ "OpenSSH_5*",		SSH_NEW_OPENSSH|SSH_BUG_DYNAMIC_RPORT},
-		{ "OpenSSH_6.6.1*",	SSH_NEW_OPENSSH},
-		{ "OpenSSH_6.5*,"
-		  "OpenSSH_6.6*",	SSH_NEW_OPENSSH|SSH_BUG_CURVE25519PAD},
 		{ "OpenSSH*",		SSH_NEW_OPENSSH },
 		{ "*MindTerm*",		0 },
 		{ "2.1.0*",		SSH_BUG_SIGBLOB|SSH_BUG_HMAC|
@@ -150,12 +142,9 @@ compat_datafellows(const char *version)
 		  "1.2.19*,"
 		  "1.2.20*,"
 		  "1.2.21*,"
-		  "1.2.22*",		SSH_BUG_IGNOREMSG|SSH_BUG_K5USER },
+		  "1.2.22*",		SSH_BUG_IGNOREMSG },
 		{ "1.3.2*",		/* F-Secure */
-					SSH_BUG_IGNOREMSG|SSH_BUG_K5USER },
-		{ "1.2.1*,"
-		  "1.2.2*,"
-		  "1.2.3*",		SSH_BUG_K5USER },
+					SSH_BUG_IGNOREMSG },
 		{ "*SSH Compatible Server*",			/* Netscreen */
 					SSH_BUG_PASSWORDPAD },
 		{ "*OSU_0*,"
@@ -178,18 +167,8 @@ compat_datafellows(const char *version)
 	for (i = 0; check[i].pat; i++) {
 		if (match_pattern_list(version, check[i].pat,
 		    strlen(check[i].pat), 0) == 1) {
+			debug("match: %s pat %s", version, check[i].pat);
 			datafellows = check[i].bugs;
-			/* Check to see if the remote side is OpenSSH and not HPN */
-			if(strstr(version,"OpenSSH") != NULL)
-			{
-				if (strstr(version,"hpn") == NULL)
-				{
-					datafellows |= SSH_BUG_LARGEWINDOW;
-					debug("Remote is NON-HPN aware");
-				}
-			}
-			debug("match: %s pat %s compat 0x%08x",
-			    version, check[i].pat, datafellows);
 			return;
 		}
 	}
@@ -221,75 +200,37 @@ proto_spec(const char *spec)
 			break;
 		}
 	}
-	free(s);
+	xfree(s);
 	return ret;
 }
 
-/*
- * Filters a proposal string, excluding any algorithm matching the 'filter'
- * pattern list.
- */
-static char *
-filter_proposal(const char *proposal, const char *filter)
+char *
+compat_cipher_proposal(char *cipher_prop)
 {
 	Buffer b;
-	char *orig_prop, *fix_prop;
+	char *orig_prop, *fix_ciphers;
 	char *cp, *tmp;
 
+	if (!(datafellows & SSH_BUG_BIGENDIANAES))
+		return(cipher_prop);
+
 	buffer_init(&b);
-	tmp = orig_prop = xstrdup(proposal);
+	tmp = orig_prop = xstrdup(cipher_prop);
 	while ((cp = strsep(&tmp, ",")) != NULL) {
-		if (match_pattern_list(cp, filter, strlen(cp), 0) != 1) {
+		if (strncmp(cp, "aes", 3) != 0) {
 			if (buffer_len(&b) > 0)
 				buffer_append(&b, ",", 1);
 			buffer_append(&b, cp, strlen(cp));
-		} else
-			debug2("Compat: skipping algorithm \"%s\"", cp);
+		}
 	}
 	buffer_append(&b, "\0", 1);
-	fix_prop = xstrdup((char *)buffer_ptr(&b));
+	fix_ciphers = xstrdup(buffer_ptr(&b));
 	buffer_free(&b);
-	free(orig_prop);
+	xfree(orig_prop);
+	debug2("Original cipher proposal: %s", cipher_prop);
+	debug2("Compat cipher proposal: %s", fix_ciphers);
+	if (!*fix_ciphers)
+		fatal("No available ciphers found.");
 
-	return fix_prop;
+	return(fix_ciphers);
 }
-
-const char *
-compat_cipher_proposal(const char *cipher_prop)
-{
-	if (!(datafellows & SSH_BUG_BIGENDIANAES))
-		return cipher_prop;
-	debug2("%s: original cipher proposal: %s", __func__, cipher_prop);
-	cipher_prop = filter_proposal(cipher_prop, "aes*");
-	debug2("%s: compat cipher proposal: %s", __func__, cipher_prop);
-	if (*cipher_prop == '\0')
-		fatal("No supported ciphers found");
-	return cipher_prop;
-}
-
-char *
-compat_pkalg_proposal(char *pkalg_prop)
-{
-	if (!(datafellows & SSH_BUG_RSASIGMD5))
-		return pkalg_prop;
-	debug2("%s: original public key proposal: %s", __func__, pkalg_prop);
-	pkalg_prop = filter_proposal(pkalg_prop, "ssh-rsa");
-	debug2("%s: compat public key proposal: %s", __func__, pkalg_prop);
-	if (*pkalg_prop == '\0')
-		fatal("No supported PK algorithms found");
-	return pkalg_prop;
-}
-
-const char *
-compat_kex_proposal(const char *kex_prop)
-{
-	if (!(datafellows & SSH_BUG_CURVE25519PAD))
-		return kex_prop;
-	debug2("%s: original KEX proposal: %s", __func__, kex_prop);
-	kex_prop = filter_proposal(kex_prop, "curve25519-sha256@libssh.org");
-	debug2("%s: compat KEX proposal: %s", __func__, kex_prop);
-	if (*kex_prop == '\0')
-		fatal("No supported key exchange algorithms found");
-	return kex_prop;
-}
-

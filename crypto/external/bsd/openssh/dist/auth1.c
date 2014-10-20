@@ -1,5 +1,5 @@
-/*	$NetBSD: auth1.c,v 1.9 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: auth1.c,v 1.82 2014/07/15 15:54:14 millert Exp $ */
+/*	$NetBSD: auth1.c,v 1.1 2009/06/07 22:19:00 christos Exp $	*/
+/* $OpenBSD: auth1.c,v 1.73 2008/07/04 23:30:16 djm Exp $ */
 /*
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
  *                    All rights reserved
@@ -11,8 +11,6 @@
  * called by a name other than "ssh" or "Secure Shell".
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: auth1.c,v 1.9 2014/10/19 16:30:58 christos Exp $");
 #include <sys/types.h>
 #include <sys/queue.h>
 
@@ -27,7 +25,6 @@ __RCSID("$NetBSD: auth1.c,v 1.9 2014/10/19 16:30:58 christos Exp $");
 #include "packet.h"
 #include "buffer.h"
 #include "log.h"
-#include "misc.h"
 #include "servconf.h"
 #include "compat.h"
 #include "key.h"
@@ -40,26 +37,21 @@ __RCSID("$NetBSD: auth1.c,v 1.9 2014/10/19 16:30:58 christos Exp $");
 #include "ssh-gss.h"
 #endif
 #include "monitor_wrap.h"
-#include "buffer.h"
 
 /* import */
 extern ServerOptions options;
-extern Buffer loginmsg;
 
-static int auth1_process_password(Authctxt *);
-static int auth1_process_rsa(Authctxt *);
-static int auth1_process_rhosts_rsa(Authctxt *);
-static int auth1_process_tis_challenge(Authctxt *);
-static int auth1_process_tis_response(Authctxt *);
-#if defined(KRB4) || defined(KRB5)
-static int auth1_process_kerberos(Authctxt *);
-#endif
+static int auth1_process_password(Authctxt *, char *, size_t);
+static int auth1_process_rsa(Authctxt *, char *, size_t);
+static int auth1_process_rhosts_rsa(Authctxt *, char *, size_t);
+static int auth1_process_tis_challenge(Authctxt *, char *, size_t);
+static int auth1_process_tis_response(Authctxt *, char *, size_t);
 
 struct AuthMethod1 {
 	int type;
-	const char *name;
+	char *name;
 	int *enabled;
-	int (*method)(Authctxt *);
+	int (*method)(Authctxt *, char *, size_t);
 };
 
 const struct AuthMethod1 auth1_methods[] = {
@@ -85,13 +77,6 @@ const struct AuthMethod1 auth1_methods[] = {
 		&options.challenge_response_authentication,
 		auth1_process_tis_response
 	},
-#if defined(KRB4) || defined(KRB5)
-	{
-		SSH_CMSG_AUTH_KERBEROS, "kerberos",
-		&options.kerberos_authentication,
-		auth1_process_kerberos
-	},
-#endif /* KRB4 || KRB5 */
 	{ -1, NULL, NULL, NULL}
 };
 
@@ -107,7 +92,7 @@ static const struct AuthMethod1
 	return (NULL);
 }
 
-static const char *
+static char *
 get_authname(int type)
 {
 	const struct AuthMethod1 *a;
@@ -121,7 +106,7 @@ get_authname(int type)
 
 /*ARGSUSED*/
 static int
-auth1_process_password(Authctxt *authctxt)
+auth1_process_password(Authctxt *authctxt, char *info, size_t infolen)
 {
 	int authenticated = 0;
 	char *password;
@@ -138,70 +123,33 @@ auth1_process_password(Authctxt *authctxt)
 	/* Try authentication with the password. */
 	authenticated = PRIVSEP(auth_password(authctxt, password));
 
-	explicit_bzero(password, dlen);
-	free(password);
+	memset(password, 0, dlen);
+	xfree(password);
 
 	return (authenticated);
 }
 
-#if defined(KRB4) || defined(KRB5)
+/*ARGSUSED*/
 static int
-auth1_process_kerberos(Authctxt *authctxt)
+auth1_process_rsa(Authctxt *authctxt, char *info, size_t infolen)
 {
 	int authenticated = 0;
-	u_int dlen;
-	char *client_user;
-	char *kdata = packet_get_string(&dlen);
+	BIGNUM *n;
+
+	/* RSA authentication requested. */
+	if ((n = BN_new()) == NULL)
+		fatal("do_authloop: BN_new failed");
+	packet_get_bignum(n);
 	packet_check_eom();
+	authenticated = auth_rsa(authctxt, n);
+	BN_clear_free(n);
 
-	if (kdata[0] == 4) { /* KRB_PROT_VERSION */
-#ifdef KRB4
-		KTEXT_ST tkt, reply;
-		tkt.length = dlen;
-		if (tkt.length < MAX_KTXT_LEN)
-			memcpy(tkt.dat, kdata, tkt.length);
-
-		if (PRIVSEP(auth_krb4(authctxt, &tkt, &client_user, &reply))) {
-			authenticated = 1;
-
-			packet_start(SSH_SMSG_AUTH_KERBEROS_RESPONSE);
-			packet_put_string((char *)
-			    reply.dat, reply.length);
-			packet_send();
-			packet_write_wait();
-
-			free(client_user);
-		}
-#endif /* KRB4 */
-	} else {
-#ifdef KRB5
-		krb5_data tkt, reply;
-		tkt.length = dlen;
-		tkt.data = kdata;
-
-		if (PRIVSEP(auth_krb5(authctxt, &tkt, &client_user, &reply))) {
-			authenticated = 1;
-
-			/* Send response to client */
-			packet_start(SSH_SMSG_AUTH_KERBEROS_RESPONSE);
-			packet_put_string((char *)reply.data, reply.length);
-			packet_send();
-			packet_write_wait();
-
-			if (reply.length)
-				free(reply.data);
-			free(client_user);
-		}
-#endif /* KRB5 */
-	}
-	free(kdata);
-	return authenticated;
+	return (authenticated);
 }
-#endif /* KRB4 || KRB5 */
 
 /*ARGSUSED*/
 static int
-auth1_process_rhosts_rsa(Authctxt *authctxt)
+auth1_process_rhosts_rsa(Authctxt *authctxt, char *info, size_t infolen)
 {
 	int keybits, authenticated = 0;
 	u_int bits;
@@ -214,7 +162,7 @@ auth1_process_rhosts_rsa(Authctxt *authctxt)
 	 * trust the client; root on the client machine can
 	 * claim to be any user.
 	 */
-	client_user = packet_get_cstring(&ulen);
+	client_user = packet_get_string(&ulen);
 
 	/* Get the client host key. */
 	client_host_key = key_new(KEY_RSA1);
@@ -234,33 +182,15 @@ auth1_process_rhosts_rsa(Authctxt *authctxt)
 	    client_host_key);
 	key_free(client_host_key);
 
-	auth_info(authctxt, "ruser %.100s", client_user);
-	free(client_user);
+	snprintf(info, infolen, " ruser %.100s", client_user);
+	xfree(client_user);
 
 	return (authenticated);
 }
 
 /*ARGSUSED*/
 static int
-auth1_process_rsa(Authctxt *authctxt)
-{
-	int authenticated = 0;
-	BIGNUM *n;
-
-	/* RSA authentication requested. */
-	if ((n = BN_new()) == NULL)
-		fatal("do_authloop: BN_new failed");
-	packet_get_bignum(n);
-	packet_check_eom();
-	authenticated = auth_rsa(authctxt, n);
-	BN_clear_free(n);
-
-	return (authenticated);
-}
-
-/*ARGSUSED*/
-static int
-auth1_process_tis_challenge(Authctxt *authctxt)
+auth1_process_tis_challenge(Authctxt *authctxt, char *info, size_t infolen)
 {
 	char *challenge;
 
@@ -270,7 +200,7 @@ auth1_process_tis_challenge(Authctxt *authctxt)
 	debug("sending challenge '%s'", challenge);
 	packet_start(SSH_SMSG_AUTH_TIS_CHALLENGE);
 	packet_put_cstring(challenge);
-	free(challenge);
+	xfree(challenge);
 	packet_send();
 	packet_write_wait();
 
@@ -279,7 +209,7 @@ auth1_process_tis_challenge(Authctxt *authctxt)
 
 /*ARGSUSED*/
 static int
-auth1_process_tis_response(Authctxt *authctxt)
+auth1_process_tis_response(Authctxt *authctxt, char *info, size_t infolen)
 {
 	int authenticated = 0;
 	char *response;
@@ -288,8 +218,8 @@ auth1_process_tis_response(Authctxt *authctxt)
 	response = packet_get_string(&dlen);
 	packet_check_eom();
 	authenticated = verify_response(authctxt, response);
-	explicit_bzero(response, dlen);
-	free(response);
+	memset(response, 'r', dlen);
+	xfree(response);
 
 	return (authenticated);
 }
@@ -302,6 +232,7 @@ static void
 do_authloop(Authctxt *authctxt)
 {
 	int authenticated = 0;
+	char info[1024];
 	int type = 0;
 	const struct AuthMethod1 *meth;
 
@@ -309,19 +240,12 @@ do_authloop(Authctxt *authctxt)
 	    authctxt->valid ? "" : "invalid user ", authctxt->user);
 
 	/* If the user has no password, accept authentication immediately. */
-	if (options.permit_empty_passwd && options.password_authentication &&
-#if defined(KRB4) || defined(KRB5)
+	if (options.password_authentication &&
+#ifdef KRB5
 	    (!options.kerberos_authentication || options.kerberos_or_local_passwd) &&
 #endif
-	    PRIVSEP(auth_password(authctxt, __UNCONST("")))) {
-#ifdef USE_PAM
- 		if (options.use_pam && PRIVSEP(do_pam_account()))
-#endif
-		{
-			auth_log(authctxt, 1, 0, "without authentication",
-			    NULL);
-			return;
-		}
+	    PRIVSEP(auth_password(authctxt, ""))) {
+		auth_log(authctxt, 1, "without authentication", "");
 		return;
 	}
 
@@ -334,6 +258,7 @@ do_authloop(Authctxt *authctxt)
 		/* default to fail */
 		authenticated = 0;
 
+		info[0] = '\0';
 
 		/* Get a packet from the client. */
 		type = packet_read();
@@ -350,16 +275,14 @@ do_authloop(Authctxt *authctxt)
 			goto skip;
 		}
 
-		authenticated = meth->method(authctxt);
+		authenticated = meth->method(authctxt, info, sizeof(info));
 		if (authenticated == -1)
 			continue; /* "postponed" */
 
-#ifdef BSD_AUTH
 		if (authctxt->as) {
 			auth_close(authctxt->as);
 			authctxt->as = NULL;
 		}
-#endif
 		if (!authctxt->valid && authenticated)
 			fatal("INTERNAL ERROR: authenticated invalid user %s",
 			    authctxt->user);
@@ -369,36 +292,15 @@ do_authloop(Authctxt *authctxt)
 		    !auth_root_allowed(meth->name))
 			authenticated = 0;
 
-#ifdef USE_PAM
-		if (options.use_pam && authenticated &&
-		    !PRIVSEP(do_pam_account())) {
-			char *msg;
-			size_t len;
-
-			error("Access denied for user %s by PAM account "
-			    "configuration", authctxt->user);
-			len = buffer_len(&loginmsg);
-			buffer_append(&loginmsg, "\0", 1);
-			msg = (char *)buffer_ptr(&loginmsg);
-			/* strip trailing newlines */
-			if (len > 0)
-				while (len > 0 && msg[--len] == '\n')
-					msg[len] = '\0';
-			else
-				msg = __UNCONST("Access denied.");
-			packet_disconnect("%s", msg);
-		}
-#endif
-
  skip:
 		/* Log before sending the reply */
-		auth_log(authctxt, authenticated, 0, get_authname(type), NULL);
+		auth_log(authctxt, authenticated, get_authname(type), info);
 
 		if (authenticated)
 			return;
 
 		if (++authctxt->failures >= options.max_authtries)
-			auth_maxtries_exceeded(authctxt);
+			packet_disconnect(AUTH_FAIL_MSG, authctxt->user);
 
 		packet_start(SSH_SMSG_FAILURE);
 		packet_send();
@@ -420,21 +322,11 @@ do_authentication(Authctxt *authctxt)
 	packet_read_expect(SSH_CMSG_USER);
 
 	/* Get the user name. */
-	user = packet_get_cstring(&ulen);
+	user = packet_get_string(&ulen);
 	packet_check_eom();
 
 	if ((style = strchr(user, ':')) != NULL)
 		*style++ = '\0';
-
-#ifdef KRB5
-	/* XXX - SSH.com Kerberos v5 braindeath. */
-	if ((datafellows & SSH_BUG_K5USER) &&
-	    options.kerberos_authentication) {
-		char *p;
-		if ((p = strchr(user, '@')) != NULL)
-			*p = '\0';
-	}
-#endif
 
 	authctxt->user = user;
 	authctxt->style = style;
@@ -447,18 +339,8 @@ do_authentication(Authctxt *authctxt)
 		authctxt->pw = fakepw();
 	}
 
-	/* Configuration may have changed as a result of Match */
-	if (options.num_auth_methods != 0)
-		fatal("AuthenticationMethods is not supported with SSH "
-		    "protocol 1");
-
 	setproctitle("%s%s", authctxt->valid ? user : "unknown",
 	    use_privsep ? " [net]" : "");
-
-#ifdef USE_PAM
-	if (options.use_pam)
-		PRIVSEP(start_pam(authctxt));
-#endif
 
 	/*
 	 * If we are not running as root, the user must have the same uid as

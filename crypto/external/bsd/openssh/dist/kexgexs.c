@@ -1,5 +1,5 @@
-/*	$NetBSD: kexgexs.c,v 1.7 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: kexgexs.c,v 1.19 2014/02/02 03:44:31 djm Exp $ */
+/*	$NetBSD: kexgexs.c,v 1.1 2009/06/07 22:19:10 christos Exp $	*/
+/* $OpenBSD: kexgexs.c,v 1.11 2009/01/01 21:17:36 djm Exp $ */
 /*
  * Copyright (c) 2000 Niels Provos.  All rights reserved.
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
@@ -25,15 +25,11 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: kexgexs.c,v 1.7 2014/10/19 16:30:58 christos Exp $");
 #include <sys/param.h>
 
 #include <stdio.h>
 #include <string.h>
 #include <signal.h>
-
-#include <openssl/dh.h>
 
 #include "xmalloc.h"
 #include "buffer.h"
@@ -54,20 +50,18 @@ void
 kexgex_server(Kex *kex)
 {
 	BIGNUM *shared_secret = NULL, *dh_client_pub = NULL;
-	Key *server_host_public, *server_host_private;
+	Key *server_host_key;
 	DH *dh;
 	u_char *kbuf, *hash, *signature = NULL, *server_host_key_blob = NULL;
 	u_int sbloblen, klen, slen, hashlen;
 	int omin = -1, min = -1, omax = -1, max = -1, onbits = -1, nbits = -1;
 	int type, kout;
 
-	if (kex->load_host_public_key == NULL ||
-	    kex->load_host_private_key == NULL)
+	if (kex->load_host_key == NULL)
 		fatal("Cannot load hostkey");
-	server_host_public = kex->load_host_public_key(kex->hostkey_type);
-	if (server_host_public == NULL)
+	server_host_key = kex->load_host_key(kex->hostkey_type);
+	if (server_host_key == NULL)
 		fatal("Unsupported hostkey type %d", kex->hostkey_type);
-	server_host_private = kex->load_host_private_key(kex->hostkey_type);
 
 	type = packet_read();
 	switch (type) {
@@ -150,21 +144,21 @@ kexgex_server(Kex *kex)
 		fatal("kexgex_server: BN_new failed");
 	if (BN_bin2bn(kbuf, kout, shared_secret) == NULL)
 		fatal("kexgex_server: BN_bin2bn failed");
-	explicit_bzero(kbuf, klen);
-	free(kbuf);
+	memset(kbuf, 0, klen);
+	xfree(kbuf);
 
-	key_to_blob(server_host_public, &server_host_key_blob, &sbloblen);
+	key_to_blob(server_host_key, &server_host_key_blob, &sbloblen);
 
 	if (type == SSH2_MSG_KEX_DH_GEX_REQUEST_OLD)
 		omin = min = omax = max = -1;
 
 	/* calc H */
 	kexgex_hash(
-	    kex->hash_alg,
+	    kex->evp_md,
 	    kex->client_version_string,
 	    kex->server_version_string,
-	    (char *)buffer_ptr(&kex->peer), buffer_len(&kex->peer),
-	    (char *)buffer_ptr(&kex->my), buffer_len(&kex->my),
+	    buffer_ptr(&kex->peer), buffer_len(&kex->peer),
+	    buffer_ptr(&kex->my), buffer_len(&kex->my),
 	    server_host_key_blob, sbloblen,
 	    omin, onbits, omax,
 	    dh->p, dh->g,
@@ -183,8 +177,7 @@ kexgex_server(Kex *kex)
 	}
 
 	/* sign H */
-	kex->sign(server_host_private, server_host_public, &signature, &slen,
-	    hash, hashlen);
+	PRIVSEP(key_sign(server_host_key, &signature, &slen, hash, hashlen));
 
 	/* destroy_sensitive_data(); */
 
@@ -196,12 +189,12 @@ kexgex_server(Kex *kex)
 	packet_put_string(signature, slen);
 	packet_send();
 
-	free(signature);
-	free(server_host_key_blob);
+	xfree(signature);
+	xfree(server_host_key_blob);
 	/* have keys, free DH */
 	DH_free(dh);
 
-	kex_derive_keys_bn(kex, hash, hashlen, shared_secret);
+	kex_derive_keys(kex, hash, hashlen, shared_secret);
 	BN_clear_free(shared_secret);
 
 	kex_finish(kex);

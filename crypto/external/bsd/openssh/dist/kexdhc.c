@@ -1,5 +1,5 @@
-/*	$NetBSD: kexdhc.c,v 1.5 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: kexdhc.c,v 1.15 2014/02/02 03:44:31 djm Exp $ */
+/*	$NetBSD: kexdhc.c,v 1.1 2009/06/07 22:19:09 christos Exp $	*/
+/* $OpenBSD: kexdhc.c,v 1.11 2006/11/06 21:25:28 markus Exp $ */
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
  *
@@ -24,11 +24,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: kexdhc.c,v 1.5 2014/10/19 16:30:58 christos Exp $");
 #include <sys/types.h>
-
-#include <openssl/dh.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -48,7 +44,7 @@ void
 kexdh_client(Kex *kex)
 {
 	BIGNUM *dh_server_pub = NULL, *shared_secret = NULL;
-	DH *dh = NULL;	/* XXX: GCC */
+	DH *dh;
 	Key *server_host_key;
 	u_char *server_host_key_blob = NULL, *signature = NULL;
 	u_char *kbuf, *hash;
@@ -124,29 +120,29 @@ kexdh_client(Kex *kex)
 		fatal("kexdh_client: BN_new failed");
 	if (BN_bin2bn(kbuf, kout, shared_secret) == NULL)
 		fatal("kexdh_client: BN_bin2bn failed");
-	explicit_bzero(kbuf, klen);
-	free(kbuf);
+	memset(kbuf, 0, klen);
+	xfree(kbuf);
 
 	/* calc and verify H */
 	kex_dh_hash(
 	    kex->client_version_string,
 	    kex->server_version_string,
-	    (char *)buffer_ptr(&kex->my), buffer_len(&kex->my),
-	    (char *)buffer_ptr(&kex->peer), buffer_len(&kex->peer),
+	    buffer_ptr(&kex->my), buffer_len(&kex->my),
+	    buffer_ptr(&kex->peer), buffer_len(&kex->peer),
 	    server_host_key_blob, sbloblen,
 	    dh->pub_key,
 	    dh_server_pub,
 	    shared_secret,
 	    &hash, &hashlen
 	);
-	free(server_host_key_blob);
+	xfree(server_host_key_blob);
 	BN_clear_free(dh_server_pub);
 	DH_free(dh);
 
 	if (key_verify(server_host_key, signature, slen, hash, hashlen) != 1)
 		fatal("key_verify failed for server_host_key");
 	key_free(server_host_key);
-	free(signature);
+	xfree(signature);
 
 	/* save session id */
 	if (kex->session_id == NULL) {
@@ -155,7 +151,7 @@ kexdh_client(Kex *kex)
 		memcpy(kex->session_id, hash, kex->session_id_len);
 	}
 
-	kex_derive_keys_bn(kex, hash, hashlen, shared_secret);
+	kex_derive_keys(kex, hash, hashlen, shared_secret);
 	BN_clear_free(shared_secret);
 	kex_finish(kex);
 }

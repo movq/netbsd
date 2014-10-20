@@ -1,5 +1,5 @@
-/*	$NetBSD: uuencode.c,v 1.6 2014/10/19 16:30:59 christos Exp $	*/
-/* $OpenBSD: uuencode.c,v 1.27 2013/05/17 00:13:14 djm Exp $ */
+/*	$NetBSD: uuencode.c,v 1.1 2009/06/07 22:19:31 christos Exp $	*/
+/* $OpenBSD: uuencode.c,v 1.24 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
  *
@@ -24,23 +24,14 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: uuencode.c,v 1.6 2014/10/19 16:30:59 christos Exp $");
 #include <sys/types.h>
 #include <netinet/in.h>
 #include <resolv.h>
 #include <stdio.h>
-#include <stdlib.h>
 
 #include "xmalloc.h"
 #include "uuencode.h"
 
-/*
- * Encode binary 'src' of length 'srclength', writing base64-encoded text
- * to 'target' of size 'targsize'. Will always nul-terminate 'target'.
- * Returns the number of bytes stored in 'target' or -1 on error (inc.
- * 'targsize' too small).
- */
 int
 uuencode(const u_char *src, u_int srclength,
     char *target, size_t targsize)
@@ -48,11 +39,6 @@ uuencode(const u_char *src, u_int srclength,
 	return __b64_ntop(src, srclength, target, targsize);
 }
 
-/*
- * Decode base64-encoded 'src' into buffer 'target' of 'targsize' bytes.
- * Will skip leading and trailing whitespace. Returns the number of bytes
- * stored in 'target' or -1 on error (inc. targsize too small).
- */
 int
 uudecode(const char *src, u_char *target, size_t targsize)
 {
@@ -69,12 +55,12 @@ uudecode(const char *src, u_char *target, size_t targsize)
 	/* and remove trailing whitespace because __b64_pton needs this */
 	*p = '\0';
 	len = __b64_pton(encoded, target, targsize);
-	free(encoded);
+	xfree(encoded);
 	return len;
 }
 
 void
-dump_base64(FILE *fp, const u_char *data, u_int len)
+dump_base64(FILE *fp, u_char *data, u_int len)
 {
 	char *buf;
 	int i, n;
@@ -92,5 +78,5 @@ dump_base64(FILE *fp, const u_char *data, u_int len)
 	}
 	if (i % 70 != 69)
 		fprintf(fp, "\n");
-	free(buf);
+	xfree(buf);
 }

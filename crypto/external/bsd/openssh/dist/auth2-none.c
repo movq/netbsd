@@ -1,5 +1,5 @@
-/*	$NetBSD: auth2-none.c,v 1.4 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: auth2-none.c,v 1.18 2014/07/15 15:54:14 millert Exp $ */
+/*	$NetBSD: auth2-none.c,v 1.1 2009/06/07 22:19:03 christos Exp $	*/
+/* $OpenBSD: auth2-none.c,v 1.15 2008/07/02 12:36:39 djm Exp $ */
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
  *
@@ -24,11 +24,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: auth2-none.c,v 1.4 2014/10/19 16:30:58 christos Exp $");
 #include <sys/types.h>
-#include <stdarg.h>
-#include <stdio.h>
 
 #include "xmalloc.h"
 #include "key.h"
@@ -37,7 +33,6 @@ __RCSID("$NetBSD: auth2-none.c,v 1.4 2014/10/19 16:30:58 christos Exp $");
 #include "packet.h"
 #include "log.h"
 #include "buffer.h"
-#include "misc.h"
 #include "servconf.h"
 #include "compat.h"
 #include "ssh2.h"
@@ -57,7 +52,7 @@ userauth_none(Authctxt *authctxt)
 {
 	none_enabled = 0;
 	packet_check_eom();
-	if (options.permit_empty_passwd && options.password_authentication)
+	if (options.password_authentication)
 		return (PRIVSEP(auth_password(authctxt, "")));
 	return (0);
 }

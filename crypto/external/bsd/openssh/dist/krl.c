@@ -1,4 +1,3 @@
-/*	$NetBSD: krl.c,v 1.4 2014/10/19 16:30:58 christos Exp $	*/
 /*
  * Copyright (c) 2012 Damien Miller <djm@mindrot.org>
  *
@@ -15,11 +14,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* $OpenBSD: krl.c,v 1.17 2014/06/24 01:13:21 djm Exp $ */
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: krl.c,v 1.4 2014/10/19 16:30:58 christos Exp $");
+/* $OpenBSD: krl.c,v 1.9 2013/01/27 10:06:12 djm Exp $ */
 
-#include "includes.h"
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/tree.h>
@@ -35,6 +31,7 @@ __RCSID("$NetBSD: krl.c,v 1.4 2014/10/19 16:30:58 christos Exp $");
 #include "buffer.h"
 #include "key.h"
 #include "authfile.h"
+#include "err.h"
 #include "misc.h"
 #include "log.h"
 #include "xmalloc.h"
@@ -239,8 +236,8 @@ insert_serial_range(struct revoked_serial_tree *rt, u_int64_t lo, u_int64_t hi)
 {
 	struct revoked_serial rs, *ers, *crs, *irs;
 
-	KRL_DBG(("%s: insert %"PRIu64":%"PRIu64, __func__, lo, hi));
-	memset(&rs, 0, sizeof(rs));
+	KRL_DBG(("%s: insert %llu:%llu", __func__, lo, hi));
+	bzero(&rs, sizeof(rs));
 	rs.lo = lo;
 	rs.hi = hi;
 	ers = RB_NFIND(revoked_serial_tree, rt, &rs);
@@ -258,7 +255,7 @@ insert_serial_range(struct revoked_serial_tree *rt, u_int64_t lo, u_int64_t hi)
 		}
 		ers = irs;
 	} else {
-		KRL_DBG(("%s: overlap found %"PRIu64":%"PRIu64, __func__,
+		KRL_DBG(("%s: overlap found %llu:%llu", __func__,
 		    ers->lo, ers->hi));
 		/*
 		 * The inserted entry overlaps an existing one. Grow the
@@ -276,14 +273,13 @@ insert_serial_range(struct revoked_serial_tree *rt, u_int64_t lo, u_int64_t hi)
 
 	/* Check predecessors */
 	while ((crs = RB_PREV(revoked_serial_tree, rt, ers)) != NULL) {
-		KRL_DBG(("%s: pred %"PRIu64":%"PRIu64, __func__,
-		    crs->lo, crs->hi));
+		KRL_DBG(("%s: pred %llu:%llu", __func__, crs->lo, crs->hi));
 		if (ers->lo != 0 && crs->hi < ers->lo - 1)
 			break;
 		/* This entry overlaps. */
 		if (crs->lo < ers->lo) {
 			ers->lo = crs->lo;
-			KRL_DBG(("%s: pred extend %"PRIu64":%"PRIu64, __func__,
+			KRL_DBG(("%s: pred extend %llu:%llu", __func__,
 			    ers->lo, ers->hi));
 		}
 		RB_REMOVE(revoked_serial_tree, rt, crs);
@@ -291,21 +287,19 @@ insert_serial_range(struct revoked_serial_tree *rt, u_int64_t lo, u_int64_t hi)
 	}
 	/* Check successors */
 	while ((crs = RB_NEXT(revoked_serial_tree, rt, ers)) != NULL) {
-		KRL_DBG(("%s: succ %"PRIu64":%"PRIu64, __func__, crs->lo,
-		    crs->hi));
+		KRL_DBG(("%s: succ %llu:%llu", __func__, crs->lo, crs->hi));
 		if (ers->hi != (u_int64_t)-1 && crs->lo > ers->hi + 1)
 			break;
 		/* This entry overlaps. */
 		if (crs->hi > ers->hi) {
 			ers->hi = crs->hi;
-			KRL_DBG(("%s: succ extend %"PRIu64":%"PRIu64, __func__,
+			KRL_DBG(("%s: succ extend %llu:%llu", __func__,
 			    ers->lo, ers->hi));
 		}
 		RB_REMOVE(revoked_serial_tree, rt, crs);
 		free(crs);
 	}
-	KRL_DBG(("%s: done, final %"PRIu64":%"PRIu64, __func__, ers->lo,
-	    ers->hi));
+	KRL_DBG(("%s: done, final %llu:%llu", __func__, ers->lo, ers->hi));
 	return 0;
 }
 
@@ -371,7 +365,7 @@ plain_key_blob(const Key *key, u_char **blob, u_int *blen)
 	}
 	r = key_to_blob(kcopy, blob, blen);
 	free(kcopy);
-	return r;
+	return r == 0 ? -1 : 0;
 }
 
 /* Revoke a key blob. Ownership of blob is transferred to the tree */
@@ -399,7 +393,7 @@ ssh_krl_revoke_key_explicit(struct ssh_krl *krl, const Key *key)
 	u_int len;
 
 	debug3("%s: revoke type %s", __func__, key_type(key));
-	if (plain_key_blob(key, &blob, &len) < 0)
+	if (plain_key_blob(key, &blob, &len) != 0)
 		return -1;
 	return revoke_blob(&krl->revoked_keys, blob, len);
 }
@@ -507,11 +501,8 @@ choose_next_state(int current_state, u_int64_t contig, int final,
 	}
 	debug3("%s: contig %llu last_gap %llu next_gap %llu final %d, costs:"
 	    "list %llu range %llu bitmap %llu new bitmap %llu, "
-	    "selected 0x%02x%s", __func__, (long long unsigned)contig,
-	    (long long unsigned)last_gap, (long long unsigned)next_gap, final,
-	    (long long unsigned)cost_list, (long long unsigned)cost_range,
-	    (long long unsigned)cost_bitmap,
-	    (long long unsigned)cost_bitmap_restart, new_state,
+	    "selected 0x%02x%s", __func__, contig, last_gap, next_gap, final,
+	    cost_list, cost_range, cost_bitmap, cost_bitmap_restart, new_state,
 	    *force_new_section ? " restart" : "");
 	return new_state;
 }
@@ -547,8 +538,7 @@ revoked_certs_generate(struct revoked_certs *rc, Buffer *buf)
 	     rs != NULL;
 	     rs = RB_NEXT(revoked_serial_tree, &rc->revoked_serials, rs)) {
 		debug3("%s: serial %llu:%llu state 0x%02x", __func__,
-		    (long long unsigned)rs->lo, (long long unsigned)rs->hi,
-		    state);
+		    rs->lo, rs->hi, state);
 
 		/* Check contiguous length and gap to next section (if any) */
 		nrs = RB_NEXT(revoked_serial_tree, &rc->revoked_serials, rs);
@@ -580,7 +570,6 @@ revoked_certs_generate(struct revoked_certs *rc, Buffer *buf)
 			buffer_put_char(buf, state);
 			buffer_put_string(buf,
 			    buffer_ptr(&sect), buffer_len(&sect));
-			buffer_clear(&sect);
 		}
 
 		/* If we are starting a new section then prepare it now */
@@ -759,8 +748,7 @@ static int
 parse_revoked_certs(Buffer *buf, struct ssh_krl *krl)
 {
 	int ret = -1, nbits;
-	char type;
-	const u_char *blob;
+	u_char type, *blob;
 	u_int blen;
 	Buffer subsect;
 	u_int64_t serial, serial_lo, serial_hi;
@@ -894,12 +882,9 @@ ssh_krl_from_blob(Buffer *buf, struct ssh_krl **krlp,
 	char timestamp[64];
 	int ret = -1, r, sig_seen;
 	Key *key = NULL, **ca_used = NULL;
-	u_char *rdata = NULL;
-	char type;
-	const u_char *blob;
-	u_int i, j, sig_off, sects_off, rlen, blen, format_version, nca_used;
+	u_char type, *blob;
+	u_int i, j, sig_off, sects_off, blen, format_version, nca_used = 0;
 
-	nca_used = 0;
 	*krlp = NULL;
 	if (buffer_len(buf) < sizeof(KRL_MAGIC) - 1 ||
 	    memcmp(buffer_ptr(buf), KRL_MAGIC, sizeof(KRL_MAGIC) - 1) != 0) {
@@ -942,9 +927,8 @@ ssh_krl_from_blob(Buffer *buf, struct ssh_krl **krlp,
 	}
 
 	format_timestamp(krl->generated_date, timestamp, sizeof(timestamp));
-	debug("KRL version %llu generated at %s%s%s",
-	    (long long unsigned)krl->krl_version, timestamp,
-	    *krl->comment ? ": " : "", krl->comment);
+	debug("KRL version %llu generated at %s%s%s", krl->krl_version,
+	    timestamp, *krl->comment ? ": " : "", krl->comment);
 
 	/*
 	 * 1st pass: verify signatures, if any. This is done to avoid
@@ -982,7 +966,7 @@ ssh_krl_from_blob(Buffer *buf, struct ssh_krl **krlp,
 		}
 		/* Check signature over entire KRL up to this point */
 		if (key_verify(key, blob, blen,
-		    buffer_ptr(buf), buffer_len(buf) - sig_off) != 1) {
+		    buffer_ptr(buf), buffer_len(buf) - sig_off) == -1) {
 			error("bad signaure on KRL");
 			goto out;
 		}
@@ -1025,22 +1009,21 @@ ssh_krl_from_blob(Buffer *buf, struct ssh_krl **krlp,
 		case KRL_SECTION_EXPLICIT_KEY:
 		case KRL_SECTION_FINGERPRINT_SHA1:
 			while (buffer_len(&sect) > 0) {
-				if ((rdata = buffer_get_string_ret(&sect,
-				    &rlen)) == NULL) {
+				if ((blob = buffer_get_string_ret(&sect,
+				    &blen)) == NULL) {
 					error("%s: buffer error", __func__);
 					goto out;
 				}
 				if (type == KRL_SECTION_FINGERPRINT_SHA1 &&
-				    rlen != 20) {
+				    blen != 20) {
 					error("%s: bad SHA1 length", __func__);
 					goto out;
 				}
 				if (revoke_blob(
 				    type == KRL_SECTION_EXPLICIT_KEY ?
 				    &krl->revoked_keys : &krl->revoked_sha1s,
-				    rdata, rlen) != 0)
-					goto out;
-				rdata = NULL; /* revoke_blob frees blob */
+				    blob, blen) != 0)
+					goto out; /* revoke_blob frees blob */
 			}
 			break;
 		case KRL_SECTION_SIGNATURE:
@@ -1106,7 +1089,6 @@ ssh_krl_from_blob(Buffer *buf, struct ssh_krl **krlp,
 			key_free(ca_used[i]);
 	}
 	free(ca_used);
-	free(rdata);
 	if (key != NULL)
 		key_free(key);
 	buffer_free(&copy);
@@ -1124,7 +1106,7 @@ is_key_revoked(struct ssh_krl *krl, const Key *key)
 	struct revoked_certs *rc;
 
 	/* Check explicitly revoked hashes first */
-	memset(&rb, 0, sizeof(rb));
+	bzero(&rb, sizeof(rb));
 	if ((rb.blob = key_fingerprint_raw(key, SSH_FP_SHA1, &rb.len)) == NULL)
 		return -1;
 	erb = RB_FIND(revoked_blob_tree, &krl->revoked_sha1s, &rb);
@@ -1135,8 +1117,8 @@ is_key_revoked(struct ssh_krl *krl, const Key *key)
 	}
 
 	/* Next, explicit keys */
-	memset(&rb, 0, sizeof(rb));
-	if (plain_key_blob(key, &rb.blob, &rb.len) < 0)
+	bzero(&rb, sizeof(rb));
+	if (plain_key_blob(key, &rb.blob, &rb.len) != 0)
 		return -1;
 	erb = RB_FIND(revoked_blob_tree, &krl->revoked_keys, &rb);
 	free(rb.blob);
@@ -1156,7 +1138,7 @@ is_key_revoked(struct ssh_krl *krl, const Key *key)
 		return 0; /* No entry for this CA */
 
 	/* Check revocation by cert key ID */
-	memset(&rki, 0, sizeof(rki));
+	bzero(&rki, sizeof(rki));
 	rki.key_id = key->cert->key_id;
 	erki = RB_FIND(revoked_key_id_tree, &rc->revoked_key_ids, &rki);
 	if (erki != NULL) {
@@ -1171,16 +1153,16 @@ is_key_revoked(struct ssh_krl *krl, const Key *key)
 	if (key_cert_is_legacy(key) || key->cert->serial == 0)
 		return 0;
 
-	memset(&rs, 0, sizeof(rs));
+	bzero(&rs, sizeof(rs));
 	rs.lo = rs.hi = key->cert->serial;
 	ers = RB_FIND(revoked_serial_tree, &rc->revoked_serials, &rs);
 	if (ers != NULL) {
-		KRL_DBG(("%s: %"PRIu64" matched %"PRIu64":%"PRiu64, __func__,
+		KRL_DBG(("%s: %llu matched %llu:%llu", __func__,
 		    key->cert->serial, ers->lo, ers->hi));
 		debug("%s: revoked by serial", __func__);
 		return -1;
 	}
-	KRL_DBG(("%s: %"PRIu64" no match", __func__, key->cert->serial));
+	KRL_DBG(("%s: %llu no match", __func__, key->cert->serial));
 
 	return 0;
 }

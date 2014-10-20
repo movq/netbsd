@@ -1,5 +1,5 @@
-/*	$NetBSD: auth2-chall.c,v 1.6 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: auth2-chall.c,v 1.41 2014/02/02 03:44:31 djm Exp $ */
+/*	$NetBSD: auth2-chall.c,v 1.1 2009/06/07 22:19:02 christos Exp $	*/
+/* $OpenBSD: auth2-chall.c,v 1.34 2008/12/09 04:32:22 djm Exp $ */
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
  * Copyright (c) 2001 Per Allansson.  All rights reserved.
@@ -25,8 +25,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: auth2-chall.c,v 1.6 2014/10/19 16:30:58 christos Exp $");
 #include <sys/types.h>
 
 #include <stdio.h>
@@ -41,38 +39,15 @@ __RCSID("$NetBSD: auth2-chall.c,v 1.6 2014/10/19 16:30:58 christos Exp $");
 #include "packet.h"
 #include "dispatch.h"
 #include "log.h"
-#include "misc.h"
-#include "servconf.h"
-
-/* import */    
-extern ServerOptions options;
 
 static int auth2_challenge_start(Authctxt *);
 static int send_userauth_info_request(Authctxt *);
 static void input_userauth_info_response(int, u_int32_t, void *);
 
-#ifdef BSD_AUTH
 extern KbdintDevice bsdauth_device;
-#else
-#ifdef USE_PAM
-extern KbdintDevice sshpam_device;
-#endif
-#ifdef SKEY
-extern KbdintDevice skey_device;
-#endif
-#endif
 
 KbdintDevice *devices[] = {
-#ifdef BSD_AUTH
 	&bsdauth_device,
-#else
-#ifdef USE_PAM
-	&sshpam_device,
-#endif
-#ifdef SKEY
-	&skey_device,
-#endif
-#endif
 	NULL
 };
 
@@ -85,22 +60,6 @@ struct KbdintAuthctxt
 	u_int nreq;
 };
 
-#ifdef USE_PAM
-void remove_kbdint_device(const char *);
-void
-remove_kbdint_device(const char *xdevname)
-{
-	int i, j;
-
-	for (i = 0; devices[i] != NULL; i++)
-		if (strcmp(devices[i]->name, xdevname) == 0) {
-			for (j = i; devices[j] != NULL; j++)
-				devices[j] = devices[j+1];
-			i--;
-		}
-}
-#endif
-
 static KbdintAuthctxt *
 kbdint_alloc(const char *devs)
 {
@@ -108,12 +67,7 @@ kbdint_alloc(const char *devs)
 	Buffer b;
 	int i;
 
-#ifdef USE_PAM
-	if (!options.use_pam)
-		remove_kbdint_device("pam");
-#endif
-
-	kbdintctxt = xcalloc(1, sizeof(KbdintAuthctxt));
+	kbdintctxt = xmalloc(sizeof(KbdintAuthctxt));
 	if (strcmp(devs, "") == 0) {
 		buffer_init(&b);
 		for (i = 0; devices[i]; i++) {
@@ -123,7 +77,7 @@ kbdint_alloc(const char *devs)
 			    strlen(devices[i]->name));
 		}
 		buffer_append(&b, "\0", 1);
-		kbdintctxt->devices = xstrdup((const char *)buffer_ptr(&b));
+		kbdintctxt->devices = xstrdup(buffer_ptr(&b));
 		buffer_free(&b);
 	} else {
 		kbdintctxt->devices = xstrdup(devs);
@@ -149,13 +103,15 @@ kbdint_free(KbdintAuthctxt *kbdintctxt)
 {
 	if (kbdintctxt->device)
 		kbdint_reset_device(kbdintctxt);
-	free(kbdintctxt->devices);
-	explicit_bzero(kbdintctxt, sizeof(*kbdintctxt));
-	free(kbdintctxt);
+	if (kbdintctxt->devices) {
+		xfree(kbdintctxt->devices);
+		kbdintctxt->devices = NULL;
+	}
+	xfree(kbdintctxt);
 }
 /* get next device */
 static int
-kbdint_next_device(Authctxt *authctxt, KbdintAuthctxt *kbdintctxt)
+kbdint_next_device(KbdintAuthctxt *kbdintctxt)
 {
 	size_t len;
 	char *t;
@@ -169,16 +125,12 @@ kbdint_next_device(Authctxt *authctxt, KbdintAuthctxt *kbdintctxt)
 
 		if (len == 0)
 			break;
-		for (i = 0; devices[i]; i++) {
-			if (!auth2_method_allowed(authctxt,
-			    "keyboard-interactive", devices[i]->name))
-				continue;
+		for (i = 0; devices[i]; i++)
 			if (strncmp(kbdintctxt->devices, devices[i]->name, len) == 0)
 				kbdintctxt->device = devices[i];
-		}
 		t = kbdintctxt->devices;
 		kbdintctxt->devices = t[len] ? xstrdup(t+len+1) : NULL;
-		free(t);
+		xfree(t);
 		debug2("kbdint_next_device: devices %s", kbdintctxt->devices ?
 		    kbdintctxt->devices : "<empty>");
 	} while (kbdintctxt->devices && !kbdintctxt->device);
@@ -225,7 +177,7 @@ auth2_challenge_start(Authctxt *authctxt)
 	debug2("auth2_challenge_start: devices %s",
 	    kbdintctxt->devices ?  kbdintctxt->devices : "<empty>");
 
-	if (kbdint_next_device(authctxt, kbdintctxt) == 0) {
+	if (kbdint_next_device(kbdintctxt) == 0) {
 		auth2_challenge_stop(authctxt);
 		return 0;
 	}
@@ -272,11 +224,11 @@ send_userauth_info_request(Authctxt *authctxt)
 	packet_write_wait();
 
 	for (i = 0; i < kbdintctxt->nreq; i++)
-		free(prompts[i]);
-	free(prompts);
-	free(echo_on);
-	free(name);
-	free(instr);
+		xfree(prompts[i]);
+	xfree(prompts);
+	xfree(echo_on);
+	xfree(name);
+	xfree(instr);
 	return 1;
 }
 
@@ -287,8 +239,7 @@ input_userauth_info_response(int type, u_int32_t seq, void *ctxt)
 	KbdintAuthctxt *kbdintctxt;
 	int authenticated = 0, res;
 	u_int i, nresp;
-	const char *devicename = NULL;
-	char **response = NULL;
+	char **response = NULL, *method;
 
 	if (authctxt == NULL)
 		fatal("input_userauth_info_response: no authctxt");
@@ -314,10 +265,11 @@ input_userauth_info_response(int type, u_int32_t seq, void *ctxt)
 	res = kbdintctxt->device->respond(kbdintctxt->ctxt, nresp, response);
 
 	for (i = 0; i < nresp; i++) {
-		explicit_bzero(response[i], strlen(response[i]));
-		free(response[i]);
+		memset(response[i], 'r', strlen(response[i]));
+		xfree(response[i]);
 	}
-	free(response);
+	if (response)
+		xfree(response);
 
 	switch (res) {
 	case 0:
@@ -333,7 +285,9 @@ input_userauth_info_response(int type, u_int32_t seq, void *ctxt)
 		/* Failure! */
 		break;
 	}
-	devicename = kbdintctxt->device->name;
+
+	xasprintf(&method, "keyboard-interactive/%s", kbdintctxt->device->name);
+
 	if (!authctxt->postponed) {
 		if (authenticated) {
 			auth2_challenge_stop(authctxt);
@@ -343,33 +297,14 @@ input_userauth_info_response(int type, u_int32_t seq, void *ctxt)
 			auth2_challenge_start(authctxt);
 		}
 	}
-	userauth_finish(authctxt, authenticated, "keyboard-interactive",
-	    devicename);
+	userauth_finish(authctxt, authenticated, method);
+	xfree(method);
 }
 
 void
 privsep_challenge_enable(void)
 {
-#if defined(BSD_AUTH) || defined(USE_PAM) || defined(SKEY)
-	int n = 0;
-#endif
-#ifdef BSD_AUTH
 	extern KbdintDevice mm_bsdauth_device;
-#endif
-#ifdef USE_PAM
-	extern KbdintDevice mm_sshpam_device;
-#endif
-#ifdef SKEY
-	extern KbdintDevice mm_skey_device;
-#endif
 	/* As long as SSHv1 has devices[0] hard coded this is fine */
-#ifdef BSD_AUTH
-	devices[n++] = &mm_bsdauth_device;
-#endif
-#ifdef USE_PAM
-	devices[n++] = &mm_sshpam_device;
-#endif
-#ifdef SKEY
-	devices[n++] = &mm_skey_device;
-#endif
+	devices[0] = &mm_bsdauth_device;
 }

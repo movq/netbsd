@@ -1,5 +1,5 @@
-/*	$NetBSD: authfd.h,v 1.4 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: authfd.h,v 1.37 2009/08/27 17:44:52 djm Exp $ */
+/*	$NetBSD: authfd.h,v 1.1 2009/06/07 22:19:04 christos Exp $	*/
+/* $OpenBSD: authfd.h,v 1.36 2006/08/03 03:34:41 deraadt Exp $ */
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -76,6 +76,7 @@ void	ssh_close_authentication_connection(AuthenticationConnection *);
 int	 ssh_get_num_identities(AuthenticationConnection *, int);
 Key	*ssh_get_first_identity(AuthenticationConnection *, char **, int);
 Key	*ssh_get_next_identity(AuthenticationConnection *, char **, int);
+int	 ssh_add_identity(AuthenticationConnection *, Key *, const char *);
 int	 ssh_add_identity_constrained(AuthenticationConnection *, Key *,
     const char *, u_int, u_int);
 int	 ssh_remove_identity(AuthenticationConnection *, Key *);

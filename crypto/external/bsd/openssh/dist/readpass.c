@@ -1,5 +1,5 @@
-/*	$NetBSD: readpass.c,v 1.5 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: readpass.c,v 1.50 2014/02/02 03:44:31 djm Exp $ */
+/*	$NetBSD: readpass.c,v 1.1 2009/06/07 22:19:15 christos Exp $	*/
+/* $OpenBSD: readpass.c,v 1.47 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
  *
@@ -24,8 +24,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: readpass.c,v 1.5 2014/10/19 16:30:58 christos Exp $");
 #include <sys/types.h>
 #include <sys/wait.h>
 
@@ -33,7 +31,6 @@ __RCSID("$NetBSD: readpass.c,v 1.5 2014/10/19 16:30:58 christos Exp $");
 #include <fcntl.h>
 #include <paths.h>
 #include <readpassphrase.h>
-#include <signal.h>
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -48,14 +45,13 @@ __RCSID("$NetBSD: readpass.c,v 1.5 2014/10/19 16:30:58 christos Exp $");
 #include "uidswap.h"
 
 static char *
-ssh_askpass(const char *askpass, const char *msg)
+ssh_askpass(char *askpass, const char *msg)
 {
-	pid_t pid, ret;
+	pid_t pid;
 	size_t len;
 	char *pass;
-	int p[2], status;
+	int p[2], status, ret;
 	char buf[1024];
-	void (*osigchld)(int);
 
 	if (fflush(stdout) != 0)
 		error("ssh_askpass: fflush: %s", strerror(errno));
@@ -65,10 +61,8 @@ ssh_askpass(const char *askpass, const char *msg)
 		error("ssh_askpass: pipe: %s", strerror(errno));
 		return NULL;
 	}
-	osigchld = signal(SIGCHLD, SIG_DFL);
 	if ((pid = fork()) < 0) {
 		error("ssh_askpass: fork: %s", strerror(errno));
-		signal(SIGCHLD, osigchld);
 		return NULL;
 	}
 	if (pid == 0) {
@@ -81,31 +75,30 @@ ssh_askpass(const char *askpass, const char *msg)
 	}
 	close(p[1]);
 
-	len = 0;
+	len = ret = 0;
 	do {
-		ssize_t r = read(p[0], buf + len, sizeof(buf) - 1 - len);
-
-		if (r == -1 && errno == EINTR)
+		ret = read(p[0], buf + len, sizeof(buf) - 1 - len);
+		if (ret == -1 && errno == EINTR)
 			continue;
-		if (r <= 0)
+		if (ret <= 0)
 			break;
-		len += r;
+		len += ret;
 	} while (sizeof(buf) - 1 - len > 0);
 	buf[len] = '\0';
 
 	close(p[0]);
-	while ((ret = waitpid(pid, &status, 0)) < 0)
+	while (waitpid(pid, &status, 0) < 0)
 		if (errno != EINTR)
 			break;
-	signal(SIGCHLD, osigchld);
-	if (ret == -1 || !WIFEXITED(status) || WEXITSTATUS(status) != 0) {
-		explicit_bzero(buf, sizeof(buf));
+
+	if (!WIFEXITED(status) || WEXITSTATUS(status) != 0) {
+		memset(buf, 0, sizeof(buf));
 		return NULL;
 	}
 
 	buf[strcspn(buf, "\r\n")] = '\0';
 	pass = xstrdup(buf);
-	explicit_bzero(buf, sizeof(buf));
+	memset(buf, 0, sizeof(buf));
 	return pass;
 }
 
@@ -118,8 +111,7 @@ ssh_askpass(const char *askpass, const char *msg)
 char *
 read_passphrase(const char *prompt, int flags)
 {
-	const char *askpass = NULL;
-	char *ret, buf[1024];
+	char *askpass = NULL, *ret, buf[1024];
 	int rppflags, use_askpass = 0, ttyfd;
 
 	rppflags = (flags & RP_ECHO) ? RPP_ECHO_ON : RPP_ECHO_OFF;
@@ -163,7 +155,7 @@ read_passphrase(const char *prompt, int flags)
 	}
 
 	ret = xstrdup(buf);
-	explicit_bzero(buf, sizeof(buf));
+	memset(buf, 'x', sizeof buf);
 	return ret;
 }
 
@@ -187,7 +179,7 @@ ask_permission(const char *fmt, ...)
 		if (*p == '\0' || *p == '\n' ||
 		    strcasecmp(p, "yes") == 0)
 			allowed = 1;
-		free(p);
+		xfree(p);
 	}
 
 	return (allowed);

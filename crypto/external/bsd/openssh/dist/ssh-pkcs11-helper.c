@@ -1,5 +1,5 @@
-/*	$NetBSD: ssh-pkcs11-helper.c,v 1.7 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: ssh-pkcs11-helper.c,v 1.8 2014/06/24 01:13:21 djm Exp $ */
+/*	$NetBSD: ssh-pkcs11-helper.c,v 1.1 2010/11/21 17:06:01 adam Exp $	*/
+/* $OpenBSD: ssh-pkcs11-helper.c,v 1.3 2010/02/24 06:12:53 djm Exp $ */
 /*
  * Copyright (c) 2010 Markus Friedl.  All rights reserved.
  *
@@ -15,13 +15,10 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-#include "includes.h"
-__RCSID("$NetBSD: ssh-pkcs11-helper.c,v 1.7 2014/10/19 16:30:58 christos Exp $");
 
 #include <sys/queue.h>
 #include <sys/types.h>
 #include <sys/time.h>
-#include <sys/param.h>
 
 #include <stdarg.h>
 #include <string.h>
@@ -76,7 +73,7 @@ del_keys_by_name(char *name)
 		nxt = TAILQ_NEXT(ki, next);
 		if (!strcmp(ki->providername, name)) {
 			TAILQ_REMOVE(&pkcs11_keylist, ki, next);
-			free(ki->providername);
+			xfree(ki->providername);
 			key_free(ki->key);
 			free(ki);
 		}
@@ -124,19 +121,18 @@ process_add(void)
 		buffer_put_char(&msg, SSH2_AGENT_IDENTITIES_ANSWER);
 		buffer_put_int(&msg, nkeys);
 		for (i = 0; i < nkeys; i++) {
-			if (key_to_blob(keys[i], &blob, &blen) == 0)
-				continue;
+			key_to_blob(keys[i], &blob, &blen);
 			buffer_put_string(&msg, blob, blen);
 			buffer_put_cstring(&msg, name);
-			free(blob);
+			xfree(blob);
 			add_key(keys[i], name);
 		}
-		free(keys);
+		xfree(keys);
 	} else {
 		buffer_put_char(&msg, SSH_AGENT_FAILURE);
 	}
-	free(pin);
-	free(name);
+	xfree(pin);
+	xfree(name);
 	send_msg(&msg);
 	buffer_free(&msg);
 }
@@ -155,8 +151,8 @@ process_del(void)
 		 buffer_put_char(&msg, SSH_AGENT_SUCCESS);
 	else
 		 buffer_put_char(&msg, SSH_AGENT_FAILURE);
-	free(pin);
-	free(name);
+	xfree(pin);
+	xfree(name);
 	send_msg(&msg);
 	buffer_free(&msg);
 }
@@ -166,19 +162,16 @@ process_sign(void)
 {
 	u_char *blob, *data, *signature = NULL;
 	u_int blen, dlen, slen = 0;
-	int ok = -1;
+	int ok = -1, flags, ret;
 	Key *key, *found;
 	Buffer msg;
 
 	blob = get_string(&blen);
 	data = get_string(&dlen);
-	(void)get_int(); /* XXX ignore flags */
+	flags = get_int(); /* XXX ignore */
 
 	if ((key = key_from_blob(blob, blen)) != NULL) {
 		if ((found = lookup_key(key)) != NULL) {
-#ifdef WITH_OPENSSL
-			int ret;
-
 			slen = RSA_size(key->rsa);
 			signature = xmalloc(slen);
 			if ((ret = RSA_private_encrypt(dlen, data, signature,
@@ -186,7 +179,6 @@ process_sign(void)
 				slen = ret;
 				ok = 0;
 			}
-#endif /* WITH_OPENSSL */
 		}
 		key_free(key);
 	}
@@ -197,9 +189,10 @@ process_sign(void)
 	} else {
 		buffer_put_char(&msg, SSH_AGENT_FAILURE);
 	}
-	free(data);
-	free(blob);
-	free(signature);
+	xfree(data);
+	xfree(blob);
+	if (signature != NULL)
+		xfree(signature);
 	send_msg(&msg);
 	buffer_free(&msg);
 }
@@ -274,6 +267,7 @@ main(int argc, char **argv)
 	SyslogFacility log_facility = SYSLOG_FACILITY_AUTH;
 	LogLevel log_level = SYSLOG_LEVEL_ERROR;
 	char buf[4*4096];
+	extern char *optarg;
 	extern char *__progname;
 
 	TAILQ_INIT(&pkcs11_keylist);
