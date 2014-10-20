@@ -15,8 +15,6 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: sandbox-rlimit.c,v 1.3 2014/10/19 16:30:58 christos Exp $");
 #include <sys/types.h>
 #include <sys/param.h>
 #include <sys/time.h>

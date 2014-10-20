@@ -1,5 +1,5 @@
-/*	$NetBSD: ssh-pkcs11-client.c,v 1.5 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: ssh-pkcs11-client.c,v 1.5 2014/06/24 01:13:21 djm Exp $ */
+/*	$NetBSD: ssh-pkcs11-client.c,v 1.1 2010/11/21 17:06:01 adam Exp $	*/
+/* $OpenBSD: ssh-pkcs11-client.c,v 1.2 2010/02/24 06:12:53 djm Exp $ */
 /*
  * Copyright (c) 2010 Markus Friedl.  All rights reserved.
  *
@@ -15,8 +15,6 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-#include "includes.h"
-__RCSID("$NetBSD: ssh-pkcs11-client.c,v 1.5 2014/10/19 16:30:58 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/time.h>
@@ -26,8 +24,6 @@ __RCSID("$NetBSD: ssh-pkcs11-client.c,v 1.5 2014/10/19 16:30:58 christos Exp $")
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
-
-#include <openssl/rsa.h>
 
 #include "pathnames.h"
 #include "xmalloc.h"
@@ -120,9 +116,8 @@ pkcs11_rsa_private_encrypt(int flen, const u_char *from, u_char *to, RSA *rsa,
 	buffer_put_string(&msg, blob, blen);
 	buffer_put_string(&msg, from, flen);
 	buffer_put_int(&msg, 0);
-	free(blob);
+	xfree(blob);
 	send_msg(&msg);
-	buffer_clear(&msg);
 
 	if (recv_msg(&msg) == SSH2_AGENT_SIGN_RESPONSE) {
 		signature = buffer_get_string(&msg, &slen);
@@ -130,9 +125,8 @@ pkcs11_rsa_private_encrypt(int flen, const u_char *from, u_char *to, RSA *rsa,
 			memcpy(to, signature, slen);
 			ret = slen;
 		}
-		free(signature);
+		xfree(signature);
 	}
-	buffer_free(&msg);
 	return (ret);
 }
 
@@ -204,11 +198,11 @@ pkcs11_add_provider(char *name, char *pin, Key ***keysp)
 		*keysp = xcalloc(nkeys, sizeof(Key *));
 		for (i = 0; i < nkeys; i++) {
 			blob = buffer_get_string(&msg, &blen);
-			free(buffer_get_string(&msg, NULL));
+			xfree(buffer_get_string(&msg, NULL));
 			k = key_from_blob(blob, blen);
 			wrap_key(k->rsa);
 			(*keysp)[i] = k;
-			free(blob);
+			xfree(blob);
 		}
 	} else {
 		nkeys = -1;

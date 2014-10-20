@@ -1,5 +1,5 @@
-/*	$NetBSD: monitor_wrap.h,v 1.7 2014/10/20 03:05:13 christos Exp $	*/
-/* $OpenBSD: monitor_wrap.h,v 1.24 2014/01/29 06:18:35 djm Exp $ */
+/*	$NetBSD: monitor_wrap.h,v 1.1 2009/06/07 22:19:13 christos Exp $	*/
+/* $OpenBSD: monitor_wrap.h,v 1.21 2008/11/04 08:22:13 djm Exp $ */
 
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>
@@ -38,14 +38,13 @@ struct monitor;
 struct mm_master;
 struct Authctxt;
 
-void mm_log_handler(LogLevel, const char *, void *);
 int mm_is_monitor(void);
 DH *mm_choose_dh(int, int, int);
 int mm_key_sign(Key *, u_char **, u_int *, u_char *, u_int);
 void mm_inform_authserv(char *, char *);
 struct passwd *mm_getpwnamallow(const char *);
 char *mm_auth2_read_banner(void);
-int mm_auth_password(struct Authctxt *, const char *);
+int mm_auth_password(struct Authctxt *, char *);
 int mm_key_allowed(enum mm_keytype, char *, char *, Key *);
 int mm_user_key_allowed(struct passwd *, Key *);
 int mm_hostbased_key_allowed(struct passwd *, char *, char *, Key *);
@@ -61,15 +60,6 @@ OM_uint32 mm_ssh_gssapi_accept_ctx(Gssctxt *,
    gss_buffer_desc *, gss_buffer_desc *, OM_uint32 *);
 int mm_ssh_gssapi_userok(char *user);
 OM_uint32 mm_ssh_gssapi_checkmic(Gssctxt *, gss_buffer_t, gss_buffer_t);
-#endif
-
-#ifdef USE_PAM
-void mm_start_pam(struct Authctxt *);
-u_int mm_do_pam_account(void);
-void *mm_sshpam_init_ctx(struct Authctxt *);
-int mm_sshpam_query(void *, char **, char **, u_int *, char ***, u_int **);
-int mm_sshpam_respond(void *, u_int, char **);
-void mm_sshpam_free_ctx(void *);
 #endif
 
 struct Session;
@@ -97,15 +87,25 @@ int mm_bsdauth_respond(void *, u_int, char **);
 int mm_skey_query(void *, char **, char **, u_int *, char ***, u_int **);
 int mm_skey_respond(void *, u_int, char **);
 
-/* auth_krb */
-#ifdef KRB4
-int mm_auth_krb4(struct Authctxt *, void *, char **, void *);
-#endif
-#ifdef KRB5
-/* auth and reply are really krb5_data objects, but we don't want to
- * include all of the krb5 headers here */
-int mm_auth_krb5(void *authctxt, void *auth, char **client, void *reply);
-#endif
+/* jpake */
+struct jpake_group;
+void mm_auth2_jpake_get_pwdata(struct Authctxt *, BIGNUM **, char **, char **);
+void mm_jpake_step1(struct jpake_group *, u_char **, u_int *,
+    BIGNUM **, BIGNUM **, BIGNUM **, BIGNUM **,
+    u_char **, u_int *, u_char **, u_int *);
+void mm_jpake_step2(struct jpake_group *, BIGNUM *,
+    BIGNUM *, BIGNUM *, BIGNUM *, BIGNUM *,
+    const u_char *, u_int, const u_char *, u_int,
+    const u_char *, u_int, const u_char *, u_int,
+    BIGNUM **, u_char **, u_int *);
+void mm_jpake_key_confirm(struct jpake_group *, BIGNUM *, BIGNUM *,
+    BIGNUM *, BIGNUM *, BIGNUM *, BIGNUM *, BIGNUM *,
+    const u_char *, u_int, const u_char *, u_int,
+    const u_char *, u_int, const u_char *, u_int,
+    BIGNUM **, u_char **, u_int *);
+int mm_jpake_check_confirm(const BIGNUM *,
+    const u_char *, u_int, const u_char *, u_int, const u_char *, u_int);
+
 
 /* zlib allocation hooks */
 

@@ -1,5 +1,5 @@
-/*	$NetBSD: atomicio.c,v 1.5 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: atomicio.c,v 1.26 2010/09/22 22:58:51 djm Exp $ */
+/*	$NetBSD: atomicio.c,v 1.1 2009/06/07 22:19:01 christos Exp $	*/
+/* $OpenBSD: atomicio.c,v 1.25 2007/06/25 12:02:27 dtucker Exp $ */
 /*
  * Copyright (c) 2006 Damien Miller. All rights reserved.
  * Copyright (c) 2005 Anil Madhavapeddy. All rights reserved.
@@ -27,8 +27,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: atomicio.c,v 1.5 2014/10/19 16:30:58 christos Exp $");
 #include <sys/param.h>
 #include <sys/uio.h>
 
@@ -43,8 +41,7 @@ __RCSID("$NetBSD: atomicio.c,v 1.5 2014/10/19 16:30:58 christos Exp $");
  * ensure all of data on socket comes through. f==read || f==vwrite
  */
 size_t
-atomicio6(ssize_t (*f) (int, void *, size_t), int fd, void *_s, size_t n,
-    int (*cb)(void *, size_t), void *cb_arg)
+atomicio(ssize_t (*f) (int, void *, size_t), int fd, void *_s, size_t n)
 {
 	char *s = _s;
 	size_t pos = 0;
@@ -52,11 +49,7 @@ atomicio6(ssize_t (*f) (int, void *, size_t), int fd, void *_s, size_t n,
 	struct pollfd pfd;
 
 	pfd.fd = fd;
-	/*
-	 * check for vwrite instead of read to avoid read being renamed
-	 * by SSP issues
-	 */
-	pfd.events = f == vwrite ? POLLOUT : POLLIN;
+	pfd.events = f == read ? POLLIN : POLLOUT;
 	while (n > pos) {
 		res = (f) (fd, s + pos, n - pos);
 		switch (res) {
@@ -73,28 +66,17 @@ atomicio6(ssize_t (*f) (int, void *, size_t), int fd, void *_s, size_t n,
 			return pos;
 		default:
 			pos += (size_t)res;
-			if (cb != NULL && cb(cb_arg, (size_t)res) == -1) {
-				errno = EINTR;
-				return pos;
-			}
 		}
 	}
-	return pos;
-}
-
-size_t
-atomicio(ssize_t (*f) (int, void *, size_t), int fd, void *_s, size_t n)
-{
-	return atomicio6(f, fd, _s, n, NULL, NULL);
+	return (pos);
 }
 
 /*
  * ensure all of data on socket comes through. f==readv || f==writev
  */
 size_t
-atomiciov6(ssize_t (*f) (int, const struct iovec *, int), int fd,
-    const struct iovec *_iov, int iovcnt,
-    int (*cb)(void *, size_t), void *cb_arg)
+atomiciov(ssize_t (*f) (int, const struct iovec *, int), int fd,
+    const struct iovec *_iov, int iovcnt)
 {
 	size_t pos = 0, rem;
 	ssize_t res;
@@ -144,17 +126,6 @@ atomiciov6(ssize_t (*f) (int, const struct iovec *, int), int fd,
 			iov[0].iov_base = ((char *)iov[0].iov_base) + rem;
 			iov[0].iov_len -= rem;
 		}
-		if (cb != NULL && cb(cb_arg, (size_t)res) == -1) {
-			errno = EINTR;
-			return pos;
-		}
 	}
 	return pos;
-}
-
-size_t
-atomiciov(ssize_t (*f) (int, const struct iovec *, int), int fd,
-    const struct iovec *_iov, int iovcnt)
-{
-	return atomiciov6(f, fd, _iov, iovcnt, NULL, NULL);
 }

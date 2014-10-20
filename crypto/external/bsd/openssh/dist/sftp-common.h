@@ -1,5 +1,5 @@
-/*	$NetBSD: sftp-common.h,v 1.4 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: sftp-common.h,v 1.11 2010/01/13 01:40:16 djm Exp $ */
+/*	$NetBSD: sftp-common.h,v 1.1 2009/06/07 22:19:20 christos Exp $	*/
+/* $OpenBSD: sftp-common.h,v 1.10 2006/08/03 03:34:42 deraadt Exp $ */
 
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
@@ -47,6 +47,6 @@ void	 stat_to_attrib(const struct stat *, Attrib *);
 void	 attrib_to_stat(const Attrib *, struct stat *);
 Attrib	*decode_attrib(Buffer *);
 void	 encode_attrib(Buffer *, const Attrib *);
-char	*ls_file(const char *, const struct stat *, int, int);
+char	*ls_file(const char *, const struct stat *, int);
 
 const char *fx2txt(int);

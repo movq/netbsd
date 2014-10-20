@@ -1,5 +1,5 @@
-/*	$NetBSD: dh.h,v 1.3 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: dh.h,v 1.11 2013/10/08 11:42:13 dtucker Exp $ */
+/*	$NetBSD: dh.h,v 1.1 2009/06/07 22:19:08 christos Exp $	*/
+/* $OpenBSD: dh.h,v 1.10 2008/06/26 09:19:40 djm Exp $ */
 
 /*
  * Copyright (c) 2000 Niels Provos.  All rights reserved.
@@ -44,7 +44,6 @@ int	 dh_pub_is_valid(DH *, BIGNUM *);
 
 int	 dh_estimate(int);
 
-/* Min and max values from RFC4419. */
 #define DH_GRP_MIN	1024
 #define DH_GRP_MAX	8192
 

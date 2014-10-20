@@ -1,5 +1,4 @@
-/*	$NetBSD: kexecdhs.c,v 1.4 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: kexecdhs.c,v 1.10 2014/02/02 03:44:31 djm Exp $ */
+/* $OpenBSD: kexecdhs.c,v 1.2 2010/09/22 05:01:29 djm Exp $ */
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
  * Copyright (c) 2010 Damien Miller.  All rights reserved.
@@ -25,8 +24,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: kexecdhs.c,v 1.4 2014/10/19 16:30:58 christos Exp $");
 #include <sys/types.h>
 #include <string.h>
 #include <signal.h>
@@ -40,7 +37,12 @@ __RCSID("$NetBSD: kexecdhs.c,v 1.4 2014/10/19 16:30:58 christos Exp $");
 #include "kex.h"
 #include "log.h"
 #include "packet.h"
+#include "dh.h"
 #include "ssh2.h"
+#ifdef GSSAPI
+#include "ssh-gss.h"
+#endif
+#include "monitor_wrap.h"
 
 void
 kexecdh_server(Kex *kex)
@@ -53,8 +55,11 @@ kexecdh_server(Kex *kex)
 	u_char *server_host_key_blob = NULL, *signature = NULL;
 	u_char *kbuf, *hash;
 	u_int klen, slen, sbloblen, hashlen;
+	int curve_nid;
 
-	if ((server_key = EC_KEY_new_by_curve_name(kex->ec_nid)) == NULL)
+	if ((curve_nid = kex_ecdh_name_to_nid(kex->name)) == -1)
+		fatal("%s: unsupported ECDH curve \"%s\"", __func__, kex->name);
+	if ((server_key = EC_KEY_new_by_curve_name(curve_nid)) == NULL)
 		fatal("%s: EC_KEY_new_by_curve_name failed", __func__);
 	if (EC_KEY_generate_key(server_key) != 1)
 		fatal("%s: EC_KEY_generate_key failed", __func__);
@@ -72,6 +77,9 @@ kexecdh_server(Kex *kex)
 	if (server_host_public == NULL)
 		fatal("Unsupported hostkey type %d", kex->hostkey_type);
 	server_host_private = kex->load_host_private_key(kex->hostkey_type);
+	if (server_host_private == NULL)
+		fatal("Missing private key for hostkey type %d",
+		    kex->hostkey_type);
 
 	debug("expecting SSH2_MSG_KEX_ECDH_INIT");
 	packet_read_expect(SSH2_MSG_KEX_ECDH_INIT);
@@ -102,18 +110,18 @@ kexecdh_server(Kex *kex)
 		fatal("%s: BN_new failed", __func__);
 	if (BN_bin2bn(kbuf, klen, shared_secret) == NULL)
 		fatal("%s: BN_bin2bn failed", __func__);
-	explicit_bzero(kbuf, klen);
-	free(kbuf);
+	memset(kbuf, 0, klen);
+	xfree(kbuf);
 
 	/* calc H */
 	key_to_blob(server_host_public, &server_host_key_blob, &sbloblen);
 	kex_ecdh_hash(
-	    kex->hash_alg,
+	    kex->evp_md,
 	    group,
 	    kex->client_version_string,
 	    kex->server_version_string,
-	    (char *)buffer_ptr(&kex->peer), buffer_len(&kex->peer),
-	    (char *)buffer_ptr(&kex->my), buffer_len(&kex->my),
+	    buffer_ptr(&kex->peer), buffer_len(&kex->peer),
+	    buffer_ptr(&kex->my), buffer_len(&kex->my),
 	    server_host_key_blob, sbloblen,
 	    client_public,
 	    EC_KEY_get0_public_key(server_key),
@@ -130,8 +138,9 @@ kexecdh_server(Kex *kex)
 	}
 
 	/* sign H */
-	kex->sign(server_host_private, server_host_public, &signature, &slen,
-	    hash, hashlen);
+	if (PRIVSEP(key_sign(server_host_private, &signature, &slen,
+	    hash, hashlen)) < 0)
+		fatal("kexdh_server: key_sign failed");
 
 	/* destroy_sensitive_data(); */
 
@@ -142,12 +151,12 @@ kexecdh_server(Kex *kex)
 	packet_put_string(signature, slen);
 	packet_send();
 
-	free(signature);
-	free(server_host_key_blob);
+	xfree(signature);
+	xfree(server_host_key_blob);
 	/* have keys, free server key */
 	EC_KEY_free(server_key);
 
-	kex_derive_keys_bn(kex, hash, hashlen, shared_secret);
+	kex_derive_keys(kex, hash, hashlen, shared_secret);
 	BN_clear_free(shared_secret);
 	kex_finish(kex);
 }

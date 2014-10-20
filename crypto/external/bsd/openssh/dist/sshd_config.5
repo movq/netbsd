@@ -1,4 +1,4 @@
-.\"	$NetBSD: sshd_config.5,v 1.16 2014/10/19 16:30:59 christos Exp $
+.\"	$NetBSD: sshd_config.5,v 1.1 2009/06/07 22:19:30 christos Exp $
 .\"  -*- nroff -*-
 .\"
 .\" Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -35,8 +35,8 @@
 .\" (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
 .\" THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 .\"
-.\" $OpenBSD: sshd_config.5,v 1.176 2014/07/28 15:40:08 schwarze Exp $
-.Dd July 28 2014
+.\" $OpenBSD: sshd_config.5,v 1.102 2009/02/22 23:59:25 djm Exp $
+.Dd $Mdocdate: February 22 2009 $
 .Dt SSHD_CONFIG 5
 .Os
 .Sh NAME
@@ -119,47 +119,16 @@ The allow/deny directives are processed in the following order:
 and finally
 .Cm AllowGroups .
 .Pp
-See PATTERNS in
+See
+.Sx PATTERNS
+in
 .Xr ssh_config 5
 for more information on patterns.
 .It Cm AllowTcpForwarding
 Specifies whether TCP forwarding is permitted.
-The available options are
-.Dq yes
-or
-.Dq all
-to allow TCP forwarding,
-.Dq no
-to prevent all TCP forwarding,
-.Dq local
-to allow local (from the perspective of
-.Xr ssh 1 )
-forwarding only or
-.Dq remote
-to allow remote forwarding only.
 The default is
 .Dq yes .
 Note that disabling TCP forwarding does not improve security unless
-users are also denied shell access, as they can always install their
-own forwarders.
-.It Cm AllowStreamLocalForwarding
-Specifies whether StreamLocal (Unix-domain socket) forwarding is permitted.
-The available options are
-.Dq yes
-or
-.Dq all
-to allow StreamLocal forwarding,
-.Dq no
-to prevent all StreamLocal forwarding,
-.Dq local
-to allow local (from the perspective of
-.Xr ssh 1 )
-forwarding only or
-.Dq remote
-to allow remote forwarding only.
-The default is
-.Dq yes .
-Note that disabling StreamLocal forwarding does not improve security unless
 users are also denied shell access, as they can always install their
 own forwarders.
 .It Cm AllowUsers
@@ -179,68 +148,14 @@ The allow/deny directives are processed in the following order:
 and finally
 .Cm AllowGroups .
 .Pp
-See PATTERNS in
+See
+.Sx PATTERNS
+in
 .Xr ssh_config 5
 for more information on patterns.
-.It Cm AuthenticationMethods
-Specifies the authentication methods that must be successfully completed
-for a user to be granted access.
-This option must be followed by one or more comma-separated lists of
-authentication method names.
-Successful authentication requires completion of every method in at least
-one of these lists.
-.Pp
-For example, an argument of
-.Dq publickey,password publickey,keyboard-interactive
-would require the user to complete public key authentication, followed by
-either password or keyboard interactive authentication.
-Only methods that are next in one or more lists are offered at each stage,
-so for this example, it would not be possible to attempt password or
-keyboard-interactive authentication before public key.
-.Pp
-For keyboard interactive authentication it is also possible to
-restrict authentication to a specific device by appending a
-colon followed by the device identifier
-.Dq bsdauth ,
-.Dq pam ,
-or
-.Dq skey ,
-depending on the server configuration.
-For example,
-.Dq keyboard-interactive:bsdauth
-would restrict keyboard interactive authentication to the
-.Dq bsdauth
-device.
-.Pp
-This option is only available for SSH protocol 2 and will yield a fatal
-error if enabled if protocol 1 is also enabled.
-Note that each authentication method listed should also be explicitly enabled
-in the configuration.
-The default is not to require multiple authentication; successful completion
-of a single authentication method is sufficient.
-.It Cm AuthorizedKeysCommand
-Specifies a program to be used to look up the user's public keys.
-The program must be owned by root and not writable by group or others.
-It will be invoked with a single argument of the username
-being authenticated, and should produce on standard output zero or
-more lines of authorized_keys output (see AUTHORIZED_KEYS in
-.Xr sshd 8 ) .
-If a key supplied by AuthorizedKeysCommand does not successfully authenticate
-and authorize the user then public key authentication continues using the usual
-.Cm AuthorizedKeysFile
-files.
-By default, no AuthorizedKeysCommand is run.
-.It Cm AuthorizedKeysCommandUser
-Specifies the user under whose account the AuthorizedKeysCommand is run.
-It is recommended to use a dedicated user that has no other role on the host
-than running authorized keys commands.
 .It Cm AuthorizedKeysFile
 Specifies the file that contains the public keys that can be used
 for user authentication.
-The format is described in the
-AUTHORIZED_KEYS FILE FORMAT
-section of
-.Xr sshd 8 .
 .Cm AuthorizedKeysFile
 may contain tokens of the form %T which are substituted during connection
 setup.
@@ -251,50 +166,8 @@ After expansion,
 .Cm AuthorizedKeysFile
 is taken to be an absolute path or one relative to the user's home
 directory.
-Multiple files may be listed, separated by whitespace.
 The default is
-.Dq .ssh/authorized_keys .ssh/authorized_keys2 .
-.It Cm AuthorizedPrincipalsFile
-Specifies a file that lists principal names that are accepted for
-certificate authentication.
-When using certificates signed by a key listed in
-.Cm TrustedUserCAKeys ,
-this file lists names, one of which must appear in the certificate for it
-to be accepted for authentication.
-Names are listed one per line preceded by key options (as described
-in AUTHORIZED_KEYS FILE FORMAT in
-.Xr sshd 8 ) .
-Empty lines and comments starting with
-.Ql #
-are ignored.
-.Pp
-.Cm AuthorizedPrincipalsFile
-may contain tokens of the form %T which are substituted during connection
-setup.
-The following tokens are defined: %% is replaced by a literal '%',
-%h is replaced by the home directory of the user being authenticated, and
-%u is replaced by the username of that user.
-After expansion,
-.Cm AuthorizedPrincipalsFile
-is taken to be an absolute path or one relative to the user's home
-directory.
-.Pp
-The default is
-.Dq none ,
-i.e. not to use a principals file \(en in this case, the username
-of the user must appear in a certificate's principals list for it to be
-accepted.
-Note that
-.Cm AuthorizedPrincipalsFile
-is only used when authentication proceeds using a CA listed in
-.Cm TrustedUserCAKeys
-and is not consulted for certification authorities trusted via
-.Pa ~/.ssh/authorized_keys ,
-though the
-.Cm principals=
-key option offers a similar facility (see
-.Xr sshd 8
-for details).
+.Dq .ssh/authorized_keys .
 .It Cm Banner
 The contents of the specified file are sent to the remote user before
 authentication is allowed.
@@ -311,16 +184,13 @@ are supported.
 The default is
 .Dq yes .
 .It Cm ChrootDirectory
-Specifies the pathname of a directory to
+Specifies a path to
 .Xr chroot 2
 to after authentication.
-All components of the pathname must be root-owned directories that are
+This path, and all its components, must be root-owned directories that are
 not writable by any other user or group.
-After the chroot,
-.Xr sshd 8
-changes the working directory to the user's home directory.
 .Pp
-The pathname may contain the following tokens that are expanded at runtime once
+The path may contain the following tokens that are expanded at runtime once
 the connecting user has been authenticated: %% is replaced by a literal '%',
 %h is replaced by the home directory of the user being authenticated, and
 %u is replaced by the username of that user.
@@ -328,7 +198,7 @@ the connecting user has been authenticated: %% is replaced by a literal '%',
 The
 .Cm ChrootDirectory
 must contain the necessary files and directories to support the
-user's session.
+users' session.
 For an interactive session this requires at least a shell, typically
 .Xr sh 1 ,
 and basic
@@ -346,11 +216,8 @@ devices.
 For file transfer sessions using
 .Dq sftp ,
 no additional configuration of the environment is necessary if the
-in-process sftp server is used,
-though sessions which use logging may require
-.Pa /dev/log
-inside the chroot directory on some operating systems (see
-.Xr sftp-server 8
+in-process sftp server is used (see
+.Cm Subsystem
 for details).
 .Pp
 The default is not to
@@ -358,52 +225,26 @@ The default is not to
 .It Cm Ciphers
 Specifies the ciphers allowed for protocol version 2.
 Multiple ciphers must be comma-separated.
-The supported ciphers are:
-.Pp
-.Bl -item -compact -offset indent
-.It
-3des-cbc
-.It
-aes128-cbc
-.It
-aes192-cbc
-.It
-aes256-cbc
-.It
-aes128-ctr
-.It
-aes192-ctr
-.It
-aes256-ctr
-.It
-aes128-gcm@openssh.com
-.It
-aes256-gcm@openssh.com
-.It
-arcfour
-.It
-arcfour128
-.It
-arcfour256
-.It
-blowfish-cbc
-.It
-cast128-cbc
-.It
-chacha20-poly1305@openssh.com
-.El
-.Pp
+The supported ciphers are
+.Dq 3des-cbc ,
+.Dq aes128-cbc ,
+.Dq aes192-cbc ,
+.Dq aes256-cbc ,
+.Dq aes128-ctr ,
+.Dq aes192-ctr ,
+.Dq aes256-ctr ,
+.Dq arcfour128 ,
+.Dq arcfour256 ,
+.Dq arcfour ,
+.Dq blowfish-cbc ,
+and
+.Dq cast128-cbc .
 The default is:
-.Bd -literal -offset indent
-aes128-ctr,aes192-ctr,aes256-ctr,
-aes128-gcm@openssh.com,aes256-gcm@openssh.com,
-chacha20-poly1305@openssh.com
+.Bd -literal -offset 3n
+aes128-ctr,aes192-ctr,aes256-ctr,arcfour256,arcfour128,
+aes128-cbc,3des-cbc,blowfish-cbc,cast128-cbc,aes192-cbc,
+aes256-cbc,arcfour
 .Ed
-.Pp
-The list of available ciphers may also be obtained using the
-.Fl Q
-option of
-.Xr ssh 1 .
 .It Cm ClientAliveCountMax
 Sets the number of client alive messages (see below) which may be
 sent without
@@ -464,7 +305,9 @@ The allow/deny directives are processed in the following order:
 and finally
 .Cm AllowGroups .
 .Pp
-See PATTERNS in
+See
+.Sx PATTERNS
+in
 .Xr ssh_config 5
 for more information on patterns.
 .It Cm DenyUsers
@@ -483,7 +326,9 @@ The allow/deny directives are processed in the following order:
 and finally
 .Cm AllowGroups .
 .Pp
-See PATTERNS in
+See
+.Sx PATTERNS
+in
 .Xr ssh_config 5
 for more information on patterns.
 .It Cm ForceCommand
@@ -562,25 +407,15 @@ uses the name supplied by the client rather than
 attempting to resolve the name from the TCP connection itself.
 The default is
 .Dq no .
-.It Cm HostCertificate
-Specifies a file containing a public host certificate.
-The certificate's public key must match a private host key already specified
-by
-.Cm HostKey .
-The default behaviour of
-.Xr sshd 8
-is not to load any certificates.
 .It Cm HostKey
 Specifies a file containing a private host key
 used by SSH.
 The default is
 .Pa /etc/ssh/ssh_host_key
 for protocol version 1, and
-.Pa /etc/ssh/ssh_host_dsa_key ,
-.Pa /etc/ssh/ssh_host_ecdsa_key ,
-.Pa /etc/ssh/ssh_host_ed25519_key
-and
 .Pa /etc/ssh/ssh_host_rsa_key
+and
+.Pa /etc/ssh/ssh_host_dsa_key
 for protocol version 2.
 Note that
 .Xr sshd 8
@@ -588,24 +423,10 @@ will refuse to use a file if it is group/world-accessible.
 It is possible to have multiple host key files.
 .Dq rsa1
 keys are used for version 1 and
-.Dq dsa ,
-.Dq ecdsa ,
-.Dq ed25519
+.Dq dsa
 or
 .Dq rsa
 are used for version 2 of the SSH protocol.
-It is also possible to specify public host key files instead.
-In this case operations on the private key will be delegated
-to an
-.Xr ssh-agent 1 .
-.It Cm HostKeyAgent
-Identifies the UNIX-domain socket used to communicate
-with an agent that has access to the private host keys.
-If
-.Dq SSH_AUTH_SOCK
-is specified, the location of the socket will be read from the
-.Ev SSH_AUTH_SOCK
-environment variable.
 .It Cm IgnoreRhosts
 Specifies that
 .Pa .rhosts
@@ -633,54 +454,6 @@ or
 .Cm HostbasedAuthentication .
 The default is
 .Dq no .
-.It Cm IPQoS
-Specifies the IPv4 type-of-service or DSCP class for the connection.
-Accepted values are
-.Dq af11 ,
-.Dq af12 ,
-.Dq af13 ,
-.Dq af21 ,
-.Dq af22 ,
-.Dq af23 ,
-.Dq af31 ,
-.Dq af32 ,
-.Dq af33 ,
-.Dq af41 ,
-.Dq af42 ,
-.Dq af43 ,
-.Dq cs0 ,
-.Dq cs1 ,
-.Dq cs2 ,
-.Dq cs3 ,
-.Dq cs4 ,
-.Dq cs5 ,
-.Dq cs6 ,
-.Dq cs7 ,
-.Dq ef ,
-.Dq lowdelay ,
-.Dq throughput ,
-.Dq reliability ,
-or a numeric value.
-This option may take one or two arguments, separated by whitespace.
-If one argument is specified, it is used as the packet class unconditionally.
-If two values are specified, the first is automatically selected for
-interactive sessions and the second for non-interactive sessions.
-The default is
-.Dq lowdelay
-for interactive sessions and
-.Dq throughput
-for non-interactive sessions.
-.It Cm KbdInteractiveAuthentication
-Specifies whether to allow keyboard-interactive authentication.
-The argument to this keyword must be
-.Dq yes
-or
-.Dq no .
-The default is to use whatever value
-.Cm ChallengeResponseAuthentication
-is set to
-(by default
-.Dq yes ) .
 .It Cm KerberosAuthentication
 Specifies whether the password provided by the user for
 .Cm PasswordAuthentication
@@ -706,37 +479,6 @@ Specifies whether to automatically destroy the user's ticket cache
 file on logout.
 The default is
 .Dq yes .
-.It Cm KexAlgorithms
-Specifies the available KEX (Key Exchange) algorithms.
-Multiple algorithms must be comma-separated.
-The supported algorithms are:
-.Pp
-.Bl -item -compact -offset indent
-.It
-curve25519-sha256@libssh.org
-.It
-diffie-hellman-group1-sha1
-.It
-diffie-hellman-group14-sha1
-.It
-diffie-hellman-group-exchange-sha1
-.It
-diffie-hellman-group-exchange-sha256
-.It
-ecdh-sha2-nistp256
-.It
-ecdh-sha2-nistp384
-.It
-ecdh-sha2-nistp521
-.El
-.Pp
-The default is:
-.Bd -literal -offset indent
-curve25519-sha256@libssh.org,
-ecdh-sha2-nistp256,ecdh-sha2-nistp384,ecdh-sha2-nistp521,
-diffie-hellman-group-exchange-sha256,
-diffie-hellman-group14-sha1
-.Ed
 .It Cm KeyRegenerationInterval
 In protocol version 1, the ephemeral server key is automatically regenerated
 after this many seconds (if it has been used).
@@ -788,9 +530,7 @@ options must precede this option for non-port qualified addresses.
 The server disconnects after this time if the user has not
 successfully logged in.
 If the value is 0, there is no time limit.
-The default is 120 seconds but the default
-.Pa /etc/ssh/sshd_config
-overwrites it to 600 seconds.
+The default is 120 seconds.
 .It Cm LogLevel
 Gives the verbosity level that is used when logging messages from
 .Xr sshd 8 .
@@ -805,57 +545,10 @@ Specifies the available MAC (message authentication code) algorithms.
 The MAC algorithm is used in protocol version 2
 for data integrity protection.
 Multiple algorithms must be comma-separated.
-The algorithms that contain
-.Dq -etm
-calculate the MAC after encryption (encrypt-then-mac).
-These are considered safer and their use recommended.
-The supported MACs are:
-.Pp
-.Bl -item -compact -offset indent
-.It
-hmac-md5
-.It
-hmac-md5-96
-.It
-hmac-ripemd160
-.It
-hmac-sha1
-.It
-hmac-sha1-96
-.It
-hmac-sha2-256
-.It
-hmac-sha2-512
-.It
-umac-64@openssh.com
-.It
-umac-128@openssh.com
-.It
-hmac-md5-etm@openssh.com
-.It
-hmac-md5-96-etm@openssh.com
-.It
-hmac-ripemd160-etm@openssh.com
-.It
-hmac-sha1-etm@openssh.com
-.It
-hmac-sha1-96-etm@openssh.com
-.It
-hmac-sha2-256-etm@openssh.com
-.It
-hmac-sha2-512-etm@openssh.com
-.It
-umac-64-etm@openssh.com
-.It
-umac-128-etm@openssh.com
-.El
-.Pp
 The default is:
 .Bd -literal -offset indent
-umac-64-etm@openssh.com,umac-128-etm@openssh.com,
-hmac-sha2-256-etm@openssh.com,hmac-sha2-512-etm@openssh.com,
-umac-64@openssh.com,umac-128@openssh.com,
-hmac-sha2-256,hmac-sha2-512
+hmac-md5,hmac-sha1,umac-64@openssh.com,
+hmac-ripemd160,hmac-sha1-96,hmac-md5-96
 .Ed
 .It Cm Match
 Introduces a conditional block.
@@ -865,27 +558,20 @@ line are satisfied, the keywords on the following lines override those
 set in the global section of the config file, until either another
 .Cm Match
 line or the end of the file.
-If a keyword appears in multiple
-.Cm Match
-blocks that are satisified, only the first instance of the keyword is
-applied.
 .Pp
 The arguments to
 .Cm Match
-are one or more criteria-pattern pairs or the single token
-.Cm All
-which matches all criteria.
+are one or more criteria-pattern pairs.
 The available criteria are
 .Cm User ,
 .Cm Group ,
 .Cm Host ,
-.Cm LocalAddress ,
-.Cm LocalPort ,
 and
 .Cm Address .
 The match patterns may consist of single entries or comma-separated
 lists and may use the wildcard and negation operators described in the
-PATTERNS section of
+.Sx PATTERNS
+section of
 .Xr ssh_config 5 .
 .Pp
 The patterns in an
@@ -908,25 +594,14 @@ Only a subset of keywords may be used on the lines following a
 .Cm Match
 keyword.
 Available keywords are
-.Cm AcceptEnv ,
 .Cm AllowAgentForwarding ,
-.Cm AllowGroups ,
 .Cm AllowTcpForwarding ,
-.Cm AllowUsers ,
-.Cm AuthenticationMethods ,
-.Cm AuthorizedKeysCommand ,
-.Cm AuthorizedKeysCommandUser ,
-.Cm AuthorizedKeysFile ,
-.Cm AuthorizedPrincipalsFile ,
 .Cm Banner ,
 .Cm ChrootDirectory ,
-.Cm DenyGroups ,
-.Cm DenyUsers ,
 .Cm ForceCommand ,
 .Cm GatewayPorts ,
 .Cm GSSAPIAuthentication ,
 .Cm HostbasedAuthentication ,
-.Cm HostbasedUsesNameFromPacketOnly ,
 .Cm KbdInteractiveAuthentication ,
 .Cm KerberosAuthentication ,
 .Cm MaxAuthTries ,
@@ -935,11 +610,6 @@ Available keywords are
 .Cm PermitEmptyPasswords ,
 .Cm PermitOpen ,
 .Cm PermitRootLogin ,
-.Cm PermitTTY ,
-.Cm PermitTunnel ,
-.Cm PermitUserRC ,
-.Cm PubkeyAuthentication ,
-.Cm RekeyLimit ,
 .Cm RhostsRSAAuthentication ,
 .Cm RSAAuthentication ,
 .Cm X11DisplayOffset ,
@@ -961,7 +631,7 @@ SSH daemon.
 Additional connections will be dropped until authentication succeeds or the
 .Cm LoginGraceTime
 expires for a connection.
-The default is 10:30:100.
+The default is 10.
 .Pp
 Alternatively, random early drop can be enabled by specifying
 the three colon separated values
@@ -1014,9 +684,6 @@ Multiple forwards may be specified by separating them with whitespace.
 An argument of
 .Dq any
 can be used to remove all restrictions and permit any forwarding requests.
-An argument of
-.Dq none
-can be used to prohibit all forwarding requests.
 By default all port forwarding requests are permitted.
 .It Cm PermitRootLogin
 Specifies whether root can log in using
@@ -1028,7 +695,7 @@ The argument must be
 or
 .Dq no .
 The default is
-.Dq no .
+.Dq yes .
 .Pp
 If this option is set to
 .Dq without-password ,
@@ -1066,12 +733,6 @@ and
 .Dq ethernet .
 The default is
 .Dq no .
-.It Cm PermitTTY
-Specifies whether
-.Xr pty 4
-allocation is permitted.
-The default is
-.Dq yes .
 .It Cm PermitUserEnvironment
 Specifies whether
 .Pa ~/.ssh/environment
@@ -1086,12 +747,6 @@ The default is
 Enabling environment processing may enable users to bypass access
 restrictions in some configurations using mechanisms such as
 .Ev LD_PRELOAD .
-.It Cm PermitUserRC
-Specifies whether any
-.Pa ~/.ssh/rc
-file is executed.
-The default is
-.Dq yes .
 .It Cm PidFile
 Specifies the file that contains the process ID of the
 SSH daemon.
@@ -1133,7 +788,7 @@ and
 .Sq 2 .
 Multiple versions must be comma-separated.
 The default is
-.Sq 2 .
+.Dq 2,1 .
 Note that the order of the protocol list does not indicate preference,
 because the client selects among multiple protocol versions offered
 by the server.
@@ -1146,42 +801,6 @@ Specifies whether public key authentication is allowed.
 The default is
 .Dq yes .
 Note that this option applies to protocol version 2 only.
-.It Cm RekeyLimit
-Specifies the maximum amount of data that may be transmitted before the
-session key is renegotiated, optionally followed a maximum amount of
-time that may pass before the session key is renegotiated.
-The first argument is specified in bytes and may have a suffix of
-.Sq K ,
-.Sq M ,
-or
-.Sq G
-to indicate Kilobytes, Megabytes, or Gigabytes, respectively.
-The default is between
-.Sq 1G
-and
-.Sq 4G ,
-depending on the cipher.
-The optional second value is specified in seconds and may use any of the
-units documented in the
-.Sx TIME FORMATS
-section.
-The default value for
-.Cm RekeyLimit
-is
-.Dq default none ,
-which means that rekeying is performed after the cipher's default amount
-of data has been sent or received and no time based rekeying is done.
-This option applies to protocol version 2 only.
-.It Cm RevokedKeys
-Specifies revoked public keys.
-Keys listed in this file will be refused for public key authentication.
-Note that if this file is not readable, then public key authentication will
-be refused for all users.
-Keys may be specified as a text file, listing one public key per line, or as
-an OpenSSH Key Revocation List (KRL) as generated by
-.Xr ssh-keygen 1 .
-For more information on KRLs, see the KEY REVOCATION LISTS section in
-.Xr ssh-keygen 1 .
 .It Cm RhostsRSAAuthentication
 Specifies whether rhosts or /etc/hosts.equiv authentication together
 with successful RSA host authentication is allowed.
@@ -1196,33 +815,6 @@ This option applies to protocol version 1 only.
 .It Cm ServerKeyBits
 Defines the number of bits in the ephemeral protocol version 1 server key.
 The minimum value is 512, and the default is 1024.
-.It Cm StreamLocalBindMask
-Sets the octal file creation mode mask
-.Pq umask
-used when creating a Unix-domain socket file for local or remote
-port forwarding.
-This option is only used for port forwarding to a Unix-domain socket file.
-.Pp
-The default value is 0177, which creates a Unix-domain socket file that is
-readable and writable only by the owner.
-Note that not all operating systems honor the file mode on Unix-domain
-socket files.
-.It Cm StreamLocalBindUnlink
-Specifies whether to remove an existing Unix-domain socket file for local
-or remote port forwarding before creating a new one.
-If the socket file already exists and
-.Cm StreamLocalBindUnlink
-is not enabled,
-.Nm sshd
-will be unable to forward the port to the Unix-domain socket file.
-This option is only used for port forwarding to a Unix-domain socket file.
-.Pp
-The argument must be
-.Dq yes
-or
-.Dq no .
-The default is
-.Dq no .
 .It Cm StrictModes
 Specifies whether
 .Xr sshd 8
@@ -1232,9 +824,6 @@ This is normally desirable because novices sometimes accidentally leave their
 directory or files world-writable.
 The default is
 .Dq yes .
-Note that this does not apply to
-.Cm ChrootDirectory ,
-whose permissions and ownership are checked unconditionally.
 .It Cm Subsystem
 Configures an external subsystem (e.g. file transfer daemon).
 Arguments should be a subsystem name and a command (with optional arguments)
@@ -1284,20 +873,6 @@ This avoids infinitely hanging sessions.
 .Pp
 To disable TCP keepalive messages, the value should be set to
 .Dq no .
-.It Cm TrustedUserCAKeys
-Specifies a file containing public keys of certificate authorities that are
-trusted to sign user certificates for authentication.
-Keys are listed one per line; empty lines and comments starting with
-.Ql #
-are allowed.
-If a certificate is presented for authentication and has its signing CA key
-listed in this file, then it may be used for authentication for any user
-listed in the certificate's principals list.
-Note that certificates that lack a list of principals will not be permitted
-for authentication using
-.Cm TrustedUserCAKeys .
-For more details on certificates, see the CERTIFICATES section in
-.Xr ssh-keygen 1 .
 .It Cm UseDNS
 Specifies whether
 .Xr sshd 8
@@ -1336,17 +911,6 @@ The goal of privilege separation is to prevent privilege
 escalation by containing any corruption within the unprivileged processes.
 The default is
 .Dq yes .
-If
-.Cm UsePrivilegeSeparation
-is set to
-.Dq sandbox
-then the pre-authentication unprivileged process is subject to additional
-restrictions.
-.It Cm VersionAddendum
-Optionally specifies additional text to append to the SSH protocol banner
-sent by the server upon connection.
-The default is
-.Dq none .
 .It Cm X11DisplayOffset
 Specifies the first display number available for
 .Xr sshd 8 Ns 's
@@ -1418,62 +982,6 @@ Specifies the full pathname of the
 program.
 The default is
 .Pa /usr/X11R6/bin/xauth .
-.It Cm UseLPK
-Specifies whether LDAP public key retrieval must be used or not. It allow
-an easy centralisation of public keys within an LDAP directory. The argument must be
-.Dq yes
-or
-.Dq no .
-.It Cm LpkLdapConf
-Specifies whether LDAP Public keys should parse the specified ldap.conf file
-instead of sshd_config Tokens. The argument must be a valid path to an ldap.conf
-file like
-.Pa /etc/ldap.conf
-.It Cm LpkServers
-Specifies LDAP one or more [:space:] separated server's url the following form may be used:
-.Pp
-LpkServers ldaps://127.0.0.1 ldap://127.0.0.2 ldap://127.0.0.3
-.It Cm LpkUserDN
-Specifies the LDAP user DN.
-.Pp
-LpkUserDN ou=users,dc=phear,dc=org
-.It Cm LpkGroupDN
-Specifies the LDAP groups DN.
-.Pp
-LpkGroupDN ou=groups,dc=phear,dc=org
-.It Cm LpkBindDN
-Specifies the LDAP bind DN to use if necessary.
-.Pp
-LpkBindDN cn=Manager,dc=phear,dc=org
-.It Cm LpkBindPw
-Specifies the LDAP bind credential. 
-.Pp
-LpkBindPw secret
-.It Cm LpkServerGroup
-Specifies one or more [:space:] separated group the server is part of. 
-.Pp
-LpkServerGroup unix mail prod
-.It Cm LpkFilter
-Specifies an additional LDAP filter to use for finding SSH keys
-.Pp
-LpkFilter (hostAccess=master.phear.org)
-.It Cm LpkForceTLS
-Specifies if the LDAP server connection must be tried, forced or not used. The argument must be 
-.Dq yes
-or
-.Dq no
-or
-.Dq try .
-.It Cm LpkSearchTimelimit
-Specifies the search time limit before the search is considered over. value is
-in seconds.
-.Pp
-LpkSearchTimelimit 3
-.It Cm LpkBindTimelimit
-Specifies the bind time limit before the connection is considered dead. value is
-in seconds.
-.Pp
-LpkBindTimelimit 3
 .El
 .Sh TIME FORMATS
 .Xr sshd 8

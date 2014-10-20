@@ -1,5 +1,5 @@
-/*	$NetBSD: ssh-keysign.c,v 1.7 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: ssh-keysign.c,v 1.42 2014/04/29 18:01:49 markus Exp $ */
+/*	$NetBSD: ssh-keysign.c,v 1.1 2009/06/07 22:19:24 christos Exp $	*/
+/* $OpenBSD: ssh-keysign.c,v 1.29 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Copyright (c) 2002 Markus Friedl.  All rights reserved.
  *
@@ -24,11 +24,10 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: ssh-keysign.c,v 1.7 2014/10/19 16:30:58 christos Exp $");
 #include <sys/types.h>
 
 #include <openssl/evp.h>
+#include <openssl/rand.h>
 #include <openssl/rsa.h>
 
 #include <fcntl.h>
@@ -75,7 +74,7 @@ valid_request(struct passwd *pw, char *host, Key **ret, u_char *data,
 	p = buffer_get_string(&b, &len);
 	if (len != 20 && len != 32)
 		fail++;
-	free(p);
+	xfree(p);
 
 	if (buffer_get_char(&b) != SSH2_MSG_USERAUTH_REQUEST)
 		fail++;
@@ -87,13 +86,13 @@ valid_request(struct passwd *pw, char *host, Key **ret, u_char *data,
 	p = buffer_get_string(&b, NULL);
 	if (strcmp("ssh-connection", p) != 0)
 		fail++;
-	free(p);
+	xfree(p);
 
 	/* method */
 	p = buffer_get_string(&b, NULL);
 	if (strcmp("hostbased", p) != 0)
 		fail++;
-	free(p);
+	xfree(p);
 
 	/* pubkey */
 	pkalg = buffer_get_string(&b, NULL);
@@ -106,8 +105,8 @@ valid_request(struct passwd *pw, char *host, Key **ret, u_char *data,
 		fail++;
 	else if (key->type != pktype)
 		fail++;
-	free(pkalg);
-	free(pkblob);
+	xfree(pkalg);
+	xfree(pkblob);
 
 	/* client host name, handle trailing dot */
 	p = buffer_get_string(&b, &len);
@@ -118,14 +117,14 @@ valid_request(struct passwd *pw, char *host, Key **ret, u_char *data,
 		fail++;
 	else if (strncasecmp(host, p, len - 1) != 0)
 		fail++;
-	free(p);
+	xfree(p);
 
 	/* local user */
 	p = buffer_get_string(&b, NULL);
 
 	if (strcmp(pw->pw_name, p) != 0)
 		fail++;
-	free(p);
+	xfree(p);
 
 	/* end of message */
 	if (buffer_len(&b) != 0)
@@ -147,15 +146,13 @@ main(int argc, char **argv)
 {
 	Buffer b;
 	Options options;
-#define NUM_KEYTYPES 4
-	Key *keys[NUM_KEYTYPES], *key = NULL;
+	Key *keys[2], *key;
 	struct passwd *pw;
-	int key_fd[NUM_KEYTYPES], i, found, version = 2, fd;
+	int key_fd[2], i, found, version = 2, fd;
 	u_char *signature, *data;
-	char *host, *fp;
+	char *host;
 	u_int slen, dlen;
-
-	key = NULL;	/* XXX gcc */
+	u_int32_t rnd[256];
 
 	/* Ensure that stdin and stdout are connected */
 	if ((fd = open(_PATH_DEVNULL, O_RDWR)) < 2)
@@ -164,11 +161,8 @@ main(int argc, char **argv)
 	if (fd > 2)
 		close(fd);
 
-	i = 0;
-	key_fd[i++] = open(_PATH_HOST_DSA_KEY_FILE, O_RDONLY);
-	key_fd[i++] = open(_PATH_HOST_ECDSA_KEY_FILE, O_RDONLY);
-	key_fd[i++] = open(_PATH_HOST_ED25519_KEY_FILE, O_RDONLY);
-	key_fd[i++] = open(_PATH_HOST_RSA_KEY_FILE, O_RDONLY);
+	key_fd[0] = open(_PATH_HOST_RSA_KEY_FILE, O_RDONLY);
+	key_fd[1] = open(_PATH_HOST_DSA_KEY_FILE, O_RDONLY);
 
 	original_real_uid = getuid();	/* XXX readconf.c needs this */
 	if ((pw = getpwuid(original_real_uid)) == NULL)
@@ -183,31 +177,27 @@ main(int argc, char **argv)
 
 	/* verify that ssh-keysign is enabled by the admin */
 	initialize_options(&options);
-	(void)read_config_file(_PATH_HOST_CONFIG_FILE, pw, "", &options, 0);
+	(void)read_config_file(_PATH_HOST_CONFIG_FILE, "", &options, 0);
 	fill_default_options(&options);
 	if (options.enable_ssh_keysign != 1)
 		fatal("ssh-keysign not enabled in %s",
 		    _PATH_HOST_CONFIG_FILE);
 
-	for (i = found = 0; i < NUM_KEYTYPES; i++) {
-		if (key_fd[i] != -1)
-			found = 1;
-	}
-	if (found == 0)
+	if (key_fd[0] == -1 && key_fd[1] == -1)
 		fatal("could not open any host key");
 
-	OpenSSL_add_all_algorithms();
+	SSLeay_add_all_algorithms();
+	for (i = 0; i < 256; i++)
+		rnd[i] = arc4random();
+	RAND_seed(rnd, sizeof(rnd));
 
 	found = 0;
-	for (i = 0; i < NUM_KEYTYPES; i++) {
+	for (i = 0; i < 2; i++) {
 		keys[i] = NULL;
 		if (key_fd[i] == -1)
 			continue;
-#ifdef WITH_OPENSSL
-/* XXX wrong api */
 		keys[i] = key_load_private_pem(key_fd[i], KEY_UNSPEC,
 		    NULL, NULL);
-#endif
 		close(key_fd[i]);
 		if (keys[i] != NULL)
 			found = 1;
@@ -224,30 +214,27 @@ main(int argc, char **argv)
 	if ((fd == STDIN_FILENO) || (fd == STDOUT_FILENO))
 		fatal("bad fd");
 	if ((host = get_local_name(fd)) == NULL)
-		fatal("cannot get local name for fd");
+		fatal("cannot get sockname for fd");
 
 	data = buffer_get_string(&b, &dlen);
 	if (valid_request(pw, host, &key, data, dlen) < 0)
 		fatal("not a valid request");
-	free(host);
+	xfree(host);
 
 	found = 0;
-	for (i = 0; i < NUM_KEYTYPES; i++) {
+	for (i = 0; i < 2; i++) {
 		if (keys[i] != NULL &&
-		    key_equal_public(key, keys[i])) {
+		    key_equal(key, keys[i])) {
 			found = 1;
 			break;
 		}
 	}
-	if (!found) {
-		fp = key_fingerprint(key, SSH_FP_MD5, SSH_FP_HEX);
-		fatal("no matching hostkey found for key %s %s",
-		    key_type(key), fp);
-	}
+	if (!found)
+		fatal("no matching hostkey found");
 
 	if (key_sign(keys[i], &signature, &slen, data, dlen) != 0)
 		fatal("key_sign failed");
-	free(data);
+	xfree(data);
 
 	/* send reply */
 	buffer_clear(&b);

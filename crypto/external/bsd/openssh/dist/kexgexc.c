@@ -1,5 +1,5 @@
-/*	$NetBSD: kexgexc.c,v 1.5 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: kexgexc.c,v 1.17 2014/02/02 03:44:31 djm Exp $ */
+/*	$NetBSD: kexgexc.c,v 1.1 2009/06/07 22:19:10 christos Exp $	*/
+/* $OpenBSD: kexgexc.c,v 1.11 2006/11/06 21:25:28 markus Exp $ */
 /*
  * Copyright (c) 2000 Niels Provos.  All rights reserved.
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
@@ -25,11 +25,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: kexgexc.c,v 1.5 2014/10/19 16:30:58 christos Exp $");
 #include <sys/types.h>
-
-#include <openssl/dh.h>
 
 #include <stdio.h>
 #include <string.h>
@@ -58,7 +54,7 @@ kexgex_client(Kex *kex)
 	int min, max, nbits;
 	DH *dh;
 
-	nbits = dh_estimate(kex->dh_need * 8);
+	nbits = dh_estimate(kex->we_need * 8);
 
 	if (datafellows & SSH_OLD_DHGEX) {
 		/* Old GEX request */
@@ -162,19 +158,19 @@ kexgex_client(Kex *kex)
 		fatal("kexgex_client: BN_new failed");
 	if (BN_bin2bn(kbuf, kout, shared_secret) == NULL)
 		fatal("kexgex_client: BN_bin2bn failed");
-	explicit_bzero(kbuf, klen);
-	free(kbuf);
+	memset(kbuf, 0, klen);
+	xfree(kbuf);
 
 	if (datafellows & SSH_OLD_DHGEX)
 		min = max = -1;
 
 	/* calc and verify H */
 	kexgex_hash(
-	    kex->hash_alg,
+	    kex->evp_md,
 	    kex->client_version_string,
 	    kex->server_version_string,
-	    (char *)buffer_ptr(&kex->my), buffer_len(&kex->my),
-	    (char *)buffer_ptr(&kex->peer), buffer_len(&kex->peer),
+	    buffer_ptr(&kex->my), buffer_len(&kex->my),
+	    buffer_ptr(&kex->peer), buffer_len(&kex->peer),
 	    server_host_key_blob, sbloblen,
 	    min, nbits, max,
 	    dh->p, dh->g,
@@ -186,13 +182,13 @@ kexgex_client(Kex *kex)
 
 	/* have keys, free DH */
 	DH_free(dh);
-	free(server_host_key_blob);
+	xfree(server_host_key_blob);
 	BN_clear_free(dh_server_pub);
 
 	if (key_verify(server_host_key, signature, slen, hash, hashlen) != 1)
 		fatal("key_verify failed for server_host_key");
 	key_free(server_host_key);
-	free(signature);
+	xfree(signature);
 
 	/* save session id */
 	if (kex->session_id == NULL) {
@@ -200,7 +196,7 @@ kexgex_client(Kex *kex)
 		kex->session_id = xmalloc(kex->session_id_len);
 		memcpy(kex->session_id, hash, kex->session_id_len);
 	}
-	kex_derive_keys_bn(kex, hash, hashlen, shared_secret);
+	kex_derive_keys(kex, hash, hashlen, shared_secret);
 	BN_clear_free(shared_secret);
 
 	kex_finish(kex);

@@ -1,5 +1,5 @@
-/*	$NetBSD: ssh-gss.h,v 1.4 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: ssh-gss.h,v 1.11 2014/02/26 20:28:44 djm Exp $ */
+/*	$NetBSD: ssh-gss.h,v 1.1 2009/06/07 22:19:22 christos Exp $	*/
+/* $OpenBSD: ssh-gss.h,v 1.10 2007/06/12 08:20:00 djm Exp $ */
 /*
  * Copyright (c) 2001-2003 Simon Wilkinson. All rights reserved.
  *
@@ -57,8 +57,8 @@ typedef struct {
 } ssh_gssapi_client;
 
 typedef struct ssh_gssapi_mech_struct {
-	const char *enc_name;
-	const char *name;
+	char *enc_name;
+	char *name;
 	gss_OID_desc oid;
 	int (*dochild) (ssh_gssapi_client *);
 	int (*userok) (ssh_gssapi_client *, char *);
@@ -84,8 +84,6 @@ void ssh_gssapi_set_oid_data(Gssctxt *, void *, size_t);
 void ssh_gssapi_set_oid(Gssctxt *, gss_OID);
 void ssh_gssapi_supported_oids(gss_OID_set *);
 ssh_gssapi_mech *ssh_gssapi_get_ctype(Gssctxt *);
-void ssh_gssapi_prepare_supported_oids(void);
-OM_uint32 ssh_gssapi_test_oid_supported(OM_uint32 *, gss_OID, int *);
 
 OM_uint32 ssh_gssapi_import_name(Gssctxt *, const char *);
 OM_uint32 ssh_gssapi_init_ctx(Gssctxt *, int,

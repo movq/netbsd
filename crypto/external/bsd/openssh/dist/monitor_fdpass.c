@@ -1,5 +1,5 @@
-/*	$NetBSD: monitor_fdpass.c,v 1.4 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: monitor_fdpass.c,v 1.19 2010/01/12 00:58:25 djm Exp $ */
+/*	$NetBSD: monitor_fdpass.c,v 1.1 2009/06/07 22:19:12 christos Exp $	*/
+/* $OpenBSD: monitor_fdpass.c,v 1.18 2008/11/30 11:59:26 dtucker Exp $ */
 /*
  * Copyright 2001 Niels Provos <provos@citi.umich.edu>
  * All rights reserved.
@@ -25,14 +25,11 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: monitor_fdpass.c,v 1.4 2014/10/19 16:30:58 christos Exp $");
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/uio.h>
 
 #include <errno.h>
-#include <poll.h>
 #include <string.h>
 #include <stdarg.h>
 
@@ -45,42 +42,30 @@ mm_send_fd(int sock, int fd)
 	struct msghdr msg;
 	union {
 		struct cmsghdr hdr;
-		char buf[1024];
+		char buf[CMSG_SPACE(sizeof(int))];
 	} cmsgbuf;
 	struct cmsghdr *cmsg;
 	struct iovec vec;
 	char ch = '\0';
 	ssize_t n;
-	struct pollfd pfd;
-
-	if (sizeof(cmsgbuf.buf) < CMSG_SPACE(sizeof(int))) {
-		error("%s: %zu < %zu, recompile", __func__, 
-		    sizeof(cmsgbuf.buf), CMSG_SPACE(sizeof(int)));
-		return -1;
-	}
 
 	memset(&msg, 0, sizeof(msg));
-	msg.msg_control = &cmsgbuf.buf;
-	msg.msg_controllen = CMSG_SPACE(sizeof(int));
+	msg.msg_control = (caddr_t)&cmsgbuf.buf;
+	msg.msg_controllen = sizeof(cmsgbuf.buf);
 	cmsg = CMSG_FIRSTHDR(&msg);
 	cmsg->cmsg_len = CMSG_LEN(sizeof(int));
 	cmsg->cmsg_level = SOL_SOCKET;
 	cmsg->cmsg_type = SCM_RIGHTS;
 	*(int *)CMSG_DATA(cmsg) = fd;
-	msg.msg_controllen = cmsg->cmsg_len;
 
 	vec.iov_base = &ch;
 	vec.iov_len = 1;
 	msg.msg_iov = &vec;
 	msg.msg_iovlen = 1;
 
-	pfd.fd = sock;
-	pfd.events = POLLOUT;
-	while ((n = sendmsg(sock, &msg, 0)) == -1 &&
-	    (errno == EAGAIN || errno == EINTR)) {
+	while ((n = sendmsg(sock, &msg, 0)) == -1 && (errno == EAGAIN ||
+	    errno == EINTR))
 		debug3("%s: sendmsg(%d): %s", __func__, fd, strerror(errno));
-		(void)poll(&pfd, 1, -1);
-	}
 	if (n == -1) {
 		error("%s: sendmsg(%d): %s", __func__, fd,
 		    strerror(errno));
@@ -101,20 +86,13 @@ mm_receive_fd(int sock)
 	struct msghdr msg;
 	union {
 		struct cmsghdr hdr;
-		char buf[1024];
+		char buf[CMSG_SPACE(sizeof(int))];
 	} cmsgbuf;
 	struct cmsghdr *cmsg;
 	struct iovec vec;
 	ssize_t n;
 	char ch;
 	int fd;
-	struct pollfd pfd;
-
-	if (sizeof(cmsgbuf.buf) < CMSG_SPACE(sizeof(int))) {
-		error("%s: %zu < %zu, recompile", __func__, 
-		    sizeof(cmsgbuf.buf), CMSG_SPACE(sizeof(int)));
-		return -1;
-	}
 
 	memset(&msg, 0, sizeof(msg));
 	vec.iov_base = &ch;
@@ -122,15 +100,11 @@ mm_receive_fd(int sock)
 	msg.msg_iov = &vec;
 	msg.msg_iovlen = 1;
 	msg.msg_control = &cmsgbuf.buf;
-	msg.msg_controllen = CMSG_SPACE(sizeof(int));
+	msg.msg_controllen = sizeof(cmsgbuf.buf);
 
-	pfd.fd = sock;
-	pfd.events = POLLIN;
-	while ((n = recvmsg(sock, &msg, 0)) == -1 &&
-	    (errno == EAGAIN || errno == EINTR)) {
+	while ((n = recvmsg(sock, &msg, 0)) == -1 && (errno == EAGAIN ||
+	    errno == EINTR))
 		debug3("%s: recvmsg: %s", __func__, strerror(errno));
-		(void)poll(&pfd, 1, -1);
-	}
 	if (n == -1) {
 		error("%s: recvmsg: %s", __func__, strerror(errno));
 		return -1;

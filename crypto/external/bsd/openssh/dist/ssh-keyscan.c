@@ -1,5 +1,5 @@
-/*	$NetBSD: ssh-keyscan.c,v 1.10 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: ssh-keyscan.c,v 1.92 2014/04/29 18:01:49 markus Exp $ */
+/*	$NetBSD: ssh-keyscan.c,v 1.1 2009/06/07 22:19:24 christos Exp $	*/
+/* $OpenBSD: ssh-keyscan.c,v 1.78 2009/01/22 10:02:34 djm Exp $ */
 /*
  * Copyright 1995, 1996 by David Mazieres <dm@lcs.mit.edu>.
  *
@@ -8,10 +8,6 @@
  * OpenBSD project by leaving this copyright notice intact.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: ssh-keyscan.c,v 1.10 2014/10/19 16:30:58 christos Exp $");
-
-#include <sys/param.h>
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/queue.h>
@@ -52,13 +48,11 @@ int IPv4or6 = AF_UNSPEC;
 
 int ssh_port = SSH_DEFAULT_PORT;
 
-#define KT_RSA1		1
-#define KT_DSA		2
-#define KT_RSA		4
-#define KT_ECDSA	8
-#define KT_ED25519	16
+#define KT_RSA1	1
+#define KT_DSA	2
+#define KT_RSA	4
 
-int get_keytypes = KT_RSA|KT_ECDSA|KT_ED25519;
+int get_keytypes = KT_RSA;	/* Get only RSA keys by default */
 
 int hash_hosts = 0;		/* Hash hostname on output */
 
@@ -105,6 +99,122 @@ typedef struct Connection {
 
 TAILQ_HEAD(conlist, Connection) tq;	/* Timeout Queue */
 con *fdcon;
+
+/*
+ *  This is just a wrapper around fgets() to make it usable.
+ */
+
+/* Stress-test.  Increase this later. */
+#define LINEBUF_SIZE 16
+
+typedef struct {
+	char *buf;
+	u_int size;
+	int lineno;
+	const char *filename;
+	FILE *stream;
+	void (*errfun) (const char *,...);
+} Linebuf;
+
+static Linebuf *
+Linebuf_alloc(const char *filename, void (*errfun) (const char *,...))
+{
+	Linebuf *lb;
+
+	if (!(lb = malloc(sizeof(*lb)))) {
+		if (errfun)
+			(*errfun) ("linebuf (%s): malloc failed\n",
+			    filename ? filename : "(stdin)");
+		return (NULL);
+	}
+	if (filename) {
+		lb->filename = filename;
+		if (!(lb->stream = fopen(filename, "r"))) {
+			xfree(lb);
+			if (errfun)
+				(*errfun) ("%s: %s\n", filename, strerror(errno));
+			return (NULL);
+		}
+	} else {
+		lb->filename = "(stdin)";
+		lb->stream = stdin;
+	}
+
+	if (!(lb->buf = malloc((lb->size = LINEBUF_SIZE)))) {
+		if (errfun)
+			(*errfun) ("linebuf (%s): malloc failed\n", lb->filename);
+		xfree(lb);
+		return (NULL);
+	}
+	lb->errfun = errfun;
+	lb->lineno = 0;
+	return (lb);
+}
+
+static void
+Linebuf_free(Linebuf * lb)
+{
+	fclose(lb->stream);
+	xfree(lb->buf);
+	xfree(lb);
+}
+
+#if 0
+static void
+Linebuf_restart(Linebuf * lb)
+{
+	clearerr(lb->stream);
+	rewind(lb->stream);
+	lb->lineno = 0;
+}
+
+static int
+Linebuf_lineno(Linebuf * lb)
+{
+	return (lb->lineno);
+}
+#endif
+
+static char *
+Linebuf_getline(Linebuf * lb)
+{
+	size_t n = 0;
+	void *p;
+
+	lb->lineno++;
+	for (;;) {
+		/* Read a line */
+		if (!fgets(&lb->buf[n], lb->size - n, lb->stream)) {
+			if (ferror(lb->stream) && lb->errfun)
+				(*lb->errfun)("%s: %s\n", lb->filename,
+				    strerror(errno));
+			return (NULL);
+		}
+		n = strlen(lb->buf);
+
+		/* Return it or an error if it fits */
+		if (n > 0 && lb->buf[n - 1] == '\n') {
+			lb->buf[n - 1] = '\0';
+			return (lb->buf);
+		}
+		if (n != lb->size - 1) {
+			if (lb->errfun)
+				(*lb->errfun)("%s: skipping incomplete last line\n",
+				    lb->filename);
+			return (NULL);
+		}
+		/* Double the buffer if we need more space */
+		lb->size *= 2;
+		if ((p = realloc(lb->buf, lb->size)) == NULL) {
+			lb->size /= 2;
+			if (lb->errfun)
+				(*lb->errfun)("linebuf (%s): realloc failed\n",
+				    lb->filename);
+			return (NULL);
+		}
+		lb->buf = p;
+	}
+}
 
 static int
 fdlim_get(int hard)
@@ -162,7 +272,7 @@ xstrsep(char **str, const char *delim)
  * null token for two adjacent separators, so we may have to loop.
  */
 static char *
-strnnsep(char **stringp, const char *delim)
+strnnsep(char **stringp, char *delim)
 {
 	char *tok;
 
@@ -172,7 +282,6 @@ strnnsep(char **stringp, const char *delim)
 	return (tok);
 }
 
-#ifdef WITH_SSH1
 static Key *
 keygrab_ssh1(con *c)
 {
@@ -206,7 +315,6 @@ keygrab_ssh1(con *c)
 
 	return (rsa);
 }
-#endif
 
 static int
 hostjump(Key *hostkey)
@@ -234,25 +342,17 @@ ssh2_capable(int remote_major, int remote_minor)
 static Key *
 keygrab_ssh2(con *c)
 {
-	const char *myproposal[PROPOSAL_MAX] = { KEX_CLIENT };
 	int j;
 
 	packet_set_connection(c->c_fd, c->c_fd);
 	enable_compat20();
-	myproposal[PROPOSAL_SERVER_HOST_KEY_ALGS] =
-	    c->c_keytype == KT_DSA ?  "ssh-dss" :
-	    (c->c_keytype == KT_RSA ? "ssh-rsa" :
-	    (c->c_keytype == KT_ED25519 ? "ssh-ed25519" :
-	    "ecdsa-sha2-nistp256,ecdsa-sha2-nistp384,ecdsa-sha2-nistp521"));
+	myproposal[PROPOSAL_SERVER_HOST_KEY_ALGS] = c->c_keytype == KT_DSA?
+	    "ssh-dss": "ssh-rsa";
 	c->c_kex = kex_setup(myproposal);
-#ifdef WITH_OPENSSL
 	c->c_kex->kex[KEX_DH_GRP1_SHA1] = kexdh_client;
 	c->c_kex->kex[KEX_DH_GRP14_SHA1] = kexdh_client;
 	c->c_kex->kex[KEX_DH_GEX_SHA1] = kexgex_client;
 	c->c_kex->kex[KEX_DH_GEX_SHA256] = kexgex_client;
-	c->c_kex->kex[KEX_ECDH_SHA2] = kexecdh_client;
-#endif
-	c->c_kex->kex[KEX_C25519_SHA256] = kexc25519_client;
 	c->c_kex->verify_host_key = hostjump;
 
 	if (!(j = setjmp(kexjmp))) {
@@ -262,7 +362,7 @@ keygrab_ssh2(con *c)
 		exit(1);
 	}
 	nonfatal_fatal = 0;
-	free(c->c_kex);
+	xfree(c->c_kex);
 	c->c_kex = NULL;
 	packet_close();
 
@@ -328,7 +428,7 @@ conalloc(char *iname, char *oname, int keytype)
 	do {
 		name = xstrsep(&namelist, ",");
 		if (!name) {
-			free(namebase);
+			xfree(namebase);
 			return (-1);
 		}
 	} while ((s = tcpconnect(name)) < 0);
@@ -362,10 +462,10 @@ confree(int s)
 	if (s >= maxfd || fdcon[s].c_status == CS_UNUSED)
 		fatal("confree: attempt to free bad fdno %d", s);
 	close(s);
-	free(fdcon[s].c_namebase);
-	free(fdcon[s].c_output_name);
+	xfree(fdcon[s].c_namebase);
+	xfree(fdcon[s].c_output_name);
 	if (fdcon[s].c_status == CS_KEYS)
-		free(fdcon[s].c_data);
+		xfree(fdcon[s].c_data);
 	fdcon[s].c_status = CS_UNUSED;
 	fdcon[s].c_keytype = 0;
 	TAILQ_REMOVE(&tq, &fdcon[s], c_link);
@@ -501,12 +601,10 @@ conread(int s)
 			c->c_data = xmalloc(c->c_len);
 			c->c_status = CS_KEYS;
 			break;
-#ifdef WITH_SSH1
 		case CS_KEYS:
 			keyprint(c, keygrab_ssh1(c));
 			confree(s);
 			return;
-#endif
 		default:
 			fatal("conread: invalid status %d", c->c_status);
 			break;
@@ -536,7 +634,7 @@ conloop(void)
 			seltime.tv_sec--;
 		}
 	} else
-		timerclear(&seltime);
+		seltime.tv_sec = seltime.tv_usec = 0;
 
 	r = xcalloc(read_wait_nfdset, sizeof(fd_mask));
 	e = xcalloc(read_wait_nfdset, sizeof(fd_mask));
@@ -554,8 +652,8 @@ conloop(void)
 		} else if (FD_ISSET(i, r))
 			conread(i);
 	}
-	free(r);
-	free(e);
+	xfree(r);
+	xfree(e);
 
 	c = TAILQ_FIRST(&tq);
 	while (c && (c->c_tv.tv_sec < now.tv_sec ||
@@ -575,7 +673,7 @@ do_host(char *host)
 
 	if (name == NULL)
 		return;
-	for (j = KT_RSA1; j <= KT_ED25519; j *= 2) {
+	for (j = KT_RSA1; j <= KT_RSA; j *= 2) {
 		if (get_keytypes & j) {
 			while (ncon >= MAXCON)
 				conloop();
@@ -584,7 +682,7 @@ do_host(char *host)
 	}
 }
 
-__dead void
+void
 fatal(const char *fmt,...)
 {
 	va_list args;
@@ -598,7 +696,7 @@ fatal(const char *fmt,...)
 		exit(255);
 }
 
-__dead static void
+static void
 usage(void)
 {
 	fprintf(stderr,
@@ -612,10 +710,8 @@ int
 main(int argc, char **argv)
 {
 	int debug_flag = 0, log_level = SYSLOG_LEVEL_INFO;
-	int opt, fopt_count = 0, j;
-	char *tname, *cp, line[NI_MAXHOST];
-	FILE *fp;
-	u_long linenum;
+	int opt, fopt_count = 0;
+	char *tname;
 
 	extern int optind;
 	extern char *optarg;
@@ -674,14 +770,8 @@ main(int argc, char **argv)
 				case KEY_DSA:
 					get_keytypes |= KT_DSA;
 					break;
-				case KEY_ECDSA:
-					get_keytypes |= KT_ECDSA;
-					break;
 				case KEY_RSA:
 					get_keytypes |= KT_RSA;
-					break;
-				case KEY_ED25519:
-					get_keytypes |= KT_ED25519;
 					break;
 				case KEY_UNSPEC:
 					fatal("unknown key type %s", tname);
@@ -719,40 +809,19 @@ main(int argc, char **argv)
 	read_wait_nfdset = howmany(maxfd, NFDBITS);
 	read_wait = xcalloc(read_wait_nfdset, sizeof(fd_mask));
 
-	for (j = 0; j < fopt_count; j++) {
-		if (argv[j] == NULL)
-			fp = stdin;
-		else if ((fp = fopen(argv[j], "r")) == NULL)
-			fatal("%s: %s: %s", __progname, argv[j],
-			    strerror(errno));
-		linenum = 0;
+	if (fopt_count) {
+		Linebuf *lb;
+		char *line;
+		int j;
 
-		while (read_keyfile_line(fp,
-		    argv[j] == NULL ? "(stdin)" : argv[j], line, sizeof(line),
-		    &linenum) != -1) {
-			/* Chomp off trailing whitespace and comments */
-			if ((cp = strchr(line, '#')) == NULL)
-				cp = line + strlen(line) - 1;
-			while (cp >= line) {
-				if (*cp == ' ' || *cp == '\t' ||
-				    *cp == '\n' || *cp == '#')
-					*cp-- = '\0';
-				else
-					break;
-			}
-
-			/* Skip empty lines */
-			if (*line == '\0')
+		for (j = 0; j < fopt_count; j++) {
+			lb = Linebuf_alloc(argv[j], error);
+			if (!lb)
 				continue;
-
-			do_host(line);
+			while ((line = Linebuf_getline(lb)) != NULL)
+				do_host(line);
+			Linebuf_free(lb);
 		}
-
-		if (ferror(fp))
-			fatal("%s: %s: %s", __progname, argv[j],
-			    strerror(errno));
-
-		fclose(fp);
 	}
 
 	while (optind < argc)

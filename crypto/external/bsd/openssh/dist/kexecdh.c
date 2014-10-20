@@ -1,5 +1,4 @@
-/*	$NetBSD: kexecdh.c,v 1.4 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: kexecdh.c,v 1.5 2014/01/09 23:20:00 djm Exp $ */
+/* $OpenBSD: kexecdh.c,v 1.3 2010/09/22 05:01:29 djm Exp $ */
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
  * Copyright (c) 2010 Damien Miller.  All rights reserved.
@@ -25,8 +24,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: kexecdh.c,v 1.4 2014/10/19 16:30:58 christos Exp $");
 #include <sys/types.h>
 
 #include <signal.h>
@@ -43,11 +40,28 @@ __RCSID("$NetBSD: kexecdh.c,v 1.4 2014/10/19 16:30:58 christos Exp $");
 #include "cipher.h"
 #include "kex.h"
 #include "log.h"
-#include "digest.h"
+
+int
+kex_ecdh_name_to_nid(const char *kexname)
+{
+	if (strlen(kexname) < sizeof(KEX_ECDH_SHA2_STEM) - 1)
+		fatal("%s: kexname too short \"%s\"", __func__, kexname);
+	return key_curve_name_to_nid(kexname + sizeof(KEX_ECDH_SHA2_STEM) - 1);
+}
+
+const EVP_MD *
+kex_ecdh_name_to_evpmd(const char *kexname)
+{
+	int nid = kex_ecdh_name_to_nid(kexname);
+
+	if (nid == -1)
+		fatal("%s: unsupported ECDH curve \"%s\"", __func__, kexname);
+	return key_ec_nid_to_evpmd(nid);
+}
 
 void
 kex_ecdh_hash(
-    int hash_alg,
+    const EVP_MD *evp_md,
     const EC_GROUP *ec_group,
     char *client_version_string,
     char *server_version_string,
@@ -60,7 +74,8 @@ kex_ecdh_hash(
     u_char **hash, u_int *hashlen)
 {
 	Buffer b;
-	static u_char digest[SSH_DIGEST_MAX_LENGTH];
+	EVP_MD_CTX md;
+	static u_char digest[EVP_MAX_MD_SIZE];
 
 	buffer_init(&b);
 	buffer_put_cstring(&b, client_version_string);
@@ -82,14 +97,16 @@ kex_ecdh_hash(
 #ifdef DEBUG_KEX
 	buffer_dump(&b);
 #endif
-	if (ssh_digest_buffer(hash_alg, &b, digest, sizeof(digest)) != 0)
-		fatal("%s: ssh_digest_buffer failed", __func__);
+	EVP_DigestInit(&md, evp_md);
+	EVP_DigestUpdate(&md, buffer_ptr(&b), buffer_len(&b));
+	EVP_DigestFinal(&md, digest, NULL);
 
 	buffer_free(&b);
 
 #ifdef DEBUG_KEX
-	dump_digest("hash", digest, ssh_digest_bytes(hash_alg));
+	dump_digest("hash", digest, EVP_MD_size(evp_md));
 #endif
 	*hash = digest;
-	*hashlen = ssh_digest_bytes(hash_alg);
+	*hashlen = EVP_MD_size(evp_md);
 }
+

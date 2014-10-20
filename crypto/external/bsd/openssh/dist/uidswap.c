@@ -1,5 +1,5 @@
-/*	$NetBSD: uidswap.c,v 1.3 2014/10/19 16:30:59 christos Exp $	*/
-/* $OpenBSD: uidswap.c,v 1.36 2013/11/08 11:15:19 dtucker Exp $ */
+/*	$NetBSD: uidswap.c,v 1.1 2009/06/07 22:19:31 christos Exp $	*/
+/* $OpenBSD: uidswap.c,v 1.35 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -13,15 +13,12 @@
  * called by a name other than "ssh" or "Secure Shell".
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: uidswap.c,v 1.3 2014/10/19 16:30:59 christos Exp $");
 #include <sys/param.h>
 #include <errno.h>
 #include <pwd.h>
 #include <string.h>
 #include <unistd.h>
 #include <stdarg.h>
-#include <stdlib.h>
 
 #include "log.h"
 #include "uidswap.h"
@@ -120,50 +117,20 @@ restore_uid(void)
 void
 permanently_set_uid(struct passwd *pw)
 {
-	if (pw == NULL)
-		fatal("permanently_set_uid: no user given");
 	if (temporarily_use_uid_effective)
 		fatal("permanently_set_uid: temporarily_use_uid effective");
 	debug("permanently_set_uid: %u/%u", (u_int)pw->pw_uid,
 	    (u_int)pw->pw_gid);
-
-	if (setgid(pw->pw_gid) < 0)
-		fatal("setgid %u: %.100s", (u_int)pw->pw_gid, strerror(errno));
-	if (setegid(pw->pw_gid) < 0)
-		fatal("setegid %u: %.100s", (u_int)pw->pw_gid, strerror(errno));
-
-	if (setuid(pw->pw_uid) < 0)
-		fatal("setuid %u: %.100s", (u_int)pw->pw_uid, strerror(errno));
-	if (seteuid(pw->pw_uid) < 0)
-		fatal("seteuid %u: %.100s", (u_int)pw->pw_uid, strerror(errno));
-
-	/* Verify GID drop was successful */
-	if (getgid() != pw->pw_gid || getegid() != pw->pw_gid) {
-		fatal("%s: egid incorrect gid:%u egid:%u (should be %u)",
-		    __func__, (u_int)getgid(), (u_int)getegid(),
-		    (u_int)pw->pw_gid);
-	}
-
-	/* Verify UID drop was successful */
-	if (getuid() != pw->pw_uid || geteuid() != pw->pw_uid) {
-		fatal("%s: euid incorrect uid:%u euid:%u (should be %u)",
-		    __func__, (u_int)getuid(), (u_int)geteuid(),
-		    (u_int)pw->pw_uid);
-	}
+	if (setresgid(pw->pw_gid, pw->pw_gid, pw->pw_gid) != 0)
+		fatal("setresgid %u: %s", (u_int)pw->pw_gid, strerror(errno));
+	if (setresuid(pw->pw_uid, pw->pw_uid, pw->pw_uid) != 0)
+		fatal("setresuid %u: %s", (u_int)pw->pw_uid, strerror(errno));
 }
 
 void
 permanently_drop_suid(uid_t uid)
 {
 	debug("permanently_drop_suid: %u", (u_int)uid);
-	if (seteuid(uid) < 0)
-		fatal("seteuid %u: %.100s", (u_int)uid, strerror(errno));
-	if (setuid(uid) < 0)
-		fatal("setuid %u: %.100s", (u_int)uid, strerror(errno));
-
-	/* Verify UID drop was successful */
-	if (getuid() != uid || geteuid() != uid) {
-		fatal("%s: euid incorrect uid:%u euid:%u (should be %u)",
-		    __func__, (u_int)getuid(), (u_int)geteuid(), (u_int)uid);
-	}
+	if (setresuid(uid, uid, uid) != 0)
+		fatal("setresuid %u: %s", (u_int)uid, strerror(errno));
 }

@@ -1,5 +1,5 @@
-/*	$NetBSD: xmalloc.c,v 1.4 2014/10/19 16:30:59 christos Exp $	*/
-/* $OpenBSD: xmalloc.c,v 1.29 2014/01/04 17:50:55 tedu Exp $ */
+/*	$NetBSD: xmalloc.c,v 1.1 2009/06/07 22:19:31 christos Exp $	*/
+/* $OpenBSD: xmalloc.c,v 1.27 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -14,8 +14,6 @@
  * called by a name other than "ssh" or "Secure Shell".
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: xmalloc.c,v 1.4 2014/10/19 16:30:59 christos Exp $");
 #include <sys/param.h>
 #include <stdarg.h>
 #include <stdio.h>
@@ -34,7 +32,7 @@ xmalloc(size_t size)
 		fatal("xmalloc: zero size");
 	ptr = malloc(size);
 	if (ptr == NULL)
-		fatal("xmalloc: out of memory (allocating %zu bytes)", size);
+		fatal("xmalloc: out of memory (allocating %lu bytes)", (u_long) size);
 	return ptr;
 }
 
@@ -49,8 +47,8 @@ xcalloc(size_t nmemb, size_t size)
 		fatal("xcalloc: nmemb * size > SIZE_T_MAX");
 	ptr = calloc(nmemb, size);
 	if (ptr == NULL)
-		fatal("xcalloc: out of memory (allocating %zu bytes)",
-		    size * nmemb);
+		fatal("xcalloc: out of memory (allocating %lu bytes)",
+		    (u_long)(size * nmemb));
 	return ptr;
 }
 
@@ -69,9 +67,17 @@ xrealloc(void *ptr, size_t nmemb, size_t size)
 	else
 		new_ptr = realloc(ptr, new_size);
 	if (new_ptr == NULL)
-		fatal("xrealloc: out of memory (new_size %zu bytes)",
-		    new_size);
+		fatal("xrealloc: out of memory (new_size %lu bytes)",
+		    (u_long) new_size);
 	return new_ptr;
+}
+
+void
+xfree(void *ptr)
+{
+	if (ptr == NULL)
+		fatal("xfree: NULL pointer given as argument");
+	free(ptr);
 }
 
 char *

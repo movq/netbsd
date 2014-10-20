@@ -1,5 +1,5 @@
-/*	$NetBSD: roaming_common.c,v 1.8 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: roaming_common.c,v 1.12 2014/01/09 23:20:00 djm Exp $ */
+/*	$NetBSD: roaming_common.c,v 1.1 2009/12/27 01:07:02 christos Exp $	*/
+/* $OpenBSD: roaming_common.c,v 1.5 2009/06/27 09:32:43 andreas Exp $ */
 /*
  * Copyright (c) 2004-2009 AppGate Network Security AB
  *
@@ -15,8 +15,6 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-#include "includes.h"
-__RCSID("$NetBSD: roaming_common.c,v 1.8 2014/10/19 16:30:58 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -35,7 +33,6 @@ __RCSID("$NetBSD: roaming_common.c,v 1.8 2014/10/19 16:30:58 christos Exp $");
 #include "cipher.h"
 #include "buffer.h"
 #include "roaming.h"
-#include "digest.h"
 
 static size_t out_buf_size = 0;
 static char *out_buf = NULL;
@@ -49,24 +46,24 @@ int roaming_enabled = 0;
 int resume_in_progress = 0;
 
 int
-get_snd_buf_size(void)
+get_snd_buf_size()
 {
 	int fd = packet_get_connection_out();
-	int optval;
-	socklen_t optvallen = sizeof(optval);
+	int optval, optvallen;
 
+	optvallen = sizeof(optval);
 	if (getsockopt(fd, SOL_SOCKET, SO_SNDBUF, &optval, &optvallen) != 0)
 		optval = DEFAULT_ROAMBUF;
 	return optval;
 }
 
 int
-get_recv_buf_size(void)
+get_recv_buf_size()
 {
 	int fd = packet_get_connection_in();
-	int optval;
-	socklen_t optvallen = sizeof(optval);
+	int optval, optvallen;
 
+	optvallen = sizeof(optval);
 	if (getsockopt(fd, SOL_SOCKET, SO_RCVBUF, &optval, &optvallen) != 0)
 		optval = DEFAULT_ROAMBUF;
 	return optval;
@@ -75,8 +72,6 @@ get_recv_buf_size(void)
 void
 set_out_buffer_size(size_t size)
 {
-	if (size == 0 || size > MAX_ROAMBUF)
-		fatal("%s: bad buffer size %lu", __func__, (u_long)size);
 	/*
 	 * The buffer size can only be set once and the buffer will live
 	 * as long as the session lives.
@@ -147,16 +142,8 @@ roaming_write(int fd, const void *buf, size_t count, int *cont)
 		if (out_buf_size > 0)
 			buf_append(buf, ret);
 	}
-	if (out_buf_size > 0 &&
-	    (ret == 0 || (ret == -1 && errno == EPIPE))) {
-		if (wait_for_roaming_reconnect() != 0) {
-			ret = 0;
-			*cont = 1;
-		} else {
-			ret = -1;
-			errno = EAGAIN;
-		}
-	}
+	debug3("Wrote %ld bytes for a total of %llu", (long)ret,
+	    (unsigned long long)write_bytes);
 	return ret;
 }
 
@@ -168,15 +155,6 @@ roaming_read(int fd, void *buf, size_t count, int *cont)
 		if (!resume_in_progress) {
 			read_bytes += ret;
 		}
-	} else if (out_buf_size > 0 &&
-	    (ret == 0 || (ret == -1 && (errno == ECONNRESET
-	    || errno == ECONNABORTED || errno == ETIMEDOUT
-	    || errno == EHOSTUNREACH)))) {
-		debug("roaming_read failed for %d  ret=%ld  errno=%d",
-		    fd, (long)ret, errno);
-		ret = 0;
-		if (wait_for_roaming_reconnect() == 0)
-			*cont = 1;
 	}
 	return ret;
 }
@@ -217,27 +195,4 @@ resend_bytes(int fd, u_int64_t *offset)
 	} else {
 		atomicio(vwrite, fd, out_buf + (out_last - needed), needed);
 	}
-}
-
-/*
- * Caclulate a new key after a reconnect
- */
-void
-calculate_new_key(u_int64_t *key, u_int64_t cookie, u_int64_t challenge)
-{
-	u_char hash[SSH_DIGEST_MAX_LENGTH];
-	Buffer b;
-
-	buffer_init(&b);
-	buffer_put_int64(&b, *key);
-	buffer_put_int64(&b, cookie);
-	buffer_put_int64(&b, challenge);
-
-	if (ssh_digest_buffer(SSH_DIGEST_SHA1, &b, hash, sizeof(hash)) != 0)
-		fatal("%s: digest_buffer failed", __func__);
-
-	buffer_clear(&b);
-	buffer_append(&b, hash, ssh_digest_bytes(SSH_DIGEST_SHA1));
-	*key = buffer_get_int64(&b);
-	buffer_free(&b);
 }

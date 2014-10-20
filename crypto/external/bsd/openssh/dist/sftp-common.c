@@ -1,5 +1,5 @@
-/*	$NetBSD: sftp-common.c,v 1.6 2014/10/19 16:30:58 christos Exp $	*/
-/* $OpenBSD: sftp-common.c,v 1.26 2014/01/09 03:26:00 guenther Exp $ */
+/*	$NetBSD: sftp-common.c,v 1.1 2009/06/07 22:19:20 christos Exp $	*/
+/* $OpenBSD: sftp-common.c,v 1.20 2006/08/03 03:34:42 deraadt Exp $ */
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
  * Copyright (c) 2001 Damien Miller.  All rights reserved.
@@ -25,8 +25,6 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "includes.h"
-__RCSID("$NetBSD: sftp-common.c,v 1.6 2014/10/19 16:30:58 christos Exp $");
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/param.h>
@@ -37,9 +35,6 @@ __RCSID("$NetBSD: sftp-common.c,v 1.6 2014/10/19 16:30:58 christos Exp $");
 #include <string.h>
 #include <time.h>
 #include <stdarg.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <util.h>
 
 #include "xmalloc.h"
 #include "buffer.h"
@@ -47,7 +42,6 @@ __RCSID("$NetBSD: sftp-common.c,v 1.6 2014/10/19 16:30:58 christos Exp $");
 
 #include "sftp.h"
 #include "sftp-common.h"
-#include "fmt_scaled.h"
 
 /* Clear contents of attributes structure */
 void
@@ -130,8 +124,8 @@ decode_attrib(Buffer *b)
 			type = buffer_get_string(b, NULL);
 			data = buffer_get_string(b, NULL);
 			debug3("Got file attribute \"%s\"", type);
-			free(type);
-			free(data);
+			xfree(type);
+			xfree(data);
 		}
 	}
 	return &a;
@@ -189,32 +183,30 @@ fx2txt(int status)
  * drwxr-xr-x    5 markus   markus       1024 Jan 13 18:39 .ssh
  */
 char *
-ls_file(const char *name, const struct stat *st, int remote, int si_units)
+ls_file(const char *name, const struct stat *st, int remote)
 {
 	int ulen, glen, sz = 0;
+	struct passwd *pw;
+	struct group *gr;
 	struct tm *ltime = localtime(&st->st_mtime);
-	const char *user, *group;
+	char *user, *group;
 	char buf[1024], mode[11+1], tbuf[12+1], ubuf[11+1], gbuf[11+1];
-	char sbuf[FMT_SCALED_STRSIZE];
-	time_t now;
 
 	strmode(st->st_mode, mode);
-	if (!remote) {
-		user = user_from_uid(st->st_uid, 0);
+	if (!remote && (pw = getpwuid(st->st_uid)) != NULL) {
+		user = pw->pw_name;
 	} else {
 		snprintf(ubuf, sizeof ubuf, "%u", (u_int)st->st_uid);
 		user = ubuf;
 	}
-	if (!remote) {
-		group = group_from_gid(st->st_gid, 0);
+	if (!remote && (gr = getgrgid(st->st_gid)) != NULL) {
+		group = gr->gr_name;
 	} else {
 		snprintf(gbuf, sizeof gbuf, "%u", (u_int)st->st_gid);
 		group = gbuf;
 	}
 	if (ltime != NULL) {
-		now = time(NULL);
-		if (now - (365*24*60*60)/2 < st->st_mtime &&
-		    now >= st->st_mtime)
+		if (time(NULL) - st->st_mtime < (365*24*60*60)/2)
 			sz = strftime(tbuf, sizeof tbuf, "%b %e %H:%M", ltime);
 		else
 			sz = strftime(tbuf, sizeof tbuf, "%b %e  %Y", ltime);
@@ -223,15 +215,8 @@ ls_file(const char *name, const struct stat *st, int remote, int si_units)
 		tbuf[0] = '\0';
 	ulen = MAX(strlen(user), 8);
 	glen = MAX(strlen(group), 8);
-	if (si_units) {
-		fmt_scaled((long long)st->st_size, sbuf);
-		snprintf(buf, sizeof buf, "%s %3u %-*s %-*s %8s %s %s", mode,
-		    (u_int)st->st_nlink, ulen, user, glen, group,
-		    sbuf, tbuf, name);
-	} else {
-		snprintf(buf, sizeof buf, "%s %3u %-*s %-*s %8llu %s %s", mode,
-		    (u_int)st->st_nlink, ulen, user, glen, group,
-		    (unsigned long long)st->st_size, tbuf, name);
-	}
+	snprintf(buf, sizeof buf, "%s %3u %-*s %-*s %8llu %s %s", mode,
+	    (u_int)st->st_nlink, ulen, user, glen, group,
+	    (unsigned long long)st->st_size, tbuf, name);
 	return xstrdup(buf);
 }
