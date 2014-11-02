@@ -1,4 +1,4 @@
-/* 	$NetBSD: viornd.c,v 1.1 2014/10/26 18:43:18 tls Exp $ */
+/* 	$NetBSD: viornd.c,v 1.1.2.2 2014/11/02 10:09:44 martin Exp $ */
 /*	$OpenBSD: viornd.c,v 1.1 2014/01/21 21:14:58 sf Exp $	*/
 
 /*
