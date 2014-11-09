@@ -1,4 +1,4 @@
-/*	$NetBSD: omkbdmap.h,v 1.1 2014/07/20 11:14:56 tsutsui Exp $	*/
+/*	$NetBSD: omkbdmap.h,v 1.1.8.2 2014/11/09 07:34:12 msaitoh Exp $	*/
 /*	$OpenBSD: omkbdmap.h,v 1.1 2013/05/22 11:35:02 aoyama Exp $	*/
 
 /*
