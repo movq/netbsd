@@ -1,4 +1,4 @@
-/* $NetBSD: awin_dma.c,v 1.5 2014/10/13 12:34:00 jmcneill Exp $ */
+/* $NetBSD: awin_dma.c,v 1.5.2.2 2014/11/09 14:42:33 martin Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
@@ -30,7 +30,7 @@
 #include "opt_allwinner.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: awin_dma.c,v 1.5 2014/10/13 12:34:00 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awin_dma.c,v 1.5.2.2 2014/11/09 14:42:33 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
