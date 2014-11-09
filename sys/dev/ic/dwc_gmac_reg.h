@@ -1,4 +1,4 @@
-/* $NetBSD: dwc_gmac_reg.h,v 1.12 2014/10/25 18:15:18 joerg Exp $ */
+/* $NetBSD: dwc_gmac_reg.h,v 1.12.2.2 2014/11/09 19:06:57 snj Exp $ */
 
 /*-
  * Copyright (c) 2013, 2014 The NetBSD Foundation, Inc.
