@@ -1,4 +1,4 @@
-/*	$NetBSD: clock_subr.h,v 1.2 2014/09/07 11:50:23 martin Exp $	*/
+/*	$NetBSD: clock_subr.h,v 1.2.2.2 2014/11/12 18:50:55 snj Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
