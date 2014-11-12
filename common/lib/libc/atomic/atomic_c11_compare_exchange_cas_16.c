@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_c11_compare_exchange_cas_16.c,v 1.2 2014/11/04 19:56:44 joerg Exp $	*/
+/*	$NetBSD: atomic_c11_compare_exchange_cas_16.c,v 1.2.2.2 2014/11/12 19:20:06 snj Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
