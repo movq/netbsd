@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.3 2014/01/22 06:17:25 riastradh Exp $	*/
+/*	$NetBSD: main.c,v 1.3.8.2 2014/12/07 13:57:58 martin Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: main.c,v 1.3 2014/01/22 06:17:25 riastradh Exp $");
+__RCSID("$NetBSD: main.c,v 1.3.8.2 2014/12/07 13:57:58 martin Exp $");
 
 #include <assert.h>
 #include <err.h>
