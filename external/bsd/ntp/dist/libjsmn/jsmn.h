@@ -1,4 +1,4 @@
-/*	$NetBSD: jsmn.h,v 1.1 2014/12/19 20:37:38 christos Exp $	*/
+/*	$NetBSD: jsmn.h,v 1.1.1.1 2014/12/19 20:37:38 christos Exp $	*/
 
 #ifndef __JSMN_H_
 #define __JSMN_H_
