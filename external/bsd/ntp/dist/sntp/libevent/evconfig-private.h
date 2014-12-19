@@ -1,4 +1,4 @@
-/*	$NetBSD: evconfig-private.h,v 1.1 2014/12/19 20:37:47 christos Exp $	*/
+/*	$NetBSD: evconfig-private.h,v 1.1.1.1 2014/12/19 20:37:47 christos Exp $	*/
 
 /* evconfig-private.h.  Generated from evconfig-private.h.in by configure.  */
 /* evconfig-private.h template - see "Configuration Header Templates" */
