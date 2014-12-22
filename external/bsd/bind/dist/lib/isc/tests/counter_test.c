@@ -1,4 +1,4 @@
-/*	$NetBSD: counter_test.c,v 1.1.1.2 2014/12/10 03:34:44 christos Exp $	*/
+/*	$NetBSD: counter_test.c,v 1.1.1.2.2.2 2014/12/22 03:28:46 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2014  Internet Systems Consortium, Inc. ("ISC")

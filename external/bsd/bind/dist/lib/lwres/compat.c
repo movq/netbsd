@@ -1,4 +1,4 @@
-/*	$NetBSD: compat.c,v 1.1.1.3 2014/12/10 03:34:45 christos Exp $	*/
+/*	$NetBSD: compat.c,v 1.1.1.3.2.2 2014/12/22 03:28:47 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007, 2014  Internet Systems Consortium, Inc. ("ISC")
