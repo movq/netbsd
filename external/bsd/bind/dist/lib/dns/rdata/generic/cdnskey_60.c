@@ -1,4 +1,4 @@
-/*	$NetBSD: cdnskey_60.c,v 1.1.1.3 2014/12/10 03:34:42 christos Exp $	*/
+/*	$NetBSD: cdnskey_60.c,v 1.1.1.3.2.2 2014/12/22 03:28:45 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2014  Internet Systems Consortium, Inc. ("ISC")
