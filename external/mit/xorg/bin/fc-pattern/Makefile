@@ -11,7 +11,7 @@ DPADD+=	${LIBFONTCONFIG} ${LIBFREETYPE} ${LIBEXPAT}
 
 .PATH:	${X11SRCDIR.fontconfig}/${PROG}
 
-FCARCH_DEPFILE=	fc-cat.c
+FCARCH_DEPFILE=	fc-pattern.c
 .include "../../lib/fontconfig/src/Makefile.fcarch"
 
 .include <bsd.x11.mk>
