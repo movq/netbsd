@@ -1,4 +1,4 @@
-/*	$NetBSD: intprops.h,v 1.2 2014/12/19 20:43:19 christos Exp $	*/
+/*	$NetBSD: intprops.h,v 1.2.2.2 2014/12/24 00:05:27 riz Exp $	*/
 
 /* intprops.h -- properties of integer types
 
