@@ -1,4 +1,4 @@
-/*	$NetBSD: https-client.c,v 1.2 2014/12/19 20:43:19 christos Exp $	*/
+/*	$NetBSD: https-client.c,v 1.2.2.2 2014/12/24 00:05:26 riz Exp $	*/
 
 /*
   This is an example of how to hook up evhttp with bufferevent_ssl

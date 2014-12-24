@@ -1,4 +1,4 @@
-/*	$NetBSD: visibility.h,v 1.2 2014/12/19 20:43:19 christos Exp $	*/
+/*	$NetBSD: visibility.h,v 1.2.2.2 2014/12/24 00:05:26 riz Exp $	*/
 
 /* -*- Mode: C; tab-width: 4; c-basic-offset: 4; indent-tabs-mode: nil -*- */
 /*

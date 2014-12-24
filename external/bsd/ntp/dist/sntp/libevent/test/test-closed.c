@@ -1,4 +1,4 @@
-/*	$NetBSD: test-closed.c,v 1.2 2014/12/19 20:43:19 christos Exp $	*/
+/*	$NetBSD: test-closed.c,v 1.2.2.2 2014/12/24 00:05:26 riz Exp $	*/
 
 /*
  * Copyright (c) 2002-2007 Niels Provos <provos@citi.umich.edu>
