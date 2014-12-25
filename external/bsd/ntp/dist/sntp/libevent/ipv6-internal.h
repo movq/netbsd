@@ -1,4 +1,4 @@
-/*	$NetBSD: ipv6-internal.h,v 1.2 2014/12/19 20:43:18 christos Exp $	*/
+/*	$NetBSD: ipv6-internal.h,v 1.2.2.2 2014/12/25 02:13:12 snj Exp $	*/
 
 /*
  * Copyright (c) 2009-2012 Niels Provos and Nick Mathewson

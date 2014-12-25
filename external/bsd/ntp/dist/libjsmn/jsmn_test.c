@@ -1,4 +1,4 @@
-/*	$NetBSD: jsmn_test.c,v 1.2 2014/12/19 20:43:17 christos Exp $	*/
+/*	$NetBSD: jsmn_test.c,v 1.2.4.2 2014/12/25 02:13:05 snj Exp $	*/
 
 #include <stdio.h>
 #include <stdlib.h>

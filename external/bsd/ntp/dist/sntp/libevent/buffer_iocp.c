@@ -1,4 +1,4 @@
-/*	$NetBSD: buffer_iocp.c,v 1.2 2014/12/19 20:43:18 christos Exp $	*/
+/*	$NetBSD: buffer_iocp.c,v 1.2.2.2 2014/12/25 02:13:11 snj Exp $	*/
 
 /*
  * Copyright (c) 2009-2012 Niels Provos and Nick Mathewson
