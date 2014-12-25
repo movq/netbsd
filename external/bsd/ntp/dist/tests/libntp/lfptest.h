@@ -1,4 +1,4 @@
-/*	$NetBSD: lfptest.h,v 1.2 2014/12/19 20:43:20 christos Exp $	*/
+/*	$NetBSD: lfptest.h,v 1.2.2.2 2014/12/25 02:13:16 snj Exp $	*/
 
 #ifndef NTP_TESTS_LFPTEST_H
 #define NTP_TESTS_LFPTEST_H

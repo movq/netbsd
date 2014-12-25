@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_calendar.c,v 1.4 2014/12/19 20:43:17 christos Exp $	*/
+/*	$NetBSD: ntp_calendar.c,v 1.4.2.2 2014/12/25 02:13:05 snj Exp $	*/
 
 /*
  * ntp_calendar.c - calendar and helper functions
