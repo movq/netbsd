@@ -1,4 +1,4 @@
-/*	$NetBSD: evsignal-internal.h,v 1.2 2014/12/19 20:43:18 christos Exp $	*/
+/*	$NetBSD: evsignal-internal.h,v 1.2.6.2 2014/12/25 02:34:43 snj Exp $	*/
 
 /*
  * Copyright 2000-2007 Niels Provos <provos@citi.umich.edu>

@@ -1,4 +1,4 @@
-/*	$NetBSD: signal-test.c,v 1.2 2014/12/19 20:43:19 christos Exp $	*/
+/*	$NetBSD: signal-test.c,v 1.2.6.2 2014/12/25 02:34:45 snj Exp $	*/
 
 /*
  * Compile with:
