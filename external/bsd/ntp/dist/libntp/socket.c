@@ -1,4 +1,4 @@
-/*	$NetBSD: socket.c,v 1.2 2014/12/19 20:43:17 christos Exp $	*/
+/*	$NetBSD: socket.c,v 1.2.6.2 2014/12/25 02:34:36 snj Exp $	*/
 
 /*
  * socket.c - low-level socket operations

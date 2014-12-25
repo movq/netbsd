@@ -1,4 +1,4 @@
-/*	$NetBSD: strl_obsd.c,v 1.2 2014/12/19 20:43:17 christos Exp $	*/
+/*	$NetBSD: strl_obsd.c,v 1.2.6.2 2014/12/25 02:34:36 snj Exp $	*/
 
 /* 
  * Why use strlcpy()/strlcat() instead of standard strncpy()/strncat()?

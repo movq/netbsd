@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_gpsdjson.c,v 1.4 2014/12/23 15:47:32 joerg Exp $	*/
+/*	$NetBSD: refclock_gpsdjson.c,v 1.4.8.2 2014/12/25 02:34:38 snj Exp $	*/
 
 /*
  * refclock_gpsdjson.c - clock driver as GPSD JSON client

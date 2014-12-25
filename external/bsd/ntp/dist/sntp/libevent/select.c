@@ -1,4 +1,4 @@
-/*	$NetBSD: select.c,v 1.2 2014/12/19 20:43:18 christos Exp $	*/
+/*	$NetBSD: select.c,v 1.2.6.2 2014/12/25 02:34:43 snj Exp $	*/
 
 /*	$OpenBSD: select.c,v 1.2 2002/06/25 15:50:15 mickey Exp $	*/
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc.h,v 1.2 2014/12/19 20:43:19 christos Exp $	*/
+/*	$NetBSD: rpc.h,v 1.2.6.2 2014/12/25 02:34:44 snj Exp $	*/
 
 /*
  * Copyright (c) 2006-2007 Niels Provos <provos@citi.umich.edu>
