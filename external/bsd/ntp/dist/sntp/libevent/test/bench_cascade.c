@@ -1,4 +1,4 @@
-/*	$NetBSD: bench_cascade.c,v 1.2 2014/12/19 20:43:19 christos Exp $	*/
+/*	$NetBSD: bench_cascade.c,v 1.2.4.2 2014/12/25 02:28:16 snj Exp $	*/
 
 /*
  * Copyright 2007-2012 Niels Provos and Nick Mathewson

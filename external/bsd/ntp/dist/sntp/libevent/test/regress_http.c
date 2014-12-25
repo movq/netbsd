@@ -1,4 +1,4 @@
-/*	$NetBSD: regress_http.c,v 1.2 2014/12/19 20:43:19 christos Exp $	*/
+/*	$NetBSD: regress_http.c,v 1.2.4.2 2014/12/25 02:28:16 snj Exp $	*/
 
 /*
  * Copyright (c) 2003-2007 Niels Provos <provos@citi.umich.edu>

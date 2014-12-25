@@ -1,4 +1,4 @@
-/*	$NetBSD: event.c,v 1.2 2014/12/19 20:43:18 christos Exp $	*/
+/*	$NetBSD: event.c,v 1.2.4.2 2014/12/25 02:28:15 snj Exp $	*/
 
 /*
  * Copyright (c) 2000-2007 Niels Provos <provos@citi.umich.edu>
