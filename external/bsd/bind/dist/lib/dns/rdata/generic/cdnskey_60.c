@@ -1,5 +1,3 @@
-/*	$NetBSD: cdnskey_60.c,v 1.1.1.3 2014/12/10 03:34:42 christos Exp $	*/
-
 /*
  * Copyright (C) 2014  Internet Systems Consortium, Inc. ("ISC")
  *
@@ -16,7 +14,13 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* draft-ietf-dnsop-delegation-trust-maintainance-14 */
+/* $Id: cdnskey_60.c,v 1.1.1.3.4.2 2014/12/25 17:54:27 msaitoh Exp $ */
+
+/*
+ * Reviewed: Wed Mar 15 16:47:10 PST 2000 by halley.
+ */
+
+/* RFC2535 */
 
 #ifndef RDATA_GENERIC_CDNSKEY_60_C
 #define RDATA_GENERIC_CDNSKEY_60_C
@@ -77,12 +81,11 @@ fromtext_cdnskey(ARGS_FROMTEXT) {
 static inline isc_result_t
 totext_cdnskey(ARGS_TOTEXT) {
 	isc_region_t sr;
-	char buf[sizeof("[key id = 64000]")];
+	char buf[sizeof("64000")];
 	unsigned int flags;
 	unsigned char algorithm;
 	char algbuf[DNS_NAME_FORMATSIZE];
 	const char *keyinfo;
-	isc_region_t tmpr;
 
 	REQUIRE(rdata->type == 60);
 	REQUIRE(rdata->length != 0);
@@ -134,19 +137,11 @@ totext_cdnskey(ARGS_TOTEXT) {
 	if ((tctx->flags & DNS_STYLEFLAG_MULTILINE) != 0)
 		RETERR(str_totext(" (", target));
 	RETERR(str_totext(tctx->linebreak, target));
-
-	if ((tctx->flags & DNS_STYLEFLAG_NOCRYPTO) == 0) {
-		if (tctx->width == 0)   /* No splitting */
-			RETERR(isc_base64_totext(&sr, 0, "", target));
-		else
-			RETERR(isc_base64_totext(&sr, tctx->width - 2,
-						 tctx->linebreak, target));
-	} else {
-		dns_rdata_toregion(rdata, &tmpr);
-		snprintf(buf, sizeof(buf), "[key id = %u]",
-			 dst_region_computeid(&tmpr, algorithm));
-		RETERR(str_totext(buf, target));
-	}
+	if (tctx->width == 0)   /* No splitting */
+		RETERR(isc_base64_totext(&sr, 0, "", target));
+	else
+		RETERR(isc_base64_totext(&sr, tctx->width - 2,
+					 tctx->linebreak, target));
 
 	if ((tctx->flags & DNS_STYLEFLAG_RRCOMMENT) != 0)
 		RETERR(str_totext(tctx->linebreak, target));
@@ -157,6 +152,7 @@ totext_cdnskey(ARGS_TOTEXT) {
 		RETERR(str_totext(")", target));
 
 	if ((tctx->flags & DNS_STYLEFLAG_RRCOMMENT) != 0) {
+		isc_region_t tmpr;
 
 		RETERR(str_totext(" ; ", target));
 		RETERR(str_totext(keyinfo, target));
