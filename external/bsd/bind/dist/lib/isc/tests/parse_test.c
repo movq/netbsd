@@ -1,5 +1,3 @@
-/*	$NetBSD: parse_test.c,v 1.1.1.3 2014/12/10 03:34:44 christos Exp $	*/
-
 /*
  * Copyright (C) 2012, 2013  Internet Systems Consortium, Inc. ("ISC")
  *
@@ -16,7 +14,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* $Id: parse_test.c,v 1.1.1.3.4.2 2014/12/26 03:08:37 msaitoh Exp $ */
 
 /*! \file */
 

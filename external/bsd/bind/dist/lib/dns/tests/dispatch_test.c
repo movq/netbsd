@@ -1,5 +1,3 @@
-/*	$NetBSD: dispatch_test.c,v 1.1.1.4 2014/12/10 03:34:42 christos Exp $	*/
-
 /*
  * Copyright (C) 2012, 2014  Internet Systems Consortium, Inc. ("ISC")
  *
@@ -16,7 +14,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* $Id: dispatch_test.c,v 1.1.1.4.4.2 2014/12/26 03:08:34 msaitoh Exp $ */
 
 /*! \file */
 
