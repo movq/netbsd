@@ -1,5 +1,3 @@
-/*	$NetBSD: safe.c,v 1.3 2014/12/10 04:37:59 christos Exp $	*/
-
 /*
  * Copyright (C) 2013  Internet Systems Consortium, Inc. ("ISC")
  *
@@ -16,7 +14,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* $Id: safe.c,v 1.3.4.2 2014/12/26 03:08:36 msaitoh Exp $ */
 
 /*! \file */
 
