@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2014/12/28 11:51:11 martin Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2014/12/31 06:17:24 snj Exp $
 #
 # Makefile for evbarm64
 #
