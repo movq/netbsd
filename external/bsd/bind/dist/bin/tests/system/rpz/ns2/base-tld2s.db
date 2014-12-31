@@ -15,7 +15,6 @@
 ; Id
 
 
-
 ; RPZ rewrite responses from this signed zone
 
 $TTL	120

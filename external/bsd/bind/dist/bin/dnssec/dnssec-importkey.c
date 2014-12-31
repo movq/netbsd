@@ -1,4 +1,4 @@
-/*	$NetBSD: dnssec-importkey.c,v 1.5 2014/12/10 04:37:51 christos Exp $	*/
+/*        $NetBSD: dnssec-importkey.c,v 1.5.6.2 2014/12/31 11:58:28 msaitoh Exp $      */
 
 /*
  * Copyright (C) 2013, 2014  Internet Systems Consortium, Inc. ("ISC")
@@ -49,10 +49,6 @@
 
 #include <dst/dst.h>
 
-#ifdef PKCS11CRYPTO
-#include <pk11/result.h>
-#endif
-
 #include "dnssectool.h"
 
 #ifndef PATH_MAX
@@ -91,7 +87,7 @@ db_load_from_stream(dns_db_t *db, FILE *fp) {
 	dns_rdatacallbacks_t callbacks;
 
 	dns_rdatacallbacks_init(&callbacks);
-	result = dns_db_beginload(db, &callbacks);
+	result = dns_db_beginload(db, &callbacks.add, &callbacks.add_private);
 	if (result != ISC_R_SUCCESS)
 		fatal("dns_db_beginload failed: %s", isc_result_totext(result));
 
@@ -100,7 +96,7 @@ db_load_from_stream(dns_db_t *db, FILE *fp) {
 	if (result != ISC_R_SUCCESS)
 		fatal("can't load from input: %s", isc_result_totext(result));
 
-	result = dns_db_endload(db, &callbacks);
+	result = dns_db_endload(db, &callbacks.add_private);
 	if (result != ISC_R_SUCCESS)
 		fatal("dns_db_endload failed: %s", isc_result_totext(result));
 }
@@ -309,9 +305,6 @@ main(int argc, char **argv) {
 	if (result != ISC_R_SUCCESS)
 		fatal("out of memory");
 
-#ifdef PKCS11CRYPTO
-	pk11_result_register();
-#endif
 	dns_result_register();
 
 	isc_commandline_errprint = ISC_FALSE;

@@ -1,5 +1,3 @@
-/*	$NetBSD: caa_257.h,v 1.1.1.3 2014/12/10 03:34:42 christos Exp $	*/
-
 /*
  * Copyright (C) 2014  Internet Systems Consortium, Inc. ("ISC")
  *
@@ -19,7 +17,7 @@
 #ifndef GENERIC_CAA_257_H
 #define GENERIC_CAA_257_H 1
 
-/* Id */
+/* $Id: caa_257.h,v 1.1.1.3.8.2 2014/12/31 11:58:59 msaitoh Exp $ */
 
 typedef struct dns_rdata_caa {
 	dns_rdatacommon_t	common;

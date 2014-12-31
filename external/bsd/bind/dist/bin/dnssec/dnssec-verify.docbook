@@ -19,7 +19,7 @@
 
 <refentry id="man.dnssec-verify">
   <refentryinfo>
-    <date>January 15, 2014</date>
+    <date>June 26, 2012</date>
   </refentryinfo>
 
   <refmeta>
@@ -74,23 +74,6 @@
         <listitem>
           <para>
             Specifies the DNS class of the zone.
-          </para>
-        </listitem>
-      </varlistentry>
-
-      <varlistentry>
-        <term>-E <replaceable class="parameter">engine</replaceable></term>
-        <listitem>
-          <para>
-            Specifies the cryptographic hardware to use, when applicable.
-          </para>
-          <para>
-            When BIND is built with OpenSSL PKCS#11 support, this defaults
-            to the string "pkcs11", which identifies an OpenSSL engine
-            that can drive a cryptographic accelerator or hardware service
-            module.  When BIND is built with native PKCS#11 cryptography
-            (--enable-native-pkcs11), it defaults to the path of the PKCS#11
-            provider library specified via "--with-pkcs11".
           </para>
         </listitem>
       </varlistentry>

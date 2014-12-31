@@ -1,5 +1,3 @@
-/*	$NetBSD: db_test.c,v 1.1.1.3 2014/12/10 03:34:42 christos Exp $	*/
-
 /*
  * Copyright (C) 2013  Internet Systems Consortium, Inc. ("ISC")
  *
@@ -16,7 +14,7 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id */
+/* $Id: db_test.c,v 1.1.1.3.6.2 2014/12/31 11:59:00 msaitoh Exp $ */
 
 /*! \file */
 

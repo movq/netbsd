@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# Copyright (C) 2013, 2014  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2013  Internet Systems Consortium, Inc. ("ISC")
 #
 # Permission to use, copy, modify, and/or distribute this software for any
 # purpose with or without fee is hereby granted, provided that the above
@@ -42,38 +42,22 @@ for dir in [0-9][0-9]-*; do
         $COVERAGE $args -K $dir example.com > coverage.$n 2>&1
 
         # check that return code matches expectations
-        found=$?
-        if [ $found -ne $retcode ]; then
-            echo "retcode was $found expected $retcode"
-            ret=1
-        fi
+        [ $? -eq $retcode ] || ret=1
 
         # check for correct number of errors
         found=`grep ERROR coverage.$n | wc -l`
-        if [ $found -ne $error ]; then
-            echo "error count was $found expected $error"
-            ret=1
-        fi
+        [ $found -eq $error ] || ret=1
 
         # check for correct number of warnings
         found=`grep WARNING coverage.$n | wc -l`
-        if [ $found -ne $warn ]; then
-            echo "warning count was $found expected $warn"
-            ret=1
-        fi
+        [ $found -eq $warn ] || ret=1
 
         # check for correct number of OKs
         found=`grep "No errors found" coverage.$n | wc -l`
-        if [ $found -ne $ok ]; then
-            echo "good count was $found expected $ok"
-            ret=1
-        fi
+        [ $found -eq $ok ] || ret=1
 
         found=`matchall coverage.$n "$match"`
-        if [ "$found" = "FAIL" ]; then
-            echo "no match on '$match'"
-            ret=1
-        fi
+        [ "$found" = "FAIL" ] && ret=1
 
         n=`expr $n + 1`
         if [ $ret != 0 ]; then echo "I:failed"; fi

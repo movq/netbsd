@@ -1,4 +1,4 @@
-/*	$NetBSD: dnssec-verify.c,v 1.8 2014/12/10 04:37:51 christos Exp $	*/
+/*	$NetBSD: dnssec-verify.c,v 1.8.2.2 2014/12/31 11:58:29 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2012, 2014  Internet Systems Consortium, Inc. ("ISC")
@@ -69,10 +69,6 @@
 
 #include <dst/dst.h>
 
-#ifdef PKCS11CRYPTO
-#include <pk11/result.h>
-#endif
-
 #include "dnssectool.h"
 
 const char *program = "dnssec-verify";
@@ -142,10 +138,7 @@ usage(void) {
 	fprintf(stderr, "\t\tfile format of input zonefile (text)\n");
 	fprintf(stderr, "\t-c class (IN)\n");
 	fprintf(stderr, "\t-E engine:\n");
-#if defined(PKCS11CRYPTO)
-	fprintf(stderr, "\t\tpath to PKCS#11 provider library "
-		"(default is %s)\n", PK11_LIB_LOCATION);
-#elif defined(USE_PKCS11)
+#ifdef USE_PKCS11
 	fprintf(stderr, "\t\tname of an OpenSSL engine to use "
 				"(default is \"pkcs11\")\n");
 #else
@@ -164,7 +157,7 @@ main(int argc, char *argv[]) {
 	isc_result_t result;
 	isc_log_t *log = NULL;
 #ifdef USE_PKCS11
-	const char *engine = PKCS11_ENGINE;
+	const char *engine = "pkcs11";
 #else
 	const char *engine = NULL;
 #endif
@@ -204,9 +197,6 @@ main(int argc, char *argv[]) {
 	if (result != ISC_R_SUCCESS)
 		fatal("out of memory");
 
-#ifdef PKCS11CRYPTO
-	pk11_result_register();
-#endif
 	dns_result_register();
 
 	isc_commandline_errprint = ISC_FALSE;

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2012/12/04 23:38:37 spz Exp $
+#	$NetBSD: Makefile,v 1.1.18.2 2014/12/31 11:58:26 msaitoh Exp $
 
 BASE=	${.CURDIR:T}
 
