@@ -16,7 +16,6 @@
 
 # Id
 
-
 for QDIR in `echo "$PATH" | tr : ' '` ../../../../contrib/queryperf; do
     QPERF=$QDIR/queryperf
     if test -f $QPERF -a -x $QPERF; then

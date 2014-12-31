@@ -1,7 +1,5 @@
-/*	$NetBSD: rrl.c,v 1.4 2014/12/10 04:37:58 christos Exp $	*/
-
 /*
- * Copyright (C) 2012-2014  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2013, 2014  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above

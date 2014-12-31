@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2010, 2011  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2013  Internet Systems Consortium, Inc. ("ISC")
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -14,32 +14,18 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Id: named.conf,v 1.5 2011/07/28 03:18:17 each Exp  */
+#include <config.h>
+#include <isc/util.h>
 
-// NS4
+int
+main(int argc, char **argv) {
 
-controls { /* empty */ };
+	UNUSED(argc);
+	UNUSED(argv);
 
-options {
-	query-source address 10.53.0.7;
-	notify-source 10.53.0.7;
-	transfer-source 10.53.0.7;
-	port 5300;
-	pid-file "named.pid";
-	listen-on { 10.53.0.7; };
-	listen-on-v6 { none; };
-	recursion yes;
-	empty-zones-enable yes;
-	disable-empty-zone 20.172.in-addr.arpa;
-};
-
-zone "." {
-	type hint;
-	file "root.hint";
-};
-
-zone "server" {
-	type master;
-	file "server.db";
-	allow-update { any; };
-};
+#ifdef USE_RRL
+	return (0);
+#else
+	return (1);
+#endif
+}

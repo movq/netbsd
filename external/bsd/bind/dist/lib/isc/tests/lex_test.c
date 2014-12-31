@@ -1,5 +1,3 @@
-/*	$NetBSD: lex_test.c,v 1.3 2014/12/10 04:38:01 christos Exp $	*/
-
 /*
  * Copyright (C) 2013  Internet Systems Consortium, Inc. ("ISC")
  *
