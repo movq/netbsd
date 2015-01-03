@@ -1,4 +1,4 @@
-/*	$NetBSD: grammar.tab.h,v 1.1 2015/01/03 22:58:25 christos Exp $	*/
+/*	$NetBSD: grammar.tab.h,v 1.1.1.1 2015/01/03 22:58:25 christos Exp $	*/
 
 #ifndef _grammar__defines_h_
 #define _grammar__defines_h_

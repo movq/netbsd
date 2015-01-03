@@ -1,4 +1,4 @@
-/*	$NetBSD: rename_debug.c,v 1.1 2015/01/03 22:58:23 christos Exp $	*/
+/*	$NetBSD: rename_debug.c,v 1.1.1.1 2015/01/03 22:58:23 christos Exp $	*/
 
 /* original parser id follows */
 /* yysccsid[] = "@(#)yaccpar	1.9 (Berkeley) 02/21/93" */

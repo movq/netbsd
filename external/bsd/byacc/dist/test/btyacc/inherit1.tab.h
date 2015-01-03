@@ -1,4 +1,4 @@
-/*	$NetBSD: inherit1.tab.h,v 1.1 2015/01/03 22:58:26 christos Exp $	*/
+/*	$NetBSD: inherit1.tab.h,v 1.1.1.1 2015/01/03 22:58:26 christos Exp $	*/
 
 #ifndef _inherit1__defines_h_
 #define _inherit1__defines_h_

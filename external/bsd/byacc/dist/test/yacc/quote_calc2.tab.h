@@ -1,4 +1,4 @@
-/*	$NetBSD: quote_calc2.tab.h,v 1.1 2015/01/03 22:58:24 christos Exp $	*/
+/*	$NetBSD: quote_calc2.tab.h,v 1.1.1.1 2015/01/03 22:58:24 christos Exp $	*/
 
 #define OP_ADD 257
 #define ADD 258
