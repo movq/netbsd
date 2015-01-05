@@ -1,4 +1,4 @@
-#	$NetBSD: libmesa.mk,v 1.1 2014/12/18 06:24:28 mrg Exp $
+#	$NetBSD: libmesa.mk,v 1.1.2.2 2015/01/05 21:23:50 martin Exp $
 #
 # Consumer of this Makefile should set MESA_SRC_MODULES.
 
