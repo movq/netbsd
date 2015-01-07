@@ -1,4 +1,4 @@
-/*	$NetBSD: tpro.h,v 1.2 2014/12/19 20:43:14 christos Exp $	*/
+/*	$NetBSD: tpro.h,v 1.2.6.2 2015/01/07 12:13:18 msaitoh Exp $	*/
 
 /*
  * Structure for the KSI/Odetics TPRO-S data returned in reponse to a

@@ -1,4 +1,4 @@
-/*	$NetBSD: modetoa.c,v 1.5 2014/12/19 20:43:17 christos Exp $	*/
+/*	$NetBSD: modetoa.c,v 1.5.6.2 2015/01/07 12:13:24 msaitoh Exp $	*/
 
 /*
  * modetoa - return an asciized mode

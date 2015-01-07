@@ -1,4 +1,4 @@
-/*	$NetBSD: socktoa.c,v 1.3 2014/12/19 20:43:17 christos Exp $	*/
+/*	$NetBSD: socktoa.c,v 1.3.6.2 2015/01/07 12:13:24 msaitoh Exp $	*/
 
 /*
  * socktoa.c	socktoa(), sockporttoa(), and sock_hash()

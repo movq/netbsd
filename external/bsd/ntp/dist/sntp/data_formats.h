@@ -1,4 +1,4 @@
-/*	$NetBSD: data_formats.h,v 1.2 2014/12/19 20:43:18 christos Exp $	*/
+/*	$NetBSD: data_formats.h,v 1.2.6.2 2015/01/07 12:13:33 msaitoh Exp $	*/
 
 #ifndef DATA_FORMATS_H
 #define DATA_FORMATS_H

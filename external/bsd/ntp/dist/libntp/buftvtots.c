@@ -1,4 +1,4 @@
-/*	$NetBSD: buftvtots.c,v 1.2 2014/12/19 20:43:17 christos Exp $	*/
+/*	$NetBSD: buftvtots.c,v 1.2.6.2 2015/01/07 12:13:23 msaitoh Exp $	*/
 
 /*
  * buftvtots - pull a Unix-format (struct timeval) time stamp out of

@@ -1,4 +1,4 @@
-/*	$NetBSD: radix.h,v 1.2 2014/12/19 20:43:15 christos Exp $	*/
+/*	$NetBSD: radix.h,v 1.2.6.2 2015/01/07 12:13:20 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2007, 2008  Internet Systems Consortium, Inc. ("ISC")

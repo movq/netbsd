@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_worker.h,v 1.2 2014/12/19 20:43:14 christos Exp $	*/
+/*	$NetBSD: ntp_worker.h,v 1.2.12.2 2015/01/07 12:13:17 msaitoh Exp $	*/
 
 /*
  * ntp_worker.h

@@ -1,4 +1,4 @@
-/*	$NetBSD: symtab_test.c,v 1.2 2014/12/19 20:43:16 christos Exp $	*/
+/*	$NetBSD: symtab_test.c,v 1.2.12.2 2015/01/07 12:13:21 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2011, 2012  Internet Systems Consortium, Inc. ("ISC")
