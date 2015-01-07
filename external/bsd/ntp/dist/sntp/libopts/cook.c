@@ -1,4 +1,4 @@
-/*	$NetBSD: cook.c,v 1.2 2014/12/19 20:43:19 christos Exp $	*/
+/*	$NetBSD: cook.c,v 1.2.2.2 2015/01/07 04:45:39 msaitoh Exp $	*/
 
 /**
  * \file cook.c

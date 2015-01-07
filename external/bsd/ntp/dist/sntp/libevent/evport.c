@@ -1,4 +1,4 @@
-/*	$NetBSD: evport.c,v 1.2 2014/12/19 20:43:18 christos Exp $	*/
+/*	$NetBSD: evport.c,v 1.2.8.2 2015/01/07 04:45:36 msaitoh Exp $	*/
 
 /*
  * Submitted by David Pacheco (dp.spambait@gmail.com)

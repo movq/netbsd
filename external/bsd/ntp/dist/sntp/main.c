@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.11 2014/12/19 20:43:18 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.11.2.2 2015/01/07 04:45:35 msaitoh Exp $	*/
 
 #include <config.h>
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: sntptest.h,v 1.2 2014/12/19 20:43:20 christos Exp $	*/
+/*	$NetBSD: sntptest.h,v 1.2.8.2 2015/01/07 04:45:40 msaitoh Exp $	*/
 
 #ifndef SNTPTEST_H
 #define SNTPTEST_H

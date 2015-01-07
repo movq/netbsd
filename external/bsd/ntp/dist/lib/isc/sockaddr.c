@@ -1,4 +1,4 @@
-/*	$NetBSD: sockaddr.c,v 1.4 2014/12/19 20:43:14 christos Exp $	*/
+/*	$NetBSD: sockaddr.c,v 1.4.2.2 2015/01/07 04:45:25 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2004-2007, 2010-2012  Internet Systems Consortium, Inc. ("ISC")

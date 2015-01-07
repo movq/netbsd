@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.18 2014/12/20 16:52:21 christos Exp $
+#	$NetBSD: Makefile,v 1.18.2.2 2015/01/07 04:45:13 msaitoh Exp $
 
 .include <bsd.own.mk>
 
@@ -15,7 +15,7 @@ SRCS=	cmd_args.c				\
 	ntp_leapsec.c				\
 	ntp_loopfilter.c			\
 	ntp_monitor.c				\
-	ntp_parser.y				\
+	ntp_parser.c				\
 	ntp_peer.c				\
 	ntp_prio_q.c				\
 	ntp_proto.c				\
@@ -74,15 +74,19 @@ SRCS=	cmd_args.c				\
 LDADD+=		-L${LIBPARSE} -lparse -L${LIBISC} -liscntp -lm -lutil
 DPADD+=		${LIBPARSE}/libparse.a ${LIBISC}/libiscntp.a ${LIBOPTS}/libopts.a  ${LIBNTP}/libntp.a ${LIBM} ${LIBUTIL}
 
-COPTS.ntp_control.c+=	${${ACTIVE_CC} == "gcc":? -Wno-format-nonliteral :}
+# COPTS.ntp_control.c+=	${${ACTIVE_CC} == "gcc":? -Wno-format-nonliteral :}
+COPTS.refclock_oncore.c+=	-Wno-error
 
 .include "${.CURDIR}/../Makefile.inc"
 
 DIST=${IDIST}/ntpd
 
-CPPFLAGS+=-I${IDIST}/include -I${IDIST}/sntp/libopts -I${IDIST}/ntpd -I.
+CPPFLAGS+=-I${IDIST}/include -I${IDIST}/sntp/libopts -I${IDIST}/ntpd -I${.CURDIR}
 
 .PATH: ${DIST}
-YHEADER=1
 
 .include <bsd.prog.mk>
+
+# kill default .y.c rule - to rebuild ntp_parser.c we need bison which is not part of the toolchain
+.y.c:
+

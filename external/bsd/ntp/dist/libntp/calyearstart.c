@@ -1,4 +1,4 @@
-/*	$NetBSD: calyearstart.c,v 1.2 2014/12/19 20:43:17 christos Exp $	*/
+/*	$NetBSD: calyearstart.c,v 1.2.2.2 2015/01/07 04:45:29 msaitoh Exp $	*/
 
 /*
  * calyearstart - determine the NTP time at midnight of January 1 in
