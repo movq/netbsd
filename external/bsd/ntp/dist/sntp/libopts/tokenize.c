@@ -1,4 +1,4 @@
-/*	$NetBSD: tokenize.c,v 1.4 2014/12/19 20:43:20 christos Exp $	*/
+/*	$NetBSD: tokenize.c,v 1.4.4.2 2015/01/07 10:10:25 msaitoh Exp $	*/
 
 /** \file tokenize.c
  *

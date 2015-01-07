@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_control.c,v 1.10 2014/12/20 08:38:47 uebayasi Exp $	*/
+/*	$NetBSD: ntp_control.c,v 1.10.4.2 2015/01/07 10:10:14 msaitoh Exp $	*/
 
 /*
  * ntp_control.c - respond to mode 6 control messages and send async

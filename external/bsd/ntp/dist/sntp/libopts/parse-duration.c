@@ -1,4 +1,4 @@
-/*	$NetBSD: parse-duration.c,v 1.5 2014/12/19 20:43:20 christos Exp $	*/
+/*	$NetBSD: parse-duration.c,v 1.5.4.2 2015/01/07 10:10:25 msaitoh Exp $	*/
 
 /* Parse a time duration and return a seconds count
    Copyright (C) 2008-2014 Free Software Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_config.c,v 1.9 2014/12/19 20:43:17 christos Exp $	*/
+/*	$NetBSD: ntp_config.c,v 1.9.4.2 2015/01/07 10:10:14 msaitoh Exp $	*/
 
 /* ntp_config.c
  *
