@@ -1,4 +1,4 @@
-/*	$NetBSD: cmd_args.c,v 1.2 2014/12/19 20:43:17 christos Exp $	*/
+/*	$NetBSD: cmd_args.c,v 1.2.4.2 2015/01/07 10:10:14 msaitoh Exp $	*/
 
 /*
  * cmd_args.c = command-line argument processing

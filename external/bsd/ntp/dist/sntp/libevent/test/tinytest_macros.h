@@ -1,4 +1,4 @@
-/*	$NetBSD: tinytest_macros.h,v 1.2 2014/12/19 20:43:19 christos Exp $	*/
+/*	$NetBSD: tinytest_macros.h,v 1.2.10.2 2015/01/07 10:10:25 msaitoh Exp $	*/
 
 /* tinytest_macros.h -- Copyright 2009-2012 Nick Mathewson
  *

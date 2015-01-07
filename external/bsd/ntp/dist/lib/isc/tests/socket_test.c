@@ -1,4 +1,4 @@
-/*	$NetBSD: socket_test.c,v 1.2 2014/12/19 20:43:16 christos Exp $	*/
+/*	$NetBSD: socket_test.c,v 1.2.10.2 2015/01/07 10:10:10 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2011, 2012  Internet Systems Consortium, Inc. ("ISC")

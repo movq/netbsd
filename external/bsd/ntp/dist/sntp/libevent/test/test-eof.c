@@ -1,4 +1,4 @@
-/*	$NetBSD: test-eof.c,v 1.2 2014/12/19 20:43:19 christos Exp $	*/
+/*	$NetBSD: test-eof.c,v 1.2.10.2 2015/01/07 10:10:25 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 2002-2007 Niels Provos <provos@citi.umich.edu>

@@ -1,4 +1,4 @@
-/*	$NetBSD: getopt.c,v 1.2 2014/12/19 20:43:17 christos Exp $	*/
+/*	$NetBSD: getopt.c,v 1.2.4.2 2015/01/07 10:10:13 msaitoh Exp $	*/
 
 /*
  * getopt - get option letter from argv

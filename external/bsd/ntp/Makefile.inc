@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.15 2014/12/23 19:11:14 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.15.4.2 2015/01/07 10:09:54 msaitoh Exp $
 
 .if !defined(NTP_MAKEFILE_INC)
 NTP_MAKEFILE_INC=yes
@@ -12,12 +12,15 @@ CWARNFLAGS.clang+=	-Wno-unneeded-internal-declaration \
 
 WARNS?=	4
 
+# Tweaks for netbsd-5:
+MKREPRO?=	yes
+MKMDNS?=	no
 
 .include <bsd.own.mk>
 
 IDIST=		${NETBSDSRCDIR}/external/bsd/ntp/dist
 NTP_SRCDIR=	${NETBSDSRCDIR}/external/bsd/ntp
-NTP_HTMLDIR=	/usr/share/doc/reference/ref8
+NTP_HTMLDIR=	/usr/share/doc/html/
 
 SYSCONFDIR=/etc
 LOCALSTATEDIR=/var
@@ -28,6 +31,11 @@ CPPFLAGS+=-I${NTP_SRCDIR}/include \
 	  -I${IDIST}/lib/isc/include \
 	  -I${IDIST}/lib/isc/unix/include \
 	  -I${IDIST}/lib/isc/nothreads/include
+
+.if ${HAVE_GCC} < 45
+CPPFLAGS+=	'-D__printflike(a,b)=' -DO_CLOEXEC=0 '-Dpipe2(a, b)=pipe(a)'
+CPPFLAGS+=	'-Darc4random_buf(a, b)=memset((a),arc4random(),(b))'
+.endif
 
 .if defined(PROG)
 LIBNTP!=	cd ${.CURDIR}/../../lib/libntp && ${PRINTOBJDIR}

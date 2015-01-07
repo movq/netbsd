@@ -1,4 +1,4 @@
-/*	$NetBSD: bsd_audioirig.h,v 1.2 2014/12/19 20:43:14 christos Exp $	*/
+/*	$NetBSD: bsd_audioirig.h,v 1.2.4.2 2015/01/07 10:10:08 msaitoh Exp $	*/
 
 /*
  *	$Header: bsd_audioirig.h,v 1.0 93/08/02 12:42:00

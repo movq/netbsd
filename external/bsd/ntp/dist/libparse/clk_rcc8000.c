@@ -1,4 +1,4 @@
-/*	$NetBSD: clk_rcc8000.c,v 1.2 2014/12/19 20:43:17 christos Exp $	*/
+/*	$NetBSD: clk_rcc8000.c,v 1.2.4.2 2015/01/07 10:10:14 msaitoh Exp $	*/
 
 /*
  * /src/NTP/ntp4-dev/libparse/clk_rcc8000.c,v 4.9 2004/11/14 15:29:41 kardel RELEASE_20050508_A

@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp.h,v 1.2 2014/12/19 20:43:14 christos Exp $	*/
+/*	$NetBSD: ntp.h,v 1.2.4.2 2015/01/07 10:10:07 msaitoh Exp $	*/
 
 /*
  * ntp.h - NTP definitions for the masses
