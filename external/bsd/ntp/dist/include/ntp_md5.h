@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_md5.h,v 1.2 2014/12/19 20:43:14 christos Exp $	*/
+/*	$NetBSD: ntp_md5.h,v 1.2.6.2 2015/01/07 12:13:17 msaitoh Exp $	*/
 
 /*
  * ntp_md5.h: deal with md5.h headers

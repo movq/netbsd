@@ -1,4 +1,4 @@
-/*	$NetBSD: mstolfp.c,v 1.4 2014/12/19 20:43:17 christos Exp $	*/
+/*	$NetBSD: mstolfp.c,v 1.4.6.2 2015/01/07 12:13:24 msaitoh Exp $	*/
 
 /*
  * mstolfp - convert an ascii string in milliseconds to an l_fp number

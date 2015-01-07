@@ -1,4 +1,4 @@
-/*	$NetBSD: bufferevent_compat.h,v 1.2 2014/12/19 20:43:19 christos Exp $	*/
+/*	$NetBSD: bufferevent_compat.h,v 1.2.12.2 2015/01/07 12:13:36 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 2007-2012 Niels Provos, Nick Mathewson

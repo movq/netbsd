@@ -1,4 +1,4 @@
-/*	$NetBSD: ntgroups.h,v 1.2 2014/12/19 20:43:16 christos Exp $	*/
+/*	$NetBSD: ntgroups.h,v 1.2.6.2 2015/01/07 12:13:23 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2004, 2007  Internet Systems Consortium, Inc. ("ISC")

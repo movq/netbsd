@@ -1,4 +1,4 @@
-/*	$NetBSD: icom.h,v 1.3 2014/12/19 20:43:14 christos Exp $	*/
+/*	$NetBSD: icom.h,v 1.3.6.2 2015/01/07 12:13:16 msaitoh Exp $	*/
 
 /*
  * Header file for ICOM radios

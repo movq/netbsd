@@ -1,4 +1,4 @@
-/*	$NetBSD: stdnoreturn.in.h,v 1.2 2014/12/19 20:43:20 christos Exp $	*/
+/*	$NetBSD: stdnoreturn.in.h,v 1.2.14.2 2015/01/07 12:13:39 msaitoh Exp $	*/
 
 /* A substitute for ISO C11 <stdnoreturn.h>.
 

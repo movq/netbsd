@@ -1,4 +1,4 @@
-/*	$NetBSD: ao-strs.c,v 1.2 2014/12/19 20:43:19 christos Exp $	*/
+/*	$NetBSD: ao-strs.c,v 1.2.12.2 2015/01/07 12:13:38 msaitoh Exp $	*/
 
 /*  -*- buffer-read-only: t -*- vi: set ro:
  *

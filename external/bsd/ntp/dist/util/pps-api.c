@@ -1,4 +1,4 @@
-/*	$NetBSD: pps-api.c,v 1.2 2014/12/19 20:43:20 christos Exp $	*/
+/*	$NetBSD: pps-api.c,v 1.2.6.2 2015/01/07 12:13:43 msaitoh Exp $	*/
 
 /*
 

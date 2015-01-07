@@ -1,4 +1,4 @@
-/*	$NetBSD: regress_testutils.c,v 1.2 2014/12/19 20:43:19 christos Exp $	*/
+/*	$NetBSD: regress_testutils.c,v 1.2.12.2 2015/01/07 12:13:38 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 2010-2012 Niels Provos and Nick Mathewson
