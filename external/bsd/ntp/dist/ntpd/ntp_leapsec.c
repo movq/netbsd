@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_leapsec.c,v 1.2 2014/12/19 20:43:17 christos Exp $	*/
+/*	$NetBSD: ntp_leapsec.c,v 1.2.8.2 2015/01/07 04:45:30 msaitoh Exp $	*/
 
 /*
  * ntp_leapsec.c - leap second processing for NTPD

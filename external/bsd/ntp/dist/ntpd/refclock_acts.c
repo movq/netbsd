@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_acts.c,v 1.8 2014/12/19 20:43:17 christos Exp $	*/
+/*	$NetBSD: refclock_acts.c,v 1.8.2.2 2015/01/07 04:45:31 msaitoh Exp $	*/
 
 /*
  * refclock_acts - clock driver for the NIST/USNO/PTB/NPL Computer Time

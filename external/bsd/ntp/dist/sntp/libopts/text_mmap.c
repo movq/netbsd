@@ -1,4 +1,4 @@
-/*	$NetBSD: text_mmap.c,v 1.2 2014/12/19 20:43:20 christos Exp $	*/
+/*	$NetBSD: text_mmap.c,v 1.2.2.2 2015/01/07 04:45:39 msaitoh Exp $	*/
 
 /**
  * @file text_mmap.c

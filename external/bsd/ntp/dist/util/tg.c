@@ -1,4 +1,4 @@
-/*	$NetBSD: tg.c,v 1.2 2014/12/19 20:43:20 christos Exp $	*/
+/*	$NetBSD: tg.c,v 1.2.2.2 2015/01/07 04:45:42 msaitoh Exp $	*/
 
 /*
  * tg.c generate WWV or IRIG signals for test

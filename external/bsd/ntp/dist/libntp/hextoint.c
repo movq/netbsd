@@ -1,4 +1,4 @@
-/*	$NetBSD: hextoint.c,v 1.4 2014/12/19 20:43:17 christos Exp $	*/
+/*	$NetBSD: hextoint.c,v 1.4.2.2 2015/01/07 04:45:29 msaitoh Exp $	*/
 
 /*
  * hextoint - convert an ascii string in hex to an unsigned

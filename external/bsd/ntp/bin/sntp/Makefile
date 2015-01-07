@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.6 2013/12/28 03:19:43 christos Exp $
+# $NetBSD: Makefile,v 1.6.6.2 2015/01/07 04:45:13 msaitoh Exp $
 
 USE_FORT?= yes	# network client/server
 
@@ -30,5 +30,25 @@ CPPFLAGS+= -DLOCKNAME=\"/var/run/sntp.pid\"
 CPPFLAGS+= -DSAVENAME=\"/var/db/sntp.state\"
 LDADD+= -L${LIBISC} -liscntp -levent -lm
 DPADD+=	${LIBM} ${LIBEVENT}
+
+WARNS=1
+LIBEVENTDIR=${.CURDIR}/../../dist/sntp/libevent
+CPPFLAGS+=-I${LIBEVENTDIR}/include -I${.CURDIR}
+.PATH: ${LIBEVENTDIR}
+SRCS+=	\
+	event.c \
+	evmap.c \
+	evthread.c \
+	evutil.c \
+	evutil_rand.c \
+	evutil_time.c \
+	evlog.c \
+	kqueue.c \
+	signal.c \
+	select.c \
+
+.if ${HAVE_GCC} < 45
+COPTS.event.c+=	-Wno-error
+.endif
 
 .include <bsd.prog.mk>

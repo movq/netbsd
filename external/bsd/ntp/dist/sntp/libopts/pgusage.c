@@ -1,4 +1,4 @@
-/*	$NetBSD: pgusage.c,v 1.3 2014/12/19 20:43:20 christos Exp $	*/
+/*	$NetBSD: pgusage.c,v 1.3.2.2 2015/01/07 04:45:39 msaitoh Exp $	*/
 
 
 /**
