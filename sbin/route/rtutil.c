@@ -1,4 +1,4 @@
-/*	$NetBSD: rtutil.c,v 1.4 2015/01/07 22:38:32 christos Exp $	*/
+/*	$NetBSD: rtutil.c,v 1.4.2.2 2015/01/08 11:01:01 martin Exp $	*/
 /*	$OpenBSD: show.c,v 1.1 2006/05/27 19:16:37 claudio Exp $	*/
 
 /*
@@ -186,14 +186,13 @@ p_rttables(int paf, int flags, int pflags, int interesting)
 /* 
  * column widths; each followed by one space
  * width of destination/gateway column
- * strlen("fe80::aaaa:bbbb:cccc:dddd@gif0") == 30, strlen("/128") == 4 = 34
- * strlen("aaaa:bbbb:cccc:dddd:eeee:ffff:gggg:hhhh") == 39
+ * strlen("fe80::aaaa:bbbb:cccc:dddd@gif0") == 30, strlen("/128") == 4
  */
 #ifndef INET6
 #define	WID_DST(af)	18	/* width of destination column */
 #define	WID_GW(af)	18	/* width of gateway column */
 #else
-#define	WID_DST(af)	((af) == AF_INET6 ? ((flags & RT_NFLAG) ? 39 : 18) : 18)
+#define	WID_DST(af)	((af) == AF_INET6 ? ((flags & RT_NFLAG) ? 34 : 18) : 18)
 #define	WID_GW(af)	((af) == AF_INET6 ? ((flags & RT_NFLAG) ? 30 : 18) : 18)
 #endif
 
@@ -260,9 +259,6 @@ p_rtentry(struct rt_msghdr *rtm, int flags, int interesting)
 #ifndef SMALL
 	char		 ifbuf[IF_NAMESIZE];
 #endif
-
-	if ((flags & RT_LFLAG) && (rtm->rtm_flags & RTF_LLINFO))
-		return;
 
 	if (old_af != sa->sa_family) {
 		old_af = sa->sa_family;
@@ -552,27 +548,21 @@ routename6(const struct sockaddr_in6 *sin6, int flags)
  * The address is assumed to be that of a net or subnet, not a host.
  */
 char *
-netname4(const struct sockaddr_in* sa4, const struct sockaddr_in *mask, int flags)
+netname4(in_addr_t in, in_addr_t mask, int flags)
 {
 	const char *cp = NULL;
 	struct netent *np = NULL;
 	int mbits;
-	in_addr_t in = sa4->sin_addr.s_addr;
-
-	if (mask) {
-		in_addr_t m = mask->sin_addr.s_addr ;
-		m = ntohl(m);
-		mbits = m ? 33 - ffs(m) : 0;
-	} else
-		mbits = 0;
 
 	in = ntohl(in);
-	if (in == INADDR_ANY && !mbits)
-		cp = "default";
-	else if (!(flags & RT_NFLAG) && in != INADDR_ANY) {
+	mask = ntohl(mask);
+	if (!(flags & RT_NFLAG) && in != INADDR_ANY) {
 		if ((np = getnetbyaddr(in, AF_INET)) != NULL)
 			cp = np->n_name;
 	}
+	mbits = mask ? 33 - ffs(mask) : 0;
+	if (in == INADDR_ANY && !mbits)
+			cp = "default";
 	if (cp)
 		strlcpy(line, cp, sizeof(line));
 #define C(x)	((x) & 0xff)
@@ -588,7 +578,7 @@ netname4(const struct sockaddr_in* sa4, const struct sockaddr_in *mask, int flag
 		snprintf(line, sizeof(line), "%u.%u.%u.%u/%d", C(in >> 24),
 		    C(in >> 16), C(in >> 8), C(in), mbits);
 #undef C
-	return line;
+	return (line);
 }
 
 #ifdef INET6
@@ -699,8 +689,8 @@ netname(const struct sockaddr *sa, const struct sockaddr *mask, int flags)
 	switch (sa->sa_family) {
 
 	case AF_INET:
-		return netname4((const struct sockaddr_in *)sa,
-		    (const struct sockaddr_in *)mask, flags);
+		return netname4(((const struct sockaddr_in *)sa)->sin_addr.s_addr,
+		    ((const struct sockaddr_in *)mask)->sin_addr.s_addr, flags);
 #ifdef INET6
 	case AF_INET6:
 		return netname6((const struct sockaddr_in6 *)sa,
