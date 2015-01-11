@@ -27,7 +27,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_sysctl.c,v 1.4 2014/11/24 17:29:02 prlw1 Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_sysctl.c,v 1.4.4.2 2015/01/11 05:59:17 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
