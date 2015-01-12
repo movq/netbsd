@@ -1,4 +1,4 @@
-/*	$NetBSD: midirecord.c,v 1.6 2015/01/03 22:57:54 joerg Exp $	*/
+/*	$NetBSD: midirecord.c,v 1.6.2.2 2015/01/12 10:22:22 martin Exp $	*/
 
 /*
  * Copyright (c) 2014 Matthew R. Green
@@ -33,7 +33,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: midirecord.c,v 1.6 2015/01/03 22:57:54 joerg Exp $");
+__RCSID("$NetBSD: midirecord.c,v 1.6.2.2 2015/01/12 10:22:22 martin Exp $");
 #endif
 
 #include <sys/param.h>
