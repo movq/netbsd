@@ -1,4 +1,4 @@
-/*	$NetBSD: ops_ext.c,v 1.1 2015/01/17 16:34:15 christos Exp $	*/
+/*	$NetBSD: ops_ext.c,v 1.1.1.1 2015/01/17 16:34:15 christos Exp $	*/
 
 /*
  * Copyright (c) 1997-2014 Erez Zadok
