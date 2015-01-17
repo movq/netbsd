@@ -1,4 +1,4 @@
-/*	$NetBSD: ops_lustre.c,v 1.1 2015/01/17 16:34:15 christos Exp $	*/
+/*	$NetBSD: ops_lustre.c,v 1.1.1.1 2015/01/17 16:34:15 christos Exp $	*/
 
 /*
  * Copyright (c) 2011 Christos Zoulas

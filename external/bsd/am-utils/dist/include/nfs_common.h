@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_common.h,v 1.1 2015/01/17 16:34:18 christos Exp $	*/
+/*	$NetBSD: nfs_common.h,v 1.1.1.1 2015/01/17 16:34:18 christos Exp $	*/
 
 /*
  * Copyright (c) 2011 Christos Zoulas
