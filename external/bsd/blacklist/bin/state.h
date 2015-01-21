@@ -1,7 +1,7 @@
-/*	$NetBSD: state.h,v 1.1 2015/01/20 00:19:21 christos Exp $	*/
+/*	$NetBSD: state.h,v 1.2 2015/01/21 16:16:00 christos Exp $	*/
 
 /*-
- * Copyright (c) 2014 The NetBSD Foundation, Inc.
+ * Copyright (c) 2015 The NetBSD Foundation, Inc.
  * All rights reserved.
  *
  * This code is derived from software contributed to The NetBSD Foundation
@@ -37,7 +37,7 @@
 struct dbinfo {
 	int count;
 	time_t last;
-	int id;
+	char id[64];
 };
 
 __BEGIN_DECLS
