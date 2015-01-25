@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2015/01/14 20:26:41 tron Exp $
+#	$NetBSD: Makefile,v 1.2.2.2 2015/01/25 00:19:45 martin Exp $
 
 PROG=		lto1
 SRCS=		lto-partition.c lto-object.c lto.c lto-lang.c attribs.c main.c
