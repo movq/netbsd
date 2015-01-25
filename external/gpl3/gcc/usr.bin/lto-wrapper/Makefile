@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2015/01/07 02:02:44 christos Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2015/01/25 00:19:45 martin Exp $
 
 NOMAN=1
 PROG=		lto-wrapper
