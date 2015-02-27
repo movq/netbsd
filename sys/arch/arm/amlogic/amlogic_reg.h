@@ -1,4 +1,4 @@
-/* $NetBSD: amlogic_reg.h,v 1.1 2015/02/07 17:20:17 jmcneill Exp $ */
+/* $NetBSD: amlogic_reg.h,v 1.2 2015/02/27 19:57:10 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -35,6 +35,7 @@
 #define AMLOGIC_CORE_SIZE	0x10200000
 #define AMLOGIC_CORE_VBASE	0xe0000000
 
+#define AMLOGIC_CBUS_OFFSET	0x01100000
 #define AMLOGIC_UART0_OFFSET	0x01102130
 #define AMLOGIC_UART1_OFFSET	0x01102137
 #define AMLOGIC_UART2_OFFSET	0x011021c0
