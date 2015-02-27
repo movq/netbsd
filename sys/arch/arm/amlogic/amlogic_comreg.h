@@ -1,4 +1,4 @@
-/* $NetBSD: amlogic_comreg.h,v 1.1 2015/02/07 17:20:17 jmcneill Exp $ */
+/* $NetBSD: amlogic_comreg.h,v 1.2 2015/02/27 17:35:08 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -36,7 +36,9 @@
 #define UART_MISC_REG		0x10
 #define UART_REG5_REG		0x14
 
+#define UART_STATUS_RX_BUSY	__BIT(26)
 #define UART_STATUS_TX_BUSY	__BIT(25)
 #define UART_STATUS_TX_EMPTY	__BIT(22)
+#define UART_STATUS_RX_EMPTY	__BIT(20)
 
 #endif /* _ARM_AMLOGIC_COMREG_H */
