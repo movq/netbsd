@@ -1,4 +1,4 @@
-#	$NetBSD: libmesa7.mk,v 1.1 2015/01/05 03:45:31 mrg Exp $
+#	$NetBSD: libmesa7.mk,v 1.1.2.2 2015/03/03 08:28:12 snj Exp $
 
 # This copy for old MesaLib 7.x drivers only.
 

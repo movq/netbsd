@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2015/01/05 03:45:31 mrg Exp $
+# $NetBSD: Makefile,v 1.1.2.2 2015/03/03 08:28:12 snj Exp $
 
 # Build MesaLib 7.x r300 driver, which requires LLVM in Mesa 10.x
 
