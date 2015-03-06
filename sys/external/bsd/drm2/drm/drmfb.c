@@ -1,4 +1,4 @@
-/*	$NetBSD: drmfb.c,v 1.1 2015/03/05 17:50:41 riastradh Exp $	*/
+/*	$NetBSD: drmfb.c,v 1.1.2.2 2015/03/06 21:39:10 snj Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drmfb.c,v 1.1 2015/03/05 17:50:41 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drmfb.c,v 1.1.2.2 2015/03/06 21:39:10 snj Exp $");
 
 #ifdef _KERNEL_OPT
 #include "vga.h"
