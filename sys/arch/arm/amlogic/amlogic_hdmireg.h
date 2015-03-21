@@ -1,4 +1,4 @@
-/* $NetBSD: amlogic_hdmireg.h,v 1.1 2015/03/21 01:17:00 jmcneill Exp $ */
+/* $NetBSD: amlogic_hdmireg.h,v 1.1.2.2 2015/03/21 08:51:17 snj Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

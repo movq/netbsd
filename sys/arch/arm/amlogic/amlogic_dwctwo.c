@@ -1,4 +1,4 @@
-/*	$NetBSD: amlogic_dwctwo.c,v 1.2 2015/02/28 18:50:57 jmcneill Exp $	*/
+/*	$NetBSD: amlogic_dwctwo.c,v 1.2.2.2 2015/03/21 08:51:17 snj Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amlogic_dwctwo.c,v 1.2 2015/02/28 18:50:57 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amlogic_dwctwo.c,v 1.2.2.2 2015/03/21 08:51:17 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

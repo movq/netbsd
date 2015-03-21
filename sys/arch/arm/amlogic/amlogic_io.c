@@ -1,4 +1,4 @@
-/* $NetBSD: amlogic_io.c,v 1.7 2015/03/21 01:17:00 jmcneill Exp $ */
+/* $NetBSD: amlogic_io.c,v 1.7.2.2 2015/03/21 08:51:17 snj Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "opt_amlogic.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amlogic_io.c,v 1.7 2015/03/21 01:17:00 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amlogic_io.c,v 1.7.2.2 2015/03/21 08:51:17 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

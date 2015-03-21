@@ -1,4 +1,4 @@
-/* $NetBSD: amlogic_sdhc.c,v 1.3 2015/03/16 21:37:35 jmcneill Exp $ */
+/* $NetBSD: amlogic_sdhc.c,v 1.3.2.2 2015/03/21 08:51:17 snj Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "locators.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amlogic_sdhc.c,v 1.3 2015/03/16 21:37:35 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amlogic_sdhc.c,v 1.3.2.2 2015/03/21 08:51:17 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
