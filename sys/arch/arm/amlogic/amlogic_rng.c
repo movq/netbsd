@@ -1,4 +1,4 @@
-/* $NetBSD: amlogic_rng.c,v 1.2 2015/04/03 14:02:06 jmcneill Exp $ */
+/* $NetBSD: amlogic_rng.c,v 1.2.2.2 2015/04/06 15:17:52 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "locators.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amlogic_rng.c,v 1.2 2015/04/03 14:02:06 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amlogic_rng.c,v 1.2.2.2 2015/04/06 15:17:52 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

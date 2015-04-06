@@ -1,4 +1,4 @@
-/*	$NetBSD: ingenic_var.h,v 1.3 2015/03/25 11:25:10 macallan Exp $ */
+/*	$NetBSD: ingenic_var.h,v 1.3.2.2 2015/04/06 15:17:59 skrll Exp $ */
 
 /*-
  * Copyright (c) 2014 Michael Lorenz

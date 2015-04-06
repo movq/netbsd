@@ -1,4 +1,4 @@
-/* $NetBSD: hdafg_dd.c,v 1.1 2015/03/28 14:09:59 jmcneill Exp $ */
+/* $NetBSD: hdafg_dd.c,v 1.1.2.2 2015/04/06 15:18:08 skrll Exp $ */
 
 /*
  * Copyright (c) 2011 Jared D. McNeill <jmcneill@invisible.ca>
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hdafg_dd.c,v 1.1 2015/03/28 14:09:59 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hdafg_dd.c,v 1.1.2.2 2015/04/06 15:18:08 skrll Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: amlogic_rtcreg.h,v 1.1 2015/03/22 17:28:22 jmcneill Exp $ */
+/* $NetBSD: amlogic_rtcreg.h,v 1.1.4.2 2015/04/06 15:17:52 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.

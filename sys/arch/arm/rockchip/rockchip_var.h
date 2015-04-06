@@ -1,4 +1,4 @@
-/* $NetBSD: rockchip_var.h,v 1.13 2015/03/29 22:56:23 jmcneill Exp $ */
+/* $NetBSD: rockchip_var.h,v 1.13.2.2 2015/04/06 15:17:53 skrll Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

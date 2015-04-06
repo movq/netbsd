@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2015/03/28 14:09:59 jmcneill Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2015/04/06 15:18:08 skrll Exp $
 
 INCSDIR= /usr/include/dev/hdaudio
 

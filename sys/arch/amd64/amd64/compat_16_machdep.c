@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_16_machdep.c,v 1.5 2014/12/14 21:27:49 christos Exp $	*/
+/*	$NetBSD: compat_16_machdep.c,v 1.5.2.2 2015/04/06 15:17:51 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.5 2014/12/14 21:27:49 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_16_machdep.c,v 1.5.2.2 2015/04/06 15:17:51 skrll Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"

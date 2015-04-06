@@ -1,4 +1,4 @@
-/*	$NetBSD: amlogic_dwctwo.c,v 1.2 2015/02/28 18:50:57 jmcneill Exp $	*/
+/*	$NetBSD: amlogic_dwctwo.c,v 1.2.4.2 2015/04/06 15:17:51 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amlogic_dwctwo.c,v 1.2 2015/02/28 18:50:57 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amlogic_dwctwo.c,v 1.2.4.2 2015/04/06 15:17:51 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -70,7 +70,7 @@ static struct dwc2_core_params amlogic_dwctwo_params = {
 	.host_rx_fifo_size		= 512,	/* 512 DWORDs */
 	.host_nperio_tx_fifo_size	= 500,	/* 500 DWORDs */
 	.host_perio_tx_fifo_size	= -1,	/* 256 DWORDs */
-	.max_transfer_size		= -1,   /* 2047 to 65,535 */ 
+	.max_transfer_size		= -1,   /* 2047 to 65,535 */
 	.max_packet_count		= -1,   /* 15 to 511 */
 	.host_channels			= -1,	/* 1 to 16 */
 	.phy_type			= 1, 	/* 1- UTMI+ Phy */
@@ -112,7 +112,7 @@ amlogic_dwctwo_attach(device_t parent, device_t self, void *aux)
 	sc->sc_dwc2.sc_iot = aio->aio_core_bst;
 	bus_space_subregion(aio->aio_core_bst, aio->aio_bsh,
             loc->loc_offset, loc->loc_size, &sc->sc_dwc2.sc_ioh);
-	sc->sc_dwc2.sc_bus.dmatag = aio->aio_dmat;
+	sc->sc_dwc2.sc_bus.ub_dmatag = aio->aio_dmat;
 	sc->sc_dwc2.sc_params = &amlogic_dwctwo_params;
 
 	aprint_naive("\n");

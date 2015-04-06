@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.sys,v 1.1 2015/03/08 15:22:02 christos Exp $
+# $NetBSD: Makefile.sys,v 1.1.2.2 2015/04/06 15:18:29 skrll Exp $
 
 SYS_MKSYSCALLS=${.CURDIR}/../../../../kern/makesyscalls.sh
 SYS_DST=${SYS_P}calls.c ${SYS_P}ent.c ${SYS_P}callargs.h ${SYS_P}call.h: 

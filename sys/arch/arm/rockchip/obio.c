@@ -1,4 +1,4 @@
-/*	$NetBSD: obio.c,v 1.19 2015/04/02 15:48:38 jmcneill Exp $	*/
+/*	$NetBSD: obio.c,v 1.19.2.2 2015/04/06 15:17:53 skrll Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002, 2003 Wasabi Systems, Inc.
@@ -38,7 +38,7 @@
 #include "opt_rockchip.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.19 2015/04/02 15:48:38 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obio.c,v 1.19.2.2 2015/04/06 15:17:53 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

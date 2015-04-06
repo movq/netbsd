@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_soc.c,v 1.2 2015/03/29 22:27:04 jmcneill Exp $ */
+/* $NetBSD: tegra_soc.c,v 1.2.2.2 2015/04/06 15:17:53 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -30,7 +30,7 @@
 #include "opt_multiprocessor.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tegra_soc.c,v 1.2 2015/03/29 22:27:04 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tegra_soc.c,v 1.2.2.2 2015/04/06 15:17:53 skrll Exp $");
 
 #define	_ARM32_BUS_DMA_PRIVATE
 #include <sys/param.h>

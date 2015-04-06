@@ -1,4 +1,4 @@
-/*	$NetBSD: mgx.c,v 1.4 2015/01/06 17:41:30 macallan Exp $ */
+/*	$NetBSD: mgx.c,v 1.4.2.2 2015/04/06 15:18:13 skrll Exp $ */
 
 /*-
  * Copyright (c) 2014 Michael Lorenz
@@ -29,7 +29,7 @@
 /* a console driver for the SSB 4096V-MGX graphics card */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mgx.c,v 1.4 2015/01/06 17:41:30 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mgx.c,v 1.4.2.2 2015/04/06 15:18:13 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

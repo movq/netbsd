@@ -43,7 +43,7 @@
 
 #include <arm/cortex/scu_reg.h>
 
-RCSID("$NetBSD: rockchip_start.S,v 1.4 2014/12/30 21:24:36 jmcneill Exp $")
+RCSID("$NetBSD: rockchip_start.S,v 1.4.2.2 2015/04/06 15:17:56 skrll Exp $")
 
 #if defined(VERBOSE_INIT_ARM)
 #define	XPUTC(n)	mov r0, n; bl xputc

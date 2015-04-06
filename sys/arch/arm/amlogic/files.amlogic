@@ -1,4 +1,4 @@
-#	$NetBSD: files.amlogic,v 1.10 2015/03/29 22:49:44 jmcneill Exp $
+#	$NetBSD: files.amlogic,v 1.10.2.2 2015/04/06 15:17:52 skrll Exp $
 #
 # Configuration info for Amlogic ARM Peripherals
 #

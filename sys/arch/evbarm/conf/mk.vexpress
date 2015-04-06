@@ -1,4 +1,4 @@
-#	$NetBSD: mk.vexpress,v 1.1 2015/02/09 07:47:15 slp Exp $
+#	$NetBSD: mk.vexpress,v 1.1.2.2 2015/04/06 15:17:55 skrll Exp $
 
 .if !empty(MACHINE_ARCH:M*eb)
 EXTRA_LINKFLAGS+=	--be8
@@ -33,7 +33,7 @@ EXTRA_KERNELS+= ${KERNELS:@.KERNEL.@${.KERNEL.}.bin@}
 EXTRA_KERNELS+= ${KERNELS:@.KERNEL.@${.KERNEL.}.ub@}
 EXTRA_KERNELS+= ${KERNELS:@.KERNEL.@${.KERNEL.}.bin.gz@}
 EXTRA_KERNELS+= ${KERNELS:@.KERNEL.@${.KERNEL.}.gz.ub@}
-#	$NetBSD: mk.vexpress,v 1.1 2015/02/09 07:47:15 slp Exp $
+#	$NetBSD: mk.vexpress,v 1.1.2.2 2015/04/06 15:17:55 skrll Exp $
 
 .if !empty(MACHINE_ARCH:M*eb)
 EXTRA_LINKFLAGS+=	--be8

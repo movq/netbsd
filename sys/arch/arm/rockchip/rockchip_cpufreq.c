@@ -1,4 +1,4 @@
-/* $NetBSD: rockchip_cpufreq.c,v 1.3 2015/03/29 22:56:23 jmcneill Exp $ */
+/* $NetBSD: rockchip_cpufreq.c,v 1.3.2.2 2015/04/06 15:17:53 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -30,7 +30,7 @@
 #include "act8846pm.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rockchip_cpufreq.c,v 1.3 2015/03/29 22:56:23 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rockchip_cpufreq.c,v 1.3.2.2 2015/04/06 15:17:53 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_encoder_slave.c,v 1.1 2015/03/05 17:42:48 riastradh Exp $	*/
+/*	$NetBSD: drm_encoder_slave.c,v 1.1.4.2 2015/04/06 15:18:17 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_encoder_slave.c,v 1.1 2015/03/05 17:42:48 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_encoder_slave.c,v 1.1.4.2 2015/04/06 15:18:17 skrll Exp $");
 
 #include <sys/types.h>
 #include <sys/atomic.h>

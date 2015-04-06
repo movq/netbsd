@@ -38,7 +38,7 @@
 
 #include "assym.h"
 
-RCSID("$NetBSD: rpi2_start.S,v 1.1 2015/02/28 09:34:34 skrll Exp $")
+RCSID("$NetBSD: rpi2_start.S,v 1.1.4.2 2015/04/06 15:17:56 skrll Exp $")
 
 #if defined(VERBOSE_INIT_ARM)
 #define	XPUTC(n)	mov r0, n; bl plputc

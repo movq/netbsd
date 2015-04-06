@@ -1,4 +1,4 @@
-/*	$NetBSD: armv7_generic_space.c,v 1.1 2015/03/29 22:26:18 jmcneill Exp $	*/
+/*	$NetBSD: armv7_generic_space.c,v 1.1.2.2 2015/04/06 15:17:52 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: armv7_generic_space.c,v 1.1 2015/03/29 22:26:18 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: armv7_generic_space.c,v 1.1.2.2 2015/04/06 15:17:52 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

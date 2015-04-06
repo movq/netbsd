@@ -1,4 +1,4 @@
-#	$NetBSD: RB850GX2,v 1.1 2015/01/30 15:04:35 nonaka Exp $
+#	$NetBSD: RB850GX2,v 1.1.2.2 2015/04/06 15:17:56 skrll Exp $
 #
 #	RouterBOARD RB850Gx2
 #
@@ -7,7 +7,7 @@ include		"arch/evbppc/conf/std.mpc85xx"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-ident 		"RB850GX2-$Revision: 1.1 $"
+ident 		"RB850GX2-$Revision: 1.1.2.2 $"
 
 maxusers	32
 

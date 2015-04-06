@@ -1,4 +1,4 @@
-/*	$NetBSD: amlogic_machdep.c,v 1.20 2015/04/03 18:03:05 jmcneill Exp $ */
+/*	$NetBSD: amlogic_machdep.c,v 1.20.2.2 2015/04/06 15:17:55 skrll Exp $ */
 
 /*
  * Machine dependent functions for kernel setup for TI OSK5912 board.
@@ -125,7 +125,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amlogic_machdep.c,v 1.20 2015/04/03 18:03:05 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amlogic_machdep.c,v 1.20.2.2 2015/04/06 15:17:55 skrll Exp $");
 
 #include "opt_machdep.h"
 #include "opt_ddb.h"

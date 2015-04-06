@@ -1,4 +1,4 @@
-/* $NetBSD: rockchip_emacreg.h,v 1.1 2015/01/04 03:53:02 jmcneill Exp $ */
+/* $NetBSD: rockchip_emacreg.h,v 1.1.2.2 2015/04/06 15:17:53 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

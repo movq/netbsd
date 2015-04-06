@@ -1,4 +1,4 @@
-/*	$NetBSD: ingenic_ehci.c,v 1.3 2015/03/17 09:27:09 macallan Exp $ */
+/*	$NetBSD: ingenic_ehci.c,v 1.3.2.2 2015/04/06 15:17:59 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ingenic_ehci.c,v 1.3 2015/03/17 09:27:09 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ingenic_ehci.c,v 1.3.2.2 2015/04/06 15:17:59 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -81,7 +81,7 @@ ingenic_ehci_attach(device_t parent, device_t self, void *aux)
 	struct ehci_softc *sc = device_private(self);
 	struct apbus_attach_args *aa = aux;
 	void *ih;
-	int error, status;
+	int error;
 	uint32_t reg;
 
 	sc->sc_dev = self;
@@ -136,9 +136,9 @@ ingenic_ehci_attach(device_t parent, device_t self, void *aux)
 	sc->sc_id_vendor = USB_VENDOR_INGENIC;
 	strlcpy(sc->sc_vendor, "Ingenic", sizeof(sc->sc_vendor));
 
-	status = ehci_init(sc);
-	if (status != USBD_NORMAL_COMPLETION) {
-		aprint_error_dev(self, "init failed, error=%d\n", status);
+	error = ehci_init(sc);
+	if (error) {
+		aprint_error_dev(self, "init failed, error=%d\n", error);
 		goto fail;
 	}
 

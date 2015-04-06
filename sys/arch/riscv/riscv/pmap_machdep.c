@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 
-__RCSID("$NetBSD: pmap_machdep.c,v 1.2 2015/03/31 01:14:57 matt Exp $");
+__RCSID("$NetBSD: pmap_machdep.c,v 1.2.2.2 2015/04/06 15:18:01 skrll Exp $");
 
 #include <sys/param.h>
 

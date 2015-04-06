@@ -1,4 +1,4 @@
-/* $NetBSD: act8846.c,v 1.3 2015/01/02 21:55:31 jmcneill Exp $ */
+/* $NetBSD: act8846.c,v 1.3.2.2 2015/04/06 15:18:09 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 //#define ACT_DEBUG
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: act8846.c,v 1.3 2015/01/02 21:55:31 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: act8846.c,v 1.3.2.2 2015/04/06 15:18:09 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

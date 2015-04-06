@@ -1,4 +1,4 @@
-/* $NetBSD: axp806.c,v 1.1 2014/12/07 00:33:26 jmcneill Exp $ */
+/* $NetBSD: axp806.c,v 1.1.2.2 2015/04/06 15:18:09 skrll Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #define AXP_DEBUG
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: axp806.c,v 1.1 2014/12/07 00:33:26 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: axp806.c,v 1.1.2.2 2015/04/06 15:18:09 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

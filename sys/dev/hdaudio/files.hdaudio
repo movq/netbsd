@@ -1,4 +1,4 @@
-# $NetBSD: files.hdaudio,v 1.2 2015/03/28 14:50:20 jmcneill Exp $
+# $NetBSD: files.hdaudio,v 1.2.2.2 2015/04/06 15:18:08 skrll Exp $
 
 #
 # Intel High Definition Audio (Revision 1.0)
