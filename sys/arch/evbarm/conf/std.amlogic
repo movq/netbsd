@@ -1,4 +1,4 @@
-#	$NetBSD: std.amlogic,v 1.2 2015/02/27 17:33:31 jmcneill Exp $
+#	$NetBSD: std.amlogic,v 1.2.4.2 2015/04/06 15:17:55 skrll Exp $
 #
 
 machine	evbarm arm

@@ -1,4 +1,4 @@
-/*	$NetBSD: jziic.c,v 1.1 2015/04/04 12:28:52 macallan Exp $ */
+/*	$NetBSD: jziic.c,v 1.1.2.2 2015/04/06 15:17:59 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: jziic.c,v 1.1 2015/04/04 12:28:52 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: jziic.c,v 1.1.2.2 2015/04/06 15:17:59 skrll Exp $");
 
 /*
  * a preliminary driver for JZ4780's on-chip SMBus controllers

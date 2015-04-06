@@ -1,5 +1,5 @@
 /*	$KAME: dccp_usrreq.c,v 1.67 2005/11/03 16:05:04 nishida Exp $	*/
-/*	$NetBSD: dccp_usrreq.c,v 1.2 2015/04/04 04:33:38 rtr Exp $ */
+/*	$NetBSD: dccp_usrreq.c,v 1.2.2.2 2015/04/06 15:18:22 skrll Exp $ */
 
 /*
  * Copyright (c) 2003 Joacim Häggmark, Magnus Erixzon, Nils-Erik Mattsson 
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dccp_usrreq.c,v 1.2 2015/04/04 04:33:38 rtr Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dccp_usrreq.c,v 1.2.2.2 2015/04/06 15:18:22 skrll Exp $");
 
 #include "opt_inet.h"
 #include "opt_dccp.h"

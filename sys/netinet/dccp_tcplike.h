@@ -1,5 +1,5 @@
 /*	$KAME: dccp_tcplike.h,v 1.10 2005/07/22 09:31:14 nishida Exp $	*/
-/*	$NetBSD: dccp_tcplike.h,v 1.1 2015/02/10 19:11:52 rjs Exp $ */
+/*	$NetBSD: dccp_tcplike.h,v 1.1.2.2 2015/04/06 15:18:22 skrll Exp $ */
 
 /*
  * Copyright (c) 2003 Magnus Erixzon

@@ -1,4 +1,4 @@
-/*	$NetBSD: in_print.c,v 1.1 2014/12/02 19:35:27 christos Exp $	*/
+/*	$NetBSD: in_print.c,v 1.1.2.2 2015/04/06 15:18:23 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -29,10 +29,10 @@
 
 #include <sys/types.h>
 #ifdef _KERNEL
-__KERNEL_RCSID(0, "$NetBSD: in_print.c,v 1.1 2014/12/02 19:35:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_print.c,v 1.1.2.2 2015/04/06 15:18:23 skrll Exp $");
 #include <sys/systm.h>
 #else
-__RCSID("$NetBSD: in_print.c,v 1.1 2014/12/02 19:35:27 christos Exp $");
+__RCSID("$NetBSD: in_print.c,v 1.1.2.2 2015/04/06 15:18:23 skrll Exp $");
 #include <stdio.h>
 #endif
 #include <netinet/in.h>

@@ -1,4 +1,4 @@
-/* $NetBSD: hdaudio_pci.c,v 1.1 2015/03/28 14:09:59 jmcneill Exp $ */
+/* $NetBSD: hdaudio_pci.c,v 1.1.2.2 2015/04/06 15:18:10 skrll Exp $ */
 
 /*
  * Copyright (c) 2009 Precedence Technologies Ltd <support@precedence.co.uk>
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hdaudio_pci.c,v 1.1 2015/03/28 14:09:59 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hdaudio_pci.c,v 1.1.2.2 2015/04/06 15:18:10 skrll Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

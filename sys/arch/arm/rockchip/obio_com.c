@@ -1,4 +1,4 @@
-/*	$NetBSD: obio_com.c,v 1.3 2015/03/28 15:59:29 jmcneill Exp $	*/
+/*	$NetBSD: obio_com.c,v 1.3.2.2 2015/04/06 15:17:53 skrll Exp $	*/
 
 /*	based on omap/obio_com.c	*/
 
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: obio_com.c,v 1.3 2015/03/28 15:59:29 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: obio_com.c,v 1.3.2.2 2015/04/06 15:17:53 skrll Exp $");
 
 #include "opt_rockchip.h"
 /*#include "opt_com.h"*/

@@ -1,4 +1,4 @@
-/*	$NetBSD: mgxreg.h,v 1.2 2015/01/04 18:18:20 macallan Exp $ */
+/*	$NetBSD: mgxreg.h,v 1.2.2.2 2015/04/06 15:18:13 skrll Exp $ */
 
 /*-
  * Copyright (c) 2014 Michael Lorenz

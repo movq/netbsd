@@ -1,4 +1,4 @@
-/*	$NetBSD: ingenic_dme.c,v 1.1 2015/03/10 18:15:47 macallan Exp $ */
+/*	$NetBSD: ingenic_dme.c,v 1.1.2.2 2015/04/06 15:17:59 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ingenic_dme.c,v 1.1 2015/03/10 18:15:47 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ingenic_dme.c,v 1.1.2.2 2015/04/06 15:17:59 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

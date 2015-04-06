@@ -1,4 +1,4 @@
-/*	$NetBSD: vpci.c,v 1.1 2015/02/12 04:48:37 palle Exp $	*/
+/*	$NetBSD: vpci.c,v 1.1.2.2 2015/04/06 15:18:03 skrll Exp $	*/
 /*
  * Copyright (c) 2015 Palle Lyckegaard
  * All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vpci.c,v 1.1 2015/02/12 04:48:37 palle Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vpci.c,v 1.1.2.2 2015/04/06 15:18:03 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

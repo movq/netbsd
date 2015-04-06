@@ -1,4 +1,4 @@
-/*	$NetBSD: drmfb.h,v 1.1 2015/03/05 17:50:41 riastradh Exp $	*/
+/*	$NetBSD: drmfb.h,v 1.1.4.2 2015/04/06 15:18:17 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

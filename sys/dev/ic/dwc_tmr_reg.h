@@ -1,4 +1,4 @@
-/* $NetBSD: dwc_tmr_reg.h,v 1.1 2015/01/17 15:04:47 jmcneill Exp $ */
+/* $NetBSD: dwc_tmr_reg.h,v 1.1.2.2 2015/04/06 15:18:09 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

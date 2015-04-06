@@ -1,4 +1,4 @@
-/*	$NetBSD: if_smsh_axi.c,v 1.2 2015/02/11 07:51:10 ozaki-r Exp $	*/
+/*	$NetBSD: if_smsh_axi.c,v 1.2.2.2 2015/04/06 15:17:56 skrll Exp $	*/
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_smsh_axi.c,v 1.2 2015/02/11 07:51:10 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_smsh_axi.c,v 1.2.2.2 2015/04/06 15:17:56 skrll Exp $");
 
 #include "locators.h"
 

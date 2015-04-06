@@ -1,4 +1,4 @@
-/* $NetBSD: pl181.c,v 1.1 2015/01/27 16:33:26 jmcneill Exp $ */
+/* $NetBSD: pl181.c,v 1.1.2.2 2015/04/06 15:18:09 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pl181.c,v 1.1 2015/01/27 16:33:26 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pl181.c,v 1.1.2.2 2015/04/06 15:18:09 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 
-__RCSID("$NetBSD: mainbus.c,v 1.1 2015/03/28 16:13:56 matt Exp $");
+__RCSID("$NetBSD: mainbus.c,v 1.1.2.2 2015/04/06 15:18:01 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

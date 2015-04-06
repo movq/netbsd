@@ -1,4 +1,4 @@
-/*	$NetBSD: vexpress_start.S,v 1.2 2015/02/11 07:51:10 ozaki-r Exp $	*/
+/*	$NetBSD: vexpress_start.S,v 1.2.2.2 2015/04/06 15:17:56 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
 #include "assym.h"
 #include "platform.h"
 
-RCSID("$NetBSD: vexpress_start.S,v 1.2 2015/02/11 07:51:10 ozaki-r Exp $")
+RCSID("$NetBSD: vexpress_start.S,v 1.2.2.2 2015/04/06 15:17:56 skrll Exp $")
 
 #define	XPUTC(n)	mov r0, n; bl xputc
 #define	XPUTC2(n)	mov r0, n; blx r11

@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_ehci.c,v 1.1 2015/03/29 10:41:59 jmcneill Exp $ */
+/* $NetBSD: tegra_ehci.c,v 1.1.2.2 2015/04/06 15:17:53 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "locators.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tegra_ehci.c,v 1.1 2015/03/29 10:41:59 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tegra_ehci.c,v 1.1.2.2 2015/04/06 15:17:53 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -74,9 +74,9 @@ tegra_ehci_attach(device_t parent, device_t self, void *aux)
 	int error;
 
 	sc->sc.sc_dev = self;
-	sc->sc.sc_bus.hci_private = &sc->sc;
-	sc->sc.sc_bus.dmatag = tio->tio_dmat;
-	sc->sc.sc_bus.usbrev = USBREV_2_0;
+	sc->sc.sc_bus.ub_hcpriv = &sc->sc;
+	sc->sc.sc_bus.ub_dmatag = tio->tio_dmat;
+	sc->sc.sc_bus.ub_revision = USBREV_2_0;
 	sc->sc.sc_flags = EHCIF_ETTF;
 	sc->sc.sc_id_vendor = 0x10de;
 	strlcpy(sc->sc.sc_vendor, "Tegra", sizeof(sc->sc.sc_vendor));
@@ -100,7 +100,7 @@ tegra_ehci_attach(device_t parent, device_t self, void *aux)
 	aprint_normal_dev(self, "interrupting on irq %d\n", loc->loc_intr);
 
 	error = ehci_init(&sc->sc);
-	if (error != USBD_NORMAL_COMPLETION) {
+	if (error) {
 		aprint_error_dev(self, "init failed, error = %d\n", error);
 		return;
 	}

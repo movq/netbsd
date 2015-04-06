@@ -1,4 +1,4 @@
-/*	$NetBSD: sysproxy.c,v 1.2 2015/04/03 16:40:55 pooka Exp $	*/
+/*	$NetBSD: sysproxy.c,v 1.2.2.2 2015/04/06 15:18:30 skrll Exp $	*/
 
 /*
  * Copyright (c) 2010, 2011 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysproxy.c,v 1.2 2015/04/03 16:40:55 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysproxy.c,v 1.2.2.2 2015/04/06 15:18:30 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/filedesc.h>

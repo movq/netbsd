@@ -1,4 +1,4 @@
-/* $NetBSD: rockchip_reg.h,v 1.5 2015/01/17 15:05:24 jmcneill Exp $ */
+/* $NetBSD: rockchip_reg.h,v 1.5.2.2 2015/04/06 15:17:53 skrll Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: dl_print.c,v 1.2 2014/12/02 19:34:33 christos Exp $	*/
+/*	$NetBSD: dl_print.c,v 1.2.2.2 2015/04/06 15:18:22 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -29,10 +29,10 @@
 #include <sys/types.h>
 
 #ifdef _KERNEL
-__KERNEL_RCSID(0, "$NetBSD: dl_print.c,v 1.2 2014/12/02 19:34:33 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dl_print.c,v 1.2.2.2 2015/04/06 15:18:22 skrll Exp $");
 #include <sys/systm.h>
 #else
-__RCSID("$NetBSD: dl_print.c,v 1.2 2014/12/02 19:34:33 christos Exp $");
+__RCSID("$NetBSD: dl_print.c,v 1.2.2.2 2015/04/06 15:18:22 skrll Exp $");
 #include <stdio.h>
 static const uint8_t hexdigits[] = "0123456789abcdef";
 #endif

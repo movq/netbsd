@@ -1,4 +1,4 @@
-/* $NetBSD: rockchip_crureg.h,v 1.8 2015/01/17 15:05:24 jmcneill Exp $ */
+/* $NetBSD: rockchip_crureg.h,v 1.8.2.2 2015/04/06 15:17:53 skrll Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>

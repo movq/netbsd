@@ -1,4 +1,4 @@
-/*	$NetBSD: if_iwm.c,v 1.29 2015/03/26 14:42:56 nonaka Exp $	*/
+/*	$NetBSD: if_iwm.c,v 1.29.2.2 2015/04/06 15:18:10 skrll Exp $	*/
 /*	OpenBSD: if_iwm.c,v 1.39 2015/03/23 00:35:19 jsg Exp	*/
 
 /*
@@ -105,7 +105,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_iwm.c,v 1.29 2015/03/26 14:42:56 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_iwm.c,v 1.29.2.2 2015/04/06 15:18:10 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>

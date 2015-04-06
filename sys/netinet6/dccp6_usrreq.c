@@ -1,5 +1,5 @@
 /*	$KAME: dccp6_usrreq.c,v 1.13 2005/07/27 08:42:56 nishida Exp $	*/
-/*	$NetBSD: dccp6_usrreq.c,v 1.2 2015/04/04 04:33:39 rtr Exp $ */
+/*	$NetBSD: dccp6_usrreq.c,v 1.2.2.2 2015/04/06 15:18:23 skrll Exp $ */
 
 /*
  * Copyright (C) 2003 WIDE Project.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dccp6_usrreq.c,v 1.2 2015/04/04 04:33:39 rtr Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dccp6_usrreq.c,v 1.2.2.2 2015/04/06 15:18:23 skrll Exp $");
 
 #include "opt_inet.h"
 #include "opt_dccp.h"

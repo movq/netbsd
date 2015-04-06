@@ -1,4 +1,4 @@
-/* $NetBSD: act8846.h,v 1.1 2015/01/01 17:33:18 jmcneill Exp $ */
+/* $NetBSD: act8846.h,v 1.1.2.2 2015/04/06 15:18:09 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_machdep.c,v 1.3 2015/03/29 22:27:04 jmcneill Exp $ */
+/* $NetBSD: tegra_machdep.c,v 1.3.2.2 2015/04/06 15:17:56 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tegra_machdep.c,v 1.3 2015/03/29 22:27:04 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tegra_machdep.c,v 1.3.2.2 2015/04/06 15:17:56 skrll Exp $");
 
 #include "opt_tegra.h"
 #include "opt_machdep.h"

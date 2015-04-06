@@ -1,4 +1,4 @@
-/*	$NetBSD: drmfb_pci.c,v 1.3 2015/03/05 20:19:30 christos Exp $	*/
+/*	$NetBSD: drmfb_pci.c,v 1.3.4.2 2015/04/06 15:18:18 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drmfb_pci.c,v 1.3 2015/03/05 20:19:30 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drmfb_pci.c,v 1.3.4.2 2015/04/06 15:18:18 skrll Exp $");
 
 #ifdef _KERNEL_OPT
 #include "vga.h"

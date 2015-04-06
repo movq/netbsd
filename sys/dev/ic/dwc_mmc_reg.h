@@ -1,4 +1,4 @@
-/* $NetBSD: dwc_mmc_reg.h,v 1.4 2015/01/17 19:32:50 jmcneill Exp $ */
+/* $NetBSD: dwc_mmc_reg.h,v 1.4.2.2 2015/04/06 15:18:09 skrll Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
