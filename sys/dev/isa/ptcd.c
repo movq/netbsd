@@ -1,4 +1,4 @@
-/* $NetBSD: ptcd.c,v 1.3 2012/12/17 17:46:27 mbalmer Exp $ */
+/* $NetBSD */
 
 /*
  * Copyright (c) 2012 Marc Balmer <marc@msys.ch>
@@ -35,6 +35,8 @@
 #include <sys/gpio.h>
 #include <sys/kernel.h>
 #include <sys/bus.h>
+
+#include <machine/pio.h>
 
 #include <dev/gpio/gpiovar.h>
 
