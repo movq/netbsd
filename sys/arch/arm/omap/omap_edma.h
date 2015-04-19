@@ -1,4 +1,4 @@
-/* $NetBSD: omap_edma.h,v 1.1 2015/04/14 18:37:43 bouyer Exp $ */
+/* $NetBSD: omap_edma.h,v 1.1.2.2 2015/04/19 04:37:17 msaitoh Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
