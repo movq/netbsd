@@ -1,4 +1,4 @@
-/*	$NetBSD: opacket.h,v 1.2 2015/04/03 23:58:19 christos Exp $	*/
+/*	$NetBSD: opacket.h,v 1.2.2.2 2015/04/30 06:07:30 riz Exp $	*/
 #ifndef _OPACKET_H
 /* Written by Markus Friedl. Placed in the public domain.  */
 

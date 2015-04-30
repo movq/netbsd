@@ -1,4 +1,4 @@
-/*	$NetBSD: bitmap.c,v 1.2 2015/04/03 23:58:19 christos Exp $	*/
+/*	$NetBSD: bitmap.c,v 1.2.2.2 2015/04/30 06:07:30 riz Exp $	*/
 /*
  * Copyright (c) 2015 Damien Miller <djm@mindrot.org>
  *
@@ -15,12 +15,15 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include "includes.h"
-__RCSID("$NetBSD: bitmap.c,v 1.2 2015/04/03 23:58:19 christos Exp $");
+__RCSID("$NetBSD: bitmap.c,v 1.2.2.2 2015/04/30 06:07:30 riz Exp $");
 
 #include <sys/types.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <time.h>
 
+#include "misc.h"
 #include "bitmap.h"
 
 #define BITMAP_WTYPE	u_int

@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.3 2015/01/22 18:46:15 christos Exp $
+# $NetBSD: Makefile,v 1.3.2.2 2015/04/30 06:07:34 riz Exp $
 
 USE_SHLIBDIR=   yes
 

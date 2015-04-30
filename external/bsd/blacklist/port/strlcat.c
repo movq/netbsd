@@ -1,4 +1,4 @@
-/*	$NetBSD: strlcat.c,v 1.2 2015/01/22 03:48:07 christos Exp $	*/
+/*	$NetBSD: strlcat.c,v 1.2.2.2 2015/04/30 06:07:34 riz Exp $	*/
 /*	$OpenBSD: strlcat.c,v 1.10 2003/04/12 21:56:39 millert Exp $	*/
 
 /*
@@ -24,7 +24,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: strlcat.c,v 1.2 2015/01/22 03:48:07 christos Exp $");
+__RCSID("$NetBSD: strlcat.c,v 1.2.2.2 2015/04/30 06:07:34 riz Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #ifdef _LIBC

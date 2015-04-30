@@ -1,4 +1,4 @@
-/*	$NetBSD: bl.c,v 1.24 2015/02/03 01:22:08 christos Exp $	*/
+/*	$NetBSD: bl.c,v 1.24.2.2 2015/04/30 06:07:34 riz Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: bl.c,v 1.24 2015/02/03 01:22:08 christos Exp $");
+__RCSID("$NetBSD: bl.c,v 1.24.2.2 2015/04/30 06:07:34 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

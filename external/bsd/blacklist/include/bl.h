@@ -1,4 +1,4 @@
-/*	$NetBSD: bl.h,v 1.12 2015/01/22 16:19:53 christos Exp $	*/
+/*	$NetBSD: bl.h,v 1.12.2.2 2015/04/30 06:07:34 riz Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
