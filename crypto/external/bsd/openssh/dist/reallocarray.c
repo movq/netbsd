@@ -1,7 +1,6 @@
-/*	$NetBSD: ssh-pkcs11.h,v 1.2.22.1 2015/04/30 06:07:30 riz Exp $	*/
-/* $OpenBSD: ssh-pkcs11.h,v 1.3 2014/04/29 18:01:49 markus Exp $ */
+/*     $OpenBSD: reallocarray.c,v 1.1 2014/05/08 21:43:49 deraadt Exp $        */
 /*
- * Copyright (c) 2010 Markus Friedl.  All rights reserved.
+ * Copyright (c) 2008 Otto Moerbeek <otto@drijf.net>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,11 +14,28 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
-int	pkcs11_init(int);
-void	pkcs11_terminate(void);
-int	pkcs11_add_provider(char *, char *, struct sshkey ***);
-int	pkcs11_del_provider(char *);
+#include "includes.h"
+#include <sys/types.h>
+#include <errno.h>
+#include <stdint.h>
+#include <stdlib.h>
+#include <stdio.h>
+#include <time.h>
+#include "misc.h"
 
-#if !defined(WITH_OPENSSL) && defined(ENABLE_PKCS11)
-#undef ENABLE_PKCS11
-#endif
+/*
+ * This is sqrt(SIZE_MAX+1), as s1*s2 <= SIZE_MAX
+ * if both s1 < MUL_NO_OVERFLOW and s2 < MUL_NO_OVERFLOW
+ */
+#define MUL_NO_OVERFLOW        ((size_t)1 << (sizeof(size_t) * 4))
+
+void *
+reallocarray(void *optr, size_t nmemb, size_t size)
+{
+	if ((nmemb >= MUL_NO_OVERFLOW || size >= MUL_NO_OVERFLOW) &&
+	    nmemb > 0 && SIZE_MAX / nmemb < size) {
+		errno = ENOMEM;
+		return NULL;
+	}
+	return realloc(optr, size * nmemb);
+}

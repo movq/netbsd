@@ -1,4 +1,4 @@
-/*	$NetBSD: sshkey.c,v 1.3 2015/04/03 23:58:19 christos Exp $	*/
+/*	$NetBSD: sshkey.c,v 1.3.2.2 2015/04/30 06:07:31 riz Exp $	*/
 /* $OpenBSD: sshkey.c,v 1.15 2015/03/06 01:40:56 djm Exp $ */
 /*
  * Copyright (c) 2000, 2001 Markus Friedl.  All rights reserved.
@@ -26,7 +26,7 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 #include "includes.h"
-__RCSID("$NetBSD: sshkey.c,v 1.3 2015/04/03 23:58:19 christos Exp $");
+__RCSID("$NetBSD: sshkey.c,v 1.3.2.2 2015/04/30 06:07:31 riz Exp $");
 
 #include <sys/param.h>	/* MIN MAX */
 #include <sys/types.h>

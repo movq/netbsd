@@ -1,4 +1,4 @@
-/*	$NetBSD: support.h,v 1.5 2015/01/25 22:22:54 christos Exp $	*/
+/*	$NetBSD: support.h,v 1.5.2.2 2015/04/30 06:07:33 riz Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
