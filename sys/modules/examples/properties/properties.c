@@ -1,4 +1,4 @@
-/*	$NetBSD: properties.c,v 1.1 2015/05/13 07:07:36 pgoyette Exp $	*/
+/*	$NetBSD: properties.c,v 1.1.2.2 2015/06/03 06:51:40 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: properties.c,v 1.1 2015/05/13 07:07:36 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: properties.c,v 1.1.2.2 2015/06/03 06:51:40 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
