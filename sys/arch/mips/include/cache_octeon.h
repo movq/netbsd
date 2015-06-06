@@ -1,4 +1,4 @@
-/*	$NetBSD: cache_octeon.h,v 1.1 2015/04/29 08:32:00 hikaru Exp $	*/
+/*	$NetBSD: cache_octeon.h,v 1.1.2.2 2015/06/06 14:40:01 skrll Exp $	*/
 
 #define	CACHE_OCTEON_I			0
 #define	CACHE_OCTEON_D			1

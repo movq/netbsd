@@ -1,4 +1,4 @@
-/*	$NetBSD: octeon1p_iobus.c,v 1.2 2015/05/01 07:23:47 hikaru Exp $	*/
+/*	$NetBSD: octeon1p_iobus.c,v 1.2.2.2 2015/06/06 14:40:01 skrll Exp $	*/
 
 /*
  * Copyright (c) 2007 Internet Initiative Japan, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: octeon1p_iobus.c,v 1.2 2015/05/01 07:23:47 hikaru Exp $");
+__KERNEL_RCSID(0, "$NetBSD: octeon1p_iobus.c,v 1.2.2.2 2015/06/06 14:40:01 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: auich_at_pci.c,v 1.1 2015/06/03 14:06:19 pooka Exp $	*/
+/*	$NetBSD: auich_at_pci.c,v 1.1.2.2 2015/06/06 14:40:27 skrll Exp $	*/
 
 /*
  * Copyright (c) 2010 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: auich_at_pci.c,v 1.1 2015/06/03 14:06:19 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: auich_at_pci.c,v 1.1.2.2 2015/06/06 14:40:27 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: via_module.c,v 1.1 2015/04/29 11:25:36 riastradh Exp $	*/
+/*	$NetBSD: via_module.c,v 1.1.2.2 2015/06/06 14:40:20 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: via_module.c,v 1.1 2015/04/29 11:25:36 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: via_module.c,v 1.1.2.2 2015/06/06 14:40:20 skrll Exp $");
 
 #include <sys/types.h>
 #include <sys/module.h>

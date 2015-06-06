@@ -1,11 +1,11 @@
-#	$NetBSD: ERLITE,v 1.9 2015/06/01 22:55:12 matt Exp $
+#	$NetBSD: ERLITE,v 1.9.2.2 2015/06/06 14:39:59 skrll Exp $
 
 include 	"arch/mips/conf/std.octeon"
 include 	"arch/evbmips/conf/files.octeon"
 
 #options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"ERLITE-$Revision: 1.9 $"
+#ident 		"ERLITE-$Revision: 1.9.2.2 $"
 
 maxusers	32
 

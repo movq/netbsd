@@ -1,4 +1,4 @@
-/* $NetBSD: gpiobutton.c,v 1.2 2015/05/30 17:12:16 jmcneill Exp $ */
+/* $NetBSD: gpiobutton.c,v 1.2.2.2 2015/06/06 14:40:07 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "locators.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gpiobutton.c,v 1.2 2015/05/30 17:12:16 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gpiobutton.c,v 1.2.2.2 2015/06/06 14:40:07 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

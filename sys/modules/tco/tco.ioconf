@@ -1,4 +1,4 @@
-# $NetBSD: tco.ioconf,v 1.1 2015/05/03 02:54:07 pgoyette Exp $
+# $NetBSD: tco.ioconf,v 1.1.2.2 2015/06/06 14:40:25 skrll Exp $
 
 ioconf tco
 

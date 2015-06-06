@@ -1,4 +1,4 @@
-/*	$NetBSD: octeon_pip.c,v 1.1 2015/04/29 08:32:01 hikaru Exp $	*/
+/*	$NetBSD: octeon_pip.c,v 1.1.2.2 2015/06/06 14:40:01 skrll Exp $	*/
 
 /*
  * Copyright (c) 2007 Internet Initiative Japan, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: octeon_pip.c,v 1.1 2015/04/29 08:32:01 hikaru Exp $");
+__KERNEL_RCSID(0, "$NetBSD: octeon_pip.c,v 1.1.2.2 2015/06/06 14:40:01 skrll Exp $");
 
 #include "opt_octeon.h"
 

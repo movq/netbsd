@@ -1,4 +1,4 @@
-/*	$NetBSD: rndio.h,v 1.1 2015/04/13 15:39:19 riastradh Exp $	*/
+/*	$NetBSD: rndio.h,v 1.1.2.2 2015/06/06 14:40:30 skrll Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.

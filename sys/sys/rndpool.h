@@ -1,4 +1,4 @@
-/*	$NetBSD: rndpool.h,v 1.3 2015/04/14 13:14:20 riastradh Exp $	*/
+/*	$NetBSD: rndpool.h,v 1.3.2.2 2015/06/06 14:40:30 skrll Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.

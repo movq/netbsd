@@ -1,4 +1,4 @@
-#	$NetBSD: files.octeon,v 1.4 2015/06/06 04:34:23 matt Exp $
+#	$NetBSD: files.octeon,v 1.4.2.2 2015/06/06 14:40:01 skrll Exp $
 
 file	arch/mips/mips/locore_octeon.S
 file	arch/mips/mips/bus_dma.c

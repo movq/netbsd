@@ -1,4 +1,4 @@
-/*	$NetBSD: tap_component.c,v 1.1 2015/05/29 12:32:23 pooka Exp $	*/
+/*	$NetBSD: tap_component.c,v 1.1.2.2 2015/06/06 14:40:30 skrll Exp $	*/
 
 /*
  * Copyright (c) 2015 Wei Liu.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tap_component.c,v 1.1 2015/05/29 12:32:23 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tap_component.c,v 1.1.2.2 2015/06/06 14:40:30 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
