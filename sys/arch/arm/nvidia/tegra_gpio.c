@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_gpio.c,v 1.3 2015/05/09 12:07:11 jmcneill Exp $ */
+/* $NetBSD: tegra_gpio.c,v 1.3.2.2 2015/06/06 14:39:56 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "locators.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tegra_gpio.c,v 1.3 2015/05/09 12:07:11 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tegra_gpio.c,v 1.3.2.2 2015/06/06 14:39:56 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

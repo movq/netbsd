@@ -1,4 +1,4 @@
-/*	$NetBSD: octeon_gmx.c,v 1.2 2015/06/01 22:55:12 matt Exp $	*/
+/*	$NetBSD: octeon_gmx.c,v 1.2.2.2 2015/06/06 14:40:01 skrll Exp $	*/
 
 /*
  * Copyright (c) 2007 Internet Initiative Japan, Inc.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: octeon_gmx.c,v 1.2 2015/06/01 22:55:12 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: octeon_gmx.c,v 1.2.2.2 2015/06/06 14:40:01 skrll Exp $");
 
 #include "opt_octeon.h"
 

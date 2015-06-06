@@ -1,4 +1,4 @@
-/*	$NetBSD: bootbusvar.h,v 1.2 2015/06/04 05:22:11 matt Exp $	*/
+/*	$NetBSD: bootbusvar.h,v 1.2.2.2 2015/06/06 14:40:01 skrll Exp $	*/
 
 /*
  * Copyright (c) 2007

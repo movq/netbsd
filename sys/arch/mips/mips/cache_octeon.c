@@ -1,7 +1,7 @@
-/*	$NetBSD: cache_octeon.c,v 1.1 2015/04/29 08:32:00 hikaru Exp $	*/
+/*	$NetBSD: cache_octeon.c,v 1.1.2.2 2015/06/06 14:40:02 skrll Exp $	*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cache_octeon.c,v 1.1 2015/04/29 08:32:00 hikaru Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cache_octeon.c,v 1.1.2.2 2015/06/06 14:40:02 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

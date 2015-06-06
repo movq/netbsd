@@ -1,4 +1,4 @@
-/*	$NetBSD: mach_intr.c,v 1.2 2015/06/01 22:55:12 matt Exp $	*/
+/*	$NetBSD: mach_intr.c,v 1.2.2.2 2015/06/06 14:39:59 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mach_intr.c,v 1.2 2015/06/01 22:55:12 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mach_intr.c,v 1.2.2.2 2015/06/06 14:39:59 skrll Exp $");
 
 #include "opt_ddb.h"
 

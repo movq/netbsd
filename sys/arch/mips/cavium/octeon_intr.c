@@ -1,4 +1,4 @@
-/*	$NetBSD: octeon_intr.c,v 1.3 2015/06/01 22:55:12 matt Exp $	*/
+/*	$NetBSD: octeon_intr.c,v 1.3.2.2 2015/06/06 14:40:01 skrll Exp $	*/
 /*
  * Copyright 2001, 2002 Wasabi Systems, Inc.
  * All rights reserved.
@@ -42,7 +42,7 @@
 #define __INTR_PRIVATE
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: octeon_intr.c,v 1.3 2015/06/01 22:55:12 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: octeon_intr.c,v 1.3.2.2 2015/06/06 14:40:01 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/cpu.h>

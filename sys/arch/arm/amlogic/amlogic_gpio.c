@@ -1,4 +1,4 @@
-/* $NetBSD: amlogic_gpio.c,v 1.2 2015/05/29 12:41:14 jmcneill Exp $ */
+/* $NetBSD: amlogic_gpio.c,v 1.2.2.2 2015/06/06 14:39:55 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "locators.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amlogic_gpio.c,v 1.2 2015/05/29 12:41:14 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amlogic_gpio.c,v 1.2.2.2 2015/06/06 14:39:55 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

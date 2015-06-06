@@ -1,4 +1,4 @@
-/*	$NetBSD: octeon_uart.c,v 1.3 2015/06/02 05:11:34 matt Exp $	*/
+/*	$NetBSD: octeon_uart.c,v 1.3.2.2 2015/06/06 14:40:01 skrll Exp $	*/
 
 /*
  * Copyright (c) 2007 Internet Initiative Japan, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: octeon_uart.c,v 1.3 2015/06/02 05:11:34 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: octeon_uart.c,v 1.3.2.2 2015/06/06 14:40:01 skrll Exp $");
 
 #include "opt_octeon.h"
 

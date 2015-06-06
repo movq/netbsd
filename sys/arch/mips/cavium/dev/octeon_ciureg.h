@@ -1,4 +1,4 @@
-/*	$NetBSD: octeon_ciureg.h,v 1.3 2015/06/06 04:33:45 matt Exp $	*/
+/*	$NetBSD: octeon_ciureg.h,v 1.3.2.2 2015/06/06 14:40:01 skrll Exp $	*/
 
 /*
  * Copyright (c) 2007 Internet Initiative Japan, Inc.

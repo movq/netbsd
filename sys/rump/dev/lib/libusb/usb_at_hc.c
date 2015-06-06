@@ -1,4 +1,4 @@
-/*	$NetBSD: usb_at_hc.c,v 1.1 2015/05/20 11:53:08 pooka Exp $	*/
+/*	$NetBSD: usb_at_hc.c,v 1.1.2.2 2015/06/06 14:40:27 skrll Exp $	*/
 
 #include <sys/param.h>
 #include <sys/types.h>

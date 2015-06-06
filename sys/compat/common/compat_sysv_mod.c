@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_sysv_mod.c,v 1.3 2015/05/13 02:08:20 pgoyette Exp $	*/
+/*	$NetBSD: compat_sysv_mod.c,v 1.3.2.2 2015/06/06 14:40:05 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_sysv_mod.c,v 1.3 2015/05/13 02:08:20 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_sysv_mod.c,v 1.3.2.2 2015/06/06 14:40:05 skrll Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"

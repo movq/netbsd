@@ -1,4 +1,4 @@
-/*	$NetBSD: octeon_corereg.h,v 1.2 2015/06/01 22:55:12 matt Exp $	*/
+/*	$NetBSD: octeon_corereg.h,v 1.2.2.2 2015/06/06 14:40:01 skrll Exp $	*/
 
 /*
  * Copyright (c) 2007 Internet Initiative Japan, Inc.

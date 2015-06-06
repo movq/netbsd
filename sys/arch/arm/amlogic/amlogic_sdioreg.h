@@ -1,4 +1,4 @@
-/* $NetBSD: amlogic_sdioreg.h,v 1.1 2015/04/19 18:54:52 jmcneill Exp $ */
+/* $NetBSD: amlogic_sdioreg.h,v 1.1.2.2 2015/06/06 14:39:55 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

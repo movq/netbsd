@@ -1,4 +1,4 @@
-#	$NetBSD: viadrmums.ioconf,v 1.2 2015/04/29 17:36:32 riastradh Exp $
+#	$NetBSD: viadrmums.ioconf,v 1.2.2.2 2015/06/06 14:40:25 skrll Exp $
 
 ioconf viadrmums
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: octeon_bootbus_machdep.c,v 1.2 2015/06/04 05:22:10 matt Exp $	*/
+/*	$NetBSD: octeon_bootbus_machdep.c,v 1.2.2.2 2015/06/06 14:39:59 skrll Exp $	*/
 
 /*
  * Copyright (c) 2007 Internet Initiative Japan, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: octeon_bootbus_machdep.c,v 1.2 2015/06/04 05:22:10 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: octeon_bootbus_machdep.c,v 1.2.2.2 2015/06/06 14:39:59 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: octeon_cop2var.h,v 1.1 2015/04/29 08:32:01 hikaru Exp $	*/
+/*	$NetBSD: octeon_cop2var.h,v 1.1.2.2 2015/06/06 14:40:01 skrll Exp $	*/
 
 /*
  * TODO:

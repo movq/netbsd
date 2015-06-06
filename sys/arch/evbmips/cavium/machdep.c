@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.4 2015/06/04 05:21:09 matt Exp $	*/
+/*	$NetBSD: machdep.c,v 1.4.2.2 2015/06/06 14:39:59 skrll Exp $	*/
 
 /*
  * Copyright 2001, 2002 Wasabi Systems, Inc.
@@ -112,7 +112,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.4 2015/06/04 05:21:09 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.4.2.2 2015/06/06 14:39:59 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

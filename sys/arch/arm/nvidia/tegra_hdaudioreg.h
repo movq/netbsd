@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_hdaudioreg.h,v 1.1 2015/05/10 11:04:59 jmcneill Exp $ */
+/* $NetBSD: tegra_hdaudioreg.h,v 1.1.2.2 2015/06/06 14:39:56 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

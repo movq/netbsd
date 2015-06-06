@@ -1,4 +1,4 @@
-/*	$NetBSD: msipic.c,v 1.4 2015/05/08 04:27:48 knakahara Exp $	*/
+/*	$NetBSD: msipic.c,v 1.4.2.2 2015/06/06 14:40:04 skrll Exp $	*/
 
 /*
  * Copyright (c) 2015 Internet Initiative Japan Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msipic.c,v 1.4 2015/05/08 04:27:48 knakahara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msipic.c,v 1.4.2.2 2015/06/06 14:40:04 skrll Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

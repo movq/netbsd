@@ -1,1 +1,1 @@
-/*	$NetBSD: opt_pciide.h,v 1.1 2015/05/17 13:51:31 pooka Exp $	*/
+/*	$NetBSD: opt_pciide.h,v 1.1.2.2 2015/06/06 14:40:27 skrll Exp $	*/
