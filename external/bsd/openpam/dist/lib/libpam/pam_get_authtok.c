@@ -1,4 +1,4 @@
-/*	$NetBSD: pam_get_authtok.c,v 1.2 2014/10/24 18:17:56 christos Exp $	*/
+/*	$NetBSD: pam_get_authtok.c,v 1.2.2.2 2015/06/08 20:33:20 snj Exp $	*/
 
 /*-
  * Copyright (c) 2002-2003 Networks Associates Technology, Inc.
@@ -42,7 +42,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pam_get_authtok.c,v 1.2 2014/10/24 18:17:56 christos Exp $");
+__RCSID("$NetBSD: pam_get_authtok.c,v 1.2.2.2 2015/06/08 20:33:20 snj Exp $");
 
 #include <sys/param.h>
 
