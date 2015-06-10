@@ -1,4 +1,4 @@
-/* $NetBSD: am335x_trngreg.h,v 1.1 2015/06/06 14:00:32 jmcneill Exp $ */
+/* $NetBSD: am335x_trngreg.h,v 1.1.2.2 2015/06/10 16:38:05 snj Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
