@@ -1,4 +1,4 @@
-#	$NetBSD: NETSMB.ioconf,v 1.1 2015/08/20 11:51:12 christos Exp $
+#	$NetBSD: NETSMB.ioconf,v 1.1.2.2 2015/09/22 12:06:13 skrll Exp $
 #
 
 ioconf netsmb

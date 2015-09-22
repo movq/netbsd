@@ -1,4 +1,4 @@
-#	$NetBSD: vnd.ioconf,v 1.1 2015/08/20 11:05:02 christos Exp $
+#	$NetBSD: vnd.ioconf,v 1.1.2.2 2015/09/22 12:06:10 skrll Exp $
 
 ioconf		vnd
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: lfs_accessors.h,v 1.33 2015/09/21 01:24:58 dholland Exp $	*/
+/*	$NetBSD: lfs_accessors.h,v 1.33.2.2 2015/09/22 12:06:17 skrll Exp $	*/
 
 /*  from NetBSD: lfs.h,v 1.165 2015/07/24 06:59:32 dholland Exp  */
 /*  from NetBSD: dinode.h,v 1.22 2013/01/22 09:39:18 dholland Exp  */

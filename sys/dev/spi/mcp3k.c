@@ -1,4 +1,4 @@
-/*	$NetBSD: mcp3k.c,v 1.1 2015/08/18 15:54:20 phx Exp $ */
+/*	$NetBSD: mcp3k.c,v 1.1.2.2 2015/09/22 12:06:00 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.

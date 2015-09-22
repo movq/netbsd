@@ -1,3 +1,3 @@
-/*	$NetBSD: ksyms.h,v 1.1 2015/08/24 22:52:15 pooka Exp $	*/
+/*	$NetBSD: ksyms.h,v 1.1.2.2 2015/09/22 12:06:15 skrll Exp $	*/
 
 #define NKSYMS 0

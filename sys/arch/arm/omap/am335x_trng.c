@@ -1,4 +1,4 @@
-/* $NetBSD: am335x_trng.c,v 1.1 2015/06/06 14:00:32 jmcneill Exp $ */
+/* $NetBSD: am335x_trng.c,v 1.1.4.2 2015/09/22 12:05:38 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: am335x_trng.c,v 1.1 2015/06/06 14:00:32 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: am335x_trng.c,v 1.1.4.2 2015/09/22 12:05:38 skrll Exp $");
 
 #include "opt_omap.h"
 

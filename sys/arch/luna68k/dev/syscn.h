@@ -1,4 +1,4 @@
-/*	$NetBSD: syscn.h,v 1.1 2015/08/21 10:48:06 christos Exp $	*/
+/*	$NetBSD: syscn.h,v 1.1.2.2 2015/09/22 12:05:45 skrll Exp $	*/
 
 void syscninit(int);
 int  syscngetc(dev_t);

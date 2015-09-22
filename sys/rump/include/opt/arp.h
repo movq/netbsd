@@ -1,3 +1,3 @@
-/*	$NetBSD: arp.h,v 1.1 2015/08/24 22:31:33 pooka Exp $	*/
+/*	$NetBSD: arp.h,v 1.1.2.2 2015/09/22 12:06:14 skrll Exp $	*/
 
 #define NARP 1

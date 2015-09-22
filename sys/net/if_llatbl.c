@@ -1,4 +1,4 @@
-/*	$NetBSD: if_llatbl.c,v 1.4 2015/09/09 01:26:50 ozaki-r Exp $	*/
+/*	$NetBSD: if_llatbl.c,v 1.4.2.2 2015/09/22 12:06:10 skrll Exp $	*/
 /*
  * Copyright (c) 2004 Luigi Rizzo, Alessandro Cerri. All rights reserved.
  * Copyright (c) 2004-2008 Qing Li. All rights reserved.

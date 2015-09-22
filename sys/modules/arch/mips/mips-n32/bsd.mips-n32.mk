@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.mips-n32.mk,v 1.1 2015/06/22 06:46:27 matt Exp $
+#	$NetBSD: bsd.mips-n32.mk,v 1.1.2.2 2015/09/22 12:06:08 skrll Exp $
 
 .ifndef _BSD_MIPS_N32_MK_
 .if ${MACHINE_ARCH} == "mips64eb"

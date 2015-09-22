@@ -1,2 +1,2 @@
-/*	$NetBSD: gpiosim.h,v 1.1 2015/08/20 12:28:43 uebayasi Exp $	*/
+/*	$NetBSD: gpiosim.h,v 1.1.2.2 2015/09/22 12:06:09 skrll Exp $	*/
 #define NGPIOSIM 1

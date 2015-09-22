@@ -1,3 +1,3 @@
-/*	$NetBSD: arcnet.h,v 1.1 2015/08/24 23:04:42 pooka Exp $	*/
+/*	$NetBSD: arcnet.h,v 1.1.2.2 2015/09/22 12:06:14 skrll Exp $	*/
 
 /* dummy */

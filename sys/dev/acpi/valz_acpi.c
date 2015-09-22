@@ -1,4 +1,4 @@
-/*	$NetBSD: valz_acpi.c,v 1.5 2015/09/21 12:32:06 nonaka Exp $	*/
+/*	$NetBSD: valz_acpi.c,v 1.5.2.2 2015/09/22 12:05:56 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -74,7 +74,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: valz_acpi.c,v 1.5 2015/09/21 12:32:06 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: valz_acpi.c,v 1.5.2.2 2015/09/22 12:05:56 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

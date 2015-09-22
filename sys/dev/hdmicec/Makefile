@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2015/08/02 21:22:34 jmcneill Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2015/09/22 12:05:57 skrll Exp $
 
 INCSDIR= /usr/include/dev/hdmicec
 

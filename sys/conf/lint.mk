@@ -1,4 +1,4 @@
-# $NetBSD: lint.mk,v 1.1 2015/08/29 16:27:07 uebayasi Exp $
+# $NetBSD: lint.mk,v 1.1.2.2 2015/09/22 12:05:56 skrll Exp $
 
 ##
 ## lint

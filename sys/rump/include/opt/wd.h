@@ -1,1 +1,1 @@
-/*	$NetBSD: wd.h,v 1.1 2015/08/24 23:21:51 pooka Exp $	*/
+/*	$NetBSD: wd.h,v 1.1.2.2 2015/09/22 12:06:15 skrll Exp $	*/

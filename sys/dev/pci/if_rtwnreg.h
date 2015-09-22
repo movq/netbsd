@@ -1,4 +1,4 @@
-/*	$NetBSD: if_rtwnreg.h,v 1.1 2015/08/27 14:04:08 nonaka Exp $	*/
+/*	$NetBSD: if_rtwnreg.h,v 1.1.2.2 2015/09/22 12:05:59 skrll Exp $	*/
 /*	$OpenBSD: if_rtwnreg.h,v 1.3 2015/06/14 08:02:47 stsp Exp $	*/
 
 /*-
