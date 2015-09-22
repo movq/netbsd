@@ -1,4 +1,4 @@
-/* $NetBSD: hdmicec_if.h,v 1.1 2015/08/01 21:19:24 jmcneill Exp $ */
+/* $NetBSD: hdmicec_if.h,v 1.1.2.2 2015/09/22 12:05:57 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

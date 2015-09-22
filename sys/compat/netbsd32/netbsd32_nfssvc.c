@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_nfssvc.c,v 1.3 2015/08/05 23:17:06 mrg Exp $	*/
+/*	$NetBSD: netbsd32_nfssvc.c,v 1.3.2.2 2015/09/22 12:05:55 skrll Exp $	*/
 
 /*
  * Copyright (c) 2015 Matthew R. Green
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_nfssvc.c,v 1.3 2015/08/05 23:17:06 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_nfssvc.c,v 1.3.2.2 2015/09/22 12:05:55 skrll Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_nfs.h"

@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_cecreg.h,v 1.1 2015/08/01 21:20:11 jmcneill Exp $ */
+/* $NetBSD: tegra_cecreg.h,v 1.1.2.2 2015/09/22 12:05:38 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

@@ -1,4 +1,4 @@
-#	$NetBSD: files.dev,v 1.1 2015/08/21 02:18:18 uebayasi Exp $
+#	$NetBSD: files.dev,v 1.1.2.2 2015/09/22 12:05:56 skrll Exp $
 
 file	dev/bio.c			bio			needs-flag
 file	dev/ccd.c			ccd

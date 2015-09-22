@@ -1,4 +1,4 @@
-# $NetBSD: assym.mk,v 1.5 2015/09/10 13:11:39 uebayasi Exp $
+# $NetBSD: assym.mk,v 1.5.2.2 2015/09/22 12:05:56 skrll Exp $
 
 assym.h: ${GENASSYM_CONF} ${GENASSYM_EXTRAS} $S/conf/genassym.cf
 	${_MKTARGET_CREATE}

@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_interrupt.c,v 1.1 2015/08/17 06:16:03 knakahara Exp $	*/
+/*	$NetBSD: subr_interrupt.c,v 1.1.2.2 2015/09/22 12:06:07 skrll Exp $	*/
 
 /*
  * Copyright (c) 2015 Internet Initiative Japan Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_interrupt.c,v 1.1 2015/08/17 06:16:03 knakahara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_interrupt.c,v 1.1.2.2 2015/09/22 12:06:07 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

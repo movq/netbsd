@@ -1,4 +1,4 @@
-/* $NetBSD: common_lock.h,v 1.1 2015/06/26 14:27:35 matt Exp $ */
+/* $NetBSD: common_lock.h,v 1.1.2.2 2015/09/22 12:06:17 skrll Exp $ */
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

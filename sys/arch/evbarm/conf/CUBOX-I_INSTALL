@@ -1,4 +1,4 @@
-#	$NetBSD: CUBOX-I_INSTALL,v 1.1 2015/07/18 00:57:10 matt Exp $
+#	$NetBSD: CUBOX-I_INSTALL,v 1.1.2.2 2015/09/22 12:05:40 skrll Exp $
 #
 #	CUBOX-I_INSTALL -- CUBOX-I kernel with installation-sized
 #	ramdisk

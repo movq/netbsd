@@ -1,4 +1,4 @@
-/*	$NetBSD: timespec.h,v 1.1 2015/07/31 12:51:32 kamil Exp $	*/
+/*	$NetBSD: timespec.h,v 1.1.2.2 2015/09/22 12:06:17 skrll Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
