@@ -1,4 +1,4 @@
-/*	$NetBSD: menus.mi,v 1.10 2015/05/11 13:07:57 martin Exp $	*/
+/*	$NetBSD: menus.mi,v 1.4.4.5 2015/05/14 07:58:49 snj Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.

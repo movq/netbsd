@@ -1,6 +1,6 @@
 /* nbtool_config.h.in.  Generated automatically from configure.ac by autoheader.  */
 
-/*      $NetBSD: nbtool_config.h.in,v 1.37 2015/07/26 14:01:53 kamil Exp $    */
+/*      $NetBSD: nbtool_config.h.in,v 1.35.2.1 2015/04/22 07:18:58 snj Exp $    */
  
 #ifndef __NETBSD_NBTOOL_CONFIG_H__
 #define __NETBSD_NBTOOL_CONFIG_H__
@@ -418,9 +418,6 @@
 
 /* Define if you have the `random' function. */
 #undef HAVE_RANDOM
-
-/* Define if you have the `reallocarr' function. */
-#undef HAVE_REALLOCARR
 
 /* Define if you have the <resolv.h> header file. */
 #undef HAVE_RESOLV_H

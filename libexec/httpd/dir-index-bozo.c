@@ -1,4 +1,4 @@
-/*	$NetBSD: dir-index-bozo.c,v 1.21 2015/08/27 17:12:18 mrg Exp $	*/
+/*	$NetBSD: dir-index-bozo.c,v 1.19.4.1 2015/01/12 10:02:29 martin Exp $	*/
 
 /*	$eterna: dir-index-bozo.c,v 1.20 2011/11/18 09:21:15 mrg Exp $	*/
 
@@ -57,7 +57,7 @@ directory_hr(bozohttpd_t *httpd)
  * output a directory index.  return 1 if it actually did something..
  */
 int
-bozo_dir_index(bozo_httpreq_t *request, const char *dirpath, int isindex)
+bozo_dir_index(bozo_httpreq_t *request, const char *dirname, int isindex)
 {
 	bozohttpd_t *httpd = request->hr_httpd;
 	struct stat sb;
@@ -72,17 +72,17 @@ bozo_dir_index(bozo_httpreq_t *request, const char *dirpath, int isindex)
 	if (!isindex || !httpd->dir_indexing)
 		return 0;
 
-	if (strlen(dirpath) <= strlen(httpd->index_html))
-		dirpath = ".";
+	if (strlen(dirname) <= strlen(httpd->index_html))
+		dirname = ".";
 	else {
-		file = bozostrdup(httpd, dirpath);
+		file = bozostrdup(httpd, dirname);
 
 		file[strlen(file) - strlen(httpd->index_html)] = '\0';
-		dirpath = file;
+		dirname = file;
 	}
-	debug((httpd, DEBUG_FAT, "bozo_dir_index: dirpath ``%s''", dirpath));
-	if (stat(dirpath, &sb) < 0 ||
-	    (dp = opendir(dirpath)) == NULL) {
+	debug((httpd, DEBUG_FAT, "bozo_dir_index: dirname ``%s''", dirname));
+	if (stat(dirname, &sb) < 0 ||
+	    (dp = opendir(dirname)) == NULL) {
 		if (errno == EPERM)
 			(void)bozo_http_error(httpd, 403, request,
 			    "no permission to open directory");
@@ -123,7 +123,7 @@ bozo_dir_index(bozo_httpreq_t *request, const char *dirpath, int isindex)
 	directory_hr(httpd);
 	bozo_printf(httpd, "<pre>");
 
-	for (j = k = scandir(dirpath, &de, NULL, alphasort), deo = de;
+	for (j = k = scandir(dirname, &de, NULL, alphasort), deo = de;
 	    j--; de++) {
 		int nostat = 0;
 		char *name = (*de)->d_name;
@@ -134,7 +134,7 @@ bozo_dir_index(bozo_httpreq_t *request, const char *dirpath, int isindex)
 		     httpd->hide_dots && name[0] == '.'))
 			continue;
 
-		snprintf(buf, sizeof buf, "%s/%s", dirpath, name);
+		snprintf(buf, sizeof buf, "%s/%s", dirname, name);
 		if (stat(buf, &sb))
 			nostat = 1;
 

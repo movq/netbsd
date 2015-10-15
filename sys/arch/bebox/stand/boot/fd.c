@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.11 2014/12/12 15:57:30 phx Exp $	*/
+/*	$NetBSD: fd.c,v 1.10.34.1 2015/01/07 21:13:28 msaitoh Exp $	*/
 
 /*-
  * Copyright (C) 1997-1998 Kazuki Sakamoto (sakamoto@NetBSD.org)

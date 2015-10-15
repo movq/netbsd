@@ -81,8 +81,7 @@ extern __inline long
 __attribute__ ((__gnu_inline__, __always_inline__, __artificial__))
 __TM_end (void)
 {
-  unsigned char status = _HTM_STATE (__builtin_tend (0));
-  if (__builtin_expect (status, _HTM_TRANSACTIONAL))
+  if (__builtin_expect (__builtin_tend (0), 1))
     return 1;
   return 0;
 }

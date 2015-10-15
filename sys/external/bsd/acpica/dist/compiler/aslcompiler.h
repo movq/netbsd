@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,7 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
 
 #ifndef __ASLCOMPILER_H
 #define __ASLCOMPILER_H
@@ -110,11 +111,6 @@ AslPushInputFileStack (
     FILE                    *InputFile,
     char                    *Filename);
 
-void
-AslParserCleanup (
-    void);
-
-
 /*
  * aslstartup - entered from main()
  */
@@ -158,20 +154,13 @@ void
 CmCleanupAndExit (
     void);
 
-void
-CmDeleteCaches (
-    void);
-
-
-/*
- * aslascii - ascii support
- */
 ACPI_STATUS
 FlCheckForAcpiTable (
     FILE                    *Handle);
 
 ACPI_STATUS
 FlCheckForAscii (
+    FILE                    *Handle,
     char                    *Filename,
     BOOLEAN                 DisplayErrors);
 
@@ -286,23 +275,14 @@ void
 ApCheckRegMethod (
     ACPI_PARSE_OBJECT       *Op);
 
-BOOLEAN
-ApFindNameInScope (
-    char                    *Name,
-    ACPI_PARSE_OBJECT       *Op);
-
 
 /*
  * aslerror - error handling/reporting
  */
 void
-AslAbort (
-    void);
-
-void
 AslError (
     UINT8                   Level,
-    UINT16                  MessageId,
+    UINT8                   MessageId,
     ACPI_PARSE_OBJECT       *Op,
     char                    *ExtraMessage);
 
@@ -313,7 +293,7 @@ AslDisableException (
 BOOLEAN
 AslIsExceptionDisabled (
     UINT8                   Level,
-    UINT16                  MessageId);
+    UINT8                   MessageId);
 
 void
 AslCoreSubsystemError (
@@ -329,7 +309,7 @@ AslCompilererror(
 void
 AslCommonError (
     UINT8                   Level,
-    UINT16                  MessageId,
+    UINT8                   MessageId,
     UINT32                  CurrentLineNumber,
     UINT32                  LogicalLineNumber,
     UINT32                  LogicalByteOffset,
@@ -340,7 +320,7 @@ AslCommonError (
 void
 AslCommonError2 (
     UINT8                   Level,
-    UINT16                  MessageId,
+    UINT8                   MessageId,
     UINT32                  LineNumber,
     UINT32                  Column,
     char                    *SourceLine,
@@ -359,6 +339,10 @@ AePrintErrorLog (
 
 void
 AeClearErrorLog (
+    void);
+
+ACPI_PHYSICAL_ADDRESS
+AeLocalGetRootPointer (
     void);
 
 
@@ -451,22 +435,6 @@ OpcAmlConstantWalk (
 
 
 /*
- * aslmessages - exception strings
- */
-const char *
-AeDecodeMessageId (
-    UINT16                  MessageId);
-
-const char *
-AeDecodeExceptionLevel (
-    UINT8                   Level);
-
-UINT16
-AeBuildFullExceptionCode (
-    UINT8                   Level,
-    UINT16                  MessageId);
-
-/*
  * asloffset - generate C offset file for BIOS support
  */
 ACPI_STATUS
@@ -539,27 +507,6 @@ OptOptimizeNamePath (
     ACPI_WALK_STATE         *WalkState,
     char                    *AmlNameString,
     ACPI_NAMESPACE_NODE     *TargetNode);
-
-
-/*
- * aslprintf - Printf/Fprintf macros
- */
-void
-OpcDoPrintf (
-    ACPI_PARSE_OBJECT       *Op);
-
-void
-OpcDoFprintf (
-    ACPI_PARSE_OBJECT       *Op);
-
-
-/*
- * aslprune - parse tree pruner
- */
-void
-AslPruneParseTree (
-    UINT32                  PruneDepth,
-    UINT32                  Type);
 
 
 /*
@@ -685,10 +632,6 @@ TrAllocateNode (
     UINT32                  ParseOpcode);
 
 void
-TrPrintNodeCompileFlags (
-    UINT32                  Flags);
-
-void
 TrReleaseNode (
     ACPI_PARSE_OBJECT       *Op);
 
@@ -706,20 +649,6 @@ TrCreateNode (
 ACPI_PARSE_OBJECT *
 TrCreateLeafNode (
     UINT32                  ParseOpcode);
-
-ACPI_PARSE_OBJECT *
-TrCreateNullTarget (
-    void);
-
-ACPI_PARSE_OBJECT *
-TrCreateAssignmentNode (
-    ACPI_PARSE_OBJECT       *Target,
-    ACPI_PARSE_OBJECT       *Source);
-
-ACPI_PARSE_OBJECT *
-TrCreateTargetOperand (
-    ACPI_PARSE_OBJECT       *OriginalOp,
-    ACPI_PARSE_OBJECT       *ParentOp);
 
 ACPI_PARSE_OBJECT *
 TrCreateValuedLeafNode (
@@ -773,6 +702,10 @@ TrLinkPeerNodes (
 /*
  * aslfiles - File I/O support
  */
+void
+AslAbort (
+    void);
+
 void
 FlAddIncludeDirectory (
     char                    *Dir);
@@ -845,13 +778,6 @@ FlOpenAmlOutputFile (
 ACPI_STATUS
 FlOpenMiscOutputFiles (
     char                    *InputFilename);
-
-/*
- * aslhwmap - hardware map summary
- */
-void
-MpEmitMappingInfo (
-    void);
 
 
 /*
@@ -944,11 +870,6 @@ UtLocalCalloc (
     UINT32                  Size);
 
 void
-UtLocalFree (
-    void		    *Allocated,
-    UINT32                  Size);
-
-void
 UtPrintFormattedName (
     UINT16                  ParseOpcode,
     UINT32                  Level);
@@ -956,6 +877,10 @@ UtPrintFormattedName (
 void
 UtDisplaySummary (
     UINT32                  FileId);
+
+UINT8
+UtHexCharToValue (
+    int                     HexChar);
 
 void
 UtConvertByteToHex (
@@ -976,15 +901,11 @@ UtSetParseOpName (
     ACPI_PARSE_OBJECT       *Op);
 
 char *
-UtStringCacheCalloc (
+UtGetStringBuffer (
     UINT32                  Length);
 
 void
 UtExpandLineBuffers (
-    void);
-
-void
-UtFreeLineBuffers (
     void);
 
 ACPI_STATUS
@@ -1008,7 +929,7 @@ UtDoConstant (
     char                    *String);
 
 ACPI_STATUS
-stroul64 (
+UtStrtoul64 (
     char                    *String,
     UINT32                  Base,
     UINT64                  *RetInteger);
@@ -1020,6 +941,11 @@ stroul64 (
 ACPI_STATUS
 AuValidateUuid (
     char                    *InString);
+
+ACPI_STATUS
+AuConvertStringToUuid (
+    char                    *InString,
+    char                    *UuIdBuffer);
 
 ACPI_STATUS
 AuConvertUuidToString (
@@ -1095,7 +1021,8 @@ RsCheckListForDuplicates (
 
 ASL_RESOURCE_NODE *
 RsDoOneResourceDescriptor (
-    ASL_RESOURCE_INFO       *Info,
+    ACPI_PARSE_OBJECT       *DescriptorTypeOp,
+    UINT32                  CurrentByteOffset,
     UINT8                   *State);
 
 /* Values for State above */
@@ -1119,35 +1046,43 @@ RsDoResourceTemplate (
  */
 ASL_RESOURCE_NODE *
 RsDoEndTagDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoEndDependentDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoMemory24Descriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoMemory32Descriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoMemory32FixedDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoStartDependentDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoStartDependentNoPriDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoVendorSmallDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 
 /*
@@ -1155,27 +1090,33 @@ RsDoVendorSmallDescriptor (
  */
 ASL_RESOURCE_NODE *
 RsDoDmaDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoFixedDmaDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoFixedIoDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoIoDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoIrqDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoIrqNoFlagsDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 
 /*
@@ -1183,50 +1124,61 @@ RsDoIrqNoFlagsDescriptor (
  */
 ASL_RESOURCE_NODE *
 RsDoInterruptDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoVendorLargeDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoGeneralRegisterDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoGpioIntDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoGpioIoDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoI2cSerialBusDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoSpiSerialBusDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoUartSerialBusDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 /*
  * aslrestype2d - DWord address descriptors
  */
 ASL_RESOURCE_NODE *
 RsDoDwordIoDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoDwordMemoryDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoDwordSpaceDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 
 /*
@@ -1234,15 +1186,18 @@ RsDoDwordSpaceDescriptor (
  */
 ASL_RESOURCE_NODE *
 RsDoExtendedIoDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoExtendedMemoryDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoExtendedSpaceDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 
 /*
@@ -1250,15 +1205,18 @@ RsDoExtendedSpaceDescriptor (
  */
 ASL_RESOURCE_NODE *
 RsDoQwordIoDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoQwordMemoryDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoQwordSpaceDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 
 /*
@@ -1266,16 +1224,18 @@ RsDoQwordSpaceDescriptor (
  */
 ASL_RESOURCE_NODE *
 RsDoWordIoDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoWordSpaceDescriptor (
-    ASL_RESOURCE_INFO       *Info);
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 ASL_RESOURCE_NODE *
 RsDoWordBusNumberDescriptor (
-    ASL_RESOURCE_INFO       *Info);
-
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  CurrentByteOffset);
 
 /*
  * Entry to data table compiler subsystem

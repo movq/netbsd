@@ -31,7 +31,7 @@
 /*  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR */
 /*  PURPOSE. */
 #include "flexdef.h"
-__RCSID("$NetBSD: ccl.c,v 1.3 2014/10/30 18:44:05 christos Exp $");
+__RCSID("$NetBSD: ccl.c,v 1.1.1.1.26.1 2015/03/06 20:49:11 snj Exp $");
 
 
 /* return true if the chr is in the ccl. Takes negation into account. */

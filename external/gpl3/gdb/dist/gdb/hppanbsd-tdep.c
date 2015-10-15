@@ -1,6 +1,6 @@
 /* Target-dependent code for NetBSD/hppa
 
-   Copyright (C) 2008-2015 Free Software Foundation, Inc.
+   Copyright (C) 2008-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -24,6 +24,9 @@
 
 #include "trad-frame.h"
 #include "tramp-frame.h"
+
+#include "gdb_assert.h"
+#include <string.h>
 
 #include "hppa-tdep.h"
 #include "hppabsd-tdep.h"
@@ -210,21 +213,23 @@ hppanbsd_supply_gregset (const struct regset *regset,
 
 /* NetBSD/hppa register set.  */
 
-static const struct regset hppanbsd_gregset =
+static struct regset hppanbsd_gregset =
 {
   NULL,
   hppanbsd_supply_gregset
 };
 
-/* Iterate over supported core file register note sections. */
+/* Return the appropriate register set for the core section identified
+   by SECT_NAME and SECT_SIZE.  */
 
-static void
-hppanbsd_iterate_over_regset_sections (struct gdbarch *gdbarch,
-				       iterate_over_regset_sections_cb *cb,
-				       void *cb_data,
-				       const struct regcache *regcache)
+static const struct regset *
+hppanbsd_regset_from_core_section (struct gdbarch *gdbarch,
+				  const char *sect_name, size_t sect_size)
 {
-  cb (".reg", HPPANBSD_SIZEOF_GREGS, &hppanbsd_gregset, NULL, cb_data);
+  if (strcmp (sect_name, ".reg") == 0 && sect_size >= HPPANBSD_SIZEOF_GREGS)
+    return &hppanbsd_gregset;
+
+  return NULL;
 }
 
 static void
@@ -234,8 +239,8 @@ hppanbsd_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   hppabsd_init_abi (info, gdbarch);
 
   /* Core file support.  */
-  set_gdbarch_iterate_over_regset_sections
-    (gdbarch, hppanbsd_iterate_over_regset_sections);
+  set_gdbarch_regset_from_core_section
+    (gdbarch, hppanbsd_regset_from_core_section);
 
   tramp_frame_prepend_unwinder (gdbarch, &hppanbsd_sigtramp_si4);
 }

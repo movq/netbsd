@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,8 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+#define __RSCREATE_C__
+
 #include "acpi.h"
 #include "accommon.h"
 #include "acresrc.h"
@@ -75,10 +77,6 @@ AcpiBufferToResource (
     void                    *Resource;
     void                    *CurrentResourcePtr;
 
-
-    ACPI_FUNCTION_TRACE (AcpiBufferToResource);
-
-
     /*
      * Note: we allow AE_AML_NO_RESOURCE_END_TAG, since an end tag
      * is not required here.
@@ -94,7 +92,7 @@ AcpiBufferToResource (
     }
     if (ACPI_FAILURE (Status))
     {
-        return_ACPI_STATUS (Status);
+        return (Status);
     }
 
     /* Allocate a buffer for the converted resource */
@@ -103,7 +101,7 @@ AcpiBufferToResource (
     CurrentResourcePtr = Resource;
     if (!Resource)
     {
-        return_ACPI_STATUS (AE_NO_MEMORY);
+        return (AE_NO_MEMORY);
     }
 
     /* Perform the AML-to-Resource conversion */
@@ -123,10 +121,8 @@ AcpiBufferToResource (
         *ResourcePtr = Resource;
     }
 
-    return_ACPI_STATUS (Status);
+    return (Status);
 }
-
-ACPI_EXPORT_SYMBOL (AcpiBufferToResource)
 
 
 /*******************************************************************************
@@ -301,7 +297,7 @@ AcpiRsCreatePciRoutingTable (
          */
         UserPrt->Length = (sizeof (ACPI_PCI_ROUTING_TABLE) - 4);
 
-        /* Each subpackage must be of length 4 */
+        /* Each sub-package must be of length 4 */
 
         if ((*TopObjectList)->Package.Count != 4)
         {
@@ -312,7 +308,7 @@ AcpiRsCreatePciRoutingTable (
         }
 
         /*
-         * Dereference the subpackage.
+         * Dereference the sub-package.
          * The SubObjectList will now point to an array of the four IRQ
          * elements: [Address, Pin, Source, SourceIndex]
          */
@@ -321,7 +317,7 @@ AcpiRsCreatePciRoutingTable (
         /* 1) First subobject: Dereference the PRT.Address */
 
         ObjDesc = SubObjectList[0];
-        if (!ObjDesc || ObjDesc->Common.Type != ACPI_TYPE_INTEGER)
+        if (ObjDesc->Common.Type != ACPI_TYPE_INTEGER)
         {
             ACPI_ERROR ((AE_INFO, "(PRT[%u].Address) Need Integer, found %s",
                 Index, AcpiUtGetObjectTypeName (ObjDesc)));
@@ -333,7 +329,7 @@ AcpiRsCreatePciRoutingTable (
         /* 2) Second subobject: Dereference the PRT.Pin */
 
         ObjDesc = SubObjectList[1];
-        if (!ObjDesc || ObjDesc->Common.Type != ACPI_TYPE_INTEGER)
+        if (ObjDesc->Common.Type != ACPI_TYPE_INTEGER)
         {
             ACPI_ERROR ((AE_INFO, "(PRT[%u].Pin) Need Integer, found %s",
                 Index, AcpiUtGetObjectTypeName (ObjDesc)));
@@ -370,17 +366,16 @@ AcpiRsCreatePciRoutingTable (
                                     (UINT8 *) OutputBuffer->Pointer);
                 PathBuffer.Pointer = UserPrt->Source;
 
-                Status = AcpiNsHandleToPathname ((ACPI_HANDLE) Node,
-                            &PathBuffer, FALSE);
+                Status = AcpiNsHandleToPathname ((ACPI_HANDLE) Node, &PathBuffer);
 
                 /* +1 to include null terminator */
 
-                UserPrt->Length += (UINT32) strlen (UserPrt->Source) + 1;
+                UserPrt->Length += (UINT32) ACPI_STRLEN (UserPrt->Source) + 1;
                 break;
 
             case ACPI_TYPE_STRING:
 
-                strcpy (UserPrt->Source, ObjDesc->String.Pointer);
+                ACPI_STRCPY (UserPrt->Source, ObjDesc->String.Pointer);
 
                 /*
                  * Add to the Length field the length of the string
@@ -415,7 +410,7 @@ AcpiRsCreatePciRoutingTable (
         /* 4) Fourth subobject: Dereference the PRT.SourceIndex */
 
         ObjDesc = SubObjectList[3];
-        if (!ObjDesc || ObjDesc->Common.Type != ACPI_TYPE_INTEGER)
+        if (ObjDesc->Common.Type != ACPI_TYPE_INTEGER)
         {
             ACPI_ERROR ((AE_INFO,
                 "(PRT[%u].SourceIndex) Need Integer, found %s",

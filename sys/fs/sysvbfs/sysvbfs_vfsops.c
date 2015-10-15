@@ -1,4 +1,4 @@
-/*	$NetBSD: sysvbfs_vfsops.c,v 1.46 2015/01/02 16:51:02 hannken Exp $	*/
+/*	$NetBSD: sysvbfs_vfsops.c,v 1.43 2014/04/16 18:55:19 maxv Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysvbfs_vfsops.c,v 1.46 2015/01/02 16:51:02 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysvbfs_vfsops.c,v 1.43 2014/04/16 18:55:19 maxv Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -168,6 +168,7 @@ sysvbfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 	kauth_cred_t cred = l->l_cred;
 	struct sysvbfs_mount *bmp;
 	int error, oflags;
+	bool devopen = false;
 
 	vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 	error = vinvalbuf(devvp, V_SAVE, cred, l, 0, 0);
@@ -180,15 +181,16 @@ sysvbfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 		oflags |= FWRITE;
 	if ((error = VOP_OPEN(devvp, oflags, NOCRED)) != 0)
 		goto out;
+	devopen = true;
 
 	bmp = malloc(sizeof(*bmp), M_SYSVBFS_VFS, M_WAITOK | M_ZERO);
 	bmp->devvp = devvp;
 	bmp->mountp = mp;
 	if ((error = sysvbfs_bfs_init(&bmp->bfs, devvp)) != 0) {
 		free(bmp, M_SYSVBFS_VFS);
-		VOP_CLOSE(devvp, oflags, NOCRED);
 		goto out;
 	}
+	LIST_INIT(&bmp->bnode_head);
 
 	mp->mnt_data = bmp;
 	mp->mnt_stat.f_fsidx.__fsid_val[0] = (long)devvp->v_rdev;
@@ -200,6 +202,8 @@ sysvbfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 	mp->mnt_fs_bshift = BFS_BSHIFT;
 
  out:
+	if (devopen && error)
+		VOP_CLOSE(devvp, oflags, NOCRED);
 	VOP_UNLOCK(devvp);
 	return error;
 }
@@ -288,59 +292,89 @@ sysvbfs_statvfs(struct mount *mp, struct statvfs *f)
 int
 sysvbfs_sync(struct mount *mp, int waitfor, kauth_cred_t cred)
 {
-	struct vnode_iterator *marker;
-	struct vnode *vp;
+	struct sysvbfs_mount *bmp = mp->mnt_data;
+	struct sysvbfs_node *bnode;
+	struct vnode *v;
 	int err, error;
 
 	DPRINTF("%s:\n", __func__);
 	error = 0;
-	vfs_vnode_iterator_init(mp, &marker);
-	while ((vp = vfs_vnode_iterator_next(marker, NULL, NULL)) != NULL) {
-		err = vn_lock(vp, LK_EXCLUSIVE);
-		if (err) {
-			vrele(vp);
-			continue;
+	mutex_enter(&mntvnode_lock);
+	for (bnode = LIST_FIRST(&bmp->bnode_head); bnode != NULL;
+	    bnode = LIST_NEXT(bnode, link)) {
+		v = bnode->vnode;
+	    	mutex_enter(v->v_interlock);
+		mutex_exit(&mntvnode_lock);
+		err = vget(v, LK_EXCLUSIVE | LK_NOWAIT);
+		if (err == 0) {
+			err = VOP_FSYNC(v, cred, FSYNC_WAIT, 0, 0);
+			vput(v);
 		}
-		err = VOP_FSYNC(vp, cred, FSYNC_WAIT, 0, 0);
-		vput(vp);
 		if (err != 0)
 			error = err;
+		mutex_enter(&mntvnode_lock);
 	}
-	vfs_vnode_iterator_destroy(marker);
+	mutex_exit(&mntvnode_lock);
 
 	return error;
 }
 
 int
-sysvbfs_loadvnode(struct mount *mp, struct vnode *vp,
-    const void *key, size_t key_len, const void **new_key)
+sysvbfs_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
 {
-	struct sysvbfs_mount *bmp;
-	struct bfs *bfs;
+	struct sysvbfs_mount *bmp = mp->mnt_data;
+	struct bfs *bfs = bmp->bfs;
+	struct vnode *vp;
 	struct sysvbfs_node *bnode;
 	struct bfs_inode *inode;
-	uint16_t ino;
+	int error;
 
-	KASSERT(key_len == sizeof(ino));
-	memcpy(&ino, key, key_len);
-
-	DPRINTF("%s: i-node=%u\n", __func__, ino);
-
-	bmp = mp->mnt_data;
-	bfs = bmp->bfs;
-
+	DPRINTF("%s: i-node=%lld\n", __func__, (long long)ino);
 	/* Lookup requested i-node */
 	if (!bfs_inode_lookup(bfs, ino, &inode)) {
 		DPRINTF("%s: bfs_inode_lookup failed.\n", __func__);
 		return ENOENT;
 	}
 
-	bnode = pool_get(&sysvbfs_node_pool, PR_WAITOK);
-	memset(bnode, 0, sizeof(*bnode));
+ retry:
+	mutex_enter(&mntvnode_lock);
+	for (bnode = LIST_FIRST(&bmp->bnode_head); bnode != NULL;
+	    bnode = LIST_NEXT(bnode, link)) {
+		if (bnode->inode->number == ino) {
+			vp = bnode->vnode;
+			mutex_enter(vp->v_interlock);
+			mutex_exit(&mntvnode_lock);
+			if (vget(vp, LK_EXCLUSIVE) == 0) {
+				*vpp = vp;
+				return 0;
+			} else {
+				goto retry;
+			}
+		}
+	}
+	mutex_exit(&mntvnode_lock);
 
-	vp->v_tag = VT_SYSVBFS;
-	vp->v_op = sysvbfs_vnodeop_p;
-	vp->v_data = bnode;
+	/* Allocate v-node. */
+	error = getnewvnode(VT_SYSVBFS, mp, sysvbfs_vnodeop_p, NULL, &vp);
+	if (error) {
+		DPRINTF("%s: getnewvnode error.\n", __func__);
+		return error;
+	}
+	/* Lock vnode here */
+	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
+
+	/* Allocate i-node */
+	vp->v_data = pool_get(&sysvbfs_node_pool, PR_WAITOK);
+	memset(vp->v_data, 0, sizeof(struct sysvbfs_node));
+	bnode = vp->v_data;
+	mutex_enter(&mntvnode_lock);
+	LIST_INSERT_HEAD(&bmp->bnode_head, bnode, link);
+	mutex_exit(&mntvnode_lock);
+	bnode->vnode = vp;
+	bnode->bmp = bmp;
+	bnode->inode = inode;
+	bnode->lockf = NULL; /* advlock */
+
 	if (ino == BFS_ROOT_INODE) {	/* BFS is flat filesystem */
 		vp->v_type = VDIR;
 		vp->v_vflag |= VV_ROOT;
@@ -348,40 +382,8 @@ sysvbfs_loadvnode(struct mount *mp, struct vnode *vp,
 		vp->v_type = VREG;
 	}
 
-	bnode->vnode = vp;
-	bnode->bmp = bmp;
-	bnode->inode = inode;
-	bnode->lockf = NULL; /* advlock */
-
 	genfs_node_init(vp, &sysvbfs_genfsops);
 	uvm_vnp_setsize(vp, bfs_file_size(inode));
-
-	*new_key = &bnode->inode->number;
-
-	return 0;
-}
-
-int
-sysvbfs_vget(struct mount *mp, ino_t ino, struct vnode **vpp)
-{
-	int error;
-	uint16_t number;
-	struct vnode *vp;
-
-	KASSERT(ino <= UINT16_MAX);
-	number = ino;
-
-	DPRINTF("%s: i-node=%u\n", __func__, number);
-
-	error = vcache_get(mp, &number, sizeof(number), &vp);
-	if (error)
-		return error;
-	error = vn_lock(vp, LK_EXCLUSIVE);
-	if (error) {
-		vrele(vp);
-		return error;
-	}
-
 	*vpp = vp;
 
 	return 0;

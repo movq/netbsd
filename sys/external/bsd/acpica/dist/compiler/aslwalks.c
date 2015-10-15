@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,7 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
 
 #include "aslcompiler.h"
 #include "aslcompiler.y.h"
@@ -252,13 +253,6 @@ AnOperandTypecheckWalkEnd (
         }
         return (AE_OK);
 
-    case AML_EXTERNAL_OP:
-        /*
-         * Not really a "runtime" opcode since it used by disassembler only.
-         * The parser will find any issues with the operands.
-         */
-        return (AE_OK);
-
     default:
 
         break;
@@ -300,13 +294,6 @@ AnOperandTypecheckWalkEnd (
         while ((ArgType = GET_CURRENT_ARG_TYPE (RuntimeArgTypes2)))
         {
             RequiredBtypes = AnMapArgTypeToBtype (ArgType);
-
-            if (!ArgOp)
-            {
-                AslError (ASL_ERROR, ASL_MSG_COMPILER_INTERNAL, Op,
-                    "Null ArgOp in argument loop");
-                AslAbort ();
-            }
 
             ThisNodeBtype = AnGetBtype (ArgOp);
             if (ThisNodeBtype == ACPI_UINT32_MAX)
@@ -395,6 +382,9 @@ AnOperandTypecheckWalkEnd (
                     break;
 
                 case PARSEOP_DEBUG:
+
+                    break;
+
                 case PARSEOP_REFOF:
                 case PARSEOP_INDEX:
                 default:
@@ -615,10 +605,6 @@ AnOtherSemanticAnalysisWalkBegin (
         ArgNode = Op->Asl.Parent;       /* Field definition */
         ArgNode = ArgNode->Asl.Child;   /* First child is the OpRegion Name */
         Node = ArgNode->Asl.Node;       /* OpRegion namespace node */
-        if (!Node)
-        {
-            break;
-        }
 
         ArgNode = Node->Op;             /* OpRegion definition */
         ArgNode = ArgNode->Asl.Child;   /* First child is the OpRegion Name */

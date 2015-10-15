@@ -1,4 +1,4 @@
-/*	$NetBSD: vreset.c,v 1.14 2014/12/12 15:57:30 phx Exp $	*/
+/*	$NetBSD: vreset.c,v 1.13.34.1 2015/01/07 21:13:28 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 1995-1997 Gary Thomas (gdt@linuxppc.org)

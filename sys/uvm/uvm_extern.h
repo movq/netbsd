@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_extern.h,v 1.194 2015/03/20 15:41:43 riastradh Exp $	*/
+/*	$NetBSD: uvm_extern.h,v 1.191.2.2 2015/03/25 16:54:37 snj Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -175,23 +175,19 @@
 /*
  * flags for ubc_alloc()
  */
-#define UBC_READ	0x001	/* reading from object */
-#define UBC_WRITE	0x002	/* writing to object */
-#define UBC_FAULTBUSY	0x004	/* nobody else is using these pages, so busy
-				 * them at alloc and unbusy at release (e.g.,
-				 * for writes extending a file) */
+#define UBC_READ	0x001
+#define UBC_WRITE	0x002
+#define UBC_FAULTBUSY	0x004
 
 /*
  * flags for ubc_release()
  */
-#define UBC_UNMAP	0x010	/* unmap pages now -- don't leave the
-				 * mappings cached indefinitely */
+#define UBC_UNMAP	0x010
 
 /*
- * flags for ubc_uiomove()
+ * flags for ubc_uiomve()
  */
-#define	UBC_PARTIALOK	0x100	/* return early on error; otherwise, zero all
-				 * remaining bytes after error */
+#define	UBC_PARTIALOK	0x100
 
 /*
  * flags for uvn_findpages().

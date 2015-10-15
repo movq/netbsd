@@ -1,4 +1,4 @@
-/*	$NetBSD: u3g.c,v 1.31 2014/09/24 00:17:13 christos Exp $	*/
+/*	$NetBSD: u3g.c,v 1.30.4.1 2014/10/15 08:43:08 martin Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: u3g.c,v 1.31 2014/09/24 00:17:13 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: u3g.c,v 1.30.4.1 2014/10/15 08:43:08 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-#	$NetBSD: files.pci,v 1.20 2015/05/03 02:50:59 pgoyette Exp $
+#	$NetBSD: files.pci,v 1.16 2014/06/10 01:42:39 hikaru Exp $
 
 device 	aapic
 attach 	aapic at pci
@@ -6,13 +6,12 @@ file 	arch/x86/pci/aapic.c		aapic
 
 file	arch/x86/pci/agp_machdep.c	agp
 
-define	agp_x86: agp_ali, agp_amd, agp_amd64, agp_i810, agp_intel, agp_sis, agp_via
-defflag	AGP_X86
-
 define amdnb_miscbus {}
 
 # PCI-Host bridge chipsets
-device	pchb:	pcibus, agpbus, agp_x86
+device	pchb:	pcibus, agpbus,
+		agp_ali, agp_amd, agp_amd64, agp_i810,
+		agp_intel, agp_sis, agp_via
 attach	pchb at pci
 file	arch/x86/pci/pchb.c		pchb		needs-flag
 
@@ -46,17 +45,12 @@ file 	arch/x86/pci/rdcpcib.c 		rdcpcib
 
 define	fwhichbus {}
 define	hpetichbus {}
-define	tcoichbus {}
-device	ichlpcib: acpipmtimer, isabus, fwhichbus, hpetichbus, gpiobus, tcoichbus
+device	ichlpcib: acpipmtimer, isabus, sysmon_wdog, fwhichbus, hpetichbus, gpiobus
 attach	ichlpcib at pci
 file 	arch/x86/pci/ichlpcib.c 	ichlpcib
 
 attach	hpet at hpetichbus with ichlpcib_hpet
 file    arch/x86/pci/ichlpcib_hpet.c	ichlpcib_hpet
-
-device	tco: sysmon_wdog
-attach	tco at tcoichbus
-file	arch/x86/pci/tco.c		tco
 
 device	tcpcib: isabus, sysmon_wdog, hpetichbus
 attach	tcpcib at pci

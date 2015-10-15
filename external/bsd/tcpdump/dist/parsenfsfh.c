@@ -42,10 +42,14 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: parsenfsfh.c,v 1.5 2014/11/20 03:05:03 christos Exp $");
+#if 0
+static const char rcsid[] _U_ =
+    "@(#) Header: /tcpdump/master/tcpdump/parsenfsfh.c,v 1.29 2006-06-13 22:21:38 guy Exp  (LBL)";
+#else
+__RCSID("$NetBSD: parsenfsfh.c,v 1.4 2013/12/31 17:33:31 christos Exp $");
+#endif
 #endif
 
-#define NETDISSECT_REWORKED
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -84,7 +88,7 @@ __RCSID("$NetBSD: parsenfsfh.c,v 1.5 2014/11/20 03:05:03 christos Exp $");
 
 #ifdef	ultrix
 /* Nasty hack to keep the Ultrix C compiler from emitting bogus warnings */
-#define	XFF(x)	((uint32_t)(x))
+#define	XFF(x)	((u_int32_t)(x))
 #else
 #define	XFF(x)	(x)
 #endif
@@ -111,14 +115,17 @@ __RCSID("$NetBSD: parsenfsfh.c,v 1.5 2014/11/20 03:05:03 christos Exp $");
 static int is_UCX(const unsigned char *);
 
 void
-Parse_fh(register const unsigned char *fh, int len _U_, my_fsid *fsidp,
-	 uint32_t *inop,
-	 const char **osnamep, /* if non-NULL, return OS name here */
-	 const char **fsnamep, /* if non-NULL, return server fs name here (for VMS) */
-	 int ourself)	/* true if file handle was generated on this host */
+Parse_fh(fh, len, fsidp, inop, osnamep, fsnamep, ourself)
+register const unsigned char *fh;
+int len _U_;
+my_fsid *fsidp;
+u_int32_t *inop;
+const char **osnamep;		/* if non-NULL, return OS name here */
+const char **fsnamep;		/* if non-NULL, return server fs name here (for VMS) */
+int ourself;		/* true if file handle was generated on this host */
 {
 	register const unsigned char *fhp = fh;
-	uint32_t temp;
+	u_int32_t temp;
 	int fhtype = FHT_UNKNOWN;
 	int i;
 
@@ -369,7 +376,7 @@ Parse_fh(register const unsigned char *fh, int len _U_, my_fsid *fsidp,
 		memcpy((char *)fsidp, (char *)fh, 14);
 	    }
 	    else {
-		uint32_t tempa[4];	/* at least 16 bytes, maybe more */
+		u_int32_t tempa[4];	/* at least 16 bytes, maybe more */
 
 		memset((char *)tempa, 0, sizeof(tempa));
 		memcpy((char *)tempa, (char *)fh, 14); /* ensure alignment */
@@ -448,13 +455,14 @@ Parse_fh(register const unsigned char *fh, int len _U_, my_fsid *fsidp,
  *	(3) followed by string of nulls
  */
 static int
-is_UCX(const unsigned char *fhp)
+is_UCX(fhp)
+const unsigned char *fhp;
 {
 	register int i;
 	int seen_null = 0;
 
 	for (i = 1; i < 14; i++) {
-	    if (ND_ISPRINT(fhp[i])) {
+	    if (isprint(fhp[i])) {
 		if (seen_null)
 		   return(0);
 		else

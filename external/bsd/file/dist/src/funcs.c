@@ -1,5 +1,4 @@
-/*	$NetBSD: funcs.c,v 1.10 2015/01/02 21:15:32 christos Exp $	*/
-
+/*	$NetBSD: funcs.c,v 1.8 2014/06/13 02:08:06 christos Exp $	*/
 /*
  * Copyright (c) Christos Zoulas 2003.
  * All Rights Reserved.
@@ -30,9 +29,9 @@
 
 #ifndef	lint
 #if 0
-FILE_RCSID("@(#)$File: funcs.c,v 1.79 2014/12/16 20:52:49 christos Exp $")
+FILE_RCSID("@(#)$File: funcs.c,v 1.72 2014/05/14 23:15:42 christos Exp $")
 #else
-__RCSID("$NetBSD: funcs.c,v 1.10 2015/01/02 21:15:32 christos Exp $");
+__RCSID("$NetBSD: funcs.c,v 1.8 2014/06/13 02:08:06 christos Exp $");
 #endif
 #endif	/* lint */
 
@@ -50,6 +49,9 @@ __RCSID("$NetBSD: funcs.c,v 1.10 2015/01/02 21:15:32 christos Exp $");
 #endif
 #if defined(HAVE_LIMITS_H)
 #include <limits.h>
+#endif
+#if defined(HAVE_LOCALE_H)
+#include <locale.h>
 #endif
 
 #ifndef SIZE_MAX
@@ -234,7 +236,7 @@ file_buffer(struct magic_set *ms, int fd, const char *inname __attribute__ ((__u
 
 	/* try soft magic tests */
 	if ((ms->flags & MAGIC_NO_CHECK_SOFT) == 0)
-		if ((m = file_softmagic(ms, ubuf, nb, 0, NULL, BINTEST,
+		if ((m = file_softmagic(ms, ubuf, nb, 0, BINTEST,
 		    looks_text)) != 0) {
 			if ((ms->flags & MAGIC_DEBUG) != 0)
 				(void)fprintf(stderr, "softmagic %d\n", m);
@@ -459,14 +461,13 @@ out:
 protected int
 file_regcomp(file_regex_t *rx, const char *pat, int flags)
 {
-#ifdef USE_C_LOCALE
-	rx->c_lc_ctype = newlocale(LC_CTYPE_MASK, "C", 0);
-	assert(rx->c_lc_ctype != NULL);
-	rx->old_lc_ctype = uselocale(rx->c_lc_ctype);
+	rx->old_lc_ctype = setlocale(LC_CTYPE, NULL);
 	assert(rx->old_lc_ctype != NULL);
-#endif
+	rx->old_lc_ctype = strdup(rx->old_lc_ctype);
+	assert(rx->old_lc_ctype != NULL);
 	rx->pat = pat;
 
+	(void)setlocale(LC_CTYPE, "C");
 	return rx->rc = regcomp(&rx->rx, pat, flags);
 }
 
@@ -483,10 +484,8 @@ file_regfree(file_regex_t *rx)
 {
 	if (rx->rc == 0)
 		regfree(&rx->rx);
-#ifdef USE_C_LOCALE
-	(void)uselocale(rx->old_lc_ctype);
-	freelocale(rx->c_lc_ctype);
-#endif
+	(void)setlocale(LC_CTYPE, rx->old_lc_ctype);
+	free(rx->old_lc_ctype);
 }
 
 protected void
@@ -497,69 +496,4 @@ file_regerror(file_regex_t *rx, int rc, struct magic_set *ms)
 	(void)regerror(rc, &rx->rx, errmsg, sizeof(errmsg));
 	file_magerror(ms, "regex error %d for `%s', (%s)", rc, rx->pat,
 	    errmsg);
-}
-
-protected file_pushbuf_t *
-file_push_buffer(struct magic_set *ms)
-{
-	file_pushbuf_t *pb;
-
-	if (ms->event_flags & EVENT_HAD_ERR)
-		return NULL;
-
-	if ((pb = (CAST(file_pushbuf_t *, malloc(sizeof(*pb))))) == NULL)
-		return NULL;
-
-	pb->buf = ms->o.buf;
-	pb->offset = ms->offset;
-
-	ms->o.buf = NULL;
-	ms->offset = 0;
-
-	return pb;
-}
-
-protected char *
-file_pop_buffer(struct magic_set *ms, file_pushbuf_t *pb)
-{
-	char *rbuf;
-
-	if (ms->event_flags & EVENT_HAD_ERR) {
-		free(pb->buf);
-		free(pb);
-		return NULL;
-	}
-
-	rbuf = ms->o.buf;
-
-	ms->o.buf = pb->buf;
-	ms->offset = pb->offset;
-
-	free(pb);
-	return rbuf;
-}
-
-/*
- * convert string to ascii printable format.
- */
-protected char *
-file_printable(char *buf, size_t bufsiz, const char *str)
-{
-	char *ptr, *eptr;
-	const unsigned char *s = (const unsigned char *)str;
-
-	for (ptr = buf, eptr = ptr + bufsiz - 1; ptr < eptr && *s; s++) {
-		if (isprint(*s)) {
-			*ptr++ = *s;
-			continue;
-		}
-		if (ptr >= eptr - 3)
-			break;
-		*ptr++ = '\\';
-		*ptr++ = ((CAST(unsigned int, *s) >> 6) & 7) + '0';
-		*ptr++ = ((CAST(unsigned int, *s) >> 3) & 7) + '0';
-		*ptr++ = ((CAST(unsigned int, *s) >> 0) & 7) + '0';
-	}
-	*ptr = '\0';
-	return buf;
 }

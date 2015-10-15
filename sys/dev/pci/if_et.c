@@ -1,4 +1,4 @@
-/*	$NetBSD: if_et.c,v 1.9 2015/06/29 12:27:41 maxv Exp $	*/
+/*	$NetBSD: if_et.c,v 1.8.4.1 2015/08/04 21:16:43 snj Exp $	*/
 /*	$OpenBSD: if_et.c,v 1.11 2008/06/08 06:18:07 jsg Exp $	*/
 /*
  * Copyright (c) 2007 The DragonFly Project.  All rights reserved.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_et.c,v 1.9 2015/06/29 12:27:41 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_et.c,v 1.8.4.1 2015/08/04 21:16:43 snj Exp $");
 
 #include "opt_inet.h"
 #include "vlan.h"

@@ -7,10 +7,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "__config"
-
-#ifndef _LIBCPP_HAS_NO_THREADS
-
 #include "condition_variable"
 #include "thread"
 #include "system_error"
@@ -83,5 +79,3 @@ notify_all_at_thread_exit(condition_variable& cond, unique_lock<mutex> lk)
 }
 
 _LIBCPP_END_NAMESPACE_STD
-
-#endif // !_LIBCPP_HAS_NO_THREADS

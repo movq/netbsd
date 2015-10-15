@@ -1,4 +1,4 @@
-/*	$NetBSD: sunos_ioctl.c,v 1.63 2015/09/26 04:13:39 christos Exp $	*/
+/*	$NetBSD: sunos_ioctl.c,v 1.61 2008/11/19 18:36:05 ad Exp $	*/
 
 /*
  * Copyright (c) 1993 Markus Wild.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sunos_ioctl.c,v 1.63 2015/09/26 04:13:39 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sunos_ioctl.c,v 1.61 2008/11/19 18:36:05 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -513,12 +513,11 @@ sunos_sys_ioctl(struct lwp *l, const struct sunos_sys_ioctl_args *uap, register_
 		 * is on a pty.
 		 */
 		int pgrp;
-		struct vnode *vp = NULL;
+		struct vnode *vp;
 
 		error = (*ctl)(fp, TIOCGPGRP, &pgrp);
 		if (error) {
-			if (fp->f_type == DTYPE_VNODE)
-				vp = fp->f_vnode;
+			vp = (struct vnode *)fp->f_data;
 			if ((error == EIO || (error == 0 && pgrp == 0)) &&
 			    vp != NULL &&
 			    vp->v_type == VCHR &&
@@ -840,7 +839,7 @@ sunos_sys_ioctl(struct lwp *l, const struct sunos_sys_ioctl_args *uap, register_
 	 * (which was from the old sparc/scsi/sun_disklabel.c), and
 	 * modified to suite.
 	 */
-	case SUN_DKIOCGGEOM:
+	case DKIOCGGEOM:
             {
 		struct disklabel dl;
 
@@ -863,12 +862,12 @@ sunos_sys_ioctl(struct lwp *l, const struct sunos_sys_ioctl_args *uap, register_
 		break;
 	    }
 
-	case SUN_DKIOCINFO:
+	case DKIOCINFO:
 		/* Homey don't do DKIOCINFO */
 		memset(SCARG(uap, data), 0, sizeof(struct sun_dkctlr));
 		break;
 
-	case SUN_DKIOCGPART:
+	case DKIOCGPART:
             {
 		struct partinfo pi;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.110 2015/07/08 15:26:19 skrll Exp $	*/
+/*	$NetBSD: cpu.c,v 1.104.4.1 2015/04/06 01:57:57 snj Exp $	*/
 
 /*
  * Copyright (c) 1995 Mark Brinicombe.
@@ -46,7 +46,7 @@
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.110 2015/07/08 15:26:19 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.104.4.1 2015/04/06 01:57:57 snj Exp $");
 
 #include <sys/systm.h>
 #include <sys/conf.h>
@@ -511,8 +511,6 @@ const struct cpuidtab cpuids[] = {
 	  pN_steppings, "7A" },
 	{ CPU_ID_CORTEXA15R3,	CPU_CLASS_CORTEX,	"Cortex-A15 r3",
 	  pN_steppings, "7A" },
-	{ CPU_ID_CORTEXA17R1,	CPU_CLASS_CORTEX,	"Cortex-A17 r1",
-	  pN_steppings, "7A" },
 
 	{ CPU_ID_MV88SV581X_V6, CPU_CLASS_PJ4B,      "Sheeva 88SV581x",
 	  generic_steppings },
@@ -579,7 +577,7 @@ static const char * const wtnames[] = {
 	"**unknown 9**",
 	"**unknown 10**",
 	"**unknown 11**",
-	"write-back",
+	"**unknown 12**",
 	"write-back-locking-line",
 	"write-back-locking-C",
 	"write-back-locking-D",
@@ -840,12 +838,6 @@ identify_features(device_t dv)
 	cpu_processor_features[0] = armreg_pfr0_read();
 	cpu_processor_features[1] = armreg_pfr1_read();
 
-	aprint_verbose_dev(dv, "sctlr: %#x\n", armreg_sctlr_read());
-	aprint_verbose_dev(dv, "actlr: %#x\n", armreg_auxctl_read());
-	aprint_verbose_dev(dv, "revidr: %#x\n", armreg_revidr_read());
-#ifdef MULTIPROCESSOR
-	aprint_verbose_dev(dv, "mpidr: %#x\n", armreg_mpidr_read());
-#endif
 	aprint_verbose_dev(dv,
 	    "isar: [0]=%#x [1]=%#x [2]=%#x [3]=%#x, [4]=%#x, [5]=%#x\n",
 	    cpu_instruction_set_attributes[0],

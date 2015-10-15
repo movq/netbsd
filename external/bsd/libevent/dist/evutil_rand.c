@@ -1,4 +1,4 @@
-/*	$NetBSD: evutil_rand.c,v 1.4 2015/02/01 10:19:00 njoly Exp $	*/
+/*	$NetBSD: evutil_rand.c,v 1.2.12.1 2015/02/03 08:23:39 bouyer Exp $	*/
 /*
  * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
  *
@@ -35,7 +35,7 @@
 
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: evutil_rand.c,v 1.4 2015/02/01 10:19:00 njoly Exp $");
+__RCSID("$NetBSD: evutil_rand.c,v 1.2.12.1 2015/02/03 08:23:39 bouyer Exp $");
 
 #include <limits.h>
 

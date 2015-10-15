@@ -1,4 +1,4 @@
-/*	$NetBSD: dispatch.c,v 1.10 2015/07/08 17:28:58 christos Exp $	*/
+/*	$NetBSD: dispatch.c,v 1.8.2.2 2015/07/17 04:31:33 snj Exp $	*/
 
 /*
  * Copyright (C) 2004-2009, 2011-2015  Internet Systems Consortium, Inc. ("ISC")

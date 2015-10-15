@@ -1,4 +1,4 @@
-/* $NetBSD: catanhl.c,v 1.3 2014/10/10 12:43:15 christos Exp $ */
+/* $NetBSD: catanhl.c,v 1.3.2.2 2014/10/13 19:34:58 martin Exp $ */
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.

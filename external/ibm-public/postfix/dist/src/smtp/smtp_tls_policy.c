@@ -1,4 +1,4 @@
-/*	$NetBSD: smtp_tls_policy.c,v 1.1.1.2 2015/02/21 11:56:56 tron Exp $	*/
+/*	$NetBSD: smtp_tls_policy.c,v 1.1.1.1.4.1 2015/03/03 07:11:08 snj Exp $	*/
 
 /*++
 /* NAME

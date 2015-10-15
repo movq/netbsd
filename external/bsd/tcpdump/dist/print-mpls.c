@@ -28,16 +28,25 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: print-mpls.c,v 1.5 2015/03/31 21:59:35 christos Exp $");
+#if 0
+static const char rcsid[] _U_ =
+    "@(#) Header: /tcpdump/master/tcpdump/print-mpls.c,v 1.14 2005-07-05 09:38:19 hannes Exp  (LBL)";
+#else
+__RCSID("$NetBSD: print-mpls.c,v 1.3 2013/04/06 19:33:08 christos Exp $");
+#endif
 #endif
 
-#define NETDISSECT_REWORKED
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
 #include <tcpdump-stdinc.h>
 
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "addrtoname.h"
 #include "interface.h"
 #include "extract.h"			/* must come after interface.h */
 #include "mpls.h"
@@ -61,29 +70,29 @@ enum mpls_packet_type {
  * RFC3032: MPLS label stack encoding
  */
 void
-mpls_print(netdissect_options *ndo, const u_char *bp, u_int length)
+mpls_print(const u_char *bp, u_int length)
 {
 	const u_char *p;
-	uint32_t label_entry;
-	uint16_t label_stack_depth = 0;
+	u_int32_t label_entry;
+	u_int16_t label_stack_depth = 0;
 	enum mpls_packet_type pt = PT_UNKNOWN;
 
 	p = bp;
-	ND_PRINT((ndo, "MPLS"));
+	printf("MPLS");
 	do {
-		ND_TCHECK2(*p, sizeof(label_entry));
+		TCHECK2(*p, sizeof(label_entry));
 		label_entry = EXTRACT_32BITS(p);
-		ND_PRINT((ndo, "%s(label %u",
-		       (label_stack_depth && ndo->ndo_vflag) ? "\n\t" : " ",
-       		       MPLS_LABEL(label_entry)));
+		printf("%s(label %u",
+		       (label_stack_depth && vflag) ? "\n\t" : " ",
+       		       MPLS_LABEL(label_entry));
 		label_stack_depth++;
-		if (ndo->ndo_vflag &&
+		if (vflag &&
 		    MPLS_LABEL(label_entry) < sizeof(mpls_labelname) / sizeof(mpls_labelname[0]))
-			ND_PRINT((ndo, " (%s)", mpls_labelname[MPLS_LABEL(label_entry)]));
-		ND_PRINT((ndo, ", exp %u", MPLS_EXP(label_entry)));
+			printf(" (%s)", mpls_labelname[MPLS_LABEL(label_entry)]);
+		printf(", exp %u", MPLS_EXP(label_entry));
 		if (MPLS_STACK(label_entry))
-			ND_PRINT((ndo, ", [S]"));
-		ND_PRINT((ndo, ", ttl %u)", MPLS_TTL(label_entry)));
+			printf(", [S]");
+		printf(", ttl %u)", MPLS_TTL(label_entry));
 
 		p += sizeof(label_entry);
 	} while (!MPLS_STACK(label_entry));
@@ -143,7 +152,7 @@ mpls_print(netdissect_options *ndo, const u_char *bp, u_int length)
 		case 0x4f:
 			pt = PT_IPV4;
 			break;
-
+				
 		case 0x60:
 		case 0x61:
 		case 0x62:
@@ -179,23 +188,30 @@ mpls_print(netdissect_options *ndo, const u_char *bp, u_int length)
 	 * Print the payload.
 	 */
 	if (pt == PT_UNKNOWN) {
-		if (!ndo->ndo_suppress_default_print)
-			ND_DEFAULTPRINT(p, length - (p - bp));
+		if (!suppress_default_print)
+			default_print(p, length - (p - bp));
 		return;
 	}
-	ND_PRINT((ndo, ndo->ndo_vflag ? "\n\t" : " "));
+	if (vflag)
+		printf("\n\t");
+	else
+		printf(" ");
 	switch (pt) {
 
 	case PT_IPV4:
-		ip_print(ndo, p, length - (p - bp));
+		ip_print(gndo, p, length - (p - bp));
 		break;
 
 	case PT_IPV6:
-		ip6_print(ndo, p, length - (p - bp));
+#ifdef INET6
+		ip6_print(gndo, p, length - (p - bp));
+#else
+		printf("IPv6, length: %u", length);
+#endif
 		break;
 
 	case PT_OSI:
-		isoclns_print(ndo, p, length - (p - bp), length - (p - bp));
+		isoclns_print(p, length - (p - bp), length - (p - bp));
 		break;
 
 	default:
@@ -204,7 +220,7 @@ mpls_print(netdissect_options *ndo, const u_char *bp, u_int length)
 	return;
 
 trunc:
-	ND_PRINT((ndo, "[|MPLS]"));
+	printf("[|MPLS]");
 }
 
 

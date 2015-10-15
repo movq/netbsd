@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.221 2015/06/03 14:32:16 christos Exp $
+#	$NetBSD: Makefile,v 1.218.2.1 2015/01/12 10:22:22 martin Exp $
 #	from: @(#)Makefile	8.3 (Berkeley) 1/7/94
 
 .include <bsd.own.mk>
@@ -12,7 +12,7 @@ SUBDIR= apply asa at audio audiocfg \
 	eject elf2aout elf2ecoff env error expand extattr \
 	false fdformat fgen fincore find finger flock fmt fold fpr from \
 	fsplit fstat ftp gcore genassym gencat getaddrinfo getconf getent \
-	getopt gettext gprof \
+	getopt gprof \
 	head hexdump iconv id indent infocmp innetgr ipcrm ipcs join jot \
 	kdump ktrace ktruss lam last lastcomm ldd leave \
 	locale locate lock logger login logname look lorder m4 \
@@ -21,7 +21,7 @@ SUBDIR= apply asa at audio audiocfg \
 	moduli msgc msgs \
 	nbperf netgroup netstat newgrp newsyslog nfsstat nice nl nohup \
 	pagesize passwd paste patch pathchk pkill pmap pmc pr \
-	printenv printf progress pwait pwhash qsubst quota radioctl rdist \
+	printenv printf progress pwhash qsubst quota radioctl rdist \
 	renice rev revoke rfcomm_sppd rlogin rpcgen rpcinfo rs rsh \
 	rup ruptime rusers rwall rwho \
 	script sdiff sdpquery sed seq shar shlock \

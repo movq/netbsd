@@ -1,4 +1,4 @@
-/*	$NetBSD: freebsd_file.c,v 1.33 2014/11/09 18:30:38 maxv Exp $	*/
+/*	$NetBSD: freebsd_file.c,v 1.32.36.1 2015/01/17 12:10:55 martin Exp $	*/
 
 /*
  * Copyright (c) 1995 Frank van der Linden
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: freebsd_file.c,v 1.33 2014/11/09 18:30:38 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: freebsd_file.c,v 1.32.36.1 2015/01/17 12:10:55 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

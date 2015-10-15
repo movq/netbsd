@@ -1,4 +1,4 @@
-/*	$NetBSD: lm75.c,v 1.26 2015/09/27 13:02:21 phx Exp $	*/
+/*	$NetBSD: lm75.c,v 1.25 2012/10/27 17:18:17 chs Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lm75.c,v 1.26 2015/09/27 13:02:21 phx Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lm75.c,v 1.25 2012/10/27 17:18:17 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -132,15 +132,10 @@ lmtemp_match(device_t parent, cfdata_t cf, void *aux)
 	} else {
 		/*
 		 * Direct config - match via the list of compatible
-		 * hardware or simply match the device name.
+		 * hardware.
 		 */
-		if (ia->ia_ncompat > 0) {
-			if (iic_compat_match(ia, lmtemp_compats))
-				return 1;
-		} else {
-			if (strcmp(ia->ia_name, "lmtemp") == 0)
-				return 1;
-		}
+		if (iic_compat_match(ia, lmtemp_compats))
+			return 1;
 	}
 
 

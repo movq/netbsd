@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,8 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
+#define __DSWLOAD2_C__
 
 #include "acpi.h"
 #include "accommon.h"
@@ -344,7 +346,7 @@ AcpiDsLoad2BeginOp (
     {
         /* Create a new op */
 
-        Op = AcpiPsAllocOp (WalkState->Opcode, WalkState->Aml);
+        Op = AcpiPsAllocOp (WalkState->Opcode);
         if (!Op)
         {
             return_ACPI_STATUS (AE_NO_MEMORY);

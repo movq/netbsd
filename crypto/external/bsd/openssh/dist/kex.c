@@ -1,5 +1,5 @@
-/*	$NetBSD: kex.c,v 1.12 2015/08/13 10:33:21 christos Exp $	*/
-/* $OpenBSD: kex.c,v 1.109 2015/07/30 00:01:34 djm Exp $ */
+/*	$NetBSD: kex.c,v 1.8.4.1 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: kex.c,v 1.105 2015/01/30 00:22:25 djm Exp $ */
 /*
  * Copyright (c) 2000, 2001 Markus Friedl.  All rights reserved.
  *
@@ -25,7 +25,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: kex.c,v 1.12 2015/08/13 10:33:21 christos Exp $");
+__RCSID("$NetBSD: kex.c,v 1.8.4.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/param.h>	/* MAX roundup */
 
 #include <signal.h>
@@ -140,68 +140,6 @@ kex_names_valid(const char *names)
 	return 1;
 }
 
-/*
- * Concatenate algorithm names, avoiding duplicates in the process.
- * Caller must free returned string.
- */
-char *
-kex_names_cat(const char *a, const char *b)
-{
-	char *ret = NULL, *tmp = NULL, *cp, *p;
-	size_t len;
-
-	if (a == NULL || *a == '\0')
-		return NULL;
-	if (b == NULL || *b == '\0')
-		return strdup(a);
-	if (strlen(b) > 1024*1024)
-		return NULL;
-	len = strlen(a) + strlen(b) + 2;
-	if ((tmp = cp = strdup(b)) == NULL ||
-	    (ret = calloc(1, len)) == NULL) {
-		free(tmp);
-		return NULL;
-	}
-	strlcpy(ret, a, len);
-	for ((p = strsep(&cp, ",")); p && *p != '\0'; (p = strsep(&cp, ","))) {
-		if (match_list(ret, p, NULL) != NULL)
-			continue; /* Algorithm already present */
-		if (strlcat(ret, ",", len) >= len ||
-		    strlcat(ret, p, len) >= len) {
-			free(tmp);
-			free(ret);
-			return NULL; /* Shouldn't happen */
-		}
-	}
-	free(tmp);
-	return ret;
-}
-
-/*
- * Assemble a list of algorithms from a default list and a string from a
- * configuration file. The user-provided string may begin with '+' to
- * indicate that it should be appended to the default.
- */
-int
-kex_assemble_names(const char *def, char **list)
-{
-	char *ret;
-
-	if (list == NULL || *list == NULL || **list == '\0') {
-		*list = strdup(def);
-		return 0;
-	}
-	if (**list != '+') {
-		return 0;
-	}
-
-	if ((ret = kex_names_cat(def, *list + 1)) == NULL)
-		return SSH_ERR_ALLOC_FAIL;
-	free(*list);
-	*list = ret;
-	return 0;
-}
-
 /* put algorithm proposal into buffer */
 int
 kex_prop2buf(struct sshbuf *b, const char *proposal[PROPOSAL_MAX])
@@ -276,8 +214,6 @@ kex_prop_free(char **proposal)
 {
 	u_int i;
 
-	if (proposal == NULL)
-		return;
 	for (i = 0; i < PROPOSAL_MAX; i++)
 		free(proposal[i]);
 	free(proposal);
@@ -493,7 +429,6 @@ kex_free(struct kex *kex)
 	free(kex->session_id);
 	free(kex->client_version_string);
 	free(kex->server_version_string);
-	free(kex->failed_choice);
 	free(kex);
 }
 
@@ -519,7 +454,6 @@ choose_enc(struct sshenc *enc, char *client, char *server)
 
 	if (name == NULL)
 		return SSH_ERR_NO_CIPHER_ALG_MATCH;
-
 	if ((enc->cipher = cipher_by_name(name)) == NULL)
 		return SSH_ERR_INTERNAL_ERROR;
 	enc->name = name;
@@ -674,26 +608,17 @@ kex_choose_conf(struct ssh *ssh)
 		nmac  = ctos ? PROPOSAL_MAC_ALGS_CTOS  : PROPOSAL_MAC_ALGS_STOC;
 		ncomp = ctos ? PROPOSAL_COMP_ALGS_CTOS : PROPOSAL_COMP_ALGS_STOC;
 		if ((r = choose_enc(&newkeys->enc, cprop[nenc],
-		    sprop[nenc])) != 0) {
-			kex->failed_choice = peer[nenc];
-			peer[nenc] = NULL;
+		    sprop[nenc])) != 0)
 			goto out;
-		}
 		authlen = cipher_authlen(newkeys->enc.cipher);
 		/* ignore mac for authenticated encryption */
 		if (authlen == 0 &&
 		    (r = choose_mac(ssh, &newkeys->mac, cprop[nmac],
-		    sprop[nmac])) != 0) {
-			kex->failed_choice = peer[nmac];
-			peer[nmac] = NULL;
+		    sprop[nmac])) != 0)
 			goto out;
-		}
 		if ((r = choose_comp(&newkeys->comp, cprop[ncomp],
-		    sprop[ncomp])) != 0) {
-			kex->failed_choice = peer[ncomp];
-			peer[ncomp] = NULL;
+		    sprop[ncomp])) != 0)
 			goto out;
-		}
 		debug("REQUESTED ENC.NAME is '%s'", newkeys->enc.name);
 		if (strcmp(newkeys->enc.name, "none") == 0) {
 			int auth_flag;
@@ -727,17 +652,10 @@ kex_choose_conf(struct ssh *ssh)
 		log_flag = 1;
 	}
 	if ((r = choose_kex(kex, cprop[PROPOSAL_KEX_ALGS],
-	    sprop[PROPOSAL_KEX_ALGS])) != 0) {
-		kex->failed_choice = peer[PROPOSAL_KEX_ALGS];
-		peer[PROPOSAL_KEX_ALGS] = NULL;
+	    sprop[PROPOSAL_KEX_ALGS])) != 0 ||
+	    (r = choose_hostkeyalg(kex, cprop[PROPOSAL_SERVER_HOST_KEY_ALGS],
+	    sprop[PROPOSAL_SERVER_HOST_KEY_ALGS])) != 0)
 		goto out;
-	}
-	if ((r = choose_hostkeyalg(kex, cprop[PROPOSAL_SERVER_HOST_KEY_ALGS],
-	    sprop[PROPOSAL_SERVER_HOST_KEY_ALGS])) != 0) {
-		kex->failed_choice = peer[PROPOSAL_SERVER_HOST_KEY_ALGS];
-		peer[PROPOSAL_SERVER_HOST_KEY_ALGS] = NULL;
-		goto out;
-	}
 	need = dh_need = 0;
 	for (mode = 0; mode < MODE_MAX; mode++) {
 		newkeys = kex->newkeys[mode];

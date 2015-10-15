@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,9 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+
+#define __UTMISC_C__
+
 #include "acpi.h"
 #include "accommon.h"
 #include "acnamesp.h"
@@ -71,10 +74,10 @@ AcpiUtIsPciRootBridge (
      * Check if this is a PCI root bridge.
      * ACPI 3.0+: check for a PCI Express root also.
      */
-    if (!(strcmp (Id,
+    if (!(ACPI_STRCMP (Id,
             PCI_ROOT_HID_STRING)) ||
 
-        !(strcmp (Id,
+        !(ACPI_STRCMP (Id,
             PCI_EXPRESS_ROOT_HID_STRING)))
     {
         return (TRUE);
@@ -84,7 +87,6 @@ AcpiUtIsPciRootBridge (
 }
 
 
-#if (defined ACPI_ASL_COMPILER || defined ACPI_EXEC_APP)
 /*******************************************************************************
  *
  * FUNCTION:    AcpiUtIsAmlTable
@@ -108,15 +110,13 @@ AcpiUtIsAmlTable (
 
     if (ACPI_COMPARE_NAME (Table->Signature, ACPI_SIG_DSDT) ||
         ACPI_COMPARE_NAME (Table->Signature, ACPI_SIG_PSDT) ||
-        ACPI_COMPARE_NAME (Table->Signature, ACPI_SIG_SSDT) ||
-        ACPI_COMPARE_NAME (Table->Signature, ACPI_SIG_OSDT))
+        ACPI_COMPARE_NAME (Table->Signature, ACPI_SIG_SSDT))
     {
         return (TRUE);
     }
 
     return (FALSE);
 }
-#endif
 
 
 /*******************************************************************************
@@ -418,7 +418,7 @@ AcpiUtDisplayInitPathname (
     /* Get the full pathname to the node */
 
     Buffer.Length = ACPI_ALLOCATE_LOCAL_BUFFER;
-    Status = AcpiNsHandleToPathname (ObjHandle, &Buffer, FALSE);
+    Status = AcpiNsHandleToPathname (ObjHandle, &Buffer);
     if (ACPI_FAILURE (Status))
     {
         return;

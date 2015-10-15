@@ -1,4 +1,4 @@
-/*	$NetBSD: omap3_sdhc.c,v 1.17 2015/07/31 15:00:07 jmcneill Exp $	*/
+/*	$NetBSD: omap3_sdhc.c,v 1.14.4.1 2015/04/19 04:37:17 msaitoh Exp $	*/
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omap3_sdhc.c,v 1.17 2015/07/31 15:00:07 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omap3_sdhc.c,v 1.14.4.1 2015/04/19 04:37:17 msaitoh Exp $");
 
 #include "opt_omap.h"
 #include "edma.h"
@@ -102,6 +102,7 @@ struct obiosdhc_softc {
 	struct edma_channel	*sc_edma_rx;
 	uint16_t		sc_edma_param_tx[EDMA_MAX_PARAMS];
 	uint16_t		sc_edma_param_rx[EDMA_MAX_PARAMS];
+	kmutex_t		sc_edma_lock;
 	kcondvar_t		sc_edma_cv;
 	bus_addr_t		sc_edma_fifo;
 	bool			sc_edma_pending;
@@ -229,6 +230,7 @@ obiosdhc_attach(device_t parent, device_t self, void *aux)
 
 #if NEDMA > 0
 	if (oa->obio_edmabase != -1) {
+		mutex_init(&sc->sc_edma_lock, MUTEX_DEFAULT, IPL_SCHED);
 		cv_init(&sc->sc_edma_cv, "sdhcedma");
 		sc->sc_edma_fifo = oa->obio_addr +
 		    OMAP3_SDMMC_SDHC_OFFSET + SDHC_DATA;
@@ -256,7 +258,7 @@ obiosdhc_attach(device_t parent, device_t self, void *aux)
 	KASSERT(i < __arraycount(am335x_sdhc));
 #endif
 
-	/* XXXXXX: Turn-on regulator via I2C. */
+	/* XXXXXX: Turn-on regurator via I2C. */
 	/* XXXXXX: And enable ICLOCK/FCLOCK. */
 
 	/* MMCHS Soft reset */
@@ -466,15 +468,12 @@ static int
 obiosdhc_edma_xfer_data(struct sdhc_softc *sdhc_sc, struct sdmmc_command *cmd)
 {
 	struct obiosdhc_softc *sc = device_private(sdhc_sc->sc_dev);
-	kmutex_t *plock = sdhc_host_lock(sc->sc_hosts[0]);
 	struct edma_channel *edma;
 	uint16_t *edma_param;
 	struct edma_param ep;
 	size_t seg;
 	int error;
 	int blksize = MIN(cmd->c_datalen, cmd->c_blklen);
-
-	KASSERT(mutex_owned(plock));
 
 	edma = ISSET(cmd->c_flags, SCF_CMD_READ) ?
 	    sc->sc_edma_rx : sc->sc_edma_tx;
@@ -541,11 +540,12 @@ obiosdhc_edma_xfer_data(struct sdhc_softc *sdhc_sc, struct sdmmc_command *cmd)
 #endif
 	}
 
+	mutex_enter(&sc->sc_edma_lock);
 	error = 0;
 	sc->sc_edma_pending = true;
 	edma_transfer_enable(edma, edma_param[0]);
 	while (sc->sc_edma_pending) {
-		error = cv_timedwait(&sc->sc_edma_cv, plock, hz*10);
+		error = cv_timedwait(&sc->sc_edma_cv, &sc->sc_edma_lock, hz*10);
 		if (error == EWOULDBLOCK) {
 			device_printf(sc->sc.sc_dev, "transfer timeout!\n");
 			edma_dump(edma);
@@ -557,6 +557,7 @@ obiosdhc_edma_xfer_data(struct sdhc_softc *sdhc_sc, struct sdmmc_command *cmd)
 		}
 	}
 	edma_halt(edma);
+	mutex_exit(&sc->sc_edma_lock);
 
 	return error;
 }
@@ -565,12 +566,11 @@ static void
 obiosdhc_edma_done(void *priv)
 {
 	struct obiosdhc_softc *sc = priv;
-	kmutex_t *plock = sdhc_host_lock(sc->sc_hosts[0]);
 
-	mutex_enter(plock);
+	mutex_enter(&sc->sc_edma_lock);
 	KASSERT(sc->sc_edma_pending == true);
 	sc->sc_edma_pending = false;
 	cv_broadcast(&sc->sc_edma_cv);
-	mutex_exit(plock);
+	mutex_exit(&sc->sc_edma_lock);
 }
 #endif

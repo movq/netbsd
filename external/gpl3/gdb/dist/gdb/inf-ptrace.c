@@ -1,6 +1,6 @@
 /* Low-level child interface to ptrace.
 
-   Copyright (C) 1988-2015 Free Software Foundation, Inc.
+   Copyright (C) 1988-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -24,6 +24,9 @@
 #include "terminal.h"
 #include "gdbcore.h"
 #include "regcache.h"
+
+#include "gdb_assert.h"
+#include <string.h>
 #include "gdb_ptrace.h"
 #include "gdb_wait.h"
 #include <signal.h>
@@ -36,22 +39,57 @@
 
 #ifdef PT_GET_PROCESS_STATE
 
-/* Target hook for follow_fork.  On entry and at return inferior_ptid is
-   the ptid of the followed inferior.  */
-
 static int
 inf_ptrace_follow_fork (struct target_ops *ops, int follow_child,
 			int detach_fork)
 {
-  if (!follow_child)
-    {
-      struct thread_info *tp = inferior_thread ();
-      pid_t child_pid = ptid_get_pid (tp->pending_follow.value.related_pid);
+  pid_t pid, fpid;
+  ptrace_state_t pe;
 
+  pid = ptid_get_pid (inferior_ptid);
+
+  if (ptrace (PT_GET_PROCESS_STATE, pid,
+	       (PTRACE_TYPE_ARG3)&pe, sizeof pe) == -1)
+    perror_with_name (("ptrace"));
+
+  gdb_assert (pe.pe_report_event == PTRACE_FORK);
+  fpid = pe.pe_other_pid;
+
+  if (follow_child)
+    {
+      struct inferior *parent_inf, *child_inf;
+      struct thread_info *tp;
+
+      parent_inf = find_inferior_pid (pid);
+
+      /* Add the child.  */
+      child_inf = add_inferior (fpid);
+      child_inf->attach_flag = parent_inf->attach_flag;
+      copy_terminal_info (child_inf, parent_inf);
+      child_inf->pspace = parent_inf->pspace;
+      child_inf->aspace = parent_inf->aspace;
+
+      /* Before detaching from the parent, remove all breakpoints from
+	 it.  */
+      remove_breakpoints ();
+
+      if (ptrace (PT_DETACH, pid, (PTRACE_TYPE_ARG3)1, 0) == -1)
+	perror_with_name (("ptrace"));
+
+      /* Switch inferior_ptid out of the parent's way.  */
+      inferior_ptid = pid_to_ptid (fpid);
+
+      /* Delete the parent.  */
+      detach_inferior (pid);
+
+      add_thread_silent (inferior_ptid);
+    }
+  else
+    {
       /* Breakpoints have already been detached from the child by
 	 infrun.c.  */
 
-      if (ptrace (PT_DETACH, child_pid, (PTRACE_TYPE_ARG3)1, 0) == -1)
+      if (ptrace (PT_DETACH, fpid, (PTRACE_TYPE_ARG3)1, 0) == -1)
 	perror_with_name (("ptrace"));
     }
 
@@ -109,7 +147,7 @@ inf_ptrace_create_inferior (struct target_ops *ops,
 #ifdef PT_GET_PROCESS_STATE
 
 static void
-inf_ptrace_post_startup_inferior (struct target_ops *self, ptid_t pid)
+inf_ptrace_post_startup_inferior (ptid_t pid)
 {
   ptrace_event_t pe;
 
@@ -136,14 +174,17 @@ inf_ptrace_mourn_inferior (struct target_ops *ops)
      only report its exit status to its original parent.  */
   waitpid (ptid_get_pid (inferior_ptid), &status, 0);
 
-  inf_child_mourn_inferior (ops);
+  generic_mourn_inferior ();
+
+  if (!have_inferiors ())
+    unpush_target (ops);
 }
 
 /* Attach to the process specified by ARGS.  If FROM_TTY is non-zero,
    be chatty about it.  */
 
 static void
-inf_ptrace_attach (struct target_ops *ops, const char *args, int from_tty)
+inf_ptrace_attach (struct target_ops *ops, char *args, int from_tty)
 {
   char *exec_file;
   pid_t pid;
@@ -205,7 +246,7 @@ inf_ptrace_attach (struct target_ops *ops, const char *args, int from_tty)
 #ifdef PT_GET_PROCESS_STATE
 
 static void
-inf_ptrace_post_attach (struct target_ops *self, int pid)
+inf_ptrace_post_attach (int pid)
 {
   ptrace_event_t pe;
 
@@ -256,7 +297,8 @@ inf_ptrace_detach (struct target_ops *ops, const char *args, int from_tty)
   inferior_ptid = null_ptid;
   detach_inferior (pid);
 
-  inf_child_maybe_unpush_target (ops);
+  if (!have_inferiors ())
+    unpush_target (ops);
 }
 
 /* Kill the inferior.  */
@@ -279,7 +321,7 @@ inf_ptrace_kill (struct target_ops *ops)
 /* Stop the inferior.  */
 
 static void
-inf_ptrace_stop (struct target_ops *self, ptid_t ptid)
+inf_ptrace_stop (ptid_t ptid)
 {
   /* Send a SIGINT to the process group.  This acts just like the user
      typed a ^C on the controlling terminal.  Note that using a
@@ -423,13 +465,15 @@ inf_ptrace_wait (struct target_ops *ops,
   return pid_to_ptid (pid);
 }
 
-/* Implement the to_xfer_partial target_ops method.  */
+/* Attempt a transfer all LEN bytes starting at OFFSET between the
+   inferior's OBJECT:ANNEX space and GDB's READBUF/WRITEBUF buffer.
+   Return the number of bytes actually transferred.  */
 
-static enum target_xfer_status
+static LONGEST
 inf_ptrace_xfer_partial (struct target_ops *ops, enum target_object object,
 			 const char *annex, gdb_byte *readbuf,
 			 const gdb_byte *writebuf,
-			 ULONGEST offset, ULONGEST len, ULONGEST *xfered_len)
+			 ULONGEST offset, LONGEST len)
 {
   pid_t pid = ptid_get_pid (inferior_ptid);
 
@@ -456,16 +500,13 @@ inf_ptrace_xfer_partial (struct target_ops *ops, enum target_object object,
 
 	errno = 0;
 	if (ptrace (PT_IO, pid, (caddr_t)&piod, 0) == 0)
-	  {
-	    /* Return the actual number of bytes read or written.  */
-	    *xfered_len = piod.piod_len;
-	    return (piod.piod_len == 0) ? TARGET_XFER_EOF : TARGET_XFER_OK;
-	  }
+	  /* Return the actual number of bytes read or written.  */
+	  return piod.piod_len;
 	/* If the PT_IO request is somehow not supported, fallback on
 	   using PT_WRITE_D/PT_READ_D.  Otherwise we will return zero
 	   to indicate failure.  */
 	if (errno != EINVAL)
-	  return TARGET_XFER_EOF;
+	  return 0;
       }
 #endif
       {
@@ -475,7 +516,7 @@ inf_ptrace_xfer_partial (struct target_ops *ops, enum target_object object,
 	  gdb_byte byte[sizeof (PTRACE_TYPE_RET)];
 	} buffer;
 	ULONGEST rounded_offset;
-	ULONGEST partial_len;
+	LONGEST partial_len;
 
 	/* Round the start offset down to the next long word
 	   boundary.  */
@@ -521,7 +562,7 @@ inf_ptrace_xfer_partial (struct target_ops *ops, enum target_object object,
 			(PTRACE_TYPE_ARG3)(uintptr_t)rounded_offset,
 			buffer.word);
 		if (errno)
-		  return TARGET_XFER_EOF;
+		  return 0;
 	      }
 	  }
 
@@ -532,18 +573,17 @@ inf_ptrace_xfer_partial (struct target_ops *ops, enum target_object object,
 				  (PTRACE_TYPE_ARG3)(uintptr_t)rounded_offset,
 				  0);
 	    if (errno)
-	      return TARGET_XFER_EOF;
+	      return 0;
 	    /* Copy appropriate bytes out of the buffer.  */
 	    memcpy (readbuf, buffer.byte + (offset - rounded_offset),
 		    partial_len);
 	  }
 
-	*xfered_len = partial_len;
-	return TARGET_XFER_OK;
+	return partial_len;
       }
 
     case TARGET_OBJECT_UNWIND_TABLE:
-      return TARGET_XFER_E_IO;
+      return -1;
 
     case TARGET_OBJECT_AUXV:
 #if defined (PT_IO) && defined (PIOD_READ_AUXV)
@@ -554,7 +594,7 @@ inf_ptrace_xfer_partial (struct target_ops *ops, enum target_object object,
 	struct ptrace_io_desc piod;
 
 	if (writebuf)
-	  return TARGET_XFER_E_IO;
+	  return -1;
 	piod.piod_op = PIOD_READ_AUXV;
 	piod.piod_addr = readbuf;
 	piod.piod_offs = (void *) (long) offset;
@@ -562,20 +602,17 @@ inf_ptrace_xfer_partial (struct target_ops *ops, enum target_object object,
 
 	errno = 0;
 	if (ptrace (PT_IO, pid, (caddr_t)&piod, 0) == 0)
-	  {
-	    /* Return the actual number of bytes read or written.  */
-	    *xfered_len = piod.piod_len;
-	    return (piod.piod_len == 0) ? TARGET_XFER_EOF : TARGET_XFER_OK;
-	  }
+	  /* Return the actual number of bytes read or written.  */
+	  return piod.piod_len;
       }
 #endif
-      return TARGET_XFER_E_IO;
+      return -1;
 
     case TARGET_OBJECT_WCOOKIE:
-      return TARGET_XFER_E_IO;
+      return -1;
 
     default:
-      return TARGET_XFER_E_IO;
+      return -1;
     }
 }
 

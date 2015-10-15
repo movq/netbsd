@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_vfsops.c,v 1.230 2015/07/15 03:28:55 manu Exp $	*/
+/*	$NetBSD: nfs_vfsops.c,v 1.229 2014/05/30 08:47:45 hannken Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993, 1995
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_vfsops.c,v 1.230 2015/07/15 03:28:55 manu Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_vfsops.c,v 1.229 2014/05/30 08:47:45 hannken Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_nfs.h"
@@ -841,18 +841,13 @@ bad:
 int
 nfs_unmount(struct mount *mp, int mntflags)
 {
-	struct nfsmount *nmp = VFSTONFS(mp);
+	struct nfsmount *nmp;
 	struct vnode *vp;
 	int error, flags = 0;
 
-	if (mntflags & MNT_FORCE) {
-		mutex_enter(&nmp->nm_lock);
+	if (mntflags & MNT_FORCE)
 		flags |= FORCECLOSE;
-		nmp->nm_iflag |= NFSMNT_DISMNTFORCE;
-		mutex_exit(&nmp->nm_lock);
-
-	}
-
+	nmp = VFSTONFS(mp);
 	/*
 	 * Goes something like this..
 	 * - Check for activity on the root vnode (other than ourselves).
@@ -869,18 +864,17 @@ nfs_unmount(struct mount *mp, int mntflags)
 	vp = nmp->nm_vnode;
 	error = vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
 	if (error != 0)
-		goto err;
+		return error;
 
 	if ((mntflags & MNT_FORCE) == 0 && vp->v_usecount > 1) {
 		VOP_UNLOCK(vp);
-		error = EBUSY;
-		goto err;
+		return (EBUSY);
 	}
 
 	error = vflush(mp, vp, flags);
 	if (error) {
 		VOP_UNLOCK(vp);
-		goto err;
+		return (error);
 	}
 
 	/*
@@ -889,13 +883,6 @@ nfs_unmount(struct mount *mp, int mntflags)
 	 * will go away cleanly.
 	 */
 	nmp->nm_iflag |= NFSMNT_DISMNT;
-
-	/*
-	 * No new async I/O will be added, but await for pending
-	 * ones to drain.
-	 */
-	while (nfs_iodbusy(nmp))
-		kpause("nfsumnt", false, hz, NULL);
 
 	/*
 	 * Clean up the stats... note that we carefully avoid decrementing
@@ -921,15 +908,6 @@ nfs_unmount(struct mount *mp, int mntflags)
 	cv_destroy(&nmp->nm_disconcv);
 	kmem_free(nmp, sizeof(*nmp));
 	return (0);
-
-err:
-	if (mntflags & MNT_FORCE) {
-		mutex_enter(&nmp->nm_lock);
-		nmp->nm_iflag &= ~NFSMNT_DISMNTFORCE;	
-		mutex_exit(&nmp->nm_lock);
-	}
-
-	return error;
 }
 
 /*

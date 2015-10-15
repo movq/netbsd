@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2015/03/22 09:57:42 ast Exp $
+# $NetBSD: Makefile,v 1.1.2.2 2015/04/21 05:22:58 snj Exp $
 
 FILES=		service
 MAN=		service.8

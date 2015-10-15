@@ -1,4 +1,4 @@
-/*	$NetBSD: unaligned.h,v 1.3 2015/02/25 15:01:03 riastradh Exp $	*/
+/*	$NetBSD: unaligned.h,v 1.1.4.1 2015/03/06 21:39:10 snj Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

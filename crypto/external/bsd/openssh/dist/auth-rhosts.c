@@ -1,4 +1,4 @@
-/*	$NetBSD: auth-rhosts.c,v 1.5 2015/04/03 23:58:19 christos Exp $	*/
+/*	$NetBSD: auth-rhosts.c,v 1.3.26.1 2015/04/30 06:07:30 riz Exp $	*/
 /* $OpenBSD: auth-rhosts.c,v 1.46 2014/12/23 22:42:48 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -16,7 +16,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: auth-rhosts.c,v 1.5 2015/04/03 23:58:19 christos Exp $");
+__RCSID("$NetBSD: auth-rhosts.c,v 1.3.26.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/types.h>
 #include <sys/stat.h>
 

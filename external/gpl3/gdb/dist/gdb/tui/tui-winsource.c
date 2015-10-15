@@ -1,6 +1,6 @@
 /* TUI display source/assembly window.
 
-   Copyright (C) 1998-2015 Free Software Foundation, Inc.
+   Copyright (C) 1998-2014 Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -37,7 +37,10 @@
 #include "tui/tui-winsource.h"
 #include "tui/tui-source.h"
 #include "tui/tui-disasm.h"
+
+#include <string.h>
 #include "gdb_curses.h"
+#include "gdb_assert.h"
 
 /* Function to display the "main" routine.  */
 void
@@ -51,12 +54,12 @@ tui_display_main (void)
       tui_get_begin_asm_address (&gdbarch, &addr);
       if (addr != (CORE_ADDR) 0)
 	{
-	  struct symtab *s;
+	  struct symtab_and_line sal;
 
 	  tui_update_source_windows_with_addr (gdbarch, addr);
-	  s = find_pc_line_symtab (addr);
-          if (s != NULL)
-             tui_update_locator_fullname (symtab_to_fullname (s));
+	  sal = find_pc_line (addr, 0);
+          if (sal.symtab)
+             tui_update_locator_fullname (symtab_to_fullname (sal.symtab));
           else
              tui_update_locator_fullname ("??");
 	}
@@ -115,7 +118,7 @@ tui_update_source_window_as_is (struct tui_win_info *win_info,
 	  sal.line = line_or_addr.u.line_no +
 	    (win_info->generic.content_size - 2);
 	  sal.symtab = s;
-	  sal.pspace = SYMTAB_PSPACE (s);
+	  sal.pspace = s->objfile->pspace;
 	  set_current_source_symtab_and_line (&sal);
 	  /* If the focus was in the asm win, put it in the src win if
 	     we don't have a split layout.  */
@@ -183,7 +186,7 @@ tui_update_source_windows_with_line (struct symtab *s, int line)
   if (!s)
     return;
 
-  gdbarch = get_objfile_arch (SYMTAB_OBJFILE (s));
+  gdbarch = get_objfile_arch (s->objfile);
 
   switch (tui_current_layout ())
     {
@@ -331,7 +334,7 @@ tui_horizontal_source_scroll (struct tui_win_info *win_info,
 	    = get_current_source_symtab_and_line ();
 
 	  if (cursal.symtab == NULL)
-	    s = find_pc_line_symtab (get_frame_pc (get_selected_frame (NULL)));
+	    s = find_pc_symtab (get_frame_pc (get_selected_frame (NULL)));
 	  else
 	    s = cursal.symtab;
 	}

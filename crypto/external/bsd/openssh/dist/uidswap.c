@@ -1,5 +1,5 @@
-/*	$NetBSD: uidswap.c,v 1.5 2015/07/03 01:00:00 christos Exp $	*/
-/* $OpenBSD: uidswap.c,v 1.39 2015/06/24 01:49:19 dtucker Exp $ */
+/*	$NetBSD: uidswap.c,v 1.2.26.1 2015/04/30 06:07:31 riz Exp $	*/
+/* $OpenBSD: uidswap.c,v 1.37 2015/01/16 06:40:12 deraadt Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -14,7 +14,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: uidswap.c,v 1.5 2015/07/03 01:00:00 christos Exp $");
+__RCSID("$NetBSD: uidswap.c,v 1.2.26.1 2015/04/30 06:07:31 riz Exp $");
 #include <sys/param.h>
 #include <errno.h>
 #include <pwd.h>

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.5 2015/06/08 04:08:30 matt Exp $
+#	$NetBSD: Makefile.inc,v 1.4.24.1 2015/06/10 17:16:24 snj Exp $
 
 .if (${MACHINE_ARCH} == "x86_64" && ${MLIBDIR:Unone} != "i386")
 SRCS+=	x86_64_mtrr.c x86_64_iopl.c

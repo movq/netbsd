@@ -1,4 +1,4 @@
-/*	$NetBSD: buf.c,v 1.4 2014/10/30 18:44:05 christos Exp $	*/
+/*	$NetBSD: buf.c,v 1.2.8.1 2015/03/06 20:49:11 snj Exp $	*/
 
 /* flex - tool to generate fast lexical analyzers */
 
@@ -33,7 +33,7 @@
 /*  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR */
 /*  PURPOSE. */
 #include "flexdef.h"
-__RCSID("$NetBSD: buf.c,v 1.4 2014/10/30 18:44:05 christos Exp $");
+__RCSID("$NetBSD: buf.c,v 1.2.8.1 2015/03/06 20:49:11 snj Exp $");
 
 
 /* Take note: The buffer object is sometimes used as a String buffer (one

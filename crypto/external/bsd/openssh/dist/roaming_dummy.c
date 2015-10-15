@@ -1,4 +1,4 @@
-/*	$NetBSD: roaming_dummy.c,v 1.4 2015/04/03 23:58:19 christos Exp $	*/
+/*	$NetBSD: roaming_dummy.c,v 1.2.22.1 2015/04/30 06:07:30 riz Exp $	*/
 /* $OpenBSD: roaming_dummy.c,v 1.4 2015/01/19 19:52:16 markus Exp $ */
 /*
  * Copyright (c) 2004-2009 AppGate Network Security AB

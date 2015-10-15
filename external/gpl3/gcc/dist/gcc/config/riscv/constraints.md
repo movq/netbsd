@@ -60,10 +60,15 @@
   "@internal"
   (match_operand 0 "const_arith_operand"))
 
-(define_memory_constraint "A"
+(define_memory_constraint "YR"
   "An address that is held in a general-purpose register."
   (and (match_code "mem")
        (match_test "GET_CODE(XEXP(op,0)) == REG")))
+
+(define_memory_constraint "R"
+  "An address that can be used in a non-macro load or store."
+  (and (match_code "mem")
+       (match_test "riscv_address_insns (XEXP (op, 0), mode, false) == 1")))
 
 (define_constraint "S"
   "@internal

@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.kmodule.mk,v 1.55 2015/07/09 14:50:08 matt Exp $
+#	$NetBSD: bsd.kmodule.mk,v 1.44 2014/08/10 17:44:26 joerg Exp $
 
 # We are not building this with PIE
 MKPIE=no
@@ -11,7 +11,6 @@ MKPIE=no
 realinstall:	kmodinstall
 
 KERN=		$S/kern
-MKLDSCRIPT?=	no
 
 CFLAGS+=	-ffreestanding ${COPTS}
 CPPFLAGS+=	-nostdinc -I. -I${.CURDIR} -isystem $S -isystem $S/arch
@@ -35,14 +34,6 @@ CFLAGS+=	-mlong-calls
 CFLAGS+=	${${ACTIVE_CC} == "gcc":? -mlongcall :}
 .elif ${MACHINE_CPU} == "vax"
 CFLAGS+=	-fno-pic
-.elif ${MACHINE_CPU} == "riscv"
-CFLAGS+=	-fPIC -Wa,-fno-pic
-.elif ${MACHINE_ARCH} == "mips64eb" && !defined(BSD_MK_COMPAT_FILE)
-CFLAGS+=	-mabi=64
-LDFLAGS+=	-Wl,-m,elf64btsmip
-.elif ${MACHINE_ARCH} == "mips64el" && !defined(BSD_MK_COMPAT_FILE)
-CFLAGS+=	-mabi=64
-LDFLAGS+=	-Wl,-m,elf64ltsmip
 .endif
 
 .if ${MACHINE_CPU} == "sparc64"
@@ -79,15 +70,9 @@ DPSRCS+=	${_YKMSRCS}
 CLEANFILES+=	${_YKMSRCS}
 
 .if exists($S/../sys/modules/xldscripts/kmodule)
-KMODSCRIPTSRC=	$S/../sys/modules/xldscripts/kmodule
+KMODSCRIPT=	$S/../sys/modules/xldscripts/kmodule
 .else
-KMODSCRIPTSRC=	${DESTDIR}/usr/libdata/ldscripts/kmodule
-.endif
-.if ${MKLDSCRIPT} == "yes"
-KMODSCRIPT=	kldscript
-MKLDSCRIPTSH=	
-.else
-KMODSCRIPT=	${KMODSCRIPTSRC}
+KMODSCRIPT=	${DESTDIR}/usr/libdata/ldscripts/kmodule
 .endif
 
 PROG?=		${KMOD}.kmod
@@ -113,16 +98,9 @@ NODPSRCS+=	${f}
 ${XOBJS}:	${DPSRCS}
 .endif
 
-.if ${MKLDSCRIPT} == "yes"
-${KMODSCRIPT}: ${KMODSCRIPTSRC} ${XOBJS} $S/conf/mkldscript.sh
-	@rm -f ${.TARGET}
-	@OBJDUMP=${OBJDUMP} ${HOST_SH} $S/conf/mkldscript.sh \
-	    -t ${KMODSCRIPTSRC} ${XOBJS} > ${.TARGET}
-.endif
-
-${PROG}: ${XOBJS} ${XSRCS} ${DPSRCS} ${DPADD} ${KMODSCRIPT}
+${PROG}: ${XOBJS} ${XSRCS} ${DPSRCS} ${DPADD}
+	${_MKTARGET_LINK}
 	${CC} ${LDFLAGS} -nostdlib -MD -combine -r -Wl,-T,${KMODSCRIPT},-d \
-		-Wl,-Map=${.TARGET}.map \
 		-o ${.TARGET} ${CFLAGS} ${CPPFLAGS} ${XOBJS} \
 		${XSRCS:@.SRC.@${.ALLSRC:M*.c:M*${.SRC.}}@:O:u} && \
 	echo '.-include "${KMOD}.d"' > .depend
@@ -131,13 +109,6 @@ ${PROG}: ${XOBJS} ${XSRCS} ${DPSRCS} ${DPADD} ${KMODSCRIPT}
 OBJS+=		${SRCS:N*.h:N*.sh:R:S/$/.o/g}
 
 ${OBJS} ${LOBJS}: ${DPSRCS}
-
-.if ${MKLDSCRIPT} == "yes"
-${KMODSCRIPT}: ${KMODSCRIPTSRC} ${OBJS} $S/conf/mkldscript.sh
-	@rm -f ${.TARGET}
-	@OBJDUMP=${OBJDUMP} ${HOST_SH} $S/conf/mkldscript.sh \
-	    -t ${KMODSCRIPTSRC} ${OBJS} > ${.TARGET}
-.endif
 
 .if ${MACHINE_CPU} == "arm"
 # The solution to limited branch space involves generating trampolines for
@@ -164,21 +135,18 @@ ${KMOD}_tramp.S: ${KMOD}_tmp.o ${ARCHDIR}/kmodtramp.awk ${ASM_H}
 ${PROG}: ${KMOD}_tmp.o ${KMOD}_tramp.o
 	${_MKTARGET_LINK}
 .if exists(${ARCHDIR}/kmodhide.awk)
-	${LD} -r -Map=${.TARGET}.map \
-	    -o tmp.o ${KMOD}_tmp.o ${KMOD}_tramp.o
+	${LD} -r -o tmp.o ${KMOD}_tmp.o ${KMOD}_tramp.o
 	${OBJCOPY} \
 		`${NM} tmp.o | ${TOOL_AWK} -f ${ARCHDIR}/kmodhide.awk` \
 		tmp.o ${.TARGET} && \
 	rm tmp.o
 .else
-	${LD} -r -Map=${.TARGET}.map \
-	    -o ${.TARGET} ${KMOD}_tmp.o ${KMOD}_tramp.o
+	${LD} -r -o ${.TARGET} ${KMOD}_tmp.o ${KMOD}_tramp.o
 .endif
 .else
-${PROG}: ${OBJS} ${DPADD} ${KMODSCRIPT}
+${PROG}: ${OBJS} ${DPADD}
 	${_MKTARGET_LINK}
 	${CC} ${LDFLAGS} -nostdlib -r -Wl,-T,${KMODSCRIPT},-d \
-		-Wl,-Map=${.TARGET}.map \
 		-o ${.TARGET} ${OBJS}
 .endif
 .endif
@@ -225,10 +193,6 @@ kmodinstall::	${_PROG}
 
 ##### Clean rules
 CLEANFILES+= a.out [Ee]rrs mklog core *.core ${PROG} ${OBJS} ${LOBJS}
-CLEANFILES+= ${PROG}.map
-.if ${MKLDSCRIPT} == "yes"
-CLEANFILES+= kldscript
-.endif
 
 ##### Custom rules
 lint: ${LOBJS}

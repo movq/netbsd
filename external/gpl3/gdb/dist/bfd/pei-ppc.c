@@ -1,5 +1,6 @@
 /* BFD back-end for PowerPC PE IMAGE COFF files.
-   Copyright (C) 1995-2015 Free Software Foundation, Inc.
+   Copyright 1995, 1996, 1999, 2005, 2007, 2008, 2009
+   Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -26,10 +27,10 @@
 
 #define PPC_PE
 
-#define TARGET_LITTLE_SYM   powerpc_pei_le_vec
+#define TARGET_LITTLE_SYM   bfd_powerpcle_pei_vec
 #define TARGET_LITTLE_NAME "pei-powerpcle"
 
-#define TARGET_BIG_SYM      powerpc_pei_vec
+#define TARGET_BIG_SYM      bfd_powerpc_pei_vec
 #define TARGET_BIG_NAME    "pei-powerpc"
 
 #define COFF_IMAGE_WITH_PE

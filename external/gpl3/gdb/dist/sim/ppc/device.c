@@ -1815,7 +1815,7 @@ device_ioctl(device *me,
 /* I/O */
 
 EXTERN_DEVICE\
-(void)
+(void volatile)
 device_error(device *me,
 	     const char *fmt,
 	     ...)

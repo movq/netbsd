@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_pst.c,v 1.3 2015/07/10 14:20:33 christos Exp $	*/
+/*	$NetBSD: refclock_pst.c,v 1.1.1.3.4.1 2014/12/24 00:05:21 riz Exp $	*/
 
 /*
  * refclock_pst - clock driver for PSTI/Traconex WWV/WWVH receivers

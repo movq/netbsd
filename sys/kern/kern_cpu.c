@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_cpu.c,v 1.71 2015/08/29 12:24:00 maxv Exp $	*/
+/*	$NetBSD: kern_cpu.c,v 1.66 2014/07/25 08:10:40 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2007, 2008, 2009, 2010, 2012 The NetBSD Foundation, Inc.
@@ -56,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_cpu.c,v 1.71 2015/08/29 12:24:00 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_cpu.c,v 1.66 2014/07/25 08:10:40 dholland Exp $");
 
 #include "opt_cpu_ucode.h"
 #include "opt_compat_netbsd.h"
@@ -83,8 +83,6 @@ __KERNEL_RCSID(0, "$NetBSD: kern_cpu.c,v 1.71 2015/08/29 12:24:00 maxv Exp $");
 
 #include <uvm/uvm_extern.h>
 
-#include "ioconf.h"
-
 /*
  * If the port has stated that cpu_data is the first thing in cpu_info,
  * verify that the claim is true. This will prevent them from getting out
@@ -95,6 +93,8 @@ CTASSERT(offsetof(struct cpu_info, ci_data) == 0);
 #else
 CTASSERT(offsetof(struct cpu_info, ci_data) != 0);
 #endif
+
+void	cpuctlattach(int);
 
 static void	cpu_xc_online(struct cpu_info *);
 static void	cpu_xc_offline(struct cpu_info *);
@@ -204,7 +204,7 @@ mi_cpu_attach(struct cpu_info *ci)
 }
 
 void
-cpuctlattach(int dummy __unused)
+cpuctlattach(int dummy)
 {
 
 	KASSERT(cpu_infos != NULL);
@@ -444,6 +444,7 @@ cpu_setstate(struct cpu_info *ci, bool online)
 		if ((spc->spc_flags & SPCF_OFFLINE) == 0)
 			return 0;
 		func = (xcfunc_t)cpu_xc_online;
+		ncpuonline++;
 	} else {
 		if ((spc->spc_flags & SPCF_OFFLINE) != 0)
 			return 0;
@@ -462,19 +463,16 @@ cpu_setstate(struct cpu_info *ci, bool online)
 		if (nonline == 1)
 			return EBUSY;
 		func = (xcfunc_t)cpu_xc_offline;
+		ncpuonline--;
 	}
 
 	where = xc_unicast(0, func, ci, NULL, ci);
 	xc_wait(where);
 	if (online) {
 		KASSERT((spc->spc_flags & SPCF_OFFLINE) == 0);
-		ncpuonline++;
-	} else {
-		if ((spc->spc_flags & SPCF_OFFLINE) == 0) {
-			/* If was not set offline, then it is busy */
-			return EBUSY;
-		}
-		ncpuonline--;
+	} else if ((spc->spc_flags & SPCF_OFFLINE) == 0) {
+		/* If was not set offline, then it is busy */
+		return EBUSY;
 	}
 
 	spc->spc_lastmod = time_second;
@@ -607,7 +605,7 @@ cpu_ucode_load(struct cpu_ucode_softc *sc, const char *fwname)
 	int error;
 
 	if (sc->sc_blob != NULL) {
-		firmware_free(sc->sc_blob, sc->sc_blobsize);
+		firmware_free(sc->sc_blob, 0);
 		sc->sc_blob = NULL;
 		sc->sc_blobsize = 0;
 	}
@@ -634,7 +632,7 @@ cpu_ucode_load(struct cpu_ucode_softc *sc, const char *fwname)
 	return 0;
 
 err1:
-	firmware_free(sc->sc_blob, sc->sc_blobsize);
+	firmware_free(sc->sc_blob, 0);
 	sc->sc_blob = NULL;
 	sc->sc_blobsize = 0;
 err0:

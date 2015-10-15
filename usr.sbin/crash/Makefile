@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.31 2015/06/16 23:48:20 christos Exp $
+#	$NetBSD: Makefile,v 1.27 2014/03/30 07:29:22 skrll Exp $
 
 PROG=		crash
 MAN=		crash.8
@@ -46,10 +46,6 @@ SRCS+=	db_sym.c db_variables.c db_write_cmd.c
 .PATH:	${S}/arch/${MACHINE}/${MACHINE}
 .PATH:	${S}/arch/${MACHINE_ARCH}/${MACHINE_ARCH}
 SRCS+=	db_disasm.c
-
-.PATH:  $S/kern
-SRCS+=	kern_timeout.c
-CPPFLAGS.kern_timeout.c += -DCRASH -DDDB
 
 CPPFLAGS+=	-I${S}/arch
 

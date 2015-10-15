@@ -1,4 +1,4 @@
-/* $NetBSD: utils.c,v 1.44 2015/03/03 00:20:38 enami Exp $ */
+/* $NetBSD: utils.c,v 1.42 2013/12/11 06:00:11 dholland Exp $ */
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)utils.c	8.3 (Berkeley) 4/1/94";
 #else
-__RCSID("$NetBSD: utils.c,v 1.44 2015/03/03 00:20:38 enami Exp $");
+__RCSID("$NetBSD: utils.c,v 1.42 2013/12/11 06:00:11 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -62,13 +62,13 @@ __RCSID("$NetBSD: utils.c,v 1.44 2015/03/03 00:20:38 enami Exp $");
 int
 set_utimes(const char *file, struct stat *fs)
 {
-    struct timespec ts[2];
+    static struct timeval tv[2];
 
-    ts[0] = fs->st_atimespec;
-    ts[1] = fs->st_mtimespec;
+    TIMESPEC_TO_TIMEVAL(&tv[0], &fs->st_atimespec);
+    TIMESPEC_TO_TIMEVAL(&tv[1], &fs->st_mtimespec);
 
-    if (lutimens(file, ts)) {
-	warn("lutimens: %s", file);
+    if (lutimes(file, tv)) {
+	warn("lutimes: %s", file);
 	return (1);
     }
     return (0);

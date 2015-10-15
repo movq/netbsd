@@ -1,4 +1,4 @@
-/*	$NetBSD: radeondrmkmsfb.c,v 1.5 2014/11/18 09:28:36 nonaka Exp $	*/
+/*	$NetBSD: radeondrmkmsfb.c,v 1.3.4.2 2014/12/03 23:00:17 snj Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radeondrmkmsfb.c,v 1.5 2014/11/18 09:28:36 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: radeondrmkmsfb.c,v 1.3.4.2 2014/12/03 23:00:17 snj Exp $");
 
 #ifdef _KERNEL_OPT
 #include "vga.h"

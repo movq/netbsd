@@ -1,4 +1,4 @@
-.\" Copyright (c) 2009-2015 Roy Marples
+.\" Copyright (c) 2009-2014 Roy Marples
 .\" All rights reserved
 .\"
 .\" Redistribution and use in source and binary forms, with or without
@@ -22,8 +22,8 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd May 14, 2015
-.Dt RESOLVCONF.CONF 5
+.Dd October 28, 2014
+.Dt RESOLVCONF.CONF 5 SMM
 .Os
 .Sh NAME
 .Nm resolvconf.conf
@@ -49,7 +49,7 @@ After updating this file, you may wish to run
 .Nm resolvconf -u
 to apply the new configuration.
 .Pp
-When a dynamically generated list is appended or prepended to, the whole
+When a dynmically generated list is appended or prepended to, the whole
 is made unique where left-most wins.
 .Sh RESOLVCONF OPTIONS
 .Bl -tag -width indent
@@ -91,11 +91,6 @@ To remove a block, you can use 192.168.*
 These interfaces name servers will only be queried for the domains listed
 in their resolv.conf.
 Useful for VPN domains.
-Setting
-.Sy private_interfaces Ns ="*"
-will stop the forwarding of the root zone and allows the local resolver to
-recursively query the root servers directly.
-Requires a local nameserver other than libc.
 This is equivalent to the
 .Nm resolvconf -p
 option.
@@ -154,7 +149,7 @@ When set to /dev/null or NULL,
 .Sy resolv_conf_local_only
 is defaulted to NO,
 .Sy local_nameservers
-is unset unless overridden and only the information set in
+is unset unless overriden and only the information set in
 .Nm
 is written to
 .Sy resolv_conf .
@@ -276,7 +271,7 @@ Each subscriber attempts to automatically configure itself, but not every
 distribution has been catered for.
 Also, users could equally want to use a different version from the one
 installed by default, such as bind8 and bind9.
-To accommodate this, the subscribers have these files in configurable
+To accomodate this, the subscribers have these files in configurable
 variables, documented below.
 .Pp
 .Bl -tag -width indent

@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.59 2015/08/27 12:30:51 pooka Exp $	*/
+/*	$NetBSD: types.h,v 1.54 2014/01/04 00:10:03 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -76,7 +76,7 @@ typedef __uint32_t	vsize_t;
 #define	PRIxVSIZE	PRIx32
 #define	PRIdVSIZE	PRId32
 #endif
-#endif /* NETBSD_SOURCE */
+#endif
 
 typedef int		mips_prid_t;
 /* Make sure this is signed; we need pointers to be sign-extended. */
@@ -123,9 +123,7 @@ typedef struct label_t {
 #define	_L_S8		11
 #define	_L_RA		12
 #define	_L_SR		13
-
-typedef __uint32_t tlb_asid_t;
-#endif /* defined(_KERNEL) || defined(_NETBSD_SOURCE) */
+#endif
 
 #if defined(_KERNEL) || defined(_KMEMUSER)
 #define	PCU_FPU		0
@@ -133,7 +131,10 @@ typedef __uint32_t tlb_asid_t;
 #define	PCU_UNIT_COUNT	2
 #endif
 
-typedef	unsigned int	__cpu_simple_lock_nv_t;
+typedef __uint64_t		__cpuset_t;
+#define	__CPUSET_MAXNUMCPU	64
+
+typedef	volatile unsigned int	__cpu_simple_lock_t;
 
 #define	__SIMPLELOCK_LOCKED	1
 #define	__SIMPLELOCK_UNLOCKED	0

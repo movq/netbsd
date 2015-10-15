@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_config.c,v 1.11 2015/07/10 14:20:32 christos Exp $	*/
+/*	$NetBSD: ntp_config.c,v 1.8.4.2 2015/04/23 18:53:02 snj Exp $	*/
 
 /* ntp_config.c
  *
@@ -55,7 +55,9 @@
 #include "ntp_parser.h"
 #include "ntpd-opts.h"
 
-int yyparse(void);
+
+/* Bison still(!) does not emit usable prototypes for the calling code */
+int yyparse (struct FILE_INFO *ip_file);
 
 /* list of servers from command line for config_peers() */
 int	cmdline_server_count;
@@ -134,6 +136,8 @@ typedef struct peer_resolved_ctx_tag {
  * Definitions of things either imported from or exported to outside
  */
 extern int yydebug;			/* ntp_parser.c (.y) */
+int curr_include_level;			/* The current include level */
+struct FILE_INFO *fp[MAXINCLUDELEVEL+1];
 config_tree cfgt;			/* Parser output stored here */
 struct config_tree_tag *cfg_tree_history;	/* History of configs */
 char	*sys_phone[MAXPHONE] = {NULL};	/* ACTS phone numbers */
@@ -179,6 +183,11 @@ struct netinfo_config_state {
 
 struct REMOTE_CONFIG_INFO remote_config;  /* Remote configuration buffer and
 					     pointer info */
+int input_from_file = 1;     /* A boolean flag, which when set, indicates that
+			        the input is to be taken from the configuration
+			        file, instead of the remote-configuration buffer
+			     */
+
 int old_config_style = 1;    /* A boolean flag, which when set,
 			      * indicates that the old configuration
 			      * format with a newline at the end of
@@ -250,7 +259,7 @@ static void free_config_tree(config_tree *ptree);
 
 static void destroy_restrict_node(restrict_node *my_node);
 static int is_sane_resolved_address(sockaddr_u *peeraddr, int hmode);
-static void save_and_apply_config_tree(int/*BOOL*/ from_file);
+static void save_and_apply_config_tree(void);
 static void destroy_int_fifo(int_fifo *);
 #define FREE_INT_FIFO(pf)			\
 	do {					\
@@ -307,7 +316,7 @@ static sockaddr_u *get_next_address(address_node *addr);
 static void config_sim(config_tree *);
 static void config_ntpdsim(config_tree *);
 #else	/* !SIM follows */
-static void config_ntpd(config_tree *, int/*BOOL*/ input_from_file);
+static void config_ntpd(config_tree *);
 static void config_other_modes(config_tree *);
 static void config_auth(config_tree *);
 static void config_access(config_tree *);
@@ -319,7 +328,7 @@ static void config_trap(config_tree *);
 static void config_fudge(config_tree *);
 static void config_peers(config_tree *);
 static void config_unpeers(config_tree *);
-static void config_nic_rules(config_tree *, int/*BOOL*/ input_from_file);
+static void config_nic_rules(config_tree *);
 static void config_reset_counters(config_tree *);
 static u_char get_correct_host_mode(int token);
 static int peerflag_bits(peer_node *);
@@ -2744,8 +2753,7 @@ free_config_tinker(
 #ifndef SIM
 static void
 config_nic_rules(
-	config_tree *ptree,
-	int/*BOOL*/ input_from_file
+	config_tree *ptree
 	)
 {
 	nic_rule_node *	curr_node;
@@ -3496,11 +3504,6 @@ config_vars(
 				stats_config(STATS_FREQ_FILE, curr_var->value.s);
 			break;
 
-		case T_Dscp:
-			/* DSCP is in the upper 6 bits of the IP TOS/DS field */
-			qos = curr_var->value.i << 2;
-			break;
-
 		case T_Ident:
 			sys_ident = curr_var->value.s;
 			break;
@@ -3513,13 +3516,6 @@ config_vars(
 		case T_Leapfile:
 			stats_config(STATS_LEAP_FILE, curr_var->value.s);
 			break;
-
-#ifdef LEAP_SMEAR
-		case T_Leapsmearinterval:
-			leap_smear_intv = curr_var->value.i;
-			msyslog(LOG_INFO, "config: leap smear interval %i s", leap_smear_intv);
-			break;
-#endif
 
 		case T_Pidfile:
 			stats_config(STATS_PID_FILE, curr_var->value.s);
@@ -4230,7 +4226,7 @@ config_sim(
 	serv_info = HEAD_PFIFO(sim_n->servers);
 	for (; serv_info != NULL; serv_info = serv_info->link)
 		simulation.num_of_servers++;
-	simulation.servers = eallocarray(simulation.num_of_servers,
+	simulation.servers = emalloc(simulation.num_of_servers *
 				     sizeof(simulation.servers[0]));
 
 	i = 0;
@@ -4301,11 +4297,11 @@ free_config_sim(
 #ifndef SIM
 static void
 config_ntpd(
-	config_tree *ptree,
-	int/*BOOL*/ input_from_files
+	config_tree *ptree
 	)
 {
-	config_nic_rules(ptree, input_from_files);
+	config_nic_rules(ptree);
+	io_open_sockets();
 	config_monitor(ptree);
 	config_auth(ptree);
 	config_tos(ptree);
@@ -4320,9 +4316,6 @@ config_ntpd(
 	config_ttl(ptree);
 	config_trap(ptree);
 	config_vars(ptree);
-
-	io_open_sockets();
-
 	config_other_modes(ptree);
 	config_peers(ptree);
 	config_unpeers(ptree);
@@ -4379,22 +4372,28 @@ config_remotely(
 	sockaddr_u *	remote_addr
 	)
 {
+	struct FILE_INFO remote_cuckoo;
 	char origin[128];
 
 	snprintf(origin, sizeof(origin), "remote config from %s",
 		 stoa(remote_addr));
-	lex_init_stack(origin, NULL); /* no checking needed... */
-	init_syntax_tree(&cfgt);
-	yyparse();
-	lex_drop_stack();
+	ZERO(remote_cuckoo);
+	remote_cuckoo.fname = origin;
+	remote_cuckoo.line_no = 1;
+	remote_cuckoo.col_no = 1;
+	input_from_file = 0;
 
+	init_syntax_tree(&cfgt);
+	yyparse(&remote_cuckoo);
 	cfgt.source.attr = CONF_SOURCE_NTPQ;
 	cfgt.timestamp = time(NULL);
 	cfgt.source.value.s = estrdup(stoa(remote_addr));
 
 	DPRINTF(1, ("Finished Parsing!!\n"));
 
-	save_and_apply_config_tree(FALSE);
+	save_and_apply_config_tree();
+
+	input_from_file = 1;
 }
 
 
@@ -4446,8 +4445,9 @@ getconfig(
 
 	getCmdOpts(argc, argv);
 	init_syntax_tree(&cfgt);
+	curr_include_level = 0;
 	if (
-		!lex_init_stack(FindConfig(config_file), "r")
+		(fp[curr_include_level] = F_OPEN(FindConfig(config_file), "r")) == NULL
 #ifdef HAVE_NETINFO
 		/* If there is no config_file, try NetInfo. */
 		&& check_netinfo && !(config_netinfo = get_netinfo_config())
@@ -4461,7 +4461,8 @@ getconfig(
 #else
 		/* Under WinNT try alternate_config_file name, first NTP.CONF, then NTP.INI */
 
-		if (!lex_init_stack(FindConfig(alt_config_file), "r"))  {
+		if ((fp[curr_include_level] = F_OPEN(FindConfig(alt_config_file), "r")) == NULL) {
+
 			/*
 			 * Broadcast clients can sometimes run without
 			 * a configuration file.
@@ -4481,15 +4482,17 @@ getconfig(
 #ifdef DEBUG
 	yydebug = !!(debug >= 5);
 #endif
-	yyparse();
-	lex_drop_stack();
+	yyparse(fp[curr_include_level]);
 
 	DPRINTF(1, ("Finished Parsing!!\n"));
 
 	cfgt.source.attr = CONF_SOURCE_FILE;
 	cfgt.timestamp = time(NULL);
 
-	save_and_apply_config_tree(TRUE);
+	save_and_apply_config_tree();
+
+	while (curr_include_level != -1)
+		FCLOSE(fp[curr_include_level--]);
 
 #ifdef HAVE_NETINFO
 	if (config_netinfo)
@@ -4499,7 +4502,7 @@ getconfig(
 
 
 void
-save_and_apply_config_tree(int/*BOOL*/ input_from_file)
+save_and_apply_config_tree(void)
 {
 	config_tree *ptree;
 #ifndef SAVECONFIG
@@ -4553,7 +4556,7 @@ save_and_apply_config_tree(int/*BOOL*/ input_from_file)
 	 */
 
 #ifndef SIM
-	config_ntpd(ptree, input_from_file);
+	config_ntpd(ptree);
 #else
 	config_ntpdsim(ptree);
 #endif
@@ -4784,9 +4787,8 @@ gettokens_netinfo (
 				if (namelist.ni_namelist_len == 0) continue;
 
 				config->val_list =
-				    eallocarray(
-					(namelist.ni_namelist_len + 1),
-					sizeof(char*));
+				    emalloc(sizeof(char*) *
+				    (namelist.ni_namelist_len + 1));
 				val_list = config->val_list;
 
 				for (index = 0;
@@ -4936,7 +4938,7 @@ ntp_rlimit(
 	    case RLIMIT_NOFILE:
 		/*
 		 * For large systems the default file descriptor limit may
-		 * not be enough.
+		 * not be enough. 
 		 */
 		DPRINTF(2, ("ntp_rlimit: NOFILE: %d %s\n",
 			(int)(rl_value / rl_scale), rl_sstr));
@@ -4956,7 +4958,7 @@ ntp_rlimit(
 		DPRINTF(2, ("ntp_rlimit: STACK: %d %s pages\n",
 			    (int)(rl_value / rl_scale), rl_sstr));
 		if (-1 == getrlimit(RLIMIT_STACK, &rl)) {
-			msyslog(LOG_ERR, "getrlimit(RLIMIT_STACK) failed: %m");
+			msyslog(LOG_ERR, "getrlimit() failed: %m");
 		} else {
 			if (rl_value > rl.rlim_max) {
 				msyslog(LOG_WARNING,
@@ -4965,10 +4967,9 @@ ntp_rlimit(
 					(u_long)rl_value);
 				rl_value = rl.rlim_max;
 			}
-			rl.rlim_cur = rl_value;
 			if (-1 == setrlimit(RLIMIT_STACK, &rl)) {
 				msyslog(LOG_ERR,
-					"ntp_rlimit: Cannot set RLIMIT_STACK: %m");
+					"ntp_rlimit: Cannot adjust stack limit: %m");
 			}
 		}
 		break;

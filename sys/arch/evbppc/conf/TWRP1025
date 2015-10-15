@@ -1,4 +1,4 @@
-#	$NetBSD: TWRP1025,v 1.21 2015/06/26 21:54:41 matt Exp $
+#	$NetBSD: TWRP1025,v 1.14.4.1 2015/05/15 03:44:18 snj Exp $
 #
 #	TWRP1025 -- everything that's currently supported
 #
@@ -7,7 +7,7 @@ include		"arch/evbppc/conf/std.mpc85xx"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-ident 		"TWRP1025-$Revision: 1.21 $"
+ident 		"TWRP1025-$Revision: 1.14.4.1 $"
 
 maxusers	32
 
@@ -42,7 +42,7 @@ options 	DEBUG		# expensive debugging checks/support
 options 	DDB		# in-kernel debugger
 options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
 options 	TRAP_PANICWAIT
-makeoptions	COPY_SYMTAB=1	# size for embedded symbol table
+options 	SYMTAB_SPACE=410000	# size for embedded symbol table
 
 makeoptions	DEBUG="-g"	# compile full symbol table
 
@@ -58,9 +58,8 @@ options 	COMPAT_16	# NetBSD 1.6,
 options 	COMPAT_20	# NetBSD 2.0,
 options 	COMPAT_30	# NetBSD 3.0,
 options 	COMPAT_40	# NetBSD 4.0,
-options 	COMPAT_50	# NetBSD 5.0,
-options 	COMPAT_60	# NetBSD 6.0, and
-options 	COMPAT_70	# NetBSD 7.0 binary compatibility.
+options 	COMPAT_50	# NetBSD 5.0 compatibility.
+options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_43	# and 4.3BSD
 #options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
@@ -107,7 +106,7 @@ options 	INET		# IP + ICMP + TCP + UDP
 options 	INET_CSUM_COUNTERS
 options 	TCP_CSUM_COUNTERS
 options 	UDP_CSUM_COUNTERS
-options 	INET6		# IPV6
+#options 	INET6		# IPV6
 #options 	IPSEC		# IP security
 #options 	IPSEC_DEBUG	# debug for IP security
 #options 	MROUTING	# IP multicast routing
@@ -230,6 +229,3 @@ pseudo-device	ksyms			# /dev/ksyms
 pseudo-device	pty			# pseudo-terminals
 pseudo-device	kttcp			# kernel ttcp
 pseudo-device	vlan			# 802.1Q VLANs
-pseudo-device	lockstat		# lock profiling
-
-cinclude	"arch/evbppc/conf/TWRP1025.local"

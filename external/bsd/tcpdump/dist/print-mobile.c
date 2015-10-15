@@ -36,17 +36,23 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
-#ifndef lint
-__RCSID("$NetBSD: print-mobile.c,v 1.4 2014/11/20 03:05:03 christos Exp $");
-#endif
-
-#define NETDISSECT_REWORKED
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
+#include <sys/cdefs.h>
+#ifndef lint
+#if 0
+static const char rcsid[] _U_ =
+     "@(#) Header: /tcpdump/master/tcpdump/print-mobile.c,v 1.15 2004-03-24 01:58:14 guy Exp ";
+#else
+__RCSID("$NetBSD: print-mobile.c,v 1.3 2013/04/06 19:33:08 christos Exp $");
+#endif
+#endif
+
 #include <tcpdump-stdinc.h>
+
+#include <stdio.h>
 
 #include "interface.h"
 #include "addrtoname.h"
@@ -55,10 +61,10 @@ __RCSID("$NetBSD: print-mobile.c,v 1.4 2014/11/20 03:05:03 christos Exp $");
 #define MOBILE_SIZE (8)
 
 struct mobile_ip {
-	uint16_t proto;
-	uint16_t hcheck;
-	uint32_t odst;
-	uint32_t osrc;
+	u_int16_t proto;
+	u_int16_t hcheck;
+	u_int32_t odst;
+	u_int32_t osrc;
 };
 
 #define OSRC_PRES	0x0080	/* old source is present */
@@ -67,8 +73,9 @@ struct mobile_ip {
  * Deencapsulate and print a mobile-tunneled IP datagram
  */
 void
-mobile_print(netdissect_options *ndo, const u_char *bp, u_int length)
+mobile_print(const u_char *bp, u_int length)
 {
+	const u_char *cp = bp +8 ;
 	const struct mobile_ip *mob;
 	struct cksum_vec vec[1];
 	u_short proto,crc;
@@ -76,32 +83,35 @@ mobile_print(netdissect_options *ndo, const u_char *bp, u_int length)
 
 	mob = (const struct mobile_ip *)bp;
 
-	if (length < MOBILE_SIZE || !ND_TTEST(*mob)) {
-		ND_PRINT((ndo, "[|mobile]"));
+	if (length < MOBILE_SIZE || !TTEST(*mob)) {
+		fputs("[|mobile]", stdout);
 		return;
 	}
-	ND_PRINT((ndo, "mobile: "));
+	fputs("mobile: ", stdout);
 
 	proto = EXTRACT_16BITS(&mob->proto);
 	crc =  EXTRACT_16BITS(&mob->hcheck);
 	if (proto & OSRC_PRES) {
 		osp=1;
+		cp +=4 ;
 	}
 
 	if (osp)  {
-		ND_PRINT((ndo, "[S] "));
-		if (ndo->ndo_vflag)
-			ND_PRINT((ndo, "%s ", ipaddr_string(ndo, &mob->osrc)));
+		fputs("[S] ",stdout);
+		if (vflag)
+			(void)printf("%s ",ipaddr_string(&mob->osrc));
 	} else {
-		ND_PRINT((ndo, "[] "));
+		fputs("[] ",stdout);
 	}
-	if (ndo->ndo_vflag) {
-		ND_PRINT((ndo, "> %s ", ipaddr_string(ndo, &mob->odst)));
-		ND_PRINT((ndo, "(oproto=%d)", proto>>8));
+	if (vflag) {
+		(void)printf("> %s ",ipaddr_string(&mob->odst));
+		(void)printf("(oproto=%d)",proto>>8);
 	}
-	vec[0].ptr = (const uint8_t *)(void *)mob;
+	vec[0].ptr = (const u_int8_t *)(void *)mob;
 	vec[0].len = osp ? 12 : 8;
 	if (in_cksum(vec, 1)!=0) {
-		ND_PRINT((ndo, " (bad checksum %d)", crc));
+		(void)printf(" (bad checksum %d)",crc);
 	}
+
+	return;
 }

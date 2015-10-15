@@ -1,4 +1,4 @@
-/*	$NetBSD: net.c,v 1.21 2015/05/21 01:09:00 ozaki-r Exp $	*/
+/*	$NetBSD: net.c,v 1.2.4.5 2015/05/14 07:58:49 snj Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -200,6 +200,7 @@ url_encode(char *dst, const char *src, const char *ep,
 }
 
 static const char *ignored_if_names[] = {
+	"eon",			/* netiso */
 	"gre",			/* net */
 	"ipip",			/* netinet */
 	"gif",			/* netinet6 */
@@ -209,6 +210,7 @@ static const char *ignored_if_names[] = {
 #if 0
 	"mdecap",		/* netinet -- never in IF list (?) XXX */
 #endif
+	"nsip",			/* netns */
 	"ppp",			/* net */
 #if 0
 	"sl",			/* net */

@@ -1,4 +1,4 @@
-#	$NetBSD: std.odroid,v 1.5 2014/12/23 18:38:58 matt Exp $
+#	$NetBSD: std.odroid,v 1.2.4.1 2015/01/04 11:19:00 martin Exp $
 #
 # standard NetBSD/evbarm for ODROID options
 

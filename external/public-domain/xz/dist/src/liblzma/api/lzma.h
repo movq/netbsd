@@ -286,7 +286,7 @@ extern "C" {
 #include "lzma/filter.h"
 #include "lzma/bcj.h"
 #include "lzma/delta.h"
-#include "lzma/lzma12.h"
+#include "lzma/lzma.h"
 
 /* Container formats */
 #include "lzma/container.h"

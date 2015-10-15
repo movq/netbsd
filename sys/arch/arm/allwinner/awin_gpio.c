@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: awin_gpio.c,v 1.20 2015/10/02 16:04:40 bouyer Exp $");
+__KERNEL_RCSID(1, "$NetBSD: awin_gpio.c,v 1.8.10.5 2015/03/15 22:59:39 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -81,7 +81,6 @@ static struct awin_gpio_pin_group {
 	bus_space_handle_t grp_bsh;
 	struct awin_gpio_pin_cfg grp_cfg;
 	struct gpio_chipset_tag grp_gc_tag;
-	const int grp_index;
 	const char grp_nc_name[6];
 } pin_groups[] = {
 	[0] = {
@@ -93,7 +92,6 @@ static struct awin_gpio_pin_group {
 			.gp_pin_write = awin_gpio_pin_write,
 			.gp_pin_ctl = awin_gpio_pin_ctl,
 		},
-		.grp_index = 0,
 		.grp_nc_name = "nc-pa",
 	},
 	[1] = {
@@ -105,7 +103,6 @@ static struct awin_gpio_pin_group {
 			.gp_pin_write = awin_gpio_pin_write,
 			.gp_pin_ctl = awin_gpio_pin_ctl,
 		},
-		.grp_index = 1,
 		.grp_nc_name = "nc-pb",
 	},
 	[2] = {
@@ -117,7 +114,6 @@ static struct awin_gpio_pin_group {
 			.gp_pin_write = awin_gpio_pin_write,
 			.gp_pin_ctl = awin_gpio_pin_ctl,
 		},
-		.grp_index = 2,
 		.grp_nc_name = "nc-pc",
 	},
 	[3] = {
@@ -129,7 +125,6 @@ static struct awin_gpio_pin_group {
 			.gp_pin_write = awin_gpio_pin_write,
 			.gp_pin_ctl = awin_gpio_pin_ctl,
 		},
-		.grp_index = 3,
 		.grp_nc_name = "nc-pd",
 	},
 	[4] = {
@@ -141,7 +136,6 @@ static struct awin_gpio_pin_group {
 			.gp_pin_write = awin_gpio_pin_write,
 			.gp_pin_ctl = awin_gpio_pin_ctl,
 		},
-		.grp_index = 4,
 		.grp_nc_name = "nc-pe",
 	},
 	[5] = {
@@ -153,7 +147,6 @@ static struct awin_gpio_pin_group {
 			.gp_pin_write = awin_gpio_pin_write,
 			.gp_pin_ctl = awin_gpio_pin_ctl,
 		},
-		.grp_index = 5,
 		.grp_nc_name = "nc-pf",
 	},
 	[6] = {
@@ -165,7 +158,6 @@ static struct awin_gpio_pin_group {
 			.gp_pin_write = awin_gpio_pin_write,
 			.gp_pin_ctl = awin_gpio_pin_ctl,
 		},
-		.grp_index = 6,
 		.grp_nc_name = "nc-pg",
 	},
 	[7] = {
@@ -177,7 +169,6 @@ static struct awin_gpio_pin_group {
 			.gp_pin_write = awin_gpio_pin_write,
 			.gp_pin_ctl = awin_gpio_pin_ctl,
 		},
-		.grp_index = 7,
 		.grp_nc_name = "nc-ph",
 	},
 	[8] = {
@@ -189,7 +180,6 @@ static struct awin_gpio_pin_group {
 			.gp_pin_write = awin_gpio_pin_write,
 			.gp_pin_ctl = awin_gpio_pin_ctl,
 		},
-		.grp_index = 8,
 		.grp_nc_name = "nc-pi",
 	},
 	[9] = {
@@ -201,7 +191,6 @@ static struct awin_gpio_pin_group {
 			.gp_pin_ctl = awin_gpio_pin_ctl,
 		},
 		.grp_pin_mask = 0,
-		.grp_index = 9,
 		.grp_nc_name = "nc-pj",
 	},
 	[10] = {
@@ -213,7 +202,6 @@ static struct awin_gpio_pin_group {
 			.gp_pin_ctl = awin_gpio_pin_ctl,
 		},
 		.grp_pin_mask = 0,
-		.grp_index = 10,
 		.grp_nc_name = "nc-pk",
 	},
 	[11] = {
@@ -225,7 +213,6 @@ static struct awin_gpio_pin_group {
 			.gp_pin_ctl = awin_gpio_pin_ctl,
 		},
 		.grp_pin_mask = 0,
-		.grp_index = 11,
 		.grp_nc_name = "nc-pl",
 	},
 	[12] = {
@@ -237,19 +224,7 @@ static struct awin_gpio_pin_group {
 			.gp_pin_ctl = awin_gpio_pin_ctl,
 		},
 		.grp_pin_mask = 0,
-		.grp_index = 12,
 		.grp_nc_name = "nc-pm",
-	},
-	[13] = {
-		.grp_offset = 0,
-		.grp_gc_tag = {
-			.gp_cookie = &pin_groups[13],
-			.gp_pin_read = awin_gpio_pin_read,
-			.gp_pin_write = awin_gpio_pin_write,
-			.gp_pin_ctl = awin_gpio_pin_ctl,
-		},
-		.grp_pin_mask = 0,
-		.grp_nc_name = "nc-pn",
 	},
 };
 
@@ -259,7 +234,7 @@ static struct awin_gpio_softc {
 	bus_space_tag_t sc_bst;
 	bus_space_handle_t sc_bsh;
 } awin_gpio_sc = {
-	.sc_bst = &armv7_generic_bs_tag,
+	.sc_bst = &awin_bs_tag,
 };
 
 CFATTACH_DECL_NEW(awin_gpio, sizeof(struct awin_gpio_softc),
@@ -282,20 +257,6 @@ awin_gpio_match(device_t parent, cfdata_t cf, void *aux)
 }
 
 #if NGPIO > 0
-static int
-awin_gpio_cfprint(void *priv, const char *pnp)
-{
-	struct gpiobus_attach_args *gba = priv;
-	struct awin_gpio_pin_group *grp = gba->gba_gc->gp_cookie;
-
-	if (pnp)
-		aprint_normal("gpiobus at %s", pnp);
-
-	aprint_normal(" port %c", 'A' + grp->grp_index);
-
-	return UNCONF;
-}
-
 static void
 awin_gpio_config_pins(device_t self)
 {
@@ -351,7 +312,7 @@ awin_gpio_config_pins(device_t self)
 		}
 
 		gba.gba_npins = pin - gba.gba_pins;
-		config_found_ia(self, "gpiobus", &gba, awin_gpio_cfprint);
+		config_found_ia(self, "gpiobus", &gba, gpiobus_print);
 	}
 }
 #endif /* NGPIO > 0 */
@@ -487,48 +448,6 @@ awin_gpio_init(void)
 		pin_groups[12].grp_offset = AWIN_A31_CPUPIO_OFFSET +
 					    1 * AWIN_PIO_GRP_SIZE;
 		pin_groups[12].grp_pin_mask = __BIT(AWIN_A31_PIO_PM_PINS) - 1;
-		pin_groups[13].grp_offset = 0;		/* PN */
-		pin_groups[13].grp_pin_mask = 0;	/* PN */
-	} else if (awin_chip_id() == AWIN_CHIP_ID_A80) {
-		pin_groups[0].grp_pin_mask = __BIT(AWIN_A80_PIO_PA_PINS) - 1;
-		pin_groups[0].grp_offset = AWIN_A80_PIO_OFFSET + 
-					   0 * AWIN_PIO_GRP_SIZE;
-		pin_groups[1].grp_pin_mask = __BIT(AWIN_A80_PIO_PB_PINS) - 1;
-		pin_groups[1].grp_offset = AWIN_A80_PIO_OFFSET + 
-					   1 * AWIN_PIO_GRP_SIZE;
-		pin_groups[2].grp_pin_mask = __BIT(AWIN_A80_PIO_PC_PINS) - 1;
-		pin_groups[2].grp_offset = AWIN_A80_PIO_OFFSET + 
-					   2 * AWIN_PIO_GRP_SIZE;
-		pin_groups[3].grp_pin_mask = __BIT(AWIN_A80_PIO_PD_PINS) - 1;
-		pin_groups[3].grp_offset = AWIN_A80_PIO_OFFSET + 
-					   3 * AWIN_PIO_GRP_SIZE;
-		pin_groups[4].grp_pin_mask = __BIT(AWIN_A80_PIO_PE_PINS) - 1;
-		pin_groups[4].grp_offset = AWIN_A80_PIO_OFFSET + 
-					   4 * AWIN_PIO_GRP_SIZE;
-		pin_groups[5].grp_pin_mask = __BIT(AWIN_A80_PIO_PF_PINS) - 1;
-		pin_groups[5].grp_offset = AWIN_A80_PIO_OFFSET + 
-					   5 * AWIN_PIO_GRP_SIZE;
-		pin_groups[6].grp_pin_mask = __BIT(AWIN_A80_PIO_PG_PINS) - 1;
-		pin_groups[6].grp_offset = AWIN_A80_PIO_OFFSET + 
-					   6 * AWIN_PIO_GRP_SIZE;
-		pin_groups[7].grp_pin_mask = __BIT(AWIN_A80_PIO_PH_PINS) - 1;
-		pin_groups[7].grp_offset = AWIN_A80_PIO_OFFSET + 
-					   7 * AWIN_PIO_GRP_SIZE;
-		pin_groups[8].grp_offset = 0;		/* PI */
-		pin_groups[8].grp_pin_mask = 0;		/* PI */
-		pin_groups[9].grp_offset = 0;		/* PJ */
-		pin_groups[9].grp_pin_mask = 0;		/* PJ */
-		pin_groups[10].grp_offset = 0;		/* PK */
-		pin_groups[10].grp_pin_mask = 0;	/* PK */
-		pin_groups[11].grp_offset = AWIN_A80_RPIO_OFFSET +
-					    0 * AWIN_PIO_GRP_SIZE;
-		pin_groups[11].grp_pin_mask = __BIT(AWIN_A80_PIO_PL_PINS) - 1;
-		pin_groups[12].grp_offset = AWIN_A80_RPIO_OFFSET +
-					    1 * AWIN_PIO_GRP_SIZE;
-		pin_groups[12].grp_pin_mask = __BIT(AWIN_A80_PIO_PM_PINS) - 1;
-		pin_groups[13].grp_offset = AWIN_A80_RPIO_OFFSET +
-					    2 * AWIN_PIO_GRP_SIZE;
-		pin_groups[13].grp_pin_mask = __BIT(AWIN_A80_PIO_PN_PINS) - 1;
 	}
 
 	for (u_int i = 0; i < __arraycount(pin_groups); i++) {
@@ -537,16 +456,8 @@ awin_gpio_init(void)
 		if (grp->grp_offset == 0)
 			continue;
 
-#if defined(ALLWINNER_A80)
-		if (i >= 11) {
-			bus_space_subregion(sc->sc_bst, awin_rcpus_bsh,
-			    grp->grp_offset, AWIN_PIO_GRP_SIZE, &grp->grp_bsh);
-		} else
-#endif
-		{
-			bus_space_subregion(sc->sc_bst, awin_core_bsh,
-			    grp->grp_offset, AWIN_PIO_GRP_SIZE, &grp->grp_bsh);
-		}
+		bus_space_subregion(sc->sc_bst, awin_core_bsh,
+		    grp->grp_offset, AWIN_PIO_GRP_SIZE, &grp->grp_bsh);
 
 		for (u_int j = 0; j < 4; j++) {
 			grp->grp_cfg.cfg[j] = bus_space_read_4(sc->sc_bst,
@@ -592,10 +503,6 @@ awin_gpio_pinset_available(const struct awin_gpio_pinset *req)
 		KASSERT(
 		    ('A' <= req->pinset_group && req->pinset_group <= 'I') ||
 		    ('L' <= req->pinset_group && req->pinset_group <= 'M'));
-	} else if (awin_chip_id() == AWIN_CHIP_ID_A80) {
-		KASSERT(
-		    ('A' <= req->pinset_group && req->pinset_group <= 'I') ||
-		    ('L' <= req->pinset_group && req->pinset_group <= 'N'));
 	} else {
 		KASSERT('A' <= req->pinset_group && req->pinset_group <= 'I');
 	}
@@ -688,7 +595,7 @@ awin_gpio_pinset_acquire(const struct awin_gpio_pinset *req)
 	/*
 	 * Now update any config register that changed.
 	 */
-	awin_gpio_update_cfg_regs(&armv7_generic_bs_tag, grp, &ncfg);
+	awin_gpio_update_cfg_regs(&awin_bs_tag, grp, &ncfg);
 
 	/*
 	 * Mark all these pins as in use.
@@ -782,7 +689,7 @@ awin_gpio_pin_ctl(void *cookie, int pin, int flags)
 	/*
 	 * Now update any config register that changed.
 	 */
-	awin_gpio_update_cfg_regs(&armv7_generic_bs_tag, grp, &ncfg);
+	awin_gpio_update_cfg_regs(&awin_bs_tag, grp, &ncfg);
 }
 
 bool
@@ -802,9 +709,6 @@ awin_gpio_pin_reserve(const char *name, struct awin_gpio_pindata *pd)
 	if (awin_chip_id() == AWIN_CHIP_ID_A31) {
 		KASSERT(('A' <= pin_data[2] && pin_data[2] <= 'I') ||
 			('L' <= pin_data[2] && pin_data[2] <= 'M'));
-	} else if (awin_chip_id() == AWIN_CHIP_ID_A80) {
-		KASSERT(('A' <= pin_data[2] && pin_data[2] <= 'I') ||
-			('L' <= pin_data[2] && pin_data[2] <= 'N'));
 	} else {
 		KASSERT('A' <= pin_data[2] && pin_data[2] <= 'I');
 	}

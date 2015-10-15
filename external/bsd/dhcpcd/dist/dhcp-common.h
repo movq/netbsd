@@ -1,4 +1,4 @@
-/* $NetBSD: dhcp-common.h,v 1.10 2015/07/09 10:15:34 roy Exp $ */
+/* $NetBSD: dhcp-common.h,v 1.1.1.5.2.2 2015/02/05 15:13:12 martin Exp $ */
 
 /*
  * dhcpcd - DHCP client daemon
@@ -52,7 +52,7 @@
 #define STRING		(1 << 7)
 #define ARRAY		(1 << 8)
 #define RFC3361		(1 << 9)
-#define RFC1035		(1 << 10)
+#define RFC3397		(1 << 10)
 #define RFC3442		(1 << 11)
 #define RFC5969		(1 << 12)
 #define ADDRIPV6	(1 << 13)
@@ -67,9 +67,6 @@
 #define ASCII		(1 << 22)
 #define RAW		(1 << 23)
 #define ESCSTRING	(1 << 24)
-#define ESCFILE		(1 << 25)
-#define BITFLAG		(1 << 26)
-#define RESERVED	(1 << 27)
 
 struct dhcp_opt {
 	uint32_t option; /* Also used for IANA Enterpise Number */
@@ -78,7 +75,6 @@ struct dhcp_opt {
 	char *var;
 
 	int index; /* Index counter for many instances of the same option */
-	char bitflags[8];
 
 	/* Embedded options.
 	 * The option code is irrelevant here. */
@@ -95,20 +91,18 @@ struct dhcp_opt *vivso_find(uint32_t, const void *);
 ssize_t dhcp_vendor(char *, size_t);
 
 void dhcp_print_option_encoding(const struct dhcp_opt *opt, int cols);
-#define add_option_mask(var, val) \
-	((var)[(val) >> 3] = (uint8_t)((var)[(val) >> 3] | 1 << ((val) & 7)))
-#define del_option_mask(var, val) \
-	((var)[(val) >> 3] = (uint8_t)((var)[(val) >> 3] & ~(1 << ((val) & 7))))
-#define has_option_mask(var, val) \
-	((var)[(val) >> 3] & (uint8_t)(1 << ((val) & 7)))
+#define add_option_mask(var, val) (var[val >> 3] |= 1 << (val & 7))
+#define del_option_mask(var, val) (var[val >> 3] &= ~(1 << (val & 7)))
+#define has_option_mask(var, val) (var[val >> 3] & (1 << (val & 7)))
 int make_option_mask(const struct dhcp_opt *, size_t,
     const struct dhcp_opt *, size_t,
     uint8_t *, const char *, int);
 
 size_t encode_rfc1035(const char *src, uint8_t *dst);
-ssize_t decode_rfc1035(char *, size_t, const uint8_t *, size_t);
+ssize_t decode_rfc3397(char *, size_t, const uint8_t *, size_t);
 ssize_t print_string(char *, size_t, int, const uint8_t *, size_t);
-int dhcp_set_leasefile(char *, size_t, int, const struct interface *);
+ssize_t print_option(char *, size_t, int, const uint8_t *, size_t,
+    const char *);
 
 size_t dhcp_envoption(struct dhcpcd_ctx *,
     char **, const char *, const char *, struct dhcp_opt *,

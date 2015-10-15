@@ -1,4 +1,4 @@
-/*	$NetBSD: dwarf_attrval.c,v 1.3 2015/01/14 09:29:27 martin Exp $	*/
+/*	$NetBSD: dwarf_attrval.c,v 1.2.6.1 2015/01/20 21:02:26 snj Exp $	*/
 
 /*-
  * Copyright (c) 2007 John Birrell (jb@freebsd.org)
@@ -28,7 +28,7 @@
 
 #include "_libdwarf.h"
 
-__RCSID("$NetBSD: dwarf_attrval.c,v 1.3 2015/01/14 09:29:27 martin Exp $");
+__RCSID("$NetBSD: dwarf_attrval.c,v 1.2.6.1 2015/01/20 21:02:26 snj Exp $");
 ELFTC_VCSID("Id: dwarf_attrval.c 2072 2011-10-27 03:26:49Z jkoshy ");
 
 int

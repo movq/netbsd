@@ -1,4 +1,4 @@
-/*	$NetBSD: h_execthr.c,v 1.3 2014/08/13 00:03:00 pooka Exp $	*/
+/*	$NetBSD: h_execthr.c,v 1.2.22.1 2014/12/09 20:23:14 martin Exp $	*/
 
 /*
  * Copyright (c) 2011 The NetBSD Foundation, Inc.

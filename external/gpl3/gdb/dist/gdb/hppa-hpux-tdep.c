@@ -1,6 +1,6 @@
 /* Target-dependent code for HP-UX on PA-RISC.
 
-   Copyright (C) 2002-2015 Free Software Foundation, Inc.
+   Copyright (C) 2002-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -34,6 +34,9 @@
 #include "solib-pa64.h"
 #include "regset.h"
 #include "regcache.h"
+#include "exceptions.h"
+
+#include <string.h>
 
 #define IS_32BIT_TARGET(_gdbarch) \
 	((gdbarch_tdep (_gdbarch))->bytes_per_address == 4)
@@ -81,7 +84,7 @@ hppa32_hpux_in_solib_call_trampoline (struct gdbarch *gdbarch, CORE_ADDR pc)
 
   minsym = lookup_minimal_symbol_by_pc (pc);
   if (minsym.minsym
-      && strcmp (MSYMBOL_LINKAGE_NAME (minsym.minsym), ".stub") == 0)
+      && strcmp (SYMBOL_LINKAGE_NAME (minsym.minsym), ".stub") == 0)
     return 1;
 
   /* Get the unwind descriptor corresponding to PC, return zero
@@ -165,7 +168,7 @@ hppa64_hpux_in_solib_call_trampoline (struct gdbarch *gdbarch, CORE_ADDR pc)
   if (! minsym.minsym)
     return 0;
 
-  sec = MSYMBOL_OBJ_SECTION (minsym.objfile, minsym.minsym)->the_bfd_section;
+  sec = SYMBOL_OBJ_SECTION (minsym.objfile, minsym.minsym)->the_bfd_section;
 
   if (bfd_get_section_vma (sec->owner, sec) <= pc
       && pc < (bfd_get_section_vma (sec->owner, sec)
@@ -367,8 +370,8 @@ hppa_hpux_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
 	  ALL_MSYMBOLS (objfile, msymbol)
 	  {
 	    if (MSYMBOL_TYPE (msymbol) == mst_text
-		&& strcmp (MSYMBOL_LINKAGE_NAME (msymbol),
-			   MSYMBOL_LINKAGE_NAME (msym.minsym)) == 0)
+		&& strcmp (SYMBOL_LINKAGE_NAME (msymbol),
+			    SYMBOL_LINKAGE_NAME (msym.minsym)) == 0)
 	      {
 		function_found = 1;
 		break;
@@ -457,7 +460,7 @@ hppa_hpux_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
 	  (curr_inst == 0xeaa0d002))
 	{
 	  struct bound_minimal_symbol stubsym;
-	  struct bound_minimal_symbol libsym;
+	  struct minimal_symbol *libsym;
 
 	  stubsym = lookup_minimal_symbol_by_pc (loc);
 	  if (stubsym.minsym == NULL)
@@ -466,16 +469,16 @@ hppa_hpux_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
 	      return orig_pc == pc ? 0 : pc & ~0x3;
 	    }
 
-	  libsym = lookup_minimal_symbol (MSYMBOL_LINKAGE_NAME (stubsym.minsym),
+	  libsym = lookup_minimal_symbol (SYMBOL_LINKAGE_NAME (stubsym.minsym),
 					  NULL, NULL);
-	  if (libsym.minsym == NULL)
+	  if (libsym == NULL)
 	    {
 	      warning (_("Unable to find library symbol for %s."),
-		       MSYMBOL_PRINT_NAME (stubsym.minsym));
+		       SYMBOL_PRINT_NAME (stubsym.minsym));
 	      return orig_pc == pc ? 0 : pc & ~0x3;
 	    }
 
-	  return MSYMBOL_VALUE (libsym.minsym);
+	  return SYMBOL_VALUE (libsym);
 	}
 
       /* Does it look like bl X,%rp or bl X,%r0?  Another way to do a
@@ -970,7 +973,7 @@ hppa64_hpux_search_dummy_call_sequence (struct gdbarch *gdbarch, CORE_ADDR pc,
       gdb_byte buf[2 * HPPA_INSN_SIZE];
       int offset;
 
-      find_pc_partial_function (MSYMBOL_VALUE_ADDRESS (obj, msym), &name,
+      find_pc_partial_function (SYMBOL_VALUE_ADDRESS (msym), &name,
       				&begin, &end);
 
       if (name == NULL || begin == 0 || end == 0)
@@ -1011,7 +1014,7 @@ hppa_hpux_find_import_stub_for_addr (CORE_ADDR funcaddr)
 {
   struct objfile *objfile;
   struct bound_minimal_symbol funsym;
-  struct bound_minimal_symbol stubsym;
+  struct minimal_symbol *stubsym;
   CORE_ADDR stubaddr;
 
   funsym = lookup_minimal_symbol_by_pc (funcaddr);
@@ -1020,19 +1023,19 @@ hppa_hpux_find_import_stub_for_addr (CORE_ADDR funcaddr)
   ALL_OBJFILES (objfile)
     {
       stubsym = lookup_minimal_symbol_solib_trampoline
-	(MSYMBOL_LINKAGE_NAME (funsym.minsym), objfile);
+	(SYMBOL_LINKAGE_NAME (funsym.minsym), objfile);
 
-      if (stubsym.minsym)
+      if (stubsym)
 	{
 	  struct unwind_table_entry *u;
 
-	  u = find_unwind_entry (MSYMBOL_VALUE (stubsym.minsym));
+	  u = find_unwind_entry (SYMBOL_VALUE (stubsym));
 	  if (u == NULL 
 	      || (u->stub_unwind.stub_type != IMPORT
 		  && u->stub_unwind.stub_type != IMPORT_SHLIB))
 	    continue;
 
-          stubaddr = MSYMBOL_VALUE (stubsym.minsym);
+          stubaddr = SYMBOL_VALUE (stubsym);
 
 	  /* If we found an IMPORT stub, then we can stop searching;
 	     if we found an IMPORT_SHLIB, we want to continue the search
@@ -1093,10 +1096,10 @@ hppa_hpux_find_dummy_bpaddr (CORE_ADDR addr)
       find_pc_partial_function (addr, NULL, &func, NULL);
       ALL_OBJFILE_MSYMBOLS (sec->objfile, msym)
 	{
-	  u = find_unwind_entry (MSYMBOL_VALUE_ADDRESS (sec->objfile, msym));
-	  if (func != MSYMBOL_VALUE_ADDRESS (sec->objfile, msym) 
+	  u = find_unwind_entry (SYMBOL_VALUE_ADDRESS (msym));
+	  if (func != SYMBOL_VALUE_ADDRESS (msym) 
 	      && (!u || u->stub_unwind.stub_type == 0))
-	    return MSYMBOL_VALUE_ADDRESS (sec->objfile, msym);
+	    return SYMBOL_VALUE_ADDRESS (msym);
 	}
     }
 
@@ -1364,20 +1367,21 @@ hppa_hpux_supply_save_state (const struct regset *regset,
 
 /* HP-UX register set.  */
 
-static const struct regset hppa_hpux_regset =
+static struct regset hppa_hpux_regset =
 {
   NULL,
   hppa_hpux_supply_save_state
 };
 
-static void
-hppa_hpux_iterate_over_regset_sections (struct gdbarch *gdbarch,
-					iterate_over_regset_sections_cb *cb,
-					void *cb_data,
-					const struct regcache *regcache)
+static const struct regset *
+hppa_hpux_regset_from_core_section (struct gdbarch *gdbarch,
+				    const char *sect_name, size_t sect_size)
 {
-  cb (".reg", HPPA_HPUX_PA89_SAVE_STATE_SIZE + 8, &hppa_hpux_regset,
-      NULL, cb_data);
+  if (strcmp (sect_name, ".reg") == 0
+      && sect_size >= HPPA_HPUX_PA89_SAVE_STATE_SIZE + 8)
+    return &hppa_hpux_regset;
+
+  return NULL;
 }
 
 
@@ -1493,8 +1497,8 @@ hppa_hpux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   set_gdbarch_skip_permanent_breakpoint
     (gdbarch, hppa_skip_permanent_breakpoint);
 
-  set_gdbarch_iterate_over_regset_sections
-    (gdbarch, hppa_hpux_iterate_over_regset_sections);
+  set_gdbarch_regset_from_core_section
+    (gdbarch, hppa_hpux_regset_from_core_section);
 
   frame_unwind_append_unwinder (gdbarch, &hppa_hpux_sigtramp_frame_unwind);
 }

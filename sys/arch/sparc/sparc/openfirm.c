@@ -1,4 +1,4 @@
-/*	$NetBSD: openfirm.c,v 1.20 2015/03/27 06:10:25 nakayama Exp $	*/
+/*	$NetBSD: openfirm.c,v 1.18.28.1 2015/03/29 08:48:25 martin Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: openfirm.c,v 1.20 2015/03/27 06:10:25 nakayama Exp $");
+__KERNEL_RCSID(0, "$NetBSD: openfirm.c,v 1.18.28.1 2015/03/29 08:48:25 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -554,7 +554,7 @@ OF_seek(int handle, u_quad_t pos)
 }
 
 void
-OF_boot(const char *bspec)
+OF_boot(const char *bootspec)
 {
 	struct {
 		cell_t name;
@@ -564,12 +564,12 @@ OF_boot(const char *bspec)
 	} args;
 	int l;
 
-	if ((l = strlen(bspec)) >= NBPG)
+	if ((l = strlen(bootspec)) >= NBPG)
 		panic("OF_boot");
 	args.name = ADR2CELL("boot");
 	args.nargs = 1;
 	args.nreturns = 0;
-	args.bootspec = ADR2CELL(bspec);
+	args.bootspec = ADR2CELL(bootspec);
 	openfirmware(&args);
 	panic("OF_boot failed");
 }

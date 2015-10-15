@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,7 +42,6 @@
  */
 
 #include "acpisrc.h"
-#include "acapps.h"
 
 /* Local prototypes */
 
@@ -180,7 +179,7 @@ AsProcessTree (
     {
         if (ConversionTable->Flags & FLG_LOWERCASE_DIRNAMES)
         {
-            AcpiUtStrlwr (TargetPath);
+            AsStrlwr (TargetPath);
         }
 
         VERBOSE_PRINT (("Creating Directory \"%s\"\n", TargetPath));
@@ -306,6 +305,7 @@ AsConvertFile (
     ACPI_STRING_TABLE       *StringTable;
     ACPI_IDENTIFIER_TABLE   *ConditionalTable;
     ACPI_IDENTIFIER_TABLE   *LineTable;
+    ACPI_IDENTIFIER_TABLE   *MacroTable;
     ACPI_TYPED_IDENTIFIER_TABLE *StructTable;
     ACPI_IDENTIFIER_TABLE   *SpecialMacroTable;
 
@@ -318,6 +318,7 @@ AsConvertFile (
         StringTable         = ConversionTable->SourceStringTable;
         LineTable           = ConversionTable->SourceLineTable;
         ConditionalTable    = ConversionTable->SourceConditionalTable;
+        MacroTable          = ConversionTable->SourceMacroTable;
         StructTable         = ConversionTable->SourceStructTable;
         SpecialMacroTable   = ConversionTable->SourceSpecialMacroTable;
        break;
@@ -328,18 +329,9 @@ AsConvertFile (
         StringTable         = ConversionTable->HeaderStringTable;
         LineTable           = ConversionTable->HeaderLineTable;
         ConditionalTable    = ConversionTable->HeaderConditionalTable;
+        MacroTable          = ConversionTable->HeaderMacroTable;
         StructTable         = ConversionTable->HeaderStructTable;
         SpecialMacroTable   = ConversionTable->HeaderSpecialMacroTable;
-        break;
-
-    case FILE_TYPE_PATCH:
-
-        Functions           = ConversionTable->PatchFunctions;
-        StringTable         = ConversionTable->PatchStringTable;
-        LineTable           = ConversionTable->PatchLineTable;
-        ConditionalTable    = ConversionTable->PatchConditionalTable;
-        StructTable         = ConversionTable->PatchStructTable;
-        SpecialMacroTable   = ConversionTable->PatchSpecialMacroTable;
         break;
 
     default:
@@ -396,7 +388,6 @@ AsConvertFile (
         }
     }
 
-#ifdef _OBSOLETE_FUNCTIONS
     if (MacroTable)
     {
         for (i = 0; MacroTable[i].Identifier; i++)
@@ -404,7 +395,6 @@ AsConvertFile (
             AsRemoveMacro (FileBuffer, MacroTable[i].Identifier);
         }
     }
-#endif
 
     if (StructTable)
     {
@@ -713,6 +703,8 @@ AsGetFile (
     FILE                    *File;
     UINT32                  Size;
     char                    *Buffer;
+    int                     Seek1;
+    int                     Seek2;
     size_t                  Actual;
 
 
@@ -727,8 +719,11 @@ AsGetFile (
 
     /* Need file size to allocate a buffer */
 
-    Size = CmGetFileSize (File);
-    if (Size == ACPI_UINT32_MAX)
+    Seek1 = fseek (File, 0L, SEEK_END);
+    Size = ftell (File);
+    Seek2 = fseek (File, 0L, SEEK_SET);
+
+    if (Seek1 || Seek2 || (Size == -1))
     {
         printf ("Could not get file size for %s\n", Filename);
         goto ErrorExit;

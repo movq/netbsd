@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -58,6 +58,7 @@
  * Windows: The setargv.obj module must be linked in to automatically
  * expand wildcards.
  */
+
 extern BOOLEAN              AcpiGbl_DebugTimeout;
 
 /* Local prototypes */
@@ -89,34 +90,12 @@ BOOLEAN                     AcpiGbl_IgnoreErrors = FALSE;
 BOOLEAN                     AcpiGbl_DbOpt_NoRegionSupport = FALSE;
 UINT8                       AcpiGbl_UseHwReducedFadt = FALSE;
 BOOLEAN                     AcpiGbl_DoInterfaceTests = FALSE;
-BOOLEAN                     AcpiGbl_LoadTestTables = FALSE;
 static UINT8                AcpiGbl_ExecutionMode = AE_MODE_COMMAND_LOOP;
 static char                 BatchBuffer[AE_BUFFER_SIZE];    /* Batch command buffer */
 static AE_TABLE_DESC        *AeTableListHead = NULL;
 
 #define ACPIEXEC_NAME               "AML Execution/Debug Utility"
-#define AE_SUPPORTED_OPTIONS        "?b:d:e:f^ghm^orv^:x:"
-
-
-/* Stubs for the disassembler */
-
-void
-MpSaveGpioInfo (
-    ACPI_PARSE_OBJECT       *Op,
-    AML_RESOURCE            *Resource,
-    UINT32                  PinCount,
-    UINT16                  *PinList,
-    char                    *DeviceName)
-{
-}
-
-void
-MpSaveSerialInfo (
-    ACPI_PARSE_OBJECT       *Op,
-    AML_RESOURCE            *Resource,
-    char                    *DeviceName)
-{
-}
+#define AE_SUPPORTED_OPTIONS        "?b:d:e:f:ghm^orv^:x:"
 
 
 /******************************************************************************
@@ -147,27 +126,22 @@ usage (
     ACPI_OPTION ("-di",                 "Disable execution of STA/INI methods during init");
     ACPI_OPTION ("-do",                 "Disable Operation Region address simulation");
     ACPI_OPTION ("-dr",                 "Disable repair of method return values");
-    ACPI_OPTION ("-ds",                 "Disable method auto-serialization");
     ACPI_OPTION ("-dt",                 "Disable allocation tracking (performance)");
     printf ("\n");
 
     ACPI_OPTION ("-ef",                 "Enable display of final memory statistics");
     ACPI_OPTION ("-ei",                 "Enable additional tests for ACPICA interfaces");
-    ACPI_OPTION ("-el",                 "Enable loading of additional test tables");
+    ACPI_OPTION ("-em",                 "Enable Interpreter Serialized Mode");
     ACPI_OPTION ("-es",                 "Enable Interpreter Slack Mode");
     ACPI_OPTION ("-et",                 "Enable debug semaphore timeout");
     printf ("\n");
 
-    ACPI_OPTION ("-fv <Value>",         "Operation Region initialization fill value");
-    ACPI_OPTION ("-fi <file>",          "Specify namespace initialization file");
+    ACPI_OPTION ("-f <Value>",          "Operation Region initialization fill value");
     ACPI_OPTION ("-r",                  "Use hardware-reduced FADT V5");
     ACPI_OPTION ("-v",                  "Display version information");
     ACPI_OPTION ("-vi",                 "Verbose initialization output");
     ACPI_OPTION ("-vr",                 "Verbose region handler output");
     ACPI_OPTION ("-x <DebugLevel>",     "Debug output level");
-
-    printf ("\n  From within the interactive mode, use '?' or \"help\" to see\n"
-        "  a list of available AML Debugger commands\n");
 }
 
 
@@ -191,7 +165,7 @@ AeDoOptions (
     int                     j;
 
 
-    while ((j = AcpiGetopt (argc, argv, AE_SUPPORTED_OPTIONS)) != ACPI_OPT_END) switch (j)
+    while ((j = AcpiGetopt (argc, argv, AE_SUPPORTED_OPTIONS)) != EOF) switch (j)
     {
     case 'b':
 
@@ -216,7 +190,7 @@ AeDoOptions (
 
         case 'i':
 
-            AcpiGbl_DbOpt_NoIniMethods = TRUE;
+            AcpiGbl_DbOpt_ini_methods = FALSE;
             break;
 
         case 'o':
@@ -227,11 +201,6 @@ AeDoOptions (
         case 'r':
 
             AcpiGbl_DisableAutoRepair = TRUE;
-            break;
-
-        case 's':
-
-            AcpiGbl_AutoSerializeMethods = FALSE;
             break;
 
         case 't':
@@ -264,9 +233,10 @@ AeDoOptions (
             AcpiGbl_DoInterfaceTests = TRUE;
             break;
 
-        case 'l':
+        case 'm':
 
-            AcpiGbl_LoadTestTables = TRUE;
+            AcpiGbl_AllMethodsSerialized = TRUE;
+            printf ("Enabling AML Interpreter serialized mode\n");
             break;
 
         case 's':
@@ -289,40 +259,12 @@ AeDoOptions (
 
     case 'f':
 
-        switch (AcpiGbl_Optarg[0])
-        {
-        case 'v':   /* -fv: region fill value */
-
-            if (AcpiGetoptArgument (argc, argv))
-            {
-                return (-1);
-            }
-
-            AcpiGbl_RegionFillValue = (UINT8) strtoul (AcpiGbl_Optarg, NULL, 0);
-            break;
-
-        case 'i':   /* -fi: specify initialization file */
-
-            if (AcpiGetoptArgument (argc, argv))
-            {
-                return (-1);
-            }
-
-            if (AeOpenInitializationFile (AcpiGbl_Optarg))
-            {
-                return (-1);
-            }
-            break;
-
-        default:
-
-            printf ("Unknown option: -f%s\n", AcpiGbl_Optarg);
-            return (-1);
-        }
+        AcpiGbl_RegionFillValue = (UINT8) strtoul (AcpiGbl_Optarg, NULL, 0);
         break;
 
     case 'g':
 
+        AcpiGbl_DbOpt_tables = TRUE;
         AcpiGbl_DbFilename = NULL;
         break;
 
@@ -351,7 +293,8 @@ AeDoOptions (
 
     case 'o':
 
-        AcpiGbl_DbOpt_Disasm = TRUE;
+        AcpiGbl_DbOpt_disasm = TRUE;
+        AcpiGbl_DbOpt_stats = TRUE;
         break;
 
     case 'r':
@@ -366,7 +309,6 @@ AeDoOptions (
         {
         case '^':  /* -v: (Version): signon already emitted, just exit */
 
-            (void) AcpiOsTerminate ();
             exit (0);
 
         case 'i':
@@ -428,28 +370,28 @@ main (
 
 
     ACPI_DEBUG_INITIALIZE (); /* For debug version only */
+
+    printf (ACPI_COMMON_SIGNON (ACPIEXEC_NAME));
+    if (argc < 2)
+    {
+        usage ();
+        return (0);
+    }
+
     signal (SIGINT, AeCtrlCHandler);
 
-    /* Init debug globals */
+    /* Init globals */
 
     AcpiDbgLevel = ACPI_NORMAL_DEFAULT;
     AcpiDbgLayer = 0xFFFFFFFF;
 
-    /* Init ACPICA and start debugger thread */
+    /* Init ACPI and start debugger thread */
 
     Status = AcpiInitializeSubsystem ();
     AE_CHECK_OK (AcpiInitializeSubsystem, Status);
     if (ACPI_FAILURE (Status))
     {
         goto ErrorExit;
-    }
-
-    printf (ACPI_COMMON_SIGNON (ACPIEXEC_NAME));
-    if (argc < 2)
-    {
-        usage ();
-        (void) AcpiOsTerminate ();
-        return (0);
     }
 
     /* Get the command line options */
@@ -466,7 +408,7 @@ main (
         goto EnterDebugger;
     }
 
-    AcpiGbl_CstyleDisassembly = FALSE; /* Not supported for AcpiExec */
+    AcpiGbl_DbOpt_tables = TRUE;
     TableCount = 0;
 
     /* Get each of the ACPI table files on the command line */
@@ -475,7 +417,7 @@ main (
     {
         /* Get one entire table */
 
-        Status = AcpiUtReadTableFromFile (argv[AcpiGbl_Optind], &Table);
+        Status = AcpiDbReadTableFromFile (argv[AcpiGbl_Optind], &Table);
         if (ACPI_FAILURE (Status))
         {
             printf ("**** Could not get table from file %s, %s\n",
@@ -508,8 +450,6 @@ main (
         AcpiGbl_Optind++;
     }
 
-    printf ("\n");
-
     /* Build a local RSDT with all tables and let ACPICA process the RSDT */
 
     Status = AeBuildLocalTables (TableCount, AeTableListHead);
@@ -539,7 +479,7 @@ main (
     /* Setup initialization flags for ACPICA */
 
     InitFlags = (ACPI_NO_HANDLER_INIT | ACPI_NO_ACPI_ENABLE);
-    if (AcpiGbl_DbOpt_NoIniMethods)
+    if (!AcpiGbl_DbOpt_ini_methods)
     {
         InitFlags |= (ACPI_NO_DEVICE_INIT | ACPI_NO_OBJECT_INIT);
     }
@@ -610,6 +550,7 @@ EnterDebugger:
 
 
 ErrorExit:
+
     (void) AcpiOsTerminate ();
     return (-1);
 }

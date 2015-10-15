@@ -1,4 +1,4 @@
-/*      $NetBSD: raidctl.c,v 1.63 2015/09/08 08:59:09 bad Exp $   */
+/*      $NetBSD: raidctl.c,v 1.57.4.3 2015/07/05 20:20:10 snj Exp $   */
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -39,7 +39,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: raidctl.c,v 1.63 2015/09/08 08:59:09 bad Exp $");
+__RCSID("$NetBSD: raidctl.c,v 1.57.4.3 2015/07/05 20:20:10 snj Exp $");
 #endif
 
 
@@ -576,14 +576,6 @@ rf_pm_configure(int fd, int raidID, char *parityconf, int parityparams[])
 	    raidID, dis ? "dis" : "en");
 }
 
-/* convert "component0" into "absent" */
-static const char *rf_output_devname(const char *name)
-{
-
-	if (strncmp(name, "component", 9) == 0)
-		return "absent";
-	return name;
-}
 
 static void
 rf_output_configuration(int fd, const char *name)
@@ -610,8 +602,7 @@ rf_output_configuration(int fd, const char *name)
 
 	printf("START disks\n");
 	for(i=0; i < device_config.ndevs; i++)
-		printf("%s\n",
-		    rf_output_devname(device_config.devs[i].devname));
+		printf("%s\n", device_config.devs[i].devname);
 	printf("\n");
 
 	if (device_config.nspares > 0) {
@@ -1106,7 +1097,7 @@ get_bar(char *string, double percent, int max_strlen)
 		(int)((percent * max_strlen)/ 100);
 	if (offset < 0)
 		offset = 0;
-	snprintf(string,max_strlen,"%s",stars+offset);
+	snprintf(string,max_strlen,"%s",&stars[offset]);
 }
 
 static void

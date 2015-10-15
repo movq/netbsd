@@ -15,14 +15,18 @@
  * Original code by Ola Martin Lykkja (ola.lykkja@q-free.com)
  */
 
-#define NETDISSECT_REWORKED
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
 #include <tcpdump-stdinc.h>
 
+#include <pcap.h>
+#include <stdio.h>
+#include <string.h>
+
 #include "interface.h"
+#include "extract.h"
 #include "addrtoname.h"
 
 /*
@@ -43,12 +47,12 @@ calm_fast_print(netdissect_options *ndo, const u_char *eth, const u_char *bp, u_
 	length -= 2;
 	bp += 2;
 
-	ND_PRINT((ndo, "CALM FAST src:%s; ", etheraddr_string(ndo, eth+6)));
-	ND_PRINT((ndo, "SrcNwref:%d; ", srcNwref));
-	ND_PRINT((ndo, "DstNwref:%d; ", dstNwref));
+	printf("CALM FAST src:%s; ", etheraddr_string(eth+6));
+	printf("SrcNwref:%d; ", srcNwref);
+	printf("DstNwref:%d; ", dstNwref);
 
 	if (ndo->ndo_vflag)
-		ND_DEFAULTPRINT(bp, length);
+		default_print(bp, length);
 }
 
 

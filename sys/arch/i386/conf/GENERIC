@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.1128 2015/09/26 11:16:12 maxv Exp $
+# $NetBSD: GENERIC,v 1.1107.2.8 2015/06/05 16:52:39 snj Exp $
 #
 # GENERIC machine description file
 #
@@ -22,7 +22,7 @@ include 	"arch/i386/conf/std.i386"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.1128 $"
+#ident 		"GENERIC-$Revision: 1.1107.2.8 $"
 
 maxusers	64		# estimated number of users
 
@@ -108,10 +108,11 @@ options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 options 	BUFQ_PRIOCSCAN
 
 # Diagnostic/debugging support options
-options 	DIAGNOSTIC	# inexpensive kernel consistency checks
+#options 	DIAGNOSTIC	# inexpensive kernel consistency checks
 				# XXX to be commented out on release branch
 #options 	DEBUG		# expensive debugging checks/support
 #options 	LOCKDEBUG	# expensive locking checks/support
+#options 	KMEMSTATS	# kernel memory statistics (vmstat -m)
 options 	DDB		# in-kernel debugger
 #options 	DDB_ONPANIC=1	# see also sysctl(7): `ddb.onpanic'
 options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
@@ -122,24 +123,22 @@ options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
 #options 	SYSCALL_STATS	# per syscall counts
 #options 	SYSCALL_TIMES	# per syscall times
 #options 	SYSCALL_TIMES_HASCOUNTER	# use 'broken' rdtsc (soekris)
-#options 	KDTRACE_HOOKS	# kernel DTrace hooks
 
 # Compatibility options
 options 	COMPAT_NOMID	# NetBSD 0.8, 386BSD, and BSDI
-options 	COMPAT_09	# NetBSD 0.9,
-options 	COMPAT_10	# NetBSD 1.0,
-options 	COMPAT_11	# NetBSD 1.1,
-options 	COMPAT_12	# NetBSD 1.2 (and 386BSD and BSDI),
-options 	COMPAT_13	# NetBSD 1.3 (and 386BSD and BSDI),
-options 	COMPAT_14	# NetBSD 1.4,
-options 	COMPAT_15	# NetBSD 1.5,
-options 	COMPAT_16	# NetBSD 1.6,
-options 	COMPAT_20	# NetBSD 2.0,
-options 	COMPAT_30	# NetBSD 3.0,
-options 	COMPAT_40	# NetBSD 4.0,
-options 	COMPAT_50	# NetBSD 5.0,
-options 	COMPAT_60	# NetBSD 6.0, and
-options 	COMPAT_70	# NetBSD 7.0 binary compatibility.
+options 	COMPAT_09	# NetBSD 0.9
+options 	COMPAT_10	# NetBSD 1.0
+options 	COMPAT_11	# NetBSD 1.1
+options 	COMPAT_12	# NetBSD 1.2, 386BSD, and BSDI
+options 	COMPAT_13	# NetBSD 1.3, 386BSD, and BSDI
+options 	COMPAT_14	# NetBSD 1.4
+options 	COMPAT_15	# NetBSD 1.5
+options 	COMPAT_16	# NetBSD 1.6
+options 	COMPAT_20	# NetBSD 2.0
+options 	COMPAT_30	# NetBSD 3.0
+options 	COMPAT_40	# NetBSD 4.0
+options 	COMPAT_50	# NetBSD 5.0
+options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_43	# 4.3BSD, 386BSD, and BSDI
 #options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
@@ -155,9 +154,10 @@ options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 # Wedge support
 options 	DKWEDGE_AUTODISCOVER	# Automatically add dk(4) instances
 options 	DKWEDGE_METHOD_GPT	# Supports GPT partitions as wedges
+# The following three options can break /etc/fstab, so handle with care
 #options 	DKWEDGE_METHOD_BSDLABEL	# Support disklabel entries as wedges
 #options 	DKWEDGE_METHOD_MBR	# Support MBR partitions as wedges
-options		DKWEDGE_METHOD_APPLE    # Support Apple partitions as wedges
+#options	DKWEDGE_METHOD_APPLE    # Support Apple partitions as wedges
 
 file-system	FFS		# UFS
 file-system	NFS		# Network File System client
@@ -242,7 +242,6 @@ options 	SCSIVERBOSE	# human readable SCSI error messages
 #options 	PNPBIOSVERBOSE	# verbose PnP BIOS messages
 #options 	PNPBIOSDEBUG	# more fulsome PnP BIOS debugging messages
 #options 	MCAVERBOSE	# verbose MCA device autoconfig messages
-#options 	HDAUDIOVERBOSE	# verbose HDAUDIO driver messages
 
 options 	NFS_BOOT_DHCP,NFS_BOOT_BOOTPARAM
 
@@ -374,7 +373,6 @@ thinkpad*	at acpi?		# IBM/Lenovo Thinkpad hotkeys
 #tpm*		at acpi?		# ACPI TPM (Experimental)
 ug*		at acpi?		# Abit uGuru Hardware monitor
 vald*		at acpi?		# Toshiba Libretto hotkeys
-valz*		at acpi?		# Toshiba Dynabook hotkeys
 wb*		at acpi?		# Winbond W83L518D SD/MMC reader
 sdmmc*		at wb?			# SD/MMC bus
 wmidell*	at acpiwmibus?		# Dell WMI mappings
@@ -451,10 +449,9 @@ amdtemp* at amdnb_misc?			# AMD CPU Temperature sensors
 #amdpcib* at pci? dev ? function ?	# AMD 8111 PCI-ISA w/ HPET
 #hpet*	at amdpcib?
 ichlpcib* at pci? dev ? function ?	# Intel ICH PCI-LPC w/ timecounter,
-					# watchdog, gpio, SpeedStep and HPET
+					# watchdog, SpeedStep and HPET
 fwhrng* at ichlpcib?		# Intel 82802 FWH Random Number Generator
 #hpet*	at ichlpcib?
-tco*	at ichlpcib?		# TCO watchdog timer
 tcpcib* at pci? dev ? function ?	# Intel Atom E6xx PCI-LPC
 hpet* at tcpcib?
 gcscpcib* at pci? dev ? function ?	# AMD CS5535/CS5536 PCI-ISA w/
@@ -466,7 +463,6 @@ iic*	at viapcib?
 rdcpcib* at pci? dev ? function ?	# RDC Vortex86/PMX-1000 PCI-ISA w/
 					# watchdog
 pchb*	at pci? dev ? function ?	# PCI-Host bridges
-options 	AGP_X86
 pceb*	at pci? dev ? function ?	# PCI-EISA bridges
 pcib*	at pci? dev ? function ?	# PCI-ISA bridges
 pcmb*	at pci? dev ? function ?	# PCI-MCA bridges
@@ -571,7 +567,6 @@ sysbeep0	at pcppi?
 #tdfxdrm*	at drm?		# 3dfx (voodoo) DRM driver
 #viadrm* 	at drm?		# VIA DRM driver
 
-# DRMKMS drivers
 i915drmkms* 	at pci? dev ? function ?
 intelfb* 	at intelfbbus?
 
@@ -580,9 +575,6 @@ radeondrmkmsfb* at radeonfbbus?
 
 #nouveau*	at pci? dev ? function ?
 #nouveaufb*	at nouveaufbbus?
-
-# DRMUMS drivers
-#viadrmums* 	at drm?
 
 # Serial Devices
 
@@ -981,7 +973,6 @@ gsip*	at pci? dev ? function ?	# NS83820 Gigabit Ethernet
 hme*	at pci? dev ? function ?	# Sun Microelectronics STP2002-STQ
 ipw*	at pci? dev ? function ?	# Intel PRO/Wireless 2100
 iwi*	at pci? dev ? function ?	# Intel PRO/Wireless 2200BG
-iwm*	at pci? dev ? function ?	# Intel Wireless WiFi Link 7xxx
 iwn*	at pci? dev ? function ?	# Intel PRO/Wireless 4965AGN
 ixg*	at pci? dev ? function ?	# Intel 8259x 10 gigabit
 jme*	at pci? dev ? function ?	# JMicron JMC2[56]0 Ethernet
@@ -1001,7 +992,6 @@ ral*	at pci? dev ? function ?	# Ralink Technology RT25x0 802.11a/b/g
 re*	at pci? dev ? function ?	# Realtek 8139C+/8169/8169S/8110S
 rtk*	at pci? dev ? function ?	# Realtek 8129/8139
 rtw*	at pci? dev ? function ?	# Realtek 8180L (802.11)
-rtwn*	at pci? dev ? function ?	# Realtek 8188CE/8192CE 802.11b/g/n
 sf*	at pci? dev ? function ?	# Adaptec AIC-6915 Ethernet
 sip*	at pci? dev ? function ?	# SiS 900/DP83815 Ethernet
 skc*	at pci? dev ? function ?	# SysKonnect SK9821 Gigabit Ethernet

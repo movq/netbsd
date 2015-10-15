@@ -1,4 +1,4 @@
-/*	$NetBSD: auth2-krb5.c,v 1.4 2015/04/03 23:58:19 christos Exp $	*/
+/*	$NetBSD: auth2-krb5.c,v 1.2.4.1 2015/04/30 06:07:30 riz Exp $	*/
 /*
  * Copyright (c) 2003 Markus Friedl.  All rights reserved.
  *
@@ -24,7 +24,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: auth2-krb5.c,v 1.4 2015/04/03 23:58:19 christos Exp $");
+__RCSID("$NetBSD: auth2-krb5.c,v 1.2.4.1 2015/04/30 06:07:30 riz Exp $");
 
 #include <krb5.h>
 #include <stdio.h>

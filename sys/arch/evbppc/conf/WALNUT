@@ -1,4 +1,4 @@
-#	$NetBSD: WALNUT,v 1.70 2014/08/23 20:26:57 dholland Exp $
+#	$NetBSD: WALNUT,v 1.67 2014/08/10 17:56:23 joerg Exp $
 #
 #	GENERIC -- everything that's currently supported
 #
@@ -39,7 +39,7 @@ options 	USERCONF	# userconf(4) support
 options 	DDB		# in-kernel debugger
 options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
 options 	TRAP_PANICWAIT
-makeoptions	COPY_SYMTAB=1	# size for embedded symbol table
+options 	SYMTAB_SPACE=490000	# size for embedded symbol table
 
 makeoptions	DEBUG="-g"	# compile full symbol table
 
@@ -55,9 +55,8 @@ options 	COMPAT_16	# NetBSD 1.6,
 options 	COMPAT_20	# NetBSD 2.0,
 options 	COMPAT_30	# NetBSD 3.0,
 options 	COMPAT_40	# NetBSD 4.0,
-options 	COMPAT_50	# NetBSD 5.0,
-options 	COMPAT_60	# NetBSD 6.0, and
-options 	COMPAT_70	# NetBSD 7.0 binary compatibility.
+options 	COMPAT_50	# NetBSD 5.0 compatibility.
+options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_43	# and 4.3BSD
 #options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.

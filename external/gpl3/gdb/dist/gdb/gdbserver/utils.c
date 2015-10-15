@@ -1,5 +1,5 @@
 /* General utility routines for the remote server for GDB.
-   Copyright (C) 1986-2015 Free Software Foundation, Inc.
+   Copyright (C) 1986-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,6 +17,12 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "server.h"
+#include <stdio.h>
+#include <string.h>
+#include <stdlib.h>
+#if HAVE_ERRNO_H
+#include <errno.h>
+#endif
 
 #ifdef IN_PROCESS_AGENT
 #  define PREFIX "ipa: "
@@ -49,6 +55,27 @@ xstrdup (const char *s)
   return ret;
 }
 
+#ifndef IN_PROCESS_AGENT
+
+/* Free a standard argv vector.  */
+
+void
+freeargv (char **vector)
+{
+  char **scan;
+
+  if (vector != NULL)
+    {
+      for (scan = vector; *scan != NULL; scan++)
+	{
+	  free (*scan);
+	}
+      free (vector);
+    }
+}
+
+#endif
+
 /* Print the system error message for errno, and also mention STRING
    as the file name for which the error was encountered.
    Then return to command level.  */
@@ -71,50 +98,188 @@ perror_with_name (const char *string)
   error ("%s.", combined);
 }
 
-/* Print an error message and return to top level.  */
+/* Print an error message and return to command level.
+   STRING is the error message, used as a fprintf string,
+   and ARG is passed as an argument to it.  */
 
 void
-verror (const char *string, va_list args)
+error (const char *string,...)
 {
-#ifdef IN_PROCESS_AGENT
+#ifndef IN_PROCESS_AGENT
+  extern jmp_buf toplevel;
+#endif
+  va_list args;
+  va_start (args, string);
   fflush (stdout);
   vfprintf (stderr, string, args);
   fprintf (stderr, "\n");
-  exit (1);
+#ifndef IN_PROCESS_AGENT
+  longjmp (toplevel, 1);
 #else
-  throw_verror (GENERIC_ERROR, string, args);
+  exit (1);
 #endif
 }
 
+/* Print an error message and exit reporting failure.
+   This is for a error that we cannot continue from.
+   STRING and ARG are passed to fprintf.  */
+
+/* VARARGS */
 void
-vwarning (const char *string, va_list args)
+fatal (const char *string,...)
 {
+  va_list args;
+  va_start (args, string);
   fprintf (stderr, PREFIX);
   vfprintf (stderr, string, args);
   fprintf (stderr, "\n");
+  va_end (args);
+  exit (1);
+}
+
+/* VARARGS */
+void
+warning (const char *string,...)
+{
+  va_list args;
+  va_start (args, string);
+  fprintf (stderr, PREFIX);
+  vfprintf (stderr, string, args);
+  fprintf (stderr, "\n");
+  va_end (args);
 }
 
 /* Report a problem internal to GDBserver, and exit.  */
 
 void
-internal_verror (const char *file, int line, const char *fmt, va_list args)
+internal_error (const char *file, int line, const char *fmt, ...)
 {
+  va_list args;
+  va_start (args, fmt);
+
   fprintf (stderr,  "\
 %s:%d: A problem internal to " TOOLNAME " has been detected.\n", file, line);
   vfprintf (stderr, fmt, args);
   fprintf (stderr, "\n");
+  va_end (args);
   exit (1);
 }
 
-/* Report a problem internal to GDBserver.  */
+/* Temporary storage using circular buffer.  */
+#define NUMCELLS 10
+#define CELLSIZE 50
 
-void
-internal_vwarning (const char *file, int line, const char *fmt, va_list args)
+/* Return the next entry in the circular buffer.  */
+
+static char *
+get_cell (void)
 {
-  fprintf (stderr,  "\
-%s:%d: A problem internal to " TOOLNAME " has been detected.\n", file, line);
-  vfprintf (stderr, fmt, args);
-  fprintf (stderr, "\n");
+  static char buf[NUMCELLS][CELLSIZE];
+  static int cell = 0;
+  if (++cell >= NUMCELLS)
+    cell = 0;
+  return buf[cell];
+}
+
+static char *
+decimal2str (char *sign, ULONGEST addr)
+{
+  /* Steal code from valprint.c:print_decimal().  Should this worry
+     about the real size of addr as the above does? */
+  unsigned long temp[3];
+  char *str = get_cell ();
+  int i = 0;
+  int width = 9;
+
+  do
+    {
+      temp[i] = addr % (1000 * 1000 * 1000);
+      addr /= (1000 * 1000 * 1000);
+      i++;
+    }
+  while (addr != 0 && i < (sizeof (temp) / sizeof (temp[0])));
+
+  switch (i)
+    {
+    case 1:
+      xsnprintf (str, CELLSIZE, "%s%0*lu", sign, width, temp[0]);
+      break;
+    case 2:
+      xsnprintf (str, CELLSIZE, "%s%0*lu%09lu", sign, width,
+		 temp[1], temp[0]);
+      break;
+    case 3:
+      xsnprintf (str, CELLSIZE, "%s%0*lu%09lu%09lu", sign, width,
+		 temp[2], temp[1], temp[0]);
+      break;
+    default:
+      internal_error (__FILE__, __LINE__,
+		      "failed internal consistency check");
+    }
+
+  return str;
+}
+
+/* %u for ULONGEST.  The result is stored in a circular static buffer,
+   NUMCELLS deep.  */
+
+char *
+pulongest (ULONGEST u)
+{
+  return decimal2str ("", u);
+}
+
+/* %d for LONGEST.  The result is stored in a circular static buffer,
+   NUMCELLS deep.  */
+
+char *
+plongest (LONGEST l)
+{
+  if (l < 0)
+    return decimal2str ("-", -l);
+  else
+    return decimal2str ("", l);
+}
+
+/* Eliminate warning from compiler on 32-bit systems.  */
+static int thirty_two = 32;
+
+/* Convert a ULONGEST into a HEX string, like %lx.  The result is
+   stored in a circular static buffer, NUMCELLS deep.  */
+
+char *
+phex_nz (ULONGEST l, int sizeof_l)
+{
+  char *str;
+
+  switch (sizeof_l)
+    {
+    case 8:
+      {
+	unsigned long high = (unsigned long) (l >> thirty_two);
+	str = get_cell ();
+	if (high == 0)
+	  xsnprintf (str, CELLSIZE, "%lx",
+		     (unsigned long) (l & 0xffffffff));
+	else
+	  xsnprintf (str, CELLSIZE, "%lx%08lx", high,
+		     (unsigned long) (l & 0xffffffff));
+	break;
+      }
+    case 4:
+      str = get_cell ();
+      xsnprintf (str, CELLSIZE, "%lx", (unsigned long) l);
+      break;
+    case 2:
+      str = get_cell ();
+      xsnprintf (str, CELLSIZE, "%x", (unsigned short) (l & 0xffff));
+      break;
+    default:
+      str = phex_nz (l, sizeof (l));
+      break;
+    }
+
+  return str;
 }
 
 /* Convert a CORE_ADDR into a HEX string, like %lx.
@@ -136,12 +301,4 @@ pfildes (gdb_fildes_t fd)
 #else
   return plongest (fd);
 #endif
-}
-
-/* See common/common-exceptions.h.  */
-
-void
-prepare_to_throw_exception (void)
-{
-  /* No client-specific actions required.  */
 }

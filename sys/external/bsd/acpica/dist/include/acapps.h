@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -52,7 +52,7 @@
 /* Common info for tool signons */
 
 #define ACPICA_NAME                 "Intel ACPI Component Architecture"
-#define ACPICA_COPYRIGHT            "Copyright (c) 2000 - 2015 Intel Corporation"
+#define ACPICA_COPYRIGHT            "Copyright (c) 2000 - 2013 Intel Corporation"
 
 #if ACPI_MACHINE_WIDTH == 64
 #define ACPI_WIDTH          "-64"
@@ -74,28 +74,25 @@
 #endif
 
 #define ACPI_COMMON_SIGNON(UtilityName) \
-    "\n%s\n%s version %8.8X%s\n%s\n\n", \
+    "\n%s\n%s version %8.8X%s [%s]\n%s\n\n", \
     ACPICA_NAME, \
-    UtilityName, ((UINT32) ACPI_CA_VERSION), ACPI_WIDTH, \
+    UtilityName, ((UINT32) ACPI_CA_VERSION), ACPI_WIDTH, ACPI_DATE, \
     ACPICA_COPYRIGHT
 
 #define ACPI_COMMON_HEADER(UtilityName, Prefix) \
-    "%s%s\n%s%s version %8.8X%s\n%s%s\n%s\n", \
+    "%s%s\n%s%s version %8.8X%s [%s]\n%s%s\n%s\n", \
     Prefix, ACPICA_NAME, \
-    Prefix, UtilityName, ((UINT32) ACPI_CA_VERSION), ACPI_WIDTH, \
+    Prefix, UtilityName, ((UINT32) ACPI_CA_VERSION), ACPI_WIDTH, ACPI_DATE, \
     Prefix, ACPICA_COPYRIGHT, \
     Prefix
 
 /* Macros for usage messages */
 
 #define ACPI_USAGE_HEADER(Usage) \
-    AcpiOsPrintf ("Usage: %s\nOptions:\n", Usage);
-
-#define ACPI_USAGE_TEXT(Description) \
-    AcpiOsPrintf (Description);
+    printf ("Usage: %s\nOptions:\n", Usage);
 
 #define ACPI_OPTION(Name, Description) \
-    AcpiOsPrintf ("  %-18s%s\n", Name, Description);
+    printf ("  %-18s%s\n", Name, Description);
 
 
 #define FILE_SUFFIX_DISASSEMBLY     "dsl"
@@ -122,14 +119,6 @@ extern int                  AcpiGbl_SubOptChar;
 extern char                 *AcpiGbl_Optarg;
 
 
-/*
- * cmfsize - Common get file size function
- */
-UINT32
-CmGetFileSize (
-    ACPI_FILE               File);
-
-
 #ifndef ACPI_DUMP_APP
 /*
  * adisasm
@@ -139,7 +128,8 @@ AdAmlDisassemble (
     BOOLEAN                 OutToFile,
     char                    *Filename,
     char                    *Prefix,
-    char                    **OutFilename);
+    char                    **OutFilename,
+    BOOLEAN                 GetAllTables);
 
 void
 AdPrintStatistics (
@@ -156,7 +146,8 @@ AdDumpTables (
 
 ACPI_STATUS
 AdGetLocalTables (
-    void);
+    char                    *Filename,
+    BOOLEAN                 GetAllTables);
 
 ACPI_STATUS
 AdParseTable (

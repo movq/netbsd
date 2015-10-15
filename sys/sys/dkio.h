@@ -1,4 +1,4 @@
-/*	$NetBSD: dkio.h,v 1.21 2014/12/29 18:41:20 mlelstv Exp $	*/
+/*	$NetBSD: dkio.h,v 1.19.2.2 2015/06/01 19:19:44 snj Exp $	*/
 
 /*
  * Copyright (c) 1987, 1988, 1993

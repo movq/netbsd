@@ -1,4 +1,4 @@
-/*$NetBSD: dm_target_stripe.c,v 1.21 2014/08/19 14:43:28 christos Exp $*/
+/*$NetBSD: dm_target_stripe.c,v 1.19.2.1 2014/08/29 10:20:16 martin Exp $*/
 
 /*
  * Copyright (c) 2009 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: dirent.h,v 1.29 2015/02/26 02:05:54 dholland Exp $	*/
+/*	$NetBSD: dirent.h,v 1.28.28.1 2015/07/05 20:27:41 snj Exp $	*/
 
 /*-
  * Copyright (c) 1989, 1993

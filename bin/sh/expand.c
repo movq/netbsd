@@ -1,4 +1,4 @@
-/*	$NetBSD: expand.c,v 1.93 2015/08/27 07:46:47 christos Exp $	*/
+/*	$NetBSD: expand.c,v 1.91 2014/01/20 14:05:51 roy Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)expand.c	8.5 (Berkeley) 5/15/95";
 #else
-__RCSID("$NetBSD: expand.c,v 1.93 2015/08/27 07:46:47 christos Exp $");
+__RCSID("$NetBSD: expand.c,v 1.91 2014/01/20 14:05:51 roy Exp $");
 #endif
 #endif /* not lint */
 
@@ -98,7 +98,7 @@ struct arglist exparg;		/* holds expanded arg list */
 STATIC void argstr(char *, int);
 STATIC char *exptilde(char *, int);
 STATIC void expbackq(union node *, int, int);
-STATIC int subevalvar(char *, char *, int, int, int, int, int);
+STATIC int subevalvar(char *, char *, int, int, int, int);
 STATIC char *evalvar(char *, int);
 STATIC int varisset(char *, int);
 STATIC void varvalue(char *, int, int, int);
@@ -451,8 +451,7 @@ expbackq(union node *cmd, int quoted, int flag)
 		if (--in.nleft < 0) {
 			if (in.fd < 0)
 				break;
-			while ((i = read(in.fd, buf, sizeof buf)) < 0 && errno == EINTR)
-				continue;
+			while ((i = read(in.fd, buf, sizeof buf)) < 0 && errno == EINTR);
 			TRACE(("expbackq: read returns %d\n", i));
 			if (i <= 0)
 				break;
@@ -495,7 +494,7 @@ expbackq(union node *cmd, int quoted, int flag)
 
 
 STATIC int
-subevalvar(char *p, char *str, int strloc, int subtype, int startloc, int varflags, int quotes)
+subevalvar(char *p, char *str, int strloc, int subtype, int startloc, int varflags)
 {
 	char *startp;
 	char *loc = NULL;
@@ -548,10 +547,10 @@ subevalvar(char *p, char *str, int strloc, int subtype, int startloc, int varfla
 		for (loc = startp; loc < str; loc++) {
 			c = *loc;
 			*loc = '\0';
-			if (patmatch(str, startp, quotes))
+			if (patmatch(str, startp, varflags & VSQUOTE))
 				goto recordleft;
 			*loc = c;
-			if (quotes && *loc == CTLESC)
+			if ((varflags & VSQUOTE) && *loc == CTLESC)
 			        loc++;
 		}
 		return 0;
@@ -560,11 +559,11 @@ subevalvar(char *p, char *str, int strloc, int subtype, int startloc, int varfla
 		for (loc = str - 1; loc >= startp;) {
 			c = *loc;
 			*loc = '\0';
-			if (patmatch(str, startp, quotes))
+			if (patmatch(str, startp, varflags & VSQUOTE))
 				goto recordleft;
 			*loc = c;
 			loc--;
-			if (quotes && loc > startp &&
+			if ((varflags & VSQUOTE) && loc > startp &&
 			    *(loc - 1) == CTLESC) {
 				for (q = startp; q < loc; q++)
 					if (*q == CTLESC)
@@ -577,10 +576,10 @@ subevalvar(char *p, char *str, int strloc, int subtype, int startloc, int varfla
 
 	case VSTRIMRIGHT:
 	        for (loc = str - 1; loc >= startp;) {
-			if (patmatch(str, loc, quotes))
+			if (patmatch(str, loc, varflags & VSQUOTE))
 				goto recordright;
 			loc--;
-			if (quotes && loc > startp &&
+			if ((varflags & VSQUOTE) && loc > startp &&
 			    *(loc - 1) == CTLESC) { 
 				for (q = startp; q < loc; q++)
 					if (*q == CTLESC)
@@ -593,9 +592,9 @@ subevalvar(char *p, char *str, int strloc, int subtype, int startloc, int varfla
 
 	case VSTRIMRIGHTMAX:
 		for (loc = startp; loc < str - 1; loc++) {
-			if (patmatch(str, loc, quotes))
+			if (patmatch(str, loc, varflags & VSQUOTE))
 				goto recordright;
-			if (quotes && *loc == CTLESC)
+			if ((varflags & VSQUOTE) && *loc == CTLESC)
 			        loc++;
 		}
 		return 0;
@@ -763,7 +762,7 @@ again: /* jump here after setting a variable with ${var=text} */
 		STPUTC('\0', expdest);
 		patloc = expdest - stackblock();
 		if (subevalvar(p, NULL, patloc, subtype,
-			       startloc, varflags, quotes) == 0) {
+			       startloc, varflags) == 0) {
 			int amount = (expdest - stackblock() - patloc) + 1;
 			STADJUST(-amount, expdest);
 		}
@@ -776,7 +775,7 @@ again: /* jump here after setting a variable with ${var=text} */
 	case VSQUESTION:
 		if (set)
 			break;
-		if (subevalvar(p, var, 0, subtype, startloc, varflags, quotes)) {
+		if (subevalvar(p, var, 0, subtype, startloc, varflags)) {
 			varflags &= ~VSNUL;
 			/* 
 			 * Remove any recorded regions beyond 

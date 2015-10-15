@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -150,44 +150,33 @@ AfInstallGpeBlock (
 {
     ACPI_STATUS                 Status;
     ACPI_HANDLE                 Handle;
+    ACPI_HANDLE                 Handle2 = NULL;
+    ACPI_HANDLE                 Handle3 = NULL;
     ACPI_GENERIC_ADDRESS        BlockAddress;
     ACPI_HANDLE                 GpeDevice;
-    ACPI_OBJECT_TYPE            Type;
 
-
-    /* _GPE should always exist */
 
     Status = AcpiGetHandle (NULL, "\\_GPE", &Handle);
-    AE_CHECK_OK (AcpiGetHandle, Status);
     if (ACPI_FAILURE (Status))
     {
         return;
     }
 
-    memset (&BlockAddress, 0, sizeof (ACPI_GENERIC_ADDRESS));
+    ACPI_MEMSET (&BlockAddress, 0, sizeof (ACPI_GENERIC_ADDRESS));
     BlockAddress.SpaceId = ACPI_ADR_SPACE_SYSTEM_MEMORY;
     BlockAddress.Address = 0x76540000;
 
-    /* Attempt to install a GPE block on GPE2 (if present) */
-
-    Status = AcpiGetHandle (NULL, "\\GPE2", &Handle);
+    Status = AcpiGetHandle (NULL, "\\GPE2", &Handle2);
     if (ACPI_SUCCESS (Status))
     {
-        Status = AcpiGetType (Handle, &Type);
-        if (ACPI_FAILURE (Status) ||
-           (Type != ACPI_TYPE_DEVICE))
-        {
-            return;
-        }
-
-        Status = AcpiInstallGpeBlock (Handle, &BlockAddress, 7, 8);
+        Status = AcpiInstallGpeBlock (Handle2, &BlockAddress, 7, 8);
         AE_CHECK_OK (AcpiInstallGpeBlock, Status);
 
-        Status = AcpiInstallGpeHandler (Handle, 8,
+        Status = AcpiInstallGpeHandler (Handle2, 8,
             ACPI_GPE_LEVEL_TRIGGERED, AeGpeHandler, NULL);
         AE_CHECK_OK (AcpiInstallGpeHandler, Status);
 
-        Status = AcpiEnableGpe (Handle, 8);
+        Status = AcpiEnableGpe (Handle2, 8);
         AE_CHECK_OK (AcpiEnableGpe, Status);
 
         Status = AcpiGetGpeDevice (0x30, &GpeDevice);
@@ -202,23 +191,14 @@ AfInstallGpeBlock (
         Status = AcpiGetGpeDevice (AcpiCurrentGpeCount, &GpeDevice);
         AE_CHECK_STATUS (AcpiGetGpeDevice, Status, AE_NOT_EXIST);
 
-        Status = AcpiRemoveGpeHandler (Handle, 8, AeGpeHandler);
+        Status = AcpiRemoveGpeHandler (Handle2, 8, AeGpeHandler);
         AE_CHECK_OK (AcpiRemoveGpeHandler, Status);
     }
 
-    /* Attempt to install a GPE block on GPE3 (if present) */
-
-    Status = AcpiGetHandle (NULL, "\\GPE3", &Handle);
+    Status = AcpiGetHandle (NULL, "\\GPE3", &Handle3);
     if (ACPI_SUCCESS (Status))
     {
-        Status = AcpiGetType (Handle, &Type);
-        if (ACPI_FAILURE (Status) ||
-           (Type != ACPI_TYPE_DEVICE))
-        {
-            return;
-        }
-
-        Status = AcpiInstallGpeBlock (Handle, &BlockAddress, 8, 11);
+        Status = AcpiInstallGpeBlock (Handle3, &BlockAddress, 8, 11);
         AE_CHECK_OK (AcpiInstallGpeBlock, Status);
     }
 }
@@ -287,7 +267,7 @@ AeTestPackageArgument (
     PkgElements[3].Package.Count = 2;
     PkgElements[3].Package.Elements = Pkg2Elements;
 
-    /* Subpackage elements */
+    /* Sub-package elements */
 
     Pkg2Elements[0].Type = ACPI_TYPE_INTEGER;
     Pkg2Elements[0].Integer.Value = 0xAAAABBBB;
@@ -765,15 +745,13 @@ AeMiscellaneousTests (
     AE_CHECK_OK (AcpiEnableGpe, Status);
 
 
-    /* GPE block 1 */
-
-    Status = AcpiInstallGpeHandler (NULL, 101, ACPI_GPE_LEVEL_TRIGGERED, AeGpeHandler, NULL);
+    Status = AcpiInstallGpeHandler (NULL, 0x62, ACPI_GPE_LEVEL_TRIGGERED, AeGpeHandler, NULL);
     AE_CHECK_OK (AcpiInstallGpeHandler, Status);
 
-    Status = AcpiEnableGpe (NULL, 101);
+    Status = AcpiEnableGpe (NULL, 0x62);
     AE_CHECK_OK (AcpiEnableGpe, Status);
 
-    Status = AcpiDisableGpe (NULL, 101);
+    Status = AcpiDisableGpe (NULL, 0x62);
     AE_CHECK_OK (AcpiDisableGpe, Status);
 
     AfInstallGpeBlock ();

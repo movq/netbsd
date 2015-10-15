@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.11 2015/01/29 20:41:34 joerg Exp $
+#	$NetBSD: Makefile,v 1.10.2.1 2015/06/04 20:04:22 snj Exp $
 
 PROG_CXX=	llvm-objdump
 NOMAN=		yes

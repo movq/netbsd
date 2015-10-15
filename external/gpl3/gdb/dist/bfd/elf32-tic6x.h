@@ -1,5 +1,6 @@
 /* 32-bit ELF support for TI C6X
-   Copyright (C) 2010-2015 Free Software Foundation, Inc.
+   Copyright 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 

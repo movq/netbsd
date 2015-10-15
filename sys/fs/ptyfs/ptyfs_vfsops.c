@@ -1,4 +1,4 @@
-/*	$NetBSD: ptyfs_vfsops.c,v 1.55 2014/10/21 16:05:01 christos Exp $	*/
+/*	$NetBSD: ptyfs_vfsops.c,v 1.50.2.1 2014/08/17 03:34:02 riz Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993, 1995
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ptyfs_vfsops.c,v 1.55 2014/10/21 16:05:01 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ptyfs_vfsops.c,v 1.50.2.1 2014/08/17 03:34:02 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -415,8 +415,7 @@ ptyfs_sync(struct mount *mp, int waitfor,
 
 /*
  * Initialize this vnode / ptynode pair.
- * Only for the slave side of a pty, caller assures
- * no other thread will try to load this node.
+ * Caller assures no other thread will try to load this node.
  */
 int
 ptyfs_loadvnode(struct mount *mp, struct vnode *vp,

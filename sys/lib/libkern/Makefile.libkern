@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.libkern,v 1.38 2015/04/15 19:13:47 mrg Exp $
+#	$NetBSD: Makefile.libkern,v 1.35.2.1 2015/04/22 07:18:58 snj Exp $
 
 # 
 # Variable definitions for libkern.  
@@ -54,7 +54,7 @@ SRCS+=	cpuset.c inet_addr.c intoa.c
 SRCS+=	bswap64.c
 .endif
 SRCS+=	md4c.c md5c.c rmd160.c sha1.c sha2.c murmurhash.c
-SRCS+=	pmatch.c mcount.c mertwist.c crc32.c
+SRCS+=	pmatch.c bcd.c mcount.c mertwist.c crc32.c
 
 SRCS+=	ppath_kmem_alloc.c
 
@@ -111,3 +111,7 @@ unwanted_file := ${SRCS:M${check_file:.S=.c}}
 SRCS := ${SRCS:N${unwanted_file}}
 .endif
 .endfor
+
+.if ${HAVE_GCC:U} == "45" && ${MACHINE_CPU} == "hppa"
+COPTS.md5c.c +=		${${ACTIVE_CC} == "gcc" :? -O0 :}
+.endif

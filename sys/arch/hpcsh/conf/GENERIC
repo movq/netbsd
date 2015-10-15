@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.107 2015/08/08 06:36:25 maxv Exp $
+# $NetBSD: GENERIC,v 1.101.4.3 2015/05/15 03:44:18 snj Exp $
 #
 # GENERIC machine description file
 #
@@ -87,6 +87,7 @@ options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 # Diagnostic/debugging support options
 #options 	DIAGNOSTIC	# expensive kernel consistency checks
 #options 	DEBUG		# expensive debugging checks/support
+#options 	KMEMSTATS	# kernel memory statistics (vmstat -m)
 #options 	DDB		# in-kernel debugger
 #options 	DDB_ONPANIC=1	# see also sysctl(7): `ddb.onpanic'
 #options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
@@ -98,14 +99,13 @@ options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 #makeoptions	DEBUG="-g"	# compile full symbol table
 
 # Compatibility options
-options 	COMPAT_15	# NetBSD 1.5,
-options 	COMPAT_16	# NetBSD 1.6,
-options 	COMPAT_20	# NetBSD 2.0,
-options 	COMPAT_30	# NetBSD 3.0,
-options 	COMPAT_40	# NetBSD 4.0,
-options 	COMPAT_50	# NetBSD 5.0,
-options 	COMPAT_60	# NetBSD 6.0, and
-options 	COMPAT_70	# NetBSD 7.0 binary compatibility.
+options 	COMPAT_15	# NetBSD 1.5
+options 	COMPAT_16	# NetBSD 1.6
+options 	COMPAT_20	# NetBSD 2.0
+options 	COMPAT_30	# NetBSD 3.0 compatibility.
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
+options 	COMPAT_50	# NetBSD 5.0 compatibility.
+options 	COMPAT_60	# NetBSD 6.0 compatibility.
 #options 	BSDDISKLABEL_EI	# endian independent disklabel support
 options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: makemandb.c,v 1.29 2015/04/07 17:47:10 plunky Exp $	*/
+/*	$NetBSD: makemandb.c,v 1.24.2.3 2015/04/14 04:26:04 snj Exp $	*/
 /*
  * Copyright (c) 2011 Abhinav Upadhyay <er.abhinav.upadhyay@gmail.com>
  * Copyright (c) 2011 Kristaps Dzonsons <kristaps@bsd.lv>
@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: makemandb.c,v 1.29 2015/04/07 17:47:10 plunky Exp $");
+__RCSID("$NetBSD: makemandb.c,v 1.24.2.3 2015/04/14 04:26:04 snj Exp $");
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -75,7 +75,7 @@ typedef struct mandb_rec {
 	secbuff errors; // ERRORS
 	char section[2];
 
-	int xr_found; // To track whether a .Xr was seen when parsing a section
+	int xr_found;
 
 	/* Fields for mandb_meta table */
 	char *md5_hash;
@@ -501,7 +501,7 @@ traversedir(const char *parent, const char *file, sqlite3 *db,
 }
 
 /* build_file_cache --
- *   This function generates an md5 hash of the file passed as its 2nd parameter
+ *   This function generates an md5 hash of the file passed as it's 2nd parameter
  *   and stores it in a temporary table file_cache along with the full file path.
  *   This is done to support incremental updation of the database.
  *   The temporary table file_cache is dropped thereafter in the function
@@ -973,8 +973,12 @@ pmdoc_Nm(const struct mdoc_node *n, mandb_rec *rec)
 static void
 pmdoc_Nd(const struct mdoc_node *n, mandb_rec *rec)
 {
+	/*
+	 * A static variable for keeping track of whether a Xr macro was seen
+	 * previously.
+	 */
 	char *buf = NULL;
-	char *name;
+	char *temp;
 	char *nd_text;
 
 	if (n == NULL || (n->type != MDOC_TEXT && n->tok == MDOC_MAX))
@@ -984,12 +988,11 @@ pmdoc_Nd(const struct mdoc_node *n, mandb_rec *rec)
 		if (rec->xr_found && n->next) {
 			/*
 			 * An Xr macro was seen previously, so parse this
-			 * and the next node, as "Name(Section)".
+			 * and the next node.
 			 */
-			name = n->string;
+			temp = n->string;
 			n = n->next;
-			assert(n->type == MDOC_TEXT);
-			easprintf(&buf, "%s(%s)", name, n->string);
+			easprintf(&buf, "%s(%s)", temp, n->string);
 			concat(&rec->name_desc, buf);
 			free(buf);
 		} else {

@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_kern.c,v 1.19 2015/05/11 16:48:34 christos Exp $	*/
+/*	$NetBSD: prop_kern.c,v 1.17.22.2 2015/05/16 18:02:14 snj Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2009 The NetBSD Foundation, Inc.

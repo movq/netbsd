@@ -1,4 +1,4 @@
-/* $NetBSD: t_parsedate.c,v 1.13 2014/10/08 17:23:03 apb Exp $ */
+/* $NetBSD: t_parsedate.c,v 1.7.8.6 2014/10/11 16:55:32 snj Exp $ */
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_parsedate.c,v 1.13 2014/10/08 17:23:03 apb Exp $");
+__RCSID("$NetBSD: t_parsedate.c,v 1.7.8.6 2014/10/11 16:55:32 snj Exp $");
 
 #include <atf-c.h>
 #include <errno.h>

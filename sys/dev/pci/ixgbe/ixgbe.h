@@ -1,6 +1,6 @@
 /******************************************************************************
 
-  Copyright (c) 2001-2013, Intel Corporation 
+  Copyright (c) 2001-2012, Intel Corporation 
   All rights reserved.
   
   Redistribution and use in source and binary forms, with or without 
@@ -58,8 +58,8 @@
  * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGE.
  */
-/*$FreeBSD: head/sys/dev/ixgbe/ixgbe.h 279393 2015-02-28 14:57:57Z ngie $*/
-/*$NetBSD: ixgbe.h,v 1.9 2015/08/17 06:16:03 knakahara Exp $*/
+/*$FreeBSD: head/sys/dev/ixgbe/ixgbe.h 244514 2012-12-20 22:26:03Z luigi $*/
+/*$NetBSD: ixgbe.h,v 1.1.28.4 2015/05/06 23:29:21 riz Exp $*/
 
 
 #ifndef _IXGBE_H_
@@ -107,7 +107,6 @@
 #include <sys/endian.h>
 #include <sys/workqueue.h>
 #include <sys/cpu.h>
-#include <sys/interrupt.h>
 
 #include "ixgbe_netbsd.h"
 #include "ixgbe_api.h"
@@ -181,10 +180,8 @@
  * modern Intel CPUs, results in 40 bytes wasted and a significant drop
  * in observed efficiency of the optimization, 97.9% -> 81.8%.
  */
-#define	MPKTHSIZE		(offsetof(struct _mbuf_dummy, m_pktdat))
-#define IXGBE_RX_COPY_HDR_PADDED	((((MPKTHSIZE - 1) / 32) + 1) * 32)
-#define IXGBE_RX_COPY_LEN		(MSIZE - IXGBE_RX_COPY_HDR_PADDED)
-#define IXGBE_RX_COPY_ALIGN		(IXGBE_RX_COPY_HDR_PADDED - MPKTHSIZE)
+#define IXGBE_RX_COPY_LEN	160
+#define IXGBE_RX_COPY_ALIGN	(MHLEN - IXGBE_RX_COPY_LEN)
 
 /* Keep older OS drivers building... */
 #if !defined(SYSCTL_ADD_UQUAD)
@@ -232,7 +229,6 @@
 #define IXGBE_AVE_LATENCY	400
 #define IXGBE_BULK_LATENCY	1200
 #define IXGBE_LINK_ITR		2000
-
 
 /*
  *****************************************************************************
@@ -361,6 +357,7 @@ struct rx_ring {
 #endif /* LRO */
 	bool			lro_enabled;
 	bool			hw_rsc;
+	bool			discard;
 	bool			vtag_strip;
         u16			next_to_refresh;
         u16 			next_to_check;
@@ -473,7 +470,6 @@ struct adapter {
 	/* Multicast array memory */
 	u8			*mta;
 
-
 	/* Misc stats maintained by the driver */
 	struct evcnt   		dropped_pkts;
 	struct evcnt   		mbuf_defrag_failed;
@@ -500,7 +496,6 @@ struct adapter {
 	ixgbe_extmem_head_t jcl_head;
 };
 
-
 /* Precision Time Sync (IEEE 1588) defines */
 #define ETHERTYPE_IEEE1588      0x88F7
 #define PICOSECS_PER_TICK       20833
@@ -522,6 +517,7 @@ struct adapter {
 #define IXGBE_RX_UNLOCK(_sc)              mutex_exit(&(_sc)->rx_mtx)
 #define IXGBE_CORE_LOCK_ASSERT(_sc)       KASSERT(mutex_owned(&(_sc)->core_mtx))
 #define IXGBE_TX_LOCK_ASSERT(_sc)         KASSERT(mutex_owned(&(_sc)->tx_mtx))
+
 
 static inline bool
 ixgbe_is_sfp(struct ixgbe_hw *hw)

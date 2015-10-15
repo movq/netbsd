@@ -21,7 +21,12 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: machdep.c,v 1.6 2015/03/31 21:59:35 christos Exp $");
+#if 0
+static const char rcsid[] _U_ =
+    "@(#) Header: /tcpdump/master/tcpdump/machdep.c,v 1.13 2003-12-15 03:53:21 guy Exp  (LBL)";
+#else
+__RCSID("$NetBSD: machdep.c,v 1.4 2013/12/31 17:33:31 christos Exp $");
+#endif
 #endif
 
 #ifdef HAVE_CONFIG_H
@@ -55,15 +60,6 @@ int snprintf(char *, size_t, const char *, ...)
 
 #include "machdep.h"
 
-/*
- * On platforms where the CPU doesn't support unaligned loads, force
- * unaligned accesses to abort with SIGBUS, rather than being fixed
- * up (slowly) by the OS kernel; on those platforms, misaligned accesses
- * are bugs, and we want tcpdump to crash so that the bugs are reported.
- *
- * The only OS on which this is necessary is DEC OSF/1^W^WDigital
- * UNIX^W^WTru64 UNIX.
- */
 int
 abort_on_misalignment(char *ebuf _U_, size_t ebufsiz _U_)
 {

@@ -1,4 +1,4 @@
-# $NetBSD: HACKS,v 1.162 2015/08/27 12:32:05 pooka Exp $
+# $NetBSD: HACKS,v 1.152 2014/06/13 01:17:46 mrg Exp $
 #
 # This file is intended to document workarounds for currently unsolved
 # (mostly) compiler bugs.
@@ -379,27 +379,6 @@ descr
 
 	The compiler seems to get confused about the two filename variables
 	used in the link(2) system call.
-kcah
-
-hack	g++ 5.x barfs on volatile in constexpr initializers
-cdata	27 Aug 2015
-who	pooka
-file	src/lib/libpthread/pthread_types.h	: 1.17
-pr	lib/49989
-descr
-	Trying to use e.g. pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER
-	in C++ results in:
-		error: temporary of non-literal type '__pthread_mutex_st'
-		in a constant expression
-		constexpr mutex() _NOEXCEPT : __m_(PTHREAD_MUTEX_INITIALIZER) {}
-		[...]
-		include/pthread_types.h:101:8: note: '__pthread_mutex_st' is
-		not literal because:
-		struct __pthread_mutex_st {
-		^
-		include/pthread_types.h:103:17: note:   non-static data
-		member '__pthread_mutex_st::ptm_errorcheck' has volatile type
-		pthread_spin_t ptm_errorcheck;
 kcah
 
 port	vax
@@ -949,16 +928,6 @@ port	ia64
 		{standard input}:22978: Warning: This is the location of the conflicting usage
 	kcah
 
-	hack	libgcc unwind dummy function
-	cdate	Fri Apr 17 14:31:03 CEST 2015
-	who	martin
-	file	src/external/gpl3/gcc/dist/libgcc/config/ia64/unwind-ia64.c: 1.4
-	descr
-		Add an empty _Unwind_FindTableEntry() implementation.
-		In the end we will use our libc stuff, and this should
-		go away again.
-	kcah
-
 port	x68k
 
 	hack	compiler error with gcc 4.5.x
@@ -966,6 +935,7 @@ port	x68k
 	who	christos
 	file	src/external/gpl3/gcc/usr.bin/bakend/Makefile: 1.17
 		xsrc/external/mit/xorg/lib/libGLU/Makefile: 1.11
+		src/x11/lib/GLU/Makefile: 1.9
 	descr
 		workaround for:
 		internal compiler error: in cselib_record_set, at cselib.c:1999
@@ -982,7 +952,7 @@ descr
 	This applies only if RPCGEN_CPP is not set and /usr/bin/cpp is not executable.
 kcah
 
-port	hppa
+port	hp700
 
 	hack	compiler error with gcc 4.5.x
 	cdate	Tue Jul 23 07:42:28 BST 2013
@@ -990,17 +960,6 @@ port	hppa
 	file	src/sys/lib/libkern/Makefile.libkern: 1.26
 	descr
 		workaround for unanalysed codegen bug affecting md5c.c.
-	kcah
-
-	hack	gdb vs _rtld_debug_state problem
-	cdate	Thu Mar  5 09:49:53 UTC 2015
-	who	skrll
-	file	src/libexec/ld.elf_so/rtld.c: 1.175
-	descr
-		workaround for problem where gdb misses the breakpoint on
-		_rtld_debug_state when the function is only the
-		bv,n %r0(%rp) instruction - the nullify seems to
-		confuse something
 	kcah
 
 port	mips64*
@@ -1023,9 +982,3 @@ file	src/sys/arch/vax/boot/boot/Makefile: 1.41
 descr	/boot does not work when compiled with -O2 and gcc 4.8
 kcah
 
-port	arm
-hack	avoid using labels in a 12-bit constant.
-who	matt
-file	crypto/external/bsd/openssl/lib/libcrypto/arch/arm/aes-armv4.S: 1.2
-descr	workaround for clang misassembling an instruction
-kcah

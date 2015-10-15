@@ -1,6 +1,6 @@
 /* Branch trace support for GDB, the GNU debugger.
 
-   Copyright (C) 2013-2015 Free Software Foundation, Inc.
+   Copyright (C) 2013-2014 Free Software Foundation, Inc.
 
    Contributed by Intel Corp. <markus.t.metzger@intel.com>.
 
@@ -26,6 +26,12 @@
    inferior.  For presentation purposes, the branch trace is represented as a
    list of sequential control-flow blocks, one such list per thread.  */
 
+#ifdef GDBSERVER
+#  include "server.h"
+#else
+#  include "defs.h"
+#endif
+
 #include "vec.h"
 
 /* A branch trace block.
@@ -36,9 +42,7 @@
    asynchronous, e.g. interrupts.  */
 struct btrace_block
 {
-  /* The address of the first byte of the first instruction in the block.
-     The address may be zero if we do not know the beginning of this block,
-     such as for the first block in a delta trace.  */
+  /* The address of the first byte of the first instruction in the block.  */
   CORE_ADDR begin;
 
   /* The address of the first byte of the last instruction in the block.  */
@@ -60,31 +64,10 @@ struct btrace_target_info;
 enum btrace_read_type
 {
   /* Send all available trace.  */
-  BTRACE_READ_ALL,
+  btrace_read_all,
 
   /* Send all available trace, if it changed.  */
-  BTRACE_READ_NEW,
-
-  /* Send the trace since the last request.  This will fail if the trace
-     buffer overflowed.  */
-  BTRACE_READ_DELTA
-};
-
-/* Enumeration of btrace errors.  */
-
-enum btrace_error
-{
-  /* No error.  Everything is OK.  */
-  BTRACE_ERR_NONE,
-
-  /* An unknown error.  */
-  BTRACE_ERR_UNKNOWN,
-
-  /* Branch tracing is not supported on this system.  */
-  BTRACE_ERR_NOT_SUPPORTED,
-
-  /* The branch trace buffer overflowed; no delta read possible.  */
-  BTRACE_ERR_OVERFLOW
+  btrace_read_new
 };
 
 #endif /* BTRACE_COMMON_H */

@@ -1,4 +1,4 @@
-/*	$NetBSD: util.h,v 1.3 2015/01/29 07:26:02 spz Exp $	*/
+/*	$NetBSD: util.h,v 1.2.12.1 2015/02/03 08:23:40 bouyer Exp $	*/
 /*
  * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
  *
@@ -235,20 +235,9 @@ extern "C" {
 
    @{
 */
-#if _EVENT_SIZEOF_SIZE_T == 8
-#define EV_SIZE_MAX EV_UINT64_MAX
-#define EV_SSIZE_MAX EV_INT64_MAX
-#elif _EVENT_SIZEOF_SIZE_T == 4
-#define EV_SIZE_MAX EV_UINT32_MAX
-#define EV_SSIZE_MAX EV_INT32_MAX
-#elif defined(_EVENT_IN_DOXYGEN)
-#define EV_SIZE_MAX ...
-#define EV_SSIZE_MAX ...
-#else
-#error "No way to define SIZE_MAX"
-#endif
-
-#define EV_SSIZE_MIN ((-EV_SSIZE_MAX) - 1)
+#define EV_SIZE_MAX SIZE_MAX
+#define EV_SSIZE_MAX SSIZE_MAX
+#define EV_SSIZE_MIN SSIZE_MIN
 /**@}*/
 
 #ifdef WIN32
@@ -330,7 +319,7 @@ int evutil_closesocket(evutil_socket_t sock);
 #define EVUTIL_SOCKET_ERROR() WSAGetLastError()
 /** Replace the most recent socket error with errcode */
 #define EVUTIL_SET_SOCKET_ERROR(errcode)		\
-	do { WSASetLastError(errcode); } while (0)
+	do { WSASetLastError(errcode); } while (/*CONSTCOND*/0)
 /** Return the most recent socket error to occur on sock. */
 int evutil_socket_geterror(evutil_socket_t sock);
 /** Convert a socket error to a string. */
@@ -362,7 +351,7 @@ const char *evutil_socket_error_to_string(int errcode);
 #else
 #define EVUTIL_SOCKET_ERROR() (errno)
 #define EVUTIL_SET_SOCKET_ERROR(errcode)		\
-		do { errno = (errcode); } while (0)
+		do { errno = (errcode); } while (/*CONSTCOND*/0)
 #define evutil_socket_geterror(sock) (errno)
 #define evutil_socket_error_to_string(errcode) (strerror(errcode))
 #endif
@@ -388,7 +377,7 @@ const char *evutil_socket_error_to_string(int errcode);
 			(vvp)->tv_sec++;				\
 			(vvp)->tv_usec -= 1000000;			\
 		}							\
-	} while (0)
+	} while (/*CONSTCOND*/0)
 #define	evutil_timersub(tvp, uvp, vvp)					\
 	do {								\
 		(vvp)->tv_sec = (tvp)->tv_sec - (uvp)->tv_sec;		\
@@ -397,7 +386,7 @@ const char *evutil_socket_error_to_string(int errcode);
 			(vvp)->tv_sec--;				\
 			(vvp)->tv_usec += 1000000;			\
 		}							\
-	} while (0)
+	} while (/*CONSTCOND*/0)
 #endif /* !_EVENT_HAVE_HAVE_TIMERADD */
 
 #ifdef _EVENT_HAVE_TIMERCLEAR

@@ -1,6 +1,6 @@
 /* Frame unwinder for frames with DWARF Call Frame Information.
 
-   Copyright (C) 2003-2015 Free Software Foundation, Inc.
+   Copyright (C) 2003-2014 Free Software Foundation, Inc.
 
    Contributed by Mark Kettenis.
 
@@ -120,26 +120,15 @@ extern const struct frame_base *
 
 CORE_ADDR dwarf2_frame_cfa (struct frame_info *this_frame);
 
-/* Find the CFA information for PC.
+/* Update the agent expression EXPR with code to compute the CFA for a
+   frame at PC.  GDBARCH is the architecture of the function at PC.
+   This function may call dwarf2_compile_expr_to_ax; DATA is passed
+   through to that function if needed.  */
 
-   Return 1 if a register is used for the CFA, or 0 if another
-   expression is used.  Throw an exception on error.
-
-   GDBARCH is the architecture to use.
-   DATA is the per-CU data.
-
-   REGNUM_OUT is an out parameter that is set to the register number.
-   OFFSET_OUT is the offset to use from this register.
-   These are only filled in when 1 is returned.
-
-   TEXT_OFFSET_OUT, CFA_START_OUT, and CFA_END_OUT describe the CFA
-   in other cases.  These are only used when 0 is returned.  */
-
-extern int dwarf2_fetch_cfa_info (struct gdbarch *gdbarch, CORE_ADDR pc,
-				  struct dwarf2_per_cu_data *data,
-				  int *regnum_out, LONGEST *offset_out,
-				  CORE_ADDR *text_offset_out,
-				  const gdb_byte **cfa_start_out,
-				  const gdb_byte **cfa_end_out);
+extern void dwarf2_compile_cfa_to_ax (struct agent_expr *expr,
+				      struct axs_value *loc,
+				      struct gdbarch *gdbarch,
+				      CORE_ADDR pc,
+				      struct dwarf2_per_cu_data *data);
 
 #endif /* dwarf2-frame.h */

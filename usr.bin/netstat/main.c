@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.95 2014/11/12 03:34:59 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.91.2.1 2015/01/08 11:01:01 martin Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\
 #if 0
 static char sccsid[] = "from: @(#)main.c	8.4 (Berkeley) 3/1/94";
 #else
-__RCSID("$NetBSD: main.c,v 1.95 2014/11/12 03:34:59 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.91.2.1 2015/01/08 11:01:01 martin Exp $");
 #endif
 #endif /* not lint */
 
@@ -345,17 +345,12 @@ prepare(const char *nf, const char *mf, struct protox *tp)
 	/*
 	 * Try to figure out if we can use sysctl or not.
 	 */
-	if (nf != NULL || mf != NULL) {
+	if (nf != NULL && mf != NULL) {
 		/* Of course, we can't use sysctl with dumps. */
 		if (force_sysctl)
 			errx(EXIT_FAILURE, "can't use sysctl with dumps");
 
-		/*
-		 * If we have -M or -N, we're not dealing with live memory
-		 * or want to use kvm interface explicitly.  It is sometimes
-		 * useful to dig inside of kernel without extending
-		 * sysctl interface (i.e., without rebuilding kernel).
-		 */
+		/* If we have -M and -N, we're not dealing with live memory. */
 		use_sysctl = 0;
 	} else if (qflag ||
 		   iflag ||
@@ -421,7 +416,7 @@ main(int argc, char *argv[])
 	    "AabBdf:ghI:LliM:mN:nP:p:qrsStTuVvw:X")) != -1)
 		switch (ch) {
 		case 'A':
-			Aflag = RT_AFLAG;
+			Aflag = 1;
 			break;
 		case 'a':
 			aflag = 1;
@@ -454,7 +449,7 @@ main(int argc, char *argv[])
 			iflag = 1;
 			break;
 		case 'L':
-			Lflag = RT_LFLAG;
+			Lflag = 1;
 			break;
 		case 'l':
 			lflag = 1;
@@ -501,7 +496,7 @@ main(int argc, char *argv[])
 			tflag = 1;
 			break;
 		case 'T':
-			tagflag = RT_TFLAG;
+			tagflag = 1;
 			break;
 		case 'u':
 			af = AF_LOCAL;
@@ -510,7 +505,7 @@ main(int argc, char *argv[])
 			Vflag++;
 			break;
 		case 'v':
-			vflag = RT_VFLAG;
+			vflag++;
 			break;
 		case 'w':
 			interval = atoi(optarg);
@@ -638,8 +633,7 @@ main(int argc, char *argv[])
 				rt_stats(use_sysctl ? 0 : nl[N_RTSTAT].n_value);
 			else {
 				if (use_sysctl)
-					p_rttables(af,
-					    nflag|tagflag|vflag|Lflag, 0, ~0);
+					p_rttables(af, nflag, 0, ~0);
 				else
 					routepr(nl[N_RTREE].n_value);
 			}

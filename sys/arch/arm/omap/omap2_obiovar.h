@@ -1,4 +1,4 @@
-/* $NetBSD: omap2_obiovar.h,v 1.3 2015/04/14 18:37:43 bouyer Exp $ */
+/* $NetBSD: omap2_obiovar.h,v 1.2.14.1 2015/04/19 04:37:17 msaitoh Exp $ */
 
 /*
  * Copyright (c) 2007 Microsoft

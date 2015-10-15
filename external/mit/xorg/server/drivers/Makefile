@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.71 2015/10/13 19:43:44 rjs Exp $
+#	$NetBSD: Makefile,v 1.63.10.2 2015/03/09 08:47:19 snj Exp $
 
 # xf86-input drivers
 
@@ -23,6 +23,13 @@ SUBDIR+= \
 
 .include <bsd.own.mk>
 
+# Set this to "no" to build the UMS-happy 6.x driver, vs KMS 7.x
+.if ${MKX11RADEONKMS} != "no"
+RADEON_SUBDIR=radeon-kms
+.else
+RADEON_SUBDIR=radeon
+.endif
+
 .if ${MACHINE_ARCH} == "i386" || \
     ${MACHINE_ARCH} == "x86_64"
 SUBDIR+= \
@@ -43,16 +50,14 @@ SUBDIR+= \
 
 SUBDIR+= \
 	xf86-video-intel \
-	xf86-video-intel-old \
 	xf86-video-mach64 \
 	xf86-video-mga \
 	xf86-video-neomagic \
 	xf86-video-nv \
-	xf86-video-nouveau \
 	xf86-video-openchrome \
 	xf86-video-r128 \
-	xf86-video-radeon \
-	xf86-video-radeon-kms \
+	xf86-video-${RADEON_SUBDIR} \
+	xf86-video-radeonhd \
 	xf86-video-s3 \
 	xf86-video-s3virge \
 	xf86-video-savage \
@@ -92,7 +97,8 @@ SUBDIR+= \
 	xf86-video-mga \
 	xf86-video-nv \
 	xf86-video-r128 \
-	xf86-video-radeon \
+	xf86-video-${RADEON_SUBDIR} \
+	xf86-video-radeonhd \
 	xf86-video-s3 \
 	xf86-video-s3virge \
 	xf86-video-savage \
@@ -131,7 +137,8 @@ SUBDIR+= \
 	xf86-video-mga \
 	xf86-video-neomagic \
 	xf86-video-nv \
-	xf86-video-radeon \
+	xf86-video-${RADEON_SUBDIR} \
+	xf86-video-radeonhd \
 	xf86-video-s3 \
 	xf86-video-s3virge \
 	xf86-video-savage \
@@ -178,20 +185,10 @@ SUBDIR+= \
 	xf86-video-wsfb
 .endif # ${MACHINE} == "hpcarm" || ${MACHINE} == "hpcmips" || ${MACHINE} == "hpcsh"
 
-.if ${MACHINE} == "ibmnws"
-SUBDIR+= \
-	xf86-video-s3
-.endif	# ${MACHINE} == "ibmnws"
-
 .if ${MACHINE} == "luna68k"
 SUBDIR+= \
 	xf86-video-wsfb
 .endif	# ${MACHINE} == "luna68k"
-
-.if ${MACHINE} == "mac68k"
-SUBDIR+= \
-	xf86-video-wsfb
-.endif	# ${MACHINE} == "mac68k"
 
 .if ${MACHINE} == "macppc"
 SUBDIR+= \
@@ -200,7 +197,7 @@ SUBDIR+= \
 	xf86-video-mach64 \
 	xf86-video-mga \
 	xf86-video-nv \
-	xf86-video-radeon \
+	xf86-video-${RADEON_SUBDIR} \
 	xf86-video-r128 \
 	xf86-video-tdfx \
 	xf86-video-wsfb
@@ -225,7 +222,7 @@ SUBDIR+= \
 	xf86-video-mach64 \
 	xf86-video-mga \
 	xf86-video-nv \
-	xf86-video-radeon \
+	xf86-video-${RADEON_SUBDIR} \
 	xf86-video-r128 \
 	xf86-video-tdfx \
 	xf86-video-wsfb
@@ -262,7 +259,7 @@ SUBDIR+= \
 	xf86-video-mach64 \
 	xf86-video-mga \
 	xf86-video-r128 \
-	xf86-video-radeon \
+	xf86-video-${RADEON_SUBDIR} \
 	xf86-video-suncg6 \
 	xf86-video-sunffb \
 	xf86-video-sunleo \
@@ -284,5 +281,16 @@ SUBDIR+= \
 SUBDIR+= \
 	xf86-video-wsfb
 .endif # ${MACHINE} == "zaurus"
+
+# broken with xorg-server 1.6
+# x86
+#	xf86-video-nsc \
+#	xf86-video-vga \
+# alpha
+#	xf86-video-vga \
+# bebox
+#	xf86-video-vga
+# prep
+#	xf86-video-vga
 
 .include <bsd.subdir.mk>

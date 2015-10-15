@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_space.c,v 1.8 2015/02/28 09:34:34 skrll Exp $	*/
+/*	$NetBSD: bcm2835_space.c,v 1.6.10.2 2015/05/27 05:33:29 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_space.c,v 1.8 2015/02/28 09:34:34 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_space.c,v 1.6.10.2 2015/05/27 05:33:29 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

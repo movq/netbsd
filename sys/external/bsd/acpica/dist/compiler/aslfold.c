@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,7 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
 
 #include "aslcompiler.h"
 #include "aslcompiler.y.h"
@@ -76,125 +77,97 @@ OpcUpdateIntegerNode (
     ACPI_PARSE_OBJECT       *Op,
     UINT64                  Value);
 
-static ACPI_STATUS
-TrTransformToStoreOp (
-    ACPI_PARSE_OBJECT       *Op,
-    ACPI_WALK_STATE         *WalkState);
-
-static ACPI_STATUS
-TrSimpleConstantReduction (
-    ACPI_PARSE_OBJECT       *Op,
-    ACPI_WALK_STATE         *WalkState);
-
-static void
-TrInstallReducedConstant (
-    ACPI_PARSE_OBJECT       *Op,
-    ACPI_OPERAND_OBJECT     *ObjDesc);
-
 
 /*******************************************************************************
  *
- * FUNCTION:    OpcAmlConstantWalk
+ * FUNCTION:    OpcAmlEvaluationWalk1
  *
  * PARAMETERS:  ASL_WALK_CALLBACK
  *
  * RETURN:      Status
  *
- * DESCRIPTION: Reduce an Op and its subtree to a constant if possible
+ * DESCRIPTION: Descending callback for AML execution of constant subtrees
  *
  ******************************************************************************/
 
-ACPI_STATUS
-OpcAmlConstantWalk (
+static ACPI_STATUS
+OpcAmlEvaluationWalk1 (
     ACPI_PARSE_OBJECT       *Op,
     UINT32                  Level,
     void                    *Context)
 {
-    ACPI_WALK_STATE         *WalkState;
-    ACPI_STATUS             Status = AE_OK;
+    ACPI_WALK_STATE         *WalkState = Context;
+    ACPI_STATUS             Status;
+    ACPI_PARSE_OBJECT       *OutOp;
 
 
-    if (Op->Asl.CompileFlags == 0)
+    WalkState->Op = Op;
+    WalkState->Opcode = Op->Common.AmlOpcode;
+    WalkState->OpInfo = AcpiPsGetOpcodeInfo (Op->Common.AmlOpcode);
+
+    /* Copy child pointer to Arg for compatibility with Interpreter */
+
+    if (Op->Asl.Child)
     {
-        return (AE_OK);
+        Op->Common.Value.Arg = Op->Asl.Child;
     }
 
-    /*
-     * Only interested in subtrees that could possibly contain
-     * expressions that can be evaluated at this time
-     */
-    if ((!(Op->Asl.CompileFlags & NODE_COMPILE_TIME_CONST)) ||
-          (Op->Asl.CompileFlags & NODE_IS_TARGET))
-    {
-        return (AE_OK);
-    }
+    /* Call AML dispatcher */
 
-    /* Create a new walk state */
-
-    WalkState = AcpiDsCreateWalkState (0, NULL, NULL, NULL);
-    if (!WalkState)
-    {
-        return (AE_NO_MEMORY);
-    }
-
-    WalkState->NextOp = NULL;
-    WalkState->Params = NULL;
-
-    /*
-     * Examine the entire subtree -- all nodes must be constants
-     * or type 3/4/5 opcodes
-     */
-    Status = TrWalkParseTree (Op, ASL_WALK_VISIT_DOWNWARD,
-        OpcAmlCheckForConstant, NULL, WalkState);
-
-    /*
-     * Did we find an entire subtree that contains all constants
-     * and type 3/4/5 opcodes?
-     */
-    switch (Status)
-    {
-    case AE_OK:
-
-        /* Simple case, like Add(3,4) -> 7 */
-
-        Status = TrSimpleConstantReduction (Op, WalkState);
-        break;
-
-    case AE_CTRL_RETURN_VALUE:
-
-        /* More complex case, like Add(3,4,Local0) -> Store(7,Local0) */
-
-        Status = TrTransformToStoreOp (Op, WalkState);
-        break;
-
-    case AE_TYPE:
-
-        AcpiDsDeleteWalkState (WalkState);
-        return (AE_OK);
-
-    default:
-        AcpiDsDeleteWalkState (WalkState);
-        break;
-    }
-
+    Status = AcpiDsExecBeginOp (WalkState, &OutOp);
     if (ACPI_FAILURE (Status))
     {
-        DbgPrint (ASL_PARSE_OUTPUT, "Cannot resolve, %s\n",
-            AcpiFormatException (Status));
-
-        /* We could not resolve the subtree for some reason */
-
-        AslError (ASL_ERROR, ASL_MSG_CONSTANT_EVALUATION, Op,
-            (char *) AcpiFormatException (Status));
-
-        /* Set the subtree value to ZERO anyway. Eliminates further errors */
-
-        OpcUpdateIntegerNode (Op, 0);
+        AcpiOsPrintf ("Constant interpretation failed - %s\n",
+                        AcpiFormatException (Status));
     }
 
-    /* Abort the walk of this subtree, we are done with it */
+    return (Status);
+}
 
-    return (AE_CTRL_DEPTH);
+
+/*******************************************************************************
+ *
+ * FUNCTION:    OpcAmlEvaluationWalk2
+ *
+ * PARAMETERS:  ASL_WALK_CALLBACK
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Ascending callback for AML execution of constant subtrees
+ *
+ ******************************************************************************/
+
+static ACPI_STATUS
+OpcAmlEvaluationWalk2 (
+    ACPI_PARSE_OBJECT       *Op,
+    UINT32                  Level,
+    void                    *Context)
+{
+    ACPI_WALK_STATE         *WalkState = Context;
+    ACPI_STATUS             Status;
+
+
+    WalkState->Op = Op;
+    WalkState->Opcode = Op->Common.AmlOpcode;
+    WalkState->OpInfo = AcpiPsGetOpcodeInfo (Op->Common.AmlOpcode);
+
+    /* Copy child pointer to Arg for compatibility with Interpreter */
+
+    if (Op->Asl.Child)
+    {
+        Op->Common.Value.Arg = Op->Asl.Child;
+    }
+
+    /* Call AML dispatcher */
+
+    Status = AcpiDsExecEndOp (WalkState);
+    if (ACPI_FAILURE (Status))
+    {
+        AcpiOsPrintf ("Constant interpretation failed - %s\n",
+                        AcpiFormatException (Status));
+    }
+
+    return (Status);
 }
 
 
@@ -217,7 +190,6 @@ OpcAmlCheckForConstant (
     void                    *Context)
 {
     ACPI_WALK_STATE         *WalkState = Context;
-    ACPI_STATUS             Status = AE_OK;
 
 
     WalkState->Op = Op;
@@ -225,22 +197,7 @@ OpcAmlCheckForConstant (
     WalkState->OpInfo = AcpiPsGetOpcodeInfo (Op->Common.AmlOpcode);
 
     DbgPrint (ASL_PARSE_OUTPUT, "[%.4d] Opcode: %12.12s ",
-        Op->Asl.LogicalLineNumber, Op->Asl.ParseOpName);
-
-    /*
-     * TBD: Ignore buffer constants for now. The problem is that these
-     * constants have been transformed into RAW_DATA at this point, from
-     * the parse tree transform process which currently happens before
-     * the constant folding process. We may need to defer this transform
-     * for buffer until after the constant folding.
-     */
-    if (WalkState->Opcode == AML_BUFFER_OP)
-    {
-        DbgPrint (ASL_PARSE_OUTPUT,
-            "\nBuffer+Buffer->Buffer constant reduction is not supported yet");
-        Status = AE_TYPE;
-        goto CleanupAndExit;
-    }
+                Op->Asl.LogicalLineNumber, Op->Asl.ParseOpName);
 
     /*
      * These opcodes do not appear in the OpcodeInfo table, but
@@ -251,32 +208,50 @@ OpcAmlCheckForConstant (
         (WalkState->Opcode == AML_RAW_DATA_DWORD) ||
         (WalkState->Opcode == AML_RAW_DATA_QWORD))
     {
-        DbgPrint (ASL_PARSE_OUTPUT, "RAW DATA");
-        Status = AE_TYPE;
-        goto CleanupAndExit;
+        WalkState->WalkType = ACPI_WALK_CONST_OPTIONAL;
+        return (AE_TYPE);
     }
-
-    /* Type 3/4/5 opcodes have the AML_CONSTANT flag set */
 
     if (!(WalkState->OpInfo->Flags & AML_CONSTANT))
     {
-        /* Not 3/4/5 opcode, but maybe can convert to STORE */
+        /* The opcode is not a Type 3/4/5 opcode */
 
         if (Op->Asl.CompileFlags & NODE_IS_TARGET)
         {
             DbgPrint (ASL_PARSE_OUTPUT,
-                "**** Valid Target, transform to Store ****\n");
-            return (AE_CTRL_RETURN_VALUE);
+                "**** Valid Target, cannot reduce ****\n");
+        }
+        else
+        {
+            DbgPrint (ASL_PARSE_OUTPUT,
+                "**** Not a Type 3/4/5 opcode ****\n");
         }
 
-        /* Expression cannot be reduced */
+        if (WalkState->WalkType == ACPI_WALK_CONST_OPTIONAL)
+        {
+            /*
+             * We are looking at at normal expression to see if it can be
+             * reduced. It can't. No error
+             */
+            return (AE_TYPE);
+        }
 
-        DbgPrint (ASL_PARSE_OUTPUT,
-            "**** Not a Type 3/4/5 opcode (%s) ****",
-             Op->Asl.ParseOpName);
+        /*
+         * This is an expression that MUST reduce to a constant, and it
+         * can't be reduced. This is an error
+         */
+        if (Op->Asl.CompileFlags & NODE_IS_TARGET)
+        {
+            AslError (ASL_ERROR, ASL_MSG_INVALID_TARGET, Op,
+                Op->Asl.ParseOpName);
+        }
+        else
+        {
+            AslError (ASL_ERROR, ASL_MSG_INVALID_CONSTANT_OP, Op,
+                Op->Asl.ParseOpName);
+        }
 
-        Status = AE_TYPE;
-        goto CleanupAndExit;
+        return (AE_TYPE);
     }
 
     /* Debug output */
@@ -285,349 +260,250 @@ OpcAmlCheckForConstant (
 
     if (Op->Asl.CompileFlags & NODE_IS_TARGET)
     {
-        if (Op->Asl.ParseOpcode == PARSEOP_ZERO)
-        {
-            DbgPrint (ASL_PARSE_OUTPUT, "%-16s", " NULL TARGET");
-        }
-        else
-        {
-            DbgPrint (ASL_PARSE_OUTPUT, "%-16s", " VALID TARGET");
-        }
+        DbgPrint (ASL_PARSE_OUTPUT, " TARGET");
     }
     if (Op->Asl.CompileFlags & NODE_IS_TERM_ARG)
     {
-        DbgPrint (ASL_PARSE_OUTPUT, "%-16s", " TERMARG");
+        DbgPrint (ASL_PARSE_OUTPUT, " TERMARG");
     }
 
-CleanupAndExit:
-
-    /* Dump the node compile flags also */
-
-    TrPrintNodeCompileFlags (Op->Asl.CompileFlags);
     DbgPrint (ASL_PARSE_OUTPUT, "\n");
-    return (Status);
+    return (AE_OK);
 }
 
 
 /*******************************************************************************
  *
- * FUNCTION:    TrSimpleConstantReduction
+ * FUNCTION:    OpcAmlConstantWalk
  *
- * PARAMETERS:  Op                  - Parent operator to be transformed
- *              WalkState           - Current walk state
+ * PARAMETERS:  ASL_WALK_CALLBACK
  *
  * RETURN:      Status
  *
- * DESCRIPTION: Reduce an entire AML operation to a single constant. The
- *              operation must not have a target operand.
- *
- *              Add (32,64) --> 96
+ * DESCRIPTION: Reduce an Op and its subtree to a constant if possible
  *
  ******************************************************************************/
 
-static ACPI_STATUS
-TrSimpleConstantReduction (
+ACPI_STATUS
+OpcAmlConstantWalk (
     ACPI_PARSE_OBJECT       *Op,
-    ACPI_WALK_STATE         *WalkState)
+    UINT32                  Level,
+    void                    *Context)
 {
+    ACPI_WALK_STATE         *WalkState;
+    ACPI_STATUS             Status = AE_OK;
+    ACPI_OPERAND_OBJECT     *ObjDesc;
     ACPI_PARSE_OBJECT       *RootOp;
     ACPI_PARSE_OBJECT       *OriginalParentOp;
-    ACPI_OPERAND_OBJECT     *ObjDesc;
-    ACPI_STATUS             Status;
+    UINT8                   WalkType;
 
 
-    DbgPrint (ASL_PARSE_OUTPUT,
-        "Simple subtree constant reduction, operator to constant\n");
+    /*
+     * Only interested in subtrees that could possibly contain
+     * expressions that can be evaluated at this time
+     */
+    if ((!(Op->Asl.CompileFlags & NODE_COMPILE_TIME_CONST)) ||
+          (Op->Asl.CompileFlags & NODE_IS_TARGET))
+    {
+        return (AE_OK);
+    }
 
-    /* Allocate a new temporary root for this subtree */
+    /* Set the walk type based on the reduction used for this op */
 
-    RootOp = TrAllocateNode (PARSEOP_INTEGER);
-    if (!RootOp)
+    if (Op->Asl.CompileFlags & NODE_IS_TERM_ARG)
+    {
+        /* Op is a TermArg, constant folding is merely optional */
+
+        if (!Gbl_FoldConstants)
+        {
+            return (AE_CTRL_DEPTH);
+        }
+
+        WalkType = ACPI_WALK_CONST_OPTIONAL;
+    }
+    else
+    {
+        /* Op is a DataObject, the expression MUST reduced to a constant */
+
+        WalkType = ACPI_WALK_CONST_REQUIRED;
+    }
+
+    /* Create a new walk state */
+
+    WalkState = AcpiDsCreateWalkState (0, NULL, NULL, NULL);
+    if (!WalkState)
     {
         return (AE_NO_MEMORY);
     }
 
-    RootOp->Common.AmlOpcode = AML_INT_EVAL_SUBTREE_OP;
-
-    OriginalParentOp = Op->Common.Parent;
-    Op->Common.Parent = RootOp;
-
-    /* Hand off the subtree to the AML interpreter */
-
+    WalkState->NextOp = NULL;
+    WalkState->Params = NULL;
+    WalkState->WalkType = WalkType;
     WalkState->CallerReturnDesc = &ObjDesc;
 
-    Status = TrWalkParseTree (Op, ASL_WALK_VISIT_TWICE,
-        OpcAmlEvaluationWalk1, OpcAmlEvaluationWalk2, WalkState);
-
-    /* Restore original parse tree */
-
-    Op->Common.Parent = OriginalParentOp;
-
-    if (ACPI_FAILURE (Status))
-    {
-        DbgPrint (ASL_PARSE_OUTPUT,
-            "Constant Subtree evaluation(1), %s\n",
-            AcpiFormatException (Status));
-        return (Status);
-    }
-
-    /* Get the final result */
-
-    Status = AcpiDsResultPop (&ObjDesc, WalkState);
-    if (ACPI_FAILURE (Status))
-    {
-        DbgPrint (ASL_PARSE_OUTPUT,
-            "Constant Subtree evaluation(2), %s\n",
-            AcpiFormatException (Status));
-        return (Status);
-    }
-
-    /* Disconnect any existing children, install new constant */
-
-    Op->Asl.Child = NULL;
-    TrInstallReducedConstant (Op, ObjDesc);
-
-    UtSetParseOpName (Op);
-    return (AE_OK);
-}
-
-
-/*******************************************************************************
- *
- * FUNCTION:    TrTransformToStoreOp
- *
- * PARAMETERS:  Op                  - Parent operator to be transformed
- *              WalkState           - Current walk state
- *
- * RETURN:      Status
- *
- * DESCRIPTION: Transforms a single AML operation with a constant and target
- *              to a simple store operation:
- *
- *              Add (32,64,DATA) --> Store (96,DATA)
- *
- ******************************************************************************/
-
-static ACPI_STATUS
-TrTransformToStoreOp (
-    ACPI_PARSE_OBJECT       *Op,
-    ACPI_WALK_STATE         *WalkState)
-{
-    ACPI_PARSE_OBJECT       *OriginalTarget;
-    ACPI_PARSE_OBJECT       *NewTarget;
-    ACPI_PARSE_OBJECT       *Child1;
-    ACPI_PARSE_OBJECT       *Child2;
-    ACPI_OPERAND_OBJECT     *ObjDesc;
-    ACPI_PARSE_OBJECT       *NewParent;
-    ACPI_PARSE_OBJECT       *OriginalParent;
-    ACPI_STATUS             Status;
-
-
-    DbgPrint (ASL_PARSE_OUTPUT,
-        "Reduction/Transform to StoreOp: Store(Constant, Target)\n");
-
-    /* Extract the operands */
-
-    Child1 = Op->Asl.Child;
-    Child2 = Child1->Asl.Next;
+    /*
+     * Examine the entire subtree -- all nodes must be constants
+     * or type 3/4/5 opcodes
+     */
+    Status = TrWalkParseTree (Op, ASL_WALK_VISIT_DOWNWARD,
+        OpcAmlCheckForConstant, NULL, WalkState);
 
     /*
-     * Special case for DIVIDE -- it has two targets. The first
-     * is for the remainder and if present, we will not attempt
-     * to reduce the expression.
+     * Did we find an entire subtree that contains all constants and type 3/4/5
+     * opcodes?  (Only AE_OK or AE_TYPE returned from above)
      */
-    if (Op->Asl.ParseOpcode == PARSEOP_DIVIDE)
+    if (Status == AE_TYPE)
     {
-        Child2 = Child2->Asl.Next;
-        if (Child2->Asl.ParseOpcode != PARSEOP_ZERO)
+        /* Subtree cannot be reduced to a constant */
+
+        if (WalkState->WalkType == ACPI_WALK_CONST_OPTIONAL)
         {
-            DbgPrint (ASL_PARSE_OUTPUT,
-                "Cannot reduce DIVIDE - has two targets\n\n");
+            AcpiDsDeleteWalkState (WalkState);
             return (AE_OK);
+        }
+
+        /* Don't descend any further, and use a default "constant" value */
+
+        Status = AE_CTRL_DEPTH;
+    }
+    else
+    {
+        /* Subtree can be reduced */
+
+        /* Allocate a new temporary root for this subtree */
+
+        RootOp = TrAllocateNode (PARSEOP_INTEGER);
+        if (!RootOp)
+        {
+            return (AE_NO_MEMORY);
+        }
+
+        RootOp->Common.AmlOpcode = AML_INT_EVAL_SUBTREE_OP;
+
+        OriginalParentOp = Op->Common.Parent;
+        Op->Common.Parent = RootOp;
+
+        /* Hand off the subtree to the AML interpreter */
+
+        Status = TrWalkParseTree (Op, ASL_WALK_VISIT_TWICE,
+            OpcAmlEvaluationWalk1, OpcAmlEvaluationWalk2, WalkState);
+        Op->Common.Parent = OriginalParentOp;
+
+        /* TBD: we really *should* release the RootOp node */
+
+        if (ACPI_SUCCESS (Status))
+        {
+            TotalFolds++;
+
+            /* Get the final result */
+
+            Status = AcpiDsResultPop (&ObjDesc, WalkState);
+        }
+
+        /* Check for error from the ACPICA core */
+
+        if (ACPI_FAILURE (Status))
+        {
+            AslCoreSubsystemError (Op, Status,
+                "Failure during constant evaluation", FALSE);
         }
     }
 
-    /*
-     * Create a NULL (zero) target so that we can use the
-     * interpreter to evaluate the expression.
-     */
-    NewTarget = TrCreateNullTarget ();
-    NewTarget->Common.AmlOpcode = AML_INT_NAMEPATH_OP;
-
-    /* Handle one-operand cases (NOT, TOBCD, etc.) */
-
-    if (!Child2->Asl.Next)
-    {
-        Child2 = Child1;
-    }
-
-    /* Link in new NULL target as the last operand */
-
-    OriginalTarget = Child2->Asl.Next;
-    Child2->Asl.Next = NewTarget;
-    NewTarget->Asl.Parent = OriginalTarget->Asl.Parent;
-
-    NewParent = TrAllocateNode (PARSEOP_INTEGER);
-    NewParent->Common.AmlOpcode = AML_INT_EVAL_SUBTREE_OP;
-
-    OriginalParent = Op->Common.Parent;
-    Op->Common.Parent = NewParent;
-
-    /* Hand off the subtree to the AML interpreter */
-
-    WalkState->CallerReturnDesc = &ObjDesc;
-
-    Status = TrWalkParseTree (Op, ASL_WALK_VISIT_TWICE,
-        OpcAmlEvaluationWalk1, OpcAmlEvaluationWalk2, WalkState);
     if (ACPI_FAILURE (Status))
     {
-        DbgPrint (ASL_PARSE_OUTPUT,
-            "Constant Subtree evaluation(3), %s\n",
-            AcpiFormatException (Status));
-        goto EvalError;
+        /* We could not resolve the subtree for some reason */
+
+        AslError (ASL_ERROR, ASL_MSG_CONSTANT_EVALUATION, Op,
+            Op->Asl.ParseOpName);
+
+        /* Set the subtree value to ZERO anyway. Eliminates further errors */
+
+        OpcUpdateIntegerNode (Op, 0);
     }
-
-    /* Get the final result */
-
-    Status = AcpiDsResultPop (&ObjDesc, WalkState);
-    if (ACPI_FAILURE (Status))
+    else
     {
-        DbgPrint (ASL_PARSE_OUTPUT,
-            "Constant Subtree evaluation(4), %s\n",
-            AcpiFormatException (Status));
-        goto EvalError;
-    }
+        AslError (ASL_OPTIMIZATION, ASL_MSG_CONSTANT_FOLDED, Op,
+            Op->Asl.ParseOpName);
 
-    /* Truncate any subtree expressions, they have been evaluated */
-
-    Child1->Asl.Child = NULL;
-
-    /* Folded constant is in ObjDesc, store into Child1 */
-
-    TrInstallReducedConstant (Child1, ObjDesc);
-
-    /* Convert operator to STORE */
-
-    Op->Asl.ParseOpcode = PARSEOP_STORE;
-    Op->Asl.AmlOpcode = AML_STORE_OP;
-    UtSetParseOpName (Op);
-    Op->Common.Parent = OriginalParent;
-
-    /* First child is the folded constant */
-
-    /* Second child will be the target */
-
-    Child1->Asl.Next = OriginalTarget;
-    return (AE_OK);
-
-
-EvalError:
-
-    /* Restore original links */
-
-    Op->Common.Parent = OriginalParent;
-    Child2->Asl.Next = OriginalTarget;
-    return (Status);
-}
-
-
-/*******************************************************************************
- *
- * FUNCTION:    TrInstallReducedConstant
- *
- * PARAMETERS:  Op                  - Parent operator to be transformed
- *              ObjDesc             - Reduced constant to be installed
- *
- * RETURN:      None
- *
- * DESCRIPTION: Transform the original operator to a simple constant.
- *              Handles Integers, Strings, and Buffers.
- *
- ******************************************************************************/
-
-static void
-TrInstallReducedConstant (
-    ACPI_PARSE_OBJECT       *Op,
-    ACPI_OPERAND_OBJECT     *ObjDesc)
-{
-    ACPI_PARSE_OBJECT       *LengthOp;
-    ACPI_PARSE_OBJECT       *DataOp;
-
-
-    TotalFolds++;
-    AslError (ASL_OPTIMIZATION, ASL_MSG_CONSTANT_FOLDED, Op,
-        Op->Asl.ParseOpName);
-
-    /*
-     * Because we know we executed type 3/4/5 opcodes above, we know that
-     * the result must be either an Integer, String, or Buffer.
-     */
-    switch (ObjDesc->Common.Type)
-    {
-    case ACPI_TYPE_INTEGER:
-
-        OpcUpdateIntegerNode (Op, ObjDesc->Integer.Value);
-
-        DbgPrint (ASL_PARSE_OUTPUT,
-            "Constant expression reduced to (%s) %8.8X%8.8X\n\n",
-            Op->Asl.ParseOpName,
-            ACPI_FORMAT_UINT64 (Op->Common.Value.Integer));
-        break;
-
-    case ACPI_TYPE_STRING:
-
-        Op->Asl.ParseOpcode = PARSEOP_STRING_LITERAL;
-        Op->Common.AmlOpcode = AML_STRING_OP;
-        Op->Asl.AmlLength = strlen (ObjDesc->String.Pointer) + 1;
-        Op->Common.Value.String = ObjDesc->String.Pointer;
-
-        DbgPrint (ASL_PARSE_OUTPUT,
-            "Constant expression reduced to (STRING) %s\n\n",
-            Op->Common.Value.String);
-        break;
-
-    case ACPI_TYPE_BUFFER:
         /*
-         * Create a new parse subtree of the form:
-         *
-         * BUFFER (Buffer AML opcode)
-         *    INTEGER (Buffer length in bytes)
-         *    RAW_DATA (Buffer byte data)
+         * Because we know we executed type 3/4/5 opcodes above, we know that
+         * the result must be either an Integer, String, or Buffer.
          */
-        Op->Asl.ParseOpcode = PARSEOP_BUFFER;
-        Op->Common.AmlOpcode = AML_BUFFER_OP;
-        Op->Asl.CompileFlags = NODE_AML_PACKAGE;
-        UtSetParseOpName (Op);
+        switch (ObjDesc->Common.Type)
+        {
+        case ACPI_TYPE_INTEGER:
 
-        /* Child node is the buffer length */
+            OpcUpdateIntegerNode (Op, ObjDesc->Integer.Value);
 
-        LengthOp = TrAllocateNode (PARSEOP_INTEGER);
+            DbgPrint (ASL_PARSE_OUTPUT,
+                "Constant expression reduced to (%s) %8.8X%8.8X\n",
+                Op->Asl.ParseOpName,
+                ACPI_FORMAT_UINT64 (Op->Common.Value.Integer));
+            break;
 
-        LengthOp->Asl.AmlOpcode = AML_DWORD_OP;
-        LengthOp->Asl.Value.Integer = ObjDesc->Buffer.Length;
-        LengthOp->Asl.Parent = Op;
-        (void) OpcSetOptimalIntegerSize (LengthOp);
+        case ACPI_TYPE_STRING:
 
-        Op->Asl.Child = LengthOp;
+            Op->Asl.ParseOpcode = PARSEOP_STRING_LITERAL;
+            Op->Common.AmlOpcode = AML_STRING_OP;
+            Op->Asl.AmlLength = ACPI_STRLEN (ObjDesc->String.Pointer) + 1;
+            Op->Common.Value.String = ObjDesc->String.Pointer;
 
-        /* Next child is the raw buffer data */
+            DbgPrint (ASL_PARSE_OUTPUT,
+                "Constant expression reduced to (STRING) %s\n",
+                Op->Common.Value.String);
 
-        DataOp = TrAllocateNode (PARSEOP_RAW_DATA);
-        DataOp->Asl.AmlOpcode = AML_RAW_DATA_BUFFER;
-        DataOp->Asl.AmlLength = ObjDesc->Buffer.Length;
-        DataOp->Asl.Value.String = (char *) ObjDesc->Buffer.Pointer;
-        DataOp->Asl.Parent = Op;
+            break;
 
-        LengthOp->Asl.Next = DataOp;
+        case ACPI_TYPE_BUFFER:
 
-        DbgPrint (ASL_PARSE_OUTPUT,
-            "Constant expression reduced to (BUFFER) length %X\n\n",
-            ObjDesc->Buffer.Length);
-        break;
+            Op->Asl.ParseOpcode = PARSEOP_BUFFER;
+            Op->Common.AmlOpcode = AML_BUFFER_OP;
+            Op->Asl.CompileFlags = NODE_AML_PACKAGE;
+            UtSetParseOpName (Op);
 
-    default:
-        break;
+            /* Child node is the buffer length */
+
+            RootOp = TrAllocateNode (PARSEOP_INTEGER);
+
+            RootOp->Asl.AmlOpcode = AML_DWORD_OP;
+            RootOp->Asl.Value.Integer = ObjDesc->Buffer.Length;
+            RootOp->Asl.Parent = Op;
+
+            (void) OpcSetOptimalIntegerSize (RootOp);
+
+            Op->Asl.Child = RootOp;
+            Op = RootOp;
+            UtSetParseOpName (Op);
+
+            /* Peer to the child is the raw buffer data */
+
+            RootOp = TrAllocateNode (PARSEOP_RAW_DATA);
+            RootOp->Asl.AmlOpcode = AML_RAW_DATA_BUFFER;
+            RootOp->Asl.AmlLength = ObjDesc->Buffer.Length;
+            RootOp->Asl.Value.String = (char *) ObjDesc->Buffer.Pointer;
+            RootOp->Asl.Parent = Op->Asl.Parent;
+
+            Op->Asl.Next = RootOp;
+            Op = RootOp;
+
+            DbgPrint (ASL_PARSE_OUTPUT,
+                "Constant expression reduced to (BUFFER) length %X\n",
+                ObjDesc->Buffer.Length);
+            break;
+
+        default:
+
+            printf ("Unsupported return type: %s\n",
+                AcpiUtGetObjectTypeName (ObjDesc));
+            break;
+        }
     }
+
+    UtSetParseOpName (Op);
+    Op->Asl.Child = NULL;
+
+    AcpiDsDeleteWalkState (WalkState);
+    return (AE_CTRL_DEPTH);
 }
 
 
@@ -636,11 +512,10 @@ TrInstallReducedConstant (
  * FUNCTION:    OpcUpdateIntegerNode
  *
  * PARAMETERS:  Op                  - Current parse object
- *              Value               - Value for the integer op
  *
  * RETURN:      None
  *
- * DESCRIPTION: Update node to the correct Integer type and value
+ * DESCRIPTION: Update node to the correct integer type.
  *
  ******************************************************************************/
 
@@ -691,99 +566,4 @@ OpcUpdateIntegerNode (
     }
 
     Op->Asl.AmlLength = 0;
-}
-
-
-/*******************************************************************************
- *
- * FUNCTION:    OpcAmlEvaluationWalk1
- *
- * PARAMETERS:  ASL_WALK_CALLBACK
- *
- * RETURN:      Status
- *
- * DESCRIPTION: Descending callback for AML execution of constant subtrees
- *
- ******************************************************************************/
-
-static ACPI_STATUS
-OpcAmlEvaluationWalk1 (
-    ACPI_PARSE_OBJECT       *Op,
-    UINT32                  Level,
-    void                    *Context)
-{
-    ACPI_WALK_STATE         *WalkState = Context;
-    ACPI_STATUS             Status;
-    ACPI_PARSE_OBJECT       *OutOp;
-
-
-    WalkState->Op = Op;
-    WalkState->Opcode = Op->Common.AmlOpcode;
-    WalkState->OpInfo = AcpiPsGetOpcodeInfo (Op->Common.AmlOpcode);
-
-    /* Copy child pointer to Arg for compatibility with Interpreter */
-
-    if (Op->Asl.Child)
-    {
-        Op->Common.Value.Arg = Op->Asl.Child;
-    }
-
-    /* Call AML dispatcher */
-
-    Status = AcpiDsExecBeginOp (WalkState, &OutOp);
-    if (ACPI_FAILURE (Status))
-    {
-        DbgPrint (ASL_PARSE_OUTPUT,
-            "%s Constant interpretation failed (1) - %s\n",
-            Op->Asl.ParseOpName, AcpiFormatException (Status));
-    }
-
-    return (Status);
-}
-
-
-/*******************************************************************************
- *
- * FUNCTION:    OpcAmlEvaluationWalk2
- *
- * PARAMETERS:  ASL_WALK_CALLBACK
- *
- * RETURN:      Status
- *
- * DESCRIPTION: Ascending callback for AML execution of constant subtrees
- *
- ******************************************************************************/
-
-static ACPI_STATUS
-OpcAmlEvaluationWalk2 (
-    ACPI_PARSE_OBJECT       *Op,
-    UINT32                  Level,
-    void                    *Context)
-{
-    ACPI_WALK_STATE         *WalkState = Context;
-    ACPI_STATUS             Status;
-
-
-    WalkState->Op = Op;
-    WalkState->Opcode = Op->Common.AmlOpcode;
-    WalkState->OpInfo = AcpiPsGetOpcodeInfo (Op->Common.AmlOpcode);
-
-    /* Copy child pointer to Arg for compatibility with Interpreter */
-
-    if (Op->Asl.Child)
-    {
-        Op->Common.Value.Arg = Op->Asl.Child;
-    }
-
-    /* Call AML dispatcher */
-
-    Status = AcpiDsExecEndOp (WalkState);
-    if (ACPI_FAILURE (Status))
-    {
-        DbgPrint (ASL_PARSE_OUTPUT,
-            "%s: Constant interpretation failed (2) - %s\n",
-            Op->Asl.ParseOpName, AcpiFormatException (Status));
-    }
-
-    return (Status);
 }

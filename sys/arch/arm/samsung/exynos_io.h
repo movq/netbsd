@@ -1,4 +1,4 @@
-/*	$NetBSD: exynos_io.h,v 1.6 2014/09/28 18:59:43 reinoud Exp $	*/
+/*	$NetBSD: exynos_io.h,v 1.4.6.1 2015/01/04 11:19:00 martin Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

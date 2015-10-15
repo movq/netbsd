@@ -1,4 +1,4 @@
-/*	$NetBSD: i2c.c,v 1.49 2015/04/13 22:26:20 pgoyette Exp $	*/
+/*	$NetBSD: i2c.c,v 1.44.2.2 2015/05/16 04:06:04 snj Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -35,12 +35,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef _KERNEL_OPT
-#include "opt_i2c.h"
-#endif
-
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: i2c.c,v 1.49 2015/04/13 22:26:20 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: i2c.c,v 1.44.2.2 2015/05/16 04:06:04 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -59,9 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: i2c.c,v 1.49 2015/04/13 22:26:20 pgoyette Exp $");
 
 #include "locators.h"
 
-#ifndef I2C_MAX_ADDR
 #define I2C_MAX_ADDR	0x3ff	/* 10-bit address, max */
-#endif
 
 struct iic_softc {
 	i2c_tag_t sc_tag;
@@ -519,14 +513,19 @@ iic_ioctl_exec(struct iic_softc *sc, i2c_ioctl_exec_t *iie, int flag)
 		if (cmd == NULL)
 			return ENOMEM;
 		error = copyin(iie->iie_cmd, cmd, iie->iie_cmdlen);
-		if (error)
-			goto out;
+		if (error) {
+			kmem_free(cmd, iie->iie_cmdlen);
+			return error;
+		}
 	}
 
 	if (iie->iie_buf != NULL && I2C_OP_WRITE_P(iie->iie_op)) {
 		error = copyin(iie->iie_buf, buf, iie->iie_buflen);
-		if (error)
-			goto out;
+		if (error) {
+			if (cmd)
+				kmem_free(cmd, iie->iie_cmdlen);
+			return error;
+		}
 	}
 
 	iic_acquire_bus(ic, 0);
@@ -540,7 +539,6 @@ iic_ioctl_exec(struct iic_softc *sc, i2c_ioctl_exec_t *iie, int flag)
 	if (error < 0)
 		error = EIO;
 
-out:
 	if (cmd)
 		kmem_free(cmd, iie->iie_cmdlen);
 
@@ -573,7 +571,7 @@ iic_ioctl(dev_t dev, u_long cmd, void *data, int flag, lwp_t *l)
 CFATTACH_DECL2_NEW(iic, sizeof(struct iic_softc),
     iic_match, iic_attach, iic_detach, NULL, iic_rescan, iic_child_detach);
 
-MODULE(MODULE_CLASS_DRIVER, iic, "i2cexec");
+MODULE(MODULE_CLASS_DRIVER, iic, NULL);
 
 #ifdef _MODULE
 #include "ioconf.c"

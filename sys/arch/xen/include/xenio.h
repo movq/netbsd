@@ -1,4 +1,4 @@
-/*	$NetBSD: xenio.h,v 1.10 2015/09/07 03:49:46 dholland Exp $	*/
+/*	$NetBSD: xenio.h,v 1.9 2011/01/10 11:13:03 cegger Exp $	*/
 
 /******************************************************************************
  * privcmd.h
@@ -31,9 +31,6 @@
 #define __XEN_XENIO_H__
 
 /* Interface to /proc/xen/privcmd */
-
-#include <sys/ioccom.h>
-
 
 typedef struct privcmd_hypercall
 {

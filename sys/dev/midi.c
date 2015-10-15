@@ -1,4 +1,4 @@
-/*	$NetBSD: midi.c,v 1.83 2014/12/30 07:28:34 mrg Exp $	*/
+/*	$NetBSD: midi.c,v 1.81.2.1 2015/01/11 14:13:25 martin Exp $	*/
 
 /*
  * Copyright (c) 1998, 2008 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: midi.c,v 1.83 2014/12/30 07:28:34 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: midi.c,v 1.81.2.1 2015/01/11 14:13:25 martin Exp $");
 
 #include "midi.h"
 #include "sequencer.h"

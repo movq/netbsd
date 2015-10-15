@@ -1,4 +1,4 @@
-/*	$NetBSD: mm.h,v 1.5 2015/04/17 15:02:50 riastradh Exp $	*/
+/*	$NetBSD: mm.h,v 1.3.2.2 2015/04/23 07:31:17 snj Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

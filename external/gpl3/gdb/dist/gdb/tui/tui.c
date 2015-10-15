@@ -1,6 +1,6 @@
 /* General functions for the WDB TUI.
 
-   Copyright (C) 1998-2015 Free Software Foundation, Inc.
+   Copyright (C) 1998-2014 Free Software Foundation, Inc.
 
    Contributed by Hewlett-Packard Company.
 
@@ -37,8 +37,9 @@
 #include "inferior.h"
 #include "symtab.h"
 #include "source.h"
-#include "terminal.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <ctype.h>
 #include <signal.h>
 #include <fcntl.h>
@@ -48,7 +49,6 @@
 #include <setjmp.h>
 
 #include "gdb_curses.h"
-#include "interps.h"
 
 /* This redefines CTRL if it is not already defined, so it must come
    after terminal state releated include files like <term.h> and
@@ -90,30 +90,15 @@ static Keymap tui_readline_standard_keymap;
 static int
 tui_rl_switch_mode (int notused1, int notused2)
 {
-  volatile struct gdb_exception ex;
-
-  /* Don't let exceptions escape.  We're in the middle of a readline
-     callback that isn't prepared for that.  */
-  TRY_CATCH (ex, RETURN_MASK_ALL)
+  if (tui_active)
     {
-      if (tui_active)
-	{
-	  tui_disable ();
-	  rl_prep_terminal (0);
-	}
-      else
-	{
-	  /* If tui_enable throws, we'll re-prep below.  */
-	  rl_deprep_terminal ();
-	  tui_enable ();
-	}
+      tui_disable ();
+      rl_prep_terminal (0);
     }
-  if (ex.reason < 0)
+  else
     {
-      exception_print (gdb_stderr, ex);
-
-      if (!tui_active)
-	rl_prep_terminal (0);
+      rl_deprep_terminal ();
+      tui_enable ();
     }
 
   /* Clear the readline in case switching occurred in middle of
@@ -377,20 +362,6 @@ tui_initialize_readline (void)
   rl_bind_key_in_map ('s', tui_rl_next_keymap, tui_ctlx_keymap);
 }
 
-/* Return the TERM variable from the environment, or "<unset>"
-   if not set.  */
-
-static const char *
-gdb_getenv_term (void)
-{
-  const char *term;
-
-  term = getenv ("TERM");
-  if (term != NULL)
-    return term;
-  return "<unset>";
-}
-
 /* Enter in the tui mode (curses).
    When in normal mode, it installs the tui hooks in gdb, redirects
    the gdb output, configures the readline to work in tui mode.
@@ -398,7 +369,8 @@ gdb_getenv_term (void)
 void
 tui_enable (void)
 {
-  struct interp *interp;
+  if (!tui_allowed_p ())
+    error (_("TUI mode not allowed"));
 
   if (tui_active)
     return;
@@ -409,49 +381,9 @@ tui_enable (void)
   if (tui_finish_init)
     {
       WINDOW *w;
-      SCREEN *s;
-      const char *cap;
-      const char *interp;
 
-      /* If the top level interpreter is not the console/tui (e.g.,
-	 MI), enabling curses will certainly lose.  */
-      interp = interp_name (top_level_interpreter ());
-      if (strcmp (interp, INTERP_TUI) != 0)
-	error (_("Cannot enable the TUI when the interpreter is '%s'"), interp);
-
-      /* Don't try to setup curses (and print funny control
-	 characters) if we're not outputting to a terminal.  */
-      if (!ui_file_isatty (gdb_stdout))
-	error (_("Cannot enable the TUI when output is not a terminal"));
-
-      s = newterm (NULL, stdout, stdin);
-#ifdef __MINGW32__
-      /* The MinGW port of ncurses requires $TERM to be unset in order
-	 to activate the Windows console driver.  */
-      if (s == NULL)
-	s = newterm ("unknown", stdout, stdin);
-#endif
-      if (s == NULL)
-	{
-	  error (_("Cannot enable the TUI: error opening terminal [TERM=%s]"),
-		 gdb_getenv_term ());
-	}
-      w = stdscr;
-
-      /* Check required terminal capabilities.  The MinGW port of
-	 ncurses does have them, but doesn't expose them through "cup".  */
-#ifndef __MINGW32__
-      cap = tigetstr ("cup");
-      if (cap == NULL || cap == (char *) -1 || *cap == '\0')
-	{
-	  endwin ();
-	  delscreen (s);
-	  error (_("Cannot enable the TUI: "
-		   "terminal doesn't support cursor addressing [TERM=%s]"),
-		 gdb_getenv_term ());
-	}
-#endif
-
+      w = initscr ();
+  
       cbreak ();
       noecho ();
       /* timeout (1); */
@@ -495,7 +427,7 @@ tui_enable (void)
   tui_refresh_all_win ();
 
   /* Update gdb's knowledge of its terminal.  */
-  gdb_save_tty_state ();
+  target_terminal_save_ours ();
   tui_update_gdb_sizes ();
 }
 
@@ -525,7 +457,7 @@ tui_disable (void)
   tui_setup_io (0);
 
   /* Update gdb's knowledge of its terminal.  */
-  gdb_save_tty_state ();
+  target_terminal_save_ours ();
 
   tui_active = 0;
   tui_update_gdb_sizes ();

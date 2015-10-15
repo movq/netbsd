@@ -1,4 +1,4 @@
-/*	$NetBSD: twa.c,v 1.52 2014/09/27 15:44:27 christos Exp $ */
+/*	$NetBSD: twa.c,v 1.50.2.1 2014/10/30 12:04:46 martin Exp $ */
 /*	$wasabi: twa.c,v 1.27 2006/07/28 18:17:21 wrstuden Exp $	*/
 
 /*-
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: twa.c,v 1.52 2014/09/27 15:44:27 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: twa.c,v 1.50.2.1 2014/10/30 12:04:46 martin Exp $");
 
 //#define TWA_DEBUG
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: job.c,v 1.181 2015/10/11 04:51:24 sjg Exp $	*/
+/*	$NetBSD: job.c,v 1.177 2014/07/16 15:33:41 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990 The Regents of the University of California.
@@ -70,14 +70,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: job.c,v 1.181 2015/10/11 04:51:24 sjg Exp $";
+static char rcsid[] = "$NetBSD: job.c,v 1.177 2014/07/16 15:33:41 christos Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)job.c	8.2 (Berkeley) 3/19/94";
 #else
-__RCSID("$NetBSD: job.c,v 1.181 2015/10/11 04:51:24 sjg Exp $");
+__RCSID("$NetBSD: job.c,v 1.177 2014/07/16 15:33:41 christos Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -702,7 +702,7 @@ JobPrintCommand(void *cmdp, void *jobp)
 
     numCommands += 1;
 
-    cmdStart = cmd = Var_Subst(NULL, cmd, job->node, FALSE, TRUE);
+    cmdStart = cmd = Var_Subst(NULL, cmd, job->node, FALSE);
 
     cmdTemplate = "%s\n";
 
@@ -715,6 +715,7 @@ JobPrintCommand(void *cmdp, void *jobp)
 	    shutUp = DEBUG(LOUD) ? FALSE : TRUE;
 	    break;
 	case '-':
+	    job->flags |= JOB_IGNERR;
 	    errOff = TRUE;
 	    break;
 	case '+':
@@ -793,7 +794,6 @@ JobPrintCommand(void *cmdp, void *jobp)
 		 * to ignore errors. Set cmdTemplate to use the weirdness
 		 * instead of the simple "%s\n" template.
 		 */
-		job->flags |= JOB_IGNERR;
 		if (!(job->flags & JOB_SILENT) && !shutUp) {
 			if (commandShell->hasEchoCtl) {
 				DBPRINTF("%s\n", commandShell->echoOff);
@@ -890,7 +890,7 @@ JobPrintCommand(void *cmdp, void *jobp)
 static int
 JobSaveCommand(void *cmd, void *gn)
 {
-    cmd = Var_Subst(NULL, (char *)cmd, (GNode *)gn, FALSE, TRUE);
+    cmd = Var_Subst(NULL, (char *)cmd, (GNode *)gn, FALSE);
     (void)Lst_AtEnd(postCommands->commands, cmd);
     return(0);
 }
@@ -1878,16 +1878,16 @@ end_loop:
 		(void)fflush(stdout);
 	    }
 	}
-	/*
-	 * max is the last offset still in the buffer. Move any remaining
-	 * characters to the start of the buffer and update the end marker
-	 * curPos.
-	 */
-	if (i < max) {
-	    (void)memmove(job->outBuf, &job->outBuf[i + 1], max - (i + 1));
+	if (i < max - 1) {
+	    /* shift the remaining characters down */
+	    (void)memcpy(job->outBuf, &job->outBuf[i + 1], max - (i + 1));
 	    job->curPos = max - (i + 1);
+
 	} else {
-	    assert(i == max);
+	    /*
+	     * We have written everything out, so we just start over
+	     * from the start of the buffer. No copying. No nothing.
+	     */
 	    job->curPos = 0;
 	}
     }
@@ -2178,8 +2178,7 @@ Job_SetPrefix(void)
 	Var_Set(MAKE_JOB_PREFIX, "---", VAR_GLOBAL, 0);
     }
 
-    targPrefix = Var_Subst(NULL, "${" MAKE_JOB_PREFIX "}",
-			   VAR_GLOBAL, FALSE, TRUE);
+    targPrefix = Var_Subst(NULL, "${" MAKE_JOB_PREFIX "}", VAR_GLOBAL, 0);
 }
 
 /*-

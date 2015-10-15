@@ -1,4 +1,4 @@
-/*	$NetBSD: in6_src.c,v 1.58 2015/08/24 22:21:27 pooka Exp $	*/
+/*	$NetBSD: in6_src.c,v 1.54.2.1 2015/01/23 09:27:15 martin Exp $	*/
 /*	$KAME: in6_src.c,v 1.159 2005/10/19 01:40:32 t-momose Exp $	*/
 
 /*
@@ -66,11 +66,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in6_src.c,v 1.58 2015/08/24 22:21:27 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in6_src.c,v 1.54.2.1 2015/01/23 09:27:15 martin Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -790,21 +788,6 @@ in6_selecthlim(struct in6pcb *in6p, struct ifnet *ifp)
 		return (ip6_defhlim);
 }
 
-int
-in6_selecthlim_rt(struct in6pcb *in6p)
-{
-	struct rtentry *rt;
-
-	if (in6p == NULL)
-		return in6_selecthlim(in6p, NULL);
-
-	rt = rtcache_validate(&in6p->in6p_route);
-	if (rt != NULL)
-		return in6_selecthlim(in6p, rt->rt_ifp);
-	else
-		return in6_selecthlim(in6p, NULL);
-}
-
 /*
  * Find an empty port and set it to the specified PCB.
  */
@@ -981,10 +964,11 @@ init_policy_queue(void)
 static int
 add_addrsel_policyent(struct in6_addrpolicy *newpolicy)
 {
-	struct addrsel_policyent *newpol, *pol;
+	struct addrsel_policyent *new, *pol;
 
 	/* duplication check */
-	TAILQ_FOREACH(pol, &addrsel_policytab, ape_entry) {
+	for (pol = TAILQ_FIRST(&addrsel_policytab); pol;
+	     pol = TAILQ_NEXT(pol, ape_entry)) {
 		if (IN6_ARE_ADDR_EQUAL(&newpolicy->addr.sin6_addr,
 		    &pol->ape_policy.addr.sin6_addr) &&
 		    IN6_ARE_ADDR_EQUAL(&newpolicy->addrmask.sin6_addr,
@@ -993,12 +977,12 @@ add_addrsel_policyent(struct in6_addrpolicy *newpolicy)
 		}
 	}
 
-	newpol = malloc(sizeof(*newpol), M_IFADDR, M_WAITOK|M_ZERO);
+	new = malloc(sizeof(*new), M_IFADDR, M_WAITOK|M_ZERO);
 
 	/* XXX: should validate entry */
-	newpol->ape_policy = *newpolicy;
+	new->ape_policy = *newpolicy;
 
-	TAILQ_INSERT_TAIL(&addrsel_policytab, newpol, ape_entry);
+	TAILQ_INSERT_TAIL(&addrsel_policytab, new, ape_entry);
 
 	return (0);
 }

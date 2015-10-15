@@ -1,4 +1,4 @@
-/*	$NetBSD: fenv.c,v 1.2 2015/01/13 11:16:06 martin Exp $	*/
+/*	$NetBSD: fenv.c,v 1.2.2.2 2015/01/20 20:57:24 snj Exp $	*/
 
 /*-
  * Copyright (c) 2004-2005 David Schultz <das@FreeBSD.ORG>
@@ -24,7 +24,7 @@
  * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: fenv.c,v 1.2 2015/01/13 11:16:06 martin Exp $");
+__RCSID("$NetBSD: fenv.c,v 1.2.2.2 2015/01/20 20:57:24 snj Exp $");
 
 #include <assert.h>
 #include <fenv.h>

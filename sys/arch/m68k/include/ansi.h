@@ -1,4 +1,4 @@
-/*	$NetBSD: ansi.h,v 1.24 2015/06/17 14:32:31 martin Exp $	*/
+/*	$NetBSD: ansi.h,v 1.23.28.1 2015/07/16 18:27:22 riz Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993

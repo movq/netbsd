@@ -1,4 +1,4 @@
-/*	$NetBSD: unistd.h,v 1.145 2015/03/24 07:44:52 wiz Exp $	*/
+/*	$NetBSD: unistd.h,v 1.142.2.2 2015/03/25 17:15:54 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2008 The NetBSD Foundation, Inc.
@@ -329,8 +329,6 @@ int	 des_setkey(const char *);
 int	 dup3(int, int, int);
 void	 endusershell(void);
 int	 exect(const char *, char * const *, char * const *);
-int	 execvpe(const char *, char * const *, char * const *);
-int	 execlpe(const char *, const char *, ...);
 int	 fchroot(int);
 int	 fdiscard(int, off_t, off_t);
 int	 fsync_range(int, int, off_t, off_t);

@@ -1,6 +1,6 @@
 /* Python interface to values.
 
-   Copyright (C) 2008-2015 Free Software Foundation, Inc.
+   Copyright (C) 2008-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,8 +18,10 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include "gdb_assert.h"
 #include "charset.h"
 #include "value.h"
+#include "exceptions.h"
 #include "language.h"
 #include "dfp.h"
 #include "valprint.h"
@@ -27,6 +29,8 @@
 #include "expression.h"
 #include "cp-abi.h"
 #include "python.h"
+
+#ifdef HAVE_PYTHON
 
 #include "python-internal.h"
 
@@ -159,8 +163,7 @@ valpy_new (PyTypeObject *subtype, PyObject *args, PyObject *keywords)
 /* Iterate over all the Value objects, calling preserve_one_value on
    each.  */
 void
-gdbpy_preserve_values (const struct extension_language_defn *extlang,
-		       struct objfile *objfile, htab_t copied_types)
+preserve_python_values (struct objfile *objfile, htab_t copied_types)
 {
   value_object *iter;
 
@@ -302,15 +305,12 @@ valpy_get_dynamic_type (PyObject *self, void *closure)
 
       if (((TYPE_CODE (type) == TYPE_CODE_PTR)
 	   || (TYPE_CODE (type) == TYPE_CODE_REF))
-	  && (TYPE_CODE (TYPE_TARGET_TYPE (type)) == TYPE_CODE_STRUCT))
+	  && (TYPE_CODE (TYPE_TARGET_TYPE (type)) == TYPE_CODE_CLASS))
 	{
 	  struct value *target;
 	  int was_pointer = TYPE_CODE (type) == TYPE_CODE_PTR;
 
-	  if (was_pointer)
-	    target = value_ind (val);
-	  else
-	    target = coerce_ref (val);
+	  target = value_ind (val);
 	  type = value_rtti_type (target, NULL, NULL, NULL);
 
 	  if (type)
@@ -321,7 +321,7 @@ valpy_get_dynamic_type (PyObject *self, void *closure)
 		type = lookup_reference_type (type);
 	    }
 	}
-      else if (TYPE_CODE (type) == TYPE_CODE_STRUCT)
+      else if (TYPE_CODE (type) == TYPE_CODE_CLASS)
 	type = value_rtti_type (val, NULL, NULL, NULL);
       else
 	{
@@ -934,8 +934,6 @@ valpy_binop (enum valpy_opcode opcode, PyObject *self, PyObject *other)
       struct value *arg1, *arg2;
       struct cleanup *cleanup = make_cleanup_value_free_to_mark (value_mark ());
       struct value *res_val = NULL;
-      enum exp_opcode op = OP_NULL;
-      int handled = 0;
 
       /* If the gdb.Value object is the second operand, then it will be passed
 	 to us as the OTHER argument, and SELF will be an entirely different
@@ -967,7 +965,6 @@ valpy_binop (enum valpy_opcode opcode, PyObject *self, PyObject *other)
 	    CHECK_TYPEDEF (rtype);
 	    rtype = STRIP_REFERENCE (rtype);
 
-	    handled = 1;
 	    if (TYPE_CODE (ltype) == TYPE_CODE_PTR
 		&& is_integral_type (rtype))
 	      res_val = value_ptradd (arg1, value_as_long (arg2));
@@ -975,10 +972,7 @@ valpy_binop (enum valpy_opcode opcode, PyObject *self, PyObject *other)
 		     && is_integral_type (ltype))
 	      res_val = value_ptradd (arg2, value_as_long (arg1));
 	    else
-	      {
-		handled = 0;
-		op = BINOP_ADD;
-	      }
+	      res_val = value_binop (arg1, arg2, BINOP_ADD);
 	  }
 	  break;
 	case VALPY_SUB:
@@ -991,7 +985,6 @@ valpy_binop (enum valpy_opcode opcode, PyObject *self, PyObject *other)
 	    CHECK_TYPEDEF (rtype);
 	    rtype = STRIP_REFERENCE (rtype);
 
-	    handled = 1;
 	    if (TYPE_CODE (ltype) == TYPE_CODE_PTR
 		&& TYPE_CODE (rtype) == TYPE_CODE_PTR)
 	      /* A ptrdiff_t for the target would be preferable here.  */
@@ -1001,47 +994,36 @@ valpy_binop (enum valpy_opcode opcode, PyObject *self, PyObject *other)
 		     && is_integral_type (rtype))
 	      res_val = value_ptradd (arg1, - value_as_long (arg2));
 	    else
-	      {
-		handled = 0;
-		op = BINOP_SUB;
-	      }
+	      res_val = value_binop (arg1, arg2, BINOP_SUB);
 	  }
 	  break;
 	case VALPY_MUL:
-	  op = BINOP_MUL;
+	  res_val = value_binop (arg1, arg2, BINOP_MUL);
 	  break;
 	case VALPY_DIV:
-	  op = BINOP_DIV;
+	  res_val = value_binop (arg1, arg2, BINOP_DIV);
 	  break;
 	case VALPY_REM:
-	  op = BINOP_REM;
+	  res_val = value_binop (arg1, arg2, BINOP_REM);
 	  break;
 	case VALPY_POW:
-	  op = BINOP_EXP;
+	  res_val = value_binop (arg1, arg2, BINOP_EXP);
 	  break;
 	case VALPY_LSH:
-	  op = BINOP_LSH;
+	  res_val = value_binop (arg1, arg2, BINOP_LSH);
 	  break;
 	case VALPY_RSH:
-	  op = BINOP_RSH;
+	  res_val = value_binop (arg1, arg2, BINOP_RSH);
 	  break;
 	case VALPY_BITAND:
-	  op = BINOP_BITWISE_AND;
+	  res_val = value_binop (arg1, arg2, BINOP_BITWISE_AND);
 	  break;
 	case VALPY_BITOR:
-	  op = BINOP_BITWISE_IOR;
+	  res_val = value_binop (arg1, arg2, BINOP_BITWISE_IOR);
 	  break;
 	case VALPY_BITXOR:
-	  op = BINOP_BITWISE_XOR;
+	  res_val = value_binop (arg1, arg2, BINOP_BITWISE_XOR);
 	  break;
-	}
-
-      if (!handled)
-	{
-	  if (binop_user_defined_p (op, arg1, arg2))
-	    res_val = value_x_binop (arg1, arg2, op, OP_NULL, EVAL_NORMAL);
-	  else
-	    res_val = value_binop (arg1, arg2, op);
 	}
 
       if (res_val)
@@ -1720,3 +1702,13 @@ PyTypeObject value_object_type = {
   0,				  /* tp_alloc */
   valpy_new			  /* tp_new */
 };
+
+#else
+
+void
+preserve_python_values (struct objfile *objfile, htab_t copied_types)
+{
+  /* Nothing.  */
+}
+
+#endif /* HAVE_PYTHON */

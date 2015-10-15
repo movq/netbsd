@@ -14,7 +14,7 @@
 
 #include <sys/cdefs.h>
 #ifdef __RCSID
-__RCSID("$NetBSD: parsedate.y,v 1.20 2014/10/08 17:38:28 apb Exp $");
+__RCSID("$NetBSD: parsedate.y,v 1.16.6.4 2014/10/11 16:56:21 snj Exp $");
 #endif
 
 #include <stdio.h>

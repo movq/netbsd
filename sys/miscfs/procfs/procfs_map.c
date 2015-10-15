@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_map.c,v 1.45 2014/10/17 20:49:22 christos Exp $	*/
+/*	$NetBSD: procfs_map.c,v 1.44 2014/03/18 18:20:43 riastradh Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_map.c,v 1.45 2014/10/17 20:49:22 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_map.c,v 1.44 2014/03/18 18:20:43 riastradh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -125,6 +125,15 @@ procfs_domap(struct lwp *curl, struct proc *p, struct pfsnode *pfs,
 
 	if (uio->uio_rw != UIO_READ)
 		return EOPNOTSUPP;
+
+	if (uio->uio_offset != 0) {
+		/*
+		 * we return 0 here, so that the second read returns EOF
+		 * we don't support reading from an offset because the
+		 * map could have changed between the two reads.
+		 */
+		return 0;
+	}
 
 	error = 0;
 
@@ -211,16 +220,7 @@ again:
 	vm_map_unlock_read(map);
 	uvmspace_free(vm);
 
-	/*
-	 * We support reading from an offset, because linux does.
-	 * The map could have changed between the two reads, and
-	 * that could result in junk, but typically it does not.
-	 */
-	if (uio->uio_offset < pos)
-		error = uiomove(buffer + uio->uio_offset,
-		    pos - uio->uio_offset, uio);
-	else
-		error = 0;
+	error = uiomove(buffer, pos, uio);
 out:
 	if (path != NULL)
 		free(path, M_TEMP);

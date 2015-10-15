@@ -1,4 +1,4 @@
-/*	$NetBSD: ipmi.c,v 1.62 2015/08/28 14:06:01 joerg Exp $ */
+/*	$NetBSD: ipmi.c,v 1.57.2.1 2014/11/10 17:59:57 snj Exp $ */
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipmi.c,v 1.62 2015/08/28 14:06:01 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipmi.c,v 1.57.2.1 2014/11/10 17:59:57 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -66,6 +66,7 @@ __KERNEL_RCSID(0, "$NetBSD: ipmi.c,v 1.62 2015/08/28 14:06:01 joerg Exp $");
 #include <sys/kthread.h>
 #include <sys/bus.h>
 #include <sys/intr.h>
+#include <sys/rnd.h>
 
 #include <x86/smbiosvar.h>
 
@@ -88,6 +89,7 @@ struct ipmi_sensor {
 	uint32_t	i_props, i_defprops;
 	SLIST_ENTRY(ipmi_sensor) i_list;
 	int32_t		i_prevval;	/* feed rnd source on change */
+	krndsource_t	i_rnd;
 };
 
 int	ipmi_nintr;
@@ -889,7 +891,6 @@ dumpb(const char *lbl, int len, const uint8_t *data)
 void
 ipmi_smbios_probe(struct smbios_ipmi *pipmi, struct ipmi_attach_args *ia)
 {
-	const char *platform;
 
 	dbg_printf(1, "ipmi_smbios_probe: %02x %02x %02x %02x "
 	    "%08" PRIx64 " %02x %02x\n",
@@ -936,15 +937,6 @@ ipmi_smbios_probe(struct smbios_ipmi *pipmi, struct ipmi_attach_args *ia)
 	}
 	if (pipmi->smipmi_base_flags & SMIPMI_FLAG_ODDOFFSET)
 		ia->iaa_if_iobase++;
-
-	platform = pmf_get_platform("system-product");
-	if (platform != NULL &&
-	    strcmp(platform, "ProLiant MicroServer") == 0) {
-                ia->iaa_if_iospacing = 1;
-                ia->iaa_if_iobase = pipmi->smipmi_base_address - 7;
-                ia->iaa_if_iotype = 'i';
-                return;
-        }
 
 	if (pipmi->smipmi_base_flags == 0x7f) {
 		/* IBM 325 eServer workaround */
@@ -1303,7 +1295,7 @@ signextend(unsigned long val, int bits)
 
 /* fixpoint arithmetic */
 #define FIX2INT(x)   ((int64_t)((x) >> 32))
-#define INT2FIX(x)   ((int64_t)((uint64_t)(x) << 32))
+#define INT2FIX(x)   ((int64_t)((int64_t)(x) << 32))
 
 #define FIX2            0x0000000200000000ll /* 2.0 */
 #define FIX3            0x0000000300000000ll /* 3.0 */

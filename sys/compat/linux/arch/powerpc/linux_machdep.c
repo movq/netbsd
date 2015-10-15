@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_machdep.c,v 1.48 2014/11/09 17:48:08 maxv Exp $ */
+/*	$NetBSD: linux_machdep.c,v 1.47.12.1 2015/01/17 12:10:56 martin Exp $ */
 
 /*-
  * Copyright (c) 1995, 2000, 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.48 2014/11/09 17:48:08 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_machdep.c,v 1.47.12.1 2015/01/17 12:10:56 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

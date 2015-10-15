@@ -1,4 +1,4 @@
-/* $NetBSD: acpi.c,v 1.13 2015/08/19 07:37:17 christos Exp $ */
+/* $NetBSD: acpi.c,v 1.9 2014/03/20 14:39:43 riastradh Exp $ */
 
 /*-
  * Copyright (c) 1998 Doug Rabson
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: acpi.c,v 1.13 2015/08/19 07:37:17 christos Exp $");
+__RCSID("$NetBSD: acpi.c,v 1.9 2014/03/20 14:39:43 riastradh Exp $");
 
 #include <sys/param.h>
 #include <sys/endian.h>
@@ -1667,35 +1667,15 @@ acpi_handle_srat(ACPI_TABLE_HEADER *sdp)
 static void
 acpi_handle_tcpa(ACPI_TABLE_HEADER *sdp)
 {
-	ACPI_TABLE_TCPA_HDR *tcpah;
-	ACPI_TABLE_TCPA_CLIENT *tcpac;
-	ACPI_TABLE_TCPA_SERVER *tcpas;
+	ACPI_TABLE_TCPA *tcpa;
 
 	printf(BEGIN_COMMENT);
 	acpi_print_sdt(sdp);
-	tcpah = (void *)sdp;
-	switch (tcpah->PlatformClass) {
-	case ACPI_TCPA_CLIENT_TABLE:
-		tcpac = (void *)((char *)sdp + sizeof(*tcpah));
-		printf("\tMinimum Length of Event Log Area=%"PRIu32"\n",
-		    tcpac->MinimumLogLength);
-		printf("\tPhysical Address of Log Area=0x%08"PRIx64"\n",
-		    tcpac->LogAddress);
-		break;
+	tcpa = (ACPI_TABLE_TCPA *)sdp;
 
-	case ACPI_TCPA_SERVER_TABLE:
-		tcpas = (void *)((char *)sdp + sizeof(*tcpah));
-		printf("\tMinimum Length of Event Log Area=%"PRIu64"\n",
-		    tcpas->MinimumLogLength);
-		printf("\tPhysical Address of Log Area=0x%08"PRIx64"\n",
-		    tcpas->LogAddress);
-		break;
-
-	default:
-		printf ("\tUnknown TCPA Platform Class 0x%X\n",
-		    tcpah->PlatformClass);
-		break;
-	}
+	printf("\tMaximum Length of Event Log Area=%d\n", tcpa->MaxLogLength);
+	printf("\tPhysical Address of Log Area=0x%08"PRIx64"\n",
+	    tcpa->LogAddress);
 
 	printf(END_COMMENT);
 }
@@ -2500,6 +2480,6 @@ dsdt_from_fadt(ACPI_TABLE_FADT *fadt)
 	else
 		sdt = (ACPI_TABLE_HEADER *)acpi_map_sdt(fadt->XDsdt);
 	if (acpi_checksum(sdt, sdt->Length))
-		errx(EXIT_FAILURE, "DSDT is corrupt");
+		errx(EXIT_FAILURE, "DSDT is corrupt\n");
 	return (sdt);
 }

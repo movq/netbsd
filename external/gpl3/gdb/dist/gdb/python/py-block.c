@@ -1,6 +1,6 @@
 /* Python interface to blocks.
 
-   Copyright (C) 2008-2015 Free Software Foundation, Inc.
+   Copyright (C) 2008-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -371,8 +371,9 @@ PyObject *
 gdbpy_block_for_pc (PyObject *self, PyObject *args)
 {
   gdb_py_ulongest pc;
-  const struct block *block = NULL;
-  struct compunit_symtab *cust = NULL;
+  struct block *block = NULL;
+  struct obj_section *section = NULL;
+  struct symtab *symtab = NULL;
   volatile struct gdb_exception except;
 
   if (!PyArg_ParseTuple (args, GDB_PY_LLU_ARG, &pc))
@@ -380,14 +381,15 @@ gdbpy_block_for_pc (PyObject *self, PyObject *args)
 
   TRY_CATCH (except, RETURN_MASK_ALL)
     {
-      cust = find_pc_compunit_symtab (pc);
+      section = find_pc_mapped_section (pc);
+      symtab = find_pc_sect_symtab (pc, section);
 
-      if (cust != NULL && COMPUNIT_OBJFILE (cust) != NULL)
+      if (symtab != NULL && symtab->objfile != NULL)
 	block = block_for_pc (pc);
     }
   GDB_PY_HANDLE_EXCEPTION (except);
 
-  if (cust == NULL || COMPUNIT_OBJFILE (cust) == NULL)
+  if (!symtab || symtab->objfile == NULL)
     {
       PyErr_SetString (PyExc_RuntimeError,
 		       _("Cannot locate object file for block."));
@@ -395,7 +397,7 @@ gdbpy_block_for_pc (PyObject *self, PyObject *args)
     }
 
   if (block)
-    return block_to_block_object (block, COMPUNIT_OBJFILE (cust));
+    return block_to_block_object (block, symtab->objfile);
 
   Py_RETURN_NONE;
 }

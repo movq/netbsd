@@ -1,4 +1,4 @@
-/*	$NetBSD: linux32_exec_elf32.c,v 1.18 2015/03/20 20:36:27 maxv Exp $ */
+/*	$NetBSD: linux32_exec_elf32.c,v 1.17.4.1 2015/03/29 09:07:55 martin Exp $ */
 
 /*-                     
  * Copyright (c) 1995, 1998, 2000, 2001,2006 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux32_exec_elf32.c,v 1.18 2015/03/20 20:36:27 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux32_exec_elf32.c,v 1.17.4.1 2015/03/29 09:07:55 martin Exp $");
 
 #define	ELFSIZE		32
 

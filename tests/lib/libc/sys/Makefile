@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.39 2015/06/22 00:05:23 matt Exp $
+# $NetBSD: Makefile,v 1.36 2014/07/18 12:34:52 christos Exp $
 
 MKMAN=	no
 
@@ -9,7 +9,6 @@ MKMAN=	no
 TESTSDIR=		${TESTSBASE}/lib/libc/sys
 
 TESTS_C+=		t_access
-TESTS_C+=		t_bind
 TESTS_C+=		t_chroot
 TESTS_C+=		t_clock_gettime
 TESTS_C+=		t_clone
@@ -48,7 +47,6 @@ TESTS_C+=		t_nanosleep
 TESTS_C+=		t_pipe
 TESTS_C+=		t_pipe2
 TESTS_C+=		t_poll
-TESTS_C+=		t_posix_fallocate
 TESTS_C+=		t_recvmmsg
 TESTS_C+=		t_revoke
 TESTS_C+=		t_select
@@ -71,7 +69,7 @@ SRCS.t_mprotect=	t_mprotect.c ${SRCS_EXEC_PROT}
 
 LDADD.t_getpid+=        -lpthread
 
-.if (${MKRUMP} != "no") && !defined(BSD_MK_COMPAT_FILE)
+.if (${MKRUMP} != "no")
 TESTS_C+=		t_posix_fadvise
 LDADD.t_posix_fadvise+= -lrumpvfs -lrump -lrumpuser -lrump -lpthread
 .endif

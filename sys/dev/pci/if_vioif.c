@@ -1,4 +1,4 @@
-/*	$NetBSD: if_vioif.c,v 1.16 2015/05/05 10:56:13 ozaki-r Exp $	*/
+/*	$NetBSD: if_vioif.c,v 1.7.2.1 2014/12/29 17:01:01 martin Exp $	*/
 
 /*
  * Copyright (c) 2010 Minoura Makoto.
@@ -26,11 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_vioif.c,v 1.16 2015/05/05 10:56:13 ozaki-r Exp $");
-
-#ifdef _KERNEL_OPT
-#include "opt_net_mpsafe.h"
-#endif
+__KERNEL_RCSID(0, "$NetBSD: if_vioif.c,v 1.7.2.1 2014/12/29 17:01:01 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,7 +39,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_vioif.c,v 1.16 2015/05/05 10:56:13 ozaki-r Exp $"
 #include <sys/mbuf.h>
 #include <sys/mutex.h>
 #include <sys/sockio.h>
-#include <sys/cpu.h>
 
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcireg.h>
@@ -60,10 +55,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_vioif.c,v 1.16 2015/05/05 10:56:13 ozaki-r Exp $"
 
 #ifdef NET_MPSAFE
 #define VIOIF_MPSAFE	1
-#endif
-
-#ifdef SOFTINT_INTR
-#define VIOIF_SOFTINT_INTR	1
 #endif
 
 /*
@@ -164,7 +155,7 @@ struct vioif_softc {
 
 	uint8_t			sc_mac[ETHER_ADDR_LEN];
 	struct ethercom		sc_ethercom;
-	short			sc_deferred_init_done;
+	short			sc_ifflags;
 
 	/* bus_dmamem */
 	bus_dma_segment_t	sc_hdr_segs[1];
@@ -229,7 +220,6 @@ static void	vioif_watchdog(struct ifnet *);
 static int	vioif_add_rx_mbuf(struct vioif_softc *, int);
 static void	vioif_free_rx_mbuf(struct vioif_softc *, int);
 static void	vioif_populate_rx_mbufs(struct vioif_softc *);
-static void	vioif_populate_rx_mbufs_locked(struct vioif_softc *);
 static int	vioif_rx_deq(struct vioif_softc *);
 static int	vioif_rx_deq_locked(struct vioif_softc *);
 static int	vioif_rx_vq_done(struct virtqueue *);
@@ -501,15 +491,12 @@ vioif_attach(device_t parent, device_t self, void *aux)
 	vsc->sc_child = self;
 	vsc->sc_ipl = IPL_NET;
 	vsc->sc_vqs = &sc->sc_vq[0];
-	vsc->sc_config_change = NULL;
+	vsc->sc_config_change = 0;
 	vsc->sc_intrhand = virtio_vq_intr;
 	vsc->sc_flags = 0;
 
 #ifdef VIOIF_MPSAFE
 	vsc->sc_flags |= VIRTIO_F_PCI_INTR_MPSAFE;
-#endif
-#ifdef VIOIF_SOFTINT_INTR
-	vsc->sc_flags |= VIRTIO_F_PCI_INTR_SOFTINT;
 #endif
 
 	features = virtio_negotiate_features(vsc,
@@ -615,6 +602,8 @@ vioif_attach(device_t parent, device_t self, void *aux)
 
 	if (vioif_alloc_mems(sc) < 0)
 		goto err;
+	if (vsc->sc_nvqs == 3)
+		config_interrupts(self, vioif_deferred_init);
 
 	strlcpy(ifp->if_xname, device_xname(self), IFNAMSIZ);
 	ifp->if_softc = sc;
@@ -625,8 +614,6 @@ vioif_attach(device_t parent, device_t self, void *aux)
 	ifp->if_stop = vioif_stop;
 	ifp->if_capabilities = 0;
 	ifp->if_watchdog = vioif_watchdog;
-
-	sc->sc_ethercom.ec_capabilities |= ETHERCAP_VLAN_MTU;
 
 	if_attach(ifp);
 	ether_ifattach(ifp, sc->sc_mac);
@@ -665,13 +652,12 @@ vioif_deferred_init(device_t self)
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	int r;
 
-	if (ifp->if_flags & IFF_PROMISC)
-		return;
-
 	r =  vioif_set_promisc(sc, false);
 	if (r != 0)
 		aprint_error_dev(self, "resetting promisc mode failed, "
 				 "errror code %d\n", r);
+	else
+		ifp->if_flags &= ~IFF_PROMISC;
 }
 
 /*
@@ -683,14 +669,6 @@ vioif_init(struct ifnet *ifp)
 	struct vioif_softc *sc = ifp->if_softc;
 
 	vioif_stop(ifp, 0);
-
-	if (!sc->sc_deferred_init_done) {
-		struct virtio_softc *vsc = sc->sc_virtio;
-
-		sc->sc_deferred_init_done = 1;
-		if (vsc->sc_nvqs == 3)
-			vioif_deferred_init(sc->sc_dev);
-	}
 
 	/* Have to set false before vioif_populate_rx_mbufs */
 	sc->sc_stopping = false;
@@ -711,12 +689,7 @@ vioif_stop(struct ifnet *ifp, int disable)
 	struct vioif_softc *sc = ifp->if_softc;
 	struct virtio_softc *vsc = sc->sc_virtio;
 
-	/* Take the locks to ensure that ongoing TX/RX finish */
-	VIOIF_TX_LOCK(sc);
-	VIOIF_RX_LOCK(sc);
 	sc->sc_stopping = true;
-	VIOIF_RX_UNLOCK(sc);
-	VIOIF_TX_UNLOCK(sc);
 
 	/* only way to stop I/O and DMA is resetting... */
 	virtio_reset(vsc);
@@ -902,22 +875,14 @@ vioif_free_rx_mbuf(struct vioif_softc *sc, int i)
 static void
 vioif_populate_rx_mbufs(struct vioif_softc *sc)
 {
-	VIOIF_RX_LOCK(sc);
-	vioif_populate_rx_mbufs_locked(sc);
-	VIOIF_RX_UNLOCK(sc);
-}
-
-static void
-vioif_populate_rx_mbufs_locked(struct vioif_softc *sc)
-{
 	struct virtio_softc *vsc = sc->sc_virtio;
 	int i, r, ndone = 0;
 	struct virtqueue *vq = &sc->sc_vq[0]; /* rx vq */
 
-	KASSERT(VIOIF_RX_LOCKED(sc));
+	VIOIF_RX_LOCK(sc);
 
 	if (sc->sc_stopping)
-		return;
+		goto out;
 
 	for (i = 0; i < vq->vq_num; i++) {
 		int slot;
@@ -952,6 +917,9 @@ vioif_populate_rx_mbufs_locked(struct vioif_softc *sc)
 	}
 	if (ndone > 0)
 		virtio_enqueue_commit(vsc, vq, -1, true);
+
+out:
+	VIOIF_RX_UNLOCK(sc);
 }
 
 /* dequeue recieved packets */
@@ -1020,10 +988,6 @@ vioif_rx_vq_done(struct virtqueue *vq)
 	struct vioif_softc *sc = device_private(vsc->sc_child);
 	int r = 0;
 
-#ifdef VIOIF_SOFTINT_INTR
-	KASSERT(!cpu_intr_p());
-#endif
-
 	VIOIF_RX_LOCK(sc);
 
 	if (sc->sc_stopping)
@@ -1031,11 +995,7 @@ vioif_rx_vq_done(struct virtqueue *vq)
 
 	r = vioif_rx_deq_locked(sc);
 	if (r)
-#ifdef VIOIF_SOFTINT_INTR
-		vioif_populate_rx_mbufs_locked(sc);
-#else
 		softint_schedule(sc->sc_rx_softint);
-#endif
 
 out:
 	VIOIF_RX_UNLOCK(sc);

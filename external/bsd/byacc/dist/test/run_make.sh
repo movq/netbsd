@@ -1,5 +1,5 @@
 #!/bin/sh
-# Id: run_make.sh,v 1.14 2014/04/06 17:50:57 tom Exp 
+# Id: run_make.sh,v 1.9 2012/01/15 22:35:01 tom Exp 
 # vi:ts=4 sw=4:
 
 # do a test-compile on each of the ".c" files in the test-directory
@@ -14,54 +14,30 @@ else
 	PROG_DIR=..
 	TEST_DIR=.
 fi
-THIS_DIR=`pwd`
 
-ifBTYACC=`fgrep -l 'define YYBTYACC' config.h > /dev/null; test $? != 0; echo $?`
-
-if test $ifBTYACC = 0; then
-	REF_DIR=${TEST_DIR}/yacc
-else
-	REF_DIR=${TEST_DIR}/btyacc
-fi
-
-MY_MAKE="make -f $PROG_DIR/makefile srcdir=$PROG_DIR"
-
-run_make() {
-	C_FILE=`basename "$1"`
-	O_FILE=`basename "$C_FILE" .c`.o
-	shift
-	cd $REF_DIR
-	make -f $PROG_DIR/makefile srcdir=$PROG_DIR $O_FILE $*
-	test -f $O_FILE && rm $O_FILE
-	cd $THIS_DIR
-}
+MY_MAKE="make -f $PROG_DIR/makefile srcdir=$PROG_DIR VPATH=$TEST_DIR"
 
 echo '** '`date`
-echo "** program is in $PROG_DIR"
-echo "** test-files in $REF_DIR"
-
-for input in ${REF_DIR}/*.c
+for input in ${TEST_DIR}/*.c
 do
-	case $input in #(vi
-	${REF_DIR}/err_*)
-		continue
-		;;
-	esac
-
 	test -f "$input" || continue
 
-	run_make "$input"
+	obj=`basename "$input" .c`.o
+
+	$MY_MAKE $obj C_FILES=$input
+	test -f $obj && rm $obj
 
 	DEFS=
 	case $input in #(vi
-	${REF_DIR}/pure_*)
+	${TEST_DIR}/pure_*)
 		# DEFS="-DYYLEX_PARAM=flag -DYYLEX_PARAM_TYPE=int"
 		;;
 	esac
 
 	if test "x$DEFS" != "x"
 	then
-		run_make "$input" DEFINES="$DEFS"
+		$MY_MAKE $obj C_FILES=$input DEFINES="$DEFS"
+		test -f $obj && rm -f $obj
 	fi
 done
 
@@ -71,15 +47,6 @@ then
 	for input in ${TEST_DIR}/*.y
 	do
 		test -f "$input" || continue
-		case $input in
-		${TEST_DIR}/err_*)
-			continue
-			;;
-		${TEST_DIR}/btyacc_*)
-			# Bison does not support the btyacc []-action extension.
-			continue
-			;;
-		esac
 
 		# Bison does not support pure-parser from command-line.
 		# Also, its support for %expect is generally broken.
@@ -89,7 +56,7 @@ then
 		rm -f run_make.[coy]
 
 		case $input in
-		${TEST_DIR}/pure_*)
+		pure_*)
 			if test -z `fgrep -l '%pure-parser' $input`
 			then
 				echo "%pure-parser" >>run_make.y
@@ -100,20 +67,17 @@ then
 		sed -e '/^%expect/s,%expect.*,,' $input >>run_make.y
 
 		bison -y run_make.y
-		if test -f "y.tab.c"
+		sed -e '/^#line/s,"run_make.y","'$input'",' y.tab.c >run_make.c
+
+		rm -f y.tab.c
+
+		input=run_make.c
+		object=run_make.o
+		if test -f $input
 		then
-			sed -e '/^#line/s,"run_make.y","'$input'",' y.tab.c >run_make.c
-
-			rm -f y.tab.c
-
-			input=run_make.c
-			object=run_make.o
-			if test -f $input
-			then
-				$MY_MAKE $object DEFINES='-DYYENABLE_NLS=0 -DYYLTYPE_IS_TRIVIAL=1 -DYYSTACK_USE_ALLOCA=0 -DYYMAXDEPTH=0'
-			else
-				echo "?? $input not found"
-			fi
+			$MY_MAKE $object DEFINES='-DYYENABLE_NLS=0 -DYYLTYPE_IS_TRIVIAL=1 -DYYSTACK_USE_ALLOCA=0 -DYYMAXDEPTH=0'
+		else
+			echo "?? $input not found"
 		fi
 		rm -f run_make.[coy]
 	done
@@ -158,20 +122,17 @@ then
 		sed -e '/^%expect/s,%expect.*,,' $input >>run_make.y
 
 		$YACC run_make.y
-		if test -f y.tab.c
+		sed -e '/^#line/s,"run_make.y","'$input'",' y.tab.c >run_make.c
+
+		rm -f y.tab.c
+
+		input=run_make.c
+		object=run_make.o
+		if test -f $input
 		then
-			sed -e '/^#line/s,"run_make.y","'$input'",' y.tab.c >run_make.c
-
-			rm -f y.tab.c
-
-			input=run_make.c
-			object=run_make.o
-			if test -f $input
-			then
-				$MY_MAKE $object
-			else
-				echo "?? $input not found"
-			fi
+			$MY_MAKE $object
+		else
+			echo "?? $input not found"
 		fi
 		rm -f run_make.[coy]
 	done

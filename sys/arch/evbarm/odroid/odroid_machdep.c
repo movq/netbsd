@@ -1,4 +1,4 @@
-/*	$NetBSD: odroid_machdep.c,v 1.39 2014/09/30 14:24:26 reinoud Exp $ */
+/*	$NetBSD: odroid_machdep.c,v 1.24.4.1 2015/01/04 11:19:00 martin Exp $ */
 
 /*
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: odroid_machdep.c,v 1.39 2014/09/30 14:24:26 reinoud Exp $");
+__KERNEL_RCSID(0, "$NetBSD: odroid_machdep.c,v 1.24.4.1 2015/01/04 11:19:00 martin Exp $");
 
 #include "opt_evbarm_boardtype.h"
 #include "opt_exynos.h"

@@ -1,4 +1,4 @@
-/*	$NetBSD: driver.c,v 1.3 2014/12/10 04:37:54 christos Exp $	*/
+/*	$NetBSD: driver.c,v 1.2.2.1 2014/12/22 03:28:37 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2011-2014  Internet Systems Consortium, Inc. ("ISC")

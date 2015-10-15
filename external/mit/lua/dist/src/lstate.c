@@ -1,7 +1,7 @@
-/*	$NetBSD: lstate.c,v 1.4 2015/10/08 13:21:00 mbalmer Exp $	*/
+/*	$NetBSD: lstate.c,v 1.2.2.1 2015/02/04 21:32:46 martin Exp $	*/
 
 /*
-** Id: lstate.c,v 2.128 2015/03/04 13:31:21 roberto Exp 
+** Id: lstate.c,v 2.127 2014/11/02 19:33:33 roberto Exp 
 ** Global State
 ** See Copyright Notice in lua.h
 */
@@ -39,6 +39,9 @@
 #if !defined(LUAI_GCMUL)
 #define LUAI_GCMUL	200 /* GC runs 'twice the speed' of memory allocation */
 #endif
+
+
+#define MEMERRMSG	"not enough memory"
 
 
 /*
@@ -201,9 +204,12 @@ static void f_luaopen (lua_State *L, void *ud) {
   UNUSED(ud);
   stack_init(L, L);  /* init stack */
   init_registry(L, g);
-  luaS_init(L);
+  luaS_resize(L, MINSTRTABSIZE);  /* initial size of string table */
   luaT_init(L);
   luaX_init(L);
+  /* pre-create memory-error message */
+  g->memerrmsg = luaS_newliteral(L, MEMERRMSG);
+  luaC_fix(L, obj2gco(g->memerrmsg));  /* it should never be collected */
   g->gcrunning = 1;  /* allow gc */
   g->version = lua_version(NULL);
   luai_userstateopen(L);

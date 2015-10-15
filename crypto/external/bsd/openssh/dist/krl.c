@@ -1,4 +1,4 @@
-/*	$NetBSD: krl.c,v 1.7 2015/08/13 10:33:21 christos Exp $	*/
+/*	$NetBSD: krl.c,v 1.3.6.1 2015/04/30 06:07:30 riz Exp $	*/
 /*
  * Copyright (c) 2012 Damien Miller <djm@mindrot.org>
  *
@@ -15,10 +15,9 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+/* $OpenBSD: krl.c,v 1.31 2015/01/30 01:10:33 djm Exp $ */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: krl.c,v 1.7 2015/08/13 10:33:21 christos Exp $");
-
-/* $OpenBSD: krl.c,v 1.33 2015/07/03 03:43:18 djm Exp $ */
+__RCSID("$NetBSD: krl.c,v 1.3.6.1 2015/04/30 06:07:30 riz Exp $");
 
 #include "includes.h"
 #include <sys/param.h>	/* MIN */
@@ -435,7 +434,7 @@ ssh_krl_revoke_key(struct ssh_krl *krl, const struct sshkey *key)
 	if (!sshkey_is_cert(key))
 		return ssh_krl_revoke_key_sha1(krl, key);
 
-	if (key->cert->serial == 0) {
+	if (sshkey_cert_is_legacy(key) || key->cert->serial == 0) {
 		return ssh_krl_revoke_cert_by_key_id(krl,
 		    key->cert->signature_key,
 		    key->cert->key_id);
@@ -778,7 +777,7 @@ ssh_krl_to_blob(struct ssh_krl *krl, struct sshbuf *buf,
 			goto out;
 
 		if ((r = sshkey_sign(sign_keys[i], &sblob, &slen,
-		    sshbuf_ptr(buf), sshbuf_len(buf), 0)) != 0)
+		    sshbuf_ptr(buf), sshbuf_len(buf), 0)) == -1)
 			goto out;
 		KRL_DBG(("%s: signature sig len %zu", __func__, slen));
 		if ((r = sshbuf_put_string(buf, sblob, slen)) != 0)
@@ -1186,10 +1185,10 @@ is_cert_revoked(const struct sshkey *key, struct revoked_certs *rc)
 	}
 
 	/*
-	 * Zero serials numbers are ignored (it's the default when the
-	 * CA doesn't specify one).
+	 * Legacy cert formats lack serial numbers. Zero serials numbers
+	 * are ignored (it's the default when the CA doesn't specify one).
 	 */
-	if (key->cert->serial == 0)
+	if (sshkey_cert_is_legacy(key) || key->cert->serial == 0)
 		return 0;
 
 	memset(&rs, 0, sizeof(rs));

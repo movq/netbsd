@@ -29,7 +29,7 @@
 /*  WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR */
 /*  PURPOSE. */
 #include "flexdef.h"
-__RCSID("$NetBSD: dfa.c,v 1.3 2014/10/30 18:44:05 christos Exp $");
+__RCSID("$NetBSD: dfa.c,v 1.1.1.2.8.1 2015/03/06 20:49:11 snj Exp $");
 
 #include "tables.h"
 

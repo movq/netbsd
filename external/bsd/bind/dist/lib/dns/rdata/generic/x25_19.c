@@ -1,4 +1,4 @@
-/*	$NetBSD: x25_19.c,v 1.4 2014/12/10 04:37:59 christos Exp $	*/
+/*	$NetBSD: x25_19.c,v 1.3.12.1 2014/12/22 03:28:45 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007, 2009, 2014  Internet Systems Consortium, Inc. ("ISC")

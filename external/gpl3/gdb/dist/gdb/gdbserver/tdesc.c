@@ -1,4 +1,4 @@
-/* Copyright (C) 2012-2015 Free Software Foundation, Inc.
+/* Copyright (C) 2012-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -35,7 +35,8 @@ init_target_desc (struct target_desc *tdesc)
 
   /* Make sure PBUFSIZ is large enough to hold a full register
      packet.  */
-  gdb_assert (2 * tdesc->registers_size + 32 <= PBUFSIZ);
+  if (2 * tdesc->registers_size + 32 > PBUFSIZ)
+    fatal ("Register packet size exceeds PBUFSIZ.");
 }
 
 #ifndef IN_PROCESS_AGENT
@@ -56,7 +57,7 @@ copy_target_description (struct target_desc *dest,
 const struct target_desc *
 current_target_desc (void)
 {
-  if (current_thread == NULL)
+  if (current_inferior == NULL)
     return &default_description;
 
   return current_process ()->tdesc;

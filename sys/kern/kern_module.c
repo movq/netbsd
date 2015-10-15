@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_module.c,v 1.106 2015/06/22 16:35:13 matt Exp $	*/
+/*	$NetBSD: kern_module.c,v 1.97.2.1 2015/05/15 03:44:19 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_module.c,v 1.106 2015/06/22 16:35:13 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_module.c,v 1.97.2.1 2015/05/15 03:44:19 snj Exp $");
 
 #define _MODULE_INTERNAL
 
@@ -58,7 +58,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_module.c,v 1.106 2015/06/22 16:35:13 matt Exp $
 #include <uvm/uvm_extern.h>
 
 struct vm_map *module_map;
-const char *module_machine;
+char	*module_machine;
 char	module_base[MODULE_BASE_SIZE];
 
 struct modlist        module_list = TAILQ_HEAD_INITIALIZER(module_list);
@@ -91,7 +91,7 @@ __link_set_add_rodata(modules, module_dummy);
 static module_t	*module_newmodule(modsrc_t);
 static void	module_require_force(module_t *);
 static int	module_do_load(const char *, bool, int, prop_dictionary_t,
-		    module_t **, modclass_t modclass, bool);
+		    module_t **, modclass_t class, bool);
 static int	module_do_unload(const char *, bool);
 static int	module_do_builtin(const char *, module_t **, prop_dictionary_t);
 static int	module_fetch_info(module_t *);
@@ -105,14 +105,14 @@ static bool	module_merge_dicts(prop_dictionary_t, const prop_dictionary_t);
 static void	sysctl_module_setup(void);
 static int	sysctl_module_autotime(SYSCTLFN_PROTO);
 
-#define MODULE_CLASS_MATCH(mi, modclass) \
-	((modclass) == MODULE_CLASS_ANY || (modclass) == (mi)->mi_class)
+#define MODULE_CLASS_MATCH(mi, class) \
+	((class) == MODULE_CLASS_ANY || (class) == (mi)->mi_class)
 
 static void
-module_incompat(const modinfo_t *mi, int modclass)
+module_incompat(const modinfo_t *mi, int class)
 {
 	module_error("incompatible module class for `%s' (%d != %d)",
-	    mi->mi_name, modclass, mi->mi_class);
+	    mi->mi_name, class, mi->mi_class);
 }
 
 /*
@@ -373,6 +373,7 @@ module_init(void)
 	}
 
 	sysctl_module_setup();
+	aprint_normal("kern.module.path=%s\n", module_base);
 }
 
 /*
@@ -480,7 +481,7 @@ sysctl_module_setup(void)
  *	specified class.
  */
 void
-module_init_class(modclass_t modclass)
+module_init_class(modclass_t class)
 {
 	TAILQ_HEAD(, module) bi_fail = TAILQ_HEAD_INITIALIZER(bi_fail);
 	module_t *mod;
@@ -494,7 +495,7 @@ module_init_class(modclass_t modclass)
 	do {
 		TAILQ_FOREACH(mod, &module_builtins, mod_chain) {
 			mi = mod->mod_info;
-			if (!MODULE_CLASS_MATCH(mi, modclass))
+			if (!MODULE_CLASS_MATCH(mi, class))
 				continue;
 			/*
 			 * If initializing a builtin module fails, don't try
@@ -505,7 +506,7 @@ module_init_class(modclass_t modclass)
 			 * (If the module has previously been set to
 			 * MODFLG_MUST_FORCE, don't try to override that!)
 			 */
-			if ((mod->mod_flags & MODFLG_MUST_FORCE) ||
+			if (mod->mod_flags & MODFLG_MUST_FORCE ||
 			    module_do_builtin(mi->mi_name, NULL, NULL) != 0) {
 				TAILQ_REMOVE(&module_builtins, mod, mod_chain);
 				TAILQ_INSERT_TAIL(&bi_fail, mod, mod_chain);
@@ -521,10 +522,10 @@ module_init_class(modclass_t modclass)
 	do {
 		TAILQ_FOREACH(mod, &module_bootlist, mod_chain) {
 			mi = mod->mod_info;
-			if (!MODULE_CLASS_MATCH(mi, modclass))
+			if (!MODULE_CLASS_MATCH(mi, class))
 				continue;
 			module_do_load(mi->mi_name, false, 0, NULL, NULL,
-			    modclass, false);
+			    class, false);
 			break;
 		}
 	} while (mod != NULL);
@@ -565,7 +566,7 @@ module_compatible(int v1, int v2)
  */
 int
 module_load(const char *filename, int flags, prop_dictionary_t props,
-	    modclass_t modclass)
+	    modclass_t class)
 {
 	int error;
 
@@ -577,7 +578,7 @@ module_load(const char *filename, int flags, prop_dictionary_t props,
 	}
 
 	kernconfig_lock();
-	error = module_do_load(filename, false, flags, props, NULL, modclass,
+	error = module_do_load(filename, false, flags, props, NULL, class,
 	    false);
 	kernconfig_unlock();
 
@@ -590,7 +591,7 @@ module_load(const char *filename, int flags, prop_dictionary_t props,
  *	Load a single module from the file system, system initiated.
  */
 int
-module_autoload(const char *filename, modclass_t modclass)
+module_autoload(const char *filename, modclass_t class)
 {
 	int error;
 
@@ -614,7 +615,7 @@ module_autoload(const char *filename, modclass_t modclass)
 	    0, (void *)(uintptr_t)MODCTL_LOAD, (void *)(uintptr_t)1, NULL);
 
 	if (error == 0)
-		error = module_do_load(filename, false, 0, NULL, NULL, modclass,
+		error = module_do_load(filename, false, 0, NULL, NULL, class,
 		    true);
 
 	kernconfig_unlock();
@@ -852,7 +853,7 @@ module_do_builtin(const char *name, module_t **modp, prop_dictionary_t props)
  */
 static int
 module_do_load(const char *name, bool isdep, int flags,
-	       prop_dictionary_t props, module_t **modp, modclass_t modclass,
+	       prop_dictionary_t props, module_t **modp, modclass_t class,
 	       bool autoload)
 {
 #define MODULE_MAX_DEPTH 6
@@ -966,8 +967,7 @@ module_do_load(const char *name, bool isdep, int flags,
 			 * available for each architecture, so we don't
 			 * print an error if they are missing.
 			 */
-			if ((modclass != MODULE_CLASS_EXEC || error != ENOENT)
-			    && root_device != NULL)
+			if (class != MODULE_CLASS_EXEC || error != ENOENT)
 				module_error("vfs load failed for `%s', "
 				    "error %d", name, error);
 #endif
@@ -1010,8 +1010,8 @@ module_do_load(const char *name, bool isdep, int flags,
 	 * If a specific kind of module was requested, ensure that we have
 	 * a match.
 	 */
-	if (!MODULE_CLASS_MATCH(mi, modclass)) {
-		module_incompat(mi, modclass);
+	if (!MODULE_CLASS_MATCH(mi, class)) {
+		module_incompat(mi, class);
 		error = ENOENT;
 		goto fail;
 	}

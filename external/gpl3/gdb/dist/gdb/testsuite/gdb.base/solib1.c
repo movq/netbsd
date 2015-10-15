@@ -3,10 +3,16 @@
    the square of its integer argument.
    */
 #if defined(__cplusplus) || defined(__STDCPP__)
-extern "C"
-#endif
-int
+extern "C" int
 solib_main (int arg)
+#else
+#ifdef PROTOTYPES
+int  solib_main (int arg)
+#else
+int  solib_main (arg)
+  int  arg;
+#endif
+#endif
 {
-  return arg*arg;		/* HERE */
-}				/* STEP */
+  return arg*arg;
+}

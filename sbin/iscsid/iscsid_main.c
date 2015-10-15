@@ -1,4 +1,4 @@
-/*	$NetBSD: iscsid_main.c,v 1.9 2015/05/30 16:00:51 joerg Exp $	*/
+/*	$NetBSD: iscsid_main.c,v 1.8 2012/12/29 08:28:20 mlelstv Exp $	*/
 
 /*-
  * Copyright (c) 2005,2006,2011 The NetBSD Foundation, Inc.
@@ -52,7 +52,10 @@ pthread_t event_thread;			/* event thread handle */
 int driver = -1;				/* the driver's file desc */
 int client_sock;				/* the client communication socket */
 
-int debug_level;	/* How much info to display */
+#ifndef ISCSI_DEBUG
+#define ISCSI_DEBUG 0
+#endif
+int debug_level = ISCSI_DEBUG;	/* How much info to display */
 int nothreads;
 
 /*
@@ -131,7 +134,9 @@ init_daemon(void)
 
 	if ((driver = open(DEVICE, O_RDONLY)) < 0) {
 		perror("opening " DEVICE);
+#ifndef ISCSI_DEBUG		/* DEBUG ONLY: Allow daemon to operate w/o driver */
 		return -1;
+#endif
 	}
 
 	sock = socket(AF_UNIX, SOCK_DGRAM, 0);

@@ -1,4 +1,4 @@
-/*	$NetBSD: filecomplete.c,v 1.34 2014/10/18 15:07:02 riz Exp $	*/
+/*	$NetBSD: filecomplete.c,v 1.32.2.1 2015/05/13 13:33:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include "config.h"
 #if !defined(lint) && !defined(SCCSID)
-__RCSID("$NetBSD: filecomplete.c,v 1.34 2014/10/18 15:07:02 riz Exp $");
+__RCSID("$NetBSD: filecomplete.c,v 1.32.2.1 2015/05/13 13:33:55 martin Exp $");
 #endif /* not lint && not SCCSID */
 
 #include <sys/types.h>

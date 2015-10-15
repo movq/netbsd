@@ -1,4 +1,4 @@
-#	$NetBSD: list.images,v 1.10 2014/11/24 08:08:23 tsutsui Exp $
+#	$NetBSD: list.images,v 1.9.26.1 2015/03/29 07:42:53 snj Exp $
 
 SRCDIRS	bin sbin usr.bin usr.sbin gnu/usr.bin sys/arch/atari/stand
 LIBS	libhack.o -lprop -lrmt -lz -lutil -lcurses -lterminfo -ll -lm

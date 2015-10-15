@@ -1,4 +1,4 @@
-/*	$NetBSD: exynos_var.h,v 1.18 2014/09/30 14:23:41 reinoud Exp $	*/
+/*	$NetBSD: exynos_var.h,v 1.12.4.1 2015/01/04 11:19:00 martin Exp $	*/
 
 /*-
  * Copyright (c) 2013, 2014 The NetBSD Foundation, Inc.

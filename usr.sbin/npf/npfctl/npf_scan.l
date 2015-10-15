@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_scan.l,v 1.22 2014/12/26 22:44:54 christos Exp $	*/
+/*	$NetBSD: npf_scan.l,v 1.21.2.1 2014/12/29 17:31:47 martin Exp $	*/
 
 /*-
  * Copyright (c) 2011-2012 The NetBSD Foundation, Inc.

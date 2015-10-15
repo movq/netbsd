@@ -1,4 +1,4 @@
-/* $NetBSD: awin_sysconfig.h,v 1.1 2014/10/22 00:24:52 jmcneill Exp $ */
+/* $NetBSD: awin_sysconfig.h,v 1.1.2.2 2014/11/09 14:42:33 martin Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>

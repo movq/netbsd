@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_map.c,v 1.32 2014/12/26 05:09:03 msaitoh Exp $	*/
+/*	$NetBSD: pci_map.c,v 1.30.12.2 2015/01/08 11:39:37 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_map.c,v 1.32 2014/12/26 05:09:03 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_map.c,v 1.30.12.2 2015/01/08 11:39:37 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

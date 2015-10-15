@@ -1,4 +1,4 @@
-/*	$NetBSD: win32select.c,v 1.1.1.2 2015/01/29 06:37:53 spz Exp $	*/
+/*	$NetBSD: win32select.c,v 1.1.1.1.12.1 2015/02/03 08:23:39 bouyer Exp $	*/
 /*
  * Copyright 2007-2012 Niels Provos and Nick Mathewson
  * Copyright 2000-2007 Niels Provos <provos@citi.umich.edu>
@@ -41,7 +41,7 @@
 #include "event2/util.h"
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: win32select.c,v 1.1.1.2 2015/01/29 06:37:53 spz Exp $");
+__RCSID("$NetBSD: win32select.c,v 1.1.1.1.12.1 2015/02/03 08:23:39 bouyer Exp $");
 #include "util-internal.h"
 #include "log-internal.h"
 #include "event2/event.h"

@@ -232,7 +232,6 @@ libntpd_a_SOURCES =		\
 	ntp_timer.c		\
 	ntp_util.c		\
 	ppsapi_timepps.h	\
-	rc_cmdlength.c		\
 	refclock_acts.c		\
 	refclock_arbiter.c	\
 	refclock_arc.c		\

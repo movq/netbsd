@@ -1,5 +1,5 @@
 /* Tracepoint code for remote server for GDB.
-   Copyright (C) 2009-2015 Free Software Foundation, Inc.
+   Copyright (C) 2009-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,12 +20,12 @@
 #include "tracepoint.h"
 #include "gdbthread.h"
 #include "agent.h"
-#include "rsp-low.h"
 
 #include <ctype.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/time.h>
+#include <stddef.h>
 #include <inttypes.h>
 #include <stdint.h>
 
@@ -61,8 +61,6 @@
 
 */
 
-#ifdef IN_PROCESS_AGENT
-
 static void trace_vdebug (const char *, ...) ATTRIBUTE_PRINTF (1, 2);
 
 static void
@@ -82,19 +80,6 @@ trace_vdebug (const char *fmt, ...)
     if (level <= debug_threads)		\
       trace_vdebug ((fmt), ##args);		\
   } while (0)
-
-#else
-
-#define trace_debug_1(level, fmt, args...)	\
-  do {						\
-    if (level <= debug_threads)			\
-      {						\
-	debug_printf ((fmt), ##args);		\
-	debug_printf ("\n");			\
-      }						\
-  } while (0)
-
-#endif
 
 #define trace_debug(FMT, args...)		\
   trace_debug_1 (1, FMT, ##args)
@@ -353,7 +338,7 @@ tracepoint_look_up_symbols (void)
       if (look_up_one_symbol (symbol_list[i].name, addrp, 1) == 0)
 	{
 	  if (debug_threads)
-	    debug_printf ("symbol `%s' not found\n", symbol_list[i].name);
+	    fprintf (stderr, "symbol `%s' not found\n", symbol_list[i].name);
 	  return;
 	}
     }
@@ -2443,6 +2428,7 @@ clear_installed_tracepoints (void)
   struct tracepoint *prev_stpoint;
 
   pause_all (1);
+  cancel_breakpoints ();
 
   prev_stpoint = NULL;
 
@@ -2706,7 +2692,7 @@ cmd_qtdpsrc (char *own_buf)
   packet = unpack_varlen_hex (packet, &slen);
   ++packet; /* skip a colon */
   src = xmalloc (slen + 1);
-  nbytes = hex2bin (packet, (gdb_byte *) src, strlen (packet) / 2);
+  nbytes = unhexify (src, packet, strlen (packet) / 2);
   src[nbytes] = '\0';
 
   newlast = xmalloc (sizeof (struct source_string));
@@ -2748,7 +2734,7 @@ cmd_qtdv (char *own_buf)
 
   nbytes = strlen (packet) / 2;
   varname = xmalloc (nbytes + 1);
-  nbytes = hex2bin (packet, (gdb_byte *) varname, nbytes);
+  nbytes = unhexify (varname, packet, nbytes);
   varname[nbytes] = '\0';
 
   tsv = create_trace_state_variable (num, 1);
@@ -2941,10 +2927,7 @@ get_jump_space_head (void)
     {
       if (read_inferior_data_pointer (ipa_sym_addrs.addr_gdb_jump_pad_buffer,
 				      &gdb_jump_pad_head))
-	{
-	  internal_error (__FILE__, __LINE__,
-			  "error extracting jump_pad_buffer");
-	}
+	fatal ("error extracting jump_pad_buffer");
     }
 
   return gdb_jump_pad_head;
@@ -2975,15 +2958,15 @@ claim_trampoline_space (ULONGEST used, CORE_ADDR *trampoline)
       if (read_inferior_data_pointer (ipa_sym_addrs.addr_gdb_trampoline_buffer,
 				      &trampoline_buffer_tail))
 	{
-	  internal_error (__FILE__, __LINE__,
-			  "error extracting trampoline_buffer");
+	  fatal ("error extracting trampoline_buffer");
+	  return 0;
 	}
 
       if (read_inferior_data_pointer (ipa_sym_addrs.addr_gdb_trampoline_buffer_end,
 				      &trampoline_buffer_head))
 	{
-	  internal_error (__FILE__, __LINE__,
-			  "error extracting trampoline_buffer_end");
+	  fatal ("error extracting trampoline_buffer_end");
+	  return 0;
 	}
     }
 
@@ -3018,8 +3001,8 @@ have_fast_tracepoint_trampoline_buffer (char *buf)
   if (read_inferior_data_pointer (ipa_sym_addrs.addr_gdb_trampoline_buffer_end,
 				  &trampoline_end))
     {
-      internal_error (__FILE__, __LINE__,
-		      "error extracting trampoline_buffer_end");
+      fatal ("error extracting trampoline_buffer_end");
+      return 0;
     }
   
   if (buf)
@@ -3029,8 +3012,8 @@ have_fast_tracepoint_trampoline_buffer (char *buf)
       if (read_inferior_data_pointer (ipa_sym_addrs.addr_gdb_trampoline_buffer_error,
 				  &errbuf))
 	{
-	  internal_error (__FILE__, __LINE__,
-			  "error extracting errbuf");
+	  fatal ("error extracting errbuf");
+	  return 0;
 	}
 
       read_inferior_memory (errbuf, (unsigned char *) buf, 100);
@@ -3372,25 +3355,14 @@ cmd_qtstart (char *packet)
   if (agent_loaded_p ())
     {
       if (write_inferior_integer (ipa_sym_addrs.addr_tracing, 1))
-	{
-	  internal_error (__FILE__, __LINE__,
-			  "Error setting tracing variable in lib");
-	}
+	fatal ("Error setting tracing variable in lib");
 
       if (write_inferior_data_pointer (ipa_sym_addrs.addr_stopping_tracepoint,
 				       0))
-	{
-	  internal_error (__FILE__, __LINE__,
-			  "Error clearing stopping_tracepoint variable"
-			  " in lib");
-	}
+	fatal ("Error clearing stopping_tracepoint variable in lib");
 
       if (write_inferior_integer (ipa_sym_addrs.addr_trace_buffer_is_full, 0))
-	{
-	  internal_error (__FILE__, __LINE__,
-			  "Error clearing trace_buffer_is_full variable"
-			  " in lib");
-	}
+	fatal ("Error clearing trace_buffer_is_full variable in lib");
 
       stop_tracing_bkpt = set_breakpoint_at (ipa_sym_addrs.addr_stop_tracing,
 					     stop_tracing_handler);
@@ -3432,6 +3404,9 @@ stop_tracing (void)
      We can't now, since we may be getting here due to the inferior
      agent calling us.  */
   pause_all (1);
+  /* Since we're removing breakpoints, cancel breakpoint hits,
+     possibly related to the breakpoints we're about to delete.  */
+  cancel_breakpoints ();
 
   /* Stop logging. Tracepoints can still be hit, but they will not be
      recorded.  */
@@ -3439,10 +3414,7 @@ stop_tracing (void)
   if (agent_loaded_p ())
     {
       if (write_inferior_integer (ipa_sym_addrs.addr_tracing, 0))
-	{
-	  internal_error (__FILE__, __LINE__,
-			  "Error clearing tracing variable in lib");
-	}
+	fatal ("Error clearing tracing variable in lib");
     }
 
   tracing_stop_time = get_timestamp ();
@@ -3635,17 +3607,17 @@ cmd_qtstatus (char *packet)
   str = (tracing_user_name ? tracing_user_name : "");
   slen = strlen (str);
   buf1 = (char *) alloca (slen * 2 + 1);
-  bin2hex ((gdb_byte *) str, buf1, slen);
+  hexify (buf1, str, slen);
 
   str = (tracing_notes ? tracing_notes : "");
   slen = strlen (str);
   buf2 = (char *) alloca (slen * 2 + 1);
-  bin2hex ((gdb_byte *) str, buf2, slen);
+  hexify (buf2, str, slen);
 
   str = (tracing_stop_note ? tracing_stop_note : "");
   slen = strlen (str);
   buf3 = (char *) alloca (slen * 2 + 1);
-  bin2hex ((gdb_byte *) str, buf3, slen);
+  hexify (buf3, str, slen);
 
   trace_debug ("Returning trace status as %d, stop reason %s",
 	       tracing, tracing_stop_reason);
@@ -3675,7 +3647,7 @@ cmd_qtstatus (char *packet)
       p = stop_reason_rsp = alloca (strlen ("terror:") + hexstr_len + 1);
       strcpy (p, "terror:");
       p += strlen (p);
-      bin2hex ((gdb_byte *) result_name, p, strlen (result_name));
+      convert_int_to_ascii ((gdb_byte *) result_name, p, strlen (result_name));
     }
 
   /* If this was a forced stop, include any stop note that was supplied.  */
@@ -3794,7 +3766,7 @@ response_source (char *packet,
 
   len = strlen (src->str);
   buf = alloca (len * 2 + 1);
-  bin2hex ((gdb_byte *) src->str, buf, len);
+  convert_int_to_ascii ((gdb_byte *) src->str, buf, len);
 
   sprintf (packet, "Z%x:%s:%s:%x:%x:%s",
 	   tpoint->number, paddress (tpoint->address),
@@ -3883,7 +3855,7 @@ response_tsv (char *packet, struct trace_state_variable *tsv)
     {
       namelen = strlen (tsv->name);
       buf = alloca (namelen * 2 + 1);
-      bin2hex ((gdb_byte *) tsv->name, buf, namelen);
+      convert_int_to_ascii ((gdb_byte *) tsv->name, buf, namelen);
     }
 
   sprintf (packet, "%x:%s:%x:%s", tsv->number, phex_nz (tsv->initial_value, 0),
@@ -3955,17 +3927,6 @@ cmd_qtstmat (char *packet)
     run_inferior_command (packet, strlen (packet) + 1);
 }
 
-/* Helper for gdb_agent_about_to_close.
-   Return non-zero if thread ENTRY is in the same process in DATA.  */
-
-static int
-same_process_p (struct inferior_list_entry *entry, void *data)
-{
-  int *pid = data;
-
-  return ptid_get_pid (entry->id) == *pid;
-}
-
 /* Sent the agent a command to close it.  */
 
 void
@@ -3975,19 +3936,26 @@ gdb_agent_about_to_close (int pid)
 
   if (!maybe_write_ipa_not_loaded (buf))
     {
-      struct thread_info *saved_thread;
+      struct thread_info *save_inferior;
+      struct inferior_list_entry *inf = all_threads.head;
 
-      saved_thread = current_thread;
+      save_inferior = current_inferior;
 
-      /* Find any thread which belongs to process PID.  */
-      current_thread = (struct thread_info *)
-	find_inferior (&all_threads, same_process_p, &pid);
+      /* Find a certain thread which belongs to process PID.  */
+      while (inf != NULL)
+	{
+	  if (ptid_get_pid (inf->id) == pid)
+	    break;
+	  inf = inf->next;
+	}
+
+      current_inferior = (struct thread_info *) inf;
 
       strcpy (buf, "close");
 
       run_inferior_command (buf, strlen (buf) + 1);
 
-      current_thread = saved_thread;
+      current_inferior = save_inferior;
     }
 }
 
@@ -3997,7 +3965,7 @@ gdb_agent_about_to_close (int pid)
 static void
 cmd_qtminftpilen (char *packet)
 {
-  if (current_thread == NULL)
+  if (current_inferior == NULL)
     {
       /* Indicate that the minimum length is currently unknown.  */
       strcpy (packet, "0");
@@ -4057,7 +4025,7 @@ cmd_qtbuffer (char *own_buf)
   if (num >= (PBUFSIZ - 16) / 2 )
     num = (PBUFSIZ - 16) / 2;
 
-  bin2hex (tbp, own_buf, num);
+  convert_int_to_ascii (tbp, own_buf, num);
 }
 
 static void
@@ -4124,7 +4092,7 @@ cmd_qtnotes (char *own_buf)
 	  packet = strchr (packet, ';');
 	  nbytes = (packet - saved) / 2;
 	  user = xmalloc (nbytes + 1);
-	  nbytes = hex2bin (saved, (gdb_byte *) user, nbytes);
+	  nbytes = unhexify (user, saved, nbytes);
 	  user[nbytes] = '\0';
 	  ++packet; /* skip the semicolon */
 	  trace_debug ("User is '%s'", user);
@@ -4138,7 +4106,7 @@ cmd_qtnotes (char *own_buf)
 	  packet = strchr (packet, ';');
 	  nbytes = (packet - saved) / 2;
 	  notes = xmalloc (nbytes + 1);
-	  nbytes = hex2bin (saved, (gdb_byte *) notes, nbytes);
+	  nbytes = unhexify (notes, saved, nbytes);
 	  notes[nbytes] = '\0';
 	  ++packet; /* skip the semicolon */
 	  trace_debug ("Notes is '%s'", notes);
@@ -4152,7 +4120,7 @@ cmd_qtnotes (char *own_buf)
 	  packet = strchr (packet, ';');
 	  nbytes = (packet - saved) / 2;
 	  stopnote = xmalloc (nbytes + 1);
-	  nbytes = hex2bin (saved, (gdb_byte *) stopnote, nbytes);
+	  nbytes = unhexify (stopnote, saved, nbytes);
 	  stopnote[nbytes] = '\0';
 	  ++packet; /* skip the semicolon */
 	  trace_debug ("tstop note is '%s'", stopnote);
@@ -5620,29 +5588,17 @@ fast_tracepoint_collecting (CORE_ADDR thread_area,
 
   if (read_inferior_data_pointer (ipa_sym_addrs.addr_gdb_jump_pad_buffer,
 				  &ipa_gdb_jump_pad_buffer))
-    {
-      internal_error (__FILE__, __LINE__,
-		      "error extracting `gdb_jump_pad_buffer'");
-    }
+    fatal ("error extracting `gdb_jump_pad_buffer'");
   if (read_inferior_data_pointer (ipa_sym_addrs.addr_gdb_jump_pad_buffer_end,
 				  &ipa_gdb_jump_pad_buffer_end))
-    {
-      internal_error (__FILE__, __LINE__,
-		      "error extracting `gdb_jump_pad_buffer_end'");
-    }
+    fatal ("error extracting `gdb_jump_pad_buffer_end'");
 
   if (read_inferior_data_pointer (ipa_sym_addrs.addr_gdb_trampoline_buffer,
 				  &ipa_gdb_trampoline_buffer))
-    {
-      internal_error (__FILE__, __LINE__,
-		      "error extracting `gdb_trampoline_buffer'");
-    }
+    fatal ("error extracting `gdb_trampoline_buffer'");
   if (read_inferior_data_pointer (ipa_sym_addrs.addr_gdb_trampoline_buffer_end,
 				  &ipa_gdb_trampoline_buffer_end))
-    {
-      internal_error (__FILE__, __LINE__,
-		      "error extracting `gdb_trampoline_buffer_end'");
-    }
+    fatal ("error extracting `gdb_trampoline_buffer_end'");
 
   if (ipa_gdb_jump_pad_buffer <= stop_pc
       && stop_pc < ipa_gdb_jump_pad_buffer_end)
@@ -5962,10 +5918,7 @@ target_malloc (ULONGEST size)
       /* We have the pointer *address*, need what it points to.  */
       if (read_inferior_data_pointer (ipa_sym_addrs.addr_gdb_tp_heap_buffer,
 				      &target_tp_heap))
-	{
-	  internal_error (__FILE__, __LINE__,
-			  "couldn't get target heap head pointer");
-	}
+	fatal ("could get target heap head pointer");
     }
 
   ptr = target_tp_heap;
@@ -6189,10 +6142,7 @@ download_tracepoint (struct tracepoint *tpoint)
       if (read_inferior_data_pointer (tp_prev->obj_addr_on_target
 				      + offsetof (struct tracepoint, next),
 				      &tp_prev_target_next_addr))
-	{
-	  internal_error (__FILE__, __LINE__,
-			  "error reading `tp_prev->next'");
-	}
+	fatal ("error reading `tp_prev->next'");
 
       /* tpoint->next = tp_prev->next */
       write_inferior_data_ptr (tpoint->obj_addr_on_target
@@ -6269,7 +6219,10 @@ download_trace_state_variables (void)
 				   name_addr);
 	}
 
-      gdb_assert (tsv->getter == NULL);
+      if (tsv->getter != NULL)
+	{
+	  fatal ("what to do with these?");
+	}
     }
 
   if (prev_ptr != 0)
@@ -6442,13 +6395,9 @@ upload_fast_traceframes (void)
 	error ("Uploading: couldn't read traceframe at %s\n", paddress (tf));
 
       if (ipa_tframe.tpnum == 0)
-	{
-	  internal_error (__FILE__, __LINE__,
-			  "Uploading: No (more) fast traceframes, but"
-			  " ipa_traceframe_count == %u??\n",
-			  ipa_traceframe_write_count
-			  - ipa_traceframe_read_count);
-	}
+	fatal ("Uploading: No (more) fast traceframes, but "
+	       "ipa_traceframe_count == %u??\n",
+	       ipa_traceframe_write_count - ipa_traceframe_read_count);
 
       /* Note that this will be incorrect for multi-location
 	 tracepoints...  */
@@ -6534,6 +6483,7 @@ upload_fast_traceframes (void)
   trace_debug ("Done uploading traceframes [%d]\n", curr_tbctrl_idx);
 
   pause_all (1);
+  cancel_breakpoints ();
 
   delete_breakpoint (about_to_request_buffer_space_bkpt);
   about_to_request_buffer_space_bkpt = NULL;
@@ -6964,7 +6914,7 @@ cstr_to_hexstr (const char *str)
 {
   int len = strlen (str);
   char *hexstr = xmalloc (len * 2 + 1);
-  bin2hex ((gdb_byte *) str, hexstr, len);
+  convert_int_to_ascii ((gdb_byte *) str, hexstr, len);
   return hexstr;
 }
 
@@ -7140,6 +7090,7 @@ gdb_ust_init (void)
 #endif /* HAVE_UST */
 
 #include <sys/syscall.h>
+#include <stdlib.h>
 
 static void
 gdb_agent_remove_socket (void)
@@ -7254,9 +7205,9 @@ gdb_agent_helper_thread (void *arg)
 
 	      /* Sleep endlessly to wait the whole inferior stops.  This
 		 thread can not exit because GDB or GDBserver may still need
-		 'current_thread' (representing this thread) to access
+		 'current_inferior' (representing this thread) to access
 		 inferior memory.  Otherwise, this thread exits earlier than
-		 other threads, and 'current_thread' is set to NULL.  */
+		 other threads, and 'current_inferior' is set to NULL.  */
 	      while (1)
 		sleep (10);
 	    }
@@ -7285,7 +7236,7 @@ gdb_agent_init (void)
   sigfillset (&new_mask);
   res = pthread_sigmask (SIG_SETMASK, &new_mask, &orig_mask);
   if (res)
-    perror_with_name ("pthread_sigmask (1)");
+    fatal ("pthread_sigmask (1) failed: %s", strerror (res));
 
   res = pthread_create (&thread,
 			NULL,
@@ -7294,7 +7245,7 @@ gdb_agent_init (void)
 
   res = pthread_sigmask (SIG_SETMASK, &orig_mask, NULL);
   if (res)
-    perror_with_name ("pthread_sigmask (2)");
+    fatal ("pthread_sigmask (2) failed: %s", strerror (res));
 
   while (helper_thread_id == 0)
     usleep (1);
@@ -7375,7 +7326,7 @@ initialize_tracepoint (void)
 
     pagesize = sysconf (_SC_PAGE_SIZE);
     if (pagesize == -1)
-      perror_with_name ("sysconf");
+      fatal ("sysconf");
 
     gdb_tp_heap_buffer = xmalloc (5 * 1024 * 1024);
 
@@ -7394,7 +7345,9 @@ initialize_tracepoint (void)
       }
 
     if (addr == 0)
-      perror_with_name ("mmap");
+      fatal ("\
+initialize_tracepoint: mmap'ing jump pad buffer failed with %s",
+	     strerror (errno));
 
     gdb_jump_pad_buffer_end = gdb_jump_pad_buffer + pagesize * SCRATCH_BUFFER_NPAGES;
   }

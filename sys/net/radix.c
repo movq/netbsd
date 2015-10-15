@@ -1,4 +1,4 @@
-/*	$NetBSD: radix.c,v 1.45 2015/08/24 22:21:26 pooka Exp $	*/
+/*	$NetBSD: radix.c,v 1.44 2011/07/17 20:54:52 joerg Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1993
@@ -36,16 +36,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: radix.c,v 1.45 2015/08/24 22:21:26 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: radix.c,v 1.44 2011/07/17 20:54:52 joerg Exp $");
 
 #ifndef _NET_RADIX_H_
 #include <sys/param.h>
 #include <sys/queue.h>
 #include <sys/kmem.h>
 #ifdef	_KERNEL
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
-#endif
 
 #include <sys/systm.h>
 #include <sys/malloc.h>

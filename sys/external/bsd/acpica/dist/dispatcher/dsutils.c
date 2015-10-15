@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,8 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
+#define __DSUTILS_C__
 
 #include "acpi.h"
 #include "accommon.h"
@@ -598,21 +600,6 @@ AcpiDsCreateOperand (
                     ObjDesc = ACPI_CAST_PTR (
                                 ACPI_OPERAND_OBJECT, AcpiGbl_RootNode);
                     Status = AE_OK;
-                }
-                else if (ParentOp->Common.AmlOpcode == AML_EXTERNAL_OP)
-                {
-                    /* TBD: May only be temporary */
-
-                    ObjDesc = AcpiUtCreateStringObject ((ACPI_SIZE) NameLength);
-		    if (!ObjDesc)
-		    {
-			Status = AE_NO_MEMORY;
-		    }
-		    else
-		    {
-			strncpy (ObjDesc->String.Pointer, NameString, NameLength);
-			Status = AE_OK;
-		    }
                 }
                 else
                 {

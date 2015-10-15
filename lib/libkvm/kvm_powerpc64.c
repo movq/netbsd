@@ -1,4 +1,4 @@
-/*	$NetBSD: kvm_powerpc64.c,v 1.6 2014/08/23 02:25:23 matt Exp $	*/
+/*	$NetBSD: kvm_powerpc64.c,v 1.5.4.1 2015/02/04 10:14:30 martin Exp $	*/
 
 /*
  * Copyright (c) 2005 Wasabi Systems, Inc.
@@ -90,7 +90,7 @@
 #include <powerpc/oea/bat.h>
 #include <powerpc/oea/pte.h>
 
-__RCSID("$NetBSD: kvm_powerpc64.c,v 1.6 2014/08/23 02:25:23 matt Exp $");
+__RCSID("$NetBSD: kvm_powerpc64.c,v 1.5.4.1 2015/02/04 10:14:30 martin Exp $");
 
 void
 _kvm_freevtop(kvm_t *kd)

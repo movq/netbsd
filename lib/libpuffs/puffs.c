@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs.c,v 1.120 2015/06/17 00:15:26 christos Exp $	*/
+/*	$NetBSD: puffs.c,v 1.117.18.1 2014/11/05 18:11:31 snj Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007  Antti Kantee.  All Rights Reserved.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: puffs.c,v 1.120 2015/06/17 00:15:26 christos Exp $");
+__RCSID("$NetBSD: puffs.c,v 1.117.18.1 2014/11/05 18:11:31 snj Exp $");
 #endif /* !lint */
 
 #include <sys/param.h>
@@ -134,7 +134,7 @@ puffs_kernerr_abort(struct puffs_usermount *pu, uint8_t type,
 	int error, const char *str, puffs_cookie_t cookie)
 {
 
-	warnx("abort: type %d, error %d, cookie %p (%s)",
+	fprintf(stderr, "abort: type %d, error %d, cookie %p (%s)\n",
 	    type, error, cookie, str);
 	abort();
 }
@@ -145,7 +145,7 @@ puffs_kernerr_log(struct puffs_usermount *pu, uint8_t type,
 	int error, const char *str, puffs_cookie_t cookie)
 {
 
-	syslog(LOG_WARNING, "kernel: type %d, error %d, cookie %p (%s)",
+	syslog(LOG_WARNING, "kernel: type %d, error %d, cookie %p (%s)\n",
 	    type, error, cookie, str);
 }
 
@@ -213,8 +213,8 @@ puffs_setstacksize(struct puffs_usermount *pu, size_t ss)
 	minsize = 4*psize;
 	if (ss < (size_t)minsize || ss == PUFFS_STACKSIZE_MIN) {
 		if (ss != PUFFS_STACKSIZE_MIN)
-			warnx("%s: adjusting " "stacksize to minimum %ld",
-			    __func__, minsize);
+			fprintf(stderr, "puffs_setstacksize: adjusting "
+			    "stacksize to minimum %ld\n", minsize);
 		ss = 4*psize;
 	}
  
@@ -228,8 +228,8 @@ puffs_setstacksize(struct puffs_usermount *pu, size_t ss)
 	}
 	if (bonus > 1) {
 		stackshift++;
-		warnx("%s: using next power of two: %d", __func__,
-		    1 << stackshift);
+		fprintf(stderr, "puffs_setstacksize: using next power of two: "
+		    "%d\n", 1<<stackshift);
 	}
 
 	pu->pu_cc_stackshift = stackshift;
@@ -270,7 +270,8 @@ puffs_setrootinfo(struct puffs_usermount *pu, enum vtype vt,
 	struct puffs_kargs *pargs = pu->pu_kargp;
 
 	if (puffs_getstate(pu) != PUFFS_STATE_BEFOREMOUNT) {
-		warnx("%s: call has effect only before mount", __func__);
+		warnx("puffs_setrootinfo: call has effect only "
+		    "before mount\n");
 		return;
 	}
 
@@ -317,7 +318,8 @@ puffs_setmaxreqlen(struct puffs_usermount *pu, size_t reqlen)
 {
 
 	if (puffs_getstate(pu) != PUFFS_STATE_BEFOREMOUNT)
-		warnx("%s: call has effect only before mount", __func__);
+		warnx("puffs_setmaxreqlen: call has effect only "
+		    "before mount\n");
 
 	pu->pu_kargp->pa_maxmsglen = reqlen;
 }
@@ -327,7 +329,7 @@ puffs_setfhsize(struct puffs_usermount *pu, size_t fhsize, int flags)
 {
 
 	if (puffs_getstate(pu) != PUFFS_STATE_BEFOREMOUNT)
-		warnx("%s: call has effect only before mount", __func__);
+		warnx("puffs_setfhsize: call has effect only before mount\n");
 
 	pu->pu_kargp->pa_fhsize = fhsize;
 	pu->pu_kargp->pa_fhflags = flags;
@@ -338,7 +340,7 @@ puffs_setncookiehash(struct puffs_usermount *pu, int nhash)
 {
 
 	if (puffs_getstate(pu) != PUFFS_STATE_BEFOREMOUNT)
-		warnx("%s: call has effect only before mount", __func__);
+		warnx("puffs_setfhsize: call has effect only before mount\n");
 
 	pu->pu_kargp->pa_nhashbuckets = nhash;
 }
@@ -572,17 +574,13 @@ do {									\
 		rv = 0;
 	} else {
 		char rp[MAXPATHLEN];
-		size_t rplen,dirlen;
 
 		if (realpath(dir, rp) == NULL) {
 			rv = -1;
 			goto out;
 		}
 
-		rplen = strlen(rp);
-		dirlen = strlen(dir);
-		if (strncmp(dir, rp, rplen) != 0 ||
-		    strspn(dir + rplen, "/") != dirlen - rplen) {
+		if (strcmp(dir, rp) != 0) {
 			warnx("puffs_mount: \"%s\" is a relative path.", dir);
 			warnx("puffs_mount: using \"%s\" instead.", rp);
 		}

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_cue.c,v 1.70 2015/04/14 21:09:48 riastradh Exp $	*/
+/*	$NetBSD: if_cue.c,v 1.68 2014/08/10 16:44:36 tls Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999, 2000
  *	Bill Paul <wpaul@ee.columbia.edu>.  All rights reserved.
@@ -56,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_cue.c,v 1.70 2015/04/14 21:09:48 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_cue.c,v 1.68 2014/08/10 16:44:36 tls Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_inet.h"
@@ -72,6 +72,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_cue.c,v 1.70 2015/04/14 21:09:48 riastradh Exp $"
 #include <sys/socket.h>
 #include <sys/bus.h>
 #include <sys/device.h>
+#include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_arp.h>

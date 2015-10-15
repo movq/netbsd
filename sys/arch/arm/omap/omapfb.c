@@ -1,4 +1,4 @@
-/*	$NetBSD: omapfb.c,v 1.27 2014/08/20 00:40:33 macallan Exp $	*/
+/*	$NetBSD: omapfb.c,v 1.26.2.1 2014/08/21 08:50:55 martin Exp $	*/
 
 /*
  * Copyright (c) 2010 Michael Lorenz
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omapfb.c,v 1.27 2014/08/20 00:40:33 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omapfb.c,v 1.26.2.1 2014/08/21 08:50:55 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

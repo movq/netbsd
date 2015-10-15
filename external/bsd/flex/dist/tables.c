@@ -1,4 +1,4 @@
-/*	$NetBSD: tables.c,v 1.5 2014/10/30 18:44:05 christos Exp $	*/
+/*	$NetBSD: tables.c,v 1.3.8.1 2015/03/06 20:49:11 snj Exp $	*/
 
 /*  tables.c - tables serialization code
  *
@@ -34,7 +34,7 @@
  *  PURPOSE.
  */
 #include "flexdef.h"
-__RCSID("$NetBSD: tables.c,v 1.5 2014/10/30 18:44:05 christos Exp $");
+__RCSID("$NetBSD: tables.c,v 1.3.8.1 2015/03/06 20:49:11 snj Exp $");
 
 
 #include "tables.h"

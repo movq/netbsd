@@ -1,5 +1,6 @@
 /* ELF strtab with GC and suffix merging support.
-   Copyright (C) 2001-2015 Free Software Foundation, Inc.
+   Copyright 2001, 2002, 2003, 2005, 2006, 2007, 2008
+   Free Software Foundation, Inc.
    Written by Jakub Jelinek <jakub@redhat.com>.
 
    This file is part of BFD, the Binary File Descriptor library.

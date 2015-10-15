@@ -494,11 +494,10 @@ mDNSexport int ParseDNSServers(mDNS *m, const char *filePath)
 	while (fgets(line,sizeof(line),fp))
 		{
 		struct in_addr ina;
-		struct in6_addr ina6;
 		line[255]='\0';		// just to be safe
 		if (sscanf(line,"%10s %15s", keyword, nameserver) != 2) continue;	// it will skip whitespaces
 		if (strncasecmp(keyword,"nameserver",10)) continue;
-		if (inet_pton(AF_INET, nameserver, &ina) == 1)
+		if (inet_aton(nameserver, (struct in_addr *)&ina) != 0)
 			{
 			mDNSAddr DNSAddr;
 			DNSAddr.type = mDNSAddrType_IPv4;
@@ -506,15 +505,7 @@ mDNSexport int ParseDNSServers(mDNS *m, const char *filePath)
 			mDNS_AddDNSServer(m, NULL, mDNSInterface_Any, &DNSAddr, UnicastDNSPort, mDNSfalse, 0);
 			numOfServers++;
 			}
-		else if (inet_pton(AF_INET6, nameserver, &ina6) == 1)
-			{
-			mDNSAddr DNSAddr;
-			DNSAddr.type = mDNSAddrType_IPv6;
-			DNSAddr.ip.v6 = *(mDNSv6Addr *)&ina6;
-			mDNS_AddDNSServer(m, NULL, mDNSInterface_Any, &DNSAddr, UnicastDNSPort, mDNSfalse, 0);
-			numOfServers++;
-			}
-		}
+		}  
 	fclose(fp);
 	return (numOfServers > 0) ? 0 : -1;
 	}
@@ -930,9 +921,7 @@ mDNSlocal int SetupInterfaceList(mDNS *const m)
 	assert(m != NULL);
 	debugf("SetupInterfaceList");
 
-	/* More interfaces, or usableable addresses to existing interfaces
-	 * could be added later. */
-	if (intfList == NULL) return 0;
+	if (intfList == NULL) err = ENOENT;
 
 #if HAVE_IPV6
 	if (err == 0)		/* Link the IPv6 list to the end of the IPv4 list */
@@ -1422,11 +1411,6 @@ mDNSexport mStatus mDNSPlatformTimeInit(void)
 
 mDNSexport mDNSs32  mDNSPlatformRawTime()
 	{
-#ifdef CLOCK_MONOTONIC
-	struct timespec tv;
-	clock_gettime(CLOCK_MONOTONIC, &tv);
-	return((tv.tv_sec << 10) | ((tv.tv_nsec / 1000) * 16 / 15625));
-#else
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	// tv.tv_sec is seconds since 1st January 1970 (GMT, with no adjustment for daylight savings time)
@@ -1436,7 +1420,6 @@ mDNSexport mDNSs32  mDNSPlatformRawTime()
 	// This gives us a proper modular (cyclic) counter that has a resolution of roughly 1ms (actually 1/1024 second)
 	// and correctly cycles every 2^22 seconds (4194304 seconds = approx 48 days).
 	return((tv.tv_sec << 10) | (tv.tv_usec * 16 / 15625));
-#endif
 	}
 
 mDNSexport mDNSs32 mDNSPlatformUTC(void)

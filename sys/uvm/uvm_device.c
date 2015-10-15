@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_device.c,v 1.64 2014/12/14 23:48:58 chs Exp $	*/
+/*	$NetBSD: uvm_device.c,v 1.63.22.1 2014/12/31 06:44:01 snj Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_device.c,v 1.64 2014/12/14 23:48:58 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_device.c,v 1.63.22.1 2014/12/31 06:44:01 snj Exp $");
 
 #include "opt_uvmhist.h"
 

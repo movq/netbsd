@@ -1,4 +1,4 @@
-/*	$NetBSD: mpt_netbsd.c,v 1.32 2015/07/22 08:33:51 hannken Exp $	*/
+/*	$NetBSD: mpt_netbsd.c,v 1.25.2.2 2015/07/30 15:53:39 snj Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpt_netbsd.c,v 1.32 2015/07/22 08:33:51 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpt_netbsd.c,v 1.25.2.2 2015/07/30 15:53:39 snj Exp $");
 
 #include "bio.h"
 

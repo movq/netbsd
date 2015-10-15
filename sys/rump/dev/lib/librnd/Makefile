@@ -1,13 +1,18 @@
-#	$NetBSD: Makefile,v 1.9 2015/08/20 11:51:12 christos Exp $
+#	$NetBSD: Makefile,v 1.7 2014/03/13 01:52:37 pooka Exp $
 #
 
 .PATH:	${.CURDIR}/../../../../dev
 
 LIB=	rumpdev_rnd
-IOCONF=	RND.ioconf
+
 SRCS=	rndpseudo.c
 
 SRCS+=	rnd_component.c
+
+# sys/rump/Makefile.rump sets CPPFLAGS+= -DCOMPAT_50=1,
+# so we need rndpseudo_50.c from the compat/common directory.
+.PATH:	${.CURDIR}/../../../../compat/common
+SRCS+=	rndpseudo_50.c
 
 CPPFLAGS+=	-I${RUMPTOP}/librump/rumpvfs
 

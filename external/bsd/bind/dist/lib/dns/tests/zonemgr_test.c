@@ -1,4 +1,4 @@
-/*	$NetBSD: zonemgr_test.c,v 1.4 2015/07/08 17:28:59 christos Exp $	*/
+/*	$NetBSD: zonemgr_test.c,v 1.2.4.1 2015/07/17 04:31:34 snj Exp $	*/
 
 /*
  * Copyright (C) 2011-2013, 2015  Internet Systems Consortium, Inc. ("ISC")

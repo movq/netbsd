@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,7 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
 
 #include "acpi.h"
 #include "accommon.h"
@@ -179,7 +180,7 @@ AcpiPsDisplayObjectPathname (
     /* Convert NamedDesc/handle to a full pathname */
 
     Buffer.Length = ACPI_ALLOCATE_LOCAL_BUFFER;
-    Status = AcpiNsHandleToPathname (Node, &Buffer, FALSE);
+    Status = AcpiNsHandleToPathname (Node, &Buffer);
     if (ACPI_FAILURE (Status))
     {
         AcpiOsPrintf ("****Could not get pathname****)");

@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.33 2015/06/05 16:01:55 martin Exp $ */
+/*	$NetBSD: boot.c,v 1.32.4.1 2015/07/05 20:25:15 snj Exp $ */
 /*-
  * Copyright (c) 1982, 1986 The Regents of the University of California.
  * All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_show.c,v 1.19 2015/06/03 23:36:05 rmind Exp $	*/
+/*	$NetBSD: npf_show.c,v 1.15.2.3 2015/06/04 07:34:26 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: npf_show.c,v 1.19 2015/06/03 23:36:05 rmind Exp $");
+__RCSID("$NetBSD: npf_show.c,v 1.15.2.3 2015/06/04 07:34:26 msaitoh Exp $");
 
 #include <sys/socket.h>
 #include <netinet/in.h>

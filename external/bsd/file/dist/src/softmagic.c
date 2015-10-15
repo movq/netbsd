@@ -1,5 +1,4 @@
-/*	$NetBSD: softmagic.c,v 1.13 2015/01/02 21:15:32 christos Exp $	*/
-
+/*	$NetBSD: softmagic.c,v 1.11 2014/06/13 02:08:06 christos Exp $	*/
 /*
  * Copyright (c) Ian F. Darwin 1986-1995.
  * Software written by Ian F. Darwin and others;
@@ -35,9 +34,9 @@
 
 #ifndef	lint
 #if 0
-FILE_RCSID("@(#)$File: softmagic.c,v 1.206 2015/01/01 17:07:34 christos Exp $")
+FILE_RCSID("@(#)$File: softmagic.c,v 1.191 2014/06/04 17:36:34 christos Exp $")
 #else
-__RCSID("$NetBSD: softmagic.c,v 1.13 2015/01/02 21:15:32 christos Exp $");
+__RCSID("$NetBSD: softmagic.c,v 1.11 2014/06/13 02:08:06 christos Exp $");
 #endif
 #endif	/* lint */
 
@@ -47,13 +46,17 @@ __RCSID("$NetBSD: softmagic.c,v 1.13 2015/01/02 21:15:32 christos Exp $");
 #include <ctype.h>
 #include <stdlib.h>
 #include <time.h>
+#if defined(HAVE_LOCALE_H)
+#include <locale.h>
+#endif
+
 
 private int match(struct magic_set *, struct magic *, uint32_t,
-    const unsigned char *, size_t, size_t, int, int, int, uint16_t,
-    uint16_t *, int *, int *, int *);
+    const unsigned char *, size_t, size_t, int, int, int, int, int *, int *,
+    int *);
 private int mget(struct magic_set *, const unsigned char *,
-    struct magic *, size_t, size_t, unsigned int, int, int, int, uint16_t,
-    uint16_t *, int *, int *, int *);
+    struct magic *, size_t, size_t, unsigned int, int, int, int, int, int *,
+    int *, int *);
 private int magiccheck(struct magic_set *, struct magic *);
 private int32_t mprint(struct magic_set *, struct magic *);
 private int32_t moffset(struct magic_set *, struct magic *);
@@ -69,7 +72,6 @@ private void cvt_32(union VALUETYPE *, const struct magic *);
 private void cvt_64(union VALUETYPE *, const struct magic *);
 
 #define OFFSET_OOB(n, o, i)	((n) < (o) || (i) > ((n) - (o)))
-
 /*
  * softmagic - lookup one file in parsed, in-memory copy of database
  * Passed the name and FILE * of one file to be typed.
@@ -77,21 +79,14 @@ private void cvt_64(union VALUETYPE *, const struct magic *);
 /*ARGSUSED1*/		/* nbytes passed for regularity, maybe need later */
 protected int
 file_softmagic(struct magic_set *ms, const unsigned char *buf, size_t nbytes,
-    uint16_t indir_level, uint16_t *name_count, int mode, int text)
+    size_t level, int mode, int text)
 {
 	struct mlist *ml;
 	int rv, printed_something = 0, need_separator = 0;
-	uint16_t nc;
-
-	if (name_count == NULL) {
-		nc = 0;
-		name_count = &nc;
-	}
-
 	for (ml = ms->mlist[0]->next; ml != ms->mlist[0]; ml = ml->next)
 		if ((rv = match(ms, ml->magic, ml->nmagic, buf, nbytes, 0, mode,
-		    text, 0, indir_level, name_count,
-		    &printed_something, &need_separator, NULL)) != 0)
+		    text, 0, level, &printed_something, &need_separator,
+		    NULL)) != 0)
 			return rv;
 
 	return 0;
@@ -108,8 +103,8 @@ file_fmtcheck(struct magic_set *ms, const struct magic *m, const char *def,
 	const char *ptr = fmtcheck(m->desc, def);
 	if (ptr == def)
 		file_magerror(ms,
-		    "%s, %" SIZE_T_FORMAT "u: format `%s' does not match"
-		    " with `%s'", file, line, m->desc, def);
+		    "%s, %zu: format `%s' does not match with `%s'",
+		    file, line, m->desc, def);
 	return ptr;
 }
 #else
@@ -146,8 +141,8 @@ file_fmtcheck(struct magic_set *ms, const struct magic *m, const char *def,
 private int
 match(struct magic_set *ms, struct magic *magic, uint32_t nmagic,
     const unsigned char *s, size_t nbytes, size_t offset, int mode, int text,
-    int flip, uint16_t indir_level, uint16_t *name_count,
-    int *printed_something, int *need_separator, int *returnval)
+    int flip, int recursion_level, int *printed_something, int *need_separator,
+    int *returnval)
 {
 	uint32_t magindex = 0;
 	unsigned int cont_level = 0;
@@ -184,8 +179,8 @@ match(struct magic_set *ms, struct magic *magic, uint32_t nmagic,
 
 		/* if main entry matches, print it... */
 		switch (mget(ms, s, m, nbytes, offset, cont_level, mode, text,
-		    flip, indir_level, name_count,
-		    printed_something, need_separator, returnval)) {
+		    flip, recursion_level + 1, printed_something,
+		    need_separator, returnval)) {
 		case -1:
 			return -1;
 		case 0:
@@ -245,9 +240,9 @@ match(struct magic_set *ms, struct magic *magic, uint32_t nmagic,
 		if (file_check_mem(ms, ++cont_level) == -1)
 			return -1;
 
-		while (magindex + 1 < nmagic &&
-		    magic[magindex + 1].cont_level != 0) {
-			m = &magic[++magindex];
+		while (++magindex < nmagic &&
+		    magic[magindex].cont_level != 0) {
+			m = &magic[magindex];
 			ms->line = m->lineno; /* for messages */
 
 			if (cont_level < m->cont_level)
@@ -273,8 +268,8 @@ match(struct magic_set *ms, struct magic *magic, uint32_t nmagic,
 			}
 #endif
 			switch (mget(ms, s, m, nbytes, offset, cont_level, mode,
-			    text, flip, indir_level, name_count,
-			    printed_something, need_separator, returnval)) {
+			    text, flip, recursion_level + 1, printed_something,
+			    need_separator, returnval)) {
 			case -1:
 				return -1;
 			case 0:
@@ -417,7 +412,7 @@ mprint(struct magic_set *ms, struct magic *m)
 	float vf;
 	double vd;
 	int64_t t = 0;
- 	char buf[128], tbuf[26], sbuf[512];
+ 	char buf[128], tbuf[26];
 	union VALUETYPE *p = &ms->ms_value;
 
   	switch (m->type) {
@@ -511,9 +506,7 @@ mprint(struct magic_set *ms, struct magic *m)
   	case FILE_BESTRING16:
   	case FILE_LESTRING16:
 		if (m->reln == '=' || m->reln == '!') {
-			if (file_printf(ms, F(ms, m, "%s"), 
-			    file_printable(sbuf, sizeof(sbuf), m->value.s))
-			    == -1)
+			if (file_printf(ms, F(ms, m, "%s"), m->value.s) == -1)
 				return -1;
 			t = ms->offset + m->vallen;
 		}
@@ -539,8 +532,7 @@ mprint(struct magic_set *ms, struct magic *m)
 				*++last = '\0';
 			}
 
-			if (file_printf(ms, F(ms, m, "%s"),
-			    file_printable(sbuf, sizeof(sbuf), str)) == -1)
+			if (file_printf(ms, F(ms, m, "%s"), str) == -1)
 				return -1;
 
 			if (m->type == FILE_PSTRING)
@@ -644,8 +636,7 @@ mprint(struct magic_set *ms, struct magic *m)
 			file_oomem(ms, ms->search.rm_len);
 			return -1;
 		}
-		rval = file_printf(ms, F(ms, m, "%s"),
-		    file_printable(sbuf, sizeof(sbuf), cp));
+		rval = file_printf(ms, F(ms, m, "%s"), cp);
 		free(cp);
 
 		if (rval == -1)
@@ -659,8 +650,7 @@ mprint(struct magic_set *ms, struct magic *m)
 	}
 
 	case FILE_SEARCH:
-	  	if (file_printf(ms, F(ms, m, "%s"),
-		    file_printable(sbuf, sizeof(sbuf), m->value.s)) == -1)
+	  	if (file_printf(ms, F(ms, m, "%s"), m->value.s) == -1)
 			return -1;
 		if ((m->str_flags & REGEX_OFFSET_START))
 			t = ms->search.offset;
@@ -958,17 +948,14 @@ mconvert(struct magic_set *ms, struct magic *m, int flip)
 		size_t sz = file_pstring_length_size(m);
 		char *ptr1 = p->s, *ptr2 = ptr1 + sz;
 		size_t len = file_pstring_get_length(m, ptr1);
-		sz = sizeof(p->s) - sz; /* maximum length of string */
-		if (len >= sz) {
+		if (len >= sizeof(p->s)) {
 			/*
 			 * The size of the pascal string length (sz)
 			 * is 1, 2, or 4. We need at least 1 byte for NUL
 			 * termination, but we've already truncated the
 			 * string by p->s, so we need to deduct sz.
-			 * Because we can use one of the bytes of the length
-			 * after we shifted as NUL termination.
 			 */ 
-			len = sz;
+			len = sizeof(p->s) - sz;
 		}
 		while (len--)
 			*ptr1++ = *ptr2++;
@@ -1078,7 +1065,7 @@ mconvert(struct magic_set *ms, struct magic *m, int flip)
 private void
 mdebug(uint32_t offset, const char *str, size_t len)
 {
-	(void) fprintf(stderr, "mget/%" SIZE_T_FORMAT "u @%d: ", len, offset);
+	(void) fprintf(stderr, "mget/%zu @%d: ", len, offset);
 	file_showstr(stderr, str, len);
 	(void) fputc('\n', stderr);
 	(void) fputc('\n', stderr);
@@ -1208,26 +1195,18 @@ mcopy(struct magic_set *ms, union VALUETYPE *p, int type, int indir,
 private int
 mget(struct magic_set *ms, const unsigned char *s, struct magic *m,
     size_t nbytes, size_t o, unsigned int cont_level, int mode, int text,
-    int flip, uint16_t indir_level, uint16_t *name_count,
-    int *printed_something, int *need_separator, int *returnval)
+    int flip, int recursion_level, int *printed_something,
+    int *need_separator, int *returnval)
 {
-	uint32_t offset = ms->offset;
+	uint32_t soffset, offset = ms->offset;
 	uint32_t lhs;
-	file_pushbuf_t *pb;
 	int rv, oneed_separator, in_type;
-	char *rbuf;
+	char *sbuf, *rbuf;
 	union VALUETYPE *p = &ms->ms_value;
 	struct mlist ml;
 
-	if (indir_level >= ms->indir_max) {
-		file_error(ms, 0, "indirect recursion nesting (%hu) exceeded",
-		    indir_level);
-		return -1;
-	}
-
-	if (*name_count >= ms->name_max) {
-		file_error(ms, 0, "name use count (%hu) exceeded",
-		    *name_count);
+	if (recursion_level >= 20) {
+		file_error(ms, 0, "recursion nesting exceeded");
 		return -1;
 	}
 
@@ -1236,11 +1215,8 @@ mget(struct magic_set *ms, const unsigned char *s, struct magic *m,
 		return -1;
 
 	if ((ms->flags & MAGIC_DEBUG) != 0) {
-		fprintf(stderr, "mget(type=%d, flag=%x, offset=%u, o=%"
-		    SIZE_T_FORMAT "u, " "nbytes=%" SIZE_T_FORMAT
-		    "u, il=%hu, nc=%hu)\n",
-		    m->type, m->flag, offset, o, nbytes,
-		    indir_level, *name_count);
+		fprintf(stderr, "mget(type=%d, flag=%x, offset=%u, o=%zu, "
+		    "nbytes=%zu)\n", m->type, m->flag, offset, o, nbytes);
 		mdebug(offset, (char *)(void *)p, sizeof(union VALUETYPE));
 #ifndef COMPILE_ONLY
 		file_mdump(m);
@@ -1671,27 +1647,21 @@ mget(struct magic_set *ms, const unsigned char *s, struct magic *m,
 		break;
 
 	case FILE_INDIRECT:
-		if (m->str_flags & INDIRECT_RELATIVE)
-			offset += CAST(uint32_t, o);
 		if (offset == 0)
 			return 0;
-
 		if (nbytes < offset)
 			return 0;
-
-		if ((pb = file_push_buffer(ms)) == NULL)
-			return -1;
-
+		sbuf = ms->o.buf;
+		soffset = ms->offset;
+		ms->o.buf = NULL;
+		ms->offset = 0;
 		rv = file_softmagic(ms, s + offset, nbytes - offset,
-		    indir_level + 1, name_count, BINTEST, text);
-
+		    recursion_level, BINTEST, text);
 		if ((ms->flags & MAGIC_DEBUG) != 0)
 			fprintf(stderr, "indirect @offs=%u[%d]\n", offset, rv);
-
-		rbuf = file_pop_buffer(ms, pb);
-		if (rbuf == NULL && ms->event_flags & EVENT_HAD_ERR)
-			return -1;
-
+		rbuf = ms->o.buf;
+		ms->o.buf = sbuf;
+		ms->offset = soffset;
 		if (rv == 1) {
 			if ((ms->flags & (MAGIC_MIME|MAGIC_APPLE)) == 0 &&
 			    file_printf(ms, F(ms, m, "%u"), offset) == -1) {
@@ -1709,22 +1679,22 @@ mget(struct magic_set *ms, const unsigned char *s, struct magic *m,
 	case FILE_USE:
 		if (nbytes < offset)
 			return 0;
-		rbuf = m->value.s;
-		if (*rbuf == '^') {
-			rbuf++;
+		sbuf = m->value.s;
+		if (*sbuf == '^') {
+			sbuf++;
 			flip = !flip;
 		}
-		if (file_magicfind(ms, rbuf, &ml) == -1) {
-			file_error(ms, 0, "cannot find entry `%s'", rbuf);
+		if (file_magicfind(ms, sbuf, &ml) == -1) {
+			file_error(ms, 0, "cannot find entry `%s'", sbuf);
 			return -1;
 		}
-		(*name_count)++;
+
 		oneed_separator = *need_separator;
 		if (m->flag & NOSPACE)
 			*need_separator = 0;
 		rv = match(ms, ml.magic, ml.nmagic, s, nbytes, offset + o,
-		    mode, text, flip, indir_level, name_count,
-		    printed_something, need_separator, returnval);
+		    mode, text, flip, recursion_level, printed_something,
+		    need_separator, returnval);
 		if (rv != 1)
 		    *need_separator = oneed_separator;
 		return rv;
@@ -1979,7 +1949,6 @@ magiccheck(struct magic_set *ms, struct magic *m)
 	case FILE_REGEX: {
 		int rc;
 		file_regex_t rx;
-		const char *search;
 
 		if (ms->search.s == NULL)
 			return 0;
@@ -1996,31 +1965,19 @@ magiccheck(struct magic_set *ms, struct magic *m)
 			size_t slen = ms->search.s_len;
 #ifndef REG_STARTEND
 #define	REG_STARTEND	0
-			char *copy;
-			if (slen != 0) {
-			    copy = malloc(slen);
-			    if (copy == NULL)  {
-				file_error(ms, errno,
-				    "can't allocate %" SIZE_T_FORMAT "u bytes",
-				    slen);
-				return -1;
-			    }
-			    memcpy(copy, ms->search.s, slen);
-			    copy[--slen] = '\0';
-			    search = copy;
-			} else {
-			    search = ms->search.s;
-			    copy = NULL;
-			}
+			char c;
+			if (slen != 0)
+				slen--;
+			c = ms->search.s[slen];
+			((char *)(intptr_t)ms->search.s)[slen] = '\0';
 #else
-			search = ms->search.s;
 			pmatch[0].rm_so = 0;
 			pmatch[0].rm_eo = slen;
 #endif
-			rc = file_regexec(&rx, (const char *)search,
+			rc = file_regexec(&rx, (const char *)ms->search.s,
 			    1, pmatch, REG_STARTEND);
 #if REG_STARTEND == 0
-			free(copy);
+			((char *)(intptr_t)ms->search.s)[l] = c;
 #endif
 			switch (rc) {
 			case 0:

@@ -1,4 +1,4 @@
-/*	$NetBSD: md_root.c,v 1.19 2015/08/30 05:24:03 uebayasi Exp $	*/
+/*	$NetBSD: md_root.c,v 1.17 2009/04/16 14:46:33 tsutsui Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -30,10 +30,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: md_root.c,v 1.19 2015/08/30 05:24:03 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: md_root.c,v 1.17 2009/04/16 14:46:33 tsutsui Exp $");
 
 #include "opt_md.h"
-#include "opt_memory_disk_image.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -42,14 +41,14 @@ __KERNEL_RCSID(0, "$NetBSD: md_root.c,v 1.19 2015/08/30 05:24:03 uebayasi Exp $"
 #include <dev/md.h>
 
 #ifdef MEMORY_DISK_DYNAMIC
-#ifdef makeoptions_MEMORY_DISK_IMAGE
+#ifdef MEMORY_DISK_IMAGE
 #error MEMORY_DISK_DYNAMIC is not compatible with MEMORY_DISK_IMAGE
 #endif
 size_t md_root_size;
 char *md_root_image;
 #else /* MEMORY_DISK_DYNAMIC */
 
-#ifdef makeoptions_MEMORY_DISK_IMAGE
+#ifdef MEMORY_DISK_IMAGE
 #ifdef MEMORY_DISK_ROOT_SIZE
 #error MEMORY_DISK_ROOT_SIZE is not compatible with MEMORY_DISK_IMAGE
 #endif
@@ -58,7 +57,7 @@ char md_root_image[] = {
 };
 uint32_t md_root_size = sizeof(md_root_image) & ~(DEV_BSIZE - 1);
 
-#else /* makeoptions_MEMORY_DISK_IMAGE */
+#else /* MEMORY_DISK_IMAGE */
 
 #ifndef MEMORY_DISK_ROOT_SIZE
 #define MEMORY_DISK_ROOT_SIZE 512
@@ -71,7 +70,7 @@ uint32_t md_root_size = sizeof(md_root_image) & ~(DEV_BSIZE - 1);
  */
 uint32_t md_root_size = ROOTBYTES;
 char md_root_image[ROOTBYTES] = "|This is the root ramdisk!\n";
-#endif /* makeoptions_MEMORY_DISK_IMAGE */
+#endif /* MEMORY_DISK_IMAGE */
 #endif /* MEMORY_DISK_DYNAMIC */
 
 #ifndef MEMORY_DISK_RBFLAGS

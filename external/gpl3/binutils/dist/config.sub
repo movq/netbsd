@@ -300,7 +300,7 @@ case $basic_machine in
 	| nios | nios2 \
 	| ns16k | ns32k \
 	| open8 \
-	| or1k | or1knd \
+	| or32 \
 	| pdp10 | pdp11 | pj | pjl \
 	| powerpc | powerpc64 | powerpc64le | powerpcle \
 	| pyramid \
@@ -337,14 +337,6 @@ case $basic_machine in
 		;;
 	ms1)
 		basic_machine=mt-unknown
-		;;
-
-	riscv32-*)
-		basic_machine=riscv32-ucb
-		;;
-
-	riscv*-*)
-		basic_machine=riscv-ucb
 		;;
 
 	strongarm | thumb | xscale)
@@ -917,11 +909,8 @@ case $basic_machine in
 		basic_machine=hppa1.1-oki
 		os=-proelf
 		;;
-	or1k | or1k-*)
-		basic_machine=or1k-unknown
-		;;
-	or1knd | or1knd-*)
-		basic_machine=or1knd-unknown
+	openrisc | openrisc-*)
+		basic_machine=or32-unknown
 		;;
 	os400)
 		basic_machine=powerpc-ibm
@@ -1578,11 +1567,8 @@ case $basic_machine in
 	mips*-*)
 		os=-elf
 		;;
-	or1k-*)
-		os=-elf
-		;;
-	or1knd-*)
-		os=-elf
+	or32-*)
+		os=-coff
 		;;
 	*-tti)	# must be before sparc entry or we get the wrong os.
 		os=-sysv3

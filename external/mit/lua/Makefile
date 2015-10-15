@@ -1,5 +1,5 @@
-#	$NetBSD: Makefile,v 1.4 2015/02/09 16:44:53 christos Exp $
+#	$NetBSD: Makefile,v 1.3 2010/10/31 11:26:01 mbalmer Exp $
 
-SUBDIR+=	lib .WAIT usr.bin
+SUBDIR+=	usr.bin
 
 .include <bsd.subdir.mk>

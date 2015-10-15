@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tun.c,v 1.123 2015/08/24 22:21:26 pooka Exp $	*/
+/*	$NetBSD: if_tun.c,v 1.120 2014/07/25 08:10:40 dholland Exp $	*/
 
 /*
  * Copyright (c) 1988, Julian Onions <jpo@cs.nott.ac.uk>
@@ -15,11 +15,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tun.c,v 1.123 2015/08/24 22:21:26 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tun.c,v 1.120 2014/07/25 08:10:40 dholland Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -60,12 +58,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_tun.c,v 1.123 2015/08/24 22:21:26 pooka Exp $");
 
 #include <net/if_tun.h>
 
-#include "ioconf.h"
-
 #define TUNDEBUG	if (tundebug) printf
 int	tundebug = 0;
 
 extern int ifqmaxlen;
+void	tunattach(int);
 
 static LIST_HEAD(, tun_softc) tun_softc_list;
 static LIST_HEAD(, tun_softc) tunz_softc_list;
@@ -438,15 +435,13 @@ tun_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	int		error = 0, s;
 	struct tun_softc *tp = (struct tun_softc *)(ifp->if_softc);
-	struct ifreq *ifr = (struct ifreq *)data;
-	struct ifaddr *ifa = (struct ifaddr *)data;
+	struct ifreq *ifr = data;
 
 	s = splnet();
 
 	switch (cmd) {
 	case SIOCINITIFADDR:
 		tuninit(tp);
-		ifa->ifa_rtrequest = p2p_rtrequest;
 		TUNDEBUG("%s: address set\n", ifp->if_xname);
 		break;
 	case SIOCSIFBRDADDR:

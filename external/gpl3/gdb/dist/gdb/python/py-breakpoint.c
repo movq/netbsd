@@ -1,6 +1,6 @@
 /* Python interface to breakpoints
 
-   Copyright (C) 2008-2015 Free Software Foundation, Inc.
+   Copyright (C) 2008-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,6 +19,7 @@
 
 #include "defs.h"
 #include "value.h"
+#include "exceptions.h"
 #include "python-internal.h"
 #include "python.h"
 #include "charset.h"
@@ -749,22 +750,15 @@ gdbpy_breakpoints (PyObject *self, PyObject *args)
    stopped at the breakpoint.  Otherwise the inferior will be
    allowed to continue.  */
 
-enum ext_lang_bp_stop
-gdbpy_breakpoint_cond_says_stop (const struct extension_language_defn *extlang,
-				 struct breakpoint *b)
+int
+gdbpy_should_stop (struct gdbpy_breakpoint_object *bp_obj)
 {
-  int stop;
-  struct gdbpy_breakpoint_object *bp_obj = b->py_bp_object;
+  int stop = 1;
+
   PyObject *py_bp = (PyObject *) bp_obj;
-  struct gdbarch *garch;
-  struct cleanup *cleanup;
-
-  if (bp_obj == NULL)
-    return EXT_LANG_BP_STOP_UNSET;
-
-  stop = -1;
-  garch = b->gdbarch ? b->gdbarch : get_current_arch ();
-  cleanup = ensure_python_env (garch, current_language);
+  struct breakpoint *b = bp_obj->bp;
+  struct gdbarch *garch = b->gdbarch ? b->gdbarch : get_current_arch ();
+  struct cleanup *cleanup = ensure_python_env (garch, current_language);
 
   if (bp_obj->is_finish_bp)
     bpfinishpy_pre_stop_hook (bp_obj);
@@ -773,7 +767,6 @@ gdbpy_breakpoint_cond_says_stop (const struct extension_language_defn *extlang,
     {
       PyObject *result = PyObject_CallMethod (py_bp, stop_func, NULL);
 
-      stop = 1;
       if (result)
 	{
 	  int evaluate = PyObject_IsTrue (result);
@@ -797,9 +790,7 @@ gdbpy_breakpoint_cond_says_stop (const struct extension_language_defn *extlang,
 
   do_cleanups (cleanup);
 
-  if (stop < 0)
-    return EXT_LANG_BP_STOP_UNSET;
-  return stop ? EXT_LANG_BP_STOP_YES : EXT_LANG_BP_STOP_NO;
+  return stop;
 }
 
 /* Checks if the  "stop" method exists in this breakpoint.
@@ -807,21 +798,17 @@ gdbpy_breakpoint_cond_says_stop (const struct extension_language_defn *extlang,
    conditions.  */
 
 int
-gdbpy_breakpoint_has_cond (const struct extension_language_defn *extlang,
-			   struct breakpoint *b)
+gdbpy_breakpoint_has_py_cond (struct gdbpy_breakpoint_object *bp_obj)
 {
-  int has_func;
-  PyObject *py_bp;
-  struct gdbarch *garch;
-  struct cleanup *cleanup;
+  int has_func = 0;
+  PyObject *py_bp = (PyObject *) bp_obj;
+  struct gdbarch *garch = bp_obj->bp->gdbarch ? bp_obj->bp->gdbarch :
+    get_current_arch ();
+  struct cleanup *cleanup = ensure_python_env (garch, current_language);
 
-  if (b->py_bp_object == NULL)
-    return 0;
+  if (py_bp != NULL)
+    has_func = PyObject_HasAttrString (py_bp, stop_func);
 
-  py_bp = (PyObject *) b->py_bp_object;
-  garch = b->gdbarch ? b->gdbarch : get_current_arch ();
-  cleanup = ensure_python_env (garch, current_language);
-  has_func = PyObject_HasAttrString (py_bp, stop_func);
   do_cleanups (cleanup);
 
   return has_func;
@@ -960,30 +947,16 @@ local_setattro (PyObject *self, PyObject *name, PyObject *v)
     return -1;
 
   /* If the attribute trying to be set is the "stop" method,
-     but we already have a condition set in the CLI or other extension
-     language, disallow this operation.  */
-  if (strcmp (attr, stop_func) == 0)
+     but we already have a condition set in the CLI, disallow this
+     operation.  */
+  if (strcmp (attr, stop_func) == 0 && obj->bp->cond_string)
     {
-      const struct extension_language_defn *extlang = NULL;
-
-      if (obj->bp->cond_string != NULL)
-	extlang = get_ext_lang_defn (EXT_LANG_GDB);
-      if (extlang == NULL)
-	extlang = get_breakpoint_cond_ext_lang (obj->bp, EXT_LANG_PYTHON);
-      if (extlang != NULL)
-	{
-	  char *error_text;
-
-	  xfree (attr);
-	  error_text
-	    = xstrprintf (_("Only one stop condition allowed.  There is"
-			    " currently a %s stop condition defined for"
-			    " this breakpoint."),
-			  ext_lang_capitalized_name (extlang));
-	  PyErr_SetString (PyExc_RuntimeError, error_text);
-	  xfree (error_text);
-	  return -1;
-	}
+      xfree (attr);
+      PyErr_SetString (PyExc_RuntimeError,
+		       _("Cannot set 'stop' method.  There is an " \
+			 "existing GDB condition attached to the " \
+			 "breakpoint."));
+      return -1;
     }
 
   xfree (attr);

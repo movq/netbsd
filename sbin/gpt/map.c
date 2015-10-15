@@ -33,7 +33,7 @@
 __FBSDID("$FreeBSD: src/sbin/gpt/map.c,v 1.6 2005/08/31 01:47:19 marcel Exp $");
 #endif
 #ifdef __RCSID
-__RCSID("$NetBSD: map.c,v 1.7 2014/09/29 20:28:57 christos Exp $");
+__RCSID("$NetBSD: map.c,v 1.6.4.1 2015/06/02 19:49:38 snj Exp $");
 #endif
 
 #include <sys/types.h>

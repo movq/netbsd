@@ -1,6 +1,6 @@
 #! /bin/sh
 
-# $NetBSD: t_netpgpverify.sh,v 1.2 2014/11/23 01:56:35 agc Exp $
+# $NetBSD: t_netpgpverify.sh,v 1.1.12.1 2014/11/25 07:55:25 snj Exp $
 
 # Copyright (c) 2012 Alistair Crooks <agc@NetBSD.org>
 # All rights reserved.

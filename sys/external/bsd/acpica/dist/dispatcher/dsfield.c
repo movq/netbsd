@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,8 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
+#define __DSFIELD_C__
 
 #include "acpi.h"
 #include "accommon.h"
@@ -389,7 +391,6 @@ AcpiDsGetFieldNames (
              */
             Info->ResourceBuffer = NULL;
             Info->ConnectionNode = NULL;
-            Info->PinNumberIndex = 0;
 
             /*
              * A Connection() is either an actual resource descriptor (buffer)
@@ -465,7 +466,6 @@ AcpiDsGetFieldNames (
             }
 
             Info->FieldBitPosition += Info->FieldBitLength;
-            Info->PinNumberIndex++; /* Index relative to previous Connection() */
             break;
 
         default:
@@ -530,7 +530,7 @@ AcpiDsCreateField (
         }
     }
 
-    memset (&Info, 0, sizeof (ACPI_CREATE_FIELD_INFO));
+    ACPI_MEMSET (&Info, 0, sizeof (ACPI_CREATE_FIELD_INFO));
 
     /* Second arg is the field flags */
 

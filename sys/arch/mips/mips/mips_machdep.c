@@ -1,4 +1,4 @@
-/*	$NetBSD: mips_machdep.c,v 1.269 2015/06/11 15:48:57 matt Exp $	*/
+/*	$NetBSD: mips_machdep.c,v 1.260 2014/06/02 04:57:02 mrg Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -111,7 +111,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: mips_machdep.c,v 1.269 2015/06/11 15:48:57 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mips_machdep.c,v 1.260 2014/06/02 04:57:02 mrg Exp $");
 
 #define __INTR_PRIVATE
 #include "opt_cputype.h"
@@ -239,6 +239,7 @@ extern const mips_locore_jumpvec_t mips64_locore_vec;
 #endif
 
 #if defined(MIPS64R2)
+static void	mips64r2_vector_init(const struct splsw *);
 extern const struct locoresw mips64r2_locoresw;
 extern const mips_locore_jumpvec_t mips64r2_locore_vec;
 #endif
@@ -489,13 +490,6 @@ static const struct pridtab cputab[] = {
 	  MIPS_CP0FL_CONFIG | MIPS_CP0FL_CONFIG1 | MIPS_CP0FL_CONFIG2 |
 	  MIPS_CP0FL_CONFIG3 | MIPS_CP0FL_CONFIG6 | MIPS_CP0FL_CONFIG7,
 	  0, "1004K" },
-	{ MIPS_PRID_CID_MTI, MIPS_1074K, -1, -1,	-1, 0,
-	  MIPS32_FLAGS | CPU_MIPS_DOUBLE_COUNT,
-	  MIPS_CP0FL_USE |
-	  MIPS_CP0FL_EBASE | MIPS_CP0FL_USERLOCAL | MIPS_CP0FL_HWRENA |
-	  MIPS_CP0FL_CONFIG | MIPS_CP0FL_CONFIG1 | MIPS_CP0FL_CONFIG2 |
-	  MIPS_CP0FL_CONFIG3 | MIPS_CP0FL_CONFIG6 | MIPS_CP0FL_CONFIG7,
-	  0, "1074K" },
 
 	{ MIPS_PRID_CID_BROADCOM, MIPS_BCM3302, -1, -1, -1, 0,
 	  MIPS32_FLAGS | CPU_MIPS_DOUBLE_COUNT, 0, 0, "BCM3302"	},
@@ -630,37 +624,9 @@ static const struct pridtab cputab[] = {
 	  CIDFL_RMI_TYPE_XLS|MIPS_CIDFL_RMI_CPUS(1,4)|MIPS_CIDFL_RMI_L2(256KB),
 	  "XLS104"		},
 
-	{ MIPS_PRID_CID_CAVIUM, MIPS_CN31XX, -1, -1, -1, 0,
-	  MIPS64_FLAGS | CPU_MIPS_D_CACHE_COHERENT | CPU_MIPS_NO_LLADDR,
-	  MIPS_CP0FL_USE |
-	  MIPS_CP0FL_EBASE | MIPS_CP0FL_CONFIG |
-	  MIPS_CP0FL_CONFIG1 | MIPS_CP0FL_CONFIG2 | MIPS_CP0FL_CONFIG3,
-	  0,
-	  "CN31xx"		},
-
-	{ MIPS_PRID_CID_CAVIUM, MIPS_CN30XX, -1, -1, -1, 0,
-	  MIPS64_FLAGS | CPU_MIPS_D_CACHE_COHERENT | CPU_MIPS_NO_LLADDR,
-	  MIPS_CP0FL_USE |
-	  MIPS_CP0FL_EBASE | MIPS_CP0FL_CONFIG |
-	  MIPS_CP0FL_CONFIG1 | MIPS_CP0FL_CONFIG2 | MIPS_CP0FL_CONFIG3,
-	  0,
-	  "CN30xx"		},
-
-	{ MIPS_PRID_CID_CAVIUM, MIPS_CN50XX, -1, -1, -1, 0,
-	  MIPS64_FLAGS | CPU_MIPS_D_CACHE_COHERENT | CPU_MIPS_NO_LLADDR,
-	  MIPS_CP0FL_USE |
-	  MIPS_CP0FL_EBASE | MIPS_CP0FL_CONFIG | MIPS_CP0FL_HWRENA |
-	  MIPS_CP0FL_CONFIG1 | MIPS_CP0FL_CONFIG2 | MIPS_CP0FL_CONFIG3,
-	  0,
-	  "CN50xx"		},
-
 	/* Microsoft Research' extensible MIPS */
 	{ MIPS_PRID_CID_MICROSOFT, MIPS_eMIPS, 1, -1, CPU_ARCH_MIPS1, 64,
 	  CPU_MIPS_NO_WAIT, 0, 0,		"eMIPS CPU"		},
-
-	/* Ingenic XBurst */
-	{ MIPS_PRID_CID_INGENIC, MIPS_XBURST,  -1, -1,	-1, 0,
-	  MIPS32_FLAGS | CPU_MIPS_DOUBLE_COUNT, 0, 0, "XBurst"		},
 
 	{ 0, 0, 0,				0, 0, 0,
 	  0, 0, 0,				NULL			}
@@ -693,7 +659,6 @@ static const char * const cidnames[] = {
 	"(unannounced)",
 	"Lexra",
 	"RMI",
-	"Cavium",
 };
 #define	ncidnames __arraycount(cidnames)
 
@@ -1011,7 +976,7 @@ mips64_vector_init(const struct splsw *splsw)
 #endif /* MIPS64 */
 
 #if defined(MIPS64R2)
-void
+static void
 mips64r2_vector_init(const struct splsw *splsw)
 {
 	/* r4000 exception handler address */
@@ -1047,13 +1012,7 @@ mips64r2_vector_init(const struct splsw *splsw)
 		panic("startup: %s vector code too large",
 		    "interrupt exception");
 
-	const intptr_t ebase = (intptr_t)mipsNN_cp0_ebase_read();
-	const int cpunum = ebase & MIPS_EBASE_CPUNUM;
-
-	// This may need to be on CPUs other CPU0 so use EBASE to fetch
-	// the appropriate address for exception code.  EBASE also contains
-	// the cpunum so remove that.
-	memcpy((void *)(ebase & ~MIPS_EBASE_CPUNUM), mips64r2_tlb_miss,
+	memcpy((void *)MIPS_UTLB_MISS_EXC_VEC, mips64r2_tlb_miss,
 	      mips64r2_intr_end - mips64r2_tlb_miss);
 
 	/*
@@ -1074,7 +1033,7 @@ mips64r2_vector_init(const struct splsw *splsw)
 	 * If this CPU doesn't have a COP0 USERLOCAL register, at the end
 	 * of cpu_switch resume overwrite the instructions which update it.
 	 */
-	if (!(cp0flags & MIPS_CP0FL_USERLOCAL) && cpunum == 0) {
+	if (!(cp0flags & MIPS_CP0FL_USERLOCAL)) {
 		extern uint32_t mips64r2_cpu_switch_resume[];
 		for (uint32_t *insnp = mips64r2_cpu_switch_resume;; insnp++) {
 			KASSERT(insnp[0] != JR_RA);
@@ -1090,8 +1049,7 @@ mips64r2_vector_init(const struct splsw *splsw)
 	/*
 	 * Copy locore-function vector.
 	 */
-	if (cpunum == 0)
-		mips_locore_jumpvec = mips64r2_locore_vec;
+	mips_locore_jumpvec = mips64r2_locore_vec;
 
 	mips_icache_sync_all();
 	mips_dcache_wbinv_all();
@@ -1176,19 +1134,7 @@ mips_vector_init(const struct splsw *splsw, bool multicpu_p)
 		case MIPSNN_CFG_AR_REV1:
 			break;
 		case MIPSNN_CFG_AR_REV2:
-			switch (opts->mips_cpu_arch) {
-			case CPU_ARCH_MIPS32:
-				opts->mips_cpu_arch = CPU_ARCH_MIPS32R2;
-				break;
-			case CPU_ARCH_MIPS64:
-				opts->mips_cpu_arch = CPU_ARCH_MIPS64R2;
-				break;
-			default:
-				printf("WARNING: MIPS32/64 arch %d revision %d "
-				    "unknown!\n", opts->mips_cpu_arch,
-				    MIPSNN_GET(CFG_AR, cfg));
-				break;
-			}
+			opts->mips_cpu_arch += CPU_ARCH_MIPS32R2 - CPU_ARCH_MIPS32;
 			break;
 		default:
 			printf("WARNING: MIPS32/64 arch revision %d "
@@ -1433,18 +1379,15 @@ cpu_identify(device_t dev)
 	const mips_prid_t cpu_id = opts->mips_cpu_id;
 	const mips_prid_t fpu_id = opts->mips_fpu_id;
 	static const char * const waynames[] = {
-		[0] = "fully set-associative",
-		[1] = "direct-mapped",
-		[2] = "2-way set-associative",
-		[3] = NULL,
-		[4] = "4-way set-associative",
-		[5] = "5-way set-associative",
-		[6] = "6-way set-associative",
-		[7] = "7-way set-associative",
-		[8] = "8-way set-associative",
-#ifdef MIPS64_OCTEON
-		[64] = "64-way set-associative",
-#endif
+		"fully set-associative",	/* 0 */
+		"direct-mapped",		/* 1 */
+		"2-way set-associative",	/* 2 */
+		NULL,				/* 3 */
+		"4-way set-associative",	/* 4 */
+		"5-way set-associative",	/* 5 */
+		"6-way set-associative",	/* 6 */
+		"7-way set-associative",	/* 7 */
+		"8-way set-associative",	/* 8 */
 	};
 #define	nwaynames (sizeof(waynames) / sizeof(waynames[0]))
 	static const char * const wtnames[] = {
@@ -1474,9 +1417,7 @@ cpu_identify(device_t dev)
 	if (opts->mips_cpu->cpu_cid != 0) {
 		if (opts->mips_cpu->cpu_cid <= ncidnames)
 			aprint_normal("%s ", cidnames[opts->mips_cpu->cpu_cid]);
-		else if (opts->mips_cpu->cpu_cid == MIPS_PRID_CID_INGENIC) {
-			aprint_normal("Ingenic ");
-		} else {
+		else {
 			aprint_normal("Unknown Company ID - 0x%x", opts->mips_cpu->cpu_cid);
 			aprint_normal_dev(dev, "");
 		}
@@ -1816,6 +1757,7 @@ cpu_dump(void)
 		cpuhdrp->pg_v      = MIPS1_PG_V;
 	}
 	cpuhdrp->sysmappa   = MIPS_KSEG0_TO_PHYS(Sysmap);
+	cpuhdrp->sysmapsize = Sysmapsize;
 	cpuhdrp->nmemsegs   = mem_cluster_cnt;
 
 	/*
@@ -2394,7 +2336,7 @@ mm_md_kernacc(void *ptr, vm_prot_t prot, bool *handled)
 	if (v < MIPS_XKPHYS_START) {
 		return EFAULT;
 	}
-	if (MIPS_XKPHYS_P(v) && v > MIPS_PHYS_TO_XKPHYS_CACHED(pmap_limits.avail_end +
+	if (MIPS_XKPHYS_P(v) && v > MIPS_PHYS_TO_XKPHYS_CACHED(mips_avail_end +
 	    mips_round_page(MSGBUFSIZE))) {
 		return EFAULT;
 	}
@@ -2409,7 +2351,7 @@ mm_md_kernacc(void *ptr, vm_prot_t prot, bool *handled)
 	if (v < MIPS_KSEG0_START) {
 		return EFAULT;
 	}
-	if (v < MIPS_PHYS_TO_KSEG0(pmap_limits.avail_end +
+	if (v < MIPS_PHYS_TO_KSEG0(mips_avail_end +
 	    mips_round_page(MSGBUFSIZE))) {
 		*handled = true;
 		return 0;

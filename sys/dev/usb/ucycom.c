@@ -1,4 +1,4 @@
-/*	$NetBSD: ucycom.c,v 1.42 2015/03/07 20:20:55 mrg Exp $	*/
+/*	$NetBSD: ucycom.c,v 1.39.2.1 2015/03/21 17:30:43 snj Exp $	*/
 
 /*
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ucycom.c,v 1.42 2015/03/07 20:20:55 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ucycom.c,v 1.39.2.1 2015/03/21 17:30:43 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -74,13 +74,13 @@ int	ucycomdebug = 20;
 #endif
 
 
-#define	UCYCOMCALLUNIT_MASK	TTCALLUNIT_MASK
-#define	UCYCOMUNIT_MASK		TTUNIT_MASK
-#define	UCYCOMDIALOUT_MASK	TTDIALOUT_MASK
+#define UCYCOMUNIT_MASK		0x3ffff
+#define UCYCOMDIALOUT_MASK	0x80000
+#define UCYCOMCALLUNIT_MASK	0x40000
 
-#define	UCYCOMCALLUNIT(x)	TTCALLUNIT(x)
-#define	UCYCOMUNIT(x)		TTUNIT(x)
-#define	UCYCOMDIALOUT(x)	TTDIALOUT(x)
+#define UCYCOMUNIT(x)		(minor(x) & UCYCOMUNIT_MASK)
+#define UCYCOMDIALOUT(x)	(minor(x) & UCYCOMDIALOUT_MASK)
+#define UCYCOMCALLUNIT(x)	(minor(x) & UCYCOMCALLUNIT_MASK)
 
 /* Configuration Byte */
 #define UCYCOM_RESET		0x80

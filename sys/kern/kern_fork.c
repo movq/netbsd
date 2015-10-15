@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_fork.c,v 1.194 2015/10/02 16:54:15 christos Exp $	*/
+/*	$NetBSD: kern_fork.c,v 1.193 2013/11/22 21:04:11 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2001, 2004, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -67,10 +67,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_fork.c,v 1.194 2015/10/02 16:54:15 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_fork.c,v 1.193 2013/11/22 21:04:11 christos Exp $");
 
 #include "opt_ktrace.h"
-#include "opt_dtrace.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -99,11 +98,11 @@ __KERNEL_RCSID(0, "$NetBSD: kern_fork.c,v 1.194 2015/10/02 16:54:15 christos Exp
 /*
  * DTrace SDT provider definitions
  */
-SDT_PROVIDER_DECLARE(proc);
-SDT_PROBE_DEFINE3(proc, kernel, , create,
-    "struct proc *", /* new process */
-    "struct proc *", /* parent process */
-    "int" /* flags */);
+SDT_PROBE_DEFINE(proc,,,create,create,
+	    "struct proc *", NULL,	/* new process */
+	    "struct proc *", NULL,	/* parent process */
+	    "int", NULL,		/* flags */
+	    NULL, NULL, NULL, NULL);
 
 u_int	nprocs __cacheline_aligned = 1;		/* process 0 */
 
@@ -456,7 +455,7 @@ fork1(struct lwp *l1, int flags, int exitsig, void *stack, size_t stacksize,
 	 */
 	doforkhooks(p2, p1);
 
-	SDT_PROBE(proc, kernel, , create, p2, p1, flags, 0, 0);
+	SDT_PROBE(proc,,,create, p2, p1, flags, 0, 0);
 
 	/*
 	 * It's now safe for the scheduler and other processes to see the

@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,8 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
+#define __EXSYSTEM_C__
 
 #include "acpi.h"
 #include "accommon.h"
@@ -85,7 +87,7 @@ AcpiExSystemWaitSemaphore (
     {
         /* We must wait, so unlock the interpreter */
 
-        AcpiExExitInterpreter ();
+        AcpiExRelinquishInterpreter ();
 
         Status = AcpiOsWaitSemaphore (Semaphore, 1, Timeout);
 
@@ -95,7 +97,7 @@ AcpiExSystemWaitSemaphore (
 
         /* Reacquire the interpreter */
 
-       AcpiExEnterInterpreter ();
+       AcpiExReacquireInterpreter ();
     }
 
     return_ACPI_STATUS (Status);
@@ -138,7 +140,7 @@ AcpiExSystemWaitMutex (
     {
         /* We must wait, so unlock the interpreter */
 
-        AcpiExExitInterpreter ();
+        AcpiExRelinquishInterpreter ();
 
         Status = AcpiOsAcquireMutex (Mutex, Timeout);
 
@@ -148,7 +150,7 @@ AcpiExSystemWaitMutex (
 
         /* Reacquire the interpreter */
 
-        AcpiExEnterInterpreter ();
+        AcpiExReacquireInterpreter ();
     }
 
     return_ACPI_STATUS (Status);
@@ -225,7 +227,7 @@ AcpiExSystemDoSleep (
 
     /* Since this thread will sleep, we must release the interpreter */
 
-    AcpiExExitInterpreter ();
+    AcpiExRelinquishInterpreter ();
 
     /*
      * For compatibility with other ACPI implementations and to prevent
@@ -240,7 +242,7 @@ AcpiExSystemDoSleep (
 
     /* And now we must get the interpreter again */
 
-    AcpiExEnterInterpreter ();
+    AcpiExReacquireInterpreter ();
     return (AE_OK);
 }
 

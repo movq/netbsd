@@ -1,4 +1,4 @@
-/*	$NetBSD: chartype.h,v 1.15 2015/05/17 13:14:41 christos Exp $	*/
+/*	$NetBSD: chartype.h,v 1.10.18.2 2015/05/13 13:33:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
  * supports non-BMP code points without requiring UTF-16, but nothing
  * seems to actually advertise this properly, despite Unicode 3.1 having
  * been around since 2001... */
-#if !defined(__NetBSD__) && !defined(__sun) && !(defined(__APPLE__) && defined(__MACH__)) && !defined(__OpenBSD__) && !defined(__FreeBSD__)
+#if !defined(__NetBSD__) && !defined(__sun) && !(defined(__APPLE__) && defined(__MACH__)) && !defined(__OpenBSD__)
 #ifndef __STDC_ISO_10646__
 /* In many places it is assumed that the first 127 code points are ASCII
  * compatible, so ensure wchar_t indeed does ISO 10646 and not some other
@@ -72,7 +72,6 @@
 #define FUN(prefix,rest)	prefix ## _w ## rest
 #define FUNW(type)		type ## _w
 #define TYPE(type)		type ## W
-#define FCHAR			"%lc"
 #define FSTR			"%ls"
 #define STR(x) 			L ## x
 #define UC(c)			c
@@ -127,7 +126,6 @@ Width(wchar_t c)
 #define FUN(prefix,rest)	prefix ## _ ## rest
 #define FUNW(type)		type
 #define TYPE(type)		type
-#define FCHAR			"%c"
 #define FSTR			"%s"
 #define STR(x) 			x
 #define UC(c)			(unsigned char)(c)

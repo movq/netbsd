@@ -1,5 +1,5 @@
-/*	$NetBSD: auth.c,v 1.15 2015/08/21 08:20:59 christos Exp $	*/
-/* $OpenBSD: auth.c,v 1.113 2015/08/21 03:42:19 djm Exp $ */
+/*	$NetBSD: auth.c,v 1.8.4.2 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: auth.c,v 1.110 2015/02/25 17:29:38 djm Exp $ */
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
  *
@@ -25,7 +25,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: auth.c,v 1.15 2015/08/21 08:20:59 christos Exp $");
+__RCSID("$NetBSD: auth.c,v 1.8.4.2 2015/04/30 06:07:30 riz Exp $");
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -115,8 +115,10 @@ allowed_user(struct passwd * pw)
 	if (cap_hlist != NULL) {
 		hp = strtok(cap_hlist, ",");
 		while (hp != NULL) {
-			match_name = match_hostname(hostname, hp);
-			match_ip = match_hostname(ipaddr, hp);
+			match_name = match_hostname(hostname,
+			    hp, strlen(hp));
+			match_ip = match_hostname(ipaddr,
+			    hp, strlen(hp));
 			/*
 			 * Only a positive match here causes a "deny".
 			 */
@@ -144,8 +146,10 @@ allowed_user(struct passwd * pw)
 			return 0;
 		}
 		while (hp != NULL) {
-			match_name = match_hostname(hostname, hp);
-			match_ip = match_hostname(ipaddr, hp);
+			match_name = match_hostname(hostname,
+			    hp, strlen(hp));
+			match_ip = match_hostname(ipaddr,
+			    hp, strlen(hp));
 			/*
 			 * Negative match causes an immediate "deny".
 			 * Positive match causes us to break out
@@ -390,9 +394,7 @@ auth_root_allowed(const char *method)
 	case PERMIT_YES:
 		return 1;
 	case PERMIT_NO_PASSWD:
-		if (strcmp(method, "publickey") == 0 ||
-		    strcmp(method, "hostbased") == 0 ||
-		    strcmp(method, "gssapi-with-mic") == 0)
+		if (strcmp(method, "password") != 0)
 			return 1;
 		break;
 	case PERMIT_FORCED_ONLY:
@@ -440,7 +442,8 @@ expand_authorized_keys(const char *filename, struct passwd *pw)
 char *
 authorized_principals_file(struct passwd *pw)
 {
-	if (options.authorized_principals_file == NULL)
+	if (options.authorized_principals_file == NULL ||
+	    strcasecmp(options.authorized_principals_file, "none") == 0)
 		return NULL;
 	return expand_authorized_keys(options.authorized_principals_file, pw);
 }

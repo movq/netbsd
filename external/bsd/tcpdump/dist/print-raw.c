@@ -21,16 +21,25 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: print-raw.c,v 1.4 2014/11/20 03:05:03 christos Exp $");
+#if 0
+static const char rcsid[] _U_ =
+    "@(#) Header: /tcpdump/master/tcpdump/print-raw.c,v 1.41 2003-11-16 09:36:34 guy Exp  (LBL)";
+#else
+__RCSID("$NetBSD: print-raw.c,v 1.3 2013/04/06 19:33:08 christos Exp $");
+#endif
 #endif
 
-#define NETDISSECT_REWORKED
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
 #include <tcpdump-stdinc.h>
 
+#include <pcap.h>
+#include <stdio.h>
+#include <string.h>
+
+#include "addrtoname.h"
 #include "interface.h"
 
 /*
@@ -38,12 +47,12 @@ __RCSID("$NetBSD: print-raw.c,v 1.4 2014/11/20 03:05:03 christos Exp $");
  */
 
 u_int
-raw_if_print(netdissect_options *ndo, const struct pcap_pkthdr *h, const u_char *p)
+raw_if_print(const struct pcap_pkthdr *h, const u_char *p)
 {
-	if (ndo->ndo_eflag)
-		ND_PRINT((ndo, "ip: "));
+	if (eflag)
+		printf("ip: ");
 
-	ipN_print(ndo, p, h->len);
+	ipN_print(p, h->len);
 
 	return (0);
 }

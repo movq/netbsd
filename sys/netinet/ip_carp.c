@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_carp.c,v 1.62 2015/08/24 22:21:26 pooka Exp $	*/
+/*	$NetBSD: ip_carp.c,v 1.59 2014/07/31 02:37:25 ozaki-r Exp $	*/
 /*	$OpenBSD: ip_carp.c,v 1.113 2005/11/04 08:11:54 mcbride Exp $	*/
 
 /*
@@ -27,13 +27,11 @@
  * THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
 #include "opt_mbuftrace.h"
-#endif
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip_carp.c,v 1.62 2015/08/24 22:21:26 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip_carp.c,v 1.59 2014/07/31 02:37:25 ozaki-r Exp $");
 
 /*
  * TODO:
@@ -101,8 +99,6 @@ __KERNEL_RCSID(0, "$NetBSD: ip_carp.c,v 1.62 2015/08/24 22:21:26 pooka Exp $");
 #include <sys/sha1.h>
 
 #include <netinet/ip_carp.h>
-
-#include "ioconf.h"
 
 struct carp_mc_entry {
 	LIST_ENTRY(carp_mc_entry)	mc_entries;
@@ -197,6 +193,7 @@ static int	carp_hmac_verify(struct carp_softc *, u_int32_t *,
 static void	carp_setroute(struct carp_softc *, int);
 static void	carp_proto_input_c(struct mbuf *, struct carp_header *,
 		    sa_family_t);
+void	carpattach(int);
 static void	carpdetach(struct carp_softc *);
 static int	carp_prepare_ad(struct mbuf *, struct carp_softc *,
 		    struct carp_header *);
@@ -449,9 +446,9 @@ carp_setroute(struct carp_softc *sc, int cmd)
 #ifdef INET6
 		case AF_INET6:
 			if (cmd == RTM_ADD)
-				in6_ifaddlocal(ifa);
+				in6_ifaddloop(ifa);
 			else
-				in6_ifremlocal(ifa);
+				in6_ifremloop(ifa);
 			break;
 #endif /* INET6 */
 		default:

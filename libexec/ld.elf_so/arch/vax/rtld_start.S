@@ -1,4 +1,4 @@
-/*	$NetBSD: rtld_start.S,v 1.24 2014/08/17 16:57:37 matt Exp $	*/
+/*	$NetBSD: rtld_start.S,v 1.22.4.1 2014/08/20 13:49:28 martin Exp $	*/
 
 /*
  * Copyright 1996 Matt Thomas <matt@3am-software.com>

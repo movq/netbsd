@@ -1,4 +1,4 @@
-/* $NetBSD: amlogic_rng.c,v 1.3 2015/04/13 21:18:40 riastradh Exp $ */
+/* $NetBSD: amlogic_rng.c,v 1.1.2.3 2015/04/06 01:43:31 snj Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "locators.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amlogic_rng.c,v 1.3 2015/04/13 21:18:40 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amlogic_rng.c,v 1.1.2.3 2015/04/06 01:43:31 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -38,8 +38,7 @@ __KERNEL_RCSID(0, "$NetBSD: amlogic_rng.c,v 1.3 2015/04/13 21:18:40 riastradh Ex
 #include <sys/kernel.h>
 #include <sys/mutex.h>
 #include <sys/callout.h>
-#include <sys/rndpool.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <arm/amlogic/amlogic_reg.h>
 #include <arm/amlogic/amlogic_var.h>

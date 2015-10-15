@@ -1,5 +1,4 @@
-# THIS FILE IS GENERATED.  -*- buffer-read-only: t -*- vi :set ro:
-# Generated from: mips64-linux.xml
+# DO NOT EDIT: generated from mips64-linux.xml
 name:mips64_linux
 xmltarget:mips64-linux.xml
 expedite:r29,pc

@@ -1,4 +1,4 @@
-/*	$NetBSD: usbdi.c,v 1.165 2015/09/26 13:59:28 skrll Exp $	*/
+/*	$NetBSD: usbdi.c,v 1.161.2.1 2015/02/11 09:32:19 martin Exp $	*/
 
 /*
  * Copyright (c) 1998, 2012 The NetBSD Foundation, Inc.
@@ -31,10 +31,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: usbdi.c,v 1.165 2015/09/26 13:59:28 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: usbdi.c,v 1.161.2.1 2015/02/11 09:32:19 martin Exp $");
 
 #ifdef _KERNEL_OPT
-#include "opt_usb.h"
 #include "opt_compat_netbsd.h"
 #endif
 
@@ -53,63 +52,69 @@ __KERNEL_RCSID(0, "$NetBSD: usbdi.c,v 1.165 2015/09/26 13:59:28 skrll Exp $");
 #include <dev/usb/usbdivar.h>
 #include <dev/usb/usb_mem.h>
 #include <dev/usb/usb_quirks.h>
-#include <dev/usb/usbhist.h>
 
 /* UTF-8 encoding stuff */
 #include <fs/unicode.h>
 
+#ifdef USB_DEBUG
+#define DPRINTF(x)	if (usbdebug) printf x
+#define DPRINTFN(n,x)	if (usbdebug>(n)) printf x
 extern int usbdebug;
+#else
+#define DPRINTF(x)
+#define DPRINTFN(n,x)
+#endif
 
 Static usbd_status usbd_ar_pipe(usbd_pipe_handle);
 Static void usbd_start_next(usbd_pipe_handle);
 Static usbd_status usbd_open_pipe_ival
 	(usbd_interface_handle, u_int8_t, u_int8_t, usbd_pipe_handle *, int);
 
-#if defined(USB_DEBUG)
+static inline int
+usbd_xfer_isread(usbd_xfer_handle xfer)
+{
+	if (xfer->rqflags & URQ_REQUEST)
+		return (xfer->request.bmRequestType & UT_READ);
+	else
+		return (xfer->pipe->endpoint->edesc->bEndpointAddress &
+			UE_DIR_IN);
+}
+
+#if defined(USB_DEBUG) || defined(EHCI_DEBUG) || defined(OHCI_DEBUG)
 void
 usbd_dump_iface(struct usbd_interface *iface)
 {
-	USBHIST_FUNC(); USBHIST_CALLED(usbdebug);
-
-	USBHIST_LOG(usbdebug, "iface %p\n", iface, 0, 0, 0);
+	printf("usbd_dump_iface: iface=%p\n", iface);
 	if (iface == NULL)
 		return;
-	USBHIST_LOG(usbdebug, "     device = %p idesc = %p index = %d",
-	    iface->device, iface->idesc, iface->index, 0);
-	USBHIST_LOG(usbdebug, "     altindex=%d priv=%p",
-	    iface->altindex, iface->priv, 0, 0);
+	printf(" device=%p idesc=%p index=%d altindex=%d priv=%p\n",
+	       iface->device, iface->idesc, iface->index, iface->altindex,
+	       iface->priv);
 }
 
 void
 usbd_dump_device(struct usbd_device *dev)
 {
-	USBHIST_FUNC(); USBHIST_CALLED(usbdebug);
-
-	USBHIST_LOG(usbdebug, "dev = %p", dev, 0, 0, 0);
+	printf("usbd_dump_device: dev=%p\n", dev);
 	if (dev == NULL)
 		return;
-	USBHIST_LOG(usbdebug, "     bus = %p default_pipe = %p",
-	    dev->bus, dev->default_pipe, 0, 0);
-	USBHIST_LOG(usbdebug, "     address = %d config = %d depth = %d ",
-	    dev->address, dev->config, dev->depth, 0);
-	USBHIST_LOG(usbdebug, "     speed = %d self_powered = %d "
-	    "power = %d langid = %d",
-	    dev->speed, dev->self_powered, dev->power, dev->langid);
+	printf(" bus=%p default_pipe=%p\n", dev->bus, dev->default_pipe);
+	printf(" address=%d config=%d depth=%d speed=%d self_powered=%d "
+	       "power=%d langid=%d\n",
+	       dev->address, dev->config, dev->depth, dev->speed,
+	       dev->self_powered, dev->power, dev->langid);
 }
 
 void
 usbd_dump_endpoint(struct usbd_endpoint *endp)
 {
-	USBHIST_FUNC(); USBHIST_CALLED(usbdebug);
-
-	USBHIST_LOG(usbdebug, "endp = %p", endp, 0, 0, 0);
+	printf("usbd_dump_endpoint: endp=%p\n", endp);
 	if (endp == NULL)
 		return;
-	USBHIST_LOG(usbdebug, "    edesc = %p refcnt = %d",
-	    endp->edesc, endp->refcnt, 0, 0);
+	printf(" edesc=%p refcnt=%d\n", endp->edesc, endp->refcnt);
 	if (endp->edesc)
-		USBHIST_LOG(usbdebug, "     bEndpointAddress=0x%02x",
-		    endp->edesc->bEndpointAddress, 0, 0, 0);
+		printf(" bEndpointAddress=0x%02x\n",
+		       endp->edesc->bEndpointAddress);
 }
 
 void
@@ -117,30 +122,25 @@ usbd_dump_queue(usbd_pipe_handle pipe)
 {
 	usbd_xfer_handle xfer;
 
-	USBHIST_FUNC(); USBHIST_CALLED(usbdebug);
-
-	USBHIST_LOG(usbdebug, "pipe = %p", pipe, 0, 0, 0);
+	printf("usbd_dump_queue: pipe=%p\n", pipe);
 	SIMPLEQ_FOREACH(xfer, &pipe->queue, next) {
-		USBHIST_LOG(usbdebug, "     xfer = %p", xfer, 0, 0, 0);
+		printf("  xfer=%p\n", xfer);
 	}
 }
 
 void
 usbd_dump_pipe(usbd_pipe_handle pipe)
 {
-	USBHIST_FUNC(); USBHIST_CALLED(usbdebug);
-
-	USBHIST_LOG(usbdebug, "pipe = %p", pipe, 0, 0, 0);
+	printf("usbd_dump_pipe: pipe=%p\n", pipe);
 	if (pipe == NULL)
 		return;
 	usbd_dump_iface(pipe->iface);
 	usbd_dump_device(pipe->device);
 	usbd_dump_endpoint(pipe->endpoint);
-	USBHIST_LOG(usbdebug, "(usbd_dump_pipe)", 0, 0, 0, 0);
-	USBHIST_LOG(usbdebug, "     refcnt = %d running = %d aborting = %d",
-	    pipe->refcnt, pipe->running, pipe->aborting, 0);
-	USBHIST_LOG(usbdebug, "     intrxfer = %p, repeat = %d, interval = %d",
-	    pipe->intrxfer, pipe->repeat, pipe->interval, 0);
+	printf(" (usbd_dump_pipe:)\n refcnt=%d running=%d aborting=%d\n",
+	       pipe->refcnt, pipe->running, pipe->aborting);
+	printf(" intrxfer=%p, repeat=%d, interval=%d\n",
+	       pipe->intrxfer, pipe->repeat, pipe->interval);
 }
 #endif
 
@@ -161,10 +161,8 @@ usbd_open_pipe_ival(usbd_interface_handle iface, u_int8_t address,
 	usbd_status err;
 	int i;
 
-	USBHIST_FUNC(); USBHIST_CALLED(usbdebug);
-
-	USBHIST_LOG(usbdebug, "iface = %p address = 0x%x flags = 0x%x",
-	    iface, address, flags, 0);
+	DPRINTFN(3,("usbd_open_pipe: iface=%p address=0x%x flags=0x%x\n",
+		    iface, address, flags));
 
 	for (i = 0; i < iface->idesc->bNumEndpoints; i++) {
 		ep = &iface->endpoints[i];
@@ -195,10 +193,8 @@ usbd_open_pipe_intr(usbd_interface_handle iface, u_int8_t address,
 	usbd_xfer_handle xfer;
 	usbd_pipe_handle ipipe;
 
-	USBHIST_FUNC(); USBHIST_CALLED(usbdebug);
-
-	USBHIST_LOG(usbdebug, "address = 0x%x flags = 0x%x len = %d",
-	    address, flags, len, 0);
+	DPRINTFN(3,("usbd_open_pipe_intr: address=0x%x flags=0x%x len=%d\n",
+		    address, flags, len));
 
 	err = usbd_open_pipe_ival(iface, address,
 				  USBD_EXCLUSIVE_USE | (flags & USBD_MPSAFE),
@@ -233,11 +229,9 @@ usbd_status
 usbd_close_pipe(usbd_pipe_handle pipe)
 {
 
-	USBHIST_FUNC(); USBHIST_CALLED(usbdebug);
-
 #ifdef DIAGNOSTIC
 	if (pipe == NULL) {
-		USBHIST_LOG(usbdebug, "pipe == NULL", 0, 0, 0, 0);
+		printf("usbd_close_pipe: pipe==NULL\n");
 		return (USBD_NORMAL_COMPLETION);
 	}
 #endif
@@ -269,11 +263,8 @@ usbd_transfer(usbd_xfer_handle xfer)
 	usbd_status err;
 	unsigned int size, flags;
 
-	USBHIST_FUNC(); USBHIST_CALLED(usbdebug);
-
-	USBHIST_LOG(usbdebug,
-	    "xfer = %p, flags = %#x, pipe = %p, running = %d",
-	    xfer, xfer->flags, pipe, pipe->running);
+	DPRINTFN(5,("usbd_transfer: xfer=%p, flags=%#x, pipe=%p, running=%d\n",
+		    xfer, xfer->flags, pipe, pipe->running));
 
 #ifdef USB_DEBUG
 	if (usbdebug > 5)
@@ -281,11 +272,8 @@ usbd_transfer(usbd_xfer_handle xfer)
 #endif
 	xfer->done = 0;
 
-	if (pipe->aborting) {
-		USBHIST_LOG(usbdebug, "<- done xfer %p, aborting", xfer, 0, 0,
-		    0);
+	if (pipe->aborting)
 		return (USBD_CANCELLED);
-	}
 
 	size = xfer->length;
 	/* If there is no buffer, allocate one. */
@@ -297,11 +285,8 @@ usbd_transfer(usbd_xfer_handle xfer)
 			printf("usbd_transfer: has old buffer!\n");
 #endif
 		err = bus->methods->allocm(bus, dmap, size);
-		if (err) {
-			USBHIST_LOG(usbdebug,
-			    "<- done xfer %p, no mem", xfer, 0, 0, 0);
+		if (err)
 			return (err);
-		}
 		xfer->rqflags |= URQ_AUTO_DMABUF;
 	}
 
@@ -313,7 +298,6 @@ usbd_transfer(usbd_xfer_handle xfer)
 
 	/* xfer is not valid after the transfer method unless synchronous */
 	err = pipe->methods->transfer(xfer);
-	USBHIST_LOG(usbdebug, "<- done transfer %p, err = %d", xfer, err, 0, 0);
 
 	if (err != USBD_IN_PROGRESS && err) {
 		/* The transfer has not been queued, so free buffer. */
@@ -325,23 +309,16 @@ usbd_transfer(usbd_xfer_handle xfer)
 		}
 	}
 
-	if (!(flags & USBD_SYNCHRONOUS)) {
-		USBHIST_LOG(usbdebug, "<- done xfer %p, not sync", xfer, 0, 0,
-		    0);
+	if (!(flags & USBD_SYNCHRONOUS))
 		return (err);
-	}
 
 	/* Sync transfer, wait for completion. */
-	if (err != USBD_IN_PROGRESS) {
-		USBHIST_LOG(usbdebug, "<- done xfer %p, not in progress", xfer,
-		    0, 0, 0);
+	if (err != USBD_IN_PROGRESS)
 		return (err);
-	}
 	usbd_lock_pipe(pipe);
 	while (!xfer->done) {
 		if (pipe->device->bus->use_polling)
 			panic("usbd_transfer: not done");
-		USBHIST_LOG(usbdebug, "<- sleeping on xfer %p", xfer, 0, 0, 0);
 
 		err = 0;
 		if ((flags & USBD_SYNCHRONOUS_SIG) != 0) {
@@ -418,8 +395,6 @@ usbd_alloc_xfer(usbd_device_handle dev)
 {
 	usbd_xfer_handle xfer;
 
-	USBHIST_FUNC(); USBHIST_CALLED(usbdebug);
-
 	xfer = dev->bus->methods->allocx(dev->bus);
 	if (xfer == NULL)
 		return (NULL);
@@ -427,18 +402,14 @@ usbd_alloc_xfer(usbd_device_handle dev)
 	callout_init(&xfer->timeout_handle, CALLOUT_MPSAFE);
 	cv_init(&xfer->cv, "usbxfer");
 	cv_init(&xfer->hccv, "usbhcxfer");
-
-	USBHIST_LOG(usbdebug, "returns %p", xfer, 0, 0, 0);
-
+	DPRINTFN(5,("usbd_alloc_xfer() = %p\n", xfer));
 	return (xfer);
 }
 
 usbd_status
 usbd_free_xfer(usbd_xfer_handle xfer)
 {
-	USBHIST_FUNC(); USBHIST_CALLED(usbdebug);
-
-	USBHIST_LOG(usbdebug, "%p", xfer, 0, 0, 0);
+	DPRINTFN(5,("usbd_free_xfer: %p\n", xfer));
 	if (xfer->rqflags & (URQ_DEV_DMABUF | URQ_AUTO_DMABUF))
 		usbd_free_buffer(xfer);
 #if defined(DIAGNOSTIC)
@@ -597,7 +568,7 @@ usbd_clear_endpoint_stall(usbd_pipe_handle pipe)
 	usb_device_request_t req;
 	usbd_status err;
 
-	USBHIST_FUNC(); USBHIST_CALLED(usbdebug);
+	DPRINTFN(8, ("usbd_clear_endpoint_stall\n"));
 
 	/*
 	 * Clearing en endpoint stall resets the endpoint toggle, so
@@ -778,11 +749,9 @@ usbd_ar_pipe(usbd_pipe_handle pipe)
 {
 	usbd_xfer_handle xfer;
 
-	USBHIST_FUNC(); USBHIST_CALLED(usbdebug);
-
 	KASSERT(mutex_owned(pipe->device->bus->lock));
 
-	USBHIST_LOG(usbdebug, "pipe = %p", pipe, 0, 0, 0);
+	DPRINTFN(2,("usbd_ar_pipe: pipe=%p\n", pipe));
 #ifdef USB_DEBUG
 	if (usbdebug > 5)
 		usbd_dump_queue(pipe);
@@ -790,8 +759,8 @@ usbd_ar_pipe(usbd_pipe_handle pipe)
 	pipe->repeat = 0;
 	pipe->aborting = 1;
 	while ((xfer = SIMPLEQ_FIRST(&pipe->queue)) != NULL) {
-		USBHIST_LOG(usbdebug, "pipe = %p xfer = %p (methods = %p)",
-		    pipe, xfer, pipe->methods, 0);
+		DPRINTFN(2,("usbd_ar_pipe: pipe=%p xfer=%p (methods=%p)\n",
+			    pipe, xfer, pipe->methods));
 		/* Make the HC abort it (and invoke the callback). */
 		pipe->methods->abort(xfer);
 		/* XXX only for non-0 usbd_clear_endpoint_stall(pipe); */
@@ -812,10 +781,8 @@ usb_transfer_complete(usbd_xfer_handle xfer)
 	int polling = pipe->device->bus->use_polling;
 	int repeat;
 
-	USBHIST_FUNC(); USBHIST_CALLED(usbdebug);
-
-	USBHIST_LOG(usbdebug, "pipe = %p xfer = %p status = %d actlen = %d",
-		pipe, xfer, xfer->status, xfer->actlen);
+	DPRINTFN(5, ("usb_transfer_complete: pipe=%p xfer=%p status=%d "
+		     "actlen=%d\n", pipe, xfer, xfer->status, xfer->actlen));
 
 	KASSERT(polling || mutex_owned(pipe->device->bus->lock));
 
@@ -872,8 +839,8 @@ usb_transfer_complete(usbd_xfer_handle xfer)
 #endif
 		SIMPLEQ_REMOVE_HEAD(&pipe->queue, next);
 	}
-	USBHIST_LOG(usbdebug, "xfer %p: repeat %d new head = %p",
-	    xfer, repeat, SIMPLEQ_FIRST(&pipe->queue), 0);
+	DPRINTFN(5,("usb_transfer_complete: repeat=%d new head=%p\n",
+		    repeat, SIMPLEQ_FIRST(&pipe->queue)));
 
 	/* Count completed transfers. */
 	++pipe->device->bus->stats.uds_requests
@@ -882,14 +849,12 @@ usb_transfer_complete(usbd_xfer_handle xfer)
 	xfer->done = 1;
 	if (!xfer->status && xfer->actlen < xfer->length &&
 	    !(xfer->flags & USBD_SHORT_XFER_OK)) {
-		USBHIST_LOG(usbdebug, "short transfer %d < %d",
-		    xfer->actlen, xfer->length, 0, 0);
+		DPRINTFN(-1,("usb_transfer_complete: short transfer %d<%d\n",
+			     xfer->actlen, xfer->length));
 		xfer->status = USBD_SHORT_XFER;
 	}
 
 	if (repeat) {
-		USBHIST_LOG(usbdebug, "xfer %p doing callback %p status %x",
-		    xfer, xfer->callback, xfer->status, 0);
 		if (xfer->callback) {
 			if (!polling)
 				mutex_exit(pipe->device->bus->lock);
@@ -897,8 +862,6 @@ usb_transfer_complete(usbd_xfer_handle xfer)
 			if (!(pipe->flags & USBD_MPSAFE))
 				KERNEL_LOCK(1, curlwp);
 			xfer->callback(xfer, xfer->priv, xfer->status);
-			USBHIST_LOG(usbdebug, "xfer %p doing done %p", xfer,
-			    pipe->methods->done, 0, 0);
 			if (!(pipe->flags & USBD_MPSAFE))
 				KERNEL_UNLOCK_ONE(curlwp);
 
@@ -907,11 +870,7 @@ usb_transfer_complete(usbd_xfer_handle xfer)
 		}
 		pipe->methods->done(xfer);
 	} else {
-		USBHIST_LOG(usbdebug, "xfer %p doing done %p", xfer,
-		    pipe->methods->done, 0, 0);
 		pipe->methods->done(xfer);
-		USBHIST_LOG(usbdebug, "xfer %p doing callback %p status %x",
-		    xfer, xfer->callback, xfer->status, 0);
 		if (xfer->callback) {
 			if (!polling)
 				mutex_exit(pipe->device->bus->lock);
@@ -928,7 +887,6 @@ usb_transfer_complete(usbd_xfer_handle xfer)
 	}
 
 	if (sync && !polling) {
-		USBHIST_LOG(usbdebug, "<- done xfer %p, wakeup", xfer, 0, 0, 0);
 		cv_broadcast(&xfer->cv);
 	}
 
@@ -948,17 +906,13 @@ usb_insert_transfer(usbd_xfer_handle xfer)
 	usbd_pipe_handle pipe = xfer->pipe;
 	usbd_status err;
 
-	USBHIST_FUNC(); USBHIST_CALLED(usbdebug);
-
-	USBHIST_LOG(usbdebug, "pipe = %p running = %d timeout = %d",
-	    pipe, pipe->running, xfer->timeout, 0);
+	DPRINTFN(5,("usb_insert_transfer: pipe=%p running=%d timeout=%d\n",
+		    pipe, pipe->running, xfer->timeout));
 
 	KASSERT(mutex_owned(pipe->device->bus->lock));
 
 #ifdef DIAGNOSTIC
 	if (xfer->busy_free != XFER_BUSY) {
-		USBHIST_LOG(usbdebug, "<- done, xfer %p not busy", xfer, 0, 0,
-		    0);
 		printf("usb_insert_transfer: xfer=%p not busy 0x%08x\n",
 		       xfer, xfer->busy_free);
 		return (USBD_INVAL);
@@ -972,7 +926,6 @@ usb_insert_transfer(usbd_xfer_handle xfer)
 		pipe->running = 1;
 		err = USBD_NORMAL_COMPLETION;
 	}
-	USBHIST_LOG(usbdebug, "<- done xfer %p, err %d", xfer, err, 0, 0);
 	return (err);
 }
 
@@ -982,8 +935,6 @@ usbd_start_next(usbd_pipe_handle pipe)
 {
 	usbd_xfer_handle xfer;
 	usbd_status err;
-
-	USBHIST_FUNC(); USBHIST_CALLED(usbdebug);
 
 #ifdef DIAGNOSTIC
 	if (pipe == NULL) {
@@ -996,29 +947,26 @@ usbd_start_next(usbd_pipe_handle pipe)
 	}
 #endif
 
-	int polling = pipe->device->bus->use_polling;
-	KASSERT(polling || mutex_owned(pipe->device->bus->lock));
+	KASSERT(mutex_owned(pipe->device->bus->lock));
 
 	/* Get next request in queue. */
 	xfer = SIMPLEQ_FIRST(&pipe->queue);
-	USBHIST_LOG(usbdebug, "pipe = %p, xfer = %p", pipe, xfer, 0, 0);
+	DPRINTFN(5, ("usbd_start_next: pipe=%p, xfer=%p\n", pipe, xfer));
 	if (xfer == NULL) {
 		pipe->running = 0;
 	} else {
-		if (!polling)
-			mutex_exit(pipe->device->bus->lock);
+		mutex_exit(pipe->device->bus->lock);
 		err = pipe->methods->start(xfer);
-		if (!polling)
-			mutex_enter(pipe->device->bus->lock);
+		mutex_enter(pipe->device->bus->lock);
 
 		if (err != USBD_IN_PROGRESS) {
-			USBHIST_LOG(usbdebug, "error = %d", err, 0, 0, 0);
+			printf("usbd_start_next: error=%d\n", err);
 			pipe->running = 0;
 			/* XXX do what? */
 		}
 	}
 
-	KASSERT(polling || mutex_owned(pipe->device->bus->lock));
+	KASSERT(mutex_owned(pipe->device->bus->lock));
 }
 
 usbd_status
@@ -1044,11 +992,9 @@ usbd_do_request_flags_pipe(usbd_device_handle dev, usbd_pipe_handle pipe,
 	usbd_xfer_handle xfer;
 	usbd_status err;
 
-	USBHIST_FUNC(); USBHIST_CALLED(usbdebug);
-
 #ifdef DIAGNOSTIC
 	if (cpu_intr_p() || cpu_softintr_p()) {
-		USBHIST_LOG(usbdebug, "not in process context", 0, 0, 0, 0);
+		printf("usbd_do_request: not in process context\n");
 		return (USBD_INVAL);
 	}
 #endif
@@ -1062,14 +1008,13 @@ usbd_do_request_flags_pipe(usbd_device_handle dev, usbd_pipe_handle pipe,
 	err = usbd_sync_transfer(xfer);
 #if defined(USB_DEBUG) || defined(DIAGNOSTIC)
 	if (xfer->actlen > xfer->length) {
-		USBHIST_LOG(usbdebug, "overrun addr = %d type = 0x%02x",
-		    dev->address, xfer->request.bmRequestType, 0, 0);
-		USBHIST_LOG(usbdebug, "     req = 0x%02x val = %d index = %d",
-		    xfer->request.bRequest, UGETW(xfer->request.wValue),
-		    UGETW(xfer->request.wIndex), 0);
-		USBHIST_LOG(usbdebug, "     rlen = %d length = %d actlen = %d",
-		    UGETW(xfer->request.wLength),
-		    xfer->length, xfer->actlen, 0);
+		DPRINTF(("%s: overrun addr=%d type=0x%02x req=0x"
+			 "%02x val=%d index=%d rlen=%d length=%d actlen=%d\n",
+			 __func__, dev->address, xfer->request.bmRequestType,
+			 xfer->request.bRequest, UGETW(xfer->request.wValue),
+			 UGETW(xfer->request.wIndex),
+			 UGETW(xfer->request.wLength),
+			 xfer->length, xfer->actlen));
 	}
 #endif
 	if (actlen != NULL)
@@ -1097,7 +1042,7 @@ usbd_do_request_flags_pipe(usbd_device_handle dev, usbd_pipe_handle pipe,
 		if (nerr)
 			goto bad;
 		s = UGETW(status.wStatus);
-		USBHIST_LOG(usbdebug, "status = 0x%04x", s, 0, 0, 0);
+		DPRINTF(("usbd_do_request: status = 0x%04x\n", s));
 		if (!(s & UES_HALT))
 			goto bad;
 		treq.bmRequestType = UT_WRITE_ENDPOINT;
@@ -1114,8 +1059,7 @@ usbd_do_request_flags_pipe(usbd_device_handle dev, usbd_pipe_handle pipe,
 
  bad:
 	if (err) {
-		USBHIST_LOG(usbdebug, "returning err = %s",
-		    usbd_errstr(err), 0, 0, 0);
+		DPRINTF(("%s: returning err=%s\n", __func__, usbd_errstr(err)));
 	}
 	usbd_free_xfer(xfer);
 	return (err);
@@ -1258,8 +1202,6 @@ usbd_get_string0(usbd_device_handle dev, int si, char *buf, int unicode)
 	usbd_status err;
 	int size;
 
-	USBHIST_FUNC(); USBHIST_CALLED(usbdebug);
-
 	buf[0] = '\0';
 	if (si == 0)
 		return (USBD_INVAL);
@@ -1270,8 +1212,7 @@ usbd_get_string0(usbd_device_handle dev, int si, char *buf, int unicode)
 		err = usbd_get_string_desc(dev, USB_LANGUAGE_TABLE, 0, &us,
 		    &size);
 		if (err || size < 4) {
-			USBHIST_LOG(usbdebug, "getting lang failed, using 0",
-			    0, 0, 0, 0);
+			DPRINTFN(-1,("usbd_get_string: getting lang failed, using 0\n"));
 			dev->langid = 0; /* Well, just pick something then */
 		} else {
 			/* Pick the first language as the default. */

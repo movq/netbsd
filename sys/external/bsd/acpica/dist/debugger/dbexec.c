@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,7 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
 
 #include "acpi.h"
 #include "accommon.h"
@@ -435,15 +436,15 @@ AcpiDbExecute (
     }
     else
     {
-        NameString = ACPI_ALLOCATE (strlen (Name) + 1);
+        NameString = ACPI_ALLOCATE (ACPI_STRLEN (Name) + 1);
         if (!NameString)
         {
             return;
         }
 
-        memset (&AcpiGbl_DbMethodInfo, 0, sizeof (ACPI_DB_METHOD_INFO));
+        ACPI_MEMSET (&AcpiGbl_DbMethodInfo, 0, sizeof (ACPI_DB_METHOD_INFO));
 
-        strcpy (NameString, Name);
+        ACPI_STRCPY (NameString, Name);
         AcpiUtStrupr (NameString);
         AcpiGbl_DbMethodInfo.Name = NameString;
         AcpiGbl_DbMethodInfo.Args = Args;
@@ -671,8 +672,8 @@ AcpiDbCreateExecutionThreads (
 
     /* Get the arguments */
 
-    NumThreads = strtoul (NumThreadsArg, NULL, 0);
-    NumLoops   = strtoul (NumLoopsArg, NULL, 0);
+    NumThreads = ACPI_STRTOUL (NumThreadsArg, NULL, 0);
+    NumLoops   = ACPI_STRTOUL (NumLoopsArg, NULL, 0);
 
     if (!NumThreads || !NumLoops)
     {
@@ -716,7 +717,7 @@ AcpiDbCreateExecutionThreads (
         return;
     }
 
-    memset (&AcpiGbl_DbMethodInfo, 0, sizeof (ACPI_DB_METHOD_INFO));
+    ACPI_MEMSET (&AcpiGbl_DbMethodInfo, 0, sizeof (ACPI_DB_METHOD_INFO));
 
     /* Array to store IDs of threads */
 
@@ -731,7 +732,7 @@ AcpiDbCreateExecutionThreads (
         (void) AcpiOsDeleteSemaphore (InfoGate);
         return;
     }
-    memset (AcpiGbl_DbMethodInfo.Threads, 0, Size);
+    ACPI_MEMSET (AcpiGbl_DbMethodInfo.Threads, 0, Size);
 
     /* Setup the context to be passed to each thread */
 

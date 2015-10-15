@@ -20,7 +20,7 @@ extern "C" {
 
 #define XCB_XEVIE_MAJOR_VERSION 1
 #define XCB_XEVIE_MINOR_VERSION 0
-
+  
 extern xcb_extension_t xcb_xevie_id;
 
 /**
@@ -210,8 +210,20 @@ typedef struct xcb_xevie_select_input_reply_t {
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xevie_query_version_cookie_t xcb_xevie_query_version
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint16_t          client_major_version
+ ** @param uint16_t          client_minor_version
+ ** @returns xcb_xevie_query_version_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xevie_query_version_cookie_t
 xcb_xevie_query_version (xcb_connection_t *c  /**< */,
                          uint16_t          client_major_version  /**< */,
@@ -223,11 +235,23 @@ xcb_xevie_query_version (xcb_connection_t *c  /**< */,
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  * This form can be used only if the request will cause
  * a reply to be generated. Any returned error will be
  * placed in the event queue.
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xevie_query_version_cookie_t xcb_xevie_query_version_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint16_t          client_major_version
+ ** @param uint16_t          client_minor_version
+ ** @returns xcb_xevie_query_version_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xevie_query_version_cookie_t
 xcb_xevie_query_version_unchecked (xcb_connection_t *c  /**< */,
                                    uint16_t          client_major_version  /**< */,
@@ -240,13 +264,25 @@ xcb_xevie_query_version_unchecked (xcb_connection_t *c  /**< */,
  * @param e      The xcb_generic_error_t supplied
  *
  * Returns the reply of the request asked by
- *
+ * 
  * The parameter @p e supplied to this function must be NULL if
  * xcb_xevie_query_version_unchecked(). is used.
  * Otherwise, it stores the error if any.
  *
  * The returned value must be freed by the caller using free().
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xevie_query_version_reply_t * xcb_xevie_query_version_reply
+ ** 
+ ** @param xcb_connection_t                  *c
+ ** @param xcb_xevie_query_version_cookie_t   cookie
+ ** @param xcb_generic_error_t              **e
+ ** @returns xcb_xevie_query_version_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_xevie_query_version_reply_t *
 xcb_xevie_query_version_reply (xcb_connection_t                  *c  /**< */,
                                xcb_xevie_query_version_cookie_t   cookie  /**< */,
@@ -258,8 +294,19 @@ xcb_xevie_query_version_reply (xcb_connection_t                  *c  /**< */,
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xevie_start_cookie_t xcb_xevie_start
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @returns xcb_xevie_start_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xevie_start_cookie_t
 xcb_xevie_start (xcb_connection_t *c  /**< */,
                  uint32_t          screen  /**< */);
@@ -270,11 +317,22 @@ xcb_xevie_start (xcb_connection_t *c  /**< */,
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  * This form can be used only if the request will cause
  * a reply to be generated. Any returned error will be
  * placed in the event queue.
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xevie_start_cookie_t xcb_xevie_start_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @returns xcb_xevie_start_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xevie_start_cookie_t
 xcb_xevie_start_unchecked (xcb_connection_t *c  /**< */,
                            uint32_t          screen  /**< */);
@@ -286,13 +344,25 @@ xcb_xevie_start_unchecked (xcb_connection_t *c  /**< */,
  * @param e      The xcb_generic_error_t supplied
  *
  * Returns the reply of the request asked by
- *
+ * 
  * The parameter @p e supplied to this function must be NULL if
  * xcb_xevie_start_unchecked(). is used.
  * Otherwise, it stores the error if any.
  *
  * The returned value must be freed by the caller using free().
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xevie_start_reply_t * xcb_xevie_start_reply
+ ** 
+ ** @param xcb_connection_t          *c
+ ** @param xcb_xevie_start_cookie_t   cookie
+ ** @param xcb_generic_error_t      **e
+ ** @returns xcb_xevie_start_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_xevie_start_reply_t *
 xcb_xevie_start_reply (xcb_connection_t          *c  /**< */,
                        xcb_xevie_start_cookie_t   cookie  /**< */,
@@ -304,8 +374,19 @@ xcb_xevie_start_reply (xcb_connection_t          *c  /**< */,
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xevie_end_cookie_t xcb_xevie_end
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          cmap
+ ** @returns xcb_xevie_end_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xevie_end_cookie_t
 xcb_xevie_end (xcb_connection_t *c  /**< */,
                uint32_t          cmap  /**< */);
@@ -316,11 +397,22 @@ xcb_xevie_end (xcb_connection_t *c  /**< */,
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  * This form can be used only if the request will cause
  * a reply to be generated. Any returned error will be
  * placed in the event queue.
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xevie_end_cookie_t xcb_xevie_end_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          cmap
+ ** @returns xcb_xevie_end_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xevie_end_cookie_t
 xcb_xevie_end_unchecked (xcb_connection_t *c  /**< */,
                          uint32_t          cmap  /**< */);
@@ -332,13 +424,25 @@ xcb_xevie_end_unchecked (xcb_connection_t *c  /**< */,
  * @param e      The xcb_generic_error_t supplied
  *
  * Returns the reply of the request asked by
- *
+ * 
  * The parameter @p e supplied to this function must be NULL if
  * xcb_xevie_end_unchecked(). is used.
  * Otherwise, it stores the error if any.
  *
  * The returned value must be freed by the caller using free().
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xevie_end_reply_t * xcb_xevie_end_reply
+ ** 
+ ** @param xcb_connection_t        *c
+ ** @param xcb_xevie_end_cookie_t   cookie
+ ** @param xcb_generic_error_t    **e
+ ** @returns xcb_xevie_end_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_xevie_end_reply_t *
 xcb_xevie_end_reply (xcb_connection_t        *c  /**< */,
                      xcb_xevie_end_cookie_t   cookie  /**< */,
@@ -352,6 +456,16 @@ xcb_xevie_end_reply (xcb_connection_t        *c  /**< */,
  * decreased by one. The member data points to the next
  * element. The member index is increased by sizeof(xcb_xevie_event_t)
  */
+
+/*****************************************************************************
+ **
+ ** void xcb_xevie_event_next
+ ** 
+ ** @param xcb_xevie_event_iterator_t *i
+ ** @returns void
+ **
+ *****************************************************************************/
+ 
 void
 xcb_xevie_event_next (xcb_xevie_event_iterator_t *i  /**< */);
 
@@ -364,6 +478,16 @@ xcb_xevie_event_next (xcb_xevie_event_iterator_t *i  /**< */);
  * The member rem is set to 0. The member data points to the
  * last element.
  */
+
+/*****************************************************************************
+ **
+ ** xcb_generic_iterator_t xcb_xevie_event_end
+ ** 
+ ** @param xcb_xevie_event_iterator_t i
+ ** @returns xcb_generic_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_generic_iterator_t
 xcb_xevie_event_end (xcb_xevie_event_iterator_t i  /**< */);
 
@@ -373,8 +497,20 @@ xcb_xevie_event_end (xcb_xevie_event_iterator_t i  /**< */);
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xevie_send_cookie_t xcb_xevie_send
+ ** 
+ ** @param xcb_connection_t  *c
+ ** @param xcb_xevie_event_t  event
+ ** @param uint32_t           data_type
+ ** @returns xcb_xevie_send_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xevie_send_cookie_t
 xcb_xevie_send (xcb_connection_t  *c  /**< */,
                 xcb_xevie_event_t  event  /**< */,
@@ -386,11 +522,23 @@ xcb_xevie_send (xcb_connection_t  *c  /**< */,
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  * This form can be used only if the request will cause
  * a reply to be generated. Any returned error will be
  * placed in the event queue.
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xevie_send_cookie_t xcb_xevie_send_unchecked
+ ** 
+ ** @param xcb_connection_t  *c
+ ** @param xcb_xevie_event_t  event
+ ** @param uint32_t           data_type
+ ** @returns xcb_xevie_send_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xevie_send_cookie_t
 xcb_xevie_send_unchecked (xcb_connection_t  *c  /**< */,
                           xcb_xevie_event_t  event  /**< */,
@@ -403,13 +551,25 @@ xcb_xevie_send_unchecked (xcb_connection_t  *c  /**< */,
  * @param e      The xcb_generic_error_t supplied
  *
  * Returns the reply of the request asked by
- *
+ * 
  * The parameter @p e supplied to this function must be NULL if
  * xcb_xevie_send_unchecked(). is used.
  * Otherwise, it stores the error if any.
  *
  * The returned value must be freed by the caller using free().
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xevie_send_reply_t * xcb_xevie_send_reply
+ ** 
+ ** @param xcb_connection_t         *c
+ ** @param xcb_xevie_send_cookie_t   cookie
+ ** @param xcb_generic_error_t     **e
+ ** @returns xcb_xevie_send_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_xevie_send_reply_t *
 xcb_xevie_send_reply (xcb_connection_t         *c  /**< */,
                       xcb_xevie_send_cookie_t   cookie  /**< */,
@@ -421,8 +581,19 @@ xcb_xevie_send_reply (xcb_connection_t         *c  /**< */,
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xevie_select_input_cookie_t xcb_xevie_select_input
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          event_mask
+ ** @returns xcb_xevie_select_input_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xevie_select_input_cookie_t
 xcb_xevie_select_input (xcb_connection_t *c  /**< */,
                         uint32_t          event_mask  /**< */);
@@ -433,11 +604,22 @@ xcb_xevie_select_input (xcb_connection_t *c  /**< */,
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  * This form can be used only if the request will cause
  * a reply to be generated. Any returned error will be
  * placed in the event queue.
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xevie_select_input_cookie_t xcb_xevie_select_input_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          event_mask
+ ** @returns xcb_xevie_select_input_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xevie_select_input_cookie_t
 xcb_xevie_select_input_unchecked (xcb_connection_t *c  /**< */,
                                   uint32_t          event_mask  /**< */);
@@ -449,13 +631,25 @@ xcb_xevie_select_input_unchecked (xcb_connection_t *c  /**< */,
  * @param e      The xcb_generic_error_t supplied
  *
  * Returns the reply of the request asked by
- *
+ * 
  * The parameter @p e supplied to this function must be NULL if
  * xcb_xevie_select_input_unchecked(). is used.
  * Otherwise, it stores the error if any.
  *
  * The returned value must be freed by the caller using free().
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xevie_select_input_reply_t * xcb_xevie_select_input_reply
+ ** 
+ ** @param xcb_connection_t                 *c
+ ** @param xcb_xevie_select_input_cookie_t   cookie
+ ** @param xcb_generic_error_t             **e
+ ** @returns xcb_xevie_select_input_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_xevie_select_input_reply_t *
 xcb_xevie_select_input_reply (xcb_connection_t                 *c  /**< */,
                               xcb_xevie_select_input_cookie_t   cookie  /**< */,

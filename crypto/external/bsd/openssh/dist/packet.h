@@ -1,4 +1,4 @@
-/*	$NetBSD: packet.h,v 1.11 2015/04/11 21:14:31 joerg Exp $	*/
+/*	$NetBSD: packet.h,v 1.8.4.1 2015/04/30 06:07:30 riz Exp $	*/
 /* $OpenBSD: packet.h,v 1.66 2015/01/30 01:13:33 djm Exp $ */
 
 /*

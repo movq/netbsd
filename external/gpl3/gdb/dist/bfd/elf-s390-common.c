@@ -1,5 +1,6 @@
 /* IBM S/390-specific support for ELF 32 and 64 bit functions
-   Copyright (C) 2000-2015 Free Software Foundation, Inc.
+   Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
+   2011, 2012 Free Software Foundation, Inc.
    Contributed by Andreas Krebbel.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -234,10 +235,8 @@ elf_s390_add_symbol_hook (bfd *abfd,
 			  asection **secp ATTRIBUTE_UNUSED,
 			  bfd_vma *valp ATTRIBUTE_UNUSED)
 {
-  if ((ELF_ST_TYPE (sym->st_info) == STT_GNU_IFUNC
-       || ELF_ST_BIND (sym->st_info) == STB_GNU_UNIQUE)
-      && (abfd->flags & DYNAMIC) == 0
-      && bfd_get_flavour (info->output_bfd) == bfd_target_elf_flavour)
+  if ((abfd->flags & DYNAMIC) == 0
+      && ELF_ST_TYPE (sym->st_info) == STT_GNU_IFUNC)
     elf_tdata (info->output_bfd)->has_gnu_symbols = TRUE;
 
   return TRUE;

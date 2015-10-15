@@ -1,5 +1,5 @@
 %{
-/* $NetBSD: cgram.y,v 1.74 2015/10/13 20:49:39 christos Exp $ */
+/* $NetBSD: cgram.y,v 1.65 2014/04/21 21:52:24 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: cgram.y,v 1.74 2015/10/13 20:49:39 christos Exp $");
+__RCSID("$NetBSD: cgram.y,v 1.65 2014/04/21 21:52:24 christos Exp $");
 #endif
 
 #include <stdlib.h>
@@ -105,17 +105,9 @@ static inline void RESTORE(const char *file, size_t line)
 #define SAVE(f, l)	olwarn = lwarn
 #define RESTORE(f, l) (void)(olwarn == LWARN_BAD ? (clrwflgs(), 0) : (lwarn = olwarn))
 #endif
-
-/* unbind the anonymous struct members from the struct */
-static void
-anonymize(sym_t *s)
-{
-	for ( ; s; s = s->s_nxt)
-		s->s_styp = NULL;
-}
 %}
 
-%expect 80
+%expect 75
 
 %union {
 	int	y_int;
@@ -706,22 +698,14 @@ member_declaration:
 		$$ = $4;
 	  }
 	| noclass_declmods deftyp {
-		symtyp = FVFT;
 		/* struct or union member must be named */
-		if (!Sflag)
-			warning(49);
-		/* add all the members of the anonymous struct/union */
-		$$ = dcs->d_type->t_str->memb;
-		anonymize($$);
+		warning(49);
+		$$ = NULL;
 	  }
 	| noclass_declspecs deftyp {
-		symtyp = FVFT;
 		/* struct or union member must be named */
-		if (!Sflag)
-			warning(49);
-		$$ = dcs->d_type->t_str->memb;
-		/* add all the members of the anonymous struct/union */
-		anonymize($$);
+		warning(49);
+		$$ = NULL;
 	  }
 	| error {
 		symtyp = FVFT;
@@ -906,7 +890,7 @@ type_init_decls:
 	;
 
 notype_init_decl:
-	notype_decl opt_asm_or_symbolrename {
+	  notype_decl opt_asm_or_symbolrename {
 		idecl($1, 0, $2);
 		chksz($1);
 	  }
@@ -918,7 +902,7 @@ notype_init_decl:
 	;
 
 type_init_decl:
-	type_decl opt_asm_or_symbolrename {
+	  type_decl opt_asm_or_symbolrename {
 		idecl($1, 0, $2);
 		chksz($1);
 	  }
@@ -1041,7 +1025,7 @@ notype_param_decl:
 	;
 
 direct_notype_param_decl:
-	  identifier {
+	  T_NAME {
 		$$ = dname(getsym($1));
 	  }
 	| T_LPARN notype_param_decl T_RPARN {
@@ -1226,7 +1210,7 @@ initializer:
 	;
 
 init_expr:
-	| expr				%prec T_COMMA {
+	  expr				%prec T_COMMA {
 		mkinit($1);
 	  }
 	| init_by_name init_expr	%prec T_COMMA
@@ -1257,25 +1241,16 @@ range:
 	  }
 	;
 
-init_field:
-	  T_LBRACK range T_RBRACK {
+init_by_name:
+	  T_LBRACK range T_RBRACK T_ASSIGN {
 		if (!Sflag)
 			warning(321);
 	  }
-	| point identifier {
+	| point identifier T_ASSIGN {
 		if (!Sflag)
 			warning(313);
 		memberpush($2);
 	  }
-	;
-
-init_field_list:
-	  init_field
-	| init_field_list init_field
-	;
-
-init_by_name:
-	  init_field_list T_ASSIGN
 	| identifier T_COLON {
 		gnuism(315);
 		memberpush($1);
@@ -1551,14 +1526,10 @@ iteration_stmnt:
 	| for_exprs stmnt {
 		CLRWFLGS(__FILE__, __LINE__);
 		for2();
-		popdecl();
-		blklev--;
 	  }
 	| for_exprs error {
 		CLRWFLGS(__FILE__, __LINE__);
 		for2();
-		popdecl();
-		blklev--;
 	  }
 	;
 
@@ -1581,21 +1552,15 @@ do_while_expr:
 	  }
 	;
 
-for_start:
-	  T_FOR T_LPARN {
-		pushdecl(AUTO);
-		blklev++;
-	  }
-	;
 for_exprs:
-	    for_start declspecs deftyp notype_init_decls T_SEMI opt_expr
+	    T_FOR T_LPARN declspecs deftyp notype_init_decls T_SEMI opt_expr
 	    T_SEMI opt_expr T_RPARN {
 		c99ism(325);
-		for1(NULL, $6, $8);
+		for1(NULL, $7, $9);
 		CLRWFLGS(__FILE__, __LINE__);
 	    }
-	  | for_start opt_expr T_SEMI opt_expr T_SEMI opt_expr T_RPARN {
-		for1($2, $4, $6);
+	  | T_FOR T_LPARN opt_expr T_SEMI opt_expr T_SEMI opt_expr T_RPARN {
+		for1($3, $5, $7);
 		CLRWFLGS(__FILE__, __LINE__);
 	  }
 	;
@@ -1946,10 +1911,8 @@ toicon(tnode_t *tn, int required)
 	/*
 	 * Abstract declarations are used inside expression. To free
 	 * the memory would be a fatal error.
-	 * We don't free blocks that are inside casts because these
-	 * will be used later to match types.
 	 */
-	if (tn->tn_op != CON && dcs->d_ctx != ABSTRACT)
+	if (dcs->d_ctx != ABSTRACT)
 		tfreeblk();
 
 	if ((t = v->v_tspec) == FLOAT || t == DOUBLE || t == LDOUBLE) {
@@ -1988,7 +1951,7 @@ idecl(sym_t *decl, int initflg, sbuf_t *renaming)
 	case EXTERN:
 		if (renaming != NULL) {
 			if (decl->s_rename != NULL)
-				LERROR("idecl(rename)");
+				LERROR("idecl()");
 
 			s = getlblk(1, renaming->sb_len + 1);
 	                (void)memcpy(s, renaming->sb_name, renaming->sb_len + 1);
@@ -2016,7 +1979,7 @@ idecl(sym_t *decl, int initflg, sbuf_t *renaming)
 		decl1loc(decl, initflg);
 		break;
 	default:
-		LERROR("idecl(%d)", dcs->d_ctx);
+		LERROR("idecl()");
 	}
 
 	if (initflg && !initerr)

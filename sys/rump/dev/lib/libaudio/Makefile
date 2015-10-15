@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2014/11/18 04:29:06 nonaka Exp $
+#	$NetBSD: Makefile,v 1.2.4.1 2014/11/23 20:58:15 snj Exp $
 #
 
 .PATH:	${.CURDIR}/../../../../dev

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.13 2014/12/05 04:42:36 agc Exp $
+#	$NetBSD: Makefile,v 1.12.4.1 2014/12/08 20:22:07 martin Exp $
 
 PROG=netpgpverify
 BINDIR=		/usr/bin

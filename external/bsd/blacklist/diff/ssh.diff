@@ -11,7 +11,7 @@
 +static struct blacklist *blstate;
 +
 +void
-+pfilter_init(void)
++pfilter_init()
 +{
 +	blstate = blacklist_open();
 +}

@@ -1,5 +1,3 @@
-/*	$NetBSD: rumpuser_random.c,v 1.4 2014/11/04 19:05:17 pooka Exp $	*/
-
 /*
  * Copyright (c) 2014 Justin Cormack.  All Rights Reserved.
  *
@@ -28,7 +26,7 @@
 #include "rumpuser_port.h"
 
 #if !defined(lint)
-__RCSID("$NetBSD: rumpuser_random.c,v 1.4 2014/11/04 19:05:17 pooka Exp $");
+__RCSID("$NetBSD: rumpuser_random.c,v 1.2 2014/07/25 14:00:31 justin Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>
@@ -48,7 +46,7 @@ __RCSID("$NetBSD: rumpuser_random.c,v 1.4 2014/11/04 19:05:17 pooka Exp $");
 
 static const size_t random_maxread = 32;
 
-#ifdef HAVE_ARC4RANDOM_BUF
+#ifdef PLATFORM_HAS_ARC4RANDOM_BUF
 int
 rumpuser__random_init(void)
 {
@@ -75,7 +73,7 @@ rumpuser__random_init(void)
 int
 rumpuser_getrandom(void *buf, size_t buflen, int flags, size_t *retp)
 {
-#ifndef HAVE_ARC4RANDOM_BUF
+#ifndef PLATFORM_HAS_ARC4RANDOM_BUF
 	ssize_t rv;
 
 	rv = read(random_fd, buf, buflen > random_maxread ? random_maxread : buflen);

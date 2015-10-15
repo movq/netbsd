@@ -1,4 +1,4 @@
-/*	$NetBSD: srvtest.c,v 1.10 2015/05/30 22:40:38 christos Exp $	*/
+/*	$NetBSD: srvtest.c,v 1.9.2.3 2015/06/02 20:32:44 snj Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: srvtest.c,v 1.10 2015/05/30 22:40:38 christos Exp $");
+__RCSID("$NetBSD: srvtest.c,v 1.9.2.3 2015/06/02 20:32:44 snj Exp $");
 
 #include <sys/types.h> 
 #include <sys/socket.h>

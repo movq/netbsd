@@ -1,4 +1,4 @@
-/*	$NetBSD: emul.c,v 1.173 2015/08/25 14:47:26 pooka Exp $	*/
+/*	$NetBSD: emul.c,v 1.166 2014/05/28 20:57:22 justin Exp $	*/
 
 /*
  * Copyright (c) 2007-2011 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: emul.c,v 1.173 2015/08/25 14:47:26 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: emul.c,v 1.166 2014/05/28 20:57:22 justin Exp $");
 
 #include <sys/param.h>
 #include <sys/null.h>
@@ -85,6 +85,7 @@ struct vnode *rootvp;
 dev_t rootdev = NODEV;
 
 const int schedppq = 1;
+int hardclock_ticks;
 bool mp_online = false;
 struct timeval boottime;
 int cold = 1;
@@ -230,64 +231,21 @@ module_init_md(void)
 	 */
 }
 
-/*
- * Try to emulate all the MD definitions of DELAY() / delay().
- * Would be nice to fix the #defines in MD headers, but this quicker.
- *
- * XXX: we'd need a rumpuser_clock_sleep_nowrap() here.  Since we
- * don't have it in the current hypercall revision, busyloop.
- * Note that rather than calibrate a loop delay and work with that,
- * get call gettime (which does not block) in a loop to make sure
- * we didn't get virtual ghosttime.  That might be slightly inaccurate
- * for very small delays ...
- *
- * The other option would be to run a thread in the hypervisor which
- * sleeps for us and we can wait for it using rumpuser_cv_wait_nowrap()
- * Probably too fussy.  Better just wait for hypercall rev 18 ;)
- */
+/* us and them, after all we're only ordinary seconds */
 static void
 rump_delay(unsigned int us)
 {
-	struct timespec target, tmp;
-	uint64_t sec, sec_ini, sec_now;
-	long nsec, nsec_ini, nsec_now;
-	int loops;
+	uint64_t sec, nsec;
 
-	rumpuser_clock_gettime(RUMPUSER_CLOCK_ABSMONO, &sec_ini, &nsec_ini);
-
-#ifdef __mac68k__
-	sec = us / 1000;
-	nsec = (us % 1000) * 1000000;
-#else
 	sec = us / 1000000;
 	nsec = (us % 1000000) * 1000;
-#endif
-
-	target.tv_sec = sec_ini;
-	tmp.tv_sec = sec;
-	target.tv_nsec = nsec_ini;
-	tmp.tv_nsec = nsec;
-	timespecadd(&target, &tmp, &target);
 
 	if (__predict_false(sec != 0))
 		printf("WARNING: over 1s delay\n");
 
-	for (loops = 0; loops < 1000*1000*100; loops++) {
-		struct timespec cur;
-
-		rumpuser_clock_gettime(RUMPUSER_CLOCK_ABSMONO,
-		    &sec_now, &nsec_now);
-		cur.tv_sec = sec_now;
-		cur.tv_nsec = nsec_now;
-		if (timespeccmp(&cur, &target, >=)) {
-			return;
-		}
-	}
-	printf("WARNING: DELAY ESCAPED\n");
+	rumpuser_clock_sleep(RUMPUSER_CLOCK_RELWALL, sec, nsec);
 }
 void (*delay_func)(unsigned int) = rump_delay;
-__strong_alias(delay,rump_delay);
-__strong_alias(_delay,rump_delay);
 
 /*
  * Provide weak aliases for tty routines used by printf.
@@ -361,7 +319,7 @@ cpu_reboot(int howto, char *bootstr)
 	printf("rump kernel halting...\n");
 
 	if (!RUMP_LOCALPROC_P(curproc))
-		finiarg = RUMP_SPVM2CTL(curproc->p_vmspace);
+		finiarg = curproc->p_vmspace->vm_map.pmap;
 	else
 		finiarg = NULL;
 
@@ -380,8 +338,8 @@ cpu_reboot(int howto, char *bootstr)
 
 	/* your wish is my command */
 	if (howto & RB_HALT) {
-		printf("rump kernel halted (with RB_HALT, not exiting)\n");
-		rump_sysproxy_fini(finiarg);
+		printf("rump kernel halted\n");
+		rumpuser_sp_fini(finiarg);
 		for (;;) {
 			rumpuser_clock_sleep(RUMPUSER_CLOCK_RELWALL, 10, 0);
 		}
@@ -389,13 +347,7 @@ cpu_reboot(int howto, char *bootstr)
 
 	/* this function is __dead, we must exit */
  out:
-	rump_sysproxy_fini(finiarg);
+	printf("halted\n");
+	rumpuser_sp_fini(finiarg);
 	rumpuser_exit(ruhow);
-}
-
-const char *
-cpu_getmodel(void)
-{
-
-	return "rumpcore (virtual)";
 }

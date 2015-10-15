@@ -1,4 +1,4 @@
-/*	$NetBSD: misc.h,v 1.9 2015/04/03 23:58:19 christos Exp $	*/
+/*	$NetBSD: misc.h,v 1.6.4.1 2015/04/30 06:07:30 riz Exp $	*/
 /* $OpenBSD: misc.h,v 1.54 2014/07/15 15:54:14 millert Exp $ */
 
 /*
@@ -64,6 +64,8 @@ time_t	 monotime(void);
 void	 lowercase(char *s);
 int	 unix_listener(const char *, int, int);
 
+void *reallocarray(void *, size_t, size_t);
+long long strtonum(const char *, long long, long long, const char **);
 int	bcrypt_pbkdf(const char *, size_t, const u_int8_t *, size_t,
     u_int8_t *, size_t, unsigned int);
 

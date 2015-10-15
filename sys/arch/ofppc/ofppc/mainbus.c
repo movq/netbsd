@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.30 2014/12/31 18:43:18 phx Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.29.10.1 2015/01/04 12:14:30 martin Exp $	*/
 
 /*-
  * Copyright (c) 2007 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.30 2014/12/31 18:43:18 phx Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.29.10.1 2015/01/04 12:14:30 martin Exp $");
 
 #include "opt_interrupt.h"
 #include "opt_multiprocessor.h"

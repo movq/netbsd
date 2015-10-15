@@ -1,6 +1,6 @@
 /* Python pretty-printing
 
-   Copyright (C) 2008-2015 Free Software Foundation, Inc.
+   Copyright (C) 2008-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,12 +18,15 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include "exceptions.h"
 #include "objfiles.h"
 #include "symtab.h"
 #include "language.h"
 #include "valprint.h"
-#include "extension-priv.h"
+
 #include "python.h"
+
+#ifdef HAVE_PYTHON
 #include "python-internal.h"
 
 /* Return type of print_string_repr.  */
@@ -297,7 +300,7 @@ print_stack_unless_memory_error (struct ui_file *stream)
     gdbpy_print_stack ();
 }
 
-/* Helper for gdbpy_apply_val_pretty_printer which calls to_string and
+/* Helper for apply_val_pretty_printer which calls to_string and
    formats the result.  */
 
 static enum string_repr_result
@@ -464,7 +467,7 @@ push_dummy_python_frame (void)
 }
 #endif
 
-/* Helper for gdbpy_apply_val_pretty_printer that formats children of the
+/* Helper for apply_val_pretty_printer that formats children of the
    printer, if any exist.  If is_py_none is true, then nothing has
    been printed by to_string, and format output accordingly. */
 static void
@@ -683,14 +686,13 @@ print_children (PyObject *printer, const char *hint,
   do_cleanups (cleanups);
 }
 
-enum ext_lang_rc
-gdbpy_apply_val_pretty_printer (const struct extension_language_defn *extlang,
-				struct type *type, const gdb_byte *valaddr,
-				int embedded_offset, CORE_ADDR address,
-				struct ui_file *stream, int recurse,
-				const struct value *val,
-				const struct value_print_options *options,
-				const struct language_defn *language)
+int
+apply_val_pretty_printer (struct type *type, const gdb_byte *valaddr,
+			  int embedded_offset, CORE_ADDR address,
+			  struct ui_file *stream, int recurse,
+			  const struct value *val,
+			  const struct value_print_options *options,
+			  const struct language_defn *language)
 {
   struct gdbarch *gdbarch = get_type_arch (type);
   PyObject *printer = NULL;
@@ -698,15 +700,15 @@ gdbpy_apply_val_pretty_printer (const struct extension_language_defn *extlang,
   struct value *value;
   char *hint = NULL;
   struct cleanup *cleanups;
-  enum ext_lang_rc result = EXT_LANG_RC_NOP;
+  int result = 0;
   enum string_repr_result print_result;
 
   /* No pretty-printer support for unavailable values.  */
   if (!value_bytes_available (val, embedded_offset, TYPE_LENGTH (type)))
-    return EXT_LANG_RC_NOP;
+    return 0;
 
   if (!gdb_python_initialized)
-    return EXT_LANG_RC_NOP;
+    return 0;
 
   cleanups = ensure_python_env (gdbarch, language);
 
@@ -726,27 +728,18 @@ gdbpy_apply_val_pretty_printer (const struct extension_language_defn *extlang,
 
   val_obj = value_to_value_object (value);
   if (! val_obj)
-    {
-      result = EXT_LANG_RC_ERROR;
-      goto done;
-    }
+    goto done;
 
   /* Find the constructor.  */
   printer = find_pretty_printer (val_obj);
   Py_DECREF (val_obj);
 
   if (printer == NULL)
-    {
-      result = EXT_LANG_RC_ERROR;
-      goto done;
-    }
+    goto done;
 
   make_cleanup_py_decref (printer);
   if (printer == Py_None)
-    {
-      result = EXT_LANG_RC_NOP;
-      goto done;
-    }
+    goto done;
 
   /* If we are printing a map, we want some special formatting.  */
   hint = gdbpy_get_display_hint (printer);
@@ -759,7 +752,8 @@ gdbpy_apply_val_pretty_printer (const struct extension_language_defn *extlang,
     print_children (printer, hint, stream, recurse, options, language,
 		    print_result == string_repr_none);
 
-  result = EXT_LANG_RC_OK;
+  result = 1;
+
 
  done:
   if (PyErr_Occurred ())
@@ -844,3 +838,18 @@ gdbpy_default_visualizer (PyObject *self, PyObject *args)
   cons = find_pretty_printer (val_obj);
   return cons;
 }
+
+#else /* HAVE_PYTHON */
+
+int
+apply_val_pretty_printer (struct type *type, const gdb_byte *valaddr,
+			  int embedded_offset, CORE_ADDR address,
+			  struct ui_file *stream, int recurse,
+			  const struct value *val,
+			  const struct value_print_options *options,
+			  const struct language_defn *language)
+{
+  return 0;
+}
+
+#endif /* HAVE_PYTHON */

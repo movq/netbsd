@@ -1,4 +1,4 @@
-#	$NetBSD: NetBSD.dist.tests,v 1.120 2015/09/24 16:02:39 christos Exp $
+#	$NetBSD: NetBSD.dist.tests,v 1.108 2014/06/30 21:32:59 alnsn Exp $
 
 ./usr/libdata/debug/usr/tests
 ./usr/libdata/debug/usr/tests/atf
@@ -109,7 +109,6 @@
 ./usr/libdata/debug/usr/tests/lib/libposix/posix1
 ./usr/libdata/debug/usr/tests/lib/libposix/posix2
 ./usr/libdata/debug/usr/tests/lib/libppath
-./usr/libdata/debug/usr/tests/lib/libproc
 ./usr/libdata/debug/usr/tests/lib/libprop
 ./usr/libdata/debug/usr/tests/lib/libpthread
 ./usr/libdata/debug/usr/tests/lib/libpthread/dlopen
@@ -135,8 +134,6 @@
 ./usr/libdata/debug/usr/tests/net/icmp
 ./usr/libdata/debug/usr/tests/net/if
 ./usr/libdata/debug/usr/tests/net/if_loop
-./usr/libdata/debug/usr/tests/net/in_cksum
-./usr/libdata/debug/usr/tests/net/mcast
 ./usr/libdata/debug/usr/tests/net/net
 ./usr/libdata/debug/usr/tests/net/sys
 ./usr/libdata/debug/usr/tests/rump
@@ -147,11 +144,6 @@
 ./usr/libdata/debug/usr/tests/rump/rumpvfs
 ./usr/libdata/debug/usr/tests/sbin
 ./usr/libdata/debug/usr/tests/sbin/resize_ffs
-./usr/libdata/debug/usr/tests/sys
-./usr/libdata/debug/usr/tests/sys/net
-./usr/libdata/debug/usr/tests/sys/netatalk
-./usr/libdata/debug/usr/tests/sys/netinet
-./usr/libdata/debug/usr/tests/sys/netinet6
 ./usr/libdata/debug/usr/tests/usr.bin
 ./usr/libdata/debug/usr/tests/usr.bin/id
 ./usr/libdata/debug/usr/tests/usr.bin/netpgpverify
@@ -289,7 +281,6 @@
 ./usr/tests/lib/libposix/posix1
 ./usr/tests/lib/libposix/posix2
 ./usr/tests/lib/libppath
-./usr/tests/lib/libproc
 ./usr/tests/lib/libprop
 ./usr/tests/lib/libpthread
 ./usr/tests/lib/libpthread/dlopen
@@ -309,7 +300,6 @@
 ./usr/tests/libexec/ld.elf_so/h_helper_symver_dso2
 ./usr/tests/modules
 ./usr/tests/net
-./usr/tests/net/arp
 ./usr/tests/net/bpf
 ./usr/tests/net/bpfilter
 ./usr/tests/net/bpfjit
@@ -317,13 +307,9 @@
 ./usr/tests/net/fdpass
 ./usr/tests/net/icmp
 ./usr/tests/net/if
-./usr/tests/net/if_bridge
 ./usr/tests/net/if_loop
-./usr/tests/net/in_cksum
-./usr/tests/net/mcast
 ./usr/tests/net/mpls
 ./usr/tests/net/net
-./usr/tests/net/ndp
 ./usr/tests/net/npf
 ./usr/tests/net/route
 ./usr/tests/net/sys
@@ -347,10 +333,6 @@
 ./usr/tests/share/examples/lutok
 ./usr/tests/share/mk
 ./usr/tests/sys
-./usr/tests/sys/net
-./usr/tests/sys/netatalk
-./usr/tests/sys/netinet
-./usr/tests/sys/netinet6
 ./usr/tests/sys/rc
 ./usr/tests/usr.bin
 ./usr/tests/usr.bin/awk
@@ -374,10 +356,8 @@
 ./usr/tests/usr.bin/netpgpverify
 ./usr/tests/usr.bin/infocmp
 ./usr/tests/usr.bin/jot
-./usr/tests/usr.bin/ld
 ./usr/tests/usr.bin/m4
 ./usr/tests/usr.bin/make
-./usr/tests/usr.bin/make/unit-tests
 ./usr/tests/usr.bin/mkdep
 ./usr/tests/usr.bin/nbperf
 ./usr/tests/usr.bin/pr

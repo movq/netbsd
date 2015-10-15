@@ -1,4 +1,4 @@
-/*	$NetBSD: hdmi.h,v 1.5 2014/11/24 01:27:07 riastradh Exp $	*/
+/*	$NetBSD: hdmi.h,v 1.2.4.1 2015/01/11 05:59:17 snj Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

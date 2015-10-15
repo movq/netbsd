@@ -1,4 +1,4 @@
-/*	$NetBSD: motg.c,v 1.13 2015/08/19 06:23:35 skrll Exp $	*/
+/*	$NetBSD: motg.c,v 1.6.4.2 2014/11/12 19:54:46 martin Exp $	*/
 
 /*
  * Copyright (c) 1998, 2004, 2011, 2012, 2014 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
 #include "opt_motg.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: motg.c,v 1.13 2015/08/19 06:23:35 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: motg.c,v 1.6.4.2 2014/11/12 19:54:46 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -444,7 +444,7 @@ motg_init(struct motg_softc *sc)
 	    "motgxfer", NULL, IPL_USB, NULL, NULL, NULL);
 
 	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_SOFTUSB);
-	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_USB);
+	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_SCHED);
 
 	/* Set up the bus struct. */
 	sc->sc_bus.methods = &motg_bus_methods;

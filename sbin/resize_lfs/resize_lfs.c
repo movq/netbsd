@@ -1,4 +1,4 @@
-/*	$NetBSD: resize_lfs.c,v 1.14 2015/08/02 18:18:09 dholland Exp $	*/
+/*	$NetBSD: resize_lfs.c,v 1.9 2014/03/23 05:38:14 dholland Exp $	*/
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -38,8 +38,8 @@
 #include <sys/mount.h>
 #include <sys/statvfs.h>
 
+#include <ufs/ufs/dinode.h>
 #include <ufs/lfs/lfs.h>
-#include <ufs/lfs/lfs_accessors.h>
 
 #include <disktab.h>
 #include <err.h>
@@ -125,18 +125,17 @@ main(int argc, char **argv)
 	fs = (struct lfs *)malloc(sizeof(*fs));
 	for (sboff = LFS_LABELPAD;;) {
 		pread(devfd, buf, sboff, LFS_SBPAD);
-		__CTASSERT(sizeof(struct dlfs) == sizeof(struct dlfs64));
-		memcpy(&fs->lfs_dlfs_u, buf, sizeof(struct dlfs));
+		memcpy(&fs->lfs_dlfs, buf, sizeof(struct dlfs));
 		if (sboff == LFS_LABELPAD && lfs_fsbtob(fs, 1) > LFS_LABELPAD)
-			sboff = lfs_fsbtob(fs, (off_t)lfs_sb_getsboff(fs, 0));
+			sboff = lfs_fsbtob(fs, (off_t)fs->lfs_sboffs[0]);
 		else
 			break;
 	}
 	close(devfd);
 
 	/* Calculate new number of segments. */
-	newnsegs = (newsize * secsize) / lfs_sb_getssize(fs);
-	if (newnsegs == lfs_sb_getnseg(fs)) {
+	newnsegs = (newsize * secsize) / fs->lfs_ssize;
+	if (newnsegs == fs->lfs_nseg) {
 		errx(0, "the filesystem is unchanged.");
 	}
 
@@ -146,7 +145,7 @@ main(int argc, char **argv)
 	 * Make the cleaner do this for us.
 	 * (XXX make the kernel able to do this instead?)
 	 */
-	for (i = lfs_sb_getnseg(fs) - 1; i >= newnsegs; --i) {
+	for (i = fs->lfs_nseg - 1; i >= newnsegs; --i) {
 		char cmd[128];
 
 		/* If it's already empty, don't call the cleaner */
@@ -165,7 +164,7 @@ main(int argc, char **argv)
 	}
 
 	if (verbose)
-		printf("Successfully resized %s from %u to %lld segments\n",
-			fsname, lfs_sb_getnseg(fs), (long long)newnsegs);
+		printf("Successfully resized %s from %d to %lld segments\n",
+			fsname, fs->lfs_nseg, (long long)newnsegs);
 	return 0;
 }

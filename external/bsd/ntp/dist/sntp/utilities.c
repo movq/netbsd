@@ -1,4 +1,4 @@
-/*	$NetBSD: utilities.c,v 1.3 2015/07/10 14:20:34 christos Exp $	*/
+/*	$NetBSD: utilities.c,v 1.1.1.3.4.1 2014/12/24 00:05:24 riz Exp $	*/
 
 #include <config.h>
 #include "utilities.h"

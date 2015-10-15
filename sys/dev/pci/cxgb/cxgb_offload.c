@@ -31,7 +31,7 @@ POSSIBILITY OF SUCH DAMAGE.
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cxgb_offload.c,v 1.4 2014/09/21 17:05:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cxgb_offload.c,v 1.3.4.1 2014/10/30 12:04:46 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

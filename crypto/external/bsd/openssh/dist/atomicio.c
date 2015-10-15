@@ -1,4 +1,4 @@
-/*	$NetBSD: atomicio.c,v 1.6 2015/04/03 23:58:19 christos Exp $	*/
+/*	$NetBSD: atomicio.c,v 1.4.22.1 2015/04/30 06:07:30 riz Exp $	*/
 /* $OpenBSD: atomicio.c,v 1.27 2015/01/16 06:40:12 deraadt Exp $ */
 /*
  * Copyright (c) 2006 Damien Miller. All rights reserved.
@@ -28,7 +28,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: atomicio.c,v 1.6 2015/04/03 23:58:19 christos Exp $");
+__RCSID("$NetBSD: atomicio.c,v 1.4.22.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/param.h>
 #include <sys/uio.h>
 

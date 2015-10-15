@@ -1,4 +1,4 @@
-/*	$NetBSD: overlay_vnops.c,v 1.21 2014/11/10 18:46:33 maxv Exp $	*/
+/*	$NetBSD: overlay_vnops.c,v 1.20.4.1 2015/01/17 12:10:55 martin Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 National Aeronautics & Space Administration
@@ -67,7 +67,7 @@
  *
  * Ancestors:
  *	@(#)lofs_vnops.c	1.2 (Berkeley) 6/18/92
- *	$Id: overlay_vnops.c,v 1.21 2014/11/10 18:46:33 maxv Exp $
+ *	$Id: overlay_vnops.c,v 1.20.4.1 2015/01/17 12:10:55 martin Exp $
  *	...and...
  *	@(#)null_vnodeops.c 1.20 92/07/07 UCLA Ficus project
  */
@@ -126,7 +126,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: overlay_vnops.c,v 1.21 2014/11/10 18:46:33 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: overlay_vnops.c,v 1.20.4.1 2015/01/17 12:10:55 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

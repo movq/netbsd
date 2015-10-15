@@ -1,4 +1,4 @@
-/*	$NetBSD: curses.h,v 1.107 2015/06/08 12:38:57 joerg Exp $	*/
+/*	$NetBSD: curses.h,v 1.106.4.1 2015/06/10 16:59:32 snj Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994

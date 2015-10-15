@@ -1,4 +1,4 @@
-/*	$NetBSD: pci.h,v 1.19 2015/06/24 19:46:30 riastradh Exp $	*/
+/*	$NetBSD: pci.h,v 1.7.2.7 2015/07/30 15:46:41 snj Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

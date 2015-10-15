@@ -1,35 +1,6 @@
-/*	$NetBSD: kern_pax.c,v 1.33 2015/10/09 02:00:59 christos Exp $	*/
+/*	$NetBSD: kern_pax.c,v 1.27 2014/02/25 18:30:11 pooka Exp $	*/
 
-/*
- * Copyright (c) 2015 The NetBSD Foundation, Inc.
- * All rights reserved.
- *
- * This code is derived from software contributed to The NetBSD Foundation
- * by Maxime Villard.
- *
- * Redistribution and use in source and binary forms, with or without
- * modification, are permitted provided that the following conditions
- * are met:
- * 1. Redistributions of source code must retain the above copyright
- *    notice, this list of conditions and the following disclaimer.
- * 2. Redistributions in binary form must reproduce the above copyright
- *    notice, this list of conditions and the following disclaimer in the
- *    documentation and/or other materials provided with the distribution.
- *
- * THIS SOFTWARE IS PROVIDED BY THE NETBSD FOUNDATION, INC. AND CONTRIBUTORS
- * ``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED
- * TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
- * PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION OR CONTRIBUTORS
- * BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR
- * CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF
- * SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS
- * INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN
- * CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE)
- * ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
- * POSSIBILITY OF SUCH DAMAGE.
- */
-
-/*
+/*-
  * Copyright (c) 2006 Elad Efrat <elad@NetBSD.org>
  * All rights reserved.
  *
@@ -57,13 +28,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_pax.c,v 1.33 2015/10/09 02:00:59 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_pax.c,v 1.27 2014/02/25 18:30:11 pooka Exp $");
 
 #include "opt_pax.h"
 
 #include <sys/param.h>
 #include <sys/proc.h>
-#include <sys/exec.h>
 #include <sys/exec_elf.h>
 #include <sys/pax.h>
 #include <sys/sysctl.h>
@@ -75,14 +45,10 @@ __KERNEL_RCSID(0, "$NetBSD: kern_pax.c,v 1.33 2015/10/09 02:00:59 christos Exp $
 #include <sys/kauth.h>
 #include <sys/cprng.h>
 
-#ifdef PAX_ASLR_DEBUG
-#define PAX_DPRINTF(_fmt, args...)	uprintf("%s: " _fmt "\n", __func__, ##args)
-#else
-#define PAX_DPRINTF(_fmt, args...)	do {} while (/*CONSTCOND*/0)
-#endif
-
 #ifdef PAX_ASLR
 #include <sys/mman.h>
+#include <sys/rnd.h>
+#include <sys/exec.h>
 
 int pax_aslr_enabled = 1;
 int pax_aslr_global = PAX_ASLR;
@@ -100,22 +66,22 @@ int pax_aslr_global = PAX_ASLR;
 #define PAX_ASLR_DELTA_STACK_LEN 	12
 #endif
 
-static bool pax_aslr_elf_flags_active(uint32_t);
 #endif /* PAX_ASLR */
 
 #ifdef PAX_MPROTECT
 static int pax_mprotect_enabled = 1;
 static int pax_mprotect_global = PAX_MPROTECT;
-static bool pax_mprotect_elf_flags_active(uint32_t);
 #endif /* PAX_MPROTECT */
 
 #ifdef PAX_SEGVGUARD
 #ifndef PAX_SEGVGUARD_EXPIRY
 #define	PAX_SEGVGUARD_EXPIRY		(2 * 60)
 #endif
+
 #ifndef PAX_SEGVGUARD_SUSPENSION
 #define	PAX_SEGVGUARD_SUSPENSION	(10 * 60)
 #endif
+
 #ifndef	PAX_SEGVGUARD_MAXCRASHES
 #define	PAX_SEGVGUARD_MAXCRASHES	5
 #endif
@@ -140,9 +106,16 @@ struct pax_segvguard_entry {
 	LIST_HEAD(, pax_segvguard_uid_entry) segv_uids;
 };
 
-static bool pax_segvguard_elf_flags_active(uint32_t);
-static void pax_segvguard_cleanup_cb(void *);
+static void pax_segvguard_cb(void *);
 #endif /* PAX_SEGVGUARD */
+
+/* PaX internal setspecific flags */
+#define	PAX_MPROTECT_EXPLICIT_ENABLE	(void *)0x01
+#define	PAX_MPROTECT_EXPLICIT_DISABLE	(void *)0x02
+#define	PAX_SEGVGUARD_EXPLICIT_ENABLE	(void *)0x03
+#define	PAX_SEGVGUARD_EXPLICIT_DISABLE	(void *)0x04
+#define	PAX_ASLR_EXPLICIT_ENABLE	(void *)0x05
+#define	PAX_ASLR_EXPLICIT_DISABLE	(void *)0x06
 
 SYSCTL_SETUP(sysctl_security_pax_setup, "sysctl security.pax setup")
 {
@@ -275,8 +248,10 @@ pax_init(void)
 {
 #ifdef PAX_SEGVGUARD
 	int error;
+#endif /* PAX_SEGVGUARD */
 
-	error = fileassoc_register("segvguard", pax_segvguard_cleanup_cb,
+#ifdef PAX_SEGVGUARD
+	error = fileassoc_register("segvguard", pax_segvguard_cb,
 	    &segvguard_id);
 	if (error) {
 		panic("pax_init: segvguard_id: error=%d\n", error);
@@ -284,64 +259,18 @@ pax_init(void)
 #endif /* PAX_SEGVGUARD */
 }
 
-void
-pax_setup_elf_flags(struct exec_package *epp, uint32_t elf_flags)
-{
-	uint32_t flags = 0;
-
-#ifdef PAX_ASLR
-	if (pax_aslr_elf_flags_active(elf_flags)) {
-		flags |= P_PAX_ASLR;
-	}
-#endif
 #ifdef PAX_MPROTECT
-	if (pax_mprotect_elf_flags_active(elf_flags)) {
-		flags |= P_PAX_MPROTECT;
-	}
-#endif
-#ifdef PAX_SEGVGUARD
-	if (pax_segvguard_elf_flags_active(elf_flags)) {
-		flags |= P_PAX_GUARD;
-	}
-#endif
-
-	epp->ep_pax_flags = flags;
-}
-
-#if defined(PAX_MPROTECT) || defined(PAX_SEGVGUARD) || defined(PAX_ASLR)
-static inline bool
-pax_flags_active(uint32_t flags, uint32_t opt)
-{
-	if (!(flags & opt))
-		return false;
-	return true;
-}
-#endif /* PAX_MPROTECT || PAX_SEGVGUARD || PAX_ASLR */
-
-#ifdef PAX_MPROTECT
-static bool
-pax_mprotect_elf_flags_active(uint32_t flags)
-{
-	if (!pax_mprotect_enabled)
-		return false;
-	if (pax_mprotect_global && (flags & ELF_NOTE_PAX_NOMPROTECT) != 0) {
-		/* Mprotect explicitly disabled */
-		return false;
-	}
-	if (!pax_mprotect_global && (flags & ELF_NOTE_PAX_MPROTECT) == 0) {
-		/* Mprotect not requested */
-		return false;
-	}
-	return true;
-}
-
 void
 pax_mprotect(struct lwp *l, vm_prot_t *prot, vm_prot_t *maxprot)
 {
-	uint32_t flags;
+	uint32_t f;
 
-	flags = l->l_proc->p_pax;
-	if (!pax_flags_active(flags, P_PAX_MPROTECT))
+	if (!pax_mprotect_enabled)
+		return;
+
+	f = l->l_proc->p_pax;
+	if ((pax_mprotect_global && (f & ELF_NOTE_PAX_NOMPROTECT) != 0) ||
+	    (!pax_mprotect_global && (f & ELF_NOTE_PAX_MPROTECT) == 0))
 		return;
 
 	if ((*prot & (VM_PROT_WRITE|VM_PROT_EXECUTE)) != VM_PROT_EXECUTE) {
@@ -355,36 +284,23 @@ pax_mprotect(struct lwp *l, vm_prot_t *prot, vm_prot_t *maxprot)
 #endif /* PAX_MPROTECT */
 
 #ifdef PAX_ASLR
-static bool
-pax_aslr_elf_flags_active(uint32_t flags)
-{
-	if (!pax_aslr_enabled)
-		return false;
-	if (pax_aslr_global && (flags & ELF_NOTE_PAX_NOASLR) != 0) {
-		/* ASLR explicitly disabled */
-		return false;
-	}
-	if (!pax_aslr_global && (flags & ELF_NOTE_PAX_ASLR) == 0) {
-		/* ASLR not requested */
-		return false;
-	}
-	return true;
-}
-
-bool
-pax_aslr_epp_active(struct exec_package *epp)
-{
-	return pax_flags_active(epp->ep_pax_flags, P_PAX_ASLR);
-}
-
 bool
 pax_aslr_active(struct lwp *l)
 {
-	return pax_flags_active(l->l_proc->p_pax, P_PAX_ASLR);
+	uint32_t f;
+
+	if (!pax_aslr_enabled)
+		return false;
+
+	f = l->l_proc->p_pax;
+	if ((pax_aslr_global && (f & ELF_NOTE_PAX_NOASLR) != 0) ||
+	    (!pax_aslr_global && (f & ELF_NOTE_PAX_ASLR) == 0))
+		return false;
+	return true;
 }
 
 void
-pax_aslr_init_vm(struct lwp *l, struct vmspace *vm)
+pax_aslr_init(struct lwp *l, struct vmspace *vm)
 {
 	if (!pax_aslr_active(l))
 		return;
@@ -394,62 +310,53 @@ pax_aslr_init_vm(struct lwp *l, struct vmspace *vm)
 }
 
 void
-pax_aslr_mmap(struct lwp *l, vaddr_t *addr, vaddr_t orig_addr, int f)
+pax_aslr(struct lwp *l, vaddr_t *addr, vaddr_t orig_addr, int f)
 {
 	if (!pax_aslr_active(l))
 		return;
 
 	if (!(f & MAP_FIXED) && ((orig_addr == 0) || !(f & MAP_ANON))) {
-		PAX_DPRINTF("applying to 0x%lx orig_addr=0x%lx f=%x",
+#ifdef PAX_ASLR_DEBUG
+		uprintf("applying to 0x%lx orig_addr=0x%lx f=%x\n",
 		    (unsigned long)*addr, (unsigned long)orig_addr, f);
+#endif
 		if (!(l->l_proc->p_vmspace->vm_map.flags & VM_MAP_TOPDOWN))
 			*addr += l->l_proc->p_vmspace->vm_aslr_delta_mmap;
 		else
 			*addr -= l->l_proc->p_vmspace->vm_aslr_delta_mmap;
-		PAX_DPRINTF("result 0x%lx", *addr);
-	} else {
-		PAX_DPRINTF("not applying to 0x%lx orig_addr=0x%lx f=%x",
-		    (unsigned long)*addr, (unsigned long)orig_addr, f);
+#ifdef PAX_ASLR_DEBUG
+		uprintf("result 0x%lx\n", *addr);
+#endif
 	}
+#ifdef PAX_ASLR_DEBUG
+	else
+	    uprintf("not applying to 0x%lx orig_addr=0x%lx f=%x\n",
+		(unsigned long)*addr, (unsigned long)orig_addr, f);
+#endif
 }
 
 void
-pax_aslr_stack(struct exec_package *epp, u_long *max_stack_size)
+pax_aslr_stack(struct lwp *l, struct exec_package *epp, u_long *max_stack_size)
 {
-	if (!pax_aslr_epp_active(epp))
-		return;
-
-	u_long d = PAX_ASLR_DELTA(cprng_fast32(),
-	    PAX_ASLR_DELTA_STACK_LSB,
-	    PAX_ASLR_DELTA_STACK_LEN);
-	PAX_DPRINTF("stack 0x%lx d=0x%lx 0x%lx",
-	    epp->ep_minsaddr, d, epp->ep_minsaddr - d);
-	epp->ep_minsaddr -= d;
-	*max_stack_size -= d;
-	if (epp->ep_ssize > *max_stack_size)
-		epp->ep_ssize = *max_stack_size;
+	if (pax_aslr_active(l)) {
+		u_long d =  PAX_ASLR_DELTA(cprng_fast32(),
+		    PAX_ASLR_DELTA_STACK_LSB,
+		    PAX_ASLR_DELTA_STACK_LEN);
+#ifdef PAX_ASLR_DEBUG
+		uprintf("stack 0x%lx d=0x%lx 0x%lx\n",
+		    epp->ep_minsaddr, d, epp->ep_minsaddr - d);
+#endif
+		epp->ep_minsaddr -= d;
+		*max_stack_size -= d;
+		if (epp->ep_ssize > *max_stack_size)
+			epp->ep_ssize = *max_stack_size;
+	}
 }
 #endif /* PAX_ASLR */
 
 #ifdef PAX_SEGVGUARD
-static bool
-pax_segvguard_elf_flags_active(uint32_t flags)
-{
-	if (!pax_segvguard_enabled)
-		return false;
-	if (pax_segvguard_global && (flags & ELF_NOTE_PAX_NOGUARD) != 0) {
-		/* Segvguard explicitly disabled */
-		return false;
-	}
-	if (!pax_segvguard_global && (flags & ELF_NOTE_PAX_GUARD) == 0) {
-		/* Segvguard not requested */
-		return false;
-	}
-	return true;
-}
-
 static void
-pax_segvguard_cleanup_cb(void *v)
+pax_segvguard_cb(void *v)
 {
 	struct pax_segvguard_entry *p = v;
 	struct pax_segvguard_uid_entry *up;
@@ -475,22 +382,26 @@ pax_segvguard(struct lwp *l, struct vnode *vp, const char *name,
 	struct pax_segvguard_uid_entry *up;
 	struct timeval tv;
 	uid_t uid;
-	uint32_t flags;
+	uint32_t f;
 	bool have_uid;
 
-	flags = l->l_proc->p_pax;
-	if (!pax_flags_active(flags, P_PAX_GUARD))
-		return 0;
+	if (!pax_segvguard_enabled)
+		return (0);
+
+	f = l->l_proc->p_pax;
+	if ((pax_segvguard_global && (f & ELF_NOTE_PAX_NOGUARD) != 0) ||
+	    (!pax_segvguard_global && (f & ELF_NOTE_PAX_GUARD) == 0))
+		return (0);
 
 	if (vp == NULL)
-		return EFAULT;	
+		return (EFAULT);	
 
 	/* Check if we already monitor the file. */
 	p = fileassoc_lookup(vp, segvguard_id);
 
 	/* Fast-path if starting a program we don't know. */
 	if (p == NULL && !crashed)
-		return 0;
+		return (0);
 
 	microtime(&tv);
 
@@ -513,8 +424,10 @@ pax_segvguard(struct lwp *l, struct vnode *vp, const char *name,
 		up->sue_ncrashes = 1;
 		up->sue_expiry = tv.tv_sec + pax_segvguard_expiry;
 		up->sue_suspended = 0;
+
 		LIST_INSERT_HEAD(&p->segv_uids, up, sue_list);
-		return 0;
+
+		return (0);
 	}
 
 	/*
@@ -540,9 +453,10 @@ pax_segvguard(struct lwp *l, struct vnode *vp, const char *name,
 			up->sue_ncrashes = 1;
 			up->sue_expiry = tv.tv_sec + pax_segvguard_expiry;
 			up->sue_suspended = 0;
+
 			LIST_INSERT_HEAD(&p->segv_uids, up, sue_list);
 		}
-		return 0;
+		return (0);
 	}
 
 	if (crashed) {
@@ -550,10 +464,12 @@ pax_segvguard(struct lwp *l, struct vnode *vp, const char *name,
 		if (up->sue_expiry < tv.tv_sec) {
 			log(LOG_INFO, "PaX Segvguard: [%s] Suspension"
 			    " expired.\n", name ? name : "unknown");
+
 			up->sue_ncrashes = 1;
 			up->sue_expiry = tv.tv_sec + pax_segvguard_expiry;
 			up->sue_suspended = 0;
-			return 0;
+
+			return (0);
 		}
 
 		up->sue_ncrashes++;
@@ -575,10 +491,11 @@ pax_segvguard(struct lwp *l, struct vnode *vp, const char *name,
 			log(LOG_ALERT, "PaX Segvguard: [%s] Preventing "
 			    "execution due to repeated segfaults.\n", name ?
 			    name : "unknown");
-			return EPERM;
+
+			return (EPERM);
 		}
 	}
 
-	return 0;
+	return (0);
 }
 #endif /* PAX_SEGVGUARD */

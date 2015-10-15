@@ -1,4 +1,4 @@
-/*	$NetBSD: tls.c,v 1.10 2014/12/14 23:49:17 chs Exp $	*/
+/*	$NetBSD: tls.c,v 1.9.4.1 2014/12/31 06:51:08 snj Exp $	*/
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: tls.c,v 1.10 2014/12/14 23:49:17 chs Exp $");
+__RCSID("$NetBSD: tls.c,v 1.9.4.1 2014/12/31 06:51:08 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/ucontext.h>

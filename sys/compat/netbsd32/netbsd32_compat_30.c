@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_compat_30.c,v 1.31 2014/12/05 17:26:21 maxv Exp $	*/
+/*	$NetBSD: netbsd32_compat_30.c,v 1.30.34.1 2014/12/12 19:12:08 martin Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_30.c,v 1.31 2014/12/05 17:26:21 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_30.c,v 1.30.34.1 2014/12/12 19:12:08 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

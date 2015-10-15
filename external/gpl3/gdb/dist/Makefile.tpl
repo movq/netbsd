@@ -216,7 +216,6 @@ HOST_EXPORTS = \
 	LD_FOR_TARGET="$(LD_FOR_TARGET)"; export LD_FOR_TARGET; \
 	NM_FOR_TARGET="$(NM_FOR_TARGET)"; export NM_FOR_TARGET; \
 	OBJDUMP_FOR_TARGET="$(OBJDUMP_FOR_TARGET)"; export OBJDUMP_FOR_TARGET; \
-	OBJCOPY_FOR_TARGET="$(OBJCOPY_FOR_TARGET)"; export OBJCOPY_FOR_TARGET; \
 	RANLIB_FOR_TARGET="$(RANLIB_FOR_TARGET)"; export RANLIB_FOR_TARGET; \
 	READELF_FOR_TARGET="$(READELF_FOR_TARGET)"; export READELF_FOR_TARGET; \
 	TOPLEVEL_CONFIGURE_ARGUMENTS="$(TOPLEVEL_CONFIGURE_ARGUMENTS)"; export TOPLEVEL_CONFIGURE_ARGUMENTS; \
@@ -243,9 +242,9 @@ POSTSTAGE1_CXX_EXPORT = \
 	  -B$$r/$(HOST_SUBDIR)/prev-gcc/ -B$(build_tooldir)/bin/ -nostdinc++ \
 	  -B$$r/prev-$(TARGET_SUBDIR)/libstdc++-v3/src/.libs \
 	  -B$$r/prev-$(TARGET_SUBDIR)/libstdc++-v3/libsupc++/.libs \
-	  `if $(LEAN); then echo ' -isystem '; else echo ' -I'; fi`$$r/prev-$(TARGET_SUBDIR)/libstdc++-v3/include/$(TARGET_SUBDIR) \
-	  `if $(LEAN); then echo ' -isystem '; else echo ' -I'; fi`$$r/prev-$(TARGET_SUBDIR)/libstdc++-v3/include \
-	  `if $(LEAN); then echo ' -isystem '; else echo ' -I'; fi`$$s/libstdc++-v3/libsupc++ \
+	  -I$$r/prev-$(TARGET_SUBDIR)/libstdc++-v3/include/$(TARGET_SUBDIR) \
+	  -I$$r/prev-$(TARGET_SUBDIR)/libstdc++-v3/include \
+	  -I$$s/libstdc++-v3/libsupc++ \
 	  -L$$r/prev-$(TARGET_SUBDIR)/libstdc++-v3/src/.libs \
 	  -L$$r/prev-$(TARGET_SUBDIR)/libstdc++-v3/libsupc++/.libs"; \
 	  export CXX; \
@@ -289,7 +288,6 @@ BASE_TARGET_EXPORTS = \
 	LIPO="$(LIPO_FOR_TARGET)"; export LIPO; \
 	NM="$(COMPILER_NM_FOR_TARGET)"; export NM; \
 	OBJDUMP="$(OBJDUMP_FOR_TARGET)"; export OBJDUMP; \
-	OBJCOPY="$(OBJCOPY_FOR_TARGET)"; export OBJCOPY; \
 	RANLIB="$(RANLIB_FOR_TARGET)"; export RANLIB; \
 	READELF="$(READELF_FOR_TARGET)"; export READELF; \
 	STRIP="$(STRIP_FOR_TARGET)"; export STRIP; \
@@ -491,7 +489,6 @@ LD_FOR_TARGET=@LD_FOR_TARGET@
 LIPO_FOR_TARGET=@LIPO_FOR_TARGET@
 NM_FOR_TARGET=@NM_FOR_TARGET@
 OBJDUMP_FOR_TARGET=@OBJDUMP_FOR_TARGET@
-OBJCOPY_FOR_TARGET=@OBJCOPY_FOR_TARGET@
 RANLIB_FOR_TARGET=@RANLIB_FOR_TARGET@
 READELF_FOR_TARGET=@READELF_FOR_TARGET@
 STRIP_FOR_TARGET=@STRIP_FOR_TARGET@
@@ -659,7 +656,6 @@ EXTRA_TARGET_FLAGS = \
 	'LIBCXXFLAGS=$$(LIBCXXFLAGS_FOR_TARGET)' \
 	'NM=$(COMPILER_NM_FOR_TARGET)' \
 	'OBJDUMP=$$(OBJDUMP_FOR_TARGET)' \
-	'OBJCOPY=$$(OBJCOPY_FOR_TARGET)' \
 	'RANLIB=$$(RANLIB_FOR_TARGET)' \
 	'READELF=$$(READELF_FOR_TARGET)' \
 	'WINDRES=$$(WINDRES_FOR_TARGET)' \

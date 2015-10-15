@@ -1,12 +1,10 @@
-# $NetBSD: mi,v 1.78 2015/05/13 02:17:13 pgoyette Exp $
+# $NetBSD: mi,v 1.69.2.1 2015/03/21 17:11:35 snj Exp $
 #
 # Note: don't delete entries from here - mark them as "obsolete" instead.
 #
 # IMPORTANT:	When you add a module here, you have to add it twice to
 #		md.evbppc as well. evbppc does not use mi, because
 #		powerpc-4xx and powerpc-booke modules are incompatible.
-#		Additionally, you may have to add it once more in md.amd64
-#		(for xen) and twice more for i386 (xen and xen-pae).
 #		Sorry for any inconvenience this may cause, the management.
 #
 ./@MODULEDIR@					base-kernel-modules	kmod
@@ -40,8 +38,6 @@
 ./@MODULEDIR@/coda5/coda5.kmod			base-kernel-modules	kmod
 ./@MODULEDIR@/compat				base-kernel-modules	kmod
 ./@MODULEDIR@/compat/compat.kmod		base-kernel-modules	kmod
-./@MODULEDIR@/compat_sysv			base-kernel-modules	kmod
-./@MODULEDIR@/compat_sysv/compat_sysv.kmod	base-kernel-modules	kmod
 ./@MODULEDIR@/compat_ossaudio			base-kernel-modules	kmod
 ./@MODULEDIR@/compat_ossaudio/compat_ossaudio.kmod	base-kernel-modules	kmod
 ./@MODULEDIR@/coredump				base-kernel-modules	kmod
@@ -62,18 +58,6 @@
 ./@MODULEDIR@/dm/dm.kmod			base-kernel-modules	lvm,kmod
 ./@MODULEDIR@/dtrace				base-kernel-modules	kmod,dtrace
 ./@MODULEDIR@/dtrace/dtrace.kmod		base-kernel-modules	kmod,dtrace
-./@MODULEDIR@/dtrace_fbt				base-kernel-modules	kmod,dtrace
-./@MODULEDIR@/dtrace_fbt/dtrace_fbt.kmod		base-kernel-modules	kmod,dtrace
-./@MODULEDIR@/dtrace_lockstat				base-kernel-modules	kmod,dtrace
-./@MODULEDIR@/dtrace_lockstat/dtrace_lockstat.kmod	base-kernel-modules	kmod,dtrace
-./@MODULEDIR@/dtrace_profile				base-kernel-modules	kmod,dtrace
-./@MODULEDIR@/dtrace_profile/dtrace_profile.kmod	base-kernel-modules	kmod,dtrace
-./@MODULEDIR@/dtrace_sdt				base-kernel-modules	kmod,dtrace
-./@MODULEDIR@/dtrace_sdt/dtrace_sdt.kmod		base-kernel-modules	kmod,dtrace
-./@MODULEDIR@/dtrace_syscall				base-kernel-modules	kmod,dtrace
-./@MODULEDIR@/dtrace_syscall/dtrace_syscall.kmod	base-kernel-modules	kmod,dtrace
-./@MODULEDIR@/dtrace_syscall_linux			base-kernel-modules	kmod,dtrace
-./@MODULEDIR@/dtrace_syscall_linux/dtrace_syscall_linux.kmod	base-kernel-modules	kmod,dtrace
 ./@MODULEDIR@/dtv				base-kernel-modules	kmod
 ./@MODULEDIR@/dtv/dtv.kmod			base-kernel-modules	kmod
 ./@MODULEDIR@/dtv_math				base-kernel-modules	kmod
@@ -84,8 +68,8 @@
 ./@MODULEDIR@/exec_script/exec_script.kmod	base-kernel-modules	kmod
 ./@MODULEDIR@/ext2fs				base-kernel-modules	kmod
 ./@MODULEDIR@/ext2fs/ext2fs.kmod		base-kernel-modules	kmod
-./@MODULEDIR@/fbt				base-obsolete		obsolete
-./@MODULEDIR@/fbt/fbt.kmod			base-obsolete		obsolete
+./@MODULEDIR@/fbt				base-kernel-modules	kmod,dtrace
+./@MODULEDIR@/fbt/fbt.kmod			base-kernel-modules	kmod,dtrace
 ./@MODULEDIR@/fdesc				base-kernel-modules	kmod
 ./@MODULEDIR@/fdesc/fdesc.kmod			base-kernel-modules	kmod
 ./@MODULEDIR@/ffs				base-kernel-modules	kmod
@@ -194,8 +178,8 @@
 ./@MODULEDIR@/ppp_deflate/ppp_deflate.kmod	base-kernel-modules	kmod
 ./@MODULEDIR@/procfs				base-kernel-modules	kmod
 ./@MODULEDIR@/procfs/procfs.kmod		base-kernel-modules	kmod
-./@MODULEDIR@/profile				base-obsolete		obsolete
-./@MODULEDIR@/profile/profile.kmod		base-obsolete		obsolete
+./@MODULEDIR@/profile				base-kernel-modules	kmod,dtrace
+./@MODULEDIR@/profile/profile.kmod		base-kernel-modules	kmod,dtrace
 ./@MODULEDIR@/ptyfs				base-kernel-modules	kmod
 ./@MODULEDIR@/ptyfs/ptyfs.kmod			base-kernel-modules	kmod
 ./@MODULEDIR@/puffs				base-kernel-modules	kmod
@@ -204,8 +188,8 @@
 ./@MODULEDIR@/putter/putter.kmod		base-kernel-modules	kmod
 ./@MODULEDIR@/scsiverbose			base-kernel-modules	kmod
 ./@MODULEDIR@/scsiverbose/scsiverbose.kmod	base-kernel-modules	kmod
-./@MODULEDIR@/sdt				base-obsolete		obsolete
-./@MODULEDIR@/sdt/sdt.kmod			base-obsolete		obsolete
+./@MODULEDIR@/sdt				base-kernel-modules	kmod,dtrace
+./@MODULEDIR@/sdt/sdt.kmod			base-kernel-modules	kmod,dtrace
 ./@MODULEDIR@/sdtemp				base-kernel-modules	kmod
 ./@MODULEDIR@/sdtemp/sdtemp.kmod		base-kernel-modules	kmod
 ./@MODULEDIR@/secmodel_bsd44			base-kernel-modules	kmod
@@ -230,22 +214,8 @@
 ./@MODULEDIR@/swcrypto/swcrypto.kmod		base-kernel-modules	kmod
 ./@MODULEDIR@/swsensor				base-kernel-modules	kmod
 ./@MODULEDIR@/swsensor/swsensor.kmod		base-kernel-modules	kmod
-./@MODULEDIR@/swwdog				base-kernel-modules	kmod
-./@MODULEDIR@/swwdog/swwdog.kmod		base-kernel-modules	kmod
-./@MODULEDIR@/sysmon				base-kernel-modules	kmod
-./@MODULEDIR@/sysmon/sysmon.kmod		base-kernel-modules	kmod
-./@MODULEDIR@/sysmon_envsys			base-kernel-modules	kmod
-./@MODULEDIR@/sysmon_envsys/sysmon_envsys.kmod	base-kernel-modules	kmod
-./@MODULEDIR@/sysmon_power			base-kernel-modules	kmod
-./@MODULEDIR@/sysmon_power/sysmon_power.kmod	base-kernel-modules	kmod
-./@MODULEDIR@/sysmon_taskq			base-kernel-modules	kmod
-./@MODULEDIR@/sysmon_taskq/sysmon_taskq.kmod	base-kernel-modules	kmod
-./@MODULEDIR@/sysmon_wdog			base-kernel-modules	kmod
-./@MODULEDIR@/sysmon_wdog/sysmon_wdog.kmod	base-kernel-modules	kmod
 ./@MODULEDIR@/sysvbfs				base-kernel-modules	kmod
 ./@MODULEDIR@/sysvbfs/sysvbfs.kmod		base-kernel-modules	kmod
-./@MODULEDIR@/sysv_ipc				base-kernel-modules	kmod
-./@MODULEDIR@/sysv_ipc/sysv_ipc.kmod		base-kernel-modules	kmod
 ./@MODULEDIR@/tmpfs				base-kernel-modules	kmod
 ./@MODULEDIR@/tmpfs/tmpfs.kmod			base-kernel-modules	kmod
 ./@MODULEDIR@/tprof				base-kernel-modules	kmod

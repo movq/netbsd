@@ -1,4 +1,4 @@
-/*	$NetBSD: uhidev.h,v 1.18 2015/04/13 16:33:25 riastradh Exp $	*/
+/*	$NetBSD: uhidev.h,v 1.15.2.2 2015/03/21 17:30:43 snj Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 struct uhidev_softc {
 	device_t sc_dev;		/* base device */

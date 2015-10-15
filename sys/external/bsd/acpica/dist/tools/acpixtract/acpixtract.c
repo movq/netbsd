@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,6 +51,10 @@
 #include <ctype.h>
 
 /* Local prototypes */
+
+static void
+AxStrlwr (
+    char                    *String);
 
 static void
 AxCheckAscii (
@@ -121,6 +125,31 @@ static unsigned char        Data[16];
 static char                 LineBuffer[AX_LINE_BUFFER_SIZE];
 static char                 HeaderBuffer[AX_LINE_BUFFER_SIZE];
 static char                 InstanceBuffer[AX_LINE_BUFFER_SIZE];
+
+
+/*******************************************************************************
+ *
+ * FUNCTION:    AxStrlwr
+ *
+ * PARAMETERS:  String              - Ascii string
+ *
+ * RETURN:      None
+ *
+ * DESCRIPTION: String lowercase function.
+ *
+ ******************************************************************************/
+
+static void
+AxStrlwr (
+    char                    *String)
+{
+
+    while (*String)
+    {
+        *String = (char) tolower ((int) *String);
+        String++;
+    }
+}
 
 
 /*******************************************************************************
@@ -565,7 +594,7 @@ AxExtractTables (
                 snprintf (Filename, sizeof(Filename), "%4.4s.dat", ThisSignature);
             }
 
-            AcpiUtStrlwr (Filename);
+            AxStrlwr (Filename);
             OutputFile = fopen (Filename, "w+b");
             if (!OutputFile)
             {
@@ -666,7 +695,7 @@ AxListTables (
     FILE                    *InputFile;
     size_t                  HeaderSize;
     unsigned char           Header[48];
-    unsigned int            TableCount = 0;
+    int                     TableCount = 0;
     ACPI_TABLE_HEADER       *TableHeader = (ACPI_TABLE_HEADER *) (void *) Header;
 
 

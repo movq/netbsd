@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: scan.l,v 1.25 2015/09/04 10:16:35 uebayasi Exp $	*/
+/*	$NetBSD: scan.l,v 1.17.10.1 2015/03/06 21:00:23 snj Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: scan.l,v 1.25 2015/09/04 10:16:35 uebayasi Exp $");
+__RCSID("$NetBSD: scan.l,v 1.17.10.1 2015/03/06 21:00:23 snj Exp $");
 
 #include <sys/param.h>
 #include <errno.h>
@@ -164,7 +164,6 @@ obsolete	return OBSOLETE;
 on		return ON;
 options		return OPTIONS;
 prefix		return PREFIX;
-buildprefix	return BUILDPREFIX;
 pseudo-device	return PSEUDO_DEVICE;
 pseudo-root	return PSEUDO_ROOT;
 root		return ROOT;
@@ -363,7 +362,7 @@ package[ \t]+{FILENAME}{RESTOFLINE}	{
 		/* Detect NUL characters in the config file and
 		 * error out.
 		 */
-		cfgerror("NUL character detected at line %i", yyline);
+		cfgerror("NUL character detected at line %i\n", yyline);
 	}
 #.*	{ /* ignored (comment) */; }
 [ \t]+	{ /* ignored (white space) */; }
@@ -476,8 +475,6 @@ package(const char *fname)
 	free(fname2);
 }
 
-int includedepth;
-
 /*
  * Open the named file for inclusion at the current point.  Returns 0 on
  * success (file opened and previous state pushed), nonzero on failure
@@ -508,7 +505,7 @@ include(const char *fname, int ateof, int conditional, int direct)
 		s = sourcepath(fname);
 	if ((fp = fopen(s, "r")) == NULL) {
 		if (conditional == 0)
-			cfgerror("cannot open %s for reading: %s", s,
+			cfgerror("cannot open %s for reading: %s\n", s,
 			    strerror(errno));
 		else if (vflag)
 			cfgwarn("cannot open conditional include file %s: %s",
@@ -517,7 +514,7 @@ include(const char *fname, int ateof, int conditional, int direct)
 		return (-1);
 	}
 	if (curdir_push(s) == -1) {
-		cfgerror("cannot record current working directory for %s", s);
+		cfgerror("cannot record current working directory for %s\n", s);
 		fclose(fp);
 		free(s);
 		return (-1);
@@ -539,7 +536,6 @@ include(const char *fname, int ateof, int conditional, int direct)
 	yyfile = intern(s);
 	yyline = 1;
 	free(s);
-	includedepth++;
 	return (0);
 }
 
@@ -601,8 +597,6 @@ endinclude(void)
 	ateof  = in->in_ateof;
 	interesting = in->in_interesting;
 	free(in);
-
-	includedepth--;
 
 	return (ateof);
 }

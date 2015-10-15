@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveaufb.h,v 1.1 2015/03/06 01:43:07 riastradh Exp $	*/
+/*	$NetBSD: nouveaufb.h,v 1.1.2.2 2015/03/06 21:39:11 snj Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.

@@ -18,6 +18,18 @@
 
 xcb_extension_t xcb_screensaver_id = { "MIT-SCREEN-SAVER", 0 };
 
+
+/*****************************************************************************
+ **
+ ** xcb_screensaver_query_version_cookie_t xcb_screensaver_query_version
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint8_t           client_major_version
+ ** @param uint8_t           client_minor_version
+ ** @returns xcb_screensaver_query_version_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_screensaver_query_version_cookie_t
 xcb_screensaver_query_version (xcb_connection_t *c  /**< */,
                                uint8_t           client_major_version  /**< */,
@@ -29,24 +41,36 @@ xcb_screensaver_query_version (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SCREENSAVER_QUERY_VERSION,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_screensaver_query_version_cookie_t xcb_ret;
     xcb_screensaver_query_version_request_t xcb_out;
-
+    
     xcb_out.client_major_version = client_major_version;
     xcb_out.client_minor_version = client_minor_version;
     memset(xcb_out.pad0, 0, 2);
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_screensaver_query_version_cookie_t xcb_screensaver_query_version_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint8_t           client_major_version
+ ** @param uint8_t           client_minor_version
+ ** @returns xcb_screensaver_query_version_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_screensaver_query_version_cookie_t
 xcb_screensaver_query_version_unchecked (xcb_connection_t *c  /**< */,
                                          uint8_t           client_major_version  /**< */,
@@ -58,24 +82,36 @@ xcb_screensaver_query_version_unchecked (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SCREENSAVER_QUERY_VERSION,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_screensaver_query_version_cookie_t xcb_ret;
     xcb_screensaver_query_version_request_t xcb_out;
-
+    
     xcb_out.client_major_version = client_major_version;
     xcb_out.client_minor_version = client_minor_version;
     memset(xcb_out.pad0, 0, 2);
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_screensaver_query_version_reply_t * xcb_screensaver_query_version_reply
+ ** 
+ ** @param xcb_connection_t                        *c
+ ** @param xcb_screensaver_query_version_cookie_t   cookie
+ ** @param xcb_generic_error_t                    **e
+ ** @returns xcb_screensaver_query_version_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_screensaver_query_version_reply_t *
 xcb_screensaver_query_version_reply (xcb_connection_t                        *c  /**< */,
                                      xcb_screensaver_query_version_cookie_t   cookie  /**< */,
@@ -84,6 +120,17 @@ xcb_screensaver_query_version_reply (xcb_connection_t                        *c 
     return (xcb_screensaver_query_version_reply_t *) xcb_wait_for_reply(c, cookie.sequence, e);
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_screensaver_query_info_cookie_t xcb_screensaver_query_info
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param xcb_drawable_t    drawable
+ ** @returns xcb_screensaver_query_info_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_screensaver_query_info_cookie_t
 xcb_screensaver_query_info (xcb_connection_t *c  /**< */,
                             xcb_drawable_t    drawable  /**< */)
@@ -94,22 +141,33 @@ xcb_screensaver_query_info (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SCREENSAVER_QUERY_INFO,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_screensaver_query_info_cookie_t xcb_ret;
     xcb_screensaver_query_info_request_t xcb_out;
-
+    
     xcb_out.drawable = drawable;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_screensaver_query_info_cookie_t xcb_screensaver_query_info_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param xcb_drawable_t    drawable
+ ** @returns xcb_screensaver_query_info_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_screensaver_query_info_cookie_t
 xcb_screensaver_query_info_unchecked (xcb_connection_t *c  /**< */,
                                       xcb_drawable_t    drawable  /**< */)
@@ -120,22 +178,34 @@ xcb_screensaver_query_info_unchecked (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SCREENSAVER_QUERY_INFO,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_screensaver_query_info_cookie_t xcb_ret;
     xcb_screensaver_query_info_request_t xcb_out;
-
+    
     xcb_out.drawable = drawable;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_screensaver_query_info_reply_t * xcb_screensaver_query_info_reply
+ ** 
+ ** @param xcb_connection_t                     *c
+ ** @param xcb_screensaver_query_info_cookie_t   cookie
+ ** @param xcb_generic_error_t                 **e
+ ** @returns xcb_screensaver_query_info_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_screensaver_query_info_reply_t *
 xcb_screensaver_query_info_reply (xcb_connection_t                     *c  /**< */,
                                   xcb_screensaver_query_info_cookie_t   cookie  /**< */,
@@ -144,6 +214,18 @@ xcb_screensaver_query_info_reply (xcb_connection_t                     *c  /**< 
     return (xcb_screensaver_query_info_reply_t *) xcb_wait_for_reply(c, cookie.sequence, e);
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_screensaver_select_input_checked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param xcb_drawable_t    drawable
+ ** @param uint32_t          event_mask
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_screensaver_select_input_checked (xcb_connection_t *c  /**< */,
                                       xcb_drawable_t    drawable  /**< */,
@@ -155,23 +237,35 @@ xcb_screensaver_select_input_checked (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SCREENSAVER_SELECT_INPUT,
         /* isvoid */ 1
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_void_cookie_t xcb_ret;
     xcb_screensaver_select_input_request_t xcb_out;
-
+    
     xcb_out.drawable = drawable;
     xcb_out.event_mask = event_mask;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_screensaver_select_input
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param xcb_drawable_t    drawable
+ ** @param uint32_t          event_mask
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_screensaver_select_input (xcb_connection_t *c  /**< */,
                               xcb_drawable_t    drawable  /**< */,
@@ -183,19 +277,19 @@ xcb_screensaver_select_input (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SCREENSAVER_SELECT_INPUT,
         /* isvoid */ 1
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_void_cookie_t xcb_ret;
     xcb_screensaver_select_input_request_t xcb_out;
-
+    
     xcb_out.drawable = drawable;
     xcb_out.event_mask = event_mask;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
@@ -231,6 +325,27 @@ xcb_screensaver_set_attributes_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_screensaver_set_attributes_checked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param xcb_drawable_t    drawable
+ ** @param int16_t           x
+ ** @param int16_t           y
+ ** @param uint16_t          width
+ ** @param uint16_t          height
+ ** @param uint16_t          border_width
+ ** @param uint8_t           _class
+ ** @param uint8_t           depth
+ ** @param xcb_visualid_t    visual
+ ** @param uint32_t          value_mask
+ ** @param const uint32_t   *value_list
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_screensaver_set_attributes_checked (xcb_connection_t *c  /**< */,
                                         xcb_drawable_t    drawable  /**< */,
@@ -251,11 +366,11 @@ xcb_screensaver_set_attributes_checked (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SCREENSAVER_SET_ATTRIBUTES,
         /* isvoid */ 1
     };
-
+    
     struct iovec xcb_parts[6];
     xcb_void_cookie_t xcb_ret;
     xcb_screensaver_set_attributes_request_t xcb_out;
-
+    
     xcb_out.drawable = drawable;
     xcb_out.x = x;
     xcb_out.y = y;
@@ -266,7 +381,7 @@ xcb_screensaver_set_attributes_checked (xcb_connection_t *c  /**< */,
     xcb_out.depth = depth;
     xcb_out.visual = visual;
     xcb_out.value_mask = value_mask;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
@@ -276,11 +391,32 @@ xcb_screensaver_set_attributes_checked (xcb_connection_t *c  /**< */,
     xcb_parts[4].iov_len = xcb_popcount(value_mask) * sizeof(uint32_t);
     xcb_parts[5].iov_base = 0;
     xcb_parts[5].iov_len = -xcb_parts[4].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_screensaver_set_attributes
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param xcb_drawable_t    drawable
+ ** @param int16_t           x
+ ** @param int16_t           y
+ ** @param uint16_t          width
+ ** @param uint16_t          height
+ ** @param uint16_t          border_width
+ ** @param uint8_t           _class
+ ** @param uint8_t           depth
+ ** @param xcb_visualid_t    visual
+ ** @param uint32_t          value_mask
+ ** @param const uint32_t   *value_list
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_screensaver_set_attributes (xcb_connection_t *c  /**< */,
                                 xcb_drawable_t    drawable  /**< */,
@@ -301,11 +437,11 @@ xcb_screensaver_set_attributes (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SCREENSAVER_SET_ATTRIBUTES,
         /* isvoid */ 1
     };
-
+    
     struct iovec xcb_parts[6];
     xcb_void_cookie_t xcb_ret;
     xcb_screensaver_set_attributes_request_t xcb_out;
-
+    
     xcb_out.drawable = drawable;
     xcb_out.x = x;
     xcb_out.y = y;
@@ -316,7 +452,7 @@ xcb_screensaver_set_attributes (xcb_connection_t *c  /**< */,
     xcb_out.depth = depth;
     xcb_out.visual = visual;
     xcb_out.value_mask = value_mask;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
@@ -326,11 +462,22 @@ xcb_screensaver_set_attributes (xcb_connection_t *c  /**< */,
     xcb_parts[4].iov_len = xcb_popcount(value_mask) * sizeof(uint32_t);
     xcb_parts[5].iov_base = 0;
     xcb_parts[5].iov_len = -xcb_parts[4].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_screensaver_unset_attributes_checked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param xcb_drawable_t    drawable
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_screensaver_unset_attributes_checked (xcb_connection_t *c  /**< */,
                                           xcb_drawable_t    drawable  /**< */)
@@ -341,22 +488,33 @@ xcb_screensaver_unset_attributes_checked (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SCREENSAVER_UNSET_ATTRIBUTES,
         /* isvoid */ 1
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_void_cookie_t xcb_ret;
     xcb_screensaver_unset_attributes_request_t xcb_out;
-
+    
     xcb_out.drawable = drawable;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_screensaver_unset_attributes
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param xcb_drawable_t    drawable
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_screensaver_unset_attributes (xcb_connection_t *c  /**< */,
                                   xcb_drawable_t    drawable  /**< */)
@@ -367,22 +525,33 @@ xcb_screensaver_unset_attributes (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SCREENSAVER_UNSET_ATTRIBUTES,
         /* isvoid */ 1
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_void_cookie_t xcb_ret;
     xcb_screensaver_unset_attributes_request_t xcb_out;
-
+    
     xcb_out.drawable = drawable;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_screensaver_suspend_checked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint8_t           suspend
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_screensaver_suspend_checked (xcb_connection_t *c  /**< */,
                                  uint8_t           suspend  /**< */)
@@ -393,23 +562,34 @@ xcb_screensaver_suspend_checked (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SCREENSAVER_SUSPEND,
         /* isvoid */ 1
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_void_cookie_t xcb_ret;
     xcb_screensaver_suspend_request_t xcb_out;
-
+    
     xcb_out.suspend = suspend;
     memset(xcb_out.pad0, 0, 3);
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_screensaver_suspend
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint8_t           suspend
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_screensaver_suspend (xcb_connection_t *c  /**< */,
                          uint8_t           suspend  /**< */)
@@ -420,19 +600,19 @@ xcb_screensaver_suspend (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SCREENSAVER_SUSPEND,
         /* isvoid */ 1
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_void_cookie_t xcb_ret;
     xcb_screensaver_suspend_request_t xcb_out;
-
+    
     xcb_out.suspend = suspend;
     memset(xcb_out.pad0, 0, 3);
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }

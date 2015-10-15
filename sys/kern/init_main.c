@@ -1,4 +1,4 @@
-/*	$NetBSD: init_main.c,v 1.470 2015/09/14 01:40:03 uebayasi Exp $	*/
+/*	$NetBSD: init_main.c,v 1.458.2.2 2015/03/09 08:56:01 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -97,7 +97,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.470 2015/09/14 01:40:03 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.458.2.2 2015/03/09 08:56:01 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_ipsec.h"
@@ -113,17 +113,14 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.470 2015/09/14 01:40:03 uebayasi Exp
 #include "opt_wapbl.h"
 #include "opt_ptrace.h"
 #include "opt_rnd_printf.h"
-#include "opt_splash.h"
-
-#if defined(SPLASHSCREEN) && defined(makeoptions_SPLASHSCREEN_IMAGE)
-extern void *_binary_splash_image_start;
-extern void *_binary_splash_image_end;
-#endif
 
 #include "drvctl.h"
-#include "ether.h"
 #include "ksyms.h"
 
+#include "sysmon_envsys.h"
+#include "sysmon_power.h"
+#include "sysmon_taskq.h"
+#include "sysmon_wdog.h"
 #include "veriexec.h"
 
 #include <sys/param.h>
@@ -217,19 +214,26 @@ extern void *_binary_splash_image_end;
 #include <ufs/ufs/quota.h>
 
 #include <miscfs/genfs/genfs.h>
+#include <miscfs/syncfs/syncfs.h>
 #include <miscfs/specfs/specdev.h>
 
 #include <sys/cpu.h>
 
 #include <uvm/uvm.h>	/* extern struct uvm uvm */
 
+#if NSYSMON_TASKQ > 0
+#include <dev/sysmon/sysmon_taskq.h>
+#endif
+
 #include <dev/cons.h>
-#include <dev/splash/splash.h>
+
+#if NSYSMON_ENVSYS > 0 || NSYSMON_POWER > 0 || NSYSMON_WDOG > 0
+#include <dev/sysmon/sysmonvar.h>
+#endif
 
 #include <net/bpf.h>
 #include <net/if.h>
 #include <net/raw_cb.h>
-#include <net/if_llatbl.h>
 
 #include <prop/proplib.h>
 
@@ -364,13 +368,6 @@ main(void)
 	/* Initialize the buffer cache */
 	bufinit();
 
-
-#if defined(SPLASHSCREEN) && defined(SPLASHSCREEN_IMAGE)
-	size_t splash_size = (&_binary_splash_image_end -
-	    &_binary_splash_image_start) * sizeof(void *);
-	splash_setimage(&_binary_splash_image_start, splash_size);
-#endif
-
 	/* Initialize sockets. */
 	soinit();
 
@@ -470,6 +467,23 @@ main(void)
 	/* Initialize kqueue. */
 	kqueue_init();
 
+	/* Initialize the system monitor subsystems. */
+#if NSYSMON_TASKQ > 0
+	sysmon_task_queue_preinit();
+#endif
+
+#if NSYSMON_ENVSYS > 0
+	sysmon_envsys_init();
+#endif
+
+#if NSYSMON_POWER > 0
+	sysmon_power_init();
+#endif
+
+#if NSYSMON_WDOG > 0
+	sysmon_wdog_init();
+#endif
+
 	inittimecounter();
 	ntp_init();
 
@@ -513,9 +527,6 @@ main(void)
 
 	/* Now timer is working.  Enable preemption. */
 	kpreempt_enable();
-
-	/* Get the threads going and into any sleeps before continuing. */
-	yield();
 
 	/* Enable deferred processing of RNG samples */
 	rnd_init_softint();
@@ -567,9 +578,6 @@ main(void)
 	 */
 	s = splnet();
 	ifinit();
-#if NETHER > 0
-	lltableinit();
-#endif
 	domaininit(true);
 	if_attachdomain();
 	splx(s);
@@ -596,6 +604,9 @@ main(void)
 	/* Initialize ptrace. */
 	ptrace_init();
 #endif /* PTRACE */
+
+	/* Initialize the UUID system calls. */
+	uuid_init();
 
 	machdep_init();
 
@@ -798,6 +809,9 @@ configure2(void)
 	 * devices that want interrupts enabled.
 	 */
 	config_create_interruptthreads();
+
+	/* Get the threads going and into any sleeps before continuing. */
+	yield();
 }
 
 static void

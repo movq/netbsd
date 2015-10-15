@@ -1,4 +1,4 @@
-/*	$NetBSD: rdataset.c,v 1.8 2015/07/08 17:28:59 christos Exp $	*/
+/*	$NetBSD: rdataset.c,v 1.6.10.1 2015/07/17 04:31:33 snj Exp $	*/
 
 /*
  * Copyright (C) 2004-2012, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")

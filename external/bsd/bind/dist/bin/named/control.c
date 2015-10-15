@@ -1,4 +1,4 @@
-/*	$NetBSD: control.c,v 1.8 2014/12/10 04:37:51 christos Exp $	*/
+/*	$NetBSD: control.c,v 1.7.4.1 2014/12/22 03:28:33 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2004-2007, 2009-2014  Internet Systems Consortium, Inc. ("ISC")

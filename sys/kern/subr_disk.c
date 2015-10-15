@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_disk.c,v 1.113 2015/05/14 17:31:24 chs Exp $	*/
+/*	$NetBSD: subr_disk.c,v 1.103.4.2 2015/06/01 19:19:44 snj Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1999, 2000, 2009 The NetBSD Foundation, Inc.
@@ -67,13 +67,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_disk.c,v 1.113 2015/05/14 17:31:24 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_disk.c,v 1.103.4.2 2015/06/01 19:19:44 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/kmem.h>
 #include <sys/buf.h>
-#include <sys/fcntl.h>
 #include <sys/syslog.h>
 #include <sys/disklabel.h>
 #include <sys/disk.h>
@@ -182,7 +181,6 @@ disk_find(const char *name)
 void
 disk_init(struct disk *diskp, const char *name, const struct dkdriver *driver)
 {
-	u_int blocksize = DEV_BSIZE;
 
 	/*
 	 * Initialize the wedge-related locks and other fields.
@@ -192,8 +190,7 @@ disk_init(struct disk *diskp, const char *name, const struct dkdriver *driver)
 	LIST_INIT(&diskp->dk_wedges);
 	diskp->dk_nwedges = 0;
 	diskp->dk_labelsector = LABELSECTOR;
-	diskp->dk_blkshift = DK_BSIZE2BLKSHIFT(blocksize);
-	diskp->dk_byteshift = DK_BSIZE2BYTESHIFT(blocksize);
+	disk_blocksize(diskp, DEV_BSIZE);
 	diskp->dk_name = name;
 	diskp->dk_driver = driver;
 }
@@ -302,6 +299,18 @@ disk_isbusy(struct disk *diskp)
 {
 
 	return iostat_isbusy(diskp->dk_stats);
+}
+
+/*
+ * Set the physical blocksize of a disk, in bytes.
+ * Only necessary if blocksize != DEV_BSIZE.
+ */
+void
+disk_blocksize(struct disk *diskp, int blocksize)
+{
+
+	diskp->dk_blkshift = DK_BSIZE2BLKSHIFT(blocksize);
+	diskp->dk_byteshift = DK_BSIZE2BYTESHIFT(blocksize);
 }
 
 /*
@@ -498,104 +507,44 @@ convertdisklabel(struct disklabel *lp, void (*strat)(struct buf *),
  *	Generic disk ioctl handling.
  */
 int
-disk_ioctl(struct disk *dk, dev_t dev, u_long cmd, void *data, int flag,
-    struct lwp *l)
+disk_ioctl(struct disk *diskp, u_long cmd, void *data, int flag,
+	   struct lwp *l)
 {
-	struct dkwedge_info *dkw;
-	struct partinfo *pt;
-#ifdef __HAVE_OLD_DISKLABEL
-	struct disklabel newlabel;
-#endif
+	int error = 0;
 
 	switch (cmd) {
 	case DIOCGDISKINFO:
-		if (dk->dk_info == NULL)
-			return ENOTSUP;
-		return prop_dictionary_copyout_ioctl(data, cmd, dk->dk_info);
+	    {
+		struct plistref *pref = (struct plistref *) data;
+
+		if (diskp->dk_info == NULL)
+			error = ENOTSUP;
+		else
+			error = prop_dictionary_copyout_ioctl(pref, cmd,
+							diskp->dk_info);
+		break;
+	    }
 
 	case DIOCGSECTORSIZE:
-		*(u_int *)data = dk->dk_geom.dg_secsize;
-		return 0;
+		*(u_int *)data = diskp->dk_geom.dg_secsize;
+		break;
 
 	case DIOCGMEDIASIZE:
-		*(off_t *)data = (off_t)dk->dk_geom.dg_secsize *
-		    dk->dk_geom.dg_secperunit;
-		return 0;
-	default:
+		*(off_t *)data = (off_t)diskp->dk_geom.dg_secsize *
+		    diskp->dk_geom.dg_secperunit;
 		break;
-	}
-
-	if (dev == NODEV)
-		return EPASSTHROUGH;
-
-	/* The following should be moved to dk_ioctl */
-	switch (cmd) {
-	case DIOCGDINFO:
-		memcpy(data, dk->dk_label, sizeof (*dk->dk_label));
-		return 0;
-
-#ifdef __HAVE_OLD_DISKLABEL
-	case ODIOCGDINFO:
-		memcpy(&newlabel, dk->dk_label, sizeof(newlabel));
-		if (newlabel.d_npartitions > OLDMAXPARTITIONS)
-			return ENOTTY;
-		memcpy(data, &newlabel, sizeof(struct olddisklabel));
-		return 0;
-#endif
-
-	case DIOCGPART:
-		if (dk->dk_label == NULL)
-			return EBUSY;
-		pt = data;
-		pt->disklab = dk->dk_label;
-		pt->part = &dk->dk_label->d_partitions[DISKPART(dev)];
-		return 0;
-
-	case DIOCAWEDGE:
-		if ((flag & FWRITE) == 0)
-			return EBADF;
-
-		dkw = data;
-		strlcpy(dkw->dkw_parent, dk->dk_name, sizeof(dkw->dkw_parent));
-		return dkwedge_add(dkw);
-
-	case DIOCDWEDGE:
-		if ((flag & FWRITE) == 0)
-			return EBADF;
-
-		dkw = data;
-		strlcpy(dkw->dkw_parent, dk->dk_name, sizeof(dkw->dkw_parent));
-		return dkwedge_del(dkw);
-
-	case DIOCLWEDGES:
-		return dkwedge_list(dk, data, l);
-
-	case DIOCMWEDGES:
-		if ((flag & FWRITE) == 0)
-			return EBADF;
-
-		dkwedge_discover(dk);
-		return 0;
 
 	default:
-		return EPASSTHROUGH;
+		error = EPASSTHROUGH;
 	}
+
+	return (error);
 }
 
 void
 disk_set_info(device_t dev, struct disk *dk, const char *type)
 {
 	struct disk_geom *dg = &dk->dk_geom;
-
-	if (dg->dg_secsize == 0) {
-#ifdef DIAGNOSTIC
-		printf("%s: fixing 0 sector size\n", dk->dk_name);
-#endif
-		dg->dg_secsize = DEV_BSIZE;
-	}
-
-	dk->dk_blkshift = DK_BSIZE2BLKSHIFT(dg->dg_secsize);
-	dk->dk_byteshift = DK_BSIZE2BYTESHIFT(dg->dg_secsize);
 
 	if (dg->dg_secperunit == 0 && dg->dg_ncylinders == 0) {
 #ifdef DIAGNOSTIC
@@ -620,6 +569,13 @@ disk_set_info(device_t dev, struct disk *dk, const char *type)
 		if (dg->dg_ntracks && dg->dg_nsectors)
 			dg->dg_ncylinders = dg->dg_secperunit /
 			    (dg->dg_ntracks * dg->dg_nsectors);
+	}
+
+	if (dg->dg_secsize == 0) {
+#ifdef DIAGNOSTIC
+		printf("%s: fixing 0 sector size\n", dk->dk_name);
+#endif
+		dg->dg_secsize = DEV_BSIZE;
 	}
 
 	prop_dictionary_t disk_info, odisk_info, geom;

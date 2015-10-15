@@ -1,6 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.3 2015/02/09 22:44:34 pooka Exp $
+#	$NetBSD: Makefile.inc,v 1.2 2006/03/11 23:04:03 christos Exp $
 
 .include "${COMPATARCHDIR}/gen/Makefile.inc"
-.if ${RUMPRUN} != "yes"
 .include "${COMPATARCHDIR}/sys/Makefile.inc"
-.endif

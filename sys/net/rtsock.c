@@ -1,4 +1,4 @@
-/*	$NetBSD: rtsock.c,v 1.174 2015/10/13 21:28:34 rjs Exp $	*/
+/*	$NetBSD: rtsock.c,v 1.163 2014/08/09 05:33:01 rtr Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -61,13 +61,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtsock.c,v 1.174 2015/10/13 21:28:34 rjs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtsock.c,v 1.163 2014/08/09 05:33:01 rtr Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_inet.h"
 #include "opt_mpls.h"
 #include "opt_compat_netbsd.h"
-#include "opt_sctp.h"
 #endif
 
 #include <sys/param.h>
@@ -91,11 +90,6 @@ __KERNEL_RCSID(0, "$NetBSD: rtsock.c,v 1.174 2015/10/13 21:28:34 rjs Exp $");
 
 #include <netmpls/mpls.h>
 
-#ifdef SCTP
-extern void sctp_add_ip_address(struct ifaddr *);
-extern void sctp_delete_ip_address(struct ifaddr *);
-#endif
-
 #if defined(COMPAT_14) || defined(COMPAT_50)
 #include <compat/net/if.h>
 #include <compat/net/route.h>
@@ -113,7 +107,7 @@ extern void sctp_delete_ip_address(struct ifaddr *);
 #define	DOMAINNAME	"oroute"
 CTASSERT(sizeof(struct ifa_xmsghdr) == 20);
 DOMAIN_DEFINE(compat_50_routedomain); /* forward declare and add to link set */
-#else /* COMPAT_RTSOCK */
+#else
 #define	RTM_XVERSION	RTM_VERSION
 #define	RT_XADVANCE(a,b) RT_ADVANCE(a,b)
 #define	RT_XROUNDUP(n)	RT_ROUNDUP(n)
@@ -131,16 +125,11 @@ CTASSERT(sizeof(struct ifa_xmsghdr) == 24);
 DOMAIN_DEFINE(routedomain); /* forward declare and add to link set */
 #undef COMPAT_50
 #undef COMPAT_14
-#endif /* COMPAT_RTSOCK */
+#endif
 
 #ifndef COMPATCALL
 #define	COMPATCALL(name, args)	do { } while (/*CONSTCOND*/ 0)
 #endif
-
-#ifdef RTSOCK_DEBUG
-#define RT_IN_PRINT(b, a) (in_print((b), sizeof(b), \
-    &((const struct sockaddr_in *)info.rti_info[(a)])->sin_addr), (b))
-#endif /* RTSOCK_DEBUG */
 
 struct route_info COMPATNAME(route_info) = {
 	.ri_dst = { .sa_len = 2, .sa_family = PF_XROUTE, },
@@ -235,7 +224,7 @@ COMPATNAME(route_detach)(struct socket *so)
 }
 
 static int
-COMPATNAME(route_accept)(struct socket *so, struct sockaddr *nam)
+COMPATNAME(route_accept)(struct socket *so, struct mbuf *nam)
 {
 	KASSERT(solocked(so));
 
@@ -245,7 +234,7 @@ COMPATNAME(route_accept)(struct socket *so, struct sockaddr *nam)
 }
 
 static int
-COMPATNAME(route_bind)(struct socket *so, struct sockaddr *nam, struct lwp *l)
+COMPATNAME(route_bind)(struct socket *so, struct mbuf *nam, struct lwp *l)
 {
 	KASSERT(solocked(so));
 
@@ -261,7 +250,7 @@ COMPATNAME(route_listen)(struct socket *so, struct lwp *l)
 }
 
 static int
-COMPATNAME(route_connect)(struct socket *so, struct sockaddr *nam, struct lwp *l)
+COMPATNAME(route_connect)(struct socket *so, struct mbuf *nam, struct lwp *l)
 {
 	KASSERT(solocked(so));
 
@@ -335,7 +324,7 @@ COMPATNAME(route_stat)(struct socket *so, struct stat *ub)
 }
 
 static int
-COMPATNAME(route_peeraddr)(struct socket *so, struct sockaddr *nam)
+COMPATNAME(route_peeraddr)(struct socket *so, struct mbuf *nam)
 {
 	struct rawcb *rp = sotorawcb(so);
 
@@ -351,7 +340,7 @@ COMPATNAME(route_peeraddr)(struct socket *so, struct sockaddr *nam)
 }
 
 static int
-COMPATNAME(route_sockaddr)(struct socket *so, struct sockaddr *nam)
+COMPATNAME(route_sockaddr)(struct socket *so, struct mbuf *nam)
 {
 	struct rawcb *rp = sotorawcb(so);
 
@@ -384,7 +373,7 @@ COMPATNAME(route_recvoob)(struct socket *so, struct mbuf *m, int flags)
 
 static int
 COMPATNAME(route_send)(struct socket *so, struct mbuf *m,
-    struct sockaddr *nam, struct mbuf *control, struct lwp *l)
+    struct mbuf *nam, struct mbuf *control, struct lwp *l)
 {
 	int error = 0;
 	int s;
@@ -416,6 +405,39 @@ COMPATNAME(route_purgeif)(struct socket *so, struct ifnet *ifp)
 	panic("route_purgeif");
 
 	return EOPNOTSUPP;
+}
+
+static int
+COMPATNAME(route_usrreq)(struct socket *so, int req, struct mbuf *m,
+    struct mbuf *nam, struct mbuf *control, struct lwp *l)
+{
+	int s, error = 0;
+
+	KASSERT(req != PRU_ATTACH);
+	KASSERT(req != PRU_DETACH);
+	KASSERT(req != PRU_ACCEPT);
+	KASSERT(req != PRU_BIND);
+	KASSERT(req != PRU_LISTEN);
+	KASSERT(req != PRU_CONNECT);
+	KASSERT(req != PRU_CONNECT2);
+	KASSERT(req != PRU_DISCONNECT);
+	KASSERT(req != PRU_SHUTDOWN);
+	KASSERT(req != PRU_ABORT);
+	KASSERT(req != PRU_CONTROL);
+	KASSERT(req != PRU_SENSE);
+	KASSERT(req != PRU_PEERADDR);
+	KASSERT(req != PRU_SOCKADDR);
+	KASSERT(req != PRU_RCVD);
+	KASSERT(req != PRU_RCVOOB);
+	KASSERT(req != PRU_SEND);
+	KASSERT(req != PRU_SENDOOB);
+	KASSERT(req != PRU_PURGEIF);
+
+	s = splsoftnet();
+	error = raw_usrreq(so, req, m, nam, control, l);
+	splx(s);
+
+	return error;
 }
 
 /*ARGSUSED*/
@@ -471,9 +493,9 @@ COMPATNAME(route_output)(struct mbuf *m, ...)
 	info.rti_flags = rtm->rtm_flags;
 #ifdef RTSOCK_DEBUG
 	if (info.rti_info[RTAX_DST]->sa_family == AF_INET) {
-		char abuf[INET_ADDRSTRLEN];
 		printf("%s: extracted info.rti_info[RTAX_DST] %s\n", __func__,
-		    RT_IN_PRINT(abuf, RTAX_DST));
+		    inet_ntoa(((const struct sockaddr_in *)
+		    info.rti_info[RTAX_DST])->sin_addr));
 	}
 #endif /* RTSOCK_DEBUG */
 	if (info.rti_info[RTAX_DST] == NULL ||
@@ -500,16 +522,16 @@ COMPATNAME(route_output)(struct mbuf *m, ...)
 			senderr(EINVAL);
 		}
 		error = rtrequest1(rtm->rtm_type, &info, &saved_nrt);
-		if (error == 0) {
+		if (error == 0 && saved_nrt) {
 			rt_setmetrics(rtm->rtm_inits, rtm, saved_nrt);
-			rtfree(saved_nrt);
+			saved_nrt->rt_refcnt--;
 		}
 		break;
 
 	case RTM_DELETE:
 		error = rtrequest1(rtm->rtm_type, &info, &saved_nrt);
 		if (error == 0) {
-			rt = saved_nrt;
+			(rt = saved_nrt)->rt_refcnt++;
 			goto report;
 		}
 		break;
@@ -521,7 +543,6 @@ COMPATNAME(route_output)(struct mbuf *m, ...)
 		 * info.rti_info[RTAX_NETMASK] before
                  * searching.  It did not used to do that.  --dyoung
 		 */
-		rt = NULL;
 		error = rtrequest1(RTM_GET, &info, &rt);
 		if (error != 0)
 			senderr(error);
@@ -556,14 +577,16 @@ COMPATNAME(route_output)(struct mbuf *m, ...)
 #ifdef RTSOCK_DEBUG
 				if (info.rti_info[RTAX_IFA]->sa_family ==
 				    AF_INET) {
-					char ibuf[INET_ADDRSTRLEN];
-					char abuf[INET_ADDRSTRLEN];
-					printf("%s: copying out RTAX_IFA %s "
-					    "for info.rti_info[RTAX_DST] %s "
+					printf("%s: copying out RTAX_IFA %s ",
+					    __func__, inet_ntoa(
+					    ((const struct sockaddr_in *)
+					    info.rti_info[RTAX_IFA])->sin_addr)
+					    );
+					printf("for info.rti_info[RTAX_DST] %s "
 					    "ifa_getifa %p ifa_seqno %p\n",
-					    __func__,
-					    RT_IN_PRINT(ibuf, RTAX_IFA),
-					    RT_IN_PRINT(abuf, RTAX_DST),
+					    inet_ntoa(
+					    ((const struct sockaddr_in *)
+					    info.rti_info[RTAX_DST])->sin_addr),
 					    (void *)rtifa->ifa_getifa,
 					    rtifa->ifa_seqno);
 				}
@@ -723,11 +746,8 @@ rt_setmetrics(int which, const struct rt_xmsghdr *in, struct rtentry *out)
 	metric(RTV_RTTVAR, rmx_rttvar);
 	metric(RTV_HOPCOUNT, rmx_hopcount);
 	metric(RTV_MTU, rmx_mtu);
+	metric(RTV_EXPIRE, rmx_expire);
 #undef metric
-	if (which & RTV_EXPIRE) {
-		out->rt_rmx.rmx_expire = in->rtm_rmx.rmx_expire ?
-		    time_wall_to_mono(in->rtm_rmx.rmx_expire) : 0;
-	}
 }
 
 static void
@@ -741,9 +761,8 @@ rtm_setmetrics(const struct rtentry *in, struct rt_xmsghdr *out)
 	metric(rmx_rttvar);
 	metric(rmx_hopcount);
 	metric(rmx_mtu);
+	metric(rmx_expire);
 #undef metric
-	out->rtm_rmx.rmx_expire = in->rt_rmx.rmx_expire ?
-	    time_mono_to_wall(in->rt_rmx.rmx_expire) : 0;
 }
 
 static int
@@ -1062,14 +1081,6 @@ COMPATNAME(rt_newaddrmsg)(int cmd, struct ifaddr *ifa, int error,
 
 	KASSERT(ifa != NULL);
 	ifp = ifa->ifa_ifp;
-#ifdef SCTP
-	if (cmd == RTM_ADD) {
-		sctp_add_ip_address(ifa);
-	} else if (cmd == RTM_DELETE) {
-		sctp_delete_ip_address(ifa);
-	}
-#endif
-
 	COMPATCALL(rt_newaddrmsg, (cmd, ifa, error, rt));
 	if (COMPATNAME(route_info).ri_cb.any_count == 0)
 		return;
@@ -1368,6 +1379,7 @@ sysctl_rtable(SYSCTLFN_ARGS)
 {
 	void 	*where = oldp;
 	size_t	*given = oldlenp;
+	const void *new = newp;
 	int	i, s, error = EINVAL;
 	u_char  af;
 	struct	rt_walkarg w;
@@ -1375,7 +1387,7 @@ sysctl_rtable(SYSCTLFN_ARGS)
 	if (namelen == 1 && name[0] == CTL_QUERY)
 		return sysctl_query(SYSCTLFN_CALL(rnode));
 
-	if (newp)
+	if (new)
 		return EPERM;
 	if (namelen != 3)
 		return EINVAL;
@@ -1533,6 +1545,7 @@ static const struct pr_usrreqs route_usrreqs = {
 	.pr_send	= COMPATNAME(route_send_wrapper),
 	.pr_sendoob	= COMPATNAME(route_sendoob_wrapper),
 	.pr_purgeif	= COMPATNAME(route_purgeif_wrapper),
+	.pr_generic	= COMPATNAME(route_usrreq_wrapper),
 };
 
 static const struct protosw COMPATNAME(route_protosw)[] = {

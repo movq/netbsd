@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,8 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+#define __NSEVAL_C__
+
 #include "acpi.h"
 #include "accommon.h"
 #include "acparser.h"
@@ -63,14 +65,15 @@ AcpiNsExecModuleCode (
  *
  * FUNCTION:    AcpiNsEvaluate
  *
- * PARAMETERS:  Info            - Evaluation info block, contains these fields
- *                                and more:
+ * PARAMETERS:  Info            - Evaluation info block, contains:
  *                  PrefixNode      - Prefix or Method/Object Node to execute
  *                  RelativePath    - Name of method to execute, If NULL, the
  *                                    Node is the object to execute
  *                  Parameters      - List of parameters to pass to the method,
  *                                    terminated by NULL. Params itself may be
  *                                    NULL if no parameters are being passed.
+ *                  ReturnObject    - Where to put method's return value (if
+ *                                    any). If NULL, no value is returned.
  *                  ParameterType   - Type of Parameter list
  *                  ReturnObject    - Where to put method's return value (if
  *                                    any). If NULL, no value is returned.
@@ -462,7 +465,7 @@ AcpiNsExecModuleCode (
 
     /* Initialize the evaluation information block */
 
-    memset (Info, 0, sizeof (ACPI_EVALUATE_INFO));
+    ACPI_MEMSET (Info, 0, sizeof (ACPI_EVALUATE_INFO));
     Info->PrefixNode = ParentNode;
 
     /*

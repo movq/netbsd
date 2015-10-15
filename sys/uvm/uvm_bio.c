@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_bio.c,v 1.83 2015/05/27 19:43:40 rmind Exp $	*/
+/*	$NetBSD: uvm_bio.c,v 1.81 2014/07/07 20:14:43 riastradh Exp $	*/
 
 /*
  * Copyright (c) 1998 Chuck Silvers.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_bio.c,v 1.83 2015/05/27 19:43:40 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_bio.c,v 1.81 2014/07/07 20:14:43 riastradh Exp $");
 
 #include "opt_uvmhist.h"
 #include "opt_ubc.h"
@@ -93,7 +93,6 @@ struct ubc_map {
 	LIST_ENTRY(ubc_map)	list;		/* per-object list */
 };
 
-TAILQ_HEAD(ubc_inactive_head, ubc_map);
 static struct ubc_object {
 	struct uvm_object uobj;		/* glue for uvm_map() */
 	char *kva;			/* where ubc_object is mapped */
@@ -102,7 +101,7 @@ static struct ubc_object {
 	LIST_HEAD(, ubc_map) *hash;	/* hashtable for cached ubc_map's */
 	u_long hashmask;		/* mask for hashtable */
 
-	struct ubc_inactive_head *inactive;
+	TAILQ_HEAD(ubc_inactive_head, ubc_map) *inactive;
 					/* inactive queues for ubc_map's */
 } ubc_object;
 
@@ -581,10 +580,6 @@ again_faultbusy:
 		    &npages, 0, VM_PROT_READ | VM_PROT_WRITE, advice, gpflags);
 		UVMHIST_LOG(ubchist, "faultbusy getpages %d", error, 0, 0, 0);
 		if (error) {
-			/*
-			 * Flush: the mapping above might have been removed.
-			 */
-			pmap_update(pmap_kernel());
 			goto out;
 		}
 		for (i = 0; i < npages; i++) {

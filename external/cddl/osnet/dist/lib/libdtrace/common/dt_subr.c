@@ -21,14 +21,12 @@
 
 /*
  * Copyright 2010 Sun Microsystems, Inc.  All rights reserved.
- * Copyright (c) 2012 by Delphix. All rights reserved.
  * Use is subject to license terms.
  */
 
-#ifdef illumos
+#if defined(sun)
 #include <sys/sysmacros.h>
 #endif
-#include <sys/isa_defs.h>
 
 #include <strings.h>
 #include <unistd.h>
@@ -38,17 +36,15 @@
 #include <stdio.h>
 #include <errno.h>
 #include <ctype.h>
-#ifdef illumos
+#if defined(sun)
 #include <alloca.h>
 #else
-#include <sys/sysctl.h>
 #include <sys/ioctl.h>
-#include <libproc_compat.h>
+#include <sys/sysctl.h>
 #endif
 #include <assert.h>
 #include <libgen.h>
 #include <limits.h>
-#include <stdint.h>
 
 #include <dt_impl.h>
 
@@ -108,7 +104,7 @@ dtrace_xstr2desc(dtrace_hdl_t *dtp, dtrace_probespec_t spec,
 				v++;
 			}
 
-			if (isdigit((unsigned char)v[1])) {
+			if (isdigit(v[1])) {
 				long i;
 
 				errno = 0;
@@ -393,7 +389,7 @@ dt_version_str2num(const char *s, dt_version_t *vp)
 	char c;
 
 	while ((c = *s++) != '\0') {
-		if (isdigit((unsigned char)c))
+		if (isdigit(c))
 			n[i] = n[i] * 10 + c - '0';
 		else if (c != '.' || i++ >= sizeof (n) / sizeof (n[0]) - 1)
 			return (-1);
@@ -478,7 +474,7 @@ dt_dprintf(const char *format, ...)
 }
 
 int
-#ifdef illumos
+#if defined(sun)
 dt_ioctl(dtrace_hdl_t *dtp, int val, void *arg)
 #else
 dt_ioctl(dtrace_hdl_t *dtp, u_long val, void *arg)
@@ -486,7 +482,7 @@ dt_ioctl(dtrace_hdl_t *dtp, u_long val, void *arg)
 {
 	const dtrace_vector_t *v = dtp->dt_vector;
 
-#ifndef illumos
+#if !defined(sun)
 	/* Avoid sign extension. */
 	val &= 0xffffffff;
 #endif
@@ -507,15 +503,10 @@ dt_status(dtrace_hdl_t *dtp, processorid_t cpu)
 	const dtrace_vector_t *v = dtp->dt_vector;
 
 	if (v == NULL) {
-#ifdef illumos
+#if defined(sun)
 		return (p_online(cpu, P_STATUS));
 #else
-		int maxid = 0;
-		size_t len = sizeof(maxid);
-		if (sysctlbyname("kern.smp.maxid", &maxid, &len, NULL, 0) != 0)
-			return (cpu == 0 ? 1 : -1);
-		else
-			return (cpu <= maxid ? 1 : -1);
+		return 1;
 #endif
 	}
 
@@ -562,9 +553,9 @@ dt_write(dtrace_hdl_t *dtp, int fd, const void *buf, size_t n)
 /*
  * This function handles all output from libdtrace, as well as the
  * dtrace_sprintf() case.  If we're here due to dtrace_sprintf(), then
- * dt_sprintf_buflen will be non-zero; in this case, we sprintf into the
+ * dt_sprintf_buflen will be non-zero; in this case, we snprintf into the
  * specified buffer and return.  Otherwise, if output is buffered (denoted by
- * a NULL fp), we sprintf the desired output into the buffered buffer
+ * a NULL fp), we snprintf the desired output into the buffered buffer
  * (expanding the buffer if required).  If we don't satisfy either of these
  * conditions (that is, if we are to actually generate output), then we call
  * fprintf with the specified fp.  In this case, we need to deal with one of
@@ -584,7 +575,7 @@ dt_printf(dtrace_hdl_t *dtp, FILE *fp, const char *format, ...)
 	va_list ap;
 	int n;
 
-#ifndef illumos
+#if !defined(sun)
 	/*
 	 * On FreeBSD, check if output is currently being re-directed
 	 * to another file. If so, output to that file instead of the
@@ -619,8 +610,8 @@ dt_printf(dtrace_hdl_t *dtp, FILE *fp, const char *format, ...)
 		size_t avail;
 
 		/*
-		 * Using buffered output is not allowed if a handler has
-		 * not been installed.
+		 * It's not legal to use buffered ouput if there is not a
+		 * handler for buffered output.
 		 */
 		if (dtp->dt_bufhdlr == NULL) {
 			va_end(ap);
@@ -680,7 +671,6 @@ dt_printf(dtrace_hdl_t *dtp, FILE *fp, const char *format, ...)
 
 		dtp->dt_buffered_offs += needed;
 		assert(dtp->dt_buffered_buf[dtp->dt_buffered_offs] == '\0');
-		va_end(ap);
 		return (0);
 	}
 
@@ -735,6 +725,11 @@ dt_zalloc(dtrace_hdl_t *dtp, size_t size)
 {
 	void *data;
 
+	if (size > 16 * 1024 * 1024) {
+		(void) dt_set_errno(dtp, EDT_NOMEM);
+		return (NULL);
+	}
+
 	if ((data = malloc(size)) == NULL)
 		(void) dt_set_errno(dtp, EDT_NOMEM);
 	else
@@ -747,6 +742,11 @@ void *
 dt_alloc(dtrace_hdl_t *dtp, size_t size)
 {
 	void *data;
+
+	if (size > 16 * 1024 * 1024) {
+		(void) dt_set_errno(dtp, EDT_NOMEM);
+		return (NULL);
+	}
 
 	if ((data = malloc(size)) == NULL)
 		(void) dt_set_errno(dtp, EDT_NOMEM);
@@ -806,14 +806,15 @@ dt_basename(char *str)
 ulong_t
 dt_popc(ulong_t x)
 {
-#if defined(_ILP32)
+#ifdef _ILP32
 	x = x - ((x >> 1) & 0x55555555UL);
 	x = (x & 0x33333333UL) + ((x >> 2) & 0x33333333UL);
 	x = (x + (x >> 4)) & 0x0F0F0F0FUL;
 	x = x + (x >> 8);
 	x = x + (x >> 16);
 	return (x & 0x3F);
-#elif defined(_LP64)
+#endif
+#ifdef _LP64
 	x = x - ((x >> 1) & 0x5555555555555555ULL);
 	x = (x & 0x3333333333333333ULL) + ((x >> 2) & 0x3333333333333333ULL);
 	x = (x + (x >> 4)) & 0x0F0F0F0F0F0F0F0FULL;
@@ -821,8 +822,6 @@ dt_popc(ulong_t x)
 	x = x + (x >> 16);
 	x = x + (x >> 32);
 	return (x & 0x7F);
-#else
-/* This should be a #warning but for now ignore error. Err: "need td_popc() implementation" */
 #endif
 }
 
@@ -844,36 +843,6 @@ dt_popcb(const ulong_t *bp, ulong_t n)
 		popc += dt_popc(bp[w]);
 
 	return (popc + dt_popc(bp[maxw] & ((1UL << maxb) - 1)));
-}
-
-#ifdef illumos
-struct _rwlock;
-struct _lwp_mutex;
-
-int
-dt_rw_read_held(pthread_rwlock_t *lock)
-{
-	extern int _rw_read_held(struct _rwlock *);
-	return (_rw_read_held((struct _rwlock *)lock));
-}
-
-int
-dt_rw_write_held(pthread_rwlock_t *lock)
-{
-	extern int _rw_write_held(struct _rwlock *);
-	return (_rw_write_held((struct _rwlock *)lock));
-}
-#endif
-
-int
-dt_mutex_held(pthread_mutex_t *lock)
-{
-#ifdef illumos
-	extern int _mutex_held(struct _lwp_mutex *);
-	return (_mutex_held((struct _lwp_mutex *)lock));
-#else
-	return (1);
-#endif
 }
 
 static int
@@ -919,8 +888,8 @@ dtrace_addr2str(dtrace_hdl_t *dtp, uint64_t addr, char *str, int nbytes)
 	s = alloca(n);
 
 	if (err == 0 && addr != sym.st_value) {
-		(void) snprintf(s, n, "%s`%s+0x%llx", dts.dts_object,
-		    dts.dts_name, (unsigned long long)addr - sym.st_value);
+		(void) snprintf(s, n, "%s`%s+0x%" PRIx64, dts.dts_object,
+		    dts.dts_name, addr - sym.st_value);
 	} else if (err == 0) {
 		(void) snprintf(s, n, "%s`%s",
 		    dts.dts_object, dts.dts_name);
@@ -931,10 +900,10 @@ dtrace_addr2str(dtrace_hdl_t *dtp, uint64_t addr, char *str, int nbytes)
 		 * containing module.
 		 */
 		if (dtrace_lookup_by_addr(dtp, addr, NULL, &dts) == 0) {
-			(void) snprintf(s, n, "%s`0x%llx", dts.dts_object,
-			    (unsigned long long)addr);
+			(void) snprintf(s, n, "%s`0x%" PRIx64, dts.dts_object,
+			    addr);
 		} else {
-			(void) snprintf(s, n, "0x%llx", (unsigned long long)addr);
+			(void) snprintf(s, n, "0x%" PRIx64, addr);
 		}
 	}
 
@@ -945,6 +914,7 @@ int
 dtrace_uaddr2str(dtrace_hdl_t *dtp, pid_t pid,
     uint64_t addr, char *str, int nbytes)
 {
+#if 0	/* XXX TBD needs libproc */
 	char name[PATH_MAX], objname[PATH_MAX], c[PATH_MAX * 2];
 	struct ps_prochandle *P = NULL;
 	GElf_Sym sym;
@@ -954,32 +924,45 @@ dtrace_uaddr2str(dtrace_hdl_t *dtp, pid_t pid,
 		P = dt_proc_grab(dtp, pid, PGRAB_RDONLY | PGRAB_FORCE, 0);
 
 	if (P == NULL) {
-	  (void) snprintf(c, sizeof (c), "0x%jx", (uintmax_t)addr);
+		(void) snprintf(c, sizeof (c), "0x%" PRIx64, addr);
 		return (dt_string2str(c, str, nbytes));
 	}
 
 	dt_proc_lock(dtp, P);
 
+#if defined(sun)
 	if (Plookup_by_addr(P, addr, name, sizeof (name), &sym) == 0) {
 		(void) Pobjname(P, addr, objname, sizeof (objname));
+#else
+	if (proc_addr2sym(P, addr, name, sizeof (name), &sym) == 0) {
+		(void) proc_objname(P, addr, objname, sizeof (objname));
+#endif
 
 		obj = dt_basename(objname);
 
 		if (addr > sym.st_value) {
-			(void) snprintf(c, sizeof (c), "%s`%s+0x%llx", obj,
-			    name, (unsigned long long)(addr - sym.st_value));
+			(void) snprintf(c, sizeof (c), "%s`%s+0x%" PRIx64,
+			    obj, name, (addr - sym.st_value));
 		} else {
 			(void) snprintf(c, sizeof (c), "%s`%s", obj, name);
 		}
+#if defined(sun)
 	} else if (Pobjname(P, addr, objname, sizeof (objname)) != 0) {
-		(void) snprintf(c, sizeof (c), "%s`0x%jx",
-				dt_basename(objname), (uintmax_t)addr);
+#else
+	} else if (proc_objname(P, addr, objname, sizeof (objname)) != 0) {
+#endif
+		(void) snprintf(c, sizeof (c), "%s`0x%" PRIx64,
+		    dt_basename(objname), addr);
 	} else {
-	  (void) snprintf(c, sizeof (c), "0x%jx", (uintmax_t)addr);
+		(void) snprintf(c, sizeof (c), "0x%" PRIx64, addr);
 	}
 
 	dt_proc_unlock(dtp, P);
 	dt_proc_release(dtp, P);
 
 	return (dt_string2str(c, str, nbytes));
+#else
+	printf("XXX %s not implemented\n", __func__);
+	return 0;
+#endif
 }

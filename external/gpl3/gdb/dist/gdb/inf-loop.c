@@ -1,5 +1,5 @@
 /* Handling of inferior events for the event loop for GDB, the GNU debugger.
-   Copyright (C) 1999-2015 Free Software Foundation, Inc.
+   Copyright (C) 1999-2014 Free Software Foundation, Inc.
    Written by Elena Zannoni <ezannoni@cygnus.com> of Cygnus Solutions.
 
    This file is part of GDB.
@@ -18,19 +18,20 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
-#include "inferior.h"
-#include "infrun.h"
+#include "inferior.h"		/* For fetch_inferior_event.  */
 #include "target.h"             /* For enum inferior_event_type.  */
 #include "event-loop.h"
 #include "event-top.h"
 #include "inf-loop.h"
 #include "remote.h"
+#include "exceptions.h"
 #include "language.h"
 #include "gdbthread.h"
 #include "continuations.h"
 #include "interps.h"
 #include "top.h"
-#include "observer.h"
+
+static int fetch_inferior_event_wrapper (gdb_client_data client_data);
 
 /* General function to handle events in the inferior.  So far it just
    takes care of detecting errors reported by select() or poll(),
@@ -45,26 +46,19 @@ inferior_event_handler (enum inferior_event_type event_type,
   switch (event_type)
     {
     case INF_REG_EVENT:
-      /* Catch errors for now, until the inner layers of
+      /* Use catch errors for now, until the inner layers of
 	 fetch_inferior_event (i.e. readchar) can return meaningful
 	 error status.  If an error occurs while getting an event from
 	 the target, just cancel the current command.  */
-      {
-	volatile struct gdb_exception ex;
-
-	TRY_CATCH (ex, RETURN_MASK_ALL)
-	  {
-	    fetch_inferior_event (client_data);
-	  }
-	if (ex.reason < 0)
-	  {
-	    bpstat_clear_actions ();
-	    do_all_intermediate_continuations (1);
-	    do_all_continuations (1);
-
-	    throw_exception (ex);
-	  }
-      }
+      if (!catch_errors (fetch_inferior_event_wrapper, 
+			 client_data, "", RETURN_MASK_ALL))
+	{
+	  bpstat_clear_actions ();
+	  do_all_intermediate_continuations (1);
+	  do_all_continuations (1);
+	  async_enable_stdin ();
+	  display_gdb_prompt (0);
+	}
       break;
 
     case INF_EXEC_COMPLETE:
@@ -143,4 +137,11 @@ inferior_event_handler (enum inferior_event_type event_type,
     }
 
   discard_cleanups (cleanup_if_error);
+}
+
+static int 
+fetch_inferior_event_wrapper (gdb_client_data client_data)
+{
+  fetch_inferior_event (client_data);
+  return 1;
 }

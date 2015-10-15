@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.gcc.mk,v 1.11 2015/06/07 15:04:28 matt Exp $
+#	$NetBSD: bsd.gcc.mk,v 1.10.8.1 2015/06/10 17:16:24 snj Exp $
 
 .if !defined(_BSD_GCC_MK_)
 _BSD_GCC_MK_=1

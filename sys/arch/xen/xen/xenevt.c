@@ -1,4 +1,4 @@
-/*      $NetBSD: xenevt.c,v 1.44 2015/08/20 14:40:17 christos Exp $      */
+/*      $NetBSD: xenevt.c,v 1.41.2.1 2015/05/22 16:56:45 snj Exp $      */
 
 /*
  * Copyright (c) 2005 Manuel Bouyer.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xenevt.c,v 1.44 2015/08/20 14:40:17 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xenevt.c,v 1.41.2.1 2015/05/22 16:56:45 snj Exp $");
 
 #include "opt_xen.h"
 #include <sys/param.h>
@@ -52,8 +52,6 @@ __KERNEL_RCSID(0, "$NetBSD: xenevt.c,v 1.44 2015/08/20 14:40:17 christos Exp $")
 #include <xen/xenio3.h>
 #include <xen/xen.h>
 
-#include "ioconf.h"
-
 /*
  * Interface between the event channel and userland.
  * Each process with a xenevt device instance open can regiter events it
@@ -64,6 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: xenevt.c,v 1.44 2015/08/20 14:40:17 christos Exp $")
  * Processes get a device instance by opening a cloning device.
  */
 
+void		xenevtattach(int);
 static int	xenevt_fread(struct file *, off_t *, struct uio *,
     kauth_cred_t, int);
 static int	xenevt_fwrite(struct file *, off_t *, struct uio *,
@@ -301,7 +300,7 @@ xenevtopen(dev_t dev, int flags, int mode, struct lwp *l)
 
 	switch(minor(dev)) {
 	case DEV_EVT:
-		/* falloc() will fill in the descriptor for us. */
+		/* falloc() will use the descriptor for us. */
 		if ((error = fd_allocfile(&fp, &fd)) != 0)
 			return error;
 

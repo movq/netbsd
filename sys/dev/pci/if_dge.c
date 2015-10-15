@@ -1,4 +1,4 @@
-/*	$NetBSD: if_dge.c,v 1.40 2015/04/13 16:33:25 riastradh Exp $ */
+/*	$NetBSD: if_dge.c,v 1.38.2.1 2015/01/11 13:05:13 martin Exp $ */
 
 /*
  * Copyright (c) 2004, SUNET, Swedish University Computer Network.
@@ -80,7 +80,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_dge.c,v 1.40 2015/04/13 16:33:25 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_dge.c,v 1.38.2.1 2015/01/11 13:05:13 martin Exp $");
 
 
 
@@ -96,7 +96,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_dge.c,v 1.40 2015/04/13 16:33:25 riastradh Exp $"
 #include <sys/device.h>
 #include <sys/queue.h>
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_bo.c,v 1.5 2014/08/23 08:03:33 riastradh Exp $	*/
+/*	$NetBSD: nouveau_bo.c,v 1.4.4.1 2014/09/21 17:41:52 snj Exp $	*/
 
 /*
  * Copyright 2007 Dave Airlied
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_bo.c,v 1.5 2014/08/23 08:03:33 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_bo.c,v 1.4.4.1 2014/09/21 17:41:52 snj Exp $");
 
 #include <core/engine.h>
 #include <linux/swiotlb.h>

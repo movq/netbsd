@@ -1,4 +1,4 @@
-/*	$NetBSD: irdaio.h,v 1.8 2015/09/06 06:01:00 dholland Exp $	*/
+/*	$NetBSD: irdaio.h,v 1.7 2008/04/28 20:23:51 martin Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -31,8 +31,6 @@
 
 #ifndef _SYS_DEV_IRDAIO_H_
 #define _SYS_DEV_IRDAIO_H_
-
-#include <sys/ioccom.h>
 
 struct irda_params {
 	unsigned int speed;

@@ -1,4 +1,4 @@
-/*	$NetBSD: sshconnect1.c,v 1.6 2015/04/03 23:58:19 christos Exp $	*/
+/*	$NetBSD: sshconnect1.c,v 1.4.4.1 2015/04/30 06:07:31 riz Exp $	*/
 /* $OpenBSD: sshconnect1.c,v 1.77 2015/01/14 20:05:27 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -15,7 +15,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: sshconnect1.c,v 1.6 2015/04/03 23:58:19 christos Exp $");
+__RCSID("$NetBSD: sshconnect1.c,v 1.4.4.1 2015/04/30 06:07:31 riz Exp $");
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>

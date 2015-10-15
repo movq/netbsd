@@ -1,4 +1,4 @@
-/* $NetBSD: pass4.c,v 1.27 2015/09/01 06:15:02 dholland Exp $	 */
+/* $NetBSD: pass4.c,v 1.22 2013/06/18 18:18:58 christos Exp $	 */
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -37,7 +37,6 @@
 #define buf ubuf
 #define panic call_panic
 #include <ufs/lfs/lfs.h>
-#include <ufs/lfs/lfs_accessors.h>
 #include <ufs/lfs/lfs_inode.h>
 
 #include <err.h>
@@ -51,6 +50,8 @@
 #include "fsutil.h"
 #include "fsck.h"
 #include "extern.h"
+
+extern SEGUSE *seg_table;
 
 static int check_orphan(struct inodesc *idp);
 
@@ -80,7 +81,7 @@ pass4(void)
 {
 	ino_t inumber;
 	struct zlncnt *zlnp;
-	union lfs_dinode *dp;
+	struct ulfs1_dinode *dp;
 	struct inodesc idesc;
 	int n;
 
@@ -117,7 +118,7 @@ pass4(void)
 			if (check_orphan(&idesc))
 				break;
 			dp = ginode(inumber);
-			if (lfs_dino_getsize(fs, dp) == 0) {
+			if (dp->di_size == 0) {
 				const char * msg = (lncntp[inumber] ?
 					"ZERO LENGTH" : "UNREF ZERO LENGTH");
 				clri(&idesc, msg, 1);
@@ -136,7 +137,7 @@ pass4(void)
 			break;
 
 		default:
-			err(EEXIT, "BAD STATE %d FOR INODE I=%llu",
+			err(EEXIT, "BAD STATE %d FOR INODE I=%llu\n",
 			    statemap[inumber], (unsigned long long)inumber);
 		}
 	}
@@ -172,7 +173,7 @@ pass4check(struct inodesc * idesc)
 				sup->su_nbytes -= lfs_fsbtob(fs, 1);
 				VOP_BWRITE(bp);
 				seg_table[sn].su_nbytes -= lfs_fsbtob(fs, 1);
-				lfs_sb_addbfree(fs, 1);
+				++fs->lfs_bfree;
 				n_blks--;
 			}
 		}

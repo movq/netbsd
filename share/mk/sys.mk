@@ -1,4 +1,4 @@
-#	$NetBSD: sys.mk,v 1.128 2015/07/06 00:21:51 chs Exp $
+#	$NetBSD: sys.mk,v 1.127.2.1 2015/07/16 21:52:28 snj Exp $
 #	@(#)sys.mk	8.2 (Berkeley) 3/21/94
 #
 # This file contains the basic rules for make(1) and is read first

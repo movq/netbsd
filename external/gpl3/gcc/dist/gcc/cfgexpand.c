@@ -2113,7 +2113,7 @@ expand_call_stmt (gimple stmt)
   if (lhs)
     expand_assignment (lhs, exp, false);
   else
-    expand_expr (exp, const0_rtx, VOIDmode, EXPAND_NORMAL);
+    expand_expr_real_1 (exp, const0_rtx, VOIDmode, EXPAND_NORMAL, NULL);
 
   mark_transaction_restart_calls (stmt);
 }

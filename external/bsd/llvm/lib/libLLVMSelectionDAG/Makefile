@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.5 2015/01/29 20:41:36 joerg Exp $
+#	$NetBSD: Makefile,v 1.4.12.1 2015/06/04 20:05:44 snj Exp $
 
 LIB=	LLVMSelectionDAG
 

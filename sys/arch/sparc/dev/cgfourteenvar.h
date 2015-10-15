@@ -1,4 +1,4 @@
-/*	$NetBSD: cgfourteenvar.h,v 1.17 2015/09/07 03:49:45 dholland Exp $ */
+/*	$NetBSD: cgfourteenvar.h,v 1.16 2013/05/29 22:26:39 macallan Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -32,9 +32,6 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  */
-
-#include <sys/ioccom.h>
-
 struct sbus_reg {
 	uint32_t	sbr_slot;
 	uint32_t	sbr_offset;

@@ -1,4 +1,4 @@
-/*	$NetBSD: aevar.h,v 1.7 2015/04/13 21:18:42 riastradh Exp $	*/
+/*	$NetBSD: aevar.h,v 1.6 2012/10/27 17:18:02 chs Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
 #include <sys/queue.h>
 #include <sys/callout.h>
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 /*
  * Misc. definitions for the Digital Semiconductor ``Tulip'' (21x4x)

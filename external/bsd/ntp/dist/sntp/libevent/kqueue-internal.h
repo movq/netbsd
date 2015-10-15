@@ -1,4 +1,4 @@
-/*	$NetBSD: kqueue-internal.h,v 1.3 2015/07/10 14:20:34 christos Exp $	*/
+/*	$NetBSD: kqueue-internal.h,v 1.1.1.1.6.1 2014/12/24 00:05:25 riz Exp $	*/
 
 /*
  * Copyright (c) 2012 Niels Provos and Nick Mathewson

@@ -33,7 +33,7 @@
 __FBSDID("$FreeBSD: src/sbin/gpt/create.c,v 1.11 2005/08/31 01:47:19 marcel Exp $");
 #endif
 #ifdef __RCSID
-__RCSID("$NetBSD: create.c,v 1.12 2014/10/03 20:30:06 christos Exp $");
+__RCSID("$NetBSD: create.c,v 1.7.4.1 2015/06/02 19:49:38 snj Exp $");
 #endif
 
 #include <sys/types.h>

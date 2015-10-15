@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2015/09/24 14:36:54 christos Exp $
+#	$NetBSD: Makefile,v 1.5 2014/01/12 17:48:25 riz Exp $
 
 # $FreeBSD: src/cddl/usr.sbin/dtrace/Makefile,v 1.1.4.1 2009/08/03 08:13:06 kensmith Exp $
 
@@ -33,11 +33,13 @@ COPTS.dtrace.c += -Wno-stack-protector -Wno-format-extra-args
 
 LDFLAGS+=	-pthread
 
-PROGDPLIBS+=	ctf ${.CURDIR}/../../lib/libctf
-PROGDPLIBS+=	dtrace ${.CURDIR}/../../lib/libdtrace
-PROGDPLIBS+=	elf ${NETBSDSRCDIR}/external/bsd/elftoolchain/lib/libelf
-PROGDPLIBS+=	y ${NETBSDSRCDIR}/lib/liby
-PROGDPLIBS+=	l ${NETBSDSRCDIR}/external/bsd/flex/lib
-PROGDPLIBS+=	z ${NETBSDSRCDIR}/lib/libz
+LIBCTF_OBJDIR!=	cd ${.CURDIR}/../../lib/libctf && ${PRINTOBJDIR}
+LDFLAGS+=	-L${LIBDTRACE_OBJDIR} -ldtrace
+
+LIBDTRACE_OBJDIR!= cd ${.CURDIR}/../../lib/libdtrace && ${PRINTOBJDIR}
+LDFLAGS+=	-L${LIBCTF_OBJDIR} -lctf
+
+LDADD+=		-ly -ll -lelf -lz
+
 
 .include <bsd.prog.mk>

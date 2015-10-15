@@ -20,7 +20,6 @@
  */
 /*
  * Copyright 2008 Sun Microsystems, Inc.  All rights reserved.
- * Copyright 2013 Voxer Inc. All rights reserved.
  * Use is subject to license terms.
  */
 
@@ -35,7 +34,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>
-#include <libelf.h>
 
 /*
  * In Solaris 10 GA, the only mechanism for communicating helper information
@@ -55,9 +53,7 @@
  */
 
 static const char *devnamep = "/dev/dtrace/helper";
-#ifdef illumos
 static const char *olddevname = "/devices/pseudo/dtrace@0:helper";
-#endif
 
 static const char *modname;	/* Name of this load object */
 static int gen;			/* DOF helper generation */
@@ -87,7 +83,7 @@ dprintf(int debug, const char *fmt, ...)
 	va_end(ap);
 }
 
-#ifdef illumos
+#if defined(sun)
 #pragma init(dtrace_dof_init)
 #else
 static void dtrace_dof_init(void) __attribute__ ((constructor));
@@ -103,10 +99,11 @@ dtrace_dof_init(void)
 	Elf32_Ehdr *elf;
 #endif
 	dof_helper_t dh;
-	Link_map *lmp = NULL;
-#ifdef illumos
+#if defined(sun)
+	Link_map *lmp;
 	Lmid_t lmid;
 #else
+	struct link_map *lmp;
 	u_long lmid = 0;
 #endif
 	int fd;
@@ -123,7 +120,7 @@ dtrace_dof_init(void)
 		return;
 	}
 
-#ifdef illumos
+#if defined(sun)
 	if (dlinfo(RTLD_SELF, RTLD_DI_LMID, &lmid) == -1) {
 		dprintf(1, "couldn't discover link map ID\n");
 		return;
@@ -147,9 +144,6 @@ dtrace_dof_init(void)
 
 	dh.dofhp_dof = (uintptr_t)dof;
 	dh.dofhp_addr = elf->e_type == ET_DYN ? (uintptr_t) lmp->l_addr : 0;
-#if defined(__FreeBSD__) || defined(__NetBSD__)
-	dh.dofhp_pid = getpid();
-#endif
 
 	if (lmid == 0) {
 		(void) snprintf(dh.dofhp_mod, sizeof (dh.dofhp_mod),
@@ -164,7 +158,7 @@ dtrace_dof_init(void)
 
 	if ((fd = open64(devnamep, O_RDWR)) < 0) {
 		dprintf(1, "failed to open helper device %s", devnamep);
-#ifdef illumos
+
 		/*
 		 * If the device path wasn't explicitly set, try again with
 		 * the old device path.
@@ -178,23 +172,17 @@ dtrace_dof_init(void)
 			dprintf(1, "failed to open helper device %s", devnamep);
 			return;
 		}
-#else
-		return;
-#endif
 	}
+
 	if ((gen = ioctl(fd, DTRACEHIOC_ADDDOF, &dh)) == -1)
 		dprintf(1, "DTrace ioctl failed for DOF at %p", dof);
-	else {
+	else
 		dprintf(1, "DTrace ioctl succeeded for DOF at %p\n", dof);
-#if defined(__FreeBSD__) || defined(__NetBSD__)
-		gen = dh.dofhp_gen;
-#endif
-	}
 
 	(void) close(fd);
 }
 
-#ifdef illumos
+#if defined(sun)
 #pragma fini(dtrace_dof_fini)
 #else
 static void dtrace_dof_fini(void) __attribute__ ((destructor));
@@ -210,7 +198,7 @@ dtrace_dof_fini(void)
 		return;
 	}
 
-	if ((gen = ioctl(fd, DTRACEHIOC_REMOVE, &gen)) == -1)
+	if ((gen = ioctl(fd, DTRACEHIOC_REMOVE, gen)) == -1)
 		dprintf(1, "DTrace ioctl failed to remove DOF (%d)\n", gen);
 	else
 		dprintf(1, "DTrace ioctl removed DOF (%d)\n", gen);

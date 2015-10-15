@@ -1,4 +1,4 @@
-/* $NetBSD: coretemp.c,v 1.34 2015/05/27 00:16:46 msaitoh Exp $ */
+/* $NetBSD: coretemp.c,v 1.32.4.1 2015/08/11 05:11:08 snj Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: coretemp.c,v 1.34 2015/05/27 00:16:46 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: coretemp.c,v 1.32.4.1 2015/08/11 05:11:08 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -344,7 +344,7 @@ coretemp_refresh_xcall(void *arg0, void *arg1)
 		edata->state = ENVSYS_SCRITICAL;
 }
 
-MODULE(MODULE_CLASS_DRIVER, coretemp, "sysmon_envsys");
+MODULE(MODULE_CLASS_DRIVER, coretemp, NULL);
 
 #ifdef _MODULE
 #include "ioconf.c"

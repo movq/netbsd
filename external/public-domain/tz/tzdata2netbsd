@@ -1,4 +1,4 @@
-# $NetBSD: tzdata2netbsd,v 1.7 2015/08/11 18:10:13 apb Exp $
+# $NetBSD: tzdata2netbsd,v 1.2.4.2 2015/09/10 03:00:37 snj Exp $
 
 # For use by NetBSD developers when updating to new versions of tzdata.
 #

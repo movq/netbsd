@@ -1,4 +1,4 @@
-/*	$NetBSD: dig.c,v 1.10 2014/12/10 04:37:51 christos Exp $	*/
+/*	$NetBSD: dig.c,v 1.9.2.1 2014/12/22 03:28:33 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2004-2014  Internet Systems Consortium, Inc. ("ISC")

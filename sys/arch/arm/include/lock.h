@@ -1,4 +1,4 @@
-/*	$NetBSD: lock.h,v 1.32 2015/02/25 13:52:42 joerg Exp $	*/
+/*	$NetBSD: lock.h,v 1.28.2.2 2015/05/27 05:33:29 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 The NetBSD Foundation, Inc.
@@ -78,7 +78,7 @@ static __inline unsigned int
 __arm_load_exclusive(__cpu_simple_lock_t *__alp)
 {
 	unsigned int __rv;
-	if (/*CONSTCOND*/sizeof(*__alp) == 1) {
+	if (sizeof(*__alp) == 1) {
 		__asm __volatile("ldrexb\t%0,[%1]" : "=r"(__rv) : "r"(__alp));
 	} else {
 		__asm __volatile("ldrex\t%0,[%1]" : "=r"(__rv) : "r"(__alp));
@@ -91,7 +91,7 @@ static __inline unsigned int
 __arm_store_exclusive(__cpu_simple_lock_t *__alp, unsigned int __val)
 {
 	unsigned int __rv;
-	if (/*CONSTCOND*/sizeof(*__alp) == 1) {
+	if (sizeof(*__alp) == 1) {
 		__asm __volatile("strexb\t%0,%1,[%2]"
 		    : "=&r"(__rv) : "r"(__val), "r"(__alp) : "cc", "memory");
 	} else {

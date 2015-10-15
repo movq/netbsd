@@ -46,12 +46,8 @@ OBJECTS = \
 	$(OBJDIR)/adfile.o\
 	$(OBJDIR)/adisasm.o\
 	$(OBJDIR)/adwalk.o\
-	$(OBJDIR)/ahids.o\
 	$(OBJDIR)/ahpredef.o\
-	$(OBJDIR)/ahtable.o\
-	$(OBJDIR)/ahuuids.o\
 	$(OBJDIR)/aslanalyze.o\
-	$(OBJDIR)/aslascii.o\
 	$(OBJDIR)/aslbtypes.o\
 	$(OBJDIR)/aslcodegen.o\
 	$(OBJDIR)/aslcompile.o\
@@ -67,10 +63,6 @@ OBJECTS = \
 	$(OBJDIR)/asllookup.o\
 	$(OBJDIR)/aslmain.o\
 	$(OBJDIR)/aslmap.o\
-	$(OBJDIR)/aslmapenter.o\
-	$(OBJDIR)/aslmapoutput.o\
-	$(OBJDIR)/aslmaputils.o\
-	$(OBJDIR)/aslmessages.o\
 	$(OBJDIR)/aslmethod.o\
 	$(OBJDIR)/aslnamesp.o\
 	$(OBJDIR)/asloffset.o\
@@ -80,8 +72,6 @@ OBJECTS = \
 	$(OBJDIR)/asloptions.o\
 	$(OBJDIR)/aslpredef.o\
 	$(OBJDIR)/aslprepkg.o\
-	$(OBJDIR)/aslprintf.o\
-	$(OBJDIR)/aslprune.o\
 	$(OBJDIR)/aslresource.o\
 	$(OBJDIR)/aslrestype1.o\
 	$(OBJDIR)/aslrestype1i.o\
@@ -99,13 +89,20 @@ OBJECTS = \
 	$(OBJDIR)/asluuid.o\
 	$(OBJDIR)/aslwalks.o\
 	$(OBJDIR)/aslxref.o\
-	$(OBJDIR)/cmfsize.o\
+	$(OBJDIR)/dtcompile.o\
+	$(OBJDIR)/dtexpress.o\
+	$(OBJDIR)/dtfield.o\
+	$(OBJDIR)/dtio.o\
+	$(OBJDIR)/dtsubtable.o\
+	$(OBJDIR)/dttable.o\
+	$(OBJDIR)/dttemplate.o\
+	$(OBJDIR)/dtutils.o\
 	$(OBJDIR)/dbfileio.o\
 	$(OBJDIR)/dmbuffer.o\
-	$(OBJDIR)/dmcstyle.o\
 	$(OBJDIR)/dmdeferred.o\
 	$(OBJDIR)/dmextern.o\
 	$(OBJDIR)/dmnames.o\
+	$(OBJDIR)/dmobject.o\
 	$(OBJDIR)/dmopcode.o\
 	$(OBJDIR)/dmresrc.o\
 	$(OBJDIR)/dmresrcl.o\
@@ -128,14 +125,6 @@ OBJECTS = \
 	$(OBJDIR)/dswload2.o\
 	$(OBJDIR)/dswscope.o\
 	$(OBJDIR)/dswstate.o\
-	$(OBJDIR)/dtcompile.o\
-	$(OBJDIR)/dtexpress.o\
-	$(OBJDIR)/dtfield.o\
-	$(OBJDIR)/dtio.o\
-	$(OBJDIR)/dtsubtable.o\
-	$(OBJDIR)/dttable.o\
-	$(OBJDIR)/dttemplate.o\
-	$(OBJDIR)/dtutils.o\
 	$(OBJDIR)/exconvrt.o\
 	$(OBJDIR)/excreate.o\
 	$(OBJDIR)/exdump.o\
@@ -168,7 +157,6 @@ OBJECTS = \
 	$(OBJDIR)/nswalk.o\
 	$(OBJDIR)/nsxfobj.o\
 	$(OBJDIR)/osunixxf.o\
-	$(OBJDIR)/oslibcfs.o\
 	$(OBJDIR)/prexpress.o\
 	$(OBJDIR)/prmacros.o\
 	$(OBJDIR)/prscan.o\
@@ -183,7 +171,6 @@ OBJECTS = \
 	$(OBJDIR)/pstree.o\
 	$(OBJDIR)/psutils.o\
 	$(OBJDIR)/pswalk.o\
-	$(OBJDIR)/tbdata.o\
 	$(OBJDIR)/tbfadt.o\
 	$(OBJDIR)/tbinstal.o\
 	$(OBJDIR)/tbprint.o\
@@ -199,28 +186,22 @@ OBJECTS = \
 	$(OBJDIR)/utdelete.o\
 	$(OBJDIR)/uterror.o\
 	$(OBJDIR)/utexcep.o\
-	$(OBJDIR)/utfileio.o\
 	$(OBJDIR)/utglobal.o\
-	$(OBJDIR)/uthex.o\
 	$(OBJDIR)/utinit.o\
 	$(OBJDIR)/utlock.o\
 	$(OBJDIR)/utmath.o\
 	$(OBJDIR)/utmisc.o\
 	$(OBJDIR)/utmutex.o\
-	$(OBJDIR)/utnonansi.o\
 	$(OBJDIR)/utobject.o\
 	$(OBJDIR)/utownerid.o\
 	$(OBJDIR)/utpredef.o\
-	$(OBJDIR)/utprint.o\
 	$(OBJDIR)/utresrc.o\
 	$(OBJDIR)/utstate.o\
 	$(OBJDIR)/utstring.o\
-	$(OBJDIR)/utuuid.o\
 	$(OBJDIR)/utxface.o\
 	$(OBJDIR)/utxferror.o
 
 INTERMEDIATES = \
-	$(OBJDIR)/aslcompiler.y\
 	$(OBJDIR)/aslcompilerlex.c\
 	$(OBJDIR)/aslcompilerparse.c\
 	$(OBJDIR)/dtparserlex.c\
@@ -232,19 +213,6 @@ MISC = \
 	$(OBJDIR)/aslcompiler.y.h\
 	$(OBJDIR)/dtparser.y.h\
 	$(OBJDIR)/prparser.y.h
-
-ASL_PARSER = \
-	$(ASL_COMPILER)/aslparser.y\
-	$(ASL_COMPILER)/aslsupport.y\
-	$(ASL_COMPILER)/asltokens.y\
-	$(ASL_COMPILER)/asltypes.y\
-	$(ASL_COMPILER)/aslrules.y
-
-ASL_LEXER = \
-	$(ASL_COMPILER)/aslcompiler.l\
-	$(ASL_COMPILER)/aslsupport.l\
-	$(OBJDIR)/aslcompiler.y.h
-
 
 #
 # Flags specific to iASL compiler
@@ -259,22 +227,17 @@ CFLAGS += \
 #
 include ../Makefile.rules
 
-#
-# Macro processing for iASL .y files
-#
-$(OBJDIR)/aslcompiler.y :      $(ASL_PARSER)
-	$(MACROPROC) $(MFLAGS) $(ASL_COMPILER)/aslparser.y > $(OBJDIR)/aslcompiler.y
 
 #
 # Parser and Lexer - intermediate C files
 #
-$(OBJDIR)/aslcompilerlex.c :   $(ASL_LEXER)
+$(OBJDIR)/aslcompilerlex.c :   $(ASL_COMPILER)/aslcompiler.l $(ASL_COMPILER)/aslsupport.l $(OBJDIR)/aslcompiler.y.h
 	$(LEX) $(LFLAGS) -PAslCompiler -o$@ $(ASL_COMPILER)/aslcompiler.l
 
-$(OBJDIR)/aslcompiler.y.h :    $(OBJDIR)/aslcompiler.y
+$(OBJDIR)/aslcompiler.y.h :    $(ASL_COMPILER)/aslcompiler.y
 	$(YACC) $(YFLAGS) -pAslCompiler -o/dev/null --defines=$@ $<
 
-$(OBJDIR)/aslcompilerparse.c : $(OBJDIR)/aslcompiler.y
+$(OBJDIR)/aslcompilerparse.c : $(ASL_COMPILER)/aslcompiler.y
 	$(YACC) $(YFLAGS) -pAslCompiler -o$@ --defines=/dev/null $<
 
 $(OBJDIR)/dtparserlex.c :      $(ASL_COMPILER)/dtparser.l $(OBJDIR)/dtparser.y.h

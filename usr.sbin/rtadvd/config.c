@@ -1,4 +1,4 @@
-/*	$NetBSD: config.c,v 1.34 2015/06/05 14:09:20 roy Exp $	*/
+/*	$NetBSD: config.c,v 1.33 2013/01/24 19:55:28 christos Exp $	*/
 /*	$KAME: config.c,v 1.93 2005/10/17 14:40:02 suz Exp $	*/
 
 /*
@@ -444,8 +444,8 @@ getconfig(const char *intface, int exithard)
 
 		makeentry(entbuf, sizeof(entbuf), i, "vltimedecr");
 		if (agetflag(entbuf)) {
-			struct timespec now;
-			clock_gettime(CLOCK_MONOTONIC, &now);
+			struct timeval now;
+			gettimeofday(&now, 0);
 			pfx->vltimeexpire =
 				now.tv_sec + pfx->validlifetime;
 		}
@@ -464,8 +464,8 @@ getconfig(const char *intface, int exithard)
 
 		makeentry(entbuf, sizeof(entbuf), i, "pltimedecr");
 		if (agetflag(entbuf)) {
-			struct timespec now;
-			clock_gettime(CLOCK_MONOTONIC, &now);
+			struct timeval now;
+			gettimeofday(&now, 0);
 			pfx->pltimeexpire =
 				now.tv_sec + pfx->preflifetime;
 		}
@@ -958,7 +958,7 @@ void
 invalidate_prefix(struct prefix *prefix)
 {
 	char ntopbuf[INET6_ADDRSTRLEN];
-	struct timespec timo;
+	struct timeval timo;
 	struct rainfo *rai = prefix->rainfo;
 
 	if (prefix->timer) {	/* sanity check */
@@ -981,7 +981,7 @@ invalidate_prefix(struct prefix *prefix)
 		delete_prefix(prefix);
 	}
 	timo.tv_sec = prefix_timo;
-	timo.tv_nsec = 0;
+	timo.tv_usec = 0;
 	rtadvd_set_timer(&timo, prefix->timer);
 }
 
@@ -1200,7 +1200,7 @@ make_packet(struct rainfo *rainfo)
 
 	TAILQ_FOREACH(pfx, &rainfo->prefix, next) {	
 		uint32_t vltime, pltime;
-		struct timespec now;
+		struct timeval now;
 
 		CHECKLEN(sizeof(*ndopt_pi));
 		ndopt_pi = (struct nd_opt_prefix_info *)buf;
@@ -1218,7 +1218,7 @@ make_packet(struct rainfo *rainfo)
 			vltime = 0;
 		else {
 			if (pfx->vltimeexpire || pfx->pltimeexpire)
-				clock_gettime(CLOCK_MONOTONIC, &now);
+				gettimeofday(&now, NULL);
 			if (pfx->vltimeexpire == 0)
 				vltime = pfx->validlifetime;
 			else

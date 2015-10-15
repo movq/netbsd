@@ -1,5 +1,7 @@
 /* chew
-   Copyright (C) 1990-2015 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1998, 2000, 2001,
+   2002, 2003, 2005, 2007, 2009, 2012
+   Free Software Foundation, Inc.
    Contributed by steve chamberlain @cygnus
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -265,19 +267,6 @@ skip_white_and_stars (src, idx)
   return idx;
 }
 
-static unsigned int
-skip_past_newline_1 (ptr, idx)
-     string_type *ptr;
-     unsigned int idx;
-{
-  while (at (ptr, idx)
-	 && at (ptr, idx) != '\n')
-    idx++;
-  if (at (ptr, idx) == '\n')
-    return idx + 1;
-  return idx;
-}
-
 /***********************************************************************/
 
 string_type stack[STACK];
@@ -487,10 +476,8 @@ remove_noncomments (src, dst)
 static void
 print_stack_level ()
 {
-  fprintf (stderr, "current string stack depth = %ld, ",
-	   (long) (tos - stack));
-  fprintf (stderr, "current integer stack depth = %ld\n",
-	   (long) (isp - istack));
+  fprintf (stderr, "current string stack depth = %ld, ", tos - stack);
+  fprintf (stderr, "current integer stack depth = %ld\n", isp - istack);
   pc++;
 }
 
@@ -616,12 +603,10 @@ outputdots ()
 
   while (at (tos, idx))
     {
-      /* Every iteration begins at the start of a line.  */
-      if (at (tos, idx) == '.')
+      if (at (tos, idx) == '\n' && at (tos, idx + 1) == '.')
 	{
 	  char c;
-
-	  idx++;
+	  idx += 2;
 
 	  while ((c = at (tos, idx)) && c != '\n')
 	    {
@@ -641,13 +626,11 @@ outputdots ()
 		  idx++;
 		}
 	    }
-	  if (c == '\n')
-	    idx++;
 	  catchar (&out, '\n');
 	}
       else
 	{
-	  idx = skip_past_newline_1 (tos, idx);
+	  idx++;
 	}
     }
 
@@ -1112,7 +1095,10 @@ icatstr ()
 static void
 skip_past_newline ()
 {
-  idx = skip_past_newline_1 (ptr, idx);
+  while (at (ptr, idx)
+	 && at (ptr, idx) != '\n')
+    idx++;
+  idx++;
   pc++;
 }
 
@@ -1578,7 +1564,7 @@ main (ac, av)
   if (tos != stack)
     {
       fprintf (stderr, "finishing with current stack level %ld\n",
-	       (long) (tos - stack));
+	       tos - stack);
       return 1;
     }
   return 0;

@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: awin_com.c,v 1.10 2015/08/08 23:30:16 tnn Exp $");
+__KERNEL_RCSID(1, "$NetBSD: awin_com.c,v 1.5.10.1 2014/11/09 14:42:33 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -81,10 +81,6 @@ static const struct awin_gpio_pinset awin_com_pinsets_a31[] = {
 	{ 'H', AWIN_A31_PIO_PH_UART0_FUNC, AWIN_A31_PIO_PH_UART0_PINS },
 };
 
-static const struct awin_gpio_pinset awin_com_pinsets_a80[] = {
-	{ 'H', AWIN_A80_PIO_PH_UART0_FUNC, AWIN_A80_PIO_PH_UART0_PINS },
-};
-
 CFATTACH_DECL_NEW(awin_com, sizeof(struct awin_com_softc),
 	awin_com_match, awin_com_attach, NULL, NULL);
 
@@ -101,21 +97,14 @@ awin_com_match(device_t parent, cfdata_t cf, void *aux)
 
 	if (awin_chip_id() == AWIN_CHIP_ID_A31) {
 		pinset = awin_com_pinsets_a31;
-	} else if (awin_chip_id() == AWIN_CHIP_ID_A80) {
-		pinset = awin_com_pinsets_a80;
 	} else {
 		pinset = loc->loc_port + ((cf->cf_flags & 1) ?
 		    awin_com_alt_pinsets : awin_com_pinsets);
 	}
 
 	KASSERT(!strcmp(cf->cf_name, loc->loc_name));
-#if defined(ALLWINNER_A80)
-	KASSERT(loc->loc_offset >= AWIN_A80_UART0_OFFSET);
-	KASSERT(loc->loc_offset <= AWIN_A80_UART5_OFFSET);
-#else
 	KASSERT(loc->loc_offset >= AWIN_UART0_OFFSET);
 	KASSERT(loc->loc_offset <= AWIN_UART7_OFFSET);
-#endif
 	KASSERT((loc->loc_offset & 0x3ff) == 0);
 	KASSERT((awin_com_ports & __BIT(loc->loc_port)) == 0);
 	KASSERT(cf->cf_loc[AWINIOCF_PORT] == AWINIOCF_PORT_DEFAULT
@@ -130,28 +119,7 @@ awin_com_match(device_t parent, cfdata_t cf, void *aux)
 	awin_gpio_pinset_acquire(pinset);
 
 	bus_space_subregion(iot, aio->aio_core_bsh,
-	    loc->loc_offset / 4, loc->loc_size, &bsh);
-
-	/*
-	 * Clock gating, soft reset
-	 */
-	if (awin_chip_id() == AWIN_CHIP_ID_A80) {
-		awin_reg_set_clear(aio->aio_core_bst, aio->aio_ccm_bsh,
-		    AWIN_A80_CCU_SCLK_BUS_CLK_GATING4_REG,
-		    AWIN_A80_CCU_SCLK_BUS_CLK_GATING4_UART0 << loc->loc_port, 0);
-		awin_reg_set_clear(aio->aio_core_bst, aio->aio_ccm_bsh,
-		    AWIN_A80_CCU_SCLK_BUS_SOFT_RST4_REG,
-		    AWIN_A80_CCU_SCLK_BUS_SOFT_RST4_UART0 << loc->loc_port, 0);
-	} else {
-		awin_reg_set_clear(aio->aio_core_bst, aio->aio_ccm_bsh,
-		   AWIN_APB1_GATING_REG,
-		   AWIN_APB_GATING1_UART0 << loc->loc_port, 0);
-		if (awin_chip_id() == AWIN_CHIP_ID_A31) {
-			awin_reg_set_clear(aio->aio_core_bst, aio->aio_ccm_bsh,
-			    AWIN_A31_APB2_RESET_REG,
-			    AWIN_A31_APB2_RESET_UART0_RST << loc->loc_port, 0);
-		}
-	}
+	    loc->loc_offset, loc->loc_size, &bsh);
 
 	const int rv = comprobe1(iot, bsh);
 
@@ -175,8 +143,6 @@ awin_com_attach(device_t parent, device_t self, void *aux)
 
 	if (awin_chip_id() == AWIN_CHIP_ID_A31) {
 		pinset = awin_com_pinsets_a31;
-	} else if (awin_chip_id() == AWIN_CHIP_ID_A80) {
-		pinset = awin_com_pinsets_a80;
 	} else {
 		pinset = loc->loc_port + ((cf->cf_flags & 1) ?
 		    awin_com_alt_pinsets : awin_com_pinsets);

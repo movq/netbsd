@@ -1,4 +1,4 @@
-/* $NetBSD: t_swapcontext.c,v 1.2 2014/08/25 16:31:15 bouyer Exp $ */
+/* $NetBSD: t_swapcontext.c,v 1.1.12.1 2014/08/29 11:44:46 martin Exp $ */
 
 /*
  * Copyright (c) 2012 Emmanuel Dreyfus. All rights reserved.

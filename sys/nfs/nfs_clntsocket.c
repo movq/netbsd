@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_clntsocket.c,v 1.3 2015/07/15 03:28:55 manu Exp $	*/
+/*	$NetBSD: nfs_clntsocket.c,v 1.1 2010/03/02 23:19:09 pooka Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993, 1995
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_clntsocket.c,v 1.3 2015/07/15 03:28:55 manu Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_clntsocket.c,v 1.1 2010/03/02 23:19:09 pooka Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_nfs.h"
@@ -964,19 +964,13 @@ nfs_sndlock(struct nfsmount *nmp, struct nfsreq *rep)
 {
 	struct lwp *l;
 	int timeo = 0;
-	bool catch_p = false;
+	bool catch = false;
 	int error = 0;
-
-	if (nmp->nm_flag & NFSMNT_SOFT)
-		timeo = nmp->nm_retry * nmp->nm_timeo;
-
-	if (nmp->nm_iflag & NFSMNT_DISMNTFORCE)
-		timeo = hz;
 
 	if (rep) {
 		l = rep->r_lwp;
 		if (rep->r_nmp->nm_flag & NFSMNT_INT)
-			catch_p = true;
+			catch = true;
 	} else
 		l = NULL;
 	mutex_enter(&nmp->nm_lock);
@@ -985,24 +979,13 @@ nfs_sndlock(struct nfsmount *nmp, struct nfsreq *rep)
 			error = EINTR;
 			goto quit;
 		}
-		if (catch_p) {
-			error = cv_timedwait_sig(&nmp->nm_sndcv,
-						 &nmp->nm_lock, timeo);
+		if (catch) {
+			cv_timedwait_sig(&nmp->nm_sndcv, &nmp->nm_lock, timeo);
 		} else {
-			error = cv_timedwait(&nmp->nm_sndcv,
-					     &nmp->nm_lock, timeo);
+			cv_timedwait(&nmp->nm_sndcv, &nmp->nm_lock, timeo);
 		}
-
-		if (error) {
-			if ((error == EWOULDBLOCK) &&
-			    (nmp->nm_flag & NFSMNT_SOFT)) {
-				error = EIO;
-				goto quit;
-			}
-			error = 0;
-		}
-		if (catch_p) {
-			catch_p = false;
+		if (catch) {
+			catch = false;
 			timeo = 2 * hz;
 		}
 	}

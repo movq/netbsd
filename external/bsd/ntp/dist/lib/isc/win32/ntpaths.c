@@ -1,4 +1,4 @@
-/*	$NetBSD: ntpaths.c,v 1.3 2015/07/10 14:20:31 christos Exp $	*/
+/*	$NetBSD: ntpaths.c,v 1.1.1.2.4.1 2014/12/24 00:05:19 riz Exp $	*/
 
 /*
  * Copyright (C) 2004, 2007, 2009  Internet Systems Consortium, Inc. ("ISC")

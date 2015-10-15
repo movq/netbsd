@@ -1,4 +1,4 @@
-/*	$NetBSD: hash.c,v 1.35 2015/06/22 21:16:02 christos Exp $	*/
+/*	$NetBSD: hash.c,v 1.33.4.1 2015/08/06 21:50:36 snj Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -37,7 +37,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: hash.c,v 1.35 2015/06/22 21:16:02 christos Exp $");
+__RCSID("$NetBSD: hash.c,v 1.33.4.1 2015/08/06 21:50:36 snj Exp $");
 
 #include "namespace.h"
 #include <sys/param.h>

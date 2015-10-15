@@ -1,4 +1,4 @@
-/*	$NetBSD: sljitNativeX86_common.c,v 1.7 2015/02/16 13:33:24 alnsn Exp $	*/
+/*	$NetBSD: sljitNativeX86_common.c,v 1.6.2.1 2015/02/17 15:11:28 martin Exp $	*/
 
 /*
  *    Stack-less Just-In-Time compiler

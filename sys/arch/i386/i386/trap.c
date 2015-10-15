@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.275 2015/02/27 17:45:52 christos Exp $	*/
+/*	$NetBSD: trap.c,v 1.272 2014/03/12 18:59:07 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000, 2005, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.275 2015/02/27 17:45:52 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.272 2014/03/12 18:59:07 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -303,7 +303,7 @@ trap(struct trapframe *frame)
 	/*
 	 * A trap can occur while DTrace executes a probe. Before
 	 * executing the probe, DTrace blocks re-scheduling and sets
-	 * a flag in its per-cpu flags to indicate that it doesn't
+	 * a flag in it's per-cpu flags to indicate that it doesn't
 	 * want to fault. On returning from the the probe, the no-fault
 	 * flag is cleared and finally re-scheduling is enabled.
 	 *
@@ -653,6 +653,15 @@ faultcommon:
 			}
 			goto out;
 		}
+		KSI_INIT_TRAP(&ksi);
+		ksi.ksi_trap = type & ~T_USER;
+		ksi.ksi_addr = (void *)cr2;
+		if (error == EACCES) {
+			ksi.ksi_code = SEGV_ACCERR;
+			error = EFAULT;
+		} else {
+			ksi.ksi_code = SEGV_MAPERR;
+		}
 
 		if (type == T_PAGEFLT) {
 			onfault = onfault_handler(pcb, frame);
@@ -662,37 +671,15 @@ faultcommon:
 			    map, va, ftype, error);
 			goto kernelfault;
 		}
-
-		KSI_INIT_TRAP(&ksi);
-		ksi.ksi_trap = type & ~T_USER;
-		ksi.ksi_addr = (void *)cr2;
-		switch (error) {
-		case EINVAL:
-			ksi.ksi_signo = SIGBUS;
-			ksi.ksi_code = BUS_ADRERR;
-			break;
-		case EACCES:
-			ksi.ksi_signo = SIGSEGV;
-			ksi.ksi_code = SEGV_ACCERR;
-			error = EFAULT;
-			break;
-		case ENOMEM:
+		if (error == ENOMEM) {
 			ksi.ksi_signo = SIGKILL;
-			printf("UVM: pid %d.%d (%s), uid %d killed: "
-			    "out of swap\n", p->p_pid, l->l_lid, p->p_comm,
-			    l->l_cred ?  kauth_cred_geteuid(l->l_cred) : -1);
-			break;
-		default:
+			printf("UVM: pid %d (%s), uid %d killed: out of swap\n",
+			       p->p_pid, p->p_comm,
+			       l->l_cred ?
+			       kauth_cred_geteuid(l->l_cred) : -1);
+		} else {
 			ksi.ksi_signo = SIGSEGV;
-			ksi.ksi_code = SEGV_MAPERR;
-			break;
 		}
-
-#ifdef TRAP_SIGDEBUG
-		printf("pid %d.%d (%s): signal %d at eip %x addr %lx "
-		    "error %d\n", p->p_pid, l->l_lid, p->p_comm, ksi.ksi_signo,
-		    frame->tf_eip, va, error);
-#endif
 		(*p->p_emul->e_trapsignal)(l, &ksi);
 		break;
 	}

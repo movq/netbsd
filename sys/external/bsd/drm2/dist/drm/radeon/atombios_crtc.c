@@ -1382,26 +1382,24 @@ static int avivo_crtc_do_set_base(struct drm_crtc *crtc,
 
 	obj = radeon_fb->obj;
 	rbo = gem_to_radeon_bo(obj);
+	r = radeon_bo_reserve(rbo, false);
+	if (unlikely(r != 0))
+		return r;
 
 	/* If atomic, assume fb object is pinned & idle & fenced and
 	 * just update base pointers
 	 */
-	if (atomic) {
-		BUG_ON(rbo->pin_count == 0);
+	if (atomic)
 		fb_location = radeon_bo_gpu_offset(rbo);
-		tiling_flags = 0;
-	} else {
-		r = radeon_bo_reserve(rbo, false);
-		if (unlikely(r != 0))
-			return r;
+	else {
 		r = radeon_bo_pin(rbo, RADEON_GEM_DOMAIN_VRAM, &fb_location);
 		if (unlikely(r != 0)) {
 			radeon_bo_unreserve(rbo);
 			return -EINVAL;
 		}
-		radeon_bo_get_tiling_flags(rbo, &tiling_flags, NULL);
-		radeon_bo_unreserve(rbo);
 	}
+	radeon_bo_get_tiling_flags(rbo, &tiling_flags, NULL);
+	radeon_bo_unreserve(rbo);
 
 	switch (target_fb->bits_per_pixel) {
 	case 8:

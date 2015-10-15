@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,7 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
 
 #include "acpi.h"
 #include "accommon.h"
@@ -92,7 +93,7 @@ AcpiDbAddToHistory (
 
     /* Put command into the next available slot */
 
-    CmdLen = (UINT16) strlen (CommandLine);
+    CmdLen = (UINT16) ACPI_STRLEN (CommandLine);
     if (!CmdLen)
     {
         return;
@@ -100,7 +101,7 @@ AcpiDbAddToHistory (
 
     if (AcpiGbl_HistoryBuffer[AcpiGbl_NextHistoryIndex].Command != NULL)
     {
-        BufferLen = (UINT16) strlen (
+        BufferLen = (UINT16) ACPI_STRLEN (
             AcpiGbl_HistoryBuffer[AcpiGbl_NextHistoryIndex].Command);
         if (CmdLen > BufferLen)
         {
@@ -116,7 +117,7 @@ AcpiDbAddToHistory (
             AcpiOsAllocate (CmdLen + 1);
     }
 
-    strcpy (AcpiGbl_HistoryBuffer[AcpiGbl_NextHistoryIndex].Command,
+    ACPI_STRCPY (AcpiGbl_HistoryBuffer[AcpiGbl_NextHistoryIndex].Command,
         CommandLine);
 
     AcpiGbl_HistoryBuffer[AcpiGbl_NextHistoryIndex].CmdNum =
@@ -217,7 +218,7 @@ AcpiDbGetFromHistory (
 
     else
     {
-        CmdNum = strtoul (CommandNumArg, NULL, 0);
+        CmdNum = ACPI_STRTOUL (CommandNumArg, NULL, 0);
     }
 
     return (AcpiDbGetHistoryByIndex (CmdNum));

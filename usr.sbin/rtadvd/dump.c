@@ -1,4 +1,4 @@
-/*	$NetBSD: dump.c,v 1.12 2015/06/05 14:09:20 roy Exp $	*/
+/*	$NetBSD: dump.c,v 1.11 2013/07/09 09:34:59 roy Exp $	*/
 /*	$KAME: dump.c,v 1.34 2004/06/14 05:35:59 itojun Exp $	*/
 
 /*
@@ -99,9 +99,9 @@ if_dump(void)
 	struct dnssl_domain *dnsd;
 	char *p, len;
 	char prefixbuf[INET6_ADDRSTRLEN];
-	struct timespec now;
+	struct timeval now;
 
-	clock_gettime(CLOCK_MONOTONIC, &now); /* XXX: unused in most cases */
+	gettimeofday(&now, NULL); /* XXX: unused in most cases */
 	TAILQ_FOREACH(rai, &ralist, next) {
 		fprintf(fp, "%s:\n", rai->ifname);
 
@@ -198,7 +198,7 @@ if_dump(void)
 				pfx->autoconfflg ? "A" : "",
 				"");
 			if (pfx->timer) {
-				struct timespec *rest;
+				struct timeval *rest;
 
 				rest = rtadvd_timer_rest(pfx->timer);
 				if (rest) { /* XXX: what if not? */

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.bootimage,v 1.11 2015/05/08 17:46:03 riastradh Exp $
+#	$NetBSD: Makefile.bootimage,v 1.9.2.1 2015/07/30 15:40:14 snj Exp $
 #
 # Copyright (c) 2009, 2010, 2011 Izumi Tsutsui.  All rights reserved.
 #
@@ -276,7 +276,7 @@ ${TARGETFS}: prepare_md_post
 	${RM} -f ${WORKSPEC}
 	cat ${WORKDIR}/etc/mtree/* |					\
 	    ${TOOL_SED} -e 's/ size=[0-9]*//' > ${WORKSPEC}
-	${HOST_SH} ${WORKDIR}/dev/MAKEDEV -s all ipty |			\
+	${HOST_SH} ${WORKDIR}/dev/MAKEDEV -s all |			\
 	    ${TOOL_SED} -e '/^\. type=dir/d' -e 's,^\.,./dev,' >> ${WORKSPEC}
 	cat ${SPEC_IN} >> ${WORKSPEC}
 .if defined(SECONDARY_BOOT)

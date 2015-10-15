@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.30 2015/01/29 20:41:35 joerg Exp $
+#	$NetBSD: Makefile,v 1.29.2.1 2015/06/04 20:05:43 snj Exp $
 
 LIB=	LLVMCodeGen
 

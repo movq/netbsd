@@ -1,4 +1,4 @@
-#	$NetBSD: DEVNAMES,v 1.294 2015/08/27 14:04:07 nonaka Exp $
+#	$NetBSD: DEVNAMES,v 1.291 2014/07/16 18:32:21 bouyer Exp $
 #
 # This file contains all used device names and defined attributes in
 # alphabetical order. New devices added to the system somewhere should first
@@ -784,7 +784,6 @@ lpt			sgimips
 lpt			sparc64
 lsi64854		MI		Attribute
 lxtphy			MI
-m25p			MI
 m38813c			hpcmips
 mace			sgimips
 macepci			sgimips
@@ -860,9 +859,6 @@ mcclock			pmax
 mcclock			prep
 mcd			MI
 mcmem			alpha
-mcp23s17gpio		MI
-mcp3kadc		MI
-mcp48x1dac		MI
 mcpcia			alpha
 mdio			evbppc
 mec			sgimips
@@ -1007,7 +1003,6 @@ ofppb			sparc64
 ofrom			shark
 ofrtc			MI
 ohci			MI
-oj6sh			MI
 oldscsi			pmax		Attribute
 oldscsibus		pmax
 oosiop			MI
@@ -1187,13 +1182,11 @@ rtii			MI
 rtk			MI
 rtl80x9			MI		Attribute
 rtsx			MI
-rtwn			MI
 rum			MI
 run			MI
 rx			MI
 ry			vax
 rz			pmax
-s390rtc			MI
 sab			MI
 sableio			alpha
 sacc			hpcarm

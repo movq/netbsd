@@ -12,7 +12,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBM_SCCS) && !defined(lint)
-__RCSID("$NetBSD: s_copysign.c,v 1.13 2015/05/14 19:26:12 joerg Exp $");
+__RCSID("$NetBSD: s_copysign.c,v 1.11.74.1 2015/05/25 09:05:25 msaitoh Exp $");
 #endif
 
 /*

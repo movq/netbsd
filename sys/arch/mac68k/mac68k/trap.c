@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.147 2015/03/03 20:36:31 martin Exp $	*/
+/*	$NetBSD: trap.c,v 1.146 2012/02/19 21:06:15 rmind Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.147 2015/03/03 20:36:31 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.146 2012/02/19 21:06:15 rmind Exp $");
 
 #include "opt_ddb.h"
 #include "opt_execfmt.h"
@@ -585,6 +585,11 @@ copyfault:
 			}
 			goto out;
 		}
+		if (rv == EACCES) {
+			ksi.ksi_code = SEGV_ACCERR;
+			rv = EFAULT;
+		} else
+			ksi.ksi_code = SEGV_MAPERR;
 		if (type == T_MMUFLT) {
 			if (onfault)
 				goto copyfault;
@@ -595,26 +600,14 @@ copyfault:
 			goto dopanic;
 		}
 		ksi.ksi_addr = (void *)v;
-		switch (rv) {
-		case ENOMEM:
+		if (rv == ENOMEM) {
 			printf("UVM: pid %d (%s), uid %d killed: out of swap\n",
 			       p->p_pid, p->p_comm,
 			       l->l_cred ?
 			       kauth_cred_geteuid(l->l_cred) : -1);
 			ksi.ksi_signo = SIGKILL;
-			break;
-		case EINVAL:
-			ksi.ksi_signo = SIGBUS;
-			ksi.ksi_code = BUS_ADRERR;
-			break;
-		case EACCES:
+		} else {
 			ksi.ksi_signo = SIGSEGV;
-			ksi.ksi_code = SEGV_ACCERR;
-			break;
-		default:
-			ksi.ksi_signo = SIGSEGV;
-			ksi.ksi_code = SEGV_MAPERR;
-			break;
 		}
 		break;
 	    }

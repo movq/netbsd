@@ -34,7 +34,6 @@ EXTRA_DIST =			\
 	NOTES.y2kfixes		\
 	README.bk		\
 	README.hackers		\
-	README.leapsmear	\
 	README.patches		\
 	README.refclocks	\
 	README.versions		\
@@ -114,13 +113,10 @@ dist-hook:
 	@find $(distdir) -type d -name SCCS -print | xargs rm -rf
 
 install-data-local:
-	@echo "Installing stand-alone HTML documentation"
-	@( cd $(srcdir) && \
-		for i in `find html -type d | grep -v SCCS` ; \
-		do $(INSTALL) -d $(DESTDIR)$(htmldir)/$$i ; done )
-	@( cd $(srcdir) && \
-		for i in `find html -type f | grep -v SCCS` ; \
-		do $(INSTALL_DATA) $$i $(DESTDIR)$(htmldir)/$$i ; done )
+	( cd $(srcdir) && find html -name SCCS -prune -o -type d \
+		-exec $(INSTALL) -d $(DESTDIR)$(htmldir)/{} ";" )
+	( cd $(srcdir) && find html -name SCCS -prune -o -type f \
+		-exec $(INSTALL_DATA) {} $(DESTDIR)$(htmldir)/{} ";" )
 
 uninstall-local:
 		rm -rf $(DESTDIR)$(htmldir)/html

@@ -1,4 +1,4 @@
-/*	$NetBSD: vsnprintf_ss.c,v 1.13 2014/09/29 14:58:33 christos Exp $	*/
+/*	$NetBSD: vsnprintf_ss.c,v 1.12.10.1 2014/09/30 18:21:40 martin Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)vsnprintf.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: vsnprintf_ss.c,v 1.13 2014/09/29 14:58:33 christos Exp $");
+__RCSID("$NetBSD: vsnprintf_ss.c,v 1.12.10.1 2014/09/30 18:21:40 martin Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

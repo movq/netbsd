@@ -4,12 +4,12 @@ typedef void *ptr;
 
 ptr p = &p;
 
-void
+static void
 foo_void (void)
 {
 }
 
-int
+static int
 foo_int (void)
 {
   return 0;

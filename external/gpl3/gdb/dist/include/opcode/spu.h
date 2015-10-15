@@ -1,6 +1,6 @@
 /* SPU ELF support for BFD.
 
-   Copyright (C) 2006-2015 Free Software Foundation, Inc.
+   Copyright 2006, 2010 Free Software Foundation, Inc.
 
    This file is part of GDB, GAS, and the GNU binutils.
 

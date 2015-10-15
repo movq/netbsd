@@ -1,4 +1,4 @@
-/*	$NetBSD: in_pcb.c,v 1.162 2015/08/24 22:21:26 pooka Exp $	*/
+/*	$NetBSD: in_pcb.c,v 1.151.2.2 2015/01/17 12:10:53 martin Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -93,12 +93,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in_pcb.c,v 1.162 2015/08/24 22:21:26 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in_pcb.c,v 1.151.2.2 2015/01/17 12:10:53 martin Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
 #include "opt_ipsec.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -289,8 +287,6 @@ in_pcbbind_addr(struct inpcb *inp, struct sockaddr_in *sin, kauth_cred_t cred)
 			ia = ifatoia(ifa_ifwithaddr(sintosa(sin)));
 		if (ia == NULL)
 			return (EADDRNOTAVAIL);
-		if (ia->ia4_flags & (IN_IFF_NOTREADY | IN_IFF_DETACHED))
-			return (EADDRNOTAVAIL);
 	}
 
 	inp->inp_laddr = sin->sin_addr;
@@ -314,7 +310,7 @@ in_pcbbind_port(struct inpcb *inp, struct sockaddr_in *sin, kauth_cred_t cred)
 		 * and a multicast address is bound on both
 		 * new and duplicated sockets.
 		 */
-		if (so->so_options & (SO_REUSEADDR | SO_REUSEPORT))
+		if (so->so_options & SO_REUSEADDR)
 			reuseport = SO_REUSEADDR|SO_REUSEPORT;
 	} 
 
@@ -405,9 +401,10 @@ in_pcbbind_port(struct inpcb *inp, struct sockaddr_in *sin, kauth_cred_t cred)
 }
 
 int
-in_pcbbind(void *v, struct sockaddr_in *sin, struct lwp *l)
+in_pcbbind(void *v, struct mbuf *nam, struct lwp *l)
 {
 	struct inpcb *inp = v;
+	struct sockaddr_in *sin = NULL; /* XXXGCC */
 	struct sockaddr_in lsin;
 	int error;
 
@@ -419,8 +416,9 @@ in_pcbbind(void *v, struct sockaddr_in *sin, struct lwp *l)
 	if (inp->inp_lport || !in_nullhost(inp->inp_laddr))
 		return (EINVAL);
 
-	if (NULL != sin) {
-		if (sin->sin_len != sizeof(*sin))
+	if (nam != NULL) {
+		sin = mtod(nam, struct sockaddr_in *);
+		if (nam->m_len != sizeof (*sin))
 			return (EINVAL);
 	} else {
 		lsin = *((const struct sockaddr_in *)
@@ -451,18 +449,19 @@ in_pcbbind(void *v, struct sockaddr_in *sin, struct lwp *l)
  * then pick one.
  */
 int
-in_pcbconnect(void *v, struct sockaddr_in *sin, struct lwp *l)
+in_pcbconnect(void *v, struct mbuf *nam, struct lwp *l)
 {
 	struct inpcb *inp = v;
 	struct in_ifaddr *ia = NULL;
 	struct sockaddr_in *ifaddr = NULL;
+	struct sockaddr_in *sin = mtod(nam, struct sockaddr_in *);
 	vestigial_inpcb_t vestige;
 	int error;
 
 	if (inp->inp_af != AF_INET)
 		return (EINVAL);
 
-	if (sin->sin_len != sizeof (*sin))
+	if (nam->m_len != sizeof (*sin))
 		return (EINVAL);
 	if (sin->sin_family != AF_INET)
 		return (EAFNOSUPPORT);
@@ -614,23 +613,29 @@ in_pcbdetach(void *v)
 }
 
 void
-in_setsockaddr(struct inpcb *inp, struct sockaddr_in *sin)
+in_setsockaddr(struct inpcb *inp, struct mbuf *nam)
 {
+	struct sockaddr_in *sin;
 
 	if (inp->inp_af != AF_INET)
 		return;
 
+	sin = mtod(nam, struct sockaddr_in *);
 	sockaddr_in_init(sin, &inp->inp_laddr, inp->inp_lport);
+	nam->m_len = sin->sin_len;
 }
 
 void
-in_setpeeraddr(struct inpcb *inp, struct sockaddr_in *sin)
+in_setpeeraddr(struct inpcb *inp, struct mbuf *nam)
 {
+	struct sockaddr_in *sin;
 
 	if (inp->inp_af != AF_INET)
 		return;
 
+	sin = mtod(nam, struct sockaddr_in *);
 	sockaddr_in_init(sin, &inp->inp_faddr, inp->inp_fport);
+	nam->m_len = sin->sin_len;
 }
 
 /*
@@ -693,44 +698,40 @@ in_pcbnotifyall(struct inpcbtable *table, struct in_addr faddr, int errno,
 }
 
 void
-in_purgeifmcast(struct ip_moptions *imo, struct ifnet *ifp)
-{
-	int i, gap;
-
-	if (imo == NULL)
-		return;
-
-	/*
-	 * Unselect the outgoing interface if it is being
-	 * detached.
-	 */
-	if (imo->imo_multicast_ifp == ifp)
-		imo->imo_multicast_ifp = NULL;
-
-	/*
-	 * Drop multicast group membership if we joined
-	 * through the interface being detached.
-	 */
-	for (i = 0, gap = 0; i < imo->imo_num_memberships; i++) {
-		if (imo->imo_membership[i]->inm_ifp == ifp) {
-			in_delmulti(imo->imo_membership[i]);
-			gap++;
-		} else if (gap != 0)
-			imo->imo_membership[i - gap] = imo->imo_membership[i];
-	}
-	imo->imo_num_memberships -= gap;
-}
-
-void
 in_pcbpurgeif0(struct inpcbtable *table, struct ifnet *ifp)
 {
 	struct inpcb_hdr *inph, *ninph;
+	struct ip_moptions *imo;
+	int i, gap;
 
 	TAILQ_FOREACH_SAFE(inph, &table->inpt_queue, inph_queue, ninph) {
 		struct inpcb *inp = (struct inpcb *)inph;
 		if (inp->inp_af != AF_INET)
 			continue;
-		in_purgeifmcast(inp->inp_moptions, ifp);
+		imo = inp->inp_moptions;
+		if (imo != NULL) {
+			/*
+			 * Unselect the outgoing interface if it is being
+			 * detached.
+			 */
+			if (imo->imo_multicast_ifp == ifp)
+				imo->imo_multicast_ifp = NULL;
+
+			/*
+			 * Drop multicast group membership if we joined
+			 * through the interface being detached.
+			 */
+			for (i = 0, gap = 0; i < imo->imo_num_memberships;
+			    i++) {
+				if (imo->imo_membership[i]->inm_ifp == ifp) {
+					in_delmulti(imo->imo_membership[i]);
+					gap++;
+				} else if (gap != 0)
+					imo->imo_membership[i - gap] =
+					    imo->imo_membership[i];
+			}
+			imo->imo_num_memberships -= gap;
+		}
 	}
 }
 

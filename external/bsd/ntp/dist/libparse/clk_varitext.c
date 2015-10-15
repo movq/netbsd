@@ -1,4 +1,4 @@
-/*	$NetBSD: clk_varitext.c,v 1.4 2015/07/10 14:20:32 christos Exp $	*/
+/*	$NetBSD: clk_varitext.c,v 1.1.1.1.26.2 2015/04/23 18:53:02 snj Exp $	*/
 
 #ifdef HAVE_CONFIG_H
 # include <config.h>

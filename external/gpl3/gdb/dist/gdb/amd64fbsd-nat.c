@@ -1,6 +1,6 @@
 /* Native-dependent code for FreeBSD/amd64.
 
-   Copyright (C) 2003-2015 Free Software Foundation, Inc.
+   Copyright (C) 2003-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,7 +22,9 @@
 #include "regcache.h"
 #include "target.h"
 
+#include "gdb_assert.h"
 #include <signal.h>
+#include <stddef.h>
 #include <sys/types.h>
 #include <sys/ptrace.h>
 #include <sys/sysctl.h>
@@ -32,7 +34,7 @@
 #include "amd64-tdep.h"
 #include "amd64-nat.h"
 #include "amd64bsd-nat.h"
-#include "x86-nat.h"
+#include "i386-nat.h"
 
 
 /* Offset in `struct reg' where MEMBER is stored.  */
@@ -145,7 +147,7 @@ static void
 amd64fbsd_mourn_inferior (struct target_ops *ops)
 {
 #ifdef HAVE_PT_GETDBREGS
-  x86_cleanup_dregs ();
+  i386_cleanup_dregs ();
 #endif
   super_mourn_inferior (ops);
 }
@@ -167,14 +169,14 @@ _initialize_amd64fbsd_nat (void)
 
 #ifdef HAVE_PT_GETDBREGS
 
-  x86_use_watchpoints (t);
+  i386_use_watchpoints (t);
 
-  x86_dr_low.set_control = amd64bsd_dr_set_control;
-  x86_dr_low.set_addr = amd64bsd_dr_set_addr;
-  x86_dr_low.get_addr = amd64bsd_dr_get_addr;
-  x86_dr_low.get_status = amd64bsd_dr_get_status;
-  x86_dr_low.get_control = amd64bsd_dr_get_control;
-  x86_set_debug_register_length (8);
+  i386_dr_low.set_control = amd64bsd_dr_set_control;
+  i386_dr_low.set_addr = amd64bsd_dr_set_addr;
+  i386_dr_low.get_addr = amd64bsd_dr_get_addr;
+  i386_dr_low.get_status = amd64bsd_dr_get_status;
+  i386_dr_low.get_control = amd64bsd_dr_get_control;
+  i386_set_debug_register_length (8);
 
 #endif /* HAVE_PT_GETDBREGS */
 
@@ -183,6 +185,7 @@ _initialize_amd64fbsd_nat (void)
 
   t->to_pid_to_exec_file = fbsd_pid_to_exec_file;
   t->to_find_memory_regions = fbsd_find_memory_regions;
+  t->to_make_corefile_notes = fbsd_make_corefile_notes;
   add_target (t);
 
   /* Support debugging kernel virtual memory images.  */

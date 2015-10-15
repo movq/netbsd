@@ -1,4 +1,4 @@
-/* $NetBSD: if_ti.c,v 1.95 2015/07/25 08:36:44 maxv Exp $ */
+/* $NetBSD: if_ti.c,v 1.93.4.1 2015/08/04 21:14:49 snj Exp $ */
 
 /*
  * Copyright (c) 1997, 1998, 1999
@@ -81,7 +81,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ti.c,v 1.95 2015/07/25 08:36:44 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ti.c,v 1.93.4.1 2015/08/04 21:14:49 snj Exp $");
 
 #include "opt_inet.h"
 

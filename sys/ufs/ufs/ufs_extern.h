@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_extern.h,v 1.79 2015/03/27 17:27:56 riastradh Exp $	*/
+/*	$NetBSD: ufs_extern.h,v 1.75.2.1 2015/01/28 18:34:11 martin Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -184,10 +184,10 @@ int	ufs_fhtovp(struct mount *, struct ufid *, struct vnode **);
 /* ufs_vnops.c */
 void	ufs_vinit(struct mount *, int (**)(void *),
 		  int (**)(void *), struct vnode **);
+int	ufs_makeinode(int, struct vnode *, const struct ufs_lookup_results *,
+		      struct vnode **, struct componentname *);
 int	ufs_gop_alloc(struct vnode *, off_t, off_t, int, kauth_cred_t);
 void	ufs_gop_markupdate(struct vnode *, int);
-int	ufs_bufio(enum uio_rw, struct vnode *, void *, size_t, off_t, int,
-	    kauth_cred_t, size_t *, struct lwp *);
 
 __END_DECLS
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: screen.c,v 1.30 2015/07/07 22:53:25 nat Exp $	*/
+/*	$NetBSD: screen.c,v 1.29.2.1 2015/07/17 03:39:35 snj Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993

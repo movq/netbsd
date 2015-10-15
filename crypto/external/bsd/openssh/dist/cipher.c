@@ -1,4 +1,4 @@
-/*	$NetBSD: cipher.c,v 1.7 2015/04/03 23:58:19 christos Exp $	*/
+/*	$NetBSD: cipher.c,v 1.5.4.1 2015/04/30 06:07:30 riz Exp $	*/
 /* $OpenBSD: cipher.c,v 1.100 2015/01/14 10:29:45 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -37,7 +37,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: cipher.c,v 1.7 2015/04/03 23:58:19 christos Exp $");
+__RCSID("$NetBSD: cipher.c,v 1.5.4.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/types.h>
 
 #include <string.h>

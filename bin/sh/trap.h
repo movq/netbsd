@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.h,v 1.22 2015/08/22 12:12:47 christos Exp $	*/
+/*	$NetBSD: trap.h,v 1.20 2012/03/15 02:02:20 joerg Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -34,7 +34,7 @@
  *	@(#)trap.h	8.3 (Berkeley) 6/5/95
  */
 
-extern volatile int pendingsigs;
+extern int pendingsigs;
 
 void clear_traps(int);
 sig_t setsignal(int, int);
@@ -43,4 +43,3 @@ void onsig(int);
 void dotrap(void);
 void setinteractive(int);
 void exitshell(int) __dead;
-int lastsig(void);

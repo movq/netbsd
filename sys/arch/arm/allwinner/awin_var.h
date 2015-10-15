@@ -1,4 +1,4 @@
-/* $NetBSD: awin_var.h,v 1.35 2015/04/20 01:33:22 matt Exp $ */
+/* $NetBSD: awin_var.h,v 1.10.2.6 2014/11/25 08:03:06 snj Exp $ */
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -47,7 +47,6 @@ struct awin_locators {
 	int loc_flags;
 #define	AWINIO_REQUIRED		__BIT(8)
 #define	AWINIO_ONLY		__BITS(7,0)
-#define	AWINIO_ONLY_A80		__BIT(3)
 #define	AWINIO_ONLY_A31		__BIT(2)
 #define	AWINIO_ONLY_A20		__BIT(1)
 #define	AWINIO_ONLY_A10		__BIT(0)
@@ -59,9 +58,6 @@ struct awinio_attach_args {
 	bus_space_tag_t aio_core_a4x_bst;
 	bus_space_handle_t aio_core_bsh;
 	bus_space_handle_t aio_ccm_bsh;
-	bus_space_handle_t aio_a80_usb_bsh;
-	bus_space_handle_t aio_a80_core2_bsh;
-	bus_space_handle_t aio_a80_rcpus_bsh;
 	bus_dma_tag_t aio_dmat;
 	bus_dma_tag_t aio_coherent_dmat;
 };
@@ -90,13 +86,9 @@ struct awin_gpio_pindata {
 
 struct awin_dma_channel;
 
-extern struct bus_space armv7_generic_bs_tag;
-extern struct bus_space armv7_generic_a4x_bs_tag;
+extern struct bus_space awin_bs_tag;
+extern struct bus_space awin_a4x_bs_tag;
 extern bus_space_handle_t awin_core_bsh;
-#if defined(ALLWINNER_A80)
-extern bus_space_handle_t awin_core2_bsh;
-extern bus_space_handle_t awin_rcpus_bsh;
-#endif
 extern struct arm32_bus_dma_tag awin_dma_tag;
 extern struct arm32_bus_dma_tag awin_coherent_dma_tag;
 
@@ -110,7 +102,6 @@ void	awin_pll7_enable(void);
 void	awin_pll3_set_rate(uint32_t);
 uint32_t awin_pll5x_get_rate(void);
 uint32_t awin_pll6_get_rate(void);
-uint32_t awin_periph0_get_rate(void);
 void	awin_cpu_hatch(struct cpu_info *);
 
 #define AWIN_CHIP_ID_A10	AWIN_SRAM_VER_KEY_A10
@@ -118,7 +109,6 @@ void	awin_cpu_hatch(struct cpu_info *);
 #define AWIN_CHIP_ID_A31	AWIN_SRAM_VER_KEY_A31
 #define AWIN_CHIP_ID_A23	AWIN_SRAM_VER_KEY_A23
 #define AWIN_CHIP_ID_A20	AWIN_SRAM_VER_KEY_A20
-#define AWIN_CHIP_ID_A80	AWIN_SRAM_VER_KEY_A80
 uint16_t awin_chip_id(void);
 const char *awin_chip_name(void);
 
@@ -143,8 +133,6 @@ void	awin_tcon_enable(bool);
 void	awin_debe_set_videomode(const struct videomode *);
 void	awin_debe_enable(bool);
 int	awin_debe_ioctl(device_t, u_long, void *);
-int	awin_mp_ioctl(device_t, u_long, void *);
-void	awin_mp_setbase(device_t, paddr_t, size_t);
 
 struct awin_hdmi_info {
 	bool	display_connected;

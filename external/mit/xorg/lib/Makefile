@@ -1,24 +1,15 @@
-#	$NetBSD: Makefile,v 1.36 2015/10/13 04:33:21 mrg Exp $
+#	$NetBSD: Makefile,v 1.29.2.2 2015/03/03 08:28:12 snj Exp $
 
 # build libraries for xorg
-
-.include <bsd.own.mk>
 
 SUBDIR=	libfontenc freetype libFS libICE libglapi \
 	libXau libXdmcp libdrm libpciaccess libpthread-stubs .WAIT
 .if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64"
-SUBDIR+=libdrm_intel libdrm_nouveau
+SUBDIR+=libdrm_intel
 .endif
-SUBDIR+=libdrm_radeon pixman
-.if !defined(MLIBDIR)
-SUBDIR+=xkeyboard-config
-.endif
-SUBDIR+=libxcb \
+SUBDIR+=libdrm_radeon pixman xkeyboard-config libxcb \
 	.WAIT
-.if !defined(MLIBDIR)
-SUBDIR+=dri7 dri gallium
-.endif
-SUBDIR+=fontconfig libSM libX11 \
+SUBDIR+=dri7 dri gallium fontconfig libSM libX11 \
 	.WAIT \
 	libXcomposite libXdamage libXext libXfixes libXt \
 	libxkbfile \
@@ -39,11 +30,9 @@ SUBDIR+=libchromeXvMCPro
 SUBDIR+=libGLU libGLw libXaw6 libXaw libXcursor \
 	libXrandr \
 	.WAIT \
-	libXpresent libXft libglut \
+	libXft libglut \
 	.WAIT \
 	libXdmGreet \
 	xcb-util
-SUBDIR+=libgbm
 
-.include <bsd.buildinstall.mk>
 .include <bsd.subdir.mk>

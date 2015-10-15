@@ -1,4 +1,4 @@
-/*	$NetBSD: tip.c,v 1.58 2015/06/17 01:38:02 christos Exp $	*/
+/*	$NetBSD: tip.c,v 1.55 2014/07/27 04:32:23 dholland Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1993\
 #if 0
 static char sccsid[] = "@(#)tip.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: tip.c,v 1.58 2015/06/17 01:38:02 christos Exp $");
+__RCSID("$NetBSD: tip.c,v 1.55 2014/07/27 04:32:23 dholland Exp $");
 #endif /* not lint */
 
 /*
@@ -87,11 +87,13 @@ main(int argc, char *argv[])
 		goto cucommon;
 	}
 
-	if (argc > 4)
+	if (argc > 4) {
 		tipusage();
-
-	if (!isatty(0))
-		errx(EXIT_FAILURE, "must be interactive");
+	}
+	if (!isatty(0)) {
+		(void)fprintf(stderr, "%s: must be interactive\n", getprogname());
+		exit(1);
+	}
 
 	cmdlineBR = 0;
 	while((c = getopt(argc, argv, "v0123456789")) != -1) {
@@ -149,10 +151,11 @@ notnumber:
 	(void)signal(SIGTERM, cleanup);
 
 	if ((i = hunt(System)) == 0) {
-		errx(3, "all ports busy");
+		(void)printf("all ports busy\n");
+		exit(3);
 	}
 	if (i == -1) {
-		errx(3, "link down");
+		errx(3, "link down\n");
 	}
 	setbuf(stdout, NULL);
 
@@ -177,7 +180,7 @@ notnumber:
 		}
 	}
 	if ((q = tip_connect()) != NULL) {
-		errx(1, "\07%s\n[EOT]", q);
+		errx(1, "\07%s\n[EOT]\n", q);
 	}
 	if (!HW) {
 		if (ttysetup((speed_t)number(value(BAUDRATE))) != 0) {
@@ -261,7 +264,7 @@ cleanup(int dummy __unused)
 
 	if (odisc)
 		(void)ioctl(0, TIOCSETD, &odisc);
-	_exit(0);
+	exit(0);
 }
 
 /*

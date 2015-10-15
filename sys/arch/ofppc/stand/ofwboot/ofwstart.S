@@ -1,4 +1,4 @@
-/* $NetBSD: ofwstart.S,v 1.4 2014/09/20 23:10:46 phx Exp $ */
+/* $NetBSD: ofwstart.S,v 1.3.62.1 2014/09/22 11:13:17 martin Exp $ */
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.

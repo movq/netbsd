@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.21 2014/10/08 05:44:03 msaitoh Exp $
+#	$NetBSD: Makefile.inc,v 1.18.4.1 2015/01/25 09:11:03 martin Exp $
 
 .PATH: ${.CURDIR}/time
 

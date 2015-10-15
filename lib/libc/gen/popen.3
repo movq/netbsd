@@ -1,4 +1,4 @@
-.\"	$NetBSD: popen.3,v 1.20 2015/01/21 08:35:31 wiz Exp $
+.\"	$NetBSD: popen.3,v 1.18 2011/06/27 08:21:07 wiz Exp $
 .\"
 .\" Copyright (c) 1991, 1993
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,12 +29,11 @@
 .\"
 .\"     @(#)popen.3	8.2 (Berkeley) 5/3/95
 .\"
-.Dd January 19, 2015
+.Dd June 24, 2011
 .Dt POPEN 3
 .Os
 .Sh NAME
 .Nm popen ,
-.Nm popenve ,
 .Nm pclose
 .Nd process
 .Tn I/O
@@ -44,8 +43,6 @@
 .In stdio.h
 .Ft FILE *
 .Fn popen "const char *command" "const char *type"
-.Ft FILE *
-.Fn popenve "const char *path" "char * const *argv" "char * const *envp" "const char *type"
 .Ft int
 .Fn pclose "FILE *stream"
 .Sh DESCRIPTION
@@ -96,19 +93,8 @@ using the
 .Fl c
 flag; interpretation, if any, is performed by the shell.
 .Pp
-The
-.Fn popenve
-function is similar to
-.Fn popen
-but the first three arguments are passed
-to
-.Xr execve 2
-and there is no shell involved in the command invocation.
-.Pp
 The return value from
 .Fn popen
-and
-.Fn popenve
 is a normal standard
 .Tn I/O
 stream in all respects
@@ -143,13 +129,12 @@ The
 function returns
 .Dv NULL
 if the
-.Xr vfork 2 ,
+.Xr fork 2 ,
 .Xr pipe 2 ,
 or
 .Xr socketpair 2
 calls fail,
-or if it cannot allocate memory, preserving
-the errno from those functions.
+or if it cannot allocate memory.
 .Pp
 The
 .Fn pclose
@@ -162,15 +147,16 @@ command, if
 .Fa stream
 has already been
 .Dq pclosed ,
-setting errno to
-.Dv ESRCH
 or if
 .Xr wait4 2
-returns an error, preserving the errno returned by
-.Xr wait4 2 .
+returns an error.
+.Sh ERRORS
+The
+.Fn popen
+function does not reliably set
+.Va errno .
 .Sh SEE ALSO
 .Xr sh 1 ,
-.Xr execve 2 ,
 .Xr fork 2 ,
 .Xr pipe 2 ,
 .Xr socketpair 2 ,
@@ -220,8 +206,3 @@ always calls
 .Xr sh 1 ,
 never calls
 .Xr csh 1 .
-.Pp
-The
-.Fn popenve
-function first appeared in
-.Nx 8 .

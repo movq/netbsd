@@ -1,4 +1,4 @@
-.\"	$NetBSD: hardware,v 1.5 2015/05/19 19:30:28 snj Exp $
+.\"	$NetBSD: hardware,v 1.4.64.1 2015/05/24 11:14:45 martin Exp $
 .
 .Pp
 The minimum configuration requires 16 MB of RAM and 150 MB of disk space.

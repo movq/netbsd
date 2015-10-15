@@ -1,4 +1,4 @@
-/* $NetBSD: t_exp.c,v 1.8 2014/10/07 16:53:44 gson Exp $ */
+/* $NetBSD: t_exp.c,v 1.7.4.1 2014/12/07 14:32:03 martin Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.

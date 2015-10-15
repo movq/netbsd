@@ -1,4 +1,4 @@
-/*	$NetBSD: postconf_master.c,v 1.4 2015/02/21 12:00:48 tron Exp $	*/
+/*	$NetBSD: postconf_master.c,v 1.3.2.1 2015/03/03 07:11:08 snj Exp $	*/
 
 /*++
 /* NAME

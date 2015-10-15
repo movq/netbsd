@@ -1,4 +1,4 @@
-/*	$NetBSD: lua-bozo.c,v 1.12 2015/07/04 22:39:23 christos Exp $	*/
+/*	$NetBSD: lua-bozo.c,v 1.10.2.1 2015/01/12 10:02:29 martin Exp $	*/
 
 /*
  * Copyright (c) 2013 Marc Balmer <marc@msys.ch>
@@ -311,38 +311,41 @@ bozo_process_lua(bozo_httpreq_t *request)
 	if (!httpd->process_lua)
 		return 0;
 
-	info = NULL;
-	query = NULL;
-	prefix = NULL;
 	uri = request->hr_oldfile ? request->hr_oldfile : request->hr_file;
 
 	if (*uri == '/') {
 		file = bozostrdup(httpd, uri);
-		if (file == NULL)
-			goto out;
 		prefix = bozostrdup(httpd, &uri[1]);
 	} else {
-		if (asprintf(&file, "/%s", uri) < 0)
-			goto out;
 		prefix = bozostrdup(httpd, uri);
+		asprintf(&file, "/%s", uri);
 	}
-	if (prefix == NULL)
-		goto out;
+	if (file == NULL) {
+		free(prefix);
+		return 0;
+	}
 
-	if (request->hr_query && request->hr_query[0])
+	if (request->hr_query && strlen(request->hr_query))
 		query = bozostrdup(httpd, request->hr_query);
+	else
+		query = NULL;
 
 	p = strchr(prefix, '/');
-	if (p == NULL)
-		goto out;
+	if (p == NULL){
+		free(prefix);
+		return 0;
+	}
 	*p++ = '\0';
 	handler = p;
-	if (!*handler)
-		goto out;
+	if (!*handler) {
+		free(prefix);
+		return 0;
+	}
 	p = strchr(handler, '/');
 	if (p != NULL)
 		*p++ = '\0';
 
+	info = NULL;
 	command = file + 1;
 	if ((s = strchr(command, '/')) != NULL) {
 		info = bozostrdup(httpd, s);

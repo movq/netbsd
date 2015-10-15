@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,9 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
+
+#define __EXCONVRT_C__
 
 #include "acpi.h"
 #include "accommon.h"
@@ -251,7 +254,7 @@ AcpiExConvertToBuffer (
         /* Copy the integer to the buffer, LSB first */
 
         NewBuf = ReturnDesc->Buffer.Pointer;
-        memcpy (NewBuf,
+        ACPI_MEMCPY (NewBuf,
                         &ObjDesc->Integer.Value,
                         AcpiGbl_IntegerByteWidth);
         break;
@@ -276,7 +279,7 @@ AcpiExConvertToBuffer (
         /* Copy the string to the buffer */
 
         NewBuf = ReturnDesc->Buffer.Pointer;
-        strncpy ((char *) NewBuf, (char *) ObjDesc->String.Pointer,
+        ACPI_STRNCPY ((char *) NewBuf, (char *) ObjDesc->String.Pointer,
             ObjDesc->String.Length);
         break;
 

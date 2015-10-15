@@ -1,4 +1,4 @@
-/*	$NetBSD: plcom.c,v 1.52 2015/04/13 21:18:41 riastradh Exp $	*/
+/*	$NetBSD: plcom.c,v 1.50 2014/08/10 16:44:34 tls Exp $	*/
 
 /*-
  * Copyright (c) 2001 ARM Ltd
@@ -94,13 +94,15 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: plcom.c,v 1.52 2015/04/13 21:18:41 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: plcom.c,v 1.50 2014/08/10 16:44:34 tls Exp $");
 
 #include "opt_plcom.h"
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 #include "opt_lockdebug.h"
 #include "opt_multiprocessor.h"
+
+#include "rnd.h"
 
 /*
  * Override cnmagic(9) macro before including <sys/systm.h>.
@@ -134,7 +136,7 @@ __KERNEL_RCSID(0, "$NetBSD: plcom.c,v 1.52 2015/04/13 21:18:41 riastradh Exp $")
 #include <sys/intr.h>
 #include <sys/bus.h>
 #ifdef RND_COM
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 #endif
 
 #include <evbarm/dev/plcomreg.h>
@@ -243,10 +245,11 @@ int	plcom_kgdb_getc (void *);
 void	plcom_kgdb_putc (void *, int);
 #endif /* KGDB */
 
-#define	PLCOMDIALOUT_MASK	TTDIALOUT_MASK
+#define	PLCOMUNIT_MASK		0x7ffff
+#define	PLCOMDIALOUT_MASK	0x80000
 
-#define	PLCOMUNIT(x)	TTUNIT(x)
-#define	PLCOMDIALOUT(x)	TTDIALOUT(x)
+#define	PLCOMUNIT(x)	(minor(x) & PLCOMUNIT_MASK)
+#define	PLCOMDIALOUT(x)	(minor(x) & PLCOMDIALOUT_MASK)
 
 #define	PLCOM_ISALIVE(sc)	((sc)->enabled != 0 && \
 				 device_is_active((sc)->sc_dev))

@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.56 2015/04/03 01:04:23 riastradh Exp $	*/
+/*	$NetBSD: pmap.h,v 1.55.4.1 2015/04/23 07:31:16 snj Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.

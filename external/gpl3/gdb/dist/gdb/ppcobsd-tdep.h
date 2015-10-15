@@ -1,6 +1,6 @@
 /* Target-dependent code for OpenBSD/powerpc.
 
-   Copyright (C) 2004-2015 Free Software Foundation, Inc.
+   Copyright (C) 2004-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,6 +20,8 @@
 #ifndef PPCOBSD_TDEP_H
 #define PPCOBSD_TDEP_H
 
+#include <stddef.h>
+
 struct regset;
 struct regcache;
 
@@ -28,8 +30,8 @@ extern struct ppc_reg_offsets ppcobsd_reg_offsets;
 extern struct ppc_reg_offsets ppcobsd_fpreg_offsets;
 
 /* Register sets for OpenBSD/powerpc.  */
-extern const struct regset ppcobsd_gregset;
-extern const struct regset ppcobsd_fpregset;
+extern struct regset ppcobsd_gregset;
+extern struct regset ppcobsd_fpregset;
 
 
 /* Supply register REGNUM in the general-purpose register set REGSET

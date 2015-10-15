@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_prot.c,v 1.119 2015/08/24 22:50:32 pooka Exp $	*/
+/*	$NetBSD: kern_prot.c,v 1.117 2013/11/25 16:28:20 rmind Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1990, 1991, 1993
@@ -41,11 +41,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_prot.c,v 1.119 2015/08/24 22:50:32 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_prot.c,v 1.117 2013/11/25 16:28:20 rmind Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_compat_43.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/acct.h>
@@ -592,7 +590,7 @@ sys___getlogin(struct lwp *l, const struct sys___getlogin_args *uap, register_t 
 	} */
 	struct proc *p = l->l_proc;
 	char login[sizeof(p->p_session->s_login)];
-	size_t namelen = SCARG(uap, namelen);
+	int namelen = SCARG(uap, namelen);
 
 	if (namelen > sizeof(login))
 		namelen = sizeof(login);

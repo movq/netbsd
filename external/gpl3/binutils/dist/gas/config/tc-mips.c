@@ -9235,28 +9235,18 @@ macro (struct mips_cl_insn *ip)
 
 	
     case M_SAA_AB:
-      ab = (offset_expr.X_op != O_constant || offset_expr.X_add_number != 0);
+      ab = 1;
     case M_SAA_OB:
       s = "saa";
       off0 = 1;
       fmt = "t,(b)";
-      if (!ab)
-	{
-	  tempreg = AT;
-	  goto ld_noat;
-	}
       goto ld_st;
     case M_SAAD_AB:
-      ab = (offset_expr.X_op != O_constant || offset_expr.X_add_number != 0);
+      ab = 1;
     case M_SAAD_OB:
       s = "saad";
       off0 = 1;
       fmt = "t,(b)";
-      if (!ab)
-	{
-	  tempreg = AT;
-	  goto ld_noat;
-	}
       goto ld_st;
 
    /* New code added to support COPZ instructions.

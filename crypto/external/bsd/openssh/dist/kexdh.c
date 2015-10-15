@@ -1,4 +1,4 @@
-/*	$NetBSD: kexdh.c,v 1.4 2015/04/03 23:58:19 christos Exp $	*/
+/*	$NetBSD: kexdh.c,v 1.2.26.1 2015/04/30 06:07:30 riz Exp $	*/
 /* $OpenBSD: kexdh.c,v 1.25 2015/01/19 20:16:15 markus Exp $ */
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
@@ -25,7 +25,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: kexdh.c,v 1.4 2015/04/03 23:58:19 christos Exp $");
+__RCSID("$NetBSD: kexdh.c,v 1.2.26.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/types.h>
 
 #include <signal.h>

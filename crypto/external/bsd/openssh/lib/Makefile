@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.17 2015/04/03 23:58:19 christos Exp $
+#	$NetBSD: Makefile,v 1.13.4.1 2015/04/30 06:07:31 riz Exp $
 
 .include <bsd.own.mk>
 
@@ -60,6 +60,7 @@ packet.c \
 poly1305.c \
 progressmeter.c \
 readpass.c \
+reallocarray.c \
 roaming_dummy.c \
 rsa.c \
 sc25519.c \
@@ -72,6 +73,7 @@ ssherr.c \
 sshkey.c \
 ssh-ed25519.c \
 ssh-pkcs11.c \
+strtonum.c \
 ttymodes.c \
 uidswap.c \
 umac.c \

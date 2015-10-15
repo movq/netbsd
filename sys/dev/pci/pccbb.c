@@ -1,4 +1,4 @@
-/*	$NetBSD: pccbb.c,v 1.208 2015/03/26 20:13:28 nakayama Exp $	*/
+/*	$NetBSD: pccbb.c,v 1.206.4.1 2014/12/01 11:38:42 martin Exp $	*/
 
 /*
  * Copyright (c) 1998, 1999 and 2000
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pccbb.c,v 1.208 2015/03/26 20:13:28 nakayama Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pccbb.c,v 1.206.4.1 2014/12/01 11:38:42 martin Exp $");
 
 /*
 #define CBB_DEBUG
@@ -556,9 +556,9 @@ pccbbdetach(device_t self, int flags)
 	sc->sc_flags &= ~(CBB_MEMHMAPPED|CBB_SPECMAPPED);
 
 	if (!TAILQ_EMPTY(&sc->sc_iowindow))
-		aprint_error_dev(self, "i/o windows not empty\n");
+		aprint_error_dev(self, "i/o windows not empty");
 	if (!TAILQ_EMPTY(&sc->sc_memwindow))
-		aprint_error_dev(self, "memory windows not empty\n");
+		aprint_error_dev(self, "memory windows not empty");
 
 	callout_halt(&sc->sc_insert_ch, NULL);
 	callout_destroy(&sc->sc_insert_ch);

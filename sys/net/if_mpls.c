@@ -1,4 +1,4 @@
-/*	$NetBSD: if_mpls.c,v 1.19 2015/08/24 22:21:26 pooka Exp $ */
+/*	$NetBSD: if_mpls.c,v 1.16 2014/07/17 10:46:57 bouyer Exp $ */
 
 /*
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -30,12 +30,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_mpls.c,v 1.19 2015/08/24 22:21:26 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_mpls.c,v 1.16 2014/07/17 10:46:57 bouyer Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
 #include "opt_mpls.h"
-#endif
 
 #include <sys/param.h>
 
@@ -55,7 +53,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_mpls.c,v 1.19 2015/08/24 22:21:26 pooka Exp $");
 #include <netinet/in_systm.h>
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
-#include <netinet/ip_var.h>
 #endif
 
 #ifdef INET6
@@ -69,8 +66,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_mpls.c,v 1.19 2015/08/24 22:21:26 pooka Exp $");
 
 #include "if_mpls.h"
 
-#include "ioconf.h"
-
 #define TRIM_LABEL do { \
 	m_adj(m, sizeof(union mpls_shim)); \
 	if (m->m_len < sizeof(union mpls_shim) && \
@@ -79,6 +74,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_mpls.c,v 1.19 2015/08/24 22:21:26 pooka Exp $");
 	dst.smpls_addr.s_addr = ntohl(mtod(m, union mpls_shim *)->s_addr); \
 	} while (/* CONSTCOND */ 0)
 
+
+void ifmplsattach(int);
 
 static int mpls_clone_create(struct if_clone *, int);
 static int mpls_clone_destroy(struct ifnet *);
@@ -472,13 +469,9 @@ mpls_send_frame(struct mbuf *m, struct ifnet *ifp, struct rtentry *rt)
 	case IFT_ETHER:
 	case IFT_TUNNEL:
 	case IFT_LOOP:
-#ifdef INET
-		ret = ip_hresolv_output(ifp, m, rt->rt_gateway, rt);
-#else
 		KERNEL_LOCK(1, NULL);
 		ret =  (*ifp->if_output)(ifp, m, rt->rt_gateway, rt);
 		KERNEL_UNLOCK_ONE(NULL);
-#endif
 		return ret;
 		break;
 	default:

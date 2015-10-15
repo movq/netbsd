@@ -1,4 +1,4 @@
-/*	$NetBSD: wd.c,v 1.420 2015/04/26 15:15:20 mlelstv Exp $ */
+/*	$NetBSD: wd.c,v 1.412.2.1 2014/11/11 10:36:41 martin Exp $ */
 
 /*
  * Copyright (c) 1998, 2001 Manuel Bouyer.  All rights reserved.
@@ -54,7 +54,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wd.c,v 1.420 2015/04/26 15:15:20 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wd.c,v 1.412.2.1 2014/11/11 10:36:41 martin Exp $");
 
 #include "opt_ata.h"
 
@@ -76,7 +76,7 @@ __KERNEL_RCSID(0, "$NetBSD: wd.c,v 1.420 2015/04/26 15:15:20 mlelstv Exp $");
 #include <sys/proc.h>
 #include <sys/reboot.h>
 #include <sys/vnode.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <sys/intr.h>
 #include <sys/bus.h>
@@ -194,7 +194,7 @@ void  wdstart(void *);
 void  wdstart1(struct wd_softc*, struct buf *);
 void  wdrestart(void *);
 void  wddone(void *);
-int   wd_get_params(struct wd_softc *, uint8_t, struct ataparams *);
+int   wd_get_params(struct wd_softc *, u_int8_t, struct ataparams *);
 int   wd_flushcache(struct wd_softc *, int);
 int   wd_trim(struct wd_softc *, int, daddr_t, long);
 bool  wd_shutdown(device_t, int);
@@ -202,10 +202,7 @@ bool  wd_shutdown(device_t, int);
 int   wd_getcache(struct wd_softc *, int *);
 int   wd_setcache(struct wd_softc *, int);
 
-struct dkdriver wddkdriver = {
-	.d_strategy = wdstrategy,
-	.d_minphys = wdminphys
-};
+struct dkdriver wddkdriver = { wdstrategy, wdminphys };
 
 #ifdef HAS_BAD144_HANDLING
 static void bad144intern(struct wd_softc *);
@@ -371,10 +368,10 @@ wdattach(device_t parent, device_t self, void *aux)
 	if ((wd->sc_flags & WDF_LBA48) != 0) {
 		aprint_verbose(" LBA48 addressing\n");
 		wd->sc_capacity =
-		    ((uint64_t) wd->sc_params.atap_max_lba[3] << 48) |
-		    ((uint64_t) wd->sc_params.atap_max_lba[2] << 32) |
-		    ((uint64_t) wd->sc_params.atap_max_lba[1] << 16) |
-		    ((uint64_t) wd->sc_params.atap_max_lba[0] <<  0);
+		    ((u_int64_t) wd->sc_params.atap_max_lba[3] << 48) |
+		    ((u_int64_t) wd->sc_params.atap_max_lba[2] << 32) |
+		    ((u_int64_t) wd->sc_params.atap_max_lba[1] << 16) |
+		    ((u_int64_t) wd->sc_params.atap_max_lba[0] <<  0);
 		wd->sc_capacity28 =
 		    (wd->sc_params.atap_capacity[1] << 16) |
 		    wd->sc_params.atap_capacity[0];
@@ -1070,9 +1067,9 @@ wdgetdefaultlabel(struct wd_softc *wd, struct disklabel *lp)
 	lp->d_secpercyl = lp->d_ntracks * lp->d_nsectors;
 
 	if (strcmp(wd->sc_params.atap_model, "ST506") == 0)
-		lp->d_type = DKTYPE_ST506;
+		lp->d_type = DTYPE_ST506;
 	else
-		lp->d_type = DKTYPE_ESDI;
+		lp->d_type = DTYPE_ESDI;
 
 	strncpy(lp->d_typename, wd->sc_params.atap_model, 16);
 	strncpy(lp->d_packname, "fictitious", 16);
@@ -1085,7 +1082,8 @@ wdgetdefaultlabel(struct wd_softc *wd, struct disklabel *lp)
 	lp->d_flags = 0;
 
 	lp->d_partitions[RAW_PART].p_offset = 0;
-	lp->d_partitions[RAW_PART].p_size = lp->d_secperunit;
+	lp->d_partitions[RAW_PART].p_size =
+	    lp->d_secperunit * (lp->d_secsize / DEV_BSIZE);
 	lp->d_partitions[RAW_PART].p_fstype = FS_UNUSED;
 	lp->d_npartitions = RAW_PART + 1;
 
@@ -1205,9 +1203,9 @@ wdioctl(dev_t dev, u_long xfer, void *addr, int flag, struct lwp *l)
 	if ((wd->sc_flags & WDF_LOADED) == 0)
 		return EIO;
 
-	error = disk_ioctl(&wd->sc_dk, dev, xfer, addr, flag, l);
+	error = disk_ioctl(&wd->sc_dk, xfer, addr, flag, l);
 	if (error != EPASSTHROUGH)
-		return error;
+		return (error);
 
 	error = 0;
 	switch (xfer) {
@@ -1223,7 +1221,7 @@ wdioctl(dev_t dev, u_long xfer, void *addr, int flag, struct lwp *l)
 #ifdef WD_SOFTBADSECT
 	case DIOCBSLIST :
 	{
-		uint32_t count, missing, skip;
+		u_int32_t count, missing, skip;
 		struct disk_badsecinfo dbsi;
 		struct disk_badsectors *dbs;
 		size_t available;
@@ -1275,6 +1273,28 @@ wdioctl(dev_t dev, u_long xfer, void *addr, int flag, struct lwp *l)
 		wd->sc_bscount = 0;
 		return 0;
 #endif
+	case DIOCGDINFO:
+		*(struct disklabel *)addr = *(wd->sc_dk.dk_label);
+		return 0;
+#ifdef __HAVE_OLD_DISKLABEL
+	case ODIOCGDINFO:
+		newlabel = malloc(sizeof *newlabel, M_TEMP, M_WAITOK);
+		if (newlabel == NULL)
+			return EIO;
+		*newlabel = *(wd->sc_dk.dk_label);
+		if (newlabel->d_npartitions <= OLDMAXPARTITIONS)
+			memcpy(addr, newlabel, sizeof (struct olddisklabel));
+		else
+			error = ENOTTY;
+		free(newlabel, M_TEMP);
+		return error;
+#endif
+
+	case DIOCGPART:
+		((struct partinfo *)addr)->disklab = wd->sc_dk.dk_label;
+		((struct partinfo *)addr)->part =
+		    &wd->sc_dk.dk_label->d_partitions[WDPART(dev)];
+		return 0;
 
 	case DIOCWDINFO:
 	case DIOCSDINFO:
@@ -1459,6 +1479,46 @@ wdioctl(dev_t dev, u_long xfer, void *addr, int flag, struct lwp *l)
 		wi_free(wi);
 		return(error1);
 		}
+
+	case DIOCAWEDGE:
+	    {
+	    	struct dkwedge_info *dkw = (void *) addr;
+
+		if ((flag & FWRITE) == 0)
+			return (EBADF);
+
+		/* If the ioctl happens here, the parent is us. */
+		strcpy(dkw->dkw_parent, device_xname(wd->sc_dev));
+		return (dkwedge_add(dkw));
+	    }
+
+	case DIOCDWEDGE:
+	    {
+	    	struct dkwedge_info *dkw = (void *) addr;
+
+		if ((flag & FWRITE) == 0)
+			return (EBADF);
+
+		/* If the ioctl happens here, the parent is us. */
+		strcpy(dkw->dkw_parent, device_xname(wd->sc_dev));
+		return (dkwedge_del(dkw));
+	    }
+
+	case DIOCLWEDGES:
+	    {
+	    	struct dkwedge_list *dkwl = (void *) addr;
+
+		return (dkwedge_list(&wd->sc_dk, dkwl, l));
+	    }
+
+	case DIOCMWEDGES:
+	    {
+	    	if ((flag & FWRITE) == 0)
+			return (EBADF);
+
+		dkwedge_discover(&wd->sc_dk);
+		return 0;
+	    }
 
 	case DIOCGSTRATEGY:
 	    {
@@ -1747,7 +1807,7 @@ wd_params_to_properties(struct wd_softc *wd, struct ataparams *params)
 }
 
 int
-wd_get_params(struct wd_softc *wd, uint8_t flags, struct ataparams *params)
+wd_get_params(struct wd_softc *wd, u_int8_t flags, struct ataparams *params)
 {
 
 	switch (wd->atabus->ata_get_params(wd->drvp, flags, params)) {

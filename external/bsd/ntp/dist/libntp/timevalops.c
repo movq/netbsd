@@ -1,4 +1,4 @@
-/*	$NetBSD: timevalops.c,v 1.3 2015/07/10 14:20:32 christos Exp $	*/
+/*	$NetBSD: timevalops.c,v 1.1.1.1.6.1 2014/12/24 00:05:20 riz Exp $	*/
 
 /*
  * timevalops.c -- calculations on 'struct timeval' values

@@ -1,4 +1,4 @@
-/*	$NetBSD: extern.h,v 1.33 2014/12/16 19:30:24 christos Exp $	*/
+/*	$NetBSD: extern.h,v 1.32.10.1 2015/04/23 19:46:40 snj Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -29,7 +29,7 @@
  * SUCH DAMAGE.
  *
  *	@(#)extern.h	8.2 (Berkeley) 4/20/95
- *	$NetBSD: extern.h,v 1.33 2014/12/16 19:30:24 christos Exp $
+ *	$NetBSD: extern.h,v 1.32.10.1 2015/04/23 19:46:40 snj Exp $
  */
 
 #ifndef __EXTERN_H__

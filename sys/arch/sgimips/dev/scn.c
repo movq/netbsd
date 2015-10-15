@@ -1,4 +1,4 @@
-/*	$NetBSD: scn.c,v 1.8 2015/04/04 14:12:40 macallan Exp $ */
+/*	$NetBSD: scn.c,v 1.7.2.1 2015/05/16 04:06:04 snj Exp $ */
 
 /*
  * Resurrected from the old pc532 port 1/18/2009.
@@ -92,7 +92,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scn.c,v 1.8 2015/04/04 14:12:40 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scn.c,v 1.7.2.1 2015/05/16 04:06:04 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"

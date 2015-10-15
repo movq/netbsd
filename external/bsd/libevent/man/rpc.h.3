@@ -1,4 +1,4 @@
-.TH "event2/rpc.h" 3 "Tue Jan 27 2015" "libevent" \" -*- nroff -*-
+.TH "event2/rpc.h" 3 "Wed Apr 10 2013" "libevent" \" -*- nroff -*-
 .ad l
 .nh
 .SH NAME
@@ -225,7 +225,7 @@ A specific RPC can then be registered with
 .PP
 when the server receives an appropriately formatted RPC, the user callback is invoked\&. The callback needs to fill in the reply structure\&.
 .PP
-void FunctionCB(EVRPC_STRUCT(SendCommand)* rpc, void *arg);
+void FunctionCB(\fBEVRPC_STRUCT(SendCommand)\fP* rpc, void *arg);
 .PP
 To send the reply, call \fBEVRPC_REQUEST_DONE(rpc)\fP;
 .PP
@@ -262,7 +262,7 @@ Generates the code for receiving and sending an RPC message\&. EVRPC_GENERATE is
 \fIreplystruct\fP the name of the RPC reply structure 
 .RE
 .PP
-\fBSee also:\fP
+\fBSee Also:\fP
 .RS 4
 \fBEVRPC_HEADER()\fP 
 .RE
@@ -298,7 +298,7 @@ Creates the definitions and prototypes for an RPC\&. You need to use EVRPC_HEADE
 \fIreplystruct\fP the name of the RPC reply structure 
 .RE
 .PP
-\fBSee also:\fP
+\fBSee Also:\fP
 .RS 4
 \fBEVRPC_GENERATE()\fP 
 .RE
@@ -403,9 +403,9 @@ register RPCs with the HTTP Server registers a new RPC with the HTTP server, eac
 .PP
 .nf
 do { \
-  struct evrpc_req_generic *_req = (struct evrpc_req_generic *)(rpc_req); \\
+  struct evrpc_req_generic *_req = (struct evrpc_req_generic *)(rpc_req); \
   evrpc_request_done(_req);                 \
-} while (0)
+} while (/*CONSTCOND*/0)
 .fi
 .PP
 Creates the reply to an RPC request\&. EVRPC_REQUEST_DONE is used to answer a request; the reply is expected to have been filled in\&. The request and reply pointers become invalid after this call has finished\&.
@@ -435,9 +435,7 @@ an struct evhttp_request object that can be inspected for HTTP headers or sender
 .SS "#define EVRPC_STRUCT(rpcname)   struct evrpc_req__##rpcname"
 
 .PP
-The type of a specific RPC Message\&. 
-.PP
-\fBParameters:\fP
+The type of a specific RPC Message\&. \fBParameters:\fP
 .RS 4
 \fIrpcname\fP the name of the RPC message 
 .RE
@@ -446,9 +444,7 @@ The type of a specific RPC Message\&.
 .SS "#define EVRPC_UNREGISTER(base, name)   evrpc_unregister_rpc((base), #name)"
 
 .PP
-Unregisters an already registered RPC\&. 
-.PP
-\fBParameters:\fP
+Unregisters an already registered RPC\&. \fBParameters:\fP
 .RS 4
 \fIbase\fP the evrpc_base object from which to unregister an RPC 
 .br
@@ -460,7 +456,7 @@ Unregisters an already registered RPC\&.
 -1 on error or 0 when successful\&. 
 .RE
 .PP
-\fBSee also:\fP
+\fBSee Also:\fP
 .RS 4
 \fBEVRPC_REGISTER()\fP 
 .RE
@@ -469,9 +465,7 @@ Unregisters an already registered RPC\&.
 .SS "#define EVTAG_ASSIGN(msg, member, value)   (*(msg)->base->member##_assign)((msg), (value))"
 
 .PP
-Assigns a value to the member in the message\&. 
-.PP
-\fBParameters:\fP
+Assigns a value to the member in the message\&. \fBParameters:\fP
 .RS 4
 \fImsg\fP the message to which to assign a value 
 .br
@@ -484,9 +478,7 @@ Assigns a value to the member in the message\&.
 .SS "#define EVTAG_ASSIGN_WITH_LEN(msg, member, value, len)   (*(msg)->base->member##_assign)((msg), (value), (len))"
 
 .PP
-Assigns a value to the member in the message\&. 
-.PP
-\fBParameters:\fP
+Assigns a value to the member in the message\&. \fBParameters:\fP
 .RS 4
 \fImsg\fP the message to which to assign a value 
 .br
@@ -501,9 +493,7 @@ Assigns a value to the member in the message\&.
 .SS "#define EVTAG_GET(msg, member, pvalue)   (*(msg)->base->member##_get)((msg), (pvalue))"
 
 .PP
-Returns the value for a member\&. 
-.PP
-\fBParameters:\fP
+Returns the value for a member\&. \fBParameters:\fP
 .RS 4
 \fImsg\fP the message from which to get the value 
 .br
@@ -521,9 +511,7 @@ Returns the value for a member\&.
 .SS "#define EVTAG_GET_WITH_LEN(msg, member, pvalue, plen)   (*(msg)->base->member##_get)((msg), (pvalue), (plen))"
 
 .PP
-Returns the value for a member\&. 
-.PP
-\fBParameters:\fP
+Returns the value for a member\&. \fBParameters:\fP
 .RS 4
 \fImsg\fP the message from which to get the value 
 .br
@@ -543,9 +531,7 @@ Returns the value for a member\&.
 .SS "#define EVTAG_HAS(msg, member)   ((msg)->member##_set == 1)"
 
 .PP
-Determines if the member has been set in the message\&. 
-.PP
-\fBParameters:\fP
+Determines if the member has been set in the message\&. \fBParameters:\fP
 .RS 4
 \fImsg\fP the message to inspect 
 .br
@@ -622,7 +608,7 @@ The add functions return handles that can be used for removing hooks\&.
 a handle to the hook so it can be removed later 
 .RE
 .PP
-\fBSee also:\fP
+\fBSee Also:\fP
 .RS 4
 \fBevrpc_remove_hook()\fP 
 .RE
@@ -638,7 +624,7 @@ Frees the evrpc base\&. For now, you are responsible for making sure that no rpc
 \fIbase\fP the evrpc_base object to be freed 
 .RE
 .PP
-\fBSee also:\fP
+\fBSee Also:\fP
 .RS 4
 \fBevrpc_init\fP 
 .RE
@@ -683,12 +669,10 @@ retrieves meta data previously associated \fBevrpc_hook_find_meta()\fP can be us
 .RE
 .PP
 
-.SS "struct evhttp_connection* evrpc_hook_get_connection (void *ctx)"
+.SS "struct evhttp_connection* evrpc_hook_get_connection (void *ctx)\fC [read]\fP"
 
 .PP
-returns the connection object associated with the request 
-.PP
-\fBParameters:\fP
+returns the connection object associated with the request \fBParameters:\fP
 .RS 4
 \fIctx\fP the context provided to the hook call 
 .RE
@@ -699,12 +683,10 @@ a pointer to the evhttp_connection object
 .RE
 .PP
 
-.SS "struct evrpc_base* evrpc_init (struct evhttp *server)"
+.SS "struct evrpc_base* evrpc_init (struct evhttp *server)\fC [read]\fP"
 
 .PP
-Creates a new rpc base from which RPC requests can be received\&. 
-.PP
-\fBParameters:\fP
+Creates a new rpc base from which RPC requests can be received\&. \fBParameters:\fP
 .RS 4
 \fIserver\fP a pointer to an existing HTTP server 
 .RE
@@ -714,7 +696,7 @@ Creates a new rpc base from which RPC requests can be received\&.
 a newly allocated evrpc_base struct 
 .RE
 .PP
-\fBSee also:\fP
+\fBSee Also:\fP
 .RS 4
 \fBevrpc_free()\fP 
 .RE
@@ -735,7 +717,7 @@ Makes an RPC request based on the provided context\&. This is a low-level functi
 0 on success, -1 otherwise\&. 
 .RE
 .PP
-\fBSee also:\fP
+\fBSee Also:\fP
 .RS 4
 \fBEVRPC_MAKE_REQUEST()\fP, \fBEVRPC_MAKE_CTX()\fP 
 .RE
@@ -757,20 +739,18 @@ Adds a connection over which rpc can be dispatched to the pool\&. The connection
 .SS "void evrpc_pool_free (struct evrpc_pool *pool)"
 
 .PP
-frees an rpc connection pool 
-.PP
-\fBParameters:\fP
+frees an rpc connection pool \fBParameters:\fP
 .RS 4
 \fIpool\fP a pointer to an evrpc_pool allocated via \fBevrpc_pool_new()\fP 
 .RE
 .PP
-\fBSee also:\fP
+\fBSee Also:\fP
 .RS 4
 \fBevrpc_pool_new()\fP 
 .RE
 .PP
 
-.SS "struct evrpc_pool* evrpc_pool_new (struct \fBevent_base\fP *base)"
+.SS "struct evrpc_pool* evrpc_pool_new (struct \fBevent_base\fP *base)\fC [read]\fP"
 
 .PP
 creates an rpc connection pool a pool has a number of connections associated with it\&. rpc requests are always made via a pool\&.
@@ -785,7 +765,7 @@ creates an rpc connection pool a pool has a number of connections associated wit
 a newly allocated struct evrpc_pool object 
 .RE
 .PP
-\fBSee also:\fP
+\fBSee Also:\fP
 .RS 4
 \fBevrpc_pool_free()\fP 
 .RE
@@ -824,7 +804,7 @@ Any connection already in the pool will be updated with the new timeout\&. Conne
 .PP
 Function for registering a generic RPC with the RPC base\&. Do not call this function directly, use \fBEVRPC_REGISTER()\fP instead\&.
 .PP
-\fBSee also:\fP
+\fBSee Also:\fP
 .RS 4
 \fBEVRPC_REGISTER()\fP 
 .RE
@@ -835,7 +815,7 @@ Function for registering a generic RPC with the RPC base\&. Do not call this fun
 .PP
 Low level function for registering an RPC with a server\&. Use \fBEVRPC_REGISTER()\fP instead\&.
 .PP
-\fBSee also:\fP
+\fBSee Also:\fP
 .RS 4
 \fBEVRPC_REGISTER()\fP 
 .RE
@@ -844,9 +824,7 @@ Low level function for registering an RPC with a server\&. Use \fBEVRPC_REGISTER
 .SS "int evrpc_remove_hook (void *vbase, enum \fBEVRPC_HOOK_TYPE\fPhook_type, void *handle)"
 
 .PP
-removes a previously added hook 
-.PP
-\fBParameters:\fP
+removes a previously added hook \fBParameters:\fP
 .RS 4
 \fIvbase\fP a pointer to either struct evrpc_base or struct evrpc_pool 
 .br
@@ -860,7 +838,7 @@ removes a previously added hook
 1 on success or 0 on failure 
 .RE
 .PP
-\fBSee also:\fP
+\fBSee Also:\fP
 .RS 4
 \fBevrpc_add_hook()\fP 
 .RE
@@ -869,9 +847,7 @@ removes a previously added hook
 .SS "int evrpc_resume_request (void *vbase, void *ctx, enum \fBEVRPC_HOOK_RESULT\fPres)"
 
 .PP
-resume a paused request 
-.PP
-\fBParameters:\fP
+resume a paused request \fBParameters:\fP
 .RS 4
 \fIvbase\fP a pointer to either struct evrpc_base or struct evrpc_pool 
 .br
@@ -884,7 +860,7 @@ resume a paused request
 .PP
 Function for sending a generic RPC request\&. Do not call this function directly, use \fBEVRPC_MAKE_REQUEST()\fP instead\&.
 .PP
-\fBSee also:\fP
+\fBSee Also:\fP
 .RS 4
 \fBEVRPC_MAKE_REQUEST()\fP 
 .RE

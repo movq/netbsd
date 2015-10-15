@@ -1,4 +1,4 @@
-/*	$NetBSD: rcode.c,v 1.8 2014/12/10 04:37:58 christos Exp $	*/
+/*	$NetBSD: rcode.c,v 1.7.4.1 2014/12/22 03:28:45 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2004-2014  Internet Systems Consortium, Inc. ("ISC")

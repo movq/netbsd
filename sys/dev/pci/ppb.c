@@ -1,4 +1,4 @@
-/*	$NetBSD: ppb.c,v 1.54 2014/09/24 10:57:03 msaitoh Exp $	*/
+/*	$NetBSD: ppb.c,v 1.52.10.1 2014/12/12 18:56:16 martin Exp $	*/
 
 /*
  * Copyright (c) 1996, 1998 Christopher G. Demetriou.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ppb.c,v 1.54 2014/09/24 10:57:03 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ppb.c,v 1.52.10.1 2014/12/12 18:56:16 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

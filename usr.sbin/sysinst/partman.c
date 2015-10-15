@@ -1,4 +1,4 @@
-/*	$NetBSD: partman.c,v 1.11 2015/05/17 10:13:24 martin Exp $ */
+/*	$NetBSD: partman.c,v 1.4.4.4 2015/05/14 07:58:49 snj Exp $ */
 
 /*
  * Copyright 2012 Eugene Lozovoy
@@ -690,7 +690,7 @@ pm_raid_commit(void)
 							raids[i].node) == 0
 			) {
 			raids[i].blocked = 1; /* RAID creation done, remove it from list to 
-									 prevent its repeated reinitialization */
+									 prevent it's repeated reinitialization */
 			for (ii = 0; ii < MAX_IN_RAID; ii++)
 				if (raids[i].pm[ii] != NULL)
 					raids[i].pm[ii]->blocked++;
@@ -734,7 +734,7 @@ pm_vnd_edit_menufmt(menudesc *m, int opt, void *arg)
 			break;
 		case PMV_MENU_EXIST:
 			wprintw(m->mw, msg_string(MSG_vnd_assgn_fmt),
-				dev_ptr->is_exist? msg_string(MSG_No) : msg_string(MSG_Yes));
+				dev_ptr->is_exist? msg_string(MSG_Yes) : msg_string(MSG_No));
 			break;
 		case PMV_MENU_SIZE:
 			if (!dev_ptr->is_exist)

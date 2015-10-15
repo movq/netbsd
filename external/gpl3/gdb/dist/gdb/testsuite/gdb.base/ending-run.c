@@ -4,9 +4,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef PROTOTYPES
 int callee (int x)
+#else
+int callee( x )
+int x;
+#endif
 {
-    int y = x * x;		/* -break1- */
+    int y = x * x;
     return (y - 2);
 }
 
@@ -23,6 +28,6 @@ int main()
             printf( "%d ", callee( i ));
             fflush (stdout);
         }
-    printf( " Goodbye!\n" ); fflush (stdout); /* -break2- */
+    printf( " Goodbye!\n" ); fflush (stdout);
     return 0;
 }

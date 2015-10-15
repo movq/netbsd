@@ -1,5 +1,5 @@
-/*	$NetBSD: addrmatch.c,v 1.9 2015/08/13 10:33:21 christos Exp $	*/
-/*	$OpenBSD: addrmatch.c,v 1.10 2015/07/08 19:04:21 markus Exp $ */
+/*	$NetBSD: addrmatch.c,v 1.6.4.1 2015/04/30 06:07:30 riz Exp $	*/
+/*	$OpenBSD: addrmatch.c,v 1.9 2014/01/19 11:21:51 dtucker Exp $ */
 
 /*
  * Copyright (c) 2004-2008 Damien Miller <djm@mindrot.org>
@@ -18,7 +18,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: addrmatch.c,v 1.9 2015/08/13 10:33:21 christos Exp $");
+__RCSID("$NetBSD: addrmatch.c,v 1.6.4.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -32,6 +32,7 @@ __RCSID("$NetBSD: addrmatch.c,v 1.9 2015/08/13 10:33:21 christos Exp $");
 
 #include "match.h"
 #include "log.h"
+#include "xmalloc.h"
 
 struct xaddr {
 	sa_family_t	af;

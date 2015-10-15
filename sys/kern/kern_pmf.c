@@ -1,4 +1,4 @@
-/* $NetBSD: kern_pmf.c,v 1.37 2015/02/13 13:26:50 maxv Exp $ */
+/* $NetBSD: kern_pmf.c,v 1.36.12.1 2015/03/25 16:54:37 snj Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_pmf.c,v 1.37 2015/02/13 13:26:50 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_pmf.c,v 1.36.12.1 2015/03/25 16:54:37 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

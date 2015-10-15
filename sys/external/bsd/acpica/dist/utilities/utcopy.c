@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,8 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
+#define __UTCOPY_C__
 
 #include "acpi.h"
 #include "accommon.h"
@@ -146,7 +148,7 @@ AcpiUtCopyIsimpleToEsimple (
 
     /* Always clear the external object */
 
-    memset (ExternalObject, 0, sizeof (ACPI_OBJECT));
+    ACPI_MEMSET (ExternalObject, 0, sizeof (ACPI_OBJECT));
 
     /*
      * In general, the external object will be the same type as
@@ -165,7 +167,7 @@ AcpiUtCopyIsimpleToEsimple (
         *BufferSpaceUsed = ACPI_ROUND_UP_TO_NATIVE_WORD (
                             (ACPI_SIZE) InternalObject->String.Length + 1);
 
-        memcpy ((void *) DataSpace,
+        ACPI_MEMCPY ((void *) DataSpace,
             (void *) InternalObject->String.Pointer,
             (ACPI_SIZE) InternalObject->String.Length + 1);
         break;
@@ -177,7 +179,7 @@ AcpiUtCopyIsimpleToEsimple (
         *BufferSpaceUsed = ACPI_ROUND_UP_TO_NATIVE_WORD (
                             InternalObject->String.Length);
 
-        memcpy ((void *) DataSpace,
+        ACPI_MEMCPY ((void *) DataSpace,
             (void *) InternalObject->Buffer.Pointer,
             InternalObject->Buffer.Length);
         break;
@@ -528,7 +530,7 @@ AcpiUtCopyEsimpleToIsimple (
             goto ErrorExit;
         }
 
-        memcpy (InternalObject->String.Pointer,
+        ACPI_MEMCPY (InternalObject->String.Pointer,
                      ExternalObject->String.Pointer,
                      ExternalObject->String.Length);
 
@@ -544,7 +546,7 @@ AcpiUtCopyEsimpleToIsimple (
             goto ErrorExit;
         }
 
-        memcpy (InternalObject->Buffer.Pointer,
+        ACPI_MEMCPY (InternalObject->Buffer.Pointer,
                      ExternalObject->Buffer.Pointer,
                      ExternalObject->Buffer.Length);
 
@@ -562,10 +564,10 @@ AcpiUtCopyEsimpleToIsimple (
 
     case ACPI_TYPE_LOCAL_REFERENCE:
 
-        /* An incoming reference is defined to be a namespace node */
+        /* TBD: should validate incoming handle */
 
-        InternalObject->Reference.Class = ACPI_REFCLASS_REFOF;
-        InternalObject->Reference.Object = ExternalObject->Reference.Handle;
+        InternalObject->Reference.Class = ACPI_REFCLASS_NAME;
+        InternalObject->Reference.Node = ExternalObject->Reference.Handle;
         break;
 
     default:
@@ -732,7 +734,7 @@ AcpiUtCopySimpleObject (
         CopySize = sizeof (ACPI_NAMESPACE_NODE);
     }
 
-    memcpy (ACPI_CAST_PTR (char, DestDesc),
+    ACPI_MEMCPY (ACPI_CAST_PTR (char, DestDesc),
         ACPI_CAST_PTR (char, SourceDesc), CopySize);
 
     /* Restore the saved fields */
@@ -766,7 +768,7 @@ AcpiUtCopySimpleObject (
 
             /* Copy the actual buffer data */
 
-            memcpy (DestDesc->Buffer.Pointer,
+            ACPI_MEMCPY (DestDesc->Buffer.Pointer,
                 SourceDesc->Buffer.Pointer, SourceDesc->Buffer.Length);
         }
         break;
@@ -788,7 +790,7 @@ AcpiUtCopySimpleObject (
 
             /* Copy the actual string data */
 
-            memcpy (DestDesc->String.Pointer, SourceDesc->String.Pointer,
+            ACPI_MEMCPY (DestDesc->String.Pointer, SourceDesc->String.Pointer,
                 (ACPI_SIZE) SourceDesc->String.Length + 1);
         }
         break;
@@ -1059,13 +1061,6 @@ AcpiUtCopyIobjectToIobject (
     else
     {
         Status = AcpiUtCopySimpleObject (SourceDesc, *DestDesc);
-    }
-
-    /* Delete the allocated object if copy failed */
-
-    if (ACPI_FAILURE (Status))
-    {
-        AcpiUtRemoveReference(*DestDesc);
     }
 
     return_ACPI_STATUS (Status);

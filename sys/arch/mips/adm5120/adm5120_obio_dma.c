@@ -1,4 +1,4 @@
-/*	$NetBSD: adm5120_obio_dma.c,v 1.5 2015/06/09 22:50:50 matt Exp $	*/
+/*	$NetBSD: adm5120_obio_dma.c,v 1.4 2011/07/01 18:38:49 dyoung Exp $	*/
 
 /*-
  * Copyright (c) 2007 Ruslan Ermilov and Vsevolod Lobko.
@@ -64,14 +64,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adm5120_obio_dma.c,v 1.5 2015/06/09 22:50:50 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adm5120_obio_dma.c,v 1.4 2011/07/01 18:38:49 dyoung Exp $");
 
 #include <sys/param.h>
 
 #define	_MIPS_BUS_DMA_PRIVATE
 #include <sys/bus.h>
-
-#include <mips/cpuregs.h>
 
 #include <mips/adm5120/include/adm5120_obiovar.h>
 

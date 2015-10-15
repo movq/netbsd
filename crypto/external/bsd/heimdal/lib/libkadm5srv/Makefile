@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.3 2014/11/24 10:49:27 pettai Exp $
+# $NetBSD: Makefile,v 1.2.4.1 2014/11/27 11:36:25 martin Exp $
 
 USE_FORT?= yes	# network protocol library
 

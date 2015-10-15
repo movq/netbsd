@@ -1,4 +1,4 @@
-/*	$NetBSD: uatp.c,v 1.11 2015/03/07 20:20:55 mrg Exp $	*/
+/*	$NetBSD: uatp.c,v 1.10.2.1 2015/03/21 17:30:43 snj Exp $	*/
 
 /*-
  * Copyright (c) 2011-2014 The NetBSD Foundation, Inc.
@@ -146,7 +146,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uatp.c,v 1.11 2015/03/07 20:20:55 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uatp.c,v 1.10.2.1 2015/03/21 17:30:43 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

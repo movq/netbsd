@@ -1,7 +1,7 @@
-/*	$Id: omap2_obio.c,v 1.22 2015/04/14 18:37:43 bouyer Exp $	*/
+/*	$Id: omap2_obio.c,v 1.21.8.1 2015/04/19 04:37:17 msaitoh Exp $	*/
 
 /* adapted from: */
-/*	$NetBSD: omap2_obio.c,v 1.22 2015/04/14 18:37:43 bouyer Exp $ */
+/*	$NetBSD: omap2_obio.c,v 1.21.8.1 2015/04/19 04:37:17 msaitoh Exp $ */
 
 
 /*
@@ -103,7 +103,7 @@
 
 #include "opt_omap.h"
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omap2_obio.c,v 1.22 2015/04/14 18:37:43 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omap2_obio.c,v 1.21.8.1 2015/04/19 04:37:17 msaitoh Exp $");
 
 #include "locators.h"
 #include "obio.h"

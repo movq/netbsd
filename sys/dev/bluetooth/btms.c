@@ -1,4 +1,4 @@
-/*	$NetBSD: btms.c,v 1.12 2014/12/13 19:28:55 nonaka Exp $	*/
+/*	$NetBSD: btms.c,v 1.11.12.1 2014/12/16 16:19:36 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: btms.c,v 1.12 2014/12/13 19:28:55 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: btms.c,v 1.11.12.1 2014/12/16 16:19:36 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>

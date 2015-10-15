@@ -1,4 +1,4 @@
-/*	$NetBSD: npf.h,v 1.28 2015/02/02 00:55:28 rmind Exp $	*/
+/*	$NetBSD: npf.h,v 1.27.2.1 2015/02/04 07:13:04 snj Exp $	*/
 
 /*-
  * Copyright (c) 2011-2014 The NetBSD Foundation, Inc.

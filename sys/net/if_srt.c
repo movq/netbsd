@@ -1,12 +1,10 @@
-/* $NetBSD: if_srt.c,v 1.20 2015/08/24 22:21:26 pooka Exp $ */
+/* $NetBSD: if_srt.c,v 1.19 2014/07/25 08:10:40 dholland Exp $ */
 /* This file is in the public domain. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_srt.c,v 1.20 2015/08/24 22:21:26 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_srt.c,v 1.19 2014/07/25 08:10:40 dholland Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
-#endif
 
 #if !defined(INET) && !defined(INET6)
 #error "srt without INET/INET6?"

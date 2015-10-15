@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,8 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
+#define __RSMISC_C__
 
 #include "acpi.h"
 #include "accommon.h"
@@ -130,7 +132,7 @@ AcpiRsConvertAmlToResource (
             /*
              * Get the resource type and the initial (minimum) length
              */
-            memset (Resource, 0, INIT_RESOURCE_LENGTH (Info));
+            ACPI_MEMSET (Resource, 0, INIT_RESOURCE_LENGTH (Info));
             Resource->Type = INIT_RESOURCE_TYPE (Info);
             Resource->Length = INIT_RESOURCE_LENGTH (Info);
             break;
@@ -326,13 +328,13 @@ AcpiRsConvertAmlToResource (
 
         case ACPI_RSC_SET8:
 
-            memset (Destination, Info->AmlOffset, Info->Value);
+            ACPI_MEMSET (Destination, Info->AmlOffset, Info->Value);
             break;
 
         case ACPI_RSC_DATA8:
 
             Target = ACPI_ADD_PTR (char, Resource, Info->Value);
-            memcpy (Destination, Source,  ACPI_GET16 (Target));
+            ACPI_MEMCPY (Destination, Source,  ACPI_GET16 (Target));
             break;
 
         case ACPI_RSC_ADDRESS:
@@ -505,7 +507,7 @@ AcpiRsConvertResourceToAml (
         {
         case ACPI_RSC_INITSET:
 
-            memset (Aml, 0, INIT_RESOURCE_LENGTH (Info));
+            ACPI_MEMSET (Aml, 0, INIT_RESOURCE_LENGTH (Info));
             AmlLength = INIT_RESOURCE_LENGTH (Info);
             AcpiRsSetResourceHeader (INIT_RESOURCE_TYPE (Info), AmlLength, Aml);
             break;

@@ -1,4 +1,4 @@
-/*	$NetBSD: strchr.c,v 1.3 2015/07/10 14:20:35 christos Exp $	*/
+/*	$NetBSD: strchr.c,v 1.1.1.2.4.1 2014/12/24 00:05:27 riz Exp $	*/
 
 /*
    SYNOPSIS

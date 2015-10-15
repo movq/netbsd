@@ -1,4 +1,4 @@
-/*	$NetBSD: ssh-gss.h,v 1.5 2015/04/03 23:58:19 christos Exp $	*/
+/*	$NetBSD: ssh-gss.h,v 1.3.22.1 2015/04/30 06:07:30 riz Exp $	*/
 /* $OpenBSD: ssh-gss.h,v 1.11 2014/02/26 20:28:44 djm Exp $ */
 /*
  * Copyright (c) 2001-2003 Simon Wilkinson. All rights reserved.

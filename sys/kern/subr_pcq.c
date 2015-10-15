@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_pcq.c,v 1.9 2015/01/08 23:39:57 riastradh Exp $	*/
+/*	$NetBSD: subr_pcq.c,v 1.8 2014/06/09 12:44:06 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_pcq.c,v 1.9 2015/01/08 23:39:57 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_pcq.c,v 1.8 2014/06/09 12:44:06 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -141,8 +141,7 @@ pcq_peek(pcq_t *pcq)
 	pcq_split(v, &p, &c);
 
 	/* See comment on race below in pcq_get(). */
-	return (p == c) ? NULL :
-	    (membar_datadep_consumer(), pcq->pcq_items[c]);
+	return (p == c) ? NULL : pcq->pcq_items[c];
 }
 
 /*
@@ -163,8 +162,6 @@ pcq_get(pcq_t *pcq)
 		/* Queue is empty: nothing to return. */
 		return NULL;
 	}
-	/* Make sure we read pcq->pcq_pc before pcq->pcq_items[c].  */
-	membar_datadep_consumer();
 	item = pcq->pcq_items[c];
 	if (item == NULL) {
 		/*

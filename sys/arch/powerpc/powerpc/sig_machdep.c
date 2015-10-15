@@ -1,4 +1,4 @@
-/*	$NetBSD: sig_machdep.c,v 1.44 2014/12/14 23:49:17 chs Exp $	*/
+/*	$NetBSD: sig_machdep.c,v 1.43.14.1 2014/12/31 06:51:08 snj Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.44 2014/12/14 23:49:17 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sig_machdep.c,v 1.43.14.1 2014/12/31 06:51:08 snj Exp $");
 
 #include "opt_ppcarch.h"
 #include "opt_altivec.h"

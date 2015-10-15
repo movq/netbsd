@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_lfs.h,v 1.3 2015/08/02 18:11:57 dholland Exp $	*/
+/*	$NetBSD: mount_lfs.h,v 1.2 2009/08/06 00:58:32 pooka Exp $	*/
 
 /*
  * Copyright (c) 2008 The NetBSD Foundation.  All Rights Reserved.
@@ -28,10 +28,10 @@
 #ifndef _SBIN_MOUNT_LFS_MOUNT_LFS_H_
 #define _SBIN_MOUNT_LFS_MOUNT_LFS_H_
 
-#include <ufs/lfs/lfs.h>
+#include <ufs/ufs/ufsmount.h>
 
 int	mount_lfs(int, char **);
-void	mount_lfs_parseargs(int, char **, struct ulfs_args *, int *,
+void	mount_lfs_parseargs(int, char **, struct ufs_args *, int *,
 			    char *, char *);
 
 int	lfs_cleaner_main(int, char **);

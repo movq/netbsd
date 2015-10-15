@@ -1,4 +1,4 @@
-/*	$NetBSD: module.h,v 1.5 2014/11/12 02:24:40 christos Exp $	*/
+/*	$NetBSD: module.h,v 1.4.2.1 2015/01/11 05:59:17 snj Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
