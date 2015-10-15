@@ -1,4 +1,4 @@
-# $NetBSD: mi,v 1.196 2015/08/23 18:28:40 mrg Exp $
+# $NetBSD: mi,v 1.194 2014/07/20 15:58:40 tron Exp $
 #
 # Note: don't delete entries from here - mark them as "obsolete" instead.
 #
@@ -1490,8 +1490,8 @@
 ./usr/share/examples/postfix/FORWARD_SECRECY_README	misc-postfix-examples	postfix,doc
 ./usr/share/examples/postfix/IPV6_README	misc-postfix-examples	postfix,doc
 ./usr/share/examples/postfix/LDAP_README	misc-postfix-examples	postfix,doc
-./usr/share/examples/postfix/LICENSE		misc-postfix-examples	postfix,share
 ./usr/share/examples/postfix/LMDB_README	misc-obsolete	obsolete
+./usr/share/examples/postfix/LICENSE		misc-postfix-examples	postfix,share
 ./usr/share/examples/postfix/LMTP_README	misc-obsolete	obsolete
 ./usr/share/examples/postfix/LOCAL_RECIPIENT_README	misc-postfix-examples	postfix,doc
 ./usr/share/examples/postfix/MAILDROP_README	misc-postfix-examples	postfix,doc
@@ -1635,4 +1635,3 @@
 ./usr/share/xsl/atf				misc-atf-share
 ./usr/share/xsl/atf/tests-results.xsl		misc-atf-share		share,atf,!kyua
 ./usr/share/xsl/atf/tests-results.xsl		misc-obsolete		share,kyua,obsolete
-./var/db/obsolete/misc				base-sys-root

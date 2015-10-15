@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2014/08/24 06:13:36 mrg Exp $
+#	$NetBSD: Makefile,v 1.5.6.1 2014/08/29 11:35:28 martin Exp $
 
 DRIVER=		xf86-video-openchrome
 DRIVER_NAME=	openchrome_drv

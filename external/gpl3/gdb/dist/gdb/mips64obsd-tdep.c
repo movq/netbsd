@@ -1,6 +1,6 @@
 /* Target-dependent code for OpenBSD/mips64.
 
-   Copyright (C) 2004-2015 Free Software Foundation, Inc.
+   Copyright (C) 2004-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,7 +25,9 @@
 #include "trad-frame.h"
 #include "tramp-frame.h"
 
-#include "obsd-tdep.h"
+#include "gdb_assert.h"
+#include <string.h>
+
 #include "mips-tdep.h"
 #include "solib-svr4.h"
 
@@ -58,21 +60,23 @@ mips64obsd_supply_gregset (const struct regset *regset,
 
 /* OpenBSD/mips64 register set.  */
 
-static const struct regset mips64obsd_gregset =
+static struct regset mips64obsd_gregset =
 {
   NULL,
   mips64obsd_supply_gregset
 };
 
-/* Iterate over core file register note sections.  */
+/* Return the appropriate register set for the core section identified
+   by SECT_NAME and SECT_SIZE.  */
 
-static void
-mips64obsd_iterate_over_regset_sections (struct gdbarch *gdbarch,
-					 iterate_over_regset_sections_cb *cb,
-					 void *cb_data,
-					 const struct regcache *regcache)
+static const struct regset *
+mips64obsd_regset_from_core_section (struct gdbarch *gdbarch,
+				     const char *sect_name, size_t sect_size)
 {
-  cb (".reg", MIPS64OBSD_NUM_REGS * 8, &mips64obsd_gregset, NULL, cb_data);
+  if (strcmp (sect_name, ".reg") == 0 && sect_size >= MIPS64OBSD_NUM_REGS * 8)
+    return &mips64obsd_gregset;
+
+  return NULL;
 }
 
 
@@ -143,15 +147,13 @@ mips64obsd_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   /* OpenBSD/mips64 only supports the n64 ABI, but the braindamaged
      way GDB works, forces us to pretend we can handle them all.  */
 
-  set_gdbarch_iterate_over_regset_sections
-    (gdbarch, mips64obsd_iterate_over_regset_sections);
+  set_gdbarch_regset_from_core_section
+    (gdbarch, mips64obsd_regset_from_core_section);
 
   tramp_frame_prepend_unwinder (gdbarch, &mips64obsd_sigframe);
 
   set_gdbarch_long_double_bit (gdbarch, 128);
   set_gdbarch_long_double_format (gdbarch, floatformats_mips64_quad);
-
-  obsd_init_abi(info, gdbarch);
 
   /* OpenBSD/mips64 has SVR4-style shared libraries.  */
   set_solib_svr4_fetch_link_map_offsets

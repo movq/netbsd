@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.7 2015/03/18 17:43:20 joerg Exp $
+#	$NetBSD: Makefile,v 1.5.2.1 2015/06/04 20:05:44 snj Exp $
 
 LIB=	LLVMRuntimeDyld
 

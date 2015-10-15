@@ -1,5 +1,5 @@
 /* Read HP PA/Risc object files for GDB.
-   Copyright (C) 1991-2015 Free Software Foundation, Inc.
+   Copyright (C) 1991-2014 Free Software Foundation, Inc.
    Written by Fred Fish at Cygnus Support.
 
    This file is part of GDB.
@@ -27,6 +27,7 @@
 #include "stabsread.h"
 #include "gdb-stabs.h"
 #include "complaints.h"
+#include <string.h>
 #include "demangle.h"
 #include "som.h"
 #include "libhppa.h"
@@ -55,6 +56,9 @@ som_symtab_read (bfd *abfd, struct objfile *objfile,
   char *symname;
   const int symsize = sizeof (struct som_external_symbol_dictionary_record);
 
+
+#define text_offset ANOFFSET (section_offsets, SECT_OFF_TEXT (objfile))
+#define data_offset ANOFFSET (section_offsets, SECT_OFF_DATA (objfile))
 
   number_of_symbols = bfd_get_symcount (abfd);
 
@@ -90,7 +94,7 @@ som_symtab_read (bfd *abfd, struct objfile *objfile,
      more accurate to check for a nonzero text offset, but they
      have not provided any information about why that test is
      more accurate.  */
-  dynamic = (ANOFFSET (section_offsets, SECT_OFF_TEXT (objfile)) != 0);
+  dynamic = (text_offset != 0);
 
   endbufp = buf + number_of_symbols;
   for (bufp = buf; bufp < endbufp; ++bufp)
@@ -148,6 +152,7 @@ som_symtab_read (bfd *abfd, struct objfile *objfile,
 	    case ST_MILLICODE:
 	      symname = bfd_getb32 (bufp->name) + stringtab;
 	      ms_type = mst_text;
+	      symbol_value += text_offset;
 	      symbol_value = gdbarch_addr_bits_remove (gdbarch, symbol_value);
 	      break;
 
@@ -160,17 +165,20 @@ som_symtab_read (bfd *abfd, struct objfile *objfile,
 		ms_type = mst_solib_trampoline;
 	      else
 		ms_type = mst_text;
+	      symbol_value += text_offset;
 	      symbol_value = gdbarch_addr_bits_remove (gdbarch, symbol_value);
 	      break;
 
 	    case ST_STUB:
 	      symname = bfd_getb32 (bufp->name) + stringtab;
 	      ms_type = mst_solib_trampoline;
+	      symbol_value += text_offset;
 	      symbol_value = gdbarch_addr_bits_remove (gdbarch, symbol_value);
 	      break;
 
 	    case ST_DATA:
 	      symname = bfd_getb32 (bufp->name) + stringtab;
+	      symbol_value += data_offset;
 	      ms_type = mst_data;
 	      break;
 	    default:
@@ -192,6 +200,7 @@ som_symtab_read (bfd *abfd, struct objfile *objfile,
 	    case ST_CODE:
 	      symname = bfd_getb32 (bufp->name) + stringtab;
 	      ms_type = mst_file_text;
+	      symbol_value += text_offset;
 	      symbol_value = gdbarch_addr_bits_remove (gdbarch, symbol_value);
 
 	    check_strange_names:
@@ -222,6 +231,7 @@ som_symtab_read (bfd *abfd, struct objfile *objfile,
 	    case ST_MILLICODE:
 	      symname = bfd_getb32 (bufp->name) + stringtab;
 	      ms_type = mst_file_text;
+	      symbol_value += text_offset;
 	      symbol_value = gdbarch_addr_bits_remove (gdbarch, symbol_value);
 	      break;
 
@@ -232,18 +242,21 @@ som_symtab_read (bfd *abfd, struct objfile *objfile,
 		 using mst_file_text vs mst_solib_trampoline here like
 		 we do for SS_UNIVERSAL and SS_EXTERNAL symbols above.  */
 	      ms_type = mst_file_text;
+	      symbol_value += text_offset;
 	      symbol_value = gdbarch_addr_bits_remove (gdbarch, symbol_value);
 	      break;
 
 	    case ST_STUB:
 	      symname = bfd_getb32 (bufp->name) + stringtab;
 	      ms_type = mst_solib_trampoline;
+	      symbol_value += text_offset;
 	      symbol_value = gdbarch_addr_bits_remove (gdbarch, symbol_value);
 	      break;
 
 
 	    case ST_DATA:
 	      symname = bfd_getb32 (bufp->name) + stringtab;
+	      symbol_value += data_offset;
 	      ms_type = mst_file_data;
 	      goto check_strange_names;
 
@@ -264,6 +277,7 @@ som_symtab_read (bfd *abfd, struct objfile *objfile,
 	    case ST_STORAGE:
 	    case ST_DATA:
 	      symname = bfd_getb32 (bufp->name) + stringtab;
+	      symbol_value += data_offset;
 	      ms_type = mst_data;
 	      break;
 
@@ -286,16 +300,11 @@ som_symtab_read (bfd *abfd, struct objfile *objfile,
 
 	  ALL_OBJFILE_OSECTIONS (objfile, iter)
 	    {
-	      CORE_ADDR start;
-	      CORE_ADDR len;
-
 	      if (bfd_is_const_section (iter->the_bfd_section))
 		continue;
 
-	      start = bfd_get_section_vma (iter->objfile->obfd,
-					   iter->the_bfd_section);
-	      len = bfd_get_section_size (iter->the_bfd_section);
-	      if (start <= symbol_value && symbol_value < start + len)
+	      if (obj_section_addr (iter) <= symbol_value
+		  && symbol_value < obj_section_endaddr (iter))
 		{
 		  section = iter->the_bfd_section;
 		  break;

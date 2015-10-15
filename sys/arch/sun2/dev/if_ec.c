@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ec.c,v 1.23 2015/05/20 09:17:17 ozaki-r Exp $	*/
+/*	$NetBSD: if_ec.c,v 1.21 2014/08/10 16:44:34 tls Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ec.c,v 1.23 2015/05/20 09:17:17 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ec.c,v 1.21 2014/08/10 16:44:34 tls Exp $");
 
 #include "opt_inet.h"
 #include "opt_ns.h"
@@ -48,7 +48,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_ec.c,v 1.23 2015/05/20 09:17:17 ozaki-r Exp $");
 #include <sys/syslog.h>
 #include <sys/device.h>
 #include <sys/endian.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -63,6 +63,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_ec.c,v 1.23 2015/05/20 09:17:17 ozaki-r Exp $");
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
 #include <netinet/if_inarp.h>
+#endif
+
+#ifdef NS
+#include <netns/ns.h>
+#include <netns/ns_if.h>
 #endif
 
 #include <net/bpf.h>

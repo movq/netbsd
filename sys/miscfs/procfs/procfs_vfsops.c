@@ -1,4 +1,4 @@
-/*	$NetBSD: procfs_vfsops.c,v 1.94 2014/11/10 18:46:34 maxv Exp $	*/
+/*	$NetBSD: procfs_vfsops.c,v 1.92.2.1 2015/01/17 12:10:54 martin Exp $	*/
 
 /*
  * Copyright (c) 1993
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: procfs_vfsops.c,v 1.94 2014/11/10 18:46:34 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: procfs_vfsops.c,v 1.92.2.1 2015/01/17 12:10:54 martin Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -338,7 +338,7 @@ procfs_loadvnode(struct mount *mp, struct vnode *vp,
 			pfs->pfs_mode = S_IRUSR|S_IWUSR;
 			switch (fp->f_type) {
 			case DTYPE_VNODE:
-				vxp = fp->f_vnode;
+				vxp = fp->f_data;
 
 				/*
 				 * We make symlinks for directories

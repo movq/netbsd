@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.h,v 1.118 2015/09/07 20:00:49 palle Exp $ */
+/*	$NetBSD: cpu.h,v 1.111.2.1 2015/07/20 06:12:23 snj Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -70,9 +70,6 @@
 #if defined(_KERNEL)
 #include <machine/cpuset.h>
 #include <sparc64/sparc64/intreg.h>
-#endif
-#ifdef SUN4V
-#include <machine/hypervisor.h>
 #endif
 
 #include <sys/cpu_data.h>
@@ -177,9 +174,6 @@ struct cpu_info {
 	pte_t			*ci_tsb_dmmu;
 	pte_t			*ci_tsb_immu;
 
-	/* TSB description (sun4v). */
-	struct tsb_desc         *ci_tsb_desc;
-	
 	/* MMU Fault Status Area (sun4v).
 	 * Will be initialized to the physical address of the bottom of
 	 * the interrupt stack.
@@ -223,7 +217,6 @@ struct cpu_bootargs {
 	vaddr_t cb_ekdata;
 
 	paddr_t	cb_cpuinfo;
-	int cb_cputyp;
 };
 
 extern struct cpu_bootargs *cpu_args;
@@ -263,10 +256,6 @@ void	cpu_pmap_init(struct cpu_info *);
 /* run upfront to prepare the cpu_info */
 void	cpu_pmap_prepare(struct cpu_info *, bool);
 
-/* Helper functions to retrieve cache info */
-int	cpu_ecache_associativity(int node);
-int	cpu_ecache_size(int node);
-
 #if defined(MULTIPROCESSOR)
 extern vaddr_t cpu_spinup_trampoline;
 
@@ -291,7 +280,7 @@ typedef void (* ipifunc_t)(void *, void *);
 
 void	sparc64_multicast_ipi(sparc64_cpuset_t, ipifunc_t, uint64_t, uint64_t);
 void	sparc64_broadcast_ipi(ipifunc_t, uint64_t, uint64_t);
-extern void (*sparc64_send_ipi)(int, ipifunc_t, uint64_t, uint64_t);
+void	sparc64_send_ipi(int, ipifunc_t, uint64_t, uint64_t);
 
 /*
  * Call an arbitrary C function on another cpu (or all others but ourself)

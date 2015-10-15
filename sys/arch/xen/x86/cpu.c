@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.101 2014/12/08 15:22:47 msaitoh Exp $	*/
+/*	$NetBSD: cpu.c,v 1.98.4.1 2015/08/04 18:12:28 snj Exp $	*/
 /* NetBSD: cpu.c,v 1.18 2004/02/20 17:35:01 yamt Exp  */
 
 /*-
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.101 2014/12/08 15:22:47 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.98.4.1 2015/08/04 18:12:28 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
@@ -403,7 +403,6 @@ cpu_attach_common(device_t parent, device_t self, void *aux)
 
 	KASSERT(ci->ci_func == 0);
 	ci->ci_func = caa->cpu_func;
-	aprint_normal("\n");
 
 	/* Must be called before mi_cpu_attach(). */
 	cpu_vm_init(ci);
@@ -415,6 +414,7 @@ cpu_attach_common(device_t parent, device_t self, void *aux)
 
 		KASSERT(ci->ci_data.cpu_idlelwp != NULL);
 		if (error != 0) {
+			aprint_normal("\n");
 			aprint_error_dev(self,
 			    "mi_cpu_attach failed with %d\n", error);
 			return;
@@ -448,7 +448,7 @@ cpu_attach_common(device_t parent, device_t self, void *aux)
 		cpu_init(ci);
 		pmap_cpu_init_late(ci);
 
-		/* Every processor needs to init its own ipi h/w (similar to lapic) */
+		/* Every processor needs to init it's own ipi h/w (similar to lapic) */
 		xen_ipi_init();
 
 		/* Make sure DELAY() is initialized. */
@@ -501,11 +501,12 @@ cpu_attach_common(device_t parent, device_t self, void *aux)
 			tmp->ci_next = ci;
 		}
 #else
-		aprint_error_dev(ci->ci_dev, "not started\n");
+		aprint_error(": not started\n");
 #endif
 		break;
 
 	default:
+		aprint_normal("\n");
 		panic("unknown processor type??\n");
 	}
 

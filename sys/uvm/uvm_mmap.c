@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_mmap.c,v 1.153 2015/08/04 18:28:10 maxv Exp $	*/
+/*	$NetBSD: uvm_mmap.c,v 1.148.4.2 2015/01/11 06:27:40 snj Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_mmap.c,v 1.153 2015/08/04 18:28:10 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_mmap.c,v 1.148.4.2 2015/01/11 06:27:40 snj Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_pax.h"
@@ -289,7 +289,7 @@ sys_mmap(struct lwp *l, const struct sys_mmap_args *uap, register_t *retval)
 	struct proc *p = l->l_proc;
 	vaddr_t addr;
 	off_t pos;
-	vsize_t size, pageoff, newsize;
+	vsize_t size, pageoff;
 	vm_prot_t prot, maxprot;
 	int flags, fd, advice;
 	vaddr_t defaddr;
@@ -338,13 +338,9 @@ sys_mmap(struct lwp *l, const struct sys_mmap_args *uap, register_t *retval)
 	 */
 
 	pageoff = (pos & PAGE_MASK);
-	pos    -= pageoff;
-	newsize = size + pageoff;		/* add offset */
-	newsize = (vsize_t)round_page(newsize);	/* round up */
-
-	if (newsize < size)
-		return (ENOMEM);
-	size = newsize;
+	pos  -= pageoff;
+	size += pageoff;			/* add offset */
+	size = (vsize_t)round_page(size);	/* round up */
 
 	/*
 	 * now check (MAP_FIXED) or get (!MAP_FIXED) the "addr"
@@ -422,7 +418,7 @@ sys_mmap(struct lwp *l, const struct sys_mmap_args *uap, register_t *retval)
 #endif /* PAX_MPROTECT */
 
 #ifdef PAX_ASLR
-	pax_aslr_mmap(l, &addr, orig_addr, flags);
+	pax_aslr(l, &addr, orig_addr, flags);
 #endif /* PAX_ASLR */
 
 	/*

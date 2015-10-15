@@ -1,4 +1,4 @@
-/*	$NetBSD: elf_machdep.h,v 1.11 2014/10/23 19:39:42 christos Exp $	*/
+/*	$NetBSD: elf_machdep.h,v 1.10.38.1 2015/01/25 09:16:00 martin Exp $	*/
 
 #include <machine/endian_machdep.h>
 

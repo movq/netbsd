@@ -1,4 +1,4 @@
-/*	$NetBSD: spec_vnops.c,v 1.153 2015/07/01 08:13:52 hannken Exp $	*/
+/*	$NetBSD: spec_vnops.c,v 1.145 2014/07/25 08:20:53 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spec_vnops.c,v 1.153 2015/07/01 08:13:52 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spec_vnops.c,v 1.145 2014/07/25 08:20:53 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -101,7 +101,6 @@ const char	devcls[] = "devcls";
 #endif
 
 static vnode_t	*specfs_hash[SPECHSZ];
-extern struct mount *dead_rootmount;
 
 /*
  * This vnode operations vector is used for special device nodes
@@ -310,7 +309,7 @@ spec_node_lookup_by_dev(enum vtype type, dev_t dev, vnode_t **vpp)
 		mutex_enter(vp->v_interlock);
 	}
 	mutex_exit(&device_lock);
-	error = vget(vp, 0, true /* wait */);
+	error = vget(vp, 0);
 	if (error != 0)
 		return error;
 	*vpp = vp;
@@ -345,7 +344,7 @@ spec_node_lookup_by_mount(struct mount *mp, vnode_t **vpp)
 	}
 	mutex_enter(vq->v_interlock);
 	mutex_exit(&device_lock);
-	error = vget(vq, 0, true /* wait */);
+	error = vget(vq, 0);
 	if (error != 0)
 		return error;
 	*vpp = vq;
@@ -739,7 +738,7 @@ spec_read(void *v)
 			bn = (uio->uio_offset >> DEV_BSHIFT) &~ (bscale - 1);
 			on = uio->uio_offset % bsize;
 			n = min((unsigned)(bsize - on), uio->uio_resid);
-			error = bread(vp, bn, bsize, 0, &bp);
+			error = bread(vp, bn, bsize, NOCRED, 0, &bp);
 			if (error) {
 				return (error);
 			}
@@ -815,7 +814,8 @@ spec_write(void *v)
 			if (n == bsize)
 				bp = getblk(vp, bn, bsize, 0, 0);
 			else
-				error = bread(vp, bn, bsize, B_MODIFY, &bp);
+				error = bread(vp, bn, bsize, NOCRED,
+				    B_MODIFY, &bp);
 			if (error) {
 				return (error);
 			}
@@ -1078,27 +1078,11 @@ spec_inactive(void *v)
 {
 	struct vop_inactive_args /* {
 		struct vnode *a_vp;
-		struct bool *a_recycle;
+		struct proc *a_l;
 	} */ *ap = v;
-	struct vnode *vp = ap->a_vp;
 
-	KASSERT(vp->v_mount == dead_rootmount);
-	*ap->a_recycle = true;
-	VOP_UNLOCK(vp);
-	return 0;
-}
-
-int
-spec_reclaim(void *v)
-{
-	struct vop_reclaim_args /* {
-		struct vnode *a_vp;
-	} */ *ap = v;
-	struct vnode *vp = ap->a_vp;
-
-	KASSERT(vp->v_mount == dead_rootmount);
-	vcache_remove(vp->v_mount, &vp->v_interlock, sizeof(vp->v_interlock));
-	return 0;
+	VOP_UNLOCK(ap->a_vp);
+	return (0);
 }
 
 /*

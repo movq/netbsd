@@ -1,7 +1,8 @@
-#	$NetBSD: Makefile,v 1.6 2015/07/18 08:56:06 mrg Exp $
+#	$NetBSD: Makefile,v 1.5 2011/08/11 23:15:41 joerg Exp $
+
+LIBISPRIVATE=yes
 
 .include "../../../Makefile.serverlib"
-.include "../../../Makefile.servermod"
 
 LIB=		ddc
 

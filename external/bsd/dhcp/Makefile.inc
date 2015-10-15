@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.15 2015/09/27 21:01:27 mlelstv Exp $
+# $NetBSD: Makefile.inc,v 1.11.2.1 2014/10/11 16:22:28 snj Exp $
 
 WARNS?=	1	# XXX -Wshadow -Wcast-qual -Wsign-compare
 
@@ -48,9 +48,6 @@ LDADD+=-Wl,-Bdynamic
 .endif
 LDADD+= -lcrypto -lipsec -lcrypt
 DPADD+= ${LIBCRYPTO} ${LIBIPSEC} ${LIBCRYPT}
-.endif
-.if defined(PROG) && ${PROG} == "dhclient"
-LDADD+=-Wl,-Bdynamic
 .endif
 DPADD+= ${COBJDIR}/libdhcp.a
 DPADD+= ${OMOBJDIR}/libomapi.a ${DSTOBJDIR}/libdst.a

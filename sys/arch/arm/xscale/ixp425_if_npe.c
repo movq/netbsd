@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp425_if_npe.c,v 1.29 2015/06/28 15:13:28 maxv Exp $ */
+/*	$NetBSD: ixp425_if_npe.c,v 1.26.2.1 2015/07/05 20:34:51 snj Exp $ */
 
 /*-
  * Copyright (c) 2006 Sam Leffler.  All rights reserved.
@@ -28,7 +28,7 @@
 #if 0
 __FBSDID("$FreeBSD: src/sys/arm/xscale/ixp425/if_npe.c,v 1.1 2006/11/19 23:55:23 sam Exp $");
 #endif
-__KERNEL_RCSID(0, "$NetBSD: ixp425_if_npe.c,v 1.29 2015/06/28 15:13:28 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp425_if_npe.c,v 1.26.2.1 2015/07/05 20:34:51 snj Exp $");
 
 /*
  * Intel XScale NPE Ethernet driver.
@@ -68,7 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixp425_if_npe.c,v 1.29 2015/06/28 15:13:28 maxv Exp 
 
 #include <net/bpf.h>
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <arm/xscale/ixp425reg.h>
 #include <arm/xscale/ixp425var.h>
@@ -1220,7 +1220,7 @@ npeinit(struct ifnet *ifp)
 /*
  * Defragment an mbuf chain, returning at most maxfrags separate
  * mbufs+clusters.  If this is not possible NULL is returned and
- * the original mbuf chain is left in its present (potentially
+ * the original mbuf chain is left in it's present (potentially
  * modified) state.  We use two techniques: collapsing consecutive
  * mbufs and replacing consecutive mbufs by a cluster.
  */

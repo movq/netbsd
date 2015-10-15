@@ -1,4 +1,4 @@
-/*	$NetBSD: ntptime.c,v 1.6 2015/07/10 14:20:36 christos Exp $	*/
+/*	$NetBSD: ntptime.c,v 1.3.4.1 2014/12/24 00:05:28 riz Exp $	*/
 
 /*
  * NTP test program

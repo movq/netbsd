@@ -1,4 +1,4 @@
-/*	$NetBSD: strftime.c,v 1.35 2015/10/09 17:21:45 christos Exp $	*/
+/*	$NetBSD: strftime.c,v 1.30.4.1 2015/01/25 09:11:03 martin Exp $	*/
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
@@ -6,7 +6,7 @@
 static char	elsieid[] = "@(#)strftime.c	7.64";
 static char	elsieid[] = "@(#)strftime.c	8.3";
 #else
-__RCSID("$NetBSD: strftime.c,v 1.35 2015/10/09 17:21:45 christos Exp $");
+__RCSID("$NetBSD: strftime.c,v 1.30.4.1 2015/01/25 09:11:03 martin Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -152,8 +152,8 @@ strftime_lz(const timezone_t sp, char *const s, const size_t maxsize,
 }
 
 static char *
-_fmt(const timezone_t sp, const char *format, const struct tm *t, char *pt,
-     const char *ptlim, int *warnp, locale_t loc)
+_fmt(const timezone_t sp, const char *format, const struct tm *const t,
+	char *pt, const char *const ptlim, int *warnp, locale_t loc)
 {
 	for ( ; *format; ++format) {
 		if (*format == '%') {
@@ -487,7 +487,9 @@ label:
 				continue;
 			case 'Z':
 #ifdef TM_ZONE
-				pt = _add(t->TM_ZONE, pt, ptlim);
+				if (t->TM_ZONE != NULL)
+					pt = _add(t->TM_ZONE, pt, ptlim);
+				else
 #endif /* defined TM_ZONE */
 				if (t->tm_isdst >= 0)
 					pt = _add((sp ?
@@ -608,7 +610,8 @@ label:
 }
 
 size_t
-strftime(char *s, size_t maxsize, const char *format, const struct tm *t)
+strftime(char * const s, const size_t maxsize,
+    const char * const format, const struct tm * const	t)
 {
 	tzset();
 	return strftime_z(NULL, s, maxsize, format, t);
@@ -623,7 +626,8 @@ strftime_l(char * __restrict s, size_t maxsize, const char * __restrict format,
 }
 
 static char *
-_conv(int n, const char *format, char *pt, const char *ptlim)
+_conv(const int	n, const char *const format, char *const pt,
+    const char *const ptlim)
 {
 	char	buf[INT_STRLEN_MAXIMUM(int) + 1];
 
@@ -632,7 +636,7 @@ _conv(int n, const char *format, char *pt, const char *ptlim)
 }
 
 static char *
-_add(const char *str, char *pt, const char *ptlim)
+_add(const char *str, char *pt, const char *const ptlim)
 {
 	while (pt < ptlim && (*pt = *str++) != '\0')
 		++pt;
@@ -649,7 +653,7 @@ _add(const char *str, char *pt, const char *ptlim)
 
 static char *
 _yconv(int a, int b, bool convert_top, bool convert_yy,
-    char *pt, const char * ptlim)
+    char *pt, const char *const ptlim)
 {
 	int	lead;
 	int	trail;

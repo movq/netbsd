@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -105,7 +105,7 @@ NsDumpEntireNamespace (
 
     /* Open the binary AML file and read the entire table */
 
-    Status = AcpiUtReadTableFromFile (AmlFilename, &Table);
+    Status = AcpiDbReadTableFromFile (AmlFilename, &Table);
     if (ACPI_FAILURE (Status))
     {
         printf ("**** Could not get input table %s, %s\n", AmlFilename,
@@ -241,29 +241,25 @@ main (
 
 
     ACPI_DEBUG_INITIALIZE (); /* For debug version only */
-
-    /* Init debug globals and ACPICA */
-
-    AcpiDbgLevel = ACPI_LV_TABLES;
-    AcpiDbgLayer = 0xFFFFFFFF;
-
-    Status = AcpiInitializeSubsystem ();
-    AE_CHECK_OK (AcpiInitializeSubsystem, Status);
-    if (ACPI_FAILURE (Status))
-    {
-        return (-1);
-    }
-
     printf (ACPI_COMMON_SIGNON (AN_UTILITY_NAME));
+
     if (argc < 2)
     {
         usage ();
         return (0);
     }
 
+    /* Init globals and ACPICA */
+
+    AcpiDbgLevel = ACPI_NORMAL_DEFAULT | ACPI_LV_TABLES;
+    AcpiDbgLayer = 0xFFFFFFFF;
+
+    Status = AcpiInitializeSubsystem ();
+    AE_CHECK_OK (AcpiInitializeSubsystem, Status);
+
     /* Get the command line options */
 
-    while ((j = AcpiGetopt (argc, argv, AN_SUPPORTED_OPTIONS)) != ACPI_OPT_END) switch(j)
+    while ((j = AcpiGetopt (argc, argv, AN_SUPPORTED_OPTIONS)) != EOF) switch(j)
     {
     case 'v': /* -v: (Version): signon already emitted, just exit */
 

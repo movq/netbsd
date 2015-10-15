@@ -1,4 +1,4 @@
-/*	$NetBSD: motgvar.h,v 1.4 2014/09/13 18:36:39 jmcneill Exp $	*/
+/*	$NetBSD: motgvar.h,v 1.2.4.1 2014/11/12 19:54:46 martin Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: hpftodit.cpp,v 1.6 2015/06/06 14:40:29 joerg Exp $	*/
+/*	$NetBSD: hpftodit.cpp,v 1.5.62.1 2015/06/10 16:41:12 snj Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 1994, 2000, 2001, 2003, 2004 Free Software Foundation, Inc.

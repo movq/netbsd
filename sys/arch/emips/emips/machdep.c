@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.11 2015/06/11 08:22:08 matt Exp $	*/
+/*	$NetBSD: machdep.c,v 1.10 2014/03/24 20:06:31 christos Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.11 2015/06/11 08:22:08 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.10 2014/03/24 20:06:31 christos Exp $");
 
 #include "opt_ddb.h"
 
@@ -82,8 +82,8 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.11 2015/06/11 08:22:08 matt Exp $");
 #include <ddb/db_extern.h>
 #endif
 
-vaddr_t iospace = 64 * 1024; /* BUGBUG make it an option? */
-vsize_t iospace_size;
+extern vaddr_t iospace;
+extern vsize_t iospace_size;
 
 #include "ksyms.h"
 
@@ -315,8 +315,7 @@ mach_init(int argc, char *argv[], int code, intptr_t cv, u_int bim, char *bip)
 	/*
 	 * Initialize the virtual memory system.
 	 */
-	iospace = pmap_limits.virtual_start;
-	pmap_limits.virtual_start += iospace_size;
+	iospace_size = 64*1024; /* BUGBUG make it an option? */
 	pmap_bootstrap();
 
 	mips_init_lwp0_uarea();

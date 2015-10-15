@@ -1,4 +1,4 @@
-/*	$NetBSD: adb_bus.c,v 1.10 2014/11/08 17:21:51 macallan Exp $ */
+/*	$NetBSD: adb_bus.c,v 1.9 2009/05/12 14:07:01 cegger Exp $ */
 
 /*-
  * Copyright (c) 2006 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: adb_bus.c,v 1.10 2014/11/08 17:21:51 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: adb_bus.c,v 1.9 2009/05/12 14:07:01 cegger Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -171,7 +171,7 @@ nadb_init(device_t dev)
 			if (config_found(sc->sc_dev, &aaa, nadb_devprint)) {
 				devmask |= (1 << i);
 			} else {
-				aprint_normal(" not configured\n");
+				printf(" not configured\n");
 			}
 		}
 	}
@@ -183,7 +183,7 @@ nadb_init(device_t dev)
 int
 nadb_print(void *aux, const char *what)
 {
-	aprint_normal(": Apple Desktop Bus\n");
+	printf(": Apple Desktop Bus\n");
 	return 0;
 }
 
@@ -197,13 +197,13 @@ nadb_devprint(void *aux, const char *what)
 
 	switch(aaa->dev->original_addr) {
 		case 2:
-			aprint_normal("%s: ADB Keyboard", what);
+			printf("%s: ADB Keyboard", what);
 			break;
 		case 3:
-			aprint_normal("%s: ADB relative pointing device", what);
+			printf("%s: ADB relative pointing device", what);
 			break;
 		default:
-			aprint_normal("%s: something from address %d:%02x",
+			printf("%s: something from address %d:%02x",
 			    what,
 			    aaa->dev->original_addr,
 			    aaa->dev->handler_id);

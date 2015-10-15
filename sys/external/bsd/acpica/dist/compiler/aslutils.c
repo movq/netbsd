@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,7 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
 
 #include "aslcompiler.h"
 #include "aslcompiler.y.h"
@@ -77,11 +78,13 @@ UtAttachNameseg (
  *
  ******************************************************************************/
 
+#define ACPI_TABLE_HELP_FORMAT  "%8u) %s    %s\n"
+
 void
 UtDisplaySupportedTables (
     void)
 {
-    const AH_TABLE          *TableData;
+    ACPI_DMTABLE_DATA       *TableData;
     UINT32                  i;
 
 
@@ -89,14 +92,20 @@ UtDisplaySupportedTables (
         "  (Compiler, Disassembler, Template Generator)\n\n",
         ACPI_CA_VERSION);
 
-    /* All ACPI tables with the common table header */
+    /* Special tables */
 
-    printf ("\n  Supported ACPI tables:\n");
-    for (TableData = AcpiSupportedTables, i = 1;
-         TableData->Signature; TableData++, i++)
+    printf ("  Special tables and AML tables:\n");
+    printf (ACPI_TABLE_HELP_FORMAT, 1, ACPI_RSDP_NAME, "Root System Description Pointer");
+    printf (ACPI_TABLE_HELP_FORMAT, 2, ACPI_SIG_FACS, "Firmware ACPI Control Structure");
+    printf (ACPI_TABLE_HELP_FORMAT, 3, ACPI_SIG_DSDT, "Differentiated System Description Table");
+    printf (ACPI_TABLE_HELP_FORMAT, 4, ACPI_SIG_SSDT, "Secondary System Description Table");
+
+    /* All data tables with common table header */
+
+    printf ("\n  Standard ACPI data tables:\n");
+    for (TableData = AcpiDmTableData, i = 5; TableData->Signature; TableData++, i++)
     {
-        printf ("%8u) %s    %s\n", i,
-            TableData->Signature, TableData->Description);
+        printf (ACPI_TABLE_HELP_FORMAT, i, TableData->Signature, TableData->Name);
     }
 }
 
@@ -170,26 +179,6 @@ UtLocalCalloc (
     return (Allocated);
 }
 
-/*******************************************************************************
- *
- * FUNCTION:    UtLocalFree
- *
- * PARAMETERS:  Allocated           - Pointer to be released
- * PARAMETERS:  Size                - Bytes to be released
- *
- * RETURN:      None
- *
- * DESCRIPTION: Free memory previously allocated
- *
- ******************************************************************************/
-void 
-UtLocalFree (
-	void *Allocated, UINT32 Size)
-{
-    ACPI_FREE (Allocated);
-    TotalAllocations--;
-    TotalAllocated -= Size;
-}
 
 /*******************************************************************************
  *
@@ -254,6 +243,37 @@ UtEndEvent (
 
 /*******************************************************************************
  *
+ * FUNCTION:    UtHexCharToValue
+ *
+ * PARAMETERS:  HexChar             - Hex character in Ascii
+ *
+ * RETURN:      The binary value of the hex character
+ *
+ * DESCRIPTION: Perform ascii-to-hex translation
+ *
+ ******************************************************************************/
+
+UINT8
+UtHexCharToValue (
+    int                     HexChar)
+{
+
+    if (HexChar <= 0x39)
+    {
+        return ((UINT8) (HexChar - 0x30));
+    }
+
+    if (HexChar <= 0x46)
+    {
+        return ((UINT8) (HexChar - 0x37));
+    }
+
+    return ((UINT8) (HexChar - 0x57));
+}
+
+
+/*******************************************************************************
+ *
  * FUNCTION:    UtConvertByteToHex
  *
  * PARAMETERS:  RawByte             - Binary data
@@ -276,8 +296,8 @@ UtConvertByteToHex (
     Buffer[0] = '0';
     Buffer[1] = 'x';
 
-    Buffer[2] = (UINT8) AcpiUtHexToAsciiChar (RawByte, 4);
-    Buffer[3] = (UINT8) AcpiUtHexToAsciiChar (RawByte, 0);
+    Buffer[2] = (UINT8) AslHexLookup[(RawByte >> 4) & 0xF];
+    Buffer[3] = (UINT8) AslHexLookup[RawByte & 0xF];
 }
 
 
@@ -292,7 +312,7 @@ UtConvertByteToHex (
  * RETURN:      Ascii hex byte is stored in Buffer.
  *
  * DESCRIPTION: Perform hex-to-ascii translation. The return data is prefixed
- *              with '0', and a trailing 'h' is added.
+ *              with "0x"
  *
  ******************************************************************************/
 
@@ -303,8 +323,8 @@ UtConvertByteToAsmHex (
 {
 
     Buffer[0] = '0';
-    Buffer[1] = (UINT8) AcpiUtHexToAsciiChar (RawByte, 4);
-    Buffer[2] = (UINT8) AcpiUtHexToAsciiChar (RawByte, 0);
+    Buffer[1] = (UINT8) AslHexLookup[(RawByte >> 4) & 0xF];
+    Buffer[2] = (UINT8) AslHexLookup[RawByte & 0xF];
     Buffer[3] = 'h';
 }
 
@@ -461,20 +481,17 @@ UtDisplaySummary (
             "%-14s %s - %u lines, %u bytes, %u keywords\n",
             "ASL Input:",
             Gbl_Files[ASL_FILE_INPUT].Filename, Gbl_CurrentLineNumber,
-            Gbl_OriginalInputFileSize, TotalKeywords);
+            Gbl_InputByteCount, TotalKeywords);
 
         /* AML summary */
 
         if ((Gbl_ExceptionCount[ASL_ERROR] == 0) || (Gbl_IgnoreErrors))
         {
-            if (Gbl_Files[ASL_FILE_AML_OUTPUT].Handle)
-            {
-                FlPrintFile (FileId,
-                    "%-14s %s - %u bytes, %u named objects, %u executable opcodes\n",
-                    "AML Output:",
-                    Gbl_Files[ASL_FILE_AML_OUTPUT].Filename, Gbl_TableLength,
-                    TotalNamedObjects, TotalExecutableOpcodes);
-            }
+            FlPrintFile (FileId,
+                "%-14s %s - %u bytes, %u named objects, %u executable opcodes\n",
+                "AML Output:",
+                Gbl_Files[ASL_FILE_AML_OUTPUT].Filename, Gbl_TableLength,
+                TotalNamedObjects, TotalExecutableOpcodes);
         }
     }
 
@@ -494,9 +511,9 @@ UtDisplaySummary (
             continue;
         }
 
-        /* .PRE is the preprocessor intermediate file */
+        /* .I is a temp file unless specifically requested */
 
-        if ((i == ASL_FILE_PREPROCESSOR)  && (!Gbl_KeepPreprocessorTempFile))
+        if ((i == ASL_FILE_PREPROCESSOR) && (!Gbl_PreprocessorOutputFlag))
         {
             continue;
         }
@@ -518,13 +535,8 @@ UtDisplaySummary (
 
     if (Gbl_FileType != ASL_INPUT_TYPE_ASCII_DATA)
     {
-        FlPrintFile (FileId, ", %u Optimizations",
-            Gbl_ExceptionCount[ASL_OPTIMIZATION]);
-
-        if (TotalFolds)
-        {
-            FlPrintFile (FileId, ", %u Constants Folded", TotalFolds);
-        }
+        FlPrintFile (FileId,
+            ", %u Optimizations", Gbl_ExceptionCount[ASL_OPTIMIZATION]);
     }
 
     FlPrintFile (FileId, "\n");
@@ -573,7 +585,7 @@ UtCheckIntegerRange (
 
 /*******************************************************************************
  *
- * FUNCTION:    UtStringCacheCalloc
+ * FUNCTION:    UtGetStringBuffer
  *
  * PARAMETERS:  Length              - Size of buffer requested
  *
@@ -586,58 +598,22 @@ UtCheckIntegerRange (
  ******************************************************************************/
 
 char *
-UtStringCacheCalloc (
+UtGetStringBuffer (
     UINT32                  Length)
 {
     char                    *Buffer;
-    ASL_CACHE_INFO          *Cache;
-    UINT32                  CacheSize = ASL_STRING_CACHE_SIZE;
 
-
-    if (Length > CacheSize)
-    {
-        CacheSize = Length;
-
-        if (Gbl_StringCacheList)
-        {
-            Cache = UtLocalCalloc (sizeof (Cache->Next) + CacheSize);
-
-            /* Link new cache buffer just following head of list */
-
-            Cache->Next = Gbl_StringCacheList->Next;
-            Gbl_StringCacheList->Next = Cache;
-
-            /* Leave cache management pointers alone as they pertain to head */
-
-            Gbl_StringCount++;
-            Gbl_StringSize += Length;
-
-            return (Cache->Buffer);
-        }
-    }
 
     if ((Gbl_StringCacheNext + Length) >= Gbl_StringCacheLast)
     {
-        /* Allocate a new buffer */
-
-        Cache = UtLocalCalloc (sizeof (Cache->Next) + CacheSize);
-
-        /* Link new cache buffer to head of list */
-
-        Cache->Next = Gbl_StringCacheList;
-        Gbl_StringCacheList = Cache;
-
-        /* Setup cache management pointers */
-
-        Gbl_StringCacheNext = Cache->Buffer;
-        Gbl_StringCacheLast = Gbl_StringCacheNext + CacheSize;
+        Gbl_StringCacheNext = UtLocalCalloc (ASL_STRING_CACHE_SIZE + Length);
+        Gbl_StringCacheLast = Gbl_StringCacheNext + ASL_STRING_CACHE_SIZE +
+                                Length;
     }
-
-    Gbl_StringCount++;
-    Gbl_StringSize += Length;
 
     Buffer = Gbl_StringCacheNext;
     Gbl_StringCacheNext += Length;
+
     return (Buffer);
 }
 
@@ -670,8 +646,7 @@ UtExpandLineBuffers (
     NewSize = Gbl_LineBufferSize * 2;
     if (Gbl_CurrentLineBuffer)
     {
-        DbgPrint (ASL_DEBUG_OUTPUT,
-            "Increasing line buffer size from %u to %u\n",
+        DbgPrint (ASL_DEBUG_OUTPUT,"Increasing line buffer size from %u to %u\n",
             Gbl_LineBufferSize, NewSize);
     }
 
@@ -716,30 +691,6 @@ ErrorExit:
 }
 
 
-/******************************************************************************
- *
- * FUNCTION:    UtFreeLineBuffers
- *
- * PARAMETERS:  None
- *
- * RETURN:      None
- *
- * DESCRIPTION: Free all line buffers
- *
- *****************************************************************************/
-
-void
-UtFreeLineBuffers (
-    void)
-{
-
-    free (Gbl_CurrentLineBuffer);
-    free (Gbl_MainTokenBuffer);
-    free (Gbl_MacroTokenBuffer);
-    free (Gbl_ExpressionTokenBuffer);
-}
-
-
 /*******************************************************************************
  *
  * FUNCTION:    UtInternalizeName
@@ -772,9 +723,9 @@ UtInternalizeName (
     Info.ExternalName = ExternalName;
     AcpiNsGetInternalNameLength (&Info);
 
-    /* We need a segment to store the internal name */
+    /* We need a segment to store the internal  name */
 
-    Info.InternalName = UtStringCacheCalloc (Info.Length);
+    Info.InternalName = UtGetStringBuffer (Info.Length);
     if (!Info.InternalName)
     {
         return (AE_NO_MEMORY);
@@ -955,7 +906,7 @@ UtDoConstant (
     char                    ErrBuf[64];
 
 
-    Status = stroul64 (String, 0, &Converted);
+    Status = UtStrtoul64 (String, 0, &Converted);
     if (ACPI_FAILURE (Status))
     {
         snprintf (ErrBuf, sizeof(ErrBuf), "%s %s\n", "Conversion error:",
@@ -967,11 +918,11 @@ UtDoConstant (
 }
 
 
-/* TBD: use version in ACPICA main code base? */
+/* TBD: use version in ACPI CA main code base? */
 
 /*******************************************************************************
  *
- * FUNCTION:    stroul64
+ * FUNCTION:    UtStrtoul64
  *
  * PARAMETERS:  String              - Null terminated string
  *              Terminater          - Where a pointer to the terminating byte
@@ -985,7 +936,7 @@ UtDoConstant (
  ******************************************************************************/
 
 ACPI_STATUS
-stroul64 (
+UtStrtoul64 (
     char                    *String,
     UINT32                  Base,
     UINT64                  *RetInteger)
@@ -1028,17 +979,17 @@ stroul64 (
      */
     if (*String == '-')
     {
-        Sign = ACPI_SIGN_NEGATIVE;
+        Sign = NEGATIVE;
         ++String;
     }
     else if (*String == '+')
     {
         ++String;
-        Sign = ACPI_SIGN_POSITIVE;
+        Sign = POSITIVE;
     }
     else
     {
-        Sign = ACPI_SIGN_POSITIVE;
+        Sign = POSITIVE;
     }
 
     /*
@@ -1126,7 +1077,7 @@ stroul64 (
 
     /* If a minus sign was present, then "the conversion is negated": */
 
-    if (Sign == ACPI_SIGN_NEGATIVE)
+    if (Sign == NEGATIVE)
     {
         ReturnValue = (ACPI_UINT32_MAX - ReturnValue) + 1;
     }

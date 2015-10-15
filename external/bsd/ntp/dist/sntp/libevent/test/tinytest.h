@@ -1,4 +1,4 @@
-/*	$NetBSD: tinytest.h,v 1.4 2015/07/10 14:20:35 christos Exp $	*/
+/*	$NetBSD: tinytest.h,v 1.1.1.1.6.2 2015/04/23 18:53:06 snj Exp $	*/
 
 /* tinytest.h -- Copyright 2009-2012 Nick Mathewson
  *

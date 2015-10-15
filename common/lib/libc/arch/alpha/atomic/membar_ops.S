@@ -1,4 +1,4 @@
-/*	$NetBSD: membar_ops.S,v 1.7 2015/01/08 22:27:17 riastradh Exp $	*/
+/*	$NetBSD: membar_ops.S,v 1.6.40.1 2015/03/18 07:47:28 snj Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.

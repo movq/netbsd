@@ -1,4 +1,4 @@
-/*	$NetBSD: npfctl.h,v 1.39 2014/12/26 22:44:54 christos Exp $	*/
+/*	$NetBSD: npfctl.h,v 1.38.2.1 2014/12/29 17:31:47 martin Exp $	*/
 
 /*-
  * Copyright (c) 2009-2013 The NetBSD Foundation, Inc.

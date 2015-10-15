@@ -1,4 +1,4 @@
-/* $NetBSD: lrintf.c,v 1.6 2015/07/09 06:17:13 nat Exp $ */
+/* $NetBSD: lrintf.c,v 1.5.40.1 2015/07/17 03:44:09 snj Exp $ */
 
 /*-
  * Copyright (c) 2004

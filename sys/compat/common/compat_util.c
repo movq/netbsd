@@ -1,4 +1,4 @@
-/* 	$NetBSD: compat_util.c,v 1.46 2014/11/09 17:48:07 maxv Exp $	*/
+/* 	$NetBSD: compat_util.c,v 1.45.4.1 2015/01/17 12:10:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: compat_util.c,v 1.46 2014/11/09 17:48:07 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: compat_util.c,v 1.45.4.1 2015/01/17 12:10:54 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

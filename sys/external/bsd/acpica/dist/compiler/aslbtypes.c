@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,7 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
 
 #include "aslcompiler.h"
 #include "aslcompiler.y.h"
@@ -373,12 +374,6 @@ AnGetBtype (
     ACPI_PARSE_OBJECT       *ReferencedNode;
     UINT32                  ThisNodeBtype = 0;
 
-
-    if (!Op)
-    {
-        AcpiOsPrintf ("Null Op in AnGetBtype\n");
-        return (ACPI_UINT32_MAX);
-    }
 
     if ((Op->Asl.ParseOpcode == PARSEOP_NAMESEG)     ||
         (Op->Asl.ParseOpcode == PARSEOP_NAMESTRING)  ||

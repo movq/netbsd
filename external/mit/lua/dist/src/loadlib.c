@@ -1,7 +1,5 @@
-/*	$NetBSD: loadlib.c,v 1.4 2015/10/08 13:21:00 mbalmer Exp $	*/
-
 /*
-** Id: loadlib.c,v 1.126 2015/02/16 13:14:33 roberto Exp 
+** $Id: loadlib.c,v 1.2.2.1 2015/02/04 21:32:46 martin Exp $
 ** Dynamic library loader for Lua
 ** See Copyright Notice in lua.h
 **
@@ -16,7 +14,6 @@
 #include "lprefix.h"
 
 
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -139,8 +136,8 @@ static lua_CFunction lsys_sym (lua_State *L, void *lib, const char *sym);
 #include <dlfcn.h>
 
 /*
-** Macro to convert pointer-to-void* to pointer-to-function. This cast
-** is undefined according to ISO C, but POSIX assumes that it works.
+** Macro to covert pointer to void* to pointer to function. This cast
+** is undefined according to ISO C, but POSIX assumes that it must work.
 ** (The '__extension__' in gnu compilers is only to avoid warnings.)
 */
 #if defined(__GNUC__)

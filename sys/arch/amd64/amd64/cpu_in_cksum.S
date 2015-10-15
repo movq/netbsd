@@ -1,4 +1,4 @@
-/* $NetBSD: cpu_in_cksum.S,v 1.3 2015/06/30 21:08:24 christos Exp $ */
+/* $NetBSD: cpu_in_cksum.S,v 1.2 2013/06/22 05:56:32 uebayasi Exp $ */
 
 /*-
  * Copyright (c) 2008 Joerg Sonnenberger <joerg@NetBSD.org>.
@@ -285,13 +285,9 @@ ENTRY(cpu_in_cksum)
 	ret
 
 .Mout_of_mbufs:
-#ifdef __PIC__
-	leaq	.Mout_of_mbufs_msg(%rip), %rdi
-#else
 	movq	$.Mout_of_mbufs_msg, %rdi
-#endif
 	movl	$0, %eax
-	call	PIC_PLT(_C_LABEL(printf))
+	call	_C_LABEL(printf)
 	jmp	.Mreturn
 END(cpu_in_cksum)
 

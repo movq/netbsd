@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.8 2014/10/10 12:43:07 christos Exp $
+# $NetBSD: Makefile.inc,v 1.4.22.1 2014/10/13 19:34:58 martin Exp $
 
 .PATH: ${.CURDIR}/complex
 

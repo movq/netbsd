@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,8 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
+#define __DSWLOAD_C__
 
 #include "acpi.h"
 #include "accommon.h"
@@ -78,20 +80,7 @@ AcpiDsInitCallbacks (
 
     switch (PassNumber)
     {
-    case 0:
-
-        /* Parse only - caller will setup callbacks */
-
-        WalkState->ParseFlags         = ACPI_PARSE_LOAD_PASS1 |
-                                        ACPI_PARSE_DELETE_TREE |
-                                        ACPI_PARSE_DISASSEMBLE;
-        WalkState->DescendingCallback = NULL;
-        WalkState->AscendingCallback  = NULL;
-        break;
-
     case 1:
-
-        /* Load pass 1 */
 
         WalkState->ParseFlags         = ACPI_PARSE_LOAD_PASS1 |
                                         ACPI_PARSE_DELETE_TREE;
@@ -101,8 +90,6 @@ AcpiDsInitCallbacks (
 
     case 2:
 
-        /* Load pass 2 */
-
         WalkState->ParseFlags         = ACPI_PARSE_LOAD_PASS1 |
                                         ACPI_PARSE_DELETE_TREE;
         WalkState->DescendingCallback = AcpiDsLoad2BeginOp;
@@ -110,8 +97,6 @@ AcpiDsInitCallbacks (
         break;
 
     case 3:
-
-        /* Execution pass */
 
 #ifndef ACPI_NO_METHOD_EXECUTION
         WalkState->ParseFlags        |= ACPI_PARSE_EXECUTE  |
@@ -325,18 +310,9 @@ AcpiDsLoad1BeginOp (
         if ((WalkState->Opcode != AML_SCOPE_OP) &&
             (!(WalkState->ParseFlags & ACPI_PARSE_DEFERRED_OP)))
         {
-            if (WalkState->NamespaceOverride)
-            {
-                Flags |= ACPI_NS_OVERRIDE_IF_FOUND;
-                ACPI_DEBUG_PRINT ((ACPI_DB_DISPATCH, "[%s] Override allowed\n",
-                        AcpiUtGetTypeName (ObjectType)));
-            }
-            else
-            {
-                Flags |= ACPI_NS_ERROR_IF_FOUND;
-                ACPI_DEBUG_PRINT ((ACPI_DB_DISPATCH, "[%s] Cannot already exist\n",
-                        AcpiUtGetTypeName (ObjectType)));
-            }
+            Flags |= ACPI_NS_ERROR_IF_FOUND;
+            ACPI_DEBUG_PRINT ((ACPI_DB_DISPATCH, "[%s] Cannot already exist\n",
+                    AcpiUtGetTypeName (ObjectType)));
         }
         else
         {
@@ -398,7 +374,7 @@ AcpiDsLoad1BeginOp (
     {
         /* Create a new op */
 
-        Op = AcpiPsAllocOp (WalkState->Opcode, WalkState->Aml);
+        Op = AcpiPsAllocOp (WalkState->Opcode);
         if (!Op)
         {
             return_ACPI_STATUS (AE_NO_MEMORY);

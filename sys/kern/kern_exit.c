@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_exit.c,v 1.248 2015/10/13 06:47:21 pgoyette Exp $	*/
+/*	$NetBSD: kern_exit.c,v 1.244 2014/05/05 15:45:32 christos Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -67,10 +67,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_exit.c,v 1.248 2015/10/13 06:47:21 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_exit.c,v 1.244 2014/05/05 15:45:32 christos Exp $");
 
 #include "opt_ktrace.h"
-#include "opt_dtrace.h"
 #include "opt_perfctrs.h"
 #include "opt_sysv.h"
 
@@ -124,9 +123,10 @@ static void proc_free(struct proc *, struct rusage *);
 /*
  * DTrace SDT provider definitions
  */
-SDT_PROVIDER_DECLARE(proc);
-SDT_PROBE_DEFINE1(proc, kernel, , exit, "int");
-
+SDT_PROBE_DEFINE(proc,,,exit,exit,
+	    "int", NULL, 		/* reason */
+	    NULL, NULL, NULL, NULL,
+	    NULL, NULL, NULL, NULL);
 /*
  * Fill in the appropriate signal information, and signal the parent.
  */
@@ -227,16 +227,9 @@ exit1(struct lwp *l, int rv)
 	if (__predict_false(p->p_sflag & PS_STOPEXIT)) {
 		KERNEL_UNLOCK_ALL(l, &l->l_biglocks);
 		sigclearall(p, &contsigmask, &kq);
-
-		if (!mutex_tryenter(proc_lock)) {
-			mutex_exit(p->p_lock);
-			mutex_enter(proc_lock);
-			mutex_enter(p->p_lock);
-		}
 		p->p_waited = 0;
-		p->p_pptr->p_nstopchild++;
+		membar_producer();
 		p->p_stat = SSTOP;
-		mutex_exit(proc_lock);
 		lwp_lock(l);
 		p->p_nrlwps--;
 		l->l_stat = LSSTOP;
@@ -421,7 +414,7 @@ exit1(struct lwp *l, int rv)
 	 */
 	KNOTE(&p->p_klist, NOTE_EXIT);
 
-	SDT_PROBE(proc, kernel, , exit,
+	SDT_PROBE(proc,,,exit,
 		(WCOREDUMP(rv) ? CLD_DUMPED :
 		 (WIFSIGNALED(rv) ? CLD_KILLED : CLD_EXITED)),
 		0,0,0,0);
@@ -966,7 +959,7 @@ proc_reparent(struct proc *child, struct proc *parent)
 	if (child->p_pptr == parent)
 		return;
 
-	if (child->p_stat == SZOMB || child->p_stat == SDEAD ||
+	if (child->p_stat == SZOMB ||
 	    (child->p_stat == SSTOP && !child->p_waited)) {
 		child->p_pptr->p_nstopchild--;
 		parent->p_nstopchild++;

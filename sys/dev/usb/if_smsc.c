@@ -1,4 +1,4 @@
-/*	$NetBSD: if_smsc.c,v 1.24 2015/08/02 11:55:28 mlelstv Exp $	*/
+/*	$NetBSD: if_smsc.c,v 1.19.2.1 2014/09/22 11:11:10 martin Exp $	*/
 
 /*	$OpenBSD: if_smsc.c,v 1.4 2012/09/27 12:38:11 jsg Exp $	*/
 /* $FreeBSD: src/sys/dev/usb/net/if_smsc.c,v 1.1 2012/08/15 04:03:55 gonzo Exp $ */
@@ -61,7 +61,6 @@
  */
 
 #ifdef _KERNEL_OPT
-#include "opt_usb.h"
 #include "opt_inet.h"
 #endif
 
@@ -77,7 +76,7 @@
 
 #include <sys/device.h>
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -1092,7 +1091,7 @@ smsc_attach(device_t parent, device_t self, void *aux)
 		sc->sc_enaddr[0] = (uint8_t)((mac_l) & 0xff);
 	}
 
-	aprint_normal_dev(self, "Ethernet address %s\n", ether_sprintf(sc->sc_enaddr));
+	aprint_normal_dev(self, " Ethernet address %s\n", ether_sprintf(sc->sc_enaddr));
 
 	IFQ_SET_READY(&ifp->if_snd);
 
@@ -1294,12 +1293,7 @@ smsc_rxeof(usbd_xfer_handle xfer, usbd_private_handle priv, usbd_status status)
 		buf += sizeof(rxhdr);
 		total_len -= sizeof(rxhdr);
 
-		if (rxhdr & SMSC_RX_STAT_COLLISION)
-			ifp->if_collisions++;
-
-		if (rxhdr & (SMSC_RX_STAT_ERROR
-		           | SMSC_RX_STAT_LENGTH_ERROR
-		           | SMSC_RX_STAT_MII_ERROR)) {
+		if (rxhdr & SMSC_RX_STAT_ERROR) {
 			smsc_dbg_printf(sc, "rx error (hdr 0x%08x)\n", rxhdr);
 			ifp->if_ierrors++;
 			goto done;

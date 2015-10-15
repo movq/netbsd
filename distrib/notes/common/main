@@ -1,4 +1,4 @@
-.\"	$NetBSD: main,v 1.524 2015/08/13 13:21:04 leot Exp $
+.\"	$NetBSD: main,v 1.510.4.7 2015/09/25 04:34:17 snj Exp $
 .\"
 .\" Copyright (c) 1999-2012 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -50,7 +50,7 @@
 .as MACHINE_LIST " sgimips shark sparc sparc64 sun2 sun3 vax x68k xen zaurus .
 .so \*[.CURDIR]/../common/macros
 .
-.Dd May 9, 2015
+.Dd September 25, 2015
 .Dt INSTALL 8
 .Os NetBSD
 .Sh NAME
@@ -495,7 +495,11 @@ It is impossible to completely summarize the massive development that
 went into the
 .Nx
 \*V release.
-The complete list of changes can be found in the
+See
+.Lk http://www.NetBSD.org/releases/formal-7/NetBSD-7.0.html
+for some of the more noteworthy changes in this release.
+.Pp
+A more extensive list of changes can be found in the
 CHANGES:
 .Lk http://ftp.NetBSD.org/pub/NetBSD/NetBSD-7.0/CHANGES
 and
@@ -503,8 +507,6 @@ CHANGES-7.0:
 .Lk http://ftp.NetBSD.org/pub/NetBSD/NetBSD-7.0/CHANGES-7.0
 files in the top level directory of the NetBSD 7.0 release tree.
 .Pp
-.\" fill in with changes.mdoc
-.
 .\} \" \n[FOR_RELEASE]
 .
 .Ss "Features to be removed in a later release"
@@ -513,6 +515,8 @@ The following features are to be removed from
 in the future:
 .(bullet
 .Xr dhclient 8
+and
+.Xr rtsol 8
 in favor of
 .Xr dhcpcd 8 .
 .It
@@ -568,7 +572,7 @@ The root directory of the
 .It Li CHANGES
 Changes between the 6.0 and 7.0 releases.
 .It Li CHANGES-7.0
-Changes between the initial 7.0 branch and final release of 7.0.
+Changes between the initial 7.0 branch and the final release of 7.0.
 .It Li CHANGES.prev
 Changes in previous
 .Nx
@@ -1106,7 +1110,6 @@ If you're one of them, and would like to be mentioned, tell us!)
 .\" Please keep in alphabetical order
 .\"
 .It Ta Ta
-.It Ta Hikaru Abe Ta Mt hikaru@NetBSD.org
 .It Ta Nathan Ahlstrom Ta Mt nra@NetBSD.org
 .It Ta Steve Allen Ta Mt wormey@NetBSD.org
 .It Ta Jukka Andberg Ta Mt jandberg@NetBSD.org
@@ -1240,7 +1243,6 @@ If you're one of them, and would like to be mentioned, tell us!)
 .It Ta IWAMOTO Toshihiro Ta Mt toshii@NetBSD.org
 .It Ta Matthew Jacob Ta Mt mjacob@NetBSD.org
 .It Ta Soren Jacobsen Ta Mt snj@NetBSD.org
-.It Ta Sevan Janiyan Ta Mt sevan@NetBSD.org
 .It Ta Lonhyn T. Jasinskyj Ta Mt lonhyn@NetBSD.org
 .It Ta Darrin Jewell Ta Mt dbj@NetBSD.org
 .It Ta Nicolas Joly Ta Mt njoly@NetBSD.org
@@ -1303,12 +1305,10 @@ If you're one of them, and would like to be mentioned, tell us!)
 .It Ta Simas Mockevicius Ta Mt symka@NetBSD.org
 .It Ta Ryosuke Moro Ta Mt szptvlfn@NetBSD.org
 .It Ta der Mouse Ta Mt mouse@NetBSD.org
-.It Ta Youri Mouton Ta Mt youri@NetBSD.org
 .It Ta Constantine A. Murenin Ta Mt cnst@NetBSD.org
 .It Ta Joseph Myers Ta Mt jsm@NetBSD.org
 .It Ta Tuomo M\(:akinen Ta Mt tjam@NetBSD.org
 .It Ta Zolt\('an Arnold NAGY Ta Mt zoltan@NetBSD.org
-.It Ta Kengo NAKAHARA Ta Mt knakahara@NetBSD.org
 .It Ta Ken Nakata Ta Mt kenn@NetBSD.org
 .It Ta Takeshi Nakayama Ta Mt nakayama@NetBSD.org
 .It Ta Alexander Nasonov Ta Mt alnsn@NetBSD.org
@@ -1337,7 +1337,6 @@ If you're one of them, and would like to be mentioned, tell us!)
 .It Ta Pierre Pronchery Ta Mt khorben@NetBSD.org
 .It Ta Chris Provenzano Ta Mt proven@NetBSD.org
 .It Ta Mindaugas Rasiukevicius Ta Mt rmind@NetBSD.org
-.It Ta Nils Ratusznik Ta Mt nils@NetBSD.org
 .It Ta Michael Rauch Ta Mt mrauch@NetBSD.org
 .It Ta Marc Recht Ta Mt recht@NetBSD.org
 .It Ta Darren Reed Ta Mt darrenr@NetBSD.org
@@ -1352,7 +1351,6 @@ If you're one of them, and would like to be mentioned, tell us!)
 .It Ta Steve Rumble Ta Mt rumble@NetBSD.org
 .It Ta Rumko Ta Mt rumko@NetBSD.org
 .It Ta Jukka Ruohonen Ta Mt jruoho@NetBSD.org
-.It Ta Kamil Rytarowski Ta Mt kamil@NetBSD.org
 .It Ta Blair J. Sadewitz Ta Mt bjs@NetBSD.org
 .It Ta David Sainty Ta Mt dsainty@NetBSD.org
 .It Ta SAITOH Masanobu Ta Mt msaitoh@NetBSD.org
@@ -1397,7 +1395,6 @@ If you're one of them, and would like to be mentioned, tell us!)
 .It Ta Gr\('egoire Sutre Ta Mt gsutre@NetBSD.org
 .It Ta Sergey Svishchev Ta Mt shattered@NetBSD.org
 .It Ta Robert Swindells Ta Mt rjs@NetBSD.org
-.It Ta Leonardo Taccari Ta Mt leot@NetBSD.org
 .It Ta Shin Takemura Ta Mt takemura@NetBSD.org
 .It Ta TAMURA Kent Ta Mt kent@NetBSD.org
 .It Ta Shin'ichiro TAYA Ta Mt taya@NetBSD.org

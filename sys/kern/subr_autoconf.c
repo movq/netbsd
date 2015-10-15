@@ -1,4 +1,4 @@
-/* $NetBSD: subr_autoconf.c,v 1.235 2015/04/13 16:46:33 riastradh Exp $ */
+/* $NetBSD: subr_autoconf.c,v 1.231.2.1 2015/03/09 08:56:01 snj Exp $ */
 
 /*
  * Copyright (c) 1996, 2000 Christopher G. Demetriou
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_autoconf.c,v 1.235 2015/04/13 16:46:33 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_autoconf.c,v 1.231.2.1 2015/03/09 08:56:01 snj Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ddb.h"
@@ -110,7 +110,7 @@ __KERNEL_RCSID(0, "$NetBSD: subr_autoconf.c,v 1.235 2015/04/13 16:46:33 riastrad
 
 #include <sys/disk.h>
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <machine/limits.h>
 
@@ -734,12 +734,11 @@ config_stdsubmatch(device_t parent, cfdata_t cf, const int *locs, void *aux)
 	KASSERT(!nlocs || locs);
 	for (i = 0; i < nlocs; i++) {
 		cl = &ci->ci_locdesc[i];
-		if (cl->cld_defaultstr != NULL &&
-		    cf->cf_loc[i] == cl->cld_default)
-			continue;
-		if (cf->cf_loc[i] == locs[i])
-			continue;
-		return 0;
+		/* !cld_defaultstr means no default value */
+		if ((!(cl->cld_defaultstr)
+		     || (cf->cf_loc[i] != cl->cld_default))
+		    && cf->cf_loc[i] != locs[i])
+			return 0;
 	}
 
 	return config_match(parent, cf, aux);
@@ -1151,26 +1150,26 @@ number(char *ep, int n)
 static void
 config_makeroom(int n, struct cfdriver *cd)
 {
-	int ondevs, nndevs;
+	int old, new;
 	device_t *osp, *nsp;
 
 	alldevs_nwrite++;
 
-	for (nndevs = MAX(4, cd->cd_ndevs); nndevs <= n; nndevs += nndevs)
+	for (new = MAX(4, cd->cd_ndevs); new <= n; new += new)
 		;
 
 	while (n >= cd->cd_ndevs) {
 		/*
 		 * Need to expand the array.
 		 */
-		ondevs = cd->cd_ndevs;
+		old = cd->cd_ndevs;
 		osp = cd->cd_devs;
 
 		/* Release alldevs_mtx around allocation, which may
 		 * sleep.
 		 */
 		mutex_exit(&alldevs_mtx);
-		nsp = kmem_alloc(sizeof(device_t[nndevs]), KM_SLEEP);
+		nsp = kmem_alloc(sizeof(device_t[new]), KM_SLEEP);
 		if (nsp == NULL)
 			panic("%s: could not expand cd_devs", __func__);
 		mutex_enter(&alldevs_mtx);
@@ -1180,20 +1179,20 @@ config_makeroom(int n, struct cfdriver *cd)
 		 */
 		if (cd->cd_devs != osp) {
 			mutex_exit(&alldevs_mtx);
-			kmem_free(nsp, sizeof(device_t[nndevs]));
+			kmem_free(nsp, sizeof(device_t[new]));
 			mutex_enter(&alldevs_mtx);
 			continue;
 		}
 
-		memset(nsp + ondevs, 0, sizeof(device_t[nndevs - ondevs]));
-		if (ondevs != 0)
-			memcpy(nsp, cd->cd_devs, sizeof(device_t[ondevs]));
+		memset(nsp + old, 0, sizeof(device_t[new - old]));
+		if (old != 0)
+			memcpy(nsp, cd->cd_devs, sizeof(device_t[old]));
 
-		cd->cd_ndevs = nndevs;
+		cd->cd_ndevs = new;
 		cd->cd_devs = nsp;
-		if (ondevs != 0) {
+		if (old != 0) {
 			mutex_exit(&alldevs_mtx);
-			kmem_free(osp, sizeof(device_t[ondevs]));
+			kmem_free(osp, sizeof(device_t[old]));
 			mutex_enter(&alldevs_mtx);
 		}
 	}

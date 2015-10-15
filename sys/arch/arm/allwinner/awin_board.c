@@ -1,4 +1,4 @@
-/*	$NetBSD: awin_board.c,v 1.35 2015/04/20 01:33:22 matt Exp $	*/
+/*	$NetBSD: awin_board.c,v 1.14.6.4 2014/12/04 11:08:38 martin Exp $	*/
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: awin_board.c,v 1.35 2015/04/20 01:33:22 matt Exp $");
+__KERNEL_RCSID(1, "$NetBSD: awin_board.c,v 1.14.6.4 2014/12/04 11:08:38 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -58,10 +58,6 @@ __KERNEL_RCSID(1, "$NetBSD: awin_board.c,v 1.35 2015/04/20 01:33:22 matt Exp $")
 #include <arm/cortex/gtmr_var.h>
 
 bus_space_handle_t awin_core_bsh;
-#if defined(ALLWINNER_A80)
-bus_space_handle_t awin_core2_bsh;
-bus_space_handle_t awin_rcpus_bsh;
-#endif
 
 struct arm32_bus_dma_tag awin_dma_tag = {
 	_BUS_DMAMAP_FUNCS,
@@ -128,20 +124,10 @@ static void
 awin_cpu_clk(void)
 {
 	struct cpu_info * const ci = curcpu();
-	bus_space_tag_t bst = &armv7_generic_bs_tag;
-
-#if defined(ALLWINNER_A80)
-	const uint32_t c0cpux = bus_space_read_4(bst, awin_core_bsh,
-	    AWIN_A80_CCU_OFFSET + AWIN_A80_CCU_PLL_C0CPUX_CTRL_REG);
-	const u_int p = (c0cpux & AWIN_A80_CCU_PLL_CxCPUX_OUT_EXT_DIVP) ? 4 : 1;
-	const u_int n = __SHIFTOUT(c0cpux, AWIN_A80_CCU_PLL_CxCPUX_FACTOR_N);
-
-	ci->ci_data.cpu_cc_freq = ((uint64_t)AWIN_REF_FREQ * n) / p;
-#else
 	u_int reg = awin_chip_id() == AWIN_CHIP_ID_A31 ?
 				      AWIN_A31_CPU_AXI_CFG_REG :
 				      AWIN_CPU_AHB_APB0_CFG_REG;
-	const uint32_t cpu0_cfg = bus_space_read_4(bst, awin_core_bsh,
+	const uint32_t cpu0_cfg = bus_space_read_4(&awin_bs_tag, awin_core_bsh,
 	    AWIN_CCM_OFFSET + reg);
 	const u_int cpu_clk_sel = __SHIFTIN(cpu0_cfg, AWIN_CPU_CLK_SRC_SEL);
 	switch (__SHIFTOUT(cpu_clk_sel, AWIN_CPU_CLK_SRC_SEL)) {
@@ -152,7 +138,7 @@ awin_cpu_clk(void)
 		ci->ci_data.cpu_cc_freq = AWIN_REF_FREQ;
 		break;
 	case AWIN_CPU_CLK_SRC_SEL_PLL1: {
-		const uint32_t pll1_cfg = bus_space_read_4(bst,
+		const uint32_t pll1_cfg = bus_space_read_4(&awin_bs_tag,
 		    awin_core_bsh, AWIN_CCM_OFFSET + AWIN_PLL1_CFG_REG);
 		u_int p, n, k, m;
 		if (awin_chip_id() == AWIN_CHIP_ID_A31) {
@@ -174,14 +160,12 @@ awin_cpu_clk(void)
 		ci->ci_data.cpu_cc_freq = 200000000;
 		break;
 	}
-#endif
 }
 
 void
 awin_bootstrap(vaddr_t iobase, vaddr_t uartbase)
 {
 	int error;
-	bus_space_tag_t bst = &armv7_generic_bs_tag;
 
 #ifdef AWIN_CONSOLE_EARLY
 	uart_base = (volatile uint32_t *)uartbase;
@@ -189,25 +173,12 @@ awin_bootstrap(vaddr_t iobase, vaddr_t uartbase)
 	printf("Early console started\n");
 #endif
 
-	error = bus_space_map(bst, AWIN_CORE_PBASE, AWIN_CORE_SIZE,
-	    0, &awin_core_bsh);
+	error = bus_space_map(&awin_bs_tag, AWIN_CORE_PBASE,
+	    AWIN_CORE_SIZE, 0, &awin_core_bsh);
 	if (error)
 		panic("%s: failed to map awin %s registers: %d",
 		    __func__, "io", error);
 	KASSERT(awin_core_bsh == iobase);
-
-#ifdef ALLWINNER_A80
-	error = bus_space_map(bst, AWIN_A80_CORE2_PBASE, AWIN_A80_CORE2_SIZE,
-	    0, &awin_core2_bsh);
-	if (error)
-		panic("%s: failed to map awin %s registers: %d",
-		    __func__, "core2", error);
-	error = bus_space_map(bst, AWIN_A80_RCPUS_PBASE, AWIN_A80_RCPUS_SIZE,
-	    0, &awin_rcpus_bsh);
-	if (error)
-		panic("%s: failed to map awin %s registers: %d",
-		    __func__, "rcpus", error);
-#endif
 
 #ifdef VERBOSE_INIT_ARM
 	printf("CPU Speed is");
@@ -230,16 +201,16 @@ awin_bootstrap(vaddr_t iobase, vaddr_t uartbase)
 		uint32_t s[4];
 		unsigned int cpuno;
 		for (cpuno = 0; cpuno < 4; cpuno++) {
-			s[cpuno] = bus_space_read_4(bst, awin_core_bsh,
+			s[cpuno] = bus_space_read_4(&awin_bs_tag, awin_core_bsh,
 			    AWIN_A31_CPUCFG_OFFSET +
 			    AWIN_A31_CPUCFG_STATUS_REG(cpuno));
 		}
 		printf("%s: cpu status: 0=%#x 1=%#x 2=%#x 3=%#x\n", __func__,
 		    s[0], s[1], s[2], s[3]);
-	} else if (awin_chip_id() == AWIN_CHIP_ID_A20) {
-		uint32_t s0 = bus_space_read_4(bst, awin_core_bsh,
+	} else {
+		uint32_t s0 = bus_space_read_4(&awin_bs_tag, awin_core_bsh,
 		    AWIN_CPUCFG_OFFSET + AWIN_CPUCFG_CPU0_STATUS_REG);
-		uint32_t s1 = bus_space_read_4(bst, awin_core_bsh,
+		uint32_t s1 = bus_space_read_4(&awin_bs_tag, awin_core_bsh,
 		    AWIN_CPUCFG_OFFSET + AWIN_CPUCFG_CPU1_STATUS_REG);
 		printf("%s: cpu status: 0=%#x 1=%#x\n", __func__, s0, s1);
 	}
@@ -289,7 +260,7 @@ awin_memprobe(void)
 #endif
 		memsize = 0;
 	} else {
-		const uint32_t dcr = bus_space_read_4(&armv7_generic_bs_tag,
+		const uint32_t dcr = bus_space_read_4(&awin_bs_tag,
 		    awin_core_bsh,
 		    AWIN_DRAM_OFFSET + AWIN_DRAM_DCR_REG);
 
@@ -308,22 +279,16 @@ awin_memprobe(void)
 uint16_t
 awin_chip_id(void)
 {
-	bus_space_tag_t bst = &armv7_generic_bs_tag;
-#if defined(ALLWINNER_A80)
-	bus_space_handle_t bsh = awin_core2_bsh;
-#else
-	bus_space_handle_t bsh = awin_core_bsh;
-#endif
 	static uint16_t chip_id = 0;
 	uint32_t ver;
 
 	if (!chip_id) {
-		ver = bus_space_read_4(bst, bsh,
+		ver = bus_space_read_4(&awin_bs_tag, awin_core_bsh,
 		    AWIN_SRAM_OFFSET + AWIN_SRAM_VER_REG);
 		ver |= AWIN_SRAM_VER_R_EN;
-		bus_space_write_4(bst, bsh,
+		bus_space_write_4(&awin_bs_tag, awin_core_bsh,
 		    AWIN_SRAM_OFFSET + AWIN_SRAM_VER_REG, ver);
-		ver = bus_space_read_4(bst, bsh,
+		ver = bus_space_read_4(&awin_bs_tag, awin_core_bsh,
 		    AWIN_SRAM_OFFSET + AWIN_SRAM_VER_REG);
 
 		chip_id = __SHIFTOUT(ver, AWIN_SRAM_VER_KEY_FIELD);
@@ -343,7 +308,6 @@ awin_chip_name(void)
 	case AWIN_CHIP_ID_A20: return "A20";
 	case AWIN_CHIP_ID_A23: return "A23";
 	case AWIN_CHIP_ID_A31: return "A31";
-	case AWIN_CHIP_ID_A80: return "A80";
 	default: return "unknown chip";
 	}
 }
@@ -351,10 +315,8 @@ awin_chip_name(void)
 void
 awin_pll6_enable(void)
 {
-	bus_space_tag_t bst = &armv7_generic_bs_tag;
+	bus_space_tag_t bst = &awin_bs_tag;
 	bus_space_handle_t bsh = awin_core_bsh;
-
-	KASSERT(awin_chip_id() != AWIN_CHIP_ID_A80);
 
 	/*
 	 * SATA needs PLL6 to be a 100MHz clock.
@@ -403,7 +365,7 @@ awin_pll6_enable(void)
 void
 awin_pll2_enable(void)
 {
-	bus_space_tag_t bst = &armv7_generic_bs_tag;
+	bus_space_tag_t bst = &awin_bs_tag;
 	bus_space_handle_t bsh = awin_core_bsh;
 
 	/*
@@ -448,7 +410,7 @@ awin_pll2_enable(void)
 void
 awin_pll3_enable(void)
 {
-	bus_space_tag_t bst = &armv7_generic_bs_tag;
+	bus_space_tag_t bst = &awin_bs_tag;
 	bus_space_handle_t bsh = awin_core_bsh;
 
 	/*
@@ -486,7 +448,7 @@ awin_pll3_enable(void)
 void
 awin_pll7_enable(void)
 {
-	bus_space_tag_t bst = &armv7_generic_bs_tag;
+	bus_space_tag_t bst = &awin_bs_tag;
 	bus_space_handle_t bsh = awin_core_bsh;
 
 	/*
@@ -524,7 +486,7 @@ awin_pll7_enable(void)
 void
 awin_pll3_set_rate(uint32_t rate)
 {
-	bus_space_tag_t bst = &armv7_generic_bs_tag;
+	bus_space_tag_t bst = &awin_bs_tag;
 	bus_space_handle_t bsh = awin_core_bsh;
 
 	const uint32_t ocfg = bus_space_read_4(bst, bsh,
@@ -567,12 +529,11 @@ awin_pll3_set_rate(uint32_t rate)
 uint32_t
 awin_pll5x_get_rate(void)
 {
-	bus_space_tag_t bst = &armv7_generic_bs_tag;
+	bus_space_tag_t bst = &awin_bs_tag;
 	bus_space_handle_t bsh = awin_core_bsh;
 	unsigned int n, k, p;
 
 	KASSERT(awin_chip_id() != AWIN_CHIP_ID_A31);
-	KASSERT(awin_chip_id() != AWIN_CHIP_ID_A80);
 
 	const uint32_t cfg = bus_space_read_4(bst, bsh,
 	    AWIN_CCM_OFFSET + AWIN_PLL5_CFG_REG);
@@ -587,11 +548,9 @@ awin_pll5x_get_rate(void)
 uint32_t
 awin_pll6_get_rate(void)
 {
-	bus_space_tag_t bst = &armv7_generic_bs_tag;
+	bus_space_tag_t bst = &awin_bs_tag;
 	bus_space_handle_t bsh = awin_core_bsh;
 	unsigned int n, k, m;
-
-	KASSERT(awin_chip_id() != AWIN_CHIP_ID_A80);
 
 	const uint32_t cfg = bus_space_read_4(bst, bsh,
 	    AWIN_CCM_OFFSET + AWIN_PLL6_CFG_REG);
@@ -607,23 +566,4 @@ awin_pll6_get_rate(void)
 	}
 
 	return (AWIN_REF_FREQ * n * k) / m;
-}
-
-uint32_t
-awin_periph0_get_rate(void)
-{
-	bus_space_tag_t bst = &armv7_generic_bs_tag;
-	bus_space_handle_t bsh = awin_core_bsh;
-	unsigned int n, idiv, odiv;
-
-	KASSERT(awin_chip_id() == AWIN_CHIP_ID_A80);
-
-	const uint32_t cfg = bus_space_read_4(bst, bsh,
-	    AWIN_A80_CCU_OFFSET + AWIN_A80_CCU_PLL_PERIPH0_CTRL_REG);
-
-	n = __SHIFTOUT(cfg, AWIN_A80_CCU_PLL_PERIPH0_FACTOR_N);
-	idiv = __SHIFTOUT(cfg, AWIN_A80_CCU_PLL_PERIPH0_INPUT_DIV) + 1;
-	odiv = __SHIFTOUT(cfg, AWIN_A80_CCU_PLL_PERIPH0_OUTPUT_DIV) + 1;
-
-	return ((AWIN_REF_FREQ * n) / idiv) / odiv;
 }

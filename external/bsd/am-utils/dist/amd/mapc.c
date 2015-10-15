@@ -1,7 +1,7 @@
-/*	$NetBSD: mapc.c,v 1.1.1.3 2015/01/17 16:34:15 christos Exp $	*/
+/*	$NetBSD: mapc.c,v 1.1.1.2 2009/03/20 20:26:49 christos Exp $	*/
 
 /*
- * Copyright (c) 1997-2014 Erez Zadok
+ * Copyright (c) 1997-2009 Erez Zadok
  * Copyright (c) 1989 Jan-Simon Pendry
  * Copyright (c) 1989 Imperial College of Science, Technology & Medicine
  * Copyright (c) 1989 The Regents of the University of California.
@@ -18,7 +18,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgment:
+ *      This product includes software developed by the University of
+ *      California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -135,7 +139,6 @@ static const char *get_full_path(const char *map, const char *path, const char *
 static int mapc_meta_search(mnt_map *, char *, char **, int);
 static void mapc_sync(mnt_map *);
 static void mapc_clear(mnt_map *);
-static void mapc_clear_kvhash(kv **);
 
 /* ROOT MAP */
 static int root_init(mnt_map *, char *, time_t *);
@@ -326,7 +329,6 @@ static map_type maptypes[] =
     MAPC_INC
   },
 #endif /* HAVE_MAP_EXEC */
-#ifdef notyet /* probe function needs to be there or SEGV */
 #ifdef HAVE_MAP_SUN
   {
     /* XXX: fill in */
@@ -339,7 +341,6 @@ static map_type maptypes[] =
     0
   },
 #endif /* HAVE_MAP_SUN */
-#endif
   {
     "error",
     error_init,
@@ -445,7 +446,7 @@ mapc_add_kv(mnt_map *m, char *key, char *val)
      * this entry is the key passed into this function.
      */
     if ((tok = strtok(val, "\n")) != NULL) {
-      mapc_add_kv(m, key, xstrdup(tok));
+      mapc_add_kv(m, key, strdup(tok));
     }
 
     /*
@@ -460,7 +461,7 @@ mapc_add_kv(mnt_map *m, char *key, char *val)
 	*entry++ = '\0';
       }
 
-      mapc_add_kv(m, xstrdup(key), xstrdup(entry));
+      mapc_add_kv(m, strdup(key), strdup(entry));
     }
 
     XFREE(val);
@@ -486,8 +487,7 @@ mapc_add_kv(mnt_map *m, char *key, char *val)
       plog(XLOG_USER, "error compiling RE \"%s\": %s", pattern, errstr);
       return;
     }
-  } else
-    memset(&re, 0, sizeof(re));
+  }
 #endif /* HAVE_REGEXEC */
 
   h = &m->kvhash[hash];
@@ -499,7 +499,6 @@ mapc_add_kv(mnt_map *m, char *key, char *val)
   n->val = val;
   n->next = *h;
   *h = n;
-  m->nentries++;
 }
 
 
@@ -577,7 +576,7 @@ static int
 mapc_reload_map(mnt_map *m)
 {
   int error, ret = 0;
-  kv *maphash[NKVHASH];
+  kv *maphash[NKVHASH], *tmphash[NKVHASH];
   time_t t;
 
   error = (*m->mtime) (m, m->map_name, &t);
@@ -603,7 +602,6 @@ mapc_reload_map(mnt_map *m)
   memset((voidp) m->kvhash, 0, sizeof(m->kvhash));
 
   dlog("calling map reload on %s", m->map_name);
-  m->nentries = 0;
   error = (*m->reload) (m, m->map_name, mapc_add_kv);
   if (error) {
     if (m->reloads == 0)
@@ -619,14 +617,14 @@ mapc_reload_map(mnt_map *m)
     else
       plog(XLOG_INFO, "reload #%d of map %s succeeded",
 	   m->reloads, m->map_name);
-    mapc_clear_kvhash(maphash);
-    if (m->wildcard) {
-       XFREE(m->wildcard);
-       m->wildcard = NULL;
-    }
+    memcpy((voidp) tmphash, (voidp) m->kvhash, sizeof(m->kvhash));
+    memcpy((voidp) m->kvhash, (voidp) maphash, sizeof(m->kvhash));
+    mapc_clear(m);
+    memcpy((voidp) m->kvhash, (voidp) tmphash, sizeof(m->kvhash));
     m->modify = t;
     ret = 1;
   }
+  m->wildcard = NULL;
 
   dlog("calling mapc_search for wildcard");
   error = mapc_search(m, wildcard, &m->wildcard);
@@ -690,7 +688,6 @@ mapc_create(char *map, char *opt, const char *type, const char *mntpt)
   /* assert: mt in maptypes */
 
   m->flags = alloc & ~MAPC_CACHE_MASK;
-  m->nentries = 0;
   alloc &= MAPC_CACHE_MASK;
 
   if (alloc == MAPC_DFLT)
@@ -737,7 +734,7 @@ mapc_create(char *map, char *opt, const char *type, const char *mntpt)
   m->search = alloc >= MAPC_ALL ? error_search : mt->search;
   m->mtime = mt->mtime;
   memset((voidp) m->kvhash, 0, sizeof(m->kvhash));
-  m->map_name = xstrdup(map);
+  m->map_name = strdup(map);
   m->refc = 1;
   m->wildcard = NULL;
   m->reloads = 0;
@@ -754,10 +751,10 @@ mapc_create(char *map, char *opt, const char *type, const char *mntpt)
 
 
 /*
- * Free the cached data in a map hash
+ * Free the cached data in a map
  */
 static void
-mapc_clear_kvhash(kv **kvhash)
+mapc_clear(mnt_map *m)
 {
   int i;
 
@@ -766,25 +763,16 @@ mapc_clear_kvhash(kv **kvhash)
    * along free'ing the data.
    */
   for (i = 0; i < NKVHASH; i++) {
-    kv *k = kvhash[i];
+    kv *k = m->kvhash[i];
     while (k) {
       kv *n = k->next;
       XFREE(k->key);
-      XFREE(k->val);
+      if (k->val)
+	XFREE(k->val);
       XFREE(k);
       k = n;
     }
   }
-}
-
-
-/*
- * Free the cached data in a map
- */
-static void
-mapc_clear(mnt_map *m)
-{
-  mapc_clear_kvhash(m->kvhash);
 
   /*
    * Zero the hash slots
@@ -794,10 +782,8 @@ mapc_clear(mnt_map *m)
   /*
    * Free the wildcard if it exists
    */
-  XFREE(m->wildcard);
-  m->wildcard = NULL;
-
-  m->nentries = 0;
+  if (m->wildcard)
+    XFREE(m->wildcard);
 }
 
 
@@ -931,7 +917,7 @@ mapc_meta_search(mnt_map *m, char *key, char **pval, int recurse)
    */
   if (k) {
     if (k->val)
-      *pval = xstrdup(k->val);
+      *pval = strdup(k->val);
     else
       error = ENOENT;
   } else if (m->alloc >= MAPC_ALL) {
@@ -948,7 +934,7 @@ mapc_meta_search(mnt_map *m, char *key, char **pval, int recurse)
      */
     error = search_map(m, key, pval);
     if (!error && m->alloc == MAPC_INC)
-      mapc_add_kv(m, xstrdup(key), xstrdup(*pval));
+      mapc_add_kv(m, strdup(key), strdup(*pval));
   }
 
   /*
@@ -983,7 +969,7 @@ mapc_meta_search(mnt_map *m, char *key, char **pval, int recurse)
       }
 
       if (error > 0 && m->wildcard) {
-	*pval = xstrdup(m->wildcard);
+	*pval = strdup(m->wildcard);
 	error = 0;
       }
     }
@@ -1139,7 +1125,7 @@ root_newmap(const char *dir, const char *opts, const char *map, const cf_map_t *
     else
       xstrlcpy(str, opts, sizeof(str));
   }
-  mapc_repl_kv(root_map, xstrdup(dir), xstrdup(str));
+  mapc_repl_kv(root_map, strdup((char *)dir), strdup(str));
 }
 
 

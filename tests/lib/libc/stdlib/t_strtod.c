@@ -1,4 +1,4 @@
-/*	$NetBSD: t_strtod.c,v 1.33 2014/12/27 18:03:41 martin Exp $ */
+/*	$NetBSD: t_strtod.c,v 1.31 2012/09/26 07:24:38 jruoho Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 /* Public domain, Otto Moerbeek <otto@drijf.net>, 2006. */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_strtod.c,v 1.33 2014/12/27 18:03:41 martin Exp $");
+__RCSID("$NetBSD: t_strtod.c,v 1.31 2012/09/26 07:24:38 jruoho Exp $");
 
 #include <errno.h>
 #include <math.h>
@@ -41,8 +41,9 @@ __RCSID("$NetBSD: t_strtod.c,v 1.33 2014/12/27 18:03:41 martin Exp $");
 #include <string.h>
 
 #include <atf-c.h>
+#include <atf-c/config.h>
 
-#ifdef HAVE_FENV
+#if defined(__i386__) || defined(__amd64__) || defined(__sparc__)
 #include <fenv.h>
 #endif
 
@@ -238,7 +239,7 @@ ATF_TC_HEAD(strtod_round, tc)
 
 ATF_TC_BODY(strtod_round, tc)
 {
-#ifdef HAVE_FENV
+#if defined(__i386__) || defined(__amd64__) || defined(__sparc__)
 
 	/*
 	 * Test that strtod(3) honors the current rounding mode.
@@ -262,7 +263,7 @@ ATF_TC_BODY(strtod_round, tc)
 		atf_tc_fail("strtod(3) did not honor fesetround(3)");
 	}
 #else
-	atf_tc_skip("Requires <fenv.h> support");
+	atf_tc_skip("Requires one of i386, amd64 or sparc");
 #endif
 }
 

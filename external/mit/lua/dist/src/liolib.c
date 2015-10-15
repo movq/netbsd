@@ -1,7 +1,5 @@
-/*	$NetBSD: liolib.c,v 1.4 2015/10/08 13:21:00 mbalmer Exp $	*/
-
 /*
-** Id: liolib.c,v 2.144 2015/04/03 18:41:57 roberto Exp 
+** $Id: liolib.c,v 1.2.2.1 2015/02/04 21:32:46 martin Exp $
 ** Standard I/O (and system) library
 ** See Copyright Notice in lua.h
 */
@@ -412,6 +410,12 @@ static int readdigits (RN *rn, int hex) {
 }
 
 
+/* access to locale "radix character" (decimal point) */
+#if !defined(l_getlocaledecpoint)
+#define l_getlocaledecpoint()     (localeconv()->decimal_point[0])
+#endif
+
+
 /*
 ** Read a number: first reads a valid prefix of a numeral into a buffer.
 ** Then it calls 'lua_stringtonumber' to check whether the format is
@@ -421,10 +425,9 @@ static int read_number (lua_State *L, FILE *f) {
   RN rn;
   int count = 0;
   int hex = 0;
-  char decp[2];
+  char decp[2] = ".";
   rn.f = f; rn.n = 0;
-  decp[0] = lua_getlocaledecpoint();  /* get decimal point from locale */
-  decp[1] = '\0';
+  decp[0] = l_getlocaledecpoint();  /* get decimal point from locale */
   l_lockfile(rn.f);
   do { rn.c = l_getc(rn.f); } while (isspace(rn.c));  /* skip spaces */
   test2(&rn, "-+");  /* optional signal */
@@ -454,7 +457,7 @@ static int read_number (lua_State *L, FILE *f) {
 static int test_eof (lua_State *L, FILE *f) {
   int c = getc(f);
   ungetc(c, f);  /* no-op when c == EOF */
-  lua_pushliteral(L, "");
+  lua_pushlstring(L, NULL, 0);
   return (c != EOF);
 }
 

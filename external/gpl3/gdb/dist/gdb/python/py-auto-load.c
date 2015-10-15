@@ -1,6 +1,6 @@
 /* GDB routines for supporting auto-loaded scripts.
 
-   Copyright (C) 2010-2015 Free Software Foundation, Inc.
+   Copyright (C) 2010-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,11 +18,16 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include <string.h>
 #include "top.h"
+#include "exceptions.h"
 #include "gdbcmd.h"
 #include "objfiles.h"
 #include "python.h"
 #include "auto-load.h"
+
+#ifdef HAVE_PYTHON
+
 #include "python-internal.h"
 
 /* User-settable option to enable/disable auto-loading of Python scripts:
@@ -40,13 +45,30 @@ show_auto_load_python_scripts (struct ui_file *file, int from_tty,
   fprintf_filtered (file, _("Auto-loading of Python scripts is %s.\n"), value);
 }
 
-/* Return non-zero if auto-loading Python scripts is enabled.
-   This is the extension_language_script_ops.auto_load_enabled "method".  */
+/* Return non-zero if auto-loading Python scripts is enabled.  */
 
-int
-gdbpy_auto_load_enabled (const struct extension_language_defn *extlang)
+static int
+auto_load_python_scripts_enabled (void)
 {
   return auto_load_python_scripts;
+}
+
+/* Definition of script language for Python scripts.  */
+
+static const struct script_language script_language_python =
+{
+  "python",
+  GDBPY_AUTO_FILE_NAME,
+  auto_load_python_scripts_enabled,
+  source_python_script_for_objfile
+};
+
+/* Return the Python script language definition.  */
+
+const struct script_language *
+gdbpy_script_language_defn (void)
+{
+  return &script_language_python;
 }
 
 /* Wrapper for "info auto-load python-scripts".  */
@@ -54,7 +76,7 @@ gdbpy_auto_load_enabled (const struct extension_language_defn *extlang)
 static void
 info_auto_load_python_scripts (char *pattern, int from_tty)
 {
-  auto_load_info_scripts (pattern, from_tty, &extension_language_python);
+  auto_load_info_scripts (pattern, from_tty, &script_language_python);
 }
 
 int
@@ -103,3 +125,16 @@ Print the list of automatically loaded Python scripts, deprecated."));
 
   return 0;
 }
+
+#else /* ! HAVE_PYTHON */
+
+/* Return the Python script language definition.
+   Since support isn't compiled in, return NULL.  */
+
+const struct script_language *
+gdbpy_script_language_defn (void)
+{
+  return NULL;
+}
+
+#endif /* ! HAVE_PYTHON */

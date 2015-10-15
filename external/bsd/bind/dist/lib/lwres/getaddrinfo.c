@@ -1,4 +1,4 @@
-/*	$NetBSD: getaddrinfo.c,v 1.7 2014/12/10 04:38:02 christos Exp $	*/
+/*	$NetBSD: getaddrinfo.c,v 1.6.4.1 2014/12/22 03:28:47 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2004-2008, 2012, 2014  Internet Systems Consortium, Inc. ("ISC")

@@ -1,5 +1,5 @@
-/*	$Id: at91dbgu.c,v 1.15 2015/09/21 13:31:30 skrll Exp $	*/
-/*	$NetBSD: at91dbgu.c,v 1.15 2015/09/21 13:31:30 skrll Exp $ */
+/*	$Id: at91dbgu.c,v 1.12 2014/08/10 16:44:33 tls Exp $	*/
+/*	$NetBSD: at91dbgu.c,v 1.12 2014/08/10 16:44:33 tls Exp $ */
 
 /*
  *
@@ -83,14 +83,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: at91dbgu.c,v 1.15 2015/09/21 13:31:30 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: at91dbgu.c,v 1.12 2014/08/10 16:44:33 tls Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
 
 #include "rnd.h"
 #ifdef RND_COM
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 #endif
 
 /*
@@ -205,8 +205,11 @@ struct consdev at91dbgu_cons = {
 #define DEFAULT_COMSPEED 115200
 #endif
 
-#define COMUNIT(x)	TTUNIT(x)
-#define COMDIALOUT(x)	TTDIALOUT(x)
+#define COMUNIT_MASK    0x7ffff
+#define COMDIALOUT_MASK 0x80000
+
+#define COMUNIT(x)	(minor(x) & COMUNIT_MASK)
+#define COMDIALOUT(x)	(minor(x) & COMDIALOUT_MASK)
 
 #define COM_ISALIVE(sc)	((sc)->enabled != 0 && device_is_active((sc)->sc_dev))
 
@@ -910,7 +913,7 @@ at91dbgu_cn_getc(dev_t dev)
 	if (!db_active)
 #endif
 	{
-		int cn_trapped __unused = 0;
+		int cn_trapped = 0; /* unused */
 
 		cn_check_magic(dev, c, at91dbgu_cnm_state);
 	}

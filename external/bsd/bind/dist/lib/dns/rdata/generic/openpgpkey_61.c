@@ -1,4 +1,4 @@
-/*	$NetBSD: openpgpkey_61.c,v 1.1.1.2 2015/09/03 07:21:39 christos Exp $	*/
+/*	$NetBSD: openpgpkey_61.c,v 1.1.1.1.2.3 2015/09/09 08:10:03 martin Exp $	*/
 
 /*
  * Copyright (C) 2014  Internet Systems Consortium, Inc. ("ISC")

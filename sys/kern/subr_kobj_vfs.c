@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_kobj_vfs.c,v 1.8 2015/08/24 22:50:32 pooka Exp $	*/
+/*	$NetBSD: subr_kobj_vfs.c,v 1.7 2013/09/15 14:08:25 martin Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -61,10 +61,7 @@
  */
 
 #include <sys/kobj_impl.h>
-
-#ifdef _KERNEL_OPT
 #include "opt_modular.h"
-#endif
 
 #ifdef MODULAR
 
@@ -75,7 +72,7 @@
 #include <sys/vnode.h>
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_kobj_vfs.c,v 1.8 2015/08/24 22:50:32 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_kobj_vfs.c,v 1.7 2013/09/15 14:08:25 martin Exp $");
 
 static void
 kobj_close_vfs(kobj_t ko)

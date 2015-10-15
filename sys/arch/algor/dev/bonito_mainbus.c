@@ -1,4 +1,4 @@
-/*	$NetBSD: bonito_mainbus.c,v 1.16 2015/06/09 22:47:12 matt Exp $	*/
+/*	$NetBSD: bonito_mainbus.c,v 1.15 2012/10/27 17:17:24 chs Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bonito_mainbus.c,v 1.16 2015/06/09 22:47:12 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bonito_mainbus.c,v 1.15 2012/10/27 17:17:24 chs Exp $");
 
 #include "opt_algor_p6032.h"
 
@@ -43,7 +43,6 @@ __KERNEL_RCSID(0, "$NetBSD: bonito_mainbus.c,v 1.16 2015/06/09 22:47:12 matt Exp
 
 #include <algor/autoconf.h>
 
-#include <mips/cpuregs.h>
 #include <mips/bonito/bonitoreg.h>
 
 #ifdef ALGOR_P6032

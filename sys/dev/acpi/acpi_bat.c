@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_bat.c,v 1.115 2015/04/23 23:23:00 pgoyette Exp $	*/
+/*	$NetBSD: acpi_bat.c,v 1.112 2012/08/14 14:36:43 jruoho Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -75,7 +75,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_bat.c,v 1.115 2015/04/23 23:23:00 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_bat.c,v 1.112 2012/08/14 14:36:43 jruoho Exp $");
 
 #include <sys/param.h>
 #include <sys/condvar.h>
@@ -381,22 +381,15 @@ acpibat_get_info(device_t dv)
 			goto out;
 		}
 
-		if (elm[i].Integer.Value != ACPIBAT_VAL_UNKNOWN &&
-		    elm[i].Integer.Value >= INT_MAX) {
-			rv = AE_LIMIT;
-			goto out;
-		}
+		KDASSERT((uint64_t)elm[i].Integer.Value < INT_MAX);
 	}
 
-	switch (elm[ACPIBAT_BIF_UNIT].Integer.Value) {
-	case ACPIBAT_PWRUNIT_MA:
+	if ((elm[ACPIBAT_BIF_UNIT].Integer.Value & ACPIBAT_PWRUNIT_MA) != 0) {
 		capunit = ENVSYS_SAMPHOUR;
 		rateunit = ENVSYS_SAMPS;
-		break;
-	default:
+	} else {
 		capunit = ENVSYS_SWATTHOUR;
 		rateunit = ENVSYS_SWATTS;
-		break;
 	}
 
 	sc->sc_sensor[ACPIBAT_DCAPACITY].units = capunit;
@@ -504,14 +497,10 @@ acpibat_print_info(device_t dv, ACPI_OBJECT *elm)
 	 * Granularity 2.	"Battery capacity granularity between warning
 	 *			 and full in [mAh] or [mWh]. [...]"
 	 */
-	switch (elm[ACPIBAT_BIF_UNIT].Integer.Value) {
-	case ACPIBAT_PWRUNIT_MA:
+	if ((elm[ACPIBAT_BIF_UNIT].Integer.Value & ACPIBAT_PWRUNIT_MA) != 0)
 		unit = "Ah";
-		break;
-	default:
+	else
 		unit = "Wh";
-		break;
-	}
 
 	aprint_verbose_dev(dv, "granularity: "
 	    "low->warn %d.%03d %s, warn->full %d.%03d %s\n",
@@ -851,7 +840,7 @@ acpibat_get_limits(struct sysmon_envsys *sme, envsys_data_t *edata,
 	*props |= PROP_BATTCAP | PROP_BATTWARN | PROP_DRIVER_LIMITS;
 }
 
-MODULE(MODULE_CLASS_DRIVER, acpibat, "sysmon_envsys");
+MODULE(MODULE_CLASS_DRIVER, acpibat, NULL);
 
 #ifdef _MODULE
 #include "ioconf.c"

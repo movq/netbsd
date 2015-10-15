@@ -1,4 +1,4 @@
-/*	$NetBSD: printhost.c,v 1.3 2014/12/20 13:15:48 prlw1 Exp $	*/
+/*	$NetBSD: printhost.c,v 1.2.12.1 2014/12/29 17:27:28 martin Exp $	*/
 
 /*
  * Copyright (C) 2012 by Darren Reed.

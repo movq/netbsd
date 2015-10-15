@@ -1,7 +1,5 @@
-/*	$NetBSD: ldo.h,v 1.4 2015/10/08 13:21:00 mbalmer Exp $	*/
-
 /*
-** Id: ldo.h,v 2.22 2015/05/22 17:48:19 roberto Exp 
+** $Id: ldo.h,v 1.2.2.1 2015/02/04 21:32:46 martin Exp $
 ** Stack and Call structure of Lua
 ** See Copyright Notice in lua.h
 */
@@ -36,7 +34,7 @@ LUAI_FUNC void luaD_call (lua_State *L, StkId func, int nResults,
                                         int allowyield);
 LUAI_FUNC int luaD_pcall (lua_State *L, Pfunc func, void *u,
                                         ptrdiff_t oldtop, ptrdiff_t ef);
-LUAI_FUNC int luaD_poscall (lua_State *L, StkId firstResult, int nres);
+LUAI_FUNC int luaD_poscall (lua_State *L, StkId firstResult);
 LUAI_FUNC void luaD_reallocstack (lua_State *L, int newsize);
 LUAI_FUNC void luaD_growstack (lua_State *L, int n);
 LUAI_FUNC void luaD_shrinkstack (lua_State *L);

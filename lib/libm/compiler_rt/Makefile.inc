@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.9 2014/10/22 10:33:27 joerg Exp $
+# $NetBSD: Makefile.inc,v 1.6.2.1 2015/05/19 05:03:15 snj Exp $
 
 COMPILER_RT_SRCDIR=	${NETBSDSRCDIR}/sys/external/bsd/compiler_rt/dist
 

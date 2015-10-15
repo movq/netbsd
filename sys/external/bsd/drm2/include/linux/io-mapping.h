@@ -1,4 +1,4 @@
-/*	$NetBSD: io-mapping.h,v 1.5 2015/02/25 14:02:43 riastradh Exp $	*/
+/*	$NetBSD: io-mapping.h,v 1.2.8.3 2015/03/06 21:39:10 snj Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

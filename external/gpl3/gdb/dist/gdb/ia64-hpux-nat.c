@@ -1,4 +1,4 @@
-/* Copyright (C) 2010-2015 Free Software Foundation, Inc.
+/* Copyright (C) 2010-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -342,11 +342,10 @@ static target_xfer_partial_ftype *super_xfer_partial;
 /* The "xfer_partial" routine for a memory region that is completely
    outside of the backing-store region.  */
 
-static enum target_xfer_status
+static LONGEST
 ia64_hpux_xfer_memory_no_bs (struct target_ops *ops, const char *annex,
 			     gdb_byte *readbuf, const gdb_byte *writebuf,
-			     CORE_ADDR addr, LONGEST len,
-			     ULONGEST *xfered_len)
+			     CORE_ADDR addr, LONGEST len)
 {
   /* Memory writes need to be aligned on 16byte boundaries, at least
      when writing in the text section.  On the other hand, the size
@@ -368,17 +367,17 @@ ia64_hpux_xfer_memory_no_bs (struct target_ops *ops, const char *annex,
 				   NULL /* write */,
 				   aligned_addr, addr - aligned_addr);
       if (status <= 0)
-	return TARGET_XFER_EOF;
+	return 0;
       memcpy (aligned_buf + (addr - aligned_addr), writebuf, len);
 
       return super_xfer_partial (ops, TARGET_OBJECT_MEMORY, annex,
 				 NULL /* read */, aligned_buf /* write */,
-				 aligned_addr, aligned_len, xfered_len);
+				 aligned_addr, aligned_len);
     }
   else
     /* Memory read or properly aligned memory write.  */
     return super_xfer_partial (ops, TARGET_OBJECT_MEMORY, annex, readbuf,
-			       writebuf, addr, len, xfered_len);
+			       writebuf, addr, len);
 }
 
 /* Read LEN bytes at ADDR from memory, and store it in BUF.  This memory
@@ -518,10 +517,10 @@ ia64_hpux_get_register_from_save_state_t (int regnum, int reg_size)
 /* The "xfer_partial" target_ops routine for ia64-hpux, in the case
    where the requested object is TARGET_OBJECT_MEMORY.  */
 
-static enum target_xfer_status
+static LONGEST
 ia64_hpux_xfer_memory (struct target_ops *ops, const char *annex,
 		       gdb_byte *readbuf, const gdb_byte *writebuf,
-		       CORE_ADDR addr, ULONGEST len, ULONGEST *xfered_len)
+		       CORE_ADDR addr, LONGEST len)
 {
   CORE_ADDR bsp, bspstore;
   CORE_ADDR start_addr, short_len;
@@ -564,7 +563,7 @@ ia64_hpux_xfer_memory (struct target_ops *ops, const char *annex,
       status = ia64_hpux_xfer_memory_no_bs (ops, annex, readbuf, writebuf,
 					    addr, short_len);
       if (status <= 0)
-        return TARGET_XFER_EOF;
+        return 0;
     }
 
   /* 2. Memory region after BSP.  */
@@ -582,7 +581,7 @@ ia64_hpux_xfer_memory (struct target_ops *ops, const char *annex,
 		 writebuf ? writebuf + (start_addr - addr) : NULL,
 		 start_addr, short_len);
       if (status <= 0)
-	return TARGET_XFER_EOF;
+	return 0;
     }
 
   /* 3. Memory region between BSPSTORE and BSP.  */
@@ -607,11 +606,10 @@ ia64_hpux_xfer_memory (struct target_ops *ops, const char *annex,
 		  writebuf ? writebuf + (start_addr - addr) : NULL,
 		  start_addr, short_len);
       if (status < 0)
-	return TARGET_XFER_EOF;
+	return 0;
     }
 
-  *xfered_len = len;
-  return TARGET_XFER_OK;
+  return len;
 }
 
 /* Handle the transfer of TARGET_OBJECT_HPUX_UREGS objects on ia64-hpux.
@@ -621,10 +619,10 @@ ia64_hpux_xfer_memory (struct target_ops *ops, const char *annex,
    we do not currently do not need these transfers), and will raise
    a failed assertion if WRITEBUF is not NULL.  */
 
-static enum target_xfer_status
+static LONGEST
 ia64_hpux_xfer_uregs (struct target_ops *ops, const char *annex,
 		      gdb_byte *readbuf, const gdb_byte *writebuf,
-		      ULONGEST offset, ULONGEST len, ULONGEST *xfered_len)
+		      ULONGEST offset, LONGEST len)
 {
   int status;
 
@@ -632,10 +630,8 @@ ia64_hpux_xfer_uregs (struct target_ops *ops, const char *annex,
 
   status = ia64_hpux_read_register_from_save_state_t (offset, readbuf, len);
   if (status < 0)
-    return TARGET_XFER_E_IO;
-
-  *xfered_len = (ULONGEST) len;
-  return TARGET_XFER_OK;
+    return -1;
+  return len;
 }
 
 /* Handle the transfer of TARGET_OBJECT_HPUX_SOLIB_GOT objects on ia64-hpux.
@@ -644,10 +640,10 @@ ia64_hpux_xfer_uregs (struct target_ops *ops, const char *annex,
    we do not currently do not need these transfers), and will raise
    a failed assertion if WRITEBUF is not NULL.  */
 
-static enum target_xfer_status
+static LONGEST
 ia64_hpux_xfer_solib_got (struct target_ops *ops, const char *annex,
 			  gdb_byte *readbuf, const gdb_byte *writebuf,
-			  ULONGEST offset, ULONGEST len, ULONGEST *xfered_len)
+			  ULONGEST offset, LONGEST len)
 {
   CORE_ADDR fun_addr;
   /* The linkage pointer.  We use a uint64_t to make sure that the size
@@ -660,7 +656,7 @@ ia64_hpux_xfer_solib_got (struct target_ops *ops, const char *annex,
   gdb_assert (writebuf == NULL);
 
   if (offset > sizeof (got))
-    return TARGET_XFER_EOF;
+    return 0;
 
   fun_addr = string_to_core_addr (annex);
   got = ia64_hpux_get_solib_linkage_addr (fun_addr);
@@ -669,32 +665,28 @@ ia64_hpux_xfer_solib_got (struct target_ops *ops, const char *annex,
     len = sizeof (got) - offset;
   memcpy (readbuf, &got + offset, len);
 
-  *xfered_len = (ULONGEST) len;
-  return TARGET_XFER_OK;
+  return len;
 }
 
 /* The "to_xfer_partial" target_ops routine for ia64-hpux.  */
 
-static enum target_xfer_status
+static LONGEST
 ia64_hpux_xfer_partial (struct target_ops *ops, enum target_object object,
 			const char *annex, gdb_byte *readbuf,
-			const gdb_byte *writebuf, ULONGEST offset, ULONGEST len,
-			ULONGEST *xfered_len)
+			const gdb_byte *writebuf, ULONGEST offset, LONGEST len)
 {
-  enum target_xfer_status val;
+  LONGEST val;
 
   if (object == TARGET_OBJECT_MEMORY)
-    val = ia64_hpux_xfer_memory (ops, annex, readbuf, writebuf, offset, len,
-				 xfered_len);
+    val = ia64_hpux_xfer_memory (ops, annex, readbuf, writebuf, offset, len);
   else if (object == TARGET_OBJECT_HPUX_UREGS)
-    val = ia64_hpux_xfer_uregs (ops, annex, readbuf, writebuf, offset, len,
-				xfered_len);
+    val = ia64_hpux_xfer_uregs (ops, annex, readbuf, writebuf, offset, len);
   else if (object == TARGET_OBJECT_HPUX_SOLIB_GOT)
     val = ia64_hpux_xfer_solib_got (ops, annex, readbuf, writebuf, offset,
-				    len, xfered_len);
+				    len);
   else
     val = super_xfer_partial (ops, object, annex, readbuf, writebuf, offset,
-			      len, xfered_len);
+			      len);
 
   return val;
 }
@@ -702,8 +694,7 @@ ia64_hpux_xfer_partial (struct target_ops *ops, enum target_object object,
 /* The "to_can_use_hw_breakpoint" target_ops routine for ia64-hpux.  */
 
 static int
-ia64_hpux_can_use_hw_breakpoint (struct target_ops *self,
-				 int type, int cnt, int othertype)
+ia64_hpux_can_use_hw_breakpoint (int type, int cnt, int othertype)
 {
   /* No hardware watchpoint/breakpoint support yet.  */
   return 0;

@@ -1,4 +1,4 @@
-/*	$NetBSD: server.c,v 1.19 2015/07/08 17:28:55 christos Exp $	*/
+/*	$NetBSD: server.c,v 1.17.2.2 2015/07/17 04:31:20 snj Exp $	*/
 
 /*
  * Copyright (C) 2004-2015  Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-# $NetBSD: t_nat_exec.sh,v 1.21 2014/12/01 19:46:29 martin Exp $
+# $NetBSD: t_nat_exec.sh,v 1.20.2.1 2014/12/01 20:03:35 snj Exp $
 #
 # Copyright (c) 2008, 2010 The NetBSD Foundation, Inc.
 # All rights reserved.

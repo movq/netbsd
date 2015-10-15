@@ -1,4 +1,4 @@
-/*	$NetBSD: libyywrap.c,v 1.5 2014/10/30 20:21:39 christos Exp $	*/
+/*	$NetBSD: libyywrap.c,v 1.2.12.1 2015/03/06 20:49:11 snj Exp $	*/
 
 /* libyywrap - flex run-time support library "yywrap" function */
 
@@ -24,7 +24,7 @@
 /*  PURPOSE. */
 #include <sys/cdefs.h>
 #ifdef __RCSID
-__RCSID("$NetBSD: libyywrap.c,v 1.5 2014/10/30 20:21:39 christos Exp $");
+__RCSID("$NetBSD: libyywrap.c,v 1.2.12.1 2015/03/06 20:49:11 snj Exp $");
 #endif
 
 int yywrap(void);

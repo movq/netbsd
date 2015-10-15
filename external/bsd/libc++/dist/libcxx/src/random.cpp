@@ -7,38 +7,29 @@
 //
 //===----------------------------------------------------------------------===//
 
-#if defined(_LIBCPP_USING_WIN32_RANDOM)
+#if defined(_WIN32)
 // Must be defined before including stdlib.h to enable rand_s().
 #define _CRT_RAND_S
-#endif // defined(_LIBCPP_USING_WIN32_RANDOM)
+#include <stdio.h>
+#endif
 
 #include "random"
 #include "system_error"
 
-#if defined(__sun__)
+#ifdef __sun__
 #define rename solaris_headers_are_broken
-#endif // defined(__sun__)
-
-#include <errno.h>
-#include <stdio.h>
-#include <stdlib.h>
-
-#if defined(_LIBCPP_USING_DEV_RANDOM)
+#endif
+#if !defined(_WIN32)
 #include <fcntl.h>
 #include <unistd.h>
-#elif defined(_LIBCPP_USING_NACL_RANDOM)
-#include <nacl/nacl_random.h>
-#endif
-
+#endif // defined(_WIN32)
+#include <errno.h>
 
 _LIBCPP_BEGIN_NAMESPACE_STD
 
-#if defined(_LIBCPP_USING_ARC4_RANDOM)
-
-random_device::random_device(const string& __token)
+#if defined(_WIN32)
+random_device::random_device(const string&)
 {
-    if (__token != "/dev/urandom")
-        __throw_system_error(ENOENT, ("random device not supported " + __token).c_str());
 }
 
 random_device::~random_device()
@@ -48,11 +39,13 @@ random_device::~random_device()
 unsigned
 random_device::operator()()
 {
-    return arc4random();
+    unsigned r;
+    errno_t err = rand_s(&r);
+    if (err)
+        __throw_system_error(err, "random_device rand_s failed.");
+    return r;
 }
-
-#elif defined(_LIBCPP_USING_DEV_RANDOM)
-
+#else
 random_device::random_device(const string& __token)
     : __f_(open(__token.c_str(), O_RDONLY))
 {
@@ -87,61 +80,7 @@ random_device::operator()()
     }
     return r;
 }
-
-#elif defined(_LIBCPP_USING_NACL_RANDOM)
-
-random_device::random_device(const string& __token)
-{
-    if (__token != "/dev/urandom")
-        __throw_system_error(ENOENT, ("random device not supported " + __token).c_str());
-    int error = nacl_secure_random_init();
-    if (error)
-        __throw_system_error(error, ("random device failed to open " + __token).c_str());
-}
-
-random_device::~random_device()
-{
-}
-
-unsigned
-random_device::operator()()
-{
-    unsigned r;
-    size_t n = sizeof(r);
-    size_t bytes_written;
-    int error = nacl_secure_random(&r, n, &bytes_written);
-    if (error != 0)
-        __throw_system_error(error, "random_device failed getting bytes");
-    else if (bytes_written != n)
-        __throw_runtime_error("random_device failed to obtain enough bytes");
-    return r;
-}
-
-#elif defined(_LIBCPP_USING_WIN32_RANDOM)
-
-random_device::random_device(const string& __token)
-{
-    if (__token != "/dev/urandom")
-        __throw_system_error(ENOENT, ("random device not supported " + __token).c_str());
-}
-
-random_device::~random_device()
-{
-}
-
-unsigned
-random_device::operator()()
-{
-    unsigned r;
-    errno_t err = rand_s(&r);
-    if (err)
-        __throw_system_error(err, "random_device rand_s failed.");
-    return r;
-}
-
-#else
-#error "Random device not implemented for this architecture"
-#endif
+#endif // defined(_WIN32)
 
 double
 random_device::entropy() const _NOEXCEPT

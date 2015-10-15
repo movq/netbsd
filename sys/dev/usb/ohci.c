@@ -1,4 +1,4 @@
-/*	$NetBSD: ohci.c,v 1.256 2015/08/19 06:23:35 skrll Exp $	*/
+/*	$NetBSD: ohci.c,v 1.253.2.1 2014/12/01 11:38:43 martin Exp $	*/
 
 /*
  * Copyright (c) 1998, 2004, 2005, 2012 The NetBSD Foundation, Inc.
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ohci.c,v 1.256 2015/08/19 06:23:35 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ohci.c,v 1.253.2.1 2014/12/01 11:38:43 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -645,7 +645,7 @@ ohci_init(ohci_softc_t *sc)
 	callout_init(&sc->sc_tmo_rhsc, CALLOUT_MPSAFE);
 
 	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_SOFTUSB);
-	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_USB);
+	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_SCHED);
 	cv_init(&sc->sc_softwake_cv, "ohciab");
 
 	sc->sc_rhsc_si = softint_establish(SOFTINT_NET | SOFTINT_MPSAFE,
@@ -1872,8 +1872,8 @@ ohci_rem_ed(ohci_softc_t *sc, ohci_soft_ed_t *sed, ohci_soft_ed_t *head)
 	/* XXX */
 	for (p = head; p != NULL && p->next != sed; p = p->next)
 		;
-	KASSERT(p != NULL);
-
+	if (p == NULL)
+		panic("ohci_rem_ed: ED not found");
 	usb_syncmem(&sed->dma, sed->offs + offsetof(ohci_ed_t, ed_nexted),
 	    sizeof(sed->ed.ed_nexted),
 	    BUS_DMASYNC_POSTWRITE | BUS_DMASYNC_POSTREAD);

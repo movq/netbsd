@@ -1,4 +1,4 @@
-/*	$NetBSD: dwc2_hcdintr.c,v 1.12 2015/08/30 12:59:59 skrll Exp $	*/
+/*	$NetBSD: dwc2_hcdintr.c,v 1.9.2.1 2014/09/08 19:03:37 msaitoh Exp $	*/
 
 /*
  * hcd_intr.c - DesignWare HS OTG Controller host-mode interrupt handling
@@ -40,7 +40,7 @@
  * This file contains the interrupt handlers for Host mode
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dwc2_hcdintr.c,v 1.12 2015/08/30 12:59:59 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dwc2_hcdintr.c,v 1.9.2.1 2014/09/08 19:03:37 msaitoh Exp $");
 
 #include <sys/types.h>
 #include <sys/pool.h>
@@ -357,9 +357,6 @@ static void dwc2_port_intr(struct dwc2_hsotg *hsotg)
 		dev_vdbg(hsotg->dev,
 			 "--Port Interrupt HPRT0=0x%08x Port Connect Detected--\n",
 			 hprt0);
-		if (hsotg->lx_state != DWC2_L0)
-			usb_hcd_resume_root_hub(hsotg->priv);
-
 		hsotg->flags.b.port_connect_status_change = 1;
 		hsotg->flags.b.port_connect_status = 1;
 		hprt0_modify |= HPRT0_CONNDET;
@@ -477,17 +474,12 @@ static int dwc2_update_urb_state(struct dwc2_hsotg *hsotg,
 	}
 
 	/* Non DWORD-aligned buffer case handling */
-	if (chan->align_buf && xfer_length) {
+	if (chan->align_buf && xfer_length && chan->ep_is_in) {
 		dev_vdbg(hsotg->dev, "%s(): non-aligned buffer\n", __func__);
-		usb_syncmem(urb->usbdma, 0, chan->qh->dw_align_buf_size,
-		    chan->ep_is_in ?
-		    BUS_DMASYNC_POSTREAD : BUS_DMASYNC_POSTWRITE);
-		if (chan->ep_is_in)
-			memcpy(urb->buf + urb->actual_length,
-					chan->qh->dw_align_buf, xfer_length);
-		usb_syncmem(urb->usbdma, 0, chan->qh->dw_align_buf_size,
-		    chan->ep_is_in ?
-		    BUS_DMASYNC_PREREAD : BUS_DMASYNC_PREWRITE);
+		usb_syncmem(urb->usbdma, 0, urb->length, BUS_DMASYNC_POSTREAD);
+		memcpy(urb->buf + urb->actual_length, chan->qh->dw_align_buf,
+		       xfer_length);
+		usb_syncmem(urb->usbdma, 0, urb->length, BUS_DMASYNC_PREREAD);
 	}
 
 	dev_vdbg(hsotg->dev, "urb->actual_length=%d xfer_length=%d\n",
@@ -572,22 +564,17 @@ static enum dwc2_halt_status dwc2_update_isoc_urb_state(
 					chan, chnum, qtd, halt_status, NULL);
 
 		/* Non DWORD-aligned buffer case handling */
-		if (chan->align_buf && frame_desc->actual_length) {
+		if (chan->align_buf && frame_desc->actual_length &&
+		    chan->ep_is_in) {
 			dev_vdbg(hsotg->dev, "%s(): non-aligned buffer\n",
 				 __func__);
-			usb_dma_t *ud = &chan->qh->dw_align_buf_usbdma;
-
-			usb_syncmem(ud, 0, chan->qh->dw_align_buf_size,
-			    chan->ep_is_in ?
-			    BUS_DMASYNC_POSTREAD : BUS_DMASYNC_POSTWRITE);
-			if (chan->ep_is_in)
-				memcpy(urb->buf + frame_desc->offset +
-					qtd->isoc_split_offset,
-					chan->qh->dw_align_buf,
-					frame_desc->actual_length);
-			usb_syncmem(ud, 0, chan->qh->dw_align_buf_size,
-			    chan->ep_is_in ?
-			    BUS_DMASYNC_PREREAD : BUS_DMASYNC_PREWRITE);
+			usb_syncmem(urb->usbdma, 0, urb->length,
+				    BUS_DMASYNC_POSTREAD);
+			memcpy(urb->buf + frame_desc->offset +
+			       qtd->isoc_split_offset, chan->qh->dw_align_buf,
+			       frame_desc->actual_length);
+			usb_syncmem(urb->usbdma, 0, urb->length,
+				    BUS_DMASYNC_PREREAD);
 		}
 		break;
 	case DWC2_HC_XFER_FRAME_OVERRUN:
@@ -610,22 +597,17 @@ static enum dwc2_halt_status dwc2_update_isoc_urb_state(
 					chan, chnum, qtd, halt_status, NULL);
 
 		/* Non DWORD-aligned buffer case handling */
-		if (chan->align_buf && frame_desc->actual_length) {
+		if (chan->align_buf && frame_desc->actual_length &&
+		    chan->ep_is_in) {
 			dev_vdbg(hsotg->dev, "%s(): non-aligned buffer\n",
 				 __func__);
-			usb_dma_t *ud = &chan->qh->dw_align_buf_usbdma;
-
-			usb_syncmem(ud, 0, chan->qh->dw_align_buf_size,
-			    chan->ep_is_in ?
-			    BUS_DMASYNC_POSTREAD : BUS_DMASYNC_POSTWRITE);
-			if (chan->ep_is_in)
-				memcpy(urb->buf + frame_desc->offset +
-					qtd->isoc_split_offset,
-					chan->qh->dw_align_buf,
-					frame_desc->actual_length);
-			usb_syncmem(ud, 0, chan->qh->dw_align_buf_size,
-			    chan->ep_is_in ?
-			    BUS_DMASYNC_PREREAD : BUS_DMASYNC_PREWRITE);
+			usb_syncmem(urb->usbdma, 0, urb->length,
+				    BUS_DMASYNC_POSTREAD);
+			memcpy(urb->buf + frame_desc->offset +
+			       qtd->isoc_split_offset, chan->qh->dw_align_buf,
+			       frame_desc->actual_length);
+			usb_syncmem(urb->usbdma, 0, urb->length,
+				    BUS_DMASYNC_PREREAD);
 		}
 
 		/* Skip whole frame */
@@ -961,12 +943,12 @@ static int dwc2_xfercomp_isoc_split_in(struct dwc2_hsotg *hsotg,
 
 	if (chan->align_buf) {
 		dev_vdbg(hsotg->dev, "%s(): non-aligned buffer\n", __func__);
-		usb_syncmem(qtd->urb->usbdma, chan->qh->dw_align_buf_dma,
-		    chan->qh->dw_align_buf_size, BUS_DMASYNC_POSTREAD);
+		usb_syncmem(qtd->urb->usbdma, 0, qtd->urb->length,
+			    BUS_DMASYNC_POSTREAD);
 		memcpy(qtd->urb->buf + frame_desc->offset +
 		       qtd->isoc_split_offset, chan->qh->dw_align_buf, len);
-		usb_syncmem(qtd->urb->usbdma, chan->qh->dw_align_buf_dma,
-		    chan->qh->dw_align_buf_size, BUS_DMASYNC_PREREAD);
+		usb_syncmem(qtd->urb->usbdma, 0, qtd->urb->length,
+			    BUS_DMASYNC_PREREAD);
 	}
 
 	qtd->isoc_split_offset += len;
@@ -1193,19 +1175,10 @@ static void dwc2_update_urb_state_abn(struct dwc2_hsotg *hsotg,
 	/* Non DWORD-aligned buffer case handling */
 	if (chan->align_buf && xfer_length && chan->ep_is_in) {
 		dev_vdbg(hsotg->dev, "%s(): non-aligned buffer\n", __func__);
-
-		usb_dma_t *ud = &chan->qh->dw_align_buf_usbdma;
-
-		usb_syncmem(ud, 0, chan->qh->dw_align_buf_size,
-		    chan->ep_is_in ?
-		    BUS_DMASYNC_POSTREAD : BUS_DMASYNC_POSTWRITE);
-		if (chan->ep_is_in)
-			memcpy(urb->buf + urb->actual_length,
-					chan->qh->dw_align_buf,
-					xfer_length);
-		usb_syncmem(ud, 0, chan->qh->dw_align_buf_size,
-		    chan->ep_is_in ?
-		    BUS_DMASYNC_PREREAD : BUS_DMASYNC_PREWRITE);
+		usb_syncmem(urb->usbdma, 0, urb->length, BUS_DMASYNC_POSTREAD);
+		memcpy(urb->buf + urb->actual_length, chan->qh->dw_align_buf,
+		       xfer_length);
+		usb_syncmem(urb->usbdma, 0, urb->length, BUS_DMASYNC_PREREAD);
 	}
 
 	urb->actual_length += xfer_length;
@@ -1233,36 +1206,26 @@ static void dwc2_hc_nak_intr(struct dwc2_hsotg *hsotg,
 			     struct dwc2_host_chan *chan, int chnum,
 			     struct dwc2_qtd *qtd)
 {
-	if (!qtd) {
-		dev_dbg(hsotg->dev, "%s: qtd is NULL\n", __func__);
-		return;
-	}
-
-	if (!qtd->urb) {
-		dev_dbg(hsotg->dev, "%s: qtd->urb is NULL\n", __func__);
-		return;
-	}
-
 	if (dbg_hc(chan))
 		dev_vdbg(hsotg->dev, "--Host Channel %d Interrupt: NAK Received--\n",
 			 chnum);
+
+	/*
+	 * When we get control/bulk NAKs then remember this so we holdoff on
+	 * this qh until the beginning of the next frame
+	 */
+	switch (dwc2_hcd_get_pipe_type(&qtd->urb->pipe_info)) {
+	case USB_ENDPOINT_XFER_CONTROL:
+	case USB_ENDPOINT_XFER_BULK:
+		chan->qh->nak_frame = dwc2_hcd_get_frame_number(hsotg);
+		break;
+	}
 
 	/*
 	 * Handle NAK for IN/OUT SSPLIT/CSPLIT transfers, bulk, control, and
 	 * interrupt. Re-start the SSPLIT transfer.
 	 */
 	if (chan->do_split) {
-		/*
-		 * When we get control/bulk NAKs then remember this so we holdoff on
-		 * this qh until the beginning of the next frame
-		 */
-		switch (dwc2_hcd_get_pipe_type(&qtd->urb->pipe_info)) {
-		case USB_ENDPOINT_XFER_CONTROL:
-		case USB_ENDPOINT_XFER_BULK:
-			chan->qh->nak_frame = dwc2_hcd_get_frame_number(hsotg);
-			break;
-		}
-
 		if (chan->complete_split)
 			qtd->error_count = 0;
 		qtd->complete_split = 0;
@@ -1947,10 +1910,10 @@ static void dwc2_hc_chhltd_intr_dma(struct dwc2_hsotg *hsotg,
 			 "NYET/NAK/ACK/other in non-error case, 0x%08x\n",
 			 chan->hcint);
 error:
-		/* Failthrough: use 3-strikes rule */
+		/* use the 3-strikes rule */
 		qtd->error_count++;
 		dwc2_update_urb_state_abn(hsotg, chan, chnum, qtd->urb,
-					  qtd, DWC2_HC_XFER_XACT_ERR);
+					    qtd, DWC2_HC_XFER_XACT_ERR);
 		dwc2_hcd_save_data_toggle(hsotg, chan, chnum, qtd);
 		dwc2_halt_channel(hsotg, chan, qtd, DWC2_HC_XFER_XACT_ERR);
 	}

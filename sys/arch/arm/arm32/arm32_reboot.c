@@ -1,4 +1,4 @@
-/*	$NetBSD: arm32_reboot.c,v 1.8 2015/01/05 17:04:24 joerg Exp $	*/
+/*	$NetBSD: arm32_reboot.c,v 1.6.6.1 2015/07/17 03:48:00 snj Exp $	*/
 
 /*
  * Copyright (c) 2002, 2003, 2005  Genetec Corporation.  All rights reserved.
@@ -122,7 +122,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arm32_reboot.c,v 1.8 2015/01/05 17:04:24 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arm32_reboot.c,v 1.6.6.1 2015/07/17 03:48:00 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

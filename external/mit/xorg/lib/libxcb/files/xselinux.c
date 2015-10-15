@@ -18,6 +18,18 @@
 
 xcb_extension_t xcb_selinux_id = { "SELinux", 0 };
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_query_version_cookie_t xcb_selinux_query_version
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint8_t           client_major
+ ** @param uint8_t           client_minor
+ ** @returns xcb_selinux_query_version_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_query_version_cookie_t
 xcb_selinux_query_version (xcb_connection_t *c  /**< */,
                            uint8_t           client_major  /**< */,
@@ -29,23 +41,35 @@ xcb_selinux_query_version (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_QUERY_VERSION,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_query_version_cookie_t xcb_ret;
     xcb_selinux_query_version_request_t xcb_out;
-
+    
     xcb_out.client_major = client_major;
     xcb_out.client_minor = client_minor;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_query_version_cookie_t xcb_selinux_query_version_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint8_t           client_major
+ ** @param uint8_t           client_minor
+ ** @returns xcb_selinux_query_version_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_query_version_cookie_t
 xcb_selinux_query_version_unchecked (xcb_connection_t *c  /**< */,
                                      uint8_t           client_major  /**< */,
@@ -57,23 +81,35 @@ xcb_selinux_query_version_unchecked (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_QUERY_VERSION,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_query_version_cookie_t xcb_ret;
     xcb_selinux_query_version_request_t xcb_out;
-
+    
     xcb_out.client_major = client_major;
     xcb_out.client_minor = client_minor;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_query_version_reply_t * xcb_selinux_query_version_reply
+ ** 
+ ** @param xcb_connection_t                    *c
+ ** @param xcb_selinux_query_version_cookie_t   cookie
+ ** @param xcb_generic_error_t                **e
+ ** @returns xcb_selinux_query_version_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_query_version_reply_t *
 xcb_selinux_query_version_reply (xcb_connection_t                    *c  /**< */,
                                  xcb_selinux_query_version_cookie_t   cookie  /**< */,
@@ -113,6 +149,18 @@ xcb_selinux_set_device_create_context_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_selinux_set_device_create_context_checked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          context_len
+ ** @param const char       *context
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_selinux_set_device_create_context_checked (xcb_connection_t *c  /**< */,
                                                uint32_t          context_len  /**< */,
@@ -124,13 +172,13 @@ xcb_selinux_set_device_create_context_checked (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_SET_DEVICE_CREATE_CONTEXT,
         /* isvoid */ 1
     };
-
+    
     struct iovec xcb_parts[6];
     xcb_void_cookie_t xcb_ret;
     xcb_selinux_set_device_create_context_request_t xcb_out;
-
+    
     xcb_out.context_len = context_len;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
@@ -140,11 +188,23 @@ xcb_selinux_set_device_create_context_checked (xcb_connection_t *c  /**< */,
     xcb_parts[4].iov_len = context_len * sizeof(char);
     xcb_parts[5].iov_base = 0;
     xcb_parts[5].iov_len = -xcb_parts[4].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_selinux_set_device_create_context
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          context_len
+ ** @param const char       *context
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_selinux_set_device_create_context (xcb_connection_t *c  /**< */,
                                        uint32_t          context_len  /**< */,
@@ -156,13 +216,13 @@ xcb_selinux_set_device_create_context (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_SET_DEVICE_CREATE_CONTEXT,
         /* isvoid */ 1
     };
-
+    
     struct iovec xcb_parts[6];
     xcb_void_cookie_t xcb_ret;
     xcb_selinux_set_device_create_context_request_t xcb_out;
-
+    
     xcb_out.context_len = context_len;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
@@ -172,7 +232,7 @@ xcb_selinux_set_device_create_context (xcb_connection_t *c  /**< */,
     xcb_parts[4].iov_len = context_len * sizeof(char);
     xcb_parts[5].iov_base = 0;
     xcb_parts[5].iov_len = -xcb_parts[4].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
@@ -208,6 +268,16 @@ xcb_selinux_get_device_create_context_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_device_create_context_cookie_t xcb_selinux_get_device_create_context
+ ** 
+ ** @param xcb_connection_t *c
+ ** @returns xcb_selinux_get_device_create_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_device_create_context_cookie_t
 xcb_selinux_get_device_create_context (xcb_connection_t *c  /**< */)
 {
@@ -217,21 +287,31 @@ xcb_selinux_get_device_create_context (xcb_connection_t *c  /**< */)
         /* opcode */ XCB_SELINUX_GET_DEVICE_CREATE_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_device_create_context_cookie_t xcb_ret;
     xcb_selinux_get_device_create_context_request_t xcb_out;
-
-
+    
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_device_create_context_cookie_t xcb_selinux_get_device_create_context_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @returns xcb_selinux_get_device_create_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_device_create_context_cookie_t
 xcb_selinux_get_device_create_context_unchecked (xcb_connection_t *c  /**< */)
 {
@@ -241,33 +321,63 @@ xcb_selinux_get_device_create_context_unchecked (xcb_connection_t *c  /**< */)
         /* opcode */ XCB_SELINUX_GET_DEVICE_CREATE_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_device_create_context_cookie_t xcb_ret;
     xcb_selinux_get_device_create_context_request_t xcb_out;
-
-
+    
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** char * xcb_selinux_get_device_create_context_context
+ ** 
+ ** @param const xcb_selinux_get_device_create_context_reply_t *R
+ ** @returns char *
+ **
+ *****************************************************************************/
+ 
 char *
 xcb_selinux_get_device_create_context_context (const xcb_selinux_get_device_create_context_reply_t *R  /**< */)
 {
     return (char *) (R + 1);
 }
 
+
+/*****************************************************************************
+ **
+ ** int xcb_selinux_get_device_create_context_context_length
+ ** 
+ ** @param const xcb_selinux_get_device_create_context_reply_t *R
+ ** @returns int
+ **
+ *****************************************************************************/
+ 
 int
 xcb_selinux_get_device_create_context_context_length (const xcb_selinux_get_device_create_context_reply_t *R  /**< */)
 {
     return R->context_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_generic_iterator_t xcb_selinux_get_device_create_context_context_end
+ ** 
+ ** @param const xcb_selinux_get_device_create_context_reply_t *R
+ ** @returns xcb_generic_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_generic_iterator_t
 xcb_selinux_get_device_create_context_context_end (const xcb_selinux_get_device_create_context_reply_t *R  /**< */)
 {
@@ -278,6 +388,18 @@ xcb_selinux_get_device_create_context_context_end (const xcb_selinux_get_device_
     return i;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_device_create_context_reply_t * xcb_selinux_get_device_create_context_reply
+ ** 
+ ** @param xcb_connection_t                                *c
+ ** @param xcb_selinux_get_device_create_context_cookie_t   cookie
+ ** @param xcb_generic_error_t                            **e
+ ** @returns xcb_selinux_get_device_create_context_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_device_create_context_reply_t *
 xcb_selinux_get_device_create_context_reply (xcb_connection_t                                *c  /**< */,
                                              xcb_selinux_get_device_create_context_cookie_t   cookie  /**< */,
@@ -317,6 +439,19 @@ xcb_selinux_set_device_context_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_selinux_set_device_context_checked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          device
+ ** @param uint32_t          context_len
+ ** @param const char       *context
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_selinux_set_device_context_checked (xcb_connection_t *c  /**< */,
                                         uint32_t          device  /**< */,
@@ -329,14 +464,14 @@ xcb_selinux_set_device_context_checked (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_SET_DEVICE_CONTEXT,
         /* isvoid */ 1
     };
-
+    
     struct iovec xcb_parts[6];
     xcb_void_cookie_t xcb_ret;
     xcb_selinux_set_device_context_request_t xcb_out;
-
+    
     xcb_out.device = device;
     xcb_out.context_len = context_len;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
@@ -346,11 +481,24 @@ xcb_selinux_set_device_context_checked (xcb_connection_t *c  /**< */,
     xcb_parts[4].iov_len = context_len * sizeof(char);
     xcb_parts[5].iov_base = 0;
     xcb_parts[5].iov_len = -xcb_parts[4].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_selinux_set_device_context
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          device
+ ** @param uint32_t          context_len
+ ** @param const char       *context
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_selinux_set_device_context (xcb_connection_t *c  /**< */,
                                 uint32_t          device  /**< */,
@@ -363,14 +511,14 @@ xcb_selinux_set_device_context (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_SET_DEVICE_CONTEXT,
         /* isvoid */ 1
     };
-
+    
     struct iovec xcb_parts[6];
     xcb_void_cookie_t xcb_ret;
     xcb_selinux_set_device_context_request_t xcb_out;
-
+    
     xcb_out.device = device;
     xcb_out.context_len = context_len;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
@@ -380,7 +528,7 @@ xcb_selinux_set_device_context (xcb_connection_t *c  /**< */,
     xcb_parts[4].iov_len = context_len * sizeof(char);
     xcb_parts[5].iov_base = 0;
     xcb_parts[5].iov_len = -xcb_parts[4].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
@@ -416,6 +564,17 @@ xcb_selinux_get_device_context_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_device_context_cookie_t xcb_selinux_get_device_context
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          device
+ ** @returns xcb_selinux_get_device_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_device_context_cookie_t
 xcb_selinux_get_device_context (xcb_connection_t *c  /**< */,
                                 uint32_t          device  /**< */)
@@ -426,22 +585,33 @@ xcb_selinux_get_device_context (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_GET_DEVICE_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_device_context_cookie_t xcb_ret;
     xcb_selinux_get_device_context_request_t xcb_out;
-
+    
     xcb_out.device = device;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_device_context_cookie_t xcb_selinux_get_device_context_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          device
+ ** @returns xcb_selinux_get_device_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_device_context_cookie_t
 xcb_selinux_get_device_context_unchecked (xcb_connection_t *c  /**< */,
                                           uint32_t          device  /**< */)
@@ -452,34 +622,64 @@ xcb_selinux_get_device_context_unchecked (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_GET_DEVICE_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_device_context_cookie_t xcb_ret;
     xcb_selinux_get_device_context_request_t xcb_out;
-
+    
     xcb_out.device = device;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** char * xcb_selinux_get_device_context_context
+ ** 
+ ** @param const xcb_selinux_get_device_context_reply_t *R
+ ** @returns char *
+ **
+ *****************************************************************************/
+ 
 char *
 xcb_selinux_get_device_context_context (const xcb_selinux_get_device_context_reply_t *R  /**< */)
 {
     return (char *) (R + 1);
 }
 
+
+/*****************************************************************************
+ **
+ ** int xcb_selinux_get_device_context_context_length
+ ** 
+ ** @param const xcb_selinux_get_device_context_reply_t *R
+ ** @returns int
+ **
+ *****************************************************************************/
+ 
 int
 xcb_selinux_get_device_context_context_length (const xcb_selinux_get_device_context_reply_t *R  /**< */)
 {
     return R->context_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_generic_iterator_t xcb_selinux_get_device_context_context_end
+ ** 
+ ** @param const xcb_selinux_get_device_context_reply_t *R
+ ** @returns xcb_generic_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_generic_iterator_t
 xcb_selinux_get_device_context_context_end (const xcb_selinux_get_device_context_reply_t *R  /**< */)
 {
@@ -490,6 +690,18 @@ xcb_selinux_get_device_context_context_end (const xcb_selinux_get_device_context
     return i;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_device_context_reply_t * xcb_selinux_get_device_context_reply
+ ** 
+ ** @param xcb_connection_t                         *c
+ ** @param xcb_selinux_get_device_context_cookie_t   cookie
+ ** @param xcb_generic_error_t                     **e
+ ** @returns xcb_selinux_get_device_context_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_device_context_reply_t *
 xcb_selinux_get_device_context_reply (xcb_connection_t                         *c  /**< */,
                                       xcb_selinux_get_device_context_cookie_t   cookie  /**< */,
@@ -529,6 +741,18 @@ xcb_selinux_set_window_create_context_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_selinux_set_window_create_context_checked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          context_len
+ ** @param const char       *context
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_selinux_set_window_create_context_checked (xcb_connection_t *c  /**< */,
                                                uint32_t          context_len  /**< */,
@@ -540,13 +764,13 @@ xcb_selinux_set_window_create_context_checked (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_SET_WINDOW_CREATE_CONTEXT,
         /* isvoid */ 1
     };
-
+    
     struct iovec xcb_parts[6];
     xcb_void_cookie_t xcb_ret;
     xcb_selinux_set_window_create_context_request_t xcb_out;
-
+    
     xcb_out.context_len = context_len;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
@@ -556,11 +780,23 @@ xcb_selinux_set_window_create_context_checked (xcb_connection_t *c  /**< */,
     xcb_parts[4].iov_len = context_len * sizeof(char);
     xcb_parts[5].iov_base = 0;
     xcb_parts[5].iov_len = -xcb_parts[4].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_selinux_set_window_create_context
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          context_len
+ ** @param const char       *context
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_selinux_set_window_create_context (xcb_connection_t *c  /**< */,
                                        uint32_t          context_len  /**< */,
@@ -572,13 +808,13 @@ xcb_selinux_set_window_create_context (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_SET_WINDOW_CREATE_CONTEXT,
         /* isvoid */ 1
     };
-
+    
     struct iovec xcb_parts[6];
     xcb_void_cookie_t xcb_ret;
     xcb_selinux_set_window_create_context_request_t xcb_out;
-
+    
     xcb_out.context_len = context_len;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
@@ -588,7 +824,7 @@ xcb_selinux_set_window_create_context (xcb_connection_t *c  /**< */,
     xcb_parts[4].iov_len = context_len * sizeof(char);
     xcb_parts[5].iov_base = 0;
     xcb_parts[5].iov_len = -xcb_parts[4].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
@@ -624,6 +860,16 @@ xcb_selinux_get_window_create_context_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_window_create_context_cookie_t xcb_selinux_get_window_create_context
+ ** 
+ ** @param xcb_connection_t *c
+ ** @returns xcb_selinux_get_window_create_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_window_create_context_cookie_t
 xcb_selinux_get_window_create_context (xcb_connection_t *c  /**< */)
 {
@@ -633,21 +879,31 @@ xcb_selinux_get_window_create_context (xcb_connection_t *c  /**< */)
         /* opcode */ XCB_SELINUX_GET_WINDOW_CREATE_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_window_create_context_cookie_t xcb_ret;
     xcb_selinux_get_window_create_context_request_t xcb_out;
-
-
+    
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_window_create_context_cookie_t xcb_selinux_get_window_create_context_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @returns xcb_selinux_get_window_create_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_window_create_context_cookie_t
 xcb_selinux_get_window_create_context_unchecked (xcb_connection_t *c  /**< */)
 {
@@ -657,33 +913,63 @@ xcb_selinux_get_window_create_context_unchecked (xcb_connection_t *c  /**< */)
         /* opcode */ XCB_SELINUX_GET_WINDOW_CREATE_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_window_create_context_cookie_t xcb_ret;
     xcb_selinux_get_window_create_context_request_t xcb_out;
-
-
+    
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** char * xcb_selinux_get_window_create_context_context
+ ** 
+ ** @param const xcb_selinux_get_window_create_context_reply_t *R
+ ** @returns char *
+ **
+ *****************************************************************************/
+ 
 char *
 xcb_selinux_get_window_create_context_context (const xcb_selinux_get_window_create_context_reply_t *R  /**< */)
 {
     return (char *) (R + 1);
 }
 
+
+/*****************************************************************************
+ **
+ ** int xcb_selinux_get_window_create_context_context_length
+ ** 
+ ** @param const xcb_selinux_get_window_create_context_reply_t *R
+ ** @returns int
+ **
+ *****************************************************************************/
+ 
 int
 xcb_selinux_get_window_create_context_context_length (const xcb_selinux_get_window_create_context_reply_t *R  /**< */)
 {
     return R->context_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_generic_iterator_t xcb_selinux_get_window_create_context_context_end
+ ** 
+ ** @param const xcb_selinux_get_window_create_context_reply_t *R
+ ** @returns xcb_generic_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_generic_iterator_t
 xcb_selinux_get_window_create_context_context_end (const xcb_selinux_get_window_create_context_reply_t *R  /**< */)
 {
@@ -694,6 +980,18 @@ xcb_selinux_get_window_create_context_context_end (const xcb_selinux_get_window_
     return i;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_window_create_context_reply_t * xcb_selinux_get_window_create_context_reply
+ ** 
+ ** @param xcb_connection_t                                *c
+ ** @param xcb_selinux_get_window_create_context_cookie_t   cookie
+ ** @param xcb_generic_error_t                            **e
+ ** @returns xcb_selinux_get_window_create_context_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_window_create_context_reply_t *
 xcb_selinux_get_window_create_context_reply (xcb_connection_t                                *c  /**< */,
                                              xcb_selinux_get_window_create_context_cookie_t   cookie  /**< */,
@@ -733,6 +1031,17 @@ xcb_selinux_get_window_context_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_window_context_cookie_t xcb_selinux_get_window_context
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param xcb_window_t      window
+ ** @returns xcb_selinux_get_window_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_window_context_cookie_t
 xcb_selinux_get_window_context (xcb_connection_t *c  /**< */,
                                 xcb_window_t      window  /**< */)
@@ -743,22 +1052,33 @@ xcb_selinux_get_window_context (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_GET_WINDOW_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_window_context_cookie_t xcb_ret;
     xcb_selinux_get_window_context_request_t xcb_out;
-
+    
     xcb_out.window = window;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_window_context_cookie_t xcb_selinux_get_window_context_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param xcb_window_t      window
+ ** @returns xcb_selinux_get_window_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_window_context_cookie_t
 xcb_selinux_get_window_context_unchecked (xcb_connection_t *c  /**< */,
                                           xcb_window_t      window  /**< */)
@@ -769,34 +1089,64 @@ xcb_selinux_get_window_context_unchecked (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_GET_WINDOW_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_window_context_cookie_t xcb_ret;
     xcb_selinux_get_window_context_request_t xcb_out;
-
+    
     xcb_out.window = window;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** char * xcb_selinux_get_window_context_context
+ ** 
+ ** @param const xcb_selinux_get_window_context_reply_t *R
+ ** @returns char *
+ **
+ *****************************************************************************/
+ 
 char *
 xcb_selinux_get_window_context_context (const xcb_selinux_get_window_context_reply_t *R  /**< */)
 {
     return (char *) (R + 1);
 }
 
+
+/*****************************************************************************
+ **
+ ** int xcb_selinux_get_window_context_context_length
+ ** 
+ ** @param const xcb_selinux_get_window_context_reply_t *R
+ ** @returns int
+ **
+ *****************************************************************************/
+ 
 int
 xcb_selinux_get_window_context_context_length (const xcb_selinux_get_window_context_reply_t *R  /**< */)
 {
     return R->context_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_generic_iterator_t xcb_selinux_get_window_context_context_end
+ ** 
+ ** @param const xcb_selinux_get_window_context_reply_t *R
+ ** @returns xcb_generic_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_generic_iterator_t
 xcb_selinux_get_window_context_context_end (const xcb_selinux_get_window_context_reply_t *R  /**< */)
 {
@@ -807,6 +1157,18 @@ xcb_selinux_get_window_context_context_end (const xcb_selinux_get_window_context
     return i;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_window_context_reply_t * xcb_selinux_get_window_context_reply
+ ** 
+ ** @param xcb_connection_t                         *c
+ ** @param xcb_selinux_get_window_context_cookie_t   cookie
+ ** @param xcb_generic_error_t                     **e
+ ** @returns xcb_selinux_get_window_context_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_window_context_reply_t *
 xcb_selinux_get_window_context_reply (xcb_connection_t                         *c  /**< */,
                                       xcb_selinux_get_window_context_cookie_t   cookie  /**< */,
@@ -858,18 +1220,48 @@ xcb_selinux_list_item_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** char * xcb_selinux_list_item_object_context
+ ** 
+ ** @param const xcb_selinux_list_item_t *R
+ ** @returns char *
+ **
+ *****************************************************************************/
+ 
 char *
 xcb_selinux_list_item_object_context (const xcb_selinux_list_item_t *R  /**< */)
 {
     return (char *) (R + 1);
 }
 
+
+/*****************************************************************************
+ **
+ ** int xcb_selinux_list_item_object_context_length
+ ** 
+ ** @param const xcb_selinux_list_item_t *R
+ ** @returns int
+ **
+ *****************************************************************************/
+ 
 int
 xcb_selinux_list_item_object_context_length (const xcb_selinux_list_item_t *R  /**< */)
 {
     return R->object_context_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_generic_iterator_t xcb_selinux_list_item_object_context_end
+ ** 
+ ** @param const xcb_selinux_list_item_t *R
+ ** @returns xcb_generic_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_generic_iterator_t
 xcb_selinux_list_item_object_context_end (const xcb_selinux_list_item_t *R  /**< */)
 {
@@ -880,6 +1272,16 @@ xcb_selinux_list_item_object_context_end (const xcb_selinux_list_item_t *R  /**<
     return i;
 }
 
+
+/*****************************************************************************
+ **
+ ** char * xcb_selinux_list_item_data_context
+ ** 
+ ** @param const xcb_selinux_list_item_t *R
+ ** @returns char *
+ **
+ *****************************************************************************/
+ 
 char *
 xcb_selinux_list_item_data_context (const xcb_selinux_list_item_t *R  /**< */)
 {
@@ -887,12 +1289,32 @@ xcb_selinux_list_item_data_context (const xcb_selinux_list_item_t *R  /**< */)
     return (char *) ((char *) prev.data + XCB_TYPE_PAD(char, prev.index) + 0);
 }
 
+
+/*****************************************************************************
+ **
+ ** int xcb_selinux_list_item_data_context_length
+ ** 
+ ** @param const xcb_selinux_list_item_t *R
+ ** @returns int
+ **
+ *****************************************************************************/
+ 
 int
 xcb_selinux_list_item_data_context_length (const xcb_selinux_list_item_t *R  /**< */)
 {
     return R->data_context_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_generic_iterator_t xcb_selinux_list_item_data_context_end
+ ** 
+ ** @param const xcb_selinux_list_item_t *R
+ ** @returns xcb_generic_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_generic_iterator_t
 xcb_selinux_list_item_data_context_end (const xcb_selinux_list_item_t *R  /**< */)
 {
@@ -904,6 +1326,16 @@ xcb_selinux_list_item_data_context_end (const xcb_selinux_list_item_t *R  /**< *
     return i;
 }
 
+
+/*****************************************************************************
+ **
+ ** void xcb_selinux_list_item_next
+ ** 
+ ** @param xcb_selinux_list_item_iterator_t *i
+ ** @returns void
+ **
+ *****************************************************************************/
+ 
 void
 xcb_selinux_list_item_next (xcb_selinux_list_item_iterator_t *i  /**< */)
 {
@@ -915,6 +1347,16 @@ xcb_selinux_list_item_next (xcb_selinux_list_item_iterator_t *i  /**< */)
     i->data = (xcb_selinux_list_item_t *) child.data;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_generic_iterator_t xcb_selinux_list_item_end
+ ** 
+ ** @param xcb_selinux_list_item_iterator_t i
+ ** @returns xcb_generic_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_generic_iterator_t
 xcb_selinux_list_item_end (xcb_selinux_list_item_iterator_t i  /**< */)
 {
@@ -958,6 +1400,18 @@ xcb_selinux_set_property_create_context_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_selinux_set_property_create_context_checked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          context_len
+ ** @param const char       *context
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_selinux_set_property_create_context_checked (xcb_connection_t *c  /**< */,
                                                  uint32_t          context_len  /**< */,
@@ -969,13 +1423,13 @@ xcb_selinux_set_property_create_context_checked (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_SET_PROPERTY_CREATE_CONTEXT,
         /* isvoid */ 1
     };
-
+    
     struct iovec xcb_parts[6];
     xcb_void_cookie_t xcb_ret;
     xcb_selinux_set_property_create_context_request_t xcb_out;
-
+    
     xcb_out.context_len = context_len;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
@@ -985,11 +1439,23 @@ xcb_selinux_set_property_create_context_checked (xcb_connection_t *c  /**< */,
     xcb_parts[4].iov_len = context_len * sizeof(char);
     xcb_parts[5].iov_base = 0;
     xcb_parts[5].iov_len = -xcb_parts[4].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_selinux_set_property_create_context
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          context_len
+ ** @param const char       *context
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_selinux_set_property_create_context (xcb_connection_t *c  /**< */,
                                          uint32_t          context_len  /**< */,
@@ -1001,13 +1467,13 @@ xcb_selinux_set_property_create_context (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_SET_PROPERTY_CREATE_CONTEXT,
         /* isvoid */ 1
     };
-
+    
     struct iovec xcb_parts[6];
     xcb_void_cookie_t xcb_ret;
     xcb_selinux_set_property_create_context_request_t xcb_out;
-
+    
     xcb_out.context_len = context_len;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
@@ -1017,7 +1483,7 @@ xcb_selinux_set_property_create_context (xcb_connection_t *c  /**< */,
     xcb_parts[4].iov_len = context_len * sizeof(char);
     xcb_parts[5].iov_base = 0;
     xcb_parts[5].iov_len = -xcb_parts[4].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
@@ -1053,6 +1519,16 @@ xcb_selinux_get_property_create_context_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_property_create_context_cookie_t xcb_selinux_get_property_create_context
+ ** 
+ ** @param xcb_connection_t *c
+ ** @returns xcb_selinux_get_property_create_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_property_create_context_cookie_t
 xcb_selinux_get_property_create_context (xcb_connection_t *c  /**< */)
 {
@@ -1062,21 +1538,31 @@ xcb_selinux_get_property_create_context (xcb_connection_t *c  /**< */)
         /* opcode */ XCB_SELINUX_GET_PROPERTY_CREATE_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_property_create_context_cookie_t xcb_ret;
     xcb_selinux_get_property_create_context_request_t xcb_out;
-
-
+    
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_property_create_context_cookie_t xcb_selinux_get_property_create_context_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @returns xcb_selinux_get_property_create_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_property_create_context_cookie_t
 xcb_selinux_get_property_create_context_unchecked (xcb_connection_t *c  /**< */)
 {
@@ -1086,33 +1572,63 @@ xcb_selinux_get_property_create_context_unchecked (xcb_connection_t *c  /**< */)
         /* opcode */ XCB_SELINUX_GET_PROPERTY_CREATE_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_property_create_context_cookie_t xcb_ret;
     xcb_selinux_get_property_create_context_request_t xcb_out;
-
-
+    
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** char * xcb_selinux_get_property_create_context_context
+ ** 
+ ** @param const xcb_selinux_get_property_create_context_reply_t *R
+ ** @returns char *
+ **
+ *****************************************************************************/
+ 
 char *
 xcb_selinux_get_property_create_context_context (const xcb_selinux_get_property_create_context_reply_t *R  /**< */)
 {
     return (char *) (R + 1);
 }
 
+
+/*****************************************************************************
+ **
+ ** int xcb_selinux_get_property_create_context_context_length
+ ** 
+ ** @param const xcb_selinux_get_property_create_context_reply_t *R
+ ** @returns int
+ **
+ *****************************************************************************/
+ 
 int
 xcb_selinux_get_property_create_context_context_length (const xcb_selinux_get_property_create_context_reply_t *R  /**< */)
 {
     return R->context_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_generic_iterator_t xcb_selinux_get_property_create_context_context_end
+ ** 
+ ** @param const xcb_selinux_get_property_create_context_reply_t *R
+ ** @returns xcb_generic_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_generic_iterator_t
 xcb_selinux_get_property_create_context_context_end (const xcb_selinux_get_property_create_context_reply_t *R  /**< */)
 {
@@ -1123,6 +1639,18 @@ xcb_selinux_get_property_create_context_context_end (const xcb_selinux_get_prope
     return i;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_property_create_context_reply_t * xcb_selinux_get_property_create_context_reply
+ ** 
+ ** @param xcb_connection_t                                  *c
+ ** @param xcb_selinux_get_property_create_context_cookie_t   cookie
+ ** @param xcb_generic_error_t                              **e
+ ** @returns xcb_selinux_get_property_create_context_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_property_create_context_reply_t *
 xcb_selinux_get_property_create_context_reply (xcb_connection_t                                  *c  /**< */,
                                                xcb_selinux_get_property_create_context_cookie_t   cookie  /**< */,
@@ -1162,6 +1690,18 @@ xcb_selinux_set_property_use_context_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_selinux_set_property_use_context_checked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          context_len
+ ** @param const char       *context
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_selinux_set_property_use_context_checked (xcb_connection_t *c  /**< */,
                                               uint32_t          context_len  /**< */,
@@ -1173,13 +1713,13 @@ xcb_selinux_set_property_use_context_checked (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_SET_PROPERTY_USE_CONTEXT,
         /* isvoid */ 1
     };
-
+    
     struct iovec xcb_parts[6];
     xcb_void_cookie_t xcb_ret;
     xcb_selinux_set_property_use_context_request_t xcb_out;
-
+    
     xcb_out.context_len = context_len;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
@@ -1189,11 +1729,23 @@ xcb_selinux_set_property_use_context_checked (xcb_connection_t *c  /**< */,
     xcb_parts[4].iov_len = context_len * sizeof(char);
     xcb_parts[5].iov_base = 0;
     xcb_parts[5].iov_len = -xcb_parts[4].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_selinux_set_property_use_context
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          context_len
+ ** @param const char       *context
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_selinux_set_property_use_context (xcb_connection_t *c  /**< */,
                                       uint32_t          context_len  /**< */,
@@ -1205,13 +1757,13 @@ xcb_selinux_set_property_use_context (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_SET_PROPERTY_USE_CONTEXT,
         /* isvoid */ 1
     };
-
+    
     struct iovec xcb_parts[6];
     xcb_void_cookie_t xcb_ret;
     xcb_selinux_set_property_use_context_request_t xcb_out;
-
+    
     xcb_out.context_len = context_len;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
@@ -1221,7 +1773,7 @@ xcb_selinux_set_property_use_context (xcb_connection_t *c  /**< */,
     xcb_parts[4].iov_len = context_len * sizeof(char);
     xcb_parts[5].iov_base = 0;
     xcb_parts[5].iov_len = -xcb_parts[4].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
@@ -1257,6 +1809,16 @@ xcb_selinux_get_property_use_context_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_property_use_context_cookie_t xcb_selinux_get_property_use_context
+ ** 
+ ** @param xcb_connection_t *c
+ ** @returns xcb_selinux_get_property_use_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_property_use_context_cookie_t
 xcb_selinux_get_property_use_context (xcb_connection_t *c  /**< */)
 {
@@ -1266,21 +1828,31 @@ xcb_selinux_get_property_use_context (xcb_connection_t *c  /**< */)
         /* opcode */ XCB_SELINUX_GET_PROPERTY_USE_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_property_use_context_cookie_t xcb_ret;
     xcb_selinux_get_property_use_context_request_t xcb_out;
-
-
+    
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_property_use_context_cookie_t xcb_selinux_get_property_use_context_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @returns xcb_selinux_get_property_use_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_property_use_context_cookie_t
 xcb_selinux_get_property_use_context_unchecked (xcb_connection_t *c  /**< */)
 {
@@ -1290,33 +1862,63 @@ xcb_selinux_get_property_use_context_unchecked (xcb_connection_t *c  /**< */)
         /* opcode */ XCB_SELINUX_GET_PROPERTY_USE_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_property_use_context_cookie_t xcb_ret;
     xcb_selinux_get_property_use_context_request_t xcb_out;
-
-
+    
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** char * xcb_selinux_get_property_use_context_context
+ ** 
+ ** @param const xcb_selinux_get_property_use_context_reply_t *R
+ ** @returns char *
+ **
+ *****************************************************************************/
+ 
 char *
 xcb_selinux_get_property_use_context_context (const xcb_selinux_get_property_use_context_reply_t *R  /**< */)
 {
     return (char *) (R + 1);
 }
 
+
+/*****************************************************************************
+ **
+ ** int xcb_selinux_get_property_use_context_context_length
+ ** 
+ ** @param const xcb_selinux_get_property_use_context_reply_t *R
+ ** @returns int
+ **
+ *****************************************************************************/
+ 
 int
 xcb_selinux_get_property_use_context_context_length (const xcb_selinux_get_property_use_context_reply_t *R  /**< */)
 {
     return R->context_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_generic_iterator_t xcb_selinux_get_property_use_context_context_end
+ ** 
+ ** @param const xcb_selinux_get_property_use_context_reply_t *R
+ ** @returns xcb_generic_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_generic_iterator_t
 xcb_selinux_get_property_use_context_context_end (const xcb_selinux_get_property_use_context_reply_t *R  /**< */)
 {
@@ -1327,6 +1929,18 @@ xcb_selinux_get_property_use_context_context_end (const xcb_selinux_get_property
     return i;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_property_use_context_reply_t * xcb_selinux_get_property_use_context_reply
+ ** 
+ ** @param xcb_connection_t                               *c
+ ** @param xcb_selinux_get_property_use_context_cookie_t   cookie
+ ** @param xcb_generic_error_t                           **e
+ ** @returns xcb_selinux_get_property_use_context_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_property_use_context_reply_t *
 xcb_selinux_get_property_use_context_reply (xcb_connection_t                               *c  /**< */,
                                             xcb_selinux_get_property_use_context_cookie_t   cookie  /**< */,
@@ -1366,6 +1980,18 @@ xcb_selinux_get_property_context_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_property_context_cookie_t xcb_selinux_get_property_context
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param xcb_window_t      window
+ ** @param xcb_atom_t        property
+ ** @returns xcb_selinux_get_property_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_property_context_cookie_t
 xcb_selinux_get_property_context (xcb_connection_t *c  /**< */,
                                   xcb_window_t      window  /**< */,
@@ -1377,23 +2003,35 @@ xcb_selinux_get_property_context (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_GET_PROPERTY_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_property_context_cookie_t xcb_ret;
     xcb_selinux_get_property_context_request_t xcb_out;
-
+    
     xcb_out.window = window;
     xcb_out.property = property;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_property_context_cookie_t xcb_selinux_get_property_context_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param xcb_window_t      window
+ ** @param xcb_atom_t        property
+ ** @returns xcb_selinux_get_property_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_property_context_cookie_t
 xcb_selinux_get_property_context_unchecked (xcb_connection_t *c  /**< */,
                                             xcb_window_t      window  /**< */,
@@ -1405,35 +2043,65 @@ xcb_selinux_get_property_context_unchecked (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_GET_PROPERTY_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_property_context_cookie_t xcb_ret;
     xcb_selinux_get_property_context_request_t xcb_out;
-
+    
     xcb_out.window = window;
     xcb_out.property = property;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** char * xcb_selinux_get_property_context_context
+ ** 
+ ** @param const xcb_selinux_get_property_context_reply_t *R
+ ** @returns char *
+ **
+ *****************************************************************************/
+ 
 char *
 xcb_selinux_get_property_context_context (const xcb_selinux_get_property_context_reply_t *R  /**< */)
 {
     return (char *) (R + 1);
 }
 
+
+/*****************************************************************************
+ **
+ ** int xcb_selinux_get_property_context_context_length
+ ** 
+ ** @param const xcb_selinux_get_property_context_reply_t *R
+ ** @returns int
+ **
+ *****************************************************************************/
+ 
 int
 xcb_selinux_get_property_context_context_length (const xcb_selinux_get_property_context_reply_t *R  /**< */)
 {
     return R->context_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_generic_iterator_t xcb_selinux_get_property_context_context_end
+ ** 
+ ** @param const xcb_selinux_get_property_context_reply_t *R
+ ** @returns xcb_generic_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_generic_iterator_t
 xcb_selinux_get_property_context_context_end (const xcb_selinux_get_property_context_reply_t *R  /**< */)
 {
@@ -1444,6 +2112,18 @@ xcb_selinux_get_property_context_context_end (const xcb_selinux_get_property_con
     return i;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_property_context_reply_t * xcb_selinux_get_property_context_reply
+ ** 
+ ** @param xcb_connection_t                           *c
+ ** @param xcb_selinux_get_property_context_cookie_t   cookie
+ ** @param xcb_generic_error_t                       **e
+ ** @returns xcb_selinux_get_property_context_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_property_context_reply_t *
 xcb_selinux_get_property_context_reply (xcb_connection_t                           *c  /**< */,
                                         xcb_selinux_get_property_context_cookie_t   cookie  /**< */,
@@ -1483,6 +2163,18 @@ xcb_selinux_get_property_data_context_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_property_data_context_cookie_t xcb_selinux_get_property_data_context
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param xcb_window_t      window
+ ** @param xcb_atom_t        property
+ ** @returns xcb_selinux_get_property_data_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_property_data_context_cookie_t
 xcb_selinux_get_property_data_context (xcb_connection_t *c  /**< */,
                                        xcb_window_t      window  /**< */,
@@ -1494,23 +2186,35 @@ xcb_selinux_get_property_data_context (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_GET_PROPERTY_DATA_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_property_data_context_cookie_t xcb_ret;
     xcb_selinux_get_property_data_context_request_t xcb_out;
-
+    
     xcb_out.window = window;
     xcb_out.property = property;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_property_data_context_cookie_t xcb_selinux_get_property_data_context_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param xcb_window_t      window
+ ** @param xcb_atom_t        property
+ ** @returns xcb_selinux_get_property_data_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_property_data_context_cookie_t
 xcb_selinux_get_property_data_context_unchecked (xcb_connection_t *c  /**< */,
                                                  xcb_window_t      window  /**< */,
@@ -1522,35 +2226,65 @@ xcb_selinux_get_property_data_context_unchecked (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_GET_PROPERTY_DATA_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_property_data_context_cookie_t xcb_ret;
     xcb_selinux_get_property_data_context_request_t xcb_out;
-
+    
     xcb_out.window = window;
     xcb_out.property = property;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** char * xcb_selinux_get_property_data_context_context
+ ** 
+ ** @param const xcb_selinux_get_property_data_context_reply_t *R
+ ** @returns char *
+ **
+ *****************************************************************************/
+ 
 char *
 xcb_selinux_get_property_data_context_context (const xcb_selinux_get_property_data_context_reply_t *R  /**< */)
 {
     return (char *) (R + 1);
 }
 
+
+/*****************************************************************************
+ **
+ ** int xcb_selinux_get_property_data_context_context_length
+ ** 
+ ** @param const xcb_selinux_get_property_data_context_reply_t *R
+ ** @returns int
+ **
+ *****************************************************************************/
+ 
 int
 xcb_selinux_get_property_data_context_context_length (const xcb_selinux_get_property_data_context_reply_t *R  /**< */)
 {
     return R->context_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_generic_iterator_t xcb_selinux_get_property_data_context_context_end
+ ** 
+ ** @param const xcb_selinux_get_property_data_context_reply_t *R
+ ** @returns xcb_generic_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_generic_iterator_t
 xcb_selinux_get_property_data_context_context_end (const xcb_selinux_get_property_data_context_reply_t *R  /**< */)
 {
@@ -1561,6 +2295,18 @@ xcb_selinux_get_property_data_context_context_end (const xcb_selinux_get_propert
     return i;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_property_data_context_reply_t * xcb_selinux_get_property_data_context_reply
+ ** 
+ ** @param xcb_connection_t                                *c
+ ** @param xcb_selinux_get_property_data_context_cookie_t   cookie
+ ** @param xcb_generic_error_t                            **e
+ ** @returns xcb_selinux_get_property_data_context_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_property_data_context_reply_t *
 xcb_selinux_get_property_data_context_reply (xcb_connection_t                                *c  /**< */,
                                              xcb_selinux_get_property_data_context_cookie_t   cookie  /**< */,
@@ -1605,6 +2351,17 @@ xcb_selinux_list_properties_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_list_properties_cookie_t xcb_selinux_list_properties
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param xcb_window_t      window
+ ** @returns xcb_selinux_list_properties_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_list_properties_cookie_t
 xcb_selinux_list_properties (xcb_connection_t *c  /**< */,
                              xcb_window_t      window  /**< */)
@@ -1615,22 +2372,33 @@ xcb_selinux_list_properties (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_LIST_PROPERTIES,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_list_properties_cookie_t xcb_ret;
     xcb_selinux_list_properties_request_t xcb_out;
-
+    
     xcb_out.window = window;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_list_properties_cookie_t xcb_selinux_list_properties_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param xcb_window_t      window
+ ** @returns xcb_selinux_list_properties_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_list_properties_cookie_t
 xcb_selinux_list_properties_unchecked (xcb_connection_t *c  /**< */,
                                        xcb_window_t      window  /**< */)
@@ -1641,28 +2409,48 @@ xcb_selinux_list_properties_unchecked (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_LIST_PROPERTIES,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_list_properties_cookie_t xcb_ret;
     xcb_selinux_list_properties_request_t xcb_out;
-
+    
     xcb_out.window = window;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** int xcb_selinux_list_properties_properties_length
+ ** 
+ ** @param const xcb_selinux_list_properties_reply_t *R
+ ** @returns int
+ **
+ *****************************************************************************/
+ 
 int
 xcb_selinux_list_properties_properties_length (const xcb_selinux_list_properties_reply_t *R  /**< */)
 {
     return R->properties_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_list_item_iterator_t xcb_selinux_list_properties_properties_iterator
+ ** 
+ ** @param const xcb_selinux_list_properties_reply_t *R
+ ** @returns xcb_selinux_list_item_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_list_item_iterator_t
 xcb_selinux_list_properties_properties_iterator (const xcb_selinux_list_properties_reply_t *R  /**< */)
 {
@@ -1673,6 +2461,18 @@ xcb_selinux_list_properties_properties_iterator (const xcb_selinux_list_properti
     return i;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_list_properties_reply_t * xcb_selinux_list_properties_reply
+ ** 
+ ** @param xcb_connection_t                      *c
+ ** @param xcb_selinux_list_properties_cookie_t   cookie
+ ** @param xcb_generic_error_t                  **e
+ ** @returns xcb_selinux_list_properties_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_list_properties_reply_t *
 xcb_selinux_list_properties_reply (xcb_connection_t                      *c  /**< */,
                                    xcb_selinux_list_properties_cookie_t   cookie  /**< */,
@@ -1712,6 +2512,18 @@ xcb_selinux_set_selection_create_context_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_selinux_set_selection_create_context_checked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          context_len
+ ** @param const char       *context
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_selinux_set_selection_create_context_checked (xcb_connection_t *c  /**< */,
                                                   uint32_t          context_len  /**< */,
@@ -1723,13 +2535,13 @@ xcb_selinux_set_selection_create_context_checked (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_SET_SELECTION_CREATE_CONTEXT,
         /* isvoid */ 1
     };
-
+    
     struct iovec xcb_parts[6];
     xcb_void_cookie_t xcb_ret;
     xcb_selinux_set_selection_create_context_request_t xcb_out;
-
+    
     xcb_out.context_len = context_len;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
@@ -1739,11 +2551,23 @@ xcb_selinux_set_selection_create_context_checked (xcb_connection_t *c  /**< */,
     xcb_parts[4].iov_len = context_len * sizeof(char);
     xcb_parts[5].iov_base = 0;
     xcb_parts[5].iov_len = -xcb_parts[4].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_selinux_set_selection_create_context
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          context_len
+ ** @param const char       *context
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_selinux_set_selection_create_context (xcb_connection_t *c  /**< */,
                                           uint32_t          context_len  /**< */,
@@ -1755,13 +2579,13 @@ xcb_selinux_set_selection_create_context (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_SET_SELECTION_CREATE_CONTEXT,
         /* isvoid */ 1
     };
-
+    
     struct iovec xcb_parts[6];
     xcb_void_cookie_t xcb_ret;
     xcb_selinux_set_selection_create_context_request_t xcb_out;
-
+    
     xcb_out.context_len = context_len;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
@@ -1771,7 +2595,7 @@ xcb_selinux_set_selection_create_context (xcb_connection_t *c  /**< */,
     xcb_parts[4].iov_len = context_len * sizeof(char);
     xcb_parts[5].iov_base = 0;
     xcb_parts[5].iov_len = -xcb_parts[4].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
@@ -1807,6 +2631,16 @@ xcb_selinux_get_selection_create_context_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_selection_create_context_cookie_t xcb_selinux_get_selection_create_context
+ ** 
+ ** @param xcb_connection_t *c
+ ** @returns xcb_selinux_get_selection_create_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_selection_create_context_cookie_t
 xcb_selinux_get_selection_create_context (xcb_connection_t *c  /**< */)
 {
@@ -1816,21 +2650,31 @@ xcb_selinux_get_selection_create_context (xcb_connection_t *c  /**< */)
         /* opcode */ XCB_SELINUX_GET_SELECTION_CREATE_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_selection_create_context_cookie_t xcb_ret;
     xcb_selinux_get_selection_create_context_request_t xcb_out;
-
-
+    
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_selection_create_context_cookie_t xcb_selinux_get_selection_create_context_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @returns xcb_selinux_get_selection_create_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_selection_create_context_cookie_t
 xcb_selinux_get_selection_create_context_unchecked (xcb_connection_t *c  /**< */)
 {
@@ -1840,33 +2684,63 @@ xcb_selinux_get_selection_create_context_unchecked (xcb_connection_t *c  /**< */
         /* opcode */ XCB_SELINUX_GET_SELECTION_CREATE_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_selection_create_context_cookie_t xcb_ret;
     xcb_selinux_get_selection_create_context_request_t xcb_out;
-
-
+    
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** char * xcb_selinux_get_selection_create_context_context
+ ** 
+ ** @param const xcb_selinux_get_selection_create_context_reply_t *R
+ ** @returns char *
+ **
+ *****************************************************************************/
+ 
 char *
 xcb_selinux_get_selection_create_context_context (const xcb_selinux_get_selection_create_context_reply_t *R  /**< */)
 {
     return (char *) (R + 1);
 }
 
+
+/*****************************************************************************
+ **
+ ** int xcb_selinux_get_selection_create_context_context_length
+ ** 
+ ** @param const xcb_selinux_get_selection_create_context_reply_t *R
+ ** @returns int
+ **
+ *****************************************************************************/
+ 
 int
 xcb_selinux_get_selection_create_context_context_length (const xcb_selinux_get_selection_create_context_reply_t *R  /**< */)
 {
     return R->context_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_generic_iterator_t xcb_selinux_get_selection_create_context_context_end
+ ** 
+ ** @param const xcb_selinux_get_selection_create_context_reply_t *R
+ ** @returns xcb_generic_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_generic_iterator_t
 xcb_selinux_get_selection_create_context_context_end (const xcb_selinux_get_selection_create_context_reply_t *R  /**< */)
 {
@@ -1877,6 +2751,18 @@ xcb_selinux_get_selection_create_context_context_end (const xcb_selinux_get_sele
     return i;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_selection_create_context_reply_t * xcb_selinux_get_selection_create_context_reply
+ ** 
+ ** @param xcb_connection_t                                   *c
+ ** @param xcb_selinux_get_selection_create_context_cookie_t   cookie
+ ** @param xcb_generic_error_t                               **e
+ ** @returns xcb_selinux_get_selection_create_context_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_selection_create_context_reply_t *
 xcb_selinux_get_selection_create_context_reply (xcb_connection_t                                   *c  /**< */,
                                                 xcb_selinux_get_selection_create_context_cookie_t   cookie  /**< */,
@@ -1916,6 +2802,18 @@ xcb_selinux_set_selection_use_context_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_selinux_set_selection_use_context_checked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          context_len
+ ** @param const char       *context
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_selinux_set_selection_use_context_checked (xcb_connection_t *c  /**< */,
                                                uint32_t          context_len  /**< */,
@@ -1927,13 +2825,13 @@ xcb_selinux_set_selection_use_context_checked (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_SET_SELECTION_USE_CONTEXT,
         /* isvoid */ 1
     };
-
+    
     struct iovec xcb_parts[6];
     xcb_void_cookie_t xcb_ret;
     xcb_selinux_set_selection_use_context_request_t xcb_out;
-
+    
     xcb_out.context_len = context_len;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
@@ -1943,11 +2841,23 @@ xcb_selinux_set_selection_use_context_checked (xcb_connection_t *c  /**< */,
     xcb_parts[4].iov_len = context_len * sizeof(char);
     xcb_parts[5].iov_base = 0;
     xcb_parts[5].iov_len = -xcb_parts[4].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_selinux_set_selection_use_context
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          context_len
+ ** @param const char       *context
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_selinux_set_selection_use_context (xcb_connection_t *c  /**< */,
                                        uint32_t          context_len  /**< */,
@@ -1959,13 +2869,13 @@ xcb_selinux_set_selection_use_context (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_SET_SELECTION_USE_CONTEXT,
         /* isvoid */ 1
     };
-
+    
     struct iovec xcb_parts[6];
     xcb_void_cookie_t xcb_ret;
     xcb_selinux_set_selection_use_context_request_t xcb_out;
-
+    
     xcb_out.context_len = context_len;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
@@ -1975,7 +2885,7 @@ xcb_selinux_set_selection_use_context (xcb_connection_t *c  /**< */,
     xcb_parts[4].iov_len = context_len * sizeof(char);
     xcb_parts[5].iov_base = 0;
     xcb_parts[5].iov_len = -xcb_parts[4].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
@@ -2011,6 +2921,16 @@ xcb_selinux_get_selection_use_context_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_selection_use_context_cookie_t xcb_selinux_get_selection_use_context
+ ** 
+ ** @param xcb_connection_t *c
+ ** @returns xcb_selinux_get_selection_use_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_selection_use_context_cookie_t
 xcb_selinux_get_selection_use_context (xcb_connection_t *c  /**< */)
 {
@@ -2020,21 +2940,31 @@ xcb_selinux_get_selection_use_context (xcb_connection_t *c  /**< */)
         /* opcode */ XCB_SELINUX_GET_SELECTION_USE_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_selection_use_context_cookie_t xcb_ret;
     xcb_selinux_get_selection_use_context_request_t xcb_out;
-
-
+    
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_selection_use_context_cookie_t xcb_selinux_get_selection_use_context_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @returns xcb_selinux_get_selection_use_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_selection_use_context_cookie_t
 xcb_selinux_get_selection_use_context_unchecked (xcb_connection_t *c  /**< */)
 {
@@ -2044,33 +2974,63 @@ xcb_selinux_get_selection_use_context_unchecked (xcb_connection_t *c  /**< */)
         /* opcode */ XCB_SELINUX_GET_SELECTION_USE_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_selection_use_context_cookie_t xcb_ret;
     xcb_selinux_get_selection_use_context_request_t xcb_out;
-
-
+    
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** char * xcb_selinux_get_selection_use_context_context
+ ** 
+ ** @param const xcb_selinux_get_selection_use_context_reply_t *R
+ ** @returns char *
+ **
+ *****************************************************************************/
+ 
 char *
 xcb_selinux_get_selection_use_context_context (const xcb_selinux_get_selection_use_context_reply_t *R  /**< */)
 {
     return (char *) (R + 1);
 }
 
+
+/*****************************************************************************
+ **
+ ** int xcb_selinux_get_selection_use_context_context_length
+ ** 
+ ** @param const xcb_selinux_get_selection_use_context_reply_t *R
+ ** @returns int
+ **
+ *****************************************************************************/
+ 
 int
 xcb_selinux_get_selection_use_context_context_length (const xcb_selinux_get_selection_use_context_reply_t *R  /**< */)
 {
     return R->context_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_generic_iterator_t xcb_selinux_get_selection_use_context_context_end
+ ** 
+ ** @param const xcb_selinux_get_selection_use_context_reply_t *R
+ ** @returns xcb_generic_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_generic_iterator_t
 xcb_selinux_get_selection_use_context_context_end (const xcb_selinux_get_selection_use_context_reply_t *R  /**< */)
 {
@@ -2081,6 +3041,18 @@ xcb_selinux_get_selection_use_context_context_end (const xcb_selinux_get_selecti
     return i;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_selection_use_context_reply_t * xcb_selinux_get_selection_use_context_reply
+ ** 
+ ** @param xcb_connection_t                                *c
+ ** @param xcb_selinux_get_selection_use_context_cookie_t   cookie
+ ** @param xcb_generic_error_t                            **e
+ ** @returns xcb_selinux_get_selection_use_context_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_selection_use_context_reply_t *
 xcb_selinux_get_selection_use_context_reply (xcb_connection_t                                *c  /**< */,
                                              xcb_selinux_get_selection_use_context_cookie_t   cookie  /**< */,
@@ -2120,6 +3092,17 @@ xcb_selinux_get_selection_context_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_selection_context_cookie_t xcb_selinux_get_selection_context
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param xcb_atom_t        selection
+ ** @returns xcb_selinux_get_selection_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_selection_context_cookie_t
 xcb_selinux_get_selection_context (xcb_connection_t *c  /**< */,
                                    xcb_atom_t        selection  /**< */)
@@ -2130,22 +3113,33 @@ xcb_selinux_get_selection_context (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_GET_SELECTION_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_selection_context_cookie_t xcb_ret;
     xcb_selinux_get_selection_context_request_t xcb_out;
-
+    
     xcb_out.selection = selection;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_selection_context_cookie_t xcb_selinux_get_selection_context_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param xcb_atom_t        selection
+ ** @returns xcb_selinux_get_selection_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_selection_context_cookie_t
 xcb_selinux_get_selection_context_unchecked (xcb_connection_t *c  /**< */,
                                              xcb_atom_t        selection  /**< */)
@@ -2156,34 +3150,64 @@ xcb_selinux_get_selection_context_unchecked (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_GET_SELECTION_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_selection_context_cookie_t xcb_ret;
     xcb_selinux_get_selection_context_request_t xcb_out;
-
+    
     xcb_out.selection = selection;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** char * xcb_selinux_get_selection_context_context
+ ** 
+ ** @param const xcb_selinux_get_selection_context_reply_t *R
+ ** @returns char *
+ **
+ *****************************************************************************/
+ 
 char *
 xcb_selinux_get_selection_context_context (const xcb_selinux_get_selection_context_reply_t *R  /**< */)
 {
     return (char *) (R + 1);
 }
 
+
+/*****************************************************************************
+ **
+ ** int xcb_selinux_get_selection_context_context_length
+ ** 
+ ** @param const xcb_selinux_get_selection_context_reply_t *R
+ ** @returns int
+ **
+ *****************************************************************************/
+ 
 int
 xcb_selinux_get_selection_context_context_length (const xcb_selinux_get_selection_context_reply_t *R  /**< */)
 {
     return R->context_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_generic_iterator_t xcb_selinux_get_selection_context_context_end
+ ** 
+ ** @param const xcb_selinux_get_selection_context_reply_t *R
+ ** @returns xcb_generic_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_generic_iterator_t
 xcb_selinux_get_selection_context_context_end (const xcb_selinux_get_selection_context_reply_t *R  /**< */)
 {
@@ -2194,6 +3218,18 @@ xcb_selinux_get_selection_context_context_end (const xcb_selinux_get_selection_c
     return i;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_selection_context_reply_t * xcb_selinux_get_selection_context_reply
+ ** 
+ ** @param xcb_connection_t                            *c
+ ** @param xcb_selinux_get_selection_context_cookie_t   cookie
+ ** @param xcb_generic_error_t                        **e
+ ** @returns xcb_selinux_get_selection_context_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_selection_context_reply_t *
 xcb_selinux_get_selection_context_reply (xcb_connection_t                            *c  /**< */,
                                          xcb_selinux_get_selection_context_cookie_t   cookie  /**< */,
@@ -2233,6 +3269,17 @@ xcb_selinux_get_selection_data_context_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_selection_data_context_cookie_t xcb_selinux_get_selection_data_context
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param xcb_atom_t        selection
+ ** @returns xcb_selinux_get_selection_data_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_selection_data_context_cookie_t
 xcb_selinux_get_selection_data_context (xcb_connection_t *c  /**< */,
                                         xcb_atom_t        selection  /**< */)
@@ -2243,22 +3290,33 @@ xcb_selinux_get_selection_data_context (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_GET_SELECTION_DATA_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_selection_data_context_cookie_t xcb_ret;
     xcb_selinux_get_selection_data_context_request_t xcb_out;
-
+    
     xcb_out.selection = selection;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_selection_data_context_cookie_t xcb_selinux_get_selection_data_context_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param xcb_atom_t        selection
+ ** @returns xcb_selinux_get_selection_data_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_selection_data_context_cookie_t
 xcb_selinux_get_selection_data_context_unchecked (xcb_connection_t *c  /**< */,
                                                   xcb_atom_t        selection  /**< */)
@@ -2269,34 +3327,64 @@ xcb_selinux_get_selection_data_context_unchecked (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_GET_SELECTION_DATA_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_selection_data_context_cookie_t xcb_ret;
     xcb_selinux_get_selection_data_context_request_t xcb_out;
-
+    
     xcb_out.selection = selection;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** char * xcb_selinux_get_selection_data_context_context
+ ** 
+ ** @param const xcb_selinux_get_selection_data_context_reply_t *R
+ ** @returns char *
+ **
+ *****************************************************************************/
+ 
 char *
 xcb_selinux_get_selection_data_context_context (const xcb_selinux_get_selection_data_context_reply_t *R  /**< */)
 {
     return (char *) (R + 1);
 }
 
+
+/*****************************************************************************
+ **
+ ** int xcb_selinux_get_selection_data_context_context_length
+ ** 
+ ** @param const xcb_selinux_get_selection_data_context_reply_t *R
+ ** @returns int
+ **
+ *****************************************************************************/
+ 
 int
 xcb_selinux_get_selection_data_context_context_length (const xcb_selinux_get_selection_data_context_reply_t *R  /**< */)
 {
     return R->context_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_generic_iterator_t xcb_selinux_get_selection_data_context_context_end
+ ** 
+ ** @param const xcb_selinux_get_selection_data_context_reply_t *R
+ ** @returns xcb_generic_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_generic_iterator_t
 xcb_selinux_get_selection_data_context_context_end (const xcb_selinux_get_selection_data_context_reply_t *R  /**< */)
 {
@@ -2307,6 +3395,18 @@ xcb_selinux_get_selection_data_context_context_end (const xcb_selinux_get_select
     return i;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_selection_data_context_reply_t * xcb_selinux_get_selection_data_context_reply
+ ** 
+ ** @param xcb_connection_t                                 *c
+ ** @param xcb_selinux_get_selection_data_context_cookie_t   cookie
+ ** @param xcb_generic_error_t                             **e
+ ** @returns xcb_selinux_get_selection_data_context_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_selection_data_context_reply_t *
 xcb_selinux_get_selection_data_context_reply (xcb_connection_t                                 *c  /**< */,
                                               xcb_selinux_get_selection_data_context_cookie_t   cookie  /**< */,
@@ -2351,6 +3451,16 @@ xcb_selinux_list_selections_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_list_selections_cookie_t xcb_selinux_list_selections
+ ** 
+ ** @param xcb_connection_t *c
+ ** @returns xcb_selinux_list_selections_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_list_selections_cookie_t
 xcb_selinux_list_selections (xcb_connection_t *c  /**< */)
 {
@@ -2360,21 +3470,31 @@ xcb_selinux_list_selections (xcb_connection_t *c  /**< */)
         /* opcode */ XCB_SELINUX_LIST_SELECTIONS,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_list_selections_cookie_t xcb_ret;
     xcb_selinux_list_selections_request_t xcb_out;
-
-
+    
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_list_selections_cookie_t xcb_selinux_list_selections_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @returns xcb_selinux_list_selections_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_list_selections_cookie_t
 xcb_selinux_list_selections_unchecked (xcb_connection_t *c  /**< */)
 {
@@ -2384,27 +3504,47 @@ xcb_selinux_list_selections_unchecked (xcb_connection_t *c  /**< */)
         /* opcode */ XCB_SELINUX_LIST_SELECTIONS,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_list_selections_cookie_t xcb_ret;
     xcb_selinux_list_selections_request_t xcb_out;
-
-
+    
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** int xcb_selinux_list_selections_selections_length
+ ** 
+ ** @param const xcb_selinux_list_selections_reply_t *R
+ ** @returns int
+ **
+ *****************************************************************************/
+ 
 int
 xcb_selinux_list_selections_selections_length (const xcb_selinux_list_selections_reply_t *R  /**< */)
 {
     return R->selections_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_list_item_iterator_t xcb_selinux_list_selections_selections_iterator
+ ** 
+ ** @param const xcb_selinux_list_selections_reply_t *R
+ ** @returns xcb_selinux_list_item_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_list_item_iterator_t
 xcb_selinux_list_selections_selections_iterator (const xcb_selinux_list_selections_reply_t *R  /**< */)
 {
@@ -2415,6 +3555,18 @@ xcb_selinux_list_selections_selections_iterator (const xcb_selinux_list_selectio
     return i;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_list_selections_reply_t * xcb_selinux_list_selections_reply
+ ** 
+ ** @param xcb_connection_t                      *c
+ ** @param xcb_selinux_list_selections_cookie_t   cookie
+ ** @param xcb_generic_error_t                  **e
+ ** @returns xcb_selinux_list_selections_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_list_selections_reply_t *
 xcb_selinux_list_selections_reply (xcb_connection_t                      *c  /**< */,
                                    xcb_selinux_list_selections_cookie_t   cookie  /**< */,
@@ -2454,6 +3606,17 @@ xcb_selinux_get_client_context_sizeof (const void  *_buffer  /**< */)
     return xcb_buffer_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_client_context_cookie_t xcb_selinux_get_client_context
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          resource
+ ** @returns xcb_selinux_get_client_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_client_context_cookie_t
 xcb_selinux_get_client_context (xcb_connection_t *c  /**< */,
                                 uint32_t          resource  /**< */)
@@ -2464,22 +3627,33 @@ xcb_selinux_get_client_context (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_GET_CLIENT_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_client_context_cookie_t xcb_ret;
     xcb_selinux_get_client_context_request_t xcb_out;
-
+    
     xcb_out.resource = resource;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, XCB_REQUEST_CHECKED, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_client_context_cookie_t xcb_selinux_get_client_context_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          resource
+ ** @returns xcb_selinux_get_client_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_client_context_cookie_t
 xcb_selinux_get_client_context_unchecked (xcb_connection_t *c  /**< */,
                                           uint32_t          resource  /**< */)
@@ -2490,34 +3664,64 @@ xcb_selinux_get_client_context_unchecked (xcb_connection_t *c  /**< */,
         /* opcode */ XCB_SELINUX_GET_CLIENT_CONTEXT,
         /* isvoid */ 0
     };
-
+    
     struct iovec xcb_parts[4];
     xcb_selinux_get_client_context_cookie_t xcb_ret;
     xcb_selinux_get_client_context_request_t xcb_out;
-
+    
     xcb_out.resource = resource;
-
+    
     xcb_parts[2].iov_base = (char *) &xcb_out;
     xcb_parts[2].iov_len = sizeof(xcb_out);
     xcb_parts[3].iov_base = 0;
     xcb_parts[3].iov_len = -xcb_parts[2].iov_len & 3;
-
+    
     xcb_ret.sequence = xcb_send_request(c, 0, xcb_parts + 2, &xcb_req);
     return xcb_ret;
 }
 
+
+/*****************************************************************************
+ **
+ ** char * xcb_selinux_get_client_context_context
+ ** 
+ ** @param const xcb_selinux_get_client_context_reply_t *R
+ ** @returns char *
+ **
+ *****************************************************************************/
+ 
 char *
 xcb_selinux_get_client_context_context (const xcb_selinux_get_client_context_reply_t *R  /**< */)
 {
     return (char *) (R + 1);
 }
 
+
+/*****************************************************************************
+ **
+ ** int xcb_selinux_get_client_context_context_length
+ ** 
+ ** @param const xcb_selinux_get_client_context_reply_t *R
+ ** @returns int
+ **
+ *****************************************************************************/
+ 
 int
 xcb_selinux_get_client_context_context_length (const xcb_selinux_get_client_context_reply_t *R  /**< */)
 {
     return R->context_len;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_generic_iterator_t xcb_selinux_get_client_context_context_end
+ ** 
+ ** @param const xcb_selinux_get_client_context_reply_t *R
+ ** @returns xcb_generic_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_generic_iterator_t
 xcb_selinux_get_client_context_context_end (const xcb_selinux_get_client_context_reply_t *R  /**< */)
 {
@@ -2528,6 +3732,18 @@ xcb_selinux_get_client_context_context_end (const xcb_selinux_get_client_context
     return i;
 }
 
+
+/*****************************************************************************
+ **
+ ** xcb_selinux_get_client_context_reply_t * xcb_selinux_get_client_context_reply
+ ** 
+ ** @param xcb_connection_t                         *c
+ ** @param xcb_selinux_get_client_context_cookie_t   cookie
+ ** @param xcb_generic_error_t                     **e
+ ** @returns xcb_selinux_get_client_context_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_selinux_get_client_context_reply_t *
 xcb_selinux_get_client_context_reply (xcb_connection_t                         *c  /**< */,
                                       xcb_selinux_get_client_context_cookie_t   cookie  /**< */,

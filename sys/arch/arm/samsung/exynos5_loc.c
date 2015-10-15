@@ -1,4 +1,4 @@
-/*	$NetBSD: exynos5_loc.c,v 1.12 2014/09/05 08:01:05 skrll Exp $	*/
+/*	$NetBSD: exynos5_loc.c,v 1.7.4.1 2015/01/04 11:19:00 martin Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

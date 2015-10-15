@@ -1,4 +1,4 @@
-/*	$NetBSD: ssh_api.c,v 1.2 2015/04/03 23:58:19 christos Exp $	*/
+/*	$NetBSD: ssh_api.c,v 1.2.2.2 2015/04/30 06:07:30 riz Exp $	*/
 /* $OpenBSD: ssh_api.c,v 1.4 2015/02/16 22:13:32 djm Exp $ */
 /*
  * Copyright (c) 2012 Markus Friedl.  All rights reserved.
@@ -17,7 +17,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: ssh_api.c,v 1.2 2015/04/03 23:58:19 christos Exp $");
+__RCSID("$NetBSD: ssh_api.c,v 1.2.2.2 2015/04/30 06:07:30 riz Exp $");
 
 #include "ssh1.h" /* For SSH_MSG_NONE */
 #include "ssh_api.h"

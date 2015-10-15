@@ -1,4 +1,4 @@
-/*	$NetBSD: ds1307reg.h,v 1.5 2014/10/12 01:23:23 macallan Exp $	*/
+/*	$NetBSD: ds1307reg.h,v 1.4.14.1 2015/04/14 04:24:58 snj Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.

@@ -1,4 +1,4 @@
-/*      $NetBSD: scheduler.c,v 1.41 2015/08/25 14:47:39 pooka Exp $	*/
+/*      $NetBSD: scheduler.c,v 1.39 2014/06/07 11:08:09 rmind Exp $	*/
 
 /*
  * Copyright (c) 2010, 2011 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: scheduler.c,v 1.41 2015/08/25 14:47:39 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: scheduler.c,v 1.39 2014/06/07 11:08:09 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/atomic.h>
@@ -72,7 +72,7 @@ static struct rumpcpu {
 struct cpu_info *rump_cpu = &rump_cpus[0];
 kcpuset_t *kcpuset_attached = NULL;
 kcpuset_t *kcpuset_running = NULL;
-int ncpu, ncpuonline;
+int ncpu;
 
 #define RCPULWP_BUSY	((void *)-1)
 #define RCPULWP_WANTED	((void *)-2)
@@ -280,7 +280,6 @@ void
 rump_schedule_cpu_interlock(struct lwp *l, void *interlock)
 {
 	struct rumpcpu *rcpu;
-	struct cpu_info *ci;
 	void *old;
 	bool domigrate;
 	bool bound = l->l_pflag & LP_BOUND;
@@ -355,19 +354,12 @@ rump_schedule_cpu_interlock(struct lwp *l, void *interlock)
 	rumpuser_mutex_exit(rcpu->rcpu_mtx);
 
  fastlane:
-	ci = rcpu->rcpu_ci;
-	l->l_cpu = l->l_target_cpu = ci;
+	l->l_cpu = l->l_target_cpu = rcpu->rcpu_ci;
 	l->l_mutex = rcpu->rcpu_ci->ci_schedstate.spc_mutex;
 	l->l_ncsw++;
 	l->l_stat = LSONPROC;
 
-	/*
-	 * No interrupts, so ci_curlwp === cpu_onproc.
-	 * Okay, we could make an attempt to not set cpu_onproc
-	 * in the case that an interrupt is scheduled immediately
-	 * after a user proc, but leave that for later.
-	 */
-	ci->ci_curlwp = ci->ci_data.cpu_onproc = l;
+	rcpu->rcpu_ci->ci_curlwp = l;
 }
 
 void
@@ -439,7 +431,7 @@ rump_unschedule_cpu1(struct lwp *l, void *interlock)
 	void *old;
 
 	ci = l->l_cpu;
-	ci->ci_curlwp = ci->ci_data.cpu_onproc = NULL;
+	ci->ci_curlwp = NULL;
 	rcpu = &rcpu_storage[ci-&rump_cpus[0]];
 
 	KASSERT(rcpu->rcpu_ci == ci);

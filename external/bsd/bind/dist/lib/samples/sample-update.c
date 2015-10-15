@@ -1,4 +1,4 @@
-/*	$NetBSD: sample-update.c,v 1.1.1.5 2015/07/08 15:38:07 christos Exp $	*/
+/*	$NetBSD: sample-update.c,v 1.1.1.2.2.1 2015/07/17 04:31:35 snj Exp $	*/
 
 /*
  * Copyright (C) 2009, 2010, 2012-2014  Internet Systems Consortium, Inc. ("ISC")

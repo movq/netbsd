@@ -1,4 +1,4 @@
-/*	$NetBSD: alpha_reloc.c,v 1.41 2014/08/25 20:40:52 joerg Exp $	*/
+/*	$NetBSD: alpha_reloc.c,v 1.40 2011/03/31 15:30:31 skrll Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -62,7 +62,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: alpha_reloc.c,v 1.41 2014/08/25 20:40:52 joerg Exp $");
+__RCSID("$NetBSD: alpha_reloc.c,v 1.40 2011/03/31 15:30:31 skrll Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -376,13 +376,7 @@ _rtld_relocate_plt_object(const Obj_Entry *obj, const Elf_Rela *rela,
 	if (__predict_false(def == &_rtld_sym_zero))
 		return 0;
 
-	if (ELF_ST_TYPE(def->st_info) == STT_GNU_IFUNC) {
-		if (tp == NULL)
-			return 0;
-		new_value = _rtld_resolve_ifunc(defobj, def);
-	} else {
-		new_value = (Elf_Addr)(defobj->relocbase + def->st_value);
-	}
+	new_value = (Elf_Addr)(defobj->relocbase + def->st_value);
 	rdbg(("bind now/fixup in %s --> old=%p new=%p",
 	    defobj->strtab + def->st_name, (void *)*where, (void *)new_value));
 

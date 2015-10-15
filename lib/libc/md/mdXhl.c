@@ -1,4 +1,4 @@
-/*	$NetBSD: mdXhl.c,v 1.13 2014/09/24 13:18:52 christos Exp $	*/
+/*	$NetBSD: mdXhl.c,v 1.10 2012/06/25 22:32:44 abs Exp $	*/
 
 /*
  * ----------------------------------------------------------------------------
@@ -42,6 +42,8 @@ WA(MDNAME(Data),CONCAT(_,MDNAME(Data)))
 #include <stdlib.h>
 #include <unistd.h>
 
+
+
 char *
 MDNAME(End)(MDNAME(_CTX) *ctx, char *buf)
 {
@@ -79,7 +81,7 @@ MDNAME(File)(const char *filename, char *buf)
 	/* buf may be NULL */
 
 	MDNAME(Init)(&ctx);
-	f = open(filename, O_RDONLY | O_CLOEXEC, 0666);
+	f = open(filename, O_RDONLY, 0666);
 	if (f < 0)
 		return NULL;
 

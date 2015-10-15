@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs.c,v 1.64 2015/01/12 19:50:25 christos Exp $	*/
+/*	$NetBSD: ffs.c,v 1.63.6.1 2015/04/14 05:08:09 snj Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -71,7 +71,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(__lint)
-__RCSID("$NetBSD: ffs.c,v 1.64 2015/01/12 19:50:25 christos Exp $");
+__RCSID("$NetBSD: ffs.c,v 1.63.6.1 2015/04/14 05:08:09 snj Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>

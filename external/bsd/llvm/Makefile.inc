@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.79 2015/05/29 17:37:50 joerg Exp $
+#	$NetBSD: Makefile.inc,v 1.74.2.1 2015/06/04 20:04:21 snj Exp $
 
 .if !defined(LLVM_TOPLEVEL_MK)
 LLVM_TOPLEVEL_MK=

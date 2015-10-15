@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2015/01/29 20:41:37 joerg Exp $
+#	$NetBSD: Makefile,v 1.1.6.1 2015/06/04 20:05:46 snj Exp $
 
 LIB=	lldReaderWriterELFX86
 

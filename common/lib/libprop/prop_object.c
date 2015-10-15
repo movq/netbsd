@@ -1,4 +1,4 @@
-/*	$NetBSD: prop_object.c,v 1.30 2015/05/12 14:59:35 christos Exp $	*/
+/*	$NetBSD: prop_object.c,v 1.29.4.1 2015/05/16 18:02:14 snj Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007 The NetBSD Foundation, Inc.

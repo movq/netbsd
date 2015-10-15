@@ -1,4 +1,4 @@
-/*	$NetBSD: fsck.c,v 1.52 2014/10/25 22:00:19 mlelstv Exp $	*/
+/*	$NetBSD: fsck.c,v 1.51.10.1 2014/11/11 10:21:26 martin Exp $	*/
 
 /*
  * Copyright (c) 1996 Christos Zoulas. All rights reserved.
@@ -36,7 +36,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fsck.c,v 1.52 2014/10/25 22:00:19 mlelstv Exp $");
+__RCSID("$NetBSD: fsck.c,v 1.51.10.1 2014/11/11 10:21:26 martin Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>

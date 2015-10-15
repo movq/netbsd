@@ -912,9 +912,6 @@ case "$ntp_cv_hdr_def_sigio" in
      *-sni-sysv*)
 	ans=no
 	;;
-     *-stratus-vos)
-	ans=no
-	;;
      *-univel-sysv*)
 	ans=no
 	;;
@@ -979,9 +976,6 @@ case "$ntp_cv_hdr_def_sigpoll" in
      *-sni-sysv*)
 	ans=no
 	;;
-     *-stratus-vos)
-	ans=no
-	;;
      *-*-aix[[4-9]]*)
 	# XXX Only verified thru AIX6
 	ans=no
@@ -1039,9 +1033,6 @@ case "$ntp_cv_hdr_def_sigpoll" in
 	ans=no
 	;;
      *-sni-sysv*)
-	ans=no
-	;;
-     *-stratus-vos)
 	ans=no
 	;;
      *-*-aix[[4-9]]*)

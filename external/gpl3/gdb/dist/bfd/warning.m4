@@ -1,6 +1,6 @@
-dnl Common configure.ac fragment
+dnl Common configure.in fragment
 dnl
-dnl   Copyright (C) 2012-2015 Free Software Foundation, Inc.
+dnl   Copyright 2012 Free Software Foundation
 dnl
 dnl This file is free software; you can redistribute it and/or modify
 dnl it under the terms of the GNU General Public License as published by
@@ -18,9 +18,6 @@ dnl <http://www.gnu.org/licenses/>.
 dnl
 
 AC_DEFUN([AM_BINUTILS_WARNINGS],[
-# Set the 'development' global.
-. $srcdir/../bfd/development.sh
-
 GCC_WARN_CFLAGS="-W -Wall -Wstrict-prototypes -Wmissing-prototypes"
 AC_EGREP_CPP([^[0-3]$],[__GNUC__],,GCC_WARN_CFLAGS="$GCC_WARN_CFLAGS -Wshadow")
 
@@ -42,8 +39,8 @@ case "${host}" in
   *) ;;
 esac
 
-# Enable -Werror by default when using gcc.  Turn it off for releases.
-if test "${GCC}" = yes -a -z "${ERROR_ON_WARNING}" -a "$development" = true ; then
+# Enable -Werror by default when using gcc
+if test "${GCC}" = yes -a -z "${ERROR_ON_WARNING}" ; then
     ERROR_ON_WARNING=yes
 fi
 

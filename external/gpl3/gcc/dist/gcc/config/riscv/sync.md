@@ -71,7 +71,7 @@
 
 ;; Implement atomic stores with amoswap.  Fall back to fences for atomic loads.
 (define_insn "atomic_store<mode>"
-  [(set (match_operand:GPR 0 "memory_operand" "=A")
+  [(set (match_operand:GPR 0 "memory_operand" "=YR")
     (unspec_volatile:GPR
       [(match_operand:GPR 1 "reg_or_0_operand" "rJ")
        (match_operand:SI 2 "const_int_operand")]      ;; model
@@ -79,19 +79,18 @@
   "TARGET_ATOMIC"
   "amoswap.<amo>%A2 zero,%z1,%0")
 
-(define_insn "atomic_<atomic_optab><mode>"
-  [(set (match_operand:GPR 0 "memory_operand" "+A")
+(define_insn "sync_<optab><mode>"
+  [(set (match_operand:GPR 0 "memory_operand" "+YR")
 	(unspec_volatile:GPR
 	  [(any_atomic:GPR (match_dup 0)
-		     (match_operand:GPR 1 "reg_or_0_operand" "rJ"))
-	   (match_operand:SI 2 "const_int_operand")] ;; model
-	 UNSPEC_SYNC_OLD_OP))]
+	   (match_operand:GPR 1 "reg_or_0_operand" "rJ"))]
+	  UNSPEC_SYNC_OLD_OP))]
   "TARGET_ATOMIC"
-  "amo<insn>.<amo>%A2 zero,%z1,%0")
+  "amo<insn>.<amo>.sc zero,%z1,%0")
 
 (define_insn "atomic_fetch_<atomic_optab><mode>"
   [(set (match_operand:GPR 0 "register_operand" "=&r")
-	(match_operand:GPR 1 "memory_operand" "+A"))
+	(match_operand:GPR 1 "memory_operand" "+YR"))
    (set (match_dup 1)
 	(unspec_volatile:GPR
 	  [(any_atomic:GPR (match_dup 1)
@@ -104,7 +103,7 @@
 (define_insn "atomic_exchange<mode>"
   [(set (match_operand:GPR 0 "register_operand" "=&r")
 	(unspec_volatile:GPR
-	  [(match_operand:GPR 1 "memory_operand" "+A")
+	  [(match_operand:GPR 1 "memory_operand" "+YR")
 	   (match_operand:SI 3 "const_int_operand")] ;; model
 	  UNSPEC_SYNC_EXCHANGE))
    (set (match_dup 1)
@@ -114,7 +113,7 @@
 
 (define_insn "atomic_cas_value_strong<mode>"
   [(set (match_operand:GPR 0 "register_operand" "=&r")
-	(match_operand:GPR 1 "memory_operand" "+A"))
+	(match_operand:GPR 1 "memory_operand" "+YR"))
    (set (match_dup 1)
 	(unspec_volatile:GPR [(match_operand:GPR 2 "reg_or_0_operand" "rJ")
 			      (match_operand:GPR 3 "reg_or_0_operand" "rJ")
@@ -158,7 +157,7 @@
 
 (define_expand "atomic_test_and_set"
   [(match_operand:QI 0 "register_operand" "")     ;; bool output
-   (match_operand:QI 1 "memory_operand" "+A")    ;; memory
+   (match_operand:QI 1 "memory_operand" "+YR")    ;; memory
    (match_operand:SI 2 "const_int_operand" "")]   ;; model
   "TARGET_ATOMIC"
 {

@@ -30,8 +30,8 @@
   POSSIBILITY OF SUCH DAMAGE.
 
 ******************************************************************************/
-/*$FreeBSD: head/sys/dev/ixgbe/ixgbe_vf.c 251964 2013-06-18 21:28:19Z jfv $*/
-/*$NetBSD: ixgbe_vf.c,v 1.5 2015/08/05 04:08:44 msaitoh Exp $*/
+/*$FreeBSD: head/sys/dev/ixgbe/ixgbe_vf.c 247822 2013-03-04 23:07:40Z jfv $*/
+/*$NetBSD: ixgbe_vf.c,v 1.1.28.2 2015/05/06 23:29:21 riz Exp $*/
 
 
 #include "ixgbe_api.h"
@@ -158,33 +158,34 @@ s32 ixgbe_reset_hw_vf(struct ixgbe_hw *hw)
 		usec_delay(5);
 	}
 
-	if (!timeout)
-		return IXGBE_ERR_RESET_FAILED;
+	if (timeout) {
+		/* mailbox timeout can now become active */
+		mbx->timeout = IXGBE_VF_MBX_INIT_TIMEOUT;
 
-	/* mailbox timeout can now become active */
-	mbx->timeout = IXGBE_VF_MBX_INIT_TIMEOUT;
+		msgbuf[0] = IXGBE_VF_RESET;
+		mbx->ops.write_posted(hw, msgbuf, 1, 0);
 
-	msgbuf[0] = IXGBE_VF_RESET;
-	mbx->ops.write_posted(hw, msgbuf, 1, 0);
+		msec_delay(10);
 
-	msec_delay(10);
-
-	/*
-	 * set our "perm_addr" based on info provided by PF
-	 * also set up the mc_filter_type which is piggy backed
-	 * on the mac address in word 3
-	 */
-	ret_val = mbx->ops.read_posted(hw, msgbuf,
-			IXGBE_VF_PERMADDR_MSG_LEN, 0);
-	if (ret_val)
-		return ret_val;
-
-	if (msgbuf[0] != (IXGBE_VF_RESET | IXGBE_VT_MSGTYPE_ACK) &&
-	    msgbuf[0] != (IXGBE_VF_RESET | IXGBE_VT_MSGTYPE_NACK))
-		return IXGBE_ERR_INVALID_MAC_ADDR;
-
-	memcpy(hw->mac.perm_addr, addr, IXGBE_ETH_LENGTH_OF_ADDRESS);
-	hw->mac.mc_filter_type = msgbuf[IXGBE_VF_MC_TYPE_WORD];
+		/*
+		 * set our "perm_addr" based on info provided by PF
+		 * also set up the mc_filter_type which is piggy backed
+		 * on the mac address in word 3
+		 */
+		ret_val = mbx->ops.read_posted(hw, msgbuf,
+					       IXGBE_VF_PERMADDR_MSG_LEN, 0);
+		if (!ret_val) {
+			if (msgbuf[0] == (IXGBE_VF_RESET |
+					  IXGBE_VT_MSGTYPE_ACK)) {
+				memcpy(hw->mac.perm_addr, addr,
+				       IXGBE_ETH_LENGTH_OF_ADDRESS);
+				hw->mac.mc_filter_type =
+					msgbuf[IXGBE_VF_MC_TYPE_WORD];
+			} else {
+				ret_val = IXGBE_ERR_INVALID_MAC_ADDR;
+			}
+		}
+	}
 
 	return ret_val;
 }

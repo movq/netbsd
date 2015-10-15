@@ -1,4 +1,4 @@
-/*	$NetBSD: uhci.c,v 1.266 2015/08/19 06:23:35 skrll Exp $	*/
+/*	$NetBSD: uhci.c,v 1.264 2014/08/05 06:35:24 skrll Exp $	*/
 
 /*
  * Copyright (c) 1998, 2004, 2011, 2012 The NetBSD Foundation, Inc.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uhci.c,v 1.266 2015/08/19 06:23:35 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uhci.c,v 1.264 2014/08/05 06:35:24 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -70,6 +70,7 @@ __KERNEL_RCSID(0, "$NetBSD: uhci.c,v 1.266 2015/08/19 06:23:35 skrll Exp $");
 
 /* Use bandwidth reclamation for control transfers. Some devices choke on it. */
 /*#define UHCI_CTL_LOOP */
+
 
 
 #ifdef UHCI_DEBUG
@@ -529,7 +530,7 @@ uhci_init(uhci_softc_t *sc)
 	callout_init(&sc->sc_poll_handle, CALLOUT_MPSAFE);
 
 	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_SOFTUSB);
-	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_USB);
+	mutex_init(&sc->sc_intr_lock, MUTEX_DEFAULT, IPL_SCHED);
 	cv_init(&sc->sc_softwake_cv, "uhciab");
 
 	/* Set up the bus struct. */

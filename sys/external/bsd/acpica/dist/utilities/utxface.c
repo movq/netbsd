@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,8 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+
+#define __UTXFACE_C__
 #define EXPORT_ACPI_INTERFACES
 
 #include "acpi.h"
@@ -263,7 +265,7 @@ AcpiGetStatistics (
     Stats->SciCount = AcpiSciCount;
     Stats->GpeCount = AcpiGpeCount;
 
-    memcpy (Stats->FixedEventCount, AcpiFixedEventCount,
+    ACPI_MEMCPY (Stats->FixedEventCount, AcpiFixedEventCount,
         sizeof (AcpiFixedEventCount));
 
 
@@ -367,7 +369,7 @@ AcpiInstallInterface (
 
     /* Parameter validation */
 
-    if (!InterfaceName || (strlen (InterfaceName) == 0))
+    if (!InterfaceName || (ACPI_STRLEN (InterfaceName) == 0))
     {
         return (AE_BAD_PARAMETER);
     }
@@ -432,7 +434,7 @@ AcpiRemoveInterface (
 
     /* Parameter validation */
 
-    if (!InterfaceName || (strlen (InterfaceName) == 0))
+    if (!InterfaceName || (ACPI_STRLEN (InterfaceName) == 0))
     {
         return (AE_BAD_PARAMETER);
     }
@@ -620,9 +622,7 @@ AcpiDecodePldBuffer (
     ACPI_MOVE_32_TO_32 (&Dword, &Buffer[0]);
     PldInfo->Revision =             ACPI_PLD_GET_REVISION (&Dword);
     PldInfo->IgnoreColor =          ACPI_PLD_GET_IGNORE_COLOR (&Dword);
-    PldInfo->Red =                  ACPI_PLD_GET_RED (&Dword);
-    PldInfo->Green =                ACPI_PLD_GET_GREEN (&Dword);
-    PldInfo->Blue =                 ACPI_PLD_GET_BLUE (&Dword);
+    PldInfo->Color =                ACPI_PLD_GET_COLOR (&Dword);
 
     /* Second 32-bit DWord */
 

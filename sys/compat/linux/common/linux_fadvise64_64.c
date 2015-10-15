@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_fadvise64_64.c,v 1.3 2014/11/09 17:48:08 maxv Exp $	*/
+/*	$NetBSD: linux_fadvise64_64.c,v 1.2.2.1 2015/01/17 12:10:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_fadvise64_64.c,v 1.3 2014/11/09 17:48:08 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_fadvise64_64.c,v 1.2.2.1 2015/01/17 12:10:54 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

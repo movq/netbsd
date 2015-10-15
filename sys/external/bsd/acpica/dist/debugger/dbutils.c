@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,10 +41,12 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+
 #include "acpi.h"
 #include "accommon.h"
 #include "acnamesp.h"
 #include "acdebug.h"
+#include "acdisasm.h"
 
 
 #ifdef ACPI_DEBUGGER
@@ -95,7 +97,7 @@ AcpiDbMatchArgument (
 
     for (i = 0; Arguments[i].Name; i++)
     {
-        if (strstr (Arguments[i].Name, UserArgument) == Arguments[i].Name)
+        if (ACPI_STRSTR (Arguments[i].Name, UserArgument) == Arguments[i].Name)
         {
             return (i);
         }
@@ -222,7 +224,7 @@ AcpiDbDumpExternalObject (
     case ACPI_TYPE_LOCAL_REFERENCE:
 
         AcpiOsPrintf ("[Object Reference] = ");
-        AcpiDbDisplayInternalObject (ObjDesc->Reference.Handle, NULL);
+        AcpiDmDisplayInternalObject (ObjDesc->Reference.Handle, NULL);
         break;
 
     case ACPI_TYPE_PROCESSOR:
@@ -374,7 +376,7 @@ AcpiDbUint32ToHexString (
 
     if (Value == 0)
     {
-        strcpy (Buffer, "0");
+        ACPI_STRCPY (Buffer, "0");
         return;
     }
 

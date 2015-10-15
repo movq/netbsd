@@ -1,4 +1,4 @@
-/*	$NetBSD: ipsec.c,v 1.66 2015/04/01 02:49:44 ozaki-r Exp $	*/
+/*	$NetBSD: ipsec.c,v 1.63 2014/05/30 01:39:03 christos Exp $	*/
 /*	$FreeBSD: /usr/local/www/cvsroot/FreeBSD/src/sys/netipsec/ipsec.c,v 1.2.2.2 2003/07/01 01:38:13 sam Exp $	*/
 /*	$KAME: ipsec.c,v 1.103 2001/05/24 07:14:18 sakane Exp $	*/
 
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ipsec.c,v 1.66 2015/04/01 02:49:44 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ipsec.c,v 1.63 2014/05/30 01:39:03 christos Exp $");
 
 /*
  * IPsec controller part.
@@ -230,8 +230,8 @@ SYSCTL_INT(_net_inet6_ipsec6, IPSECCTL_DEBUG,
 	debug, CTLFLAG_RW,	&ipsec_debug,	0, "");
 SYSCTL_INT(_net_inet6_ipsec6, IPSECCTL_ESP_RANDPAD,
 	esp_randpad, CTLFLAG_RW,	&ip6_esp_randpad,	0, "");
-#endif /* __FreeBSD__ */
 #endif /* INET6 */
+#endif /* __FreeBSD__ */
 
 static int ipsec4_setspidx_inpcb (struct mbuf *, struct inpcb *);
 #ifdef INET6
@@ -1748,7 +1748,7 @@ ipsec_get_reqlevel(const struct ipsecrequest *isr)
     (((lev) != IPSEC_LEVEL_USE && (lev) != IPSEC_LEVEL_REQUIRE		\
     && (lev) != IPSEC_LEVEL_UNIQUE) ?					\
 	(ipsec_debug ? log(LOG_INFO, "fixed system default level " #lev \
-	":%d->%d\n", (lev), IPSEC_LEVEL_REQUIRE) : (void)0),		\
+	":%d->%d\n", (lev), IPSEC_LEVEL_REQUIRE) : 0),			\
 	(lev) = IPSEC_LEVEL_REQUIRE, (lev)				\
     : (lev))
 
@@ -2425,52 +2425,7 @@ skippolicycheck:;
 	*needipsecp = needipsec;
 	return sp;
 }
-
-int
-ipsec6_input(struct mbuf *m)
-{
-	struct m_tag *mtag;
-	struct tdb_ident *tdbi;
-	struct secpolicy *sp;
-	int s, error;
-
-	/*
-	 * Check if the packet has already had IPsec
-	 * processing done. If so, then just pass it
-	 * along. This tag gets set during AH, ESP,
-	 * etc. input handling, before the packet is
-	 * returned to the ip input queue for delivery.
-	 */
-	mtag = m_tag_find(m, PACKET_TAG_IPSEC_IN_DONE,
-	    NULL);
-	s = splsoftnet();
-	if (mtag != NULL) {
-		tdbi = (struct tdb_ident *)(mtag + 1);
-		sp = ipsec_getpolicy(tdbi,
-		    IPSEC_DIR_INBOUND);
-	} else {
-		sp = ipsec_getpolicybyaddr(m,
-		    IPSEC_DIR_INBOUND, IP_FORWARDING,
-		    &error);
-	}
-	if (sp != NULL) {
-		/*
-		 * Check security policy against packet
-		 * attributes.
-		 */
-		error = ipsec_in_reject(sp, m);
-		KEY_FREESP(&sp);
-	} else {
-		/* XXX error stat??? */
-		error = EINVAL;
-		DPRINTF(("ip6_input: no SP, packet"
-		    " discarded\n"));/*XXX*/
-	}
-	splx(s);
-
-	return error;
-}
-#endif /* INET6 */
+#endif
 
 
 

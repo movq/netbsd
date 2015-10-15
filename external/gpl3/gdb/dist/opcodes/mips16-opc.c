@@ -1,5 +1,6 @@
 /* mips16-opc.c.  Mips16 opcode table.
-   Copyright (C) 1996-2015 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 2000, 2005, 2006, 2007, 2012
+   Free Software Foundation, Inc.
    Contributed by Ian Lance Taylor, Cygnus Support
 
    This file is part of the GNU opcodes library.

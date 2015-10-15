@@ -1,4 +1,4 @@
-/*	$NetBSD: regex.c,v 1.3 2014/12/10 04:37:59 christos Exp $	*/
+/*	$NetBSD: regex.c,v 1.2.2.1 2014/12/22 03:28:46 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2013, 2014  Internet Systems Consortium, Inc. ("ISC")

@@ -33,7 +33,7 @@
 __FBSDID("$FreeBSD: src/sbin/gpt/recover.c,v 1.8 2005/08/31 01:47:19 marcel Exp $");
 #endif
 #ifdef __RCSID
-__RCSID("$NetBSD: recover.c,v 1.6 2015/06/18 01:37:23 jnemeth Exp $");
+__RCSID("$NetBSD: recover.c,v 1.4.20.2 2015/06/29 17:24:28 snj Exp $");
 #endif
 
 #include <sys/types.h>

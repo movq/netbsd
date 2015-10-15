@@ -42,13 +42,8 @@ OBJECTS = \
 	$(OBJDIR)/acgetline.o\
 	$(OBJDIR)/aeexec.o\
 	$(OBJDIR)/aehandlers.o\
-	$(OBJDIR)/aeinitfile.o\
 	$(OBJDIR)/aemain.o\
-	$(OBJDIR)/aeregion.o\
 	$(OBJDIR)/aetables.o\
-	$(OBJDIR)/ahids.o\
-	$(OBJDIR)/ahuuids.o\
-	$(OBJDIR)/cmfsize.o\
 	$(OBJDIR)/dbcmds.o\
 	$(OBJDIR)/dbconvert.o\
 	$(OBJDIR)/dbdisply.o\
@@ -58,15 +53,13 @@ OBJECTS = \
 	$(OBJDIR)/dbinput.o\
 	$(OBJDIR)/dbmethod.o\
 	$(OBJDIR)/dbnames.o\
-	$(OBJDIR)/dbobject.o\
 	$(OBJDIR)/dbstats.o\
-	$(OBJDIR)/dbtest.o\
 	$(OBJDIR)/dbutils.o\
 	$(OBJDIR)/dbxface.o\
 	$(OBJDIR)/dmbuffer.o\
-	$(OBJDIR)/dmcstyle.o\
 	$(OBJDIR)/dmdeferred.o\
 	$(OBJDIR)/dmnames.o\
+	$(OBJDIR)/dmobject.o\
 	$(OBJDIR)/dmopcode.o\
 	$(OBJDIR)/dmresrc.o\
 	$(OBJDIR)/dmresrcl.o\
@@ -76,7 +69,6 @@ OBJECTS = \
 	$(OBJDIR)/dmwalk.o\
 	$(OBJDIR)/dsargs.o\
 	$(OBJDIR)/dscontrol.o\
-	$(OBJDIR)/dsdebug.o\
 	$(OBJDIR)/dsfield.o\
 	$(OBJDIR)/dsinit.o\
 	$(OBJDIR)/dsmethod.o\
@@ -160,7 +152,6 @@ OBJECTS = \
 	$(OBJDIR)/nsxfeval.o\
 	$(OBJDIR)/nsxfname.o\
 	$(OBJDIR)/nsxfobj.o\
-	$(OBJDIR)/oslibcfs.o\
 	$(OBJDIR)/osunixxf.o\
 	$(OBJDIR)/psargs.o\
 	$(OBJDIR)/psloop.o\
@@ -187,7 +178,6 @@ OBJECTS = \
 	$(OBJDIR)/rsserial.o\
 	$(OBJDIR)/rsutils.o\
 	$(OBJDIR)/rsxface.o\
-	$(OBJDIR)/tbdata.o\
 	$(OBJDIR)/tbfadt.o\
 	$(OBJDIR)/tbfind.o\
 	$(OBJDIR)/tbinstal.o\
@@ -207,9 +197,7 @@ OBJECTS = \
 	$(OBJDIR)/uterror.o\
 	$(OBJDIR)/uteval.o\
 	$(OBJDIR)/utexcep.o\
-	$(OBJDIR)/utfileio.o\
 	$(OBJDIR)/utglobal.o\
-	$(OBJDIR)/uthex.o\
 	$(OBJDIR)/utids.o\
 	$(OBJDIR)/utinit.o\
 	$(OBJDIR)/utlock.o\
@@ -219,14 +207,11 @@ OBJECTS = \
 	$(OBJDIR)/utobject.o\
 	$(OBJDIR)/utosi.o\
 	$(OBJDIR)/utownerid.o\
-	$(OBJDIR)/utnonansi.o\
 	$(OBJDIR)/utpredef.o\
-	$(OBJDIR)/utprint.o\
 	$(OBJDIR)/utresrc.o\
 	$(OBJDIR)/utstate.o\
 	$(OBJDIR)/utstring.o\
 	$(OBJDIR)/uttrack.o\
-	$(OBJDIR)/utuuid.o\
 	$(OBJDIR)/utxface.o\
 	$(OBJDIR)/utxferror.o\
 	$(OBJDIR)/utxfinit.o\

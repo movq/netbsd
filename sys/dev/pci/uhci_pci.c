@@ -1,4 +1,4 @@
-/*	$NetBSD: uhci_pci.c,v 1.59 2015/08/19 06:16:18 skrll Exp $	*/
+/*	$NetBSD: uhci_pci.c,v 1.57 2014/03/29 19:28:25 christos Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uhci_pci.c,v 1.59 2015/08/19 06:16:18 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uhci_pci.c,v 1.57 2014/03/29 19:28:25 christos Exp $");
 
 #include "ehci.h"
 
@@ -93,6 +93,7 @@ uhci_pci_attach(device_t parent, device_t self, void *aux)
 	char const *intrstr;
 	pci_intr_handle_t ih;
 	pcireg_t csr;
+	const char *vendor;
 	usbd_status r;
 	int s;
 	char intrbuf[PCI_INTRSTR_LEN];
@@ -132,7 +133,7 @@ uhci_pci_attach(device_t parent, device_t self, void *aux)
 		return;
 	}
 	intrstr = pci_intr_string(pc, ih, intrbuf, sizeof(intrbuf));
-	sc->sc_ih = pci_intr_establish(pc, ih, IPL_USB, uhci_intr, sc);
+	sc->sc_ih = pci_intr_establish(pc, ih, IPL_SCHED, uhci_intr, sc);
 	if (sc->sc_ih == NULL) {
 		aprint_error_dev(self, "couldn't establish interrupt");
 		if (intrstr != NULL)
@@ -170,9 +171,14 @@ uhci_pci_attach(device_t parent, device_t self, void *aux)
 	}
 
 	/* Figure out vendor for root hub descriptor. */
+	vendor = pci_findvendor(pa->pa_id);
 	sc->sc.sc_id_vendor = PCI_VENDOR(pa->pa_id);
-	pci_findvendor(sc->sc.sc_vendor, sizeof(sc->sc.sc_vendor),
-	    sc->sc.sc_id_vendor);
+	if (vendor)
+		strlcpy(sc->sc.sc_vendor, vendor, sizeof(sc->sc.sc_vendor));
+	else
+		snprintf(sc->sc.sc_vendor, sizeof(sc->sc.sc_vendor),
+		    "vendor 0x%04x", PCI_VENDOR(pa->pa_id));
+
 	r = uhci_init(&sc->sc);
 	if (r != USBD_NORMAL_COMPLETION) {
 		aprint_error_dev(self, "init failed, error=%d\n", r);

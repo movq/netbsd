@@ -1,4 +1,4 @@
-/*	$NetBSD: bpf_filter.c,v 1.70 2015/02/11 12:53:15 alnsn Exp $	*/
+/*	$NetBSD: bpf_filter.c,v 1.67 2014/07/07 19:56:03 alnsn Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bpf_filter.c,v 1.70 2015/02/11 12:53:15 alnsn Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bpf_filter.c,v 1.67 2014/07/07 19:56:03 alnsn Exp $");
 
 #if 0
 #if !(defined(lint) || defined(KERNEL))
@@ -481,22 +481,12 @@ bpf_filter(const struct bpf_insn *pc, const u_char *p, u_int wirelen,
 			A /= X;
 			continue;
 
-		case BPF_ALU|BPF_MOD|BPF_X:
-			if (X == 0)
-				return 0;
-			A %= X;
-			continue;
-
 		case BPF_ALU|BPF_AND|BPF_X:
 			A &= X;
 			continue;
 
 		case BPF_ALU|BPF_OR|BPF_X:
 			A |= X;
-			continue;
-
-		case BPF_ALU|BPF_XOR|BPF_X:
-			A ^= X;
 			continue;
 
 		case BPF_ALU|BPF_LSH|BPF_X:
@@ -523,20 +513,12 @@ bpf_filter(const struct bpf_insn *pc, const u_char *p, u_int wirelen,
 			A /= pc->k;
 			continue;
 
-		case BPF_ALU|BPF_MOD|BPF_K:
-			A %= pc->k;
-			continue;
-
 		case BPF_ALU|BPF_AND|BPF_K:
 			A &= pc->k;
 			continue;
 
 		case BPF_ALU|BPF_OR|BPF_K:
 			A |= pc->k;
-			continue;
-
-		case BPF_ALU|BPF_XOR|BPF_K:
-			A ^= pc->k;
 			continue;
 
 		case BPF_ALU|BPF_LSH|BPF_K:
@@ -628,10 +610,8 @@ bpf_validate(const struct bpf_insn *f, int signed_len)
 	if (len > BPF_MAXINSNS)
 		return 0;
 #endif
-	if (f[len - 1].code != (BPF_RET|BPF_K) &&
-	    f[len - 1].code != (BPF_RET|BPF_A)) {
+	if (BPF_CLASS(f[len - 1].code) != BPF_RET)
 		return 0;
-	}
 
 #if defined(KERNEL) || defined(_KERNEL)
 	/* Note: only the pre-initialised is valid on startup */
@@ -695,14 +675,12 @@ bpf_validate(const struct bpf_insn *f, int signed_len)
 			case BPF_SUB:
 			case BPF_MUL:
 			case BPF_OR:
-			case BPF_XOR:
 			case BPF_AND:
 			case BPF_LSH:
 			case BPF_RSH:
 			case BPF_NEG:
 				break;
 			case BPF_DIV:
-			case BPF_MOD:
 				/*
 				 * Check for constant division by 0.
 				 */

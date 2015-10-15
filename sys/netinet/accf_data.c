@@ -1,4 +1,4 @@
-/*	$NetBSD: accf_data.c,v 1.7 2015/08/20 14:40:19 christos Exp $	*/
+/*	$NetBSD: accf_data.c,v 1.6 2009/09/02 14:56:57 tls Exp $	*/
 
 /*-
  * Copyright (c) 2000 Alfred Perlstein <alfred@FreeBSD.org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: accf_data.c,v 1.7 2015/08/20 14:40:19 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: accf_data.c,v 1.6 2009/09/02 14:56:57 tls Exp $");
 
 #define ACCEPT_FILTER_MOD
 
@@ -40,8 +40,6 @@ __KERNEL_RCSID(0, "$NetBSD: accf_data.c,v 1.7 2015/08/20 14:40:19 christos Exp $
 
 #include <netinet/accept_filter.h>
 
-#include "ioconf.h"
-
 MODULE(MODULE_CLASS_MISC, accf_dataready, NULL);
 
 /* accept filter that holds a socket until data arrives */
@@ -52,6 +50,9 @@ static struct accept_filter accf_data_filter = {
 	.accf_name = "dataready",
 	.accf_callback = sohasdata,
 };
+
+/* XXX pseudo-device */
+void	accf_dataattach(int);
 
 void
 accf_dataattach(int junk)

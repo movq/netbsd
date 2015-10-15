@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.dhcpcd,v 1.2 2014/09/12 20:42:13 roy Exp $
+# $NetBSD: Makefile.dhcpcd,v 1.1.28.1 2015/05/14 07:11:53 snj Exp $
 
 IMAGEDEPENDS+= 	\
 	${DESTDIR}/etc/dhcpcd.conf \

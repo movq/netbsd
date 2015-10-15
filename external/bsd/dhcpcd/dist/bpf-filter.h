@@ -1,4 +1,4 @@
-/* $NetBSD: bpf-filter.h,v 1.9 2014/11/07 20:51:02 roy Exp $ */
+/* $NetBSD: bpf-filter.h,v 1.4.2.1 2014/12/29 16:18:04 martin Exp $ */
 
 /*
  * dhcpcd - DHCP client daemon

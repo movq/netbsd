@@ -1,4 +1,4 @@
-/*	$NetBSD: ulfs_readwrite.c,v 1.19 2015/07/24 06:59:32 dholland Exp $	*/
+/*	$NetBSD: ulfs_readwrite.c,v 1.7 2013/10/17 21:01:08 christos Exp $	*/
 /*  from NetBSD: ufs_readwrite.c,v 1.105 2013/01/22 09:39:18 dholland Exp  */
 
 /*-
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: ulfs_readwrite.c,v 1.19 2015/07/24 06:59:32 dholland Exp $");
+__KERNEL_RCSID(1, "$NetBSD: ulfs_readwrite.c,v 1.7 2013/10/17 21:01:08 christos Exp $");
 
 #ifdef LFS_READWRITE
 #define	FS			struct lfs
@@ -42,9 +42,7 @@ __KERNEL_RCSID(1, "$NetBSD: ulfs_readwrite.c,v 1.19 2015/07/24 06:59:32 dholland
 #define	READ_S			"lfs_read"
 #define	WRITE			lfs_write
 #define	WRITE_S			"lfs_write"
-#define	BUFRD			lfs_bufrd
-#define	BUFWR			lfs_bufwr
-#define	fs_sb_getbsize(fs)	lfs_sb_getbsize(fs)
+#define	fs_bsize		lfs_bsize
 #define	fs_bmask		lfs_bmask
 #else
 #define	FS			struct fs
@@ -53,14 +51,7 @@ __KERNEL_RCSID(1, "$NetBSD: ulfs_readwrite.c,v 1.19 2015/07/24 06:59:32 dholland
 #define	READ_S			"ffs_read"
 #define	WRITE			ffs_write
 #define	WRITE_S			"ffs_write"
-#define	BUFRD			ffs_bufrd
-#define	BUFWR			ffs_bufwr
-#define fs_sb_getbsize(fs)	(fs)->fs_bsize
 #endif
-
-static int	ulfs_post_read_update(struct vnode *, int, int);
-static int	ulfs_post_write_update(struct vnode *, struct uio *, int,
-		    kauth_cred_t, off_t, int, int, int);
 
 /*
  * Vnode op for reading.
@@ -78,9 +69,14 @@ READ(void *v)
 	struct vnode *vp;
 	struct inode *ip;
 	struct uio *uio;
+	struct buf *bp;
 	FS *fs;
 	vsize_t bytelen;
-	int error, ioflag, advice;
+	daddr_t lbn, nextlbn;
+	off_t bytesinfile;
+	long size, xfersize, blkoffset;
+	int error, ioflag;
+	bool usepc = false;
 
 	vp = ap->a_vp;
 	ip = VTOI(vp);
@@ -89,16 +85,16 @@ READ(void *v)
 	ioflag = ap->a_ioflag;
 	error = 0;
 
-	KASSERT(uio->uio_rw == UIO_READ);
-	KASSERT(vp->v_type == VREG || vp->v_type == VDIR);
+#ifdef DIAGNOSTIC
+	if (uio->uio_rw != UIO_READ)
+		panic("%s: mode", READ_S);
 
-	/* XXX Eliminate me by refusing directory reads from userland.  */
-	if (vp->v_type == VDIR)
-		return BUFRD(vp, uio, ioflag, ap->a_cred);
-#ifdef LFS_READWRITE
-	/* XXX Eliminate me by using ufs_bufio in lfs.  */
-	if (vp->v_type == VREG && ip->i_number == LFS_IFILE_INUM)
-		return BUFRD(vp, uio, ioflag, ap->a_cred);
+	if (vp->v_type == VLNK) {
+		if (ip->i_size < fs->um_maxsymlinklen ||
+		    (fs->um_maxsymlinklen == 0 && DIP(ip, blocks) == 0))
+			panic("%s: short symlink", READ_S);
+	} else if (vp->v_type != VREG && vp->v_type != VDIR)
+		panic("%s: type %d", READ_S, vp->v_type);
 #endif
 	if ((u_int64_t)uio->uio_offset > fs->um_maxfilesize)
 		return (EFBIG);
@@ -115,69 +111,29 @@ READ(void *v)
 	if (uio->uio_offset >= ip->i_size)
 		goto out;
 
-	KASSERT(vp->v_type == VREG);
-	advice = IO_ADV_DECODE(ap->a_ioflag);
-	while (uio->uio_resid > 0) {
-		if (ioflag & IO_DIRECT) {
-			genfs_directio(vp, uio, ioflag);
+#ifdef LFS_READWRITE
+	usepc = (vp->v_type == VREG && ip->i_number != LFS_IFILE_INUM);
+#else /* !LFS_READWRITE */
+	usepc = vp->v_type == VREG;
+#endif /* !LFS_READWRITE */
+	if (usepc) {
+		const int advice = IO_ADV_DECODE(ap->a_ioflag);
+
+		while (uio->uio_resid > 0) {
+			if (ioflag & IO_DIRECT) {
+				genfs_directio(vp, uio, ioflag);
+			}
+			bytelen = MIN(ip->i_size - uio->uio_offset,
+			    uio->uio_resid);
+			if (bytelen == 0)
+				break;
+			error = ubc_uiomove(&vp->v_uobj, uio, bytelen, advice,
+			    UBC_READ | UBC_PARTIALOK | UBC_UNMAP_FLAG(vp));
+			if (error)
+				break;
 		}
-		bytelen = MIN(ip->i_size - uio->uio_offset, uio->uio_resid);
-		if (bytelen == 0)
-			break;
-		error = ubc_uiomove(&vp->v_uobj, uio, bytelen, advice,
-		    UBC_READ | UBC_PARTIALOK | UBC_UNMAP_FLAG(vp));
-		if (error)
-			break;
-	}
-
- out:
-	error = ulfs_post_read_update(vp, ap->a_ioflag, error);
-	fstrans_done(vp->v_mount);
-	return (error);
-}
-
-/*
- * UFS op for reading via the buffer cache
- */
-int
-BUFRD(struct vnode *vp, struct uio *uio, int ioflag, kauth_cred_t cred)
-{
-	struct inode *ip;
-	FS *fs;
-	struct buf *bp;
-	daddr_t lbn, nextlbn;
-	off_t bytesinfile;
-	long size, xfersize, blkoffset;
-	int error;
-
-	KASSERT(VOP_ISLOCKED(vp));
-	KASSERT(vp->v_type == VDIR || vp->v_type == VLNK ||
-	    vp->v_type == VREG);
-	KASSERT(uio->uio_rw == UIO_READ);
-
-	ip = VTOI(vp);
-	fs = ip->I_FS;
-	error = 0;
-
-	KASSERT(vp->v_type != VLNK || ip->i_size < fs->um_maxsymlinklen);
-	KASSERT(vp->v_type != VLNK || fs->um_maxsymlinklen != 0 ||
-	    DIP(ip, blocks) == 0);
-	KASSERT(vp->v_type != VREG || vp == fs->lfs_ivnode);
-	KASSERT(vp->v_type != VREG || ip->i_number == LFS_IFILE_INUM);
-
-	if (uio->uio_offset > fs->um_maxfilesize)
-		return EFBIG;
-	if (uio->uio_resid == 0)
-		return 0;
-
-#ifndef LFS_READWRITE
-	KASSERT(!ISSET(ip->i_flags, (SF_SNAPSHOT | SF_SNAPINVAL)));
-#endif
-
-	fstrans_start(vp->v_mount, FSTRANS_SHARED);
-
-	if (uio->uio_offset >= ip->i_size)
 		goto out;
+	}
 
 	for (error = 0, bp = NULL; uio->uio_resid > 0; bp = NULL) {
 		bytesinfile = ip->i_size - uio->uio_offset;
@@ -187,15 +143,15 @@ BUFRD(struct vnode *vp, struct uio *uio, int ioflag, kauth_cred_t cred)
 		nextlbn = lbn + 1;
 		size = lfs_blksize(fs, ip, lbn);
 		blkoffset = lfs_blkoff(fs, uio->uio_offset);
-		xfersize = MIN(MIN(fs_sb_getbsize(fs) - blkoffset, uio->uio_resid),
+		xfersize = MIN(MIN(fs->fs_bsize - blkoffset, uio->uio_resid),
 		    bytesinfile);
 
 		if (lfs_lblktosize(fs, nextlbn) >= ip->i_size)
-			error = bread(vp, lbn, size, 0, &bp);
+			error = bread(vp, lbn, size, NOCRED, 0, &bp);
 		else {
 			int nextsize = lfs_blksize(fs, ip, nextlbn);
 			error = breadn(vp, lbn,
-			    size, &nextlbn, &nextsize, 1, 0, &bp);
+			    size, &nextlbn, &nextsize, 1, NOCRED, 0, &bp);
 		}
 		if (error)
 			break;
@@ -222,28 +178,15 @@ BUFRD(struct vnode *vp, struct uio *uio, int ioflag, kauth_cred_t cred)
 		brelse(bp, 0);
 
  out:
-	error = ulfs_post_read_update(vp, ioflag, error);
-	fstrans_done(vp->v_mount);
-	return (error);
-}
-
-static int
-ulfs_post_read_update(struct vnode *vp, int ioflag, int oerror)
-{
-	struct inode *ip = VTOI(vp);
-	int error = oerror;
-
 	if (!(vp->v_mount->mnt_flag & MNT_NOATIME)) {
 		ip->i_flag |= IN_ACCESS;
-		if ((ioflag & IO_SYNC) == IO_SYNC) {
+		if ((ap->a_ioflag & IO_SYNC) == IO_SYNC) {
 			error = lfs_update(vp, NULL, NULL, UPDATE_WAIT);
 		}
 	}
 
-	/* Read error overrides any inode update error.  */
-	if (oerror)
-		error = oerror;
-	return error;
+	fstrans_done(vp->v_mount);
+	return (error);
 }
 
 /*
@@ -262,13 +205,19 @@ WRITE(void *v)
 	struct uio *uio;
 	struct inode *ip;
 	FS *fs;
+	struct buf *bp;
 	kauth_cred_t cred;
+	daddr_t lbn;
 	off_t osize, origoff, oldoff, preallocoff, endallocoff, nsize;
-	int blkoffset, error, flags, ioflag, resid;
+	int blkoffset, error, flags, ioflag, resid, size, xfersize;
 	int aflag;
 	int extended=0;
 	vsize_t bytelen;
 	bool async;
+	bool usepc = false;
+#ifdef LFS_READWRITE
+	bool need_unreserve = false;
+#endif
 
 	cred = ap->a_cred;
 	ioflag = ap->a_ioflag;
@@ -277,13 +226,27 @@ WRITE(void *v)
 	ip = VTOI(vp);
 
 	KASSERT(vp->v_size == ip->i_size);
-	KASSERT(uio->uio_rw == UIO_WRITE);
-	KASSERT(vp->v_type == VREG);
+#ifdef DIAGNOSTIC
+	if (uio->uio_rw != UIO_WRITE)
+		panic("%s: mode", WRITE_S);
+#endif
 
-	if (ioflag & IO_APPEND)
-		uio->uio_offset = ip->i_size;
-	if ((ip->i_flags & APPEND) && uio->uio_offset != ip->i_size)
-		return (EPERM);
+	switch (vp->v_type) {
+	case VREG:
+		if (ioflag & IO_APPEND)
+			uio->uio_offset = ip->i_size;
+		if ((ip->i_flags & APPEND) && uio->uio_offset != ip->i_size)
+			return (EPERM);
+		/* FALLTHROUGH */
+	case VLNK:
+		break;
+	case VDIR:
+		if ((ioflag & IO_SYNC) == 0)
+			panic("%s: nonsync dir write", WRITE_S);
+		break;
+	default:
+		panic("%s: type", WRITE_S);
+	}
 
 	fs = ip->I_FS;
 	if (uio->uio_offset < 0 ||
@@ -307,13 +270,15 @@ WRITE(void *v)
 	osize = ip->i_size;
 	error = 0;
 
-	KASSERT(vp->v_type == VREG);
+	usepc = vp->v_type == VREG;
 
 #ifdef LFS_READWRITE
 	async = true;
 	lfs_availwait(fs, lfs_btofsb(fs, uio->uio_resid));
 	lfs_check(vp, LFS_UNUSED_LBN, 0);
 #endif /* !LFS_READWRITE */
+	if (!usepc)
+		goto bcache;
 
 	preallocoff = round_page(lfs_blkroundup(fs, MAX(osize, uio->uio_offset)));
 	aflag = ioflag & IO_SYNC ? B_SYNC : 0;
@@ -337,9 +302,9 @@ WRITE(void *v)
 			goto out;
 		if (flags & B_SYNC) {
 			mutex_enter(vp->v_interlock);
-			VOP_PUTPAGES(vp, trunc_page(osize & lfs_sb_getbmask(fs)),
+			VOP_PUTPAGES(vp, trunc_page(osize & fs->fs_bmask),
 			    round_page(eob),
-			    PGO_CLEANIT | PGO_SYNCIO);
+			    PGO_CLEANIT | PGO_SYNCIO | PGO_JOURNALLOCKED);
 		}
 	}
 
@@ -349,12 +314,12 @@ WRITE(void *v)
 		off_t newoff;
 
 		if (ioflag & IO_DIRECT) {
-			genfs_directio(vp, uio, ioflag);
+			genfs_directio(vp, uio, ioflag | IO_JOURNALLOCKED);
 		}
 
 		oldoff = uio->uio_offset;
 		blkoffset = lfs_blkoff(fs, uio->uio_offset);
-		bytelen = MIN(fs_sb_getbsize(fs) - blkoffset, uio->uio_resid);
+		bytelen = MIN(fs->fs_bsize - blkoffset, uio->uio_resid);
 		if (bytelen == 0) {
 			break;
 		}
@@ -433,7 +398,7 @@ WRITE(void *v)
 			mutex_enter(vp->v_interlock);
 			error = VOP_PUTPAGES(vp, (oldoff >> 16) << 16,
 			    (uio->uio_offset >> 16) << 16,
-			    PGO_CLEANIT | PGO_LAZY);
+			    PGO_CLEANIT | PGO_JOURNALLOCKED | PGO_LAZY);
 			if (error)
 				break;
 		}
@@ -443,93 +408,34 @@ WRITE(void *v)
 	}
 	if (error == 0 && ioflag & IO_SYNC) {
 		mutex_enter(vp->v_interlock);
-		error = VOP_PUTPAGES(vp, trunc_page(origoff & lfs_sb_getbmask(fs)),
+		error = VOP_PUTPAGES(vp, trunc_page(origoff & fs->fs_bmask),
 		    round_page(lfs_blkroundup(fs, uio->uio_offset)),
-		    PGO_CLEANIT | PGO_SYNCIO);
+		    PGO_CLEANIT | PGO_SYNCIO | PGO_JOURNALLOCKED);
 	}
+	goto out;
 
-out:
-	error = ulfs_post_write_update(vp, uio, ioflag, cred, osize, resid,
-	    extended, error);
-	fstrans_done(vp->v_mount);
-
-	return (error);
-}
-
-/*
- * UFS op for writing via the buffer cache
- */
-int
-BUFWR(struct vnode *vp, struct uio *uio, int ioflag, kauth_cred_t cred)
-{
-	struct inode *ip;
-	FS *fs;
-	int flags;
-	struct buf *bp;
-	off_t osize;
-	int resid, xfersize, size, blkoffset;
-	daddr_t lbn;
-	int extended=0;
-	int error;
-#ifdef LFS_READWRITE
-	bool need_unreserve = false;
-#endif
-
-	KASSERT(ISSET(ioflag, IO_NODELOCKED));
-	KASSERT(VOP_ISLOCKED(vp) == LK_EXCLUSIVE);
-	KASSERT(vp->v_type == VDIR || vp->v_type == VLNK);
-	KASSERT(vp->v_type != VDIR || ISSET(ioflag, IO_SYNC));
-	KASSERT(uio->uio_rw == UIO_WRITE);
-
-	ip = VTOI(vp);
-	fs = ip->I_FS;
-
-	KASSERT(vp->v_size == ip->i_size);
-
-	if (uio->uio_offset < 0 ||
-	    uio->uio_resid > fs->um_maxfilesize ||
-	    uio->uio_offset > (fs->um_maxfilesize - uio->uio_resid))
-		return EFBIG;
-#ifdef LFS_READWRITE
-	KASSERT(vp != fs->lfs_ivnode);
-#endif
-	if (uio->uio_resid == 0)
-		return 0;
-
-	fstrans_start(vp->v_mount, FSTRANS_SHARED);
-
-	flags = ioflag & IO_SYNC ? B_SYNC : 0;
-	resid = uio->uio_resid;
-	osize = ip->i_size;
-	error = 0;
-
-	KASSERT(vp->v_type != VREG);
-
-#ifdef LFS_READWRITE
-	lfs_availwait(fs, lfs_btofsb(fs, uio->uio_resid));
-	lfs_check(vp, LFS_UNUSED_LBN, 0);
-#endif /* !LFS_READWRITE */
-
-	/* XXX Should never have pages cached here.  */
-	KASSERT(vp->v_uobj.uo_npages == 0);
+ bcache:
+	mutex_enter(vp->v_interlock);
+	VOP_PUTPAGES(vp, trunc_page(origoff), round_page(origoff + resid),
+	    PGO_CLEANIT | PGO_FREE | PGO_SYNCIO | PGO_JOURNALLOCKED);
 	while (uio->uio_resid > 0) {
 		lbn = lfs_lblkno(fs, uio->uio_offset);
 		blkoffset = lfs_blkoff(fs, uio->uio_offset);
-		xfersize = MIN(fs_sb_getbsize(fs) - blkoffset, uio->uio_resid);
-		if (fs_sb_getbsize(fs) > xfersize)
+		xfersize = MIN(fs->fs_bsize - blkoffset, uio->uio_resid);
+		if (fs->fs_bsize > xfersize)
 			flags |= B_CLRBUF;
 		else
 			flags &= ~B_CLRBUF;
 
 #ifdef LFS_READWRITE
 		error = lfs_reserve(fs, vp, NULL,
-		    lfs_btofsb(fs, (ULFS_NIADDR + 1) << lfs_sb_getbshift(fs)));
+		    lfs_btofsb(fs, (ULFS_NIADDR + 1) << fs->lfs_bshift));
 		if (error)
 			break;
 		need_unreserve = true;
 #endif
-		error = lfs_balloc(vp, uio->uio_offset, xfersize, cred, flags,
-		    &bp);
+		error = lfs_balloc(vp, uio->uio_offset, xfersize,
+		    ap->a_cred, flags, &bp);
 
 		if (error)
 			break;
@@ -557,7 +463,7 @@ BUFWR(struct vnode *vp, struct uio *uio, int ioflag, kauth_cred_t cred)
 #ifdef LFS_READWRITE
 		(void)VOP_BWRITE(bp->b_vp, bp);
 		lfs_reserve(fs, vp, NULL,
-		    -lfs_btofsb(fs, (ULFS_NIADDR + 1) << lfs_sb_getbshift(fs)));
+		    -lfs_btofsb(fs, (ULFS_NIADDR + 1) << fs->lfs_bshift));
 		need_unreserve = false;
 #else
 		if (ioflag & IO_SYNC)
@@ -573,37 +479,22 @@ BUFWR(struct vnode *vp, struct uio *uio, int ioflag, kauth_cred_t cred)
 #ifdef LFS_READWRITE
 	if (need_unreserve) {
 		lfs_reserve(fs, vp, NULL,
-		    -lfs_btofsb(fs, (ULFS_NIADDR + 1) << lfs_sb_getbshift(fs)));
+		    -lfs_btofsb(fs, (ULFS_NIADDR + 1) << fs->lfs_bshift));
 	}
 #endif
 
-	error = ulfs_post_write_update(vp, uio, ioflag, cred, osize, resid,
-	    extended, error);
-	fstrans_done(vp->v_mount);
-
-	return (error);
-}
-
-static int
-ulfs_post_write_update(struct vnode *vp, struct uio *uio, int ioflag,
-    kauth_cred_t cred, off_t osize, int resid, int extended, int oerror)
-{
-	struct inode *ip = VTOI(vp);
-	int error = oerror;
-
-	/* Trigger ctime and mtime updates, and atime if MNT_RELATIME.  */
-	ip->i_flag |= IN_CHANGE | IN_UPDATE;
-	if (vp->v_mount->mnt_flag & MNT_RELATIME)
-		ip->i_flag |= IN_ACCESS;
-
 	/*
-	 * If we successfully wrote any data and we are not the superuser,
+	 * If we successfully wrote any data, and we are not the superuser
 	 * we clear the setuid and setgid bits as a precaution against
 	 * tampering.
 	 */
-	if (resid > uio->uio_resid && cred) {
+out:
+	ip->i_flag |= IN_CHANGE | IN_UPDATE;
+	if (vp->v_mount->mnt_flag & MNT_RELATIME)
+		ip->i_flag |= IN_ACCESS;
+	if (resid > uio->uio_resid && ap->a_cred) {
 		if (ip->i_mode & ISUID) {
-			if (kauth_authorize_vnode(cred,
+			if (kauth_authorize_vnode(ap->a_cred,
 			    KAUTH_VNODE_RETAIN_SUID, vp, NULL, EPERM) != 0) {
 				ip->i_mode &= ~ISUID;
 				DIP_ASSIGN(ip, mode, ip->i_mode);
@@ -611,24 +502,17 @@ ulfs_post_write_update(struct vnode *vp, struct uio *uio, int ioflag,
 		}
 
 		if (ip->i_mode & ISGID) {
-			if (kauth_authorize_vnode(cred,
+			if (kauth_authorize_vnode(ap->a_cred,
 			    KAUTH_VNODE_RETAIN_SGID, vp, NULL, EPERM) != 0) {
 				ip->i_mode &= ~ISGID;
 				DIP_ASSIGN(ip, mode, ip->i_mode);
 			}
 		}
 	}
-
-	/* If we successfully wrote anything, notify kevent listeners.  */
 	if (resid > uio->uio_resid)
 		VN_KNOTE(vp, NOTE_WRITE | (extended ? NOTE_EXTEND : 0));
-
-	/*
-	 * Update the size on disk: truncate back to original size on
-	 * error, or reflect the new size on success.
-	 */
 	if (error) {
-		(void) lfs_truncate(vp, osize, ioflag & IO_SYNC, cred);
+		(void) lfs_truncate(vp, osize, ioflag & IO_SYNC, ap->a_cred);
 		uio->uio_offset -= resid - uio->uio_resid;
 		uio->uio_resid = resid;
 	} else if (resid > uio->uio_resid && (ioflag & IO_SYNC) == IO_SYNC) {
@@ -636,12 +520,8 @@ ulfs_post_write_update(struct vnode *vp, struct uio *uio, int ioflag,
 	} else {
 		/* nothing */
 	}
-
-	/* Make sure the vnode uvm size matches the inode file size.  */
 	KASSERT(vp->v_size == ip->i_size);
+	fstrans_done(vp->v_mount);
 
-	/* Write error overrides any inode update error.  */
-	if (oerror)
-		error = oerror;
-	return error;
+	return (error);
 }

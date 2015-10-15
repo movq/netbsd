@@ -1,4 +1,4 @@
-/*	$NetBSD: npfctl.c,v 1.46 2015/01/04 20:02:15 christos Exp $	*/
+/*	$NetBSD: npfctl.c,v 1.42.2.3 2015/02/04 07:13:04 snj Exp $	*/
 
 /*-
  * Copyright (c) 2009-2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: npfctl.c,v 1.46 2015/01/04 20:02:15 christos Exp $");
+__RCSID("$NetBSD: npfctl.c,v 1.42.2.3 2015/02/04 07:13:04 snj Exp $");
 
 #include <sys/ioctl.h>
 #include <sys/stat.h>

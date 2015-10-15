@@ -1,4 +1,4 @@
-/*	$NetBSD: if_spppsubr.c,v 1.135 2015/08/20 14:40:19 christos Exp $	 */
+/*	$NetBSD: if_spppsubr.c,v 1.130 2014/06/06 22:15:32 rmind Exp $	 */
 
 /*
  * Synchronous PPP/Cisco link level subroutines.
@@ -41,10 +41,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_spppsubr.c,v 1.135 2015/08/20 14:40:19 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_spppsubr.c,v 1.130 2014/06/06 22:15:32 rmind Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_inet.h"
+#include "opt_ipx.h"
 #include "opt_modular.h"
 #include "opt_compat_netbsd.h"
 #endif
@@ -82,6 +83,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_spppsubr.c,v 1.135 2015/08/20 14:40:19 christos E
 
 #ifdef INET6
 #include <netinet6/scope6_var.h>
+#endif
+
+#ifdef IPX
+#include <netipx/ipx.h>
+#include <netipx/ipx_if.h>
 #endif
 
 #include <net/if_sppp.h>
@@ -442,6 +448,13 @@ static const struct cp *cps[IDX_COUNT] = {
 };
 
 
+void spppattach(int);
+void
+/*ARGSUSED*/
+spppattach(int count)
+{
+}
+
 /*
  * Exported functions, comprising our interface to the lower layer.
  */
@@ -535,6 +548,12 @@ sppp_input(struct ifnet *ifp, struct mbuf *m)
 				pktq = ip6_pktq;
 				break;
 #endif
+#ifdef IPX
+			case ETHERTYPE_IPX:
+				isr = NETISR_IPX;
+				inq = &ipxintrq;
+				break;
+#endif
 			}
 			goto queue_pkt;
 		default:        /* Invalid PPP packet. */
@@ -602,6 +621,15 @@ sppp_input(struct ifnet *ifp, struct mbuf *m)
 		if (sp->state[IDX_IPV6CP] == STATE_OPENED) {
 			sp->pp_last_activity = time_uptime;
 			pktq = ip6_pktq;
+		}
+		break;
+#endif
+#ifdef IPX
+	case PPP_IPX:
+		/* IPX IPXCP not implemented yet */
+		if (sp->pp_phase == SPPP_PHASE_NETWORK) {
+			isr = NETISR_IPX;
+			inq = &ipxintrq;
 		}
 		break;
 #endif
@@ -801,6 +829,12 @@ sppp_output(struct ifnet *ifp, struct mbuf *m,
 		}
 		break;
 #endif
+#ifdef IPX
+	case AF_IPX:     /* Novell IPX Protocol */
+		protocol = htons((sp->pp_flags & PP_CISCO) ?
+			ETHERTYPE_IPX : PPP_IPX);
+		break;
+#endif
 	default:
 		m_freem(m);
 		++ifp->if_oerrors;
@@ -916,6 +950,10 @@ sppp_detach(struct ifnet *ifp)
 	if (sp->myauth.secret) free(sp->myauth.secret, M_DEVBUF);
 	if (sp->hisauth.name) free(sp->hisauth.name, M_DEVBUF);
 	if (sp->hisauth.secret) free(sp->hisauth.secret, M_DEVBUF);
+
+#if 0	/* done in if_detach() */
+	if_free_sadl(ifp);
+#endif
 }
 
 /*
@@ -983,14 +1021,12 @@ sppp_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct lwp *l = curlwp;	/* XXX */
 	struct ifreq *ifr = (struct ifreq *) data;
-	struct ifaddr *ifa = (struct ifaddr *) data;
 	struct sppp *sp = (struct sppp *) ifp;
 	int s, error=0, going_up, going_down, newmode;
 
 	s = splnet();
 	switch (cmd) {
 	case SIOCINITIFADDR:
-		ifa->ifa_rtrequest = p2p_rtrequest;
 		break;
 
 	case SIOCSIFFLAGS:
@@ -4841,7 +4877,7 @@ sppp_set_ip_addrs(struct sppp *sp, uint32_t myaddr, uint32_t hisaddr)
 
 found:
 	{
-		int error, hostIsNew;
+		int error;
 		struct sockaddr_in new_sin = *si;
 		struct sockaddr_in new_dst = *dest;
 
@@ -4852,13 +4888,8 @@ found:
 		 */
 		in_ifscrub(ifp, ifatoia(ifa));
 
-		hostIsNew = 0;
-		if (myaddr != 0) {
-			if (new_sin.sin_addr.s_addr != htonl(myaddr)) {
-				new_sin.sin_addr.s_addr = htonl(myaddr);
-				hostIsNew = 1;
-			}
-		}
+		if (myaddr != 0)
+			new_sin.sin_addr.s_addr = htonl(myaddr);
 		if (hisaddr != 0) {
 			new_dst.sin_addr.s_addr = htonl(hisaddr);
 			if (new_dst.sin_addr.s_addr != dest->sin_addr.s_addr) {
@@ -4866,7 +4897,7 @@ found:
 				*dest = new_dst; /* fix dstaddr in place */
 			}
 		}
-		error = in_ifinit(ifp, ifatoia(ifa), &new_sin, 0, hostIsNew);
+		error = in_ifinit(ifp, ifatoia(ifa), &new_sin, 0);
 		if (debug && error)
 		{
 			log(LOG_DEBUG, "%s: sppp_set_ip_addrs: in_ifinit "
@@ -4919,7 +4950,7 @@ found:
 		if (sp->ipcp.flags & IPCP_HISADDR_DYN)
 			/* replace peer addr in place */
 			dest->sin_addr.s_addr = sp->ipcp.saved_hisaddr;
-		in_ifinit(ifp, ifatoia(ifa), &new_sin, 0, 0);
+		in_ifinit(ifp, ifatoia(ifa), &new_sin, 0);
 		(void)pfil_run_hooks(if_pfil,
 		    (struct mbuf **)SIOCDIFADDR, ifp, PFIL_IFADDR);
 	}

@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_event.c,v 1.83 2015/03/02 19:24:53 christos Exp $	*/
+/*	$NetBSD: kern_event.c,v 1.80.2.1 2015/04/14 04:39:58 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_event.c,v 1.83 2015/03/02 19:24:53 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_event.c,v 1.80.2.1 2015/04/14 04:39:58 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -415,7 +415,7 @@ filt_kqdetach(struct knote *kn)
 {
 	struct kqueue *kq;
 
-	kq = ((file_t *)kn->kn_obj)->f_kqueue;
+	kq = ((file_t *)kn->kn_obj)->f_data;
 
 	mutex_spin_enter(&kq->kq_lock);
 	SLIST_REMOVE(&kq->kq_sel.sel_klist, kn, knote, kn_selnext);
@@ -432,7 +432,7 @@ filt_kqueue(struct knote *kn, long hint)
 	struct kqueue *kq;
 	int rv;
 
-	kq = ((file_t *)kn->kn_obj)->f_kqueue;
+	kq = ((file_t *)kn->kn_obj)->f_data;
 
 	if (hint != NOTE_SUBMIT)
 		mutex_spin_enter(&kq->kq_lock);
@@ -748,7 +748,7 @@ kqueue1(struct lwp *l, int flags, register_t *retval)
 	cv_init(&kq->kq_cv, "kqueue");
 	selinit(&kq->kq_sel);
 	TAILQ_INIT(&kq->kq_head);
-	fp->f_kqueue = kq;
+	fp->f_data = kq;
 	*retval = fd;
 	kq->kq_fdp = curlwp->l_fd;
 	fd_set_exclose(l, fd, (flags & O_CLOEXEC) != 0);
@@ -779,7 +779,7 @@ sys_kqueue1(struct lwp *l, const struct sys_kqueue1_args *uap,
  * kevent(2) system call.
  */
 int
-kevent_fetch_changes(void *ctx, const struct kevent *changelist,
+kevent_fetch_changes(void *private, const struct kevent *changelist,
     struct kevent *changes, size_t index, int n)
 {
 
@@ -787,7 +787,7 @@ kevent_fetch_changes(void *ctx, const struct kevent *changelist,
 }
 
 int
-kevent_put_events(void *ctx, struct kevent *events,
+kevent_put_events(void *private, struct kevent *events,
     struct kevent *eventlist, size_t index, int n)
 {
 
@@ -851,7 +851,7 @@ kevent1(register_t *retval, int fd,
 		timeout = &ts;
 	}
 
-	kq = fp->f_kqueue;
+	kq = (struct kqueue *)fp->f_data;
 	nerrors = 0;
 	ichange = 0;
 
@@ -1156,7 +1156,7 @@ kqueue_scan(file_t *fp, size_t maxevents, struct kevent *ulistp,
 	filedesc_t	*fdp;
 
 	fdp = curlwp->l_fd;
-	kq = fp->f_kqueue;
+	kq = fp->f_data;
 	count = maxevents;
 	nkev = nevents = error = 0;
 	if (count == 0) {
@@ -1378,7 +1378,7 @@ kqueue_poll(file_t *fp, int events)
 	struct kqueue	*kq;
 	int		revents;
 
-	kq = fp->f_kqueue;
+	kq = fp->f_data;
 
 	revents = 0;
 	if (events & (POLLIN | POLLRDNORM)) {
@@ -1404,7 +1404,7 @@ kqueue_stat(file_t *fp, struct stat *st)
 {
 	struct kqueue *kq;
 
-	kq = fp->f_kqueue;
+	kq = fp->f_data;
 
 	memset(st, 0, sizeof(*st));
 	st->st_size = kq->kq_count;
@@ -1447,8 +1447,8 @@ kqueue_close(file_t *fp)
 	fdfile_t *ff;
 	int i;
 
-	kq = fp->f_kqueue;
-	fp->f_kqueue = NULL;
+	kq = fp->f_data;
+	fp->f_data = NULL;
 	fp->f_type = 0;
 	fdp = curlwp->l_fd;
 
@@ -1483,7 +1483,7 @@ kqueue_kqfilter(file_t *fp, struct knote *kn)
 {
 	struct kqueue *kq;
 
-	kq = ((file_t *)kn->kn_obj)->f_kqueue;
+	kq = ((file_t *)kn->kn_obj)->f_data;
 
 	KASSERT(fp == kn->kn_obj);
 

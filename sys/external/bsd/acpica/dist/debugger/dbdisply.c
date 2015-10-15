@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,7 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+
 #include "acpi.h"
 #include "accommon.h"
 #include "amlcode.h"
@@ -49,6 +50,7 @@
 #include "acparser.h"
 #include "acinterp.h"
 #include "acdebug.h"
+#include "acdisasm.h"
 
 
 #ifdef ACPI_DEBUGGER
@@ -140,7 +142,7 @@ AcpiDbGetPointer (
     ACPI_SIZE               Address;
 
 
-    Address = strtoul (Target, NULL, 16);
+    Address = ACPI_STRTOUL (Target, NULL, 16);
     ObjPtr = ACPI_TO_POINTER (Address);
     return (ObjPtr);
 }
@@ -300,10 +302,6 @@ AcpiDbDecodeAndDisplayObject (
         default:
 
             /* Is not a recognizeable object */
-
-            AcpiOsPrintf (
-                "Not a known ACPI internal object, descriptor type %2.2X\n",
-                ACPI_GET_DESCRIPTOR_TYPE (ObjPtr));
 
             Size = 16;
             if (AcpiOsReadable (ObjPtr, 64))
@@ -512,7 +510,7 @@ AcpiDbDisplayLocals (
         return;
     }
 
-    AcpiDbDecodeLocals (WalkState);
+    AcpiDmDisplayLocals (WalkState);
 }
 
 
@@ -542,7 +540,7 @@ AcpiDbDisplayArguments (
         return;
     }
 
-    AcpiDbDecodeArguments (WalkState);
+    AcpiDmDisplayArguments (WalkState);
 }
 
 
@@ -598,7 +596,7 @@ AcpiDbDisplayResults (
     {
         ObjDesc = Frame->Results.ObjDesc[Index];
         AcpiOsPrintf ("Result%u: ", i);
-        AcpiDbDisplayInternalObject (ObjDesc, WalkState);
+        AcpiDmDisplayInternalObject (ObjDesc, WalkState);
         if (Index == 0)
         {
             Frame = Frame->Results.Next;
@@ -762,7 +760,7 @@ AcpiDbDisplayResultObject (
     }
 
     AcpiOsPrintf ("ResultObj: ");
-    AcpiDbDisplayInternalObject (ObjDesc, WalkState);
+    AcpiDmDisplayInternalObject (ObjDesc, WalkState);
     AcpiOsPrintf ("\n");
 }
 
@@ -792,7 +790,7 @@ AcpiDbDisplayArgumentObject (
     }
 
     AcpiOsPrintf ("ArgObj:    ");
-    AcpiDbDisplayInternalObject (ObjDesc, WalkState);
+    AcpiDmDisplayInternalObject (ObjDesc, WalkState);
 }
 
 
@@ -899,7 +897,7 @@ AcpiDbDisplayGpes (
                     GpeIndex = (i * ACPI_GPE_REGISTER_WIDTH) + j;
                     GpeEventInfo = &GpeBlock->EventInfo[GpeIndex];
 
-                    if (ACPI_GPE_DISPATCH_TYPE (GpeEventInfo->Flags) ==
+                    if ((GpeEventInfo->Flags & ACPI_GPE_DISPATCH_MASK) ==
                         ACPI_GPE_DISPATCH_NONE)
                     {
                         /* This GPE is not used (no method or handler), ignore it */
@@ -932,7 +930,7 @@ AcpiDbDisplayGpes (
                         AcpiOsPrintf ("RunOnly, ");
                     }
 
-                    switch (ACPI_GPE_DISPATCH_TYPE (GpeEventInfo->Flags))
+                    switch (GpeEventInfo->Flags & ACPI_GPE_DISPATCH_MASK)
                     {
                     case ACPI_GPE_DISPATCH_NONE:
 
@@ -943,7 +941,6 @@ AcpiDbDisplayGpes (
 
                         AcpiOsPrintf ("Method");
                         break;
-
                     case ACPI_GPE_DISPATCH_HANDLER:
 
                         AcpiOsPrintf ("Handler");
@@ -961,15 +958,10 @@ AcpiDbDisplayGpes (
                         AcpiOsPrintf ("Implicit Notify on %u devices", Count);
                         break;
 
-                    case ACPI_GPE_DISPATCH_RAW_HANDLER:
-
-                        AcpiOsPrintf ("RawHandler");
-                        break;
-
                     default:
 
                         AcpiOsPrintf ("UNKNOWN: %X",
-                            ACPI_GPE_DISPATCH_TYPE (GpeEventInfo->Flags));
+                            GpeEventInfo->Flags & ACPI_GPE_DISPATCH_MASK);
                         break;
                     }
 

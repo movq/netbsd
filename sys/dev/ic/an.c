@@ -1,4 +1,4 @@
-/*	$NetBSD: an.c,v 1.62 2015/02/07 04:11:06 christos Exp $	*/
+/*	$NetBSD: an.c,v 1.61.4.1 2015/02/16 21:25:34 martin Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999
  *	Bill Paul <wpaul@ctr.columbia.edu>.  All rights reserved.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: an.c,v 1.62 2015/02/07 04:11:06 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: an.c,v 1.61.4.1 2015/02/16 21:25:34 martin Exp $");
 
 
 #include <sys/param.h>

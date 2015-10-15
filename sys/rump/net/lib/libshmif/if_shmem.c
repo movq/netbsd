@@ -1,4 +1,4 @@
-/*	$NetBSD: if_shmem.c,v 1.63 2014/08/15 15:03:03 ozaki-r Exp $	*/
+/*	$NetBSD: if_shmem.c,v 1.62.2.1 2014/08/17 03:26:51 riz Exp $	*/
 
 /*
  * Copyright (c) 2009, 2010 Antti Kantee.  All Rights Reserved.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_shmem.c,v 1.63 2014/08/15 15:03:03 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_shmem.c,v 1.62.2.1 2014/08/17 03:26:51 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/atomic.h>

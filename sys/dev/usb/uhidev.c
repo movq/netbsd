@@ -1,4 +1,4 @@
-/*	$NetBSD: uhidev.c,v 1.64 2015/04/13 16:33:25 riastradh Exp $	*/
+/*	$NetBSD: uhidev.c,v 1.61.2.2 2015/03/21 17:30:43 snj Exp $	*/
 
 /*
  * Copyright (c) 2001, 2012 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uhidev.c,v 1.64 2015/04/13 16:33:25 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uhidev.c,v 1.61.2.2 2015/03/21 17:30:43 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -45,7 +45,6 @@ __KERNEL_RCSID(0, "$NetBSD: uhidev.c,v 1.64 2015/04/13 16:33:25 riastradh Exp $"
 #include <sys/device.h>
 #include <sys/ioctl.h>
 #include <sys/conf.h>
-#include <sys/rndsource.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbhid.h>

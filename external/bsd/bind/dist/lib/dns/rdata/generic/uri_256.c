@@ -1,4 +1,4 @@
-/*	$NetBSD: uri_256.c,v 1.1.1.5 2014/12/10 03:34:42 christos Exp $	*/
+/*	$NetBSD: uri_256.c,v 1.1.1.2.12.1 2014/12/22 03:28:45 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2011, 2012, 2014  Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-/* $NetBSD: if_aumac.c,v 1.39 2015/04/13 21:18:42 riastradh Exp $ */
+/* $NetBSD: if_aumac.c,v 1.38 2014/08/10 16:44:34 tls Exp $ */
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -46,7 +46,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_aumac.c,v 1.39 2015/04/13 21:18:42 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_aumac.c,v 1.38 2014/08/10 16:44:34 tls Exp $");
 
 
 
@@ -71,7 +71,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_aumac.c,v 1.39 2015/04/13 21:18:42 riastradh Exp 
 #include <net/if_ether.h>
 
 #include <net/bpf.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>

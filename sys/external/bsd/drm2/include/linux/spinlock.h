@@ -1,4 +1,4 @@
-/*	$NetBSD: spinlock.h,v 1.6 2015/01/01 01:15:42 mrg Exp $	*/
+/*	$NetBSD: spinlock.h,v 1.3.2.1 2014/09/21 17:41:52 snj Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

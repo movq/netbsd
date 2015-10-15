@@ -1,4 +1,4 @@
-/*	$NetBSD: http-server.c,v 1.1.1.2 2015/01/29 06:38:19 spz Exp $	*/
+/*	$NetBSD: http-server.c,v 1.1.1.1.12.1 2015/02/03 08:23:40 bouyer Exp $	*/
 /*
   A trivial static http webserver using Libevent's evhttp.
 

@@ -23,9 +23,6 @@
  * Copyright 2005 Sun Microsystems, Inc.  All rights reserved.
  * Use is subject to license terms.
  */
-/*
- * Copyright (c) 2013, Joyent, Inc.  All rights reserved.
- */
 
 /*
  * This header file defines the interfaces available from the CTF debugger
@@ -42,6 +39,8 @@
 
 #ifndef	_CTF_API_H
 #define	_CTF_API_H
+
+/* #pragma ident	"%Z%%M%	%I%	%E% SMI" */
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -66,10 +65,10 @@ typedef long ctf_id_t;
  * filling in ctf_sect_t structures and passing them to ctf_bufopen():
  */
 typedef struct ctf_sect {
-	const char *cts_name;	/* section name (if any) */
+	char *cts_name;		/* section name (if any) */
 	ulong_t cts_type;	/* section type (ELF SHT_... value) */
 	ulong_t cts_flags;	/* section flags (ELF SHF_... value) */
-#ifdef illumos
+#if defined(sun)
 	const void *cts_data;	/* pointer to section data */
 #else
 	void *cts_data;		/* pointer to section data */
@@ -155,7 +154,6 @@ extern ctf_file_t *ctf_bufopen(const ctf_sect_t *, const ctf_sect_t *,
 extern ctf_file_t *ctf_fdopen(int, int *);
 extern ctf_file_t *ctf_open(const char *, int *);
 extern ctf_file_t *ctf_create(int *);
-extern ctf_file_t *ctf_dup(ctf_file_t *);
 extern void ctf_close(ctf_file_t *);
 
 extern ctf_file_t *ctf_parent_file(ctf_file_t *);
@@ -181,8 +179,6 @@ extern ctf_id_t ctf_lookup_by_symbol(ctf_file_t *, ulong_t);
 extern ctf_id_t ctf_type_resolve(ctf_file_t *, ctf_id_t);
 extern ssize_t ctf_type_lname(ctf_file_t *, ctf_id_t, char *, size_t);
 extern char *ctf_type_name(ctf_file_t *, ctf_id_t, char *, size_t);
-extern char *ctf_type_qname(ctf_file_t *, ctf_id_t, char *, size_t,
-    const char *);
 extern ssize_t ctf_type_size(ctf_file_t *, ctf_id_t);
 extern ssize_t ctf_type_align(ctf_file_t *, ctf_id_t);
 extern int ctf_type_kind(ctf_file_t *, ctf_id_t);
@@ -230,8 +226,6 @@ extern int ctf_add_enumerator(ctf_file_t *, ctf_id_t, const char *, int);
 extern int ctf_add_member(ctf_file_t *, ctf_id_t, const char *, ctf_id_t);
 
 extern int ctf_set_array(ctf_file_t *, ctf_id_t, const ctf_arinfo_t *);
-
-extern int ctf_delete_type(ctf_file_t *, ctf_id_t);
 
 extern int ctf_update(ctf_file_t *);
 extern int ctf_discard(ctf_file_t *);

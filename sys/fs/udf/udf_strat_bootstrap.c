@@ -1,4 +1,4 @@
-/* $NetBSD: udf_strat_bootstrap.c,v 1.4 2014/11/10 18:46:33 maxv Exp $ */
+/* $NetBSD: udf_strat_bootstrap.c,v 1.3.40.1 2015/01/17 12:10:54 martin Exp $ */
 
 /*
  * Copyright (c) 2006, 2008 Reinoud Zandijk
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__KERNEL_RCSID(0, "$NetBSD: udf_strat_bootstrap.c,v 1.4 2014/11/10 18:46:33 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udf_strat_bootstrap.c,v 1.3.40.1 2015/01/17 12:10:54 martin Exp $");
 #endif /* not lint */
 
 

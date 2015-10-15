@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.58 2015/04/26 15:15:19 mlelstv Exp $	*/
+/*	$NetBSD: fd.c,v 1.55 2014/07/25 08:10:31 dholland Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -82,7 +82,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.58 2015/04/26 15:15:19 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.55 2014/07/25 08:10:31 dholland Exp $");
 
 #include "opt_ddb.h"
 
@@ -113,6 +113,7 @@ __KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.58 2015/04/26 15:15:19 mlelstv Exp $");
 #include <machine/cpu.h>
 #include <machine/intr.h>
 #include <machine/io.h>
+#include <arm/arm32/katelib.h>
 
 #include <arm/iomd/iomdreg.h>
 #include <arm/iomd/iomdvar.h>
@@ -296,9 +297,7 @@ void fdgetdisklabel(struct fd_softc *);
 int fd_get_parms(struct fd_softc *);
 void fdstart(struct fd_softc *);
 
-struct dkdriver fddkdriver = {
-	.d_strategy = fdstrategy
-};
+struct dkdriver fddkdriver = { fdstrategy };
 
 struct fd_type *fd_nvtotype(const char *, int, int);
 void fd_set_motor(struct fdc_softc *fdc, int reset);
@@ -1287,7 +1286,7 @@ fdioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 		memset(&buffer, 0, sizeof(buffer));
 
 		buffer.d_secpercyl = fd->sc_type->seccyl;
-		buffer.d_type = DKTYPE_FLOPPY;
+		buffer.d_type = DTYPE_FLOPPY;
 		buffer.d_secsize = FDC_BSIZE;
 
 		if (readdisklabel(dev, fdstrategy, &buffer, NULL) != NULL)

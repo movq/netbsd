@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ie_vme.c,v 1.31 2014/08/18 04:26:38 riastradh Exp $	*/
+/*	$NetBSD: if_ie_vme.c,v 1.30.28.1 2014/08/22 10:15:22 martin Exp $	*/
 
 /*
  * Copyright (c) 1995 Charles D. Cranor
@@ -140,7 +140,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ie_vme.c,v 1.31 2014/08/18 04:26:38 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ie_vme.c,v 1.30.28.1 2014/08/22 10:15:22 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

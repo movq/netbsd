@@ -1,4 +1,4 @@
-/*	$NetBSD: textdomain.c,v 1.14 2015/05/29 12:26:28 christos Exp $	*/
+/*	$NetBSD: textdomain.c,v 1.13 2012/03/21 10:10:36 matt Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001 Citrus Project,
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: textdomain.c,v 1.14 2015/05/29 12:26:28 christos Exp $");
+__RCSID("$NetBSD: textdomain.c,v 1.13 2012/03/21 10:10:36 matt Exp $");
 
 #include <sys/param.h>
 
@@ -115,7 +115,8 @@ bind_textdomain_codeset(const char *domainname, const char *codeset)
 		return NULL;
 
 	if (codeset) {
-		free(p->codeset);
+		if (p->codeset)
+			free(p->codeset);
 		p->codeset = strdup(codeset);
 	}
 

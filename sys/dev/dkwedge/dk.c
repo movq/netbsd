@@ -1,4 +1,4 @@
-/*	$NetBSD: dk.c,v 1.85 2015/10/10 23:39:43 christos Exp $	*/
+/*	$NetBSD: dk.c,v 1.72.2.4 2015/09/08 12:02:33 martin Exp $	*/
 
 /*-
  * Copyright (c) 2004, 2005, 2006, 2007 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dk.c,v 1.85 2015/10/10 23:39:43 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dk.c,v 1.72.2.4 2015/09/08 12:02:33 martin Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_dkwedge.h"
@@ -260,22 +260,22 @@ dkwedge_array_expand(void)
 }
 
 static void
-dk_set_geometry(struct dkwedge_softc *sc, struct disk *pdk)
+dk_set_geometry(struct dkwedge_softc *sc)
 {
-	struct disk *dk = &sc->sc_dk;
-	struct disk_geom *dg = &dk->dk_geom;
+	struct disk *disk = &sc->sc_dk;
+	struct disk_geom *dg = &disk->dk_geom;
 
 	memset(dg, 0, sizeof(*dg));
 
-	dg->dg_secperunit = sc->sc_size >> pdk->dk_blkshift;
-	dg->dg_secsize = DEV_BSIZE << pdk->dk_blkshift;
+	dg->dg_secperunit = sc->sc_size >> disk->dk_blkshift;
+	dg->dg_secsize = DEV_BSIZE << disk->dk_blkshift;
 
 	/* fake numbers, 1 cylinder is 1 MB with default sector size */
 	dg->dg_nsectors = 32;
 	dg->dg_ntracks = 64;
 	dg->dg_ncylinders = dg->dg_secperunit / (dg->dg_nsectors * dg->dg_ntracks);
 
-	disk_set_info(sc->sc_dev, dk, NULL);
+	disk_set_info(sc->sc_dev, disk, NULL);
 }
 
 /*
@@ -457,19 +457,18 @@ dkwedge_add(struct dkwedge_info *dkw)
 	 */
 
 	disk_init(&sc->sc_dk, device_xname(sc->sc_dev), NULL);
-	dk_set_geometry(sc, pdk);
+	disk_blocksize(&sc->sc_dk, DEV_BSIZE << pdk->dk_blkshift);
+	dk_set_geometry(sc);
 	disk_attach(&sc->sc_dk);
 
 	/* Disk wedge is ready for use! */
 	sc->sc_state = DKW_STATE_RUNNING;
 
 	/* Announce our arrival. */
-	aprint_normal(
-	    "%s at %s: \"%s\", %"PRIu64" blocks at %"PRId64", type: %s\n",
-	    device_xname(sc->sc_dev), pdk->dk_name,
-	    sc->sc_wname,	/* XXX Unicode */
-	    sc->sc_size, sc->sc_offset,
-	    sc->sc_ptype[0] == '\0' ? "<unknown>" : sc->sc_ptype);
+	aprint_normal("%s at %s: %s\n", device_xname(sc->sc_dev), pdk->dk_name,
+	    sc->sc_wname);	/* XXX Unicode */
+	aprint_normal("%s: %"PRIu64" blocks at %"PRId64", type: %s\n",
+	    device_xname(sc->sc_dev), sc->sc_size, sc->sc_offset, sc->sc_ptype);
 
 	return (0);
 }
@@ -684,6 +683,8 @@ dkwedge_delall1(struct disk *pdk, bool idleonly)
  * dkwedge_list:	[exported function]
  *
  *	List all of the wedges on a particular disk.
+ *	If p == NULL, the buffer is in kernel space.  Otherwise, it is
+ *	in user space of the specified process.
  */
 int
 dkwedge_list(struct disk *pdk, struct dkwedge_list *dkwl, struct lwp *l)
@@ -949,7 +950,7 @@ dkwedge_read(struct disk *pdk, struct vnode *vp, daddr_t blkno,
 	int error;
 	bool isopen;
 	dev_t bdev;
-	struct vnode *bdvp;
+	struct vnode *bdevvp;
 
 	/*
 	 * The kernel cannot read from a character device vnode
@@ -968,17 +969,17 @@ dkwedge_read(struct disk *pdk, struct vnode *vp, daddr_t blkno,
 		KASSERT(pdk->dk_rawvp != NULL);
 		isopen = true;
 		++pdk->dk_rawopens;
-		bdvp = pdk->dk_rawvp;
+		bdevvp = pdk->dk_rawvp;
 	} else {
 		isopen = false;
-		bdvp = dk_open_parent(bdev, FREAD);
+		bdevvp = dk_open_parent(bdev, FREAD);
 	}
 	mutex_exit(&pdk->dk_rawlock);
 
-	if (bdvp == NULL)
+	if (bdevvp == NULL)
 		return EBUSY;
 
-	bp = getiobuf(bdvp, true);
+	bp = getiobuf(bdevvp, true);
 	bp->b_flags = B_READ;
 	bp->b_cflags = BC_BUSY;
 	bp->b_dev = bdev;
@@ -988,7 +989,7 @@ dkwedge_read(struct disk *pdk, struct vnode *vp, daddr_t blkno,
 	bp->b_cylinder = 0;
 	bp->b_error = 0;
 
-	VOP_STRATEGY(bdvp, bp);
+	VOP_STRATEGY(bdevvp, bp);
 	error = biowait(bp);
 	putiobuf(bp);
 
@@ -996,7 +997,7 @@ dkwedge_read(struct disk *pdk, struct vnode *vp, daddr_t blkno,
 	if (isopen) {
 		--pdk->dk_rawopens;
 	} else {
-		dk_close_parent(bdvp, FREAD);
+		dk_close_parent(bdevvp, FREAD);
 	}
 	mutex_exit(&pdk->dk_rawlock);
 
@@ -1410,11 +1411,7 @@ dkioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 	if (sc->sc_parent->dk_rawvp == NULL)
 		return (ENXIO);
 
-	/*
-	 * We pass NODEV instead of our device to indicate we don't
-	 * want to handle disklabel ioctls
-	 */
-	error = disk_ioctl(&sc->sc_dk, NODEV, cmd, data, flag, l);
+	error = disk_ioctl(&sc->sc_dk, cmd, data, flag, l);
 	if (error != EPASSTHROUGH)
 		return (error);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: netinet_component.c,v 1.4 2014/08/22 11:34:28 pooka Exp $	*/
+/*	$NetBSD: netinet_component.c,v 1.3 2014/07/01 05:49:19 rtr Exp $	*/
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netinet_component.c,v 1.4 2014/08/22 11:34:28 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netinet_component.c,v 1.3 2014/07/01 05:49:19 rtr Exp $");
 
 #include <sys/param.h>
 #include <sys/domain.h>
@@ -51,8 +51,8 @@ RUMP_COMPONENT(RUMP_COMPONENT_NET)
 {
 	extern struct domain arpdomain, inetdomain;
 
-	domain_attach(&arpdomain);
-	domain_attach(&inetdomain);
+	DOMAINADD(arpdomain);
+	DOMAINADD(inetdomain);
 
 	carpattach(1);
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: utils.c,v 1.4 2014/10/25 21:11:37 christos Exp $	*/
+/*	$NetBSD: utils.c,v 1.2.6.1 2014/12/17 19:25:40 martin Exp $	*/
 
 /*
  * utils.c - various utility functions used in pppd.
@@ -35,7 +35,7 @@
 #define RCSID	"Id: utils.c,v 1.25 2008/06/03 12:06:37 paulus Exp "
 static const char rcsid[] = RCSID;
 #else
-__RCSID("$NetBSD: utils.c,v 1.4 2014/10/25 21:11:37 christos Exp $");
+__RCSID("$NetBSD: utils.c,v 1.2.6.1 2014/12/17 19:25:40 martin Exp $");
 #endif
 
 #include <stdio.h>

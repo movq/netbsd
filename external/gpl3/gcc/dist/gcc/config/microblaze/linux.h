@@ -22,9 +22,6 @@
 #undef TARGET_SUPPORTS_PIC
 #define TARGET_SUPPORTS_PIC 1
 
-#undef CPP_SPEC
-#define CPP_SPEC "%{posix:-D_POSIX_SOURCE} %{pthread:-D_REENTRANT}"
-
 #undef TLS_NEEDS_GOT
 #define TLS_NEEDS_GOT 1
 

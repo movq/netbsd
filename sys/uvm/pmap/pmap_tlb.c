@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_tlb.c,v 1.12 2015/06/11 05:28:42 matt Exp $	*/
+/*	$NetBSD: pmap_tlb.c,v 1.8.4.1 2014/11/09 16:05:25 martin Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: pmap_tlb.c,v 1.12 2015/06/11 05:28:42 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap_tlb.c,v 1.8.4.1 2014/11/09 16:05:25 martin Exp $");
 
 /*
  * Manages address spaces in a TLB.
@@ -196,7 +196,7 @@ pmap_pai_check(struct pmap_tlb_info *ti)
 }
 
 #ifdef MULTIPROCESSOR
-__unused static inline bool
+static inline bool
 pmap_tlb_intersecting_active_p(pmap_t pm, struct pmap_tlb_info *ti)
 {
 #if PMAP_TLB_MAX == 1
@@ -437,7 +437,7 @@ pmap_tlb_asid_reinitialize(struct pmap_tlb_info *ti, enum tlb_invalidate_op op)
 			tlb_invalidate_asids(KERNEL_PID + 1, ti->ti_asid_max);
 #else /* MULTIPROCESSOR && !PMAP_NEED_TLB_SHOOTDOWN */
 			/*
-			 * For those systems (PowerPC) that don't require
+			 * For those systems (PowerPC) that don't need require
 			 * cross cpu TLB shootdowns, we have to invalidate the
 			 * entire TLB because we can't record the ASIDs in use
 			 * on the other CPUs.  This is hopefully cheaper than
@@ -635,10 +635,9 @@ pmap_tlb_shootdown_bystanders(pmap_t pm)
 		struct pmap_asid_info * const pai = PMAP_PAI(pm, ti);
 		kcpuset_remove(pm_active, ti->ti_kcpuset);
 		TLBINFO_LOCK(ti);
-		cpuid_t j = kcpuset_ffs_intersecting(pm->pm_onproc,
-		    ti->ti_kcpuset);
-		// post decrement since ffs returns bit + 1 or 0 if no bit
-		if (j-- > 0) {
+		if (pmap_tlb_intersecting_onproc_p(pm, ti)) {
+			cpuid_t j = kcpuset_ffs_intersecting(pm->pm_onproc,
+			    ti->ti_kcpuset);
 			if (kernel_p) {
 				ti->ti_tlbinvop =
 				    TLBINV_KERNEL_MAP(ti->ti_tlbinvop);

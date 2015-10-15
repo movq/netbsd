@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_machdep.c,v 1.12 2015/05/17 18:52:37 matt Exp $	*/
+/*	$NetBSD: netbsd32_machdep.c,v 1.11 2014/01/25 15:20:55 christos Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.12 2015/05/17 18:52:37 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.11 2014/01/25 15:20:55 christos Exp $");
 
 #include "opt_compat_netbsd.h"
 #include "opt_coredump.h"
@@ -343,14 +343,3 @@ cpu_coredump32(struct lwp *l, struct coredump_iostate *iocookie,
 	    chdr->c_cpusize);
 }
 #endif
-
-int
-cpu_machinearch32(SYSCTLFN_ARGS)
-{
-	struct sysctlnode node = *rnode;
-	const char *march = l->l_proc->p_md.md_abi == _MIPS_BSD_API_O32
-	    ? machine_arch32 : machine_arch;
-	node.sysctl_data = __UNCONST(march);
-	node.sysctl_size = strlen(march) + 1;
-	return sysctl_lookup(SYSCTLFN_CALL(&node));
-}

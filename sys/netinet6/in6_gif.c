@@ -1,4 +1,4 @@
-/*	$NetBSD: in6_gif.c,v 1.62 2015/08/24 22:21:27 pooka Exp $	*/
+/*	$NetBSD: in6_gif.c,v 1.60 2014/05/18 14:46:16 rmind Exp $	*/
 /*	$KAME: in6_gif.c,v 1.62 2001/07/29 04:27:25 itojun Exp $	*/
 
 /*
@@ -31,11 +31,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in6_gif.c,v 1.62 2015/08/24 22:21:27 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in6_gif.c,v 1.60 2014/05/18 14:46:16 rmind Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -186,7 +184,6 @@ in6_gif_output(struct ifnet *ifp, int family, struct mbuf *m)
 
 	/* If the route constitutes infinite encapsulation, punt. */
 	if (rt->rt_ifp == ifp) {
-		rtcache_free(&sc->gif_ro);
 		m_freem(m);
 		return ENETUNREACH;	/* XXX */
 	}

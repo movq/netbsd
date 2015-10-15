@@ -1,4 +1,4 @@
-/*	$NetBSD: if_loop.c,v 1.83 2015/08/24 22:21:26 pooka Exp $	*/
+/*	$NetBSD: if_loop.c,v 1.80 2014/06/07 11:00:29 rmind Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -65,15 +65,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_loop.c,v 1.83 2015/08/24 22:21:26 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_loop.c,v 1.80 2014/06/07 11:00:29 rmind Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
 #include "opt_atalk.h"
+#include "opt_ipx.h"
 #include "opt_mbuftrace.h"
 #include "opt_mpls.h"
-#include "opt_net_mpsafe.h"
-#endif
+
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -106,6 +105,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_loop.c,v 1.83 2015/08/24 22:21:26 pooka Exp $");
 #include <netinet6/in6_var.h>
 #include <netinet6/in6_offload.h>
 #include <netinet/ip6.h>
+#endif
+
+#ifdef IPX
+#include <netipx/ipx.h>
+#include <netipx/ipx_if.h>
 #endif
 
 #ifdef MPLS
@@ -214,9 +218,7 @@ looutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 	size_t pktlen;
 
 	MCLAIM(m, ifp->if_mowner);
-#ifndef NET_MPSAFE
 	KASSERT(KERNEL_LOCKED_P());
-#endif
 
 	if ((m->m_flags & M_PKTHDR) == 0)
 		panic("looutput: no header mbuf");
@@ -304,6 +306,12 @@ looutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 		pktq = ip6_pktq;
 		break;
 #endif
+#ifdef IPX
+	case AF_IPX:
+		ifq = &ipxintrq;
+		isr = NETISR_IPX;
+		break;
+#endif
 #ifdef NETATALK
 	case AF_APPLETALK:
 	        ifq = &atintrq2;
@@ -374,6 +382,12 @@ lostart(struct ifnet *ifp)
 		case AF_INET6:
 			m->m_flags |= M_LOOP;
 			pktq = ip6_pktq;
+			break;
+#endif
+#ifdef IPX
+		case AF_IPX:
+			ifq = &ipxintrq;
+			isr = NETISR_IPX;
 			break;
 #endif
 #ifdef NETATALK

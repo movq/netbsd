@@ -1,7 +1,5 @@
-/*	$NetBSD: lstring.h,v 1.4 2015/10/08 13:21:00 mbalmer Exp $	*/
-
 /*
-** Id: lstring.h,v 1.59 2015/03/25 13:42:19 roberto Exp 
+** $Id: lstring.h,v 1.2.2.1 2015/02/04 21:32:46 martin Exp $
 ** String table (keep all strings handled by Lua)
 ** See Copyright Notice in lua.h
 */
@@ -15,6 +13,7 @@
 
 
 #define sizelstring(l)  (sizeof(union UTString) + ((l) + 1) * sizeof(char))
+#define sizestring(s)	sizelstring((s)->len)
 
 #define sizeludata(l)	(sizeof(union UUdata) + (l))
 #define sizeudata(u)	sizeludata((u)->len)
@@ -38,8 +37,6 @@
 LUAI_FUNC unsigned int luaS_hash (const char *str, size_t l, unsigned int seed);
 LUAI_FUNC int luaS_eqlngstr (TString *a, TString *b);
 LUAI_FUNC void luaS_resize (lua_State *L, int newsize);
-LUAI_FUNC void luaS_clearcache (global_State *g);
-LUAI_FUNC void luaS_init (lua_State *L);
 LUAI_FUNC void luaS_remove (lua_State *L, TString *ts);
 LUAI_FUNC Udata *luaS_newudata (lua_State *L, size_t s);
 LUAI_FUNC TString *luaS_newlstr (lua_State *L, const char *str, size_t l);

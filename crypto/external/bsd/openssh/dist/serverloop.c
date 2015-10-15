@@ -1,4 +1,4 @@
-/*	$NetBSD: serverloop.c,v 1.12 2015/04/13 18:00:47 christos Exp $	*/
+/*	$NetBSD: serverloop.c,v 1.8.4.1 2015/04/30 06:07:30 riz Exp $	*/
 /* $OpenBSD: serverloop.c,v 1.178 2015/02/20 22:17:21 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -37,7 +37,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: serverloop.c,v 1.12 2015/04/13 18:00:47 christos Exp $");
+__RCSID("$NetBSD: serverloop.c,v 1.8.4.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/param.h>	/* MIN MAX */
 #include <sys/types.h>
 #include <sys/wait.h>

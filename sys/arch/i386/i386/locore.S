@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.114 2015/08/30 01:46:03 uebayasi Exp $	*/
+/*	$NetBSD: locore.S,v 1.112 2014/02/20 18:19:10 dsl Exp $	*/
 
 /*
  * Copyright-o-rama!
@@ -129,10 +129,9 @@
  */
 
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: locore.S,v 1.114 2015/08/30 01:46:03 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: locore.S,v 1.112 2014/02/20 18:19:10 dsl Exp $");
 
 #include "opt_compat_oldboot.h"
-#include "opt_copy_symtab.h"
 #include "opt_ddb.h"
 #include "opt_modular.h"
 #include "opt_multiboot.h"
@@ -185,7 +184,7 @@ __KERNEL_RCSID(0, "$NetBSD: locore.S,v 1.114 2015/08/30 01:46:03 uebayasi Exp $"
 	.ascii	",PAE=yes[extended-cr3]"
 #endif
 	.ascii	",LOADER=generic"
-#if (NKSYMS || defined(DDB) || defined(MODULAR)) && !defined(makeoptions_COPY_SYMTAB)
+#if (NKSYMS || defined(DDB) || defined(MODULAR)) && !defined(SYMTAB_SPACE)
 	.ascii	",BSD_SYMTAB=yes"
 #endif
 	.byte	0
@@ -545,7 +544,7 @@ try586:	/* Use the `cpuid' instruction. */
 	/* Find end of kernel image. */
 	movl	$RELOC(end),%edi
 
-#if (NKSYMS || defined(DDB) || defined(MODULAR)) && !defined(makeoptions_COPY_SYMTAB)
+#if (NKSYMS || defined(DDB) || defined(MODULAR)) && !defined(SYMTAB_SPACE)
 	/* Save the symbols (if loaded). */
 	movl	RELOC(esym),%eax
 	testl	%eax,%eax

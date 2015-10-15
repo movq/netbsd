@@ -1,4 +1,4 @@
-/*	$NetBSD: t_fpsetmask.c,v 1.15 2014/11/18 08:58:08 martin Exp $ */
+/*	$NetBSD: t_fpsetmask.c,v 1.13 2014/02/09 21:26:07 jmmv Exp $ */
 
 /*-
  * Copyright (c) 1995 The NetBSD Foundation, Inc.
@@ -29,6 +29,7 @@
 #include <sys/param.h>
 
 #include <atf-c.h>
+#include <atf-c/config.h>
 
 #include <stdio.h>
 #include <signal.h>
@@ -58,20 +59,8 @@ ATF_TC_BODY(no_test, tc)
 
 #include <ieeefp.h>
 
-#if __arm__ && !__SOFTFP__
-	/*
-	 * Some NEON fpus do not implement IEEE exception handling,
-	 * skip these tests if running on them and compiled for
-	 * hard float.
-	 */
-#define	FPU_PREREQ()							\
-	if (0 == fpsetmask(fpsetmask(FP_X_INV)))			\
-		atf_tc_skip("FPU does not implement exception handling");
-#endif
-
-#ifndef FPU_PREREQ
-#define	FPU_PREREQ()	/* nothing */
-#endif
+const char *skip_mesg;
+const char *skip_arch;
 
 void		sigfpe(int, siginfo_t *, void *);
 
@@ -308,9 +297,6 @@ sigfpe(int s, siginfo_t *si, void *c)
 									\
 	ATF_TC_BODY(m##_##t, tc)					\
 	{								\
-									\
-		FPU_PREREQ();						\
-									\
 		if (strcmp(MACHINE, "macppc") == 0)			\
 			atf_tc_expect_fail("PR port-macppc/46319");	\
 									\
@@ -337,8 +323,6 @@ ATF_TC_BODY(fpsetmask_basic, tc)
 {
 	size_t i;
 	fp_except_t msk, lst[] = { FP_X_INV, FP_X_DZ, FP_X_OFL, FP_X_UFL };
-
-	FPU_PREREQ();
 
 	msk = fpgetmask();
 	for (i = 0; i < __arraycount(lst); i++) {

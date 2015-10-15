@@ -121,8 +121,7 @@ get_lim_data ()
 {
   struct rlimit XXrlimit;
 
-  if (getrlimit (RLIMIT_DATA, &XXrlimit) == -1)
-	XXrlimit.rlim_cur = -1;
+  getrlimit (RLIMIT_DATA, &XXrlimit);
 #ifdef RLIM_INFINITY
   lim_data = XXrlimit.rlim_cur & RLIM_INFINITY; /* soft limit */
 #else

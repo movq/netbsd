@@ -1,4 +1,4 @@
-/*	$NetBSD: if_pcn.c,v 1.60 2015/04/27 17:40:13 christos Exp $	*/
+/*	$NetBSD: if_pcn.c,v 1.58.2.1 2015/07/30 09:23:05 martin Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_pcn.c,v 1.60 2015/04/27 17:40:13 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_pcn.c,v 1.58.2.1 2015/07/30 09:23:05 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -79,7 +79,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_pcn.c,v 1.60 2015/04/27 17:40:13 christos Exp $")
 #include <sys/device.h>
 #include <sys/queue.h>
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>

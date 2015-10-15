@@ -42,8 +42,7 @@ lzma_stream_buffer_bound(size_t uncompressed_size)
 
 extern LZMA_API(lzma_ret)
 lzma_stream_buffer_encode(lzma_filter *filters, lzma_check check,
-		const lzma_allocator *allocator,
-		const uint8_t *in, size_t in_size,
+		lzma_allocator *allocator, const uint8_t *in, size_t in_size,
 		uint8_t *out, size_t *out_pos_ptr, size_t out_size)
 {
 	// Sanity checks

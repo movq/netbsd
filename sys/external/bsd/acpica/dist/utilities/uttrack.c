@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,6 +51,8 @@
  * AcpiUtTrackAllocation to add an element to the list; deletion
  * occurs in the body of AcpiUtFree.
  */
+
+#define __UTTRACK_C__
 
 #include "acpi.h"
 #include "accommon.h"
@@ -113,7 +115,7 @@ AcpiUtCreateList (
         return (AE_NO_MEMORY);
     }
 
-    memset (Cache, 0, sizeof (ACPI_MEMORY_LIST));
+    ACPI_MEMSET (Cache, 0, sizeof (ACPI_MEMORY_LIST));
 
     Cache->ListName   = __UNCONST(ListName);
     Cache->ObjectSize = ObjectSize;
@@ -305,8 +307,7 @@ AcpiUtFreeAndTrack (
     }
 
     AcpiOsFree (DebugBlock);
-    ACPI_DEBUG_PRINT ((ACPI_DB_ALLOCATIONS, "%p freed (block %p)\n",
-        Allocation, DebugBlock));
+    ACPI_DEBUG_PRINT ((ACPI_DB_ALLOCATIONS, "%p freed\n", Allocation));
     return_VOID;
 }
 
@@ -445,7 +446,7 @@ AcpiUtTrackAllocation (
     Allocation->Component = Component;
     Allocation->Line      = Line;
 
-    strncpy (Allocation->Module, Module, ACPI_MAX_MODULE_NAME);
+    ACPI_STRNCPY (Allocation->Module, Module, ACPI_MAX_MODULE_NAME);
     Allocation->Module[ACPI_MAX_MODULE_NAME-1] = 0;
 
     if (!Element)
@@ -556,7 +557,7 @@ AcpiUtRemoveAllocation (
 
     /* Mark the segment as deleted */
 
-    memset (&Allocation->UserSpace, 0xEA, Allocation->Size);
+    ACPI_MEMSET (&Allocation->UserSpace, 0xEA, Allocation->Size);
 
     Status = AcpiUtReleaseMutex (ACPI_MTX_MEMORY);
     return (Status);
@@ -667,7 +668,7 @@ AcpiUtDumpAllocations (
     while (Element)
     {
         if ((Element->Component & Component) &&
-            ((Module == NULL) || (0 == strcmp (Module, Element->Module))))
+            ((Module == NULL) || (0 == ACPI_STRCMP (Module, Element->Module))))
         {
             Descriptor = ACPI_CAST_PTR (ACPI_DESCRIPTOR, &Element->UserSpace);
 

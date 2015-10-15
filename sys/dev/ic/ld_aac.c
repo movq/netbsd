@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_aac.c,v 1.28 2015/04/13 16:33:24 riastradh Exp $	*/
+/*	$NetBSD: ld_aac.c,v 1.27 2012/10/27 17:18:21 chs Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_aac.c,v 1.28 2015/04/13 16:33:24 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld_aac.c,v 1.27 2012/10/27 17:18:21 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -41,6 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: ld_aac.c,v 1.28 2015/04/13 16:33:24 riastradh Exp $"
 #include <sys/endian.h>
 #include <sys/dkio.h>
 #include <sys/disk.h>
+#include <sys/rnd.h>
 
 #include <sys/bus.h>
 

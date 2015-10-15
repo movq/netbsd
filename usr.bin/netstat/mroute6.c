@@ -1,4 +1,4 @@
-/*	$NetBSD: mroute6.c,v 1.15 2014/11/06 21:30:09 christos Exp $	*/
+/*	$NetBSD: mroute6.c,v 1.14.4.1 2015/01/08 11:01:01 martin Exp $	*/
 
 /*
  * Copyright (C) 1998 WIDE Project.

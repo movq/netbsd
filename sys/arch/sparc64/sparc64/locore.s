@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.s,v 1.384 2015/04/05 20:34:00 palle Exp $	*/
+/*	$NetBSD: locore.s,v 1.369.2.2 2015/03/09 07:54:12 snj Exp $	*/
 
 /*
  * Copyright (c) 2006-2010 Matthew R. Green
@@ -88,9 +88,6 @@
 #include <machine/intr.h>
 #include <machine/asm.h>
 #include <machine/locore.h>
-#ifdef SUN4V
-#include <machine/hypervisor.h>
-#endif	
 #include <sys/syscall.h>
 
 #define BLOCK_SIZE SPARC64_BLOCK_SIZE
@@ -123,16 +120,7 @@
 3:
 	.endm
 
-	.macro	SET_MMU_CONTEXTID_SUN4U ctxid,ctx
-	stxa	\ctxid, [\ctx] ASI_DMMU;
-	.endm
-	
-#ifdef SUN4V
-	.macro	SET_MMU_CONTEXTID_SUN4V ctxid,ctx
-	stxa	\ctxid, [\ctx] ASI_MMU;
-	.endm
-#endif	
-		
+
 	.macro	SET_MMU_CONTEXTID ctxid,ctx,scratch
 #ifdef SUN4V
 	sethi	%hi(cputyp), \scratch
@@ -141,32 +129,39 @@
 	bne,pt	%icc, 2f
 	 nop
 	/* sun4v */
-	SET_MMU_CONTEXTID_SUN4V \ctxid,\ctx
+	stxa	\ctxid, [\ctx] ASI_MMU;
 	ba	3f
 	 nop
 2:		
 #endif	
 	/* sun4u */
-	SET_MMU_CONTEXTID_SUN4U \ctxid,\ctx
+	stxa	\ctxid, [\ctx] ASI_DMMU;
+3:
+	
+	.endm
+
+
+	.macro	NORMAL_GLOBALS scratch
+#ifdef SUN4V
+	sethi	%hi(cputyp), \scratch
+	ld	[\scratch + %lo(cputyp)], \scratch
+	cmp	\scratch, CPU_SUN4V
+	bne,pt	%icc, 2f
+	 nop
+	/* sun4v */
+	ba	3f
+	 wrpr	%g0, 0, %gl
+2:		
+#endif	
+	/* sun4u */
+	rdpr	 %pstate, \scratch
+	and	\scratch, ~PSTATE_AG, \scratch	! Alternate Globals (AG) bit set to zero
+	wrpr	%g0, \scratch, %pstate
 3:
 	.endm
 
-#ifdef SUN4V
-	.macro	NORMAL_GLOBALS_SUN4V
-	 wrpr	%g0, 0, %gl				! Set globals to level 0
-	.endm
-#endif
-	.macro	NORMAL_GLOBALS_SUN4U
-	wrpr	%g0, PSTATE_KERN, %pstate		! Alternate Globals (AG) bit set to zero
-	.endm
-		
-#ifdef SUN4V
-	.macro	ALTERNATE_GLOBALS_SUN4V
-	 wrpr	%g0, 1, %gl				! Set globals to level 1
-	.endm
-#endif	
-	.macro	ALTERNATE_GLOBALS_SUN4U
-	 wrpr    %g0, PSTATE_KERN|PSTATE_AG, %pstate	! Alternate Globals (AG) bit set to one
+	.macro	ALTERNATE_GLOBALS
+	 wrpr    %g0, PSTATE_KERN|PSTATE_AG, %pstate	! sun4u only for now...
 	.endm
 	
 	.macro	ENABLE_INTERRUPTS scratch
@@ -493,9 +488,41 @@ label:	\
 	NOTREACHED; \
 	TA32
 
-	/* handle clean window trap when trap level = 0 */
-	.macro CLEANWIN0
-	rdpr %cleanwin, %o7
+	.globl	start, _C_LABEL(kernel_text)
+	_C_LABEL(kernel_text) = kernel_start		! for kvm_mkdb(8)
+kernel_start:
+	/* Traps from TL=0 -- traps from user mode */
+#ifdef __STDC__
+#define TABLE(name)	user_ ## name
+#else
+#define	TABLE(name)	user_/**/name
+#endif
+	.globl	_C_LABEL(trapbase)
+_C_LABEL(trapbase):
+	b dostart; nop; TA8	! 000 = reserved -- Use it to boot
+	/* We should not get the next 5 traps */
+	UTRAP(0x001)		! 001 = POR Reset -- ROM should get this
+	UTRAP(0x002)		! 002 = WDR -- ROM should get this
+	UTRAP(0x003)		! 003 = XIR -- ROM should get this
+	UTRAP(0x004)		! 004 = SIR -- ROM should get this
+	UTRAP(0x005)		! 005 = RED state exception
+	UTRAP(0x006); UTRAP(0x007)
+	VTRAP(T_INST_EXCEPT, textfault)	! 008 = instr. access except
+	VTRAP(T_TEXTFAULT, textfault)	! 009 = instr access MMU miss
+	VTRAP(T_INST_ERROR, textfault)	! 00a = instr. access err
+	UTRAP(0x00b); UTRAP(0x00c); UTRAP(0x00d); UTRAP(0x00e); UTRAP(0x00f)
+	TRAP(T_ILLINST)			! 010 = illegal instruction
+	TRAP(T_PRIVINST)		! 011 = privileged instruction
+	UTRAP(0x012)			! 012 = unimplemented LDD
+	UTRAP(0x013)			! 013 = unimplemented STD
+	UTRAP(0x014); UTRAP(0x015); UTRAP(0x016); UTRAP(0x017); UTRAP(0x018)
+	UTRAP(0x019); UTRAP(0x01a); UTRAP(0x01b); UTRAP(0x01c); UTRAP(0x01d)
+	UTRAP(0x01e); UTRAP(0x01f)
+	TRAP(T_FPDISABLED)		! 020 = fp instr, but EF bit off in psr
+	TRAP(T_FP_IEEE_754)		! 021 = ieee 754 exception
+	TRAP(T_FP_OTHER)		! 022 = other fp exception
+	TRAP(T_TAGOF)			! 023 = tag overflow
+	rdpr %cleanwin, %o7		! 024-027 = clean window trap
 	inc %o7				!	This handler is in-lined and cannot fault
 #ifdef DEBUG
 	set	0xbadcafe, %l0		! DEBUG -- compiler should not rely on zero-ed registers.
@@ -537,74 +564,6 @@ label:	\
 	mov %l0, %o6; mov %l0, %o7
 	CLRTT
 	retry; nop; NOTREACHED; TA32
-	.endm
-
-	/* handle clean window trap when trap level = 1 */
-	.macro CLEANWIN1
-	clr	%l0
-#ifdef DEBUG
-	set	0xbadbeef, %l0		! DEBUG
-#endif
-	mov %l0, %l1; mov %l0, %l2
-	rdpr %cleanwin, %o7		!	This handler is in-lined and cannot fault
-	inc %o7; mov %l0, %l3		!       Nucleus (trap&IRQ) code does not need clean windows
-	wrpr %g0, %o7, %cleanwin	!	Clear out %l0-%l8 and %o0-%o8 and inc %cleanwin and done
-#ifdef NOT_DEBUG
-	!!
-	!! Check the sp redzone
-	!!
-	rdpr	%wstate, t1
-	cmp	t1, WSTATE_KERN
-	bne,pt	icc, 7f
-	 sethi	%hi(_C_LABEL(redzone)), t1
-	ldx	[t1 + %lo(_C_LABEL(redzone))], t2
-	cmp	%sp, t2			! if sp >= t2, not in red zone
-	blu	panic_red		! and can continue normally
-7:
-#endif
-	mov %l0, %l4; mov %l0, %l5; mov %l0, %l6; mov %l0, %l7
-	mov %l0, %o0; mov %l0, %o1; mov %l0, %o2; mov %l0, %o3
-
-	mov %l0, %o4; mov %l0, %o5; mov %l0, %o6; mov %l0, %o7
-	CLRTT
-	retry; nop; TA32
-	.endm
-	
-	.globl	start, _C_LABEL(kernel_text)
-	_C_LABEL(kernel_text) = kernel_start		! for kvm_mkdb(8)
-kernel_start:
-	/* Traps from TL=0 -- traps from user mode */
-#ifdef __STDC__
-#define TABLE(name)	user_ ## name
-#else
-#define	TABLE(name)	user_/**/name
-#endif
-	.globl	_C_LABEL(trapbase)
-_C_LABEL(trapbase):
-	b dostart; nop; TA8	! 000 = reserved -- Use it to boot
-	/* We should not get the next 5 traps */
-	UTRAP(0x001)		! 001 = POR Reset -- ROM should get this
-	UTRAP(0x002)		! 002 = WDR -- ROM should get this
-	UTRAP(0x003)		! 003 = XIR -- ROM should get this
-	UTRAP(0x004)		! 004 = SIR -- ROM should get this
-	UTRAP(0x005)		! 005 = RED state exception
-	UTRAP(0x006); UTRAP(0x007)
-	VTRAP(T_INST_EXCEPT, textfault)	! 008 = instr. access except
-	VTRAP(T_TEXTFAULT, textfault)	! 009 = instr access MMU miss
-	VTRAP(T_INST_ERROR, textfault)	! 00a = instr. access err
-	UTRAP(0x00b); UTRAP(0x00c); UTRAP(0x00d); UTRAP(0x00e); UTRAP(0x00f)
-	TRAP(T_ILLINST)			! 010 = illegal instruction
-	TRAP(T_PRIVINST)		! 011 = privileged instruction
-	UTRAP(0x012)			! 012 = unimplemented LDD
-	UTRAP(0x013)			! 013 = unimplemented STD
-	UTRAP(0x014); UTRAP(0x015); UTRAP(0x016); UTRAP(0x017); UTRAP(0x018)
-	UTRAP(0x019); UTRAP(0x01a); UTRAP(0x01b); UTRAP(0x01c); UTRAP(0x01d)
-	UTRAP(0x01e); UTRAP(0x01f)
-	TRAP(T_FPDISABLED)		! 020 = fp instr, but EF bit off in psr
-	TRAP(T_FP_IEEE_754)		! 021 = ieee 754 exception
-	TRAP(T_FP_OTHER)		! 022 = other fp exception
-	TRAP(T_TAGOF)			! 023 = tag overflow
-	CLEANWIN0			! 024-027 = clean window trap
 	TRAP(T_DIV0)			! 028 = divide by zero
 	UTRAP(0x029)			! 029 = internal processor error
 	UTRAP(0x02a); UTRAP(0x02b); UTRAP(0x02c); UTRAP(0x02d); UTRAP(0x02e); UTRAP(0x02f)
@@ -813,7 +772,33 @@ ktextfault:
 	TRAP(T_FP_IEEE_754)		! 021 = ieee 754 exception
 	TRAP(T_FP_OTHER)		! 022 = other fp exception
 	TRAP(T_TAGOF)			! 023 = tag overflow
-	CLEANWIN1			! 024-027 = clean window trap
+	clr	%l0
+#ifdef DEBUG
+	set	0xbadbeef, %l0		! DEBUG
+#endif
+	mov %l0, %l1; mov %l0, %l2	! 024-027 = clean window trap
+	rdpr %cleanwin, %o7		!	This handler is in-lined and cannot fault
+	inc %o7; mov %l0, %l3		!       Nucleus (trap&IRQ) code does not need clean windows
+	wrpr %g0, %o7, %cleanwin	!	Clear out %l0-%l8 and %o0-%o8 and inc %cleanwin and done
+#ifdef NOT_DEBUG
+	!!
+	!! Check the sp redzone
+	!!
+	rdpr	%wstate, t1
+	cmp	t1, WSTATE_KERN
+	bne,pt	icc, 7f
+	 sethi	%hi(_C_LABEL(redzone)), t1
+	ldx	[t1 + %lo(_C_LABEL(redzone))], t2
+	cmp	%sp, t2			! if sp >= t2, not in red zone
+	blu	panic_red		! and can continue normally
+7:
+#endif
+	mov %l0, %l4; mov %l0, %l5; mov %l0, %l6; mov %l0, %l7
+	mov %l0, %o0; mov %l0, %o1; mov %l0, %o2; mov %l0, %o3
+
+	mov %l0, %o4; mov %l0, %o5; mov %l0, %o6; mov %l0, %o7
+	CLRTT
+	retry; nop; TA32
 	TRAP(T_DIV0)			! 028 = divide by zero
 	UTRAP(0x029)			! 029 = internal processor error
 	UTRAP(0x02a); UTRAP(0x02b); UTRAP(0x02c); UTRAP(0x02d); UTRAP(0x02e); UTRAP(0x02f)
@@ -1020,9 +1005,7 @@ _C_LABEL(trapbase_sun4v):
 	!
 	! trap level 0
 	!
-	sun4v_trap_entry 36					! 0x000-0x023
-	CLEANWIN0						! 0x24-0x27 = clean window
-	sun4v_trap_entry 9					! 0x028-0x030			
+	sun4v_trap_entry 49					! 0x000-0x030
 	VTRAP(T_DATA_MMU_MISS, sun4v_dtsb_miss)			! 0x031 = data MMU miss
 	sun4v_trap_entry 15					! 0x032-0x040
 	HARDINT4V(1)						! 0x041 = level 1 interrupt
@@ -1040,9 +1023,7 @@ _C_LABEL(trapbase_sun4v):
 	HARDINT4V(13)						! 0x04d = level 13 interrupt
 	HARDINT4V(14)						! 0x04e = level 14 interrupt
 	HARDINT4V(15)						! 0x04f = level 15 interrupt
-	sun4v_trap_entry 44					! 0x050-0x07b
-	VTRAP(T_CPU_MONDO, sun4v_cpu_mondo)			! 0x07c = cpu mondo
-	sun4v_trap_entry 3					! 0x07d-0x07f
+	sun4v_trap_entry 48					! 0x050-0x07f
 	SPILL64(uspill8_sun4vt0,ASI_AIUS)			! 0x080 spill_0_normal -- used to save user windows in user mode
 	SPILL32(uspill4_sun4vt0,ASI_AIUS)			! 0x084 spill_1_normal
 	SPILLBOTH(uspill8_sun4vt0,uspill4_sun4vt0,ASI_AIUS)	! 0x088 spill_2_normal
@@ -1079,9 +1060,7 @@ _C_LABEL(trapbase_sun4v):
 	!
 	! trap level 1
 	!
-	sun4v_trap_entry_fail 36				! 0x000-0x023
-	CLEANWIN1						! 0x24-0x27 = clean window
-	sun4v_trap_entry_fail 9					! 0x028-0x030			
+	sun4v_trap_entry_fail 49				! 0x000-0x030
 	VTRAP(T_DATA_MMU_MISS, sun4v_dtsb_miss)			! 0x031 = data MMU miss
 	sun4v_trap_entry_fail 78				! 0x032-0x07f
 	SPILL64(uspill8_sun4vt1,ASI_AIUS)			! 0x080 spill_0_normal -- save user windows
@@ -1629,7 +1608,7 @@ asmptechk:
 
 	.data
 2:
-	.asciz	"asmptechk: %x %x %x %x:%x\n"
+	.asciz	"asmptechk: %x %x %x %x:%x\r\n"
 	_ALIGN
 	.text
 #endif
@@ -3515,7 +3494,7 @@ setup_sparcintr:
 
 	STACKFRAME(-CC64FSZ)		! Get a clean register window
 	LOAD_ASCIZ(%o0,\
-	    "interrupt_vector: number %lx softint mask %lx pil %lu slot %p\n")
+	    "interrupt_vector: number %lx softint mask %lx pil %lu slot %p\r\n")
 	mov	%g2, %o1
 	rdpr	%pil, %o3
 	mov	%g1, %o4
@@ -3547,7 +3526,7 @@ ret_from_intr_vector:
 #if 1
 	set	PANICSTACK-STKB, %g1	! Use panic stack temporarily
 	save	%g1, -CC64FSZ, %sp	! Get a clean register window
-	LOAD_ASCIZ(%o0, "interrupt_vector: spurious vector %lx at pil %d\n")
+	LOAD_ASCIZ(%o0, "interrupt_vector: spurious vector %lx at pil %d\r\n")
 	mov	%g7, %o1
 	GLOBTOLOC
 	clr	%g4
@@ -3560,32 +3539,6 @@ ret_from_intr_vector:
 	ba,a	ret_from_intr_vector
 	 nop				! XXX spitfire bug?
 
-sun4v_cpu_mondo:
-	mov	0x3c0, %g1			 ! CPU Mondo Queue Head
-	ldxa	[%g1] ASI_QUEUE, %g2		 ! fetch index value for head
-	set	CPUINFO_VA, %g3
-	LDPTR	[%g3 + CI_PADDR], %g3
-	add	%g3, CI_CPUMQ, %g3	
-	ldxa	[%g3] ASI_PHYS_CACHED, %g3	 ! fetch head element
-	ldxa	[%g3 + %g2] ASI_PHYS_CACHED, %g4 ! fetch func 
-	add	%g2, 8, %g5
-	ldxa	[%g3 + %g5] ASI_PHYS_CACHED, %g5 ! fetch arg1
-	add	%g2, 16, %g6
-	ldxa	[%g3 + %g6] ASI_PHYS_CACHED, %g6 ! fetch arg2
-	add	%g2, 64, %g2			 ! point to next element in queue
-	and	%g2, 0x7ff, %g2			 ! modulo queue size 2048 (32*64)
-	stxa	%g2, [%g1] ASI_QUEUE		 ! update head index
-	membar	#Sync
-
-	mov	%g4, %g2
-	mov	%g5, %g3
-	mov	%g6, %g5
-	jmpl	%g2, %g0
-	 nop			! No store here!
-	retry
-	NOTREACHED
-
-	
 /*
  * Ultra1 and Ultra2 CPUs use soft interrupts for everything.  What we do
  * on a soft interrupt, is we should check which bits in SOFTINT(%asr22)
@@ -3694,37 +3647,8 @@ ENTRY_NOPROFILE(sparc_interrupt)
 1:
 #endif
 	INTR_SETUP(-CC64FSZ-TF_SIZE)
-	
 	! Switch to normal globals so we can save them
-#ifdef SUN4V
-	sethi	%hi(cputyp), %g5
-	ld	[%g5 + %lo(cputyp)], %g5
-	cmp	%g5, CPU_SUN4V
-	bne,pt	%icc, 1f
-	 nop
-	NORMAL_GLOBALS_SUN4V
-	! Save the normal globals
-	stx	%g1, [%sp + CC64FSZ + STKB + TF_G + ( 1*8)]
-	stx	%g2, [%sp + CC64FSZ + STKB + TF_G + ( 2*8)]
-	stx	%g3, [%sp + CC64FSZ + STKB + TF_G + ( 3*8)]
-	stx	%g4, [%sp + CC64FSZ + STKB + TF_G + ( 4*8)]
-	stx	%g5, [%sp + CC64FSZ + STKB + TF_G + ( 5*8)]
-	stx	%g6, [%sp + CC64FSZ + STKB + TF_G + ( 6*8)]
-	stx	%g7, [%sp + CC64FSZ + STKB + TF_G + ( 7*8)]
-
-	/*
-	 * In the EMBEDANY memory model %g4 points to the start of the
-	 * data segment.  In our case we need to clear it before calling
-	 * any C-code.
-	 */
-	clr	%g4
-
-	ba	2f
-	 nop
-1:		
-#endif
-	NORMAL_GLOBALS_SUN4U
-	! Save the normal globals
+	NORMAL_GLOBALS %g5
 	stx	%g1, [%sp + CC64FSZ + STKB + TF_G + ( 1*8)]
 	stx	%g2, [%sp + CC64FSZ + STKB + TF_G + ( 2*8)]
 	stx	%g3, [%sp + CC64FSZ + STKB + TF_G + ( 3*8)]
@@ -3741,8 +3665,6 @@ ENTRY_NOPROFILE(sparc_interrupt)
 	clr	%g4
 
 	flushw			! Do not remove this insn -- causes interrupt loss
-
-2:
 	rd	%y, %l6
 	INCR64(CPUINFO_VA+CI_NINTR)	! cnt.v_ints++ (clobbers %o0,%o1)
 	rdpr	%tt, %l5		! Find out our current IPL
@@ -3856,7 +3778,7 @@ sparc_intr_retry:
 	 nop
 
 	STACKFRAME(-CC64FSZ)		! Get a clean register window
-	LOAD_ASCIZ(%o0, "sparc_interrupt: func %p arg %p\n")
+	LOAD_ASCIZ(%o0, "sparc_interrupt: func %p arg %p\r\n")
 	mov	%i0, %o2		! arg
 	GLOBTOLOC
 	call	prom_printf
@@ -3916,7 +3838,7 @@ intrcmplt:
 	 nop
 
 	STACKFRAME(-CC64FSZ)		! Get a clean register window
-	LOAD_ASCIZ(%o0, "sparc_interrupt:  done\n")
+	LOAD_ASCIZ(%o0, "sparc_interrupt:  done\r\n")
 	GLOBTOLOC
 	call	prom_printf
 	 nop
@@ -3998,17 +3920,10 @@ return_from_trap:
 	ENABLE_INTERRUPTS %g5
 	wrpr	%g0, %g0, %pil				! Lower IPL
 1:
-	!! Make sure we have no IRQs
+	!! Make sure we have normal globals & no IRQs
 	DISABLE_INTERRUPTS %g5
+	NORMAL_GLOBALS %g5
 
-#ifdef SUN4V
-	sethi	%hi(cputyp), %g5
-	ld	[%g5 + %lo(cputyp)], %g5
-	cmp	%g5, CPU_SUN4V
-	bne,pt	%icc, 1f
-	 nop
-	!! Make sure we have normal globals
-	NORMAL_GLOBALS_SUN4V
 	/* Restore normal globals */
 	ldx	[%sp + CC64FSZ + STKB + TF_G + (1*8)], %g1
 	ldx	[%sp + CC64FSZ + STKB + TF_G + (2*8)], %g2
@@ -4017,31 +3932,12 @@ return_from_trap:
 	ldx	[%sp + CC64FSZ + STKB + TF_G + (5*8)], %g5
 	ldx	[%sp + CC64FSZ + STKB + TF_G + (6*8)], %g6
 	ldx	[%sp + CC64FSZ + STKB + TF_G + (7*8)], %g7
-	/* Switch to alternate globals */
-	ALTERNATE_GLOBALS_SUN4V
-	ba	2f
-	 nop
-1:		
-#endif
-	!! Make sure we have normal globals
-	NORMAL_GLOBALS_SUN4U
-	/* Restore normal globals */
-	ldx	[%sp + CC64FSZ + STKB + TF_G + (1*8)], %g1
-	ldx	[%sp + CC64FSZ + STKB + TF_G + (2*8)], %g2
-	ldx	[%sp + CC64FSZ + STKB + TF_G + (3*8)], %g3
-	ldx	[%sp + CC64FSZ + STKB + TF_G + (4*8)], %g4
-	ldx	[%sp + CC64FSZ + STKB + TF_G + (5*8)], %g5
-	ldx	[%sp + CC64FSZ + STKB + TF_G + (6*8)], %g6
-	ldx	[%sp + CC64FSZ + STKB + TF_G + (7*8)], %g7
-	/* Switch to alternate globals */
+	/* Switch to alternate globals and load outs */
 #ifdef TRAPS_USE_IG
 	wrpr	%g0, PSTATE_KERN|PSTATE_IG, %pstate	! DEBUG
 #else
-	ALTERNATE_GLOBALS_SUN4U
+	ALTERNATE_GLOBALS
 #endif
-2:		
-	
-	/* Load outs */
 	ldx	[%sp + CC64FSZ + STKB + TF_O + (0*8)], %i0
 	ldx	[%sp + CC64FSZ + STKB + TF_O + (1*8)], %i1
 	ldx	[%sp + CC64FSZ + STKB + TF_O + (2*8)], %i2
@@ -4479,7 +4375,7 @@ dostart:
 
 ENTRY_NOPROFILE(cpu_initialize)	/* for cosmetic reasons - nicer backtrace */
 
-	/* Cache the cputyp in %l6 for later use below */
+	/* Cache the cputyp in %l6 for later user below */
 	sethi	%hi(cputyp), %l6
 	ld	[%l6 + %lo(cputyp)], %l6
 
@@ -4507,6 +4403,7 @@ ENTRY_NOPROFILE(cpu_initialize)	/* for cosmetic reasons - nicer backtrace */
 	 */
 	mov	%l1, %l7			! save cpu_info pointer
 	ldx	[%l1 + CI_PADDR], %l1		! Load the interrupt stack's PA
+
 #ifdef SUN4V
 	cmp	%l6, CPU_SUN4V
 	bne,pt	%icc, 3f
@@ -4530,7 +4427,7 @@ ENTRY_NOPROFILE(cpu_initialize)	/* for cosmetic reasons - nicer backtrace */
 	andn	%l1, %l4, %l1			! Mask the phys page number
 
 	or	%l2, %l1, %l1			! Now take care of the high bits
-	or	%l1, SUN4U_TTE_DATABITS, %l2	! And low bits:	L=1|CP=1|CV=?|E=0|P=1|W=1|G=0
+	or	%l1, SUN4U_TTE_DATABITS, %l2		! And low bits:	L=1|CP=1|CV=?|E=0|P=1|W=1|G=0
 
 	!!
 	!!  Now, map in the interrupt stack as context==0
@@ -4543,7 +4440,7 @@ ENTRY_NOPROFILE(cpu_initialize)	/* for cosmetic reasons - nicer backtrace */
 4:
 
 	!! Setup kernel stack (we rely on curlwp on this cpu
-	!! being lwp0 here and its uarea is mapped special
+	!! being lwp0 here and it's uarea is mapped special
 	!! and already accessible here)
 	flushw
 	LDPTR	[%l7 + CI_CPCB], %l0		! load PCB/uarea pointer
@@ -4568,7 +4465,7 @@ ENTRY_NOPROFILE(cpu_initialize)	/* for cosmetic reasons - nicer backtrace */
 	 nop
 	.data
 1:
-	.asciz	"Setting trap base...\n"
+	.asciz	"Setting trap base...\r\n"
 	_ALIGN
 	.text
 0:	
@@ -4587,7 +4484,6 @@ ENTRY_NOPROFILE(cpu_initialize)	/* for cosmetic reasons - nicer backtrace */
 	 nop
 
 	/* sun4v */
-	LDPTR	[%l7 + CI_TSB_DESC], %o0
 	call	_C_LABEL(pmap_setup_tsb_sun4v)
 	 nop
 	ba	1f
@@ -4666,7 +4562,7 @@ ENTRY_NOPROFILE(cpu_initialize)	/* for cosmetic reasons - nicer backtrace */
 
 	.data
 1:
-	.asciz	"Calling startup routine %p with stack at %p...\n"
+	.asciz	"Calling startup routine %p with stack at %p...\r\n"
 	_ALIGN
 	.text
 0:	
@@ -4685,7 +4581,7 @@ ENTRY_NOPROFILE(cpu_initialize)	/* for cosmetic reasons - nicer backtrace */
 	 nop
 	.data
 1:
-	.asciz	"main() returned\n"
+	.asciz	"main() returned\r\n"
 	_ALIGN
 	.text
 
@@ -4716,62 +4612,10 @@ ENTRY(cpu_mp_startup)
 	wrpr	%g0, PSTATE_KERN, %pstate
 	flushw
 
-	/* Cache the cputyp in %l6 for later use below */
-	sethi	%hi(cputyp), %l6
-	ld	[%l6 + %lo(cputyp)], %l6
-	
 	/*
 	 * Get pointer to our cpu_info struct
 	 */
 	ldx	[%g2 + CBA_CPUINFO], %l1	! Load the interrupt stack's PA
-	
-#ifdef SUN4V
-	cmp	%l6, CPU_SUN4V
-	bne,pt	%icc, 3f
-	 nop
-	
-	/* sun4v */
-	
-	sethi	%hi(0x80000000), %l2		! V=1|NFO=0|SW=0
-	sllx	%l2, 32, %l2			! Shift it into place
-	mov	-1, %l3				! Create a nice mask
-	sllx	%l3, 56, %l4			! Mask off high 8 bits
-	or	%l4, 0xfff, %l4			! We can just load this in 12 (of 13) bits
-	andn	%l1, %l4, %l1			! Mask the phys page number into RA
-	or	%l2, %l1, %l1			! Now take care of the 8 high bits V|NFO|SW
-	or	%l1, 0x0741, %l2		! And low 13 bits IE=0|E=0|CP=1|CV=1|P=1|
-						!		  X=0|W=1|SW=00|SZ=0001
-
-	/*
-	 *  Now, map in the interrupt stack & cpu_info as context==0
-	 */
-	
-	set	INTSTACK, %o0			! vaddr
-	clr	%o1				! reserved
-	mov	%l2, %o2			! tte
-	mov	MAP_DTLB, %o3			! flags
-	mov	FT_MMU_MAP_PERM_ADDR, %o5	! hv fast trap function
-	ta	ST_FAST_TRAP
-	cmp	%o0, 0
-	be,pt	%icc, 5f
-	 nop
-	sir					! crash if mapping fails
-5:
-
-	/*
-	 * Set 0 as primary context XXX
-	 */
-	
-	mov	CTX_PRIMARY, %o0
-	SET_MMU_CONTEXTID_SUN4V %g0, %o0
-
-	ba	4f		
-	 nop
-3:
-#endif
-	
-	/* sun4u */
-	
 	sethi	%hi(0xa0000000), %l2		! V=1|SZ=01|NFO=0|IE=0
 	sllx	%l2, 32, %l2			! Shift it into place
 	mov	-1, %l3				! Create a nice mask
@@ -4779,12 +4623,11 @@ ENTRY(cpu_mp_startup)
 	or	%l4, 0xfff, %l4			! We can just load this in 12 (of 13) bits
 	andn	%l1, %l4, %l1			! Mask the phys page number
 	or	%l2, %l1, %l1			! Now take care of the high bits
-	or	%l1, SUN4U_TTE_DATABITS, %l2	! And low bits:	L=1|CP=1|CV=?|E=0|P=1|W=1|G=0
+	or	%l1, SUN4U_TTE_DATABITS, %l2		! And low bits:	L=1|CP=1|CV=?|E=0|P=1|W=1|G=0
 
 	/*
 	 *  Now, map in the interrupt stack & cpu_info as context==0
 	 */
-	
 	set	TLB_TAG_ACCESS, %l5
 	set	INTSTACK, %l0
 	stxa	%l0, [%l5] ASI_DMMU		! Make DMMU point to it
@@ -4793,11 +4636,8 @@ ENTRY(cpu_mp_startup)
 	/*
 	 * Set 0 as primary context XXX
 	 */
-	
 	mov	CTX_PRIMARY, %o0
-	SET_MMU_CONTEXTID_SUN4U %g0, %o0
-
-4:	
+	stxa	%g0, [%o0] ASI_DMMU
 	membar	#Sync
 
 	/*
@@ -4811,40 +4651,9 @@ ENTRY(cpu_mp_startup)
 	set	1, %fp
 	clr	%i7
 
-#ifdef SUN4V
-	cmp	%l6, CPU_SUN4V
-	bne,pt	%icc, 2f
-	 nop
-	
-	/* sun4v */
-	
 	/*
 	 * install our TSB pointers
 	 */
-
-	set	CPUINFO_VA, %o0
-	LDPTR	[%o0 + CI_TSB_DESC], %o0
-	call	_C_LABEL(pmap_setup_tsb_sun4v)
-	 nop
-
-	/* set trap table */
-
-	set	_C_LABEL(trapbase_sun4v), %l1
-	GET_MMFSA %o1
-	call	_C_LABEL(prom_set_trap_table_sun4v)
-	 mov	%l1, %o0
-
-	! Now we should be running 100% from our handlers	
-	ba	3f		
-	 nop
-2:
-#endif
-	/* sun4u */
-	
-	/*
-	 * install our TSB pointers
-	 */
-
 	sethi	%hi(CPUINFO_VA+CI_TSB_DMMU), %l0
 	sethi	%hi(CPUINFO_VA+CI_TSB_IMMU), %l1
 	sethi	%hi(_C_LABEL(tsbsize)), %l2
@@ -4870,11 +4679,9 @@ ENTRY(cpu_mp_startup)
 1:
 
 	/* set trap table */
-	
 	set	_C_LABEL(trapbase), %l1
 	call	_C_LABEL(prom_set_trap_table_sun4u)
 	 mov	%l1, %o0
-3:	
 	wrpr	%l1, 0, %tba			! Make sure the PROM didn't
 						! foul up.
 	/*
@@ -5062,7 +4869,7 @@ ENTRY(sp_tlb_flush_pte_us)
 	restore
 	.data
 1:
-	.asciz	"sp_tlb_flush_pte_us:	demap ctx=%x va=%08x res=%x\n"
+	.asciz	"sp_tlb_flush_pte_us:	demap ctx=%x va=%08x res=%x\r\n"
 	_ALIGN
 	.text
 2:
@@ -5116,7 +4923,7 @@ ENTRY(sp_tlb_flush_pte_usiii)
 	restore
 	.data
 1:
-	.asciz	"sp_tlb_flush_pte_usiii:	demap ctx=%x va=%08x res=%x\n"
+	.asciz	"sp_tlb_flush_pte_usiii:	demap ctx=%x va=%08x res=%x\r\n"
 	_ALIGN
 	.text
 2:
@@ -5828,7 +5635,7 @@ ENTRY(softint_fastintr)
 	wrpr	%g0, PIL_HIGH, %pil
 	LDPTR	[%l0 + CI_EINTSTACK], %l6	! l6 = ci_eintstack
 	add	%sp, -CC64FSZ, %l2		! ci_eintstack = sp - CC64FSZ
-	STPTR	%l2, [%l0 + CI_EINTSTACK]	! save intstack for nested intr
+	STPTR	%l2, [%l0 + CI_EINTSTACK]	! save intstack for nexted intr
 
 	mov	%i0, %o0			! o0/i0 = softint lwp
 	mov	%l7, %o1			! o1/i1 = ipl

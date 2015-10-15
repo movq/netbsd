@@ -1,4 +1,4 @@
-/*	$NetBSD: shm.c,v 1.3 2015/07/08 07:14:38 martin Exp $	*/
+/*	$NetBSD: shm.c,v 1.1 2013/12/19 19:11:50 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: shm.c,v 1.3 2015/07/08 07:14:38 martin Exp $");
+__RCSID("$NetBSD: shm.c,v 1.1 2013/12/19 19:11:50 rmind Exp $");
 
 #include <sys/mman.h>
 #include <sys/mount.h>
@@ -57,36 +57,31 @@ __RCSID("$NetBSD: shm.c,v 1.3 2015/07/08 07:14:38 martin Exp $");
 
 #define	MOUNT_SHMFS		MOUNT_TMPFS
 
-static bool			shm_ok = false;
+static const char *		_shmfs_path = NULL;
 
 static bool
 _shm_check_fs(void)
 {
-	int fd;
+	const char *shmfs = SHMFS_DIR_PATH;
 	struct statvfs sv;
 	struct stat st;
 
-	fd = open(SHMFS_DIR_PATH, O_DIRECTORY|O_RDONLY);
-	if (fd == -1)
+	if (statvfs1(shmfs, &sv, ST_NOWAIT) == -1) {
 		return false;
+	}
+	if (strncmp(sv.f_fstypename, MOUNT_SHMFS, sizeof(sv.f_fstypename))) {
+		return false;
+	}
 
-	if (fstatvfs1(fd, &sv, ST_NOWAIT) == -1)
-		goto out;
+	if (lstat(shmfs, &st) == -1) {
+		return false;
+	}
+	if ((st.st_mode & SHMFS_DIR_MODE) != SHMFS_DIR_MODE) {
+		return false;
+	}
 
-	if (strncmp(sv.f_fstypename, MOUNT_SHMFS, sizeof(sv.f_fstypename)))
-		goto out;
-
-	if (fstat(fd, &st) == -1)
-		goto out;
-
-	if ((st.st_mode & SHMFS_DIR_MODE) != SHMFS_DIR_MODE)
-		goto out;
-
-	shm_ok = true;
-
-out:
-	close(fd);
-	return shm_ok;
+	_shmfs_path = shmfs;
+	return true;
 }
 
 static bool
@@ -94,7 +89,7 @@ _shm_get_path(char *buf, size_t len, const char *name)
 {
 	int ret;
 
-	if (__predict_false(!shm_ok) && !_shm_check_fs()) {
+	if (__predict_false(!_shmfs_path) && !_shm_check_fs()) {
 		errno = ENOTSUP;
 		return false;
 	}
@@ -108,10 +103,10 @@ _shm_get_path(char *buf, size_t len, const char *name)
 		return false;
 	}
 
-	ret = snprintf(buf, len, SHMFS_DIR_PATH "/" SHMFS_OBJ_PREFIX "%s",
-	    name);
+	ret = snprintf(buf, len, "%s/%s%s",
+	    _shmfs_path, SHMFS_OBJ_PREFIX, name);
 
-	if ((size_t)ret >= len) {
+	if ((size_t)ret >= PATH_MAX) {
 		errno = ENAMETOOLONG;
 		return false;
 	}
@@ -121,7 +116,7 @@ _shm_get_path(char *buf, size_t len, const char *name)
 int
 shm_open(const char *name, int oflag, mode_t mode)
 {
-	char path[PATH_MAX];
+	char path[PATH_MAX + 1];
 
 	if (!_shm_get_path(path, sizeof(path), name)) {
 		return -1;
@@ -132,7 +127,7 @@ shm_open(const char *name, int oflag, mode_t mode)
 int
 shm_unlink(const char *name)
 {
-	char path[PATH_MAX];
+	char path[PATH_MAX + 1];
 
 	if (!_shm_get_path(path, sizeof(path), name)) {
 		return -1;

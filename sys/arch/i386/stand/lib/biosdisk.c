@@ -1,4 +1,4 @@
-/*	$NetBSD: biosdisk.c,v 1.44 2015/01/18 20:18:07 jakllsch Exp $	*/
+/*	$NetBSD: biosdisk.c,v 1.43.4.1 2015/01/20 09:45:20 martin Exp $	*/
 
 /*
  * Copyright (c) 1996, 1998

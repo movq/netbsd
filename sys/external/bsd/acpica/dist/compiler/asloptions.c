@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -118,7 +118,8 @@ AslCommandLine (
     /* Next parameter must be the input filename */
 
     if (!argv[AcpiGbl_Optind] &&
-        !Gbl_DisasmFlag)
+        !Gbl_DisasmFlag &&
+        !Gbl_GetAllTables)
     {
         printf ("Missing input filename\n");
         BadCommandLine = TRUE;
@@ -168,7 +169,7 @@ AslDoOptions (
 
     /* Get the command line options */
 
-    while ((j = AcpiGetopt (argc, argv, ASL_SUPPORTED_OPTIONS)) != ACPI_OPT_END) switch (j)
+    while ((j = AcpiGetopt (argc, argv, ASL_SUPPORTED_OPTIONS)) != EOF) switch (j)
     {
     case '@':   /* Begin a response file */
 
@@ -184,7 +185,7 @@ AslDoOptions (
         }
         break;
 
-    case 'b':   /* Debug options */
+    case 'b':   /* Debug output options */
 
         switch (AcpiGbl_Optarg[0])
         {
@@ -193,38 +194,10 @@ AslDoOptions (
             AslCompilerdebug = 1; /* same as yydebug */
             DtParserdebug = 1;
             PrParserdebug = 1;
-            Gbl_DebugFlag = TRUE;
-            Gbl_KeepPreprocessorTempFile = TRUE;
-            break;
-
-        case 'p':   /* Prune ASL parse tree */
-
-            /* Get the required argument */
-
-            if (AcpiGetoptArgument (argc, argv))
-            {
-                return (-1);
-            }
-
-            Gbl_PruneParseTree = TRUE;
-            Gbl_PruneDepth = (UINT8) strtoul (AcpiGbl_Optarg, NULL, 0);
-            break;
-
-        case 's':
-
-            Gbl_DebugFlag = TRUE;
             break;
 
         case 't':
 
-            /* Get the required argument */
-
-            if (AcpiGetoptArgument (argc, argv))
-            {
-                return (-1);
-            }
-
-            Gbl_PruneType = (UINT8) strtoul (AcpiGbl_Optarg, NULL, 0);
             break;
 
         default:
@@ -233,6 +206,9 @@ AslDoOptions (
             return (-1);
         }
 
+        /* Produce debug output file */
+
+        Gbl_DebugFlag = TRUE;
         break;
 
     case 'c':
@@ -275,22 +251,6 @@ AslDoOptions (
 
             break;
 
-        case 'f':
-
-            AcpiGbl_ForceAmlDisassembly = TRUE;
-            break;
-
-        case 'l':   /* Use legacy ASL code (not ASL+) for disassembly */
-
-            Gbl_DoCompile = FALSE;
-            AcpiGbl_CstyleDisassembly = FALSE;
-            break;
-
-        case 'v':
-
-            AcpiGbl_DbOpt_Verbose = TRUE;
-            break;
-
         default:
 
             printf ("Unknown option: -d%s\n", AcpiGbl_Optarg);
@@ -310,7 +270,6 @@ AslDoOptions (
         /* Get entire list of external files */
 
         AcpiGbl_Optind--;
-        argv[AcpiGbl_Optind] = AcpiGbl_Optarg;
 
         while (argv[AcpiGbl_Optind] &&
               (argv[AcpiGbl_Optind][0] != '-'))
@@ -359,8 +318,9 @@ AslDoOptions (
 
     case 'g':   /* Get all ACPI tables */
 
-        printf ("-g option is deprecated, use acpidump utility instead\n");
-        exit (1);
+        Gbl_GetAllTables = TRUE;
+        Gbl_DoCompile = FALSE;
+        break;
 
     case 'h':
 
@@ -452,13 +412,6 @@ AslDoOptions (
             /* Produce preprocessor output file */
 
             Gbl_PreprocessorOutputFlag = TRUE;
-            break;
-
-        case 'm':
-
-            /* Produce hardware map summary file */
-
-            Gbl_MapfileFlag = TRUE;
             break;
 
         case 'n':
@@ -571,6 +524,7 @@ AslDoOptions (
 
         Gbl_OutputFilenamePrefix = AcpiGbl_Optarg;
         UtConvertBackslashes (Gbl_OutputFilenamePrefix);
+
         Gbl_UseDefaultAmlFilename = FALSE;
         break;
 

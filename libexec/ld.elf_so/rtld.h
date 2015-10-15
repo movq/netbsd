@@ -1,4 +1,4 @@
-/*	$NetBSD: rtld.h,v 1.124 2014/09/19 17:43:33 matt Exp $	 */
+/*	$NetBSD: rtld.h,v 1.118 2014/08/10 23:35:26 matt Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -179,7 +179,7 @@ typedef struct Struct_Obj_Entry {
 	const Elf_Sym  *symtab;		/* Symbol table */
 	const char     *strtab;		/* String table */
 	unsigned long   strsize;	/* Size in bytes of string table */
-#if defined(__mips__) || defined(__riscv__)
+#ifdef __mips__
 	Elf_Word        local_gotno;	/* Number of local GOT entries */
 	Elf_Word        symtabno;	/* Number of dynamic symbols */
 	Elf_Word        gotsym;		/* First dynamic symbol in GOT */
@@ -193,8 +193,8 @@ typedef struct Struct_Obj_Entry {
 	Search_Path    *rpaths;		/* Search path specified in object */
 	Needed_Entry   *needed;		/* Shared objects needed by this (%) */
 
-	Elf_Addr	init;		/* Initialization function to call */
-	Elf_Addr	fini;		/* Termination function to call */
+	fptr_t		init;		/* Initialization function to call */
+	fptr_t		fini;		/* Termination function to call */
 
 	/*
 	 * BACKWARDS COMPAT Entry points for dlopen() and friends.
@@ -288,9 +288,9 @@ typedef struct Struct_Obj_Entry {
 	int		vertabnum;	/* Number of entries in vertab */
 
 	/* init_array/fini_array */
-	Elf_Addr	*init_array;	/* start of init array */
+	fptr_t		*init_array;	/* start of init array */
 	size_t		init_arraysz;	/* # of entries in it */
-	Elf_Addr	*fini_array;	/* start of fini array */
+	fptr_t		*fini_array;	/* start of fini array */
 	size_t		fini_arraysz;	/* # of entries in it */
 #ifdef __ARM_EABI__
 	void		*exidx_start;
@@ -326,7 +326,7 @@ extern Elf_Sym _rtld_sym_zero;
 
 /* Flags to be passed into _rtld_symlook_ family of functions. */
 #define SYMLOOK_IN_PLT	0x01	/* Lookup for PLT symbol */
-#define SYMLOOK_DLSYM	0x02	/* Return newest versioned symbol.
+#define SYMLOOK_DLSYM	0x02	/* Return newes versioned symbol.
 				   Used by dlsym. */
 
 /* Flags for _rtld_load_object() and friends. */
@@ -404,7 +404,6 @@ int _rtld_relocate_nonplt_objects(Obj_Entry *);
 int _rtld_relocate_plt_lazy(const Obj_Entry *);
 int _rtld_relocate_plt_objects(const Obj_Entry *);
 void _rtld_setup_pltgot(const Obj_Entry *);
-Elf_Addr _rtld_resolve_ifunc(const Obj_Entry *, const Elf_Sym *);
 
 /* search.c */
 Obj_Entry *_rtld_load_library(const char *, const Obj_Entry *, int);
@@ -475,28 +474,12 @@ Obj_Entry *_rtld_map_object(const char *, int, const struct stat *);
 void _rtld_obj_free(Obj_Entry *);
 Obj_Entry *_rtld_obj_new(void);
 
-#ifdef RTLD_LOADER
 /* function descriptors */
 #ifdef __HAVE_FUNCTION_DESCRIPTORS
 Elf_Addr _rtld_function_descriptor_alloc(const Obj_Entry *,
     const Elf_Sym *, Elf_Addr);
 const void *_rtld_function_descriptor_function(const void *);
-
-void _rtld_call_function_void(const Obj_Entry *, Elf_Addr);
-Elf_Addr _rtld_call_function_addr(const Obj_Entry *, Elf_Addr);
-#else
-static inline void
-_rtld_call_function_void(const Obj_Entry *obj, Elf_Addr addr)
-{
-	((void (*)(void))addr)();
-}
-static inline Elf_Addr
-_rtld_call_function_addr(const Obj_Entry *obj, Elf_Addr addr)
-{
-	return ((Elf_Addr(*)(void))addr)();
-}
 #endif /* __HAVE_FUNCTION_DESCRIPTORS */
-#endif /* RTLD_LOADER */
 
 #endif /* _RTLD_SOURCE */
 

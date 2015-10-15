@@ -1,4 +1,4 @@
-/*	$NetBSD: drvctl.c,v 1.1 2014/12/29 16:27:06 christos Exp $	*/
+/*	$NetBSD: drvctl.c,v 1.1.2.2 2015/06/02 19:49:38 snj Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: drvctl.c,v 1.1 2014/12/29 16:27:06 christos Exp $");
+__RCSID("$NetBSD: drvctl.c,v 1.1.2.2 2015/06/02 19:49:38 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/disk.h>

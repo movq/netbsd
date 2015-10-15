@@ -1,4 +1,4 @@
-/*	$NetBSD: wsdisplay_vcons.c,v 1.34 2015/07/19 13:22:42 mlelstv Exp $ */
+/*	$NetBSD: wsdisplay_vcons.c,v 1.32.4.1 2014/11/11 12:50:48 martin Exp $ */
 
 /*-
  * Copyright (c) 2005, 2006 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsdisplay_vcons.c,v 1.34 2015/07/19 13:22:42 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsdisplay_vcons.c,v 1.32.4.1 2014/11/11 12:50:48 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -736,10 +736,9 @@ vcons_copycols(void *cookie, int row, int srccol, int dstcol, int ncols)
 
 	vcons_lock(scr);
 	if (SCREEN_IS_VISIBLE(scr) && SCREEN_CAN_DRAW(scr)) {
-#if defined(VCONS_DRAW_INTR)
-		vcons_update_screen(scr);
-#else
 		scr->scr_vd->copycols(cookie, row, srccol, dstcol, ncols);
+#if defined(VCONS_DRAW_INTR)
+		vcons_invalidate_cache(scr->scr_vd);
 #endif
 	}
 	vcons_unlock(scr);
@@ -908,10 +907,9 @@ vcons_copyrows(void *cookie, int srcrow, int dstrow, int nrows)
 
 	vcons_lock(scr);
 	if (SCREEN_IS_VISIBLE(scr) && SCREEN_CAN_DRAW(scr)) {
-#if defined(VCONS_DRAW_INTR)
-		vcons_update_screen(scr);
-#else
 		scr->scr_vd->copyrows(cookie, srcrow, dstrow, nrows);
+#if defined(VCONS_DRAW_INTR)
+		vcons_invalidate_cache(scr->scr_vd);
 #endif
 	}
 	vcons_unlock(scr);

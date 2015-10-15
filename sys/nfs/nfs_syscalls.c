@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_syscalls.c,v 1.156 2015/06/22 10:35:00 mrg Exp $	*/
+/*	$NetBSD: nfs_syscalls.c,v 1.154 2013/11/27 22:10:47 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_syscalls.c,v 1.156 2015/06/22 10:35:00 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_syscalls.c,v 1.154 2013/11/27 22:10:47 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -99,61 +99,11 @@ struct nfssvc_sock *nfs_udp6sock;
 static struct nfssvc_sock *nfsrv_sockalloc(void);
 static void nfsrv_sockfree(struct nfssvc_sock *);
 static void nfsd_rt(int, struct nfsrv_descript *, int);
-static int nfssvc_nfsd(struct nfssvc_copy_ops *, struct nfsd_srvargs *, void *,
-		struct lwp *);
-
-static int nfssvc_addsock_in(struct nfsd_args *, const void *);
-static int nfssvc_setexports_in(struct mountd_exports_list *, const void *);
-static int nfssvc_nsd_in(struct nfsd_srvargs *, const void *);
-static int nfssvc_nsd_out(void *, const struct nfsd_srvargs *);
-static int nfssvc_exp_in(struct export_args *, const void *, size_t);
-
-static int
-nfssvc_addsock_in(struct nfsd_args *nfsdarg, const void *argp)
-{
-
-	return copyin(argp, nfsdarg, sizeof *nfsdarg);
-}
-
-static int
-nfssvc_setexports_in(struct mountd_exports_list *mel, const void *argp)
-{
-
-	return copyin(argp, mel, sizeof *mel);
-}
-
-static int
-nfssvc_nsd_in(struct nfsd_srvargs *nsd, const void *argp)
-{
-
-	return copyin(argp, nsd, sizeof *nsd);
-}
-
-static int
-nfssvc_nsd_out(void *argp, const struct nfsd_srvargs *nsd)
-{
-
-	return copyout(nsd, argp, sizeof *nsd);
-}
-
-static int
-nfssvc_exp_in(struct export_args *exp, const void *argp, size_t nexports)
-{
-
-	return copyin(argp, exp, sizeof(*exp) * nexports);
-}
 
 /*
  * NFS server system calls
  */
 
-static struct nfssvc_copy_ops native_ops = {
-	.addsock_in = nfssvc_addsock_in,
-	.setexports_in = nfssvc_setexports_in,
-	.nsd_in = nfssvc_nsd_in,
-	.nsd_out = nfssvc_nsd_out,
-	.exp_in = nfssvc_exp_in,
-};
 
 /*
  * Nfs server pseudo system call for the nfsd's
@@ -162,7 +112,6 @@ static struct nfssvc_copy_ops native_ops = {
  * - remains in the kernel as an nfsd
  * - remains in the kernel as an nfsiod
  */
-
 int
 sys_nfssvc(struct lwp *l, const struct sys_nfssvc_args *uap, register_t *retval)
 {
@@ -170,15 +119,6 @@ sys_nfssvc(struct lwp *l, const struct sys_nfssvc_args *uap, register_t *retval)
 		syscallarg(int) flag;
 		syscallarg(void *) argp;
 	} */
-	int	flag = SCARG(uap, flag);
-	void	*argp = SCARG(uap, argp);
-
-	return do_nfssvc(&native_ops, l, flag, argp, retval);
-}
-
-int
-do_nfssvc(struct nfssvc_copy_ops *ops, struct lwp *l, int flag, void *argp, register_t *retval)
-{
 	int error;
 	file_t *fp;
 	struct mbuf *nam;
@@ -199,13 +139,14 @@ do_nfssvc(struct nfssvc_copy_ops *ops, struct lwp *l, int flag, void *argp, regi
 	}
 	mutex_exit(&nfsd_lock);
 
-	if (flag & NFSSVC_BIOD) {
+	if (SCARG(uap, flag) & NFSSVC_BIOD) {
 		/* Dummy implementation of nfsios for 1.4 and earlier. */
 		error = kpause("nfsbiod", true, 0, NULL);
-	} else if (flag & NFSSVC_MNTD) {
+	} else if (SCARG(uap, flag) & NFSSVC_MNTD) {
 		error = ENOSYS;
-	} else if (flag & NFSSVC_ADDSOCK) {
-		error = ops->addsock_in(&nfsdarg, argp);
+	} else if (SCARG(uap, flag) & NFSSVC_ADDSOCK) {
+		error = copyin(SCARG(uap, argp), (void *)&nfsdarg,
+		    sizeof(nfsdarg));
 		if (error)
 			return (error);
 		/* getsock() will use the descriptor for us */
@@ -230,17 +171,18 @@ do_nfssvc(struct nfssvc_copy_ops *ops, struct lwp *l, int flag, void *argp, regi
 		}
 		error = nfssvc_addsock(fp, nam);
 		fd_putfile(nfsdarg.sock);
-	} else if (flag & NFSSVC_SETEXPORTSLIST) {
+	} else if (SCARG(uap, flag) & NFSSVC_SETEXPORTSLIST) {
 		struct export_args *args;
 		struct mountd_exports_list mel;
 
-		error = ops->setexports_in(&mel, argp);
+		error = copyin(SCARG(uap, argp), &mel, sizeof(mel));
 		if (error != 0)
 			return error;
 
 		args = (struct export_args *)malloc(mel.mel_nexports *
 		    sizeof(struct export_args), M_TEMP, M_WAITOK);
-		error = ops->exp_in(args, mel.mel_exports, mel.mel_nexports);
+		error = copyin(mel.mel_exports, args, mel.mel_nexports *
+		    sizeof(struct export_args));
 		if (error != 0) {
 			free(args, M_TEMP);
 			return error;
@@ -251,10 +193,10 @@ do_nfssvc(struct nfssvc_copy_ops *ops, struct lwp *l, int flag, void *argp, regi
 
 		free(args, M_TEMP);
 	} else {
-		error = ops->nsd_in(nsd, argp);
+		error = copyin(SCARG(uap, argp), (void *)nsd, sizeof (*nsd));
 		if (error)
 			return (error);
-		if ((flag & NFSSVC_AUTHIN) &&
+		if ((SCARG(uap, flag) & NFSSVC_AUTHIN) &&
 		    ((nfsd = nsd->nsd_nfsd)) != NULL &&
 		    (nfsd->nfsd_slp->ns_flags & SLP_VALID)) {
 			slp = nfsd->nfsd_slp;
@@ -338,10 +280,10 @@ do_nfssvc(struct nfssvc_copy_ops *ops, struct lwp *l, int flag, void *argp, regi
 			    }
 			}
 		}
-		if ((flag & NFSSVC_AUTHINFAIL) &&
+		if ((SCARG(uap, flag) & NFSSVC_AUTHINFAIL) &&
 		    (nfsd = nsd->nsd_nfsd))
 			nfsd->nfsd_flag |= NFSD_AUTHFAIL;
-		error = nfssvc_nfsd(ops, nsd, argp, l);
+		error = nfssvc_nfsd(nsd, SCARG(uap, argp), l);
 	}
 	if (error == EINTR || error == ERESTART)
 		error = 0;
@@ -394,7 +336,7 @@ nfssvc_addsock(file_t *fp, struct mbuf *mynam)
 	int error;
 	int val;
 
-	so = fp->f_socket;
+	so = (struct socket *)fp->f_data;
 	tslp = (struct nfssvc_sock *)0;
 	/*
 	 * Add it to the list, as required.
@@ -473,9 +415,8 @@ nfssvc_addsock(file_t *fp, struct mbuf *mynam)
  * Called by nfssvc() for nfsds. Just loops around servicing rpc requests
  * until it is killed by a signal.
  */
-static int
-nfssvc_nfsd(struct nfssvc_copy_ops *ops, struct nfsd_srvargs *nsd,
-	    void *argp, struct lwp *l)
+int
+nfssvc_nfsd(struct nfsd_srvargs *nsd, void *argp, struct lwp *l)
 {
 	struct timeval tv;
 	struct mbuf *m;
@@ -623,7 +564,7 @@ nfssvc_nfsd(struct nfssvc_copy_ops *ops, struct nfsd_srvargs *nsd,
 				    nsd->nsd_authstr, nfsd->nfsd_authlen) &&
 				    !copyout(nfsd->nfsd_verfstr,
 				    nsd->nsd_verfstr, nfsd->nfsd_verflen) &&
-				    !ops->nsd_out(argp, nsd)) {
+				    !copyout(nsd, argp, sizeof (*nsd))) {
 					return (ENEEDAUTH);
 				}
 				cacherep = RC_DROPIT;
@@ -859,7 +800,7 @@ nfsrv_slpderef(struct nfssvc_sock *slp)
 		if (fp != NULL) {
 			slp->ns_fp = NULL;
 			KASSERT(fp != NULL);
-			KASSERT(fp->f_socket == slp->ns_so);
+			KASSERT(fp->f_data == slp->ns_so);
 			KASSERT(fp->f_count > 0);
 			closef(fp);
 			slp->ns_so = NULL;

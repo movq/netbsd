@@ -1,4 +1,4 @@
-/* $NetBSD: t_siginfo.c,v 1.29 2015/02/17 09:47:08 isaki Exp $ */
+/* $NetBSD: t_siginfo.c,v 1.23 2014/02/09 21:26:07 jmmv Exp $ */
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -27,6 +27,7 @@
  */
 
 #include <atf-c.h>
+#include <atf-c/config.h>
 
 #include <sys/inttypes.h>
 #include <sys/resource.h>
@@ -46,7 +47,6 @@
 
 #ifdef HAVE_FENV
 #include <fenv.h>
-#include <ieeefp.h>	/* only need for ARM Cortex/Neon hack */
 #elif defined(_FLOAT_IEEE754)
 #include <ieeefp.h>
 #endif
@@ -311,14 +311,6 @@ ATF_TC_BODY(sigfpe_flt, tc)
 		atf_tc_skip("Test does not run correctly under QEMU");
 #if defined(__powerpc__)
 	atf_tc_skip("Test not valid on powerpc");
-#elif defined(__arm__) && !__SOFTFP__
-	/*
-	 * Some NEON fpus do not implement IEEE exception handling,
-	 * skip these tests if running on them and compiled for
-	 * hard float.
-	 */
-	if (0 == fpsetmask(fpsetmask(FP_X_INV)))
-		atf_tc_skip("FPU does not implement exception handling");
 #endif
 	if (sigsetjmp(sigfpe_flt_env, 0) == 0) {
 		sa.sa_flags = SA_SIGINFO;
@@ -457,18 +449,14 @@ ATF_TC_BODY(sigbus_adraln, tc)
 {
 	struct sigaction sa;
 
-#if defined(__alpha__) || defined(__arm__)
+#if defined(__alpha__)
 	int rv, val;
 	size_t len = sizeof(val);
 	rv = sysctlbyname("machdep.unaligned_sigbus", &val, &len, NULL, 0);
 	ATF_REQUIRE(rv == 0);
 	if (val == 0)
-		atf_tc_skip("No SIGBUS signal for unaligned accesses");
+		atf_tc_skip("SIGBUS signal not enabled for unaligned accesses");
 #endif
-
-	/* m68k (except sun2) never issue SIGBUS (PR lib/49653) */
-	if (strcmp(MACHINE_ARCH, "m68k") == 0)
-		atf_tc_skip("No SIGBUS signal for unaligned accesses");
 
 	sa.sa_flags = SA_SIGINFO;
 	sa.sa_sigaction = sigbus_action;

@@ -1,4 +1,4 @@
-/*	$NetBSD: md.c,v 1.4 2015/05/10 10:14:02 martin Exp $ */
+/*	$NetBSD: md.c,v 1.2.4.1 2015/05/14 07:58:49 snj Exp $ */
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -266,8 +266,7 @@ md_check_mbr(mbr_info_t *mbri)
 		for (ext = mbri; ext; ext = ext->extended) {
 			part = ext->mbr.mbr_parts;
 			for (i=0, hasboot=0; i < MBR_PART_COUNT; part++, i++) {
-				if (part->mbrp_type != MBR_PTYPE_FAT16L &&
-				    part->mbrp_type != MBR_PTYPE_FAT32L)
+				if (part->mbrp_type != MBR_PTYPE_FAT32L)
 					continue;
 				hasboot = 1;
 				break;
@@ -300,8 +299,7 @@ md_mbr_use_wholedisk(mbr_info_t *mbri)
 	/* raspi code */
 	if (boardtype == BOARD_TYPE_RPI) {
 		part = &mbrs->mbr_parts[0];
-		if (part[0].mbrp_type != MBR_PTYPE_FAT16L &&
-		    part[0].mbrp_type != MBR_PTYPE_FAT32L) {
+		if (part[0].mbrp_type != MBR_PTYPE_FAT32L) {
 			/* It's hopelessly corrupt, punt for now */
 			msg_display(MSG_nomsdospart);
 			process_menu(MENU_ok, NULL);

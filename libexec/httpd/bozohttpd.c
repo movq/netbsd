@@ -1,4 +1,4 @@
-/*	$NetBSD: bozohttpd.c,v 1.66 2015/07/16 12:19:23 shm Exp $	*/
+/*	$NetBSD: bozohttpd.c,v 1.56.2.4 2015/05/09 08:50:42 snj Exp $	*/
 
 /*	$eterna: bozohttpd.c,v 1.178 2011/11/18 09:21:15 mrg Exp $	*/
 
@@ -895,12 +895,8 @@ bozo_escape_rfc3986(bozohttpd_t *httpd, const char *url)
 		case ';':
 		case '=':
 		case '%':
-		case '\n':
-		case '\r':
-		case ' ':
-		case '"':
 		encode_it:
-			snprintf(d, 4, "%%%02X", *s++);
+			snprintf(d, 4, "%%%2X", *s++);
 			d += 3;
 			len += 3;
 			break;
@@ -1097,7 +1093,8 @@ check_virtual(bozo_httpreq_t *request)
 				}
 				debug((httpd, DEBUG_OBESE, "looking at dir``%s''",
 			 	   d->d_name));
-				if (strcmp(d->d_name, request->hr_host) == 0) {
+				if (d->d_namlen == len && strcmp(d->d_name,
+				    request->hr_host) == 0) {
 					/* found it, punch it */
 					debug((httpd, DEBUG_OBESE, "found it punch it"));
 					request->hr_virthostname =
@@ -1335,10 +1332,6 @@ transform_request(bozo_httpreq_t *request, int *isindex)
 		(void)bozo_http_error(httpd, 404, request, "unknown URL");
 		goto bad_done;
 	}
-
-	/* omit additional slashes at the beginning */
-	while (file[1] == '/')
-		file++;
 
 	switch(check_bzredirect(request)) {
 	case -1:

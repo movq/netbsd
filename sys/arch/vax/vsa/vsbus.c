@@ -1,4 +1,4 @@
-/*	$NetBSD: vsbus.c,v 1.61 2015/05/31 07:04:18 abs Exp $ */
+/*	$NetBSD: vsbus.c,v 1.60.14.1 2015/06/02 10:14:22 sborrill Exp $ */
 /*
  * Copyright (c) 1996, 1999 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vsbus.c,v 1.61 2015/05/31 07:04:18 abs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vsbus.c,v 1.60.14.1 2015/06/02 10:14:22 sborrill Exp $");
 
 #include "opt_cputype.h"
 

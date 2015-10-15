@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.26 2015/08/21 10:44:43 roy Exp $
+# $NetBSD: Makefile,v 1.22 2014/06/14 21:00:22 roy Exp $
 #
 
 PROG=		dhcpcd
@@ -7,20 +7,15 @@ SRCS+=		if.c if-options.c script.c
 SRCS+=		dhcp-common.c dhcpcd-embedded.c
 SRCS+=		if-bsd.c
 
-WARNS?=		6
+WARNS?=		5
 USE_FORT?=	yes	# network client (local server)
-
-CPPFLAGS+=	-DHAVE_CONFIG_H
 
 .include <bsd.own.mk>
 
 SRCS+=		auth.c hmac_md5.c
 
-USE_INET?=	yes
-.if (${USE_INET} != "no")
 CPPFLAGS+=	-DINET
 SRCS+=		arp.c dhcp.c ipv4.c ipv4ll.c
-.endif
 
 .if (${USE_INET6} != "no")
 CPPFLAGS+=	-DINET6
@@ -38,7 +33,7 @@ SCRIPTSDIR_dhcpcd-run-hooks=	/libexec
 CONFIGFILES=			dhcpcd.conf
 FILESDIR_dhcpcd.conf=		/etc
 
-HOOKS=			01-test 02-dump 10-wpa_supplicant 15-timezone
+HOOKS=			01-test 02-dump 10-mtu 10-wpa_supplicant 15-timezone
 HOOKS+=			20-resolv.conf 29-lookup-hostname 30-hostname
 HOOKS+=			50-ntp.conf
 

@@ -1,4 +1,4 @@
-/*$NetBSD: ixgbe_netbsd.h,v 1.3 2015/04/24 07:00:51 msaitoh Exp $*/
+/*$NetBSD: ixgbe_netbsd.h,v 1.2.2.1 2015/05/06 23:29:21 riz Exp $*/
 /*
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
  * All rights reserved.

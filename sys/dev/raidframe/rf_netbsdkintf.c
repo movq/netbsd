@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_netbsdkintf.c,v 1.325 2015/08/20 14:40:18 christos Exp $	*/
+/*	$NetBSD: rf_netbsdkintf.c,v 1.312.2.4 2014/12/22 02:19:32 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2008-2011 The NetBSD Foundation, Inc.
@@ -101,7 +101,7 @@
  ***********************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_netbsdkintf.c,v 1.325 2015/08/20 14:40:18 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_netbsdkintf.c,v 1.312.2.4 2014/12/22 02:19:32 msaitoh Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
@@ -151,8 +151,6 @@ __KERNEL_RCSID(0, "$NetBSD: rf_netbsdkintf.c,v 1.325 2015/08/20 14:40:18 christo
 #include "rf_compat50.h"
 #endif
 
-#include "ioconf.h"
-
 #ifdef DEBUG
 int     rf_kdebug_level = 0;
 #define db1_printf(a) if (rf_kdebug_level > 0) printf a
@@ -181,6 +179,7 @@ static void InitBP(struct buf *, struct vnode *, unsigned,
 struct raid_softc;
 static void raidinit(struct raid_softc *);
 
+void raidattach(int);
 static int raid_match(device_t, cfdata_t, void *);
 static void raid_attach(device_t, device_t, void *);
 static int raid_detach(device_t, int);
@@ -196,14 +195,14 @@ static int raidread_component_label(unsigned,
     dev_t, struct vnode *, RF_ComponentLabel_t *);
 
 
-static dev_type_open(raidopen);
-static dev_type_close(raidclose);
-static dev_type_read(raidread);
-static dev_type_write(raidwrite);
-static dev_type_ioctl(raidioctl);
-static dev_type_strategy(raidstrategy);
-static dev_type_dump(raiddump);
-static dev_type_size(raidsize);
+dev_type_open(raidopen);
+dev_type_close(raidclose);
+dev_type_read(raidread);
+dev_type_write(raidwrite);
+dev_type_ioctl(raidioctl);
+dev_type_strategy(raidstrategy);
+dev_type_dump(raiddump);
+dev_type_size(raidsize);
 
 const struct bdevsw raid_bdevsw = {
 	.d_open = raidopen,
@@ -231,10 +230,7 @@ const struct cdevsw raid_cdevsw = {
 	.d_flag = D_DISK
 };
 
-static struct dkdriver rf_dkdriver = {
-	.d_strategy = raidstrategy,
-	.d_minphys = minphys
-};
+static struct dkdriver rf_dkdriver = { raidstrategy, minphys };
 
 struct raid_softc {
 	device_t sc_dev;
@@ -598,7 +594,8 @@ rf_buildroothack(RF_ConfigSet_t *config_sets)
 	}
 }
 
-static int
+
+int
 raidsize(dev_t dev)
 {
 	struct raid_softc *rs;
@@ -631,7 +628,7 @@ raidsize(dev_t dev)
 
 }
 
-static int
+int
 raiddump(dev_t dev, daddr_t blkno, void *va, size_t size)
 {
 	int     unit = raidunit(dev);
@@ -767,9 +764,8 @@ out:
 		
 	return error;
 }
-
 /* ARGSUSED */
-static int
+int
 raidopen(dev_t dev, int flags, int fmt,
     struct lwp *l)
 {
@@ -853,9 +849,8 @@ bad:
 
 
 }
-
 /* ARGSUSED */
-static int
+int
 raidclose(dev_t dev, int flags, int fmt, struct lwp *l)
 {
 	int     unit = raidunit(dev);
@@ -904,7 +899,7 @@ raidclose(dev_t dev, int flags, int fmt, struct lwp *l)
 
 }
 
-static void
+void
 raidstrategy(struct buf *bp)
 {
 	unsigned int unit = raidunit(bp->b_dev);
@@ -974,9 +969,8 @@ done:
 	bp->b_resid = bp->b_bcount;
 	biodone(bp);
 }
-
 /* ARGSUSED */
-static int
+int
 raidread(dev_t dev, struct uio *uio, int flags)
 {
 	int     unit = raidunit(dev);
@@ -991,9 +985,8 @@ raidread(dev_t dev, struct uio *uio, int flags)
 	return (physio(raidstrategy, NULL, dev, B_READ, minphys, uio));
 
 }
-
 /* ARGSUSED */
-static int
+int
 raidwrite(dev_t dev, struct uio *uio, int flags)
 {
 	int     unit = raidunit(dev);
@@ -1041,7 +1034,7 @@ raid_detach_unlocked(struct raid_softc *rs)
 	return 0;
 }
 
-static int
+int
 raidioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 {
 	int     unit = raidunit(dev);
@@ -1069,6 +1062,7 @@ raidioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 #ifdef __HAVE_OLD_DISKLABEL
 	struct disklabel newlabel;
 #endif
+	struct dkwedge_info *dkw;
 
 	if ((rs = raidget(unit)) == NULL)
 		return ENXIO;
@@ -1833,11 +1827,29 @@ raidioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 	 * Add support for "regular" device ioctls here.
 	 */
 	
-	error = disk_ioctl(&rs->sc_dkdev, dev, cmd, data, flag, l); 
+	error = disk_ioctl(&rs->sc_dkdev, cmd, data, flag, l); 
 	if (error != EPASSTHROUGH)
 		return (error);
 
 	switch (cmd) {
+	case DIOCGDINFO:
+		*(struct disklabel *) data = *(rs->sc_dkdev.dk_label);
+		break;
+#ifdef __HAVE_OLD_DISKLABEL
+	case ODIOCGDINFO:
+		newlabel = *(rs->sc_dkdev.dk_label);
+		if (newlabel.d_npartitions > OLDMAXPARTITIONS)
+			return ENOTTY;
+		memcpy(data, &newlabel, sizeof (struct olddisklabel));
+		break;
+#endif
+
+	case DIOCGPART:
+		((struct partinfo *) data)->disklab = rs->sc_dkdev.dk_label;
+		((struct partinfo *) data)->part =
+		    &rs->sc_dkdev.dk_label->d_partitions[DISKPART(dev)];
+		break;
+
 	case DIOCWDINFO:
 	case DIOCSDINFO:
 #ifdef __HAVE_OLD_DISKLABEL
@@ -1901,6 +1913,20 @@ raidioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		break;
 #endif
 
+	case DIOCAWEDGE:
+	case DIOCDWEDGE:
+	    	dkw = (void *)data;
+
+		/* If the ioctl happens here, the parent is us. */
+		(void)strcpy(dkw->dkw_parent, rs->sc_xname);
+		return cmd == DIOCAWEDGE ? dkwedge_add(dkw) : dkwedge_del(dkw);
+
+	case DIOCLWEDGES:
+		return dkwedge_list(&rs->sc_dkdev,
+		    (struct dkwedge_list *)data, l);
+	case DIOCMWEDGES:
+		dkwedge_discover(&rs->sc_dkdev);
+		return 0;
 	case DIOCCACHESYNC:
 		return rf_sync_component_caches(raidPtr);
 
@@ -1993,15 +2019,16 @@ raidinit(struct raid_softc *rs)
 
 	disk_init(&rs->sc_dkdev, rs->sc_xname, &rf_dkdriver);
 	disk_attach(&rs->sc_dkdev);
+	disk_blocksize(&rs->sc_dkdev, raidPtr->bytesPerSector);
 
 	/* XXX There may be a weird interaction here between this, and
 	 * protectedSectors, as used in RAIDframe.  */
 
 	rs->sc_size = raidPtr->totalSectors;
 
-	rf_set_geometry(rs, raidPtr);
-
 	dkwedge_discover(&rs->sc_dkdev);
+
+	rf_set_geometry(rs, raidPtr);
 
 }
 #if (RF_INCLUDE_PARITY_DECLUSTERING_DS > 0)
@@ -2286,9 +2313,8 @@ KernelWakeupFunc(struct buf *bp)
 		      rf_ds_used_spare)) && 
 		     (queue->raidPtr->numFailures <
 		      queue->raidPtr->Layout.map->faultsTolerated)) {
-			printf("raid%d: IO Error (%d). Marking %s as failed.\n",
+			printf("raid%d: IO Error.  Marking %s as failed.\n",
 			       queue->raidPtr->raidid,
-			       bp->b_error,
 			       queue->raidPtr->Disks[queue->col].devname);
 			queue->raidPtr->Disks[queue->col].status =
 			    rf_ds_failed;
@@ -2361,7 +2387,7 @@ raidgetdefaultlabel(RF_Raid_t *raidPtr, struct raid_softc *rs,
 	lp->d_secpercyl = lp->d_ntracks * lp->d_nsectors;
 
 	strncpy(lp->d_typename, "raid", sizeof(lp->d_typename));
-	lp->d_type = DKTYPE_RAID;
+	lp->d_type = DTYPE_RAID;
 	strncpy(lp->d_packname, "fictitious", sizeof(lp->d_packname));
 	lp->d_rpm = 3600;
 	lp->d_interleave = 1;

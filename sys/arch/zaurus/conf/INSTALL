@@ -1,4 +1,4 @@
-# $NetBSD: INSTALL,v 1.26 2015/07/19 09:26:50 martin Exp $
+# $NetBSD: INSTALL,v 1.22 2014/08/04 20:59:19 martin Exp $
 #
 # INSTALL config file (GENERIC with memory disk root)
 #
@@ -43,7 +43,6 @@ no options		COMPAT_30
 no options		COMPAT_40
 no options		COMPAT_50
 no options		COMPAT_60
-no options		COMPAT_70
 no options		COMPAT_43
 
 no options 		COMPAT_OSSAUDIO
@@ -65,7 +64,7 @@ options 		RASOPS_SMALL
 no options 		DIAGNOSTIC
 no options 		DDB
 no options 		DDB_HISTORY_SIZE
-no makeoptions	COPY_SYMTAB
+no options 		SYMTAB_SPACE
 
 no zrc0 at pxaip?
 

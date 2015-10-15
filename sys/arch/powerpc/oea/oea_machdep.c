@@ -1,4 +1,4 @@
-/*	$NetBSD: oea_machdep.c,v 1.72 2015/07/06 05:20:50 matt Exp $	*/
+/*	$NetBSD: oea_machdep.c,v 1.71.4.1 2015/07/17 03:34:01 snj Exp $	*/
 
 /*
  * Copyright (C) 2002 Matt Thomas
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: oea_machdep.c,v 1.72 2015/07/06 05:20:50 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: oea_machdep.c,v 1.71.4.1 2015/07/17 03:34:01 snj Exp $");
 
 #include "opt_ppcarch.h"
 #include "opt_compat_netbsd.h"

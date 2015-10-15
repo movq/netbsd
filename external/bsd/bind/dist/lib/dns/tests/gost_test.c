@@ -1,4 +1,4 @@
-/*	$NetBSD: gost_test.c,v 1.1.1.6 2015/07/08 15:38:04 christos Exp $	*/
+/*	$NetBSD: gost_test.c,v 1.1.1.2.2.2 2015/07/17 04:31:34 snj Exp $	*/
 
 /*
  * Copyright (C) 2014, 2015  Internet Systems Consortium, Inc. ("ISC")

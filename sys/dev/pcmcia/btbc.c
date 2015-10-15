@@ -1,4 +1,4 @@
-/*	$NetBSD: btbc.c,v 1.17 2014/11/16 16:20:00 ozaki-r Exp $	*/
+/*	$NetBSD: btbc.c,v 1.16.2.1 2014/12/01 11:38:43 martin Exp $	*/
 /*
  * Copyright (c) 2007 KIYOHARA Takashi
  * All rights reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: btbc.c,v 1.17 2014/11/16 16:20:00 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: btbc.c,v 1.16.2.1 2014/12/01 11:38:43 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/callout.h>

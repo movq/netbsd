@@ -1,6 +1,6 @@
 /* PPC GNU/Linux native support.
 
-   Copyright (C) 1988-2015 Free Software Foundation, Inc.
+   Copyright (C) 1988-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,12 +18,14 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include <string.h>
 #include "observer.h"
 #include "frame.h"
 #include "inferior.h"
 #include "gdbthread.h"
 #include "gdbcore.h"
 #include "regcache.h"
+#include "gdb_assert.h"
 #include "target.h"
 #include "linux-nat.h"
 
@@ -1442,8 +1444,7 @@ have_ptrace_hwdebug_interface (void)
 }
 
 static int
-ppc_linux_can_use_hw_breakpoint (struct target_ops *self,
-				 int type, int cnt, int ot)
+ppc_linux_can_use_hw_breakpoint (int type, int cnt, int ot)
 {
   int total_hw_wp, total_hw_bp;
 
@@ -1471,11 +1472,6 @@ ppc_linux_can_use_hw_breakpoint (struct target_ops *self,
     }
   else if (type == bp_hardware_breakpoint)
     {
-      if (total_hw_bp == 0)
-	{
-	  /* No hardware breakpoint support. */
-	  return 0;
-	}
       if (cnt > total_hw_bp)
 	return -1;
     }
@@ -1500,8 +1496,7 @@ ppc_linux_can_use_hw_breakpoint (struct target_ops *self,
 }
 
 static int
-ppc_linux_region_ok_for_hw_watchpoint (struct target_ops *self,
-				       CORE_ADDR addr, int len)
+ppc_linux_region_ok_for_hw_watchpoint (CORE_ADDR addr, int len)
 {
   /* Handle sub-8-byte quantities.  */
   if (len <= 0)
@@ -1677,8 +1672,7 @@ ppc_linux_ranged_break_num_registers (struct target_ops *target)
    success, 1 if hardware breakpoints are not supported or -1 for failure.  */
 
 static int
-ppc_linux_insert_hw_breakpoint (struct target_ops *self,
-				struct gdbarch *gdbarch,
+ppc_linux_insert_hw_breakpoint (struct gdbarch *gdbarch,
 				  struct bp_target_info *bp_tgt)
 {
   struct lwp_info *lp;
@@ -1690,7 +1684,7 @@ ppc_linux_insert_hw_breakpoint (struct target_ops *self,
   p.version = PPC_DEBUG_CURRENT_VERSION;
   p.trigger_type = PPC_BREAKPOINT_TRIGGER_EXECUTE;
   p.condition_mode = PPC_BREAKPOINT_CONDITION_NONE;
-  p.addr = (uint64_t) (bp_tgt->placed_address = bp_tgt->reqstd_address);
+  p.addr = (uint64_t) bp_tgt->placed_address;
   p.condition_value = 0;
 
   if (bp_tgt->length)
@@ -1714,8 +1708,7 @@ ppc_linux_insert_hw_breakpoint (struct target_ops *self,
 }
 
 static int
-ppc_linux_remove_hw_breakpoint (struct target_ops *self,
-				struct gdbarch *gdbarch,
+ppc_linux_remove_hw_breakpoint (struct gdbarch *gdbarch,
 				  struct bp_target_info *bp_tgt)
 {
   struct lwp_info *lp;
@@ -2018,8 +2011,7 @@ check_condition (CORE_ADDR watch_addr, struct expression *cond,
    the condition expression, thus only triggering the watchpoint when it is
    true.  */
 static int
-ppc_linux_can_accel_watchpoint_condition (struct target_ops *self,
-					  CORE_ADDR addr, int len, int rw,
+ppc_linux_can_accel_watchpoint_condition (CORE_ADDR addr, int len, int rw,
 					  struct expression *cond)
 {
   CORE_ADDR data_value;
@@ -2081,8 +2073,7 @@ create_watchpoint_request (struct ppc_hw_breakpoint *p, CORE_ADDR addr,
 }
 
 static int
-ppc_linux_insert_watchpoint (struct target_ops *self,
-			     CORE_ADDR addr, int len, int rw,
+ppc_linux_insert_watchpoint (CORE_ADDR addr, int len, int rw,
 			     struct expression *cond)
 {
   struct lwp_info *lp;
@@ -2150,8 +2141,7 @@ ppc_linux_insert_watchpoint (struct target_ops *self,
 }
 
 static int
-ppc_linux_remove_watchpoint (struct target_ops *self,
-			     CORE_ADDR addr, int len, int rw,
+ppc_linux_remove_watchpoint (CORE_ADDR addr, int len, int rw,
 			     struct expression *cond)
 {
   struct lwp_info *lp;
@@ -2293,10 +2283,10 @@ ppc_linux_stopped_data_address (struct target_ops *target, CORE_ADDR *addr_p)
 }
 
 static int
-ppc_linux_stopped_by_watchpoint (struct target_ops *ops)
+ppc_linux_stopped_by_watchpoint (void)
 {
   CORE_ADDR addr;
-  return ppc_linux_stopped_data_address (ops, &addr);
+  return ppc_linux_stopped_data_address (&current_target, &addr);
 }
 
 static int

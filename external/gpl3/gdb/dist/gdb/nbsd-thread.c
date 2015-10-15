@@ -81,7 +81,7 @@ struct target_ops nbsd_thread_ops;
 struct td_proc_callbacks_t nbsd_thread_callbacks;
 
 static ptid_t find_active_thread (void);
-static void nbsd_update_thread_list (struct target_ops *);
+static void nbsd_find_new_threads (struct target_ops *);
 
 
 static td_proc_t *main_ta;
@@ -139,7 +139,7 @@ nbsd_thread_activate (void)
   cached_thread = minus_one_ptid;
   thread_change_ptid(inferior_ptid,
       ptid_build (ptid_get_pid (inferior_ptid), 1, 0));
-  nbsd_update_thread_list (NULL);
+  nbsd_find_new_threads (NULL);
   inferior_ptid = find_active_thread ();
 }
 
@@ -155,7 +155,7 @@ nbsd_thread_deactivate (void)
 }
 
 static void
-nbsd_thread_attach (struct target_ops *ops, const char *args, int from_tty)
+nbsd_thread_attach (struct target_ops *ops, char *args, int from_tty)
 {
   struct target_ops *beneath = find_target_beneath (ops);
   nbsd_thread_core = 0;
@@ -170,11 +170,11 @@ nbsd_thread_attach (struct target_ops *ops, const char *args, int from_tty)
 }
 
 static void
-nbsd_thread_post_attach (struct target_ops *ops, int pid)
+nbsd_thread_post_attach (int pid)
 {
 #if 0
   struct target_ops *beneath = find_target_beneath (ops);
-  beneath->to_post_attach (ops, pid);
+  beneath->to_post_attach (pid);
 #endif
 
   if (nbsd_thread_present && !nbsd_thread_active)
@@ -361,17 +361,17 @@ nbsd_thread_store_registers (struct target_ops *ops, struct regcache *cache,
 
 
 
-static enum target_xfer_status
+static LONGEST
 nbsd_thread_xfer_partial (struct target_ops *ops, enum target_object object,
 			  const char *annex, gdb_byte *readbuf,
 			  const gdb_byte *writebuf,  ULONGEST offset,
-			  ULONGEST len, ULONGEST *xfered_len)
+			  LONGEST len)
 {
   struct target_ops *beneath = find_target_beneath (ops);
-  enum target_xfer_status val;
+  LONGEST val;
 
   val = beneath->to_xfer_partial (beneath, object, annex, readbuf, writebuf,
-				  offset, len, xfered_len);
+				  offset, len);
   return val;
 }
 
@@ -397,14 +397,12 @@ nbsd_thread_files_info (struct target_ops *ignore)
   beneath->to_files_info (beneath);
 }
 
-#if 0
 static void
 nbsd_core_files_info (struct target_ops *ignore)
 {
   struct target_ops *beneath = find_target_beneath (ignore);
   beneath->to_files_info (beneath);
 }
-#endif
 
 /* Convert a ptid to printable form. */
 
@@ -532,7 +530,7 @@ nbsd_core_thread_alive (struct target_ops *ops, ptid_t ptid)
 
 
 static void
-nbsd_update_thread_list (struct target_ops *ops)
+nbsd_find_new_threads (struct target_ops *ops)
 {
   int retval;
   ptid_t ptid;
@@ -614,14 +612,14 @@ nbsd_thread_proc_write (void *arg, caddr_t addr, void *buf, size_t size)
 static int
 nbsd_thread_proc_lookup (void *arg, const char *sym, caddr_t *addr)
 {
-  struct bound_minimal_symbol bms;
+  struct minimal_symbol *ms;
 
-  bms = lookup_minimal_symbol (sym, NULL, NULL);
+  ms = lookup_minimal_symbol (sym, NULL, NULL);
 
-  if (bms.minsym == NULL)
+  if (!ms)
     return TD_ERR_NOSYM;
 
-  *addr = (caddr_t)(uintptr_t)BMSYMBOL_VALUE_ADDRESS (bms);
+  *addr = (caddr_t)(uintptr_t)SYMBOL_VALUE_ADDRESS (ms);
 
   return 0;
 
@@ -761,16 +759,16 @@ init_nbsd_thread_ops (void)
   nbsd_thread_ops.to_files_info = nbsd_thread_files_info;
   nbsd_thread_ops.to_insert_breakpoint = memory_insert_breakpoint;
   nbsd_thread_ops.to_remove_breakpoint = memory_remove_breakpoint;
-  nbsd_thread_ops.to_terminal_init = child_terminal_init;
-  nbsd_thread_ops.to_terminal_inferior = child_terminal_inferior;
-  nbsd_thread_ops.to_terminal_ours_for_output = child_terminal_ours_for_output;
-  nbsd_thread_ops.to_terminal_ours = child_terminal_ours;
+  nbsd_thread_ops.to_terminal_init = terminal_init_inferior;
+  nbsd_thread_ops.to_terminal_inferior = terminal_inferior;
+  nbsd_thread_ops.to_terminal_ours_for_output = terminal_ours_for_output;
+  nbsd_thread_ops.to_terminal_ours = terminal_ours;
   nbsd_thread_ops.to_terminal_info = child_terminal_info;
   nbsd_thread_ops.to_create_inferior = nbsd_thread_create_inferior;
   nbsd_thread_ops.to_mourn_inferior = nbsd_thread_mourn_inferior;
   nbsd_thread_ops.to_thread_alive = nbsd_thread_alive;
   nbsd_thread_ops.to_pid_to_str = nbsd_pid_to_str;
-  nbsd_thread_ops.to_update_thread_list = nbsd_update_thread_list;
+  nbsd_thread_ops.to_find_new_threads = nbsd_find_new_threads;
   nbsd_thread_ops.to_stratum = thread_stratum;
   nbsd_thread_ops.to_has_thread_control = tc_none;
   nbsd_thread_ops.to_magic = OPS_MAGIC;

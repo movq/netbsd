@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,8 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+#define __TBXFROOT_C__
+
 #include "acpi.h"
 #include "accommon.h"
 #include "actables.h"
@@ -48,43 +50,6 @@
 
 #define _COMPONENT          ACPI_TABLES
         ACPI_MODULE_NAME    ("tbxfroot")
-
-
-/*******************************************************************************
- *
- * FUNCTION:    AcpiTbGetRsdpLength
- *
- * PARAMETERS:  Rsdp                - Pointer to RSDP
- *
- * RETURN:      Table length
- *
- * DESCRIPTION: Get the length of the RSDP
- *
- ******************************************************************************/
-
-UINT32
-AcpiTbGetRsdpLength (
-    ACPI_TABLE_RSDP         *Rsdp)
-{
-
-    if (!ACPI_VALIDATE_RSDP_SIG (Rsdp->Signature))
-    {
-        /* BAD Signature */
-
-        return (0);
-    }
-
-    /* "Length" field is available if table version >= 2 */
-
-    if (Rsdp->Revision >= 2)
-    {
-        return (Rsdp->Length);
-    }
-    else
-    {
-        return (ACPI_RSDP_CHECKSUM_LENGTH);
-    }
-}
 
 
 /*******************************************************************************
@@ -158,7 +123,7 @@ AcpiTbValidateRsdp (
 
 ACPI_STATUS
 AcpiFindRootPointer (
-    ACPI_PHYSICAL_ADDRESS   *TableAddress)
+    ACPI_SIZE               *TableAddress)
 {
     UINT8                   *TablePtr;
     UINT8                   *MemRover;
@@ -218,7 +183,7 @@ AcpiFindRootPointer (
 
             PhysicalAddress += (UINT32) ACPI_PTR_DIFF (MemRover, TablePtr);
 
-            *TableAddress = (ACPI_PHYSICAL_ADDRESS) PhysicalAddress;
+            *TableAddress = PhysicalAddress;
             return_ACPI_STATUS (AE_OK);
         }
     }
@@ -249,7 +214,7 @@ AcpiFindRootPointer (
         PhysicalAddress = (UINT32)
             (ACPI_HI_RSDP_WINDOW_BASE + ACPI_PTR_DIFF (MemRover, TablePtr));
 
-        *TableAddress = (ACPI_PHYSICAL_ADDRESS) PhysicalAddress;
+        *TableAddress = PhysicalAddress;
         return_ACPI_STATUS (AE_OK);
     }
 

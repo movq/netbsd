@@ -1,4 +1,4 @@
-/*	$NetBSD: bozohttpd.h,v 1.36 2015/08/05 06:50:44 mrg Exp $	*/
+/*	$NetBSD: bozohttpd.h,v 1.33.2.2 2015/05/09 08:50:42 snj Exp $	*/
 
 /*	$eterna: bozohttpd.h,v 1.39 2011/11/18 09:21:15 mrg Exp $	*/
 
@@ -40,11 +40,6 @@
 #include <lua.h>
 #endif
 #include <stdio.h>
-
-/* QNX provides a lot of NetBSD things in nbutil.h */
-#ifdef USE_NBUTIL
-#include <nbutil.h>
-#endif
 
 /* lots of "const" but gets free()'ed etc at times, sigh */
 

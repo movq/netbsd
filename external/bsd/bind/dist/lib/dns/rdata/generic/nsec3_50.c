@@ -1,4 +1,4 @@
-/*	$NetBSD: nsec3_50.c,v 1.8 2015/07/08 17:28:59 christos Exp $	*/
+/*	$NetBSD: nsec3_50.c,v 1.6.2.2 2015/07/17 04:31:34 snj Exp $	*/
 
 /*
  * Copyright (C) 2008, 2009, 2011, 2012, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-# $NetBSD: features.mk,v 1.2 2015/06/07 15:05:34 matt Exp $
+# $NetBSD: features.mk,v 1.1.6.1 2015/06/10 17:16:23 snj Exp $
 
 .ifnmake obj
 TESTFILE=${NETBSDSRCDIR}/common/lib/libc/arch/arm/features.c

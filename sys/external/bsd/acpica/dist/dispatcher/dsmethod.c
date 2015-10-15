@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,14 +41,14 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+#define __DSMETHOD_C__
+
 #include "acpi.h"
 #include "accommon.h"
 #include "acdispat.h"
 #include "acinterp.h"
 #include "acnamesp.h"
-#include "acparser.h"
-#include "amlcode.h"
-#include "acdebug.h"
+#include "acdisasm.h"
 
 
 #define _COMPONENT          ACPI_DISPATCHER
@@ -57,150 +57,8 @@
 /* Local prototypes */
 
 static ACPI_STATUS
-AcpiDsDetectNamedOpcodes (
-    ACPI_WALK_STATE         *WalkState,
-    ACPI_PARSE_OBJECT       **OutOp);
-
-static ACPI_STATUS
 AcpiDsCreateMethodMutex (
     ACPI_OPERAND_OBJECT     *MethodDesc);
-
-
-/*******************************************************************************
- *
- * FUNCTION:    AcpiDsAutoSerializeMethod
- *
- * PARAMETERS:  Node                        - Namespace Node of the method
- *              ObjDesc                     - Method object attached to node
- *
- * RETURN:      Status
- *
- * DESCRIPTION: Parse a control method AML to scan for control methods that
- *              need serialization due to the creation of named objects.
- *
- * NOTE: It is a bit of overkill to mark all such methods serialized, since
- * there is only a problem if the method actually blocks during execution.
- * A blocking operation is, for example, a Sleep() operation, or any access
- * to an operation region. However, it is probably not possible to easily
- * detect whether a method will block or not, so we simply mark all suspicious
- * methods as serialized.
- *
- * NOTE2: This code is essentially a generic routine for parsing a single
- * control method.
- *
- ******************************************************************************/
-
-ACPI_STATUS
-AcpiDsAutoSerializeMethod (
-    ACPI_NAMESPACE_NODE     *Node,
-    ACPI_OPERAND_OBJECT     *ObjDesc)
-{
-    ACPI_STATUS             Status;
-    ACPI_PARSE_OBJECT       *Op = NULL;
-    ACPI_WALK_STATE         *WalkState;
-
-
-    ACPI_FUNCTION_TRACE_PTR (DsAutoSerializeMethod, Node);
-
-
-    ACPI_DEBUG_PRINT ((ACPI_DB_PARSE,
-        "Method auto-serialization parse [%4.4s] %p\n",
-        AcpiUtGetNodeName (Node), Node));
-
-    /* Create/Init a root op for the method parse tree */
-
-    Op = AcpiPsAllocOp (AML_METHOD_OP, ObjDesc->Method.AmlStart);
-    if (!Op)
-    {
-        return_ACPI_STATUS (AE_NO_MEMORY);
-    }
-
-    AcpiPsSetName (Op, Node->Name.Integer);
-    Op->Common.Node = Node;
-
-    /* Create and initialize a new walk state */
-
-    WalkState = AcpiDsCreateWalkState (Node->OwnerId, NULL, NULL, NULL);
-    if (!WalkState)
-    {
-        AcpiPsFreeOp (Op);
-        return_ACPI_STATUS (AE_NO_MEMORY);
-    }
-
-    Status = AcpiDsInitAmlWalk (WalkState, Op, Node, ObjDesc->Method.AmlStart,
-                ObjDesc->Method.AmlLength, NULL, 0);
-    if (ACPI_FAILURE (Status))
-    {
-        AcpiDsDeleteWalkState (WalkState);
-        AcpiPsFreeOp (Op);
-        return_ACPI_STATUS (Status);
-    }
-
-    WalkState->DescendingCallback = AcpiDsDetectNamedOpcodes;
-
-    /* Parse the method, scan for creation of named objects */
-
-    Status = AcpiPsParseAml (WalkState);
-
-    AcpiPsDeleteParseTree (Op);
-    return_ACPI_STATUS (Status);
-}
-
-
-/*******************************************************************************
- *
- * FUNCTION:    AcpiDsDetectNamedOpcodes
- *
- * PARAMETERS:  WalkState       - Current state of the parse tree walk
- *              OutOp           - Unused, required for parser interface
- *
- * RETURN:      Status
- *
- * DESCRIPTION: Descending callback used during the loading of ACPI tables.
- *              Currently used to detect methods that must be marked serialized
- *              in order to avoid problems with the creation of named objects.
- *
- ******************************************************************************/
-
-static ACPI_STATUS
-AcpiDsDetectNamedOpcodes (
-    ACPI_WALK_STATE         *WalkState,
-    ACPI_PARSE_OBJECT       **OutOp)
-{
-
-    ACPI_FUNCTION_NAME (AcpiDsDetectNamedOpcodes);
-
-
-    /* We are only interested in opcodes that create a new name */
-
-    if (!(WalkState->OpInfo->Flags & (AML_NAMED | AML_CREATE | AML_FIELD)))
-    {
-        return (AE_OK);
-    }
-
-    /*
-     * At this point, we know we have a Named object opcode.
-     * Mark the method as serialized. Later code will create a mutex for
-     * this method to enforce serialization.
-     *
-     * Note, ACPI_METHOD_IGNORE_SYNC_LEVEL flag means that we will ignore the
-     * Sync Level mechanism for this method, even though it is now serialized.
-     * Otherwise, there can be conflicts with existing ASL code that actually
-     * uses sync levels.
-     */
-    WalkState->MethodDesc->Method.SyncLevel = 0;
-    WalkState->MethodDesc->Method.InfoFlags |=
-        (ACPI_METHOD_SERIALIZED | ACPI_METHOD_IGNORE_SYNC_LEVEL);
-
-    ACPI_DEBUG_PRINT ((ACPI_DB_INFO,
-        "Method serialized [%4.4s] %p - [%s] (%4.4X)\n",
-        WalkState->MethodNode->Name.Ascii, WalkState->MethodNode,
-        WalkState->OpInfo->Name, WalkState->Opcode));
-
-    /* Abort the parse, no need to examine this method any further */
-
-    return (AE_CTRL_TERMINATE);
-}
 
 
 /*******************************************************************************
@@ -213,7 +71,7 @@ AcpiDsDetectNamedOpcodes (
  * RETURN:      Status
  *
  * DESCRIPTION: Called on method error. Invoke the global exception handler if
- *              present, dump the method data if the debugger is configured
+ *              present, dump the method data if the disassembler is configured
  *
  *              Note: Allows the exception handler to change the status code
  *
@@ -224,9 +82,6 @@ AcpiDsMethodError (
     ACPI_STATUS             Status,
     ACPI_WALK_STATE         *WalkState)
 {
-    UINT32                  AmlOffset;
-
-
     ACPI_FUNCTION_ENTRY ();
 
 
@@ -250,28 +105,23 @@ AcpiDsMethodError (
          * Handler can map the exception code to anything it wants, including
          * AE_OK, in which case the executing method will not be aborted.
          */
-        AmlOffset = (UINT32) ACPI_PTR_DIFF (WalkState->Aml,
-                        WalkState->ParserState.AmlStart);
-
         Status = AcpiGbl_ExceptionHandler (Status,
                     WalkState->MethodNode ?
                         WalkState->MethodNode->Name.Integer : 0,
-                    WalkState->Opcode, AmlOffset, NULL);
+                    WalkState->Opcode, WalkState->AmlOffset, NULL);
         AcpiExEnterInterpreter ();
     }
 
     AcpiDsClearImplicitReturn (WalkState);
 
+#ifdef ACPI_DISASSEMBLER
     if (ACPI_FAILURE (Status))
     {
-        AcpiDsDumpMethodStack (Status, WalkState, WalkState->Op);
+        /* Display method locals/args if disassembler is present */
 
-        /* Display method locals/args if debugger is present */
-
-#ifdef ACPI_DEBUGGER
-        AcpiDbDumpMethodInfo (Status, WalkState);
-#endif
+        AcpiDmDumpMethodInfo (Status, WalkState, WalkState->Op);
     }
+#endif
 
     return (Status);
 }
@@ -357,8 +207,6 @@ AcpiDsBeginMethodExecution (
         return_ACPI_STATUS (AE_NULL_ENTRY);
     }
 
-    AcpiExStartTraceMethod (MethodNode, ObjDesc, WalkState);
-
     /* Prevent wraparound of thread count */
 
     if (ObjDesc->Method.ThreadCount == ACPI_UINT8_MAX)
@@ -390,16 +238,11 @@ AcpiDsBeginMethodExecution (
         /*
          * The CurrentSyncLevel (per-thread) must be less than or equal to
          * the sync level of the method. This mechanism provides some
-         * deadlock prevention.
-         *
-         * If the method was auto-serialized, we just ignore the sync level
-         * mechanism, because auto-serialization of methods can interfere
-         * with ASL code that actually uses sync levels.
+         * deadlock prevention
          *
          * Top-level method invocation has no walk state at this point
          */
         if (WalkState &&
-            (!(ObjDesc->Method.InfoFlags & ACPI_METHOD_IGNORE_SYNC_LEVEL)) &&
             (WalkState->Thread->CurrentSyncLevel > ObjDesc->Method.Mutex->Mutex.SyncLevel))
         {
             ACPI_ERROR ((AE_INFO,
@@ -620,7 +463,10 @@ Cleanup:
     /* On error, we must terminate the method properly */
 
     AcpiDsTerminateControlMethod (ObjDesc, NextWalkState);
-    AcpiDsDeleteWalkState (NextWalkState);
+    if (NextWalkState)
+    {
+        AcpiDsDeleteWalkState (NextWalkState);
+    }
 
     return_ACPI_STATUS (Status);
 }
@@ -864,8 +710,7 @@ AcpiDsTerminateControlMethod (
              * thread exits here.
              */
             MethodDesc->Method.InfoFlags &= ~ACPI_METHOD_SERIALIZED_PENDING;
-            MethodDesc->Method.InfoFlags |=
-                (ACPI_METHOD_SERIALIZED | ACPI_METHOD_IGNORE_SYNC_LEVEL);
+            MethodDesc->Method.InfoFlags |= ACPI_METHOD_SERIALIZED;
             MethodDesc->Method.SyncLevel = 0;
         }
 
@@ -876,9 +721,6 @@ AcpiDsTerminateControlMethod (
             AcpiUtReleaseOwnerId (&MethodDesc->Method.OwnerId);
         }
     }
-
-    AcpiExStopTraceMethod ((ACPI_NAMESPACE_NODE *) MethodDesc->Method.Node,
-            MethodDesc, WalkState);
 
     return_VOID;
 }

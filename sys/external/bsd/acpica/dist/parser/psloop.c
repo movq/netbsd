@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,7 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+
 /*
  * Parse the AML and build an operation tree as most interpreters, (such as
  * Perl) do. Parsing is done by hand rather than with a YACC generated parser
@@ -51,7 +52,6 @@
 
 #include "acpi.h"
 #include "accommon.h"
-#include "acinterp.h"
 #include "acparser.h"
 #include "acdispat.h"
 #include "amlcode.h"
@@ -135,7 +135,8 @@ AcpiPsGetArguments (
          */
         while (GET_CURRENT_ARG_TYPE (WalkState->ArgTypes) && !WalkState->ArgCount)
         {
-            WalkState->Aml = WalkState->ParserState.Aml;
+            WalkState->AmlOffset = (UINT32) ACPI_PTR_DIFF (WalkState->ParserState.Aml,
+                WalkState->ParserState.AmlStart);
 
             Status = AcpiPsGetNextArg (WalkState, &(WalkState->ParserState),
                         GET_CURRENT_ARG_TYPE (WalkState->ArgTypes), &Arg);
@@ -146,6 +147,7 @@ AcpiPsGetArguments (
 
             if (Arg)
             {
+                Arg->Common.AmlOffset = WalkState->AmlOffset;
                 AcpiPsAppendArg (Op, Arg);
             }
 
@@ -487,11 +489,6 @@ AcpiPsParseLoop (
                     Status = AE_OK;
                 }
 
-                if (Status == AE_CTRL_TERMINATE)
-                {
-                    return_ACPI_STATUS (Status);
-                }
-
                 Status = AcpiPsCompleteOp (WalkState, &Op, Status);
                 if (ACPI_FAILURE (Status))
                 {
@@ -501,7 +498,15 @@ AcpiPsParseLoop (
                 continue;
             }
 
-            AcpiExStartTraceOpcode (Op, WalkState);
+            Op->Common.AmlOffset = WalkState->AmlOffset;
+
+            if (WalkState->OpInfo)
+            {
+                ACPI_DEBUG_PRINT ((ACPI_DB_PARSE,
+                    "Opcode %4.4X [%s] Op %p Aml %p AmlOffset %5.5X\n",
+                     (UINT32) Op->Common.AmlOpcode, WalkState->OpInfo->Name,
+                     Op, ParserState->Aml, Op->Common.AmlOffset));
+            }
         }
 
 

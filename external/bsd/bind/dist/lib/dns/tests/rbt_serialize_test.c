@@ -1,4 +1,4 @@
-/*	$NetBSD: rbt_serialize_test.c,v 1.1.1.4 2015/07/08 15:38:04 christos Exp $	*/
+/*	$NetBSD: rbt_serialize_test.c,v 1.1.1.3.2.3 2015/07/17 04:31:34 snj Exp $	*/
 
 /*
  * Copyright (C) 2014, 2015  Internet Systems Consortium, Inc. ("ISC")

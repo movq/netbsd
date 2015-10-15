@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_fbcon.c,v 1.2 2015/03/06 01:43:07 riastradh Exp $	*/
+/*	$NetBSD: nouveau_fbcon.c,v 1.1.1.2.4.1 2015/03/06 21:39:08 snj Exp $	*/
 
 /*
  * Copyright © 2007 David Airlie
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_fbcon.c,v 1.2 2015/03/06 01:43:07 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_fbcon.c,v 1.1.1.2.4.1 2015/03/06 21:39:08 snj Exp $");
 
 #include <linux/module.h>
 #include <linux/kernel.h>

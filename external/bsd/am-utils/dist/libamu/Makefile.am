@@ -28,6 +28,7 @@ EXTRA_DIST = memcmp.c	\
 	clnt_sperrno.c	\
 	hasmntopt.c	\
 	strcasecmp.c	\
+	strdup.c	\
 	strerror.c	\
 	strlcat.c	\
 	strlcpy.c	\
@@ -42,6 +43,7 @@ DISTCLEANFILES = mountutil.c mtabutil.c transputil.c umount_fs.c
 #	hasmntopt.c
 #	memcmp.c (via AC_FUNC_MEMCMP)
 #	strcasecmp.c
+#	strdup.c
 #	strerror.c
 #	strstr.c
 #	ualarm.c
@@ -69,11 +71,11 @@ libamu_la_DEPENDENCIES = @AMU_LIB_OBJS@
 # LDFLAGS should include standard ones plus LIBTOOL ones
 AM_LDFLAGS = @LDFLAGS@ @LIBTOOL_LDFLAGS@
 
-AM_CPPFLAGS = -I$(top_srcdir)/include
+INCLUDES = -I$(top_srcdir)/include
 
 # allow users to add their own flags via "configure --enable-am-flags=ARG"
 AMU_CFLAGS = @AMU_CFLAGS@
-AM_CFLAGS = $(AMU_CFLAGS)
+AM_CFLAGS = @CFLAGS@ $(AMU_CFLAGS)
 
 # dependencies
 $(libamu_la_OBJECTS) $(libamu_la_LIBADD):	\

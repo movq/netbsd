@@ -1,4 +1,4 @@
-/*      $NetBSD: if_qe.c,v 1.73 2014/08/18 04:16:59 riastradh Exp $ */
+/*      $NetBSD: if_qe.c,v 1.72.4.1 2014/08/22 10:15:22 martin Exp $ */
 /*
  * Copyright (c) 1999 Ludd, University of Lule}, Sweden. All rights reserved.
  *
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_qe.c,v 1.73 2014/08/18 04:16:59 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_qe.c,v 1.72.4.1 2014/08/22 10:15:22 martin Exp $");
 
 #include "opt_inet.h"
 

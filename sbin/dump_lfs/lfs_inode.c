@@ -1,4 +1,4 @@
-/*      $NetBSD: lfs_inode.c,v 1.28 2015/10/15 06:25:12 dholland Exp $ */
+/*      $NetBSD: lfs_inode.c,v 1.19 2013/06/19 06:15:54 dholland Exp $ */
 
 /*-
  * Copyright (c) 1980, 1991, 1993, 1994
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1991, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)main.c      8.6 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: lfs_inode.c,v 1.28 2015/10/15 06:25:12 dholland Exp $");
+__RCSID("$NetBSD: lfs_inode.c,v 1.19 2013/06/19 06:15:54 dholland Exp $");
 #endif
 #endif /* not lint */
 
@@ -59,6 +59,8 @@ __RCSID("$NetBSD: lfs_inode.c,v 1.28 2015/10/15 06:25:12 dholland Exp $");
 #include "dump.h"
 #undef di_inumber
 
+#define MAXIFPB        (MAXBSIZE / sizeof(IFILE))
+
 #define	HASDUMPEDFILE	0x1
 #define	HASSUBDIRS	0x2
 
@@ -73,44 +75,28 @@ int is_ufs2 = 0;
 int
 fs_read_sblock(char *superblock)
 {
-	/*
-	 * XXX this should not be assuming that the in-memory
-	 * superblock has the on-disk superblock at the front of the
-	 * structure.
-	 */
 	union {
 		char tbuf[LFS_SBPAD];
 		struct lfs lfss;
 	} u;
 
+	int ns = 0;
 	off_t sboff = LFS_LABELPAD;
 
 	sblock = (struct lfs *)superblock;
 	while(1) {
 		rawread(sboff, (char *) sblock, LFS_SBPAD);
-		switch (sblock->lfs_dlfs_u.u_32.dlfs_magic) {
-		    case LFS_MAGIC:
-			sblock->lfs_is64 = false;
-			sblock->lfs_dobyteswap = false;
-			break;
-		    case LFS_MAGIC_SWAPPED:
-			sblock->lfs_is64 = false;
-			sblock->lfs_dobyteswap = true;
-			break;
-		    case LFS64_MAGIC:
-			sblock->lfs_is64 = true;
-			sblock->lfs_dobyteswap = false;
-			break;
-		    case LFS64_MAGIC_SWAPPED:
-			sblock->lfs_is64 = true;
-			sblock->lfs_dobyteswap = true;
-			break;
-		    default:
-			quit("bad sblock magic number\n");
-			break;
+		if (sblock->lfs_magic != LFS_MAGIC) {
+#ifdef notyet
+			if (sblock->lfs_magic == bswap32(LFS_MAGIC)) {
+				lfs_sb_swap(sblock, sblock, 0);
+				ns = 1;
+			} else
+#endif
+				quit("bad sblock magic number\n");
 		}
-		if (lfs_fsbtob(sblock, (off_t)lfs_sb_getsboff(sblock, 0)) != sboff) {
-			sboff = lfs_fsbtob(sblock, (off_t)lfs_sb_getsboff(sblock, 0));
+		if (lfs_fsbtob(sblock, (off_t)sblock->lfs_sboffs[0]) != sboff) {
+			sboff = lfs_fsbtob(sblock, (off_t)sblock->lfs_sboffs[0]);
 			continue;
 		}
 		break;
@@ -119,26 +105,25 @@ fs_read_sblock(char *superblock)
 	/*
 	 * Read the secondary and take the older of the two
 	 */
-	rawread(lfs_fsbtob(sblock, (off_t)lfs_sb_getsboff(sblock, 1)), u.tbuf,
+	rawread(lfs_fsbtob(sblock, (off_t)sblock->lfs_sboffs[1]), u.tbuf,
 	    sizeof(u.tbuf));
-
-	if (u.lfss.lfs_dlfs_u.u_32.dlfs_magic !=
-	    sblock->lfs_dlfs_u.u_32.dlfs_magic) {
-		msg("Warning: secondary superblock at 0x%" PRIx64 " mismatched or wrong magic\n",
-			LFS_FSBTODB(sblock, (off_t)lfs_sb_getsboff(sblock, 1)));
+#ifdef notyet
+	if (ns)
+		lfs_sb_swap(u.tbuf, u.tbuf, 0);
+#endif
+	if (u.lfss.lfs_magic != LFS_MAGIC) {
+		msg("Warning: secondary superblock at 0x%" PRIx64 " bad magic\n",
+			LFS_FSBTODB(sblock, (off_t)sblock->lfs_sboffs[1]));
 	} else {
-		u.lfss.lfs_is64 = sblock->lfs_is64;
-		u.lfss.lfs_dobyteswap = sblock->lfs_dobyteswap;
-
-		if (lfs_sb_getversion(sblock) > 1) {
-			if (lfs_sb_getserial(&u.lfss) < lfs_sb_getserial(sblock)) {
+		if (sblock->lfs_version > 1) {
+			if (u.lfss.lfs_serial < sblock->lfs_serial) {
 				memcpy(sblock, u.tbuf, sizeof(u.tbuf));
-				sboff = lfs_fsbtob(sblock, (off_t)lfs_sb_getsboff(sblock, 1));
+				sboff = lfs_fsbtob(sblock, (off_t)sblock->lfs_sboffs[1]);
 			}
 		} else {
-			if (lfs_sb_getotstamp(&u.lfss) < lfs_sb_getotstamp(sblock)) {
+			if (u.lfss.lfs_otstamp < sblock->lfs_otstamp) {
 				memcpy(sblock, u.tbuf, sizeof(u.tbuf));
-				sboff = lfs_fsbtob(sblock, (off_t)lfs_sb_getsboff(sblock, 1));
+				sboff = lfs_fsbtob(sblock, (off_t)sblock->lfs_sboffs[1]);
 			}
 		}
 	}
@@ -147,18 +132,7 @@ fs_read_sblock(char *superblock)
 		    (unsigned long)(btodb(sboff)));
 	}
 
-	/* ugh */
-	is_ufs2 = sblock->lfs_is64;
-
-	/*
-	 * XXX for now dump won't work on lfs64 because of the 64-bit
-	 * inodes in directories. dump needs more abstraction.
-	 */
-	if (sblock->lfs_is64) {
-		quit("LFS64 directory entries not supported yet");
-	}
-
-	return sblock->lfs_dobyteswap;
+	return ns;
 }
 
 /*
@@ -172,25 +146,25 @@ fs_parametrize(void)
 
 	spcl.c_flags = iswap32(iswap32(spcl.c_flags) | DR_NEWINODEFMT);
 
-	ufsi.ufs_dsize = LFS_FSBTODB(sblock, lfs_sb_getsize(sblock));
-	if (lfs_sb_getversion(sblock) == 1) 
-		ufsi.ufs_dsize = lfs_sb_getsize(sblock) >> lfs_sb_getblktodb(sblock);
-	ufsi.ufs_bsize = lfs_sb_getbsize(sblock);
-	ufsi.ufs_bshift = lfs_sb_getbshift(sblock);
-	ufsi.ufs_fsize = lfs_sb_getfsize(sblock);
-	ufsi.ufs_frag = lfs_sb_getfrag(sblock);
-	ufsi.ufs_fsatoda = lfs_sb_getfsbtodb(sblock);
-	if (lfs_sb_getversion(sblock) == 1)
+	ufsi.ufs_dsize = LFS_FSBTODB(sblock,sblock->lfs_size);
+	if (sblock->lfs_version == 1) 
+		ufsi.ufs_dsize = sblock->lfs_size >> sblock->lfs_blktodb;
+	ufsi.ufs_bsize = sblock->lfs_bsize;
+	ufsi.ufs_bshift = sblock->lfs_bshift;
+	ufsi.ufs_fsize = sblock->lfs_fsize;
+	ufsi.ufs_frag = sblock->lfs_frag;
+	ufsi.ufs_fsatoda = sblock->lfs_fsbtodb;
+	if (sblock->lfs_version == 1)
 		ufsi.ufs_fsatoda = 0;
-	ufsi.ufs_nindir = lfs_sb_getnindir(sblock);
-	ufsi.ufs_inopb = lfs_sb_getinopb(sblock);
-	ufsi.ufs_maxsymlinklen = lfs_sb_getmaxsymlinklen(sblock);
-	ufsi.ufs_bmask = ~(lfs_sb_getbmask(sblock));
-	ufsi.ufs_qbmask = lfs_sb_getbmask(sblock);
-	ufsi.ufs_fmask = ~(lfs_sb_getffmask(sblock));
-	ufsi.ufs_qfmask = lfs_sb_getffmask(sblock);
+	ufsi.ufs_nindir = sblock->lfs_nindir;
+	ufsi.ufs_inopb = sblock->lfs_inopb;
+	ufsi.ufs_maxsymlinklen = sblock->lfs_maxsymlinklen;
+	ufsi.ufs_bmask = ~(sblock->lfs_bmask);
+	ufsi.ufs_qbmask = sblock->lfs_bmask;
+	ufsi.ufs_fmask = ~(sblock->lfs_ffmask);
+	ufsi.ufs_qfmask = sblock->lfs_ffmask;
 
-	dev_bsize = lfs_sb_getbsize(sblock) >> lfs_sb_getblktodb(sblock);
+	dev_bsize = sblock->lfs_bsize >> sblock->lfs_blktodb;
 
 	return &ufsi;
 }
@@ -198,10 +172,10 @@ fs_parametrize(void)
 ino_t
 fs_maxino(void)
 {
-	return ((getino(LFS_IFILE_INUM)->dp1.di_size
-		   - (lfs_sb_getcleansz(sblock) + lfs_sb_getsegtabsz(sblock))
-		   * lfs_sb_getbsize(sblock))
-		  / lfs_sb_getbsize(sblock)) * lfs_sb_getifpb(sblock) - 1;
+	return ((getino(sblock->lfs_ifile)->dp1.di_size
+		   - (sblock->lfs_cleansz + sblock->lfs_segtabsz)
+		   * sblock->lfs_bsize)
+		  / sblock->lfs_bsize) * sblock->lfs_ifpb - 1;
 }
 
 void
@@ -224,7 +198,7 @@ fs_mapinodes(ino_t maxino, u_int64_t *tapesz, int *anydirskipped)
 #define T_UNITS (LFS_NINDIR(fs)*LFS_NINDIR(fs))
 
 static daddr_t
-lfs_bmap(struct lfs *fs, union lfs_dinode *idinode, daddr_t lbn)
+lfs_bmap(struct lfs *fs, struct ulfs1_dinode *idinode, daddr_t lbn)
 {
 	daddr_t residue, up;
 	int off=0;
@@ -232,7 +206,7 @@ lfs_bmap(struct lfs *fs, union lfs_dinode *idinode, daddr_t lbn)
 
 	up = UNASSIGNED;	/* XXXGCC -Wunitialized [sh3] */
 	
-	if(lbn > 0 && lbn > lfs_lblkno(fs, lfs_dino_getsize(fs, idinode))) {
+	if(lbn > 0 && lbn > lfs_lblkno(fs, idinode->di_size)) {
 		return UNASSIGNED;
 	}
 	/*
@@ -245,13 +219,13 @@ lfs_bmap(struct lfs *fs, union lfs_dinode *idinode, daddr_t lbn)
 		lbn *= -1;
 		if (lbn == ULFS_NDADDR) {
 			/* printf("lbn %d: single indir base\n", -lbn); */
-			return lfs_dino_getib(fs, idinode, 0); /* single indirect */
+			return idinode->di_ib[0]; /* single indirect */
 		} else if(lbn == BASE_DINDIR+1) {
 			/* printf("lbn %d: double indir base\n", -lbn); */
-			return lfs_dino_getib(fs, idinode, 1); /* double indirect */
+			return idinode->di_ib[1]; /* double indirect */
 		} else if(lbn == BASE_TINDIR+2) {
 			/* printf("lbn %d: triple indir base\n", -lbn); */
-			return lfs_dino_getib(fs, idinode, 2); /* triple indirect */
+			return idinode->di_ib[2]; /* triple indirect */
 		}
 
 		/*
@@ -261,13 +235,14 @@ lfs_bmap(struct lfs *fs, union lfs_dinode *idinode, daddr_t lbn)
 		residue = (lbn-ULFS_NDADDR) % LFS_NINDIR(fs);
 		if(residue == 1) {
 			/* Double indirect.  Parent is the triple. */
-			up = lfs_dino_getib(fs, idinode, 2);
+			up = idinode->di_ib[2];
 			off = (lbn-2-BASE_TINDIR)/(LFS_NINDIR(fs)*LFS_NINDIR(fs));
 			if(up == UNASSIGNED || up == LFS_UNUSED_DADDR)
 				return UNASSIGNED;
 			/* printf("lbn %d: parent is the triple\n", -lbn); */
-			bread(LFS_FSBTODB(sblock, up), bp, lfs_sb_getbsize(sblock));
-			return lfs_iblock_get(fs, bp, off);
+			bread(LFS_FSBTODB(sblock, up), bp, sblock->lfs_bsize);
+			/* XXX ondisk32 */
+			return (daddr_t)((int32_t *)bp)[off];
 		} else /* residue == 0 */ {
 			/* Single indirect.  Two cases. */
 			if(lbn < BASE_TINDIR) {
@@ -287,7 +262,7 @@ lfs_bmap(struct lfs *fs, union lfs_dinode *idinode, daddr_t lbn)
 	} else {
 		/* Direct block.  Its parent must be a single indirect. */
 		if (lbn < ULFS_NDADDR)
-			return lfs_dino_getdb(fs, idinode, lbn);
+			return idinode->di_db[lbn];
 		else {
 			/* Parent is an indirect block. */
 			up = -(((lbn-ULFS_NDADDR) / D_UNITS) * D_UNITS + ULFS_NDADDR);
@@ -298,56 +273,41 @@ lfs_bmap(struct lfs *fs, union lfs_dinode *idinode, daddr_t lbn)
 	up = lfs_bmap(fs,idinode,up);
 	if(up == UNASSIGNED || up == LFS_UNUSED_DADDR)
 		return UNASSIGNED;
-	bread(LFS_FSBTODB(sblock, up), bp, lfs_sb_getbsize(sblock));
-	return lfs_iblock_get(fs, bp, off);
+	bread(LFS_FSBTODB(sblock, up), bp, sblock->lfs_bsize);
+	/* XXX ondisk32 */
+	return (daddr_t)((int32_t *)bp)[off];
 }
 
-static IFILE *
+static struct ifile *
 lfs_ientry(ino_t ino)
 {
-	static char ifileblock[MAXBSIZE];
+	static struct ifile ifileblock[MAXIFPB];
 	static daddr_t ifblkno;
 	daddr_t lbn;
 	daddr_t blkno;
 	union dinode *dp;
-	union lfs_dinode *ldp;
-	unsigned index;
+	struct ulfs1_dinode *ldp;
     
-	lbn = ino/lfs_sb_getifpb(sblock) + lfs_sb_getcleansz(sblock) + lfs_sb_getsegtabsz(sblock);
-	dp = getino(LFS_IFILE_INUM);
-	/* XXX this is foolish */
-	if (sblock->lfs_is64) {
-		ldp = (union lfs_dinode *)&dp->dlp64;
-	} else {
-		ldp = (union lfs_dinode *)&dp->dlp32;
-	}
-	blkno = lfs_bmap(sblock, ldp, lbn);
+	lbn = ino/sblock->lfs_ifpb + sblock->lfs_cleansz + sblock->lfs_segtabsz;
+	dp = getino(sblock->lfs_ifile);
+	/* XXX XXX this is horribly unsafe */
+	ldp = (struct ulfs1_dinode *)dp;
+	blkno = lfs_bmap(sblock, ldp ,lbn);
 	if (blkno != ifblkno)
-		bread(LFS_FSBTODB(sblock, blkno), ifileblock,
-		    lfs_sb_getbsize(sblock));
-	index = ino % lfs_sb_getifpb(sblock);
-	if (sblock->lfs_is64) {
-		return (IFILE *) &((IFILE64 *)ifileblock)[index];
-	} else if (lfs_sb_getversion(sblock) > 1) {
-		return (IFILE *) &((IFILE32 *)ifileblock)[index];
-	} else {
-		return (IFILE *) &((IFILE_V1 *)ifileblock)[index];
-	}
+		bread(LFS_FSBTODB(sblock, blkno), (char *)ifileblock,
+		    sblock->lfs_bsize);
+	return ifileblock + (ino % sblock->lfs_ifpb);
 }
 
 /* Search a block for a specific dinode. */
-static union lfs_dinode *
-lfs_ifind(struct lfs *fs, ino_t ino, void *block)
+static struct ulfs1_dinode *
+lfs_ifind(struct lfs *fs, ino_t ino, struct ulfs1_dinode *dip)
 {
-	union lfs_dinode *dip;
-	unsigned i, num;
+	int cnt;
 
-	num = LFS_INOPB(fs);
-	for (i = num; i-- > 0; ) {
-		dip = DINO_IN_BLOCK(fs, block, i);
-		if (lfs_dino_getinumber(fs, dip) == ino)
-			return dip;
-	}
+	for (cnt = 0; cnt < LFS_INOPB(fs); cnt++)
+		if(dip[cnt].di_inumber == ino)
+			return &(dip[cnt]);
 	return NULL;
 }
 
@@ -356,46 +316,38 @@ getino(ino_t inum)
 {
 	static daddr_t inoblkno;
 	daddr_t blkno;
-	static union {
-		char space[MAXBSIZE];
-		struct lfs64_dinode u_64[MAXBSIZE/sizeof(struct lfs64_dinode)];
-		struct lfs32_dinode u_32[MAXBSIZE/sizeof(struct lfs32_dinode)];
-	} inoblock;
+	static struct ulfs1_dinode inoblock[MAXBSIZE / sizeof (struct ulfs1_dinode)];
 	static union dinode ifile_dinode; /* XXX fill this in */
 	static union dinode empty_dinode; /* Always stays zeroed */
-	union lfs_dinode *dp;
-	ino_t inum2;
+	struct ulfs1_dinode *dp;
 
-	if (inum == LFS_IFILE_INUM) {
+	if(inum == sblock->lfs_ifile) {
 		/* Load the ifile inode if not already */
-		inum2 = sblock->lfs_is64 ?
-			ifile_dinode.dlp64.di_inumber :
-			ifile_dinode.dlp32.di_inumber;
-		if (inum2 == 0) {
-			blkno = lfs_sb_getidaddr(sblock);
-			bread(LFS_FSBTODB(sblock, blkno), inoblock.space,
-				(int)lfs_sb_getbsize(sblock));
-			dp = lfs_ifind(sblock, inum, inoblock.space);
-			/* Structure copy */
-			if (sblock->lfs_is64) {
-				ifile_dinode.dlp64 = dp->u_64;
-			} else {
-				ifile_dinode.dlp32 = dp->u_32;
-			}
+		if(ifile_dinode.dlp1.di_inumber == 0) {
+			blkno = sblock->lfs_idaddr;
+			bread(LFS_FSBTODB(sblock, blkno), (char *)inoblock, 
+				(int)sblock->lfs_bsize);
+			dp = lfs_ifind(sblock, inum, inoblock);
+			ifile_dinode.dlp1 = *dp; /* Structure copy */
 		}
 		return &ifile_dinode;
 	}
 
 	curino = inum;
-	blkno = lfs_if_getdaddr(sblock, lfs_ientry(inum));
+	blkno = lfs_ientry(inum)->if_daddr;
 	if(blkno == LFS_UNUSED_DADDR)
 		return &empty_dinode;
 
 	if(blkno != inoblkno) {
-		bread(LFS_FSBTODB(sblock, blkno), inoblock.space,
-			(int)lfs_sb_getbsize(sblock));
+		bread(LFS_FSBTODB(sblock, blkno), (char *)inoblock, 
+			(int)sblock->lfs_bsize);
+#ifdef notyet
+		if (needswap)
+			for (i = 0; i < MAXINOPB; i++)
+				ffs_dinode_swap(&inoblock[i], &inoblock[i]);
+#endif
 	}
-	return (void *)lfs_ifind(sblock, inum, inoblock.space);
+	return (void *)lfs_ifind(sblock, inum, inoblock);
 }
 
 /*

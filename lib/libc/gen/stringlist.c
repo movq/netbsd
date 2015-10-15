@@ -1,4 +1,4 @@
-/*	$NetBSD: stringlist.c,v 1.14 2015/05/21 01:29:13 christos Exp $	*/
+/*	$NetBSD: stringlist.c,v 1.13 2008/04/28 20:22:59 martin Exp $	*/
 
 /*-
  * Copyright (c) 1994, 1999 The NetBSD Foundation, Inc.
@@ -31,14 +31,13 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: stringlist.c,v 1.14 2015/05/21 01:29:13 christos Exp $");
+__RCSID("$NetBSD: stringlist.c,v 1.13 2008/04/28 20:22:59 martin Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "namespace.h"
 
 #include <assert.h>
 #include <err.h>
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -68,9 +67,8 @@ sl_init(void)
 
 	sl->sl_cur = 0;
 	sl->sl_max = _SL_CHUNKSIZE;
-	sl->sl_str = NULL;
-	errno = reallocarr(&sl->sl_str, sl->sl_max, sizeof(char *));
-	if (errno) {
+	sl->sl_str = malloc(sl->sl_max * sizeof(char *));
+	if (sl->sl_str == NULL) {
 		free(sl);
 		sl = NULL;
 	}
@@ -88,11 +86,11 @@ sl_add(StringList *sl, char *name)
 	_DIAGASSERT(sl != NULL);
 
 	if (sl->sl_cur == sl->sl_max - 1) {
-		char	**new = sl->sl_str;
+		char	**new;
 
-		errno = reallocarr(&new, (sl->sl_max + _SL_CHUNKSIZE),
-		    sizeof(char *));
-		if (errno)
+		new = realloc(sl->sl_str,
+		    (sl->sl_max + _SL_CHUNKSIZE) * sizeof(char *));
+		if (new == NULL)
 			return -1;
 		sl->sl_max += _SL_CHUNKSIZE;
 		sl->sl_str = new;

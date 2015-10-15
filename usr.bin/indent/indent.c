@@ -1,4 +1,4 @@
-/*	$NetBSD: indent.c,v 1.19 2014/09/04 04:06:07 mrg Exp $	*/
+/*	$NetBSD: indent.c,v 1.18.24.1 2014/09/21 18:58:56 snj Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -75,7 +75,7 @@ __COPYRIGHT("@(#) Copyright (c) 1985 Sun Microsystems, Inc.\
 #if 0
 static char sccsid[] = "@(#)indent.c	5.17 (Berkeley) 6/7/93";
 #else
-__RCSID("$NetBSD: indent.c,v 1.19 2014/09/04 04:06:07 mrg Exp $");
+__RCSID("$NetBSD: indent.c,v 1.18.24.1 2014/09/21 18:58:56 snj Exp $");
 #endif
 #endif				/* not lint */
 

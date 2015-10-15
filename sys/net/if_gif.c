@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gif.c,v 1.88 2015/08/24 22:21:26 pooka Exp $	*/
+/*	$NetBSD: if_gif.c,v 1.83.2.1 2015/06/04 09:44:57 msaitoh Exp $	*/
 /*	$KAME: if_gif.c,v 1.76 2001/08/20 02:01:02 kjc Exp $	*/
 
 /*
@@ -31,11 +31,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_gif.c,v 1.88 2015/08/24 22:21:26 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_gif.c,v 1.83.2.1 2015/06/04 09:44:57 msaitoh Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -81,10 +79,10 @@ __KERNEL_RCSID(0, "$NetBSD: if_gif.c,v 1.88 2015/08/24 22:21:26 pooka Exp $");
 #include <netinet/ip_encap.h>
 #include <net/if_gif.h>
 
+
 #include <net/net_osdep.h>
 
-#include "ioconf.h"
-
+void	gifattach(int);
 static void	gifintr(void *);
 
 /*
@@ -430,14 +428,12 @@ gif_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct gif_softc *sc  = ifp->if_softc;
 	struct ifreq     *ifr = (struct ifreq*)data;
-	struct ifaddr    *ifa = (struct ifaddr*)data;
 	int error = 0, size;
 	struct sockaddr *dst, *src;
 
 	switch (cmd) {
 	case SIOCINITIFADDR:
 		ifp->if_flags |= IFF_UP;
-		ifa->ifa_rtrequest = p2p_rtrequest;
 		break;
 
 	case SIOCADDMULTI:

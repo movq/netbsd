@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi.h,v 1.3 2014/11/05 23:46:09 nonaka Exp $	*/
+/*	$NetBSD: acpi.h,v 1.2.8.1 2014/11/11 09:06:32 martin Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

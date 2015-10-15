@@ -1,4 +1,4 @@
-/* $NetBSD: drvctl.c,v 1.17 2015/02/24 18:15:29 mlelstv Exp $ */
+/* $NetBSD: drvctl.c,v 1.16.18.1 2015/03/07 06:06:24 snj Exp $ */
 
 /*
  * Copyright (c) 2004

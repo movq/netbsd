@@ -1,4 +1,4 @@
-/*	$NetBSD: ptrace.S,v 1.6 2014/11/24 15:33:18 christos Exp $	*/
+/*	$NetBSD: ptrace.S,v 1.5.2.1 2014/11/25 15:07:37 martin Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -36,7 +36,7 @@
 
 #include <machine/asm.h>
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: ptrace.S,v 1.6 2014/11/24 15:33:18 christos Exp $")
+	RCSID("$NetBSD: ptrace.S,v 1.5.2.1 2014/11/25 15:07:37 martin Exp $")
 #endif /* SYSLIBC_SCCS and not lint */
 
 #include "SYS.h"

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.20 2015/04/08 13:16:37 martin Exp $
+#	$NetBSD: Makefile.inc,v 1.19.2.1 2015/04/10 20:22:42 snj Exp $
 
 SOFTFLOAT_BITS?=64
 .PATH:		${ARCHDIR}/softfloat \

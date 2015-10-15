@@ -1,4 +1,4 @@
-/*	$NetBSD: arm32_machdep.c,v 1.109 2015/04/11 13:37:59 bouyer Exp $	*/
+/*	$NetBSD: arm32_machdep.c,v 1.105.2.1 2014/11/09 16:05:25 martin Exp $	*/
 
 /*
  * Copyright (c) 1994-1998 Mark Brinicombe.
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: arm32_machdep.c,v 1.109 2015/04/11 13:37:59 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arm32_machdep.c,v 1.105.2.1 2014/11/09 16:05:25 martin Exp $");
 
 #include "opt_modular.h"
 #include "opt_md.h"
@@ -75,6 +75,7 @@ __KERNEL_RCSID(0, "$NetBSD: arm32_machdep.c,v 1.109 2015/04/11 13:37:59 bouyer E
 
 #include <arm/locore.h>
 
+#include <arm/arm32/katelib.h>
 #include <arm/arm32/machdep.h>
 
 #include <machine/bootconfig.h>
@@ -108,7 +109,6 @@ int cpu_simd_present;
 int cpu_simdex_present;
 int cpu_umull_present;
 int cpu_synchprim_present;
-int cpu_unaligned_sigbus;
 const char *cpu_arch = "";
 
 int cpu_instruction_set_attributes[6];
@@ -505,13 +505,6 @@ SYSCTL_SETUP(sysctl_machdep_setup, "sysctl machdep subtree setup")
 		       CTLTYPE_INT, "printfataltraps", NULL,
 		       NULL, 0, &cpu_printfataltraps, 0,
 		       CTL_MACHDEP, CTL_CREATE, CTL_EOL);
-	cpu_unaligned_sigbus = !CPU_IS_ARMV6_P() && !CPU_IS_ARMV7_P();
-	sysctl_createv(clog, 0, NULL, NULL,
-		       CTLFLAG_PERMANENT|CTLFLAG_READONLY,
-		       CTLTYPE_INT, "unaligned_sigbus",
-		       SYSCTL_DESCR("Do SIGBUS for fixed unaligned accesses"),
-		       NULL, 0, &cpu_unaligned_sigbus, 0,
-		       CTL_MACHDEP, CTL_CREATE, CTL_EOL);
 
 
 	/*
@@ -575,10 +568,6 @@ parse_mi_bootargs(char *args)
 	    || get_bootconf_option(args, "-v", BOOTOPT_TYPE_BOOLEAN, &integer))
 		if (integer)
 			boothowto |= AB_VERBOSE;
-	if (get_bootconf_option(args, "debug", BOOTOPT_TYPE_BOOLEAN, &integer)
-	    || get_bootconf_option(args, "-x", BOOTOPT_TYPE_BOOLEAN, &integer))
-		if (integer)
-			boothowto |= AB_DEBUG;
 }
 
 #ifdef __HAVE_FAST_SOFTINTS

@@ -1,5 +1,6 @@
 /* Xstormy16-specific support for 32-bit ELF.
-   Copyright (C) 2000-2015 Free Software Foundation, Inc.
+   Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2010, 2011, 2012
+   Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -610,7 +611,7 @@ xstormy16_elf_relax_section (bfd *dynobj,
 
   /* Likewise for local symbols, though that's somewhat less convenient
      as we have to walk the list of input bfds and swap in symbol data.  */
-  for (ibfd = info->input_bfds; ibfd ; ibfd = ibfd->link.next)
+  for (ibfd = info->input_bfds; ibfd ; ibfd = ibfd->link_next)
     {
       bfd_vma *local_plt_offsets = elf_local_got_offsets (ibfd);
       Elf_Internal_Shdr *symtab_hdr;
@@ -684,7 +685,7 @@ xstormy16_elf_relax_section (bfd *dynobj,
       elf_link_hash_traverse (elf_hash_table (info),
 			      xstormy16_relax_plt_realloc, &entry);
 
-      for (ibfd = info->input_bfds; ibfd ; ibfd = ibfd->link.next)
+      for (ibfd = info->input_bfds; ibfd ; ibfd = ibfd->link_next)
 	{
 	  bfd_vma *local_plt_offsets = elf_local_got_offsets (ibfd);
 	  unsigned int nlocals = elf_tdata (ibfd)->symtab_hdr.sh_info;
@@ -1014,7 +1015,7 @@ xstormy16_elf_gc_mark_hook (asection *sec,
 #define ELF_MACHINE_CODE	EM_XSTORMY16
 #define ELF_MAXPAGESIZE		0x100
 
-#define TARGET_LITTLE_SYM       xstormy16_elf32_vec
+#define TARGET_LITTLE_SYM       bfd_elf32_xstormy16_vec
 #define TARGET_LITTLE_NAME	"elf32-xstormy16"
 
 #define elf_info_to_howto_rel			NULL

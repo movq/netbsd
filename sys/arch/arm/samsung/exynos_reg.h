@@ -1,4 +1,4 @@
-/*	$NetBSD: exynos_reg.h,v 1.13 2014/09/30 14:20:55 reinoud Exp $	*/
+/*	$NetBSD: exynos_reg.h,v 1.7.4.1 2015/01/04 11:19:00 martin Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

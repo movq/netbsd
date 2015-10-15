@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,8 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
+#define __EXPREP_C__
 
 #include "acpi.h"
 #include "accommon.h"
@@ -512,8 +514,6 @@ AcpiExPrepFieldValue (
             ObjDesc->Field.ResourceBuffer = Info->ResourceBuffer;
             ObjDesc->Field.ResourceLength = Info->ResourceLength;
         }
-
-        ObjDesc->Field.PinNumberIndex = Info->PinNumberIndex;
 
         /* Allow full data read from EC address space */
 

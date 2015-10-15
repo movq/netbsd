@@ -1,4 +1,4 @@
-/*	$NetBSD: dbversion_test.c,v 1.1.1.5 2015/07/08 15:38:04 christos Exp $	*/
+/*	$NetBSD: dbversion_test.c,v 1.1.1.2.2.1 2015/07/17 04:31:34 snj Exp $	*/
 
 /*
  * Copyright (C) 2011, 2012, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")

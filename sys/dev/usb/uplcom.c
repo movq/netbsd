@@ -1,4 +1,4 @@
-/*	$NetBSD: uplcom.c,v 1.75 2015/05/30 16:44:28 riastradh Exp $	*/
+/*	$NetBSD: uplcom.c,v 1.74.2.1 2015/07/30 15:51:58 snj Exp $	*/
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uplcom.c,v 1.75 2015/05/30 16:44:28 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uplcom.c,v 1.74.2.1 2015/07/30 15:51:58 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

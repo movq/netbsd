@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.c,v 1.188 2015/04/03 01:04:24 riastradh Exp $	*/
+/*	$NetBSD: pmap.c,v 1.183.2.2 2015/04/23 07:31:16 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2010 The NetBSD Foundation, Inc.
@@ -171,7 +171,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.188 2015/04/03 01:04:24 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmap.c,v 1.183.2.2 2015/04/23 07:31:16 snj Exp $");
 
 #include "opt_user_ldt.h"
 #include "opt_lockdebug.h"
@@ -3033,7 +3033,7 @@ pmap_extract(struct pmap *pmap, vaddr_t va, paddr_t *pap)
 	pa = 0;
 	l = curlwp;
 
-	kpreempt_disable();
+	KPREEMPT_DISABLE(l);
 	ci = l->l_cpu;
 	if (__predict_true(!ci->ci_want_pmapload && ci->ci_pmap == pmap) ||
 	    pmap == pmap_kernel()) {
@@ -3066,7 +3066,7 @@ pmap_extract(struct pmap *pmap, vaddr_t va, paddr_t *pap)
 	if (__predict_false(hard)) {
 		pmap_unmap_ptes(pmap, pmap2);
 	}
-	kpreempt_enable();
+	KPREEMPT_ENABLE(l);
 	if (pap != NULL) {
 		*pap = pa;
 	}
@@ -4585,7 +4585,7 @@ pmap_update(struct pmap *pmap)
 	 * If we have torn down this pmap, invalidate non-global TLB
 	 * entries on any processors using it.
 	 */
-	kpreempt_disable();
+	KPREEMPT_DISABLE(l);
 	if (__predict_false(l->l_md.md_gc_pmap == pmap)) {
 		l->l_md.md_gc_pmap = NULL;
 		pmap_tlb_shootdown(pmap, (vaddr_t)-1LL, 0, TLBSHOOT_UPDATE);
@@ -4595,7 +4595,7 @@ pmap_update(struct pmap *pmap)
 	 * complete before returning control to the caller.
 	 */
 	pmap_tlb_shootnow();
-	kpreempt_enable();
+	KPREEMPT_ENABLE(l);
 
 	/*
 	 * Now that shootdowns are complete, process deferred frees,

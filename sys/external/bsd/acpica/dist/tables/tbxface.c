@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,7 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+#define __TBXFACE_C__
 #define EXPORT_ACPI_INTERFACES
 
 #include "acpi.h"
@@ -132,7 +133,7 @@ AcpiInitializeTables (
     {
         /* Root Table Array has been statically allocated by the host */
 
-        memset (InitialTableArray, 0,
+        ACPI_MEMSET (InitialTableArray, 0,
             (ACPI_SIZE) InitialTableCount * sizeof (ACPI_TABLE_DESC));
 
         AcpiGbl_RootTableList.Tables = InitialTableArray;
@@ -258,7 +259,7 @@ AcpiGetTableHeader (
         {
             if ((AcpiGbl_RootTableList.Tables[i].Flags &
                     ACPI_TABLE_ORIGIN_MASK) ==
-                ACPI_TABLE_ORIGIN_INTERNAL_PHYSICAL)
+                ACPI_TABLE_ORIGIN_MAPPED)
             {
                 Header = AcpiOsMapMemory (
                             AcpiGbl_RootTableList.Tables[i].Address,
@@ -268,7 +269,7 @@ AcpiGetTableHeader (
                     return (AE_NO_MEMORY);
                 }
 
-                memcpy (OutTableHeader, Header,
+                ACPI_MEMCPY (OutTableHeader, Header,
                     sizeof (ACPI_TABLE_HEADER));
                 AcpiOsUnmapMemory (Header, sizeof (ACPI_TABLE_HEADER));
             }
@@ -279,7 +280,7 @@ AcpiGetTableHeader (
         }
         else
         {
-            memcpy (OutTableHeader,
+            ACPI_MEMCPY (OutTableHeader,
                 AcpiGbl_RootTableList.Tables[i].Pointer,
                 sizeof (ACPI_TABLE_HEADER));
         }
@@ -341,7 +342,7 @@ AcpiGetTable (
             continue;
         }
 
-        Status = AcpiTbValidateTable (&AcpiGbl_RootTableList.Tables[i]);
+        Status = AcpiTbVerifyTable (&AcpiGbl_RootTableList.Tables[i]);
         if (ACPI_SUCCESS (Status))
         {
             *OutTable = AcpiGbl_RootTableList.Tables[i].Pointer;
@@ -402,7 +403,7 @@ AcpiGetTableByIndex (
     {
         /* Table is not mapped, map it */
 
-        Status = AcpiTbValidateTable (&AcpiGbl_RootTableList.Tables[TableIndex]);
+        Status = AcpiTbVerifyTable (&AcpiGbl_RootTableList.Tables[TableIndex]);
         if (ACPI_FAILURE (Status))
         {
             (void) AcpiUtReleaseMutex (ACPI_MTX_TABLES);

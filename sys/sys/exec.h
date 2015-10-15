@@ -1,4 +1,4 @@
-/*	$NetBSD: exec.h,v 1.149 2015/10/10 10:51:15 maxv Exp $	*/
+/*	$NetBSD: exec.h,v 1.145.4.1 2015/04/14 05:12:17 snj Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -154,6 +154,7 @@ struct execsw {
 		int (*elf_probe_func)(struct lwp *,
 			struct exec_package *, void *, char *, vaddr_t *);
 		int (*ecoff_probe_func)(struct lwp *, struct exec_package *);
+		int (*mach_probe_func)(const char **);
 	} u;
 	struct  emul *es_emul;		/* os emulation */
 	int	es_prio;		/* entry priority */
@@ -180,12 +181,9 @@ struct exec_vmcmd_set {
 };
 
 #define	EXEC_DEFAULT_VMCMD_SETSIZE	9	/* # of cmds in set to start */
-struct exec_fakearg {
-	char *fa_arg;
-	size_t fa_len;
-};
 
 struct exec_package {
+	const char *ep_name;		/* file's name */
 	const char *ep_kname;		/* kernel-side copy of file's name */
 	char *ep_resolvedname;		/* fully resolved path from namei */
 	void	*ep_hdr;		/* file's exec header */
@@ -207,7 +205,10 @@ struct exec_package {
 	vaddr_t	ep_vm_maxaddr;		/* top of process address space */
 	u_int	ep_flags;		/* flags; see below. */
 	size_t	ep_fa_len;		/* byte size of ep_fa */
-	struct exec_fakearg *ep_fa;	/* a fake args vector for scripts */
+	struct exec_fakearg {
+		char *fa_arg;
+		size_t fa_len;
+	} *ep_fa;			/* a fake args vector for scripts */
 	int	ep_fd;			/* a file descriptor we're holding */
 	void	*ep_emul_arg;		/* emulation argument */
 	const struct	execsw *ep_esch;/* execsw entry */

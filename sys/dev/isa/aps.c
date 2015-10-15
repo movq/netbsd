@@ -1,4 +1,4 @@
-/*	$NetBSD: aps.c,v 1.17 2015/04/23 23:23:00 pgoyette Exp $	*/
+/*	$NetBSD: aps.c,v 1.15.14.1 2014/12/01 11:38:42 martin Exp $	*/
 /*	$OpenBSD: aps.c,v 1.15 2007/05/19 19:14:11 tedu Exp $	*/
 /*	$OpenBSD: aps.c,v 1.17 2008/06/27 06:08:43 canacar Exp $	*/
 /*
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aps.c,v 1.17 2015/04/23 23:23:00 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aps.c,v 1.15.14.1 2014/12/01 11:38:42 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -547,7 +547,7 @@ aps_resume(device_t dv, const pmf_qual_t *qual)
 	return true;
 }
 
-MODULE(MODULE_CLASS_DRIVER, aps, "sysmon_envsys");
+MODULE(MODULE_CLASS_DRIVER, aps, NULL);
 
 #ifdef _MODULE
 #include "ioconf.c"

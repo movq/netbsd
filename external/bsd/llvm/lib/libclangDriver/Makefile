@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.9 2015/01/29 20:41:37 joerg Exp $
+#	$NetBSD: Makefile,v 1.8.2.1 2015/06/04 20:05:45 snj Exp $
 
 LIB=	clangDriver
 

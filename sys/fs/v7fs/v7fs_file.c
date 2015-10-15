@@ -1,4 +1,4 @@
-/*	$NetBSD: v7fs_file.c,v 1.6 2014/12/29 15:28:58 hannken Exp $	*/
+/*	$NetBSD: v7fs_file.c,v 1.5.12.1 2015/01/07 10:08:15 martin Exp $	*/
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: v7fs_file.c,v 1.6 2014/12/29 15:28:58 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: v7fs_file.c,v 1.5.12.1 2015/01/07 10:08:15 martin Exp $");
 #if defined _KERNEL_OPT
 #include "opt_v7fs.h"
 #endif

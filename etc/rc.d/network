@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: network,v 1.69 2014/10/14 20:49:47 christos Exp $
+# $NetBSD: network,v 1.66 2014/04/29 09:58:18 uebayasi Exp $
 #
 
 # PROVIDE: network
@@ -432,26 +432,33 @@ network_start_defaultroute6()
 network_start_ipv6_autoconf()
 {
 	# IPv6 interface autoconfiguration.
-
+	#
+	# wait till DAD is completed. always invoke it in case
+	# if are configured manually by ifconfig
+	#
+	echo 'Waiting for DAD completion for' \
+	    'statically configured addresses...'
 	dadcount=$(/sbin/sysctl -n net.inet6.ip6.dad_count 2>/dev/null)
-	if [ -n "$dadcount" -a "$dadcount" != 0 ]; then
-		# wait till DAD is completed
-		echo 'Waiting for DAD to complete for' \
-		    'statically configured addresses...'
-		# Add 1 for MAX_RTR_SOLICITATION_DELAY and another
-		# to give time for the last DAD packet to respond and
-		# a few more for luck.
-		waitsecs=$((dadcount + 4))
-		/sbin/ifconfig -w $waitsecs
-	fi
+	sleep $dadcount
+	sleep 1
 
-	# dhcpcd will ensure DAD completes before forking
-	if checkyesnox rtsol && ! checkyesno dhcpcd; then
+	if checkyesno rtsol; then
 		if [ "$ip6mode" = "autohost" ]; then
+			echo 'Sending router solicitation...'
+			/sbin/rtsol $rtsol_flags
+		else
 			echo
-			warn "rtsol has been removed, " \
-			    "please configure dhcpcd in its place."
+			warn \
+		    "ip6mode must be set to 'autohost' to use rtsol."
 		fi
+
+		# wait till DAD is completed, for global addresses
+		# configured by router advert message.
+		#
+		echo 'Waiting for DAD completion for' \
+		    'addresses configured by router advert message...'
+		sleep $dadcount
+		sleep 1
 	fi
 }
 

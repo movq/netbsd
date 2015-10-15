@@ -1,4 +1,4 @@
-/*	$NetBSD: ipv6cp.h,v 1.4 2014/10/25 21:11:37 christos Exp $	*/
+/*	$NetBSD: ipv6cp.h,v 1.2.6.1 2014/12/17 19:25:40 martin Exp $	*/
 
 /*
  * ipv6cp.h - PPP IPV6 Control Protocol.

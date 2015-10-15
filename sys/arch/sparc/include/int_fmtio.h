@@ -1,4 +1,4 @@
-/*	$NetBSD: int_fmtio.h,v 1.7 2014/08/21 15:27:37 martin Exp $	*/
+/*	$NetBSD: int_fmtio.h,v 1.4 2008/04/28 20:23:36 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -32,9 +32,6 @@
 #ifndef _SPARC_INT_FMTIO_H_
 #define _SPARC_INT_FMTIO_H_
 
-#ifdef __INTPTR_FMTd__
-#include <sys/common_int_fmtio.h>
-#else
 /*
  * 7.8.1 Macros for format specifiers
  */
@@ -408,7 +405,5 @@
 #define	SCNxMAX		"llx"	/* uintmax_t		*/
 #endif
 #define	SCNxPTR		"lx"	/* uintptr_t		*/
-
-#endif /* !__INTPTR_FMTd__ */
 
 #endif /* !_SPARC_INT_FMTIO_H_ */

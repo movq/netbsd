@@ -1,6 +1,6 @@
 /* Shared helper routines for manipulating XML.
 
-   Copyright (C) 2006-2015 Free Software Foundation, Inc.
+   Copyright (C) 2006-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,8 +17,15 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "common-defs.h"
+#ifdef GDBSERVER
+#include "server.h"
+#else
+#include "defs.h"
+#endif
+
 #include "xml-utils.h"
+
+#include <string.h>
 
 /* Return a malloc allocated string with special characters from TEXT
    replaced by entity references.  */

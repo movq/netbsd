@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_syscalls_43.c,v 1.46 2014/11/09 17:48:07 maxv Exp $	*/
+/*	$NetBSD: uipc_syscalls_43.c,v 1.44.42.1 2015/01/17 12:10:54 martin Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1990, 1993
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_syscalls_43.c,v 1.46 2014/11/09 17:48:07 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_syscalls_43.c,v 1.44.42.1 2015/01/17 12:10:54 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -91,7 +91,7 @@ compat_43_sys_accept(struct lwp *l, const struct compat_43_sys_accept_args *uap,
 	} */
 	int error;
 
-	if ((error = sys_accept(l, (const struct sys_accept_args *)uap, retval)) != 0)
+	if ((error = sys_accept(l, (const void *)uap, retval)) != 0)
 		return error;
 
 	if (SCARG(uap, name)
@@ -112,7 +112,7 @@ compat_43_sys_getpeername(struct lwp *l, const struct compat_43_sys_getpeername_
 
 	int error;
 
-	if ((error = sys_getpeername(l, (const struct sys_getpeername_args *)uap, retval)) != 0)
+	if ((error = sys_getpeername(l, (const void *)uap, retval)) != 0)
 		return error;
 
 	if ((error = compat_43_sa_put(SCARG(uap, asa))))
@@ -131,7 +131,7 @@ compat_43_sys_getsockname(struct lwp *l, const struct compat_43_sys_getsockname_
 	} */
 	int error;
 
-	if ((error = sys_getsockname(l, (const struct sys_getsockname_args *)uap, retval)) != 0)
+	if ((error = sys_getsockname(l, (const void *)uap, retval)) != 0)
 		return error;
 
 	if ((error = compat_43_sa_put(SCARG(uap, asa))))
@@ -174,7 +174,7 @@ compat_43_sys_recvfrom(struct lwp *l, const struct compat_43_sys_recvfrom_args *
 	} */
 	int error;
 
-	if ((error = sys_recvfrom(l, (const struct sys_recvfrom_args *)uap, retval)))
+	if ((error = sys_recvfrom(l, (const void *)uap, retval)))
 		return (error);
 
 	if (SCARG(uap, from) && (error = compat_43_sa_put(SCARG(uap, from))))
@@ -227,7 +227,7 @@ compat_43_sys_recvmsg(struct lwp *l, const struct compat_43_sys_recvmsg_args *ua
 	 * XXX: maybe there can be more than one chunk of control data?
 	 */
 	if (omsg.msg_accrights && control != NULL) {
-		struct cmsghdr *cmsg = mtod(control, struct cmsghdr *);
+		struct cmsghdr *cmsg = mtod(control, void *);
 
 		if (cmsg->cmsg_level == SOL_SOCKET
 		    && cmsg->cmsg_type == SCM_RIGHTS
@@ -248,7 +248,7 @@ compat_43_sys_recvmsg(struct lwp *l, const struct compat_43_sys_recvmsg_args *ua
 		mtod(from, struct osockaddr *)->sa_family =
 				    mtod(from, struct sockaddr *)->sa_family;
 
-	error = copyout_sockname((struct sockaddr *)omsg.msg_name, &omsg.msg_namelen, 0, from);
+	error = copyout_sockname(omsg.msg_name, &omsg.msg_namelen, 0, from);
 	if (from != NULL)
 		m_free(from);
 
@@ -300,7 +300,7 @@ compat43_set_accrights(struct msghdr *msg, void *accrights, int accrightslen)
 
 	ctl = m_get(M_WAIT, MT_CONTROL);
 	ctl->m_len = clen;
-	cmsg = mtod(ctl, struct cmsghdr *);
+	cmsg = mtod(ctl, void *);
 	cmsg->cmsg_len		= CMSG_SPACE(accrightslen);
 	cmsg->cmsg_level	= SOL_SOCKET;
 	cmsg->cmsg_type 	= SCM_RIGHTS;
@@ -347,8 +347,8 @@ compat_43_sys_sendmsg(struct lwp *l, const struct compat_43_sys_sendmsg_args *ua
 	if (error != 0)
 		return (error);
 
-	sa = mtod(nam, struct sockaddr *);
-	osa = mtod(nam, struct osockaddr *);
+	sa = mtod(nam, void *);
+	osa = mtod(nam, void *);
 	sa->sa_family = osa->sa_family;
 	sa->sa_len = omsg.msg_namelen;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_kobj.c,v 1.51 2015/08/24 22:50:32 pooka Exp $	*/
+/*	$NetBSD: subr_kobj.c,v 1.50 2014/07/16 13:26:33 maxv Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -63,11 +63,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_kobj.c,v 1.51 2015/08/24 22:50:32 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_kobj.c,v 1.50 2014/07/16 13:26:33 maxv Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_modular.h"
-#endif
 
 #include <sys/kobj_impl.h>
 

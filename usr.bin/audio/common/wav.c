@@ -1,4 +1,4 @@
-/*	$NetBSD: wav.c,v 1.13 2015/08/05 06:54:39 mrg Exp $	*/
+/*	$NetBSD: wav.c,v 1.12 2013/10/18 20:47:06 christos Exp $	*/
 
 /*
  * Copyright (c) 2002, 2009 Matthew R. Green
@@ -33,7 +33,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: wav.c,v 1.13 2015/08/05 06:54:39 mrg Exp $");
+__RCSID("$NetBSD: wav.c,v 1.12 2013/10/18 20:47:06 christos Exp $");
 #endif
 
 
@@ -93,7 +93,7 @@ wav_enc_from_val(int encoding)
  */
 ssize_t
 audio_wav_parse_hdr(void *hdr, size_t sz, u_int *enc, u_int *prec,
-    u_int *sample, u_int *channels, off_t *datasize)
+    u_int *sample, u_int *channels, size_t *datasize)
 {
 	char	*where = hdr, *owhere;
 	wav_audioheaderpart part;
@@ -206,7 +206,7 @@ audio_wav_parse_hdr(void *hdr, size_t sz, u_int *enc, u_int *prec,
 		if (prec)
 			*prec = newprec;
 		if (datasize)
-			*datasize = (off_t)getle32(part.len);
+			*datasize = (size_t)getle32(part.len);
 		return (owhere - (char *)hdr + 8);
 	}
 	return (AUDIO_EWAVNODATA);
@@ -218,7 +218,7 @@ audio_wav_parse_hdr(void *hdr, size_t sz, u_int *enc, u_int *prec,
  * and expect our caller (wav_write_header()) to use them.
  */
 int
-wav_prepare_header(struct track_info *ti, void **hdrp, size_t *lenp, int *leftp)
+wav_prepare_header(struct write_info *wi, void **hdrp, size_t *lenp, int *leftp)
 {
 	/*
 	 * WAV header we write looks like this:
@@ -263,11 +263,11 @@ wav_prepare_header(struct track_info *ti, void **hdrp, size_t *lenp, int *leftp)
 	u_int32_t filelen, fmtsz, sps, abps, factsz = 4, nsample, datalen;
 	u_int16_t fmttag, nchan, align, extln = 0;
 
-	if (ti->header_info)
+	if (wi->header_info)
 		warnx("header information not supported for WAV");
 	*leftp = 0;
 
-	switch (ti->precision) {
+	switch (wi->precision) {
 	case 8:
 		break;
 	case 16:
@@ -279,24 +279,24 @@ wav_prepare_header(struct track_info *ti, void **hdrp, size_t *lenp, int *leftp)
 			static int warned = 0;
 
 			if (warned == 0) {
-				warnx("can not support precision of %d", ti->precision);
+				warnx("can not support precision of %d", wi->precision);
 				warned = 1;
 			}
 		}
 		return (-1);
 	}
 
-	switch (ti->encoding) {
+	switch (wi->encoding) {
 	case AUDIO_ENCODING_ULAW:
 		fmttag = WAVE_FORMAT_MULAW;
 		fmtsz = 18;
-		align = ti->channels;
+		align = wi->channels;
 		break;
 
 	case AUDIO_ENCODING_ALAW:
 		fmttag = WAVE_FORMAT_ALAW;
 		fmtsz = 18;
-		align = ti->channels;
+		align = wi->channels;
 		break;
 
 	/*
@@ -315,7 +315,7 @@ wav_prepare_header(struct track_info *ti, void **hdrp, size_t *lenp, int *leftp)
 #endif
 		fmttag = WAVE_FORMAT_PCM;
 		fmtsz = 16;
-		align = ti->channels * (ti->precision / 8);
+		align = wi->channels * (wi->precision / 8);
 		break;
 
 	default:
@@ -324,28 +324,28 @@ wav_prepare_header(struct track_info *ti, void **hdrp, size_t *lenp, int *leftp)
 			static int warned = 0;
 
 			if (warned == 0) {
-				const char *s = wav_enc_from_val(ti->encoding);
+				const char *s = wav_enc_from_val(wi->encoding);
 
 				if (s == NULL)
 					warnx("can not support encoding of %s", s);
 				else
-					warnx("can not support encoding of %d", ti->encoding);
+					warnx("can not support encoding of %d", wi->encoding);
 				warned = 1;
 			}
 		}
 #endif
-		ti->format = AUDIO_FORMAT_NONE;
+		wi->format = AUDIO_FORMAT_NONE;
 		return (-1);
 	}
 
-	nchan = ti->channels;
-	sps = ti->sample_rate;
+	nchan = wi->channels;
+	sps = wi->sample_rate;
 
 	/* data length */
-	if (ti->outfd == STDOUT_FILENO)
+	if (wi->outfd == STDOUT_FILENO)
 		datalen = 0;
-	else if (ti->total_size != -1)
-		datalen = ti->total_size;
+	else if (wi->total_size != -1)
+		datalen = wi->total_size;
 	else
 		datalen = 0;
 
@@ -354,9 +354,9 @@ wav_prepare_header(struct track_info *ti, void **hdrp, size_t *lenp, int *leftp)
 	if (fmttag != WAVE_FORMAT_PCM)
 		filelen += 8 + factsz;
 
-	abps = (double)align*ti->sample_rate / (double)1 + 0.5;
+	abps = (double)align*wi->sample_rate / (double)1 + 0.5;
 
-	nsample = (datalen / ti->precision) / ti->sample_rate;
+	nsample = (datalen / wi->precision) / wi->sample_rate;
 	
 	/*
 	 * now we've calculated the info, write it out!
@@ -389,7 +389,7 @@ wav_prepare_header(struct track_info *ti, void **hdrp, size_t *lenp, int *leftp)
 	p += 4;				/* 32 */
 	put16(align);
 	p += 2;				/* 34 */
-	put16(ti->precision);
+	put16(wi->precision);
 	p += 2;				/* 36 */
 	/* NON PCM formats have an extended chunk; write it */
 	if (fmttag != WAVE_FORMAT_PCM) {
@@ -416,11 +416,11 @@ wav_prepare_header(struct track_info *ti, void **hdrp, size_t *lenp, int *leftp)
 }
 
 write_conv_func
-wav_write_get_conv_func(struct track_info *ti)
+wav_write_get_conv_func(struct write_info *wi)
 {
 	write_conv_func conv_func = NULL;
 
-	switch (ti->encoding) {
+	switch (wi->encoding) {
 
 	/*
 	 * we could try to support RIFX but it seems to be more portable
@@ -430,9 +430,9 @@ wav_write_get_conv_func(struct track_info *ti)
 #if BYTE_ORDER == BIG_ENDIAN
 	case AUDIO_ENCODING_ULINEAR:
 #endif
-		if (ti->precision == 16)
+		if (wi->precision == 16)
 			conv_func = change_sign16_swap_bytes_be;
-		else if (ti->precision == 32)
+		else if (wi->precision == 32)
 			conv_func = change_sign32_swap_bytes_be;
 		break;
 
@@ -440,11 +440,11 @@ wav_write_get_conv_func(struct track_info *ti)
 #if BYTE_ORDER == BIG_ENDIAN
 	case AUDIO_ENCODING_SLINEAR:
 #endif
-		if (ti->precision == 8)
+		if (wi->precision == 8)
 			conv_func = change_sign8;
-		else if (ti->precision == 16)
+		else if (wi->precision == 16)
 			conv_func = swap_bytes;
-		else if (ti->precision == 32)
+		else if (wi->precision == 32)
 			conv_func = swap_bytes32;
 		break;
 
@@ -452,9 +452,9 @@ wav_write_get_conv_func(struct track_info *ti)
 #if BYTE_ORDER == LITTLE_ENDIAN
 	case AUDIO_ENCODING_ULINEAR:
 #endif
-		if (ti->precision == 16)
+		if (wi->precision == 16)
 			conv_func = change_sign16_le;
-		else if (ti->precision == 32)
+		else if (wi->precision == 32)
 			conv_func = change_sign32_le;
 		break;
 
@@ -463,12 +463,12 @@ wav_write_get_conv_func(struct track_info *ti)
 #if BYTE_ORDER == LITTLE_ENDIAN
 	case AUDIO_ENCODING_SLINEAR:
 #endif
-		if (ti->precision == 8)
+		if (wi->precision == 8)
 			conv_func = change_sign8;
 		break;
 
 	default:
-		ti->format = AUDIO_FORMAT_NONE;
+		wi->format = AUDIO_FORMAT_NONE;
 	}
 
 	return conv_func;

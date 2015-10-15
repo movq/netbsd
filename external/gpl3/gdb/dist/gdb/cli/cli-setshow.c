@@ -1,6 +1,6 @@
 /* Handle set and show GDB commands.
 
-   Copyright (C) 2000-2015 Free Software Foundation, Inc.
+   Copyright (C) 2000-2014 Free Software Foundation, Inc.
 
    This program is free software; you can redistribute it and/or modify
    it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@
 #include "readline/tilde.h"
 #include "value.h"
 #include <ctype.h>
+#include <string.h>
 #include "arch-utils.h"
 #include "observer.h"
 
@@ -75,7 +76,7 @@ parse_auto_binary_operation (const char *arg)
 /* See cli-setshow.h.  */
 
 int
-parse_cli_boolean_value (const char *arg)
+parse_cli_boolean_value (char *arg)
 {
   int length;
 
@@ -147,7 +148,7 @@ is_unlimited_literal (const char *arg)
    other command).  C is the command list element for the command.  */
 
 void
-do_set_command (const char *arg, int from_tty, struct cmd_list_element *c)
+do_set_command (char *arg, int from_tty, struct cmd_list_element *c)
 {
   /* A flag to indicate the option is changed or not.  */
   int option_changed = 0;
@@ -232,15 +233,13 @@ do_set_command (const char *arg, int from_tty, struct cmd_list_element *c)
 	if (arg != NULL)
 	  {
 	    /* Clear trailing whitespace of filename.  */
-	    const char *ptr = arg + strlen (arg) - 1;
-	    char *copy;
+	    char *ptr = arg + strlen (arg) - 1;
 
 	    while (ptr >= arg && (*ptr == ' ' || *ptr == '\t'))
 	      ptr--;
-	    copy = xstrndup (arg, ptr + 1 - arg);
+	    *(ptr + 1) = '\0';
 
-	    val = tilde_expand (copy);
-	    xfree (copy);
+	    val = tilde_expand (arg);
 	  }
 	else
 	  val = xstrdup ("");
@@ -453,6 +452,8 @@ do_set_command (const char *arg, int from_tty, struct cmd_list_element *c)
       error (_("gdb internal error: bad var_type in do_setshow_command"));
     }
   c->func (c, NULL, from_tty);
+  if (deprecated_set_hook)
+    deprecated_set_hook (c);
 
   if (notify_command_param_changed_p (option_changed, c))
     {
@@ -565,7 +566,7 @@ do_set_command (const char *arg, int from_tty, struct cmd_list_element *c)
    other command).  C is the command list element for the command.  */
 
 void
-do_show_command (const char *arg, int from_tty, struct cmd_list_element *c)
+do_show_command (char *arg, int from_tty, struct cmd_list_element *c)
 {
   struct ui_out *uiout = current_uiout;
   struct cleanup *old_chain;
@@ -669,7 +670,7 @@ do_show_command (const char *arg, int from_tty, struct cmd_list_element *c)
 /* Show all the settings in a list of show commands.  */
 
 void
-cmd_show_list (struct cmd_list_element *list, int from_tty, const char *prefix)
+cmd_show_list (struct cmd_list_element *list, int from_tty, char *prefix)
 {
   struct cleanup *showlist_chain;
   struct ui_out *uiout = current_uiout;

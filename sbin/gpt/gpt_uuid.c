@@ -1,4 +1,4 @@
-/*	$NetBSD: gpt_uuid.c,v 1.10 2014/12/06 12:24:22 mlelstv Exp $	*/
+/*	$NetBSD: gpt_uuid.c,v 1.10.2.2 2015/06/02 19:49:38 snj Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifdef __RCSID
-__RCSID("$NetBSD: gpt_uuid.c,v 1.10 2014/12/06 12:24:22 mlelstv Exp $");
+__RCSID("$NetBSD: gpt_uuid.c,v 1.10.2.2 2015/06/02 19:49:38 snj Exp $");
 #endif
 
 #include <err.h>

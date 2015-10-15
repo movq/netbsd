@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi.c,v 1.261 2015/10/02 05:22:52 msaitoh Exp $	*/
+/*	$NetBSD: acpi.c,v 1.258 2014/02/25 18:30:09 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2003, 2007 The NetBSD Foundation, Inc.
@@ -100,7 +100,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi.c,v 1.261 2015/10/02 05:22:52 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi.c,v 1.258 2014/02/25 18:30:09 pooka Exp $");
 
 #include "opt_acpi.h"
 #include "opt_pcifixup.h"
@@ -118,7 +118,6 @@ __KERNEL_RCSID(0, "$NetBSD: acpi.c,v 1.261 2015/10/02 05:22:52 msaitoh Exp $");
 
 #include <dev/acpi/acpireg.h>
 #include <dev/acpi/acpivar.h>
-#include <dev/acpi/acpi_mcfg.h>
 #include <dev/acpi/acpi_osd.h>
 #include <dev/acpi/acpi_pci.h>
 #include <dev/acpi/acpi_power.h>
@@ -254,6 +253,7 @@ acpi_probe(void)
 	/*
 	 * Start up ACPICA.
 	 */
+	AcpiGbl_AllMethodsSerialized = false;
 	AcpiGbl_EnableInterpreterSlack = true;
 
 	rv = AcpiInitializeSubsystem();
@@ -483,11 +483,6 @@ acpi_attach(device_t parent, device_t self, void *aux)
 	 * Scan the namespace and build our device tree.
 	 */
 	acpi_build_tree(sc);
-
-	/*
-	 * Probe MCFG table
-	 */
-	acpimcfg_probe(sc);
 
 	acpi_md_callback(sc);
 
@@ -1414,7 +1409,7 @@ acpi_enter_sleep_state(int state)
 
 			(void)pmf_system_bus_resume(PMF_Q_NONE);
 			(void)AcpiLeaveSleepState(state);
-			(void)AcpiSetFirmwareWakingVector(0, 0);
+			(void)AcpiSetFirmwareWakingVector(0);
 			(void)pmf_system_resume(PMF_Q_NONE);
 		}
 

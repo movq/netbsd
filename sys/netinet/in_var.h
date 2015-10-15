@@ -1,4 +1,4 @@
-/*	$NetBSD: in_var.h,v 1.74 2015/08/31 08:05:20 ozaki-r Exp $	*/
+/*	$NetBSD: in_var.h,v 1.70 2014/07/01 05:49:18 rtr Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -66,15 +66,6 @@
 
 #include <sys/queue.h>
 
-#define IN_IFF_TENTATIVE	0x01	/* tentative address */
-#define IN_IFF_DUPLICATED	0x02	/* DAD detected duplicate */
-#define IN_IFF_DETACHED		0x04	/* may be detached from the link */
-#define IN_IFF_TRYTENTATIVE	0x08	/* intent to try DAD */
-
-/* do not input/output */
-#define IN_IFF_NOTREADY \
-    (IN_IFF_TRYTENTATIVE | IN_IFF_TENTATIVE | IN_IFF_DUPLICATED)
-
 /*
  * Interface address, Internet version.  One of these structures
  * is allocated for each interface with an Internet address.
@@ -101,9 +92,6 @@ struct in_ifaddr {
 	struct	in_multi *ia_allhosts;	/* multicast address record for
 					   the allhosts multicast group */
 	uint16_t ia_idsalt;		/* ip_id salt for this ia */
-	int	ia4_flags;		/* address flags */
-	void	(*ia_dad_start) (struct ifaddr *);	/* DAD start function */
-	void	(*ia_dad_stop) (struct ifaddr *);	/* DAD stop function */
 };
 
 struct	in_aliasreq {
@@ -113,7 +101,6 @@ struct	in_aliasreq {
 #define	ifra_broadaddr	ifra_dstaddr
 	struct	sockaddr_in ifra_mask;
 };
-
 /*
  * Given a pointer to an in_ifaddr (ifaddr),
  * return a pointer to the addr as a sockaddr_in.
@@ -204,17 +191,7 @@ extern	const	int	inetctlerrmap[];
 	} \
 	(ia) = ifatoia(ifa); \
 }
-
-#include <netinet/in_selsrc.h>
-/*
- * IPv4 per-interface state.
- */
-struct in_ifinfo {
-	struct lltable		*ii_llt;	/* ARP state */
-	struct in_ifsysctl	*ii_selsrc;
-};
-
-#endif /* _KERNEL */
+#endif
 
 /*
  * Internet multicast address structure.  There is one of these for each IP
@@ -240,8 +217,6 @@ struct in_multi {
 
 extern pktqueue_t *ip_pktq;
 
-extern int ip_dad_count;		/* Duplicate Address Detection probes */
-
 /*
  * Structure used by functions below to remember position when stepping
  * through all of the in_multi records.
@@ -265,7 +240,7 @@ int in_multi_lock_held(void);
 struct ifaddr;
 
 int	in_ifinit(struct ifnet *,
-	    struct in_ifaddr *, const struct sockaddr_in *, int, int);
+	    struct in_ifaddr *, const struct sockaddr_in *, int);
 void	in_savemkludge(struct in_ifaddr *);
 void	in_restoremkludge(struct in_ifaddr *, struct ifnet *);
 void	in_purgemkludge(struct ifnet *);
@@ -322,9 +297,6 @@ ip_newid(const struct in_ifaddr *ia)
 #ifdef SYSCTLFN_PROTO
 int	sysctl_inpcblist(SYSCTLFN_PROTO);
 #endif
-
-#define LLTABLE(ifp)	\
-	((struct in_ifinfo *)(ifp)->if_afdata[AF_INET])->ii_llt
 
 #endif	/* !_KERNEL */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: gemvar.h,v 1.25 2015/04/13 16:33:24 riastradh Exp $ */
+/*	$NetBSD: gemvar.h,v 1.24 2012/07/02 11:23:40 jdc Exp $ */
 
 /*
  *
@@ -36,7 +36,7 @@
 #include <sys/queue.h>
 #include <sys/callout.h>
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 /*
  * Misc. definitions for the Sun ``Gem'' Ethernet controller family driver.

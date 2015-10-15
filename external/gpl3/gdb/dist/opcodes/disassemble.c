@@ -1,5 +1,7 @@
 /* Select disassembly routine for specified architecture.
-   Copyright (C) 1994-2015 Free Software Foundation, Inc.
+   Copyright 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003,
+   2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
+   Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -68,7 +70,8 @@
 #define ARCH_nds32
 #define ARCH_nios2
 #define ARCH_ns32k
-#define ARCH_or1k
+#define ARCH_openrisc
+#define ARCH_or32
 #define ARCH_pdp11
 #define ARCH_pj
 #define ARCH_powerpc
@@ -89,7 +92,6 @@
 #define ARCH_tilepro
 #define ARCH_v850
 #define ARCH_vax
-#define ARCH_visium
 #define ARCH_w65
 #define ARCH_xstormy16
 #define ARCH_xc16x
@@ -351,9 +353,17 @@ disassembler (abfd)
 	disassemble = print_insn_little_nios2;
       break;
 #endif
-#ifdef ARCH_or1k
-    case bfd_arch_or1k:
-      disassemble = print_insn_or1k;
+#ifdef ARCH_openrisc
+    case bfd_arch_openrisc:
+      disassemble = print_insn_openrisc;
+      break;
+#endif
+#ifdef ARCH_or32
+    case bfd_arch_or32:
+      if (bfd_big_endian (abfd))
+	disassemble = print_insn_big_or32;
+      else
+	disassemble = print_insn_little_or32;
       break;
 #endif
 #ifdef ARCH_pdp11
@@ -493,11 +503,6 @@ disassembler (abfd)
     case bfd_arch_vax:
       disassemble = print_insn_vax;
       break;
-#endif
-#ifdef ARCH_visium
-     case bfd_arch_visium:
-       disassemble = print_insn_visium;
-       break;
 #endif
 #ifdef ARCH_frv
     case bfd_arch_frv:

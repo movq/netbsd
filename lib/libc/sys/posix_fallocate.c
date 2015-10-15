@@ -1,4 +1,4 @@
-/*	$NetBSD: posix_fallocate.c,v 1.1 2014/09/25 15:08:29 manu Exp $ */
+/*	$NetBSD: posix_fallocate.c,v 1.1.2.2 2015/02/08 22:05:55 snj Exp $ */
 
 /*
  * Copyright (c) 2014 The NetBSD Foundation, Inc.      
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: posix_fallocate.c,v 1.1 2014/09/25 15:08:29 manu Exp $");
+__RCSID("$NetBSD: posix_fallocate.c,v 1.1.2.2 2015/02/08 22:05:55 snj Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>

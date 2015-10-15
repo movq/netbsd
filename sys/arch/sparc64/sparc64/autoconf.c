@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.205 2015/09/06 16:45:09 martin Exp $ */
+/*	$NetBSD: autoconf.c,v 1.198.2.4 2015/09/04 14:43:45 martin Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.205 2015/09/06 16:45:09 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.198.2.4 2015/09/04 14:43:45 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -480,7 +480,6 @@ get_bootpath_from_prom(void)
 void
 cpu_configure(void)
 {
-	
 	bool userconf = (boothowto & RB_USERCONF) != 0;
 
 	/* fetch boot device settings */
@@ -763,7 +762,7 @@ romgetcursoraddr(int **rowp, int **colp)
 
 /*
  * Match a device_t against the bootpath, by
- * comparing its firmware package handle. If they match
+ * comparing it's firmware package handle. If they match
  * exactly, we found the boot device.
  */
 static void
@@ -779,7 +778,7 @@ dev_path_exact_match(device_t dev, int ofnode)
 
 /*
  * Match a device_t against the bootpath, by
- * comparing its firmware package handle and calculating
+ * comparing it's firmware package handle and calculating
  * the target/lun suffix and comparing that against
  * the bootpath remainder.
  */
@@ -1221,7 +1220,7 @@ device_register_post_config(device_t dev, void *aux)
 
 		/*
 		 * If this is a FC-AL drive it will have
-		 * aquired its WWN device property by now,
+		 * aquired it's WWN device property by now,
 		 * so we can properly match it.
 		 */
 		if (prop_dictionary_get_uint64(device_properties(dev),

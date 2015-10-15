@@ -1,4 +1,4 @@
-/*	$NetBSD: altq_jobs.c,v 1.7 2014/08/18 03:14:12 riastradh Exp $	*/
+/*	$NetBSD: altq_jobs.c,v 1.6.34.1 2014/08/22 10:15:22 martin Exp $	*/
 /*	$KAME: altq_jobs.c,v 1.11 2005/04/13 03:44:25 suz Exp $	*/
 /*
  * Copyright (c) 2001, the Rector and Board of Visitors of the
@@ -59,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: altq_jobs.c,v 1.7 2014/08/18 03:14:12 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: altq_jobs.c,v 1.6.34.1 2014/08/22 10:15:22 martin Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_altq.h"

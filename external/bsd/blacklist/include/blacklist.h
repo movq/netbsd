@@ -1,4 +1,4 @@
-/*	$NetBSD: blacklist.h,v 1.3 2015/01/23 18:48:56 christos Exp $	*/
+/*	$NetBSD: blacklist.h,v 1.3.2.2 2015/04/30 06:07:34 riz Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

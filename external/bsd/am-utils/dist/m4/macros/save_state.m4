@@ -7,7 +7,6 @@ if test -f confdefs.h
 then
  cp confdefs.h dbgcf.h
 fi
-[AC_CACHE_SAVE
-AC_MSG_NOTICE([*** SAVING CONFIGURE STATE ***])]
+[AC_CACHE_SAVE]
 )
 dnl ======================================================================

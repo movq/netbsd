@@ -1,4 +1,4 @@
-/*	$NetBSD: io.c,v 1.15 2014/09/04 04:06:07 mrg Exp $	*/
+/*	$NetBSD: io.c,v 1.14.24.1 2014/09/21 18:58:56 snj Exp $	*/
 
 /*
  * Copyright (c) 1980, 1993
@@ -68,7 +68,7 @@
 #if 0
 static char sccsid[] = "@(#)io.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: io.c,v 1.15 2014/09/04 04:06:07 mrg Exp $");
+__RCSID("$NetBSD: io.c,v 1.14.24.1 2014/09/21 18:58:56 snj Exp $");
 #endif
 #endif				/* not lint */
 

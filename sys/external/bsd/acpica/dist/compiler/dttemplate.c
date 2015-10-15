@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -59,7 +59,7 @@ AcpiUtIsSpecialTable (
 static ACPI_STATUS
 DtCreateOneTemplate (
     char                    *Signature,
-    const ACPI_DMTABLE_DATA *TableData);
+    ACPI_DMTABLE_DATA       *TableData);
 
 static ACPI_STATUS
 DtCreateAllTemplates (
@@ -85,7 +85,6 @@ AcpiUtIsSpecialTable (
 {
 
     if (ACPI_COMPARE_NAME (Signature, ACPI_SIG_DSDT) ||
-        ACPI_COMPARE_NAME (Signature, ACPI_SIG_OSDT) ||
         ACPI_COMPARE_NAME (Signature, ACPI_SIG_SSDT) ||
         ACPI_COMPARE_NAME (Signature, ACPI_SIG_FACS) ||
         ACPI_COMPARE_NAME (Signature, ACPI_RSDP_NAME))
@@ -113,7 +112,7 @@ ACPI_STATUS
 DtCreateTemplates (
     char                    *Signature)
 {
-    const ACPI_DMTABLE_DATA *TableData;
+    ACPI_DMTABLE_DATA       *TableData;
     ACPI_STATUS             Status;
 
 
@@ -128,8 +127,8 @@ DtCreateTemplates (
     }
 
     AcpiUtStrupr (Signature);
-    if (!strcmp (Signature, "ALL") ||
-        !strcmp (Signature, "*"))
+    if (!ACPI_STRCMP (Signature, "ALL") ||
+        !ACPI_STRCMP (Signature, "*"))
     {
         /* Create all available/known templates */
 
@@ -188,12 +187,6 @@ GetTemplate:
     }
 
     Status = DtCreateOneTemplate (Signature, TableData);
-
-
-    /* Shutdown ACPICA subsystem */
-
-    (void) AcpiTerminate ();
-    CmDeleteCaches ();
     return (Status);
 }
 
@@ -214,7 +207,7 @@ static ACPI_STATUS
 DtCreateAllTemplates (
     void)
 {
-    const ACPI_DMTABLE_DATA *TableData;
+    ACPI_DMTABLE_DATA       *TableData;
     ACPI_STATUS             Status;
 
 
@@ -293,7 +286,7 @@ DtCreateAllTemplates (
 static ACPI_STATUS
 DtCreateOneTemplate (
     char                    *Signature,
-    const ACPI_DMTABLE_DATA  *TableData)
+    ACPI_DMTABLE_DATA       *TableData)
 {
     char                    *DisasmFilename;
     FILE                    *File;
@@ -328,7 +321,7 @@ DtCreateOneTemplate (
     AcpiOsPrintf ("/*\n");
     AcpiOsPrintf (ACPI_COMMON_HEADER ("iASL Compiler/Disassembler", " * "));
 
-    AcpiOsPrintf (" * Template for [%4.4s] ACPI Table",
+    AcpiOsPrintf (" * Template for [%4.4s] ACPI Table\n",
         Signature);
 
     /* Dump the actual ACPI table */
@@ -336,8 +329,6 @@ DtCreateOneTemplate (
     if (TableData)
     {
         /* Normal case, tables that appear in AcpiDmTableData */
-
-        AcpiOsPrintf (" (static data table)\n");
 
         if (Gbl_VerboseTemplates)
         {
@@ -347,7 +338,7 @@ DtCreateOneTemplate (
         else
         {
             AcpiOsPrintf (" * Format: [ByteLength]"
-                "  FieldName : HexFieldValue\n */\n");
+                "  FieldName : HexFieldValue\n */\n\n");
         }
 
         AcpiDmDumpDataTable (ACPI_CAST_PTR (ACPI_TABLE_HEADER,
@@ -355,11 +346,9 @@ DtCreateOneTemplate (
     }
     else
     {
-        /* Special ACPI tables - DSDT, SSDT, OSDT, FADT, RSDP */
+        /* Special ACPI tables - DSDT, SSDT, FADT, RSDP */
 
-        AcpiOsPrintf (" (AML byte code table)\n");
-
-        AcpiOsPrintf (" */\n");
+        AcpiOsPrintf (" */\n\n");
         if (ACPI_COMPARE_NAME (Signature, ACPI_SIG_DSDT))
         {
             Actual = fwrite (TemplateDsdt, 1, sizeof (TemplateDsdt) -1, File);
@@ -375,17 +364,6 @@ DtCreateOneTemplate (
         {
             Actual = fwrite (TemplateSsdt, 1, sizeof (TemplateSsdt) -1, File);
             if (Actual != sizeof (TemplateSsdt) -1)
-            {
-                fprintf (stderr,
-                    "Could not write to output file %s\n", DisasmFilename);
-                Status = AE_ERROR;
-                goto Cleanup;
-            }
-        }
-        else if (ACPI_COMPARE_NAME (Signature, ACPI_SIG_OSDT))
-        {
-            Actual = fwrite (TemplateOsdt, 1, sizeof (TemplateOsdt) -1, File);
-            if (Actual != sizeof (TemplateOsdt) -1)
             {
                 fprintf (stderr,
                     "Could not write to output file %s\n", DisasmFilename);
@@ -419,5 +397,6 @@ DtCreateOneTemplate (
 Cleanup:
     fclose (File);
     AcpiOsRedirectOutput (stdout);
+    ACPI_FREE (DisasmFilename);
     return (Status);
 }

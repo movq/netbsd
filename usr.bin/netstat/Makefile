@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.43 2015/06/06 13:48:37 joerg Exp $
+#	$NetBSD: Makefile,v 1.39.8.1 2015/01/08 11:01:01 martin Exp $
 #	from: @(#)Makefile	8.1 (Berkeley) 6/12/93
 
 .include <bsd.own.mk>
@@ -11,18 +11,21 @@ SRCS=	atalk.c bpf.c fast_ipsec.c if.c inet.c inet6.c \
 	unix.c vtw.c rtutil.c
 BINGRP=	kmem
 BINMODE=2555
-LDADD=	-lutil -lkvm
-DPADD=	${LIBUTIL} ${LIBKVM}
+LDADD=	-lkvm
+DPADD=	${LIBKVM}
 CPPFLAGS+= -DIPSEC -I${.CURDIR}
 CPPFLAGS+= -I${NETBSDSRCDIR}/sys/dist/pf
 CPPFLAGS+= -I${NETBSDSRCDIR}/sbin/route
+
+CWARNFLAGS.clang+=	-Wno-format
+COPTS.show.c += -Wno-format-nonliteral
 
 .PATH:  ${.CURDIR}/../../lib/libc/gen
 .PATH:  ${.CURDIR}/../../lib/libc/net
 .PATH:  ${.CURDIR}/../../sbin/route
 CPPFLAGS+= -DRUMP_ACTION
 RUMPSRCS+= sysctlbyname.c sysctlgetmibinfo.c sysctlnametomib.c
-RUMPSRCS+= if_indextoname.c getifaddrs.c getnameinfo.c
+RUMPSRCS+= if_indextoname.c getifaddrs.c
 
 .if (${USE_INET6} != "no")
 CPPFLAGS+= -DINET6

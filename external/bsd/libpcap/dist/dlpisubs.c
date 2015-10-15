@@ -1,4 +1,4 @@
-/*	$NetBSD: dlpisubs.c,v 1.2 2014/11/19 19:33:30 christos Exp $	*/
+/*	$NetBSD: dlpisubs.c,v 1.1.1.4 2013/12/31 16:57:23 christos Exp $	*/
 
 /*
  * This code is derived from code formerly in pcap-dlpi.c, originally
@@ -12,9 +12,10 @@
  * This file contains dlpi/libdlpi related common functions used
  * by pcap-[dlpi,libdlpi].c.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: dlpisubs.c,v 1.2 2014/11/19 19:33:30 christos Exp $");
+#ifndef lint
+static const char rcsid[] _U_ =
+	"@(#) Header: /tcpdump/master/libpcap/dlpisubs.c,v 1.3 2008-12-02 16:40:19 guy Exp  (LBL)";
+#endif
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -194,7 +195,7 @@ pcap_process_pkts(pcap_t *p, pcap_handler callback, u_char *user,
 			if (pkthdr.caplen > p->snapshot)
 				pkthdr.caplen = p->snapshot;
 			(*callback)(user, &pkthdr, pk);
-			if (++n >= count && !PACKET_COUNT_IS_UNLIMITED(count)) {
+			if (++n >= count && count >= 0) {
 				p->cc = ep - bufp;
 				p->bp = bufp;
 				return (n);

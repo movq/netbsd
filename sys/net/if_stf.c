@@ -1,4 +1,4 @@
-/*	$NetBSD: if_stf.c,v 1.82 2015/08/24 22:21:26 pooka Exp $	*/
+/*	$NetBSD: if_stf.c,v 1.80 2014/06/12 16:43:09 christos Exp $	*/
 /*	$KAME: if_stf.c,v 1.62 2001/06/07 22:32:16 itojun Exp $ */
 
 /*
@@ -75,12 +75,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_stf.c,v 1.82 2015/08/24 22:21:26 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_stf.c,v 1.80 2014/06/12 16:43:09 christos Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
-#endif
-
 #ifndef INET6
 	#error "pseudo-device stf requires options INET6"
 #endif
@@ -130,8 +127,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_stf.c,v 1.82 2015/08/24 22:21:26 pooka Exp $");
 #include <net/if_gif.h>
 #endif
 
-#include "ioconf.h"
-
 #define IN6_IS_ADDR_6TO4(x)	(ntohs((x)->s6_addr16[0]) == 0x2002)
 #define GET_V4(x)	((const struct in_addr *)(&(x)->s6_addr16[1]))
 
@@ -170,6 +165,8 @@ static const struct protosw in_stf_protosw =
 	.pr_ctloutput	= rip_ctloutput,
 	.pr_usrreqs	= &rip_usrreqs,
 };
+
+void	stfattach(int);
 
 static int stf_encapcheck(struct mbuf *, int, int, void *);
 static struct in6_ifaddr *stf_getsrcifa6(struct ifnet *);

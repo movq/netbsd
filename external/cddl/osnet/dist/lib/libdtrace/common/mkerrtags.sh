@@ -26,9 +26,10 @@
 #
 #ident	"%Z%%M%	%I%	%E% SMI"
 
-
-if [ "x$(echo -e)" != "x-e" ]; then
-	BSDECHO=-e
+if [ $(uname) = "Darwin" ]; then
+    BSDECHO=
+else
+    BSDECHO=-e
 fi
 
 echo ${BSDECHO} "\

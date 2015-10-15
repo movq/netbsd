@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.3 2014/11/22 01:28:13 pettai Exp $
+# $NetBSD: Makefile,v 1.2.24.1 2014/11/27 11:36:25 martin Exp $
 
 .include <bsd.own.mk>
 .include <${.CURDIR}/../../Makefile.inc>

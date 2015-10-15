@@ -1,4 +1,4 @@
-/*	$NetBSD: cpuctl.c,v 1.25 2014/12/16 04:07:40 msaitoh Exp $	*/
+/*	$NetBSD: cpuctl.c,v 1.23.4.1 2014/12/21 19:28:38 snj Exp $	*/
 
 /*-
  * Copyright (c) 2007, 2008, 2009, 2012 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #ifndef lint
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: cpuctl.c,v 1.25 2014/12/16 04:07:40 msaitoh Exp $");
+__RCSID("$NetBSD: cpuctl.c,v 1.23.4.1 2014/12/21 19:28:38 snj Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -137,7 +137,7 @@ usage(void)
 	fprintf(stderr, "       %s online cpuno\n", progname);
 	fprintf(stderr, "       %s intr cpuno\n", progname);
 	fprintf(stderr, "       %s nointr cpuno\n", progname);
-	fprintf(stderr, "       %s ucode [cpuno] [file]\n", progname);
+	fprintf(stderr, "       %s ucode [file]\n", progname);
 	exit(EXIT_FAILURE);
 	/* NOTREACHED */
 }

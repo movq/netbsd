@@ -1,5 +1,6 @@
 /* Disassemble Motorola M*Core instructions.
-   Copyright (C) 1993-2015 Free Software Foundation, Inc.
+   Copyright 1993, 1999, 2000, 2001, 2002, 2005, 2007, 2009
+   Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 

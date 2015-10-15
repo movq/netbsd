@@ -1,4 +1,4 @@
-/*	$NetBSD: fd.c,v 1.118 2015/07/11 10:32:46 kamil Exp $	*/
+/*	$NetBSD: fd.c,v 1.111 2014/08/10 16:44:34 tls Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.118 2015/07/11 10:32:46 kamil Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.111 2014/08/10 16:44:34 tls Exp $");
 
 #include "opt_ddb.h"
 #include "opt_m68k_arch.h"
@@ -89,7 +89,7 @@ __KERNEL_RCSID(0, "$NetBSD: fd.c,v 1.118 2015/07/11 10:32:46 kamil Exp $");
 #include <sys/queue.h>
 #include <sys/proc.h>
 #include <sys/fdio.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <dev/cons.h>
 
@@ -298,9 +298,7 @@ const struct cdevsw fd_cdevsw = {
 
 void fdstart(struct fd_softc *);
 
-struct dkdriver fddkdriver = {
-	.d_strategy = fdstrategy
-};
+struct dkdriver fddkdriver = { fdstrategy };
 
 void fd_set_motor(struct fdc_softc *, int);
 void fd_motor_off(void *);
@@ -354,7 +352,7 @@ fdc_dmastart(struct fdc_softc *fdc, int read, void *addr, vsize_t count)
 	 * Note 2:
 	 *  FDC is connected to LSB 8 bits of X68000 16 bit bus
 	 *  (as BUS_SPACE_MAP_SHIFTED_ODD defined in bus.h)
-	 *  so each FDC register is mapped at sparse odd address.
+	 *  so each FDC regsiter is mapped at sparse odd address.
 	 *
 	 * XXX: No proper API to get DMA address of FDC register for DMAC.
 	 */
@@ -1617,12 +1615,34 @@ fdioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 	int il[FD_MAX_NSEC + 1];
 	int i, j;
 
-	error = disk_ioctl(&fd->sc_dk, dev, cmd, addr, flag, l);
-	if (error != EPASSTHROUGH)
-		return error;
-
 	DPRINTF(("fdioctl:"));
 	switch (cmd) {
+	case DIOCGDINFO:
+		DPRINTF(("DIOCGDINFO\n"));
+#if 1
+		*(struct disklabel *)addr = *fd->sc_dk.dk_label;
+		return 0;
+#else
+		memset(&buffer, 0, sizeof(buffer));
+
+		buffer.d_secpercyl = fd->sc_type->seccyl;
+		buffer.d_type = DTYPE_FLOPPY;
+		buffer.d_secsize = 128 << fd->sc_type->secsize;
+
+		if (readdisklabel(dev, fdstrategy, &buffer, NULL) != NULL)
+			return EINVAL;
+
+		*(struct disklabel *)addr = buffer;
+		return 0;
+#endif
+
+	case DIOCGPART:
+		DPRINTF(("DIOCGPART\n"));
+		((struct partinfo *)addr)->disklab = fd->sc_dk.dk_label;
+		((struct partinfo *)addr)->part =
+		    &fd->sc_dk.dk_label->d_partitions[part];
+		return 0;
+
 	case DIOCWLABEL:
 		DPRINTF(("DIOCWLABEL\n"));
 		if ((flag & FWRITE) == 0)
@@ -1879,7 +1899,7 @@ fdgetdisklabel(struct fd_softc *sc, dev_t dev)
 	lp->d_ncylinders  = sc->sc_type->size / lp->d_secpercyl;
 	lp->d_secperunit  = sc->sc_type->size;
 
-	lp->d_type        = DKTYPE_FLOPPY;
+	lp->d_type        = DTYPE_FLOPPY;
 	lp->d_rpm         = 300; 	/* XXX */
 	lp->d_interleave  = 1;		/* FIXME: is this OK?		*/
 	lp->d_bbsize      = 0;

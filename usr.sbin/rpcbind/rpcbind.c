@@ -1,4 +1,4 @@
-/*	$NetBSD: rpcbind.c,v 1.22 2015/05/09 21:22:18 christos Exp $	*/
+/*	$NetBSD: rpcbind.c,v 1.19 2013/10/19 17:16:38 christos Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -118,20 +118,17 @@ main(int argc, char *argv[])
 
 	parseargs(argc, argv);
 
-	if (getrlimit(RLIMIT_NOFILE, &rl) == -1)
-		err(EXIT_FAILURE, "getrlimit(RLIMIT_NOFILE)");
-
+	getrlimit(RLIMIT_NOFILE, &rl);
 	if (rl.rlim_cur < 128) {
 		if (rl.rlim_max <= 128)
 			rl.rlim_cur = rl.rlim_max;
 		else
 			rl.rlim_cur = 128;
-		if (setrlimit(RLIMIT_NOFILE, &rl) < 0)
-			err(EXIT_FAILURE, "setrlimit(RLIMIT_NOFILE)");
+		setrlimit(RLIMIT_NOFILE, &rl);
 	}
 	nc_handle = setnetconfig(); 	/* open netconfig file */
 	if (nc_handle == NULL)
-		errx(EXIT_FAILURE, "could not read /etc/netconfig");
+		errx(1, "could not read /etc/netconfig");
 #ifdef PORTMAP
 	udptrans = "";
 	tcptrans = "";
@@ -139,7 +136,7 @@ main(int argc, char *argv[])
 
 	nconf = getnetconfigent("local");
 	if (nconf == NULL)
-		errx(EXIT_FAILURE, "can't find local transport");
+		errx(1, "can't find local transport");
 
 	rpc_control(RPC_SVC_CONNMAXREC_SET, &maxrec);
 
@@ -175,7 +172,7 @@ main(int argc, char *argv[])
 		}
 	} else {
 		if (daemon(0, 0))
-			err(EXIT_FAILURE, "fork failed");
+			err(1, "fork failed");
 	}
 
 	openlog("rpcbind", 0, LOG_DAEMON);
@@ -186,11 +183,11 @@ main(int argc, char *argv[])
 
 		if((p = getpwnam(RUN_AS)) == NULL) {
 			syslog(LOG_ERR, "cannot get uid of daemon: %m");
-			exit(EXIT_FAILURE);
+			exit(1);
 		}
 		if (setuid(p->pw_uid) == -1) {
 			syslog(LOG_ERR, "setuid to daemon failed: %m");
-			exit(EXIT_FAILURE);
+			exit(1);
 		}
 	}
 
@@ -201,7 +198,7 @@ main(int argc, char *argv[])
 	rpcbind_abort();
 	/* NOTREACHED */
 
-	return EXIT_SUCCESS;
+	return 0;
 }
 
 /*
@@ -522,7 +519,7 @@ terminate(int dummy)
 		"rpcbind terminating on signal. Restart with \"rpcbind -w\"");
 	write_warmstart();	/* Dump yourself */
 #endif
-	exit(EXIT_FAILURE);
+	exit(2);
 }
 
 void
@@ -568,7 +565,7 @@ parseargs(int argc, char *argv[])
 #endif
 		default:	/* error */
 			fprintf(stderr,	"usage: rpcbind [-Idwils]\n");
-			exit(EXIT_FAILURE);
+			exit (1);
 		}
 	}
 	if (doabort && !debugging) {

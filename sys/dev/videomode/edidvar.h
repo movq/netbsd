@@ -1,4 +1,4 @@
-/*	$NetBSD: edidvar.h,v 1.3 2014/11/17 00:46:04 jmcneill Exp $	*/
+/*	$NetBSD: edidvar.h,v 1.2.138.1 2014/11/18 18:19:10 snj Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.

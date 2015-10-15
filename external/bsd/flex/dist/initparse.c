@@ -1,7 +1,7 @@
-/*	$NetBSD: initparse.c,v 1.5 2014/10/30 18:44:05 christos Exp $	*/
+/*	$NetBSD: initparse.c,v 1.3.8.1 2015/03/06 20:49:11 snj Exp $	*/
 
 #include "flexdef.h"
-__RCSID("$NetBSD: initparse.c,v 1.5 2014/10/30 18:44:05 christos Exp $");
+__RCSID("$NetBSD: initparse.c,v 1.3.8.1 2015/03/06 20:49:11 snj Exp $");
 
 #ifndef lint
 static const char yysccsid[] = "@(#)yaccpar	1.9 (Berkeley) 02/21/93";

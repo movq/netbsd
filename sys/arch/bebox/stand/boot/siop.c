@@ -1,4 +1,4 @@
-/*	$NetBSD: siop.c,v 1.5 2014/12/12 15:57:30 phx Exp $	*/
+/*	$NetBSD: siop.c,v 1.4.2.1 2015/01/07 21:13:28 msaitoh Exp $	*/
 /*
  * Copyright (c) 2010 KIYOHARA Takashi
  * All rights reserved.

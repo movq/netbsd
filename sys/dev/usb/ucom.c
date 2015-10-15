@@ -1,4 +1,4 @@
-/*	$NetBSD: ucom.c,v 1.109 2015/04/13 16:33:25 riastradh Exp $	*/
+/*	$NetBSD: ucom.c,v 1.107 2014/08/10 16:44:36 tls Exp $	*/
 
 /*
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ucom.c,v 1.109 2015/04/13 16:33:25 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ucom.c,v 1.107 2014/08/10 16:44:36 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -51,7 +51,7 @@ __KERNEL_RCSID(0, "$NetBSD: ucom.c,v 1.109 2015/04/13 16:33:25 riastradh Exp $")
 #include <sys/queue.h>
 #include <sys/kauth.h>
 #include <sys/timepps.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <dev/usb/usb.h>
 
@@ -76,13 +76,13 @@ int ucomdebug = 0;
 #endif
 #define DPRINTF(x) DPRINTFN(0, x)
 
-#define	UCOMCALLUNIT_MASK	TTCALLUNIT_MASK
-#define	UCOMUNIT_MASK		TTUNIT_MASK
-#define	UCOMDIALOUT_MASK	TTDIALOUT_MASK
+#define	UCOMUNIT_MASK		0x3ffff
+#define	UCOMDIALOUT_MASK	0x80000
+#define	UCOMCALLUNIT_MASK	0x40000
 
-#define	UCOMCALLUNIT(x)		TTCALLUNIT(x)
-#define	UCOMUNIT(x)		TTUNIT(x)
-#define	UCOMDIALOUT(x)		TTDIALOUT(x)
+#define	UCOMUNIT(x)		(minor(x) & UCOMUNIT_MASK)
+#define	UCOMDIALOUT(x)		(minor(x) & UCOMDIALOUT_MASK)
+#define	UCOMCALLUNIT(x)		(minor(x) & UCOMCALLUNIT_MASK)
 
 /*
  * XXX: We can submit multiple input/output buffers to the usb stack

@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_elf.c,v 1.77 2015/09/26 16:12:24 maxv Exp $	*/
+/*	$NetBSD: exec_elf.c,v 1.69.2.2 2015/03/29 09:07:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 1994, 2000, 2005 The NetBSD Foundation, Inc.
@@ -57,7 +57,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: exec_elf.c,v 1.77 2015/09/26 16:12:24 maxv Exp $");
+__KERNEL_RCSID(1, "$NetBSD: exec_elf.c,v 1.69.2.2 2015/03/29 09:07:55 martin Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_pax.h"
@@ -116,7 +116,8 @@ static void	elf_free_emul_arg(void *);
 #define	ELF_TRUNC(a, b)		((a) & ~((b) - 1))
 
 static void
-elf_placedynexec(struct exec_package *epp, Elf_Ehdr *eh, Elf_Phdr *ph)
+elf_placedynexec(struct lwp *l, struct exec_package *epp, Elf_Ehdr *eh,
+    Elf_Phdr *ph)
 {
 	Elf_Addr align, offset;
 	int i;
@@ -126,7 +127,7 @@ elf_placedynexec(struct exec_package *epp, Elf_Ehdr *eh, Elf_Phdr *ph)
 			align = ph[i].p_align;
 
 #ifdef PAX_ASLR
-	if (pax_aslr_epp_active(epp)) {
+	if (pax_aslr_active(l)) {
 		size_t pax_align, l2, delta;
 		uint32_t r;
 
@@ -466,6 +467,13 @@ elf_load_interp(struct lwp *l, struct exec_package *epp, char *path,
 	if (vp->v_mount->mnt_flag & MNT_NOSUID)
 		epp->ep_vap->va_mode &= ~(S_ISUID | S_ISGID);
 
+#ifdef notyet /* XXX cgd 960926 */
+	XXX cgd 960926: (maybe) VOP_OPEN it (and VOP_CLOSE in copyargs?)
+
+	XXXps: this problem will make it impossible to use an interpreter
+	from a file system which actually does something in VOP_OPEN
+#endif
+
 	error = vn_marktext(vp);
 	if (error)
 		goto badunlock;
@@ -614,6 +622,9 @@ badunlock:
 bad:
 	if (ph != NULL)
 		kmem_free(ph, phsize);
+#ifdef notyet /* XXX cgd 960926 */
+	(maybe) VOP_CLOSE it
+#endif
 	vrele(vp);
 	return error;
 }
@@ -645,7 +656,10 @@ exec_elf_makecmds(struct lwp *l, struct exec_package *epp)
 		return error;
 
 	if (eh->e_type == ET_DYN)
-		/* PIE, and some libs have an entry point */
+		/*
+		 * XXX allow for executing shared objects. It seems silly
+		 * but other ELF-based systems allow it as well.
+		 */
 		is_dyn = true;
 	else if (eh->e_type != ET_EXEC)
 		return ENOEXEC;
@@ -697,7 +711,7 @@ exec_elf_makecmds(struct lwp *l, struct exec_package *epp)
 	 *
 	 * Probe functions would normally see if the interpreter (if any)
 	 * exists. Emulation packages may possibly replace the interpreter in
-	 * interp with a changed path (/emul/xxx/<path>).
+	 * interp[] with a changed path (/emul/xxx/<path>).
 	 */
 	pos = ELFDEFNNAME(NO_ADDR);
 	if (epp->ep_esch->u.elf_probe_func) {
@@ -710,8 +724,12 @@ exec_elf_makecmds(struct lwp *l, struct exec_package *epp)
 		pos = (Elf_Addr)startp;
 	}
 
+#if defined(PAX_MPROTECT) || defined(PAX_SEGVGUARD) || defined(PAX_ASLR)
+	l->l_proc->p_pax = epp->ep_pax_flags;
+#endif /* PAX_MPROTECT || PAX_SEGVGUARD || PAX_ASLR */
+
 	if (is_dyn)
-		elf_placedynexec(epp, eh, ph);
+		elf_placedynexec(l, epp, eh, ph);
 
 	/*
 	 * Load all the necessary sections
@@ -936,15 +954,8 @@ netbsd_elf_signature(struct lwp *l, struct exec_package *epp,
 			    np->n_descsz == ELF_NOTE_PAX_DESCSZ &&
 			    memcmp(ndata, ELF_NOTE_PAX_NAME,
 			    ELF_NOTE_PAX_NAMESZ) == 0) {
-				uint32_t flags;
-				memcpy(&flags, ndesc, sizeof(flags));
-#if defined(PAX_MPROTECT) || defined(PAX_SEGVGUARD) || defined(PAX_ASLR)
-				/* Convert the flags and insert them into
-				 * the exec package. */
-				pax_setup_elf_flags(epp, flags);
-#else
-				(void)flags; /* UNUSED */
-#endif /* PAX_MPROTECT || PAX_SEGVGUARD || PAX_ASLR */
+				memcpy(&epp->ep_pax_flags, ndesc,
+				    sizeof(epp->ep_pax_flags));
 				break;
 			}
 			BADNOTE("PaX tag");

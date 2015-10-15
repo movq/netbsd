@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz_dlopen_driver.c,v 1.4 2015/07/08 17:28:55 christos Exp $	*/
+/*	$NetBSD: dlz_dlopen_driver.c,v 1.2.2.2 2015/07/17 04:31:21 snj Exp $	*/
 
 /*
  * Copyright (C) 2011-2014  Internet Systems Consortium, Inc. ("ISC")

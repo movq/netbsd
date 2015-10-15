@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_twe.c,v 1.37 2015/04/13 16:33:25 riastradh Exp $	*/
+/*	$NetBSD: ld_twe.c,v 1.36 2012/02/02 19:43:06 tls Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_twe.c,v 1.37 2015/04/13 16:33:25 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld_twe.c,v 1.36 2012/02/02 19:43:06 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,6 +46,7 @@ __KERNEL_RCSID(0, "$NetBSD: ld_twe.c,v 1.37 2015/04/13 16:33:25 riastradh Exp $"
 #include <sys/dkio.h>
 #include <sys/disk.h>
 #include <sys/proc.h>
+#include <sys/rnd.h>
 
 #include <sys/bus.h>
 

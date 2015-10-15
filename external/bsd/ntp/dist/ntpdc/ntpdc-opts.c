@@ -1,9 +1,9 @@
-/*	$NetBSD: ntpdc-opts.c,v 1.4 2015/07/10 14:20:33 christos Exp $	*/
+/*	$NetBSD: ntpdc-opts.c,v 1.1.1.3.4.2 2015/04/23 18:53:03 snj Exp $	*/
 
 /*
  *  EDIT THIS FILE WITH CAUTION  (ntpdc-opts.c)
  *
- *  It has been AutoGen-ed  June 29, 2015 at 04:30:51 PM by AutoGen 5.18.5
+ *  It has been AutoGen-ed  April  7, 2015 at 04:26:14 AM by AutoGen 5.18.5pre4
  *  From the definitions    ntpdc-opts.def
  *  and the template file   options
  *
@@ -71,7 +71,7 @@ extern FILE * option_usage_fp;
  *  static const strings for ntpdc options
  */
 static char const ntpdc_opt_strs[1911] =
-/*     0 */ "ntpdc 4.2.8p3\n"
+/*     0 */ "ntpdc 4.2.8p2\n"
             "Copyright (C) 1992-2015 The University of Delaware and Network Time Foundation, all rights reserved.\n"
             "This is free software. It is licensed for use, modification and\n"
             "redistribution under the terms of the NTP License, copies of which\n"
@@ -130,14 +130,14 @@ static char const ntpdc_opt_strs[1911] =
 /*  1694 */ "no-load-opts\0"
 /*  1707 */ "no\0"
 /*  1710 */ "NTPDC\0"
-/*  1716 */ "ntpdc - vendor-specific NTPD control program - Ver. 4.2.8p3\n"
+/*  1716 */ "ntpdc - vendor-specific NTPD control program - Ver. 4.2.8p2\n"
             "Usage:  %s [ -<flag> [<val>] | --<name>[{=| }<val>] ]... [ host ...]\n\0"
 /*  1846 */ "$HOME\0"
 /*  1852 */ ".\0"
 /*  1854 */ ".ntprc\0"
 /*  1861 */ "http://bugs.ntp.org, bugs@ntp.org\0"
 /*  1895 */ "\n\0"
-/*  1897 */ "ntpdc 4.2.8p3";
+/*  1897 */ "ntpdc 4.2.8p2";
 
 /**
  *  ipv4 option description with
@@ -600,7 +600,7 @@ OPT_VALUE_SET_DEBUG_LEVEL++;
     (void)pOptDesc;
     (void)pOptions;
 }
-/* extracted from optmain.tlib near line 1250 */
+/* extracted from optmain.tlib near line 1245 */
 
 /**
  * The directory containing the data associated with ntpdc.
@@ -712,11 +712,11 @@ AO_gettext(char const * pz)
     if (option_xlateable_txt.field_ct != 0) {
         res = dgettext("libopts", pz);
         if (res == pz)
-            res = (char *)VOIDP(_(pz));
+            res = (char *)(void *)_(pz);
     } else
-        res = (char *)VOIDP(_(pz));
+        res = (char *)(void *)_(pz);
 #else
-    res = (char *)VOIDP(_(pz));
+    res = (char *)(void *)_(pz);
 #endif
     if (res == pz)
         return res;
@@ -753,7 +753,7 @@ translate_option_strings(void)
          *  Do the translations.  The first pointer follows the field count
          *  field.  The field count field is the size of a pointer.
          */
-        char ** ppz = (char**)VOIDP(&(option_xlateable_txt));
+        char ** ppz = (char**)(void*)&(option_xlateable_txt);
         int     ix  = option_xlateable_txt.field_ct;
 
         do {
@@ -763,16 +763,16 @@ translate_option_strings(void)
         /* prevent re-translation and disable "libopts" domain lookup */
         option_xlateable_txt.field_ct = 0;
 
-        coerce_it(VOIDP(&(opts->pzCopyright)));
-        coerce_it(VOIDP(&(opts->pzCopyNotice)));
-        coerce_it(VOIDP(&(opts->pzFullVersion)));
-        coerce_it(VOIDP(&(opts->pzUsageTitle)));
-        coerce_it(VOIDP(&(opts->pzExplain)));
-        coerce_it(VOIDP(&(opts->pzDetail)));
+        coerce_it((void*)&(opts->pzCopyright));
+        coerce_it((void*)&(opts->pzCopyNotice));
+        coerce_it((void*)&(opts->pzFullVersion));
+        coerce_it((void*)&(opts->pzUsageTitle));
+        coerce_it((void*)&(opts->pzExplain));
+        coerce_it((void*)&(opts->pzDetail));
         {
             tOptDesc * od = opts->pOptDesc;
             for (ix = opts->optCt; ix > 0; ix--, od++)
-                coerce_it(VOIDP(&(od->pzText)));
+                coerce_it((void*)&(od->pzText));
         }
     }
 }
@@ -798,7 +798,7 @@ static void bogus_function(void) {
      translate option names.
    */
   /* referenced via ntpdcOptions.pzCopyright */
-  puts(_("ntpdc 4.2.8p3\n\
+  puts(_("ntpdc 4.2.8p2\n\
 Copyright (C) 1992-2015 The University of Delaware and Network Time Foundation, all rights reserved.\n\
 This is free software. It is licensed for use, modification and\n\
 redistribution under the terms of the NTP License, copies of which\n\
@@ -864,14 +864,14 @@ implied warranty.\n"));
   puts(_("load options from a config file"));
 
   /* referenced via ntpdcOptions.pzUsageTitle */
-  puts(_("ntpdc - vendor-specific NTPD control program - Ver. 4.2.8p3\n\
+  puts(_("ntpdc - vendor-specific NTPD control program - Ver. 4.2.8p2\n\
 Usage:  %s [ -<flag> [<val>] | --<name>[{=| }<val>] ]... [ host ...]\n"));
 
   /* referenced via ntpdcOptions.pzExplain */
   puts(_("\n"));
 
   /* referenced via ntpdcOptions.pzFullVersion */
-  puts(_("ntpdc 4.2.8p3"));
+  puts(_("ntpdc 4.2.8p2"));
 
   /* referenced via ntpdcOptions.pzFullUsage */
   puts(_("<<<NOT-FOUND>>>"));
@@ -897,7 +897,7 @@ Usage:  %s [ -<flag> [<val>] | --<name>[{=| }<val>] ]... [ host ...]\n"));
 #line 121 "../version.c"
   puts(_("Automated Options version %s\n"
        "\tCopyright (C) 1999-2014 by Bruce Korb - all rights reserved\n"));
-#line 87 "../makeshell.c"
+#line 82 "../makeshell.c"
   puts(_("(AutoOpts bug):  %s.\n"));
 #line 90 "../reset.c"
   puts(_("optionResetOpt() called, but reset-option not configured"));
@@ -921,9 +921,9 @@ Usage:  %s [ -<flag> [<val>] | --<name>[{=| }<val>] ]... [ host ...]\n"));
   puts(_("%s: Command line arguments required\n"));
 #line 43 "../alias.c"
   puts(_("%d %s%s options allowed\n"));
-#line 94 "../makeshell.c"
+#line 89 "../makeshell.c"
   puts(_("%s error %d (%s) calling %s for '%s'\n"));
-#line 306 "../makeshell.c"
+#line 301 "../makeshell.c"
   puts(_("interprocess pipe"));
 #line 168 "../version.c"
   puts(_("error: version option argument '%c' invalid.  Use:\n"
@@ -1001,9 +1001,9 @@ Usage:  %s [ -<flag> [<val>] | --<name>[{=| }<val>] ]... [ host ...]\n"));
   puts(_("Try '%s %s' for more information.\n"));
 #line 45 "../alias.c"
   puts(_("one %s%s option allowed\n"));
-#line 208 "../makeshell.c"
+#line 203 "../makeshell.c"
   puts(_("standard output"));
-#line 943 "../makeshell.c"
+#line 938 "../makeshell.c"
   puts(_("standard output"));
 #line 274 "../usage.c"
   puts(_("standard output"));
@@ -1021,9 +1021,9 @@ Usage:  %s [ -<flag> [<val>] | --<name>[{=| }<val>] ]... [ host ...]\n"));
   puts(_("standard error"));
 #line 175 "../version.c"
   puts(_("standard error"));
-#line 208 "../makeshell.c"
+#line 203 "../makeshell.c"
   puts(_("write"));
-#line 943 "../makeshell.c"
+#line 938 "../makeshell.c"
   puts(_("write"));
 #line 273 "../usage.c"
   puts(_("write"));
@@ -1075,7 +1075,7 @@ Usage:  %s [ -<flag> [<val>] | --<name>[{=| }<val>] ]... [ host ...]\n"));
 #line 380 "../usage.c"
   puts(_("Options are specified by doubled hyphens and their name or by a single\n"
        "hyphen and the flag character.\n"));
-#line 921 "../makeshell.c"
+#line 916 "../makeshell.c"
   puts(_("\n"
        "= = = = = = = =\n\n"
        "This incarnation of genshell will produce\n"

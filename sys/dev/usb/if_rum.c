@@ -1,5 +1,5 @@
 /*	$OpenBSD: if_rum.c,v 1.40 2006/09/18 16:20:20 damien Exp $	*/
-/*	$NetBSD: if_rum.c,v 1.51 2015/08/30 13:09:48 ryoon Exp $	*/
+/*	$NetBSD: if_rum.c,v 1.48 2014/03/29 00:59:05 zafer Exp $	*/
 
 /*-
  * Copyright (c) 2005-2007 Damien Bergamini <damien.bergamini@free.fr>
@@ -24,7 +24,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_rum.c,v 1.51 2015/08/30 13:09:48 ryoon Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_rum.c,v 1.48 2014/03/29 00:59:05 zafer Exp $");
 
 #include <sys/param.h>
 #include <sys/sockio.h>
@@ -266,7 +266,7 @@ rum_attachhook(void *xsc)
 	int error;
 
 	if ((error = firmware_open("rum", name, &fwh)) != 0) {
-		printf("%s: failed firmware_open of file %s (error %d)\n",
+		printf("%s: failed loadfirmware of file %s (error %d)\n",
 		    device_xname(sc->sc_dev), name, error);
 		return error;
 	}
@@ -283,18 +283,18 @@ rum_attachhook(void *xsc)
 	if (error != 0) {
 		printf("%s: failed to read firmware (error %d)\n",
 		    device_xname(sc->sc_dev), error);
-		firmware_free(ucode, size);
+		firmware_free(ucode, 0);
 		return error;
 	}
 
 	if (rum_load_microcode(sc, ucode, size) != 0) {
 		printf("%s: could not load 8051 microcode\n",
 		    device_xname(sc->sc_dev));
-		firmware_free(ucode, size);
+		firmware_free(ucode, 0);
 		return ENXIO;
 	}
 
-	firmware_free(ucode, size);
+	firmware_free(ucode, 0);
 	sc->sc_flags |= RT2573_FWLOADED;
 
 	return 0;
@@ -483,9 +483,6 @@ rum_attach(device_t parent, device_t self, void *aux)
 	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
 	    sc->sc_dev);
 
-	if (!pmf_device_register(self, NULL, NULL))
-		aprint_error_dev(self, "couldn't establish power handler\n");
-
 	return;
 }
 
@@ -499,8 +496,6 @@ rum_detach(device_t self, int flags)
 
 	if (!ifp->if_softc)
 		return 0;
-
-	pmf_device_deregister(self);
 
 	s = splusb();
 

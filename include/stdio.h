@@ -1,4 +1,4 @@
-/*	$NetBSD: stdio.h,v 1.96 2015/03/24 07:44:52 wiz Exp $	*/
+/*	$NetBSD: stdio.h,v 1.91.2.1 2015/03/25 17:15:54 snj Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -330,11 +330,6 @@ int	 pclose(FILE *);
 FILE	*popen(const char *, const char *);
 __END_DECLS
 #endif
-#ifdef _NETBSD_SOURCE
-__BEGIN_DECLS
-FILE	*popenve(const char *, char *const *, char *const *, const char *);
-__END_DECLS
-#endif
 
 /*
  * Functions defined in ISO XPG4.2, ISO C99, POSIX 1003.1-2001 or later.
@@ -531,7 +526,6 @@ __END_DECLS
     defined(_NETBSD_SOURCE)
 __BEGIN_DECLS
 FILE *fmemopen(void * __restrict, size_t, const char * __restrict);
-FILE *open_memstream(char **, size_t *);
 ssize_t	 getdelim(char ** __restrict, size_t * __restrict, int,
 	    FILE * __restrict);
 ssize_t	 getline(char ** __restrict, size_t * __restrict, FILE * __restrict);
@@ -578,6 +572,8 @@ int	 scanf_l(locale_t, const char * __restrict, ...)
     __scanflike(2, 3);
 int	 sscanf_l(const char * __restrict, locale_t,
     const char * __restrict, ...) __scanflike(3, 4);
+int	 vscanf_l(locale_t, const char * __restrict, __va_list)
+    __scanflike(2, 0);
 int	 vscanf_l(locale_t, const char * __restrict, __va_list)
     __scanflike(2, 0);
 int	 vfscanf_l(FILE * __restrict, locale_t, const char * __restrict,

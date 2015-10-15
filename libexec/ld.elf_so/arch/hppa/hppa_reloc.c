@@ -1,4 +1,4 @@
-/*	$NetBSD: hppa_reloc.c,v 1.43 2014/08/25 20:40:52 joerg Exp $	*/
+/*	$NetBSD: hppa_reloc.c,v 1.42 2012/01/06 10:38:57 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2004 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: hppa_reloc.c,v 1.43 2014/08/25 20:40:52 joerg Exp $");
+__RCSID("$NetBSD: hppa_reloc.c,v 1.42 2012/01/06 10:38:57 skrll Exp $");
 #endif /* not lint */
 
 #include <stdlib.h>
@@ -656,19 +656,9 @@ _rtld_relocate_plt_object(const Obj_Entry *obj, const Elf_Rela *rela,
 		if (__predict_false(def == &_rtld_sym_zero))
 			return 0;
 
-		if (ELF_ST_TYPE(def->st_info) == STT_GNU_IFUNC) {
-			if (tp == NULL)
-				return 0;
-			Elf_Addr ptr = _rtld_resolve_ifunc(defobj, def);
-			assert(RTLD_IS_PLABEL(ptr));
-			hppa_plabel *label = RTLD_GET_PLABEL(ptr);
-			func_pc = label->hppa_plabel_pc;
-			func_sl = label->hppa_plabel_sl;
-		} else {
-			func_pc = (Elf_Addr)(defobj->relocbase + def->st_value +
-			    rela->r_addend);
-			func_sl = (Elf_Addr)(defobj->pltgot);
-		}
+		func_pc = (Elf_Addr)(defobj->relocbase + def->st_value +
+		    rela->r_addend);
+		func_sl = (Elf_Addr)(defobj->pltgot);
 
 		rdbg(("bind now/fixup in %s --> old=(%p,%p) new=(%p,%p)",
 		    defobj->strtab + def->st_name,
@@ -719,30 +709,4 @@ _rtld_relocate_plt_objects(const Obj_Entry *obj)
 			return -1;
 	}
 	return 0;
-}
-
-void
-_rtld_call_function_void(const Obj_Entry *obj, Elf_Addr ptr)
-{
-	volatile hppa_plabel plabel;
-	void (*f)(void);
-
-	plabel.hppa_plabel_pc = (Elf_Addr)ptr;
-	plabel.hppa_plabel_sl = (Elf_Addr)(obj->pltgot);
-	f = (void (*)(void))RTLD_MAKE_PLABEL(&plabel);
-
-	f();
-}
-
-Elf_Addr
-_rtld_call_function_addr(const Obj_Entry *obj, Elf_Addr ptr)
-{
-	volatile hppa_plabel plabel;
-	Elf_Addr (*f)(void);
-
-	plabel.hppa_plabel_pc = (Elf_Addr)ptr;
-	plabel.hppa_plabel_sl = (Elf_Addr)(obj->pltgot);
-	f = (Elf_Addr (*)(void))RTLD_MAKE_PLABEL(&plabel);
-
-	return f();
 }

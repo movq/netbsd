@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,13 +41,12 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+
 #include "acpi.h"
 #include "accommon.h"
 #include "amlcode.h"
 #include "acdebug.h"
-#ifdef ACPI_DISASSEMBLER
 #include "acdisasm.h"
-#endif
 
 
 #ifdef ACPI_DEBUGGER
@@ -181,7 +180,6 @@ AcpiDbSingleStep (
     UINT32                  OriginalDebugLevel;
     ACPI_PARSE_OBJECT       *DisplayOp;
     ACPI_PARSE_OBJECT       *ParentOp;
-    UINT32                  AmlOffset;
 
 
     ACPI_FUNCTION_ENTRY ();
@@ -195,18 +193,15 @@ AcpiDbSingleStep (
         return (AE_ABORT_METHOD);
     }
 
-    AmlOffset = (UINT32) ACPI_PTR_DIFF (Op->Common.Aml,
-                    WalkState->ParserState.AmlStart);
-
     /* Check for single-step breakpoint */
 
     if (WalkState->MethodBreakpoint &&
-       (WalkState->MethodBreakpoint <= AmlOffset))
+       (WalkState->MethodBreakpoint <= Op->Common.AmlOffset))
     {
         /* Check if the breakpoint has been reached or passed */
         /* Hit the breakpoint, resume single step, reset breakpoint */
 
-        AcpiOsPrintf ("***Break*** at AML offset %X\n", AmlOffset);
+        AcpiOsPrintf ("***Break*** at AML offset %X\n", Op->Common.AmlOffset);
         AcpiGbl_CmSingleStep = TRUE;
         AcpiGbl_StepToNextCall = FALSE;
         WalkState->MethodBreakpoint = 0;
@@ -215,10 +210,10 @@ AcpiDbSingleStep (
     /* Check for user breakpoint (Must be on exact Aml offset) */
 
     else if (WalkState->UserBreakpoint &&
-            (WalkState->UserBreakpoint == AmlOffset))
+            (WalkState->UserBreakpoint == Op->Common.AmlOffset))
     {
         AcpiOsPrintf ("***UserBreakpoint*** at AML offset %X\n",
-            AmlOffset);
+            Op->Common.AmlOffset);
         AcpiGbl_CmSingleStep = TRUE;
         AcpiGbl_StepToNextCall = FALSE;
         WalkState->MethodBreakpoint = 0;
@@ -314,9 +309,7 @@ AcpiDbSingleStep (
 
         /* Now we can display it */
 
-#ifdef ACPI_DISASSEMBLER
         AcpiDmDisassemble (WalkState, DisplayOp, ACPI_UINT32_MAX);
-#endif
 
         if ((Op->Common.AmlOpcode == AML_IF_OP) ||
             (Op->Common.AmlOpcode == AML_WHILE_OP))
@@ -430,16 +423,18 @@ AcpiDbInitialize (
     AcpiGbl_DbConsoleDebugLevel = ACPI_NORMAL_DEFAULT | ACPI_LV_TABLES;
     AcpiGbl_DbOutputFlags       = ACPI_DB_CONSOLE_OUTPUT;
 
-    AcpiGbl_DbOpt_Disasm        = FALSE;
-    AcpiGbl_DbOpt_Verbose       = TRUE;
-    AcpiGbl_DbOpt_NoIniMethods  = FALSE;
+    AcpiGbl_DbOpt_tables        = FALSE;
+    AcpiGbl_DbOpt_disasm        = FALSE;
+    AcpiGbl_DbOpt_stats         = FALSE;
+    AcpiGbl_DbOpt_verbose       = TRUE;
+    AcpiGbl_DbOpt_ini_methods   = TRUE;
 
     AcpiGbl_DbBuffer = AcpiOsAllocate (ACPI_DEBUG_BUFFER_SIZE);
     if (!AcpiGbl_DbBuffer)
     {
         return_ACPI_STATUS (AE_NO_MEMORY);
     }
-    memset (AcpiGbl_DbBuffer, 0, ACPI_DEBUG_BUFFER_SIZE);
+    ACPI_MEMSET (AcpiGbl_DbBuffer, 0, ACPI_DEBUG_BUFFER_SIZE);
 
     /* Initial scope is the root */
 
@@ -480,9 +475,10 @@ AcpiDbInitialize (
         }
     }
 
-    if (!AcpiGbl_DbOpt_Verbose)
+    if (!AcpiGbl_DbOpt_verbose)
     {
-        AcpiGbl_DbOpt_Disasm = TRUE;
+        AcpiGbl_DbOpt_disasm = TRUE;
+        AcpiGbl_DbOpt_stats = FALSE;
     }
 
     return_ACPI_STATUS (AE_OK);

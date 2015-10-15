@@ -1,4 +1,4 @@
-/*	$NetBSD: keysock.c,v 1.48 2015/05/02 17:18:04 rtr Exp $	*/
+/*	$NetBSD: keysock.c,v 1.43 2014/08/09 05:33:01 rtr Exp $	*/
 /*	$FreeBSD: src/sys/netipsec/keysock.c,v 1.3.2.1 2003/01/24 05:11:36 sam Exp $	*/
 /*	$KAME: keysock.c,v 1.25 2001/08/13 20:07:41 itojun Exp $	*/
 
@@ -32,7 +32,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: keysock.c,v 1.48 2015/05/02 17:18:04 rtr Exp $");
+__KERNEL_RCSID(0, "$NetBSD: keysock.c,v 1.43 2014/08/09 05:33:01 rtr Exp $");
+
+#include "opt_ipsec.h"
 
 /* This code has derived from sys/net/rtsock.c on FreeBSD2.2.5 */
 
@@ -483,7 +485,7 @@ key_detach(struct socket *so)
 }
 
 static int
-key_accept(struct socket *so, struct sockaddr *nam)
+key_accept(struct socket *so, struct mbuf *nam)
 {
 	KASSERT(solocked(so));
 
@@ -493,7 +495,7 @@ key_accept(struct socket *so, struct sockaddr *nam)
 }
 
 static int
-key_bind(struct socket *so, struct sockaddr *nam, struct lwp *l)
+key_bind(struct socket *so, struct mbuf *nam, struct lwp *l)
 {
 	KASSERT(solocked(so));
 
@@ -509,7 +511,7 @@ key_listen(struct socket *so, struct lwp *l)
 }
 
 static int
-key_connect(struct socket *so, struct sockaddr *nam, struct lwp *l)
+key_connect(struct socket *so, struct mbuf *nam, struct lwp *l)
 {
 	KASSERT(solocked(so));
 
@@ -583,7 +585,7 @@ key_stat(struct socket *so, struct stat *ub)
 }
 
 static int
-key_peeraddr(struct socket *so, struct sockaddr *nam)
+key_peeraddr(struct socket *so, struct mbuf *nam)
 {
 	struct rawcb *rp = sotorawcb(so);
 
@@ -599,7 +601,7 @@ key_peeraddr(struct socket *so, struct sockaddr *nam)
 }
 
 static int
-key_sockaddr(struct socket *so, struct sockaddr *nam)
+key_sockaddr(struct socket *so, struct mbuf *nam)
 {
 	struct rawcb *rp = sotorawcb(so);
 
@@ -631,7 +633,7 @@ key_recvoob(struct socket *so, struct mbuf *m, int flags)
 }
 
 static int
-key_send(struct socket *so, struct mbuf *m, struct sockaddr *nam,
+key_send(struct socket *so, struct mbuf *m, struct mbuf *nam,
     struct mbuf *control, struct lwp *l)
 {
 	int error = 0;
@@ -667,6 +669,44 @@ key_purgeif(struct socket *so, struct ifnet *ifa)
 }
 
 /*
+ * key_usrreq()
+ * derived from net/rtsock.c:route_usrreq()
+ */
+static int
+key_usrreq(struct socket *so, int req,struct mbuf *m, struct mbuf *nam,
+    struct mbuf *control, struct lwp *l)
+{
+	int s, error = 0;
+
+	KASSERT(req != PRU_ATTACH);
+	KASSERT(req != PRU_DETACH);
+	KASSERT(req != PRU_ACCEPT);
+	KASSERT(req != PRU_BIND);
+	KASSERT(req != PRU_LISTEN);
+	KASSERT(req != PRU_CONNECT);
+	KASSERT(req != PRU_CONNECT2);
+	KASSERT(req != PRU_DISCONNECT);
+	KASSERT(req != PRU_SHUTDOWN);
+	KASSERT(req != PRU_ABORT);
+	KASSERT(req != PRU_CONTROL);
+	KASSERT(req != PRU_SENSE);
+	KASSERT(req != PRU_PEERADDR);
+	KASSERT(req != PRU_SOCKADDR);
+	KASSERT(req != PRU_RCVD);
+	KASSERT(req != PRU_RCVOOB);
+	KASSERT(req != PRU_SEND);
+	KASSERT(req != PRU_SENDOOB);
+	KASSERT(req != PRU_PURGEIF);
+
+	s = splsoftnet();
+	error = raw_usrreq(so, req, m, nam, control, l);
+	m = control = NULL;	/* reclaimed in raw_usrreq */
+	splx(s);
+
+	return error;
+}
+
+/*
  * Definitions of protocols supported in the KEY domain.
  */
 
@@ -692,6 +732,7 @@ PR_WRAP_USRREQS(key)
 #define	key_send	key_send_wrapper
 #define	key_sendoob	key_sendoob_wrapper
 #define	key_purgeif	key_purgeif_wrapper
+#define	key_usrreq	key_usrreq_wrapper
 
 const struct pr_usrreqs key_usrreqs = {
 	.pr_attach	= key_attach,
@@ -713,6 +754,7 @@ const struct pr_usrreqs key_usrreqs = {
 	.pr_send	= key_send,
 	.pr_sendoob	= key_sendoob,
 	.pr_purgeif	= key_purgeif,
+	.pr_generic	= key_usrreq,
 };
 
 const struct protosw keysw[] = {

@@ -1,4 +1,4 @@
-/*	$NetBSD: kernel.h,v 1.8 2015/08/20 21:41:12 skrll Exp $	*/
+/*	$NetBSD: kernel.h,v 1.4.2.1 2015/03/06 21:39:08 snj Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -37,11 +37,9 @@
 #include <sys/param.h>
 #include <sys/systm.h>
 
-#include <lib/libkern/libkern.h>
-
 #define	oops_in_progress	(panicstr != NULL)
 
-#define	IS_ENABLED(option)	(option)
+#define	IS_ENABLED(option)	0 /* XXX Hmm...  */
 
 #define	__printf	__printflike
 #define	__user
@@ -95,6 +93,16 @@
  */
 #define	upper_32_bits(X)	((uint32_t) (((X) >> 16) >> 16))
 #define	lower_32_bits(X)	((uint32_t) ((X) & 0xffffffffUL))
+
+/*
+ * Given x = &c->f, container_of(x, T, f) gives us back c, where T is
+ * the type of c.
+ */
+#define	container_of(PTR, TYPE, FIELD)					\
+	((TYPE *)(((char *)(PTR)) - offsetof(TYPE, FIELD) +		\
+	    0*sizeof((PTR) -						\
+		&((TYPE *)(((char *)(PTR)) -				\
+			offsetof(TYPE, FIELD)))->FIELD)))
 
 #define	ARRAY_SIZE(ARRAY)	__arraycount(ARRAY)
 

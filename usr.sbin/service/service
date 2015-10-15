@@ -1,5 +1,5 @@
 #!/bin/sh
-#    $NetBSD: service,v 1.7 2015/04/05 11:33:15 apb Exp $
+#    $NetBSD: service,v 1.7.2.2 2015/04/21 05:22:58 snj Exp $
 #    service -- run or list system services
 #
 #  Taken from FreeBSD: releng/10.1/usr.sbin/service/service.sh 268098

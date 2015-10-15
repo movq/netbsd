@@ -1,8 +1,7 @@
-#	$NetBSD: Makefile,v 1.85 2014/12/16 20:05:54 pooka Exp $
+#	$NetBSD: Makefile,v 1.84 2014/08/10 23:25:49 matt Exp $
 #
 
 WARNS?=	5
-LIB=	pthread
 
 .include <bsd.own.mk>
 
@@ -36,10 +35,7 @@ CPPFLAGS+=	-D__LIBPTHREAD_SOURCE__ -D__LIBC_THREAD_STUBS
 # XXX: This crappy poke at libc's internals needs to be fixed.
 CPPFLAGS+=-I${NETBSDSRCDIR}/sys -I${.CURDIR}/../libc
 
-# providing alternative MI implementations for creating an lwp is
-# possible by setting PTHREAD_MAKELWP.  Currently, alternatives are
-# set by the rumprun software stacks (see repo.rumpkernel.org)
-PTHREAD_MAKELWP?=	pthread_makelwp_netbsd.c
+LIB=	pthread
 
 #
 # NOTE: When you create a new file for libpthread, make sure that pthread.c
@@ -49,13 +45,9 @@ PTHREAD_MAKELWP?=	pthread_makelwp_netbsd.c
 SRCS=	pthread.c 
 SRCS+=	pthread_attr.c
 SRCS+=	pthread_barrier.c
-# used by rumprun-posix to work around symbol collisions
-.if ${PTHREAD_CANCELSTUB:Uyes} != "no"
 SRCS+=	pthread_cancelstub.c
-.endif
 SRCS+=	pthread_cond.c
 SRCS+=	pthread_lock.c 
-SRCS+=	${PTHREAD_MAKELWP}
 SRCS+=	pthread_misc.c
 SRCS+=	pthread_mutex.c
 SRCS+=	pthread_once.c

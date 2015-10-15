@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.26 2015/01/05 18:51:10 gson Exp $
+# $NetBSD: Makefile,v 1.18.24.2 2015/01/06 11:00:40 martin Exp $
 
 # Link the mesa_dri_drivers mega driver.
 

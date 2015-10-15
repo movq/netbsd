@@ -1,4 +1,6 @@
-#	$NetBSD: Makefile,v 1.17 2015/07/01 15:38:56 christos Exp $
+#	$NetBSD: Makefile,v 1.15.2.1 2015/01/02 20:41:51 martin Exp $
+
+NOLINT=		1	# XTODO: tess.ln SIGSEGVs lint :(
 
 .include <bsd.own.mk>
 

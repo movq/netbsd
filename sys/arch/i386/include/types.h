@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.83 2015/08/27 12:30:51 pooka Exp $	*/
+/*	$NetBSD: types.h,v 1.79 2014/04/24 19:23:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -90,7 +90,7 @@ typedef __uint64_t	pmc_ctr_t;
 typedef int		register_t;
 #define	PRIxREGISTER	"x"
 
-typedef	unsigned char		__cpu_simple_lock_nv_t;
+typedef	volatile unsigned char		__cpu_simple_lock_t;
 
 /* __cpu_simple_lock_t used to be a full word. */
 #define	__CPU_SIMPLE_LOCK_PAD
@@ -109,13 +109,12 @@ typedef	unsigned char		__cpu_simple_lock_nv_t;
 #define	__HAVE_SYSCALL_INTERN
 #define	__HAVE_MINIMAL_EMUL
 #define	__HAVE_OLD_DISKLABEL
-#if defined(_KERNEL)
+#if defined(_KERNEL) && !defined(_RUMPKERNEL) && !defined(_RUMP_NATIVE_ABI)
 /*
  * Processors < i586 do not have cmpxchg8b, and we compile for i486
- * by default. The kernel tsc driver uses them though, and handles < i586
- * by patching.  E.g. rump kernels and crash(8) and a selection of
- * other run-in-userspace code defines _KERNEL, but is careful not to
- * build anything using 64bit atomic ops by default.
+ * by default in userland. The kernel tsc driver uses them though,
+ * and handles < i586 * by patching. We don't want to expose them in
+ * userland, that is why we exclude rump.
  */
 #define __HAVE_ATOMIC64_OPS
 #endif
@@ -129,10 +128,6 @@ typedef	unsigned char		__cpu_simple_lock_nv_t;
 
 #if defined(_KERNEL)
 #define	__HAVE_RAS
-
-#if !defined(XEN) && !defined(NO_PCI_MSI_MSIX)
-#define __HAVE_PCI_MSI_MSIX
-#endif
 #endif
 
 #endif	/* _I386_MACHTYPES_H_ */

@@ -828,10 +828,10 @@ eh_region_may_contain_throw (eh_region r)
 /* We want to transform
 	try { body; } catch { stuff; }
    to
-	normal_sequence:
+	normal_seqence:
 	  body;
 	  over:
-	eh_sequence:
+	eh_seqence:
 	  landing_pad:
 	  stuff;
 	  goto over;
@@ -1752,12 +1752,6 @@ lower_catch (struct leh_state *state, gimple tp)
   this_state.cur_region = state->cur_region;
   this_state.ehp_region = try_region;
 
-  /* Add eh_seq from lowering EH in the cleanup sequence after the cleanup
-     itself, so that e.g. for coverage purposes the nested cleanups don't
-     appear before the cleanup body.  See PR64634 for details.  */
-  gimple_seq old_eh_seq = eh_seq;
-  eh_seq = NULL;
-
   out_label = NULL;
   cleanup = gimple_try_cleanup (tp);
   for (gsi = gsi_start (cleanup);
@@ -1794,11 +1788,7 @@ lower_catch (struct leh_state *state, gimple tp)
 
   gimple_try_set_cleanup (tp, new_seq);
 
-  gimple_seq new_eh_seq = eh_seq;
-  eh_seq = old_eh_seq;
-  gimple_seq ret_seq = frob_into_branch_around (tp, try_region, out_label);
-  gimple_seq_add_seq (&eh_seq, new_eh_seq);
-  return ret_seq;
+  return frob_into_branch_around (tp, try_region, out_label);
 }
 
 /* A subroutine of lower_eh_constructs_1.  Lower a GIMPLE_TRY with a

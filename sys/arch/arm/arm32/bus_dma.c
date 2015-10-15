@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_dma.c,v 1.93 2015/08/24 04:51:18 matt Exp $	*/
+/*	$NetBSD: bus_dma.c,v 1.86.2.3 2015/05/27 05:33:29 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
 #include "opt_arm_bus_space.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.93 2015/08/24 04:51:18 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.86.2.3 2015/05/27 05:33:29 msaitoh Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -775,19 +775,13 @@ _bus_dmamap_sync_segment(vaddr_t va, paddr_t pa, vsize_t len, int ops, bool read
 
 	switch (ops) {
 	case BUS_DMASYNC_PREREAD|BUS_DMASYNC_PREWRITE:
-#ifdef ARM_MMU_EXTENDED
-		(void)readonly_p;
-#else
 		if (!readonly_p) {
-#endif
 			STAT_INCR(sync_prereadwrite);
 			cpu_dcache_wbinv_range(va, len);
 			cpu_sdcache_wbinv_range(va, pa, len);
 			break;
-#ifndef ARM_MMU_EXTENDED
 		}
 		/* FALLTHROUGH */
-#endif
 
 	case BUS_DMASYNC_PREREAD: {
 		const size_t line_size = arm_dcache_align;
@@ -915,8 +909,7 @@ _bus_dmamap_sync_mbuf(bus_dma_tag_t t, bus_dmamap_t map, bus_size_t offset,
 
 		/*
 		 * We can save a lot of work here if we know the mapping
-		 * is read-only at the MMU and we aren't using the armv6+
-		 * MMU:
+		 * is read-only at the MMU:
 		 *
 		 * If a mapping is read-only, no dirty cache blocks will
 		 * exist for it.  If a writable mapping was made read-only,
@@ -931,15 +924,9 @@ _bus_dmamap_sync_mbuf(bus_dma_tag_t t, bus_dmamap_t map, bus_size_t offset,
 		 * cache), this will have to be revisited.
 		 */
 
-		if ((ds->_ds_flags & _BUS_DMAMAP_COHERENT) == 0) {
-			/*
-			 * If we are doing preread (DMAing into the mbuf),
-			 * this mbuf better not be readonly, 
-			 */
-			KASSERT(!(ops & BUS_DMASYNC_PREREAD) || !M_ROMAP(m));
+		if ((ds->_ds_flags & _BUS_DMAMAP_COHERENT) == 0)
 			_bus_dmamap_sync_segment(va, pa, seglen, ops,
 			    M_ROMAP(m));
-		}
 		voff += seglen;
 		ds_off += seglen;
 		len -= seglen;
@@ -1416,7 +1403,7 @@ _bus_dmamem_unmap(bus_dma_tag_t t, void *kva, size_t size)
 
 #ifdef __HAVE_MM_MD_DIRECT_MAPPED_PHYS
 	/*
-	 * Check to see if this used direct mapped memory.  Get its physical
+	 * Check to see if this used direct mapped memory.  Get it's physical
 	 * address and try to map it.  If the resultant matches the kva, then
 	 * it was and so we can just return since we have notice to free up.
 	 */

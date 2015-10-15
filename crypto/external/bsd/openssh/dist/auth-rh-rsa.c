@@ -1,4 +1,4 @@
-/*	$NetBSD: auth-rh-rsa.c,v 1.6 2015/04/03 23:58:19 christos Exp $	*/
+/*	$NetBSD: auth-rh-rsa.c,v 1.4.22.1 2015/04/30 06:07:30 riz Exp $	*/
 /* $OpenBSD: auth-rh-rsa.c,v 1.44 2014/07/15 15:54:14 millert Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -15,7 +15,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: auth-rh-rsa.c,v 1.6 2015/04/03 23:58:19 christos Exp $");
+__RCSID("$NetBSD: auth-rh-rsa.c,v 1.4.22.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/types.h>
 
 #include <pwd.h>

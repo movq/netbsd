@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,7 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
 
 #include "aslcompiler.h"
 #include "actables.h"
@@ -88,7 +89,6 @@ AslInitializeGlobals (
 
     /* Init compiler globals */
 
-    Gbl_SyntaxError = 0;
     Gbl_CurrentColumn = 0;
     Gbl_CurrentLineNumber = 1;
     Gbl_LogicalLineNumber = 1;
@@ -159,10 +159,10 @@ AslDetectSourceFileType (
 
     /* Check for 100% ASCII source file (comments are ignored) */
 
-    Status = FlCheckForAscii (Info->Filename, TRUE);
+    Status = FlCheckForAscii (Info->Handle, Info->Filename, TRUE);
     if (ACPI_FAILURE (Status))
     {
-        printf ("Invalid characters in input file - %s\n", Info->Filename);
+        printf ("Non-ascii input file - %s\n", Info->Filename);
 
         if (!Gbl_IgnoreErrors)
         {
@@ -246,17 +246,12 @@ AslDoDisassembly (
         return (Status);
     }
 
-    /* Handle additional output files for disassembler */
-
-    Gbl_FileType = ASL_INPUT_TYPE_ACPI_TABLE;
-    Status = FlOpenMiscOutputFiles (Gbl_OutputFilenamePrefix);
-
     /* This is where the disassembly happens */
 
-    AcpiGbl_DbOpt_Disasm = TRUE;
+    AcpiGbl_DbOpt_disasm = TRUE;
     Status = AdAmlDisassemble (AslToFile,
         Gbl_Files[ASL_FILE_INPUT].Filename, Gbl_OutputFilenamePrefix,
-        &Gbl_Files[ASL_FILE_INPUT].Filename);
+        &Gbl_Files[ASL_FILE_INPUT].Filename, Gbl_GetAllTables);
     if (ACPI_FAILURE (Status))
     {
         return (Status);
@@ -265,6 +260,13 @@ AslDoDisassembly (
     /* Check if any control methods were unresolved */
 
     AcpiDmUnresolvedWarning (0);
+
+#if 0
+    /* TBD: Handle additional output files for disassembler */
+
+    Status = FlOpenMiscOutputFiles (Gbl_OutputFilenamePrefix);
+    NsDisplayNamespace ();
+#endif
 
     /* Shutdown compiler and ACPICA subsystem */
 
@@ -282,11 +284,8 @@ AslDoDisassembly (
         return (AE_CTRL_CONTINUE);
     }
 
-    /* No need to free the filename string */
-
+    ACPI_FREE (Gbl_Files[ASL_FILE_INPUT].Filename);
     Gbl_Files[ASL_FILE_INPUT].Filename = NULL;
-
-    CmDeleteCaches ();
     return (AE_OK);
 }
 
@@ -326,18 +325,13 @@ AslDoOneFile (
         return (Status);
     }
 
-    /* Take a copy of the input filename, convert any backslashes */
-
-    Gbl_Files[ASL_FILE_INPUT].Filename =
-        UtStringCacheCalloc (strlen (Filename) + 1);
-
-    strcpy (Gbl_Files[ASL_FILE_INPUT].Filename, Filename);
-    UtConvertBackslashes (Gbl_Files[ASL_FILE_INPUT].Filename);
+    Gbl_Files[ASL_FILE_INPUT].Filename = Filename;
+    UtConvertBackslashes (Filename);
 
     /*
      * AML Disassembly (Optional)
      */
-    if (Gbl_DisasmFlag)
+    if (Gbl_DisasmFlag || Gbl_GetAllTables)
     {
         Status = AslDoDisassembly ();
         if (Status != AE_CTRL_CONTINUE)
@@ -356,8 +350,6 @@ AslDoOneFile (
         AePrintErrorLog (ASL_FILE_STDERR);
         return (AE_ERROR);
     }
-
-    Gbl_OriginalInputFileSize = FlGetFileSize (ASL_FILE_INPUT);
 
     /* Determine input file type */
 
@@ -404,6 +396,7 @@ AslDoOneFile (
 
         if (Gbl_Signature)
         {
+            ACPI_FREE (Gbl_Signature);
             Gbl_Signature = NULL;
         }
 

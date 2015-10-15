@@ -1,4 +1,4 @@
-/*	$NetBSD: grf.c,v 1.45 2014/12/14 23:48:58 chs Exp $	*/
+/*	$NetBSD: grf.c,v 1.44.2.1 2014/12/31 06:44:00 snj Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -45,7 +45,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grf.c,v 1.45 2014/12/14 23:48:58 chs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grf.c,v 1.44.2.1 2014/12/31 06:44:00 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

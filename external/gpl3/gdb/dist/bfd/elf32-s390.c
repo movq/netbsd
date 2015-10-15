@@ -1,5 +1,6 @@
 /* IBM S/390-specific support for 32-bit ELF
-   Copyright (C) 2000-2015 Free Software Foundation, Inc.
+   Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
+   2011, 2012 Free Software Foundation, Inc.
    Contributed by Carl B. Pedersen and Martin Schwidefsky.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -1250,12 +1251,6 @@ elf_s390_check_relocs (bfd *abfd,
 	  /* Fall through.  */
 
 	case R_390_TLS_LE32:
-	  /* For static linking and executables this reloc will be
-	     calculated at linktime otherwise a TLS_TPOFF runtime
-	     reloc will be generated.  */
-	  if (r_type == R_390_TLS_LE32 && info->pie)
-	    break;
-
 	  if (!info->shared)
 	    break;
 	  info->flags |= DF_STATIC_TLS;
@@ -1762,7 +1757,7 @@ elf_s390_adjust_dynamic_symbol (struct bfd_link_info *info,
 
   s = htab->sdynbss;
 
-  return _bfd_elf_adjust_dynamic_copy (info, h, s);
+  return _bfd_elf_adjust_dynamic_copy (h, s);
 }
 
 /* Allocate space in .plt, .got and associated reloc sections for
@@ -2051,7 +2046,7 @@ elf_s390_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
 
   /* Set up .got offsets for local syms, and space for local dynamic
      relocs.  */
-  for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
+  for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link_next)
     {
       bfd_signed_vma *local_got;
       bfd_signed_vma *end_local_got;
@@ -3110,7 +3105,7 @@ elf_s390_relocate_section (bfd *output_bfd,
 	  break;
 
 	case R_390_TLS_LE32:
-	  if (info->shared && !info->pie)
+	  if (info->shared)
 	    {
 	      /* Linking a shared library with non-fpic code requires
 		 a R_390_TLS_TPOFF relocation.  */
@@ -3909,7 +3904,7 @@ elf_s390_finish_dynamic_sections (bfd *output_bfd,
 	->this_hdr.sh_entsize = 4;
     }
   /* Finish dynamic symbol for local IFUNC symbols.  */
-  for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
+  for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link_next)
     {
       struct plt_entry *local_plt;
       Elf_Internal_Sym *isym;
@@ -3988,7 +3983,7 @@ elf32_s390_merge_private_bfd_data (bfd *ibfd, bfd *obfd)
 }
 
 
-#define TARGET_BIG_SYM	s390_elf32_vec
+#define TARGET_BIG_SYM	bfd_elf32_s390_vec
 #define TARGET_BIG_NAME	"elf32-s390"
 #define ELF_ARCH	bfd_arch_s390
 #define ELF_TARGET_ID	S390_ELF_DATA

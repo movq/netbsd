@@ -1,4 +1,4 @@
-/* $NetBSD: mklocaledb.c,v 1.4 2015/06/16 22:54:10 christos Exp $ */
+/* $NetBSD: mklocaledb.c,v 1.3 2013/07/04 11:36:17 joerg Exp $ */
 
 /*-
  * Copyright (c)2008 Citrus Project,
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: mklocaledb.c,v 1.4 2015/06/16 22:54:10 christos Exp $");
+__RCSID("$NetBSD: mklocaledb.c,v 1.3 2013/07/04 11:36:17 joerg Exp $");
 #endif /* not lint */
 
 #include <assert.h>
@@ -252,17 +252,17 @@ mklocaledb(const char *type, FILE *reader, FILE *writer)
 		/*NOTREACHED*/
 	}
 	if (_db_factory_create(&df, &_db_hash_std, NULL))
-		errx(EXIT_FAILURE, "can't create db factory");
+		errx(1, "can't create db factory.\n");
 	if (_db_factory_add32_by_s(df, category->vers_sym, category->version))
-		errx(EXIT_FAILURE, "can't store db");
+		errx(1, "can't store db.\n");
 	token = &category->tokens[0];
 	while (token->key != NULL) {
 		line = fparseln(reader, NULL,
 		    NULL, delim, FPARSELN_UNESCALL);
 		if (line == NULL)
-			errx(EXIT_FAILURE, "can't read line");
+			errx(1, "can't read line.\n");
 		if ((*token->save)(df, token->key, (const char *)line))
-			errx(EXIT_FAILURE, "can't store db");
+			errx(1, "can't store db.\n");
 		free(line);
 		++token;
 	}
@@ -270,11 +270,11 @@ mklocaledb(const char *type, FILE *reader, FILE *writer)
 	_DIAGASSERT(size > 0);
 	serialized = malloc(size);
 	if (serialized == NULL)
-		errx(EXIT_FAILURE, "can't malloc");
+		errx(1, "can't malloc.\n");
 	_DIAGASSERT(serialized != NULL);
 	_region_init(&r, serialized, size);
 	if (_db_factory_serialize(df, category->magic, &r))
-		errx(EXIT_FAILURE, "can't serialize db");
+		errx(1, "can't serialize db.\n");
 	fwrite(serialized, size, 1, writer);
 	_db_factory_free(df);
 }

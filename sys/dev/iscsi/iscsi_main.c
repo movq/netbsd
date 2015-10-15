@@ -32,12 +32,9 @@
 
 #include <sys/systm.h>
 #include <sys/buf.h>
-#include <sys/file.h>
-#include <sys/filedesc.h>
 #include <sys/kmem.h>
 #include <sys/socketvar.h>
 
-#include "ioconf.h"
 
 /*------------------------- Global Variables ------------------------*/
 
@@ -45,6 +42,10 @@ extern struct cfdriver iscsi_cd;
 
 #if defined(ISCSI_DEBUG)
 int iscsi_debug_level = ISCSI_DEBUG;
+#endif
+
+#if defined(ISCSI_PERFTEST)
+int iscsi_perf_level = 0;
 #endif
 
 /* Device Structure */
@@ -74,6 +75,8 @@ login_isid_t iscsi_InitiatorISID;
    System interface: autoconf and device structures
 */
 
+void iscsiattach(int);
+
 static void iscsi_attach(device_t parent, device_t self, void *aux);
 static int iscsi_match(device_t, cfdata_t, void *);
 static int iscsi_detach(device_t, int);
@@ -84,19 +87,14 @@ CFATTACH_DECL_NEW(iscsi, sizeof(struct iscsi_softc), iscsi_match, iscsi_attach,
 
 
 static dev_type_open(iscsiopen);
-static int iscsiclose(struct file *);
-
-static const struct fileops iscsi_fileops = {
-	.fo_ioctl = iscsiioctl,
-	.fo_close = iscsiclose,
-};
+static dev_type_close(iscsiclose);
 
 struct cdevsw iscsi_cdevsw = {
 	.d_open = iscsiopen,
-	.d_close = noclose,
+	.d_close = iscsiclose,
 	.d_read = noread,
 	.d_write = nowrite,
-	.d_ioctl = noioctl,
+	.d_ioctl = iscsiioctl,
 	.d_stop = nostop,
 	.d_tty = notty,
 	.d_poll = nopoll,
@@ -123,29 +121,16 @@ STATIC void iscsi_minphys(struct buf *);
 *******************************************************************************/
 
 int
-iscsiopen(dev_t dev, int flag, int mode, struct lwp *l)
+iscsiopen(dev_t dev, int flag, int mode, PTHREADOBJ p)
 {
-	struct iscsifd *d;
-	struct file *fp;
-	int error, fd;
 
 	DEB(99, ("ISCSI Open\n"));
-
-	if ((error = fd_allocfile(&fp, &fd)) != 0)
-		return error;
-
-	d = kmem_alloc(sizeof(*d), KM_SLEEP);
-
-	return fd_clone(fp, fd, flag, &iscsi_fileops, d);
+	return 0;
 }
 
-static int
-iscsiclose(struct file *fp)
+int
+iscsiclose(dev_t dev, int flag, int mode, PTHREADOBJ p)
 {
-	struct iscsifd *d = fp->f_iscsi;
-
-	kmem_free(d, sizeof(*d));
-	fp->f_iscsi = NULL;
 
 	DEB(99, ("ISCSI Close\n"));
 	return 0;
@@ -243,19 +228,28 @@ iscsi_detach(device_t self, int flags)
 
 typedef struct quirktab_t {
 	const char	*tgt;
+	size_t		 tgtlen;
 	const char	*iqn;
+	size_t		 iqnlen;
 	uint32_t	 quirks;
 } quirktab_t;
 
 static const quirktab_t	quirktab[] = {
-	{ "StarWind", "iqn.2008-08.com.starwindsoftware", PQUIRK_ONLYBIG },
-	{ "UNH", "iqn.2002-10.edu.unh.",
-	    PQUIRK_NOBIGMODESENSE |
-	    PQUIRK_NOMODESENSE |
-	    PQUIRK_NOSYNCCACHE },
-	{ "NetBSD", "iqn.1994-04.org.netbsd.", 0 },
-	{ "Unknown", "unknown", 0 },
-	{ NULL, NULL, 0 }
+	{ "StarWind",	8,
+		"iqn.2008-08.com.starwindsoftware",	32,
+		PQUIRK_ONLYBIG	},
+	{ "UNH",	3,
+		"iqn.2002-10.edu.unh.",	20,
+		PQUIRK_NOBIGMODESENSE |
+		PQUIRK_NOMODESENSE |
+		PQUIRK_NOSYNCCACHE },
+	{ "NetBSD",	6,
+		"iqn.1994-04.org.netbsd.",	23,
+		0	},
+	{ "Unknown",	7,
+		"unknown",	7,
+		0	},
+	{ NULL,		0,	NULL,	0,	0	}
 };
 
 /* loop through the quirktab looking for a match on target name */
@@ -263,17 +257,14 @@ static const quirktab_t *
 getquirks(const char *iqn)
 {
 	const quirktab_t	*qp;
-	size_t iqnlen, quirklen;
 
-	if (iqn == NULL)
+	if (iqn == NULL) {
 		iqn = "unknown";
-	iqnlen = strlen(iqn);
+	}
 	for (qp = quirktab ; qp->iqn ; qp++) {
-		quirklen = strlen(qp->iqn);
-		if (quirklen > iqnlen)
-			continue;
-		if (memcmp(qp->iqn, iqn, quirklen) == 0)
+		if (strncmp(qp->iqn, iqn, qp->iqnlen) == 0) {
 			break;
+		}
 	}
 	return qp;
 }
@@ -514,15 +505,13 @@ iscsi_done(ccb_t *ccb)
 
 #include <sys/module.h>
 
-MODULE(MODULE_CLASS_DRIVER, iscsi, NULL); /* Possibly a builtin module */
-
-#ifdef _MODULE
+MODULE(MODULE_CLASS_DRIVER, iscsi, NULL);
 static const struct cfiattrdata ibescsi_info = { "scsi", 1,
 	{{"channel", "-1", -1},}
 };
-
 static const struct cfiattrdata *const iscsi_attrs[] = { &ibescsi_info, NULL };
 
+#ifdef _MODULE
 CFDRIVER_DECL(iscsi, DV_DULL, iscsi_attrs);
 
 static struct cfdata iscsi_cfdata[] = {

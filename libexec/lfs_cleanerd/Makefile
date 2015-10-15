@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.19 2015/10/10 22:34:46 dholland Exp $
+#	$NetBSD: Makefile,v 1.18 2014/03/04 21:06:47 joerg Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/18/93
 
 .include "Makefile.inc"
@@ -10,5 +10,7 @@ BINDIR=		/libexec
 .if (${MKDYNAMICROOT} == "no")
 LDSTATIC?=      -static
 .endif
+
+CWARNFLAGS.clang+=	-Wno-error=absolute-value
 
 .include <bsd.prog.mk>

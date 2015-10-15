@@ -1,4 +1,4 @@
-/*	$NetBSD: time-test.c,v 1.3 2015/07/10 14:20:35 christos Exp $	*/
+/*	$NetBSD: time-test.c,v 1.1.1.1.6.1 2014/12/24 00:05:26 riz Exp $	*/
 
 /*
  * XXX This sample code was once meant to show how to use the basic Libevent

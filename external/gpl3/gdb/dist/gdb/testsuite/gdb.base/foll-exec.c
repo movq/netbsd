@@ -6,7 +6,11 @@
 
 int  global_i = 100;
 
+#ifdef PROTOTYPES
 int main (void)
+#else
+main ()
+#endif
 {
   int  local_j = global_i+1;
   int  local_k = local_j+1;
@@ -20,7 +24,7 @@ int main (void)
 
   printf ("foll-exec is about to execl(execd-prog)...\n");
 
-  execl (BASEDIR "/execd-prog",	/* tbreak-execl */
+  execl (BASEDIR "/execd-prog",
          BASEDIR "/execd-prog",
          "execl arg1 from foll-exec",
          "execl arg2 from foll-exec",
@@ -34,6 +38,6 @@ int main (void)
 
     printf ("foll-exec is about to execv(execd-prog)...\n");
 
-    execv (BASEDIR "/execd-prog", argv); /* tbreak-execv */
+    execv (BASEDIR "/execd-prog", argv);
   }
 }

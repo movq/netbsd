@@ -1,4 +1,4 @@
-/*	$NetBSD: umidi_quirks.c,v 1.19 2014/12/21 23:00:35 mrg Exp $	*/
+/*	$NetBSD: umidi_quirks.c,v 1.18.14.1 2015/01/11 14:13:25 martin Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umidi_quirks.c,v 1.19 2014/12/21 23:00:35 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umidi_quirks.c,v 1.18.14.1 2015/01/11 14:13:25 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

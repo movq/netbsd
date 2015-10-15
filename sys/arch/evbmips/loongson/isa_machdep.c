@@ -24,7 +24,6 @@
 #include <sys/systm.h>
 #include <sys/device.h>
 
-#include <mips/cpuregs.h>
 #include <evbmips/loongson/autoconf.h>
 #include <machine/intr.h>
 

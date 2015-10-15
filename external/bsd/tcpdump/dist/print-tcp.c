@@ -25,16 +25,21 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: print-tcp.c,v 1.6 2015/03/31 21:59:35 christos Exp $");
+#if 0
+static const char rcsid[] _U_ =
+"@(#) Header: /tcpdump/master/tcpdump/print-tcp.c,v 1.135 2008-11-09 23:35:03 mcr Exp  (LBL)";
+#else
+__RCSID("$NetBSD: print-tcp.c,v 1.4 2013/12/31 17:33:31 christos Exp $");
+#endif
 #endif
 
-#define NETDISSECT_REWORKED
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
 #include <tcpdump-stdinc.h>
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -58,12 +63,11 @@ __RCSID("$NetBSD: print-tcp.c,v 1.6 2015/03/31 21:59:35 christos Exp $");
 #include <openssl/md5.h>
 #include <signature.h>
 
-static int tcp_verify_signature(netdissect_options *ndo,
-                                const struct ip *ip, const struct tcphdr *tp,
+static int tcp_verify_signature(const struct ip *ip, const struct tcphdr *tp,
                                 const u_char *data, int length, const u_char *rcvsig);
 #endif
 
-static void print_tcp_rst_data(netdissect_options *, register const u_char *sp, u_int length);
+static void print_tcp_rst_data(register const u_char *sp, u_int length);
 
 #define MAX_RST_DATA_LEN	30
 
@@ -139,30 +143,27 @@ static const struct tok tcp_option_values[] = {
         { 0, NULL }
 };
 
-static int
-tcp_cksum(netdissect_options *ndo,
-          register const struct ip *ip,
-          register const struct tcphdr *tp,
-          register u_int len)
+static int tcp_cksum(register const struct ip *ip,
+		     register const struct tcphdr *tp,
+		     register u_int len)
 {
-	return nextproto4_cksum(ndo, ip, (const uint8_t *)tp, len, len,
-				IPPROTO_TCP);
+	return (nextproto4_cksum(ip, (const u_int8_t *)tp, len,
+	    IPPROTO_TCP));
 }
 
 void
-tcp_print(netdissect_options *ndo,
-          register const u_char *bp, register u_int length,
-          register const u_char *bp2, int fragmented)
+tcp_print(register const u_char *bp, register u_int length,
+	  register const u_char *bp2, int fragmented)
 {
         register const struct tcphdr *tp;
         register const struct ip *ip;
         register u_char flags;
         register u_int hlen;
         register char ch;
-        uint16_t sport, dport, win, urp;
-        uint32_t seq, ack, thseq, thack;
+        u_int16_t sport, dport, win, urp;
+        u_int32_t seq, ack, thseq, thack;
         u_int utoval;
-        uint16_t magic;
+        u_int16_t magic;
         register int rev;
 #ifdef INET6
         register const struct ip6_hdr *ip6;
@@ -177,10 +178,10 @@ tcp_print(netdissect_options *ndo,
                 ip6 = NULL;
 #endif /*INET6*/
         ch = '\0';
-        if (!ND_TTEST(tp->th_dport)) {
-                ND_PRINT((ndo, "%s > %s: [|tcp]",
-                             ipaddr_string(ndo, &ip->ip_src),
-                             ipaddr_string(ndo, &ip->ip_dst)));
+        if (!TTEST(tp->th_dport)) {
+                (void)printf("%s > %s: [|tcp]",
+                             ipaddr_string(&ip->ip_src),
+                             ipaddr_string(&ip->ip_dst));
                 return;
         }
 
@@ -192,56 +193,56 @@ tcp_print(netdissect_options *ndo,
 #ifdef INET6
         if (ip6) {
                 if (ip6->ip6_nxt == IPPROTO_TCP) {
-                        ND_PRINT((ndo, "%s.%s > %s.%s: ",
-                                     ip6addr_string(ndo, &ip6->ip6_src),
+                        (void)printf("%s.%s > %s.%s: ",
+                                     ip6addr_string(&ip6->ip6_src),
                                      tcpport_string(sport),
-                                     ip6addr_string(ndo, &ip6->ip6_dst),
-                                     tcpport_string(dport)));
+                                     ip6addr_string(&ip6->ip6_dst),
+                                     tcpport_string(dport));
                 } else {
-                        ND_PRINT((ndo, "%s > %s: ",
-                                     tcpport_string(sport), tcpport_string(dport)));
+                        (void)printf("%s > %s: ",
+                                     tcpport_string(sport), tcpport_string(dport));
                 }
         } else
 #endif /*INET6*/
         {
                 if (ip->ip_p == IPPROTO_TCP) {
-                        ND_PRINT((ndo, "%s.%s > %s.%s: ",
-                                     ipaddr_string(ndo, &ip->ip_src),
+                        (void)printf("%s.%s > %s.%s: ",
+                                     ipaddr_string(&ip->ip_src),
                                      tcpport_string(sport),
-                                     ipaddr_string(ndo, &ip->ip_dst),
-                                     tcpport_string(dport)));
+                                     ipaddr_string(&ip->ip_dst),
+                                     tcpport_string(dport));
                 } else {
-                        ND_PRINT((ndo, "%s > %s: ",
-                                     tcpport_string(sport), tcpport_string(dport)));
+                        (void)printf("%s > %s: ",
+                                     tcpport_string(sport), tcpport_string(dport));
                 }
         }
 
         if (hlen < sizeof(*tp)) {
-                ND_PRINT((ndo, " tcp %d [bad hdr length %u - too short, < %lu]",
-                             length - hlen, hlen, (unsigned long)sizeof(*tp)));
+                (void)printf(" tcp %d [bad hdr length %u - too short, < %lu]",
+                             length - hlen, hlen, (unsigned long)sizeof(*tp));
                 return;
         }
 
-        ND_TCHECK(*tp);
+        TCHECK(*tp);
 
         seq = EXTRACT_32BITS(&tp->th_seq);
         ack = EXTRACT_32BITS(&tp->th_ack);
         win = EXTRACT_16BITS(&tp->th_win);
         urp = EXTRACT_16BITS(&tp->th_urp);
 
-        if (ndo->ndo_qflag) {
-                ND_PRINT((ndo, "tcp %d", length - hlen));
+        if (qflag) {
+                (void)printf("tcp %d", length - hlen);
                 if (hlen > length) {
-                        ND_PRINT((ndo, " [bad hdr length %u - too long, > %u]",
-                                     hlen, length));
+                        (void)printf(" [bad hdr length %u - too long, > %u]",
+                                     hlen, length);
                 }
                 return;
         }
 
         flags = tp->th_flags;
-        ND_PRINT((ndo, "Flags [%s]", bittok2str_nosep(tcp_flag_values, "none", flags)));
+        printf("Flags [%s]", bittok2str_nosep(tcp_flag_values, "none", flags));
 
-        if (!ndo->ndo_Sflag && (flags & TH_ACK)) {
+        if (!Sflag && (flags & TH_ACK)) {
                 /*
                  * Find (or record) the initial sequence numbers for
                  * this conversation.  (we pick an arbitrary
@@ -262,16 +263,16 @@ tcp_print(netdissect_options *ndo,
                         if (sport > dport)
                                 rev = 1;
                         else if (sport == dport) {
-                                if (UNALIGNED_MEMCMP(src, dst, sizeof ip6->ip6_dst) > 0)
+                                if (memcmp(src, dst, sizeof ip6->ip6_dst) > 0)
                                         rev = 1;
                         }
                         if (rev) {
-                                UNALIGNED_MEMCPY(&tha.src, dst, sizeof ip6->ip6_dst);
-                                UNALIGNED_MEMCPY(&tha.dst, src, sizeof ip6->ip6_src);
+                                memcpy(&tha.src, dst, sizeof ip6->ip6_dst);
+                                memcpy(&tha.dst, src, sizeof ip6->ip6_src);
                                 tha.port = dport << 16 | sport;
                         } else {
-                                UNALIGNED_MEMCPY(&tha.dst, dst, sizeof ip6->ip6_dst);
-                                UNALIGNED_MEMCPY(&tha.src, src, sizeof ip6->ip6_src);
+                                memcpy(&tha.dst, dst, sizeof ip6->ip6_dst);
+                                memcpy(&tha.src, src, sizeof ip6->ip6_src);
                                 tha.port = sport << 16 | dport;
                         }
 
@@ -318,16 +319,16 @@ tcp_print(netdissect_options *ndo,
                         if (sport > dport)
                                 rev = 1;
                         else if (sport == dport) {
-                                if (UNALIGNED_MEMCMP(src, dst, sizeof ip->ip_dst) > 0)
+                                if (memcmp(src, dst, sizeof ip->ip_dst) > 0)
                                         rev = 1;
                         }
                         if (rev) {
-                                UNALIGNED_MEMCPY(&tha.src, dst, sizeof ip->ip_dst);
-                                UNALIGNED_MEMCPY(&tha.dst, src, sizeof ip->ip_src);
+                                memcpy(&tha.src, dst, sizeof ip->ip_dst);
+                                memcpy(&tha.dst, src, sizeof ip->ip_src);
                                 tha.port = dport << 16 | sport;
                         } else {
-                                UNALIGNED_MEMCPY(&tha.dst, dst, sizeof ip->ip_dst);
-                                UNALIGNED_MEMCPY(&tha.src, src, sizeof ip->ip_src);
+                                memcpy(&tha.dst, dst, sizeof ip->ip_dst);
+                                memcpy(&tha.src, src, sizeof ip->ip_src);
                                 tha.port = sport << 16 | dport;
                         }
 
@@ -365,41 +366,40 @@ tcp_print(netdissect_options *ndo,
                 thseq = thack = rev = 0;
         }
         if (hlen > length) {
-                ND_PRINT((ndo, " [bad hdr length %u - too long, > %u]",
-                             hlen, length));
+                (void)printf(" [bad hdr length %u - too long, > %u]",
+                             hlen, length);
                 return;
         }
 
-        if (ndo->ndo_vflag && !ndo->ndo_Kflag && !fragmented) {
+        if (vflag && !Kflag && !fragmented) {
                 /* Check the checksum, if possible. */
-                uint16_t sum, tcp_sum;
+                u_int16_t sum, tcp_sum;
 
                 if (IP_V(ip) == 4) {
-                        if (ND_TTEST2(tp->th_sport, length)) {
-                                sum = tcp_cksum(ndo, ip, tp, length);
+                        if (TTEST2(tp->th_sport, length)) {
+                                sum = tcp_cksum(ip, tp, length);
                                 tcp_sum = EXTRACT_16BITS(&tp->th_sum);
 
-                                ND_PRINT((ndo, ", cksum 0x%04x", tcp_sum));
+                                (void)printf(", cksum 0x%04x", tcp_sum);
                                 if (sum != 0)
-                                        ND_PRINT((ndo, " (incorrect -> 0x%04x)",
-                                            in_cksum_shouldbe(tcp_sum, sum)));
+                                        (void)printf(" (incorrect -> 0x%04x)",
+                                            in_cksum_shouldbe(tcp_sum, sum));
                                 else
-                                        ND_PRINT((ndo, " (correct)"));
+                                        (void)printf(" (correct)");
                         }
                 }
 #ifdef INET6
                 else if (IP_V(ip) == 6 && ip6->ip6_plen) {
-                        if (ND_TTEST2(tp->th_sport, length)) {
-                                sum = nextproto6_cksum(ip6, (const uint8_t *)tp,
-							length, length, IPPROTO_TCP);
+                        if (TTEST2(tp->th_sport, length)) {
+                                sum = nextproto6_cksum(ip6, (const u_int8_t *)tp, length, IPPROTO_TCP);
                                 tcp_sum = EXTRACT_16BITS(&tp->th_sum);
 
-                                ND_PRINT((ndo, ", cksum 0x%04x", tcp_sum));
+                                (void)printf(", cksum 0x%04x", tcp_sum);
                                 if (sum != 0)
-                                        ND_PRINT((ndo, " (incorrect -> 0x%04x)",
-                                            in_cksum_shouldbe(tcp_sum, sum)));
+                                        (void)printf(" (incorrect -> 0x%04x)",
+                                            in_cksum_shouldbe(tcp_sum, sum));
                                 else
-                                        ND_PRINT((ndo, " (correct)"));
+                                        (void)printf(" (correct)");
 
                         }
                 }
@@ -407,22 +407,22 @@ tcp_print(netdissect_options *ndo,
         }
 
         length -= hlen;
-        if (ndo->ndo_vflag > 1 || length > 0 || flags & (TH_SYN | TH_FIN | TH_RST)) {
-                ND_PRINT((ndo, ", seq %u", seq));
+        if (vflag > 1 || length > 0 || flags & (TH_SYN | TH_FIN | TH_RST)) {
+                (void)printf(", seq %u", seq);
 
                 if (length > 0) {
-                        ND_PRINT((ndo, ":%u", seq + length));
+                        (void)printf(":%u", seq + length);
                 }
         }
 
         if (flags & TH_ACK) {
-                ND_PRINT((ndo, ", ack %u", ack));
+                (void)printf(", ack %u", ack);
         }
 
-        ND_PRINT((ndo, ", win %d", win));
+        (void)printf(", win %d", win);
 
         if (flags & TH_URG)
-                ND_PRINT((ndo, ", urg %d", urp));
+                (void)printf(", urg %d", urp);
         /*
          * Handle any options.
          */
@@ -433,16 +433,16 @@ tcp_print(netdissect_options *ndo,
 
                 hlen -= sizeof(*tp);
                 cp = (const u_char *)tp + sizeof(*tp);
-                ND_PRINT((ndo, ", options ["));
+                printf(", options [");
                 while (hlen > 0) {
                         if (ch != '\0')
-                                ND_PRINT((ndo, "%c", ch));
-                        ND_TCHECK(*cp);
+                                putchar(ch);
+                        TCHECK(*cp);
                         opt = *cp++;
                         if (ZEROLENOPT(opt))
                                 len = 1;
                         else {
-                                ND_TCHECK(*cp);
+                                TCHECK(*cp);
                                 len = *cp++;	/* total including type, len */
                                 if (len < 2 || len > hlen)
                                         goto bad;
@@ -452,33 +452,33 @@ tcp_print(netdissect_options *ndo,
                         datalen = 0;
 
 /* Bail if "l" bytes of data are not left or were not captured  */
-#define LENCHECK(l) { if ((l) > hlen) goto bad; ND_TCHECK2(*cp, l); }
+#define LENCHECK(l) { if ((l) > hlen) goto bad; TCHECK2(*cp, l); }
 
 
-                        ND_PRINT((ndo, "%s", tok2str(tcp_option_values, "unknown-%u", opt)));
+                        printf("%s", tok2str(tcp_option_values, "unknown-%u", opt));
 
                         switch (opt) {
 
                         case TCPOPT_MAXSEG:
                                 datalen = 2;
                                 LENCHECK(datalen);
-                                ND_PRINT((ndo, " %u", EXTRACT_16BITS(cp)));
+                                (void)printf(" %u", EXTRACT_16BITS(cp));
                                 break;
 
                         case TCPOPT_WSCALE:
                                 datalen = 1;
                                 LENCHECK(datalen);
-                                ND_PRINT((ndo, " %u", *cp));
+                                (void)printf(" %u", *cp);
                                 break;
 
                         case TCPOPT_SACK:
                                 datalen = len - 2;
                                 if (datalen % 8 != 0) {
-                                        ND_PRINT((ndo, "malformed sack"));
+                                        (void)printf("malformed sack");
                                 } else {
-                                        uint32_t s, e;
+                                        u_int32_t s, e;
 
-                                        ND_PRINT((ndo, " %d ", datalen / 8));
+                                        (void)printf(" %d ", datalen / 8);
                                         for (i = 0; i < datalen; i += 8) {
                                                 LENCHECK(i + 4);
                                                 s = EXTRACT_32BITS(cp + i);
@@ -491,7 +491,7 @@ tcp_print(netdissect_options *ndo,
                                                         s -= thack;
                                                         e -= thack;
                                                 }
-                                                ND_PRINT((ndo, "{%u:%u}", s, e));
+                                                (void)printf("{%u:%u}", s, e);
                                         }
                                 }
                                 break;
@@ -508,50 +508,50 @@ tcp_print(netdissect_options *ndo,
                                  */
                                 datalen = 4;
                                 LENCHECK(datalen);
-                                ND_PRINT((ndo, " %u", EXTRACT_32BITS(cp)));
+                                (void)printf(" %u", EXTRACT_32BITS(cp));
                                 break;
 
                         case TCPOPT_TIMESTAMP:
                                 datalen = 8;
                                 LENCHECK(datalen);
-                                ND_PRINT((ndo, " val %u ecr %u",
+                                (void)printf(" val %u ecr %u",
                                              EXTRACT_32BITS(cp),
-                                             EXTRACT_32BITS(cp + 4)));
+                                             EXTRACT_32BITS(cp + 4));
                                 break;
 
                         case TCPOPT_SIGNATURE:
                                 datalen = TCP_SIGLEN;
                                 LENCHECK(datalen);
 #ifdef HAVE_LIBCRYPTO
-                                switch (tcp_verify_signature(ndo, ip, tp,
+                                switch (tcp_verify_signature(ip, tp,
                                                              bp + TH_OFF(tp) * 4, length, cp)) {
 
                                 case SIGNATURE_VALID:
-                                        ND_PRINT((ndo, "valid"));
+                                        (void)printf("valid");
                                         break;
 
                                 case SIGNATURE_INVALID:
-                                        ND_PRINT((ndo, "invalid"));
+                                        (void)printf("invalid");
                                         break;
 
                                 case CANT_CHECK_SIGNATURE:
-                                        ND_PRINT((ndo, "can't check - "));
+                                        (void)printf("can't check - ");
                                         for (i = 0; i < TCP_SIGLEN; ++i)
-                                                ND_PRINT((ndo, "%02x", cp[i]));
+                                                (void)printf("%02x", cp[i]);
                                         break;
                                 }
 #else
                                 for (i = 0; i < TCP_SIGLEN; ++i)
-                                        ND_PRINT((ndo, "%02x", cp[i]));
+                                        (void)printf("%02x", cp[i]);
 #endif
                                 break;
 
                         case TCPOPT_AUTH:
-                                ND_PRINT((ndo, "keyid %d", *cp++));
+                                (void)printf("keyid %d", *cp++);
                                 datalen = len - 3;
                                 for (i = 0; i < datalen; ++i) {
                                         LENCHECK(i);
-                                        ND_PRINT((ndo, "%02x", cp[i]));
+                                        (void)printf("%02x", cp[i]);
                                 }
                                 break;
 
@@ -569,18 +569,18 @@ tcp_print(netdissect_options *ndo,
                                 datalen = 2;
                                 LENCHECK(datalen);
                                 utoval = EXTRACT_16BITS(cp);
-                                ND_PRINT((ndo, "0x%x", utoval));
+                                (void)printf("0x%x", utoval);
                                 if (utoval & 0x0001)
                                         utoval = (utoval >> 1) * 60;
                                 else
                                         utoval >>= 1;
-                                ND_PRINT((ndo, " %u", utoval));
+                                (void)printf(" %u", utoval);
                                 break;
 
                         case TCPOPT_MPTCP:
                                 datalen = len - 2;
                                 LENCHECK(datalen);
-                                if (!mptcp_print(ndo, cp-2, len, flags))
+                                if (!mptcp_print(cp-2, len, flags))
                                         goto bad;
                                 break;
 
@@ -591,30 +591,30 @@ tcp_print(netdissect_options *ndo,
                                         goto bad;
                                 /* RFC6994 */
                                 magic = EXTRACT_16BITS(cp);
-                                ND_PRINT((ndo, "-"));
+                                (void)printf("-");
 
                                 switch(magic) {
 
                                 case 0xf989:
-                                        /* TCP Fast Open: RFC 7413 */
+                                        /* TCP Fast Open: draft-ietf-tcpm-fastopen-04 */
                                         if (datalen == 2) {
                                                 /* Fast Open Cookie Request */
-                                                ND_PRINT((ndo, "tfo cookiereq"));
+                                                (void)printf("tfo cookiereq");
                                         } else {
                                                 /* Fast Open Cookie */
                                                 if (datalen % 2 != 0 || datalen < 6 || datalen > 18) {
-                                                        ND_PRINT((ndo, "tfo malformed"));
+                                                        (void)printf("tfo malformed");
                                                 } else {
-                                                        ND_PRINT((ndo, "tfo cookie "));
+                                                        (void)printf("tfo cookie ");
                                                         for (i = 2; i < datalen; ++i)
-                                                                ND_PRINT((ndo, "%02x", cp[i]));
+                                                                (void)printf("%02x", cp[i]);
                                                 }
                                         }
                                         break;
 
                                 default:
                                         /* Unknown magic number */
-                                        ND_PRINT((ndo, "%04x", magic));
+                                        (void)printf("%04x", magic);
                                         break;
                                 }
                                 break;
@@ -622,10 +622,10 @@ tcp_print(netdissect_options *ndo,
                         default:
                                 datalen = len - 2;
                                 if (datalen)
-                                        ND_PRINT((ndo, " 0x"));
+                                        printf(" 0x");
                                 for (i = 0; i < datalen; ++i) {
                                         LENCHECK(i);
-                                        ND_PRINT((ndo, "%02x", cp[i]));
+                                        (void)printf("%02x", cp[i]);
                                 }
                                 break;
                         }
@@ -639,18 +639,18 @@ tcp_print(netdissect_options *ndo,
                         if (!ZEROLENOPT(opt))
                                 ++datalen;		/* size octet */
                         if (datalen != len)
-                                ND_PRINT((ndo, "[len %d]", len));
+                                (void)printf("[len %d]", len);
                         ch = ',';
                         if (opt == TCPOPT_EOL)
                                 break;
                 }
-                ND_PRINT((ndo, "]"));
+                putchar(']');
         }
 
         /*
          * Print length field before crawling down the stack.
          */
-        ND_PRINT((ndo, ", length %u", length));
+        printf(", length %u", length);
 
         if (length <= 0)
                 return;
@@ -659,76 +659,62 @@ tcp_print(netdissect_options *ndo,
          * Decode payload if necessary.
          */
         bp += TH_OFF(tp) * 4;
-        if ((flags & TH_RST) && ndo->ndo_vflag) {
-                print_tcp_rst_data(ndo, bp, length);
+        if ((flags & TH_RST) && vflag) {
+                print_tcp_rst_data(bp, length);
                 return;
-        }
+        } 
 
-        if (ndo->ndo_packettype) {
-                switch (ndo->ndo_packettype) {
+        if (packettype) {
+                switch (packettype) {
                 case PT_ZMTP1:
-                        zmtp1_print(ndo, bp, length);
+                        zmtp1_print(bp, length);
                         break;
                 }
                 return;
         }
 
         if (sport == TELNET_PORT || dport == TELNET_PORT) {
-                telnet_print(ndo, bp, length);
-        } else if (sport == SMTP_PORT || dport == SMTP_PORT) {
-                ND_PRINT((ndo, ": "));
-                smtp_print(ndo, bp, length);
+                if (!qflag && vflag)
+                        telnet_print(bp, length);
         } else if (sport == BGP_PORT || dport == BGP_PORT)
-                bgp_print(ndo, bp, length);
+                bgp_print(bp, length);
         else if (sport == PPTP_PORT || dport == PPTP_PORT)
-                pptp_print(ndo, bp);
+                pptp_print(bp);
 #ifdef TCPDUMP_DO_SMB
         else if (sport == NETBIOS_SSN_PORT || dport == NETBIOS_SSN_PORT)
-                nbt_tcp_print(ndo, bp, length);
+                nbt_tcp_print(bp, length);
 	else if (sport == SMB_PORT || dport == SMB_PORT)
-		smb_tcp_print(ndo, bp, length);
+		smb_tcp_print(bp, length);
 #endif
         else if (sport == BEEP_PORT || dport == BEEP_PORT)
-                beep_print(ndo, bp, length);
-        else if (sport == OPENFLOW_PORT_OLD || dport == OPENFLOW_PORT_OLD ||
-                 sport == OPENFLOW_PORT_IANA || dport == OPENFLOW_PORT_IANA)
-                openflow_print(ndo, bp, length);
-        else if (sport == FTP_PORT || dport == FTP_PORT) {
-                ND_PRINT((ndo, ": "));
-                ftp_print(ndo, bp, length);
-        } else if (sport == HTTP_PORT || dport == HTTP_PORT ||
-            sport == HTTP_PORT_ALT || dport == HTTP_PORT_ALT) {
-                ND_PRINT((ndo, ": "));
-                http_print(ndo, bp, length);
-        } else if (sport == RTSP_PORT || dport == RTSP_PORT ||
-            sport == RTSP_PORT_ALT || dport == RTSP_PORT_ALT) {
-                ND_PRINT((ndo, ": "));
-                rtsp_print(ndo, bp, length);
-        } else if (length > 2 &&
+                beep_print(bp, length);
+        else if (sport == OPENFLOW_PORT || dport == OPENFLOW_PORT)
+                openflow_print(bp, length);
+        else if (length > 2 &&
                  (sport == NAMESERVER_PORT || dport == NAMESERVER_PORT ||
                   sport == MULTICASTDNS_PORT || dport == MULTICASTDNS_PORT)) {
                 /*
                  * TCP DNS query has 2byte length at the head.
                  * XXX packet could be unaligned, it can go strange
                  */
-                ns_print(ndo, bp + 2, length - 2, 0);
+                ns_print(bp + 2, length - 2, 0);
         } else if (sport == MSDP_PORT || dport == MSDP_PORT) {
-                msdp_print(ndo, bp, length);
+                msdp_print(bp, length);
         } else if (sport == RPKI_RTR_PORT || dport == RPKI_RTR_PORT) {
-                rpki_rtr_print(ndo, bp, length);
+                rpki_rtr_print(bp, length);
         }
         else if (length > 0 && (sport == LDP_PORT || dport == LDP_PORT)) {
-                ldp_print(ndo, bp, length);
+                ldp_print(bp, length);
         }
         else if ((sport == NFS_PORT || dport == NFS_PORT) &&
-                 length >= 4 && ND_TTEST2(*bp, 4)) {
+                 length >= 4 && TTEST2(*bp, 4)) {
                 /*
                  * If data present, header length valid, and NFS port used,
                  * assume NFS.
                  * Pass offset of data plus 4 bytes for RPC TCP msg length
                  * to NFS print routines.
                  */
-                uint32_t fraglen;
+                u_int32_t fraglen;
                 register struct sunrpc_msg *rp;
                 enum sunrpc_msg_type direction;
 
@@ -736,16 +722,16 @@ tcp_print(netdissect_options *ndo,
                 if (fraglen > (length) - 4)
                         fraglen = (length) - 4;
                 rp = (struct sunrpc_msg *)(bp + 4);
-                if (ND_TTEST(rp->rm_direction)) {
+                if (TTEST(rp->rm_direction)) {
                         direction = (enum sunrpc_msg_type)EXTRACT_32BITS(&rp->rm_direction);
                         if (dport == NFS_PORT && direction == SUNRPC_CALL) {
-                                ND_PRINT((ndo, ": NFS request xid %u ", EXTRACT_32BITS(&rp->rm_xid)));
-                                nfsreq_print_noaddr(ndo, (u_char *)rp, fraglen, (u_char *)ip);
+                                (void)printf(": NFS request xid %u ", EXTRACT_32BITS(&rp->rm_xid));
+                                nfsreq_print_noaddr((u_char *)rp, fraglen, (u_char *)ip);
                                 return;
                         }
                         if (sport == NFS_PORT && direction == SUNRPC_REPLY) {
-                                ND_PRINT((ndo, ": NFS reply xid %u ", EXTRACT_32BITS(&rp->rm_xid)));
-                                nfsreply_print_noaddr(ndo, (u_char *)rp, fraglen, (u_char *)ip);
+                                (void)printf(": NFS reply xid %u ", EXTRACT_32BITS(&rp->rm_xid));
+                                nfsreply_print_noaddr((u_char *)rp, fraglen, (u_char *)ip);
                                 return;
                         }
                 }
@@ -753,14 +739,14 @@ tcp_print(netdissect_options *ndo,
 
         return;
  bad:
-        ND_PRINT((ndo, "[bad opt]"));
+        fputs("[bad opt]", stdout);
         if (ch != '\0')
-                ND_PRINT((ndo, ">"));
+                putchar('>');
         return;
  trunc:
-        ND_PRINT((ndo, "[|tcp]"));
+        fputs("[|tcp]", stdout);
         if (ch != '\0')
-                ND_PRINT((ndo, ">"));
+                putchar('>');
 }
 
 /*
@@ -779,51 +765,52 @@ tcp_print(netdissect_options *ndo,
  */
 
 static void
-print_tcp_rst_data(netdissect_options *ndo,
-                   register const u_char *sp, u_int length)
+print_tcp_rst_data(register const u_char *sp, u_int length)
 {
         int c;
 
-        ND_PRINT((ndo, ND_TTEST2(*sp, length) ? " [RST" : " [!RST"));
+        if (TTEST2(*sp, length))
+                printf(" [RST");
+        else
+                printf(" [!RST");
         if (length > MAX_RST_DATA_LEN) {
                 length = MAX_RST_DATA_LEN;	/* can use -X for longer */
-                ND_PRINT((ndo, "+"));			/* indicate we truncate */
+                putchar('+');			/* indicate we truncate */
         }
-        ND_PRINT((ndo, " "));
-        while (length-- && sp <= ndo->ndo_snapend) {
+        putchar(' ');
+        while (length-- && sp <= snapend) {
                 c = *sp++;
-                safeputchar(ndo, c);
+                safeputchar(c);
         }
-        ND_PRINT((ndo, "]"));
+        putchar(']');
 }
 
 #ifdef HAVE_LIBCRYPTO
 USES_APPLE_DEPRECATED_API
 static int
-tcp_verify_signature(netdissect_options *ndo,
-                     const struct ip *ip, const struct tcphdr *tp,
+tcp_verify_signature(const struct ip *ip, const struct tcphdr *tp,
                      const u_char *data, int length, const u_char *rcvsig)
 {
         struct tcphdr tp1;
         u_char sig[TCP_SIGLEN];
         char zero_proto = 0;
         MD5_CTX ctx;
-        uint16_t savecsum, tlen;
+        u_int16_t savecsum, tlen;
 #ifdef INET6
         struct ip6_hdr *ip6;
-        uint32_t len32;
-        uint8_t nxt;
+        u_int32_t len32;
+        u_int8_t nxt;
 #endif
 
-	if (data + length > ndo->ndo_snapend) {
-		ND_PRINT((ndo, "snaplen too short, "));
+	if (data + length > snapend) {
+		printf("snaplen too short, ");
 		return (CANT_CHECK_SIGNATURE);
 	}
 
         tp1 = *tp;
 
-        if (ndo->ndo_sigsecret == NULL) {
-		ND_PRINT((ndo, "shared secret not supplied with -M, "));
+        if (sigsecret == NULL) {
+		printf("shared secret not supplied with -M, ");
                 return (CANT_CHECK_SIGNATURE);
         }
 
@@ -855,9 +842,9 @@ tcp_verify_signature(netdissect_options *ndo,
 #endif
         } else {
 #ifdef INET6
-		ND_PRINT((ndo, "IP version not 4 or 6, "));
+		printf("IP version not 4 or 6, ");
 #else
-		ND_PRINT((ndo, "IP version not 4, "));
+		printf("IP version not 4, ");
 #endif
                 return (CANT_CHECK_SIGNATURE);
         }
@@ -878,7 +865,7 @@ tcp_verify_signature(netdissect_options *ndo,
         /*
          * Step 4: Update MD5 hash with shared secret.
          */
-        MD5_Update(&ctx, ndo->ndo_sigsecret, strlen(ndo->ndo_sigsecret));
+        MD5_Update(&ctx, sigsecret, strlen(sigsecret));
         MD5_Final(sig, &ctx);
 
         if (memcmp(rcvsig, sig, TCP_SIGLEN) == 0)

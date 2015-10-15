@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,7 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
 
 #include "acpi.h"
 #include "accommon.h"
@@ -256,13 +257,6 @@ AcpiDmCommaIfListMember (
 
     if (AcpiDmListType (Op->Common.Parent) & BLOCK_COMMA_LIST)
     {
-        /* Exit if Target has been marked IGNORE */
-
-        if (Op->Common.Next->Common.DisasmFlags & ACPI_PARSEOP_IGNORE)
-        {
-            return (FALSE);
-        }
-
         /* Check for a NULL target operand */
 
         if ((Op->Common.Next->Common.AmlOpcode == AML_INT_NAMEPATH_OP) &&
@@ -286,13 +280,7 @@ AcpiDmCommaIfListMember (
             return (FALSE);
         }
 
-        /* Emit comma only if this is not a C-style operator */
-
-        if (!Op->Common.OperatorSymbol)
-        {
-            AcpiOsPrintf (", ");
-        }
-
+        AcpiOsPrintf (", ");
         return (TRUE);
     }
 

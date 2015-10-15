@@ -1,4 +1,5 @@
-/* Definitions for 64-bit RISC-V GNU/Linux systems with ELF format.
+/* Definitions for MIPS running Linux-based GNU systems with ELF format
+   using n32/64 abi.
    Copyright 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2010, 2011
    Free Software Foundation, Inc.
 

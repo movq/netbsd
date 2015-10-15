@@ -1,4 +1,4 @@
-/*	$NetBSD: pm.h,v 1.4 2015/03/05 17:35:56 riastradh Exp $	*/
+/*	$NetBSD: pm.h,v 1.3.2.1 2015/03/06 21:39:10 snj Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/* $NetBSD: umcs.c,v 1.8 2014/08/23 21:37:56 martin Exp $ */
+/* $NetBSD: umcs.c,v 1.7.6.1 2014/08/31 17:18:15 riz Exp $ */
 /* $FreeBSD: head/sys/dev/usb/serial/umcs.c 260559 2014-01-12 11:44:28Z hselasky $ */
 
 /*-
@@ -41,7 +41,7 @@
  *
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umcs.c,v 1.8 2014/08/23 21:37:56 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umcs.c,v 1.7.6.1 2014/08/31 17:18:15 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: usb.c,v 1.159 2015/05/30 06:41:08 skrll Exp $	*/
+/*	$NetBSD: usb.c,v 1.154 2014/07/25 08:10:39 dholland Exp $	*/
 
 /*
  * Copyright (c) 1998, 2002, 2008, 2012 The NetBSD Foundation, Inc.
@@ -37,10 +37,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: usb.c,v 1.159 2015/05/30 06:41:08 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: usb.c,v 1.154 2014/07/25 08:10:39 dholland Exp $");
 
 #ifdef _KERNEL_OPT
-#include "opt_usb.h"
 #include "opt_compat_netbsd.h"
 #endif
 
@@ -63,7 +62,6 @@ __KERNEL_RCSID(0, "$NetBSD: usb.c,v 1.159 2015/05/30 06:41:08 skrll Exp $");
 #include <sys/bus.h>
 #include <sys/once.h>
 #include <sys/atomic.h>
-#include <sys/sysctl.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
@@ -71,18 +69,6 @@ __KERNEL_RCSID(0, "$NetBSD: usb.c,v 1.159 2015/05/30 06:41:08 skrll Exp $");
 #include <dev/usb/usbdivar.h>
 #include <dev/usb/usb_verbose.h>
 #include <dev/usb/usb_quirks.h>
-#include <dev/usb/usbhist.h>
-
-#if defined(USBHIST)
-
-#ifndef USBHIST_SIZE
-#define USBHIST_SIZE 50000
-#endif
-
-static struct kern_history_ent usbhistbuf[USBHIST_SIZE];
-USBHIST_DEFINE(usbhist) = KERNHIST_INITIALIZER(usbhist, usbhistbuf);
-
-#endif
 
 #define USB_DEV_MINOR 255
 
@@ -96,34 +82,6 @@ int	usbdebug = 0;
  * >1 - do no exploration
  */
 int	usb_noexplore = 0;
-
-SYSCTL_SETUP(sysctl_hw_usb_setup, "sysctl hw.usb setup")
-{
-	int err;
-	const struct sysctlnode *rnode;
-	const struct sysctlnode *cnode;
-
-	err = sysctl_createv(clog, 0, NULL, &rnode,
-	    CTLFLAG_PERMANENT, CTLTYPE_NODE, "usb",
-	    SYSCTL_DESCR("usb global controls"),
-	    NULL, 0, NULL, 0, CTL_HW, CTL_CREATE, CTL_EOL);
-
-	if (err)
-		goto fail;
-
-	/* control debugging printfs */
-	err = sysctl_createv(clog, 0, &rnode, &cnode,
-	    CTLFLAG_PERMANENT|CTLFLAG_READWRITE, CTLTYPE_INT,
-	    "debug", SYSCTL_DESCR("Enable debugging output"),
-	    NULL, 0, &usbdebug, sizeof(usbdebug), CTL_CREATE, CTL_EOL);
-	if (err)
-		goto fail;
-
-	return;
-fail:
-	aprint_error("%s: sysctl_createv failed (err = %d)\n", __func__, err);
-}
-
 #else
 #define DPRINTF(x)
 #define DPRINTFN(n,x)
@@ -245,7 +203,6 @@ usb_attach(device_t parent, device_t self, void *aux)
 	case USBREV_1_0:
 	case USBREV_1_1:
 	case USBREV_2_0:
-	case USBREV_3_0:
 		break;
 	default:
 		aprint_error(", not supported\n");
@@ -276,8 +233,6 @@ usb_once_init(void)
 {
 	struct usb_taskq *taskq;
 	int i;
-
-	USBHIST_LINK_STATIC(usbhist);
 
 	selinit(&usb_selevent);
 	mutex_init(&usb_event_lock, MUTEX_DEFAULT, IPL_NONE);
@@ -329,9 +284,6 @@ usb_doattach(device_t self)
 		break;
 	case USBREV_2_0:
 		speed = USB_SPEED_HIGH;
-		break;
-	case USBREV_3_0:
-		speed = USB_SPEED_SUPER;
 		break;
 	default:
 		panic("usb_doattach");

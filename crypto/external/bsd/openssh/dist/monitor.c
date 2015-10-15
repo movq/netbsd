@@ -1,5 +1,5 @@
-/*	$NetBSD: monitor.c,v 1.16 2015/08/13 10:33:21 christos Exp $	*/
-/* $OpenBSD: monitor.c,v 1.150 2015/06/22 23:42:16 djm Exp $ */
+/*	$NetBSD: monitor.c,v 1.12.4.2 2015/08/14 05:32:39 msaitoh Exp $	*/
+/* $OpenBSD: monitor.c,v 1.145 2015/02/20 22:17:21 djm Exp $ */
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>
  * Copyright 2002 Markus Friedl <markus@openbsd.org>
@@ -27,7 +27,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: monitor.c,v 1.16 2015/08/13 10:33:21 christos Exp $");
+__RCSID("$NetBSD: monitor.c,v 1.12.4.2 2015/08/14 05:32:39 msaitoh Exp $");
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/socket.h>
@@ -386,7 +386,7 @@ monitor_child_preauth(Authctxt *_authctxt, struct monitor *pmonitor)
 		if (ent->flags & (MON_AUTHDECIDE|MON_ALOG)) {
 			auth_log(authctxt, authenticated, partial,
 			    auth_method, auth_submethod);
-			if (!partial && !authenticated)
+			if (!authenticated)
 				authctxt->failures++;
 		}
 	}
@@ -1161,7 +1161,7 @@ mm_answer_keyallowed(int sock, Buffer *m)
 	Key *key;
 	char *cuser, *chost;
 	u_char *blob;
-	u_int bloblen, pubkey_auth_attempt;
+	u_int bloblen;
 	enum mm_keytype type = 0;
 	int allowed = 0;
 
@@ -1171,7 +1171,6 @@ mm_answer_keyallowed(int sock, Buffer *m)
 	cuser = buffer_get_string(m, NULL);
 	chost = buffer_get_string(m, NULL);
 	blob = buffer_get_string(m, &bloblen);
-	pubkey_auth_attempt = buffer_get_int(m);
 
 	key = key_from_blob(blob, bloblen);
 
@@ -1192,19 +1191,19 @@ mm_answer_keyallowed(int sock, Buffer *m)
 			allowed = options.pubkey_authentication &&
 			    !auth2_userkey_already_used(authctxt, key) &&
 			    match_pattern_list(sshkey_ssh_name(key),
-			    options.pubkey_key_types, 0) == 1 &&
-			    user_key_allowed(authctxt->pw, key,
-			    pubkey_auth_attempt);
+			    options.pubkey_key_types,
+			    strlen(options.pubkey_key_types), 0) == 1 &&
+			    user_key_allowed(authctxt->pw, key);
 			pubkey_auth_info(authctxt, key, NULL);
 			auth_method = "publickey";
-			if (options.pubkey_authentication &&
-			    (!pubkey_auth_attempt || allowed != 1))
+			if (options.pubkey_authentication && allowed != 1)
 				auth_clear_options();
 			break;
 		case MM_HOSTKEY:
 			allowed = options.hostbased_authentication &&
 			    match_pattern_list(sshkey_ssh_name(key),
-			    options.hostbased_key_types, 0) == 1 &&
+			    options.hostbased_key_types,
+			    strlen(options.hostbased_key_types), 0) == 1 &&
 			    hostbased_key_allowed(authctxt->pw,
 			    cuser, chost, key);
 			pubkey_auth_info(authctxt, key,
@@ -1450,9 +1449,6 @@ mm_record_login(Session *s, struct passwd *pw)
 {
 	socklen_t fromlen;
 	struct sockaddr_storage from;
-
-	if (options.use_login)
-		return;
 
 	/*
 	 * Get IP address of client. If the connection is not a socket, let
@@ -1868,13 +1864,11 @@ monitor_apply_keystate(struct monitor *pmonitor)
 
 	if ((kex = ssh->kex) != 0) {
 		/* XXX set callbacks */
-#ifdef WITH_OPENSSL
 		kex->kex[KEX_DH_GRP1_SHA1] = kexdh_server;
 		kex->kex[KEX_DH_GRP14_SHA1] = kexdh_server;
 		kex->kex[KEX_DH_GEX_SHA1] = kexgex_server;
 		kex->kex[KEX_DH_GEX_SHA256] = kexgex_server;
 		kex->kex[KEX_ECDH_SHA2] = kexecdh_server;
-#endif
 		kex->kex[KEX_C25519_SHA256] = kexc25519_server;
 		kex->load_host_public_key=&get_hostkey_public_by_type;
 		kex->load_host_private_key=&get_hostkey_private_by_type;

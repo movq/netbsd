@@ -1,4 +1,4 @@
-/*	$NetBSD: delv.c,v 1.4 2015/07/08 17:28:54 christos Exp $	*/
+/*	$NetBSD: delv.c,v 1.2.4.1 2015/07/17 04:31:20 snj Exp $	*/
 
 /*
  * Copyright (C) 2014, 2015  Internet Systems Consortium, Inc. ("ISC")

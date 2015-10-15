@@ -1,4 +1,4 @@
-/* $NetBSD: awin_hdmiaudio.c,v 1.5 2014/11/18 01:53:53 jmcneill Exp $ */
+/* $NetBSD: awin_hdmiaudio.c,v 1.3.2.4 2014/11/23 13:07:04 martin Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: awin_hdmiaudio.c,v 1.5 2014/11/18 01:53:53 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awin_hdmiaudio.c,v 1.3.2.4 2014/11/23 13:07:04 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

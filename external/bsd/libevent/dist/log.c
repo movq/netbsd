@@ -1,4 +1,4 @@
-/*	$NetBSD: log.c,v 1.4 2015/01/30 00:07:06 joerg Exp $	*/
+/*	$NetBSD: log.c,v 1.2.4.1 2015/02/03 08:23:39 bouyer Exp $	*/
 /*	$OpenBSD: err.c,v 1.2 2002/06/25 15:50:15 mickey Exp $	*/
 
 /*
@@ -40,7 +40,7 @@
 
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: log.c,v 1.4 2015/01/30 00:07:06 joerg Exp $");
+__RCSID("$NetBSD: log.c,v 1.2.4.1 2015/02/03 08:23:39 bouyer Exp $");
 
 #ifdef WIN32
 #include <winsock2.h>

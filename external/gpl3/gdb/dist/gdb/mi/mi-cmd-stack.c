@@ -1,5 +1,5 @@
 /* MI Command Set - stack commands.
-   Copyright (C) 2000-2015 Free Software Foundation, Inc.
+   Copyright (C) 2000-2014 Free Software Foundation, Inc.
    Contributed by Cygnus Solutions (a Red Hat company).
 
    This file is part of GDB.
@@ -27,11 +27,13 @@
 #include "block.h"
 #include "stack.h"
 #include "dictionary.h"
+#include <string.h>
 #include "language.h"
 #include "valprint.h"
+#include "exceptions.h"
 #include "utils.h"
 #include "mi-getopt.h"
-#include "extension.h"
+#include "python/python.h"
 #include <ctype.h>
 #include "mi-parse.h"
 
@@ -67,7 +69,7 @@ mi_cmd_stack_list_frames (char *command, char **argv, int argc)
   int i;
   struct cleanup *cleanup_stack;
   struct frame_info *fi;
-  enum ext_lang_bt_status result = EXT_LANG_BT_ERROR;
+  enum py_bt_status result = PY_BT_ERROR;
   int raw_arg = 0;
   int oind = 0;
   enum opt
@@ -139,14 +141,14 @@ mi_cmd_stack_list_frames (char *command, char **argv, int argc)
       if (py_frame_low == -1)
 	py_frame_low++;
 
-      result = apply_ext_lang_frame_filter (get_current_frame (), flags,
-					    NO_VALUES,  current_uiout,
-					    py_frame_low, frame_high);
+      result = apply_frame_filter (get_current_frame (), flags,
+				   NO_VALUES,  current_uiout,
+				   py_frame_low, frame_high);
     }
 
   /* Run the inbuilt backtrace if there are no filters registered, or
      if "--no-frame-filters" has been specified from the command.  */
-  if (! frame_filters || raw_arg  || result == EXT_LANG_BT_NO_FILTERS)
+  if (! frame_filters || raw_arg  || result == PY_BT_NO_FILTERS)
     {
       /* Now let's print the frames up to frame_high, or until there are
 	 frames in the stack.  */
@@ -198,7 +200,7 @@ mi_cmd_stack_list_locals (char *command, char **argv, int argc)
 {
   struct frame_info *frame;
   int raw_arg = 0;
-  enum ext_lang_bt_status result = EXT_LANG_BT_ERROR;
+  enum py_bt_status result = PY_BT_ERROR;
   int print_value;
   int oind = 0;
   int skip_unavailable = 0;
@@ -252,13 +254,13 @@ mi_cmd_stack_list_locals (char *command, char **argv, int argc)
      {
        int flags = PRINT_LEVEL | PRINT_LOCALS;
 
-       result = apply_ext_lang_frame_filter (frame, flags, print_value,
-					     current_uiout, 0, 0);
+       result = apply_frame_filter (frame, flags, print_value,
+				    current_uiout, 0, 0);
      }
 
    /* Run the inbuilt backtrace if there are no filters registered, or
       if "--no-frame-filters" has been specified from the command.  */
-   if (! frame_filters || raw_arg  || result == EXT_LANG_BT_NO_FILTERS)
+   if (! frame_filters || raw_arg  || result == PY_BT_NO_FILTERS)
      {
        list_args_or_locals (locals, print_value, frame,
 			    skip_unavailable);
@@ -282,7 +284,7 @@ mi_cmd_stack_list_args (char *command, char **argv, int argc)
   int raw_arg = 0;
   int oind = 0;
   int skip_unavailable = 0;
-  enum ext_lang_bt_status result = EXT_LANG_BT_ERROR;
+  enum py_bt_status result = PY_BT_ERROR;
   enum opt
   {
     NO_FRAME_FILTERS,
@@ -358,14 +360,14 @@ mi_cmd_stack_list_args (char *command, char **argv, int argc)
       if (py_frame_low == -1)
 	py_frame_low++;
 
-      result = apply_ext_lang_frame_filter (get_current_frame (), flags,
-					    print_values, current_uiout,
-					    py_frame_low, frame_high);
+      result = apply_frame_filter (get_current_frame (), flags,
+				   print_values, current_uiout,
+				   py_frame_low, frame_high);
     }
 
      /* Run the inbuilt backtrace if there are no filters registered, or
       if "--no-frame-filters" has been specified from the command.  */
-   if (! frame_filters || raw_arg  || result == EXT_LANG_BT_NO_FILTERS)
+   if (! frame_filters || raw_arg  || result == PY_BT_NO_FILTERS)
      {
       /* Now let's print the frames up to frame_high, or until there are
 	 frames in the stack.  */
@@ -395,7 +397,7 @@ mi_cmd_stack_list_variables (char *command, char **argv, int argc)
 {
   struct frame_info *frame;
   int raw_arg = 0;
-  enum ext_lang_bt_status result = EXT_LANG_BT_ERROR;
+  enum py_bt_status result = PY_BT_ERROR;
   int print_value;
   int oind = 0;
   int skip_unavailable = 0;
@@ -448,13 +450,13 @@ mi_cmd_stack_list_variables (char *command, char **argv, int argc)
      {
        int flags = PRINT_LEVEL | PRINT_ARGS | PRINT_LOCALS;
 
-       result = apply_ext_lang_frame_filter (frame, flags, print_value,
-					     current_uiout, 0, 0);
+       result = apply_frame_filter (frame, flags, print_value,
+				    current_uiout, 0, 0);
      }
 
    /* Run the inbuilt backtrace if there are no filters registered, or
       if "--no-frame-filters" has been specified from the command.  */
-   if (! frame_filters || raw_arg  || result == EXT_LANG_BT_NO_FILTERS)
+   if (! frame_filters || raw_arg  || result == PY_BT_NO_FILTERS)
      {
        list_args_or_locals (all, print_value, frame,
 			    skip_unavailable);
@@ -557,7 +559,7 @@ static void
 list_args_or_locals (enum what_to_list what, enum print_values values,
 		     struct frame_info *fi, int skip_unavailable)
 {
-  const struct block *block;
+  struct block *block;
   struct symbol *sym;
   struct block_iterator iter;
   struct cleanup *cleanup_list;

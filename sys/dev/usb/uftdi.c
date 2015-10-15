@@ -1,4 +1,4 @@
-/*	$NetBSD: uftdi.c,v 1.60 2015/02/20 14:50:53 nonaka Exp $	*/
+/*	$NetBSD: uftdi.c,v 1.59.4.1 2015/02/21 19:38:02 martin Exp $	*/
 
 /*
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uftdi.c,v 1.60 2015/02/20 14:50:53 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uftdi.c,v 1.59.4.1 2015/02/21 19:38:02 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

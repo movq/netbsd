@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.7 2015/09/23 05:28:14 mrg Exp $
+# $NetBSD: Makefile,v 1.6.2.3 2015/01/06 11:00:40 martin Exp $
 
 # Link the gallium mega driver.
 
@@ -53,6 +53,8 @@ GALLIUM_SUBDIRS= \
 	winsys/sw/dri \
 	winsys/sw/kms-dri \
 	state_trackers/dri
+
+GALLIUM_NAMES=	kms_swrast r600 swrant
 
 GALLIUM_SOURCES.auxiliary/cso_cache= \
 	cso_cache.c \

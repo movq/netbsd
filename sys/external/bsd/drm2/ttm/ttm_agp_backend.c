@@ -1,4 +1,4 @@
-/*	$NetBSD: ttm_agp_backend.c,v 1.4 2015/04/25 21:00:29 riastradh Exp $	*/
+/*	$NetBSD: ttm_agp_backend.c,v 1.1.4.2 2015/07/30 15:41:44 snj Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ttm_agp_backend.c,v 1.4 2015/04/25 21:00:29 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ttm_agp_backend.c,v 1.1.4.2 2015/07/30 15:41:44 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/kmem.h>

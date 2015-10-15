@@ -1,4 +1,4 @@
-/*	$NetBSD: t_rnd.c,v 1.6 2015/04/13 22:24:34 riastradh Exp $	*/
+/*	$NetBSD: t_rnd.c,v 1.5 2012/03/18 09:46:50 jruoho Exp $	*/
 
 /*
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -27,12 +27,12 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_rnd.c,v 1.6 2015/04/13 22:24:34 riastradh Exp $");
+__RCSID("$NetBSD: t_rnd.c,v 1.5 2012/03/18 09:46:50 jruoho Exp $");
 
 #include <sys/types.h>
 #include <sys/fcntl.h>
 #include <sys/ioctl.h>
-#include <sys/rndio.h>
+#include <sys/rnd.h>
 
 #include <atf-c.h>
 

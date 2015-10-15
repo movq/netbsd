@@ -1,4 +1,4 @@
-/*	$NetBSD: booke_machdep.c,v 1.23 2015/01/23 07:27:05 nonaka Exp $	*/
+/*	$NetBSD: booke_machdep.c,v 1.20 2014/03/24 19:29:59 christos Exp $	*/
 /*-
  * Copyright (c) 2010, 2011 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -38,7 +38,7 @@
 #define	_POWERPC_BUS_DMA_PRIVATE
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: booke_machdep.c,v 1.23 2015/01/23 07:27:05 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: booke_machdep.c,v 1.20 2014/03/24 19:29:59 christos Exp $");
 
 #include "opt_modular.h"
 
@@ -207,9 +207,6 @@ booke_cpu_startup(const char *model)
 	fake_mapiodev = 0;
 
 #ifdef MULTIPROCESSOR
-	pmap_kernel()->pm_active = kcpuset_running;
-	pmap_kernel()->pm_onproc = kcpuset_running;
-
 	for (size_t i = 1; i < __arraycount(cpu_info); i++) {
 		struct cpu_info * const ci = &cpu_info[i];
 		struct cpu_softc * const cpu = &cpu_softc[i];
@@ -230,8 +227,6 @@ booke_cpu_startup(const char *model)
 	kcpuset_create(&cpuset_info.cpus_paused, true);
 	kcpuset_create(&cpuset_info.cpus_resumed, true);
 	kcpuset_create(&cpuset_info.cpus_halted, true);
-
-	kcpuset_set(cpuset_info.cpus_running, cpu_number());
 #endif /* MULTIPROCESSOR */
 }
 
@@ -571,10 +566,10 @@ booke_sstep(struct trapframe *tf)
 			const int16_t off = insn & ~3;
 			iac2 = ((insn & 2) ? 0 : tf->tf_srr0) + off;
 			dbcr0 |= DBCR0_IAC2;
-		} else if ((insn & 0xfc00fffe) == 0x4c000420) {
+		} else if ((insn & 0xfc00ffde) == 0x4c000420) {
 			iac2 = tf->tf_ctr;
 			dbcr0 |= DBCR0_IAC2;
-		} else if ((insn & 0xfc00fffe) == 0x4c000020) {
+		} else if ((insn & 0xfc00ffde) == 0x4c000020) {
 			iac2 = tf->tf_lr;
 			dbcr0 |= DBCR0_IAC2;
 		}

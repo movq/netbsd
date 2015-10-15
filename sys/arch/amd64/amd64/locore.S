@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.78 2015/08/30 01:46:02 uebayasi Exp $	*/
+/*	$NetBSD: locore.S,v 1.76 2014/05/16 00:48:41 rmind Exp $	*/
 
 /*
  * Copyright-o-rama!
@@ -153,7 +153,6 @@
 
 #include <machine/asm.h>
 
-#include "opt_copy_symtab.h"
 #include "opt_ddb.h"
 #include "opt_ddbparam.h"
 #include "opt_modular.h"
@@ -521,7 +520,7 @@ ENTRY(start)
 
 	/* Find end of kernel image. */
 	movl	$RELOC(end),%edi
-#if (NKSYMS || defined(DDB) || defined(MODULAR)) && !defined(makeoptions_COPY_SYMTAB)
+#if (NKSYMS || defined(DDB) || defined(MODULAR)) && !defined(SYMTAB_SPACE)
 	/* Save the symbols (if loaded). */
 	movl	RELOC(esym),%eax
 	testl	%eax,%eax

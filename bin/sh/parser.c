@@ -1,4 +1,4 @@
-/*	$NetBSD: parser.c,v 1.93 2014/08/29 09:35:19 christos Exp $	*/
+/*	$NetBSD: parser.c,v 1.90 2014/01/01 19:50:44 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)parser.c	8.7 (Berkeley) 5/16/95";
 #else
-__RCSID("$NetBSD: parser.c,v 1.93 2014/08/29 09:35:19 christos Exp $");
+__RCSID("$NetBSD: parser.c,v 1.90 2014/01/01 19:50:44 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -647,8 +647,8 @@ void fixredir(union node *n, const char *text, int err)
 	if (!err)
 		n->ndup.vname = NULL;
 
-	if (is_number(text))
-		n->ndup.dupfd = number(text);
+	if (is_digit(text[0]) && text[1] == '\0')
+		n->ndup.dupfd = digit_val(text[0]);
 	else if (text[0] == '-' && text[1] == '\0')
 		n->ndup.dupfd = -1;
 	else {
@@ -839,20 +839,15 @@ xxreadtoken(void)
 			pungetc();
 			continue;
 		case '\\':
-			switch (pgetc()) {
-			case '\n':
+			if (pgetc() == '\n') {
 				startlinno = ++plinno;
 				if (doprompt)
 					setprompt(2);
 				else
 					setprompt(0);
 				continue;
-			case PEOF:
-				RETURN(TEOF);
-			default:
-				pungetc();
-				break;
 			}
+			pungetc();
 			goto breakloop;
 		case '\n':
 			plinno++;
@@ -1154,7 +1149,8 @@ endword:
 	if (eofmark == NULL) {
 		if ((c == '>' || c == '<')
 		 && quotef == 0
-		 && (*out == '\0' || is_number(out))) {
+		 && len <= 2
+		 && (*out == '\0' || is_digit(*out))) {
 			PARSEREDIR();
 			return lasttoken = TREDIR;
 		} else {
@@ -1212,9 +1208,8 @@ checkend: {
  */
 
 parseredir: {
-	char fd[64];
+	char fd = *out;
 	union node *np;
-	strlcpy(fd, out, sizeof(fd));
 
 	np = (union node *)stalloc(sizeof (struct nfile));
 	if (c == '>') {
@@ -1263,8 +1258,8 @@ parseredir: {
 			break;
 		}
 	}
-	if (*fd != '\0')
-		np->nfile.fd = number(fd);
+	if (fd != '\0')
+		np->nfile.fd = digit_val(fd);
 	redirnode = np;
 	goto parseredir_return;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: taskq.c,v 1.5 2015/04/11 16:32:07 riastradh Exp $	*/
+/*	$NetBSD: taskq.c,v 1.3 2013/06/21 16:22:46 christos Exp $	*/
 
 /*
  * CDDL HEADER START
@@ -721,14 +721,6 @@ taskq_dispatch(taskq_t *tq, task_func_t func, void *arg, uint_t flags)
 	/*
 	 * TQ_NOQUEUE flag can't be used with non-dynamic task queues.
 	 */
-#ifdef __NetBSD__
-	/*
-	 * Dynamic task queues didn't seem to get imported.  Caller
-	 * must be prepared to handle failure anyway, so just fail.
-	 */
-	if (flags & TQ_NOQUEUE)
-		return ((taskqid_t)NULL);
-#endif
 	ASSERT(! (flags & TQ_NOQUEUE));
 
 	/*
@@ -905,8 +897,7 @@ taskq_create_common(const char *name, int instance, int nthreads, pri_t pri,
 	uint_t bsize;	/* # of buckets - always power of 2 */
 
 	ASSERT(instance == 0);
-	ASSERT(!ISSET(flags, TASKQ_CPR_SAFE));
-	ASSERT(!ISSET(flags, TASKQ_DYNAMIC));
+	ASSERT(flags == TASKQ_PREPOPULATE | TASKQ_NOINSTANCE);
 
 	/*
 	 * TASKQ_CPR_SAFE and TASKQ_DYNAMIC flags are mutually exclusive.
@@ -920,10 +911,7 @@ taskq_create_common(const char *name, int instance, int nthreads, pri_t pri,
 	ASSERT(bsize >= 1);
 	bsize = MIN(bsize, taskq_maxbuckets);
 
-	ASSERT(!(flags & TASKQ_DYNAMIC));
-	if (flags & TASKQ_THREADS_CPU_PCT)
-		/* nthreads is % of CPUs we want to use.  */
-		nthreads = (ncpus*nthreads)/100;
+	tq->tq_maxsize = nthreads;
 
 	(void) strncpy(tq->tq_name, name, TASKQ_NAMELEN + 1);
 	tq->tq_name[TASKQ_NAMELEN] = '\0';

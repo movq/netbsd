@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_subdev_mc_base.c,v 1.3 2015/03/06 13:44:18 riastradh Exp $	*/
+/*	$NetBSD: nouveau_subdev_mc_base.c,v 1.1.1.1.4.1 2015/03/06 21:39:09 snj Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_mc_base.c,v 1.3 2015/03/06 13:44:18 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_mc_base.c,v 1.1.1.1.4.1 2015/03/06 21:39:09 snj Exp $");
 
 #include <subdev/mc.h>
 #include <core/option.h>

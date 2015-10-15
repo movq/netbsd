@@ -1,5 +1,5 @@
-/*	$NetBSD: thread.h,v 1.1.1.2 2015/01/29 06:38:27 spz Exp $	*/
-/*	$NetBSD: thread.h,v 1.1.1.2 2015/01/29 06:38:27 spz Exp $	*/
+/*	$NetBSD: thread.h,v 1.1.1.1.12.1 2015/02/03 08:23:40 bouyer Exp $	*/
+/*	$NetBSD: thread.h,v 1.1.1.1.12.1 2015/02/03 08:23:40 bouyer Exp $	*/
 /*
  * Copyright (c) 2008-2012 Niels Provos and Nick Mathewson
  *

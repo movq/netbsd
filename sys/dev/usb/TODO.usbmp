@@ -1,4 +1,4 @@
-$NetBSD: TODO.usbmp,v 1.9 2015/03/07 20:20:55 mrg Exp $
+$NetBSD: TODO.usbmp,v 1.8.2.1 2015/03/21 17:30:43 snj Exp $
 
 
 the majority of the USB MP device interface is documented in usbdivar.h.

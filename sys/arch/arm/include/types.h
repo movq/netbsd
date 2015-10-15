@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.30 2015/08/27 12:30:50 pooka Exp $	*/
+/*	$NetBSD: types.h,v 1.28 2014/08/05 06:24:56 skrll Exp $	*/
 
 /*
  * Copyright (c) 1990 The Regents of the University of California.
@@ -46,6 +46,9 @@ typedef struct label_t {	/* Used by setjmp & longjmp */
          
 /* NB: This should probably be if defined(_KERNEL) */
 #if defined(_NETBSD_SOURCE)
+typedef	unsigned long	vm_offset_t;	/* depreciated */
+typedef	unsigned long	vm_size_t;	/* depreciated */
+
 typedef unsigned long	paddr_t;
 typedef unsigned long	psize_t;
 typedef unsigned long	vaddr_t;
@@ -71,9 +74,9 @@ typedef unsigned short	tlb_asid_t;
  * to user-space, we don't want ABI breakage there.
  */
 #if defined(_KERNEL)
-typedef unsigned char	__cpu_simple_lock_nv_t;
+typedef volatile unsigned char	__cpu_simple_lock_t;
 #else
-typedef	int		__cpu_simple_lock_nv_t;
+typedef	volatile int		__cpu_simple_lock_t;
 #endif /* _KERNEL */
 
 #define	__SIMPLELOCK_LOCKED	1

@@ -1,4 +1,4 @@
-/*	$NetBSD: ppsclock.h,v 1.3 2015/07/10 14:20:29 christos Exp $	*/
+/*	$NetBSD: ppsclock.h,v 1.1.1.1.26.1 2014/12/24 00:05:17 riz Exp $	*/
 
 /*
  * This software was developed by the Computer Systems Engineering group

@@ -1,4 +1,4 @@
-/*	$NetBSD: pm_runtime.h,v 1.3 2014/08/23 08:03:33 riastradh Exp $	*/
+/*	$NetBSD: pm_runtime.h,v 1.2.4.1 2014/09/21 17:41:52 snj Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

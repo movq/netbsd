@@ -1,4 +1,4 @@
-/*	$NetBSD: pcap-nit.c,v 1.3 2015/03/31 21:39:42 christos Exp $	*/
+/*	$NetBSD: pcap-nit.c,v 1.1.1.4 2013/12/31 16:57:19 christos Exp $	*/
 
 /*
  * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1995, 1996
@@ -20,9 +20,10 @@
  * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: pcap-nit.c,v 1.3 2015/03/31 21:39:42 christos Exp $");
+#ifndef lint
+static const char rcsid[] _U_ =
+    "@(#) Header: /tcpdump/master/libpcap/pcap-nit.c,v 1.62 2008-04-14 20:40:58 guy Exp  (LBL)";
+#endif
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -190,7 +191,7 @@ pcap_read_nit(pcap_t *p, int cnt, pcap_handler callback, u_char *user)
 			h.len = nh->nh_wirelen;
 			h.caplen = caplen;
 			(*callback)(user, &h, cp);
-			if (++n >= cnt && !PACKET_COUNT_IS_UNLIMITED(cnt)) {
+			if (++n >= cnt && cnt > 0) {
 				p->cc = ep - bp;
 				p->bp = bp;
 				return (n);
@@ -216,7 +217,7 @@ pcap_inject_nit(pcap_t *p, const void *buf, size_t size)
 		return (-1);
 	}
 	return (ret);
-}
+}                           
 
 static int
 nit_setflags(pcap_t *p)

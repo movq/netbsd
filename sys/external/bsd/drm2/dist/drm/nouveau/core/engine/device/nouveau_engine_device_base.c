@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_engine_device_base.c,v 1.4 2015/03/06 13:44:18 riastradh Exp $	*/
+/*	$NetBSD: nouveau_engine_device_base.c,v 1.2.4.2 2015/03/06 21:39:08 snj Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_device_base.c,v 1.4 2015/03/06 13:44:18 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_device_base.c,v 1.2.4.2 2015/03/06 21:39:08 snj Exp $");
 
 #include <core/object.h>
 #include <core/device.h>

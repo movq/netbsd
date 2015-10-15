@@ -1,4 +1,4 @@
-/*      $NetBSD: vfp_init.c,v 1.48 2015/04/28 17:14:21 jmcneill Exp $ */
+/*      $NetBSD: vfp_init.c,v 1.41.2.2 2015/03/26 08:53:48 snj Exp $ */
 
 /*
  * Copyright (c) 2008 ARM Ltd
@@ -94,7 +94,6 @@ load_vfpregs(const struct vfpreg *fregs)
 	case FPU_VFP_CORTEXA8:
 	case FPU_VFP_CORTEXA9:
 	case FPU_VFP_CORTEXA15:
-	case FPU_VFP_CORTEXA15_QEMU:
 #endif
 		load_vfpregs_hi(fregs->vfp_regs);
 #ifdef CPU_ARM11
@@ -116,7 +115,6 @@ save_vfpregs(struct vfpreg *fregs)
 	case FPU_VFP_CORTEXA8:
 	case FPU_VFP_CORTEXA9:
 	case FPU_VFP_CORTEXA15:
-	case FPU_VFP_CORTEXA15_QEMU:
 #endif
 		save_vfpregs_hi(fregs->vfp_regs);
 #ifdef CPU_ARM11
@@ -265,8 +263,6 @@ vfp_attach(struct cpu_info *ci)
 		cpacr |= __SHIFTIN(CPACR_ALL, cpacr_vfp2);
 		armreg_cpacr_write(cpacr);
 
-		arm_isb();
-
 		/*
 		 * If we could enable them, then they exist.
 		 */
@@ -316,7 +312,6 @@ vfp_attach(struct cpu_info *ci)
 	case FPU_VFP_CORTEXA8:
 	case FPU_VFP_CORTEXA9:
 	case FPU_VFP_CORTEXA15:
-	case FPU_VFP_CORTEXA15_QEMU:
 		if (armreg_cpacr_read() & CPACR_V7_ASEDIS) {
 			model = "VFP 4.0+";
 		} else {

@@ -1,6 +1,6 @@
 /* Dump-to-file commands, for GDB, the GNU debugger.
 
-   Copyright (C) 2002-2015 Free Software Foundation, Inc.
+   Copyright (C) 2002-2014 Free Software Foundation, Inc.
 
    Contributed by Red Hat.
 
@@ -20,10 +20,12 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include <string.h>
 #include "cli/cli-decode.h"
 #include "cli/cli-cmds.h"
 #include "value.h"
 #include "completer.h"
+#include "gdb_assert.h"
 #include <ctype.h>
 #include "target.h"
 #include "readline/readline.h"
@@ -33,8 +35,8 @@
 #include "filestuff.h"
 
 
-static const char *
-scan_expression_with_cleanup (const char **cmd, const char *def)
+static char *
+scan_expression_with_cleanup (char **cmd, const char *def)
 {
   if ((*cmd) == NULL || (**cmd) == '\0')
     {
@@ -46,19 +48,19 @@ scan_expression_with_cleanup (const char **cmd, const char *def)
   else
     {
       char *exp;
-      const char *end;
+      char *end;
 
       end = (*cmd) + strcspn (*cmd, " \t");
       exp = savestring ((*cmd), end - (*cmd));
       make_cleanup (xfree, exp);
-      (*cmd) = skip_spaces_const (end);
+      (*cmd) = skip_spaces (end);
       return exp;
     }
 }
 
 
 static char *
-scan_filename_with_cleanup (const char **cmd, const char *defname)
+scan_filename_with_cleanup (char **cmd, const char *defname)
 {
   char *filename;
   char *fullname;
@@ -76,13 +78,13 @@ scan_filename_with_cleanup (const char **cmd, const char *defname)
   else
     {
       /* FIXME: should parse a possibly quoted string.  */
-      const char *end;
+      char *end;
 
-      (*cmd) = skip_spaces_const (*cmd);
+      (*cmd) = skip_spaces (*cmd);
       end = *cmd + strcspn (*cmd, " \t");
       filename = savestring ((*cmd), end - (*cmd));
       make_cleanup (xfree, filename);
-      (*cmd) = skip_spaces_const (end);
+      (*cmd) = skip_spaces (end);
     }
   gdb_assert (filename != NULL);
 
@@ -158,14 +160,14 @@ static void
 dump_command (char *cmd, int from_tty)
 {
   printf_unfiltered (_("\"dump\" must be followed by a subcommand.\n\n"));
-  help_list (dump_cmdlist, "dump ", all_commands, gdb_stdout);
+  help_list (dump_cmdlist, "dump ", -1, gdb_stdout);
 }
 
 static void
 append_command (char *cmd, int from_tty)
 {
   printf_unfiltered (_("\"append\" must be followed by a subcommand.\n\n"));
-  help_list (dump_cmdlist, "append ", all_commands, gdb_stdout);
+  help_list (dump_cmdlist, "append ", -1, gdb_stdout);
 }
 
 static void
@@ -204,16 +206,16 @@ dump_bfd_file (const char *filename, const char *mode,
 }
 
 static void
-dump_memory_to_file (const char *cmd, const char *mode, const char *file_format)
+dump_memory_to_file (char *cmd, char *mode, char *file_format)
 {
   struct cleanup *old_cleanups = make_cleanup (null_cleanup, NULL);
   CORE_ADDR lo;
   CORE_ADDR hi;
   ULONGEST count;
-  const char *filename;
+  char *filename;
   void *buf;
-  const char *lo_exp;
-  const char *hi_exp;
+  char *lo_exp;
+  char *hi_exp;
 
   /* Open the file.  */
   filename = scan_filename_with_cleanup (&cmd, NULL);
@@ -260,11 +262,11 @@ dump_memory_command (char *cmd, char *mode)
 }
 
 static void
-dump_value_to_file (const char *cmd, const char *mode, const char *file_format)
+dump_value_to_file (char *cmd, char *mode, char *file_format)
 {
   struct cleanup *old_cleanups = make_cleanup (null_cleanup, NULL);
   struct value *val;
-  const char *filename;
+  char *filename;
 
   /* Open the file.  */
   filename = scan_filename_with_cleanup (&cmd, NULL);
@@ -394,7 +396,7 @@ add_dump_command (char *name, void (*func) (char *args, char *mode),
 
   c = add_cmd (name, all_commands, NULL, descr, &dump_cmdlist);
   c->completer =  filename_completer;
-  d = XNEW (struct dump_context);
+  d = XMALLOC (struct dump_context);
   d->func = func;
   d->mode = FOPEN_WB;
   set_cmd_context (c, d);
@@ -402,7 +404,7 @@ add_dump_command (char *name, void (*func) (char *args, char *mode),
 
   c = add_cmd (name, all_commands, NULL, descr, &append_cmdlist);
   c->completer =  filename_completer;
-  d = XNEW (struct dump_context);
+  d = XMALLOC (struct dump_context);
   d->func = func;
   d->mode = FOPEN_AB;
   set_cmd_context (c, d);
@@ -501,7 +503,7 @@ restore_section_callback (bfd *ibfd, asection *isec, void *args)
 }
 
 static void
-restore_binary_file (const char *filename, struct callback_data *data)
+restore_binary_file (char *filename, struct callback_data *data)
 {
   struct cleanup *cleanup = make_cleanup (null_cleanup, NULL);
   FILE *file = fopen_with_cleanup (filename, FOPEN_RB);
@@ -553,13 +555,12 @@ restore_binary_file (const char *filename, struct callback_data *data)
 }
 
 static void
-restore_command (char *args_in, int from_tty)
+restore_command (char *args, int from_tty)
 {
   char *filename;
   struct callback_data data;
   bfd *ibfd;
   int binary_flag = 0;
-  const char *args = args_in;
 
   if (!target_has_execution)
     noprocess ();
@@ -579,7 +580,7 @@ restore_command (char *args_in, int from_tty)
 	{
 	  binary_flag = 1;
 	  args += strlen (binary_string);
-	  args = skip_spaces_const (args);
+	  args = skip_spaces (args);
 	}
       /* Parse offset (optional).  */
       if (args != NULL && *args != '\0')
@@ -625,36 +626,35 @@ static void
 srec_dump_command (char *cmd, int from_tty)
 {
   printf_unfiltered ("\"dump srec\" must be followed by a subcommand.\n");
-  help_list (srec_cmdlist, "dump srec ", all_commands, gdb_stdout);
+  help_list (srec_cmdlist, "dump srec ", -1, gdb_stdout);
 }
 
 static void
 ihex_dump_command (char *cmd, int from_tty)
 {
   printf_unfiltered ("\"dump ihex\" must be followed by a subcommand.\n");
-  help_list (ihex_cmdlist, "dump ihex ", all_commands, gdb_stdout);
+  help_list (ihex_cmdlist, "dump ihex ", -1, gdb_stdout);
 }
 
 static void
 tekhex_dump_command (char *cmd, int from_tty)
 {
   printf_unfiltered ("\"dump tekhex\" must be followed by a subcommand.\n");
-  help_list (tekhex_cmdlist, "dump tekhex ", all_commands, gdb_stdout);
+  help_list (tekhex_cmdlist, "dump tekhex ", -1, gdb_stdout);
 }
 
 static void
 binary_dump_command (char *cmd, int from_tty)
 {
   printf_unfiltered ("\"dump binary\" must be followed by a subcommand.\n");
-  help_list (binary_dump_cmdlist, "dump binary ", all_commands, gdb_stdout);
+  help_list (binary_dump_cmdlist, "dump binary ", -1, gdb_stdout);
 }
 
 static void
 binary_append_command (char *cmd, int from_tty)
 {
   printf_unfiltered ("\"append binary\" must be followed by a subcommand.\n");
-  help_list (binary_append_cmdlist, "append binary ", all_commands,
-	     gdb_stdout);
+  help_list (binary_append_cmdlist, "append binary ", -1, gdb_stdout);
 }
 
 extern initialize_file_ftype _initialize_cli_dump; /* -Wmissing-prototypes */

@@ -1,4 +1,4 @@
-/*	$NetBSD: wsmux.c,v 1.60 2015/08/24 22:50:33 pooka Exp $	*/
+/*	$NetBSD: wsmux.c,v 1.58 2014/07/25 08:10:39 dholland Exp $	*/
 
 /*
  * Copyright (c) 1998, 2005 The NetBSD Foundation, Inc.
@@ -37,12 +37,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsmux.c,v 1.60 2015/08/24 22:50:33 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsmux.c,v 1.58 2014/07/25 08:10:39 dholland Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
 #include "opt_modular.h"
-#endif
 
 #include "wsdisplay.h"
 #include "wsmux.h"
@@ -71,8 +69,6 @@ __KERNEL_RCSID(0, "$NetBSD: wsmux.c,v 1.60 2015/08/24 22:50:33 pooka Exp $");
 #include <dev/wscons/wseventvar.h>
 #include <dev/wscons/wscons_callbacks.h>
 #include <dev/wscons/wsmuxvar.h>
-
-#include "ioconf.h"
 
 #ifdef WSMUX_DEBUG
 #define DPRINTF(x)	if (wsmuxdebug) printf x
@@ -114,6 +110,8 @@ static int wsmux_do_displayioctl(device_t dev, u_long cmd,
 static int wsmux_do_ioctl(device_t, u_long, void *,int,struct lwp *);
 
 static int wsmux_add_mux(int, struct wsmux_softc *);
+
+void wsmuxattach(int);
 
 #define WSMUXDEV(n) ((n) & 0x7f)
 #define WSMUXCTL(n) ((n) & 0x80)

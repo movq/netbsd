@@ -30,7 +30,7 @@
 #include "opt_multiprocessor.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(1, "$NetBSD: arm32_tlb.c,v 1.9 2015/03/26 08:45:05 hsuenaga Exp $");
+__KERNEL_RCSID(1, "$NetBSD: arm32_tlb.c,v 1.2.6.2 2014/11/10 16:32:56 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -93,19 +93,11 @@ tlb_invalidate_asids(tlb_asid_t lo, tlb_asid_t hi)
 	arm_dsb();
 	if (arm_has_tlbiasid_p) {
 		for (; lo <= hi; lo++) {
-#ifdef MULTIPROCESSOR
 			armreg_tlbiasidis_write(lo);
-#else
-			armreg_tlbiasid_write(lo);
-#endif
 		}
 		arm_isb();
 		if (__predict_false(vivt_icache_p)) {
-#ifdef MULTIPROCESSOR
 			armreg_icialluis_write(0);
-#else
-			armreg_iciallu_write(0);
-#endif
 		}
 	} else {
 		armreg_tlbiall_write(0);
@@ -155,11 +147,11 @@ tlb_cortex_a5_record_asids(u_long *mapp)
 			const uint64_t d = ((uint64_t) armreg_tlbdata1_read())
 			    | armreg_tlbdata0_read();
 			if (!(d & ARM_TLBDATA_VALID)
-			    || !(d & ARM_A5_TLBDATA_nG))
+			    || !(d & ARM_V5_TLBDATA_nG))
 				continue;
 
 			const tlb_asid_t asid = __SHIFTOUT(d,
-			    ARM_A5_TLBDATA_ASID);
+			    ARM_V5_TLBDATA_ASID);
 			const u_long mask = 1L << (asid & 31);
 			const size_t idx = asid >> 5;
 			if (mapp[idx] & mask)

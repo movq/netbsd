@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ethersubr.c,v 1.214 2015/10/13 12:33:07 roy Exp $	*/
+/*	$NetBSD: if_ethersubr.c,v 1.204 2014/08/10 16:44:36 tls Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -61,33 +61,38 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ethersubr.c,v 1.214 2015/10/13 12:33:07 roy Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ethersubr.c,v 1.204 2014/08/10 16:44:36 tls Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
 #include "opt_atalk.h"
+#include "opt_ipx.h"
 #include "opt_mbuftrace.h"
 #include "opt_mpls.h"
 #include "opt_gateway.h"
 #include "opt_pppoe.h"
-#include "opt_net_mpsafe.h"
-#endif
-
 #include "vlan.h"
 #include "pppoe.h"
 #include "bridge.h"
 #include "arp.h"
 #include "agr.h"
 
+#include <sys/param.h>
+#include <sys/systm.h>
 #include <sys/sysctl.h>
+#include <sys/kernel.h>
+#include <sys/callout.h>
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
-#include <sys/mutex.h>
+#include <sys/protosw.h>
+#include <sys/socket.h>
 #include <sys/ioctl.h>
 #include <sys/errno.h>
+#include <sys/syslog.h>
+#include <sys/kauth.h>
+#include <sys/cpu.h>
+#include <sys/intr.h>
 #include <sys/device.h>
 #include <sys/rnd.h>
-#include <sys/rndsource.h>
 
 #include <net/if.h>
 #include <net/netisr.h>
@@ -95,7 +100,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_ethersubr.c,v 1.214 2015/10/13 12:33:07 roy Exp $
 #include <net/if_llc.h>
 #include <net/if_dl.h>
 #include <net/if_types.h>
-#include <net/pktqueue.h>
 
 #include <net/if_media.h>
 #include <dev/mii/mii.h>
@@ -147,6 +151,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_ethersubr.c,v 1.214 2015/10/13 12:33:07 roy Exp $
 #include <netinet/ip_carp.h>
 #endif
 
+#ifdef IPX
+#include <netipx/ipx.h>
+#include <netipx/ipx_if.h>
+#endif
+
 #ifdef NETATALK
 #include <netatalk/at.h>
 #include <netatalk/at_var.h>
@@ -187,12 +196,13 @@ static	int ether_output(struct ifnet *, struct mbuf *,
 static int
 ether_output(struct ifnet * const ifp0, struct mbuf * const m0,
 	const struct sockaddr * const dst,
-	struct rtentry *rt)
+	struct rtentry *rt0)
 {
 	uint16_t etype = 0;
 	int error = 0, hdrcmplt = 0;
  	uint8_t esrc[6], edst[6];
 	struct mbuf *m = m0;
+	struct rtentry *rt;
 	struct mbuf *mcopy = NULL;
 	struct ether_header *eh;
 	struct ifnet *ifp = ifp0;
@@ -204,9 +214,7 @@ ether_output(struct ifnet * const ifp0, struct mbuf * const m0,
 	struct at_ifaddr *aa;
 #endif /* NETATALK */
 
-#ifndef NET_MPSAFE
 	KASSERT(KERNEL_LOCKED_P());
-#endif
 
 #ifdef MBUFTRACE
 	m_claimm(m, ifp->if_mowner);
@@ -220,7 +228,7 @@ ether_output(struct ifnet * const ifp0, struct mbuf * const m0,
 		if (dst != NULL && ifp0->if_link_state == LINK_STATE_UP &&
 		    (ifa = ifa_ifwithaddr(dst)) != NULL &&
 		    ifa->ifa_ifp == ifp0)
-			return looutput(ifp0, m, dst, rt);
+			return looutput(ifp0, m, dst, rt0);
 
 		ifp = ifp->if_carpdev;
 		/* ac = (struct arpcom *)ifp; */
@@ -233,6 +241,38 @@ ether_output(struct ifnet * const ifp0, struct mbuf * const m0,
 
 	if ((ifp->if_flags & (IFF_UP|IFF_RUNNING)) != (IFF_UP|IFF_RUNNING))
 		senderr(ENETDOWN);
+	if ((rt = rt0) != NULL) {
+		if ((rt->rt_flags & RTF_UP) == 0) {
+			if ((rt0 = rt = rtalloc1(dst, 1)) != NULL) {
+				rt->rt_refcnt--;
+				if (rt->rt_ifp != ifp)
+					return (*rt->rt_ifp->if_output)
+							(ifp, m0, dst, rt);
+			} else
+				senderr(EHOSTUNREACH);
+		}
+		if ((rt->rt_flags & RTF_GATEWAY) && dst->sa_family != AF_NS) {
+			if (rt->rt_gwroute == NULL)
+				goto lookup;
+			if (((rt = rt->rt_gwroute)->rt_flags & RTF_UP) == 0) {
+				rtfree(rt); rt = rt0;
+			lookup: rt->rt_gwroute = rtalloc1(rt->rt_gateway, 1);
+				if ((rt = rt->rt_gwroute) == NULL)
+					senderr(EHOSTUNREACH);
+				/* the "G" test below also prevents rt == rt0 */
+				if ((rt->rt_flags & RTF_GATEWAY) ||
+				    (rt->rt_ifp != ifp)) {
+					rt->rt_refcnt--;
+					rt0->rt_gwroute = NULL;
+					senderr(EHOSTUNREACH);
+				}
+			}
+		}
+		if (rt->rt_flags & RTF_REJECT)
+			if (rt->rt_rmx.rmx_expire == 0 ||
+			    (u_long) time_second < rt->rt_rmx.rmx_expire)
+				senderr(rt == rt0 ? EHOSTDOWN : EHOSTUNREACH);
+	}
 
 	switch (dst->sa_family) {
 
@@ -242,8 +282,8 @@ ether_output(struct ifnet * const ifp0, struct mbuf * const m0,
 			(void)memcpy(edst, etherbroadcastaddr, sizeof(edst));
 		else if (m->m_flags & M_MCAST)
 			ETHER_MAP_IP_MULTICAST(&satocsin(dst)->sin_addr, edst);
-		else if ((error = arpresolve(ifp, rt, m, dst, edst)) != 0)
-			return error == EWOULDBLOCK ? 0 : error;
+		else if (!arpresolve(ifp, rt, m, dst, edst))
+			return (0);	/* if not yet resolved */
 		/* If broadcasting on a simplex interface, loopback a copy */
 		if ((m->m_flags & M_BCAST) && (ifp->if_flags & IFF_SIMPLEX))
 			mcopy = m_copy(m, 0, (int)M_COPYALL);
@@ -291,7 +331,7 @@ ether_output(struct ifnet * const ifp0, struct mbuf * const m0,
 #endif
 #ifdef NETATALK
     case AF_APPLETALK:
-		if (aarpresolve(ifp, m, (const struct sockaddr_at *)dst, edst)) {
+		if (!aarpresolve(ifp, m, (const struct sockaddr_at *)dst, edst)) {
 #ifdef NETATALKDEBUG
 			printf("aarpresolv failed\n");
 #endif /* NETATALKDEBUG */
@@ -326,6 +366,17 @@ ether_output(struct ifnet * const ifp0, struct mbuf * const m0,
 		}
 		break;
 #endif /* NETATALK */
+#ifdef IPX
+	case AF_IPX:
+		etype = htons(ETHERTYPE_IPX);
+ 		memcpy(edst,
+		    &(((const struct sockaddr_ipx *)dst)->sipx_addr.x_host),
+		    sizeof(edst));
+		/* If broadcasting on a simplex interface, loopback a copy */
+		if ((m->m_flags & M_BCAST) && (ifp->if_flags & IFF_SIMPLEX))
+			mcopy = m_copy(m, 0, (int)M_COPYALL);
+		break;
+#endif
 	case pseudo_AF_HDRCMPLT:
 		hdrcmplt = 1;
 		memcpy(esrc,
@@ -348,14 +399,13 @@ ether_output(struct ifnet * const ifp0, struct mbuf * const m0,
 	}
 
 #ifdef MPLS
-	{
-		struct m_tag *mtag;
-		mtag = m_tag_find(m, PACKET_TAG_MPLS, NULL);
-		if (mtag != NULL) {
-			/* Having the tag itself indicates it's MPLS */
+	if (rt0 != NULL && rt_gettag(rt0) != NULL &&
+	    rt_gettag(rt0)->sa_family == AF_MPLS &&
+	    (m->m_flags & (M_MCAST | M_BCAST)) == 0) {
+		union mpls_shim msh;
+		msh.s_addr = MPLS_GETSADDR(rt0);
+		if (msh.shim.label != MPLS_LABEL_IMPLNULL)
 			etype = htons(ETHERTYPE_MPLS);
-			m_tag_delete(m, mtag);
-		}
 	}
 #endif
 
@@ -802,6 +852,12 @@ ether_input(struct ifnet *ifp, struct mbuf *m)
 			pktq = ip6_pktq;
 			break;
 #endif
+#ifdef IPX
+		case ETHERTYPE_IPX:
+			isr = NETISR_IPX;
+			inq = &ipxintrq;
+			break;
+#endif
 #ifdef NETATALK
 		case ETHERTYPE_ATALK:
 			isr = NETISR_ATALK;
@@ -991,6 +1047,10 @@ ether_ifdetach(struct ifnet *ifp)
 		ec->ec_multicnt--;
 	}
 	splx(s);
+
+#if 0	/* done in if_detach() */
+	if_free_sadl(ifp);
+#endif
 
 	ifp->if_mowner = NULL;
 	MOWNER_DETACH(&ec->ec_rx_mowner);

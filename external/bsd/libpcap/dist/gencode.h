@@ -1,4 +1,4 @@
-/*	$NetBSD: gencode.h,v 1.3 2015/03/31 21:39:42 christos Exp $	*/
+/*	$NetBSD: gencode.h,v 1.1.1.4 2013/12/31 16:57:26 christos Exp $	*/
 
 /*
  * Copyright (c) 1990, 1991, 1992, 1993, 1994, 1995, 1996
@@ -19,6 +19,8 @@
  * THIS SOFTWARE IS PROVIDED ``AS IS'' AND WITHOUT ANY EXPRESS OR IMPLIED
  * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
+ *
+ * @(#) Header: /tcpdump/master/libpcap/gencode.h,v 1.71 2007-11-18 02:03:52 guy Exp  (LBL)
  */
 
 /*
@@ -163,7 +165,7 @@
 #define A_CONNECTACK	44	/* Connect Ack message */
 #define A_RELEASE	45	/* Release message */
 #define A_RELEASE_DONE	46	/* Release message */
-
+ 
 /* ATM field types */
 #define A_VPI		51
 #define A_VCI		52
@@ -296,9 +298,9 @@ void gen_not(struct block *);
 struct block *gen_scode(const char *, struct qual);
 struct block *gen_ecode(const u_char *, struct qual);
 struct block *gen_acode(const u_char *, struct qual);
-struct block *gen_mcode(const char *, const char *, unsigned int, struct qual);
+struct block *gen_mcode(const char *, const char *, int, struct qual);
 #ifdef INET6
-struct block *gen_mcode6(const char *, const char *, unsigned int, struct qual);
+struct block *gen_mcode6(const char *, const char *, int, struct qual);
 #endif
 struct block *gen_ncode(const char *, bpf_u_int32, struct qual);
 struct block *gen_proto_abbrev(int);
@@ -310,20 +312,11 @@ struct block *gen_broadcast(int);
 struct block *gen_multicast(int);
 struct block *gen_inbound(int);
 
-struct block *gen_llc(void);
-struct block *gen_llc_i(void);
-struct block *gen_llc_s(void);
-struct block *gen_llc_u(void);
-struct block *gen_llc_s_subtype(bpf_u_int32);
-struct block *gen_llc_u_subtype(bpf_u_int32);
-
 struct block *gen_vlan(int);
 struct block *gen_mpls(int);
 
 struct block *gen_pppoed(void);
 struct block *gen_pppoes(int);
-
-struct block *gen_geneve(int);
 
 struct block *gen_atmfield_code(int atmfield, bpf_int32 jvalue, bpf_u_int32 jtype, int reverse);
 struct block *gen_atmtype_abbrev(int type);

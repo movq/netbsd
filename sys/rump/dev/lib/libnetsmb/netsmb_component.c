@@ -1,4 +1,4 @@
-/*	$NetBSD: netsmb_component.c,v 1.3 2015/08/20 11:51:12 christos Exp $	*/
+/*	$NetBSD: netsmb_component.c,v 1.2 2014/07/18 16:25:17 maxv Exp $	*/
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netsmb_component.c,v 1.3 2015/08/20 11:51:12 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netsmb_component.c,v 1.2 2014/07/18 16:25:17 maxv Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -39,7 +39,7 @@ __KERNEL_RCSID(0, "$NetBSD: netsmb_component.c,v 1.3 2015/08/20 11:51:12 christo
 #include "rump_dev_private.h"
 #include "rump_vfs_private.h"
 
-#include "ioconf.h"
+void nsmbattach(int); /* XXX */
 
 RUMP_COMPONENT(RUMP_COMPONENT_DEV)
 {

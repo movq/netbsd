@@ -1,4 +1,4 @@
-/*	$NetBSD: virtio.c,v 1.10 2015/10/15 02:40:38 ozaki-r Exp $	*/
+/*	$NetBSD: virtio.c,v 1.6 2014/07/22 01:55:54 ozaki-r Exp $	*/
 
 /*
  * Copyright (c) 2010 Minoura Makoto.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: virtio.c,v 1.10 2015/10/15 02:40:38 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: virtio.c,v 1.6 2014/07/22 01:55:54 ozaki-r Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -49,7 +49,6 @@ static int	virtio_match(device_t, cfdata_t, void *);
 static void	virtio_attach(device_t, device_t, void *);
 static int	virtio_detach(device_t, int);
 static int	virtio_intr(void *arg);
-static void	virtio_soft_intr(void *arg);
 static void	virtio_init_vq(struct virtio_softc *,
 		    struct virtqueue *, const bool);
 
@@ -129,8 +128,8 @@ virtio_attach(device_t parent, device_t self, void *aux)
 	/* subsystem ID shows what I am */
 	id = pci_conf_read(pc, tag, PCI_SUBSYS_ID_REG);
 	aprint_normal_dev(self, "Virtio %s Device (rev. 0x%02x)\n",
-			  (PCI_SUBSYS_ID(id) < NDEVNAMES?
-			   virtio_device_name[PCI_SUBSYS_ID(id)] : "Unknown"),
+			  (PCI_PRODUCT(id) < NDEVNAMES?
+			   virtio_device_name[PCI_PRODUCT(id)] : "Unknown"),
 			  revision);
 
 	sc->sc_dev = self;
@@ -151,7 +150,7 @@ virtio_attach(device_t parent, device_t self, void *aux)
 	virtio_set_status(sc, VIRTIO_CONFIG_DEVICE_STATUS_DRIVER);
 
 	/* XXX: use softc as aux... */
-	sc->sc_childdevid = PCI_SUBSYS_ID(id);
+	sc->sc_childdevid = PCI_PRODUCT(id);
 	sc->sc_child = NULL;
 	config_found(self, sc, NULL);
 	if (sc->sc_child == NULL) {
@@ -177,8 +176,7 @@ virtio_attach(device_t parent, device_t self, void *aux)
 	if (sc->sc_flags & VIRTIO_F_PCI_INTR_MPSAFE)
 		pci_intr_setattr(pc, &ih, PCI_INTR_MPSAFE, true);
 
-	sc->sc_ih = pci_intr_establish_xname(pc, ih, sc->sc_ipl, virtio_intr, sc,
-	    device_xname(sc->sc_dev));
+	sc->sc_ih = pci_intr_establish(pc, ih, sc->sc_ipl, virtio_intr, sc);
 
 	if (sc->sc_ih == NULL) {
 		aprint_error_dev(self, "couldn't establish interrupt");
@@ -189,17 +187,6 @@ virtio_attach(device_t parent, device_t self, void *aux)
 		return;
 	}
 	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
-
-	sc->sc_soft_ih = NULL;
-	if (sc->sc_flags & VIRTIO_F_PCI_INTR_SOFTINT) {
-		u_int flags = SOFTINT_NET;
-		if (sc->sc_flags & VIRTIO_F_PCI_INTR_MPSAFE)
-			flags |= SOFTINT_MPSAFE;
-
-		sc->sc_soft_ih = softint_establish(flags, virtio_soft_intr, sc);
-		if (sc->sc_soft_ih == NULL)
-			aprint_error(": failed to establish soft interrupt\n");
-	}
 
 	virtio_set_status(sc, VIRTIO_CONFIG_DEVICE_STATUS_DRIVER_OK);
 
@@ -401,24 +388,10 @@ virtio_intr(void *arg)
 	if ((isr & VIRTIO_CONFIG_ISR_CONFIG_CHANGE) &&
 	    (sc->sc_config_change != NULL))
 		r = (sc->sc_config_change)(sc);
-	if (sc->sc_intrhand != NULL) {
-		if (sc->sc_soft_ih != NULL)
-			softint_schedule(sc->sc_soft_ih);
-		else
-			r |= (sc->sc_intrhand)(sc);
-	}
+	if (sc->sc_intrhand != NULL)
+		r |= (sc->sc_intrhand)(sc);
 
 	return r;
-}
-
-static void
-virtio_soft_intr(void *arg)
-{
-	struct virtio_softc *sc = arg;
-
-	KASSERT(sc->sc_intrhand != NULL);
-
-	(sc->sc_intrhand)(sc);
 }
 
 /*
@@ -490,6 +463,7 @@ virtio_vq_intr(struct virtio_softc *sc)
 				r |= (vq->vq_done)(vq);
 		}
 	}
+		
 
 	return r;
 }

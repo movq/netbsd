@@ -1,4 +1,4 @@
-/*	$NetBSD: edidreg.h,v 1.4 2014/11/17 00:46:04 jmcneill Exp $	*/
+/*	$NetBSD: edidreg.h,v 1.3.30.1 2014/11/18 18:19:10 snj Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.

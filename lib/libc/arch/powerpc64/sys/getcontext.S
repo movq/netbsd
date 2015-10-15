@@ -1,4 +1,4 @@
-/*	$NetBSD: getcontext.S,v 1.5 2014/08/23 02:24:22 matt Exp $	*/
+/*	$NetBSD: getcontext.S,v 1.4.20.2 2015/02/04 22:42:04 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 #include "assym.h"
 
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: getcontext.S,v 1.5 2014/08/23 02:24:22 matt Exp $")
+__RCSID("$NetBSD: getcontext.S,v 1.4.20.2 2015/02/04 22:42:04 martin Exp $")
 #endif /* LIBC_SCCS && !lint */
 
 #ifdef WEAK_ALIAS

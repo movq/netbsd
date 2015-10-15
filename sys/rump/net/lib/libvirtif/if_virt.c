@@ -1,4 +1,4 @@
-/*	$NetBSD: if_virt.c,v 1.49 2014/11/06 23:25:16 pooka Exp $	*/
+/*	$NetBSD: if_virt.c,v 1.48 2014/08/09 09:47:02 ozaki-r Exp $	*/
 
 /*
  * Copyright (c) 2008, 2013 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_virt.c,v 1.49 2014/11/06 23:25:16 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_virt.c,v 1.48 2014/08/09 09:47:02 ozaki-r Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -385,16 +385,10 @@ VIF_DELIVERPKT(struct virtif_sc *sc, struct iovec *iov, size_t iovlen)
 	m = NULL;
 }
 
-/*
- * The following ensures that no two modules using if_virt end up with
- * the same module name.  MODULE() and modcmd wrapped in ... bad mojo.
- */
-#define VIF_MOJO(x) MODULE(MODULE_CLASS_DRIVER,x,NULL);
-#define VIF_MODULE() VIF_MOJO(VIF_BASENAME(if_virt_,VIRTIF_BASE))
-#define VIF_MODCMD VIF_BASENAME3(if_virt_,VIRTIF_BASE,_modcmd)
-VIF_MODULE();
+MODULE(MODULE_CLASS_DRIVER, if_virt, NULL);
+
 static int
-VIF_MODCMD(modcmd_t cmd, void *opaque)
+if_virt_modcmd(modcmd_t cmd, void *opaque)
 {
 	int error = 0;
 

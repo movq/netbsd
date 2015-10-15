@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_cprng.c,v 1.27 2015/04/13 22:43:41 riastradh Exp $ */
+/*	$NetBSD: subr_cprng.c,v 1.24.2.1 2014/08/15 12:56:24 martin Exp $ */
 
 /*-
  * Copyright (c) 2011-2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_cprng.c,v 1.27 2015/04/13 22:43:41 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_cprng.c,v 1.24.2.1 2014/08/15 12:56:24 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -48,8 +48,9 @@ __KERNEL_RCSID(0, "$NetBSD: subr_cprng.c,v 1.27 2015/04/13 22:43:41 riastradh Ex
 #include <sys/select.h>
 #include <sys/systm.h>
 #include <sys/sysctl.h>
+#include <sys/rnd.h>
 #include <sys/rndsink.h>
-#if DIAGNOSTIC
+#if DEBUG
 #include <sys/rngtest.h>
 #endif
 
@@ -66,7 +67,7 @@ static void	cprng_strong_generate(struct cprng_strong *, void *, size_t);
 static void	cprng_strong_reseed(struct cprng_strong *);
 static void	cprng_strong_reseed_from(struct cprng_strong *, const void *,
 		    size_t, bool);
-#if DIAGNOSTIC
+#if DEBUG
 static void	cprng_strong_rngtest(struct cprng_strong *);
 #endif
 
@@ -446,12 +447,12 @@ cprng_strong_reseed_from(struct cprng_strong *cprng,
 		/* XXX Fix nist_ctr_drbg API so this can't happen.  */
 		panic("cprng %s: NIST CTR_DRBG reseed failed", cprng->cs_name);
 
-#if DIAGNOSTIC
+#if DEBUG
 	cprng_strong_rngtest(cprng);
 #endif
 }
 
-#if DIAGNOSTIC
+#if DEBUG
 /*
  * Generate some output and apply a statistical RNG test to it.
  */

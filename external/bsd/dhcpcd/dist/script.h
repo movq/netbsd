@@ -1,8 +1,8 @@
-/* $NetBSD: script.h,v 1.7 2015/03/26 10:26:37 roy Exp $ */
+/* $NetBSD: script.h,v 1.1.1.2.2.1 2014/12/29 16:18:05 martin Exp $ */
 
 /*
  * dhcpcd - DHCP client daemon
- * Copyright (c) 2006-2015 Roy Marples <roy@marples.name>
+ * Copyright (c) 2006-2013 Roy Marples <roy@marples.name>
  * All rights reserved
 
  * Redistribution and use in source and binary forms, with or without

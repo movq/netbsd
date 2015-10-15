@@ -1,4 +1,4 @@
-/*	$NetBSD: uyurex.c,v 1.10 2015/03/07 20:20:55 mrg Exp $ */
+/*	$NetBSD: uyurex.c,v 1.9.12.1 2015/03/21 17:30:43 snj Exp $ */
 /*	$OpenBSD: uyurex.c,v 1.3 2010/03/04 03:47:22 deraadt Exp $ */
 
 /*
@@ -22,7 +22,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uyurex.c,v 1.10 2015/03/07 20:20:55 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uyurex.c,v 1.9.12.1 2015/03/21 17:30:43 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>

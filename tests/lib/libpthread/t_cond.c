@@ -1,4 +1,4 @@
-/* $NetBSD: t_cond.c,v 1.6 2014/09/03 16:23:24 gson Exp $ */
+/* $NetBSD: t_cond.c,v 1.5.4.1 2014/12/22 02:06:10 msaitoh Exp $ */
 
 /*
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2008\
  The NetBSD Foundation, inc. All rights reserved.");
-__RCSID("$NetBSD: t_cond.c,v 1.6 2014/09/03 16:23:24 gson Exp $");
+__RCSID("$NetBSD: t_cond.c,v 1.5.4.1 2014/12/22 02:06:10 msaitoh Exp $");
 
 #include <sys/time.h>
 

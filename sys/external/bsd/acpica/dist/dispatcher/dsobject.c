@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,8 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
+#define __DSOBJECT_C__
 
 #include "acpi.h"
 #include "accommon.h"
@@ -348,7 +350,7 @@ AcpiDsBuildInternalBufferObj (
 
         if (ByteList)
         {
-            memcpy (ObjDesc->Buffer.Pointer, ByteList->Named.Data,
+            ACPI_MEMCPY (ObjDesc->Buffer.Pointer, ByteList->Named.Data,
                          ByteListLength);
         }
     }
@@ -775,7 +777,7 @@ AcpiDsInitObjectFromOp (
     case ACPI_TYPE_STRING:
 
         ObjDesc->String.Pointer = Op->Common.Value.String;
-        ObjDesc->String.Length = (UINT32) strlen (Op->Common.Value.String);
+        ObjDesc->String.Length = (UINT32) ACPI_STRLEN (Op->Common.Value.String);
 
         /*
          * The string is contained in the ACPI table, don't ever try

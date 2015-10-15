@@ -1,4 +1,4 @@
-/*	$NetBSD: kobj_machdep.c,v 1.10 2014/11/07 21:28:32 martin Exp $	*/
+/*	$NetBSD: kobj_machdep.c,v 1.9.4.1 2014/11/14 08:16:56 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kobj_machdep.c,v 1.10 2014/11/07 21:28:32 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kobj_machdep.c,v 1.9.4.1 2014/11/14 08:16:56 snj Exp $");
 
 #define	ELFSIZE		ARCH_ELFSIZE
 

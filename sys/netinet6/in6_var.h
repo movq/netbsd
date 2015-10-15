@@ -1,4 +1,4 @@
-/*	$NetBSD: in6_var.h,v 1.74 2015/09/06 06:01:01 dholland Exp $	*/
+/*	$NetBSD: in6_var.h,v 1.70 2014/07/01 05:49:19 rtr Exp $	*/
 /*	$KAME: in6_var.h,v 1.81 2002/06/08 11:16:51 itojun Exp $	*/
 
 /*
@@ -65,7 +65,6 @@
 #define _NETINET6_IN6_VAR_H_
 
 #include <sys/callout.h>
-#include <sys/ioccom.h>
 
 /*
  * Interface address, Internet version.  One of these structures
@@ -99,7 +98,6 @@ struct in6_ifextra {
 	int ndefrouters;
 };
 
-LIST_HEAD(in6_multihead, in6_multi);
 struct	in6_ifaddr {
 	struct	ifaddr ia_ifa;		/* protocol-independent info */
 #define	ia_ifp		ia_ifa.ifa_ifp
@@ -110,7 +108,7 @@ struct	in6_ifaddr {
 	struct	sockaddr_in6 ia_prefixmask; /* prefix mask */
 	u_int32_t ia_plen;		/* prefix length */
 	struct	in6_ifaddr *ia_next;	/* next in6 list of IP6 addresses */
-	struct	in6_multihead ia6_multiaddrs;
+	LIST_HEAD(in6_multihead, in6_multi) ia6_multiaddrs;
 					/* list of multicast addresses */
 	int	ia6_flags;
 
@@ -686,6 +684,7 @@ int	in6_control(struct socket *, u_long, void *, struct ifnet *);
 int	in6_update_ifa(struct ifnet *, struct in6_aliasreq *,
 	struct in6_ifaddr *, int);
 void	in6_purgeaddr(struct ifaddr *);
+int	in6if_do_dad(struct ifnet *);
 void	in6_purgeif(struct ifnet *);
 void	in6_savemkludge(struct in6_ifaddr *);
 void	in6_setmaxmtu  (void);
@@ -693,8 +692,8 @@ int	in6_if2idlen  (struct ifnet *);
 void	*in6_domifattach(struct ifnet *);
 void	in6_domifdetach(struct ifnet *, void *);
 void	in6_restoremkludge(struct in6_ifaddr *, struct ifnet *);
-void	in6_ifremlocal(struct ifaddr *);
-void	in6_ifaddlocal(struct ifaddr *);
+void	in6_ifremloop(struct ifaddr *);
+void	in6_ifaddloop(struct ifaddr *);
 void	in6_createmkludge(struct ifnet *);
 void	in6_purgemkludge(struct ifnet *);
 struct in6_ifaddr *in6ifa_ifpforlinklocal(const struct ifnet *, int);

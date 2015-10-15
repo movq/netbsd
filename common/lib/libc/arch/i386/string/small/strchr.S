@@ -1,4 +1,4 @@
-/*	$NetBSD: strchr.S,v 1.3 2014/09/22 20:31:56 khorben Exp $	*/
+/*	$NetBSD: strchr.S,v 1.2.4.1 2014/09/29 15:31:01 msaitoh Exp $	*/
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <machine/asm.h>
-	RCSID("$NetBSD: strchr.S,v 1.3 2014/09/22 20:31:56 khorben Exp $")
+	RCSID("$NetBSD: strchr.S,v 1.2.4.1 2014/09/29 15:31:01 msaitoh Exp $")
 
 ENTRY(strchr)
 	popl	%edx		/* Return address */

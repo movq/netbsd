@@ -1,4 +1,4 @@
-/*	$NetBSD: if_arcsubr.c,v 1.69 2015/10/13 12:33:07 roy Exp $	*/
+/*	$NetBSD: if_arcsubr.c,v 1.66 2014/06/05 23:48:16 rmind Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995 Ignatios Souvatzis
@@ -35,11 +35,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_arcsubr.c,v 1.69 2015/10/13 12:33:07 roy Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_arcsubr.c,v 1.66 2014/06/05 23:48:16 rmind Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
-#endif
+
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -112,9 +111,10 @@ static	void arc_input(struct ifnet *, struct mbuf *);
  */
 static int
 arc_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
-    struct rtentry *rt)
+    struct rtentry *rt0)
 {
 	struct mbuf		*m, *m1, *mcopy;
+	struct rtentry		*rt;
 	struct arccom		*ac;
 	const struct arc_header	*cah;
 	struct arc_header	*ah;
@@ -134,6 +134,29 @@ arc_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 
 	myself = *CLLADDR(ifp->if_sadl);
 
+	if ((rt = rt0)) {
+		if ((rt->rt_flags & RTF_UP) == 0) {
+			if ((rt0 = rt = rtalloc1(dst, 1)))
+				rt->rt_refcnt--;
+			else
+				senderr(EHOSTUNREACH);
+		}
+		if (rt->rt_flags & RTF_GATEWAY) {
+			if (rt->rt_gwroute == 0)
+				goto lookup;
+			if (((rt = rt->rt_gwroute)->rt_flags & RTF_UP) == 0) {
+				rtfree(rt); rt = rt0;
+			lookup: rt->rt_gwroute = rtalloc1(rt->rt_gateway, 1);
+				if ((rt = rt->rt_gwroute) == 0)
+					senderr(EHOSTUNREACH);
+			}
+		}
+		if (rt->rt_flags & RTF_REJECT)
+			if (rt->rt_rmx.rmx_expire == 0 ||
+			    time_second < rt->rt_rmx.rmx_expire)
+				senderr(rt == rt0 ? EHOSTDOWN : EHOSTUNREACH);
+	}
+
 	/*
 	 * if the queueing discipline needs packet classification,
 	 * do it before prepending link headers.
@@ -151,8 +174,8 @@ arc_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 			adst = arcbroadcastaddr; /* ARCnet broadcast address */
 		else if (ifp->if_flags & IFF_NOARP)
 			adst = ntohl(satocsin(dst)->sin_addr.s_addr) & 0xFF;
-		else if ((error = arpresolve(ifp, rt, m, dst, &adst)) != 0)
-			return error == EWOULDBLOCK ? 0 : error;
+		else if (!arpresolve(ifp, rt, m, dst, &adst))
+			return 0;	/* not resolved yet */
 
 		/* If broadcasting on a simplex interface, loopback a copy */
 		if ((m->m_flags & (M_BCAST|M_MCAST)) &&

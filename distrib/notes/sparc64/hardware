@@ -1,4 +1,4 @@
-.\"	$NetBSD: hardware,v 1.28 2015/05/19 19:30:29 snj Exp $
+.\"	$NetBSD: hardware,v 1.27.28.1 2015/05/24 11:14:45 martin Exp $
 .
 .Ss2 Supported machines
 The minimal configuration requires 32 MB of RAM and ~180 MB of disk space.

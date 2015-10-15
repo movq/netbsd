@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2015, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,9 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
+
+#define __NSXFINIT_C__
 
 #include "acpi.h"
 #include "accommon.h"
@@ -105,7 +108,7 @@ AcpiNsInitializeObjects (
 
     /* Set all init info to zero */
 
-    memset (&Info, 0, sizeof (ACPI_INIT_WALK_INFO));
+    ACPI_MEMSET (&Info, 0, sizeof (ACPI_INIT_WALK_INFO));
 
     /* Walk entire namespace from the supplied root */
 
@@ -126,8 +129,9 @@ AcpiNsInitializeObjects (
         Info.PackageInit,   Info.PackageCount, Info.ObjectCount));
 
     ACPI_DEBUG_PRINT ((ACPI_DB_DISPATCH,
-        "%u Control Methods found\n%u Op Regions found\n",
-        Info.MethodCount, Info.OpRegionCount));
+        "%u Control Methods found\n", Info.MethodCount));
+    ACPI_DEBUG_PRINT ((ACPI_DB_DISPATCH,
+        "%u Op Regions found\n", Info.OpRegionCount));
 
     return_ACPI_STATUS (AE_OK);
 }
@@ -614,7 +618,7 @@ AcpiNsInitOneDevice (
     ACPI_DEBUG_EXEC (AcpiUtDisplayInitPathname (
         ACPI_TYPE_METHOD, DeviceNode, METHOD_NAME__INI));
 
-    memset (Info, 0, sizeof (ACPI_EVALUATE_INFO));
+    ACPI_MEMSET (Info, 0, sizeof (ACPI_EVALUATE_INFO));
     Info->PrefixNode = DeviceNode;
     Info->RelativePathname = __UNCONST(METHOD_NAME__INI);
     Info->Parameters = NULL;

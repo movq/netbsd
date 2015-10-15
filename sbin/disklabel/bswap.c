@@ -1,4 +1,4 @@
-/*	$NetBSD: bswap.c,v 1.4 2015/07/18 06:00:46 htodd Exp $	*/
+/*	$NetBSD: bswap.c,v 1.2.6.1 2015/07/30 09:45:24 martin Exp $	*/
 
 /*-
  * Copyright (c) 2009 Izumi Tsutsui.  All rights reserved.

@@ -1,4 +1,4 @@
-/*	$NetBSD: tests_main.h,v 1.3 2015/07/10 14:20:34 christos Exp $	*/
+/*	$NetBSD: tests_main.h,v 1.1.1.1.6.1 2014/12/24 00:05:24 riz Exp $	*/
 
 #ifndef TESTS_MAIN_H
 #define TESTS_MAIN_H

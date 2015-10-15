@@ -1,4 +1,4 @@
-/*	$NetBSD: drm_cache.c,v 1.6 2015/03/06 12:24:36 riastradh Exp $	*/
+/*	$NetBSD: drm_cache.c,v 1.3.2.1 2015/03/06 21:39:10 snj Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: drm_cache.c,v 1.6 2015/03/06 12:24:36 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: drm_cache.c,v 1.3.2.1 2015/03/06 21:39:10 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/xcall.h>

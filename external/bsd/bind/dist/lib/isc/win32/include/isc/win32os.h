@@ -1,4 +1,4 @@
-/*	$NetBSD: win32os.h,v 1.5 2015/07/08 17:29:00 christos Exp $	*/
+/*	$NetBSD: win32os.h,v 1.3.12.1 2015/07/17 04:31:35 snj Exp $	*/
 
 /*
  * Copyright (C) 2004, 2007, 2009, 2015  Internet Systems Consortium, Inc. ("ISC")

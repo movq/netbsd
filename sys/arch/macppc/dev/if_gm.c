@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gm.c,v 1.45 2015/04/13 21:18:42 riastradh Exp $	*/
+/*	$NetBSD: if_gm.c,v 1.44 2014/08/10 16:44:34 tls Exp $	*/
 
 /*-
  * Copyright (c) 2000 Tsubai Masanari.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_gm.c,v 1.45 2015/04/13 21:18:42 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_gm.c,v 1.44 2014/08/10 16:44:34 tls Exp $");
 
 #include "opt_inet.h"
 
@@ -40,7 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_gm.c,v 1.45 2015/04/13 21:18:42 riastradh Exp $")
 #include <sys/systm.h>
 #include <sys/callout.h>
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <uvm/uvm_extern.h>
 

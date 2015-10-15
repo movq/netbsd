@@ -1,4 +1,4 @@
-/*	$NetBSD: dnssec-dsfromkey.c,v 1.11 2015/07/08 17:28:55 christos Exp $	*/
+/*	$NetBSD: dnssec-dsfromkey.c,v 1.9.2.2 2015/07/17 04:31:20 snj Exp $	*/
 
 /*
  * Copyright (C) 2008-2012, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")

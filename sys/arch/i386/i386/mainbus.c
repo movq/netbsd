@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.101 2015/08/05 07:01:11 mrg Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.98 2013/11/08 03:12:48 christos Exp $	*/
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.101 2015/08/05 07:01:11 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.98 2013/11/08 03:12:48 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -86,7 +86,6 @@ __KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.101 2015/08/05 07:01:11 mrg Exp $");
 #include <arch/x86/pci/pci_addr_fixup.h>
 #endif
 #endif
-#include <arch/x86/pci/msipic.h>
 #endif
 
 void	mainbus_childdetached(device_t, device_t);
@@ -161,15 +160,11 @@ int mp_nintr;
 int mp_isa_bus = -1;            /* XXX */
 int mp_eisa_bus = -1;           /* XXX */
 
-# ifdef MPVERBOSE
-#  if MPVERBOSE > 0
-int mp_verbose = MPVERBOSE;
-#  else
+#ifdef MPVERBOSE
 int mp_verbose = 1;
-#  endif
-# else
+#else
 int mp_verbose = 0;
-# endif
+#endif
 #endif
 
 void
@@ -232,8 +227,6 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 #endif
 
 #if NPCI > 0
-	msipic_init();
-
 	/*
 	 * ACPI needs to be able to access PCI configuration space.
 	 */

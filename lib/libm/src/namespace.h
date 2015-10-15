@@ -1,4 +1,4 @@
-/* $NetBSD: namespace.h,v 1.13 2014/11/14 14:53:17 joerg Exp $ */
+/* $NetBSD: namespace.h,v 1.11.2.1 2015/05/25 09:05:25 msaitoh Exp $ */
 
 #define atan2 _atan2
 #define atan2f _atan2f
@@ -70,6 +70,3 @@
 #define tanhl _tanhl
 #define atanhl _atanhl
 #define log10l _log10l
-
-#define erfl	_erfl
-#define erfcl	_erfcl

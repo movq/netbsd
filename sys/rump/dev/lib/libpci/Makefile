@@ -1,9 +1,7 @@
-#	$NetBSD: Makefile,v 1.7 2015/08/24 23:21:50 pooka Exp $
+#	$NetBSD: Makefile,v 1.3 2014/04/14 23:53:42 pooka Exp $
 #
 
 RUMPTOP= ${TOPRUMP}
-
-.include <bsd.own.mk>
 
 .PATH:	${RUMPTOP}/../dev/pci
 
@@ -22,24 +20,14 @@ SRCS+=	rumpdev_bus_dma.c
 
 SRCS+=	pci_at_mainbus.c
 
-CPPFLAGS+= -I${RUMPTOP}/librump/rumpkern
+CPPFLAGS+= -I${.CURDIR}/opt -I${RUMPTOP}/librump/rumpkern
 CPPFLAGS+= -I${RUMPTOP}/librump/rumpvfs
 
-.if ${RUMP_PCI_IOSPACE:Uno} == "yes"
-.error RUMP_PCI_IOSPACE defined in Makefile.  Use userfeatures.h instead.
+.if defined(RUMP_PCI_USER)
+RUMPCOMP_USER_SRCS=	${RUMP_PCI_USER}
+RUMPCOMP_INCS_DIR:=	${.PARSEDIR}
+RUMPCOMP_USER_CPPFLAGS=-I${RUMPCOMP_INCS_DIR}
 .endif
-
-.PATH:			${RUMPCOMP_USER_PATH.rumpdev_pci}
-RUMPCOMP_USER_SRCS=	${RUMPCOMP_USER_SRCS.rumpdev_pci}
-MYDIR:=			${.PARSEDIR}
-RUMPCOMP_USER_CPPFLAGS=	-I${MYDIR}
-RUMPCOMP_USER_CPPFLAGS+=${RUMPCOMP_USER_CPPFLAGS.rumpdev_pci}
-RUMPCOMP_USER_CFLAGS=	${RUMPCOMP_USER_CFLAGS.rumpdev_pci}
-
-CPPFLAGS+=		${RUMPCOMP_CPPFLAGS.rumpdev_pci}
-
-# XXX: messy
-.undef RUMPKERN_ONLY
 
 .include "${RUMPTOP}/Makefile.rump"
 .include <bsd.lib.mk>

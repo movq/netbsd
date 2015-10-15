@@ -1,4 +1,4 @@
-/*        $NetBSD: device-mapper.c,v 1.37 2015/08/20 14:40:17 christos Exp $ */
+/*        $NetBSD: device-mapper.c,v 1.34 2014/07/25 08:10:36 dholland Exp $ */
 
 /*
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -49,7 +49,6 @@
 
 #include "netbsd-dm.h"
 #include "dm.h"
-#include "ioconf.h"
 
 static dev_type_open(dmopen);
 static dev_type_close(dmclose);
@@ -60,6 +59,7 @@ static dev_type_strategy(dmstrategy);
 static dev_type_size(dmsize);
 
 /* attach and detach routines */
+void dmattach(int);
 #ifdef _MODULE
 static int dmdestroy(void);
 #endif
@@ -156,8 +156,7 @@ static int
 dm_modcmd(modcmd_t cmd, void *arg)
 {
 #ifdef _MODULE
-	int error;
-	devmajor_t bmajor, cmajor;
+	int error, bmajor, cmajor;
 
 	error = 0;
 	bmajor = -1;
@@ -686,4 +685,6 @@ dmgetproperties(struct disk *disk, dm_table_head_t *head)
 	dg->dg_ntracks = 64;
 
 	disk_set_info(NULL, disk, "ESDI");
+
+	disk_blocksize(disk, secsize);
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: lint.c,v 1.15 2014/10/29 17:14:50 christos Exp $	*/
+/*	$NetBSD: lint.c,v 1.14.10.1 2015/03/06 21:00:23 snj Exp $	*/
 
 /*
  *  Copyright (c) 2007 The NetBSD Foundation.
@@ -31,7 +31,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: lint.c,v 1.15 2014/10/29 17:14:50 christos Exp $");
+__RCSID("$NetBSD: lint.c,v 1.14.10.1 2015/03/06 21:00:23 snj Exp $");
 
 #include <assert.h>
 #include <stdlib.h>

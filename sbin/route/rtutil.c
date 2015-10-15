@@ -1,4 +1,4 @@
-/*	$NetBSD: rtutil.c,v 1.6 2015/03/23 18:33:17 roy Exp $	*/
+/*	$NetBSD: rtutil.c,v 1.4.2.3 2015/01/08 11:47:11 martin Exp $	*/
 /*	$OpenBSD: show.c,v 1.1 2006/05/27 19:16:37 claudio Exp $	*/
 
 /*
@@ -92,8 +92,6 @@ static const struct bits bits[] = {
 	{ RTF_CLONED,	'c' },
 	/* { RTF_JUMBO,	'J' }, */
 	{ RTF_ANNOUNCE,	'p' },
-	{ RTF_LOCAL, 'l'},
-	{ RTF_BROADCAST, 'b'},
 	{ 0, 0 }
 };
 
@@ -188,14 +186,13 @@ p_rttables(int paf, int flags, int pflags, int interesting)
 /* 
  * column widths; each followed by one space
  * width of destination/gateway column
- * strlen("fe80::aaaa:bbbb:cccc:dddd@gif0") == 30, strlen("/128") == 4 = 34
- * strlen("aaaa:bbbb:cccc:dddd:eeee:ffff:gggg:hhhh") == 39
+ * strlen("fe80::aaaa:bbbb:cccc:dddd@gif0") == 30, strlen("/128") == 4
  */
 #ifndef INET6
 #define	WID_DST(af)	18	/* width of destination column */
 #define	WID_GW(af)	18	/* width of gateway column */
 #else
-#define	WID_DST(af)	((af) == AF_INET6 ? ((flags & RT_NFLAG) ? 39 : 18) : 18)
+#define	WID_DST(af)	((af) == AF_INET6 ? ((flags & RT_NFLAG) ? 34 : 18) : 18)
 #define	WID_GW(af)	((af) == AF_INET6 ? ((flags & RT_NFLAG) ? 30 : 18) : 18)
 #endif
 
@@ -262,9 +259,6 @@ p_rtentry(struct rt_msghdr *rtm, int flags, int interesting)
 #ifndef SMALL
 	char		 ifbuf[IF_NAMESIZE];
 #endif
-
-	if ((flags & RT_LFLAG) && (rtm->rtm_flags & RTF_LLINFO))
-		return;
 
 	if (old_af != sa->sa_family) {
 		old_af = sa->sa_family;

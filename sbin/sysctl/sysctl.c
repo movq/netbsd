@@ -1,4 +1,4 @@
-/*	$NetBSD: sysctl.c,v 1.156 2015/08/17 06:42:46 knakahara Exp $ */
+/*	$NetBSD: sysctl.c,v 1.153 2014/05/16 12:22:32 martin Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@ __COPYRIGHT("@(#) Copyright (c) 1993\
 #if 0
 static char sccsid[] = "@(#)sysctl.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: sysctl.c,v 1.156 2015/08/17 06:42:46 knakahara Exp $");
+__RCSID("$NetBSD: sysctl.c,v 1.153 2014/05/16 12:22:32 martin Exp $");
 #endif
 #endif /* not lint */
 
@@ -181,7 +181,6 @@ static const struct handlespec {
 	const void *ps_d;
 } handlers[] = {
 	{ "/kern/clockrate",			kern_clockrate, NULL, NULL },
-	{ "/kern/evcnt",			printother, NULL, "vmstat -e" },
 	{ "/kern/vnode",			printother, NULL, "pstat" },
 	{ "/kern/proc(2|_args)?",		printother, NULL, "ps" },
 	{ "/kern/file2?",			printother, NULL, "pstat" },
@@ -196,11 +195,6 @@ static const struct handlespec {
 
 	{ "/kern/coredump/setid/mode",		mode_bits, mode_bits, NULL },
 	{ "/kern/drivers",			kern_drivers, NULL, NULL },
-
-	{ "/kern/intr/list",			printother, NULL, "intrctl" },
-	{ "/kern/intr/affinity",		printother, NULL, "intrctl" },
-	{ "/kern/intr/intr",			printother, NULL, "intrctl" },
-	{ "/kern/intr/nointr",			printother, NULL, "intrctl" },
 
 	{ "/vm/vmmeter",			printother, NULL,
 						"vmstat' or 'systat" },
@@ -1707,8 +1701,8 @@ sysctlerror(int soft)
 		case EOPNOTSUPP:
 		case EPROTONOSUPPORT:
 			if (Aflag || req)
-				sysctlperror("%s: the value is not available "
-				    "(%s)\n", gsname, strerror(errno));
+				sysctlperror("%s: the value is not available\n",
+					     gsname);
 			return;
 		}
 	}

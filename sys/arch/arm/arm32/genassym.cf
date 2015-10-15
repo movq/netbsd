@@ -1,4 +1,4 @@
-#	$NetBSD: genassym.cf,v 1.74 2015/06/09 08:09:24 skrll Exp $
+#	$NetBSD: genassym.cf,v 1.69.2.1 2015/03/27 11:27:39 martin Exp $
 
 # Copyright (c) 1982, 1990 The Regents of the University of California.
 # All rights reserved.
@@ -66,10 +66,6 @@ ifdef __ARM_FIQ_INDIRECT
 define	__ARM_FIQ_INDIRECT	1
 endif
 
-ifdef __HAVE_PREEMPTION
-define	__HAVE_PREEMPTION	1
-endif
-
 ifdef __HAVE_MM_MD_DIRECT_MAPPED_PHYS
 define	__HAVE_MM_MD_DIRECT_MAPPED_PHYS	1
 endif
@@ -80,6 +76,10 @@ endif
 
 ifdef __HAVE_PIC_FAST_SOFTINTS
 define	__HAVE_PIC_FAST_SOFTINTS	1
+endif
+
+ifdef __HAVE_UNNESTED_INTRS
+define	__HAVE_UNNESTED_INTRS	1
 endif
 
 ifdef ARM_MMU_EXTENDED
@@ -101,7 +101,7 @@ define	PMAP_DOMAIN_KERNEL	PMAP_DOMAIN_KERNEL
 define	DOMAIN_CLIENT		DOMAIN_CLIENT
 ifdef ARM_MMU_EXTENDED
 define	DOMAIN_DEFAULT		((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | (DOMAIN_CLIENT << (PMAP_DOMAIN_USER*2)))
-else
+else 
 define	DOMAIN_DEFAULT		((DOMAIN_CLIENT << (PMAP_DOMAIN_KERNEL*2)) | DOMAIN_CLIENT)
 endif
 
@@ -137,9 +137,6 @@ define	L2_C			L2_C
 define	L2_AP_KRW		L2_AP(AP_KRW)
 
 define	TTBCR_S_N_1		__SHIFTIN(1, TTBCR_S_N)
-
-define	TTBR_UPATTR		TTBR_UPATTR
-define	TTBR_MPATTR		TTBR_MPATTR
 
 ifdef PMAP_INCLUDE_PTE_SYNC
 define	PMAP_INCLUDE_PTE_SYNC	1

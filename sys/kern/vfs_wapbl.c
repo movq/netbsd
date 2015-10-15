@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_wapbl.c,v 1.62 2015/08/09 07:40:59 mlelstv Exp $	*/
+/*	$NetBSD: vfs_wapbl.c,v 1.59.4.1 2015/08/09 10:15:15 martin Exp $	*/
 
 /*-
  * Copyright (c) 2003, 2008, 2009 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
 #define WAPBL_INTERNAL
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_wapbl.c,v 1.62 2015/08/09 07:40:59 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_wapbl.c,v 1.59.4.1 2015/08/09 10:15:15 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bitops.h>
@@ -107,7 +107,6 @@ static inline size_t wapbl_space_free(size_t, off_t, off_t);
  *		u = unlocked access ok
  *		b = bufcache_lock held
  */
-LIST_HEAD(wapbl_ino_head, wapbl_ino);
 struct wapbl {
 	struct vnode *wl_logvp;	/* r:	log here */
 	struct vnode *wl_devvp;	/* r:	log on this device */
@@ -181,7 +180,7 @@ struct wapbl {
 
 	/* hashtable of inode numbers for allocated but unlinked inodes */
 	/* synch ??? */
-	struct wapbl_ino_head *wl_inohash;
+	LIST_HEAD(wapbl_ino_head, wapbl_ino) *wl_inohash;
 	u_long wl_inohashmask;
 	int wl_inohashcnt;
 
@@ -1128,31 +1127,31 @@ wapbl_space_used(size_t avail, off_t head, off_t tail)
 #ifdef _KERNEL
 /* This is used to advance the pointer at old to new value at old+delta */
 static inline off_t
-wapbl_advance(size_t size, size_t off, off_t oldoff, size_t delta)
+wapbl_advance(size_t size, size_t off, off_t old, size_t delta)
 {
-	off_t newoff;
+	off_t new;
 
 	/* Define acceptable ranges for inputs. */
 	KASSERT(delta <= (size_t)size);
-	KASSERT((oldoff == 0) || ((size_t)oldoff >= off));
-	KASSERT(oldoff < (off_t)(size + off));
+	KASSERT((old == 0) || ((size_t)old >= off));
+	KASSERT(old < (off_t)(size + off));
 
-	if ((oldoff == 0) && (delta != 0))
-		newoff = off + delta;
-	else if ((oldoff + delta) < (size + off))
-		newoff = oldoff + delta;
+	if ((old == 0) && (delta != 0))
+		new = off + delta;
+	else if ((old + delta) < (size + off))
+		new = old + delta;
 	else
-		newoff = (oldoff + delta) - size;
+		new = (old + delta) - size;
 
 	/* Note some interesting axioms */
-	KASSERT((delta != 0) || (newoff == oldoff));
-	KASSERT((delta == 0) || (newoff != 0));
-	KASSERT((delta != (size)) || (newoff == oldoff));
+	KASSERT((delta != 0) || (new == old));
+	KASSERT((delta == 0) || (new != 0));
+	KASSERT((delta != (size)) || (new == old));
 
 	/* Define acceptable ranges for output. */
-	KASSERT((newoff == 0) || ((size_t)newoff >= off));
-	KASSERT((size_t)newoff < (size + off));
-	return newoff;
+	KASSERT((new == 0) || ((size_t)new >= off));
+	KASSERT((size_t)new < (size + off));
+	return new;
 }
 
 static inline size_t
@@ -2952,7 +2951,7 @@ wapbl_replay_read(struct wapbl_replay *wr, void *data, daddr_t blk, long len)
 
 #ifdef _KERNEL
 /*
- * This is not really a module now, but maybe on its way to
+ * This is not really a module now, but maybe on it's way to
  * being one some day.
  */
 MODULE(MODULE_CLASS_VFS, wapbl, NULL);

@@ -1,5 +1,5 @@
 #include <sys/cdefs.h>
- __RCSID("$NetBSD: control.c,v 1.10 2015/08/21 10:39:00 roy Exp $");
+ __RCSID("$NetBSD: control.c,v 1.1.1.7.2.2 2015/02/05 15:13:12 martin Exp $");
 
 /*
  * dhcpcd - DHCP client daemon
@@ -38,6 +38,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <syslog.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -46,7 +47,6 @@
 #include "dhcpcd.h"
 #include "control.h"
 #include "eloop.h"
-#include "if.h"
 
 #ifndef SUN_LEN
 #define SUN_LEN(su) \
@@ -96,7 +96,7 @@ control_delete(struct fd_list *fd)
 {
 
 	TAILQ_REMOVE(&fd->ctx->control_fds, fd, next);
-	eloop_event_delete(fd->ctx->eloop, fd->fd);
+	eloop_event_delete(fd->ctx->eloop, fd->fd, 0);
 	close(fd->fd);
 	control_queue_free(fd);
 	free(fd);
@@ -143,8 +143,7 @@ control_handle_data(void *arg)
 		}
 		*ap = NULL;
 		if (dhcpcd_handleargs(fd->ctx, fd, argc, argvp) == -1) {
-			logger(fd->ctx, LOG_ERR,
-			    "%s: dhcpcd_handleargs: %m", __func__);
+			syslog(LOG_ERR, "%s: dhcpcd_handleargs: %m", __func__);
 			if (errno != EINTR && errno != EAGAIN) {
 				control_delete(fd);
 				return;
@@ -211,8 +210,28 @@ make_sock(struct sockaddr_un *sa, const char *ifname, int unpriv)
 {
 	int fd;
 
-	if ((fd = xsocket(AF_UNIX, SOCK_STREAM, 0, O_NONBLOCK|O_CLOEXEC)) == -1)
+#ifdef SOCK_CLOEXEC
+	if ((fd = socket(AF_UNIX,
+	    SOCK_STREAM | SOCK_CLOEXEC | SOCK_NONBLOCK, 0)) == -1)
 		return -1;
+#else
+	int flags;
+
+	if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1)
+		return -1;
+	if ((flags = fcntl(fd, F_GETFD, 0)) == -1 ||
+	    fcntl(fd, F_SETFD, flags | FD_CLOEXEC) == -1)
+	{
+		close(fd);
+	        return -1;
+	}
+	if ((flags = fcntl(fd, F_GETFL, 0)) == -1 ||
+	    fcntl(fd, F_SETFL, flags | O_NONBLOCK) == -1)
+	{
+		close(fd);
+	        return -1;
+	}
+#endif
 	memset(sa, 0, sizeof(*sa));
 	sa->sun_family = AF_UNIX;
 	if (unpriv)
@@ -287,14 +306,14 @@ control_stop(struct dhcpcd_ctx *ctx)
 
 	if (ctx->control_fd == -1)
 		return 0;
-	eloop_event_delete(ctx->eloop, ctx->control_fd);
+	eloop_event_delete(ctx->eloop, ctx->control_fd, 0);
 	close(ctx->control_fd);
 	ctx->control_fd = -1;
 	if (unlink(ctx->control_sock) == -1)
 		retval = -1;
 
 	if (ctx->control_unpriv_fd != -1) {
-		eloop_event_delete(ctx->eloop, ctx->control_unpriv_fd);
+		eloop_event_delete(ctx->eloop, ctx->control_unpriv_fd, 0);
 		close(ctx->control_unpriv_fd);
 		ctx->control_unpriv_fd = -1;
 		if (unlink(UNPRIVSOCKET) == -1)
@@ -304,7 +323,7 @@ control_stop(struct dhcpcd_ctx *ctx)
 freeit:
 	while ((l = TAILQ_FIRST(&ctx->control_fds))) {
 		TAILQ_REMOVE(&ctx->control_fds, l, next);
-		eloop_event_delete(ctx->eloop, l->fd);
+		eloop_event_delete(ctx->eloop, l->fd, 0);
 		close(l->fd);
 		control_queue_free(l);
 		free(l);
@@ -368,8 +387,7 @@ control_writeone(void *arg)
 	iov[1].iov_base = data->data;
 	iov[1].iov_len = data->data_len;
 	if (writev(fd->fd, iov, 2) == -1) {
-		logger(fd->ctx, LOG_ERR,
-		    "%s: writev fd %d: %m", __func__, fd->fd);
+		syslog(LOG_ERR, "%s: writev fd %d: %m", __func__, fd->fd);
 		if (errno != EINTR && errno != EAGAIN)
 			control_delete(fd);
 		return;
@@ -383,7 +401,7 @@ control_writeone(void *arg)
 	TAILQ_INSERT_TAIL(&fd->free_queue, data, next);
 
 	if (TAILQ_FIRST(&fd->queue) == NULL)
-		eloop_event_remove_writecb(fd->ctx->eloop, fd->fd);
+		eloop_event_delete(fd->ctx->eloop, fd->fd, 1);
 }
 
 int

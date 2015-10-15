@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.27 2014/09/03 19:29:14 matt Exp $
+# $NetBSD: Makefile.inc,v 1.24.2.2 2015/02/04 22:00:24 martin Exp $
 
 COMPILER_RT_SRCDIR=	${NETBSDSRCDIR}/sys/external/bsd/compiler_rt/dist
 
@@ -135,24 +135,17 @@ GENERIC_SRCS+= \
 .endif
 
 # These have h/w instructions which are always used.
-.if ${LIBC_MACHINE_ARCH} != "alpha" && ${LIBC_MACHINE_CPU} != "aarch64" \
-    && ${LIBC_MACHINE_CPU} != "powerpc" && ${LIBC_MACHINE_CPU} != "or1k"
+.if ${LIBC_MACHINE_ARCH} != "alpha" && ${LIBC_MACHINE_CPU} != "powerpc" \
+    && ${LIBC_MACHINE_CPU} != "aarch64"
 GENERIC_SRCS+= \
 	clzsi2.c
-.endif
-
-# These have h/w instructions which are always used.
-.if ${LIBC_MACHINE_ARCH} != "alpha" && ${LIBC_MACHINE_ARCH} != "vax" \
-    && ${LIBC_MACHINE_CPU} != "aarch64" && ${LIBC_MACHINE_CPU} != "powerpc" \
-    && ${LIBC_MACHINE_CPU} != "or1k"
-GENERIC_SRCS+= \
-	ctzsi2.c
 .endif
 
 # These have h/w instructions which are always used.
 .if ${LIBC_MACHINE_ARCH} != "alpha" && ${LIBC_MACHINE_CPU} != "powerpc" \
     && ${LIBC_MACHINE_CPU} != "aarch64" && ${LIBC_MACHINE_ARCH} != "vax"
 GENERIC_SRCS+= \
+	ctzsi2.c \
 	divmodsi4.c \
 	divsi3.c \
 	modsi3.c \
@@ -181,7 +174,7 @@ GENERIC_SRCS+= \
 
 # These have h/w instructions which are always used.
 .if ${LIBC_MACHINE_ARCH} != "alpha" && ${LIBC_MACHINE_CPU} != "powerpc64" \
-    && ${LIBC_MACHINE_ARCH} != "aarch64" && ${LIBC_MACHINE_CPU} != "or1k"
+    && ${LIBC_MACHINE_ARCH} != "aarch64"
 GENERIC_SRCS+= \
 	clzdi2.c \
 	ctzdi2.c \

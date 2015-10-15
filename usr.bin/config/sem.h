@@ -1,4 +1,4 @@
-/*	$NetBSD: sem.h,v 1.19 2014/11/21 20:46:56 christos Exp $	*/
+/*	$NetBSD: sem.h,v 1.10.10.1 2015/03/06 21:00:23 snj Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993

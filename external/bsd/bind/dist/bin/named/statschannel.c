@@ -1,4 +1,4 @@
-/*	$NetBSD: statschannel.c,v 1.10 2014/12/10 04:37:52 christos Exp $	*/
+/*	$NetBSD: statschannel.c,v 1.9.2.1 2014/12/22 03:28:34 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2008-2014  Internet Systems Consortium, Inc. ("ISC")

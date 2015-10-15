@@ -1,4 +1,4 @@
-/*	$NetBSD: com_mace.c,v 1.11 2015/09/30 19:44:58 macallan Exp $	*/
+/*	$NetBSD: com_mace.c,v 1.9 2011/07/01 18:53:47 dyoung Exp $	*/
 
 /*
  * Copyright (c) 2000 Soren S. Jorvang
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: com_mace.c,v 1.11 2015/09/30 19:44:58 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: com_mace.c,v 1.9 2011/07/01 18:53:47 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -55,7 +55,6 @@ __KERNEL_RCSID(0, "$NetBSD: com_mace.c,v 1.11 2015/09/30 19:44:58 macallan Exp $
 #include <machine/machtype.h>
 
 #include <sgimips/mace/macevar.h>
-#include <sgimips/mace/macereg.h>
 
 #include <dev/arcbios/arcbios.h>
 #include <dev/arcbios/arcbiosvar.h>
@@ -97,8 +96,7 @@ com_mace_attach(device_t parent, device_t self, void *aux)
 	 */
 	ioh = maa->maa_sh + maa->maa_offset;
 	/* note that ioh on mac is *also* the iobase address */
-	COM_INIT_REGS(sc->sc_regs, mace_isa_memt, ioh,
-	    MACE_BASE + maa->maa_offset);
+	COM_INIT_REGS(sc->sc_regs, maa->maa_st, ioh, ioh);
 
 	sc->sc_frequency = COM_FREQ;
 

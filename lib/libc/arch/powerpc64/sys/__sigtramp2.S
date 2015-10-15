@@ -1,4 +1,4 @@
-/*	$NetBSD: __sigtramp2.S,v 1.4 2014/08/23 02:24:22 matt Exp $	*/
+/*	$NetBSD: __sigtramp2.S,v 1.3.24.1 2015/02/04 22:00:24 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.

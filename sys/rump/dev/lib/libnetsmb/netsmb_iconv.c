@@ -1,4 +1,4 @@
-/*	$NetBSD: netsmb_iconv.c,v 1.1 2014/11/15 18:49:04 nakayama Exp $	*/
+/*	$NetBSD: netsmb_iconv.c,v 1.1.4.2 2014/12/01 09:31:39 martin Exp $	*/
 
 /*
  * Copyright (c) 2014 Takeshi Nakayama.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netsmb_iconv.c,v 1.1 2014/11/15 18:49:04 nakayama Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netsmb_iconv.c,v 1.1.4.2 2014/12/01 09:31:39 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>

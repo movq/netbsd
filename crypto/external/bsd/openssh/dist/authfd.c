@@ -1,5 +1,5 @@
-/*	$NetBSD: authfd.c,v 1.10 2015/08/13 10:33:21 christos Exp $	*/
-/* $OpenBSD: authfd.c,v 1.98 2015/07/03 03:43:18 djm Exp $ */
+/*	$NetBSD: authfd.c,v 1.6.4.1 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: authfd.c,v 1.94 2015/01/14 20:05:27 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -37,7 +37,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: authfd.c,v 1.10 2015/08/13 10:33:21 christos Exp $");
+__RCSID("$NetBSD: authfd.c,v 1.6.4.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/types.h>
 #include <sys/un.h>
 #include <sys/socket.h>
@@ -438,8 +438,10 @@ ssh_agent_sign(int sock, struct sshkey *key,
 	u_int flags = 0;
 	int r = SSH_ERR_INTERNAL_ERROR;
 
-	*sigp = NULL;
-	*lenp = 0;
+	if (sigp != NULL)
+		*sigp = NULL;
+	if (lenp != NULL)
+		*lenp = 0;
 
 	if (datalen > SSH_KEY_MAX_SIGN_DATA_SIZE)
 		return SSH_ERR_INVALID_ARGUMENT;
@@ -560,8 +562,10 @@ ssh_add_identity_constrained(int sock, struct sshkey *key, const char *comment,
 #ifdef WITH_OPENSSL
 	case KEY_RSA:
 	case KEY_RSA_CERT:
+	case KEY_RSA_CERT_V00:
 	case KEY_DSA:
 	case KEY_DSA_CERT:
+	case KEY_DSA_CERT_V00:
 	case KEY_ECDSA:
 	case KEY_ECDSA_CERT:
 #endif

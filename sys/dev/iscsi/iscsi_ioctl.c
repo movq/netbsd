@@ -1,4 +1,4 @@
-/*	$NetBSD: iscsi_ioctl.c,v 1.13 2015/09/19 18:32:42 dholland Exp $	*/
+/*	$NetBSD: iscsi_ioctl.c,v 1.6 2012/12/29 11:05:29 mlelstv Exp $	*/
 
 /*-
  * Copyright (c) 2004,2005,2006,2011 The NetBSD Foundation, Inc.
@@ -477,7 +477,7 @@ kill_connection(connection_t *conn, uint32_t status, int logout, bool recover)
 		/* of logging in */
 		if (logout >= 0) {
 			conn->state = ST_WINDING_DOWN;
-			callout_schedule(&conn->timeout, CONNECTION_TIMEOUT);
+			SET_CONN_TIMEOUT(conn, CONNECTION_TIMEOUT);
 
 			if (sess->ErrorRecoveryLevel < 2 &&
 			    logout == RECOVER_CONNECTION) {
@@ -498,6 +498,10 @@ kill_connection(connection_t *conn, uint32_t status, int logout, bool recover)
 			 */
 		}
 	}
+
+#ifdef ISCSI_TEST_MODE
+	test_remove_connection(conn);
+#endif
 
 	conn->terminating = status;
 	conn->state = ST_SETTLING;
@@ -602,7 +606,7 @@ kill_session(session_t *session, uint32_t status, int logout, bool recover)
  *    Parameter:
  *          par      IN/OUT: The login parameters
  *          session  IN: The owning session
- *          l        IN: The lwp pointer of the caller
+ *          p        IN: The proc pointer of the caller
  *
  *    Returns:    0 on success
  *                >0 on failure, connection structure deleted
@@ -611,7 +615,7 @@ kill_session(session_t *session, uint32_t status, int logout, bool recover)
 
 STATIC int
 create_connection(iscsi_login_parameters_t *par, session_t *session,
-				  struct lwp *l)
+				  PTHREADOBJ p)
 {
 	connection_t *connection;
 	int rc, s;
@@ -668,7 +672,7 @@ create_connection(iscsi_login_parameters_t *par, session_t *session,
 	/* close the file descriptor */
 	fd_close(par->socket);
 
-	connection->threadobj = l;
+	connection->threadobj = p;
 	connection->login_par = par;
 
 	/*DEBOUT (("Creating receive thread\n")); */
@@ -716,6 +720,10 @@ create_connection(iscsi_login_parameters_t *par, session_t *session,
 	 * increments performed in get_socket().
 	 */
 
+#ifdef ISCSI_TEST_MODE
+	test_assign_connection(connection);
+#endif
+
 	if ((rc = send_login(connection)) != 0) {
 		DEBC(connection, 0, ("Login failed (rc %d)\n", rc));
 		/* Don't attempt to recover, there seems to be something amiss */
@@ -745,7 +753,7 @@ create_connection(iscsi_login_parameters_t *par, session_t *session,
  *    Parameter:
  *          par      IN/OUT: The login parameters
  *          conn     IN: The connection
- *          l        IN: The lwp pointer of the caller
+ *          p        IN: The proc pointer of the caller
  *
  *    Returns:    0 on success
  *                >0 on failure, connection structure deleted
@@ -754,7 +762,7 @@ create_connection(iscsi_login_parameters_t *par, session_t *session,
 
 STATIC int
 recreate_connection(iscsi_login_parameters_t *par, session_t *session,
-					connection_t *connection, struct lwp *l)
+					connection_t *connection, PTHREADOBJ p)
 {
 	int rc, s;
 	ccb_t *ccb;
@@ -789,7 +797,7 @@ recreate_connection(iscsi_login_parameters_t *par, session_t *session,
 	/* close the file descriptor */
 	fd_close(par->socket);
 
-	connection->threadobj = l;
+	connection->threadobj = p;
 	connection->login_par = par;
 	connection->terminating = ISCSI_STATUS_SUCCESS;
 	connection->recover++;
@@ -850,7 +858,7 @@ recreate_connection(iscsi_login_parameters_t *par, session_t *session,
 			}
 			resend_pdu(ccb);
 		} else {
-			callout_schedule(&ccb->timeout, COMMAND_TIMEOUT);
+			SET_CCB_TIMEOUT(connection, ccb, COMMAND_TIMEOUT);
 		}
 	}
 
@@ -944,11 +952,11 @@ check_login_pars(iscsi_login_parameters_t *par)
  *
  *    Parameter:
  *          par      IN/OUT: The login parameters
- *          l        IN: The lwp pointer of the caller
+ *          p        IN: The proc pointer of the caller
  */
 
 STATIC void
-login(iscsi_login_parameters_t *par, struct lwp *l)
+login(iscsi_login_parameters_t *par, PTHREADOBJ p)
 {
 	session_t *session;
 	int rc, s;
@@ -985,7 +993,7 @@ login(iscsi_login_parameters_t *par, struct lwp *l)
 	session->login_type = par->login_type;
 	session->CmdSN = 1;
 
-	if ((rc = create_connection(par, session, l)) != 0) {
+	if ((rc = create_connection(par, session, p)) != 0) {
 		if (rc > 0) {
 			free(session, M_DEVBUF);
 		}
@@ -1043,11 +1051,11 @@ logout(iscsi_logout_parameters_t *par)
  *
  *    Parameter:
  *          par      IN/OUT: The login parameters
- *          l        IN: The lwp pointer of the caller
+ *          p        IN: The proc pointer of the caller
  */
 
 STATIC void
-add_connection(iscsi_login_parameters_t *par, struct lwp *l)
+add_connection(iscsi_login_parameters_t *par, PTHREADOBJ p)
 {
 	session_t *session;
 
@@ -1059,7 +1067,7 @@ add_connection(iscsi_login_parameters_t *par, struct lwp *l)
 		return;
 	}
 	if ((par->status = check_login_pars(par)) == 0) {
-		create_connection(par, session, l);
+		create_connection(par, session, p);
 	}
 }
 
@@ -1106,11 +1114,11 @@ remove_connection(iscsi_remove_parameters_t *par)
  *
  *    Parameter:
  *          par      IN/OUT: The login parameters
- *          l        IN: The lwp pointer of the caller
+ *          p        IN: The proc pointer of the caller
  */
 
 STATIC void
-restore_connection(iscsi_login_parameters_t *par, struct lwp *l)
+restore_connection(iscsi_login_parameters_t *par, PTHREADOBJ p)
 {
 	session_t *session;
 	connection_t *connection;
@@ -1132,7 +1140,7 @@ restore_connection(iscsi_login_parameters_t *par, struct lwp *l)
 	}
 
 	if ((par->status = check_login_pars(par)) == 0) {
-		recreate_connection(par, session, connection, l);
+		recreate_connection(par, session, connection, p);
 	}
 }
 
@@ -1214,8 +1222,13 @@ unmap_databuf(struct proc *p, void *buf, uint32_t datalen)
 
 	/* following code lifted almost verbatim from uvm_io.c */
 	vm_map_lock(kernel_map);
-	uvm_unmap_remove(kernel_map, databuf, databuf + datalen, &dead_entries,
-	    0);
+	uvm_unmap_remove(kernel_map, databuf, databuf + datalen, &dead_entries
+#if (__NetBSD_Version__ >= 399000500)
+					 , 0
+#elif   (__NetBSD_Version__ >= 300000000)
+					 , NULL
+#endif
+		);
 	vm_map_unlock(kernel_map);
 	if (dead_entries != NULL) {
 		uvm_unmap_detach(dead_entries, AMAP_REFALL);
@@ -1231,11 +1244,11 @@ unmap_databuf(struct proc *p, void *buf, uint32_t datalen)
  *
  *    Parameter:
  *          par      IN/OUT: The iocommand parameters
- *          l        IN: The lwp pointer of the caller
+ *          p        IN: The proc pointer of the caller
  */
 
 STATIC void
-io_command(iscsi_iocommand_parameters_t *par, struct lwp *l)
+io_command(iscsi_iocommand_parameters_t *par, PTHREADOBJ p)
 {
 	uint32_t datalen = par->req.datalen;
 	void *databuf = par->req.databuf;
@@ -1259,7 +1272,7 @@ io_command(iscsi_iocommand_parameters_t *par, struct lwp *l)
 		return;
 	}
 
-	if (datalen && (par->status = map_databuf(l->l_proc,
+	if (datalen && (par->status = map_databuf(PROCP(p),
 			&par->req.databuf, datalen)) != 0) {
 		return;
 	}
@@ -1267,7 +1280,7 @@ io_command(iscsi_iocommand_parameters_t *par, struct lwp *l)
 								  par->options.immediate, par->connection_id);
 
 	if (datalen) {
-		unmap_databuf(l->l_proc, par->req.databuf, datalen);
+		unmap_databuf(PROCP(p), par->req.databuf, datalen);
 		par->req.databuf = databuf;	/* restore original addr */
 	}
 
@@ -1511,7 +1524,7 @@ iscsi_cleanup_thread(void *par)
 			while (conn->usecount > 0)
 				tsleep(conn, PWAIT, "finalwait", hz);
 
-			callout_halt(&conn->timeout, NULL);
+			callout_stop(&conn->timeout);
 			closef(conn->sock);
 			free(conn, M_DEVBUF);
 
@@ -1539,9 +1552,9 @@ iscsi_cleanup_thread(void *par)
 					free(sess->target_list, M_TEMP);
 				/* notify event handlers of session shutdown */
 				add_event(ISCSI_SESSION_TERMINATED, sess->id, 0, status);
-				DEB(1, ("Cleanup: session ended %d\n", sess->id));
 				free(sess, M_DEVBUF);
 
+				DEB(1, ("Cleanup: session ended %d\n", sess->id));
 				s = splbio();
 			}
 			splx(s);
@@ -1589,13 +1602,12 @@ iscsi_cleanup_thread(void *par)
  *       cmd      The ioctl Command
  *       addr     IN/OUT: The command parameter
  *       flag     Flags (ignored)
- *       l        IN: The lwp object of the caller
+ *       p        IN: The thread object of the caller
  */
 
 int
-iscsiioctl(struct file *fp, u_long cmd, void *addr)
+iscsiioctl(dev_t dev, u_long cmd, void *addr, int flag, PTHREADOBJ p)
 {
-	struct lwp *l = curlwp;
 
 	DEB(1, ("ISCSI Ioctl cmd = %x\n", (int) cmd));
 
@@ -1605,15 +1617,15 @@ iscsiioctl(struct file *fp, u_long cmd, void *addr)
 		break;
 
 	case ISCSI_LOGIN:
-		login((iscsi_login_parameters_t *) addr, l);
+		login((iscsi_login_parameters_t *) addr, p);
 		break;
 
 	case ISCSI_ADD_CONNECTION:
-		add_connection((iscsi_login_parameters_t *) addr, l);
+		add_connection((iscsi_login_parameters_t *) addr, p);
 		break;
 
 	case ISCSI_RESTORE_CONNECTION:
-		restore_connection((iscsi_login_parameters_t *) addr, l);
+		restore_connection((iscsi_login_parameters_t *) addr, p);
 		break;
 
 	case ISCSI_LOGOUT:
@@ -1626,7 +1638,7 @@ iscsiioctl(struct file *fp, u_long cmd, void *addr)
 
 #ifndef ISCSI_MINIMAL
 	case ISCSI_IO_COMMAND:
-		io_command((iscsi_iocommand_parameters_t *) addr, l);
+		io_command((iscsi_iocommand_parameters_t *) addr, p);
 		break;
 #endif
 
@@ -1657,6 +1669,42 @@ iscsiioctl(struct file *fp, u_long cmd, void *addr)
 	case ISCSI_POLL_EVENT:
 		check_event((iscsi_wait_event_parameters_t *) addr, FALSE);
 		break;
+
+#ifdef ISCSI_PERFTEST
+	case ISCSI_PERFDATA_START:
+		perf_start((iscsi_perf_startstop_parameters_t *) addr);
+		break;
+
+	case ISCSI_PERFDATA_STOP:
+		perf_stop((iscsi_perf_startstop_parameters_t *) addr);
+		break;
+
+	case ISCSI_PERFDATA_GET:
+		perf_get((iscsi_perf_get_parameters_t *) addr);
+		break;
+#endif
+
+#ifdef ISCSI_TEST_MODE
+	case ISCSI_TEST_DEFINE:
+		test_define((iscsi_test_define_parameters_t *) addr);
+		break;
+
+	case ISCSI_TEST_ADD_NEGOTIATION:
+		test_add_neg((iscsi_test_add_negotiation_parameters_t *) addr);
+		break;
+
+	case ISCSI_TEST_ADD_MODIFICATION:
+		test_add_mod(PROCP(p), (iscsi_test_add_modification_parameters_t *) addr);
+		break;
+
+	case ISCSI_TEST_SEND_PDU:
+		test_send_pdu(PROCP(p), (iscsi_test_send_pdu_parameters_t *) addr);
+		break;
+
+	case ISCSI_TEST_CANCEL:
+		test_cancel((iscsi_test_cancel_parameters_t *) addr);
+		break;
+#endif
 
 	default:
 		DEBOUT(("Invalid IO-Control Code\n"));

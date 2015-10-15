@@ -1,4 +1,4 @@
-/* $NetBSD: awin_otgreg.h,v 1.4 2014/10/20 21:18:00 jmcneill Exp $ */
+/* $NetBSD: awin_otgreg.h,v 1.4.2.2 2014/11/09 14:42:33 martin Exp $ */
 /* FreeBSD: head/sys/dev/usb/controller/musb_otg.h 267122 2014-06-05 18:23:51Z hselasky */
 /*-
  * Copyright (c) 2008 Hans Petter Selasky. All rights reserved.

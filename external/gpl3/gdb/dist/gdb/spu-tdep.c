@@ -1,5 +1,5 @@
 /* SPU target-dependent code for GDB, the GNU debugger.
-   Copyright (C) 2006-2015 Free Software Foundation, Inc.
+   Copyright (C) 2006-2014 Free Software Foundation, Inc.
 
    Contributed by Ulrich Weigand <uweigand@de.ibm.com>.
    Based on a port by Sid Manning <sid@us.ibm.com>.
@@ -24,6 +24,8 @@
 #include "gdbtypes.h"
 #include "gdbcmd.h"
 #include "gdbcore.h"
+#include <string.h>
+#include "gdb_assert.h"
 #include "frame.h"
 #include "frame-unwind.h"
 #include "frame-base.h"
@@ -42,8 +44,7 @@
 #include "observer.h"
 #include "infcall.h"
 #include "dwarf2.h"
-#include "dwarf2-frame.h"
-#include "ax.h"
+#include "exceptions.h"
 #include "spu-tdep.h"
 
 
@@ -310,59 +311,13 @@ spu_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
     }
 }
 
-static int
-spu_ax_pseudo_register_collect (struct gdbarch *gdbarch,
-				struct agent_expr *ax, int regnum)
-{
-  switch (regnum)
-    {
-    case SPU_SP_REGNUM:
-      ax_reg_mask (ax, SPU_RAW_SP_REGNUM);
-      return 0;
-
-    case SPU_FPSCR_REGNUM:
-    case SPU_SRR0_REGNUM:
-    case SPU_LSLR_REGNUM:
-    case SPU_DECR_REGNUM:
-    case SPU_DECR_STATUS_REGNUM:
-      return -1;
-
-    default:
-      internal_error (__FILE__, __LINE__, _("invalid regnum"));
-    }
-}
-
-static int
-spu_ax_pseudo_register_push_stack (struct gdbarch *gdbarch,
-				   struct agent_expr *ax, int regnum)
-{
-  switch (regnum)
-    {
-    case SPU_SP_REGNUM:
-      ax_reg (ax, SPU_RAW_SP_REGNUM);
-      return 0;
-
-    case SPU_FPSCR_REGNUM:
-    case SPU_SRR0_REGNUM:
-    case SPU_LSLR_REGNUM:
-    case SPU_DECR_REGNUM:
-    case SPU_DECR_STATUS_REGNUM:
-      return -1;
-
-    default:
-      internal_error (__FILE__, __LINE__, _("invalid regnum"));
-    }
-}
-
-
 /* Value conversion -- access scalar values at the preferred slot.  */
 
 static struct value *
-spu_value_from_register (struct gdbarch *gdbarch, struct type *type,
-			 int regnum, struct frame_id frame_id)
+spu_value_from_register (struct type *type, int regnum,
+			 struct frame_info *frame)
 {
-  struct value *value = default_value_from_register (gdbarch, type,
-						     regnum, frame_id);
+  struct value *value = default_value_from_register (type, regnum, frame);
   int len = TYPE_LENGTH (type);
 
   if (regnum < SPU_NUM_GPRS && len < 16)
@@ -394,15 +349,6 @@ spu_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
     return 1;
 
   return default_register_reggroup_p (gdbarch, regnum, group);
-}
-
-/* DWARF-2 register numbers.  */
-
-static int
-spu_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
-{
-  /* Use cooked instead of raw SP.  */
-  return (reg == SPU_RAW_SP_REGNUM)? SPU_SP_REGNUM : reg;
 }
 
 
@@ -1801,7 +1747,7 @@ spu_get_overlay_table (struct objfile *objfile)
 {
   enum bfd_endian byte_order = bfd_big_endian (objfile->obfd)?
 		   BFD_ENDIAN_BIG : BFD_ENDIAN_LITTLE;
-  struct bound_minimal_symbol ovly_table_msym, ovly_buf_table_msym;
+  struct minimal_symbol *ovly_table_msym, *ovly_buf_table_msym;
   CORE_ADDR ovly_table_base, ovly_buf_table_base;
   unsigned ovly_table_size, ovly_buf_table_size;
   struct spu_overlay_table *tbl;
@@ -1814,19 +1760,19 @@ spu_get_overlay_table (struct objfile *objfile)
     return tbl;
 
   ovly_table_msym = lookup_minimal_symbol ("_ovly_table", NULL, objfile);
-  if (!ovly_table_msym.minsym)
+  if (!ovly_table_msym)
     return NULL;
 
   ovly_buf_table_msym = lookup_minimal_symbol ("_ovly_buf_table",
 					       NULL, objfile);
-  if (!ovly_buf_table_msym.minsym)
+  if (!ovly_buf_table_msym)
     return NULL;
 
-  ovly_table_base = BMSYMBOL_VALUE_ADDRESS (ovly_table_msym);
-  ovly_table_size = MSYMBOL_SIZE (ovly_table_msym.minsym);
+  ovly_table_base = SYMBOL_VALUE_ADDRESS (ovly_table_msym);
+  ovly_table_size = MSYMBOL_SIZE (ovly_table_msym);
 
-  ovly_buf_table_base = BMSYMBOL_VALUE_ADDRESS (ovly_buf_table_msym);
-  ovly_buf_table_size = MSYMBOL_SIZE (ovly_buf_table_msym.minsym);
+  ovly_buf_table_base = SYMBOL_VALUE_ADDRESS (ovly_buf_table_msym);
+  ovly_buf_table_size = MSYMBOL_SIZE (ovly_buf_table_msym);
 
   ovly_table = xmalloc (ovly_table_size);
   read_memory (ovly_table_base, ovly_table, ovly_table_size);
@@ -1952,8 +1898,8 @@ spu_overlay_new_objfile (struct objfile *objfile)
 static void
 spu_catch_start (struct objfile *objfile)
 {
-  struct bound_minimal_symbol minsym;
-  struct compunit_symtab *cust;
+  struct minimal_symbol *minsym;
+  struct symtab *symtab;
   CORE_ADDR pc;
   char buf[32];
 
@@ -1972,23 +1918,21 @@ spu_catch_start (struct objfile *objfile)
   /* There can be multiple symbols named "main".  Search for the
      "main" in *this* objfile.  */
   minsym = lookup_minimal_symbol ("main", NULL, objfile);
-  if (!minsym.minsym)
+  if (!minsym)
     return;
 
   /* If we have debugging information, try to use it -- this
      will allow us to properly skip the prologue.  */
-  pc = BMSYMBOL_VALUE_ADDRESS (minsym);
-  cust
-    = find_pc_sect_compunit_symtab (pc, MSYMBOL_OBJ_SECTION (minsym.objfile,
-							     minsym.minsym));
-  if (cust != NULL)
+  pc = SYMBOL_VALUE_ADDRESS (minsym);
+  symtab = find_pc_sect_symtab (pc, SYMBOL_OBJ_SECTION (objfile, minsym));
+  if (symtab != NULL)
     {
-      const struct blockvector *bv = COMPUNIT_BLOCKVECTOR (cust);
+      struct blockvector *bv = BLOCKVECTOR (symtab);
       struct block *block = BLOCKVECTOR_BLOCK (bv, GLOBAL_BLOCK);
       struct symbol *sym;
       struct symtab_and_line sal;
 
-      sym = block_lookup_symbol (block, "main", VAR_DOMAIN);
+      sym = lookup_block_symbol (block, "main", VAR_DOMAIN);
       if (sym)
 	{
 	  fixup_symbol_section (sym, objfile);
@@ -2037,7 +1981,7 @@ spu_objfile_from_frame (struct frame_info *frame)
 static void
 flush_ea_cache (void)
 {
-  struct bound_minimal_symbol msymbol;
+  struct minimal_symbol *msymbol;
   struct objfile *obj;
 
   if (!has_stack_frames ())
@@ -2049,7 +1993,7 @@ flush_ea_cache (void)
 
   /* Lookup inferior function __cache_flush.  */
   msymbol = lookup_minimal_symbol ("__cache_flush", NULL, obj);
-  if (msymbol.minsym != NULL)
+  if (msymbol != NULL)
     {
       struct type *type;
       CORE_ADDR addr;
@@ -2057,7 +2001,7 @@ flush_ea_cache (void)
       type = objfile_type (obj)->builtin_void;
       type = lookup_function_type (type);
       type = lookup_pointer_type (type);
-      addr = BMSYMBOL_VALUE_ADDRESS (msymbol);
+      addr = SYMBOL_VALUE_ADDRESS (msymbol);
 
       call_function_by_hand (value_from_pointer (type, addr), 0, NULL);
     }
@@ -2647,7 +2591,7 @@ info_spu_command (char *args, int from_tty)
 {
   printf_unfiltered (_("\"info spu\" must be followed by "
 		       "the name of an SPU facility.\n"));
-  help_list (infospucmdlist, "info spu ", all_commands, gdb_stdout);
+  help_list (infospucmdlist, "info spu ", -1, gdb_stdout);
 }
 
 
@@ -2714,7 +2658,7 @@ spu_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     }
 
   /* None found, so create a new architecture.  */
-  tdep = XCNEW (struct gdbarch_tdep);
+  tdep = XCALLOC (1, struct gdbarch_tdep);
   tdep->id = id;
   gdbarch = gdbarch_alloc (&info, tdep);
 
@@ -2734,11 +2678,6 @@ spu_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_pseudo_register_write (gdbarch, spu_pseudo_register_write);
   set_gdbarch_value_from_register (gdbarch, spu_value_from_register);
   set_gdbarch_register_reggroup_p (gdbarch, spu_register_reggroup_p);
-  set_gdbarch_dwarf2_reg_to_regnum (gdbarch, spu_dwarf_reg_to_regnum);
-  set_gdbarch_ax_pseudo_register_collect
-    (gdbarch, spu_ax_pseudo_register_collect);
-  set_gdbarch_ax_pseudo_register_push_stack
-    (gdbarch, spu_ax_pseudo_register_push_stack);
 
   /* Data types.  */
   set_gdbarch_char_signed (gdbarch, 0);
@@ -2777,7 +2716,6 @@ spu_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* Frame handling.  */
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);
-  dwarf2_append_unwinders (gdbarch);
   frame_unwind_append_unwinder (gdbarch, &spu_frame_unwind);
   frame_base_set_default (gdbarch, &spu_frame_base);
   set_gdbarch_unwind_pc (gdbarch, spu_unwind_pc);

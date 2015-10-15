@@ -1,4 +1,4 @@
-/*      $NetBSD: rumpclient.c,v 1.65 2015/01/17 19:34:50 justin Exp $	*/
+/*      $NetBSD: rumpclient.c,v 1.62 2014/04/25 12:20:12 pooka Exp $	*/
 
 /*
  * Copyright (c) 2010, 2011 Antti Kantee.  All Rights Reserved.
@@ -32,7 +32,8 @@
 #include <rump/rumpuser_port.h>
 
 /*
- * We use kqueue on the BSDs, poll elsewhere.  We
+ * We use kqueue on NetBSD, poll elsewhere.  Theoretically we could
+ * use kqueue on other BSD's too, but I haven't tested those.  We
  * want to use kqueue because it will give us the ability to get signal
  * notifications but defer their handling to a stage where we do not
  * hold the communication lock.  Taking a signal while holding on to
@@ -42,15 +43,14 @@
  * response from the server.
  */
 
-#if defined(__NetBSD__) || defined(__FreeBSD__) || \
-    defined(__DragonFly__) || defined(__OpenBSD__)
+#ifdef __NetBSD__
 #define USE_KQUEUE
 #endif
-#if defined(__linux__)
+#if defined(__linux__) && !defined(__ANDROID__)
 #define USE_SIGNALFD
 #endif
 
-__RCSID("$NetBSD: rumpclient.c,v 1.65 2015/01/17 19:34:50 justin Exp $");
+__RCSID("$NetBSD: rumpclient.c,v 1.62 2014/04/25 12:20:12 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/mman.h>
@@ -86,21 +86,24 @@ int	(*host_socket)(int, int, int);
 int	(*host_close)(int);
 int	(*host_connect)(int, const struct sockaddr *, socklen_t);
 int	(*host_fcntl)(int, int, ...);
+#ifdef __ANDROID__
+int	(*host_poll)(struct pollfd *, nfds_t, long);
+#else
 int	(*host_poll)(struct pollfd *, nfds_t, int);
+#endif
 ssize_t	(*host_read)(int, void *, size_t);
+#ifdef __ANDROID__
+int	(*host_sendmsg)(int, const struct msghdr *, unsigned int);
+#else
 ssize_t (*host_sendmsg)(int, const struct msghdr *, int);
+#endif
 int	(*host_setsockopt)(int, int, int, const void *, socklen_t);
 int	(*host_dup)(int);
 
 #ifdef USE_KQUEUE
 int	(*host_kqueue)(void);
-#ifdef __NetBSD__
 int	(*host_kevent)(int, const struct kevent *, size_t,
 		       struct kevent *, size_t, const struct timespec *);
-#else
-int	(*host_kevent)(int, const struct kevent *, int,
-		       struct kevent *, int, const struct timespec *);
-#endif
 #endif
 
 #ifdef USE_SIGNALFD
@@ -922,14 +925,10 @@ rumpclient_init(void)
 
 #ifdef USE_KQUEUE
 	FINDSYM(kqueue)
-#ifdef __NetBSD__
 #if !__NetBSD_Prereq__(5,99,7)
 	FINDSYM(kevent)
 #else
 	FINDSYM2(kevent,_sys___kevent50)
-#endif
-#else
-	FINDSYM(kevent)
 #endif
 #endif /* USE_KQUEUE */
 

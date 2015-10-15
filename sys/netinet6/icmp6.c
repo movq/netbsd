@@ -1,4 +1,4 @@
-/*	$NetBSD: icmp6.c,v 1.177 2015/09/14 05:34:28 ozaki-r Exp $	*/
+/*	$NetBSD: icmp6.c,v 1.169 2014/06/06 01:02:47 rmind Exp $	*/
 /*	$KAME: icmp6.c,v 1.217 2001/06/20 15:03:29 jinmei Exp $	*/
 
 /*
@@ -62,12 +62,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: icmp6.c,v 1.177 2015/09/14 05:34:28 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: icmp6.c,v 1.169 2014/06/06 01:02:47 rmind Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
 #include "opt_ipsec.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -724,8 +722,6 @@ icmp6_input(struct mbuf **mp, int *offp, int proto)
 			n->m_pkthdr.rcvif = NULL;
 			n->m_len = 0;
 			maxhlen = M_TRAILINGSPACE(n) - ICMP6_MAXLEN;
-			if (maxhlen < 0)
-				break;
 			if (maxhlen > hostnamelen)
 				maxhlen = hostnamelen;
 			/*
@@ -1814,9 +1810,9 @@ ni6_store_addrs(struct icmp6_nodeinfo *ni6,
 				ltime = ND6_INFINITE_LIFETIME;
 			else {
 				if (ifa6->ia6_lifetime.ia6t_expire >
-				    time_uptime)
+				    time_second)
 					ltime = ifa6->ia6_lifetime.ia6t_expire -
-					    time_uptime;
+					    time_second;
 				else
 					ltime = 0;
 			}
@@ -2474,10 +2470,8 @@ icmp6_redirect_output(struct mbuf *m0, struct rtentry *rt)
 		len = sizeof(*nd_opt) + ifp->if_addrlen;
 		len = (len + 7) & ~7;	/* round by 8 */
 		/* safety check */
-		if (len + (p - (u_char *)ip6) > maxlen) {
-			rtfree(rt_nexthop);
+		if (len + (p - (u_char *)ip6) > maxlen)
 			goto nolladdropt;
-		}
 		if (!(rt_nexthop->rt_flags & RTF_GATEWAY) &&
 		    (rt_nexthop->rt_flags & RTF_LLINFO) &&
 		    (rt_nexthop->rt_gateway->sa_family == AF_LINK) &&
@@ -2490,7 +2484,6 @@ icmp6_redirect_output(struct mbuf *m0, struct rtentry *rt)
 			memcpy(lladdr, CLLADDR(sdl), ifp->if_addrlen);
 			p += len;
 		}
-		rtfree(rt_nexthop);
 	}
   nolladdropt:;
 
@@ -2714,14 +2707,12 @@ icmp6_mtudisc_clone(struct sockaddr *dst)
 static void
 icmp6_mtudisc_timeout(struct rtentry *rt, struct rttimer *r)
 {
-
-	KASSERT(rt != NULL);
-	rt_assert_referenced(rt);
-
+	if (rt == NULL)
+		panic("icmp6_mtudisc_timeout: bad route to timeout");
 	if ((rt->rt_flags & (RTF_DYNAMIC | RTF_HOST)) ==
 	    (RTF_DYNAMIC | RTF_HOST)) {
 		rtrequest((int) RTM_DELETE, rt_getkey(rt),
-		    rt->rt_gateway, rt_mask(rt), rt->rt_flags, NULL);
+		    rt->rt_gateway, rt_mask(rt), rt->rt_flags, 0);
 	} else {
 		if (!(rt->rt_rmx.rmx_locks & RTV_MTU))
 			rt->rt_rmx.rmx_mtu = 0;
@@ -2731,14 +2722,12 @@ icmp6_mtudisc_timeout(struct rtentry *rt, struct rttimer *r)
 static void
 icmp6_redirect_timeout(struct rtentry *rt, struct rttimer *r)
 {
-
-	KASSERT(rt != NULL);
-	rt_assert_referenced(rt);
-
+	if (rt == NULL)
+		panic("icmp6_redirect_timeout: bad route to timeout");
 	if ((rt->rt_flags & (RTF_GATEWAY | RTF_DYNAMIC | RTF_HOST)) ==
 	    (RTF_GATEWAY | RTF_DYNAMIC | RTF_HOST)) {
 		rtrequest((int) RTM_DELETE, rt_getkey(rt),
-		    rt->rt_gateway, rt_mask(rt), rt->rt_flags, NULL);
+		    rt->rt_gateway, rt_mask(rt), rt->rt_flags, 0);
 	}
 }
 
@@ -2765,38 +2754,6 @@ sysctl_net_inet6_icmp6_stats(SYSCTLFN_ARGS)
 {
 
 	return (NETSTAT_SYSCTL(icmp6stat_percpu, ICMP6_NSTATS));
-}
-
-static int
-sysctl_net_inet6_icmp6_redirtimeout(SYSCTLFN_ARGS)
-{
-	int error, tmp;
-	struct sysctlnode node;
-
-	node = *rnode;
-	node.sysctl_data = &tmp;
-	tmp = icmp6_redirtimeout;
-	error = sysctl_lookup(SYSCTLFN_CALL(&node));
-	if (error || newp == NULL)
-		return error;
-	if (tmp < 0)
-		return EINVAL;
-	icmp6_redirtimeout = tmp;
-
-	if (icmp6_redirect_timeout_q != NULL) {
-		if (icmp6_redirtimeout == 0) {
-			rt_timer_queue_destroy(icmp6_redirect_timeout_q,
-			    true);
-		} else {
-			rt_timer_queue_change(icmp6_redirect_timeout_q,
-			    icmp6_redirtimeout);
-		}
-	} else if (icmp6_redirtimeout > 0) {
-		icmp6_redirect_timeout_q =
-		    rt_timer_queue_create(icmp6_redirtimeout);
-	}
-
-	return 0;
 }
 
 static void
@@ -2834,8 +2791,7 @@ sysctl_net_inet6_icmp6_setup(struct sysctllog **clog)
 		       CTLFLAG_PERMANENT|CTLFLAG_READWRITE,
 		       CTLTYPE_INT, "redirtimeout",
 		       SYSCTL_DESCR("Redirect generated route lifetime"),
-		       sysctl_net_inet6_icmp6_redirtimeout, 0,
-		       &icmp6_redirtimeout, 0,
+		       NULL, 0, &icmp6_redirtimeout, 0,
 		       CTL_NET, PF_INET6, IPPROTO_ICMPV6,
 		       ICMPV6CTL_REDIRTIMEOUT, CTL_EOL);
 #if 0 /* obsoleted */

@@ -1,4 +1,4 @@
-/*	$NetBSD: udl.c,v 1.12 2014/12/12 05:19:33 msaitoh Exp $	*/
+/*	$NetBSD: udl.c,v 1.11.4.1 2015/01/16 08:30:42 martin Exp $	*/
 
 /*-
  * Copyright (c) 2009 FUKAUMI Naoki.
@@ -53,7 +53,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: udl.c,v 1.12 2014/12/12 05:19:33 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udl.c,v 1.11.4.1 2015/01/16 08:30:42 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

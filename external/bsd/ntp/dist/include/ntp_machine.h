@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_machine.h,v 1.3 2015/07/10 14:20:29 christos Exp $	*/
+/*	$NetBSD: ntp_machine.h,v 1.1.1.3.4.1 2014/12/24 00:05:16 riz Exp $	*/
 
 /*
  * ntp_machine.h

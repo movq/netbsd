@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.9 2014/10/14 08:33:38 nonaka Exp $
+#	$NetBSD: Makefile,v 1.8.4.1 2014/10/15 08:37:34 martin Exp $
 
 WARNS?=	4
 

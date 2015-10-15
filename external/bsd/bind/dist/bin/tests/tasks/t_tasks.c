@@ -1,4 +1,4 @@
-/*	$NetBSD: t_tasks.c,v 1.7 2014/12/10 04:37:54 christos Exp $	*/
+/*	$NetBSD: t_tasks.c,v 1.6.2.1 2014/12/22 03:28:42 msaitoh Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007, 2009, 2011, 2013, 2014  Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-/*	$NetBSD: pcap-septel.c,v 1.3 2015/03/31 21:39:42 christos Exp $	*/
+/*	$NetBSD: pcap-septel.c,v 1.1.1.4 2013/12/31 16:57:25 christos Exp $	*/
 
 /*
  * pcap-septel.c: Packet capture interface for Intel/Septel card.
@@ -16,8 +16,10 @@
  * (+961 3 485243)
  */
 
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: pcap-septel.c,v 1.3 2015/03/31 21:39:42 christos Exp $");
+#ifndef lint
+static const char rcsid[] _U_ =
+    "@(#) Header: /tcpdump/master/libpcap/pcap-septel.c,v 1.4 2008-04-14 20:40:58 guy Exp ";
+#endif
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -199,9 +201,9 @@ septel_inject(pcap_t *handle, const void *buf _U_, size_t size _U_)
  *  See also pcap(3).
  */
 static pcap_t *septel_activate(pcap_t* handle) {
-  /* Initialize some components of the pcap structure. */
+  /* Initialize some components of the pcap structure. */  
   handle->linktype = DLT_MTP2;
-
+  
   handle->bufsize = 0;
 
   /*
@@ -249,9 +251,9 @@ static int septel_stats(pcap_t *p, struct pcap_stat *ps) {
   struct pcap_septel *handlep = p->priv;
   /*handlep->stat.ps_recv = 0;*/
   /*handlep->stat.ps_drop = 0;*/
-
+  
   *ps = handlep->stat;
-
+ 
   return 0;
 }
 
@@ -259,8 +261,13 @@ static int septel_stats(pcap_t *p, struct pcap_stat *ps) {
 int
 septel_findalldevs(pcap_if_t **devlistp, char *errbuf)
 {
-  return (pcap_add_if(devlistp,"septel",0,
-                      "Intel/Septel device",errbuf));
+unsigned char *p;
+  const char description[512]= "Intel/Septel device";
+  char name[512]="septel" ;
+  int ret = 0;
+  pcap_add_if(devlistp,name,0,description,errbuf);
+
+  return (ret); 
 }
 
 

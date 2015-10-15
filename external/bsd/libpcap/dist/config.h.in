@@ -256,9 +256,6 @@
 /* target host supports Bluetooth sniffing */
 #undef PCAP_SUPPORT_BT
 
-/* target host supports Bluetooth Monitor */
-#undef PCAP_SUPPORT_BT_MONITOR
-
 /* target host supports CAN sniffing */
 #undef PCAP_SUPPORT_CAN
 
@@ -270,9 +267,6 @@
 
 /* target host supports netfilter sniffing */
 #undef PCAP_SUPPORT_NETFILTER
-
-/* use Linux packet ring capture if available */
-#undef PCAP_SUPPORT_PACKET_RING
 
 /* target host supports USB sniffing */
 #undef PCAP_SUPPORT_USB

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.6 2015/06/13 20:38:52 martin Exp $
+#	$NetBSD: Makefile.inc,v 1.5.8.1 2015/06/29 17:20:04 snj Exp $
 
 WARNS?=	3	# XXX: -Wsign-compare issues ld.elf_so source
 

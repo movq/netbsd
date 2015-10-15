@@ -1,4 +1,4 @@
-/* $NetBSD: genericbd.c,v 1.6 2015/06/09 22:49:55 matt Exp $ */
+/* $NetBSD: genericbd.c,v 1.5 2014/03/24 20:06:31 christos Exp $ */
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,11 +32,10 @@
  */ 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: genericbd.c,v 1.6 2015/06/09 22:49:55 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: genericbd.c,v 1.5 2014/03/24 20:06:31 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
-#include <sys/cpu.h>
 
 #include <mips/locore.h>
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: psycho.c,v 1.121 2015/10/02 05:22:52 msaitoh Exp $	*/
+/*	$NetBSD: psycho.c,v 1.118.4.1 2014/11/10 17:59:57 snj Exp $	*/
 
 /*
  * Copyright (c) 1999, 2000 Matthew R. Green
@@ -55,7 +55,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: psycho.c,v 1.121 2015/10/02 05:22:52 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: psycho.c,v 1.118.4.1 2014/11/10 17:59:57 snj Exp $");
 
 #include "opt_ddb.h"
 
@@ -286,7 +286,7 @@ psycho_dump_intmap(struct psycho_softc *sc)
  *	- get interrupt-map and interrupt-map-mask
  *	- setup the chipsets.
  *	- if we're the first of the pair, initialise the IOMMU, otherwise
- *	  just copy its tags and addresses.
+ *	  just copy it's tags and addresses.
  */
 static	void
 psycho_attach(device_t parent, device_t self, void *aux)
@@ -755,7 +755,7 @@ psycho_power_button_pressed(void *arg)
  */
 
 /*
- * allocate a PCI chipset tag and set its cookie.
+ * allocate a PCI chipset tag and set it's cookie.
  */
 static pci_chipset_tag_t
 psycho_alloc_chipset(struct psycho_pbm *pp, int node, pci_chipset_tag_t pc)
@@ -1405,7 +1405,7 @@ psycho_pci_conf_read(pci_chipset_tag_t pc, pcitag_t tag, int reg)
 
 	DPRINTF(PDB_CONF, ("%s: tag %lx reg %x ", __func__,
 		(long)tag, reg));
-	if (PCITAG_NODE(tag) != -1 && (unsigned int)reg < PCI_CONF_SIZE) {
+	if (PCITAG_NODE(tag) != -1) {
 
 		DPRINTF(PDB_CONF, ("asi=%x addr=%qx (offset=%x) ...",
 			sc->sc_configaddr._asi,
@@ -1451,10 +1451,7 @@ psycho_pci_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data
 		DPRINTF(PDB_CONF, ("%s: bad addr", __func__));
 		return;
 	}
-
-	if ((unsigned int)reg >= PCI_CONF_SIZE)
-		return;
-
+		
 	bus_space_write_4(sc->sc_configtag, sc->sc_configaddr,
 		PCITAG_OFFSET(tag) + reg, data);
 }

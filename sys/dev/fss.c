@@ -1,4 +1,4 @@
-/*	$NetBSD: fss.c,v 1.93 2015/08/20 14:40:17 christos Exp $	*/
+/*	$NetBSD: fss.c,v 1.91 2014/07/25 08:10:35 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fss.c,v 1.93 2015/08/20 14:40:17 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fss.c,v 1.91 2014/07/25 08:10:35 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -65,7 +65,7 @@ __KERNEL_RCSID(0, "$NetBSD: fss.c,v 1.93 2015/08/20 14:40:17 christos Exp $");
 
 #include <uvm/uvm.h>
 
-#include "ioconf.h"
+void fssattach(int);
 
 dev_type_open(fss_open);
 dev_type_close(fss_close);
@@ -1293,8 +1293,7 @@ CFDRIVER_DECL(fss, DV_DISK, NULL);
 static int
 fss_modcmd(modcmd_t cmd, void *arg)
 {
-	devmajor_t bmajor = -1, cmajor = -1;
-	int error = 0;
+	int bmajor = -1, cmajor = -1,  error = 0;
 
 	switch (cmd) {
 	case MODULE_CMD_INIT:

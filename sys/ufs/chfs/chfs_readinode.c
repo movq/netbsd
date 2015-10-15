@@ -1,4 +1,4 @@
-/*	$NetBSD: chfs_readinode.c,v 1.9 2014/09/01 16:31:17 he Exp $	*/
+/*	$NetBSD: chfs_readinode.c,v 1.8.4.1 2014/09/08 18:57:58 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2010 Department of Software Engineering,

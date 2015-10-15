@@ -1,12 +1,10 @@
-#	$NetBSD: Makefile,v 1.7 2015/06/24 22:20:25 matt Exp $
+#	$NetBSD: Makefile,v 1.6 2011/01/14 16:04:49 jmcneill Exp $
 
 .include <bsd.own.mk>
 
 LIB=	pciaccess
 .PATH:	${X11SRCDIR.${LIB}}/src
 .PATH:	${X11SRCDIR.${LIB}}/include
-
-XORG_MACHINE_ARCH?=${MACHINE_ARCH}
 
 SRCS=	common_bridge.c \
 	common_io.c \
@@ -33,16 +31,16 @@ PKGDIST=	${LIB}
 LDADD+=	-lpci -lz
 DPADD+=	${LIBPCI} ${LIBZ}
 
-.if ${XORG_MACHINE_ARCH} == "i386" || ${XORG_MACHINE_ARCH} == "x86_64"
+.if ${MACHINE_ARCH} == "i386" || ${MACHINE_ARCH} == "x86_64"
 CPPFLAGS+=	-DHAVE_MTRR
 .endif
 
-.if ${XORG_MACHINE_ARCH} == "i386"
+.if ${MACHINE_ARCH} == "i386"
 LDADD+=	-li386
 DPADD+=	${LIBI386}
 .endif
 
-.if ${XORG_MACHINE_ARCH} == "x86_64"
+.if ${MACHINE_ARCH} == "x86_64"
 LDADD+=	-lx86_64
 DPADD+=	${LIBX86_64}
 .endif

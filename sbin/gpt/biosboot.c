@@ -1,4 +1,4 @@
-/*	$NetBSD: biosboot.c,v 1.14 2014/10/03 20:30:06 christos Exp $ */
+/*	$NetBSD: biosboot.c,v 1.7.4.1 2015/06/02 19:49:38 snj Exp $ */
 
 /*
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #ifdef __RCSID
-__RCSID("$NetBSD: biosboot.c,v 1.14 2014/10/03 20:30:06 christos Exp $");
+__RCSID("$NetBSD: biosboot.c,v 1.7.4.1 2015/06/02 19:49:38 snj Exp $");
 #endif
 
 #include <sys/stat.h>

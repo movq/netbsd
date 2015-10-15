@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.7 2015/09/29 20:31:43 christos Exp $
+#	$NetBSD: Makefile,v 1.6 2014/03/09 22:01:31 christos Exp $
 
 # $FreeBSD: src/cddl/usr.bin/ctfmerge/Makefile,v 1.1.4.1 2009/08/03 08:13:06 kensmith Exp $
 
@@ -28,7 +28,8 @@ SRCS=		alist.c \
 		tdata.c \
 		traverse.c \
 		util.c
-LDADD+=-lpthread
-DPADD+=${LIBPTHREAD}
+
+LDADD+=-lrt -lpthread
+DPADD+=${LIBRT} ${LIBPTHREAD}
 
 .include <bsd.prog.mk>

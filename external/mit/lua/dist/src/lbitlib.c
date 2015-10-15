@@ -1,5 +1,5 @@
 /*
-** $Id: lbitlib.c,v 1.2 2015/02/02 14:03:05 lneto Exp $
+** $Id: lbitlib.c,v 1.1.4.1 2015/02/04 21:32:46 martin Exp $
 ** Standard library for bitwise operations
 ** See Copyright Notice in lua.h
 */

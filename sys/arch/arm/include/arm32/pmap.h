@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.142 2015/09/09 07:37:36 skrll Exp $	*/
+/*	$NetBSD: pmap.h,v 1.135.2.2 2015/05/27 05:33:29 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 2002, 2003 Wasabi Systems, Inc.
@@ -346,9 +346,9 @@ extern int		arm_poolpage_vmfreelist;
 
 #define pmap_phys_address(ppn)		(arm_ptob((ppn)))
 u_int arm32_mmap_flags(paddr_t);
-#define ARM32_MMAP_WRITECOMBINE		0x40000000
+#define ARM32_MMAP_WRITECOMBINE	0x40000000
 #define ARM32_MMAP_CACHEABLE		0x20000000
-#define pmap_mmap_flags(ppn)		arm32_mmap_flags(ppn)
+#define pmap_mmap_flags(ppn)			arm32_mmap_flags(ppn)
 
 #define	PMAP_PTE			0x10000000 /* kenter_pa */
 
@@ -428,9 +428,9 @@ extern vaddr_t	pmap_curmaxkvaddr;
 
 #if defined(ARM_MMU_EXTENDED) && defined(__HAVE_MM_MD_DIRECT_MAPPED_PHYS)
 /*
- * Ending VA of direct mapped memory (usually KERNEL_VM_BASE).
+ * Starting VA of direct mapped memory (usually KERNEL_BASE).
  */
-extern vaddr_t pmap_directlimit;
+extern vaddr_t pmap_directbase;
 #endif
 
 /*
@@ -567,12 +567,10 @@ static inline void
 l2pte_set(pt_entry_t *ptep, pt_entry_t pte, pt_entry_t opte)
 {
 	if (l1pte_lpage_p(pte)) {
-		KASSERTMSG((((uintptr_t)ptep / sizeof(pte)) & (L2_L_SIZE / L2_S_SIZE - 1)) == 0, "%p", ptep);
 		for (size_t k = 0; k < L2_L_SIZE / L2_S_SIZE; k++) {
 			*ptep++ = pte;
 		}
 	} else {
-		KASSERTMSG((((uintptr_t)ptep / sizeof(pte)) & (PAGE_SIZE / L2_S_SIZE - 1)) == 0, "%p", ptep);
 		for (size_t k = 0; k < PAGE_SIZE / L2_S_SIZE; k++) {
 			KASSERTMSG(*ptep == opte, "%#x [*%p] != %#x", *ptep, ptep, opte);
 			*ptep++ = pte;
@@ -586,7 +584,6 @@ l2pte_set(pt_entry_t *ptep, pt_entry_t pte, pt_entry_t opte)
 static inline void
 l2pte_reset(pt_entry_t *ptep)
 {
-	KASSERTMSG((((uintptr_t)ptep / sizeof(*ptep)) & (PAGE_SIZE / L2_S_SIZE - 1)) == 0, "%p", ptep);
 	*ptep = 0;
 	for (vsize_t k = 1; k < PAGE_SIZE / L2_S_SIZE; k++) {
 		ptep[k] = 0;
@@ -794,12 +791,12 @@ extern void (*pmap_zero_page_func)(paddr_t);
 #define	L2_S_CACHE_MASK_generic	(L2_B|L2_C)
 #define	L2_S_CACHE_MASK_xscale	(L2_B|L2_C|L2_XS_T_TEX(TEX_XSCALE_X))
 #define	L2_XS_CACHE_MASK_armv6	(L2_B|L2_C|L2_V6_XS_TEX(TEX_ARMV6_TEX))
+#define	L2_S_CACHE_MASK_armv6n	L2_XS_CACHE_MASK_armv6
 #ifdef	ARMV6_EXTENDED_SMALL_PAGE
 #define	L2_S_CACHE_MASK_armv6c	L2_XS_CACHE_MASK_armv6
 #else
 #define	L2_S_CACHE_MASK_armv6c	L2_S_CACHE_MASK_generic
 #endif
-#define	L2_S_CACHE_MASK_armv6n	(L2_B|L2_C|L2_V6_XS_TEX(TEX_ARMV6_TEX)|L2_XS_S)
 #define	L2_S_CACHE_MASK_armv7	(L2_B|L2_C|L2_V6_XS_TEX(TEX_ARMV6_TEX)|L2_XS_S)
 
 
