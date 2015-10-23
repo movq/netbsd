@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_prio_q.c,v 1.1 2015/10/23 17:47:45 christos Exp $	*/
+/*	$NetBSD: ntp_prio_q.c,v 1.1.1.1 2015/10/23 17:47:45 christos Exp $	*/
 
 #include "config.h"
 
