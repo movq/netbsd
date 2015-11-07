@@ -1,4 +1,4 @@
-/*	$NetBSD: jsondump.c,v 1.1.1.2 2015/07/10 13:11:03 christos Exp $	*/
+/*	$NetBSD: jsondump.c,v 1.1.1.2.2.2 2015/11/07 22:26:35 snj Exp $	*/
 
 #include <stdio.h>
 #include <stdlib.h>

@@ -38,9 +38,6 @@
 /* Define to 1 if you have the `clock_gettime' function. */
 #define EVENT__HAVE_CLOCK_GETTIME 1
 
-/* Define to 1 if you have the <cthreads.h> header file. */
-/* #undef EVENT__HAVE_CTHREADS_H */
-
 /* Define to 1 if you have the declaration of `CTL_KERN', and to 0 if you
    don't. */
 #define EVENT__HAVE_DECL_CTL_KERN 1
@@ -123,9 +120,6 @@
 /* Define to 1 if you have the `gettimeofday' function. */
 #define EVENT__HAVE_GETTIMEOFDAY 1
 
-/* if you have GNU Pth */
-/* #undef EVENT__HAVE_GNU_PTH */
-
 /* Define to 1 if you have the <ifaddrs.h> header file. */
 #define EVENT__HAVE_IFADDRS_H 1
 
@@ -147,23 +141,8 @@
 /* Define if the system has zlib */
 #define EVENT__HAVE_LIBZ 1
 
-/* if you have LinuxThreads */
-/* #undef EVENT__HAVE_LINUX_THREADS */
-
-/* if you have SunOS LWP package */
-/* #undef EVENT__HAVE_LWP */
-
-/* Define to 1 if you have the <lwp/lwp.h> header file. */
-/* #undef EVENT__HAVE_LWP_LWP_H */
-
 /* Define to 1 if you have the `mach_absolute_time' function. */
 /* #undef EVENT__HAVE_MACH_ABSOLUTE_TIME */
-
-/* define if you have Mach Cthreads */
-/* #undef EVENT__HAVE_MACH_CTHREADS */
-
-/* Define to 1 if you have the <mach/cthreads.h> header file. */
-/* #undef EVENT__HAVE_MACH_CTHREADS_H */
 
 /* Define to 1 if you have the <mach/mach_time.h> header file. */
 /* #undef EVENT__HAVE_MACH_MACH_TIME_H */
@@ -189,15 +168,6 @@
 /* Define to 1 if you have the <netinet/tcp.h> header file. */
 #define EVENT__HAVE_NETINET_TCP_H 1
 
-/* if you have NT Event Log */
-/* #undef EVENT__HAVE_NT_EVENT_LOG */
-
-/* if you have NT Service Manager */
-/* #undef EVENT__HAVE_NT_SERVICE_MANAGER */
-
-/* if you have NT Threads */
-/* #undef EVENT__HAVE_NT_THREADS */
-
 /* Define if the system has openssl */
 #define EVENT__HAVE_OPENSSL 1
 
@@ -222,47 +192,14 @@
 /* Define if you have POSIX threads libraries and header files. */
 /* #undef EVENT__HAVE_PTHREAD */
 
-/* define to pthreads API spec revision */
-#define EVENT__HAVE_PTHREADS 10
-
-/* define if you have pthread_detach function */
-#define EVENT__HAVE_PTHREAD_DETACH 1
-
-/* Define to 1 if you have the `pthread_getconcurrency' function. */
-/* #undef EVENT__HAVE_PTHREAD_GETCONCURRENCY */
-
-/* Define to 1 if you have the <pthread.h> header file. */
-#define EVENT__HAVE_PTHREAD_H 1
-
-/* Define to 1 if you have the `pthread_kill' function. */
-#define EVENT__HAVE_PTHREAD_KILL 1
-
-/* Define to 1 if you have the `pthread_kill_other_threads_np' function. */
-/* #undef EVENT__HAVE_PTHREAD_KILL_OTHER_THREADS_NP */
-
-/* define if you have pthread_rwlock_destroy function */
-#define EVENT__HAVE_PTHREAD_RWLOCK_DESTROY 1
-
-/* Define to 1 if you have the `pthread_setconcurrency' function. */
-/* #undef EVENT__HAVE_PTHREAD_SETCONCURRENCY */
-
-/* Define to 1 if you have the `pthread_yield' function. */
-/* #undef EVENT__HAVE_PTHREAD_YIELD */
-
-/* Define to 1 if you have the <pth.h> header file. */
-/* #undef EVENT__HAVE_PTH_H */
+/* Define if we have pthreads on this system */
+#define EVENT__HAVE_PTHREADS 1
 
 /* Define to 1 if you have the `putenv' function. */
 #define EVENT__HAVE_PUTENV 1
 
 /* Define to 1 if the system has the type `sa_family_t'. */
 #define EVENT__HAVE_SA_FAMILY_T 1
-
-/* Define to 1 if you have the <sched.h> header file. */
-#define EVENT__HAVE_SCHED_H 1
-
-/* Define to 1 if you have the `sched_yield' function. */
-#define EVENT__HAVE_SCHED_YIELD 1
 
 /* Define to 1 if you have the `select' function. */
 #define EVENT__HAVE_SELECT 1
@@ -351,9 +288,6 @@
 /* Define to 1 if the system has the type `struct so_linger'. */
 /* #undef EVENT__HAVE_STRUCT_SO_LINGER */
 
-/* Define to 1 if you have the <synch.h> header file. */
-/* #undef EVENT__HAVE_SYNCH_H */
-
 /* Define to 1 if you have the `sysctl' function. */
 #define EVENT__HAVE_SYSCTL 1
 
@@ -417,21 +351,6 @@
 /* Define if TAILQ_FOREACH is defined in <sys/queue.h> */
 #define EVENT__HAVE_TAILQFOREACH 1
 
-/* if you have Solaris LWP (thr) package */
-/* #undef EVENT__HAVE_THR */
-
-/* Define to 1 if you have the <thread.h> header file. */
-/* #undef EVENT__HAVE_THREAD_H */
-
-/* Define to 1 if you have the `thr_getconcurrency' function. */
-/* #undef EVENT__HAVE_THR_GETCONCURRENCY */
-
-/* Define to 1 if you have the `thr_setconcurrency' function. */
-/* #undef EVENT__HAVE_THR_SETCONCURRENCY */
-
-/* Define to 1 if you have the `thr_yield' function. */
-/* #undef EVENT__HAVE_THR_YIELD */
-
 /* Define if timeradd is defined in <sys/time.h> */
 #define EVENT__HAVE_TIMERADD 1
 
@@ -480,27 +399,15 @@
 /* Define if kqueue works correctly with pipes */
 #define EVENT__HAVE_WORKING_KQUEUE 1
 
-/* define if select implicitly yields */
-#define EVENT__HAVE_YIELDING_SELECT 1
-
 /* Define to 1 if you have the <zlib.h> header file. */
 #define EVENT__HAVE_ZLIB_H 1
-
-/* define to 1 if library is thread safe */
-#define EVENT__LDAP_API_FEATURE_X_OPENLDAP_THREAD_SAFE 1
 
 /* Define to the sub-directory in which libtool stores uninstalled libraries.
    */
 #define EVENT__LT_OBJDIR ".libs/"
 
-/* Define to 1 if your C compiler doesn't accept -c and -o together. */
-/* #undef EVENT__NO_MINUS_C_MINUS_O */
-
-/* define if you have (or want) no threads */
-/* #undef EVENT__NO_THREADS */
-
 /* Numeric representation of the version */
-#define EVENT__NUMERIC_VERSION 0x02010301
+#define EVENT__NUMERIC_VERSION 0x02010500
 
 /* Name of package */
 #define EVENT__PACKAGE "libevent"
@@ -512,7 +419,7 @@
 #define EVENT__PACKAGE_NAME "libevent"
 
 /* Define to the full name and version of this package. */
-#define EVENT__PACKAGE_STRING "libevent 2.1.3-alpha-dev"
+#define EVENT__PACKAGE_STRING "libevent 2.1.5-beta"
 
 /* Define to the one symbol short name of this package. */
 #define EVENT__PACKAGE_TARNAME "libevent"
@@ -521,23 +428,17 @@
 #define EVENT__PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define EVENT__PACKAGE_VERSION "2.1.3-alpha-dev"
+#define EVENT__PACKAGE_VERSION "2.1.5-beta"
 
-/* enable thread safety */
-#define EVENT__REENTRANT 1
-
-/* define if sched_yield yields the entire process */
-/* #undef EVENT__REPLACE_BROKEN_YIELD */
+/* Define to necessary symbol if this constant uses a non-standard name on
+   your system. */
+/* #undef EVENT__PTHREAD_CREATE_JOINABLE */
 
 /* The size of `int', as computed by sizeof. */
 #define EVENT__SIZEOF_INT 4
 
-#ifdef _LP64
 /* The size of `long', as computed by sizeof. */
 #define EVENT__SIZEOF_LONG 8
-#else
-#define EVENT__SIZEOF_LONG 4
-#endif
 
 /* The size of `long long', as computed by sizeof. */
 #define EVENT__SIZEOF_LONG_LONG 8
@@ -545,44 +446,31 @@
 /* The size of `off_t', as computed by sizeof. */
 #define EVENT__SIZEOF_OFF_T 8
 
-#ifdef _LP64
 /* The size of `pthread_t', as computed by sizeof. */
 #define EVENT__SIZEOF_PTHREAD_T 8
-#else
-#define EVENT__SIZEOF_PTHREAD_T 4
-#endif
 
 /* The size of `short', as computed by sizeof. */
 #define EVENT__SIZEOF_SHORT 2
 
-#ifdef _LP64
 /* The size of `size_t', as computed by sizeof. */
 #define EVENT__SIZEOF_SIZE_T 8
-#else
-#define EVENT__SIZEOF_SIZE_T 4
-#endif
 
-#ifdef _LP64
 /* The size of `void *', as computed by sizeof. */
 #define EVENT__SIZEOF_VOID_P 8
-#else
-#define EVENT__SIZEOF_VOID_P 4
-#endif
 
 /* Define to 1 if you have the ANSI C header files. */
 #define EVENT__STDC_HEADERS 1
-
-/* enable thread safety */
-#define EVENT__THREADSAFE 1
-
-/* enable thread safety */
-#define EVENT__THREAD_SAFE 1
 
 /* Define to 1 if you can safely include both <sys/time.h> and <time.h>. */
 #define EVENT__TIME_WITH_SYS_TIME 1
 
 /* Version number of package */
-#define EVENT__VERSION "2.1.3-alpha-dev"
+#define EVENT__VERSION "2.1.5-beta"
+
+/* Enable large inode numbers on Mac OS X 10.5.  */
+#ifndef EVENT___DARWIN_USE_64_BIT_INODE
+# define EVENT___DARWIN_USE_64_BIT_INODE 1
+#endif
 
 /* Number of bits in a file offset, on hosts where this is settable. */
 /* #undef EVENT___FILE_OFFSET_BITS */
@@ -599,18 +487,6 @@
 
 /* Define to 1 if you need to in order for `stat' and other things to work. */
 /* #undef EVENT___POSIX_SOURCE */
-
-/* enable thread safety */
-#define EVENT___REENTRANT 1
-
-/* enable thread safety */
-#define EVENT___SGI_MP_SOURCE 1
-
-/* enable thread safety */
-#define EVENT___THREADSAFE 1
-
-/* enable thread safety */
-#define EVENT___THREAD_SAFE 1
 
 /* Define to 500 only on HP-UX. */
 /* #undef EVENT___XOPEN_SOURCE */

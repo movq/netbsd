@@ -1,4 +1,4 @@
-/*	$NetBSD: numtoa.c,v 1.1.1.3 2015/10/23 17:47:45 christos Exp $	*/
+/*	$NetBSD: numtoa.c,v 1.1.1.3.2.2 2015/11/07 22:26:46 snj Exp $	*/
 
 #include "config.h"
 

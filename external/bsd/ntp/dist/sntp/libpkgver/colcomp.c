@@ -1,4 +1,4 @@
-/*	$NetBSD: colcomp.c,v 1.1.1.2 2015/07/10 13:11:13 christos Exp $	*/
+/*	$NetBSD: colcomp.c,v 1.1.1.2.2.2 2015/11/07 22:26:44 snj Exp $	*/
 
 /* COLLATE COMPARE, COMPARES DIGITS NUMERICALLY AND OTHERS IN ASCII */
 

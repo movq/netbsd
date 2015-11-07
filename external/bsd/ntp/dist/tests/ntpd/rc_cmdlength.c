@@ -1,4 +1,4 @@
-/*	$NetBSD: rc_cmdlength.c,v 1.1.1.1 2015/10/23 17:47:45 christos Exp $	*/
+/*	$NetBSD: rc_cmdlength.c,v 1.1.1.1.2.2 2015/11/07 22:26:47 snj Exp $	*/
 
 #include "config.h"
 
