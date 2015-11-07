@@ -1,4 +1,4 @@
-/*	$NetBSD: bug-2803.c,v 1.1.1.2 2015/07/10 13:11:13 christos Exp $	*/
+/*	$NetBSD: bug-2803.c,v 1.1.1.2.4.2 2015/11/07 22:46:27 snj Exp $	*/
 
 #include <config.h>
 
