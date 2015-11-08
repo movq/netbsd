@@ -1,4 +1,4 @@
-/*	$NetBSD: pkgver.h,v 1.1.1.2 2015/07/10 13:11:13 christos Exp $	*/
+/*	$NetBSD: pkgver.h,v 1.1.1.2.10.2 2015/11/08 01:55:35 riz Exp $	*/
 
 /*
  * 

@@ -1,4 +1,4 @@
-/*	$NetBSD: decodenetnum.c,v 1.1.1.3 2015/10/23 17:47:45 christos Exp $	*/
+/*	$NetBSD: decodenetnum.c,v 1.1.1.3.10.2 2015/11/08 01:55:36 riz Exp $	*/
 
 #include "config.h"
 #include "ntp_stdlib.h"
