@@ -1,4 +1,4 @@
-/*	$NetBSD: unity_internals.h,v 1.1.1.3 2015/10/23 17:47:43 christos Exp $	*/
+/*	$NetBSD: unity_internals.h,v 1.1.1.3.6.2 2015/11/08 00:16:08 snj Exp $	*/
 
 /* ==========================================
     Unity Project - A Test Framework for C

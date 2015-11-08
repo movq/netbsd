@@ -1,4 +1,4 @@
-/*	$NetBSD: unity_fixture_internals.h,v 1.1.1.2 2015/07/10 13:11:13 christos Exp $	*/
+/*	$NetBSD: unity_fixture_internals.h,v 1.1.1.2.6.2 2015/11/08 00:16:08 snj Exp $	*/
 
 //- Copyright (c) 2010 James Grenning and Contributed to Unity Project
 /* ==========================================

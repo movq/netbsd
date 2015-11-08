@@ -1,4 +1,4 @@
-/*	$NetBSD: refidsmear.h,v 1.1.1.2 2015/07/10 13:11:03 christos Exp $	*/
+/*	$NetBSD: refidsmear.h,v 1.1.1.2.6.2 2015/11/08 00:15:57 snj Exp $	*/
 
 
 extern l_fp	convertRefIDToLFP(uint32_t r);

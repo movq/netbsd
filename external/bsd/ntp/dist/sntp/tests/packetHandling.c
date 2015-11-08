@@ -1,4 +1,4 @@
-/*	$NetBSD: packetHandling.c,v 1.1.1.3 2015/10/23 17:47:43 christos Exp $	*/
+/*	$NetBSD: packetHandling.c,v 1.1.1.3.6.2 2015/11/08 00:16:07 snj Exp $	*/
 
 #include "config.h"
 #include "ntp_debug.h"

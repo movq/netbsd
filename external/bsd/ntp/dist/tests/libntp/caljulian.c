@@ -1,4 +1,4 @@
-/*	$NetBSD: caljulian.c,v 1.1.1.3 2015/10/23 17:47:45 christos Exp $	*/
+/*	$NetBSD: caljulian.c,v 1.1.1.3.6.2 2015/11/08 00:16:08 snj Exp $	*/
 
 #include "config.h"
 
