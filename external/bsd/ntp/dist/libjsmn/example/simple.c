@@ -1,4 +1,4 @@
-/*	$NetBSD: simple.c,v 1.1.1.2 2015/07/10 13:11:03 christos Exp $	*/
+/*	$NetBSD: simple.c,v 1.1.1.2.8.2 2015/11/08 01:51:06 riz Exp $	*/
 
 #include <stdio.h>
 #include <string.h>
