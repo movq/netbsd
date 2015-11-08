@@ -1,4 +1,4 @@
-/*	$NetBSD: kodDatabase.c,v 1.1.1.3 2015/10/23 17:47:43 christos Exp $	*/
+/*	$NetBSD: kodDatabase.c,v 1.1.1.3.10.2 2015/11/08 01:55:35 riz Exp $	*/
 
 #include "config.h"
 
