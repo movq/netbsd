@@ -1,4 +1,4 @@
-/*	$NetBSD: xmlstats.c,v 1.1 2015/12/17 03:21:57 christos Exp $	*/
+/*	$NetBSD: xmlstats.c,v 1.1.1.1 2015/12/17 03:21:57 christos Exp $	*/
 
 /*
  * Copyright (C) 2015  Internet Systems Consortium, Inc. ("ISC")
