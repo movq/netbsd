@@ -1,4 +1,4 @@
-/*	$Id: test-strtonum.c,v 1.1 2015/12/17 21:58:48 christos Exp $	*/
+/*	$Id: test-strtonum.c,v 1.1.1.1 2015/12/17 21:58:48 christos Exp $	*/
 /*
  * Copyright (c) 2015 Ingo Schwarze <schwarze@openbsd.org>
  *

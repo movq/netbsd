@@ -6,7 +6,7 @@ int dummy;
 
 #else
 
-/*	$Id: compat_fts.c,v 1.1 2015/12/17 21:58:48 christos Exp $	*/
+/*	$Id: compat_fts.c,v 1.1.1.1 2015/12/17 21:58:48 christos Exp $	*/
 /*	$OpenBSD: fts.c,v 1.50 2015/01/16 16:48:51 deraadt Exp $	*/
 
 /*-

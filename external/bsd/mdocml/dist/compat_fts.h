@@ -1,5 +1,5 @@
 /*	$OpenBSD: fts.h,v 1.14 2012/12/05 23:19:57 deraadt Exp $	*/
-/*	$NetBSD: compat_fts.h,v 1.1 2015/12/17 21:58:48 christos Exp $	*/
+/*	$NetBSD: compat_fts.h,v 1.1.1.1 2015/12/17 21:58:48 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993

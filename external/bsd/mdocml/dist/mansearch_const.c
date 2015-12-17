@@ -1,4 +1,4 @@
-/*	$Id: mansearch_const.c,v 1.1 2015/12/17 21:58:48 christos Exp $ */
+/*	$Id: mansearch_const.c,v 1.1.1.1 2015/12/17 21:58:48 christos Exp $ */
 /*
  * Copyright (c) 2014 Ingo Schwarze <schwarze@openbsd.org>
  *
