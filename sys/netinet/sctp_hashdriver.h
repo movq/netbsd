@@ -1,5 +1,5 @@
 /*	$KAME: sctp_hashdriver.h,v 1.4 2003/11/25 06:40:52 ono Exp $	*/
-/*	$NetBSD: sctp_hashdriver.h,v 1.1 2015/10/13 21:28:35 rjs Exp $ */
+/*	$NetBSD: sctp_hashdriver.h,v 1.1.2.2 2015/12/27 12:10:07 skrll Exp $ */
 
 #ifndef __SCTP_HASHDRIVER_H__
 #define __SCTP_HASHDRIVER_H__

@@ -1,4 +1,4 @@
-#	$NetBSD: drvctl.ioconf,v 1.1 2015/12/07 11:38:46 pgoyette Exp $
+#	$NetBSD: drvctl.ioconf,v 1.1.2.2 2015/12/27 12:10:06 skrll Exp $
 
 ioconf		drvctl
 

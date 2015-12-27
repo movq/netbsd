@@ -1,4 +1,4 @@
-/* $NetBSD: fdtvar.h,v 1.4 2015/12/22 22:19:07 jmcneill Exp $ */
+/* $NetBSD: fdtvar.h,v 1.4.2.2 2015/12/27 12:09:49 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

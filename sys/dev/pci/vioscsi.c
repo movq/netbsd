@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vioscsi.c,v 1.6 2015/11/01 08:55:05 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vioscsi.c,v 1.6.2.2 2015/12/27 12:09:57 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

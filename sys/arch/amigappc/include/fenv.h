@@ -1,3 +1,3 @@
-/*	$NetBSD: fenv.h,v 1.1 2015/12/20 16:23:38 christos Exp $	*/
+/*	$NetBSD: fenv.h,v 1.1.2.2 2015/12/27 12:09:29 skrll Exp $	*/
 
 #include <powerpc/fenv.h>

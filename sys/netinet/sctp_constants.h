@@ -1,5 +1,5 @@
 /*	$KAME: sctp_constants.h,v 1.17 2005/03/06 16:04:17 itojun Exp $	*/
-/*	$NetBSD: sctp_constants.h,v 1.1 2015/10/13 21:28:35 rjs Exp $ */
+/*	$NetBSD: sctp_constants.h,v 1.1.2.2 2015/12/27 12:10:07 skrll Exp $ */
 
 #ifndef __SCTP_CONSTANTS_H__
 #define __SCTP_CONSTANTS_H__

@@ -1,4 +1,4 @@
-/*	$NetBSD: cortex_init.S,v 1.1 2015/11/25 04:03:34 marty Exp $	*/
+/*	$NetBSD: cortex_init.S,v 1.1.2.2 2015/12/27 12:09:30 skrll Exp $	*/
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.

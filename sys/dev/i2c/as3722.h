@@ -1,4 +1,4 @@
-/* $NetBSD: as3722.h,v 1.2 2015/11/21 12:19:47 jmcneill Exp $ */
+/* $NetBSD: as3722.h,v 1.2.2.2 2015/12/27 12:09:49 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

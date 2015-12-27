@@ -1,5 +1,5 @@
 /*	$KAME: sctp_input.c,v 1.28 2005/04/21 18:36:21 nishida Exp $	*/
-/*	$NetBSD: sctp_input.c,v 1.1 2015/10/13 21:28:35 rjs Exp $	*/
+/*	$NetBSD: sctp_input.c,v 1.1.2.2 2015/12/27 12:10:07 skrll Exp $	*/
 
 /*
  * Copyright (C) 2002, 2003, 2004 Cisco Systems Inc,
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sctp_input.c,v 1.1 2015/10/13 21:28:35 rjs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sctp_input.c,v 1.1.2.2 2015/12/27 12:10:07 skrll Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ipsec.h"

@@ -1,4 +1,4 @@
-/*	$NetBSD: sctp_indata.c,v 1.2 2015/12/13 18:53:57 christos Exp $ */
+/*	$NetBSD: sctp_indata.c,v 1.2.2.2 2015/12/27 12:10:07 skrll Exp $ */
 /*	$KAME: sctp_indata.c,v 1.36 2005/03/06 16:04:17 itojun Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sctp_indata.c,v 1.2 2015/12/13 18:53:57 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sctp_indata.c,v 1.2.2.2 2015/12/27 12:10:07 skrll Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ipsec.h"

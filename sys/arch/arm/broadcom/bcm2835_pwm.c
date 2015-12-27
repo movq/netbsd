@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_pwm.c,v 1.1 2015/11/21 07:41:29 mlelstv Exp $ */
+/*	$NetBSD: bcm2835_pwm.c,v 1.1.2.2 2015/12/27 12:09:30 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_pwm.c,v 1.1 2015/11/21 07:41:29 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_pwm.c,v 1.1.2.2 2015/12/27 12:09:30 skrll Exp $");
 
 #include "bcmdmac.h"
 

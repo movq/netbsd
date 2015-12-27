@@ -1,4 +1,4 @@
-/* $NetBSD: gic_fdt.c,v 1.1 2015/12/13 17:45:37 jmcneill Exp $ */
+/* $NetBSD: gic_fdt.c,v 1.1.2.2 2015/12/27 12:09:30 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gic_fdt.c,v 1.1 2015/12/13 17:45:37 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gic_fdt.c,v 1.1.2.2 2015/12/27 12:09:30 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

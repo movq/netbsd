@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2015/11/16 23:27:08 pooka Exp $
+#	$NetBSD: Makefile,v 1.3.2.2 2015/12/27 12:10:12 skrll Exp $
 #
 
 RUMPTOP=${TOPRUMP}

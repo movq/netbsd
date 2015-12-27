@@ -1,4 +1,4 @@
-# $NetBSD: genassym.cf,v 1.1 2015/12/15 04:53:55 marty Exp $
+# $NetBSD: genassym.cf,v 1.1.2.2 2015/12/27 12:09:34 skrll Exp $
 
 #-
 # Copyright (c) 2013 The NetBSD Foundation, Inc.

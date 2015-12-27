@@ -1,5 +1,5 @@
 /*	$KAME: sctp_usrreq.c,v 1.50 2005/06/16 20:45:29 jinmei Exp $	*/
-/*	$NetBSD: sctp_usrreq.c,v 1.2 2015/12/13 18:58:13 christos Exp $	*/
+/*	$NetBSD: sctp_usrreq.c,v 1.2.2.2 2015/12/27 12:10:07 skrll Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002, 2003, 2004 Cisco Systems, Inc.
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sctp_usrreq.c,v 1.2 2015/12/13 18:58:13 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sctp_usrreq.c,v 1.2.2.2 2015/12/27 12:10:07 skrll Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_inet.h"
