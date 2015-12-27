@@ -1,4 +1,4 @@
-/*	$NetBSD: auxio_sbus.c,v 1.1 2015/10/06 16:40:36 martin Exp $	*/
+/*	$NetBSD: auxio_sbus.c,v 1.1.2.2 2015/12/27 12:09:43 skrll Exp $	*/
 
 /*
  * Copyright (c) 2000, 2001, 2015 Matthew R. Green
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: auxio_sbus.c,v 1.1 2015/10/06 16:40:36 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: auxio_sbus.c,v 1.1.2.2 2015/12/27 12:09:43 skrll Exp $");
 
 #include "opt_auxio.h"
 

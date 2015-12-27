@@ -1,4 +1,4 @@
-/* $NetBSD: clk.h,v 1.1 2015/12/05 13:31:07 jmcneill Exp $ */
+/* $NetBSD: clk.h,v 1.1.2.2 2015/12/27 12:09:49 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

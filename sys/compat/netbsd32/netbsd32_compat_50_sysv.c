@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_compat_50_sysv.c,v 1.1 2015/12/03 10:38:21 pgoyette Exp $	*/
+/*	$NetBSD: netbsd32_compat_50_sysv.c,v 1.1.2.2 2015/12/27 12:09:47 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_50_sysv.c,v 1.1 2015/12/03 10:38:21 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_50_sysv.c,v 1.1.2.2 2015/12/27 12:09:47 skrll Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_sysv.h"

@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_mcfg.c,v 1.2 2015/10/11 21:49:22 christos Exp $	*/
+/*	$NetBSD: acpi_mcfg.c,v 1.2.2.2 2015/12/27 12:09:48 skrll Exp $	*/
 
 /*-
  * Copyright (C) 2015 NONAKA Kimihiro <nonaka@NetBSD.org>
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_mcfg.c,v 1.2 2015/10/11 21:49:22 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_mcfg.c,v 1.2.2.2 2015/12/27 12:09:48 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

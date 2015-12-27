@@ -1,4 +1,4 @@
-/* $NetBSD: exynos_fdt.c,v 1.2 2015/12/15 23:13:51 marty Exp $ */
+/* $NetBSD: exynos_fdt.c,v 1.2.2.2 2015/12/27 12:09:32 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "opt_exynos.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exynos_fdt.c,v 1.2 2015/12/15 23:13:51 marty Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exynos_fdt.c,v 1.2.2.2 2015/12/27 12:09:32 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

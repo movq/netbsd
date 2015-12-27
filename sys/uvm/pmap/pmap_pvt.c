@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap_pvt.c,v 1.2 2015/11/11 08:22:36 skrll Exp $	*/
+/*	$NetBSD: pmap_pvt.c,v 1.2.2.2 2015/12/27 12:10:19 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pmap_pvt.c,v 1.2 2015/11/11 08:22:36 skrll Exp $");
+__RCSID("$NetBSD: pmap_pvt.c,v 1.2.2.2 2015/12/27 12:10:19 skrll Exp $");
 
 #include <sys/kmem.h>
 #include <sys/pserialize.h>

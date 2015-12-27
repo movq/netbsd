@@ -1,4 +1,4 @@
-#	$NetBSD: std.exynos,v 1.1 2015/12/06 00:31:24 marty Exp $
+#	$NetBSD: std.exynos,v 1.1.2.2 2015/12/27 12:09:34 skrll Exp $
 #
 # standard NetBSD/evbarm for EXYNOS options
 

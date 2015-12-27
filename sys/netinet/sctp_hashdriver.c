@@ -1,5 +1,5 @@
 /*	$KAME: sctp_hashdriver.c,v 1.6 2004/02/24 21:52:26 itojun Exp $	*/
-/*	$NetBSD: sctp_hashdriver.c,v 1.1 2015/10/13 21:28:35 rjs Exp $	*/
+/*	$NetBSD: sctp_hashdriver.c,v 1.1.2.2 2015/12/27 12:10:07 skrll Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002, 2003, 2004 Cisco Systems, Inc.
@@ -33,7 +33,7 @@
  * SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sctp_hashdriver.c,v 1.1 2015/10/13 21:28:35 rjs Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sctp_hashdriver.c,v 1.1.2.2 2015/12/27 12:10:07 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

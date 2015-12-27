@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_socthermreg.h,v 1.1 2015/11/21 22:55:32 jmcneill Exp $ */
+/* $NetBSD: tegra_socthermreg.h,v 1.1.2.2 2015/12/27 12:09:31 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>

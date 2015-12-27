@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_mcfg.h,v 1.1 2015/10/02 05:22:52 msaitoh Exp $	*/
+/*	$NetBSD: acpi_mcfg.h,v 1.1.2.2 2015/12/27 12:09:48 skrll Exp $	*/
 
 /*-
  * Copyright (C) 2015 NONAKA Kimihiro <nonaka@NetBSD.org>

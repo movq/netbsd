@@ -1,4 +1,4 @@
-/*	$NetBSD: exynos_machdep.c,v 1.7 2015/12/21 04:58:50 marty Exp $ */
+/*	$NetBSD: exynos_machdep.c,v 1.7.2.2 2015/12/27 12:09:34 skrll Exp $ */
 
 /*
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exynos_machdep.c,v 1.7 2015/12/21 04:58:50 marty Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exynos_machdep.c,v 1.7.2.2 2015/12/27 12:09:34 skrll Exp $");
 
 #include "opt_evbarm_boardtype.h"
 #include "opt_exynos.h"
