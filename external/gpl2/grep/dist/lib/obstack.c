@@ -1,4 +1,4 @@
-/*	$NetBSD: obstack.c,v 1.1 2016/01/10 21:36:18 christos Exp $	*/
+/*	$NetBSD: obstack.c,v 1.1.1.1 2016/01/10 21:36:18 christos Exp $	*/
 
 /* obstack.c - subroutines used implicitly by object stack macros
    Copyright (C) 1988-1994,96,97,98,99 Free Software Foundation, Inc.

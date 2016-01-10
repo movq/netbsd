@@ -1,4 +1,4 @@
-/*	$NetBSD: explodename.c,v 1.1 2016/01/10 21:36:17 christos Exp $	*/
+/*	$NetBSD: explodename.c,v 1.1.1.1 2016/01/10 21:36:17 christos Exp $	*/
 
 /* Copyright (C) 1995-1998, 2000, 2001 Free Software Foundation, Inc.
    Contributed by Ulrich Drepper <drepper@gnu.ai.mit.edu>, 1995.

@@ -1,4 +1,4 @@
-/*	$NetBSD: savedir.c,v 1.1 2016/01/10 21:36:19 christos Exp $	*/
+/*	$NetBSD: savedir.c,v 1.1.1.1 2016/01/10 21:36:19 christos Exp $	*/
 
 /* savedir.c -- save the list of files in a directory in a string
    Copyright (C) 1990, 1997, 1998, 1999, 2000, 2001 Free Software Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: dcigettext.c,v 1.1 2016/01/10 21:36:18 christos Exp $	*/
+/*	$NetBSD: dcigettext.c,v 1.1.1.1 2016/01/10 21:36:18 christos Exp $	*/
 
 /* Implementation of the internal dcigettext function.
    Copyright (C) 1995-1999, 2000-2002 Free Software Foundation, Inc.

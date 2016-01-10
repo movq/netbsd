@@ -1,4 +1,4 @@
-/*	$NetBSD: gettextP.h,v 1.1 2016/01/10 21:36:17 christos Exp $	*/
+/*	$NetBSD: gettextP.h,v 1.1.1.1 2016/01/10 21:36:17 christos Exp $	*/
 
 /* Header describing internals of libintl library.
    Copyright (C) 1995-1999, 2000, 2001 Free Software Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: osdep.c,v 1.1 2016/01/10 21:36:18 christos Exp $	*/
+/*	$NetBSD: osdep.c,v 1.1.1.1 2016/01/10 21:36:18 christos Exp $	*/
 
 /* OS dependent parts of libintl.
    Copyright (C) 2001-2002 Free Software Foundation, Inc.

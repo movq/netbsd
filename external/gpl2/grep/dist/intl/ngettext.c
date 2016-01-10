@@ -1,4 +1,4 @@
-/*	$NetBSD: ngettext.c,v 1.1 2016/01/10 21:36:18 christos Exp $	*/
+/*	$NetBSD: ngettext.c,v 1.1.1.1 2016/01/10 21:36:18 christos Exp $	*/
 
 /* Implementation of ngettext(3) function.
    Copyright (C) 1995, 1997, 2000, 2001 Free Software Foundation, Inc.

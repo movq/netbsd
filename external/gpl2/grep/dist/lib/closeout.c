@@ -1,4 +1,4 @@
-/*	$NetBSD: closeout.c,v 1.1 2016/01/10 21:36:18 christos Exp $	*/
+/*	$NetBSD: closeout.c,v 1.1.1.1 2016/01/10 21:36:18 christos Exp $	*/
 
 /* closeout.c - close standard output
    Copyright (C) 1998, 1999, 2000, 2001 Free Software Foundation, Inc.

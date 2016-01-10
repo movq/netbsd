@@ -1,4 +1,4 @@
-/*	$NetBSD: xstrtol.h,v 1.1 2016/01/10 21:36:19 christos Exp $	*/
+/*	$NetBSD: xstrtol.h,v 1.1.1.1 2016/01/10 21:36:19 christos Exp $	*/
 
 #ifndef XSTRTOL_H_
 # define XSTRTOL_H_ 1

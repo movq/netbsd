@@ -1,4 +1,4 @@
-/*	$NetBSD: gmo.h,v 1.1 2016/01/10 21:36:18 christos Exp $	*/
+/*	$NetBSD: gmo.h,v 1.1.1.1 2016/01/10 21:36:18 christos Exp $	*/
 
 /* Description of GNU message catalog format: general file layout.
    Copyright (C) 1995, 1997, 2000, 2001 Free Software Foundation, Inc.

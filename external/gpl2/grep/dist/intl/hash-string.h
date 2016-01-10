@@ -1,4 +1,4 @@
-/*	$NetBSD: hash-string.h,v 1.1 2016/01/10 21:36:17 christos Exp $	*/
+/*	$NetBSD: hash-string.h,v 1.1.1.1 2016/01/10 21:36:17 christos Exp $	*/
 
 /* Description of GNU message catalog format: string hashing function.
    Copyright (C) 1995, 1997, 1998, 2000, 2001 Free Software Foundation, Inc.
