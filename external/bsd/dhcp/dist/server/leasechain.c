@@ -1,4 +1,4 @@
-/*	$NetBSD: leasechain.c,v 1.1 2016/01/10 19:44:48 christos Exp $	*/
+/*	$NetBSD: leasechain.c,v 1.1.1.1 2016/01/10 19:44:48 christos Exp $	*/
 /* leasechain.c
 
    Additional support for in-memory database support */
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: leasechain.c,v 1.1 2016/01/10 19:44:48 christos Exp $");
+__RCSID("$NetBSD: leasechain.c,v 1.1.1.1 2016/01/10 19:44:48 christos Exp $");
 
 /*! \file server\leasechaing.c
  *

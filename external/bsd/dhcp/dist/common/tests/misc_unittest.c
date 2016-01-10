@@ -1,4 +1,4 @@
-/*	$NetBSD: misc_unittest.c,v 1.1 2016/01/10 19:44:40 christos Exp $	*/
+/*	$NetBSD: misc_unittest.c,v 1.1.1.1 2016/01/10 19:44:40 christos Exp $	*/
 /*
  * Copyright (C) 2014 Internet Systems Consortium, Inc. ("ISC")
  *

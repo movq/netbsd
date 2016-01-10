@@ -1,4 +1,4 @@
-/*	$NetBSD: ldap_krb_helper.c,v 1.1 2016/01/10 19:44:48 christos Exp $	*/
+/*	$NetBSD: ldap_krb_helper.c,v 1.1.1.1 2016/01/10 19:44:48 christos Exp $	*/
 /* ldap_krb_helper.c
 
    Helper routings for allowing LDAP to read configuration with GSSAPI/krb auth */
