@@ -1,4 +1,4 @@
-/*	$NetBSD: dcgettext.c,v 1.1 2016/01/10 21:36:17 christos Exp $	*/
+/*	$NetBSD: dcgettext.c,v 1.1.1.1 2016/01/10 21:36:17 christos Exp $	*/
 
 /* Implementation of the dcgettext(3) function.
    Copyright (C) 1995-1999, 2000, 2001 Free Software Foundation, Inc.

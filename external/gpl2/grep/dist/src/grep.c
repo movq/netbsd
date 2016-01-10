@@ -1,4 +1,4 @@
-/*	$NetBSD: grep.c,v 1.1 2016/01/10 21:36:20 christos Exp $	*/
+/*	$NetBSD: grep.c,v 1.1.1.1 2016/01/10 21:36:20 christos Exp $	*/
 
 /* grep.c - main driver file for grep.
    Copyright 1992, 1997-1999, 2000 Free Software Foundation, Inc.

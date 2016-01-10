@@ -1,4 +1,4 @@
-/*	$NetBSD: l10nflist.c,v 1.1 2016/01/10 21:36:18 christos Exp $	*/
+/*	$NetBSD: l10nflist.c,v 1.1.1.1 2016/01/10 21:36:18 christos Exp $	*/
 
 /* Copyright (C) 1995-1999, 2000, 2001 Free Software Foundation, Inc.
    Contributed by Ulrich Drepper <drepper@gnu.ai.mit.edu>, 1995.

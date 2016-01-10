@@ -1,4 +1,4 @@
-/*	$NetBSD: strtoull.c,v 1.1 2016/01/10 21:36:19 christos Exp $	*/
+/*	$NetBSD: strtoull.c,v 1.1.1.1 2016/01/10 21:36:19 christos Exp $	*/
 
 /* Function to parse an `unsigned long long int' from text.
    Copyright (C) 1995, 1996, 1997, 1999 Free Software Foundation, Inc.

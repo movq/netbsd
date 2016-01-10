@@ -1,4 +1,4 @@
-/*	$NetBSD: dosbuf.c,v 1.1 2016/01/10 21:36:21 christos Exp $	*/
+/*	$NetBSD: dosbuf.c,v 1.1.1.1 2016/01/10 21:36:21 christos Exp $	*/
 
 /* Messy DOS-specific code for correctly treating binary, Unix text
    and DOS text files.
