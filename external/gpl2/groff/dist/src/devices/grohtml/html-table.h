@@ -1,4 +1,4 @@
-/*	$NetBSD: html-table.h,v 1.1 2016/01/13 18:41:49 christos Exp $	*/
+/*	$NetBSD: html-table.h,v 1.1.1.1 2016/01/13 18:41:49 christos Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 2002, 2003, 2004, 2005 Free Software Foundation, Inc.

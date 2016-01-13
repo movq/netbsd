@@ -1,4 +1,4 @@
-/*	$NetBSD: getcwd.c,v 1.1 2016/01/13 18:41:48 christos Exp $	*/
+/*	$NetBSD: getcwd.c,v 1.1.1.1 2016/01/13 18:41:48 christos Exp $	*/
 
 /* Copyright (C) 2000 Free Software Foundation, Inc.
      Written by James Clark (jjc@jclark.com)
