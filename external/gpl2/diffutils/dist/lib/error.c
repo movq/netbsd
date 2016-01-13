@@ -1,4 +1,4 @@
-/*	$NetBSD: error.c,v 1.1 2016/01/13 03:15:30 christos Exp $	*/
+/*	$NetBSD: error.c,v 1.1.1.1 2016/01/13 03:15:30 christos Exp $	*/
 
 /* Error handler for noninteractive utilities
    Copyright (C) 1990-1998, 2000, 2001 Free Software Foundation, Inc.

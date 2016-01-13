@@ -1,4 +1,4 @@
-/*	$NetBSD: fnmatch.c,v 1.1 2016/01/13 03:15:30 christos Exp $	*/
+/*	$NetBSD: fnmatch.c,v 1.1.1.1 2016/01/13 03:15:30 christos Exp $	*/
 
 /* Copyright 1991, 1992, 1993, 1996, 1997, 2000 Free Software Foundation, Inc.
 

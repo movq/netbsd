@@ -1,4 +1,4 @@
-/*	$NetBSD: hard-locale.h,v 1.1 2016/01/13 03:15:30 christos Exp $	*/
+/*	$NetBSD: hard-locale.h,v 1.1.1.1 2016/01/13 03:15:30 christos Exp $	*/
 
 #ifndef HARD_LOCALE_H_
 # define HARD_LOCALE_H_ 1
