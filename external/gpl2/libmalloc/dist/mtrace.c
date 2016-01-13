@@ -1,4 +1,4 @@
-/*	$NetBSD: mtrace.c,v 1.1 2016/01/13 21:42:18 christos Exp $	*/
+/*	$NetBSD: mtrace.c,v 1.1.1.1 2016/01/13 21:42:18 christos Exp $	*/
 
 /* More debugging hooks for `malloc'.
    Copyright (C) 1991, 1992, 1993, 1994 Free Software Foundation, Inc.

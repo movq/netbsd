@@ -1,4 +1,4 @@
-/*	$NetBSD: vm-limit.c,v 1.1 2016/01/13 21:42:18 christos Exp $	*/
+/*	$NetBSD: vm-limit.c,v 1.1.1.1 2016/01/13 21:42:18 christos Exp $	*/
 
 /* Functions for memory limit warnings.
    Copyright (C) 1990, 1992 Free Software Foundation, Inc.

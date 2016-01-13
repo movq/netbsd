@@ -1,4 +1,4 @@
-/*	$NetBSD: realloc.c,v 1.1 2016/01/13 21:42:18 christos Exp $	*/
+/*	$NetBSD: realloc.c,v 1.1.1.1 2016/01/13 21:42:18 christos Exp $	*/
 
 /* Change the size of a block allocated by `malloc'.
    Copyright 1990, 1991, 1992, 1993, 1994 Free Software Foundation, Inc.
