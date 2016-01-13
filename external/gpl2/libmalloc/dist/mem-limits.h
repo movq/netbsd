@@ -1,4 +1,4 @@
-/*	$NetBSD: mem-limits.h,v 1.1 2016/01/13 21:42:18 christos Exp $	*/
+/*	$NetBSD: mem-limits.h,v 1.1.1.1 2016/01/13 21:42:18 christos Exp $	*/
 
 /* Includes for memory limit warnings.
    Copyright (C) 1990, 1993, 1994 Free Software Foundation, Inc.

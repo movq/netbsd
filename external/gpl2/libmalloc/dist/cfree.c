@@ -1,4 +1,4 @@
-/*	$NetBSD: cfree.c,v 1.1 2016/01/13 21:42:18 christos Exp $	*/
+/*	$NetBSD: cfree.c,v 1.1.1.1 2016/01/13 21:42:18 christos Exp $	*/
 
 /* Copyright (C) 1991, 1993, 1994 Free Software Foundation, Inc.
 This file is part of the GNU C Library.
