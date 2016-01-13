@@ -1,4 +1,4 @@
-/*	$NetBSD: soelim.cpp,v 1.1 2016/01/13 18:41:49 christos Exp $	*/
+/*	$NetBSD: soelim.cpp,v 1.1.1.1 2016/01/13 18:41:49 christos Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 1989-1992, 2000, 2001, 2003, 2004, 2005

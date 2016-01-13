@@ -1,4 +1,4 @@
-/*	$NetBSD: parse.c,v 1.1 2016/01/13 18:41:49 christos Exp $	*/
+/*	$NetBSD: parse.c,v 1.1.1.1 2016/01/13 18:41:49 christos Exp $	*/
 
 /*
  * parse.c

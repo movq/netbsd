@@ -1,4 +1,4 @@
-/*	$NetBSD: hgraph.cpp,v 1.1 2016/01/13 18:41:49 christos Exp $	*/
+/*	$NetBSD: hgraph.cpp,v 1.1.1.1 2016/01/13 18:41:49 christos Exp $	*/
 
 /* Last non-groff version: hgraph.c  1.14 (Berkeley) 84/11/27
  *

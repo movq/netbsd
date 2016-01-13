@@ -1,4 +1,4 @@
-/*	$NetBSD: mtsm.h,v 1.1 2016/01/13 18:41:48 christos Exp $	*/
+/*	$NetBSD: mtsm.h,v 1.1.1.1 2016/01/13 18:41:48 christos Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 2003, 2004 Free Software Foundation, Inc.

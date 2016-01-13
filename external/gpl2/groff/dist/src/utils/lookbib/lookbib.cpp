@@ -1,4 +1,4 @@
-/*	$NetBSD: lookbib.cpp,v 1.1 2016/01/13 18:41:49 christos Exp $	*/
+/*	$NetBSD: lookbib.cpp,v 1.1.1.1 2016/01/13 18:41:49 christos Exp $	*/
 
 // -*- C++ -*-
 /* Copyright (C) 1989-1992, 2000, 2001, 2002, 2003

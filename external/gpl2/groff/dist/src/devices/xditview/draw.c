@@ -1,4 +1,4 @@
-/*	$NetBSD: draw.c,v 1.1 2016/01/13 18:41:49 christos Exp $	*/
+/*	$NetBSD: draw.c,v 1.1.1.1 2016/01/13 18:41:49 christos Exp $	*/
 
 /*
  * draw.c
