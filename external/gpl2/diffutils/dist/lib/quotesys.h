@@ -1,4 +1,4 @@
-/*	$NetBSD: quotesys.h,v 1.1 2016/01/13 03:15:30 christos Exp $	*/
+/*	$NetBSD: quotesys.h,v 1.1.1.1 2016/01/13 03:15:30 christos Exp $	*/
 
 /* quotesys.h -- declarations for quoting system arguments */
 

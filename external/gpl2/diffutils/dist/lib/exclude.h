@@ -1,4 +1,4 @@
-/*	$NetBSD: exclude.h,v 1.1 2016/01/13 03:15:30 christos Exp $	*/
+/*	$NetBSD: exclude.h,v 1.1.1.1 2016/01/13 03:15:30 christos Exp $	*/
 
 /* exclude.h -- declarations for excluding file names
    Copyright 1992, 1993, 1994, 1997, 1999, 2001 Free Software Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: getopt.h,v 1.1 2016/01/13 03:15:30 christos Exp $	*/
+/*	$NetBSD: getopt.h,v 1.1.1.1 2016/01/13 03:15:30 christos Exp $	*/
 
 /* Declarations for getopt.
    Copyright (C) 1989-1994, 1996-1999, 2001 Free Software Foundation, Inc.
