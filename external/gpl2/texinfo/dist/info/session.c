@@ -1,4 +1,4 @@
-/*	$NetBSD: session.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: session.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* session.c -- user windowing interface to Info.
    Id: session.c,v 1.16 2004/12/14 00:15:36 karl Exp 

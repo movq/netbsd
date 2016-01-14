@@ -1,4 +1,4 @@
-/*	$NetBSD: plural-exp.h,v 1.1 2016/01/14 00:11:28 christos Exp $	*/
+/*	$NetBSD: plural-exp.h,v 1.1.1.1 2016/01/14 00:11:28 christos Exp $	*/
 
 /* Expression parsing and evaluation for plural form selection.
    Copyright (C) 2000-2003 Free Software Foundation, Inc.

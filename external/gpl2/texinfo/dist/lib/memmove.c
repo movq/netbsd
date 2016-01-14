@@ -1,4 +1,4 @@
-/*	$NetBSD: memmove.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: memmove.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* memmove.c -- copy memory.
    Copy LENGTH bytes from SOURCE to DEST.  Does not null-terminate.

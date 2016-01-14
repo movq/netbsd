@@ -1,4 +1,4 @@
-/*	$NetBSD: xml.h,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: xml.h,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* xml.h -- xml output declarations.
    Id: xml.h,v 1.24 2004/11/26 00:48:35 karl Exp 

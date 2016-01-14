@@ -1,4 +1,4 @@
-/*	$NetBSD: xexit.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: xexit.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* xexit.c -- exit with attention to return values and closing stdout.
    Id: xexit.c,v 1.5 2004/04/11 17:56:46 karl Exp 

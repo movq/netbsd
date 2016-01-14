@@ -1,4 +1,4 @@
-/*	$NetBSD: window.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: window.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* window.c -- windows in Info.
    Id: window.c,v 1.4 2004/04/11 17:56:46 karl Exp 

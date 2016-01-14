@@ -1,4 +1,4 @@
-/*	$NetBSD: loadinfo.h,v 1.1 2016/01/14 00:11:27 christos Exp $	*/
+/*	$NetBSD: loadinfo.h,v 1.1.1.1 2016/01/14 00:11:27 christos Exp $	*/
 
 /* Copyright (C) 1996-1999, 2000-2003 Free Software Foundation, Inc.
    This file is part of the GNU C Library.

@@ -1,4 +1,4 @@
-/*	$NetBSD: insertion.h,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: insertion.h,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* insertion.h -- declarations for insertion.c.
    Id: insertion.h,v 1.10 2004/04/11 17:56:47 karl Exp 

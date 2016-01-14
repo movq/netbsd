@@ -1,4 +1,4 @@
-/*	$NetBSD: memcpy.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: memcpy.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* Copyright (C) 1995, 1997, 2000, 2003 Free Software Foundation, Inc.
 

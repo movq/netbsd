@@ -1,4 +1,4 @@
-/*	$NetBSD: getopt.h,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: getopt.h,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* getopt.h -- wrapper for gnulib getopt_.h.
    Id: getopt.h,v 1.6 2004/09/14 12:36:00 karl Exp 

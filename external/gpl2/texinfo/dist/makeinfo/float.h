@@ -1,4 +1,4 @@
-/*	$NetBSD: float.h,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: float.h,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* float.h -- declarations for the float environment.
    Id: float.h,v 1.5 2004/04/11 17:56:47 karl Exp 

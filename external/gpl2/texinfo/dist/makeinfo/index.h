@@ -1,4 +1,4 @@
-/*	$NetBSD: index.h,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: index.h,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* index.h -- declarations for index.c.
    Id: index.h,v 1.2 2004/04/11 17:56:47 karl Exp 

@@ -1,4 +1,4 @@
-/*	$NetBSD: tempname.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: tempname.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* tempname.c - generate the name of a temporary file.
 

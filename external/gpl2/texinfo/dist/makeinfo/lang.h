@@ -1,4 +1,4 @@
-/*	$NetBSD: lang.h,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: lang.h,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* lang.h -- declarations for language codes etc.
    Id: lang.h,v 1.6 2004/04/11 17:56:47 karl Exp 

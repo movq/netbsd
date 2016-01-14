@@ -1,4 +1,4 @@
-/*	$NetBSD: makeinfo.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: makeinfo.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* makeinfo -- convert Texinfo source into other formats.
    Id: makeinfo.c,v 1.74 2004/12/19 17:15:42 karl Exp 
