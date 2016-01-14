@@ -1,4 +1,4 @@
-/*	$NetBSD: partime.c,v 1.1 2016/01/14 03:05:06 christos Exp $	*/
+/*	$NetBSD: partime.c,v 1.1.1.1 2016/01/14 03:05:06 christos Exp $	*/
 
 /* Parse a string, yielding a struct partime that describes it.  */
 

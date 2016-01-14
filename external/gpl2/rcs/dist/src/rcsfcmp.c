@@ -1,4 +1,4 @@
-/*	$NetBSD: rcsfcmp.c,v 1.1 2016/01/14 03:05:06 christos Exp $	*/
+/*	$NetBSD: rcsfcmp.c,v 1.1.1.1 2016/01/14 03:05:06 christos Exp $	*/
 
 /* Compare working files, ignoring RCS keyword strings.  */
 

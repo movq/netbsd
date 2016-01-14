@@ -1,4 +1,4 @@
-/*	$NetBSD: rcsclean.c,v 1.1 2016/01/14 03:05:06 christos Exp $	*/
+/*	$NetBSD: rcsclean.c,v 1.1.1.1 2016/01/14 03:05:06 christos Exp $	*/
 
 /* Clean up working files.  */
 

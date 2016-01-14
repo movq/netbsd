@@ -1,4 +1,4 @@
-/*	$NetBSD: rcslex.c,v 1.1 2016/01/14 03:05:06 christos Exp $	*/
+/*	$NetBSD: rcslex.c,v 1.1.1.1 2016/01/14 03:05:06 christos Exp $	*/
 
 /* lexical analysis of RCS files */
 

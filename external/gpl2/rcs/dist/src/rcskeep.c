@@ -1,4 +1,4 @@
-/*	$NetBSD: rcskeep.c,v 1.1 2016/01/14 03:05:06 christos Exp $	*/
+/*	$NetBSD: rcskeep.c,v 1.1.1.1 2016/01/14 03:05:06 christos Exp $	*/
 
 /* Extract RCS keyword string values from working files.  */
 
