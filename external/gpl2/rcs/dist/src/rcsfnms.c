@@ -1,4 +1,4 @@
-/*	$NetBSD: rcsfnms.c,v 1.1 2016/01/14 03:05:06 christos Exp $	*/
+/*	$NetBSD: rcsfnms.c,v 1.1.1.1 2016/01/14 03:05:06 christos Exp $	*/
 
 /* RCS filename and pathname handling */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: rlog.c,v 1.1 2016/01/14 03:05:06 christos Exp $	*/
+/*	$NetBSD: rlog.c,v 1.1.1.1 2016/01/14 03:05:06 christos Exp $	*/
 
 /* Print log messages and other information about RCS files.  */
 
