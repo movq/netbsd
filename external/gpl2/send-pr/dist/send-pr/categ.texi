@@ -1,5 +1,5 @@
 @node Valid Categories
-@c $NetBSD: categ.texi,v 1.1 2016/01/14 21:06:13 christos Exp $
+@c $NetBSD: categ.texi,v 1.1.1.1 2016/01/14 21:06:13 christos Exp $
 @unnumberedsec Valid Categories
 @cindex valid categories
 @cindex example of a list of valid categories
