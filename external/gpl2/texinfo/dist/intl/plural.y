@@ -1,4 +1,4 @@
-/*	$NetBSD: plural.y,v 1.1 2016/01/14 00:11:28 christos Exp $	*/
+/*	$NetBSD: plural.y,v 1.1.1.1 2016/01/14 00:11:28 christos Exp $	*/
 
 %{
 /* Expression parsing for plural form selection.

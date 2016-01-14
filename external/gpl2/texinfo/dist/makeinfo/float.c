@@ -1,4 +1,4 @@
-/*	$NetBSD: float.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: float.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* float.c -- float environment functions.
    Id: float.c,v 1.8 2004/07/05 22:23:22 karl Exp 

@@ -1,4 +1,4 @@
-/*	$NetBSD: texindex.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: texindex.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* texindex -- sort TeX index dribble output into an actual index.
    Id: texindex.c,v 1.11 2004/04/11 17:56:47 karl Exp 

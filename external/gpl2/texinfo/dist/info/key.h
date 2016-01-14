@@ -1,4 +1,4 @@
-/*	$NetBSD: key.h,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: key.h,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* key.h -- Structure associating function names with numeric codes. */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: dgettext.c,v 1.1 2016/01/14 00:11:28 christos Exp $	*/
+/*	$NetBSD: dgettext.c,v 1.1.1.1 2016/01/14 00:11:28 christos Exp $	*/
 
 /* Implementation of the dgettext(3) function.
    Copyright (C) 1995-1997, 2000-2003 Free Software Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: echo-area.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: echo-area.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* echo-area.c -- how to read a line in the echo area.
    Id: echo-area.c,v 1.7 2004/12/14 00:15:36 karl Exp 

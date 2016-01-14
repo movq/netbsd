@@ -1,4 +1,4 @@
-/*	$NetBSD: files.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: files.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* files.c -- file-related functions for makeinfo.
    Id: files.c,v 1.5 2004/07/27 00:06:31 karl Exp 

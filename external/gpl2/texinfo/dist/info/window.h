@@ -1,4 +1,4 @@
-/*	$NetBSD: window.h,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: window.h,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* window.h -- Structure and flags used in manipulating Info windows.
    Id: window.h,v 1.3 2004/04/11 17:56:46 karl Exp 

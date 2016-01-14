@@ -1,4 +1,4 @@
-/*	$NetBSD: html.h,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: html.h,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* html.h -- declarations for html-related utilities.
    Id: html.h,v 1.6 2004/11/30 02:03:23 karl Exp 

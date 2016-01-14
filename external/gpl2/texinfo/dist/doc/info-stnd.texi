@@ -1,5 +1,5 @@
 \input texinfo.tex    @c -*-texinfo-*-
-@c $NetBSD: info-stnd.texi,v 1.1 2016/01/14 00:11:30 christos Exp $
+@c $NetBSD: info-stnd.texi,v 1.1.1.1 2016/01/14 00:11:30 christos Exp $
 @comment Id: info-stnd.texi,v 1.9 2004/12/14 16:58:15 karl Exp 
 @c We must \input texinfo.tex instead of texinfo, otherwise make
 @c distcheck in the Texinfo distribution fails, because the texinfo Info

@@ -1,4 +1,4 @@
-/*	$NetBSD: echo-area.h,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: echo-area.h,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* echo-area.h -- Functions used in reading information from the echo area.
    Id: echo-area.h,v 1.4 2004/08/07 22:03:08 karl Exp 

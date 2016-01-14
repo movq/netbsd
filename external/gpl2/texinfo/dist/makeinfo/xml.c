@@ -1,4 +1,4 @@
-/*	$NetBSD: xml.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: xml.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* xml.c -- xml output.
    Id: xml.c,v 1.52 2004/12/19 17:02:23 karl Exp 

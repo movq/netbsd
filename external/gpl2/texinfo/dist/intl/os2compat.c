@@ -1,4 +1,4 @@
-/*	$NetBSD: os2compat.c,v 1.1 2016/01/14 00:11:28 christos Exp $	*/
+/*	$NetBSD: os2compat.c,v 1.1.1.1 2016/01/14 00:11:28 christos Exp $	*/
 
 /* OS/2 compatibility functions.
    Copyright (C) 2001-2002 Free Software Foundation, Inc.

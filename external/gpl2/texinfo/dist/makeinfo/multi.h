@@ -1,4 +1,4 @@
-/*	$NetBSD: multi.h,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: multi.h,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* multi.h -- declarations for multi.c.
    Id: multi.h,v 1.1 2004/04/11 17:56:47 karl Exp 

@@ -1,4 +1,4 @@
-/*	$NetBSD: os2compat.h,v 1.1 2016/01/14 00:11:28 christos Exp $	*/
+/*	$NetBSD: os2compat.h,v 1.1.1.1 2016/01/14 00:11:28 christos Exp $	*/
 
 /* OS/2 compatibility defines.
    This file is intended to be included from config.h

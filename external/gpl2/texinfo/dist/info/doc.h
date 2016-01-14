@@ -1,4 +1,4 @@
-/*	$NetBSD: doc.h,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: doc.h,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* doc.h -- Structures associating function pointers with documentation.
    Id: doc.h,v 1.3 2004/04/11 17:56:45 karl Exp 

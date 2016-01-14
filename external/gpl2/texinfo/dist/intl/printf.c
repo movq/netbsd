@@ -1,4 +1,4 @@
-/*	$NetBSD: printf.c,v 1.1 2016/01/14 00:11:28 christos Exp $	*/
+/*	$NetBSD: printf.c,v 1.1.1.1 2016/01/14 00:11:28 christos Exp $	*/
 
 /* Formatted output to strings, using POSIX/XSI format strings with positions.
    Copyright (C) 2003 Free Software Foundation, Inc.

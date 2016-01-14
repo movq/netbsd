@@ -1,4 +1,4 @@
-/*	$NetBSD: sectioning.c,v 1.1 2016/01/14 00:11:29 christos Exp $	*/
+/*	$NetBSD: sectioning.c,v 1.1.1.1 2016/01/14 00:11:29 christos Exp $	*/
 
 /* sectioning.c -- for @chapter, @section, ..., @contents ...
    Id: sectioning.c,v 1.25 2004/07/05 22:23:23 karl Exp 
