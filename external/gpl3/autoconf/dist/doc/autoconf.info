@@ -1655,7 +1655,7 @@ Using them is optional.
 
      For example, this line in `configure.ac':
 
-          AC_REVISION([$Revision: 1.1 $])
+          AC_REVISION([$Revision: 1.1.1.1 $])
 
      produces this in `configure':
 
