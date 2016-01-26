@@ -1,4 +1,4 @@
-/* $NetBSD: mdsetimage.c,v 1.1 2016/01/26 17:27:00 christos Exp $ */
+/* $NetBSD: mdsetimage.c,v 1.1.1.1 2016/01/26 17:27:00 christos Exp $ */
 /* from: NetBSD: mdsetimage.c,v 1.15 2001/03/21 23:46:48 cgd Exp $ */
 
 /*
@@ -38,7 +38,7 @@
 #if !defined(lint)
 __COPYRIGHT("@(#) Copyright (c) 1996\
  Christopher G. Demetriou.  All rights reserved.");
-__RCSID("$NetBSD: mdsetimage.c,v 1.1 2016/01/26 17:27:00 christos Exp $");
+__RCSID("$NetBSD: mdsetimage.c,v 1.1.1.1 2016/01/26 17:27:00 christos Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
