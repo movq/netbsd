@@ -1,5 +1,5 @@
 /*	Id: softfloat.h,v 1.2 2015/11/13 12:47:09 ragge Exp 	*/	
-/*	$NetBSD: softfloat.h,v 1.1 2016/02/09 20:29:20 plunky Exp $	*/
+/*	$NetBSD: softfloat.h,v 1.1.1.1 2016/02/09 20:29:20 plunky Exp $	*/
 
 /*
  * Copyright (c) 2015 Anders Magnusson. All rights reserved.

@@ -1,5 +1,5 @@
 /*	Id: osdefs.h	*/	
-/*	$NetBSD: osdefs.h,v 1.1 2016/02/09 20:29:11 plunky Exp $	*/
+/*	$NetBSD: osdefs.h,v 1.1.1.1 2016/02/09 20:29:11 plunky Exp $	*/
 
 #define CPPADD			\
 	"-D__NetBSD__",

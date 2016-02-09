@@ -8,9 +8,9 @@ diff -u -p -u -r1.196 -r1.197
 +++ cpp.c	19 Oct 2014 17:40:36 -0000	1.197
 @@ -1,4 +1,4 @@
 -/*	Id: cpp.c,v 1.196 2014/10/18 15:02:03 ragge Exp 	*/	
--/*	$NetBSD: stdio.diff,v 1.1 2016/02/09 20:28:45 plunky Exp $	*/
+-/*	$NetBSD: stdio.diff,v 1.1.1.1 2016/02/09 20:28:45 plunky Exp $	*/
 +/*	Id: cpp.c,v 1.197 2014/10/19 17:40:36 ragge Exp 	*/	
-+/*	$NetBSD: stdio.diff,v 1.1 2016/02/09 20:28:45 plunky Exp $	*/
++/*	$NetBSD: stdio.diff,v 1.1.1.1 2016/02/09 20:28:45 plunky Exp $	*/
  
  /*
   * Copyright (c) 2004,2010 Anders Magnusson (ragge@ludd.luth.se).
@@ -243,9 +243,9 @@ diff -u -p -u -r1.70 -r1.71
 +++ cpp.h	19 Oct 2014 17:40:36 -0000	1.71
 @@ -1,4 +1,4 @@
 -/*	Id: cpp.h,v 1.70 2014/10/18 15:02:03 ragge Exp 	*/	
--/*	$NetBSD: stdio.diff,v 1.1 2016/02/09 20:28:45 plunky Exp $	*/
+-/*	$NetBSD: stdio.diff,v 1.1.1.1 2016/02/09 20:28:45 plunky Exp $	*/
 +/*	Id: cpp.h,v 1.71 2014/10/19 17:40:36 ragge Exp 	*/	
-+/*	$NetBSD: stdio.diff,v 1.1 2016/02/09 20:28:45 plunky Exp $	*/
++/*	$NetBSD: stdio.diff,v 1.1.1.1 2016/02/09 20:28:45 plunky Exp $	*/
  
  /*
   * Copyright (c) 2004,2010 Anders Magnusson (ragge@ludd.luth.se).
@@ -269,9 +269,9 @@ diff -u -p -u -r1.119 -r1.120
 +++ token.c	19 Oct 2014 17:40:36 -0000	1.120
 @@ -1,4 +1,4 @@
 -/*	Id: token.c,v 1.119 2014/10/18 15:02:03 ragge Exp 	*/	
--/*	$NetBSD: stdio.diff,v 1.1 2016/02/09 20:28:45 plunky Exp $	*/
+-/*	$NetBSD: stdio.diff,v 1.1.1.1 2016/02/09 20:28:45 plunky Exp $	*/
 +/*	Id: token.c,v 1.120 2014/10/19 17:40:36 ragge Exp 	*/	
-+/*	$NetBSD: stdio.diff,v 1.1 2016/02/09 20:28:45 plunky Exp $	*/
++/*	$NetBSD: stdio.diff,v 1.1.1.1 2016/02/09 20:28:45 plunky Exp $	*/
  
  /*
   * Copyright (c) 2004,2009 Anders Magnusson. All rights reserved.

@@ -1,5 +1,5 @@
 /*	Id: osdefs.h	
-/*	$NetBSD: osdefs.h,v 1.1 2016/02/09 20:29:20 plunky Exp $
+/*	$NetBSD: osdefs.h,v 1.1.1.1 2016/02/09 20:29:20 plunky Exp $
 
 /*
  * CPPADD	a comma separated list of strings, to be added to

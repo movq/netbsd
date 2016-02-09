@@ -1,5 +1,5 @@
 /*	Id: platform.c,v 1.4 2011/05/27 06:32:57 plunky Exp 	*/	
-/*	$NetBSD: platform.c,v 1.1 2016/02/09 20:29:12 plunky Exp $	*/
+/*	$NetBSD: platform.c,v 1.1.1.1 2016/02/09 20:29:12 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2011 Joerg Sonnenberger <joerg@NetBSD.org>.

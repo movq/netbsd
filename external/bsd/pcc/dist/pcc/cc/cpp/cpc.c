@@ -1,5 +1,5 @@
 /*      Id: cpc.c,v 1.7 2016/01/10 16:17:45 ragge Exp       */	
-/*      $NetBSD: cpc.c,v 1.1 2016/02/09 20:28:42 plunky Exp $      */
+/*      $NetBSD: cpc.c,v 1.1.1.1 2016/02/09 20:28:42 plunky Exp $      */
 
 /*
  * Copyright (c) 2014 Anders Magnusson (ragge@ludd.luth.se).

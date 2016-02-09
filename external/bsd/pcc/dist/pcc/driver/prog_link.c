@@ -1,5 +1,5 @@
 /*	Id	*/	
-/*	$NetBSD: prog_link.c,v 1.1 2016/02/09 20:29:13 plunky Exp $	*/
+/*	$NetBSD: prog_link.c,v 1.1.1.1 2016/02/09 20:29:13 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2014 Iain Hibbert.

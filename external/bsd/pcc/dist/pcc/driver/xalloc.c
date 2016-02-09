@@ -1,5 +1,5 @@
 /*	Id	*/	
-/*	$NetBSD: xalloc.c,v 1.1 2016/02/09 20:29:13 plunky Exp $	*/
+/*	$NetBSD: xalloc.c,v 1.1.1.1 2016/02/09 20:29:13 plunky Exp $	*/
 
 /*-
  * Copyright (c) 2011 Joerg Sonnenberger <joerg@NetBSD.org>.

@@ -1,5 +1,5 @@
 /*	Id: order.c,v 1.3 2014/12/27 21:18:19 ragge Exp 	*/	
-/*	$NetBSD: order.c,v 1.1 2016/02/09 20:28:39 plunky Exp $	*/
+/*	$NetBSD: order.c,v 1.1.1.1 2016/02/09 20:28:39 plunky Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
