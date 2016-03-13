@@ -1,4 +1,4 @@
-/*	$NetBSD: fetchlimit.c,v 1.1.1.1 2015/12/17 03:21:56 christos Exp $	*/
+/*	$NetBSD: fetchlimit.c,v 1.1.1.1.2.2 2016/03/13 08:00:28 martin Exp $	*/
 
 /*
  * Copyright (C) 2015  Internet Systems Consortium, Inc. ("ISC")
