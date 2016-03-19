@@ -1,4 +1,4 @@
-/*	$NetBSD: exynos_usbphy.c,v 1.1 2015/12/27 02:54:12 marty Exp $	*/
+/*	$NetBSD: exynos_usbphy.c,v 1.1.2.2 2016/03/19 11:29:57 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: exynos_usbphy.c,v 1.1 2015/12/27 02:54:12 marty Exp $");
+__KERNEL_RCSID(1, "$NetBSD: exynos_usbphy.c,v 1.1.2.2 2016/03/19 11:29:57 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

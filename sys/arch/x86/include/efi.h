@@ -1,4 +1,4 @@
-/*     $NetBSD: efi.h,v 1.1 2016/01/28 01:09:56 christos Exp $   */
+/*     $NetBSD: efi.h,v 1.1.2.2 2016/03/19 11:30:07 skrll Exp $   */
 
 /*-
  * Copyright (c) 2004 Marcel Moolenaar

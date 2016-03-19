@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu_startup.S,v 1.1 2016/01/29 01:54:14 macallan Exp $ */
+/*	$NetBSD: cpu_startup.S,v 1.1.2.2 2016/03/19 11:29:59 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Michael Lorenz
@@ -33,7 +33,7 @@
 #include <sys/endian.h>
 
 #include <mips/asm.h>
-RCSID("$NetBSD: cpu_startup.S,v 1.1 2016/01/29 01:54:14 macallan Exp $");
+RCSID("$NetBSD: cpu_startup.S,v 1.1.2.2 2016/03/19 11:29:59 skrll Exp $");
 
 #ifdef MULTIPROCESSOR
 

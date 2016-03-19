@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_unicode.c,v 1.2 2016/02/06 14:11:58 joerg Exp $	*/
+/*	$NetBSD: msdosfs_unicode.c,v 1.2.2.2 2016/03/19 11:30:31 skrll Exp $	*/
 
 /*
  * Unicode 5.0 case folding derived from

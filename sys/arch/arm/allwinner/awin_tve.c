@@ -1,4 +1,4 @@
-/* $NetBSD: awin_tve.c,v 1.1 2015/12/26 16:56:41 macallan Exp $ */
+/* $NetBSD: awin_tve.c,v 1.1.2.2 2016/03/19 11:29:55 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Michael Lorenz
@@ -32,7 +32,7 @@
 #include "opt_ddb.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: awin_tve.c,v 1.1 2015/12/26 16:56:41 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awin_tve.c,v 1.1.2.2 2016/03/19 11:29:55 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

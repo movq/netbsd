@@ -1,4 +1,4 @@
-/* $NetBSD: exynos_dwcmmc.c,v 1.2 2015/12/27 20:49:01 jmcneill Exp $ */
+/* $NetBSD: exynos_dwcmmc.c,v 1.2.2.2 2016/03/19 11:29:57 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exynos_dwcmmc.c,v 1.2 2015/12/27 20:49:01 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exynos_dwcmmc.c,v 1.2.2.2 2016/03/19 11:29:57 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

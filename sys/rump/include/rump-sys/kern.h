@@ -1,4 +1,4 @@
-/*	$NetBSD: kern.h,v 1.3 2016/02/08 18:18:19 pooka Exp $	*/
+/*	$NetBSD: kern.h,v 1.3.2.2 2016/03/19 11:30:36 skrll Exp $	*/
 
 /*
  * Copyright (c) 2007-2011 Antti Kantee.  All Rights Reserved.

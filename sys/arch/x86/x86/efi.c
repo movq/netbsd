@@ -1,4 +1,4 @@
-/*	$NetBSD: efi.c,v 1.2 2016/01/29 02:40:22 christos Exp $	*/
+/*	$NetBSD: efi.c,v 1.2.2.2 2016/03/19 11:30:07 skrll Exp $	*/
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -25,7 +25,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: efi.c,v 1.2 2016/01/29 02:40:22 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: efi.c,v 1.2.2.2 2016/03/19 11:30:07 skrll Exp $");
 #include <sys/kmem.h>
 #include <sys/param.h>
 #include <sys/systm.h>
