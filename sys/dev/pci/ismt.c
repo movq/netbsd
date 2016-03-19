@@ -60,7 +60,7 @@
 #if 0
 __FBSDID("$FreeBSD: head/sys/dev/ismt/ismt.c 266474 2014-05-20 19:55:06Z jimharris $");
 #endif
-__KERNEL_RCSID(0, "$NetBSD: ismt.c,v 1.3 2016/02/01 08:53:36 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ismt.c,v 1.3.2.2 2016/03/19 11:30:11 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

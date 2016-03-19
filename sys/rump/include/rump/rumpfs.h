@@ -1,4 +1,4 @@
-/*	$NetBSD: rumpfs.h,v 1.1 2016/02/02 12:22:23 pooka Exp $	*/
+/*	$NetBSD: rumpfs.h,v 1.1.2.2 2016/03/19 11:30:36 skrll Exp $	*/
 
 /*
  * Copyright (c) 2016 Antti Kantee.  All Rights Reserved.

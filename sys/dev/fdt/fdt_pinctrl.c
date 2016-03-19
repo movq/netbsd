@@ -1,4 +1,4 @@
-/* $NetBSD: fdt_pinctrl.c,v 1.2 2016/01/01 22:35:44 marty Exp $ */
+/* $NetBSD: fdt_pinctrl.c,v 1.2.2.2 2016/03/19 11:30:09 skrll Exp $ */
 
 /*-
  * Copyright (c) 2015 Martin Fouts
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdt_pinctrl.c,v 1.2 2016/01/01 22:35:44 marty Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdt_pinctrl.c,v 1.2.2.2 2016/03/19 11:30:09 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

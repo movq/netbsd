@@ -1,4 +1,4 @@
-/* $NetBSD: cpu_rng.h,v 1.1 2016/02/27 00:09:45 tls Exp $ */
+/* $NetBSD: cpu_rng.h,v 1.1.2.2 2016/03/19 11:30:07 skrll Exp $ */
 
 #ifndef _X86_CPU_RNG_H_
 #define _X86_CPU_RNG_H_

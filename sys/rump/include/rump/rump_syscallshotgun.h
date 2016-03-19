@@ -1,4 +1,4 @@
-/*	$NetBSD: rump_syscallshotgun.h,v 1.1 2016/01/31 23:14:34 pooka Exp $	*/
+/*	$NetBSD: rump_syscallshotgun.h,v 1.1.2.2 2016/03/19 11:30:36 skrll Exp $	*/
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
