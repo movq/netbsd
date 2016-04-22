@@ -1,4 +1,4 @@
-/*	$NetBSD: psref.h,v 1.1 2016/04/09 06:21:16 riastradh Exp $	*/
+/*	$NetBSD: psref.h,v 1.1.2.2 2016/04/22 15:44:19 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
