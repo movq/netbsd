@@ -1,4 +1,4 @@
-/*	$NetBSD: pslist.h,v 1.2 2016/04/11 03:46:37 riastradh Exp $	*/
+/*	$NetBSD: pslist.h,v 1.2.2.2 2016/04/22 15:44:19 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.

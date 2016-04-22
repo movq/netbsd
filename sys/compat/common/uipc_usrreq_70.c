@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_usrreq_70.c,v 1.1 2016/04/06 19:45:45 roy Exp $	*/
+/*	$NetBSD: uipc_usrreq_70.c,v 1.1.2.2 2016/04/22 15:44:12 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_usrreq_70.c,v 1.1 2016/04/06 19:45:45 roy Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_usrreq_70.c,v 1.1.2.2 2016/04/22 15:44:12 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/lwp.h>
