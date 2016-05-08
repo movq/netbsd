@@ -1,4 +1,4 @@
-/*	$NetBSD: tsmemcmp.c,v 1.1.1.1 2016/05/01 15:57:23 christos Exp $	*/
+/*	$NetBSD: tsmemcmp.c,v 1.1.1.1.2.2 2016/05/08 21:51:00 snj Exp $	*/
 
 /*
  * Copyright (C) 2004-2007, 2011, 2012  Internet Systems Consortium, Inc. ("ISC")
