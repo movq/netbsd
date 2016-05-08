@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_keyacc.h,v 1.1.1.1 2016/05/01 15:57:23 christos Exp $	*/
+/*	$NetBSD: ntp_keyacc.h,v 1.1.1.1.2.2 2016/05/08 21:51:00 snj Exp $	*/
 
 /*
  *  ntp_keyacc.h - key access stuff
