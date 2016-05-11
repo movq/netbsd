@@ -1,4 +1,4 @@
-/*	$NetBSD: safecast.h,v 1.1.1.2 2016/01/08 21:21:23 christos Exp $	*/
+/*	$NetBSD: safecast.h,v 1.1.1.2.8.2 2016/05/11 10:02:37 martin Exp $	*/
 
 #ifndef SAFECAST_H
 #define SAFECAST_H
