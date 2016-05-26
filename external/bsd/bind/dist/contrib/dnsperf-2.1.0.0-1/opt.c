@@ -1,4 +1,4 @@
-/*	$NetBSD: opt.c,v 1.1 2016/05/26 15:45:46 christos Exp $	*/
+/*	$NetBSD: opt.c,v 1.1.1.1 2016/05/26 15:45:46 christos Exp $	*/
 
 /*
  * Copyright (C) 2012 - 2015 Nominum, Inc.
