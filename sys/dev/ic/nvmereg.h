@@ -1,4 +1,4 @@
-/*	$NetBSD: nvmereg.h,v 1.1 2016/05/01 10:21:02 nonaka Exp $	*/
+/*	$NetBSD: nvmereg.h,v 1.1.2.2 2016/05/29 08:44:21 skrll Exp $	*/
 /*	$OpenBSD: nvmereg.h,v 1.10 2016/04/14 11:18:32 dlg Exp $ */
 
 /*

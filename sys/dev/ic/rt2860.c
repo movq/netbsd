@@ -1,4 +1,4 @@
-/*	$NetBSD: rt2860.c,v 1.10 2016/05/26 05:04:46 ozaki-r Exp $	*/
+/*	$NetBSD: rt2860.c,v 1.10.2.2 2016/05/29 08:44:21 skrll Exp $	*/
 /*	$OpenBSD: rt2860.c,v 1.90 2016/04/13 10:49:26 mpi Exp $	*/
 
 /*-
@@ -23,7 +23,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rt2860.c,v 1.10 2016/05/26 05:04:46 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rt2860.c,v 1.10.2.2 2016/05/29 08:44:21 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/sockio.h>

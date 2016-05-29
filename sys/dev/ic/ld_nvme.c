@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_nvme.c,v 1.1 2016/05/01 10:21:02 nonaka Exp $	*/
+/*	$NetBSD: ld_nvme.c,v 1.1.2.2 2016/05/29 08:44:21 skrll Exp $	*/
 
 /*-
  * Copyright (C) 2016 NONAKA Kimihiro <nonaka@netbsd.org>
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_nvme.c,v 1.1 2016/05/01 10:21:02 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld_nvme.c,v 1.1.2.2 2016/05/29 08:44:21 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: imx7_ioconfig.c,v 1.1 2016/05/17 06:44:46 ryo Exp $	*/
+/*	$NetBSD: imx7_ioconfig.c,v 1.1.2.2 2016/05/29 08:44:16 skrll Exp $	*/
 
 /*
  * Copyright (c) 2015 Ryo Shimizu <ryo@nerv.org>
@@ -26,7 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imx7_ioconfig.c,v 1.1 2016/05/17 06:44:46 ryo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imx7_ioconfig.c,v 1.1.2.2 2016/05/29 08:44:16 skrll Exp $");
 
 #include "opt_evbarm_boardtype.h"
 #include <sys/bus.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: imx7_machdep.c,v 1.2 2016/05/19 05:15:51 ryo Exp $	*/
+/*	$NetBSD: imx7_machdep.c,v 1.2.2.2 2016/05/29 08:44:16 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imx7_machdep.c,v 1.2 2016/05/19 05:15:51 ryo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imx7_machdep.c,v 1.2.2.2 2016/05/29 08:44:16 skrll Exp $");
 
 #include "opt_evbarm_boardtype.h"
 #include "opt_arm_debug.h"

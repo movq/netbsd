@@ -1,4 +1,4 @@
-/*	$NetBSD: strnvisx.c,v 1.1 2016/05/02 19:18:29 christos Exp $	*/
+/*	$NetBSD: strnvisx.c,v 1.1.2.2 2016/05/29 08:44:37 skrll Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2004 The NetBSD Foundation, Inc.
