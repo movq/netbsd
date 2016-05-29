@@ -1,4 +1,4 @@
-/* $NetBSD: semaphore.h,v 1.1 2016/04/24 19:48:29 dholland Exp $ */
+/* $NetBSD: semaphore.h,v 1.1.2.2 2016/05/29 08:44:40 skrll Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.

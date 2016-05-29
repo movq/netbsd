@@ -1,4 +1,4 @@
-/*	$NetBSD: imx7_snvs.c,v 1.1 2016/05/17 06:44:45 ryo Exp $	*/
+/*	$NetBSD: imx7_snvs.c,v 1.1.2.2 2016/05/29 08:44:16 skrll Exp $	*/
 
 /*
  * Copyright (c) 2014 Ryo Shimizu <ryo@nerv.org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imx7_snvs.c,v 1.1 2016/05/17 06:44:45 ryo Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imx7_snvs.c,v 1.1.2.2 2016/05/29 08:44:16 skrll Exp $");
 
 #include "locators.h"
 #include "opt_imx.h"

@@ -1,4 +1,4 @@
-/*	$NetBSD: rt2860var.h,v 1.2 2016/04/27 19:49:26 christos Exp $	*/
+/*	$NetBSD: rt2860var.h,v 1.2.2.2 2016/05/29 08:44:21 skrll Exp $	*/
 /*	$OpenBSD: rt2860var.h,v 1.23 2016/03/21 21:16:30 stsp Exp $	*/
 
 /*-

@@ -1,4 +1,4 @@
-/*	$NetBSD: nvme.c,v 1.2 2016/05/02 19:18:29 christos Exp $	*/
+/*	$NetBSD: nvme.c,v 1.2.2.2 2016/05/29 08:44:21 skrll Exp $	*/
 /*	$OpenBSD: nvme.c,v 1.49 2016/04/18 05:59:50 dlg Exp $ */
 
 /*
@@ -18,7 +18,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nvme.c,v 1.2 2016/05/02 19:18:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nvme.c,v 1.2.2.2 2016/05/29 08:44:21 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
