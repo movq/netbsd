@@ -1,4 +1,4 @@
-/*	$NetBSD: loop-bsd.c,v 1.11 2011/08/30 19:49:10 joerg Exp $	*/
+/*	$NetBSD: loop-bsd.c,v 1.12 2016/06/08 01:11:49 christos Exp $	*/
 
 /*
  * Copyright (c) 1993-95 Mats O Jansson.  All rights reserved.
@@ -24,9 +24,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/cdefs.h>
+#include "port.h"
 #ifndef lint
-__RCSID("$NetBSD: loop-bsd.c,v 1.11 2011/08/30 19:49:10 joerg Exp $");
+__RCSID("$NetBSD: loop-bsd.c,v 1.12 2016/06/08 01:11:49 christos Exp $");
 #endif
 
 #include <errno.h>
