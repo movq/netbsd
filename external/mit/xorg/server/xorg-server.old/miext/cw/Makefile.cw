@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.cw,v 1.1 2016/06/10 03:42:14 mrg Exp $
+#	$NetBSD: Makefile.cw,v 1.1.1.1 2016/06/10 03:42:14 mrg Exp $
 
 .PATH:          ${X11SRCDIR.xorg-server}/miext/cw
 SRCS.cw=	cw.c cw_ops.c cw_render.c
