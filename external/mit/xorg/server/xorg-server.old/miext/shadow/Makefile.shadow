@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.shadow,v 1.1 2016/06/10 03:42:14 mrg Exp $
+#	$NetBSD: Makefile.shadow,v 1.1.1.1 2016/06/10 03:42:14 mrg Exp $
 
 .PATH:          ${X11SRCDIR.xorg-server}/miext/shadow
 SRCS.shadow+=	shadow.c shalloc.c shpacked.c shplanar8.c shplanar.c \

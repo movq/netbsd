@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.glx,v 1.1 2016/06/10 03:42:14 mrg Exp $
+#	$NetBSD: Makefile.glx,v 1.1.1.1 2016/06/10 03:42:14 mrg Exp $
 
 .PATH:	${X11SRCDIR.xorg-server}/glx
 .PATH:	${X11SRCDIR.MesaLib}/src/mesa/glapi

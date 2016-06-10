@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2016/06/10 03:42:13 mrg Exp $
+#	$NetBSD: Makefile,v 1.1.1.1 2016/06/10 03:42:13 mrg Exp $
 
 LIBISPRIVATE=	yes
 PIXELSIZE=	8
