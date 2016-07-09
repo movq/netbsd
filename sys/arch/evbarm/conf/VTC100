@@ -1,5 +1,5 @@
 #
-#	$NetBSD: VTC100,v 1.1 2016/07/04 15:53:25 kiyohara Exp $
+#	$NetBSD: VTC100,v 1.1.2.2 2016/07/09 20:24:51 skrll Exp $
 #
 #	BEAGLEBONE -- TI AM335x board Kernel
 #
