@@ -47,7 +47,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: platinumfb.c,v 1.2 2016/07/06 13:28:34 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: platinumfb.c,v 1.2.2.2 2016/07/09 20:24:53 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

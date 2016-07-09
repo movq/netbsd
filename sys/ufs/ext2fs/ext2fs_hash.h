@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_hash.h,v 1.1 2016/06/24 17:21:30 christos Exp $	*/
+/*	$NetBSD: ext2fs_hash.h,v 1.1.2.2 2016/07/09 20:25:24 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.

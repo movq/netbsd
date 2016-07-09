@@ -1,4 +1,4 @@
-/*	$NetBSD: loongson_clock.c,v 1.1 2016/06/24 21:41:37 macallan Exp $	*/
+/*	$NetBSD: loongson_clock.c,v 1.1.2.2 2016/07/09 20:24:51 skrll Exp $	*/
 
 /*
  * Copyright (c) 2011, 2016 Michael Lorenz
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: loongson_clock.c,v 1.1 2016/06/24 21:41:37 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: loongson_clock.c,v 1.1.2.2 2016/07/09 20:24:51 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

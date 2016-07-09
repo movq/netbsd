@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_htree.c,v 1.1 2016/06/24 17:21:30 christos Exp $	*/
+/*	$NetBSD: ext2fs_htree.c,v 1.1.2.2 2016/07/09 20:25:24 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2010, 2012 Zheng Liu <lz@freebsd.org>
@@ -29,7 +29,7 @@
  * $FreeBSD: head/sys/fs/ext2fs/ext2_htree.c 294653 2016-01-24 02:41:49Z pfg $
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_htree.c,v 1.1 2016/06/24 17:21:30 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_htree.c,v 1.1.2.2 2016/07/09 20:25:24 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
