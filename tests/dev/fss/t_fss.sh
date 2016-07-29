@@ -1,4 +1,4 @@
-# $NetBSD: t_fss.sh,v 1.1 2016/07/29 06:13:39 pgoyette Exp $
+# $NetBSD: t_fss.sh,v 1.1.2.2 2016/07/29 10:57:32 pgoyette Exp $
 #
 # Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
 # All rights reserved.
