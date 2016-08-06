@@ -1,4 +1,4 @@
-/*	$NetBSD: getcontext.S,v 1.1 2016/08/05 16:40:47 scole Exp $	*/
+/*	$NetBSD: getcontext.S,v 1.1.2.2 2016/08/06 00:19:02 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.

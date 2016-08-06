@@ -1,4 +1,4 @@
-/*	$NetBSD: memmove.S,v 1.1 2016/08/05 15:06:02 scole Exp $	*/
+/*	$NetBSD: memmove.S,v 1.1.2.2 2016/08/06 00:18:38 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson

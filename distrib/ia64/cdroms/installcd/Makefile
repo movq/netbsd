@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2016/08/05 16:18:19 scole Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2016/08/06 00:18:39 pgoyette Exp $
 CDBASE=		ia64cd		# gives ${CDBASE}.iso
 #CDINSTKERNEL=	../../instkernel/instkernel
 CDKERNELS=	netbsd netbsd

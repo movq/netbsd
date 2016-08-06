@@ -1,4 +1,4 @@
-/*	$NetBSD: ifstat.c,v 1.4 2016/08/05 07:22:17 christos Exp $	*/
+/*	$NetBSD: ifstat.c,v 1.4.2.2 2016/08/06 00:19:12 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2003, Trent Nelson, <trent@arpa.com>.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ifstat.c,v 1.4 2016/08/05 07:22:17 christos Exp $");
+__RCSID("$NetBSD: ifstat.c,v 1.4.2.2 2016/08/06 00:19:12 pgoyette Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>

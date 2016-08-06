@@ -1,4 +1,4 @@
-/*	$NetBSD: efifpswa.h,v 1.1 2016/08/04 18:08:12 scole Exp $	*/
+/*	$NetBSD: efifpswa.h,v 1.1.2.2 2016/08/06 00:19:09 pgoyette Exp $	*/
 /* $FreeBSD: releng/10.1/sys/boot/efi/include/efifpswa.h 96893 2002-05-19 03:17:22Z marcel $ */
 #ifndef _EFI_FPSWA_H
 #define _EFI_FPSWA_H

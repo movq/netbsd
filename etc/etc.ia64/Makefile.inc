@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.1 2016/08/05 16:22:08 scole Exp $
+# $NetBSD: Makefile.inc,v 1.1.2.2 2016/08/06 00:18:40 pgoyette Exp $
 #
 #	etc.ia64/Makefile.inc -- ia64-specific etc Makefile targets
 #
