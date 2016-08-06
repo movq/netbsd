@@ -1,5 +1,5 @@
 #
-#	$NetBSD: ttys,v 1.1 2016/08/05 16:22:08 scole Exp $
+#	$NetBSD: ttys,v 1.1.2.2 2016/08/06 00:18:40 pgoyette Exp $
 #
 # name	getty				type	status		comments
 

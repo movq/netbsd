@@ -1,4 +1,4 @@
-/*	$NetBSD: convtbl.c,v 1.2 2016/08/02 17:53:46 scole Exp $	*/
+/*	$NetBSD: convtbl.c,v 1.2.2.2 2016/08/06 00:19:12 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2003, Trent Nelson, <trent@arpa.com>.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: convtbl.c,v 1.2 2016/08/02 17:53:46 scole Exp $");
+__RCSID("$NetBSD: convtbl.c,v 1.2.2.2 2016/08/06 00:19:12 pgoyette Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>

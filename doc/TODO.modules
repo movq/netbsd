@@ -1,4 +1,4 @@
-/* $NetBSD: TODO.modules,v 1.4 2016/08/05 04:21:01 pgoyette Exp $ */
+/* $NetBSD: TODO.modules,v 1.4.2.2 2016/08/06 00:18:40 pgoyette Exp $ */
 
 Some notes on the limitations of our current (as of 7.99.35) module
 subsystem.  This list was triggered by an Email exchange between

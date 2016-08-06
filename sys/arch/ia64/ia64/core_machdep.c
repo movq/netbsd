@@ -1,4 +1,4 @@
-/*	$NetBSD: core_machdep.c,v 1.1 2016/08/05 16:50:07 scole Exp $	*/
+/*	$NetBSD: core_machdep.c,v 1.1.2.2 2016/08/06 00:19:04 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: core_machdep.c,v 1.1 2016/08/05 16:50:07 scole Exp $");
+__KERNEL_RCSID(0, "$NetBSD: core_machdep.c,v 1.1.2.2 2016/08/06 00:19:04 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

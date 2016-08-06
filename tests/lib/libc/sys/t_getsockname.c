@@ -1,4 +1,4 @@
-/*	$NetBSD: t_getsockname.c,v 1.1 2016/07/30 11:03:54 njoly Exp $	*/
+/*	$NetBSD: t_getsockname.c,v 1.1.2.2 2016/08/06 00:19:12 pgoyette Exp $	*/
 /*
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
  * All rights reserved.

@@ -1,4 +1,4 @@
-# $NetBSD: md.ia64,v 1.1 2016/08/05 16:21:09 scole Exp $
+# $NetBSD: md.ia64,v 1.1.2.2 2016/08/06 00:18:39 pgoyette Exp $
 #
 # XXX add skiload for now
 #
