@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_iod.c,v 1.7 2015/07/15 03:28:55 manu Exp $	*/
+/*	$NetBSD: nfs_iod.c,v 1.6.4.1 2015/11/04 17:32:00 riz Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_iod.c,v 1.7 2015/07/15 03:28:55 manu Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_iod.c,v 1.6.4.1 2015/11/04 17:32:00 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

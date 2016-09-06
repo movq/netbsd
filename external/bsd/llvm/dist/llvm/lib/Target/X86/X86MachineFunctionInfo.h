@@ -1,4 +1,4 @@
-//===-- X86MachineFunctionInfo.h - X86 machine function info ----*- C++ -*-===//
+//===-- X86MachineFuctionInfo.h - X86 machine function info -----*- C++ -*-===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -30,71 +30,53 @@ class X86MachineFunctionInfo : public MachineFunctionInfo {
   /// pointer for reasons other than it containing dynamic allocation or
   /// that FP eliminatation is turned off. For example, Cygwin main function
   /// contains stack pointer re-alignment code which requires FP.
-  bool ForceFramePointer = false;
+  bool ForceFramePointer;
 
   /// RestoreBasePointerOffset - Non-zero if the function has base pointer
   /// and makes call to llvm.eh.sjlj.setjmp. When non-zero, the value is a
   /// displacement from the frame pointer to a slot where the base pointer
   /// is stashed.
-  signed char RestoreBasePointerOffset = 0;
+  signed char RestoreBasePointerOffset;
 
   /// CalleeSavedFrameSize - Size of the callee-saved register portion of the
   /// stack frame in bytes.
-  unsigned CalleeSavedFrameSize = 0;
+  unsigned CalleeSavedFrameSize;
 
   /// BytesToPopOnReturn - Number of bytes function pops on return (in addition
   /// to the space used by the return address).
   /// Used on windows platform for stdcall & fastcall name decoration
-  unsigned BytesToPopOnReturn = 0;
+  unsigned BytesToPopOnReturn;
 
   /// ReturnAddrIndex - FrameIndex for return slot.
-  int ReturnAddrIndex = 0;
-
-  /// \brief FrameIndex for return slot.
-  int FrameAddrIndex = 0;
+  int ReturnAddrIndex;
 
   /// TailCallReturnAddrDelta - The number of bytes by which return address
   /// stack slot is moved as the result of tail call optimization.
-  int TailCallReturnAddrDelta = 0;
+  int TailCallReturnAddrDelta;
 
   /// SRetReturnReg - Some subtargets require that sret lowering includes
   /// returning the value of the returned struct in a register. This field
   /// holds the virtual register into which the sret argument is passed.
-  unsigned SRetReturnReg = 0;
+  unsigned SRetReturnReg;
 
   /// GlobalBaseReg - keeps track of the virtual register initialized for
   /// use as the global base register. This is used for PIC in some PIC
   /// relocation models.
-  unsigned GlobalBaseReg = 0;
+  unsigned GlobalBaseReg;
 
   /// VarArgsFrameIndex - FrameIndex for start of varargs area.
-  int VarArgsFrameIndex = 0;
+  int VarArgsFrameIndex;
   /// RegSaveFrameIndex - X86-64 vararg func register save area.
-  int RegSaveFrameIndex = 0;
+  int RegSaveFrameIndex;
   /// VarArgsGPOffset - X86-64 vararg func int reg offset.
-  unsigned VarArgsGPOffset = 0;
+  unsigned VarArgsGPOffset;
   /// VarArgsFPOffset - X86-64 vararg func fp reg offset.
-  unsigned VarArgsFPOffset = 0;
+  unsigned VarArgsFPOffset;
   /// ArgumentStackSize - The number of bytes on stack consumed by the arguments
   /// being passed on the stack.
-  unsigned ArgumentStackSize = 0;
+  unsigned ArgumentStackSize;
   /// NumLocalDynamics - Number of local-dynamic TLS accesses.
-  unsigned NumLocalDynamics = 0;
-  /// HasPushSequences - Keeps track of whether this function uses sequences
-  /// of pushes to pass function parameters.
-  bool HasPushSequences = false;
-
-  /// True if the function recovers from an SEH exception, and therefore needs
-  /// to spill and restore the frame pointer.
-  bool HasSEHFramePtrSave = false;
-
-  /// The frame index of a stack object containing the original frame pointer
-  /// used to address arguments in a function using a base pointer.
-  int SEHFramePtrSaveIndex = 0;
-
-  /// True if this function has a subset of CSRs that is handled explicitly via
-  /// copies.
-  bool IsSplitCSR = false;
+  unsigned NumLocalDynamics;
 
 private:
   /// ForwardedMustTailRegParms - A list of virtual and physical registers
@@ -102,15 +84,39 @@ private:
   SmallVector<ForwardedRegister, 1> ForwardedMustTailRegParms;
 
 public:
-  X86MachineFunctionInfo() = default;
+  X86MachineFunctionInfo() : ForceFramePointer(false),
+                             RestoreBasePointerOffset(0),
+                             CalleeSavedFrameSize(0),
+                             BytesToPopOnReturn(0),
+                             ReturnAddrIndex(0),
+                             TailCallReturnAddrDelta(0),
+                             SRetReturnReg(0),
+                             GlobalBaseReg(0),
+                             VarArgsFrameIndex(0),
+                             RegSaveFrameIndex(0),
+                             VarArgsGPOffset(0),
+                             VarArgsFPOffset(0),
+                             ArgumentStackSize(0),
+                             NumLocalDynamics(0) {}
 
-  explicit X86MachineFunctionInfo(MachineFunction &MF) {}
+  explicit X86MachineFunctionInfo(MachineFunction &MF)
+    : ForceFramePointer(false),
+      RestoreBasePointerOffset(0),
+      CalleeSavedFrameSize(0),
+      BytesToPopOnReturn(0),
+      ReturnAddrIndex(0),
+      TailCallReturnAddrDelta(0),
+      SRetReturnReg(0),
+      GlobalBaseReg(0),
+      VarArgsFrameIndex(0),
+      RegSaveFrameIndex(0),
+      VarArgsGPOffset(0),
+      VarArgsFPOffset(0),
+      ArgumentStackSize(0),
+      NumLocalDynamics(0) {}
 
   bool getForceFramePointer() const { return ForceFramePointer;}
   void setForceFramePointer(bool forceFP) { ForceFramePointer = forceFP; }
-
-  bool getHasPushSequences() const { return HasPushSequences; }
-  void setHasPushSequences(bool HasPush) { HasPushSequences = HasPush; }
 
   bool getRestoreBasePointer() const { return RestoreBasePointerOffset!=0; }
   void setRestoreBasePointer(const MachineFunction *MF);
@@ -124,9 +130,6 @@ public:
 
   int getRAIndex() const { return ReturnAddrIndex; }
   void setRAIndex(int Index) { ReturnAddrIndex = Index; }
-
-  int getFAIndex() const { return FrameAddrIndex; }
-  void setFAIndex(int Index) { FrameAddrIndex = Index; }
 
   int getTCReturnAddrDelta() const { return TailCallReturnAddrDelta; }
   void setTCReturnAddrDelta(int delta) {TailCallReturnAddrDelta = delta;}
@@ -155,18 +158,9 @@ public:
   unsigned getNumLocalDynamicTLSAccesses() const { return NumLocalDynamics; }
   void incNumLocalDynamicTLSAccesses() { ++NumLocalDynamics; }
 
-  bool getHasSEHFramePtrSave() const { return HasSEHFramePtrSave; }
-  void setHasSEHFramePtrSave(bool V) { HasSEHFramePtrSave = V; }
-
-  int getSEHFramePtrSaveIndex() const { return SEHFramePtrSaveIndex; }
-  void setSEHFramePtrSaveIndex(int Index) { SEHFramePtrSaveIndex = Index; }
-
   SmallVectorImpl<ForwardedRegister> &getForwardedMustTailRegParms() {
     return ForwardedMustTailRegParms;
   }
-
-  bool isSplitCSR() const { return IsSplitCSR; }
-  void setIsSplitCSR(bool s) { IsSplitCSR = s; }
 };
 
 } // End llvm namespace

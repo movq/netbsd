@@ -1,4 +1,4 @@
-/*	$NetBSD: ffb.c,v 1.57 2016/07/07 06:55:38 msaitoh Exp $	*/
+/*	$NetBSD: ffb.c,v 1.55 2013/10/09 17:21:39 macallan Exp $	*/
 /*	$OpenBSD: creator.c,v 1.20 2002/07/30 19:48:15 jason Exp $	*/
 
 /*
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffb.c,v 1.57 2016/07/07 06:55:38 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffb.c,v 1.55 2013/10/09 17:21:39 macallan Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -428,7 +428,7 @@ ffb_ioctl(void *v, void *vs, u_long cmd, void *data, int flags, struct lwp *l)
 		fba->emu_types[0] = sc->sc_fb.fb_type.fb_type;
 		fba->emu_types[1] = -1;
 #undef fba
-		break;
+		break; 
 
 	case FBIOGETCMAP:
 	case FBIOPUTCMAP:
@@ -466,7 +466,7 @@ ffb_ioctl(void *v, void *vs, u_long cmd, void *data, int flags, struct lwp *l)
 				sc->sc_mode = *(u_int *)data;
 				if ((sc->sc_mode == WSDISPLAYIO_MODE_EMUL) &&
 				    (sc->sc_locked == 0)) {
-					ffb_ras_init(sc);
+					ffb_ras_init(sc);		
 					vcons_redraw_screen(ms);
 				}
 			}
@@ -554,7 +554,7 @@ ffb_blank(struct ffb_softc *sc, u_long cmd, u_int *data)
 		if (ms != NULL) {
 			if ((sc->sc_mode == WSDISPLAYIO_MODE_EMUL) && 
 			    (sc->sc_locked == 0)) {
-				ffb_ras_init(sc);
+				ffb_ras_init(sc);		
 				vcons_redraw_screen(ms);
 			}
 		}
@@ -640,7 +640,7 @@ ffb_ras_init(struct ffb_softc *sc)
 	DPRINTF(("ffb_ras_init: standard resolution.\n"));
 		fbc = FFB_FBC_XE_OFF;
 	}
-	ffb_ras_fifo_wait(sc, 7);
+	ffb_ras_fifo_wait(sc, 11);
 	DPRINTF(("WID: %08x\n", FBC_READ(sc, FFB_FBC_WID)));
 	FBC_WRITE(sc, FFB_FBC_WID, 0x0);
 	FBC_WRITE(sc, FFB_FBC_PPC,
@@ -656,11 +656,8 @@ ffb_ras_init(struct ffb_softc *sc)
 	FBC_WRITE(sc, FFB_FBC_DRAWOP, FBC_DRAWOP_RECTANGLE);
 	FBC_WRITE(sc, FFB_FBC_PMASK, 0xffffffff);
 	FBC_WRITE(sc, FFB_FBC_FONTINC, 0x10000);
-	ffb_ras_fifo_wait(sc, 5);
 	sc->sc_fg_cache = 0;
 	FBC_WRITE(sc, FFB_FBC_FG, sc->sc_fg_cache);
-	sc->sc_bg_cache = 0;
-	FBC_WRITE(sc, FFB_FBC_BG, sc->sc_bg_cache);
 	FBC_WRITE(sc, FFB_FBC_BLENDC, FFB_BLENDC_FORCE_ONE |
 				      FFB_BLENDC_DF_ONE_M_A |
 				      FFB_BLENDC_SF_A);
@@ -730,7 +727,7 @@ ffb_ras_erasecols(void *cookie, int row, int col, int n, long attr)
 	FBC_WRITE(sc, FFB_FBC_BY, ri->ri_yorigin + row);
 	FBC_WRITE(sc, FFB_FBC_BX, ri->ri_xorigin + col);
 	FBC_WRITE(sc, FFB_FBC_BH, ri->ri_font->fontheight);
-	FBC_WRITE(sc, FFB_FBC_BW, n);
+	FBC_WRITE(sc, FFB_FBC_BW, n - 1);
 	SYNC;
 }
 
@@ -885,7 +882,7 @@ ffbfb_close(dev_t dev, int flags, int mode, struct lwp *l)
 	if (ms != NULL) {
 		if ((sc->sc_mode == WSDISPLAYIO_MODE_EMUL) &&
 		    (sc->sc_locked == 0)) {
-			ffb_ras_init(sc);
+			ffb_ras_init(sc);		
 			vcons_redraw_screen(ms);
 		}
 	}

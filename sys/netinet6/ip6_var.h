@@ -1,4 +1,4 @@
-/*	$NetBSD: ip6_var.h,v 1.67 2016/06/21 10:25:27 ozaki-r Exp $	*/
+/*	$NetBSD: ip6_var.h,v 1.62.2.1 2015/01/23 09:27:15 martin Exp $	*/
 /*	$KAME: ip6_var.h,v 1.33 2000/06/11 14:59:20 jinmei Exp $	*/
 
 /*
@@ -109,7 +109,7 @@ struct	ip6asfrag {
 #define IP6_REASS_MBUF(ip6af) ((ip6af)->ip6af_m)
 
 struct	ip6_moptions {
-	if_index_t im6o_multicast_if_index; /* I/F for outgoing multicasts */
+	struct	ifnet *im6o_multicast_ifp; /* ifp for outgoing multicasts */
 	u_char	im6o_multicast_hlim;	/* hoplimit for outgoing multicasts */
 	u_char	im6o_multicast_loop;	/* 1 >= hear sends if a member */
 	LIST_HEAD(, in6_multi_mship) im6o_memberships;
@@ -321,9 +321,8 @@ extern const struct pr_usrreqs rip6_usrreqs;
 
 int	icmp6_ctloutput(int, struct socket *, struct sockopt *);
 
-struct mbuf;
 void	ip6_init(void);
-void	ip6_input(struct mbuf *, struct ifnet *);
+void	ip6_input(struct mbuf *);
 const struct ip6aux *ip6_getdstifaddr(struct mbuf *);
 void	ip6_freepcbopts(struct ip6_pktopts *);
 void	ip6_freemoptions(struct ip6_moptions *);
@@ -335,7 +334,7 @@ int	ip6_lasthdr(struct mbuf *, int, int, int *);
 struct m_tag *ip6_addaux(struct mbuf *);
 struct m_tag *ip6_findaux(struct mbuf *);
 void	ip6_delaux(struct mbuf *);
-struct ip6_hdr;
+
 int	ip6_mforward(struct ip6_hdr *, struct ifnet *, struct mbuf *);
 int	ip6_hopopts_input(u_int32_t *, u_int32_t *, struct mbuf **, int *);
 void	ip6_savecontrol(struct in6pcb *, struct mbuf **, struct ip6_hdr *,
@@ -397,12 +396,10 @@ struct route;
 
 struct 	in6_addr *in6_selectsrc(struct sockaddr_in6 *,
 	struct ip6_pktopts *, struct ip6_moptions *, struct route *,
-	struct in6_addr *, struct ifnet **, struct psref *, int *);
+	struct in6_addr *, struct ifnet **, int *);
 int in6_selectroute(struct sockaddr_in6 *, struct ip6_pktopts *,
 	struct ip6_moptions *, struct route *, struct ifnet **,
-	struct psref *, struct rtentry **, int);
-int	ip6_get_membership(const struct sockopt *, struct ifnet **, void *,
-	size_t);
+	struct rtentry **, int);
 
 u_int32_t ip6_randomid(void);
 u_int32_t ip6_randomflowlabel(void);

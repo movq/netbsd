@@ -1,4 +1,4 @@
-/* $NetBSD: netmpls_component.c,v 1.5 2016/08/07 17:42:18 christos Exp $ */
+/* $NetBSD: netmpls_component.c,v 1.1 2014/03/13 02:05:29 pooka Exp $ */
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netmpls_component.c,v 1.5 2016/08/07 17:42:18 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netmpls_component.c,v 1.1 2014/03/13 02:05:29 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/domain.h>
@@ -43,16 +43,16 @@ __KERNEL_RCSID(0, "$NetBSD: netmpls_component.c,v 1.5 2016/08/07 17:42:18 christ
 
 #include <netmpls/mpls_var.h>
 
-#include <rump-sys/kern.h>
-#include <rump-sys/net.h>
+#include "rump_private.h"
+#include "rump_net_private.h"
 
-#include "ioconf.h"
+void ifmplsattach(int);
 
 RUMP_COMPONENT(RUMP_COMPONENT_NET)
 {
 	extern struct domain mplsdomain;
 
-	domain_attach(&mplsdomain);
+	DOMAINADD(mplsdomain);
 
 	rump_netisr_register(NETISR_MPLS, mplsintr);
 }
@@ -60,5 +60,5 @@ RUMP_COMPONENT(RUMP_COMPONENT_NET)
 RUMP_COMPONENT(RUMP_COMPONENT_NET_IF)
 {
 
-	mplsattach(0);
+	ifmplsattach(0);
 }

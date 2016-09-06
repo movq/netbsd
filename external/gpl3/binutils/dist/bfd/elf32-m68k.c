@@ -1,5 +1,7 @@
 /* Motorola 68k series support for 32-bit ELF
-   Copyright (C) 1993-2015 Free Software Foundation, Inc.
+   Copyright 1993, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003,
+   2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
+   Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -31,7 +33,7 @@ elf_m68k_discard_copies (struct elf_link_hash_entry *, void *);
 
 static reloc_howto_type howto_table[] =
 {
-  HOWTO(R_68K_NONE,       0, 3, 0, FALSE,0, complain_overflow_dont,     bfd_elf_generic_reloc, "R_68K_NONE",      FALSE, 0, 0x00000000,FALSE),
+  HOWTO(R_68K_NONE,       0, 0, 0, FALSE,0, complain_overflow_dont,     bfd_elf_generic_reloc, "R_68K_NONE",      FALSE, 0, 0x00000000,FALSE),
   HOWTO(R_68K_32,         0, 2,32, FALSE,0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_68K_32",        FALSE, 0, 0xffffffff,FALSE),
   HOWTO(R_68K_16,         0, 1,16, FALSE,0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_68K_16",        FALSE, 0, 0x0000ffff,FALSE),
   HOWTO(R_68K_8,          0, 0, 8, FALSE,0, complain_overflow_bitfield, bfd_elf_generic_reloc, "R_68K_8",         FALSE, 0, 0x000000ff,FALSE),
@@ -940,23 +942,6 @@ elf_m68k_link_hash_newfunc (struct bfd_hash_entry *entry,
   return ret;
 }
 
-/* Destroy an m68k ELF linker hash table.  */
-
-static void
-elf_m68k_link_hash_table_free (bfd *obfd)
-{
-  struct elf_m68k_link_hash_table *htab;
-
-  htab = (struct elf_m68k_link_hash_table *) obfd->link.hash;
-
-  if (htab->multi_got_.bfd2got != NULL)
-    {
-      htab_delete (htab->multi_got_.bfd2got);
-      htab->multi_got_.bfd2got = NULL;
-    }
-  _bfd_elf_link_hash_table_free (obfd);
-}
-
 /* Create an m68k ELF linker hash table.  */
 
 static struct bfd_link_hash_table *
@@ -965,7 +950,7 @@ elf_m68k_link_hash_table_create (bfd *abfd)
   struct elf_m68k_link_hash_table *ret;
   bfd_size_type amt = sizeof (struct elf_m68k_link_hash_table);
 
-  ret = (struct elf_m68k_link_hash_table *) bfd_zmalloc (amt);
+  ret = (struct elf_m68k_link_hash_table *) bfd_malloc (amt);
   if (ret == (struct elf_m68k_link_hash_table *) NULL)
     return NULL;
 
@@ -977,11 +962,32 @@ elf_m68k_link_hash_table_create (bfd *abfd)
       free (ret);
       return NULL;
     }
-  ret->root.root.hash_table_free = elf_m68k_link_hash_table_free;
 
+  ret->sym_cache.abfd = NULL;
+  ret->plt_info = NULL;
+  ret->local_gp_p = FALSE;
+  ret->use_neg_got_offsets_p = FALSE;
+  ret->allow_multigot_p = FALSE;
+  ret->multi_got_.bfd2got = NULL;
   ret->multi_got_.global_symndx = 1;
 
   return &ret->root.root;
+}
+
+/* Destruct local data.  */
+
+static void
+elf_m68k_link_hash_table_free (struct bfd_link_hash_table *_htab)
+{
+  struct elf_m68k_link_hash_table *htab;
+
+  htab = (struct elf_m68k_link_hash_table *) _htab;
+
+  if (htab->multi_got_.bfd2got != NULL)
+    {
+      htab_delete (htab->multi_got_.bfd2got);
+      htab->multi_got_.bfd2got = NULL;
+    }
 }
 
 /* Set the right machine number.  */
@@ -2232,7 +2238,7 @@ elf_m68k_partition_multi_got_2 (struct elf_m68k_partition_multi_got_arg *arg)
 
   arg->n_slots += arg->current_got->n_slots[R_32];
 
-  if (!bfd_link_pic (arg->info))
+  if (!arg->info->shared)
     /* If we are generating a shared object, we need to
        output a R_68K_RELATIVE reloc so that the dynamic
        linker can adjust this GOT entry.  Overwise we
@@ -2554,7 +2560,7 @@ elf_m68k_check_relocs (bfd *abfd,
   asection *sreloc;
   struct elf_m68k_got *got;
 
-  if (bfd_link_relocatable (info))
+  if (info->relocatable)
     return TRUE;
 
   dynobj = elf_hash_table (info)->dynobj;
@@ -2583,10 +2589,6 @@ elf_m68k_check_relocs (bfd *abfd,
 	  while (h->root.type == bfd_link_hash_indirect
 		 || h->root.type == bfd_link_hash_warning)
 	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
-
-	  /* PR15323, ref flags aren't set for references in the same
-	     object.  */
-	  h->root.non_ir_ref = 1;
 	}
 
       switch (ELF32_R_TYPE (rel->r_info))
@@ -2620,7 +2622,7 @@ elf_m68k_check_relocs (bfd *abfd,
 	case R_68K_TLS_DTPREL32:
 
 	  if (ELF32_R_TYPE (rel->r_info) == R_68K_TLS_TPREL32
-	      && bfd_link_pic (info))
+	      && info->shared)
 	    /* Do the special chorus for libraries with static TLS.  */
 	    info->flags |= DF_STATIC_TLS;
 
@@ -2641,7 +2643,7 @@ elf_m68k_check_relocs (bfd *abfd,
 	    }
 
 	  if (srelgot == NULL
-	      && (h != NULL || bfd_link_pic (info)))
+	      && (h != NULL || info->shared))
 	    {
 	      srelgot = bfd_get_linker_section (dynobj, ".rela.got");
 	      if (srelgot == NULL)
@@ -2755,10 +2757,10 @@ elf_m68k_check_relocs (bfd *abfd,
 	     will be set later (it is never cleared).  We account for that
 	     possibility below by storing information in the
 	     pcrel_relocs_copied field of the hash table entry.  */
-	  if (!(bfd_link_pic (info)
+	  if (!(info->shared
 		&& (sec->flags & SEC_ALLOC) != 0
 		&& h != NULL
-		&& (!SYMBOLIC_BIND (info, h)
+		&& (!info->symbolic
 		    || h->root.type == bfd_link_hash_defweak
 		    || !h->def_regular)))
 	    {
@@ -2786,14 +2788,14 @@ elf_m68k_check_relocs (bfd *abfd,
 		 turns out to be a function defined by a dynamic object.  */
 	      h->plt.refcount++;
 
-	      if (bfd_link_executable (info))
+	      if (info->executable)
 		/* This symbol needs a non-GOT reference.  */
 		h->non_got_ref = 1;
 	    }
 
 	  /* If we are creating a shared library, we need to copy the
 	     reloc into the shared library.  */
-	  if (bfd_link_pic (info))
+	  if (info->shared)
 	    {
 	      /* When creating a shared object, we must copy these
 		 reloc types into the output file.  We create a reloc
@@ -2813,13 +2815,7 @@ elf_m68k_check_relocs (bfd *abfd,
 		  && !(ELF32_R_TYPE (rel->r_info) == R_68K_PC8
 		       || ELF32_R_TYPE (rel->r_info) == R_68K_PC16
 		       || ELF32_R_TYPE (rel->r_info) == R_68K_PC32))
-		{
-		  if (info->warn_shared_textrel)
-		    (*_bfd_error_handler)
-		      (_("warning: dynamic relocation to `%s' in readonly section `%s'"),
-		      h->root.root.string, sec->name); 
-		  info->flags |= DF_TEXTREL;
-		}
+		    info->flags |= DF_TEXTREL;
 
 	      sreloc->size += sizeof (Elf32_External_Rela);
 
@@ -2944,7 +2940,7 @@ elf_m68k_gc_sweep_hook (bfd *abfd,
   bfd *dynobj;
   struct elf_m68k_got *got;
 
-  if (bfd_link_relocatable (info))
+  if (info->relocatable)
     return TRUE;
 
   dynobj = elf_hash_table (info)->dynobj;
@@ -3108,7 +3104,6 @@ elf_m68k_adjust_dynamic_symbol (struct bfd_link_info *info,
   /* Make sure we know what is going on here.  */
   BFD_ASSERT (dynobj != NULL
 	      && (h->needs_plt
-		  || h->type == STT_GNU_IFUNC
 		  || h->u.weakdef != NULL
 		  || (h->def_dynamic
 		      && h->ref_regular
@@ -3117,7 +3112,7 @@ elf_m68k_adjust_dynamic_symbol (struct bfd_link_info *info,
   /* If this is a function, put it in the procedure linkage table.  We
      will fill in the contents of the procedure linkage table later,
      when we know the address of the .got section.  */
-  if ((h->type == STT_FUNC || h->type == STT_GNU_IFUNC)
+  if (h->type == STT_FUNC
       || h->needs_plt)
     {
       if ((h->plt.refcount <= 0
@@ -3160,7 +3155,7 @@ elf_m68k_adjust_dynamic_symbol (struct bfd_link_info *info,
 	 location in the .plt.  This is required to make function
 	 pointers compare as equal between the normal executable and
 	 the shared library.  */
-      if (!bfd_link_pic (info)
+      if (!info->shared
 	  && !h->def_regular)
 	{
 	  h->root.u.def.section = s;
@@ -3209,7 +3204,7 @@ elf_m68k_adjust_dynamic_symbol (struct bfd_link_info *info,
      only references to the symbol are via the global offset table.
      For such cases we need not do anything here; the relocations will
      be handled correctly by relocate_section.  */
-  if (bfd_link_pic (info))
+  if (info->shared)
     return TRUE;
 
   /* If there are no references to this symbol that do not use the
@@ -3244,7 +3239,7 @@ elf_m68k_adjust_dynamic_symbol (struct bfd_link_info *info,
       h->needs_copy = 1;
     }
 
-  return _bfd_elf_adjust_dynamic_copy (info, h, s);
+  return _bfd_elf_adjust_dynamic_copy (h, s);
 }
 
 /* Set the sizes of the dynamic sections.  */
@@ -3264,7 +3259,7 @@ elf_m68k_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
   if (elf_hash_table (info)->dynamic_sections_created)
     {
       /* Set the contents of the .interp section to the interpreter.  */
-      if (bfd_link_executable (info) && !info->nointerp)
+      if (info->executable)
 	{
 	  s = bfd_get_linker_section (dynobj, ".interp");
 	  BFD_ASSERT (s != NULL);
@@ -3290,7 +3285,7 @@ elf_m68k_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
      against symbols that have become local due to visibility changes.
      We allocated space for them in the check_relocs routine, but we
      will not fill them in in the relocate_section routine.  */
-  if (bfd_link_pic (info))
+  if (info->shared)
     elf_link_hash_traverse (elf_hash_table (info),
 			    elf_m68k_discard_copies,
 			    info);
@@ -3373,7 +3368,7 @@ elf_m68k_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
 #define add_dynamic_entry(TAG, VAL) \
   _bfd_elf_add_dynamic_entry (info, TAG, VAL)
 
-      if (bfd_link_executable (info))
+      if (!info->shared)
 	{
 	  if (!add_dynamic_entry (DT_DEBUG, 0))
 	    return FALSE;
@@ -3437,10 +3432,6 @@ elf_m68k_discard_copies (struct elf_link_hash_entry *h,
 	       s = s->next)
 	    if ((s->section->flags & SEC_READONLY) != 0)
 	      {
-		if (info->warn_shared_textrel)
-		  (*_bfd_error_handler)
-		    (_("warning: dynamic relocation to `%s' in readonly section `%s'"),
-		    h->root.root.string, s->section->name); 
 		info->flags |= DF_TEXTREL;
 		break;
 	      }
@@ -3679,19 +3670,19 @@ elf_m68k_relocate_section (bfd *output_bfd,
 	}
       else
 	{
-	  bfd_boolean warned, ignored;
+	  bfd_boolean warned;
 
 	  RELOC_FOR_GLOBAL_SYMBOL (info, input_bfd, input_section, rel,
 				   r_symndx, symtab_hdr, sym_hashes,
 				   h, sec, relocation,
-				   unresolved_reloc, warned, ignored);
+				   unresolved_reloc, warned);
 	}
 
       if (sec != NULL && discarded_section (sec))
 	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
 					 rel, 1, relend, howto, 0, contents);
 
-      if (bfd_link_relocatable (info))
+      if (info->relocatable)
 	continue;
 
       switch (r_type)
@@ -3821,10 +3812,8 @@ elf_m68k_relocate_section (bfd *output_bfd,
 		    bfd_boolean dyn;
 
 		    dyn = elf_hash_table (info)->dynamic_sections_created;
-		    if (!WILL_CALL_FINISH_DYNAMIC_SYMBOL (dyn,
-							  bfd_link_pic (info),
-							  h)
-			|| (bfd_link_pic (info)
+		    if (!WILL_CALL_FINISH_DYNAMIC_SYMBOL (dyn, info->shared, h)
+			|| (info->shared
 			    && SYMBOL_REFERENCES_LOCAL (info, h))
 			|| (ELF_ST_VISIBILITY (h->other)
 			    && h->root.type == bfd_link_hash_undefweak))
@@ -3854,7 +3843,7 @@ elf_m68k_relocate_section (bfd *output_bfd,
 		    else
 		      unresolved_reloc = FALSE;
 		  }
-		else if (bfd_link_pic (info)) /* && h == NULL */
+		else if (info->shared) /* && h == NULL */
 		  /* Process local symbol during dynamic link.  */
 		  {
 		    if (srela == NULL)
@@ -3873,7 +3862,7 @@ elf_m68k_relocate_section (bfd *output_bfd,
 
 		    *off_ptr |= 1;
 		  }
-		else /* h == NULL && !bfd_link_pic (info) */
+		else /* h == NULL && !info->shared */
 		  {
 		    elf_m68k_init_got_entry_static (info,
 						    output_bfd,
@@ -3927,7 +3916,7 @@ elf_m68k_relocate_section (bfd *output_bfd,
 	case R_68K_TLS_LE32:
 	case R_68K_TLS_LE16:
 	case R_68K_TLS_LE8:
-	  if (bfd_link_dll (info))
+	  if (info->shared && !info->pie)
 	    {
 	      (*_bfd_error_handler)
 		(_("%B(%A+0x%lx): R_68K_TLS_LE32 relocation not permitted "
@@ -4000,7 +3989,7 @@ elf_m68k_relocate_section (bfd *output_bfd,
 	case R_68K_PC8:
 	case R_68K_PC16:
 	case R_68K_PC32:
-	  if (bfd_link_pic (info)
+	  if (info->shared
 	      && r_symndx != STN_UNDEF
 	      && (input_section->flags & SEC_ALLOC) != 0
 	      && (h == NULL
@@ -4039,8 +4028,8 @@ elf_m68k_relocate_section (bfd *output_bfd,
 		       && (r_type == R_68K_PC8
 			   || r_type == R_68K_PC16
 			   || r_type == R_68K_PC32
-			   || !bfd_link_pic (info)
-			   || !SYMBOLIC_BIND (info, h)
+			   || !info->shared
+			   || !info->symbolic
 			   || !h->def_regular))
 		{
 		  outrel.r_info = ELF32_R_INFO (h->dynindx, r_type);
@@ -4348,7 +4337,7 @@ elf_m68k_finish_dynamic_symbol (bfd *output_bfd,
 	     the symbol was forced to be local because of a version file.
 	     The entry in the global offset table already have been
 	     initialized in the relocate_section function.  */
-	  if (bfd_link_pic (info)
+	  if (info->shared
 	      && SYMBOL_REFERENCES_LOCAL (info, h))
 	    {
 	      bfd_vma relocation;
@@ -4604,7 +4593,7 @@ bfd_m68k_elf32_create_embedded_relocs (abfd, info, datasec, relsec, errmsg)
   bfd_byte *p;
   bfd_size_type amt;
 
-  BFD_ASSERT (! bfd_link_relocatable (info));
+  BFD_ASSERT (! info->relocatable);
 
   *errmsg = NULL;
 
@@ -4753,9 +4742,7 @@ bfd_elf_m68k_set_target_options (struct bfd_link_info *info, int got_handling)
 }
 
 static enum elf_reloc_type_class
-elf32_m68k_reloc_type_class (const struct bfd_link_info *info ATTRIBUTE_UNUSED,
-			     const asection *rel_sec ATTRIBUTE_UNUSED,
-			     const Elf_Internal_Rela *rela)
+elf32_m68k_reloc_type_class (const Elf_Internal_Rela *rela)
 {
   switch ((int) ELF32_R_TYPE (rela->r_info))
     {
@@ -4795,10 +4782,10 @@ elf_m68k_grok_prstatus (bfd *abfd, Elf_Internal_Note *note)
 
     case 154:		/* Linux/m68k */
       /* pr_cursig */
-      elf_tdata (abfd)->core->signal = bfd_get_16 (abfd, note->descdata + 12);
+      elf_tdata (abfd)->core_signal = bfd_get_16 (abfd, note->descdata + 12);
 
       /* pr_pid */
-      elf_tdata (abfd)->core->lwpid = bfd_get_32 (abfd, note->descdata + 22);
+      elf_tdata (abfd)->core_lwpid = bfd_get_32 (abfd, note->descdata + 22);
 
       /* pr_reg */
       offset = 70;
@@ -4821,11 +4808,11 @@ elf_m68k_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
       return FALSE;
 
     case 124:		/* Linux/m68k elf_prpsinfo.  */
-      elf_tdata (abfd)->core->pid
+      elf_tdata (abfd)->core_pid
 	= bfd_get_32 (abfd, note->descdata + 12);
-      elf_tdata (abfd)->core->program
+      elf_tdata (abfd)->core_program
 	= _bfd_elfcore_strndup (abfd, note->descdata + 28, 16);
-      elf_tdata (abfd)->core->command
+      elf_tdata (abfd)->core_command
 	= _bfd_elfcore_strndup (abfd, note->descdata + 44, 80);
     }
 
@@ -4833,7 +4820,7 @@ elf_m68k_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
      onto the end of the args in some (at least one anyway)
      implementations, so strip it off if it exists.  */
   {
-    char *command = elf_tdata (abfd)->core->command;
+    char *command = elf_tdata (abfd)->core_command;
     int n = strlen (command);
 
     if (n > 0 && command[n - 1] == ' ')
@@ -4843,28 +4830,7 @@ elf_m68k_grok_psinfo (bfd *abfd, Elf_Internal_Note *note)
   return TRUE;
 }
 
-/* Hook called by the linker routine which adds symbols from an object
-   file.  */
-
-static bfd_boolean
-elf_m68k_add_symbol_hook (bfd *abfd,
-			  struct bfd_link_info *info,
-			  Elf_Internal_Sym *sym,
-			  const char **namep ATTRIBUTE_UNUSED,
-			  flagword *flagsp ATTRIBUTE_UNUSED,
-			  asection **secp ATTRIBUTE_UNUSED,
-			  bfd_vma *valp ATTRIBUTE_UNUSED)
-{
-  if ((ELF_ST_TYPE (sym->st_info) == STT_GNU_IFUNC
-       || ELF_ST_BIND (sym->st_info) == STB_GNU_UNIQUE)
-      && (abfd->flags & DYNAMIC) == 0
-      && bfd_get_flavour (info->output_bfd) == bfd_target_elf_flavour)
-    elf_tdata (info->output_bfd)->has_gnu_symbols = elf_gnu_symbol_any;
-
-  return TRUE;
-}
-
-#define TARGET_BIG_SYM			m68k_elf32_vec
+#define TARGET_BIG_SYM			bfd_elf32_m68k_vec
 #define TARGET_BIG_NAME			"elf32-m68k"
 #define ELF_MACHINE_CODE		EM_68K
 #define ELF_MAXPAGESIZE			0x2000
@@ -4872,6 +4838,9 @@ elf_m68k_add_symbol_hook (bfd *abfd,
 					_bfd_elf_create_dynamic_sections
 #define bfd_elf32_bfd_link_hash_table_create \
 					elf_m68k_link_hash_table_create
+/* ??? Should it be this macro or bfd_elfNN_bfd_link_hash_table_create?  */
+#define bfd_elf32_bfd_link_hash_table_free \
+					elf_m68k_link_hash_table_free
 #define bfd_elf32_bfd_final_link	bfd_elf_final_link
 
 #define elf_backend_check_relocs	elf_m68k_check_relocs
@@ -4902,7 +4871,6 @@ elf_m68k_add_symbol_hook (bfd *abfd,
 #define elf_backend_object_p		elf32_m68k_object_p
 #define elf_backend_grok_prstatus	elf_m68k_grok_prstatus
 #define elf_backend_grok_psinfo		elf_m68k_grok_psinfo
-#define elf_backend_add_symbol_hook	elf_m68k_add_symbol_hook
 
 #define elf_backend_can_gc_sections 1
 #define elf_backend_can_refcount 1

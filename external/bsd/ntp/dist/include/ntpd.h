@@ -1,4 +1,4 @@
-/*	$NetBSD: ntpd.h,v 1.8 2016/01/08 21:35:35 christos Exp $	*/
+/*	$NetBSD: ntpd.h,v 1.4.4.4 2016/05/11 11:35:37 martin Exp $	*/
 
 /*
  * ntpd.h - Prototypes and external variables for ntpd.

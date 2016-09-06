@@ -13,11 +13,10 @@
 #include "AArch64.h"
 #include "AArch64TargetMachine.h"
 #include "AArch64TargetObjectFile.h"
-#include "AArch64TargetTransformInfo.h"
 #include "llvm/CodeGen/Passes.h"
 #include "llvm/CodeGen/RegAllocRegistry.h"
 #include "llvm/IR/Function.h"
-#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/PassManager.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Target/TargetOptions.h"
@@ -85,12 +84,7 @@ EnableA53Fix835769("aarch64-fix-cortex-a53-835769", cl::Hidden,
 static cl::opt<bool>
 EnableGEPOpt("aarch64-gep-opt", cl::Hidden,
              cl::desc("Enable optimizations on complex GEPs"),
-             cl::init(false));
-
-// FIXME: Unify control over GlobalMerge.
-static cl::opt<cl::boolOrDefault>
-EnableGlobalMerge("aarch64-global-merge", cl::Hidden,
-                  cl::desc("Enable the global merge pass"));
+             cl::init(true));
 
 extern "C" void LLVMInitializeAArch64Target() {
   // Register the target.
@@ -109,29 +103,17 @@ static std::unique_ptr<TargetLoweringObjectFile> createTLOF(const Triple &TT) {
   return make_unique<AArch64_ELFTargetObjectFile>();
 }
 
-// Helper function to build a DataLayout string
-static std::string computeDataLayout(const Triple &TT, bool LittleEndian) {
-  if (TT.isOSBinFormatMachO())
-    return "e-m:o-i64:64-i128:128-n32:64-S128";
-  if (LittleEndian)
-    return "e-m:e-i64:64-i128:128-n32:64-S128";
-  return "E-m:e-i64:64-i128:128-n32:64-S128";
-}
-
 /// TargetMachine ctor - Create an AArch64 architecture model.
 ///
-AArch64TargetMachine::AArch64TargetMachine(const Target &T, const Triple &TT,
+AArch64TargetMachine::AArch64TargetMachine(const Target &T, StringRef TT,
                                            StringRef CPU, StringRef FS,
                                            const TargetOptions &Options,
                                            Reloc::Model RM, CodeModel::Model CM,
                                            CodeGenOpt::Level OL,
                                            bool LittleEndian)
-    // This nested ternary is horrible, but DL needs to be properly
-    // initialized before TLInfo is constructed.
-    : LLVMTargetMachine(T, computeDataLayout(TT, LittleEndian), TT, CPU, FS,
-                        Options, RM, CM, OL),
-      TLOF(createTLOF(getTargetTriple())),
-      isLittle(LittleEndian) {
+    : LLVMTargetMachine(T, TT, CPU, FS, Options, RM, CM, OL),
+      TLOF(createTLOF(Triple(getTargetTriple()))),
+      Subtarget(TT, CPU, FS, *this, LittleEndian), isLittle(LittleEndian) {
   initAsmInfo();
 }
 
@@ -139,8 +121,11 @@ AArch64TargetMachine::~AArch64TargetMachine() {}
 
 const AArch64Subtarget *
 AArch64TargetMachine::getSubtargetImpl(const Function &F) const {
-  Attribute CPUAttr = F.getFnAttribute("target-cpu");
-  Attribute FSAttr = F.getFnAttribute("target-features");
+  AttributeSet FnAttrs = F.getAttributes();
+  Attribute CPUAttr =
+      FnAttrs.getAttribute(AttributeSet::FunctionIndex, "target-cpu");
+  Attribute FSAttr =
+      FnAttrs.getAttribute(AttributeSet::FunctionIndex, "target-features");
 
   std::string CPU = !CPUAttr.hasAttribute(Attribute::None)
                         ? CPUAttr.getValueAsString().str()
@@ -155,27 +140,28 @@ AArch64TargetMachine::getSubtargetImpl(const Function &F) const {
     // creation will depend on the TM and the code generation flags on the
     // function that reside in TargetOptions.
     resetTargetOptions(F);
-    I = llvm::make_unique<AArch64Subtarget>(TargetTriple, CPU, FS, *this,
-                                            isLittle);
+    I = llvm::make_unique<AArch64Subtarget>(TargetTriple, CPU, FS, *this, isLittle);
   }
   return I.get();
 }
 
 void AArch64leTargetMachine::anchor() { }
 
-AArch64leTargetMachine::AArch64leTargetMachine(
-    const Target &T, const Triple &TT, StringRef CPU, StringRef FS,
-    const TargetOptions &Options, Reloc::Model RM, CodeModel::Model CM,
-    CodeGenOpt::Level OL)
-    : AArch64TargetMachine(T, TT, CPU, FS, Options, RM, CM, OL, true) {}
+AArch64leTargetMachine::
+AArch64leTargetMachine(const Target &T, StringRef TT,
+                       StringRef CPU, StringRef FS, const TargetOptions &Options,
+                       Reloc::Model RM, CodeModel::Model CM,
+                       CodeGenOpt::Level OL)
+  : AArch64TargetMachine(T, TT, CPU, FS, Options, RM, CM, OL, true) {}
 
 void AArch64beTargetMachine::anchor() { }
 
-AArch64beTargetMachine::AArch64beTargetMachine(
-    const Target &T, const Triple &TT, StringRef CPU, StringRef FS,
-    const TargetOptions &Options, Reloc::Model RM, CodeModel::Model CM,
-    CodeGenOpt::Level OL)
-    : AArch64TargetMachine(T, TT, CPU, FS, Options, RM, CM, OL, false) {}
+AArch64beTargetMachine::
+AArch64beTargetMachine(const Target &T, StringRef TT,
+                       StringRef CPU, StringRef FS, const TargetOptions &Options,
+                       Reloc::Model RM, CodeModel::Model CM,
+                       CodeGenOpt::Level OL)
+  : AArch64TargetMachine(T, TT, CPU, FS, Options, RM, CM, OL, false) {}
 
 namespace {
 /// AArch64 Code Generator Pass Configuration Options.
@@ -202,10 +188,12 @@ public:
 };
 } // namespace
 
-TargetIRAnalysis AArch64TargetMachine::getTargetIRAnalysis() {
-  return TargetIRAnalysis([this](const Function &F) {
-    return TargetTransformInfo(AArch64TTIImpl(this, F));
-  });
+void AArch64TargetMachine::addAnalysisPasses(PassManagerBase &PM) {
+  // Add first the target-independent BasicTTI pass, then our AArch64 pass. This
+  // allows the AArch64 pass to delegate to the target independent layer when
+  // appropriate.
+  PM.add(createBasicTargetTransformInfoPass(this));
+  PM.add(createAArch64TargetTransformInfoPass(this));
 }
 
 TargetPassConfig *AArch64TargetMachine::createPassConfig(PassManagerBase &PM) {
@@ -224,10 +212,6 @@ void AArch64PassConfig::addIRPasses() {
     addPass(createCFGSimplificationPass());
 
   TargetPassConfig::addIRPasses();
-
-  // Match interleaved memory accesses to ldN/stN intrinsics.
-  if (TM->getOptLevel() != CodeGenOpt::None)
-    addPass(createInterleavedAccessPass(TM));
 
   if (TM->getOptLevel() == CodeGenOpt::Aggressive && EnableGEPOpt) {
     // Call SeparateConstOffsetFromGEP pass to extract constants within indices
@@ -249,17 +233,8 @@ bool AArch64PassConfig::addPreISel() {
   // get a chance to be merged
   if (TM->getOptLevel() != CodeGenOpt::None && EnablePromoteConstant)
     addPass(createAArch64PromoteConstantPass());
-  // FIXME: On AArch64, this depends on the type.
-  // Basically, the addressable offsets are up to 4095 * Ty.getSizeInBytes().
-  // and the offset has to be a multiple of the related size in bytes.
-  if ((TM->getOptLevel() != CodeGenOpt::None &&
-       EnableGlobalMerge == cl::BOU_UNSET) ||
-      EnableGlobalMerge == cl::BOU_TRUE) {
-    bool OnlyOptimizeForSize = (TM->getOptLevel() < CodeGenOpt::Aggressive) &&
-                               (EnableGlobalMerge == cl::BOU_UNSET);
-    addPass(createGlobalMergePass(TM, 4095, OnlyOptimizeForSize));
-  }
-
+  if (TM->getOptLevel() != CodeGenOpt::None)
+    addPass(createGlobalMergePass(TM));
   if (TM->getOptLevel() != CodeGenOpt::None)
     addPass(createAArch64AddressTypePromotionPass());
 
@@ -271,7 +246,7 @@ bool AArch64PassConfig::addInstSelector() {
 
   // For ELF, cleanup any local-dynamic TLS accesses (i.e. combine as many
   // references to _TLS_MODULE_BASE_ as possible.
-  if (TM->getTargetTriple().isOSBinFormatELF() &&
+  if (TM->getSubtarget<AArch64Subtarget>().isTargetELF() &&
       getOptLevel() != CodeGenOpt::None)
     addPass(createAArch64CleanupLocalDynamicTLSPass());
 
@@ -306,7 +281,10 @@ void AArch64PassConfig::addPostRegAlloc() {
   // Change dead register definitions to refer to the zero register.
   if (TM->getOptLevel() != CodeGenOpt::None && EnableDeadRegisterElimination)
     addPass(createAArch64DeadRegisterDefinitions());
-  if (TM->getOptLevel() != CodeGenOpt::None && usingDefaultRegAlloc())
+  if (TM->getOptLevel() != CodeGenOpt::None &&
+      (TM->getSubtarget<AArch64Subtarget>().isCortexA53() ||
+       TM->getSubtarget<AArch64Subtarget>().isCortexA57()) &&
+      usingDefaultRegAlloc())
     // Improve performance for some FP/SIMD code for A57.
     addPass(createAArch64A57FPLoadBalancing());
 }
@@ -326,6 +304,6 @@ void AArch64PassConfig::addPreEmitPass() {
   // range of their destination.
   addPass(createAArch64BranchRelaxation());
   if (TM->getOptLevel() != CodeGenOpt::None && EnableCollectLOH &&
-      TM->getTargetTriple().isOSBinFormatMachO())
+      TM->getSubtarget<AArch64Subtarget>().isTargetMachO())
     addPass(createAArch64CollectLOHPass());
 }

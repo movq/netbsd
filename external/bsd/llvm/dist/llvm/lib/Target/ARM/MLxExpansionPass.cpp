@@ -381,10 +381,7 @@ bool MLxExpansion::runOnMachineFunction(MachineFunction &Fn) {
   TII = static_cast<const ARMBaseInstrInfo *>(Fn.getSubtarget().getInstrInfo());
   TRI = Fn.getSubtarget().getRegisterInfo();
   MRI = &Fn.getRegInfo();
-  const ARMSubtarget *STI = &Fn.getSubtarget<ARMSubtarget>();
-  // Only run this for CortexA9.
-  if (!STI->isCortexA9())
-    return false;
+  const ARMSubtarget *STI = &Fn.getTarget().getSubtarget<ARMSubtarget>();
   isLikeA9 = STI->isLikeA9() || STI->isSwift();
   isSwift = STI->isSwift();
 

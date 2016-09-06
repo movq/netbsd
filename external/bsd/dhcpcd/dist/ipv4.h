@@ -1,8 +1,8 @@
-/* $NetBSD: ipv4.h,v 1.19 2016/07/29 10:07:58 roy Exp $ */
+/* $NetBSD: ipv4.h,v 1.1.1.5.2.2 2015/02/05 15:13:12 martin Exp $ */
 
 /*
  * dhcpcd - DHCP client daemon
- * Copyright (c) 2006-2016 Roy Marples <roy@marples.name>
+ * Copyright (c) 2006-2015 Roy Marples <roy@marples.name>
  * All rights reserved
 
  * Redistribution and use in source and binary forms, with or without
@@ -32,93 +32,28 @@
 
 #include "dhcpcd.h"
 
-/* Prefer our macro */
-#ifdef HTONL
-#undef HTONL
-#endif
-
-#ifndef BYTE_ORDER
-#define	BIG_ENDIAN	1234
-#define	LITTLE_ENDIAN	4321
-#if defined(_BIG_ENDIAN)
-#define	BYTE_ORDER	BIG_ENDIAN
-#elif defined(_LITTLE_ENDIAN)
-#define	BYTE_ORDER	LITTLE_ENDIAN
-#else
-#error Endian unknown
-#endif
-#endif
-
-#if BYTE_ORDER == BIG_ENDIAN
-#define HTONL(A) (A)
-#elif BYTE_ORDER == LITTLE_ENDIAN
-#define HTONL(A) \
-    ((((uint32_t)(A) & 0xff000000) >> 24) | \
-    (((uint32_t)(A) & 0x00ff0000) >> 8) | \
-    (((uint32_t)(A) & 0x0000ff00) << 8) | \
-    (((uint32_t)(A) & 0x000000ff) << 24))
-#endif /* BYTE_ORDER */
-
-#ifdef __sun
-   /* Solaris lacks these defines.
-    * While it supports DaD, to seems to only expose IFF_DUPLICATE
-    * so we have no way of knowing if it's tentative or not.
-    * I don't even know if Solaris has any special treatment for tentative. */
-#  define IN_IFF_TENTATIVE	0
-#  define IN_IFF_DUPLICATED	0x02
-#  define IN_IFF_DETACHED	0
-#endif
-
-#ifdef IN_IFF_TENTATIVE
-#define IN_IFF_NOTUSEABLE \
-        (IN_IFF_TENTATIVE | IN_IFF_DUPLICATED | IN_IFF_DETACHED)
-#endif
-
 struct rt {
 	TAILQ_ENTRY(rt) next;
 	struct in_addr dest;
-	struct in_addr mask;
+	struct in_addr net;
 	struct in_addr gate;
 	const struct interface *iface;
-#ifdef HAVE_ROUTE_METRIC
 	unsigned int metric;
-#endif
-	unsigned int mtu;
 	struct in_addr src;
-	unsigned int flags;
-	unsigned int state;
+	uint8_t flags;
 };
 TAILQ_HEAD(rt_head, rt);
 
 struct ipv4_addr {
 	TAILQ_ENTRY(ipv4_addr) next;
 	struct in_addr addr;
-	struct in_addr mask;
-	struct in_addr brd;
-	struct interface *iface;
-	int addr_flags;
-	char saddr[INET_ADDRSTRLEN + 3];
-#ifdef ALIAS_ADDR
-	char alias[IF_NAMESIZE];
-#endif
+	struct in_addr net;
+	struct in_addr dst;
 };
 TAILQ_HEAD(ipv4_addrhead, ipv4_addr);
 
-#define	IPV4_ADDR_EQ(a1, a2)	((a1) && (a1)->addr.s_addr == (a2)->addr.s_addr)
-#define	IPV4_MASK1_EQ(a1, a2)	((a1) && (a1)->mask.s_addr == (a2)->mask.s_addr)
-#define	IPV4_MASK_EQ(a1, a2)	(IPV4_ADDR_EQ(a1, a2) && IPV4_MASK1_EQ(a1, a2))
-#define	IPV4_BRD1_EQ(a1, a2)	((a1) && (a1)->brd.s_addr == (a2)->brd.s_addr)
-#define	IPV4_BRD_EQ(a1, a2)	(IPV4_MASK_EQ(a1, a2) && IPV4_BRD1_EQ(a1, a2))
-
 struct ipv4_state {
 	struct ipv4_addrhead addrs;
-	struct rt_head routes;
-
-#ifdef BSD
-	/* Buffer for BPF */
-	size_t buffer_size, buffer_len, buffer_pos;
-	char *buffer;
-#endif
 };
 
 #define IPV4_STATE(ifp)							       \
@@ -127,32 +62,24 @@ struct ipv4_state {
 	((const struct ipv4_state *)(ifp)->if_data[IF_DATA_IPV4])
 
 #ifdef INET
-struct ipv4_state *ipv4_getstate(struct interface *);
 int ipv4_init(struct dhcpcd_ctx *);
-int ipv4_ifcmp(const struct interface *, const struct interface *);
+void ipv4_sortinterfaces(struct dhcpcd_ctx *);
 uint8_t inet_ntocidr(struct in_addr);
 int inet_cidrtoaddr(int, struct in_addr *);
 uint32_t ipv4_getnetmask(uint32_t);
-int ipv4_hasaddr(const struct interface *);
+int ipv4_addrexists(struct dhcpcd_ctx *, const struct in_addr *);
 
 #define STATE_ADDED		0x01
 #define STATE_FAKE		0x02
 
 void ipv4_buildroutes(struct dhcpcd_ctx *);
-int ipv4_deladdr(struct ipv4_addr *, int);
-int ipv4_preferanother(struct interface *);
-struct ipv4_addr *ipv4_addaddr(struct interface *,
-    const struct in_addr *, const struct in_addr *, const struct in_addr *);
 void ipv4_applyaddr(void *);
-int ipv4_handlert(struct dhcpcd_ctx *, int, const struct rt *, int);
-void ipv4_freerts(struct rt_head *);
+int ipv4_routedeleted(struct dhcpcd_ctx *, const struct rt *);
 
 struct ipv4_addr *ipv4_iffindaddr(struct interface *,
     const struct in_addr *, const struct in_addr *);
 struct ipv4_addr *ipv4_iffindlladdr(struct interface *);
 struct ipv4_addr *ipv4_findaddr(struct dhcpcd_ctx *, const struct in_addr *);
-struct ipv4_addr *ipv4_findmaskaddr(struct dhcpcd_ctx *,
-    const struct in_addr *);
 void ipv4_handleifa(struct dhcpcd_ctx *, int, struct if_head *, const char *,
     const struct in_addr *, const struct in_addr *, const struct in_addr *);
 
@@ -167,8 +94,7 @@ void ipv4_ctxfree(struct dhcpcd_ctx *);
 #define ipv4_freeroutes(a) {}
 #define ipv4_free(a) {}
 #define ipv4_ctxfree(a) {}
-#define ipv4_hasaddr(a) (0)
-#define ipv4_preferanother(a) {}
+#define ipv4_addrexists(a, b) (0)
 #endif
 
 #endif

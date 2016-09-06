@@ -69,14 +69,14 @@ MachOUniversalBinary::ObjectForArch::ObjectForArch(
 
 ErrorOr<std::unique_ptr<MachOObjectFile>>
 MachOUniversalBinary::ObjectForArch::getAsObjectFile() const {
-  if (!Parent)
-    return object_error::parse_failed;
-
-  StringRef ParentData = Parent->getData();
-  StringRef ObjectData = ParentData.substr(Header.offset, Header.size);
-  StringRef ObjectName = Parent->getFileName();
-  MemoryBufferRef ObjBuffer(ObjectData, ObjectName);
-  return ObjectFile::createMachOObjectFile(ObjBuffer);
+  if (Parent) {
+    StringRef ParentData = Parent->getData();
+    StringRef ObjectData = ParentData.substr(Header.offset, Header.size);
+    StringRef ObjectName = Parent->getFileName();
+    MemoryBufferRef ObjBuffer(ObjectData, ObjectName);
+    return ObjectFile::createMachOObjectFile(ObjBuffer);
+  }
+  return object_error::parse_failed;
 }
 
 ErrorOr<std::unique_ptr<Archive>>
@@ -120,16 +120,28 @@ MachOUniversalBinary::MachOUniversalBinary(MemoryBufferRef Source,
     ec = object_error::parse_failed;
     return;
   }
-  ec = std::error_code();
+  ec = object_error::success;
+}
+
+static bool getCTMForArch(Triple::ArchType Arch, MachO::CPUType &CTM) {
+  switch (Arch) {
+    case Triple::x86:    CTM = MachO::CPU_TYPE_I386; return true;
+    case Triple::x86_64: CTM = MachO::CPU_TYPE_X86_64; return true;
+    case Triple::arm:    CTM = MachO::CPU_TYPE_ARM; return true;
+    case Triple::sparc:  CTM = MachO::CPU_TYPE_SPARC; return true;
+    case Triple::ppc:    CTM = MachO::CPU_TYPE_POWERPC; return true;
+    case Triple::ppc64:  CTM = MachO::CPU_TYPE_POWERPC64; return true;
+    default: return false;
+  }
 }
 
 ErrorOr<std::unique_ptr<MachOObjectFile>>
-MachOUniversalBinary::getObjectForArch(StringRef ArchName) const {
-  if (Triple(ArchName).getArch() == Triple::ArchType::UnknownArch)
+MachOUniversalBinary::getObjectForArch(Triple::ArchType Arch) const {
+  MachO::CPUType CTM;
+  if (!getCTMForArch(Arch, CTM))
     return object_error::arch_not_found;
-
   for (object_iterator I = begin_objects(), E = end_objects(); I != E; ++I) {
-    if (I->getArchTypeName() == ArchName)
+    if (I->getCPUType() == static_cast<uint32_t>(CTM))
       return I->getAsObjectFile();
   }
   return object_error::arch_not_found;

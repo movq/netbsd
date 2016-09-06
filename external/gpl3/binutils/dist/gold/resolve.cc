@@ -1,6 +1,6 @@
 // resolve.cc -- symbol resolution for gold
 
-// Copyright (C) 2006-2015 Free Software Foundation, Inc.
+// Copyright 2006, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -96,9 +96,7 @@ Symbol::override_base(const elfcpp::Sym<size, big_endian>& sym,
   this->override_version(version);
   this->u_.from_object.shndx = st_shndx;
   this->is_ordinary_shndx_ = is_ordinary;
-  // Don't override st_type from plugin placeholder symbols.
-  if (object->pluginobj() == NULL)
-    this->type_ = sym.get_st_type();
+  this->type_ = sym.get_st_type();
   this->binding_ = sym.get_st_bind();
   this->override_visibility(sym.get_st_visibility());
   this->nonvis_ = sym.get_st_nonvis();
@@ -173,7 +171,7 @@ static const unsigned int common_flag = 2 << def_undef_or_common_shift;
 
 static unsigned int
 symbol_to_bits(elfcpp::STB binding, bool is_dynamic,
-	       unsigned int shndx, bool is_ordinary)
+	       unsigned int shndx, bool is_ordinary, elfcpp::STT type)
 {
   unsigned int bits;
 
@@ -218,7 +216,9 @@ symbol_to_bits(elfcpp::STB binding, bool is_dynamic,
       break;
 
     default:
-      if (!is_ordinary && Symbol::is_common_shndx(shndx))
+      if (type == elfcpp::STT_COMMON)
+	bits |= common_flag;
+      else if (!is_ordinary && Symbol::is_common_shndx(shndx))
 	bits |= common_flag;
       else
         bits |= def_flag;
@@ -243,8 +243,7 @@ Symbol_table::resolve(Sized_symbol<size>* to,
 		      const elfcpp::Sym<size, big_endian>& sym,
 		      unsigned int st_shndx, bool is_ordinary,
 		      unsigned int orig_st_shndx,
-		      Object* object, const char* version,
-		      bool is_default_version)
+		      Object* object, const char* version)
 {
   // It's possible for a symbol to be defined in an object file
   // using .symver to give it a version, and for there to also be
@@ -271,15 +270,6 @@ Symbol_table::resolve(Sized_symbol<size>* to,
 
   if (!object->is_dynamic())
     {
-      if (sym.get_st_type() == elfcpp::STT_COMMON
-	  && (is_ordinary || !Symbol::is_common_shndx(st_shndx)))
-	{
-	  gold_warning(_("STT_COMMON symbol '%s' in %s "
-			 "is not in a common section"),
-		       to->demangled_name().c_str(),
-		       to->object()->name().c_str());
-	  return;
-	}
       // Record that we've seen this symbol in a regular object.
       to->set_in_reg();
     }
@@ -287,10 +277,15 @@ Symbol_table::resolve(Sized_symbol<size>* to,
            && (to->visibility() == elfcpp::STV_HIDDEN
                || to->visibility() == elfcpp::STV_INTERNAL))
     {
-      // The symbol is hidden, so a reference from a shared object
-      // cannot bind to it.  We tried issuing a warning in this case,
-      // but that produces false positives when the symbol is
-      // actually resolved in a different shared object (PR 15574).
+      // A dynamic object cannot reference a hidden or internal symbol
+      // defined in another object.
+      gold_warning(_("%s symbol '%s' in %s is referenced by DSO %s"),
+                   (to->visibility() == elfcpp::STV_HIDDEN
+                    ? "hidden"
+                    : "internal"),
+                   to->demangled_name().c_str(),
+                   to->object()->name().c_str(),
+                   object->name().c_str());
       return;
     }
   else
@@ -306,33 +301,14 @@ Symbol_table::resolve(Sized_symbol<size>* to,
 
   // If we're processing replacement files, allow new symbols to override
   // the placeholders from the plugin objects.
-  // Treat common symbols specially since it is possible that an ELF
-  // file increased the size of the alignment.
   if (to->source() == Symbol::FROM_OBJECT)
     {
       Pluginobj* obj = to->object()->pluginobj();
       if (obj != NULL
           && parameters->options().plugins()->in_replacement_phase())
         {
-	  bool adjust_common = false;
-	  typename Sized_symbol<size>::Size_type tosize = 0;
-	  typename Sized_symbol<size>::Value_type tovalue = 0;
-	  if (to->is_common()
-	      && !is_ordinary && Symbol::is_common_shndx(st_shndx))
-	    {
-	      adjust_common = true;
-	      tosize = to->symsize();
-	      tovalue = to->value();
-	    }
-	  this->override(to, sym, st_shndx, is_ordinary, object, version);
-	  if (adjust_common)
-	    {
-	      if (tosize > to->symsize())
-		to->set_symsize(tosize);
-	      if (tovalue > to->value())
-		to->set_value(tovalue);
-	    }
-	  return;
+          this->override(to, sym, st_shndx, is_ordinary, object, version);
+          return;
         }
     }
 
@@ -367,21 +343,17 @@ Symbol_table::resolve(Sized_symbol<size>* to,
       this->candidate_odr_violations_[to->name()].insert(toloc);
     }
 
-  // Plugins don't provide a symbol type, so adopt the existing type
-  // if the FROM symbol is from a plugin.
-  elfcpp::STT fromtype = (object->pluginobj() != NULL
-			  ? to->type()
-			  : sym.get_st_type());
   unsigned int frombits = symbol_to_bits(sym.get_st_bind(),
                                          object->is_dynamic(),
-					 st_shndx, is_ordinary);
+					 st_shndx, is_ordinary,
+                                         sym.get_st_type());
 
   bool adjust_common_sizes;
   bool adjust_dyndef;
   typename Sized_symbol<size>::Size_type tosize = to->symsize();
-  if (Symbol_table::should_override(to, frombits, fromtype, OBJECT,
+  if (Symbol_table::should_override(to, frombits, sym.get_st_type(), OBJECT,
 				    object, &adjust_common_sizes,
-				    &adjust_dyndef, is_default_version))
+				    &adjust_dyndef))
     {
       elfcpp::STB tobinding = to->binding();
       typename Sized_symbol<size>::Value_type tovalue = to->value();
@@ -450,16 +422,18 @@ bool
 Symbol_table::should_override(const Symbol* to, unsigned int frombits,
 			      elfcpp::STT fromtype, Defined defined,
 			      Object* object, bool* adjust_common_sizes,
-			      bool* adjust_dyndef, bool is_default_version)
+			      bool* adjust_dyndef)
 {
   *adjust_common_sizes = false;
   *adjust_dyndef = false;
 
   unsigned int tobits;
   if (to->source() == Symbol::IS_UNDEFINED)
-    tobits = symbol_to_bits(to->binding(), false, elfcpp::SHN_UNDEF, true);
+    tobits = symbol_to_bits(to->binding(), false, elfcpp::SHN_UNDEF, true,
+			    to->type());
   else if (to->source() != Symbol::FROM_OBJECT)
-    tobits = symbol_to_bits(to->binding(), false, elfcpp::SHN_ABS, false);
+    tobits = symbol_to_bits(to->binding(), false, elfcpp::SHN_ABS, false,
+			    to->type());
   else
     {
       bool is_ordinary;
@@ -467,11 +441,13 @@ Symbol_table::should_override(const Symbol* to, unsigned int frombits,
       tobits = symbol_to_bits(to->binding(),
 			      to->object()->is_dynamic(),
 			      shndx,
-			      is_ordinary);
+			      is_ordinary,
+			      to->type());
     }
 
-  if ((to->type() == elfcpp::STT_TLS) ^ (fromtype == elfcpp::STT_TLS)
-      && !to->is_placeholder())
+  if (to->type() == elfcpp::STT_TLS
+      ? fromtype != elfcpp::STT_TLS
+      : fromtype == elfcpp::STT_TLS)
     Symbol_table::report_resolve_problem(true,
 					 _("symbol '%s' used as both __thread "
 					   "and non-__thread"),
@@ -597,19 +573,9 @@ Symbol_table::should_override(const Symbol* to, unsigned int frombits,
 
     case DEF * 16 + DYN_DEF:
     case WEAK_DEF * 16 + DYN_DEF:
-      // Ignore a dynamic definition if we already have a definition.
-      return false;
-
     case DYN_DEF * 16 + DYN_DEF:
     case DYN_WEAK_DEF * 16 + DYN_DEF:
-      // Ignore a dynamic definition if we already have a definition,
-      // unless the existing definition is an unversioned definition
-      // in the same dynamic object, and the new definition is a
-      // default version.
-      if (to->object() == object
-          && to->version() == NULL
-          && is_default_version)
-        return true;
+      // Ignore a dynamic definition if we already have a definition.
       return false;
 
     case UNDEF * 16 + DYN_DEF:
@@ -930,7 +896,7 @@ Symbol_table::should_override_with_special(const Symbol* to,
   unsigned int frombits = global_flag | regular_flag | def_flag;
   bool ret = Symbol_table::should_override(to, frombits, fromtype, defined,
 					   NULL, &adjust_common_sizes,
-					   &adjust_dyn_def, false);
+					   &adjust_dyn_def);
   gold_assert(!adjust_common_sizes && !adjust_dyn_def);
   return ret;
 }
@@ -942,10 +908,6 @@ Symbol::override_base_with_special(const Symbol* from)
 {
   bool same_name = this->name_ == from->name_;
   gold_assert(same_name || this->has_alias());
-
-  // If we are overriding an undef, remember the original binding.
-  if (this->is_undefined())
-    this->set_undef_binding(this->binding_);
 
   this->source_ = from->source_;
   switch (from->source_)
@@ -1062,8 +1024,7 @@ Symbol_table::resolve<32, false>(
     bool is_ordinary,
     unsigned int orig_st_shndx,
     Object* object,
-    const char* version,
-    bool is_default_version);
+    const char* version);
 
 template
 void
@@ -1074,8 +1035,7 @@ Symbol_table::resolve<32, true>(
     bool is_ordinary,
     unsigned int orig_st_shndx,
     Object* object,
-    const char* version,
-    bool is_default_version);
+    const char* version);
 #endif
 
 #if defined(HAVE_TARGET_64_LITTLE) || defined(HAVE_TARGET_64_BIG)
@@ -1088,8 +1048,7 @@ Symbol_table::resolve<64, false>(
     bool is_ordinary,
     unsigned int orig_st_shndx,
     Object* object,
-    const char* version,
-    bool is_default_version);
+    const char* version);
 
 template
 void
@@ -1100,8 +1059,7 @@ Symbol_table::resolve<64, true>(
     bool is_ordinary,
     unsigned int orig_st_shndx,
     Object* object,
-    const char* version,
-    bool is_default_version);
+    const char* version);
 #endif
 
 #if defined(HAVE_TARGET_32_LITTLE) || defined(HAVE_TARGET_32_BIG)

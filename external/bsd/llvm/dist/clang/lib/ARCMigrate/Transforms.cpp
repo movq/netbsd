@@ -16,7 +16,6 @@
 #include "clang/Basic/SourceManager.h"
 #include "clang/Basic/TargetInfo.h"
 #include "clang/Lex/Lexer.h"
-#include "clang/Lex/Preprocessor.h"
 #include "clang/Sema/Sema.h"
 #include "clang/Sema/SemaDiagnostic.h"
 #include "llvm/ADT/DenseSet.h"
@@ -42,7 +41,7 @@ bool MigrationPass::CFBridgingFunctionsDefined() {
 
 bool trans::canApplyWeak(ASTContext &Ctx, QualType type,
                          bool AllowOnUnknownClass) {
-  if (!Ctx.getLangOpts().ObjCWeakRuntime)
+  if (!Ctx.getLangOpts().ObjCARCWeak)
     return false;
 
   QualType T = type;
@@ -50,8 +49,7 @@ bool trans::canApplyWeak(ASTContext &Ctx, QualType type,
     return false;
 
   // iOS is always safe to use 'weak'.
-  if (Ctx.getTargetInfo().getTriple().isiOS() ||
-      Ctx.getTargetInfo().getTriple().isWatchOS())
+  if (Ctx.getTargetInfo().getTriple().isiOS())
     AllowOnUnknownClass = true;
 
   while (const PointerType *ptr = T->getAs<PointerType>())
@@ -113,7 +111,10 @@ bool trans::isPlusOne(const Expr *E) {
   while (implCE && implCE->getCastKind() ==  CK_BitCast)
     implCE = dyn_cast<ImplicitCastExpr>(implCE->getSubExpr());
 
-  return implCE && implCE->getCastKind() == CK_ARCConsumeObject;
+  if (implCE && implCE->getCastKind() == CK_ARCConsumeObject)
+    return true;
+
+  return false;
 }
 
 /// \brief 'Loc' is the end of a statement range. This returns the location
@@ -211,8 +212,11 @@ bool trans::isGlobalVar(Expr *E) {
   return false;  
 }
 
-StringRef trans::getNilString(MigrationPass &Pass) {
-  return Pass.SemaRef.PP.isMacroDefined("nil") ? "nil" : "0";
+StringRef trans::getNilString(ASTContext &Ctx) {
+  if (Ctx.Idents.get("nil").hasMacroDefinition())
+    return "nil";
+  else
+    return "0";
 }
 
 namespace {

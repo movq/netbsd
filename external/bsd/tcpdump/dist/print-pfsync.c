@@ -1,4 +1,4 @@
-/*	$NetBSD: print-pfsync.c,v 1.3 2016/01/23 19:08:02 christos Exp $	*/
+/*	$NetBSD: print-pfsync.c,v 1.1 2010/12/05 05:11:30 christos Exp $	*/
 /*	$OpenBSD: print-pfsync.c,v 1.30 2007/05/31 04:16:26 mcbride Exp $	*/
 
 /*
@@ -31,35 +31,31 @@
 #ifndef lint
 #if 0
 static const char rcsid[] =
-    "@(#) $Header: /home/mike/src/cvs/netbsd/src/external/bsd/tcpdump/dist/print-pfsync.c,v 1.3 2016/01/23 19:08:02 christos Exp $";
+    "@(#) $Header: /home/mike/src/cvs/netbsd/src/external/bsd/tcpdump/dist/print-pfsync.c,v 1.1 2010/12/05 05:11:30 christos Exp $";
 #else
-__RCSID("$NetBSD: print-pfsync.c,v 1.3 2016/01/23 19:08:02 christos Exp $");
+__RCSID("$NetBSD: print-pfsync.c,v 1.1 2010/12/05 05:11:30 christos Exp $");
 #endif
 #endif
 
-#define NETDISECT_REWORKED
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
-
-#include <tcpdump-stdinc.h>
 
 #include <sys/param.h>
 #include <sys/time.h>
 #include <sys/socket.h>
 #include <sys/file.h>
 #include <sys/ioctl.h>
+#include <sys/mbuf.h>
 
 #ifdef __STDC__
 struct rtentry;
 #endif
 #include <net/if.h>
 
-#if 0
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/ip.h>
-#endif
 
 #include <net/pfvar.h>
 #include <net/if_pfsync.h>
@@ -81,14 +77,14 @@ const char *pfsync_acts[] = { PFSYNC_ACTIONS };
 static void pfsync_print(struct pfsync_header *, int);
 
 u_int
-pfsync_if_print(netdissect_options *ndo, const struct pcap_pkthdr *h, const u_char *p)
+pfsync_if_print(const struct pcap_pkthdr *h, const u_char *p)
 {
 	u_int caplen = h->caplen;
 
-	ts_print(ndo, &h->ts);
+	ts_print(&h->ts);
 
 	if (caplen < PFSYNC_HDRLEN) {
-		ND_PRINT((ndo, "[|pfsync]"));
+		printf("[|pfsync]");
 		goto out;
 	}
 

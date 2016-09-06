@@ -1,9 +1,9 @@
-/*	$NetBSD: __setjmp14.S,v 1.3 2014/08/23 02:24:22 matt Exp $	*/
+/*	$NetBSD: __setjmp14.S,v 1.2.24.2 2015/02/04 22:42:04 martin Exp $	*/
 
 #include "SYS.h"
 
 #if defined(LIBC_SCCS)
-__RCSID("$NetBSD: __setjmp14.S,v 1.3 2014/08/23 02:24:22 matt Exp $")
+__RCSID("$NetBSD: __setjmp14.S,v 1.2.24.2 2015/02/04 22:42:04 martin Exp $")
 #endif
 
 /*

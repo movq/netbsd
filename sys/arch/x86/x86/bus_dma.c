@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_dma.c,v 1.74 2015/10/27 18:49:26 christos Exp $	*/
+/*	$NetBSD: bus_dma.c,v 1.71.4.1 2015/11/08 00:31:00 riz Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2007 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.74 2015/10/27 18:49:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.71.4.1 2015/11/08 00:31:00 riz Exp $");
 
 /*
  * The following is included because _bus_dma_uiomove is derived from

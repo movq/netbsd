@@ -33,7 +33,7 @@ namespace llvm {
 class RegisterClassInfo;
 
   /// Contains all the state necessary for anti-dep breaking.
-class LLVM_LIBRARY_VISIBILITY AggressiveAntiDepState {
+  class AggressiveAntiDepState {
   public:
     /// Information about a register reference within a liverange
     typedef struct {
@@ -63,11 +63,11 @@ class LLVM_LIBRARY_VISIBILITY AggressiveAntiDepState {
     /// Map registers to all their references within a live range.
     std::multimap<unsigned, RegisterReference> RegRefs;
 
-    /// The index of the most recent kill (proceeding bottom-up),
+    /// The index of the most recent kill (proceding bottom-up),
     /// or ~0u if the register is not live.
     std::vector<unsigned> KillIndices;
 
-    /// The index of the most recent complete def (proceeding bottom
+    /// The index of the most recent complete def (proceding bottom
     /// up), or ~0u if the register is live.
     std::vector<unsigned> DefIndices;
 
@@ -108,8 +108,8 @@ class LLVM_LIBRARY_VISIBILITY AggressiveAntiDepState {
     bool IsLive(unsigned Reg);
   };
 
-  class LLVM_LIBRARY_VISIBILITY AggressiveAntiDepBreaker
-      : public AntiDepBreaker {
+
+  class AggressiveAntiDepBreaker : public AntiDepBreaker {
     MachineFunction& MF;
     MachineRegisterInfo &MRI;
     const TargetInstrInfo *TII;
@@ -127,7 +127,7 @@ class LLVM_LIBRARY_VISIBILITY AggressiveAntiDepState {
     AggressiveAntiDepBreaker(MachineFunction& MFi,
                           const RegisterClassInfo &RCI,
                           TargetSubtargetInfo::RegClassVector& CriticalPathRCs);
-    ~AggressiveAntiDepBreaker() override;
+    ~AggressiveAntiDepBreaker();
 
     /// Initialize anti-dep breaking for a new basic block.
     void StartBlock(MachineBasicBlock *BB) override;

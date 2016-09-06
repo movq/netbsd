@@ -1,9 +1,9 @@
-/*	$NetBSD: gayle.c,v 1.8 2015/01/16 23:34:11 phx Exp $	*/
+/*	$NetBSD: gayle.c,v 1.7.4.1 2015/01/17 12:20:14 martin Exp $	*/
 
 /* public domain */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gayle.c,v 1.8 2015/01/16 23:34:11 phx Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gayle.c,v 1.7.4.1 2015/01/17 12:20:14 martin Exp $");
 
 /*
  * Gayle management - provide functions for use in the drivers that utilise

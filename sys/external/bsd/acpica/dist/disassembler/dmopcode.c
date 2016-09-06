@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,177 +45,18 @@
 #include "accommon.h"
 #include "acparser.h"
 #include "amlcode.h"
-#include "acinterp.h"
-#include "acnamesp.h"
-#include "acdebug.h"
+#include "acdisasm.h"
 
+#ifdef ACPI_DISASSEMBLER
 
 #define _COMPONENT          ACPI_CA_DEBUGGER
         ACPI_MODULE_NAME    ("dmopcode")
-
 
 /* Local prototypes */
 
 static void
 AcpiDmMatchKeyword (
     ACPI_PARSE_OBJECT       *Op);
-
-static void
-AcpiDmConvertToElseIf (
-    ACPI_PARSE_OBJECT       *Op);
-
-
-/*******************************************************************************
- *
- * FUNCTION:    AcpiDmDisplayTargetPathname
- *
- * PARAMETERS:  Op              - Parse object
- *
- * RETURN:      None
- *
- * DESCRIPTION: For AML opcodes that have a target operand, display the full
- *              pathname for the target, in a comment field. Handles Return()
- *              statements also.
- *
- ******************************************************************************/
-
-void
-AcpiDmDisplayTargetPathname (
-    ACPI_PARSE_OBJECT       *Op)
-{
-    ACPI_PARSE_OBJECT       *NextOp;
-    ACPI_PARSE_OBJECT       *PrevOp = NULL;
-    char                    *Pathname;
-    const ACPI_OPCODE_INFO  *OpInfo;
-
-
-    if (Op->Common.AmlOpcode == AML_RETURN_OP)
-    {
-        PrevOp = Op->Asl.Value.Arg;
-    }
-    else
-    {
-        OpInfo = AcpiPsGetOpcodeInfo (Op->Common.AmlOpcode);
-        if (!(OpInfo->Flags & AML_HAS_TARGET))
-        {
-            return;
-        }
-
-        /* Target is the last Op in the arg list */
-
-        NextOp = Op->Asl.Value.Arg;
-        while (NextOp)
-        {
-            PrevOp = NextOp;
-            NextOp = PrevOp->Asl.Next;
-        }
-    }
-
-    if (!PrevOp)
-    {
-        return;
-    }
-
-    /* We must have a namepath AML opcode */
-
-    if (PrevOp->Asl.AmlOpcode != AML_INT_NAMEPATH_OP)
-    {
-        return;
-    }
-
-    /* A null string is the "no target specified" case */
-
-    if (!PrevOp->Asl.Value.String)
-    {
-        return;
-    }
-
-    /* No node means "unresolved external reference" */
-
-    if (!PrevOp->Asl.Node)
-    {
-        AcpiOsPrintf (" /* External reference */");
-        return;
-    }
-
-    /* Ignore if path is already from the root */
-
-    if (*PrevOp->Asl.Value.String == '\\')
-    {
-        return;
-    }
-
-    /* Now: we can get the full pathname */
-
-    Pathname = AcpiNsGetExternalPathname (PrevOp->Asl.Node);
-    if (!Pathname)
-    {
-        return;
-    }
-
-    AcpiOsPrintf (" /* %s */", Pathname);
-    ACPI_FREE (Pathname);
-}
-
-
-/*******************************************************************************
- *
- * FUNCTION:    AcpiDmNotifyDescription
- *
- * PARAMETERS:  Op              - Name() parse object
- *
- * RETURN:      None
- *
- * DESCRIPTION: Emit a description comment for the value associated with a
- *              Notify() operator.
- *
- ******************************************************************************/
-
-void
-AcpiDmNotifyDescription (
-    ACPI_PARSE_OBJECT       *Op)
-{
-    ACPI_PARSE_OBJECT       *NextOp;
-    ACPI_NAMESPACE_NODE     *Node;
-    UINT8                   NotifyValue;
-    UINT8                   Type = ACPI_TYPE_ANY;
-
-
-    /* The notify value is the second argument */
-
-    NextOp = Op->Asl.Value.Arg;
-    NextOp = NextOp->Asl.Next;
-
-    switch (NextOp->Common.AmlOpcode)
-    {
-    case AML_ZERO_OP:
-    case AML_ONE_OP:
-
-        NotifyValue = (UINT8) NextOp->Common.AmlOpcode;
-        break;
-
-    case AML_BYTE_OP:
-
-        NotifyValue = (UINT8) NextOp->Asl.Value.Integer;
-        break;
-
-    default:
-        return;
-    }
-
-    /*
-     * Attempt to get the namespace node so we can determine the object type.
-     * Some notify values are dependent on the object type (Device, Thermal,
-     * or Processor).
-     */
-    Node = Op->Asl.Node;
-    if (Node)
-    {
-        Type = Node->Type;
-    }
-
-    AcpiOsPrintf (" // %s", AcpiUtGetNotifyName (NotifyValue, Type));
-}
 
 
 /*******************************************************************************
@@ -249,11 +90,11 @@ AcpiDmPredefinedDescription (
 
     /* Ensure that the comment field is emitted only once */
 
-    if (Op->Common.DisasmFlags & ACPI_PARSEOP_PREDEFINED_CHECKED)
+    if (Op->Common.DisasmFlags & ACPI_PARSEOP_PREDEF_CHECKED)
     {
         return;
     }
-    Op->Common.DisasmFlags |= ACPI_PARSEOP_PREDEFINED_CHECKED;
+    Op->Common.DisasmFlags |= ACPI_PARSEOP_PREDEF_CHECKED;
 
     /* Predefined name must start with an underscore */
 
@@ -272,10 +113,10 @@ AcpiDmPredefinedDescription (
      * Note: NameString is guaranteed to be upper case here.
      */
     LastCharIsDigit =
-        (isdigit ((int) NameString[3]));    /* d */
+        (ACPI_IS_DIGIT (NameString[3]));    /* d */
     LastCharsAreHex =
-        (isxdigit ((int) NameString[2]) &&  /* xx */
-         isxdigit ((int) NameString[3]));
+        (ACPI_IS_XDIGIT (NameString[2]) &&  /* xx */
+         ACPI_IS_XDIGIT (NameString[3]));
 
     switch (NameString[1])
     {
@@ -342,11 +183,14 @@ AcpiDmPredefinedDescription (
 
     /* Match the name in the info table */
 
-    Info = AcpiAhMatchPredefinedName (NameString);
-    if (Info)
+    for (Info = AslPredefinedInfo; Info->Name; Info++)
     {
-        AcpiOsPrintf ("  // %4.4s: %s",
-            NameString, ACPI_CAST_PTR (char, Info->Description));
+        if (ACPI_COMPARE_NAME (NameString, Info->Name))
+        {
+            AcpiOsPrintf ("  // %4.4s: %s",
+                NameString, ACPI_CAST_PTR (char, Info->Description));
+            return;
+        }
     }
 
 #endif
@@ -385,11 +229,11 @@ AcpiDmFieldPredefinedDescription (
 
     /* Ensure that the comment field is emitted only once */
 
-    if (Op->Common.DisasmFlags & ACPI_PARSEOP_PREDEFINED_CHECKED)
+    if (Op->Common.DisasmFlags & ACPI_PARSEOP_PREDEF_CHECKED)
     {
         return;
     }
-    Op->Common.DisasmFlags |= ACPI_PARSEOP_PREDEFINED_CHECKED;
+    Op->Common.DisasmFlags |= ACPI_PARSEOP_PREDEF_CHECKED;
 
     /*
      * Op must be one of the Create* operators: CreateField, CreateBitField,
@@ -423,11 +267,14 @@ AcpiDmFieldPredefinedDescription (
 
     /* Match the name in the info table */
 
-    Info = AcpiAhMatchPredefinedName (Tag);
-    if (Info)
+    for (Info = AslPredefinedInfo; Info->Name; Info++)
     {
-        AcpiOsPrintf ("  // %4.4s: %s", Tag,
-            ACPI_CAST_PTR (char, Info->Description));
+        if (ACPI_COMPARE_NAME (Tag, Info->Name))
+        {
+            AcpiOsPrintf ("  // %4.4s: %s", Tag,
+                ACPI_CAST_PTR (char, Info->Description));
+            return;
+        }
     }
 
 #endif
@@ -571,6 +418,7 @@ AcpiDmRegionFlags (
     ACPI_PARSE_OBJECT       *Op)
 {
 
+
     /* The next Op contains the SpaceId */
 
     Op = AcpiPsGetDepthNext (NULL, Op);
@@ -640,14 +488,15 @@ AcpiDmMatchKeyword (
     ACPI_PARSE_OBJECT       *Op)
 {
 
+
     if (((UINT32) Op->Common.Value.Integer) > ACPI_MAX_MATCH_OPCODE)
     {
         AcpiOsPrintf ("/* Unknown Match Keyword encoding */");
     }
     else
     {
-        AcpiOsPrintf ("%s",
-            AcpiGbl_MatchOps[(ACPI_SIZE) Op->Common.Value.Integer]);
+        AcpiOsPrintf ("%s", ACPI_CAST_PTR (char,
+            AcpiGbl_MatchOps[(ACPI_SIZE) Op->Common.Value.Integer]));
     }
 }
 
@@ -678,18 +527,12 @@ AcpiDmDisassembleOneOp (
     ACPI_PARSE_OBJECT       *Child;
     ACPI_STATUS             Status;
     UINT8                   *Aml;
-    const AH_DEVICE_ID      *IdInfo;
 
 
     if (!Op)
     {
         AcpiOsPrintf ("<NULL OP PTR>");
         return;
-    }
-
-    if (Op->Common.DisasmFlags & ACPI_PARSEOP_ELSEIF)
-    {
-        return; /* ElseIf macro was already emitted */
     }
 
     switch (Op->Common.DisasmOpcode)
@@ -701,27 +544,27 @@ AcpiDmDisassembleOneOp (
 
     case ACPI_DASM_LNOT_SUFFIX:
 
-        if (!AcpiGbl_CstyleDisassembly)
+        switch (Op->Common.AmlOpcode)
         {
-            switch (Op->Common.AmlOpcode)
-            {
-            case AML_LEQUAL_OP:
-                AcpiOsPrintf ("LNotEqual");
-                break;
+        case AML_LEQUAL_OP:
 
-            case AML_LGREATER_OP:
-                AcpiOsPrintf ("LLessEqual");
-                break;
+            AcpiOsPrintf ("LNotEqual");
+            break;
 
-            case AML_LLESS_OP:
-                AcpiOsPrintf ("LGreaterEqual");
-                break;
+        case AML_LGREATER_OP:
 
-            default:
-                break;
-            }
+            AcpiOsPrintf ("LLessEqual");
+            break;
+
+        case AML_LLESS_OP:
+
+            AcpiOsPrintf ("LGreaterEqual");
+            break;
+
+        default:
+
+            break;
         }
-
         Op->Common.DisasmOpcode = 0;
         Op->Common.DisasmFlags |= ACPI_PARSEOP_IGNORE;
         return;
@@ -729,6 +572,7 @@ AcpiDmDisassembleOneOp (
     default:
         break;
     }
+
 
     OpInfo = AcpiPsGetOpcodeInfo (Op->Common.AmlOpcode);
 
@@ -761,7 +605,7 @@ AcpiDmDisassembleOneOp (
 
         if (Op->Common.DisasmOpcode == ACPI_DASM_EISAID)
         {
-            AcpiDmDecompressEisaId ((UINT32) Op->Common.Value.Integer);
+            AcpiDmEisaId ((UINT32) Op->Common.Value.Integer);
         }
         else
         {
@@ -773,7 +617,7 @@ AcpiDmDisassembleOneOp (
 
         if (Op->Common.DisasmOpcode == ACPI_DASM_EISAID)
         {
-            AcpiDmDecompressEisaId ((UINT32) Op->Common.Value.Integer);
+            AcpiDmEisaId ((UINT32) Op->Common.Value.Integer);
         }
         else
         {
@@ -790,19 +634,6 @@ AcpiDmDisassembleOneOp (
     case AML_STRING_OP:
 
         AcpiUtPrintString (Op->Common.Value.String, ACPI_UINT16_MAX);
-
-        /* For _HID/_CID strings, attempt to output a descriptive comment */
-
-        if (Op->Common.DisasmOpcode == ACPI_DASM_HID_STRING)
-        {
-            /* If we know about the ID, emit the description */
-
-            IdInfo = AcpiAhMatchHardwareId (Op->Common.Value.String);
-            if (IdInfo)
-            {
-                AcpiOsPrintf (" /* %s */", IdInfo->Description);
-            }
-        }
         break;
 
     case AML_BUFFER_OP:
@@ -829,18 +660,11 @@ AcpiDmDisassembleOneOp (
             }
             else if (Status == AE_AML_NO_RESOURCE_END_TAG)
             {
-                AcpiOsPrintf (
-                    "/**** Is ResourceTemplate, "
-                    "but EndTag not at buffer end ****/ ");
+                AcpiOsPrintf ("/**** Is ResourceTemplate, but EndTag not at buffer end ****/ ");
             }
         }
 
-        if (AcpiDmIsUuidBuffer (Op))
-        {
-            Op->Common.DisasmOpcode = ACPI_DASM_UUID;
-            AcpiOsPrintf ("ToUUID (");
-        }
-        else if (AcpiDmIsUnicodeBuffer (Op))
+        if (AcpiDmIsUnicodeBuffer (Op))
         {
             Op->Common.DisasmOpcode = ACPI_DASM_UNICODE;
             AcpiOsPrintf ("Unicode (");
@@ -853,12 +677,24 @@ AcpiDmDisassembleOneOp (
         else if (AcpiDmIsPldBuffer (Op))
         {
             Op->Common.DisasmOpcode = ACPI_DASM_PLD_METHOD;
-            AcpiOsPrintf ("ToPLD (");
+            AcpiOsPrintf ("Buffer");
         }
         else
         {
             Op->Common.DisasmOpcode = ACPI_DASM_BUFFER;
             AcpiOsPrintf ("Buffer");
+        }
+        break;
+
+    case AML_INT_STATICSTRING_OP:
+
+        if (Op->Common.Value.String)
+        {
+            AcpiOsPrintf ("%s", Op->Common.Value.String);
+        }
+        else
+        {
+            AcpiOsPrintf ("\"<NULL STATIC STRING PTR>\"");
         }
         break;
 
@@ -906,8 +742,7 @@ AcpiDmDisassembleOneOp (
 
         if (Op->Common.AmlOpcode == AML_INT_EXTACCESSFIELD_OP)
         {
-            AcpiOsPrintf (" (0x%2.2X)", (unsigned)
-                ((Op->Common.Value.Integer >> 16) & 0xFF));
+            AcpiOsPrintf (" (0x%2.2X)", (unsigned) ((Op->Common.Value.Integer >> 16) & 0xFF));
         }
 
         AcpiOsPrintf (")");
@@ -930,9 +765,7 @@ AcpiDmDisassembleOneOp (
             Length = (UINT32) Child->Common.Value.Integer;
 
             Info->Level += 1;
-            Info->MappingOp = Op;
             Op->Common.DisasmOpcode = ACPI_DASM_RESOURCE;
-
             AcpiDmResourceTemplate (Info, Op->Common.Parent, Aml, Length);
 
             Info->Level -= 1;
@@ -964,24 +797,6 @@ AcpiDmDisassembleOneOp (
         AcpiDmNamestring (Op->Common.Value.Name);
         break;
 
-    case AML_ELSE_OP:
-
-        AcpiDmConvertToElseIf (Op);
-        break;
-
-    case AML_EXTERNAL_OP:
-
-        if (AcpiGbl_DmEmitExternalOpcodes)
-        {
-            AcpiOsPrintf ("/* Opcode 0x15 */ ");
-
-            /* Fallthrough */
-        }
-        else
-        {
-            break;
-        }
-
     default:
 
         /* Just get the opcode name and print it */
@@ -996,7 +811,7 @@ AcpiDmDisassembleOneOp (
             (WalkState->Results) &&
             (WalkState->ResultCount))
         {
-            AcpiDbDecodeInternalObject (
+            AcpiDmDecodeInternalObject (
                 WalkState->Results->Results.ObjDesc [
                     (WalkState->ResultCount - 1) %
                         ACPI_RESULTS_FRAME_OBJ_NUM]);
@@ -1007,118 +822,4 @@ AcpiDmDisassembleOneOp (
     }
 }
 
-
-/*******************************************************************************
- *
- * FUNCTION:    AcpiDmConvertToElseIf
- *
- * PARAMETERS:  OriginalElseOp          - ELSE Object to be examined
- *
- * RETURN:      None. Emits either an "Else" or an "ElseIf" ASL operator.
- *
- * DESCRIPTION: Detect and convert an If..Else..If sequence to If..ElseIf
- *
- * EXAMPLE:
- *
- * This If..Else..If nested sequence:
- *
- *        If (Arg0 == 1)
- *        {
- *            Local0 = 4
- *        }
- *        Else
- *        {
- *            If (Arg0 == 2)
- *            {
- *                Local0 = 5
- *            }
- *        }
- *
- * Is converted to this simpler If..ElseIf sequence:
- *
- *        If (Arg0 == 1)
- *        {
- *            Local0 = 4
- *        }
- *        ElseIf (Arg0 == 2)
- *        {
- *            Local0 = 5
- *        }
- *
- * NOTE: There is no actual ElseIf AML opcode. ElseIf is essentially an ASL
- * macro that emits an Else opcode followed by an If opcode. This function
- * reverses these AML sequences back to an ElseIf macro where possible. This
- * can make the disassembled ASL code simpler and more like the original code.
- *
- ******************************************************************************/
-
-static void
-AcpiDmConvertToElseIf (
-    ACPI_PARSE_OBJECT       *OriginalElseOp)
-{
-    ACPI_PARSE_OBJECT       *IfOp;
-    ACPI_PARSE_OBJECT       *ElseOp;
-
-
-    /*
-     * To be able to perform the conversion, two conditions must be satisfied:
-     * 1) The first child of the Else must be an If statement.
-     * 2) The If block can only be followed by an Else block and these must
-     *    be the only blocks under the original Else.
-     */
-    IfOp = OriginalElseOp->Common.Value.Arg;
-    if (!IfOp ||
-        (IfOp->Common.AmlOpcode != AML_IF_OP) ||
-        (IfOp->Asl.Next && (IfOp->Asl.Next->Common.AmlOpcode != AML_ELSE_OP)))
-    {
-        /* Not an Else..If sequence, cannot convert to ElseIf */
-
-        AcpiOsPrintf ("%s", "Else");
-        return;
-    }
-
-    /* Emit ElseIf, mark the IF as now an ELSEIF */
-
-    AcpiOsPrintf ("%s", "ElseIf");
-    IfOp->Common.DisasmFlags |= ACPI_PARSEOP_ELSEIF;
-
-    /* The IF parent will now be the same as the original ELSE parent */
-
-    IfOp->Common.Parent = OriginalElseOp->Common.Parent;
-
-    /*
-     * Update the NEXT pointers to restructure the parse tree, essentially
-     * promoting an If..Else block up to the same level as the original
-     * Else.
-     *
-     * Check if the IF has a corresponding ELSE peer
-     */
-    ElseOp = IfOp->Common.Next;
-    if (ElseOp &&
-        (ElseOp->Common.AmlOpcode == AML_ELSE_OP))
-    {
-        /* If an ELSE matches the IF, promote it also */
-
-        ElseOp->Common.Parent = OriginalElseOp->Common.Parent;
-        ElseOp->Common.Next = OriginalElseOp->Common.Next;
-    }
-    else
-    {
-        /* Otherwise, set the IF NEXT to the original ELSE NEXT */
-
-        IfOp->Common.Next = OriginalElseOp->Common.Next;
-    }
-
-    /* Detach the child IF block from the original ELSE */
-
-    OriginalElseOp->Common.Value.Arg = NULL;
-
-    /* Ignore the original ELSE from now on */
-
-    OriginalElseOp->Common.DisasmFlags |= ACPI_PARSEOP_IGNORE;
-    OriginalElseOp->Common.DisasmOpcode = ACPI_DASM_LNOT_PREFIX;
-
-    /* Insert IF (now ELSEIF) as next peer of the original ELSE */
-
-    OriginalElseOp->Common.Next = IfOp;
-}
+#endif  /* ACPI_DISASSEMBLER */

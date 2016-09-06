@@ -1,4 +1,4 @@
-/*	$NetBSD: setterm.c,v 1.54 2016/01/09 19:05:13 jdc Exp $	*/
+/*	$NetBSD: setterm.c,v 1.52 2013/10/16 19:59:29 roy Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)setterm.c	8.8 (Berkeley) 10/25/94";
 #else
-__RCSID("$NetBSD: setterm.c,v 1.54 2016/01/09 19:05:13 jdc Exp $");
+__RCSID("$NetBSD: setterm.c,v 1.52 2013/10/16 19:59:29 roy Exp $");
 #endif
 #endif /* not lint */
 
@@ -69,8 +69,6 @@ _cursesi_setterm(char *type, SCREEN *screen)
 	if (type[0] == '\0')
 		type = "xx";
 	unknown = 0;
-	if (screen->term)
-		del_curterm(screen->term);
 	(void)ti_setupterm(&screen->term, type, fileno(screen->outfd), &r);
 	if (screen->term == NULL) {
 		unknown++;
@@ -124,7 +122,7 @@ _cursesi_setterm(char *type, SCREEN *screen)
 
 #ifdef DEBUG
 	__CTRACE(__CTRACE_INIT,
-	    "setterm: LINES = %d, COLS = %d, TABSIZE = %d\n",
+	    "setterm: LINES = %d, COLS = %d\n, TABSIZE = %d\n",
 	    LINES, COLS, TABSIZE);
 #endif
 

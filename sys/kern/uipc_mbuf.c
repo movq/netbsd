@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_mbuf.c,v 1.168 2016/06/16 02:38:40 ozaki-r Exp $	*/
+/*	$NetBSD: uipc_mbuf.c,v 1.158.4.1 2015/02/09 09:46:01 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2001 The NetBSD Foundation, Inc.
@@ -62,13 +62,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_mbuf.c,v 1.168 2016/06/16 02:38:40 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_mbuf.c,v 1.158.4.1 2015/02/09 09:46:01 martin Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_mbuftrace.h"
 #include "opt_nmbclusters.h"
 #include "opt_ddb.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -556,22 +554,9 @@ m_reclaim(void *arg, int flags)
 			if (pr->pr_drain)
 				(*pr->pr_drain)();
 	}
-	/* XXX we cannot use psref in H/W interrupt */
-	if (!cpu_intr_p()) {
-		int bound = curlwp_bind();
-		IFNET_READER_FOREACH(ifp) {
-			struct psref psref;
-
-			psref_acquire(&psref, &ifp->if_psref,
-			    ifnet_psref_class);
-
-			if (ifp->if_drain)
-				(*ifp->if_drain)(ifp);
-
-			psref_release(&psref, &ifp->if_psref,
-			    ifnet_psref_class);
-		}
-		curlwp_bindx(bound);
+	IFNET_FOREACH(ifp) {
+		if (ifp->if_drain)
+			(*ifp->if_drain)(ifp);
 	}
 	splx(s);
 	mbstat.m_drain++;
@@ -596,8 +581,14 @@ m_get(int nowait, int type)
 		return NULL;
 
 	mbstat_type_add(type, 1);
-
-	m_hdr_init(m, type, NULL, m->m_dat, 0);
+	mowner_init(m, type);
+	m->m_ext_ref = m;
+	m->m_type = type;
+	m->m_len = 0;
+	m->m_next = NULL;
+	m->m_nextpkt = NULL;
+	m->m_data = m->m_dat;
+	m->m_flags = 0;
 
 	return m;
 }
@@ -611,7 +602,13 @@ m_gethdr(int nowait, int type)
 	if (m == NULL)
 		return NULL;
 
-	m_pkthdr_init(m);
+	m->m_data = m->m_pktdat;
+	m->m_flags = M_PKTHDR;
+	m->m_pkthdr.rcvif = NULL;
+	m->m_pkthdr.len = 0;
+	m->m_pkthdr.csum_flags = 0;
+	m->m_pkthdr.csum_data = 0;
+	SLIST_INIT(&m->m_pkthdr.tags);
 
 	return m;
 }
@@ -1170,7 +1167,7 @@ m_split0(struct mbuf *m0, int len0, int wait, int copyhdr)
 		if (n == NULL)
 			return NULL;
 		MCLAIM(n, m0->m_owner);
-		m_copy_rcvif(n, m0);
+		n->m_pkthdr.rcvif = m0->m_pkthdr.rcvif;
 		n->m_pkthdr.len = m0->m_pkthdr.len - len0;
 		len_save = m0->m_pkthdr.len;
 		m0->m_pkthdr.len = len0;
@@ -1239,7 +1236,7 @@ m_devget(char *buf, int totlen, int off0, struct ifnet *ifp,
 	m = m_gethdr(M_DONTWAIT, MT_DATA);
 	if (m == NULL)
 		return NULL;
-	m_set_rcvif(m, ifp);
+	m->m_pkthdr.rcvif = ifp;
 	m->m_pkthdr.len = totlen;
 	m->m_len = MHLEN;
 
@@ -1692,7 +1689,7 @@ m_getptr(struct mbuf *m, int loc, int *off)
 /*
  * m_ext_free: release a reference to the mbuf external storage.
  *
- * => free the mbuf m itself as well.
+ * => free the mbuf m itsself as well.
  */
 
 void
@@ -1782,7 +1779,7 @@ nextchain:
 		snprintb(buf, sizeof(buf), M_CSUM_BITS, m->m_pkthdr.csum_flags);
 		(*pr)("  pktlen=%d, rcvif=%p, csum_flags=0x%s, csum_data=0x%"
 		    PRIx32 ", segsz=%u\n",
-		    m->m_pkthdr.len, m_get_rcvif_NOMPSAFE(m),
+		    m->m_pkthdr.len, m->m_pkthdr.rcvif,
 		    buf, m->m_pkthdr.csum_data, m->m_pkthdr.segsz);
 	}
 	if ((m->m_flags & M_EXT)) {

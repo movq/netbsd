@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_engine.c,v 1.51 2016/01/03 08:17:24 mlelstv Exp $	*/
+/*	$NetBSD: rf_engine.c,v 1.49 2013/09/15 12:45:11 martin Exp $	*/
 /*
  * Copyright (c) 1995 Carnegie-Mellon University.
  * All rights reserved.
@@ -55,7 +55,7 @@
  ****************************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_engine.c,v 1.51 2016/01/03 08:17:24 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_engine.c,v 1.49 2013/09/15 12:45:11 martin Exp $");
 
 #include <sys/errno.h>
 
@@ -187,7 +187,7 @@ BranchDone(RF_DagNode_t *node)
 {
 	int     i;
 
-	/* return true if forward execution is completed for a node and its
+	/* return true if forward execution is completed for a node and it's
 	 * succedents */
 	switch (node->status) {
 	case rf_wait:
@@ -843,7 +843,7 @@ DAGExecutionThread(RF_ThreadArg_t arg)
 
 /*
  * rf_RaidIOThread() -- When I/O to a component begins, raidstrategy()
- * puts the I/O on a buffer queue, and then signals raidPtr->iodone.  If
+ * puts the I/O on a buf_queue, and then signals raidPtr->iodone.  If
  * necessary, this function calls raidstart() to initiate the I/O.
  * When I/O to a component completes, KernelWakeupFunc() puts the
  * completed request onto raidPtr->iodone TAILQ.  This function looks

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_atureg.h,v 1.11 2016/04/23 10:15:31 skrll Exp $ */
+/*	$NetBSD: if_atureg.h,v 1.10 2012/09/23 01:08:17 chs Exp $ */
 /*	$OpenBSD: if_atureg.h,v 1.21 2004/12/23 13:19:38 dlg Exp $ */
 /*
  * Copyright (c) 2003
@@ -98,21 +98,21 @@ enum atu_radio_type {
 };
 
 struct atu_type {
-	uint16_t		atu_vid;
-	uint16_t		atu_pid;
+	u_int16_t		atu_vid;
+	u_int16_t		atu_pid;
 	enum atu_radio_type	atu_radio;
-	uint16_t		atu_quirk;
+	u_int16_t		atu_quirk;
 };
 
 struct atu_softc;
 
 struct atu_chain {
 	struct atu_softc	*atu_sc;
-	struct usbd_xfer	*atu_xfer;
+	usbd_xfer_handle	atu_xfer;
 	char			*atu_buf;
 	struct mbuf		*atu_mbuf;
-	uint8_t			atu_idx;
-	uint16_t		atu_length;
+	u_int8_t		atu_idx;
+	u_int16_t		atu_length;
 	int			atu_in_xfer;
 	SLIST_ENTRY(atu_chain)	atu_list;
 };
@@ -124,8 +124,8 @@ struct atu_cdata {
 	SLIST_HEAD(atu_list_head, atu_chain)	atu_rx_free;
 	struct atu_list_head	atu_tx_free;
 
-	uint8_t			atu_tx_inuse;
-	uint8_t			atu_tx_last_idx;
+	u_int8_t		atu_tx_inuse;
+	u_int8_t		atu_tx_last_idx;
 };
 
 #define MAX_SSID_LEN		32
@@ -148,12 +148,12 @@ struct atu_softc {
 #define ATU_C_JOIN		2
 	struct usb_task		sc_task;
 
-	struct usbd_device	*atu_udev;
-	struct usbd_interface	*atu_iface;
+	usbd_device_handle	atu_udev;
+	usbd_interface_handle	atu_iface;
 	struct ethercom		atu_ec;
 	struct ifmedia		atu_media;
 	int			atu_ed[ATU_ENDPT_MAX];
-	struct usbd_pipe	*atu_ep[ATU_ENDPT_MAX];
+	usbd_pipe_handle	atu_ep[ATU_ENDPT_MAX];
 	int			atu_unit;
 	int			atu_if_flags;
 
@@ -161,25 +161,25 @@ struct atu_softc {
 
 	struct timeval		atu_rx_notice;
 
-	uint8_t			atu_bssid[ETHER_ADDR_LEN];
+	u_int8_t		atu_bssid[ETHER_ADDR_LEN];
 	enum atu_radio_type	atu_radio;
-	uint16_t		atu_quirk;
+	u_int16_t		atu_quirk;
 
-	uint8_t			atu_channel;
-	uint16_t		atu_desired_channel;
-	uint8_t			atu_mode;
+	u_int8_t		atu_channel;
+	u_int16_t		atu_desired_channel;
+	u_int8_t		atu_mode;
 #define NO_MODE_YET		0
 #define AD_HOC_MODE		1
 #define INFRASTRUCTURE_MODE	2
 
-	uint8_t			atu_radio_on;
-	uint8_t			atu_encrypt;
+	u_int8_t		atu_radio_on;
+	u_int8_t		atu_encrypt;
 #define ATU_WEP_RX		0x01
 #define ATU_WEP_TX		0x02
 #define ATU_WEP_TXRX		(ATU_WEP_RX | ATU_WEP_TX)
 	int			atu_wepkey;
 	int			atu_wepkeylen;
-	uint8_t			atu_wepkeys[4][13];
+	u_int8_t		atu_wepkeys[4][13];
 };
 
 #define	sc_if	sc_ec.ec_if
@@ -337,39 +337,39 @@ struct atu_cmd_start_ibss {
 
 /* The config structure of an RFMD radio */
 struct atu_rfmd_conf {
-	uint8_t		CR20[14];
-	uint8_t		CR21[14];
-	uint8_t		BB_CR[14];
-	uint8_t		PidVid[4];
-	uint8_t		MACAddr[ETHER_ADDR_LEN];
-	uint8_t		RegulatoryDomain;
-	uint8_t		LowPowerValues[14];
-	uint8_t		NormalPowerValues[14];
-	uint8_t		Reserved[3];
+	u_int8_t		CR20[14];
+	u_int8_t		CR21[14];
+	u_int8_t		BB_CR[14];
+	u_int8_t		PidVid[4];
+	u_int8_t		MACAddr[ETHER_ADDR_LEN];
+	u_int8_t		RegulatoryDomain;
+	u_int8_t		LowPowerValues[14];
+	u_int8_t		NormalPowerValues[14];
+	u_int8_t		Reserved[3];
 	/* then we have 84 bytes, somehow Windows reads 95?? */
-	uint8_t		Rest[11];
+	u_int8_t		Rest[11];
 } UPACKED;
 
 /* The config structure of an Intersil radio */
 struct atu_intersil_conf {
-	uint8_t		MACAddr[ETHER_ADDR_LEN];
+	u_int8_t		MACAddr[ETHER_ADDR_LEN];
 	/* From the HFA3861B manual : */
 	/* Manual TX power control (7bit : -64 to 63) */
-	uint8_t		CR31[14];
+	u_int8_t		CR31[14];
 	/* TX power measurement */
-	uint8_t		CR58[14];
-	uint8_t		PidVid[4];
-	uint8_t		RegulatoryDomain;
-	uint8_t		Reserved[1];
+	u_int8_t		CR58[14];
+	u_int8_t		PidVid[4];
+	u_int8_t		RegulatoryDomain;
+	u_int8_t		Reserved[1];
 } UPACKED;
 
 
 /* Firmware information request */
 struct atu_fw {
-	uint8_t		major;
-	uint8_t		minor;
-	uint8_t		patch;
-	uint8_t		build;
+	u_int8_t		major;
+	u_int8_t		minor;
+	u_int8_t		patch;
+	u_int8_t		build;
 } UPACKED;
 
 /*

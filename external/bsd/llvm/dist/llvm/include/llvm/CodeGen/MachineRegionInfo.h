@@ -57,6 +57,8 @@ public:
 
   }
 
+  ~MachineRegionNode() { }
+
   bool operator==(const MachineRegion &RN) const {
     return this == reinterpret_cast<const MachineRegionNode*>(&RN);
   }
@@ -78,7 +80,7 @@ class MachineRegionInfo : public RegionInfoBase<RegionTraits<MachineFunction>> {
 public:
   explicit MachineRegionInfo();
 
-  ~MachineRegionInfo() override;
+  virtual ~MachineRegionInfo();
 
   // updateStatistics - Update statistic about created regions.
   void updateStatistics(MachineRegion *R) final;
@@ -96,7 +98,7 @@ public:
   static char ID;
   explicit MachineRegionInfoPass();
 
-  ~MachineRegionInfoPass() override;
+  ~MachineRegionInfoPass();
 
   MachineRegionInfo &getRegionInfo() {
     return RI;
@@ -172,9 +174,10 @@ template <> struct GraphTraits<MachineRegionInfoPass*>
   }
 };
 
-extern template class RegionBase<RegionTraits<MachineFunction>>;
-extern template class RegionNodeBase<RegionTraits<MachineFunction>>;
-extern template class RegionInfoBase<RegionTraits<MachineFunction>>;
+EXTERN_TEMPLATE_INSTANTIATION(class RegionBase<RegionTraits<MachineFunction>>);
+EXTERN_TEMPLATE_INSTANTIATION(class RegionNodeBase<RegionTraits<MachineFunction>>);
+EXTERN_TEMPLATE_INSTANTIATION(class RegionInfoBase<RegionTraits<MachineFunction>>);
+
 }
 
 #endif

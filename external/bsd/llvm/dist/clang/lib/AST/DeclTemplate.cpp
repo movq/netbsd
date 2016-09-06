@@ -18,7 +18,6 @@
 #include "clang/AST/Expr.h"
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/TypeLoc.h"
-#include "clang/Basic/Builtins.h"
 #include "clang/Basic/IdentifierTable.h"
 #include "llvm/ADT/STLExtras.h"
 #include <memory>
@@ -30,10 +29,10 @@ using namespace clang;
 
 TemplateParameterList::TemplateParameterList(SourceLocation TemplateLoc,
                                              SourceLocation LAngleLoc,
-                                             ArrayRef<NamedDecl *> Params,
+                                             NamedDecl **Params, unsigned NumParams,
                                              SourceLocation RAngleLoc)
   : TemplateLoc(TemplateLoc), LAngleLoc(LAngleLoc), RAngleLoc(RAngleLoc),
-    NumParams(Params.size()), ContainsUnexpandedParameterPack(false) {
+    NumParams(NumParams), ContainsUnexpandedParameterPack(false) {
   assert(this->NumParams == NumParams && "Too many template parameters");
   for (unsigned Idx = 0; Idx < NumParams; ++Idx) {
     NamedDecl *P = Params[Idx];
@@ -54,13 +53,17 @@ TemplateParameterList::TemplateParameterList(SourceLocation TemplateLoc,
   }
 }
 
-TemplateParameterList *TemplateParameterList::Create(
-    const ASTContext &C, SourceLocation TemplateLoc, SourceLocation LAngleLoc,
-    ArrayRef<NamedDecl *> Params, SourceLocation RAngleLoc) {
-  void *Mem = C.Allocate(totalSizeToAlloc<NamedDecl *>(Params.size()),
-                         llvm::alignOf<TemplateParameterList>());
+TemplateParameterList *
+TemplateParameterList::Create(const ASTContext &C, SourceLocation TemplateLoc,
+                              SourceLocation LAngleLoc, NamedDecl **Params,
+                              unsigned NumParams, SourceLocation RAngleLoc) {
+  unsigned Size = sizeof(TemplateParameterList) 
+                + sizeof(NamedDecl *) * NumParams;
+  unsigned Align = std::max(llvm::alignOf<TemplateParameterList>(),
+                            llvm::alignOf<NamedDecl*>());
+  void *Mem = C.Allocate(Size, Align);
   return new (Mem) TemplateParameterList(TemplateLoc, LAngleLoc, Params,
-                                         RAngleLoc);
+                                         NumParams, RAngleLoc);
 }
 
 unsigned TemplateParameterList::getMinRequiredArguments() const {
@@ -121,12 +124,6 @@ static void AdoptTemplateParameterList(TemplateParameterList *Params,
   }
 }
 
-namespace clang {
-void *allocateDefaultArgStorageChain(const ASTContext &C) {
-  return new (C) char[sizeof(void*) * 2];
-}
-}
-
 //===----------------------------------------------------------------------===//
 // RedeclarableTemplateDecl Implementation
 //===----------------------------------------------------------------------===//
@@ -163,43 +160,17 @@ RedeclarableTemplateDecl::CommonBase *RedeclarableTemplateDecl::getCommonPtr() c
   return Common;
 }
 
-template<class EntryType>
-typename RedeclarableTemplateDecl::SpecEntryTraits<EntryType>::DeclType *
+template <class EntryType>
+typename RedeclarableTemplateDecl::SpecEntryTraits<EntryType>::DeclType*
 RedeclarableTemplateDecl::findSpecializationImpl(
-    llvm::FoldingSetVector<EntryType> &Specs, ArrayRef<TemplateArgument> Args,
-    void *&InsertPos) {
+                                 llvm::FoldingSetVector<EntryType> &Specs,
+                                 ArrayRef<TemplateArgument> Args,
+                                 void *&InsertPos) {
   typedef SpecEntryTraits<EntryType> SETraits;
   llvm::FoldingSetNodeID ID;
   EntryType::Profile(ID,Args, getASTContext());
   EntryType *Entry = Specs.FindNodeOrInsertPos(ID, InsertPos);
-  return Entry ? SETraits::getDecl(Entry)->getMostRecentDecl() : nullptr;
-}
-
-template<class Derived, class EntryType>
-void RedeclarableTemplateDecl::addSpecializationImpl(
-    llvm::FoldingSetVector<EntryType> &Specializations, EntryType *Entry,
-    void *InsertPos) {
-  typedef SpecEntryTraits<EntryType> SETraits;
-  if (InsertPos) {
-#ifndef NDEBUG
-    void *CorrectInsertPos;
-    assert(!findSpecializationImpl(Specializations,
-                                   SETraits::getTemplateArgs(Entry),
-                                   CorrectInsertPos) &&
-           InsertPos == CorrectInsertPos &&
-           "given incorrect InsertPos for specialization");
-#endif
-    Specializations.InsertNode(Entry, InsertPos);
-  } else {
-    EntryType *Existing = Specializations.GetOrInsertNode(Entry);
-    (void)Existing;
-    assert(SETraits::getDecl(Existing)->isCanonicalDecl() &&
-           "non-canonical specialization?");
-  }
-
-  if (ASTMutationListener *L = getASTMutationListener())
-    L->AddedCXXTemplateSpecialization(cast<Derived>(this),
-                                      SETraits::getDecl(Entry));
+  return Entry ? SETraits::getMostRecentDecl(Entry) : nullptr;
 }
 
 /// \brief Generate the injected template arguments for the given template
@@ -237,8 +208,8 @@ static void GenerateInjectedTemplateArgs(ASTContext &Context,
     }
     
     if ((*Param)->isTemplateParameterPack())
-      Arg = TemplateArgument::CreatePackCopy(Context, Arg);
-
+      Arg = TemplateArgument::CreatePackCopy(Context, &Arg, 1);
+    
     *Args++ = Arg;
   }
 }
@@ -275,11 +246,7 @@ FunctionTemplateDecl::newCommon(ASTContext &C) const {
 }
 
 void FunctionTemplateDecl::LoadLazySpecializations() const {
-  // Grab the most recent declaration to ensure we've loaded any lazy
-  // redeclarations of this template.
-  //
-  // FIXME: Avoid walking the entire redeclaration chain here.
-  Common *CommonPtr = getMostRecentDecl()->getCommonPtr();
+  Common *CommonPtr = getCommonPtr();
   if (CommonPtr->LazySpecializations) {
     ASTContext &Context = getASTContext();
     uint32_t *Specs = CommonPtr->LazySpecializations;
@@ -303,8 +270,12 @@ FunctionTemplateDecl::findSpecialization(ArrayRef<TemplateArgument> Args,
 
 void FunctionTemplateDecl::addSpecialization(
       FunctionTemplateSpecializationInfo *Info, void *InsertPos) {
-  addSpecializationImpl<FunctionTemplateDecl>(getSpecializations(), Info,
-                                              InsertPos);
+  if (InsertPos)
+    getSpecializations().InsertNode(Info, InsertPos);
+  else
+    getSpecializations().GetOrInsertNode(Info);
+  if (ASTMutationListener *L = getASTMutationListener())
+    L->AddedCXXTemplateSpecialization(this, Info->Function);
 }
 
 ArrayRef<TemplateArgument> FunctionTemplateDecl::getInjectedTemplateArgs() {
@@ -349,11 +320,7 @@ ClassTemplateDecl *ClassTemplateDecl::CreateDeserialized(ASTContext &C,
 }
 
 void ClassTemplateDecl::LoadLazySpecializations() const {
-  // Grab the most recent declaration to ensure we've loaded any lazy
-  // redeclarations of this template.
-  //
-  // FIXME: Avoid walking the entire redeclaration chain here.
-  Common *CommonPtr = getMostRecentDecl()->getCommonPtr();
+  Common *CommonPtr = getCommonPtr();
   if (CommonPtr->LazySpecializations) {
     ASTContext &Context = getASTContext();
     uint32_t *Specs = CommonPtr->LazySpecializations;
@@ -390,7 +357,16 @@ ClassTemplateDecl::findSpecialization(ArrayRef<TemplateArgument> Args,
 
 void ClassTemplateDecl::AddSpecialization(ClassTemplateSpecializationDecl *D,
                                           void *InsertPos) {
-  addSpecializationImpl<ClassTemplateDecl>(getSpecializations(), D, InsertPos);
+  if (InsertPos)
+    getSpecializations().InsertNode(D, InsertPos);
+  else {
+    ClassTemplateSpecializationDecl *Existing 
+      = getSpecializations().GetOrInsertNode(D);
+    (void)Existing;
+    assert(Existing->isCanonicalDecl() && "Non-canonical specialization?");
+  }
+  if (ASTMutationListener *L = getASTMutationListener())
+    L->AddedCXXTemplateSpecialization(this, D);
 }
 
 ClassTemplatePartialSpecializationDecl *
@@ -507,14 +483,14 @@ TemplateTypeParmDecl::CreateDeserialized(const ASTContext &C, unsigned ID) {
 
 SourceLocation TemplateTypeParmDecl::getDefaultArgumentLoc() const {
   return hasDefaultArgument()
-             ? getDefaultArgumentInfo()->getTypeLoc().getBeginLoc()
-             : SourceLocation();
+    ? DefaultArgument->getTypeLoc().getBeginLoc()
+    : SourceLocation();
 }
 
 SourceRange TemplateTypeParmDecl::getSourceRange() const {
   if (hasDefaultArgument() && !defaultArgumentWasInherited())
     return SourceRange(getLocStart(),
-                       getDefaultArgumentInfo()->getTypeLoc().getEndLoc());
+                       DefaultArgument->getTypeLoc().getEndLoc());
   else
     return TypeDecl::getSourceRange();
 }
@@ -546,14 +522,15 @@ NonTypeTemplateParmDecl::NonTypeTemplateParmDecl(DeclContext *DC,
                                                  unsigned NumExpandedTypes,
                                                 TypeSourceInfo **ExpandedTInfos)
   : DeclaratorDecl(NonTypeTemplateParm, DC, IdLoc, Id, T, TInfo, StartLoc),
-    TemplateParmPosition(D, P), ParameterPack(true),
-    ExpandedParameterPack(true), NumExpandedTypes(NumExpandedTypes) {
+    TemplateParmPosition(D, P), DefaultArgumentAndInherited(nullptr, false),
+    ParameterPack(true), ExpandedParameterPack(true),
+    NumExpandedTypes(NumExpandedTypes)
+{
   if (ExpandedTypes && ExpandedTInfos) {
-    auto TypesAndInfos =
-        getTrailingObjects<std::pair<QualType, TypeSourceInfo *>>();
+    void **TypesAndInfos = reinterpret_cast<void **>(this + 1);
     for (unsigned I = 0; I != NumExpandedTypes; ++I) {
-      new (&TypesAndInfos[I].first) QualType(ExpandedTypes[I]);
-      TypesAndInfos[I].second = ExpandedTInfos[I];
+      TypesAndInfos[2*I] = ExpandedTypes[I].getAsOpaquePtr();
+      TypesAndInfos[2*I + 1] = ExpandedTInfos[I];
     }
   }
 }
@@ -577,11 +554,10 @@ NonTypeTemplateParmDecl::Create(const ASTContext &C, DeclContext *DC,
                                 const QualType *ExpandedTypes, 
                                 unsigned NumExpandedTypes,
                                 TypeSourceInfo **ExpandedTInfos) {
-  return new (C, DC,
-              additionalSizeToAlloc<std::pair<QualType, TypeSourceInfo *>>(
-                  NumExpandedTypes))
-      NonTypeTemplateParmDecl(DC, StartLoc, IdLoc, D, P, Id, T, TInfo,
-                              ExpandedTypes, NumExpandedTypes, ExpandedTInfos);
+  unsigned Extra = NumExpandedTypes * 2 * sizeof(void*);
+  return new (C, DC, Extra) NonTypeTemplateParmDecl(
+      DC, StartLoc, IdLoc, D, P, Id, T, TInfo,
+      ExpandedTypes, NumExpandedTypes, ExpandedTInfos);
 }
 
 NonTypeTemplateParmDecl *
@@ -594,12 +570,10 @@ NonTypeTemplateParmDecl::CreateDeserialized(ASTContext &C, unsigned ID) {
 NonTypeTemplateParmDecl *
 NonTypeTemplateParmDecl::CreateDeserialized(ASTContext &C, unsigned ID,
                                             unsigned NumExpandedTypes) {
-  return new (C, ID,
-              additionalSizeToAlloc<std::pair<QualType, TypeSourceInfo *>>(
-                  NumExpandedTypes))
-      NonTypeTemplateParmDecl(nullptr, SourceLocation(), SourceLocation(), 0, 0,
-                              nullptr, QualType(), nullptr, nullptr,
-                              NumExpandedTypes, nullptr);
+  unsigned Extra = NumExpandedTypes * 2 * sizeof(void*);
+  return new (C, ID, Extra) NonTypeTemplateParmDecl(
+      nullptr, SourceLocation(), SourceLocation(), 0, 0, nullptr, QualType(),
+      nullptr, nullptr, NumExpandedTypes, nullptr);
 }
 
 SourceRange NonTypeTemplateParmDecl::getSourceRange() const {
@@ -626,11 +600,12 @@ TemplateTemplateParmDecl::TemplateTemplateParmDecl(
     IdentifierInfo *Id, TemplateParameterList *Params,
     unsigned NumExpansions, TemplateParameterList * const *Expansions)
   : TemplateDecl(TemplateTemplateParm, DC, L, Id, Params),
-    TemplateParmPosition(D, P), ParameterPack(true),
+    TemplateParmPosition(D, P), DefaultArgument(),
+    DefaultArgumentWasInherited(false), ParameterPack(true),
     ExpandedParameterPack(true), NumExpandedParams(NumExpansions) {
   if (Expansions)
-    std::uninitialized_copy(Expansions, Expansions + NumExpandedParams,
-                            getTrailingObjects<TemplateParameterList *>());
+    std::memcpy(reinterpret_cast<void*>(this + 1), Expansions,
+                sizeof(TemplateParameterList*) * NumExpandedParams);
 }
 
 TemplateTemplateParmDecl *
@@ -648,10 +623,9 @@ TemplateTemplateParmDecl::Create(const ASTContext &C, DeclContext *DC,
                                  IdentifierInfo *Id,
                                  TemplateParameterList *Params,
                                  ArrayRef<TemplateParameterList *> Expansions) {
-  return new (C, DC,
-              additionalSizeToAlloc<TemplateParameterList *>(Expansions.size()))
-      TemplateTemplateParmDecl(DC, L, D, P, Id, Params, Expansions.size(),
-                               Expansions.data());
+  return new (C, DC, sizeof(TemplateParameterList*) * Expansions.size())
+      TemplateTemplateParmDecl(DC, L, D, P, Id, Params,
+                               Expansions.size(), Expansions.data());
 }
 
 TemplateTemplateParmDecl *
@@ -663,41 +637,26 @@ TemplateTemplateParmDecl::CreateDeserialized(ASTContext &C, unsigned ID) {
 TemplateTemplateParmDecl *
 TemplateTemplateParmDecl::CreateDeserialized(ASTContext &C, unsigned ID,
                                              unsigned NumExpansions) {
-  return new (C, ID,
-              additionalSizeToAlloc<TemplateParameterList *>(NumExpansions))
+  return new (C, ID, sizeof(TemplateParameterList*) * NumExpansions)
       TemplateTemplateParmDecl(nullptr, SourceLocation(), 0, 0, nullptr,
                                nullptr, NumExpansions, nullptr);
-}
-
-SourceLocation TemplateTemplateParmDecl::getDefaultArgumentLoc() const {
-  return hasDefaultArgument() ? getDefaultArgument().getLocation()
-                              : SourceLocation();
-}
-
-void TemplateTemplateParmDecl::setDefaultArgument(
-    const ASTContext &C, const TemplateArgumentLoc &DefArg) {
-  if (DefArg.getArgument().isNull())
-    DefaultArgument.set(nullptr);
-  else
-    DefaultArgument.set(new (C) TemplateArgumentLoc(DefArg));
 }
 
 //===----------------------------------------------------------------------===//
 // TemplateArgumentList Implementation
 //===----------------------------------------------------------------------===//
-TemplateArgumentList::TemplateArgumentList(const TemplateArgument *Args,
-                                           unsigned NumArgs)
-    : Arguments(getTrailingObjects<TemplateArgument>()), NumArguments(NumArgs) {
-  std::uninitialized_copy(Args, Args + NumArgs,
-                          getTrailingObjects<TemplateArgument>());
-}
-
 TemplateArgumentList *
 TemplateArgumentList::CreateCopy(ASTContext &Context,
                                  const TemplateArgument *Args,
                                  unsigned NumArgs) {
-  void *Mem = Context.Allocate(totalSizeToAlloc<TemplateArgument>(NumArgs));
-  return new (Mem) TemplateArgumentList(Args, NumArgs);
+  std::size_t Size = sizeof(TemplateArgumentList)
+                   + NumArgs * sizeof(TemplateArgument);
+  void *Mem = Context.Allocate(Size);
+  TemplateArgument *StoredArgs 
+    = reinterpret_cast<TemplateArgument *>(
+                                static_cast<TemplateArgumentList *>(Mem) + 1);
+  std::uninitialized_copy(Args, Args + NumArgs, StoredArgs);
+  return new (Mem) TemplateArgumentList(StoredArgs, NumArgs, true);
 }
 
 FunctionTemplateSpecializationInfo *
@@ -994,11 +953,7 @@ VarTemplateDecl *VarTemplateDecl::CreateDeserialized(ASTContext &C,
 // TODO: Unify across class, function and variable templates?
 //       May require moving this and Common to RedeclarableTemplateDecl.
 void VarTemplateDecl::LoadLazySpecializations() const {
-  // Grab the most recent declaration to ensure we've loaded any lazy
-  // redeclarations of this template.
-  //
-  // FIXME: Avoid walking the entire redeclaration chain here.
-  Common *CommonPtr = getMostRecentDecl()->getCommonPtr();
+  Common *CommonPtr = getCommonPtr();
   if (CommonPtr->LazySpecializations) {
     ASTContext &Context = getASTContext();
     uint32_t *Specs = CommonPtr->LazySpecializations;
@@ -1035,7 +990,16 @@ VarTemplateDecl::findSpecialization(ArrayRef<TemplateArgument> Args,
 
 void VarTemplateDecl::AddSpecialization(VarTemplateSpecializationDecl *D,
                                         void *InsertPos) {
-  addSpecializationImpl<VarTemplateDecl>(getSpecializations(), D, InsertPos);
+  if (InsertPos)
+    getSpecializations().InsertNode(D, InsertPos);
+  else {
+    VarTemplateSpecializationDecl *Existing =
+        getSpecializations().GetOrInsertNode(D);
+    (void)Existing;
+    assert(Existing->isCanonicalDecl() && "Non-canonical specialization?");
+  }
+  if (ASTMutationListener *L = getASTMutationListener())
+    L->AddedCXXTemplateSpecialization(this, D);
 }
 
 VarTemplatePartialSpecializationDecl *
@@ -1191,69 +1155,3 @@ VarTemplatePartialSpecializationDecl::CreateDeserialized(ASTContext &C,
                                                          unsigned ID) {
   return new (C, ID) VarTemplatePartialSpecializationDecl(C);
 }
-
-static TemplateParameterList *
-createMakeIntegerSeqParameterList(const ASTContext &C, DeclContext *DC) {
-  // typename T
-  auto *T = TemplateTypeParmDecl::Create(
-      C, DC, SourceLocation(), SourceLocation(), /*Depth=*/1, /*Position=*/0,
-      /*Id=*/nullptr, /*Typename=*/true, /*ParameterPack=*/false);
-  T->setImplicit(true);
-
-  // T ...Ints
-  TypeSourceInfo *TI =
-      C.getTrivialTypeSourceInfo(QualType(T->getTypeForDecl(), 0));
-  auto *N = NonTypeTemplateParmDecl::Create(
-      C, DC, SourceLocation(), SourceLocation(), /*Depth=*/0, /*Position=*/1,
-      /*Id=*/nullptr, TI->getType(), /*ParameterPack=*/true, TI);
-  N->setImplicit(true);
-
-  // <typename T, T ...Ints>
-  NamedDecl *P[2] = {T, N};
-  auto *TPL = TemplateParameterList::Create(
-      C, SourceLocation(), SourceLocation(), P, SourceLocation());
-
-  // template <typename T, ...Ints> class IntSeq
-  auto *TemplateTemplateParm = TemplateTemplateParmDecl::Create(
-      C, DC, SourceLocation(), /*Depth=*/0, /*Position=*/0,
-      /*ParameterPack=*/false, /*Id=*/nullptr, TPL);
-  TemplateTemplateParm->setImplicit(true);
-
-  // typename T
-  auto *TemplateTypeParm = TemplateTypeParmDecl::Create(
-      C, DC, SourceLocation(), SourceLocation(), /*Depth=*/0, /*Position=*/1,
-      /*Id=*/nullptr, /*Typename=*/true, /*ParameterPack=*/false);
-  TemplateTypeParm->setImplicit(true);
-
-  // T N
-  TypeSourceInfo *TInfo = C.getTrivialTypeSourceInfo(
-      QualType(TemplateTypeParm->getTypeForDecl(), 0));
-  auto *NonTypeTemplateParm = NonTypeTemplateParmDecl::Create(
-      C, DC, SourceLocation(), SourceLocation(), /*Depth=*/0, /*Position=*/2,
-      /*Id=*/nullptr, TInfo->getType(), /*ParameterPack=*/false, TInfo);
-  NamedDecl *Params[] = {TemplateTemplateParm, TemplateTypeParm,
-                         NonTypeTemplateParm};
-
-  // template <template <typename T, T ...Ints> class IntSeq, typename T, T N>
-  return TemplateParameterList::Create(C, SourceLocation(), SourceLocation(),
-                                       Params, SourceLocation());
-}
-
-static TemplateParameterList *createBuiltinTemplateParameterList(
-    const ASTContext &C, DeclContext *DC, BuiltinTemplateKind BTK) {
-  switch (BTK) {
-  case BTK__make_integer_seq:
-    return createMakeIntegerSeqParameterList(C, DC);
-  }
-
-  llvm_unreachable("unhandled BuiltinTemplateKind!");
-}
-
-void BuiltinTemplateDecl::anchor() {}
-
-BuiltinTemplateDecl::BuiltinTemplateDecl(const ASTContext &C, DeclContext *DC,
-                                         DeclarationName Name,
-                                         BuiltinTemplateKind BTK)
-    : TemplateDecl(BuiltinTemplate, DC, SourceLocation(), Name,
-                   createBuiltinTemplateParameterList(C, DC, BTK)),
-      BTK(BTK) {}

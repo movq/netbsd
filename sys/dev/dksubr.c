@@ -1,4 +1,4 @@
-/* $NetBSD: dksubr.c,v 1.88 2016/06/27 18:27:51 christos Exp $ */
+/* $NetBSD: dksubr.c,v 1.51.2.3 2015/06/01 19:19:44 snj Exp $ */
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 1999, 2002, 2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dksubr.c,v 1.88 2016/06/27 18:27:51 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dksubr.c,v 1.51.2.3 2015/06/01 19:19:44 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -46,7 +46,6 @@ __KERNEL_RCSID(0, "$NetBSD: dksubr.c,v 1.88 2016/06/27 18:27:51 christos Exp $")
 #include <sys/fcntl.h>
 #include <sys/namei.h>
 #include <sys/module.h>
-#include <sys/syslog.h>
 
 #include <dev/dkvar.h>
 #include <miscfs/specfs/specdev.h> /* for v_rdev */
@@ -57,7 +56,6 @@ int	dkdebug = 0;
 #define DKDB_FOLLOW	0x1
 #define DKDB_INIT	0x2
 #define DKDB_VNODE	0x4
-#define DKDB_DUMP	0x8
 
 #define IFDEBUG(x,y)		if (dkdebug & (x)) y
 #define DPRINTF(x,y)		IFDEBUG(x, printf y)
@@ -68,58 +66,25 @@ int	dkdebug = 0;
 #define DPRINTF_FOLLOW(y)
 #endif
 
-#define DKF_READYFORDUMP	(DKF_INITED|DKF_TAKEDUMP)
-
 static int dk_subr_modcmd(modcmd_t, void *);
 
 #define DKLABELDEV(dev)	\
 	(MAKEDISKDEV(major((dev)), DISKUNIT((dev)), RAW_PART))
 
-static void	dk_makedisklabel(struct dk_softc *);
-static int	dk_translate(struct dk_softc *, struct buf *);
-static void	dk_done1(struct dk_softc *, struct buf *, bool);
+static void	dk_makedisklabel(struct dk_intf *, struct dk_softc *);
 
 void
-dk_init(struct dk_softc *dksc, device_t dev, int dtype)
+dk_sc_init(struct dk_softc *dksc, const char *xname)
 {
 
 	memset(dksc, 0x0, sizeof(*dksc));
-	dksc->sc_dtype = dtype;
-	dksc->sc_dev = dev;
-
-	strlcpy(dksc->sc_xname, device_xname(dev), DK_XNAME_SIZE);
+	strncpy(dksc->sc_xname, xname, DK_XNAME_SIZE);
 	dksc->sc_dkdev.dk_name = dksc->sc_xname;
-}
-
-void
-dk_attach(struct dk_softc *dksc)
-{
-	KASSERT(dksc->sc_dev != NULL);
-
-	mutex_init(&dksc->sc_iolock, MUTEX_DEFAULT, IPL_VM);
-	dksc->sc_flags |= DKF_READYFORDUMP;
-#ifdef DIAGNOSTIC
-	dksc->sc_flags |= DKF_WARNLABEL | DKF_LABELSANITY;
-#endif
-
-	/* Attach the device into the rnd source list. */
-	rnd_attach_source(&dksc->sc_rnd_source, dksc->sc_xname,
-	    RND_TYPE_DISK, RND_FLAG_DEFAULT);
-}
-
-void
-dk_detach(struct dk_softc *dksc)
-{
-	/* Unhook the entropy source. */
-	rnd_detach_source(&dksc->sc_rnd_source);
-
-	dksc->sc_flags &= ~DKF_READYFORDUMP;
-	mutex_destroy(&dksc->sc_iolock);
 }
 
 /* ARGSUSED */
 int
-dk_open(struct dk_softc *dksc, dev_t dev,
+dk_open(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
     int flags, int fmt, struct lwp *l)
 {
 	struct	disklabel *lp = dksc->sc_dkdev.dk_label;
@@ -128,10 +93,11 @@ dk_open(struct dk_softc *dksc, dev_t dev,
 	int	ret = 0;
 	struct disk *dk = &dksc->sc_dkdev;
 
-	DPRINTF_FOLLOW(("%s(%s, %p, 0x%"PRIx64", 0x%x)\n", __func__,
-	    dksc->sc_xname, dksc, dev, flags));
+	DPRINTF_FOLLOW(("dk_open(%s, %p, 0x%"PRIx64", 0x%x)\n",
+	    di->di_dkname, dksc, dev, flags));
 
 	mutex_enter(&dk->dk_openlock);
+	part = DISKPART(dev);
 
 	/*
 	 * If there are wedges, and this is not RAW_PART, then we
@@ -142,22 +108,24 @@ dk_open(struct dk_softc *dksc, dev_t dev,
 		goto done;
 	}
 
+	pmask = 1 << part;
+
 	/*
 	 * If we're init'ed and there are no other open partitions then
 	 * update the in-core disklabel.
 	 */
 	if ((dksc->sc_flags & DKF_INITED)) {
-		if ((dksc->sc_flags & DKF_VLABEL) == 0) {
-			dksc->sc_flags |= DKF_VLABEL;
-			dk_getdisklabel(dksc, dev);
+		if (dk->dk_openmask == 0) {
+			dk_getdisklabel(di, dksc, dev);
 		}
+		/* XXX re-discover wedges? */
 	}
 
 	/* Fail if we can't find the partition. */
-	if (part != RAW_PART &&
-	    ((dksc->sc_flags & DKF_VLABEL) == 0 ||
-	     part >= lp->d_npartitions ||
-	     lp->d_partitions[part].p_fstype == FS_UNUSED)) {
+	if ((part != RAW_PART) &&
+	    (((dksc->sc_flags & DKF_INITED) == 0) ||
+	    ((part >= lp->d_npartitions) ||
+	    (lp->d_partitions[part].p_fstype == FS_UNUSED)))) {
 		ret = ENXIO;
 		goto done;
 	}
@@ -181,16 +149,15 @@ done:
 
 /* ARGSUSED */
 int
-dk_close(struct dk_softc *dksc, dev_t dev,
+dk_close(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
     int flags, int fmt, struct lwp *l)
 {
-	const struct dkdriver *dkd = dksc->sc_dkdev.dk_driver;
 	int	part = DISKPART(dev);
 	int	pmask = 1 << part;
 	struct disk *dk = &dksc->sc_dkdev;
 
-	DPRINTF_FOLLOW(("%s(%s, %p, 0x%"PRIx64", 0x%x)\n", __func__,
-	    dksc->sc_xname, dksc, dev, flags));
+	DPRINTF_FOLLOW(("dk_close(%s, %p, 0x%"PRIx64", 0x%x)\n",
+	    di->di_dkname, dksc, dev, flags));
 
 	mutex_enter(&dk->dk_openlock);
 
@@ -204,303 +171,68 @@ dk_close(struct dk_softc *dksc, dev_t dev,
 	}
 	dk->dk_openmask = dk->dk_copenmask | dk->dk_bopenmask;
 
-	if (dk->dk_openmask == 0) {
-		if (dkd->d_lastclose != NULL)
-			(*dkd->d_lastclose)(dksc->sc_dev);
-		if ((dksc->sc_flags & DKF_KLABEL) == 0)
-			dksc->sc_flags &= ~DKF_VLABEL;
-	}
-
 	mutex_exit(&dk->dk_openlock);
 	return 0;
 }
 
-static int
-dk_translate(struct dk_softc *dksc, struct buf *bp)
+void
+dk_strategy(struct dk_intf *di, struct dk_softc *dksc, struct buf *bp)
 {
-	int	part;
+	int	s;
 	int	wlabel;
 	daddr_t	blkno;
-	struct disklabel *lp;
-	struct disk *dk;
-	uint64_t numsecs;
-	unsigned secsize;
 
-	lp = dksc->sc_dkdev.dk_label;
-	dk = &dksc->sc_dkdev;
-
-	part = DISKPART(bp->b_dev);
-	numsecs = dk->dk_geom.dg_secperunit;
-	secsize = dk->dk_geom.dg_secsize;
-
-	/*
-	 * The transfer must be a whole number of blocks and the offset must
-	 * not be negative.
-	 */
-	if ((bp->b_bcount % secsize) != 0 || bp->b_blkno < 0) {
-		bp->b_error = EINVAL;
-		goto done;
-	}
-
-	/* If there is nothing to do, then we are done */
-	if (bp->b_bcount == 0)
-		goto done;
-
-	wlabel = dksc->sc_flags & (DKF_WLABEL|DKF_LABELLING);
-	if (part == RAW_PART) {
-		uint64_t numblocks = btodb(numsecs * secsize);
-		if (bounds_check_with_mediasize(bp, DEV_BSIZE, numblocks) <= 0)
-			goto done;
-	} else {
-		if (bounds_check_with_label(&dksc->sc_dkdev, bp, wlabel) <= 0)
-			goto done;
-	}
-
-	/*
-	 * Convert the block number to absolute and put it in terms
-	 * of the device's logical block size.
-	 */
-	if (secsize >= DEV_BSIZE)
-		blkno = bp->b_blkno / (secsize / DEV_BSIZE);
-	else
-		blkno = bp->b_blkno * (DEV_BSIZE / secsize);
-
-	if (part != RAW_PART)
-		blkno += lp->d_partitions[DISKPART(bp->b_dev)].p_offset;
-	bp->b_rawblkno = blkno;
-
-	return -1;
-
-done:
-	bp->b_resid = bp->b_bcount;
-	return bp->b_error;
-}
-
-static int
-dk_strategy1(struct dk_softc *dksc, struct buf *bp)
-{
-	int error;
-
-	DPRINTF_FOLLOW(("%s(%s, %p, %p)\n", __func__,
-	    dksc->sc_xname, dksc, bp));
+	DPRINTF_FOLLOW(("dk_strategy(%s, %p, %p)\n",
+	    di->di_dkname, dksc, bp));
 
 	if (!(dksc->sc_flags & DKF_INITED)) {
-		DPRINTF_FOLLOW(("%s: not inited\n", __func__));
+		DPRINTF_FOLLOW(("dk_strategy: not inited\n"));
 		bp->b_error  = ENXIO;
 		biodone(bp);
-		return 1;
+		return;
 	}
 
-	error = dk_translate(dksc, bp);
-	if (error >= 0) {
+	/* XXX look for some more errors, c.f. ld.c */
+
+	bp->b_resid = bp->b_bcount;
+
+	/* If there is nothing to do, then we are done */
+	if (bp->b_bcount == 0) {
 		biodone(bp);
-		return 1;
+		return;
 	}
 
-	return 0;
-}
-
-void
-dk_strategy(struct dk_softc *dksc, struct buf *bp)
-{
-	int error;
-
-	error = dk_strategy1(dksc, bp);
-	if (error)
+	wlabel = dksc->sc_flags & (DKF_WLABEL|DKF_LABELLING);
+	if (DISKPART(bp->b_dev) != RAW_PART &&
+	    bounds_check_with_label(&dksc->sc_dkdev, bp, wlabel) <= 0) {
+		biodone(bp);
 		return;
+	}
+
+	blkno = bp->b_blkno;
+	if (DISKPART(bp->b_dev) != RAW_PART) {
+		struct partition *pp;
+
+		pp =
+		    &dksc->sc_dkdev.dk_label->d_partitions[DISKPART(bp->b_dev)];
+		blkno += pp->p_offset;
+	}
+	bp->b_rawblkno = blkno;
 
 	/*
-	 * Queue buffer and start unit
+	 * Start the unit by calling the start routine
+	 * provided by the individual driver.
 	 */
-	dk_start(dksc, bp);
-}
-
-int
-dk_strategy_defer(struct dk_softc *dksc, struct buf *bp)
-{
-	int error;
-
-	error = dk_strategy1(dksc, bp);
-	if (error)
-		return error;
-
-	/*
-	 * Queue buffer only
-	 */
-	mutex_enter(&dksc->sc_iolock);
+	s = splbio();
 	bufq_put(dksc->sc_bufq, bp);
-	mutex_exit(&dksc->sc_iolock);
-
-	return 0;
+	di->di_diskstart(dksc);
+	splx(s);
+	return;
 }
 
 int
-dk_strategy_pending(struct dk_softc *dksc)
+dk_size(struct dk_intf *di, struct dk_softc *dksc, dev_t dev)
 {
-	struct buf *bp;
-
-	if (!(dksc->sc_flags & DKF_INITED)) {
-		DPRINTF_FOLLOW(("%s: not inited\n", __func__));
-		return 0;
-	}
-
-	mutex_enter(&dksc->sc_iolock);
-	bp = bufq_peek(dksc->sc_bufq);
-	mutex_exit(&dksc->sc_iolock);
-
-	return bp != NULL;
-}
-
-void
-dk_start(struct dk_softc *dksc, struct buf *bp)
-{
-	const struct dkdriver *dkd = dksc->sc_dkdev.dk_driver;
-	int error;
-
-	if (!(dksc->sc_flags & DKF_INITED)) {
-		DPRINTF_FOLLOW(("%s: not inited\n", __func__));
-		return;
-	}
-
-	mutex_enter(&dksc->sc_iolock);
-
-	if (bp != NULL)
-		bufq_put(dksc->sc_bufq, bp);
-
-	if (dksc->sc_busy)
-		goto done;
-	dksc->sc_busy = true;
-
-	/*
-	 * Peeking at the buffer queue and committing the operation
-	 * only after success isn't atomic.
-	 *
-	 * So when a diskstart fails, the buffer is saved
-	 * and tried again before the next buffer is fetched.
-	 * dk_drain() handles flushing of a saved buffer.
-	 *
-	 * This keeps order of I/O operations, unlike bufq_put.
-	 */
-
-	bp = dksc->sc_deferred;
-	dksc->sc_deferred = NULL;
-
-	if (bp == NULL)
-		bp = bufq_get(dksc->sc_bufq);
-
-	while (bp != NULL) {
-
-		disk_busy(&dksc->sc_dkdev);
-		mutex_exit(&dksc->sc_iolock);
-		error = dkd->d_diskstart(dksc->sc_dev, bp);
-		mutex_enter(&dksc->sc_iolock);
-		if (error == EAGAIN) {
-			dksc->sc_deferred = bp;
-			disk_unbusy(&dksc->sc_dkdev, 0, (bp->b_flags & B_READ));
-			break;
-		}
-
-		if (error != 0) {
-			bp->b_error = error;
-			bp->b_resid = bp->b_bcount;
-			dk_done1(dksc, bp, false);
-		}
-
-		bp = bufq_get(dksc->sc_bufq);
-	}
-
-	dksc->sc_busy = false;
-done:
-	mutex_exit(&dksc->sc_iolock);
-}
-
-static void
-dk_done1(struct dk_softc *dksc, struct buf *bp, bool lock)
-{
-	struct disk *dk = &dksc->sc_dkdev;
-
-	if (bp->b_error != 0) {
-		struct cfdriver *cd = device_cfdriver(dksc->sc_dev);
-
-		diskerr(bp, cd->cd_name, "error", LOG_PRINTF, 0,
-			dk->dk_label);
-		printf("\n");
-	}
-
-	if (lock)
-		mutex_enter(&dksc->sc_iolock);
-	disk_unbusy(dk, bp->b_bcount - bp->b_resid, (bp->b_flags & B_READ));
-	if (lock)
-		mutex_exit(&dksc->sc_iolock);
-
-	rnd_add_uint32(&dksc->sc_rnd_source, bp->b_rawblkno);
-
-	biodone(bp);
-}
-
-void
-dk_done(struct dk_softc *dksc, struct buf *bp)
-{
-	dk_done1(dksc, bp, true);
-}
-
-void
-dk_drain(struct dk_softc *dksc)
-{
-	struct buf *bp;
-
-	mutex_enter(&dksc->sc_iolock);
-	bp = dksc->sc_deferred;
-	dksc->sc_deferred = NULL;
-	if (bp != NULL) {
-		bp->b_error = EIO;
-		bp->b_resid = bp->b_bcount;
-		biodone(bp); 
-	}
-	bufq_drain(dksc->sc_bufq);
-	mutex_exit(&dksc->sc_iolock);
-}
-
-int
-dk_discard(struct dk_softc *dksc, dev_t dev, off_t pos, off_t len)
-{
-	const struct dkdriver *dkd = dksc->sc_dkdev.dk_driver;
-	unsigned secsize = dksc->sc_dkdev.dk_geom.dg_secsize;
-	struct buf tmp, *bp = &tmp;
-	int error;
-
-	DPRINTF_FOLLOW(("%s(%s, %p, 0x"PRIx64", %jd, %jd)\n", __func__,
-	    dksc->sc_xname, dksc, (intmax_t)pos, (intmax_t)len));
-
-	if (!(dksc->sc_flags & DKF_INITED)) {
-		DPRINTF_FOLLOW(("%s: not inited\n", __func__));
-		return ENXIO;
-	}
-
-	if (secsize == 0 || (pos % secsize) != 0)
-		return EINVAL;
-
-	/* enough data to please the bounds checking code */
-	bp->b_dev = dev;
-	bp->b_blkno = (daddr_t)(pos / secsize);
-	bp->b_bcount = len;
-	bp->b_flags = B_WRITE;
-
-	error = dk_translate(dksc, bp);
-	if (error >= 0)
-		return error;
-
-	error = dkd->d_discard(dksc->sc_dev,
-		(off_t)bp->b_rawblkno * secsize,
-		(off_t)bp->b_bcount);
-
-	return error;
-}
-
-int
-dk_size(struct dk_softc *dksc, dev_t dev)
-{
-	const struct dkdriver *dkd = dksc->sc_dkdev.dk_driver;
 	struct	disklabel *lp;
 	int	is_open;
 	int	part;
@@ -512,7 +244,7 @@ dk_size(struct dk_softc *dksc, dev_t dev)
 	part = DISKPART(dev);
 	is_open = dksc->sc_dkdev.dk_openmask & (1 << part);
 
-	if (!is_open && dkd->d_open(dev, 0, S_IFBLK, curlwp))
+	if (!is_open && di->di_open(dev, 0, S_IFBLK, curlwp))
 		return -1;
 
 	lp = dksc->sc_dkdev.dk_label;
@@ -522,26 +254,25 @@ dk_size(struct dk_softc *dksc, dev_t dev)
 		size = lp->d_partitions[part].p_size *
 		    (lp->d_secsize / DEV_BSIZE);
 
-	if (!is_open && dkd->d_close(dev, 0, S_IFBLK, curlwp))
-		return -1;
+	if (!is_open && di->di_close(dev, 0, S_IFBLK, curlwp))
+		return 1;
 
 	return size;
 }
 
 int
-dk_ioctl(struct dk_softc *dksc, dev_t dev,
+dk_ioctl(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
 	    u_long cmd, void *data, int flag, struct lwp *l)
 {
-	const struct dkdriver *dkd = dksc->sc_dkdev.dk_driver;
 	struct	disklabel *lp;
-	struct	disk *dk = &dksc->sc_dkdev;
+	struct	disk *dk;
 #ifdef __HAVE_OLD_DISKLABEL
 	struct	disklabel newlabel;
 #endif
-	int	error;
+	int	error = 0;
 
-	DPRINTF_FOLLOW(("%s(%s, %p, 0x%"PRIx64", 0x%lx)\n", __func__,
-	    dksc->sc_xname, dksc, dev, cmd));
+	DPRINTF_FOLLOW(("dk_ioctl(%s, %p, 0x%"PRIx64", 0x%lx)\n",
+	    di->di_dkname, dksc, dev, cmd));
 
 	/* ensure that the pseudo disk is open for writes for these commands */
 	switch (cmd) {
@@ -551,11 +282,9 @@ dk_ioctl(struct dk_softc *dksc, dev_t dev,
 	case ODIOCSDINFO:
 	case ODIOCWDINFO:
 #endif
-	case DIOCKLABEL:
 	case DIOCWLABEL:
 	case DIOCAWEDGE:
 	case DIOCDWEDGE:
-	case DIOCSSTRATEGY:
 		if ((flag & FWRITE) == 0)
 			return EBADF;
 	}
@@ -565,8 +294,7 @@ dk_ioctl(struct dk_softc *dksc, dev_t dev,
 	case DIOCGDINFO:
 	case DIOCSDINFO:
 	case DIOCWDINFO:
-	case DIOCGPARTINFO:
-	case DIOCKLABEL:
+	case DIOCGPART:
 	case DIOCWLABEL:
 	case DIOCGDEFLABEL:
 	case DIOCAWEDGE:
@@ -584,13 +312,26 @@ dk_ioctl(struct dk_softc *dksc, dev_t dev,
 			return ENXIO;
 	}
 
-	error = disk_ioctl(dk, dev, cmd, data, flag, l);
-	if (error != EPASSTHROUGH)
-		return error;
-	else
-		error = 0;
-
 	switch (cmd) {
+	case DIOCGDINFO:
+		*(struct disklabel *)data = *(dksc->sc_dkdev.dk_label);
+		break;
+
+#ifdef __HAVE_OLD_DISKLABEL
+	case ODIOCGDINFO:
+		newlabel = *(dksc->sc_dkdev.dk_label);
+		if (newlabel.d_npartitions > OLDMAXPARTITIONS)
+			return ENOTTY;
+		memcpy(data, &newlabel, sizeof (struct olddisklabel));
+		break;
+#endif
+
+	case DIOCGPART:
+		((struct partinfo *)data)->disklab = dksc->sc_dkdev.dk_label;
+		((struct partinfo *)data)->part =
+		    &dksc->sc_dkdev.dk_label->d_partitions[DISKPART(dev)];
+		break;
+
 	case DIOCWDINFO:
 	case DIOCSDINFO:
 #ifdef __HAVE_OLD_DISKLABEL
@@ -606,6 +347,7 @@ dk_ioctl(struct dk_softc *dksc, dev_t dev,
 #endif
 		lp = (struct disklabel *)data;
 
+		dk = &dksc->sc_dkdev;
 		mutex_enter(&dk->dk_openlock);
 		dksc->sc_flags |= DKF_LABELLING;
 
@@ -618,19 +360,12 @@ dk_ioctl(struct dk_softc *dksc, dev_t dev,
 #endif
 			   )
 				error = writedisklabel(DKLABELDEV(dev),
-				    dkd->d_strategy, dksc->sc_dkdev.dk_label,
+				    di->di_strategy, dksc->sc_dkdev.dk_label,
 				    dksc->sc_dkdev.dk_cpulabel);
 		}
 
 		dksc->sc_flags &= ~DKF_LABELLING;
 		mutex_exit(&dk->dk_openlock);
-		break;
-
-	case DIOCKLABEL:
-		if (*(int *)data != 0)
-			dksc->sc_flags |= DKF_KLABEL;
-		else
-			dksc->sc_flags &= ~DKF_KLABEL;
 		break;
 
 	case DIOCWLABEL:
@@ -641,40 +376,82 @@ dk_ioctl(struct dk_softc *dksc, dev_t dev,
 		break;
 
 	case DIOCGDEFLABEL:
-		dk_getdefaultlabel(dksc, (struct disklabel *)data);
+		dk_getdefaultlabel(di, dksc, (struct disklabel *)data);
 		break;
 
 #ifdef __HAVE_OLD_DISKLABEL
 	case ODIOCGDEFLABEL:
-		dk_getdefaultlabel(dksc, &newlabel);
+		dk_getdefaultlabel(di, dksc, &newlabel);
 		if (newlabel.d_npartitions > OLDMAXPARTITIONS)
 			return ENOTTY;
 		memcpy(data, &newlabel, sizeof (struct olddisklabel));
 		break;
 #endif
 
+	case DIOCAWEDGE:
+	    {
+	    	struct dkwedge_info *dkw = (void *)data;
+
+		if ((flag & FWRITE) == 0)
+			return (EBADF);
+
+		/* If the ioctl happens here, the parent is us. */
+		strcpy(dkw->dkw_parent, dksc->sc_dkdev.dk_name);
+		return (dkwedge_add(dkw));
+	    }
+
+	case DIOCDWEDGE:
+	    {
+	    	struct dkwedge_info *dkw = (void *)data;
+
+		if ((flag & FWRITE) == 0)
+			return (EBADF);
+
+		/* If the ioctl happens here, the parent is us. */
+		strcpy(dkw->dkw_parent, dksc->sc_dkdev.dk_name);
+		return (dkwedge_del(dkw));
+	    }
+
+	case DIOCLWEDGES:
+	    {
+	    	struct dkwedge_list *dkwl = (void *)data;
+
+		return (dkwedge_list(&dksc->sc_dkdev, dkwl, l));
+	    }
+
+	case DIOCMWEDGES:
+	    {
+		if ((flag & FWRITE) == 0)
+			return (EBADF);
+
+	    	dkwedge_discover(&dksc->sc_dkdev);
+		return 0;
+	    }
+
 	case DIOCGSTRATEGY:
 	    {
 		struct disk_strategy *dks = (void *)data;
+		int s;
 
-		mutex_enter(&dksc->sc_iolock);
-		if (dksc->sc_bufq != NULL)
-			strlcpy(dks->dks_name,
-			    bufq_getstrategyname(dksc->sc_bufq),
-			    sizeof(dks->dks_name));
-		else
-			error = EINVAL;
-		mutex_exit(&dksc->sc_iolock);
+		s = splbio();
+		strlcpy(dks->dks_name, bufq_getstrategyname(dksc->sc_bufq),
+		    sizeof(dks->dks_name));
+		splx(s);
 		dks->dks_paramlen = 0;
-		break;
-	    }
 
+		return 0;
+	    }
+	
 	case DIOCSSTRATEGY:
 	    {
 		struct disk_strategy *dks = (void *)data;
 		struct bufq_state *new;
 		struct bufq_state *old;
+		int s;
 
+		if ((flag & FWRITE) == 0) {
+			return EBADF;
+		}
 		if (dks->dks_param != NULL) {
 			return EINVAL;
 		}
@@ -684,15 +461,14 @@ dk_ioctl(struct dk_softc *dksc, dev_t dev,
 		if (error) {
 			return error;
 		}
-		mutex_enter(&dksc->sc_iolock);
+		s = splbio();
 		old = dksc->sc_bufq;
-		if (old)
-			bufq_move(new, old);
+		bufq_move(new, old);
 		dksc->sc_bufq = new;
-		mutex_exit(&dksc->sc_iolock);
-		if (old)
-			bufq_free(old);
-		break;
+		splx(s);
+		bufq_free(old);
+
+		return 0;
 	    }
 
 	default:
@@ -707,102 +483,43 @@ dk_ioctl(struct dk_softc *dksc, dev_t dev,
  * This requires substantially more framework than {s,w}ddump, and hence
  * is probably much more fragile.
  *
+ * XXX: we currently do not implement this.
  */
 
+#define DKF_READYFORDUMP	(DKF_INITED|DKF_TAKEDUMP)
 #define DKFF_READYFORDUMP(x)	(((x) & DKF_READYFORDUMP) == DKF_READYFORDUMP)
 static volatile int	dk_dumping = 0;
 
 /* ARGSUSED */
 int
-dk_dump(struct dk_softc *dksc, dev_t dev,
-    daddr_t blkno, void *vav, size_t size)
+dk_dump(struct dk_intf *di, struct dk_softc *dksc, dev_t dev,
+    daddr_t blkno, void *va, size_t size)
 {
-	const struct dkdriver *dkd = dksc->sc_dkdev.dk_driver;
-	char *va = vav;
-	struct disklabel *lp;
-	struct partition *p;
-	int part, towrt, nsects, sectoff, maxblkcnt, nblk;
-	int maxxfer, rv = 0;
 
 	/*
 	 * ensure that we consider this device to be safe for dumping,
 	 * and that the device is configured.
 	 */
-	if (!DKFF_READYFORDUMP(dksc->sc_flags)) {
-		DPRINTF(DKDB_DUMP, ("%s: bad dump flags 0x%x\n", __func__,
-		    dksc->sc_flags));
+	if (!DKFF_READYFORDUMP(dksc->sc_flags))
 		return ENXIO;
-	}
 
 	/* ensure that we are not already dumping */
 	if (dk_dumping)
 		return EFAULT;
 	dk_dumping = 1;
 
-	if (dkd->d_dumpblocks == NULL) {
-		DPRINTF(DKDB_DUMP, ("%s: no dumpblocks\n", __func__));
-		return ENXIO;
-	}
-
-	/* device specific max transfer size */
-	maxxfer = MAXPHYS;
-	if (dkd->d_iosize != NULL)
-		(*dkd->d_iosize)(dksc->sc_dev, &maxxfer);
-
-	/* Convert to disk sectors.  Request must be a multiple of size. */
-	part = DISKPART(dev);
-	lp = dksc->sc_dkdev.dk_label;
-	if ((size % lp->d_secsize) != 0) {
-		DPRINTF(DKDB_DUMP, ("%s: odd size %zu\n", __func__, size));
-		return EFAULT;
-	}
-	towrt = size / lp->d_secsize;
-	blkno = dbtob(blkno) / lp->d_secsize;   /* blkno in secsize units */
-
-	p = &lp->d_partitions[part];
-	if (p->p_fstype != FS_SWAP) {
-		DPRINTF(DKDB_DUMP, ("%s: bad fstype %d\n", __func__,
-		    p->p_fstype));
-		return ENXIO;
-	}
-	nsects = p->p_size;
-	sectoff = p->p_offset;
-
-	/* Check transfer bounds against partition size. */
-	if ((blkno < 0) || ((blkno + towrt) > nsects)) {
-		DPRINTF(DKDB_DUMP, ("%s: out of bounds blkno=%jd, towrt=%d, "
-		    "nsects=%d\n", __func__, (intmax_t)blkno, towrt, nsects));
-		return EINVAL;
-	}
-
-	/* Offset block number to start of partition. */
-	blkno += sectoff;
-
-	/* Start dumping and return when done. */
-	maxblkcnt = howmany(maxxfer, lp->d_secsize);
-	while (towrt > 0) {
-		nblk = min(maxblkcnt, towrt);
-
-		if ((rv = (*dkd->d_dumpblocks)(dksc->sc_dev, va, blkno, nblk))
-		    != 0) {
-			DPRINTF(DKDB_DUMP, ("%s: dumpblocks %d\n", __func__,
-			    rv));
-			return rv;
-		}
-
-		towrt -= nblk;
-		blkno += nblk;
-		va += nblk * lp->d_secsize;
-	}
+	/* XXX: unimplemented */
 
 	dk_dumping = 0;
 
-	return 0;
+	/* XXX: actually for now, we are going to leave this alone */
+	return ENXIO;
 }
 
 /* ARGSUSED */
 void
-dk_getdefaultlabel(struct dk_softc *dksc, struct disklabel *lp)
+dk_getdefaultlabel(struct dk_intf *di, struct dk_softc *dksc,
+		      struct disklabel *lp)
 {
 	struct disk_geom *dg = &dksc->sc_dkdev.dk_geom;
 
@@ -818,9 +535,9 @@ dk_getdefaultlabel(struct dk_softc *dksc, struct disklabel *lp)
 	lp->d_ncylinders = dg->dg_ncylinders;
 	lp->d_secpercyl = lp->d_ntracks * lp->d_nsectors;
 
-	strlcpy(lp->d_typename, dksc->sc_xname, sizeof(lp->d_typename));
-	lp->d_type = dksc->sc_dtype;
-	strlcpy(lp->d_packname, "fictitious", sizeof(lp->d_packname));
+	strncpy(lp->d_typename, di->di_dkname, sizeof(lp->d_typename));
+	lp->d_type = di->di_dtype;
+	strncpy(lp->d_packname, "fictitious", sizeof(lp->d_packname));
 	lp->d_rpm = 3600;
 	lp->d_interleave = 1;
 	lp->d_flags = 0;
@@ -837,22 +554,21 @@ dk_getdefaultlabel(struct dk_softc *dksc, struct disklabel *lp)
 
 /* ARGSUSED */
 void
-dk_getdisklabel(struct dk_softc *dksc, dev_t dev)
+dk_getdisklabel(struct dk_intf *di, struct dk_softc *dksc, dev_t dev)
 {
-	const struct dkdriver *dkd = dksc->sc_dkdev.dk_driver;
 	struct	 disklabel *lp = dksc->sc_dkdev.dk_label;
 	struct	 cpu_disklabel *clp = dksc->sc_dkdev.dk_cpulabel;
-	struct   disk_geom *dg = &dksc->sc_dkdev.dk_geom;
+	struct disk_geom *dg = &dksc->sc_dkdev.dk_geom;
 	struct	 partition *pp;
 	int	 i;
 	const char	*errstring;
 
 	memset(clp, 0x0, sizeof(*clp));
-	dk_getdefaultlabel(dksc, lp);
-	errstring = readdisklabel(DKLABELDEV(dev), dkd->d_strategy,
+	dk_getdefaultlabel(di, dksc, lp);
+	errstring = readdisklabel(DKLABELDEV(dev), di->di_strategy,
 	    dksc->sc_dkdev.dk_label, dksc->sc_dkdev.dk_cpulabel);
 	if (errstring) {
-		dk_makedisklabel(dksc);
+		dk_makedisklabel(di, dksc);
 		if (dksc->sc_flags & DKF_WARNLABEL)
 			printf("%s: %s\n", dksc->sc_xname, errstring);
 		return;
@@ -867,7 +583,7 @@ dk_getdisklabel(struct dk_softc *dksc, dev_t dev)
 		lp->d_secperunit > dg->dg_secperunit)
 		printf("WARNING: %s: total sector size in disklabel (%ju) "
 		    "!= the size of %s (%ju)\n", dksc->sc_xname,
-		    (uintmax_t)lp->d_secperunit, dksc->sc_xname,
+		    (uintmax_t)lp->d_secperunit, di->di_dkname,
 		    (uintmax_t)dg->dg_secperunit);
 
 	for (i=0; i < lp->d_npartitions; i++) {
@@ -875,19 +591,19 @@ dk_getdisklabel(struct dk_softc *dksc, dev_t dev)
 		if (pp->p_offset + pp->p_size > dg->dg_secperunit)
 			printf("WARNING: %s: end of partition `%c' exceeds "
 			    "the size of %s (%ju)\n", dksc->sc_xname,
-			    'a' + i, dksc->sc_xname,
+			    'a' + i, di->di_dkname,
 			    (uintmax_t)dg->dg_secperunit);
 	}
 }
 
 /* ARGSUSED */
 static void
-dk_makedisklabel(struct dk_softc *dksc)
+dk_makedisklabel(struct dk_intf *di, struct dk_softc *dksc)
 {
 	struct	disklabel *lp = dksc->sc_dkdev.dk_label;
 
 	lp->d_partitions[RAW_PART].p_fstype = FS_BSDFFS;
-	strlcpy(lp->d_packname, "default label", sizeof(lp->d_packname));
+	strncpy(lp->d_packname, "default label", sizeof(lp->d_packname));
 	lp->d_checksum = dkcksum(lp);
 }
 
@@ -916,7 +632,7 @@ dk_lookup(struct pathbuf *pb, struct lwp *l, struct vnode **vpp)
 	NDINIT(&nd, LOOKUP, FOLLOW, pb);
 	if ((error = vn_open(&nd, FREAD | FWRITE, 0)) != 0) {
 		DPRINTF((DKDB_FOLLOW|DKDB_INIT),
-		    ("%s: vn_open error = %d\n", __func__, error));
+		    ("dk_lookup: vn_open error = %d\n", error));
 		return error;
 	}
 

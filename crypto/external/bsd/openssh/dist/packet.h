@@ -1,5 +1,5 @@
-/*	$NetBSD: packet.h,v 1.13 2016/08/02 13:45:12 christos Exp $	*/
-/* $OpenBSD: packet.h,v 1.71 2016/03/07 19:02:43 djm Exp $ */
+/*	$NetBSD: packet.h,v 1.8.4.1 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: packet.h,v 1.66 2015/01/30 01:13:33 djm Exp $ */
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -43,11 +43,9 @@ struct ssh {
 	/* Key exchange */
 	struct kex *kex;
 
-	/* cached local and remote ip addresses and ports */
+	/* cached remote ip address and port*/
 	char *remote_ipaddr;
 	int remote_port;
-	char *local_ipaddr;
-	int local_port;
 
 	/* Dispatcher table */
 	dispatch_fn *dispatch[DISPATCH_MAX];
@@ -75,7 +73,6 @@ int      ssh_packet_get_connection_in(struct ssh *);
 int      ssh_packet_get_connection_out(struct ssh *);
 void     ssh_packet_close(struct ssh *);
 void	 ssh_packet_set_encryption_key(struct ssh *, const u_char *, u_int, int);
-int	 ssh_packet_is_rekeying(struct ssh *);
 void     ssh_packet_set_protocol_flags(struct ssh *, u_int);
 u_int	 ssh_packet_get_protocol_flags(struct ssh *);
 int      ssh_packet_start_compression(struct ssh *, int);
@@ -135,12 +132,14 @@ int	 ssh_packet_get_state(struct ssh *, struct sshbuf *);
 int	 ssh_packet_set_state(struct ssh *, struct sshbuf *);
 
 const char *ssh_remote_ipaddr(struct ssh *);
-int	 ssh_remote_port(struct ssh *);
-const char *ssh_local_ipaddr(struct ssh *);
-int	 ssh_local_port(struct ssh *);
 
-void	 ssh_packet_set_rekey_limits(struct ssh *, u_int64_t, time_t);
+int	 ssh_packet_need_rekeying(struct ssh *);
+void	 ssh_packet_set_rekey_limits(struct ssh *, u_int32_t, time_t);
 time_t	 ssh_packet_get_rekey_timeout(struct ssh *);
+
+/* XXX FIXME */
+void	 ssh_packet_backup_state(struct ssh *, struct ssh *);
+void	 ssh_packet_restore_state(struct ssh *, struct ssh *);
 
 void	*ssh_packet_get_input(struct ssh *);
 void	*ssh_packet_get_output(struct ssh *);

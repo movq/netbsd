@@ -1,7 +1,7 @@
 /* Disassembler structures definitions for the ARC.
-   Copyright (C) 1994-2015 Free Software Foundation, Inc.
-
-   Contributed by Claudiu Zissulescu (claziss@synopsys.com)
+   Copyright 1994, 1995, 1997, 1998, 2000, 2001, 2005, 2007
+   Free Software Foundation, Inc.
+   Contributed by Doug Evans (dje@cygnus.com).
 
    This file is part of libopcodes.
 
@@ -22,18 +22,14 @@
 #ifndef ARCDIS_H
 #define ARCDIS_H
 
-enum ARC_Debugger_OperandType
+enum 
 {
-    ARC_UNDEFINED,
-    ARC_LIMM,
-    ARC_SHIMM,
-    ARC_REGISTER,
-    ARCOMPACT_REGISTER /* Valid only for the
-			  registers allowed in
-			  16 bit mode.  */
+  BR_exec_when_no_jump,
+  BR_exec_always,
+  BR_exec_when_jump
 };
 
-enum Flow
+enum Flow 
 {
   noflow,
   direct_jump,
@@ -43,16 +39,10 @@ enum Flow
   invalid_instr
 };
 
-enum NullifyMode
-{
-  BR_exec_when_no_jump,
-  BR_exec_always,
-  BR_exec_when_jump
-};
-
+enum { no_reg = 99 };
 enum { allOperandsSize = 256 };
 
-struct arcDisState
+struct arcDisState 
 {
   void *_this;
   int instructionLen;
@@ -61,24 +51,13 @@ struct arcDisState
   const char *(*auxRegName)(void*, int);
   const char *(*condCodeName)(void*, int);
   const char *(*instName)(void*, int, int, int*);
-
+  
   unsigned char* instruction;
   unsigned index;
-  const char *comm[6]; /* Instr name, cond, NOP, 3 operands.  */
-
-  union
-  {
-    unsigned int registerNum;
-    unsigned int shortimm;
-    unsigned int longimm;
-  } source_operand;
-  enum ARC_Debugger_OperandType sourceType;
-
+  const char *comm[6]; /* instr name, cond, NOP, 3 operands  */
   int opWidth;
   int targets[4];
-  /* START ARC LOCAL.  */
-  unsigned int addresses[4];
-  /* END ARC LOCAL.  */
+  int addresses[4];
   /* Set as a side-effect of calling the disassembler.
      Used only by the debugger.  */
   enum Flow flow;
@@ -90,16 +69,15 @@ struct arcDisState
   char instrBuffer[40];
   char operandBuffer[allOperandsSize];
   char _ea_present;
-  char _addrWriteBack; /* Address writeback.  */
   char _mem_load;
   char _load_len;
-  enum NullifyMode nullifyMode;
+  char nullifyMode;
   unsigned char commNum;
   unsigned char isBranch;
   unsigned char tcnt;
   unsigned char acnt;
 };
 
-struct arcDisState
-arcAnalyzeInstr (bfd_vma memaddr, struct disassemble_info *);
+#define __TRANSLATION_REQUIRED(state) ((state).acnt != 0)
+
 #endif

@@ -1,4 +1,4 @@
-/*	$NetBSD: lexer.c,v 1.2 2014/12/20 13:15:48 prlw1 Exp $	*/
+/*	$NetBSD: lexer.c,v 1.1.1.2.12.1 2014/12/29 17:27:29 martin Exp $	*/
 
 /*
  * Copyright (C) 2012 by Darren Reed.

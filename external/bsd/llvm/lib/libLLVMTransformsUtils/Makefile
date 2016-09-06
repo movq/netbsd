@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.18 2016/02/27 21:47:35 joerg Exp $
+#	$NetBSD: Makefile,v 1.16.2.1 2015/06/04 20:05:45 snj Exp $
 
 LIB=	LLVMTransformsUtils
 
@@ -28,8 +28,7 @@ SRCS+=	ASanStackFrameLayout.cpp \
 	LoopSimplify.cpp \
 	LoopUnroll.cpp \
 	LoopUnrollRuntime.cpp \
-	LoopUtils.cpp \
-	LoopVersioning.cpp \
+	LowerExpectIntrinsic.cpp \
 	LowerInvoke.cpp \
 	LowerSwitch.cpp \
 	Mem2Reg.cpp \
@@ -41,7 +40,6 @@ SRCS+=	ASanStackFrameLayout.cpp \
 	SimplifyIndVar.cpp \
 	SimplifyInstructions.cpp \
 	SimplifyLibCalls.cpp \
-	SplitModule.cpp \
 	SymbolRewriter.cpp \
 	UnifyFunctionExitNodes.cpp \
 	Utils.cpp \

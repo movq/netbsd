@@ -1,6 +1,6 @@
 /* Remote debugging interface for boot monitors, for GDB.
 
-   Copyright (C) 1990-2015 Free Software Foundation, Inc.
+   Copyright (C) 1990-2014 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.  Written by Rob Savoye for Cygnus.
    Resurrected from the ashes by Stu Grossman.
@@ -40,28 +40,28 @@
 #include "defs.h"
 #include "gdbcore.h"
 #include "target.h"
+#include "exceptions.h"
 #include <signal.h>
 #include <ctype.h>
+#include <string.h>
 #include <sys/types.h>
 #include "command.h"
 #include "serial.h"
 #include "monitor.h"
 #include "gdbcmd.h"
 #include "inferior.h"
-#include "infrun.h"
 #include "gdb_regex.h"
 #include "srec.h"
 #include "regcache.h"
 #include "gdbthread.h"
 #include "readline/readline.h"
-#include "rsp-low.h"
 
 static char *dev_name;
 static struct target_ops *targ_ops;
 
 static void monitor_interrupt_query (void);
 static void monitor_interrupt_twice (int);
-static void monitor_stop (struct target_ops *self, ptid_t);
+static void monitor_stop (ptid_t);
 static void monitor_dump_regs (struct regcache *regcache);
 
 #if 0
@@ -224,6 +224,21 @@ monitor_error (char *function, char *message,
     error (_("%s (%s): %s: %s"),
 	   function, paddress (target_gdbarch (), memaddr),
 	   message, safe_string);
+}
+
+/* Convert hex digit A to a number.  */
+
+static int
+fromhex (int a)
+{
+  if (a >= '0' && a <= '9')
+    return a - '0';
+  else if (a >= 'a' && a <= 'f')
+    return a - 'a' + 10;
+  else if (a >= 'A' && a <= 'F')
+    return a - 'A' + 10;
+  else
+    error (_("Invalid hex digit %d"), a);
 }
 
 /* monitor_vsprintf - similar to vsprintf but handles 64-bit addresses
@@ -697,9 +712,9 @@ compile_pattern (char *pattern, struct re_pattern_buffer *compiled_pattern,
    for communication.  */
 
 void
-monitor_open (const char *args, struct monitor_ops *mon_ops, int from_tty)
+monitor_open (char *args, struct monitor_ops *mon_ops, int from_tty)
 {
-  const char *name;
+  char *name;
   char **p;
   struct inferior *inf;
 
@@ -753,7 +768,6 @@ monitor_open (const char *args, struct monitor_ops *mon_ops, int from_tty)
 	}
     }
 
-  serial_setparity (monitor_desc, serial_parity);
   serial_raw (monitor_desc);
 
   serial_flush_input (monitor_desc);
@@ -769,7 +783,7 @@ monitor_open (const char *args, struct monitor_ops *mon_ops, int from_tty)
 
   if (current_monitor->stop)
     {
-      monitor_stop (targ_ops, inferior_ptid);
+      monitor_stop (inferior_ptid);
       if ((current_monitor->flags & MO_NO_ECHO_ON_OPEN) == 0)
 	{
 	  monitor_debug ("EXP Open echo\n");
@@ -839,7 +853,7 @@ monitor_open (const char *args, struct monitor_ops *mon_ops, int from_tty)
    control.  */
 
 void
-monitor_close (struct target_ops *self)
+monitor_close (void)
 {
   if (monitor_desc)
     serial_close (monitor_desc);
@@ -1413,7 +1427,7 @@ monitor_store_registers (struct target_ops *ops,
    debugged.  */
 
 static void
-monitor_prepare_to_store (struct target_ops *self, struct regcache *regcache)
+monitor_prepare_to_store (struct regcache *regcache)
 {
   /* Do nothing, since we can store individual regs.  */
 }
@@ -2004,9 +2018,9 @@ monitor_read_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len)
 /* Helper for monitor_xfer_partial that handles memory transfers.
    Arguments are like target_xfer_partial.  */
 
-static enum target_xfer_status
+static LONGEST
 monitor_xfer_memory (gdb_byte *readbuf, const gdb_byte *writebuf,
-		     ULONGEST memaddr, ULONGEST len, ULONGEST *xfered_len)
+		     ULONGEST memaddr, LONGEST len)
 {
   int res;
 
@@ -2022,27 +2036,22 @@ monitor_xfer_memory (gdb_byte *readbuf, const gdb_byte *writebuf,
       res = monitor_read_memory (memaddr, readbuf, len);
     }
 
-  if (res <= 0)
+  if (res == 0)
     return TARGET_XFER_E_IO;
-  else
-    {
-      *xfered_len = (ULONGEST) res;
-      return TARGET_XFER_OK;
-    }
+  return res;
 }
 
 /* Target to_xfer_partial implementation.  */
 
-static enum target_xfer_status
+static LONGEST
 monitor_xfer_partial (struct target_ops *ops, enum target_object object,
 		      const char *annex, gdb_byte *readbuf,
-		      const gdb_byte *writebuf, ULONGEST offset, ULONGEST len,
-		      ULONGEST *xfered_len)
+		      const gdb_byte *writebuf, ULONGEST offset, LONGEST len)
 {
   switch (object)
     {
     case TARGET_OBJECT_MEMORY:
-      return monitor_xfer_memory (readbuf, writebuf, offset, len, xfered_len);
+      return monitor_xfer_memory (readbuf, writebuf, offset, len);
 
     default:
       return TARGET_XFER_E_IO;
@@ -2065,7 +2074,7 @@ monitor_create_inferior (struct target_ops *ops, char *exec_file,
     error (_("Args are not supported by the monitor."));
 
   first_time = 1;
-  clear_proceed_status (0);
+  clear_proceed_status ();
   regcache_write_pc (get_current_regcache (),
 		     bfd_get_start_address (exec_bfd));
 }
@@ -2086,10 +2095,10 @@ monitor_mourn_inferior (struct target_ops *ops)
 /* Tell the monitor to add a breakpoint.  */
 
 static int
-monitor_insert_breakpoint (struct target_ops *ops, struct gdbarch *gdbarch,
+monitor_insert_breakpoint (struct gdbarch *gdbarch,
 			   struct bp_target_info *bp_tgt)
 {
-  CORE_ADDR addr = bp_tgt->placed_address = bp_tgt->reqstd_address;
+  CORE_ADDR addr = bp_tgt->placed_address;
   int i;
   int bplen;
 
@@ -2123,7 +2132,7 @@ monitor_insert_breakpoint (struct target_ops *ops, struct gdbarch *gdbarch,
 /* Tell the monitor to remove a breakpoint.  */
 
 static int
-monitor_remove_breakpoint (struct target_ops *ops, struct gdbarch *gdbarch,
+monitor_remove_breakpoint (struct gdbarch *gdbarch,
 			   struct bp_target_info *bp_tgt)
 {
   CORE_ADDR addr = bp_tgt->placed_address;
@@ -2185,7 +2194,7 @@ monitor_wait_srec_ack (void)
 /* monitor_load -- download a file.  */
 
 static void
-monitor_load (struct target_ops *self, const char *args, int from_tty)
+monitor_load (char *args, int from_tty)
 {
   CORE_ADDR load_offset = 0;
   char **argv;
@@ -2253,7 +2262,7 @@ monitor_load (struct target_ops *self, const char *args, int from_tty)
 }
 
 static void
-monitor_stop (struct target_ops *self, ptid_t ptid)
+monitor_stop (ptid_t ptid)
 {
   monitor_debug ("MON stop\n");
   if ((current_monitor->flags & MO_SEND_BREAK_ON_STOP) != 0)
@@ -2267,7 +2276,7 @@ monitor_stop (struct target_ops *self, ptid_t ptid)
    ourseleves here cause of a nasty echo.  */
 
 static void
-monitor_rcmd (struct target_ops *self, const char *command,
+monitor_rcmd (char *command,
 	      struct ui_file *outbuf)
 {
   char *p;

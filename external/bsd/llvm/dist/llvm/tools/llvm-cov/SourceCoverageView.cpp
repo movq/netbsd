@@ -14,7 +14,6 @@
 #include "SourceCoverageView.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/SmallString.h"
-#include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/LineIterator.h"
 
 using namespace llvm;
@@ -78,22 +77,6 @@ void SourceCoverageView::renderViewDivider(unsigned Level, unsigned Length,
     OS << "-";
 }
 
-/// Format a count using engineering notation with 3 significant digits.
-static std::string formatCount(uint64_t N) {
-  std::string Number = utostr(N);
-  int Len = Number.size();
-  if (Len <= 3)
-    return Number;
-  int IntLen = Len % 3 == 0 ? 3 : Len % 3;
-  std::string Result(Number.data(), IntLen);
-  if (IntLen != 3) {
-    Result.push_back('.');
-    Result += Number.substr(IntLen, 3 - IntLen);
-  }
-  Result.push_back(" kMGTPEZY"[(Len - 1) / 3]);
-  return Result;
-}
-
 void
 SourceCoverageView::renderLineCoverageColumn(raw_ostream &OS,
                                              const LineCoverageInfo &Line) {
@@ -101,11 +84,17 @@ SourceCoverageView::renderLineCoverageColumn(raw_ostream &OS,
     OS.indent(LineCoverageColumnWidth) << '|';
     return;
   }
-  std::string C = formatCount(Line.ExecutionCount);
-  OS.indent(LineCoverageColumnWidth - C.size());
+  SmallString<32> Buffer;
+  raw_svector_ostream BufferOS(Buffer);
+  BufferOS << Line.ExecutionCount;
+  auto Str = BufferOS.str();
+  // Trim
+  Str = Str.substr(0, std::min(Str.size(), (size_t)LineCoverageColumnWidth));
+  // Align to the right
+  OS.indent(LineCoverageColumnWidth - Str.size());
   colored_ostream(OS, raw_ostream::MAGENTA,
                   Line.hasMultipleRegions() && Options.Colors)
-      << C;
+      << Str;
   OS << '|';
 }
 
@@ -122,6 +111,9 @@ void SourceCoverageView::renderLineNumberColumn(raw_ostream &OS,
 
 void SourceCoverageView::renderRegionMarkers(
     raw_ostream &OS, ArrayRef<const coverage::CoverageSegment *> Segments) {
+  SmallString<32> Buffer;
+  raw_svector_ostream BufferOS(Buffer);
+
   unsigned PrevColumn = 1;
   for (const auto *S : Segments) {
     if (!S->IsRegionEntry)
@@ -130,16 +122,20 @@ void SourceCoverageView::renderRegionMarkers(
     if (S->Col > PrevColumn)
       OS.indent(S->Col - PrevColumn);
     PrevColumn = S->Col + 1;
-    std::string C = formatCount(S->Count);
-    PrevColumn += C.size();
-    OS << '^' << C;
+    BufferOS << S->Count;
+    StringRef Str = BufferOS.str();
+    // Trim the execution count
+    Str = Str.substr(0, std::min(Str.size(), (size_t)7));
+    PrevColumn += Str.size();
+    OS << '^' << Str;
+    Buffer.clear();
   }
   OS << "\n";
 
   if (Options.Debug)
     for (const auto *S : Segments)
-      errs() << "Marker at " << S->Line << ":" << S->Col << " = "
-             << formatCount(S->Count) << (S->IsRegionEntry ? "\n" : " (pop)\n");
+      errs() << "Marker at " << S->Line << ":" << S->Col << " = " << S->Count
+             << (S->IsRegionEntry ? "\n" : " (pop)\n");
 }
 
 void SourceCoverageView::render(raw_ostream &OS, bool WholeFile,

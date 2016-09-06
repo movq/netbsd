@@ -447,12 +447,12 @@ static long conn_ctrl(BIO *b, int cmd, long num, void *ptr)
         if (b->init) {
             if (pptr != NULL) {
                 ret = 1;
-                if (num == 0) {
-                    *pptr = data->param_hostname;
-                } else if (num == 1) {
-                    *pptr = data->param_port;
-                } else if (num == 2) {
-                    *pptr = (char *)&(data->ip[0]);
+            if (num == 0) {
+                *pptr = data->param_hostname;
+            } else if (num == 1) {
+                *pptr = data->param_port;
+            } else if (num == 2) {
+                *pptr = (char *)&(data->ip[0]);
                 } else {
                     ret = 0;
                 }

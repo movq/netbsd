@@ -1,4 +1,4 @@
-/*	$NetBSD: ds1307reg.h,v 1.6 2016/04/05 10:53:16 bouyer Exp $	*/
+/*	$NetBSD: ds1307reg.h,v 1.4.14.1 2015/04/14 04:24:58 snj Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -70,7 +70,6 @@
 #define DS1672_CNTR3		0x02
 #define DS1672_CNTR4		0x03
 #define DS1672_CONTROL		0x04
-#define DS1672_CONTROL_CH		(1 << 7) /* clock hold */
 #define DS1672_TRICKLE		0x05
 
 #define DS1672_RTC_START	0

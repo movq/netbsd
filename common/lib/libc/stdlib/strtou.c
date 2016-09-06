@@ -1,4 +1,4 @@
-/*	$NetBSD: strtou.c,v 1.2 2015/05/01 14:17:56 christos Exp $	*/
+/*	$NetBSD: strtou.c,v 1.1.2.3 2015/05/16 17:58:46 snj Exp $	*/
 
 /*-
  * Copyright (c) 2005 The DragonFly Project.  All rights reserved.
@@ -35,7 +35,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: strtou.c,v 1.2 2015/05/01 14:17:56 christos Exp $");
+__RCSID("$NetBSD: strtou.c,v 1.1.2.3 2015/05/16 17:58:46 snj Exp $");
 
 #ifdef _LIBC
 #include "namespace.h"

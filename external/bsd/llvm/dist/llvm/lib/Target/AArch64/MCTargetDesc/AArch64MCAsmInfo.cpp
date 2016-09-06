@@ -58,14 +58,15 @@ const MCExpr *AArch64MCAsmInfoDarwin::getExprForPersonalitySymbol(
   // version.
   MCContext &Context = Streamer.getContext();
   const MCExpr *Res =
-      MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_GOT, Context);
-  MCSymbol *PCSym = Context.createTempSymbol();
+      MCSymbolRefExpr::Create(Sym, MCSymbolRefExpr::VK_GOT, Context);
+  MCSymbol *PCSym = Context.CreateTempSymbol();
   Streamer.EmitLabel(PCSym);
-  const MCExpr *PC = MCSymbolRefExpr::create(PCSym, Context);
-  return MCBinaryExpr::createSub(Res, PC, Context);
+  const MCExpr *PC = MCSymbolRefExpr::Create(PCSym, Context);
+  return MCBinaryExpr::CreateSub(Res, PC, Context);
 }
 
-AArch64MCAsmInfoELF::AArch64MCAsmInfoELF(const Triple &T) {
+AArch64MCAsmInfoELF::AArch64MCAsmInfoELF(StringRef TT) {
+  Triple T(TT);
   if (T.getArch() == Triple::aarch64_be)
     IsLittleEndian = false;
 

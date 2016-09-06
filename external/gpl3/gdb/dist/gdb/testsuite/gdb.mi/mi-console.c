@@ -1,5 +1,3 @@
-#include <unistd.h>
-
 void
 hello ()
 {
@@ -13,4 +11,4 @@ int
 main ()
 {
   hello ();
-} /* after-hello */
+}

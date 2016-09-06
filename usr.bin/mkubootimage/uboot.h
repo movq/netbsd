@@ -1,4 +1,4 @@
-/* $NetBSD: uboot.h,v 1.6 2014/09/30 10:21:50 msaitoh Exp $ */
+/* $NetBSD: uboot.h,v 1.5 2012/12/29 15:11:56 jmcneill Exp $ */
 
 /*-
  * Copyright (c) 2010 Jared D. McNeill <jmcneill@invisible.ca>
@@ -39,12 +39,9 @@ enum uboot_image_os {
 enum uboot_image_arch {
 	IH_ARCH_UNKNOWN = 0,
 	IH_ARCH_ARM = 2,
-	IH_ARCH_I386 = 3,
 	IH_ARCH_MIPS = 5,
 	IH_ARCH_MIPS64 = 6,
-	IH_ARCH_PPC = 7,
-	IH_ARCH_OPENRISC = 21,
-	IH_ARCH_ARM64 = 22
+	IH_ARCH_PPC = 7
 };
 
 enum uboot_image_type {

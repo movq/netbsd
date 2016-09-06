@@ -1,5 +1,5 @@
 /* Subroutines for manipulating rtx's in semantically interesting ways.
-   Copyright (C) 1987-2015 Free Software Foundation, Inc.
+   Copyright (C) 1987-2013 Free Software Foundation, Inc.
 
 This file is part of GCC.
 
@@ -24,38 +24,16 @@ along with GCC; see the file COPYING3.  If not see
 #include "tm.h"
 #include "diagnostic-core.h"
 #include "rtl.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
-#include "real.h"
 #include "tree.h"
-#include "stor-layout.h"
 #include "tm_p.h"
 #include "flags.h"
 #include "except.h"
-#include "hard-reg-set.h"
 #include "function.h"
-#include "hashtab.h"
-#include "statistics.h"
-#include "fixed-value.h"
-#include "insn-config.h"
-#include "expmed.h"
-#include "dojump.h"
-#include "explow.h"
-#include "calls.h"
-#include "emit-rtl.h"
-#include "varasm.h"
-#include "stmt.h"
 #include "expr.h"
-#include "insn-codes.h"
 #include "optabs.h"
 #include "libfuncs.h"
+#include "hard-reg-set.h"
+#include "insn-config.h"
 #include "ggc.h"
 #include "recog.h"
 #include "langhooks.h"
@@ -69,13 +47,12 @@ static rtx break_out_memory_refs (rtx);
 /* Truncate and perhaps sign-extend C as appropriate for MODE.  */
 
 HOST_WIDE_INT
-trunc_int_for_mode (HOST_WIDE_INT c, machine_mode mode)
+trunc_int_for_mode (HOST_WIDE_INT c, enum machine_mode mode)
 {
   int width = GET_MODE_PRECISION (mode);
 
   /* You want to truncate to a _what_?  */
-  gcc_assert (SCALAR_INT_MODE_P (mode)
-	      || POINTER_BOUNDS_MODE_P (mode));
+  gcc_assert (SCALAR_INT_MODE_P (mode));
 
   /* Canonicalize BImode to 0 and STORE_FLAG_VALUE.  */
   if (mode == BImode)
@@ -96,12 +73,10 @@ trunc_int_for_mode (HOST_WIDE_INT c, machine_mode mode)
 }
 
 /* Return an rtx for the sum of X and the integer C, given that X has
-   mode MODE.  INPLACE is true if X can be modified inplace or false
-   if it must be treated as immutable.  */
+   mode MODE.  */
 
 rtx
-plus_constant (machine_mode mode, rtx x, HOST_WIDE_INT c,
-	       bool inplace)
+plus_constant (enum machine_mode mode, rtx x, HOST_WIDE_INT c)
 {
   RTX_CODE code;
   rtx y;
@@ -120,9 +95,38 @@ plus_constant (machine_mode mode, rtx x, HOST_WIDE_INT c,
 
   switch (code)
     {
-    CASE_CONST_SCALAR_INT:
-      return immed_wide_int_const (wi::add (std::make_pair (x, mode), c),
-				   mode);
+    case CONST_INT:
+      if (GET_MODE_BITSIZE (mode) > HOST_BITS_PER_WIDE_INT)
+	{
+	  double_int di_x = double_int::from_shwi (INTVAL (x));
+	  double_int di_c = double_int::from_shwi (c);
+
+	  bool overflow;
+	  double_int v = di_x.add_with_sign (di_c, false, &overflow);
+	  if (overflow)
+	    gcc_unreachable ();
+
+	  return immed_double_int_const (v, mode);
+	}
+
+      return gen_int_mode (INTVAL (x) + c, mode);
+
+    case CONST_DOUBLE:
+      {
+	double_int di_x = double_int::from_pair (CONST_DOUBLE_HIGH (x),
+						 CONST_DOUBLE_LOW (x));
+	double_int di_c = double_int::from_shwi (c);
+
+	bool overflow;
+	double_int v = di_x.add_with_sign (di_c, false, &overflow);
+	if (overflow)
+	  /* Sorry, we have no way to represent overflows this wide.
+	     To fix, add constant support wider than CONST_DOUBLE.  */
+	  gcc_assert (GET_MODE_BITSIZE (mode) <= HOST_BITS_PER_DOUBLE_INT);
+
+	return immed_double_int_const (v, mode);
+      }
+
     case MEM:
       /* If this is a reference to the constant pool, try replacing it with
 	 a reference to a new constant.  If the resulting address isn't
@@ -140,8 +144,6 @@ plus_constant (machine_mode mode, rtx x, HOST_WIDE_INT c,
     case CONST:
       /* If adding to something entirely constant, set a flag
 	 so that we can add a CONST around the result.  */
-      if (inplace && shared_const_p (x))
-	inplace = false;
       x = XEXP (x, 0);
       all_constant = 1;
       goto restart;
@@ -162,25 +164,19 @@ plus_constant (machine_mode mode, rtx x, HOST_WIDE_INT c,
 
       if (CONSTANT_P (XEXP (x, 1)))
 	{
-	  rtx term = plus_constant (mode, XEXP (x, 1), c, inplace);
-	  if (term == const0_rtx)
-	    x = XEXP (x, 0);
-	  else if (inplace)
-	    XEXP (x, 1) = term;
-	  else
-	    x = gen_rtx_PLUS (mode, XEXP (x, 0), term);
+	  x = gen_rtx_PLUS (mode, XEXP (x, 0),
+			    plus_constant (mode, XEXP (x, 1), c));
 	  c = 0;
 	}
-      else if (rtx *const_loc = find_constant_term_loc (&y))
+      else if (find_constant_term_loc (&y))
 	{
-	  if (!inplace)
-	    {
-	      /* We need to be careful since X may be shared and we can't
-		 modify it in place.  */
-	      x = copy_rtx (x);
-	      const_loc = find_constant_term_loc (&x);
-	    }
-	  *const_loc = plus_constant (mode, *const_loc, c, true);
+	  /* We need to be careful since X may be shared and we can't
+	     modify it in place.  */
+	  rtx copy = copy_rtx (x);
+	  rtx *const_loc = find_constant_term_loc (&copy);
+
+	  *const_loc = plus_constant (mode, *const_loc, c);
+	  x = copy;
 	  c = 0;
 	}
       break;
@@ -190,7 +186,7 @@ plus_constant (machine_mode mode, rtx x, HOST_WIDE_INT c,
     }
 
   if (c != 0)
-    x = gen_rtx_PLUS (mode, x, gen_int_mode (c, mode));
+    x = gen_rtx_PLUS (mode, x, GEN_INT (c));
 
   if (GET_CODE (x) == SYMBOL_REF || GET_CODE (x) == LABEL_REF)
     return x;
@@ -239,6 +235,46 @@ eliminate_constant_term (rtx x, rtx *constptr)
   return x;
 }
 
+/* Return an rtx for the size in bytes of the value of EXP.  */
+
+rtx
+expr_size (tree exp)
+{
+  tree size;
+
+  if (TREE_CODE (exp) == WITH_SIZE_EXPR)
+    size = TREE_OPERAND (exp, 1);
+  else
+    {
+      size = tree_expr_size (exp);
+      gcc_assert (size);
+      gcc_assert (size == SUBSTITUTE_PLACEHOLDER_IN_EXPR (size, exp));
+    }
+
+  return expand_expr (size, NULL_RTX, TYPE_MODE (sizetype), EXPAND_NORMAL);
+}
+
+/* Return a wide integer for the size in bytes of the value of EXP, or -1
+   if the size can vary or is larger than an integer.  */
+
+HOST_WIDE_INT
+int_expr_size (tree exp)
+{
+  tree size;
+
+  if (TREE_CODE (exp) == WITH_SIZE_EXPR)
+    size = TREE_OPERAND (exp, 1);
+  else
+    {
+      size = tree_expr_size (exp);
+      gcc_assert (size);
+    }
+
+  if (size == 0 || !host_integerp (size, 0))
+    return -1;
+
+  return tree_low_cst (size, 0);
+}
 
 /* Return a copy of X in which all memory references
    and all constants that involve symbol refs
@@ -280,19 +316,17 @@ break_out_memory_refs (rtx x)
    an address in the address space's address mode, or vice versa (TO_MODE says
    which way).  We take advantage of the fact that pointers are not allowed to
    overflow by commuting arithmetic operations over conversions so that address
-   arithmetic insns can be used. IN_CONST is true if this conversion is inside
-   a CONST.  */
+   arithmetic insns can be used.  */
 
-static rtx
-convert_memory_address_addr_space_1 (machine_mode to_mode ATTRIBUTE_UNUSED,
-				     rtx x, addr_space_t as ATTRIBUTE_UNUSED,
-				     bool in_const ATTRIBUTE_UNUSED)
+rtx
+convert_memory_address_addr_space (enum machine_mode to_mode ATTRIBUTE_UNUSED,
+				   rtx x, addr_space_t as ATTRIBUTE_UNUSED)
 {
 #ifndef POINTERS_EXTEND_UNSIGNED
   gcc_assert (GET_MODE (x) == to_mode || GET_MODE (x) == VOIDmode);
   return x;
 #else /* defined(POINTERS_EXTEND_UNSIGNED) */
-  machine_mode pointer_mode, address_mode, from_mode;
+  enum machine_mode pointer_mode, address_mode, from_mode;
   rtx temp;
   enum rtx_code code;
 
@@ -329,7 +363,7 @@ convert_memory_address_addr_space_1 (machine_mode to_mode ATTRIBUTE_UNUSED,
       break;
 
     case LABEL_REF:
-      temp = gen_rtx_LABEL_REF (to_mode, LABEL_REF_LABEL (x));
+      temp = gen_rtx_LABEL_REF (to_mode, XEXP (x, 0));
       LABEL_REF_NONLOCAL_P (temp) = LABEL_REF_NONLOCAL_P (x);
       return temp;
       break;
@@ -342,29 +376,32 @@ convert_memory_address_addr_space_1 (machine_mode to_mode ATTRIBUTE_UNUSED,
 
     case CONST:
       return gen_rtx_CONST (to_mode,
-			    convert_memory_address_addr_space_1
-			      (to_mode, XEXP (x, 0), as, true));
+			    convert_memory_address_addr_space
+			      (to_mode, XEXP (x, 0), as));
       break;
 
     case PLUS:
     case MULT:
-      /* For addition we can safely permute the conversion and addition
-	 operation if one operand is a constant and converting the constant
-	 does not change it or if one operand is a constant and we are
-	 using a ptr_extend instruction  (POINTERS_EXTEND_UNSIGNED < 0).
+      /* FIXME: For addition, we used to permute the conversion and
+	 addition operation only if one operand is a constant and
+	 converting the constant does not change it or if one operand
+	 is a constant and we are using a ptr_extend instruction
+	 (POINTERS_EXTEND_UNSIGNED < 0) even if the resulting address
+	 may overflow/underflow.  We relax the condition to include
+	 zero-extend (POINTERS_EXTEND_UNSIGNED > 0) since the other
+	 parts of the compiler depend on it.  See PR 49721.
+
 	 We can always safely permute them if we are making the address
-	 narrower. Inside a CONST RTL, this is safe for both pointers
-	 zero or sign extended as pointers cannot wrap. */
+	 narrower.  */
       if (GET_MODE_SIZE (to_mode) < GET_MODE_SIZE (from_mode)
 	  || (GET_CODE (x) == PLUS
 	      && CONST_INT_P (XEXP (x, 1))
-	      && ((in_const && POINTERS_EXTEND_UNSIGNED != 0)
-		  || XEXP (x, 1) == convert_memory_address_addr_space_1
-				     (to_mode, XEXP (x, 1), as, in_const)
-                  || POINTERS_EXTEND_UNSIGNED < 0)))
+	      && (POINTERS_EXTEND_UNSIGNED != 0
+		  || XEXP (x, 1) == convert_memory_address_addr_space
+		  			(to_mode, XEXP (x, 1), as))))
 	return gen_rtx_fmt_ee (GET_CODE (x), to_mode,
-			       convert_memory_address_addr_space_1
-				 (to_mode, XEXP (x, 0), as, in_const),
+			       convert_memory_address_addr_space
+				 (to_mode, XEXP (x, 0), as),
 			       XEXP (x, 1));
       break;
 
@@ -376,29 +413,16 @@ convert_memory_address_addr_space_1 (machine_mode to_mode ATTRIBUTE_UNUSED,
 			x, POINTERS_EXTEND_UNSIGNED);
 #endif /* defined(POINTERS_EXTEND_UNSIGNED) */
 }
-
-/* Given X, a memory address in address space AS' pointer mode, convert it to
-   an address in the address space's address mode, or vice versa (TO_MODE says
-   which way).  We take advantage of the fact that pointers are not allowed to
-   overflow by commuting arithmetic operations over conversions so that address
-   arithmetic insns can be used.  */
-
-rtx
-convert_memory_address_addr_space (machine_mode to_mode, rtx x, addr_space_t as)
-{
-  return convert_memory_address_addr_space_1 (to_mode, x, as, false);
-}
 
-
 /* Return something equivalent to X but valid as a memory address for something
    of mode MODE in the named address space AS.  When X is not itself valid,
    this works by copying X or subexpressions of it into registers.  */
 
 rtx
-memory_address_addr_space (machine_mode mode, rtx x, addr_space_t as)
+memory_address_addr_space (enum machine_mode mode, rtx x, addr_space_t as)
 {
   rtx oldx = x;
-  machine_mode address_mode = targetm.addr_space.address_mode (as);
+  enum machine_mode address_mode = targetm.addr_space.address_mode (as);
 
   x = convert_memory_address_addr_space (address_mode, x, as);
 
@@ -500,9 +524,8 @@ memory_address_addr_space (machine_mode mode, rtx x, addr_space_t as)
   return x;
 }
 
-/* If REF is a MEM with an invalid address, change it into a valid address.
-   Pass through anything else unchanged.  REF must be an unshared rtx and
-   the function may modify it in-place.  */
+/* Convert a mem ref into one with a valid memory address.
+   Pass through anything else unchanged.  */
 
 rtx
 validize_mem (rtx ref)
@@ -514,7 +537,8 @@ validize_mem (rtx ref)
 				   MEM_ADDR_SPACE (ref)))
     return ref;
 
-  return replace_equiv_address (ref, XEXP (ref, 0), true);
+  /* Don't alter REF itself, since that is probably a stack slot.  */
+  return replace_equiv_address (ref, XEXP (ref, 0));
 }
 
 /* If X is a memory reference to a member of an object block, try rewriting
@@ -526,7 +550,7 @@ use_anchored_address (rtx x)
 {
   rtx base;
   HOST_WIDE_INT offset;
-  machine_mode mode;
+  enum machine_mode mode;
 
   if (!flag_section_anchors)
     return x;
@@ -605,7 +629,7 @@ copy_addr_to_reg (rtx x)
    in case X is a constant.  */
 
 rtx
-copy_to_mode_reg (machine_mode mode, rtx x)
+copy_to_mode_reg (enum machine_mode mode, rtx x)
 {
   rtx temp = gen_reg_rtx (mode);
 
@@ -629,10 +653,9 @@ copy_to_mode_reg (machine_mode mode, rtx x)
    since we mark it as a "constant" register.  */
 
 rtx
-force_reg (machine_mode mode, rtx x)
+force_reg (enum machine_mode mode, rtx x)
 {
-  rtx temp, set;
-  rtx_insn *insn;
+  rtx temp, insn, set;
 
   if (REG_P (x))
     return x;
@@ -730,7 +753,7 @@ force_not_mem (rtx x)
    MODE is the mode to use for X in case it is a constant.  */
 
 rtx
-copy_to_suggested_reg (rtx x, rtx target, machine_mode mode)
+copy_to_suggested_reg (rtx x, rtx target, enum machine_mode mode)
 {
   rtx temp;
 
@@ -750,8 +773,8 @@ copy_to_suggested_reg (rtx x, rtx target, machine_mode mode)
    FOR_RETURN is nonzero if the caller is promoting the return value
    of FNDECL, else it is for promoting args.  */
 
-machine_mode
-promote_function_mode (const_tree type, machine_mode mode, int *punsignedp,
+enum machine_mode
+promote_function_mode (const_tree type, enum machine_mode mode, int *punsignedp,
 		       const_tree funtype, int for_return)
 {
   /* Called without a type node for a libcall.  */
@@ -781,8 +804,8 @@ promote_function_mode (const_tree type, machine_mode mode, int *punsignedp,
    PUNSIGNEDP points to the signedness of the type and may be adjusted
    to show what signedness to use on extension operations.  */
 
-machine_mode
-promote_mode (const_tree type ATTRIBUTE_UNUSED, machine_mode mode,
+enum machine_mode
+promote_mode (const_tree type ATTRIBUTE_UNUSED, enum machine_mode mode,
 	      int *punsignedp ATTRIBUTE_UNUSED)
 {
 #ifdef PROMOTE_MODE
@@ -834,13 +857,13 @@ promote_mode (const_tree type ATTRIBUTE_UNUSED, machine_mode mode,
    mode of DECL.  If PUNSIGNEDP is not NULL, store there the unsignedness
    of DECL after promotion.  */
 
-machine_mode
+enum machine_mode
 promote_decl_mode (const_tree decl, int *punsignedp)
 {
   tree type = TREE_TYPE (decl);
   int unsignedp = TYPE_UNSIGNED (type);
-  machine_mode mode = DECL_MODE (decl);
-  machine_mode pmode;
+  enum machine_mode mode = DECL_MODE (decl);
+  enum machine_mode pmode;
 
   if (TREE_CODE (decl) == RESULT_DECL
       || TREE_CODE (decl) == PARM_DECL)
@@ -863,8 +886,7 @@ static bool suppress_reg_args_size;
 static void
 adjust_stack_1 (rtx adjust, bool anti_p)
 {
-  rtx temp;
-  rtx_insn *insn;
+  rtx temp, insn;
 
 #ifndef STACK_GROWS_DOWNWARD
   /* Hereafter anti_p means subtract_p.  */
@@ -985,7 +1007,7 @@ emit_stack_save (enum save_level save_level, rtx *psave)
   rtx sa = *psave;
   /* The default is that we use a move insn and save in a Pmode object.  */
   rtx (*fcn) (rtx, rtx) = gen_move_insn;
-  machine_mode mode = STACK_SAVEAREA_MODE (save_level);
+  enum machine_mode mode = STACK_SAVEAREA_MODE (save_level);
 
   /* See if this machine has anything special to do for this kind of save.  */
   switch (save_level)
@@ -1144,8 +1166,7 @@ allocate_dynamic_stack_space (rtx size, unsigned size_align,
 			      unsigned required_align, bool cannot_accumulate)
 {
   HOST_WIDE_INT stack_usage_size = -1;
-  rtx_code_label *final_label;
-  rtx final_target, target;
+  rtx final_label, final_target, target;
   unsigned extra_align = 0;
   bool must_align;
 
@@ -1169,8 +1190,7 @@ allocate_dynamic_stack_space (rtx size, unsigned size_align,
         {
 	  /* Look into the last emitted insn and see if we can deduce
 	     something for the register.  */
-	  rtx_insn *insn;
-	  rtx set, note;
+	  rtx insn, set, note;
 	  insn = get_last_insn ();
 	  if ((set = single_set (insn)) && rtx_equal_p (SET_DEST (set), size))
 	    {
@@ -1299,7 +1319,7 @@ allocate_dynamic_stack_space (rtx size, unsigned size_align,
 	current_function_has_unbounded_dynamic_stack_size = 1;
     }
 
-  final_label = NULL;
+  final_label = NULL_RTX;
   final_target = NULL_RTX;
 
   /* If we are splitting the stack, we need to ask the backend whether
@@ -1311,10 +1331,9 @@ allocate_dynamic_stack_space (rtx size, unsigned size_align,
      least it doesn't cause a stack overflow.  */
   if (flag_split_stack)
     {
-      rtx_code_label *available_label;
-      rtx ask, space, func;
+      rtx available_label, ask, space, func;
 
-      available_label = NULL;
+      available_label = NULL_RTX;
 
 #ifdef HAVE_split_stack_space_check
       if (HAVE_split_stack_space_check)
@@ -1336,8 +1355,7 @@ allocate_dynamic_stack_space (rtx size, unsigned size_align,
       else
 	{
 	  ask = expand_binop (Pmode, add_optab, size,
-			      gen_int_mode (required_align / BITS_PER_UNIT - 1,
-					    Pmode),
+			      GEN_INT (required_align / BITS_PER_UNIT - 1),
 			      NULL_RTX, 1, OPTAB_LIB_WIDEN);
 	  must_align = true;
 	}
@@ -1407,7 +1425,7 @@ allocate_dynamic_stack_space (rtx size, unsigned size_align,
       if (crtl->limit_stack)
 	{
 	  rtx available;
-	  rtx_code_label *space_available = gen_label_rtx ();
+	  rtx space_available = gen_label_rtx ();
 #ifdef STACK_GROWS_DOWNWARD
 	  available = expand_binop (Pmode, sub_optab,
 				    stack_pointer_rtx, stack_limit_rtx,
@@ -1463,16 +1481,13 @@ allocate_dynamic_stack_space (rtx size, unsigned size_align,
 	 but we know it can't.  So add ourselves and then do
 	 TRUNC_DIV_EXPR.  */
       target = expand_binop (Pmode, add_optab, target,
-			     gen_int_mode (required_align / BITS_PER_UNIT - 1,
-					   Pmode),
+			     GEN_INT (required_align / BITS_PER_UNIT - 1),
 			     NULL_RTX, 1, OPTAB_LIB_WIDEN);
       target = expand_divmod (0, TRUNC_DIV_EXPR, Pmode, target,
-			      gen_int_mode (required_align / BITS_PER_UNIT,
-					    Pmode),
+			      GEN_INT (required_align / BITS_PER_UNIT),
 			      NULL_RTX, 1);
       target = expand_mult (Pmode, target,
-			    gen_int_mode (required_align / BITS_PER_UNIT,
-					  Pmode),
+			    GEN_INT (required_align / BITS_PER_UNIT),
 			    NULL_RTX, 1);
     }
 
@@ -1609,15 +1624,15 @@ probe_stack_range (HOST_WIDE_INT first, rtx size)
   else
     {
       rtx rounded_size, rounded_size_op, test_addr, last_addr, temp;
-      rtx_code_label *loop_lab = gen_label_rtx ();
-      rtx_code_label *end_lab = gen_label_rtx ();
+      rtx loop_lab = gen_label_rtx ();
+      rtx end_lab = gen_label_rtx ();
+
 
       /* Step 1: round SIZE to the previous multiple of the interval.  */
 
       /* ROUNDED_SIZE = SIZE & -PROBE_INTERVAL  */
       rounded_size
-	= simplify_gen_binary (AND, Pmode, size,
-			       gen_int_mode (-PROBE_INTERVAL, Pmode));
+	= simplify_gen_binary (AND, Pmode, size, GEN_INT (-PROBE_INTERVAL));
       rounded_size_op = force_operand (rounded_size, NULL_RTX);
 
 
@@ -1626,8 +1641,7 @@ probe_stack_range (HOST_WIDE_INT first, rtx size)
       /* TEST_ADDR = SP + FIRST.  */
       test_addr = force_operand (gen_rtx_fmt_ee (STACK_GROW_OP, Pmode,
 					 	 stack_pointer_rtx,
-						 gen_int_mode (first, Pmode)),
-				 NULL_RTX);
+					 	 GEN_INT (first)), NULL_RTX);
 
       /* LAST_ADDR = SP + FIRST + ROUNDED_SIZE.  */
       last_addr = force_operand (gen_rtx_fmt_ee (STACK_GROW_OP, Pmode,
@@ -1654,7 +1668,7 @@ probe_stack_range (HOST_WIDE_INT first, rtx size)
 
       /* TEST_ADDR = TEST_ADDR + PROBE_INTERVAL.  */
       temp = expand_binop (Pmode, STACK_GROW_OPTAB, test_addr,
-			   gen_int_mode (PROBE_INTERVAL, Pmode), test_addr,
+			   GEN_INT (PROBE_INTERVAL), test_addr,
 			   1, OPTAB_WIDEN);
 
       gcc_assert (temp == test_addr);
@@ -1696,9 +1710,6 @@ probe_stack_range (HOST_WIDE_INT first, rtx size)
 	  emit_stack_probe (addr);
 	}
     }
-
-  /* Make sure nothing is scheduled before we are done.  */
-  emit_insn (gen_blockage ());
 }
 
 /* Adjust the stack pointer by minus SIZE (an rtx for a number of bytes)
@@ -1756,16 +1767,15 @@ anti_adjust_stack_and_probe (rtx size, bool adjust_back)
   else
     {
       rtx rounded_size, rounded_size_op, last_addr, temp;
-      rtx_code_label *loop_lab = gen_label_rtx ();
-      rtx_code_label *end_lab = gen_label_rtx ();
+      rtx loop_lab = gen_label_rtx ();
+      rtx end_lab = gen_label_rtx ();
 
 
       /* Step 1: round SIZE to the previous multiple of the interval.  */
 
       /* ROUNDED_SIZE = SIZE & -PROBE_INTERVAL  */
       rounded_size
-	= simplify_gen_binary (AND, Pmode, size,
-			       gen_int_mode (-PROBE_INTERVAL, Pmode));
+	= simplify_gen_binary (AND, Pmode, size, GEN_INT (-PROBE_INTERVAL));
       rounded_size_op = force_operand (rounded_size, NULL_RTX);
 
 
@@ -1849,7 +1859,7 @@ hard_function_value (const_tree valtype, const_tree func, const_tree fntype,
       && GET_MODE (val) == BLKmode)
     {
       unsigned HOST_WIDE_INT bytes = int_size_in_bytes (valtype);
-      machine_mode tmpmode;
+      enum machine_mode tmpmode;
 
       /* int_size_in_bytes can return -1.  We don't need a check here
 	 since the value of bytes will then be large enough that no
@@ -1876,7 +1886,7 @@ hard_function_value (const_tree valtype, const_tree func, const_tree fntype,
    in which a scalar value of mode MODE was returned by a library call.  */
 
 rtx
-hard_libcall_value (machine_mode mode, rtx fun)
+hard_libcall_value (enum machine_mode mode, rtx fun)
 {
   return targetm.calls.libcall_value (mode, fun);
 }

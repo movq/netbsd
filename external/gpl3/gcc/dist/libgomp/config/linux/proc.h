@@ -1,8 +1,7 @@
-/* Copyright (C) 2011-2015 Free Software Foundation, Inc.
+/* Copyright (C) 2011-2013 Free Software Foundation, Inc.
    Contributed by Uros Bizjak <ubizjak@gmail.com>
 
-   This file is part of the GNU Offloading and Multi Processing Library
-   (libgomp).
+   This file is part of the GNU OpenMP Library (libgomp).
 
    Libgomp is free software; you can redistribute it and/or modify it
    under the terms of the GNU General Public License as published by
@@ -29,10 +28,7 @@
 #include <sched.h>
 
 #ifdef HAVE_PTHREAD_AFFINITY_NP
-extern unsigned long gomp_cpuset_size attribute_hidden;
-extern cpu_set_t *gomp_cpusetp attribute_hidden;
-extern unsigned long gomp_cpuset_popcount (unsigned long, cpu_set_t *)
-     attribute_hidden;
+extern unsigned long gomp_cpuset_popcount (cpu_set_t *);
 #endif
 
 #endif /* GOMP_PROC_H */

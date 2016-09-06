@@ -1,4 +1,4 @@
-/*	$NetBSD: cd.c,v 1.331 2016/05/15 15:37:38 reinoud Exp $	*/
+/*	$NetBSD: cd.c,v 1.323 2014/08/10 16:44:36 tls Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2001, 2003, 2004, 2005, 2008 The NetBSD Foundation,
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cd.c,v 1.331 2016/05/15 15:37:38 reinoud Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cd.c,v 1.323 2014/08/10 16:44:36 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -72,7 +72,7 @@ __KERNEL_RCSID(0, "$NetBSD: cd.c,v 1.331 2016/05/15 15:37:38 reinoud Exp $");
 #include <sys/proc.h>
 #include <sys/conf.h>
 #include <sys/vnode.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <dev/scsipi/scsi_spc.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -229,10 +229,7 @@ const struct cdevsw cd_cdevsw = {
 	.d_flag = D_DISK
 };
 
-static struct dkdriver cddkdriver = {
-	.d_strategy = cdstrategy,
-	.d_minphys = cdminphys
-};
+static struct dkdriver cddkdriver = { cdstrategy, NULL };
 
 static const struct scsipi_periphsw cd_switch = {
 	cd_interpret_sense,	/* use our error handler first */
@@ -1324,12 +1321,35 @@ cdioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 		}
 	}
 
-	error = disk_ioctl(&cd->sc_dk, dev, cmd, addr, flag, l); 
+	error = disk_ioctl(&cd->sc_dk, cmd, addr, flag, l); 
 	if (error != EPASSTHROUGH)
 		return (error);
 
 	error = 0;
 	switch (cmd) {
+	case DIOCGDINFO:
+		*(struct disklabel *)addr = *(cd->sc_dk.dk_label);
+		return (0);
+#ifdef __HAVE_OLD_DISKLABEL
+	case ODIOCGDINFO:
+		newlabel = malloc(sizeof (*newlabel), M_TEMP, M_WAITOK);
+		if (newlabel == NULL)
+			return (EIO);
+		memcpy(newlabel, cd->sc_dk.dk_label, sizeof (*newlabel));
+		if (newlabel->d_npartitions > OLDMAXPARTITIONS)
+			error = ENOTTY;
+		else
+			memcpy(addr, newlabel, sizeof (struct olddisklabel));
+		free(newlabel, M_TEMP);
+		return error;
+#endif
+
+	case DIOCGPART:
+		((struct partinfo *)addr)->disklab = cd->sc_dk.dk_label;
+		((struct partinfo *)addr)->part =
+		    &cd->sc_dk.dk_label->d_partitions[part];
+		return (0);
+
 	case DIOCWDINFO:
 	case DIOCSDINFO:
 #ifdef __HAVE_OLD_DISKLABEL
@@ -1701,10 +1721,10 @@ cdgetdefaultlabel(struct cd_softc *cd, struct cd_formatted_toc *toc,
 
 	switch (SCSIPI_BUSTYPE_TYPE(scsipi_periph_bustype(cd->sc_periph))) {
 	case SCSIPI_BUSTYPE_SCSI:
-		lp->d_type = DKTYPE_SCSI;
+		lp->d_type = DTYPE_SCSI;
 		break;
 	case SCSIPI_BUSTYPE_ATAPI:
-		lp->d_type = DKTYPE_ATAPI;
+		lp->d_type = DTYPE_ATAPI;
 		break;
 	}
 	/*
@@ -1789,7 +1809,7 @@ cdgetdisklabel(struct cd_softc *cd)
  * we count.
  */
 static int
-read_cd_capacity(struct scsipi_periph *periph, uint32_t *blksize, u_long *last_lba)
+read_cd_capacity(struct scsipi_periph *periph, u_int *blksize, u_long *last_lba)
 {
 	struct scsipi_read_cd_capacity    cap_cmd;
 	/*
@@ -1799,9 +1819,9 @@ read_cd_capacity(struct scsipi_periph *periph, uint32_t *blksize, u_long *last_l
 	 */
 	struct scsipi_read_cd_cap_data    cap __aligned(2);
 	struct scsipi_read_discinfo       di_cmd;
-	struct scsipi_read_discinfo_data  di __aligned(2);
+	struct scsipi_read_discinfo_data  di;
 	struct scsipi_read_trackinfo      ti_cmd;
-	struct scsipi_read_trackinfo_data ti __aligned(2);
+	struct scsipi_read_trackinfo_data ti;
 	uint32_t track_start, track_size;
 	int error, flags, msb, lsb, last_track;
 
@@ -1881,12 +1901,12 @@ read_cd_capacity(struct scsipi_periph *periph, uint32_t *blksize, u_long *last_l
 }
 
 /*
- * Find out from the device what its capacity is
+ * Find out from the device what it's capacity is
  */
 static u_long
 cd_size(struct cd_softc *cd, int flags)
 {
-	uint32_t blksize = 2048;
+	u_int blksize = 2048;
 	u_long last_lba = 0, size;
 	int error;
 
@@ -2112,6 +2132,7 @@ cd_get_parms(struct cd_softc *cd, int flags)
 	 */
 	if (cd_size(cd, flags) == 0)
 		return (ENXIO);
+	disk_blocksize(&cd->sc_dk, cd->params.blksize);
 	return (0);
 }
 
@@ -2986,7 +3007,7 @@ mmc_getdiscinfo(struct scsipi_periph *periph,
 	struct scsipi_get_conf_data      *gc;
 	struct scsipi_get_conf_feature   *gcf;
 	struct scsipi_read_discinfo       di_cmd;
-	struct scsipi_read_discinfo_data  di __aligned(2);
+	struct scsipi_read_discinfo_data  di;
 	const uint32_t buffer_size = 1024;
 	uint32_t feat_tbl_len, pos;
 	u_long   last_lba = 0;
@@ -3502,9 +3523,9 @@ mmc_gettrackinfo(struct scsipi_periph *periph,
 		 struct mmc_trackinfo *trackinfo)
 {
 	struct scsipi_read_trackinfo      ti_cmd;
-	struct scsipi_read_trackinfo_data ti __aligned(2);
+	struct scsipi_read_trackinfo_data ti;
 	struct scsipi_get_configuration   gc_cmd;
-	struct scsipi_get_conf_data       gc __aligned(2);
+	struct scsipi_get_conf_data       gc;
 	int error, flags;
 	int mmc_profile;
 

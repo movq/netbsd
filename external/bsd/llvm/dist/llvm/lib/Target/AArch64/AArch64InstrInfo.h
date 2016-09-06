@@ -90,13 +90,13 @@ public:
   /// Hint that pairing the given load or store is unprofitable.
   void suppressLdStPair(MachineInstr *MI) const;
 
-  bool getMemOpBaseRegImmOfs(MachineInstr *LdSt, unsigned &BaseReg,
-                             unsigned &Offset,
-                             const TargetRegisterInfo *TRI) const override;
+  bool getLdStBaseRegImmOfs(MachineInstr *LdSt, unsigned &BaseReg,
+                            unsigned &Offset,
+                            const TargetRegisterInfo *TRI) const override;
 
-  bool getMemOpBaseRegImmOfsWidth(MachineInstr *LdSt, unsigned &BaseReg,
-                                  int &Offset, int &Width,
-                                  const TargetRegisterInfo *TRI) const;
+  bool getLdStBaseRegImmOfsWidth(MachineInstr *LdSt, unsigned &BaseReg,
+                                 int &Offset, int &Width,
+                                 const TargetRegisterInfo *TRI) const;
 
   bool enableClusterLoads() const override { return true; }
 
@@ -129,10 +129,10 @@ public:
                             const TargetRegisterInfo *TRI) const override;
 
   using TargetInstrInfo::foldMemoryOperandImpl;
-  MachineInstr *foldMemoryOperandImpl(MachineFunction &MF, MachineInstr *MI,
-                                      ArrayRef<unsigned> Ops,
-                                      MachineBasicBlock::iterator InsertPt,
-                                      int FrameIndex) const override;
+  MachineInstr *
+  foldMemoryOperandImpl(MachineFunction &MF, MachineInstr *MI,
+                        const SmallVectorImpl<unsigned> &Ops,
+                        int FrameIndex) const override;
 
   bool AnalyzeBranch(MachineBasicBlock &MBB, MachineBasicBlock *&TBB,
                      MachineBasicBlock *&FBB,
@@ -140,14 +140,17 @@ public:
                      bool AllowModify = false) const override;
   unsigned RemoveBranch(MachineBasicBlock &MBB) const override;
   unsigned InsertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
-                        MachineBasicBlock *FBB, ArrayRef<MachineOperand> Cond,
+                        MachineBasicBlock *FBB,
+                        const SmallVectorImpl<MachineOperand> &Cond,
                         DebugLoc DL) const override;
   bool
   ReverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond) const override;
-  bool canInsertSelect(const MachineBasicBlock &, ArrayRef<MachineOperand> Cond,
-                       unsigned, unsigned, int &, int &, int &) const override;
+  bool canInsertSelect(const MachineBasicBlock &,
+                       const SmallVectorImpl<MachineOperand> &Cond, unsigned,
+                       unsigned, int &, int &, int &) const override;
   void insertSelect(MachineBasicBlock &MBB, MachineBasicBlock::iterator MI,
-                    DebugLoc DL, unsigned DstReg, ArrayRef<MachineOperand> Cond,
+                    DebugLoc DL, unsigned DstReg,
+                    const SmallVectorImpl<MachineOperand> &Cond,
                     unsigned TrueReg, unsigned FalseReg) const override;
   void getNoopForMachoTarget(MCInst &NopInst) const override;
 
@@ -163,19 +166,19 @@ public:
                             unsigned SrcReg2, int CmpMask, int CmpValue,
                             const MachineRegisterInfo *MRI) const override;
   bool optimizeCondBranch(MachineInstr *MI) const override;
-  /// Return true when there is potentially a faster code sequence
+  /// hasPattern - return true when there is potentially a faster code sequence
   /// for an instruction chain ending in <Root>. All potential patterns are
-  /// listed in the <Patterns> array.
-  bool getMachineCombinerPatterns(MachineInstr &Root,
-                  SmallVectorImpl<MachineCombinerPattern> &Patterns)
+  /// listed
+  /// in the <Pattern> array.
+  bool hasPattern(MachineInstr &Root,
+                  SmallVectorImpl<MachineCombinerPattern::MC_PATTERN> &Pattern)
       const override;
-  /// Return true when Inst is associative and commutative so that it can be
-  /// reassociated.
-  bool isAssociativeAndCommutative(const MachineInstr &Inst) const override;
-  /// When getMachineCombinerPatterns() finds patterns, this function generates
-  /// the instructions that could replace the original code sequence
+
+  /// genAlternativeCodeSequence - when hasPattern() finds a pattern
+  /// this function generates the instructions that could replace the
+  /// original code sequence
   void genAlternativeCodeSequence(
-      MachineInstr &Root, MachineCombinerPattern Pattern,
+      MachineInstr &Root, MachineCombinerPattern::MC_PATTERN P,
       SmallVectorImpl<MachineInstr *> &InsInstrs,
       SmallVectorImpl<MachineInstr *> &DelInstrs,
       DenseMap<unsigned, unsigned> &InstrIdxForVirtReg) const override;
@@ -183,18 +186,10 @@ public:
   bool useMachineCombiner() const override;
 
   bool expandPostRAPseudo(MachineBasicBlock::iterator MI) const override;
-
-  std::pair<unsigned, unsigned>
-  decomposeMachineOperandsTargetFlags(unsigned TF) const override;
-  ArrayRef<std::pair<unsigned, const char *>>
-  getSerializableDirectMachineOperandTargetFlags() const override;
-  ArrayRef<std::pair<unsigned, const char *>>
-  getSerializableBitmaskMachineOperandTargetFlags() const override;
-
 private:
   void instantiateCondBranch(MachineBasicBlock &MBB, DebugLoc DL,
                              MachineBasicBlock *TBB,
-                             ArrayRef<MachineOperand> Cond) const;
+                             const SmallVectorImpl<MachineOperand> &Cond) const;
 };
 
 /// emitFrameOffset - Emit instructions as needed to set DestReg to SrcReg

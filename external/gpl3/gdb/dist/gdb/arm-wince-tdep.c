@@ -1,7 +1,7 @@
 /* Target-dependent code for Windows CE running on ARM processors,
    for GDB.
 
-   Copyright (C) 2007-2015 Free Software Foundation, Inc.
+   Copyright (C) 2007-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -24,6 +24,8 @@
 #include "target.h"
 #include "frame.h"
 
+#include <string.h>
+
 #include "arm-tdep.h"
 #include "windows-tdep.h"
 
@@ -45,12 +47,9 @@ arm_pe_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
   CORE_ADDR next_pc;
 
   /* The format of an ARM DLL trampoline is:
-
        ldr  ip, [pc]
        ldr  pc, [ip]
-       .dw __imp_<func>
-
-  */
+       .dw __imp_<func>  */
 
   if (pc == 0
       || read_memory_unsigned_integer (pc + 0, 4, byte_order) != 0xe59fc000
@@ -65,8 +64,8 @@ arm_pe_skip_trampoline_code (struct frame_info *frame, CORE_ADDR pc)
   if (indsym.minsym == NULL)
     return 0;
 
-  symname = MSYMBOL_LINKAGE_NAME (indsym.minsym);
-  if (symname == NULL || !startswith (symname, "__imp_"))
+  symname = SYMBOL_LINKAGE_NAME (indsym.minsym);
+  if (symname == NULL || strncmp (symname, "__imp_", 6) != 0)
     return 0;
 
   next_pc = read_memory_unsigned_integer (indirect, 4, byte_order);
@@ -103,8 +102,8 @@ arm_wince_skip_main_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
       struct bound_minimal_symbol s = lookup_minimal_symbol_by_pc (call_dest);
 
       if (s.minsym != NULL
-	  && MSYMBOL_LINKAGE_NAME (s.minsym) != NULL
-	  && strcmp (MSYMBOL_LINKAGE_NAME (s.minsym), "__gccmain") == 0)
+	  && SYMBOL_LINKAGE_NAME (s.minsym) != NULL
+	  && strcmp (SYMBOL_LINKAGE_NAME (s.minsym), "__gccmain") == 0)
 	pc += 4;
     }
 

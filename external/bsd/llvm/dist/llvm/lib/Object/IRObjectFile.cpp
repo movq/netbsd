@@ -13,7 +13,6 @@
 
 #include "llvm/Object/IRObjectFile.h"
 #include "RecordStreamer.h"
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/Bitcode/ReaderWriter.h"
 #include "llvm/IR/GVMaterializer.h"
 #include "llvm/IR/LLVMContext.h"
@@ -25,7 +24,6 @@
 #include "llvm/MC/MCObjectFileInfo.h"
 #include "llvm/MC/MCParser/MCAsmParser.h"
 #include "llvm/MC/MCRegisterInfo.h"
-#include "llvm/MC/MCSubtargetInfo.h"
 #include "llvm/MC/MCTargetAsmParser.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/Support/MemoryBuffer.h"
@@ -37,28 +35,33 @@ using namespace object;
 
 IRObjectFile::IRObjectFile(MemoryBufferRef Object, std::unique_ptr<Module> Mod)
     : SymbolicFile(Binary::ID_IR, Object), M(std::move(Mod)) {
-  Mang.reset(new Mangler());
+  // If we have a DataLayout, setup a mangler.
+  const DataLayout *DL = M->getDataLayout();
+  if (!DL)
+    return;
+
+  Mang.reset(new Mangler(DL));
 
   const std::string &InlineAsm = M->getModuleInlineAsm();
   if (InlineAsm.empty())
     return;
 
-  Triple TT(M->getTargetTriple());
+  StringRef Triple = M->getTargetTriple();
   std::string Err;
-  const Target *T = TargetRegistry::lookupTarget(TT.str(), Err);
+  const Target *T = TargetRegistry::lookupTarget(Triple, Err);
   if (!T)
     return;
 
-  std::unique_ptr<MCRegisterInfo> MRI(T->createMCRegInfo(TT.str()));
+  std::unique_ptr<MCRegisterInfo> MRI(T->createMCRegInfo(Triple));
   if (!MRI)
     return;
 
-  std::unique_ptr<MCAsmInfo> MAI(T->createMCAsmInfo(*MRI, TT.str()));
+  std::unique_ptr<MCAsmInfo> MAI(T->createMCAsmInfo(*MRI, Triple));
   if (!MAI)
     return;
 
   std::unique_ptr<MCSubtargetInfo> STI(
-      T->createMCSubtargetInfo(TT.str(), "", ""));
+      T->createMCSubtargetInfo(Triple, "", ""));
   if (!STI)
     return;
 
@@ -68,9 +71,8 @@ IRObjectFile::IRObjectFile(MemoryBufferRef Object, std::unique_ptr<Module> Mod)
 
   MCObjectFileInfo MOFI;
   MCContext MCCtx(MAI.get(), MRI.get(), &MOFI);
-  MOFI.InitMCObjectFileInfo(TT, Reloc::Default, CodeModel::Default, MCCtx);
+  MOFI.InitMCObjectFileInfo(Triple, Reloc::Default, CodeModel::Default, MCCtx);
   std::unique_ptr<RecordStreamer> Streamer(new RecordStreamer(MCCtx));
-  T->createNullTargetStreamer(*Streamer);
 
   std::unique_ptr<MemoryBuffer> Buffer(MemoryBuffer::getMemBuffer(InlineAsm));
   SourceMgr SrcMgr;
@@ -193,18 +195,15 @@ std::error_code IRObjectFile::printSymbolName(raw_ostream &OS,
     unsigned Index = getAsmSymIndex(Symb);
     assert(Index <= AsmSymbols.size());
     OS << AsmSymbols[Index].first;
-    return std::error_code();
+    return object_error::success;;
   }
-
-  if (GV->hasDLLImportStorageClass())
-    OS << "__imp_";
 
   if (Mang)
     Mang->getNameWithPrefix(OS, GV, false);
   else
     OS << GV->getName();
 
-  return std::error_code();
+  return object_error::success;
 }
 
 uint32_t IRObjectFile::getSymbolFlags(DataRefImpl Symb) const {
@@ -219,12 +218,6 @@ uint32_t IRObjectFile::getSymbolFlags(DataRefImpl Symb) const {
   uint32_t Res = BasicSymbolRef::SF_None;
   if (GV->isDeclarationForLinker())
     Res |= BasicSymbolRef::SF_Undefined;
-  else if (GV->hasHiddenVisibility() && !GV->hasLocalLinkage())
-    Res |= BasicSymbolRef::SF_Hidden;
-  if (const GlobalVariable *GVar = dyn_cast<GlobalVariable>(GV)) {
-    if (GVar->isConstant())
-      Res |= BasicSymbolRef::SF_Const;
-  }
   if (GV->hasPrivateLinkage())
     Res |= BasicSymbolRef::SF_FormatSpecific;
   if (!GV->hasLocalLinkage())
@@ -308,12 +301,10 @@ llvm::object::IRObjectFile::create(MemoryBufferRef Object,
   std::unique_ptr<MemoryBuffer> Buff(
       MemoryBuffer::getMemBuffer(BCOrErr.get(), false));
 
-  ErrorOr<std::unique_ptr<Module>> MOrErr =
-      getLazyBitcodeModule(std::move(Buff), Context,
-                           /*ShouldLazyLoadMetadata*/ true);
+  ErrorOr<Module *> MOrErr = getLazyBitcodeModule(std::move(Buff), Context);
   if (std::error_code EC = MOrErr.getError())
     return EC;
 
-  std::unique_ptr<Module> &M = MOrErr.get();
+  std::unique_ptr<Module> M(MOrErr.get());
   return llvm::make_unique<IRObjectFile>(Object, std::move(M));
 }

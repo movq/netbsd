@@ -1,4 +1,4 @@
-/*	$NetBSD: bitmap.c,v 1.3 2016/03/11 01:55:00 christos Exp $	*/
+/*	$NetBSD: bitmap.c,v 1.2.2.2 2015/04/30 06:07:30 riz Exp $	*/
 /*
  * Copyright (c) 2015 Damien Miller <djm@mindrot.org>
  *
@@ -15,12 +15,15 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include "includes.h"
-__RCSID("$NetBSD: bitmap.c,v 1.3 2016/03/11 01:55:00 christos Exp $");
+__RCSID("$NetBSD: bitmap.c,v 1.2.2.2 2015/04/30 06:07:30 riz Exp $");
 
 #include <sys/types.h>
 #include <string.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <time.h>
 
+#include "misc.h"
 #include "bitmap.h"
 
 #define BITMAP_WTYPE	u_int
@@ -54,7 +57,7 @@ void
 bitmap_free(struct bitmap *b)
 {
 	if (b != NULL && b->d != NULL) {
-		explicit_bzero(b->d, b->len);
+		memset(b->d, 0, b->len);
 		free(b->d);
 	}
 	free(b);

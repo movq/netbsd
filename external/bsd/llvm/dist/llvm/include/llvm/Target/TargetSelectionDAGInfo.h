@@ -20,20 +20,28 @@
 
 namespace llvm {
 
+class DataLayout;
+class TargetMachine;
+
 //===----------------------------------------------------------------------===//
-/// Targets can subclass this to parameterize the
+/// TargetSelectionDAGInfo - Targets can subclass this to parameterize the
 /// SelectionDAG lowering and instruction selection process.
 ///
 class TargetSelectionDAGInfo {
-  TargetSelectionDAGInfo(const TargetSelectionDAGInfo &) = delete;
-  void operator=(const TargetSelectionDAGInfo &) = delete;
+  TargetSelectionDAGInfo(const TargetSelectionDAGInfo &) LLVM_DELETED_FUNCTION;
+  void operator=(const TargetSelectionDAGInfo &) LLVM_DELETED_FUNCTION;
+
+  const DataLayout *DL;
+
+protected:
+  const DataLayout *getDataLayout() const { return DL; }
 
 public:
-  explicit TargetSelectionDAGInfo() = default;
+  explicit TargetSelectionDAGInfo(const DataLayout *DL);
   virtual ~TargetSelectionDAGInfo();
 
-  /// Emit target-specific code that performs a memcpy.
-  /// This can be used by targets to provide code sequences for cases
+  /// EmitTargetCodeForMemcpy - Emit target-specific code that performs a
+  /// memcpy. This can be used by targets to provide code sequences for cases
   /// that don't fit the target's parameters for simple loads/stores and can be
   /// more efficient than using a library call. This function can return a null
   /// SDValue if the target declines to use custom code and a different
@@ -56,8 +64,8 @@ public:
     return SDValue();
   }
 
-  /// Emit target-specific code that performs a memmove.
-  /// This can be used by targets to provide code sequences for cases
+  /// EmitTargetCodeForMemmove - Emit target-specific code that performs a
+  /// memmove. This can be used by targets to provide code sequences for cases
   /// that don't fit the target's parameters for simple loads/stores and can be
   /// more efficient than using a library call. This function can return a null
   /// SDValue if the target declines to use custom code and a different
@@ -72,8 +80,8 @@ public:
     return SDValue();
   }
 
-  /// Emit target-specific code that performs a memset.
-  /// This can be used by targets to provide code sequences for cases
+  /// EmitTargetCodeForMemset - Emit target-specific code that performs a
+  /// memset. This can be used by targets to provide code sequences for cases
   /// that don't fit the target's parameters for simple stores and can be more
   /// efficient than using a library call. This function can return a null
   /// SDValue if the target declines to use custom code and a different
@@ -87,10 +95,11 @@ public:
     return SDValue();
   }
 
-  /// Emit target-specific code that performs a memcmp, in cases where that is
-  /// faster than a libcall. The first returned SDValue is the result of the
-  /// memcmp and the second is the chain. Both SDValues can be null if a normal
-  /// libcall should be used.
+  /// EmitTargetCodeForMemcmp - Emit target-specific code that performs a
+  /// memcmp, in cases where that is faster than a libcall.  The first
+  /// returned SDValue is the result of the memcmp and the second is
+  /// the chain.  Both SDValues can be null if a normal libcall should
+  /// be used.
   virtual std::pair<SDValue, SDValue>
   EmitTargetCodeForMemcmp(SelectionDAG &DAG, SDLoc dl,
                           SDValue Chain,
@@ -100,10 +109,11 @@ public:
     return std::make_pair(SDValue(), SDValue());
   }
 
-  /// Emit target-specific code that performs a memchr, in cases where that is
-  /// faster than a libcall. The first returned SDValue is the result of the
-  /// memchr and the second is the chain. Both SDValues can be null if a normal
-  /// libcall should be used.
+  /// EmitTargetCodeForMemchr - Emit target-specific code that performs a
+  /// memchr, in cases where that is faster than a libcall.  The first
+  /// returned SDValue is the result of the memchr and the second is
+  /// the chain.  Both SDValues can be null if a normal libcall should
+  /// be used.
   virtual std::pair<SDValue, SDValue>
   EmitTargetCodeForMemchr(SelectionDAG &DAG, SDLoc dl, SDValue Chain,
                           SDValue Src, SDValue Char, SDValue Length,
@@ -111,8 +121,8 @@ public:
     return std::make_pair(SDValue(), SDValue());
   }
 
-  /// Emit target-specific code that performs a strcpy or stpcpy, in cases
-  /// where that is faster than a libcall.
+  /// EmitTargetCodeForStrcpy - Emit target-specific code that performs a
+  /// strcpy or stpcpy, in cases where that is faster than a libcall.
   /// The first returned SDValue is the result of the copy (the start
   /// of the destination string for strcpy, a pointer to the null terminator
   /// for stpcpy) and the second is the chain.  Both SDValues can be null
@@ -126,10 +136,11 @@ public:
     return std::make_pair(SDValue(), SDValue());
   }
 
-  /// Emit target-specific code that performs a strcmp, in cases where that is
-  /// faster than a libcall.
-  /// The first returned SDValue is the result of the strcmp and the second is
-  /// the chain. Both SDValues can be null if a normal libcall should be used.
+  /// EmitTargetCodeForStrcmp - Emit target-specific code that performs a
+  /// strcmp, in cases where that is faster than a libcall.  The first
+  /// returned SDValue is the result of the strcmp and the second is
+  /// the chain.  Both SDValues can be null if a normal libcall should
+  /// be used.
   virtual std::pair<SDValue, SDValue>
   EmitTargetCodeForStrcmp(SelectionDAG &DAG, SDLoc dl,
                           SDValue Chain,

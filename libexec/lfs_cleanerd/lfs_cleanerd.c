@@ -1,4 +1,4 @@
-/* $NetBSD: lfs_cleanerd.c,v 1.58 2016/03/18 10:10:21 mrg Exp $	 */
+/* $NetBSD: lfs_cleanerd.c,v 1.37 2013/10/19 17:19:30 christos Exp $	 */
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -45,7 +45,6 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <semaphore.h>
-#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -95,11 +94,6 @@ extern u_int32_t lfs_sb_cksum(struct dlfs *);
 extern u_int32_t lfs_cksum_part(void *, size_t, u_int32_t);
 extern int ulfs_getlbns(struct lfs *, struct uvnode *, daddr_t, struct indir *, int *);
 
-/* Ugh */
-#define FSMNT_SIZE MAX(sizeof(((struct dlfs *)0)->dlfs_fsmnt), \
-			sizeof(((struct dlfs64 *)0)->dlfs_fsmnt))
-
-
 /* Compat */
 void pwarn(const char *unused, ...) { /* Does nothing */ };
 
@@ -126,7 +120,7 @@ dlog(const char *fmt, ...)
 void
 handle_error(struct clfs **cfsp, int n)
 {
-	syslog(LOG_NOTICE, "%s: detaching cleaner", lfs_sb_getfsmnt(cfsp[n]));
+	syslog(LOG_NOTICE, "%s: detaching cleaner", cfsp[n]->lfs_fsmnt);
 	free(cfsp[n]);
 	if (n != nfss - 1)
 		cfsp[n] = cfsp[nfss - 1];
@@ -139,11 +133,9 @@ handle_error(struct clfs **cfsp, int n)
 int
 reinit_fs(struct clfs *fs)
 {
-	char fsname[FSMNT_SIZE];
+	char fsname[MNAMELEN];
 
-	memcpy(fsname, lfs_sb_getfsmnt(fs), sizeof(fsname));
-	fsname[sizeof(fsname) - 1] = '\0';
-
+	strncpy(fsname, (char *)fs->lfs_fsmnt, MNAMELEN);
 	kops.ko_close(fs->clfs_ifilefd);
 	kops.ko_close(fs->clfs_devfd);
 	fd_reclaim(fs->clfs_devvp);
@@ -182,11 +174,11 @@ init_unmounted_fs(struct clfs *fs, char *fsname)
 				 atatime);
 
 	/* Allocate and clear segtab */
-	fs->clfs_segtab = (struct clfs_seguse *)malloc(lfs_sb_getnseg(fs) *
+	fs->clfs_segtab = (struct clfs_seguse *)malloc(fs->lfs_nseg *
 						sizeof(*fs->clfs_segtab));
-	fs->clfs_segtabp = (struct clfs_seguse **)malloc(lfs_sb_getnseg(fs) *
+	fs->clfs_segtabp = (struct clfs_seguse **)malloc(fs->lfs_nseg *
 						sizeof(*fs->clfs_segtabp));
-	for (i = 0; i < lfs_sb_getnseg(fs); i++) {
+	for (i = 0; i < fs->lfs_nseg; i++) {
 		fs->clfs_segtabp[i] = &(fs->clfs_segtab[i]);
 		fs->clfs_segtab[i].flags = 0x0;
 	}
@@ -208,7 +200,6 @@ init_unmounted_fs(struct clfs *fs, char *fsname)
 int
 init_fs(struct clfs *fs, char *fsname)
 {
-	char mnttmp[FSMNT_SIZE];
 	struct statvfs sf;
 	int rootfd;
 	int i;
@@ -260,55 +251,27 @@ init_fs(struct clfs *fs, char *fsname)
 		return -1;
 	}
 
-	__CTASSERT(sizeof(struct dlfs) == sizeof(struct dlfs64));
-	memcpy(&fs->lfs_dlfs_u, sbuf, sizeof(struct dlfs));
+	memcpy(&(fs->lfs_dlfs), sbuf, sizeof(struct dlfs));
 	free(sbuf);
 
-	/* If it is not LFS, complain and exit! */
-	switch (fs->lfs_dlfs_u.u_32.dlfs_magic) {
-	    case LFS_MAGIC:
-		fs->lfs_is64 = false;
-		fs->lfs_dobyteswap = false;
-		break;
-	    case LFS_MAGIC_SWAPPED:
-		fs->lfs_is64 = false;
-		fs->lfs_dobyteswap = true;
-		break;
-	    case LFS64_MAGIC:
-		fs->lfs_is64 = true;
-		fs->lfs_dobyteswap = false;
-		break;
-	    case LFS64_MAGIC_SWAPPED:
-		fs->lfs_is64 = true;
-		fs->lfs_dobyteswap = true;
-		break;
-	    default:
-		syslog(LOG_ERR, "%s: not LFS", fsname);
-		return -1;
-	}
-	/* XXX: can this ever need to be set? does the cleaner even care? */
-	fs->lfs_hasolddirfmt = 0;
-
 	/* If this is not a version 2 filesystem, complain and exit */
-	if (lfs_sb_getversion(fs) != 2) {
+	if (fs->lfs_version != 2) {
 		syslog(LOG_ERR, "%s: not a version 2 LFS", fsname);
 		return -1;
 	}
 
 	/* Assume fsname is the mounted name */
-	strncpy(mnttmp, fsname, sizeof(mnttmp));
-	mnttmp[sizeof(mnttmp) - 1] = '\0';
-	lfs_sb_setfsmnt(fs, mnttmp);
+	strncpy((char *)fs->lfs_fsmnt, fsname, MNAMELEN);
 
 	/* Set up vnodes for Ifile and raw device */
-	fs->lfs_ivnode = fd_vget(fs->clfs_ifilefd, lfs_sb_getbsize(fs), 0, 0);
-	fs->clfs_devvp = fd_vget(fs->clfs_devfd, lfs_sb_getfsize(fs), lfs_sb_getssize(fs),
+	fs->lfs_ivnode = fd_vget(fs->clfs_ifilefd, fs->lfs_bsize, 0, 0);
+	fs->clfs_devvp = fd_vget(fs->clfs_devfd, fs->lfs_fsize, fs->lfs_ssize,
 				 atatime);
 
 	/* Allocate and clear segtab */
-	fs->clfs_segtab = (struct clfs_seguse *)malloc(lfs_sb_getnseg(fs) *
+	fs->clfs_segtab = (struct clfs_seguse *)malloc(fs->lfs_nseg *
 						sizeof(*fs->clfs_segtab));
-	fs->clfs_segtabp = (struct clfs_seguse **)malloc(lfs_sb_getnseg(fs) *
+	fs->clfs_segtabp = (struct clfs_seguse **)malloc(fs->lfs_nseg *
 						sizeof(*fs->clfs_segtabp));
 	if (fs->clfs_segtab == NULL || fs->clfs_segtabp == NULL) {
 		syslog(LOG_ERR, "%s: couldn't malloc segment table: %m",
@@ -316,7 +279,7 @@ init_fs(struct clfs *fs, char *fsname)
 		return -1;
 	}
 
-	for (i = 0; i < lfs_sb_getnseg(fs); i++) {
+	for (i = 0; i < fs->lfs_nseg; i++) {
 		fs->clfs_segtabp[i] = &(fs->clfs_segtab[i]);
 		fs->clfs_segtab[i].flags = 0x0;
 	}
@@ -349,11 +312,11 @@ reload_ifile(struct clfs *fs)
 
 	/* If Ifile is larger than buffer cache, rehash */
 	fstat(fs->clfs_ifilefd, &st);
-	if (st.st_size / lfs_sb_getbsize(fs) > hashmax) {
+	if (st.st_size / fs->lfs_bsize > hashmax) {
 		ohashmax = hashmax;
-		bufrehash(st.st_size / lfs_sb_getbsize(fs));
+		bufrehash(st.st_size / fs->lfs_bsize);
 		dlog("%s: resized buffer hash from %d to %d",
-		     lfs_sb_getfsmnt(fs), ohashmax, hashmax);
+		     fs->lfs_fsmnt, ohashmax, hashmax);
 	}
 }
 
@@ -361,36 +324,18 @@ reload_ifile(struct clfs *fs)
  * Get IFILE entry for the given inode, store in ifpp.	The buffer
  * which contains that data is returned in bpp, and must be brelse()d
  * by the caller.
- *
- * XXX this is cutpaste of LFS_IENTRY from lfs.h; unify the two.
  */
 void
 lfs_ientry(IFILE **ifpp, struct clfs *fs, ino_t ino, struct ubuf **bpp)
 {
-	IFILE64 *ifp64;
-	IFILE32 *ifp32;
-	IFILE_V1 *ifp_v1;
 	int error;
 
-	error = bread(fs->lfs_ivnode,
-		      ino / lfs_sb_getifpb(fs) + lfs_sb_getcleansz(fs) +
-		      lfs_sb_getsegtabsz(fs), lfs_sb_getbsize(fs), 0, bpp);
+	error = bread(fs->lfs_ivnode, ino / fs->lfs_ifpb + fs->lfs_cleansz +
+		      fs->lfs_segtabsz, fs->lfs_bsize, NOCRED, 0, bpp);
 	if (error)
 		syslog(LOG_ERR, "%s: ientry failed for ino %d",
-			lfs_sb_getfsmnt(fs), (int)ino);
-	if (fs->lfs_is64) {
-		ifp64 = (IFILE64 *)(*bpp)->b_data;
-		ifp64 += ino % lfs_sb_getifpb(fs);
-		*ifpp = (IFILE *)ifp64;
-	} else if (lfs_sb_getversion(fs) > 1) {
-		ifp32 = (IFILE32 *)(*bpp)->b_data;
-		ifp32 += ino % lfs_sb_getifpb(fs);
-		*ifpp = (IFILE *)ifp32;
-	} else {
-		ifp_v1 = (IFILE_V1 *)(*bpp)->b_data;
-		ifp_v1 += ino % lfs_sb_getifpb(fs);
-		*ifpp = (IFILE *)ifp_v1;
-	}
+			fs->lfs_fsmnt, (int)ino);
+	*ifpp = (IFILE *)(*bpp)->b_data + ino % fs->lfs_ifpb;
 	return;
 }
 
@@ -429,20 +374,18 @@ check_test_pattern(BLOCK_INFO *bip)
  * Parse the partial segment at daddr, adding its information to
  * bip.	 Return the address of the next partial segment to read.
  */
-static daddr_t
+int32_t
 parse_pseg(struct clfs *fs, daddr_t daddr, BLOCK_INFO **bipp, int *bic)
 {
 	SEGSUM *ssp;
 	IFILE *ifp;
 	BLOCK_INFO *bip, *nbip;
-	daddr_t idaddr, odaddr;
+	int32_t *iaddrp, idaddr, odaddr;
 	FINFO *fip;
-	IINFO *iip;
 	struct ubuf *ifbp;
-	union lfs_dinode *dip;
+	struct ulfs1_dinode *dip;
 	u_int32_t ck, vers;
 	int fic, inoc, obic;
-	size_t sumstart;
 	int i;
 	char *cp;
 
@@ -456,24 +399,23 @@ parse_pseg(struct clfs *fs, daddr_t daddr, BLOCK_INFO **bipp, int *bic)
 	 */
 	cp = fd_ptrget(fs->clfs_devvp, daddr);
 	ssp = (SEGSUM *)cp;
-	iip = SEGSUM_IINFOSTART(fs, cp);
-	fip = SEGSUM_FINFOBASE(fs, cp);
+	iaddrp = ((int32_t *)(cp + fs->lfs_ibsize)) - 1;
+	fip = (FINFO *)(cp + sizeof(SEGSUM));
 
 	/*
 	 * Check segment header magic and checksum
 	 */
-	if (lfs_ss_getmagic(fs, ssp) != SS_MAGIC) {
-		syslog(LOG_WARNING, "%s: sumsum magic number bad at 0x%jx:"
-		       " read 0x%x, expected 0x%x", lfs_sb_getfsmnt(fs),
-		       (intmax_t)daddr, lfs_ss_getmagic(fs, ssp), SS_MAGIC);
+	if (ssp->ss_magic != SS_MAGIC) {
+		syslog(LOG_WARNING, "%s: sumsum magic number bad at 0x%x:"
+		       " read 0x%x, expected 0x%x", fs->lfs_fsmnt,
+		       (int32_t)daddr, ssp->ss_magic, SS_MAGIC);
 		return 0x0;
 	}
-	sumstart = lfs_ss_getsumstart(fs);
-	ck = cksum((char *)ssp + sumstart, lfs_sb_getsumsize(fs) - sumstart);
-	if (ck != lfs_ss_getsumsum(fs, ssp)) {
-		syslog(LOG_WARNING, "%s: sumsum checksum mismatch at 0x%jx:"
-		       " read 0x%x, computed 0x%x", lfs_sb_getfsmnt(fs),
-		       (intmax_t)daddr, lfs_ss_getsumsum(fs, ssp), ck);
+	ck = cksum(&ssp->ss_datasum, fs->lfs_sumsize - sizeof(ssp->ss_sumsum));
+	if (ck != ssp->ss_sumsum) {
+		syslog(LOG_WARNING, "%s: sumsum checksum mismatch at 0x%x:"
+		       " read 0x%x, computed 0x%x", fs->lfs_fsmnt,
+		       (int32_t)daddr, ssp->ss_sumsum, ck);
 		return 0x0;
 	}
 
@@ -489,14 +431,14 @@ parse_pseg(struct clfs *fs, daddr_t daddr, BLOCK_INFO **bipp, int *bic)
 	 * as we go.
 	 */
 	fic = inoc = 0;
-	while (fic < lfs_ss_getnfinfo(fs, ssp) || inoc < lfs_ss_getninos(fs, ssp)) {
+	while (fic < ssp->ss_nfinfo || inoc < ssp->ss_ninos) {
 		/*
 		 * We must have either a file block or an inode block.
 		 * If we don't have either one, it's an error.
 		 */
-		if (fic >= lfs_ss_getnfinfo(fs, ssp) && lfs_ii_getblock(fs, iip) != daddr) {
-			syslog(LOG_WARNING, "%s: bad pseg at %jx (seg %d)",
-			       lfs_sb_getfsmnt(fs), (intmax_t)odaddr, lfs_dtosn(fs, odaddr));
+		if (fic >= ssp->ss_nfinfo && *iaddrp != daddr) {
+			syslog(LOG_WARNING, "%s: bad pseg at %x (seg %d)",
+			       fs->lfs_fsmnt, odaddr, lfs_dtosn(fs, odaddr));
 			*bipp = bip;
 			return 0x0;
 		}
@@ -504,20 +446,20 @@ parse_pseg(struct clfs *fs, daddr_t daddr, BLOCK_INFO **bipp, int *bic)
 		/*
 		 * Note each inode from the inode blocks
 		 */
-		if (inoc < lfs_ss_getninos(fs, ssp) && lfs_ii_getblock(fs, iip) == daddr) {
+		if (inoc < ssp->ss_ninos && *iaddrp == daddr) {
 			cp = fd_ptrget(fs->clfs_devvp, daddr);
 			ck = lfs_cksum_part(cp, sizeof(u_int32_t), ck);
-			for (i = 0; i < lfs_sb_getinopb(fs); i++) {
-				dip = DINO_IN_BLOCK(fs, cp, i);
-				if (lfs_dino_getinumber(fs, dip) == 0)
+			dip = (struct ulfs1_dinode *)cp;
+			for (i = 0; i < fs->lfs_inopb; i++) {
+				if (dip[i].di_inumber == 0)
 					break;
 
 				/*
 				 * Check currency before adding it
 				 */
 #ifndef REPAIR_ZERO_FINFO
-				lfs_ientry(&ifp, fs, lfs_dino_getinumber(fs, dip), &ifbp);
-				idaddr = lfs_if_getdaddr(fs, ifp);
+				lfs_ientry(&ifp, fs, dip[i].di_inumber, &ifbp);
+				idaddr = ifp->if_daddr;
 				brelse(ifbp, 0);
 				if (idaddr != daddr)
 #endif
@@ -536,24 +478,24 @@ parse_pseg(struct clfs *fs, daddr_t daddr, BLOCK_INFO **bipp, int *bic)
 					*bipp = bip;
 					return 0x0;
 				}
-				bip[*bic - 1].bi_inode = lfs_dino_getinumber(fs, dip);
+				bip[*bic - 1].bi_inode = dip[i].di_inumber;
 				bip[*bic - 1].bi_lbn = LFS_UNUSED_LBN;
 				bip[*bic - 1].bi_daddr = daddr;
-				bip[*bic - 1].bi_segcreate = lfs_ss_getcreate(fs, ssp);
-				bip[*bic - 1].bi_version = lfs_dino_getgen(fs, dip);
-				bip[*bic - 1].bi_bp = dip;
-				bip[*bic - 1].bi_size = DINOSIZE(fs);
+				bip[*bic - 1].bi_segcreate = ssp->ss_create;
+				bip[*bic - 1].bi_version = dip[i].di_gen;
+				bip[*bic - 1].bi_bp = &(dip[i]);
+				bip[*bic - 1].bi_size = LFS_DINODE1_SIZE;
 			}
 			inoc += i;
-			daddr += lfs_btofsb(fs, lfs_sb_getibsize(fs));
-			iip = NEXTLOWER_IINFO(fs, iip);
+			daddr += lfs_btofsb(fs, fs->lfs_ibsize);
+			--iaddrp;
 			continue;
 		}
 
 		/*
 		 * Note each file block from the finfo blocks
 		 */
-		if (fic >= lfs_ss_getnfinfo(fs, ssp))
+		if (fic >= ssp->ss_nfinfo)
 			continue;
 
 		/* Count this finfo, whether or not we use it */
@@ -564,23 +506,23 @@ parse_pseg(struct clfs *fs, daddr_t daddr, BLOCK_INFO **bipp, int *bic)
 		 * Kernels with this problem always wrote this zero-sized
 		 * finfo last, so just ignore it.
 		 */
-		if (lfs_fi_getnblocks(fs, fip) == 0) {
+		if (fip->fi_nblocks == 0) {
 #ifdef REPAIR_ZERO_FINFO
 			struct ubuf *nbp;
 			SEGSUM *nssp;
 
-			syslog(LOG_WARNING, "fixing short FINFO at %jx (seg %d)",
-			       (intmax_t)odaddr, lfs_dtosn(fs, odaddr));
-			bread(fs->clfs_devvp, odaddr, lfs_sb_getfsize(fs),
-			    0, &nbp);
+			syslog(LOG_WARNING, "fixing short FINFO at %x (seg %d)",
+			       odaddr, lfs_dtosn(fs, odaddr));
+			bread(fs->clfs_devvp, odaddr, fs->lfs_fsize,
+			    NOCRED, 0, &nbp);
 			nssp = (SEGSUM *)nbp->b_data;
 			--nssp->ss_nfinfo;
 			nssp->ss_sumsum = cksum(&nssp->ss_datasum,
-				lfs_sb_getsumsize(fs) - sizeof(nssp->ss_sumsum));
+				fs->lfs_sumsize - sizeof(nssp->ss_sumsum));
 			bwrite(nbp);
 #endif
-			syslog(LOG_WARNING, "zero-length FINFO at %jx (seg %d)",
-			       (intmax_t)odaddr, lfs_dtosn(fs, odaddr));
+			syslog(LOG_WARNING, "zero-length FINFO at %x (seg %d)",
+			       odaddr, lfs_dtosn(fs, odaddr));
 			continue;
 		}
 
@@ -590,27 +532,27 @@ parse_pseg(struct clfs *fs, daddr_t daddr, BLOCK_INFO **bipp, int *bic)
 #ifdef REPAIR_ZERO_FINFO
 		vers = -1;
 #else
-		lfs_ientry(&ifp, fs, lfs_fi_getino(fs, fip), &ifbp);
-		vers = lfs_if_getversion(fs, ifp);
+		lfs_ientry(&ifp, fs, fip->fi_ino, &ifbp);
+		vers = ifp->if_version;
 		brelse(ifbp, 0);
 #endif
-		if (vers != lfs_fi_getversion(fs, fip)) {
+		if (vers != fip->fi_version) {
 			size_t size;
 
 			/* Read all the blocks from the data summary */
-			for (i = 0; i < lfs_fi_getnblocks(fs, fip); i++) {
-				size = (i == lfs_fi_getnblocks(fs, fip) - 1) ?
-					lfs_fi_getlastlength(fs, fip) : lfs_sb_getbsize(fs);
+			for (i = 0; i < fip->fi_nblocks; i++) {
+				size = (i == fip->fi_nblocks - 1) ?
+					fip->fi_lastlength : fs->lfs_bsize;
 				cp = fd_ptrget(fs->clfs_devvp, daddr);
 				ck = lfs_cksum_part(cp, sizeof(u_int32_t), ck);
 				daddr += lfs_btofsb(fs, size);
 			}
-			fip = NEXT_FINFO(fs, fip);
+			fip = (FINFO *)(fip->fi_blocks + fip->fi_nblocks);
 			continue;
 		}
 
 		/* Add all the blocks from the finfos (current or not) */
-		nbip = (BLOCK_INFO *)realloc(bip, (*bic + lfs_fi_getnblocks(fs, fip)) *
+		nbip = (BLOCK_INFO *)realloc(bip, (*bic + fip->fi_nblocks) *
 					     sizeof(*bip));
 		if (nbip)
 			bip = nbip;
@@ -619,14 +561,14 @@ parse_pseg(struct clfs *fs, daddr_t daddr, BLOCK_INFO **bipp, int *bic)
 			return 0x0;
 		}
 
-		for (i = 0; i < lfs_fi_getnblocks(fs, fip); i++) {
-			bip[*bic + i].bi_inode = lfs_fi_getino(fs, fip);
-			bip[*bic + i].bi_lbn = lfs_fi_getblock(fs, fip, i);
+		for (i = 0; i < fip->fi_nblocks; i++) {
+			bip[*bic + i].bi_inode = fip->fi_ino;
+			bip[*bic + i].bi_lbn = fip->fi_blocks[i];
 			bip[*bic + i].bi_daddr = daddr;
-			bip[*bic + i].bi_segcreate = lfs_ss_getcreate(fs, ssp);
-			bip[*bic + i].bi_version = lfs_fi_getversion(fs, fip);
-			bip[*bic + i].bi_size = (i == lfs_fi_getnblocks(fs, fip) - 1) ?
-				lfs_fi_getlastlength(fs, fip) : lfs_sb_getbsize(fs);
+			bip[*bic + i].bi_segcreate = ssp->ss_create;
+			bip[*bic + i].bi_version = fip->fi_version;
+			bip[*bic + i].bi_size = (i == fip->fi_nblocks - 1) ?
+				fip->fi_lastlength : fs->lfs_bsize;
 			cp = fd_ptrget(fs->clfs_devvp, daddr);
 			ck = lfs_cksum_part(cp, sizeof(u_int32_t), ck);
 			bip[*bic + i].bi_bp = cp;
@@ -636,16 +578,15 @@ parse_pseg(struct clfs *fs, daddr_t daddr, BLOCK_INFO **bipp, int *bic)
 			check_test_pattern(bip + *bic + i); /* XXXDEBUG */
 #endif
 		}
-		*bic += lfs_fi_getnblocks(fs, fip);
-		fip = NEXT_FINFO(fs, fip);
+		*bic += fip->fi_nblocks;
+		fip = (FINFO *)(fip->fi_blocks + fip->fi_nblocks);
 	}
 
 #ifndef REPAIR_ZERO_FINFO
-	if (lfs_ss_getdatasum(fs, ssp) != ck) {
-		syslog(LOG_WARNING, "%s: data checksum bad at 0x%jx:"
-		       " read 0x%x, computed 0x%x", lfs_sb_getfsmnt(fs),
-		       (intmax_t)odaddr,
-		       lfs_ss_getdatasum(fs, ssp), ck);
+	if (ssp->ss_datasum != ck) {
+		syslog(LOG_WARNING, "%s: data checksum bad at 0x%x:"
+		       " read 0x%x, computed 0x%x", fs->lfs_fsmnt, odaddr,
+		       ssp->ss_datasum, ck);
 		*bic = obic;
 		return 0x0;
 	}
@@ -676,7 +617,7 @@ log_segment_read(struct clfs *fs, int sn)
 
         fp = fopen(copylog_filename, "ab");
         if (fp != NULL) {
-                if (fwrite(cp, (size_t)lfs_sb_getssize(fs), 1, fp) != 1) {
+                if (fwrite(cp, (size_t)fs->lfs_ssize, 1, fp) != 1) {
                         perror("writing segment to copy log");
                 }
         }
@@ -690,14 +631,14 @@ log_segment_read(struct clfs *fs, int sn)
 int
 load_segment(struct clfs *fs, int sn, BLOCK_INFO **bipp, int *bic)
 {
-	daddr_t daddr;
+	int32_t daddr;
 	int i, npseg;
 
 	daddr = lfs_sntod(fs, sn);
 	if (daddr < lfs_btofsb(fs, LFS_LABELPAD))
 		daddr = lfs_btofsb(fs, LFS_LABELPAD);
 	for (i = 0; i < LFS_MAXNUMSB; i++) {
-		if (lfs_sb_getsboff(fs, i) == daddr) {
+		if (fs->lfs_sboffs[i] == daddr) {
 			daddr += lfs_btofsb(fs, LFS_SBPAD);
 			break;
 		}
@@ -712,12 +653,12 @@ load_segment(struct clfs *fs, int sn, BLOCK_INFO **bipp, int *bic)
 
 	/* Note bytes read for stats */
 	cleaner_stats.segs_cleaned++;
-	cleaner_stats.bytes_read += lfs_sb_getssize(fs);
+	cleaner_stats.bytes_read += fs->lfs_ssize;
 	++fs->clfs_nactive;
 
 	npseg = 0;
 	while(lfs_dtosn(fs, daddr) == sn &&
-	      lfs_dtosn(fs, daddr + lfs_btofsb(fs, lfs_sb_getbsize(fs))) == sn) {
+	      lfs_dtosn(fs, daddr + lfs_btofsb(fs, fs->lfs_bsize)) == sn) {
 		daddr = parse_pseg(fs, daddr, bipp, bic);
 		if (daddr == 0x0) {
 			++cleaner_stats.segs_error;
@@ -761,7 +702,7 @@ calc_cb(struct clfs *fs, int sn, struct clfs_seguse *t)
 		return;
 	}
 
-	if (t->nbytes > lfs_sb_getssize(fs)) {
+	if (t->nbytes > fs->lfs_ssize) {
 		/* Another type of error */
 		syslog(LOG_WARNING, "segment %d: bad seguse count %d",
 		       sn, t->nbytes);
@@ -778,16 +719,16 @@ calc_cb(struct clfs *fs, int sn, struct clfs_seguse *t)
 	 * We count the summary headers as "dirty" to avoid cleaning very
 	 * old and very full segments.
 	 */
-	benefit = (int64_t)lfs_sb_getssize(fs) - t->nbytes -
-		  (t->nsums + 1) * lfs_sb_getfsize(fs);
-	if (lfs_sb_getbsize(fs) > lfs_sb_getfsize(fs)) /* fragmentation */
-		benefit -= (lfs_sb_getbsize(fs) / 2);
+	benefit = (int64_t)fs->lfs_ssize - t->nbytes -
+		  (t->nsums + 1) * fs->lfs_fsize;
+	if (fs->lfs_bsize > fs->lfs_fsize) /* fragmentation */
+		benefit -= (fs->lfs_bsize / 2);
 	if (benefit <= 0) {
 		t->priority = 0;
 		return;
 	}
 
-	cost = lfs_sb_getssize(fs) + t->nbytes;
+	cost = fs->lfs_ssize + t->nbytes;
 	t->priority = (256 * benefit * age) / cost;
 
 	return;
@@ -828,7 +769,7 @@ bi_comparator(const void *va, const void *vb)
 		return -1;
 	if (b->bi_lbn == LFS_UNUSED_LBN)
 		return 1;
-	if ((u_int64_t)a->bi_lbn > (u_int64_t)b->bi_lbn)
+	if ((u_int32_t)a->bi_lbn > (u_int32_t)b->bi_lbn)
 		return 1;
 	else
 		return -1;
@@ -850,10 +791,9 @@ cb_comparator(const void *va, const void *vb)
 }
 
 void
-toss_old_blocks(struct clfs *fs, BLOCK_INFO **bipp, blkcnt_t *bic, int *sizep)
+toss_old_blocks(struct clfs *fs, BLOCK_INFO **bipp, int *bic, int *sizep)
 {
-	blkcnt_t i;
-	int r;
+	int i, r;
 	BLOCK_INFO *bip = *bipp;
 	struct lfs_fcntl_markv /* {
 		BLOCK_INFO *blkiov;
@@ -870,13 +810,6 @@ toss_old_blocks(struct clfs *fs, BLOCK_INFO **bipp, blkcnt_t *bic, int *sizep)
 	for (i = 0; i < *bic; i++)
 		bip[i].bi_segcreate = bip[i].bi_daddr;
 
-	/*
-	 * XXX: blkcnt_t is 64 bits, so *bic might overflow size_t
-	 * (the argument type of heapsort's number argument) on a
-	 * 32-bit platform. However, if so we won't have got this far
-	 * because we'll have failed trying to allocate the array. So
-	 * while *bic here might cause a 64->32 truncation, it's safe.
-	 */
 	/* Sort the blocks */
 	heapsort(bip, *bic, sizeof(BLOCK_INFO), bi_comparator);
 
@@ -885,7 +818,7 @@ toss_old_blocks(struct clfs *fs, BLOCK_INFO **bipp, blkcnt_t *bic, int *sizep)
 	lim.blkcnt = *bic;
 	if ((r = kops.ko_fcntl(fs->clfs_ifilefd, LFCNBMAPV, &lim)) < 0) {
 		syslog(LOG_WARNING, "%s: bmapv returned %d (%m)",
-		       lfs_sb_getfsmnt(fs), r);
+		       fs->lfs_fsmnt, r);
 		return;
 	}
 
@@ -915,7 +848,6 @@ invalidate_segment(struct clfs *fs, int sn)
 {
 	BLOCK_INFO *bip;
 	int i, r, bic;
-	blkcnt_t widebic;
 	off_t nb;
 	double util;
 	struct lfs_fcntl_markv /* {
@@ -923,21 +855,19 @@ invalidate_segment(struct clfs *fs, int sn)
 		int blkcnt;
 	} */ lim;
 
-	dlog("%s: inval seg %d", lfs_sb_getfsmnt(fs), sn);
+	dlog("%s: inval seg %d", fs->lfs_fsmnt, sn);
 
 	bip = NULL;
 	bic = 0;
 	fs->clfs_nactive = 0;
 	if (load_segment(fs, sn, &bip, &bic) <= 0)
 		return -1;
-	widebic = bic;
-	toss_old_blocks(fs, &bip, &widebic, NULL);
-	bic = widebic;
+	toss_old_blocks(fs, &bip, &bic, NULL);
 
 	/* Record statistics */
 	for (i = nb = 0; i < bic; i++)
 		nb += bip[i].bi_size;
-	util = ((double)nb) / (fs->clfs_nactive * lfs_sb_getssize(fs));
+	util = ((double)nb) / (fs->clfs_nactive * fs->lfs_ssize);
 	cleaner_stats.util_tot += util;
 	cleaner_stats.util_sos += util * util;
 	cleaner_stats.bytes_written += nb;
@@ -949,7 +879,7 @@ invalidate_segment(struct clfs *fs, int sn)
 	lim.blkcnt = bic;
 	if ((r = kops.ko_fcntl(fs->clfs_ifilefd, LFCNMARKV, &lim)) < 0) {
 		syslog(LOG_WARNING, "%s: markv returned %d (%m) "
-		       "for seg %d", lfs_sb_getfsmnt(fs), r, sn);
+		       "for seg %d", fs->lfs_fsmnt, r, sn);
 		return r;
 	}
 
@@ -958,7 +888,7 @@ invalidate_segment(struct clfs *fs, int sn)
 	 */
 	if ((r = kops.ko_fcntl(fs->clfs_ifilefd, LFCNINVAL, &sn)) < 0) {
 		syslog(LOG_WARNING, "%s: inval returned %d (%m) "
-		       "for seg %d", lfs_sb_getfsmnt(fs), r, sn);
+		       "for seg %d", fs->lfs_fsmnt, r, sn);
 		return r;
 	}
 
@@ -973,7 +903,7 @@ invalidate_segment(struct clfs *fs, int sn)
  * if the block needs to be added, 0 if it is already represented.
  */
 static int
-check_or_add(ino_t ino, daddr_t lbn, BLOCK_INFO *bip, int bic, BLOCK_INFO **ebipp, int *ebicp)
+check_or_add(ino_t ino, int32_t lbn, BLOCK_INFO *bip, int bic, BLOCK_INFO **ebipp, int *ebicp)
 {
 	BLOCK_INFO *t, *ebip = *ebipp;
 	int ebic = *ebicp;
@@ -1023,7 +953,7 @@ check_hidden_cost(struct clfs *fs, BLOCK_INFO *bip, int bic, off_t *ifc)
 	int num;
 	int i, j, ebic;
 	BLOCK_INFO *ebip;
-	daddr_t lbn;
+	int32_t lbn;
 
 	start = 0;
 	ebip = NULL;
@@ -1034,10 +964,10 @@ check_hidden_cost(struct clfs *fs, BLOCK_INFO *bip, int bic, off_t *ifc)
 			/*
 			 * Look for IFILE blocks, unless this is the Ifile.
 			 */
-			if (bip[i].bi_inode != LFS_IFILE_INUM) {
-				lbn = lfs_sb_getcleansz(fs) + bip[i].bi_inode /
-							lfs_sb_getifpb(fs);
-				*ifc += check_or_add(LFS_IFILE_INUM, lbn,
+			if (bip[i].bi_inode != fs->lfs_ifile) {
+				lbn = fs->lfs_cleansz + bip[i].bi_inode /
+							fs->lfs_ifpb;
+				*ifc += check_or_add(fs->lfs_ifile, lbn,
 						     bip, bic, &ebip, &ebic);
 			}
 		}
@@ -1046,7 +976,6 @@ check_hidden_cost(struct clfs *fs, BLOCK_INFO *bip, int bic, off_t *ifc)
 		if (bip[i].bi_lbn < ULFS_NDADDR)
 			continue;
 
-		/* XXX the struct lfs cast is completely wrong/unsafe */
 		ulfs_getlbns((struct lfs *)fs, NULL, (daddr_t)bip[i].bi_lbn, in, &num);
 		for (j = 0; j < num; j++) {
 			check_or_add(bip[i].bi_inode, in[j].in_lbn,
@@ -1061,11 +990,10 @@ check_hidden_cost(struct clfs *fs, BLOCK_INFO *bip, int bic, off_t *ifc)
  * list, and send this list through lfs_markv() to move them to new
  * locations on disk.
  */
-static int
-clean_fs(struct clfs *fs, const CLEANERINFO64 *cip)
+int
+clean_fs(struct clfs *fs, CLEANERINFO *cip)
 {
 	int i, j, ngood, sn, bic, r, npos;
-	blkcnt_t widebic;
 	int bytes, totbytes;
 	struct ubuf *bp;
 	SEGUSE *sup;
@@ -1084,11 +1012,10 @@ clean_fs(struct clfs *fs, const CLEANERINFO64 *cip)
 
 	/* Read the segment table into our private structure */
 	npos = 0;
-	for (i = 0; i < lfs_sb_getnseg(fs); i+= lfs_sb_getsepb(fs)) {
-		bread(fs->lfs_ivnode,
-		      lfs_sb_getcleansz(fs) + i / lfs_sb_getsepb(fs),
-		      lfs_sb_getbsize(fs), 0, &bp);
-		for (j = 0; j < lfs_sb_getsepb(fs) && i + j < lfs_sb_getnseg(fs); j++) {
+	for (i = 0; i < fs->lfs_nseg; i+= fs->lfs_sepb) {
+		bread(fs->lfs_ivnode, fs->lfs_cleansz + i / fs->lfs_sepb,
+		      fs->lfs_bsize, NOCRED, 0, &bp);
+		for (j = 0; j < fs->lfs_sepb && i + j < fs->lfs_nseg; j++) {
 			sup = ((SEGUSE *)bp->b_data) + j;
 			fs->clfs_segtab[i + j].nbytes  = sup->su_nbytes;
 			fs->clfs_segtab[i + j].nsums = sup->su_nsums;
@@ -1106,12 +1033,12 @@ clean_fs(struct clfs *fs, const CLEANERINFO64 *cip)
 	}
 
 	/* Sort segments based on cleanliness, fulness, and condition */
-	heapsort(fs->clfs_segtabp, lfs_sb_getnseg(fs), sizeof(struct clfs_seguse *),
+	heapsort(fs->clfs_segtabp, fs->lfs_nseg, sizeof(struct clfs_seguse *),
 		 cb_comparator);
 
 	/* If no segment is cleanable, just return */
 	if (fs->clfs_segtabp[0]->priority == 0) {
-		dlog("%s: no segment cleanable", lfs_sb_getfsmnt(fs));
+		dlog("%s: no segment cleanable", fs->lfs_fsmnt);
 		return 0;
 	}
 
@@ -1121,34 +1048,32 @@ clean_fs(struct clfs *fs, const CLEANERINFO64 *cip)
 	ngood = 0;
 	if (use_bytes) {
 		/* Set attainable goal */
-		goal = lfs_sb_getssize(fs) * atatime;
-		if (goal > (cip->clean - 1) * lfs_sb_getssize(fs) / 2)
-			goal = MAX((cip->clean - 1) * lfs_sb_getssize(fs),
-				   lfs_sb_getssize(fs)) / 2;
+		goal = fs->lfs_ssize * atatime;
+		if (goal > (cip->clean - 1) * fs->lfs_ssize / 2)
+			goal = MAX((cip->clean - 1) * fs->lfs_ssize,
+				   fs->lfs_ssize) / 2;
 
 		dlog("%s: cleaning with goal %" PRId64
 		     " bytes (%d segs clean, %d cleanable)",
-		     lfs_sb_getfsmnt(fs), goal, cip->clean, npos);
+		     fs->lfs_fsmnt, goal, cip->clean, npos);
 		syslog(LOG_INFO, "%s: cleaning with goal %" PRId64
 		       " bytes (%d segs clean, %d cleanable)",
-		       lfs_sb_getfsmnt(fs), goal, cip->clean, npos);
+		       fs->lfs_fsmnt, goal, cip->clean, npos);
 		totbytes = 0;
-		for (i = 0; i < lfs_sb_getnseg(fs) && totbytes < goal; i++) {
+		for (i = 0; i < fs->lfs_nseg && totbytes < goal; i++) {
 			if (fs->clfs_segtabp[i]->priority == 0)
 				break;
 			/* Upper bound on number of segments at once */
-			if (ngood * lfs_sb_getssize(fs) > 4 * goal)
+			if (ngood * fs->lfs_ssize > 4 * goal)
 				break;
 			sn = (fs->clfs_segtabp[i] - fs->clfs_segtab);
 			dlog("%s: add seg %d prio %" PRIu64
 			     " containing %ld bytes",
-			     lfs_sb_getfsmnt(fs), sn, fs->clfs_segtabp[i]->priority,
+			     fs->lfs_fsmnt, sn, fs->clfs_segtabp[i]->priority,
 			     fs->clfs_segtabp[i]->nbytes);
 			if ((r = load_segment(fs, sn, &bip, &bic)) > 0) {
 				++ngood;
-				widebic = bic;
-				toss_old_blocks(fs, &bip, &widebic, &bytes);
-				bic = widebic;
+				toss_old_blocks(fs, &bip, &bic, &bytes);
 				totbytes += bytes;
 			} else if (r == 0)
 				fd_release(fs->clfs_devvp);
@@ -1162,13 +1087,13 @@ clean_fs(struct clfs *fs, const CLEANERINFO64 *cip)
 			goal = MAX(cip->clean - 1, 1);
 
 		dlog("%s: cleaning with goal %d segments (%d clean, %d cleanable)",
-		       lfs_sb_getfsmnt(fs), (int)goal, cip->clean, npos);
-		for (i = 0; i < lfs_sb_getnseg(fs) && ngood < goal; i++) {
+		       fs->lfs_fsmnt, (int)goal, cip->clean, npos);
+		for (i = 0; i < fs->lfs_nseg && ngood < goal; i++) {
 			if (fs->clfs_segtabp[i]->priority == 0)
 				break;
 			sn = (fs->clfs_segtabp[i] - fs->clfs_segtab);
 			dlog("%s: add seg %d prio %" PRIu64,
-			     lfs_sb_getfsmnt(fs), sn, fs->clfs_segtabp[i]->priority);
+			     fs->lfs_fsmnt, sn, fs->clfs_segtabp[i]->priority);
 			if ((r = load_segment(fs, sn, &bip, &bic)) > 0)
 				++ngood;
 			else if (r == 0)
@@ -1176,15 +1101,13 @@ clean_fs(struct clfs *fs, const CLEANERINFO64 *cip)
 			else
 				break;
 		}
-		widebic = bic;
-		toss_old_blocks(fs, &bip, &widebic, NULL);
-		bic = widebic;
+		toss_old_blocks(fs, &bip, &bic, NULL);
 	}
 
 	/* If there is nothing to do, try again later. */
 	if (bic == 0) {
 		dlog("%s: no blocks to clean in %d cleanable segments",
-		       lfs_sb_getfsmnt(fs), (int)ngood);
+		       fs->lfs_fsmnt, (int)ngood);
 		fd_release_all(fs->clfs_devvp);
 		return 0;
 	}
@@ -1192,7 +1115,7 @@ clean_fs(struct clfs *fs, const CLEANERINFO64 *cip)
 	/* Record statistics */
 	for (i = nb = 0; i < bic; i++)
 		nb += bip[i].bi_size;
-	util = ((double)nb) / (fs->clfs_nactive * lfs_sb_getssize(fs));
+	util = ((double)nb) / (fs->clfs_nactive * fs->lfs_ssize);
 	cleaner_stats.util_tot += util;
 	cleaner_stats.util_sos += util * util;
 	cleaner_stats.bytes_written += nb;
@@ -1204,14 +1127,14 @@ clean_fs(struct clfs *fs, const CLEANERINFO64 *cip)
 	 * XXX do something about this.
 	 */
 	if_extra = 0;
-	extra = lfs_sb_getbsize(fs) * (off_t)check_hidden_cost(fs, bip, bic, &if_extra);
-	if_extra *= lfs_sb_getbsize(fs);
+	extra = fs->lfs_bsize * (off_t)check_hidden_cost(fs, bip, bic, &if_extra);
+	if_extra *= fs->lfs_bsize;
 
 	/*
 	 * Use markv to move the blocks.
 	 */
 	if (do_small) 
-		inc = MAXPHYS / lfs_sb_getbsize(fs) - 1;
+		inc = MAXPHYS / fs->lfs_bsize - 1;
 	else
 		inc = LFS_MARKV_MAXBLKCNT / 2;
 	for (mc = 0, mbip = bip; mc < bic; mc += inc, mbip += inc) {
@@ -1227,16 +1150,16 @@ clean_fs(struct clfs *fs, const CLEANERINFO64 *cip)
 		if ((r = kops.ko_fcntl(fs->clfs_ifilefd, LFCNMARKV, &lim))<0) {
 			int oerrno = errno;
 			syslog(LOG_WARNING, "%s: markv returned %d (errno %d, %m)",
-			       lfs_sb_getfsmnt(fs), r, errno);
+			       fs->lfs_fsmnt, r, errno);
 			if (oerrno != EAGAIN && oerrno != ESHUTDOWN) {
 				syslog(LOG_DEBUG, "%s: errno %d, returning",
-				       lfs_sb_getfsmnt(fs), oerrno);
+				       fs->lfs_fsmnt, oerrno);
 				fd_release_all(fs->clfs_devvp);
 				return r;
 			}
 			if (oerrno == ESHUTDOWN) {
 				syslog(LOG_NOTICE, "%s: filesystem unmounted",
-				       lfs_sb_getfsmnt(fs));
+				       fs->lfs_fsmnt);
 				fd_release_all(fs->clfs_devvp);
 				return r;
 			}
@@ -1250,14 +1173,14 @@ clean_fs(struct clfs *fs, const CLEANERINFO64 *cip)
 	       PRId64 " supporting indirect + %"
 	       PRId64 " supporting Ifile = %"
 	       PRId64 " bytes to clean %d segs (%" PRId64 "%% recovery)",
-	       lfs_sb_getfsmnt(fs), (int64_t)nb, (int64_t)(extra - if_extra),
+	       fs->lfs_fsmnt, (int64_t)nb, (int64_t)(extra - if_extra),
 	       (int64_t)if_extra, (int64_t)(nb + extra), ngood,
 	       (ngood ? (int64_t)(100 - (100 * (nb + extra)) /
-					 (ngood * lfs_sb_getssize(fs))) :
+					 (ngood * fs->lfs_ssize)) :
 		(int64_t)0));
-	if (nb + extra >= ngood * lfs_sb_getssize(fs))
+	if (nb + extra >= ngood * fs->lfs_ssize)
 		syslog(LOG_WARNING, "%s: cleaner not making forward progress",
-		       lfs_sb_getfsmnt(fs));
+		       fs->lfs_fsmnt);
 
 	/*
 	 * Finally call reclaim to prompt cleaning of the segments.
@@ -1273,10 +1196,9 @@ clean_fs(struct clfs *fs, const CLEANERINFO64 *cip)
  * the given filesystem needs to be cleaned.  Returns 1 if it does, 0 if it
  * does not, or -1 on error.
  */
-static int
-needs_cleaning(struct clfs *fs, CLEANERINFO64 *cip)
+int
+needs_cleaning(struct clfs *fs, CLEANERINFO *cip)
 {
-	CLEANERINFO *cipu;
 	struct ubuf *bp;
 	struct stat st;
 	daddr_t fsb_per_seg, max_free_segs;
@@ -1284,74 +1206,45 @@ needs_cleaning(struct clfs *fs, CLEANERINFO64 *cip)
 	double loadavg;
 
 	/* If this fs is "on hold", don't clean it. */
-	if (fs->clfs_onhold) {
-#if defined(__GNUC__) && \
-    (__GNUC__ > 4 || (__GNUC__ == 4 && __GNUC_MINOR__ >= 8)) && \
-    defined(__OPTIMIZE_SIZE__)
-	/*
-	 * XXX: Work around apparent bug with GCC >= 4.8 and -Os: it
-	 * claims that ci.clean is uninitialized in clean_fs (at one
-	 * of the several uses of it, which is neither the first nor
-	 * last use) -- this doesn't happen with plain -O2.
-	 *
-	 * Hopefully in the future further rearrangements will allow
-	 * removing this hack.
-	 */
-		cip->clean = 0;
-#endif
+	if (fs->clfs_onhold)
 		return 0;
-	}
 
 	/*
 	 * Read the cleanerinfo block from the Ifile.  We don't want
 	 * the cached information, so invalidate the buffer before
 	 * handing it back.
 	 */
-	if (bread(fs->lfs_ivnode, 0, lfs_sb_getbsize(fs), 0, &bp)) {
-		syslog(LOG_ERR, "%s: can't read inode", lfs_sb_getfsmnt(fs));
+	if (bread(fs->lfs_ivnode, 0, fs->lfs_bsize, NOCRED, 0, &bp)) {
+		syslog(LOG_ERR, "%s: can't read inode", fs->lfs_fsmnt);
 		return -1;
 	}
-	cipu = (CLEANERINFO *)bp->b_data;
-	if (fs->lfs_is64) {
-		/* Structure copy */
-		*cip = cipu->u_64;
-	} else {
-		/* Copy the fields and promote to 64 bit */
-		cip->clean = cipu->u_32.clean;
-		cip->dirty = cipu->u_32.dirty;
-		cip->bfree = cipu->u_32.bfree;
-		cip->avail = cipu->u_32.avail;
-		cip->free_head = cipu->u_32.free_head;
-		cip->free_tail = cipu->u_32.free_tail;
-		cip->flags = cipu->u_32.flags;
-	}
+	*cip = *(CLEANERINFO *)bp->b_data; /* Structure copy */
 	brelse(bp, B_INVAL);
-	cleaner_stats.bytes_read += lfs_sb_getbsize(fs);
+	cleaner_stats.bytes_read += fs->lfs_bsize;
 
 	/*
 	 * If the number of segments changed under us, reinit.
 	 * We don't have to start over from scratch, however,
 	 * since we don't hold any buffers.
 	 */
-	if (lfs_sb_getnseg(fs) != cip->clean + cip->dirty) {
+	if (fs->lfs_nseg != cip->clean + cip->dirty) {
 		if (reinit_fs(fs) < 0) {
 			/* The normal case for unmount */
-			syslog(LOG_NOTICE, "%s: filesystem unmounted", lfs_sb_getfsmnt(fs));
+			syslog(LOG_NOTICE, "%s: filesystem unmounted", fs->lfs_fsmnt);
 			return -1;
 		}
-		syslog(LOG_NOTICE, "%s: nsegs changed", lfs_sb_getfsmnt(fs));
+		syslog(LOG_NOTICE, "%s: nsegs changed", fs->lfs_fsmnt);
 	}
 
 	/* Compute theoretical "free segments" maximum based on usage */
 	fsb_per_seg = lfs_segtod(fs, 1);
-	max_free_segs = MAX(cip->bfree, 0) / fsb_per_seg + lfs_sb_getminfreeseg(fs);
+	max_free_segs = MAX(cip->bfree, 0) / fsb_per_seg + fs->lfs_minfreeseg;
 
 	dlog("%s: bfree = %d, avail = %d, clean = %d/%d",
-	     lfs_sb_getfsmnt(fs), cip->bfree, cip->avail, cip->clean,
-	     lfs_sb_getnseg(fs));
+	     fs->lfs_fsmnt, cip->bfree, cip->avail, cip->clean, fs->lfs_nseg);
 
 	/* If the writer is waiting on us, clean it */
-	if (cip->clean <= lfs_sb_getminfreeseg(fs) ||
+	if (cip->clean <= fs->lfs_minfreeseg ||
 	    (cip->flags & LFS_CLEANER_MUST_CLEAN))
 		return 1;
 
@@ -1375,7 +1268,7 @@ needs_cleaning(struct clfs *fs, CLEANERINFO64 *cip)
 		time(&now);
 		if (fstat(fs->clfs_ifilefd, &st) < 0) {
 			syslog(LOG_ERR, "%s: failed to stat ifile",
-			       lfs_sb_getfsmnt(fs));
+			       fs->lfs_fsmnt);
 			return -1;
 		}
 		if (now - st.st_mtime > segwait_timeout &&
@@ -1385,7 +1278,7 @@ needs_cleaning(struct clfs *fs, CLEANERINFO64 *cip)
 		/* CPU idle - use one-minute load avg */
 		if (getloadavg(&loadavg, 1) == -1) {
 			syslog(LOG_ERR, "%s: failed to get load avg",
-			       lfs_sb_getfsmnt(fs));
+			       fs->lfs_fsmnt);
 			return -1;
 		}
 		if (loadavg < load_threshold &&
@@ -1463,7 +1356,7 @@ lfs_cleaner_main(int argc, char **argv)
 #ifdef LFS_CLEANER_AS_LIB
 	sem_t *semaddr = NULL;
 #endif
-	CLEANERINFO64 ci;
+	CLEANERINFO ci;
 #ifndef USE_CLIENT_SERVER
 	char *cp, *pidname;
 #endif

@@ -1,6 +1,6 @@
 /* The common simulator framework for GDB, the GNU Debugger.
 
-   Copyright 2002-2015 Free Software Foundation, Inc.
+   Copyright 2002-2014 Free Software Foundation, Inc.
 
    Contributed by Andrew Cagney and Red Hat.
 
@@ -94,6 +94,7 @@ struct _sim_events {
   SIM_ELAPSED_TIME resume_wallclock;
   signed64 time_of_event;
   signed64 time_from_event;
+  int trace;
 };
 
 

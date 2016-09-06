@@ -1,4 +1,4 @@
-/*	$NetBSD: atactl.c,v 1.76 2016/05/10 08:08:59 mrg Exp $	*/
+/*	$NetBSD: atactl.c,v 1.73.4.1 2014/11/09 19:23:04 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: atactl.c,v 1.76 2016/05/10 08:08:59 mrg Exp $");
+__RCSID("$NetBSD: atactl.c,v 1.73.4.1 2014/11/09 19:23:04 snj Exp $");
 #endif
 
 
@@ -315,7 +315,6 @@ static const struct {
 	{ 207,		"Spin high current", NULL },
 	{ 208,		"Spin buzz", NULL },
 	{ 209,		"Offline seek performance", NULL },
-	{ 210,		"Successful RAIN Recovery Count", NULL },
 	{ 220,		"Disk shift", NULL },
 	{ 221,		"G-Sense error rate", NULL },
 	{ 222,		"Loaded hours", NULL },
@@ -332,9 +331,6 @@ static const struct {
 	{ 240,		"Head flying hours", NULL },
 	{ 241,		"Total LBAs Written", NULL },
 	{ 242,		"Total LBAs Read", NULL },
-	{ 246,		"Total Host Sector Writes", NULL },
-	{ 247,		"Host Program NAND Pages Count", NULL },
-	{ 248,		"FTL Program Pages Count ", NULL },
 	{ 250,		"Read error retry rate", NULL },
 	{ 254,		"Free Fall Sensor", NULL },
 	{   0,		"Unknown", NULL },

@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,7 +41,7 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
-#include "aslcompiler.h"
+
 #include "acpi.h"
 #include "accommon.h"
 #include "acapps.h"
@@ -99,7 +99,7 @@ AdGenerateFilename (
     }
 
     FilenameBuf[i] = 0;
-    strcat (FilenameBuf, FILE_SUFFIX_BINARY_TABLE);
+    strcat (FilenameBuf, ACPI_TABLE_FILE_SUFFIX);
     return (FilenameBuf);
 }
 
@@ -203,16 +203,11 @@ FlGenerateFilename (
 
 
     /*
-     * Copy the original filename to a new buffer. Leave room for the worst
-     * case where we append the suffix, an added dot and the null terminator.
+     * Copy the original filename to a new buffer. Leave room for the worst case
+     * where we append the suffix, an added dot and the null terminator.
      */
-    NewFilename = UtStringCacheCalloc ((ACPI_SIZE)
+    NewFilename = ACPI_ALLOCATE_ZEROED ((ACPI_SIZE)
         strlen (InputFilename) + strlen (Suffix) + 2);
-    if (!NewFilename)
-    {
-        return (NULL);
-    }
-
     strcpy (NewFilename, InputFilename);
 
     /* Try to find the last dot in the filename */
@@ -255,7 +250,7 @@ FlStrdup (
     char                *NewString;
 
 
-    NewString = UtStringCacheCalloc ((ACPI_SIZE) strlen (String) + 1);
+    NewString = ACPI_ALLOCATE ((ACPI_SIZE) strlen (String) + 1);
     if (!NewString)
     {
         return (NULL);
@@ -295,10 +290,7 @@ FlSplitInputPathname (
     char                    *Filename;
 
 
-    if (OutDirectoryPath)
-    {
-        *OutDirectoryPath = NULL;
-    }
+    *OutDirectoryPath = NULL;
 
     if (!InputPath)
     {
@@ -340,13 +332,11 @@ FlSplitInputPathname (
 
     if (!Filename)
     {
+        ACPI_FREE (DirectoryPath);
         return (AE_NO_MEMORY);
     }
 
-    if (OutDirectoryPath)
-    {
-        *OutDirectoryPath = DirectoryPath;
-    }
+    *OutDirectoryPath = DirectoryPath;
 
     if (OutFilename)
     {
@@ -354,5 +344,6 @@ FlSplitInputPathname (
         return (AE_OK);
     }
 
+    ACPI_FREE (Filename);
     return (AE_OK);
 }

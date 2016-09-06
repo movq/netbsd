@@ -92,7 +92,7 @@ public:
 REGISTER_MAP_WITH_PROGRAMSTATE(StreamMap, SymbolRef, StreamState)
 
 namespace {
-class StopTrackingCallback final : public SymbolVisitor {
+class StopTrackingCallback : public SymbolVisitor {
   ProgramStateRef state;
 public:
   StopTrackingCallback(ProgramStateRef st) : state(st) {}
@@ -200,9 +200,7 @@ void SimpleStreamChecker::checkDeadSymbols(SymbolReaper &SymReaper,
       State = State->remove<StreamMap>(Sym);
   }
 
-  ExplodedNode *N = C.generateNonFatalErrorNode(State);
-  if (!N)
-    return;
+  ExplodedNode *N = C.addTransition(State);
   reportLeaks(LeakedStreams, C, N);
 }
 
@@ -210,17 +208,17 @@ void SimpleStreamChecker::reportDoubleClose(SymbolRef FileDescSym,
                                             const CallEvent &Call,
                                             CheckerContext &C) const {
   // We reached a bug, stop exploring the path here by generating a sink.
-  ExplodedNode *ErrNode = C.generateErrorNode();
+  ExplodedNode *ErrNode = C.generateSink();
   // If we've already reached this node on another path, return.
   if (!ErrNode)
     return;
 
   // Generate the report.
-  auto R = llvm::make_unique<BugReport>(*DoubleCloseBugType,
+  BugReport *R = new BugReport(*DoubleCloseBugType,
       "Closing a previously closed file stream", ErrNode);
   R->addRange(Call.getSourceRange());
   R->markInteresting(FileDescSym);
-  C.emitReport(std::move(R));
+  C.emitReport(R);
 }
 
 void SimpleStreamChecker::reportLeaks(ArrayRef<SymbolRef> LeakedStreams,
@@ -229,10 +227,10 @@ void SimpleStreamChecker::reportLeaks(ArrayRef<SymbolRef> LeakedStreams,
   // Attach bug reports to the leak node.
   // TODO: Identify the leaked file descriptor.
   for (SymbolRef LeakedStream : LeakedStreams) {
-    auto R = llvm::make_unique<BugReport>(*LeakBugType,
+    BugReport *R = new BugReport(*LeakBugType,
         "Opened file is never closed; potential resource leak", ErrNode);
     R->markInteresting(LeakedStream);
-    C.emitReport(std::move(R));
+    C.emitReport(R);
   }
 }
 

@@ -17,7 +17,6 @@
 
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/Triple.h"
 #include "llvm/Object/ObjectFile.h"
 #include "llvm/ProfileData/CoverageMapping.h"
 #include "llvm/ProfileData/InstrProf.h"
@@ -28,7 +27,7 @@
 namespace llvm {
 namespace coverage {
 
-class CoverageMappingReader;
+class ObjectFileCoverageMappingReader;
 
 /// \brief Coverage mapping information for a single function.
 struct CoverageMappingRecord {
@@ -42,14 +41,15 @@ struct CoverageMappingRecord {
 /// \brief A file format agnostic iterator over coverage mapping data.
 class CoverageMappingIterator
     : public std::iterator<std::input_iterator_tag, CoverageMappingRecord> {
-  CoverageMappingReader *Reader;
+  ObjectFileCoverageMappingReader *Reader;
   CoverageMappingRecord Record;
 
   void increment();
 
 public:
   CoverageMappingIterator() : Reader(nullptr) {}
-  CoverageMappingIterator(CoverageMappingReader *Reader) : Reader(Reader) {
+  CoverageMappingIterator(ObjectFileCoverageMappingReader *Reader)
+      : Reader(Reader) {
     increment();
   }
 
@@ -67,18 +67,16 @@ public:
   CoverageMappingRecord *operator->() { return &Record; }
 };
 
-class CoverageMappingReader {
-public:
-  virtual std::error_code readNextRecord(CoverageMappingRecord &Record) = 0;
-  CoverageMappingIterator begin() { return CoverageMappingIterator(this); }
-  CoverageMappingIterator end() { return CoverageMappingIterator(); }
-  virtual ~CoverageMappingReader() {}
-};
-
 /// \brief Base class for the raw coverage mapping and filenames data readers.
 class RawCoverageReader {
 protected:
   StringRef Data;
+
+  /// \brief Return the error code.
+  std::error_code error(std::error_code EC) { return EC; }
+
+  /// \brief Clear the current error code and return a successful one.
+  std::error_code success() { return error(instrprof_error::success); }
 
   RawCoverageReader(StringRef Data) : Data(Data) {}
 
@@ -92,9 +90,10 @@ protected:
 class RawCoverageFilenamesReader : public RawCoverageReader {
   std::vector<StringRef> &Filenames;
 
-  RawCoverageFilenamesReader(const RawCoverageFilenamesReader &) = delete;
+  RawCoverageFilenamesReader(const RawCoverageFilenamesReader &)
+      LLVM_DELETED_FUNCTION;
   RawCoverageFilenamesReader &
-  operator=(const RawCoverageFilenamesReader &) = delete;
+  operator=(const RawCoverageFilenamesReader &) LLVM_DELETED_FUNCTION;
 
 public:
   RawCoverageFilenamesReader(StringRef Data, std::vector<StringRef> &Filenames)
@@ -105,27 +104,29 @@ public:
 
 /// \brief Reader for the raw coverage mapping data.
 class RawCoverageMappingReader : public RawCoverageReader {
+  StringRef FunctionName;
   ArrayRef<StringRef> TranslationUnitFilenames;
   std::vector<StringRef> &Filenames;
   std::vector<CounterExpression> &Expressions;
   std::vector<CounterMappingRegion> &MappingRegions;
 
-  RawCoverageMappingReader(const RawCoverageMappingReader &) = delete;
+  RawCoverageMappingReader(const RawCoverageMappingReader &)
+      LLVM_DELETED_FUNCTION;
   RawCoverageMappingReader &
-  operator=(const RawCoverageMappingReader &) = delete;
+  operator=(const RawCoverageMappingReader &) LLVM_DELETED_FUNCTION;
 
 public:
-  RawCoverageMappingReader(StringRef MappingData,
+  RawCoverageMappingReader(StringRef FunctionName, StringRef MappingData,
                            ArrayRef<StringRef> TranslationUnitFilenames,
                            std::vector<StringRef> &Filenames,
                            std::vector<CounterExpression> &Expressions,
                            std::vector<CounterMappingRegion> &MappingRegions)
-      : RawCoverageReader(MappingData),
+      : RawCoverageReader(MappingData), FunctionName(FunctionName),
         TranslationUnitFilenames(TranslationUnitFilenames),
         Filenames(Filenames), Expressions(Expressions),
         MappingRegions(MappingRegions) {}
 
-  std::error_code read();
+  std::error_code read(CoverageMappingRecord &Record);
 
 private:
   std::error_code decodeCounter(unsigned Value, Counter &C);
@@ -137,7 +138,7 @@ private:
 
 /// \brief Reader for the coverage mapping data that is emitted by the
 /// frontend and stored in an object file.
-class BinaryCoverageReader : public CoverageMappingReader {
+class ObjectFileCoverageMappingReader {
 public:
   struct ProfileMappingRecord {
     CoverageMappingVersion Version;
@@ -156,6 +157,8 @@ public:
   };
 
 private:
+  std::error_code LastError;
+  object::OwningBinary<object::ObjectFile> Object;
   std::vector<StringRef> Filenames;
   std::vector<ProfileMappingRecord> MappingRecords;
   size_t CurrentRecord;
@@ -163,17 +166,40 @@ private:
   std::vector<CounterExpression> Expressions;
   std::vector<CounterMappingRegion> MappingRegions;
 
-  BinaryCoverageReader(const BinaryCoverageReader &) = delete;
-  BinaryCoverageReader &operator=(const BinaryCoverageReader &) = delete;
+  ObjectFileCoverageMappingReader(const ObjectFileCoverageMappingReader &)
+      LLVM_DELETED_FUNCTION;
+  ObjectFileCoverageMappingReader &
+  operator=(const ObjectFileCoverageMappingReader &) LLVM_DELETED_FUNCTION;
 
-  BinaryCoverageReader() : CurrentRecord(0) {}
+  /// \brief Set the current error_code and return same.
+  std::error_code error(std::error_code EC) {
+    LastError = EC;
+    return EC;
+  }
+
+  /// \brief Clear the current error code and return a successful one.
+  std::error_code success() { return error(instrprof_error::success); }
 
 public:
-  static ErrorOr<std::unique_ptr<BinaryCoverageReader>>
-  create(std::unique_ptr<MemoryBuffer> &ObjectBuffer,
-         StringRef Arch);
+  ObjectFileCoverageMappingReader(StringRef FileName);
+  ObjectFileCoverageMappingReader(
+      std::unique_ptr<MemoryBuffer> &ObjectBuffer,
+      sys::fs::file_magic Type = sys::fs::file_magic::unknown);
 
-  std::error_code readNextRecord(CoverageMappingRecord &Record) override;
+  std::error_code readHeader();
+  std::error_code readNextRecord(CoverageMappingRecord &Record);
+
+  /// Iterator over profile data.
+  CoverageMappingIterator begin() { return CoverageMappingIterator(this); }
+  CoverageMappingIterator end() { return CoverageMappingIterator(); }
+
+  /// \brief Return true if the reader has finished reading the profile data.
+  bool isEOF() { return LastError == instrprof_error::eof; }
+  /// \brief Return true if the reader encountered an error reading profiling
+  /// data.
+  bool hasError() { return LastError && !isEOF(); }
+  /// \brief Get the current error code.
+  std::error_code getError() { return LastError; }
 };
 
 } // end namespace coverage

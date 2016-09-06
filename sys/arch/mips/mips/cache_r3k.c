@@ -1,4 +1,4 @@
-/*	$NetBSD: cache_r3k.c,v 1.7 2016/07/11 16:15:36 matt Exp $	*/
+/*	$NetBSD: cache_r3k.c,v 1.5 2011/02/20 07:45:47 matt Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -36,11 +36,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cache_r3k.c,v 1.7 2016/07/11 16:15:36 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cache_r3k.c,v 1.5 2011/02/20 07:45:47 matt Exp $");
 
 #include <sys/param.h>
 
-#include <mips/cpuregs.h>
 #include <mips/cache.h>
 #include <mips/cache_r3k.h>
 
@@ -65,7 +64,7 @@ r3k_icache_sync_all(void)
 }
 
 void
-r3k_icache_sync_range(register_t va, vsize_t size)
+r3k_icache_sync_range(vaddr_t va, vsize_t size)
 {
 	vaddr_t eva = round_line(va + size);
 
@@ -91,7 +90,7 @@ r3k_pdcache_wbinv_all(void)
 }
 
 void
-r3k_pdcache_inv_range(register_t va, vsize_t size)
+r3k_pdcache_inv_range(vaddr_t va, vsize_t size)
 {
 	vaddr_t eva = round_line(va + size);
 
@@ -106,7 +105,7 @@ r3k_pdcache_inv_range(register_t va, vsize_t size)
 }
 
 void
-r3k_pdcache_wb_range(register_t va, vsize_t size)
+r3k_pdcache_wb_range(vaddr_t va, vsize_t size)
 {
 
 	/* Cache is write-though. */

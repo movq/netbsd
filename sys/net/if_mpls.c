@@ -1,4 +1,4 @@
-/*	$NetBSD: if_mpls.c,v 1.27 2016/08/07 17:38:34 christos Exp $ */
+/*	$NetBSD: if_mpls.c,v 1.16 2014/07/17 10:46:57 bouyer Exp $ */
 
 /*
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -30,12 +30,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_mpls.c,v 1.27 2016/08/07 17:38:34 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_mpls.c,v 1.16 2014/07/17 10:46:57 bouyer Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
 #include "opt_mpls.h"
-#endif
 
 #include <sys/param.h>
 
@@ -49,16 +47,12 @@ __KERNEL_RCSID(0, "$NetBSD: if_mpls.c,v 1.27 2016/08/07 17:38:34 christos Exp $"
 #include <net/if_types.h>
 #include <net/netisr.h>
 #include <net/route.h>
-#include <sys/device.h>
-#include <sys/module.h>
-#include <sys/atomic.h>
 
 #ifdef INET
 #include <netinet/in.h>
 #include <netinet/in_systm.h>
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
-#include <netinet/ip_var.h>
 #endif
 
 #ifdef INET6
@@ -72,8 +66,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_mpls.c,v 1.27 2016/08/07 17:38:34 christos Exp $"
 
 #include "if_mpls.h"
 
-#include "ioconf.h"
-
 #define TRIM_LABEL do { \
 	m_adj(m, sizeof(union mpls_shim)); \
 	if (m->m_len < sizeof(union mpls_shim) && \
@@ -82,6 +74,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_mpls.c,v 1.27 2016/08/07 17:38:34 christos Exp $"
 	dst.smpls_addr.s_addr = ntohl(mtod(m, union mpls_shim *)->s_addr); \
 	} while (/* CONSTCOND */ 0)
 
+
+void ifmplsattach(int);
 
 static int mpls_clone_create(struct if_clone *, int);
 static int mpls_clone_destroy(struct ifnet *);
@@ -92,10 +86,9 @@ static struct if_clone mpls_if_cloner =
 
 static void mpls_input(struct ifnet *, struct mbuf *);
 static int mpls_output(struct ifnet *, struct mbuf *, const struct sockaddr *,
-	const struct rtentry *);
+	struct rtentry *);
 static int mpls_ioctl(struct ifnet *, u_long, void *);
-static int mpls_send_frame(struct mbuf *, struct ifnet *,
-    const struct rtentry *);
+static int mpls_send_frame(struct mbuf *, struct ifnet *, struct rtentry *);
 static int mpls_lse(struct mbuf *);
 
 #ifdef INET
@@ -111,38 +104,14 @@ static struct mbuf *mpls_label_inet6(struct mbuf *, union mpls_shim *, uint);
 static struct mbuf *mpls_prepend_shim(struct mbuf *, union mpls_shim *);
 
 extern int mpls_defttl, mpls_mapttl_inet, mpls_mapttl_inet6, mpls_icmp_respond,
-    mpls_forwarding, mpls_frame_accept, mpls_mapprec_inet, mpls_mapclass_inet6,
-    mpls_rfc4182;
+	mpls_forwarding, mpls_frame_accept, mpls_mapprec_inet, mpls_mapclass_inet6,
+	mpls_rfc4182;
 
-static u_int mpls_count;
 /* ARGSUSED */
 void
-mplsattach(int count)
-{
-	/*
-	 * Nothing to do here, initialization is handled by the
-	 * module initialization code in mplsinit() below).
-	 */
-}
-
-static void
-mplsinit(void)
+ifmplsattach(int count)
 {
 	if_clone_attach(&mpls_if_cloner);
-}
-
-static int
-mplsdetach(void)
-{
-	int error = 0;
-
-	if (mpls_count != 0)
-		error = EBUSY;
-
-	if (error == 0)
-		if_clone_detach(&mpls_if_cloner);
-
-	return error;
 }
 
 static int
@@ -150,7 +119,6 @@ mpls_clone_create(struct if_clone *ifc, int unit)
 {
 	struct mpls_softc *sc;
 
-	atomic_inc_uint(&mpls_count);
 	sc = malloc(sizeof(*sc), M_DEVBUF, M_WAITOK | M_ZERO);
 
 	if_initname(&sc->sc_if, ifc->ifc_name, unit);
@@ -161,7 +129,7 @@ mpls_clone_create(struct if_clone *ifc, int unit)
 	sc->sc_if.if_dlt = DLT_NULL;
 	sc->sc_if.if_mtu = 1500;
 	sc->sc_if.if_flags = 0;
-	sc->sc_if._if_input = mpls_input;
+	sc->sc_if.if_input = mpls_input;
 	sc->sc_if.if_output = mpls_output;
 	sc->sc_if.if_ioctl = mpls_ioctl;
 
@@ -183,7 +151,6 @@ mpls_clone_destroy(struct ifnet *ifp)
 	splx(s);
 
 	free(ifp->if_softc, M_DEVBUF);
-	atomic_dec_uint(&mpls_count);
 	return 0;
 }
 
@@ -217,13 +184,13 @@ mplsintr(void)
 			return;
 
 		if (((m->m_flags & M_PKTHDR) == 0) ||
-		    (m->m_pkthdr.rcvif_index == 0))
+		    (m->m_pkthdr.rcvif == 0))
 			panic("mplsintr(): no pkthdr or rcvif");
 
 #ifdef MBUFTRACE
 		m_claimm(m, &mpls_owner);
 #endif
-		mpls_input(m_get_rcvif_NOMPSAFE(m), m);
+		mpls_input(m->m_pkthdr.rcvif, m);
 	}
 }
 
@@ -231,8 +198,7 @@ mplsintr(void)
  * prepend shim and deliver
  */
 static int
-mpls_output(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
-    const struct rtentry *rt)
+mpls_output(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst, struct rtentry *rt)
 {
 	union mpls_shim mh, *pms;
 	struct rtentry *rt1;
@@ -469,12 +435,6 @@ mpls_lse(struct mbuf *m)
 			return ENOBUFS;
 	}
 
-	if ((rt->rt_flags & RTF_GATEWAY) == 0) {
-		error = EHOSTUNREACH;
-		goto done;
-	}
-
-	rt->rt_use++;
 	error = mpls_send_frame(m, rt->rt_ifp, rt);
 
 done:
@@ -487,10 +447,15 @@ done:
 }
 
 static int
-mpls_send_frame(struct mbuf *m, struct ifnet *ifp, const struct rtentry *rt)
+mpls_send_frame(struct mbuf *m, struct ifnet *ifp, struct rtentry *rt)
 {
 	union mpls_shim msh;
 	int ret;
+
+	if ((rt->rt_flags & RTF_GATEWAY) == 0)
+		return EHOSTUNREACH;
+
+	rt->rt_use++;
 
 	msh.s_addr = MPLS_GETSADDR(rt);
 	if (msh.shim.label == MPLS_LABEL_IMPLNULL ||
@@ -504,11 +469,9 @@ mpls_send_frame(struct mbuf *m, struct ifnet *ifp, const struct rtentry *rt)
 	case IFT_ETHER:
 	case IFT_TUNNEL:
 	case IFT_LOOP:
-#ifdef INET
-		ret = ip_if_output(ifp, m, rt->rt_gateway, rt);
-#else
-		ret = if_output_lock(ifp, ifp, m, rt->rt_gateway, rt);
-#endif
+		KERNEL_LOCK(1, NULL);
+		ret =  (*ifp->if_output)(ifp, m, rt->rt_gateway, rt);
+		KERNEL_UNLOCK_ONE(NULL);
 		return ret;
 		break;
 	default:
@@ -671,7 +634,7 @@ mpls_label_inet6(struct mbuf *m, union mpls_shim *ms, uint offset)
 static struct mbuf *
 mpls_prepend_shim(struct mbuf *m, union mpls_shim *ms) 
 {
-	union mpls_shim *shim;
+	union mpls_shim *shim; 
  
 	M_PREPEND(m, sizeof(*ms), M_DONTWAIT);
 	if (m == NULL)
@@ -688,10 +651,3 @@ mpls_prepend_shim(struct mbuf *m, union mpls_shim *ms)
 
 	return m;
 }
-
-/*
- * Module infrastructure
- */
-#include "if_module.h"
-
-IF_MODULE(MODULE_CLASS_DRIVER, mpls, "")

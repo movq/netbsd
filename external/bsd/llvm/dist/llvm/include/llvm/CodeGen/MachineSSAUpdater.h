@@ -107,8 +107,8 @@ public:
 private:
   unsigned GetValueAtEndOfBlockInternal(MachineBasicBlock *BB);
 
-  void operator=(const MachineSSAUpdater&) = delete;
-  MachineSSAUpdater(const MachineSSAUpdater&) = delete;
+  void operator=(const MachineSSAUpdater&) LLVM_DELETED_FUNCTION;
+  MachineSSAUpdater(const MachineSSAUpdater&) LLVM_DELETED_FUNCTION;
 };
 
 } // End llvm namespace

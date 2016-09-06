@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_sys.h,v 1.90 2016/07/07 06:55:42 msaitoh Exp $	*/
+/*	$NetBSD: puffs_sys.h,v 1.84.4.3 2015/02/27 19:39:56 martin Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006  Antti Kantee.  All Rights Reserved.
@@ -63,15 +63,11 @@ extern struct pool puffs_vapool;
 
 #ifdef PUFFSDEBUG
 extern int puffsdebug; /* puffs_subr.c */
-#define DPRINTF(x) do { \
-		if (puffsdebug > 0) printf x; \
-	} while (/*CONSTCOND*/0)
-#define DPRINTF_VERBOSE(x) do { \
-		if (puffsdebug > 1) printf x; \
-	} while (/*CONSTCOND*/0)
+#define DPRINTF(x) if (puffsdebug > 0) printf x
+#define DPRINTF_VERBOSE(x) if (puffsdebug > 1) printf x
 #else
-#define DPRINTF(x) ((void)0)
-#define DPRINTF_VERBOSE(x) ((void)0)
+#define DPRINTF(x)
+#define DPRINTF_VERBOSE(x)
 #endif
 
 #define MPTOPUFFSMP(mp) ((struct puffs_mount *)((mp)->mnt_data))
@@ -284,7 +280,7 @@ void	puffs_parkdone_poll(struct puffs_mount *, struct puffs_req *, void *);
 void	puffs_mp_reference(struct puffs_mount *);
 void	puffs_mp_release(struct puffs_mount *);
 
-void	puffs_gop_size(struct vnode *, off_t, off_t *, int);
+void	puffs_gop_size(struct vnode *, off_t, off_t *, int); 
 void	puffs_gop_markupdate(struct vnode *, int);
 
 void	puffs_senderr(struct puffs_mount *, int, int, const char *,

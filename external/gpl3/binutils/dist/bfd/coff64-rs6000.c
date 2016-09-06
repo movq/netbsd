@@ -1,5 +1,7 @@
 /* BFD back-end for IBM RS/6000 "XCOFF64" files.
-   Copyright (C) 2000-2015 Free Software Foundation, Inc.
+   Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
+   2010, 2011
+   Free Software Foundation, Inc.
    Written Clinton Popetz.
    Contributed by Cygnus Support.
 
@@ -277,7 +279,6 @@ extern int rs6000coff_core_file_failing_signal
 #define bfd_pe_print_pdata	NULL
 #endif
 
-#include <stdint.h>
 #include "coffcode.h"
 
 /* For XCOFF64, the effective width of symndx changes depending on
@@ -1277,7 +1278,7 @@ xcoff64_ppc_relocate_section (bfd *output_bfd,
 		}
 	      else
 		{
-		  BFD_ASSERT (bfd_link_relocatable (info)
+		  BFD_ASSERT (info->relocatable
 			      || (h->flags & XCOFF_DEF_DYNAMIC) != 0
 			      || (h->flags & XCOFF_IMPORT) != 0);
 		}
@@ -1372,7 +1373,7 @@ xcoff64_ppc_relocate_section (bfd *output_bfd,
 
 reloc_howto_type xcoff64_howto_table[] =
 {
-  /* 0x00: Standard 64 bit relocation.  */
+  /* Standard 64 bit relocation.  */
   HOWTO (R_POS,			/* type */
 	 0,			/* rightshift */
 	 4,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1387,7 +1388,7 @@ reloc_howto_type xcoff64_howto_table[] =
 	 MINUS_ONE,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 0x01: 64 bit relocation, but store negative value.  */
+  /* 64 bit relocation, but store negative value.  */
   HOWTO (R_NEG,			/* type */
 	 0,			/* rightshift */
 	 -4,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1402,7 +1403,7 @@ reloc_howto_type xcoff64_howto_table[] =
 	 MINUS_ONE,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 0x02: 32 bit PC relative relocation.  */
+  /* 32 bit PC relative relocation.  */
   HOWTO (R_REL,			/* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1417,7 +1418,7 @@ reloc_howto_type xcoff64_howto_table[] =
 	 0xffffffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 0x03: 16 bit TOC relative relocation.  */
+  /* 16 bit TOC relative relocation.  */
   HOWTO (R_TOC,			/* type */
 	 0,			/* rightshift */
 	 1,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1432,7 +1433,7 @@ reloc_howto_type xcoff64_howto_table[] =
 	 0xffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 0x04: I don't really know what this is.	*/
+  /* I don't really know what this is.	*/
   HOWTO (R_RTB,			/* type */
 	 1,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1447,7 +1448,7 @@ reloc_howto_type xcoff64_howto_table[] =
 	 0xffffffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 0x05: External TOC relative symbol.  */
+  /* External TOC relative symbol.  */
   HOWTO (R_GL,			/* type */
 	 0,			/* rightshift */
 	 1,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1462,7 +1463,7 @@ reloc_howto_type xcoff64_howto_table[] =
 	 0xffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 0x06: Local TOC relative symbol.	 */
+  /* Local TOC relative symbol.	 */
   HOWTO (R_TCL,			/* type */
 	 0,			/* rightshift */
 	 1,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1479,7 +1480,7 @@ reloc_howto_type xcoff64_howto_table[] =
 
   EMPTY_HOWTO (7),
 
-  /* 0x08: Non modifiable absolute branch.  */
+  /* Non modifiable absolute branch.  */
   HOWTO (R_BA,			/* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1496,7 +1497,7 @@ reloc_howto_type xcoff64_howto_table[] =
 
   EMPTY_HOWTO (9),
 
-  /* 0x0a: Non modifiable relative branch.  */
+  /* Non modifiable relative branch.  */
   HOWTO (R_BR,			/* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1513,7 +1514,7 @@ reloc_howto_type xcoff64_howto_table[] =
 
   EMPTY_HOWTO (0xb),
 
-  /* 0x0c: Indirect load.  */
+  /* Indirect load.  */
   HOWTO (R_RL,			/* type */
 	 0,			/* rightshift */
 	 1,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1528,7 +1529,7 @@ reloc_howto_type xcoff64_howto_table[] =
 	 0xffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 0x0d: Load address.  */
+  /* Load address.  */
   HOWTO (R_RLA,			/* type */
 	 0,			/* rightshift */
 	 1,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1545,7 +1546,7 @@ reloc_howto_type xcoff64_howto_table[] =
 
   EMPTY_HOWTO (0xe),
 
-  /* 0x0f: Non-relocating reference.  Bitsize is 1 so that r_rsize is 0.  */
+  /* Non-relocating reference.  Bitsize is 1 so that r_rsize is 0.  */
   HOWTO (R_REF,			/* type */
 	 0,			/* rightshift */
 	 0,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1563,7 +1564,7 @@ reloc_howto_type xcoff64_howto_table[] =
   EMPTY_HOWTO (0x10),
   EMPTY_HOWTO (0x11),
 
-  /* 0x12: TOC relative indirect load.  */
+  /* TOC relative indirect load.  */
   HOWTO (R_TRL,			/* type */
 	 0,			/* rightshift */
 	 1,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1578,7 +1579,7 @@ reloc_howto_type xcoff64_howto_table[] =
 	 0xffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 0x13: TOC relative load address.	 */
+  /* TOC relative load address.	 */
   HOWTO (R_TRLA,		/* type */
 	 0,			/* rightshift */
 	 1,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1593,7 +1594,7 @@ reloc_howto_type xcoff64_howto_table[] =
 	 0xffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 0x14: Modifiable relative branch.  */
+  /* Modifiable relative branch.  */
   HOWTO (R_RRTBI,		/* type */
 	 1,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1608,7 +1609,7 @@ reloc_howto_type xcoff64_howto_table[] =
 	 0xffffffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 0x15: Modifiable absolute branch.  */
+  /* Modifiable absolute branch.  */
   HOWTO (R_RRTBA,		/* type */
 	 1,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1623,7 +1624,7 @@ reloc_howto_type xcoff64_howto_table[] =
 	 0xffffffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 0x16: Modifiable call absolute indirect.	 */
+  /* Modifiable call absolute indirect.	 */
   HOWTO (R_CAI,			/* type */
 	 0,			/* rightshift */
 	 1,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1638,7 +1639,7 @@ reloc_howto_type xcoff64_howto_table[] =
 	 0xffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 0x17: Modifiable call relative.	*/
+  /* Modifiable call relative.	*/
   HOWTO (R_CREL,		/* type */
 	 0,			/* rightshift */
 	 1,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1653,7 +1654,7 @@ reloc_howto_type xcoff64_howto_table[] =
 	 0xffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 0x18: Modifiable branch absolute.  */
+  /* Modifiable branch absolute.  */
   HOWTO (R_RBA,			/* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1668,7 +1669,7 @@ reloc_howto_type xcoff64_howto_table[] =
 	 0x03fffffc,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 0x19: Modifiable branch absolute.  */
+  /* Modifiable branch absolute.  */
   HOWTO (R_RBAC,		/* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1683,7 +1684,7 @@ reloc_howto_type xcoff64_howto_table[] =
 	 0xffffffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 0x1a: Modifiable branch relative.  */
+  /* Modifiable branch relative.  */
   HOWTO (R_RBR,			/* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1698,7 +1699,7 @@ reloc_howto_type xcoff64_howto_table[] =
 	 0x03fffffc,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 0x1b: Modifiable branch absolute.  */
+  /* Modifiable branch absolute.  */
   HOWTO (R_RBRC,		/* type */
 	 0,			/* rightshift */
 	 1,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1713,7 +1714,6 @@ reloc_howto_type xcoff64_howto_table[] =
 	 0xffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 0x1c: Standard 32 bit relocation.  */
   HOWTO (R_POS,			/* type */
 	 0,			/* rightshift */
 	 2,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1728,7 +1728,7 @@ reloc_howto_type xcoff64_howto_table[] =
 	 0xffffffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 0x1d: 16 bit Non modifiable absolute branch.  */
+  /* 16 bit Non modifiable absolute branch.  */
   HOWTO (R_BA,			/* type */
 	 0,			/* rightshift */
 	 1,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1743,22 +1743,22 @@ reloc_howto_type xcoff64_howto_table[] =
 	 0xfffc,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 0x1e: Modifiable branch relative.  */
+  /* Modifiable branch relative.  */
   HOWTO (R_RBR,			/* type */
 	 0,			/* rightshift */
 	 1,			/* size (0 = byte, 1 = short, 2 = long) */
 	 16,			/* bitsize */
-	 TRUE,			/* pc_relative */
+	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
 	 complain_overflow_signed, /* complain_on_overflow */
 	 0,			/* special_function */
 	 "R_RBR_16",		/* name */
 	 TRUE,			/* partial_inplace */
-	 0xfffc,		/* src_mask */
-	 0xfffc,		/* dst_mask */
+	 0xffff,		/* src_mask */
+	 0xffff,		/* dst_mask */
 	 FALSE),		/* pcrel_offset */
 
-  /* 0x1f: Modifiable branch absolute.  */
+  /* Modifiable branch absolute.  */
   HOWTO (R_RBA,			/* type */
 	 0,			/* rightshift */
 	 1,			/* size (0 = byte, 1 = short, 2 = long) */
@@ -1826,11 +1826,6 @@ xcoff64_reloc_type_lookup (bfd *abfd ATTRIBUTE_UNUSED,
       return &xcoff64_howto_table[8];
     case BFD_RELOC_PPC_TOC16:
       return &xcoff64_howto_table[3];
-    case BFD_RELOC_16:
-      /* Note that this relocation is only internally used by gas.  */
-      return &xcoff64_howto_table[0xc];
-    case BFD_RELOC_PPC_B16:
-      return &xcoff64_howto_table[0x1e];
     case BFD_RELOC_32:
     case BFD_RELOC_CTOR:
       return &xcoff64_howto_table[0x1c];
@@ -2542,7 +2537,6 @@ static const struct xcoff_backend_data_rec bfd_xcoff_backend_data =
       3,			/* _bfd_coff_default_section_alignment_power */
       TRUE,			/* _bfd_coff_force_symnames_in_strings */
       4,			/* _bfd_coff_debug_string_prefix_length */
-      32768,			/* _bfd_coff_max_nscns */
       coff_swap_filehdr_in,
       coff_swap_aouthdr_in,
       coff_swap_scnhdr_in,
@@ -2614,7 +2608,7 @@ static const struct xcoff_backend_data_rec bfd_xcoff_backend_data =
   };
 
 /* The transfer vector that leads the outside world to all of the above.  */
-const bfd_target rs6000_xcoff64_vec =
+const bfd_target rs6000coff64_vec =
   {
     "aixcoff64-rs6000",
     bfd_target_xcoff_flavour,
@@ -2674,7 +2668,7 @@ const bfd_target rs6000_xcoff64_vec =
     },
 
     /* Generic */
-    _bfd_archive_close_and_cleanup,
+    bfd_true,
     bfd_true,
     coff_new_section_hook,
     _bfd_generic_get_section_contents,
@@ -2712,12 +2706,12 @@ const bfd_target rs6000_xcoff64_vec =
     coff_make_empty_symbol,
     coff_print_symbol,
     coff_get_symbol_info,
-    coff_get_symbol_version_string,
     _bfd_xcoff_is_local_label_name,
     coff_bfd_is_target_special_symbol,
     coff_get_lineno,
     coff_find_nearest_line,
-    coff_find_line,
+    _bfd_generic_find_nearest_line_discriminator,
+    _bfd_generic_find_line,
     coff_find_inliner_info,
     coff_bfd_make_debug_symbol,
     _bfd_generic_read_minisymbols,
@@ -2738,6 +2732,7 @@ const bfd_target rs6000_xcoff64_vec =
     bfd_generic_get_relocated_section_contents,
     bfd_generic_relax_section,
     _bfd_xcoff_bfd_link_hash_table_create,
+    _bfd_generic_link_hash_table_free,
     _bfd_xcoff_bfd_link_add_symbols,
     _bfd_generic_link_just_syms,
     _bfd_generic_copy_link_hash_symbol_type,
@@ -2801,7 +2796,6 @@ static const struct xcoff_backend_data_rec bfd_xcoff_aix5_backend_data =
       3,			/* _bfd_coff_default_section_alignment_power */
       TRUE,			/* _bfd_coff_force_symnames_in_strings */
       4,			/* _bfd_coff_debug_string_prefix_length */
-      32768,			/* _bfd_coff_max_nscns */
       coff_swap_filehdr_in,
       coff_swap_aouthdr_in,
       coff_swap_scnhdr_in,
@@ -2872,7 +2866,7 @@ static const struct xcoff_backend_data_rec bfd_xcoff_aix5_backend_data =
   };
 
 /* The transfer vector that leads the outside world to all of the above.  */
-const bfd_target rs6000_xcoff64_aix_vec =
+const bfd_target aix5coff64_vec =
   {
     "aix5coff64-rs6000",
     bfd_target_xcoff_flavour,
@@ -2932,7 +2926,7 @@ const bfd_target rs6000_xcoff64_aix_vec =
     },
 
     /* Generic */
-    _bfd_archive_close_and_cleanup,
+    bfd_true,
     bfd_true,
     coff_new_section_hook,
     _bfd_generic_get_section_contents,
@@ -2970,12 +2964,12 @@ const bfd_target rs6000_xcoff64_aix_vec =
     coff_make_empty_symbol,
     coff_print_symbol,
     coff_get_symbol_info,
-    coff_get_symbol_version_string,
     _bfd_xcoff_is_local_label_name,
     coff_bfd_is_target_special_symbol,
     coff_get_lineno,
     coff_find_nearest_line,
-    coff_find_line,
+    _bfd_generic_find_nearest_line_discriminator,
+    _bfd_generic_find_line,
     coff_find_inliner_info,
     coff_bfd_make_debug_symbol,
     _bfd_generic_read_minisymbols,
@@ -2996,6 +2990,7 @@ const bfd_target rs6000_xcoff64_aix_vec =
     bfd_generic_get_relocated_section_contents,
     bfd_generic_relax_section,
     _bfd_xcoff_bfd_link_hash_table_create,
+    _bfd_generic_link_hash_table_free,
     _bfd_xcoff_bfd_link_add_symbols,
     _bfd_generic_link_just_syms,
     _bfd_generic_copy_link_hash_symbol_type,

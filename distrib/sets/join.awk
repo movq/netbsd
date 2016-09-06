@@ -1,4 +1,4 @@
-#	$NetBSD: join.awk,v 1.6 2014/10/24 22:19:44 riz Exp $
+#	$NetBSD: join.awk,v 1.3.42.3 2015/08/04 17:16:33 snj Exp $
 #
 # Copyright (c) 2002 The NetBSD Foundation, Inc.
 # All rights reserved.

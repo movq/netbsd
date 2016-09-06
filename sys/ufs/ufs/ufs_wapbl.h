@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_wapbl.h,v 1.11 2016/05/19 18:32:20 riastradh Exp $	*/
+/*	$NetBSD: ufs_wapbl.h,v 1.8 2013/11/10 18:28:08 christos Exp $	*/
 
 /*-
  * Copyright (c) 2003,2006,2008 The NetBSD Foundation, Inc.
@@ -95,10 +95,16 @@ void	ufs_wapbl_verify_inodes(struct mount *, const char *);
 #endif
 
 static __inline int
-ufs_wapbl_begin(struct mount *mp, const char *file, int line)
+ufs_wapbl_begin2(struct mount *mp, struct vnode *vp1, struct vnode *vp2,
+		 const char *file, int line)
 {
 	if (mp->mnt_wapbl) {
 		int error;
+
+		if (vp1)
+			vref(vp1);
+		if (vp2)
+			vref(vp2);
 		error = wapbl_begin(mp->mnt_wapbl, file, line);
 		if (error)
 			return error;
@@ -111,7 +117,7 @@ ufs_wapbl_begin(struct mount *mp, const char *file, int line)
 }
 
 static __inline void
-ufs_wapbl_end(struct mount *mp)
+ufs_wapbl_end2(struct mount *mp, struct vnode *vp1, struct vnode *vp2)
 {
 	if (mp->mnt_wapbl) {
 #ifdef WAPBL_DEBUG_INODES
@@ -119,12 +125,19 @@ ufs_wapbl_end(struct mount *mp)
 			ufs_wapbl_verify_inodes(mp, "wapbl_end");
 #endif
 		wapbl_end(mp->mnt_wapbl);
+		if (vp2)
+			vrele(vp2);
+		if (vp1)
+			vrele(vp1);
 	}
 }
 
 #define	UFS_WAPBL_BEGIN(mp)						\
-	ufs_wapbl_begin(mp, __func__, __LINE__)
-#define	UFS_WAPBL_END(mp) ufs_wapbl_end(mp)
+	ufs_wapbl_begin2(mp, NULL, NULL, __FUNCTION__, __LINE__)
+#define	UFS_WAPBL_BEGIN1(mp, v1)					\
+	ufs_wapbl_begin2(mp, v1, NULL, __FUNCTION__, __LINE__)
+#define	UFS_WAPBL_END(mp)	ufs_wapbl_end2(mp, NULL, NULL)
+#define	UFS_WAPBL_END1(mp, v1)	ufs_wapbl_end2(mp, v1, NULL)
 
 #define	UFS_WAPBL_UPDATE(vp, access, modify, flags)			\
 	if ((vp)->v_mount->mnt_wapbl) {					\
@@ -151,7 +164,9 @@ ufs_wapbl_end(struct mount *mp)
 
 #else /* ! WAPBL */
 #define	UFS_WAPBL_BEGIN(mp) (__USE(mp), 0)
+#define	UFS_WAPBL_BEGIN1(mp, v1) 0
 #define	UFS_WAPBL_END(mp)	do { } while (0)
+#define	UFS_WAPBL_END1(mp, v1)
 #define	UFS_WAPBL_UPDATE(vp, access, modify, flags)	do { } while (0)
 #define	UFS_WAPBL_JLOCK_ASSERT(mp)
 #define	UFS_WAPBL_JUNLOCK_ASSERT(mp)

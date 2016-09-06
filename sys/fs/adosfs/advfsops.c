@@ -1,4 +1,4 @@
-/*	$NetBSD: advfsops.c,v 1.75 2015/11/18 22:06:25 phx Exp $	*/
+/*	$NetBSD: advfsops.c,v 1.71.2.1 2015/11/22 14:02:31 bouyer Exp $	*/
 
 /*
  * Copyright (c) 1994 Christian E. Hopps
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: advfsops.c,v 1.75 2015/11/18 22:06:25 phx Exp $");
+__KERNEL_RCSID(0, "$NetBSD: advfsops.c,v 1.71.2.1 2015/11/22 14:02:31 bouyer Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_compat_netbsd.h"
@@ -214,7 +214,7 @@ adosfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 	if (error)
 		goto fail;
 	parp = &dl.d_partitions[DISKPART(devvp->v_rdev)];
-	if (dl.d_type == DKTYPE_FLOPPY) {
+	if (dl.d_type == DTYPE_FLOPPY) {
 		amp->bsize = secsize;
 		secsperblk = 1;
 		resvblks   = 2;
@@ -232,7 +232,7 @@ adosfs_mountfs(struct vnode *devvp, struct mount *mp, struct lwp *l)
 	/* The filesytem variant ('dostype') is stored in the boot block */
 	bp = NULL;
 	if ((error = bread(devvp, (daddr_t)BBOFF,
-			   amp->bsize, 0, &bp)) != 0) {
+			   amp->bsize, NOCRED, 0, &bp)) != 0) {
 		goto fail;
 	}
 	amp->dostype = adoswordn(bp, 0);
@@ -364,7 +364,7 @@ adosfs_statvfs(struct mount *mp, struct statvfs *sbp)
 
 /*
  * lookup an anode, if not found, create
- * return locked and referenced
+ * return locked and referenced al la vget(vp, LK_EXCLUSIVE);
  */
 int
 adosfs_vget(struct mount *mp, ino_t an, struct vnode **vpp)
@@ -406,7 +406,7 @@ adosfs_loadvnode(struct mount *mp, struct vnode *vp,
 	amp = VFSTOADOSFS(mp);
 
 	if ((error = bread(amp->devvp, an * amp->bsize / DEV_BSIZE,
-			   amp->bsize, 0, &bp)) != 0)
+			   amp->bsize, NOCRED, 0, &bp)) != 0)
 		return error;
 
 	ap = pool_get(&adosfs_node_pool, PR_WAITOK);
@@ -528,7 +528,7 @@ adosfs_loadvnode(struct mount *mp, struct vnode *vp,
 		brelse(bp, 0);
 		bp = NULL;
 		error = bread(amp->devvp, ap->linkto * amp->bsize / DEV_BSIZE,
-		    amp->bsize, 0, &bp);
+		    amp->bsize, NOCRED, 0, &bp);
 		if (error)
 			goto bad;
 		ap->fsize = adoswordn(bp, ap->nwords - 47);
@@ -612,7 +612,7 @@ adosfs_loadbitmap(struct adosfsmount *amp)
 	bp = mapbp = NULL;
 	bn = amp->rootb;
 	if ((error = bread(amp->devvp, bn * amp->bsize / DEV_BSIZE, amp->bsize,
-	    0, &bp)) != 0) {
+	    NOCRED, 0, &bp)) != 0) {
 		return (error);
 	}
 	blkix = amp->nwords - 49;
@@ -629,7 +629,7 @@ adosfs_loadbitmap(struct adosfsmount *amp)
 			brelse(mapbp, 0);
 		if ((error = bread(amp->devvp,
 		    adoswordn(bp, blkix) * amp->bsize / DEV_BSIZE, amp->bsize,
-		     0, &mapbp)) != 0)
+		     NOCRED, 0, &mapbp)) != 0)
 			break;
 		if (adoscksum(mapbp, amp->nwords)) {
 #ifdef DIAGNOSTIC
@@ -656,7 +656,7 @@ adosfs_loadbitmap(struct adosfsmount *amp)
 			bn = adoswordn(bp, blkix);
 			brelse(bp, 0);
 			if ((error = bread(amp->devvp, bn * amp->bsize / DEV_BSIZE,
-			    amp->bsize, 0, &bp)) != 0)
+			    amp->bsize, NOCRED, 0, &bp)) != 0)
 				break;
 			/*
 			 * Why is there no checksum on these blocks?

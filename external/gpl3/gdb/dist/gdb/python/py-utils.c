@@ -1,6 +1,6 @@
 /* General utility routines for GDB/Python.
 
-   Copyright (C) 2008-2015 Free Software Foundation, Inc.
+   Copyright (C) 2008-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -316,16 +316,13 @@ get_addr_from_python (PyObject *obj, CORE_ADDR *addr)
 {
   if (gdbpy_is_value_object (obj))
     {
+      volatile struct gdb_exception except;
 
-      TRY
+      TRY_CATCH (except, RETURN_MASK_ALL)
 	{
 	  *addr = value_as_address (value_object_to_value (obj));
 	}
-      CATCH (except, RETURN_MASK_ALL)
-	{
-	  GDB_PY_SET_HANDLE_EXCEPTION (except);
-	}
-      END_CATCH
+      GDB_PY_SET_HANDLE_EXCEPTION (except);
     }
   else
     {

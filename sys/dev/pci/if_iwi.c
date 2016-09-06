@@ -1,4 +1,4 @@
-/*	$NetBSD: if_iwi.c,v 1.100 2016/08/03 19:59:57 mlelstv Exp $  */
+/*	$NetBSD: if_iwi.c,v 1.97 2014/03/29 19:28:24 christos Exp $  */
 /*	$OpenBSD: if_iwi.c,v 1.111 2010/11/15 19:11:57 damien Exp $	*/
 
 /*-
@@ -19,7 +19,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_iwi.c,v 1.100 2016/08/03 19:59:57 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_iwi.c,v 1.97 2014/03/29 19:28:24 christos Exp $");
 
 /*-
  * Intel(R) PRO/Wireless 2200BG/2225BG/2915ABG driver
@@ -1197,7 +1197,7 @@ iwi_frame_intr(struct iwi_softc *sc, struct iwi_rx_data *data, int i,
 	CSR_WRITE_4(sc, IWI_CSR_RX_BASE + i * 4, data->map->dm_segs[0].ds_addr);
 
 	/* Finalize mbuf */
-	m_set_rcvif(m, ifp);
+	m->m_pkthdr.rcvif = ifp;
 	m->m_pkthdr.len = m->m_len = sizeof (struct iwi_hdr) +
 	    sizeof (struct iwi_frame) + le16toh(frame->len);
 
@@ -1282,14 +1282,6 @@ iwi_notification_intr(struct iwi_softc *sc, struct iwi_notif *notif)
 			break;
 
 		case IWI_AUTH_FAIL:
-			break;
-
-		case IWI_AUTH_SENT_1:
-		case IWI_AUTH_RECV_2:
-		case IWI_AUTH_SEQ1_PASS:
-			break;
-
-		case IWI_AUTH_SEQ1_FAIL:
 			break;
 
 		default:
@@ -2195,7 +2187,6 @@ iwi_cache_firmware(struct iwi_softc *sc)
 		error = EIO;
 		goto fail1;
 	}
-	sc->sc_blobsize = size;
 
 	sc->sc_blob = firmware_malloc(size);
 	if (sc->sc_blob == NULL) {
@@ -2255,7 +2246,7 @@ iwi_cache_firmware(struct iwi_softc *sc)
 	return 0;
 
 
-fail2:	firmware_free(sc->sc_blob, sc->sc_blobsize);
+fail2:	firmware_free(sc->sc_blob, 0);
 fail1:
 	return error;
 }
@@ -2267,7 +2258,7 @@ iwi_free_firmware(struct iwi_softc *sc)
 	if (!(sc->flags & IWI_FLAG_FW_CACHED))
 		return;
 
-	firmware_free(sc->sc_blob, sc->sc_blobsize);
+	firmware_free(sc->sc_blob, 0);
 
 	sc->flags &= ~IWI_FLAG_FW_CACHED;
 }

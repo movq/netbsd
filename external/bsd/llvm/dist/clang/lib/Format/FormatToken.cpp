@@ -13,29 +13,14 @@
 ///
 //===----------------------------------------------------------------------===//
 
-#include "ContinuationIndenter.h"
 #include "FormatToken.h"
+#include "ContinuationIndenter.h"
 #include "clang/Format/Format.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Support/Debug.h"
-#include <climits>
 
 namespace clang {
 namespace format {
-
-const char *getTokenTypeName(TokenType Type) {
-  static const char *const TokNames[] = {
-#define TYPE(X) #X,
-LIST_TOKEN_TYPES
-#undef TYPE
-    nullptr
-  };
-
-  if (Type < NUM_TOKEN_TYPES)
-    return TokNames[Type];
-  llvm_unreachable("unknown TokenType");
-  return nullptr;
-}
 
 // FIXME: This is copy&pasted from Sema. Put it in a common place and remove
 // duplication.
@@ -74,14 +59,13 @@ void TokenRole::precomputeFormattingInfos(const FormatToken *Token) {}
 unsigned CommaSeparatedList::formatAfterToken(LineState &State,
                                               ContinuationIndenter *Indenter,
                                               bool DryRun) {
-  if (State.NextToken == nullptr || !State.NextToken->Previous)
+  if (!State.NextToken->Previous || !State.NextToken->Previous->Previous)
     return 0;
 
   // Ensure that we start on the opening brace.
-  const FormatToken *LBrace =
-      State.NextToken->Previous->getPreviousNonComment();
-  if (!LBrace || !LBrace->isOneOf(tok::l_brace, TT_ArrayInitializerLSquare) ||
-      LBrace->BlockKind == BK_Block || LBrace->Type == TT_DictLiteral ||
+  const FormatToken *LBrace = State.NextToken->Previous->Previous;
+  if (LBrace->isNot(tok::l_brace) || LBrace->BlockKind == BK_Block ||
+      LBrace->Type == TT_DictLiteral ||
       LBrace->Next->Type == TT_DesignatedInitializerPeriod)
     return 0;
 
@@ -144,43 +128,34 @@ static unsigned CodePointsBetween(const FormatToken *Begin,
 
 void CommaSeparatedList::precomputeFormattingInfos(const FormatToken *Token) {
   // FIXME: At some point we might want to do this for other lists, too.
-  if (!Token->MatchingParen ||
-      !Token->isOneOf(tok::l_brace, TT_ArrayInitializerLSquare))
+  if (!Token->MatchingParen || Token->isNot(tok::l_brace))
     return;
 
   // In C++11 braced list style, we should not format in columns unless they
-  // have many items (20 or more) or we allow bin-packing of function call
-  // arguments.
-  if (Style.Cpp11BracedListStyle && !Style.BinPackArguments &&
+  // have many items (20 or more) or we allow bin-packing of function
+  // parameters.
+  if (Style.Cpp11BracedListStyle && !Style.BinPackParameters &&
       Commas.size() < 19)
     return;
 
-  // Limit column layout for JavaScript array initializers to 20 or more items
-  // for now to introduce it carefully. We can become more aggressive if this
-  // necessary.
-  if (Token->is(TT_ArrayInitializerLSquare) && Commas.size() < 19)
-    return;
-
   // Column format doesn't really make sense if we don't align after brackets.
-  if (Style.AlignAfterOpenBracket == FormatStyle::BAS_DontAlign)
+  if (!Style.AlignAfterOpenBracket)
     return;
 
   FormatToken *ItemBegin = Token->Next;
-  while (ItemBegin->isTrailingComment())
-    ItemBegin = ItemBegin->Next;
   SmallVector<bool, 8> MustBreakBeforeItem;
 
   // The lengths of an item if it is put at the end of the line. This includes
   // trailing comments which are otherwise ignored for column alignment.
   SmallVector<unsigned, 8> EndOfLineItemLength;
 
-  bool HasSeparatingComment = false;
+  unsigned MinItemLength = Style.ColumnLimit;
+  unsigned MaxItemLength = 0;
+
   for (unsigned i = 0, e = Commas.size() + 1; i != e; ++i) {
     // Skip comments on their own line.
-    while (ItemBegin->HasUnescapedNewline && ItemBegin->isTrailingComment()) {
+    while (ItemBegin->HasUnescapedNewline && ItemBegin->isTrailingComment())
       ItemBegin = ItemBegin->Next;
-      HasSeparatingComment = i > 0;
-    }
 
     MustBreakBeforeItem.push_back(ItemBegin->MustBreakBefore);
     if (ItemBegin->is(tok::l_brace))
@@ -190,8 +165,7 @@ void CommaSeparatedList::precomputeFormattingInfos(const FormatToken *Token) {
       ItemEnd = Token->MatchingParen;
       const FormatToken *NonCommentEnd = ItemEnd->getPreviousNonComment();
       ItemLengths.push_back(CodePointsBetween(ItemBegin, NonCommentEnd));
-      if (Style.Cpp11BracedListStyle &&
-          !ItemEnd->Previous->isTrailingComment()) {
+      if (Style.Cpp11BracedListStyle) {
         // In Cpp11 braced list style, the } and possibly other subsequent
         // tokens will need to stay on a line with the last element.
         while (ItemEnd->Next && !ItemEnd->Next->CanBreakBefore)
@@ -204,6 +178,8 @@ void CommaSeparatedList::precomputeFormattingInfos(const FormatToken *Token) {
       ItemEnd = Commas[i];
       // The comma is counted as part of the item when calculating the length.
       ItemLengths.push_back(CodePointsBetween(ItemBegin, ItemEnd));
+      MinItemLength = std::min(MinItemLength, ItemLengths.back());
+      MaxItemLength = std::max(MaxItemLength, ItemLengths.back());
 
       // Consume trailing comments so the are included in EndOfLineItemLength.
       if (ItemEnd->Next && !ItemEnd->Next->HasUnescapedNewline &&
@@ -218,24 +194,20 @@ void CommaSeparatedList::precomputeFormattingInfos(const FormatToken *Token) {
     ItemBegin = ItemEnd->Next;
   }
 
-  // Don't use column layout for lists with few elements and in presence of
-  // separating comments.
-  if (Commas.size() < 5 || HasSeparatingComment)
-    return;
-
-  if (Token->NestingLevel != 0 && Token->is(tok::l_brace) && Commas.size() < 19)
+  // If this doesn't have a nested list, we require at least 6 elements in order
+  // create a column layout. If it has a nested list, column layout ensures one
+  // list element per line. If the difference between the shortest and longest
+  // element is too large, column layout would create too much whitespace.
+  if (HasNestedBracedList || Commas.size() < 5 || Token->NestingLevel != 0 ||
+      MaxItemLength - MinItemLength > 10)
     return;
 
   // We can never place more than ColumnLimit / 3 items in a row (because of the
   // spaces and the comma).
-  unsigned MaxItems = Style.ColumnLimit / 3;
-  std::vector<unsigned> MinSizeInColumn;
-  MinSizeInColumn.reserve(MaxItems);
-  for (unsigned Columns = 1; Columns <= MaxItems; ++Columns) {
+  for (unsigned Columns = 1; Columns <= Style.ColumnLimit / 3; ++Columns) {
     ColumnFormat Format;
     Format.Columns = Columns;
     Format.ColumnSizes.resize(Columns);
-    MinSizeInColumn.assign(Columns, UINT_MAX);
     Format.LineCount = 1;
     bool HasRowWithSufficientColumns = false;
     unsigned Column = 0;
@@ -247,10 +219,9 @@ void CommaSeparatedList::precomputeFormattingInfos(const FormatToken *Token) {
       }
       if (Column == Columns - 1)
         HasRowWithSufficientColumns = true;
-      unsigned Length =
+      unsigned length =
           (Column == Columns - 1) ? EndOfLineItemLength[i] : ItemLengths[i];
-      Format.ColumnSizes[Column] = std::max(Format.ColumnSizes[Column], Length);
-      MinSizeInColumn[Column] = std::min(MinSizeInColumn[Column], Length);
+      Format.ColumnSizes[Column] = std::max(Format.ColumnSizes[Column], length);
       ++Column;
     }
     // If all rows are terminated early (e.g. by trailing comments), we don't
@@ -258,19 +229,9 @@ void CommaSeparatedList::precomputeFormattingInfos(const FormatToken *Token) {
     if (!HasRowWithSufficientColumns)
       break;
     Format.TotalWidth = Columns - 1; // Width of the N-1 spaces.
-
-    for (unsigned i = 0; i < Columns; ++i)
+    for (unsigned i = 0; i < Columns; ++i) {
       Format.TotalWidth += Format.ColumnSizes[i];
-
-    // Don't use this Format, if the difference between the longest and shortest
-    // element in a column exceeds a threshold to avoid excessive spaces.
-    if ([&] {
-          for (unsigned i = 0; i < Columns - 1; ++i)
-            if (Format.ColumnSizes[i] - MinSizeInColumn[i] > 10)
-              return true;
-          return false;
-        }())
-      continue;
+    }
 
     // Ignore layouts that are bound to violate the column limit.
     if (Format.TotalWidth > Style.ColumnLimit)

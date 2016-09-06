@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_lockdebug.c,v 1.54 2015/09/29 01:44:57 ozaki-r Exp $	*/
+/*	$NetBSD: subr_lockdebug.c,v 1.51 2014/03/07 16:36:32 matt Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -34,11 +34,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_lockdebug.c,v 1.54 2015/09/29 01:44:57 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_lockdebug.c,v 1.51 2014/03/07 16:36:32 matt Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_ddb.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -103,8 +101,6 @@ static void	lockdebug_abort1(lockdebug_t *, int, const char *,
 				 const char *, bool);
 static int	lockdebug_more(int);
 static void	lockdebug_init(void);
-static void	lockdebug_dump(lockdebug_t *, void (*)(const char *, ...)
-    __printflike(1, 2));
 
 static signed int
 ld_rbto_compare_nodes(void *ctx, const void *n1, const void *n2)
@@ -667,13 +663,8 @@ lockdebug_barrier(volatile void *spinlock, int slplocks)
 	}
 	splx(s);
 	if (l->l_shlocks != 0) {
-		TAILQ_FOREACH(ld, &ld_all, ld_achain) {
-			if (ld->ld_lockops->lo_type == LOCKOPS_CV)
-				continue;
-			if (ld->ld_lwp == l)
-				lockdebug_dump(ld, printf);
-		}
-		panic("%s: holding %d shared locks", __func__, l->l_shlocks);
+		panic("lockdebug_barrier: holding %d shared locks",
+		    l->l_shlocks);
 	}
 }
 
@@ -864,6 +855,5 @@ lockdebug_abort(volatile void *lock, lockops_t *ops, const char *func,
 		printf_nolog("\n");
 	}
 
-	panic("lock error: %s: %s: %s: lock %p cpu %d lwp %p",
-	    ops->lo_name, func, msg, lock, cpu_index(curcpu()), curlwp);
+	panic("lock error");
 }

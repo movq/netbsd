@@ -1,4 +1,4 @@
-/*	$NetBSD: evutil.c,v 1.5 2015/01/29 07:26:02 spz Exp $	*/
+/*	$NetBSD: evutil.c,v 1.4.8.1 2015/02/03 08:23:39 bouyer Exp $	*/
 /*
  * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
  *
@@ -27,7 +27,7 @@
 
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: evutil.c,v 1.5 2015/01/29 07:26:02 spz Exp $");
+__RCSID("$NetBSD: evutil.c,v 1.4.8.1 2015/02/03 08:23:39 bouyer Exp $");
 
 #define _GNU_SOURCE
 

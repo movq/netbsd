@@ -1,4 +1,4 @@
-/*	$NetBSD: partutil.h,v 1.3 2014/12/29 16:27:43 christos Exp $	*/
+/*	$NetBSD: partutil.h,v 1.2.40.1 2015/05/25 09:10:48 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.

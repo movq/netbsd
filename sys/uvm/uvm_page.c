@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_page.c,v 1.187 2015/04/11 19:24:13 joerg Exp $	*/
+/*	$NetBSD: uvm_page.c,v 1.185 2014/08/10 16:44:37 tls Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -66,10 +66,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_page.c,v 1.187 2015/04/11 19:24:13 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_page.c,v 1.185 2014/08/10 16:44:37 tls Exp $");
 
 #include "opt_ddb.h"
-#include "opt_uvm.h"
 #include "opt_uvmhist.h"
 #include "opt_readahead.h"
 
@@ -108,10 +107,7 @@ bool vm_page_zero_enable = false;
 /*
  * number of pages per-CPU to reserve for the kernel.
  */
-#ifndef	UVM_RESERVED_PAGES_PER_CPU
-#define	UVM_RESERVED_PAGES_PER_CPU	5
-#endif
-int vm_page_reserve_kernel = UVM_RESERVED_PAGES_PER_CPU;
+int vm_page_reserve_kernel = 5;
 
 /*
  * physical memory size;
@@ -890,7 +886,7 @@ static inline int
 vm_physseg_find_bsearch(struct vm_physseg *segs, int nsegs, paddr_t pframe, int *offp)
 {
 	/* binary search for it */
-	u_int	start, len, guess;
+	u_int	start, len, try;
 
 	/*
 	 * if try is too large (thus target is less than try) we reduce
@@ -906,17 +902,17 @@ vm_physseg_find_bsearch(struct vm_physseg *segs, int nsegs, paddr_t pframe, int 
 	 */
 
 	for (start = 0, len = nsegs ; len != 0 ; len = len / 2) {
-		guess = start + (len / 2);	/* try in the middle */
+		try = start + (len / 2);	/* try in the middle */
 
 		/* start past our try? */
-		if (pframe >= segs[guess].start) {
+		if (pframe >= segs[try].start) {
 			/* was try correct? */
-			if (pframe < segs[guess].end) {
+			if (pframe < segs[try].end) {
 				if (offp)
-					*offp = pframe - segs[guess].start;
-				return guess;            /* got it */
+					*offp = pframe - segs[try].start;
+				return(try);            /* got it */
 			}
-			start = guess + 1;	/* next time, start here */
+			start = try + 1;	/* next time, start here */
 			len--;			/* "adjust" */
 		} else {
 			/*

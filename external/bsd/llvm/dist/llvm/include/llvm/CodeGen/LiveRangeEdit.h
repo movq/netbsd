@@ -21,7 +21,6 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SetVector.h"
 #include "llvm/ADT/SmallPtrSet.h"
-#include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/CodeGen/LiveInterval.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
 #include "llvm/Target/TargetMachine.h"
@@ -29,6 +28,7 @@
 
 namespace llvm {
 
+class AliasAnalysis;
 class LiveIntervals;
 class MachineBlockFrequencyInfo;
 class MachineLoopInfo;
@@ -102,10 +102,6 @@ private:
   /// registers are created.
   void MRI_NoteNewVirtualRegister(unsigned VReg) override;
 
-  /// \brief Check if MachineOperand \p MO is a last use/kill either in the
-  /// main live range of \p LI or in one of the matching subregister ranges.
-  bool useIsKill(const LiveInterval &LI, const MachineOperand &MO) const;
-
 public:
   /// Create a LiveRangeEdit for breaking down parent into smaller pieces.
   /// @param parent The register being spilled or split.
@@ -126,7 +122,7 @@ public:
     MRI.setDelegate(this);
   }
 
-  ~LiveRangeEdit() override { MRI.resetDelegate(this); }
+  ~LiveRangeEdit() { MRI.resetDelegate(this); }
 
   LiveInterval &getParent() const {
    assert(Parent && "No parent LiveInterval");

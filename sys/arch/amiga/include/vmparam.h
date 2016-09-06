@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.46 2015/09/30 20:36:28 phx Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.42.30.3 2015/11/06 20:23:56 riz Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -57,6 +57,8 @@
 
 /*
  * USRSTACK is the top (end) of the user stack.
+ *
+ * These are a mixture of i386, sun3 and hp settings.. 
  */
 
 #ifndef USRSTACK
@@ -136,5 +138,5 @@ struct pmap_physseg {
 /*
  * number of kernel PT pages (initial only, can grow dynamically)
  */
-#define VM_KERNEL_PT_PAGES	((vm_size_t)10)
+#define VM_KERNEL_PT_PAGES	((vm_size_t)10)		/* XXX: SYSPTSIZE */
 #endif /* !_MACHINE_VMPARAM_H_ */

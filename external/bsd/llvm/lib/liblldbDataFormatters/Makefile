@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2015/01/29 20:41:38 joerg Exp $
+#	$NetBSD: Makefile,v 1.2.6.1 2015/06/04 20:05:46 snj Exp $
 
 LIB=	lldbDataFormatters
 

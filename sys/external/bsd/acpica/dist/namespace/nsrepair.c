@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,8 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
+#define __NSREPAIR_C__
 
 #include "acpi.h"
 #include "accommon.h"
@@ -114,11 +116,6 @@ static const ACPI_SIMPLE_REPAIR_INFO    AcpiObjectRepairInfo[] =
                 ACPI_NOT_PACKAGE_ELEMENT,
                 AcpiNsConvertToResource },
 
-    /* Object reference conversions */
-
-    { "_DEP", ACPI_RTYPE_STRING, ACPI_ALL_PACKAGE_ELEMENTS,
-                AcpiNsConvertToReference },
-
     /* Unicode conversions */
 
     { "_MLS", ACPI_RTYPE_STRING, 1,
@@ -179,8 +176,7 @@ AcpiNsSimpleRepair (
                 ACPI_WARN_ALWAYS, "Missing expected return value"));
         }
 
-        Status = Predefined->ObjectConverter (Info->Node, ReturnObject,
-            &NewObject);
+        Status = Predefined->ObjectConverter (ReturnObject, &NewObject);
         if (ACPI_FAILURE (Status))
         {
             /* A fatal error occurred during a conversion */
@@ -216,29 +212,14 @@ AcpiNsSimpleRepair (
      * this predefined name. Either one return value is expected, or none,
      * for both methods and other objects.
      *
-     * Try to fix if there was no return object. Warning if failed to fix.
+     * Exit now if there is no return object. Warning if one was expected.
      */
     if (!ReturnObject)
     {
         if (ExpectedBtypes && (!(ExpectedBtypes & ACPI_RTYPE_NONE)))
         {
-            if (PackageIndex != ACPI_NOT_PACKAGE_ELEMENT)
-            {
-                ACPI_WARN_PREDEFINED ((AE_INFO, Info->FullPathname,
-                    ACPI_WARN_ALWAYS, "Found unexpected NULL package element"));
-
-                Status = AcpiNsRepairNullElement (Info, ExpectedBtypes,
-                    PackageIndex, ReturnObjectPtr);
-                if (ACPI_SUCCESS (Status))
-                {
-                    return (AE_OK); /* Repair was successful */
-                }
-            }
-            else
-            {
-                ACPI_WARN_PREDEFINED ((AE_INFO, Info->FullPathname,
-                    ACPI_WARN_ALWAYS, "Missing expected return value"));
-            }
+            ACPI_WARN_PREDEFINED ((AE_INFO, Info->FullPathname,
+                ACPI_WARN_ALWAYS, "Missing expected return value"));
 
             return (AE_AML_NO_RETURN_VALUE);
         }
@@ -379,15 +360,13 @@ AcpiNsMatchSimpleRepair (
             /* Check if we can actually repair this name/type combination */
 
             if ((ReturnBtype & ThisName->UnexpectedBtypes) &&
-                (ThisName->PackageIndex == ACPI_ALL_PACKAGE_ELEMENTS ||
-                 PackageIndex == ThisName->PackageIndex))
+                (PackageIndex == ThisName->PackageIndex))
             {
                 return (ThisName);
             }
 
             return (NULL);
         }
-
         ThisName++;
     }
 
@@ -472,13 +451,11 @@ AcpiNsRepairNullElement (
 
     /* Set the reference count according to the parent Package object */
 
-    NewObject->Common.ReferenceCount =
-        Info->ParentPackage->Common.ReferenceCount;
+    NewObject->Common.ReferenceCount = Info->ParentPackage->Common.ReferenceCount;
 
     ACPI_DEBUG_PRINT ((ACPI_DB_REPAIR,
         "%s: Converted NULL package element to expected %s at index %u\n",
-        Info->FullPathname, AcpiUtGetObjectTypeName (NewObject),
-        PackageIndex));
+         Info->FullPathname, AcpiUtGetObjectTypeName (NewObject), PackageIndex));
 
     *ReturnObjectPtr = NewObject;
     Info->ReturnFlags |= ACPI_OBJECT_REPAIRED;
@@ -497,7 +474,7 @@ AcpiNsRepairNullElement (
  * RETURN:      None.
  *
  * DESCRIPTION: Remove all NULL package elements from packages that contain
- *              a variable number of subpackages. For these types of
+ *              a variable number of sub-packages. For these types of
  *              packages, NULL elements can be safely removed.
  *
  *****************************************************************************/
@@ -521,7 +498,7 @@ AcpiNsRemoveNullElements (
     /*
      * We can safely remove all NULL elements from these package types:
      * PTYPE1_VAR packages contain a variable number of simple data types.
-     * PTYPE2 packages contain a variable number of subpackages.
+     * PTYPE2 packages contain a variable number of sub-packages.
      */
     switch (PackageType)
     {
@@ -533,10 +510,10 @@ AcpiNsRemoveNullElements (
     case ACPI_PTYPE2_MIN:
     case ACPI_PTYPE2_REV_FIXED:
     case ACPI_PTYPE2_FIX_VAR:
+
         break;
 
     default:
-    case ACPI_PTYPE2_VAR_VAR:
     case ACPI_PTYPE1_FIXED:
     case ACPI_PTYPE1_OPTION:
         return;
@@ -561,7 +538,6 @@ AcpiNsRemoveNullElements (
             *Dest = *Source;
             Dest++;
         }
-
         Source++;
     }
 
@@ -618,8 +594,8 @@ AcpiNsWrapWithPackage (
 
 
     /*
-     * Create the new outer package and populate it. The new
-     * package will have a single element, the lone sub-object.
+     * Create the new outer package and populate it. The new package will
+     * have a single element, the lone sub-object.
      */
     PkgObjDesc = AcpiUtCreatePackageObject (1);
     if (!PkgObjDesc)

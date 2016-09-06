@@ -67,12 +67,6 @@ void test(int *List, int Length) {
     List[i] = i;
   }
 
-/* expected-error {{incompatible directives 'unroll(enable)' and '#pragma unroll(4)'}} */ #pragma unroll(4)
-#pragma clang loop unroll(enable)
-  while (i-11 < Length) {
-    List[i] = i;
-  }
-
 /* expected-error {{incompatible directives '#pragma unroll' and '#pragma unroll(4)'}} */ #pragma unroll(4)
 #pragma unroll
   while (i-11 < Length) {

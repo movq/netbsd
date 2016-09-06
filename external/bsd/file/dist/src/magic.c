@@ -1,5 +1,4 @@
-/*	$NetBSD: magic.c,v 1.10 2015/01/02 21:15:32 christos Exp $	*/
-
+/*	$NetBSD: magic.c,v 1.8 2014/06/13 02:08:06 christos Exp $	*/
 /*
  * Copyright (c) Christos Zoulas 2003.
  * All Rights Reserved.
@@ -36,9 +35,9 @@
 
 #ifndef	lint
 #if 0
-FILE_RCSID("@(#)$File: magic.c,v 1.91 2014/12/16 23:18:40 christos Exp $")
+FILE_RCSID("@(#)$File: magic.c,v 1.84 2014/05/14 23:15:42 christos Exp $")
 #else
-__RCSID("$NetBSD: magic.c,v 1.10 2015/01/02 21:15:32 christos Exp $");
+__RCSID("$NetBSD: magic.c,v 1.8 2014/06/13 02:08:06 christos Exp $");
 #endif
 #endif	/* lint */
 
@@ -134,7 +133,6 @@ out:
 #else
 	char *hmagicp;
 	char *tmppath = NULL;
-	LPTSTR dllpath;
 	hmagicpath = NULL;
 
 #define APPENDPATH() \
@@ -180,7 +178,7 @@ out:
 	}
 
 	/* Third, try to get magic file relative to dll location */
-	dllpath = malloc(sizeof(*dllpath) * (MAX_PATH + 1));
+	LPTSTR dllpath = malloc(sizeof(*dllpath) * (MAX_PATH + 1));
 	dllpath[MAX_PATH] = 0;	/* just in case long path gets truncated and not null terminated */
 	if (GetModuleFileNameA(NULL, dllpath, MAX_PATH)){
 		PathRemoveFileSpecA(dllpath);
@@ -263,20 +261,6 @@ magic_load(struct magic_set *ms, const char *magicfile)
 		return -1;
 	return file_apprentice(ms, magicfile, FILE_LOAD);
 }
-
-#ifndef COMPILE_ONLY
-/*
- * Install a set of compiled magic buffers.
- */
-public int
-magic_load_buffers(struct magic_set *ms, void **bufs, size_t *sizes,
-    size_t nbufs)
-{
-	if (ms == NULL)
-		return -1;
-	return buffer_apprentice(ms, (struct magic **)bufs, sizes, nbufs);
-}
-#endif
 
 public int
 magic_compile(struct magic_set *ms, const char *magicfile)
@@ -542,54 +526,4 @@ public int
 magic_version(void)
 {
 	return MAGIC_VERSION;
-}
-
-public int
-magic_setparam(struct magic_set *ms, int param, const void *val)
-{
-	switch (param) {
-	case MAGIC_PARAM_INDIR_MAX:
-		ms->indir_max = (uint16_t)*(const size_t *)val;
-		return 0;
-	case MAGIC_PARAM_NAME_MAX:
-		ms->name_max = (uint16_t)*(const size_t *)val;
-		return 0;
-	case MAGIC_PARAM_ELF_PHNUM_MAX:
-		ms->elf_phnum_max = (uint16_t)*(const size_t *)val;
-		return 0;
-	case MAGIC_PARAM_ELF_SHNUM_MAX:
-		ms->elf_shnum_max = (uint16_t)*(const size_t *)val;
-		return 0;
-	case MAGIC_PARAM_ELF_NOTES_MAX:
-		ms->elf_notes_max = (uint16_t)*(const size_t *)val;
-		return 0;
-	default:
-		errno = EINVAL;
-		return -1;
-	}
-}
-
-public int
-magic_getparam(struct magic_set *ms, int param, void *val)
-{
-	switch (param) {
-	case MAGIC_PARAM_INDIR_MAX:
-		*(size_t *)val = ms->indir_max;
-		return 0;
-	case MAGIC_PARAM_NAME_MAX:
-		*(size_t *)val = ms->name_max;
-		return 0;
-	case MAGIC_PARAM_ELF_PHNUM_MAX:
-		*(size_t *)val = ms->elf_phnum_max;
-		return 0;
-	case MAGIC_PARAM_ELF_SHNUM_MAX:
-		*(size_t *)val = ms->elf_shnum_max;
-		return 0;
-	case MAGIC_PARAM_ELF_NOTES_MAX:
-		*(size_t *)val = ms->elf_notes_max;
-		return 0;
-	default:
-		errno = EINVAL;
-		return -1;
-	}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: timer_test.c,v 1.9 2015/12/17 04:00:42 christos Exp $	*/
+/*	$NetBSD: timer_test.c,v 1.7.4.2 2016/03/13 08:06:04 martin Exp $	*/
 
 /*
  * Copyright (C) 2004, 2007, 2013-2015  Internet Systems Consortium, Inc. ("ISC")

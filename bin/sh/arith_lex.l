@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: arith_lex.l,v 1.18 2016/03/16 15:42:33 christos Exp $	*/
+/*	$NetBSD: arith_lex.l,v 1.16 2012/03/20 18:42:29 matt Exp $	*/
 
 /*-
  * Copyright (c) 1993
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)arith_lex.l	8.3 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: arith_lex.l,v 1.18 2016/03/16 15:42:33 christos Exp $");
+__RCSID("$NetBSD: arith_lex.l,v 1.16 2012/03/20 18:42:29 matt Exp $");
 #endif
 #endif /* not lint */
 
@@ -59,7 +59,7 @@ extern const char *arith_buf, *arith_startbuf;
 
 %%
 [ \t\n]	{ ; }
-0[xX][0-9a-fA-F]+	{ yylval = strtoimax(yytext, 0, 0); return(ARITH_NUM); }
+0x[0-9a-fA-F]+	{ yylval = strtoimax(yytext, 0, 0); return(ARITH_NUM); }
 0[0-7]*		{ yylval = strtoimax(yytext, 0, 0); return(ARITH_NUM); }
 [1-9][0-9]*	{ yylval = strtoimax(yytext, 0, 0); return(ARITH_NUM); }
 [A-Za-z_][A-Za-z_0-9]*	{ char *v = lookupvar(yytext);
@@ -92,8 +92,6 @@ extern const char *arith_buf, *arith_startbuf;
 "-"	{ return(ARITH_SUB); }
 "~"	{ return(ARITH_BNOT); }
 "!"	{ return(ARITH_NOT); }
-"?"	{ return(ARITH_QM); }
-":"	{ return(ARITH_COLON); }
 .	{ error("arith: syntax error: \"%s\"", arith_startbuf); }
 %%
 

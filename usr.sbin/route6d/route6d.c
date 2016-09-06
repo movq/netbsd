@@ -1,4 +1,4 @@
-/*	$NetBSD: route6d.c,v 1.68 2016/04/04 07:37:08 ozaki-r Exp $	*/
+/*	$NetBSD: route6d.c,v 1.67 2013/04/15 07:58:35 kardel Exp $	*/
 /*	$KAME: route6d.c,v 1.94 2002/10/26 20:08:55 itojun Exp $	*/
 
 /*
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifndef	lint
-__RCSID("$NetBSD: route6d.c,v 1.68 2016/04/04 07:37:08 ozaki-r Exp $");
+__RCSID("$NetBSD: route6d.c,v 1.67 2013/04/15 07:58:35 kardel Exp $");
 #endif
 
 #include <stdbool.h>
@@ -1597,6 +1597,7 @@ rtrecv(void)
 			continue;
 		case RTM_LOSING:
 		case RTM_MISS:
+		case RTM_RESOLVE:
 		case RTM_GET:
 		case RTM_LOCK:
 			/* nothing to be done here */
@@ -1634,6 +1635,7 @@ rtrecv(void)
 		case RTM_ADD:
 		case RTM_LOSING:
 		case RTM_MISS:
+		case RTM_RESOLVE:
 		case RTM_GET:
 		case RTM_LOCK:
 			/* should already be handled */
@@ -1981,7 +1983,7 @@ ifrt(struct ifc *ifcp, int again)
 			if (ifa->ifa_plen == 128)
 				rrt->rrt_flags = RTF_HOST;
 			else
-				rrt->rrt_flags = RTF_CONNECTED;
+				rrt->rrt_flags = RTF_CLONING;
 			rrt->rrt_rflags |= RRTF_CHANGED;
 			applyplen(&rrt->rrt_info.rip6_dest, ifa->ifa_plen);
 			memset(&rrt->rrt_gw, 0, sizeof(struct in6_addr));
@@ -2269,6 +2271,7 @@ do { \
 	RTTYPE("LOCK", RTM_LOCK);
 	RTTYPE("OLDADD", RTM_OLDADD);
 	RTTYPE("OLDDEL", RTM_OLDDEL);
+	RTTYPE("RESOLVE", RTM_RESOLVE);
 	RTTYPE("NEWADDR", RTM_NEWADDR);
 	RTTYPE("DELADDR", RTM_DELADDR);
 	RTTYPE("IFINFO", RTM_IFINFO);
@@ -2318,7 +2321,7 @@ do { \
 #ifdef	RTF_MASK
 	RTFLAG("m", RTF_MASK);
 #endif
-	RTFLAG("C", RTF_CONNECTED);
+	RTFLAG("C", RTF_CLONING);
 #ifdef RTF_CLONED
 	RTFLAG("c", RTF_CLONED);
 #endif
@@ -2328,6 +2331,8 @@ do { \
 #ifdef RTF_WASCLONED
 	RTFLAG("W", RTF_WASCLONED);
 #endif
+	RTFLAG("X", RTF_XRESOLVE);
+	RTFLAG("L", RTF_LLINFO);
 	RTFLAG("S", RTF_STATIC);
 	RTFLAG("B", RTF_BLACKHOLE);
 #ifdef RTF_PROTO3
@@ -2461,7 +2466,7 @@ rt_entry(struct rt_msghdr *rtm, int again)
 
 	sin6_dst = sin6_gw = sin6_mask = sin6_genmask = sin6_ifp = 0;
 	if ((rtm->rtm_flags & RTF_UP) == 0 || rtm->rtm_flags &
-	    (RTF_CONNECTED|RTF_BLACKHOLE)) {
+		(RTF_CLONING|RTF_XRESOLVE|RTF_LLINFO|RTF_BLACKHOLE)) {
 		return;		/* not interested in the link route */
 	}
 	/* do not look at cloned routes */

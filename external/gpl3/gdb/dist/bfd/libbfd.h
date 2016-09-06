@@ -6,7 +6,10 @@
 /* libbfd.h -- Declarations used by bfd library *implementation*.
    (This include file is not for users of the library.)
 
-   Copyright (C) 1990-2015 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
+   2010, 2011, 2012
+   Free Software Foundation, Inc.
 
    Written by Cygnus Support.
 
@@ -28,10 +31,6 @@
    MA 02110-1301, USA.  */
 
 #include "hashtab.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /* Align an address upward to a boundary, expressed as a number of bytes.
    E.g. align to an 8-byte boundary with argument of 8.  Take care never
@@ -401,8 +400,6 @@ extern bfd_boolean _bfd_vms_lib_ia64_mkarchive (bfd *abfd);
   ((void (*) (bfd *, void *, asymbol *, bfd_print_symbol_type)) bfd_void)
 #define _bfd_nosymbols_get_symbol_info \
   ((void (*) (bfd *, asymbol *, symbol_info *)) bfd_void)
-#define _bfd_nosymbols_get_symbol_version_string \
-  ((const char *(*) (bfd *, asymbol *, bfd_boolean *)) bfd_nullvoidptr)
 #define _bfd_nosymbols_bfd_is_local_label_name \
   ((bfd_boolean (*) (bfd *, const char *)) bfd_false)
 #define _bfd_nosymbols_bfd_is_target_special_symbol \
@@ -410,13 +407,8 @@ extern bfd_boolean _bfd_vms_lib_ia64_mkarchive (bfd *abfd);
 #define _bfd_nosymbols_get_lineno \
   ((alent *(*) (bfd *, asymbol *)) bfd_nullvoidptr)
 #define _bfd_nosymbols_find_nearest_line \
-  ((bfd_boolean (*) (bfd *, asymbol **, asection *, bfd_vma,		\
-		     const char **, const char **, unsigned int *,	\
-		     unsigned int *))					\
-   bfd_false)
-#define _bfd_nosymbols_find_line \
-  ((bfd_boolean (*) (bfd *, asymbol **, asymbol *,	\
-		     const char **, unsigned int *))	\
+  ((bfd_boolean (*) (bfd *, asection *, asymbol **, bfd_vma, const char **, \
+		     const char **, unsigned int *)) \
    bfd_false)
 #define _bfd_nosymbols_find_inliner_info \
   ((bfd_boolean (*) (bfd *, const char **, const char **, unsigned int *)) \
@@ -487,6 +479,8 @@ extern bfd_boolean _bfd_generic_set_section_contents
    bfd_false)
 #define _bfd_nolink_bfd_link_hash_table_create \
   ((struct bfd_link_hash_table *(*) (bfd *)) bfd_nullvoidptr)
+#define _bfd_nolink_bfd_link_hash_table_free \
+  ((void (*) (struct bfd_link_hash_table *)) bfd_void)
 #define _bfd_nolink_bfd_link_add_symbols \
   ((bfd_boolean (*) (bfd *, struct bfd_link_info *)) bfd_false)
 #define _bfd_nolink_bfd_link_just_syms \
@@ -536,8 +530,8 @@ extern bfd_boolean _bfd_stab_section_find_nearest_line
 
 /* Find the nearest line using DWARF 1 debugging information.  */
 extern bfd_boolean _bfd_dwarf1_find_nearest_line
-  (bfd *, asymbol **, asection *, bfd_vma,
-   const char **, const char **, unsigned int *);
+  (bfd *, asection *, asymbol **, bfd_vma, const char **,
+   const char **, unsigned int *);
 
 struct dwarf_debug_section
 {
@@ -552,22 +546,29 @@ extern const struct dwarf_debug_section dwarf_debug_sections[];
 
 /* Find the nearest line using DWARF 2 debugging information.  */
 extern bfd_boolean _bfd_dwarf2_find_nearest_line
-  (bfd *, asymbol **, asymbol *, asection *, bfd_vma,
-   const char **, const char **, unsigned int *, unsigned int *,
-   const struct dwarf_debug_section *, unsigned int, void **);
+  (bfd *, const struct dwarf_debug_section *, asection *, asymbol **, bfd_vma,
+   const char **, const char **, unsigned int *, unsigned int *, unsigned int,
+   void **);
 
-/* Find the bias between DWARF addresses and real addresses.  */
-extern bfd_signed_vma _bfd_dwarf2_find_symbol_bias
-  (asymbol **, void **);
-  
+/* Find the line using DWARF 2 debugging information.  */
+extern bfd_boolean _bfd_dwarf2_find_line
+  (bfd *, asymbol **, asymbol *, const char **,
+   unsigned int *, unsigned int *, unsigned int, void **);
+
+bfd_boolean _bfd_generic_find_line
+  (bfd *, asymbol **, asymbol *, const char **, unsigned int *);
+
+bfd_boolean _bfd_generic_find_nearest_line_discriminator
+  (bfd *, asection *, asymbol **, bfd_vma, const char **, const char **,
+   unsigned int *, unsigned int *);
+
 /* Find inliner info after calling bfd_find_nearest_line. */
 extern bfd_boolean _bfd_dwarf2_find_inliner_info
   (bfd *, const char **, const char **, unsigned int *, void **);
 
 /* Read DWARF 2 debugging information. */
 extern bfd_boolean _bfd_dwarf2_slurp_debug_info
-  (bfd *, bfd *, const struct dwarf_debug_section *, asymbol **, void **,
-   bfd_boolean);
+  (bfd *, bfd *, const struct dwarf_debug_section *, asymbol **, void **);
 
 /* Clean up the data used to handle DWARF 2 debugging information. */
 extern void _bfd_dwarf2_cleanup_debug_info
@@ -596,7 +597,7 @@ extern struct bfd_link_hash_table *_bfd_generic_link_hash_table_create
 
 /* Generic link hash table destruction routine.  */
 extern void _bfd_generic_link_hash_table_free
-  (bfd *);
+  (struct bfd_link_hash_table *);
 
 /* Generic add symbol routine.  */
 extern bfd_boolean _bfd_generic_link_add_symbols
@@ -611,9 +612,7 @@ extern bfd_boolean _bfd_generic_link_add_symbols_collect
 /* Generic archive add symbol routine.  */
 extern bfd_boolean _bfd_generic_link_add_archive_symbols
   (bfd *, struct bfd_link_info *,
-   bfd_boolean (*) (bfd *, struct bfd_link_info *,
-		    struct bfd_link_hash_entry *, const char *,
-		    bfd_boolean *));
+   bfd_boolean (*) (bfd *, struct bfd_link_info *, bfd_boolean *));
 
 /* Forward declaration to avoid prototype errors.  */
 typedef struct bfd_link_hash_entry _bfd_link_hash_entry;
@@ -852,8 +851,6 @@ extern void bfd_section_already_linked_table_traverse
 
 extern bfd_vma read_unsigned_leb128 (bfd *, bfd_byte *, unsigned int *);
 extern bfd_signed_vma read_signed_leb128 (bfd *, bfd_byte *, unsigned int *);
-extern bfd_vma safe_read_leb128 (bfd *, bfd_byte *, unsigned int *,
-				 bfd_boolean, const bfd_byte * const);
 /* Extracted from init.c.  */
 /* Extracted from libbfd.c.  */
 bfd_boolean bfd_write_bigendian_4byte_int (bfd *, unsigned int);
@@ -1131,10 +1128,6 @@ static const char *const bfd_reloc_code_real_names[] = { "@@uninitialized@@",
   "BFD_RELOC_MICROMIPS_7_PCREL_S1",
   "BFD_RELOC_MICROMIPS_10_PCREL_S1",
   "BFD_RELOC_MICROMIPS_16_PCREL_S1",
-  "BFD_RELOC_MIPS_21_PCREL_S2",
-  "BFD_RELOC_MIPS_26_PCREL_S2",
-  "BFD_RELOC_MIPS_18_PCREL_S3",
-  "BFD_RELOC_MIPS_19_PCREL_S2",
   "BFD_RELOC_MICROMIPS_GPREL16",
   "BFD_RELOC_MICROMIPS_HI16",
   "BFD_RELOC_MICROMIPS_HI16_S",
@@ -1200,11 +1193,6 @@ static const char *const bfd_reloc_code_real_names[] = { "@@uninitialized@@",
   "BFD_RELOC_MIPS_JUMP_SLOT",
 
   "BFD_RELOC_MOXIE_10_PCREL",
-
-  "BFD_RELOC_FT32_10",
-  "BFD_RELOC_FT32_20",
-  "BFD_RELOC_FT32_17",
-  "BFD_RELOC_FT32_18",
 
   "BFD_RELOC_FRV_LABEL16",
   "BFD_RELOC_FRV_LABEL24",
@@ -1413,7 +1401,6 @@ static const char *const bfd_reloc_code_real_names[] = { "@@uninitialized@@",
   "BFD_RELOC_PPC64_PLTGOT16_LO_DS",
   "BFD_RELOC_PPC64_ADDR16_HIGH",
   "BFD_RELOC_PPC64_ADDR16_HIGHA",
-  "BFD_RELOC_PPC64_ADDR64_LOCAL",
   "BFD_RELOC_PPC_TLS",
   "BFD_RELOC_PPC_TLSGD",
   "BFD_RELOC_PPC_TLSLD",
@@ -1807,13 +1794,6 @@ static const char *const bfd_reloc_code_real_names[] = { "@@uninitialized@@",
   "BFD_RELOC_NDS32_15_FIXED",
   "BFD_RELOC_NDS32_17_FIXED",
   "BFD_RELOC_NDS32_25_FIXED",
-  "BFD_RELOC_NDS32_LONGCALL4",
-  "BFD_RELOC_NDS32_LONGCALL5",
-  "BFD_RELOC_NDS32_LONGCALL6",
-  "BFD_RELOC_NDS32_LONGJUMP4",
-  "BFD_RELOC_NDS32_LONGJUMP5",
-  "BFD_RELOC_NDS32_LONGJUMP6",
-  "BFD_RELOC_NDS32_LONGJUMP7",
   "BFD_RELOC_NDS32_PLTREL_HI20",
   "BFD_RELOC_NDS32_PLTREL_LO12",
   "BFD_RELOC_NDS32_PLT_GOTREL_HI20",
@@ -1855,25 +1835,11 @@ static const char *const bfd_reloc_code_real_names[] = { "@@uninitialized@@",
   "BFD_RELOC_NDS32_DIFF16",
   "BFD_RELOC_NDS32_DIFF32",
   "BFD_RELOC_NDS32_DIFF_ULEB128",
-  "BFD_RELOC_NDS32_EMPTY",
   "BFD_RELOC_NDS32_25_ABS",
   "BFD_RELOC_NDS32_DATA",
   "BFD_RELOC_NDS32_TRAN",
   "BFD_RELOC_NDS32_17IFC_PCREL",
   "BFD_RELOC_NDS32_10IFCU_PCREL",
-  "BFD_RELOC_NDS32_TPOFF",
-  "BFD_RELOC_NDS32_TLS_LE_HI20",
-  "BFD_RELOC_NDS32_TLS_LE_LO12",
-  "BFD_RELOC_NDS32_TLS_LE_ADD",
-  "BFD_RELOC_NDS32_TLS_LE_LS",
-  "BFD_RELOC_NDS32_GOTTPOFF",
-  "BFD_RELOC_NDS32_TLS_IE_HI20",
-  "BFD_RELOC_NDS32_TLS_IE_LO12S2",
-  "BFD_RELOC_NDS32_TLS_TPOFF",
-  "BFD_RELOC_NDS32_TLS_LE_20",
-  "BFD_RELOC_NDS32_TLS_LE_15S0",
-  "BFD_RELOC_NDS32_TLS_LE_15S1",
-  "BFD_RELOC_NDS32_TLS_LE_15S2",
   "BFD_RELOC_V850_9_PCREL",
   "BFD_RELOC_V850_22_PCREL",
   "BFD_RELOC_V850_SDA_16_16_OFFSET",
@@ -2075,12 +2041,6 @@ static const char *const bfd_reloc_code_real_names[] = { "@@uninitialized@@",
   "BFD_RELOC_AVR_8_LO",
   "BFD_RELOC_AVR_8_HI",
   "BFD_RELOC_AVR_8_HLO",
-  "BFD_RELOC_AVR_DIFF8",
-  "BFD_RELOC_AVR_DIFF16",
-  "BFD_RELOC_AVR_DIFF32",
-  "BFD_RELOC_AVR_LDS_STS_16",
-  "BFD_RELOC_AVR_PORT6",
-  "BFD_RELOC_AVR_PORT5",
   "BFD_RELOC_RL78_NEG8",
   "BFD_RELOC_RL78_NEG16",
   "BFD_RELOC_RL78_NEG24",
@@ -2114,7 +2074,6 @@ static const char *const bfd_reloc_code_real_names[] = { "@@uninitialized@@",
   "BFD_RELOC_RL78_HI8",
   "BFD_RELOC_RL78_LO16",
   "BFD_RELOC_RL78_CODE",
-  "BFD_RELOC_RL78_SADDR",
   "BFD_RELOC_RX_NEG8",
   "BFD_RELOC_RX_NEG16",
   "BFD_RELOC_RX_NEG24",
@@ -2490,30 +2449,8 @@ static const char *const bfd_reloc_code_real_names[] = { "@@uninitialized@@",
   "BFD_RELOC_860_HIGH",
   "BFD_RELOC_860_HIGOT",
   "BFD_RELOC_860_HIGOTOFF",
-  "BFD_RELOC_OR1K_REL_26",
-  "BFD_RELOC_OR1K_GOTPC_HI16",
-  "BFD_RELOC_OR1K_GOTPC_LO16",
-  "BFD_RELOC_OR1K_GOT16",
-  "BFD_RELOC_OR1K_PLT26",
-  "BFD_RELOC_OR1K_GOTOFF_HI16",
-  "BFD_RELOC_OR1K_GOTOFF_LO16",
-  "BFD_RELOC_OR1K_COPY",
-  "BFD_RELOC_OR1K_GLOB_DAT",
-  "BFD_RELOC_OR1K_JMP_SLOT",
-  "BFD_RELOC_OR1K_RELATIVE",
-  "BFD_RELOC_OR1K_TLS_GD_HI16",
-  "BFD_RELOC_OR1K_TLS_GD_LO16",
-  "BFD_RELOC_OR1K_TLS_LDM_HI16",
-  "BFD_RELOC_OR1K_TLS_LDM_LO16",
-  "BFD_RELOC_OR1K_TLS_LDO_HI16",
-  "BFD_RELOC_OR1K_TLS_LDO_LO16",
-  "BFD_RELOC_OR1K_TLS_IE_HI16",
-  "BFD_RELOC_OR1K_TLS_IE_LO16",
-  "BFD_RELOC_OR1K_TLS_LE_HI16",
-  "BFD_RELOC_OR1K_TLS_LE_LO16",
-  "BFD_RELOC_OR1K_TLS_TPOFF",
-  "BFD_RELOC_OR1K_TLS_DTPOFF",
-  "BFD_RELOC_OR1K_TLS_DTPMOD",
+  "BFD_RELOC_OPENRISC_ABS_26",
+  "BFD_RELOC_OPENRISC_REL_26",
   "BFD_RELOC_H8_DIR16A8",
   "BFD_RELOC_H8_DIR16R8",
   "BFD_RELOC_H8_DIR24A8",
@@ -2595,24 +2532,6 @@ static const char *const bfd_reloc_code_real_names[] = { "@@uninitialized@@",
   "BFD_RELOC_NIOS2_JUMP_SLOT",
   "BFD_RELOC_NIOS2_RELATIVE",
   "BFD_RELOC_NIOS2_GOTOFF",
-  "BFD_RELOC_NIOS2_CALL26_NOAT",
-  "BFD_RELOC_NIOS2_GOT_LO",
-  "BFD_RELOC_NIOS2_GOT_HA",
-  "BFD_RELOC_NIOS2_CALL_LO",
-  "BFD_RELOC_NIOS2_CALL_HA",
-  "BFD_RELOC_NIOS2_R2_S12",
-  "BFD_RELOC_NIOS2_R2_I10_1_PCREL",
-  "BFD_RELOC_NIOS2_R2_T1I7_1_PCREL",
-  "BFD_RELOC_NIOS2_R2_T1I7_2",
-  "BFD_RELOC_NIOS2_R2_T2I4",
-  "BFD_RELOC_NIOS2_R2_T2I4_1",
-  "BFD_RELOC_NIOS2_R2_T2I4_2",
-  "BFD_RELOC_NIOS2_R2_X1I7_2",
-  "BFD_RELOC_NIOS2_R2_X2L5",
-  "BFD_RELOC_NIOS2_R2_F1I5_2",
-  "BFD_RELOC_NIOS2_R2_L5I4X1",
-  "BFD_RELOC_NIOS2_R2_T1X1I6",
-  "BFD_RELOC_NIOS2_R2_T1X1I6_2",
   "BFD_RELOC_IQ2000_OFFSET_16",
   "BFD_RELOC_IQ2000_OFFSET_21",
   "BFD_RELOC_IQ2000_UHI16",
@@ -2747,11 +2666,7 @@ static const char *const bfd_reloc_code_real_names[] = { "@@uninitialized@@",
   "BFD_RELOC_AARCH64_ADR_GOT_PAGE",
   "BFD_RELOC_AARCH64_LD64_GOT_LO12_NC",
   "BFD_RELOC_AARCH64_LD32_GOT_LO12_NC",
-  "BFD_RELOC_AARCH64_LD64_GOTOFF_LO15",
-  "BFD_RELOC_AARCH64_LD32_GOTPAGE_LO14",
-  "BFD_RELOC_AARCH64_LD64_GOTPAGE_LO15",
   "BFD_RELOC_AARCH64_TLSGD_ADR_PAGE21",
-  "BFD_RELOC_AARCH64_TLSGD_ADR_PREL21",
   "BFD_RELOC_AARCH64_TLSGD_ADD_LO12_NC",
   "BFD_RELOC_AARCH64_TLSIE_MOVW_GOTTPREL_G1",
   "BFD_RELOC_AARCH64_TLSIE_MOVW_GOTTPREL_G0_NC",
@@ -2988,13 +2903,6 @@ static const char *const bfd_reloc_code_real_names[] = { "@@uninitialized@@",
   "BFD_RELOC_EPIPHANY_SIMM11",
   "BFD_RELOC_EPIPHANY_IMM11",
   "BFD_RELOC_EPIPHANY_IMM8",
-  "BFD_RELOC_VISIUM_HI16",
-  "BFD_RELOC_VISIUM_LO16",
-  "BFD_RELOC_VISIUM_IM16",
-  "BFD_RELOC_VISIUM_REL16",
-  "BFD_RELOC_VISIUM_HI16_PCREL",
-  "BFD_RELOC_VISIUM_LO16_PCREL",
-  "BFD_RELOC_VISIUM_IM16_PCREL",
  "@@overflow: BFD_RELOC_UNUSED@@",
 };
 #endif
@@ -3041,6 +2949,3 @@ void *bfd_arch_default_fill (bfd_size_type count,
     bfd_boolean code);
 
 /* Extracted from elf.c.  */
-#ifdef __cplusplus
-}
-#endif

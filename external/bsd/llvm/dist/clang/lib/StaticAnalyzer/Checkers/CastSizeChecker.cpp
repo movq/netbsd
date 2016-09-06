@@ -82,7 +82,10 @@ static bool evenFlexibleArraySize(ASTContext &Ctx, CharUnits RegionSize,
   if (Left.isNegative())
     return false;
 
-  return Left % FlexSize == 0;
+  if (Left % FlexSize == 0)
+    return true;
+
+  return false;
 }
 
 void CastSizeChecker::checkPreStmt(const CastExpr *CE,CheckerContext &C) const {
@@ -128,14 +131,14 @@ void CastSizeChecker::checkPreStmt(const CastExpr *CE,CheckerContext &C) const {
   if (evenFlexibleArraySize(Ctx, regionSize, typeSize, ToPointeeTy))
     return;
 
-  if (ExplodedNode *errorNode = C.generateErrorNode()) {
+  if (ExplodedNode *errorNode = C.generateSink()) {
     if (!BT)
       BT.reset(new BuiltinBug(this, "Cast region with wrong size.",
                                     "Cast a region whose size is not a multiple"
                                     " of the destination type size."));
-    auto R = llvm::make_unique<BugReport>(*BT, BT->getDescription(), errorNode);
+    BugReport *R = new BugReport(*BT, BT->getDescription(), errorNode);
     R->addRange(CE->getSourceRange());
-    C.emitReport(std::move(R));
+    C.emitReport(R);
   }
 }
 

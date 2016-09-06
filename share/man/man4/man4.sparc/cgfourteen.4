@@ -1,4 +1,4 @@
-.\"	$NetBSD: cgfourteen.4,v 1.9 2016/06/09 15:00:26 abhinav Exp $
+.\"	$NetBSD: cgfourteen.4,v 1.6 2002/01/15 01:59:34 wiz Exp $
 .\"
 .\" Copyright (c) 1996 The President and Fellows of Harvard College.
 .\" All rights reserved.
@@ -40,7 +40,7 @@
 .\" Based on tcx.4,
 .\"	NetBSD: tcx.4,v 1.2 1996/06/21 22:35:06 pk Exp
 .\"
-.Dd June 10, 2016
+.Dd June 23, 1996
 .Dt CGFOURTEEN 4 sparc
 .Os
 .Sh NAME
@@ -52,15 +52,15 @@
 The
 .Nm cgfourteen
 is a memory based color frame buffer, with graphics acceleration and
-overlay capabilities.
-Its pixel memory can be mapped into a user process address space by using
+overlay capabilities. Its pixel memory can be mapped into a user process
+address space by using
 the
 .Xr mmap 2
 system call.
 The
 .Nm
 driver supports the minimal ioctl's needed to run
-.Xr Xorg 1 .
+.Xr X 1 .
 .Pp
 The driver operates by default in
 .Xr cgthree 4
@@ -71,9 +71,9 @@ This emulation does include support for the hardware cursor present on the
 however.
 .Sh SEE ALSO
 .Xr bwtwo 4 ,
-.Xr cgeight 4 ,
+.Xr cgtwo 4 ,
+.Xr cgthree 4 ,
 .Xr cgfour 4 ,
 .Xr cgsix 4 ,
-.Xr cgthree 4 ,
-.Xr cgtwo 4 ,
+.Xr cgeight 4 ,
 .Xr tcx 4

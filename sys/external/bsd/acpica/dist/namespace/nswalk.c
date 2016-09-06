@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,9 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
+
+#define __NSWALK_C__
 
 #include "acpi.h"
 #include "accommon.h"
@@ -218,10 +221,10 @@ AcpiNsWalkNamespace (
 
     /* Null child means "get first node" */
 
-    ParentNode = StartNode;
-    ChildNode = AcpiNsGetNextNode (ParentNode, NULL);
-    ChildType = ACPI_TYPE_ANY;
-    Level = 1;
+    ParentNode  = StartNode;
+    ChildNode   = AcpiNsGetNextNode (ParentNode, NULL);
+    ChildType   = ACPI_TYPE_ANY;
+    Level       = 1;
 
     /*
      * Traverse the tree of nodes until we bubble back up to where we
@@ -279,7 +282,7 @@ AcpiNsWalkNamespace (
                 if (DescendingCallback)
                 {
                     Status = DescendingCallback (ChildNode, Level,
-                        Context, ReturnValue);
+                                Context, ReturnValue);
                 }
             }
             else
@@ -287,7 +290,7 @@ AcpiNsWalkNamespace (
                 if (AscendingCallback)
                 {
                     Status = AscendingCallback (ChildNode, Level,
-                        Context, ReturnValue);
+                                Context, ReturnValue);
                 }
             }
 

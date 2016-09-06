@@ -149,7 +149,7 @@ function(add_ocaml_library name)
             "-I" "${LLVM_LIBRARY_DIR}/ocaml/"
             "-dump" "${bin}/${name}.odoc"
             ${ocaml_pkgs} ${ocaml_inputs}
-    DEPENDS ${ocaml_inputs} ${ocaml_outputs}
+    DEPENDS ${ocaml_inputs}
     COMMENT "Building OCaml documentation for ${name}"
     VERBATIM)
 

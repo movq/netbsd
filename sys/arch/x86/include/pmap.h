@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.59 2016/07/25 12:11:40 maxv Exp $	*/
+/*	$NetBSD: pmap.h,v 1.55.4.1 2015/04/23 07:31:16 snj Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -109,7 +109,6 @@
 
 #if defined(_KERNEL)
 #include <sys/kcpuset.h>
-#include <uvm/pmap/pmap_pvt.h>
 
 /*
  * pmap data structures: see pmap.c for details of locking.
@@ -208,8 +207,7 @@ struct pmap {
  */
 extern u_long PDPpaddr;
 
-extern pd_entry_t pmap_pg_g;			/* do we support PG_G? */
-extern pd_entry_t pmap_pg_nx;			/* do we support PG_NX? */
+extern int pmap_pg_g;			/* do we support PG_G? */
 extern long nkptp[PTP_LEVELS];
 
 /*

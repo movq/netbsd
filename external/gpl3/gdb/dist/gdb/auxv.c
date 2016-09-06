@@ -1,6 +1,6 @@
 /* Auxiliary vector support for GDB, the GNU debugger.
 
-   Copyright (C) 2004-2015 Free Software Foundation, Inc.
+   Copyright (C) 2004-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,10 +23,10 @@
 #include "command.h"
 #include "inferior.h"
 #include "valprint.h"
+#include "gdb_assert.h"
 #include "gdbcore.h"
 #include "observer.h"
 #include "filestuff.h"
-#include "objfiles.h"
 
 #include "auxv.h"
 #include "elf/common.h"
@@ -35,57 +35,47 @@
 #include <fcntl.h>
 
 
-/* Implement the to_xfer_partial target_ops method.  This function
-   handles access via /proc/PID/auxv, which is a common method for
-   native targets.  */
+/* This function handles access via /proc/PID/auxv, which is a common
+   method for native targets.  */
 
-static enum target_xfer_status
+static LONGEST
 procfs_xfer_auxv (gdb_byte *readbuf,
 		  const gdb_byte *writebuf,
 		  ULONGEST offset,
-		  ULONGEST len,
-		  ULONGEST *xfered_len)
+		  LONGEST len)
 {
   char *pathname;
   int fd;
-  ssize_t l;
+  LONGEST n;
 
   pathname = xstrprintf ("/proc/%d/auxv", ptid_get_pid (inferior_ptid));
   fd = gdb_open_cloexec (pathname, writebuf != NULL ? O_WRONLY : O_RDONLY, 0);
   xfree (pathname);
   if (fd < 0)
-    return TARGET_XFER_E_IO;
+    return -1;
 
   if (offset != (ULONGEST) 0
       && lseek (fd, (off_t) offset, SEEK_SET) != (off_t) offset)
-    l = -1;
+    n = -1;
   else if (readbuf != NULL)
-    l = read (fd, readbuf, (size_t) len);
+    n = read (fd, readbuf, len);
   else
-    l = write (fd, writebuf, (size_t) len);
+    n = write (fd, writebuf, len);
 
   (void) close (fd);
 
-  if (l < 0)
-    return TARGET_XFER_E_IO;
-  else if (l == 0)
-    return TARGET_XFER_EOF;
-  else
-    {
-      *xfered_len = (ULONGEST) l;
-      return TARGET_XFER_OK;
-    }
+  return n;
 }
 
 /* This function handles access via ld.so's symbol `_dl_auxv'.  */
 
-static enum target_xfer_status
+static LONGEST
 ld_so_xfer_auxv (gdb_byte *readbuf,
 		 const gdb_byte *writebuf,
 		 ULONGEST offset,
-		 ULONGEST len, ULONGEST *xfered_len)
+		 LONGEST len)
 {
-  struct bound_minimal_symbol msym;
+  struct minimal_symbol *msym;
   CORE_ADDR data_address, pointer_address;
   struct type *ptr_type = builtin_type (target_gdbarch ())->builtin_data_ptr;
   size_t ptr_size = TYPE_LENGTH (ptr_type);
@@ -95,17 +85,17 @@ ld_so_xfer_auxv (gdb_byte *readbuf,
   size_t block;
 
   msym = lookup_minimal_symbol ("_dl_auxv", NULL, NULL);
-  if (msym.minsym == NULL)
-    return TARGET_XFER_E_IO;
+  if (msym == NULL)
+    return -1;
 
-  if (MSYMBOL_SIZE (msym.minsym) != ptr_size)
-    return TARGET_XFER_E_IO;
+  if (MSYMBOL_SIZE (msym) != ptr_size)
+    return -1;
 
   /* POINTER_ADDRESS is a location where the `_dl_auxv' variable
      resides.  DATA_ADDRESS is the inferior value present in
      `_dl_auxv', therefore the real inferior AUXV address.  */
 
-  pointer_address = BMSYMBOL_VALUE_ADDRESS (msym);
+  pointer_address = SYMBOL_VALUE_ADDRESS (msym);
 
   /* The location of the _dl_auxv symbol may no longer be correct if
      ld.so runs at a different address than the one present in the
@@ -128,26 +118,23 @@ ld_so_xfer_auxv (gdb_byte *readbuf,
      11440.  */
 
   if (target_read_memory (pointer_address, ptr_buf, ptr_size) != 0)
-    return TARGET_XFER_E_IO;
+    return -1;
 
   data_address = extract_typed_address (ptr_buf, ptr_type);
 
   /* Possibly still not initialized such as during an inferior
      startup.  */
   if (data_address == 0)
-    return TARGET_XFER_E_IO;
+    return -1;
 
   data_address += offset;
 
   if (writebuf != NULL)
     {
       if (target_write_memory (data_address, writebuf, len) == 0)
-	{
-	  *xfered_len = (ULONGEST) len;
-	  return TARGET_XFER_OK;
-	}
+	return len;
       else
-	return TARGET_XFER_E_IO;
+	return -1;
     }
 
   /* Stop if trying to read past the existing AUXV block.  The final
@@ -157,10 +144,10 @@ ld_so_xfer_auxv (gdb_byte *readbuf,
     {
       if (target_read_memory (data_address - auxv_pair_size, ptr_buf,
 			      ptr_size) != 0)
-	return TARGET_XFER_E_IO;
+	return -1;
 
       if (extract_typed_address (ptr_buf, ptr_type) == AT_NULL)
-	return TARGET_XFER_EOF;
+	return 0;
     }
 
   retval = 0;
@@ -179,12 +166,12 @@ ld_so_xfer_auxv (gdb_byte *readbuf,
 
       block &= -auxv_pair_size;
       if (block == 0)
-	break;
+	return retval;
 
       if (target_read_memory (data_address, readbuf, block) != 0)
 	{
 	  if (block <= auxv_pair_size)
-	    break;
+	    return retval;
 
 	  block = auxv_pair_size;
 	  continue;
@@ -202,31 +189,27 @@ ld_so_xfer_auxv (gdb_byte *readbuf,
 	  retval += auxv_pair_size;
 
 	  if (extract_typed_address (readbuf, ptr_type) == AT_NULL)
-	    {
-	      *xfered_len = (ULONGEST) retval;
-	      return TARGET_XFER_OK;
-	    }
+	    return retval;
 
 	  readbuf += auxv_pair_size;
 	  block -= auxv_pair_size;
 	}
     }
 
-  *xfered_len = (ULONGEST) retval;
-  return TARGET_XFER_OK;
+  return retval;
 }
 
-/* Implement the to_xfer_partial target_ops method for
-   TARGET_OBJECT_AUXV.  It handles access to AUXV.  */
+/* This function is called like a to_xfer_partial hook, but must be
+   called with TARGET_OBJECT_AUXV.  It handles access to AUXV.  */
 
-enum target_xfer_status
+LONGEST
 memory_xfer_auxv (struct target_ops *ops,
 		  enum target_object object,
 		  const char *annex,
 		  gdb_byte *readbuf,
 		  const gdb_byte *writebuf,
 		  ULONGEST offset,
-		  ULONGEST len, ULONGEST *xfered_len)
+		  LONGEST len)
 {
   gdb_assert (object == TARGET_OBJECT_AUXV);
   gdb_assert (readbuf || writebuf);
@@ -240,21 +223,21 @@ memory_xfer_auxv (struct target_ops *ops,
 
   if (current_inferior ()->attach_flag != 0)
     {
-      enum target_xfer_status ret;
+      LONGEST retval;
 
-      ret = ld_so_xfer_auxv (readbuf, writebuf, offset, len, xfered_len);
-      if (ret != TARGET_XFER_E_IO)
-	return ret;
+      retval = ld_so_xfer_auxv (readbuf, writebuf, offset, len);
+      if (retval != -1)
+	return retval;
     }
 
-  return procfs_xfer_auxv (readbuf, writebuf, offset, len, xfered_len);
+  return procfs_xfer_auxv (readbuf, writebuf, offset, len);
 }
 
 /* Read one auxv entry from *READPTR, not reading locations >= ENDPTR.
    Return 0 if *READPTR is already at the end of the buffer.
    Return -1 if there is insufficient buffer for a whole entry.
    Return 1 if an entry was read into *TYPEP and *VALP.  */
-int
+static int
 default_auxv_parse (struct target_ops *ops, gdb_byte **readptr,
 		   gdb_byte *endptr, CORE_ADDR *typep, CORE_ADDR *valp)
 {
@@ -286,13 +269,13 @@ int
 target_auxv_parse (struct target_ops *ops, gdb_byte **readptr,
                   gdb_byte *endptr, CORE_ADDR *typep, CORE_ADDR *valp)
 {
-  struct gdbarch *gdbarch = target_gdbarch();
+  struct target_ops *t;
 
-  if (gdbarch_auxv_parse_p (gdbarch))
-    return gdbarch_auxv_parse (gdbarch, readptr, endptr, typep, valp);
-
-  return current_target.to_auxv_parse (&current_target, readptr, endptr,
-				       typep, valp);
+  for (t = ops; t != NULL; t = t->beneath)
+    if (t->to_auxv_parse != NULL)
+      return t->to_auxv_parse (t, readptr, endptr, typep, valp);
+  
+  return default_auxv_parse (ops, readptr, endptr, typep, valp);
 }
 
 
@@ -358,7 +341,7 @@ get_auxv_inferior_data (struct target_ops *ops)
   info = inferior_data (inf, auxv_inferior_data);
   if (info == NULL)
     {
-      info = XCNEW (struct auxv_info);
+      info = XZALLOC (struct auxv_info);
       info->length = target_read_alloc (ops, TARGET_OBJECT_AUXV,
 					NULL, &info->data);
       set_inferior_data (inf, auxv_inferior_data, info);
@@ -459,7 +442,6 @@ fprint_target_auxv (struct ui_file *file, struct target_ops *ops)
 	  TAG (AT_IGNOREPPC, _("Entry should be ignored"), dec);
 	  TAG (AT_BASE_PLATFORM, _("String identifying base platform"), str);
 	  TAG (AT_RANDOM, _("Address of 16 random bytes"), hex);
-	  TAG (AT_HWCAP2, _("Extension of AT_HWCAP"), hex);
 	  TAG (AT_EXECFN, _("File name of executable"), str);
 	  TAG (AT_SECURE, _("Boolean, was exec setuid-like?"), dec);
 	  TAG (AT_SYSINFO, _("Special system info/entry points"), hex);

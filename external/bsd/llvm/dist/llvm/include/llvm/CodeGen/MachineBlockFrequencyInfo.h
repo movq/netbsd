@@ -35,7 +35,7 @@ public:
 
   MachineBlockFrequencyInfo();
 
-  ~MachineBlockFrequencyInfo() override;
+  ~MachineBlockFrequencyInfo();
 
   void getAnalysisUsage(AnalysisUsage &AU) const override;
 

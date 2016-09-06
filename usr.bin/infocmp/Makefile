@@ -1,9 +1,9 @@
-#	$NetBSD: Makefile,v 1.3 2016/03/09 20:02:33 christos Exp $
+#	$NetBSD: Makefile,v 1.2 2013/08/11 06:48:46 dholland Exp $
 
 PROG=		infocmp
 
 CPPFLAGS+=	-I${.CURDIR}/../../lib/libterminfo
-LDADD+=		-lterminfo -lutil
-DPADD+=		${LIBTERMINFO} ${LIBUTIL}
+LDADD+=		-lterminfo
+DPADD+=		${LIBTERMINFO}
 
 .include <bsd.prog.mk>

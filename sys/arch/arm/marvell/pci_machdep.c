@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_machdep.c,v 1.10 2016/07/12 13:43:18 kiyohara Exp $	*/
+/*	$NetBSD: pci_machdep.c,v 1.8 2014/03/30 01:19:20 christos Exp $	*/
 /*
  * Copyright (c) 2008 KIYOHARA Takashi
  * All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.10 2016/07/12 13:43:18 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.8 2014/03/30 01:19:20 christos Exp $");
 
 #include "opt_mvsoc.h"
 #include "gtpci.h"
@@ -266,9 +266,6 @@ gtpci_mbus_conf_read(void *v, pcitag_t tag, int reg)
 	struct gtpci_softc *sc = v;
 	const pcireg_t addr = tag | reg;
 
-	if ((unsigned int)reg >= PCI_CONF_SIZE)
-		return -1;
-
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, GTPCI_MBUS_CA,
 	    addr | GTPCI_CA_CONFIGEN);
 	if ((addr | GTPCI_CA_CONFIGEN) !=
@@ -283,9 +280,6 @@ gtpci_mbus_conf_write(void *v, pcitag_t tag, int reg, pcireg_t data)
 {
 	struct gtpci_softc *sc = v;
 	pcireg_t addr = tag | (reg & 0xfc);
-
-	if ((unsigned int)reg >= PCI_CONF_SIZE)
-		return;
 
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, GTPCI_MBUS_CA,
 	    addr | GTPCI_CA_CONFIGEN);
@@ -352,8 +346,7 @@ gtpci_gpp_intr_establish(void *v, pci_intr_handle_t int_pin, int ipl,
 	int2gpp = prop_dictionary_get(device_properties(sc->sc_dev), "int2gpp");
 	gpp = prop_array_get(int2gpp, int_pin);
 	gpp_pin = prop_number_integer_value(gpp);
-	return mvsocgpp_intr_establish(gpp_pin, ipl, IST_LEVEL_LOW, intrhand,
-	    intrarg);
+	return mvsocgpp_intr_establish(gpp_pin, ipl, 0, intrhand, intrarg);
 }
 
 static void
@@ -380,9 +373,6 @@ mvpex_mbus_conf_read(void *v, pcitag_t tag, int reg)
 	pcireg_t addr, data, pci_cs;
 	uint32_t stat;
 	int bus, dev, func, pexbus, pexdev;
-
-	if ((unsigned int)reg >= PCI_CONF_SIZE)
-		return -1;
 
 	mvpex_decompose_tag(v, tag, &bus, &dev, &func);
 

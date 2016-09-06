@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.186 2016/01/24 22:49:08 christos Exp $
+#	$NetBSD: Makefile,v 1.177 2014/08/10 05:57:31 matt Exp $
 
 .include <bsd.own.mk>
 .include <bsd.endian.mk>
@@ -95,9 +95,9 @@ dependall-binstall: dependall-compat
 # See above for special treatment for host-mkdep, compat, and binstall.
 #
 SUBDIR=	host-mkdep compat binstall \
-	.WAIT mktemp .WAIT sed .WAIT genassym
+	.WAIT mktemp .WAIT sed .WAIT
 .if ${TOOLS_BUILDRUMP} == "no"
-SUBDIR+= cap_mkdb crunchgen ctags gencat hexdump \
+SUBDIR+= cap_mkdb crunchgen ctags genassym gencat hexdump \
 		${LINT_BITS} \
 		makewhatis mtree nbperf .WAIT uudecode
 .endif
@@ -112,9 +112,8 @@ SUBDIR += .WAIT texinfo \
 	${DTRACE_BITS} \
 		asn1_compile cksum compile_et db \
 		file lint1 slc \
-		makefs sortinfo \
-		.WAIT menuc mkcsmapper mkesdb mklocale mknod msgc \
-		.WAIT disklabel gpt \
+		makefs .WAIT menuc mkcsmapper mkesdb mklocale mknod msgc \
+		.WAIT disklabel \
 		.WAIT paxctl \
 		.WAIT fdisk \
 		.WAIT installboot \
@@ -211,13 +210,6 @@ SUBDIR+=	elftosb
     ${MACHINE} == "evbppc" || ${MACHINE} == "sandpoint"
 SUBDIR+=	mkubootimage
 .endif
-
-.if ${MKX11} != "no"
-SUBDIR+=	makestrs
-SUBDIR+=	makekeys
-.endif
-
-SUBDIR+= cvslatest
 
 .endif # TOOLCHAIN_BUILDRUMP
 

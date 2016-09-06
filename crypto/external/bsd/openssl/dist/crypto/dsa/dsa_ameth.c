@@ -275,7 +275,7 @@ static int dsa_priv_decode(EVP_PKEY *pkey, PKCS8_PRIV_KEY_INFO *p8)
  done:
     BN_CTX_free(ctx);
     if (ndsa)
-        sk_ASN1_TYPE_pop_free(ndsa, ASN1_TYPE_free);
+    sk_ASN1_TYPE_pop_free(ndsa, ASN1_TYPE_free);
     else
         ASN1_STRING_clear_free(privkey);
     return ret;

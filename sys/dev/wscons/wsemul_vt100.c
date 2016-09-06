@@ -1,4 +1,4 @@
-/* $NetBSD: wsemul_vt100.c,v 1.37 2015/08/24 22:50:33 pooka Exp $ */
+/* $NetBSD: wsemul_vt100.c,v 1.36 2013/10/19 21:01:39 mrg Exp $ */
 
 /*
  * Copyright (c) 1998
@@ -27,11 +27,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsemul_vt100.c,v 1.37 2015/08/24 22:50:33 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsemul_vt100.c,v 1.36 2013/10/19 21:01:39 mrg Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_wsmsgattrs.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>

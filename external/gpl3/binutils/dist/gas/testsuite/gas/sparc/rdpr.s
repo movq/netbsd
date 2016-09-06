@@ -18,4 +18,3 @@
 	rdpr %fq,%l0
 	rdpr %gl,%l1
 	rdpr %ver,%l2
-	rdpr %pmcdper,%l3

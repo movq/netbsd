@@ -1,4 +1,4 @@
-/*	$NetBSD: strncat_chk.c,v 1.5 2014/09/17 00:39:28 joerg Exp $	*/
+/*	$NetBSD: strncat_chk.c,v 1.4 2009/11/17 20:44:26 drochner Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -29,16 +29,13 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: strncat_chk.c,v 1.5 2014/09/17 00:39:28 joerg Exp $");
+__RCSID("$NetBSD: strncat_chk.c,v 1.4 2009/11/17 20:44:26 drochner Exp $");
 
 /*LINTLIBRARY*/
 
 #include <ssp/ssp.h>
 #include <string.h>
 #include <stdio.h>
-
-char *__strncat_chk(char * __restrict, const char * __restrict, size_t,
-    size_t);
 
 char *
 __strncat_chk(char * __restrict dst, const char * __restrict src, size_t len,

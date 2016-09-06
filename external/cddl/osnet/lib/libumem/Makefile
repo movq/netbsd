@@ -1,6 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2016/08/04 17:07:24 christos Exp $
-
-.include <bsd.init.mk>
+#	$NetBSD: Makefile,v 1.5 2010/05/10 06:27:57 haad Exp $
 
 LIB=	umem
 SRCS=	umem.c

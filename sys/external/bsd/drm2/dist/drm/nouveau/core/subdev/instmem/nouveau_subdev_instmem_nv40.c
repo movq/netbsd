@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_subdev_instmem_nv40.c,v 1.3 2016/02/15 19:36:35 riastradh Exp $	*/
+/*	$NetBSD: nouveau_subdev_instmem_nv40.c,v 1.1.1.1.4.2 2016/04/15 08:46:42 snj Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_instmem_nv40.c,v 1.3 2016/02/15 19:36:35 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_instmem_nv40.c,v 1.1.1.1.4.2 2016/04/15 08:46:42 snj Exp $");
 
 #include <engine/graph/nv40.h>
 

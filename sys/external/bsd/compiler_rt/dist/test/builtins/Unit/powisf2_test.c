@@ -17,7 +17,7 @@
 
 // Returns: a ^ b
 
-COMPILER_RT_ABI float __powisf2(float a, si_int b);
+float __powisf2(float a, si_int b);
 
 int test__powisf2(float a, si_int b, float expected)
 {

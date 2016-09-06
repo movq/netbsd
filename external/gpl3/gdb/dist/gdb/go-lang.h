@@ -1,6 +1,6 @@
 /* Go language support definitions for GDB, the GNU debugger.
 
-   Copyright (C) 2012-2015 Free Software Foundation, Inc.
+   Copyright (C) 2012-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,8 +25,6 @@ struct type_print_options;
 #include "gdbtypes.h"
 #include "symtab.h"
 #include "value.h"
-
-struct parser_state;
 
 struct builtin_go_type
 {
@@ -58,7 +56,7 @@ enum go_type
 
 /* Defined in go-exp.y.  */
 
-extern int go_parse (struct parser_state *);
+extern int go_parse (void);
 
 extern void go_error (char *);
 

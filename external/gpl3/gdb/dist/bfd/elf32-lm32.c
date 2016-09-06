@@ -1,5 +1,5 @@
 /* Lattice Mico32-specific support for 32-bit ELF
-   Copyright (C) 2008-2015 Free Software Foundation, Inc.
+   Copyright 2008, 2009, 2010, 2011, 2012 Free Software Foundation, Inc.
    Contributed by Jon Beniston <jon@beniston.com>
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -43,9 +43,9 @@
 
 #define ELF_DYNAMIC_INTERPRETER "/usr/lib/libc.so.1"
 
-extern const bfd_target lm32_elf32_fdpic_vec;
+extern const bfd_target bfd_elf32_lm32fdpic_vec;
 
-#define IS_FDPIC(bfd) ((bfd)->xvec == &lm32_elf32_fdpic_vec)
+#define IS_FDPIC(bfd) ((bfd)->xvec == &bfd_elf32_lm32fdpic_vec)
 
 static bfd_reloc_status_type lm32_elf_gprel_reloc
   (bfd *, arelent *, asymbol *, void *, asection *, bfd *, char **);
@@ -262,11 +262,11 @@ static reloc_howto_type lm32_elf_howto_table [] =
   /* This reloc does nothing.  */
   HOWTO (R_LM32_NONE,               /* type */
          0,                         /* rightshift */
-         3,                         /* size (0 = byte, 1 = short, 2 = long) */
-         0,                         /* bitsize */
+         2,                         /* size (0 = byte, 1 = short, 2 = long) */
+         32,                        /* bitsize */
          FALSE,                     /* pc_relative */
          0,                         /* bitpos */
-         complain_overflow_dont,    /* complain_on_overflow */
+         complain_overflow_bitfield,/* complain_on_overflow */
          bfd_elf_generic_reloc,     /* special_function */
          "R_LM32_NONE",             /* name */
          FALSE,                     /* partial_inplace */
@@ -588,11 +588,7 @@ lm32_info_to_howto_rela (bfd *abfd ATTRIBUTE_UNUSED,
   unsigned int r_type;
 
   r_type = ELF32_R_TYPE (dst->r_info);
-  if (r_type >= (unsigned int) R_LM32_max)
-    {
-      _bfd_error_handler (_("%B: invalid LM32 reloc number: %d"), abfd, r_type);
-      r_type = 0;
-    }
+  BFD_ASSERT (r_type < (unsigned int) R_LM32_max);
   cache_ptr->howto = &lm32_elf_howto_table[r_type];
 }
 
@@ -1896,7 +1892,7 @@ lm32_elf_adjust_dynamic_symbol (struct bfd_link_info *info,
       h->needs_copy = 1;
     }
 
-  return _bfd_elf_adjust_dynamic_copy (info, h, s);
+  return _bfd_elf_adjust_dynamic_copy (h, s);
 }
 
 /* Allocate space in .plt, .got and associated reloc sections for
@@ -2150,7 +2146,7 @@ lm32_elf_size_dynamic_sections (bfd *output_bfd,
 
   /* Set up .got offsets for local syms, and space for local dynamic
      relocs.  */
-  for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
+  for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link_next)
     {
       bfd_signed_vma *local_got;
       bfd_signed_vma *end_local_got;
@@ -2328,7 +2324,7 @@ lm32_elf_size_dynamic_sections (bfd *output_bfd,
       int r32_count = 0;
       int rgot_count = 0;
       /* Look for deleted sections.  */
-      for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
+      for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link_next)
         {
           for (s = ibfd->sections; s != NULL; s = s->next)
             {
@@ -2678,7 +2674,7 @@ lm32_elf_fdpic_copy_private_bfd_data (bfd *ibfd, bfd *obfd)
 #define ELF_MACHINE_CODE        EM_LATTICEMICO32
 #define ELF_MAXPAGESIZE         0x1000
 
-#define TARGET_BIG_SYM          lm32_elf32_vec
+#define TARGET_BIG_SYM          bfd_elf32_lm32_vec
 #define TARGET_BIG_NAME         "elf32-lm32"
 
 #define bfd_elf32_bfd_reloc_type_lookup         lm32_reloc_type_lookup
@@ -2716,7 +2712,7 @@ lm32_elf_fdpic_copy_private_bfd_data (bfd *ibfd, bfd *obfd)
 
 
 #undef  TARGET_BIG_SYM
-#define TARGET_BIG_SYM          lm32_elf32_fdpic_vec
+#define TARGET_BIG_SYM          bfd_elf32_lm32fdpic_vec
 #undef  TARGET_BIG_NAME
 #define TARGET_BIG_NAME		"elf32-lm32fdpic"
 #undef	elf32_bed

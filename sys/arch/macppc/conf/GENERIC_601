@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC_601,v 1.8 2016/06/10 21:32:46 macallan Exp $
+# $NetBSD: GENERIC_601,v 1.1.8.1 2015/05/15 03:44:18 snj Exp $
 #
 # GENERIC machine description file
 # 
@@ -28,7 +28,7 @@ include		"arch/macppc/conf/std.macppc.601"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-ident 		"GENERIC-$Revision: 1.8 $"
+ident 		"GENERIC-$Revision: 1.1.8.1 $"
 
 maxusers	32
 
@@ -68,9 +68,8 @@ options		DDB_COMMANDONENTER="bt"
 #makeoptions 	DEBUG="-g"	# compile full symbol table
 
 # Compatibility options
-options 	COMPAT_50	# NetBSD 5.0,
-options 	COMPAT_60	# NetBSD 6.0, and
-options 	COMPAT_70	# NetBSD 7.0 binary compatibility.
+options 	COMPAT_50	# NetBSD 5.0 compatibility.
+options 	COMPAT_60	# NetBSD 6.0 compatibility.
 #options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	COMPAT_LINUX	# Linux binary compatibility
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
@@ -79,9 +78,9 @@ options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 # Wedge support
 options         DKWEDGE_AUTODISCOVER    # Automatically add dk(4) instances
 options         DKWEDGE_METHOD_GPT      # Supports GPT partitions as wedges
-#options		DKWEDGE_METHOD_BSDLABEL # Support disklabel entries as wedges
-#options		DKWEDGE_METHOD_MBR      # Support MBR partitions as wedges
-options		DKWEDGE_METHOD_APPLE    # Support Apple partitions as wedges
+# The following two options can break /etc/fstab, so handle with care
+#options        DKWEDGE_METHOD_BSDLABEL # Support disklabel entries as wedges
+#options        DKWEDGE_METHOD_MBR      # Support MBR partitions as wedges
 
 # File systems
 file-system 	FFS		# UFS
@@ -216,15 +215,11 @@ ppb*	at pci? dev ? function ?	# PCI-PCI bridges
 
 # Display devices
 #
-# The 7200's onboard video is unsupported by OF so we need either a
+# The 7200's onboard video is unsupported ( by OF no less ) so we need either a
 # graphics card that works as OF console or a serial console.
 # The only cards known to work ( so far ) are PCI Voodoo3s flashed with the
 # official Macintosh firmware from 3Dfx. The others should work but are
 # untested with OF 1.0.5
-
-# this will take over the console if output-device is set to 'screen' or
-# 'platinum'. It will provide a NetBSD console, but still won't work with OF
-platinumfb0 	at mainbus?
 
 #gffb*		at pci?	function ?	# NVIDIA GeForce2 MX
 #machfb*		at pci? function ?	# ATI Mach 64, Rage, Rage Pro
@@ -233,6 +228,7 @@ voodoofb*	at pci? function ?	# 3Dfx Voodoo3
 
 # ATI Radeon. Still has problems on some hardware
 #radeonfb*	at pci? function ?
+#options 	RADEONFB_MMAP_BARS	# allow mmap()ing BARs - needed for X
 
 # generic PCI framebuffer, should work with everything supported by OF
 genfb*		at pci? function ?

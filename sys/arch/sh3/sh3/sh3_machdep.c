@@ -1,4 +1,4 @@
-/*	$NetBSD: sh3_machdep.c,v 1.103 2015/11/22 18:44:25 tsutsui Exp $	*/
+/*	$NetBSD: sh3_machdep.c,v 1.102.4.1 2015/12/26 22:14:41 snj Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1998, 2002 The NetBSD Foundation, Inc.
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sh3_machdep.c,v 1.103 2015/11/22 18:44:25 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sh3_machdep.c,v 1.102.4.1 2015/12/26 22:14:41 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"

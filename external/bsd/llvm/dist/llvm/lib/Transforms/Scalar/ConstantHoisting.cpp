@@ -43,7 +43,6 @@
 #include "llvm/IR/IntrinsicInst.h"
 #include "llvm/Pass.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/raw_ostream.h"
 #include <tuple>
 
 using namespace llvm;
@@ -132,14 +131,14 @@ public:
   void getAnalysisUsage(AnalysisUsage &AU) const override {
     AU.setPreservesCFG();
     AU.addRequired<DominatorTreeWrapperPass>();
-    AU.addRequired<TargetTransformInfoWrapperPass>();
+    AU.addRequired<TargetTransformInfo>();
   }
 
 private:
   /// \brief Initialize the pass.
   void setup(Function &Fn) {
     DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
-    TTI = &getAnalysis<TargetTransformInfoWrapperPass>().getTTI(Fn);
+    TTI = &getAnalysis<TargetTransformInfo>();
     Entry = &Fn.getEntryBlock();
   }
 
@@ -177,7 +176,7 @@ char ConstantHoisting::ID = 0;
 INITIALIZE_PASS_BEGIN(ConstantHoisting, "consthoist", "Constant Hoisting",
                       false, false)
 INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
-INITIALIZE_PASS_DEPENDENCY(TargetTransformInfoWrapperPass)
+INITIALIZE_AG_DEPENDENCY(TargetTransformInfo)
 INITIALIZE_PASS_END(ConstantHoisting, "consthoist", "Constant Hoisting",
                     false, false)
 
@@ -187,9 +186,6 @@ FunctionPass *llvm::createConstantHoistingPass() {
 
 /// \brief Perform the constant hoisting optimization for the given function.
 bool ConstantHoisting::runOnFunction(Function &Fn) {
-  if (skipOptnoneFunction(Fn))
-    return false;
-
   DEBUG(dbgs() << "********** Begin Constant Hoisting **********\n");
   DEBUG(dbgs() << "********** Function: " << Fn.getName() << '\n');
 
@@ -223,10 +219,10 @@ Instruction *ConstantHoisting::findMatInsertPt(Instruction *Inst,
   }
 
   // The simple and common case. This also includes constant expressions.
-  if (!isa<PHINode>(Inst) && !Inst->isEHPad())
+  if (!isa<PHINode>(Inst) && !isa<LandingPadInst>(Inst))
     return Inst;
 
-  // We can't insert directly before a phi node or an eh pad. Insert before
+  // We can't insert directly before a phi node or landing pad. Insert before
   // the terminator of the incoming or dominating block.
   assert(Entry != Inst->getParent() && "PHI or landing pad in entry block!");
   if (Idx != ~0U && isa<PHINode>(Inst))
@@ -365,9 +361,9 @@ void ConstantHoisting::collectConstantCandidates(ConstCandMapType &ConstCandMap,
 /// into an instruction itself.
 void ConstantHoisting::collectConstantCandidates(Function &Fn) {
   ConstCandMapType ConstCandMap;
-  for (BasicBlock &BB : Fn)
-    for (Instruction &Inst : BB)
-      collectConstantCandidates(ConstCandMap, &Inst);
+  for (Function::iterator BB : Fn)
+    for (BasicBlock::iterator Inst : *BB)
+      collectConstantCandidates(ConstCandMap, Inst);
 }
 
 /// \brief Find the base constant within the given range and rebase all other

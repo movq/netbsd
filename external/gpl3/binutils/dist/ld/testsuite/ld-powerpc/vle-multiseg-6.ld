@@ -16,6 +16,7 @@ SECTIONS
   }
   .text_vle	0x00001000 :
   {
+	. = ALIGN(16);
 	INPUT_SECTION_FLAGS (SHF_PPC_VLE) *(.text*)
 	INPUT_SECTION_FLAGS (SHF_PPC_VLE) *(.init*)
 	INPUT_SECTION_FLAGS (SHF_PPC_VLE) *(.fini*)
@@ -23,12 +24,14 @@ SECTIONS
 
   .text_iv	0x100000 :
   {
+	. = ALIGN(16);
 	INPUT_SECTION_FLAGS (SHF_PPC_VLE) *(.text_iv)
 	INPUT_SECTION_FLAGS (SHF_PPC_VLE) *(.iv_handlers)
   } >vle_seg2
 
   .text 	0x101000 :
   {
+	. = ALIGN(16);
 	INPUT_SECTION_FLAGS (!SHF_PPC_VLE) *(.text*)
   }
 }

@@ -1,6 +1,6 @@
 /* Target-dependent code for NetBSD/sparc.
 
-   Copyright (C) 2002-2015 Free Software Foundation, Inc.
+   Copyright (C) 2002-2014 Free Software Foundation, Inc.
    Contributed by Wasabi Systems, Inc.
 
    This file is part of GDB.
@@ -30,6 +30,9 @@
 #include "symtab.h"
 #include "trad-frame.h"
 
+#include "gdb_assert.h"
+#include <string.h>
+
 #include "sparc-tdep.h"
 #include "nbsd-tdep.h"
 
@@ -38,7 +41,7 @@
 #define X_RS2(i) ((i) & 0x1f)
 #define X_I(i) (((i) >> 13) & 1)
 
-const struct sparc_gregmap sparc32nbsd_gregmap =
+const struct sparc_gregset sparc32nbsd_gregset =
 {
   0 * 4,			/* %psr */
   1 * 4,			/* %pc */
@@ -55,13 +58,13 @@ sparc32nbsd_supply_gregset (const struct regset *regset,
 			    struct regcache *regcache,
 			    int regnum, const void *gregs, size_t len)
 {
-  sparc32_supply_gregset (&sparc32nbsd_gregmap, regcache, regnum, gregs);
+  sparc32_supply_gregset (&sparc32nbsd_gregset, regcache, regnum, gregs);
 
   /* Traditional NetBSD core files don't use multiple register sets.
      Instead, the general-purpose and floating-point registers are
      lumped together in a single section.  */
   if (len >= 212)
-    sparc32_supply_fpregset (&sparc32_bsd_fpregmap, regcache, regnum,
+    sparc32_supply_fpregset (&sparc32_bsd_fpregset, regcache, regnum,
 			     (const char *) gregs + 80);
 }
 
@@ -70,7 +73,7 @@ sparc32nbsd_supply_fpregset (const struct regset *regset,
 			     struct regcache *regcache,
 			     int regnum, const void *fpregs, size_t len)
 {
-  sparc32_supply_fpregset (&sparc32_bsd_fpregmap, regcache, regnum, fpregs);
+  sparc32_supply_fpregset (&sparc32_bsd_fpregset, regcache, regnum, fpregs);
 }
 
 
@@ -241,7 +244,7 @@ sparc32nbsd_sigcontext_frame_sniffer (const struct frame_unwind *self,
   find_pc_partial_function (pc, &name, NULL, NULL);
   if (sparc32nbsd_pc_in_sigtramp (pc, name))
     {
-      if (name == NULL || !startswith (name, "__sigtramp_sigcontext"))
+      if (name == NULL || strncmp (name, "__sigtramp_sigcontext", 21))
 	return 1;
     }
 
@@ -280,16 +283,6 @@ sparcnbsd_step_trap (struct frame_info *frame, unsigned long insn)
 }
 
 
-static const struct regset sparc32nbsd_gregset =
-  {
-    NULL, sparc32nbsd_supply_gregset, NULL
-  };
-
-static const struct regset sparc32nbsd_fpregset =
-  {
-    NULL, sparc32nbsd_supply_fpregset, NULL
-  };
-
 static void
 sparc32nbsd_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
@@ -299,10 +292,10 @@ sparc32nbsd_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   set_gdbarch_long_double_bit (gdbarch, 64);
   set_gdbarch_long_double_format (gdbarch, floatformats_ieee_double);
 
-  tdep->gregset = &sparc32nbsd_gregset;
+  tdep->gregset = regset_alloc (gdbarch, sparc32nbsd_supply_gregset, NULL);
   tdep->sizeof_gregset = 20 * 4;
 
-  tdep->fpregset = &sparc32nbsd_fpregset;
+  tdep->fpregset = regset_alloc (gdbarch, sparc32nbsd_supply_fpregset, NULL);
   tdep->sizeof_fpregset = 33 * 4;
 
   /* Make sure we can single-step "new" syscalls.  */

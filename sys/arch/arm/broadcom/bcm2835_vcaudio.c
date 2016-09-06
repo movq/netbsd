@@ -1,4 +1,4 @@
-/* $NetBSD: bcm2835_vcaudio.c,v 1.10 2015/07/28 21:24:43 skrll Exp $ */
+/* $NetBSD: bcm2835_vcaudio.c,v 1.3.4.2 2015/03/15 22:55:47 snj Exp $ */
 
 /*-
  * Copyright (c) 2013 Jared D. McNeill <jmcneill@invisible.ca>
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_vcaudio.c,v 1.10 2015/07/28 21:24:43 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_vcaudio.c,v 1.3.4.2 2015/03/15 22:55:47 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -81,22 +81,20 @@ enum vcaudio_dest {
 	VCAUDIO_DEST_HDMI = 2,
 };
 
+
 /*
- * Maximum message size is 4000 bytes and VCHIQ can accept 16 messages.
+ * Standard message size is 4000 bytes and VCHIQ can accept 16 messages.
  *
  * 4000 bytes of 16bit 48kHz stereo is approximately 21ms.
  *
  * We get complete messages at ~10ms intervals.
  *
- * Setting blocksize to 4 x 1600 means that we send approx 33ms of audio. We
- * prefill by two blocks before starting audio meaning we have 50ms of latency.
- * 
- * Six messages of 1600 bytes was chosen working back from a desired latency of
- * 50ms.
+ * Setting blocksize to 2 x 4000 means that we send approx 42ms of audio. We
+ * prefill by two blocks before starting audio meaning we have 83ms of latency.
  */
 
-#define VCAUDIO_MSGSIZE		1600
-#define VCAUDIO_NUMMSGS		4
+#define VCAUDIO_MSGSIZE		4000
+#define VCAUDIO_NUMMSGS		2
 #define VCAUDIO_BLOCKSIZE	(VCAUDIO_MSGSIZE * VCAUDIO_NUMMSGS)
 #define VCAUDIO_BUFFERSIZE	128000
 #define VCAUDIO_PREFILLCOUNT	2

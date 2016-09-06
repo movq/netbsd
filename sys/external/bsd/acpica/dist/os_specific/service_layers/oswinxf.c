@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -64,6 +64,7 @@
         ACPI_MODULE_NAME    ("oswinxf")
 
 
+FILE                        *AcpiGbl_OutputFile;
 UINT64                      TimerFrequency;
 char                        TableName[ACPI_NAME_SIZE + 1];
 
@@ -71,6 +72,10 @@ char                        TableName[ACPI_NAME_SIZE + 1];
 
 
 /* Upcalls to AcpiExec application */
+
+ACPI_PHYSICAL_ADDRESS
+AeLocalGetRootPointer (
+    void);
 
 void
 AeTableOverride (
@@ -101,7 +106,6 @@ ACPI_OS_SEMAPHORE_INFO          AcpiGbl_Semaphores[ACPI_OS_MAX_SEMAPHORES];
 #endif /* ACPI_SINGLE_THREADED */
 
 BOOLEAN                         AcpiGbl_DebugTimeout = FALSE;
-
 
 /******************************************************************************
  *
@@ -139,7 +143,6 @@ ACPI_STATUS
 AcpiOsInitialize (
     void)
 {
-    ACPI_STATUS             Status;
     LARGE_INTEGER           LocalTimerFrequency;
 
 
@@ -161,17 +164,10 @@ AcpiOsInitialize (
         TimerFrequency = LocalTimerFrequency.QuadPart;
     }
 
-    Status = AcpiOsCreateLock (&AcpiGbl_PrintLock);
-    if (ACPI_FAILURE (Status))
-    {
-        return (Status);
-    }
-
     return (AE_OK);
 }
 
 
-#ifndef ACPI_USE_NATIVE_RSDP_POINTER
 /******************************************************************************
  *
  * FUNCTION:    AcpiOsGetRootPointer
@@ -189,9 +185,8 @@ AcpiOsGetRootPointer (
     void)
 {
 
-    return (0);
+    return (AeLocalGetRootPointer ());
 }
-#endif
 
 
 /******************************************************************************
@@ -243,6 +238,10 @@ AcpiOsTableOverride (
     ACPI_TABLE_HEADER       *ExistingTable,
     ACPI_TABLE_HEADER       **NewTable)
 {
+#ifdef ACPI_ASL_COMPILER
+    ACPI_STATUS             Status;
+    ACPI_PHYSICAL_ADDRESS   Address;
+#endif
 
     if (!ExistingTable || !NewTable)
     {
@@ -257,6 +256,29 @@ AcpiOsTableOverride (
     /* Call back up to AcpiExec */
 
     AeTableOverride (ExistingTable, NewTable);
+#endif
+
+
+#ifdef ACPI_ASL_COMPILER
+
+    /* Attempt to get the table from the registry */
+
+    /* Construct a null-terminated string from table signature */
+
+    ACPI_MOVE_NAME (TableName, ExistingTable->Signature);
+    TableName[ACPI_NAME_SIZE] = 0;
+
+    Status = AcpiOsGetTableByName (TableName, 0, NewTable, &Address);
+    if (ACPI_SUCCESS (Status))
+    {
+        AcpiOsPrintf ("Table [%s] obtained from registry, %u bytes\n",
+            TableName, (*NewTable)->Length);
+    }
+    else
+    {
+        AcpiOsPrintf ("Could not read table %s from registry (%s)\n",
+            TableName, AcpiFormatException (Status));
+    }
 #endif
 
     return (AE_OK);
@@ -555,12 +577,10 @@ AcpiOsGetLine (
     {
         *BytesRead = i;
     }
-
     return (AE_OK);
 }
 
 
-#ifndef ACPI_USE_NATIVE_MEMORY_MAPPING
 /******************************************************************************
  *
  * FUNCTION:    AcpiOsMapMemory
@@ -606,7 +626,6 @@ AcpiOsUnmapMemory (
 
     return;
 }
-#endif
 
 
 /******************************************************************************
@@ -629,34 +648,9 @@ AcpiOsAllocate (
 
 
     Mem = (void *) malloc ((size_t) Size);
+
     return (Mem);
 }
-
-
-#ifdef USE_NATIVE_ALLOCATE_ZEROED
-/******************************************************************************
- *
- * FUNCTION:    AcpiOsAllocateZeroed
- *
- * PARAMETERS:  Size                - Amount to allocate, in bytes
- *
- * RETURN:      Pointer to the new allocation. Null on error.
- *
- * DESCRIPTION: Allocate and zero memory. Algorithm is dependent on the OS.
- *
- *****************************************************************************/
-
-void *
-AcpiOsAllocateZeroed (
-    ACPI_SIZE               Size)
-{
-    void                    *Mem;
-
-
-    Mem = (void *) calloc (1, (size_t) Size);
-    return (Mem);
-}
-#endif
 
 
 /******************************************************************************
@@ -779,8 +773,7 @@ AcpiOsCreateSemaphore (
     if (i >= ACPI_OS_MAX_SEMAPHORES)
     {
         ACPI_EXCEPTION ((AE_INFO, AE_LIMIT,
-            "Reached max semaphores (%u), could not create",
-            ACPI_OS_MAX_SEMAPHORES));
+            "Reached max semaphores (%u), could not create", ACPI_OS_MAX_SEMAPHORES));
         return (AE_LIMIT);
     }
 
@@ -797,9 +790,8 @@ AcpiOsCreateSemaphore (
     AcpiGbl_Semaphores[i].CurrentUnits = (UINT16) InitialUnits;
     AcpiGbl_Semaphores[i].OsHandle = Mutex;
 
-    ACPI_DEBUG_PRINT ((ACPI_DB_MUTEX,
-        "Handle=%u, Max=%u, Current=%u, OsHandle=%p\n",
-        i, MaxUnits, InitialUnits, Mutex));
+    ACPI_DEBUG_PRINT ((ACPI_DB_MUTEX, "Handle=%u, Max=%u, Current=%u, OsHandle=%p\n",
+            i, MaxUnits, InitialUnits, Mutex));
 
     *OutHandle = (void *) i;
     return (AE_OK);
@@ -894,8 +886,7 @@ AcpiOsWaitSemaphore (
         OsTimeout += 10;
     }
 
-    WaitStatus = WaitForSingleObject (
-        AcpiGbl_Semaphores[Index].OsHandle, OsTimeout);
+    WaitStatus = WaitForSingleObject (AcpiGbl_Semaphores[Index].OsHandle, OsTimeout);
     if (WaitStatus == WAIT_TIMEOUT)
     {
         if (AcpiGbl_DebugTimeout)
@@ -904,14 +895,12 @@ AcpiOsWaitSemaphore (
                 "Debug timeout on semaphore 0x%04X (%ums)\n",
                 Index, ACPI_OS_DEBUG_TIMEOUT));
         }
-
         return (AE_TIME);
     }
 
     if (AcpiGbl_Semaphores[Index].CurrentUnits == 0)
     {
-        ACPI_ERROR ((AE_INFO,
-            "%s - No unit received. Timeout 0x%X, OS_Status 0x%X",
+        ACPI_ERROR ((AE_INFO, "%s - No unit received. Timeout 0x%X, OS_Status 0x%X",
             AcpiUtGetMutexName (Index), Timeout, WaitStatus));
 
         return (AE_OK);
@@ -1362,7 +1351,7 @@ AcpiOsWriteMemory (
  *
  * FUNCTION:    AcpiOsSignal
  *
- * PARAMETERS:  Function            - ACPICA signal function code
+ * PARAMETERS:  Function            - ACPI CA signal function code
  *              Info                - Pointer to function-dependent structure
  *
  * RETURN:      Status
@@ -1524,25 +1513,6 @@ AcpiOsExecute (
     return (0);
 }
 
-#else /* ACPI_SINGLE_THREADED */
-ACPI_THREAD_ID
-AcpiOsGetThreadId (
-    void)
-{
-    return (1);
-}
-
-ACPI_STATUS
-AcpiOsExecute (
-    ACPI_EXECUTE_TYPE       Type,
-    ACPI_OSD_EXEC_CALLBACK  Function,
-    void                    *Context)
-{
-
-    Function (Context);
-    return (AE_OK);
-}
-
 #endif /* ACPI_SINGLE_THREADED */
 
 
@@ -1563,6 +1533,5 @@ void
 AcpiOsWaitEventsComplete (
     void)
 {
-
     return;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: savefile.c,v 1.3 2015/03/31 21:39:42 christos Exp $	*/
+/*	$NetBSD: savefile.c,v 1.1.1.4 2013/12/31 16:57:18 christos Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994, 1995, 1996, 1997
@@ -30,8 +30,10 @@
  * dependent values so we can print the dump file on any architecture.
  */
 
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: savefile.c,v 1.3 2015/03/31 21:39:42 christos Exp $");
+#ifndef lint
+static const char rcsid[] _U_ =
+    "@(#) Header: /tcpdump/master/libpcap/savefile.c,v 1.183 2008-12-23 20:13:29 guy Exp  (LBL)";
+#endif
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -223,14 +225,14 @@ pcap_t* pcap_hopen_offline_with_tstamp_precision(intptr_t osfd, u_int precision,
 	FILE *file;
 
 	fd = _open_osfhandle(osfd, _O_RDONLY);
-	if ( fd < 0 )
+	if ( fd < 0 ) 
 	{
 		snprintf(errbuf, PCAP_ERRBUF_SIZE, pcap_strerror(errno));
 		return NULL;
 	}
 
 	file = _fdopen(fd, "rb");
-	if ( file == NULL )
+	if ( file == NULL ) 
 	{
 		snprintf(errbuf, PCAP_ERRBUF_SIZE, pcap_strerror(errno));
 		return NULL;
@@ -348,11 +350,6 @@ found:
 	 * be used for pcap_next()/pcap_next_ex().
 	 */
 	p->oneshot_callback = pcap_oneshot;
-
-	/*
-	 * Savefiles never require special BPF code generation.
-	 */
-	p->bpf_codegen_flags = 0;
 
 	p->activated = 1;
 

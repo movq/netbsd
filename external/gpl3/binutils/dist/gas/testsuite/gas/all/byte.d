@@ -1,4 +1,5 @@
 #name: bad byte directive
 #error-output: byte.l
-# Quoted expressions are now allowed in .byte (and similar) expressions.
-#skip: *-*-*
+# The RX target allows quoted ASCII strings inside .byte directives
+# for compatibily with the Renesas assembler.
+#skip: rx-*-*

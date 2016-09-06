@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_display.c,v 1.15 2016/04/03 10:32:47 mlelstv Exp $	*/
+/*	$NetBSD: acpi_display.c,v 1.11 2014/02/25 18:30:09 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_display.c,v 1.15 2016/04/03 10:32:47 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_display.c,v 1.11 2014/02/25 18:30:09 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -785,31 +785,24 @@ acpidisp_out_capabilities(const struct acpi_devnode *ad)
 
 	cap = 0;
 
-	/* List of Brigthness levels */
 	if (acpidisp_has_method(ad->ad_handle, "_BCL", ACPI_TYPE_PACKAGE))
 		cap |= ACPI_DISP_OUT_CAP__BCL;
 
-	/* Set brightness level */
 	if (acpidisp_has_method(ad->ad_handle, "_BCM", ACPI_TYPE_METHOD))
 		cap |= ACPI_DISP_OUT_CAP__BCM;
 
-	/* Get brightless level */
 	if (acpidisp_has_method(ad->ad_handle, "_BQC", ACPI_TYPE_INTEGER))
 		cap |= ACPI_DISP_OUT_CAP__BQC;
 
-	/* Return EDID */
 	if (acpidisp_has_method(ad->ad_handle, "_DDC", ACPI_TYPE_METHOD))
 		cap |= ACPI_DISP_OUT_CAP__DDC;
 
-	/* Get Status */
 	if (acpidisp_has_method(ad->ad_handle, "_DCS", ACPI_TYPE_INTEGER))
 		cap |= ACPI_DISP_OUT_CAP__DCS;
 
-	/* Get Graphics State */
 	if (acpidisp_has_method(ad->ad_handle, "_DGS", ACPI_TYPE_INTEGER))
 		cap |= ACPI_DISP_OUT_CAP__DGS;
 
-	/* Set Graphics State */
 	if (acpidisp_has_method(ad->ad_handle, "_DSS", ACPI_TYPE_METHOD))
 		cap |= ACPI_DISP_OUT_CAP__DSS;
 
@@ -1878,40 +1871,16 @@ acpidisp_print_odinfo(device_t self, const struct acpidisp_odinfo *oi)
 	}
 }
 
-/*
- * general purpose range printing function
- * 1 -> 1
- * 1 2 4 6 7-> [1-2,4,6-7]
- */
-static void
-ranger(uint8_t *a, size_t l, void (*pr)(const char *, ...) __printflike(1, 2))
-{
-	uint8_t b, e; 
-
-	if (l > 1)
-		(*pr)("[");
-
-	for (size_t i = 0; i < l; i++) {
-		for (b = e = a[i]; i + 1 < l && a[i + 1] == e + 1; i++, e++)
-			continue;
-		(*pr)("%"PRIu8, b);
-		if (b != e)
-			(*pr)("-%"PRIu8, e);
-		if (i < l - 1)
-			(*pr)(",");
-	}
-
-	if (l > 1)
-		(*pr)("]");
-}
-
 static void
 acpidisp_print_brctl(device_t self, const struct acpidisp_brctl *bc)
 {
+	uint16_t i;
+
 	KASSERT(bc != NULL);
 
-	aprint_verbose_dev(self, "brightness levels: ");
-	ranger(bc->bc_level, bc->bc_level_count, aprint_verbose);
+	aprint_verbose_dev(self, "brightness levels:");
+	for (i = 0; i < bc->bc_level_count; i++)
+		aprint_verbose(" %"PRIu8, bc->bc_level[i]);
 	aprint_verbose("\n");
 }
 

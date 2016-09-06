@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_refclock.c,v 1.9 2016/01/08 21:35:39 christos Exp $	*/
+/*	$NetBSD: ntp_refclock.c,v 1.5.4.3 2016/05/11 11:35:39 martin Exp $	*/
 
 /*
  * ntp_refclock - processing support for reference clocks

@@ -30,26 +30,22 @@
 
 */
 
-#include <ctype.h>
 #include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 
 #define MAX_NR_STUFF 42
 
 typedef struct
 {
-  const char *defs;
-  const char *refs;
-  const char *name;
-  const char *code;
-  const char * const stuff[MAX_NR_STUFF];
+  char *defs;
+  char *refs;
+  char *name;
+  char *code;
+  char *stuff[MAX_NR_STUFF];
   int index;
 } op;
 
 
-static op tab[] =
+op tab[] =
 {
 
   { "n", "", "add #<imm>,<REG_N>", "0111nnnni8*1....",
@@ -433,14 +429,8 @@ static op tab[] =
 
   /* sh2e */
   { "", "", "fabs <FREG_N>", "1111nnnn01011101",
-    "  union",
-    "  {",
-    "    unsigned int i;",
-    "    float f;",
-    "  } u;",
-    "  u.f = FR (n);",
-    "  u.i &= 0x7fffffff;",
-    "  SET_FR (n, u.f);",
+    "FP_UNARY (n, fabs);",
+    "/* FIXME: FR (n) &= 0x7fffffff; */",
   },
 
   /* sh2e */
@@ -672,14 +662,7 @@ static op tab[] =
 
   /* sh2e */
   { "", "", "fneg <FREG_N>", "1111nnnn01001101",
-    "  union",
-    "  {",
-    "    unsigned int i;",
-    "    float f;",
-    "  } u;",
-    "  u.f = FR (n);",
-    "  u.i ^= 0x80000000;",
-    "  SET_FR (n, u.f);",
+    "FP_UNARY (n, -);",
   },
 
   /* sh4a */
@@ -2466,8 +2449,7 @@ op ppi_tab[] =
 };
 
 /* Tables of things to put into enums for sh-opc.h */
-static
-const char * const nibble_type_list[] =
+static char *nibble_type_list[] =
 {
   "HEX_0",
   "HEX_1",
@@ -2502,7 +2484,7 @@ const char * const nibble_type_list[] =
   0
 };
 static
-const char * const arg_type_list[] =
+char *arg_type_list[] =
 {
   "A_END",
   "A_BDISP12",
@@ -2535,11 +2517,27 @@ const char * const arg_type_list[] =
   0,
 };
 
-static int
-qfunc (const void *va, const void *vb)
+static void
+make_enum_list (name, s)
+     char *name;
+     char **s;
 {
-  const op *a = va;
-  const op *b = vb;
+  int i = 1;
+  printf ("typedef enum {\n");
+  while (*s)
+    {
+      printf ("\t%s,\n", *s);
+      s++;
+      i++;
+    }
+  printf ("} %s;\n", name);
+}
+
+static int
+qfunc (a, b)
+     op *a;
+     op *b;
+{
   char bufa[9];
   char bufb[9];
   int diff;
@@ -2558,7 +2556,7 @@ qfunc (const void *va, const void *vb)
 }
 
 static void
-sorttab (void)
+sorttab ()
 {
   op *p = tab;
   int len = 0;
@@ -2572,7 +2570,7 @@ sorttab (void)
 }
 
 static void
-gengastab (void)
+gengastab ()
 {
   op *p;
   sorttab ();
@@ -2587,7 +2585,9 @@ static unsigned short table[1 << 16];
 static int warn_conflicts = 0;
 
 static void
-conflict_warn (int val, int i)
+conflict_warn (val, i)
+     int val;
+     int i;
 {
   int ix, key;
   int j = table[val];
@@ -2638,7 +2638,10 @@ conflict_warn (int val, int i)
    right entries in 'table' with the opcode index.  */
 
 static void
-expand_opcode (int val, int i, const char *s)
+expand_opcode (val, i, s)
+     int val;
+     int i;
+     char *s;
 {
   if (*s == 0)
     {
@@ -2763,7 +2766,10 @@ expand_opcode (int val, int i, const char *s)
    statement entry.  */
 
 static void
-dumptable (const char *name, int size, int start)
+dumptable (name, size, start)
+     char *name;
+     int size;
+     int start;
 {
   int lump = 256;
   int online = 16;
@@ -2798,7 +2804,8 @@ dumptable (const char *name, int size, int start)
 
 
 static void
-filltable (op *p)
+filltable (p)
+     op *p;
 {
   static int index = 1;
 
@@ -2815,7 +2822,7 @@ filltable (op *p)
    processing insns (ppi) for code 0xf800 (ppi nopx nopy).  Copy the
    latter tag to represent all combinations of ppi with ddt.  */
 static void
-expand_ppi_movxy (void)
+expand_ppi_movxy ()
 {
   int i;
 
@@ -2825,7 +2832,8 @@ expand_ppi_movxy (void)
 }
 
 static void
-gensim_caselist (op *p)
+gensim_caselist (p)
+     op *p;
 {
   for (; p->name; p++)
     {
@@ -2833,7 +2841,8 @@ gensim_caselist (op *p)
       int sextbit = -1;
       int needm = 0;
       int needn = 0;
-      const char *s = p->code;
+      
+      char *s = p->code;
 
       printf ("  /* %s %s */\n", p->name, p->code);
       printf ("  case %d:      \n", p->index);
@@ -3016,7 +3025,7 @@ gensim_caselist (op *p)
 
       {
 	/* Do the refs.  */
-	const char *r;
+	char *r;
 	for (r = p->refs; *r; r++)
 	  {
 	    if (*r == 'f') printf ("      CREF (15);\n");
@@ -3058,7 +3067,7 @@ gensim_caselist (op *p)
 
       {
 	/* Do the defs.  */
-	const char *r;
+	char *r;
 	for (r = p->defs; *r; r++) 
 	  {
 	    if (*r == 'f') printf ("      CDEF (15);\n");
@@ -3092,7 +3101,7 @@ gensim_caselist (op *p)
 }
 
 static void
-gensim (void)
+gensim ()
 {
   printf ("{\n");
   printf ("/* REG_xy = [r4, r5, r0, r1].  */\n");
@@ -3121,17 +3130,19 @@ gensim (void)
 }
 
 static void
-gendefines (void)
+gendefines ()
 {
   op *p;
   filltable (tab);
   for (p = tab; p->name; p++)
     {
-      const char *s = p->name;
+      char *s = p->name;
       printf ("#define OPC_");
       while (*s) {
+	if (isupper (*s)) 
+	  *s = tolower (*s);
 	if (isalpha (*s))
-	  printf ("%c", tolower (*s));
+	  printf ("%c", *s);
 	if (*s == ' ')
 	  printf ("_");
 	if (*s == '@')
@@ -3151,7 +3162,10 @@ static int ppi_index;
    NOTE: tail recursion optimization removed for simplicity.  */
 
 static void
-expand_ppi_code (int val, int i, const char *s)
+expand_ppi_code (val, i, s)
+     int val;
+     int i;
+     char *s;
 {
   int j;
 
@@ -3196,7 +3210,7 @@ expand_ppi_code (int val, int i, const char *s)
 }
 
 static void
-ppi_filltable (void)
+ppi_filltable ()
 {
   op *p;
   ppi_index = 1;
@@ -3209,7 +3223,7 @@ ppi_filltable (void)
 }
 
 static void
-ppi_gensim (void)
+ppi_gensim ()
 {
   op *p = ppi_tab;
 
@@ -3240,7 +3254,8 @@ ppi_gensim (void)
   printf ("  (greater_equal = ~(overflow << 3 & res_grd) & DSR_MASK_G)\n");
   printf ("\n");
   printf ("static void\n");
-  printf ("ppi_insn (int iword)\n");
+  printf ("ppi_insn (iword)\n");
+  printf ("     int iword;\n");
   printf ("{\n");
   printf ("  /* 'ee' = [x0, x1, y0, a1] */\n");
   printf ("  static char e_tab[] = { 8,  9, 10,  5};\n");
@@ -3266,7 +3281,8 @@ ppi_gensim (void)
       int shift, j;
       int cond = 0;
       int havedecl = 0;
-      const char *s = p->code;
+      
+      char *s = p->code;
 
       printf ("  /* %s %s */\n", p->name, p->code);
       printf ("  case %d:      \n", p->index);
@@ -3358,11 +3374,11 @@ ppi_gensim (void)
   printf ("      DSR |= res_grd >> 7 & 1;\n");
   printf ("    case 2: /* Zero Value Mode */\n");
   printf ("      DSR |= DSR >> 6 & 1;\n");
-  printf ("    case 3: /* Overflow mode */\n");
+  printf ("    case 3: /* Overflow mode\n");
   printf ("      DSR |= overflow >> 4;\n");
   printf ("    case 4: /* Signed Greater Than Mode */\n");
   printf ("      DSR |= DSR >> 7 & 1;\n");
-  printf ("    case 5: /* Signed Greater Than Or Equal Mode */\n");
+  printf ("    case 4: /* Signed Greater Than Or Equal Mode */\n");
   printf ("      DSR |= greater_equal >> 7;\n");
   printf ("    }\n");
   printf (" assign_z:\n");
@@ -3377,7 +3393,9 @@ ppi_gensim (void)
 }
 
 int
-main (int ac, char *av[])
+main (ac, av)
+     int ac;
+     char **av;
 {
   /* Verify the table before anything else.  */
   {
@@ -3387,7 +3405,7 @@ main (int ac, char *av[])
 	/* Check that the code field contains 16 bits.  */
 	if (strlen (p->code) != 16)
 	  {
-	    fprintf (stderr, "Code `%s' length wrong (%zu) for `%s'\n",
+	    fprintf (stderr, "Code `%s' length wrong (%d) for `%s'\n",
 		     p->code, strlen (p->code), p->name);
 	    abort ();
 	  }

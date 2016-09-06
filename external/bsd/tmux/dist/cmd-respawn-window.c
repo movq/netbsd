@@ -1,4 +1,4 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
  * Copyright (c) 2008 Nicholas Marriott <nicm@users.sourceforge.net>
@@ -31,9 +31,10 @@ enum cmd_retval	 cmd_respawn_window_exec(struct cmd *, struct cmd_q *);
 
 const struct cmd_entry cmd_respawn_window_entry = {
 	"respawn-window", "respawnw",
-	"kt:", 0, -1,
+	"kt:", 0, 1,
 	"[-k] " CMD_TARGET_WINDOW_USAGE " [command]",
 	0,
+	NULL,
 	cmd_respawn_window_exec
 };
 
@@ -46,9 +47,8 @@ cmd_respawn_window_exec(struct cmd *self, struct cmd_q *cmdq)
 	struct window_pane	*wp;
 	struct session		*s;
 	struct environ		 env;
-	const char		*path;
+	const char		*cmd;
 	char		 	*cause;
-	struct environ_entry	*envent;
 
 	if ((wl = cmd_find_window(cmdq, args_get(args, 't'), &s)) == NULL)
 		return (CMD_RETURN_ERROR);
@@ -75,17 +75,11 @@ cmd_respawn_window_exec(struct cmd *self, struct cmd_q *cmdq)
 	window_destroy_panes(w);
 	TAILQ_INSERT_HEAD(&w->panes, wp, entry);
 	window_pane_resize(wp, w->sx, w->sy);
-
-	path = NULL;
-	if (cmdq->client != NULL && cmdq->client->session == NULL)
-		envent = environ_find(&cmdq->client->environ, "PATH");
+	if (args->argc != 0)
+		cmd = args->argv[0];
 	else
-		envent = environ_find(&s->environ, "PATH");
-	if (envent != NULL)
-		path = envent->value;
-
-	if (window_pane_spawn(wp, args->argc, args->argv, path, NULL, -1, &env,
-	    s->tio, &cause) != 0) {
+		cmd = NULL;
+	if (window_pane_spawn(wp, cmd, NULL, -1, &env, s->tio, &cause) != 0) {
 		cmdq_error(cmdq, "respawn window failed: %s", cause);
 		free(cause);
 		environ_free(&env);

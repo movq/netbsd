@@ -1,4 +1,4 @@
-/*	$NetBSD: atalk.c,v 1.16 2015/06/06 13:08:31 joerg Exp $	*/
+/*	$NetBSD: atalk.c,v 1.15.4.1 2015/06/10 16:41:12 snj Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from @(#)atalk.c	1.1 (Whistle) 6/6/96";
 #else
-__RCSID("$NetBSD: atalk.c,v 1.16 2015/06/06 13:08:31 joerg Exp $");
+__RCSID("$NetBSD: atalk.c,v 1.15.4.1 2015/06/10 16:41:12 snj Exp $");
 #endif
 #endif /* not lint */
 

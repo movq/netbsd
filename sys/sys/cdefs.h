@@ -1,4 +1,4 @@
-/*	$NetBSD: cdefs.h,v 1.128 2015/11/19 17:04:01 christos Exp $	*/
+/*	$NetBSD: cdefs.h,v 1.121 2014/08/08 19:43:49 joerg Exp $	*/
 
 /* * Copyright (c) 1991, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -35,10 +35,6 @@
 
 #ifndef	_SYS_CDEFS_H_
 #define	_SYS_CDEFS_H_
-
-#ifdef _KERNEL_OPT
-#include "opt_diagnostic.h"
-#endif
 
 /*
  * Macro to test if we're using a GNU C compiler of a specific vintage
@@ -303,7 +299,7 @@
 #if __GNUC_PREREQ__(4, 6) || defined(__clang__)
 #define	__unreachable()	__builtin_unreachable()
 #else
-#define	__unreachable()	do {} while (/*CONSTCOND*/0)
+#define	__unreachable()	do {} while (0)
 #endif
 
 #if defined(__cplusplus)
@@ -419,7 +415,7 @@
 #error "No function renaming possible"
 #endif /* __GNUC__ */
 #else /* _STANDALONE || _KERNEL */
-#define	__RENAME(x)	no renaming in kernel/standalone environment
+#define	__RENAME(x)	no renaming in kernel or standalone environment
 #endif
 
 /*
@@ -478,18 +474,12 @@
 #if __GNUC_PREREQ__(2, 7)
 #define __printflike(fmtarg, firstvararg)	\
 	    __attribute__((__format__ (__printf__, fmtarg, firstvararg)))
-#ifndef __syslog_attribute__
-#define __syslog__ __printf__
-#endif
-#define __sysloglike(fmtarg, firstvararg)	\
-	    __attribute__((__format__ (__syslog__, fmtarg, firstvararg)))
 #define __scanflike(fmtarg, firstvararg)	\
 	    __attribute__((__format__ (__scanf__, fmtarg, firstvararg)))
 #define __format_arg(fmtarg)    __attribute__((__format_arg__ (fmtarg)))
 #else
 #define __printflike(fmtarg, firstvararg)	/* nothing */
 #define __scanflike(fmtarg, firstvararg)	/* nothing */
-#define __sysloglike(fmtarg, firstvararg)	/* nothing */
 #define __format_arg(fmtarg)			/* nothing */
 #endif
 
@@ -560,8 +550,7 @@
 #ifndef __ASSEMBLER__
 /* __BIT(n): nth bit, where __BIT(0) == 0x1. */
 #define	__BIT(__n)	\
-    (((uintmax_t)(__n) >= NBBY * sizeof(uintmax_t)) ? 0 : \
-    ((uintmax_t)1 << (uintmax_t)((__n) & (NBBY * sizeof(uintmax_t) - 1))))
+    (((uintmax_t)(__n) >= NBBY * sizeof(uintmax_t)) ? 0 : ((uintmax_t)1 << (uintmax_t)((__n) & (NBBY * sizeof(uintmax_t) - 1))))
 
 /* __BITS(m, n): bits m through n, m < n. */
 #define	__BITS(__m, __n)	\
@@ -590,9 +579,6 @@
 #else
 #define __CAST(__dt, __st)	((__dt)(__st))
 #endif
-
-#define __CASTV(__dt, __st)	__CAST(__dt, __CAST(void *, __st))
-#define __CASTCV(__dt, __st)	__CAST(__dt, __CAST(const void *, __st))
 
 #define __USE(a) ((void)(a))
 

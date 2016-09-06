@@ -14,7 +14,6 @@
 #include "llvm/Analysis/Passes.h"
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Function.h"
-#include "llvm/IR/Module.h"
 #include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
@@ -35,7 +34,7 @@ char PAEval::ID = 0;
 PAEval::PAEval() : FunctionPass(ID) {}
 
 void PAEval::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.addRequired<AAResultsWrapperPass>();
+  AU.addRequired<AliasAnalysis>();
 }
 
 static StringRef getName(Value *V) {
@@ -65,8 +64,7 @@ bool PAEval::runOnFunction(Function &F) {
   }
 
   ProvenanceAnalysis PA;
-  PA.setAA(&getAnalysis<AAResultsWrapperPass>().getAAResults());
-  const DataLayout &DL = F.getParent()->getDataLayout();
+  PA.setAA(&getAnalysis<AliasAnalysis>());
 
   for (Value *V1 : Values) {
     StringRef NameV1 = getName(V1);
@@ -75,7 +73,7 @@ bool PAEval::runOnFunction(Function &F) {
       if (NameV1 >= NameV2)
         continue;
       errs() << NameV1 << " and " << NameV2;
-      if (PA.related(V1, V2, DL))
+      if (PA.related(V1, V2))
         errs() << " are related.\n";
       else
         errs() << " are not related.\n";
@@ -89,6 +87,6 @@ FunctionPass *llvm::createPAEvalPass() { return new PAEval(); }
 
 INITIALIZE_PASS_BEGIN(PAEval, "pa-eval",
                       "Evaluate ProvenanceAnalysis on all pairs", false, true)
-INITIALIZE_PASS_DEPENDENCY(AAResultsWrapperPass)
+INITIALIZE_AG_DEPENDENCY(AliasAnalysis)
 INITIALIZE_PASS_END(PAEval, "pa-eval",
                     "Evaluate ProvenanceAnalysis on all pairs", false, true)

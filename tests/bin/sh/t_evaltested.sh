@@ -1,4 +1,4 @@
-# $NetBSD: t_evaltested.sh,v 1.2 2016/03/27 14:50:01 christos Exp $
+# $NetBSD: t_evaltested.sh,v 1.1 2012/03/17 16:33:11 jruoho Exp $
 #
 # Copyright (c) 2011 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -24,8 +24,6 @@
 # ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 # POSSIBILITY OF SUCH DAMAGE.
 #
-# the implementation of "sh" to test
-: ${TEST_SH:="/bin/sh"}
 
 atf_test_case evaltested
 
@@ -45,7 +43,7 @@ fi
 echo "passed"
 exit 0
 EOF
-	output="$($TEST_SH helper.sh)"
+	output="$(/bin/sh helper.sh)"
 	[ $? = 0 ] && return
 
 	if [ -n "$output" ]

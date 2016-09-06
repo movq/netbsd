@@ -1,6 +1,6 @@
 /* The common simulator framework for GDB, the GNU Debugger.
 
-   Copyright 2002-2015 Free Software Foundation, Inc.
+   Copyright 2002-2014 Free Software Foundation, Inc.
 
    Contributed by Andrew Cagney and Red Hat.
 
@@ -25,7 +25,6 @@
 
 #include "sim-main.h"
 #include "sim-assert.h"
-#include "libiberty.h"
 
 #ifdef HAVE_STRING_H
 #include <string.h>
@@ -141,14 +140,21 @@ struct _sim_event {
 
 #define _ETRACE sd, NULL
 
+#undef ETRACE_P
+#define ETRACE_P (WITH_TRACE && STATE_EVENTS (sd)->trace)
+
 #undef ETRACE
 #define ETRACE(ARGS) \
 do \
   { \
-    if (STRACE_EVENTS_P (sd)) \
+    if (ETRACE_P) \
       { \
         if (STRACE_DEBUG_P (sd)) \
-	  trace_printf (sd, NULL, "%s:%d: ", lbasename (__FILE__), __LINE__); \
+	  { \
+	    const char *file; \
+	    SIM_FILTER_PATH (file, __FILE__); \
+	    trace_printf (sd, NULL, "%s:%d: ", file, __LINE__); \
+	  } \
         trace_printf  ARGS; \
       } \
   } \
@@ -403,7 +409,7 @@ update_time_from_event (SIM_DESC sd)
       events->time_of_event = current_time - 1;
       events->time_from_event = -1;
     }
-  if (STRACE_EVENTS_P (sd))
+  if (ETRACE_P)
     {
       sim_event *event;
       int i;
@@ -515,7 +521,7 @@ sim_events_schedule_vtracef (SIM_DESC sd,
   new_event->data = data;
   new_event->handler = handler;
   new_event->watching = watch_timer;
-  if (fmt == NULL || !STRACE_EVENTS_P (sd) || vasprintf (&new_event->trace, fmt, ap) < 0)
+  if (fmt == NULL || !ETRACE_P || vasprintf (&new_event->trace, fmt, ap) < 0)
     new_event->trace = NULL;
   insert_sim_event (sd, new_event, delta_time);
   ETRACE ((_ETRACE,
@@ -555,7 +561,7 @@ sim_events_schedule_after_signal (SIM_DESC sd,
   if (events->nr_held > MAX_NR_SIGNAL_SIM_EVENTS)
     {
       sim_engine_abort (NULL, NULL, NULL_CIA,
-			"sim_events_schedule_after_signal - buffer overflow");
+			"sim_events_schedule_after_signal - buffer oveflow");
     }
 
   new_event->data = data;

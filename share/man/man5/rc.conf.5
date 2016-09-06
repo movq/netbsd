@@ -1,4 +1,4 @@
-.\"	$NetBSD: rc.conf.5,v 1.165 2015/12/27 08:43:51 wiz Exp $
+.\"	$NetBSD: rc.conf.5,v 1.157.4.1 2015/08/06 21:13:44 snj Exp $
 .\"
 .\" Copyright (c) 1996 Matthew R. Green
 .\" All rights reserved.
@@ -55,7 +55,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd December 26, 2015
+.Dd March 30, 2015
 .Dt RC.CONF 5
 .Os
 .Sh NAME
@@ -193,7 +193,7 @@ The default is
 .Pa /etc/rc.d .
 All directories in
 .Ev rc_directories
-must be located in the root file system, otherwise they will be silently
+must be located in the root filesystem, otherwise they will be silently
 skipped.
 .It Sy rc_silent
 Boolean value.
@@ -247,7 +247,7 @@ If empty or not set, then the contents of
 (if it exists) are used.
 .It Sy force_down_interfaces
 A space separated list of interface names.
-These interfaces will be configured down when going from multiuser to single-user
+These interfaces will be configured down when going from multiuser to singleuser
 mode or on system shutdown.
 .Pp
 This is important for some stateful interfaces, for example PPP over ISDN
@@ -416,7 +416,7 @@ restored at start-up.
 Boolean value.
 Run
 .Nm newsyslog
-to trim log files before syslogd starts.
+to trim logfiles before syslogd starts.
 Intended for laptop users.
 Passes
 .Sy newsyslog_flags .
@@ -696,11 +696,6 @@ or need a separate configuration per interface,
 then this should be done in the configuration file - see
 .Xr dhcpcd.conf 5
 for details.
-dhcpcd presently ignores the
-.Sy wpa_supplicant
-variable in rc.conf and will start wpa_supplicant if a suitable
-wpa_supplicant.conf is found unless otherwise instructed in
-.Xr dhcpcd.conf 5 .
 .It Sy dhcpcd_flags
 Passes
 .Sy dhcpcd_flags
@@ -750,25 +745,6 @@ Boolean value.
 Monitor dynamic interfaces and perform actions upon address changes.
 Passes
 .Sy ifwatchd_flags .
-.It Sy ip6addrctl
-Boolean value.
-Fine grain control of address and routing priorities.
-.It Sy ip6addrctl_policy
-A string.
-Can be:
-.Bl -tag -width auto -compact
-.It Li auto
-automatically determine from system settings; will read priorities from
-.Pa /etc/ip6addrctl.conf
-or if that file does not exist it will default to IPv6 first, then IPv4.
-.It Li ipv4_prefer
-try IPv4 before IPv6.
-.It Li ipv6_prefer
-try IPv6 before IPv4.
-.El
-.It Sy ip6addrctl_verbose
-Boolean value.
-If set, print the resulting prefixes and priorities map.
 .It Sy ip6mode
 A string.
 An IPv6 node can be a router
@@ -926,13 +902,13 @@ at network boot time:
 Load the initial configuration
 .Xr pf.boot.conf 5
 before the network is up.
-After the network has been configured, then load the final rule set
+After the network has been configured, then load the final ruleset
 .Xr pf.conf 5 .
 .It Sy pf_rules
 A string.
 The path of the
 .Xr pf.conf 5
-rule set that will be used when loading the final rule set.
+ruleset that will be used when loading the final ruleset.
 .It Sy pflogd
 Boolean value.
 Run
@@ -997,9 +973,6 @@ must be in
 or
 .Pa /usr
 must be on the root file system.
-dhcpcd ignores this variable, see the
-.Sy dhcpcd
-variable for details.
 .El
 .Ss Daemons required by other daemons
 .Bl -tag -width net_interfaces
@@ -1418,7 +1391,7 @@ Configure Bluetooth support, comprising the following tasks:
 .Bl -dash -compact
 .It
 attach serial Bluetooth controllers as listed in the
-.Pa /etc/bluetooth/btattach.conf
+.Pa /etc/bluetooth/btdevctl.conf
 configuration file.
 .It
 enable Bluetooth controllers with useful defaults, plus

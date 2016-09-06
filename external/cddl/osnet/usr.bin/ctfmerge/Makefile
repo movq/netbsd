@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.9 2016/02/04 17:47:17 roy Exp $
+#	$NetBSD: Makefile,v 1.6 2014/03/09 22:01:31 christos Exp $
 
 # $FreeBSD: src/cddl/usr.bin/ctfmerge/Makefile,v 1.1.4.1 2009/08/03 08:13:06 kensmith Exp $
 
@@ -29,11 +29,7 @@ SRCS=		alist.c \
 		traverse.c \
 		util.c
 
-COPTS.util.c +=		-Wno-format-nonliteral
-
-.if (${HOSTPROG:U} == "")
-LDADD+=-lpthread
-DPADD+=${LIBPTHREAD}
-.endif
+LDADD+=-lrt -lpthread
+DPADD+=${LIBRT} ${LIBPTHREAD}
 
 .include <bsd.prog.mk>

@@ -1,4 +1,4 @@
-/*	$NetBSD: irframe_tty.c,v 1.61 2015/08/20 14:40:18 christos Exp $	*/
+/*	$NetBSD: irframe_tty.c,v 1.59.4.1 2014/12/01 11:38:42 martin Exp $	*/
 
 /*
  * TODO
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: irframe_tty.c,v 1.61 2015/08/20 14:40:18 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: irframe_tty.c,v 1.59.4.1 2014/12/01 11:38:42 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -62,8 +62,6 @@ __KERNEL_RCSID(0, "$NetBSD: irframe_tty.c,v 1.61 2015/08/20 14:40:18 christos Ex
 #include <dev/ir/sir.h>
 #include <dev/ir/irdaio.h>
 #include <dev/ir/irframevar.h>
-
-#include "ioconf.h"
 
 #ifdef IRFRAMET_DEBUG
 #define DPRINTF(x)	if (irframetdebug) printf x
@@ -126,6 +124,8 @@ int	irframetioctl(struct tty *, u_long, void *, int, struct lwp *);
 int	irframetinput(int, struct tty *);
 int	irframetstart(struct tty *);
 
+/* pseudo device init */
+void	irframettyattach(int);
 
 /* irframe methods */
 static int	irframet_open(void *, int, int, struct lwp *);

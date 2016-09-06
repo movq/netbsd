@@ -68,10 +68,12 @@ namespace InFunctions {
 
 namespace ClassNameRedecl {
   class C0 {
-    template<typename U> using C0 = int; // expected-error {{member 'C0' has the same name as its class}}
+    // FIXME: this diagnostic is pretty poor
+    template<typename U> using C0 = int; // expected-error {{name defined in alias declaration must be an identifier}}
   };
   class C1 {
-    template<typename U> using C1 = C1; // expected-error {{member 'C1' has the same name as its class}}
+    // FIXME: this diagnostic is pretty poor
+    template<typename U> using C1 = C1; // expected-error {{name defined in alias declaration must be an identifier}}
   };
   class C2 {
     template<typename U> using C0 = C1; // ok
@@ -167,15 +169,4 @@ namespace SFINAE {
 
   fail1<int> f1; // expected-note {{here}}
   fail2<E> f2; // expected-note {{here}}
-}
-
-namespace PR24212 {
-struct X {};
-template <int I>
-struct S {
-  template <int J>
-  using T = X[J];
-  using U = T<I>;
-};
-static_assert(__is_same(S<3>::U, X[2]), ""); // expected-error {{static_assert failed}}
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: natm_proto.c,v 1.16 2016/01/20 21:44:00 riastradh Exp $	*/
+/*	$NetBSD: natm_proto.c,v 1.15 2014/05/18 14:46:16 rmind Exp $	*/
 
 /*
  * Copyright (c) 1996 Charles D. Cranor and Washington University.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: natm_proto.c,v 1.16 2016/01/20 21:44:00 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: natm_proto.c,v 1.15 2014/05/18 14:46:16 rmind Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -62,6 +62,7 @@ const struct protosw natmsw[] = {
   .pr_protocol = PROTO_NATMAAL5,
   .pr_flags = PR_CONNREQUIRED,
   .pr_input = 0,
+  .pr_output = 0,
   .pr_ctlinput = 0,
   .pr_ctloutput = 0,
   .pr_usrreqs = &natm_usrreq,
@@ -75,6 +76,7 @@ const struct protosw natmsw[] = {
   .pr_protocol = PROTO_NATMAAL5,
   .pr_flags = PR_CONNREQUIRED | PR_ATOMIC,
   .pr_input = 0,
+  .pr_output = 0,
   .pr_ctlinput = 0,
   .pr_ctloutput = 0,
   .pr_usrreqs = &natm_usrreq,
@@ -88,6 +90,7 @@ const struct protosw natmsw[] = {
   .pr_protocol = PROTO_NATMAAL0,
   .pr_flags = PR_CONNREQUIRED,
   .pr_input = 0,
+  .pr_output = 0,
   .pr_ctlinput = 0,
   .pr_ctloutput = 0,
   .pr_usrreqs = &natm_usrreqs,

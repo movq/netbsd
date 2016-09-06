@@ -1,5 +1,5 @@
 /* Definitions of target machine for GNU compiler, NetBSD/arm ELF version.
-   Copyright (C) 2002-2015 Free Software Foundation, Inc.
+   Copyright (C) 2002-2013 Free Software Foundation, Inc.
    Contributed by Wasabi Systems, Inc.
 
    This file is part of GCC.
@@ -14,13 +14,8 @@
    or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU General Public
    License for more details.
 
-   Under Section 7 of GPL version 3, you are granted additional
-   permissions described in the GCC Runtime Library Exception, version
-   3.1, as published by the Free Software Foundation.
-
-   You should have received a copy of the GNU General Public License and
-   a copy of the GCC Runtime Library Exception along with this program;
-   see the files COPYING3 and COPYING.RUNTIME respectively.  If not, see
+   You should have received a copy of the GNU General Public License
+   along with GCC; see the file COPYING3.  If not see
    <http://www.gnu.org/licenses/>.  */
 
 /* Run-time Target Specification.  */
@@ -74,6 +69,13 @@
 #define SUBTARGET_ASM_FLOAT_SPEC	\
   "%{mhard-float:%{!mfpu=*:-mfpu=vfp}}   \
    %{mfloat-abi=hard:%{!mfpu=*:-mfpu=vfp}}"
+
+#undef SUBTARGET_EXTRA_SPECS
+#define SUBTARGET_EXTRA_SPECS				\
+  { "subtarget_extra_asm_spec",	SUBTARGET_EXTRA_ASM_SPEC }, \
+  { "subtarget_asm_float_spec", SUBTARGET_ASM_FLOAT_SPEC }, \
+  { "netbsd_link_spec",		NETBSD_LINK_SPEC_ELF },	\
+  { "netbsd_entry_point",	NETBSD_ENTRY_POINT },
 
 #define NETBSD_ENTRY_POINT "__start"
 
@@ -171,8 +173,3 @@ while (0)
 #undef FPUTYPE_DEFAULT
 #define FPUTYPE_DEFAULT "vfp"
 
-/* Ensure that libgcc does not attempt to define __[CD]TOR_LIST__[] for APCS,
-   which belongs in crtbegin on NetBSD.  */
-#ifndef __ARM_EABI__
-#define CTOR_LISTS_DEFINED_EXTERNALLY
-#endif

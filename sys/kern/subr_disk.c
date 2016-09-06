@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_disk.c,v 1.116 2016/01/06 00:22:30 christos Exp $	*/
+/*	$NetBSD: subr_disk.c,v 1.103.4.2 2015/06/01 19:19:44 snj Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1999, 2000, 2009 The NetBSD Foundation, Inc.
@@ -67,13 +67,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_disk.c,v 1.116 2016/01/06 00:22:30 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_disk.c,v 1.103.4.2 2015/06/01 19:19:44 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/kmem.h>
 #include <sys/buf.h>
-#include <sys/fcntl.h>
 #include <sys/syslog.h>
 #include <sys/disklabel.h>
 #include <sys/disk.h>
@@ -182,7 +181,6 @@ disk_find(const char *name)
 void
 disk_init(struct disk *diskp, const char *name, const struct dkdriver *driver)
 {
-	u_int blocksize = DEV_BSIZE;
 
 	/*
 	 * Initialize the wedge-related locks and other fields.
@@ -192,8 +190,7 @@ disk_init(struct disk *diskp, const char *name, const struct dkdriver *driver)
 	LIST_INIT(&diskp->dk_wedges);
 	diskp->dk_nwedges = 0;
 	diskp->dk_labelsector = LABELSECTOR;
-	diskp->dk_blkshift = DK_BSIZE2BLKSHIFT(blocksize);
-	diskp->dk_byteshift = DK_BSIZE2BYTESHIFT(blocksize);
+	disk_blocksize(diskp, DEV_BSIZE);
 	diskp->dk_name = name;
 	diskp->dk_driver = driver;
 }
@@ -302,6 +299,18 @@ disk_isbusy(struct disk *diskp)
 {
 
 	return iostat_isbusy(diskp->dk_stats);
+}
+
+/*
+ * Set the physical blocksize of a disk, in bytes.
+ * Only necessary if blocksize != DEV_BSIZE.
+ */
+void
+disk_blocksize(struct disk *diskp, int blocksize)
+{
+
+	diskp->dk_blkshift = DK_BSIZE2BLKSHIFT(blocksize);
+	diskp->dk_byteshift = DK_BSIZE2BYTESHIFT(blocksize);
 }
 
 /*
@@ -421,7 +430,7 @@ int
 disk_read_sectors(void (*strat)(struct buf *), const struct disklabel *lp,
     struct buf *bp, unsigned int sector, int count)
 {
-	bp->b_blkno = btodb((off_t)sector * lp->d_secsize);
+	bp->b_blkno = sector;
 	bp->b_bcount = count * lp->d_secsize;
 	bp->b_flags = (bp->b_flags & ~B_WRITE) | B_READ;
 	bp->b_oflags &= ~BO_DONE;
@@ -436,7 +445,6 @@ convertdisklabel(struct disklabel *lp, void (*strat)(struct buf *),
 {
 	struct partition rp, *altp, *p;
 	int geom_ok;
-	const char *str;
 
 	memset(&rp, 0, sizeof(rp));
 	rp.p_size = secperunit;
@@ -461,7 +469,7 @@ convertdisklabel(struct disklabel *lp, void (*strat)(struct buf *),
 		altp = &lp->d_partitions['c' - 'a'];
 
 	if (lp->d_npartitions > RAW_PART && p->p_offset == 0 && p->p_size != 0)
-		return NULL;	/* already a raw partition */
+		;	/* already a raw partition */
 	else if (lp->d_npartitions > MAX('c', 'd') - 'a' &&
 		 altp->p_offset == 0 && altp->p_size != 0) {
 		/* alternate partition ('c' or 'd') is suitable for raw slot,
@@ -470,7 +478,6 @@ convertdisklabel(struct disklabel *lp, void (*strat)(struct buf *),
 		rp = *p;
 		*p = *altp;
 		*altp = rp;
-		return NULL;
 	} else if (lp->d_npartitions <= RAW_PART &&
 	           lp->d_npartitions > 'c' - 'a') {
 		/* No raw partition is present, but the alternate is present.
@@ -478,40 +485,21 @@ convertdisklabel(struct disklabel *lp, void (*strat)(struct buf *),
 		 */
 		lp->d_npartitions = RAW_PART + 1;
 		*p = *altp;
-		return NULL;
 	} else if (!geom_ok)
-		str = "no raw partition and disk reports bad geometry";
+		return "no raw partition and disk reports bad geometry";
 	else if (lp->d_npartitions <= RAW_PART) {
 		memset(&lp->d_partitions[lp->d_npartitions], 0,
 		    sizeof(struct partition) * (RAW_PART - lp->d_npartitions));
 		*p = rp;
 		lp->d_npartitions = RAW_PART + 1;
-		return NULL;
 	} else if (lp->d_npartitions < MAXPARTITIONS) {
 		memmove(p + 1, p,
 		    sizeof(struct partition) * (lp->d_npartitions - RAW_PART));
 		*p = rp;
 		lp->d_npartitions++;
-		return NULL;
 	} else
-		str = "no raw partition and partition table is full";
-#ifdef DIAGNOSTIC
-	printf("Bad partition: %s\n", str);
-	printf("type = %u, subtype = %u, typename = %s\n",
-	    lp->d_type, lp->d_subtype, lp->d_typename);
-	printf("secsize = %u, nsectors = %u, ntracks = %u\n",
-	    lp->d_secsize, lp->d_nsectors, lp->d_ntracks);
-	printf("ncylinders = %u, secpercyl = %u, secperunit = %u\n",
-	    lp->d_ncylinders, lp->d_secpercyl, lp->d_secperunit);
-	printf("npartitions = %u\n", lp->d_npartitions);
-
-	for (size_t i = 0; i < MIN(lp->d_npartitions, MAXPARTITIONS); i++) {
-		p = &lp->d_partitions[i];
-		printf("\t%c: offset = %u size = %u fstype = %u\n",
-		    (char)(i + 'a'), p->p_offset, p->p_size, p->p_fstype);
-	}
-#endif			
-	return str;
+		return "no raw partition and partition table is full";
+	return NULL;
 }
 
 /*
@@ -519,143 +507,44 @@ convertdisklabel(struct disklabel *lp, void (*strat)(struct buf *),
  *	Generic disk ioctl handling.
  */
 int
-disk_ioctl(struct disk *dk, dev_t dev, u_long cmd, void *data, int flag,
-    struct lwp *l)
+disk_ioctl(struct disk *diskp, u_long cmd, void *data, int flag,
+	   struct lwp *l)
 {
-	struct dkwedge_info *dkw;
-	struct partinfo *pi;
-	struct partition *dp;
-#ifdef __HAVE_OLD_DISKLABEL
-	struct disklabel newlabel;
-#endif
+	int error = 0;
 
 	switch (cmd) {
 	case DIOCGDISKINFO:
-		if (dk->dk_info == NULL)
-			return ENOTSUP;
-		return prop_dictionary_copyout_ioctl(data, cmd, dk->dk_info);
+	    {
+		struct plistref *pref = (struct plistref *) data;
+
+		if (diskp->dk_info == NULL)
+			error = ENOTSUP;
+		else
+			error = prop_dictionary_copyout_ioctl(pref, cmd,
+							diskp->dk_info);
+		break;
+	    }
 
 	case DIOCGSECTORSIZE:
-		*(u_int *)data = dk->dk_geom.dg_secsize;
-		return 0;
+		*(u_int *)data = diskp->dk_geom.dg_secsize;
+		break;
 
 	case DIOCGMEDIASIZE:
-		*(off_t *)data = (off_t)dk->dk_geom.dg_secsize *
-		    dk->dk_geom.dg_secperunit;
-		return 0;
-	default:
+		*(off_t *)data = (off_t)diskp->dk_geom.dg_secsize *
+		    diskp->dk_geom.dg_secperunit;
 		break;
-	}
-
-	if (dev == NODEV)
-		return EPASSTHROUGH;
-
-	/* The following should be moved to dk_ioctl */
-	switch (cmd) {
-	case DIOCGDINFO:
-		if (dk->dk_label == NULL)
-			return EBUSY;
-		memcpy(data, dk->dk_label, sizeof (*dk->dk_label));
-		return 0;
-
-#ifdef __HAVE_OLD_DISKLABEL
-	case ODIOCGDINFO:
-		if (dk->dk_label == NULL)
-			return EBUSY;
-		memcpy(&newlabel, dk->dk_label, sizeof(newlabel));
-		if (newlabel.d_npartitions > OLDMAXPARTITIONS)
-			return ENOTTY;
-		memcpy(data, &newlabel, sizeof(struct olddisklabel));
-		return 0;
-#endif
-
-	case DIOCGPARTINFO:
-		pi = data;
-		memset(pi, 0, sizeof(*pi));
-		pi->pi_secsize = dk->dk_geom.dg_secsize;
-		pi->pi_bsize = BLKDEV_IOSIZE;
-
-		if (DISKPART(dev) == RAW_PART) {
-			pi->pi_size = dk->dk_geom.dg_secperunit;
-			return 0;
-		}
-
-		if (dk->dk_label == NULL)
-			return EBUSY;
-
-		dp = &dk->dk_label->d_partitions[DISKPART(dev)];
-		pi->pi_offset = dp->p_offset;
-		pi->pi_size = dp->p_size;
-
-		pi->pi_fstype = dp->p_fstype;
-		pi->pi_frag = dp->p_frag;
-		pi->pi_fsize = dp->p_fsize;
-		pi->pi_cpg = dp->p_cpg;
-		
-		/*
-		 * dholland 20130616: XXX this logic should not be
-		 * here. It is here because the old buffer cache
-		 * demands that all accesses to the same blocks need
-		 * to be the same size; but it only works for FFS and
-		 * nowadays I think it'll fail silently if the size
-		 * info in the disklabel is wrong. (Or missing.) The
-		 * buffer cache needs to be smarter; or failing that
-		 * we need a reliable way here to get the right block
-		 * size; or a reliable way to guarantee that (a) the
-		 * fs is not mounted when we get here and (b) any
-		 * buffers generated here will get purged when the fs
-		 * does get mounted.
-		 */
-		if (dp->p_fstype == FS_BSDFFS &&
-		    dp->p_frag != 0 && dp->p_fsize != 0)
-			pi->pi_bsize = dp->p_frag * dp->p_fsize;
-		return 0;
-
-	case DIOCAWEDGE:
-		if ((flag & FWRITE) == 0)
-			return EBADF;
-
-		dkw = data;
-		strlcpy(dkw->dkw_parent, dk->dk_name, sizeof(dkw->dkw_parent));
-		return dkwedge_add(dkw);
-
-	case DIOCDWEDGE:
-		if ((flag & FWRITE) == 0)
-			return EBADF;
-
-		dkw = data;
-		strlcpy(dkw->dkw_parent, dk->dk_name, sizeof(dkw->dkw_parent));
-		return dkwedge_del(dkw);
-
-	case DIOCLWEDGES:
-		return dkwedge_list(dk, data, l);
-
-	case DIOCMWEDGES:
-		if ((flag & FWRITE) == 0)
-			return EBADF;
-
-		dkwedge_discover(dk);
-		return 0;
 
 	default:
-		return EPASSTHROUGH;
+		error = EPASSTHROUGH;
 	}
+
+	return (error);
 }
 
 void
 disk_set_info(device_t dev, struct disk *dk, const char *type)
 {
 	struct disk_geom *dg = &dk->dk_geom;
-
-	if (dg->dg_secsize == 0) {
-#ifdef DIAGNOSTIC
-		printf("%s: fixing 0 sector size\n", dk->dk_name);
-#endif
-		dg->dg_secsize = DEV_BSIZE;
-	}
-
-	dk->dk_blkshift = DK_BSIZE2BLKSHIFT(dg->dg_secsize);
-	dk->dk_byteshift = DK_BSIZE2BYTESHIFT(dg->dg_secsize);
 
 	if (dg->dg_secperunit == 0 && dg->dg_ncylinders == 0) {
 #ifdef DIAGNOSTIC
@@ -680,6 +569,13 @@ disk_set_info(device_t dev, struct disk *dk, const char *type)
 		if (dg->dg_ntracks && dg->dg_nsectors)
 			dg->dg_ncylinders = dg->dg_secperunit /
 			    (dg->dg_ntracks * dg->dg_nsectors);
+	}
+
+	if (dg->dg_secsize == 0) {
+#ifdef DIAGNOSTIC
+		printf("%s: fixing 0 sector size\n", dk->dk_name);
+#endif
+		dg->dg_secsize = DEV_BSIZE;
 	}
 
 	prop_dictionary_t disk_info, odisk_info, geom;

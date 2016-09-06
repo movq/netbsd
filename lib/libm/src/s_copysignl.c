@@ -1,4 +1,4 @@
-/*	$NetBSD: s_copysignl.c,v 1.5 2015/05/14 19:26:12 joerg Exp $	*/
+/*	$NetBSD: s_copysignl.c,v 1.2.24.1 2015/05/25 09:05:25 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -26,7 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: s_copysignl.c,v 1.5 2015/05/14 19:26:12 joerg Exp $");
+__RCSID("$NetBSD: s_copysignl.c,v 1.2.24.1 2015/05/25 09:05:25 msaitoh Exp $");
 #include "namespace.h"
 
 #include <math.h>

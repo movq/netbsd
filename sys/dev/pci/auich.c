@@ -1,4 +1,4 @@
-/*	$NetBSD: auich.c,v 1.149 2016/07/07 06:55:41 msaitoh Exp $	*/
+/*	$NetBSD: auich.c,v 1.144 2014/08/10 16:44:35 tls Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2004, 2005, 2008 The NetBSD Foundation, Inc.
@@ -111,7 +111,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: auich.c,v 1.149 2016/07/07 06:55:41 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: auich.c,v 1.144 2014/08/10 16:44:35 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -123,7 +123,7 @@ __KERNEL_RCSID(0, "$NetBSD: auich.c,v 1.149 2016/07/07 06:55:41 msaitoh Exp $");
 #include <sys/sysctl.h>
 #include <sys/audioio.h>
 #include <sys/bus.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcivar.h>
@@ -233,13 +233,11 @@ struct auich_softc {
 	struct audio_format sc_modem_formats[AUICH_MODEM_NFORMATS];
 	struct audio_encoding_set *sc_encodings;
 	struct audio_encoding_set *sc_spdif_encodings;
-
-	int sc_cas_been_used;
 };
 
 /* Debug */
 #ifdef AUICH_DEBUG
-#define	DPRINTF(l,x)	do { if (auich_debug & (l)) aprint_normal_dev x; } while(0)
+#define	DPRINTF(l,x)	do { if (auich_debug & (l)) printf x; } while(0)
 int auich_debug = 0xfffe;
 #define	ICH_DEBUG_CODECIO	0x0001
 #define	ICH_DEBUG_DMA		0x0002
@@ -586,8 +584,8 @@ map_done:
 	sc->pcmo.qptr = sc->pcmi.qptr = sc->mici.qptr = 0;
 	auich_alloc_cdata(sc);
 
-	DPRINTF(ICH_DEBUG_DMA, (sc->sc_dev, "%s: lists %p %p %p\n",
-	    __func__, sc->pcmo.dmalist, sc->pcmi.dmalist, sc->mici.dmalist));
+	DPRINTF(ICH_DEBUG_DMA, ("auich_attach: lists %p %p %p\n",
+	    sc->pcmo.dmalist, sc->pcmi.dmalist, sc->mici.dmalist));
 
 	/* Modem codecs are always the secondary codec on ICH */
 	sc->sc_codecnum = sc->sc_codectype == AC97_CODEC_TYPE_MODEM ? 1 : 0;
@@ -626,8 +624,7 @@ map_done:
 
 	/* setup audio_format */
 	if (sc->sc_codectype == AC97_CODEC_TYPE_AUDIO) {
-		memcpy(sc->sc_audio_formats, auich_audio_formats,
-		    sizeof(auich_audio_formats));
+		memcpy(sc->sc_audio_formats, auich_audio_formats, sizeof(auich_audio_formats));
 		if (!AC97_IS_4CH(sc->codec_if))
 			AUFMT_INVALIDATE(&sc->sc_audio_formats[AUICH_FORMATS_4CH]);
 		if (!AC97_IS_6CH(sc->codec_if))
@@ -639,18 +636,17 @@ map_done:
 			}
 		}
 		mutex_exit(&sc->sc_lock);
-		if (0 != auconv_create_encodings(sc->sc_audio_formats,
-			AUICH_AUDIO_NFORMATS, &sc->sc_encodings))
+		if (0 != auconv_create_encodings(sc->sc_audio_formats, AUICH_AUDIO_NFORMATS,
+						 &sc->sc_encodings))
 			return;
-		if (0 != auconv_create_encodings(auich_spdif_formats,
-			AUICH_SPDIF_NFORMATS, &sc->sc_spdif_encodings))
+		if (0 != auconv_create_encodings(auich_spdif_formats, AUICH_SPDIF_NFORMATS,
+						 &sc->sc_spdif_encodings))
 			return;
 	} else {
 		mutex_exit(&sc->sc_lock);
-		memcpy(sc->sc_modem_formats, auich_modem_formats,
-		    sizeof(auich_modem_formats));
-		if (0 != auconv_create_encodings(sc->sc_modem_formats,
-			AUICH_MODEM_NFORMATS, &sc->sc_encodings))
+		memcpy(sc->sc_modem_formats, auich_modem_formats, sizeof(auich_modem_formats));
+		if (0 != auconv_create_encodings(sc->sc_modem_formats, AUICH_MODEM_NFORMATS,
+						 &sc->sc_encodings))
 			return;
 	}
 
@@ -687,7 +683,8 @@ map_done:
 	return;
 
  sysctl_err:
-	aprint_error_dev(self, "failed to add sysctl nodes. (%d)\n", err);
+	printf("%s: failed to add sysctl nodes. (%d)\n",
+	       device_xname(self), err);
 	return;			/* failure of sysctl is not fatal. */
 }
 
@@ -792,23 +789,11 @@ auich_read_codec(void *v, uint8_t reg, uint16_t *val)
 		ICH_CAS + sc->sc_modem_offset) & 1;
 	    DELAY(ICH_CODECIO_INTERVAL));
 
-	/*
-	 * Be permissive in first attempt. If previous instances of
-	 * this routine were interrupted precisely at this point (after
-	 * access is granted by CAS but before a command is sent),
-	 * they could have left hardware in an inconsistent state where
-	 * a command is expected and therefore semaphore wait would hit
-	 * the timeout.
-	 */
-	if (!sc->sc_cas_been_used && i <= 0)
-		i = 1;
-	sc->sc_cas_been_used = 1;
-
 	if (i > 0) {
 		*val = bus_space_read_2(sc->iot, sc->mix_ioh,
 		    reg + (sc->sc_codecnum * ICH_CODEC_OFFSET));
 		DPRINTF(ICH_DEBUG_CODECIO,
-		    (sc->sc_dev, "%s(%x, %x)\n", __func__, reg, *val));
+		    ("auich_read_codec(%x, %x)\n", reg, *val));
 		status = bus_space_read_4(sc->iot, sc->aud_ioh,
 		    ICH_GSTS + sc->sc_modem_offset);
 		if (status & ICH_RCS) {
@@ -817,7 +802,7 @@ auich_read_codec(void *v, uint8_t reg, uint16_t *val)
 					  status & ~(ICH_SRI|ICH_PRI|ICH_GSCI));
 			*val = 0xffff;
 			DPRINTF(ICH_DEBUG_CODECIO,
-			    (sc->sc_dev, "%s: read_codec error\n", __func__));
+			    ("%s: read_codec error\n", device_xname(sc->sc_dev)));
 			if (reg == AC97_REG_GPIO_STATUS)
 				auich_clear_cas(sc);
 			return -1;
@@ -839,19 +824,13 @@ auich_write_codec(void *v, uint8_t reg, uint16_t val)
 	struct auich_softc *sc;
 	int i;
 
+	DPRINTF(ICH_DEBUG_CODECIO, ("auich_write_codec(%x, %x)\n", reg, val));
 	sc = v;
-	DPRINTF(ICH_DEBUG_CODECIO, (sc->sc_dev, "%s(%x, %x)\n",
-	    __func__, reg, val));
 	/* wait for an access semaphore */
 	for (i = ICH_SEMATIMO / ICH_CODECIO_INTERVAL; i-- &&
 	    bus_space_read_1(sc->iot, sc->aud_ioh,
 		ICH_CAS + sc->sc_modem_offset) & 1;
 	    DELAY(ICH_CODECIO_INTERVAL));
-
-	/* Be permissive in first attempt (see comments in auich_read_codec) */
-	if (!sc->sc_cas_been_used && i <= 0)
-		i = 1;
-	sc->sc_cas_been_used = 1;
 
 	if (i > 0) {
 		bus_space_write_2(sc->iot, sc->mix_ioh,
@@ -907,9 +886,11 @@ auich_reset_codec(void *v)
 	}
 #ifdef AUICH_DEBUG
 	if (status & ICH_SCR)
-		aprint_normal_dev(sc->sc_dev, "The 2nd codec is ready.\n");
+		printf("%s: The 2nd codec is ready.\n",
+		       device_xname(sc->sc_dev));
 	if (status & ICH_S2CR)
-		aprint_normal_dev(sc->sc_dev, "The 3rd codec is ready.\n");
+		printf("%s: The 3rd codec is ready.\n",
+		       device_xname(sc->sc_dev));
 #endif
 	return 0;
 }
@@ -1088,8 +1069,7 @@ auich_halt_pipe(struct auich_softc *sc, int pipe)
 
 #if AUICH_DEBUG
 	if (i > 0)
-		aprint_normal_dev(sc->sc_dev, "%s: halt took %d cycles\n",
-		    __func__, i);
+		printf("auich_halt_pipe: halt took %d cycles\n", i);
 #endif
 }
 
@@ -1099,7 +1079,7 @@ auich_halt_output(void *v)
 	struct auich_softc *sc;
 
 	sc = v;
-	DPRINTF(ICH_DEBUG_DMA, (sc->sc_dev, "%s\n", __func__));
+	DPRINTF(ICH_DEBUG_DMA, ("%s: halt_output\n", device_xname(sc->sc_dev)));
 
 	auich_halt_pipe(sc, ICH_PCMO);
 	sc->pcmo.intr = NULL;
@@ -1113,7 +1093,7 @@ auich_halt_input(void *v)
 	struct auich_softc *sc;
 
 	sc = v;
-	DPRINTF(ICH_DEBUG_DMA, (sc->sc_dev, "%s\n", __func__));
+	DPRINTF(ICH_DEBUG_DMA, ("%s: halt_input\n", device_xname(sc->sc_dev)));
 
 	auich_halt_pipe(sc, ICH_PCMI);
 	sc->pcmi.intr = NULL;
@@ -1268,15 +1248,13 @@ auich_intr(void *v)
 #ifdef DIAGNOSTIC
 	csts = pci_conf_read(sc->sc_pc, sc->sc_pt, PCI_COMMAND_STATUS_REG);
 	if (csts & PCI_STATUS_MASTER_ABORT) {
-		aprint_error_dev(sc->sc_dev, "%s: PCI master abort\n",
-		    __func__);
+		printf("auich_intr: PCI master abort\n");
 	}
 #endif
 
 	gsts = bus_space_read_4(sc->iot, sc->aud_ioh,
 	    ICH_GSTS + sc->sc_modem_offset);
-	DPRINTF(ICH_DEBUG_INTR, (sc->sc_dev, "%s: gsts=0x%x\n",
-	    __func__, gsts));
+	DPRINTF(ICH_DEBUG_INTR, ("auich_intr: gsts=0x%x\n", gsts));
 
 	if ((sc->sc_codectype == AC97_CODEC_TYPE_AUDIO && gsts & ICH_POINT) ||
 	    (sc->sc_codectype == AC97_CODEC_TYPE_MODEM && gsts & ICH_MOINT)) {
@@ -1284,12 +1262,11 @@ auich_intr(void *v)
 
 		sts = bus_space_read_2(sc->iot, sc->aud_ioh,
 		    ICH_PCMO + sc->sc_sts_reg);
-		DPRINTF(ICH_DEBUG_INTR, 
-		    (sc->sc_dev, "%s: osts=0x%x\n", __func__, sts));
+		DPRINTF(ICH_DEBUG_INTR,
+		    ("auich_intr: osts=0x%x\n", sts));
 
 		if (sts & ICH_FIFOE)
-			aprint_error_dev(sc->sc_dev, "%s: fifo underrun\n",
-			    __func__);
+			printf("%s: fifo underrun\n", device_xname(sc->sc_dev));
 
 		if (sts & ICH_BCIS)
 			auich_intr_pipe(sc, ICH_PCMO, &sc->pcmo);
@@ -1313,11 +1290,10 @@ auich_intr(void *v)
 		sts = bus_space_read_2(sc->iot, sc->aud_ioh,
 		    ICH_PCMI + sc->sc_sts_reg);
 		DPRINTF(ICH_DEBUG_INTR,
-		    (sc->sc_dev, "%s: ists=0x%x\n", __func__, sts));
+		    ("auich_intr: ists=0x%x\n", sts));
 
 		if (sts & ICH_FIFOE)
-			aprint_error_dev(sc->sc_dev, "%s: fifo overrun\n",
-			    __func__);
+			printf("%s: fifo overrun\n", device_xname(sc->sc_dev));
 
 		if (sts & ICH_BCIS)
 			auich_intr_pipe(sc, ICH_PCMI, &sc->pcmi);
@@ -1340,11 +1316,10 @@ auich_intr(void *v)
 		sts = bus_space_read_2(sc->iot, sc->aud_ioh,
 		    ICH_MICI + sc->sc_sts_reg);
 		DPRINTF(ICH_DEBUG_INTR,
-		    (sc->sc_dev, "%s: ists=0x%x\n", __func__, sts));
+		    ("auich_intr: ists=0x%x\n", sts));
 
 		if (sts & ICH_FIFOE)
-			aprint_error_dev(sc->sc_dev, "%s: fifo overrun\n",
-			    __func__);
+			printf("%s: fifo overrun\n", device_xname(sc->sc_dev));
 
 		if (sts & ICH_BCIS)
 			auich_intr_pipe(sc, ICH_MICI, &sc->mici);
@@ -1359,7 +1334,7 @@ auich_intr(void *v)
 
 #ifdef AUICH_MODEM_DEBUG
 	if (sc->sc_codectype == AC97_CODEC_TYPE_MODEM && gsts & ICH_GSCI) {
-		aprint_normal_dev(sc->sc_dev, "gsts=0x%x\n", gsts);
+		printf("%s: gsts=0x%x\n", device_xname(sc->sc_dev), gsts);
 		/* int ack */
 		bus_space_write_4(sc->iot, sc->aud_ioh,
 		    ICH_GSTS + sc->sc_modem_offset, ICH_GSCI);
@@ -1413,7 +1388,7 @@ auich_intr_pipe(struct auich_softc *sc, int pipe, struct auich_ring *ring)
 		q->len = (blksize >> sc->sc_sample_shift) | ICH_DMAF_IOC;
 
 		DPRINTF(ICH_DEBUG_INTR,
-		    (sc->sc_dev, "%s: %p, %p = %x @ 0x%x\n", __func__,
+		    ("auich_intr: %p, %p = %x @ 0x%x\n",
 		    &ring->dmalist[qptr], q, q->len, q->base));
 
 		ring->p += blksize;
@@ -1438,16 +1413,15 @@ auich_trigger_output(void *v, void *start, void *end, int blksize,
 	struct auich_dma *p;
 	size_t size;
 
-	sc = v;
 	DPRINTF(ICH_DEBUG_DMA,
-	    (sc->sc_dev, "%s(%p, %p, %d, %p, %p, %p)\n", __func__,
+	    ("auich_trigger_output(%p, %p, %d, %p, %p, %p)\n",
 	    start, end, blksize, intr, arg, param));
+	sc = v;
 
 	for (p = sc->sc_dmas; p && KERNADDR(p) != start; p = p->next)
 		continue;
 	if (!p) {
-		aprint_error_dev(sc->sc_dev, "%s: bad addr %p\n", __func__,
-		    start);
+		printf("auich_trigger_output: bad addr %p\n", start);
 		return EINVAL;
 	}
 
@@ -1475,16 +1449,15 @@ auich_trigger_input(void *v, void *start, void *end, int blksize,
 	struct auich_dma *p;
 	size_t size;
 
-	sc = v;
 	DPRINTF(ICH_DEBUG_DMA,
-	    (sc->sc_dev, "%s(%p, %p, %d, %p, %p, %p)\n", __func__,
+	    ("auich_trigger_input(%p, %p, %d, %p, %p, %p)\n",
 	    start, end, blksize, intr, arg, param));
+	sc = v;
 
 	for (p = sc->sc_dmas; p && KERNADDR(p) != start; p = p->next)
 		continue;
 	if (!p) {
-		aprint_error_dev(sc->sc_dev, "%s: bad addr %p\n", __func__,
-		    start);
+		printf("auich_trigger_input: bad addr %p\n", start);
 		return EINVAL;
 	}
 
@@ -1669,8 +1642,7 @@ auich_calibrate(struct auich_softc *sc)
 	for (p = sc->sc_dmas; p && KERNADDR(p) != temp_buffer; p = p->next)
 		continue;
 	if (p == NULL) {
-		aprint_error_dev(sc->sc_dev, "%s: bad address %p\n",
-		    __func__, temp_buffer);
+		printf("auich_calibrate: bad address %p\n", temp_buffer);
 		return;
 	}
 	sc->pcmi.dmalist[0].base = DMAADDR(p);
@@ -1725,15 +1697,8 @@ auich_calibrate(struct auich_softc *sc)
 	auich_freem(sc, temp_buffer, bytes);
 
 	if (nciv == ociv) {
-		aprint_error_dev(sc->sc_dev, "ac97 link rate calibration "
-		    "timed out after %" PRIu64 " us\n", wait_us);
-		return;
-	}
-
-	if (wait_us == 0) {
-		/* Can happen with emulated hardware */
-		aprint_error_dev(sc->sc_dev, "abnormal zero delay during "
-		    "calibration\n");
+		printf("%s: ac97 link rate calibration timed out after %"
+		       PRIu64 " us\n", device_xname(sc->sc_dev), wait_us);
 		return;
 	}
 

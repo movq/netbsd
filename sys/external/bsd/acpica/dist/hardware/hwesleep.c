@@ -6,7 +6,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -130,8 +130,7 @@ AcpiHwExtendedSleep (
 
     /* Clear wake status (WAK_STS) */
 
-    Status = AcpiWrite ((UINT64) ACPI_X_WAKE_STATUS,
-        &AcpiGbl_FADT.SleepStatus);
+    Status = AcpiWrite ((UINT64) ACPI_X_WAKE_STATUS, &AcpiGbl_FADT.SleepStatus);
     if (ACPI_FAILURE (Status))
     {
         return_ACPI_STATUS (Status);
@@ -203,7 +202,7 @@ AcpiHwExtendedWakePrep (
 
 
     Status = AcpiGetSleepTypeData (ACPI_STATE_S0,
-        &AcpiGbl_SleepTypeA, &AcpiGbl_SleepTypeB);
+                    &AcpiGbl_SleepTypeA, &AcpiGbl_SleepTypeB);
     if (ACPI_SUCCESS (Status))
     {
         SleepTypeValue = ((AcpiGbl_SleepTypeA << ACPI_X_SLEEP_TYPE_POSITION) &

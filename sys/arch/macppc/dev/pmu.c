@@ -1,4 +1,4 @@
-/*	$NetBSD: pmu.c,v 1.27 2016/06/01 05:27:40 macallan Exp $ */
+/*	$NetBSD: pmu.c,v 1.23 2014/03/14 21:59:41 mrg Exp $ */
 
 /*-
  * Copyright (c) 2006 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pmu.c,v 1.27 2016/06/01 05:27:40 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pmu.c,v 1.23 2014/03/14 21:59:41 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -35,7 +35,6 @@ __KERNEL_RCSID(0, "$NetBSD: pmu.c,v 1.27 2016/06/01 05:27:40 macallan Exp $");
 #include <sys/device.h>
 #include <sys/proc.h>
 #include <sys/kthread.h>
-#include <sys/atomic.h>
 
 #include <sys/bus.h>
 #include <machine/pio.h>
@@ -71,13 +70,6 @@ static void pmu_autopoll(void *, int);
 
 static int pmu_intr(void *);
 
-
-/* bits for sc_pending, as signals to the event thread */
-#define PMU_EV_CARD0	1
-#define PMU_EV_CARD1	2
-#define PMU_EV_BUTTON	4
-#define PMU_EV_LID	8
-
 struct pmu_softc {
 	device_t sc_dev;
 	void *sc_ih;
@@ -86,7 +78,6 @@ struct pmu_softc {
 	struct i2c_controller sc_i2c;
 	struct pmu_ops sc_pmu_ops;
 	struct sysmon_pswitch sc_lidswitch;
-	struct sysmon_pswitch sc_powerbutton;
 	bus_space_tag_t sc_memt;
 	bus_space_handle_t sc_memh;
 	uint32_t sc_flags;
@@ -95,15 +86,12 @@ struct pmu_softc {
 	int sc_iic_done;
 	int sc_error;
 	int sc_autopoll;
+	int sc_pending_eject;
 	int sc_brightness, sc_brightness_wanted;
 	int sc_volume, sc_volume_wanted;
 	int sc_lid_closed;
-	int sc_button;
-	uint8_t sc_env_old;
-	uint8_t sc_env_mask;
 	/* deferred processing */
 	lwp_t *sc_thread;
-	int sc_pending;
 	/* signalling the event thread */
 	int sc_event;
 	/* ADB */
@@ -272,7 +260,7 @@ pmu_attach(device_t parent, device_t self, void *aux)
 	int type = IST_EDGE;
 	uint8_t cmd[2] = {2, 0};
 	uint8_t resp[16];
-	char name[256], model[32];
+	char name[256];
 
 	extint_node = of_getnode_byname(OF_parent(ca->ca_node), "extint-gpio1");
 	if (extint_node) {
@@ -291,27 +279,12 @@ pmu_attach(device_t parent, device_t self, void *aux)
 
 	sc->sc_error = 0;
 	sc->sc_autopoll = 0;
-	sc->sc_pending = 0;
-	sc->sc_env_old = 0;
+	sc->sc_pending_eject = 0;
 	sc->sc_brightness = sc->sc_brightness_wanted = 0x80;
 	sc->sc_volume = sc->sc_volume_wanted = 0x80;
 	sc->sc_flags = 0;
 	sc->sc_callback = NULL;
 	sc->sc_lid_closed = 0;
-	sc->sc_button = 0;
-	sc->sc_env_mask = 0xff;
-
-	/*
-	 * core99 PowerMacs like to send environment messages with the lid
-	 * switch bit set - since that doesn't make any sense here and it
-	 * probably means something else anyway we mask it out
-	 */
-
-	if (OF_getprop(root_node, "model", model, 32) != 0) {
-		if (strncmp(model, "PowerMac", 8) == 0) {
-			sc->sc_env_mask = PMU_ENV_POWER_BUTTON;
-		}
-	}
 
 	if (bus_space_map(sc->sc_memt, ca->ca_reg[0] + ca->ca_baseaddr,
 	    ca->ca_reg[1], 0, &sc->sc_memh) != 0) {
@@ -412,7 +385,6 @@ next:
 bat_done:
 
 #if notyet
-	memset(&iba, 0, sizeof(iba));
 	iba.iba_tag = &sc->sc_i2c;
 	sc->sc_i2c.ic_cookie = sc;
 	sc->sc_i2c.ic_acquire_bus = pmu_i2c_acquire_bus;
@@ -436,12 +408,6 @@ bat_done:
 	if (sysmon_pswitch_register(&sc->sc_lidswitch) != 0)
 		aprint_error_dev(self,
 		    "unable to register lid switch with sysmon\n");
-
-	sc->sc_powerbutton.smpsw_name = "Power button";
-	sc->sc_powerbutton.smpsw_type = PSWITCH_TYPE_POWER;
-	if (sysmon_pswitch_register(&sc->sc_powerbutton) != 0)
-		aprint_error_dev(self,
-		    "unable to register power button with sysmon\n");
 }
 
 static void
@@ -667,7 +633,7 @@ pmu_intr(void *arg)
 	if (resp[1] & PMU_INT_PCEJECT) {
 		/* deal with PCMCIA eject buttons */
 		DPRINTF("card eject %d\n", resp[3]);
-		atomic_or_32(&sc->sc_pending, (resp[3] & 3));
+		sc->sc_pending_eject |= (resp[3] & 3);
 		wakeup(&sc->sc_event);
 		goto done;
 	}
@@ -680,7 +646,7 @@ pmu_intr(void *arg)
 		goto done;
 	}
 	if (resp[1] & PMU_INT_ENVIRONMENT) {
-		uint8_t diff;
+		int closed;
 #ifdef PMU_VERBOSE
 		/* deal with environment messages */
 		printf("environment:");
@@ -688,18 +654,12 @@ pmu_intr(void *arg)
 			printf(" %02x", resp[i]);
 		printf("\n");
 #endif
-		diff = (resp[2] ^ sc->sc_env_old ) & sc->sc_env_mask;
-		if (diff == 0) goto done;
-		sc->sc_env_old = resp[2];
-		if (diff & PMU_ENV_LID_CLOSED) {
-			sc->sc_lid_closed = (resp[2] & PMU_ENV_LID_CLOSED) != 0;
-			atomic_or_32(&sc->sc_pending, PMU_EV_LID);
-			wakeup(&sc->sc_event);
-		}
-		if (diff & PMU_ENV_POWER_BUTTON) {
-			sc->sc_button = (resp[2] & PMU_ENV_POWER_BUTTON) != 0;
-			atomic_or_32(&sc->sc_pending, PMU_EV_BUTTON);
-			wakeup(&sc->sc_event);
+		closed = (resp[2] & PMU_ENV_LID_CLOSED) != 0;
+		if (closed != sc->sc_lid_closed) {
+			sc->sc_lid_closed = closed;
+			sysmon_pswitch_event(&sc->sc_lidswitch, 
+	    		    closed ? PSWITCH_EVENT_PRESSED : 
+			    PSWITCH_EVENT_RELEASED);
 		}
 		goto done;
 	}
@@ -974,10 +934,13 @@ pmu_i2c_exec(void *cookie, i2c_op_t op, i2c_addr_t addr, const void *_send,
 static void
 pmu_eject_card(struct pmu_softc *sc, int socket)
 {
+	int s;
 	uint8_t buf[] = {socket | 4};
 	uint8_t res[4];
 
-	atomic_and_32(&sc->sc_pending, ~socket);
+	s = splhigh();
+	sc->sc_pending_eject &= ~socket;
+	splx(s);
 	pmu_send(sc, PMU_EJECT_PCMCIA, 1, buf, 4, res);
 }
 
@@ -1038,10 +1001,10 @@ pmu_thread(void *cookie)
 	
 	while (1) {
 		tsleep(&sc->sc_event, PWAIT, "wait", ticks);
-		if ((sc->sc_pending & 3) != 0) {
-			DPRINTF("eject %d\n", sc->sc_pending & 3);
+		if (sc->sc_pending_eject != 0) {
+			DPRINTF("eject %d\n", sc->sc_pending_eject);
 			for (i = 1; i < 3; i++) {
-				if (i & sc->sc_pending)
+				if (i & sc->sc_pending_eject)
 					pmu_eject_card(sc, i);
 			}
 		}
@@ -1057,20 +1020,6 @@ pmu_thread(void *cookie)
 			set_volume(sc->sc_volume_wanted);
 #endif
 			sc->sc_volume = sc->sc_volume_wanted;
-		}
-
-		if (sc->sc_pending & PMU_EV_LID) {
-			atomic_and_32(&sc->sc_pending, ~PMU_EV_LID);
-			sysmon_pswitch_event(&sc->sc_lidswitch, 
-	    		    sc->sc_lid_closed ? PSWITCH_EVENT_PRESSED : 
-			    PSWITCH_EVENT_RELEASED);
-		}
-
-		if (sc->sc_pending & PMU_EV_BUTTON) {
-			atomic_and_32(&sc->sc_pending, ~PMU_EV_BUTTON);
-			sysmon_pswitch_event(&sc->sc_powerbutton, 
-	    		    sc->sc_button ? PSWITCH_EVENT_PRESSED : 
-			    PSWITCH_EVENT_RELEASED);
 		}
 
 		if (sc->sc_callback != NULL)

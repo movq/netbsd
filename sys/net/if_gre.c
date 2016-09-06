@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gre.c,v 1.170 2016/08/07 17:38:33 christos Exp $ */
+/*	$NetBSD: if_gre.c,v 1.159.2.1 2014/08/22 10:15:22 martin Exp $ */
 
 /*
  * Copyright (c) 1998, 2008 The NetBSD Foundation, Inc.
@@ -45,14 +45,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_gre.c,v 1.170 2016/08/07 17:38:33 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_gre.c,v 1.159.2.1 2014/08/22 10:15:22 martin Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_atalk.h"
 #include "opt_gre.h"
 #include "opt_inet.h"
 #include "opt_mpls.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/file.h>
@@ -71,8 +69,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_gre.c,v 1.170 2016/08/07 17:38:33 christos Exp $"
 #include <sys/systm.h>
 #include <sys/sysctl.h>
 #include <sys/kauth.h>
-#include <sys/device.h>
-#include <sys/module.h>
 
 #include <sys/kernel.h>
 #include <sys/mutex.h>
@@ -86,9 +82,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_gre.c,v 1.170 2016/08/07 17:38:33 christos Exp $"
 #include <net/if_types.h>
 #include <net/netisr.h>
 #include <net/route.h>
-#include <sys/device.h>
-#include <sys/module.h>
-#include <sys/atomic.h>
 
 #include <netinet/in_systm.h>
 #include <netinet/in.h>
@@ -121,9 +114,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_gre.c,v 1.170 2016/08/07 17:38:33 christos Exp $"
 
 #include <compat/sys/socket.h>
 #include <compat/sys/sockio.h>
-
-#include "ioconf.h"
-
 /*
  * It is not easy to calculate the right value for a GRE MTU.
  * We leave this task to the admin and use the same default that
@@ -147,8 +137,6 @@ int gre_debug = 0;
 
 int ip_gre_ttl = GRE_TTL;
 
-static u_int gre_count;
-
 static int gre_clone_create(struct if_clone *, int);
 static int gre_clone_destroy(struct ifnet *);
 
@@ -159,10 +147,10 @@ static int gre_input(struct gre_softc *, struct mbuf *, int,
     const struct gre_h *);
 static bool gre_is_nullconf(const struct gre_soparm *);
 static int gre_output(struct ifnet *, struct mbuf *,
-			   const struct sockaddr *, const struct rtentry *);
+			   const struct sockaddr *, struct rtentry *);
 static int gre_ioctl(struct ifnet *, u_long, void *);
-static int gre_getsockname(struct socket *, struct sockaddr *);
-static int gre_getpeername(struct socket *, struct sockaddr *);
+static int gre_getsockname(struct socket *, struct mbuf *);
+static int gre_getpeername(struct socket *, struct mbuf *);
 static int gre_getnames(struct socket *, struct lwp *,
     struct sockaddr_storage *, struct sockaddr_storage *);
 static void gre_clearconf(struct gre_soparm *, bool);
@@ -324,7 +312,6 @@ gre_clone_create(struct if_clone *ifc, int unit)
 	if_attach(&sc->sc_if);
 	if_alloc_sadl(&sc->sc_if);
 	bpf_attach(&sc->sc_if, DLT_NULL, sizeof(uint32_t));
-	atomic_inc_uint(&gre_count);
 	return 0;
 
 fail1:	cv_destroy(&sc->sc_fp_condvar);
@@ -366,7 +353,6 @@ gre_clone_destroy(struct ifnet *ifp)
 	gre_evcnt_detach(sc);
 	free(sc, M_DEVBUF);
 
-	atomic_dec_uint(&gre_count);
 	return 0;
 }
 
@@ -432,8 +418,9 @@ static int
 gre_socreate(struct gre_softc *sc, const struct gre_soparm *sp, int *fdout)
 {
 	int fd, rc;
+	struct mbuf *m;
+	struct sockaddr *sa;
 	struct socket *so;
-	struct sockaddr_big sbig;
 	sa_family_t af;
 	int val;
 
@@ -449,20 +436,31 @@ gre_socreate(struct gre_softc *sc, const struct gre_soparm *sp, int *fdout)
 	if ((rc = fd_getsock(fd, &so)) != 0)
 		return rc;
 
-	memcpy(&sbig, &sp->sp_src, sizeof(sp->sp_src));
-	if ((rc = sobind(so, (struct sockaddr *)&sbig, curlwp)) != 0) {
+	if ((m = getsombuf(so, MT_SONAME)) == NULL) {
+		rc = ENOBUFS;
+		goto out;
+	}
+	sa = mtod(m, struct sockaddr *);
+	sockaddr_copy(sa, MIN(MLEN, sizeof(sp->sp_src)), sstocsa(&sp->sp_src));
+	m->m_len = sp->sp_src.ss_len;
+
+	if ((rc = sobind(so, m, curlwp)) != 0) {
 		GRE_DPRINTF(sc, "sobind failed\n");
 		goto out;
 	}
 
-	memcpy(&sbig, &sp->sp_dst, sizeof(sp->sp_dst));
+	sockaddr_copy(sa, MIN(MLEN, sizeof(sp->sp_dst)), sstocsa(&sp->sp_dst));
+	m->m_len = sp->sp_dst.ss_len;
+
 	solock(so);
-	if ((rc = soconnect(so, (struct sockaddr *)&sbig, curlwp)) != 0) {
+	if ((rc = soconnect(so, m, curlwp)) != 0) {
 		GRE_DPRINTF(sc, "soconnect failed\n");
 		sounlock(so);
 		goto out;
 	}
 	sounlock(so);
+
+	m = NULL;
 
 	/* XXX convert to a (new) SOL_SOCKET call */
   	KASSERT(so->so_proto != NULL);
@@ -481,6 +479,8 @@ gre_socreate(struct gre_softc *sc, const struct gre_soparm *sp, int *fdout)
 		rc = 0;
 	}
 out:
+	m_freem(m);
+
 	if (rc != 0)
 		fd_close(fd);
 	else  {
@@ -858,7 +858,7 @@ gre_input(struct gre_softc *sc, struct mbuf *m, int hlen,
 
 	bpf_mtap_af(&sc->sc_if, af, m);
 
-	m_set_rcvif(m, &sc->sc_if);
+	m->m_pkthdr.rcvif = &sc->sc_if;
 
 	if (__predict_true(pktq)) {
 		if (__predict_false(!pktq_enqueue(pktq, m, 0))) {
@@ -887,7 +887,7 @@ gre_input(struct gre_softc *sc, struct mbuf *m, int hlen,
  */
 static int
 gre_output(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
-	   const struct rtentry *rt)
+	   struct rtentry *rt)
 {
 	int error = 0;
 	struct gre_softc *sc = ifp->if_softc;
@@ -973,13 +973,13 @@ gre_output(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 }
 
 static int
-gre_getsockname(struct socket *so, struct sockaddr *nam)
+gre_getsockname(struct socket *so, struct mbuf *nam)
 {
 	return (*so->so_proto->pr_usrreqs->pr_sockaddr)(so, nam);
 }
 
 static int
-gre_getpeername(struct socket *so, struct sockaddr *nam)
+gre_getpeername(struct socket *so, struct mbuf *nam)
 {
 	return (*so->so_proto->pr_usrreqs->pr_peeraddr)(so, nam);
 }
@@ -988,19 +988,26 @@ static int
 gre_getnames(struct socket *so, struct lwp *l, struct sockaddr_storage *src,
     struct sockaddr_storage *dst)
 {
-	struct sockaddr_storage ss;
+	struct mbuf *m;
+	struct sockaddr_storage *ss;
 	int rc;
 
-	solock(so);
-	if ((rc = gre_getsockname(so, (struct sockaddr *)&ss)) != 0)
-		goto out;
-	*src = ss;
+	if ((m = getsombuf(so, MT_SONAME)) == NULL)
+		return ENOBUFS;
 
-	if ((rc = gre_getpeername(so, (struct sockaddr *)&ss)) != 0)
+	ss = mtod(m, struct sockaddr_storage *);
+
+	solock(so);
+	if ((rc = gre_getsockname(so, m)) != 0)
 		goto out;
-	*dst = ss;
+	*src = *ss;
+
+	if ((rc = gre_getpeername(so, m)) != 0)
+		goto out;
+	*dst = *ss;
 out:
 	sounlock(so);
+	m_freem(m);
 	return rc;
 }
 
@@ -1095,7 +1102,7 @@ gre_ssock(struct ifnet *ifp, struct gre_soparm *sp, int fd)
 
 	GRE_DPRINTF(sc, "\n");
 
-	so = fp->f_socket;
+	so = (struct socket *)fp->f_data;
 	pr = so->so_proto;
 
 	GRE_DPRINTF(sc, "type %d, proto %d\n", pr->pr_type, pr->pr_protocol);
@@ -1173,7 +1180,6 @@ static int
 gre_ioctl(struct ifnet *ifp, const u_long cmd, void *data)
 {
 	struct ifreq *ifr;
-	struct ifaddr *ifa = (struct ifaddr *)data;
 	struct if_laddrreq *lifr = (struct if_laddrreq *)data;
 	struct gre_softc *sc = ifp->if_softc;
 	struct gre_soparm *sp;
@@ -1215,7 +1221,6 @@ gre_ioctl(struct ifnet *ifp, const u_long cmd, void *data)
 			break;
 		gre_clearconf(sp, false);
 		ifp->if_flags |= IFF_UP;
-		ifa->ifa_rtrequest = p2p_rtrequest;
 		goto mksocket;
 	case SIOCSIFFLAGS:
 		if ((error = ifioctl_common(ifp, cmd, data)) != 0)
@@ -1439,40 +1444,11 @@ out:
 	return error;
 }
 
+void	greattach(int);
+
 /* ARGSUSED */
 void
 greattach(int count)
 {
-
-	/*
-	 * Nothing to do here, initialization is handled by the
-	 * module initialization code in greinit() below).
-	 */
-}
-
-static void
-greinit(void)
-{
 	if_clone_attach(&gre_cloner);
 }
-
-static int
-gredetach(void)
-{
-	int error = 0;
-
-	if (gre_count != 0)
-		error = EBUSY;
-
-	if (error == 0)
-		if_clone_detach(&gre_cloner);
-
-	return error;
-}
-
-/*
- * Module infrastructure
- */
-#include "if_module.h"
-
-IF_MODULE(MODULE_CLASS_DRIVER, gre, "")

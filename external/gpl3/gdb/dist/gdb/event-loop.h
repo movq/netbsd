@@ -1,5 +1,5 @@
 /* Definitions used by the GDB event loop.
-   Copyright (C) 1999-2015 Free Software Foundation, Inc.
+   Copyright (C) 1999-2014 Free Software Foundation, Inc.
    Written by Elena Zannoni <ezannoni@cygnus.com> of Cygnus Solutions.
 
    This file is part of GDB.
@@ -77,6 +77,7 @@ typedef void (timer_handler_func) (gdb_client_data);
 
 /* Exported functions from event-loop.c */
 
+extern void initialize_event_loop (void);
 extern void start_event_loop (void);
 extern int gdb_do_one_event (void);
 extern void delete_file_handler (int fd);
@@ -101,15 +102,6 @@ void call_async_signal_handler (struct async_signal_handler *handler);
    Do not call this directly; use gdb_call_async_signal_handler,
    below, with IMMEDIATE_P == 0.  */
 void mark_async_signal_handler (struct async_signal_handler *handler);
-
-/* Returns true if HANDLER is marked ready.  */
-
-extern int
-  async_signal_handler_is_marked (struct async_signal_handler *handler);
-
-/* Mark HANDLER as NOT ready.  */
-
-extern void clear_async_signal_handler (struct async_signal_handler *handler);
 
 /* Wrapper for the body of signal handlers.  Call this function from
    any SIGINT handler which needs to access GDB data structures or
@@ -139,7 +131,3 @@ extern void
 /* Call the handler from HANDLER the next time through the event
    loop.  */
 extern void mark_async_event_handler (struct async_event_handler *handler);
-
-/* Mark the handler (ASYNC_HANDLER_PTR) as NOT ready.  */
-
-extern void clear_async_event_handler (struct async_event_handler *handler);

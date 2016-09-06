@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.23 2016/06/25 14:35:58 isaki Exp $
+#	$NetBSD: Makefile,v 1.21 2014/04/16 14:33:43 tsutsui Exp $
 
 NOMAN=		# defined
 
@@ -13,8 +13,6 @@ NEWVERSWHAT=	"${BOOT}"
 # text and bss addresses in hex
 TEXT=		002000		# Primary (me)
 BOOT_TEXT=	006000		# Secondary (/boot)
-
-BOOT_MAXSIZE=	65536		# size enough to read /boot whole
 
 PROG=		fd$(BOOT)
 BINDIR=		/usr/mdec
@@ -35,7 +33,6 @@ vers.c:	${VERSIONFILE}
 	    ${.ALLSRC} ${MACHINE} ${NEWVERSWHAT}
 
 CPPFLAGS+= -DTEXTADDR="0x$(TEXT)" -DBOOT_TEXTADDR="0x$(BOOT_TEXT)"
-CPPFLAGS+= -DBOOT_MAXSIZE="$(BOOT_MAXSIZE)"
 CPPFLAGS+= -DBOOT=\"$(BOOT)\" -DBOOT_VERS=\"$(VERSION)\"
 CPPFLAGS+= -I${COMMONDIR} -I${LIBIOCS} -I${S} -I. -D_STANDALONE
 CFLAGS+=   -m68000

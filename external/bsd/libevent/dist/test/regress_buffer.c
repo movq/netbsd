@@ -1,4 +1,4 @@
-/*	$NetBSD: regress_buffer.c,v 1.5 2015/08/28 13:04:48 joerg Exp $	*/
+/*	$NetBSD: regress_buffer.c,v 1.3.6.1 2015/02/03 08:23:40 bouyer Exp $	*/
 /*
  * Copyright (c) 2003-2007 Niels Provos <provos@citi.umich.edu>
  * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
@@ -33,7 +33,7 @@
 
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: regress_buffer.c,v 1.5 2015/08/28 13:04:48 joerg Exp $");
+__RCSID("$NetBSD: regress_buffer.c,v 1.3.6.1 2015/02/03 08:23:40 bouyer Exp $");
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -199,7 +199,7 @@ test_evbuffer(void *ptr)
 
 	tt_assert(evbuffer_get_length(evb_two) == 0);
 	tt_assert(evbuffer_get_length(evb) == 7);
-	tt_assert(memcmp((char*)EVBUFFER_DATA(evb), "1/hello", 7) == 0);
+	tt_assert(!memcmp((char*)EVBUFFER_DATA(evb), "1/hello", 7) != 0);
 
 	memset(buffer, 0, sizeof(buffer));
 	evbuffer_add(evb, buffer, sizeof(buffer));

@@ -1,5 +1,6 @@
 /* tc-tic54x.c -- Assembly code for the Texas Instruments TMS320C54X
-   Copyright (C) 1999-2015 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008,
+   2009, 2010, 2012  Free Software Foundation, Inc.
    Contributed by Timothy Wall (twall@cygnus.com)
 
    This file is part of GAS, the GNU Assembler.
@@ -351,8 +352,8 @@ tic54x_asg (int x ATTRIBUTE_UNUSED)
       return;
     }
 
-  ++input_line_pointer;
-  c = get_symbol_name (&name);	/* Get terminator.  */
+  name = ++input_line_pointer;
+  c = get_symbol_end ();	/* Get terminator.  */
   if (!ISALPHA (*name))
     {
       as_bad (_("symbols assigned with .asg must begin with a letter"));
@@ -367,7 +368,7 @@ tic54x_asg (int x ATTRIBUTE_UNUSED)
   strcpy (tmp, name);
   name = tmp;
   subsym_create_or_replace (name, str);
-  (void) restore_line_pointer (c);
+  *input_line_pointer = c;
   demand_empty_rest_of_line ();
 }
 
@@ -411,10 +412,11 @@ tic54x_eval (int x ATTRIBUTE_UNUSED)
       ignore_rest_of_line ();
       return;
     }
-  c = get_symbol_name (&name);	/* Get terminator.  */
+  name = input_line_pointer;
+  c = get_symbol_end ();	/* Get terminator.  */
   tmp = xmalloc (strlen (name) + 1);
   name = strcpy (tmp, name);
-  (void) restore_line_pointer (c);
+  *input_line_pointer = c;
 
   if (!ISALPHA (*name))
     {
@@ -470,9 +472,8 @@ tic54x_bss (int x ATTRIBUTE_UNUSED)
   current_seg = now_seg;	/* Save current seg.  */
   current_subseg = now_subseg;	/* Save current subseg.  */
 
-  c = get_symbol_name (&name);	/* Get terminator.  */
-  if (c == '"')
-    c = * ++ input_line_pointer;
+  name = input_line_pointer;
+  c = get_symbol_end ();	/* Get terminator.  */
   if (c != ',')
     {
       as_bad (_(".bss size argument missing\n"));
@@ -782,8 +783,8 @@ tic54x_endstruct (int is_union)
 static void
 tic54x_tag (int ignore ATTRIBUTE_UNUSED)
 {
-  char *name;
-  int c = get_symbol_name (&name);
+  char *name = input_line_pointer;
+  int c = get_symbol_end ();
   struct stag *stag = (struct stag *) hash_find (stag_hash, name);
 
   if (!stag)
@@ -829,7 +830,7 @@ tic54x_tag (int ignore ATTRIBUTE_UNUSED)
   if (current_stag != NULL && !current_stag->is_union)
     abs_section_offset += stag->size;
 
-  (void) restore_line_pointer (c);
+  *input_line_pointer = c;
   demand_empty_rest_of_line ();
   line_label = NULL;
 }
@@ -1109,10 +1110,11 @@ tic54x_global (int type)
 
   do
     {
-      c = get_symbol_name (&name);
+      name = input_line_pointer;
+      c = get_symbol_end ();
       symbolP = symbol_find_or_make (name);
-      c = restore_line_pointer (c);
 
+      *input_line_pointer = c;
       S_SET_STORAGE_CLASS (symbolP, C_EXT);
       if (c == ',')
 	{
@@ -1183,14 +1185,13 @@ tic54x_sect (int arg)
       else
 	{
 	  int c;
-
-	  c = get_symbol_name (&name);
+	  name = input_line_pointer;
+	  c = get_symbol_end ();
           len = strlen(name);
 	  name = strcpy (xmalloc (len + 10), name);
-	  (void) restore_line_pointer (c);
+	  *input_line_pointer = c;
 	  demand_empty_rest_of_line ();
 	}
-
       /* Make sure all named initialized sections flagged properly.  If we
          encounter instructions, we'll flag it with SEC_CODE as well.  */
       strcat (name, ",\"w\"\n");
@@ -1366,14 +1367,17 @@ tic54x_usect (int x ATTRIBUTE_UNUSED)
   current_seg = now_seg;	/* Save current seg.  */
   current_subseg = now_subseg;	/* Save current subseg.  */
 
-  c = get_symbol_name (&section_name);	/* Get terminator.  */
+  if (*input_line_pointer == '"')
+    input_line_pointer++;
+  section_name = input_line_pointer;
+  c = get_symbol_end ();	/* Get terminator.  */
+  input_line_pointer++;		/* Skip null symbol terminator.  */
   name = xmalloc (input_line_pointer - section_name + 1);
   strcpy (name, section_name);
-  c = restore_line_pointer (c);
-  
-  if (c == ',')
+
+  if (*input_line_pointer == ',')
     ++input_line_pointer;
-  else
+  else if (c != ',')
     {
       as_bad (_("Missing size argument"));
       ignore_rest_of_line ();
@@ -2005,17 +2009,17 @@ tic54x_message (int type)
 static void
 tic54x_label (int ignored ATTRIBUTE_UNUSED)
 {
-  char *name;
+  char *name = input_line_pointer;
   symbolS *symbolP;
   int c;
 
   ILLEGAL_WITHIN_STRUCT ();
 
-  c = get_symbol_name (&name);
+  c = get_symbol_end ();
   symbolP = colon (name);
   S_SET_STORAGE_CLASS (symbolP, C_STATLAB);
 
-  (void) restore_line_pointer (c);
+  *input_line_pointer = c;
   demand_empty_rest_of_line ();
 }
 
@@ -2138,12 +2142,12 @@ tic54x_sblock (int ignore ATTRIBUTE_UNUSED)
 	}
       else
 	{
-	  char *section_name;
+	  char *section_name = input_line_pointer;
 
-	  c = get_symbol_name (&section_name);
+	  c = get_symbol_end ();
 	  name = xmalloc (strlen (section_name) + 1);
 	  strcpy (name, section_name);
-	  (void) restore_line_pointer (c);
+	  *input_line_pointer = c;
 	}
 
       seg = bfd_get_section_by_name (stdoutput, name);
@@ -2253,11 +2257,12 @@ tic54x_var (int ignore ATTRIBUTE_UNUSED)
 	  ignore_rest_of_line ();
 	  return;
 	}
-      c = get_symbol_name (&name);
+      name = input_line_pointer;
+      c = get_symbol_end ();
       /* .var symbols start out with a null string.  */
       name = strcpy (xmalloc (strlen (name) + 1), name);
       hash_insert (subsym_hash[macro_level], name, empty);
-      c = restore_line_pointer (c);
+      *input_line_pointer = c;
       if (c == ',')
 	{
 	  ++input_line_pointer;
@@ -2364,13 +2369,13 @@ tic54x_mlib (int ignore ATTRIBUTE_UNUSED)
       FILE *ftmp;
 
       /* We're not sure how big it is, but it will be smaller than "size".  */
-      size = bfd_bread (buf, size, mbfd);
+      bfd_bread (buf, size, mbfd);
 
       /* Write to a temporary file, then use s_include to include it
 	 a bit of a hack.  */
       ftmp = fopen (fname, "w+b");
       fwrite ((void *) buf, size, 1, ftmp);
-      if (size == 0 || buf[size - 1] != '\n')
+      if (buf[size - 1] != '\n')
 	fwrite ("\n", 1, 1, ftmp);
       fclose (ftmp);
       free (buf);
@@ -4496,8 +4501,8 @@ subsym_substitute (char *line, int forced)
 	  if (forced)
 	    ++ptr;
 
-	  input_line_pointer = ptr;
-	  c = get_symbol_name (&name);
+	  name = input_line_pointer = ptr;
+	  c = get_symbol_end ();
 	  /* '?' is not normally part of a symbol, but it IS part of a local
 	     label.  */
 	  if (c == '?')
@@ -4773,7 +4778,7 @@ tic54x_start_line_hook (void)
   line[endp - input_line_pointer] = 0;
 
   /* Scan ahead for parallel insns.  */
-  parallel_on_next_line_hint = next_line_shows_parallel (endp);
+  parallel_on_next_line_hint = next_line_shows_parallel (endp + 1);
 
   /* If within a macro, first process forced replacements.  */
   if (macro_level > 0)
@@ -4842,7 +4847,7 @@ md_assemble (char *line)
   int c;
 
   input_line_pointer = line;
-  c = get_symbol_name (&line);
+  c = get_symbol_end ();
 
   if (cpu == VNONE)
     cpu = V542;
@@ -5117,9 +5122,10 @@ tc_gen_reloc (asection *section, fixS *fixP)
 /* Handle cons expressions.  */
 
 void
-tic54x_cons_fix_new (fragS *frag, int where, int octets, expressionS *expn,
-		     bfd_reloc_code_real_type r)
+tic54x_cons_fix_new (fragS *frag, int where, int octets, expressionS *expn)
 {
+  bfd_reloc_code_real_type r;
+
   switch (octets)
     {
     default:
@@ -5357,21 +5363,22 @@ tic54x_convert_frag (bfd *abfd ATTRIBUTE_UNUSED,
    syntax puts the symbol *before* the pseudo (which is kinda like MRI syntax,
    I guess, except I've never seen a definition of MRI syntax).
 
+   C is the character that used to be at *REST, which points to the end of the
+   label.
+
    Don't allow labels to start with '.'  */
 
 int
-tic54x_start_label (int nul_char, int next_char)
+tic54x_start_label (int c, char *rest)
 {
-  char *rest;
-
   /* If within .struct/.union, no auto line labels, please.  */
   if (current_stag != NULL)
     return 0;
 
   /* Disallow labels starting with "."  */
-  if (next_char != ':')
+  if (c != ':')
     {
-      char *label = input_line_pointer;
+      char *label = rest;
 
       while (!is_end_of_line[(int) label[-1]])
 	--label;
@@ -5382,22 +5389,22 @@ tic54x_start_label (int nul_char, int next_char)
 	}
     }
 
-  if (is_end_of_line[(int) next_char])
+  if (is_end_of_line[(int) c])
     return 1;
 
-  rest = input_line_pointer;
-  if (nul_char == '"')
-    ++rest;
-  while (ISSPACE (next_char))
-    next_char = *++rest;
-  if (next_char != '.')
-    return 1;
+  if (ISSPACE (c))
+    while (ISSPACE (c = *++rest))
+      ;
+  if (c == '.')
+    {
+      /* Don't let colon () define a label for any of these...  */
+      return (strncasecmp (rest, ".tag", 4) != 0 || !ISSPACE (rest[4]))
+	&& (strncasecmp (rest, ".struct", 7) != 0 || !ISSPACE (rest[7]))
+	&& (strncasecmp (rest, ".union", 6) != 0 || !ISSPACE (rest[6]))
+	&& (strncasecmp (rest, ".macro", 6) != 0 || !ISSPACE (rest[6]))
+	&& (strncasecmp (rest, ".set", 4) != 0 || !ISSPACE (rest[4]))
+	&& (strncasecmp (rest, ".equ", 4) != 0 || !ISSPACE (rest[4]));
+    }
 
-  /* Don't let colon () define a label for any of these...  */
-  return ((strncasecmp (rest, ".tag", 4) != 0 || !ISSPACE (rest[4]))
-	  && (strncasecmp (rest, ".struct", 7) != 0 || !ISSPACE (rest[7]))
-	  && (strncasecmp (rest, ".union", 6) != 0 || !ISSPACE (rest[6]))
-	  && (strncasecmp (rest, ".macro", 6) != 0 || !ISSPACE (rest[6]))
-	  && (strncasecmp (rest, ".set", 4) != 0 || !ISSPACE (rest[4]))
-	  && (strncasecmp (rest, ".equ", 4) != 0 || !ISSPACE (rest[4])));
+  return 1;
 }

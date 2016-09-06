@@ -1,7 +1,8 @@
-<!DOCTYPE book [
-<!ENTITY mdash "&#8212;">]>
+<!DOCTYPE book PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN"
+	       "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd"
+	       [<!ENTITY mdash "&#8212;">]>
 <!--
- - Copyright (C) 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
+ - Copyright (C) 2014  Internet Systems Consortium, Inc. ("ISC")
  -
  - Permission to use, copy, modify, and/or distribute this software for any
  - purpose with or without fee is hereby granted, provided that the above
@@ -16,14 +17,10 @@
  - PERFORMANCE OF THIS SOFTWARE.
 -->
 
-<!-- Converted by db4-upgrade version 1.0 -->
-<refentry xmlns="http://docbook.org/ns/docbook" version="5.0" xml:id="man.delv">
-  <info>
-    <date>2014-04-23</date>
-  </info>
+<refentry id="man.delv">
+
   <refentryinfo>
-    <corpname>ISC</corpname>
-    <corpauthor>Internet Systems Consortium, Inc.</corpauthor>
+    <date>April 23, 2014</date>
   </refentryinfo>
 
   <refmeta>
@@ -40,52 +37,51 @@
   <docinfo>
     <copyright>
       <year>2014</year>
-      <year>2015</year>
       <holder>Internet Systems Consortium, Inc. ("ISC")</holder>
     </copyright>
   </docinfo>
 
   <refsynopsisdiv>
-    <cmdsynopsis sepchar=" ">
+    <cmdsynopsis>
       <command>delv</command>
-      <arg choice="opt" rep="norepeat">@server</arg>
-      <arg choice="opt" rep="norepeat"><option>-4</option></arg>
-      <arg choice="opt" rep="norepeat"><option>-6</option></arg>
-      <arg choice="opt" rep="norepeat"><option>-a <replaceable class="parameter">anchor-file</replaceable></option></arg>
-      <arg choice="opt" rep="norepeat"><option>-b <replaceable class="parameter">address</replaceable></option></arg>
-      <arg choice="opt" rep="norepeat"><option>-c <replaceable class="parameter">class</replaceable></option></arg>
-      <arg choice="opt" rep="norepeat"><option>-d <replaceable class="parameter">level</replaceable></option></arg>
-      <arg choice="opt" rep="norepeat"><option>-i</option></arg>
-      <arg choice="opt" rep="norepeat"><option>-m</option></arg>
-      <arg choice="opt" rep="norepeat"><option>-p <replaceable class="parameter">port#</replaceable></option></arg>
-      <arg choice="opt" rep="norepeat"><option>-q <replaceable class="parameter">name</replaceable></option></arg>
-      <arg choice="opt" rep="norepeat"><option>-t <replaceable class="parameter">type</replaceable></option></arg>
-      <arg choice="opt" rep="norepeat"><option>-x <replaceable class="parameter">addr</replaceable></option></arg>
-      <arg choice="opt" rep="norepeat">name</arg>
-      <arg choice="opt" rep="norepeat">type</arg>
-      <arg choice="opt" rep="norepeat">class</arg>
+      <arg choice="opt">@server</arg>
+      <arg><option>-4</option></arg>
+      <arg><option>-6</option></arg>
+      <arg><option>-a <replaceable class="parameter">anchor-file</replaceable></option></arg>
+      <arg><option>-b <replaceable class="parameter">address</replaceable></option></arg>
+      <arg><option>-c <replaceable class="parameter">class</replaceable></option></arg>
+      <arg><option>-d <replaceable class="parameter">level</replaceable></option></arg>
+      <arg><option>-i</option></arg>
+      <arg><option>-m</option></arg>
+      <arg><option>-p <replaceable class="parameter">port#</replaceable></option></arg>
+      <arg><option>-q <replaceable class="parameter">name</replaceable></option></arg>
+      <arg><option>-t <replaceable class="parameter">type</replaceable></option></arg>
+      <arg><option>-x <replaceable class="parameter">addr</replaceable></option></arg>
+      <arg choice="opt">name</arg>
+      <arg choice="opt">type</arg>
+      <arg choice="opt">class</arg>
       <arg choice="opt" rep="repeat">queryopt</arg>
     </cmdsynopsis>
 
-    <cmdsynopsis sepchar=" ">
+    <cmdsynopsis>
       <command>delv</command>
-      <arg choice="opt" rep="norepeat"><option>-h</option></arg>
+      <arg><option>-h</option></arg>
     </cmdsynopsis>
 
-    <cmdsynopsis sepchar=" ">
+    <cmdsynopsis>
       <command>delv</command>
-      <arg choice="opt" rep="norepeat"><option>-v</option></arg>
+      <arg><option>-v</option></arg>
     </cmdsynopsis>
 
-    <cmdsynopsis sepchar=" ">
+    <cmdsynopsis>
       <command>delv</command>
       <arg choice="opt" rep="repeat">queryopt</arg>
       <arg choice="opt" rep="repeat">query</arg>
     </cmdsynopsis>
   </refsynopsisdiv>
 
-  <refsection><info><title>DESCRIPTION</title></info>
-
+  <refsect1>
+    <title>DESCRIPTION</title>
     <para><command>delv</command>
       (Domain Entity Lookup &amp; Validation) is a tool for sending
       DNS queries and validating the results, using the the same internal
@@ -126,10 +122,10 @@
       <command>delv</command> will perform an NS query for "."
       (the root zone).
     </para>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>SIMPLE USAGE</title></info>
-
+  <refsect1>
+    <title>SIMPLE USAGE</title>
 
     <para>
       A typical invocation of <command>delv</command> looks like:
@@ -193,10 +189,10 @@
       </variablelist>
     </para>
 
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>OPTIONS</title></info>
-
+  <refsect1>
+    <title>OPTIONS</title>
     <variablelist>
 
       <varlistentry>
@@ -395,10 +391,10 @@
       </varlistentry>
 
     </variablelist>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>QUERY OPTIONS</title></info>
-
+  <refsect1>
+    <title>QUERY OPTIONS</title>
 
     <para><command>delv</command>
       provides a number of query options which affect the way results are
@@ -585,7 +581,7 @@
 	  <listitem>
 	    <para>
 	      Set or clear the display options
-	      <option>+[no]comments</option>,
+	      <option>+[no]comments</option>, 
 	      <option>+[no]rrcomments</option>, and
 	      <option>+[no]trust</option> as a group.
 	    </para>
@@ -654,16 +650,16 @@
       </variablelist>
 
     </para>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>FILES</title></info>
-
+  <refsect1>
+    <title>FILES</title>
     <para><filename>/etc/bind.keys</filename></para>
     <para><filename>/etc/resolv.conf</filename></para>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>SEE ALSO</title></info>
-
+  <refsect1>
+    <title>SEE ALSO</title>
     <para><citerefentry>
 	<refentrytitle>dig</refentrytitle><manvolnum>1</manvolnum>
       </citerefentry>,
@@ -676,6 +672,9 @@
       <citetitle>RFC5074</citetitle>,
       <citetitle>RFC5155</citetitle>.
     </para>
-  </refsection>
-
-</refentry>
+  </refsect1>
+</refentry><!--
+ - Local variables:
+ - mode: sgml
+ - End:
+-->

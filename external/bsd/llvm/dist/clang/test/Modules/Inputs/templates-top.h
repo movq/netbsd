@@ -10,7 +10,6 @@ public:
 };
 
 extern List<double> *instantiateListDoubleDeclaration;
-extern List<long> *instantiateListLongDeclaration;
 
 namespace A {
   class Y {

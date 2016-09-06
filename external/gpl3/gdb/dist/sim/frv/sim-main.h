@@ -1,5 +1,5 @@
 /* frv simulator support code
-   Copyright (C) 1998-2015 Free Software Foundation, Inc.
+   Copyright (C) 1998-2014 Free Software Foundation, Inc.
    Contributed by Red Hat.
 
 This file is part of the GNU simulators.
@@ -19,6 +19,16 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 /* Main header for the frv.  */
 
+#define USING_SIM_BASE_H /* FIXME: quick hack */
+
+struct _sim_cpu; /* FIXME: should be in sim-basics.h */
+typedef struct _sim_cpu SIM_CPU;
+
+/* Set the mask of unsupported traces.  */
+#define WITH_TRACE \
+  (~(TRACE_alu | TRACE_decode | TRACE_memory | TRACE_model | TRACE_fpu \
+     | TRACE_branch | TRACE_debug))
+
 /* sim-basics.h includes config.h but cgen-types.h must be included before
    sim-basics.h and cgen-types.h needs config.h.  */
 #include "config.h"
@@ -30,6 +40,13 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include "frv-opc.h"
 #include "arch.h"
 
+/* These must be defined before sim-base.h.  */
+typedef USI sim_cia;
+
+#define CIA_GET(cpu)     CPU_PC_GET (cpu)
+#define CIA_SET(cpu,val) CPU_PC_SET ((cpu), (val))
+
+void frv_sim_engine_halt_hook (SIM_DESC, SIM_CPU *, sim_cia);
 #define SIM_ENGINE_HALT_HOOK(SD, LAST_CPU, CIA) \
   frv_sim_engine_halt_hook ((SD), (LAST_CPU), (CIA))
 
@@ -41,8 +58,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 #include "cache.h"
 #include "registers.h"
 #include "profile.h"
-
-void frv_sim_engine_halt_hook (SIM_DESC, SIM_CPU *, sim_cia);
 
 /* The _sim_cpu struct.  */
 
@@ -103,7 +118,8 @@ struct _sim_cpu {
 /* The sim_state struct.  */
 
 struct sim_state {
-  sim_cpu *cpu[MAX_NR_PROCESSORS];
+  sim_cpu *cpu;
+#define STATE_CPU(sd, n) (/*&*/ (sd)->cpu)
 
   CGEN_STATE cgen_state;
 

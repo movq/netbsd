@@ -1,8 +1,8 @@
-/* $NetBSD: common.h,v 1.14 2016/05/09 10:15:59 roy Exp $ */
+/* $NetBSD: common.h,v 1.1.1.11.2.2 2015/02/05 15:13:12 martin Exp $ */
 
 /*
  * dhcpcd - DHCP client daemon
- * Copyright (c) 2006-2016 Roy Marples <roy@marples.name>
+ * Copyright (c) 2006-2015 Roy Marples <roy@marples.name>
  * All rights reserved
 
  * Redistribution and use in source and binary forms, with or without
@@ -33,11 +33,9 @@
 #include <sys/param.h>
 #include <sys/time.h>
 #include <stdio.h>
-#include <syslog.h>
 
 #include "config.h"
 #include "defs.h"
-#include "dhcpcd.h"
 
 #ifndef HOSTNAME_MAX_LEN
 #define HOSTNAME_MAX_LEN	250	/* 255 - 3 (FQDN) - 2 (DNS enc) */
@@ -51,99 +49,52 @@
 #define UNCONST(a)		((void *)(unsigned long)(const void *)(a))
 #define STRINGIFY(a)		#a
 #define TOSTRING(a)		STRINGIFY(a)
-#define UNUSED(a)		(void)(a)
 
-#define ROUNDUP4(a)		(1 + (((a) - 1) |  3))
-#define ROUNDUP8(a)		(1 + (((a) - 1) |  7))
-
-#define USEC_PER_SEC		1000000L
-#define USEC_PER_NSEC		1000L
-#define NSEC_PER_SEC		1000000000L
-#define NSEC_PER_MSEC		1000000L
-#define MSEC_PER_SEC		1000L
-#define CSEC_PER_SEC		100L
-#define NSEC_PER_CSEC		10000000L
-
-/* Some systems don't define timespec macros */
-#ifndef timespecclear
-#define timespecclear(tsp)      (tsp)->tv_sec = (time_t)((tsp)->tv_nsec = 0L)
-#define timespecisset(tsp)      ((tsp)->tv_sec || (tsp)->tv_nsec)
-#define timespeccmp(tsp, usp, cmp)                                      \
-        (((tsp)->tv_sec == (usp)->tv_sec) ?                             \
-            ((tsp)->tv_nsec cmp (usp)->tv_nsec) :                       \
-            ((tsp)->tv_sec cmp (usp)->tv_sec))
-#define timespecadd(tsp, usp, vsp)                                      \
-        do {                                                            \
-                (vsp)->tv_sec = (tsp)->tv_sec + (usp)->tv_sec;          \
-                (vsp)->tv_nsec = (tsp)->tv_nsec + (usp)->tv_nsec;       \
-                if ((vsp)->tv_nsec >= 1000000000L) {                    \
-                        (vsp)->tv_sec++;                                \
-                        (vsp)->tv_nsec -= 1000000000L;                  \
-                }                                                       \
-        } while (/* CONSTCOND */ 0)
-#define timespecsub(tsp, usp, vsp)                                      \
-        do {                                                            \
-                (vsp)->tv_sec = (tsp)->tv_sec - (usp)->tv_sec;          \
-                (vsp)->tv_nsec = (tsp)->tv_nsec - (usp)->tv_nsec;       \
-                if ((vsp)->tv_nsec < 0) {                               \
-                        (vsp)->tv_sec--;                                \
-                        (vsp)->tv_nsec += 1000000000L;                  \
-                }                                                       \
-        } while (/* CONSTCOND */ 0)
-#endif
-
-#define timespec_to_double(tv)						     \
-	((double)(tv)->tv_sec + (double)((tv)->tv_nsec) / 1000000000.0)
-#define timespecnorm(tv) do {						     \
-	while ((tv)->tv_nsec >=  NSEC_PER_SEC) {			     \
-		(tv)->tv_sec++;						     \
-		(tv)->tv_nsec -= NSEC_PER_SEC;				     \
-	}								     \
+#define USECINSEC		1000000
+#define timeval_to_double(tv)						\
+	((double)(tv)->tv_sec + (double)((tv)->tv_usec) * 1.0e-6)
+#define timernorm(tv) do {						\
+	while ((tv)->tv_usec >=  USECINSEC) {				\
+		(tv)->tv_sec++;						\
+		(tv)->tv_usec -= USECINSEC;				\
+	}								\
 } while (0 /* CONSTCOND */);
-#define ts_to_ms(ms, tv) do {						     \
-	ms = (tv)->tv_sec * MSEC_PER_SEC;				     \
-	ms += (tv)->tv_nsec / NSEC_PER_MSEC;				     \
+#define tv_to_ms(ms, tv) do {						\
+	ms = (tv)->tv_sec * 1000;					\
+	ms += (tv)->tv_usec / 1000;					\
 } while (0 /* CONSTCOND */);
-#define ms_to_ts(tv, ms) do {						     \
-	(tv)->tv_sec = ms / MSEC_PER_SEC;				     \
-	(tv)->tv_nsec = (suseconds_t)(ms - ((tv)->tv_sec * MSEC_PER_SEC))    \
-	    * NSEC_PER_MSEC;						     \
+#define ms_to_tv(tv, ms) do {						      \
+	(tv)->tv_sec = ms / 1000;					      \
+	(tv)->tv_usec = (suseconds_t)(ms - ((tv)->tv_sec * 1000)) * 1000;     \
 } while (0 /* CONSTCOND */);
 
 #ifndef TIMEVAL_TO_TIMESPEC
 #define	TIMEVAL_TO_TIMESPEC(tv, ts) do {				\
 	(ts)->tv_sec = (tv)->tv_sec;					\
-	(ts)->tv_nsec = (tv)->tv_usec * USEC_PER_NSEC;			\
+	(ts)->tv_nsec = (tv)->tv_usec * 1000;				\
 } while (0 /* CONSTCOND */)
 #endif
 
 #if __GNUC__ > 2 || defined(__INTEL_COMPILER)
-# ifndef __packed
-#  define __packed __attribute__((__packed__))
+# ifndef __dead
+#  define __dead __attribute__((__noreturn__))
 # endif
-# ifndef __sysloglike
-#  ifndef __syslog_attribute_
-#    define __syslog__ __printf__
-#  endif
-#  define __sysloglike(a, b) __attribute__((format(__syslog__, a, b)))
+# ifndef __packed
+#  define __packed   __attribute__((__packed__))
 # endif
 # ifndef __unused
-#  define __unused __attribute__((__unused__))
+#  define __unused   __attribute__((__unused__))
 # endif
 #else
+# ifndef __dead
+#  define __dead
+# endif
 # ifndef __packed
 #  define __packed
-# endif
-# ifndef __sysloglike
-#  define __sysloglike
 # endif
 # ifndef __unused
 #  define __unused
 # endif
-#endif
-
-#ifndef __arraycount
-#  define __arraycount(__x)       (sizeof(__x) / sizeof(__x[0]))
 #endif
 
 /* We don't really need this as our supported systems define __restrict
@@ -159,43 +110,13 @@
 #endif
 
 void get_line_free(void);
+const char *get_hostname(char *, size_t, int);
 extern int clock_monotonic;
-int get_monotonic(struct timespec *);
+int get_monotonic(struct timeval *);
+ssize_t setvar(char ***, const char *, const char *, const char *);
+ssize_t setvard(char ***, const char *, const char *, size_t);
+time_t uptime(void);
 
-/* We could shave a few k off the binary size by just using the
- * syslog(3) interface.
- * However, this results in a ugly output on the command line
- * and relies on syslogd(8) starting before dhcpcd which is not
- * always the case. */
-#ifndef USE_LOGFILE
-# define USE_LOGFILE 1
-#endif
-#if USE_LOGFILE
-void logger_open(struct dhcpcd_ctx *);
-#define logger_mask(ctx, lvl) setlogmask((lvl))
-void logger(struct dhcpcd_ctx *, int, const char *, ...) __sysloglike(3, 4);
-void logger_close(struct dhcpcd_ctx *);
-#else
-#define logger_open(ctx) openlog(PACKAGE, LOG_PERROR | LOG_PID, LOG_DAEMON)
-#define logger_mask(ctx, lvl) setlogmask((lvl))
-#define logger(ctx, pri, fmt, ...)			\
-	do {						\
-		UNUSED((ctx));				\
-		syslog((pri), (fmt), ##__VA_ARGS__);	\
-	} while (0 /*CONSTCOND */)
-#define logger_close(ctx) closelog()
-#endif
-
-ssize_t setvar(struct dhcpcd_ctx *,
-    char **, const char *, const char *, const char *);
-ssize_t setvard(struct dhcpcd_ctx *,
-    char **, const char *, const char *, size_t);
-ssize_t addvar(struct dhcpcd_ctx *,
-    char ***, const char *, const char *, const char *);
-ssize_t addvard(struct dhcpcd_ctx *,
-    char ***, const char *, const char *, size_t);
-
-char *hwaddr_ntoa(const uint8_t *, size_t, char *, size_t);
-size_t hwaddr_aton(uint8_t *, const char *);
-size_t read_hwaddr_aton(uint8_t **, const char *);
+char *hwaddr_ntoa(const unsigned char *, size_t, char *, size_t);
+size_t hwaddr_aton(unsigned char *, const char *);
 #endif

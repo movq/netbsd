@@ -1,4 +1,4 @@
-/*	$NetBSD: error.c,v 1.5 2015/12/17 04:00:45 christos Exp $	*/
+/*	$NetBSD: error.c,v 1.3.12.1 2016/03/13 08:06:14 martin Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007, 2015  Internet Systems Consortium, Inc. ("ISC")

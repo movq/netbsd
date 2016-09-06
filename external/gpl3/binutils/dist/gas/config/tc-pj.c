@@ -1,5 +1,6 @@
 /* tc-pj.c -- Assemble code for Pico Java
-   Copyright (C) 1999-2015 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2002, 2003, 2005, 2007, 2009, 2010
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -96,8 +97,7 @@ parse_exp_save_ilp (char *s, expressionS *op)
    we want to handle magic pending reloc expressions specially.  */
 
 void
-pj_cons_fix_new_pj (fragS *frag, int where, int nbytes, expressionS *exp,
-		    bfd_reloc_code_real_type r ATTRIBUTE_UNUSED)
+pj_cons_fix_new_pj (fragS *frag, int where, int nbytes, expressionS *exp)
 {
   static int rv[5][2] =
   { { 0, 0 },

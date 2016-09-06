@@ -1,4 +1,4 @@
-/* $NetBSD: omrasops.c,v 1.19 2014/10/04 16:58:17 tsutsui Exp $ */
+/* $NetBSD: omrasops.c,v 1.16.4.1 2014/10/05 20:12:49 martin Exp $ */
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: omrasops.c,v 1.19 2014/10/04 16:58:17 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omrasops.c,v 1.16.4.1 2014/10/05 20:12:49 martin Exp $");
 
 /*
  * Designed speficically for 'm68k bitorder';

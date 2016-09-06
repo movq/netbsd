@@ -1,4 +1,4 @@
-/*	$NetBSD: keydata_65533.c,v 1.9 2015/12/17 04:00:44 christos Exp $	*/
+/*	$NetBSD: keydata_65533.c,v 1.6.4.2 2016/03/13 08:06:14 martin Exp $	*/
 
 /*
  * Copyright (C) 2009, 2011-2013, 2015  Internet Systems Consortium, Inc. ("ISC")

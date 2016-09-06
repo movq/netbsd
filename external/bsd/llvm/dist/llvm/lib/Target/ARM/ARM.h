@@ -16,13 +16,11 @@
 #define LLVM_LIB_TARGET_ARM_ARM_H
 
 #include "llvm/Support/CodeGen.h"
-#include <functional>
 
 namespace llvm {
 
 class ARMAsmPrinter;
 class ARMBaseTargetMachine;
-class Function;
 class FunctionPass;
 class ImmutablePass;
 class MachineInstr;
@@ -35,12 +33,16 @@ FunctionPass *createARMISelDag(ARMBaseTargetMachine &TM,
 FunctionPass *createA15SDOptimizerPass();
 FunctionPass *createARMLoadStoreOptimizationPass(bool PreAlloc = false);
 FunctionPass *createARMExpandPseudoPass();
+FunctionPass *createARMGlobalBaseRegPass();
+FunctionPass *createARMGlobalMergePass(const TargetLowering* tli);
 FunctionPass *createARMConstantIslandPass();
 FunctionPass *createMLxExpansionPass();
 FunctionPass *createThumb2ITBlockPass();
 FunctionPass *createARMOptimizeBarriersPass();
-FunctionPass *createThumb2SizeReductionPass(
-    std::function<bool(const Function &)> Ftor = nullptr);
+FunctionPass *createThumb2SizeReductionPass();
+
+/// \brief Creates an ARM-specific Target Transformation Info pass.
+ImmutablePass *createARMTargetTransformInfoPass(const ARMBaseTargetMachine *TM);
 
 void LowerARMMachineInstrToMCInst(const MachineInstr *MI, MCInst &OutMI,
                                   ARMAsmPrinter &AP);

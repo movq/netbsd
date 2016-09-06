@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -69,14 +69,13 @@ BOOLEAN
 ApIsValidHeader (
     ACPI_TABLE_HEADER       *Table)
 {
-
     if (!ACPI_VALIDATE_RSDP_SIG (Table->Signature))
     {
         /* Make sure signature is all ASCII and a valid ACPI name */
 
-        if (!AcpiUtValidNameseg (Table->Signature))
+        if (!AcpiUtValidAcpiName (Table->Signature))
         {
-            AcpiLogError ("Table signature (0x%8.8X) is invalid\n",
+            fprintf (stderr, "Table signature (0x%8.8X) is invalid\n",
                 *(UINT32 *) Table->Signature);
             return (FALSE);
         }
@@ -85,7 +84,7 @@ ApIsValidHeader (
 
         if (Table->Length < sizeof (ACPI_TABLE_HEADER))
         {
-            AcpiLogError ("Table length (0x%8.8X) is invalid\n",
+            fprintf (stderr, "Table length (0x%8.8X) is invalid\n",
                 Table->Length);
             return (FALSE);
         }
@@ -101,9 +100,9 @@ ApIsValidHeader (
  *
  * PARAMETERS:  Table               - Pointer to table to be validated
  *
- * RETURN:      TRUE if the checksum appears to be valid. FALSE otherwise.
+ * RETURN:      TRUE if the checksum appears to be valid. FALSE otherwise
  *
- * DESCRIPTION: Check for a valid ACPI table checksum.
+ * DESCRIPTION: Check for a valid ACPI table checksum
  *
  ******************************************************************************/
 
@@ -121,6 +120,7 @@ ApIsValidChecksum (
          * Checksum for RSDP.
          * Note: Other checksums are computed during the table dump.
          */
+
         Rsdp = ACPI_CAST_PTR (ACPI_TABLE_RSDP, Table);
         Status = AcpiTbValidateRsdp (Rsdp);
     }
@@ -131,7 +131,7 @@ ApIsValidChecksum (
 
     if (ACPI_FAILURE (Status))
     {
-        AcpiLogError ("%4.4s: Warning: wrong checksum in table\n",
+        fprintf (stderr, "%4.4s: Warning: wrong checksum\n",
             Table->Signature);
     }
 
@@ -147,7 +147,7 @@ ApIsValidChecksum (
  *
  * RETURN:      Table length
  *
- * DESCRIPTION: Obtain table length according to table signature.
+ * DESCRIPTION: Obtain table length according to table signature
  *
  ******************************************************************************/
 
@@ -168,12 +168,12 @@ ApGetTableLength (
     if (ACPI_VALIDATE_RSDP_SIG (Table->Signature))
     {
         Rsdp = ACPI_CAST_PTR (ACPI_TABLE_RSDP, Table);
-        return (AcpiTbGetRsdpLength (Rsdp));
+        return (Rsdp->Length);
     }
-
-    /* Normal ACPI table */
-
-    return (Table->Length);
+    else
+    {
+        return (Table->Length);
+    }
 }
 
 
@@ -219,17 +219,16 @@ ApDumpTableBuffer (
     }
 
     /*
-     * Dump the table with header for use with acpixtract utility.
+     * Dump the table with header for use with acpixtract utility
      * Note: simplest to just always emit a 64-bit address. AcpiXtract
      * utility can handle this.
      */
-    AcpiUtFilePrintf (Gbl_OutputFile, "%4.4s @ 0x%8.8X%8.8X\n",
-        Table->Signature, ACPI_FORMAT_UINT64 (Address));
+    printf ("%4.4s @ 0x%8.8X%8.8X\n", Table->Signature,
+        ACPI_FORMAT_UINT64 (Address));
 
-    AcpiUtDumpBufferToFile (Gbl_OutputFile,
-        ACPI_CAST_PTR (UINT8, Table), TableLength,
+    AcpiUtDumpBuffer (ACPI_CAST_PTR (UINT8, Table), TableLength,
         DB_BYTE_DISPLAY, 0);
-    AcpiUtFilePrintf (Gbl_OutputFile, "\n");
+    printf ("\n");
     return (0);
 }
 
@@ -255,7 +254,6 @@ ApDumpAllTables (
     UINT32                  Instance = 0;
     ACPI_PHYSICAL_ADDRESS   Address;
     ACPI_STATUS             Status;
-    int                     TableStatus;
     UINT32                  i;
 
 
@@ -274,25 +272,23 @@ ApDumpAllTables (
             }
             else if (i == 0)
             {
-                AcpiLogError ("Could not get ACPI tables, %s\n",
+                fprintf (stderr, "Could not get ACPI tables, %s\n",
                     AcpiFormatException (Status));
                 return (-1);
             }
             else
             {
-                AcpiLogError ("Could not get ACPI table at index %u, %s\n",
+                fprintf (stderr, "Could not get ACPI table at index %u, %s\n",
                     i, AcpiFormatException (Status));
                 continue;
             }
         }
 
-        TableStatus = ApDumpTableBuffer (Table, Instance, Address);
-        ACPI_FREE (Table);
-
-        if (TableStatus)
+        if (ApDumpTableBuffer (Table, Instance, Address))
         {
-            break;
+            return (-1);
         }
+        free (Table);
     }
 
     /* Something seriously bad happened if the loop terminates here */
@@ -326,11 +322,10 @@ ApDumpTableByAddress (
 
     /* Convert argument to an integer physical address */
 
-    Status = AcpiUtStrtoul64 (AsciiAddress, ACPI_ANY_BASE,
-        ACPI_MAX64_BYTE_WIDTH, &LongAddress);
+    Status = AcpiUtStrtoul64 (AsciiAddress, 0, &LongAddress);
     if (ACPI_FAILURE (Status))
     {
-        AcpiLogError ("%s: Could not convert to a physical address\n",
+        fprintf (stderr, "%s: Could not convert to a physical address\n",
             AsciiAddress);
         return (-1);
     }
@@ -339,14 +334,14 @@ ApDumpTableByAddress (
     Status = AcpiOsGetTableByAddress (Address, &Table);
     if (ACPI_FAILURE (Status))
     {
-        AcpiLogError ("Could not get table at 0x%8.8X%8.8X, %s\n",
+        fprintf (stderr, "Could not get table at 0x%8.8X%8.8X, %s\n",
             ACPI_FORMAT_UINT64 (Address),
             AcpiFormatException (Status));
         return (-1);
     }
 
     TableStatus = ApDumpTableBuffer (Table, 0, Address);
-    ACPI_FREE (Table);
+    free (Table);
     return (TableStatus);
 }
 
@@ -373,12 +368,11 @@ ApDumpTableByName (
     ACPI_TABLE_HEADER       *Table;
     ACPI_PHYSICAL_ADDRESS   Address;
     ACPI_STATUS             Status;
-    int                     TableStatus;
 
 
     if (strlen (Signature) != ACPI_NAME_SIZE)
     {
-        AcpiLogError (
+        fprintf (stderr,
             "Invalid table signature [%s]: must be exactly 4 characters\n",
             Signature);
         return (-1);
@@ -391,7 +385,11 @@ ApDumpTableByName (
 
     /* To be friendly, handle tables whose signatures do not match the name */
 
-    if (ACPI_COMPARE_NAME (LocalSignature, "FADT"))
+    if (ACPI_COMPARE_NAME (LocalSignature, AP_DUMP_SIG_RSDP))
+    {
+        strcpy (LocalSignature, AP_DUMP_SIG_RSDP);
+    }
+    else if (ACPI_COMPARE_NAME (LocalSignature, "FADT"))
     {
         strcpy (LocalSignature, ACPI_SIG_FADT);
     }
@@ -415,19 +413,17 @@ ApDumpTableByName (
                 return (0);
             }
 
-            AcpiLogError (
+            fprintf (stderr,
                 "Could not get ACPI table with signature [%s], %s\n",
                 LocalSignature, AcpiFormatException (Status));
             return (-1);
         }
 
-        TableStatus = ApDumpTableBuffer (Table, Instance, Address);
-        ACPI_FREE (Table);
-
-        if (TableStatus)
+        if (ApDumpTableBuffer (Table, Instance, Address))
         {
-            break;
+            return (-1);
         }
+        free (Table);
     }
 
     /* Something seriously bad happened if the loop terminates here */
@@ -454,7 +450,7 @@ ApDumpTableFromFile (
 {
     ACPI_TABLE_HEADER       *Table;
     UINT32                  FileSize = 0;
-    int                     TableStatus = -1;
+    int                     TableStatus;
 
 
     /* Get the entire ACPI table from the file */
@@ -465,33 +461,53 @@ ApDumpTableFromFile (
         return (-1);
     }
 
-    if (!AcpiUtValidNameseg (Table->Signature))
-    {
-        AcpiLogError (
-            "No valid ACPI signature was found in input file %s\n",
-            Pathname);
-    }
-
     /* File must be at least as long as the table length */
 
     if (Table->Length > FileSize)
     {
-        AcpiLogError (
+        fprintf (stderr,
             "Table length (0x%X) is too large for input file (0x%X) %s\n",
             Table->Length, FileSize, Pathname);
-        goto Exit;
+        return (-1);
     }
 
     if (Gbl_VerboseMode)
     {
-        AcpiLogError (
+        fprintf (stderr,
             "Input file:  %s contains table [%4.4s], 0x%X (%u) bytes\n",
             Pathname, Table->Signature, FileSize, FileSize);
     }
 
     TableStatus = ApDumpTableBuffer (Table, 0, 0);
-
-Exit:
-    ACPI_FREE (Table);
+    free (Table);
     return (TableStatus);
+}
+
+
+/******************************************************************************
+ *
+ * FUNCTION:    AcpiOs* print functions
+ *
+ * DESCRIPTION: Used for linkage with ACPICA modules
+ *
+ ******************************************************************************/
+
+void ACPI_INTERNAL_VAR_XFACE
+AcpiOsPrintf (
+    const char              *Fmt,
+    ...)
+{
+    va_list                 Args;
+
+    va_start (Args, Fmt);
+    vfprintf (stdout, Fmt, Args);
+    va_end (Args);
+}
+
+void
+AcpiOsVprintf (
+    const char              *Fmt,
+    va_list                 Args)
+{
+    vfprintf (stdout, Fmt, Args);
 }

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.15 2016/08/14 03:43:04 mrg Exp $
+#	$NetBSD: Makefile,v 1.11 2011/08/02 09:11:38 mrg Exp $
 
 .include <bsd.own.mk>
 
@@ -13,9 +13,8 @@ PROG=		Xvfb
 .PATH:		${X11SRCDIR.xorg-server}/mi
 SRCS=		InitInput.c InitOutput.c dpmsstubs.c miinitext.c stubs.c
 
-# XXX should not be needed now
-#.PATH:		${X11SRCDIR.xorg-server}/fb
-#SRCS+=		fbcmap_mi.c
+.PATH:		${X11SRCDIR.xorg-server}/fb
+SRCS+=		fbcmap_mi.c
 
 CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/X11 \
 		-I${X11SRCDIR.xorg-server}/fb \
@@ -24,12 +23,13 @@ CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/X11 \
 		-I${X11SRCDIR.xorg-server}/include \
 		-I${X11SRCDIR.xorg-server}/os \
 		-I${X11SRCDIR.xorg-server}/Xext \
-		-I${X11SRCDIR.xorg-server}/hw/xfree86/common \
 		-I${DESTDIR}${X11INCDIR}/X11/extensions \
 		-I${DESTDIR}${X11INCDIR}/pixman-1 \
 		-I${DESTDIR}${X11INCDIR}/xorg \
 		-I${X11SRCDIR.xorg-server}/render \
 		-DHAVE_DIX_CONFIG_H \
+		-DNO_HW_ONLY_EXTS \
+		-DNO_MODULE_EXTS \
 		-UGLXEXT
 
 CPPFLAGS+=	${X11FLAGS.OS_DEFINES} ${X11FLAGS.DIX} \
@@ -44,6 +44,7 @@ CPPFLAGS+=	-UDDXTIME
 CPPFLAGS.InitInput.c=	${X11FLAGS.EXTENSION} \
 			-UGLXEXT
 CPPFLAGS.miinitext.c=	${X11FLAGS.EXTENSION} \
+			-DNO_HW_ONLY_EXTS -DNO_MODULE_EXTS \
 			-UXFree86LOADER \
 			-UGLXEXT
 CPPFLAGS.dpmsstubs.c=	${X11FLAGS.EXTENSION} \
@@ -72,7 +73,6 @@ LDADD+=	${LDADD.dix} \
 	${LDADD.composite} \
 	${LDADD.os} \
 	${LDADD.glx} \
-	${LDADD.present} \
 	-lXfont \
 	-lfreetype \
 	-lXau \
@@ -82,7 +82,7 @@ LDADD+=	${LDADD.dix} \
 	-lXdmcp \
 	-lz \
 	-lm \
-	-lGL
+	-lcrypto
 
 DPADD+=	${DPADD.dix} \
 	${DPADD.fb} \
@@ -104,7 +104,6 @@ DPADD+=	${DPADD.dix} \
 	${DPADD.composite} \
 	${DPADD.os} \
 	${DPADD.glx} \
-	${DPADD.present} \
 	${LIBXFONT} \
 	${LIBFREETYPE} \
 	${LIBXAU} \
@@ -113,12 +112,7 @@ DPADD+=	${DPADD.dix} \
 	${LIBXDMCP} \
 	${LIBZ} \
 	${LIBM} \
-	${LIBGL}
-
-.if ${MKCRYPTO:Uno} != "no"
-LDADD+=	-lcrypto
-DPADD+=	${LIBCRYPTO}
-.endif
+	${LIBCRYPTO}
 
 .if ${MACHINE_ARCH} == "i386"
 LDADD+=	-li386

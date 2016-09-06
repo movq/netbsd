@@ -1,10 +1,9 @@
-/* $NetBSD: spdmem_i2c.c,v 1.12 2016/01/05 11:49:32 msaitoh Exp $ */
+/* $NetBSD: spdmem_i2c.c,v 1.9.2.1 2015/03/21 17:11:35 snj Exp $ */
 
 /*
  * Copyright (c) 2007 Nicolas Joly
  * Copyright (c) 2007 Paul Goyette
  * Copyright (c) 2007 Tobias Nygren
- * Copyright (c) 2015 Michael van Elst
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -33,14 +32,10 @@
 
 /*
  * Serial Presence Detect (SPD) memory identification
- *
- * JEDEC standard No. 21-C
- * JEDEC document 4_01_06R24
- * - Definitions of the EE1004-v 4 Kbit Serial Presence Detect EEPROM [...]
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spdmem_i2c.c,v 1.12 2016/01/05 11:49:32 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spdmem_i2c.c,v 1.9.2.1 2015/03/21 17:11:35 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -54,38 +49,13 @@ __KERNEL_RCSID(0, "$NetBSD: spdmem_i2c.c,v 1.12 2016/01/05 11:49:32 msaitoh Exp 
 #include <dev/ic/spdmemvar.h>
 
 /* Constants for matching i2c bus address */
-#define SPDMEM_I2C_ADDRMASK 0xfff8
+#define SPDMEM_I2C_ADDRMASK 0x3f8
 #define SPDMEM_I2C_ADDR     0x50
-#define SPDCTL_I2C_ADDR     0x30
-
-/* set write protection */
-#define SPDCTL_SWP0         (SPDCTL_I2C_ADDR + 1)
-#define SPDCTL_SWP1         (SPDCTL_I2C_ADDR + 4)
-#define SPDCTL_SWP2         (SPDCTL_I2C_ADDR + 5)
-#define SPDCTL_SWP3         (SPDCTL_I2C_ADDR + 0)
-
-/* clear write protections */
-#define SPDCTL_CWP          (SPDCTL_I2C_ADDR + 3)
-
-/* read protection status */
-#define SPDCTL_RPS0         (SPDCTL_I2C_ADDR + 1)
-#define SPDCTL_RPS1         (SPDCTL_I2C_ADDR + 4)
-#define SPDCTL_RPS2         (SPDCTL_I2C_ADDR + 5)
-#define SPDCTL_RPS3         (SPDCTL_I2C_ADDR + 0)
-
-/* select page address */
-#define SPDCTL_SPA0         (SPDCTL_I2C_ADDR + 6)
-#define SPDCTL_SPA1         (SPDCTL_I2C_ADDR + 7)
-
-/* read page address */
-#define SPDCTL_RPA          (SPDCTL_I2C_ADDR + 6)
 
 struct spdmem_i2c_softc {
 	struct spdmem_softc sc_base;
 	i2c_tag_t sc_tag;
-	i2c_addr_t sc_addr; /* EEPROM */
-	i2c_addr_t sc_page0;
-	i2c_addr_t sc_page1;
+	i2c_addr_t sc_addr;
 };
 
 static int  spdmem_i2c_match(device_t, cfdata_t, void *);
@@ -95,7 +65,7 @@ static int  spdmem_i2c_detach(device_t, int);
 CFATTACH_DECL_NEW(spdmem_iic, sizeof(struct spdmem_i2c_softc),
     spdmem_i2c_match, spdmem_i2c_attach, spdmem_i2c_detach, NULL);
 
-static int spdmem_i2c_read(struct spdmem_softc *, uint16_t, uint8_t *);
+static uint8_t spdmem_i2c_read(struct spdmem_softc *, uint8_t);
 
 static int
 spdmem_i2c_match(device_t parent, cfdata_t match, void *aux)
@@ -118,8 +88,6 @@ spdmem_i2c_match(device_t parent, cfdata_t match, void *aux)
 
 	sc.sc_tag = ia->ia_tag;
 	sc.sc_addr = ia->ia_addr;
-	sc.sc_page0 = SPDCTL_SPA0;
-	sc.sc_page1 = SPDCTL_SPA1;
 	sc.sc_base.sc_read = spdmem_i2c_read;
 
 	return spdmem_common_probe(&sc.sc_base);
@@ -133,8 +101,6 @@ spdmem_i2c_attach(device_t parent, device_t self, void *aux)
 
 	sc->sc_tag = ia->ia_tag;
 	sc->sc_addr = ia->ia_addr;
-	sc->sc_page0 = SPDCTL_SPA0;
-	sc->sc_page1 = SPDCTL_SPA1;
 	sc->sc_base.sc_read = spdmem_i2c_read;
 
 	if (!pmf_device_register(self, NULL, NULL))
@@ -153,33 +119,18 @@ spdmem_i2c_detach(device_t self, int flags)
 	return spdmem_common_detach(&sc->sc_base, self);
 }
 
-static int
-spdmem_i2c_read(struct spdmem_softc *softc, uint16_t addr, uint8_t *val)
+static uint8_t
+spdmem_i2c_read(struct spdmem_softc *softc, uint8_t reg)
 {
-	uint8_t reg;
+	uint8_t val;
 	struct spdmem_i2c_softc *sc = (struct spdmem_i2c_softc *)softc;
-	static uint8_t dummy = 0;
-	int rv;
-
-	reg = addr & 0xff;
 
 	iic_acquire_bus(sc->sc_tag, 0);
-
-	if (addr & 0x100) {
-		rv = iic_exec(sc->sc_tag, I2C_OP_WRITE_WITH_STOP, sc->sc_page1,
-		    &dummy, 1, NULL, 0, I2C_F_POLL);
-		rv |= iic_exec(sc->sc_tag, I2C_OP_READ_WITH_STOP, sc->sc_addr,
-		    &reg, 1, val, 1, I2C_F_POLL);
-		rv |= iic_exec(sc->sc_tag, I2C_OP_WRITE_WITH_STOP,
-		    sc->sc_page0, &dummy, 1, NULL, 0, I2C_F_POLL);
-	} else {
-		rv = iic_exec(sc->sc_tag, I2C_OP_READ_WITH_STOP, sc->sc_addr,
-		    &reg, 1, val, 1, I2C_F_POLL);
-	}
-
+	iic_exec(sc->sc_tag, I2C_OP_READ_WITH_STOP, sc->sc_addr, &reg, 1,
+		 &val, 1, I2C_F_POLL);
 	iic_release_bus(sc->sc_tag, 0);
 
-	return rv;
+	return val;
 }
 
 MODULE(MODULE_CLASS_DRIVER, spdmem, "i2cexec");

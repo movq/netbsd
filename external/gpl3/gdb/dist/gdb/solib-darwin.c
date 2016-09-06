@@ -1,6 +1,6 @@
 /* Handle Darwin shared libraries for GDB, the GNU Debugger.
 
-   Copyright (C) 2009-2015 Free Software Foundation, Inc.
+   Copyright (C) 2009-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -30,6 +30,8 @@
 #include "gdbthread.h"
 #include "gdb_bfd.h"
 
+#include "gdb_assert.h"
+
 #include "solist.h"
 #include "solib.h"
 #include "solib-svr4.h"
@@ -38,6 +40,7 @@
 #include "elf-bfd.h"
 #include "exec.h"
 #include "auxv.h"
+#include "exceptions.h"
 #include "mach-o.h"
 #include "mach-o/external.h"
 
@@ -67,7 +70,7 @@ struct gdb_dyld_all_image_infos
 
 /* Current all_image_infos version.  */
 #define DYLD_VERSION_MIN 1
-#define DYLD_VERSION_MAX 14
+#define DYLD_VERSION_MAX 12
 
 /* Per PSPACE specific data.  */
 struct darwin_info
@@ -100,7 +103,7 @@ get_darwin_info (void)
   if (info != NULL)
     return info;
 
-  info = XCNEW (struct darwin_info);
+  info = XZALLOC (struct darwin_info);
   set_program_space_data (current_program_space,
 			  solib_darwin_pspace_data, info);
   return info;
@@ -271,7 +274,7 @@ darwin_current_sos (void)
       char *file_path;
       int errcode;
       struct darwin_so_list *dnew;
-      struct so_list *newobj;
+      struct so_list *new;
       struct cleanup *old_chain;
 
       /* Read image info from inferior.  */
@@ -301,23 +304,23 @@ darwin_current_sos (void)
 	break;
 
       /* Create and fill the new so_list element.  */
-      dnew = XCNEW (struct darwin_so_list);
-      newobj = &dnew->sl;
+      dnew = XZALLOC (struct darwin_so_list);
+      new = &dnew->sl;
       old_chain = make_cleanup (xfree, dnew);
 
-      newobj->lm_info = &dnew->li;
+      new->lm_info = &dnew->li;
 
-      strncpy (newobj->so_name, file_path, SO_NAME_MAX_PATH_SIZE - 1);
-      newobj->so_name[SO_NAME_MAX_PATH_SIZE - 1] = '\0';
-      strcpy (newobj->so_original_name, newobj->so_name);
+      strncpy (new->so_name, file_path, SO_NAME_MAX_PATH_SIZE - 1);
+      new->so_name[SO_NAME_MAX_PATH_SIZE - 1] = '\0';
+      strcpy (new->so_original_name, new->so_name);
       xfree (file_path);
-      newobj->lm_info->lm_addr = load_addr;
+      new->lm_info->lm_addr = load_addr;
 
       if (head == NULL)
-	head = newobj;
+	head = new;
       else
-	tail->next = newobj;
-      tail = newobj;
+	tail->next = new;
+      tail = new;
 
       discard_cleanups (old_chain);
     }
@@ -510,10 +513,7 @@ darwin_solib_create_inferior_hook (int from_tty)
   darwin_load_image_infos (info);
 
   if (!darwin_dyld_version_ok (info))
-    {
-      warning (_("unhandled dyld version (%d)"), info->all_image.version);
-      return;
-    }
+    return;
 
   create_solib_event_breakpoint (target_gdbarch (), info->all_image.notifier);
 
@@ -521,10 +521,26 @@ darwin_solib_create_inferior_hook (int from_tty)
   load_addr = darwin_read_exec_load_addr (info);
   if (load_addr != 0 && symfile_objfile != NULL)
     {
-      CORE_ADDR vmaddr;
+      CORE_ADDR vmaddr = 0;
+      struct mach_o_data_struct *md = bfd_mach_o_get_data (exec_bfd);
+      unsigned int i, num;
 
       /* Find the base address of the executable.  */
-      vmaddr = bfd_mach_o_get_base_address (exec_bfd);
+      for (i = 0; i < md->header.ncmds; i++)
+	{
+	  struct bfd_mach_o_load_command *cmd = &md->commands[i];
+
+	  if (cmd->type != BFD_MACH_O_LC_SEGMENT
+	      && cmd->type != BFD_MACH_O_LC_SEGMENT_64)
+	    continue;
+	  if (cmd->command.segment.fileoff == 0
+	      && cmd->command.segment.vmaddr != 0
+	      && cmd->command.segment.filesize != 0)
+	    {
+	      vmaddr = cmd->command.segment.vmaddr;
+	      break;
+	    }
+	}
 
       /* Relocate.  */
       if (vmaddr != load_addr)
@@ -570,7 +586,7 @@ darwin_relocate_section_addresses (struct so_list *so,
 }
 
 static struct symbol *
-darwin_lookup_lib_symbol (struct objfile *objfile,
+darwin_lookup_lib_symbol (const struct objfile *objfile,
 			  const char *name,
 			  const domain_enum domain)
 {

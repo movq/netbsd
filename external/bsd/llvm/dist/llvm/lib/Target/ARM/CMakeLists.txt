@@ -40,9 +40,10 @@ add_llvm_target(ARMCodeGen
   MLxExpansionPass.cpp
   Thumb1FrameLowering.cpp
   Thumb1InstrInfo.cpp
-  ThumbRegisterInfo.cpp
+  Thumb1RegisterInfo.cpp
   Thumb2ITBlockPass.cpp
   Thumb2InstrInfo.cpp
+  Thumb2RegisterInfo.cpp
   Thumb2SizeReduction.cpp
   )
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: grackle.c,v 1.16 2015/10/02 05:22:51 msaitoh Exp $	*/
+/*	$NetBSD: grackle.c,v 1.15 2011/10/26 04:56:23 macallan Exp $	*/
 
 /*-
  * Copyright (c) 2000 Tsubai Masanari.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: grackle.c,v 1.16 2015/10/02 05:22:51 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: grackle.c,v 1.15 2011/10/26 04:56:23 macallan Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -155,9 +155,6 @@ grackle_conf_read(void *cookie, pcitag_t tag, int reg)
 	pcireg_t data;
 	int s;
 
-	if ((unsigned int)reg >= PCI_CONF_SIZE)
-		return (pcireg_t) -1;
-
 	s = splhigh();
 
 	out32rb(pc->pc_addr, tag | reg);
@@ -176,9 +173,6 @@ grackle_conf_write(void *cookie, pcitag_t tag, int reg, pcireg_t data)
 {
 	pci_chipset_tag_t pc = cookie;
 	int s;
-
-	if ((unsigned int)reg >= PCI_CONF_SIZE)
-		return;
 
 	s = splhigh();
 

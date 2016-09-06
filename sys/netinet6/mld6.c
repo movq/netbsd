@@ -1,4 +1,4 @@
-/*	$NetBSD: mld6.c,v 1.74 2016/08/01 03:15:31 ozaki-r Exp $	*/
+/*	$NetBSD: mld6.c,v 1.59.2.3 2015/11/18 08:33:08 msaitoh Exp $	*/
 /*	$KAME: mld6.c,v 1.25 2001/01/16 14:14:18 itojun Exp $	*/
 
 /*
@@ -102,11 +102,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mld6.c,v 1.74 2016/08/01 03:15:31 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mld6.c,v 1.59.2.3 2015/11/18 08:33:08 msaitoh Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -336,18 +334,16 @@ mld_input(struct mbuf *m, int off)
 {
 	struct ip6_hdr *ip6;
 	struct mld_hdr *mldh;
-	struct ifnet *ifp;
+	struct ifnet *ifp = m->m_pkthdr.rcvif;
 	struct in6_multi *in6m = NULL;
 	struct in6_addr mld_addr, all_in6;
 	struct in6_ifaddr *ia;
 	u_long timer = 0;	/* timer value in the MLD query header */
-	int s;
 
-	ifp = m_get_rcvif(m, &s);
 	IP6_EXTHDR_GET(mldh, struct mld_hdr *, m, off, sizeof(*mldh));
 	if (mldh == NULL) {
 		ICMP6_STATINC(ICMP6_STAT_TOOSHORT);
-		goto out_nodrop;
+		return;
 	}
 
 	/* source address validation */
@@ -377,7 +373,8 @@ mld_input(struct mbuf *m, int off)
 		    "mld_input: src %s is not link-local (grp=%s)\n",
 		    ip6_sprintf(&ip6->ip6_src), ip6_sprintf(&mldh->mld_addr));
 #endif
-		goto out;
+		m_freem(m);
+		return;
 	}
 
 	/*
@@ -386,7 +383,8 @@ mld_input(struct mbuf *m, int off)
 	mld_addr = mldh->mld_addr;
 	if (in6_setscope(&mld_addr, ifp, NULL)) {
 		/* XXX: this should not happen! */
-		goto out;
+		m_free(m);
+		return;
 	}
 
 	/*
@@ -402,9 +400,7 @@ mld_input(struct mbuf *m, int off)
 	 * if we sent the last report.
 	 */
 	switch (mldh->mld_type) {
-	case MLD_LISTENER_QUERY: {
-		struct psref psref;
-
+	case MLD_LISTENER_QUERY:
 		if (ifp->if_flags & IFF_LOOPBACK)
 			break;
 
@@ -430,13 +426,9 @@ mld_input(struct mbuf *m, int off)
 		 */
 		timer = ntohs(mldh->mld_maxdelay);
 
-		ia = in6_get_ia_from_ifp_psref(ifp, &psref);
+		IFP_TO_IA6(ifp, ia);
 		if (ia == NULL)
 			break;
-
-		/* The following operations may sleep */
-		m_put_rcvif(ifp, &s);
-		ifp = NULL;
 
 		LIST_FOREACH(in6m, &ia->ia6_multiaddrs, in6m_entry) {
 			if (IN6_ARE_ADDR_EQUAL(&in6m->in6m_addr, &all_in6) ||
@@ -463,9 +455,7 @@ mld_input(struct mbuf *m, int off)
 				mld_starttimer(in6m);
 			}
 		}
-		ia6_release(ia, &psref);
 		break;
-	    }
 
 	case MLD_LISTENER_REPORT:
 		/*
@@ -505,10 +495,7 @@ mld_input(struct mbuf *m, int off)
 		break;
 	}
 
-out:
 	m_freem(m);
-out_nodrop:
-	m_put_rcvif(ifp, &s);
 }
 
 static void
@@ -522,8 +509,6 @@ mld_sendpkt(struct in6_multi *in6m, int type,
 	struct in6_ifaddr *ia = NULL;
 	struct ifnet *ifp = in6m->in6m_ifp;
 	int ignflags;
-	struct psref psref;
-	int bound;
 
 	/*
 	 * At first, find a link local address on the outgoing interface
@@ -532,31 +517,20 @@ mld_sendpkt(struct in6_multi *in6m, int type,
 	 * the case where we first join a link-local address.
 	 */
 	ignflags = (IN6_IFF_NOTREADY|IN6_IFF_ANYCAST) & ~IN6_IFF_TENTATIVE;
-	bound = curlwp_bind();
-	ia = in6ifa_ifpforlinklocal_psref(ifp, ignflags, &psref);
-	if (ia == NULL) {
-		curlwp_bindx(bound);
+	if ((ia = in6ifa_ifpforlinklocal(ifp, ignflags)) == NULL)
 		return;
-	}
-	if ((ia->ia6_flags & IN6_IFF_TENTATIVE)) {
-		ia6_release(ia, &psref);
+	if ((ia->ia6_flags & IN6_IFF_TENTATIVE))
 		ia = NULL;
-	}
 
 	/* Allocate two mbufs to store IPv6 header and MLD header */
 	mldh = mld_allocbuf(&mh, sizeof(struct mld_hdr), in6m, type);
-	if (mldh == NULL) {
-		ia6_release(ia, &psref);
-		curlwp_bindx(bound);
+	if (mldh == NULL)
 		return;
-	}
 
 	/* fill src/dst here */
  	ip6 = mtod(mh, struct ip6_hdr *);
  	ip6->ip6_src = ia ? ia->ia_addr.sin6_addr : in6addr_any;
  	ip6->ip6_dst = dst ? *dst : in6m->in6m_addr;
-	ia6_release(ia, &psref);
-	curlwp_bindx(bound);
 
 	mldh->mld_addr = in6m->in6m_addr;
 	in6_clearscope(&mldh->mld_addr); /* XXX */
@@ -565,7 +539,7 @@ mld_sendpkt(struct in6_multi *in6m, int type,
 
 	/* construct multicast option */
 	memset(&im6o, 0, sizeof(im6o));
-	im6o.im6o_multicast_if_index = if_get_index(ifp);
+	im6o.im6o_multicast_ifp = ifp;
 	im6o.im6o_multicast_hlim = 1;
 
 	/*
@@ -618,7 +592,7 @@ mld_allocbuf(struct mbuf **mh, int len, struct in6_multi *in6m,
 	(*mh)->m_next = md;
 	md->m_next = NULL;
 
-	m_reset_rcvif((*mh));
+	(*mh)->m_pkthdr.rcvif = NULL;
 	(*mh)->m_pkthdr.len = sizeof(struct ip6_hdr) + len;
 	(*mh)->m_len = sizeof(struct ip6_hdr);
 	MH_ALIGN(*mh, sizeof(struct ip6_hdr));
@@ -666,7 +640,6 @@ in6_addmulti(struct in6_addr *maddr6, struct ifnet *ifp,
 		 */
 		in6m->in6m_refcount++;
 	} else {
-		int _s;
 		/*
 		 * New address; allocate a new multicast record
 		 * and link it into the interface's multicast list.
@@ -686,10 +659,8 @@ in6_addmulti(struct in6_addr *maddr6, struct ifnet *ifp,
 		callout_init(&in6m->in6m_timer_ch, CALLOUT_MPSAFE);
 		callout_setfunc(&in6m->in6m_timer_ch, mld_timeo, in6m);
 
-		_s = pserialize_read_enter();
-		ia = in6_get_ia_from_ifp(ifp);
+		IFP_TO_IA6(ifp, ia);
 		if (ia == NULL) {
-			pserialize_read_exit(_s);
 			callout_destroy(&in6m->in6m_timer_ch);
 			free(in6m, M_IPMADDR);
 			splx(s);
@@ -697,10 +668,8 @@ in6_addmulti(struct in6_addr *maddr6, struct ifnet *ifp,
 			return (NULL);
 		}
 		in6m->in6m_ia = ia;
-		ifaref(&ia->ia_ifa); /* gain a reference */
-		/* FIXME NOMPSAFE: need to lock */
+		IFAREF(&ia->ia_ifa); /* gain a reference */
 		LIST_INSERT_HEAD(&ia->ia6_multiaddrs, in6m, in6m_entry);
-		pserialize_read_exit(_s);
 
 		/*
 		 * Ask the network driver to update its multicast reception
@@ -712,7 +681,7 @@ in6_addmulti(struct in6_addr *maddr6, struct ifnet *ifp,
 			callout_destroy(&in6m->in6m_timer_ch);
 			LIST_REMOVE(in6m, in6m_entry);
 			free(in6m, M_IPMADDR);
-			ifafree(&ia->ia_ifa);
+			IFAFREE(&ia->ia_ifa);
 			splx(s);
 			return (NULL);
 		}
@@ -749,8 +718,6 @@ in6_delmulti(struct in6_multi *in6m)
 	mld_stoptimer(in6m);
 
 	if (--in6m->in6m_refcount == 0) {
-		int _s;
-
 		/*
 		 * No remaining claims to this record; let MLD6 know
 		 * that we are leaving the multicast group.
@@ -762,7 +729,7 @@ in6_delmulti(struct in6_multi *in6m)
 		 */
 		LIST_REMOVE(in6m, in6m_entry);
 		if (in6m->in6m_ia != NULL) {
-			ifafree(&in6m->in6m_ia->ia_ifa); /* release reference */
+			IFAFREE(&in6m->in6m_ia->ia_ifa); /* release reference */
 			in6m->in6m_ia = NULL;
 		}
 
@@ -770,15 +737,13 @@ in6_delmulti(struct in6_multi *in6m)
 		 * Delete all references of this multicasting group from
 		 * the membership arrays
 		 */
-		_s = pserialize_read_enter();
-		IN6_ADDRLIST_READER_FOREACH(ia) {
+		for (ia = in6_ifaddr; ia; ia = ia->ia_next) {
 			struct in6_multi_mship *imm;
 			LIST_FOREACH(imm, &ia->ia6_memberships, i6mm_chain) {
 				if (imm->i6mm_maddr == in6m)
 					imm->i6mm_maddr = NULL;
 			}
 		}
-		pserialize_read_exit(_s);
 
 		/*
 		 * Notify the network driver to update its multicast
@@ -842,18 +807,15 @@ in6_savemkludge(struct in6_ifaddr *oia)
 {
 	struct in6_ifaddr *ia;
 	struct in6_multi *in6m;
-	int s;
 
-	s = pserialize_read_enter();
-	ia = in6_get_ia_from_ifp(oia->ia_ifp);
+	IFP_TO_IA6(oia->ia_ifp, ia);
 	if (ia) {	/* there is another address */
 		KASSERT(ia != oia);
 		while ((in6m = LIST_FIRST(&oia->ia6_multiaddrs)) != NULL) {
 			LIST_REMOVE(in6m, in6m_entry);
-			ifaref(&ia->ia_ifa);
-			ifafree(&in6m->in6m_ia->ia_ifa);
+			IFAREF(&ia->ia_ifa);
+			IFAFREE(&in6m->in6m_ia->ia_ifa);
 			in6m->in6m_ia = ia;
-			/* FIXME NOMPSAFE: need to lock */
 			LIST_INSERT_HEAD(&ia->ia6_multiaddrs, in6m, in6m_entry);
 		}
 	} else {	/* last address on this if deleted, save */
@@ -868,12 +830,11 @@ in6_savemkludge(struct in6_ifaddr *oia)
 
 		while ((in6m = LIST_FIRST(&oia->ia6_multiaddrs)) != NULL) {
 			LIST_REMOVE(in6m, in6m_entry);
-			ifafree(&in6m->in6m_ia->ia_ifa); /* release reference */
+			IFAFREE(&in6m->in6m_ia->ia_ifa); /* release reference */
 			in6m->in6m_ia = NULL;
 			LIST_INSERT_HEAD(&mk->mk_head, in6m, in6m_entry);
 		}
 	}
-	pserialize_read_exit(s);
 }
 
 /*
@@ -896,7 +857,7 @@ in6_restoremkludge(struct in6_ifaddr *ia, struct ifnet *ifp)
 	while ((in6m = LIST_FIRST(&mk->mk_head)) != NULL) {
 		LIST_REMOVE(in6m, in6m_entry);
 		in6m->in6m_ia = ia;
-		ifaref(&ia->ia_ifa);
+		IFAREF(&ia->ia_ifa);
 		LIST_INSERT_HEAD(&ia->ia6_multiaddrs, in6m, in6m_entry);
 	}
 }
@@ -1016,23 +977,19 @@ in6_multicast_sysctl(SYSCTLFN_ARGS)
 	uint32_t tmp;
 	int error;
 	size_t written;
-	struct psref psref, psref_ia;
-	int bound, s;
 
 	if (namelen != 1)
 		return EINVAL;
 
-	bound = curlwp_bind();
-	ifp = if_get_byindex(name[0], &psref);
-	if (ifp == NULL) {
-		curlwp_bindx(bound);
+	ifp = if_byindex(name[0]);
+	if (ifp == NULL)
 		return ENODEV;
-	}
 
 	if (oldp == NULL) {
 		*oldlenp = 0;
-		s = pserialize_read_enter();
-		IFADDR_READER_FOREACH(ifa, ifp) {
+		IFADDR_FOREACH(ifa, ifp) {
+			if (ifa->ifa_addr == NULL)
+				continue;
 			if (ifa->ifa_addr->sa_family != AF_INET6)
 				continue;
 			ifa6 = (struct in6_ifaddr *)ifa;
@@ -1041,22 +998,16 @@ in6_multicast_sysctl(SYSCTLFN_ARGS)
 				    sizeof(uint32_t);
 			}
 		}
-		pserialize_read_exit(s);
-		if_put(ifp, &psref);
-		curlwp_bindx(bound);
 		return 0;
 	}
 
 	error = 0;
 	written = 0;
-	s = pserialize_read_enter();
-	IFADDR_READER_FOREACH(ifa, ifp) {
+	IFADDR_FOREACH(ifa, ifp) {
+		if (ifa->ifa_addr == NULL)
+			continue;
 		if (ifa->ifa_addr->sa_family != AF_INET6)
 			continue;
-
-		ifa_acquire(ifa, &psref_ia);
-		pserialize_read_exit(s);
-
 		ifa6 = (struct in6_ifaddr *)ifa;
 		LIST_FOREACH(in6m, &ifa6->ia6_multiaddrs, in6m_entry) {
 			if (written + 2 * sizeof(struct in6_addr) +
@@ -1081,15 +1032,8 @@ in6_multicast_sysctl(SYSCTLFN_ARGS)
 			oldp = (char *)oldp + sizeof(tmp);
 			written += sizeof(tmp);
 		}
-
-		s = pserialize_read_enter();
-		ifa_release(ifa, &psref_ia);
 	}
-	pserialize_read_exit(s);
 done:
-	ifa_release(ifa, &psref_ia);
-	if_put(ifp, &psref);
-	curlwp_bindx(bound);
 	*oldlenp = written;
 	return error;
 }

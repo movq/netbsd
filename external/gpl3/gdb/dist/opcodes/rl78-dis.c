@@ -1,5 +1,5 @@
 /* Disassembler code for Renesas RL78.
-   Copyright (C) 2011-2015 Free Software Foundation, Inc.
+   Copyright 2011, 2012 Free Software Foundation, Inc.
    Contributed by Red Hat.
    Written by DJ Delorie.
 
@@ -24,10 +24,8 @@
 #include <stdio.h>
 
 #include "bfd.h"
-#include "elf-bfd.h"
 #include "dis-asm.h"
 #include "opcode/rl78.h"
-#include "elf/rl78.h"
 
 #define DEBUG_SEMANTICS 0
 
@@ -82,8 +80,8 @@ indirect_type (int t)
     }
 }
 
-static int
-print_insn_rl78_common (bfd_vma addr, disassemble_info * dis, RL78_Dis_Isa isa)
+int
+print_insn_rl78 (bfd_vma addr, disassemble_info * dis)
 {
   int rv;
   RL78_Data rl78_data;
@@ -96,7 +94,7 @@ print_insn_rl78_common (bfd_vma addr, disassemble_info * dis, RL78_Dis_Isa isa)
   rl78_data.pc = addr;
   rl78_data.dis = dis;
 
-  rv = rl78_decode_opcode (addr, &opcode, rl78_get_byte, &rl78_data, isa);
+  rv = rl78_decode_opcode (addr, &opcode, rl78_get_byte, &rl78_data);
 
   dis->bytes_per_line = 10;
 
@@ -286,7 +284,7 @@ print_insn_rl78_common (bfd_vma addr, disassemble_info * dis, RL78_Dis_Isa isa)
 		    PR (PS, "[%s", register_names[oper->reg]);
 		    if (oper->reg2 != RL78_Reg_None)
 		      PR (PS, "+%s", register_names[oper->reg2]);
-		    if (oper->addend || do_addr)
+		    if (oper->addend)
 		      PR (PS, "+%d", oper->addend);
 		    PC (']');
 		    break;
@@ -328,45 +326,4 @@ print_insn_rl78_common (bfd_vma addr, disassemble_info * dis, RL78_Dis_Isa isa)
 #endif
 
   return rv;
-}
-
-int
-print_insn_rl78 (bfd_vma addr, disassemble_info * dis)
-{
-  return print_insn_rl78_common (addr, dis, RL78_ISA_DEFAULT);
-}
-
-int
-print_insn_rl78_g10 (bfd_vma addr, disassemble_info * dis)
-{
-  return print_insn_rl78_common (addr, dis, RL78_ISA_G10);
-}
-
-int
-print_insn_rl78_g13 (bfd_vma addr, disassemble_info * dis)
-{
-  return print_insn_rl78_common (addr, dis, RL78_ISA_G13);
-}
-
-int
-print_insn_rl78_g14 (bfd_vma addr, disassemble_info * dis)
-{
-  return print_insn_rl78_common (addr, dis, RL78_ISA_G14);
-}
-
-disassembler_ftype
-rl78_get_disassembler (bfd *abfd)
-{
-  int cpu = abfd->tdata.elf_obj_data->elf_header->e_flags & E_FLAG_RL78_CPU_MASK;
-  switch (cpu)
-    {
-    case E_FLAG_RL78_G10:
-      return print_insn_rl78_g10;
-    case E_FLAG_RL78_G13:
-      return print_insn_rl78_g13;
-    case E_FLAG_RL78_G14:
-      return print_insn_rl78_g14;
-    default:
-      return print_insn_rl78;
-    }
 }

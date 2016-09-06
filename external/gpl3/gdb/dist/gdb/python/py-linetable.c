@@ -1,6 +1,6 @@
 /* Python interface to line tables.
 
-   Copyright (C) 2013-2015 Free Software Foundation, Inc.
+   Copyright (C) 2013-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,6 +19,7 @@
 
 #include "defs.h"
 #include "python-internal.h"
+#include "exceptions.h"
 
 typedef struct {
   PyObject_HEAD
@@ -28,7 +29,7 @@ typedef struct {
   CORE_ADDR pc;
 } linetable_entry_object;
 
-extern PyTypeObject linetable_entry_object_type
+static PyTypeObject linetable_entry_object_type
     CPYCHECKER_TYPE_OBJECT_FOR_TYPEDEF ("linetable_entry_object");
 
 typedef struct {
@@ -39,7 +40,7 @@ typedef struct {
   PyObject *symtab;
 } linetable_object;
 
-extern PyTypeObject linetable_object_type
+static PyTypeObject linetable_object_type
     CPYCHECKER_TYPE_OBJECT_FOR_TYPEDEF ("linetable_object");
 
 typedef struct {
@@ -52,7 +53,7 @@ typedef struct {
   PyObject *source;
 } ltpy_iterator_object;
 
-extern PyTypeObject ltpy_iterator_object_type
+static PyTypeObject ltpy_iterator_object_type
     CPYCHECKER_TYPE_OBJECT_FOR_TYPEDEF ("ltpy_iterator_object");
 
 /* Internal helper function to extract gdb.Symtab from a gdb.Linetable
@@ -172,21 +173,18 @@ ltpy_get_pcs_for_line (PyObject *self, PyObject *args)
   linetable_entry_object *result;
   VEC (CORE_ADDR) *pcs = NULL;
   PyObject *tuple;
+  volatile struct gdb_exception except;
 
   LTPY_REQUIRE_VALID (self, symtab);
 
   if (! PyArg_ParseTuple (args, GDB_PY_LL_ARG, &py_line))
     return NULL;
 
-  TRY
+  TRY_CATCH (except, RETURN_MASK_ALL)
     {
       pcs = find_pcs_for_symtab_line (symtab, py_line, &best_entry);
     }
-  CATCH (except, RETURN_MASK_ALL)
-    {
-      GDB_PY_HANDLE_EXCEPTION (except);
-    }
-  END_CATCH
+  GDB_PY_HANDLE_EXCEPTION (except);
 
   tuple = build_line_table_tuple_from_pcs (py_line, pcs);
   VEC_free (CORE_ADDR, pcs);
@@ -210,16 +208,16 @@ ltpy_has_line (PyObject *self, PyObject *args)
   if (! PyArg_ParseTuple (args, GDB_PY_LL_ARG, &py_line))
     return NULL;
 
-  if (SYMTAB_LINETABLE (symtab) == NULL)
+  if (LINETABLE (symtab) == NULL)
     {
       PyErr_SetString (PyExc_RuntimeError,
 		       _("Linetable information not found in symbol table"));
       return NULL;
     }
 
-  for (index = 0; index < SYMTAB_LINETABLE (symtab)->nitems; index++)
+  for (index = 0; index < LINETABLE (symtab)->nitems; index++)
     {
-      struct linetable_entry *item = &(SYMTAB_LINETABLE (symtab)->item[index]);
+      struct linetable_entry *item = &(symtab->linetable->item[index]);
       if (item->line == py_line)
 	  Py_RETURN_TRUE;
     }
@@ -243,7 +241,7 @@ ltpy_get_all_source_lines (PyObject *self, PyObject *args)
 
   LTPY_REQUIRE_VALID (self, symtab);
 
-  if (SYMTAB_LINETABLE (symtab) == NULL)
+  if (LINETABLE (symtab) == NULL)
     {
       PyErr_SetString (PyExc_RuntimeError,
 		       _("Linetable information not found in symbol table"));
@@ -254,9 +252,9 @@ ltpy_get_all_source_lines (PyObject *self, PyObject *args)
   if (source_dict == NULL)
     return NULL;
 
-  for (index = 0; index < SYMTAB_LINETABLE (symtab)->nitems; index++)
+  for (index = 0; index < LINETABLE (symtab)->nitems; index++)
     {
-      item = &(SYMTAB_LINETABLE (symtab)->item[index]);
+      item = &(LINETABLE (symtab)->item[index]);
 
       /* 0 is used to signify end of line table information.  Do not
 	 include in the source set. */
@@ -433,10 +431,10 @@ ltpy_iternext (PyObject *self)
 
   LTPY_REQUIRE_VALID (iter_obj->source, symtab);
 
-  if (iter_obj->current_index >= SYMTAB_LINETABLE (symtab)->nitems)
+  if (iter_obj->current_index >= LINETABLE (symtab)->nitems)
     goto stop_iteration;
 
-  item = &(SYMTAB_LINETABLE (symtab)->item[iter_obj->current_index]);
+  item = &(LINETABLE (symtab)->item[iter_obj->current_index]);
 
   /* Skip over internal entries such as 0.  0 signifies the end of
      line table data and is not useful to the API user.  */
@@ -445,9 +443,9 @@ ltpy_iternext (PyObject *self)
       iter_obj->current_index++;
 
       /* Exit if the internal value is the last item in the line table.  */
-      if (iter_obj->current_index >= SYMTAB_LINETABLE (symtab)->nitems)
+      if (iter_obj->current_index >= symtab->linetable->nitems)
 	goto stop_iteration;
-      item = &(SYMTAB_LINETABLE (symtab)->item[iter_obj->current_index]);
+      item = &(symtab->linetable->item[iter_obj->current_index]);
     }
 
   obj = build_linetable_entry (item->line, item->pc);
@@ -496,7 +494,7 @@ Return True if this Linetable is valid, False if not." },
   {NULL}  /* Sentinel */
 };
 
-PyTypeObject linetable_object_type = {
+static PyTypeObject linetable_object_type = {
   PyVarObject_HEAD_INIT (NULL, 0)
   "gdb.LineTable",	          /*tp_name*/
   sizeof (linetable_object),	  /*tp_basicsize*/
@@ -543,7 +541,7 @@ Return True if this Linetable iterator is valid, False if not." },
   {NULL}  /* Sentinel */
 };
 
-PyTypeObject ltpy_iterator_object_type = {
+static PyTypeObject ltpy_iterator_object_type = {
   PyVarObject_HEAD_INIT (NULL, 0)
   "gdb.LineTableIterator",		  /*tp_name*/
   sizeof (ltpy_iterator_object),  /*tp_basicsize*/
@@ -583,7 +581,7 @@ static PyGetSetDef linetable_entry_object_getset[] = {
   { NULL }  /* Sentinel */
 };
 
-PyTypeObject linetable_entry_object_type = {
+static PyTypeObject linetable_entry_object_type = {
   PyVarObject_HEAD_INIT (NULL, 0)
   "gdb.LineTableEntry",	          /*tp_name*/
   sizeof (linetable_entry_object), /*tp_basicsize*/

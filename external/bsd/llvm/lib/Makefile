@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.43 2016/02/27 21:47:32 joerg Exp $
+# $NetBSD: Makefile,v 1.41.2.1 2015/06/04 20:05:43 snj Exp $
 
 .include <bsd.own.mk>
 
@@ -13,6 +13,7 @@ SUBDIR=	\
 	libLLVMIRReader \
 	libLLVMInstCombine \
 	libLLVMInstrumentation \
+	libLLVMipa \
 	libLLVMipo \
 	libLLVMLinker \
 	libLLVMMC \
@@ -86,18 +87,12 @@ SUBDIR+= \
 SUBDIR+= \
 	libLLVMExecutionEngine \
 	libLLVMMCJIT \
-	libLLVMMIRParser \
-	libLLVMPasses \
-	libLLVMOrc \
 	libLLVMRuntimeDyld
 .endif
 
 .if (${NO_LLVM_DEVELOPER:Uno} == "no" && ${LLVM_DEVELOPER:U} == "yes") || ${MKLLD} == "yes"
 SUBDIR+= \
-	libLLVMDebugInfoCodeView \
-	libLLVMDebugInfoDWARF \
-	libLLVMDebugInfoPDB \
-	libLLVMDebugInfoSymbolize
+	libLLVMDebugInfo
 .endif
 
 .if ${NO_LLVM_DEVELOPER:Uno} == "no" && ${LLVM_DEVELOPER:U} == "yes"
@@ -107,7 +102,6 @@ SUBDIR+= \
 	libLLVMHello \
 	libLLVMInterpreter \
 	libLLVMLTO \
-	libLLVMLibDriver \
 	libLLVMLineEditor
 .endif
 

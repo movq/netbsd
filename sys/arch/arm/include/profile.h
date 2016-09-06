@@ -1,4 +1,4 @@
-/*	$NetBSD: profile.h,v 1.17 2015/01/11 20:52:57 joerg Exp $	*/
+/*	$NetBSD: profile.h,v 1.14.2.2 2015/06/02 20:03:37 snj Exp $	*/
 
 /*
  * Copyright (c) 2001 Ben Harris
@@ -91,10 +91,10 @@
 	/*								\
 	 * Preserve registers that are trashed during mcount		\
 	 */								\
-	__asm("push	{r0-r3, ip, lr}");				\
+	__asm("push	{r0-r4, ip, lr}");				\
 	__asm(".cfi_def_cfa_offset 24");				\
 	__asm(".cfi_offset 14, -4");					\
-	__asm(".cfi_offset 12, -8");					\
+	__asm(".cfi_offset 4, -8");					\
 	__asm(".cfi_offset 3, -12");					\
 	__asm(".cfi_offset 2, -16");					\
 	__asm(".cfi_offset 1, -20");					\
@@ -117,7 +117,7 @@
 	/*								\
 	 * Restore registers that were trashed during mcount		\
 	 */								\
-	__asm("pop	{r0-r3, lr}");					\
+	__asm("pop	{r0-r4, lr}");					\
 	__asm("pop	{pc}");						\
 	__asm(".cfi_endproc");						\
 	__asm(".size	" MCOUNT_ASM_NAME ", .-" MCOUNT_ASM_NAME);
@@ -134,11 +134,11 @@
 	/*								\
 	 * Preserve registers that are trashed during mcount		\
 	 */								\
-	__asm("push	{r0-r3, ip, lr}");				\
-	__asm(".save {r0-r3, lr}");					\
+	__asm("push	{r0-r4, ip, lr}");				\
+	__asm(".save {r0-r4, lr}");					\
 	__asm(".cfi_def_cfa_offset 24");				\
 	__asm(".cfi_offset 14, -4");					\
-	__asm(".cfi_offset 12, -8");					\
+	__asm(".cfi_offset 4, -8");					\
 	__asm(".cfi_offset 3, -12");					\
 	__asm(".cfi_offset 2, -16");					\
 	__asm(".cfi_offset 1, -20");					\
@@ -161,7 +161,7 @@
 	/*								\
 	 * Restore registers that were trashed during mcount		\
 	 */								\
-	__asm("pop	{r0-r3, lr}");					\
+	__asm("pop	{r0-r4, lr}");					\
 	__asm("pop	{pc}");						\
 	__asm(".cfi_endproc");						\
 	__asm(".fnend");						\

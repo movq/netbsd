@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.25 2016/08/19 19:10:54 mrg Exp $
+#	$NetBSD: Makefile,v 1.21 2014/01/16 01:15:33 christos Exp $
 
 .include <bsd.own.mk>
 
@@ -12,7 +12,7 @@ SRCS.xv=	xf86xv.c xf86xvmc.c
 SRCS.bus=	xf86pciBus.c xf86fbBus.c xf86noBus.c
 SRCS.randr=	xf86RandR.c
 
-SRCS=	xf86Configure.c xf86Bus.c xf86Config.c \
+SRCS=	xf86Configure.c xf86ShowOpts.c xf86Bus.c xf86Config.c \
 	xf86Cursor.c xf86DGA.c xf86DPMS.c \
 	xf86Events.c xf86Globals.c xf86AutoConfig.c \
 	xf86Option.c \
@@ -21,9 +21,7 @@ SRCS=	xf86Configure.c xf86Bus.c xf86Config.c \
 	xf86Mode.c xorgHelper.c \
 	${SRCS.xv} ${SRCS.bus} ${SRCS.randr} \
 	xf86DefModeSet.c \
-	xf86VGAarbiter.c \
-	xf86Extensions.c \
-	xf86platformBus.c
+	xf86VGAarbiter.c
 
 .if ${MACHINE_ARCH} == "sparc" || ${MACHINE_ARCH} == "sparc64"
 SRCS.bus+=	xf86sbusBus.c
@@ -64,6 +62,7 @@ CPPFLAGS+=	-I${X11SRCDIR.xorg-server}/hw/xfree86/common \
 		-I${DESTDIR}${X11INCDIR}/xorg \
                 -I${X11SRCDIR.xorg-server}/Xi \
                 -I${X11SRCDIR.xorg-server}/hw/xfree86/ddc \
+		-I${X11SRCDIR.xorg-server}/hw/xfree86/dixmods/extmod \
 		-I${X11SRCDIR.xorg-server}/hw/xfree86/modes \
 		-I${X11SRCDIR.xorg-server}/hw/xfree86/i2c \
 		-I${X11SRCDIR.xorg-server}/hw/xfree86 \
@@ -114,7 +113,8 @@ CPPFLAGS.xf86Init.c=		-DOSNAME='"NetBSD/${MACHINE} ${OS_RELEASE} -"' \
 				-DXORG_RELEASE='"Release 1.4.2"' \
 				-DBUILDERADDR='"xorg@xorg.org"' \
 				-DOSVENDOR='" The NetBSD Foundation, Inc."'
-CPPFLAGS.xf86Globals.c=		-DDEFAULT_MODULE_PATH='"${X11USRLIBDIR}/modules"'
+CPPFLAGS.xf86Globals.c=		-DDEFAULT_LOGPREFIX='"/var/log/Xorg."' \
+				-DDEFAULT_MODULE_PATH='"${X11USRLIBDIR}/modules"'
 CPPFLAGS.xf86Configure.c=	-DXF86CONFIGFILE='"xorg.conf"'
 CPPFLAGS.xf86Config.c=		-DDRIVERS='"${DRIVERS}"' \
 				-DIDRIVERS='"${IDRIVERS}"' \
@@ -124,7 +124,14 @@ CPPFLAGS.xf86AutoConfig.c=	-DPROJECTROOT='"${X11ROOTDIR}"' \
 				-DDRIVERS='"${DRIVERS}"' \
 				-DIDRIVERS='"${IDRIVERS}"'
 
-COPTS.xf86sbusBus.c=		-Wno-error=incompatible-pointer-types
+COPTS.xf86AutoConfig.c=		-Wno-error
+COPTS.xf86Config.c=		-Wno-error
+COPTS.xf86Cursor.c=		-Wno-error
+COPTS.xf86RandR.c=		-Wno-error
+COPTS.xf86Helper.c=		-Wno-error
+COPTS.xf86cmap.c=		-Wno-error
+COPTS.xf86Cursor.c=		-Wno-error	# XXX xf86dgastr.h
+COPTS.xf86DGA.c=		-Wno-error	# XXX xf86dgastr.h
 
 .include <bsd.x11.mk>
 .include <bsd.lib.mk>

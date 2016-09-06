@@ -1,5 +1,4 @@
-/*	$NetBSD: fsmagic.c,v 1.11 2015/01/02 21:15:32 christos Exp $	*/
-
+/*	$NetBSD: fsmagic.c,v 1.9 2014/06/13 02:08:06 christos Exp $	*/
 /*
  * Copyright (c) Ian F. Darwin 1986-1995.
  * Software written by Ian F. Darwin and others;
@@ -35,9 +34,9 @@
 
 #ifndef	lint
 #if 0
-FILE_RCSID("@(#)$File: fsmagic.c,v 1.75 2014/12/04 15:56:46 christos Exp $")
+FILE_RCSID("@(#)$File: fsmagic.c,v 1.73 2014/05/14 23:15:42 christos Exp $")
 #else
-__RCSID("$NetBSD: fsmagic.c,v 1.11 2015/01/02 21:15:32 christos Exp $");
+__RCSID("$NetBSD: fsmagic.c,v 1.9 2014/06/13 02:08:06 christos Exp $");
 #endif
 #endif	/* lint */
 
@@ -81,10 +80,10 @@ bad_link(struct magic_set *ms, int err, char *buf)
 	else if (!mime) {
 		if (ms->flags & MAGIC_ERROR) {
 			file_error(ms, err,
-				   "broken symbolic link to %s", buf);
+				   "broken symbolic link to `%s'", buf);
 			return -1;
 		} 
-		if (file_printf(ms, "broken symbolic link to %s", buf) == -1)
+		if (file_printf(ms, "broken symbolic link to `%s'", buf) == -1)
 			return -1;
 	}
 	return 1;
@@ -135,7 +134,7 @@ file_fsmagic(struct magic_set *ms, const char *fn, struct stat *sb)
 
 #ifdef WIN32
 	{
-		HANDLE hFile = CreateFile((LPCSTR)fn, 0, FILE_SHARE_DELETE |
+		HANDLE hFile = CreateFile(fn, 0, FILE_SHARE_DELETE |
 		    FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0,
 		    NULL);
 		if (hFile != INVALID_HANDLE_VALUE) {
@@ -358,7 +357,7 @@ file_fsmagic(struct magic_set *ms, const char *fn, struct stat *sb)
 			if (mime) {
 				if (handle_mime(ms, mime, "symlink") == -1)
 					return -1;
-			} else if (file_printf(ms, "%ssymbolic link to %s",
+			} else if (file_printf(ms, "%ssymbolic link to `%s'",
 			    COMMA, buf) == -1)
 				return -1;
 		}

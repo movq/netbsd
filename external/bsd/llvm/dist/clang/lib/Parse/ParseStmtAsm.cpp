@@ -215,35 +215,12 @@ ExprResult Parser::ParseMSAsmIdentifier(llvm::SmallVectorImpl<Token> &LineToks,
   // Require an identifier here.
   SourceLocation TemplateKWLoc;
   UnqualifiedId Id;
-  bool Invalid = true;
-  ExprResult Result;
-  if (Tok.is(tok::kw_this)) {
-    Result = ParseCXXThis();
-    Invalid = false;
-  } else {
-    Invalid =
-        ParseUnqualifiedId(SS,
-                           /*EnteringContext=*/false,
-                           /*AllowDestructorName=*/false,
-                           /*AllowConstructorName=*/false,
-                           /*ObjectType=*/ParsedType(), TemplateKWLoc, Id);
-    // Perform the lookup.
-    Result = Actions.LookupInlineAsmIdentifier(SS, TemplateKWLoc, Id, Info,
-                                               IsUnevaluatedContext);
-  }
-  // While the next two tokens are 'period' 'identifier', repeatedly parse it as
-  // a field access. We have to avoid consuming assembler directives that look
-  // like '.' 'else'.
-  while (Result.isUsable() && Tok.is(tok::period)) {
-    Token IdTok = PP.LookAhead(0);
-    if (IdTok.isNot(tok::identifier))
-      break;
-    ConsumeToken(); // Consume the period.
-    IdentifierInfo *Id = Tok.getIdentifierInfo();
-    ConsumeToken(); // Consume the identifier.
-    Result = Actions.LookupInlineAsmVarDeclField(Result.get(), Id->getName(),
-                                                 Info, Tok.getLocation());
-  }
+  bool Invalid =
+      ParseUnqualifiedId(SS,
+                         /*EnteringContext=*/false,
+                         /*AllowDestructorName=*/false,
+                         /*AllowConstructorName=*/false,
+                         /*ObjectType=*/ParsedType(), TemplateKWLoc, Id);
 
   // Figure out how many tokens we are into LineToks.
   unsigned LineIndex = 0;
@@ -277,7 +254,9 @@ ExprResult Parser::ParseMSAsmIdentifier(llvm::SmallVectorImpl<Token> &LineToks,
   LineToks.pop_back();
   LineToks.pop_back();
 
-  return Result;
+  // Perform the lookup.
+  return Actions.LookupInlineAsmIdentifier(SS, TemplateKWLoc, Id, Info,
+                                           IsUnevaluatedContext);
 }
 
 /// Turn a sequence of our tokens back into a string that we can hand
@@ -533,8 +512,8 @@ StmtResult Parser::ParseMicrosoftAsmStatement(SourceLocation AsmLoc) {
 
   llvm::SourceMgr TempSrcMgr;
   llvm::MCContext Ctx(MAI.get(), MRI.get(), MOFI.get(), &TempSrcMgr);
-  MOFI->InitMCObjectFileInfo(TheTriple, llvm::Reloc::Default,
-                             llvm::CodeModel::Default, Ctx);
+  MOFI->InitMCObjectFileInfo(TT, llvm::Reloc::Default, llvm::CodeModel::Default,
+                             Ctx);
   std::unique_ptr<llvm::MemoryBuffer> Buffer =
       llvm::MemoryBuffer::getMemBuffer(AsmString, "<MS inline asm>");
 
@@ -551,7 +530,7 @@ StmtResult Parser::ParseMicrosoftAsmStatement(SourceLocation AsmLoc) {
       TheTarget->createMCAsmParser(*STI, *Parser, *MII, MCOptions));
 
   std::unique_ptr<llvm::MCInstPrinter> IP(
-      TheTarget->createMCInstPrinter(llvm::Triple(TT), 1, *MAI, *MII, *MRI));
+      TheTarget->createMCInstPrinter(1, *MAI, *MII, *MRI, *STI));
 
   // Change to the Intel dialect.
   Parser->setAssemblerDialect(1);
@@ -636,7 +615,6 @@ StmtResult Parser::ParseAsmStatement(bool &msAsm) {
     msAsm = true;
     return ParseMicrosoftAsmStatement(AsmLoc);
   }
-
   DeclSpec DS(AttrFactory);
   SourceLocation Loc = Tok.getLocation();
   ParseTypeQualifierListOpt(DS, AR_VendorAttributesParsed);
@@ -661,15 +639,6 @@ StmtResult Parser::ParseAsmStatement(bool &msAsm) {
   T.consumeOpen();
 
   ExprResult AsmString(ParseAsmStringLiteral());
-
-  // Check if GNU-style InlineAsm is disabled.
-  // Error on anything other than empty string.
-  if (!(getLangOpts().GNUAsm || AsmString.isInvalid())) {
-    const auto *SL = cast<StringLiteral>(AsmString.get());
-    if (!SL->getString().trim().empty())
-      Diag(Loc, diag::err_gnu_inline_asm_disabled);
-  }
-
   if (AsmString.isInvalid()) {
     // Consume up to and including the closing paren.
     T.skipToEnd();

@@ -43,7 +43,6 @@ namespace llvm {
       SCEV(ID, scConstant), V(v) {}
   public:
     ConstantInt *getValue() const { return V; }
-    const APInt &getAPInt() const { return getValue()->getValue(); }
 
     Type *getType() const { return V->getType(); }
 
@@ -357,6 +356,84 @@ namespace llvm {
     static inline bool classof(const SCEV *S) {
       return S->getSCEVType() == scAddRecExpr;
     }
+
+    /// Collect parametric terms occurring in step expressions.
+    void collectParametricTerms(ScalarEvolution &SE,
+                                SmallVectorImpl<const SCEV *> &Terms) const;
+
+    /// Return in Subscripts the access functions for each dimension in Sizes.
+    void computeAccessFunctions(ScalarEvolution &SE,
+                                SmallVectorImpl<const SCEV *> &Subscripts,
+                                SmallVectorImpl<const SCEV *> &Sizes) const;
+
+    /// Split this SCEVAddRecExpr into two vectors of SCEVs representing the
+    /// subscripts and sizes of an array access.
+    ///
+    /// The delinearization is a 3 step process: the first two steps compute the
+    /// sizes of each subscript and the third step computes the access functions
+    /// for the delinearized array:
+    ///
+    /// 1. Find the terms in the step functions
+    /// 2. Compute the array size
+    /// 3. Compute the access function: divide the SCEV by the array size
+    ///    starting with the innermost dimensions found in step 2. The Quotient
+    ///    is the SCEV to be divided in the next step of the recursion. The
+    ///    Remainder is the subscript of the innermost dimension. Loop over all
+    ///    array dimensions computed in step 2.
+    ///
+    /// To compute a uniform array size for several memory accesses to the same
+    /// object, one can collect in step 1 all the step terms for all the memory
+    /// accesses, and compute in step 2 a unique array shape. This guarantees
+    /// that the array shape will be the same across all memory accesses.
+    ///
+    /// FIXME: We could derive the result of steps 1 and 2 from a description of
+    /// the array shape given in metadata.
+    ///
+    /// Example:
+    ///
+    /// A[][n][m]
+    ///
+    /// for i
+    ///   for j
+    ///     for k
+    ///       A[j+k][2i][5i] =
+    ///
+    /// The initial SCEV:
+    ///
+    /// A[{{{0,+,2*m+5}_i, +, n*m}_j, +, n*m}_k]
+    ///
+    /// 1. Find the different terms in the step functions:
+    /// -> [2*m, 5, n*m, n*m]
+    ///
+    /// 2. Compute the array size: sort and unique them
+    /// -> [n*m, 2*m, 5]
+    /// find the GCD of all the terms = 1
+    /// divide by the GCD and erase constant terms
+    /// -> [n*m, 2*m]
+    /// GCD = m
+    /// divide by GCD -> [n, 2]
+    /// remove constant terms
+    /// -> [n]
+    /// size of the array is A[unknown][n][m]
+    ///
+    /// 3. Compute the access function
+    /// a. Divide {{{0,+,2*m+5}_i, +, n*m}_j, +, n*m}_k by the innermost size m
+    /// Quotient: {{{0,+,2}_i, +, n}_j, +, n}_k
+    /// Remainder: {{{0,+,5}_i, +, 0}_j, +, 0}_k
+    /// The remainder is the subscript of the innermost array dimension: [5i].
+    ///
+    /// b. Divide Quotient: {{{0,+,2}_i, +, n}_j, +, n}_k by next outer size n
+    /// Quotient: {{{0,+,0}_i, +, 1}_j, +, 1}_k
+    /// Remainder: {{{0,+,2}_i, +, 0}_j, +, 0}_k
+    /// The Remainder is the subscript of the next array dimension: [2i].
+    ///
+    /// The subscript of the outermost dimension is the Quotient: [j+k].
+    ///
+    /// Overall, we have: A[][n][m], and the access function: A[j+k][2i][5i].
+    void delinearize(ScalarEvolution &SE,
+                     SmallVectorImpl<const SCEV *> &Subscripts,
+                     SmallVectorImpl<const SCEV *> &Sizes,
+                     const SCEV *ElementSize) const;
   };
 
   //===--------------------------------------------------------------------===//
@@ -405,7 +482,7 @@ namespace llvm {
   /// value, and only represent it as its LLVM Value.  This is the "bottom"
   /// value for the analysis.
   ///
-  class SCEVUnknown final : public SCEV, private CallbackVH {
+  class SCEVUnknown : public SCEV, private CallbackVH {
     friend class ScalarEvolution;
 
     // Implement CallbackVH.
@@ -554,88 +631,12 @@ namespace llvm {
     T.visitAll(Root);
   }
 
-  /// Recursively visits a SCEV expression and re-writes it.
-  template<typename SC>
-  class SCEVRewriteVisitor : public SCEVVisitor<SC, const SCEV *> {
-  protected:
-    ScalarEvolution &SE;
-  public:
-    SCEVRewriteVisitor(ScalarEvolution &SE) : SE(SE) {}
-
-    const SCEV *visitConstant(const SCEVConstant *Constant) {
-      return Constant;
-    }
-
-    const SCEV *visitTruncateExpr(const SCEVTruncateExpr *Expr) {
-      const SCEV *Operand = ((SC*)this)->visit(Expr->getOperand());
-      return SE.getTruncateExpr(Operand, Expr->getType());
-    }
-
-    const SCEV *visitZeroExtendExpr(const SCEVZeroExtendExpr *Expr) {
-      const SCEV *Operand = ((SC*)this)->visit(Expr->getOperand());
-      return SE.getZeroExtendExpr(Operand, Expr->getType());
-    }
-
-    const SCEV *visitSignExtendExpr(const SCEVSignExtendExpr *Expr) {
-      const SCEV *Operand = ((SC*)this)->visit(Expr->getOperand());
-      return SE.getSignExtendExpr(Operand, Expr->getType());
-    }
-
-    const SCEV *visitAddExpr(const SCEVAddExpr *Expr) {
-      SmallVector<const SCEV *, 2> Operands;
-      for (int i = 0, e = Expr->getNumOperands(); i < e; ++i)
-        Operands.push_back(((SC*)this)->visit(Expr->getOperand(i)));
-      return SE.getAddExpr(Operands);
-    }
-
-    const SCEV *visitMulExpr(const SCEVMulExpr *Expr) {
-      SmallVector<const SCEV *, 2> Operands;
-      for (int i = 0, e = Expr->getNumOperands(); i < e; ++i)
-        Operands.push_back(((SC*)this)->visit(Expr->getOperand(i)));
-      return SE.getMulExpr(Operands);
-    }
-
-    const SCEV *visitUDivExpr(const SCEVUDivExpr *Expr) {
-      return SE.getUDivExpr(((SC*)this)->visit(Expr->getLHS()),
-                            ((SC*)this)->visit(Expr->getRHS()));
-    }
-
-    const SCEV *visitAddRecExpr(const SCEVAddRecExpr *Expr) {
-      SmallVector<const SCEV *, 2> Operands;
-      for (int i = 0, e = Expr->getNumOperands(); i < e; ++i)
-        Operands.push_back(((SC*)this)->visit(Expr->getOperand(i)));
-      return SE.getAddRecExpr(Operands, Expr->getLoop(),
-                              Expr->getNoWrapFlags());
-    }
-
-    const SCEV *visitSMaxExpr(const SCEVSMaxExpr *Expr) {
-      SmallVector<const SCEV *, 2> Operands;
-      for (int i = 0, e = Expr->getNumOperands(); i < e; ++i)
-        Operands.push_back(((SC*)this)->visit(Expr->getOperand(i)));
-      return SE.getSMaxExpr(Operands);
-    }
-
-    const SCEV *visitUMaxExpr(const SCEVUMaxExpr *Expr) {
-      SmallVector<const SCEV *, 2> Operands;
-      for (int i = 0, e = Expr->getNumOperands(); i < e; ++i)
-        Operands.push_back(((SC*)this)->visit(Expr->getOperand(i)));
-      return SE.getUMaxExpr(Operands);
-    }
-
-    const SCEV *visitUnknown(const SCEVUnknown *Expr) {
-      return Expr;
-    }
-
-    const SCEV *visitCouldNotCompute(const SCEVCouldNotCompute *Expr) {
-      return Expr;
-    }
-  };
-
   typedef DenseMap<const Value*, Value*> ValueToValueMap;
 
   /// The SCEVParameterRewriter takes a scalar evolution expression and updates
   /// the SCEVUnknown components following the Map (Value -> Value).
-  class SCEVParameterRewriter : public SCEVRewriteVisitor<SCEVParameterRewriter> {
+  struct SCEVParameterRewriter
+    : public SCEVVisitor<SCEVParameterRewriter, const SCEV*> {
   public:
     static const SCEV *rewrite(const SCEV *Scev, ScalarEvolution &SE,
                                ValueToValueMap &Map,
@@ -644,8 +645,67 @@ namespace llvm {
       return Rewriter.visit(Scev);
     }
 
-    SCEVParameterRewriter(ScalarEvolution &SE, ValueToValueMap &M, bool C)
-      : SCEVRewriteVisitor(SE), Map(M), InterpretConsts(C) {}
+    SCEVParameterRewriter(ScalarEvolution &S, ValueToValueMap &M, bool C)
+      : SE(S), Map(M), InterpretConsts(C) {}
+
+    const SCEV *visitConstant(const SCEVConstant *Constant) {
+      return Constant;
+    }
+
+    const SCEV *visitTruncateExpr(const SCEVTruncateExpr *Expr) {
+      const SCEV *Operand = visit(Expr->getOperand());
+      return SE.getTruncateExpr(Operand, Expr->getType());
+    }
+
+    const SCEV *visitZeroExtendExpr(const SCEVZeroExtendExpr *Expr) {
+      const SCEV *Operand = visit(Expr->getOperand());
+      return SE.getZeroExtendExpr(Operand, Expr->getType());
+    }
+
+    const SCEV *visitSignExtendExpr(const SCEVSignExtendExpr *Expr) {
+      const SCEV *Operand = visit(Expr->getOperand());
+      return SE.getSignExtendExpr(Operand, Expr->getType());
+    }
+
+    const SCEV *visitAddExpr(const SCEVAddExpr *Expr) {
+      SmallVector<const SCEV *, 2> Operands;
+      for (int i = 0, e = Expr->getNumOperands(); i < e; ++i)
+        Operands.push_back(visit(Expr->getOperand(i)));
+      return SE.getAddExpr(Operands);
+    }
+
+    const SCEV *visitMulExpr(const SCEVMulExpr *Expr) {
+      SmallVector<const SCEV *, 2> Operands;
+      for (int i = 0, e = Expr->getNumOperands(); i < e; ++i)
+        Operands.push_back(visit(Expr->getOperand(i)));
+      return SE.getMulExpr(Operands);
+    }
+
+    const SCEV *visitUDivExpr(const SCEVUDivExpr *Expr) {
+      return SE.getUDivExpr(visit(Expr->getLHS()), visit(Expr->getRHS()));
+    }
+
+    const SCEV *visitAddRecExpr(const SCEVAddRecExpr *Expr) {
+      SmallVector<const SCEV *, 2> Operands;
+      for (int i = 0, e = Expr->getNumOperands(); i < e; ++i)
+        Operands.push_back(visit(Expr->getOperand(i)));
+      return SE.getAddRecExpr(Operands, Expr->getLoop(),
+                              Expr->getNoWrapFlags());
+    }
+
+    const SCEV *visitSMaxExpr(const SCEVSMaxExpr *Expr) {
+      SmallVector<const SCEV *, 2> Operands;
+      for (int i = 0, e = Expr->getNumOperands(); i < e; ++i)
+        Operands.push_back(visit(Expr->getOperand(i)));
+      return SE.getSMaxExpr(Operands);
+    }
+
+    const SCEV *visitUMaxExpr(const SCEVUMaxExpr *Expr) {
+      SmallVector<const SCEV *, 2> Operands;
+      for (int i = 0, e = Expr->getNumOperands(); i < e; ++i)
+        Operands.push_back(visit(Expr->getOperand(i)));
+      return SE.getUMaxExpr(Operands);
+    }
 
     const SCEV *visitUnknown(const SCEVUnknown *Expr) {
       Value *V = Expr->getValue();
@@ -658,26 +718,68 @@ namespace llvm {
       return Expr;
     }
 
+    const SCEV *visitCouldNotCompute(const SCEVCouldNotCompute *Expr) {
+      return Expr;
+    }
+
   private:
+    ScalarEvolution &SE;
     ValueToValueMap &Map;
     bool InterpretConsts;
   };
 
   typedef DenseMap<const Loop*, const SCEV*> LoopToScevMapT;
 
-  /// The SCEVLoopAddRecRewriter takes a scalar evolution expression and applies
+  /// The SCEVApplyRewriter takes a scalar evolution expression and applies
   /// the Map (Loop -> SCEV) to all AddRecExprs.
-  class SCEVLoopAddRecRewriter
-      : public SCEVRewriteVisitor<SCEVLoopAddRecRewriter> {
+  struct SCEVApplyRewriter
+    : public SCEVVisitor<SCEVApplyRewriter, const SCEV*> {
   public:
     static const SCEV *rewrite(const SCEV *Scev, LoopToScevMapT &Map,
                                ScalarEvolution &SE) {
-      SCEVLoopAddRecRewriter Rewriter(SE, Map);
+      SCEVApplyRewriter Rewriter(SE, Map);
       return Rewriter.visit(Scev);
     }
 
-    SCEVLoopAddRecRewriter(ScalarEvolution &SE, LoopToScevMapT &M)
-        : SCEVRewriteVisitor(SE), Map(M) {}
+    SCEVApplyRewriter(ScalarEvolution &S, LoopToScevMapT &M)
+      : SE(S), Map(M) {}
+
+    const SCEV *visitConstant(const SCEVConstant *Constant) {
+      return Constant;
+    }
+
+    const SCEV *visitTruncateExpr(const SCEVTruncateExpr *Expr) {
+      const SCEV *Operand = visit(Expr->getOperand());
+      return SE.getTruncateExpr(Operand, Expr->getType());
+    }
+
+    const SCEV *visitZeroExtendExpr(const SCEVZeroExtendExpr *Expr) {
+      const SCEV *Operand = visit(Expr->getOperand());
+      return SE.getZeroExtendExpr(Operand, Expr->getType());
+    }
+
+    const SCEV *visitSignExtendExpr(const SCEVSignExtendExpr *Expr) {
+      const SCEV *Operand = visit(Expr->getOperand());
+      return SE.getSignExtendExpr(Operand, Expr->getType());
+    }
+
+    const SCEV *visitAddExpr(const SCEVAddExpr *Expr) {
+      SmallVector<const SCEV *, 2> Operands;
+      for (int i = 0, e = Expr->getNumOperands(); i < e; ++i)
+        Operands.push_back(visit(Expr->getOperand(i)));
+      return SE.getAddExpr(Operands);
+    }
+
+    const SCEV *visitMulExpr(const SCEVMulExpr *Expr) {
+      SmallVector<const SCEV *, 2> Operands;
+      for (int i = 0, e = Expr->getNumOperands(); i < e; ++i)
+        Operands.push_back(visit(Expr->getOperand(i)));
+      return SE.getMulExpr(Operands);
+    }
+
+    const SCEV *visitUDivExpr(const SCEVUDivExpr *Expr) {
+      return SE.getUDivExpr(visit(Expr->getLHS()), visit(Expr->getRHS()));
+    }
 
     const SCEV *visitAddRecExpr(const SCEVAddRecExpr *Expr) {
       SmallVector<const SCEV *, 2> Operands;
@@ -690,18 +792,41 @@ namespace llvm {
       if (0 == Map.count(L))
         return Res;
 
-      const SCEVAddRecExpr *Rec = cast<SCEVAddRecExpr>(Res);
+      const SCEVAddRecExpr *Rec = (const SCEVAddRecExpr *) Res;
       return Rec->evaluateAtIteration(Map[L], SE);
     }
 
+    const SCEV *visitSMaxExpr(const SCEVSMaxExpr *Expr) {
+      SmallVector<const SCEV *, 2> Operands;
+      for (int i = 0, e = Expr->getNumOperands(); i < e; ++i)
+        Operands.push_back(visit(Expr->getOperand(i)));
+      return SE.getSMaxExpr(Operands);
+    }
+
+    const SCEV *visitUMaxExpr(const SCEVUMaxExpr *Expr) {
+      SmallVector<const SCEV *, 2> Operands;
+      for (int i = 0, e = Expr->getNumOperands(); i < e; ++i)
+        Operands.push_back(visit(Expr->getOperand(i)));
+      return SE.getUMaxExpr(Operands);
+    }
+
+    const SCEV *visitUnknown(const SCEVUnknown *Expr) {
+      return Expr;
+    }
+
+    const SCEV *visitCouldNotCompute(const SCEVCouldNotCompute *Expr) {
+      return Expr;
+    }
+
   private:
+    ScalarEvolution &SE;
     LoopToScevMapT &Map;
   };
 
 /// Applies the Map (Loop -> SCEV) to the given Scev.
 static inline const SCEV *apply(const SCEV *Scev, LoopToScevMapT &Map,
                                 ScalarEvolution &SE) {
-  return SCEVLoopAddRecRewriter::rewrite(Scev, Map, SE);
+  return SCEVApplyRewriter::rewrite(Scev, Map, SE);
 }
 
 }

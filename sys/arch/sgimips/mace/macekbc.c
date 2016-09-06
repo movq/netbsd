@@ -1,4 +1,4 @@
-/* $NetBSD: macekbc.c,v 1.8 2015/04/04 14:19:00 macallan Exp $ */
+/* $NetBSD: macekbc.c,v 1.7.12.1 2015/05/16 04:06:04 snj Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: macekbc.c,v 1.8 2015/04/04 14:19:00 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: macekbc.c,v 1.7.12.1 2015/05/16 04:06:04 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

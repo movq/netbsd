@@ -1,4 +1,4 @@
-/* 	$NetBSD: viornd.c,v 1.9 2015/10/27 16:04:19 christos Exp $ */
+/* 	$NetBSD: viornd.c,v 1.1.2.3 2015/11/06 22:52:55 riz Exp $ */
 /*	$OpenBSD: viornd.c,v 1.1 2014/01/21 21:14:58 sf Exp $	*/
 
 /*
@@ -51,7 +51,7 @@
 #include <sys/kernel.h>
 #include <sys/device.h>
 #include <sys/callout.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 #include <sys/mutex.h>
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcivar.h>
@@ -91,10 +91,8 @@ viornd_get(size_t bytes, void *priv)
         struct virtqueue *vq = &sc->sc_vq;
         int slot;
 
-#if VIORND_DEBUG
 	aprint_normal("%s: asked for %d bytes of entropy\n", __func__,
 		      VIORND_BUFSIZE);
-#endif
 	mutex_enter(&sc->sc_mutex);
 
 	if (sc->sc_active) {
@@ -104,10 +102,10 @@ viornd_get(size_t bytes, void *priv)
         bus_dmamap_sync(vsc->sc_dmat, sc->sc_dmamap, 0, VIORND_BUFSIZE,
             BUS_DMASYNC_PREREAD);
 	if (virtio_enqueue_prep(vsc, vq, &slot)) {
+		virtio_enqueue_abort(vsc, vq, slot);
 		goto out;
 	}
         if (virtio_enqueue_reserve(vsc, vq, slot, 1)) {
-		virtio_enqueue_abort(vsc, vq, slot);
 		goto out;
 	}
         virtio_enqueue(vsc, vq, slot, sc->sc_dmamap, 0);
@@ -134,12 +132,10 @@ viornd_attach( device_t parent, device_t self, void *aux)
 	bus_dma_segment_t segs[1];
 	int nsegs;
 	int error;
-	uint32_t features;
-	char buf[256];
 
 	vsc->sc_vqs = &sc->sc_vq;
 	vsc->sc_nvqs = 1;
-	vsc->sc_config_change = NULL;
+	vsc->sc_config_change = 0;
 	if (vsc->sc_child != NULL)
 		panic("already attached to something else");
 	vsc->sc_child = self;
@@ -148,11 +144,7 @@ viornd_attach( device_t parent, device_t self, void *aux)
 	sc->sc_virtio = vsc;
 	sc->sc_dev = self;
 
-	features = virtio_negotiate_features(vsc, 0);
-	snprintb(buf, sizeof(buf), VIRTIO_COMMON_FLAG_BITS, features);
-	aprint_normal(": Features: %s\n", buf);
-	aprint_naive("\n");
-
+	(void)virtio_negotiate_features(vsc, 0);
 
 	mutex_init(&sc->sc_mutex, MUTEX_DEFAULT, IPL_VM);
 
@@ -208,7 +200,6 @@ viornd_attach( device_t parent, device_t self, void *aux)
 	viornd_get(VIORND_BUFSIZE, sc);
 	return;
 vio_failed:
-	bus_dmamap_unload(vsc->sc_dmat, sc->sc_dmamap);
 load_failed:
 	bus_dmamap_destroy(vsc->sc_dmat, sc->sc_dmamap);
 create_failed:

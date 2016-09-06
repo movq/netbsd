@@ -65,8 +65,7 @@ entry:
 
 define i64 @f9(i64 %a0, i64 %a1) nounwind readnone {
 entry:
-; CHECK-NOT:  sll
-; CHECK:      drotrv
+; CHECK: drotrv
   %shr = lshr i64 %a0, %a1
   %sub = sub i64 64, %a1
   %shl = shl i64 %a0, %sub
@@ -76,8 +75,7 @@ entry:
 
 define i64 @f10(i64 %a0, i64 %a1) nounwind readnone {
 entry:
-; CHECK-NOT:  sll
-; CHECK:      drotrv
+; CHECK: drotrv
   %shl = shl i64 %a0, %a1
   %sub = sub i64 64, %a1
   %shr = lshr i64 %a0, %sub

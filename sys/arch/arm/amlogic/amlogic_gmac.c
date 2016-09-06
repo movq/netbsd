@@ -1,4 +1,4 @@
-/* $NetBSD: amlogic_gmac.c,v 1.2 2015/03/04 18:40:06 jmcneill Exp $ */
+/* $NetBSD: amlogic_gmac.c,v 1.2.2.2 2015/03/21 08:51:17 snj Exp $ */
 
 /*-
  * Copyright (c) 2013, 2014, 2015 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: amlogic_gmac.c,v 1.2 2015/03/04 18:40:06 jmcneill Exp $");
+__KERNEL_RCSID(1, "$NetBSD: amlogic_gmac.c,v 1.2.2.2 2015/03/21 08:51:17 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

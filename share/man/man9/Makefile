@@ -1,13 +1,12 @@
-#       $NetBSD: Makefile,v 1.397 2016/08/20 12:37:06 hannken Exp $
+#       $NetBSD: Makefile,v 1.378.2.1 2015/01/17 12:10:55 martin Exp $
 
 #	Makefile for section 9 (kernel function and variable) manual pages.
 
 MAN=	accept_filter.9 accf_data.9 accf_http.9 \
 	altq.9 arp.9 audio.9 autoconf.9 \
 	bcdtobin.9 bcmp.9 bcopy.9 bintime_add.9 bluetooth.9 boothowto.9 bpf.9 \
-	buffercache.9 bufferio.9 bufq.9 bus_dma.9 bus_space.9 byteorder.9 \
-	bzero.9 \
-	callback.9 callout.9 cardbus.9 clock.9 cnmagic.9 condvar.9 config.9 \
+	buffercache.9 bufq.9 bus_dma.9 bus_space.9 byteorder.9 bzero.9 \
+	callback.9 callout.9 cardbus.9 cnmagic.9 condvar.9 config.9 \
 	cons.9 copy.9 coredump_write.9 \
 	cpu_configure.9 cpu_coredump.9 cpu_dumpconf.9 \
 	cpu_lwp_fork.9 \
@@ -16,20 +15,19 @@ MAN=	accept_filter.9 accf_data.9 accf_http.9 \
 	cpu_startup.9 cpu_switchto.9 cpufreq.9 \
 	csf.9 ctod.9 \
 	curproc.9 \
-	delay.9 devsw_attach.9 disk.9 ddc.9 disklabel.9 dofileread.9 \
+	delay.9 disk.9 ddc.9 disklabel.9 dofileread.9 \
 	dopowerhooks.9 do_setresuid.9 doshutdownhooks.9 driver.9 \
 	edid.9 errno.9 ethersubr.9 evcnt.9 extattr.9 extent.9 \
 	fetch.9 file.9 fileassoc.9 filedesc.9 firmload.9 flash.9 \
-	fork1.9 fsetown.9 fstrans.9 \
-	genfs.9 genfs_rename.9 \
+	fork1.9 fsetown.9 fstrans.9 getiobuf.9 genfs.9 genfs_rename.9 \
 	hash.9 hashinit.9 hardclock.9 humanize_number.9 hz.9 \
 	ieee80211.9 ieee80211_crypto.9 ieee80211_input.9 ieee80211_ioctl.9 \
 	ieee80211_node.9 ieee80211_output.9 ieee80211_proto.9 \
 	ieee80211_radiotap.9 iic.9 imax.9 \
 	in_getifa.9 \
-	in4_cksum.9 inittodr.9 interrupt_distribute.9 intro.9 ioasic.9 \
-	ioctl.9 ipkdb.9 ipi.9 isa.9 isapnp.9 itimerfix.9 kauth.9 kcopy.9 \
-	kcpuset.9 kernhist.9 kmem.9 kpause.9 \
+	in4_cksum.9 inittodr.9 intro.9 ioasic.9 ioctl.9 ipkdb.9 ipi.9 isa.9 \
+	isapnp.9 itimerfix.9 kauth.9 kcopy.9 kcpuset.9 kmem.9 \
+	kpause.9 \
 	kfilter_register.9 knote.9 \
 	kprintf.9 kthread.9 linedisc.9 lock.9 log.9 ltsleep.9 \
 	LWP_CACHE_CREDS.9 \
@@ -39,11 +37,10 @@ MAN=	accept_filter.9 accf_data.9 accf_http.9 \
 	microseq.9 microtime.9 microuptime.9 mi_switch.9 module.9 \
 	mstohz.9 mutex.9 m_tag.9 namecache.9 \
 	namei.9 nullop.9 opencrypto.9 optstr.9 \
-	panic.9 pathbuf.9 pci.9 pci_configure_bus.9 pci_intr.9 \
-	pci_msi.9 pckbport.9 pcmcia.9 pcq.9 pcu.9 \
-	percpu.9 pfil.9 physio.9 pmap.9 pmatch.9 pmc.9 pmf.9 pool.9 \
-	pool_cache.9 powerhook_establish.9 ppi.9 ppsratecheck.9 preempt.9 \
-	proc_find.9 pserialize.9 pslist.9 psref.9 putter.9 \
+	panic.9 pathbuf.9 pci.9 pci_configure_bus.9 pci_intr.9 pckbport.9 \
+	pcmcia.9 pcq.9 pcu.9 percpu.9 pfil.9 physio.9 pmap.9 pmatch.9 \
+	pmc.9 pmf.9 pool.9 pool_cache.9 powerhook_establish.9 ppi.9 \
+	ppsratecheck.9 preempt.9 proc_find.9 pserialize.9 putter.9 \
 	radio.9 ras.9 rasops.9 ratecheck.9 resettodr.9 rnd.9 rndsink.9 \
 	roundup.9 rssadapt.9 rt_timer.9 rwlock.9 RUN_ONCE.9 STACK.9 \
 	scanc.9 \
@@ -60,7 +57,7 @@ MAN=	accept_filter.9 accf_data.9 accf_http.9 \
 	video.9 vme.9 \
 	vnfileops.9 vnode.9 vnodeops.9 vnsubr.9 \
 	ubc.9 usbd_status.9 usbdi.9 uvm.9 uvm_km.9 uvm_map.9 vmem.9 \
-	wapbl.9 wdc.9 workqueue.9 \
+	wdc.9 workqueue.9 \
 	wscons.9 wsdisplay.9 wsfont.9 wskbd.9 wsmouse.9 \
 	xcall.9
 
@@ -71,6 +68,8 @@ MAN+=	cprng.9
 MLINKS+=cprng.9	cprng_strong.9 \
 	cprng.9 cprng_strong_create.9 \
 	cprng.9	cprng_strong_destroy.9 \
+	cprng.9 cprng_strong_getflags.9 \
+	cprng.9 cprng_strong_setflags.9 \
 	cprng.9 cprng_strong32.9 \
 	cprng.9 cprng_strong64.9 \
 	cprng.9 cprng_fast.9 \
@@ -79,7 +78,7 @@ MLINKS+=cprng.9	cprng_strong.9 \
 	cprng.9 arc4random.9 \
 	cprng.9 arc4randbytes.9 \
 	cprng.9 rnd_extract_data.9
-
+	
 MAN+=	deviter.9
 MLINKS+=deviter.9 deviter_first.9 \
 	deviter.9 deviter_init.9 \
@@ -143,13 +142,9 @@ MLINKS+=buffercache.9 bread.9 \
 	buffercache.9 geteblk.9 \
 	buffercache.9 incore.9 \
 	buffercache.9 allocbuf.9 \
-	buffercache.9 brelse.9
-MLINKS+=bufferio.9 biodone.9 \
-	bufferio.9 biowait.9 \
-	bufferio.9 getiobuf.9 \
-	bufferio.9 putiobuf.9 \
-	bufferio.9 nestiobuf_setup.9 \
-	bufferio.9 nestiobuf_done.9
+	buffercache.9 brelse.9 \
+	buffercache.9 biodone.9 \
+	buffercache.9 biowait.9
 MLINKS+=bus_space.9 bus_space_alloc.9 bus_space.9 bus_space_barrier.9 \
 	bus_space.9 bus_space_copy_region_1.9 \
 	bus_space.9 bus_space_copy_region_2.9 \
@@ -235,9 +230,6 @@ MLINKS+=cardbus.9 cardbus_attach_card.9 \
 	cardbus.9 Cardbus_free_tag.9 \
 	cardbus.9 Cardbus_conf_read.9 \
 	cardbus.9 Cardbus_conf_write.9
-MLINKS+=clock.9 days_in_month.9 \
-	clock.9 is_leap_year.9 \
-	clock.9 days_per_year.9
 MLINKS+=cnmagic.9 cn_trap.9 \
 	cnmagic.9 cn_isconsole.9 \
 	cnmagic.9 cn_check_magic.9 \
@@ -278,11 +270,6 @@ MLINKS+=ctod.9 dtoc.9 \
 	ctod.9 btodb.9
 MLINKS+=curproc.9 curcpu.9 curproc.9 curlwp.9
 MLINKS+=delay.9 DELAY.9
-MLINKS+=devsw_attach.9 devsw_detach.9 \
-	devsw_attach.9 bdevsw_lookup.9 \
-	devsw_attach.9 cdevsw_lookup.9 \
-	devsw_attach.9 bdevsw_lookup_major.9 \
-	devsw_attach.9 cdevsw_lookup_major.9
 MLINKS+=disk.9 disk_attach.9 disk.9 disk_detach.9 \
 	disk.9 disk_busy.9 disk.9 disk_unbusy.9 disk.9 disk_find.9 \
 	disk.9 disk_init.9 disk.9 disk_destroy.9 disk.9 disk_begindetach.9
@@ -344,6 +331,7 @@ MLINKS+=fstrans.9 fstrans_done.9 \
 	fstrans.9 fscow_establish.9 \
 	fstrans.9 fscow_disestablish.9 \
 	fstrans.9 fscow_run.9
+MLINKS+=getiobuf.9 putiobuf.9
 MLINKS+=hash.9 hash32_buf.9 hash.9 hash32_str.9 hash.9 hash32_strn.9
 MLINKS+=hashinit.9 hashdone.9
 MLINKS+=humanize_number.9 format_bytes.9
@@ -451,6 +439,7 @@ MLINKS+=kprintf.9 printf.9 kprintf.9 printf_nolog.9 kprintf.9 sprintf.9 \
 	kprintf.9 device_printf.9
 MLINKS+=kthread.9 kthread_exit.9 \
 	kthread.9 kthread_create.9 \
+	kthread.9 kthread_destroy.9 \
 	kthread.9 kthread_join.9
 MLINKS+=linedisc.9 ttyldisc_add.9 \
 	linedisc.9 ttyldisc_lookup.9 \
@@ -558,8 +547,6 @@ MLINKS+=pci.9 pci_conf_read.9 \
 	pci.9 pci_conf_print.9 \
 	pci.9 pci_find_device.9 \
 	pci.9 pci_get_capability.9 \
-	pci.9 pci_get_ht_capability.9 \
-	pci.9 pci_get_ext_capability.9 \
 	pci.9 pci_mapreg_type.9 \
 	pci.9 pci_mapreg_map.9 \
 	pci.9 pci_mapreg_info.9 \
@@ -567,9 +554,7 @@ MLINKS+=pci.9 pci_conf_read.9 \
 	pci.9 pci_intr_string.9 \
 	pci.9 pci_intr_evcnt.9 \
 	pci.9 pci_intr_establish.9 \
-	pci.9 pci_intr_establish_xname.9 \
 	pci.9 pci_intr_disestablish.9 \
-	pci.9 pci_intr_setattr.9 \
 	pci.9 pci_get_powerstate.9 \
 	pci.9 pci_set_powerstate.9 \
 	pci.9 pci_vpd_read.9 \
@@ -581,25 +566,6 @@ MLINKS+=pci.9 pci_conf_read.9 \
 	pci.9 PCI_VENDOR.9 \
 	pci.9 PCI_PRODUCT.9 \
 	pci.9 PCI_REVISION.9
-MLINKS+=pci_msi.9 pci_msix.9 \
-	pci_msi.9 pci_intr_alloc.9 \
-	pci_msi.9 pci_intr_release.9 \
-	pci_msi.9 pci_intr_type.9 \
-	pci_msi.9 pci_intx_alloc.9 \
-	pci_msi.9 pci_intx_release.9 \
-	pci_msi.9 pci_msi_count.9 \
-	pci_msi.9 pci_msi_alloc.9 \
-	pci_msi.9 pci_msi_alloc_exact.9 \
-	pci_msi.9 pci_msi_release.9 \
-	pci_msi.9 pci_msi_establish.9 \
-	pci_msi.9 pci_msi_disestablish.9 \
-	pci_msi.9 pci_msix_count.9 \
-	pci_msi.9 pci_msix_alloc.9 \
-	pci_msi.9 pci_msix_alloc_exact.9 \
-	pci_msi.9 pci_msix_alloc_map.9 \
-	pci_msi.9 pci_msix_release.9 \
-	pci_msi.9 pci_msix_establish.9 \
-	pci_msi.9 pci_msix_disestablish.9
 MLINKS+=pci_configure_bus.9 pci_conf_hook.9 \
 	pci_configure_bus.9 pci_conf_interrupt.9
 MLINKS+=pckbport.9 pckbport_attach.9 \
@@ -707,30 +673,6 @@ MLINKS+=pserialize.9 pserialize_create.9 \
 	pserialize.9 pserialize_read_enter.9 \
 	pserialize.9 pserialize_read_exit.9 \
 	pserialize.9 pserialize_perform.9
-MLINKS+=pslist.9 PSLIST_DESTROY.9 \
-	pslist.9 PSLIST_ENTRY_DESTROY.9 \
-	pslist.9 PSLIST_ENTRY_INIT.9 \
-	pslist.9 PSLIST_ENTRY_INITIALIZER.9 \
-	pslist.9 PSLIST_INIT.9 \
-	pslist.9 PSLIST_INITIALIZER.9 \
-	pslist.9 PSLIST_READER_FIRST.9 \
-	pslist.9 PSLIST_READER_FOREACH.9 \
-	pslist.9 PSLIST_READER_NEXT.9 \
-	pslist.9 PSLIST_WRITER_FIRST.9 \
-	pslist.9 PSLIST_WRITER_FOREACH.9 \
-	pslist.9 PSLIST_WRITER_INSERT_AFTER.9 \
-	pslist.9 PSLIST_WRITER_INSERT_BEFORE.9 \
-	pslist.9 PSLIST_WRITER_INSERT_HEAD.9 \
-	pslist.9 PSLIST_WRITER_NEXT.9 \
-	pslist.9 PSLIST_WRITER_REMOVE.9
-MLINKS+=psref.9 psref_acquire.9 \
-	psref.9 psref_class_create.9 \
-	psref.9 psref_class_destroy.9 \
-	psref.9 psref_copy.9 \
-	psref.9 psref_held.9 \
-	psref.9 psref_release.9 \
-	psref.9 psref_target_destroy.9 \
-	psref.9 psref_target_init.9
 MLINKS+=ras.9 ras_lookup.9 \
 	ras.9 ras_fork.9 \
 	ras.9 ras_purgeall.9
@@ -910,8 +852,6 @@ MLINKS+=vfsops.9 VFS_MOUNT.9 \
 	vfsops.9 VFS_STATVFS.9 \
 	vfsops.9 VFS_SYNC.9 \
 	vfsops.9 VFS_VGET.9 \
-	vfsops.9 VFS_LOADVNODE.9 \
-	vfsops.9 VFS_NEWVNODE.9 \
 	vfsops.9 VFS_FHTOVP.9 \
 	vfsops.9 VFS_VPTOFH.9 \
 	vfsops.9 VFS_CHECKEXP.9 \
@@ -953,10 +893,8 @@ MLINKS+=vnode.9 vref.9 \
 	vnode.9 vput.9 \
 	vnode.9 vhold.9 \
 	vnode.9 holdrele.9 \
-	vnode.9 vcache_get.9 \
-	vnode.9 vcache_new.9 \
-	vnode.9 vcache_rekey_enter.9 \
-	vnode.9 vcache_rekey_exit.9 \
+	vnode.9 getnewvnode.9 \
+	vnode.9 ungetnewvnode.9 \
 	vnode.9 vrecycle.9 \
 	vnode.9 vgone.9 \
 	vnode.9 vgonel.9 \
@@ -1034,20 +972,6 @@ MLINKS+=vnsubr.9 vn_bwrite.9 \
 	vnsubr.9 vn_stat.9 \
 	vnsubr.9 vn_open.9 \
 	vnsubr.9 vn_writechk.9
-MLINKS+=wapbl.9 wapbl_start.9 \
-	wapbl.9 wapbl_stop.9 \
-	wapbl.9 wapbl_begin.9 \
-	wapbl.9 wapbl_end.9 \
-	wapbl.9 wapbl_flush.9 \
-	wapbl.9 wapbl_discard.9 \
-	wapbl.9 wapbl_add_buf.9 \
-	wapbl.9 wapbl_remove_buf.9 \
-	wapbl.9 wapbl_resize_buf.9 \
-	wapbl.9 wapbl_register_inode.9 \
-	wapbl.9 wapbl_unregister_inode.9 \
-	wapbl.9 wapbl_register_deallocation.9 \
-	wapbl.9 wapbl_jlock_assert.9 \
-	wapbl.9 wapbl_junlock_assert.9
 MLINKS+=workqueue.9 workqueue_create.9 \
 	workqueue.9 workqueue_enqueue.9 \
 	workqueue.9 workqueue_destroy.9

@@ -1,4 +1,4 @@
-/*	$NetBSD: udp6_usrreq.c,v 1.124 2016/07/15 07:40:09 ozaki-r Exp $	*/
+/*	$NetBSD: udp6_usrreq.c,v 1.115 2014/08/09 05:33:01 rtr Exp $	*/
 /*	$KAME: udp6_usrreq.c,v 1.86 2001/05/27 17:33:00 itojun Exp $	*/
 
 /*
@@ -62,13 +62,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: udp6_usrreq.c,v 1.124 2016/07/15 07:40:09 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udp6_usrreq.c,v 1.115 2014/08/09 05:33:01 rtr Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
 #include "opt_inet_csum.h"
-#include "opt_ipsec.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
@@ -82,6 +79,7 @@ __KERNEL_RCSID(0, "$NetBSD: udp6_usrreq.c,v 1.124 2016/07/15 07:40:09 ozaki-r Ex
 #include <sys/sysctl.h>
 
 #include <net/if.h>
+#include <net/route.h>
 #include <net/if_types.h>
 
 #include <netinet/in.h>
@@ -104,15 +102,6 @@ __KERNEL_RCSID(0, "$NetBSD: udp6_usrreq.c,v 1.124 2016/07/15 07:40:09 ozaki-r Ex
 #include <netinet6/udp6_private.h>
 #include <netinet6/ip6protosw.h>
 #include <netinet6/scope6_var.h>
-
-#ifdef IPSEC
-#include <netipsec/ipsec.h>
-#include <netipsec/ipsec_var.h>
-#include <netipsec/ipsec_private.h>
-#ifdef INET6
-#include <netipsec/ipsec6.h>
-#endif
-#endif	/* IPSEC */
 
 #include "faith.h"
 #if defined(NFAITH) && NFAITH > 0
@@ -289,11 +278,11 @@ udp6_ctlinput(int cmd, const struct sockaddr *sa, void *d)
 		}
 
 		(void) in6_pcbnotify(&udbtable, sa, uh.uh_dport,
-		    sin6tocsa(sa6_src), uh.uh_sport, cmd, cmdarg,
+		    (const struct sockaddr *)sa6_src, uh.uh_sport, cmd, cmdarg,
 		    notify);
 	} else {
 		(void) in6_pcbnotify(&udbtable, sa, 0,
-		    sin6tocsa(sa6_src), 0, cmd, cmdarg, notify);
+		    (const struct sockaddr *)sa6_src, 0, cmd, cmdarg, notify);
 	}
 	return NULL;
 }
@@ -464,7 +453,8 @@ udp6_realinput(int af, struct sockaddr_in6 *src, struct sockaddr_in6 *dst,
 					continue;
 			}
 
-			udp6_sendup(m, off, sin6tosa(src), in6p->in6p_socket);
+			udp6_sendup(m, off, (struct sockaddr *)src,
+				in6p->in6p_socket);
 			rcvcnt++;
 
 			/*
@@ -492,7 +482,7 @@ udp6_realinput(int af, struct sockaddr_in6 *src, struct sockaddr_in6 *dst,
 				return rcvcnt;
 		}
 
-		udp6_sendup(m, off, sin6tosa(src), in6p->in6p_socket);
+		udp6_sendup(m, off, (struct sockaddr *)src, in6p->in6p_socket);
 		rcvcnt++;
 	}
 
@@ -518,7 +508,7 @@ udp6_input_checksum(struct mbuf *m, const struct udphdr *uh, int off, int len)
 	}
 
 	switch (m->m_pkthdr.csum_flags &
-	    ((m_get_rcvif_NOMPSAFE(m)->if_csum_flags_rx & M_CSUM_UDPv6) |
+	    ((m->m_pkthdr.rcvif->if_csum_flags_rx & M_CSUM_UDPv6) |
 	    M_CSUM_TCP_UDP_BAD | M_CSUM_DATA)) {
 	case M_CSUM_UDPv6|M_CSUM_TCP_UDP_BAD:
 		UDP_CSUM_COUNTER_INCR(&udp6_hwcsum_bad);
@@ -688,7 +678,7 @@ udp6_detach(struct socket *so)
 }
 
 static int
-udp6_accept(struct socket *so, struct sockaddr *nam)
+udp6_accept(struct socket *so, struct mbuf *nam)
 {
 	KASSERT(solocked(so));
 
@@ -696,10 +686,9 @@ udp6_accept(struct socket *so, struct sockaddr *nam)
 }
 
 static int
-udp6_bind(struct socket *so, struct sockaddr *nam, struct lwp *l)
+udp6_bind(struct socket *so, struct mbuf *nam, struct lwp *l)
 {
 	struct in6pcb *in6p = sotoin6pcb(so);
-	struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)nam;
 	int error = 0;
 	int s;
 
@@ -707,7 +696,7 @@ udp6_bind(struct socket *so, struct sockaddr *nam, struct lwp *l)
 	KASSERT(in6p != NULL);
 
 	s = splsoftnet();
-	error = in6_pcbbind(in6p, sin6, l);
+	error = in6_pcbbind(in6p, nam, l);
 	splx(s);
 	return error;
 }
@@ -721,7 +710,7 @@ udp6_listen(struct socket *so, struct lwp *l)
 }
 
 static int
-udp6_connect(struct socket *so, struct sockaddr *nam, struct lwp *l)
+udp6_connect(struct socket *so, struct mbuf *nam, struct lwp *l)
 {
 	struct in6pcb *in6p = sotoin6pcb(so);
 	int error = 0;
@@ -733,7 +722,7 @@ udp6_connect(struct socket *so, struct sockaddr *nam, struct lwp *l)
 	if (!IN6_IS_ADDR_UNSPECIFIED(&in6p->in6p_faddr))
 		return EISCONN;
 	s = splsoftnet();
-	error = in6_pcbconnect(in6p, (struct sockaddr_in6 *)nam, l);
+	error = in6_pcbconnect(in6p, nam, l);
 	splx(s);
 	if (error == 0)
 		soisconnected(so);
@@ -825,24 +814,24 @@ udp6_stat(struct socket *so, struct stat *ub)
 }
 
 static int
-udp6_peeraddr(struct socket *so, struct sockaddr *nam)
+udp6_peeraddr(struct socket *so, struct mbuf *nam)
 {
 	KASSERT(solocked(so));
 	KASSERT(sotoin6pcb(so) != NULL);
 	KASSERT(nam != NULL);
 
-	in6_setpeeraddr(sotoin6pcb(so), (struct sockaddr_in6 *)nam);
+	in6_setpeeraddr(sotoin6pcb(so), nam);
 	return 0;
 }
 
 static int
-udp6_sockaddr(struct socket *so, struct sockaddr *nam)
+udp6_sockaddr(struct socket *so, struct mbuf *nam)
 {
 	KASSERT(solocked(so));
 	KASSERT(sotoin6pcb(so) != NULL);
 	KASSERT(nam != NULL);
 
-	in6_setsockaddr(sotoin6pcb(so), (struct sockaddr_in6 *)nam);
+	in6_setsockaddr(sotoin6pcb(so), nam);
 	return 0;
 }
 
@@ -863,7 +852,7 @@ udp6_recvoob(struct socket *so, struct mbuf *m, int flags)
 }
 
 static int
-udp6_send(struct socket *so, struct mbuf *m, struct sockaddr *nam,
+udp6_send(struct socket *so, struct mbuf *m, struct mbuf *nam,
     struct mbuf *control, struct lwp *l)
 {
 	struct in6pcb *in6p = sotoin6pcb(so);
@@ -875,7 +864,7 @@ udp6_send(struct socket *so, struct mbuf *m, struct sockaddr *nam,
 	KASSERT(m != NULL);
 
 	s = splsoftnet();
-	error = udp6_output(in6p, m, (struct sockaddr_in6 *)nam, control, l);
+	error = udp6_output(in6p, m, nam, control, l);
 	splx(s);
 
 	return error;
@@ -905,6 +894,57 @@ udp6_purgeif(struct socket *so, struct ifnet *ifp)
 	mutex_exit(softnet_lock);
 
 	return 0;
+}
+
+int
+udp6_usrreq(struct socket *so, int req, struct mbuf *m, struct mbuf *addr6,
+    struct mbuf *control, struct lwp *l)
+{
+	int error = 0;
+
+	KASSERT(req != PRU_ATTACH);
+	KASSERT(req != PRU_DETACH);
+	KASSERT(req != PRU_ACCEPT);
+	KASSERT(req != PRU_BIND);
+	KASSERT(req != PRU_LISTEN);
+	KASSERT(req != PRU_CONNECT);
+	KASSERT(req != PRU_CONNECT2);
+	KASSERT(req != PRU_DISCONNECT);
+	KASSERT(req != PRU_SHUTDOWN);
+	KASSERT(req != PRU_ABORT);
+	KASSERT(req != PRU_CONTROL);
+	KASSERT(req != PRU_SENSE);
+	KASSERT(req != PRU_PEERADDR);
+	KASSERT(req != PRU_SOCKADDR);
+	KASSERT(req != PRU_RCVD);
+	KASSERT(req != PRU_RCVOOB);
+	KASSERT(req != PRU_SEND);
+	KASSERT(req != PRU_SENDOOB);
+	KASSERT(req != PRU_PURGEIF);
+
+	if (sotoin6pcb(so) == NULL) {
+		error = EINVAL;
+		goto release;
+	}
+
+	switch (req) {
+	case PRU_FASTTIMO:
+	case PRU_SLOWTIMO:
+	case PRU_PROTORCV:
+	case PRU_PROTOSEND:
+		error = EOPNOTSUPP;
+		break;
+
+	default:
+		panic("udp6_usrreq");
+	}
+
+release:
+	if (control != NULL)
+		m_freem(control);
+	if (m != NULL)
+		m_freem(m);
+	return error;
 }
 
 static int
@@ -995,6 +1035,7 @@ PR_WRAP_USRREQS(udp6)
 #define	udp6_send	udp6_send_wrapper
 #define	udp6_sendoob	udp6_sendoob_wrapper
 #define	udp6_purgeif	udp6_purgeif_wrapper
+#define	udp6_usrreq	udp6_usrreq_wrapper
 
 const struct pr_usrreqs udp6_usrreqs = {
 	.pr_attach	= udp6_attach,
@@ -1016,4 +1057,5 @@ const struct pr_usrreqs udp6_usrreqs = {
 	.pr_send	= udp6_send,
 	.pr_sendoob	= udp6_sendoob,
 	.pr_purgeif	= udp6_purgeif,
+	.pr_generic	= udp6_usrreq,
 };

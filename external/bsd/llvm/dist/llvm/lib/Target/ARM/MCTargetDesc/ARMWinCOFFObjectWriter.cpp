@@ -8,10 +8,7 @@
 //===----------------------------------------------------------------------===//
 
 #include "MCTargetDesc/ARMFixupKinds.h"
-#include "llvm/ADT/Twine.h"
-#include "llvm/MC/MCAsmBackend.h"
 #include "llvm/MC/MCFixup.h"
-#include "llvm/MC/MCFixupKindInfo.h"
 #include "llvm/MC/MCValue.h"
 #include "llvm/MC/MCWinCOFFObjectWriter.h"
 #include "llvm/Support/COFF.h"
@@ -26,19 +23,17 @@ public:
     : MCWinCOFFObjectTargetWriter(COFF::IMAGE_FILE_MACHINE_ARMNT) {
     assert(!Is64Bit && "AArch64 support not yet implemented");
   }
-  ~ARMWinCOFFObjectWriter() override {}
+  virtual ~ARMWinCOFFObjectWriter() { }
 
   unsigned getRelocType(const MCValue &Target, const MCFixup &Fixup,
-                        bool IsCrossSection,
-                        const MCAsmBackend &MAB) const override;
+                        bool IsCrossSection) const override;
 
   bool recordRelocation(const MCFixup &) const override;
 };
 
 unsigned ARMWinCOFFObjectWriter::getRelocType(const MCValue &Target,
                                               const MCFixup &Fixup,
-                                              bool IsCrossSection,
-                                              const MCAsmBackend &MAB) const {
+                                              bool IsCrossSection) const {
   assert(getMachine() == COFF::IMAGE_FILE_MACHINE_ARMNT &&
          "AArch64 support not yet implemented");
 
@@ -46,10 +41,7 @@ unsigned ARMWinCOFFObjectWriter::getRelocType(const MCValue &Target,
     Target.isAbsolute() ? MCSymbolRefExpr::VK_None : Target.getSymA()->getKind();
 
   switch (static_cast<unsigned>(Fixup.getKind())) {
-  default: {
-    const MCFixupKindInfo &Info = MAB.getFixupKindInfo(Fixup.getKind());
-    report_fatal_error(Twine("unsupported relocation type: ") + Info.Name);
-  }
+  default: llvm_unreachable("unsupported relocation type");
   case FK_Data_4:
     switch (Modifier) {
     case MCSymbolRefExpr::VK_COFF_IMGREL32:
@@ -82,8 +74,7 @@ bool ARMWinCOFFObjectWriter::recordRelocation(const MCFixup &Fixup) const {
 }
 
 namespace llvm {
-MCObjectWriter *createARMWinCOFFObjectWriter(raw_pwrite_stream &OS,
-                                             bool Is64Bit) {
+MCObjectWriter *createARMWinCOFFObjectWriter(raw_ostream &OS, bool Is64Bit) {
   MCWinCOFFObjectTargetWriter *MOTW = new ARMWinCOFFObjectWriter(Is64Bit);
   return createWinCOFFObjectWriter(MOTW, OS);
 }

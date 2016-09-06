@@ -1,4 +1,4 @@
-/*	$NetBSD: qmqpd.c,v 1.1.1.5 2015/01/24 18:08:29 tron Exp $	*/
+/*	$NetBSD: qmqpd.c,v 1.1.1.4.4.1 2015/01/27 08:14:03 martin Exp $	*/
 
 /*++
 /* NAME

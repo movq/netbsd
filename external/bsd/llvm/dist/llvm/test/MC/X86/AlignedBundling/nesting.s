@@ -1,13 +1,10 @@
 # RUN: llvm-mc -filetype=obj -triple x86_64-pc-linux-gnu %s -o - \
 # RUN:   | llvm-objdump -disassemble -no-show-raw-insn - | FileCheck %s
-# RUN: llvm-mc -filetype=obj -triple x86_64-pc-linux-gnu -mc-relax-all %s -o - \
-# RUN:   | llvm-objdump -disassemble -no-show-raw-insn - | FileCheck %s
 
 # Will be bundle-aligning to 16 byte boundaries
   .bundle_align_mode 4
   .text
-# CHECK-LABEL: foo:
-.type   foo,@function
+# CHECK-LABEL: foo
 foo:
 # Test that bundle alignment mode can be set more than once.
   .bundle_align_mode 4
@@ -20,12 +17,11 @@ foo:
   callq bar     
   .bundle_unlock
   .bundle_unlock
-# CHECK:      10: callq {{.*}} <bar>
-# CHECK-NEXT: 15: callq {{.*}} <bar>
+# CHECK:      10: callq
+# CHECK-NEXT: 15: callq
 
   .p2align 4
-# CHECK-LABEL: bar:
-.type   bar,@function
+# CHECK-LABEL: bar
 bar:
   callq foo
   callq foo
@@ -37,11 +33,10 @@ bar:
   callq bar
   .bundle_unlock
   .bundle_unlock
-# CHECK:      36: callq {{.*}} <bar>
-# CHECK-NEXT: 3b: callq {{.*}} <bar>
+# CHECK:      36: callq
+# CHECK-NEXT: 3b: callq
 
-# CHECK-LABEL: baz:
-.type   baz,@function
+# CHECK-LABEL: baz
 baz:
   callq foo
   callq foo
@@ -53,11 +48,10 @@ baz:
   callq bar
   .bundle_unlock
   .bundle_unlock
-# CHECK:      56: callq {{.*}} <bar>
-# CHECK-NEXT: 5b: callq {{.*}} <bar>
+# CHECK:      56: callq
+# CHECK-NEXT: 5b: callq
 
 # CHECK-LABEL: quux
-.type   quux,@function
 quux:
   callq bar
   callq bar
@@ -69,5 +63,5 @@ quux:
   .bundle_unlock
 # Check that the calls are bundled together when the second one is after the
 # inner nest is closed.
-# CHECK:      70: callq {{.*}} <bar>
-# CHECK-NEXT: 75: callq {{.*}} <bar>
+# CHECK:      70: callq
+# CHECK-NEXT: 75: callq

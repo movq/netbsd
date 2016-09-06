@@ -2,7 +2,7 @@
 
 # ver_test_4.sh -- test that version symbol is visible.
 
-# Copyright (C) 2008-2015 Free Software Foundation, Inc.
+# Copyright 2008 Free Software Foundation, Inc.
 # Written by Ian Lance Taylor <iant@google.com>.
 
 # This file is part of gold.
@@ -24,18 +24,17 @@
 
 check()
 {
-    if ! sed '/\.symtab/q' "$1" | grep -q "$2"
+    if ! grep -q "$2" "$1"
     then
 	echo "Did not find expected symbol in $1:"
 	echo "   $2"
 	echo ""
 	echo "Actual output below:"
-	sed '/\.symtab/q' "$1"
+	cat "$1"
 	exit 1
     fi
 }
 
-check ver_test_4.syms "t1_2\$"
 check ver_test_4.syms "t1_2@@VER2"
 check ver_test_4.syms "t2_2@VER1"
 check ver_test_4.syms "t2_2@@VER2"

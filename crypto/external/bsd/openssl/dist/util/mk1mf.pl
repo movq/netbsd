@@ -282,8 +282,8 @@ $cflags.=" -DOPENSSL_FIPS"    if $fips;
 $cflags.=" -DOPENSSL_NO_JPAKE"    if $no_jpake;
 $cflags.=" -DOPENSSL_NO_EC2M"    if $no_ec2m;
 $cflags.=" -DOPENSSL_NO_WEAK_SSL_CIPHERS"   if $no_weak_ssl;
-$cflags.=" -DZLIB" if $zlib_opt;
-$cflags.=" -DZLIB_SHARED" if $zlib_opt == 2;
+$cflags.= " -DZLIB" if $zlib_opt;
+$cflags.= " -DZLIB_SHARED" if $zlib_opt == 2;
 $cflags.=" -DOPENSSL_NO_COMP" if $no_comp;
 
 if ($no_static_engine)

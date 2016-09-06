@@ -79,9 +79,9 @@ public:
 /// @brief Abstract Stack Frame Information
 class MachineFrameInfo {
 
-  // Represent a single object allocated on the stack.
+  // StackObject - Represent a single object allocated on the stack.
   struct StackObject {
-    // The offset of this object from the stack pointer on entry to
+    // SPOffset - The offset of this object from the stack pointer on entry to
     // the function.  This field has no meaning for a variable sized element.
     int64_t SPOffset;
 
@@ -89,30 +89,23 @@ class MachineFrameInfo {
     // ~0ULL means a dead object.
     uint64_t Size;
 
-    // The required alignment of this stack slot.
+    // Alignment - The required alignment of this stack slot.
     unsigned Alignment;
 
-    // If true, the value of the stack object is set before
+    // isImmutable - If true, the value of the stack object is set before
     // entering the function and is not modified inside the function. By
     // default, fixed objects are immutable unless marked otherwise.
     bool isImmutable;
 
-    // If true the stack object is used as spill slot. It
+    // isSpillSlot - If true the stack object is used as spill slot. It
     // cannot alias any other memory objects.
     bool isSpillSlot;
 
-    /// If true, this stack slot is used to spill a value (could be deopt
-    /// and/or GC related) over a statepoint. We know that the address of the
-    /// slot can't alias any LLVM IR value.  This is very similiar to a Spill
-    /// Slot, but is created by statepoint lowering is SelectionDAG, not the
-    /// register allocator. 
-    bool isStatepointSpillSlot;
-
-    /// If this stack object is originated from an Alloca instruction
+    /// Alloca - If this stack object is originated from an Alloca instruction
     /// this value saves the original IR allocation. Can be NULL.
     const AllocaInst *Alloca;
 
-    // If true, the object was mapped into the local frame
+    // PreAllocated - If true, the object was mapped into the local frame
     // block and doesn't need additional handling for allocation beyond that.
     bool PreAllocated;
 
@@ -125,114 +118,110 @@ class MachineFrameInfo {
     StackObject(uint64_t Sz, unsigned Al, int64_t SP, bool IM,
                 bool isSS, const AllocaInst *Val, bool A)
       : SPOffset(SP), Size(Sz), Alignment(Al), isImmutable(IM),
-        isSpillSlot(isSS), isStatepointSpillSlot(false), Alloca(Val),
-        PreAllocated(false), isAliased(A) {}
+        isSpillSlot(isSS), Alloca(Val), PreAllocated(false), isAliased(A) {}
   };
 
-  /// The alignment of the stack.
+  /// StackAlignment - The alignment of the stack.
   unsigned StackAlignment;
 
-  /// Can the stack be realigned.
-  /// Targets that set this to false don't have the ability to overalign
-  /// their stack frame, and thus, overaligned allocas are all treated
-  /// as dynamic allocations and the target must handle them as part
-  /// of DYNAMIC_STACKALLOC lowering.
-  /// FIXME: There is room for improvement in this case, in terms of
-  /// grouping overaligned allocas into a "secondary stack frame" and
-  /// then only use a single alloca to allocate this frame and only a
-  /// single virtual register to access it. Currently, without such an
-  /// optimization, each such alloca gets it's own dynamic
-  /// realignment.
+  /// StackRealignable - Can the stack be realigned.
   bool StackRealignable;
 
-  /// The list of stack objects allocated.
+  /// Objects - The list of stack objects allocated...
+  ///
   std::vector<StackObject> Objects;
 
-  /// This contains the number of fixed objects contained on
+  /// NumFixedObjects - This contains the number of fixed objects contained on
   /// the stack.  Because fixed objects are stored at a negative index in the
   /// Objects list, this is also the index to the 0th object in the list.
+  ///
   unsigned NumFixedObjects;
 
-  /// This boolean keeps track of whether any variable
+  /// HasVarSizedObjects - This boolean keeps track of whether any variable
   /// sized objects have been allocated yet.
+  ///
   bool HasVarSizedObjects;
 
-  /// This boolean keeps track of whether there is a call
+  /// FrameAddressTaken - This boolean keeps track of whether there is a call
   /// to builtin \@llvm.frameaddress.
   bool FrameAddressTaken;
 
-  /// This boolean keeps track of whether there is a call
+  /// ReturnAddressTaken - This boolean keeps track of whether there is a call
   /// to builtin \@llvm.returnaddress.
   bool ReturnAddressTaken;
 
-  /// This boolean keeps track of whether there is a call
+  /// HasStackMap - This boolean keeps track of whether there is a call
   /// to builtin \@llvm.experimental.stackmap.
   bool HasStackMap;
 
-  /// This boolean keeps track of whether there is a call
+  /// HasPatchPoint - This boolean keeps track of whether there is a call
   /// to builtin \@llvm.experimental.patchpoint.
   bool HasPatchPoint;
 
-  /// The prolog/epilog code inserter calculates the final stack
+  /// StackSize - The prolog/epilog code inserter calculates the final stack
   /// offsets for all of the fixed size objects, updating the Objects list
   /// above.  It then updates StackSize to contain the number of bytes that need
   /// to be allocated on entry to the function.
+  ///
   uint64_t StackSize;
 
-  /// The amount that a frame offset needs to be adjusted to
+  /// OffsetAdjustment - The amount that a frame offset needs to be adjusted to
   /// have the actual offset from the stack/frame pointer.  The exact usage of
   /// this is target-dependent, but it is typically used to adjust between
   /// SP-relative and FP-relative offsets.  E.G., if objects are accessed via
   /// SP then OffsetAdjustment is zero; if FP is used, OffsetAdjustment is set
   /// to the distance between the initial SP and the value in FP.  For many
   /// targets, this value is only used when generating debug info (via
-  /// TargetRegisterInfo::getFrameIndexReference); when generating code, the
+  /// TargetRegisterInfo::getFrameIndexOffset); when generating code, the
   /// corresponding adjustments are performed directly.
   int OffsetAdjustment;
 
-  /// The prolog/epilog code inserter may process objects that require greater
-  /// alignment than the default alignment the target provides.
-  /// To handle this, MaxAlignment is set to the maximum alignment
+  /// MaxAlignment - The prolog/epilog code inserter may process objects
+  /// that require greater alignment than the default alignment the target
+  /// provides. To handle this, MaxAlignment is set to the maximum alignment
   /// needed by the objects on the current frame.  If this is greater than the
   /// native alignment maintained by the compiler, dynamic alignment code will
   /// be needed.
   ///
   unsigned MaxAlignment;
 
-  /// Set to true if this function adjusts the stack -- e.g.,
+  /// AdjustsStack - Set to true if this function adjusts the stack -- e.g.,
   /// when calling another function. This is only valid during and after
   /// prolog/epilog code insertion.
   bool AdjustsStack;
 
-  /// Set to true if this function has any function calls.
+  /// HasCalls - Set to true if this function has any function calls.
   bool HasCalls;
 
-  /// The frame index for the stack protector.
+  /// StackProtectorIdx - The frame index for the stack protector.
   int StackProtectorIdx;
 
-  /// The frame index for the function context. Used for SjLj exceptions.
+  /// FunctionContextIdx - The frame index for the function context. Used for
+  /// SjLj exceptions.
   int FunctionContextIdx;
 
-  /// This contains the size of the largest call frame if the target uses frame
-  /// setup/destroy pseudo instructions (as defined in the TargetFrameInfo
-  /// class).  This information is important for frame pointer elimination.
-  /// It is only valid during and after prolog/epilog code insertion.
+  /// MaxCallFrameSize - This contains the size of the largest call frame if the
+  /// target uses frame setup/destroy pseudo instructions (as defined in the
+  /// TargetFrameInfo class).  This information is important for frame pointer
+  /// elimination.  If is only valid during and after prolog/epilog code
+  /// insertion.
+  ///
   unsigned MaxCallFrameSize;
 
-  /// The prolog/epilog code inserter fills in this vector with each
+  /// CSInfo - The prolog/epilog code inserter fills in this vector with each
   /// callee saved register saved in the frame.  Beyond its use by the prolog/
   /// epilog code inserter, this data used for debug info and exception
   /// handling.
   std::vector<CalleeSavedInfo> CSInfo;
 
-  /// Has CSInfo been set yet?
+  /// CSIValid - Has CSInfo been set yet?
   bool CSIValid;
 
-  /// References to frame indices which are mapped
+  /// LocalFrameObjects - References to frame indices which are mapped
   /// into the local frame allocation block. <FrameIdx, LocalOffset>
   SmallVector<std::pair<int, int64_t>, 32> LocalFrameObjects;
 
-  /// Size of the pre-allocated local frame block.
+  /// LocalFrameSize - Size of the pre-allocated local frame block.
   int64_t LocalFrameSize;
 
   /// Required alignment of the local object blob, which is the strictest
@@ -247,29 +236,15 @@ class MachineFrameInfo {
   /// Whether the "realign-stack" option is on.
   bool RealignOption;
 
-  /// True if the function dynamically adjusts the stack pointer through some
-  /// opaque mechanism like inline assembly or Win32 EH.
-  bool HasOpaqueSPAdjustment;
-
-  /// True if the function contains operations which will lower down to
-  /// instructions which manipulate the stack pointer.
-  bool HasCopyImplyingStackAdjustment;
+  /// True if the function includes inline assembly that adjusts the stack
+  /// pointer.
+  bool HasInlineAsmWithSPAdjust;
 
   /// True if the function contains a call to the llvm.vastart intrinsic.
   bool HasVAStart;
 
   /// True if this is a varargs function that contains a musttail call.
   bool HasMustTailInVarArgFunc;
-
-  /// True if this function contains a tail call. If so immutable objects like
-  /// function arguments are no longer so. A tail call *can* override fixed
-  /// stack objects like arguments so we can't treat them as immutable.
-  bool HasTailCall;
-
-  /// Not null, if shrink-wrapping found a better place for the prologue.
-  MachineBasicBlock *Save;
-  /// Not null, if shrink-wrapping found a better place for the epilogue.
-  MachineBasicBlock *Restore;
 
 public:
   explicit MachineFrameInfo(unsigned StackAlign, bool isStackRealign,
@@ -291,103 +266,107 @@ public:
     LocalFrameSize = 0;
     LocalFrameMaxAlign = 0;
     UseLocalStackAllocationBlock = false;
-    HasOpaqueSPAdjustment = false;
-    HasCopyImplyingStackAdjustment = false;
+    HasInlineAsmWithSPAdjust = false;
     HasVAStart = false;
     HasMustTailInVarArgFunc = false;
-    Save = nullptr;
-    Restore = nullptr;
-    HasTailCall = false;
   }
 
-  /// Return true if there are any stack objects in this function.
+  /// hasStackObjects - Return true if there are any stack objects in this
+  /// function.
+  ///
   bool hasStackObjects() const { return !Objects.empty(); }
 
-  /// This method may be called any time after instruction
+  /// hasVarSizedObjects - This method may be called any time after instruction
   /// selection is complete to determine if the stack frame for this function
   /// contains any variable sized objects.
+  ///
   bool hasVarSizedObjects() const { return HasVarSizedObjects; }
 
-  /// Return the index for the stack protector object.
+  /// getStackProtectorIndex/setStackProtectorIndex - Return the index for the
+  /// stack protector object.
+  ///
   int getStackProtectorIndex() const { return StackProtectorIdx; }
   void setStackProtectorIndex(int I) { StackProtectorIdx = I; }
-  bool hasStackProtectorIndex() const { return StackProtectorIdx != -1; }
 
-  /// Return the index for the function context object.
-  /// This object is used for SjLj exceptions.
+  /// getFunctionContextIndex/setFunctionContextIndex - Return the index for the
+  /// function context object. This object is used for SjLj exceptions.
   int getFunctionContextIndex() const { return FunctionContextIdx; }
   void setFunctionContextIndex(int I) { FunctionContextIdx = I; }
 
-  /// This method may be called any time after instruction
+  /// isFrameAddressTaken - This method may be called any time after instruction
   /// selection is complete to determine if there is a call to
   /// \@llvm.frameaddress in this function.
   bool isFrameAddressTaken() const { return FrameAddressTaken; }
   void setFrameAddressIsTaken(bool T) { FrameAddressTaken = T; }
 
-  /// This method may be called any time after
+  /// isReturnAddressTaken - This method may be called any time after
   /// instruction selection is complete to determine if there is a call to
   /// \@llvm.returnaddress in this function.
   bool isReturnAddressTaken() const { return ReturnAddressTaken; }
   void setReturnAddressIsTaken(bool s) { ReturnAddressTaken = s; }
 
-  /// This method may be called any time after instruction
+  /// hasStackMap - This method may be called any time after instruction
   /// selection is complete to determine if there is a call to builtin
   /// \@llvm.experimental.stackmap.
   bool hasStackMap() const { return HasStackMap; }
   void setHasStackMap(bool s = true) { HasStackMap = s; }
 
-  /// This method may be called any time after instruction
+  /// hasPatchPoint - This method may be called any time after instruction
   /// selection is complete to determine if there is a call to builtin
   /// \@llvm.experimental.patchpoint.
   bool hasPatchPoint() const { return HasPatchPoint; }
   void setHasPatchPoint(bool s = true) { HasPatchPoint = s; }
 
-  /// Return the minimum frame object index.
+  /// getObjectIndexBegin - Return the minimum frame object index.
+  ///
   int getObjectIndexBegin() const { return -NumFixedObjects; }
 
-  /// Return one past the maximum frame object index.
+  /// getObjectIndexEnd - Return one past the maximum frame object index.
+  ///
   int getObjectIndexEnd() const { return (int)Objects.size()-NumFixedObjects; }
 
-  /// Return the number of fixed objects.
+  /// getNumFixedObjects - Return the number of fixed objects.
   unsigned getNumFixedObjects() const { return NumFixedObjects; }
 
-  /// Return the number of objects.
+  /// getNumObjects - Return the number of objects.
+  ///
   unsigned getNumObjects() const { return Objects.size(); }
 
-  /// Map a frame index into the local object block
+  /// mapLocalFrameObject - Map a frame index into the local object block
   void mapLocalFrameObject(int ObjectIndex, int64_t Offset) {
     LocalFrameObjects.push_back(std::pair<int, int64_t>(ObjectIndex, Offset));
     Objects[ObjectIndex + NumFixedObjects].PreAllocated = true;
   }
 
-  /// Get the local offset mapping for a for an object.
-  std::pair<int, int64_t> getLocalFrameObjectMap(int i) const {
+  /// getLocalFrameObjectMap - Get the local offset mapping for a for an object
+  std::pair<int, int64_t> getLocalFrameObjectMap(int i) {
     assert (i >= 0 && (unsigned)i < LocalFrameObjects.size() &&
             "Invalid local object reference!");
     return LocalFrameObjects[i];
   }
 
-  /// Return the number of objects allocated into the local object block.
-  int64_t getLocalFrameObjectCount() const { return LocalFrameObjects.size(); }
+  /// getLocalFrameObjectCount - Return the number of objects allocated into
+  /// the local object block.
+  int64_t getLocalFrameObjectCount() { return LocalFrameObjects.size(); }
 
-  /// Set the size of the local object blob.
+  /// setLocalFrameSize - Set the size of the local object blob.
   void setLocalFrameSize(int64_t sz) { LocalFrameSize = sz; }
 
-  /// Get the size of the local object blob.
+  /// getLocalFrameSize - Get the size of the local object blob.
   int64_t getLocalFrameSize() const { return LocalFrameSize; }
 
-  /// Required alignment of the local object blob,
+  /// setLocalFrameMaxAlign - Required alignment of the local object blob,
   /// which is the strictest alignment of any object in it.
   void setLocalFrameMaxAlign(unsigned Align) { LocalFrameMaxAlign = Align; }
 
-  /// Return the required alignment of the local object blob.
+  /// getLocalFrameMaxAlign - Return the required alignment of the local
+  /// object blob.
   unsigned getLocalFrameMaxAlign() const { return LocalFrameMaxAlign; }
 
-  /// Get whether the local allocation blob should be allocated together or
-  /// let PEI allocate the locals in it directly.
-  bool getUseLocalStackAllocationBlock() const {
-    return UseLocalStackAllocationBlock;
-  }
+  /// getUseLocalStackAllocationBlock - Get whether the local allocation blob
+  /// should be allocated together or let PEI allocate the locals in it
+  /// directly.
+  bool getUseLocalStackAllocationBlock() {return UseLocalStackAllocationBlock;}
 
   /// setUseLocalStackAllocationBlock - Set whether the local allocation blob
   /// should be allocated together or let PEI allocate the locals in it
@@ -396,28 +375,30 @@ public:
     UseLocalStackAllocationBlock = v;
   }
 
-  /// Return true if the object was pre-allocated into the local block.
+  /// isObjectPreAllocated - Return true if the object was pre-allocated into
+  /// the local block.
   bool isObjectPreAllocated(int ObjectIdx) const {
     assert(unsigned(ObjectIdx+NumFixedObjects) < Objects.size() &&
            "Invalid Object Idx!");
     return Objects[ObjectIdx+NumFixedObjects].PreAllocated;
   }
 
-  /// Return the size of the specified object.
+  /// getObjectSize - Return the size of the specified object.
+  ///
   int64_t getObjectSize(int ObjectIdx) const {
     assert(unsigned(ObjectIdx+NumFixedObjects) < Objects.size() &&
            "Invalid Object Idx!");
     return Objects[ObjectIdx+NumFixedObjects].Size;
   }
 
-  /// Change the size of the specified stack object.
+  /// setObjectSize - Change the size of the specified stack object.
   void setObjectSize(int ObjectIdx, int64_t Size) {
     assert(unsigned(ObjectIdx+NumFixedObjects) < Objects.size() &&
            "Invalid Object Idx!");
     Objects[ObjectIdx+NumFixedObjects].Size = Size;
   }
 
-  /// Return the alignment of the specified stack object.
+  /// getObjectAlignment - Return the alignment of the specified stack object.
   unsigned getObjectAlignment(int ObjectIdx) const {
     assert(unsigned(ObjectIdx+NumFixedObjects) < Objects.size() &&
            "Invalid Object Idx!");
@@ -432,7 +413,7 @@ public:
     ensureMaxAlignment(Align);
   }
 
-  /// Return the underlying Alloca of the specified
+  /// getObjectAllocation - Return the underlying Alloca of the specified
   /// stack object if it exists. Returns 0 if none exists.
   const AllocaInst* getObjectAllocation(int ObjectIdx) const {
     assert(unsigned(ObjectIdx+NumFixedObjects) < Objects.size() &&
@@ -440,8 +421,9 @@ public:
     return Objects[ObjectIdx+NumFixedObjects].Alloca;
   }
 
-  /// Return the assigned stack offset of the specified object
+  /// getObjectOffset - Return the assigned stack offset of the specified object
   /// from the incoming stack pointer.
+  ///
   int64_t getObjectOffset(int ObjectIdx) const {
     assert(unsigned(ObjectIdx+NumFixedObjects) < Objects.size() &&
            "Invalid Object Idx!");
@@ -450,8 +432,9 @@ public:
     return Objects[ObjectIdx+NumFixedObjects].SPOffset;
   }
 
-  /// Set the stack frame offset of the specified object. The
+  /// setObjectOffset - Set the stack frame offset of the specified object.  The
   /// offset is relative to the stack pointer on entry to the function.
+  ///
   void setObjectOffset(int ObjectIdx, int64_t SPOffset) {
     assert(unsigned(ObjectIdx+NumFixedObjects) < Objects.size() &&
            "Invalid Object Idx!");
@@ -460,52 +443,50 @@ public:
     Objects[ObjectIdx+NumFixedObjects].SPOffset = SPOffset;
   }
 
-  /// Return the number of bytes that must be allocated to hold
+  /// getStackSize - Return the number of bytes that must be allocated to hold
   /// all of the fixed size frame objects.  This is only valid after
   /// Prolog/Epilog code insertion has finalized the stack frame layout.
+  ///
   uint64_t getStackSize() const { return StackSize; }
 
-  /// Set the size of the stack.
+  /// setStackSize - Set the size of the stack...
+  ///
   void setStackSize(uint64_t Size) { StackSize = Size; }
 
   /// Estimate and return the size of the stack frame.
   unsigned estimateStackSize(const MachineFunction &MF) const;
 
-  /// Return the correction for frame offsets.
+  /// getOffsetAdjustment - Return the correction for frame offsets.
+  ///
   int getOffsetAdjustment() const { return OffsetAdjustment; }
 
-  /// Set the correction for frame offsets.
+  /// setOffsetAdjustment - Set the correction for frame offsets.
+  ///
   void setOffsetAdjustment(int Adj) { OffsetAdjustment = Adj; }
 
-  /// Return the alignment in bytes that this function must be aligned to,
-  /// which is greater than the default stack alignment provided by the target.
+  /// getMaxAlignment - Return the alignment in bytes that this function must be
+  /// aligned to, which is greater than the default stack alignment provided by
+  /// the target.
+  ///
   unsigned getMaxAlignment() const { return MaxAlignment; }
 
-  /// Make sure the function is at least Align bytes aligned.
+  /// ensureMaxAlignment - Make sure the function is at least Align bytes
+  /// aligned.
   void ensureMaxAlignment(unsigned Align);
 
-  /// Return true if this function adjusts the stack -- e.g.,
+  /// AdjustsStack - Return true if this function adjusts the stack -- e.g.,
   /// when calling another function. This is only valid during and after
   /// prolog/epilog code insertion.
   bool adjustsStack() const { return AdjustsStack; }
   void setAdjustsStack(bool V) { AdjustsStack = V; }
 
-  /// Return true if the current function has any function calls.
+  /// hasCalls - Return true if the current function has any function calls.
   bool hasCalls() const { return HasCalls; }
   void setHasCalls(bool V) { HasCalls = V; }
 
-  /// Returns true if the function contains opaque dynamic stack adjustments.
-  bool hasOpaqueSPAdjustment() const { return HasOpaqueSPAdjustment; }
-  void setHasOpaqueSPAdjustment(bool B) { HasOpaqueSPAdjustment = B; }
-
-  /// Returns true if the function contains operations which will lower down to
-  /// instructions which manipulate the stack pointer.
-  bool hasCopyImplyingStackAdjustment() const {
-    return HasCopyImplyingStackAdjustment;
-  }
-  void setHasCopyImplyingStackAdjustment(bool B) {
-    HasCopyImplyingStackAdjustment = B;
-  }
+  /// Returns true if the function contains any stack-adjusting inline assembly.
+  bool hasInlineAsmWithSPAdjust() const { return HasInlineAsmWithSPAdjust; }
+  void setHasInlineAsmWithSPAdjust(bool B) { HasInlineAsmWithSPAdjust = B; }
 
   /// Returns true if the function calls the llvm.va_start intrinsic.
   bool hasVAStart() const { return HasVAStart; }
@@ -515,11 +496,7 @@ public:
   bool hasMustTailInVarArgFunc() const { return HasMustTailInVarArgFunc; }
   void setHasMustTailInVarArgFunc(bool B) { HasMustTailInVarArgFunc = B; }
 
-  /// Returns true if the function contains a tail call.
-  bool hasTailCall() const { return HasTailCall; }
-  void setHasTailCall() { HasTailCall = true; }
-
-  /// Return the maximum size of a call frame that must be
+  /// getMaxCallFrameSize - Return the maximum size of a call frame that must be
   /// allocated for an outgoing function call.  This is only available if
   /// CallFrameSetup/Destroy pseudo instructions are used by the target, and
   /// then only during or after prolog/epilog code insertion.
@@ -527,23 +504,29 @@ public:
   unsigned getMaxCallFrameSize() const { return MaxCallFrameSize; }
   void setMaxCallFrameSize(unsigned S) { MaxCallFrameSize = S; }
 
-  /// Create a new object at a fixed location on the stack.
+  /// CreateFixedObject - Create a new object at a fixed location on the stack.
   /// All fixed objects should be created before other objects are created for
   /// efficiency. By default, fixed objects are not pointed to by LLVM IR
   /// values. This returns an index with a negative value.
+  ///
   int CreateFixedObject(uint64_t Size, int64_t SPOffset, bool Immutable,
                         bool isAliased = false);
 
-  /// Create a spill slot at a fixed location on the stack.
-  /// Returns an index with a negative value.
+  /// CreateFixedSpillStackObject - Create a spill slot at a fixed location
+  /// on the stack.  Returns an index with a negative value.
   int CreateFixedSpillStackObject(uint64_t Size, int64_t SPOffset);
 
-  /// Returns true if the specified index corresponds to a fixed stack object.
+  /// Allocates memory at a fixed, target-specific offset from the frame
+  /// pointer. Marks the function as having its frame address taken.
+  int CreateFrameAllocation(uint64_t Size);
+
+  /// isFixedObjectIndex - Returns true if the specified index corresponds to a
+  /// fixed stack object.
   bool isFixedObjectIndex(int ObjectIdx) const {
     return ObjectIdx < 0 && (ObjectIdx >= -(int)NumFixedObjects);
   }
 
-  /// Returns true if the specified index corresponds
+  /// isAliasedObjectIndex - Returns true if the specified index corresponds
   /// to an object that might be pointed to by an LLVM IR value.
   bool isAliasedObjectIndex(int ObjectIdx) const {
     assert(unsigned(ObjectIdx+NumFixedObjects) < Objects.size() &&
@@ -554,102 +537,84 @@ public:
   /// isImmutableObjectIndex - Returns true if the specified index corresponds
   /// to an immutable object.
   bool isImmutableObjectIndex(int ObjectIdx) const {
-    // Tail calling functions can clobber their function arguments.
-    if (HasTailCall)
-      return false;
     assert(unsigned(ObjectIdx+NumFixedObjects) < Objects.size() &&
            "Invalid Object Idx!");
     return Objects[ObjectIdx+NumFixedObjects].isImmutable;
   }
 
-  /// Returns true if the specified index corresponds to a spill slot.
+  /// isSpillSlotObjectIndex - Returns true if the specified index corresponds
+  /// to a spill slot..
   bool isSpillSlotObjectIndex(int ObjectIdx) const {
     assert(unsigned(ObjectIdx+NumFixedObjects) < Objects.size() &&
            "Invalid Object Idx!");
     return Objects[ObjectIdx+NumFixedObjects].isSpillSlot;
   }
 
-  bool isStatepointSpillSlotObjectIndex(int ObjectIdx) const {
-    assert(unsigned(ObjectIdx+NumFixedObjects) < Objects.size() &&
-           "Invalid Object Idx!");
-    return Objects[ObjectIdx+NumFixedObjects].isStatepointSpillSlot;
-  }
-
-  /// Returns true if the specified index corresponds to a dead object.
+  /// isDeadObjectIndex - Returns true if the specified index corresponds to
+  /// a dead object.
   bool isDeadObjectIndex(int ObjectIdx) const {
     assert(unsigned(ObjectIdx+NumFixedObjects) < Objects.size() &&
            "Invalid Object Idx!");
     return Objects[ObjectIdx+NumFixedObjects].Size == ~0ULL;
   }
 
-  /// Returns true if the specified index corresponds to a variable sized
-  /// object.
-  bool isVariableSizedObjectIndex(int ObjectIdx) const {
-    assert(unsigned(ObjectIdx + NumFixedObjects) < Objects.size() &&
-           "Invalid Object Idx!");
-    return Objects[ObjectIdx + NumFixedObjects].Size == 0;
-  }
-
-  void markAsStatepointSpillSlotObjectIndex(int ObjectIdx) {
-    assert(unsigned(ObjectIdx+NumFixedObjects) < Objects.size() &&
-           "Invalid Object Idx!");
-    Objects[ObjectIdx+NumFixedObjects].isStatepointSpillSlot = true;
-    assert(isStatepointSpillSlotObjectIndex(ObjectIdx) && "inconsistent");
-  }
-
-  /// Create a new statically sized stack object, returning
+  /// CreateStackObject - Create a new statically sized stack object, returning
   /// a nonnegative identifier to represent it.
+  ///
   int CreateStackObject(uint64_t Size, unsigned Alignment, bool isSS,
                         const AllocaInst *Alloca = nullptr);
 
-  /// Create a new statically sized stack object that represents a spill slot,
-  /// returning a nonnegative identifier to represent it.
+  /// CreateSpillStackObject - Create a new statically sized stack object that
+  /// represents a spill slot, returning a nonnegative identifier to represent
+  /// it.
+  ///
   int CreateSpillStackObject(uint64_t Size, unsigned Alignment);
 
-  /// Remove or mark dead a statically sized stack object.
+  /// RemoveStackObject - Remove or mark dead a statically sized stack object.
+  ///
   void RemoveStackObject(int ObjectIdx) {
     // Mark it dead.
     Objects[ObjectIdx+NumFixedObjects].Size = ~0ULL;
   }
 
-  /// Notify the MachineFrameInfo object that a variable sized object has been
-  /// created.  This must be created whenever a variable sized object is
-  /// created, whether or not the index returned is actually used.
+  /// CreateVariableSizedObject - Notify the MachineFrameInfo object that a
+  /// variable sized object has been created.  This must be created whenever a
+  /// variable sized object is created, whether or not the index returned is
+  /// actually used.
+  ///
   int CreateVariableSizedObject(unsigned Alignment, const AllocaInst *Alloca);
 
-  /// Returns a reference to call saved info vector for the current function.
+  /// getCalleeSavedInfo - Returns a reference to call saved info vector for the
+  /// current function.
   const std::vector<CalleeSavedInfo> &getCalleeSavedInfo() const {
     return CSInfo;
   }
 
-  /// Used by prolog/epilog inserter to set the function's callee saved
-  /// information.
+  /// setCalleeSavedInfo - Used by prolog/epilog inserter to set the function's
+  /// callee saved information.
   void setCalleeSavedInfo(const std::vector<CalleeSavedInfo> &CSI) {
     CSInfo = CSI;
   }
 
-  /// Has the callee saved info been calculated yet?
+  /// isCalleeSavedInfoValid - Has the callee saved info been calculated yet?
   bool isCalleeSavedInfoValid() const { return CSIValid; }
 
   void setCalleeSavedInfoValid(bool v) { CSIValid = v; }
 
-  MachineBasicBlock *getSavePoint() const { return Save; }
-  void setSavePoint(MachineBasicBlock *NewSave) { Save = NewSave; }
-  MachineBasicBlock *getRestorePoint() const { return Restore; }
-  void setRestorePoint(MachineBasicBlock *NewRestore) { Restore = NewRestore; }
-
-  /// Return a set of physical registers that are pristine.
+  /// getPristineRegs - Return a set of physical registers that are pristine on
+  /// entry to the MBB.
   ///
   /// Pristine registers hold a value that is useless to the current function,
-  /// but that must be preserved - they are callee saved registers that are not
-  /// saved.
+  /// but that must be preserved - they are callee saved registers that have not
+  /// been saved yet.
   ///
   /// Before the PrologueEpilogueInserter has placed the CSR spill code, this
   /// method always returns an empty set.
-  BitVector getPristineRegs(const MachineFunction &MF) const;
+  BitVector getPristineRegs(const MachineBasicBlock *MBB) const;
 
-  /// Used by the MachineFunction printer to print information about
-  /// stack objects. Implemented in MachineFunction.cpp.
+  /// print - Used by the MachineFunction printer to print information about
+  /// stack objects. Implemented in MachineFunction.cpp
+  ///
   void print(const MachineFunction &MF, raw_ostream &OS) const;
 
   /// dump - Print the function to stderr.

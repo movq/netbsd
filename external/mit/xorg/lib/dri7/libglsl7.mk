@@ -1,4 +1,4 @@
-#	$NetBSD: libglsl7.mk,v 1.1 2015/01/05 03:45:31 mrg Exp $
+#	$NetBSD: libglsl7.mk,v 1.1.2.2 2015/03/03 08:28:12 snj Exp $
 
 # This copy for MesaLib7 old drivers.
 

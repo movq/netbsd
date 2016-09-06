@@ -260,7 +260,9 @@ private:
                    << "'. Instruction has only "
                    << format("%i", Inst.getNumOperands())
                    << " operands.\nInstruction is:\n  ";
-      Inst.dump_pretty(ErrMsgStream, Checker.InstPrinter);
+      Inst.dump_pretty(ErrMsgStream,
+                       Checker.Disassembler->getContext().getAsmInfo(),
+                       Checker.InstPrinter);
       return std::make_pair(EvalResult(ErrMsgStream.str()), "");
     }
 
@@ -270,7 +272,9 @@ private:
       raw_string_ostream ErrMsgStream(ErrMsg);
       ErrMsgStream << "Operand '" << format("%i", OpIdx) << "' of instruction '"
                    << Symbol << "' is not an immediate.\nInstruction is:\n  ";
-      Inst.dump_pretty(ErrMsgStream, Checker.InstPrinter);
+      Inst.dump_pretty(ErrMsgStream,
+                       Checker.Disassembler->getContext().getAsmInfo(),
+                       Checker.InstPrinter);
 
       return std::make_pair(EvalResult(ErrMsgStream.str()), "");
     }
@@ -310,7 +314,7 @@ private:
           "");
 
     uint64_t SymbolAddr = PCtx.IsInsideLoad
-                              ? Checker.getSymbolLocalAddr(Symbol)
+                              ? Checker.getSymbolLinkerAddr(Symbol)
                               : Checker.getSymbolRemoteAddr(Symbol);
     uint64_t NextPC = SymbolAddr + InstSize;
 
@@ -437,7 +441,7 @@ private:
     // The value for the symbol depends on the context we're evaluating in:
     // Inside a load this is the address in the linker's memory, outside a
     // load it's the address in the target processes memory.
-    uint64_t Value = PCtx.IsInsideLoad ? Checker.getSymbolLocalAddr(Symbol)
+    uint64_t Value = PCtx.IsInsideLoad ? Checker.getSymbolLinkerAddr(Symbol)
                                        : Checker.getSymbolRemoteAddr(Symbol);
 
     // Looks like a plain symbol reference.
@@ -727,20 +731,18 @@ bool RuntimeDyldCheckerImpl::checkAllRulesInBuffer(StringRef RulePrefix,
 }
 
 bool RuntimeDyldCheckerImpl::isSymbolValid(StringRef Symbol) const {
-  if (getRTDyld().getSymbol(Symbol))
-    return true;
-  return !!getRTDyld().Resolver.findSymbol(Symbol);
+  return getRTDyld().getSymbolAddress(Symbol) != nullptr;
 }
 
-uint64_t RuntimeDyldCheckerImpl::getSymbolLocalAddr(StringRef Symbol) const {
+uint64_t RuntimeDyldCheckerImpl::getSymbolLinkerAddr(StringRef Symbol) const {
   return static_cast<uint64_t>(
-      reinterpret_cast<uintptr_t>(getRTDyld().getSymbolLocalAddress(Symbol)));
+      reinterpret_cast<uintptr_t>(getRTDyld().getSymbolAddress(Symbol)));
 }
 
 uint64_t RuntimeDyldCheckerImpl::getSymbolRemoteAddr(StringRef Symbol) const {
-  if (auto InternalSymbol = getRTDyld().getSymbol(Symbol))
-    return InternalSymbol.getAddress();
-  return getRTDyld().Resolver.findSymbol(Symbol).getAddress();
+  if (uint64_t InternalSymbolAddr = getRTDyld().getSymbolLoadAddress(Symbol))
+      return InternalSymbolAddr;
+  return getRTDyld().MemMgr->getSymbolAddress(Symbol);
 }
 
 uint64_t RuntimeDyldCheckerImpl::readMemoryAtAddr(uint64_t SrcAddr,
@@ -799,10 +801,11 @@ std::pair<uint64_t, std::string> RuntimeDyldCheckerImpl::getSectionAddr(
   unsigned SectionID = SectionInfo->SectionID;
   uint64_t Addr;
   if (IsInsideLoad)
-    Addr = static_cast<uint64_t>(reinterpret_cast<uintptr_t>(
-        getRTDyld().Sections[SectionID].getAddress()));
+    Addr =
+      static_cast<uint64_t>(
+        reinterpret_cast<uintptr_t>(getRTDyld().Sections[SectionID].Address));
   else
-    Addr = getRTDyld().Sections[SectionID].getLoadAddress();
+    Addr = getRTDyld().Sections[SectionID].LoadAddress;
 
   return std::make_pair(Addr, std::string(""));
 }
@@ -834,11 +837,11 @@ std::pair<uint64_t, std::string> RuntimeDyldCheckerImpl::getStubAddrFor(
 
   uint64_t Addr;
   if (IsInsideLoad) {
-    uintptr_t SectionBase = reinterpret_cast<uintptr_t>(
-        getRTDyld().Sections[SectionID].getAddress());
+    uintptr_t SectionBase =
+        reinterpret_cast<uintptr_t>(getRTDyld().Sections[SectionID].Address);
     Addr = static_cast<uint64_t>(SectionBase) + StubOffset;
   } else {
-    uint64_t SectionBase = getRTDyld().Sections[SectionID].getLoadAddress();
+    uint64_t SectionBase = getRTDyld().Sections[SectionID].LoadAddress;
     Addr = SectionBase + StubOffset;
   }
 
@@ -847,23 +850,21 @@ std::pair<uint64_t, std::string> RuntimeDyldCheckerImpl::getStubAddrFor(
 
 StringRef
 RuntimeDyldCheckerImpl::getSubsectionStartingAt(StringRef Name) const {
-  RTDyldSymbolTable::const_iterator pos =
+  RuntimeDyldImpl::SymbolTableMap::const_iterator pos =
       getRTDyld().GlobalSymbolTable.find(Name);
   if (pos == getRTDyld().GlobalSymbolTable.end())
     return StringRef();
-  const auto &SymInfo = pos->second;
-  uint8_t *SectionAddr = getRTDyld().getSectionAddress(SymInfo.getSectionID());
-  return StringRef(reinterpret_cast<const char *>(SectionAddr) +
-                       SymInfo.getOffset(),
-                   getRTDyld().Sections[SymInfo.getSectionID()].getSize() -
-                       SymInfo.getOffset());
+  RuntimeDyldImpl::SymbolLoc Loc = pos->second;
+  uint8_t *SectionAddr = getRTDyld().getSectionAddress(Loc.first);
+  return StringRef(reinterpret_cast<const char *>(SectionAddr) + Loc.second,
+                   getRTDyld().Sections[Loc.first].Size - Loc.second);
 }
 
 void RuntimeDyldCheckerImpl::registerSection(
     StringRef FilePath, unsigned SectionID) {
   StringRef FileName = sys::path::filename(FilePath);
   const SectionEntry &Section = getRTDyld().Sections[SectionID];
-  StringRef SectionName = Section.getName();
+  StringRef SectionName = Section.Name;
 
   Stubs[FileName][SectionName].SectionID = SectionID;
 }
@@ -873,7 +874,7 @@ void RuntimeDyldCheckerImpl::registerStubMap(
     const RuntimeDyldImpl::StubMap &RTDyldStubs) {
   StringRef FileName = sys::path::filename(FilePath);
   const SectionEntry &Section = getRTDyld().Sections[SectionID];
-  StringRef SectionName = Section.getName();
+  StringRef SectionName = Section.Name;
 
   Stubs[FileName][SectionName].SectionID = SectionID;
 
@@ -886,10 +887,9 @@ void RuntimeDyldCheckerImpl::registerStubMap(
       // If this is a (Section, Offset) pair, do a reverse lookup in the
       // global symbol table to find the name.
       for (auto &GSTEntry : getRTDyld().GlobalSymbolTable) {
-        const auto &SymInfo = GSTEntry.second;
-        if (SymInfo.getSectionID() == StubMapEntry.first.SectionID &&
-            SymInfo.getOffset() ==
-              static_cast<uint64_t>(StubMapEntry.first.Offset)) {
+        if (GSTEntry.second.first == StubMapEntry.first.SectionID &&
+            GSTEntry.second.second ==
+                static_cast<uint64_t>(StubMapEntry.first.Offset)) {
           SymbolName = GSTEntry.first();
           break;
         }
@@ -930,6 +930,6 @@ bool RuntimeDyldChecker::checkAllRulesInBuffer(StringRef RulePrefix,
 
 std::pair<uint64_t, std::string>
 RuntimeDyldChecker::getSectionAddr(StringRef FileName, StringRef SectionName,
-                                   bool LocalAddress) {
-  return Impl->getSectionAddr(FileName, SectionName, LocalAddress);
+                                   bool LinkerAddress) {
+  return Impl->getSectionAddr(FileName, SectionName, LinkerAddress);
 }

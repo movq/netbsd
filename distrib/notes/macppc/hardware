@@ -1,4 +1,4 @@
-.\"$NetBSD: hardware,v 1.48 2015/05/19 19:30:28 snj Exp $
+.\"$NetBSD: hardware,v 1.47.26.1 2015/05/24 11:14:44 martin Exp $
 .
 Currently,
 .Nx*M

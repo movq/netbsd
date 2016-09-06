@@ -183,7 +183,6 @@ class Copyright:
             '|[Cc]opyright\s+%s'
             '|[Cc]opyright\s+&copy;'
             '|[Cc]opyright\s+@copyright{}'
-            '|copyright = u\''
             '|@set\s+copyright[\w-]+)'
 
             # 2: the years.  Include the whitespace in the year, so that
@@ -364,8 +363,7 @@ class Copyright:
             return (False, orig_line, next_line)
 
         line = (line[:match.start (2)]
-                + ('' if intro.startswith ('copyright = ') else ' ')
-                + canon_form + self.separator
+                + ' ' + canon_form + self.separator
                 + line[match.end (2):])
 
         # Use the standard (C) form.

@@ -83,8 +83,7 @@ namespace clang {
     ICK_TransparentUnionConversion, ///< Transparent Union Conversions
     ICK_Writeback_Conversion,  ///< Objective-C ARC writeback conversion
     ICK_Zero_Event_Conversion, ///< Zero constant to event (OpenCL1.2 6.12.10)
-    ICK_C_Only_Conversion,     ///< Conversions allowed in C, but not C++
-    ICK_Num_Conversion_Kinds,  ///< The number of conversion kinds
+    ICK_Num_Conversion_Kinds   ///< The number of conversion kinds
   };
 
   /// ImplicitConversionRank - The rank of an implicit conversion
@@ -96,9 +95,7 @@ namespace clang {
     ICR_Promotion,               ///< Promotion
     ICR_Conversion,              ///< Conversion
     ICR_Complex_Real_Conversion, ///< Complex <-> Real conversion
-    ICR_Writeback_Conversion,    ///< ObjC ARC writeback conversion
-    ICR_C_Conversion             ///< Conversion only allowed in the C standard.
-                                 ///  (e.g. void* to char*)
+    ICR_Writeback_Conversion     ///< ObjC ARC writeback conversion
   };
 
   ImplicitConversionRank GetConversionRank(ImplicitConversionKind Kind);
@@ -570,8 +567,8 @@ namespace clang {
     /// This conversion candidate is not viable because its result
     /// type is not implicitly convertible to the desired type.
     ovl_fail_bad_final_conversion,
-
-    /// This conversion function template specialization candidate is not
+    
+    /// This conversion function template specialization candidate is not 
     /// viable because the final conversion was not an exact match.
     ovl_fail_final_conversion_not_exact,
 
@@ -582,10 +579,7 @@ namespace clang {
 
     /// This candidate function was not viable because an enable_if
     /// attribute disabled it.
-    ovl_fail_enable_if,
-
-    /// This candidate was not viable because its address could not be taken.
-    ovl_fail_addr_not_available
+    ovl_fail_enable_if
   };
 
   /// OverloadCandidate - A single candidate in an overload set (C++ 13.3).
@@ -724,8 +718,8 @@ namespace clang {
     llvm::AlignedCharArray<llvm::AlignOf<ImplicitConversionSequence>::Alignment,
                            16 * sizeof(ImplicitConversionSequence)> InlineSpace;
 
-    OverloadCandidateSet(const OverloadCandidateSet &) = delete;
-    void operator=(const OverloadCandidateSet &) = delete;
+    OverloadCandidateSet(const OverloadCandidateSet &) LLVM_DELETED_FUNCTION;
+    void operator=(const OverloadCandidateSet &) LLVM_DELETED_FUNCTION;
 
     void destroyCandidates();
 

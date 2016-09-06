@@ -1,5 +1,6 @@
 /* seh pdata/xdata coff object file format
-   Copyright (C) 2009-2015 Free Software Foundation, Inc.
+   Copyright 2009, 2010
+   Free Software Foundation, Inc.
 
    This file is part of GAS.
 
@@ -169,13 +170,6 @@ seh_validate_seg (const char *directive)
   return 0;
 }
 
-/* Switch back to the code section, whatever that may be.  */
-static void
-obj_coff_seh_code (int ignored ATTRIBUTE_UNUSED)
-{
-  subseg_set (seh_ctx_cur->code_seg, 0);
-}
-
 static void
 switch_xdata (int subseg, segT code_seg)
 {
@@ -329,7 +323,8 @@ obj_coff_seh_handler (int what ATTRIBUTE_UNUSED)
 
   if (*input_line_pointer == '@')
     {
-      name_end = get_symbol_name (&symbol_name);
+      symbol_name = input_line_pointer;
+      name_end = get_symbol_end ();
 
       seh_ctx_cur->handler.X_op = O_constant;
       seh_ctx_cur->handler.X_add_number = 0;
@@ -342,7 +337,7 @@ obj_coff_seh_handler (int what ATTRIBUTE_UNUSED)
       else
 	as_bad (_("unknown constant value '%s' for handler"), symbol_name);
 
-      (void) restore_line_pointer (name_end);
+      *input_line_pointer = name_end;
     }
   else
     expression (&seh_ctx_cur->handler);
@@ -358,7 +353,8 @@ obj_coff_seh_handler (int what ATTRIBUTE_UNUSED)
     {
       do
 	{
-	  name_end = get_symbol_name (&symbol_name);
+	  symbol_name = input_line_pointer;
+	  name_end = get_symbol_end ();
 
 	  if (strcasecmp (symbol_name, "@unwind") == 0)
 	    seh_ctx_cur->handler_flags |= UNW_FLAG_UHANDLER;
@@ -367,7 +363,7 @@ obj_coff_seh_handler (int what ATTRIBUTE_UNUSED)
 	  else
 	    as_bad (_(".seh_handler constant '%s' unknown"), symbol_name);
 
-	  (void) restore_line_pointer (name_end);
+	  *input_line_pointer = name_end;
 	}
       while (skip_whitespace_and_comma (0));
     }
@@ -452,9 +448,10 @@ obj_coff_seh_proc (int what ATTRIBUTE_UNUSED)
 
   SKIP_WHITESPACE ();
 
-  name_end = get_symbol_name (&symbol_name);
+  symbol_name = input_line_pointer;
+  name_end = get_symbol_end ();
   seh_ctx_cur->func_name = xstrdup (symbol_name);
-  (void) restore_line_pointer (name_end);
+  *input_line_pointer = name_end;
 
   demand_empty_rest_of_line ();
 
@@ -546,13 +543,14 @@ seh_x64_read_reg (const char *directive, int kind)
   SKIP_WHITESPACE ();
   if (*input_line_pointer == '%')
     ++input_line_pointer;
-  name_end = get_symbol_name (& symbol_name);
+  symbol_name = input_line_pointer;
+  name_end = get_symbol_end ();
 
   for (i = 0; i < 16; i++)
     if (! strcasecmp (regs[i], symbol_name))
       break;
 
-  (void) restore_line_pointer (name_end);
+  *input_line_pointer = name_end;
 
   /* Error if register not found, or EAX used as a frame pointer.  */
   if (i == 16 || (kind == 0 && i == 0))

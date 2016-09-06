@@ -3,7 +3,8 @@
 (echo;echo;echo;echo)>e${EMULATION_NAME}.c # there, now line numbers match ;-)
 fragment <<EOF
 /* This file is part of GLD, the Gnu Linker.
-   Copyright (C) 1999-2015 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2002, 2003, 2004, 2005, 2007
+   Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -105,7 +106,7 @@ gld_${EMULATION_NAME}_before_parse(void)
 static char *
 gld_${EMULATION_NAME}_get_script (int *isfile)
 EOF
-if test x"$COMPILE_IN" = xyes
+if test -n "$COMPILE_IN"
 then
 # Scripts compiled in.
 
@@ -118,9 +119,9 @@ $s/$/n"/
 fragment <<EOF
 {
   *isfile = 0;
-  if (bfd_link_relocatable (&link_info) && config.build_constructors)
+  if (link_info.relocatable && config.build_constructors)
     return `sed "$sc" ldscripts/${EMULATION_NAME}.xu`;
-  else if (bfd_link_relocatable (&link_info))
+  else if (link_info.relocatable)
     return `sed "$sc" ldscripts/${EMULATION_NAME}.xr`;
   else if (!config.text_read_only)
     return `sed "$sc" ldscripts/${EMULATION_NAME}.xbn`;
@@ -138,9 +139,9 @@ fragment <<EOF
 {
   *isfile = 1;
 
-  if (bfd_link_relocatable (&link_info) && config.build_constructors)
+  if (link_info.relocatable && config.build_constructors)
     return "ldscripts/${EMULATION_NAME}.xu";
-  else if (bfd_link_relocatable (&link_info))
+  else if (link_info.relocatable)
     return "ldscripts/${EMULATION_NAME}.xr";
   else if (!config.text_read_only)
     return "ldscripts/${EMULATION_NAME}.xbn";
@@ -180,7 +181,6 @@ struct ld_emulation_xfer_struct ld_${EMULATION_NAME}_emulation =
   gld_${EMULATION_NAME}_list_options,
   NULL, /* recognized file */
   NULL,	/* find_potential_libraries */
-  NULL,	/* new_vers_pattern */
-  NULL  /* extra_map_file_text */
+  NULL	/* new_vers_pattern */
 };
 EOF

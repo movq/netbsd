@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ndis_pci.c,v 1.21 2015/04/04 15:22:02 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ndis_pci.c,v 1.19.12.2 2015/05/16 04:06:04 snj Exp $");
 #ifdef __FreeBSD__
 __FBSDID("$FreeBSD: src/sys/dev/if_ndis/if_ndis_pci.c,v 1.8.2.3 2005/03/31 04:24:36 wpaul Exp $");
 #endif

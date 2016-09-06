@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.19 2016/03/05 07:33:58 mlelstv Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.17 2014/05/10 20:12:16 reinoud Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.19 2016/03/05 07:33:58 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.17 2014/05/10 20:12:16 reinoud Exp $");
 
 #include "opt_md.h"
 
@@ -41,7 +41,7 @@ __KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.19 2016/03/05 07:33:58 mlelstv Exp $"
 #include <sys/device.h>
 #include <sys/conf.h>
 #include <sys/kernel.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 
 #include <machine/autoconf.h>
 #include <machine/intr.h>
@@ -51,15 +51,15 @@ void	(*evbarm_device_register)(device_t, void *);
 void	(*evbarm_device_register_post_config)(device_t, void *);
 
 #ifndef MEMORY_DISK_IS_ROOT
-static int get_device(char *name, device_t *, int *);
+static void get_device(char *name);
 static void set_root_device(void);
 #endif
 
 #ifndef MEMORY_DISK_IS_ROOT
 /* Decode a device name to a major and minor number */
 
-static int
-get_device(char *name, device_t *dvp, int *partp)
+static void
+get_device(char *name)
 {
 	int unit, part;
 	char devname[16], *cp;
@@ -69,7 +69,7 @@ get_device(char *name, device_t *dvp, int *partp)
 		name += 5;
 
 	if (devsw_name2blk(name, devname, sizeof(devname)) == -1)
-		return 0;
+		return;
 
 	name += strlen(devname);
 	unit = part = 0;
@@ -78,64 +78,27 @@ get_device(char *name, device_t *dvp, int *partp)
 	while (*cp >= '0' && *cp <= '9')
 		unit = (unit * 10) + (*cp++ - '0');
 	if (cp == name)
-		return 0;
+		return;
 
 	if (*cp >= 'a' && *cp < ('a' + MAXPARTITIONS))
 		part = *cp - 'a';
 	else if (*cp != '\0' && *cp != ' ')
-		return 0;
+		return;
 	if ((dv = device_find_by_driver_unit(devname, unit)) != NULL) {
-		*dvp = dv;
-		*partp = part;
-		return 1;
+		booted_device = dv;
+		booted_partition = part;
 	}
-
-	return 0;
 }
 
 /* Set the rootdev variable from the root specifier in the boot args */
 
-static char *bootspec_buf = NULL;
-static size_t bootspec_buflen = 0;
-
 static void
 set_root_device(void)
 {
-	char *ptr, *end, *buf;
-	size_t len;
-
-	if (boot_args == NULL)
-		return;
-
-	if (!get_bootconf_option(boot_args, "root", BOOTOPT_TYPE_STRING, &ptr))
-		return;
-
-	if (get_device(ptr, &booted_device, &booted_partition))
-		return;
-
-	/* NUL-terminate string, get_bootconf_option doesn't */
-	for (end=ptr; *end != '\0'; ++end) {
-		if (*end == ' ' || *end == '\t') {
-			break;
-		}
-	}
-
-	if (end == ptr)
-		return;
-
-	len = end - ptr;
-
-	buf = kmem_alloc(len + 1, KM_SLEEP);
-	memcpy(buf, ptr, len);
-	buf[len] = '\0';
-
-	if (bootspec_buf != NULL)
-		kmem_free(bootspec_buf, bootspec_buflen + 1);
-
-	bootspec_buf = buf;
-	bootspec_buflen = len;
-
-	bootspec = bootspec_buf;
+	char *ptr;
+	if (boot_args &&
+	    get_bootconf_option(boot_args, "root", BOOTOPT_TYPE_STRING, &ptr))
+		get_device(ptr);
 }
 #endif
 

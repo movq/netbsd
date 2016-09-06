@@ -1,4 +1,4 @@
-/*	$NetBSD: fsdb.c,v 1.49 2016/07/28 08:24:58 martin Exp $	*/
+/*	$NetBSD: fsdb.c,v 1.48.6.1 2016/08/27 15:17:34 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fsdb.c,v 1.49 2016/07/28 08:24:58 martin Exp $");
+__RCSID("$NetBSD: fsdb.c,v 1.48.6.1 2016/08/27 15:17:34 bouyer Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>

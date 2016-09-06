@@ -1,5 +1,5 @@
 ; RUN: llc < %s -march=x86 -mattr=+sse4.2 | FileCheck %s
-; CHECK: cvtdq2ps
+; CHECK: cvtsi2ss
 
 ; sign to float v2i16 to v2f32
 

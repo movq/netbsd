@@ -1,4 +1,4 @@
-/*	$NetBSD: iscsi_rcv.c,v 1.22 2016/06/15 04:33:52 mlelstv Exp $	*/
+/*	$NetBSD: iscsi_rcv.c,v 1.5 2013/10/20 21:11:15 christos Exp $	*/
 
 /*-
  * Copyright (c) 2004,2005,2006,2011 The NetBSD Foundation, Inc.
@@ -51,7 +51,7 @@
 STATIC int
 my_soo_read(connection_t *conn, struct uio *u, int flags)
 {
-	struct socket *so = conn->sock->f_socket;
+	struct socket *so = (struct socket *) conn->sock->f_data;
 	int ret;
 #ifdef ISCSI_DEBUG
 	size_t resid = u->uio_resid;
@@ -59,22 +59,13 @@ my_soo_read(connection_t *conn, struct uio *u, int flags)
 
 	DEBC(conn, 99, ("soo_read req: %zu\n", resid));
 
-	if (flags & MSG_WAITALL) {
-		flags &= ~MSG_WAITALL;
-		do {
-			int oresid = u->uio_resid;
-			ret = (*so->so_receive)(so, NULL, u, NULL, NULL, &flags);
-			if (!ret && u->uio_resid == oresid)
-				break;
-		} while (!ret && u->uio_resid > 0);
-	} else
-		ret = (*so->so_receive)(so, NULL, u, NULL, NULL, &flags);
+	ret = soreceive(so, NULL, u, NULL, NULL, &flags);
 
 	if (ret || (flags != MSG_DONTWAIT && u->uio_resid)) {
-		DEBC(conn, 1, ("Read failed (ret: %d, req: %zu, out: %zu)\n",
-		               ret, resid, u->uio_resid));
+		DEBC(conn, 1, ("Read failed (ret: %d, req: %zu, out: %zu)\n", ret, resid,
+				u->uio_resid));
 		handle_connection_error(conn, ISCSI_STATUS_SOCKET_ERROR,
-		                        RECOVER_CONNECTION);
+								RECOVER_CONNECTION);
 		return 1;
 	}
 	return 0;
@@ -99,7 +90,11 @@ try_resynch_receive(connection_t *conn)
 	int rc;
 
 	uio.uio_rw = UIO_READ;
+#if (__NetBSD_Version__ >= 399000900)
 	UIO_SETUP_SYSSPACE(&uio);
+#else
+	uio.uio_segflg = UIO_SYSSPACE;
+#endif
 
 	do {
 		io_vec.iov_base = buffer;
@@ -132,29 +127,14 @@ ccb_from_itt(connection_t *conn, uint32_t itt)
 	ccb_t *ccb;
 	int cidx;
 
-	if (itt == 0xffffffff)
-		return NULL;
-
 	cidx = itt & 0xff;
-	if (cidx >= CCBS_PER_SESSION)
+	if (cidx >= CCBS_PER_SESSION) {
 		return NULL;
-
+	}
 	ccb = &conn->session->ccb[cidx];
-
-	if (ccb->ITT != itt) {
-		DEBC(conn, 0,
-		     ("ccb_from_itt: received invalid CCB itt %08x != %08x\n",
-		      itt, ccb->ITT));
+	if (ccb->ITT != itt || ccb->disp <= CCBDISP_BUSY) {
 		return NULL;
 	}
-
-	if (ccb->disp <= CCBDISP_BUSY) {
-		DEBC(conn, 0,
-		     ("ccb_from_itt: received CCB with invalid disp %d\n",
-		      ccb->disp));
-		return NULL;
-	}
-
 	return ccb;
 }
 
@@ -183,7 +163,7 @@ read_pdu_data(pdu_t *pdu, uint8_t *data, uint32_t offset)
 	int i, pad;
 	connection_t *conn = pdu->connection;
 
-	DEB(15, ("read_pdu_data: data segment length = %d\n",
+	DEBOUT(("read_pdu_data: data segment length = %d\n",
 		ntoh3(pdu->pdu.DataSegmentLength)));
 	if (!(len = ntoh3(pdu->pdu.DataSegmentLength))) {
 		return 0;
@@ -192,8 +172,7 @@ read_pdu_data(pdu_t *pdu, uint8_t *data, uint32_t offset)
 	if (pad) {
 		pad = 4 - pad;
 	}
-
-	KASSERT(data != NULL || offset == 0);
+	assert((data != NULL) || (offset == 0));
 
 	if (data == NULL) {
 		/*
@@ -220,7 +199,11 @@ read_pdu_data(pdu_t *pdu, uint8_t *data, uint32_t offset)
 	uio->uio_iovcnt = 1;
 	uio->uio_rw = UIO_READ;
 	uio->uio_resid = len;
+#if (__NetBSD_Version__ >= 399000900)
 	UIO_SETUP_SYSSPACE(uio);
+#else
+	uio->uio_segflg = UIO_SYSSPACE;
+#endif
 
 	if (pad) {
 		uio->uio_iovcnt++;
@@ -235,6 +218,11 @@ read_pdu_data(pdu_t *pdu, uint8_t *data, uint32_t offset)
 		pdu->io_vec[i].iov_len = 4;
 		uio->uio_resid += 4;
 	}
+#ifdef ISCSI_TEST_MODE
+	/* save data pointer and size */
+	pdu->save_uio.uio_iov = (struct iovec *) data;
+	pdu->save_uio.uio_resid = len;
+#endif
 
 	/* get the data */
 	if (my_soo_read(conn, &pdu->uio, MSG_WAITALL) != 0) {
@@ -392,34 +380,23 @@ check_CmdSN(connection_t *conn, uint32_t nw_sn)
 		DEBC(conn, 10,
 			("CheckCmdSN - CmdSN=%d, ExpCmdSn=%d, waiting=%p, flags=%x\n",
 			ccb->CmdSN, sn, ccb->pdu_waiting, ccb->flags));
-		if (ccb->pdu_waiting != NULL &&
-			sn_a_lt_b(sn, ccb->CmdSN) &&
+		if (ccb->pdu_waiting != NULL && ccb->CmdSN > sn &&
 			!(ccb->flags & CCBF_GOT_RSP)) {
 			DEBC(conn, 1, ("CheckCmdSN resending - CmdSN=%d, ExpCmdSn=%d\n",
-			               ccb->CmdSN, sn));
+						   ccb->CmdSN, sn));
 
 			ccb->total_tries++;
 
 			if (++ccb->num_timeouts > MAX_CCB_TIMEOUTS ||
 				ccb->total_tries > MAX_CCB_TRIES) {
-				handle_connection_error(conn,
-					ISCSI_STATUS_TIMEOUT,
-					(ccb->total_tries <= MAX_CCB_TRIES)
-						? RECOVER_CONNECTION
-						: LOGOUT_CONNECTION);
+				handle_connection_error(conn, ISCSI_STATUS_TIMEOUT,
+					(ccb->total_tries <= MAX_CCB_TRIES) ? RECOVER_CONNECTION
+														: LOGOUT_CONNECTION);
 				break;
 			} else {
 				resend_pdu(ccb);
 			}
 		}
-
-		/*
-		 * The target can respond to a NOP-In before subsequent
-		 * commands are processed. So our CmdSN can exceed the
-		 * returned ExpCmdSN by the number of commands that are
-		 * in flight. Adjust the expected value accordingly.
-		 */
-		sn++;
 	}
 }
 
@@ -504,7 +481,7 @@ receive_text_response_pdu(connection_t *conn, pdu_t *pdu, ccb_t *req_ccb)
 	}
 
 	if (req_ccb->pdu_waiting != NULL) {
-		ccb_timeout_start(req_ccb, COMMAND_TIMEOUT);
+		SET_CCB_TIMEOUT(conn, req_ccb, COMMAND_TIMEOUT);
 		req_ccb->num_timeouts = 0;
 	}
 
@@ -575,10 +552,13 @@ receive_logout_pdu(connection_t *conn, pdu_t *pdu, ccb_t *req_ccb)
 		conn->state = ST_SETTLING;
 		conn->loggedout = (response) ? LOGOUT_FAILED : LOGOUT_SUCCESS;
 
-		connection_timeout_stop(conn);
+		callout_stop(&conn->timeout);
 
+#ifdef ISCSI_TEST_MODE
+		test_remove_connection(conn);
+#endif
 		/* let send thread take over next step of cleanup */
-		cv_broadcast(&conn->conn_cv);
+		wakeup(&conn->pdus_to_send);
 	}
 
 	return !otherconn;
@@ -611,7 +591,7 @@ receive_data_in_pdu(connection_t *conn, pdu_t *pdu, ccb_t *req_ccb)
 	req_ccb->flags |= CCBF_GOT_RSP;
 
 	if (req_ccb->pdu_waiting != NULL) {
-		ccb_timeout_start(req_ccb, COMMAND_TIMEOUT);
+		SET_CCB_TIMEOUT(conn, req_ccb, COMMAND_TIMEOUT);
 		req_ccb->num_timeouts = 0;
 	}
 
@@ -654,8 +634,7 @@ receive_data_in_pdu(connection_t *conn, pdu_t *pdu, ccb_t *req_ccb)
 	done = sn_empty(&req_ccb->DataSN_buf);
 
 	if (pdu->pdu.Flags & FLAG_STATUS) {
-		DEBC(conn, 10, ("Rx Data In %d, done = %d\n",
-			req_ccb->CmdSN, done));
+		DEBC(conn, 10, ("Rx Data In Complete, done = %d\n", done));
 
 		req_ccb->flags |= CCBF_COMPLETE;
 		/* successful transfer, reset recover count */
@@ -693,7 +672,7 @@ receive_r2t_pdu(connection_t *conn, pdu_t *pdu, ccb_t *req_ccb)
 
 	if (req_ccb != NULL) {
 		if (req_ccb->pdu_waiting != NULL) {
-			ccb_timeout_start(req_ccb, COMMAND_TIMEOUT);
+			SET_CCB_TIMEOUT(conn, req_ccb, COMMAND_TIMEOUT);
 			req_ccb->num_timeouts = 0;
 		}
 		send_data_out(conn, pdu, req_ccb, CCBDISP_NOWAIT, TRUE);
@@ -735,8 +714,10 @@ receive_command_response_pdu(connection_t *conn, pdu_t *pdu, ccb_t *req_ccb)
 		return -1;
 	}
 
+	PERF_SNAP(req_ccb, PERF_PDURCVSTS);
+
 	if (req_ccb->pdu_waiting != NULL) {
-		ccb_timeout_start(req_ccb, COMMAND_TIMEOUT);
+		SET_CCB_TIMEOUT(conn, req_ccb, COMMAND_TIMEOUT);
 		req_ccb->num_timeouts = 0;
 	}
 
@@ -770,10 +751,8 @@ receive_command_response_pdu(connection_t *conn, pdu_t *pdu, ccb_t *req_ccb)
 
 	done = status || sn_empty(&req_ccb->DataSN_buf);
 
-	DEBC(conn, 10, ("Rx Response: CmdSN %d, rsp = %x, status = %x\n",
-			req_ccb->CmdSN,
-			pdu->pdu.OpcodeSpecific[0],
-			pdu->pdu.OpcodeSpecific[1]));
+	DEBC(conn, 10, ("Rx Command Response rsp = %x, status = %x\n",
+			pdu->pdu.OpcodeSpecific[0], pdu->pdu.OpcodeSpecific[1]));
 
 	rc = check_StatSN(conn, pdu->pdu.p.response.StatSN, done);
 
@@ -980,7 +959,7 @@ STATIC int
 receive_nop_in_pdu(connection_t *conn, pdu_t *pdu, ccb_t *req_ccb)
 {
 	DEBC(conn, 10,
-		("Received NOP_In PDU, req_ccb=%p, ITT=%x, TTT=%x, StatSN=%u\n",
+		("Received NOP-In PDU, req_ccb=%p, ITT=%x, TTT=%x, StatSN=%x\n",
 		req_ccb, pdu->pdu.InitiatorTaskTag,
 		pdu->pdu.p.nop_in.TargetTransferTag,
 		ntohl(pdu->pdu.p.nop_in.StatSN)));
@@ -1007,9 +986,6 @@ receive_nop_in_pdu(connection_t *conn, pdu_t *pdu, ccb_t *req_ccb)
 		wake_ccb(req_ccb, ISCSI_STATUS_SUCCESS);
 
 		check_StatSN(conn, pdu->pdu.p.nop_in.StatSN, TRUE);
-	} else {
-		DEBC(conn, 0, ("Received unsolicted NOP_In, itt=%08x\n",
-		               pdu->pdu.InitiatorTaskTag));
 	}
 
 	return 0;
@@ -1031,8 +1007,9 @@ STATIC int
 receive_pdu(connection_t *conn, pdu_t *pdu)
 {
 	ccb_t *req_ccb;
-	int rc;
-	uint32_t MaxCmdSN, ExpCmdSN, digest;
+	ccb_list_t waiting;
+	int rc, s;
+	uint32_t MaxCmdSN, digest;
 	session_t *sess = conn->session;
 
 	if (conn->HeaderDigest) {
@@ -1040,18 +1017,15 @@ receive_pdu(connection_t *conn, pdu_t *pdu)
 		if (digest != pdu->pdu.HeaderDigest) {
 			DEBOUT(("Header Digest Error: comp = %08x, rx = %08x\n",
 					digest, pdu->pdu.HeaderDigest));
+#ifdef ISCSI_TEST_MODE
+			test_mode_rx(conn, pdu, TEST_INVALID_HEADER_CRC);
+#endif
 			/* try to skip to next PDU */
 			try_resynch_receive(conn);
 			free_pdu(pdu);
 			return 0;
 		}
 	}
-
-	DEBC(conn, 10, ("Received PDU StatSN=%u, ExpCmdSN=%u MaxCmdSN=%u ExpDataSN=%u\n",
-	     ntohl(pdu->pdu.p.response.StatSN),
-	     ntohl(pdu->pdu.p.response.ExpCmdSN),
-	     ntohl(pdu->pdu.p.response.MaxCmdSN),
-	     ntohl(pdu->pdu.p.response.ExpDataSN)));
 
 	req_ccb = ccb_from_itt(conn, pdu->pdu.InitiatorTaskTag);
 
@@ -1072,10 +1046,18 @@ receive_pdu(connection_t *conn, pdu_t *pdu)
 			("Received Data in PDU - CCB = %p, Datalen = %d, Offset = %d\n",
 			req_ccb, dsl, offset));
 
+		PERF_SNAPC(req_ccb, PERF_BEGIN_PDURCVDATA);
 		rc = read_pdu_data(pdu, req_ccb->data_ptr, offset);
+		PERF_SNAP(req_ccb, PERF_END_PDURCVDATA);
 	} else {
 		rc = read_pdu_data(pdu, NULL, 0);
 	}
+#ifdef ISCSI_TEST_MODE
+	if (test_mode_rx(conn, pdu, rc)) {
+		free_pdu(pdu);
+		return rc;
+	}
+#endif
 	if (!rc && (conn->state <= ST_WINDING_DOWN ||
 		(pdu->pdu.Opcode & OPCODE_MASK) == TOP_Logout_Response)) {
 
@@ -1133,26 +1115,48 @@ receive_pdu(connection_t *conn, pdu_t *pdu)
 		return rc;
 
 	/* MaxCmdSN and ExpCmdSN are in the same place in all received PDUs */
-	ExpCmdSN = ntohl(pdu->pdu.p.nop_in.ExpCmdSN);
+	sess->ExpCmdSN = max(sess->ExpCmdSN, ntohl(pdu->pdu.p.nop_in.ExpCmdSN));
 	MaxCmdSN = ntohl(pdu->pdu.p.nop_in.MaxCmdSN);
 
 	/* received a valid frame, reset timeout */
-	if ((pdu->pdu.Opcode & OPCODE_MASK) == TOP_NOP_In &&
-	    TAILQ_EMPTY(&conn->ccbs_waiting))
-		connection_timeout_start(conn, conn->idle_timeout_val);
-	else
-		connection_timeout_start(conn, CONNECTION_TIMEOUT);
+
+	SET_CONN_TIMEOUT(conn,
+			(((pdu->pdu.Opcode & OPCODE_MASK) == TOP_NOP_In) &&
+			(TAILQ_FIRST(&conn->ccbs_waiting) == NULL)) ?
+			conn->idle_timeout_val : CONNECTION_TIMEOUT);
 	conn->num_timeouts = 0;
 
-	/* Update session window */
-	mutex_enter(&sess->lock);
-	if (sn_a_le_b(ExpCmdSN - 1, MaxCmdSN)) {
-		if (sn_a_lt_b(sess->ExpCmdSN, ExpCmdSN))
-			sess->ExpCmdSN = ExpCmdSN;
-		if (sn_a_lt_b(sess->MaxCmdSN, MaxCmdSN))
-			sess->MaxCmdSN = MaxCmdSN;
+	/*
+	 * Un-throttle - wakeup all CCBs waiting for MaxCmdSN to increase.
+	 * We have to handle wait/nowait CCBs a bit differently.
+	 */
+	if (MaxCmdSN != sess->MaxCmdSN) {
+		sess->MaxCmdSN = MaxCmdSN;
+		if (TAILQ_FIRST(&sess->ccbs_throttled) == NULL)
+			return 0;
+
+		DEBC(conn, 1, ("Unthrottling - MaxCmdSN = %d\n", MaxCmdSN));
+
+		s = splbio();
+		TAILQ_INIT(&waiting);
+		while ((req_ccb = TAILQ_FIRST(&sess->ccbs_throttled)) != NULL) {
+			throttle_ccb(req_ccb, FALSE);
+			TAILQ_INSERT_TAIL(&waiting, req_ccb, chain);
+		}
+		splx(s);
+
+		while ((req_ccb = TAILQ_FIRST(&waiting)) != NULL) {
+			TAILQ_REMOVE(&waiting, req_ccb, chain);
+
+			DEBC(conn, 1, ("Unthrottling - ccb = %p, disp = %d\n",
+					req_ccb, req_ccb->disp));
+
+			if (req_ccb->flags & CCBF_WAITING)
+				wakeup(req_ccb);
+			else
+				send_command(req_ccb, req_ccb->disp, FALSE, FALSE);
+		}
 	}
-	mutex_exit(&sess->lock);
 
 	return 0;
 }
@@ -1177,11 +1181,6 @@ iscsi_rcv_thread(void *par)
 	do {
 		while (!conn->terminating) {
 			pdu = get_pdu(conn, TRUE);
-			if (pdu == NULL) {
-				KASSERT(conn->terminating);
-				break;
-			}
-
 			pdu->uio.uio_iov = pdu->io_vec;
 			UIO_SETUP_SYSSPACE(&pdu->uio);
 			pdu->uio.uio_iovcnt = 1;
@@ -1215,11 +1214,9 @@ iscsi_rcv_thread(void *par)
 				break;
 			}
 		}
-		mutex_enter(&conn->lock);
 		if (!conn->destroy) {
-			cv_timedwait(&conn->idle_cv, &conn->lock, CONNECTION_IDLE_TIMEOUT);
+			tsleep(conn, PRIBIO, "conn_idle", 30 * hz);
 		}
-		mutex_exit(&conn->lock);
 	} while (!conn->destroy);
 
 	conn->rcvproc = NULL;

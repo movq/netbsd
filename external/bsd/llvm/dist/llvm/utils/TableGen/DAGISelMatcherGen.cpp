@@ -220,7 +220,7 @@ void MatcherGen::EmitLeafMatchCode(const TreePatternNode *N) {
   }
 
   // An UnsetInit represents a named node without any constraints.
-  if (isa<UnsetInit>(N->getLeafValue())) {
+  if (N->getLeafValue() == UnsetInit::get()) {
     assert(N->hasName() && "Unnamed ? leaf");
     return;
   }
@@ -268,10 +268,8 @@ void MatcherGen::EmitLeafMatchCode(const TreePatternNode *N) {
     // We can't model ComplexPattern uses that don't have their name taken yet.
     // The OPC_CheckComplexPattern operation implicitly records the results.
     if (N->getName().empty()) {
-      std::string S;
-      raw_string_ostream OS(S);
-      OS << "We expect complex pattern uses to have names: " << *N;
-      PrintFatalError(OS.str());
+      errs() << "We expect complex pattern uses to have names: " << *N << "\n";
+      exit(1);
     }
 
     // Remember this ComplexPattern so that we can emit it after all the other

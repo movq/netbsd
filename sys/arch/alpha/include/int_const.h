@@ -1,4 +1,4 @@
-/*	$NetBSD: int_const.h,v 1.4 2014/08/13 22:51:58 matt Exp $	*/
+/*	$NetBSD: int_const.h,v 1.3 2010/05/29 17:33:57 tnozaki Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -32,9 +32,6 @@
 #ifndef _ALPHA_INT_CONST_H_
 #define _ALPHA_INT_CONST_H_
 
-#ifdef __INTMAX_C_SUFFIX__
-#include <sys/common_int_const.h>
-#else
 /*
  * 7.18.4 Macros for integer constants
  */
@@ -55,7 +52,5 @@
 
 #define	INTMAX_C(c)	c ## L
 #define	UINTMAX_C(c)	c ## UL
-
-#endif /* !__INTMAX_C_SUFFIX__ */
 
 #endif /* !_ALPHA_INT_CONST_H_ */

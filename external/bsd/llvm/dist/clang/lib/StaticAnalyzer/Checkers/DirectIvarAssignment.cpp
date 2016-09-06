@@ -41,12 +41,13 @@ namespace {
 /// Checks for the init, dealloc, and any other functions that might be allowed
 /// to perform direct instance variable assignment based on their name.
 static bool DefaultMethodFilter(const ObjCMethodDecl *M) {
-  return M->getMethodFamily() == OMF_init ||
-         M->getMethodFamily() == OMF_dealloc ||
-         M->getMethodFamily() == OMF_copy ||
-         M->getMethodFamily() == OMF_mutableCopy ||
-         M->getSelector().getNameForSlot(0).find("init") != StringRef::npos ||
-         M->getSelector().getNameForSlot(0).find("Init") != StringRef::npos;
+  if (M->getMethodFamily() == OMF_init || M->getMethodFamily() == OMF_dealloc ||
+      M->getMethodFamily() == OMF_copy ||
+      M->getMethodFamily() == OMF_mutableCopy ||
+      M->getSelector().getNameForSlot(0).find("init") != StringRef::npos ||
+      M->getSelector().getNameForSlot(0).find("Init") != StringRef::npos)
+    return true;
+  return false;
 }
 
 class DirectIvarAssignment :
@@ -77,9 +78,9 @@ class DirectIvarAssignment :
     void VisitBinaryOperator(const BinaryOperator *BO);
 
     void VisitChildren(const Stmt *S) {
-      for (const Stmt *Child : S->children())
-        if (Child)
-          this->Visit(Child);
+      for (Stmt::const_child_range I = S->children(); I; ++I)
+        if (*I)
+         this->Visit(*I);
     }
   };
 

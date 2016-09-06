@@ -1,4 +1,4 @@
-/*	$NetBSD: arp.c,v 1.55 2016/04/04 07:37:08 ozaki-r Exp $ */
+/*	$NetBSD: arp.c,v 1.51 2013/06/07 17:18:33 christos Exp $ */
 
 /*
  * Copyright (c) 1984, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1984, 1993\
 #if 0
 static char sccsid[] = "@(#)arp.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: arp.c,v 1.55 2016/04/04 07:37:08 ozaki-r Exp $");
+__RCSID("$NetBSD: arp.c,v 1.51 2013/06/07 17:18:33 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -76,8 +76,6 @@ __RCSID("$NetBSD: arp.c,v 1.55 2016/04/04 07:37:08 ozaki-r Exp $");
 #include <unistd.h>
 #include <ifaddrs.h>
 
-#include "prog_ops.h"
-
 static int is_llinfo(const struct sockaddr_dl *, int);
 static int delete(const char *, const char *);
 static void dump(uint32_t);
@@ -88,14 +86,15 @@ static int atosdl(const char *s, struct sockaddr_dl *sdl);
 static int file(const char *);
 static void get(const char *);
 static int getinetaddr(const char *, struct in_addr *);
-static int getsocket(void);
-static struct rt_msghdr *
-	rtmsg(const int, const int, const struct sockaddr_inarp *,
-	    const struct sockaddr_dl *);
+static void getsocket(void);
+static int rtmsg(int);
 static int set(int, char **);
 static void usage(void) __dead;
 
+static pid_t pid;
 static int aflag, nflag, vflag;
+static int s = -1;
+static struct ifaddrs* ifaddrs = NULL;
 static struct sockaddr_in so_mask = { 
 	.sin_len = 8,
 	.sin_addr = {
@@ -106,12 +105,18 @@ static struct sockaddr_inarp blank_sin = {
 	.sin_len = sizeof(blank_sin),
 	.sin_family = AF_INET
 };
+static struct sockaddr_inarp sin_m;
 static struct sockaddr_dl blank_sdl = {
 	.sdl_len = sizeof(blank_sdl),
 	.sdl_family = AF_LINK
 };
+static struct sockaddr_dl sdl_m;
 
 static int expire_time, flags, export_only, doing_proxy, found_entry;
+static struct {
+	struct	rt_msghdr m_rtm;
+	char	m_space[512];
+} m_rtmsg;
 
 int
 main(int argc, char **argv)
@@ -120,6 +125,8 @@ main(int argc, char **argv)
 	int op = 0;
 
 	setprogname(argv[0]);
+
+	pid = getpid();
 
 	while ((ch = getopt(argc, argv, "andsfv")) != -1)
 		switch((char)ch) {
@@ -147,9 +154,6 @@ main(int argc, char **argv)
 
 	if (!op && aflag)
 		op = 'a';
-
-	if (prog_init && prog_init() == -1)
-		err(1, "init failed");
 
 	switch((char)op) {
 	case 'a':
@@ -223,14 +227,14 @@ file(const char *name)
 	return retval;
 }
 
-static int
+static void
 getsocket(void)
 {
-	int s;
-	s = prog_socket(PF_ROUTE, SOCK_RAW, 0);
+	if (s >= 0)
+		return;
+	s = socket(PF_ROUTE, SOCK_RAW, 0);
 	if (s < 0)
 		err(1, "socket");
-	return s;
 }
 
 static int
@@ -263,20 +267,21 @@ static int
 set(int argc, char **argv)
 {
 	struct sockaddr_inarp *sina;
-	struct sockaddr_dl *sdl = NULL;
+	struct sockaddr_dl *sdl;
 	struct rt_msghdr *rtm;
 	char *host = argv[0], *eaddr;
-	struct sockaddr_inarp sin_m = blank_sin; /* struct copy */
-	struct sockaddr_dl sdl_m = blank_sdl; /* struct copy */
-	int s;
+	int rval;
 
+	sina = &sin_m;
+	rtm = &(m_rtmsg.m_rtm);
 	eaddr = argv[1];
 
-	s = getsocket();
+	getsocket();
 	argc -= 2;
 	argv += 2;
-
-	if (getinetaddr(host, &sin_m.sin_addr) == -1)
+	sdl_m = blank_sdl;		/* struct copy */
+	sin_m = blank_sin;		/* struct copy */
+	if (getinetaddr(host, &sina->sin_addr) == -1)
 		return (1);
 	if (atosdl(eaddr, &sdl_m))
 		warnx("invalid link-level address '%s'", eaddr);
@@ -289,7 +294,7 @@ set(int argc, char **argv)
 		}
 		else if (strncmp(argv[0], "pub", 3) == 0) {
 			flags |= RTF_ANNOUNCE;
-			doing_proxy = 1;
+			doing_proxy = SIN_PROXY;
 			if (argc && strncmp(argv[1], "pro", 3) == 0) {
 			        export_only = 1;
 			        argc--; argv++;
@@ -309,9 +314,10 @@ set(int argc, char **argv)
 		}
 
 	}
+	if (memcmp(&sdl_m, &blank_sdl, sizeof(blank_sdl)))
+		goto out;
 tryagain:
-	rtm = rtmsg(s, RTM_GET, &sin_m, &sdl_m);
-	if (rtm == NULL) {
+	if (rtmsg(RTM_GET) < 0) {
 		warn("%s", host);
 		return (1);
 	}
@@ -341,13 +347,11 @@ overwrite:
 	}
 	sdl_m.sdl_type = sdl->sdl_type;
 	sdl_m.sdl_index = sdl->sdl_index;
-	sin_m.sin_other = 0;
-	if (doing_proxy && export_only)
-		sin_m.sin_other = SIN_PROXY;
-	rtm = rtmsg(s, RTM_ADD, &sin_m, &sdl_m);
+out:
+	rval = rtmsg(RTM_ADD);
 	if (vflag)
 		(void)printf("%s (%s) added\n", host, eaddr);
-	return (rtm == NULL) ? 1 : 0;
+	return (rval);
 }
 
 /*
@@ -356,13 +360,15 @@ overwrite:
 static void
 get(const char *host)
 {
-	struct sockaddr_inarp sin = blank_sin; /* struct copy */
+	struct sockaddr_inarp *sina;
 
-	if (getinetaddr(host, &sin.sin_addr) == -1)
+	sina = &sin_m;
+	sin_m = blank_sin;		/* struct copy */
+	if (getinetaddr(host, &sina->sin_addr) == -1)
 		exit(1);
-	dump(sin.sin_addr.s_addr);
+	dump(sina->sin_addr.s_addr);
 	if (found_entry == 0)
-		errx(1, "%s (%s) -- no entry", host, inet_ntoa(sin.sin_addr));
+		errx(1, "%s (%s) -- no entry", host, inet_ntoa(sina->sin_addr));
 }
 
 
@@ -370,7 +376,7 @@ static int
 is_llinfo(const struct sockaddr_dl *sdl, int rtflags)
 {
 	if (sdl->sdl_family != AF_LINK ||
-	    (rtflags & (RTF_LLDATA|RTF_GATEWAY)) != RTF_LLDATA)
+	    (rtflags & (RTF_LLINFO|RTF_GATEWAY)) != RTF_LLINFO)
 		return 0;
 
 	switch (sdl->sdl_type) {
@@ -393,20 +399,20 @@ int
 delete(const char *host, const char *info)
 {
 	struct sockaddr_inarp *sina;
-	struct sockaddr_dl *sdl;
 	struct rt_msghdr *rtm;
-	struct sockaddr_inarp sin_m = blank_sin; /* struct copy */
-	struct sockaddr_dl sdl_m = blank_sdl; /* struct copy */
-	int s;
+	struct sockaddr_dl *sdl;
 
-	s = getsocket();
+	sina = &sin_m;
+	rtm = &m_rtmsg.m_rtm;
+
+	getsocket();
+	sin_m = blank_sin;		/* struct copy */
 	if (info && strncmp(info, "pro", 3) == 0)
-		 sin_m.sin_other = SIN_PROXY;
-	if (getinetaddr(host, &sin_m.sin_addr) == -1)
+		 sina->sin_other = SIN_PROXY;
+	if (getinetaddr(host, &sina->sin_addr) == -1)
 		return (1);
 tryagain:
-	rtm = rtmsg(s, RTM_GET, &sin_m, &sdl_m);
-	if (rtm == NULL) {
+	if (rtmsg(RTM_GET) < 0) {
 		warn("%s", host);
 		return (1);
 	}
@@ -428,12 +434,11 @@ delete:
 		(void)warnx("cannot locate %s", host);
 		return (1);
 	}
-	rtm = rtmsg(s, RTM_DELETE, &sin_m, sdl);
-	if (rtm == NULL)
+	if (rtmsg(RTM_DELETE)) 
 		return (1);
 	if (vflag)
 		(void)printf("%s (%s) deleted\n", host,
-		    inet_ntoa(sin_m.sin_addr));
+		    inet_ntoa(sina->sin_addr));
 	return (0);
 }
 
@@ -458,14 +463,14 @@ dump(uint32_t addr)
 	mib[2] = 0;
 	mib[3] = AF_INET;
 	mib[4] = NET_RT_FLAGS;
-	mib[5] = 0;
-	if (prog_sysctl(mib, 6, NULL, &needed, NULL, 0) < 0)
+	mib[5] = RTF_LLINFO;
+	if (sysctl(mib, 6, NULL, &needed, NULL, 0) < 0)
 		err(1, "route-sysctl-estimate");
 	if (needed == 0)
 		return;
 	if ((buf = malloc(needed)) == NULL)
 		err(1, "malloc");
-	if (prog_sysctl(mib, 6, buf, &needed, NULL, 0) < 0)
+	if (sysctl(mib, 6, buf, &needed, NULL, 0) < 0)
 		err(1, "actual retrieval of routing table");
 	lim = buf + needed;
 	for (next = buf; next < lim; next += rtm->rtm_msglen) {
@@ -533,14 +538,14 @@ delete_all(void)
 	mib[2] = 0;
 	mib[3] = AF_INET;
 	mib[4] = NET_RT_FLAGS;
-	mib[5] = 0;
-	if (prog_sysctl(mib, 6, NULL, &needed, NULL, 0) < 0)
+	mib[5] = RTF_LLINFO;
+	if (sysctl(mib, 6, NULL, &needed, NULL, 0) < 0)
 		err(1, "route-sysctl-estimate");
 	if (needed == 0)
 		return;
 	if ((buf = malloc(needed)) == NULL)
 		err(1, "malloc");
-	if (prog_sysctl(mib, 6, buf, &needed, NULL, 0) < 0)
+	if (sysctl(mib, 6, buf, &needed, NULL, 0) < 0)
 		err(1, "actual retrieval of routing table");
 	lim = buf + needed;
 	for (next = buf; next < lim; next += rtm->rtm_msglen) {
@@ -614,29 +619,20 @@ usage(void)
 	exit(1);
 }
 
-static struct rt_msghdr *
-rtmsg(const int s, const int cmd, const struct sockaddr_inarp *sin,
-    const struct sockaddr_dl *sdl)
+static int
+rtmsg(int cmd)
 {
 	static int seq;
 	struct rt_msghdr *rtm;
 	char *cp;
 	int l;
-	static struct {
-		struct	rt_msghdr m_rtm;
-		char	m_space[512];
-	} m_rtmsg;
-	pid_t pid;
 
 	rtm = &m_rtmsg.m_rtm;
 	cp = m_rtmsg.m_space;
 	errno = 0;
 
-	/* XXX depends on rtm is filled by RTM_GET */
-	if (cmd == RTM_DELETE) {
-		rtm->rtm_flags |= RTF_LLDATA;
+	if (cmd == RTM_DELETE)
 		goto doit;
-	}
 	(void)memset(&m_rtmsg, 0, sizeof(m_rtmsg));
 	rtm->rtm_flags = flags;
 	rtm->rtm_version = RTM_VERSION;
@@ -649,29 +645,30 @@ rtmsg(const int s, const int cmd, const struct sockaddr_inarp *sin,
 		rtm->rtm_addrs |= RTA_GATEWAY;
 		rtm->rtm_rmx.rmx_expire = expire_time;
 		rtm->rtm_inits = RTV_EXPIRE;
-		rtm->rtm_flags |= (RTF_HOST | RTF_STATIC | RTF_LLDATA);
+		rtm->rtm_flags |= (RTF_HOST | RTF_STATIC);
+		sin_m.sin_other = 0;
 		if (doing_proxy) {
-			if (!export_only) {
+			if (export_only)
+				sin_m.sin_other = SIN_PROXY;
+			else {
 				rtm->rtm_addrs |= RTA_NETMASK;
 				rtm->rtm_flags &= ~RTF_HOST;
 			}
 		}
-		rtm->rtm_addrs |= RTA_DST;
-		break;
+		/* FALLTHROUGH */
 	case RTM_GET:
-		rtm->rtm_flags |= RTF_LLDATA;
-		rtm->rtm_addrs |= RTA_DST | RTA_IFP;
+		rtm->rtm_addrs |= RTA_DST;
 	}
 
 #define NEXTADDR(w, s) \
 	if (rtm->rtm_addrs & (w)) { \
 		(void)memcpy(cp, &s, \
-		    (size_t)((const struct sockaddr *)&s)->sa_len); \
-		RT_ADVANCE(cp, ((const struct sockaddr *)&s)); \
+		(size_t)((struct sockaddr *)(void *)&s)->sa_len); \
+		RT_ADVANCE(cp, ((struct sockaddr *)(void *)&s)); \
 	}
 
-	NEXTADDR(RTA_DST, *sin);
-	NEXTADDR(RTA_GATEWAY, *sdl);
+	NEXTADDR(RTA_DST, sin_m);
+	NEXTADDR(RTA_GATEWAY, sdl_m);
 	NEXTADDR(RTA_NETMASK, so_mask);
 
 	rtm->rtm_msglen = cp - (char *)(void *)&m_rtmsg;
@@ -679,20 +676,18 @@ doit:
 	l = rtm->rtm_msglen;
 	rtm->rtm_seq = ++seq;
 	rtm->rtm_type = cmd;
-	if (prog_write(s, &m_rtmsg, (size_t)l) < 0) {
+	if (write(s, &m_rtmsg, (size_t)l) < 0) {
 		if (errno != ESRCH || cmd != RTM_DELETE) {
 			warn("writing to routing socket");
-			return NULL;
+			return (-1);
 		}
 	}
-
-	pid = prog_getpid();
 	do {
-		l = prog_read(s, &m_rtmsg, sizeof(m_rtmsg));
+		l = read(s, &m_rtmsg, sizeof(m_rtmsg));
 	} while (l > 0 && (rtm->rtm_seq != seq || rtm->rtm_pid != pid));
 	if (l < 0)
 		warn("read from routing socket");
-	return rtm;
+	return (0);
 }
 
 static int
@@ -716,7 +711,6 @@ getifname(u_int16_t ifindex, char *ifname, size_t l)
 	int i;
 	struct ifaddrs *addr;
 	const struct sockaddr_dl *sdl = NULL;
-	static struct ifaddrs* ifaddrs = NULL;
 
 	if (ifaddrs == NULL) {
 		i = getifaddrs(&ifaddrs);

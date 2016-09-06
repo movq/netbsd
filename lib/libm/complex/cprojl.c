@@ -1,4 +1,4 @@
-/*	$NetBSD: cprojl.c,v 1.7 2014/10/10 00:48:18 christos Exp $	*/
+/*	$NetBSD: cprojl.c,v 1.6.20.1 2014/10/13 19:34:58 martin Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -26,7 +26,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: cprojl.c,v 1.7 2014/10/10 00:48:18 christos Exp $");
+__RCSID("$NetBSD: cprojl.c,v 1.6.20.1 2014/10/13 19:34:58 martin Exp $");
 
 #include <complex.h>
 #include <math.h>

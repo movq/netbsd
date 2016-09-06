@@ -1,6 +1,6 @@
 #   Copyright (C) 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
-#   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012,
-#   2014, 2015 Free Software Foundation, Inc.
+#   2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2010, 2011, 2012
+#   Free Software Foundation, Inc.
 #
 # This file is free software; you can redistribute it and/or modify it
 # under the terms of the GNU General Public License as published by
@@ -29,6 +29,7 @@ m4_include([ltsugar.m4])
 m4_include([ltversion.m4])
 m4_include([lt~obsolete.m4])
 m4_include([config/isl.m4])
+m4_include([config/cloog.m4])
 
 AC_INIT(move-if-change)
 AC_PREREQ(2.64)
@@ -125,14 +126,14 @@ extra_host_args=
 # these library is used by various programs built for the build
 # environment
 #
-build_libs="build-libiberty build-libcpp"
+build_libs="build-libiberty"
 
 # these tools are built for the build environment
 build_tools="build-texinfo build-flex build-bison build-m4 build-fixincludes"
 
 # these libraries are used by various programs built for the host environment
-#f
-host_libs="intl libiberty opcodes bfd readline tcl tk itcl libgui zlib libbacktrace libcpp libdecnumber gmp mpfr mpc isl libelf libiconv"
+#
+host_libs="intl libiberty opcodes bfd readline tcl tk itcl libgui zlib libbacktrace libcpp libdecnumber gmp mpfr mpc isl cloog libelf libiconv"
 
 # these tools are built for the host environment
 # Note, the powerpc-eabi build depends on sim occurring before gdb in order to
@@ -140,7 +141,7 @@ host_libs="intl libiberty opcodes bfd readline tcl tk itcl libgui zlib libbacktr
 # binutils, gas and ld appear in that order because it makes sense to run
 # "make check" in that particular order.
 # If --enable-gold is used, "gold" may replace "ld".
-host_tools="flex bison binutils gas ld fixincludes gcc cgen sid sim gdb gprof etc expect dejagnu m4 utils guile fastjar gnattools libcc1 gotools"
+host_tools="flex bison binutils gas ld fixincludes gcc cgen sid sim gdb gprof etc expect dejagnu m4 utils guile fastjar gnattools"
 
 # libgcj represents the runtime libraries only used by gcj.
 libgcj="target-libffi \
@@ -156,13 +157,11 @@ target_libraries="target-libgcc \
 		target-newlib \
 		target-libgomp \
 		target-libcilkrts \
-		target-liboffloadmic \
 		target-libatomic \
 		target-libitm \
 		target-libstdc++-v3 \
 		target-libsanitizer \
 		target-libvtv \
-		target-libmpx \
 		target-libssp \
 		target-libquadmath \
 		target-libgfortran \
@@ -245,8 +244,6 @@ if test x$with_gnu_as = xno ; then
 fi
 
 use_included_zlib=
-AC_ARG_WITH(system-zlib,
-[AS_HELP_STRING([--with-system-zlib], [use installed libz])])
 # Make sure we don't let ZLIB be added if we didn't want it.
 if test x$with_system_zlib = xyes ; then
   use_included_zlib=no
@@ -288,22 +285,6 @@ case ${with_newlib} in
   no) skipdirs="${skipdirs} target-newlib" ;;
   yes) skipdirs=`echo " ${skipdirs} " | sed -e 's/ target-newlib / /'` ;;
 esac
-
-AC_ARG_ENABLE(as-accelerator-for,
-[AS_HELP_STRING([--enable-as-accelerator-for=ARG],
-		[build as offload target compiler.
-		Specify offload host triple by ARG])])
-
-AC_ARG_ENABLE(offload-targets,
-[AS_HELP_STRING([--enable-offload-targets=LIST],
-		[enable offloading to devices from comma-separated LIST of
-		TARGET[=DIR]. Use optional path to find offload target compiler
-		during the build])],
-[
-  if test x"$enable_offload_targets" = x; then
-    AC_MSG_ERROR([no offload targets specified])
-  fi
-], [enable_offload_targets=])
 
 # Handle --enable-gold, --enable-ld.
 # --disable-gold [--enable-ld]
@@ -350,8 +331,7 @@ case "${ENABLE_GOLD}" in
     if test "$is_elf" = "yes"; then
       # Check for target supported by gold.
       case "${target}" in
-        i?86-*-* | x86_64-*-* | sparc*-*-* | powerpc*-*-* | arm*-*-* \
-        | aarch64*-*-* | tilegx*-*-*)
+        i?86-*-* | x86_64-*-* | sparc*-*-* | powerpc*-*-* | arm*-*-* | tilegx*-*-*)
 	  configdirs="$configdirs gold"
 	  if test x${ENABLE_GOLD} = xdefault; then
 	    default_ld=gold
@@ -455,44 +435,8 @@ AS_HELP_STRING([--disable-libstdcxx],
 ENABLE_LIBSTDCXX=$enableval,
 ENABLE_LIBSTDCXX=default)
 [if test "${ENABLE_LIBSTDCXX}" = "no" ; then
-  noconfigdirs="$noconfigdirs target-libstdc++-v3"
+  noconfigdirs="$noconfigdirs libstdc++-v3"
 fi]
-
-# If this is accelerator compiler and its target is intelmic we enable
-# target liboffloadmic by default.  If this is compiler with offloading
-# for intelmic we enable host liboffloadmic by default.  Otherwise
-# liboffloadmic is disabled by default.
-AC_ARG_ENABLE([liboffloadmic],
-AC_HELP_STRING([[--enable-liboffloadmic[=ARG]]],
-	       [build liboffloadmic @<:@ARG={no,host,target}@:>@]),
-[case "$enableval" in
-  no | host | target)
-    enable_liboffloadmic=$enableval ;;
-  *)
-    AC_MSG_ERROR([--enable-liboffloadmic=no/host/target]) ;;
-esac],
-[if test x"$enable_as_accelerator_for" != x; then
-  case "${target}" in
-    *-intelmic-* | *-intelmicemul-*)
-      enable_liboffloadmic=target
-      extra_liboffloadmic_configure_flags="--enable-liboffloadmic=target"
-      ;;
-    *)
-      enable_liboffloadmic=no
-      ;;
-  esac
-else
-  case "${enable_offload_targets}" in
-    *-intelmic-* | *-intelmicemul-*)
-      enable_liboffloadmic=host
-      extra_liboffloadmic_configure_flags="--enable-liboffloadmic=host"
-      ;;
-    *)
-      enable_liboffloadmic=no
-      ;;
-    esac
-fi])
-AC_SUBST(extra_liboffloadmic_configure_flags)
 
 # Save it here so that, even in case of --enable-libgcj, if the Java
 # front-end isn't enabled, we still get libgcj disabled.
@@ -579,22 +523,6 @@ if test -d ${srcdir}/libcilkrts; then
     fi
 fi
 
-# Disable liboffloadmic on unsupported systems.
-if test -d ${srcdir}/liboffloadmic; then
-    if test x$enable_liboffloadmic != xno; then
-	AC_MSG_CHECKING([for liboffloadmic support])
-	if (srcdir=${srcdir}/liboffloadmic; \
-		. ${srcdir}/configure.tgt; \
-		test -n "$UNSUPPORTED")
-	then
-	    AC_MSG_RESULT([no])
-	    noconfigdirs="$noconfigdirs target-liboffloadmic"
-	else
-	    AC_MSG_RESULT([yes])
-	fi
-    fi
-fi
-
 # Disable libitm on unsupported systems.
 if test -d ${srcdir}/libitm; then
     if test x$enable_libitm = x; then
@@ -643,27 +571,6 @@ if test -d ${srcdir}/libvtv; then
     fi
 fi
 
-
-# Enable libmpx on supported systems by request.
-if test -d ${srcdir}/libmpx; then
-    if test x$enable_libmpx = xyes; then
-       AC_MSG_CHECKING([for libmpx support])
-       if (srcdir=${srcdir}/libmpx; \
-               . ${srcdir}/configure.tgt; \
-               test "$LIBMPX_SUPPORTED" != "yes")
-       then
-           AC_MSG_RESULT([no])
-           noconfigdirs="$noconfigdirs target-libmpx"
-       else
-           AC_MSG_RESULT([yes])
-       fi
-    else
-       noconfigdirs="$noconfigdirs target-libmpx"
-    fi
-fi
-
-
-
 # Disable libquadmath for some systems.
 case "${target}" in
   avr-*-*)
@@ -689,10 +596,6 @@ case "${target}" in
     # libssp uses a misaligned load to trigger a fault, but the RL78
     # doesn't fault for those - instead, it gives a build-time error
     # for explicit misaligned loads.
-    noconfigdirs="$noconfigdirs target-libssp"
-    ;;
-  visium-*-*)
-    # No hosted I/O support.
     noconfigdirs="$noconfigdirs target-libssp"
     ;;
 esac
@@ -807,9 +710,6 @@ case "${target}" in
   alpha*-*-*vms*)
     noconfigdirs="$noconfigdirs ${libgcj}"
     ;;
-  arm*-*-freebsd*)
-    noconfigdirs="$noconfigdirs ${libgcj}"
-    ;;
   arm-wince-pe)
     noconfigdirs="$noconfigdirs ${libgcj}"
     ;;
@@ -866,20 +766,9 @@ case "${target}" in
   rs6000-*-aix*)
     noconfigdirs="$noconfigdirs ${libgcj}"
     ;;
-  ft32-*-*)
-    noconfigdirs="$noconfigdirs ${libgcj}"
-    ;;
   *-*-lynxos*)
     noconfigdirs="$noconfigdirs ${libgcj}"
-    ;;
-esac
-
-# Disable the go frontend on systems where it is known to not work. Please keep
-# this in sync with contrib/config-list.mk.
-case "${target}" in
-*-*-darwin* | *-*-cygwin* | *-*-mingw* | *-*-aix*)
-    unsupported_languages="$unsupported_languages go"
-    ;;
+    ;; 
 esac
 
 # Disable libgo for some systems where it is known to not work.
@@ -1042,10 +931,6 @@ case "${target}" in
     ;;
   *-*-rtems*)
     noconfigdirs="$noconfigdirs target-libgloss"
-    # this is not caught below because this stanza matches earlier
-    case $target in
-      or1k*-*-*) noconfigdirs="$noconfigdirs gdb" ;;
-    esac
     ;;
     # The tpf target doesn't support gdb yet.
   *-*-tpf*)
@@ -1102,11 +987,8 @@ case "${target}" in
   fr30-*-elf*)
     noconfigdirs="$noconfigdirs gdb"
     ;;
-  ft32-*-*)
-    noconfigdirs="$noconfigdirs target-rda gprof"
-    ;;
   moxie-*-*)
-    noconfigdirs="$noconfigdirs"
+    noconfigdirs="$noconfigdirs gprof"
     ;;
   h8300*-*-*)
     noconfigdirs="$noconfigdirs target-libgloss"
@@ -1116,12 +998,6 @@ case "${target}" in
     ;;
   hppa1.1-*-osf* | hppa1.1-*-bsd* )
     ;;
-  hppa*64*-*-hpux*)
-    noconfigdirs="$noconfigdirs gdb"
-    ;;
-  hppa*-*-hpux11*)
-    noconfigdirs="$noconfigdirs gdb ld"
-    ;;
   hppa*64*-*-linux*)
     ;;
   hppa*-*-linux*)
@@ -1130,6 +1006,9 @@ case "${target}" in
   hppa*-*-lites* | \
   hppa*-*-openbsd* | \
   hppa*64*-*-*)
+    ;;
+  hppa*-hp-hpux11*)
+    noconfigdirs="$noconfigdirs ld"
     ;;
   hppa*-*-pro*)
     ;;
@@ -1145,7 +1024,7 @@ case "${target}" in
     ;;
   ia64*-**-hpux*)
     # No ld support yet.
-    noconfigdirs="$noconfigdirs gdb libgui itcl ld"
+    noconfigdirs="$noconfigdirs libgui itcl ld"
     ;;
   ia64*-*-*vms*)
     # No ld support yet.
@@ -1227,7 +1106,7 @@ case "${target}" in
   microblaze*)
     noconfigdirs="$noconfigdirs gprof"
     ;;
-  mips*-sde-elf* | mips*-mti-elf* | mips*-img-elf*)
+  mips*-sde-elf* | mips*-mti-elf*)
     if test x$with_newlib = xyes; then
       noconfigdirs="$noconfigdirs gprof"
     fi
@@ -1250,16 +1129,6 @@ case "${target}" in
   mips*-*-*)
     noconfigdirs="$noconfigdirs gprof"
     ;;
-  nds32*-*-*)
-    noconfigdirs="$noconfigdirs gdb"
-    ;;
-  nvptx*-*-*)
-    # nvptx is just a compiler
-    noconfigdirs="$noconfigdirs target-libssp target-libstdc++-v3 target-libobjc"
-    ;;
-  or1k*-*-*)
-    noconfigdirs="$noconfigdirs gdb"
-    ;;
   sh-*-* | sh64-*-*)
     case "${target}" in
       sh*-*-elf)
@@ -1276,7 +1145,7 @@ case "${target}" in
   tic6x-*-*)
     noconfigdirs="$noconfigdirs sim"
     ;;
-  tilepro*-*-* | tilegx*-*-*)
+  tilepro-*-* | tilegx-*-*)
     noconfigdirs="$noconfigdirs sim"
     ;;
   v810-*-*)
@@ -1755,9 +1624,16 @@ AC_ARG_WITH(boot-ldflags,
  fi])
 AC_SUBST(poststage1_ldflags)
 
-# GCC GRAPHITE dependency ISL.
-# Basic setup is inlined here, actual checks are in config/isl.m4
+# GCC GRAPHITE dependences, ISL and CLOOG which in turn requires ISL.
+# Basic setup is inlined here, actual checks are in config/cloog.m4 and
+# config/isl.m4
 
+AC_ARG_WITH(cloog,
+  [AS_HELP_STRING(
+    [--with-cloog=PATH],
+    [Specify prefix directory for the installed CLooG-ISL package.
+     Equivalent to --with-cloog-include=PATH/include
+     plus --with-cloog-lib=PATH/lib])])
 AC_ARG_WITH(isl,
   [AS_HELP_STRING(
    [--with-isl=PATH],
@@ -1765,29 +1641,59 @@ AC_ARG_WITH(isl,
     Equivalent to --with-isl-include=PATH/include
     plus --with-isl-lib=PATH/lib])])
 
-# Treat --without-isl as a request to disable
+# Treat either --without-cloog or --without-isl as a request to disable
 # GRAPHITE support and skip all following checks.
-if test "x$with_isl" != "xno"; then
+if test "x$with_isl" != "xno" &&
+   test "x$with_cloog" != "xno"; then
   # Check for ISL
   dnl Provide configure switches and initialize islinc & isllibs
   dnl with user input.
   ISL_INIT_FLAGS
   dnl The versions of ISL that work for Graphite
-  ISL_CHECK_VERSION()
+  ISL_CHECK_VERSION(0,10)
+  if test "${gcc_cv_isl}" = no ; then
+    ISL_CHECK_VERSION(0,11)
+    if test "${gcc_cv_isl}" = no ; then
+      ISL_CHECK_VERSION(0,12)
+    fi
+  fi
   dnl Only execute fail-action, if ISL has been requested.
   ISL_IF_FAILED([
     AC_MSG_ERROR([Unable to find a usable ISL.  See config.log for details.])])
+
+  if test "x$gcc_cv_isl" != "xno"; then
+    # Check for CLOOG
+    dnl Provide configure switches and initialize clooginc & clooglibs
+    dnl with user input.
+    CLOOG_INIT_FLAGS
+    dnl The versions of CLooG that work for Graphite.
+    CLOOG_CHECK_VERSION(0,17,0)
+    if test "${gcc_cv_cloog}" = no ; then
+      CLOOG_CHECK_VERSION(0,18,0)
+    fi
+
+    dnl Only execute fail-action, if CLooG has been requested.
+    CLOOG_IF_FAILED([
+      AC_MSG_ERROR([Unable to find a usable CLooG.  See config.log for details.])])
+  fi
 fi
 
-# If the ISL check failed, disable builds of in-tree variant of ISL
+# If either the ISL or the CLooG check failed, disable builds of in-tree
+# variants of both
 if test "x$with_isl" = xno ||
+   test "x$with_cloog" = xno ||
+   test "x$gcc_cv_cloog" = xno ||
    test "x$gcc_cv_isl" = xno; then
-  noconfigdirs="$noconfigdirs isl"
+  noconfigdirs="$noconfigdirs cloog isl"
   islinc=
+  clooginc=
+  clooglibs=
 fi
 
-AC_SUBST(isllibs)
 AC_SUBST(islinc)
+AC_SUBST(clooglibs)
+AC_SUBST(clooginc)
+
 
 # Check for LTO support.
 AC_ARG_ENABLE(lto,
@@ -1824,19 +1730,6 @@ ACX_ELF_TARGET_IFELSE([# ELF platforms build the lto-plugin always.
     *) ;;
   esac
 ])
-
-AC_ARG_ENABLE(linker-plugin-configure-flags,
-  [AS_HELP_STRING([[--enable-linker-plugin-configure-flags=FLAGS]],
-    [additional flags for configuring linker plugins @<:@none@:>@])],
-  extra_linker_plugin_configure_flags=$enableval,
-  extra_linker_plugin_configure_flags=)
-AC_SUBST(extra_linker_plugin_configure_flags)
-AC_ARG_ENABLE(linker-plugin-flags,
-  [AS_HELP_STRING([[--enable-linker-plugin-flags=FLAGS]],
-    [additional flags for configuring and building linker plugins @<:@none@:>@])],
-  extra_linker_plugin_flags=$enableval,
-  extra_linker_plugin_flags=)
-AC_SUBST(extra_linker_plugin_flags)
 
 
 # By default, C and C++ are the only stage 1 languages.
@@ -1938,6 +1831,7 @@ if test -d ${srcdir}/gcc; then
   new_enable_languages=,c,
 
   # If LTO is enabled, add the LTO front end.
+  extra_host_libiberty_configure_flags=
   if test "$enable_lto" = "yes" ; then
     case ,${enable_languages}, in
       *,lto,*) ;;
@@ -1945,16 +1839,10 @@ if test -d ${srcdir}/gcc; then
     esac
     if test "${build_lto_plugin}" = "yes" ; then
       configdirs="$configdirs lto-plugin"
+      extra_host_libiberty_configure_flags=--enable-shared
     fi
   fi
-
-  # If we're building an offloading compiler, add the LTO front end.
-  if test x"$enable_as_accelerator_for" != x ; then
-    case ,${enable_languages}, in
-      *,lto,*) ;;
-      *) enable_languages="${enable_languages},lto" ;;
-    esac
-  fi
+  AC_SUBST(extra_host_libiberty_configure_flags)
 
   missing_languages=`echo ",$enable_languages," | sed -e s/,all,/,/ -e s/,c,/,/ `
   potential_languages=,c,
@@ -2169,19 +2057,11 @@ case ,${enable_languages},:${enable_objc_gc} in
     ;;
 esac
 
-# Disable libcilkrts, libitm, libsanitizer, libvtv, liboffloadmic if we're not building C++
+# Disable libitm, libsanitizer, libvtv if we're not building C++
 case ,${enable_languages}, in
-  *,c++,*)
-    # Disable libcilkrts, libitm, libsanitizer if we're not building libstdc++
-    case "${noconfigdirs}" in
-      *target-libstdc++-v3*)
-        noconfigdirs="$noconfigdirs target-libcilkrts target-libitm target-libsanitizer"
-        ;;
-      *) ;;
-    esac
-    ;;
+  *,c++,*) ;;
   *)
-    noconfigdirs="$noconfigdirs target-libcilkrts target-liboffloadmic target-libitm target-libsanitizer target-libvtv"
+    noconfigdirs="$noconfigdirs target-libcilkrts target-libitm target-libsanitizer target-libvtv"
     ;;
 esac
 
@@ -2252,50 +2132,6 @@ for i in ${target_configdirs_all} ; do
     target_configdirs="${target_configdirs} $i"
   fi
 done
-
-# Exclude target-zlib if target-libjava isn't built.
-case ${target_configdirs} in
-*target-libjava*)
-  ;;
-*)
-  target_configdirs="`echo ${target_configdirs} | sed -e 's/target-zlib//'`"
-  ;;
-esac
-
-# libiberty-linker-plugin is special: it doesn't have its own source directory,
-# so we have to add it after the preceding checks.
-if test x"$extra_linker_plugin_flags$extra_linker_plugin_configure_flags" != x
-then
-  case " $configdirs " in
-    *" libiberty "*)
-      # If we can build libiberty, we can also build libiberty-linker-plugin.
-      configdirs="$configdirs libiberty-linker-plugin"
-      extra_linker_plugin_configure_flags="$extra_linker_plugin_configure_flags \
-        --with-libiberty=../libiberty-linker-plugin";;
-    *)
-      AC_MSG_ERROR([libiberty missing]);;
-  esac
-fi
-
-# Sometimes we have special requirements for the host libiberty.
-extra_host_libiberty_configure_flags=
-extra_host_zlib_configure_flags=
-case " $configdirs " in
-  *" lto-plugin "* | *" libcc1 "*)
-    # When these are to be built as shared libraries, the same applies to
-    # libiberty.
-    extra_host_libiberty_configure_flags=--enable-shared
-    ;;
-  *" bfd "*)
-    # When bfd is to be built as a shared library, the same applies to
-    # zlib.
-    if test "$enable_shared" = "yes"; then
-      extra_host_zlib_configure_flags=--enable-host-shared
-    fi
-    ;;
-esac
-AC_SUBST(extra_host_libiberty_configure_flags)
-AC_SUBST(extra_host_zlib_configure_flags)
 
 # Produce a warning message for the subdirs we can't configure.
 # This isn't especially interesting in the Cygnus tree, but in the individual
@@ -2370,36 +2206,28 @@ AC_SUBST(DEBUG_PREFIX_CFLAGS_FOR_TARGET)
 # gcc) are built with "-O2 -g", so include those options when setting
 # CFLAGS_FOR_TARGET and CXXFLAGS_FOR_TARGET.
 if test "x$CFLAGS_FOR_TARGET" = x; then
-  if test "x${is_cross_compiler}" = xyes; then
-    CFLAGS_FOR_TARGET="-g -O2"
-  else
-    CFLAGS_FOR_TARGET=$CFLAGS
-    case " $CFLAGS " in
-      *" -O2 "*) ;;
-      *) CFLAGS_FOR_TARGET="-O2 $CFLAGS_FOR_TARGET" ;;
-    esac
-    case " $CFLAGS " in
-      *" -g "* | *" -g3 "*) ;;
-      *) CFLAGS_FOR_TARGET="-g $CFLAGS_FOR_TARGET" ;;
-    esac
-  fi
+  CFLAGS_FOR_TARGET=$CFLAGS
+  case " $CFLAGS " in
+    *" -O2 "*) ;;
+    *) CFLAGS_FOR_TARGET="-O2 $CFLAGS_FOR_TARGET" ;;
+  esac
+  case " $CFLAGS " in
+    *" -g "* | *" -g3 "*) ;;
+    *) CFLAGS_FOR_TARGET="-g $CFLAGS_FOR_TARGET" ;;
+  esac
 fi
 AC_SUBST(CFLAGS_FOR_TARGET)
 
 if test "x$CXXFLAGS_FOR_TARGET" = x; then
-  if test "x${is_cross_compiler}" = xyes; then
-    CXXFLAGS_FOR_TARGET="-g -O2"
-  else
-    CXXFLAGS_FOR_TARGET=$CXXFLAGS
-    case " $CXXFLAGS " in
-      *" -O2 "*) ;;
-      *) CXXFLAGS_FOR_TARGET="-O2 $CXXFLAGS_FOR_TARGET" ;;
-    esac
-    case " $CXXFLAGS " in
-      *" -g "* | *" -g3 "*) ;;
-      *) CXXFLAGS_FOR_TARGET="-g $CXXFLAGS_FOR_TARGET" ;;
-    esac
-  fi
+  CXXFLAGS_FOR_TARGET=$CXXFLAGS
+  case " $CXXFLAGS " in
+    *" -O2 "*) ;;
+    *) CXXFLAGS_FOR_TARGET="-O2 $CXXFLAGS_FOR_TARGET" ;;
+  esac
+  case " $CXXFLAGS " in
+    *" -g "* | *" -g3 "*) ;;
+    *) CXXFLAGS_FOR_TARGET="-g $CXXFLAGS_FOR_TARGET" ;;
+  esac
 fi
 AC_SUBST(CXXFLAGS_FOR_TARGET)
 
@@ -2533,7 +2361,7 @@ case "${target}" in
   spu-*-*)
     target_makefile_frag="config/mt-spu"
     ;;
-  mips*-sde-elf* | mips*-mti-elf* | mips*-img-elf*)
+  mips*-sde-elf* | mips*-mti-elf*)
     target_makefile_frag="config/mt-sde"
     ;;
   mipsisa*-*-elfoabi*)
@@ -2541,9 +2369,6 @@ case "${target}" in
     ;;
   mips*-*-*linux* | mips*-*-gnu*)
     target_makefile_frag="config/mt-mips-gnu"
-    ;;
-  nios2-*-elf*)
-    target_makefile_frag="config/mt-nios2-elf"
     ;;
   *-*-linux* | *-*-gnu* | *-*-k*bsd*-gnu | *-*-kopensolaris*-gnu)
     target_makefile_frag="config/mt-gnu"
@@ -2577,7 +2402,7 @@ case "${enable_target_optspace}:${target}" in
   :d30v-*)
     ospace_frag="config/mt-d30v"
     ;;
-  :m32r-* | :d10v-* | :fr30-* | :i?86*-*-elfiamcu)
+  :m32r-* | :d10v-* | :fr30-*)
     ospace_frag="config/mt-ospace"
     ;;
   no:* | :*)
@@ -2647,93 +2472,24 @@ else
   GCC_SHLIB_SUBDIR=
 fi
 
-# Adjust the toplevel makefile according to whether bootstrap was selected.
-case $enable_bootstrap in
-  yes)
-    bootstrap_suffix=bootstrap
-    BUILD_CONFIG=bootstrap-debug
-    ;;
-  no)
-    bootstrap_suffix=no-bootstrap
-    BUILD_CONFIG=
-    ;;
-esac
-
-AC_MSG_CHECKING(for default BUILD_CONFIG)
-
-AC_ARG_WITH([build-config],
-  [AS_HELP_STRING([--with-build-config='NAME NAME2...'],
-		  [use config/NAME.mk build configuration])],
-  [case $with_build_config in
-   yes) with_build_config= ;;
-   no) with_build_config= BUILD_CONFIG= ;;
-   esac])
-
-if test "x${with_build_config}" != x; then
-  BUILD_CONFIG=$with_build_config
-else
-  case $BUILD_CONFIG in
-  bootstrap-debug)
-    if echo "int f (void) { return 0; }" > conftest.c &&
-       ${CC} -c conftest.c &&
-       mv conftest.o conftest.o.g0 &&
-       ${CC} -c -g conftest.c &&
-       mv conftest.o conftest.o.g &&
-       ${srcdir}/contrib/compare-debug conftest.o.g0 conftest.o.g > /dev/null 2>&1; then
-      :
-    else
-      BUILD_CONFIG=
-    fi
-    rm -f conftest.c conftest.o conftest.o.g0 conftest.o.g
-    ;;
-  esac
-fi
-AC_MSG_RESULT($BUILD_CONFIG)
-AC_SUBST(BUILD_CONFIG)
-
-# Use same top-level configure hooks in libgcc/libstdc++/libvtv.
-AC_MSG_CHECKING([for --enable-vtable-verify])
-AC_ARG_ENABLE(vtable-verify,
-[  --enable-vtable-verify    Enable vtable verification feature ],
-[case "$enableval" in
- yes) enable_vtable_verify=yes ;;
- no)  enable_vtable_verify=no ;;
- *)   enable_vtable_verify=no;;
- esac],
-[enable_vtable_verify=no])
-AC_MSG_RESULT($enable_vtable_verify)
-
 # Record target_configdirs and the configure arguments for target and
 # build configuration in Makefile.
 target_configdirs=`echo "${target_configdirs}" | sed -e 's/target-//g'`
 build_configdirs=`echo "${build_configdirs}" | sed -e 's/build-//g'`
-bootstrap_fixincludes=no
 
 # If we are building libgomp, bootstrap it.
 if echo " ${target_configdirs} " | grep " libgomp " > /dev/null 2>&1 ; then
   bootstrap_target_libs=${bootstrap_target_libs}target-libgomp,
 fi
 
-# If we are building libsanitizer and $BUILD_CONFIG contains bootstrap-asan
-# or bootstrap-ubsan, bootstrap it.
-if echo " ${target_configdirs} " | grep " libsanitizer " > /dev/null 2>&1; then
-  case "$BUILD_CONFIG" in
-    *bootstrap-asan* | *bootstrap-ubsan* )
-      bootstrap_target_libs=${bootstrap_target_libs}target-libsanitizer,
-      bootstrap_fixincludes=yes
-      ;;
-  esac
+# If we are building libsanitizer, bootstrap it.
+if echo " ${target_configdirs} " | grep " libsanitizer " > /dev/null 2>&1 ; then
+  bootstrap_target_libs=${bootstrap_target_libs}target-libsanitizer,
 fi
 
-# If we are building libvtv and --enable-vtable-verify, bootstrap it.
-if echo " ${target_configdirs} " | grep " libvtv " > /dev/null 2>&1 &&
-   test "$enable_vtable_verify" != no; then
+# If we are building libvtv, bootstrap it.
+if echo " ${target_configdirs} " | grep " libvtv " > /dev/null 2>&1 ; then
   bootstrap_target_libs=${bootstrap_target_libs}target-libvtv,
-fi
-
-# If we are building libmpx, bootstrap it.
-if echo " ${target_configdirs} " | grep " libmpx " > /dev/null 2>&1; then
-  bootstrap_target_libs=${bootstrap_target_libs}target-libmpx,
 fi
 
 # Determine whether gdb needs tk/tcl or not.
@@ -2785,6 +2541,50 @@ case "$enable_bootstrap:$ENABLE_GOLD: $configdirs :,$stage1_languages," in
     ;;
 esac
 
+# Adjust the toplevel makefile according to whether bootstrap was selected.
+case $enable_bootstrap in
+  yes)
+    bootstrap_suffix=bootstrap
+    BUILD_CONFIG=bootstrap-debug
+    ;;
+  no)
+    bootstrap_suffix=no-bootstrap
+    BUILD_CONFIG=
+    ;;
+esac
+
+AC_MSG_CHECKING(for default BUILD_CONFIG)
+
+AC_ARG_WITH([build-config],
+  [AS_HELP_STRING([--with-build-config='NAME NAME2...'],
+		  [use config/NAME.mk build configuration])],
+  [case $with_build_config in
+   yes) with_build_config= ;;
+   no) with_build_config= BUILD_CONFIG= ;;
+   esac])
+
+if test "x${with_build_config}" != x; then
+  BUILD_CONFIG=$with_build_config
+else
+  case $BUILD_CONFIG in
+  bootstrap-debug)
+    if echo "int f (void) { return 0; }" > conftest.c &&
+       ${CC} -c conftest.c &&
+       mv conftest.o conftest.o.g0 &&
+       ${CC} -c -g conftest.c &&
+       mv conftest.o conftest.o.g &&
+       ${srcdir}/contrib/compare-debug conftest.o.g0 conftest.o.g > /dev/null 2>&1; then
+      :
+    else
+      BUILD_CONFIG=
+    fi
+    rm -f conftest.c conftest.o conftest.o.g0 conftest.o.g
+    ;;
+  esac
+fi
+AC_MSG_RESULT($BUILD_CONFIG)
+AC_SUBST(BUILD_CONFIG)
+
 extrasub_build=
 for module in ${build_configdirs} ; do
   if test -z "${no_recursion}" \
@@ -2808,15 +2608,11 @@ for module in ${configdirs} ; do
       fi
     done
   fi
-  case ${module},${bootstrap_fixincludes} in
-    fixincludes,no) host_bootstrap_suffix=no-bootstrap ;;
-    *) host_bootstrap_suffix=$bootstrap_suffix ;;
-  esac
   extrasub_host="$extrasub_host
 /^@if $module\$/d
 /^@endif $module\$/d
-/^@if $module-$host_bootstrap_suffix\$/d
-/^@endif $module-$host_bootstrap_suffix\$/d"
+/^@if $module-$bootstrap_suffix\$/d
+/^@endif $module-$bootstrap_suffix\$/d"
 done
 extrasub_target=
 for module in ${target_configdirs} ; do
@@ -2959,7 +2755,7 @@ changequote(,)
 changequote([,])
 
     case $lib in
-    mpc | mpfr | gmp | isl)
+    mpc | mpfr | gmp | cloog)
       # If we're processing --with-$lib, --with-$lib-include or
       # --with-$lib-lib, for one of the libs above, and target is
       # different from host, don't pass the current argument to any
@@ -3055,10 +2851,8 @@ AC_ARG_VAR([target_configargs],
 
 # For the build-side libraries, we just need to pretend we're native,
 # and not use the same cache file.  Multilibs are neither needed nor
-# desired.  We can't even use the same cache file for all build-side
-# libraries, as they're compiled differently; some with C, some with
-# C++ or with different feature-enabling options.
-build_configargs="$build_configargs --cache-file=./config.cache ${baseargs}"
+# desired.
+build_configargs="$build_configargs --cache-file=../config.cache ${baseargs}"
 
 # For host modules, accept cache file option, or specification as blank.
 case "${cache_file}" in
@@ -3400,7 +3194,6 @@ ACX_CHECK_INSTALLED_TARGET_TOOL(DLLTOOL_FOR_TARGET, dlltool)
 ACX_CHECK_INSTALLED_TARGET_TOOL(LD_FOR_TARGET, ld)
 ACX_CHECK_INSTALLED_TARGET_TOOL(LIPO_FOR_TARGET, lipo)
 ACX_CHECK_INSTALLED_TARGET_TOOL(NM_FOR_TARGET, nm)
-ACX_CHECK_INSTALLED_TARGET_TOOL(OBJCOPY_FOR_TARGET, objcopy)
 ACX_CHECK_INSTALLED_TARGET_TOOL(OBJDUMP_FOR_TARGET, objdump)
 ACX_CHECK_INSTALLED_TARGET_TOOL(RANLIB_FOR_TARGET, ranlib)
 ACX_CHECK_INSTALLED_TARGET_TOOL(READELF_FOR_TARGET, readelf)
@@ -3431,7 +3224,6 @@ GCC_TARGET_TOOL(gccgo, GOC_FOR_TARGET, GOC,
 GCC_TARGET_TOOL(ld, LD_FOR_TARGET, LD, [ld/ld-new])
 GCC_TARGET_TOOL(lipo, LIPO_FOR_TARGET, LIPO)
 GCC_TARGET_TOOL(nm, NM_FOR_TARGET, NM, [binutils/nm-new])
-GCC_TARGET_TOOL(objcopy, OBJCOPY_FOR_TARGET, OBJCOPY, [binutils/objcopy])
 GCC_TARGET_TOOL(objdump, OBJDUMP_FOR_TARGET, OBJDUMP, [binutils/objdump])
 GCC_TARGET_TOOL(ranlib, RANLIB_FOR_TARGET, RANLIB, [binutils/ranlib])
 GCC_TARGET_TOOL(readelf, READELF_FOR_TARGET, READELF, [binutils/readelf])
@@ -3535,30 +3327,6 @@ AC_ARG_ENABLE(host-shared,
 		[build host code as shared libraries])],
 [host_shared=$enableval], [host_shared=no])
 AC_SUBST(host_shared)
-
-# PR jit/64780: Require the user to explicitly specify
-# --enable-host-shared if the jit is enabled, hinting
-# that they might want to do a separate configure/build of
-# the jit, to avoid users from slowing down the rest of the
-# compiler by enabling the jit.
-if test ${host_shared} = "no" ; then
-  case "${enable_languages}" in
-    *jit*)
-      AC_MSG_ERROR([
-Enabling language "jit" requires --enable-host-shared.
-
---enable-host-shared typically slows the rest of the compiler down by
-a few %, so you must explicitly enable it.
-
-If you want to build both the jit and the regular compiler, it is often
-best to do this via two separate configure/builds, in separate
-directories, to avoid imposing the performance cost of
---enable-host-shared on the regular compiler.])
-      ;;
-    *)
-      ;;
-  esac
-fi
 
 # Specify what files to not compare during bootstrap.
 

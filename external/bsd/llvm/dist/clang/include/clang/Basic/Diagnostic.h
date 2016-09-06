@@ -18,7 +18,6 @@
 #include "clang/Basic/DiagnosticIDs.h"
 #include "clang/Basic/DiagnosticOptions.h"
 #include "clang/Basic/SourceLocation.h"
-#include "clang/Basic/Specifiers.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/IntrusiveRefCntPtr.h"
@@ -133,8 +132,8 @@ public:
 /// the user. DiagnosticsEngine is tied to one translation unit and one
 /// SourceManager.
 class DiagnosticsEngine : public RefCountedBase<DiagnosticsEngine> {
-  DiagnosticsEngine(const DiagnosticsEngine &) = delete;
-  void operator=(const DiagnosticsEngine &) = delete;
+  DiagnosticsEngine(const DiagnosticsEngine &) LLVM_DELETED_FUNCTION;
+  void operator=(const DiagnosticsEngine &) LLVM_DELETED_FUNCTION;
 
 public:
   /// \brief The level of the diagnostic, after it has been through mapping.
@@ -864,27 +863,28 @@ public:
 /// the common fields to registers, eliminating increments of the NumArgs field,
 /// for example.
 class DiagnosticBuilder {
-  mutable DiagnosticsEngine *DiagObj = nullptr;
-  mutable unsigned NumArgs = 0;
+  mutable DiagnosticsEngine *DiagObj;
+  mutable unsigned NumArgs;
 
   /// \brief Status variable indicating if this diagnostic is still active.
   ///
   // NOTE: This field is redundant with DiagObj (IsActive iff (DiagObj == 0)),
   // but LLVM is not currently smart enough to eliminate the null check that
   // Emit() would end up with if we used that as our status variable.
-  mutable bool IsActive = false;
+  mutable bool IsActive;
 
   /// \brief Flag indicating that this diagnostic is being emitted via a
   /// call to ForceEmit.
-  mutable bool IsForceEmit = false;
+  mutable bool IsForceEmit;
 
-  void operator=(const DiagnosticBuilder &) = delete;
+  void operator=(const DiagnosticBuilder &) LLVM_DELETED_FUNCTION;
   friend class DiagnosticsEngine;
 
-  DiagnosticBuilder() = default;
+  DiagnosticBuilder()
+      : DiagObj(nullptr), NumArgs(0), IsActive(false), IsForceEmit(false) {}
 
   explicit DiagnosticBuilder(DiagnosticsEngine *diagObj)
-      : DiagObj(diagObj), IsActive(true) {
+      : DiagObj(diagObj), NumArgs(0), IsActive(true), IsForceEmit(false) {
     assert(diagObj && "DiagnosticBuilder requires a valid DiagnosticsEngine!");
     diagObj->DiagRanges.clear();
     diagObj->DiagFixItHints.clear();
@@ -991,8 +991,7 @@ public:
 
   void AddFixItHint(const FixItHint &Hint) const {
     assert(isActive() && "Clients must not add to cleared diagnostic!");
-    if (!Hint.isNull())
-      DiagObj->DiagFixItHints.push_back(Hint);
+    DiagObj->DiagFixItHints.push_back(Hint);
   }
 
   void addFlagValue(StringRef V) const { DiagObj->FlagValue = V; }
@@ -1076,14 +1075,14 @@ operator<<(const DiagnosticBuilder &DB, T *DC) {
 }
 
 inline const DiagnosticBuilder &operator<<(const DiagnosticBuilder &DB,
-                                           SourceRange R) {
+                                           const SourceRange &R) {
   DB.AddSourceRange(CharSourceRange::getTokenRange(R));
   return DB;
 }
 
 inline const DiagnosticBuilder &operator<<(const DiagnosticBuilder &DB,
                                            ArrayRef<SourceRange> Ranges) {
-  for (SourceRange R : Ranges)
+  for (const SourceRange &R: Ranges)
     DB.AddSourceRange(CharSourceRange::getTokenRange(R));
   return DB;
 }
@@ -1096,23 +1095,10 @@ inline const DiagnosticBuilder &operator<<(const DiagnosticBuilder &DB,
 
 inline const DiagnosticBuilder &operator<<(const DiagnosticBuilder &DB,
                                            const FixItHint &Hint) {
-  DB.AddFixItHint(Hint);
-  return DB;
-}
-
-inline const DiagnosticBuilder &operator<<(const DiagnosticBuilder &DB,
-                                           ArrayRef<FixItHint> Hints) {
-  for (const FixItHint &Hint : Hints)
+  if (!Hint.isNull())
     DB.AddFixItHint(Hint);
   return DB;
 }
-
-/// A nullability kind paired with a bit indicating whether it used a
-/// context-sensitive keyword.
-typedef std::pair<NullabilityKind, bool> DiagNullabilityKind;
-
-const DiagnosticBuilder &operator<<(const DiagnosticBuilder &DB,
-                                    DiagNullabilityKind nullability);
 
 inline DiagnosticBuilder DiagnosticsEngine::Report(SourceLocation Loc,
                                                    unsigned DiagID) {
@@ -1263,7 +1249,7 @@ class StoredDiagnostic {
   std::vector<FixItHint> FixIts;
 
 public:
-  StoredDiagnostic() = default;
+  StoredDiagnostic();
   StoredDiagnostic(DiagnosticsEngine::Level Level, const Diagnostic &Info);
   StoredDiagnostic(DiagnosticsEngine::Level Level, unsigned ID, 
                    StringRef Message);
@@ -1271,9 +1257,10 @@ public:
                    StringRef Message, FullSourceLoc Loc,
                    ArrayRef<CharSourceRange> Ranges,
                    ArrayRef<FixItHint> Fixits);
+  ~StoredDiagnostic();
 
   /// \brief Evaluates true when this object stores a diagnostic.
-  explicit operator bool() const { return Message.size() > 0; }
+  LLVM_EXPLICIT operator bool() const { return Message.size() > 0; }
 
   unsigned getID() const { return ID; }
   DiagnosticsEngine::Level getLevel() const { return Level; }
@@ -1377,7 +1364,7 @@ class ForwardingDiagnosticConsumer : public DiagnosticConsumer {
 public:
   ForwardingDiagnosticConsumer(DiagnosticConsumer &Target) : Target(Target) {}
 
-  ~ForwardingDiagnosticConsumer() override;
+  virtual ~ForwardingDiagnosticConsumer();
 
   void HandleDiagnostic(DiagnosticsEngine::Level DiagLevel,
                         const Diagnostic &Info) override;

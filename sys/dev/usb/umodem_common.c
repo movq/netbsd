@@ -1,4 +1,4 @@
-/*	$NetBSD: umodem_common.c,v 1.24 2016/07/07 06:55:42 msaitoh Exp $	*/
+/*	$NetBSD: umodem_common.c,v 1.22 2010/11/03 22:34:24 dyoung Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -44,7 +44,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umodem_common.c,v 1.24 2016/07/07 06:55:42 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umodem_common.c,v 1.22 2010/11/03 22:34:24 dyoung Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -90,22 +90,22 @@ int	umodemdebug = 0;
 #define UMODEMIBUFSIZE 4096
 #define UMODEMOBUFSIZE 4096
 
-Static usbd_status umodem_set_comm_feature(struct umodem_softc *,
-					   int, int);
-Static usbd_status umodem_set_line_coding(struct umodem_softc *,
-					  usb_cdc_line_state_t *);
+Static usbd_status umodem_set_comm_feature(struct umodem_softc *sc,
+					   int feature, int state);
+Static usbd_status umodem_set_line_coding(struct umodem_softc *sc,
+					  usb_cdc_line_state_t *state);
 
 Static void	umodem_dtr(struct umodem_softc *, int);
 Static void	umodem_rts(struct umodem_softc *, int);
 Static void	umodem_break(struct umodem_softc *, int);
 Static void	umodem_set_line_state(struct umodem_softc *);
-Static void	umodem_intr(struct usbd_xfer *, void *, usbd_status);
+Static void	umodem_intr(usbd_xfer_handle, usbd_private_handle, usbd_status);
 
 int
 umodem_common_attach(device_t self, struct umodem_softc *sc,
-    struct usbif_attach_arg *uiaa, struct ucom_attach_args *ucaa)
+		     struct usbif_attach_arg *uaa, struct ucom_attach_args *uca)
 {
-	struct usbd_device *dev = uiaa->uiaa_device;
+	usbd_device_handle dev = uaa->device;
 	usb_interface_descriptor_t *id;
 	usb_endpoint_descriptor_t *ed;
 	char *devinfop;
@@ -115,13 +115,13 @@ umodem_common_attach(device_t self, struct umodem_softc *sc,
 
 	sc->sc_dev = self;
 	sc->sc_udev = dev;
-	sc->sc_ctl_iface = uiaa->uiaa_iface;
+	sc->sc_ctl_iface = uaa->iface;
 
 	aprint_naive("\n");
 	aprint_normal("\n");
 
 	id = usbd_get_interface_descriptor(sc->sc_ctl_iface);
-	devinfop = usbd_devinfo_alloc(uiaa->uiaa_device, 0);
+	devinfop = usbd_devinfo_alloc(uaa->device, 0);
 	aprint_normal_dev(self, "%s, iclass %d/%d\n",
 	       devinfop, id->bInterfaceClass, id->bInterfaceSubClass);
 	usbd_devinfo_free(devinfop);
@@ -143,12 +143,12 @@ umodem_common_attach(device_t self, struct umodem_softc *sc,
 	    sc->sc_acm_cap & USB_CDC_ACM_HAS_BREAK ? "" : "no ");
 
 	/* Get the data interface too. */
-	for (i = 0; i < uiaa->uiaa_nifaces; i++) {
-		if (uiaa->uiaa_ifaces[i] != NULL) {
-			id = usbd_get_interface_descriptor(uiaa->uiaa_ifaces[i]);
+	for (i = 0; i < uaa->nifaces; i++) {
+		if (uaa->ifaces[i] != NULL) {
+			id = usbd_get_interface_descriptor(uaa->ifaces[i]);
 			if (id != NULL && id->bInterfaceNumber == data_ifcno) {
-				sc->sc_data_iface = uiaa->uiaa_ifaces[i];
-				uiaa->uiaa_ifaces[i] = NULL;
+				sc->sc_data_iface = uaa->ifaces[i];
+				uaa->ifaces[i] = NULL;
 			}
 		}
 	}
@@ -161,7 +161,7 @@ umodem_common_attach(device_t self, struct umodem_softc *sc,
 	 * Find the bulk endpoints.
 	 * Iterate over all endpoints in the data interface and take note.
 	 */
-	ucaa->ucaa_bulkin = ucaa->ucaa_bulkout = -1;
+	uca->bulkin = uca->bulkout = -1;
 
 	id = usbd_get_interface_descriptor(sc->sc_data_iface);
 	for (i = 0; i < id->bNumEndpoints; i++) {
@@ -173,18 +173,18 @@ umodem_common_attach(device_t self, struct umodem_softc *sc,
 		}
 		if (UE_GET_DIR(ed->bEndpointAddress) == UE_DIR_IN &&
 		    (ed->bmAttributes & UE_XFERTYPE) == UE_BULK) {
-			ucaa->ucaa_bulkin = ed->bEndpointAddress;
+			uca->bulkin = ed->bEndpointAddress;
 		} else if (UE_GET_DIR(ed->bEndpointAddress) == UE_DIR_OUT &&
 			   (ed->bmAttributes & UE_XFERTYPE) == UE_BULK) {
-			ucaa->ucaa_bulkout = ed->bEndpointAddress;
+			uca->bulkout = ed->bEndpointAddress;
 		}
 	}
 
-	if (ucaa->ucaa_bulkin == -1) {
+	if (uca->bulkin == -1) {
 		aprint_error_dev(self, "Could not find data bulk in\n");
 		goto bad;
 	}
-	if (ucaa->ucaa_bulkout == -1) {
+	if (uca->bulkout == -1) {
 		aprint_error_dev(self, "Could not find data bulk out\n");
 		goto bad;
 	}
@@ -234,19 +234,20 @@ umodem_common_attach(device_t self, struct umodem_softc *sc,
 
 	sc->sc_dtr = -1;
 
-	/* ucaa_bulkin, ucaa_bulkout set above */
-	ucaa->ucaa_ibufsize = UMODEMIBUFSIZE;
-	ucaa->ucaa_obufsize = UMODEMOBUFSIZE;
-	ucaa->ucaa_ibufsizepad = UMODEMIBUFSIZE;
-	ucaa->ucaa_opkthdrlen = 0;
-	ucaa->ucaa_device = sc->sc_udev;
-	ucaa->ucaa_iface = sc->sc_data_iface;
-	ucaa->ucaa_arg = sc;
+	/* bulkin, bulkout set above */
+	uca->ibufsize = UMODEMIBUFSIZE;
+	uca->obufsize = UMODEMOBUFSIZE;
+	uca->ibufsizepad = UMODEMIBUFSIZE;
+	uca->opkthdrlen = 0;
+	uca->device = sc->sc_udev;
+	uca->iface = sc->sc_data_iface;
+	uca->arg = sc;
 
-	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev, sc->sc_dev);
+	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
+			   sc->sc_dev);
 
 	DPRINTF(("umodem_common_attach: sc=%p\n", sc));
-	sc->sc_subdev = config_found_sm_loc(self, "ucombus", NULL, ucaa,
+	sc->sc_subdev = config_found_sm_loc(self, "ucombus", NULL, uca,
 					    ucomprint, ucomsubmatch);
 
 	return 0;
@@ -302,7 +303,7 @@ umodem_close(void *addr, int portno)
 }
 
 Static void
-umodem_intr(struct usbd_xfer *xfer, void *priv,
+umodem_intr(usbd_xfer_handle xfer, usbd_private_handle priv,
     usbd_status status)
 {
 	struct umodem_softc *sc = priv;
@@ -365,13 +366,13 @@ umodem_intr(struct usbd_xfer *xfer, void *priv,
 }
 
 int
-umodem_get_caps(struct usbd_device *dev, int *cm, int *acm,
+umodem_get_caps(usbd_device_handle dev, int *cm, int *acm,
 		usb_interface_descriptor_t *id)
 {
 	const usb_cdc_cm_descriptor_t *cmd;
 	const usb_cdc_acm_descriptor_t *cad;
 	const usb_cdc_union_descriptor_t *cud;
-	uint32_t uq_flags;
+	u_int32_t uq_flags;
 
 	*cm = *acm = 0;
 	uq_flags = usbd_get_quirks(dev)->uq_flags;
@@ -466,9 +467,9 @@ umodem_param(void *addr, int portno, struct termios *t)
 	err = umodem_set_line_coding(sc, &ls);
 	if (err) {
 		DPRINTF(("umodem_param: err=%s\n", usbd_errstr(err)));
-		return EPASSTHROUGH;
+		return (EPASSTHROUGH);
 	}
-	return 0;
+	return (0);
 }
 
 int
@@ -479,7 +480,7 @@ umodem_ioctl(void *addr, int portno, u_long cmd, void *data,
 	int error = 0;
 
 	if (sc->sc_dying)
-		return EIO;
+		return (EIO);
 
 	DPRINTF(("umodem_ioctl: cmd=0x%08lx\n", cmd));
 
@@ -500,7 +501,7 @@ umodem_ioctl(void *addr, int portno, u_long cmd, void *data,
 		break;
 	}
 
-	return error;
+	return (error);
 }
 
 void
@@ -596,7 +597,7 @@ umodem_set_line_coding(struct umodem_softc *sc, usb_cdc_line_state_t *state)
 
 	if (memcmp(state, &sc->sc_line_state, UCDC_LINE_STATE_LENGTH) == 0) {
 		DPRINTF(("umodem_set_line_coding: already set\n"));
-		return USBD_NORMAL_COMPLETION;
+		return (USBD_NORMAL_COMPLETION);
 	}
 
 	req.bmRequestType = UT_WRITE_CLASS_INTERFACE;
@@ -609,12 +610,12 @@ umodem_set_line_coding(struct umodem_softc *sc, usb_cdc_line_state_t *state)
 	if (err) {
 		DPRINTF(("umodem_set_line_coding: failed, err=%s\n",
 			 usbd_errstr(err)));
-		return err;
+		return (err);
 	}
 
 	sc->sc_line_state = *state;
 
-	return USBD_NORMAL_COMPLETION;
+	return (USBD_NORMAL_COMPLETION);
 }
 
 usbd_status
@@ -638,10 +639,10 @@ umodem_set_comm_feature(struct umodem_softc *sc, int feature, int state)
 	if (err) {
 		DPRINTF(("umodem_set_comm_feature: feature=%d, err=%s\n",
 			 feature, usbd_errstr(err)));
-		return err;
+		return (err);
 	}
 
-	return USBD_NORMAL_COMPLETION;
+	return (USBD_NORMAL_COMPLETION);
 }
 
 int
@@ -675,7 +676,8 @@ umodem_common_detach(struct umodem_softc *sc, int flags)
 	if (sc->sc_subdev != NULL)
 		rv = config_detach(sc->sc_subdev, flags);
 
-	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev, sc->sc_dev);
+	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
+			   sc->sc_dev);
 
-	return rv;
+	return (rv);
 }

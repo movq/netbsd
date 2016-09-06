@@ -12,6 +12,15 @@ SECTIONS
     *(.strings)
      _etext = . ;
   }  > ram
+  .tors :
+  {
+    ___ctors = . ;
+    *(.ctors)
+    ___ctors_end = . ;
+    ___dtors = . ;
+    *(.dtors)
+    ___dtors_end = . ;
+  } > ram
   .data :
   {
     *(.data)

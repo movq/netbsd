@@ -1,4 +1,4 @@
-/*	$NetBSD: getaddresses.c,v 1.6 2015/07/08 17:28:58 christos Exp $	*/
+/*	$NetBSD: getaddresses.c,v 1.4.4.1 2015/07/17 04:31:33 snj Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")

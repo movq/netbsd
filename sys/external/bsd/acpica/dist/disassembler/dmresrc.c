@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,11 +41,13 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+
 #include "acpi.h"
 #include "accommon.h"
 #include "amlcode.h"
 #include "acdisasm.h"
 
+#ifdef ACPI_DISASSEMBLER
 
 #define _COMPONENT          ACPI_CA_DEBUGGER
         ACPI_MODULE_NAME    ("dbresrc")
@@ -212,7 +214,6 @@ AcpiDmBitList (
             {
                 AcpiOsPrintf (",");
             }
-
             Previous = TRUE;
             AcpiOsPrintf ("%u", i);
         }
@@ -259,11 +260,6 @@ AcpiDmResourceTemplate (
     ACPI_NAMESPACE_NODE     *Node;
 
 
-    if (Op->Asl.AmlOpcode != AML_FIELD_OP)
-    {
-        Info->MappingOp = Op;
-    }
-
     Level = Info->Level;
     ResourceName = ACPI_DEFAULT_RESNAME;
     Node = Op->Common.Node;
@@ -286,8 +282,7 @@ AcpiDmResourceTemplate (
         Status = AcpiUtValidateResource (NULL, Aml, &ResourceIndex);
         if (ACPI_FAILURE (Status))
         {
-            AcpiOsPrintf (
-                "/*** Could not validate Resource, type (%X) %s***/\n",
+            AcpiOsPrintf ("/*** Could not validate Resource, type (%X) %s***/\n",
                 ResourceType, AcpiFormatException (Status));
             return;
         }
@@ -333,12 +328,11 @@ AcpiDmResourceTemplate (
 
                 /* Go ahead and insert EndDependentFn() */
 
-                AcpiDmEndDependentDescriptor (Info, Aml, ResourceLength, Level);
+                AcpiDmEndDependentDescriptor (Aml, ResourceLength, Level);
 
                 AcpiDmIndent (Level);
                 AcpiOsPrintf (
-                    "/*** Disassembler: inserted "
-                    "missing EndDependentFn () ***/\n");
+                    "/*** Disassembler: inserted missing EndDependentFn () ***/\n");
             }
             return;
 
@@ -356,7 +350,7 @@ AcpiDmResourceTemplate (
         }
 
         AcpiGbl_DmResourceDispatch [ResourceIndex] (
-            Info, Aml, ResourceLength, Level);
+            Aml, ResourceLength, Level);
 
         /* Descriptor post-processing */
 
@@ -446,3 +440,5 @@ AcpiDmIsResourceTemplate (
      */
     return (AE_OK);
 }
+
+#endif

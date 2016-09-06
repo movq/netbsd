@@ -134,6 +134,12 @@ private:
                                  SourceLocation *MacroBegin = nullptr) const;
   bool isAtEndOfMacroExpansion(SourceLocation loc,
                                SourceLocation *MacroEnd = nullptr) const;
+
+  StringRef copyString(StringRef str) {
+    char *buf = StrAlloc.Allocate<char>(str.size());
+    std::memcpy(buf, str.data(), str.size());
+    return StringRef(buf, str.size());
+  }
 };
 
 }

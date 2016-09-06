@@ -1,4 +1,4 @@
-/*	$NetBSD: config.c,v 1.35 2015/11/11 07:48:41 ozaki-r Exp $	*/
+/*	$NetBSD: config.c,v 1.33 2013/01/24 19:55:28 christos Exp $	*/
 /*	$KAME: config.c,v 1.93 2005/10/17 14:40:02 suz Exp $	*/
 
 /*
@@ -67,7 +67,6 @@
 #include "timer.h"
 #include "if.h"
 #include "config.h"
-#include "prog_ops.h"
 
 #ifndef __arraycount
 #define __arraycount(__x)	(sizeof(__x) / sizeof(__x[0]))
@@ -445,8 +444,8 @@ getconfig(const char *intface, int exithard)
 
 		makeentry(entbuf, sizeof(entbuf), i, "vltimedecr");
 		if (agetflag(entbuf)) {
-			struct timespec now;
-			prog_clock_gettime(CLOCK_MONOTONIC, &now);
+			struct timeval now;
+			gettimeofday(&now, 0);
 			pfx->vltimeexpire =
 				now.tv_sec + pfx->validlifetime;
 		}
@@ -465,8 +464,8 @@ getconfig(const char *intface, int exithard)
 
 		makeentry(entbuf, sizeof(entbuf), i, "pltimedecr");
 		if (agetflag(entbuf)) {
-			struct timespec now;
-			prog_clock_gettime(CLOCK_MONOTONIC, &now);
+			struct timeval now;
+			gettimeofday(&now, 0);
 			pfx->pltimeexpire =
 				now.tv_sec + pfx->preflifetime;
 		}
@@ -503,13 +502,13 @@ getconfig(const char *intface, int exithard)
 		struct in6_ndireq ndi;
 		int s;
 
-		if ((s = prog_socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
+		if ((s = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
 			syslog(LOG_ERR, "<%s> socket: %m", __func__);
 			goto errexit;
 		}
 		memset(&ndi, 0, sizeof(ndi));
 		strncpy(ndi.ifname, intface, IFNAMSIZ);
-		if (prog_ioctl(s, SIOCGIFINFO_IN6, &ndi) < 0) {
+		if (ioctl(s, SIOCGIFINFO_IN6, &ndi) < 0) {
 			syslog(LOG_INFO, "<%s> ioctl:SIOCGIFINFO_IN6 at %s: %m",
 			     __func__, intface);
 		}
@@ -518,11 +517,11 @@ getconfig(const char *intface, int exithard)
 		ndi.ndi.chlim = tmp->hoplimit;
 		ndi.ndi.retrans = tmp->retranstimer;
 		ndi.ndi.basereachable = tmp->reachabletime;
-		if (prog_ioctl(s, SIOCSIFINFO_IN6, &ndi) < 0) {
+		if (ioctl(s, SIOCSIFINFO_IN6, &ndi) < 0) {
 			syslog(LOG_INFO, "<%s> ioctl:SIOCSIFINFO_IN6 at %s: %m",
 			     __func__, intface);
 		}
-		prog_close(s);
+		close(s);
 	}
 #endif
 
@@ -959,7 +958,7 @@ void
 invalidate_prefix(struct prefix *prefix)
 {
 	char ntopbuf[INET6_ADDRSTRLEN];
-	struct timespec timo;
+	struct timeval timo;
 	struct rainfo *rai = prefix->rainfo;
 
 	if (prefix->timer) {	/* sanity check */
@@ -982,7 +981,7 @@ invalidate_prefix(struct prefix *prefix)
 		delete_prefix(prefix);
 	}
 	timo.tv_sec = prefix_timo;
-	timo.tv_nsec = 0;
+	timo.tv_usec = 0;
 	rtadvd_set_timer(&timo, prefix->timer);
 }
 
@@ -1028,12 +1027,12 @@ init_prefix(struct in6_prefixreq *ipr)
 #if 0
 	int s;
 
-	if ((s = prog_socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
+	if ((s = socket(AF_INET6, SOCK_DGRAM, 0)) < 0) {
 		syslog(LOG_ERR, "<%s> socket: %m", __func__);
 		exit(1);
 	}
 
-	if (prog_ioctl(s, SIOCGIFPREFIX_IN6, ipr) < 0) {
+	if (ioctl(s, SIOCGIFPREFIX_IN6, ipr) < 0) {
 		syslog(LOG_INFO, "<%s> ioctl:SIOCGIFPREFIX: %m", __func__);
 
 		ipr->ipr_vltime = DEF_ADVVALIDLIFETIME;
@@ -1050,11 +1049,11 @@ init_prefix(struct in6_prefixreq *ipr)
 		       "This should not happen if I am router", __func__,
 		       inet_ntop(AF_INET6, &ipr->ipr_prefix.sin6_addr, ntopbuf,
 				 sizeof(ntopbuf)), ipr->ipr_origin);
-		prog_close(s);
+		close(s);
 		return 1;
 	}
 
-	prog_close(s);
+	close(s);
 	return 0;
 #else
 	ipr->ipr_vltime = DEF_ADVVALIDLIFETIME;
@@ -1201,7 +1200,7 @@ make_packet(struct rainfo *rainfo)
 
 	TAILQ_FOREACH(pfx, &rainfo->prefix, next) {	
 		uint32_t vltime, pltime;
-		struct timespec now;
+		struct timeval now;
 
 		CHECKLEN(sizeof(*ndopt_pi));
 		ndopt_pi = (struct nd_opt_prefix_info *)buf;
@@ -1219,7 +1218,7 @@ make_packet(struct rainfo *rainfo)
 			vltime = 0;
 		else {
 			if (pfx->vltimeexpire || pfx->pltimeexpire)
-				prog_clock_gettime(CLOCK_MONOTONIC, &now);
+				gettimeofday(&now, NULL);
 			if (pfx->vltimeexpire == 0)
 				vltime = pfx->validlifetime;
 			else
@@ -1314,7 +1313,7 @@ getinet6sysctl(int code)
 	size_t size;
 
 	size = sizeof(value);
-	if (prog_sysctl(mib, __arraycount(mib), &value, &size, NULL, 0)
+	if (sysctl(mib, __arraycount(mib), &value, &size, NULL, 0)
 	    < 0) {
 		syslog(LOG_ERR, "<%s>: failed to get ip6 sysctl(%d): %m",
 		       __func__, code);

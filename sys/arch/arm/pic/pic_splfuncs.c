@@ -1,4 +1,4 @@
-/*	$NetBSD: pic_splfuncs.c,v 1.7 2015/04/02 03:11:34 matt Exp $	*/
+/*	$NetBSD: pic_splfuncs.c,v 1.5 2014/04/16 22:44:42 matt Exp $	*/
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -28,26 +28,19 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pic_splfuncs.c,v 1.7 2015/04/02 03:11:34 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pic_splfuncs.c,v 1.5 2014/04/16 22:44:42 matt Exp $");
 
 #define _INTR_PRIVATE
 #include <sys/param.h>
 #include <sys/atomic.h>
 #include <sys/evcnt.h>
-#include <sys/lwp.h>
 #include <sys/kernel.h>
 
 #include <dev/cons.h>
 
-#if defined(__arm__)
 #include <arm/armreg.h>
 #include <arm/cpu.h>
 #include <arm/cpufunc.h>
-#elif defined(__aarch64__)
-#include <aarch64/locore.h>
-#define I32_bit		DAIF_I
-#define F32_bit		DAIF_F
-#endif
 
 #include <arm/pic/picvar.h>
 
@@ -74,7 +67,7 @@ _spllower(int newipl)
 		ci->ci_intr_depth++;
 		pic_do_pending_ints(psw, newipl, NULL);
 		ci->ci_intr_depth--;
-		if ((psw & I32_bit) == 0 || newipl == IPL_NONE)
+		if ((psw & I32_bit) == 0)
 			cpsie(I32_bit);
 		cpu_dosoftints();
 	}

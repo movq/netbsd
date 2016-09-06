@@ -1,4 +1,4 @@
-/*	$NetBSD: dnssec-revoke.c,v 1.10 2016/05/26 16:49:55 christos Exp $	*/
+/*	$NetBSD: dnssec-revoke.c,v 1.7.2.2 2016/03/13 08:06:03 martin Exp $	*/
 
 /*
  * Copyright (C) 2009-2012, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
@@ -88,8 +88,7 @@ main(int argc, char **argv) {
 #else
 	const char *engine = NULL;
 #endif
-	char const *filename = NULL;
-	char *dir = NULL;
+	char *filename = NULL, *dir = NULL;
 	char newname[1024], oldname[1024];
 	char keystr[DST_KEY_FORMATSIZE];
 	char *endp;

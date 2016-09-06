@@ -1,4 +1,4 @@
-/*	$NetBSD: be.c,v 1.83 2016/06/10 13:27:15 ozaki-r Exp $	*/
+/*	$NetBSD: be.c,v 1.80 2013/06/09 09:23:35 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -57,7 +57,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: be.c,v 1.83 2016/06/10 13:27:15 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: be.c,v 1.80 2013/06/09 09:23:35 msaitoh Exp $");
 
 #include "opt_ddb.h"
 #include "opt_inet.h"
@@ -73,6 +73,7 @@ __KERNEL_RCSID(0, "$NetBSD: be.c,v 1.83 2016/06/10 13:27:15 ozaki-r Exp $");
 #include <sys/syslog.h>
 #include <sys/device.h>
 #include <sys/malloc.h>
+#include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -504,7 +505,7 @@ be_get(struct be_softc *sc, int idx, int totlen)
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (m == NULL)
 		return (NULL);
-	m_set_rcvif(m, ifp);
+	m->m_pkthdr.rcvif = ifp;
 	m->m_pkthdr.len = totlen;
 
 	pad = ALIGN(sizeof(struct ether_header)) - sizeof(struct ether_header);
@@ -574,7 +575,7 @@ be_read(struct be_softc *sc, int idx, int len)
 	 */
 	bpf_mtap(ifp, m);
 	/* Pass the packet up. */
-	if_percpuq_enqueue(ifp->if_percpuq, m);
+	(*ifp->if_input)(ifp, m);
 }
 
 /*

@@ -1,4 +1,4 @@
-/*	$NetBSD: svc.c,v 1.39 2015/11/13 15:22:12 christos Exp $	*/
+/*	$NetBSD: svc.c,v 1.34 2013/03/11 20:19:29 tron Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -37,7 +37,7 @@
 static char *sccsid = "@(#)svc.c 1.44 88/02/08 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)svc.c	2.4 88/08/11 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: svc.c,v 1.39 2015/11/13 15:22:12 christos Exp $");
+__RCSID("$NetBSD: svc.c,v 1.34 2013/03/11 20:19:29 tron Exp $");
 #endif
 #endif
 
@@ -90,9 +90,7 @@ __weak_alias(xprt_unregister,_xprt_unregister)
 __weak_alias(rpc_control,_rpc_control)
 #endif
 
-/* __svc_xports[-1] is reserved for raw */
 SVCXPRT **__svc_xports;
-int __svc_maxxports;
 int __svc_maxrec;
 
 #define	RQCRED_SIZE	400		/* this size is excessive */
@@ -127,48 +125,6 @@ static void __xprt_do_unregister(SVCXPRT *xprt, bool_t dolock);
 
 /* ***************  SVCXPRT related stuff **************** */
 
-static bool_t
-xprt_alloc(int sock)
-{
-	int oldmaxxports, newmaxxports;
-	SVCXPRT **oldxports, **newxports;
-
-	if (++sock < 0)
-		return FALSE;
-
-	newmaxxports = svc_fdset_getsize(sock);
-	if (newmaxxports == -1)
-		return FALSE;
-
-	if (__svc_xports != NULL && newmaxxports < __svc_maxxports)
-		return TRUE;
-
-	oldxports = __svc_xports;
-	oldmaxxports = __svc_maxxports;
-	if (oldxports != NULL) {
-		/* revert saving [-1] slot */
-		--oldxports;
-		++oldmaxxports;
-	}
-
-	/* reserve an extra slot for [-1] */
-	newmaxxports++;
-	newxports = realloc(oldxports, newmaxxports * sizeof(SVCXPRT *));
-	if (newxports == NULL) {
-		warn("%s: out of memory", __func__);
-		return FALSE;
-	}
-
-	memset(&newxports[oldmaxxports], 0,
-	    (newmaxxports - oldmaxxports) * sizeof(SVCXPRT *));
-
-	/* save one slot for [-1] */
-	__svc_xports = newxports + 1;
-	__svc_maxxports = newmaxxports - 1;
-
-	return TRUE;
-}
-
 /*
  * Activate a transport handle.
  */
@@ -179,17 +135,25 @@ xprt_register(SVCXPRT *xprt)
 
 	_DIAGASSERT(xprt != NULL);
 
-	rwlock_wrlock(&svc_fd_lock);
 	sock = xprt->xp_fd;
 
-	if (!xprt_alloc(sock))
-		goto out;
-
-	__svc_xports[sock] = xprt;
-	if (sock != -1) {
-		if (svc_fdset_set(sock) == -1)
-			return FALSE;
+	rwlock_wrlock(&svc_fd_lock);
+	if (__svc_xports == NULL) {
+		__svc_xports = mem_alloc(FD_SETSIZE * sizeof(SVCXPRT *));
+		if (__svc_xports == NULL) {
+			warn("%s: out of memory", __func__);
+			goto out;
+		}
+		memset(__svc_xports, '\0', FD_SETSIZE * sizeof(SVCXPRT *));
 	}
+	if (sock >= FD_SETSIZE) {
+		warnx("%s: socket descriptor %d too large for setsize %u",
+		    __func__, sock, (unsigned)FD_SETSIZE);
+		goto out;
+	}
+	__svc_xports[sock] = xprt;
+	FD_SET(sock, get_fdset());
+	*get_fdsetmax() = max(*get_fdsetmax(), sock);
 	rwlock_unlock(&svc_fd_lock);
 	return (TRUE);
 
@@ -216,30 +180,24 @@ __xprt_unregister_unlocked(SVCXPRT *xprt)
 static void
 __xprt_do_unregister(SVCXPRT *xprt, bool_t dolock)
 { 
-	int sock, *fdmax;
+	int sock;
 
 	_DIAGASSERT(xprt != NULL);
 
+	sock = xprt->xp_fd;
+
 	if (dolock)
 		rwlock_wrlock(&svc_fd_lock);
-
-	sock = xprt->xp_fd;
-	if (sock >= __svc_maxxports || __svc_xports[sock] != xprt)
-		goto out;
-
-	__svc_xports[sock] = NULL;
-	if (sock == -1)
-		goto out;
-	fdmax = svc_fdset_getmax();
-	if (fdmax == NULL || sock < *fdmax)
-		goto clr;
-
-	for ((*fdmax)--; *fdmax >= 0; (*fdmax)--)
-		if (__svc_xports[*fdmax])
-			break;
-clr:
-	svc_fdset_clr(sock);
-out:
+	if ((sock < FD_SETSIZE) && (__svc_xports[sock] == xprt)) {
+		__svc_xports[sock] = NULL;
+		FD_CLR(sock, get_fdset());
+		if (sock >= *get_fdsetmax()) {
+			for ((*get_fdsetmax())--; *get_fdsetmax() >= 0;
+			    (*get_fdsetmax())--)
+				if (__svc_xports[*get_fdsetmax()])
+					break;
+		}
+	}
 	if (dolock)
 		rwlock_unlock(&svc_fd_lock);
 }
@@ -642,17 +600,15 @@ svcerr_progvers(SVCXPRT *xprt, rpcvers_t low_vers, rpcvers_t high_vers)
 void
 svc_getreq(int rdfds)
 {
-	fd_set *readfds = svc_fdset_copy(NULL);
-	if (readfds == NULL)
-		return;
+	fd_set readfds;
 
-	readfds->fds_bits[0] = (unsigned int)rdfds;
-	svc_getreqset(readfds);
-	free(readfds);
+	FD_ZERO(&readfds);
+	readfds.fds_bits[0] = (unsigned int)rdfds;
+	svc_getreqset(&readfds);
 }
 
 void
-svc_getreqset2(fd_set *readfds, int maxsize)
+svc_getreqset(fd_set *readfds)
 {
 	uint32_t mask, *maskp;
 	int sock, bit, fd;
@@ -660,7 +616,7 @@ svc_getreqset2(fd_set *readfds, int maxsize)
 	_DIAGASSERT(readfds != NULL);
 
 	maskp = readfds->fds_bits;
-	for (sock = 0; sock < maxsize; sock += NFDBITS) {
+	for (sock = 0; sock < FD_SETSIZE; sock += NFDBITS) {
 	    for (mask = *maskp++; (bit = ffs((int)mask)) != 0;
 		mask ^= (1 << (bit - 1))) {
 		/* sock has input waiting */
@@ -668,12 +624,6 @@ svc_getreqset2(fd_set *readfds, int maxsize)
 		svc_getreq_common(fd);
 	    }
 	}
-}
-
-void
-svc_getreqset(fd_set *readfds)
-{
-	svc_getreqset2(readfds, FD_SETSIZE);
 }
 
 void
@@ -782,7 +732,7 @@ svc_getreq_poll(struct pollfd *pfdp, int pollretval)
 			 *	via someone select()ing from svc_fdset or
 			 *	pollts()ing from svc_pollset[].  Thus it's safe
 			 *	to handle the POLLNVAL event by simply turning
-			 *	the corresponding bit off in the fdset.  The
+			 *	the corresponding bit off in svc_fdset.  The
 			 *	svc_pollset[] array is derived from svc_fdset
 			 *	and so will also be updated eventually.
 			 *
@@ -790,7 +740,7 @@ svc_getreq_poll(struct pollfd *pfdp, int pollretval)
 			 */
 			if (p->revents & POLLNVAL) {
 				rwlock_wrlock(&svc_fd_lock);
-				svc_fdset_clr(p->fd);
+				FD_CLR(p->fd, get_fdset());
 				rwlock_unlock(&svc_fd_lock);
 			} else
 				svc_getreq_common(p->fd);

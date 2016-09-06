@@ -1,4 +1,4 @@
-/* $NetBSD: dsk.c,v 1.18 2015/09/29 15:12:52 phx Exp $ */
+/* $NetBSD: dsk.c,v 1.17.2.1 2016/01/16 10:04:05 snj Exp $ */
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.

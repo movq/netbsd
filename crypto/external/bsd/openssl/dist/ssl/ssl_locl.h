@@ -1220,14 +1220,14 @@ int tls1_cbc_remove_padding(const SSL *s,
                             unsigned block_size, unsigned mac_size);
 char ssl3_cbc_record_digest_supported(const EVP_MD_CTX *ctx);
 int ssl3_cbc_digest_record(const EVP_MD_CTX *ctx,
-                           unsigned char *md_out,
-                           size_t *md_out_size,
-                           const unsigned char header[13],
-                           const unsigned char *data,
-                           size_t data_plus_mac_size,
-                           size_t data_plus_mac_plus_padding_size,
-                           const unsigned char *mac_secret,
-                           unsigned mac_secret_length, char is_sslv3);
+                            unsigned char *md_out,
+                            size_t *md_out_size,
+                            const unsigned char header[13],
+                            const unsigned char *data,
+                            size_t data_plus_mac_size,
+                            size_t data_plus_mac_plus_padding_size,
+                            const unsigned char *mac_secret,
+                            unsigned mac_secret_length, char is_sslv3);
 
 void tls_fips_digest_extra(const EVP_CIPHER_CTX *cipher_ctx,
                            EVP_MD_CTX *mac_ctx, const unsigned char *data,

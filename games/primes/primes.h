@@ -1,4 +1,4 @@
-/*	$NetBSD: primes.h,v 1.6 2014/10/02 21:36:37 ast Exp $	*/
+/*	$NetBSD: primes.h,v 1.5.74.1 2014/10/05 10:21:04 martin Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993

@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.h,v 1.37 2016/07/07 06:55:40 msaitoh Exp $	*/
+/*	$NetBSD: intr.h,v 1.35 2012/12/27 06:42:14 cherry Exp $	*/
 /*	NetBSD intr.h,v 1.15 2004/10/31 10:39:34 yamt Exp	*/
 
 /*-
@@ -68,7 +68,7 @@ struct intrstub {
 #if 0
 	void *ist_entry;
 #endif
-	void *ist_recurse;
+	void *ist_recurse; 
 	void *ist_resume;
 };
 
@@ -154,8 +154,6 @@ splraiseipl(ipl_cookie_t icookie)
 
 struct pcibus_attach_args;
 
-typedef int intr_handle_t;
-
 #ifdef MULTIPROCESSOR
 int intr_biglock_wrapper(void *);
 #endif
@@ -165,7 +163,7 @@ int x86_nmi(void);
 
 void *intr_establish(int, struct pic *, int, int, int, int (*)(void *), void *, bool);
 void intr_disestablish(struct intrhand *);
-const char *intr_string(intr_handle_t);
+const char *intr_string(int);
 void cpu_intr_init(struct cpu_info *);
 int xen_intr_map(int *, int);
 #ifdef INTRDEBUG

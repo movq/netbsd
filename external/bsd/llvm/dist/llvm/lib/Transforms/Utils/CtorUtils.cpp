@@ -11,15 +11,14 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/Transforms/Utils/CtorUtils.h"
 #include "llvm/ADT/BitVector.h"
+#include "llvm/Transforms/Utils/CtorUtils.h"
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Function.h"
 #include "llvm/IR/GlobalVariable.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/Module.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/raw_ostream.h"
 
 #define DEBUG_TYPE "ctor_utils"
 
@@ -50,7 +49,7 @@ void removeGlobalCtors(GlobalVariable *GCL, const BitVector &CtorsToRemove) {
   GlobalVariable *NGV =
       new GlobalVariable(CA->getType(), GCL->isConstant(), GCL->getLinkage(),
                          CA, "", GCL->getThreadLocalMode());
-  GCL->getParent()->getGlobalList().insert(GCL->getIterator(), NGV);
+  GCL->getParent()->getGlobalList().insert(GCL, NGV);
   NGV->takeName(GCL);
 
   // Nuke the old list, replacing any uses with the new one.

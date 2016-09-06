@@ -1,5 +1,6 @@
 /* tc-mn10200.c -- Assembler code for the Matsushita 10200
-   Copyright (C) 1996-2015 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
+   2005, 2006, 2007, 2009  Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -181,12 +182,13 @@ data_register_name (expressionS *expressionP)
   char c;
 
   /* Find the spelling of the operand.  */
-  start = input_line_pointer;
-  c = get_symbol_name (&name);
+  start = name = input_line_pointer;
+
+  c = get_symbol_end ();
   reg_number = reg_name_search (data_registers, DATA_REG_NAME_CNT, name);
 
   /* Put back the delimiting char.  */
-  (void) restore_line_pointer (c);
+  *input_line_pointer = c;
 
   /* Look to see if it's in the register table.  */
   if (reg_number >= 0)
@@ -225,12 +227,13 @@ address_register_name (expressionS *expressionP)
   char c;
 
   /* Find the spelling of the operand.  */
-  start = input_line_pointer;
-  c = get_symbol_name (&name);
+  start = name = input_line_pointer;
+
+  c = get_symbol_end ();
   reg_number = reg_name_search (address_registers, ADDRESS_REG_NAME_CNT, name);
 
   /* Put back the delimiting char.  */
-  (void) restore_line_pointer (c);
+  *input_line_pointer = c;
 
   /* Look to see if it's in the register table.  */
   if (reg_number >= 0)
@@ -269,12 +272,13 @@ other_register_name (expressionS *expressionP)
   char c;
 
   /* Find the spelling of the operand.  */
-  start = input_line_pointer;
-  c = get_symbol_name (&name);
+  start = name = input_line_pointer;
+
+  c = get_symbol_end ();
   reg_number = reg_name_search (other_registers, OTHER_REG_NAME_CNT, name);
 
   /* Put back the delimiting char.  */
-  (void) restore_line_pointer (c);
+  *input_line_pointer = c;
 
   /* Look to see if it's in the register table.  */
   if (reg_number >= 0)
@@ -558,7 +562,6 @@ md_convert_frag (bfd *abfd ATTRIBUTE_UNUSED,
 	  break;
 	case 0xff:
 	  opcode = 0xfe;
-	  break;
 	case 0xe8:
 	  opcode = 0xe9;
 	  break;
@@ -676,14 +679,14 @@ valueT
 md_section_align (asection *seg, valueT addr)
 {
   int align = bfd_get_section_alignment (stdoutput, seg);
-  return ((addr + (1 << align) - 1) & -(1 << align));
+  return ((addr + (1 << align) - 1) & (-1 << align));
 }
 
 void
 md_begin (void)
 {
   char *prev_name = "";
-  const struct mn10200_opcode *op;
+  register const struct mn10200_opcode *op;
 
   mn10200_hash = hash_new ();
 
@@ -977,32 +980,32 @@ md_assemble (char *str)
 	    }
 	  else if (operand->flags & MN10200_OPERAND_PSW)
 	    {
-	      char *start;
-	      char c = get_symbol_name (&start);
+	      char *start = input_line_pointer;
+	      char c = get_symbol_end ();
 
 	      if (strcmp (start, "psw") != 0)
 		{
-		  (void) restore_line_pointer (c);
+		  *input_line_pointer = c;
 		  input_line_pointer = hold;
 		  str = hold;
 		  goto error;
 		}
-	      (void) restore_line_pointer (c);
+	      *input_line_pointer = c;
 	      goto keep_going;
 	    }
 	  else if (operand->flags & MN10200_OPERAND_MDR)
 	    {
-	      char *start;
-	      char c = get_symbol_name (&start);
+	      char *start = input_line_pointer;
+	      char c = get_symbol_end ();
 
 	      if (strcmp (start, "mdr") != 0)
 		{
-		  (void) restore_line_pointer (c);
+		  *input_line_pointer = c;
 		  input_line_pointer = hold;
 		  str = hold;
 		  goto error;
 		}
-	      (void) restore_line_pointer (c);
+	      *input_line_pointer = c;
 	      goto keep_going;
 	    }
 	  else if (data_register_name (&ex))
@@ -1334,3 +1337,4 @@ keep_going:
 	}
     }
 }
+

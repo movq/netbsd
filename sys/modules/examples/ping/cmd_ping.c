@@ -1,4 +1,4 @@
-/*	$NetBSD: cmd_ping.c,v 1.2 2015/05/13 12:13:38 joerg Exp $	*/
+/*	$NetBSD: cmd_ping.c,v 1.2.2.2 2015/06/03 06:51:40 snj Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: cmd_ping.c,v 1.2 2015/05/13 12:13:38 joerg Exp $");
+__RCSID("$NetBSD: cmd_ping.c,v 1.2.2.2 2015/06/03 06:51:40 snj Exp $");
 
 #include <err.h>
 #include <fcntl.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: cac.c,v 1.56 2016/07/07 06:55:41 msaitoh Exp $	*/
+/*	$NetBSD: cac.c,v 1.54 2012/10/27 17:18:19 chs Exp $	*/
 
 /*-
  * Copyright (c) 2000, 2006, 2007 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cac.c,v 1.56 2016/07/07 06:55:41 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cac.c,v 1.54 2012/10/27 17:18:19 chs Exp $");
 
 #include "bio.h"
 
@@ -107,7 +107,8 @@ cac_init(struct cac_softc *sc, const char *intrstr, int startfw)
 	char firm[8];
 
 	if (intrstr != NULL)
-		aprint_normal_dev(sc->sc_dev, "interrupting at %s\n", intrstr);
+		aprint_normal_dev(sc->sc_dev, "interrupting at %s\n",
+		    intrstr);
 
 	SIMPLEQ_INIT(&sc->sc_ccb_free);
 	SIMPLEQ_INIT(&sc->sc_ccb_queue);
@@ -722,10 +723,40 @@ cac_sensor_refresh(struct sysmon_envsys *sme, envsys_data_t *edata)
 	memset(&bv, 0, sizeof(bv));
 	bv.bv_volid = edata->sensor;
 	s = splbio();
-	if (cac_ioctl_vol(sc, &bv))
-		bv.bv_status = BIOC_SVINVALID;
+	if (cac_ioctl_vol(sc, &bv)) {
+		splx(s);
+		return;
+	}
 	splx(s);
 
-	bio_vol_to_envsys(edata, &bv);
+	switch(bv.bv_status) {
+	case BIOC_SVOFFLINE:
+		edata->value_cur = ENVSYS_DRIVE_FAIL;
+		edata->state = ENVSYS_SCRITICAL;
+		break;
+
+	case BIOC_SVDEGRADED:
+		edata->value_cur = ENVSYS_DRIVE_PFAIL;
+		edata->state = ENVSYS_SCRITICAL;
+		break;
+
+	case BIOC_SVSCRUB:
+	case BIOC_SVONLINE:
+		edata->value_cur = ENVSYS_DRIVE_ONLINE;
+		edata->state = ENVSYS_SVALID;
+		break;
+
+	case BIOC_SVREBUILD:
+	case BIOC_SVBUILDING:
+		edata->value_cur = ENVSYS_DRIVE_REBUILD;
+		edata->state = ENVSYS_SVALID;
+		break;
+
+	case BIOC_SVINVALID:
+		/* FALLTRHOUGH */
+	default:
+		edata->value_cur = 0; /* unknown */
+		edata->state = ENVSYS_SINVALID;
+	}
 }
 #endif /* NBIO > 0 */

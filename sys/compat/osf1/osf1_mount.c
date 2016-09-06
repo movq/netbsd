@@ -1,4 +1,4 @@
-/*	$NetBSD: osf1_mount.c,v 1.53 2015/10/23 19:40:11 maxv Exp $	*/
+/*	$NetBSD: osf1_mount.c,v 1.50 2013/11/27 17:24:44 christos Exp $	*/
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: osf1_mount.c,v 1.53 2015/10/23 19:40:11 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: osf1_mount.c,v 1.50 2013/11/27 17:24:44 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -116,7 +116,7 @@ osf1_sys_fstatfs(struct lwp *l, const struct osf1_sys_fstatfs_args *uap, registe
 	/* fd_getvnode() will use the descriptor for us */
 	if ((error = fd_getvnode(SCARG(uap, fd), &fp)))
 		return (error);
-	mp = fp->f_vnode->v_mount;
+	mp = ((struct vnode *)fp->f_data)->v_mount;
 	sp = &mp->mnt_stat;
 	if ((error = VFS_STATVFS(mp, sp)))
 		goto out;
@@ -261,7 +261,7 @@ osf1_mount_mfs(struct lwp *l, const struct osf1_sys_mount_args *uap)
 	bsd_ma.base = osf_ma.base;
 	bsd_ma.size = osf_ma.size;
 
-	return do_sys_mount(l, "mfs", UIO_SYSSPACE, SCARG(uap, path),
+	return do_sys_mount(l, vfs_getopsbyname("mfs"), NULL, SCARG(uap, path),
 	    SCARG(uap, flags), &bsd_ma, UIO_SYSSPACE, sizeof bsd_ma, &dummy);
 }
 
@@ -312,6 +312,8 @@ osf1_mount_nfs(struct lwp *l, const struct osf1_sys_mount_args *uap)
 	if (bsd_na.flags & NFSMNT_RETRANS)
 		bsd_na.retrans = osf_na.retrans;
 
-	return do_sys_mount(l, "nfs", UIO_SYSSPACE, SCARG(uap, path),
+	return do_sys_mount(l, vfs_getopsbyname("nfs"), NULL, SCARG(uap, path),
 	    SCARG(uap, flags), &bsd_na, UIO_SYSSPACE, sizeof bsd_na, &dummy);
+
+	return 0;
 }

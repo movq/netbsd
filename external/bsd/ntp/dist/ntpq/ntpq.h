@@ -1,4 +1,4 @@
-/*	$NetBSD: ntpq.h,v 1.9 2016/05/01 23:32:01 christos Exp $	*/
+/*	$NetBSD: ntpq.h,v 1.4.4.2 2016/05/11 11:35:39 martin Exp $	*/
 
 /*
  * ntpq.h - definitions of interest to ntpq

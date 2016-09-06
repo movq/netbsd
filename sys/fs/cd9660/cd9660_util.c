@@ -1,4 +1,4 @@
-/*	$NetBSD: cd9660_util.c,v 1.14 2016/03/09 20:18:17 christos Exp $	*/
+/*	$NetBSD: cd9660_util.c,v 1.11.2.1 2015/01/17 12:10:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 1994
@@ -37,17 +37,9 @@
  */
 
 #include <sys/cdefs.h>
-#ifdef _KERNEL
-__KERNEL_RCSID(0, "$NetBSD: cd9660_util.c,v 1.14 2016/03/09 20:18:17 christos Exp $");
-#else
-/* used by macppc_installboot */
-#if HAVE_NBTOOL_CONFIG_H
-#include "nbtool_config.h"
-#endif
-#endif
+__KERNEL_RCSID(0, "$NetBSD: cd9660_util.c,v 1.11.2.1 2015/01/17 12:10:55 martin Exp $");
 
 #include <sys/param.h>
-#ifdef _KERNEL
 #include <sys/systm.h>
 #include <sys/namei.h>
 #include <sys/resourcevar.h>
@@ -59,23 +51,14 @@ __KERNEL_RCSID(0, "$NetBSD: cd9660_util.c,v 1.14 2016/03/09 20:18:17 christos Ex
 #include <sys/mount.h>
 #include <sys/vnode.h>
 #include <sys/dirent.h>
-#else
-#include <assert.h>
-#include <dirent.h>
-#define KASSERT(x)	assert(x)	/* XXX for <fs/unicode.h> */
-#endif
 
 #include <fs/cd9660/iso.h>
-#ifdef _KERNEL
 #include <fs/cd9660/cd9660_extern.h>
-#else
-static int isochar(const u_char *, const u_char *, int, uint16_t *);
-#endif
 
 #include <fs/unicode.h>
 
-static uint16_t wget(const u_char **, size_t *, int);
-static int wput(u_char *, size_t, uint16_t, int);
+static u_int16_t wget(const u_char **, size_t *, int);
+static int wput(u_char *, size_t, u_int16_t, int);
 
 int cd9660_utf8_joliet = 1;
 
@@ -85,9 +68,8 @@ int cd9660_utf8_joliet = 1;
  */
 int
 isochar(const u_char *isofn, const u_char *isoend, int joliet_level,
-    uint16_t *c)
+	u_int16_t *c)
 {
-
 	*c = isofn[0];
 	if (joliet_level == 0 || isofn + 1 == isoend) {
 		/* (00) and (01) are one byte in Joliet, too */
@@ -113,16 +95,11 @@ isochar(const u_char *isofn, const u_char *isoend, int joliet_level,
  */
 int
 isofncmp(const u_char *fn, size_t fnlen, const u_char *isofn, size_t isolen,
-    int joliet_level)
+	int joliet_level)
 {
 	int i, j;
-	uint16_t fc, ic;
+	u_int16_t fc, ic;
 	const u_char *isoend = isofn + isolen;
-
-#ifdef ISOFNCMPDEBUG
-	printf("fn = %s, fnlen = %zu, isofn = %s, isolen = %zu\n",
-	    fn, fnlen, isofn, isolen);
-#endif
 
 	while (fnlen > 0) {
 		fc = wget(&fn, &fnlen, joliet_level);
@@ -155,10 +132,10 @@ isofncmp(const u_char *fn, size_t fnlen, const u_char *isofn, size_t isolen,
 					if (fc >= 'a' && fc <= 'z')
 						fc -= 'a' - 'A';
 
-					return (int)fc - (int)ic;
+					return (int) fc - (int) ic;
 				}
 			} else
-				return (int)fc - (int)ic;
+				return (int) fc - (int) ic;
 		}
 	}
 	if (isofn != isoend) {
@@ -185,11 +162,11 @@ isofncmp(const u_char *fn, size_t fnlen, const u_char *isofn, size_t isolen,
  */
 void
 isofntrans(const u_char *infn, int infnlen, u_char *outfn, u_short *outfnlen,
-    int original, int casetrans, int assoc, int joliet_level)
+	int original, int casetrans, int assoc, int joliet_level)
 {
 	int fnidx = 0;
 	const u_char *infnend = infn + infnlen;
-	uint16_t c;
+	u_int16_t c;
 	int sz;
 
 	if (assoc) {
@@ -222,7 +199,7 @@ isofntrans(const u_char *infn, int infnlen, u_char *outfn, u_short *outfnlen,
 	*outfnlen = fnidx;
 }
 
-static uint16_t
+static u_int16_t
 wget(const u_char **str, size_t *sz, int joliet_level)
 {
 	if (joliet_level > 0 && cd9660_utf8_joliet) {
@@ -234,7 +211,7 @@ wget(const u_char **str, size_t *sz, int joliet_level)
 		 * this effectively assumes provided file name is using
 		 * ISO-8859-1 subset.
 		 */
-		uint16_t c = *str[0];
+		u_int16_t c = *str[0];
 		(*str)++;
 		(*sz)--;
 
@@ -243,7 +220,7 @@ wget(const u_char **str, size_t *sz, int joliet_level)
 }
 
 static int
-wput(u_char *s, size_t n, uint16_t c, int joliet_level)
+wput(u_char *s, size_t n, u_int16_t c, int joliet_level)
 {
 	if (joliet_level > 0 && cd9660_utf8_joliet) {
 		/* Store Joliet file name encoded into UTF-8 */

@@ -29,8 +29,8 @@ inline void DominatorTreeBase<MachineBasicBlock>::addRoot(MachineBasicBlock* MBB
   this->Roots.push_back(MBB);
 }
 
-extern template class DomTreeNodeBase<MachineBasicBlock>;
-extern template class DominatorTreeBase<MachineBasicBlock>;
+EXTERN_TEMPLATE_INSTANTIATION(class DomTreeNodeBase<MachineBasicBlock>);
+EXTERN_TEMPLATE_INSTANTIATION(class DominatorTreeBase<MachineBasicBlock>);
 
 typedef DomTreeNodeBase<MachineBasicBlock> MachineDomTreeNode;
 
@@ -45,6 +45,9 @@ class MachineDominatorTree : public MachineFunctionPass {
     MachineBasicBlock *FromBB;
     MachineBasicBlock *ToBB;
     MachineBasicBlock *NewBB;
+    CriticalEdge(MachineBasicBlock *FromBB, MachineBasicBlock *ToBB,
+                 MachineBasicBlock *NewBB)
+        : FromBB(FromBB), ToBB(ToBB), NewBB(NewBB) {}
   };
 
   /// \brief Pile up all the critical edges to be split.
@@ -64,7 +67,74 @@ class MachineDominatorTree : public MachineFunctionPass {
   /// the fast query path of DT as much as possible.
   ///
   /// \post CriticalEdgesToSplit.empty().
-  void applySplitCriticalEdges() const;
+  void applySplitCriticalEdges() const {
+    // Bail out early if there is nothing to do.
+    if (CriticalEdgesToSplit.empty())
+      return;
+
+    // For each element in CriticalEdgesToSplit, remember whether or
+    // not element is the new immediate domminator of its successor.
+    // The mapping is done by index, i.e., the information for the ith
+    // element of CriticalEdgesToSplit is the ith element of IsNewIDom.
+    SmallVector<bool, 32> IsNewIDom;
+    IsNewIDom.resize(CriticalEdgesToSplit.size());
+    size_t Idx = 0;
+
+    // Collect all the dominance properties info, before invalidating
+    // the underlying DT.
+    for (CriticalEdge &Edge : CriticalEdgesToSplit) {
+      // Update dominator information.
+      MachineBasicBlock *Succ = Edge.ToBB;
+      MachineDomTreeNode *SucccDTNode = DT->getNode(Succ);
+
+      IsNewIDom[Idx] = true;
+      for (MachineBasicBlock *PredBB : Succ->predecessors()) {
+        if (PredBB == Edge.NewBB)
+          continue;
+        // If we are in this situation:
+        // FromBB1        FromBB2
+        //    +              +
+        //   + +            + +
+        //  +   +          +   +
+        // ...  Split1  Split2 ...
+        //           +   +
+        //            + +
+        //             +
+        //            Succ
+        // Instead of checking the domiance property with Split2, we
+        // check it with FromBB2 since Split2 is still unknown of the
+        // underlying DT structure.
+        if (NewBBs.count(PredBB)) {
+          assert(PredBB->pred_size() == 1 && "A basic block resulting from a "
+                                             "critical edge split has more "
+                                             "than one predecessor!");
+          PredBB = *PredBB->pred_begin();
+        }
+        if (!DT->dominates(SucccDTNode, DT->getNode(PredBB))) {
+          IsNewIDom[Idx] = false;
+          break;
+        }
+      }
+      ++Idx;
+    }
+
+    // Now, update DT with the collected dominance properties info.
+    Idx = 0;
+    for (CriticalEdge &Edge : CriticalEdgesToSplit) {
+      // We know FromBB dominates NewBB.
+      MachineDomTreeNode *NewDTNode = DT->addNewBlock(Edge.NewBB, Edge.FromBB);
+      MachineDomTreeNode *SucccDTNode = DT->getNode(Edge.ToBB);
+
+      // If all the other predecessors of "Succ" are dominated by "Succ" itself
+      // then the new block is the new immediate dominator of "Succ". Otherwise,
+      // the new block doesn't dominate anything.
+      if (IsNewIDom[Idx])
+        DT->changeImmediateDominator(SucccDTNode, NewDTNode);
+      ++Idx;
+    }
+    NewBBs.clear();
+    CriticalEdgesToSplit.clear();
+  }
 
 public:
   static char ID; // Pass ID, replacement for typeid
@@ -72,7 +142,7 @@ public:
 
   MachineDominatorTree();
 
-  ~MachineDominatorTree() override;
+  ~MachineDominatorTree();
 
   DominatorTreeBase<MachineBasicBlock> &getBase() {
     applySplitCriticalEdges();
@@ -237,7 +307,7 @@ public:
     (void)Inserted;
     assert(Inserted &&
            "A basic block inserted via edge splitting cannot appear twice");
-    CriticalEdgesToSplit.push_back({FromBB, ToBB, NewBB});
+    CriticalEdgesToSplit.push_back(CriticalEdge(FromBB, ToBB, NewBB));
   }
 };
 
@@ -246,29 +316,21 @@ public:
 /// iterable by generic graph iterators.
 ///
 
-template <class Node, class ChildIterator>
-struct MachineDomTreeGraphTraitsBase {
-  typedef Node NodeType;
-  typedef ChildIterator ChildIteratorType;
+template<class T> struct GraphTraits;
 
-  static NodeType *getEntryNode(NodeType *N) { return N; }
-  static inline ChildIteratorType child_begin(NodeType *N) {
+template <> struct GraphTraits<MachineDomTreeNode *> {
+  typedef MachineDomTreeNode NodeType;
+  typedef NodeType::iterator  ChildIteratorType;
+
+  static NodeType *getEntryNode(NodeType *N) {
+    return N;
+  }
+  static inline ChildIteratorType child_begin(NodeType* N) {
     return N->begin();
   }
-  static inline ChildIteratorType child_end(NodeType *N) { return N->end(); }
-};
-
-template <class T> struct GraphTraits;
-
-template <>
-struct GraphTraits<MachineDomTreeNode *>
-    : public MachineDomTreeGraphTraitsBase<MachineDomTreeNode,
-                                           MachineDomTreeNode::iterator> {};
-
-template <>
-struct GraphTraits<const MachineDomTreeNode *>
-    : public MachineDomTreeGraphTraitsBase<const MachineDomTreeNode,
-                                           MachineDomTreeNode::const_iterator> {
+  static inline ChildIteratorType child_end(NodeType* N) {
+    return N->end();
+  }
 };
 
 template <> struct GraphTraits<MachineDominatorTree*>

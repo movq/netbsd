@@ -282,7 +282,7 @@ int BN_mod_exp_recp(BIGNUM *r, const BIGNUM *a, const BIGNUM *p,
             ret = 1;
             BN_zero(r);
         } else {
-            ret = BN_one(r);
+        ret = BN_one(r);
         }
         return ret;
     }
@@ -422,7 +422,7 @@ int BN_mod_exp_mont(BIGNUM *rr, const BIGNUM *a, const BIGNUM *p,
             ret = 1;
             BN_zero(rr);
         } else {
-            ret = BN_one(rr);
+        ret = BN_one(rr);
         }
         return ret;
     }
@@ -667,7 +667,7 @@ int BN_mod_exp_mont_consttime(BIGNUM *rr, const BIGNUM *a, const BIGNUM *p,
             ret = 1;
             BN_zero(rr);
         } else {
-            ret = BN_one(rr);
+        ret = BN_one(rr);
         }
         return ret;
     }
@@ -1084,13 +1084,13 @@ int BN_mod_exp_simple(BIGNUM *r, const BIGNUM *a, const BIGNUM *p,
     }
 
     bits = BN_num_bits(p);
-   if (bits == 0) {
+    if (bits == 0) {
         /* x**0 mod 1 is still zero. */
         if (BN_is_one(m)) {
             ret = 1;
             BN_zero(r);
         } else {
-            ret = BN_one(r);
+        ret = BN_one(r);
         }
         return ret;
     }

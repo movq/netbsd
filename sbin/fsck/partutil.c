@@ -1,4 +1,4 @@
-/*	$NetBSD: partutil.c,v 1.15 2015/06/03 17:53:23 martin Exp $	*/
+/*	$NetBSD: partutil.c,v 1.12.6.1 2015/05/25 09:10:48 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2006 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: partutil.c,v 1.15 2015/06/03 17:53:23 martin Exp $");
+__RCSID("$NetBSD: partutil.c,v 1.12.6.1 2015/05/25 09:10:48 msaitoh Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -99,7 +99,7 @@ getdiskinfo(const char *s, int fd, const char *dt, struct disk_geom *geo,
 	prop_dictionary_t disk_dict, geom_dict;
 	struct stat sb;
 	const struct partition *pp;
-	int ptn, error;
+	int ptn;
 
 	if (dt) {
 		lp = getdiskbyname(dt);
@@ -108,13 +108,7 @@ getdiskinfo(const char *s, int fd, const char *dt, struct disk_geom *geo,
 	}
 
 	/* Get disk description dictionary */
-	error = prop_dictionary_recv_ioctl(fd, DIOCGDISKINFO, &disk_dict);
-
-	/* fail quickly if the device does not exist at all */
-	if (error == ENXIO)
-		return -1;
-
-	if (error) {
+	if (prop_dictionary_recv_ioctl(fd, DIOCGDISKINFO, &disk_dict)) {
 		/*
 		 * Ask for disklabel if DIOCGDISKINFO failed. This is
 		 * compatibility call and can be removed when all devices
@@ -122,8 +116,7 @@ getdiskinfo(const char *s, int fd, const char *dt, struct disk_geom *geo,
 		 * cgd, ccd pseudo disk drives doesn't support DIOCGDDISKINFO
 		 */
 		if (ioctl(fd, DIOCGDINFO, lp) == -1) {
-			if (errno != ENXIO)
-				warn("DIOCGDINFO on %s failed", s);
+			warn("DIOCGDINFO on %s failed", s);
 			return -1;
 		}
 		label2geom(geo, lp);
@@ -131,9 +124,6 @@ getdiskinfo(const char *s, int fd, const char *dt, struct disk_geom *geo,
 		geom_dict = prop_dictionary_get(disk_dict, "geometry");
 		dict2geom(geo, geom_dict);
 	}
-
-	if (dkw == NULL)
-		return 0;
 
 	/* Get info about partition/wedge */
 	if (ioctl(fd, DIOCGWEDGEINFO, dkw) != -1) {
@@ -145,6 +135,9 @@ getdiskinfo(const char *s, int fd, const char *dt, struct disk_geom *geo,
 		err(1, "Please implement DIOCGWEDGEINFO or "
 		    "DIOCGDINFO for disk device %s", s);
 	}
+
+	if (dkw == NULL)
+		return 0;
 
 	/* DIOCGDINFO didn't fail */
 	(void)memset(dkw, 0, sizeof(*dkw));

@@ -15,9 +15,7 @@
 #ifndef LLVM_TRANSFORMS_UTILS_LOCAL_H
 #define LLVM_TRANSFORMS_UTILS_LOCAL_H
 
-#include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/IR/DataLayout.h"
-#include "llvm/IR/Dominators.h"
 #include "llvm/IR/GetElementPtrTypeIterator.h"
 #include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/Operator.h"
@@ -33,6 +31,7 @@ class DbgDeclareInst;
 class StoreInst;
 class LoadInst;
 class Value;
+class Pass;
 class PHINode;
 class AllocaInst;
 class AssumptionCache;
@@ -41,8 +40,8 @@ class DataLayout;
 class TargetLibraryInfo;
 class TargetTransformInfo;
 class DIBuilder;
+class AliasAnalysis;
 class DominatorTree;
-class LazyValueInfo;
 
 template<typename T> class SmallVectorImpl;
 
@@ -90,7 +89,7 @@ bool RecursivelyDeleteDeadPHINode(PHINode *PN,
 ///
 /// This returns true if it changed the code, note that it can delete
 /// instructions in other blocks as well in this block.
-bool SimplifyInstructionsInBlock(BasicBlock *BB,
+bool SimplifyInstructionsInBlock(BasicBlock *BB, const DataLayout *TD = nullptr,
                                  const TargetLibraryInfo *TLI = nullptr);
 
 //===----------------------------------------------------------------------===//
@@ -108,14 +107,15 @@ bool SimplifyInstructionsInBlock(BasicBlock *BB,
 ///
 /// .. and delete the predecessor corresponding to the '1', this will attempt to
 /// recursively fold the 'and' to 0.
-void RemovePredecessorAndSimplify(BasicBlock *BB, BasicBlock *Pred);
+void RemovePredecessorAndSimplify(BasicBlock *BB, BasicBlock *Pred,
+                                  DataLayout *TD = nullptr);
 
 /// MergeBasicBlockIntoOnlyPred - BB is a block with one predecessor and its
 /// predecessor is known to have one successor (BB!).  Eliminate the edge
 /// between them, moving the instructions in the predecessor into BB.  This
 /// deletes the predecessor block.
 ///
-void MergeBasicBlockIntoOnlyPred(BasicBlock *BB, DominatorTree *DT = nullptr);
+void MergeBasicBlockIntoOnlyPred(BasicBlock *BB, Pass *P = nullptr);
 
 /// TryToSimplifyUncondBranchFromEmptyBlock - BB is known to contain an
 /// unconditional branch, and contains no instructions other than PHI nodes,
@@ -138,7 +138,8 @@ bool EliminateDuplicatePHINodes(BasicBlock *BB);
 /// the basic block that was pointed to.
 ///
 bool SimplifyCFG(BasicBlock *BB, const TargetTransformInfo &TTI,
-                 unsigned BonusInstThreshold, AssumptionCache *AC = nullptr);
+                 unsigned BonusInstThreshold, const DataLayout *TD = nullptr,
+                 AssumptionCache *AC = nullptr);
 
 /// FlatternCFG - This function is used to flatten a CFG.  For
 /// example, it uses parallel-and and parallel-or mode to collapse
@@ -150,7 +151,8 @@ bool FlattenCFG(BasicBlock *BB, AliasAnalysis *AA = nullptr);
 /// and if a predecessor branches to us and one of our successors, fold the
 /// setcc into the predecessor and use logical operations to pick the right
 /// destination.
-bool FoldBranchToCommonDest(BranchInst *BI, unsigned BonusInstThreshold = 1);
+bool FoldBranchToCommonDest(BranchInst *BI, const DataLayout *DL = nullptr,
+                            unsigned BonusInstThreshold = 1);
 
 /// DemoteRegToStack - This function takes a virtual register computed by an
 /// Instruction and replaces it with a slot in the stack frame, allocated via
@@ -172,17 +174,18 @@ AllocaInst *DemotePHIToStack(PHINode *P, Instruction *AllocaPoint = nullptr);
 /// and it is more than the alignment of the ultimate object, see if we can
 /// increase the alignment of the ultimate object, making this check succeed.
 unsigned getOrEnforceKnownAlignment(Value *V, unsigned PrefAlign,
-                                    const DataLayout &DL,
-                                    const Instruction *CxtI = nullptr,
+                                    const DataLayout *TD = nullptr,
                                     AssumptionCache *AC = nullptr,
+                                    const Instruction *CxtI = nullptr,
                                     const DominatorTree *DT = nullptr);
 
 /// getKnownAlignment - Try to infer an alignment for the specified pointer.
-static inline unsigned getKnownAlignment(Value *V, const DataLayout &DL,
-                                         const Instruction *CxtI = nullptr,
+static inline unsigned getKnownAlignment(Value *V,
+                                         const DataLayout *TD = nullptr,
                                          AssumptionCache *AC = nullptr,
+                                         const Instruction *CxtI = nullptr,
                                          const DominatorTree *DT = nullptr) {
-  return getOrEnforceKnownAlignment(V, 0, DL, CxtI, AC, DT);
+  return getOrEnforceKnownAlignment(V, 0, TD, AC, CxtI, DT);
 }
 
 /// EmitGEPOffset - Given a getelementptr instruction/constantexpr, emit the
@@ -190,11 +193,11 @@ static inline unsigned getKnownAlignment(Value *V, const DataLayout &DL,
 /// in the base pointer).  Return the result as a signed integer of intptr size.
 /// When NoAssumptions is true, no assumptions about index computation not
 /// overflowing is made.
-template <typename IRBuilderTy>
-Value *EmitGEPOffset(IRBuilderTy *Builder, const DataLayout &DL, User *GEP,
+template<typename IRBuilderTy>
+Value *EmitGEPOffset(IRBuilderTy *Builder, const DataLayout &TD, User *GEP,
                      bool NoAssumptions = false) {
   GEPOperator *GEPOp = cast<GEPOperator>(GEP);
-  Type *IntPtrTy = DL.getIntPtrType(GEP->getType());
+  Type *IntPtrTy = TD.getIntPtrType(GEP->getType());
   Value *Result = Constant::getNullValue(IntPtrTy);
 
   // If the GEP is inbounds, we know that none of the addressing operations will
@@ -209,7 +212,7 @@ Value *EmitGEPOffset(IRBuilderTy *Builder, const DataLayout &DL, User *GEP,
   for (User::op_iterator i = GEP->op_begin() + 1, e = GEP->op_end(); i != e;
        ++i, ++GTI) {
     Value *Op = *i;
-    uint64_t Size = DL.getTypeAllocSize(GTI.getIndexedType()) & PtrSizeMask;
+    uint64_t Size = TD.getTypeAllocSize(GTI.getIndexedType()) & PtrSizeMask;
     if (Constant *OpC = dyn_cast<Constant>(Op)) {
       if (OpC->isZeroValue())
         continue;
@@ -220,7 +223,7 @@ Value *EmitGEPOffset(IRBuilderTy *Builder, const DataLayout &DL, User *GEP,
           OpC = OpC->getSplatValue();
 
         uint64_t OpValue = cast<ConstantInt>(OpC)->getZExtValue();
-        Size = DL.getStructLayout(STy)->getElementOffset(OpValue);
+        Size = TD.getStructLayout(STy)->getElementOffset(OpValue);
 
         if (Size)
           Result = Builder->CreateAdd(Result, ConstantInt::get(IntPtrTy, Size),
@@ -272,83 +275,20 @@ bool LowerDbgDeclare(Function &F);
 /// an alloca, if any.
 DbgDeclareInst *FindAllocaDbgDeclare(Value *V);
 
-/// \brief Replaces llvm.dbg.declare instruction when the address it describes
-/// is replaced with a new value. If Deref is true, an additional DW_OP_deref is
-/// prepended to the expression. If Offset is non-zero, a constant displacement
-/// is added to the expression (after the optional Deref). Offset can be
-/// negative.
-bool replaceDbgDeclare(Value *Address, Value *NewAddress,
-                       Instruction *InsertBefore, DIBuilder &Builder,
-                       bool Deref, int Offset);
-
-/// \brief Replaces llvm.dbg.declare instruction when the alloca it describes
-/// is replaced with a new value. If Deref is true, an additional DW_OP_deref is
-/// prepended to the expression. If Offset is non-zero, a constant displacement
-/// is added to the expression (after the optional Deref). Offset can be
-/// negative. New llvm.dbg.declare is inserted immediately before AI.
+/// replaceDbgDeclareForAlloca - Replaces llvm.dbg.declare instruction when
+/// alloca is replaced with a new value.
 bool replaceDbgDeclareForAlloca(AllocaInst *AI, Value *NewAllocaAddress,
-                                DIBuilder &Builder, bool Deref, int Offset = 0);
-
-/// \brief Insert an unreachable instruction before the specified
-/// instruction, making it and the rest of the code in the block dead.
-void changeToUnreachable(Instruction *I, bool UseLLVMTrap);
-
-/// Replace 'BB's terminator with one that does not have an unwind successor
-/// block.  Rewrites `invoke` to `call`, etc.  Updates any PHIs in unwind
-/// successor.
-///
-/// \param BB  Block whose terminator will be replaced.  Its terminator must
-///            have an unwind successor.
-void removeUnwindEdge(BasicBlock *BB);
+                                DIBuilder &Builder);
 
 /// \brief Remove all blocks that can not be reached from the function's entry.
 ///
 /// Returns true if any basic block was removed.
-bool removeUnreachableBlocks(Function &F, LazyValueInfo *LVI = nullptr);
+bool removeUnreachableBlocks(Function &F);
 
 /// \brief Combine the metadata of two instructions so that K can replace J
 ///
 /// Metadata not listed as known via KnownIDs is removed
 void combineMetadata(Instruction *K, const Instruction *J, ArrayRef<unsigned> KnownIDs);
-
-/// \brief Replace each use of 'From' with 'To' if that use is dominated by 
-/// the given edge.  Returns the number of replacements made.
-unsigned replaceDominatedUsesWith(Value *From, Value *To, DominatorTree &DT,
-                                  const BasicBlockEdge &Edge);
-/// \brief Replace each use of 'From' with 'To' if that use is dominated by
-/// the given BasicBlock. Returns the number of replacements made.
-unsigned replaceDominatedUsesWith(Value *From, Value *To, DominatorTree &DT,
-                                  const BasicBlock *BB);
-
-
-/// \brief Return true if the CallSite CS calls a gc leaf function.
-///
-/// A leaf function is a function that does not safepoint the thread during its
-/// execution.  During a call or invoke to such a function, the callers stack
-/// does not have to be made parseable.
-///
-/// Most passes can and should ignore this information, and it is only used
-/// during lowering by the GC infrastructure.
-bool callsGCLeafFunction(ImmutableCallSite CS);
-
-//===----------------------------------------------------------------------===//
-//  Intrinsic pattern matching
-//
-
-/// Try and match a bitreverse or bswap idiom.
-///
-/// If an idiom is matched, an intrinsic call is inserted before \c I. Any added
-/// instructions are returned in \c InsertedInsts. They will all have been added
-/// to a basic block.
-///
-/// A bitreverse idiom normally requires around 2*BW nodes to be searched (where
-/// BW is the bitwidth of the integer type). A bswap idiom requires anywhere up
-/// to BW / 4 nodes to be searched, so is significantly faster.
-///
-/// This function returns true on a successful match or false otherwise.
-bool recognizeBitReverseOrBSwapIdiom(
-    Instruction *I, bool MatchBSwaps, bool MatchBitReversals,
-    SmallVectorImpl<Instruction *> &InsertedInsts);
 
 } // End llvm namespace
 

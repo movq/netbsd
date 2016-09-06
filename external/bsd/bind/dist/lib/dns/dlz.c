@@ -1,4 +1,4 @@
-/*	$NetBSD: dlz.c,v 1.8 2015/12/17 04:00:43 christos Exp $	*/
+/*	$NetBSD: dlz.c,v 1.6.4.1 2016/03/13 08:06:12 martin Exp $	*/
 
 /*
  * Portions Copyright (C) 2005, 2007, 2009-2013, 2015  Internet Systems Consortium, Inc. ("ISC")

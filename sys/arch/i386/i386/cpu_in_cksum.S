@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu_in_cksum.S,v 1.6 2016/06/14 03:05:24 christos Exp $	*/
+/*	$NetBSD: cpu_in_cksum.S,v 1.4 2008/04/28 20:23:24 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2001 The NetBSD Foundation, Inc.
@@ -59,7 +59,7 @@
  */
 
 #include <machine/asm.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu_in_cksum.S,v 1.6 2016/06/14 03:05:24 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu_in_cksum.S,v 1.4 2008/04/28 20:23:24 martin Exp $");
 
 #include "assym.h"
 
@@ -329,21 +329,9 @@ ENTRY(cpu_in_cksum)
 	ret
 
 .Lout_of_mbufs:
-#ifdef __PIC__
-	PIC_PROLOGUE
-	leal	PIC_GOTOFF(.Mout_of_mbufs_msg), %eax
-	pushl	%eax
-	call	PIC_PLT(_C_LABEL(printf))
-	leal	4(%esp), %esp
-	PIC_EPILOGUE
-#else
-	pushl	.Mout_of_mbufs_msg
+	pushl	$1f
 	call	_C_LABEL(printf)
 	leal	4(%esp), %esp
-#endif
 	jmp	.Lreturn
-
-	.section        .rodata
-	.type           .Mout_of_mbufs_msg, @object
-.Mout_of_mbufs_msg:
+1:
 	.asciz	"cksum: out of data\n"

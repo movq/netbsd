@@ -1,7 +1,7 @@
 /*
  * $OpenBSD: pch.c,v 1.37 2007/09/02 15:19:33 deraadt Exp $
  * $DragonFly: src/usr.bin/patch/pch.c,v 1.6 2008/08/10 23:35:40 joerg Exp $
- * $NetBSD: pch.c,v 1.28 2015/07/30 21:47:51 christos Exp $
+ * $NetBSD: pch.c,v 1.25.8.2 2015/07/31 16:47:13 snj Exp $
  */
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pch.c,v 1.28 2015/07/30 21:47:51 christos Exp $");
+__RCSID("$NetBSD: pch.c,v 1.25.8.2 2015/07/31 16:47:13 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/stat.h>

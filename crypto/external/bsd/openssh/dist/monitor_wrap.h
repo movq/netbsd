@@ -1,5 +1,5 @@
-/*	$NetBSD: monitor_wrap.h,v 1.11 2016/08/02 13:45:12 christos Exp $	*/
-/* $OpenBSD: monitor_wrap.h,v 1.30 2016/03/07 19:02:43 djm Exp $ */
+/*	$NetBSD: monitor_wrap.h,v 1.5.22.1 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: monitor_wrap.h,v 1.26 2015/02/16 22:13:32 djm Exp $ */
 
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>
@@ -41,17 +41,15 @@ struct Authctxt;
 void mm_log_handler(LogLevel, const char *, void *);
 int mm_is_monitor(void);
 DH *mm_choose_dh(int, int, int);
-int mm_key_sign(Key *, u_char **, u_int *, const u_char *, u_int, const char *);
+int mm_key_sign(Key *, u_char **, u_int *, const u_char *, u_int);
 void mm_inform_authserv(char *, char *);
 struct passwd *mm_getpwnamallow(const char *);
 char *mm_auth2_read_banner(void);
 int mm_auth_password(struct Authctxt *, const char *);
-int mm_key_allowed(enum mm_keytype, const char *, const char *, Key *, int);
-int mm_user_key_allowed(struct passwd *, Key *, int);
-int mm_hostbased_key_allowed(struct passwd *, const char *,
-    const char *, Key *);
-int mm_auth_rhosts_rsa_key_allowed(struct passwd *, const char *,
-    const char *, Key *);
+int mm_key_allowed(enum mm_keytype, char *, char *, Key *);
+int mm_user_key_allowed(struct passwd *, Key *);
+int mm_hostbased_key_allowed(struct passwd *, char *, char *, Key *);
+int mm_auth_rhosts_rsa_key_allowed(struct passwd *, char *, char *, Key *);
 int mm_key_verify(Key *, u_char *, u_int, u_char *, u_int);
 int mm_auth_rsa_key_allowed(struct passwd *, BIGNUM *, Key **);
 int mm_auth_rsa_verify_response(Key *, BIGNUM *, u_char *);

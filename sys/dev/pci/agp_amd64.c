@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: agp_amd64.c,v 1.8 2015/04/04 15:08:40 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: agp_amd64.c,v 1.7.14.1 2015/04/23 07:31:16 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

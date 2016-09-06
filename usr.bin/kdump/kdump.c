@@ -1,4 +1,4 @@
-/*	$NetBSD: kdump.c,v 1.124 2016/06/01 00:47:16 christos Exp $	*/
+/*	$NetBSD: kdump.c,v 1.118 2014/04/30 11:51:51 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1988, 1993\
 #if 0
 static char sccsid[] = "@(#)kdump.c	8.4 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: kdump.c,v 1.124 2016/06/01 00:47:16 christos Exp $");
+__RCSID("$NetBSD: kdump.c,v 1.118 2014/04/30 11:51:51 njoly Exp $");
 #endif
 #endif /* not lint */
 
@@ -48,7 +48,6 @@ __RCSID("$NetBSD: kdump.c,v 1.124 2016/06/01 00:47:16 christos Exp $");
 #define _KMEMUSER        /* To get the pseudo errors defined */
 #include <sys/errno.h>
 #undef _KMEMUSER
-#include <sys/mman.h>
 #include <sys/time.h>
 #include <sys/uio.h>
 #include <sys/ktrace.h>
@@ -110,7 +109,7 @@ static void	ioctldecode(u_long);
 static void	ktrsyscall(struct ktr_syscall *);
 static void	ktrsysret(struct ktr_sysret *, int);
 static void	ktrnamei(char *, int);
-static void	ktremul(char *, size_t, size_t);
+static void	ktremul(char *, int, int);
 static void	ktrgenio(struct ktr_genio *, int);
 static void	ktrpsig(void *, int);
 static void	ktrcsw(struct ktr_csw *);
@@ -127,8 +126,7 @@ static void visdump_buf(const void *, int, int);
 int
 main(int argc, char **argv)
 {
-	unsigned int ktrlen, size;
-	int ch;
+	int ch, ktrlen, size;
 	void *m;
 	int trpoints = 0;
 	int trset = 0;
@@ -251,7 +249,7 @@ main(int argc, char **argv)
 			col = dumpheader(&ktr_header);
 		else
 			col = -1;
-		if ((ktrlen = ktr_header.ktr_len) > INT_MAX)
+		if ((ktrlen = ktr_header.ktr_len) < 0)
 			errx(1, "bogus length 0x%x", ktrlen);
 		if (ktrlen > size) {
 			while (ktrlen > size)
@@ -438,7 +436,7 @@ dumpheader(struct ktr_header *kth)
 				break;
 			default:
 			badversion:
-				err(1, "Unsupported ktrace version %x",
+				err(1, "Unsupported ktrace version %x\n",
 				    kth->ktr_version);
 			}
 		}
@@ -460,31 +458,6 @@ output_long(u_long it, int as_x)
 		printf(as_x ? "%#x" : "%d", (u_int)it);
 	else
 		printf(as_x ? "%#lx" : "%ld", it);
-}
-
-static const char *
-fcntlname(u_long cmd)
-{
-#define	FCNTLCASE(a)	case a:	return # a
-	switch (cmd) {
-	FCNTLCASE(F_DUPFD);
-	FCNTLCASE(F_GETFD);
-	FCNTLCASE(F_SETFD);
-	FCNTLCASE(F_GETFL);
-	FCNTLCASE(F_SETFL);
-	FCNTLCASE(F_GETOWN);
-	FCNTLCASE(F_SETOWN);
-	FCNTLCASE(F_GETLK);
-	FCNTLCASE(F_SETLK);
-	FCNTLCASE(F_SETLKW);
-	FCNTLCASE(F_CLOSEM);
-	FCNTLCASE(F_MAXFD);
-	FCNTLCASE(F_DUPFD_CLOEXEC);
-	FCNTLCASE(F_GETNOSIGPIPE);
-	FCNTLCASE(F_SETNOSIGPIPE);
-	default:
-		return NULL;
-	}
 }
 
 static void
@@ -571,19 +544,6 @@ ktrsyscall(struct ktr_syscall *ktr)
 			argcount--;
 			c = ',';
 
-		} else if (strcmp(sys_name, "fcntl") == 0 && argcount >= 2) {
-			(void)putchar('(');
-			output_long((long)*ap, !(decimal || small(*ap)));
-			ap++;
-			argcount--;
-			if ((cp = fcntlname(*ap)) != NULL)
-				(void)printf(",%s", cp);
-			else {
-				(void)printf(",%#lx", (unsigned long)*ap);
-			}
-			ap++;
-			argcount--;
-			c = ',';
 		} else if ((strstr(sys_name, "sigaction") != NULL ||
 		    strstr(sys_name, "sigvec") != NULL) && argcount >= 1) {
 			(void)printf("(SIG%s", signame(ap[0], 1));
@@ -599,43 +559,7 @@ ktrsyscall(struct ktr_syscall *ktr)
 			ap += 2;
 			argcount -= 2;
 			c = ',';
-		} else if (strcmp(sys_name, "mmap") == 0 && argcount >= 6) {
-			char buf[1024];
-			putchar('(');
-			output_long((long)ap[0], !(decimal || small(ap[0])));
-			c = ',';
-			putchar(c);
-			output_long((long)ap[1], !(decimal || small(ap[1])));
-			putchar(c);
-			if (ap[2] == PROT_NONE) {
-			    fputs("PROT_NONE", stdout);
-			} else {
-			    const char *s = "";
-			    c = 0;
-			    if (ap[2] & PROT_READ) {
-				fputs("PROT_READ", stdout);
-				s = "|";
-				ap[2] &= ~PROT_READ;
-			    }
-			    if (ap[2] & PROT_WRITE) {
-				printf("%sPROT_WRITE", s);
-				ap[2] &= ~PROT_WRITE;
-				s = "|";
-			    }
-			    if (ap[2] & PROT_EXEC) {
-				printf("%sPROT_EXEC", s);
-				ap[2] &= ~PROT_EXEC;
-				s = "|";
-			    }
-			    if (ap[2]) {
-				printf("%s%#lx", s, (long)ap[2]);
-			    }
-			}
-			snprintb(buf, sizeof(buf), MAP_FMT, ap[3]);
-			printf(",%s", buf);
-			ap += 4;
-			argcount -= 4;
-			c = ',';
+
 		} else if (strcmp(sys_name, "ptrace") == 0 && argcount >= 1) {
 			putchar('(');
 			if (strcmp(emul->name, "linux") == 0 ||
@@ -789,7 +713,7 @@ ktrnamei(char *cp, int len)
 }
 
 static void
-ktremul(char *name, size_t len, size_t bufsize)
+ktremul(char *name, int len, int bufsize)
 {
 
 	if (len >= bufsize)
@@ -1073,7 +997,7 @@ ktrpsig(void *v, int len)
 		}
 		/*NOTREACHED*/
 	default:
-		warnx("Unhandled size %d for ktrpsig", len);
+		warnx("Unhandled size %d for ktrpsig\n", len);
 		break;
 	}
 }

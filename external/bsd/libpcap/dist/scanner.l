@@ -1,4 +1,4 @@
-/*	$NetBSD: scanner.l,v 1.8 2015/04/05 22:36:36 christos Exp $	*/
+/*	$NetBSD: scanner.l,v 1.5 2013/12/31 17:08:23 christos Exp $	*/
 
 %{
 /*
@@ -21,10 +21,16 @@
  * WARRANTIES, INCLUDING, WITHOUT LIMITATION, THE IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE.
  */
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: scanner.l,v 1.8 2015/04/05 22:36:36 christos Exp $");
 
+#ifndef lint
+static const char rcsid[] _U_ =
+    "@(#) Header: /tcpdump/master/libpcap/scanner.l,v 1.112 2008-02-06 10:21:30 guy Exp  (LBL)";
+#endif
+
+#ifdef HAVE_CONFIG_H
 #include "config.h"
+#endif
+
 #ifdef WIN32
 #include <pcap-stdinc.h>
 #else /* WIN32 */
@@ -282,7 +288,6 @@ vlan		return VLAN;
 mpls		return MPLS;
 pppoed		return PPPOED;
 pppoes		return PPPOES;
-geneve		return GENEVE;
 
 lane		return LANE;
 llc		return LLC;
@@ -323,7 +328,7 @@ hdpc		return HDPC;
 hsls		return HSLS;
 
 [ \r\n\t]		;
-[+\-*/%:\[\]!<>()&|\^=]	return yytext[0];
+[+\-*/:\[\]!<>()&|=]	return yytext[0];
 ">="			return GEQ;
 "<="			return LEQ;
 "!="			return NEQ;

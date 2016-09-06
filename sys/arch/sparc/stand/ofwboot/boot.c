@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.33 2016/06/11 06:43:47 dholland Exp $	*/
+/*	$NetBSD: boot.c,v 1.31 2014/06/28 09:16:18 rtr Exp $	*/
 
 /*
  * Copyright (c) 1997, 1999 Eduardo E. Horvath.  All rights reserved.
@@ -141,7 +141,7 @@ bootoptions(const char *ap, char *loaddev, char *kernel, char *options)
 		}
 		end1 = ap;
 
-		while (*ap == ' ') {
+		while (*ap != '\0' && *ap == ' ') {
 			ap++;
 		}
 
@@ -463,7 +463,7 @@ main(void *ofw)
 			char cmdline[PROM_MAX_PATH];
 
 			printf("Boot: ");
-			kgets(cmdline, sizeof(cmdline));
+			gets(cmdline);
 
 			if (!strcmp(cmdline,"exit") ||
 			    !strcmp(cmdline,"halt")) {

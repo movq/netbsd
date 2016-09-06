@@ -1,4 +1,4 @@
-/*	$NetBSD: mainbus.c,v 1.13 2016/08/07 10:45:19 skrll Exp $	*/
+/*	$NetBSD: mainbus.c,v 1.12 2011/06/06 17:13:05 matt Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.13 2016/08/07 10:45:19 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mainbus.c,v 1.12 2011/06/06 17:13:05 matt Exp $");
 
 #include "opt_pci.h"
 
@@ -108,11 +108,12 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 {
 	struct mainbus_attach_args ma;
 	const struct mainbusdev *md;
-#if defined(PCI_NETBSD_ENABLE_IDE) || defined(PCI_NETBSD_CONFIGURE)
-	struct malta_config *mcp = &malta_configuration;
-	pci_chipset_tag_t pc = &mcp->mc_pc;
+#if defined(PCI_NETBSD_CONFIGURE)
+	struct extent *ioext, *memext;
 #endif
 #if defined(PCI_NETBSD_ENABLE_IDE)
+	struct malta_config *mcp = &malta_configuration;
+	pci_chipset_tag_t pc = &mcp->mc_pc;
 	pcitag_t idetag;
 	pcireg_t idetim;
 #endif
@@ -121,15 +122,13 @@ mainbus_attach(device_t parent, device_t self, void *aux)
 	printf("\n");
 
 #if defined(PCI_NETBSD_CONFIGURE)
-	struct mips_cache_info * const mci = &mips_cache_info;
-
-	struct extent *ioext = extent_create("pciio", 0x00001000, 0x0000efff,
-	    NULL, 0, EX_NOWAIT);
-	struct extent *memext = extent_create("pcimem", MALTA_PCIMEM1_BASE,
+	ioext = extent_create("pciio",  0x00001000, 0x0000efff,
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
+	memext = extent_create("pcimem", MALTA_PCIMEM1_BASE,
 	    MALTA_PCIMEM1_BASE + MALTA_PCIMEM1_SIZE,
-	    NULL, 0, EX_NOWAIT);
+	    M_DEVBUF, NULL, 0, EX_NOWAIT);
 
-	pci_configure_bus(pc, ioext, memext, NULL, 0, mci->mci_dcache_align);
+	pci_configure_bus(pc, ioext, memext, NULL, 0, mips_dcache_align);
 	extent_destroy(ioext);
 	extent_destroy(memext);
 #endif /* PCI_NETBSD_CONFIGURE */

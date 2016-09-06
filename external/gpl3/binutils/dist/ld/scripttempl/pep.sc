@@ -1,10 +1,4 @@
 # Linker script for PE.
-#
-# Copyright (C) 2014-2015 Free Software Foundation, Inc.
-# 
-# Copying and distribution of this file, with or without modification,
-# are permitted in any medium without royalty provided the copyright
-# notice and this notice are preserved.
 
 if test -z "${RELOCATEABLE_OUTPUT_FORMAT}"; then
   RELOCATEABLE_OUTPUT_FORMAT=${OUTPUT_FORMAT}
@@ -30,29 +24,25 @@ if test "${RELOCATING}"; then
              *(SORT(.rdata$*))'
   fi
   R_IDATA234='
-    KEEP (SORT(*)(.idata$2))
-    KEEP (SORT(*)(.idata$3))
+    SORT(*)(.idata$2)
+    SORT(*)(.idata$3)
     /* These zeroes mark the end of the import list.  */
     LONG (0); LONG (0); LONG (0); LONG (0); LONG (0);
-    KEEP (SORT(*)(.idata$4))'
+    SORT(*)(.idata$4)'
   R_IDATA5='SORT(*)(.idata$5)'
   R_IDATA67='
-    KEEP (SORT(*)(.idata$6))
-    KEEP (SORT(*)(.idata$7))'
-  R_CRT_XC='KEEP (*(SORT(.CRT$XC*)))  /* C initialization */'
-  R_CRT_XI='KEEP (*(SORT(.CRT$XI*)))  /* C++ initialization */'
-  R_CRT_XL='KEEP (*(SORT(.CRT$XL*)))  /* TLS callbacks */'
-  R_CRT_XP='KEEP (*(SORT(.CRT$XP*)))  /* Pre-termination */'
-  R_CRT_XT='KEEP (*(SORT(.CRT$XT*)))  /* Termination */'
+    SORT(*)(.idata$6)
+    SORT(*)(.idata$7)'
+  R_CRT_XC='*(SORT(.CRT$XC*))  /* C initialization */'
+  R_CRT_XI='*(SORT(.CRT$XI*))  /* C++ initialization */'
+  R_CRT_XL='*(SORT(.CRT$XL*))  /* TLS callbacks */'
+  R_CRT_XP='*(SORT(.CRT$XP*))  /* Pre-termination */'
+  R_CRT_XT='*(SORT(.CRT$XT*))  /* Termination */'
   R_TLS='
-    KEEP (*(.tls$AAA))
-    KEEP (*(.tls))
-    KEEP (*(.tls$))
-    KEEP (*(SORT(.tls$*)))
-    KEEP (*(.tls$ZZZ))'
-  R_RSRC='
-    KEEP (*(.rsrc))
-    KEEP (*(.rsrc$*))'
+    *(.tls)
+    *(.tls$)
+    *(SORT(.tls$*))'
+  R_RSRC='*(SORT(.rsrc$*))'
 else
   R_TEXT=
   R_DATA=
@@ -61,16 +51,10 @@ else
   R_IDATA5=
   R_IDATA67=
   R_CRT=
-  R_RSRC='*(.rsrc)'
+  R_RSRC=
 fi
 
 cat <<EOF
-/* Copyright (C) 2014-2015 Free Software Foundation, Inc.
-
-   Copying and distribution of this script, with or without modification,
-   are permitted in any medium without royalty provided the copyright
-   notice and this notice are preserved.  */
-
 ${RELOCATING+OUTPUT_FORMAT(${OUTPUT_FORMAT})}
 ${RELOCATING-OUTPUT_FORMAT(${RELOCATEABLE_OUTPUT_FORMAT})}
 ${OUTPUT_ARCH+OUTPUT_ARCH(${OUTPUT_ARCH})}
@@ -83,9 +67,9 @@ SECTIONS
   ${RELOCATING+   lower than the target page size. */}
   ${RELOCATING+. = SIZEOF_HEADERS;}
   ${RELOCATING+. = ALIGN(__section_alignment__);}
-  .text ${RELOCATING+ __image_base__ + ( __section_alignment__ < ${TARGET_PAGE_SIZE} ? . : __section_alignment__ )} :
+  .text ${RELOCATING+ __image_base__ + ( __section_alignment__ < ${TARGET_PAGE_SIZE} ? . : __section_alignment__ )} : 
   {
-    ${RELOCATING+ KEEP(*(.init))}
+    ${RELOCATING+ *(.init)}
     *(.text)
     ${R_TEXT}
     ${RELOCATING+ *(.text.*)}
@@ -93,23 +77,15 @@ SECTIONS
     *(.glue_7t)
     *(.glue_7)
     ${CONSTRUCTING+. = ALIGN(8);}
-    ${CONSTRUCTING+ ___CTOR_LIST__ = .; __CTOR_LIST__ = . ;
-			LONG (-1); LONG (-1);
-			KEEP (*(.ctors));
-			KEEP (*(.ctor));
-			KEEP (*(SORT(.ctors.*)));
-			LONG (0); LONG (0); }
-    ${CONSTRUCTING+ ___DTOR_LIST__ = .; __DTOR_LIST__ = . ;
-			LONG (-1); LONG (-1);
-			KEEP (*(.dtors));
-			KEEP (*(.dtor));
-			KEEP (*(SORT(.dtors.*)));
-			LONG (0); LONG (0); }
-    ${RELOCATING+ KEEP (*(.fini))}
+    ${CONSTRUCTING+ ___CTOR_LIST__ = .; __CTOR_LIST__ = . ; 
+			LONG (-1); LONG (-1);*(.ctors); *(.ctor); *(SORT(.ctors.*));  LONG (0); LONG (0); }
+    ${CONSTRUCTING+ ___DTOR_LIST__ = .; __DTOR_LIST__ = . ; 
+			LONG (-1); LONG (-1); *(.dtors); *(.dtor); *(SORT(.dtors.*));  LONG (0); LONG (0); }
+    ${RELOCATING+ *(.fini)}
     /* ??? Why is .gcc_exc here?  */
     ${RELOCATING+ *(.gcc_exc)}
     ${RELOCATING+PROVIDE (etext = .);}
-    ${RELOCATING+ KEEP (*(.gcc_except_table))}
+    ${RELOCATING+ *(.gcc_except_table)}
   }
 
   /* The Cygwin32 library uses a section to avoid copying certain data
@@ -118,13 +94,13 @@ SECTIONS
      breaks building the cygwin32 dll.  Instead, we name the section
      ".data_cygwin_nocopy" and explicitly include it after __data_end__. */
 
-  .data ${RELOCATING+BLOCK(__section_alignment__)} :
+  .data ${RELOCATING+BLOCK(__section_alignment__)} : 
   {
     ${RELOCATING+__data_start__ = . ;}
     *(.data)
     *(.data2)
     ${R_DATA}
-    KEEP(*(.jcr))
+    *(.jcr)
     ${RELOCATING+__data_end__ = . ;}
     ${RELOCATING+*(.data_cygwin_nocopy)}
   }
@@ -144,17 +120,17 @@ SECTIONS
 
   .eh_frame ${RELOCATING+BLOCK(__section_alignment__)} :
   {
-    KEEP (*(.eh_frame*))
+    *(.eh_frame*)
   }
 
   .pdata ${RELOCATING+BLOCK(__section_alignment__)} :
   {
-    KEEP(*(.pdata*))
+    *(.pdata*)
   }
 
   .xdata ${RELOCATING+BLOCK(__section_alignment__)} :
   {
-    KEEP(*(.xdata*))
+    *(.xdata*)
   }
 
   .bss ${RELOCATING+BLOCK(__section_alignment__)} :
@@ -209,10 +185,6 @@ SECTIONS
     ${RELOCATING+___crt_xt_end__ = . ;}
   }
 
-  /* Windows TLS expects .tls\$AAA to be at the start and .tls\$ZZZ to be
-     at the end of the .tls section.  This is important because _tls_start MUST
-     be at the beginning of the section to enable SECREL32 relocations with TLS
-     data.  */
   .tls ${RELOCATING+BLOCK(__section_alignment__)} :
   { 					
     ${RELOCATING+___tls_start__ = . ;}
@@ -228,13 +200,14 @@ SECTIONS
     ${RELOCATING+ __end__ = .;}
   }
 
-  .rsrc ${RELOCATING+BLOCK(__section_alignment__)} : SUBALIGN(4)
-  {
+  .rsrc ${RELOCATING+BLOCK(__section_alignment__)} :
+  { 					
+    *(.rsrc)
     ${R_RSRC}
   }
 
   .reloc ${RELOCATING+BLOCK(__section_alignment__)} :
-  {
+  { 					
     *(.reloc)
   }
 
@@ -252,33 +225,21 @@ SECTIONS
      Symbols in the DWARF debugging sections are relative to the beginning
      of the section.  Unlike other targets that fake this by putting the
      section VMA at 0, the PE format will not allow it.  */
-
+     
   /* DWARF 1.1 and DWARF 2.  */
   .debug_aranges ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
   {
     *(.debug_aranges)
-  }
-  .zdebug_aranges ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
-  {
-    *(.zdebug_aranges)
   }
 
   .debug_pubnames ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
   {
     *(.debug_pubnames)
   }
-  .zdebug_pubnames ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
-  {
-    *(.zdebug_pubnames)
-  }
 
   .debug_pubtypes ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
   {
     *(.debug_pubtypes)
-  }
-  .zdebug_pubtypes ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
-  {
-    *(.zdebug_pubtypes)
   }
 
   /* DWARF 2.  */
@@ -286,63 +247,35 @@ SECTIONS
   {
     *(.debug_info${RELOCATING+ .gnu.linkonce.wi.*})
   }
-  .zdebug_info ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
-  {
-    *(.zdebug_info${RELOCATING+ .zdebug.gnu.linkonce.wi.*})
-  }
 
   .debug_abbrev ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
   {
     *(.debug_abbrev)
-  }
-  .zdebug_abbrev ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
-  {
-    *(.zdebug_abbrev)
   }
 
   .debug_line ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
   {
     *(.debug_line)
   }
-  .zdebug_line ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
-  {
-    *(.zdebug_line)
-  }
 
   .debug_frame ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
   {
-    *(.debug_frame)
-  }
-  .zdebug_frame ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
-  {
-    *(.zdebug_frame)
+    *(.debug_frame*)
   }
 
   .debug_str ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
   {
     *(.debug_str)
   }
-  .zdebug_str ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
-  {
-    *(.zdebug_str)
-  }
 
   .debug_loc ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
   {
     *(.debug_loc)
   }
-  .zdebug_loc ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
-  {
-    *(.zdebug_loc)
-  }
 
   .debug_macinfo ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
   {
     *(.debug_macinfo)
-  }
-  .zdebug_macinfo ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
-  {
-    *(.zdebug_macinfo)
   }
 
   /* SGI/MIPS DWARF 2 extensions.  */
@@ -350,45 +283,25 @@ SECTIONS
   {
     *(.debug_weaknames)
   }
-  .zdebug_weaknames ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
-  {
-    *(.zdebug_weaknames)
-  }
 
   .debug_funcnames ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
   {
     *(.debug_funcnames)
-  }
-  .zdebug_funcnames ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
-  {
-    *(.zdebug_funcnames)
   }
 
   .debug_typenames ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
   {
     *(.debug_typenames)
   }
-  .zdebug_typenames ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
-  {
-    *(.zdebug_typenames)
-  }
 
   .debug_varnames ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
   {
     *(.debug_varnames)
   }
-  .zdebug_varnames ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
-  {
-    *(.zdebug_varnames)
-  }
 
   .debug_macro ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
   {
     *(.debug_macro)
-  }
-  .zdebug_macro ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
-  {
-    *(.zdebug_macro)
   }
 
   /* DWARF 3.  */
@@ -396,19 +309,11 @@ SECTIONS
   {
     *(.debug_ranges)
   }
-  .zdebug_ranges ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
-  {
-    *(.zdebug_ranges)
-  }
 
   /* DWARF 4.  */
   .debug_types ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
   {
     *(.debug_types${RELOCATING+ .gnu.linkonce.wt.*})
-  }
-  .zdebug_types ${RELOCATING+BLOCK(__section_alignment__)} ${RELOCATING+(NOLOAD)} :
-  {
-    *(.zdebug_types${RELOCATING+ .zdebug.gnu.linkonce.wt.*})
   }
 }
 EOF

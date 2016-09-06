@@ -1,5 +1,4 @@
 	.syntax unified
-	.arch armv6t2
 	.text
 text:
 	.arm

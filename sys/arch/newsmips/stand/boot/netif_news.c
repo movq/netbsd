@@ -1,4 +1,4 @@
-/*	$NetBSD: netif_news.c,v 1.9 2014/09/21 16:35:44 christos Exp $	*/
+/*	$NetBSD: netif_news.c,v 1.8.38.1 2014/10/30 12:14:36 martin Exp $	*/
 
 /*
  * Copyright (c) 1995 Gordon W. Ross

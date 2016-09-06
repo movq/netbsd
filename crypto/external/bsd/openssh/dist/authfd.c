@@ -1,6 +1,5 @@
-/*	$NetBSD: authfd.c,v 1.11 2016/03/11 01:55:00 christos Exp $	*/
-/* $OpenBSD: authfd.c,v 1.100 2015/12/04 16:41:28 markus Exp $ */
-
+/*	$NetBSD: authfd.c,v 1.6.4.1 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: authfd.c,v 1.94 2015/01/14 20:05:27 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -38,7 +37,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: authfd.c,v 1.11 2016/03/11 01:55:00 christos Exp $");
+__RCSID("$NetBSD: authfd.c,v 1.6.4.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/types.h>
 #include <sys/un.h>
 #include <sys/socket.h>
@@ -427,24 +426,11 @@ ssh_decrypt_challenge(int sock, struct sshkey* key, BIGNUM *challenge,
 }
 #endif
 
-/* encode signature algoritm in flag bits, so we can keep the msg format */
-static u_int
-agent_encode_alg(struct sshkey *key, const char *alg)
-{
-	if (alg != NULL && key->type == KEY_RSA) {
-		if (strcmp(alg, "rsa-sha2-256") == 0)
-			return SSH_AGENT_RSA_SHA2_256;
-		else if (strcmp(alg, "rsa-sha2-512") == 0)
-			return SSH_AGENT_RSA_SHA2_512;
-	}
-	return 0;
-}
-
 /* ask agent to sign data, returns err.h code on error, 0 on success */
 int
 ssh_agent_sign(int sock, struct sshkey *key,
     u_char **sigp, size_t *lenp,
-    const u_char *data, size_t datalen, const char *alg, u_int compat)
+    const u_char *data, size_t datalen, u_int compat)
 {
 	struct sshbuf *msg;
 	u_char *blob = NULL, type;
@@ -452,8 +438,10 @@ ssh_agent_sign(int sock, struct sshkey *key,
 	u_int flags = 0;
 	int r = SSH_ERR_INTERNAL_ERROR;
 
-	*sigp = NULL;
-	*lenp = 0;
+	if (sigp != NULL)
+		*sigp = NULL;
+	if (lenp != NULL)
+		*lenp = 0;
 
 	if (datalen > SSH_KEY_MAX_SIGN_DATA_SIZE)
 		return SSH_ERR_INVALID_ARGUMENT;
@@ -463,13 +451,12 @@ ssh_agent_sign(int sock, struct sshkey *key,
 		return SSH_ERR_ALLOC_FAIL;
 	if ((r = sshkey_to_blob(key, &blob, &blen)) != 0)
 		goto out;
-	flags |= agent_encode_alg(key, alg);
 	if ((r = sshbuf_put_u8(msg, SSH2_AGENTC_SIGN_REQUEST)) != 0 ||
 	    (r = sshbuf_put_string(msg, blob, blen)) != 0 ||
 	    (r = sshbuf_put_string(msg, data, datalen)) != 0 ||
 	    (r = sshbuf_put_u32(msg, flags)) != 0)
 		goto out;
-	if ((r = ssh_request_reply(sock, msg, msg)) != 0)
+	if ((r = ssh_request_reply(sock, msg, msg) != 0))
 		goto out;
 	if ((r = sshbuf_get_u8(msg, &type)) != 0)
 		goto out;
@@ -575,8 +562,10 @@ ssh_add_identity_constrained(int sock, struct sshkey *key, const char *comment,
 #ifdef WITH_OPENSSL
 	case KEY_RSA:
 	case KEY_RSA_CERT:
+	case KEY_RSA_CERT_V00:
 	case KEY_DSA:
 	case KEY_DSA_CERT:
+	case KEY_DSA_CERT_V00:
 	case KEY_ECDSA:
 	case KEY_ECDSA_CERT:
 #endif

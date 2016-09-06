@@ -1,6 +1,6 @@
 /* Remote debugging interface for M32R/SDI.
 
-   Copyright (C) 2003-2015 Free Software Foundation, Inc.
+   Copyright (C) 2003-2014 Free Software Foundation, Inc.
 
    Contributed by Renesas Technology Co.
    Written by Kei Sakamoto <sakamoto.kei@renesas.com>.
@@ -24,9 +24,9 @@
 #include "gdbcmd.h"
 #include "gdbcore.h"
 #include "inferior.h"
-#include "infrun.h"
 #include "target.h"
 #include "regcache.h"
+#include <string.h>
 #include "gdbthread.h"
 #include <ctype.h>
 #include <signal.h>
@@ -40,7 +40,7 @@
 #include <time.h>
 #include "gdb_bfd.h"
 #include "cli/cli-utils.h"
-#include "symfile.h"
+
 #include "serial.h"
 
 /* Descriptor for I/O to remote machine.  */
@@ -179,7 +179,7 @@ get_ack (void)
 
 /* Send data to the target and check an ack packet.  */
 static int
-send_data (const void *buf, int len)
+send_data (void *buf, int len)
 {
   if (!sdi_desc)
     return -1;
@@ -339,7 +339,7 @@ m32r_create_inferior (struct target_ops *ops, char *execfile,
   /* The "process" (board) is already stopped awaiting our commands, and
      the program is already downloaded.  We just set its PC and go.  */
 
-  clear_proceed_status (0);
+  clear_proceed_status ();
 
   /* Tell wait_for_inferior that we've started a new process.  */
   init_wait_for_inferior ();
@@ -358,12 +358,11 @@ m32r_create_inferior (struct target_ops *ops, char *execfile,
    NAME is the filename used for communication.  */
 
 static void
-m32r_open (const char *args, int from_tty)
+m32r_open (char *args, int from_tty)
 {
   struct hostent *host_ent;
   struct sockaddr_in server_addr;
-  char hostname[256];
-  const char *port_str;
+  char *port_str, hostname[256];
   int port;
   int i, n;
   int yes = 1;
@@ -430,7 +429,7 @@ m32r_open (const char *args, int from_tty)
 /* Close out all files and local state before this target loses control.  */
 
 static void
-m32r_close (struct target_ops *self)
+m32r_close (void)
 {
   if (remote_debug)
     fprintf_unfiltered (gdb_stdlog, "m32r_close()\n");
@@ -1013,7 +1012,7 @@ m32r_store_register (struct target_ops *ops,
    debugged.  */
 
 static void
-m32r_prepare_to_store (struct target_ops *self, struct regcache *regcache)
+m32r_prepare_to_store (struct regcache *regcache)
 {
   /* Do nothing, since we can store individual regs.  */
   if (remote_debug)
@@ -1033,12 +1032,11 @@ m32r_files_info (struct target_ops *target)
     }
 }
 
-/* Helper for m32r_xfer_partial that handles memory transfers.
-   Arguments are like target_xfer_partial.  */
-
-static enum target_xfer_status
-m32r_xfer_memory (gdb_byte *readbuf, const gdb_byte *writebuf,
-		  ULONGEST memaddr, ULONGEST len, ULONGEST *xfered_len)
+/* Read/Write memory.  */
+static int
+m32r_xfer_memory (CORE_ADDR memaddr, gdb_byte *myaddr, int len,
+		  int write,
+		  struct mem_attrib *attrib, struct target_ops *target)
 {
   unsigned long taddr;
   unsigned char buf[0x2000];
@@ -1054,24 +1052,22 @@ m32r_xfer_memory (gdb_byte *readbuf, const gdb_byte *writebuf,
 
   if (remote_debug)
     {
-      if (writebuf != NULL)
-	fprintf_unfiltered (gdb_stdlog, "m32r_xfer_memory(%s,%s,write)\n",
-			    paddress (target_gdbarch (), memaddr),
-			    plongest (len));
+      if (write)
+	fprintf_unfiltered (gdb_stdlog, "m32r_xfer_memory(%s,%d,write)\n",
+			    paddress (target_gdbarch (), memaddr), len);
       else
-	fprintf_unfiltered (gdb_stdlog, "m32r_xfer_memory(%s,%s,read)\n",
-			    paddress (target_gdbarch (), memaddr),
-			    plongest (len));
+	fprintf_unfiltered (gdb_stdlog, "m32r_xfer_memory(%s,%d,read)\n",
+			    paddress (target_gdbarch (), memaddr), len);
     }
 
-  if (writebuf != NULL)
+  if (write)
     {
       buf[0] = SDI_WRITE_MEMORY;
       store_long_parameter (buf + 1, taddr);
       store_long_parameter (buf + 5, len);
       if (len < 0x1000)
 	{
-	  memcpy (buf + 9, writebuf, len);
+	  memcpy (buf + 9, myaddr, len);
 	  ret = send_data (buf, len + 9) - 9;
 	}
       else
@@ -1081,9 +1077,9 @@ m32r_xfer_memory (gdb_byte *readbuf, const gdb_byte *writebuf,
 	      if (remote_debug)
 		fprintf_unfiltered (gdb_stdlog,
 				    "m32r_xfer_memory() failed\n");
-	      return TARGET_XFER_EOF;
+	      return 0;
 	    }
-	  ret = send_data (writebuf, len);
+	  ret = send_data (myaddr, len);
 	}
     }
   else
@@ -1095,7 +1091,7 @@ m32r_xfer_memory (gdb_byte *readbuf, const gdb_byte *writebuf,
 	{
 	  if (remote_debug)
 	    fprintf_unfiltered (gdb_stdlog, "m32r_xfer_memory() failed\n");
-	  return TARGET_XFER_EOF;
+	  return 0;
 	}
 
       c = serial_readchar (sdi_desc, SDI_TIMEOUT);
@@ -1103,41 +1099,20 @@ m32r_xfer_memory (gdb_byte *readbuf, const gdb_byte *writebuf,
 	{
 	  if (remote_debug)
 	    fprintf_unfiltered (gdb_stdlog, "m32r_xfer_memory() failed\n");
-	  return TARGET_XFER_EOF;
+	  return 0;
 	}
 
-      ret = recv_data (readbuf, len);
+      ret = recv_data (myaddr, len);
     }
 
   if (ret <= 0)
     {
       if (remote_debug)
 	fprintf_unfiltered (gdb_stdlog, "m32r_xfer_memory() fails\n");
-      return TARGET_XFER_E_IO;
+      return 0;
     }
 
-  *xfered_len = ret;
-  return TARGET_XFER_OK;
-}
-
-/* Target to_xfer_partial implementation.  */
-
-static enum target_xfer_status
-m32r_xfer_partial (struct target_ops *ops, enum target_object object,
-		   const char *annex, gdb_byte *readbuf,
-		   const gdb_byte *writebuf, ULONGEST offset, ULONGEST len,
-		   ULONGEST *xfered_len)
-{
-  switch (object)
-    {
-    case TARGET_OBJECT_MEMORY:
-      return m32r_xfer_memory (readbuf, writebuf, offset, len, xfered_len);
-
-    default:
-      return ops->beneath->to_xfer_partial (ops->beneath, object, annex,
-					    readbuf, writebuf, offset, len,
-					    xfered_len);
-    }
+  return ret;
 }
 
 static void
@@ -1169,11 +1144,10 @@ m32r_mourn_inferior (struct target_ops *ops)
 }
 
 static int
-m32r_insert_breakpoint (struct target_ops *ops,
-			struct gdbarch *gdbarch,
+m32r_insert_breakpoint (struct gdbarch *gdbarch,
 			struct bp_target_info *bp_tgt)
 {
-  CORE_ADDR addr = bp_tgt->placed_address = bp_tgt->reqstd_address;
+  CORE_ADDR addr = bp_tgt->placed_address;
   int ib_breakpoints;
   unsigned char buf[13];
   int i, c;
@@ -1214,8 +1188,7 @@ m32r_insert_breakpoint (struct target_ops *ops,
 }
 
 static int
-m32r_remove_breakpoint (struct target_ops *ops,
-			struct gdbarch *gdbarch,
+m32r_remove_breakpoint (struct gdbarch *gdbarch,
 			struct bp_target_info *bp_tgt)
 {
   CORE_ADDR addr = bp_tgt->placed_address;
@@ -1238,9 +1211,9 @@ m32r_remove_breakpoint (struct target_ops *ops,
 }
 
 static void
-m32r_load (struct target_ops *self, const char *args, int from_tty)
+m32r_load (char *args, int from_tty)
 {
-  struct cleanup *old_chain = make_cleanup (null_cleanup, NULL);
+  struct cleanup *old_chain;
   asection *section;
   bfd *pbfd;
   bfd_vma entry;
@@ -1258,17 +1231,23 @@ m32r_load (struct target_ops *self, const char *args, int from_tty)
 
   while (*args != '\000')
     {
-      char *arg = extract_arg_const (&args);
+      char *arg;
 
-      if (arg == NULL)
-	break;
-      make_cleanup (xfree, arg);
+      args = skip_spaces (args);
+
+      arg = args;
+
+      while ((*args != '\000') && !isspace (*args))
+	args++;
+
+      if (*args != '\000')
+	*args++ = '\000';
 
       if (*arg != '-')
 	filename = arg;
-      else if (startswith ("-quiet", arg))
+      else if (strncmp (arg, "-quiet", strlen (arg)) == 0)
 	quiet = 1;
-      else if (startswith ("-nostart", arg))
+      else if (strncmp (arg, "-nostart", strlen (arg)) == 0)
 	nostart = 1;
       else
 	error (_("Unknown option `%s'"), arg);
@@ -1279,8 +1258,11 @@ m32r_load (struct target_ops *self, const char *args, int from_tty)
 
   pbfd = gdb_bfd_open (filename, gnutarget, -1);
   if (pbfd == NULL)
-    perror_with_name (filename);
-  make_cleanup_bfd_unref (pbfd);
+    {
+      perror_with_name (filename);
+      return;
+    }
+  old_chain = make_cleanup_bfd_unref (pbfd);
 
   if (!bfd_check_format (pbfd, bfd_object))
     error (_("\"%s\" is not an object file: %s"), filename,
@@ -1407,7 +1389,7 @@ m32r_load (struct target_ops *self, const char *args, int from_tty)
 }
 
 static void
-m32r_stop (struct target_ops *self, ptid_t ptid)
+m32r_stop (ptid_t ptid)
 {
   if (remote_debug)
     fprintf_unfiltered (gdb_stdlog, "m32r_stop()\n");
@@ -1423,8 +1405,7 @@ m32r_stop (struct target_ops *self, ptid_t ptid)
    implements the target_can_use_hardware_watchpoint macro.  */
 
 static int
-m32r_can_use_hw_watchpoint (struct target_ops *self,
-			    int type, int cnt, int othertype)
+m32r_can_use_hw_watchpoint (int type, int cnt, int othertype)
 {
   return sdi_desc != NULL && cnt < max_access_breaks;
 }
@@ -1434,8 +1415,7 @@ m32r_can_use_hw_watchpoint (struct target_ops *self,
    watchpoint.  */
 
 static int
-m32r_insert_watchpoint (struct target_ops *self,
-			CORE_ADDR addr, int len, int type,
+m32r_insert_watchpoint (CORE_ADDR addr, int len, int type,
 			struct expression *cond)
 {
   int i;
@@ -1460,8 +1440,7 @@ m32r_insert_watchpoint (struct target_ops *self,
 }
 
 static int
-m32r_remove_watchpoint (struct target_ops *self,
-			CORE_ADDR addr, int len, int type,
+m32r_remove_watchpoint (CORE_ADDR addr, int len, int type,
 			struct expression *cond)
 {
   int i;
@@ -1496,7 +1475,7 @@ m32r_stopped_data_address (struct target_ops *target, CORE_ADDR *addr_p)
 }
 
 static int
-m32r_stopped_by_watchpoint (struct target_ops *ops)
+m32r_stopped_by_watchpoint (void)
 {
   CORE_ADDR addr;
 
@@ -1651,7 +1630,7 @@ init_m32r_ops (void)
   m32r_ops.to_fetch_registers = m32r_fetch_register;
   m32r_ops.to_store_registers = m32r_store_register;
   m32r_ops.to_prepare_to_store = m32r_prepare_to_store;
-  m32r_ops.to_xfer_partial = m32r_xfer_partial;
+  m32r_ops.deprecated_xfer_memory = m32r_xfer_memory;
   m32r_ops.to_files_info = m32r_files_info;
   m32r_ops.to_insert_breakpoint = m32r_insert_breakpoint;
   m32r_ops.to_remove_breakpoint = m32r_remove_breakpoint;

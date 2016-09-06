@@ -1,4 +1,4 @@
-/*	$NetBSD: mbuf.h,v 1.166 2016/06/21 03:07:54 ozaki-r Exp $	*/
+/*	$NetBSD: mbuf.h,v 1.155 2014/05/17 23:27:59 rmind Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997, 1999, 2001, 2007 The NetBSD Foundation, Inc.
@@ -75,8 +75,6 @@
 #include <sys/queue.h>
 #if defined(_KERNEL)
 #include <sys/percpu_types.h>
-#include <sys/socket.h>	/* for AF_UNSPEC */
-#include <sys/psref.h>
 #endif /* defined(_KERNEL) */
 
 /* For offsetof() */
@@ -87,8 +85,6 @@
 #endif
 
 #include <uvm/uvm_param.h>	/* for MIN_PAGE_SIZE */
-
-#include <net/if.h>
 
 /*
  * Mbufs are of a single size, MSIZE (machine/param.h), which
@@ -173,29 +169,14 @@ struct m_hdr {
  * be bit-wise inverted (the final step in the calculation of an IP
  * checksum) -- this is so we can accumulate the checksum for fragmented
  * packets during reassembly.
- *
- * Size ILP32: 36
- *       LP64: 56
  */
 struct	pkthdr {
-	union {
-		void		*ctx;		/* for M_GETCTX/M_SETCTX */
-		if_index_t	index;		/* rcv interface index */
-	} _rcvif;
-#define rcvif_index		_rcvif.index
+	struct ifnet	*rcvif;			/* rcv interface */
 	SLIST_HEAD(packet_tags, m_tag) tags;	/* list of packet tags */
 	int		len;			/* total packet length */
 	int		csum_flags;		/* checksum flags */
 	uint32_t	csum_data;		/* checksum data */
 	u_int		segsz;			/* segment size */
-
-	/*
-	 * Following three fields are open-coded struct altq_pktattr
-	 * to rearrange struct pkthdr fields flexibly.
-	 */
-	void	*pattr_class;		/* ALTQ: sched class set by classifier */
-	void	*pattr_hdr;		/* ALTQ: saved header position in mbuf */
-	int	pattr_af;		/* ALTQ: address family */
 };
 
 /*
@@ -341,34 +322,29 @@ MBUF_DEFINE(_mbuf_dummy, 1, 1);
 MBUF_DEFINE(mbuf, MHLEN, MLEN);
 
 /* mbuf flags */
-#define	M_EXT		0x00000001	/* has associated external storage */
-#define	M_PKTHDR	0x00000002	/* start of record */
-#define	M_EOR		0x00000004	/* end of record */
-#define	M_PROTO1	0x00000008	/* protocol-specific */
+#define	M_EXT		0x00001	/* has associated external storage */
+#define	M_PKTHDR	0x00002	/* start of record */
+#define	M_EOR		0x00004	/* end of record */
+#define	M_PROTO1	0x00008	/* protocol-specific */
 
 /* mbuf pkthdr flags, also in m_flags */
-#define	M_AUTHIPHDR	0x00000010	/* data origin authentication for
-					 * IP header */
-#define	M_DECRYPTED	0x00000020	/* confidentiality */
-#define	M_LOOP		0x00000040	/* for Mbuf statistics */
-#define	M_AUTHIPDGM     0x00000080	/* data origin authentication */
-#define	M_BCAST		0x00000100	/* send/received as link-level
-					 * broadcast */
-#define	M_MCAST		0x00000200	/* send/received as link-level
-					 * multicast */
-#define	M_CANFASTFWD	0x00000400	/* used by filters to indicate
-					 * packet can be fast-forwarded */
-#define	M_ANYCAST6	0x00000800	/* received as IPv6 anycast */
-
-#define	M_LINK0		0x00001000	/* link layer specific flag */
-#define	M_LINK1		0x00002000	/* link layer specific flag */
-#define	M_LINK2		0x00004000	/* link layer specific flag */
-
-#define	M_LINK3		0x00008000	/* link layer specific flag */
-#define	M_LINK4		0x00010000	/* link layer specific flag */
-#define	M_LINK5		0x00020000	/* link layer specific flag */
-#define	M_LINK6		0x00040000	/* link layer specific flag */
-#define	M_LINK7		0x00080000	/* link layer specific flag */
+#define M_AUTHIPHDR	0x00010	/* data origin authentication for IP header */
+#define M_DECRYPTED	0x00020	/* confidentiality */
+#define M_LOOP		0x00040	/* for Mbuf statistics */
+#define M_AUTHIPDGM     0x00080  /* data origin authentication */
+#define	M_BCAST		0x00100	/* send/received as link-level broadcast */
+#define	M_MCAST		0x00200	/* send/received as link-level multicast */
+#define	M_CANFASTFWD	0x00400	/* used by filters to indicate packet can
+				   be fast-forwarded */
+#define	M_ANYCAST6	0x00800	/* received as IPv6 anycast */
+#define	M_LINK0		0x01000	/* link layer specific flag */
+#define	M_LINK1		0x02000	/* link layer specific flag */
+#define	M_LINK2		0x04000	/* link layer specific flag */
+#define	M_LINK3		0x08000	/* link layer specific flag */
+#define	M_LINK4		0x10000	/* link layer specific flag */
+#define	M_LINK5		0x20000	/* link layer specific flag */
+#define	M_LINK6		0x40000	/* link layer specific flag */
+#define	M_LINK7		0x80000	/* link layer specific flag */
 
 /* additional flags for M_EXT mbufs */
 #define	M_EXT_FLAGS	0xff000000
@@ -379,7 +355,6 @@ MBUF_DEFINE(mbuf, MHLEN, MLEN);
 
 /* for source-level compatibility */
 #define	M_CLUSTER	M_EXT_CLUSTER
-#define	M_NOTIFICATION	M_PROTO1
 
 #define M_FLAGS_BITS \
     "\20\1EXT\2PKTHDR\3EOR\4PROTO1\5AUTHIPHDR\6DECRYPTED\7LOOP\10AUTHIPDGM" \
@@ -404,7 +379,7 @@ MBUF_DEFINE(mbuf, MHLEN, MLEN);
 #define MT_OOBDATA	7	/* expedited data  */
 
 #ifdef MBUFTYPES
-static const char * const mbuftypes[] = {
+static const char *mbuftypes[] = {
 	"mbfree",
 	"mbdata",
 	"mbheader",
@@ -507,7 +482,7 @@ do {									\
 
 #define	_MCLGET(m, pool_cache, size, how)				\
 do {									\
-	(m)->m_ext_storage.ext_buf = (char *)				\
+	(m)->m_ext_storage.ext_buf =					\
 	    pool_cache_get_paddr((pool_cache),				\
 		(how) == M_WAIT ? (PR_WAITOK|PR_LIMITFAIL) : 0,		\
 		&(m)->m_ext_storage.ext_paddr);				\
@@ -532,7 +507,7 @@ do {									\
 
 #define	MEXTMALLOC(m, size, how)					\
 do {									\
-	(m)->m_ext_storage.ext_buf = (char *)				\
+	(m)->m_ext_storage.ext_buf =					\
 	    malloc((size), mbtypes[(m)->m_type], (how));		\
 	if ((m)->m_ext_storage.ext_buf != NULL) {			\
 		MCLINITREFERENCE(m);					\
@@ -550,7 +525,7 @@ do {									\
 #define	MEXTADD(m, buf, size, type, free, arg)				\
 do {									\
 	MCLINITREFERENCE(m);						\
-	(m)->m_data = (m)->m_ext.ext_buf = (char *)(buf);		\
+	(m)->m_data = (m)->m_ext.ext_buf = (void *)(buf);		\
 	(m)->m_flags = ((m)->m_flags & ~M_EXTCOPYFLAGS) | M_EXT;	\
 	(m)->m_ext.ext_flags = 0;					\
 	(m)->m_ext.ext_size = (size);					\
@@ -717,11 +692,11 @@ do {									\
 #define  m_copy(m, o, l)	m_copym((m), (o), (l), M_DONTWAIT)
 
 /*
- * Allow drivers and/or protocols to store private context information.
+ * Allow drivers and/or protocols to use the rcvif member of
+ * PKTHDR mbufs to store private context information.
  */
-#define	M_GETCTX(m, t)		((t)(m)->m_pkthdr._rcvif.ctx)
-#define	M_SETCTX(m, c)		((void)((m)->m_pkthdr._rcvif.ctx = (void *)(c)))
-#define	M_CLEARCTX(m)		M_SETCTX((m), NULL)
+#define	M_GETCTX(m, t)		((t)(m)->m_pkthdr.rcvif)
+#define	M_SETCTX(m, c)		((void)((m)->m_pkthdr.rcvif = (void *)(c)))
 
 #endif /* defined(_KERNEL) */
 
@@ -933,8 +908,6 @@ struct	m_tag *m_tag_next(struct mbuf *, struct m_tag *);
 						    * loop detection/recovery
 						    */
 
-#define	PACKET_TAG_MPLS				29 /* Indicate it's for MPLS */
-
 /*
  * Return the number of bytes in the mbuf chain, m.
  */
@@ -953,125 +926,8 @@ m_length(const struct mbuf *m)
 	return pktlen;
 }
 
-static __inline void
-m_hdr_init(struct mbuf *m, short type, struct mbuf *next, char *data, int len)
-{
-
-	KASSERT(m != NULL);
-
-	mowner_init(m, type);
-	m->m_ext_ref = m; /* default */
-	m->m_type = type;
-	m->m_len = len;
-	m->m_next = next;
-	m->m_nextpkt = NULL; /* default */
-	m->m_data = data;
-	m->m_flags = 0; /* default */
-}
-
-static __inline void
-m_set_rcvif(struct mbuf *m, const struct ifnet *ifp)
-{
-
-	m->m_pkthdr.rcvif_index = ifp->if_index;
-}
-
-static __inline void
-m_reset_rcvif(struct mbuf *m)
-{
-
-	/* A caller may expect whole _rcvif union is zeroed */
-	/* m->m_pkthdr.rcvif_index = 0; */
-	m->m_pkthdr._rcvif.ctx = NULL;
-}
-
-static __inline void
-m_copy_rcvif(struct mbuf *m, const struct mbuf *n)
-{
-
-	m->m_pkthdr.rcvif_index = n->m_pkthdr.rcvif_index;
-}
-
-static __inline void
-m_pkthdr_init(struct mbuf *m)
-{
-
-	KASSERT(m != NULL);
-
-	m->m_data = m->m_pktdat;
-	m->m_flags = M_PKTHDR;
-
-	m_reset_rcvif(m);
-	m->m_pkthdr.len = 0;
-	m->m_pkthdr.csum_flags = 0;
-	m->m_pkthdr.csum_data = 0;
-	SLIST_INIT(&m->m_pkthdr.tags);
-
-	m->m_pkthdr.pattr_class = NULL;
-	m->m_pkthdr.pattr_af = AF_UNSPEC;
-	m->m_pkthdr.pattr_hdr = NULL;
-}
-
 void m_print(const struct mbuf *, const char *, void (*)(const char *, ...)
     __printflike(1, 2));
-
-/*
- * Get rcvif of a mbuf.
- *
- * The caller must call m_put_rcvif after using rcvif. The caller cannot
- * block or sleep during using rcvif. Insofar as the constraint is satisfied,
- * the API ensures a got rcvif isn't be freed until m_put_rcvif is called.
- */
-static __inline struct ifnet *
-m_get_rcvif(const struct mbuf *m, int *s)
-{
-
-	*s = pserialize_read_enter();
-	return if_byindex(m->m_pkthdr.rcvif_index);
-}
-
-static __inline void
-m_put_rcvif(struct ifnet *ifp, int *s)
-{
-
-	if (ifp == NULL)
-		return;
-	pserialize_read_exit(*s);
-}
-
-/*
- * Get rcvif of a mbuf.
- *
- * The caller must call m_put_rcvif_psref after using rcvif. The API ensures
- * a got rcvif isn't be freed until m_put_rcvif_psref is called.
- */
-static __inline struct ifnet *
-m_get_rcvif_psref(const struct mbuf *m, struct psref *psref)
-{
-
-	return if_get_byindex(m->m_pkthdr.rcvif_index, psref);
-}
-
-static __inline void
-m_put_rcvif_psref(struct ifnet *ifp, struct psref *psref)
-{
-
-	if (ifp == NULL)
-		return;
-	if_put(ifp, psref);
-}
-
-/*
- * Get rcvif of a mbuf.
- *
- * This is NOT an MP-safe API and shouldn't be used at where we want MP-safe.
- */
-static __inline struct ifnet *
-m_get_rcvif_NOMPSAFE(const struct mbuf *m)
-{
-
-	return if_byindex(m->m_pkthdr.rcvif_index);
-}
 
 #endif /* _KERNEL */
 #endif /* !_SYS_MBUF_H_ */

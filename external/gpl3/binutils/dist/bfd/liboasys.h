@@ -1,5 +1,6 @@
 /* BFD internal declarations for Oasys file format handling.
-   Copyright (C) 1990-2015 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1992, 1993, 1994, 1997, 2002, 2005, 2007
+   Free Software Foundation, Inc.
    Scrawled by Steve Chamberlain of Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.

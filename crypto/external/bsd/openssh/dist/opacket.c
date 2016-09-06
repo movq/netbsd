@@ -1,8 +1,8 @@
-/*	$NetBSD: opacket.c,v 1.5 2016/03/11 01:55:00 christos Exp $	*/
+/*	$NetBSD: opacket.c,v 1.2.2.2 2015/04/30 06:07:30 riz Exp $	*/
 /* Written by Markus Friedl. Placed in the public domain.  */
 
 #include "includes.h"
-__RCSID("$NetBSD: opacket.c,v 1.5 2016/03/11 01:55:00 christos Exp $");
+__RCSID("$NetBSD: opacket.c,v 1.2.2.2 2015/04/30 06:07:30 riz Exp $");
 
 #include "ssherr.h"
 #include "packet.h"
@@ -76,7 +76,7 @@ ssh_packet_put_raw(struct ssh *ssh, const void *buf, u_int len)
 		fatal("%s: %s", __func__, ssh_err(r));
 }
 
-#ifdef WITH_SSH1
+#ifdef WITH_OPENSSL
 void
 ssh_packet_put_bignum(struct ssh *ssh, BIGNUM * value)
 {
@@ -85,9 +85,7 @@ ssh_packet_put_bignum(struct ssh *ssh, BIGNUM * value)
 	if ((r = sshpkt_put_bignum1(ssh, value)) != 0)
 		fatal("%s: %s", __func__, ssh_err(r));
 }
-#endif
 
-#ifdef WITH_OPENSSL
 void
 ssh_packet_put_bignum2(struct ssh *ssh, BIGNUM * value)
 {
@@ -160,7 +158,7 @@ ssh_packet_get_int64(struct ssh *ssh)
 	return val;
 }
 
-#ifdef WITH_SSH1
+#ifdef WITH_OPENSSL
 void
 ssh_packet_get_bignum(struct ssh *ssh, BIGNUM * value)
 {
@@ -169,9 +167,7 @@ ssh_packet_get_bignum(struct ssh *ssh, BIGNUM * value)
 	if ((r = sshpkt_get_bignum1(ssh, value)) != 0)
 		fatal("%s: %s", __func__, ssh_err(r));
 }
-#endif
 
-#ifdef WITH_OPENSSL
 void
 ssh_packet_get_bignum2(struct ssh *ssh, BIGNUM * value)
 {
@@ -241,6 +237,18 @@ packet_set_connection(int fd_in, int fd_out)
 	active_state = ssh_packet_set_connection(active_state, fd_in, fd_out);
 	if (active_state == NULL)
 		fatal("%s: ssh_packet_set_connection failed", __func__);
+}
+
+void
+packet_backup_state(void)
+{
+	ssh_packet_backup_state(active_state, backup_state);
+}
+
+void
+packet_restore_state(void)
+{
+	ssh_packet_restore_state(active_state, backup_state);
 }
 
 u_int

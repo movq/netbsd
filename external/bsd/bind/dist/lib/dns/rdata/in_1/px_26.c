@@ -1,4 +1,4 @@
-/*	$NetBSD: px_26.c,v 1.6 2016/05/26 16:49:59 christos Exp $	*/
+/*	$NetBSD: px_26.c,v 1.3.12.1 2016/03/13 08:06:14 martin Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007, 2009, 2015  Internet Systems Consortium, Inc. ("ISC")
@@ -41,9 +41,6 @@ fromtext_in_px(ARGS_FROMTEXT) {
 	UNUSED(rdclass);
 	UNUSED(callbacks);
 
-	if (origin == NULL)
-		origin = dns_rootname;
-
 	/*
 	 * Preference.
 	 */
@@ -60,6 +57,7 @@ fromtext_in_px(ARGS_FROMTEXT) {
 				      ISC_FALSE));
 	dns_name_init(&name, NULL);
 	buffer_fromregion(&buffer, &token.value.as_region);
+	origin = (origin != NULL) ? origin : dns_rootname;
 	RETTOK(dns_name_fromtext(&name, &buffer, origin, options, target));
 
 	/*
@@ -69,6 +67,7 @@ fromtext_in_px(ARGS_FROMTEXT) {
 				      ISC_FALSE));
 	dns_name_init(&name, NULL);
 	buffer_fromregion(&buffer, &token.value.as_region);
+	origin = (origin != NULL) ? origin : dns_rootname;
 	RETTOK(dns_name_fromtext(&name, &buffer, origin, options, target));
 	return (ISC_R_SUCCESS);
 }

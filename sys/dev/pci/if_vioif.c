@@ -1,4 +1,4 @@
-/*	$NetBSD: if_vioif.c,v 1.24 2016/06/10 13:27:14 ozaki-r Exp $	*/
+/*	$NetBSD: if_vioif.c,v 1.7.2.1 2014/12/29 17:01:01 martin Exp $	*/
 
 /*
  * Copyright (c) 2010 Minoura Makoto.
@@ -26,11 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_vioif.c,v 1.24 2016/06/10 13:27:14 ozaki-r Exp $");
-
-#ifdef _KERNEL_OPT
-#include "opt_net_mpsafe.h"
-#endif
+__KERNEL_RCSID(0, "$NetBSD: if_vioif.c,v 1.7.2.1 2014/12/29 17:01:01 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -43,7 +39,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_vioif.c,v 1.24 2016/06/10 13:27:14 ozaki-r Exp $"
 #include <sys/mbuf.h>
 #include <sys/mutex.h>
 #include <sys/sockio.h>
-#include <sys/cpu.h>
 
 #include <dev/pci/pcidevs.h>
 #include <dev/pci/pcireg.h>
@@ -60,10 +55,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_vioif.c,v 1.24 2016/06/10 13:27:14 ozaki-r Exp $"
 
 #ifdef NET_MPSAFE
 #define VIOIF_MPSAFE	1
-#endif
-
-#ifdef SOFTINT_INTR
-#define VIOIF_SOFTINT_INTR	1
 #endif
 
 /*
@@ -91,26 +82,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_vioif.c,v 1.24 2016/06/10 13:27:14 ozaki-r Exp $"
 #define VIRTIO_NET_F_CTRL_VQ	(1<<17)
 #define VIRTIO_NET_F_CTRL_RX	(1<<18)
 #define VIRTIO_NET_F_CTRL_VLAN	(1<<19)
-
-#define VIRTIO_NET_FLAG_BITS \
-	VIRTIO_COMMON_FLAG_BITS \
-	"\x14""CTRL_VLAN" \
-	"\x13""CTRL_RX" \
-	"\x12""CTRL_VQ" \
-	"\x11""STATUS" \
-	"\x10""MRG_RXBUF" \
-	"\x0f""HOST_UFO" \
-	"\x0e""HOST_ECN" \
-	"\x0d""HOST_TSO6" \
-	"\x0c""HOST_TSO4" \
-	"\x0b""GUEST_UFO" \
-	"\x0a""GUEST_ECN" \
-	"\x09""GUEST_TSO6" \
-	"\x08""GUEST_TSO4" \
-	"\x07""GSO" \
-	"\x06""MAC" \
-	"\x02""GUEST_CSUM" \
-	"\x01""CSUM"
 
 /* Status */
 #define VIRTIO_NET_S_LINK_UP	1
@@ -181,13 +152,10 @@ struct vioif_softc {
 
 	struct virtio_softc	*sc_virtio;
 	struct virtqueue	sc_vq[3];
-#define VQ_RX	0
-#define VQ_TX	1
-#define VQ_CTRL	2
 
 	uint8_t			sc_mac[ETHER_ADDR_LEN];
 	struct ethercom		sc_ethercom;
-	short			sc_deferred_init_done;
+	short			sc_ifflags;
 
 	/* bus_dmamem */
 	bus_dma_segment_t	sc_hdr_segs[1];
@@ -252,7 +220,6 @@ static void	vioif_watchdog(struct ifnet *);
 static int	vioif_add_rx_mbuf(struct vioif_softc *, int);
 static void	vioif_free_rx_mbuf(struct vioif_softc *, int);
 static void	vioif_populate_rx_mbufs(struct vioif_softc *);
-static void	vioif_populate_rx_mbufs_locked(struct vioif_softc *);
 static int	vioif_rx_deq(struct vioif_softc *);
 static int	vioif_rx_deq_locked(struct vioif_softc *);
 static int	vioif_rx_vq_done(struct virtqueue *);
@@ -321,8 +288,8 @@ vioif_alloc_mems(struct vioif_softc *sc)
 	intptr_t p;
 	int rxqsize, txqsize;
 
-	rxqsize = vsc->sc_vqs[VQ_RX].vq_num;
-	txqsize = vsc->sc_vqs[VQ_TX].vq_num;
+	rxqsize = vsc->sc_vqs[0].vq_num;
+	txqsize = vsc->sc_vqs[1].vq_num;
 
 	allocsize = sizeof(struct virtio_net_hdr) * rxqsize;
 	allocsize += sizeof(struct virtio_net_hdr) * txqsize;
@@ -430,7 +397,7 @@ vioif_alloc_mems(struct vioif_softc *sc)
 		C_L1(txhdr_dmamaps[i], rx_hdrs[i],
 		    sizeof(struct virtio_net_hdr), 1,
 		    WRITE, "tx header");
-		C(tx_dmamaps[i], NULL, ETHER_MAX_LEN, 16 /* XXX */, 0,
+		C(tx_dmamaps[i], NULL, ETHER_MAX_LEN, 256 /* XXX */, 0,
 		  "tx payload");
 	}
 
@@ -508,10 +475,8 @@ vioif_attach(device_t parent, device_t self, void *aux)
 	struct vioif_softc *sc = device_private(self);
 	struct virtio_softc *vsc = device_private(parent);
 	uint32_t features;
-	char buf[256];
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	u_int flags;
-	int r;
 
 	if (vsc->sc_child != NULL) {
 		aprint_normal(": child already attached for %s; "
@@ -526,17 +491,13 @@ vioif_attach(device_t parent, device_t self, void *aux)
 	vsc->sc_child = self;
 	vsc->sc_ipl = IPL_NET;
 	vsc->sc_vqs = &sc->sc_vq[0];
-	vsc->sc_config_change = NULL;
+	vsc->sc_config_change = 0;
 	vsc->sc_intrhand = virtio_vq_intr;
 	vsc->sc_flags = 0;
 
 #ifdef VIOIF_MPSAFE
 	vsc->sc_flags |= VIRTIO_F_PCI_INTR_MPSAFE;
 #endif
-#ifdef VIOIF_SOFTINT_INTR
-	vsc->sc_flags |= VIRTIO_F_PCI_INTR_SOFTINT;
-#endif
-	vsc->sc_flags |= VIRTIO_F_PCI_INTR_MSIX;
 
 	features = virtio_negotiate_features(vsc,
 					     (VIRTIO_NET_F_MAC |
@@ -584,9 +545,22 @@ vioif_attach(device_t parent, device_t self, void *aux)
 					     sc->sc_mac[5]);
 	}
 	aprint_normal(": Ethernet address %s\n", ether_sprintf(sc->sc_mac));
-	snprintb(buf, sizeof(buf), VIRTIO_NET_FLAG_BITS, features);
-	aprint_normal_dev(self, "Features: %s\n", buf);
 	aprint_naive("\n");
+
+	if (virtio_alloc_vq(vsc, &sc->sc_vq[0], 0,
+			    MCLBYTES+sizeof(struct virtio_net_hdr), 2,
+			    "rx") != 0) {
+		goto err;
+	}
+	vsc->sc_nvqs = 1;
+	sc->sc_vq[0].vq_done = vioif_rx_vq_done;
+	if (virtio_alloc_vq(vsc, &sc->sc_vq[1], 1,
+			    (sizeof(struct virtio_net_hdr)
+			     + (ETHER_MAX_LEN - ETHER_HDR_LEN)),
+			    VIRTIO_NET_TX_MAXNSEGS + 1,
+			    "tx") != 0) {
+		goto err;
+	}
 
 #ifdef VIOIF_MPSAFE
 	sc->sc_tx_lock = mutex_obj_alloc(MUTEX_DEFAULT, IPL_NET);
@@ -597,51 +571,23 @@ vioif_attach(device_t parent, device_t self, void *aux)
 #endif
 	sc->sc_stopping = false;
 
-	/*
-	 * Allocating a virtqueue for Rx
-	 */
-	r = virtio_alloc_vq(vsc, &sc->sc_vq[VQ_RX], 0,
-	    MCLBYTES+sizeof(struct virtio_net_hdr), 2, "rx");
-	if (r != 0)
-		goto err;
-	vsc->sc_nvqs = 1;
-	sc->sc_vq[VQ_RX].vq_done = vioif_rx_vq_done;
-
-	/*
-	 * Allocating a virtqueue for Tx
-	 */
-	r = virtio_alloc_vq(vsc, &sc->sc_vq[VQ_TX], 1,
-	    (sizeof(struct virtio_net_hdr) + (ETHER_MAX_LEN - ETHER_HDR_LEN)),
-	    VIRTIO_NET_TX_MAXNSEGS + 1, "tx");
-	if (r != 0)
-		goto err;
 	vsc->sc_nvqs = 2;
-	sc->sc_vq[VQ_TX].vq_done = vioif_tx_vq_done;
-
-	virtio_start_vq_intr(vsc, &sc->sc_vq[VQ_RX]);
-	virtio_stop_vq_intr(vsc, &sc->sc_vq[VQ_TX]); /* not urgent; do it later */
-
-	if ((features & VIRTIO_NET_F_CTRL_VQ) &&
-	    (features & VIRTIO_NET_F_CTRL_RX)) {
-		/*
-		 * Allocating a virtqueue for control channel
-		 */
-		r = virtio_alloc_vq(vsc, &sc->sc_vq[VQ_CTRL], 2,
-		    NBPG, 1, "control");
-		if (r != 0) {
-			aprint_error_dev(self, "failed to allocate "
-			    "a virtqueue for control channel\n");
-			goto skip;
+	sc->sc_vq[1].vq_done = vioif_tx_vq_done;
+	virtio_start_vq_intr(vsc, &sc->sc_vq[0]);
+	virtio_stop_vq_intr(vsc, &sc->sc_vq[1]); /* not urgent; do it later */
+	if ((features & VIRTIO_NET_F_CTRL_VQ)
+	    && (features & VIRTIO_NET_F_CTRL_RX)) {
+		if (virtio_alloc_vq(vsc, &sc->sc_vq[2], 2,
+				    NBPG, 1, "control") == 0) {
+			sc->sc_vq[2].vq_done = vioif_ctrl_vq_done;
+			cv_init(&sc->sc_ctrl_wait, "ctrl_vq");
+			mutex_init(&sc->sc_ctrl_wait_lock,
+				   MUTEX_DEFAULT, IPL_NET);
+			sc->sc_ctrl_inuse = FREE;
+			virtio_start_vq_intr(vsc, &sc->sc_vq[2]);
+			vsc->sc_nvqs = 3;
 		}
-
-		sc->sc_vq[VQ_CTRL].vq_done = vioif_ctrl_vq_done;
-		cv_init(&sc->sc_ctrl_wait, "ctrl_vq");
-		mutex_init(&sc->sc_ctrl_wait_lock, MUTEX_DEFAULT, IPL_NET);
-		sc->sc_ctrl_inuse = FREE;
-		virtio_start_vq_intr(vsc, &sc->sc_vq[VQ_CTRL]);
-		vsc->sc_nvqs = 3;
 	}
-skip:
 
 #ifdef VIOIF_MPSAFE
 	flags = SOFTINT_NET | SOFTINT_MPSAFE;
@@ -656,6 +602,8 @@ skip:
 
 	if (vioif_alloc_mems(sc) < 0)
 		goto err;
+	if (vsc->sc_nvqs == 3)
+		config_interrupts(self, vioif_deferred_init);
 
 	strlcpy(ifp->if_xname, device_xname(self), IFNAMSIZ);
 	ifp->if_softc = sc;
@@ -666,8 +614,6 @@ skip:
 	ifp->if_stop = vioif_stop;
 	ifp->if_capabilities = 0;
 	ifp->if_watchdog = vioif_watchdog;
-
-	sc->sc_ethercom.ec_capabilities |= ETHERCAP_VLAN_MTU;
 
 	if_attach(ifp);
 	ether_ifattach(ifp, sc->sc_mac);
@@ -681,13 +627,19 @@ err:
 		mutex_obj_free(sc->sc_rx_lock);
 
 	if (vsc->sc_nvqs == 3) {
+		virtio_free_vq(vsc, &sc->sc_vq[2]);
 		cv_destroy(&sc->sc_ctrl_wait);
 		mutex_destroy(&sc->sc_ctrl_wait_lock);
+		vsc->sc_nvqs = 2;
 	}
-
-	while (vsc->sc_nvqs > 0)
-		virtio_free_vq(vsc, &sc->sc_vq[--vsc->sc_nvqs]);
-
+	if (vsc->sc_nvqs == 2) {
+		virtio_free_vq(vsc, &sc->sc_vq[1]);
+		vsc->sc_nvqs = 1;
+	}
+	if (vsc->sc_nvqs == 1) {
+		virtio_free_vq(vsc, &sc->sc_vq[0]);
+		vsc->sc_nvqs = 0;
+	}
 	vsc->sc_child = (void*)1;
 	return;
 }
@@ -700,13 +652,12 @@ vioif_deferred_init(device_t self)
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	int r;
 
-	if (ifp->if_flags & IFF_PROMISC)
-		return;
-
 	r =  vioif_set_promisc(sc, false);
 	if (r != 0)
 		aprint_error_dev(self, "resetting promisc mode failed, "
 				 "errror code %d\n", r);
+	else
+		ifp->if_flags &= ~IFF_PROMISC;
 }
 
 /*
@@ -718,14 +669,6 @@ vioif_init(struct ifnet *ifp)
 	struct vioif_softc *sc = ifp->if_softc;
 
 	vioif_stop(ifp, 0);
-
-	if (!sc->sc_deferred_init_done) {
-		struct virtio_softc *vsc = sc->sc_virtio;
-
-		sc->sc_deferred_init_done = 1;
-		if (vsc->sc_nvqs == 3)
-			vioif_deferred_init(sc->sc_dev);
-	}
 
 	/* Have to set false before vioif_populate_rx_mbufs */
 	sc->sc_stopping = false;
@@ -746,12 +689,7 @@ vioif_stop(struct ifnet *ifp, int disable)
 	struct vioif_softc *sc = ifp->if_softc;
 	struct virtio_softc *vsc = sc->sc_virtio;
 
-	/* Take the locks to ensure that ongoing TX/RX finish */
-	VIOIF_TX_LOCK(sc);
-	VIOIF_RX_LOCK(sc);
 	sc->sc_stopping = true;
-	VIOIF_RX_UNLOCK(sc);
-	VIOIF_TX_UNLOCK(sc);
 
 	/* only way to stop I/O and DMA is resetting... */
 	virtio_reset(vsc);
@@ -764,10 +702,10 @@ vioif_stop(struct ifnet *ifp, int disable)
 
 	virtio_reinit_start(vsc);
 	virtio_negotiate_features(vsc, vsc->sc_features);
-	virtio_start_vq_intr(vsc, &sc->sc_vq[VQ_RX]);
-	virtio_stop_vq_intr(vsc, &sc->sc_vq[VQ_TX]);
+	virtio_start_vq_intr(vsc, &sc->sc_vq[0]);
+	virtio_stop_vq_intr(vsc, &sc->sc_vq[1]);
 	if (vsc->sc_nvqs >= 3)
-		virtio_start_vq_intr(vsc, &sc->sc_vq[VQ_CTRL]);
+		virtio_start_vq_intr(vsc, &sc->sc_vq[2]);
 	virtio_reinit_end(vsc);
 	vioif_updown(sc, false);
 }
@@ -777,7 +715,7 @@ vioif_start(struct ifnet *ifp)
 {
 	struct vioif_softc *sc = ifp->if_softc;
 	struct virtio_softc *vsc = sc->sc_virtio;
-	struct virtqueue *vq = &sc->sc_vq[VQ_TX];
+	struct virtqueue *vq = &sc->sc_vq[1]; /* tx vq */
 	struct mbuf *m;
 	int queued = 0, retry = 0;
 
@@ -814,14 +752,13 @@ retry:
 					 m, BUS_DMA_WRITE|BUS_DMA_NOWAIT);
 		if (r != 0) {
 			virtio_enqueue_abort(vsc, vq, slot);
-			aprint_error_dev(sc->sc_dev,
-			    "tx dmamap load failed, error code %d\n", r);
+			printf("%s: tx dmamap load failed, error code %d\n",
+			       device_xname(sc->sc_dev), r);
 			break;
 		}
 		r = virtio_enqueue_reserve(vsc, vq, slot,
 					sc->sc_tx_dmamaps[slot]->dm_nsegs + 1);
 		if (r != 0) {
-			virtio_enqueue_abort(vsc, vq, slot);
 			bus_dmamap_unload(vsc->sc_dmat,
 					  sc->sc_tx_dmamaps[slot]);
 			ifp->if_flags |= IFF_OACTIVE;
@@ -889,7 +826,7 @@ vioif_watchdog(struct ifnet *ifp)
 	struct vioif_softc *sc = ifp->if_softc;
 
 	if (ifp->if_flags & IFF_RUNNING)
-		vioif_tx_vq_done(&sc->sc_vq[VQ_TX]);
+		vioif_tx_vq_done(&sc->sc_vq[1]);
 }
 
 
@@ -938,22 +875,14 @@ vioif_free_rx_mbuf(struct vioif_softc *sc, int i)
 static void
 vioif_populate_rx_mbufs(struct vioif_softc *sc)
 {
-	VIOIF_RX_LOCK(sc);
-	vioif_populate_rx_mbufs_locked(sc);
-	VIOIF_RX_UNLOCK(sc);
-}
-
-static void
-vioif_populate_rx_mbufs_locked(struct vioif_softc *sc)
-{
 	struct virtio_softc *vsc = sc->sc_virtio;
 	int i, r, ndone = 0;
-	struct virtqueue *vq = &sc->sc_vq[VQ_RX];
+	struct virtqueue *vq = &sc->sc_vq[0]; /* rx vq */
 
-	KASSERT(VIOIF_RX_LOCKED(sc));
+	VIOIF_RX_LOCK(sc);
 
 	if (sc->sc_stopping)
-		return;
+		goto out;
 
 	for (i = 0; i < vq->vq_num; i++) {
 		int slot;
@@ -988,6 +917,9 @@ vioif_populate_rx_mbufs_locked(struct vioif_softc *sc)
 	}
 	if (ndone > 0)
 		virtio_enqueue_commit(vsc, vq, -1, true);
+
+out:
+	VIOIF_RX_UNLOCK(sc);
 }
 
 /* dequeue recieved packets */
@@ -1010,7 +942,7 @@ static int
 vioif_rx_deq_locked(struct vioif_softc *sc)
 {
 	struct virtio_softc *vsc = sc->sc_virtio;
-	struct virtqueue *vq = &sc->sc_vq[VQ_RX];
+	struct virtqueue *vq = &sc->sc_vq[0];
 	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	struct mbuf *m;
 	int r = 0;
@@ -1032,13 +964,13 @@ vioif_rx_deq_locked(struct vioif_softc *sc)
 		bus_dmamap_unload(vsc->sc_dmat, sc->sc_rx_dmamaps[slot]);
 		sc->sc_rx_mbufs[slot] = 0;
 		virtio_dequeue_commit(vsc, vq, slot);
-		m_set_rcvif(m, ifp);
+		m->m_pkthdr.rcvif = ifp;
 		m->m_len = m->m_pkthdr.len = len;
 		ifp->if_ipackets++;
 		bpf_mtap(ifp, m);
 
 		VIOIF_RX_UNLOCK(sc);
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		(*ifp->if_input)(ifp, m);
 		VIOIF_RX_LOCK(sc);
 
 		if (sc->sc_stopping)
@@ -1056,10 +988,6 @@ vioif_rx_vq_done(struct virtqueue *vq)
 	struct vioif_softc *sc = device_private(vsc->sc_child);
 	int r = 0;
 
-#ifdef VIOIF_SOFTINT_INTR
-	KASSERT(!cpu_intr_p());
-#endif
-
 	VIOIF_RX_LOCK(sc);
 
 	if (sc->sc_stopping)
@@ -1067,11 +995,7 @@ vioif_rx_vq_done(struct virtqueue *vq)
 
 	r = vioif_rx_deq_locked(sc);
 	if (r)
-#ifdef VIOIF_SOFTINT_INTR
-		vioif_populate_rx_mbufs_locked(sc);
-#else
 		softint_schedule(sc->sc_rx_softint);
-#endif
 
 out:
 	VIOIF_RX_UNLOCK(sc);
@@ -1091,7 +1015,7 @@ vioif_rx_softint(void *arg)
 static void
 vioif_rx_drain(struct vioif_softc *sc)
 {
-	struct virtqueue *vq = &sc->sc_vq[VQ_RX];
+	struct virtqueue *vq = &sc->sc_vq[0];
 	int i;
 
 	for (i = 0; i < vq->vq_num; i++) {
@@ -1116,7 +1040,6 @@ vioif_tx_vq_done(struct virtqueue *vq)
 {
 	struct virtio_softc *vsc = vq->vq_owner;
 	struct vioif_softc *sc = device_private(vsc->sc_child);
-	struct ifnet *ifp = &sc->sc_ethercom.ec_if;
 	int r = 0;
 
 	VIOIF_TX_LOCK(sc);
@@ -1128,8 +1051,6 @@ vioif_tx_vq_done(struct virtqueue *vq)
 
 out:
 	VIOIF_TX_UNLOCK(sc);
-	if (r)
-		vioif_start(ifp);
 	return r;
 }
 
@@ -1171,7 +1092,7 @@ static void
 vioif_tx_drain(struct vioif_softc *sc)
 {
 	struct virtio_softc *vsc = sc->sc_virtio;
-	struct virtqueue *vq = &sc->sc_vq[VQ_TX];
+	struct virtqueue *vq = &sc->sc_vq[1];
 	int i;
 
 	KASSERT(sc->sc_stopping);
@@ -1193,7 +1114,7 @@ static int
 vioif_ctrl_rx(struct vioif_softc *sc, int cmd, bool onoff)
 {
 	struct virtio_softc *vsc = sc->sc_virtio;
-	struct virtqueue *vq = &sc->sc_vq[VQ_CTRL];
+	struct virtqueue *vq = &sc->sc_vq[2];
 	int r, slot;
 
 	if (vsc->sc_nvqs < 3)
@@ -1289,7 +1210,7 @@ vioif_set_rx_filter(struct vioif_softc *sc)
 {
 	/* filter already set in sc_ctrl_mac_tbl */
 	struct virtio_softc *vsc = sc->sc_virtio;
-	struct virtqueue *vq = &sc->sc_vq[VQ_CTRL];
+	struct virtqueue *vq = &sc->sc_vq[2];
 	int r, slot;
 
 	if (vsc->sc_nvqs < 3)

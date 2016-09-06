@@ -1,4 +1,4 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
  * Copyright (c) 2008 Tiago Cunha <me@tiagocunha.org>
@@ -28,6 +28,7 @@
 
 enum cmd_retval	cmd_source_file_exec(struct cmd *, struct cmd_q *);
 
+void		cmd_source_file_show(struct cmd_q *);
 void		cmd_source_file_done(struct cmd_q *);
 
 const struct cmd_entry cmd_source_file_entry = {
@@ -35,6 +36,7 @@ const struct cmd_entry cmd_source_file_entry = {
 	"", 1, 1,
 	"path",
 	0,
+	NULL,
 	cmd_source_file_exec
 };
 
@@ -58,12 +60,11 @@ cmd_source_file_exec(struct cmd *self, struct cmd_q *cmdq)
 			free(cause);
 			return (CMD_RETURN_ERROR);
 		}
-		cfg_add_cause("%s", cause);
-		free(cause);
+		ARRAY_ADD(&cfg_causes, cause);
 		/* FALLTHROUGH */
 	case 0:
 		if (cfg_references == 0)
-			cfg_print_causes(cmdq);
+			cmd_source_file_show(cmdq);
 		cmdq_free(cmdq1);
 		return (CMD_RETURN_NORMAL);
 	}
@@ -73,6 +74,20 @@ cmd_source_file_exec(struct cmd *self, struct cmd_q *cmdq)
 
 	cmdq_continue(cmdq1);
 	return (CMD_RETURN_WAIT);
+}
+
+void
+cmd_source_file_show(struct cmd_q *cmdq)
+{
+	u_int	 i;
+	char	*cause;
+
+	for (i = 0; i < ARRAY_LENGTH(&cfg_causes); i++) {
+		cause = ARRAY_ITEM(&cfg_causes, i);
+		cmdq_print(cmdq, "%s", cause);
+		free(cause);
+	}
+	ARRAY_FREE(&cfg_causes);
 }
 
 void
@@ -91,6 +106,6 @@ cmd_source_file_done(struct cmd_q *cmdq1)
 		return;
 
 	if (cfg_references == 0)
-		cfg_print_causes(cmdq);
+		cmd_source_file_show(cmdq);
 	cmdq_continue(cmdq);
 }

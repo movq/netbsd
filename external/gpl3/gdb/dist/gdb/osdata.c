@@ -1,6 +1,6 @@
 /* Routines for handling XML generic OS data provided by target.
 
-   Copyright (C) 2008-2015 Free Software Foundation, Inc.
+   Copyright (C) 2008-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,6 +22,7 @@
 #include "vec.h"
 #include "xml-support.h"
 #include "osdata.h"
+#include <string.h>
 #include "ui-out.h"
 #include "gdbcmd.h"
 
@@ -66,7 +67,7 @@ osdata_start_osdata (struct gdb_xml_parser *parser,
     gdb_xml_error (parser, _("Seen more than on osdata element"));
 
   type = xml_find_attribute (attributes, "type")->value;
-  osdata = XCNEW (struct osdata);
+  osdata = XZALLOC (struct osdata);
   osdata->type = xstrdup (type);
   data->osdata = osdata;
 }

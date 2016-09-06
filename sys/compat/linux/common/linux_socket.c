@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_socket.c,v 1.132 2016/08/01 03:15:30 ozaki-r Exp $	*/
+/*	$NetBSD: linux_socket.c,v 1.119.2.1 2015/01/17 12:10:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998, 2008 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_socket.c,v 1.132 2016/08/01 03:15:30 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_socket.c,v 1.119.2.1 2015/01/17 12:10:54 martin Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_inet.h"
@@ -119,8 +119,8 @@ int linux_to_bsd_udp_sockopt(int);
 int linux_getifname(struct lwp *, register_t *, void *);
 int linux_getifconf(struct lwp *, register_t *, void *);
 int linux_getifhwaddr(struct lwp *, register_t *, u_int, void *);
-static int linux_get_sa(struct lwp *, int, struct sockaddr_big *,
-		const struct osockaddr *, socklen_t);
+static int linux_get_sa(struct lwp *, int, struct mbuf **,
+		const struct osockaddr *, unsigned int);
 static int linux_sa_put(struct osockaddr *osa);
 static int linux_to_bsd_msg_flags(int);
 static int bsd_to_linux_msg_flags(int);
@@ -399,7 +399,7 @@ linux_sys_sendto(struct lwp *l, const struct linux_sys_sendto_args *uap, registe
 	} */
 	struct msghdr   msg;
 	struct iovec    aiov;
-	struct sockaddr_big nam;
+	struct mbuf *nam;
 	int bflags;
 	int error;
 
@@ -419,7 +419,8 @@ linux_sys_sendto(struct lwp *l, const struct linux_sys_sendto_args *uap, registe
 		    SCARG(uap, tolen));
 		if (error)
 			return (error);
-		msg.msg_name = &nam;
+		msg.msg_flags |= MSG_NAMEMBUF;
+		msg.msg_name = nam;
 		msg.msg_namelen = SCARG(uap, tolen);
 	}
 
@@ -467,7 +468,7 @@ linux_sys_sendmsg(struct lwp *l, const struct linux_sys_sendmsg_args *uap, regis
 	struct linux_msghdr lmsg;
 	int		error;
 	int		bflags;
-	struct sockaddr_big nam;
+	struct mbuf     *nam;
 	u_int8_t	*control;
 	struct mbuf     *ctl_mbuf = NULL;
 
@@ -492,7 +493,8 @@ linux_sys_sendmsg(struct lwp *l, const struct linux_sys_sendmsg_args *uap, regis
 		    msg.msg_namelen);
 		if (error)
 			return (error);
-		msg.msg_name = &nam;
+		msg.msg_flags |= MSG_NAMEMBUF;
+		msg.msg_name = nam;
 	}
 
 	/*
@@ -1092,21 +1094,16 @@ linux_getifname(struct lwp *l, register_t *retval, void *data)
 	struct ifnet *ifp;
 	struct linux_ifreq ifr;
 	int error;
-	int s;
 
 	error = copyin(data, &ifr, sizeof(ifr));
 	if (error)
 		return error;
 
-	s = pserialize_read_enter();
 	ifp = if_byindex(ifr.ifr_ifru.ifru_ifindex);
-	if (ifp == NULL) {
-		pserialize_read_exit(s);
+	if (ifp == NULL)
 		return ENODEV;
-	}
 
 	strncpy(ifr.ifr_name, ifp->if_xname, sizeof(ifr.ifr_name));
-	pserialize_read_exit(s);
 
 	return copyout(&ifr, data, sizeof(ifr));
 }
@@ -1114,85 +1111,56 @@ linux_getifname(struct lwp *l, register_t *retval, void *data)
 int
 linux_getifconf(struct lwp *l, register_t *retval, void *data)
 {
-	struct linux_ifreq ifr, *ifrp = NULL;
+	struct linux_ifreq ifr, *ifrp;
 	struct linux_ifconf ifc;
 	struct ifnet *ifp;
+	struct ifaddr *ifa;
 	struct sockaddr *sa;
 	struct osockaddr *osa;
-	int space = 0, error;
+	int space, error = 0;
 	const int sz = (int)sizeof(ifr);
-	bool docopy;
-	int s;
-	int bound;
-	struct psref psref;
 
 	error = copyin(data, &ifc, sizeof(ifc));
 	if (error)
 		return error;
 
-	docopy = ifc.ifc_req != NULL;
-	if (docopy) {
+	ifrp = ifc.ifc_req;
+	if (ifrp == NULL)
+		space = 0;
+	else
 		space = ifc.ifc_len;
-		ifrp = ifc.ifc_req;
-	}
 
-	bound = curlwp_bind();
-	s = pserialize_read_enter();
-	IFNET_READER_FOREACH(ifp) {
-		struct ifaddr *ifa;
-		psref_acquire(&psref, &ifp->if_psref, ifnet_psref_class);
-
+	IFNET_FOREACH(ifp) {
 		(void)strncpy(ifr.ifr_name, ifp->if_xname,
 		    sizeof(ifr.ifr_name));
-		if (ifr.ifr_name[sizeof(ifr.ifr_name) - 1] != '\0') {
-			error = ENAMETOOLONG;
-			goto release_exit;
-		}
-
-		IFADDR_READER_FOREACH(ifa, ifp) {
-			struct psref psref_ifa;
-			ifa_acquire(ifa, &psref_ifa);
-			pserialize_read_exit(s);
-
+		if (ifr.ifr_name[sizeof(ifr.ifr_name) - 1] != '\0')
+			return ENAMETOOLONG;
+		if (IFADDR_EMPTY(ifp))
+			continue;
+		IFADDR_FOREACH(ifa, ifp) {
 			sa = ifa->ifa_addr;
 			if (sa->sa_family != AF_INET ||
 			    sa->sa_len > sizeof(*osa))
-				goto next;
+				continue;
 			memcpy(&ifr.ifr_addr, sa, sa->sa_len);
 			osa = (struct osockaddr *)&ifr.ifr_addr;
 			osa->sa_family = sa->sa_family;
 			if (space >= sz) {
 				error = copyout(&ifr, ifrp, sz);
-				if (error != 0) {
-					s = pserialize_read_enter();
-					ifa_release(ifa, &psref_ifa);
-					goto release_exit;
-				}
+				if (error != 0)
+					return error;
 				ifrp++;
 			}
 			space -= sz;
-		next:
-			s = pserialize_read_enter();
-			ifa_release(ifa, &psref_ifa);
 		}
-
-		psref_release(&psref, &ifp->if_psref, ifnet_psref_class);
 	}
-	pserialize_read_exit(s);
-	curlwp_bindx(bound);
 
-	if (docopy)
+	if (ifrp != NULL)
 		ifc.ifc_len -= space;
 	else
 		ifc.ifc_len = -space;
 
 	return copyout(&ifc, data, sizeof(ifc));
-
-release_exit:
-	pserialize_read_exit(s);
-	psref_release(&psref, &ifp->if_psref, ifnet_psref_class);
-	curlwp_bindx(bound);
-	return error;
 }
 
 int
@@ -1207,7 +1175,6 @@ linux_getifhwaddr(struct lwp *l, register_t *retval, u_int fd,
 	struct sockaddr_dl *sadl;
 	int error, found;
 	int index, ifnum;
-	int s;
 
 	/*
 	 * We can't emulate this ioctl by calling sys_ioctl() to run
@@ -1239,21 +1206,18 @@ linux_getifhwaddr(struct lwp *l, register_t *retval, u_int fd,
 	 * Try real interface name first, then fake "ethX"
 	 */
 	found = 0;
-	s = pserialize_read_enter();
-	IFNET_READER_FOREACH(ifp) {
+	IFNET_FOREACH(ifp) {
 		if (found)
 			break;
 		if (strcmp(lreq.ifr_name, ifp->if_xname))
 			/* not this interface */
 			continue;
-
 		found=1;
-		if (IFADDR_READER_EMPTY(ifp)) {
-			pserialize_read_exit(s);
+		if (IFADDR_EMPTY(ifp)) {
 			error = ENODEV;
 			goto out;
 		}
-		IFADDR_READER_FOREACH(ifa, ifp) {
+		IFADDR_FOREACH(ifa, ifp) {
 			sadl = satosdl(ifa->ifa_addr);
 			/* only return ethernet addresses */
 			/* XXX what about FDDI, etc. ? */
@@ -1265,55 +1229,51 @@ linux_getifhwaddr(struct lwp *l, register_t *retval, u_int fd,
 				   sizeof(lreq.ifr_hwaddr.sa_data)));
 			lreq.ifr_hwaddr.sa_family =
 				sadl->sdl_family;
-			pserialize_read_exit(s);
-
 			error = copyout(&lreq, data, sizeof(lreq));
 			goto out;
 		}
 	}
-	pserialize_read_exit(s);
 
-	if (strncmp(lreq.ifr_name, "eth", 3) != 0) {
+	if (strncmp(lreq.ifr_name, "eth", 3) == 0) {
+		for (ifnum = 0, index = 3;
+		     index < LINUX_IFNAMSIZ && lreq.ifr_name[index] != '\0';
+		     index++) {
+			ifnum *= 10;
+			ifnum += lreq.ifr_name[index] - '0';
+		}
+
+		error = EINVAL;			/* in case we don't find one */
+		found = 0;
+		IFNET_FOREACH(ifp) {
+			if (found)
+				break;
+			memcpy(lreq.ifr_name, ifp->if_xname,
+			       MIN(LINUX_IFNAMSIZ, IFNAMSIZ));
+			IFADDR_FOREACH(ifa, ifp) {
+				sadl = satosdl(ifa->ifa_addr);
+				/* only return ethernet addresses */
+				/* XXX what about FDDI, etc. ? */
+				if (sadl->sdl_family != AF_LINK ||
+				    sadl->sdl_type != IFT_ETHER)
+					continue;
+				if (ifnum--)
+					/* not the reqested iface */
+					continue;
+				memcpy(&lreq.ifr_hwaddr.sa_data,
+				       CLLADDR(sadl),
+				       MIN(sadl->sdl_alen,
+					   sizeof(lreq.ifr_hwaddr.sa_data)));
+				lreq.ifr_hwaddr.sa_family =
+					sadl->sdl_family;
+				error = copyout(&lreq, data, sizeof(lreq));
+				found = 1;
+				break;
+			}
+		}
+	} else {
 		/* unknown interface, not even an "eth*" name */
 		error = ENODEV;
-		goto out;
 	}
-
-	for (ifnum = 0, index = 3;
-	     index < LINUX_IFNAMSIZ && lreq.ifr_name[index] != '\0';
-	     index++) {
-		ifnum *= 10;
-		ifnum += lreq.ifr_name[index] - '0';
-	}
-
-	error = EINVAL;			/* in case we don't find one */
-	s = pserialize_read_enter();
-	IFNET_READER_FOREACH(ifp) {
-		memcpy(lreq.ifr_name, ifp->if_xname,
-		       MIN(LINUX_IFNAMSIZ, IFNAMSIZ));
-		IFADDR_READER_FOREACH(ifa, ifp) {
-			sadl = satosdl(ifa->ifa_addr);
-			/* only return ethernet addresses */
-			/* XXX what about FDDI, etc. ? */
-			if (sadl->sdl_family != AF_LINK ||
-			    sadl->sdl_type != IFT_ETHER)
-				continue;
-			if (ifnum--)
-				/* not the reqested iface */
-				continue;
-			memcpy(&lreq.ifr_hwaddr.sa_data,
-			       CLLADDR(sadl),
-			       MIN(sadl->sdl_alen,
-				   sizeof(lreq.ifr_hwaddr.sa_data)));
-			lreq.ifr_hwaddr.sa_family =
-				sadl->sdl_family;
-			pserialize_read_exit(s);
-
-			error = copyout(&lreq, data, sizeof(lreq));
-			goto out;
-		}
-	}
-	pserialize_read_exit(s);
 
 out:
 	KERNEL_UNLOCK_ONE(NULL);
@@ -1438,14 +1398,14 @@ linux_sys_connect(struct lwp *l, const struct linux_sys_connect_args *uap, regis
 		syscallarg(int) namelen;
 	} */
 	int		error;
-	struct sockaddr_big sb;
+	struct mbuf *nam;
 
-	error = linux_get_sa(l, SCARG(uap, s), &sb, SCARG(uap, name),
+	error = linux_get_sa(l, SCARG(uap, s), &nam, SCARG(uap, name),
 	    SCARG(uap, namelen));
 	if (error)
 		return (error);
 
-	error = do_sys_connect(l, SCARG(uap, s), (struct sockaddr *)&sb);
+	error = do_sys_connect(l, SCARG(uap, s), nam);
 
 	if (error == EISCONN) {
 		struct socket *so;
@@ -1483,14 +1443,14 @@ linux_sys_bind(struct lwp *l, const struct linux_sys_bind_args *uap, register_t 
 		syscallarg(int) namelen;
 	} */
 	int		error;
-	struct sockaddr_big sb;
+	struct mbuf     *nam;
 
-	error = linux_get_sa(l, SCARG(uap, s), &sb, SCARG(uap, name),
+	error = linux_get_sa(l, SCARG(uap, s), &nam, SCARG(uap, name),
 	    SCARG(uap, namelen));
 	if (error)
 		return (error);
 
-	return do_sys_bind(l, SCARG(uap, s), (struct sockaddr *)&sb);
+	return do_sys_bind(l, SCARG(uap, s), nam);
 }
 
 int
@@ -1532,26 +1492,50 @@ linux_sys_getpeername(struct lwp *l, const struct linux_sys_getpeername_args *ua
 }
 
 /*
- * Copy the osockaddr structure pointed to by name to sb, adjust
+ * Copy the osockaddr structure pointed to by osa to mbuf, adjust
  * family and convert to sockaddr.
  */
 static int
-linux_get_sa(struct lwp *l, int s, struct sockaddr_big *sb,
-    const struct osockaddr *name, socklen_t namelen)
+linux_get_sa(struct lwp *l, int s, struct mbuf **mp,
+    const struct osockaddr *osa, unsigned int salen)
 {
 	int error, bdom;
+	struct sockaddr *sa;
+	struct osockaddr *kosa;
+	struct mbuf *m;
 
-	if (namelen > UCHAR_MAX ||
-	    namelen <= offsetof(struct sockaddr_big, sb_data))
+	if (salen == 1 || salen > UCHAR_MAX) {
+		DPRINTF(("bad osa=%p salen=%d\n", osa, salen));
 		return EINVAL;
+	}
 
-	error = copyin(name, sb, namelen);
-	if (error)
-		return error;
+	/* We'll need the address in an mbuf later, so copy into one here */
+	m = m_get(M_WAIT, MT_SONAME);
+	if (salen > MLEN)
+		MEXTMALLOC(m, salen, M_WAITOK);
 
-	bdom = linux_to_bsd_domain(sb->sb_family);
-	if (bdom == -1)
-		return EINVAL;
+	m->m_len = salen;
+
+	if (salen == 0) {
+		*mp = m;
+		return 0;
+	}
+
+	kosa = mtod(m, void *);
+	if ((error = copyin(osa, kosa, salen))) {
+		DPRINTF(("error %d copying osa %p len %d\n",
+				error, osa, salen));
+		goto bad;
+	}
+
+	ktrkuser("linux/sockaddr", kosa, salen);
+
+	bdom = linux_to_bsd_domain(kosa->sa_family);
+	if (bdom == -1) {
+		DPRINTF(("bad linux family=%d\n", kosa->sa_family));
+		error = EINVAL;
+		goto bad;
+	}
 
 	/*
 	 * If the family is unspecified, use address family of the socket.
@@ -1562,10 +1546,12 @@ linux_get_sa(struct lwp *l, int s, struct sockaddr_big *sb,
 
 		/* fd_getsock() will use the descriptor for us */
 		if ((error = fd_getsock(s, &so)) != 0)
-			return error;
+			goto bad;
 
 		bdom = so->so_proto->pr_domain->dom_family;
 		fd_putfile(s);
+
+		DPRINTF(("AF_UNSPEC family adjusted to %d\n", bdom));
 	}
 
 	/*
@@ -1575,9 +1561,8 @@ linux_get_sa(struct lwp *l, int s, struct sockaddr_big *sb,
 	 *
 	 * Still accept addresses for which the scope id is not used.
 	 */
-	if (bdom == AF_INET6 &&
-	    namelen == sizeof(struct sockaddr_in6) - sizeof(uint32_t)) {
-		struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)sb;
+	if (bdom == AF_INET6 && salen == sizeof (struct sockaddr_in6) - sizeof (u_int32_t)) {
+		struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)kosa;
 		if (!IN6_IS_ADDR_V4MAPPED(&sin6->sin6_addr) &&
 		    (IN6_IS_ADDR_LINKLOCAL(&sin6->sin6_addr) ||
 		     IN6_IS_ADDR_SITELOCAL(&sin6->sin6_addr) ||
@@ -1591,19 +1576,35 @@ linux_get_sa(struct lwp *l, int s, struct sockaddr_big *sb,
 			    "pid %d (%s), uid %d: obsolete pre-RFC2553 "
 			    "sockaddr_in6 rejected",
 			    p->p_pid, p->p_comm, uid);
-			return EINVAL;
+			error = EINVAL;
+			goto bad;
 		}
-		namelen = sizeof(struct sockaddr_in6);
+		salen = sizeof (struct sockaddr_in6);
 		sin6->sin6_scope_id = 0;
 	}
 
 	if (bdom == AF_INET)
-		namelen = sizeof(struct sockaddr_in);
+		salen = sizeof(struct sockaddr_in);
 
-	sb->sb_family = bdom;
-	sb->sb_len = namelen;
-	ktrkuser("mbsoname", sb, namelen);
+	sa = (struct sockaddr *) kosa;
+	sa->sa_family = bdom;
+	sa->sa_len = salen;
+	m->m_len = salen;
+	ktrkuser("mbsoname", kosa, salen);
+
+#ifdef DEBUG_LINUX
+	DPRINTF(("family %d, len = %d [ ", sa->sa_family, sa->sa_len));
+	for (bdom = 0; bdom < sizeof(sa->sa_data); bdom++)
+	    DPRINTF(("%02x ", (unsigned char) sa->sa_data[bdom]));
+	DPRINTF(("\n"));
+#endif
+
+	*mp = m;
 	return 0;
+
+    bad:
+	m_free(m);
+	return error;
 }
 
 static int

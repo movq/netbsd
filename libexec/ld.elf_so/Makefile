@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.133 2016/06/16 11:34:13 christos Exp $
+#	$NetBSD: Makefile,v 1.127 2014/08/10 05:57:31 matt Exp $
 #
 # NOTE: when changing ld.so, ensure that ldd still compiles.
 #
@@ -34,9 +34,7 @@ M=		${.CURDIR}/arch/${ARCHSUBDIR}
      (${LDELFSO_MACHINE_ARCH} == "i386") ||				\
      (${LDELFSO_MACHINE_ARCH} == "m68k") ||				\
      (${MACHINE_CPU} == "mips") ||					\
-     (${MACHINE_CPU} == "or1k") ||					\
      (${MACHINE_CPU} == "powerpc") ||					\
-     (${MACHINE_CPU} == "riscv") ||					\
      (${MACHINE_CPU} == "sh3") ||					\
      (${LDELFSO_MACHINE_ARCH} == "sparc") ||				\
      (${LDELFSO_MACHINE_ARCH} == "sparc64") ||				\
@@ -91,9 +89,8 @@ CLEANFILES+=	errlist_concat.h ${PROG}.map
 BINDIR=		${SHLINKINSTALLDIR}
 
 CPPFLAGS+=	-DLIBDIR=\"${LIBDIR}\" -D_PATH_RTLD=\"${BINDIR}/${PROG}\"
-CPPFLAGS+=	-I${.CURDIR} -I. -D_KERNTYPES
+CPPFLAGS+=	-I${.CURDIR} -I.
 CPPFLAGS+=	-DRTLD_LOADER
-CPPFLAGS+=	-DGNU_RELRO
 CPPFLAGS+=	-D_RTLD_SOURCE
 CPPFLAGS+=	-DCOMBRELOC
 #CPPFLAGS+=	-DDEBUG

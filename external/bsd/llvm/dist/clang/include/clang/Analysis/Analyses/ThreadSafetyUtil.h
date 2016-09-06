@@ -130,8 +130,6 @@ public:
 
   typedef T *iterator;
   typedef const T *const_iterator;
-  typedef std::reverse_iterator<iterator> reverse_iterator;
-  typedef std::reverse_iterator<const_iterator> const_reverse_iterator;
 
   size_t size() const { return Size; }
   size_t capacity() const { return Capacity; }
@@ -162,16 +160,6 @@ public:
   const_iterator cbegin() const { return Data; }
   const_iterator cend()   const { return Data + Size; }
 
-  reverse_iterator rbegin() { return reverse_iterator(end()); }
-  reverse_iterator rend() { return reverse_iterator(begin()); }
-
-  const_reverse_iterator rbegin() const {
-    return const_reverse_iterator(end());
-  }
-  const_reverse_iterator rend() const {
-    return const_reverse_iterator(begin());
-  }
-
   void push_back(const T &Elem) {
     assert(Size < Capacity);
     Data[Size++] = Elem;
@@ -200,12 +188,36 @@ public:
     return J - Osz;
   }
 
-  llvm::iterator_range<reverse_iterator> reverse() {
-    return llvm::make_range(rbegin(), rend());
-  }
-  llvm::iterator_range<const_reverse_iterator> reverse() const {
-    return llvm::make_range(rbegin(), rend());
-  }
+  // An adaptor to reverse a simple array
+  class ReverseAdaptor {
+   public:
+    ReverseAdaptor(SimpleArray &Array) : Array(Array) {}
+    // A reverse iterator used by the reverse adaptor
+    class Iterator {
+     public:
+      Iterator(T *Data) : Data(Data) {}
+      T &operator*() { return *Data; }
+      const T &operator*() const { return *Data; }
+      Iterator &operator++() {
+        --Data;
+        return *this;
+      }
+      bool operator!=(Iterator Other) { return Data != Other.Data; }
+
+     private:
+      T *Data;
+    };
+    Iterator begin() { return Array.end() - 1; }
+    Iterator end() { return Array.begin() - 1; }
+    const Iterator begin() const { return Array.end() - 1; }
+    const Iterator end() const { return Array.begin() - 1; }
+
+   private:
+    SimpleArray &Array;
+  };
+
+  const ReverseAdaptor reverse() const { return ReverseAdaptor(*this); }
+  ReverseAdaptor reverse() { return ReverseAdaptor(*this); }
 
 private:
   // std::max is annoying here, because it requires a reference,
@@ -214,7 +226,7 @@ private:
 
   static const size_t InitialCapacity = 4;
 
-  SimpleArray(const SimpleArray<T> &A) = delete;
+  SimpleArray(const SimpleArray<T> &A) LLVM_DELETED_FUNCTION;
 
   T *Data;
   size_t Size;
@@ -243,8 +255,8 @@ class CopyOnWriteVector {
   };
 
   // No copy constructor or copy assignment.  Use clone() with move assignment.
-  CopyOnWriteVector(const CopyOnWriteVector &V) = delete;
-  void operator=(const CopyOnWriteVector &V) = delete;
+  CopyOnWriteVector(const CopyOnWriteVector &V) LLVM_DELETED_FUNCTION;
+  void operator=(const CopyOnWriteVector &V) LLVM_DELETED_FUNCTION;
 
 public:
   CopyOnWriteVector() : Data(nullptr) {}

@@ -101,17 +101,17 @@ class LiveRangeCalc {
   /// used to add entries directly.
   SmallVector<LiveInBlock, 16> LiveIn;
 
-  /// Assuming that @p LR is live-in to @p UseMBB, find the set of defs that can
-  /// reach it.
+  /// Assuming that LI is live-in to KillMBB and killed at Kill, find the set
+  /// of defs that can reach it.
   ///
-  /// If only one def can reach @p UseMBB, all paths from the def to @p UseMBB
-  /// are added to @p LR, and the function returns true.
+  /// If only one def can reach Kill, all paths from the def to kill are added
+  /// to LI, and the function returns true.
   ///
-  /// If multiple values can reach @p UseMBB, the blocks that need @p LR to be
-  /// live in are added to the LiveIn array, and the function returns false.
+  /// If multiple values can reach Kill, the blocks that need LI to be live in
+  /// are added to the LiveIn array, and the function returns false.
   ///
   /// PhysReg, when set, is used to verify live-in lists on basic blocks.
-  bool findReachingDefs(LiveRange &LR, MachineBasicBlock &UseMBB,
+  bool findReachingDefs(LiveRange &LR, MachineBasicBlock &KillMBB,
                         SlotIndex Kill, unsigned PhysReg);
 
   /// updateSSA - Compute the values that will be live in to all requested
@@ -129,7 +129,7 @@ class LiveRangeCalc {
   ///
   /// All uses must be jointly dominated by existing liveness.  PHI-defs are
   /// inserted as needed to preserve SSA form.
-  void extendToUses(LiveRange &LR, unsigned Reg, LaneBitmask LaneMask);
+  void extendToUses(LiveRange &LR, unsigned Reg, unsigned LaneMask);
 
   /// Reset Map and Seen fields.
   void resetLiveOutMap();
@@ -162,14 +162,15 @@ public:
   // Modify existing live ranges.
   //
 
-  /// Extend the live range of @p LR to reach @p Use.
+  /// extend - Extend the live range of LI to reach Kill.
   ///
-  /// The existing values in @p LR must be live so they jointly dominate @p Use.
-  /// If @p Use is not dominated by a single existing value, PHI-defs are
-  /// inserted as required to preserve SSA form.
+  /// The existing values in LI must be live so they jointly dominate Kill.  If
+  /// Kill is not dominated by a single existing value, PHI-defs are inserted
+  /// as required to preserve SSA form.  If Kill is known to be dominated by a
+  /// single existing value, Alloc may be null.
   ///
   /// PhysReg, when set, is used to verify live-in lists on basic blocks.
-  void extend(LiveRange &LR, SlotIndex Use, unsigned PhysReg = 0);
+  void extend(LiveRange &LR, SlotIndex Kill, unsigned PhysReg = 0);
 
   /// createDeadDefs - Create a dead def in LI for every def operand of Reg.
   /// Each instruction defining Reg gets a new VNInfo with a corresponding
@@ -187,7 +188,7 @@ public:
   /// Calculates liveness for the register specified in live interval @p LI.
   /// Creates subregister live ranges as needed if subreg liveness tracking is
   /// enabled.
-  void calculate(LiveInterval &LI, bool TrackSubRegs);
+  void calculate(LiveInterval &LI);
 
   //===--------------------------------------------------------------------===//
   // Low-level interface.

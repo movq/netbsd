@@ -1,6 +1,6 @@
 /* Target-dependent code for NetBSD/mips.
 
-   Copyright (C) 2002-2015 Free Software Foundation, Inc.
+   Copyright (C) 2002-2014 Free Software Foundation, Inc.
 
    Contributed by Wasabi Systems, Inc.
 
@@ -26,6 +26,9 @@
 #include "target.h"
 #include "value.h"
 #include "osabi.h"
+
+#include "gdb_assert.h"
+#include <string.h>
 
 #include "nbsd-tdep.h"
 #include "mipsnbsd-tdep.h"
@@ -108,34 +111,36 @@ mipsnbsd_supply_gregset (const struct regset *regset,
 
 /* NetBSD/mips register sets.  */
 
-static const struct regset mipsnbsd_gregset =
+static struct regset mipsnbsd_gregset =
 {
   NULL,
-  mipsnbsd_supply_gregset,
-  NULL,
-  REGSET_VARIABLE_SIZE
+  mipsnbsd_supply_gregset
 };
 
-static const struct regset mipsnbsd_fpregset =
+static struct regset mipsnbsd_fpregset =
 {
   NULL,
   mipsnbsd_supply_fpregset
 };
 
-/* Iterate over core file register note sections.  */
+/* Return the appropriate register set for the core section identified
+   by SECT_NAME and SECT_SIZE.  */
 
-static void
-mipsnbsd_iterate_over_regset_sections (struct gdbarch *gdbarch,
-				       iterate_over_regset_sections_cb *cb,
-				       void *cb_data,
-				       const struct regcache *regcache)
+static const struct regset *
+mipsnbsd_regset_from_core_section (struct gdbarch *gdbarch,
+				   const char *sect_name, size_t sect_size)
 {
   size_t regsize = mips_isa_regsize (gdbarch);
+  
+  if (strcmp (sect_name, ".reg") == 0
+      && sect_size >= MIPSNBSD_NUM_GREGS * regsize)
+    return &mipsnbsd_gregset;
 
-  cb (".reg", MIPSNBSD_NUM_GREGS * regsize, &mipsnbsd_gregset,
-      NULL, cb_data);
-  cb (".reg2", MIPSNBSD_NUM_FPREGS * regsize, &mipsnbsd_fpregset,
-      NULL, cb_data);
+  if (strcmp (sect_name, ".reg2") == 0
+      && sect_size >= MIPSNBSD_NUM_FPREGS * regsize)
+    return &mipsnbsd_fpregset;
+
+  return NULL;
 }
 
 
@@ -219,8 +224,6 @@ mipsnbsd_fill_fpreg (const struct regcache *regcache, char *fpregs, int regno)
 			      * mips_isa_regsize (gdbarch)));
 }
 
-#if 0
-
 /* Under NetBSD/mips, signal handler invocations can be identified by the
    designated code sequence that is used to return from a signal handler.
    In particular, the return address of a signal handler points to the
@@ -253,8 +256,6 @@ static const unsigned char sigtramp_retcode_mipseb[RETCODE_SIZE] =
   0x24, 0x02, 0x01, 0x27,	/* li v0, 295 */
   0x00, 0x00, 0x00, 0x0c,	/* syscall */
 };
-
-#endif
 
 /* Figure out where the longjmp will land.  We expect that we have
    just entered longjmp and haven't yet setup the stack frame, so the
@@ -369,8 +370,8 @@ static void
 mipsnbsd_init_abi (struct gdbarch_info info,
                    struct gdbarch *gdbarch)
 {
-  set_gdbarch_iterate_over_regset_sections
-    (gdbarch, mipsnbsd_iterate_over_regset_sections);
+  set_gdbarch_regset_from_core_section
+    (gdbarch, mipsnbsd_regset_from_core_section);
 
   set_gdbarch_get_longjmp_target (gdbarch, mipsnbsd_get_longjmp_target);
 

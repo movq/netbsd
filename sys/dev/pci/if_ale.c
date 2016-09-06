@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ale.c,v 1.20 2016/02/09 08:32:11 ozaki-r Exp $	*/
+/*	$NetBSD: if_ale.c,v 1.17 2014/03/29 19:28:24 christos Exp $	*/
 
 /*-
  * Copyright (c) 2008, Pyun YongHyeon <yongari@FreeBSD.org>
@@ -32,7 +32,7 @@
 /* Driver for Atheros AR8121/AR8113/AR8114 PCIe Ethernet. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ale.c,v 1.20 2016/02/09 08:32:11 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ale.c,v 1.17 2014/03/29 19:28:24 christos Exp $");
 
 #include "vlan.h"
 
@@ -68,6 +68,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_ale.c,v 1.20 2016/02/09 08:32:11 ozaki-r Exp $");
 #include <net/if_vlanvar.h>
 
 #include <net/bpf.h>
+
+#include <sys/rnd.h>
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
@@ -541,7 +543,7 @@ ale_attach(device_t parent, device_t self, void *aux)
 #ifdef ALE_CHECKSUM
 	ifp->if_capabilities |= IFCAP_CSUM_IPv4_Tx | IFCAP_CSUM_IPv4_Rx |
 				IFCAP_CSUM_TCPv4_Tx | IFCAP_CSUM_TCPv4_Rx |
-				IFCAP_CSUM_UDPv4_Tx | IFCAP_CSUM_UDPv4_Rx;
+				IFCAP_CSUM_UDPv4_Tx | IFCAP_CSUM_TCPv4_Rx;
 #endif
 
 #if NVLAN > 0
@@ -1548,7 +1550,7 @@ ale_rxeof(struct ale_softc *sc)
 		bpf_mtap(ifp, m);
 
 		/* Pass it to upper layer. */
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		(*ifp->if_input)(ifp, m);
 
 		ale_rx_update_page(sc, &rx_page, length, &prod);
 	}

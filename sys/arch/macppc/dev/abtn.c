@@ -1,4 +1,4 @@
-/*	$NetBSD: abtn.c,v 1.20 2014/08/17 10:01:49 wiz Exp $	*/
+/*	$NetBSD: abtn.c,v 1.19 2012/10/27 17:18:00 chs Exp $	*/
 
 /*-
  * Copyright (C) 1999 Tsubai Masanari.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: abtn.c,v 1.20 2014/08/17 10:01:49 wiz Exp $");
+__KERNEL_RCSID(0, "$NetBSD: abtn.c,v 1.19 2012/10/27 17:18:00 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -192,6 +192,6 @@ abtn_adbcomplete(uint8_t *buffer, uint8_t *data, int adb_command)
 
 	default:
 		printf("%s: unknown button 0x%x\n",
-		       device_xname(sc->sc_dev), cmd);
+		       device_xname(sc->sc_dev));
 	}
 }

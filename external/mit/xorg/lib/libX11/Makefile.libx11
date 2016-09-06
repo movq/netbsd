@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.libx11,v 1.17 2015/11/21 11:15:31 tsutsui Exp $
+#	$NetBSD: Makefile.libx11,v 1.13.2.1 2015/12/26 22:18:57 snj Exp $
 
 LIB=	X11
 .PATH:	${X11SRCDIR.${LIB}}/src
@@ -263,7 +263,7 @@ SRCS=	\
 	WrBitF.c \
 	XlibAsync.c \
 	XlibInt.c \
-	Xrm.c
+	Xrm.c \
 
 # We have own pthread stubs in src/lib/libc/thread-stub. See PR/50386.
 #SRCS+=	\
@@ -332,7 +332,7 @@ SRCS+=	\
 	cmsProp.c \
 	cmsTrig.c \
 	uvY.c \
-	xyY.c
+	xyY.c \
 
 SRCS+=	\
 	XKB.c \
@@ -355,7 +355,7 @@ SRCS+=	\
 	XKBMisc.c \
 	XKBMAlloc.c \
 	XKBGAlloc.c \
-	XKBAlloc.c
+	XKBAlloc.c \
 
 SRCS+=	\
 	XDefaultIMIF.c \
@@ -385,7 +385,7 @@ SRCS+=	\
 	mbWrap.c \
 	utf8WMProps.c \
 	utf8Wrap.c \
-	wcWrap.c
+	wcWrap.c \
 
 CPPFLAGS+=	${X11FLAGS.THREADLIB} ${X11FLAGS.CONNECTION}
 CPPFLAGS+=	-I. -DHAS_SNPRINTF -DLIBX11 -DPOSTLOCALELIBDIR=\"lib\"
@@ -418,7 +418,7 @@ POLL_DEFINES=		-DUSE_POLL
 SETID_DEFINES=		-DHASSETUGID
 SHM_DEFINES=		-DHAS_SHM
 SOCK_DEFINES=		-DBSD44SOCKETS
-TRANS_INCLUDES=		-I${X11SRCDIR.xtrans}
+TRANS_INCLUDES=		-I${X11SRCDIR.xc}/lib/xtrans
 XCURSOR_DEFINES=	-DUSE_DYNAMIC_XCURSOR -DLIBXCURSOR=\"libXcursor.so.1\"
 XDMAUTHDEFS=		-DHASXDMAUTH
 XF86BIGFONT_DEFINES=	-DXF86BIGFONT
@@ -462,7 +462,7 @@ COPTS.lcUTF8.c+=	-Wno-error
 COPTS.Font.c+=		-Wno-error	# XXX xf86bigfstr.h
 COPTS.OpenDis.c+=	-Wno-error	# XXX xf86bigfstr.h
 COPTS.XlibInt.c+=	-Wno-error	# XXX xcmiscstr.h
-COPTS.XKBBind.c+=	-Wno-deprecated-declarations	# uses XKeycodeToKeysym
+COPTS.XKBBind.c+=	-Wno-error	# uses XKeycodeToKeysym
 
 CWARNFLAGS.clang+=	-Wno-string-plus-int
 

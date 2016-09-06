@@ -1,5 +1,5 @@
-/*	Id: code.c,v 1.96 2015/11/17 19:19:40 ragge Exp 	*/	
-/*	$NetBSD: code.c,v 1.1.1.6 2016/02/09 20:28:17 plunky Exp $	*/
+/*	Id: code.c,v 1.80 2014/06/04 07:18:02 gmcgarry Exp 	*/	
+/*	$NetBSD: code.c,v 1.1.1.5 2014/07/24 19:17:05 plunky Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -29,14 +29,6 @@
 
 
 # include "pass1.h"
-
-#ifdef LANG_CXX
-#define	p1listf	listf
-#define	p1tfree tfree
-#else
-#define	NODE P1ND
-#define	talloc p1alloc
-#endif
 
 /*
  * Print out assembler segment name.
@@ -76,18 +68,18 @@ setseg(int seg, char *name)
 	case DTORS: name = ".section\t.dtors,\"aw\",@progbits"; break;
 #endif
 	case NMSEG: 
-		printf(PRTPREF "\t.section %s,\"a%c\",@progbits\n", name,
+		printf("\t.section %s,\"a%c\",@progbits\n", name,
 		    cftnsp ? 'x' : 'w');
 		return;
 	}
-	printf(PRTPREF "\t%s\n", name);
+	printf("\t%s\n", name);
 }
 
 #ifdef MACHOABI
 void
 defalign(int al)
 {
-	printf(PRTPREF "\t.align %d\n", ispow2(al/ALCHAR));
+	printf("\t.align %d\n", ispow2(al/ALCHAR));
 }
 #endif
 
@@ -100,28 +92,29 @@ defloc(struct symtab *sp)
 {
 	char *name;
 
-	name = getexname(sp);
+	if ((name = sp->soname) == NULL)
+		name = exname(sp->sname);
 	if (sp->sclass == EXTDEF) {
-		printf(PRTPREF "	.globl %s\n", name);
+		printf("	.globl %s\n", name);
 #if defined(ELFABI)
-		printf(PRTPREF "\t.type %s,@%s\n", name,
+		printf("\t.type %s,@%s\n", name,
 		    ISFTN(sp->stype)? "function" : "object");
 #endif
 	}
 #if defined(ELFABI)
 	if (!ISFTN(sp->stype)) {
 		if (sp->slevel == 0)
-			printf(PRTPREF "\t.size %s,%d\n", name,
+			printf("\t.size %s,%d\n", name,
 			    (int)tsize(sp->stype, sp->sdf, sp->sap)/SZCHAR);
 		else
-			printf(PRTPREF "\t.size " LABFMT ",%d\n", sp->soffset,
+			printf("\t.size " LABFMT ",%d\n", sp->soffset,
 			    (int)tsize(sp->stype, sp->sdf, sp->sap)/SZCHAR);
 	}
 #endif
 	if (sp->slevel == 0)
-		printf(PRTPREF "%s:\n", name);
+		printf("%s:\n", name);
 	else
-		printf(PRTPREF LABFMT ":\n", sp->soffset);
+		printf(LABFMT ":\n", sp->soffset);
 }
 
 int structrettemp;
@@ -135,23 +128,18 @@ efcode(void)
 {
 	extern int gotnr;
 	NODE *p, *q;
-	int sz;
 
 	gotnr = 0;	/* new number for next fun */
 	if (cftnsp->stype != STRTY+FTN && cftnsp->stype != UNIONTY+FTN)
 		return;
-
-	/* struct return for small structs */
-	sz = tsize(BTYPE(cftnsp->stype), cftnsp->sdf, cftnsp->sap);
 #if defined(os_openbsd)
+	/* struct return for small structs */
+	int sz = tsize(BTYPE(cftnsp->stype), cftnsp->sdf, cftnsp->sap);
 	if (sz == SZCHAR || sz == SZSHORT || sz == SZINT || sz == SZLONGLONG) {
-#else
-	if (sz == SZLONGLONG && attr_find(cftnsp->sap, ATTR_COMPLEX)) {
-#endif
 		/* Pointer to struct in eax */
 		if (sz == SZLONGLONG) {
 			q = block(OREG, NIL, NIL, INT, 0, 0);
-			slval(q, 4);
+			q->n_lval = 4;
 			p = block(REG, NIL, NIL, INT, 0, 0);
 			p->n_rval = EDX;
 			ecomp(buildtree(ASSIGN, p, q));
@@ -164,7 +152,7 @@ efcode(void)
 		ecomp(buildtree(ASSIGN, p, q));
 		return;
 	}
-
+#endif
 	/* Create struct assignment */
 	q = tempnode(structrettemp, PTR+STRTY, 0, cftnsp->sap);
 	q = buildtree(UMUL, q, NIL);
@@ -180,13 +168,9 @@ efcode(void)
 	ecomp(buildtree(ASSIGN, p, q));
 }
 
-#ifdef GCC_COMPAT
-static TWORD reparegs[] = { EAX, EDX, ECX };
-static TWORD fastregs[] = { ECX, EDX };
-#endif
 static TWORD longregs[] = { EAXEDX, EDXECX };
+static TWORD regpregs[] = { EAX, EDX, ECX };
 static TWORD charregs[] = { AL, DL, CL };
-static TWORD *regpregs;
 
 /*
  * code for the beginning of a function; a is an array of
@@ -215,7 +199,7 @@ bfcode(struct symtab **sp, int cnt)
 	/* Take care of PIC stuff first */
         if (kflag) {
 #define STL     200
-                char *str = xmalloc(STL);
+                char *str = inlalloc(STL);
 #if !defined(MACHOABI)
                 int l = getlab();
 #else
@@ -237,40 +221,32 @@ bfcode(struct symtab **sp, int cnt)
                         cerror("bfcode");
 #else
                 if (snprintf(str, STL,
-                    "call " LABFMT ";" LABFMT ":;\tpopl %%0;"
-                    "\taddl $_GLOBAL_OFFSET_TABLE_+[.-" LABFMT "], %%0;",
+                    "call " LABFMT "\n" LABFMT ":\n\tpopl %%0\n"
+                    "\taddl $_GLOBAL_OFFSET_TABLE_+[.-" LABFMT "], %%0\n",
                     l, l, l) >= STL)
                         cerror("bfcode");
 #endif
-                p->n_name = addstring(str);
+                p->n_name = str;
                 p->n_right->n_type = STRTY;
-		free(str);
                 ecomp(p);
         }
 
 	argbase = ARGINIT;
 	nrarg = regparmarg = 0;
-	argstacksize = 0;
 
 #ifdef GCC_COMPAT
-	regpregs = reparegs;
         if (attr_find(cftnsp->sap, GCC_ATYP_STDCALL) != NULL)
                 cftnsp->sflags |= SSTDCALL;
         if ((ap = attr_find(cftnsp->sap, GCC_ATYP_REGPARM)))
                 regparmarg = ap->iarg(0);
-        if ((ap = attr_find(cftnsp->sap, GCC_ATYP_FASTCALL)))
-                regparmarg = 2, regpregs = fastregs;
 #endif
 
 	/* Function returns struct, create return arg node */
 	if (cftnsp->stype == STRTY+FTN || cftnsp->stype == UNIONTY+FTN) {
-		sz = tsize(BTYPE(cftnsp->stype), cftnsp->sdf, cftnsp->sap);
 #if defined(os_openbsd)
 		/* OpenBSD uses non-standard return for small structs */
-		if (sz > SZLONGLONG)
-#else
-		if (sz != SZLONGLONG ||
-		    attr_find(cftnsp->sap, ATTR_COMPLEX) == 0)
+		int sz = tsize(BTYPE(cftnsp->stype), cftnsp->sdf, cftnsp->sap);
+		if (sz <= SZLONGLONG)
 #endif
 		{
 			if (regparmarg) {
@@ -278,10 +254,9 @@ bfcode(struct symtab **sp, int cnt)
 				regno(n) = regpregs[nrarg++];
 			} else {
 				n = block(OREG, 0, 0, INT, 0, 0);
-				slval(n, argbase/SZCHAR);
+				n->n_lval = argbase/SZCHAR;
 				argbase += SZINT;
 				regno(n) = FPREG;
-				argstacksize += 4; /* popped by callee */
 			}
 			p = tempnode(0, INT, 0, 0);
 			structrettemp = regno(p);
@@ -307,7 +282,7 @@ bfcode(struct symtab **sp, int cnt)
 			argbase += sz;
 			nrarg = regparmarg;	/* no more in reg either */
 		} else {					/* in reg */
-			sp2->soffset = regpregs[nrarg];
+			sp2->soffset = nrarg;
 			nrarg += sz/SZINT;
 			sp2->sclass = REGISTER;
 		}
@@ -322,8 +297,7 @@ bfcode(struct symtab **sp, int cnt)
 
 		sp2 = sp[i];
 
-		if ((ISSOU(sp2->stype) && sp2->sclass == REGISTER) ||
-		    (sp2->sclass == REGISTER && xtemps == 0)) {
+		if (ISSOU(sp2->stype) && sp2->sclass == REGISTER) {
 			/* must move to stack */
 			sz = tsize(sp2->stype, sp2->sdf, sp2->sap);
 			SETOFF(sz, SZINT);
@@ -334,7 +308,7 @@ bfcode(struct symtab **sp, int cnt)
 			oalloc(sp2, &autooff);
                         for (j = 0; j < sz/SZCHAR; j += 4) {
                                 p = block(OREG, 0, 0, INT, 0, 0);
-                                slval(p, sp2->soffset/SZCHAR + j);
+                                p->n_lval = sp2->soffset/SZCHAR + j;
                                 regno(p) = FPREG;
                                 n = block(REG, 0, 0, INT, 0, 0);
                                 regno(n) = regpregs[reg++];
@@ -342,22 +316,21 @@ bfcode(struct symtab **sp, int cnt)
                                 ecomp(p);
                         }
 		} else if (cisreg(sp2->stype) && !ISSOU(sp2->stype) &&
-		    ((cqual(sp2->stype, sp2->squal) & VOL) == 0) && xtemps) {
+		    ((cqual(sp2->stype, sp2->squal) & VOL) == 0)) {
 			/* just put rest in temps */
 			if (sp2->sclass == REGISTER) {
 				n = block(REG, 0, 0, sp2->stype,
 				    sp2->sdf, sp2->sap);
 				if (ISLONGLONG(sp2->stype))
 					regno(n) = longregs[sp2->soffset];
-				else if (DEUNSIGN(sp2->stype) == CHAR ||
-				    sp2->stype == BOOL)
+				else if (DEUNSIGN(sp2->stype) == CHAR || sp2->stype == BOOL)
 					regno(n) = charregs[sp2->soffset];
 				else
 					regno(n) = regpregs[sp2->soffset];
 			} else {
                                 n = block(OREG, 0, 0, sp2->stype,
 				    sp2->sdf, sp2->sap);
-                                slval(n, sp2->soffset/SZCHAR);
+                                n->n_lval = sp2->soffset/SZCHAR;
                                 regno(n) = FPREG;
 			}
 			p = tempnode(0, sp2->stype, sp2->sdf, sp2->sap);
@@ -368,14 +341,13 @@ bfcode(struct symtab **sp, int cnt)
 		}
 	}
 
+        argstacksize = 0;
         if (cftnsp->sflags & SSTDCALL) {
-#ifdef PECOFFABI
+		argstacksize = (argbase - ARGINIT)/SZCHAR;
+#ifdef os_win32
+
                 char buf[256];
                 char *name;
-#endif
-		/* XXX interaction STDCALL and struct return? */
-		argstacksize += (argbase - ARGINIT)/SZCHAR;
-#ifdef PECOFFABI
                 /*
                  * mangle name in symbol table as a callee.
                  */
@@ -406,24 +378,24 @@ ejobcode(int flag)
 		struct stub *p;
 
 		DLIST_FOREACH(p, &stublist, link) {
-			printf(PRTPREF "\t.section __IMPORT,__jump_table,symbol_stubs,self_modifying_code+pure_instructions,5\n");
-			printf(PRTPREF "L%s$stub:\n", p->name);
-			printf(PRTPREF "\t.indirect_symbol %s\n", p->name);
-			printf(PRTPREF "\thlt ; hlt ; hlt ; hlt ; hlt\n");
-			printf(PRTPREF "\t.subsections_via_symbols\n");
+			printf("\t.section __IMPORT,__jump_table,symbol_stubs,self_modifying_code+pure_instructions,5\n");
+			printf("L%s$stub:\n", p->name);
+			printf("\t.indirect_symbol %s\n", p->name);
+			printf("\thlt ; hlt ; hlt ; hlt ; hlt\n");
+			printf("\t.subsections_via_symbols\n");
 		}
 
-		printf(PRTPREF "\t.section __IMPORT,__pointers,non_lazy_symbol_pointers\n");
+		printf("\t.section __IMPORT,__pointers,non_lazy_symbol_pointers\n");
 		DLIST_FOREACH(p, &nlplist, link) {
-			printf(PRTPREF "L%s$non_lazy_ptr:\n", p->name);
-			printf(PRTPREF "\t.indirect_symbol %s\n", p->name);
-			printf(PRTPREF "\t.long 0\n");
+			printf("L%s$non_lazy_ptr:\n", p->name);
+			printf("\t.indirect_symbol %s\n", p->name);
+			printf("\t.long 0\n");
 	        }
 
 	}
 #endif
 
-	printf(PRTPREF "\t.ident \"PCC: %s\"\n", VERSSTR);
+	printf("\t.ident \"PCC: %s\"\n", VERSSTR);
 }
 
 void
@@ -437,20 +409,12 @@ bjobcode(void)
 	DLIST_INIT(&stublist, link);
 	DLIST_INIT(&nlplist, link);
 #endif
-#if defined(__GNUC__) || defined(__PCC__)
-	/* Be sure that the compiler uses full x87 */
-	/* XXX cross-compiling will fail here */
-	int fcw;
-	__asm("fstcw (%0)" : : "r"(&fcw));
-	fcw |= 0x300;
-	__asm("fldcw (%0)" : : "r"(&fcw));
-#endif
 }
 
 /*
  * Convert FUNARG to assign in case of regparm.
  */
-static int regcvt, rparg, fcall;
+static int regcvt, rparg;
 static void
 addreg(NODE *p)
 {
@@ -469,8 +433,6 @@ addreg(NODE *p)
 
 	if (sz == 2)
 		r = regcvt == 0 ? EAXEDX : EDXECX;
-	else if (fcall)
-		r = regcvt == 0 ? ECX : EDX;
 	else
 		r = regcvt == 0 ? EAX : regcvt == 1 ? EDX : ECX;
 
@@ -508,7 +470,9 @@ NODE *
 funcode(NODE *p)
 {
 	extern int gotnr;
+#ifdef GCC_COMPAT
 	struct attr *ap;
+#endif
 	NODE *r, *l;
 	TWORD t = DECREF(DECREF(p->n_left->n_type));
 	int stcall;
@@ -534,16 +498,7 @@ funcode(NODE *p)
 		r->n_left = l;
 		r->n_type = l->n_type;
 	}
-#ifdef os_openbsd
-	if (stcall && (ap = strattr(p->n_left->n_ap)) &&
-	    ap->amsize != SZCHAR && ap->amsize != SZSHORT &&
-	    ap->amsize != SZINT && ap->amsize != SZLONGLONG)
-#else
-	if (stcall &&
-	    (attr_find(p->n_left->n_ap, ATTR_COMPLEX) == 0 ||
-	     ((ap = strattr(p->n_left->n_ap)) && ap->amsize > SZLONGLONG)))
-#endif
-	{
+	if (stcall) {
 		/* Prepend a placeholder for struct address. */
 		/* Use EBP, can never show up under normal circumstances */
 		l = talloc();
@@ -558,18 +513,15 @@ funcode(NODE *p)
 	}
 
 #ifdef GCC_COMPAT
-	fcall = 0;
 	if ((ap = attr_find(p->n_left->n_ap, GCC_ATYP_REGPARM)))
 		rparg = ap->iarg(0);
-	else if ((ap = attr_find(p->n_left->n_ap, GCC_ATYP_FASTCALL)))
-		fcall = rparg = 2;
 	else
 #endif
 		rparg = 0;
 
 	regcvt = 0;
 	if (rparg)
-		p1listf(p->n_right, addreg);
+		listf(p->n_right, addreg);
 
 	if (kflag == 0)
 		return p;
@@ -614,9 +566,9 @@ builtin_return_address(const struct bitable *bt, NODE *a)
 	if (a->n_op != ICON)
 		goto bad;
 
-	nframes = (int)glval(a);
+	nframes = (int)a->n_lval;
   
-	p1tfree(a);	
+	tfree(a);	
 			
 	f = block(REG, NIL, NIL, PTR+VOID, 0, 0);
 	regno(f) = FPREG;
@@ -642,9 +594,9 @@ builtin_frame_address(const struct bitable *bt, NODE *a)
 	if (a->n_op != ICON)
 		goto bad;
 
-	nframes = (int)glval(a);
+	nframes = (int)a->n_lval;
 
-	p1tfree(a);
+	tfree(a);
 
 	f = block(REG, NIL, NIL, PTR+VOID, 0, 0);
 	regno(f) = FPREG;

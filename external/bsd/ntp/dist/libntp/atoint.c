@@ -1,4 +1,4 @@
-/*	$NetBSD: atoint.c,v 1.7 2016/01/08 21:35:38 christos Exp $	*/
+/*	$NetBSD: atoint.c,v 1.3.4.1 2014/12/24 00:05:20 riz Exp $	*/
 
 /*
  * atoint - convert an ascii string to a signed long, with error checking

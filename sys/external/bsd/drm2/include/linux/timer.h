@@ -1,4 +1,4 @@
-/*	$NetBSD: timer.h,v 1.5 2014/08/26 17:26:05 riastradh Exp $	*/
+/*	$NetBSD: timer.h,v 1.4.2.1 2014/09/21 17:48:40 snj Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

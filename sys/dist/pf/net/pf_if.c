@@ -1,4 +1,4 @@
-/*	$NetBSD: pf_if.c,v 1.31 2016/07/20 07:37:51 ozaki-r Exp $	*/
+/*	$NetBSD: pf_if.c,v 1.26 2014/05/17 21:00:33 rmind Exp $	*/
 /*	$OpenBSD: pf_if.c,v 1.47 2007/07/13 09:17:48 markus Exp $ */
 
 /*
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pf_if.c,v 1.31 2016/07/20 07:37:51 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pf_if.c,v 1.26 2014/05/17 21:00:33 rmind Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_inet.h"
@@ -100,9 +100,6 @@ RB_GENERATE(pfi_ifhead, pfi_kif, pfik_tree, pfi_if_compare);
 void
 pfi_initialize(void)
 {
-	int s;
-	int bound;
-
 	if (pfi_all != NULL)	/* already initialized */
 		return;
 
@@ -122,21 +119,10 @@ pfi_initialize(void)
 
 #ifdef __NetBSD__
 	ifnet_t *ifp;
-	bound = curlwp_bind();
-	s = pserialize_read_enter();
-	IFNET_READER_FOREACH(ifp) {
-		struct psref psref;
-		psref_acquire(&psref, &ifp->if_psref, ifnet_psref_class);
-		pserialize_read_exit(s);
-
+	IFNET_FOREACH(ifp) {
 		pfi_init_groups(ifp);
 		pfi_attach_ifnet(ifp);
-
-		s = pserialize_read_enter();
-		psref_release(&psref, &ifp->if_psref, ifnet_psref_class);
 	}
-	pserialize_read_exit(s);
-	curlwp_bindx(bound);
 
 	pfil_add_hook(pfil_ifnet_wrapper, NULL, PFIL_IFNET, if_pfil);
 	pfil_add_hook(pfil_ifaddr_wrapper, NULL, PFIL_IFADDR, if_pfil);
@@ -149,27 +135,14 @@ pfi_destroy(void)
 {
 	struct pfi_kif *p;
 	ifnet_t *ifp;
-	int s;
-	int bound;
 
 	pfil_remove_hook(pfil_ifaddr_wrapper, NULL, PFIL_IFADDR, if_pfil);
 	pfil_remove_hook(pfil_ifnet_wrapper, NULL, PFIL_IFNET, if_pfil);
 
-	bound = curlwp_bind();
-	s = pserialize_read_enter();
-	IFNET_READER_FOREACH(ifp) {
-		struct psref psref;
-		psref_acquire(&psref, &ifp->if_psref, ifnet_psref_class);
-		pserialize_read_exit(s);
-
+	IFNET_FOREACH(ifp) {
 		pfi_detach_ifnet(ifp);
 		pfi_destroy_groups(ifp);
-
-		s = pserialize_read_enter();
-		psref_release(&psref, &ifp->if_psref, ifnet_psref_class);
 	}
-	pserialize_read_exit(s);
-	curlwp_bindx(bound);
 
 	while ((p = RB_MIN(pfi_ifhead, &pfi_ifs))) {
 		RB_REMOVE(pfi_ifhead, &pfi_ifs, p);
@@ -556,14 +529,12 @@ pfi_instance_add(struct ifnet *ifp, int net, int flags)
 	struct ifaddr	*ia;
 	int		 got4 = 0, got6 = 0;
 	int		 net2, af;
-	int		 s;
 
 	if (ifp == NULL)
 		return;
-
-	/* Depends on pfi_address_add doesn't sleep */
-	s = pserialize_read_enter();
-	IFADDR_READER_FOREACH(ia, ifp) {
+	IFADDR_FOREACH(ia, ifp) {
+		if (ia->ifa_addr == NULL)
+			continue;
 		af = ia->ifa_addr->sa_family;
 		if (af != AF_INET && af != AF_INET6)
 			continue;
@@ -607,7 +578,6 @@ pfi_instance_add(struct ifnet *ifp, int net, int flags)
 		else
 			pfi_address_add(ia->ifa_addr, af, net2);
 	}
-	pserialize_read_exit(s);
 }
 
 void

@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.5 2015/02/15 21:46:49 christos Exp $
+# $NetBSD: Makefile,v 1.4.4.1 2015/02/17 14:45:31 martin Exp $
 
 PROG=		devpubd
 SRCS=		devpubd.c

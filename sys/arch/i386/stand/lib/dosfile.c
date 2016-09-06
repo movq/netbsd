@@ -1,4 +1,4 @@
-/*	$NetBSD: dosfile.c,v 1.19 2015/12/13 21:03:31 christos Exp $	 */
+/*	$NetBSD: dosfile.c,v 1.16 2013/10/20 21:06:37 christos Exp $	 */
 
 /*
  * Copyright (c) 1996
@@ -56,22 +56,18 @@ dos2errno(void)
 	int err;
 
 	switch (doserrno) {
-	    case 1: /* invalid function number */
-	    case 4: /* too many open files */
-	    case 12: /* invalid access mode */
+	    case 1:
+	    case 4:
+	    case 12:
 	    default:
 		err = EIO;
-		break;
-	    case 2: /* file not found */
-	    case 3: /* path not found */
+	    case 2:
+	    case 3:
 		err = ENOENT;
-		break;
-	    case 5: /* access denied */
+	    case 5:
 		err = EPERM;
-		break;
-	    case 6: /* invalid handle */
+	    case 6:
 		err = EINVAL;
-		break;
 	}
 	return err;
 }

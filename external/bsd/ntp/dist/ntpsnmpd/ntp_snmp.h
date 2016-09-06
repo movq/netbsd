@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_snmp.h,v 1.5 2016/01/08 21:35:40 christos Exp $	*/
+/*	$NetBSD: ntp_snmp.h,v 1.1.1.1.22.2 2015/04/23 18:53:03 snj Exp $	*/
 
 /*
  * ntp_snmp.h -- common net-snmp header includes and workaround

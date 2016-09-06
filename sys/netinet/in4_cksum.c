@@ -1,4 +1,4 @@
-/*	$NetBSD: in4_cksum.c,v 1.20 2014/11/30 18:15:41 christos Exp $	*/
+/*	$NetBSD: in4_cksum.c,v 1.19.12.1 2014/12/01 13:08:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 2008 Joerg Sonnenberger <joerg@NetBSD.org>.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: in4_cksum.c,v 1.20 2014/11/30 18:15:41 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: in4_cksum.c,v 1.19.12.1 2014/12/01 13:08:14 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/mbuf.h>

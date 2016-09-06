@@ -1,4 +1,4 @@
-/*	$NetBSD: for.c,v 1.52 2016/02/18 18:29:14 christos Exp $	*/
+/*	$NetBSD: for.c,v 1.49 2012/06/03 04:29:40 sjg Exp $	*/
 
 /*
  * Copyright (c) 1992, The Regents of the University of California.
@@ -30,14 +30,14 @@
  */
 
 #ifndef MAKE_NATIVE
-static char rcsid[] = "$NetBSD: for.c,v 1.52 2016/02/18 18:29:14 christos Exp $";
+static char rcsid[] = "$NetBSD: for.c,v 1.49 2012/06/03 04:29:40 sjg Exp $";
 #else
 #include <sys/cdefs.h>
 #ifndef lint
 #if 0
 static char sccsid[] = "@(#)for.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: for.c,v 1.52 2016/02/18 18:29:14 christos Exp $");
+__RCSID("$NetBSD: for.c,v 1.49 2012/06/03 04:29:40 sjg Exp $");
 #endif
 #endif /* not lint */
 #endif
@@ -216,7 +216,7 @@ For_Eval(char *line)
      * We can't do the escapes here - because we don't know whether
      * we are substuting into ${...} or $(...).
      */
-    sub = Var_Subst(NULL, ptr, VAR_GLOBAL, VARF_WANTRES);
+    sub = Var_Subst(NULL, ptr, VAR_GLOBAL, FALSE);
 
     /*
      * Split into words allowing for quoted strings.

@@ -1,4 +1,4 @@
-/*	$NetBSD: smbfs_subr.h,v 1.22 2014/11/15 18:52:44 nakayama Exp $	*/
+/*	$NetBSD: smbfs_subr.h,v 1.21.12.1 2014/12/01 09:31:40 martin Exp $	*/
 
 /*
  * Copyright (c) 2000-2001, Boris Popov

@@ -1,4 +1,4 @@
-/*	$NetBSD: mkdevsw.c,v 1.15 2016/07/16 07:13:26 pgoyette Exp $	*/
+/*	$NetBSD: mkdevsw.c,v 1.10.24.1 2015/03/06 21:00:23 snj Exp $	*/
 
 /*
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: mkdevsw.c,v 1.15 2016/07/16 07:13:26 pgoyette Exp $");
+__RCSID("$NetBSD: mkdevsw.c,v 1.10.24.1 2015/03/06 21:00:23 snj Exp $");
 
 #include <stdio.h>
 #include <string.h>
@@ -131,7 +131,7 @@ emitdevm(FILE *fp)
 	fputs("\n/* device switch table for block device */\n", fp);
 
 	for (i = 0; i <= maxbdevm ; i++)
-		dentry(fp, bdevmtab, i, 'b');
+		dentry(fp, cdevmtab, i, 'b');
 
 	fputs("\nconst struct bdevsw *bdevsw0[] = {\n", fp);
 

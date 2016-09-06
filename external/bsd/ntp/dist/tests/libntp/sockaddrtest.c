@@ -1,4 +1,4 @@
-/*	$NetBSD: sockaddrtest.c,v 1.1.1.3 2016/01/08 21:21:33 christos Exp $	*/
+/*	$NetBSD: sockaddrtest.c,v 1.1.1.1.8.2 2015/11/08 01:51:16 riz Exp $	*/
 
 
 #include "config.h"

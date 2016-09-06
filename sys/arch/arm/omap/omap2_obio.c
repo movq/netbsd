@@ -1,7 +1,7 @@
-/*	$Id: omap2_obio.c,v 1.23 2016/04/25 13:17:16 kiyohara Exp $	*/
+/*	$Id: omap2_obio.c,v 1.21.8.1 2015/04/19 04:37:17 msaitoh Exp $	*/
 
 /* adapted from: */
-/*	$NetBSD: omap2_obio.c,v 1.23 2016/04/25 13:17:16 kiyohara Exp $ */
+/*	$NetBSD: omap2_obio.c,v 1.21.8.1 2015/04/19 04:37:17 msaitoh Exp $ */
 
 
 /*
@@ -103,7 +103,7 @@
 
 #include "opt_omap.h"
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omap2_obio.c,v 1.23 2016/04/25 13:17:16 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omap2_obio.c,v 1.21.8.1 2015/04/19 04:37:17 msaitoh Exp $");
 
 #include "locators.h"
 #include "obio.h"
@@ -366,9 +366,6 @@ static const struct {
 	bus_addr_t addr;
 	bool required;
 } critical_devs[] = {
-#if defined(OMAP_3530)
-	{ .name = "omapscm", .addr = 0x48002000, .required = true },
-#endif
 #if defined(OMAP_2430) || defined(OMAP_2420)
 	{ .name = "avic", .addr = INTC_BASE, .required = true },
 #endif

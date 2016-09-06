@@ -1,7 +1,7 @@
 /* Functions that provide the mechanism to parse a syscall XML file
    and get its values.
 
-   Copyright (C) 2009-2015 Free Software Foundation, Inc.
+   Copyright (C) 2009-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,12 +22,13 @@
 #include "gdbtypes.h"
 #include "xml-support.h"
 #include "xml-syscall.h"
-#include "gdbarch.h"
 
 /* For the struct syscall definition.  */
 #include "target.h"
 
 #include "filenames.h"
+
+#include "gdb_assert.h"
 
 #ifndef HAVE_LIBEXPAT
 
@@ -47,14 +48,14 @@ syscall_warn_user (void)
 }
 
 void
-set_xml_syscall_file_name (struct gdbarch *gdbarch, const char *name)
+set_xml_syscall_file_name (const char *name)
 {
   return;
 }
 
 void
-get_syscall_by_number (struct gdbarch *gdbarch,
-		       int syscall_number, struct syscall *s)
+get_syscall_by_number (int syscall_number,
+                       struct syscall *s)
 {
   syscall_warn_user ();
   s->number = syscall_number;
@@ -62,8 +63,8 @@ get_syscall_by_number (struct gdbarch *gdbarch,
 }
 
 void
-get_syscall_by_name (struct gdbarch *gdbarch, const char *syscall_name,
-		     struct syscall *s)
+get_syscall_by_name (const char *syscall_name,
+                     struct syscall *s)
 {
   syscall_warn_user ();
   s->number = UNKNOWN_SYSCALL;
@@ -71,13 +72,17 @@ get_syscall_by_name (struct gdbarch *gdbarch, const char *syscall_name,
 }
 
 const char **
-get_syscall_names (struct gdbarch *gdbarch)
+get_syscall_names (void)
 {
   syscall_warn_user ();
   return NULL;
 }
 
 #else /* ! HAVE_LIBEXPAT */
+
+/* Variable that will hold the last known data-directory.  This is useful to
+   know whether we should re-read the XML info for the target.  */
+static char *my_gdb_datadir = NULL;
 
 /* Structure which describes a syscall.  */
 typedef struct syscall_desc
@@ -98,12 +103,6 @@ struct syscalls_info
   /* The syscalls.  */
 
   VEC(syscall_desc_p) *syscalls;
-
-  /* Variable that will hold the last known data-directory.  This is
-     useful to know whether we should re-read the XML info for the
-     target.  */
-
-  char *my_gdb_datadir;
 };
 
 /* Callback data for syscall information parsing.  */
@@ -111,17 +110,27 @@ struct syscall_parsing_data
 {
   /* The syscalls_info we are building.  */
 
-  struct syscalls_info *syscalls_info;
+  struct syscalls_info *sysinfo;
 };
+
+/* Structure used to store information about the available syscalls in
+   the system.  */
+static const struct syscalls_info *sysinfo = NULL;
+
+/* A flag to tell if we already initialized the structure above.  */
+static int have_initialized_sysinfo = 0;
+
+/* The filename of the syscall's XML.  */
+static const char *xml_syscall_file = NULL;
 
 static struct syscalls_info *
 allocate_syscalls_info (void)
 {
-  return XCNEW (struct syscalls_info);
+  return XZALLOC (struct syscalls_info);
 }
 
 static void
-syscalls_info_free_syscalls_desc (struct syscall_desc *sd)
+sysinfo_free_syscalls_desc (struct syscall_desc *sd)
 {
   xfree (sd->name);
 }
@@ -129,40 +138,35 @@ syscalls_info_free_syscalls_desc (struct syscall_desc *sd)
 static void
 free_syscalls_info (void *arg)
 {
-  struct syscalls_info *syscalls_info = arg;
+  struct syscalls_info *sysinfo = arg;
   struct syscall_desc *sysdesc;
   int i;
 
-  xfree (syscalls_info->my_gdb_datadir);
+  for (i = 0;
+       VEC_iterate (syscall_desc_p, sysinfo->syscalls, i, sysdesc);
+       i++)
+    sysinfo_free_syscalls_desc (sysdesc);
+  VEC_free (syscall_desc_p, sysinfo->syscalls);
 
-  if (syscalls_info->syscalls != NULL)
-    {
-      for (i = 0;
-	   VEC_iterate (syscall_desc_p, syscalls_info->syscalls, i, sysdesc);
-	   i++)
-	syscalls_info_free_syscalls_desc (sysdesc);
-      VEC_free (syscall_desc_p, syscalls_info->syscalls);
-    }
-
-  xfree (syscalls_info);
+  xfree (sysinfo);
 }
 
 static struct cleanup *
-make_cleanup_free_syscalls_info (struct syscalls_info *syscalls_info)
+make_cleanup_free_syscalls_info (struct syscalls_info *sysinfo)
 {
-  return make_cleanup (free_syscalls_info, syscalls_info);
+  return make_cleanup (free_syscalls_info, sysinfo);
 }
 
 static void
-syscall_create_syscall_desc (struct syscalls_info *syscalls_info,
+syscall_create_syscall_desc (struct syscalls_info *sysinfo,
                              const char *name, int number)
 {
-  struct syscall_desc *sysdesc = XCNEW (struct syscall_desc);
+  struct syscall_desc *sysdesc = XZALLOC (struct syscall_desc);
 
   sysdesc->name = xstrdup (name);
   sysdesc->number = number;
 
-  VEC_safe_push (syscall_desc_p, syscalls_info->syscalls, sysdesc);
+  VEC_safe_push (syscall_desc_p, sysinfo->syscalls, sysdesc);
 }
 
 /* Handle the start of a <syscall> element.  */
@@ -192,7 +196,7 @@ syscall_start_syscall (struct gdb_xml_parser *parser,
     }
 
   gdb_assert (name);
-  syscall_create_syscall_desc (data->syscalls_info, name, number);
+  syscall_create_syscall_desc (data->sysinfo, name, number);
 }
 
 
@@ -223,15 +227,15 @@ syscall_parse_xml (const char *document, xml_fetch_another fetcher,
   struct cleanup *result_cleanup;
   struct syscall_parsing_data data;
 
-  data.syscalls_info = allocate_syscalls_info ();
-  result_cleanup = make_cleanup_free_syscalls_info (data.syscalls_info);
+  data.sysinfo = allocate_syscalls_info ();
+  result_cleanup = make_cleanup_free_syscalls_info (data.sysinfo);
 
   if (gdb_xml_parse_quick (_("syscalls info"), NULL,
 			   syselements, document, &data) == 0)
     {
       /* Parsed successfully.  */
       discard_cleanups (result_cleanup);
-      return data.syscalls_info;
+      return data.sysinfo;
     }
   else
     {
@@ -246,12 +250,12 @@ syscall_parse_xml (const char *document, xml_fetch_another fetcher,
    struct syscalls_info with the values.
    
    Returns the struct syscalls_info if the file is valid, NULL otherwise.  */
-static struct syscalls_info *
+static const struct syscalls_info *
 xml_init_syscalls_info (const char *filename)
 {
   char *full_file;
   char *dirname;
-  struct syscalls_info *syscalls_info;
+  struct syscalls_info *sysinfo;
   struct cleanup *back_to;
 
   full_file = xml_fetch_content_from_file (filename, gdb_datadir);
@@ -264,47 +268,41 @@ xml_init_syscalls_info (const char *filename)
   if (dirname != NULL)
     make_cleanup (xfree, dirname);
 
-  syscalls_info = syscall_parse_xml (full_file,
-				     xml_fetch_content_from_file, dirname);
+  sysinfo = syscall_parse_xml (full_file,
+			       xml_fetch_content_from_file, dirname);
   do_cleanups (back_to);
 
-  return syscalls_info;
+  return sysinfo;
 }
 
 /* Initializes the syscalls_info structure according to the
    architecture.  */
 static void
-init_syscalls_info (struct gdbarch *gdbarch)
+init_sysinfo (void)
 {
-  struct syscalls_info *syscalls_info = gdbarch_syscalls_info (gdbarch);
-  const char *xml_syscall_file = gdbarch_xml_syscall_file (gdbarch);
-
   /* Should we re-read the XML info for this target?  */
-  if (syscalls_info != NULL && syscalls_info->my_gdb_datadir != NULL
-      && filename_cmp (syscalls_info->my_gdb_datadir, gdb_datadir) != 0)
+  if (my_gdb_datadir && filename_cmp (my_gdb_datadir, gdb_datadir) != 0)
     {
       /* The data-directory changed from the last time we used it.
 	 It means that we have to re-read the XML info.  */
-      free_syscalls_info (syscalls_info);
-      syscalls_info = NULL;
-      set_gdbarch_syscalls_info (gdbarch, NULL);
+      have_initialized_sysinfo = 0;
+      xfree (my_gdb_datadir);
+      my_gdb_datadir = NULL;
+      if (sysinfo)
+	free_syscalls_info ((void *) sysinfo);
     }
 
-  /* Did we succeed at initializing this?  */
-  if (syscalls_info != NULL)
+  /* Did we already try to initialize the structure?  */
+  if (have_initialized_sysinfo)
     return;
 
-  syscalls_info = xml_init_syscalls_info (xml_syscall_file);
+  sysinfo = xml_init_syscalls_info (xml_syscall_file);
 
-  /* If there was some error reading the XML file, we initialize
-     gdbarch->syscalls_info anyway, in order to store information
-     about our attempt.  */
-  if (syscalls_info == NULL)
-    syscalls_info = allocate_syscalls_info ();
+  have_initialized_sysinfo = 1;
 
-  if (syscalls_info->syscalls == NULL)
+  if (sysinfo == NULL)
     {
-      if (xml_syscall_file != NULL)
+      if (xml_syscall_file)
 	warning (_("Could not load the syscall XML file `%s/%s'."),
 		 gdb_datadir, xml_syscall_file);
       else
@@ -316,25 +314,22 @@ init_syscalls_info (struct gdbarch *gdbarch)
     }
 
   /* Saving the data-directory used to read this XML info.  */
-  syscalls_info->my_gdb_datadir = xstrdup (gdb_datadir);
-
-  set_gdbarch_syscalls_info (gdbarch, syscalls_info);
+  my_gdb_datadir = xstrdup (gdb_datadir);
 }
 
 static int
-xml_get_syscall_number (struct gdbarch *gdbarch,
+xml_get_syscall_number (const struct syscalls_info *sysinfo,
                         const char *syscall_name)
 {
-  struct syscalls_info *syscalls_info = gdbarch_syscalls_info (gdbarch);
   struct syscall_desc *sysdesc;
   int i;
 
-  if (syscalls_info == NULL
+  if (sysinfo == NULL
       || syscall_name == NULL)
     return UNKNOWN_SYSCALL;
 
   for (i = 0;
-       VEC_iterate(syscall_desc_p, syscalls_info->syscalls, i, sysdesc);
+       VEC_iterate(syscall_desc_p, sysinfo->syscalls, i, sysdesc);
        i++)
     if (strcmp (sysdesc->name, syscall_name) == 0)
       return sysdesc->number;
@@ -343,19 +338,18 @@ xml_get_syscall_number (struct gdbarch *gdbarch,
 }
 
 static const char *
-xml_get_syscall_name (struct gdbarch *gdbarch,
+xml_get_syscall_name (const struct syscalls_info *sysinfo,
                       int syscall_number)
 {
-  struct syscalls_info *syscalls_info = gdbarch_syscalls_info (gdbarch);
   struct syscall_desc *sysdesc;
   int i;
 
-  if (syscalls_info == NULL
+  if (sysinfo == NULL
       || syscall_number < 0)
     return NULL;
 
   for (i = 0;
-       VEC_iterate(syscall_desc_p, syscalls_info->syscalls, i, sysdesc);
+       VEC_iterate(syscall_desc_p, sysinfo->syscalls, i, sysdesc);
        i++)
     if (sysdesc->number == syscall_number)
       return sysdesc->name;
@@ -364,22 +358,21 @@ xml_get_syscall_name (struct gdbarch *gdbarch,
 }
 
 static const char **
-xml_list_of_syscalls (struct gdbarch *gdbarch)
+xml_list_of_syscalls (const struct syscalls_info *sysinfo)
 {
-  struct syscalls_info *syscalls_info = gdbarch_syscalls_info (gdbarch);
   struct syscall_desc *sysdesc;
   const char **names = NULL;
   int nsyscalls;
   int i;
 
-  if (syscalls_info == NULL)
+  if (sysinfo == NULL)
     return NULL;
 
-  nsyscalls = VEC_length (syscall_desc_p, syscalls_info->syscalls);
+  nsyscalls = VEC_length (syscall_desc_p, sysinfo->syscalls);
   names = xmalloc ((nsyscalls + 1) * sizeof (char *));
 
   for (i = 0;
-       VEC_iterate (syscall_desc_p, syscalls_info->syscalls, i, sysdesc);
+       VEC_iterate (syscall_desc_p, sysinfo->syscalls, i, sysdesc);
        i++)
     names[i] = sysdesc->name;
 
@@ -389,37 +382,37 @@ xml_list_of_syscalls (struct gdbarch *gdbarch)
 }
 
 void
-set_xml_syscall_file_name (struct gdbarch *gdbarch, const char *name)
+set_xml_syscall_file_name (const char *name)
 {
-  set_gdbarch_xml_syscall_file (gdbarch, name);
+  xml_syscall_file = name;
 }
 
 void
-get_syscall_by_number (struct gdbarch *gdbarch,
-		       int syscall_number, struct syscall *s)
+get_syscall_by_number (int syscall_number,
+                       struct syscall *s)
 {
-  init_syscalls_info (gdbarch);
+  init_sysinfo ();
 
   s->number = syscall_number;
-  s->name = xml_get_syscall_name (gdbarch, syscall_number);
+  s->name = xml_get_syscall_name (sysinfo, syscall_number);
 }
 
 void
-get_syscall_by_name (struct gdbarch *gdbarch,
-		     const char *syscall_name, struct syscall *s)
+get_syscall_by_name (const char *syscall_name,
+                     struct syscall *s)
 {
-  init_syscalls_info (gdbarch);
+  init_sysinfo ();
 
-  s->number = xml_get_syscall_number (gdbarch, syscall_name);
+  s->number = xml_get_syscall_number (sysinfo, syscall_name);
   s->name = syscall_name;
 }
 
 const char **
-get_syscall_names (struct gdbarch *gdbarch)
+get_syscall_names (void)
 {
-  init_syscalls_info (gdbarch);
+  init_sysinfo ();
 
-  return xml_list_of_syscalls (gdbarch);
+  return xml_list_of_syscalls (sysinfo);
 }
 
 #endif /* ! HAVE_LIBEXPAT */

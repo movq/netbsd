@@ -29,6 +29,7 @@
 #ifndef _SYS_DEBUG_H
 #define	_SYS_DEBUG_H
 
+#include <sys/isa_defs.h>
 #include <sys/types.h>
 #include <sys/note.h>
 

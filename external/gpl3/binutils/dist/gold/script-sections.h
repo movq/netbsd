@@ -1,6 +1,6 @@
 // script-sections.h -- linker script SECTIONS for gold   -*- C++ -*-
 
-// Copyright (C) 2008-2015 Free Software Foundation, Inc.
+// Copyright 2008, 2009 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -163,12 +163,10 @@ class Script_sections
   // PSCRIPT_SECTION_TYPE points to a location for returning the section
   // type specified in script.  This can be SCRIPT_SECTION_TYPE_NONE if
   // no type is specified.
-  // *KEEP indicates whether the section should survive garbage collection.
   const char*
   output_section_name(const char* file_name, const char* section_name,
 		      Output_section*** output_section_slot,
-		      Section_type* pscript_section_type,
-		      bool* keep);
+		      Section_type* pscript_section_type);
 
   // Place a marker for an orphan output section into the SECTIONS
   // clause.
@@ -240,7 +238,7 @@ class Script_sections
 
   // Find a memory region that should be used by a given output section.
   Memory_region*
-  find_memory_region(Output_section_definition*, bool, bool,
+  find_memory_region(Output_section_definition*, bool,
 		     Output_section_definition**);
 
   // Returns true if the provide block of memory is contained
@@ -319,8 +317,6 @@ class Script_sections
   bool saw_relro_end_;
   // Whether we have seen SEGMENT_START.
   bool saw_segment_start_expression_;
-  // Whether we have created all necessary segments.
-  bool segments_created_;
 };
 
 // Attributes for memory regions.

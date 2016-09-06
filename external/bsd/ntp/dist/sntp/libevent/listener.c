@@ -1,4 +1,4 @@
-/*	$NetBSD: listener.c,v 1.5 2016/01/08 21:35:40 christos Exp $	*/
+/*	$NetBSD: listener.c,v 1.1.1.1.6.3 2015/11/08 01:51:11 riz Exp $	*/
 
 /*
  * Copyright (c) 2009-2012 Niels Provos, Nick Mathewson

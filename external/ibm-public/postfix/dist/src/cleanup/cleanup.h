@@ -1,4 +1,4 @@
-/*	$NetBSD: cleanup.h,v 1.7 2015/01/24 18:10:52 tron Exp $	*/
+/*	$NetBSD: cleanup.h,v 1.6.2.1 2015/01/27 08:14:03 martin Exp $	*/
 
 /*++
 /* NAME

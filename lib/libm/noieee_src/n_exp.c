@@ -1,4 +1,4 @@
-/*      $NetBSD: n_exp.c,v 1.9 2014/10/10 20:58:09 martin Exp $ */
+/*      $NetBSD: n_exp.c,v 1.8.42.1 2014/10/13 19:34:58 martin Exp $ */
 /*
  * Copyright (c) 1985, 1993
  *	The Regents of the University of California.  All rights reserved.

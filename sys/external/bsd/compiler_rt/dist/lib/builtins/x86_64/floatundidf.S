@@ -17,7 +17,13 @@
 
 #ifdef __x86_64__
 
-CONST_SECTION
+#if defined(__APPLE__)
+	.const
+#elif defined(__ELF__)
+	.section .rodata
+#else
+	.section .rdata,"rd"
+#endif
 
 	.balign 16
 twop52:

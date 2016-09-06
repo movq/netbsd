@@ -1,4 +1,4 @@
-/*	$NetBSD: bozohttpd.c,v 1.82 2016/06/30 13:17:48 mrg Exp $	*/
+/*	$NetBSD: bozohttpd.c,v 1.56.2.6 2016/04/15 19:01:05 snj Exp $	*/
 
 /*	$eterna: bozohttpd.c,v 1.178 2011/11/18 09:21:15 mrg Exp $	*/
 
@@ -2244,7 +2244,6 @@ bozo_setup(bozohttpd_t *httpd, bozoprefs_t *prefs, const char *vhost,
 	extern char	**environ;
 	static char	 *cleanenv[1] = { NULL };
 	uid_t		  uid;
-	int		  uidset = 0;
 	char		 *chrootdir;
 	char		 *username;
 	char		 *portnum;
@@ -2340,7 +2339,6 @@ bozo_setup(bozohttpd_t *httpd, bozoprefs_t *prefs, const char *vhost,
 			bozoerr(httpd, 1, "setgid(%u): %s", pw->pw_gid,
 				strerror(errno));
 		uid = pw->pw_uid;
-		uidset = 1;
 	}
 	/*
 	 * handle chroot.
@@ -2355,7 +2353,7 @@ bozo_setup(bozohttpd_t *httpd, bozoprefs_t *prefs, const char *vhost,
 				strerror(errno));
 	}
 
-	if (uidset && setuid(uid) == -1)
+	if (username != NULL && setuid(uid) == -1)
 		bozoerr(httpd, 1, "setuid(%d): %s", uid, strerror(errno));
 
 	/*
@@ -2376,10 +2374,4 @@ bozo_setup(bozohttpd_t *httpd, bozoprefs_t *prefs, const char *vhost,
 			httpd->virthostname, httpd->slashdir));
 
 	return 1;
-}
-
-int
-bozo_get_version(char *buf, size_t size)
-{
-	return snprintf(buf, size, "%s", SERVER_SOFTWARE);
 }

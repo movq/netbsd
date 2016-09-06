@@ -1,4 +1,4 @@
-/*	$NetBSD: i82557var.h,v 1.52 2015/04/13 16:33:24 riastradh Exp $	*/
+/*	$NetBSD: i82557var.h,v 1.50.22.1 2015/05/15 04:12:07 snj Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2001 The NetBSD Foundation, Inc.
@@ -60,7 +60,6 @@
  */
 
 #include <sys/callout.h>
-#include <sys/rndsource.h>
 
 /*
  * Misc. definitions for the Intel i82557 fast Ethernet controller

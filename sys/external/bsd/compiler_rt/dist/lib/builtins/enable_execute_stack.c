@@ -10,9 +10,7 @@
 
 #include "int_lib.h"
 
-#ifndef _WIN32
 #include <sys/mman.h>
-#endif
 
 /* #include "config.h"
  * FIXME: CMake - include when cmake system is ready.
@@ -20,14 +18,9 @@
  */
 #define HAVE_SYSCONF 1
 
-#ifdef _WIN32
-#define WIN32_LEAN_AND_MEAN
-#include <Windows.h>
-#else
 #ifndef __APPLE__
 #include <unistd.h>
 #endif /* __APPLE__ */
-#endif /* _WIN32 */
 
 #if __LP64__
 	#define TRAMPOLINE_SIZE 48
@@ -47,12 +40,6 @@ COMPILER_RT_ABI void
 __enable_execute_stack(void* addr)
 {
 
-#if _WIN32
-	MEMORY_BASIC_INFORMATION mbi;
-	if (!VirtualQuery (addr, &mbi, sizeof(mbi)))
-		return; /* We should probably assert here because there is no return value */
-	VirtualProtect (mbi.BaseAddress, mbi.RegionSize, PAGE_EXECUTE_READWRITE, &mbi.Protect);
-#else
 #if __APPLE__
 	/* On Darwin, pagesize is always 4096 bytes */
 	const uintptr_t pageSize = 4096;
@@ -68,5 +55,4 @@ __enable_execute_stack(void* addr)
 	unsigned char* endPage = (unsigned char*)((p+TRAMPOLINE_SIZE+pageSize) & pageAlignMask);
 	size_t length = endPage - startPage;
 	(void) mprotect((void *)startPage, length, PROT_READ | PROT_WRITE | PROT_EXEC);
-#endif
 }

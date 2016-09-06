@@ -1,4 +1,4 @@
-/*	$NetBSD: cpu.c,v 1.128 2016/04/17 14:32:03 martin Exp $ */
+/*	$NetBSD: cpu.c,v 1.116.2.1 2014/12/13 19:29:28 martin Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.128 2016/04/17 14:32:03 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.116.2.1 2014/12/13 19:29:28 martin Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -72,13 +72,16 @@ __KERNEL_RCSID(0, "$NetBSD: cpu.c,v 1.128 2016/04/17 14:32:03 martin Exp $");
 #include <machine/pmap.h>
 #include <machine/sparc64.h>
 #include <machine/openfirm.h>
-#include <machine/hypervisor.h>
-#include <machine/mdesc.h>
 
 #include <sparc64/sparc64/cache.h>
+#ifdef SUN4V
+#include <sparc64/hypervisor.h>
+#endif
 
+#ifdef SUN4V
 #define SUN4V_MONDO_QUEUE_SIZE	32
 #define SUN4V_QUEUE_ENTRY_SIZE	64
+#endif
 
 int ecache_min_line_size;
 
@@ -137,6 +140,7 @@ cpuid_from_node(u_int cpu_node)
 		id = prom_getpropint(cpu_node, "portid", -1);
 	if (id == -1)
 		id = prom_getpropint(cpu_node, "cpuid", -1);
+#ifdef SUN4V	
 	if (CPU_ISSUN4V) {
 		int reg[4];
 		int* regp=reg;
@@ -148,159 +152,11 @@ cpuid_from_node(u_int cpu_node)
 		/* cpuid in the lower 24 bits - sun4v hypervisor arch */
 		id = reg[0] & 0x0fffffff;
 	}
+#endif	
 	if (id == -1)
 		panic("failed to determine cpuid");
 	
 	return id;
-}
-
-static int
-cpu_cache_info_sun4v(const char *type, int level, const char *prop)
-{
-	int idx = 0;
-	uint64_t val = 0;;
-	idx = mdesc_find_node_by_idx(idx, "cache");
-	while (idx != -1 && val == 0) {
-		const char *name = mdesc_name_by_idx(idx);
-		if (strcmp("cache", name) == 0) {
-			const char *p;
-			size_t len = 0;
-			p = mdesc_get_prop_data(idx, "type", &len);
-			if (p == NULL)
-				panic("No type found\n");
-			if (len == 0)
-				panic("Len is zero");
-			if (type == NULL || strcmp(p, type) == 0) {
-				uint64_t l;
-				l = mdesc_get_prop_val(idx, "level");
-				if (l == level)
-					val = mdesc_get_prop_val(idx, prop);
-			}
-		}
-		if (val == 0)
-			idx = mdesc_next_node(idx);
-	}
-	return val;
-}
-
-static int
-cpu_icache_size(int node)
-{
-	if (CPU_ISSUN4V)
-		return cpu_cache_info_sun4v("instn", 1, "size");
-	else 
-		return prom_getpropint(node, "icache-size", 0);
-}
-
-static int
-cpu_icache_line_size(int node)
-{
-	if (CPU_ISSUN4V)
-		return cpu_cache_info_sun4v("instn", 1, "line-size");
-	else
-		return prom_getpropint(node, "icache-line-size", 0);
-}
-
-static int
-cpu_icache_nlines(int node)
-{
-	if (CPU_ISSUN4V)
-		return 0;
-	else
-		return prom_getpropint(node, "icache-nlines", 64);
-}
-
-static int
-cpu_icache_associativity(int node)
-{
-	if (CPU_ISSUN4V) {
-		int val;
-		val = cpu_cache_info_sun4v("instn", 1, "associativity");
-		if (val == 0)
-			val = 1;
-		return val;
-	} else
-		return prom_getpropint(node, "icache-associativity", 1);
-}
-
-static int
-cpu_dcache_size(int node)
-{
-	if (CPU_ISSUN4V)
-		return cpu_cache_info_sun4v("data", 1, "size");
-	else
-		return prom_getpropint(node, "dcache-size", 0);
-}
-
-static int
-cpu_dcache_line_size(int node)
-{
-	if (CPU_ISSUN4V)
-		return cpu_cache_info_sun4v("data", 1, "line-size");
-	else
-		return prom_getpropint(node, "dcache-line-size", 0);
-}
-
-static int
-cpu_dcache_nlines(int node)
-{
-	if (CPU_ISSUN4V)
-		return 0;
-	else
-		return prom_getpropint(node, "dcache-nlines", 128);
-}
-
-static int
-cpu_dcache_associativity(int node)
-{
-	if (CPU_ISSUN4V) {
-		int val;
-		val = cpu_cache_info_sun4v("data", 1, "associativity");
-		if (val == 0)
-			val = 1;
-		return val;
-	} else
-		return prom_getpropint(node, "dcache-associativity", 1);
-}
-
-int
-cpu_ecache_size(int node)
-{
-	if (CPU_ISSUN4V)
-		return cpu_cache_info_sun4v(NULL, 2, "size");
-	else
-		return prom_getpropint(node, "ecache-size", 0);
-}
-
-static int
-cpu_ecache_line_size(int node)
-{
-	if (CPU_ISSUN4V)
-		return cpu_cache_info_sun4v(NULL, 2, "line-size");
-	else
-		return prom_getpropint(node, "ecache-line-size", 0);
-}
-
-static int
-cpu_ecache_nlines(int node)
-{
-	if (CPU_ISSUN4V)
-		return 0;
-	else
-		return prom_getpropint(node, "ecache-nlines", 32768);
-}
-
-int
-cpu_ecache_associativity(int node)
-{
-	if (CPU_ISSUN4V) {
-		int val;
-		val = cpu_cache_info_sun4v(NULL, 2, "associativity");
-		if (val == 0)
-			val = 1;
-		return val;
-	} else
-		return prom_getpropint(node, "ecache-associativity", 1);
 }
 
 struct cpu_info *
@@ -354,8 +210,10 @@ alloc_cpuinfo(u_int cpu_node)
 	cpi->ci_spinup = NULL;
 	cpi->ci_paddr = pa0;
 	cpi->ci_self = cpi;
+#ifdef SUN4V
 	if (CPU_ISSUN4V)
 		cpi->ci_mmfsa = pa0;
+#endif
 	cpi->ci_node = cpu_node;
 	cpi->ci_idepth = -1;
 	memset(cpi->ci_intrpending, -1, sizeof(cpi->ci_intrpending));
@@ -502,12 +360,13 @@ cpu_attach(device_t parent, device_t dev, void *aux)
 	}
 	aprint_normal_dev(dev, "");
 
+	/* XXX sun4v mising cache info printout */
 	bigcache = 0;
 
-	icachesize = cpu_icache_size(node);
+	icachesize = prom_getpropint(node, "icache-size", 0);
 	if (icachesize > icache_size)
 		icache_size = icachesize;
-	linesize = l = cpu_icache_line_size(node);
+	linesize = l = prom_getpropint(node, "icache-line-size", 0);
 	if (linesize > icache_line_size)
 		icache_line_size = linesize;
 
@@ -518,9 +377,11 @@ cpu_attach(device_t parent, device_t dev, void *aux)
 	totalsize = icachesize;
 	if (totalsize == 0)
 		totalsize = l *
-		    cpu_icache_nlines(node) * cpu_icache_associativity(node);
+			prom_getpropint(node, "icache-nlines", 64) *
+			prom_getpropint(node, "icache-associativity", 1);
 
-	cachesize = totalsize / cpu_icache_associativity(node);
+	cachesize = totalsize /
+	    prom_getpropint(node, "icache-associativity", 1);
 	bigcache = cachesize;
 
 	sep = "";
@@ -531,10 +392,10 @@ cpu_attach(device_t parent, device_t dev, void *aux)
 		sep = ", ";
 	}
 
-	dcachesize = cpu_dcache_size(node);
+	dcachesize = prom_getpropint(node, "dcache-size", 0);
 	if (dcachesize > dcache_size)
 		dcache_size = dcachesize;
-	linesize = l = cpu_dcache_line_size(node);
+	linesize = l = prom_getpropint(node, "dcache-line-size", 0);
 	if (linesize > dcache_line_size)
 		dcache_line_size = linesize;
 
@@ -545,9 +406,11 @@ cpu_attach(device_t parent, device_t dev, void *aux)
 	totalsize = dcachesize;
 	if (totalsize == 0)
 		totalsize = l *
-		    cpu_dcache_nlines(node) * cpu_dcache_associativity(node);
+			prom_getpropint(node, "dcache-nlines", 128) *
+			prom_getpropint(node, "dcache-associativity", 1);
 
-	cachesize = totalsize / cpu_dcache_associativity(node);
+	cachesize = totalsize /
+	    prom_getpropint(node, "dcache-associativity", 1);
 	if (cachesize > bigcache)
 		bigcache = cachesize;
 
@@ -558,17 +421,20 @@ cpu_attach(device_t parent, device_t dev, void *aux)
 		sep = ", ";
 	}
 
-	linesize = l = cpu_ecache_line_size(node);
+	linesize = l =
+		prom_getpropint(node, "ecache-line-size", 0);
 	for (i = 0; (1 << i) < l && l; i++)
 		/* void */;
 	if ((1 << i) != l && l)
 		panic("bad ecache line size %d", l);
-	totalsize = cpu_ecache_size(node);
+	totalsize = prom_getpropint(node, "ecache-size", 0);
 	if (totalsize == 0)
 		totalsize = l *
-		    cpu_ecache_nlines(node) * cpu_ecache_associativity(node);
+			prom_getpropint(node, "ecache-nlines", 32768) *
+			prom_getpropint(node, "ecache-associativity", 1);
 
-	cachesize = totalsize / cpu_ecache_associativity(node);
+	cachesize = totalsize /
+	     prom_getpropint(node, "ecache-associativity", 1);
 	if (cachesize > bigcache)
 		bigcache = cachesize;
 
@@ -593,6 +459,7 @@ cpu_attach(device_t parent, device_t dev, void *aux)
 	 * CPU specific ipi setup
 	 * Currently only necessary for SUN4V
 	 */
+#ifdef SUN4V	
 	if (CPU_ISSUN4V) {
 		paddr_t pa = ci->ci_paddr;
 		int err;
@@ -618,6 +485,7 @@ cpu_attach(device_t parent, device_t dev, void *aux)
 		ci->ci_cpuset = pa;
 		pa += 64;
 	}
+#endif	
 	
 }
 
@@ -626,11 +494,13 @@ cpu_myid(void)
 {
 	char buf[32];
 
+#ifdef SUN4V
 	if (CPU_ISSUN4V) {
 		uint64_t myid;
 		hv_cpu_myid(&myid);
 		return myid;
 	}
+#endif
 	if (OF_getprop(findroot(), "name", buf, sizeof(buf)) > 0 &&
 	    strcmp(buf, "SUNW,Ultra-Enterprise-10000") == 0)
 		return lduwa(0x1fff40000d0UL, ASI_PHYS_NON_CACHED);
@@ -671,24 +541,19 @@ cpu_boot_secondary_processors(void)
 	}
 
 	for (ci = cpus; ci != NULL; ci = ci->ci_next) {
-		if (ci->ci_cpuid == cpu_myid())
+		if (ci->ci_cpuid == CPU_UPAID)
 			continue;
 
 		cpu_pmap_prepare(ci, false);
 		cpu_args->cb_node = ci->ci_node;
 		cpu_args->cb_cpuinfo = ci->ci_paddr;
-		cpu_args->cb_cputyp = cputyp;
 		membar_Sync();
 
 		/* Disable interrupts and start another CPU. */
 		pstate = getpstate();
 		setpstate(PSTATE_KERN);
 
-		int rc = prom_startcpu_by_cpuid(ci->ci_cpuid,
-		    (void *)cpu_spinup_trampoline, 0);
-		if (rc == -1)
-			prom_startcpu(ci->ci_node,
-			    (void *)cpu_spinup_trampoline, 0);
+		prom_startcpu(ci->ci_node, (void *)cpu_spinup_trampoline, 0);
 
 		for (i = 0; i < 2000; i++) {
 			membar_Sync();

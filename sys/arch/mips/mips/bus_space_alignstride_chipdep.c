@@ -1,4 +1,4 @@
-/* $NetBSD: bus_space_alignstride_chipdep.c,v 1.29 2016/07/20 17:57:00 macallan Exp $ */
+/* $NetBSD: bus_space_alignstride_chipdep.c,v 1.19.22.1 2015/11/05 20:32:31 riz Exp $ */
 
 /*-
  * Copyright (c) 1998, 2000, 2001 The NetBSD Foundation, Inc.
@@ -35,17 +35,17 @@
  * All rights reserved.
  *
  * Author: Chris G. Demetriou
- *
+ * 
  * Permission to use, copy, modify and distribute this software and
  * its documentation is hereby granted, provided that both the copyright
  * notice and this permission notice appear in all copies of the
  * software, derivative works or modified versions, and any portions
  * thereof, and that both notices appear in supporting documentation.
- *
- * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS"
- * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND
+ * 
+ * CARNEGIE MELLON ALLOWS FREE USE OF THIS SOFTWARE IN ITS "AS IS" 
+ * CONDITION.  CARNEGIE MELLON DISCLAIMS ANY LIABILITY OF ANY KIND 
  * FOR ANY DAMAGES WHATSOEVER RESULTING FROM THE USE OF THIS SOFTWARE.
- *
+ * 
  * Carnegie Mellon requests users of this software to return to
  *
  *  Software Distribution Coordinator  or  Software.Distribution@CS.CMU.EDU
@@ -74,11 +74,6 @@
  *			for the memory or I/O memory space extent.
  *	CHIP_LITTLE_ENDIAN | CHIP_BIG_ENDIAN
  *			For endian-specific busses, like PCI (little).
- *	CHIP_WRONG_ENDIAN
- *			For things like PCI bridges with endian conversion that
- *			can't be turned off, so we need to switch address bits
- *			for 8 and 16bit accesses.
- *			Example: MACE PCI bridge in SGI O2
  *	CHIP_ACCESS_SIZE
  *			Size (in bytes) of minimum bus access, e.g. 4
  *			to indicate all bus cycles are 32-bits.  Defaults
@@ -86,7 +81,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_space_alignstride_chipdep.c,v 1.29 2016/07/20 17:57:00 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_space_alignstride_chipdep.c,v 1.19.22.1 2015/11/05 20:32:31 riz Exp $");
 
 #ifdef CHIP_EXTENT
 #include <sys/extent.h>
@@ -96,10 +91,6 @@ __KERNEL_RCSID(0, "$NetBSD: bus_space_alignstride_chipdep.c,v 1.29 2016/07/20 17
 #include <mips/locore.h>
 
 #include <uvm/uvm_extern.h>
-
-#if defined(__mips_o32) && defined(MIPS3)
-#define NEED_64BIT_ASM
-#endif
 
 #define	__C(A,B)	__CONCAT(A,B)
 #define	__S(S)		__STRING(S)
@@ -120,7 +111,7 @@ __KERNEL_RCSID(0, "$NetBSD: bus_space_alignstride_chipdep.c,v 1.29 2016/07/20 17
 #define	CHIP_SWAP16(x)	be16toh(x)
 #define	CHIP_SWAP32(x)	be32toh(x)
 #define	CHIP_SWAP64(x)	be64toh(x)
-#define	CHIP_NEED_STREAM	1
+#define	CHIP_NEED_STREAM	1	
 #else
 #define	CHIP_SWAP16(x)	(x)
 #define	CHIP_SWAP32(x)	(x)
@@ -138,9 +129,6 @@ __KERNEL_RCSID(0, "$NetBSD: bus_space_alignstride_chipdep.c,v 1.29 2016/07/20 17
 #elif CHIP_ACCESS_SIZE==4
 # define CHIP_SWAP_ACCESS(x)	CHIP_SWAP32(x)
 #elif CHIP_ACCESS_SIZE==8
-# ifndef MIPS3_PLUS
-#  error 8 byte access size not available
-# endif
 # define CHIP_SWAP_ACCESS(x)	CHIP_SWAP64(x)
 #else
 # error your access size not implemented
@@ -206,24 +194,16 @@ static long
 #define	CHIP_ALIGN_STRIDE	0
 #endif
 
-#ifdef CHIP_WRONG_ENDIAN
-#define	CHIP_OFF8(o)	((o) ^ 3)
-#else
 #if CHIP_ALIGN_STRIDE > 0
 #define	CHIP_OFF8(o)	((o) << (CHIP_ALIGN_STRIDE))
 #else
 #define	CHIP_OFF8(o)	(o)
 #endif
-#endif
 
-#ifdef CHIP_WRONG_ENDIAN
-#define	CHIP_OFF16(o)	((o) ^ 2)
-#else
 #if CHIP_ALIGN_STRIDE > 1
 #define	CHIP_OFF16(o)	((o) << (CHIP_ALIGN_STRIDE - 1))
 #else
 #define	CHIP_OFF16(o)	(o)
-#endif
 #endif
 
 #if CHIP_ALIGN_STRIDE > 2
@@ -356,8 +336,8 @@ __BS(map)(void *v, bus_addr_t addr, bus_size_t size, int flags,
 	printf("%s: allocating %#"PRIxBUSADDR" to %#"PRIxBUSADDR"\n",
 		__S(__BS(map)), addr, addr + size - 1);
 #endif
-	error = extent_alloc_region(CHIP_EXTENT(v), addr, size,
-	    EX_NOWAIT | (CHIP_EX_MALLOC_SAFE(v) ? EX_MALLOCOK : 0));
+        error = extent_alloc_region(CHIP_EXTENT(v), addr, size,
+            EX_NOWAIT | (CHIP_EX_MALLOC_SAFE(v) ? EX_MALLOCOK : 0));
 	if (error) {
 #ifdef EXTENT_DEBUG
 		printf("%s: allocation failed (%d)\n", __S(__BS(map)), error);
@@ -371,24 +351,13 @@ __BS(map)(void *v, bus_addr_t addr, bus_size_t size, int flags,
 
 	addr = mbst.mbst_sys_start + (addr - mbst.mbst_bus_start);
 
-#if defined(__mips_n32) || defined(_LP64)
-	if (flags & BUS_SPACE_MAP_CACHEABLE) {
-#ifdef __mips_n32
-		if (((addr + size) & ~MIPS_PHYS_MASK) == 0)
-			*hp = (intptr_t)MIPS_PHYS_TO_KSEG0(addr);
-		else
-#endif
-			*hp = MIPS_PHYS_TO_XKPHYS_CACHED(addr);
-	} else if (flags & BUS_SPACE_MAP_PREFETCHABLE) {
+#ifdef _LP64
+	if (flags & BUS_SPACE_MAP_CACHEABLE)
+		*hp = MIPS_PHYS_TO_XKPHYS_CACHED(addr);
+	else if (flags & BUS_SPACE_MAP_PREFETCHABLE)
 		*hp = MIPS_PHYS_TO_XKPHYS_ACC(addr);
-	} else {
-#ifdef __mips_n32
-		if (((addr + size) & ~MIPS_PHYS_MASK) == 0)
-			*hp = (intptr_t)MIPS_PHYS_TO_KSEG1(addr);
-		else
-#endif
-			*hp = MIPS_PHYS_TO_XKPHYS_UNCACHED(addr);
-	}
+	else
+		*hp = MIPS_PHYS_TO_XKPHYS_UNCACHED(addr);
 #else
 	if (((addr + size) & ~MIPS_PHYS_MASK) != 0) {
 		vaddr_t va;
@@ -418,9 +387,9 @@ __BS(map)(void *v, bus_addr_t addr, bus_size_t size, int flags,
 		splx(s);
 	} else {
 		if (flags & BUS_SPACE_MAP_CACHEABLE)
-			*hp = (intptr_t)MIPS_PHYS_TO_KSEG0(addr);
+			*hp = MIPS_PHYS_TO_KSEG0(addr);
 		else
-			*hp = (intptr_t)MIPS_PHYS_TO_KSEG1(addr);
+			*hp = MIPS_PHYS_TO_KSEG1(addr);
 	}
 #endif
 
@@ -438,10 +407,6 @@ __BS(unmap)(void *v, bus_space_handle_t h, bus_size_t size, int acct)
 
 	/* determine if h is addr obtained from uvm_km_alloc */
 	handle_is_km = !(MIPS_KSEG0_P(h) || MIPS_KSEG1_P(h));
-#ifdef __mips_n32
-	if (handle_is_km == true)
-		handle_is_km = !MIPS_XKPHYS_P(h);
-#endif
 	if (handle_is_km == true) {
 		paddr_t pa;
 		vaddr_t va = (vaddr_t)trunc_page(h);
@@ -485,10 +450,6 @@ __BS(unmap)(void *v, bus_space_handle_t h, bus_size_t size, int acct)
 	if (handle_is_km == false) {
 		if (MIPS_KSEG0_P(h))
 			addr = MIPS_KSEG0_TO_PHYS(h);
-#ifdef __mips_n32
-		else if (MIPS_XKPHYS_P(h))
-			addr = MIPS_XKPHYS_TO_PHYS(h);
-#endif
 		else
 			addr = MIPS_KSEG1_TO_PHYS(h);
 	}
@@ -513,12 +474,12 @@ __BS(unmap)(void *v, bus_space_handle_t h, bus_size_t size, int acct)
 		printf("\n");
 #ifdef CHIP_W1_BUS_START
 		printf("%s: sys window[1]=0x%lx-0x%lx\n",
-		    __S(__BS(unmap)), (u_long)CHIP_W1_SYS_START(v),
+		    __S(__BS(map)), (u_long)CHIP_W1_SYS_START(v),
 		    (u_long)CHIP_W1_SYS_END(v));
 #endif
 #ifdef CHIP_W2_BUS_START
 		printf("%s: sys window[2]=0x%lx-0x%lx\n",
-		    __S(__BS(unmap)), (u_long)CHIP_W2_SYS_START(v),
+		    __S(__BS(map)), (u_long)CHIP_W2_SYS_START(v),
 		    (u_long)CHIP_W2_SYS_END(v));
 #endif
 #ifdef CHIP_W3_BUS_START
@@ -533,8 +494,8 @@ __BS(unmap)(void *v, bus_space_handle_t h, bus_size_t size, int acct)
 	printf("%s: freeing %#"PRIxBUSADDR" to %#"PRIxBUSADDR"\n",
 	    __S(__BS(unmap)), addr, addr + size - 1);
 #endif
-	int error = extent_free(CHIP_EXTENT(v), addr, size,
-	    EX_NOWAIT | (CHIP_EX_MALLOC_SAFE(v) ? EX_MALLOCOK : 0));
+        int error = extent_free(CHIP_EXTENT(v), addr, size,
+            EX_NOWAIT | (CHIP_EX_MALLOC_SAFE(v) ? EX_MALLOCOK : 0));
 	if (error) {
 		printf("%s: WARNING: could not unmap"
 		    " %#"PRIxBUSADDR"-%#"PRIxBUSADDR" (error %d)\n",
@@ -542,10 +503,10 @@ __BS(unmap)(void *v, bus_space_handle_t h, bus_size_t size, int acct)
 #ifdef EXTENT_DEBUG
 		extent_print(CHIP_EXTENT(v));
 #endif
-	}
+	}	
 #endif /* CHIP_EXTENT */
 #if !defined(_LP64) || defined(CHIP_EXTENT)
-	__USE(addr);
+      __USE(addr);
 #endif
 }
 
@@ -609,19 +570,18 @@ __BS(alloc)(void *v, bus_addr_t rstart, bus_addr_t rend, bus_size_t size,
 	}
 
 	*addrp = addr;
-#if !defined(__mips_o32)
-	if (flags & BUS_SPACE_MAP_CACHEABLE) {
+#ifdef _LP64
+	if (flags & BUS_SPACE_MAP_CACHEABLE)
 		*bshp = MIPS_PHYS_TO_XKPHYS_CACHED(mbst.mbst_sys_start +
 		    (addr - mbst.mbst_bus_start));
-	} else {
+	else
 		*bshp = MIPS_PHYS_TO_XKPHYS_UNCACHED(mbst.mbst_sys_start +
 		    (addr - mbst.mbst_bus_start));
-	}
 #else
-	if (flags & BUS_SPACE_MAP_CACHEABLE) {
+	if (flags & BUS_SPACE_MAP_CACHEABLE)
 		*bshp = MIPS_PHYS_TO_KSEG0(mbst.mbst_sys_start +
 		    (addr - mbst.mbst_bus_start));
-	} else
+	else
 		*bshp = MIPS_PHYS_TO_KSEG1(mbst.mbst_sys_start +
 		    (addr - mbst.mbst_bus_start));
 #endif
@@ -644,13 +604,9 @@ static void *
 __BS(vaddr)(void *v, bus_space_handle_t bsh)
 {
 
-#if (CHIP_ALIGN_STRIDE != 0)
+#if CHIP_ALIGN_STRIDE != 0
 	/* Linear mappings not possible. */
 	return (NULL);
-#elif defined(__mips_n32)
-	if (MIPS_KSEG0_P(bsh) || MIPS_KSEG1_P(bsh) || MIPS_KSEG2_P(bsh))
-		return ((void *)(intptr_t)bsh);
-	return NULL;
 #else
 	return ((void *)bsh);
 #endif
@@ -680,7 +636,7 @@ __BS(mmap)(void *v, bus_addr_t addr, off_t off, int prot, int flags)
 	if (flags & BUS_SPACE_MAP_PREFETCHABLE) {
 		ret |= PGC_PREFETCH;
 	}
-#endif
+#endif	
 
 	return (mips_btop(ret));
 #else
@@ -700,40 +656,38 @@ __BS(barrier)(void *v, bus_space_handle_t h, bus_size_t o, bus_size_t l, int f)
 static uint8_t
 __BS(read_1)(void *v, bus_space_handle_t h, bus_size_t off)
 {
-	h += CHIP_OFF8(off);
+#if CHIP_ACCESS_SIZE > 1
+	volatile CHIP_TYPE *ptr;
+#else	/* CHIP_ACCESS_SIZE > 1 */
+	volatile uint8_t *ptr;
+#endif	/* CHIP_ACCESS_SIZE > 1 */
+	uint8_t r;
+        int shift;
 
-	const int shift = (h & (CHIP_ACCESS_SIZE - 1)) * 8;
-	h &= ~((bus_space_handle_t)(CHIP_ACCESS_SIZE - 1));
-#if CHIP_ACCESS_SIZE == 8
-	const CHIP_TYPE val = mips3_ld(h);
-#elif CHIP_ACCESS_SIZE == 4
-	const CHIP_TYPE val = mips_lwu(h);
-#elif CHIP_ACCESS_SIZE == 2
-	const CHIP_TYPE val = mips_lhu(h);
-#else
-	const uint8_t val = mips_lbu(h);
-#endif
-	const uint8_t r = (uint8_t)(CHIP_SWAP_ACCESS(val) >> shift);
+        h += CHIP_OFF8(off);
+        shift = (off & (CHIP_ACCESS_SIZE - 1)) * 8;
+        ptr = (void *)(h & ~((bus_space_handle_t)(CHIP_ACCESS_SIZE - 1)));
+        r = (uint8_t)(CHIP_SWAP_ACCESS(*ptr) >> shift);
 
-	return r;
+        return r;
 }
 
 static uint16_t
 __BS(read_2)(void *v, bus_space_handle_t h, bus_size_t off)
 {
-	KASSERT((off & 1) == 0);
-	h += CHIP_OFF16(off);
+#if CHIP_ACCESS_SIZE > 2
+	volatile CHIP_TYPE *ptr;
+#else	/* CHIP_ACCESS_SIZE > 2 */
+	volatile uint16_t *ptr;
+#endif	/* CHIP_ACCESS_SIZE > 2 */
+	uint16_t r;
+        int shift;
 
-	const int shift = (h & (CHIP_ACCESS_SIZE - 1)) * 8;
-	h &= ~((bus_space_handle_t)(CHIP_ACCESS_SIZE - 1));
-#if CHIP_ACCESS_SIZE == 8
-	const CHIP_TYPE val = mips3_ld(h);
-#elif CHIP_ACCESS_SIZE == 4
-	const CHIP_TYPE val = mips_lwu(h);
-#else
-	const uint16_t val = mips_lhu(h);
-#endif
-	const uint16_t r = (uint16_t)CHIP_SWAP16(val >> shift);
+	KASSERT((off & 1) == 0);
+        h += CHIP_OFF16(off);
+        shift = (off & (CHIP_ACCESS_SIZE - 1)) * 8;
+        ptr = (void *)(h & ~((bus_space_handle_t)(CHIP_ACCESS_SIZE - 1)));
+	r = (uint16_t)CHIP_SWAP16(*ptr >> shift);
 
 	return r;
 }
@@ -741,17 +695,19 @@ __BS(read_2)(void *v, bus_space_handle_t h, bus_size_t off)
 static uint32_t
 __BS(read_4)(void *v, bus_space_handle_t h, bus_size_t off)
 {
-	KASSERT((off & 3) == 0);
-
-	h += CHIP_OFF32(off);
-	const int shift = (h & (CHIP_ACCESS_SIZE - 1)) * 8;
-	h &= ~((bus_space_handle_t)(CHIP_ACCESS_SIZE - 1));
 #if CHIP_ACCESS_SIZE > 4
-	const CHIP_TYPE val = mips3_ld(h);
+	volatile CHIP_TYPE *ptr;
 #else	/* CHIP_ACCESS_SIZE > 4 */
-	const uint32_t val = mips_lwu(h);
+	volatile uint32_t *ptr;
 #endif
-	const uint32_t r = (uint32_t)CHIP_SWAP32(val >> shift);
+	uint32_t r;
+        int shift;
+
+	KASSERT((off & 3) == 0);
+        h += CHIP_OFF32(off);
+        shift = (off & (CHIP_ACCESS_SIZE - 1)) * 8;
+        ptr = (void *)(h & ~((bus_space_handle_t)(CHIP_ACCESS_SIZE - 1)));
+	r = (uint32_t)CHIP_SWAP32(*ptr >> shift);
 
 	return r;
 }
@@ -759,17 +715,17 @@ __BS(read_4)(void *v, bus_space_handle_t h, bus_size_t off)
 static uint64_t
 __BS(read_8)(void *v, bus_space_handle_t h, bus_size_t off)
 {
-#ifdef MIPS3_64BIT
+	volatile uint64_t *ptr;
+	volatile uint64_t r;
+        int shift;
+
 	KASSERT((off & 7) == 0);
-	h += CHIP_OFF64(off);
-	const int shift = (h & (CHIP_ACCESS_SIZE - 1)) * 8;
-	h &= ~((bus_space_handle_t)(CHIP_ACCESS_SIZE - 1));
-	const uint64_t r = CHIP_SWAP64(mips3_ld(h) >> shift);
+        h += CHIP_OFF64(off);
+        shift = (off & (CHIP_ACCESS_SIZE - 1)) * 8;
+        ptr = (void *)(h & ~((bus_space_handle_t)(CHIP_ACCESS_SIZE - 1)));
+	r =  CHIP_SWAP64(*ptr >> shift);
 
 	return r;
-#else
-	panic("%s: not implemented!", __func__);
-#endif
 }
 
 
@@ -810,73 +766,70 @@ CHIP_read_region_N(8,uint64_t)
 static void
 __BS(write_1)(void *v, bus_space_handle_t h, bus_size_t off, uint8_t val)
 {
-	h += CHIP_OFF8(off);
+#if CHIP_ACCESS_SIZE > 1
+	volatile CHIP_TYPE *ptr;
+#else	/* CHIP_ACCESS_SIZE > 1 */
+	volatile uint8_t *ptr;
+#endif	/* CHIP_ACCESS_SIZE > 1 */
+	int shift;
 
-#if CHIP_ACCESS_SIZE == 1
-	mips_sb(h, val);
-#else
-	const int shift = (h & (CHIP_ACCESS_SIZE - 1)) * 8;
-	h &= ~((bus_space_handle_t)(CHIP_ACCESS_SIZE - 1));
-	CHIP_TYPE cval = CHIP_SWAP_ACCESS(((CHIP_TYPE)val) << shift);
-# if CHIP_ACCESS_SIZE == 8
-	mips3_sd(h, cval);
-# elif CHIP_ACCESS_SIZE == 4
-	mips_sw(h, cval);
-# else
-	mips_sh(h, cval);
-# endif
-#endif
+	h += CHIP_OFF8(off);
+	shift = (off & (CHIP_ACCESS_SIZE - 1)) * 8;
+	ptr = (void *)(h & ~((bus_space_handle_t)(CHIP_ACCESS_SIZE - 1)));
+	*ptr = CHIP_SWAP_ACCESS(((CHIP_TYPE)val) << shift);
 }
 
 static void
 __BS(write_2)(void *v, bus_space_handle_t h, bus_size_t off, uint16_t val)
 {
-	KASSERT((h & 1) == 0);
-	KASSERT((off & 1) == 0);
+#if CHIP_ACCESS_SIZE > 2
+	volatile CHIP_TYPE *ptr;
+#else	/* CHIP_ACCESS_SIZE > 2 */
+	volatile uint16_t *ptr;
+#endif	/* CHIP_ACCESS_SIZE > 2 */
+	int shift;
 
+	KASSERT((off & 1) == 0);
 	h += CHIP_OFF16(off);
-#if CHIP_ACCES_SIZE <= 2
-	mips_sh(h, CHIP_SWAP16(val));
-#else
-	const int shift = (h & (CHIP_ACCESS_SIZE - 1)) * 8;
-	h &= ~((bus_space_handle_t)(CHIP_ACCESS_SIZE - 1));
-	CHIP_TYPE cval = ((CHIP_TYPE)CHIP_SWAP16(val)) << shift;
-# if CHIP_ACCESS_SIZE == 8
-	mips3_sd(h, val);
-# else
-	mips_sw(h, val);
-# endif
-#endif
+	shift = (off & (CHIP_ACCESS_SIZE - 1)) * 8;
+	ptr = (void *)(h & ~((bus_space_handle_t)(CHIP_ACCESS_SIZE - 1)));
+	if (CHIP_ACCESS_SIZE > 2)
+		*ptr = (CHIP_TYPE)(CHIP_SWAP16(val)) << shift;
+	else
+		*ptr = CHIP_SWAP16(val);
 }
 
 static void
 __BS(write_4)(void *v, bus_space_handle_t h, bus_size_t off, uint32_t val)
 {
-	KASSERT((h & 3) == 0);
-	KASSERT((off & 3) == 0);
+#if CHIP_ACCESS_SIZE > 4
+	volatile CHIP_TYPE *ptr;
+#else	/* CHIP_ACCESS_SIZE > 4 */
+	volatile uint32_t *ptr;
+#endif	/* CHIP_ACCESS_SIZE > 4 */
+        int shift;
 
-	h += CHIP_OFF32(off);
-#if CHIP_ACCESS_SIZE <= 4
-	mips_sw(h, CHIP_SWAP32(val));
-#else
-	const int shift = (h & (CHIP_ACCESS_SIZE - 1)) * 8;
-	h &= ~((bus_space_handle_t)(CHIP_ACCESS_SIZE - 1));
-	mips3_sd(h, ((CHIP_TYPE)CHIP_SWAP32(val)) << shift);
-#endif
+	KASSERT((off & 3) == 0);
+        h += CHIP_OFF32(off);
+        shift = (off & (CHIP_ACCESS_SIZE - 1)) * 8;
+        ptr = (void *)(h & ~((bus_space_handle_t)(CHIP_ACCESS_SIZE - 1)));
+        if (CHIP_ACCESS_SIZE > 4)
+		*ptr = (CHIP_TYPE)(CHIP_SWAP32(val)) << shift;
+        else
+                *ptr = CHIP_SWAP32(val);
 }
 
 static void
 __BS(write_8)(void *v, bus_space_handle_t h, bus_size_t off, uint64_t val)
 {
-#ifdef MIPS3_64BIT
-	KASSERT((h & 7) == 0);
-	KASSERT((off & 7) == 0);
+	volatile uint64_t *ptr;
+        int shift;
 
-	h += CHIP_OFF64(off);
-	mips3_sd(h, CHIP_SWAP64(val));
-#else
-	panic("%s: not implemented!", __func__);
-#endif
+	KASSERT((off & 7) == 0);
+        h += CHIP_OFF64(off);
+        shift = (off & (CHIP_ACCESS_SIZE - 1)) * 8;
+        ptr = (void *)(h & ~((bus_space_handle_t)(CHIP_ACCESS_SIZE - 1)));
+	*ptr = CHIP_SWAP64(val) << shift;
 }
 
 #define CHIP_write_multi_N(BYTES,TYPE)					\
@@ -974,52 +927,49 @@ CHIP_copy_region_N(8)
 static uint8_t
 __BS(read_stream_1)(void *v, bus_space_handle_t h, bus_size_t off)
 {
-	h += CHIP_OFF8(off);
+#if CHIP_ACCESS_SIZE > 1
+	volatile CHIP_TYPE *ptr;
+#else	/* CHIP_ACCESS_SIZE > 1 */
+	volatile uint8_t *ptr;
+#endif	/* CHIP_ACCESS_SIZE > 1 */
 
-#if CHIP_ACCESS_SIZE == 8
-	return (uint8_t)mips3_ld(h);
-#elif CHIP_ACCESS_SIZE == 4
-	return (uint8_t)mips_lwu(h);
-#elif CHIP_ACCESS_SIZE == 2
-	return (uint8_t)mips_lhu(h);
-#else
-	return mips_lbu(h);
-#endif
+	ptr = (void *)(intptr_t)(h + CHIP_OFF8(off));
+	return *ptr & 0xff;
 }
 
 static uint16_t
 __BS(read_stream_2)(void *v, bus_space_handle_t h, bus_size_t off)
 {
-	h += CHIP_OFF16(off);
-#if CHIP_ACCESS_SIZE == 8
-	return (uint16_t)mips3_ld(h);
-#elif CHIP_ACCESS_SIZE == 4
-	return (uint16_t)mips_lwu(h);
-#else
-	return (uint16_t)mips_lbu(h);
-#endif
+#if CHIP_ACCESS_SIZE > 2
+	volatile CHIP_TYPE *ptr;
+#else	/* CHIP_ACCESS_SIZE > 2 */
+	volatile uint16_t *ptr;
+#endif	/* CHIP_ACCESS_SIZE > 2 */
+
+	ptr = (void *)(intptr_t)(h + CHIP_OFF16(off));
+	return *ptr & 0xffff;
 }
 
 static uint32_t
 __BS(read_stream_4)(void *v, bus_space_handle_t h, bus_size_t off)
 {
-	h += CHIP_OFF32(off);
-#if CHIP_ACCESS_SIZE == 8
-	return (uint32_t)mips3_ld(h);
-#else
-	return (uint32_t)mips_lwu(h);
+#if CHIP_ACCESS_SIZE > 4
+	volatile CHIP_TYPE *ptr;
+#else	/* CHIP_ACCESS_SIZE > 4 */
+	volatile uint32_t *ptr;
 #endif
+
+	ptr = (void *)(intptr_t)(h + CHIP_OFF32(off));
+	return *ptr & 0xffffffff;
 }
 
 static uint64_t
 __BS(read_stream_8)(void *v, bus_space_handle_t h, bus_size_t off)
 {
-#ifdef MIPS3_64BIT
-	h += CHIP_OFF64(off);
-	return mips3_ld(h);
-#else
-	panic("%s: not implemented!", __func__);
-#endif
+	volatile uint64_t *ptr;
+
+	ptr = (void *)(intptr_t)(h + CHIP_OFF64(off));
+	return *ptr;
 }
 
 #define CHIP_read_multi_stream_N(BYTES,TYPE)				\
@@ -1059,52 +1009,52 @@ static void
 __BS(write_stream_1)(void *v, bus_space_handle_t h, bus_size_t off,
 		     uint8_t val)
 {
-#if CHIP_ACCESS_SIZE == 8
-	mips3_sd(h, val);
-#elif CHIP_ACCESS_SIZE == 4
-	mips_sw(h, val);
-#elif CHIP_ACCESS_SIZE == 2
-	mips_sh(h, val);
-#else
-	mips_sb(h, val);
-#endif
+#if CHIP_ACCESS_SIZE > 1
+	volatile CHIP_TYPE *ptr;
+#else	/* CHIP_ACCESS_SIZE > 1 */
+	volatile uint8_t *ptr;
+#endif	/* CHIP_ACCESS_SIZE > 1 */
+
+	ptr = (void *)(intptr_t)(h + CHIP_OFF8(off));
+	*ptr = val;
 }
 
 static void
 __BS(write_stream_2)(void *v, bus_space_handle_t h, bus_size_t off,
 	      uint16_t val)
 {
-#if CHIP_ACCESS_SIZE == 8
-	mips3_sd(h, val);
-#elif CHIP_ACCESS_SIZE == 4
-	mips_sw(h, val);
-#else
-	mips_sh(h, val);
-#endif
+#if CHIP_ACCESS_SIZE > 2
+	volatile CHIP_TYPE *ptr;
+#else	/* CHIP_ACCESS_SIZE > 2 */
+	volatile uint16_t *ptr;
+#endif	/* CHIP_ACCESS_SIZE > 2 */
+
+	ptr = (void *)(intptr_t)(h + CHIP_OFF16(off));
+	*ptr = val;
 }
 
 static void
 __BS(write_stream_4)(void *v, bus_space_handle_t h, bus_size_t off,
 		     uint32_t val)
 {
-	h += CHIP_OFF32(off);
-#if CHIP_ACCESS_SIZE == 8
-	mips3_sd(h, val);
-#else
-	mips_sw(h, val);
-#endif
+#if CHIP_ACCESS_SIZE > 4
+	volatile CHIP_TYPE *ptr;
+#else	/* CHIP_ACCESS_SIZE > 4 */
+	volatile uint32_t *ptr;
+#endif	/* CHIP_ACCESS_SIZE > 4 */
+
+	ptr = (void *)(intptr_t)(h + CHIP_OFF32(off));
+	*ptr = val;
 }
 
 static void
 __BS(write_stream_8)(void *v, bus_space_handle_t h, bus_size_t off,
 		     uint64_t val)
 {
-#ifdef MIPS3_64BIT
-	h += CHIP_OFF64(off);
-	mips3_sd(h, val);
-#else
-	panic("%s: not implemented!", __func__);
-#endif
+	volatile uint64_t *ptr;
+
+	ptr = (void *)(intptr_t)(h + CHIP_OFF64(off));
+	*ptr = val;
 }
 
 #define CHIP_write_multi_stream_N(BYTES,TYPE)				\
@@ -1176,37 +1126,37 @@ __BS(init)(bus_space_tag_t t, void *v)
 
 	/* barrier */
 	t->bs_barrier =		__BS(barrier);
-
+	
 	/* read (single) */
 	t->bs_r_1 =		__BS(read_1);
 	t->bs_r_2 =		__BS(read_2);
 	t->bs_r_4 =		__BS(read_4);
 	t->bs_r_8 =		__BS(read_8);
-
+	
 	/* read multiple */
 	t->bs_rm_1 =		__BS(read_multi_1);
 	t->bs_rm_2 =		__BS(read_multi_2);
 	t->bs_rm_4 =		__BS(read_multi_4);
 	t->bs_rm_8 =		__BS(read_multi_8);
-
+	
 	/* read region */
 	t->bs_rr_1 =		__BS(read_region_1);
 	t->bs_rr_2 =		__BS(read_region_2);
 	t->bs_rr_4 =		__BS(read_region_4);
 	t->bs_rr_8 =		__BS(read_region_8);
-
+	
 	/* write (single) */
 	t->bs_w_1 =		__BS(write_1);
 	t->bs_w_2 =		__BS(write_2);
 	t->bs_w_4 =		__BS(write_4);
 	t->bs_w_8 =		__BS(write_8);
-
+	
 	/* write multiple */
 	t->bs_wm_1 =		__BS(write_multi_1);
 	t->bs_wm_2 =		__BS(write_multi_2);
 	t->bs_wm_4 =		__BS(write_multi_4);
 	t->bs_wm_8 =		__BS(write_multi_8);
-
+	
 	/* write region */
 	t->bs_wr_1 =		__BS(write_region_1);
 	t->bs_wr_2 =		__BS(write_region_2);
@@ -1218,7 +1168,7 @@ __BS(init)(bus_space_tag_t t, void *v)
 	t->bs_sm_2 =		__BS(set_multi_2);
 	t->bs_sm_4 =		__BS(set_multi_4);
 	t->bs_sm_8 =		__BS(set_multi_8);
-
+	
 	/* set region */
 	t->bs_sr_1 =		__BS(set_region_1);
 	t->bs_sr_2 =		__BS(set_region_2);
@@ -1237,31 +1187,31 @@ __BS(init)(bus_space_tag_t t, void *v)
 	t->bs_rs_2 =		__BS(read_stream_2);
 	t->bs_rs_4 =		__BS(read_stream_4);
 	t->bs_rs_8 =		__BS(read_stream_8);
-
+	
 	/* read multiple, stream */
 	t->bs_rms_1 =		__BS(read_multi_stream_1);
 	t->bs_rms_2 =		__BS(read_multi_stream_2);
 	t->bs_rms_4 =		__BS(read_multi_stream_4);
 	t->bs_rms_8 =		__BS(read_multi_stream_8);
-
+	
 	/* read region, stream */
 	t->bs_rrs_1 =		__BS(read_region_stream_1);
 	t->bs_rrs_2 =		__BS(read_region_stream_2);
 	t->bs_rrs_4 =		__BS(read_region_stream_4);
 	t->bs_rrs_8 =		__BS(read_region_stream_8);
-
+	
 	/* write (single), stream */
 	t->bs_ws_1 =		__BS(write_stream_1);
 	t->bs_ws_2 =		__BS(write_stream_2);
 	t->bs_ws_4 =		__BS(write_stream_4);
 	t->bs_ws_8 =		__BS(write_stream_8);
-
+	
 	/* write multiple, stream */
 	t->bs_wms_1 =		__BS(write_multi_stream_1);
 	t->bs_wms_2 =		__BS(write_multi_stream_2);
 	t->bs_wms_4 =		__BS(write_multi_stream_4);
 	t->bs_wms_8 =		__BS(write_multi_stream_8);
-
+	
 	/* write region, stream */
 	t->bs_wrs_1 =		__BS(write_region_stream_1);
 	t->bs_wrs_2 =		__BS(write_region_stream_2);
@@ -1275,31 +1225,31 @@ __BS(init)(bus_space_tag_t t, void *v)
 	t->bs_rs_2 =		__BS(read_2);
 	t->bs_rs_4 =		__BS(read_4);
 	t->bs_rs_8 =		__BS(read_8);
-
+	
 	/* read multiple, stream */
 	t->bs_rms_1 =		__BS(read_multi_1);
 	t->bs_rms_2 =		__BS(read_multi_2);
 	t->bs_rms_4 =		__BS(read_multi_4);
 	t->bs_rms_8 =		__BS(read_multi_8);
-
+	
 	/* read region, stream */
 	t->bs_rrs_1 =		__BS(read_region_1);
 	t->bs_rrs_2 =		__BS(read_region_2);
 	t->bs_rrs_4 =		__BS(read_region_4);
 	t->bs_rrs_8 =		__BS(read_region_8);
-
+	
 	/* write (single), stream */
 	t->bs_ws_1 =		__BS(write_1);
 	t->bs_ws_2 =		__BS(write_2);
 	t->bs_ws_4 =		__BS(write_4);
 	t->bs_ws_8 =		__BS(write_8);
-
+	
 	/* write multiple, stream */
 	t->bs_wms_1 =		__BS(write_multi_1);
 	t->bs_wms_2 =		__BS(write_multi_2);
 	t->bs_wms_4 =		__BS(write_multi_4);
 	t->bs_wms_8 =		__BS(write_multi_8);
-
+	
 	/* write region, stream */
 	t->bs_wrs_1 =		__BS(write_region_1);
 	t->bs_wrs_2 =		__BS(write_region_2);
@@ -1309,7 +1259,7 @@ __BS(init)(bus_space_tag_t t, void *v)
 
 #ifdef CHIP_EXTENT
 	/* XXX WE WANT EXTENT_NOCOALESCE, BUT WE CAN'T USE IT. XXX */
-	ex = extent_create(__S(__BS(bus)), 0x0UL, ~0UL,
+	ex = extent_create(__S(__BS(bus)), 0x0UL, ~0UL, 
 	    (void *)CHIP_EX_STORE(v), CHIP_EX_STORE_SIZE(v), EX_NOWAIT);
 	extent_alloc_region(ex, 0, ~0UL, EX_NOWAIT);
 

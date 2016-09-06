@@ -1,4 +1,5 @@
-/* Copyright (C) 2013-2015 Free Software Foundation, Inc.
+/* Copyright (C) 2013
+   Free Software Foundation
   
    This file is part of GCC.
   

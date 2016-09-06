@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.8 2016/08/16 06:24:03 mrg Exp $
+#	$NetBSD: Makefile,v 1.6 2012/03/22 23:46:27 joerg Exp $
 
 DRIVER=		xf86-video-trident
 DRIVER_NAME=	trident_drv

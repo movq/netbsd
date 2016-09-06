@@ -1,4 +1,4 @@
-/* $NetBSD: ansi.h,v 1.5 2015/06/17 14:32:32 martin Exp $ */
+/* $NetBSD: ansi.h,v 1.4.4.1 2015/07/16 18:27:22 riz Exp $ */
 
 /*-
  * Copyright (c) 2007 Jared D. McNeill <jmcneill@invisible.ca>

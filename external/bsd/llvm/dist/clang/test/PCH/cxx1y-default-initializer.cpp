@@ -1,4 +1,3 @@
-// RUN: %clang_cc1 -pedantic -std=c++1y %s -o %t
 // RUN: %clang_cc1 -pedantic -std=c++1y -emit-pch %s -o %t
 // RUN: %clang_cc1 -pedantic -std=c++1y -include-pch %t -verify %s
 

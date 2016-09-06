@@ -6,10 +6,9 @@
 	mov	r0, #\@ @comment
 .endm
 
-	.byte	'\\
-	.byte	'\a
-	.byte 	0
-	.byte	0
+.byte	'\\
+.byte	'\a
+
 foo:
 	bar
 	bar

@@ -1,4 +1,4 @@
-/*	$NetBSD: pcap-enet.c,v 1.2 2014/11/19 19:33:30 christos Exp $	*/
+/*	$NetBSD: pcap-enet.c,v 1.1.1.3 2013/04/06 15:57:49 christos Exp $	*/
 
 /*
  * Stanford Enetfilter subroutines for tcpdump
@@ -8,9 +8,10 @@
  *
  * Rayan Zachariassen, CA*Net
  */
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: pcap-enet.c,v 1.2 2014/11/19 19:33:30 christos Exp $");
+#ifndef lint
+static const char rcsid[] _U_ =
+    "@(#) Header: /tcpdump/master/libpcap/pcap-enet.c,v 1.9 2006-10-04 18:09:22 guy Exp ";
+#endif
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"

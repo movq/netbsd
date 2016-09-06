@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.inc,v 1.10 2016/02/27 19:06:56 joerg Exp $
+# $NetBSD: Makefile.inc,v 1.6.2.1 2015/05/19 05:03:15 snj Exp $
 
 COMPILER_RT_SRCDIR=	${NETBSDSRCDIR}/sys/external/bsd/compiler_rt/dist
 
@@ -23,7 +23,7 @@ GENERIC_SRCS+= \
 	divsc3.c \
 	divxc3.c
 
-.if ${MACHINE_CPU} == "powerpc" || ${LIBC_MACHINE_CPU:U} == "sparc64" || ${LIBC_MACHINE_CPU:U} == "aarch64"
+.if ${MACHINE_CPU} == "powerpc"
 GENERIC_SRCS+= \
 	divtc3.c \
 	multc3.c

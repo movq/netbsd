@@ -1,4 +1,4 @@
-/*	$NetBSD: nsec3param_51.c,v 1.5 2015/12/17 04:00:44 christos Exp $	*/
+/*	$NetBSD: nsec3param_51.c,v 1.3.12.1 2016/03/13 08:06:14 martin Exp $	*/
 
 /*
  * Copyright (C) 2008, 2009, 2015  Internet Systems Consortium, Inc. ("ISC")

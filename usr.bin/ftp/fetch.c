@@ -1,4 +1,4 @@
-/*	$NetBSD: fetch.c,v 1.224 2016/08/03 12:33:56 maya Exp $	*/
+/*	$NetBSD: fetch.c,v 1.205.4.4 2016/04/29 19:03:44 snj Exp $	*/
 
 /*-
  * Copyright (c) 1997-2015 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: fetch.c,v 1.224 2016/08/03 12:33:56 maya Exp $");
+__RCSID("$NetBSD: fetch.c,v 1.205.4.4 2016/04/29 19:03:44 snj Exp $");
 #endif /* not lint */
 
 /*
@@ -954,8 +954,7 @@ parse_posinfo(const char **cp, struct posinfo *pi)
 static int
 negotiate_connection(FETCH *fin, const char *url, const char *penv,
     struct posinfo *pi, time_t *mtime, struct authinfo *wauth,
-    struct authinfo *pauth, volatile int *rval, volatile int *ischunked,
-    char **auth)
+    struct authinfo *pauth, int *rval, int *ischunked, char **auth)
 {
 	int			len, hcode, rv;
 	char			buf[FTPBUFLEN], *ep;
@@ -1261,7 +1260,7 @@ fetch_url(const char *url, const char *proxyenv, char *proxyauth, char *wwwauth)
 	int volatile		s;
 	struct stat		sb;
 	int volatile		isproxy;
-	int volatile 		rval, ischunked;
+	int 			rval, ischunked;
 	size_t			flen;
 	static size_t		bufsize;
 	static char		*xferbuf;
@@ -1899,8 +1898,7 @@ fetch_ftp(const char *url)
 	    STRorNULL(ui.path), STRorNULL(dir), STRorNULL(file));
 
 	dirhasglob = filehasglob = 0;
-	if (doglob &&
-	    (ui.utype == CLASSIC_URL_T || ui.utype == FTP_URL_T)) {
+	if (doglob && ui.utype == CLASSIC_URL_T) {
 		if (! EMPTYSTRING(dir) && strpbrk(dir, "*?[]{}") != NULL)
 			dirhasglob = 1;
 		if (! EMPTYSTRING(file) && strpbrk(file, "*?[]{}") != NULL)

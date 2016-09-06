@@ -1,5 +1,5 @@
-/*	$NetBSD: ttymodes.c,v 1.5 2016/08/02 13:45:12 christos Exp $	*/
-/* $OpenBSD: ttymodes.c,v 1.30 2016/05/04 14:22:33 markus Exp $ */
+/*	$NetBSD: ttymodes.c,v 1.2 2009/06/07 22:38:48 christos Exp $	*/
+/* $OpenBSD: ttymodes.c,v 1.29 2008/11/02 00:16:16 stevesk Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -45,7 +45,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: ttymodes.c,v 1.5 2016/08/02 13:45:12 christos Exp $");
+__RCSID("$NetBSD: ttymodes.c,v 1.2 2009/06/07 22:38:48 christos Exp $");
 #include <sys/types.h>
 
 #include <errno.h>
@@ -55,6 +55,7 @@ __RCSID("$NetBSD: ttymodes.c,v 1.5 2016/08/02 13:45:12 christos Exp $");
 
 #include "packet.h"
 #include "log.h"
+#include "ssh1.h"
 #include "compat.h"
 #include "buffer.h"
 

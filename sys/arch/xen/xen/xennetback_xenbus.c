@@ -1,4 +1,4 @@
-/*      $NetBSD: xennetback_xenbus.c,v 1.57 2016/06/10 13:27:13 ozaki-r Exp $      */
+/*      $NetBSD: xennetback_xenbus.c,v 1.52.4.1 2016/01/08 21:05:14 snj Exp $      */
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xennetback_xenbus.c,v 1.57 2016/06/10 13:27:13 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xennetback_xenbus.c,v 1.52.4.1 2016/01/08 21:05:14 snj Exp $");
 
 #include "opt_xen.h"
 
@@ -301,7 +301,6 @@ xennetback_xenbus_create(struct xenbus_device *xbusd)
 	/* create pseudo-interface */
 	aprint_verbose_ifnet(ifp, "Ethernet address %s\n",
 	    ether_sprintf(xneti->xni_enaddr));
-	xneti->xni_ec.ec_capabilities |= ETHERCAP_VLAN_MTU;
 	ifp->if_flags =
 	    IFF_BROADCAST|IFF_SIMPLEX|IFF_NOTRAILERS|IFF_MULTICAST;
 	ifp->if_snd.ifq_maxlen =
@@ -711,24 +710,6 @@ xennetback_tx_response(struct xnetback_instance *xneti, int id, int status)
 	}
 }
 
-static inline const char *
-xennetback_tx_check_packet(const netif_tx_request_t *txreq, int vlan)
-{
-	if (__predict_false(txreq->size < ETHER_HDR_LEN))
-		return "too small";
-
-	if (__predict_false(txreq->offset + txreq->size > PAGE_SIZE))
-		return "crossing a page boundary";
-
-	int maxlen = ETHER_MAX_LEN - ETHER_CRC_LEN;
-	if (vlan)
-		maxlen += ETHER_VLAN_ENCAP_LEN;
-	if (__predict_false(txreq->size > maxlen))
-		return "too big";
-
-	return NULL;
-}
-
 static int
 xennetback_evthandler(void *arg)
 {
@@ -764,21 +745,28 @@ xennetback_evthandler(void *arg)
 			    NETIF_RSP_DROPPED);
 			continue;
 		}
-
 		/*
 		 * Do some sanity checks, and map the packet's page.
 		 */
-		const char *msg = xennetback_tx_check_packet(&txreq,
-		    xneti->xni_ec.ec_capenable & ETHERCAP_VLAN_MTU);
-		if (msg) {
-			printf("%s: packet with size %d is %s\n",
-			    ifp->if_xname, txreq.size, msg);
+		if (__predict_false(txreq.size < ETHER_HDR_LEN ||
+		   txreq.size > (ETHER_MAX_LEN - ETHER_CRC_LEN))) {
+			printf("%s: packet size %d too big\n",
+			    ifp->if_xname, txreq.size);
 			xennetback_tx_response(xneti, txreq.id,
 			    NETIF_RSP_ERROR);
 			ifp->if_ierrors++;
 			continue;
 		}
-
+		/* don't cross page boundaries */
+		if (__predict_false(
+		    txreq.offset + txreq.size > PAGE_SIZE)) {
+			printf("%s: packet cross page boundary\n",
+			    ifp->if_xname);
+			xennetback_tx_response(xneti, txreq.id,
+			    NETIF_RSP_ERROR);
+			ifp->if_ierrors++;
+			continue;
+		}
 		/* get a mbuf for this packet */
 		MGETHDR(m, M_DONTWAIT, MT_DATA);
 		if (__predict_false(m == NULL)) {
@@ -888,11 +876,11 @@ so always copy for now.
 				continue;
 			}
 		}
-		m_set_rcvif(m, ifp);
+		m->m_pkthdr.rcvif = ifp;
 		ifp->if_ipackets++;
 		
 		bpf_mtap(ifp, m);
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		(*ifp->if_input)(ifp, m);
 	}
 	xen_rmb(); /* be sure to read the request before updating pointer */
 	xneti->xni_txring.req_cons = req_cons;

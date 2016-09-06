@@ -1,4 +1,4 @@
-/*	$NetBSD: sf-pcap-ng.c,v 1.6 2015/03/31 21:39:42 christos Exp $	*/
+/*	$NetBSD: sf-pcap-ng.c,v 1.4 2013/12/31 17:08:23 christos Exp $	*/
 
 /*
  * Copyright (c) 1993, 1994, 1995, 1996, 1997
@@ -27,9 +27,6 @@
 static const char rcsid[] _U_ =
     "@(#) Header (LBL)";
 #endif
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: sf-pcap-ng.c,v 1.6 2015/03/31 21:39:42 christos Exp $");
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -464,7 +461,7 @@ process_idb_options(pcap_t *p, struct block_cursor *cursor, u_int *tsresol,
 				return (-1);
 			}
 			saw_tsresol = 1;
-			memcpy(&tsresol_opt, optvalue, sizeof(tsresol_opt));
+			tsresol_opt = *(u_int *)optvalue;
 			if (tsresol_opt & 0x80) {
 				/*
 				 * Resolution is negative power of 2.
@@ -669,7 +666,7 @@ pcap_ng_check_header(bpf_u_int32 magic, FILE *fp, u_int precision, char *errbuf,
 
 	/*
 	 * Check whether the first 4 bytes of the file are the block
-	 * type for a pcap-ng savefile.
+	 * type for a pcap-ng savefile. 
 	 */
 	if (magic != BT_SHB) {
 		/*
@@ -1005,7 +1002,7 @@ pcap_ng_next_packet(pcap_t *p, struct pcap_pkthdr *hdr, u_char **data)
 				    epbp->timestamp_low;
 			}
 			goto found;
-
+			
 		case BT_SPB:
 			/*
 			 * Get a pointer to the fixed-length portion of the
@@ -1197,7 +1194,7 @@ pcap_ng_next_packet(pcap_t *p, struct pcap_pkthdr *hdr, u_char **data)
 			 * Not a packet block, IDB, or SHB; ignore it.
 			 */
 			break;
-		}
+		}		 
 	}
 
 found:
@@ -1215,16 +1212,10 @@ found:
 	}
 
 	/*
-	 * Convert the time stamp to seconds and fractions of a second,
-	 * with the fractions being in units of the file-supplied resolution.
+	 * Convert the time stamp to a struct timeval.
 	 */
 	sec = t / ps->ifaces[interface_id].tsresol + ps->ifaces[interface_id].tsoffset;
 	frac = t % ps->ifaces[interface_id].tsresol;
-
-	/*
-	 * Convert the fractions from units of the file-supplied resolution
-	 * to units of the user-requested resolution.
-	 */
 	switch (ps->ifaces[interface_id].scale_type) {
 
 	case PASS_THROUGH:
@@ -1235,25 +1226,33 @@ found:
 		break;
 
 	case SCALE_UP:
-	case SCALE_DOWN:
 		/*
-		 * The interface resolution is different from what the
-		 * user wants; convert the fractions to units of the
-		 * resolution the user requested by multiplying by the
-		 * quotient of the user-requested resolution and the
-		 * file-supplied resolution.  We do that by multiplying
-		 * by the user-requested resolution and dividing by the
-		 * file-supplied resolution, as the quotient might not
-		 * fit in an integer.
+		 * The interface resolution is less than what the user
+		 * wants; scale up to that resolution.
 		 *
 		 * XXX - if ps->ifaces[interface_id].tsresol is a power
 		 * of 10, we could just multiply by the quotient of
-		 * ps->user_tsresol and ps->ifaces[interface_id].tsresol
-		 * in the scale-up case, and divide by the quotient of
-		 * ps->ifaces[interface_id].tsresol and ps->user_tsresol
-		 * in the scale-down case, as we know those will be integers.
-		 * That would involve fewer arithmetic operations, and
-		 * would run less risk of overflow.
+		 * ps->ifaces[interface_id].tsresol and ps->user_tsresol,
+		 * as we know that's an integer.  That runs less risk of
+		 * overflow.
+		 *
+		 * Is there something clever we could do if
+		 * ps->ifaces[interface_id].tsresol is a power of 2?
+		 */
+		frac *= ps->ifaces[interface_id].tsresol;
+		frac /= ps->user_tsresol;
+		break;
+
+	case SCALE_DOWN:
+		/*
+		 * The interface resolution is greater than what the user
+		 * wants; scale down to that resolution.
+		 *
+		 * XXX - if ps->ifaces[interface_id].tsresol is a power
+		 * of 10, we could just divide by the quotient of
+		 * ps->user_tsresol and ps->ifaces[interface_id].tsresol,
+		 * as we know that's an integer.  That runs less risk of
+		 * overflow.
 		 *
 		 * Is there something clever we could do if
 		 * ps->ifaces[interface_id].tsresol is a power of 2?
@@ -1272,8 +1271,23 @@ found:
 	if (*data == NULL)
 		return (-1);
 
-	if (p->swapped)
-		swap_pseudo_headers(p->linktype, hdr, *data);
+	if (p->swapped) {
+		/*
+		 * Convert pseudo-headers from the byte order of
+		 * the host on which the file was saved to our
+		 * byte order, as necessary.
+		 */
+		switch (p->linktype) {
+
+		case DLT_USB_LINUX:
+			swap_linux_usb_header(hdr, *data, 0);
+			break;
+
+		case DLT_USB_LINUX_MMAPPED:
+			swap_linux_usb_header(hdr, *data, 1);
+			break;
+		}
+	}
 
 	return (0);
 }

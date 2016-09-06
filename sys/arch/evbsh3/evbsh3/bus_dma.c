@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_dma.c,v 1.4 2015/01/22 03:43:24 nonaka Exp $	*/
+/*	$NetBSD: bus_dma.c,v 1.3.28.1 2015/01/25 08:22:12 martin Exp $	*/
 
 /*
  * Copyright (c) 2005 NONAKA Kimihiro <nonaka@netbsd.org>
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.4 2015/01/22 03:43:24 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.3.28.1 2015/01/25 08:22:12 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

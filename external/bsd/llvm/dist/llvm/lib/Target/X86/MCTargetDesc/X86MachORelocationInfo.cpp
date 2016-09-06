@@ -25,50 +25,47 @@ public:
   X86_64MachORelocationInfo(MCContext &Ctx) : MCRelocationInfo(Ctx) {}
 
   const MCExpr *createExprForRelocation(RelocationRef Rel) override {
-    const MachOObjectFile *Obj = cast<MachOObjectFile>(Rel.getObject());
+    const MachOObjectFile *Obj = cast<MachOObjectFile>(Rel.getObjectFile());
 
-    uint64_t RelType = Rel.getType();
+    uint64_t RelType; Rel.getType(RelType);
     symbol_iterator SymI = Rel.getSymbol();
 
-    ErrorOr<StringRef> SymNameOrErr = SymI->getName();
-    if (std::error_code EC = SymNameOrErr.getError())
-      report_fatal_error(EC.message());
-    StringRef SymName = *SymNameOrErr;
-    uint64_t SymAddr = SymI->getValue();
+    StringRef SymName; SymI->getName(SymName);
+    uint64_t  SymAddr; SymI->getAddress(SymAddr);
 
     any_relocation_info RE = Obj->getRelocation(Rel.getRawDataRefImpl());
     bool isPCRel = Obj->getAnyRelocationPCRel(RE);
 
-    MCSymbol *Sym = Ctx.getOrCreateSymbol(SymName);
+    MCSymbol *Sym = Ctx.GetOrCreateSymbol(SymName);
     // FIXME: check that the value is actually the same.
-    if (!Sym->isVariable())
-      Sym->setVariableValue(MCConstantExpr::create(SymAddr, Ctx));
+    if (Sym->isVariable() == false)
+      Sym->setVariableValue(MCConstantExpr::Create(SymAddr, Ctx));
     const MCExpr *Expr = nullptr;
 
     switch(RelType) {
     case X86_64_RELOC_TLV:
-      Expr = MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_TLVP, Ctx);
+      Expr = MCSymbolRefExpr::Create(Sym, MCSymbolRefExpr::VK_TLVP, Ctx);
       break;
     case X86_64_RELOC_SIGNED_4:
-      Expr = MCBinaryExpr::createAdd(MCSymbolRefExpr::create(Sym, Ctx),
-                                     MCConstantExpr::create(4, Ctx),
+      Expr = MCBinaryExpr::CreateAdd(MCSymbolRefExpr::Create(Sym, Ctx),
+                                     MCConstantExpr::Create(4, Ctx),
                                      Ctx);
       break;
     case X86_64_RELOC_SIGNED_2:
-      Expr = MCBinaryExpr::createAdd(MCSymbolRefExpr::create(Sym, Ctx),
-                                     MCConstantExpr::create(2, Ctx),
+      Expr = MCBinaryExpr::CreateAdd(MCSymbolRefExpr::Create(Sym, Ctx),
+                                     MCConstantExpr::Create(2, Ctx),
                                      Ctx);
       break;
     case X86_64_RELOC_SIGNED_1:
-      Expr = MCBinaryExpr::createAdd(MCSymbolRefExpr::create(Sym, Ctx),
-                                     MCConstantExpr::create(1, Ctx),
+      Expr = MCBinaryExpr::CreateAdd(MCSymbolRefExpr::Create(Sym, Ctx),
+                                     MCConstantExpr::Create(1, Ctx),
                                      Ctx);
       break;
     case X86_64_RELOC_GOT_LOAD:
-      Expr = MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_GOTPCREL, Ctx);
+      Expr = MCSymbolRefExpr::Create(Sym, MCSymbolRefExpr::VK_GOTPCREL, Ctx);
       break;
     case X86_64_RELOC_GOT:
-      Expr = MCSymbolRefExpr::create(Sym, isPCRel ?
+      Expr = MCSymbolRefExpr::Create(Sym, isPCRel ?
                                      MCSymbolRefExpr::VK_GOTPCREL :
                                      MCSymbolRefExpr::VK_GOT,
                                      Ctx);
@@ -87,25 +84,25 @@ public:
           report_fatal_error("Expected X86_64_RELOC_UNSIGNED after "
                              "X86_64_RELOC_SUBTRACTOR.");
 
-        const MCExpr *LHS = MCSymbolRefExpr::create(Sym, Ctx);
+        const MCExpr *LHS = MCSymbolRefExpr::Create(Sym, Ctx);
 
         symbol_iterator RSymI = Rel.getSymbol();
-        uint64_t RSymAddr = RSymI->getValue();
-        ErrorOr<StringRef> RSymName = RSymI->getName();
-        if (std::error_code EC = RSymName.getError())
-          report_fatal_error(EC.message());
+        uint64_t RSymAddr;
+        RSymI->getAddress(RSymAddr);
+        StringRef RSymName;
+        RSymI->getName(RSymName);
 
-        MCSymbol *RSym = Ctx.getOrCreateSymbol(*RSymName);
-        if (!RSym->isVariable())
-          RSym->setVariableValue(MCConstantExpr::create(RSymAddr, Ctx));
+        MCSymbol *RSym = Ctx.GetOrCreateSymbol(RSymName);
+        if (RSym->isVariable() == false)
+          RSym->setVariableValue(MCConstantExpr::Create(RSymAddr, Ctx));
 
-        const MCExpr *RHS = MCSymbolRefExpr::create(RSym, Ctx);
+        const MCExpr *RHS = MCSymbolRefExpr::Create(RSym, Ctx);
 
-        Expr = MCBinaryExpr::createSub(LHS, RHS, Ctx);
+        Expr = MCBinaryExpr::CreateSub(LHS, RHS, Ctx);
         break;
       }
     default:
-      Expr = MCSymbolRefExpr::create(Sym, Ctx);
+      Expr = MCSymbolRefExpr::Create(Sym, Ctx);
       break;
     }
     return Expr;

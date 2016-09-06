@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp.h,v 1.31 2015/02/14 12:57:53 he Exp $	*/
+/*	$NetBSD: tcp.h,v 1.30.22.1 2015/02/21 13:40:19 martin Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993

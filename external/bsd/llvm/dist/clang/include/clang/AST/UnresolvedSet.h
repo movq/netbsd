@@ -19,36 +19,74 @@
 #include "clang/Basic/LLVM.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/ADT/iterator.h"
+#include <iterator>
 
 namespace clang {
 
 /// The iterator over UnresolvedSets.  Serves as both the const and
 /// non-const iterator.
-class UnresolvedSetIterator : public llvm::iterator_adaptor_base<
-                                  UnresolvedSetIterator, DeclAccessPair *,
-                                  std::random_access_iterator_tag, NamedDecl *,
-                                  std::ptrdiff_t, NamedDecl *, NamedDecl *> {
+class UnresolvedSetIterator {
+private:
+  typedef MutableArrayRef<DeclAccessPair> DeclsTy;
+  typedef DeclsTy::iterator IteratorTy;
+
+  IteratorTy ir;
+
   friend class UnresolvedSetImpl;
   friend class ASTUnresolvedSet;
   friend class OverloadExpr;
-
-  explicit UnresolvedSetIterator(DeclAccessPair *Iter)
-      : iterator_adaptor_base(Iter) {}
-  explicit UnresolvedSetIterator(const DeclAccessPair *Iter)
-      : iterator_adaptor_base(const_cast<DeclAccessPair *>(Iter)) {}
-
+  explicit UnresolvedSetIterator(DeclsTy::iterator ir) : ir(ir) {}
+  explicit UnresolvedSetIterator(DeclsTy::const_iterator ir) :
+    ir(const_cast<DeclsTy::iterator>(ir)) {}
+  
+  IteratorTy getIterator() const { return ir; }
+  
 public:
   UnresolvedSetIterator() {}
 
-  NamedDecl *getDecl() const { return I->getDecl(); }
-  void setDecl(NamedDecl *ND) const { return I->setDecl(ND); }
-  AccessSpecifier getAccess() const { return I->getAccess(); }
-  void setAccess(AccessSpecifier AS) { I->setAccess(AS); }
-  const DeclAccessPair &getPair() const { return *I; }
+  typedef std::iterator_traits<IteratorTy>::difference_type difference_type;
+  typedef NamedDecl *value_type;
+  typedef NamedDecl **pointer;
+  typedef NamedDecl *reference;
+  typedef std::iterator_traits<IteratorTy>::iterator_category iterator_category;
+
+  NamedDecl *getDecl() const { return ir->getDecl(); }
+  void setDecl(NamedDecl *ND) const { return ir->setDecl(ND); }
+  AccessSpecifier getAccess() const { return ir->getAccess(); }
+  void setAccess(AccessSpecifier AS) { ir->setAccess(AS); }
+  DeclAccessPair getPair() const { return *ir; }
 
   NamedDecl *operator*() const { return getDecl(); }
-  NamedDecl *operator->() const { return **this; }
+  
+  UnresolvedSetIterator &operator++() { ++ir; return *this; }
+  UnresolvedSetIterator operator++(int) { return UnresolvedSetIterator(ir++); }
+  UnresolvedSetIterator &operator--() { --ir; return *this; }
+  UnresolvedSetIterator operator--(int) { return UnresolvedSetIterator(ir--); }
+
+  UnresolvedSetIterator &operator+=(difference_type d) {
+    ir += d; return *this;
+  }
+  UnresolvedSetIterator operator+(difference_type d) const {
+    return UnresolvedSetIterator(ir + d);
+  }
+  UnresolvedSetIterator &operator-=(difference_type d) {
+    ir -= d; return *this;
+  }
+  UnresolvedSetIterator operator-(difference_type d) const {
+    return UnresolvedSetIterator(ir - d);
+  }
+  value_type operator[](difference_type d) const { return *(*this + d); }
+
+  difference_type operator-(const UnresolvedSetIterator &o) const {
+    return ir - o.ir;
+  }
+
+  bool operator==(const UnresolvedSetIterator &o) const { return ir == o.ir; }
+  bool operator!=(const UnresolvedSetIterator &o) const { return ir != o.ir; }
+  bool operator<(const UnresolvedSetIterator &o) const { return ir < o.ir; }
+  bool operator<=(const UnresolvedSetIterator &o) const { return ir <= o.ir; }
+  bool operator>=(const UnresolvedSetIterator &o) const { return ir >= o.ir; }
+  bool operator>(const UnresolvedSetIterator &o) const { return ir > o.ir; }
 };
 
 /// \brief A set of unresolved declarations.
@@ -94,17 +132,21 @@ public:
 
   /// Replaces the declaration at the given iterator with the new one,
   /// preserving the original access bits.
-  void replace(iterator I, NamedDecl *New) { I.I->setDecl(New); }
+  void replace(iterator I, NamedDecl *New) {
+    I.ir->setDecl(New);
+  }
 
   void replace(iterator I, NamedDecl *New, AccessSpecifier AS) {
-    I.I->set(New, AS);
+    I.ir->set(New, AS);
   }
 
   void erase(unsigned I) { decls()[I] = decls().pop_back_val(); }
 
-  void erase(iterator I) { *I.I = decls().pop_back_val(); }
+  void erase(iterator I) { *I.ir = decls().pop_back_val(); }
 
-  void setAccess(iterator I, AccessSpecifier AS) { I.I->setAccess(AS); }
+  void setAccess(iterator I, AccessSpecifier AS) {
+    I.ir->setAccess(AS);
+  }
 
   void clear() { decls().clear(); }
   void set_size(unsigned N) { decls().set_size(N); }
@@ -112,7 +154,9 @@ public:
   bool empty() const { return decls().empty(); }
   unsigned size() const { return decls().size(); }
 
-  void append(iterator I, iterator E) { decls().append(I.I, E.I); }
+  void append(iterator I, iterator E) {
+    decls().append(I.ir, E.ir);
+  }
 
   DeclAccessPair &operator[](unsigned I) { return decls()[I]; }
   const DeclAccessPair &operator[](unsigned I) const { return decls()[I]; }

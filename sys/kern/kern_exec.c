@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_exec.c,v 1.436 2016/08/06 15:13:13 maxv Exp $	*/
+/*	$NetBSD: kern_exec.c,v 1.408.2.4 2015/11/05 09:04:55 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -59,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_exec.c,v 1.436 2016/08/06 15:13:13 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_exec.c,v 1.408.2.4 2015/11/05 09:04:55 snj Exp $");
 
 #include "opt_exec.h"
 #include "opt_execfmt.h"
@@ -79,7 +79,6 @@ __KERNEL_RCSID(0, "$NetBSD: kern_exec.c,v 1.436 2016/08/06 15:13:13 maxv Exp $")
 #include <sys/namei.h>
 #include <sys/vnode.h>
 #include <sys/file.h>
-#include <sys/filedesc.h>
 #include <sys/acct.h>
 #include <sys/atomic.h>
 #include <sys/exec.h>
@@ -122,8 +121,6 @@ __KERNEL_RCSID(0, "$NetBSD: kern_exec.c,v 1.436 2016/08/06 15:13:13 maxv Exp $")
 
 struct execve_data;
 
-extern int user_va0_disable;
-
 static size_t calcargs(struct execve_data * restrict, const size_t);
 static size_t calcstack(struct execve_data * restrict, const size_t);
 static int copyoutargs(struct execve_data * restrict, struct lwp *,
@@ -135,9 +132,6 @@ static int copyinargstrs(struct execve_data * restrict, char * const *,
     execve_fetch_element_t, char **, size_t *, void (*)(const void *, size_t));
 static int exec_sigcode_map(struct proc *, const struct emul *);
 
-#if defined(DEBUG) && !defined(DEBUG_EXEC)
-#define DEBUG_EXEC
-#endif
 #ifdef DEBUG_EXEC
 #define DPRINTF(a) printf a
 #define COPYPRINTF(s, a, b) printf("%s, %d: copyout%s @%p %zu\n", __func__, \
@@ -153,10 +147,18 @@ static void dump_vmcmds(const struct exec_package * const, size_t, int);
 /*
  * DTrace SDT provider definitions
  */
-SDT_PROVIDER_DECLARE(proc);
-SDT_PROBE_DEFINE1(proc, kernel, , exec, "char *");
-SDT_PROBE_DEFINE1(proc, kernel, , exec__success, "char *");
-SDT_PROBE_DEFINE1(proc, kernel, , exec__failure, "int");
+SDT_PROBE_DEFINE(proc,,,exec,exec,
+	    "char *", NULL,
+	    NULL, NULL, NULL, NULL,
+	    NULL, NULL, NULL, NULL);
+SDT_PROBE_DEFINE(proc,,,exec_success,exec-success, 
+	    "char *", NULL,
+	    NULL, NULL, NULL, NULL,
+	    NULL, NULL, NULL, NULL);
+SDT_PROBE_DEFINE(proc,,,exec_failure,exec-failure, 
+	    "int", NULL,
+	    NULL, NULL, NULL, NULL,
+	    NULL, NULL, NULL, NULL);
 
 /*
  * Exec function switch:
@@ -186,11 +188,6 @@ struct exec_entry {
 void	syscall(void);
 #endif
 
-/* NetBSD autoloadable syscalls */
-#ifdef MODULAR
-#include <kern/syscalls_autoload.c>
-#endif
-
 /* NetBSD emul struct */
 struct emul emul_netbsd = {
 	.e_name =		"netbsd",
@@ -204,9 +201,6 @@ struct emul emul_netbsd = {
 	.e_errno =		NULL,
 	.e_nosys =		SYS_syscall,
 	.e_nsysent =		SYS_NSYSENT,
-#endif
-#ifdef MODULAR
-	.e_sc_autoload =	netbsd_syscalls_autoload,
 #endif
 	.e_sysent =		sysent,
 #ifdef SYSCALL_DEBUG
@@ -403,10 +397,11 @@ check_exec(struct lwp *l, struct exec_package *epp, struct pathbuf *pb)
 	/*
 	 * Set up default address space limits.  Can be overridden
 	 * by individual exec packages.
+	 *
+	 * XXX probably should be all done in the exec packages.
 	 */
-	epp->ep_vm_minaddr = exec_vm_minaddr(VM_MIN_ADDRESS);
+	epp->ep_vm_minaddr = VM_MIN_ADDRESS;
 	epp->ep_vm_maxaddr = VM_MAXUSER_ADDRESS;
-
 	/*
 	 * set up the vmcmds for creation of the process
 	 * address space
@@ -462,11 +457,6 @@ check_exec(struct lwp *l, struct exec_package *epp, struct pathbuf *pb)
 			return 0;
 		}
 
-		/*
-		 * Reset all the fields that may have been modified by the
-		 * loader.
-		 */
-		KASSERT(epp->ep_emul_arg == NULL);
 		if (epp->ep_emul_root != NULL) {
 			vrele(epp->ep_emul_root);
 			epp->ep_emul_root = NULL;
@@ -475,7 +465,6 @@ check_exec(struct lwp *l, struct exec_package *epp, struct pathbuf *pb)
 			vrele(epp->ep_interp);
 			epp->ep_interp = NULL;
 		}
-		epp->ep_pax_flags = 0;
 
 		/* make sure the first "interesting" error code is saved. */
 		if (error == ENOEXEC)
@@ -604,69 +593,6 @@ exec_autoload(void)
 }
 
 static int
-makepathbuf(struct lwp *l, const char *upath, struct pathbuf **pbp,
-    size_t *offs)
-{
-	char *path, *bp;
-	size_t len, tlen;
-	int error;
-	struct cwdinfo *cwdi;
-
-	path = PNBUF_GET();
-	error = copyinstr(upath, path, MAXPATHLEN, &len);
-	if (error) {
-		PNBUF_PUT(path);
-		DPRINTF(("%s: copyin path @%p %d\n", __func__, upath, error));
-		return error;
-	}
-
-	if (path[0] == '/') {
-		*offs = 0;
-		goto out;
-	}
-
-	len++;
-	if (len + 1 >= MAXPATHLEN)
-		goto out;
-	bp = path + MAXPATHLEN - len;
-	memmove(bp, path, len);
-	*(--bp) = '/';
-
-	cwdi = l->l_proc->p_cwdi;
-	rw_enter(&cwdi->cwdi_lock, RW_READER);
-	error = getcwd_common(cwdi->cwdi_cdir, NULL, &bp, path, MAXPATHLEN / 2,
-	    GETCWD_CHECK_ACCESS, l);
-	rw_exit(&cwdi->cwdi_lock);
-
-	if (error) {
-		DPRINTF(("%s: getcwd_common path %s %d\n", __func__, path,
-		    error));
-		goto out;
-	}
-	tlen = path + MAXPATHLEN - bp;
-
-	memmove(path, bp, tlen);
-	path[tlen] = '\0';
-	*offs = tlen - len;
-out:
-	*pbp = pathbuf_assimilate(path);
-	return 0;
-}
-
-vaddr_t
-exec_vm_minaddr(vaddr_t va_min)
-{
-	/*
-	 * Increase va_min if we don't want NULL to be mappable by the
-	 * process.
-	 */
-#define VM_MIN_GUARD	(2 * PAGE_SIZE)
-	if (user_va0_disable && (va_min < VM_MIN_GUARD))
-		return VM_MIN_GUARD;
-	return va_min;
-}
-
-static int
 execve_loadvm(struct lwp *l, const char *path, char * const *args,
 	char * const *envs, execve_fetch_element_t fetch_element,
 	struct execve_data * restrict data)
@@ -676,14 +602,13 @@ execve_loadvm(struct lwp *l, const char *path, char * const *args,
 	struct proc		*p;
 	char			*dp;
 	u_int			modgen;
-	size_t			offs = 0;	// XXX: GCC
 
 	KASSERT(data != NULL);
 
 	p = l->l_proc;
 	modgen = 0;
 
-	SDT_PROBE(proc, kernel, , exec, path, 0, 0, 0, 0);
+	SDT_PROBE(proc,,,exec, path, 0, 0, 0, 0);
 
 	/*
 	 * Check if we have exceeded our number of processes limit.
@@ -726,15 +651,20 @@ execve_loadvm(struct lwp *l, const char *path, char * const *args,
 	 * functions call check_exec() recursively - for example,
 	 * see exec_script_makecmds().
 	 */
-	if ((error = makepathbuf(l, path, &data->ed_pathbuf, &offs)) != 0)
+	error = pathbuf_copyin(path, &data->ed_pathbuf);
+	if (error) {
+		DPRINTF(("%s: pathbuf_copyin path @%p %d\n", __func__,
+		    path, error));
 		goto clrflg;
+	}
 	data->ed_pathstring = pathbuf_stringcopy_get(data->ed_pathbuf);
 	data->ed_resolvedpathbuf = PNBUF_GET();
 
 	/*
 	 * initialize the fields of the exec package.
 	 */
-	epp->ep_kname = data->ed_pathstring + offs;
+	epp->ep_name = path;
+	epp->ep_kname = data->ed_pathstring;
 	epp->ep_resolvedname = data->ed_resolvedpathbuf;
 	epp->ep_hdr = kmem_alloc(exec_maxhdrsz, KM_SLEEP);
 	epp->ep_hdrlen = exec_maxhdrsz;
@@ -755,7 +685,7 @@ execve_loadvm(struct lwp *l, const char *path, char * const *args,
 
 	/* see if we can run it. */
 	if ((error = check_exec(l, epp, data->ed_pathbuf)) != 0) {
-		if (error != ENOENT && error != EACCES) {
+		if (error != ENOENT) {
 			DPRINTF(("%s: check exec failed %d\n",
 			    __func__, error));
 		}
@@ -775,6 +705,12 @@ execve_loadvm(struct lwp *l, const char *path, char * const *args,
 	 * Calculate the new stack size.
 	 */
 
+#ifdef PAX_ASLR
+#define	ASLR_GAP(l)	(pax_aslr_active(l) ? (cprng_fast32() % PAGE_SIZE) : 0)
+#else
+#define	ASLR_GAP(l)	0
+#endif
+
 #ifdef __MACHINE_STACK_GROWS_UP
 /*
  * copyargs() fills argc/argv/envp from the lower address even on
@@ -790,7 +726,7 @@ execve_loadvm(struct lwp *l, const char *path, char * const *args,
 
 	data->ed_argslen = calcargs(data, argenvstrlen);
 
-	const size_t len = calcstack(data, pax_aslr_stack_gap(epp) + RTLD_GAP);
+	const size_t len = calcstack(data, ASLR_GAP(l) + RTLD_GAP);
 
 	if (len > epp->ep_ssize) {
 		/* in effect, compare to initial limit */
@@ -839,7 +775,7 @@ execve_loadvm(struct lwp *l, const char *path, char * const *args,
 		goto retry;
 	}
 
-	SDT_PROBE(proc, kernel, , exec__failure, error, 0, 0, 0, 0);
+	SDT_PROBE(proc,,,exec_failure, error, 0, 0, 0, 0);
 	return error;
 }
 
@@ -861,9 +797,7 @@ execve_dovmcmds(struct lwp *l, struct execve_data * restrict data)
 	/* create the new process's VM space by running the vmcmds */
 	KASSERTMSG(epp->ep_vmcmds.evs_used != 0, "%s: no vmcmds", __func__);
 
-#ifdef TRACE_EXEC
 	DUMPVMCMDS(epp, 0, 0);
-#endif
 
 	base_vcp = NULL;
 
@@ -930,12 +864,11 @@ execve_free_data(struct execve_data *data)
 }
 
 static void
-pathexec(struct exec_package *epp, struct lwp *l, const char *pathstring)
+pathexec(struct exec_package *epp, struct proc *p, const char *pathstring)
 {
 	const char		*commandname;
 	size_t			commandlen;
 	char			*path;
-	struct proc 		*p = l->l_proc;
 
 	/* set command name & other accounting info */
 	commandname = strrchr(epp->ep_resolvedname, '/');
@@ -948,15 +881,16 @@ pathexec(struct exec_package *epp, struct lwp *l, const char *pathstring)
 	(void)memcpy(p->p_comm, commandname, commandlen);
 	p->p_comm[commandlen] = '\0';
 
+	path = PNBUF_GET();
 
 	/*
 	 * If the path starts with /, we don't need to do any work.
 	 * This handles the majority of the cases.
 	 * In the future perhaps we could canonicalize it?
 	 */
-	path = PNBUF_GET();
 	if (pathstring[0] == '/') {
-		(void)strlcpy(path, pathstring, MAXPATHLEN);
+		(void)strlcpy(path, pathstring,
+		    MAXPATHLEN);
 		epp->ep_path = path;
 	}
 #ifdef notyet
@@ -976,8 +910,8 @@ pathexec(struct exec_package *epp, struct lwp *l, const char *pathstring)
 		printf("Cannot get path for pid %d [%s] (error %d)\n",
 		    (int)p->p_pid, p->p_comm, error);
 #endif
+		epp->ep_path = NULL;
 		PNBUF_PUT(path);
- 		epp->ep_path = NULL;
 	}
 }
 
@@ -1164,9 +1098,6 @@ execve_runproc(struct lwp *l, struct execve_data * restrict data,
 	/* Remove POSIX timers */
 	timers_free(p, TIMERS_POSIX);
 
-	/* Set the PaX flags. */
-	pax_set_flags(epp, p);
-
 	/*
 	 * Do whatever is necessary to prepare the address space
 	 * for remapping.  Note that this might replace the current
@@ -1192,14 +1123,16 @@ execve_runproc(struct lwp *l, struct execve_data * restrict data,
 	vm->vm_maxsaddr = (void *)epp->ep_maxsaddr;
 	vm->vm_minsaddr = (void *)epp->ep_minsaddr;
 
-	pax_aslr_init_vm(l, vm, epp);
+#ifdef PAX_ASLR
+	pax_aslr_init(l, vm);
+#endif /* PAX_ASLR */
 
 	/* Now map address space. */
 	error = execve_dovmcmds(l, data);
 	if (error != 0)
 		goto exec_abort;
 
-	pathexec(epp, l, data->ed_pathstring);
+	pathexec(epp, p, data->ed_pathstring);
 
 	char * const newstack = STACK_GROW(vm->vm_minsaddr, epp->ep_ssize);
 
@@ -1302,7 +1235,7 @@ execve_runproc(struct lwp *l, struct execve_data * restrict data,
 
 	kmem_free(epp->ep_hdr, epp->ep_hdrlen);
 
-	SDT_PROBE(proc, kernel, , exec__success, epp->ep_kname, 0, 0, 0, 0);
+	SDT_PROBE(proc,,,exec_success, epp->ep_name, 0, 0, 0, 0);
 
 	emulexec(l, epp);
 
@@ -1349,13 +1282,11 @@ execve_runproc(struct lwp *l, struct execve_data * restrict data,
 	pathbuf_stringcopy_put(data->ed_pathbuf, data->ed_pathstring);
 	pathbuf_destroy(data->ed_pathbuf);
 	PNBUF_PUT(data->ed_resolvedpathbuf);
-#ifdef TRACE_EXEC
 	DPRINTF(("%s finished\n", __func__));
-#endif
 	return EJUSTRETURN;
 
  exec_abort:
-	SDT_PROBE(proc, kernel, , exec__failure, error, 0, 0, 0, 0);
+	SDT_PROBE(proc,,,exec_failure, error, 0, 0, 0, 0);
 	rw_exit(&p->p_reflock);
 	if (!no_local_exec_lock)
 		rw_exit(&exec_lock);
@@ -1383,7 +1314,7 @@ execve_runproc(struct lwp *l, struct execve_data * restrict data,
 	/* Acquire the sched-state mutex (exit1() will release it). */
 	if (!is_spawn) {
 		mutex_enter(p->p_lock);
-		exit1(l, error, SIGABRT);
+		exit1(l, W_EXITCODE(error, SIGABRT));
 	}
 
 	return error;
@@ -1960,7 +1891,7 @@ exec_sigcode_map(struct proc *p, const struct emul *e)
 
 	/* Just a hint to uvm_map where to put it. */
 	va = e->e_vm_default_addr(p, (vaddr_t)p->p_vmspace->vm_daddr,
-	    round_page(sz), p->p_vmspace->vm_map.flags & VM_MAP_TOPDOWN);
+	    round_page(sz));
 
 #ifdef __alpha__
 	/*
@@ -2262,7 +2193,7 @@ spawn_return(void *arg)
 	 * A NetBSD specific workaround is POSIX_SPAWN_RETURNERROR as
 	 * flag bit in the attrp argument to posix_spawn(2), see above.
 	 */
-	exit1(l, 127, 0);
+	exit1(l, W_EXITCODE(127, 0));
 }
 
 void

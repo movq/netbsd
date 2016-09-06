@@ -19,7 +19,6 @@
 #define LLVM_IR_PASSMANAGERINTERNAL_H
 
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/STLExtras.h"
 
 namespace llvm {
 

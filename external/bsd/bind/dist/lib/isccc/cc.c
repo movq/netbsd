@@ -1,4 +1,4 @@
-/*	$NetBSD: cc.c,v 1.11 2016/05/26 16:50:00 christos Exp $	*/
+/*	$NetBSD: cc.c,v 1.7.4.1 2016/03/13 08:06:15 martin Exp $	*/
 
 /*
  * Portions Copyright (C) 2004-2007, 2012, 2013, 2015, 2016  Internet Systems Consortium, Inc. ("ISC")
@@ -30,6 +30,8 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+
+/* Id: cc.c,v 1.18 2007/08/28 07:20:43 tbox Exp  */
 
 /*! \file */
 
@@ -114,7 +116,8 @@ static isc_result_t
 list_towire(isccc_sexpr_t *alist, isccc_region_t *target);
 
 static isc_result_t
-value_towire(isccc_sexpr_t *elt, isccc_region_t *target) {
+value_towire(isccc_sexpr_t *elt, isccc_region_t *target)
+{
 	unsigned int len;
 	unsigned char *lenp;
 	isccc_region_t *vr;
@@ -510,7 +513,8 @@ static isc_result_t
 list_fromwire(isccc_region_t *source, isccc_sexpr_t **listp);
 
 static isc_result_t
-value_fromwire(isccc_region_t *source, isccc_sexpr_t **valuep) {
+value_fromwire(isccc_region_t *source, isccc_sexpr_t **valuep)
+{
 	unsigned int msgtype;
 	isc_uint32_t len;
 	isccc_sexpr_t *value;
@@ -604,7 +608,8 @@ table_fromwire(isccc_region_t *source, isccc_region_t *secret,
 }
 
 static isc_result_t
-list_fromwire(isccc_region_t *source, isccc_sexpr_t **listp) {
+list_fromwire(isccc_region_t *source, isccc_sexpr_t **listp)
+{
 	isccc_sexpr_t *list, *value;
 	isc_result_t result;
 
@@ -619,7 +624,7 @@ list_fromwire(isccc_region_t *source, isccc_sexpr_t **listp) {
 		if (isccc_sexpr_addtolist(&list, value) == NULL) {
 			isccc_sexpr_free(&value);
 			isccc_sexpr_free(&list);
-			return (ISC_R_NOMEMORY);
+			return (result);
 		}
 	}
 
@@ -765,7 +770,8 @@ isccc_cc_createack(isccc_sexpr_t *message, isc_boolean_t ok,
 }
 
 isc_boolean_t
-isccc_cc_isack(isccc_sexpr_t *message) {
+isccc_cc_isack(isccc_sexpr_t *message)
+{
 	isccc_sexpr_t *_ctrl;
 
 	_ctrl = isccc_alist_lookup(message, "_ctrl");
@@ -777,7 +783,8 @@ isccc_cc_isack(isccc_sexpr_t *message) {
 }
 
 isc_boolean_t
-isccc_cc_isreply(isccc_sexpr_t *message) {
+isccc_cc_isreply(isccc_sexpr_t *message)
+{
 	isccc_sexpr_t *_ctrl;
 
 	_ctrl = isccc_alist_lookup(message, "_ctrl");
@@ -850,7 +857,8 @@ isccc_cc_createresponse(isccc_sexpr_t *message, isccc_time_t now,
 }
 
 isccc_sexpr_t *
-isccc_cc_definestring(isccc_sexpr_t *alist, const char *key, const char *str) {
+isccc_cc_definestring(isccc_sexpr_t *alist, const char *key, const char *str)
+{
 	size_t len;
 	isccc_region_t r;
 
@@ -862,7 +870,8 @@ isccc_cc_definestring(isccc_sexpr_t *alist, const char *key, const char *str) {
 }
 
 isccc_sexpr_t *
-isccc_cc_defineuint32(isccc_sexpr_t *alist, const char *key, isc_uint32_t i) {
+isccc_cc_defineuint32(isccc_sexpr_t *alist, const char *key, isc_uint32_t i)
+{
 	char b[100];
 	size_t len;
 	isccc_region_t r;
@@ -876,7 +885,8 @@ isccc_cc_defineuint32(isccc_sexpr_t *alist, const char *key, isc_uint32_t i) {
 }
 
 isc_result_t
-isccc_cc_lookupstring(isccc_sexpr_t *alist, const char *key, char **strp) {
+isccc_cc_lookupstring(isccc_sexpr_t *alist, const char *key, char **strp)
+{
 	isccc_sexpr_t *kv, *v;
 
 	REQUIRE(strp == NULL || *strp == NULL);
@@ -929,7 +939,9 @@ symtab_undefine(char *key, unsigned int type, isccc_symvalue_t value,
 }
 
 static isc_boolean_t
-symtab_clean(char *key, unsigned int type, isccc_symvalue_t value, void *arg) {
+symtab_clean(char *key, unsigned int type, isccc_symvalue_t value,
+	     void *arg)
+{
 	isccc_time_t *now;
 
 	UNUSED(key);
@@ -945,18 +957,21 @@ symtab_clean(char *key, unsigned int type, isccc_symvalue_t value, void *arg) {
 }
 
 isc_result_t
-isccc_cc_createsymtab(isccc_symtab_t **symtabp) {
+isccc_cc_createsymtab(isccc_symtab_t **symtabp)
+{
 	return (isccc_symtab_create(11897, symtab_undefine, NULL, ISC_FALSE,
 				  symtabp));
 }
 
 void
-isccc_cc_cleansymtab(isccc_symtab_t *symtab, isccc_time_t now) {
+isccc_cc_cleansymtab(isccc_symtab_t *symtab, isccc_time_t now)
+{
 	isccc_symtab_foreach(symtab, symtab_clean, &now);
 }
 
 static isc_boolean_t
-has_whitespace(const char *str) {
+has_whitespace(const char *str)
+{
 	char c;
 
 	if (str == NULL)

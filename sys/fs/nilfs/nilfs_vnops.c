@@ -1,4 +1,4 @@
-/* $NetBSD: nilfs_vnops.c,v 1.33 2016/08/20 12:37:07 hannken Exp $ */
+/* $NetBSD: nilfs_vnops.c,v 1.28 2014/07/25 08:20:51 dholland Exp $ */
 
 /*
  * Copyright (c) 2008, 2009 Reinoud Zandijk
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__KERNEL_RCSID(0, "$NetBSD: nilfs_vnops.c,v 1.33 2016/08/20 12:37:07 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nilfs_vnops.c,v 1.28 2014/07/25 08:20:51 dholland Exp $");
 #endif /* not lint */
 
 
@@ -119,10 +119,7 @@ nilfs_reclaim(void *v)
 	nilfs_update(vp, NULL, NULL, NULL, UPDATE_CLOSE);
 
 	/* dispose all node knowledge */
-	genfs_node_destroy(vp);
 	nilfs_dispose_node(&nilfs_node);
-
-	vp->v_data = NULL;
 
 	return 0;
 }
@@ -552,7 +549,7 @@ nilfs_readdir(void *v)
 
 		blocknr = diroffset / blocksize;
 		blkoff  = diroffset % blocksize;
-		error = nilfs_bread(node, blocknr, 0, &bp);
+		error = nilfs_bread(node, blocknr, NOCRED, 0, &bp);
 		if (error)
 			return EIO;
 		while (diroffset < file_size) {
@@ -561,7 +558,8 @@ nilfs_readdir(void *v)
 			if (blkoff >= blocksize) {
 				blkoff = 0; blocknr++;
 				brelse(bp, BC_AGE);
-				error = nilfs_bread(node, blocknr, 0, &bp);
+				error = nilfs_bread(node, blocknr, NOCRED, 0,
+						&bp);
 				if (error)
 					return EIO;
 			}
@@ -623,13 +621,16 @@ nilfs_lookup(void *v)
 	struct vnode *dvp = ap->a_dvp;
 	struct vnode **vpp = ap->a_vpp;
 	struct componentname *cnp = ap->a_cnp;
-	struct mount *mp = dvp->v_mount;
+	struct nilfs_node  *dir_node, *res_node;
+	struct nilfs_mount *ump;
 	uint64_t ino;
 	const char *name;
 	int namelen, nameiop, islastcn, mounted_ro;
 	int vnodetp;
 	int error, found;
 
+	dir_node = VTOI(dvp);
+	ump = dir_node->ump;
 	*vpp = NULL;
 
 	DPRINTF(LOOKUP, ("nilfs_lookup called\n"));
@@ -637,7 +638,7 @@ nilfs_lookup(void *v)
 	/* simplify/clarification flags */
 	nameiop     = cnp->cn_nameiop;
 	islastcn    = cnp->cn_flags & ISLASTCN;
-	mounted_ro  = mp->mnt_flag & MNT_RDONLY;
+	mounted_ro  = dvp->v_mount->mnt_flag & MNT_RDONLY;
 
 	/* check exec/dirread permissions first */
 	error = VOP_ACCESS(dvp, VEXEC, cnp->cn_cred);
@@ -690,16 +691,23 @@ nilfs_lookup(void *v)
 		if (!found)
 			error = ENOENT;
 
+		/* first unlock parent */
+		VOP_UNLOCK(dvp);
+
 		if (error == 0) {
 			DPRINTF(LOOKUP, ("\tfound '..'\n"));
 			/* try to create/reuse the node */
-			error = vcache_get(mp, &ino, sizeof(ino), vpp);
+			error = nilfs_get_node(ump, ino, &res_node);
 
 			if (!error) {
 				DPRINTF(LOOKUP,
 					("\tnode retrieved/created OK\n"));
+				*vpp = res_node->vnode;
 			}
 		}
+
+		/* try to relock parent */
+		vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY);
 	} else {
 		DPRINTF(LOOKUP, ("\tlookup file\n"));
 		/* all other files */
@@ -730,7 +738,7 @@ nilfs_lookup(void *v)
 			/* done */
 		} else {
 			/* try to create/reuse the node */
-			error = vcache_get(mp, &ino, sizeof(ino), vpp);
+			error = nilfs_get_node(ump, ino, &res_node);
 			if (!error) {
 				/*
 				 * If we are not at the last path component
@@ -738,15 +746,15 @@ nilfs_lookup(void *v)
 				 * (which may itself be pointing to a
 				 * directory), raise an error.
 				 */
-				vnodetp = (*vpp)->v_type;
+				vnodetp = res_node->vnode->v_type;
 				if ((vnodetp != VDIR) && (vnodetp != VLNK)) {
-					if (!islastcn) {
-						vrele(*vpp);
-						*vpp = NULL;
+					if (!islastcn)
 						error = ENOTDIR;
-					}
 				}
 
+			}
+			if (!error) {
+				*vpp = res_node->vnode;
 			}
 		}
 	}	
@@ -757,7 +765,7 @@ out:
 	 * the file might not be found and thus putting it into the namecache
 	 * might be seen as negative caching.
 	 */
-	if (error == 0 && nameiop != CREATE)
+	if (nameiop != CREATE)
 		cache_enter(dvp, *vpp, cnp->cn_nameptr, cnp->cn_namelen,
 			    cnp->cn_flags);
 
@@ -765,6 +773,8 @@ out:
 
 	if (error)
 		return error;
+	if (*vpp != dvp)
+		VOP_UNLOCK(*vpp);
 	return 0;
 }
 
@@ -797,7 +807,7 @@ nilfs_getattr(void *v)
 	/* basic info */
 	vattr_null(vap);
 	vap->va_type      = vp->v_type;
-	vap->va_mode      = nilfs_rw16(inode->i_mode) & ALLPERMS;
+	vap->va_mode      = nilfs_rw16(inode->i_mode);	/* XXX same? */
 	vap->va_nlink     = nilfs_rw16(inode->i_links_count);
 	vap->va_uid       = nilfs_rw32(inode->i_uid);
 	vap->va_gid       = nilfs_rw32(inode->i_gid);
@@ -1186,7 +1196,7 @@ nilfs_do_link(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 int
 nilfs_link(void *v)
 {
-	struct vop_link_v2_args /* {
+	struct vop_link_args /* {
 		struct vnode *a_dvp;
 		struct vnode *a_vp;
 		struct componentname *a_cnp;
@@ -1202,6 +1212,7 @@ nilfs_link(void *v)
 
 	VN_KNOTE(vp, NOTE_LINK);
 	VN_KNOTE(dvp, NOTE_WRITE);
+	vput(dvp);
 
 	return error;
 }

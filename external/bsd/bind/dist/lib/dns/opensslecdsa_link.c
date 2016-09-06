@@ -1,4 +1,4 @@
-/*	$NetBSD: opensslecdsa_link.c,v 1.10 2015/12/17 04:00:43 christos Exp $	*/
+/*	$NetBSD: opensslecdsa_link.c,v 1.6.2.3 2016/03/13 08:06:13 martin Exp $	*/
 
 /*
  * Copyright (C) 2012-2015  Internet Systems Consortium, Inc. ("ISC")

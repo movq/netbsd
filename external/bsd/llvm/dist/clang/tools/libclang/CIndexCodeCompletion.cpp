@@ -533,7 +533,7 @@ namespace {
       : CodeCompleteConsumer(Opts, false), 
         AllocatedResults(Results), CCTUInfo(Results.CodeCompletionAllocator),
         TU(TranslationUnit) { }
-    ~CaptureCompletionResults() override { Finish(); }
+    ~CaptureCompletionResults() { Finish(); }
 
     void ProcessCodeCompleteResults(Sema &S, 
                                     CodeCompletionContext Context,
@@ -542,7 +542,7 @@ namespace {
       StoredResults.reserve(StoredResults.size() + NumResults);
       for (unsigned I = 0; I != NumResults; ++I) {
         CodeCompletionString *StoredCompletion        
-          = Results[I].CreateCodeCompletionString(S, Context, getAllocator(),
+          = Results[I].CreateCodeCompletionString(S, getAllocator(),
                                                   getCodeCompletionTUInfo(),
                                                   includeBriefComments());
         
@@ -619,11 +619,10 @@ namespace {
       for (unsigned I = 0; I != NumCandidates; ++I) {
         CodeCompletionString *StoredCompletion
           = Candidates[I].CreateSignatureString(CurrentArg, S, getAllocator(),
-                                                getCodeCompletionTUInfo(),
-                                                includeBriefComments());
+                                                getCodeCompletionTUInfo());
         
         CXCompletionResult R;
-        R.CursorKind = CXCursor_OverloadCandidate;
+        R.CursorKind = CXCursor_NotImplemented;
         R.CompletionString = StoredCompletion;
         StoredResults.push_back(R);
       }
@@ -646,12 +645,25 @@ namespace {
   };
 }
 
-static CXCodeCompleteResults *
-clang_codeCompleteAt_Impl(CXTranslationUnit TU, const char *complete_filename,
-                          unsigned complete_line, unsigned complete_column,
-                          ArrayRef<CXUnsavedFile> unsaved_files,
-                          unsigned options) {
+extern "C" {
+struct CodeCompleteAtInfo {
+  CXTranslationUnit TU;
+  const char *complete_filename;
+  unsigned complete_line;
+  unsigned complete_column;
+  ArrayRef<CXUnsavedFile> unsaved_files;
+  unsigned options;
+  CXCodeCompleteResults *result;
+};
+void clang_codeCompleteAt_Impl(void *UserData) {
+  CodeCompleteAtInfo *CCAI = static_cast<CodeCompleteAtInfo*>(UserData);
+  CXTranslationUnit TU = CCAI->TU;
+  const char *complete_filename = CCAI->complete_filename;
+  unsigned complete_line = CCAI->complete_line;
+  unsigned complete_column = CCAI->complete_column;
+  unsigned options = CCAI->options;
   bool IncludeBriefComments = options & CXCodeComplete_IncludeBriefComments;
+  CCAI->result = nullptr;
 
 #ifdef UDP_CODE_COMPLETION_LOGGER
 #ifdef UDP_CODE_COMPLETION_LOGGER_PORT
@@ -663,12 +675,12 @@ clang_codeCompleteAt_Impl(CXTranslationUnit TU, const char *complete_filename,
 
   if (cxtu::isNotUsableTU(TU)) {
     LOG_BAD_TU(TU);
-    return nullptr;
+    return;
   }
 
   ASTUnit *AST = cxtu::getASTUnit(TU);
   if (!AST)
-    return nullptr;
+    return;
 
   CIndexer *CXXIdx = TU->CIdx;
   if (CXXIdx->isOptEnabled(CXGlobalOpt_ThreadBackgroundPriorityForEditing))
@@ -679,7 +691,7 @@ clang_codeCompleteAt_Impl(CXTranslationUnit TU, const char *complete_filename,
   // Perform the remapping of source files.
   SmallVector<ASTUnit::RemappedFile, 4> RemappedFiles;
 
-  for (auto &UF : unsaved_files) {
+  for (auto &UF : CCAI->unsaved_files) {
     std::unique_ptr<llvm::MemoryBuffer> MB =
         llvm::MemoryBuffer::getMemBufferCopy(getContents(UF), UF.Filename);
     RemappedFiles.push_back(std::make_pair(UF.Filename, MB.release()));
@@ -702,12 +714,14 @@ clang_codeCompleteAt_Impl(CXTranslationUnit TU, const char *complete_filename,
 
   // Perform completion.
   AST->CodeComplete(complete_filename, complete_line, complete_column,
-                    RemappedFiles, (options & CXCodeComplete_IncludeMacros),
+                    RemappedFiles,
+                    (options & CXCodeComplete_IncludeMacros),
                     (options & CXCodeComplete_IncludeCodePatterns),
-                    IncludeBriefComments, Capture,
-                    CXXIdx->getPCHContainerOperations(), *Results->Diag,
-                    Results->LangOpts, *Results->SourceMgr, *Results->FileMgr,
-                    Results->Diagnostics, Results->TemporaryBuffers);
+                    IncludeBriefComments,
+                    Capture,
+                    *Results->Diag, Results->LangOpts, *Results->SourceMgr,
+                    *Results->FileMgr, Results->Diagnostics,
+                    Results->TemporaryBuffers);
 
   Results->DiagnosticsWrappers.resize(Results->Diagnostics.size());
 
@@ -791,10 +805,8 @@ clang_codeCompleteAt_Impl(CXTranslationUnit TU, const char *complete_filename,
   }
 #endif
 #endif
-  return Results;
+  CCAI->result = Results;
 }
-
-extern "C" {
 CXCodeCompleteResults *clang_codeCompleteAt(CXTranslationUnit TU,
                                             const char *complete_filename,
                                             unsigned complete_line,
@@ -810,28 +822,25 @@ CXCodeCompleteResults *clang_codeCompleteAt(CXTranslationUnit TU,
   if (num_unsaved_files && !unsaved_files)
     return nullptr;
 
-  CXCodeCompleteResults *result;
-  auto CodeCompleteAtImpl = [=, &result]() {
-    result = clang_codeCompleteAt_Impl(
-        TU, complete_filename, complete_line, complete_column,
-        llvm::makeArrayRef(unsaved_files, num_unsaved_files), options);
-  };
+  CodeCompleteAtInfo CCAI = {TU, complete_filename, complete_line,
+    complete_column, llvm::makeArrayRef(unsaved_files, num_unsaved_files),
+    options, nullptr};
 
   if (getenv("LIBCLANG_NOTHREADS")) {
-    CodeCompleteAtImpl();
-    return result;
+    clang_codeCompleteAt_Impl(&CCAI);
+    return CCAI.result;
   }
 
   llvm::CrashRecoveryContext CRC;
 
-  if (!RunSafely(CRC, CodeCompleteAtImpl)) {
+  if (!RunSafely(CRC, clang_codeCompleteAt_Impl, &CCAI)) {
     fprintf(stderr, "libclang: crash detected in code completion\n");
     cxtu::getASTUnit(TU)->setUnsafeToFree(true);
     return nullptr;
   } else if (getenv("LIBCLANG_RESOURCE_USAGE"))
     PrintLibclangResourceUsage(TU);
 
-  return result;
+  return CCAI.result;
 }
 
 unsigned clang_defaultCodeCompleteOptions(void) {

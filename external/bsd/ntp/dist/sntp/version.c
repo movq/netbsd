@@ -1,4 +1,4 @@
-/*	$NetBSD: version.c,v 1.1.1.7 2016/06/03 20:19:15 christos Exp $	*/
+/*	$NetBSD: version.c,v 1.1.1.3.8.4 2016/07/14 18:36:26 martin Exp $	*/
 
 /*
  * version file for sntp

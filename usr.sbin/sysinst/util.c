@@ -1,4 +1,4 @@
-/*	$NetBSD: util.c,v 1.7 2015/05/11 13:07:57 martin Exp $	*/
+/*	$NetBSD: util.c,v 1.3.2.3 2015/05/14 07:58:49 snj Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.

@@ -28,8 +28,8 @@ class Type;
 /// TargetIntrinsicInfo - Interface to description of machine instruction set
 ///
 class TargetIntrinsicInfo {
-  TargetIntrinsicInfo(const TargetIntrinsicInfo &) = delete;
-  void operator=(const TargetIntrinsicInfo &) = delete;
+  TargetIntrinsicInfo(const TargetIntrinsicInfo &) LLVM_DELETED_FUNCTION;
+  void operator=(const TargetIntrinsicInfo &) LLVM_DELETED_FUNCTION;
 public:
   TargetIntrinsicInfo();
   virtual ~TargetIntrinsicInfo();

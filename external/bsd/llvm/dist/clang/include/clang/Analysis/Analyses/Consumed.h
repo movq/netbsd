@@ -71,7 +71,7 @@ namespace consumed {
     virtual void warnParamReturnTypestateMismatch(SourceLocation Loc,
                                                   StringRef VariableName,
                                                   StringRef ExpectedState,
-                                                  StringRef ObservedState) {}
+                                                  StringRef ObservedState) {};
     
     // FIXME: Add documentation.
     virtual void warnParamTypestateMismatch(SourceLocation LOC,
@@ -162,8 +162,8 @@ namespace consumed {
     ConsumedState getState(const CXXBindTemporaryExpr *Tmp) const;
     
     /// \brief Merge this state map with another map.
-    void intersect(const ConsumedStateMap &Other);
-
+    void intersect(const ConsumedStateMap *Other);
+    
     void intersectAtLoopHead(const CFGBlock *LoopHead, const CFGBlock *LoopBack,
       const ConsumedStateMap *LoopBackStates,
       ConsumedWarningsHandlerBase &WarningsHandler);
@@ -196,19 +196,15 @@ namespace consumed {
   };
   
   class ConsumedBlockInfo {
-    std::vector<std::unique_ptr<ConsumedStateMap>> StateMapsArray;
+    std::vector<ConsumedStateMap*> StateMapsArray;
     std::vector<unsigned int> VisitOrder;
     
   public:
-    ConsumedBlockInfo() = default;
-    ConsumedBlockInfo &operator=(ConsumedBlockInfo &&Other) {
-      StateMapsArray = std::move(Other.StateMapsArray);
-      VisitOrder = std::move(Other.VisitOrder);
-      return *this;
-    }
+    ConsumedBlockInfo() { }
+    ~ConsumedBlockInfo() { llvm::DeleteContainerPointers(StateMapsArray); }
 
     ConsumedBlockInfo(unsigned int NumBlocks, PostOrderCFGView *SortedGraph)
-        : StateMapsArray(NumBlocks), VisitOrder(NumBlocks, 0) {
+        : StateMapsArray(NumBlocks, nullptr), VisitOrder(NumBlocks, 0) {
       unsigned int VisitOrderCounter = 0;
       for (PostOrderCFGView::iterator BI = SortedGraph->begin(),
            BE = SortedGraph->end(); BI != BE; ++BI) {
@@ -218,18 +214,17 @@ namespace consumed {
     
     bool allBackEdgesVisited(const CFGBlock *CurrBlock,
                              const CFGBlock *TargetBlock);
-
+    
     void addInfo(const CFGBlock *Block, ConsumedStateMap *StateMap,
-                 std::unique_ptr<ConsumedStateMap> &OwnedStateMap);
-    void addInfo(const CFGBlock *Block,
-                 std::unique_ptr<ConsumedStateMap> StateMap);
-
+                 bool &AlreadyOwned);
+    void addInfo(const CFGBlock *Block, ConsumedStateMap *StateMap);
+    
     ConsumedStateMap* borrowInfo(const CFGBlock *Block);
     
     void discardInfo(const CFGBlock *Block);
-
-    std::unique_ptr<ConsumedStateMap> getInfo(const CFGBlock *Block);
-
+    
+    ConsumedStateMap* getInfo(const CFGBlock *Block);
+    
     bool isBackEdge(const CFGBlock *From, const CFGBlock *To);
     bool isBackEdgeTarget(const CFGBlock *Block);
   };
@@ -238,12 +233,13 @@ namespace consumed {
   class ConsumedAnalyzer {
     
     ConsumedBlockInfo BlockInfo;
-    std::unique_ptr<ConsumedStateMap> CurrStates;
-
+    ConsumedStateMap *CurrStates;
+    
     ConsumedState ExpectedReturnState;
     
     void determineExpectedReturnState(AnalysisDeclContext &AC,
                                       const FunctionDecl *D);
+    bool hasConsumableAttributes(const CXXRecordDecl *RD);
     bool splitState(const CFGBlock *CurrBlock,
                     const ConsumedStmtVisitor &Visitor);
     

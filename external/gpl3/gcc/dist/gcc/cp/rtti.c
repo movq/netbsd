@@ -1,5 +1,5 @@
 /* RunTime Type Identification
-   Copyright (C) 1995-2015 Free Software Foundation, Inc.
+   Copyright (C) 1995-2013 Free Software Foundation, Inc.
    Mostly written by Jason Merrill (jason@cygnus.com).
 
 This file is part of GCC.
@@ -23,19 +23,7 @@ along with GCC; see the file COPYING3.  If not see
 #include "intl.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
-#include "tm_p.h"
-#include "stringpool.h"
-#include "stor-layout.h"
 #include "cp-tree.h"
 #include "flags.h"
 #include "convert.h"
@@ -185,7 +173,7 @@ build_headof (tree exp)
   tree offset;
   tree index;
 
-  gcc_assert (TYPE_PTR_P (type));
+  gcc_assert (TREE_CODE (type) == POINTER_TYPE);
   type = TREE_TYPE (type);
 
   if (!TYPE_POLYMORPHIC_P (type))
@@ -255,7 +243,7 @@ get_tinfo_decl_dynamic (tree exp, tsubst_flags_t complain)
   if (error_operand_p (exp))
     return error_mark_node;
 
-  exp = resolve_nondeduced_context (exp, complain);
+  exp = resolve_nondeduced_context (exp);
 
   /* peel back references, so they match.  */
   type = non_reference (TREE_TYPE (exp));
@@ -338,16 +326,18 @@ build_typeid (tree exp, tsubst_flags_t complain)
 
   /* FIXME when integrating with c_fully_fold, mark
      resolves_to_fixed_type_p case as a non-constant expression.  */
-  if (TYPE_POLYMORPHIC_P (TREE_TYPE (exp))
+  if (TREE_CODE (exp) == INDIRECT_REF
+      && TREE_CODE (TREE_TYPE (TREE_OPERAND (exp, 0))) == POINTER_TYPE
+      && TYPE_POLYMORPHIC_P (TREE_TYPE (exp))
       && ! resolves_to_fixed_type_p (exp, &nonnull)
       && ! nonnull)
     {
       /* So we need to look into the vtable of the type of exp.
-         Make sure it isn't a null lvalue.  */
-      exp = cp_build_addr_expr (exp, complain);
-      exp = save_expr (exp);
-      cond = cp_convert (boolean_type_node, exp, complain);
-      exp = cp_build_indirect_ref (exp, RO_NULL, complain);
+         This is an lvalue use of expr then.  */
+      exp = mark_lvalue_use (exp);
+      exp = stabilize_reference (exp);
+      cond = cp_convert (boolean_type_node, TREE_OPERAND (exp, 0),
+			 complain);
     }
 
   exp = get_tinfo_decl_dynamic (exp, complain);
@@ -489,16 +479,6 @@ get_typeid (tree type, tsubst_flags_t complain)
      referenced type.  */
   type = non_reference (type);
 
-  /* This is not one of the uses of a qualified function type in 8.3.5.  */
-  if (TREE_CODE (type) == FUNCTION_TYPE
-      && (type_memfn_quals (type) != TYPE_UNQUALIFIED
-	  || type_memfn_rqual (type) != REF_QUAL_NONE))
-    {
-      if (complain & tf_error)
-	error ("typeid of qualified function type %qT", type);
-      return error_mark_node;
-    }
-
   /* The top-level cv-qualifiers of the lvalue expression or the type-id
      that is the operand of typeid are always ignored.  */
   type = TYPE_MAIN_VARIANT (type);
@@ -548,7 +528,7 @@ build_dynamic_cast_1 (tree type, tree expr, tsubst_flags_t complain)
   switch (tc)
     {
     case POINTER_TYPE:
-      if (VOID_TYPE_P (TREE_TYPE (type)))
+      if (TREE_CODE (TREE_TYPE (type)) == VOID_TYPE)
 	break;
       /* Fall through.  */
     case REFERENCE_TYPE:
@@ -579,7 +559,7 @@ build_dynamic_cast_1 (tree type, tree expr, tsubst_flags_t complain)
 
       expr = mark_rvalue_use (expr);
 
-      if (!TYPE_PTR_P (exprtype))
+      if (TREE_CODE (exprtype) != POINTER_TYPE)
 	{
 	  errstr = _("source is not a pointer");
 	  goto fail;
@@ -614,6 +594,10 @@ build_dynamic_cast_1 (tree type, tree expr, tsubst_flags_t complain)
 	  errstr = _("source is of incomplete class type");
 	  goto fail;
 	}
+
+      /* Apply trivial conversion T -> T& for dereferenced ptrs.  */
+      expr = convert_to_reference (exprtype, expr, CONV_IMPLICIT,
+				   LOOKUP_NORMAL, NULL_TREE, complain);
     }
 
   /* The dynamic_cast operator shall not cast away constness.  */
@@ -627,16 +611,20 @@ build_dynamic_cast_1 (tree type, tree expr, tsubst_flags_t complain)
   /* If *type is an unambiguous accessible base class of *exprtype,
      convert statically.  */
   {
-    tree binfo = lookup_base (TREE_TYPE (exprtype), TREE_TYPE (type),
-			      ba_check, NULL, complain);
-    if (binfo)
-      return build_static_cast (type, expr, complain);
-  }
+    tree binfo;
 
-  /* Apply trivial conversion T -> T& for dereferenced ptrs.  */
-  if (tc == REFERENCE_TYPE)
-    expr = convert_to_reference (exprtype, expr, CONV_IMPLICIT,
-				 LOOKUP_NORMAL, NULL_TREE, complain);
+    binfo = lookup_base (TREE_TYPE (exprtype), TREE_TYPE (type),
+			 ba_check, NULL, complain);
+
+    if (binfo)
+      {
+	expr = build_base_path (PLUS_EXPR, convert_from_reference (expr),
+				binfo, 0, complain);
+	if (TREE_CODE (exprtype) == POINTER_TYPE)
+	  expr = rvalue (expr);
+	return expr;
+      }
+  }
 
   /* Otherwise *exprtype must be a polymorphic class (have a vtbl).  */
   if (TYPE_POLYMORPHIC_P (TREE_TYPE (exprtype)))
@@ -647,7 +635,7 @@ build_dynamic_cast_1 (tree type, tree expr, tsubst_flags_t complain)
 	{
 	  /* if b is an object, dynamic_cast<void *>(&b) == (void *)&b.  */
 	  if (TREE_CODE (expr) == ADDR_EXPR
-	      && VAR_P (TREE_OPERAND (expr, 0))
+	      && TREE_CODE (TREE_OPERAND (expr, 0)) == VAR_DECL
 	      && TREE_CODE (TREE_TYPE (TREE_OPERAND (expr, 0))) == RECORD_TYPE)
 	    return build1 (NOP_EXPR, type, expr);
 
@@ -670,7 +658,7 @@ build_dynamic_cast_1 (tree type, tree expr, tsubst_flags_t complain)
 	     dynamic_cast<D&>(b) (b an object) cannot succeed.  */
 	  if (tc == REFERENCE_TYPE)
 	    {
-	      if (VAR_P (old_expr)
+	      if (TREE_CODE (old_expr) == VAR_DECL
 		  && TREE_CODE (TREE_TYPE (old_expr)) == RECORD_TYPE)
 		{
 		  tree expr = throw_bad_cast ();
@@ -686,7 +674,7 @@ build_dynamic_cast_1 (tree type, tree expr, tsubst_flags_t complain)
 	  else if (TREE_CODE (expr) == ADDR_EXPR)
 	    {
 	      tree op = TREE_OPERAND (expr, 0);
-	      if (VAR_P (op)
+	      if (TREE_CODE (op) == VAR_DECL
 		  && TREE_CODE (TREE_TYPE (op)) == RECORD_TYPE)
 		{
                   if (complain & tf_warning)
@@ -708,12 +696,10 @@ build_dynamic_cast_1 (tree type, tree expr, tsubst_flags_t complain)
 	  target_type = TYPE_MAIN_VARIANT (TREE_TYPE (type));
 	  static_type = TYPE_MAIN_VARIANT (TREE_TYPE (exprtype));
 	  td2 = get_tinfo_decl (target_type);
-	  if (!mark_used (td2, complain) && !(complain & tf_error))
-	    return error_mark_node;
+	  mark_used (td2);
 	  td2 = cp_build_addr_expr (td2, complain);
 	  td3 = get_tinfo_decl (static_type);
-	  if (!mark_used (td3, complain) && !(complain & tf_error))
-	    return error_mark_node;
+	  mark_used (td3);
 	  td3 = cp_build_addr_expr (td3, complain);
 
 	  /* Determine how T and V are related.  */
@@ -751,8 +737,8 @@ build_dynamic_cast_1 (tree type, tree expr, tsubst_flags_t complain)
 					      const_ptr_type_node,
 					      tinfo_ptr, tinfo_ptr,
 					      ptrdiff_type_node, NULL_TREE);
-	      dcast_fn = build_library_fn_ptr (name, tmp,
-					       ECF_LEAF | ECF_PURE | ECF_NOTHROW);
+	      dcast_fn = build_library_fn_ptr (name, tmp);
+	      DECL_PURE_P (dcast_fn) = 1;
 	      pop_abi_namespace ();
 	      dynamic_cast_node = dcast_fn;
 	    }
@@ -836,7 +822,7 @@ target_incomplete_p (tree type)
 	  return true;
 	type = TYPE_PTRMEM_POINTED_TO_TYPE (type);
       }
-    else if (TYPE_PTR_P (type))
+    else if (TREE_CODE (type) == POINTER_TYPE)
       type = TREE_TYPE (type);
     else
       return !COMPLETE_OR_VOID_TYPE_P (type);
@@ -1067,7 +1053,7 @@ typeinfo_in_lib_p (tree type)
 {
   /* The typeinfo objects for `T*' and `const T*' are in the runtime
      library for simple types T.  */
-  if (TYPE_PTR_P (type)
+  if (TREE_CODE (type) == POINTER_TYPE
       && (cp_type_quals (TREE_TYPE (type)) == TYPE_QUAL_CONST
 	  || cp_type_quals (TREE_TYPE (type)) == TYPE_UNQUALIFIED))
     type = TREE_TYPE (type);
@@ -1340,8 +1326,14 @@ get_pseudo_ti_index (tree type)
 		/* already created.  */
 		break;
 
-	      /* Create the array of __base_class_type_info entries.  */
-	      array_domain = build_index_type (size_int (num_bases - 1));
+	      /* Create the array of __base_class_type_info entries.
+		 G++ 3.2 allocated an array that had one too many
+		 entries, and then filled that extra entries with
+		 zeros.  */
+	      if (abi_version_at_least (2))
+		array_domain = build_index_type (size_int (num_bases - 1));
+	      else
+		array_domain = build_index_type (size_int (num_bases));
 	      base_array = build_array_type ((*tinfo_descs)[TK_BASE_TYPE].type,
 					     array_domain);
 
@@ -1469,44 +1461,6 @@ create_tinfo_types (void)
   pop_abi_namespace ();
 }
 
-/* Helper for emit_support_tinfos. Emits the type_info descriptor of
-   a single type.  */
-
-void
-emit_support_tinfo_1 (tree bltn)
-{
-  tree types[3];
-
-  if (bltn == NULL_TREE)
-    return;
-  types[0] = bltn;
-  types[1] = build_pointer_type (bltn);
-  types[2] = build_pointer_type (cp_build_qualified_type (bltn,
-							  TYPE_QUAL_CONST));
-
-  for (int i = 0; i < 3; ++i)
-    {
-      tree tinfo = get_tinfo_decl (types[i]);
-      TREE_USED (tinfo) = 1;
-      mark_needed (tinfo);
-      /* The C++ ABI requires that these objects be COMDAT.  But,
-	 On systems without weak symbols, initialized COMDAT
-	 objects are emitted with internal linkage.  (See
-	 comdat_linkage for details.)  Since we want these objects
-	 to have external linkage so that copies do not have to be
-	 emitted in code outside the runtime library, we make them
-	 non-COMDAT here.  
-
-	 It might also not be necessary to follow this detail of the
-	 ABI.  */
-      if (!flag_weak || ! targetm.cxx.library_rtti_comdat ())
-	{
-	  gcc_assert (TREE_PUBLIC (tinfo) && !DECL_COMDAT (tinfo));
-	  DECL_INTERFACE_KNOWN (tinfo) = 1;
-	}
-    }
-}
-
 /* Emit the type_info descriptors which are guaranteed to be in the runtime
    support.  Generating them here guarantees consistency with the other
    structures.  We use the following heuristic to determine when the runtime
@@ -1528,6 +1482,7 @@ emit_support_tinfos (void)
     &integer_type_node, &unsigned_type_node,
     &long_integer_type_node, &long_unsigned_type_node,
     &long_long_integer_type_node, &long_long_unsigned_type_node,
+    &int128_integer_type_node, &int128_unsigned_type_node,
     &float_type_node, &double_type_node, &long_double_type_node,
     &dfloat32_type_node, &dfloat64_type_node, &dfloat128_type_node,
     &nullptr_type_node,
@@ -1548,15 +1503,42 @@ emit_support_tinfos (void)
     return;
   doing_runtime = 1;
   for (ix = 0; fundamentals[ix]; ix++)
-    emit_support_tinfo_1 (*fundamentals[ix]);
-  for (ix = 0; ix < NUM_INT_N_ENTS; ix ++)
-    if (int_n_enabled_p[ix])
-      {
-	emit_support_tinfo_1 (int_n_trees[ix].signed_type);
-	emit_support_tinfo_1 (int_n_trees[ix].unsigned_type);
-      }
-  for (tree t = registered_builtin_types; t; t = TREE_CHAIN (t))
-    emit_support_tinfo_1 (TREE_VALUE (t));
+    {
+      tree bltn = *fundamentals[ix];
+      tree types[3];
+      int i;
+
+      if (bltn == NULL_TREE)
+	continue;
+      types[0] = bltn;
+      types[1] = build_pointer_type (bltn);
+      types[2] = build_pointer_type (cp_build_qualified_type (bltn,
+							      TYPE_QUAL_CONST));
+
+      for (i = 0; i < 3; ++i)
+	{
+	  tree tinfo;
+
+	  tinfo = get_tinfo_decl (types[i]);
+	  TREE_USED (tinfo) = 1;
+	  mark_needed (tinfo);
+	  /* The C++ ABI requires that these objects be COMDAT.  But,
+	     On systems without weak symbols, initialized COMDAT
+	     objects are emitted with internal linkage.  (See
+	     comdat_linkage for details.)  Since we want these objects
+	     to have external linkage so that copies do not have to be
+	     emitted in code outside the runtime library, we make them
+	     non-COMDAT here.  
+
+	     It might also not be necessary to follow this detail of the
+	     ABI.  */
+	  if (!flag_weak || ! targetm.cxx.library_rtti_comdat ())
+	    {
+	      gcc_assert (TREE_PUBLIC (tinfo) && !DECL_COMDAT (tinfo));
+	      DECL_INTERFACE_KNOWN (tinfo) = 1;
+	    }
+	}
+    }
 }
 
 /* Finish a type info decl. DECL_PTR is a pointer to an unemitted
@@ -1607,12 +1589,6 @@ emit_tinfo_decl (tree decl)
       DECL_INITIAL (decl) = init;
       mark_used (decl);
       cp_finish_decl (decl, init, false, NULL_TREE, 0);
-      /* Avoid targets optionally bumping up the alignment to improve
-	 vector instruction accesses, tinfo are never accessed this way.  */
-#ifdef DATA_ABI_ALIGNMENT
-      DECL_ALIGN (decl) = DATA_ABI_ALIGNMENT (decl, TYPE_ALIGN (TREE_TYPE (decl)));
-      DECL_USER_ALIGN (decl) = true;
-#endif
       return true;
     }
   else

@@ -1,4 +1,4 @@
-/*	$NetBSD: types.h,v 1.87 2016/02/27 00:09:45 tls Exp $	*/
+/*	$NetBSD: types.h,v 1.79 2014/04/24 19:23:00 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990 The Regents of the University of California.
@@ -41,17 +41,15 @@
 #include <sys/featuretest.h>
 #include <machine/int_types.h>
 
-typedef int			__register_t;
-typedef unsigned long		__vaddr_t;	/* segments.h */
-typedef unsigned char		__cpu_simple_lock_nv_t;
-
 #if defined(_KERNEL)
 typedef struct label_t {
 	int val[6];
 } label_t;
 #endif
 
+#if defined(_NETBSD_SOURCE)
 #if defined(_KERNEL)
+
 /*
  * XXX JYM for now, in kernel paddr_t can be 32 or 64 bits, depending
  * on PAE. Revisit when paddr_t becomes 64 bits for !PAE systems.
@@ -70,7 +68,7 @@ typedef unsigned long	psize_t;
 #define	PRIuPSIZE	"lu"
 #endif /* PAE */
 
-#elif defined(_KMEMUSER) || defined(_KERNTYPES) || defined(_STANDALONE)
+#else /* _KERNEL */
 /* paddr_t is always 64 bits for userland */
 typedef __uint64_t	paddr_t;
 typedef __uint64_t	psize_t;
@@ -80,20 +78,19 @@ typedef __uint64_t	psize_t;
 
 #endif /* _KERNEL */
 
-#if defined(_KERNEL) || defined(_KMEMUSER) || defined(_KERNTYPES) || defined(_STANDALONE)
-
-typedef __vaddr_t	vaddr_t;
+typedef unsigned long	vaddr_t;
 typedef unsigned long	vsize_t;
 #define	PRIxVADDR	"lx"
 #define	PRIxVSIZE	"lx"
 #define	PRIuVSIZE	"lu"
+#endif /* _NETBSD_SOURCE */
 
 typedef int		pmc_evid_t;
 typedef __uint64_t	pmc_ctr_t;
-typedef __register_t	register_t;
+typedef int		register_t;
 #define	PRIxREGISTER	"x"
 
-#endif /* _KERNEL || _KMEMUSER */
+typedef	volatile unsigned char		__cpu_simple_lock_t;
 
 /* __cpu_simple_lock_t used to be a full word. */
 #define	__CPU_SIMPLE_LOCK_PAD
@@ -112,15 +109,12 @@ typedef __register_t	register_t;
 #define	__HAVE_SYSCALL_INTERN
 #define	__HAVE_MINIMAL_EMUL
 #define	__HAVE_OLD_DISKLABEL
-#define	__HAVE_CPU_RNG
-
-#if defined(_KERNEL)
+#if defined(_KERNEL) && !defined(_RUMPKERNEL) && !defined(_RUMP_NATIVE_ABI)
 /*
  * Processors < i586 do not have cmpxchg8b, and we compile for i486
- * by default. The kernel tsc driver uses them though, and handles < i586
- * by patching.  E.g. rump kernels and crash(8) and a selection of
- * other run-in-userspace code defines _KERNEL, but is careful not to
- * build anything using 64bit atomic ops by default.
+ * by default in userland. The kernel tsc driver uses them though,
+ * and handles < i586 * by patching. We don't want to expose them in
+ * userland, that is why we exclude rump.
  */
 #define __HAVE_ATOMIC64_OPS
 #endif
@@ -134,10 +128,6 @@ typedef __register_t	register_t;
 
 #if defined(_KERNEL)
 #define	__HAVE_RAS
-
-#if !defined(XEN) && !defined(NO_PCI_MSI_MSIX)
-#define __HAVE_PCI_MSI_MSIX
-#endif
 #endif
 
 #endif	/* _I386_MACHTYPES_H_ */

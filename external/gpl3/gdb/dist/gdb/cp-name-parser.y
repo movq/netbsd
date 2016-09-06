@@ -1,6 +1,6 @@
 /* YACC parser for C++ names, for GDB.
 
-   Copyright (C) 2003-2015 Free Software Foundation, Inc.
+   Copyright (C) 2003-2014 Free Software Foundation, Inc.
 
    Parts of the lexer are based on c-exp.y from GDB.
 
@@ -31,10 +31,16 @@
 
 #include "defs.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
+
 #include "safe-ctype.h"
+#include "libiberty.h"
 #include "demangle.h"
 #include "cp-support.h"
+#include "gdb_assert.h"
 
 /* Bison does not make it easy to create a parser without global
    state, unfortunately.  Here are all the global variables used
@@ -277,9 +283,9 @@ make_name (const char *name, int len)
     const char *opname;
   }
 
-%type <comp> exp exp1 type start start_opt oper colon_name
+%type <comp> exp exp1 type start start_opt operator colon_name
 %type <comp> unqualified_name colon_ext_name
-%type <comp> templ template_arg
+%type <comp> template template_arg
 %type <comp> builtin_type
 %type <comp> typespec_2 array_indicator
 %type <comp> colon_ext_only ext_only_name
@@ -439,7 +445,7 @@ demangler_special
 			{ $$ = fill_comp (DEMANGLE_COMPONENT_CONSTRUCTION_VTABLE, $2, $4); }
 		;
 
-oper	:	OPERATOR NEW
+operator	:	OPERATOR NEW
 			{
 			  /* Match the whitespacing of cplus_demangle_operators.
 			     It would abort on unrecognized string otherwise.  */
@@ -528,7 +534,7 @@ oper	:	OPERATOR NEW
 		   since it's not clear that it's parseable.  */
 conversion_op
 		:	OPERATOR typespec_2
-			{ $$ = fill_comp (DEMANGLE_COMPONENT_CONVERSION, $2, NULL); }
+			{ $$ = fill_comp (DEMANGLE_COMPONENT_CAST, $2, NULL); }
 		;
 
 conversion_op_name
@@ -554,8 +560,8 @@ conversion_op_name
 
 /* DEMANGLE_COMPONENT_NAME */
 /* This accepts certain invalid placements of '~'.  */
-unqualified_name:	oper
-		|	oper '<' template_params '>'
+unqualified_name:	operator
+		|	operator '<' template_params '>'
 			{ $$ = fill_comp (DEMANGLE_COMPONENT_TEMPLATE, $1, $3.comp); }
 		|	'~' NAME
 			{ $$ = make_dtor (gnu_v3_complete_object_dtor, $2); }
@@ -579,9 +585,9 @@ colon_name	:	name
 name		:	nested_name NAME %prec NAME
 			{ $$ = $1.comp; d_right ($1.last) = $2; }
 		|	NAME %prec NAME
-		|	nested_name templ %prec NAME
+		|	nested_name template %prec NAME
 			{ $$ = $1.comp; d_right ($1.last) = $2; }
-		|	templ %prec NAME
+		|	template %prec NAME
 		;
 
 colon_ext_name	:	colon_name
@@ -611,13 +617,13 @@ nested_name	:	NAME COLONCOLON
 			  d_left ($$.last) = $2;
 			  d_right ($$.last) = NULL;
 			}
-		|	templ COLONCOLON
+		|	template COLONCOLON
 			{ $$.comp = make_empty (DEMANGLE_COMPONENT_QUAL_NAME);
 			  d_left ($$.comp) = $1;
 			  d_right ($$.comp) = NULL;
 			  $$.last = $$.comp;
 			}
-		|	nested_name templ COLONCOLON
+		|	nested_name template COLONCOLON
 			{ $$.comp = $1.comp;
 			  d_right ($1.last) = make_empty (DEMANGLE_COMPONENT_QUAL_NAME);
 			  $$.last = d_right ($1.last);
@@ -628,7 +634,7 @@ nested_name	:	NAME COLONCOLON
 
 /* DEMANGLE_COMPONENT_TEMPLATE */
 /* DEMANGLE_COMPONENT_TEMPLATE_ARGLIST */
-templ	:	NAME '<' template_params '>'
+template	:	NAME '<' template_params '>'
 			{ $$ = fill_comp (DEMANGLE_COMPONENT_TEMPLATE, $1, $3.comp); }
 		;
 

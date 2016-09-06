@@ -1,8 +1,8 @@
-/*	$NetBSD: lua.c,v 1.18 2016/07/14 04:00:46 msaitoh Exp $ */
+/*	$NetBSD: lua.c,v 1.13.2.3 2016/05/22 10:28:49 martin Exp $ */
 
 /*
  * Copyright (c) 2014 by Lourival Vieira Neto <lneto@NetBSD.org>.
- * Copyright (c) 2011 - 2014 by Marc Balmer <mbalmer@NetBSD.org>.
+ * Copyright (c) 2011, 2013 by Marc Balmer <mbalmer@NetBSD.org>.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -152,7 +152,7 @@ lua_attach(device_t parent, device_t self, void *aux)
             CTL_KERN, CTL_CREATE, CTL_EOL);
 
         if (node == NULL) {
-		aprint_error(": can't create sysctl node\n");
+		printf(": can't create sysctl node\n");
                 return;
 	}
 
@@ -638,7 +638,7 @@ klua_mod_unregister(const char *name)
 
 klua_State *
 klua_newstate(lua_Alloc f, void *ud, const char *name, const char *desc,
-    int ipl)
+		int ipl)
 {
 	klua_State *K;
 	struct lua_state *s;
@@ -705,7 +705,6 @@ klua_close(klua_State *K)
 	struct lua_module *m;
 	int error = 0;
 
-	/* XXX consider registering a handler instead of a fixed name. */
 	lua_getglobal(K->L, "onClose");
 	if (lua_isfunction(K->L, -1))
 		lua_pcall(K->L, -1, 0, 0);
@@ -796,11 +795,9 @@ MODULE(MODULE_CLASS_MISC, lua, NULL);
 static const struct cfiattrdata luabus_iattrdata = {
 	"luabus", 0, { { NULL, NULL, 0 },}
 };
-
 static const struct cfiattrdata *const lua_attrs[] = {
 	&luabus_iattrdata, NULL
 };
-
 CFDRIVER_DECL(lua, DV_DULL, lua_attrs);
 extern struct cfattach lua_ca;
 static int lualoc[] = {
@@ -808,7 +805,6 @@ static int lualoc[] = {
 	-1,
 	-1
 };
-
 static struct cfdata lua_cfdata[] = {
 	{
 		.cf_name = "lua",

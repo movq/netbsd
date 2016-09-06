@@ -1,12 +1,11 @@
-.\"	$NetBSD: tzset.3,v 1.34 2015/10/29 22:42:55 wiz Exp $
-.Dd October 29, 2015
+.\"	$NetBSD: tzset.3,v 1.28.2.1 2015/01/25 09:11:03 martin Exp $
+.Dd October 23, 2014
 .Dt TZSET 3
 .Os
 .Sh NAME
 .Nm tzset ,
 .Nm tzalloc ,
 .Nm tzgetname ,
-.Nm tzgetgmtoff ,
 .Nm tzfree
 .Nd initialize time conversion information
 .Sh LIBRARY
@@ -19,8 +18,6 @@
 .Fn tzfree "timezone_t restrict tz"
 .Ft const char *
 .Fn tzgetname "timezone_t restrict tz" "int isdst"
-.Ft long
-.Fn tzgetgmtoff "timezone_t restrict tz" "int isdst"
 .Ft void
 .Fn tzset "void"
 .Sh DESCRIPTION
@@ -73,7 +70,7 @@ This invalidates any
 pointers that
 .Fa tz
 was used to set.
-The function
+Finally,
 .Fn tzgetname
 returns the name for the given
 .Fa tz .
@@ -89,17 +86,6 @@ is set to
 .Va 1
 the call is equivalent to
 .Va tzname[1] .
-Finally, the
-.Fn tzgetgmtoff
-function acts like
-.Fn tzgetname
-only it returns the offset in seconds from GMT for the timezone.
-If there is no match, then
-.Dv \-1
-is returned and
-.Va errno
-is set to
-.Dv ESRCH .
 The
 .Fn tzset
 function acts like
@@ -117,6 +103,7 @@ If the implied call to
 fails,
 .Fn tzset
 falls back on UTC.
+.Xr localtime 3 .
 If
 .Ev TZ
 is

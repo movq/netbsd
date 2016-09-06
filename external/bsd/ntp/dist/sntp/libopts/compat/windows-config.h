@@ -1,4 +1,4 @@
-/*	$NetBSD: windows-config.h,v 1.4 2016/01/08 21:35:42 christos Exp $	*/
+/*	$NetBSD: windows-config.h,v 1.1.1.3.4.2 2015/11/08 01:51:13 riz Exp $	*/
 
 
 /**

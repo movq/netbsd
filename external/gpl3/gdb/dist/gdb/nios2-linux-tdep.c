@@ -1,5 +1,5 @@
 /* Target-dependent code for GNU/Linux on Nios II.
-   Copyright (C) 2012-2015 Free Software Foundation, Inc.
+   Copyright (C) 2012-2014 Free Software Foundation, Inc.
    Contributed by Mentor Graphics, Inc.
 
    This file is part of GDB.
@@ -19,6 +19,8 @@
 
 #include "defs.h"
 #include "frame.h"
+#include "gdb_assert.h"
+#include <string.h>
 #include "osabi.h"
 #include "solib-svr4.h"
 #include "trad-frame.h"
@@ -49,11 +51,6 @@ static const int reg_offsets[NIOS2_NUM_REGS] =
   -1, -1, -1, -1, -1, -1, -1, -1
 };
 
-/* General register set size.  Should match sizeof (struct pt_regs) +
-   sizeof (struct switch_stack) from the NIOS2 Linux kernel patch.  */
-
-#define NIOS2_GREGS_SIZE (4 * 34)
-
 /* Implement the supply_regset hook for core files.  */
 
 static void
@@ -76,63 +73,28 @@ nios2_supply_gregset (const struct regset *regset,
       }
 }
 
-/* Implement the collect_regset hook for core files.  */
-
-static void
-nios2_collect_gregset (const struct regset *regset,
-		       const struct regcache *regcache,
-		       int regnum, void *gregs_buf, size_t len)
-{
-  gdb_byte *gregs = gregs_buf;
-  int regno;
-
-  for (regno = NIOS2_Z_REGNUM; regno <= NIOS2_MPUACC_REGNUM; regno++)
-    if (regnum == -1 || regnum == regno)
-      {
-	if (reg_offsets[regno] != -1)
-	  regcache_raw_collect (regcache, regno,
-				gregs + 4 * reg_offsets[regno]);
-      }
-}
-
-static const struct regset nios2_core_regset =
+static struct regset nios2_core_regset =
 {
   NULL,
   nios2_supply_gregset,
-  nios2_collect_gregset
+  NULL,
+  NULL
 };
 
-/* Iterate over core file register note sections.  */
+/* Implement the regset_from_core_section gdbarch method.  */
 
-static void
-nios2_iterate_over_regset_sections (struct gdbarch *gdbarch,
-				    iterate_over_regset_sections_cb *cb,
-				    void *cb_data,
-				    const struct regcache *regcache)
+static const struct regset *
+nios2_regset_from_core_section (struct gdbarch *gdbarch,
+                                const char *sect_name, size_t sect_size)
 {
-  cb (".reg", NIOS2_GREGS_SIZE, &nios2_core_regset, NULL, cb_data);
+  if (strcmp (sect_name, ".reg") == 0)
+    return &nios2_core_regset;
+
+  return NULL;
 }
 
 /* Initialize a trad-frame cache corresponding to the tramp-frame.
-   FUNC is the address of the instruction TRAMP[0] in memory.
-
-   This ABI is not documented.  It corresponds to rt_setup_ucontext in
-   the kernel arch/nios2/kernel/signal.c file.
-
-   The key points are:
-   - The kernel creates a trampoline at the hard-wired address 0x1044.
-   - The stack pointer points to an object of type struct rt_sigframe.
-     The definition of this structure is not exported from the kernel.
-     The register save area is located at offset 152 bytes (as determined
-     by inspection of the stack contents in the debugger), and the
-     registers are saved as r1-r23, ra, fp, gp, ea, sp.
-
-   This interface was implemented with kernel version 3.19 (the first
-   official mainline kernel).  Older unofficial kernel versions used
-   incompatible conventions; we do not support those here.  */
-
-#define NIOS2_SIGRETURN_TRAMP_ADDR 0x1044
-#define NIOS2_SIGRETURN_REGSAVE_OFFSET 152
+   FUNC is the address of the instruction TRAMP[0] in memory.  */
 
 static void
 nios2_linux_rt_sigreturn_init (const struct tramp_frame *self,
@@ -140,8 +102,7 @@ nios2_linux_rt_sigreturn_init (const struct tramp_frame *self,
 			       struct trad_frame_cache *this_cache,
 			       CORE_ADDR func)
 {
-  CORE_ADDR sp = get_frame_register_unsigned (next_frame, NIOS2_SP_REGNUM);
-  CORE_ADDR base = sp + NIOS2_SIGRETURN_REGSAVE_OFFSET;
+  CORE_ADDR base = func + 41 * 4;
   int i;
 
   for (i = 0; i < 23; i++)
@@ -204,8 +165,8 @@ nios2_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   set_gdbarch_fetch_tls_load_module_address (gdbarch,
                                              svr4_fetch_objfile_link_map);
   /* Core file support.  */
-  set_gdbarch_iterate_over_regset_sections
-    (gdbarch, nios2_iterate_over_regset_sections);
+  set_gdbarch_regset_from_core_section (gdbarch,
+                                        nios2_regset_from_core_section);
   /* Linux signal frame unwinders.  */
   tramp_frame_prepend_unwinder (gdbarch,
                                 &nios2_linux_rt_sigreturn_tramp_frame);

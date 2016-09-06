@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_stat.c,v 1.70 2014/08/14 17:29:30 maxv Exp $	 */
+/*	$NetBSD: svr4_stat.c,v 1.69.40.1 2014/10/20 09:55:54 martin Exp $	 */
 
 /*-
  * Copyright (c) 1994, 2008 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_stat.c,v 1.70 2014/08/14 17:29:30 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_stat.c,v 1.69.40.1 2014/10/20 09:55:54 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

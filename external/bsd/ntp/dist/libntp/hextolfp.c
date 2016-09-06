@@ -1,4 +1,4 @@
-/*	$NetBSD: hextolfp.c,v 1.7 2016/01/08 21:35:38 christos Exp $	*/
+/*	$NetBSD: hextolfp.c,v 1.3.4.2 2016/05/11 11:35:38 martin Exp $	*/
 
 /*
  * hextolfp - convert an ascii hex string to an l_fp number

@@ -1,4 +1,4 @@
-/*	$NetBSD: ath.c,v 1.122 2016/06/10 13:27:13 ozaki-r Exp $	*/
+/*	$NetBSD: ath.c,v 1.116 2013/09/12 12:17:53 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002-2005 Sam Leffler, Errno Consulting
@@ -41,7 +41,7 @@
 __FBSDID("$FreeBSD: src/sys/dev/ath/if_ath.c,v 1.104 2005/09/16 10:09:23 ru Exp $");
 #endif
 #ifdef __NetBSD__
-__KERNEL_RCSID(0, "$NetBSD: ath.c,v 1.122 2016/06/10 13:27:13 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ath.c,v 1.116 2013/09/12 12:17:53 martin Exp $");
 #endif
 
 /*
@@ -1399,8 +1399,8 @@ ath_start(struct ifnet *ifp)
 			 * tags which we consider too expensive to use)
 			 * to pass it along.
 			 */
-			ni = M_GETCTX(m, struct ieee80211_node *);
-			M_CLEARCTX(m);
+			ni = (struct ieee80211_node *) m->m_pkthdr.rcvif;
+			m->m_pkthdr.rcvif = NULL;
 
 			wh = mtod(m, struct ieee80211_frame *);
 			if ((wh->i_fc[0] & IEEE80211_FC0_SUBTYPE_MASK) ==
@@ -2940,7 +2940,7 @@ ath_recv_mgmt(struct ieee80211com *ic, struct mbuf *m,
 			/*
 			 * Handle ibss merge as needed; check the tsf on the
 			 * frame before attempting the merge.  The 802.11 spec
-			 * says the station should change its bssid to match
+			 * says the station should change it's bssid to match
 			 * the oldest station with the same ssid, where oldest
 			 * is determined by the tsf.  Note that hardware
 			 * reconfiguration happens through callback to
@@ -3145,7 +3145,7 @@ rx_accept:
 		bus_dmamap_unload(sc->sc_dmat, bf->bf_dmamap);
 		bf->bf_m = NULL;
 
-		m_set_rcvif(m, ifp);
+		m->m_pkthdr.rcvif = ifp;
 		len = ds->ds_rxstat.rs_datalen;
 		m->m_pkthdr.len = m->m_len = len;
 
@@ -3449,7 +3449,7 @@ ath_tx_cleanup(struct ath_softc *sc)
 /*
  * Defragment an mbuf chain, returning at most maxfrags separate
  * mbufs+clusters.  If this is not possible NULL is returned and
- * the original mbuf chain is left in its present (potentially
+ * the original mbuf chain is left in it's present (potentially
  * modified) state.  We use two techniques: collapsing consecutive
  * mbufs and replacing consecutive mbufs by a cluster.
  */

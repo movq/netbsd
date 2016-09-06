@@ -1,4 +1,4 @@
-/*	$NetBSD: wiconfig.c,v 1.45 2016/06/15 13:47:26 riastradh Exp $	*/
+/*	$NetBSD: wiconfig.c,v 1.44 2012/04/12 11:46:14 joerg Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999
  *	Bill Paul <wpaul@ctr.columbia.edu>.  All rights reserved.
@@ -68,7 +68,7 @@
 #if !defined(lint)
 __COPYRIGHT("@(#) Copyright (c) 1997, 1998, 1999\
  Bill Paul.  All rights reserved.");
-__RCSID("$NetBSD: wiconfig.c,v 1.45 2016/06/15 13:47:26 riastradh Exp $");
+__RCSID("$NetBSD: wiconfig.c,v 1.44 2012/04/12 11:46:14 joerg Exp $");
 #endif
 
 struct wi_table {
@@ -156,8 +156,7 @@ wi_apscan(char *iface)
 	int			naps, rate;
 	int			retries = 10;
 	int			flags;
-	struct wi_apinfo	aps[howmany(WI_MAX_DATALEN,
-				    sizeof(struct wi_apinfo))];
+	struct wi_apinfo	*w;
 	int			i, j;
 
 	if (iface == NULL)
@@ -213,21 +212,15 @@ wi_apscan(char *iface)
 		err(1, "ioctl");
 	}
 
-	memcpy(&naps, wreq.wi_val, sizeof(int));
+	naps = *(int *)wreq.wi_val;
 
 	if (naps > 0)
 		printf("\nAP Information\n");
 	else
 		printf("\nNo APs available\n");
 
-	naps = MIN((unsigned)naps,
-	    howmany(sizeof(wreq.wi_val) - sizeof(int), sizeof(*aps)));
-	memcpy(aps, (const char *)wreq.wi_val + sizeof(int),
-	    (unsigned)naps * sizeof(*aps));
-
-	for (i = 0; i < naps; i++) {
-		const struct wi_apinfo *const w = &aps[i];
-
+	w =  (struct wi_apinfo *)(((char *)&wreq.wi_val) + sizeof(int));
+	for ( i = 0; i < naps; i++, w++) {
 		printf("ap[%d]:\n", i);
 		if (w->scanreason) {
 			static const char *scanm[] = {

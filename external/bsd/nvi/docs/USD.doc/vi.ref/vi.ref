@@ -1,4 +1,4 @@
-.\"	$NetBSD: vi.ref,v 1.3 2015/11/25 01:08:34 christos Exp $
+.\"	$NetBSD: vi.ref,v 1.1 2013/11/22 16:00:45 christos Exp $
 .\"
 .\" Copyright (c) 1994
 .\"     The Regents of the University of California.  All rights reserved.
@@ -28,12 +28,9 @@ Computer Science Division
 Department of Electrical Engineering and Computer Science
 University of California, Berkeley
 Berkeley, California  94720
-.if \nR==0 \
-\{
 .sp 1
 \*(td
 .)l
-.\}
 .sp 3
 .(l C
 .i Abstract
@@ -116,7 +113,7 @@ Engineers, Inc.
 The financial support of UUNET Communications Services is gratefully
 acknowledged.
 .)q
-.if \n[.U]==0 .sy echo -n >index
+.sy echo -n >index
 .oh 'Vi/Ex Reference''USD:13-%'
 .eh 'USD:13-%''Vi/Ex Reference'
 .bp 4

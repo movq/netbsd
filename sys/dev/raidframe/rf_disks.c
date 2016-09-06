@@ -1,4 +1,4 @@
-/*	$NetBSD: rf_disks.c,v 1.87 2014/10/18 08:33:28 snj Exp $	*/
+/*	$NetBSD: rf_disks.c,v 1.86 2014/06/14 07:39:00 hannken Exp $	*/
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -60,7 +60,7 @@
  ***************************************************************/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rf_disks.c,v 1.87 2014/10/18 08:33:28 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rf_disks.c,v 1.86 2014/06/14 07:39:00 hannken Exp $");
 
 #include <dev/raidframe/raidframevar.h>
 
@@ -506,7 +506,7 @@ rf_AutoConfigureDisks(RF_Raid_t *raidPtr, RF_Config_t *cfgPtr,
 			if (ac->clabel->mod_counter != mod_counter) {
 				/* Even though we've filled in all of
 				   the above, we don't trust this
-				   component since its modification
+				   component since it's modification
 				   counter is not in sync with the
 				   rest, and we really consider it to
 				   be failed.  */

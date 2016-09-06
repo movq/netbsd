@@ -1,4 +1,4 @@
-# $NetBSD: LOONGSON,v 1.26 2016/07/13 11:12:56 jmcneill Exp $
+# $NetBSD: LOONGSON,v 1.23 2014/07/20 10:06:11 alnsn Exp $
 #
 # LOONGSON machine description file
 # 
@@ -22,7 +22,7 @@ include		"arch/evbmips/conf/std.loongson"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"LOONGSON-$Revision: 1.26 $"
+#ident 		"LOONGSON-$Revision: 1.23 $"
 
 maxusers	16
 
@@ -128,14 +128,13 @@ options 	IPFILTER_COMPAT # Compat for IP-Filter
 #options	BPFJIT
 
 # NetBSD backwards compatibility
-options 	COMPAT_43	# 4.3BSD binary compatibility.
-options 	COMPAT_16	# NetBSD 1.6,
-options 	COMPAT_20	# NetBSD 2.0,
-options 	COMPAT_30	# NetBSD 3.0,
-options 	COMPAT_40	# NetBSD 4.0,
-options 	COMPAT_50	# NetBSD 5.0,
-options 	COMPAT_60	# NetBSD 6.0, and
-options 	COMPAT_70	# NetBSD 7.0 binary compatibility.
+options 	COMPAT_43
+options 	COMPAT_16
+options 	COMPAT_20
+options 	COMPAT_30	# NetBSD 3.0 compatibility.
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
+options 	COMPAT_50	# NetBSD 5.0 compatibility.
+options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options		COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 
 
@@ -352,7 +351,6 @@ pseudo-device	bridge
 #options	BRIDGE_IPF		# bridge uses IP/IPv6 pfil hooks too
 pseudo-device	agr			# IEEE 802.3ad link aggregation
 pseudo-device	ksyms			# /dev/ksyms
-pseudo-device	drvctl			# driver control
 #pseudo-device	pf			# PF packet filter
 #pseudo-device	pflog			# PF log if
 

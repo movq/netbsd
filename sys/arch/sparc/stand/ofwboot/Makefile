@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.36 2015/10/26 07:11:33 mrg Exp $
+#	$NetBSD: Makefile,v 1.32.4.1 2015/01/12 20:57:31 snj Exp $
 
 CURDIR=	${.CURDIR}
 S=	${CURDIR}/../../../..
@@ -15,7 +15,6 @@ SRCS=		srt0.s Locore.c boot.c ofdev.c alloc.c net.c netif_of.c vers.c
 SRCS+=		bootinfo.c loadfile_machdep.c promlib.c prf.c isfloppy.c
 .if ${MACHINE_ARCH} == "sparc64"
 SRCS+=		hvcall.S
-CPPFLAGS+=	-DSUN4V
 .endif
 .PATH:		${S}/arch/sparc64/sparc64 ${S}/arch/sparc/stand/common
 
@@ -26,10 +25,13 @@ LIBC=
 LIBCRTBEGIN=
 LIBCRTEND=
 
-COPTS+=		-ffreestanding -mcpu=v9
+COPTS+=		-ffreestanding
 CWARNFLAGS+=	-Wno-main
-CFLAGS+=	${COPTS}
-CPPFLAGS+=	-D_STANDALONE
+CFLAGS+=	${COPTS} ${CEXTRAFLAGS}
+CPPFLAGS+=	-D_STANDALONE -DSUN4U
+.if ${MACHINE_ARCH} == "sparc64"
+CPPFLAGS+=	-DSUN4V
+.endif
 CPPFLAGS+=	-DBOOT_ELF32 -DBOOT_ELF64 -DBOOT_AOUT
 CPPFLAGS+=	-DNETBOOT
 CPPFLAGS+=	-DSUPPORT_DHCP
@@ -107,11 +109,21 @@ ${PROG}: ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN}
 
 .include <bsd.prog.mk>
 
-CPUFLAGS+=		-mcpu=v9
+.if ${MACHINE_ARCH} == "sparc64"
 AFLAGS+=		-Wa,-Av9a
-AFLAGS+=		-x assembler-with-cpp -D_LOCORE -D__ELF__
+CEXTRAFLAGS?=		-D_LP64
+.else
+AFLAGS+=		-Wa,-Av8plusa
+.endif
 
-NORMAL_S=	${CC} ${AFLAGS} ${AFLAGS.${<:T}}  ${CPPFLAGS} -c $<
+.if CROSS
+AFLAGS+=		-x assembler-with-cpp -D_LOCORE -D__ELF__
+CEXTRAFLAGS?=		-D_LP64
+.else
+AFLAGS+=		-x assembler-with-cpp -D_LOCORE -D__ELF__ ${CEXTRAFLAGS}
+.endif
+
+NORMAL_S=	${CC} ${AFLAGS} ${CPPFLAGS} -c $<
 srt0.o: srt0.s
 	${NORMAL_S}
 

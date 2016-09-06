@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_emap.c,v 1.11 2014/11/27 14:25:01 uebayasi Exp $	*/
+/*	$NetBSD: uvm_emap.c,v 1.10 2013/09/15 15:51:23 martin Exp $	*/
 
 /*-
  * Copyright (c) 2009, 2010 The NetBSD Foundation, Inc.
@@ -80,7 +80,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvm_emap.c,v 1.11 2014/11/27 14:25:01 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvm_emap.c,v 1.10 2013/09/15 15:51:23 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -298,12 +298,12 @@ uvm_emap_consume(u_int gen)
 	 * This test assumes two's complement arithmetic and allows
 	 * ~2B missed updates before it will produce bad results.
 	 */
-	kpreempt_disable();
+	KPREEMPT_DISABLE(l);
 	ci = l->l_cpu;
 	ucpu = ci->ci_data.cpu_uvm;
 	if (__predict_true((signed int)(ucpu->emap_gen - gen) >= 0)) {
 		l->l_emap_gen = ucpu->emap_gen;
-		kpreempt_enable();
+		KPREEMPT_ENABLE(l);
 		return;
 	}
 
@@ -329,7 +329,7 @@ uvm_emap_consume(u_int gen)
 	ucpu->emap_gen = curgen;
 	l->l_emap_gen = curgen;
 	KASSERT((signed int)(curgen - gen) >= 0);
-	kpreempt_enable();
+	KPREEMPT_ENABLE(l);
 }
 
 /*

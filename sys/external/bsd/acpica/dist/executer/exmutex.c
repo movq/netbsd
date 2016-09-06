@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,8 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
+#define __EXMUTEX_C__
 
 #include "acpi.h"
 #include "accommon.h"
@@ -209,7 +211,8 @@ AcpiExAcquireMutexObject (
     }
     else
     {
-        Status = AcpiExSystemWaitMutex (ObjDesc->Mutex.OsMutex, Timeout);
+        Status = AcpiExSystemWaitMutex (ObjDesc->Mutex.OsMutex,
+                    Timeout);
     }
 
     if (ACPI_FAILURE (Status))
@@ -272,47 +275,32 @@ AcpiExAcquireMutex (
     }
 
     /*
-     * Current sync level must be less than or equal to the sync level
-     * of the mutex. This mechanism provides some deadlock prevention.
+     * Current sync level must be less than or equal to the sync level of the
+     * mutex. This mechanism provides some deadlock prevention
      */
     if (WalkState->Thread->CurrentSyncLevel > ObjDesc->Mutex.SyncLevel)
     {
         ACPI_ERROR ((AE_INFO,
-            "Cannot acquire Mutex [%4.4s], "
-            "current SyncLevel is too large (%u)",
+            "Cannot acquire Mutex [%4.4s], current SyncLevel is too large (%u)",
             AcpiUtGetNodeName (ObjDesc->Mutex.Node),
             WalkState->Thread->CurrentSyncLevel));
         return_ACPI_STATUS (AE_AML_MUTEX_ORDER);
     }
 
-    ACPI_DEBUG_PRINT ((ACPI_DB_EXEC,
-        "Acquiring: Mutex SyncLevel %u, Thread SyncLevel %u, "
-        "Depth %u TID %p\n",
-        ObjDesc->Mutex.SyncLevel, WalkState->Thread->CurrentSyncLevel,
-        ObjDesc->Mutex.AcquisitionDepth, WalkState->Thread));
-
     Status = AcpiExAcquireMutexObject ((UINT16) TimeDesc->Integer.Value,
-        ObjDesc, WalkState->Thread->ThreadId);
-
+                ObjDesc, WalkState->Thread->ThreadId);
     if (ACPI_SUCCESS (Status) && ObjDesc->Mutex.AcquisitionDepth == 1)
     {
         /* Save Thread object, original/current sync levels */
 
         ObjDesc->Mutex.OwnerThread = WalkState->Thread;
-        ObjDesc->Mutex.OriginalSyncLevel =
-            WalkState->Thread->CurrentSyncLevel;
-        WalkState->Thread->CurrentSyncLevel =
-            ObjDesc->Mutex.SyncLevel;
+        ObjDesc->Mutex.OriginalSyncLevel = WalkState->Thread->CurrentSyncLevel;
+        WalkState->Thread->CurrentSyncLevel = ObjDesc->Mutex.SyncLevel;
 
         /* Link the mutex to the current thread for force-unlock at method exit */
 
         AcpiExLinkMutex (ObjDesc, WalkState->Thread);
     }
-
-    ACPI_DEBUG_PRINT ((ACPI_DB_EXEC,
-        "Acquired: Mutex SyncLevel %u, Thread SyncLevel %u, Depth %u\n",
-        ObjDesc->Mutex.SyncLevel, WalkState->Thread->CurrentSyncLevel,
-        ObjDesc->Mutex.AcquisitionDepth));
 
     return_ACPI_STATUS (Status);
 }
@@ -409,9 +397,9 @@ AcpiExReleaseMutex (
     ACPI_OPERAND_OBJECT     *ObjDesc,
     ACPI_WALK_STATE         *WalkState)
 {
+    ACPI_STATUS             Status = AE_OK;
     UINT8                   PreviousSyncLevel;
     ACPI_THREAD_STATE       *OwnerThread;
-    ACPI_STATUS             Status = AE_OK;
 
 
     ACPI_FUNCTION_TRACE (ExReleaseMutex);
@@ -469,8 +457,7 @@ AcpiExReleaseMutex (
     if (ObjDesc->Mutex.SyncLevel != OwnerThread->CurrentSyncLevel)
     {
         ACPI_ERROR ((AE_INFO,
-            "Cannot release Mutex [%4.4s], SyncLevel mismatch: "
-            "mutex %u current %u",
+            "Cannot release Mutex [%4.4s], SyncLevel mismatch: mutex %u current %u",
             AcpiUtGetNodeName (ObjDesc->Mutex.Node),
             ObjDesc->Mutex.SyncLevel, WalkState->Thread->CurrentSyncLevel));
         return_ACPI_STATUS (AE_AML_MUTEX_ORDER);
@@ -484,13 +471,6 @@ AcpiExReleaseMutex (
     PreviousSyncLevel =
         OwnerThread->AcquiredMutexList->Mutex.OriginalSyncLevel;
 
-    ACPI_DEBUG_PRINT ((ACPI_DB_EXEC,
-        "Releasing: Object SyncLevel %u, Thread SyncLevel %u, "
-        "Prev SyncLevel %u, Depth %u TID %p\n",
-        ObjDesc->Mutex.SyncLevel, WalkState->Thread->CurrentSyncLevel,
-        PreviousSyncLevel, ObjDesc->Mutex.AcquisitionDepth,
-        WalkState->Thread));
-
     Status = AcpiExReleaseMutexObject (ObjDesc);
     if (ACPI_FAILURE (Status))
     {
@@ -503,12 +483,6 @@ AcpiExReleaseMutex (
 
         OwnerThread->CurrentSyncLevel = PreviousSyncLevel;
     }
-
-    ACPI_DEBUG_PRINT ((ACPI_DB_EXEC,
-        "Released: Object SyncLevel %u, Thread SyncLevel, %u, "
-        "Prev SyncLevel %u, Depth %u\n",
-        ObjDesc->Mutex.SyncLevel, WalkState->Thread->CurrentSyncLevel,
-        PreviousSyncLevel, ObjDesc->Mutex.AcquisitionDepth));
 
     return_ACPI_STATUS (Status);
 }
@@ -540,7 +514,7 @@ AcpiExReleaseAllMutexes (
     ACPI_OPERAND_OBJECT     *ObjDesc;
 
 
-    ACPI_FUNCTION_TRACE (ExReleaseAllMutexes);
+    ACPI_FUNCTION_NAME (ExReleaseAllMutexes);
 
 
     /* Traverse the list of owned mutexes, releasing each one */
@@ -548,10 +522,14 @@ AcpiExReleaseAllMutexes (
     while (Next)
     {
         ObjDesc = Next;
+        Next = ObjDesc->Mutex.Next;
+
+        ObjDesc->Mutex.Prev = NULL;
+        ObjDesc->Mutex.Next = NULL;
+        ObjDesc->Mutex.AcquisitionDepth = 0;
+
         ACPI_DEBUG_PRINT ((ACPI_DB_EXEC,
-            "Mutex [%4.4s] force-release, SyncLevel %u Depth %u\n",
-            ObjDesc->Mutex.Node->Name.Ascii, ObjDesc->Mutex.SyncLevel,
-            ObjDesc->Mutex.AcquisitionDepth));
+            "Force-releasing held mutex: %p\n", ObjDesc));
 
         /* Release the mutex, special case for Global Lock */
 
@@ -566,20 +544,13 @@ AcpiExReleaseAllMutexes (
             AcpiOsReleaseMutex (ObjDesc->Mutex.OsMutex);
         }
 
+        /* Mark mutex unowned */
+
+        ObjDesc->Mutex.OwnerThread = NULL;
+        ObjDesc->Mutex.ThreadId = 0;
+
         /* Update Thread SyncLevel (Last mutex is the important one) */
 
         Thread->CurrentSyncLevel = ObjDesc->Mutex.OriginalSyncLevel;
-
-        /* Mark mutex unowned */
-
-        Next = ObjDesc->Mutex.Next;
-
-        ObjDesc->Mutex.Prev = NULL;
-        ObjDesc->Mutex.Next = NULL;
-        ObjDesc->Mutex.AcquisitionDepth = 0;
-        ObjDesc->Mutex.OwnerThread = NULL;
-        ObjDesc->Mutex.ThreadId = 0;
     }
-
-    return_VOID;
 }

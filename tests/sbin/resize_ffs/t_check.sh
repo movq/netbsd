@@ -1,4 +1,4 @@
-# $NetBSD: t_check.sh,v 1.1 2015/03/29 19:37:02 chopps Exp $
+# $NetBSD: t_check.sh,v 1.1.2.2 2015/08/06 21:13:44 snj Exp $
 #
 # Copyright (c) 2010 The NetBSD Foundation, Inc.
 # All rights reserved.

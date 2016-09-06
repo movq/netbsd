@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,7 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
 
 #include "acpi.h"
 #include "accommon.h"
@@ -135,7 +136,6 @@ AcpiDmDumpTree (
     Info.Count = 0;
     Info.Level = 0;
     Info.WalkState = NULL;
-
     AcpiDmWalkParseTree (Origin, AcpiDmDumpDescending, NULL, &Info);
     AcpiOsPrintf ("*/\n\n");
 }
@@ -169,7 +169,6 @@ AcpiDmFindOrphanMethods (
     Info.Flags = 0;
     Info.Level = 0;
     Info.WalkState = NULL;
-
     AcpiDmWalkParseTree (Origin, AcpiDmFindOrphanDescending, NULL, &Info);
 }
 
@@ -213,8 +212,7 @@ AcpiDmFinishNamespaceLoad (
         return;
     }
 
-    Status = AcpiDsScopeStackPush (NamespaceRoot, NamespaceRoot->Type,
-        WalkState);
+    Status = AcpiDsScopeStackPush (NamespaceRoot, NamespaceRoot->Type, WalkState);
     if (ACPI_FAILURE (Status))
     {
         return;
@@ -223,7 +221,6 @@ AcpiDmFinishNamespaceLoad (
     Info.Flags = 0;
     Info.Level = 0;
     Info.WalkState = WalkState;
-
     AcpiDmWalkParseTree (ParseTreeRoot, AcpiDmLoadDescendingOp,
         AcpiDmCommonAscendingOp, &Info);
     ACPI_FREE (WalkState);
@@ -268,8 +265,7 @@ AcpiDmCrossReferenceNamespace (
         return;
     }
 
-    Status = AcpiDsScopeStackPush (NamespaceRoot, NamespaceRoot->Type,
-        WalkState);
+    Status = AcpiDsScopeStackPush (NamespaceRoot, NamespaceRoot->Type, WalkState);
     if (ACPI_FAILURE (Status))
     {
         return;
@@ -278,7 +274,6 @@ AcpiDmCrossReferenceNamespace (
     Info.Flags = 0;
     Info.Level = 0;
     Info.WalkState = WalkState;
-
     AcpiDmWalkParseTree (ParseTreeRoot, AcpiDmXrefDescendingOp,
         AcpiDmCommonAscendingOp, &Info);
     ACPI_FREE (WalkState);
@@ -323,18 +318,15 @@ AcpiDmConvertResourceIndexes (
         return;
     }
 
-    Status = AcpiDsScopeStackPush (NamespaceRoot, NamespaceRoot->Type,
-        WalkState);
+    Status = AcpiDsScopeStackPush (NamespaceRoot, NamespaceRoot->Type, WalkState);
     if (ACPI_FAILURE (Status))
     {
-        ACPI_FREE (WalkState);
         return;
     }
 
     Info.Flags = 0;
     Info.Level = 0;
     Info.WalkState = WalkState;
-
     AcpiDmWalkParseTree (ParseTreeRoot, AcpiDmResourceDescendingOp,
         AcpiDmCommonAscendingOp, &Info);
     ACPI_FREE (WalkState);
@@ -405,7 +397,7 @@ AcpiDmDumpDescending (
         if (Op->Common.Value.String)
         {
             AcpiNsExternalizeName (ACPI_UINT32_MAX, Op->Common.Value.String,
-                NULL, &Path);
+                            NULL, &Path);
             AcpiOsPrintf ("%s %p", Path, Op->Common.Node);
             ACPI_FREE (Path);
         }
@@ -443,7 +435,7 @@ AcpiDmDumpDescending (
  *
  * DESCRIPTION: Check namepath Ops for orphaned method invocations
  *
- * Note: Parts of this are experimental, under possible further development.
+ * Note: Experimental.
  *
  ******************************************************************************/
 
@@ -509,7 +501,6 @@ AcpiDmFindOrphanDescending (
                 ChildOp->Common.Value.String, ACPI_TYPE_METHOD, ArgCount, 0);
         }
         break;
-
 #endif
 
     case AML_STORE_OP:
@@ -534,7 +525,7 @@ AcpiDmFindOrphanDescending (
                 /* One Arg means this is just a Store(Name,Target) */
 
                 AcpiDmAddOpToExternalList (ChildOp,
-                    ChildOp->Common.Value.String, ACPI_TYPE_INTEGER, ArgCount, 0);
+                    ChildOp->Common.Value.String, ACPI_TYPE_INTEGER, 0, 0);
                 return (AE_OK);
             }
 
@@ -556,7 +547,7 @@ AcpiDmFindOrphanDescending (
             (ParentOp->Common.AmlOpcode != AML_INT_METHODCALL_OP) &&
             !Op->Common.Node)
         {
-            ArgCount = AcpiDmInspectPossibleArgs (0, 0, Op);
+            ArgCount = AcpiDmInspectPossibleArgs (0, 0, Op->Common.Next);
 
             /*
              * Check if namepath is a predicate for if/while or lone parameter to
@@ -665,7 +656,6 @@ AcpiDmLoadDescendingOp (
         {
             NextOp = NextOp->Common.Next;
         }
-
         Path = NextOp->Common.Value.String;
     }
 
@@ -677,8 +667,8 @@ AcpiDmLoadDescendingOp (
     /* Insert the name into the namespace */
 
     Status = AcpiNsLookup (WalkState->ScopeInfo, Path, ObjectType,
-        ACPI_IMODE_LOAD_PASS2, ACPI_NS_DONT_OPEN_SCOPE,
-        WalkState, &Node);
+                ACPI_IMODE_LOAD_PASS2, ACPI_NS_DONT_OPEN_SCOPE,
+                WalkState, &Node);
 
     Op->Common.Node = Node;
 
@@ -719,8 +709,7 @@ Exit:
     {
         if (Op->Common.Node)
         {
-            Status = AcpiDsScopeStackPush (Op->Common.Node, ObjectType,
-                WalkState);
+            Status = AcpiDsScopeStackPush (Op->Common.Node, ObjectType, WalkState);
             if (ACPI_FAILURE (Status))
             {
                 return (Status);
@@ -762,7 +751,6 @@ AcpiDmXrefDescendingOp (
     ACPI_OPERAND_OBJECT     *Object;
     UINT32                  ParamCount = 0;
     char                    *Pathname;
-    UINT16                  Flags = 0;
 
 
     WalkState = Info->WalkState;
@@ -772,28 +760,8 @@ AcpiDmXrefDescendingOp (
 
     if ((!(OpInfo->Flags & AML_NAMED)) &&
         (!(OpInfo->Flags & AML_CREATE)) &&
-        (Op->Common.AmlOpcode != AML_INT_NAMEPATH_OP) &&
-        (Op->Common.AmlOpcode != AML_NOTIFY_OP))
+        (Op->Common.AmlOpcode != AML_INT_NAMEPATH_OP))
     {
-        goto Exit;
-    }
-    else if (Op->Common.Parent &&
-             Op->Common.Parent->Common.AmlOpcode == AML_EXTERNAL_OP)
-    {
-        /* External() NamePath */
-
-        Path = Op->Common.Value.String;
-        ObjectType = (ACPI_OBJECT_TYPE) Op->Common.Next->Common.Value.Integer;
-        if (ObjectType == ACPI_TYPE_METHOD)
-        {
-            ParamCount = (UINT32)
-                Op->Common.Next->Common.Next->Common.Value.Integer;
-        }
-
-        Flags |= ACPI_EXT_RESOLVED_REFERENCE | ACPI_EXT_ORIGIN_FROM_OPCODE;
-        AcpiDmAddOpToExternalList (Op, Path,
-            (UINT8) ObjectType, ParamCount, Flags);
-
         goto Exit;
     }
 
@@ -833,10 +801,6 @@ AcpiDmXrefDescendingOp (
             Path = NextOp->Common.Value.String;
         }
     }
-    else if (Op->Common.AmlOpcode == AML_NOTIFY_OP)
-    {
-        Path = Op->Common.Value.Arg->Asl.Value.String;
-    }
     else
     {
         Path = Op->Common.Value.String;
@@ -856,9 +820,8 @@ AcpiDmXrefDescendingOp (
      */
     Node = NULL;
     Status = AcpiNsLookup (WalkState->ScopeInfo, Path, ACPI_TYPE_ANY,
-        ACPI_IMODE_EXECUTE, ACPI_NS_SEARCH_PARENT | ACPI_NS_DONT_OPEN_SCOPE,
-        WalkState, &Node);
-
+                ACPI_IMODE_EXECUTE, ACPI_NS_SEARCH_PARENT | ACPI_NS_DONT_OPEN_SCOPE,
+                WalkState, &Node);
     if (ACPI_SUCCESS (Status) && (Node->Flags & ANOBJ_IS_EXTERNAL))
     {
         /* Node was created by an External() statement */
@@ -883,12 +846,12 @@ AcpiDmXrefDescendingOp (
                 if (Node)
                 {
                     AcpiDmAddNodeToExternalList (Node,
-                        (UINT8) ObjectType, 7, Flags);
+                        (UINT8) ObjectType, 0, 0);
                 }
                 else
                 {
                     AcpiDmAddOpToExternalList (Op, Path,
-                        (UINT8) ObjectType, 7, Flags);
+                        (UINT8) ObjectType, 0, 0);
                 }
             }
         }
@@ -940,8 +903,7 @@ Exit:
     {
         if (Op->Common.Node)
         {
-            Status = AcpiDsScopeStackPush (Op->Common.Node, ObjectType,
-                WalkState);
+            Status = AcpiDsScopeStackPush (Op->Common.Node, ObjectType, WalkState);
             if (ACPI_FAILURE (Status))
             {
                 return (Status);
@@ -989,8 +951,7 @@ AcpiDmResourceDescendingOp (
         if (Op->Common.Node)
         {
 
-            Status = AcpiDsScopeStackPush (Op->Common.Node, ObjectType,
-                WalkState);
+            Status = AcpiDsScopeStackPush (Op->Common.Node, ObjectType, WalkState);
             if (ACPI_FAILURE (Status))
             {
                 return (Status);
@@ -1070,69 +1031,40 @@ AcpiDmInspectPossibleArgs (
 {
     const ACPI_OPCODE_INFO  *OpInfo;
     UINT32                  i;
-    UINT32                  ArgumentCount = 0;
-    ACPI_PARSE_OBJECT       *NextOp;
-    ACPI_PARSE_OBJECT       *ExecuteOp;
+    UINT32                  Last = 0;
+    UINT32                  Lookahead;
 
 
-    if (!Op)
-    {
-        return (0);
-    }
+    Lookahead = (ACPI_METHOD_NUM_ARGS + TargetCount) - CurrentOpArgCount;
 
     /* Lookahead for the maximum number of possible arguments */
 
-    NextOp = Op->Common.Next;
-
-    for (i = 0; (i < ACPI_METHOD_NUM_ARGS) && NextOp; i++)
+    for (i = 0; i < Lookahead; i++)
     {
-        OpInfo = AcpiPsGetOpcodeInfo (NextOp->Common.AmlOpcode);
-
-        /* Any one of these operators is "very probably" not a method arg */
-
-        if ((NextOp->Common.AmlOpcode == AML_STORE_OP) ||
-            (NextOp->Common.AmlOpcode == AML_NOTIFY_OP) ||
-            (OpInfo->Class == AML_CLASS_CONTROL) ||
-            (OpInfo->Class == AML_CLASS_CREATE) ||
-            (OpInfo->Class == AML_CLASS_NAMED_OBJECT))
+        if (!Op)
         {
             break;
         }
 
-        if (OpInfo->Class == AML_CLASS_EXECUTE)
+        OpInfo = AcpiPsGetOpcodeInfo (Op->Common.AmlOpcode);
+
+        /*
+         * Any one of these operators is "very probably" not a method arg
+         */
+        if ((Op->Common.AmlOpcode == AML_STORE_OP) ||
+            (Op->Common.AmlOpcode == AML_NOTIFY_OP))
         {
-            /* Probable that this is method arg if there is no target */
-
-            ExecuteOp = NextOp->Common.Value.Arg;
-            while (ExecuteOp)
-            {
-                if ((ExecuteOp->Common.AmlOpcode == AML_INT_NAMEPATH_OP) &&
-                    (ExecuteOp->Common.Value.Arg == NULL))
-                {
-                    /* No target, could be a method arg */
-
-                    break;
-                }
-
-                if (NextOp->Common.AmlOpcode == AML_REF_OF_OP)
-                {
-                    break;
-                }
-
-                ExecuteOp = ExecuteOp->Common.Next;
-            }
-
-            if (!ExecuteOp)
-            {
-                /* Has a target, not method arg */
-
-                return (ArgumentCount);
-            }
+            break;
         }
 
-        ArgumentCount++;
-        NextOp = NextOp->Common.Next;
+        if ((OpInfo->Class != AML_CLASS_EXECUTE) &&
+            (OpInfo->Class != AML_CLASS_CONTROL))
+        {
+            Last = i+1;
+        }
+
+        Op = Op->Common.Next;
     }
 
-    return (ArgumentCount);
+    return (Last);
 }

@@ -1,6 +1,6 @@
 /* Target waitstatus definitions and prototypes.
 
-   Copyright (C) 1990-2015 Free Software Foundation, Inc.
+   Copyright (C) 1990-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,6 +20,8 @@
 #ifndef WAITSTATUS_H
 #define WAITSTATUS_H
 
+#include "common-utils.h"
+#include "ptid.h"
 #include "gdb_signals.h"
 
 /* Stuff for target_wait.  */
@@ -113,28 +115,6 @@ struct target_waitstatus
       /* Syscall number */
       int syscall_number;
     } value;
-};
-
-/* Extended reasons that can explain why a target/thread stopped for a
-   trap signal.  */
-
-enum target_stop_reason
-{
-  /* Either not stopped, or stopped for a reason that doesn't require
-     special tracking.  */
-  TARGET_STOPPED_BY_NO_REASON,
-
-  /* Stopped by a software breakpoint.  */
-  TARGET_STOPPED_BY_SW_BREAKPOINT,
-
-  /* Stopped by a hardware breakpoint.  */
-  TARGET_STOPPED_BY_HW_BREAKPOINT,
-
-  /* Stopped by a watchpoint.  */
-  TARGET_STOPPED_BY_WATCHPOINT,
-
-  /* Stopped by a single step finishing.  */
-  TARGET_STOPPED_BY_SINGLE_STEP
 };
 
 /* Prototypes */

@@ -32,12 +32,12 @@ namespace {
   public:
     ARMELFObjectWriter(uint8_t OSABI);
 
-    ~ARMELFObjectWriter() override;
+    virtual ~ARMELFObjectWriter();
 
     unsigned GetRelocType(const MCValue &Target, const MCFixup &Fixup,
                           bool IsPCRel) const override;
 
-    bool needsRelocateWithSymbol(const MCSymbol &Sym,
+    bool needsRelocateWithSymbol(const MCSymbolData &SD,
                                  unsigned Type) const override;
   };
 }
@@ -49,7 +49,7 @@ ARMELFObjectWriter::ARMELFObjectWriter(uint8_t OSABI)
 
 ARMELFObjectWriter::~ARMELFObjectWriter() {}
 
-bool ARMELFObjectWriter::needsRelocateWithSymbol(const MCSymbol &Sym,
+bool ARMELFObjectWriter::needsRelocateWithSymbol(const MCSymbolData &SD,
                                                  unsigned Type) const {
   // FIXME: This is extremely conservative. This really needs to use a
   // whitelist with a clear explanation for why each realocation needs to
@@ -81,9 +81,7 @@ unsigned ARMELFObjectWriter::GetRelocTypeInner(const MCValue &Target,
   unsigned Type = 0;
   if (IsPCRel) {
     switch ((unsigned)Fixup.getKind()) {
-    default:
-      report_fatal_error("unsupported relocation on symbol");
-      return ELF::R_ARM_NONE;
+    default: llvm_unreachable("Unimplemented");
     case FK_Data_4:
       switch (Modifier) {
       default: llvm_unreachable("Unsupported Modifier");
@@ -95,7 +93,7 @@ unsigned ARMELFObjectWriter::GetRelocTypeInner(const MCValue &Target,
       case MCSymbolRefExpr::VK_GOTTPOFF:
         Type = ELF::R_ARM_TLS_IE32;
         break;
-      case MCSymbolRefExpr::VK_ARM_GOT_PREL:
+      case MCSymbolRefExpr::VK_GOTPCREL:
         Type = ELF::R_ARM_GOT_PREL;
         break;
       }
@@ -149,9 +147,7 @@ unsigned ARMELFObjectWriter::GetRelocTypeInner(const MCValue &Target,
     }
   } else {
     switch ((unsigned)Fixup.getKind()) {
-    default:
-      report_fatal_error("unsupported relocation on symbol");
-      return ELF::R_ARM_NONE;
+    default: llvm_unreachable("invalid fixup kind!");
     case FK_Data_1:
       switch (Modifier) {
       default: llvm_unreachable("unsupported Modifier");
@@ -192,7 +188,7 @@ unsigned ARMELFObjectWriter::GetRelocTypeInner(const MCValue &Target,
       case MCSymbolRefExpr::VK_GOTOFF:
         Type = ELF::R_ARM_GOTOFF32;
         break;
-      case MCSymbolRefExpr::VK_ARM_GOT_PREL:
+      case MCSymbolRefExpr::VK_GOTPCREL:
         Type = ELF::R_ARM_GOT_PREL;
         break;
       case MCSymbolRefExpr::VK_ARM_TARGET1:
@@ -251,7 +247,7 @@ unsigned ARMELFObjectWriter::GetRelocTypeInner(const MCValue &Target,
   return Type;
 }
 
-MCObjectWriter *llvm::createARMELFObjectWriter(raw_pwrite_stream &OS,
+MCObjectWriter *llvm::createARMELFObjectWriter(raw_ostream &OS,
                                                uint8_t OSABI,
                                                bool IsLittleEndian) {
   MCELFObjectTargetWriter *MOTW = new ARMELFObjectWriter(OSABI);

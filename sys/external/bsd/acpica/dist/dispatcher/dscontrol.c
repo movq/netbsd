@@ -6,7 +6,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -42,12 +42,13 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+#define __DSCONTROL_C__
+
 #include "acpi.h"
 #include "accommon.h"
 #include "amlcode.h"
 #include "acdispat.h"
 #include "acinterp.h"
-#include "acdebug.h"
 
 #define _COMPONENT          ACPI_DISPATCHER
         ACPI_MODULE_NAME    ("dscontrol")
@@ -120,12 +121,9 @@ AcpiDsExecBeginControlOp (
          * Save a pointer to the predicate for multiple executions
          * of a loop
          */
-        ControlState->Control.AmlPredicateStart =
-            WalkState->ParserState.Aml - 1;
-        ControlState->Control.PackageEnd =
-            WalkState->ParserState.PkgEnd;
-        ControlState->Control.Opcode =
-            Op->Common.AmlOpcode;
+        ControlState->Control.AmlPredicateStart = WalkState->ParserState.Aml - 1;
+        ControlState->Control.PackageEnd = WalkState->ParserState.PkgEnd;
+        ControlState->Control.Opcode = Op->Common.AmlOpcode;
 
 
         /* Push the control state on this walk's control stack */
@@ -225,7 +223,7 @@ AcpiDsExecEndControlOp (
              * loop does not implement a timeout.
              */
             ControlState->Control.LoopCount++;
-            if (ControlState->Control.LoopCount > AcpiGbl_MaxLoopIterations)
+            if (ControlState->Control.LoopCount > ACPI_MAX_LOOP_ITERATIONS)
             {
                 Status = AE_AML_INFINITE_LOOP;
                 break;
@@ -236,8 +234,7 @@ AcpiDsExecEndControlOp (
              * another time
              */
             Status = AE_CTRL_PENDING;
-            WalkState->AmlLastWhile =
-                ControlState->Control.AmlPredicateStart;
+            WalkState->AmlLastWhile = ControlState->Control.AmlPredicateStart;
             break;
         }
 
@@ -281,8 +278,7 @@ AcpiDsExecEndControlOp (
              * an arg or local), resolve it now because it may
              * cease to exist at the end of the method.
              */
-            Status = AcpiExResolveToValue (
-                &WalkState->Operands [0], WalkState);
+            Status = AcpiExResolveToValue (&WalkState->Operands [0], WalkState);
             if (ACPI_FAILURE (Status))
             {
                 return (Status);
@@ -311,15 +307,11 @@ AcpiDsExecEndControlOp (
              * Allow references created by the Index operator to return
              * unchanged.
              */
-            if ((ACPI_GET_DESCRIPTOR_TYPE (WalkState->Results->Results.ObjDesc[0]) ==
-                    ACPI_DESC_TYPE_OPERAND) &&
-                ((WalkState->Results->Results.ObjDesc [0])->Common.Type ==
-                    ACPI_TYPE_LOCAL_REFERENCE) &&
-                ((WalkState->Results->Results.ObjDesc [0])->Reference.Class !=
-                    ACPI_REFCLASS_INDEX))
+            if ((ACPI_GET_DESCRIPTOR_TYPE (WalkState->Results->Results.ObjDesc[0]) == ACPI_DESC_TYPE_OPERAND) &&
+                ((WalkState->Results->Results.ObjDesc [0])->Common.Type == ACPI_TYPE_LOCAL_REFERENCE) &&
+                ((WalkState->Results->Results.ObjDesc [0])->Reference.Class != ACPI_REFCLASS_INDEX))
             {
-                Status = AcpiExResolveToValue (
-                    &WalkState->Results->Results.ObjDesc [0], WalkState);
+                Status = AcpiExResolveToValue (&WalkState->Results->Results.ObjDesc [0], WalkState);
                 if (ACPI_FAILURE (Status))
                 {
                     return (Status);
@@ -337,9 +329,9 @@ AcpiDsExecEndControlOp (
                 AcpiUtRemoveReference (WalkState->Operands [0]);
             }
 
-            WalkState->Operands[0] = NULL;
-            WalkState->NumOperands = 0;
-            WalkState->ReturnDesc = NULL;
+            WalkState->Operands [0]     = NULL;
+            WalkState->NumOperands      = 0;
+            WalkState->ReturnDesc       = NULL;
         }
 
 
@@ -360,12 +352,20 @@ AcpiDsExecEndControlOp (
 
     case AML_BREAK_POINT_OP:
 
-        AcpiDbSignalBreakPoint (WalkState);
+        /*
+         * Set the single-step flag. This will cause the debugger (if present)
+         * to break to the console within the AML debugger at the start of the
+         * next AML instruction.
+         */
+        ACPI_DEBUGGER_EXEC (
+            AcpiGbl_CmSingleStep = TRUE);
+        ACPI_DEBUGGER_EXEC (
+            AcpiOsPrintf ("**break** Executed AML BreakPoint opcode\n"));
 
         /* Call to the OSL in case OS wants a piece of the action */
 
         Status = AcpiOsSignal (ACPI_SIGNAL_BREAKPOINT,
-            __UNCONST("Executed AML Breakpoint opcode"));
+	    __UNCONST("Executed AML Breakpoint opcode"));
         break;
 
     case AML_BREAK_OP:
@@ -389,8 +389,7 @@ AcpiDsExecEndControlOp (
 
         /* Was: WalkState->AmlLastWhile = WalkState->ControlState->Control.AmlPredicateStart; */
 
-        WalkState->AmlLastWhile =
-            WalkState->ControlState->Control.PackageEnd;
+        WalkState->AmlLastWhile = WalkState->ControlState->Control.PackageEnd;
 
         /* Return status depending on opcode */
 

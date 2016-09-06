@@ -1,4 +1,4 @@
-/* $NetBSD: awin_debe.c,v 1.20 2015/11/22 17:50:48 aymeric Exp $ */
+/* $NetBSD: awin_debe.c,v 1.6.2.6 2014/12/09 19:21:09 martin Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
@@ -28,8 +28,6 @@
 
 #include "opt_allwinner.h"
 #include "genfb.h"
-#include "awin_mp.h"
-#include "awin_tcon.h"
 
 #ifndef AWIN_DEBE_VIDEOMEM
 #define AWIN_DEBE_VIDEOMEM	(16 * 1024 * 1024)
@@ -38,7 +36,7 @@
 #define AWIN_DEBE_CURMAX	64
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: awin_debe.c,v 1.20 2015/11/22 17:50:48 aymeric Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awin_debe.c,v 1.6.2.6 2014/12/09 19:21:09 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -116,12 +114,6 @@ awin_debe_attach(device_t parent, device_t self, void *aux)
 	struct awinio_attach_args * const aio = aux;
 	const struct awin_locators * const loc = &aio->aio_loc;
 	prop_dictionary_t cfg = device_properties(self);
-#if NAWIN_MP > 0
-	device_t mpdev;
-#endif
-#ifdef AWIN_DEBE_FWINIT
-	struct videomode mode;
-#endif
 	int error;
 
 	sc->sc_dev = self;
@@ -143,7 +135,7 @@ awin_debe_attach(device_t parent, device_t self, void *aux)
 		    AWIN_A31_AHB_RESET1_REG,
 		    AWIN_A31_AHB_RESET1_BE0_RST << loc->loc_port,
 		    0);
-	} else if (awin_chip_id() == AWIN_CHIP_ID_A20) {
+	} else {
 		awin_reg_set_clear(aio->aio_core_bst, aio->aio_ccm_bsh,
 		    AWIN_BE0_SCLK_CFG_REG + (loc->loc_port * 4),
 		    AWIN_BEx_CLK_RST,
@@ -164,7 +156,7 @@ awin_debe_attach(device_t parent, device_t self, void *aux)
 			      AWIN_A31_BEx_CLK_SRC_SEL) |
 		    __SHIFTIN(clk_div - 1, AWIN_BEx_CLK_DIV_RATIO_M),
 		    AWIN_A31_BEx_CLK_SRC_SEL | AWIN_BEx_CLK_DIV_RATIO_M);
-	} else if (awin_chip_id() == AWIN_CHIP_ID_A20) {
+	} else {
 		uint32_t pll5x_freq = awin_pll5x_get_rate();
 		unsigned int clk_div = (pll5x_freq + 299999999) / 300000000;
 
@@ -180,55 +172,22 @@ awin_debe_attach(device_t parent, device_t self, void *aux)
 		    AWIN_BEx_CLK_SRC_SEL | AWIN_BEx_CLK_DIV_RATIO_M);
 	}
 
-	if (awin_chip_id() == AWIN_CHIP_ID_A20 ||
-	    awin_chip_id() == AWIN_CHIP_ID_A31) {
-		awin_reg_set_clear(aio->aio_core_bst, aio->aio_ccm_bsh,
-		    AWIN_AHB_GATING1_REG,
-		    AWIN_AHB_GATING1_DE_BE0 << loc->loc_port, 0);
+	awin_reg_set_clear(aio->aio_core_bst, aio->aio_ccm_bsh,
+	    AWIN_AHB_GATING1_REG, AWIN_AHB_GATING1_DE_BE0 << loc->loc_port, 0);
 
-		awin_reg_set_clear(aio->aio_core_bst, aio->aio_ccm_bsh,
-		    AWIN_DRAM_CLK_REG,
-		    AWIN_DRAM_CLK_BE0_DCLK_ENABLE << loc->loc_port, 0);
+	awin_reg_set_clear(aio->aio_core_bst, aio->aio_ccm_bsh,
+	    AWIN_DRAM_CLK_REG,
+	    AWIN_DRAM_CLK_BE0_DCLK_ENABLE << loc->loc_port, 0);
 
-		awin_reg_set_clear(aio->aio_core_bst, aio->aio_ccm_bsh,
-		    AWIN_BE0_SCLK_CFG_REG + (loc->loc_port * 4),
-		    AWIN_CLK_ENABLE, 0);
-	}
+	awin_reg_set_clear(aio->aio_core_bst, aio->aio_ccm_bsh,
+	    AWIN_BE0_SCLK_CFG_REG + (loc->loc_port * 4),
+	    AWIN_CLK_ENABLE, 0);
 
-#ifdef AWIN_DEBE_FWINIT
-	const uint32_t modctl = DEBE_READ(sc, AWIN_DEBE_MODCTL_REG);
-	const uint32_t dissize = DEBE_READ(sc, AWIN_DEBE_DISSIZE_REG);
-	if ((modctl & AWIN_DEBE_MODCTL_EN) == 0) {
-		aprint_error_dev(sc->sc_dev, "disabled\n");
-		return;
-	}
-	if ((modctl & AWIN_DEBE_MODCTL_START_CTL) == 0) {
-		aprint_error_dev(sc->sc_dev, "stopped\n");
-		return;
-	}
-	memset(&mode, 0, sizeof(mode));
-	mode.hdisplay = (dissize & 0xffff) + 1;
-	mode.vdisplay = ((dissize >> 16) & 0xffff) + 1;
-
-	if (mode.hdisplay == 1 || mode.vdisplay == 1) {
-		aprint_error_dev(sc->sc_dev,
-		    "couldn't determine video mode\n");
-		return;
-	}
-
-	aprint_verbose_dev(sc->sc_dev, "using %dx%d mode from firmware\n",
-	    mode.hdisplay, mode.vdisplay);
-
-	sc->sc_dmasize = mode.hdisplay * mode.vdisplay * 4;
-#else
 	for (unsigned int reg = 0x800; reg < 0x1000; reg += 4) {
 		DEBE_WRITE(sc, reg, 0);
 	}
 
 	DEBE_WRITE(sc, AWIN_DEBE_MODCTL_REG, AWIN_DEBE_MODCTL_EN);
-
-	sc->sc_dmasize = AWIN_DEBE_VIDEOMEM;
-#endif
 
 	DEBE_WRITE(sc, AWIN_DEBE_HWC_PALETTE_TABLE, 0);
 
@@ -238,21 +197,6 @@ awin_debe_attach(device_t parent, device_t self, void *aux)
 		    "couldn't allocate video memory, error = %d\n", error);
 		return;
 	}
-
-#if NAWIN_MP > 0
-	mpdev = device_find_by_driver_unit("awinmp", 0);
-	if (mpdev) {
-		paddr_t pa = sc->sc_dmamap->dm_segs[0].ds_addr;
-		if (pa >= AWIN_SDRAM_PBASE)
-			pa -= AWIN_SDRAM_PBASE;
-		awin_mp_setbase(mpdev, pa, sc->sc_dmasize);
-	}
-#endif
-
-#ifdef AWIN_DEBE_FWINIT
-	awin_debe_set_videomode(device_unit(self), &mode);
-	awin_debe_enable(device_unit(self), true);
-#endif
 }
 
 static int
@@ -260,8 +204,9 @@ awin_debe_alloc_videomem(struct awin_debe_softc *sc)
 {
 	int error, nsegs;
 
-	error = bus_dmamem_alloc(sc->sc_dmat, sc->sc_dmasize, 0x1000, 0,
-	    sc->sc_dmasegs, 1, &nsegs, BUS_DMA_WAITOK);
+	sc->sc_dmasize = AWIN_DEBE_VIDEOMEM;
+	error = bus_dmamem_alloc(sc->sc_dmat, sc->sc_dmasize, 0,
+	    sc->sc_dmasize, sc->sc_dmasegs, 1, &nsegs, BUS_DMA_WAITOK);
 	if (error)
 		return error;
 	error = bus_dmamem_map(sc->sc_dmat, sc->sc_dmasegs, nsegs,
@@ -444,19 +389,18 @@ awin_debe_set_cursor(struct awin_debe_softc *sc, struct wsdisplay_cursor *cur)
 }
 
 void
-awin_debe_enable(int unit, bool enable)
+awin_debe_enable(bool enable)
 {
 	struct awin_debe_softc *sc;
 	device_t dev;
 	uint32_t val;
 
-	dev = device_find_by_driver_unit("awindebe", unit);
+	dev = device_find_by_driver_unit("awindebe", 0);
 	if (dev == NULL) {
-		printf("DEBE%d: no driver found\n", unit);
+		printf("DEBE: no driver found\n");
 		return;
 	}
 	sc = device_private(dev);
-	KASSERT(device_unit(sc->sc_dev) == unit);
 
 	if (enable) {
 		val = DEBE_READ(sc, AWIN_DEBE_REGBUFFCTL_REG);
@@ -471,27 +415,21 @@ awin_debe_enable(int unit, bool enable)
 		val &= ~AWIN_DEBE_MODCTL_START_CTL;
 		DEBE_WRITE(sc, AWIN_DEBE_MODCTL_REG, val);
 	}
-#if 0
-	for (int i = 0; i < 0x1000; i += 4) {
-		printf("DEBE 0x%04x: 0x%08x\n", i, DEBE_READ(sc, i));
-	}
-#endif
 }
 
 void
-awin_debe_set_videomode(int unit, const struct videomode *mode)
+awin_debe_set_videomode(const struct videomode *mode)
 {
 	struct awin_debe_softc *sc;
 	device_t dev;
 	uint32_t val;
 
-	dev = device_find_by_driver_unit("awindebe", unit);
+	dev = device_find_by_driver_unit("awindebe", 0);
 	if (dev == NULL) {
-		printf("DEBE%d: no driver found\n", unit);
+		printf("DEBE: no driver found\n");
 		return;
 	}
 	sc = device_private(dev);
-	KASSERT(device_unit(sc->sc_dev) == unit);
 
 	if (mode) {
 		const u_int interlace_p = !!(mode->flags & VID_INTERLACE);
@@ -509,14 +447,12 @@ awin_debe_set_videomode(int unit, const struct videomode *mode)
 		}
 
 		paddr_t pa = sc->sc_dmamap->dm_segs[0].ds_addr;
-#if !defined(ALLWINNER_A80)
 		/*
 		 * On 2GB systems, we need to subtract AWIN_SDRAM_PBASE from
 		 * the phys addr.
 		 */
 		if (pa >= AWIN_SDRAM_PBASE)
 			pa -= AWIN_SDRAM_PBASE;
-#endif
 
 		/* notify fb */
 		awin_debe_setup_fbdev(sc, mode);
@@ -553,11 +489,6 @@ awin_debe_set_videomode(int unit, const struct videomode *mode)
 		} else {
 			val &= ~AWIN_DEBE_MODCTL_ITLMOD_EN;
 		}
-		val &= ~AWIN_DEBE_MODCTL_OUT_SEL;
-		if (device_unit(sc->sc_dev) == 1) {
-			val |= __SHIFTIN(AWIN_DEBE_MODCTL_OUT_SEL_LCD1,
-			    AWIN_DEBE_MODCTL_OUT_SEL);
-		}
 		DEBE_WRITE(sc, AWIN_DEBE_MODCTL_REG, val);
 	} else {
 		/* disable */
@@ -584,10 +515,6 @@ awin_debe_ioctl(device_t self, u_long cmd, void *data)
 		enable = *(int *)data;
 		val = DEBE_READ(sc, AWIN_DEBE_MODCTL_REG);
 		if (enable) {
-			if (val & AWIN_DEBE_MODCTL_LAY0_EN) {
-				/* already enabled */
-				return 0;
-			}
 			val |= AWIN_DEBE_MODCTL_LAY0_EN;
 			if (sc->sc_cursor_enable) {
 				val |= AWIN_DEBE_MODCTL_HWC_EN;
@@ -595,18 +522,10 @@ awin_debe_ioctl(device_t self, u_long cmd, void *data)
 				val &= ~AWIN_DEBE_MODCTL_HWC_EN;
 			}
 		} else {
-			if ((val & AWIN_DEBE_MODCTL_LAY0_EN) == 0) {
-				/* already disabled */
-				return 0;
-			}
 			val &= ~AWIN_DEBE_MODCTL_LAY0_EN;
 			val &= ~AWIN_DEBE_MODCTL_HWC_EN;
 		}
 		DEBE_WRITE(sc, AWIN_DEBE_MODCTL_REG, val);
-#if NAWIN_TCON > 0
-		/* debe0 always connected to tcon0, debe1 to tcon1*/
-		awin_tcon_setvideo(device_unit(sc->sc_dev), enable);
-#endif
 		return 0;
 	case WSDISPLAYIO_GVIDEO:
 		val = DEBE_READ(sc, AWIN_DEBE_MODCTL_REG);

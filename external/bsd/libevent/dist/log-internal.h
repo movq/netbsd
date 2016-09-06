@@ -1,4 +1,4 @@
-/*	$NetBSD: log-internal.h,v 1.4 2015/01/29 07:26:02 spz Exp $	*/
+/*	$NetBSD: log-internal.h,v 1.3.6.1 2015/02/03 08:23:39 bouyer Exp $	*/
 /*
  * Copyright (c) 2000-2007 Niels Provos <provos@citi.umich.edu>
  * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson

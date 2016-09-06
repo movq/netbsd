@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_timer.c,v 1.7 2016/05/01 23:32:01 christos Exp $	*/
+/*	$NetBSD: ntp_timer.c,v 1.1.1.3.4.3 2016/05/11 11:35:39 martin Exp $	*/
 
 /*
  * ntp_timer.c - event timer support routines

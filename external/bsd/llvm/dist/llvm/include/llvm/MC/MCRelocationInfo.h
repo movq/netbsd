@@ -28,8 +28,8 @@ class MCContext;
 
 /// \brief Create MCExprs from relocations found in an object file.
 class MCRelocationInfo {
-  MCRelocationInfo(const MCRelocationInfo &) = delete;
-  void operator=(const MCRelocationInfo &) = delete;
+  MCRelocationInfo(const MCRelocationInfo &) LLVM_DELETED_FUNCTION;
+  void operator=(const MCRelocationInfo &) LLVM_DELETED_FUNCTION;
 
 protected:
   MCContext &Ctx;

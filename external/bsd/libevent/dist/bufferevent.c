@@ -1,4 +1,4 @@
-/*	$NetBSD: bufferevent.c,v 1.3 2015/01/29 07:26:02 spz Exp $	*/
+/*	$NetBSD: bufferevent.c,v 1.2.12.1 2015/02/03 08:23:39 bouyer Exp $	*/
 /*
  * Copyright (c) 2002-2007 Niels Provos <provos@citi.umich.edu>
  * Copyright (c) 2007-2012 Niels Provos, Nick Mathewson
@@ -30,7 +30,7 @@
 
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: bufferevent.c,v 1.3 2015/01/29 07:26:02 spz Exp $");
+__RCSID("$NetBSD: bufferevent.c,v 1.2.12.1 2015/02/03 08:23:39 bouyer Exp $");
 
 #ifdef _EVENT_HAVE_SYS_TIME_H
 #include <sys/time.h>

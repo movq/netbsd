@@ -1,4 +1,4 @@
-/*	$NetBSD: if_smap.c,v 1.21 2016/06/10 13:27:12 ozaki-r Exp $	*/
+/*	$NetBSD: if_smap.c,v 1.17 2014/08/10 16:44:34 tls Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,20 +30,25 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_smap.c,v 1.21 2016/06/10 13:27:12 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_smap.c,v 1.17 2014/08/10 16:44:34 tls Exp $");
 
 #include "debug_playstation2.h"
 
+#include "rnd.h"
+
 #include <sys/param.h>
 #include <sys/systm.h>
-#include <sys/device.h>
+
 #include <sys/syslog.h>
 #include <sys/mbuf.h>
 #include <sys/ioctl.h>
-#include <sys/rndsource.h>
 #include <sys/socket.h>
 
 #include <playstation2/ee/eevar.h>
+
+#if NRND > 0
+#include <sys/rnd.h>
+#endif
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -52,6 +57,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_smap.c,v 1.21 2016/06/10 13:27:12 ozaki-r Exp $")
 #include <net/if_ether.h>
 #include <net/if_media.h>
 
+#include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
 
 #include <netinet/in.h>
@@ -107,7 +113,9 @@ struct smap_softc {
 	int tx_done_index, tx_start_index;
 	int rx_done_index;
 
-	krndsource_t rnd_source;
+#if NRND > 0
+	rndsource_element_t rnd_source;
+#endif
 };
 
 #define DEVNAME		(sc->emac3.dev.dv_xname)
@@ -117,7 +125,7 @@ struct smap_softc {
 STATIC int smap_match(struct device *, struct cfdata *, void *);
 STATIC void smap_attach(struct device *, struct device *, void *);
 
-CFATTACH_DECL_NEW(smap, sizeof (struct smap_softc),
+CFATTACH_DECL(smap, sizeof (struct smap_softc),
     smap_match, smap_attach, NULL, NULL);
 
 STATIC int smap_intr(void *);
@@ -250,14 +258,17 @@ smap_attach(struct device *parent, struct device *self, void *aux)
 	
 	spd_intr_establish(SPD_NIC, smap_intr, sc);
 
+#if NRND > 0
 	rnd_attach_source(&sc->rnd_source, DEVNAME,
 	    RND_TYPE_NET, RND_FLAG_DEFAULT);
+#endif
 }
 
 int
 smap_ioctl(struct ifnet *ifp, u_long command, void *data)
 {
 	struct smap_softc *sc = ifp->if_softc;
+	struct ifreq *ifr = (struct ifreq *) data;
 	int error, s;
 
 	s = splnet();
@@ -323,7 +334,9 @@ smap_intr(void *arg)
 	ifp = &sc->ethercom.ec_if;
 	if (IFQ_IS_EMPTY(&ifp->if_snd) == 0)
 		smap_start(ifp);
+#if NRND > 0
 	rnd_add_uint32(&sc->rnd_source, cause | sc->tx_fifo_ptr << 16);
+#endif
 
 	return (1);
 }
@@ -389,7 +402,7 @@ smap_rxeof(void *arg)
 		}
 
 		m->m_data += 2; /* for alignment */
-		m_set_rcvif(m, ifp);
+		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = sz;
 		memcpy(mtod(m, void *), (void *)sc->rx_buf, sz);
 
@@ -406,8 +419,8 @@ smap_rxeof(void *arg)
 		
 		if (m != NULL) {
 			if (ifp->if_bpf)
-				bpf_mtap(ifp, m);
-			if_percpuq_enqueue(ifp->if_percpuq, m);
+				bpf_mtap(ifp->if_bpf, m);
+			(*ifp->if_input)(ifp, m);
 		}
 	}
 	sc->rx_done_index = i;
@@ -506,7 +519,7 @@ smap_start(struct ifnet *ifp)
 		IFQ_DEQUEUE(&ifp->if_snd, m0);
 		KDASSERT(m0 != NULL);
 		if (ifp->if_bpf)
-			bpf_mtap(ifp, m0);
+			bpf_mtap(ifp->if_bpf, m0);
 
 		p = (u_int8_t *)sc->tx_buf;
 		q = p + sz;

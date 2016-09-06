@@ -145,6 +145,16 @@ public:
     ++*this;
     return tmp;
   }
+
+  inline const Self &operator=(const Self &I) {
+    if (this != &I) {
+      assert(getNode()->getParent() == I.getNode()->getParent()
+             && "Cannot assign iterators of two different regions!");
+      Node = I.Node;
+      BItor = I.BItor;
+    }
+    return *this;
+  }
 };
 
 
@@ -229,6 +239,16 @@ public:
     Self tmp = *this;
     ++*this;
     return tmp;
+  }
+
+  inline const Self &operator=(const Self &I) {
+    if (this != &I) {
+      assert(Node->getParent() == I.Node->getParent()
+             && "Cannot assign iterators to two different regions!");
+      Node = I.Node;
+      Itor = I.Itor;
+    }
+    return *this;
   }
 };
 

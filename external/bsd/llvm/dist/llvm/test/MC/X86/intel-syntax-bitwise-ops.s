@@ -20,5 +20,3 @@
     add eax, 9876 >> 1
 // CHECK: addl	$19752, %eax
     add eax, 9876 << 1
-// CHECK: addl	$5, %eax
-    add eax, 6 ^ 3

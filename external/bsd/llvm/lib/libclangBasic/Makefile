@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.14 2016/02/27 21:47:35 joerg Exp $
+#	$NetBSD: Makefile,v 1.12.2.1 2015/06/04 20:05:45 snj Exp $
 
 LIB=	clangBasic
 
@@ -11,7 +11,6 @@ SRCS+=	Attributes.cpp \
 	CharInfo.cpp \
 	Diagnostic.cpp \
 	DiagnosticIDs.cpp \
-	DiagnosticOptions.cpp \
 	FileManager.cpp \
 	FileSystemStatCache.cpp \
 	IdentifierTable.cpp \

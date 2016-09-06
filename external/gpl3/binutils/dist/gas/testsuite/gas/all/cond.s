@@ -89,15 +89,4 @@
 	m	11,
 	m	12, 13
 
-	.if 0
-#define x "m" \
-	(x)
-#define y \
-	"m" \
-	(y)
-#define z \
-	((z) \
-	 + 1)
-	.endif
-
 	.p2align 5,0

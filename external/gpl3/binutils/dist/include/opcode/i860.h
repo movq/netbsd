@@ -1,5 +1,6 @@
 /* Table of opcodes for the i860.
-   Copyright (C) 1989-2015 Free Software Foundation, Inc.
+   Copyright 1989, 1991, 2000, 2002, 2003, 2010
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler, and GDB, the GNU disassembler.
 

@@ -1,4 +1,4 @@
-/*  $NetBSD: fuse.h,v 1.6 2014/10/31 15:12:15 manu Exp $ */
+/*  $NetBSD: fuse.h,v 1.5.18.1 2014/11/05 18:11:30 snj Exp $ */
 
 /*-
  *  Copyright (c) 2010 Emmanuel Dreyfus. All rights reserved.

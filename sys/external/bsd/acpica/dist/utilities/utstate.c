@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,11 +41,52 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+
+#define __UTSTATE_C__
+
 #include "acpi.h"
 #include "accommon.h"
 
 #define _COMPONENT          ACPI_UTILITIES
         ACPI_MODULE_NAME    ("utstate")
+
+
+/*******************************************************************************
+ *
+ * FUNCTION:    AcpiUtCreatePkgStateAndPush
+ *
+ * PARAMETERS:  Object          - Object to be added to the new state
+ *              Action          - Increment/Decrement
+ *              StateList       - List the state will be added to
+ *
+ * RETURN:      Status
+ *
+ * DESCRIPTION: Create a new state and push it
+ *
+ ******************************************************************************/
+
+ACPI_STATUS
+AcpiUtCreatePkgStateAndPush (
+    void                    *InternalObject,
+    void                    *ExternalObject,
+    UINT16                  Index,
+    ACPI_GENERIC_STATE      **StateList)
+{
+    ACPI_GENERIC_STATE       *State;
+
+
+    ACPI_FUNCTION_ENTRY ();
+
+
+    State = AcpiUtCreatePkgState (InternalObject, ExternalObject, Index);
+    if (!State)
+    {
+        return (AE_NO_MEMORY);
+    }
+
+    AcpiUtPushGenericState (StateList, State);
+    return (AE_OK);
+}
 
 
 /*******************************************************************************
@@ -278,7 +319,6 @@ AcpiUtCreatePkgState (
     State->Pkg.DestObject = ExternalObject;
     State->Pkg.Index= Index;
     State->Pkg.NumPackages = 1;
-
     return (State);
 }
 
@@ -318,7 +358,6 @@ AcpiUtCreateControlState (
 
     State->Common.DescriptorType = ACPI_DESC_TYPE_STATE_CONTROL;
     State->Common.State = ACPI_CONTROL_CONDITIONAL_EXECUTING;
-
     return (State);
 }
 
@@ -349,6 +388,5 @@ AcpiUtDeleteGenericState (
     {
         (void) AcpiOsReleaseObject (AcpiGbl_StateCache, State);
     }
-
     return;
 }

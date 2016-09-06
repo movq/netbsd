@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -257,7 +257,7 @@ PrGetNextToken (
 void
 PrError (
     UINT8                   Level,
-    UINT16                  MessageId,
+    UINT8                   MessageId,
     UINT32                  Column);
 
 void
@@ -267,18 +267,14 @@ PrReplaceData (
     char                    *BufferToAdd,
     UINT32                  LengthToAdd);
 
-FILE *
+void
 PrOpenIncludeFile (
-    char                    *Filename,
-    char                    *OpenMode,
-    char                    **FullPathname);
+    char                    *Filename);
 
 FILE *
 PrOpenIncludeWithPrefix (
     char                    *PrefixDir,
-    char                    *Filename,
-    char                    *OpenMode,
-    char                    **FullPathname);
+    char                    *Filename);
 
 void
 PrPushInputFileStack (

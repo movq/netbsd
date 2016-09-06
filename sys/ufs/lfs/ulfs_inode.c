@@ -1,5 +1,5 @@
-/*	$NetBSD: ulfs_inode.c,v 1.16 2016/08/20 12:37:09 hannken Exp $	*/
-/*  from NetBSD: ufs_inode.c,v 1.95 2015/06/13 14:56:45 hannken Exp  */
+/*	$NetBSD: ulfs_inode.c,v 1.9.6.1 2016/07/10 09:49:41 martin Exp $	*/
+/*  from NetBSD: ufs_inode.c,v 1.89 2013/01/22 09:39:18 dholland Exp  */
 
 /*
  * Copyright (c) 1991, 1993
@@ -38,11 +38,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ulfs_inode.c,v 1.16 2016/08/20 12:37:09 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ulfs_inode.c,v 1.9.6.1 2016/07/10 09:49:41 martin Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_lfs.h"
 #include "opt_quota.h"
+#include "opt_wapbl.h"
 #endif
 
 #include <sys/param.h>
@@ -53,11 +54,10 @@ __KERNEL_RCSID(0, "$NetBSD: ulfs_inode.c,v 1.16 2016/08/20 12:37:09 hannken Exp 
 #include <sys/kernel.h>
 #include <sys/namei.h>
 #include <sys/kauth.h>
+#include <sys/wapbl.h>
 #include <sys/fstrans.h>
 #include <sys/kmem.h>
 
-#include <ufs/lfs/lfs.h>
-#include <ufs/lfs/lfs_accessors.h>
 #include <ufs/lfs/lfs_extern.h>
 
 #include <ufs/lfs/ulfs_inode.h>
@@ -148,6 +148,11 @@ ulfs_reclaim(struct vnode *vp)
 	/* note: originally the first was inside a wapbl txn */
 	lfs_update(vp, NULL, NULL, UPDATE_CLOSE);
 	lfs_update(vp, NULL, NULL, UPDATE_CLOSE);
+
+	/*
+	 * Remove the inode from its hash chain.
+	 */
+	ulfs_ihashrem(ip);
 
 	if (ip->i_devvp) {
 		vrele(ip->i_devvp);

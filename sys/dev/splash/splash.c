@@ -1,4 +1,4 @@
-/* $NetBSD: splash.c,v 1.13 2016/04/25 22:26:50 khorben Exp $ */
+/* $NetBSD: splash.c,v 1.12.14.1 2016/08/28 04:31:19 snj Exp $ */
 
 /*-
  * Copyright (c) 2006 Jared D. McNeill <jmcneill@invisible.ca>
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: splash.c,v 1.13 2016/04/25 22:26:50 khorben Exp $");
+__KERNEL_RCSID(0, "$NetBSD: splash.c,v 1.12.14.1 2016/08/28 04:31:19 snj Exp $");
 
 #include "opt_splash.h"
 

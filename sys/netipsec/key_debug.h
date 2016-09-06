@@ -1,4 +1,4 @@
-/*	$NetBSD: key_debug.h,v 1.7 2016/03/05 20:11:09 christos Exp $	*/
+/*	$NetBSD: key_debug.h,v 1.6.30.1 2016/03/13 11:59:22 martin Exp $	*/
 /*	$FreeBSD: src/sys/netipsec/key_debug.h,v 1.1.4.1 2003/01/24 05:11:36 sam Exp $	*/
 /*	$KAME: key_debug.h,v 1.10 2001/08/05 08:37:52 itojun Exp $	*/
 

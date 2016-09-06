@@ -1,4 +1,4 @@
-/*	$OpenBSD: sshbuf-misc.c,v 1.6 2016/05/02 08:49:03 djm Exp $	*/
+/*	$OpenBSD: sshbuf-misc.c,v 1.3 2015/02/05 12:59:57 millert Exp $	*/
 /*
  * Copyright (c) 2011 Damien Miller
  *
@@ -15,7 +15,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include "includes.h"
-__RCSID("$NetBSD: sshbuf-misc.c,v 1.6 2016/08/02 13:45:12 christos Exp $");
+__RCSID("$NetBSD: sshbuf-misc.c,v 1.3.2.2 2015/04/30 06:07:31 riz Exp $");
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -40,7 +40,7 @@ sshbuf_dump_data(const void *s, size_t len, FILE *f)
 	const u_char *p = (const u_char *)s;
 
 	for (i = 0; i < len; i += 16) {
-		fprintf(f, "%.4zu: ", i);
+		fprintf(f, "%.4zd: ", i);
 		for (j = i; j < i + 16; j++) {
 			if (j < len)
 				fprintf(f, "%02x ", p[j]);
@@ -101,7 +101,7 @@ sshbuf_dtob64(struct sshbuf *buf)
 	if (SIZE_MAX / 2 <= len || (ret = malloc(plen)) == NULL)
 		return NULL;
 	if ((r = b64_ntop(p, len, ret, plen)) == -1) {
-		explicit_bzero(ret, plen);
+		bzero(ret, plen);
 		free(ret);
 		return NULL;
 	}
@@ -120,40 +120,17 @@ sshbuf_b64tod(struct sshbuf *buf, const char *b64)
 	if ((p = malloc(plen)) == NULL)
 		return SSH_ERR_ALLOC_FAIL;
 	if ((nlen = b64_pton(b64, p, plen)) < 0) {
-		explicit_bzero(p, plen);
+		bzero(p, plen);
 		free(p);
 		return SSH_ERR_INVALID_FORMAT;
 	}
 	if ((r = sshbuf_put(buf, p, nlen)) < 0) {
-		explicit_bzero(p, plen);
+		bzero(p, plen);
 		free(p);
 		return r;
 	}
-	explicit_bzero(p, plen);
+	bzero(p, plen);
 	free(p);
 	return 0;
-}
-
-char *
-sshbuf_dup_string(struct sshbuf *buf)
-{
-	const u_char *p = NULL, *s = sshbuf_ptr(buf);
-	size_t l = sshbuf_len(buf);
-	char *r;
-
-	if (s == NULL || l > SIZE_MAX)
-		return NULL;
-	/* accept a nul only as the last character in the buffer */
-	if (l > 0 && (p = memchr(s, '\0', l)) != NULL) {
-		if (p != s + l - 1)
-			return NULL;
-		l--; /* the nul is put back below */
-	}
-	if ((r = malloc(l + 1)) == NULL)
-		return NULL;
-	if (l > 0)
-		memcpy(r, s, l);
-	r[l] = '\0';
-	return r;
 }
 

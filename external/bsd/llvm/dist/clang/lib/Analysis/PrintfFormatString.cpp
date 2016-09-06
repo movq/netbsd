@@ -49,32 +49,13 @@ static bool ParsePrecision(FormatStringHandler &H, PrintfSpecifier &FS,
   return false;
 }
 
-static bool ParseObjCFlags(FormatStringHandler &H, PrintfSpecifier &FS,
-                           const char *FlagBeg, const char *E, bool Warn) {
-   StringRef Flag(FlagBeg, E - FlagBeg);
-   // Currently there is only one flag.
-   if (Flag == "tt") {
-     FS.setHasObjCTechnicalTerm(FlagBeg);
-     return false;
-   }
-   // Handle either the case of no flag or an invalid flag.
-   if (Warn) {
-     if (Flag == "")
-       H.HandleEmptyObjCModifierFlag(FlagBeg, E  - FlagBeg);
-     else
-       H.HandleInvalidObjCModifierFlag(FlagBeg, E  - FlagBeg);
-   }
-   return true;
-}
-
 static PrintfSpecifierResult ParsePrintfSpecifier(FormatStringHandler &H,
                                                   const char *&Beg,
                                                   const char *E,
                                                   unsigned &argIndex,
                                                   const LangOptions &LO,
                                                   const TargetInfo &Target,
-                                                  bool Warn,
-                                                  bool isFreeBSDKPrintf) {
+                                                  bool Warn) {
 
   using namespace clang::analyze_format_string;
   using namespace clang::analyze_printf;
@@ -186,38 +167,6 @@ static PrintfSpecifierResult ParsePrintfSpecifier(FormatStringHandler &H,
     return true;
   }
 
-  // Look for the Objective-C modifier flags, if any.
-  // We parse these here, even if they don't apply to
-  // the conversion specifier, and then emit an error
-  // later if the conversion specifier isn't '@'.  This
-  // enables better recovery, and we don't know if
-  // these flags are applicable until later.
-  const char *ObjCModifierFlagsStart = nullptr,
-             *ObjCModifierFlagsEnd = nullptr;
-  if (*I == '[') {
-    ObjCModifierFlagsStart = I;
-    ++I;
-    auto flagStart = I;
-    for (;; ++I) {
-      ObjCModifierFlagsEnd = I;
-      if (I == E) {
-        if (Warn)
-          H.HandleIncompleteSpecifier(Start, E - Start);
-        return true;
-      }
-      // Did we find the closing ']'?
-      if (*I == ']') {
-        if (ParseObjCFlags(H, FS, flagStart, I, Warn))
-          return true;
-        ++I;
-        break;
-      }
-      // There are no separators defined yet for multiple
-      // Objective-C modifier flags.  When those are
-      // defined, this is the place to check.
-    }
-  }
-
   if (*I == '\0') {
     // Detect spurious null characters, which are likely errors.
     H.HandleNullChar(I);
@@ -257,24 +206,9 @@ static PrintfSpecifierResult ParsePrintfSpecifier(FormatStringHandler &H,
     case '@': k = ConversionSpecifier::ObjCObjArg; break;
     // Glibc specific.
     case 'm': k = ConversionSpecifier::PrintErrno; break;
-    // FreeBSD kernel specific.
-    case 'b':
-      if (isFreeBSDKPrintf)
-        k = ConversionSpecifier::FreeBSDbArg; // int followed by char *
-      break;
-    case 'r':
-      if (isFreeBSDKPrintf)
-        k = ConversionSpecifier::FreeBSDrArg; // int
-      break;
-    case 'y':
-      if (isFreeBSDKPrintf)
-        k = ConversionSpecifier::FreeBSDyArg; // int
-      break;
     // Apple-specific.
     case 'D':
-      if (isFreeBSDKPrintf)
-        k = ConversionSpecifier::FreeBSDDArg; // void * followed by char *
-      else if (Target.getTriple().isOSDarwin())
+      if (Target.getTriple().isOSDarwin())
         k = ConversionSpecifier::DArg;
       break;
     case 'O':
@@ -290,26 +224,10 @@ static PrintfSpecifierResult ParsePrintfSpecifier(FormatStringHandler &H,
       if (Target.getTriple().isOSMSVCRT())
         k = ConversionSpecifier::ZArg;
   }
-  
-  // Check to see if we used the Objective-C modifier flags with
-  // a conversion specifier other than '@'.
-  if (k != ConversionSpecifier::ObjCObjArg &&
-      k != ConversionSpecifier::InvalidSpecifier &&
-      ObjCModifierFlagsStart) {
-    H.HandleObjCFlagsWithNonObjCConversion(ObjCModifierFlagsStart,
-                                           ObjCModifierFlagsEnd + 1,
-                                           conversionPosition);
-    return true;
-  }
-  
   PrintfConversionSpecifier CS(conversionPosition, k);
   FS.setConversionSpecifier(CS);
   if (CS.consumesDataArgument() && !FS.usesPositionalArg())
     FS.setArgIndex(argIndex++);
-  // FreeBSD kernel specific.
-  if (k == ConversionSpecifier::FreeBSDbArg ||
-      k == ConversionSpecifier::FreeBSDDArg)
-    argIndex++;
 
   if (k == ConversionSpecifier::InvalidSpecifier) {
     // Assume the conversion takes one argument.
@@ -322,16 +240,14 @@ bool clang::analyze_format_string::ParsePrintfString(FormatStringHandler &H,
                                                      const char *I,
                                                      const char *E,
                                                      const LangOptions &LO,
-                                                     const TargetInfo &Target,
-                                                     bool isFreeBSDKPrintf) {
+                                                     const TargetInfo &Target) {
 
   unsigned argIndex = 0;
 
   // Keep looking for a format specifier until we have exhausted the string.
   while (I != E) {
     const PrintfSpecifierResult &FSR = ParsePrintfSpecifier(H, I, E, argIndex,
-                                                            LO, Target, true,
-                                                            isFreeBSDKPrintf);
+                                                            LO, Target, true);
     // Did a fail-stop error of any kind occur when parsing the specifier?
     // If so, don't do any more processing.
     if (FSR.shouldStop())
@@ -360,8 +276,7 @@ bool clang::analyze_format_string::ParseFormatStringHasSArg(const char *I,
   FormatStringHandler H;
   while (I != E) {
     const PrintfSpecifierResult &FSR = ParsePrintfSpecifier(H, I, E, argIndex,
-                                                            LO, Target, false,
-                                                            false);
+                                                            LO, Target, false);
     // Did a fail-stop error of any kind occur when parsing the specifier?
     // If so, don't do any more processing.
     if (FSR.shouldStop())
@@ -759,8 +674,6 @@ bool PrintfSpecifier::hasValidPlusPrefix() const {
   case ConversionSpecifier::GArg:
   case ConversionSpecifier::aArg:
   case ConversionSpecifier::AArg:
-  case ConversionSpecifier::FreeBSDrArg:
-  case ConversionSpecifier::FreeBSDyArg:
     return true;
 
   default:
@@ -786,8 +699,6 @@ bool PrintfSpecifier::hasValidAlternativeForm() const {
   case ConversionSpecifier::FArg:
   case ConversionSpecifier::gArg:
   case ConversionSpecifier::GArg:
-  case ConversionSpecifier::FreeBSDrArg:
-  case ConversionSpecifier::FreeBSDyArg:
     return true;
 
   default:
@@ -818,8 +729,6 @@ bool PrintfSpecifier::hasValidLeadingZeros() const {
   case ConversionSpecifier::FArg:
   case ConversionSpecifier::gArg:
   case ConversionSpecifier::GArg:
-  case ConversionSpecifier::FreeBSDrArg:
-  case ConversionSpecifier::FreeBSDyArg:
     return true;
 
   default:
@@ -844,8 +753,6 @@ bool PrintfSpecifier::hasValidSpacePrefix() const {
   case ConversionSpecifier::GArg:
   case ConversionSpecifier::aArg:
   case ConversionSpecifier::AArg:
-  case ConversionSpecifier::FreeBSDrArg:
-  case ConversionSpecifier::FreeBSDyArg:
     return true;
 
   default:
@@ -911,8 +818,6 @@ bool PrintfSpecifier::hasValidPrecision() const {
   case ConversionSpecifier::gArg:
   case ConversionSpecifier::GArg:
   case ConversionSpecifier::sArg:
-  case ConversionSpecifier::FreeBSDrArg:
-  case ConversionSpecifier::FreeBSDyArg:
     return true;
 
   default:

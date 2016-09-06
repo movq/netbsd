@@ -1,4 +1,4 @@
-/*	$NetBSD: llex.h,v 1.4 2016/01/28 14:41:39 lneto Exp $	*/
+/*	$NetBSD: llex.h,v 1.2.2.2 2016/07/01 06:35:02 snj Exp $	*/
 
 /*
 ** Id: llex.h,v 1.78 2014/10/29 15:38:24 roberto Exp 

@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_syscall.c,v 1.33 2015/03/07 18:41:40 christos Exp $	*/
+/*	$NetBSD: netbsd32_syscall.c,v 1.32 2014/05/16 12:55:43 njoly Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -29,12 +29,8 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#if defined(_KERNEL) && defined(_KERNEL_OPT)
-#include "opt_dtrace.h"
-#endif
-
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_syscall.c,v 1.33 2015/03/07 18:41:40 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_syscall.c,v 1.32 2014/05/16 12:55:43 njoly Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -92,12 +88,12 @@ netbsd32_syscall(struct trapframe *frame)
 			goto bad;
 	}
 
-	if (__predict_false(p->p_trace_enabled || KDTRACE_ENTRY(callp->sy_entry))
+	if (__predict_false(p->p_trace_enabled)
 	    && !__predict_false(callp->sy_flags & SYCALL_INDIRECT)) {
 		int narg = callp->sy_argsize >> 2;
 		for (i = 0; i < narg; i++)
 			args64[i] = args[i];
-		error = trace_enter(code, callp, args64);
+		error = trace_enter(code, args64, narg);
 		if (__predict_false(error != 0))
 			goto out;
 	}
@@ -107,12 +103,9 @@ netbsd32_syscall(struct trapframe *frame)
 	error = sy_call(callp, l, args, rval);
 
 out:
-	if (__predict_false(p->p_trace_enabled || KDTRACE_ENTRY(callp->sy_return))
+	if (__predict_false(p->p_trace_enabled)
 	    && !__predict_false(callp->sy_flags & SYCALL_INDIRECT)) {
-		int narg = callp->sy_argsize >> 2;
-		for (i = 0; i < narg; i++)
-			args64[i] = args[i];
-		trace_exit(code, callp, args64, rval, error);
+		trace_exit(code, rval, error);
 	}
 
 	if (__predict_true(error == 0)) {

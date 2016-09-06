@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,48 +45,6 @@
 #include "acapps.h"
 
 
-/* Local prototypes */
-
-static int
-ApIsExistingFile (
-    char                    *Pathname);
-
-
-/******************************************************************************
- *
- * FUNCTION:    ApIsExistingFile
- *
- * PARAMETERS:  Pathname            - Output filename
- *
- * RETURN:      0 on success
- *
- * DESCRIPTION: Query for file overwrite if it already exists.
- *
- ******************************************************************************/
-
-static int
-ApIsExistingFile (
-    char                    *Pathname)
-{
-#ifndef _GNU_EFI
-    struct stat             StatInfo;
-
-
-    if (!stat (Pathname, &StatInfo))
-    {
-        AcpiLogError ("Target path already exists, overwrite? [y|n] ");
-
-        if (getchar () != 'y')
-        {
-            return (-1);
-        }
-    }
-#endif
-
-    return 0;
-}
-
-
 /******************************************************************************
  *
  * FUNCTION:    ApOpenOutputFile
@@ -104,22 +62,28 @@ int
 ApOpenOutputFile (
     char                    *Pathname)
 {
-    ACPI_FILE               File;
+    struct stat             StatInfo;
+    FILE                    *File;
 
 
     /* If file exists, prompt for overwrite */
 
-    if (ApIsExistingFile (Pathname) != 0)
+    if (!stat (Pathname, &StatInfo))
     {
-        return (-1);
+        fprintf (stderr, "Target path already exists, overwrite? [y|n] ");
+
+        if (getchar () != 'y')
+        {
+            return (-1);
+        }
     }
 
     /* Point stdout to the file */
 
-    File = AcpiOsOpenFile (Pathname, ACPI_FILE_WRITING);
+    File = freopen (Pathname, "w", stdout);
     if (!File)
     {
-        AcpiLogError ("Could not open output file: %s\n", Pathname);
+        perror ("Could not open output file");
         return (-1);
     }
 
@@ -152,7 +116,7 @@ ApWriteToBinaryFile (
 {
     char                    Filename[ACPI_NAME_SIZE + 16];
     char                    InstanceStr [16];
-    ACPI_FILE               File;
+    FILE                    *File;
     size_t                  Actual;
     UINT32                  TableLength;
 
@@ -165,55 +129,53 @@ ApWriteToBinaryFile (
 
     if (ACPI_VALIDATE_RSDP_SIG (Table->Signature))
     {
-        ACPI_MOVE_NAME (Filename, ACPI_RSDP_NAME);
+        ACPI_MOVE_NAME (Filename, AP_DUMP_SIG_RSDP);
     }
     else
     {
         ACPI_MOVE_NAME (Filename, Table->Signature);
     }
-
-    Filename[0] = (char) tolower ((int) Filename[0]);
-    Filename[1] = (char) tolower ((int) Filename[1]);
-    Filename[2] = (char) tolower ((int) Filename[2]);
-    Filename[3] = (char) tolower ((int) Filename[3]);
+    Filename[0] = (char) ACPI_TOLOWER (Filename[0]);
+    Filename[1] = (char) ACPI_TOLOWER (Filename[1]);
+    Filename[2] = (char) ACPI_TOLOWER (Filename[2]);
+    Filename[3] = (char) ACPI_TOLOWER (Filename[3]);
     Filename[ACPI_NAME_SIZE] = 0;
 
     /* Handle multiple SSDTs - create different filenames for each */
 
     if (Instance > 0)
     {
-        AcpiUtSnprintf (InstanceStr, sizeof (InstanceStr), "%u", Instance);
+        snprintf (InstanceStr, sizeof(InstanceStr), "%u", Instance);
         strcat (Filename, InstanceStr);
     }
 
-    strcat (Filename, FILE_SUFFIX_BINARY_TABLE);
+    strcat (Filename, ACPI_TABLE_FILE_SUFFIX);
 
     if (Gbl_VerboseMode)
     {
-        AcpiLogError (
+        fprintf (stderr,
             "Writing [%4.4s] to binary file: %s 0x%X (%u) bytes\n",
             Table->Signature, Filename, Table->Length, Table->Length);
     }
 
     /* Open the file and dump the entire table in binary mode */
 
-    File = AcpiOsOpenFile (Filename,
-        ACPI_FILE_WRITING | ACPI_FILE_BINARY);
+    File = fopen (Filename, "wb");
     if (!File)
     {
-        AcpiLogError ("Could not open output file: %s\n", Filename);
+        perror ("Could not open output file");
         return (-1);
     }
 
-    Actual = AcpiOsWriteFile (File, Table, 1, TableLength);
+    Actual = fwrite (Table, 1, TableLength, File);
     if (Actual != TableLength)
     {
-        AcpiLogError ("Error writing binary output file: %s\n", Filename);
-        AcpiOsCloseFile (File);
+        perror ("Error writing binary output file");
+        fclose (File);
         return (-1);
     }
 
-    AcpiOsCloseFile (File);
+    fclose (File);
     return (0);
 }
 
@@ -237,48 +199,48 @@ ApGetTableFromFile (
     UINT32                  *OutFileSize)
 {
     ACPI_TABLE_HEADER       *Buffer = NULL;
-    ACPI_FILE               File;
+    FILE                    *File;
     UINT32                  FileSize;
     size_t                  Actual;
 
 
     /* Must use binary mode */
 
-    File = AcpiOsOpenFile (Pathname, ACPI_FILE_READING | ACPI_FILE_BINARY);
+    File = fopen (Pathname, "rb");
     if (!File)
     {
-        AcpiLogError ("Could not open input file: %s\n", Pathname);
+        perror ("Could not open input file");
         return (NULL);
     }
 
     /* Need file size to allocate a buffer */
 
-    FileSize = CmGetFileSize (File);
-    if (FileSize == ACPI_UINT32_MAX)
+    FileSize = ApGetFileSize (File);
+    if (!FileSize)
     {
-        AcpiLogError (
+        fprintf (stderr,
             "Could not get input file size: %s\n", Pathname);
         goto Cleanup;
     }
 
     /* Allocate a buffer for the entire file */
 
-    Buffer = ACPI_ALLOCATE_ZEROED (FileSize);
+    Buffer = calloc (1, FileSize);
     if (!Buffer)
     {
-        AcpiLogError (
+        fprintf (stderr,
             "Could not allocate file buffer of size: %u\n", FileSize);
         goto Cleanup;
     }
 
     /* Read the entire file */
 
-    Actual = AcpiOsReadFile (File, Buffer, 1, FileSize);
+    Actual = fread (Buffer, 1, FileSize, File);
     if (Actual != FileSize)
     {
-        AcpiLogError (
+        fprintf (stderr,
             "Could not read input file: %s\n", Pathname);
-        ACPI_FREE (Buffer);
+        free (Buffer);
         Buffer = NULL;
         goto Cleanup;
     }
@@ -286,6 +248,44 @@ ApGetTableFromFile (
     *OutFileSize = FileSize;
 
 Cleanup:
-    AcpiOsCloseFile (File);
+    fclose (File);
     return (Buffer);
+}
+
+
+/******************************************************************************
+ *
+ * FUNCTION:    ApGetFileSize
+ *
+ * PARAMETERS:  File                - Open file descriptor
+ *
+ * RETURN:      File size in bytes
+ *
+ * DESCRIPTION: Get the size of an open file
+ *
+ ******************************************************************************/
+
+UINT32
+ApGetFileSize (
+    FILE                    *File)
+{
+    UINT32                  FileSize;
+    long                    Offset;
+
+
+    Offset = ftell (File);
+    if (fseek (File, 0, SEEK_END))
+    {
+        return (0);
+    }
+
+    /* Get size and restore file pointer */
+
+    FileSize = (UINT32) ftell (File);
+    if (fseek (File, Offset, SEEK_SET))
+    {
+        return (0);
+    }
+
+    return (FileSize);
 }

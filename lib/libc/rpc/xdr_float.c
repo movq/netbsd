@@ -1,4 +1,4 @@
-/*	$NetBSD: xdr_float.c,v 1.41 2016/02/15 11:07:48 martin Exp $	*/
+/*	$NetBSD: xdr_float.c,v 1.39 2014/08/10 05:57:31 matt Exp $	*/
 
 /*
  * Copyright (c) 2010, Oracle America, Inc.
@@ -37,7 +37,7 @@
 static char *sccsid = "@(#)xdr_float.c 1.12 87/08/11 Copyr 1984 Sun Micro";
 static char *sccsid = "@(#)xdr_float.c	2.1 88/07/29 4.0 RPCSRC";
 #else
-__RCSID("$NetBSD: xdr_float.c,v 1.41 2016/02/15 11:07:48 martin Exp $");
+__RCSID("$NetBSD: xdr_float.c,v 1.39 2014/08/10 05:57:31 matt Exp $");
 #endif
 #endif
 
@@ -57,7 +57,6 @@ __RCSID("$NetBSD: xdr_float.c,v 1.41 2016/02/15 11:07:48 martin Exp $");
 #include <sys/param.h>
 
 #include <stdio.h>
-#include <string.h>
 
 #include <rpc/types.h>
 #include <rpc/xdr.h>
@@ -72,7 +71,11 @@ __weak_alias(xdr_float,_xdr_float)
  * This routine works on machines with IEEE754 FP and Vaxen.
  */
 
-#if !defined(__vax__)
+#if defined(__m68k__) || defined(__sparc__) || defined(__i386__) || \
+    defined(__mips__) || defined(__ns32k__) || defined(__alpha__) || \
+    defined(__arm__) || defined(__powerpc__) || defined(__sh__) || \
+    defined(__x86_64__) || defined(__hppa__) || defined(__ia64__) || \
+    defined(__aarch64__)
 #include <machine/endian.h>
 #define IEEEFP
 #endif
@@ -304,7 +307,7 @@ xdr_double(XDR *xdrs, double *dp)
 		vd.mantissa4 = (id.mantissa2 << 3);
 	doneit:
 		vd.sign = id.sign;
-		memcpy(dp, &vd, sizeof(double));
+		*dp = *((double *)(void *)&vd);
 		return (TRUE);
 #endif
 

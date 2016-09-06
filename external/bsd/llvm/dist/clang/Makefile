@@ -67,11 +67,8 @@ endif
 #   http://gcc.gnu.org/PR41874
 #   http://gcc.gnu.org/PR41838
 #
-# We don't need to do this if the host compiler is clang.
-ifneq ($(CXX_COMPILER), "clang")
+# We can revisit this when LLVM/Clang support it.
 CXX.Flags += -fno-strict-aliasing
-endif
-
 
 # Set up Clang's tblgen.
 ifndef CLANG_TBLGEN

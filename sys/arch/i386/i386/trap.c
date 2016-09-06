@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.278 2016/08/11 15:03:23 maxv Exp $	*/
+/*	$NetBSD: trap.c,v 1.272 2014/03/12 18:59:07 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000, 2005, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.278 2016/08/11 15:03:23 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.272 2014/03/12 18:59:07 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -116,7 +116,7 @@ __KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.278 2016/08/11 15:03:23 maxv Exp $");
 #include <sys/dtrace_bsd.h>
 
 /*
- * This is a hook which is initialized by the dtrace module
+ * This is a hook which is initialised by the dtrace module
  * to handle traps which might occur during DTrace probe
  * execution.
  */
@@ -291,7 +291,8 @@ trap(struct trapframe *frame)
 		trap_print(frame, l);
 	}
 #endif
-	if (type != T_NMI && !KERNELMODE(frame->tf_cs, frame->tf_eflags)) {
+	if (type != T_NMI &&
+	    !KERNELMODE(frame->tf_cs, frame->tf_eflags)) {
 		type |= T_USER;
 		l->l_md.md_regs = frame;
 		pcb->pcb_cr2 = 0;
@@ -302,7 +303,7 @@ trap(struct trapframe *frame)
 	/*
 	 * A trap can occur while DTrace executes a probe. Before
 	 * executing the probe, DTrace blocks re-scheduling and sets
-	 * a flag in its per-cpu flags to indicate that it doesn't
+	 * a flag in it's per-cpu flags to indicate that it doesn't
 	 * want to fault. On returning from the the probe, the no-fault
 	 * flag is cleared and finally re-scheduling is enabled.
 	 *
@@ -320,6 +321,9 @@ trap(struct trapframe *frame)
 #endif
 
 	switch (type) {
+
+	case T_ASTFLT:
+		/*FALLTHROUGH*/
 
 	default:
 	we_re_toast:
@@ -405,7 +409,7 @@ kernelfault:
 				goto we_re_toast;
 			}
 			/*
-			 * We faulted loading one of the user segment registers.
+			 * We faulted loading one if the user segment registers.
 			 * The stack frame containing the user registers is
 			 * still valid and is just below the %eip:%cs:%fl of
 			 * the kernel fault frame.
@@ -549,14 +553,6 @@ kernelfault:
 		}
 
 		cr2 = rcr2();
-
-		if (frame->tf_err & PGEX_X) {
-			/* SMEP might have brought us here */
-			if (cr2 > VM_MIN_ADDRESS && cr2 <= VM_MAXUSER_ADDRESS)
-				panic("prevented execution of %p (SMEP)",
-				    (void *)cr2);
-		}
-
 		goto faultcommon;
 
 	case T_PAGEFLT|T_USER: {	/* page fault */
@@ -582,7 +578,7 @@ faultcommon:
 		 * The last can occur during an exec() copyin where the
 		 * argument space is lazy-allocated.
 		 */
-		if (type == T_PAGEFLT && va >= VM_MIN_KERNEL_ADDRESS)
+		if (type == T_PAGEFLT && va >= KERNBASE)
 			map = kernel_map;
 		else
 			map = &vm->vm_map;
@@ -657,6 +653,15 @@ faultcommon:
 			}
 			goto out;
 		}
+		KSI_INIT_TRAP(&ksi);
+		ksi.ksi_trap = type & ~T_USER;
+		ksi.ksi_addr = (void *)cr2;
+		if (error == EACCES) {
+			ksi.ksi_code = SEGV_ACCERR;
+			error = EFAULT;
+		} else {
+			ksi.ksi_code = SEGV_MAPERR;
+		}
 
 		if (type == T_PAGEFLT) {
 			onfault = onfault_handler(pcb, frame);
@@ -666,37 +671,15 @@ faultcommon:
 			    map, va, ftype, error);
 			goto kernelfault;
 		}
-
-		KSI_INIT_TRAP(&ksi);
-		ksi.ksi_trap = type & ~T_USER;
-		ksi.ksi_addr = (void *)cr2;
-		switch (error) {
-		case EINVAL:
-			ksi.ksi_signo = SIGBUS;
-			ksi.ksi_code = BUS_ADRERR;
-			break;
-		case EACCES:
-			ksi.ksi_signo = SIGSEGV;
-			ksi.ksi_code = SEGV_ACCERR;
-			error = EFAULT;
-			break;
-		case ENOMEM:
+		if (error == ENOMEM) {
 			ksi.ksi_signo = SIGKILL;
-			printf("UVM: pid %d.%d (%s), uid %d killed: "
-			    "out of swap\n", p->p_pid, l->l_lid, p->p_comm,
-			    l->l_cred ?  kauth_cred_geteuid(l->l_cred) : -1);
-			break;
-		default:
+			printf("UVM: pid %d (%s), uid %d killed: out of swap\n",
+			       p->p_pid, p->p_comm,
+			       l->l_cred ?
+			       kauth_cred_geteuid(l->l_cred) : -1);
+		} else {
 			ksi.ksi_signo = SIGSEGV;
-			ksi.ksi_code = SEGV_MAPERR;
-			break;
 		}
-
-#ifdef TRAP_SIGDEBUG
-		printf("pid %d.%d (%s): signal %d at eip %x addr %lx "
-		    "error %d\n", p->p_pid, l->l_lid, p->p_comm, ksi.ksi_signo,
-		    frame->tf_eip, va, error);
-#endif
 		(*p->p_emul->e_trapsignal)(l, &ksi);
 		break;
 	}

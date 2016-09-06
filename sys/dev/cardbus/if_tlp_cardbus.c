@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tlp_cardbus.c,v 1.71 2016/07/14 10:19:06 msaitoh Exp $	*/
+/*	$NetBSD: if_tlp_cardbus.c,v 1.70 2011/08/01 11:20:27 drochner Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tlp_cardbus.c,v 1.71 2016/07/14 10:19:06 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tlp_cardbus.c,v 1.70 2011/08/01 11:20:27 drochner Exp $");
 
 #include "opt_inet.h"
 
@@ -195,8 +195,7 @@ tlp_cardbus_lookup(const struct cardbus_attach_args *ca)
 }
 
 void
-tlp_cardbus_get_quirks(struct tulip_cardbus_softc *csc, const u_int8_t *enaddr,
-    const struct tlp_cardbus_quirks *tpq)
+tlp_cardbus_get_quirks(struct tulip_cardbus_softc *csc, const u_int8_t *enaddr, const struct tlp_cardbus_quirks *tpq)
 {
 
 	for (; tpq->tpq_func != NULL; tpq++) {
@@ -210,7 +209,8 @@ tlp_cardbus_get_quirks(struct tulip_cardbus_softc *csc, const u_int8_t *enaddr,
 }
 
 int
-tlp_cardbus_match(device_t parent, cfdata_t match, void *aux)
+tlp_cardbus_match(device_t parent, cfdata_t match,
+    void *aux)
 {
 	struct cardbus_attach_args *ca = aux;
 
@@ -221,7 +221,8 @@ tlp_cardbus_match(device_t parent, cfdata_t match, void *aux)
 }
 
 void
-tlp_cardbus_attach(device_t parent, device_t self, void *aux)
+tlp_cardbus_attach(device_t parent, device_t self,
+    void *aux)
 {
 	struct tulip_cardbus_softc *csc = device_private(self);
 	struct tulip_softc *sc = &csc->sc_tulip;
@@ -292,7 +293,7 @@ tlp_cardbus_attach(device_t parent, device_t self, void *aux)
 		break;
 	}
 
-	aprint_normal(": %s Ethernet, pass %d.%d\n",
+	printf(": %s Ethernet, pass %d.%d\n",
 	    tlp_chip_name(sc->sc_chip),
 	    (sc->sc_rev >> 4) & 0xf, sc->sc_rev & 0xf);
 
@@ -378,8 +379,8 @@ tlp_cardbus_attach(device_t parent, device_t self, void *aux)
 		 * MII-over-SIO, with no special reset routine.
 		 */
 		if (sc->sc_mediasw == NULL) {
-			aprint_normal("%s: defaulting to MII-over-SIO; "
-			    "no bets...\n", device_xname(self));
+			printf("%s: defaulting to MII-over-SIO; no bets...\n",
+			    device_xname(self));
 			sc->sc_mediasw = &tlp_sio_mii_mediasw;
 		}
 		break;
@@ -420,7 +421,8 @@ tlp_cardbus_attach(device_t parent, device_t self, void *aux)
 
 	default:
  cant_cope:
-		aprint_error_dev(self, "sorry, unable to handle your board\n");
+		printf("%s: sorry, unable to handle your board\n",
+		    device_xname(self));
 		return;
 	}
 
@@ -591,7 +593,8 @@ tlp_cardbus_x3201_reset(struct tulip_softc *sc)
 }
 
 void
-tlp_cardbus_lxt_quirks(struct tulip_cardbus_softc *csc, const u_int8_t *enaddr)
+tlp_cardbus_lxt_quirks(struct tulip_cardbus_softc *csc,
+    const u_int8_t *enaddr)
 {
 	struct tulip_softc *sc = &csc->sc_tulip;
 

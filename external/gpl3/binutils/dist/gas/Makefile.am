@@ -1,21 +1,4 @@
 ## Process this file with automake to generate Makefile.in
-#
-#   Copyright (C) 2012-2015 Free Software Foundation, Inc.
-#
-# This file is free software; you can redistribute it and/or modify
-# it under the terms of the GNU General Public License as published by
-# the Free Software Foundation; either version 3 of the License, or
-# (at your option) any later version.
-#
-# This program is distributed in the hope that it will be useful,
-# but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-# GNU General Public License for more details.
-#
-# You should have received a copy of the GNU General Public License
-# along with this program; see the file COPYING3.  If not see
-# <http://www.gnu.org/licenses/>.
-#
 
 AUTOMAKE_OPTIONS = 1.11 dejagnu foreign no-dist
 ACLOCAL_AMFLAGS = -I .. -I ../config -I ../bfd
@@ -23,11 +6,6 @@ ACLOCAL_AMFLAGS = -I .. -I ../config -I ../bfd
 SUBDIRS = doc po
 
 tooldir = $(exec_prefix)/$(target_alias)
-
-# This is where we get zlib from.  zlibdir is -L../zlib and zlibinc is
-# -I../zlib, unless we were configured with --with-system-zlib, in which
-# case both are empty.
-ZLIBINC = @zlibinc@
 
 YACC = `if [ -f ../bison/bison ] ; then echo ../bison/bison -y -L../bison/bison ; else echo @YACC@ ; fi`
 LEX = `if [ -f ../flex/flex ] ; then echo ../flex/flex ; else echo @LEX@ ; fi`
@@ -39,7 +17,7 @@ am__skipyacc =
 
 WARN_CFLAGS = @WARN_CFLAGS@
 NO_WERROR = @NO_WERROR@
-AM_CFLAGS = $(WARN_CFLAGS) $(ZLIBINC)
+AM_CFLAGS = $(WARN_CFLAGS)
 
 TARG_CPU = @target_cpu_type@
 TARG_CPU_C = $(srcdir)/config/tc-@target_cpu_type@.c
@@ -144,7 +122,6 @@ TARGET_CPU_CFILES = \
 	config/tc-epiphany.c \
 	config/tc-fr30.c \
 	config/tc-frv.c \
-	config/tc-ft32.c \
 	config/tc-h8300.c \
 	config/tc-hppa.c \
 	config/tc-ia64.c \
@@ -161,7 +138,6 @@ TARGET_CPU_CFILES = \
 	config/tc-m68k.c \
 	config/tc-mcore.c \
 	config/tc-mep.c \
-	config/tc-metag.c \
 	config/tc-microblaze.c \
 	config/tc-mips.c \
 	config/tc-mmix.c \
@@ -170,14 +146,12 @@ TARGET_CPU_CFILES = \
 	config/tc-moxie.c \
 	config/tc-msp430.c \
 	config/tc-mt.c \
-	config/tc-nds32.c \
-	config/tc-nios2.c \
 	config/tc-ns32k.c \
-	config/tc-or1k.c \
+	config/tc-openrisc.c \
+	config/tc-or32.c \
 	config/tc-pdp11.c \
 	config/tc-pj.c \
 	config/tc-ppc.c \
-	config/tc-riscv.c \
 	config/tc-rl78.c \
 	config/tc-rx.c \
 	config/tc-s390.c \
@@ -192,9 +166,8 @@ TARGET_CPU_CFILES = \
 	config/tc-tic6x.c \
 	config/tc-tilegx.c \
 	config/tc-tilepro.c \
-	config/tc-v850.c \
 	config/tc-vax.c \
-	config/tc-visium.c \
+	config/tc-v850.c \
 	config/tc-xstormy16.c \
 	config/tc-xc16x.c \
 	config/tc-xgate.c \
@@ -219,7 +192,6 @@ TARGET_CPU_HFILES = \
 	config/tc-epiphany.h \
 	config/tc-fr30.h \
 	config/tc-frv.h \
-	config/tc-ft32.h \
 	config/tc-h8300.h \
 	config/tc-hppa.h \
 	config/tc-ia64.h \
@@ -236,7 +208,6 @@ TARGET_CPU_HFILES = \
 	config/tc-m68k.h \
 	config/tc-mcore.h \
 	config/tc-mep.h \
-	config/tc-metag.h \
 	config/tc-microblaze.h \
 	config/tc-mips.h \
 	config/tc-mmix.h \
@@ -244,14 +215,12 @@ TARGET_CPU_HFILES = \
 	config/tc-mn10300.h \
 	config/tc-msp430.h \
 	config/tc-mt.h \
-	config/tc-nds32.h \
-	config/tc-nios2.h \
 	config/tc-ns32k.h \
-	config/tc-or1k.h \
+	config/tc-openrisc.h \
+	config/tc-or32.h \
 	config/tc-pdp11.h \
 	config/tc-pj.h \
 	config/tc-ppc.h \
-	config/tc-riscv.h \
 	config/tc-rl78.h \
 	config/tc-rx.h \
 	config/tc-s390.h \
@@ -266,9 +235,8 @@ TARGET_CPU_HFILES = \
 	config/tc-tic6x.h \
 	config/tc-tilegx.h \
 	config/tc-tilepro.h \
-	config/tc-v850.h \
 	config/tc-vax.h \
-	config/tc-visium.h \
+	config/tc-v850.h \
 	config/tc-xstormy16.h \
 	config/tc-xc16x.h \
 	config/tc-xgate.h \
@@ -307,8 +275,6 @@ TARG_ENV_HFILES = \
 	config/te-386bsd.h \
 	config/te-aix5.h \
 	config/te-armeabi.h \
-	config/te-armfbsdeabi.h \
-	config/te-armfbsdvfp.h \
 	config/te-armlinuxeabi.h \
 	config/te-dynix.h \
 	config/te-epoc-pe.h \
@@ -322,6 +288,7 @@ TARG_ENV_HFILES = \
 	config/te-i386aix.h \
 	config/te-ia64aix.h \
 	config/te-interix.h \
+	config/te-lnews.h \
 	config/te-lynx.h \
 	config/te-mach.h \
 	config/te-macos.h \
@@ -352,6 +319,7 @@ MULTI_CFILES = \
 	config/e-i386aout.c \
 	config/e-i386coff.c \
 	config/e-i386elf.c \
+	config/e-mipsecoff.c \
 	config/e-mipself.c
 
 CONFIG_ATOF_CFILES = \
@@ -613,8 +581,8 @@ install-exec-bindir: $(noinst_PROGRAMS)
 	$(mkinstalldirs) $(DESTDIR)$(bindir)
 	@list='$(noinst_PROGRAMS)'; for p in $$list; do \
 	  if test -f $$p; then \
-	    echo " $(INSTALL_PROGRAM_ENV) $(LIBTOOL)  --mode=install $(INSTALL_PROGRAM) $$p $(bindir)/`echo $$p|sed -e 's/$(EXEEXT)$$//' -e 's/-new//'|sed '$(transform)'|sed 's/$$/$(EXEEXT)/'`"; \
-	    $(INSTALL_PROGRAM_ENV) $(LIBTOOL)  --mode=install $(INSTALL_PROGRAM) $$p $(DESTDIR)$(bindir)/`echo $$p|sed -e 's/$(EXEEXT)$$//' -e 's/-new//'|sed '$(transform)'|sed 's/$$/$(EXEEXT)/'`; \
+	    echo " $(LIBTOOL)  --mode=install $(INSTALL_PROGRAM) $$p $(bindir)/`echo $$p|sed -e 's/$(EXEEXT)$$//' -e 's/-new//'|sed '$(transform)'|sed 's/$$/$(EXEEXT)/'`"; \
+	    $(LIBTOOL)  --mode=install $(INSTALL_PROGRAM) $$p $(DESTDIR)$(bindir)/`echo $$p|sed -e 's/$(EXEEXT)$$//' -e 's/-new//'|sed '$(transform)'|sed 's/$$/$(EXEEXT)/'`; \
 	  else :; fi; \
 	done
 
@@ -624,7 +592,7 @@ install-exec-tooldir: install-exec-bindir $(noinst_PROGRAMS)
 	if [ "$(bindir)/$$n$(EXEEXT)" != "$(tooldir)/bin/as$(EXEEXT)" ]; then \
 	  rm -f $(DESTDIR)$(tooldir)/bin/as$(EXEEXT); \
 	  ln $(DESTDIR)$(bindir)/$$n$(EXEEXT) $(DESTDIR)$(tooldir)/bin/as$(EXEEXT) >/dev/null 2>/dev/null \
-	    || $(INSTALL_PROGRAM_ENV) $(LIBTOOL) --mode=install $(INSTALL_PROGRAM) as-new$(EXEEXT) $(DESTDIR)$(tooldir)/bin/as$(EXEEXT); \
+	    || $(LIBTOOL) --mode=install $(INSTALL_PROGRAM) as-new$(EXEEXT) $(DESTDIR)$(tooldir)/bin/as$(EXEEXT); \
 	else \
 	  true ; \
 	fi
@@ -633,7 +601,7 @@ install-exec-tooldir: install-exec-bindir $(noinst_PROGRAMS)
 
 .PHONY: bootstrap bootstrap2 bootstrap3 stage1 stage2 stage3 comparison
 
-bootstrap: as-new$(EXEEXT)
+bootstrap: as-new
 	$(MAKE) stage1
 	rm -f stage && ln -s stage1 stage
 	$(MAKE) CC="$(CC)" CFLAGS="-O -Bstage/ $(CFLAGS)" libdir=$(libdir) ALLOCA= $(noinst_PROGRAMS)
@@ -706,6 +674,4 @@ de-stage3:
 	- (cd stage3 ; rm -f as$(EXEEXT) ; mv -f * ..)
 	- rmdir stage3
 
-# Reconfigure if configure.tgt changes.
-# development.sh is used to determine -Werror default.
-CONFIG_STATUS_DEPENDENCIES = $(srcdir)/configure.tgt $(BFDDIR)/development.sh
+CONFIG_STATUS_DEPENDENCIES = $(BFDDIR)/configure.in $(srcdir)/configure.tgt

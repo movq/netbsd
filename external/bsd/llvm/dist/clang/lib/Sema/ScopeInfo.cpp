@@ -33,14 +33,9 @@ void FunctionScopeInfo::Clear() {
   ObjCWarnForNoDesignatedInitChain = false;
   ObjCIsSecondaryInit = false;
   ObjCWarnForNoInitDelegation = false;
-  FirstReturnLoc = SourceLocation();
-  FirstCXXTryLoc = SourceLocation();
-  FirstSEHTryLoc = SourceLocation();
 
   SwitchStack.clear();
   Returns.clear();
-  CoroutinePromise = nullptr;
-  CoroutineStmts.clear();
   ErrorTrap.reset();
   PossiblyUnreachableDiags.clear();
   WeakObjectUses.clear();
@@ -237,4 +232,5 @@ void LambdaScopeInfo::getPotentialVariableCapture(unsigned Idx, VarDecl *&VD,
 
 FunctionScopeInfo::~FunctionScopeInfo() { }
 BlockScopeInfo::~BlockScopeInfo() { }
+LambdaScopeInfo::~LambdaScopeInfo() { }
 CapturedRegionScopeInfo::~CapturedRegionScopeInfo() { }

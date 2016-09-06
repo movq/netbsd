@@ -1,4 +1,4 @@
-/*	$NetBSD: bufaux.c,v 1.7 2015/04/03 23:58:19 christos Exp $	*/
+/*	$NetBSD: bufaux.c,v 1.5.4.1 2015/04/30 06:07:30 riz Exp $	*/
 /* $OpenBSD: bufaux.c,v 1.60 2014/04/30 05:29:56 djm Exp $ */
 /*
  * Copyright (c) 2012 Damien Miller <djm@mindrot.org>
@@ -17,7 +17,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: bufaux.c,v 1.7 2015/04/03 23:58:19 christos Exp $");
+__RCSID("$NetBSD: bufaux.c,v 1.5.4.1 2015/04/30 06:07:30 riz Exp $");
 /* Emulation wrappers for legacy OpenSSH buffer API atop sshbuf */
 
 #include <sys/types.h>

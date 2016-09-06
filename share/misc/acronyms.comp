@@ -1,4 +1,4 @@
-$NetBSD: acronyms.comp,v 1.168 2016/08/14 23:07:04 dholland Exp $
+$NetBSD: acronyms.comp,v 1.142 2014/06/14 02:05:38 jnemeth Exp $
 3WHS	three-way handshake
 8VSB	8-state vestigial side band modulation
 AA	anti-aliasing
@@ -37,7 +37,6 @@ AL	active link
 ALE	address latch enable
 ALS	ambient light sensor
 ALU	arithmetic and logical unit
-ALUA	asymmetric logical unit access
 AM	access method
 AM	alignment mask
 AM	amplitude modulation
@@ -54,7 +53,6 @@ AP	application processor
 API	application programming interface
 APIC	advanced programmable interrupt controller
 APIPA	automatic private IP addressing
-APT	advanced persistent threat
 AQM	active queue management
 ARAT	always running APIC timer
 ARC	adaptive replacement cache
@@ -109,7 +107,6 @@ BFS	breadth-first search
 BFT	binary file transfer
 BGA	ball grid array
 BGP	Border Gateway Protocol
-BGPSEC	BGP Security
 BIND	Berkeley Internet Name Daemon
 BIOS	Basic Input/Output System
 BIOS	built-in operating system
@@ -131,7 +128,6 @@ BOM	byte order mark
 BP	base pointer
 BP	boot processor
 BPB	BIOS parameter block
-BPDU	bridge protocol data unit
 BPF	Berkeley Packet Filter
 BPI	bits per inch
 BPM	business process modelling
@@ -157,7 +153,7 @@ BT	bit test
 BTC	bit test [and] complement
 BTR	bit test [and] reset
 BTS	bit test [and] set
-BTS	bug tracking system
+BTS	bits per second
 BW	bandwidth
 BWM	block-write mode
 CA	certificate authority
@@ -181,7 +177,6 @@ CD	cache disable
 CD	compact disc
 CDDA	compact disc digital audio
 CDMA	code division multiple access
-CDP	Cisco Discovery Protocol
 CDRAM	cache dynamic random access memory
 CER	canonical encoding rules
 CF	compact flash
@@ -266,7 +261,6 @@ DAB	digital audio broadcasting
 DAC	digital [to] analog converter
 DAC	discretionary access control
 DAD	duplicate address detection
-DANE	DNS-based Authentication of Named Entities
 DAO	disk at once
 DAP	Directory Access Protocol
 DAT	digital audio tape
@@ -330,7 +324,6 @@ DMT	discrete multitone modulation
 DNARD	Digital network appliance reference design
 DND	drag and drop
 DNS	Domain Name System
-DNSSEC	DNS Security Extensions
 DOE	distributed object environment
 DOF	data over fibre
 DOM	document object model
@@ -351,7 +344,6 @@ DRM	digital rights management
 DRRS	display refresh rate switching
 DS	debug store
 DSA	digital signature algorithm
-DSAP	destination service access point
 DSB	double-sideband modulation
 DSDT	differentiated system descriptor table
 DSL	digital subscriber line
@@ -365,7 +357,6 @@ DTD	document type definition
 DTE	data terminal equipment
 DTE	dumb terminal emulator
 DTL	diode-transistor logic
-DTLS	datagram transport layer security
 DTS	digital thermal sensor
 DUT	device under test
 DVB	digital video broadcasting
@@ -377,11 +368,7 @@ DVI	Digital Visual Interface
 DVR	digital video recorder
 E-XER	extended XML encoding rules
 EABI	embedded-application binary interface
-EAI	Email Address Internationalization
-EAI	Enterprise Application Integration
 EAP	Extensible Authentication Protocol
-EAPOL	EAP over Lan
-EBCDIC	Extended Binary Coded Decimal Interchange Code
 EBR	extended boot record
 EC	elliptical curve
 ECC	error correction code
@@ -404,7 +391,7 @@ EFM	eight to fourteen modulation
 EGA	Enhanced Graphics Adapter
 EGP	exterior gateway protocol
 EH	extension header
-EIDE	enhanced IDE
+EIDE	enchanced IDE
 EISA	extended industry standard architecture
 ELF	executable and linking format
 ELS	entry level system
@@ -492,7 +479,6 @@ GID	group identifier
 GIF	graphics interchange format
 GMCH	graphics and memory controller hub
 GNU	GNU's Not Unix
-GOP	graphics output protocol
 GOT	global offset table
 GPE	general purpose event
 GPF	general protection fault
@@ -530,8 +516,6 @@ HOOD	hierarchical object oriented design
 HP	Hewlett-Packard
 HPC	high performance computing
 HPET	high precision event timer
-HSM	hardware security module
-HSM	hierarchical storage management 
 HT	hyper-threading
 HTC	hardware thermal control
 HTCC	high temperature co-fired ceramic
@@ -591,7 +575,6 @@ INCITS	InterNational Committee for Information Technology Standards
 IO	input/output
 IOCTL	input/output control
 IOMMU	input/output memory management unit
-IOT	Internet of Things
 IP	Internet Protocol
 IP	intellectual property
 IPC	interprocess communication
@@ -623,8 +606,6 @@ IST	interrupt stack table
 ISV	independent software vendor
 IT	information technology
 ITB	Intel Turbo Boost
-ITIL	information technology infrastructure library
-ITSM	IT service management
 IV	initialization vector
 IVT	interrupt vector table
 JBOD	just a bunch of disks
@@ -677,7 +658,6 @@ LKML	Linux kernel mailing list
 LL	load linked
 LL/SC	load linked/store conditional
 LLC	logical link control
-LLDP	link layer discovery protocol
 LLF	low level format
 LLMNR	link-local multicast name resolution
 LLVM	Low Level Virtual Machine
@@ -700,12 +680,9 @@ LSN	Large Scale NAT
 LSN	log sequence number
 LSR	label switch router
 LTCC	low temperature co-fired ceramic
-LTO	link time optimization
 LTR	left to right
 LTR	load task register
 LTR	letter(-sized paper)
-LTS	long term support
-LUA	Lua Uppercase Accident
 LUN	logical unit number
 LV	logical volume
 LVM	logical volume management
@@ -717,7 +694,6 @@ MAC	medium access control
 MAC	message authentication {check,code}
 MADT	multiple APIC descriptor table
 MB	megabyte
-MBA	multi-boot agent
 MBR	master boot record
 MBS	megabits per second
 MC	memory controller
@@ -757,11 +733,9 @@ ML	mailing list
 ML	markup language
 ML	maximum likelihood
 MLC	multi-level cell
-MLD	multicast listener discovery
 MLHP	micro loop heat pipe
 MMIC	monolithic microwave integrated circuit
 MMIO	memory mapped input/output
-MMORPG	massive multiplayer online role playing game
 MMU	memory management unit
 MMX	matrix math extension
 MMX	multimedia extension
@@ -790,11 +764,9 @@ MSI	message signaled interrupt
 MSI	modified, shared, invalid
 MSR	machine state register
 MSS	maximum segment size
-MSTP	Multiple Spanning Tree Protocol
 MT	machine translation
 MTA	mail transfer agent
 MTBF	mean time between failures
-MTP	media transfer protocol
 MTRR	memory type range register
 MTTF	mean time to failure
 MTU	maximum transmission unit
@@ -817,7 +789,6 @@ ND	neighbor discovery
 NDFA	nondeterministic finite automaton
 NE	numeric error
 NFA	nondeterministic finite automaton
-NFC	near-field communication
 NFS	network file system
 NIA	next instruction address
 NIC	network information center
@@ -911,7 +882,6 @@ PCI	peripheral component interconnect
 PCM	phase change memory
 PCM	pulse code modulation
 PCMCIA	Personal Computer Memory Card International Association
-PCP	Port Control Protocol
 PD	public domain
 PDA	personal digital assistant
 PDA	pushdown automaton
@@ -924,7 +894,6 @@ PDP	page {descriptor,directory} page
 PDS	product data sheet
 PDU	protocol data unit
 PE	protection enable
-PEAP	Protected EAP
 PECI	platform environment control interface
 PEP	protocol extension protocol
 PER	packed encoding rules
@@ -998,7 +967,6 @@ PUN	physical unit number
 PV	physical volume
 PVG	physical volume group
 PVI	protected-mode virtual interrupt
-PVST	Per-VLAN Spanning Tree
 PWM	pulse width modulation
 PXE	preboot execution environment
 QA	quality assurance
@@ -1017,7 +985,6 @@ RA	router advertisement
 RAD	rapid application development
 RAID	redundant array of {independent,inexpensive} disks
 RAM	random access memory
-RAS	reliability, availability and serviceability
 RAS	remote access service
 RAS	restartable atomic sequence
 RAS	row address strobe
@@ -1060,20 +1027,16 @@ RMW	read, modify, write
 RNG	random number generator
 ROM	read only memory
 RPC	remote procedure call
-RPKI	resource PKI
 RPL	requested privilege level
 RPM	revolutions per minute
 RPN	reverse Polish notation
-RPVST	Rapid Per-VLAN Spanning Tree
 RR	random replacement
 RR	round robin
 RS	relay station
 RSA	Rivest, Shamir, [and] Adleman
 RSIP	Realm Specific IP
-RSN	Robust Secure Network
 RSS	really simple syndication
 RSS	residual sum of squares
-RSTP	Rapid Spanning Tree Protocol
 RT	real time
 RTC	real time clock
 RTC	real time computing
@@ -1099,7 +1062,6 @@ SAL	system abstraction layer
 SAM	serial access memory
 SAM	sum addressed memory
 SAN	storage area network
-SAP	service access point
 SAPIC	streamlined advanced programmable interrupt controller
 SASD	structured analysis, structured design
 SASI	Shugart Associates System Interface
@@ -1136,7 +1098,6 @@ SFTP	SSH File Transfer Protocol
 SFTP	Serial File Transfer Protocol
 SFTP	Simple File Transfer Protocol
 SGRAM	synchronous graphics random access memory
-SIEM	security information and event management
 SIFS	short inter-frame space
 SIMD	single instruction, multiple data
 SIMM	single inline memory module
@@ -1153,8 +1114,6 @@ SLOC	source lines of code
 SLRU	segmented LRU
 SMA	smart memory access
 SMAF	system management action field
-SMAP	Simple Mail Access Protocol
-SMAP	supervisor mode access prevention
 SMART	self-monitoring analysis and reporting technology
 SMBIOS	System Management BIOS
 SMC	system management controller
@@ -1165,7 +1124,6 @@ SMP	symmetric multiprocessing
 SMT	simultaneous multithreading
 SMTP	Simple Mail Transfer Protocol
 SMU	system management unit
-SNAP	Sub-Network Access Protocol
 SNMP	Simple Network Management Protocol
 SNR	signal-to-noise ratio
 SOA	service oriented architecture
@@ -1193,7 +1151,6 @@ SRAM	static random access memory
 SRC	sample rate conversion
 SS	self-snoop
 SS	stack segment
-SSAP	source service access point
 SSB	single-sideband modulation
 SSD	solid state drive
 SSE	streaming SIMD extensions
@@ -1291,7 +1248,6 @@ TUI	{terminal,text-based,textual} user interface
 TX	{transmit out,transmitter}
 TZ	time zone
 UAC	user {access,account} control
-UAF	use-after-free
 UART	universal asynchronous receiver/transmitter
 UAT	user acceptance testing
 UC	uncacheable
@@ -1299,9 +1255,7 @@ UCS	uniform-cost search
 UDMA	ultra DMA
 UDO	ultra density optical
 UDP	User Datagram Protocol
-UEFI	unified extensible firmware interface
 UFS	Unix File System
-UGA	universal graphics adapter
 UI	unit interval
 UI	user interface
 UID	unique identifier
@@ -1361,8 +1315,6 @@ VR	virtual reality
 VRAM	video random access memory
 VRM	voltage regulator module
 VRRP	Virtual Router Redundancy Protocol
-VSTP	VLAN Spanning Tree Protocol
-VTP	VLAN Trunking Protocol
 W	watt
 W3C	World Wide Web Consortium
 WAN	wide area network

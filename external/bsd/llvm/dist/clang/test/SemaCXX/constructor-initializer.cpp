@@ -1,7 +1,4 @@
 // RUN: %clang_cc1 -Wreorder -fsyntax-only -verify %s
-// RUN: %clang_cc1 -Wreorder -fsyntax-only -verify -std=c++98 %s
-// RUN: %clang_cc1 -Wreorder -fsyntax-only -verify -std=c++11 %s
-
 class A { 
   int m;
 public:
@@ -29,7 +26,7 @@ public:
   D() : B(), C() { }
 };
 
-class E : public D, public B {  // expected-warning{{direct base 'B' is inaccessible due to ambiguity:\n    class E -> class D -> class C -> class B\n    class E -> class B}}
+class E : public D, public B { 
 public:
   E() : B(), D() { } // expected-error{{base class initializer 'B' names both a direct base class and an inherited virtual base class}}
 };
@@ -97,15 +94,13 @@ struct Current : Derived {
                            Derived::Base1(), // expected-error {{type 'Derived::Base1' is not a direct or virtual base of 'Current'}}
                            Derived::V(),
                            ::NonExisting(), // expected-error {{member initializer 'NonExisting' does not name a non-static data member or}}
-                           INT::NonExisting()  {} // expected-error {{'INT' (aka 'int') is not a class, namespace, or enumeration}} \
+                           INT::NonExisting()  {} // expected-error {{'INT' (aka 'int') is not a class, namespace, or scoped enumeration}} \
                                                   // expected-error {{member initializer 'NonExisting' does not name a non-static data member or}}
 };
 
-struct M {              // expected-note 2 {{candidate constructor (the implicit copy constructor)}}
-#if __cplusplus >= 201103L // C++11 or later
-// expected-note@-2 2 {{candidate constructor (the implicit move constructor) not viable}}
-#endif
-// expected-note@-4 2 {{'M' declared here}}
+struct M {              // expected-note 2 {{candidate constructor (the implicit copy constructor)}} \
+                        // expected-note {{declared here}} \
+                        // expected-note {{declared here}}
   M(int i, int j);      // expected-note 2 {{candidate constructor}}
 };
 
@@ -209,8 +204,7 @@ struct A {
 };
 
 struct B : virtual A { };
-
-  struct C : A, B { }; // expected-warning{{direct base 'Test2::A' is inaccessible due to ambiguity:\n    struct Test2::C -> struct Test2::A\n    struct Test2::C -> struct Test2::B -> struct Test2::A}}
+struct C : A, B { };
 
 C f(C c) {
   return c;
@@ -238,13 +232,7 @@ namespace PR7402 {
 // <rdar://problem/8308215>: don't crash.
 // Lots of questionable recovery here;  errors can change.
 namespace test3 {
-  class A : public std::exception {}; // expected-error {{undeclared identifier}} expected-error {{expected class name}}
-  // expected-note@-1 {{candidate constructor (the implicit copy constructor) not viable}}
-#if __cplusplus >= 201103L // C++11 or later
-  // expected-note@-3 {{candidate constructor (the implicit move constructor) not viable}}
-#endif
-  // expected-note@-5 {{candidate constructor (the implicit default constructor) not viable}}
-
+  class A : public std::exception {}; // expected-error {{undeclared identifier}} expected-error {{expected class name}} expected-note 2 {{candidate}}
   class B : public A {
   public:
     B(const String& s, int e=0) // expected-error {{unknown type name}} 

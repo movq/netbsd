@@ -1,7 +1,6 @@
 	# Store macros
 
 foo:
-	.ifndef r6
 	usw      $ra,80($sp)
 	usw      $s3,88($sp)
 	usw      $s8,96($sp)
@@ -11,7 +10,6 @@ foo:
 	ush      $s3,88($sp)
 	ush      $s8,96($sp)
 	break
-	.endif
 
 	# swc1 macro
 	s.s      $f0,80($sp)

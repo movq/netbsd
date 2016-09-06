@@ -28,6 +28,3 @@ _test:
 	add.w	r0, r0, 0
 	beq.w	_func
 	.size	_test,.-_test
-
-# Align stub table for address matching.
-	.align	12

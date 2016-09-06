@@ -15,13 +15,13 @@
 #define LLVM_LIB_TARGET_ARM_THUMB1INSTRINFO_H
 
 #include "ARMBaseInstrInfo.h"
-#include "ThumbRegisterInfo.h"
+#include "Thumb1RegisterInfo.h"
 
 namespace llvm {
   class ARMSubtarget;
 
 class Thumb1InstrInfo : public ARMBaseInstrInfo {
-  ThumbRegisterInfo RI;
+  Thumb1RegisterInfo RI;
 public:
   explicit Thumb1InstrInfo(const ARMSubtarget &STI);
 
@@ -36,7 +36,7 @@ public:
   /// such, whenever a client has an instance of instruction info, it should
   /// always be able to get register info as well (through this method).
   ///
-  const ThumbRegisterInfo &getRegisterInfo() const override { return RI; }
+  const Thumb1RegisterInfo &getRegisterInfo() const override { return RI; }
 
   void copyPhysReg(MachineBasicBlock &MBB,
                    MachineBasicBlock::iterator I, DebugLoc DL,

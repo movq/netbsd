@@ -15,10 +15,9 @@
 #ifndef LLVM_TRANSFORMS_UTILS_SIMPLIFYLIBCALLS_H
 #define LLVM_TRANSFORMS_UTILS_SIMPLIFYLIBCALLS_H
 
-#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
 #include "llvm/IR/IRBuilder.h"
+#include "llvm/Target/TargetLibraryInfo.h"
 
 namespace llvm {
 class Value;
@@ -37,11 +36,12 @@ class Function;
 /// is unknown) by passing true for OnlyLowerUnknownSize.
 class FortifiedLibCallSimplifier {
 private:
+  const DataLayout *DL;
   const TargetLibraryInfo *TLI;
   bool OnlyLowerUnknownSize;
 
 public:
-  FortifiedLibCallSimplifier(const TargetLibraryInfo *TLI,
+  FortifiedLibCallSimplifier(const DataLayout *DL, const TargetLibraryInfo *TLI,
                              bool OnlyLowerUnknownSize = false);
 
   /// \brief Take the given call instruction and return a more
@@ -71,24 +71,15 @@ private:
 class LibCallSimplifier {
 private:
   FortifiedLibCallSimplifier FortifiedSimplifier;
-  const DataLayout &DL;
+  const DataLayout *DL;
   const TargetLibraryInfo *TLI;
   bool UnsafeFPShrink;
-  function_ref<void(Instruction *, Value *)> Replacer;
 
-  /// \brief Internal wrapper for RAUW that is the default implementation.
-  ///
-  /// Other users may provide an alternate function with this signature instead
-  /// of this one.
-  static void replaceAllUsesWithDefault(Instruction *I, Value *With);
-
-  /// \brief Replace an instruction's uses with a value using our replacer.
-  void replaceAllUsesWith(Instruction *I, Value *With);
+protected:
+  ~LibCallSimplifier() {}
 
 public:
-  LibCallSimplifier(const DataLayout &DL, const TargetLibraryInfo *TLI,
-                    function_ref<void(Instruction *, Value *)> Replacer =
-                        &replaceAllUsesWithDefault);
+  LibCallSimplifier(const DataLayout *TD, const TargetLibraryInfo *TLI);
 
   /// optimizeCall - Take the given call instruction and return a more
   /// optimal value to replace the instruction with or 0 if a more
@@ -98,6 +89,11 @@ public:
   /// and the given instruction is dead.
   /// The call must not be an indirect call.
   Value *optimizeCall(CallInst *CI);
+
+  /// replaceAllUsesWith - This method is used when the library call
+  /// simplifier needs to replace instructions other than the library
+  /// call being modified.
+  virtual void replaceAllUsesWith(Instruction *I, Value *With) const;
 
 private:
   // String and Memory Library Call Optimizations
@@ -116,7 +112,6 @@ private:
   Value *optimizeStrSpn(CallInst *CI, IRBuilder<> &B);
   Value *optimizeStrCSpn(CallInst *CI, IRBuilder<> &B);
   Value *optimizeStrStr(CallInst *CI, IRBuilder<> &B);
-  Value *optimizeMemChr(CallInst *CI, IRBuilder<> &B);
   Value *optimizeMemCmp(CallInst *CI, IRBuilder<> &B);
   Value *optimizeMemCpy(CallInst *CI, IRBuilder<> &B);
   Value *optimizeMemMove(CallInst *CI, IRBuilder<> &B);
@@ -125,15 +120,14 @@ private:
   Value *optimizeStringMemoryLibCall(CallInst *CI, IRBuilder<> &B);
 
   // Math Library Optimizations
+  Value *optimizeUnaryDoubleFP(CallInst *CI, IRBuilder<> &B, bool CheckRetType);
+  Value *optimizeBinaryDoubleFP(CallInst *CI, IRBuilder<> &B);
   Value *optimizeCos(CallInst *CI, IRBuilder<> &B);
   Value *optimizePow(CallInst *CI, IRBuilder<> &B);
   Value *optimizeExp2(CallInst *CI, IRBuilder<> &B);
   Value *optimizeFabs(CallInst *CI, IRBuilder<> &B);
-  Value *optimizeFMinFMax(CallInst *CI, IRBuilder<> &B);
-  Value *optimizeLog(CallInst *CI, IRBuilder<> &B);
   Value *optimizeSqrt(CallInst *CI, IRBuilder<> &B);
   Value *optimizeSinCosPi(CallInst *CI, IRBuilder<> &B);
-  Value *optimizeTan(CallInst *CI, IRBuilder<> &B);
 
   // Integer Library Call Optimizations
   Value *optimizeFFS(CallInst *CI, IRBuilder<> &B);

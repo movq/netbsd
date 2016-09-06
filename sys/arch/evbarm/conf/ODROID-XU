@@ -1,5 +1,5 @@
 #
-#	$NetBSD: ODROID-XU,v 1.6 2015/10/29 00:15:48 mrg Exp $
+#	$NetBSD: ODROID-XU,v 1.4.4.2 2015/01/04 11:19:00 martin Exp $
 #
 #	ODROID-XU -- ODROID-XU Exynos5410 based kernel
 #
@@ -26,7 +26,7 @@ options 	PMAPCOUNTERS
 options 	BUSDMA_COUNTERS
 options 	EXYNOS_CONSOLE_EARLY
 #options 	UVMHIST
-options 	USB_DEBUG
+options 	USBHIST
 options 	USBHIST_SIZE=100000
 #options 	UVMHIST_PRINT,KERNHIST_DELAY=0
 options 	__HAVE_MM_MD_DIRECT_MAPPED_PHYS
@@ -129,6 +129,7 @@ options 	DKWEDGE_METHOD_GPT	# Supports GPT partitions as wedges
 
 # Miscellaneous kernel options
 options 	KTRACE		# system call tracing, a la ktrace(1)
+#options 	KMEMSTATS	# kernel memory statistics
 #options 	SCSIVERBOSE	# Verbose SCSI errors
 #options 	MIIVERBOSE	# Verbose MII autoconfuration messages
 #options 	DDB_KEYCODE=0x40

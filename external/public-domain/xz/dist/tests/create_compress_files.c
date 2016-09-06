@@ -79,8 +79,7 @@ static void
 write_abc(FILE *file)
 {
 	for (size_t i = 0; i < 12345; ++i)
-		if (fwrite("abc\n", 4, 1, file) != 1)
-			exit(1);
+		fwrite("abc\n", 4, 1, file);
 }
 
 

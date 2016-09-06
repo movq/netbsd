@@ -1,4 +1,4 @@
-/*	$NetBSD: ratelimiter.h,v 1.5 2015/07/08 17:28:59 christos Exp $	*/
+/*	$NetBSD: ratelimiter.h,v 1.3.12.1 2015/07/17 04:31:34 snj Exp $	*/
 
 /*
  * Copyright (C) 2004-2007, 2009, 2014  Internet Systems Consortium, Inc. ("ISC")

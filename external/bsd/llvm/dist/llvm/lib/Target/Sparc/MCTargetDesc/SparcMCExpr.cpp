@@ -15,8 +15,9 @@
 #include "SparcMCExpr.h"
 #include "llvm/MC/MCAssembler.h"
 #include "llvm/MC/MCContext.h"
+#include "llvm/MC/MCELF.h"
 #include "llvm/MC/MCObjectStreamer.h"
-#include "llvm/MC/MCSymbolELF.h"
+#include "llvm/MC/MCSymbol.h"
 #include "llvm/Object/ELF.h"
 
 
@@ -25,17 +26,20 @@ using namespace llvm;
 #define DEBUG_TYPE "sparcmcexpr"
 
 const SparcMCExpr*
-SparcMCExpr::create(VariantKind Kind, const MCExpr *Expr,
+SparcMCExpr::Create(VariantKind Kind, const MCExpr *Expr,
                       MCContext &Ctx) {
     return new (Ctx) SparcMCExpr(Kind, Expr);
 }
 
-void SparcMCExpr::printImpl(raw_ostream &OS, const MCAsmInfo *MAI) const {
+
+
+void SparcMCExpr::PrintImpl(raw_ostream &OS) const
+{
 
   bool closeParen = printVariantKind(OS, Kind);
 
   const MCExpr *Expr = getSubExpr();
-  Expr->print(OS, MAI);
+  Expr->print(OS);
 
   if (closeParen)
     OS << ')';
@@ -156,10 +160,10 @@ Sparc::Fixups SparcMCExpr::getFixupKind(SparcMCExpr::VariantKind Kind) {
 }
 
 bool
-SparcMCExpr::evaluateAsRelocatableImpl(MCValue &Res,
+SparcMCExpr::EvaluateAsRelocatableImpl(MCValue &Res,
                                        const MCAsmLayout *Layout,
                                        const MCFixup *Fixup) const {
-  return getSubExpr()->evaluateAsRelocatable(Res, Layout, Fixup);
+  return getSubExpr()->EvaluateAsRelocatable(Res, Layout, Fixup);
 }
 
 static void fixELFSymbolsInTLSFixupsImpl(const MCExpr *Expr, MCAssembler &Asm) {
@@ -180,7 +184,8 @@ static void fixELFSymbolsInTLSFixupsImpl(const MCExpr *Expr, MCAssembler &Asm) {
 
   case MCExpr::SymbolRef: {
     const MCSymbolRefExpr &SymRef = *cast<MCSymbolRefExpr>(Expr);
-    cast<MCSymbolELF>(SymRef.getSymbol()).setType(ELF::STT_TLS);
+    MCSymbolData &SD = Asm.getOrCreateSymbolData(SymRef.getSymbol());
+    MCELF::SetType(SD, ELF::STT_TLS);
     break;
   }
 

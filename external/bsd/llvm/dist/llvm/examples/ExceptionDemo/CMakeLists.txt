@@ -3,19 +3,16 @@ set(LLVM_LINK_COMPONENTS
   ExecutionEngine
   MC
   MCJIT
-  RuntimeDyld
   Support
-  Target
   nativecodegen
   )
 
 # Enable EH and RTTI for this demo
-if(NOT LLVM_ENABLE_EH)
-  message(FATAL_ERROR "ExceptionDemo must require EH.")
-endif()
+set(LLVM_REQUIRES_EH 1)
+set(LLVM_REQUIRES_RTTI 1)
 
 add_llvm_example(ExceptionDemo
   ExceptionDemo.cpp
   )
 
-export_executable_symbols(ExceptionDemo)
+set_target_properties(ExceptionDemo PROPERTIES ENABLE_EXPORTS 1)

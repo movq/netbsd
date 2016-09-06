@@ -1,5 +1,6 @@
 /* Motorola MCore specific support for 32-bit ELF
-   Copyright (C) 1994-2015 Free Software Foundation, Inc.
+   Copyright 1994, 1995, 1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006,
+   2007, 2011, 2012 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -110,11 +111,11 @@ static reloc_howto_type mcore_elf_howto_raw[] =
   /* This reloc does nothing.  */
   HOWTO (R_MCORE_NONE,		/* type */
 	 0,			/* rightshift */
-	 3,			/* size (0 = byte, 1 = short, 2 = long) */
-	 0,			/* bitsize */
+	 2,			/* size (0 = byte, 1 = short, 2 = long) */
+	 32,			/* bitsize */
 	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
-	 complain_overflow_dont,  /* complain_on_overflow */
+	 complain_overflow_bitfield,  /* complain_on_overflow */
 	 NULL,                  /* special_function */
 	 "R_MCORE_NONE",	/* name */
 	 FALSE,			/* partial_inplace */
@@ -340,22 +341,13 @@ mcore_elf_info_to_howto (bfd * abfd ATTRIBUTE_UNUSED,
 			 arelent * cache_ptr,
 			 Elf_Internal_Rela * dst)
 {
-  unsigned int r_type;
-
   if (! mcore_elf_howto_table [R_MCORE_PCRELIMM8BY4])
     /* Initialize howto table if needed.  */
     mcore_elf_howto_init ();
 
-  r_type = ELF32_R_TYPE (dst->r_info);
-  if (r_type >= R_MCORE_max)
-    {
-      (*_bfd_error_handler) (_("%B: unrecognised MCore reloc number: %d"),
-			     abfd, r_type);
-      bfd_set_error (bfd_error_bad_value);
-      r_type = R_MCORE_NONE;
-    }
+  BFD_ASSERT (ELF32_R_TYPE (dst->r_info) < (unsigned int) R_MCORE_max);
 
-  cache_ptr->howto = mcore_elf_howto_table [r_type];
+  cache_ptr->howto = mcore_elf_howto_table [ELF32_R_TYPE (dst->r_info)];
 }
 
 /* The RELOCATE_SECTION function is called by the ELF backend linker
@@ -409,7 +401,7 @@ mcore_elf_relocate_section (bfd * output_bfd,
      input_bfd,
      input_section,
      (long) input_section->reloc_count,
-     (bfd_link_relocatable (info)) ? " (relocatable)" : "");
+     (info->relocatable) ? " (relocatable)" : "");
 #endif
 
   if (! mcore_elf_howto_table [R_MCORE_PCRELIMM8BY4])	/* Initialize howto table if needed */
@@ -466,19 +458,19 @@ mcore_elf_relocate_section (bfd * output_bfd,
 	}
       else
 	{
-	  bfd_boolean unresolved_reloc, warned, ignored;
+	  bfd_boolean unresolved_reloc, warned;
 
 	  RELOC_FOR_GLOBAL_SYMBOL (info, input_bfd, input_section, rel,
 				   r_symndx, symtab_hdr, sym_hashes,
 				   h, sec, relocation,
-				   unresolved_reloc, warned, ignored);
+				   unresolved_reloc, warned);
 	}
 
       if (sec != NULL && discarded_section (sec))
 	RELOC_AGAINST_DISCARDED_SECTION (info, input_bfd, input_section,
 					 rel, 1, relend, howto, 0, contents);
 
-      if (bfd_link_relocatable (info))
+      if (info->relocatable)
 	continue;
 
       switch (r_type)
@@ -598,7 +590,7 @@ mcore_elf_check_relocs (bfd * abfd,
   const Elf_Internal_Rela * rel;
   const Elf_Internal_Rela * rel_end;
 
-  if (bfd_link_relocatable (info))
+  if (info->relocatable)
     return TRUE;
 
   symtab_hdr = & elf_tdata (abfd)->symtab_hdr;
@@ -621,10 +613,6 @@ mcore_elf_check_relocs (bfd * abfd,
 	  while (h->root.type == bfd_link_hash_indirect
 		 || h->root.type == bfd_link_hash_warning)
 	    h = (struct elf_link_hash_entry *) h->root.u.i.link;
-
-	  /* PR15323, ref flags aren't set for references in the same
-	     object.  */
-	  h->root.non_ir_ref = 1;
 	}
 
       switch (ELF32_R_TYPE (rel->r_info))
@@ -657,9 +645,9 @@ static const struct bfd_elf_special_section mcore_elf_special_sections[]=
   { NULL,                     0,  0, 0,            0 }
 };
 
-#define TARGET_BIG_SYM		mcore_elf32_be_vec
+#define TARGET_BIG_SYM		bfd_elf32_mcore_big_vec
 #define TARGET_BIG_NAME		"elf32-mcore-big"
-#define TARGET_LITTLE_SYM       mcore_elf32_le_vec
+#define TARGET_LITTLE_SYM       bfd_elf32_mcore_little_vec
 #define TARGET_LITTLE_NAME      "elf32-mcore-little"
 
 #define ELF_ARCH		bfd_arch_mcore

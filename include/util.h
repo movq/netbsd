@@ -1,4 +1,4 @@
-/*	$NetBSD: util.h,v 1.69 2016/04/10 19:05:50 roy Exp $	*/
+/*	$NetBSD: util.h,v 1.65 2013/05/02 07:17:35 matt Exp $	*/
 
 /*-
  * Copyright (c) 1995
@@ -83,7 +83,6 @@ const char     *getdiskrawname(char *, size_t, const char *);
 const char     *getdiskcookedname(char *, size_t, const char *);
 const char     *getfstypename(int);
 const char     *getfsspecname(char *, size_t, const char *);
-struct kinfo_vmentry *kinfo_getvmmap(pid_t, size_t *);
 #ifndef __LIBC12_SOURCE__
 void		login(const struct utmp *) __RENAME(__login50);
 void		loginx(const struct utmpx *) __RENAME(__loginx50);
@@ -103,9 +102,6 @@ time_t		parsedate(const char *, const time_t *, const int *)
     __RENAME(__parsedate50);
 #endif
 int		pidfile(const char *);
-pid_t		pidfile_lock(const char *);
-pid_t		pidfile_read(const char *);
-int		pidfile_clean(void);
 int		pidlock(const char *, int, pid_t *, const char *);
 int		pw_abort(void);
 #ifndef __LIBC12_SOURCE__
@@ -151,12 +147,9 @@ size_t 		estrlcpy(char *, const char *, size_t);
 size_t 		estrlcat(char *, const char *, size_t);
 char 		*estrdup(const char *);
 char 		*estrndup(const char *, size_t);
-intmax_t	estrtoi(const char *, int, intmax_t, intmax_t);
-uintmax_t	estrtou(const char *, int, uintmax_t, uintmax_t);
 void 		*ecalloc(size_t, size_t);
 void 		*emalloc(size_t);
 void 		*erealloc(void *, size_t);
-void 		ereallocarr(void *, size_t, size_t);
 struct __sFILE	*efopen(const char *, const char *);
 int	 	easprintf(char ** __restrict, const char * __restrict, ...)
 			__printflike(2, 3);

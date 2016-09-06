@@ -1,4 +1,4 @@
-/*	$NetBSD: console.c,v 1.45 2015/09/30 19:46:27 macallan Exp $	*/
+/*	$NetBSD: console.c,v 1.43 2012/10/13 17:58:54 jdc Exp $	*/
 
 /*
  * Copyright (c) 1994, 1995, 1996 Carnegie-Mellon University.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: console.c,v 1.45 2015/09/30 19:46:27 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: console.c,v 1.43 2012/10/13 17:58:54 jdc Exp $");
 
 #include "opt_kgdb.h"
 
@@ -115,8 +115,7 @@ consinit(void)
 #if notyet
 #if (NPCKBC > 0)
 			/* XXX Hardcoded iotag, MACE address XXX */
-			mace_init_bus();
-			pckbc_cnattach(mace_isa_memt,
+			pckbc_cnattach(SGIMIPS_BUS_SPACE_NORMAL,
 			    MACE_BASE + 0x320000, 8,
 			    PCKBC_KBD_SLOT, 0);
 #endif
@@ -192,7 +191,7 @@ gio_video_init(const char *consdev)
 		case MACH_SGI_IP22:
 #if (NPCKBC > 0)
 			/* XXX Hardcoded iotag, HPC address XXX */
-			pckbc_cnattach(normal_memt,
+			pckbc_cnattach(SGIMIPS_BUS_SPACE_HPC,
 			    HPC_BASE_ADDRESS_0 +
 			    HPC3_PBUS_CH6_DEVREGS + IOC_KB_REGS, KBCMDP,
 			    PCKBC_KBD_SLOT, 0);
@@ -226,8 +225,7 @@ mace_serial_init(const char *consdev)
 		delay(10000);
 
 		/* XXX: hardcoded MACE iotag */
-		mace_init_bus();
-		if (comcnattach(mace_isa_memt, MACE_BASE + base,
+		if (comcnattach(SGIMIPS_BUS_SPACE_MACE, MIPS_PHYS_TO_KSEG1(MACE_BASE + base),
 		    speed, COM_FREQ, COM_TYPE_NORMAL, comcnmode) == 0)
 			return (1);
 	}
@@ -242,11 +240,9 @@ kgdb_port_init(void)
 {
 # if (NCOM > 0)
 #  define KGDB_DEVMODE ((TTYDEF_CFLAG & ~(CSIZE | CSTOPB | PARENB)) | CS8)
-	if (mach_type == MACH_SGI_IP32) {
-		mace_init_bus();
-		com_kgdb_attach(mace_isa_memt, 0xbf398000, 9600, COM_FREQ, COM_TYPE_NORMAL,
+	if (mach_type == MACH_SGI_IP32)
+		com_kgdb_attach(SGIMIPS_BUS_SPACE_MACE, 0xbf398000, 9600, COM_FREQ, COM_TYPE_NORMAL,
 		    KGDB_DEVMODE);
-	}
 # endif	/* (NCOM > 0) */
 
 # if (NZSC > 0)

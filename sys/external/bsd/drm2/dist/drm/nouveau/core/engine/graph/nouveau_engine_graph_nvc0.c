@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_engine_graph_nvc0.c,v 1.3 2015/10/18 15:42:00 jmcneill Exp $	*/
+/*	$NetBSD: nouveau_engine_graph_nvc0.c,v 1.1.1.1.4.1 2014/09/21 17:41:53 snj Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_graph_nvc0.c,v 1.3 2015/10/18 15:42:00 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_graph_nvc0.c,v 1.1.1.1.4.1 2014/09/21 17:41:53 snj Exp $");
 
 #include <linux/string.h>	/* XXX */
 
@@ -901,10 +901,6 @@ nvc0_graph_init_fw(struct nvc0_graph_priv *priv, u32 fuc_base,
 			nv_wr32(priv, fuc_base + 0x0188, i >> 6);
 		nv_wr32(priv, fuc_base + 0x0184, code->data[i]);
 	}
-
-	/* code must be padded to 0x40 words */
-	for (; i & 0x3f; i++)
-		nv_wr32(priv, fuc_base + 0x0184, 0);
 }
 
 static void
@@ -1270,14 +1266,10 @@ nvc0_graph_ctor(struct nouveau_object *parent, struct nouveau_object *engine,
 	struct nvc0_graph_oclass *oclass = (void *)bclass;
 	struct nouveau_device *device = nv_device(parent);
 	struct nvc0_graph_priv *priv;
-	bool use_ext_fw, enable;
 	int ret, i;
 
-	use_ext_fw = nouveau_boolopt(device->cfgopt, "NvGrUseFW",
-				     oclass->fecs.ucode == NULL);
-	enable = use_ext_fw || oclass->fecs.ucode != NULL;
-
-	ret = nouveau_graph_create(parent, engine, bclass, enable, &priv);
+	ret = nouveau_graph_create(parent, engine, bclass,
+				   (oclass->fecs.ucode != NULL), &priv);
 	*pobject = nv_object(priv);
 	if (ret)
 		return ret;
@@ -1287,7 +1279,7 @@ nvc0_graph_ctor(struct nouveau_object *parent, struct nouveau_object *engine,
 
 	priv->base.units = nvc0_graph_units;
 
-	if (use_ext_fw) {
+	if (nouveau_boolopt(device->cfgopt, "NvGrUseFW", false)) {
 		nv_info(priv, "using external firmware\n");
 		if (nvc0_graph_ctor_fw(priv, "fuc409c", &priv->fuc409c) ||
 		    nvc0_graph_ctor_fw(priv, "fuc409d", &priv->fuc409d) ||

@@ -1,4 +1,4 @@
-/*	$NetBSD: chfs_gc.c,v 1.8 2015/01/11 17:28:22 hannken Exp $	*/
+/*	$NetBSD: chfs_gc.c,v 1.5.4.1 2014/09/08 18:57:58 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 2010 Department of Software Engineering,
@@ -32,7 +32,6 @@
  * SUCH DAMAGE.
  */
 
-#include <sys/cprng.h>
 #include "chfs.h"
 
 void chfs_gc_release_inode(struct chfs_mount *,
@@ -251,7 +250,6 @@ chfs_gc_fetch_inode(struct chfs_mount *chmp, ino_t vno,
 	dbg_gc("vp to ip\n");
 	ip = VTOI(vp);
 	KASSERT(ip);
-	vrele(vp);
 
 	return ip;
 }
@@ -353,7 +351,10 @@ find_gc_block(struct chfs_mount *chmp)
 	KASSERT(mutex_owned(&chmp->chm_lock_mountfields));
 
 	/* Get a random number. */
-	uint32_t n = cprng_fast32() % 128;
+	struct timespec now;
+	vfs_timestamp(&now);
+
+	int n = now.tv_nsec % 128;
 
 again:
 	/* Find an eraseblock queue. */
@@ -971,7 +972,6 @@ chfs_gcollect_dirent(struct chfs_mount *chmp,
 	}
 
 	ip = VTOI(vnode);
-	vrele(vnode);
 
 	/* Remove and obsolete the previous version. */
 	mutex_enter(&chmp->chm_lock_vnocache);
@@ -1008,7 +1008,7 @@ chfs_gcollect_deletion_dirent(struct chfs_mount *chmp,
 
 	nref_len = chfs_nref_len(chmp, cheb, fd->nref);
 
-	/* XXX This was a noop  (void)chfs_vnode_lookup(chmp, fd->vno); */
+	(void)chfs_vnode_lookup(chmp, fd->vno);
 
 	/* Find it in parent dirents. */
 	for (nref = parent->chvc->dirents;

@@ -1,4 +1,4 @@
-/*	$NetBSD: mroute.c,v 1.25 2014/11/06 21:30:09 christos Exp $	*/
+/*	$NetBSD: mroute.c,v 1.24.10.1 2015/01/08 11:01:01 martin Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -76,7 +76,7 @@
 #if 0
 static char sccsid[] = "from: @(#)mroute.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: mroute.c,v 1.25 2014/11/06 21:30:09 christos Exp $");
+__RCSID("$NetBSD: mroute.c,v 1.24.10.1 2015/01/08 11:01:01 martin Exp $");
 #endif
 #endif /* not lint */
 

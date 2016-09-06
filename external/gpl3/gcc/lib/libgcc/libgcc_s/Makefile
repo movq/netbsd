@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.13 2016/03/23 05:28:01 mrg Exp $
+#	$NetBSD: Makefile,v 1.10.2.1 2015/01/25 00:19:35 martin Exp $
 
 USE_SHLIBDIR=	yes
 REQUIRETOOLS=	yes
@@ -22,22 +22,15 @@ SHLIB_MINOR=	0
 LDFLAGS+=	-nodefaultlibs
 LDFLAGS+=	-Wl,--version-script=${.OBJDIR}/libgcc.map
 
+# XXX handle this better?
 # XXX handle this better?  GCC 4.8 moved them.
 .if ${MACHINE} == "emips"
-LIB2ADD_HACK+=	${GNUHOSTDIST}/gcc/config/floatunsidf.c \
-		${GNUHOSTDIST}/gcc/config/floatunsisf.c
-.endif
-
-# XXXGCC5 GCC 5.3 has all these in libgcc and we have them in libc.
-.if ${MACHINE_ARCH} == "mips64el" || ${MACHINE_ARCH} == "mips64eb"
-LIB2ADD_EDITED= ${G_LIB2ADD:T:Nfloatsisf.c:Nfloatunsisf.c:Nfloatsidf.c:Nfloatunsidf.c:Nfixsfsi.c:Nextendsfdf2.c:Naddsf3.c:Nmulsf3.c:Ndivsf3.c:Nadddf3.c:Nsubdf3.c:Nmuldf3.c:Ndivdf3.c:Nfixdfsi.c:S/.asm/.S/}
-.else
-LIB2ADD_EDITED=	${G_LIB2ADD:T:S/.asm/.S/}
+G_LIB2ADD_HACK+=	${GNUHOSTDIST}/gcc/config/floatunsidf.c \
+			${GNUHOSTDIST}/gcc/config/floatunsisf.c
 .endif
 
 SRCS+=		${LIB2FUNCS} ${LIB2DIVMOD} ${LIB2_EH} ${LIB2_EHASM} \
-		${LIB2ADD_EDITED} \
-		${LIB2ADD_HACK:T:S/.asm/.S/} \
+		${G_LIB2ADD:T:S/.asm/.S/} ${G_LIB2ADD_HACK:T:S/.asm/.S/} \
 		${G_LIB2ADD_ST:T} ${LIB1ASMFUNCS}
 
 COPTS.unwind-dw2.c = -Wno-stack-protector

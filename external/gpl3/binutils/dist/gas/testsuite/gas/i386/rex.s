@@ -10,9 +10,6 @@ _start:
 	rex/fxsave (%r8,%r8)
 	rex64/fxsave (%r8,%r8)
 
-	.byte 0x41,0x9b,0xdd,0x30
-	fsave (%r8)
-
 	.byte 0x40
 	vmovapd (%rax),%xmm0
 

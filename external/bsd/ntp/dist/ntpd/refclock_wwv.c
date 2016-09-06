@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_wwv.c,v 1.7 2016/01/08 21:35:39 christos Exp $	*/
+/*	$NetBSD: refclock_wwv.c,v 1.2.4.2 2015/11/08 01:51:08 riz Exp $	*/
 
 /*
  * refclock_wwv - clock driver for NIST WWV/H time/frequency station

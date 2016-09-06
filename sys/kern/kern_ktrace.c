@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_ktrace.c,v 1.167 2016/07/07 06:55:43 msaitoh Exp $	*/
+/*	$NetBSD: kern_ktrace.c,v 1.164.4.1 2014/12/01 11:38:42 martin Exp $	*/
 
 /*-
  * Copyright (c) 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -61,7 +61,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_ktrace.c,v 1.167 2016/07/07 06:55:43 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_ktrace.c,v 1.164.4.1 2014/12/01 11:38:42 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -92,7 +92,7 @@ struct ktrace_entry {
 	TAILQ_ENTRY(ktrace_entry) kte_list;
 	struct	ktr_header kte_kth;
 	void	*kte_buf;
-	size_t	kte_bufsz;
+	size_t	kte_bufsz;	
 #define	KTE_SPACE		32
 	uint8_t kte_space[KTE_SPACE] __aligned(sizeof(register_t));
 };
@@ -263,7 +263,7 @@ ktrinit(void)
 	    "ktrace", &pool_allocator_nointr, IPL_NONE, NULL, NULL, NULL);
 
 	ktrace_listener = kauth_listen_scope(KAUTH_SCOPE_PROCESS,
-	    ktrace_listener_cb, NULL);
+	    ktrace_listener_cb, NULL); 
 }
 
 /*
@@ -875,14 +875,14 @@ ktr_csw(int out, int user)
 			break;
 		case 1: 
 			kte->kte_kth.ktr_ots.tv_sec = ts->tv_sec;
-			kte->kte_kth.ktr_ots.tv_nsec = ts->tv_nsec;
-			break;
+			kte->kte_kth.ktr_ots.tv_nsec = ts->tv_nsec;       
+			break; 
 		case 2:
 			kte->kte_kth.ktr_ts.tv_sec = ts->tv_sec;
-			kte->kte_kth.ktr_ts.tv_nsec = ts->tv_nsec;
-			break;
+			kte->kte_kth.ktr_ts.tv_nsec = ts->tv_nsec;       
+			break; 
 		default:
-			break;
+			break; 
 		}
 
 		ktraddentry(l, kte, KTA_WAITOK);
@@ -930,7 +930,7 @@ ktruser(const char *id, void *addr, size_t len, int ustr)
 	ktp->ktr_id[KTR_USER_MAXIDLEN-1] = '\0';
 
 	user_dta = (void *)(ktp + 1);
-	if ((error = copyin(addr, user_dta, len)) != 0)
+	if ((error = copyin(addr, (void *)user_dta, len)) != 0)
 		len = 0;
 
 	ktraddentry(l, kte, KTA_WAITOK);

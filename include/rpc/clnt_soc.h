@@ -1,4 +1,4 @@
-/*	$NetBSD: clnt_soc.h,v 1.5 2016/01/23 02:34:09 dholland Exp $	*/
+/*	$NetBSD: clnt_soc.h,v 1.3 2005/02/06 04:40:51 perry Exp $	*/
 
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
@@ -55,26 +55,26 @@
  * CLIENT *
  * clnttcp_create(raddr, prog, vers, sockp, sendsz, recvsz)
  *	struct sockaddr_in *raddr;
- *	unsigned long prog;
- *	unsigned long version;
+ *	u_long prog;
+ *	u_long version;
  *	int *sockp;
- *	unsigned sendsz;
- *	unsigned recvsz;
+ *	u_int sendsz;
+ *	u_int recvsz;
  */
 __BEGIN_DECLS
 extern CLIENT *clnttcp_create(struct sockaddr_in *,
-				unsigned long,
-				unsigned long,
+				u_long,
+				u_long,
 				int *,
-				unsigned int,
-				unsigned int);
+				u_int,
+				u_int);
 __END_DECLS
 
 /*
  * Raw (memory) rpc.
  */
 __BEGIN_DECLS
-extern CLIENT *clntraw_create  (unsigned long, unsigned long);
+extern CLIENT *clntraw_create  (u_long, u_long);
 __END_DECLS
 
 
@@ -83,8 +83,8 @@ __END_DECLS
  * CLIENT *
  * clntudp_create(raddr, program, version, wait, sockp)
  *	struct sockaddr_in *raddr;
- *	unsigned long program;
- *	unsigned long version;
+ *	u_long program;
+ *	u_long version;
  *	struct timeval wait;
  *	int *sockp;
  *
@@ -92,26 +92,26 @@ __END_DECLS
  * CLIENT *
  * clntudp_bufcreate(raddr, program, version, wait, sockp, sendsz, recvsz)
  *	struct sockaddr_in *raddr;
- *	unsigned long program;
- *	unsigned long version;
+ *	u_long program;
+ *	u_long version;
  *	struct timeval wait;
  *	int *sockp;
- *	unsigned sendsz;
- *	unsigned recvsz;
+ *	u_int sendsz;
+ *	u_int recvsz;
  */
 __BEGIN_DECLS
 extern CLIENT *clntudp_create(struct sockaddr_in *,
-				unsigned long,
-				unsigned long,
+				u_long,
+				u_long,
 				struct timeval,
 				int *);
 extern CLIENT *clntudp_bufcreate(struct sockaddr_in *,
-				     unsigned long,
-				     unsigned long,
+				     u_long,
+				     u_long,
 				     struct timeval,
 				     int *,
-				     unsigned int,
-				     unsigned int);
+				     u_int,
+				     u_int);
 __END_DECLS
 
 #endif /* _RPC_CLNT_SOC_H */

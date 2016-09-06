@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_socket2.c,v 1.123 2016/05/23 13:54:34 tls Exp $	*/
+/*	$NetBSD: uipc_socket2.c,v 1.120 2014/07/31 03:39:35 rtr Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -58,12 +58,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_socket2.c,v 1.123 2016/05/23 13:54:34 tls Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_socket2.c,v 1.120 2014/07/31 03:39:35 rtr Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_mbuftrace.h"
 #include "opt_sb_max.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -262,37 +260,8 @@ sonewconn(struct socket *head, bool soready)
 	KASSERT(solocked(head));
 
 	if (head->so_qlen + head->so_q0len > 3 * head->so_qlimit / 2) {
-		/*
-		 * Listen queue overflow.  If there is an accept filter
-		 * active, pass through the oldest cxn it's handling.
-		 */
-		if (head->so_accf == NULL) {
-			return NULL;
-		} else {
-			struct socket *so2, *next;
-
-			/* Pass the oldest connection waiting in the
-			   accept filter */
-			for (so2 = TAILQ_FIRST(&head->so_q0);
-			     so2 != NULL; so2 = next) {
-				next = TAILQ_NEXT(so2, so_qe);
-				if (so2->so_upcall == NULL) {
-					continue;
-				}
-				so2->so_upcall = NULL;
-				so2->so_upcallarg = NULL;
-				so2->so_options &= ~SO_ACCEPTFILTER;
-				so2->so_rcv.sb_flags &= ~SB_UPCALL;
-				soisconnected(so2);
-				break;
-			}
-
-			/* If nothing was nudged out of the acept filter, bail
-			 * out; otherwise proceed allocating the socket. */
-			if (so2 == NULL) {
-				return NULL;
-			}
-		}
+		/* Listen queue overflow. */
+		return NULL;
 	}
 	if ((head->so_options & SO_ACCEPTFILTER) != 0) {
 		soready = false;
@@ -1512,16 +1481,16 @@ sbunlock(struct sockbuf *sb)
 }
 
 int
-sowait(struct socket *so, bool catch_p, int timo)
+sowait(struct socket *so, bool catch, int timo)
 {
 	kmutex_t *lock;
 	int error;
 
 	KASSERT(solocked(so));
-	KASSERT(catch_p || timo != 0);
+	KASSERT(catch || timo != 0);
 
 	lock = so->so_lock;
-	if (catch_p)
+	if (catch)
 		error = cv_timedwait_sig(&so->so_cv, lock, timo);
 	else
 		error = cv_timedwait(&so->so_cv, lock, timo);

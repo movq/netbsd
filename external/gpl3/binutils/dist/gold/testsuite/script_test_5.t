@@ -1,6 +1,6 @@
 /* script_test_5.t -- linker script test 5 for gold
 
-   Copyright (C) 2009-2015 Free Software Foundation, Inc.
+   Copyright 2009 Free Software Foundation, Inc.
    Written by Cary Coutant <ccoutant@google.com>.
 
    This file is part of gold.
@@ -37,7 +37,6 @@ SECTIONS
   . = ALIGN(0x100);
   .dynamic : { *(.dynamic) }
   .data : { *(.data) }
-  .got : { *(.got .toc) }
   . += 0x100000;
   . = ALIGN(0x100);
   .bss : { *(.bss) }

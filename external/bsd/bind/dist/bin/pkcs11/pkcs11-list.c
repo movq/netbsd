@@ -1,4 +1,4 @@
-/*	$NetBSD: pkcs11-list.c,v 1.8 2015/12/17 04:00:41 christos Exp $	*/
+/*	$NetBSD: pkcs11-list.c,v 1.6.2.1 2016/03/13 08:06:04 martin Exp $	*/
 
 /*
  * Copyright (C) 2009, 2015  Internet Systems Consortium, Inc. ("ISC")

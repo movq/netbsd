@@ -31,7 +31,7 @@
 
 ******************************************************************************/
 /*$FreeBSD: head/sys/dev/ixgbe/ixgbe_82598.c 251964 2013-06-18 21:28:19Z jfv $*/
-/*$NetBSD: ixgbe_82598.c,v 1.5 2015/08/05 04:08:44 msaitoh Exp $*/
+/*$NetBSD: ixgbe_82598.c,v 1.1.28.3 2016/06/14 08:42:34 snj Exp $*/
 
 #include "ixgbe_type.h"
 #include "ixgbe_82598.h"

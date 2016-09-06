@@ -1,4 +1,4 @@
-/*	$NetBSD: mvpex.c,v 1.16 2015/11/27 00:08:43 nonaka Exp $	*/
+/*	$NetBSD: mvpex.c,v 1.12 2014/03/30 23:25:20 christos Exp $	*/
 /*
  * Copyright (c) 2008 KIYOHARA Takashi
  * All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mvpex.c,v 1.16 2015/11/27 00:08:43 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mvpex.c,v 1.12 2014/03/30 23:25:20 christos Exp $");
 
 #include "opt_pci.h"
 #include "pci.h"
@@ -507,9 +507,6 @@ mvpex_conf_read(void *v, pcitag_t tag, int reg)
 	uint32_t stat;
 	int bus, dev, func, pexbus, pexdev;
 
-	if ((unsigned int)reg >= PCI_EXTCONF_SIZE)
-		return -1;
-
 	mvpex_decompose_tag(v, tag, &bus, &dev, &func);
 
 	stat = bus_space_read_4(sc->sc_iot, sc->sc_ioh, MVPEX_STAT);
@@ -554,9 +551,6 @@ mvpex_conf_write(void *v, pcitag_t tag, int reg, pcireg_t data)
 	pcireg_t addr;
 	uint32_t stat;
 	int bus, dev, func, pexbus, pexdev;
-
-	if ((unsigned int)reg >= PCI_EXTCONF_SIZE)
-		return;
 
 	mvpex_decompose_tag(v, tag, &bus, &dev, &func);
 
@@ -666,6 +660,7 @@ mvpex_intr_establish(void *v, pci_intr_handle_t pin, int ipl,
 	struct mvpex_intrhand *pexih;
 	uint32_t mask;
 	int ih = pin - 1, s;
+	char buf[PCI_INTRSTR_LEN];
 
 	intrtab = &sc->sc_intrtab[ih];
 
@@ -679,9 +674,8 @@ mvpex_intr_establish(void *v, pci_intr_handle_t pin, int ipl,
 	pexih->ih_arg = intrarg;
 	pexih->ih_type = ipl;
 	pexih->ih_intrtab = intrtab;
-	mvpex_intr_string(v, pin, pexih->ih_evname, sizeof(pexih->ih_evname));
-	evcnt_attach_dynamic(&pexih->ih_evcnt, EVCNT_TYPE_INTR, NULL,
-	    device_xname(sc->sc_dev), pexih->ih_evname);
+	evcnt_attach_dynamic(&pexih->ih_evcnt, EVCNT_TYPE_INTR, NULL, "mvpex",
+	    mvpex_intr_string(v, pin, buf, sizeof(buf)));
 
 	s = splhigh();
 
@@ -708,8 +702,6 @@ mvpex_intr_disestablish(void *v, void *ih)
 	struct mvpex_intrhand *pexih = ih;
 	uint32_t mask;
 	int s;
-
-	evcnt_detach(&pexih->ih_evcnt);
 
 	intrtab = pexih->ih_intrtab;
 

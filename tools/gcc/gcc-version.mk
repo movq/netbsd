@@ -1,9 +1,5 @@
-#	$NetBSD: gcc-version.mk,v 1.6 2016/06/07 08:12:13 mrg Exp $
+#	$NetBSD: gcc-version.mk,v 1.1.4.1 2015/01/25 00:19:45 martin Exp $
 
 # common location for tools and native build
 
-.if ${HAVE_GCC} == 48
-NETBSD_GCC_VERSION=nb3 20151015
-.else
-NETBSD_GCC_VERSION=nb1 20160606
-.endif
+NETBSD_GCC_VERSION=nb2 20150115

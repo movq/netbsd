@@ -1,6 +1,6 @@
 /* A simple growing buffer for GDB.
   
-   Copyright (C) 2009-2015 Free Software Foundation, Inc.
+   Copyright (C) 2009-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -17,10 +17,21 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "common-defs.h"
+#ifdef GDBSERVER
+#include "server.h"
+#else
+#include "defs.h"
+#endif
+
 #include "xml-utils.h"
 #include "buffer.h"
 #include "inttypes.h"
+
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <stdint.h>
+
 void
 buffer_grow (struct buffer *buffer, const char *data, size_t size)
 {

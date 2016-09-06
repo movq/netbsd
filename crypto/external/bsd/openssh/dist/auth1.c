@@ -1,4 +1,4 @@
-/*	$NetBSD: auth1.c,v 1.13 2016/01/23 00:03:30 christos Exp $	*/
+/*	$NetBSD: auth1.c,v 1.8.4.1 2015/04/30 06:07:30 riz Exp $	*/
 /* $OpenBSD: auth1.c,v 1.82 2014/07/15 15:54:14 millert Exp $ */
 /*
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -12,7 +12,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: auth1.c,v 1.13 2016/01/23 00:03:30 christos Exp $");
+__RCSID("$NetBSD: auth1.c,v 1.8.4.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/types.h>
 #include <sys/queue.h>
 
@@ -376,7 +376,6 @@ do_authloop(Authctxt *authctxt)
 			char *msg;
 			size_t len;
 
-			pfilter_notify(1);
 			error("Access denied for user %s by PAM account "
 			    "configuration", authctxt->user);
 			len = buffer_len(&loginmsg);
@@ -427,6 +426,16 @@ do_authentication(Authctxt *authctxt)
 
 	if ((style = strchr(user, ':')) != NULL)
 		*style++ = '\0';
+
+#ifdef KRB5
+	/* XXX - SSH.com Kerberos v5 braindeath. */
+	if ((datafellows & SSH_BUG_K5USER) &&
+	    options.kerberos_authentication) {
+		char *p;
+		if ((p = strchr(user, '@')) != NULL)
+			*p = '\0';
+	}
+#endif
 
 	authctxt->user = user;
 	authctxt->style = style;

@@ -1,5 +1,5 @@
 #source: arch-10.s
-#as: -march=bdver2+vmx+smx+xsaveopt+movbe+ept+padlock
+#as: -march=bdver2+avx+vmx+smx+xsave+xsaveopt+aes+pclmul+movbe+ept+clflush+svme+padlock+prfchw
 #objdump: -dw
 #name: i386 arch 10 (bdver2)
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: midiplay.c,v 1.30 2015/03/22 22:47:43 mrg Exp $	*/
+/*	$NetBSD: midiplay.c,v 1.29.18.1 2015/04/23 07:03:49 snj Exp $	*/
 
 /*
  * Copyright (c) 1998, 2002 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 #include <sys/cdefs.h>
 
 #ifndef lint
-__RCSID("$NetBSD: midiplay.c,v 1.30 2015/03/22 22:47:43 mrg Exp $");
+__RCSID("$NetBSD: midiplay.c,v 1.29.18.1 2015/04/23 07:03:49 snj Exp $");
 #endif
 
 

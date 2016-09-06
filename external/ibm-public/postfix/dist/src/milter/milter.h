@@ -1,4 +1,4 @@
-/*	$NetBSD: milter.h,v 1.1.1.2 2015/01/24 18:08:26 tron Exp $	*/
+/*	$NetBSD: milter.h,v 1.1.1.1.28.1 2015/01/27 08:14:03 martin Exp $	*/
 
 #ifndef _MILTER_H_INCLUDED_
 #define _MILTER_H_INCLUDED_

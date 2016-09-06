@@ -18,14 +18,11 @@
 #include "llvm/MC/MCAsmInfoELF.h"
 
 namespace llvm {
-class Triple;
-
-class HexagonMCAsmInfo : public MCAsmInfoELF {
-  void anchor() override;
-
-public:
-  explicit HexagonMCAsmInfo(const Triple &TT);
-};
+  class HexagonMCAsmInfo : public MCAsmInfoELF {
+    void anchor() override;
+  public:
+    explicit HexagonMCAsmInfo(StringRef TT);
+  };
 
 } // namespace llvm
 

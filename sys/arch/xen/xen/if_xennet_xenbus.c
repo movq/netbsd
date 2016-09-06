@@ -1,4 +1,4 @@
-/*      $NetBSD: if_xennet_xenbus.c,v 1.68 2016/06/10 13:27:13 ozaki-r Exp $      */
+/*      $NetBSD: if_xennet_xenbus.c,v 1.63.2.1 2016/03/06 18:52:06 martin Exp $      */
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -85,7 +85,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_xennet_xenbus.c,v 1.68 2016/06/10 13:27:13 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_xennet_xenbus.c,v 1.63.2.1 2016/03/06 18:52:06 martin Exp $");
 
 #include "opt_xen.h"
 #include "opt_nfs_boot.h"
@@ -97,7 +97,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_xennet_xenbus.c,v 1.68 2016/06/10 13:27:13 ozaki-
 #include <sys/proc.h>
 #include <sys/systm.h>
 #include <sys/intr.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -362,7 +362,6 @@ xennet_xenbus_attach(device_t parent, device_t self, void *aux)
 	    ether_sprintf(sc->sc_enaddr));
 	/* Initialize ifnet structure and attach interface */
 	strlcpy(ifp->if_xname, device_xname(self), IFNAMSIZ);
-	sc->sc_ethercom.ec_capabilities |= ETHERCAP_VLAN_MTU;
 	ifp->if_softc = sc;
 	ifp->if_start = xennet_start;
 	ifp->if_ioctl = xennet_ioctl;
@@ -1073,7 +1072,7 @@ again:
 		}
 		MCLAIM(m, &sc->sc_ethercom.ec_rx_mowner);
 
-		m_set_rcvif(m, ifp);
+		m->m_pkthdr.rcvif = ifp;
 		req->rxreq_va = (vaddr_t)pool_cache_get_paddr(
 		    if_xennetrxbuf_cache, PR_NOWAIT, &req->rxreq_pa);
 		if (__predict_false(req->rxreq_va == 0)) {
@@ -1107,7 +1106,7 @@ again:
 		ifp->if_ipackets++;
 
 		/* Pass the packet up. */
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		(*ifp->if_input)(ifp, m);
 	}
 	xen_rmb();
 	sc->sc_rx_ring.rsp_cons = i;

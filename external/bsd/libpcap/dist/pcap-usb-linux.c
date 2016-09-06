@@ -1,4 +1,4 @@
-/*	$NetBSD: pcap-usb-linux.c,v 1.3 2015/03/31 21:39:42 christos Exp $	*/
+/*	$NetBSD: pcap-usb-linux.c,v 1.1.1.4 2013/12/31 16:57:24 christos Exp $	*/
 
 /*
  * Copyright (c) 2006 Paolo Abeni (Italy)
@@ -13,8 +13,8 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  * notice, this list of conditions and the following disclaimer in the
  * documentation and/or other materials provided with the distribution.
- * 3. The name of the author may not be used to endorse or promote
- * products derived from this software without specific prior written
+ * 3. The name of the author may not be used to endorse or promote 
+ * products derived from this software without specific prior written 
  * permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
@@ -34,10 +34,11 @@
  * Modifications: Kris Katterjohn <katterjohn@gmail.com>
  *
  */
+#ifndef lint
+static const char rcsid[] _U_ =
+    "@(#) Header: /tcpdump/master/libpcap/pcap-usb-linux.c,v 1.33 2008-12-23 21:38:50 guy Exp  (LBL)";
+#endif
  
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: pcap-usb-linux.c,v 1.3 2015/03/31 21:39:42 christos Exp $");
-
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
@@ -144,21 +145,21 @@ static int usb_setdirection_linux(pcap_t *, pcap_direction_t);
 static void usb_cleanup_linux_mmap(pcap_t *);
 
 /* facility to add an USB device to the device list*/
-static int
+static int 
 usb_dev_add(pcap_if_t** alldevsp, int n, char *err_str)
 {
 	char dev_name[10];
-	char dev_descr[30];
+	char dev_descr[30]; 
 	snprintf(dev_name, 10, USB_IFACE"%d", n);
 	snprintf(dev_descr, 30, "USB bus number %d", n);
 
-	if (pcap_add_if(alldevsp, dev_name, 0,
+	if (pcap_add_if(alldevsp, dev_name, 0, 
 	    dev_descr, err_str) < 0)
 		return -1;
-	return 0;
+	return 0; 
 }
 
-int
+int 
 usb_findalldevs(pcap_if_t **alldevsp, char *err_str)
 {
 	struct dirent* data;
@@ -177,7 +178,7 @@ usb_findalldevs(pcap_if_t **alldevsp, char *err_str)
 			if (strncmp(name, "usb", 3) != 0)
 				continue;
 
-			if (sscanf(&name[3], "%d", &n) == 0)
+			if (sscanf(&name[3], "%d", &n) == 0) 
 				continue;
 
 			ret = usb_dev_add(alldevsp, n, err_str);
@@ -198,7 +199,7 @@ usb_findalldevs(pcap_if_t **alldevsp, char *err_str)
 			if ((len < 1) || !isdigit(name[--len]))
 				continue;
 			while (isdigit(name[--len]));
-			if (sscanf(&name[len+1], "%d", &n) != 1)
+			if (sscanf(&name[len+1], "%d", &n) != 1) 
 				continue;
 
 			ret = usb_dev_add(alldevsp, n, err_str);
@@ -212,12 +213,12 @@ usb_findalldevs(pcap_if_t **alldevsp, char *err_str)
 	return 0;
 }
 
-static
+static 
 int usb_mmap(pcap_t* handle)
 {
 	struct pcap_usb_linux *handlep = handle->priv;
 	int len = ioctl(handle->fd, MON_IOCQ_RING_SIZE);
-	if (len < 0)
+	if (len < 0) 
 		return 0;
 
 	handlep->mmapbuflen = len;
@@ -225,8 +226,6 @@ int usb_mmap(pcap_t* handle)
 	    MAP_SHARED, handle->fd, 0);
 	return handlep->mmapbuf != MAP_FAILED;
 }
-
-#ifdef HAVE_LINUX_USBDEVICE_FS_H
 
 #define CTRL_TIMEOUT    (5*1000)        /* milliseconds */
 
@@ -265,7 +264,7 @@ probe_devices(int bus)
 			continue;
 
 		snprintf(buf, sizeof(buf), "/dev/bus/usb/%03d/%s", bus, data->d_name);
-
+		
 		fd = open(buf, O_RDWR);
 		if (fd == -1)
 			continue;
@@ -296,7 +295,6 @@ probe_devices(int bus)
 	}
 	closedir(dir);
 }
-#endif /* HAVE_LINUX_USBDEVICE_FS_H */
 
 pcap_t *
 usb_create(const char *device, char *ebuf, int *is_ours)
@@ -368,7 +366,7 @@ usb_activate(pcap_t* handle)
 	}
 
 	/*now select the read method: try to open binary interface */
-	snprintf(full_path, USB_LINE_LEN, LINUX_USB_MON_DEV"%d", handlep->bus_index);
+	snprintf(full_path, USB_LINE_LEN, LINUX_USB_MON_DEV"%d", handlep->bus_index);  
 	handle->fd = open(full_path, O_RDONLY, 0);
 	if (handle->fd >= 0)
 	{
@@ -386,9 +384,7 @@ usb_activate(pcap_t* handle)
 			handle->stats_op = usb_stats_linux_bin;
 			handle->read_op = usb_read_linux_mmap;
 			handle->cleanup_op = usb_cleanup_linux_mmap;
-#ifdef HAVE_LINUX_USBDEVICE_FS_H
 			probe_devices(handlep->bus_index);
-#endif
 
 			/*
 			 * "handle->fd" is a real file, so "select()" and
@@ -401,13 +397,11 @@ usb_activate(pcap_t* handle)
 		/* can't mmap, use plain binary interface access */
 		handle->stats_op = usb_stats_linux_bin;
 		handle->read_op = usb_read_linux_bin;
-#ifdef HAVE_LINUX_USBDEVICE_FS_H
 		probe_devices(handlep->bus_index);
-#endif
 	}
 	else {
 		/*Binary interface not available, try open text interface */
-		snprintf(full_path, USB_LINE_LEN, USB_TEXT_DIR"/%dt", handlep->bus_index);
+		snprintf(full_path, USB_LINE_LEN, USB_TEXT_DIR"/%dt", handlep->bus_index);  
 		handle->fd = open(full_path, O_RDONLY, 0);
 		if (handle->fd < 0)
 		{
@@ -417,7 +411,7 @@ usb_activate(pcap_t* handle)
 				 * Not found at the new location; try
 				 * the old location.
 				 */
-				snprintf(full_path, USB_LINE_LEN, USB_TEXT_DIR_OLD"/%dt", handlep->bus_index);
+				snprintf(full_path, USB_LINE_LEN, USB_TEXT_DIR_OLD"/%dt", handlep->bus_index);  
 				handle->fd = open(full_path, O_RDONLY, 0);
 			}
 			if (handle->fd < 0) {
@@ -458,22 +452,22 @@ usb_activate(pcap_t* handle)
 	return 0;
 }
 
-static inline int
+static inline int 
 ascii_to_int(char c)
 {
 	return c < 'A' ? c- '0': ((c<'a') ? c - 'A' + 10: c-'a'+10);
 }
 
 /*
- * see <linux-kernel-source>/Documentation/usb/usbmon.txt and
- * <linux-kernel-source>/drivers/usb/mon/mon_text.c for urb string
+ * see <linux-kernel-source>/Documentation/usb/usbmon.txt and 
+ * <linux-kernel-source>/drivers/usb/mon/mon_text.c for urb string 
  * format description
  */
 static int
 usb_read_linux(pcap_t *handle, int max_packets, pcap_handler callback, u_char *user)
 {
 	/* see:
-	* /usr/src/linux/Documentation/usb/usbmon.txt
+	* /usr/src/linux/Documentation/usb/usbmon.txt 
 	* for message format
 	*/
 	struct pcap_usb_linux *handlep = handle->priv;
@@ -506,11 +500,11 @@ usb_read_linux(pcap_t *handle, int max_packets, pcap_handler callback, u_char *u
 		return -1;
 	}
 
-	/* read urb header; %n argument may increment return value, but it's
+	/* read urb header; %n argument may increment return value, but it's 
 	* not mandatory, so does not count on it*/
 	string[ret] = 0;
-	ret = sscanf(string, "%x %d %c %c%c:%d:%d %s%n", &tag, &timestamp, &etype,
-		&pipeid1, &pipeid2, &dev_addr, &ep_num, status,
+	ret = sscanf(string, "%x %d %c %c%c:%d:%d %s%n", &tag, &timestamp, &etype, 
+		&pipeid1, &pipeid2, &dev_addr, &ep_num, status, 
 		&cnt);
 	if (ret < 8)
 	{
@@ -526,10 +520,10 @@ usb_read_linux(pcap_t *handle, int max_packets, pcap_handler callback, u_char *u
 	string += cnt;
 
 	/* don't use usbmon provided timestamp, since it have low precision*/
-	if (gettimeofday(&pkth.ts, NULL) < 0)
+	if (gettimeofday(&pkth.ts, NULL) < 0) 
 	{
 		snprintf(handle->errbuf, PCAP_ERRBUF_SIZE,
-			"Can't get timestamp for message '%s' %d:%s",
+			"Can't get timestamp for message '%s' %d:%s", 
 			string, errno, strerror(errno));
 		return -1;
 	}
@@ -572,11 +566,11 @@ usb_read_linux(pcap_t *handle, int max_packets, pcap_handler callback, u_char *u
 	if (ret != 1)
 	{
 		/* this a setup packet, setup data can be filled with underscore if
-		* usbmon has not been able to read them, so we must parse this fields as
+		* usbmon has not been able to read them, so we must parse this fields as 
 		* strings */
 		pcap_usb_setup* shdr;
 		char str1[3], str2[3], str3[5], str4[5], str5[5];
-		ret = sscanf(string, "%s %s %s %s %s%n", str1, str2, str3, str4,
+		ret = sscanf(string, "%s %s %s %s %s%n", str1, str2, str3, str4, 
 		str5, &cnt);
 		if (ret < 5)
 		{
@@ -597,7 +591,7 @@ usb_read_linux(pcap_t *handle, int max_packets, pcap_handler callback, u_char *u
 
 		uhdr->setup_flag = 0;
 	}
-	else
+	else 
 		uhdr->setup_flag = 1;
 
 	/* read urb data */
@@ -610,7 +604,7 @@ usb_read_linux(pcap_t *handle, int max_packets, pcap_handler callback, u_char *u
 	}
 	string += cnt;
 
-	/* urb tag is not present if urb length is 0, so we can stop here
+	/* urb tag is not present if urb length is 0, so we can stop here 
 	 * text parsing */
 	pkth.len = urb_len+pkth.caplen;
 	uhdr->urb_len = urb_len;
@@ -627,7 +621,7 @@ usb_read_linux(pcap_t *handle, int max_packets, pcap_handler callback, u_char *u
 		return -1;
 	}
 
-	if (urb_tag != '=')
+	if (urb_tag != '=') 
 		goto got;
 
 	/* skip urb tag and following space */
@@ -636,7 +630,7 @@ usb_read_linux(pcap_t *handle, int max_packets, pcap_handler callback, u_char *u
 	/* if we reach this point we got some urb data*/
 	uhdr->data_flag = 0;
 
-	/* read all urb data; if urb length is greater then the usbmon internal
+	/* read all urb data; if urb length is greater then the usbmon internal 
 	 * buffer length used by the kernel to spool the URB, we get only
 	 * a partial information.
 	 * At least until linux 2.6.17 there is no way to set usbmon intenal buffer
@@ -675,7 +669,7 @@ usb_inject_linux(pcap_t *handle, const void *buf, size_t size)
 	return (-1);
 }
 
-static int
+static int 
 usb_stats_linux(pcap_t *handle, struct pcap_stat *stats)
 {
 	struct pcap_usb_linux *handlep = handle->priv;
@@ -700,7 +694,7 @@ usb_stats_linux(pcap_t *handle, struct pcap_stat *stats)
 		}
 		if (fd < 0) {
 			snprintf(handle->errbuf, PCAP_ERRBUF_SIZE,
-				"Can't open USB stats file %s: %s",
+				"Can't open USB stats file %s: %s", 
 				string, strerror(errno));
 			return -1;
 		}
@@ -722,11 +716,11 @@ usb_stats_linux(pcap_t *handle, struct pcap_stat *stats)
 
 	/* extract info on dropped urbs */
 	for (consumed=0; consumed < ret; ) {
-		/* from the sscanf man page:
- 		 * The C standard says: "Execution of a %n directive does
+		/* from the sscanf man page: 
+ 		 * The C standard says: "Execution of a %n directive does 
  		 * not increment the assignment count returned at the completion
 		 * of  execution" but the Corrigendum seems to contradict this.
-		 * Do not make any assumptions on the effect of %n conversions
+		 * Do not make any assumptions on the effect of %n conversions 
 		 * on the return value and explicitly check for cnt assignmet*/
 		int ntok;
 
@@ -738,7 +732,7 @@ usb_stats_linux(pcap_t *handle, struct pcap_stat *stats)
 		ptr += cnt;
 		if (strcmp(token, "nreaders") == 0)
 			ret = sscanf(ptr, "%d", &stats->ps_drop);
-		else
+		else 
 			ret = sscanf(ptr, "%d", &dummy);
 		if (ntok != 1)
 			break;
@@ -751,7 +745,7 @@ usb_stats_linux(pcap_t *handle, struct pcap_stat *stats)
 	return 0;
 }
 
-static int
+static int 
 usb_setdirection_linux(pcap_t *p, pcap_direction_t d)
 {
 	p->direction = d;
@@ -759,7 +753,7 @@ usb_setdirection_linux(pcap_t *p, pcap_direction_t d)
 }
 
 
-static int
+static int 
 usb_stats_linux_bin(pcap_t *handle, struct pcap_stat *stats)
 {
 	struct pcap_usb_linux *handlep = handle->priv;
@@ -780,7 +774,7 @@ usb_stats_linux_bin(pcap_t *handle, struct pcap_stat *stats)
 }
 
 /*
- * see <linux-kernel-source>/Documentation/usb/usbmon.txt and
+ * see <linux-kernel-source>/Documentation/usb/usbmon.txt and 
  * <linux-kernel-source>/drivers/usb/mon/mon_bin.c binary ABI
  */
 static int
@@ -838,7 +832,7 @@ usb_read_linux_bin(pcap_t *handle, int max_packets, pcap_handler callback, u_cha
 }
 
 /*
- * see <linux-kernel-source>/Documentation/usb/usbmon.txt and
+ * see <linux-kernel-source>/Documentation/usb/usbmon.txt and 
  * <linux-kernel-source>/drivers/usb/mon/mon_bin.c binary ABI
  */
 #define VEC_SIZE 32
@@ -892,7 +886,7 @@ usb_read_linux_mmap(pcap_t *handle, int max_packets, pcap_handler callback, u_ch
 		for (i=0; i<fetch.nfetch; ++i) {
 			/* discard filler */
 			hdr = (pcap_usb_header*) &handlep->mmapbuf[vec[i]];
-			if (hdr->event_type == '@')
+			if (hdr->event_type == '@') 
 				continue;
 
 			/* we can get less that than really captured from kernel, depending on
@@ -916,17 +910,13 @@ usb_read_linux_mmap(pcap_t *handle, int max_packets, pcap_handler callback, u_ch
 			}
 		}
 
-		/* with max_packets specifying "unlimited" we stop afer the first chunk*/
-		if (PACKET_COUNT_IS_UNLIMITED(max_packets) || (packets == max_packets))
+		/* with max_packets <= 0 we stop afer the first chunk*/
+		if ((max_packets <= 0) || (packets == max_packets))
 			break;
 	}
 
 	/* flush pending events*/
-	if (ioctl(handle->fd, MON_IOCH_MFLUSH, nflush) == -1) {
-		snprintf(handle->errbuf, PCAP_ERRBUF_SIZE,
-		    "Can't mflush fd %d: %s", handle->fd, strerror(errno));
-		return -1;
-	}
+	ioctl(handle->fd, MON_IOCH_MFLUSH, nflush);
 	return packets;
 }
 

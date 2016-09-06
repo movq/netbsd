@@ -1,16 +1,13 @@
 /* tools/clang/include/clang/Config/config.h.  Generated from config.h.in by configure.  */
 /* This generated file is for internal use. Do not include it from headers. */
 
-#ifdef CLANG_CONFIG_H
+#ifdef CONFIG_H
 #error config.h can only be included once
 #else
-#define CLANG_CONFIG_H
+#define CONFIG_H
 
 /* Bug report URL. */
 #define BUG_REPORT_URL "http://llvm.org/bugs/"
-
-/* Default OpenMP runtime used by -fopenmp. */
-#define CLANG_DEFAULT_OPENMP_RUNTIME "libomp"
 
 /* Multilib suffix for libdir. */
 #define CLANG_LIBDIR_SUFFIX ""
@@ -19,7 +16,7 @@
 #define CLANG_RESOURCE_DIR ""
 
 /* Directories clang will search for headers */
-#define C_INCLUDE_DIRS "/usr/include/clang-3.8:/usr/include"
+#define C_INCLUDE_DIRS "/usr/include/clang-3.6:/usr/include"
 
 /* Default <path> to all compiler invocations for --sysroot=<path>. */
 #define DEFAULT_SYSROOT ""
@@ -30,7 +27,7 @@
 /* Define if we have libxml2 */
 /* #undef CLANG_HAVE_LIBXML */
 
-#define PACKAGE_STRING "LLVM 3.8.0"
+#define PACKAGE_STRING "LLVM 3.6.1"
 
 /* The LLVM product name and version */
 #define BACKEND_PACKAGE_STRING PACKAGE_STRING

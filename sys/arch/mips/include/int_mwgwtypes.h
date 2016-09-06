@@ -1,4 +1,4 @@
-/*	$NetBSD: int_mwgwtypes.h,v 1.6 2014/08/13 22:25:39 matt Exp $	*/
+/*	$NetBSD: int_mwgwtypes.h,v 1.5 2008/04/28 20:23:28 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -32,9 +32,6 @@
 #ifndef _MIPS_INT_MWGWTYPES_H_
 #define _MIPS_INT_MWGWTYPES_H_
 
-#ifdef __UINT_FAST64_TYPE__
-#include <sys/common_int_mwgwtypes.h>
-#else
 /*
  * 7.18.1 Integer types
  */
@@ -94,7 +91,5 @@ typedef	long long int		      intmax_t;
 /* LONGLONG */
 typedef	unsigned long long int	     uintmax_t;
 #endif
-
-#endif /* !__UINT_FAST64_TYPE__ */
 
 #endif /* !_MIPS_INT_MWGWTYPES_H_ */

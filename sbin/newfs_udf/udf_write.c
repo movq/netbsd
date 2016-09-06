@@ -1,4 +1,4 @@
-/* $NetBSD: udf_write.c,v 1.9 2015/01/02 21:01:12 reinoud Exp $ */
+/* $NetBSD: udf_write.c,v 1.8 2013/08/25 14:13:47 reinoud Exp $ */
 
 /*
  * Copyright (c) 2006, 2008, 2013 Reinoud Zandijk
@@ -30,7 +30,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: udf_write.c,v 1.9 2015/01/02 21:01:12 reinoud Exp $");
+__RCSID("$NetBSD: udf_write.c,v 1.8 2013/08/25 14:13:47 reinoud Exp $");
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -317,7 +317,6 @@ udf_derive_format(int req_enable, int req_disable, int force)
 int
 udf_proces_names(void)
 {
-	struct timeval time_of_day;
 	uint32_t primary_nr;
 	uint64_t volset_nr;
 
@@ -336,9 +335,8 @@ udf_proces_names(void)
 		if (mmc_discinfo.disc_flags & MMC_DFLAGS_BARCODEVALID) {
 			volset_nr = mmc_discinfo.disc_barcode;
 		} else {
-			(void)gettimeofday(&time_of_day, NULL);
-			volset_nr  =  (uint64_t) random();
-			volset_nr |= ((uint64_t) time_of_day.tv_sec) << 32;
+			volset_nr  =  (uint32_t) random();
+			volset_nr |= ((uint64_t) random()) << 32;
 		}
 		context.volset_name = calloc(128,1);
 		sprintf(context.volset_name, "%016"PRIx64, volset_nr);

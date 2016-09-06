@@ -1,4 +1,4 @@
-/*	$NetBSD: pyro.c,v 1.17 2016/05/10 19:23:59 palle Exp $	*/
+/*	$NetBSD: pyro.c,v 1.15 2013/08/10 00:48:04 mrg Exp $	*/
 /*	from: $OpenBSD: pyro.c,v 1.20 2010/12/05 15:15:14 kettenis Exp $	*/
 
 /*
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pyro.c,v 1.17 2016/05/10 19:23:59 palle Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pyro.c,v 1.15 2013/08/10 00:48:04 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -295,7 +295,7 @@ pyro_conf_read(pci_chipset_tag_t pc, pcitag_t tag, int reg)
 	int s;
 
 	DPRINTF(PDB_CONF, ("%s: tag %lx reg %x ", __func__, (long)tag, reg));
-	if (PCITAG_NODE(tag) != -1 && (unsigned int)reg < PCI_CONF_SIZE) {
+	if (PCITAG_NODE(tag) != -1) {
 		s = splhigh();
 		ci->ci_pci_probe = true;
 		membar_Sync();
@@ -324,9 +324,6 @@ pyro_conf_write(pci_chipset_tag_t pc, pcitag_t tag, int reg, pcireg_t data)
 		DPRINTF(PDB_CONF, (" .. bad addr\n"));
 		return;
 	}
-
-	if ((unsigned int)reg >= PCI_CONF_SIZE)
-		return;
 
         bus_space_write_4(pp->pp_cfgt, pp->pp_cfgh,
 	    (PCITAG_OFFSET(tag) << 4) + reg, data);
@@ -580,7 +577,9 @@ pyro_intr_establish(bus_space_tag_t t, int ihandle, int level,
 
 	ino |= INTVEC(ihandle);
 
-	ih = intrhand_alloc();
+	ih = malloc(sizeof *ih, M_DEVBUF, M_NOWAIT);
+	if (ih == NULL)
+		return (NULL);
 
 	/* Register the map and clear intr registers */
 	ih->ih_map = intrmapptr;

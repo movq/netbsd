@@ -1,4 +1,4 @@
-# $NetBSD: HACKS,v 1.174 2016/06/15 14:11:15 riastradh Exp $
+# $NetBSD: HACKS,v 1.152 2014/06/13 01:17:46 mrg Exp $
 #
 # This file is intended to document workarounds for currently unsolved
 # (mostly) compiler bugs.
@@ -26,25 +26,6 @@
 #  	  closing bracket.
 #
 # this is a comment.
-
-hack	gcc-5.3 optimizes memset+malloc -> calloc inside calloc
-mdate	4 May 2016
-who	christos
-file	external/gpl2/lib/libmalloc/lib/Makefile 1.3 -> 1.5
-descr
-	resulting in infinite recursion; we prevent this with
-	-fno-builtin-malloc
-kcah
-
-hack	turn off tree-vrp for parts of ufs_lookup.c
-mdate	28 April 2016
-who	mrg christos
-file	src/sys/ufs/ufs/ufs_lookup.c : 1.144
-pr	51094
-descr
-	with -ftree-vrp enabled in ufs_lookup.c sometimes bad dir
-	panicks are see.
-hcah
 
 hack	netstat ieee1394 address printing.
 mdate	14 Nov 2000
@@ -101,6 +82,20 @@ descr
 	fail with "makes integer from pointer without a cast".  This
 	is observed on e.g. the sun3 port.  Ideally the "types" for
 	symbols should be consistent across all ports.
+kcah
+
+hack	gcc-strict-aliasing
+cdate	6 August 2004
+who	junyoung
+pr	26516
+file	src/usr.sbin/racoon/racoon/Makefile : 1.21
+descr
+	GCC issues a warning "dereferencing type-punned pointer will break
+	strict-aliasing rules" when compiling
+	crypto/dist/kame/racoon/crypto/openssl.c with -O[23s]. Note that this
+	is due to use of type casting in a non-standard way in the code and
+	not a compiler bug. Once a new release of KAME with a proper fix
+	applied is imported this should be backed out.
 kcah
 
 hack	gcc4 wrong uninitialized variable
@@ -253,6 +248,7 @@ file	usr.sbin/bootp/bootptest/Makefile : 1.2
 file	usr.sbin/chrtbl/Makefile	: 1.6
 file	usr.sbin/cron/Makefile		: 1.12
 file	usr.sbin/dhcp/Makefile.inc	: 1.20
+file	usr.sbin/dumplfs/Makefile	: 1.11
 file	usr.sbin/hprop/Makefile		: 1.13
 file	usr.sbin/installboot/Makefile	: 1.35
 file	usr.sbin/ipf/ipftest/Makefile	: 1.32
@@ -275,7 +271,9 @@ file	usr.sbin/pppd/pppd/Makefile	: 1.38
 file	usr.sbin/rarpd/Makefile		: 1.10
 file	usr.sbin/rbootd/Makefile	: 1.10
 file	usr.sbin/rpc.pcnfsd/Makefile	: 1.17
+file	usr.sbin/rtadvd/Makefile	: 1.9
 file	usr.sbin/tcpdump/Makefile	: 1.42
+file	usr.sbin/wiconfig/Makefile	: 1.3
 descr
 	GCC 4.1 warns on pointer sign comparision/assignments and lots of
 	code does not conform.  For now we use -Wno-pointer-sign and
@@ -383,44 +381,6 @@ descr
 	used in the link(2) system call.
 kcah
 
-hack	g++ 5.x barfs on volatile in constexpr initializers
-cdata	27 Aug 2015
-who	pooka
-file	src/lib/libpthread/pthread_types.h	: 1.17
-pr	lib/49989
-descr
-	Trying to use e.g. pthread_mutex_t m = PTHREAD_MUTEX_INITIALIZER
-	in C++ results in:
-		error: temporary of non-literal type '__pthread_mutex_st'
-		in a constant expression
-		constexpr mutex() _NOEXCEPT : __m_(PTHREAD_MUTEX_INITIALIZER) {}
-		[...]
-		include/pthread_types.h:101:8: note: '__pthread_mutex_st' is
-		not literal because:
-		struct __pthread_mutex_st {
-		^
-		include/pthread_types.h:103:17: note:   non-static data
-		member '__pthread_mutex_st::ptm_errorcheck' has volatile type
-		pthread_spin_t ptm_errorcheck;
-kcah
-
-hack	libm cabs{,f,l} and g++
-cdata	11 Jan 2016
-who	christos
-pr	lib/50646
-file	src/external/gpl3/gcc.old/dist/libstdc++-v3/include/std/complex : 1.2
-file	src/external/gpl3/gcc/dist/libstdc++-v3/include/std/complex : 1.2
-descr
-	Our cabs and cabsf have a different argument format on some architectures
-	and for that we have created in libm/compat_cabs{,f}.c. The standard
-	versions in libc are __c99_cabs{,f,l} and there are __RENAME()'s in
-	<complex.h>. G++ uses __builtin_cabs{,f,l} to implement those and they
-	translate by default to cabs{,f,l} which gets defined to cabs{,f} (the
-	wrong function) and an undefined cabsl. I've changed <complex> to use
-	the __c99_cabs{,f,l} directly. Using the __builtin_cabs{,f,l} in gcc is
-	still broken.
-kcah
-
 port	vax
 
 	hack	gcc4/vax ICE
@@ -441,6 +401,47 @@ port	vax
 		GCC4 on vax crashes.  -O0 stops it happening so far...
 	kcah
 
+	hack	gcc 2.95/vax doesn't like abort being used as function pointer
+	cdate	Tue Dec 13 05:54:50 GMT 2005
+	who	jmc
+	file	lib/libc/rpc/svc_vc.c 1.15
+	descr
+		Provide a local definition for abort which doesn't include
+		the noreturn attribute which trips up gcc 2.95 on vax.
+	kcah
+	
+	hack	gcc 2.95/vax doesn't have stdbool.h and gettext needs it
+	cdate	Mon May  9 12:16:22 CDT 2005
+	who	jmc
+	file	gnu/usr.bin/gettext/Makefile.inc.prog 1.5
+		gnu/usr.bin/gettext/libgrep/Makefile 1.3
+		gnu/usr.bin/gettext/libnlspr/Makefile 1.5
+		gnu/usr.bin/gettext/libnlsut/Makefile 1.3   
+	descr
+		The latest gettext assumes a C99 environment or at least
+		configure checks to work around this. As we don't use configure
+		provide a stdbool.h for vax builds locally in directories from
+		the template provided by the gettext code.
+	kcah
+	
+	hack	gcc 2.95/vax cannot handle __builtin_ffs()
+	cdate	Fri Aug 23 21:31:15 CEST 2002
+	who	ragge
+	file	sys/lib/libkern/libkern.h : 1.42
+	descr
+		__builtin_ffs() is ifdef'd away if __vax__. Matt Thomas has
+		added this feature to GCC 3 so it can be removed when switching.
+	kcah
+
+	hack	gcc 2.95/vax libbz2
+	mdate	27 Jun 2002
+	who	thorpej
+	file	lib/libbz2/Makefile
+	descr
+		libbz2 is mis-compiled with optimization with GCC 2.95.3
+		on VAX.  -O0 works around this problem.
+	kcah
+
 	hack	vax Toolchain bug
 	cdate	28 Mar 2003
 	who	he
@@ -450,6 +451,47 @@ port	vax
 		tries to range-check byte offsets when it doesn't have
 		sufficient information to make that decision.
 		Workaround uses `brw' instead of `brb' instruction.
+	kcah
+
+	hack	vax gcc 2.95.3 -Wuninitialized workarounds
+	cdate	6 Nov 2003
+	who	he
+	file	sys/dev/bi/if_ni.c : 1.22
+	file	sys/arch/vax/vax/ctu.c : 1.20
+	descr
+		Workaround for gcc 2.95.3 failing to detect that certain
+		variables will be initialized; so that this code compiles
+		with -Wuninitialized.  Should be reviewed and possibly
+		reverted when gcc 3.3.2 is ready for vax.
+	kcah
+
+	hack	vax gcc 2.95.3 structure initialization
+	cdat	13 May 2004
+	who	cl
+	file	sys/miscfs/kernfs/kernfs_vnops.c : 1.104
+	descr
+		Workaround for gcc 2.95.3 failing to initialize structures
+		and/or unions inside structures using nested designators.
+		Should be reverted when gcc >=3.3.3 is ready for vax.
+	kcah
+
+	hack	vax gcc 2.95.3 needs -I. to build nslexer.c
+	cdat	6 Jun 2004
+	who	mhitch
+	file	lib/libc/arch/vax/Makefile.inc : 1.6
+	descr
+		It appears necessary to add -I. to CPPFLAGS when building
+		nslesxer.c.  This may be caused by gcc 2.95.3 being used.
+		Should be reverted when a newer gcc is ready for vax.
+	kcah
+
+	hack	vax gcc 2.95.3 doesn't understand "-std=c99"
+	cdat	5 April 2005
+	who	tron
+	file	src/share/mk/bsd.sys.mk
+	descr
+		We cannot use "-std=c99" for compiler warning level 4 and above
+		because gcc 2.95.3 doesn't support that option.
 	kcah
 
 	hack	declare boolean_t in two IPF user-mode programs
@@ -886,16 +928,6 @@ port	ia64
 		{standard input}:22978: Warning: This is the location of the conflicting usage
 	kcah
 
-	hack	libgcc unwind dummy function
-	cdate	Fri Apr 17 14:31:03 CEST 2015
-	who	martin
-	file	src/external/gpl3/gcc/dist/libgcc/config/ia64/unwind-ia64.c: 1.4
-	descr
-		Add an empty _Unwind_FindTableEntry() implementation.
-		In the end we will use our libc stuff, and this should
-		go away again.
-	kcah
-
 port	x68k
 
 	hack	compiler error with gcc 4.5.x
@@ -903,6 +935,7 @@ port	x68k
 	who	christos
 	file	src/external/gpl3/gcc/usr.bin/bakend/Makefile: 1.17
 		xsrc/external/mit/xorg/lib/libGLU/Makefile: 1.11
+		src/x11/lib/GLU/Makefile: 1.9
 	descr
 		workaround for:
 		internal compiler error: in cselib_record_set, at cselib.c:1999
@@ -919,7 +952,7 @@ descr
 	This applies only if RPCGEN_CPP is not set and /usr/bin/cpp is not executable.
 kcah
 
-port	hppa
+port	hp700
 
 	hack	compiler error with gcc 4.5.x
 	cdate	Tue Jul 23 07:42:28 BST 2013
@@ -927,17 +960,6 @@ port	hppa
 	file	src/sys/lib/libkern/Makefile.libkern: 1.26
 	descr
 		workaround for unanalysed codegen bug affecting md5c.c.
-	kcah
-
-	hack	gdb vs _rtld_debug_state problem
-	cdate	Thu Mar  5 09:49:53 UTC 2015
-	who	skrll
-	file	src/libexec/ld.elf_so/rtld.c: 1.175
-	descr
-		workaround for problem where gdb misses the breakpoint on
-		_rtld_debug_state when the function is only the
-		bv,n %r0(%rp) instruction - the nullify seems to
-		confuse something
 	kcah
 
 port	mips64*
@@ -960,9 +982,3 @@ file	src/sys/arch/vax/boot/boot/Makefile: 1.41
 descr	/boot does not work when compiled with -O2 and gcc 4.8
 kcah
 
-port	arm
-hack	avoid using labels in a 12-bit constant.
-who	matt
-file	crypto/external/bsd/openssl/lib/libcrypto/arch/arm/aes-armv4.S: 1.2
-descr	workaround for clang misassembling an instruction
-kcah

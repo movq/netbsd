@@ -1,9 +1,9 @@
-/*	$NetBSD: uipc_syscalls_40.c,v 1.12 2016/08/01 03:15:30 ozaki-r Exp $	*/
+/*	$NetBSD: uipc_syscalls_40.c,v 1.7 2011/01/19 10:21:16 tsutsui Exp $	*/
 
 /* written by Pavel Cahyna, 2006. Public domain. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_syscalls_40.c,v 1.12 2016/08/01 03:15:30 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_syscalls_40.c,v 1.7 2011/01/19 10:21:16 tsutsui Exp $");
 
 /*
  * System call interface to the socket abstraction.
@@ -34,50 +34,34 @@ compat_ifconf(u_long cmd, void *data)
 {
 	struct oifconf *ifc = data;
 	struct ifnet *ifp;
-	struct oifreq ifr, *ifrp = NULL;
-	int space = 0, error = 0;
+	struct ifaddr *ifa;
+	struct oifreq ifr, *ifrp;
+	int space, error = 0;
 	const int sz = (int)sizeof(ifr);
-	const bool docopy = ifc->ifc_req != NULL;
-	int s;
-	int bound;
-	struct psref psref;
 
-	if (docopy) {
+	if ((ifrp = ifc->ifc_req) == NULL)
+		space = 0;
+	else
 		space = ifc->ifc_len;
-		ifrp = ifc->ifc_req;
-	}
-
-	bound = curlwp_bind();
-	s = pserialize_read_enter();
-	IFNET_READER_FOREACH(ifp) {
-		struct ifaddr *ifa;
-
-		psref_acquire(&psref, &ifp->if_psref, ifnet_psref_class);
-
+	IFNET_FOREACH(ifp) {
 		(void)strncpy(ifr.ifr_name, ifp->if_xname,
 		    sizeof(ifr.ifr_name));
-		if (ifr.ifr_name[sizeof(ifr.ifr_name) - 1] != '\0') {
-			error = ENAMETOOLONG;
-			goto release_exit;
-		}
-		if (IFADDR_READER_EMPTY(ifp)) {
+		if (ifr.ifr_name[sizeof(ifr.ifr_name) - 1] != '\0')
+			return ENAMETOOLONG;
+		if (IFADDR_EMPTY(ifp)) {
 			memset(&ifr.ifr_addr, 0, sizeof(ifr.ifr_addr));
 			if (space >= sz) {
 				error = copyout(&ifr, ifrp, sz);
 				if (error != 0)
-					goto release_exit;
+					return (error);
 				ifrp++;
 			}
 			space -= sizeof(ifr);
 			continue;
 		}
 
-		IFADDR_READER_FOREACH(ifa, ifp) {
+		IFADDR_FOREACH(ifa, ifp) {
 			struct sockaddr *sa = ifa->ifa_addr;
-			struct psref psref_ifa;
-
-			ifa_acquire(ifa, &psref_ifa);
-			pserialize_read_exit(s);
 #ifdef COMPAT_OSOCK
 			if (cmd == OOSIOCGIFCONF) {
 				struct osockaddr *osa =
@@ -85,11 +69,8 @@ compat_ifconf(u_long cmd, void *data)
 				/*
 				 * If it does not fit, we don't bother with it
 				 */
-				if (sa->sa_len > sizeof(*osa)) {
-					s = pserialize_read_enter();
-					ifa_release(ifa, &psref_ifa);
+				if (sa->sa_len > sizeof(*osa))
 					continue;
-				}
 				memcpy(&ifr.ifr_addr, sa, sa->sa_len);
 				osa->sa_family = sa->sa_family;
 				if (space >= sz) {
@@ -119,28 +100,15 @@ compat_ifconf(u_long cmd, void *data)
 						 (char *)&ifrp->ifr_addr);
 				}
 			}
-			s = pserialize_read_enter();
-			ifa_release(ifa, &psref_ifa);
 			if (error != 0)
-				goto release_exit;
+				return (error);
 			space -= sz;
 		}
-
-		psref_release(&psref, &ifp->if_psref, ifnet_psref_class);
 	}
-	pserialize_read_exit(s);
-	curlwp_bindx(bound);
-
-	if (docopy)
+	if (ifrp != NULL)
 		ifc->ifc_len -= space;
 	else
 		ifc->ifc_len = -space;
 	return (0);
-
-release_exit:
-	pserialize_read_exit(s);
-	psref_release(&psref, &ifp->if_psref, ifnet_psref_class);
-	curlwp_bindx(bound);
-	return error;
 }
 #endif

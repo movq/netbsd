@@ -56,13 +56,6 @@ void * malloc ();
 void * realloc ();
 #endif
 
-#ifdef HAVE_LIMITS_H
-#include <limits.h>
-#endif
-#ifndef INT_MAX
-# define INT_MAX       (int)(((unsigned int) ~0) >> 1)          /* 0x7FFFFFFF */ 
-#endif
-
 #include <demangle.h>
 #undef CURRENT_DEMANGLING_STYLE
 #define CURRENT_DEMANGLING_STYLE work->options
@@ -310,12 +303,6 @@ const struct demangler_engine libiberty_demanglers[] =
     GNAT_DEMANGLING_STYLE_STRING,
     gnat_demangling,
     "GNAT style demangling"
-  }
-  ,
-  {
-    DLANG_DEMANGLING_STYLE_STRING,
-    dlang_demangling,
-    "DLANG style demangling"
   }
   ,
   {
@@ -883,13 +870,6 @@ cplus_demangle (const char *mangled, int options)
   if (GNAT_DEMANGLING)
     return ada_demangle (mangled, options);
 
-  if (DLANG_DEMANGLING)
-    {
-      ret = dlang_demangle (mangled, options);
-      if (ret)
-	return ret;
-    }
-
   ret = internal_cplus_demangle (work, mangled);
   squangle_mop_up (work);
   return (ret);
@@ -1195,11 +1175,6 @@ internal_cplus_demangle (struct work_stuff *work, const char *mangled)
       if ((AUTO_DEMANGLING || GNU_DEMANGLING))
 	{
 	  success = gnu_special (work, &mangled, &decl);
-	  if (!success)
-	    {
-	      delete_work_stuff (work);
-	      string_delete (&decl);
-	    }
 	}
       if (!success)
 	{
@@ -1243,14 +1218,10 @@ squangle_mop_up (struct work_stuff *work)
   if (work -> btypevec != NULL)
     {
       free ((char *) work -> btypevec);
-      work->btypevec = NULL;
-      work->bsize = 0;
     }
   if (work -> ktypevec != NULL)
     {
       free ((char *) work -> ktypevec);
-      work->ktypevec = NULL;
-      work->ksize = 0;
     }
 }
 
@@ -3008,11 +2979,6 @@ gnu_special (struct work_stuff *work, const char **mangled, string *declp)
 		      success = 1;
 		      break;
 		    }
-		  else if (n == -1)
-		    {
-		      success = 0;
-		      break;
-		    }
 		}
 	      else
 		{
@@ -3690,10 +3656,7 @@ do_type (struct work_stuff *work, const char **mangled, string *result)
 		    string_delete (&temp);
 		  }
 		else
-		  {
-		    string_delete (&temp);
-		    break;
-		  }
+		  break;
 	      }
 	    else if (**mangled == 'Q')
 	      {
@@ -4268,8 +4231,6 @@ remember_type (struct work_stuff *work, const char *start, int len)
 	}
       else
 	{
-          if (work -> typevec_size > INT_MAX / 2)
-	    xmalloc_failed (INT_MAX);
 	  work -> typevec_size *= 2;
 	  work -> typevec
 	    = XRESIZEVEC (char *, work->typevec, work->typevec_size);
@@ -4297,8 +4258,6 @@ remember_Ktype (struct work_stuff *work, const char *start, int len)
 	}
       else
 	{
-          if (work -> ksize > INT_MAX / 2)
-	    xmalloc_failed (INT_MAX);
 	  work -> ksize *= 2;
 	  work -> ktypevec
 	    = XRESIZEVEC (char *, work->ktypevec, work->ksize);
@@ -4328,8 +4287,6 @@ register_Btype (struct work_stuff *work)
 	}
       else
 	{
-          if (work -> bsize > INT_MAX / 2)
-	    xmalloc_failed (INT_MAX);
 	  work -> bsize *= 2;
 	  work -> btypevec
 	    = XRESIZEVEC (char *, work->btypevec, work->bsize);
@@ -4784,8 +4741,6 @@ string_need (string *s, int n)
   else if (s->e - s->p < n)
     {
       tem = s->p - s->b;
-      if (n > INT_MAX / 2 - tem)
-        xmalloc_failed (INT_MAX); 
       n += tem;
       n *= 2;
       s->b = XRESIZEVEC (char, s->b, n);

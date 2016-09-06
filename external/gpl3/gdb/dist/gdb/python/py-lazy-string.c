@@ -1,6 +1,6 @@
 /* Python interface to lazy strings.
 
-   Copyright (C) 2010-2015 Free Software Foundation, Inc.
+   Copyright (C) 2010-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -21,8 +21,10 @@
 #include "python-internal.h"
 #include "charset.h"
 #include "value.h"
+#include "exceptions.h"
 #include "valprint.h"
 #include "language.h"
+#include "gdb_assert.h"
 
 typedef struct {
   PyObject_HEAD
@@ -45,7 +47,7 @@ typedef struct {
   struct type *type;
 } lazy_string_object;
 
-extern PyTypeObject lazy_string_object_type
+static PyTypeObject lazy_string_object_type
     CPYCHECKER_TYPE_OBJECT_FOR_TYPEDEF ("lazy_string_object");
 
 static PyObject *
@@ -96,23 +98,20 @@ stpy_convert_to_value  (PyObject *self, PyObject *args)
 {
   lazy_string_object *self_string = (lazy_string_object *) self;
   struct value *val = NULL;
+  volatile struct gdb_exception except;
 
   if (self_string->address == 0)
     {
-      PyErr_SetString (gdbpy_gdb_memory_error,
+      PyErr_SetString (PyExc_MemoryError,
 		       _("Cannot create a value from NULL."));
       return NULL;
     }
 
-  TRY
+  TRY_CATCH (except, RETURN_MASK_ALL)
     {
       val = value_at_lazy (self_string->type, self_string->address);
     }
-  CATCH (except, RETURN_MASK_ALL)
-    {
-      GDB_PY_HANDLE_EXCEPTION (except);
-    }
-  END_CATCH
+  GDB_PY_HANDLE_EXCEPTION (except);
 
   return value_to_value_object (val);
 }
@@ -133,7 +132,7 @@ gdbpy_create_lazy_string_object (CORE_ADDR address, long length,
 
   if (address == 0 && length != 0)
     {
-      PyErr_SetString (gdbpy_gdb_memory_error,
+      PyErr_SetString (PyExc_MemoryError,
 		       _("Cannot create a lazy string with address 0x0, " \
 			 "and a non-zero length."));
       return NULL;
@@ -218,7 +217,7 @@ static PyGetSetDef lazy_string_object_getset[] = {
   { NULL }  /* Sentinel */
 };
 
-PyTypeObject lazy_string_object_type = {
+static PyTypeObject lazy_string_object_type = {
   PyVarObject_HEAD_INIT (NULL, 0)
   "gdb.LazyString",	          /*tp_name*/
   sizeof (lazy_string_object),	  /*tp_basicsize*/

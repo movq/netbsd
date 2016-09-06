@@ -35,7 +35,7 @@
 __FBSDID("$FreeBSD: src/usr.sbin/ndiscvt/ndiscvt.c,v 1.9.2.2 2005/02/23 16:31:47 wpaul Exp $");
 #endif
 #ifdef __NetBSD__
-__RCSID("$NetBSD: ndiscvt.c,v 1.12 2015/06/16 23:04:14 christos Exp $");
+__RCSID("$NetBSD: ndiscvt.c,v 1.11 2013/11/08 01:10:23 christos Exp $");
 #endif
 
 
@@ -361,7 +361,8 @@ main(int argc, char *argv[])
 	fp = NULL;
 
 	if (insert_padding(&img, &fsize)) {
-		errx(1, "section relocation failed");
+		fprintf(stderr, "section relocation failed\n");
+		exit(1);
 	}
 
 	if (outfile == NULL || strcmp(outfile, "-") == 0)

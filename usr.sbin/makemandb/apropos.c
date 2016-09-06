@@ -1,4 +1,4 @@
-/*	$NetBSD: apropos.c,v 1.21 2016/05/22 19:26:04 abhinav Exp $	*/
+/*	$NetBSD: apropos.c,v 1.16 2013/04/02 17:16:50 christos Exp $	*/
 /*-
  * Copyright (c) 2011 Abhinav Upadhyay <er.abhinav.upadhyay@gmail.com>
  * All rights reserved.
@@ -31,9 +31,10 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: apropos.c,v 1.21 2016/05/22 19:26:04 abhinav Exp $");
+__RCSID("$NetBSD: apropos.c,v 1.16 2013/04/02 17:16:50 christos Exp $");
 
 #include <err.h>
+#include <search.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -41,16 +42,16 @@ __RCSID("$NetBSD: apropos.c,v 1.21 2016/05/22 19:26:04 abhinav Exp $");
 #include <util.h>
 
 #include "apropos-utils.h"
+#include "sqlite3.h"
 
 typedef struct apropos_flags {
-	char *sec_nums;
+	int sec_nums[SECMAX];
 	int nresults;
 	int pager;
 	int no_context;
 	query_format format;
 	int legacy;
 	const char *machine;
-	const char *manconf;
 } apropos_flags;
 
 typedef struct callback_data {
@@ -58,8 +59,6 @@ typedef struct callback_data {
 	FILE *out;
 	apropos_flags *aflags;
 } callback_data;
-
-static const unsigned int sections_args_length = 16;
 
 static char *remove_stopwords(const char *);
 static int query_callback(void *, const char * , const char *, const char *,
@@ -72,10 +71,7 @@ static void
 parseargs(int argc, char **argv, struct apropos_flags *aflags)
 {
 	int ch;
-	char sec[2] = {0, 0};
-	aflags->manconf = MANCONF;
-
-	while ((ch = getopt(argc, argv, "123456789C:hilMmn:PprS:s:")) != -1) {
+	while ((ch = getopt(argc, argv, "123456789Cchiln:PprS:s:")) != -1) {
 		switch (ch) {
 		case '1':
 		case '2':
@@ -86,20 +82,13 @@ parseargs(int argc, char **argv, struct apropos_flags *aflags)
 		case '7':
 		case '8':
 		case '9':
-			/*
-			 *Generate a space separated list of all the
-			 * requested sections
-			 */
-			sec[0] = (char) ch ;
-			if (aflags->sec_nums == NULL) {
-				aflags->sec_nums =
-				    emalloc(sections_args_length);
-				memcpy(aflags->sec_nums, sec, 2);
-			} else
-				concat2(&aflags->sec_nums, sec, 1);
+			aflags->sec_nums[ch - '1'] = 1;
 			break;
 		case 'C':
-			aflags->manconf = optarg;
+			aflags->no_context = 1;
+			break;
+		case 'c':
+			aflags->no_context = 0;
 			break;
 		case 'h':
 			aflags->format = APROPOS_HTML;
@@ -111,12 +100,6 @@ parseargs(int argc, char **argv, struct apropos_flags *aflags)
 			aflags->legacy = 1;
 			aflags->no_context = 1;
 			aflags->format = APROPOS_NONE;
-			break;
-		case 'M':
-			aflags->no_context = 1;
-			break;
-		case 'm':
-			aflags->no_context = 0;
 			break;
 		case 'n':
 			aflags->nresults = atoi(optarg);
@@ -134,15 +117,10 @@ parseargs(int argc, char **argv, struct apropos_flags *aflags)
 			aflags->machine = optarg;
 			break;
 		case 's':
-			if (aflags->sec_nums == NULL) {
-				size_t arglen = strlen(optarg);
-				aflags->sec_nums =
-				    arglen > sections_args_length
-					? emalloc(arglen + 1)
-					: emalloc(sections_args_length);
-				memcpy(aflags->sec_nums, optarg, arglen + 1);
-			} else
-				concat(&aflags->sec_nums, optarg);
+			ch = atoi(optarg);
+			if (ch < 1 || ch > 9)
+				errx(EXIT_FAILURE, "Invalid section");
+			aflags->sec_nums[ch - 1] = 1;
 			break;
 		case '?':
 		default:
@@ -164,7 +142,6 @@ main(int argc, char *argv[])
 	cbdata.out = stdout;		// the default output stream
 	cbdata.count = 0;
 	apropos_flags aflags;
-	aflags.sec_nums = NULL;
 	cbdata.aflags = &aflags;
 	sqlite3 *db;
 	setprogname(argv[0]);
@@ -194,6 +171,12 @@ main(int argc, char *argv[])
 
 	parseargs(argc, argv, &aflags);
 
+	/*
+	 * If the user specifies a section number as an option, the
+	 * corresponding index element in sec_nums is set to the string
+	 * representing that section number.
+	 */
+
 	argc -= optind;
 	argv += optind;
 
@@ -205,17 +188,13 @@ main(int argc, char *argv[])
 		concat(&str, *argv++);
 	/* Eliminate any stopwords from the query */
 	query = remove_stopwords(lower(str));
+	free(str);
 
-	/*
-	 * If the query consisted only of stopwords and we removed all of
-	 * them, use the original query.
-	 */
+	/* if any error occured in remove_stopwords, exit */
 	if (query == NULL)
-		query = str;
-	else
-		free(str);
+		errx(EXIT_FAILURE, "Try using more relevant keywords");
 
-	if ((db = init_db(MANDB_READONLY, aflags.manconf)) == NULL)
+	if ((db = init_db(MANDB_READONLY, MANCONF)) == NULL)
 		exit(EXIT_FAILURE);
 
 	/* If user wants to page the output, then set some settings */
@@ -251,7 +230,6 @@ main(int argc, char *argv[])
 		fprintf(cbdata.out, "</table>\n</body>\n</html>\n");
 
 	free(query);
-	free(aflags.sec_nums);
 	close_db(db);
 	if (errmsg) {
 		warnx("%s", errmsg);
@@ -353,7 +331,7 @@ remove_stopwords(const char *query)
 static void
 usage(void)
 {
-	fprintf(stderr, "Usage: %s [-123456789ilMmpr] [-C path] [-n results] "
+	fprintf(stderr, "Usage: %s [-123456789Ccilpr] [-n results] "
 	    "[-S machine] [-s section] query\n",
 	    getprogname());
 	exit(1);

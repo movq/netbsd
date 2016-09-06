@@ -1,4 +1,4 @@
-/*	$NetBSD: makemandb.c,v 1.42 2016/07/17 15:56:14 abhinav Exp $	*/
+/*	$NetBSD: makemandb.c,v 1.24.2.3 2015/04/14 04:26:04 snj Exp $	*/
 /*
  * Copyright (c) 2011 Abhinav Upadhyay <er.abhinav.upadhyay@gmail.com>
  * Copyright (c) 2011 Kristaps Dzonsons <kristaps@bsd.lv>
@@ -17,12 +17,13 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: makemandb.c,v 1.42 2016/07/17 15:56:14 abhinav Exp $");
+__RCSID("$NetBSD: makemandb.c,v 1.24.2.3 2015/04/14 04:26:04 snj Exp $");
 
 #include <sys/stat.h>
 #include <sys/types.h>
 
 #include <assert.h>
+#include <ctype.h>
 #include <dirent.h>
 #include <err.h>
 #include <archive.h>
@@ -38,7 +39,7 @@ __RCSID("$NetBSD: makemandb.c,v 1.42 2016/07/17 15:56:14 abhinav Exp $");
 #include "dist/man.h"
 #include "dist/mandoc.h"
 #include "dist/mdoc.h"
-#include "dist/roff.h"
+#include "sqlite3.h"
 
 #define BUFLEN 1024
 #define MDOC 0	//If the page is of mdoc(7) type
@@ -60,7 +61,7 @@ typedef struct makemandb_flags {
 	int verbosity;	// 0: quiet, 1: default, 2: verbose
 } makemandb_flags;
 
-typedef struct roff_mandb_rec {
+typedef struct mandb_rec {
 	/* Fields for mandb table */
 	char *name;	// for storing the name of the man page
 	char *name_desc; // for storing the one line description (.Nd)
@@ -72,9 +73,9 @@ typedef struct roff_mandb_rec {
 	secbuff exit_status; // EXIT STATUS
 	secbuff diagnostics; // DIAGNOSTICS
 	secbuff errors; // ERRORS
-	char *section;
+	char section[2];
 
-	int xr_found; // To track whether a .Xr was seen when parsing a section
+	int xr_found;
 
 	/* Fields for mandb_meta table */
 	char *md5_hash;
@@ -91,32 +92,32 @@ typedef struct roff_mandb_rec {
 	int page_type; //Indicates the type of page: mdoc or man
 } mandb_rec;
 
-typedef	void (*proff_nf)(const struct roff_node *n, mandb_rec *);
-
 static void append(secbuff *sbuff, const char *src);
 static void init_secbuffs(mandb_rec *);
 static void free_secbuffs(mandb_rec *);
 static int check_md5(const char *, sqlite3 *, const char *, char **, void *, size_t);
 static void cleanup(mandb_rec *);
-static void set_section(const struct roff_man *, mandb_rec *);
-static void set_machine(const struct roff_man *, mandb_rec *);
+static void set_section(const struct mdoc *, const struct man *, mandb_rec *);
+static void set_machine(const struct mdoc *, mandb_rec *);
 static int insert_into_db(sqlite3 *, mandb_rec *);
 static	void begin_parse(const char *, struct mparse *, mandb_rec *,
 			 const void *, size_t len);
-static void proff_node(const struct roff_node *, mandb_rec *, const proff_nf *);
-static void pmdoc_Nm(const struct roff_node *, mandb_rec *);
-static void pmdoc_Nd(const struct roff_node *, mandb_rec *);
-static void pmdoc_Sh(const struct roff_node *, mandb_rec *);
-static void pmdoc_Xr(const struct roff_node *, mandb_rec *);
-static void pmdoc_Pp(const struct roff_node *, mandb_rec *);
-static void pmdoc_macro_handler(const struct roff_node *, mandb_rec *, int);
-static void pman_parse_node(const struct roff_node *, secbuff *);
-static void pman_parse_name(const struct roff_node *, mandb_rec *);
-static void pman_sh(const struct roff_node *, mandb_rec *);
-static void pman_block(const struct roff_node *, mandb_rec *);
+static void pmdoc_node(const struct mdoc_node *, mandb_rec *);
+static void pmdoc_Nm(const struct mdoc_node *, mandb_rec *);
+static void pmdoc_Nd(const struct mdoc_node *, mandb_rec *);
+static void pmdoc_Sh(const struct mdoc_node *, mandb_rec *);
+static void pmdoc_Xr(const struct mdoc_node *, mandb_rec *);
+static void pmdoc_Pp(const struct mdoc_node *, mandb_rec *);
+static void pmdoc_macro_handler(const struct mdoc_node *, mandb_rec *,
+				enum mdoct);
+static void pman_node(const struct man_node *n, mandb_rec *);
+static void pman_parse_node(const struct man_node *, secbuff *);
+static void pman_parse_name(const struct man_node *, mandb_rec *);
+static void pman_sh(const struct man_node *, mandb_rec *);
+static void pman_block(const struct man_node *, mandb_rec *);
 static void traversedir(const char *, const char *, sqlite3 *, struct mparse *);
-static void mdoc_parse_section(enum roff_sec, const char *, mandb_rec *);
-static void man_parse_section(enum man_sec, const struct roff_node *, mandb_rec *);
+static void mdoc_parse_section(enum mdoc_sec, const char *, mandb_rec *);
+static void man_parse_section(enum man_sec, const struct man_node *, mandb_rec *);
 static void build_file_cache(sqlite3 *, const char *, const char *,
 			     struct stat *);
 static void update_db(sqlite3 *, struct mparse *, mandb_rec *);
@@ -126,164 +127,134 @@ static char *parse_escape(const char *);
 static void replace_hyph(char *);
 static makemandb_flags mflags = { .verbosity = 1 };
 
-static	const proff_nf mdocs[MDOC_MAX + 1] = {
+typedef	void (*pman_nf)(const struct man_node *n, mandb_rec *);
+typedef	void (*pmdoc_nf)(const struct mdoc_node *n, mandb_rec *);
+static	const pmdoc_nf mdocs[MDOC_MAX] = {
 	NULL, /* Ap */
 	NULL, /* Dd */
 	NULL, /* Dt */
 	NULL, /* Os */
-
 	pmdoc_Sh, /* Sh */
 	NULL, /* Ss */
 	pmdoc_Pp, /* Pp */
 	NULL, /* D1 */
-
 	NULL, /* Dl */
 	NULL, /* Bd */
 	NULL, /* Ed */
 	NULL, /* Bl */
-
 	NULL, /* El */
 	NULL, /* It */
 	NULL, /* Ad */
 	NULL, /* An */
-
 	NULL, /* Ar */
 	NULL, /* Cd */
 	NULL, /* Cm */
 	NULL, /* Dv */
-
 	NULL, /* Er */
 	NULL, /* Ev */
 	NULL, /* Ex */
 	NULL, /* Fa */
-
 	NULL, /* Fd */
 	NULL, /* Fl */
 	NULL, /* Fn */
 	NULL, /* Ft */
-
 	NULL, /* Ic */
 	NULL, /* In */
 	NULL, /* Li */
 	pmdoc_Nd, /* Nd */
-
 	pmdoc_Nm, /* Nm */
 	NULL, /* Op */
 	NULL, /* Ot */
 	NULL, /* Pa */
-
 	NULL, /* Rv */
 	NULL, /* St */
 	NULL, /* Va */
 	NULL, /* Vt */
-
 	pmdoc_Xr, /* Xr */
 	NULL, /* %A */
 	NULL, /* %B */
 	NULL, /* %D */
-
 	NULL, /* %I */
 	NULL, /* %J */
 	NULL, /* %N */
 	NULL, /* %O */
-
 	NULL, /* %P */
 	NULL, /* %R */
 	NULL, /* %T */
 	NULL, /* %V */
-
 	NULL, /* Ac */
 	NULL, /* Ao */
 	NULL, /* Aq */
 	NULL, /* At */
-
 	NULL, /* Bc */
 	NULL, /* Bf */
 	NULL, /* Bo */
 	NULL, /* Bq */
-
 	NULL, /* Bsx */
 	NULL, /* Bx */
 	NULL, /* Db */
 	NULL, /* Dc */
-
 	NULL, /* Do */
 	NULL, /* Dq */
 	NULL, /* Ec */
 	NULL, /* Ef */
-
 	NULL, /* Em */
 	NULL, /* Eo */
 	NULL, /* Fx */
 	NULL, /* Ms */
-
 	NULL, /* No */
 	NULL, /* Ns */
 	NULL, /* Nx */
 	NULL, /* Ox */
-
 	NULL, /* Pc */
 	NULL, /* Pf */
 	NULL, /* Po */
 	NULL, /* Pq */
-
 	NULL, /* Qc */
 	NULL, /* Ql */
 	NULL, /* Qo */
 	NULL, /* Qq */
-
 	NULL, /* Re */
 	NULL, /* Rs */
 	NULL, /* Sc */
 	NULL, /* So */
-
 	NULL, /* Sq */
 	NULL, /* Sm */
 	NULL, /* Sx */
 	NULL, /* Sy */
-
 	NULL, /* Tn */
 	NULL, /* Ux */
 	NULL, /* Xc */
 	NULL, /* Xo */
-
 	NULL, /* Fo */
 	NULL, /* Fc */
 	NULL, /* Oo */
 	NULL, /* Oc */
-
 	NULL, /* Bk */
 	NULL, /* Ek */
 	NULL, /* Bt */
 	NULL, /* Hf */
-
 	NULL, /* Fr */
 	NULL, /* Ud */
 	NULL, /* Lb */
 	NULL, /* Lp */
-
 	NULL, /* Lk */
 	NULL, /* Mt */
 	NULL, /* Brq */
 	NULL, /* Bro */
-
 	NULL, /* Brc */
 	NULL, /* %C */
 	NULL, /* Es */
 	NULL, /* En */
-
 	NULL, /* Dx */
 	NULL, /* %Q */
 	NULL, /* br */
 	NULL, /* sp */
-
 	NULL, /* %U */
 	NULL, /* Ta */
-	NULL, /* ll */
-	NULL, /* text */
 };
 
-static	const proff_nf mans[MAN_MAX] = {
+static	const pman_nf mans[MAN_MAX] = {
 	NULL,	//br
 	NULL,	//TH
 	pman_sh, //SH
@@ -305,6 +276,7 @@ static	const proff_nf mans[MAN_MAX] = {
 	NULL,	//I
 	NULL,	//IR
 	NULL,	//RI
+	NULL,	//na
 	NULL,	//sp
 	NULL,	//nf
 	NULL,	//fi
@@ -316,12 +288,6 @@ static	const proff_nf mans[MAN_MAX] = {
 	NULL,	//AT
 	NULL,	//in
 	NULL,	//ft
-	NULL,	//OP
-	NULL,	//EX
-	NULL,	//EE
-	NULL,	//UR
-	NULL,	//UE
-	NULL,	//ll
 };
 
 
@@ -337,7 +303,7 @@ main(int argc, char *argv[])
 	sqlite3 *db;
 	ssize_t len;
 	size_t linesize;
-	struct roff_mandb_rec rec;
+	struct mandb_rec rec;
 
 	while ((ch = getopt(argc, argv, "C:floQqv")) != -1) {
 		switch (ch) {
@@ -370,8 +336,7 @@ main(int argc, char *argv[])
 	memset(&rec, 0, sizeof(rec));
 
 	init_secbuffs(&rec);
-	mchars_alloc();
-	mp = mparse_alloc(0, MANDOCLEVEL_BADARG, NULL, NULL);
+	mp = mparse_alloc(MPARSE_AUTO, MANDOCLEVEL_FATAL, NULL, NULL, NULL);
 
 	if (manconf) {
 		char *arg;
@@ -425,7 +390,6 @@ main(int argc, char *argv[])
 	if (errmsg != NULL) {
 		warnx("%s", errmsg);
 		free(errmsg);
-		close_db(db);
 		exit(EXIT_FAILURE);
 	}
 
@@ -469,7 +433,6 @@ main(int argc, char *argv[])
 		printf("Performing index update\n");
 	update_db(db, mp, &rec);
 	mparse_free(mp);
-	mchars_free();
 	free_secbuffs(&rec);
 
 	/* Commit the transaction */
@@ -477,7 +440,6 @@ main(int argc, char *argv[])
 	if (errmsg != NULL) {
 		warnx("%s", errmsg);
 		free(errmsg);
-		close_db(db);
 		exit(EXIT_FAILURE);
 	}
 
@@ -539,7 +501,7 @@ traversedir(const char *parent, const char *file, sqlite3 *db,
 }
 
 /* build_file_cache --
- *   This function generates an md5 hash of the file passed as its 2nd parameter
+ *   This function generates an md5 hash of the file passed as it's 2nd parameter
  *   and stores it in a temporary table file_cache along with the full file path.
  *   This is done to support incremental updation of the database.
  *   The temporary table file_cache is dropped thereafter in the function
@@ -699,7 +661,7 @@ read_and_decompress(const char *file, void **bufp, size_t *len)
 	for (;;) {
 		r = archive_read_data(a, buf + off, *len - off);
 		if (r == ARCHIVE_OK) {
-			archive_read_finish(a);
+			archive_read_close(a);
 			*bufp = buf;
 			*len = off;
 			return 0;
@@ -715,7 +677,7 @@ read_and_decompress(const char *file, void **bufp, size_t *len)
 				if (mflags.verbosity)
 					warnx("File too large: %s", file);
 				free(buf);
-				archive_read_finish(a);
+				archive_read_close(a);
 				return -1;
 			}
 			buf = erealloc(buf, *len);
@@ -724,7 +686,7 @@ read_and_decompress(const char *file, void **bufp, size_t *len)
 
 archive_error:
 	warnx("Error while reading `%s': %s", file, archive_error_string(a));
-	archive_read_finish(a);
+	archive_read_close(a);
 	return -1;
 }
 
@@ -770,7 +732,7 @@ update_db(sqlite3 *db, struct mparse *mp, mandb_rec *rec)
 	rc = sqlite3_prepare_v2(db, sqlstr, -1, &stmt, NULL);
 	if (rc != SQLITE_OK) {
 		if (mflags.verbosity)
-			warnx("%s", sqlite3_errmsg(db));
+		warnx("%s", sqlite3_errmsg(db));
 		close_db(db);
 		errx(EXIT_FAILURE, "Could not query file cache");
 	}
@@ -805,8 +767,7 @@ update_db(sqlite3 *db, struct mparse *mp, mandb_rec *rec)
 			err_count++;
 			continue;
 		}
-		md5_status = check_md5(file, db, "mandb_meta", &md5sum, buf,
-		    buflen);
+		md5_status = check_md5(file, db, "mandb_meta", &md5sum, buf, buflen);
 		assert(md5sum != NULL);
 		if (md5_status == -1) {
 			if (mflags.verbosity)
@@ -840,24 +801,16 @@ update_db(sqlite3 *db, struct mparse *mp, mandb_rec *rec)
 			 * This means is either a new file or an updated file.
 			 * We should go ahead with parsing.
 			 */
-			if (chdir(parent) == -1) {
-				if (mflags.verbosity)
-					warn("chdir failed for `%s', could "
-					    "not index `%s'", parent, file);
-				err_count++;
-				free(md5sum);
-				continue;
-			}
-
 			if (mflags.verbosity == 2)
 				printf("Parsing: %s\n", file);
 			rec->md5_hash = md5sum;
 			rec->file_path = estrdup(file);
 			// file_path is freed by insert_into_db itself.
+			chdir(parent);
 			begin_parse(file, mp, rec, buf, buflen);
 			if (insert_into_db(db, rec) < 0) {
 				if (mflags.verbosity)
-					warnx("Error in indexing `%s'", file);
+					warnx("Error in indexing %s", file);
 				err_count++;
 			} else {
 				new_count++;
@@ -867,12 +820,12 @@ update_db(sqlite3 *db, struct mparse *mp, mandb_rec *rec)
 
 	if (mflags.verbosity == 2) {
 		printf("Total Number of new or updated pages encountered = %d\n"
-		    "Total number of (hard or symbolic) links found = %d\n"
-		    "Total number of pages that were successfully"
-		    " indexed/updated = %d\n"
-		    "Total number of pages that could not be indexed"
-		    " due to errors = %d\n",
-		    total_count - link_count, link_count, new_count, err_count);
+			"Total number of (hard or symbolic) links found = %d\n"
+			"Total number of pages that were successfully"
+			" indexed/updated = %d\n"
+			"Total number of pages that could not be indexed"
+			" due to errors = %d\n",
+			total_count - link_count, link_count, new_count, err_count);
 	}
 
 	if (mflags.recreate)
@@ -906,12 +859,13 @@ static void
 begin_parse(const char *file, struct mparse *mp, mandb_rec *rec,
     const void *buf, size_t len)
 {
-	struct roff_man *roff;
+	struct mdoc *mdoc;
+	struct man *man;
 	mparse_reset(mp);
 
 	rec->xr_found = 0;
 
-	if (mparse_readmem(mp, buf, len, file) >= MANDOCLEVEL_BADARG) {
+	if (mparse_readmem(mp, buf, len, file) >= MANDOCLEVEL_FATAL) {
 		/* Printing this warning at verbosity level 2
 		 * because some packages from pkgsrc might trigger several
 		 * of such warnings.
@@ -921,25 +875,22 @@ begin_parse(const char *file, struct mparse *mp, mandb_rec *rec,
 		return;
 	}
 
-	mparse_result(mp, &roff, NULL);
-	if (roff == NULL) {
+	mparse_result(mp, &mdoc, &man);
+	if (mdoc == NULL && man == NULL) {
 		if (mflags.verbosity == 2)
-			warnx("Not a roff(7) page");
+			warnx("Not a man(7) or mdoc(7) page");
 		return;
 	}
 
-	if (roff->macroset == MACROSET_MDOC) {
-		mdoc_validate(roff);
+	set_machine(mdoc, rec);
+	set_section(mdoc, man, rec);
+	if (mdoc) {
 		rec->page_type = MDOC;
-		proff_node(roff->first->child, rec, mdocs);
-	} else if (roff->macroset == MACROSET_MAN) {
-		man_validate(roff);
+		pmdoc_node(mdoc_node(mdoc), rec);
+	} else {
 		rec->page_type = MAN;
-		proff_node(roff->first->child, rec, mans);
-	} else
-		warnx("Unknown macroset %d", roff->macroset);
-	set_machine(roff, rec);
-	set_section(roff, rec);
+		pman_node(man_node(man), rec);
+	}
 }
 
 /*
@@ -948,15 +899,15 @@ begin_parse(const char *file, struct mparse *mp, mandb_rec *rec,
  *  (Which should be the first character of the string).
  */
 static void
-set_section(const struct roff_man *rm, mandb_rec *rec)
+set_section(const struct mdoc *md, const struct man *m, mandb_rec *rec)
 {
-	if (!rm)
-		return;
-	const struct roff_meta *rm_meta = &rm->meta;
-	const char *s = rm_meta->msec == NULL ? "?" : rm_meta->msec;
-	easprintf(&rec->section, "%s", s);
-	if (rec->section[0] == '?' && mflags.verbosity == 2)
-		warnx("%s: Missing section number", rec->file_path);
+	if (md) {
+		const struct mdoc_meta *md_meta = mdoc_meta(md);
+		rec->section[0] = md_meta->msec[0];
+	} else if (m) {
+		const struct man_meta *m_meta = man_meta(m);
+		rec->section[0] = m_meta->msec[0];
+	}
 }
 
 /*
@@ -964,13 +915,38 @@ set_section(const struct roff_man *rm, mandb_rec *rec)
  *  Extracts the machine architecture information if available.
  */
 static void
-set_machine(const struct roff_man *rm, mandb_rec *rec)
+set_machine(const struct mdoc *md, mandb_rec *rec)
 {
-	if (rm == NULL)
+	if (md == NULL)
 		return;
-	const struct roff_meta *rm_meta = &rm->meta;
-	if (rm_meta->arch)
-		rec->machine = estrdup(rm_meta->arch);
+	const struct mdoc_meta *md_meta = mdoc_meta(md);
+	if (md_meta->arch)
+		rec->machine = estrdup(md_meta->arch);
+}
+
+static void
+pmdoc_node(const struct mdoc_node *n, mandb_rec *rec)
+{
+
+	if (n == NULL)
+		return;
+
+	switch (n->type) {
+	case (MDOC_BODY):
+		/* FALLTHROUGH */
+	case (MDOC_TAIL):
+		/* FALLTHROUGH */
+	case (MDOC_ELEM):
+		if (mdocs[n->tok] == NULL)
+			break;
+		(*mdocs[n->tok])(n, rec);
+		break;
+	default:
+		break;
+	}
+
+	pmdoc_node(n->child, rec);
+	pmdoc_node(n->next, rec);
 }
 
 /*
@@ -978,16 +954,14 @@ set_machine(const struct roff_man *rm, mandb_rec *rec)
  *  Extracts the Name of the manual page from the .Nm macro
  */
 static void
-pmdoc_Nm(const struct roff_node *n, mandb_rec *rec)
+pmdoc_Nm(const struct mdoc_node *n, mandb_rec *rec)
 {
 	if (n->sec != SEC_NAME)
 		return;
 
 	for (n = n->child; n; n = n->next) {
-		if (n->type == ROFFT_TEXT) {
-			char *escaped_name = parse_escape(n->string);
-			concat(&rec->name, escaped_name);
-			free(escaped_name);
+		if (n->type == MDOC_TEXT) {
+			concat(&rec->name, n->string);
 		}
 	}
 }
@@ -997,11 +971,47 @@ pmdoc_Nm(const struct roff_node *n, mandb_rec *rec)
  *  Extracts the one line description of the man page from the .Nd macro
  */
 static void
-pmdoc_Nd(const struct roff_node *n, mandb_rec *rec)
+pmdoc_Nd(const struct mdoc_node *n, mandb_rec *rec)
 {
-	if (n->type == ROFFT_BODY)
-		deroff(&rec->name_desc, n);
+	/*
+	 * A static variable for keeping track of whether a Xr macro was seen
+	 * previously.
+	 */
+	char *buf = NULL;
+	char *temp;
+	char *nd_text;
 
+	if (n == NULL || (n->type != MDOC_TEXT && n->tok == MDOC_MAX))
+		return;
+
+	if (n->type == MDOC_TEXT) {
+		if (rec->xr_found && n->next) {
+			/*
+			 * An Xr macro was seen previously, so parse this
+			 * and the next node.
+			 */
+			temp = n->string;
+			n = n->next;
+			easprintf(&buf, "%s(%s)", temp, n->string);
+			concat(&rec->name_desc, buf);
+			free(buf);
+		} else {
+			nd_text = estrdup(n->string);
+			replace_hyph(nd_text);
+			concat(&rec->name_desc, nd_text);
+			free(nd_text);
+		}
+		rec->xr_found = 0;
+	} else if (mdocs[n->tok] == pmdoc_Xr) {
+		/* Remember that we have encountered an Xr macro */
+		rec->xr_found = 1;
+	}
+
+	if (n->child)
+		pmdoc_Nd(n->child, rec);
+
+	if(n->next)
+		pmdoc_Nd(n->next, rec);
 }
 
 /*
@@ -1012,9 +1022,9 @@ pmdoc_Nd(const struct roff_node *n, mandb_rec *rec)
  *  for adding a new line whenever we encounter it.
  */
 static void
-pmdoc_macro_handler(const struct roff_node *n, mandb_rec *rec, int doct)
+pmdoc_macro_handler(const struct mdoc_node *n, mandb_rec *rec, enum mdoct doct)
 {
-	const struct roff_node *sn;
+	const struct mdoc_node *sn;
 	assert(n);
 
 	switch (doct) {
@@ -1028,19 +1038,19 @@ pmdoc_macro_handler(const struct roff_node *n, mandb_rec *rec, int doct)
 	 */
 	case MDOC_Xr:
 		n = n->child;
-		while (n->type != ROFFT_TEXT && n->next)
+		while (n->type != MDOC_TEXT && n->next)
 			n = n->next;
 
-		if (n && n->type != ROFFT_TEXT)
+		if (n && n->type != MDOC_TEXT)
 			return;
 		sn = n;
 		if (n->next)
 			n = n->next;
 
-		while (n->type != ROFFT_TEXT && n->next)
+		while (n->type != MDOC_TEXT && n->next)
 			n = n->next;
 
-		if (n && n->type == ROFFT_TEXT) {
+		if (n && n->type == MDOC_TEXT) {
 			char *buf;
 			easprintf(&buf, "%s(%s)", sn->string, n->string);
 			mdoc_parse_section(n->sec, buf, rec);
@@ -1051,7 +1061,7 @@ pmdoc_macro_handler(const struct roff_node *n, mandb_rec *rec, int doct)
 
 	/* Parse the .Pp macro to add a new line */
 	case MDOC_Pp:
-		if (n->type == ROFFT_TEXT)
+		if (n->type == MDOC_TEXT)
 			mdoc_parse_section(n->sec, "\n", rec);
 		break;
 	default:
@@ -1069,12 +1079,12 @@ pmdoc_macro_handler(const struct roff_node *n, mandb_rec *rec, int doct)
  *  (See if else blocks in pmdoc_Sh.)
  */
 static void
-pmdoc_Xr(const struct roff_node *n, mandb_rec *rec)
+pmdoc_Xr(const struct mdoc_node *n, mandb_rec *rec)
 {
 }
 
 static void
-pmdoc_Pp(const struct roff_node *n, mandb_rec *rec)
+pmdoc_Pp(const struct mdoc_node *n, mandb_rec *rec)
 {
 }
 
@@ -1086,13 +1096,13 @@ pmdoc_Pp(const struct roff_node *n, mandb_rec *rec)
  *  they need special handling, thus the separate if branches for them.
  */
 static void
-pmdoc_Sh(const struct roff_node *n, mandb_rec *rec)
+pmdoc_Sh(const struct mdoc_node *n, mandb_rec *rec)
 {
-	if (n == NULL || (n->type != ROFFT_TEXT && n->tok == MDOC_MAX))
+	if (n == NULL || (n->type != MDOC_TEXT && n->tok == MDOC_MAX))
 		return;
 	int xr_found = 0;
 
-	if (n->type == ROFFT_TEXT) {
+	if (n->type == MDOC_TEXT) {
 		mdoc_parse_section(n->sec, n->string, rec);
 	} else if (mdocs[n->tok] == pmdoc_Nm && rec->name != NULL) {
 		/*
@@ -1130,7 +1140,7 @@ pmdoc_Sh(const struct roff_node *n, mandb_rec *rec)
  *  The function appends string to the global section buffer and returns.
  */
 static void
-mdoc_parse_section(enum roff_sec sec, const char *string, mandb_rec *rec)
+mdoc_parse_section(enum mdoc_sec sec, const char *string, mandb_rec *rec)
 {
 	/*
 	 * If the user specified the 'l' flag, then parse and store only the
@@ -1176,26 +1186,28 @@ mdoc_parse_section(enum roff_sec sec, const char *string, mandb_rec *rec)
 }
 
 static void
-proff_node(const struct roff_node *n, mandb_rec *rec, const proff_nf *func)
+pman_node(const struct man_node *n, mandb_rec *rec)
 {
 	if (n == NULL)
 		return;
 
 	switch (n->type) {
-	case (ROFFT_BODY):
+	case (MAN_BODY):
 		/* FALLTHROUGH */
-	case (ROFFT_BLOCK):
+	case (MAN_TAIL):
 		/* FALLTHROUGH */
-	case (ROFFT_ELEM):
-		if (func[n->tok] != NULL)
-			(*func[n->tok])(n, rec);
+	case (MAN_BLOCK):
+		/* FALLTHROUGH */
+	case (MAN_ELEM):
+		if (mans[n->tok] != NULL)
+			(*mans[n->tok])(n, rec);
 		break;
 	default:
 		break;
 	}
 
-	proff_node(n->child, rec, func);
-	proff_node(n->next, rec, func);
+	pman_node(n->child, rec);
+	pman_node(n->next, rec);
 }
 
 /*
@@ -1204,12 +1216,12 @@ proff_node(const struct roff_node *n, mandb_rec *rec, const proff_nf *func)
  *  variable.
  */
 static void
-pman_parse_name(const struct roff_node *n, mandb_rec *rec)
+pman_parse_name(const struct man_node *n, mandb_rec *rec)
 {
 	if (n == NULL)
 		return;
 
-	if (n->type == ROFFT_TEXT) {
+	if (n->type == MAN_TEXT) {
 		char *tmp = parse_escape(n->string);
 		concat(&rec->name_desc, tmp);
 		free(tmp);
@@ -1227,7 +1239,7 @@ pman_parse_name(const struct roff_node *n, mandb_rec *rec)
  * a section.
  */
 static void
-pman_block(const struct roff_node *n, mandb_rec *rec)
+pman_block(const struct man_node *n, mandb_rec *rec)
 {
 }
 
@@ -1243,10 +1255,10 @@ pman_block(const struct roff_node *n, mandb_rec *rec)
  *    (c) Move on to the one line description section, which is after the list
  *        of names in the NAME section.
  *  2. Otherwise, it will check the section name and call the man_parse_section
- *     function, passing the enum corresponding to that section.
+ *     function, passing the enum corresponding that section.
  */
 static void
-pman_sh(const struct roff_node *n, mandb_rec *rec)
+pman_sh(const struct man_node *n, mandb_rec *rec)
 {
 	static const struct {
 		enum man_sec section;
@@ -1268,13 +1280,13 @@ pman_sh(const struct roff_node *n, mandb_rec *rec)
 	    { MANSEC_AUTHORS, "AUTHORS" },
 	    { MANSEC_COPYRIGHT, "COPYRIGHT" },
 	};
-	const struct roff_node *head;
+	const struct man_node *head;
 	char *name_desc;
-	size_t sz;
+	int sz;
 	size_t i;
 
 	if ((head = n->parent->head) == NULL || (head = head->child) == NULL ||
-	    head->type != ROFFT_TEXT)
+	    head->type != MAN_TEXT)
 		return;
 
 	/*
@@ -1322,7 +1334,7 @@ pman_sh(const struct roff_node *n, mandb_rec *rec)
 		int has_alias = 0;	// Any more aliases left?
 		while (*name_desc) {
 			/* Remove any leading spaces or hyphens. */
-			if (name_desc[0] == ' ' || name_desc[0] == '-') {
+			if (name_desc[0] == ' ' || name_desc[0] =='-') {
 				name_desc++;
 				continue;
 			}
@@ -1332,11 +1344,9 @@ pman_sh(const struct roff_node *n, mandb_rec *rec)
 			if (rec->name == NULL) {
 				if (name_desc[sz] == ',')
 					has_alias = 1;
-				rec->name = estrndup(name_desc, sz);
-				/* XXX This would only happen with a poorly
-				 * written man page, maybe warn? */
-				if (name_desc[sz] == '\0')
-					break;
+				name_desc[sz] = 0;
+				rec->name = emalloc(sz + 1);
+				memcpy(rec->name, name_desc, sz + 1);
 				name_desc += sz + 1;
 				continue;
 			}
@@ -1347,15 +1357,13 @@ pman_sh(const struct roff_node *n, mandb_rec *rec)
 			 */
 			if (rec->name && has_alias) {
 				if (name_desc[sz] != ',') {
-					/* No more commas left --> no more
-					 * aliases to take out */
+					/* No more commas left -->
+					 * no more aliases to take out
+					 */
 					has_alias = 0;
 				}
+				name_desc[sz] = 0;
 				concat2(&rec->links, name_desc, sz);
-				/* XXX This would only happen with a poorly
-				 * written man page, maybe warn? */
-				if (name_desc[sz] == '\0')
-					break;
 				name_desc += sz + 1;
 				continue;
 			}
@@ -1374,7 +1382,7 @@ pman_sh(const struct roff_node *n, mandb_rec *rec)
 
 	/* The RETURN VALUE section might be specified in multiple ways */
 	if (strcmp(head->string, "RETURN") == 0 &&
-	    head->next != NULL && head->next->type == ROFFT_TEXT &&
+	    head->next != NULL && head->next->type == MAN_TEXT &&
 	    (strcmp(head->next->string, "VALUE") == 0 ||
 	    strcmp(head->next->string, "VALUES") == 0)) {
 		man_parse_section(MANSEC_RETURN_VALUES, n, rec);
@@ -1386,7 +1394,7 @@ pman_sh(const struct roff_node *n, mandb_rec *rec)
 	 * separate lines.
 	 */
 	if (strcmp(head->string, "EXIT") == 0 &&
-	    head->next != NULL && head->next->type == ROFFT_TEXT &&
+	    head->next != NULL && head->next->type == MAN_TEXT &&
 	    strcmp(head->next->string, "STATUS") == 0) {
 		man_parse_section(MANSEC_EXIT_STATUS, n, rec);
 		return;
@@ -1402,12 +1410,12 @@ pman_sh(const struct roff_node *n, mandb_rec *rec)
  *  man_parse_section to parse a particular section of the man page.
  */
 static void
-pman_parse_node(const struct roff_node *n, secbuff *s)
+pman_parse_node(const struct man_node *n, secbuff *s)
 {
 	if (n == NULL)
 		return;
 
-	if (n->type == ROFFT_TEXT)
+	if (n->type == MAN_TEXT)
 		append(s, n->string);
 
 	pman_parse_node(n->child, s);
@@ -1423,7 +1431,7 @@ pman_parse_node(const struct roff_node *n, secbuff *s)
  * concatenate the content from that section into the buffer for that section.
  */
 static void
-man_parse_section(enum man_sec sec, const struct roff_node *n, mandb_rec *rec)
+man_parse_section(enum man_sec sec, const struct man_node *n, mandb_rec *rec)
 {
 	/*
 	 * If the user sepecified the 'l' flag then just parse
@@ -1519,7 +1527,7 @@ insert_into_db(sqlite3 *db, mandb_rec *rec)
 		char *tmp;
 		rec->links = estrdup(rec->name);
 		free(rec->name);
-		size_t sz = strcspn(rec->links, " \0");
+		int sz = strcspn(rec->links, " \0");
 		rec->name = emalloc(sz + 1);
 		memcpy(rec->name, rec->links, sz);
 		if(rec->name[sz - 1] == ',')
@@ -1572,8 +1580,7 @@ insert_into_db(sqlite3 *db, mandb_rec *rec)
 	}
 
 	idx = sqlite3_bind_parameter_index(stmt, ":lib");
-	rc = sqlite3_bind_text(stmt, idx, rec->lib.data,
-	    rec->lib.offset + 1, NULL);
+	rc = sqlite3_bind_text(stmt, idx, rec->lib.data, rec->lib.offset + 1, NULL);
 	if (rc != SQLITE_OK) {
 		sqlite3_finalize(stmt);
 		goto Out;
@@ -1588,8 +1595,7 @@ insert_into_db(sqlite3 *db, mandb_rec *rec)
 	}
 
 	idx = sqlite3_bind_parameter_index(stmt, ":env");
-	rc = sqlite3_bind_text(stmt, idx, rec->env.data,
-	    rec->env.offset + 1, NULL);
+	rc = sqlite3_bind_text(stmt, idx, rec->env.data, rec->env.offset + 1, NULL);
 	if (rc != SQLITE_OK) {
 		sqlite3_finalize(stmt);
 		goto Out;
@@ -1927,9 +1933,6 @@ cleanup(mandb_rec *rec)
 
 	free(rec->md5_hash);
 	rec->md5_hash = NULL;
-
-	free(rec->section);
-	rec->section = NULL;
 }
 
 /*
@@ -2038,7 +2041,7 @@ parse_escape(const char *str)
 		if (backslash[1] == '-' || backslash[1] == ' ') {
 			*iter++ = backslash[1];
 			last_backslash = backslash + 2;
-			backslash = strchr(last_backslash, '\\');
+			backslash = strchr(backslash + 2, '\\');
 		} else {
 			++backslash;
 			mandoc_escape(&backslash, NULL, NULL);

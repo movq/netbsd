@@ -1,6 +1,6 @@
 /* Definitions of target machine for GCC,
    for x86-64/ELF NetBSD systems.
-   Copyright (C) 2002-2015 Free Software Foundation, Inc.
+   Copyright (C) 2002-2013 Free Software Foundation, Inc.
    Contributed by Wasabi Systems, Inc.
 
 This file is part of GCC.
@@ -25,6 +25,15 @@ along with GCC; see the file COPYING3.  If not see
       NETBSD_OS_CPP_BUILTINS_ELF();		\
     }						\
   while (0)
+
+
+/* Extra specs needed for NetBSD/x86-64 ELF.  */
+
+#undef SUBTARGET_EXTRA_SPECS
+#define SUBTARGET_EXTRA_SPECS			\
+  { "netbsd_cpp_spec", NETBSD_CPP_SPEC },	\
+  { "netbsd_link_spec", NETBSD_LINK_SPEC_ELF },	\
+  { "netbsd_entry_point", NETBSD_ENTRY_POINT },
 
 
 /* Provide a LINK_SPEC appropriate for a NetBSD/x86-64 ELF target.  */
@@ -59,9 +68,6 @@ along with GCC; see the file COPYING3.  If not see
 
 /* Preserve i386 psABI  */
 #undef PREFERRED_STACK_BOUNDARY_DEFAULT
-#define PREFERRED_STACK_BOUNDARY_DEFAULT \
-  ((TARGET_64BIT || TARGET_SSE) ? 128 : 32)
+#define PREFERRED_STACK_BOUNDARY_DEFAULT MIN_STACK_BOUNDARY
 
 #define HAVE_ENABLE_EXECUTE_STACK
-
-#define IX86_MAYBE_NO_LIBGCC_TFMODE

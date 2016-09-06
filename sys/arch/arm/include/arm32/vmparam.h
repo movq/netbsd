@@ -1,4 +1,4 @@
-/*	$NetBSD: vmparam.h,v 1.40 2015/10/18 00:28:32 jmcneill Exp $	*/
+/*	$NetBSD: vmparam.h,v 1.35 2014/07/27 21:31:34 skrll Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Wasabi Systems, Inc.
@@ -45,36 +45,26 @@
  */
 
 #include <arm/cpuconf.h>
-#include <arm/arm32/param.h>
 #include <arm/arm32/pte.h>	/* pt_entry_t */
 
-#define	__USE_TOPDOWN_VM 
 #define	USRSTACK	VM_MAXUSER_ADDRESS
-
-/*
- * ARMv4 systems are normaly configured for 256MB KVA only, so restrict
- * the size of the pager map to 4MB.
- */
-#ifndef _ARM_ARCH_5
-#define PAGER_MAP_DEFAULT_SIZE          (4 * 1024 * 1024)
-#endif
 
 /*
  * Note that MAXTSIZ can't be larger than 32M, otherwise the compiler
  * would have to be changed to not generate "bl" instructions.
  */
-#define	MAXTSIZ		(128*1024*1024)		/* max text size */
+#define	MAXTSIZ		(64*1024*1024)		/* max text size */
 #ifndef	DFLDSIZ
-#define	DFLDSIZ		(384*1024*1024)		/* initial data size limit */
+#define	DFLDSIZ		(128*1024*1024)		/* initial data size limit */
 #endif
 #ifndef	MAXDSIZ
-#define	MAXDSIZ		(1536*1024*1024)	/* max data size */
+#define	MAXDSIZ		(1024*1024*1024)	/* max data size */
 #endif
 #ifndef	DFLSSIZ
-#define	DFLSSIZ		(4*1024*1024)		/* initial stack size limit */
+#define	DFLSSIZ		(2*1024*1024)		/* initial stack size limit */
 #endif
 #ifndef	MAXSSIZ
-#define	MAXSSIZ		(64*1024*1024)		/* max stack size */
+#define	MAXSSIZ		(32*1024*1024)		/* max stack size */
 #endif
 
 /*

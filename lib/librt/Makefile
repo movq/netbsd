@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.20 2016/08/05 13:03:13 christos Exp $
+#	$NetBSD: Makefile,v 1.18 2013/12/19 19:40:08 rmind Exp $
 #
 
 .include <bsd.own.mk>
@@ -33,15 +33,12 @@ MLINKS+=	pset.3 pset_destroy.3
 
 MLINKS+=	sched.3 sched_setparam.3
 MLINKS+=	sched.3 sched_getparam.3
-MLINKS+=	sched.3 sched_protect.3
 MLINKS+=	sched.3 sched_setscheduler.3
 MLINKS+=	sched.3 sched_getscheduler.3
 MLINKS+=	sched.3 sched_get_priority_max.3
 MLINKS+=	sched.3 sched_get_priority_min.3
 MLINKS+=	sched.3 sched_rr_get_interval.3
 MLINKS+=	sched.3 sched_yield.3
-MLINKS+=	sched.3 sched_setaffinity_np.3
-MLINKS+=	sched.3 sched_getaffinity_np.3
 
 MLINKS+=	shm_open.3 shm_unlink.3
 

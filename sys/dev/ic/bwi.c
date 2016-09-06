@@ -1,4 +1,4 @@
-/*	$NetBSD: bwi.c,v 1.30 2016/06/10 13:27:13 ozaki-r Exp $	*/
+/*	$NetBSD: bwi.c,v 1.24.4.1 2015/04/21 04:55:15 snj Exp $	*/
 /*	$OpenBSD: bwi.c,v 1.74 2008/02/25 21:13:30 mglocker Exp $	*/
 
 /*
@@ -48,7 +48,7 @@
 
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bwi.c,v 1.30 2016/06/10 13:27:13 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bwi.c,v 1.24.4.1 2015/04/21 04:55:15 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/callout.h>
@@ -1939,7 +1939,7 @@ invalid:
 	error = EINVAL;
 
 free_and_fail:
-	firmware_free(fwi->fwi_data, fwi->fwi_size);
+	firmware_free(fwi->fwi_data, 0);
 	fwi->fwi_data = NULL;
 	fwi->fwi_size = 0;
 
@@ -1953,7 +1953,7 @@ bwi_mac_fw_image_free(struct bwi_mac *mac, struct bwi_fw_image *fwi)
 	if (fwi->fwi_data != NULL) {
 		DPRINTF(mac->mac_sc, BWI_DBG_FIRMWARE, "freeing firmware %s\n",
 		    fwi->fwi_name);
-		firmware_free(fwi->fwi_data, fwi->fwi_size);
+		firmware_free(fwi->fwi_data, 0);
 		fwi->fwi_data = NULL;
 		fwi->fwi_size = 0;
 	}
@@ -3782,7 +3782,7 @@ bwi_set_gains(struct bwi_mac *mac, const struct bwi_gains *gains)
 		bwi_tbl_write_2(mac, tbl_gain_ofs2 + i, tbl_gain);
 	}
 
-	if (gains == NULL || gains->phy_gain != -1) {
+	if (gains == NULL || (gains != NULL && gains->phy_gain != -1)) {
 		uint16_t phy_gain1, phy_gain2;
 
 		if (gains != NULL) {
@@ -7365,8 +7365,8 @@ bwi_start(struct ifnet *ifp)
 
 		IF_DEQUEUE(&ic->ic_mgtq, m);
 		if (m != NULL) {
-			ni = M_GETCTX(m, struct ieee80211_node *);
-			M_CLEARCTX(m);
+			ni = (struct ieee80211_node *)m->m_pkthdr.rcvif;
+			m->m_pkthdr.rcvif = NULL;
 
 			mgt_pkt = 1;
 		} else {
@@ -8458,7 +8458,7 @@ bwi_rxeof(struct bwi_softc *sc, int end_idx)
 		plcp = ((const uint8_t *)(hdr + 1) + hdr_extra);
 		rssi = bwi_calc_rssi(sc, hdr);
 
-		m_set_rcvif(m, ifp);
+		m->m_pkthdr.rcvif = ifp;
 		m->m_len = m->m_pkthdr.len = buflen + sizeof(*hdr);
 		m_adj(m, sizeof(*hdr) + wh_ofs);
 

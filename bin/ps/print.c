@@ -1,4 +1,4 @@
-/*	$NetBSD: print.c,v 1.123 2014/11/15 01:58:34 joerg Exp $	*/
+/*	$NetBSD: print.c,v 1.122.2.1 2015/05/14 08:15:47 snj Exp $	*/
 
 /*
  * Copyright (c) 2000, 2007 The NetBSD Foundation, Inc.
@@ -63,7 +63,7 @@
 #if 0
 static char sccsid[] = "@(#)print.c	8.6 (Berkeley) 4/16/94";
 #else
-__RCSID("$NetBSD: print.c,v 1.123 2014/11/15 01:58:34 joerg Exp $");
+__RCSID("$NetBSD: print.c,v 1.122.2.1 2015/05/14 08:15:47 snj Exp $");
 #endif
 #endif /* not lint */
 

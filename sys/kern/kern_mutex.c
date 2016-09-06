@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_mutex.c,v 1.63 2016/07/07 06:55:43 msaitoh Exp $	*/
+/*	$NetBSD: kern_mutex.c,v 1.58 2013/10/19 21:01:39 mrg Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -40,7 +40,7 @@
 #define	__MUTEX_PRIVATE
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_mutex.c,v 1.63 2016/07/07 06:55:43 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_mutex.c,v 1.58 2013/10/19 21:01:39 mrg Exp $");
 
 #include <sys/param.h>
 #include <sys/atomic.h>
@@ -113,28 +113,6 @@ do {								\
 #endif	/* DIAGNOSTIC */
 
 /*
- * Some architectures can't use __cpu_simple_lock as is so allow a way
- * for them to use an alternate definition.
- */
-#ifndef MUTEX_SPINBIT_LOCK_INIT
-#define MUTEX_SPINBIT_LOCK_INIT(mtx)	__cpu_simple_lock_init(&(mtx)->mtx_lock)
-#endif
-#ifndef MUTEX_SPINBIT_LOCKED_P
-#define MUTEX_SPINBIT_LOCKED_P(mtx)	__SIMPLELOCK_LOCKED_P(&(mtx)->mtx_lock)
-#endif
-#ifndef MUTEX_SPINBIT_LOCK_TRY
-#define MUTEX_SPINBIT_LOCK_TRY(mtx)	__cpu_simple_lock_try(&(mtx)->mtx_lock)
-#endif
-#ifndef MUTEX_SPINBIT_LOCK_UNLOCK
-#define MUTEX_SPINBIT_LOCK_UNLOCK(mtx)	__cpu_simple_unlock(&(mtx)->mtx_lock)
-#endif
-
-#ifndef MUTEX_INITIALIZE_SPIN_IPL
-#define MUTEX_INITIALIZE_SPIN_IPL(mtx, ipl) \
-					((mtx)->mtx_ipl = makeiplcookie((ipl)))
-#endif
-
-/*
  * Spin mutex SPL save / restore.
  */
 
@@ -142,7 +120,7 @@ do {								\
 do {									\
 	struct cpu_info *x__ci;						\
 	int x__cnt, s;							\
-	s = splraiseipl(MUTEX_SPIN_IPL(mtx));				\
+	s = splraiseipl(mtx->mtx_ipl);					\
 	x__ci = curcpu();						\
 	x__cnt = x__ci->ci_mtx_count--;					\
 	__insn_barrier();						\
@@ -184,8 +162,8 @@ do {									\
 	(mtx)->mtx_owner = MUTEX_BIT_SPIN;				\
 	if (!dodebug)							\
 		(mtx)->mtx_owner |= MUTEX_BIT_NODEBUG;			\
-	MUTEX_INITIALIZE_SPIN_IPL((mtx), (ipl));			\
-	MUTEX_SPINBIT_LOCK_INIT((mtx));					\
+	(mtx)->mtx_ipl = makeiplcookie((ipl));				\
+	__cpu_simple_lock_init(&(mtx)->mtx_lock);			\
 } while (/* CONSTCOND */ 0)
 
 #define	MUTEX_DESTROY(mtx)						\
@@ -201,22 +179,22 @@ do {									\
 #define	MUTEX_DEBUG_P(mtx)	(((mtx)->mtx_owner & MUTEX_BIT_NODEBUG) == 0)
 #if defined(LOCKDEBUG)
 #define	MUTEX_OWNED(owner)		(((owner) & ~MUTEX_BIT_NODEBUG) != 0)
-#define	MUTEX_INHERITDEBUG(n, o)	(n) |= (o) & MUTEX_BIT_NODEBUG
+#define	MUTEX_INHERITDEBUG(new, old)	(new) |= (old) & MUTEX_BIT_NODEBUG
 #else /* defined(LOCKDEBUG) */
 #define	MUTEX_OWNED(owner)		((owner) != 0)
-#define	MUTEX_INHERITDEBUG(n, o)	/* nothing */
+#define	MUTEX_INHERITDEBUG(new, old)	/* nothing */
 #endif /* defined(LOCKDEBUG) */
 
 static inline int
 MUTEX_ACQUIRE(kmutex_t *mtx, uintptr_t curthread)
 {
 	int rv;
-	uintptr_t oldown = 0;
-	uintptr_t newown = curthread;
+	uintptr_t old = 0;
+	uintptr_t new = curthread;
 
-	MUTEX_INHERITDEBUG(oldown, mtx->mtx_owner);
-	MUTEX_INHERITDEBUG(newown, oldown);
-	rv = MUTEX_CAS(&mtx->mtx_owner, oldown, newown);
+	MUTEX_INHERITDEBUG(old, mtx->mtx_owner);
+	MUTEX_INHERITDEBUG(new, old);
+	rv = MUTEX_CAS(&mtx->mtx_owner, old, new);
 	MUTEX_RECEIVE(mtx);
 	return rv;
 }
@@ -233,12 +211,12 @@ MUTEX_SET_WAITERS(kmutex_t *mtx, uintptr_t owner)
 static inline void
 MUTEX_RELEASE(kmutex_t *mtx)
 {
-	uintptr_t newown;
+	uintptr_t new;
 
 	MUTEX_GIVE(mtx);
-	newown = 0;
-	MUTEX_INHERITDEBUG(newown, mtx->mtx_owner);
-	mtx->mtx_owner = newown;
+	new = 0;
+	MUTEX_INHERITDEBUG(new, mtx->mtx_owner);
+	mtx->mtx_owner = new;
 }
 #endif	/* __HAVE_SIMPLE_MUTEXES */
 
@@ -383,7 +361,7 @@ mutex_destroy(kmutex_t *mtx)
 		MUTEX_ASSERT(mtx, !MUTEX_OWNED(mtx->mtx_owner) &&
 		    !MUTEX_HAS_WAITERS(mtx));
 	} else {
-		MUTEX_ASSERT(mtx, !MUTEX_SPINBIT_LOCKED_P(mtx));
+		MUTEX_ASSERT(mtx, !__SIMPLELOCK_LOCKED_P(&mtx->mtx_lock));
 	}
 
 	LOCKDEBUG_FREE(MUTEX_DEBUG_P(mtx), mtx);
@@ -432,7 +410,7 @@ mutex_oncpu(uintptr_t owner)
  *
  *	Support routine for mutex_enter() that must handle all cases.  In
  *	the LOCKDEBUG case, mutex_enter() is always aliased here, even if
- *	fast-path stubs are available.  If a mutex_spin_enter() stub is
+ *	fast-path stubs are available.  If an mutex_spin_enter() stub is
  *	not available, then it is also aliased directly here.
  */
 void
@@ -459,7 +437,7 @@ mutex_vector_enter(kmutex_t *mtx)
 		MUTEX_SPIN_SPLRAISE(mtx);
 		MUTEX_WANTLOCK(mtx);
 #ifdef FULL
-		if (MUTEX_SPINBIT_LOCK_TRY(mtx)) {
+		if (__cpu_simple_lock_try(&mtx->mtx_lock)) {
 			MUTEX_LOCKED(mtx);
 			return;
 		}
@@ -478,14 +456,14 @@ mutex_vector_enter(kmutex_t *mtx)
 		do {
 			if (panicstr != NULL)
 				break;
-			while (MUTEX_SPINBIT_LOCKED_P(mtx)) {
-				SPINLOCK_BACKOFF(count);
+			while (__SIMPLELOCK_LOCKED_P(&mtx->mtx_lock)) {
+				SPINLOCK_BACKOFF(count); 
 #ifdef LOCKDEBUG
 				if (SPINLOCK_SPINOUT(spins))
 					MUTEX_ABORT(mtx, "spinout");
 #endif	/* LOCKDEBUG */
 			}
-		} while (!MUTEX_SPINBIT_LOCK_TRY(mtx));
+		} while (!__cpu_simple_lock_try(&mtx->mtx_lock));
 
 		if (count != SPINLOCK_BACKOFF_MIN) {
 			LOCKSTAT_STOP_TIMER(lsflag, spintime);
@@ -534,7 +512,7 @@ mutex_vector_enter(kmutex_t *mtx)
 			continue;
 		}
 		if (__predict_false(panicstr != NULL)) {
-			KPREEMPT_ENABLE(curlwp);
+			kpreempt_enable();
 			return;
 		}
 		if (__predict_false(MUTEX_OWNER(owner) == curthread)) {
@@ -711,13 +689,13 @@ mutex_vector_exit(kmutex_t *mtx)
 
 	if (MUTEX_SPIN_P(mtx)) {
 #ifdef FULL
-		if (__predict_false(!MUTEX_SPINBIT_LOCKED_P(mtx))) {
+		if (__predict_false(!__SIMPLELOCK_LOCKED_P(&mtx->mtx_lock))) {
 			if (panicstr != NULL)
 				return;
 			MUTEX_ABORT(mtx, "exiting unheld spin mutex");
 		}
 		MUTEX_UNLOCKED(mtx);
-		MUTEX_SPINBIT_LOCK_UNLOCK(mtx);
+		__cpu_simple_unlock(&mtx->mtx_lock);
 #endif
 		MUTEX_SPIN_SPLRESTORE(mtx);
 		return;
@@ -810,7 +788,7 @@ mutex_owned(kmutex_t *mtx)
 	if (MUTEX_ADAPTIVE_P(mtx))
 		return MUTEX_OWNER(mtx->mtx_owner) == (uintptr_t)curlwp;
 #ifdef FULL
-	return MUTEX_SPINBIT_LOCKED_P(mtx);
+	return __SIMPLELOCK_LOCKED_P(&mtx->mtx_lock);
 #else
 	return 1;
 #endif
@@ -846,7 +824,7 @@ mutex_tryenter(kmutex_t *mtx)
 	if (MUTEX_SPIN_P(mtx)) {
 		MUTEX_SPIN_SPLRAISE(mtx);
 #ifdef FULL
-		if (MUTEX_SPINBIT_LOCK_TRY(mtx)) {
+		if (__cpu_simple_lock_try(&mtx->mtx_lock)) {
 			MUTEX_WANTLOCK(mtx);
 			MUTEX_LOCKED(mtx);
 			return 1;
@@ -903,14 +881,14 @@ mutex_spin_retry(kmutex_t *mtx)
 	do {
 		if (panicstr != NULL)
 			break;
-		while (MUTEX_SPINBIT_LOCKED_P(mtx)) {
-			SPINLOCK_BACKOFF(count);
+		while (__SIMPLELOCK_LOCKED_P(&mtx->mtx_lock)) {
+			SPINLOCK_BACKOFF(count); 
 #ifdef LOCKDEBUG
 			if (SPINLOCK_SPINOUT(spins))
 				MUTEX_ABORT(mtx, "spinout");
 #endif	/* LOCKDEBUG */
 		}
-	} while (!MUTEX_SPINBIT_LOCK_TRY(mtx));
+	} while (!__cpu_simple_lock_try(&mtx->mtx_lock));
 
 	LOCKSTAT_STOP_TIMER(lsflag, spintime);
 	LOCKSTAT_EVENT(lsflag, mtx, LB_SPIN_MUTEX | LB_SPIN, 1, spintime);

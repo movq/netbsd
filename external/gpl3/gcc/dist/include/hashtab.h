@@ -39,6 +39,10 @@ extern "C" {
 
 #include "ansidecl.h"
 
+#ifndef GTY
+#define GTY(X)
+#endif
+
 /* The type for a hash code.  */
 typedef unsigned int hashval_t;
 
@@ -93,7 +97,7 @@ typedef void (*htab_free_with_arg) (void *, void *);
    functions mentioned below.  The size of this structure is subject to
    change.  */
 
-struct htab {
+struct GTY(()) htab {
   /* Pointer to hash function.  */
   htab_hash hash_f;
 
@@ -104,7 +108,7 @@ struct htab {
   htab_del del_f;
 
   /* Table itself.  */
-  void **entries;
+  void ** GTY ((use_param, length ("%h.size"))) entries;
 
   /* Current size (in entries) of the hash table.  */
   size_t size;
@@ -128,7 +132,7 @@ struct htab {
   htab_free free_f;
 
   /* Alternate allocate/free functions, which take an extra argument.  */
-  void *alloc_arg;
+  void * GTY((skip)) alloc_arg;
   htab_alloc_with_arg alloc_with_arg_f;
   htab_free_with_arg free_with_arg_f;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: e500_timer.c,v 1.6 2015/01/21 06:11:39 nonaka Exp $	*/
+/*	$NetBSD: e500_timer.c,v 1.5.2.1 2015/01/26 16:18:42 martin Exp $	*/
 /*-
  * Copyright (c) 2010, 2011 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: e500_timer.c,v 1.6 2015/01/21 06:11:39 nonaka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: e500_timer.c,v 1.5.2.1 2015/01/26 16:18:42 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>

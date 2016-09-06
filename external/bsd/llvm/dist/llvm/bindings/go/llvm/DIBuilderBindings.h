@@ -14,8 +14,8 @@
 #ifndef LLVM_BINDINGS_GO_LLVM_DIBUILDERBINDINGS_H
 #define LLVM_BINDINGS_GO_LLVM_DIBUILDERBINDINGS_H
 
-#include "IRBindings.h"
 #include "llvm-c/Core.h"
+#include "IRBindings.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -55,18 +55,12 @@ LLVMMetadataRef LLVMDIBuilderCreateFunction(
     LLVMDIBuilderRef D, LLVMMetadataRef Scope, const char *Name,
     const char *LinkageName, LLVMMetadataRef File, unsigned Line,
     LLVMMetadataRef CompositeType, int IsLocalToUnit, int IsDefinition,
-    unsigned ScopeLine, unsigned Flags, int IsOptimized);
+    unsigned ScopeLine, unsigned Flags, int IsOptimized, LLVMValueRef Function);
 
-LLVMMetadataRef
-LLVMDIBuilderCreateAutoVariable(LLVMDIBuilderRef D, LLVMMetadataRef Scope,
-                                const char *Name, LLVMMetadataRef File,
-                                unsigned Line, LLVMMetadataRef Ty,
-                                int AlwaysPreserve, unsigned Flags);
-
-LLVMMetadataRef LLVMDIBuilderCreateParameterVariable(
-    LLVMDIBuilderRef D, LLVMMetadataRef Scope, const char *Name, unsigned ArgNo,
+LLVMMetadataRef LLVMDIBuilderCreateLocalVariable(
+    LLVMDIBuilderRef D, unsigned Tag, LLVMMetadataRef Scope, const char *Name,
     LLVMMetadataRef File, unsigned Line, LLVMMetadataRef Ty, int AlwaysPreserve,
-    unsigned Flags);
+    unsigned Flags, unsigned ArgNo);
 
 LLVMMetadataRef LLVMDIBuilderCreateBasicType(LLVMDIBuilderRef D,
                                              const char *Name,
@@ -89,11 +83,6 @@ LLVMMetadataRef LLVMDIBuilderCreateStructType(
     LLVMMetadataRef File, unsigned Line, uint64_t SizeInBits,
     uint64_t AlignInBits, unsigned Flags, LLVMMetadataRef DerivedFrom,
     LLVMMetadataRef ElementTypes);
-
-LLVMMetadataRef LLVMDIBuilderCreateReplaceableCompositeType(
-    LLVMDIBuilderRef D, unsigned Tag, const char *Name, LLVMMetadataRef Scope,
-    LLVMMetadataRef File, unsigned Line, unsigned RuntimeLang,
-    uint64_t SizeInBits, uint64_t AlignInBits, unsigned Flags);
 
 LLVMMetadataRef
 LLVMDIBuilderCreateMemberType(LLVMDIBuilderRef D, LLVMMetadataRef Scope,

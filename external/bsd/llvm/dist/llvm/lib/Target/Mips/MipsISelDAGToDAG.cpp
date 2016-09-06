@@ -47,7 +47,7 @@ using namespace llvm;
 //===----------------------------------------------------------------------===//
 
 bool MipsDAGToDAGISel::runOnMachineFunction(MachineFunction &MF) {
-  Subtarget = &static_cast<const MipsSubtarget &>(MF.getSubtarget());
+  Subtarget = &TM.getSubtarget<MipsSubtarget>();
   bool Ret = SelectionDAGISel::runOnMachineFunction(MF);
 
   processFunctionAfterISel(MF);
@@ -59,9 +59,8 @@ bool MipsDAGToDAGISel::runOnMachineFunction(MachineFunction &MF) {
 /// GOT address into a register.
 SDNode *MipsDAGToDAGISel::getGlobalBaseReg() {
   unsigned GlobalBaseReg = MF->getInfo<MipsFunctionInfo>()->getGlobalBaseReg();
-  return CurDAG->getRegister(GlobalBaseReg, getTargetLowering()->getPointerTy(
-                                                CurDAG->getDataLayout()))
-      .getNode();
+  return CurDAG->getRegister(GlobalBaseReg,
+                             getTargetLowering()->getPointerTy()).getNode();
 }
 
 /// ComplexPattern used on MipsInstrInfo
@@ -96,12 +95,6 @@ bool MipsDAGToDAGISel::selectIntAddrMM(SDValue Addr, SDValue &Base,
   return false;
 }
 
-bool MipsDAGToDAGISel::selectIntAddrLSL2MM(SDValue Addr, SDValue &Base,
-                                           SDValue &Offset) const {
-  llvm_unreachable("Unimplemented function.");
-  return false;
-}
-
 bool MipsDAGToDAGISel::selectIntAddrMSA(SDValue Addr, SDValue &Base,
                                         SDValue &Offset) const {
   llvm_unreachable("Unimplemented function.");
@@ -114,8 +107,7 @@ bool MipsDAGToDAGISel::selectAddr16(SDNode *Parent, SDValue N, SDValue &Base,
   return false;
 }
 
-bool MipsDAGToDAGISel::selectVSplat(SDNode *N, APInt &Imm,
-                                    unsigned MinSizeInBits) const {
+bool MipsDAGToDAGISel::selectVSplat(SDNode *N, APInt &Imm) const {
   llvm_unreachable("Unimplemented function.");
   return false;
 }
@@ -232,18 +224,18 @@ SDNode* MipsDAGToDAGISel::Select(SDNode *Node) {
 }
 
 bool MipsDAGToDAGISel::
-SelectInlineAsmMemoryOperand(const SDValue &Op, unsigned ConstraintID,
+SelectInlineAsmMemoryOperand(const SDValue &Op, char ConstraintCode,
                              std::vector<SDValue> &OutOps) {
-  // All memory constraints can at least accept raw pointers.
-  switch(ConstraintID) {
-  default:
-    llvm_unreachable("Unexpected asm memory constraint");
-  case InlineAsm::Constraint_i:
-  case InlineAsm::Constraint_m:
-  case InlineAsm::Constraint_R:
-  case InlineAsm::Constraint_ZC:
-    OutOps.push_back(Op);
-    return false;
-  }
-  return true;
+  assert(ConstraintCode == 'm' && "unexpected asm memory constraint");
+  OutOps.push_back(Op);
+  return false;
+}
+
+/// createMipsISelDag - This pass converts a legalized DAG into a
+/// MIPS-specific DAG, ready for instruction scheduling.
+FunctionPass *llvm::createMipsISelDag(MipsTargetMachine &TM) {
+  if (TM.getSubtargetImpl()->inMips16Mode())
+    return llvm::createMips16ISelDag(TM);
+
+  return llvm::createMipsSEISelDag(TM);
 }

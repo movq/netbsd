@@ -1,4 +1,4 @@
-/*	$NetBSD: freebsd_sysctl.c,v 1.19 2015/02/14 07:37:19 dholland Exp $	*/
+/*	$NetBSD: freebsd_sysctl.c,v 1.16.4.1 2014/10/18 14:04:58 martin Exp $	*/
 
 /*-
  * Copyright (c) 2005 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: freebsd_sysctl.c,v 1.19 2015/02/14 07:37:19 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: freebsd_sysctl.c,v 1.16.4.1 2014/10/18 14:04:58 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -109,9 +109,9 @@ freebsd_sys_sysctl(struct lwp *l, const struct freebsd_sys_sysctl_args *uap, reg
 	ktrmib(name, namelen);
 
 	/*
-	 * FreeBSD sysctl uses an undocumented set of special OIDs in its
+	 * FreeBSD sysctl uses an undocumented set of special OIDs in it's
 	 * sysctl MIB whose tree is rooted at oid 0.  These OIDs are
-	 * interpreted by their sysctl to implement functions that NetBSD
+	 * interpretted by their sysctl to implement functions that NetBSD
 	 * performs in libc, such as sysctlgetmibinfo.
 	 *
 	 * From the FreeBSD kern_sysctl.c, these OIDs are:

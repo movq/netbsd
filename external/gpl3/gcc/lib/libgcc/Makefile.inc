@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.33 2016/03/22 08:18:27 mrg Exp $
+#	$NetBSD: Makefile.inc,v 1.28.2.1 2015/01/25 00:19:35 martin Exp $
 
 LIBGCC_MACHINE_ARCH?=${MACHINE_ARCH:S/earmv5/earm/}
 
@@ -22,7 +22,6 @@ CPPFLAGS+=	-I${GCCARCH} ${GCPPFLAGS:M-D*} ${GCPPFLAGS:M-I*:N-I.*}
 CPPFLAGS+=	${GCPPFLAGS:M-m*} ${GCPPFLAGS:M-f*}
 CPPFLAGS+=	${G_EXTRA_HEADERS:M/*:H:u:S/^/-I/g}
 CPPFLAGS+=	-I${DIST}/libgcc -I${DIST}/libgcc/config
-CPPFLAGS+=	-I${DIST}/libgcc/config/${MACHINE_CPU}
 CPPFLAGS+=	-I${DIST}/gcc -I${DIST}/include -I.
 
 .if ${LIBGCC_MACHINE_ARCH} == "powerpc" || \
@@ -62,9 +61,7 @@ LIB2FUNCS_ALL+= \
 
 .endif
 
-.if ${LIBGCC_MACHINE_ARCH} != "coldfire" && \
-    empty(LIBGCC_MACHINE_ARCH:Mearm*) && \
-    empty(LIBGCC_MACHINE_ARCH:Mmips64*)
+.if ${LIBGCC_MACHINE_ARCH} != "coldfire" && empty(LIBGCC_MACHINE_ARCH:Mearm*)
 
 # non swfloat versions 
 .for _p in _fix _fixuns
@@ -107,7 +104,7 @@ LIB2_EHASM=	${G_LIB2ADDEH:M*.S:T}
 # from the list of files we create.
 .if !empty(G_LIB1ASMFUNCS)
 . for f in ${G_LIB1ASMFUNCS:=.S}
-.  if !exists(${DIST}/libgcc/config/${MACHINE_CPU}/${f})
+.  if !exists(${DIST}/libgcc/config/${MACHINE_GNU_ARCH}/${f})
 LIB1ASMFUNCS+=	${f}
 .  endif
 . endfor
@@ -180,7 +177,6 @@ dp-bit.c: ${.CURDIR}/Makefile
 #
 
 .PATH: ${DIST}/gcc ${DIST}/gcc/cp ${DIST}/gcc/cp/inc ${DIST}/gcc/config \
-	${DIST}/libgcc/config ${DIST}/libgcc/config/${MACHINE_CPU} \
 	${G_LIB2ADD:H:O:u} ${G_LIB2ADDEH:H:O:u} ${GCCARCHLIBGCC}
 
 .include "../Makefile.tconfigh"
@@ -198,6 +194,7 @@ DPSRCS+=	${_dst}
 EXTRA_FAKEHEADERS=	options.h libgcc_tm.h
 .include "../../Makefile.hacks"
 
-# XXX insn-modes.h
-BINBACKENDOBJ!=	cd ${.CURDIR}/../../../usr.bin/backend && ${PRINTOBJDIR}
-CPPFLAGS+=	-I${BINBACKENDOBJ}
+# XXX
+.if defined(HAVE_GCC) && ${HAVE_GCC} == 45 && ${LIBGCC_MACHINE_ARCH} == "m68k"
+COPTS._fixunsxfdi.c+=	-O0
+.endif

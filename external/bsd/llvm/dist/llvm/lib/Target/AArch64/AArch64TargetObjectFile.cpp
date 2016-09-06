@@ -13,7 +13,6 @@
 #include "llvm/MC/MCContext.h"
 #include "llvm/MC/MCExpr.h"
 #include "llvm/MC/MCStreamer.h"
-#include "llvm/MC/MCValue.h"
 #include "llvm/Support/Dwarf.h"
 using namespace llvm;
 using namespace dwarf;
@@ -22,11 +21,6 @@ void AArch64_ELFTargetObjectFile::Initialize(MCContext &Ctx,
                                              const TargetMachine &TM) {
   TargetLoweringObjectFileELF::Initialize(Ctx, TM);
   InitializeELF(TM.Options.UseInitArray);
-}
-
-AArch64_MachoTargetObjectFile::AArch64_MachoTargetObjectFile()
-  : TargetLoweringObjectFileMachO() {
-  SupportGOTPCRelWithOffset = false;
 }
 
 const MCExpr *AArch64_MachoTargetObjectFile::getTTypeGlobalReference(
@@ -40,11 +34,11 @@ const MCExpr *AArch64_MachoTargetObjectFile::getTTypeGlobalReference(
   if (Encoding & (DW_EH_PE_indirect | DW_EH_PE_pcrel)) {
     const MCSymbol *Sym = TM.getSymbol(GV, Mang);
     const MCExpr *Res =
-        MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_GOT, getContext());
-    MCSymbol *PCSym = getContext().createTempSymbol();
+        MCSymbolRefExpr::Create(Sym, MCSymbolRefExpr::VK_GOT, getContext());
+    MCSymbol *PCSym = getContext().CreateTempSymbol();
     Streamer.EmitLabel(PCSym);
-    const MCExpr *PC = MCSymbolRefExpr::create(PCSym, getContext());
-    return MCBinaryExpr::createSub(Res, PC, getContext());
+    const MCExpr *PC = MCSymbolRefExpr::Create(PCSym, getContext());
+    return MCBinaryExpr::CreateSub(Res, PC, getContext());
   }
 
   return TargetLoweringObjectFileMachO::getTTypeGlobalReference(
@@ -55,19 +49,4 @@ MCSymbol *AArch64_MachoTargetObjectFile::getCFIPersonalitySymbol(
     const GlobalValue *GV, Mangler &Mang, const TargetMachine &TM,
     MachineModuleInfo *MMI) const {
   return TM.getSymbol(GV, Mang);
-}
-
-const MCExpr *AArch64_MachoTargetObjectFile::getIndirectSymViaGOTPCRel(
-    const MCSymbol *Sym, const MCValue &MV, int64_t Offset,
-    MachineModuleInfo *MMI, MCStreamer &Streamer) const {
-  assert((Offset+MV.getConstant() == 0) &&
-         "Arch64 does not support GOT PC rel with extra offset");
-  // On ARM64 Darwin, we can reference symbols with foo@GOT-., which
-  // is an indirect pc-relative reference.
-  const MCExpr *Res =
-      MCSymbolRefExpr::create(Sym, MCSymbolRefExpr::VK_GOT, getContext());
-  MCSymbol *PCSym = getContext().createTempSymbol();
-  Streamer.EmitLabel(PCSym);
-  const MCExpr *PC = MCSymbolRefExpr::create(PCSym, getContext());
-  return MCBinaryExpr::createSub(Res, PC, getContext());
 }

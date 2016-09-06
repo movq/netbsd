@@ -1,4 +1,4 @@
-# $NetBSD: INSTALL,v 1.28 2016/08/12 09:26:35 nonaka Exp $
+# $NetBSD: INSTALL,v 1.22 2014/08/04 20:59:19 martin Exp $
 #
 # INSTALL config file (GENERIC with memory disk root)
 #
@@ -28,14 +28,12 @@ no options 		INSECURE
 
 no file-system		KERNFS
 no file-system		NULLFS
-no file-system		PUFFS
 no file-system		PROCFS
 no file-system		PTYFS
 no file-system		TMPFS
 
 no options 		WAPBL
 
-no options		COMPAT_NETBSD32
 no options		COMPAT_13
 no options		COMPAT_14
 no options		COMPAT_15
@@ -45,7 +43,6 @@ no options		COMPAT_30
 no options		COMPAT_40
 no options		COMPAT_50
 no options		COMPAT_60
-no options		COMPAT_70
 no options		COMPAT_43
 
 no options 		COMPAT_OSSAUDIO
@@ -67,7 +64,7 @@ options 		RASOPS_SMALL
 no options 		DIAGNOSTIC
 no options 		DDB
 no options 		DDB_HISTORY_SIZE
-no makeoptions	COPY_SYMTAB
+no options 		SYMTAB_SPACE
 
 no zrc0 at pxaip?
 
@@ -83,16 +80,6 @@ no ugen*
 
 no uk* at scsibus?
 
-no acphy*
-no amhphy*
-no bmtphy*
-no glxtphy*
-no gphyter*
-no makphy*
-no tlphy*
-no tqphy*
-no urlphy*
-
 no pseudo-device	vnd
 no options 		VND_COMPRESSION
 no pseudo-device	accf_data
@@ -100,6 +87,3 @@ no pseudo-device	accf_http
 no pseudo-device	ksyms
 no pseudo-device	wsfont
 options 	NO_DEV_PTM
-no pseudo-device	clockctl
-no pseudo-device	drvctl
-no pseudo-device	putter

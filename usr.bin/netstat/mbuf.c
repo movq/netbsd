@@ -1,4 +1,4 @@
-/*	$NetBSD: mbuf.c,v 1.33 2015/07/28 19:46:42 christos Exp $	*/
+/*	$NetBSD: mbuf.c,v 1.31 2012/03/20 20:34:58 matt Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "from: @(#)mbuf.c	8.1 (Berkeley) 6/6/93";
 #else
-__RCSID("$NetBSD: mbuf.c,v 1.33 2015/07/28 19:46:42 christos Exp $");
+__RCSID("$NetBSD: mbuf.c,v 1.31 2012/03/20 20:34:58 matt Exp $");
 #endif
 #endif /* not lint */
 
@@ -53,6 +53,7 @@ __RCSID("$NetBSD: mbuf.c,v 1.33 2015/07/28 19:46:42 christos Exp $");
 #include <limits.h>
 #include <errno.h>
 #include <err.h>
+#include <stdbool.h>
 #include "netstat.h"
 #include "prog_ops.h"
 

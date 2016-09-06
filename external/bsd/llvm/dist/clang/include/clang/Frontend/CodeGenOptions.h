@@ -16,7 +16,6 @@
 
 #include "clang/Basic/Sanitizers.h"
 #include "llvm/Support/Regex.h"
-#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -47,11 +46,6 @@ public:
     OnlyAlwaysInlining  // Only run the always inlining pass.
   };
 
-  enum VectorLibrary {
-    NoLibrary, // Don't use any vector library.
-    Accelerate // Use the Accelerate framework.
-  };
-
   enum ObjCDispatchMethodKind {
     Legacy = 0,
     NonLegacy = 1,
@@ -80,13 +74,6 @@ public:
                           /// contains the classe's vtable.
 
     FullDebugInfo         /// Generate complete debug info.
-  };
-
-  enum DebuggerKind {
-    DebuggerKindDefault,
-    DebuggerKindGDB,
-    DebuggerKindLLDB,
-    DebuggerKindSCE
   };
 
   enum TLSModel {
@@ -128,8 +115,6 @@ public:
   /// non-empty.
   std::string DwarfDebugFlags;
 
-  std::map<std::string, std::string> DebugPrefixMap;
-
   /// The ABI to use for passing floating point arguments.
   std::string FloatABI;
 
@@ -137,7 +122,7 @@ public:
   std::string LimitFloatPrecision;
 
   /// The name of the bitcode file to link before optzns.
-  std::vector<std::pair<unsigned, std::string>> LinkBitcodeFiles;
+  std::string LinkBitcodeFile;
 
   /// The user provided name for the "main file", if non-empty. This is useful
   /// in situations where the input file name does not match the original input
@@ -164,27 +149,11 @@ public:
   /// A list of dependent libraries.
   std::vector<std::string> DependentLibraries;
 
-  /// Name of the profile file to use as output for -fprofile-instr-generate
-  /// and -fprofile-generate.
-  std::string InstrProfileOutput;
-
   /// Name of the profile file to use with -fprofile-sample-use.
   std::string SampleProfileFile;
 
   /// Name of the profile file to use as input for -fprofile-instr-use
   std::string InstrProfileInput;
-
-  /// Name of the function summary index file to use for ThinLTO function
-  /// importing.
-  std::string ThinLTOIndexFile;
-
-  /// The EABI version to use
-  std::string EABIVersion;
-
-  /// A list of file names passed with -fcuda-include-gpubinary options to
-  /// forward to CUDA runtime back-end for incorporating them into host-side
-  /// object file.
-  std::vector<std::string> CudaGpuBinaryFileNames;
 
   /// Regular expression to select optimizations for which we should enable
   /// optimization remarks. Transformation passes whose name matches this
@@ -215,12 +184,6 @@ public:
   /// continued when possible).
   SanitizerSet SanitizeRecover;
 
-  /// Set of sanitizer checks that trap rather than diagnose.
-  SanitizerSet SanitizeTrap;
-
-  /// \brief A list of all -fno-builtin-* function names (e.g., memset).
-  std::vector<std::string> NoBuiltinFuncs;
-
 public:
   // Define accessors/mutators for code generation options of enumeration type.
 #define CODEGENOPT(Name, Bits, Default)
@@ -230,14 +193,6 @@ public:
 #include "clang/Frontend/CodeGenOptions.def"
 
   CodeGenOptions();
-
-  /// \brief Is this a libc/libm function that is no longer recognized as a
-  /// builtin because a -fno-builtin-* option has been specified?
-  bool isNoBuiltinFunc(const char *Name) const;
-
-  const std::vector<std::string> &getNoBuiltinFuncs() const {
-    return NoBuiltinFuncs;
-  }
 };
 
 }  // end namespace clang

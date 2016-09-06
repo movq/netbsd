@@ -10,11 +10,9 @@
 #ifndef LLVM_CLANG_EDIT_EDITEDSOURCE_H
 #define LLVM_CLANG_EDIT_EDITEDSOURCE_H
 
-#include "clang/Basic/IdentifierTable.h"
 #include "clang/Edit/FileOffset.h"
 #include "llvm/ADT/DenseMap.h"
 #include "llvm/ADT/StringRef.h"
-#include "llvm/ADT/TinyPtrVector.h"
 #include "llvm/Support/Allocator.h"
 #include <map>
 
@@ -41,18 +39,14 @@ class EditedSource {
   typedef std::map<FileOffset, FileEdit> FileEditsTy;
   FileEditsTy FileEdits;
 
-  llvm::DenseMap<unsigned, llvm::TinyPtrVector<IdentifierInfo*>>
-    ExpansionToArgMap;
-  SmallVector<std::pair<SourceLocation, IdentifierInfo*>, 2>
-    CurrCommitMacroArgExps;
+  llvm::DenseMap<unsigned, SourceLocation> ExpansionToArgMap;
 
-  IdentifierTable IdentTable;
   llvm::BumpPtrAllocator StrAlloc;
 
 public:
   EditedSource(const SourceManager &SM, const LangOptions &LangOpts,
                const PPConditionalDirectiveRecord *PPRec = nullptr)
-    : SourceMgr(SM), LangOpts(LangOpts), PPRec(PPRec), IdentTable(LangOpts),
+    : SourceMgr(SM), LangOpts(LangOpts), PPRec(PPRec),
       StrAlloc() { }
 
   const SourceManager &getSourceManager() const { return SourceMgr; }
@@ -68,7 +62,11 @@ public:
   void applyRewrites(EditsReceiver &receiver);
   void clearRewrites();
 
-  StringRef copyString(StringRef str) { return str.copy(StrAlloc); }
+  StringRef copyString(StringRef str) {
+    char *buf = StrAlloc.Allocate<char>(str.size());
+    std::memcpy(buf, str.data(), str.size());
+    return StringRef(buf, str.size());
+  }
   StringRef copyString(const Twine &twine);
 
 private:
@@ -82,12 +80,6 @@ private:
   StringRef getSourceText(FileOffset BeginOffs, FileOffset EndOffs,
                           bool &Invalid);
   FileEditsTy::iterator getActionForOffset(FileOffset Offs);
-  void deconstructMacroArgLoc(SourceLocation Loc,
-                              SourceLocation &ExpansionLoc,
-                              IdentifierInfo *&II);
-
-  void startingCommit();
-  void finishedCommit();
 };
 
 }

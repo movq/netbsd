@@ -184,7 +184,6 @@ syn keyword tmuxOptsSet
 	\ escape-time
 	\ exit-unattached
 	\ focus-events
-	\ history-file
 	\ history-limit
 	\ lock-after-time
 	\ lock-command
@@ -192,7 +191,9 @@ syn keyword tmuxOptsSet
 	\ message-command-style
 	\ message-limit
 	\ message-style
-	\ mouse
+	\ mouse-resize-pane
+	\ mouse-select-pane
+	\ mouse-select-window
 	\ mouse-utf8
 	\ pane-active-border-style
 	\ pane-border-style
@@ -221,6 +222,7 @@ syn keyword tmuxOptsSet
 	\ update-environment
 	\ visual-activity
 	\ visual-bell
+	\ visual-content
 	\ visual-silence
 	\ word-separators
 
@@ -229,6 +231,8 @@ syn keyword tmuxOptsSetw
 	\ allow-rename
 	\ alternate-screen
 	\ automatic-rename
+	\ c0-change-interval
+	\ c0-change-trigger
 	\ clock-mode-colour
 	\ clock-mode-style
 	\ force-height
@@ -236,8 +240,10 @@ syn keyword tmuxOptsSetw
 	\ main-pane-height
 	\ main-pane-width
 	\ mode-keys
+	\ mode-mouse
 	\ mode-style
 	\ monitor-activity
+	\ monitor-content
 	\ monitor-silence
 	\ other-pane-height
 	\ other-pane-width
@@ -245,16 +251,15 @@ syn keyword tmuxOptsSetw
 	\ remain-on-exit
 	\ synchronize-panes
 	\ utf8
-	\ window-active-style
 	\ window-status-activity-style
 	\ window-status-bell-style
+	\ window-status-content-style
 	\ window-status-current-format
 	\ window-status-current-style
 	\ window-status-format
 	\ window-status-last-style
 	\ window-status-separator
 	\ window-status-style
-	\ window-style
 	\ wrap-search
 	\ xterm-keys
 
@@ -266,9 +271,7 @@ syn match tmuxOptions		/\s-\a\+/		display
 syn match tmuxVariable		/\w\+=/			display
 syn match tmuxVariableExpansion	/\${\=\w\+}\=/		display
 
-" Comments can span multiple lines, when the newline is escaped
-" (with a single) backslash at the end.
-syn region tmuxComment  start=/#/ skip=/\\\@<!\\$/ end=/$/ contains=tmuxTodo
+syn region tmuxComment	start=/#/ end=/$/ contains=tmuxTodo display oneline
 syn region tmuxString	start=/"/ end=/"/ display oneline
 syn region tmuxString	start=/'/ end=/'/ display oneline
 

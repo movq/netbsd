@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_denode.c,v 1.52 2016/08/20 12:37:07 hannken Exp $	*/
+/*	$NetBSD: msdosfs_denode.c,v 1.50 2014/07/08 09:21:52 hannken Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msdosfs_denode.c,v 1.52 2016/08/20 12:37:07 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msdosfs_denode.c,v 1.50 2014/07/08 09:21:52 hannken Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -411,7 +411,7 @@ detrunc(struct denode *dep, u_long length, int flags, kauth_cred_t cred)
 		if (isadir) {
 			bn = cntobn(pmp, eofentry);
 			error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn),
-			    pmp->pm_bpcluster, B_MODIFY, &bp);
+			    pmp->pm_bpcluster, NOCRED, B_MODIFY, &bp);
 			if (error) {
 #ifdef MSDOSFS_DEBUG
 				printf("detrunc(): bread fails %d\n", error);
@@ -548,6 +548,10 @@ msdosfs_reclaim(void *v)
 
 	if (prtactive && vp->v_usecount > 1)
 		vprint("msdosfs_reclaim(): pushing active", vp);
+	/*
+	 * Remove the denode from the vnode cache.
+	 */
+	vcache_remove(vp->v_mount, &dep->de_key, sizeof(dep->de_key));
 	/*
 	 * Purge old data structures associated with the denode.
 	 */

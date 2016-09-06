@@ -1,4 +1,4 @@
-/*	$NetBSD: mdreloc.c,v 1.41 2014/08/25 20:40:53 joerg Exp $	*/
+/*	$NetBSD: mdreloc.c,v 1.40.22.1 2016/03/06 18:17:56 martin Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -68,7 +68,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mdreloc.c,v 1.41 2014/08/25 20:40:53 joerg Exp $");
+__RCSID("$NetBSD: mdreloc.c,v 1.40.22.1 2016/03/06 18:17:56 martin Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>

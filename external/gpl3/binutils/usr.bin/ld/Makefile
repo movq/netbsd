@@ -1,16 +1,8 @@
-#	$NetBSD: Makefile,v 1.23 2016/01/29 14:42:49 christos Exp $
+#	$NetBSD: Makefile,v 1.21 2013/10/03 23:42:38 mrg Exp $
 
-CPPFLAGS+=	-I${.CURDIR}/arch/${BINUTILS_MACHINE_ARCH} \
-		-I${DIST}/ld \
-		-DDEFAULT_EMULATION=\"${G_EMUL}\" \
-		-DSCRIPTDIR=\"${SCRIPTSDIR}\" \
-		-DTARGET=\"${G_target_alias}\" \
-		-DBINDIR=\"/usr/bin\" \
-		-DTOOLBINDIR=\"/usr/bin\" \
-		-DENABLE_PLUGINS \
-		-DELF_LIST_OPTIONS=TRUE \
-		-DELF_SHLIB_LIST_OPTIONS=TRUE \
-		-DELF_PLT_UNWIND_LIST_OPTIONS=TRUE
+.include <bsd.own.mk>
+
+TOP=		${NETBSDSRCDIR}/external/gpl3/binutils
 
 .include "${.CURDIR}/../common/Makefile.inc"
 .include "${.CURDIR}/arch/${BINUTILS_MACHINE_ARCH}/defs.mk"
@@ -19,6 +11,14 @@ SCRIPTSDIR=	/usr/libdata
 
 PROG=		ld
 SRCS=		${G_OFILES:.o=.c}
+CPPFLAGS+=	-I${.CURDIR}/arch/${BINUTILS_MACHINE_ARCH} \
+		-I${DIST}/ld \
+		-DDEFAULT_EMULATION=\"${G_EMUL}\" \
+		-DSCRIPTDIR=\"${SCRIPTSDIR}\" \
+		-DTARGET=\"${G_target_alias}\" \
+		-DBINDIR=\"/usr/bin\" \
+		-DTOOLBINDIR=\"/usr/bin\" \
+		-DENABLE_PLUGINS
 
 COPTS.ldgram.c = -Wno-stack-protector
 

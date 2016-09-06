@@ -1,5 +1,6 @@
 /* output-file.c -  Deal with the output file
-   Copyright (C) 1987-2015 Free Software Foundation, Inc.
+   Copyright 1987, 1990, 1991, 1992, 1993, 1994, 1996, 1998, 1999, 2001,
+   2003, 2004, 2005, 2006, 2007 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -56,7 +57,7 @@ output_file_close (char *filename)
 
   if (stdoutput == NULL)
     return;
-
+    
   /* Close the bfd.  */
   if (had_errors ())
     res = bfd_cache_close_all ();

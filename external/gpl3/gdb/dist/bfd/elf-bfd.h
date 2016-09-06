@@ -1,5 +1,5 @@
 /* BFD back-end data structures for ELF files.
-   Copyright (C) 1992-2015 Free Software Foundation, Inc.
+   Copyright 1992-2013 Free Software Foundation, Inc.
    Written by Cygnus Support.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -26,10 +26,6 @@
 #include "elf/external.h"
 #include "elf/internal.h"
 #include "bfdlink.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 /* The number of entries in a section is its size divided by the size
    of a single entry.  This is normally only applicable to reloc and
@@ -200,9 +196,6 @@ struct elf_link_hash_entry
   unsigned int pointer_equality_needed : 1;
   /* Symbol is a unique global symbol.  */
   unsigned int unique_global : 1;
-  /* Symbol is defined by a shared library with non-default visibility
-     in a read/write section.  */
-  unsigned int protected_def : 1;
 
   /* String table index in .dynstr if this is a dynamic symbol.  */
   unsigned long dynstr_index;
@@ -246,8 +239,7 @@ struct elf_link_hash_entry
   _bfd_elf_symbol_refs_local_p (H, INFO, 1)
 
 /* Common symbols that are turned into definitions don't have the
-   DEF_REGULAR flag set, so they might appear to be undefined.
-   Symbols defined in linker scripts also don't have DEF_REGULAR set.  */
+   DEF_REGULAR flag set, so they might appear to be undefined.  */
 #define ELF_COMMON_DEF_P(H) \
   (!(H)->def_regular							\
    && !(H)->def_dynamic							\
@@ -288,9 +280,7 @@ struct eh_cie_fde
 
 	 If REMOVED == 0, this is the CIE that we have chosen to use for
 	 the output FDE.  The CIE's REMOVED field is also 0, but the CIE
-	 might belong to a different .eh_frame input section from the FDE.
-
-	 May be NULL to signify that the FDE should be discarded.  */
+	 might belong to a different .eh_frame input section from the FDE.  */
       struct eh_cie_fde *cie_inf;
       struct eh_cie_fde *next_for_section;
     } fde;
@@ -382,47 +372,25 @@ struct eh_frame_sec_info
 struct eh_frame_array_ent
 {
   bfd_vma initial_loc;
-  bfd_size_type range;
   bfd_vma fde;
 };
 
 struct htab;
 
-#define DWARF2_EH_HDR 1
-#define COMPACT_EH_HDR 2
-
-/* Endian-neutral code indicating that a function cannot be unwound.  */
-#define COMPACT_EH_CANT_UNWIND_OPCODE 0x015d5d01
-
-struct dwarf_eh_frame_hdr_info
+struct eh_frame_hdr_info
 {
   struct htab *cies;
-  unsigned int fde_count;
+  asection *hdr_sec;
+  unsigned int fde_count, array_count;
+  struct eh_frame_array_ent *array;
+  /* TRUE if we should try to merge CIEs between input sections.  */
+  bfd_boolean merge_cies;
+  /* TRUE if all .eh_frames have been parsd.  */
+  bfd_boolean parsed_eh_frames;
   /* TRUE if .eh_frame_hdr should contain the sorted search table.
      We build it if we successfully read all .eh_frame input sections
      and recognize them.  */
   bfd_boolean table;
-  struct eh_frame_array_ent *array;
-};
-
-struct compact_eh_frame_hdr_info
-{
-  unsigned int allocated_entries;
-  /* eh_frame_entry fragments.  */
-  asection **entries;
-};
-
-struct eh_frame_hdr_info
-{
-  asection *hdr_sec;
-  unsigned int array_count;
-  bfd_boolean frame_hdr_is_compact;
-  union
-    {
-      struct dwarf_eh_frame_hdr_info dwarf;
-      struct compact_eh_frame_hdr_info compact;
-    }
-  u;
 };
 
 /* Enum used to identify target specific extensions to the elf_obj_tdata
@@ -453,7 +421,6 @@ enum elf_target_id
   MN10300_ELF_DATA,
   NDS32_ELF_DATA,
   NIOS2_ELF_DATA,
-  OR1K_ELF_DATA,
   PPC32_ELF_DATA,
   PPC64_ELF_DATA,
   S390_ELF_DATA,
@@ -467,13 +434,6 @@ enum elf_target_id
   TILEGX_ELF_DATA,
   TILEPRO_ELF_DATA,
   GENERIC_ELF_DATA
-};
-
-struct elf_sym_strtab
-{
-  Elf_Internal_Sym sym;
-  unsigned long dest_index;
-  unsigned long destshndx_index;
 };
 
 /* ELF linker hash table.  */
@@ -518,17 +478,6 @@ struct elf_link_hash_table
   /* The string table of dynamic symbols, which becomes the .dynstr
      section.  */
   struct elf_strtab_hash *dynstr;
-
-  /* The number of symbol strings found in the link which must be put
-     into the .strtab section.  */
-  bfd_size_type strtabcount;
-
-  /* The array size of the symbol string table, which becomes the
-     .strtab section.  */
-  bfd_size_type strtabsize;
-
-  /* The array of strings, which becomes the .strtab section.  */
-  struct elf_sym_strtab *strtab;
 
   /* The number of buckets in the hash table in the .hash section.
      This is based on the number of dynamic symbols.  */
@@ -1160,11 +1109,6 @@ struct elf_backend_data
   unsigned int (*elf_backend_count_relocs)
     (struct bfd_link_info *, asection *);
 
-  /* Say whether to sort relocs output by ld -r and ld --emit-relocs,
-     by r_offset.  If NULL, default to true.  */
-  bfd_boolean (*sort_relocs_p)
-    (asection *);
-
   /* This function, if defined, is called when an NT_PRSTATUS note is found
      in a core file.  */
   bfd_boolean (*elf_backend_grok_prstatus)
@@ -1247,9 +1191,9 @@ struct elf_backend_data
   /* This function implements `bfd_elf_bfd_from_remote_memory';
      see elf.c, elfcode.h.  */
   bfd *(*elf_backend_bfd_from_remote_memory)
-    (bfd *templ, bfd_vma ehdr_vma, bfd_size_type size, bfd_vma *loadbasep,
-     int (*target_read_memory) (bfd_vma vma, bfd_byte *myaddr,
-				bfd_size_type len));
+     (bfd *templ, bfd_vma ehdr_vma, bfd_vma *loadbasep,
+      int (*target_read_memory) (bfd_vma vma, bfd_byte *myaddr,
+				 bfd_size_type len));
 
   /* This function is used by `_bfd_elf_get_synthetic_symtab';
      see elf.c.  */
@@ -1281,9 +1225,6 @@ struct elf_backend_data
      otherwise return zero.  */
   bfd_size_type (*maybe_function_sym) (const asymbol *sym, asection *sec,
 				       bfd_vma *code_off);
-
-  /* Return the section which RELOC_SEC applies to.  */
-  asection *(*get_reloc_section) (asection *reloc_sec);
 
   /* Used to handle bad SHF_LINK_ORDER input.  */
   bfd_error_handler_type link_order_error_handler;
@@ -1333,12 +1274,6 @@ struct elf_backend_data
   /* Handle merging unknown attributes; either warn and return TRUE,
      or give an error and return FALSE.  */
   bfd_boolean (*obj_attrs_handle_unknown) (bfd *, int);
-
-  /* Encoding used for compact EH tables.  */
-  int (*compact_eh_encoding) (struct bfd_link_info *);
-
-  /* Opcode representing no unwind.  */
-  int (*cant_unwind_opcode) (struct bfd_link_info *);
 
   /* This is non-zero if static TLS segments require a special alignment.  */
   unsigned static_tls_alignment;
@@ -1407,15 +1342,6 @@ struct elf_backend_data
      other file in the link needs to have a .note.GNU-stack section
      for a PT_GNU_STACK segment to be created.  */
   unsigned default_execstack : 1;
-
-  /* True if elf_section_data(sec)->this_hdr.contents is sec->rawsize
-     in length rather than sec->size in length, if sec->rawsize is
-     non-zero and smaller than sec->size.  */
-  unsigned caches_rawsize : 1;
-
-  /* Address of protected data defined in the shared library may be
-     external, i.e., due to copy relocation.   */
-  unsigned extern_protected_data : 1;
 };
 
 /* Information about reloc sections associated with a bfd_elf_section_data
@@ -1494,9 +1420,6 @@ struct bfd_elf_section_data
      field acts as a chain pointer.  */
   struct eh_cie_fde *fde_list;
 
-  /* Link from a text section to its .eh_frame_entry section.  */
-  asection *eh_frame_entry;
-
   /* A pointer used for various section optimizations.  */
   void *sec_info;
 };
@@ -1510,7 +1433,6 @@ struct bfd_elf_section_data
 #define elf_next_in_group(sec)	(elf_section_data(sec)->next_in_group)
 #define elf_fde_list(sec)	(elf_section_data(sec)->fde_list)
 #define elf_sec_group(sec)	(elf_section_data(sec)->sec_group)
-#define elf_section_eh_frame_entry(sec)	(elf_section_data(sec)->eh_frame_entry)
 
 #define xvec_get_elf_backend_data(xvec) \
   ((const struct elf_backend_data *) (xvec)->backend_data)
@@ -1549,7 +1471,7 @@ typedef struct obj_attribute
 typedef struct obj_attribute_list
 {
   struct obj_attribute_list *next;
-  unsigned int tag;
+  int tag;
   obj_attribute attr;
 } obj_attribute_list;
 
@@ -1578,6 +1500,13 @@ struct sdt_note
 {
   struct sdt_note *next;
   bfd_size_type size;
+  bfd_byte data[1];
+};
+
+/* NT_GNU_BUILD_ID note type info for input BFDs.  */
+struct elf_build_id
+{
+  size_t size;
   bfd_byte data[1];
 };
 
@@ -1715,6 +1644,9 @@ struct elf_obj_tdata
   obj_attribute known_obj_attributes[2][NUM_KNOWN_OBJ_ATTRIBUTES];
   obj_attribute_list *other_obj_attributes[2];
 
+  /* NT_GNU_BUILD_ID note type.  */
+  struct elf_build_id *build_id;
+
   /* Linked-list containing information about every Systemtap section
      found in the object file.  Each section corresponds to one entry
      in the list.  */
@@ -1835,8 +1767,6 @@ extern bfd_boolean _bfd_elf_copy_private_bfd_data
   (bfd *, bfd *);
 extern bfd_boolean _bfd_elf_print_private_bfd_data
   (bfd *, void *);
-const char * _bfd_elf_get_symbol_version_string
-  (bfd *, asymbol *, bfd_boolean *);
 extern void bfd_elf_print_symbol
   (bfd *, void *, asymbol *, bfd_print_symbol_type);
 
@@ -1880,7 +1810,7 @@ extern struct bfd_hash_entry *_bfd_elf_link_hash_newfunc
 extern struct bfd_link_hash_table *_bfd_elf_link_hash_table_create
   (bfd *);
 extern void _bfd_elf_link_hash_table_free
-  (bfd *);
+  (struct bfd_link_hash_table *);
 extern void _bfd_elf_link_hash_copy_indirect
   (struct bfd_link_info *, struct elf_link_hash_entry *,
    struct elf_link_hash_entry *);
@@ -1963,14 +1893,20 @@ extern alent *_bfd_elf_get_lineno
 extern bfd_boolean _bfd_elf_set_arch_mach
   (bfd *, enum bfd_architecture, unsigned long);
 extern bfd_boolean _bfd_elf_find_nearest_line
-  (bfd *, asymbol **, asection *, bfd_vma,
-   const char **, const char **, unsigned int *, unsigned int *);
+  (bfd *, asection *, asymbol **, bfd_vma, const char **, const char **,
+   unsigned int *);
+extern bfd_boolean _bfd_elf_find_nearest_line_discriminator
+  (bfd *, asection *, asymbol **, bfd_vma, const char **, const char **,
+   unsigned int *, unsigned int *);
 extern bfd_boolean _bfd_elf_find_line
   (bfd *, asymbol **, asymbol *, const char **, unsigned int *);
+extern bfd_boolean _bfd_elf_find_line_discriminator
+  (bfd *, asymbol **, asymbol *, const char **, unsigned int *, unsigned int *);
+#define _bfd_generic_find_line _bfd_elf_find_line
+#define _bfd_generic_find_nearest_line_discriminator \
+        _bfd_elf_find_nearest_line_discriminator
 extern bfd_boolean _bfd_elf_find_inliner_info
   (bfd *, const char **, const char **, unsigned int *);
-extern bfd_boolean _bfd_elf_find_function
-  (bfd *, asymbol **, asection *, bfd_vma, const char **, const char **);
 #define _bfd_elf_read_minisymbols _bfd_generic_read_minisymbols
 #define _bfd_elf_minisymbol_to_symbol _bfd_generic_minisymbol_to_symbol
 extern int _bfd_elf_sizeof_headers
@@ -1998,6 +1934,8 @@ extern Elf_Internal_Sym *bfd_sym_from_r_symndx
   (struct sym_cache *, bfd *, unsigned long);
 extern asection *bfd_section_from_elf_index
   (bfd *, unsigned int);
+extern struct bfd_strtab_hash *_bfd_elf_stringtab_init
+  (void);
 
 extern struct elf_strtab_hash * _bfd_elf_strtab_init
   (void);
@@ -2024,13 +1962,11 @@ extern bfd_boolean _bfd_elf_strtab_emit
 extern void _bfd_elf_strtab_finalize
   (struct elf_strtab_hash *);
 
-extern bfd_boolean bfd_elf_parse_eh_frame_entries
-  (bfd *, struct bfd_link_info *);
-extern bfd_boolean _bfd_elf_parse_eh_frame_entry
-  (struct bfd_link_info *, asection *, struct elf_reloc_cookie *);
+extern void _bfd_elf_begin_eh_frame_parsing
+  (struct bfd_link_info *info);
 extern void _bfd_elf_parse_eh_frame
   (bfd *, struct bfd_link_info *, asection *, struct elf_reloc_cookie *);
-extern bfd_boolean _bfd_elf_end_eh_frame_parsing
+extern void _bfd_elf_end_eh_frame_parsing
   (struct bfd_link_info *info);
 
 extern bfd_boolean _bfd_elf_discard_section_eh_frame
@@ -2042,14 +1978,9 @@ extern bfd_vma _bfd_elf_eh_frame_section_offset
   (bfd *, struct bfd_link_info *, asection *, bfd_vma);
 extern bfd_boolean _bfd_elf_write_section_eh_frame
   (bfd *, struct bfd_link_info *, asection *, bfd_byte *);
-bfd_boolean _bfd_elf_write_section_eh_frame_entry
-  (bfd *, struct bfd_link_info *, asection *, bfd_byte *);
-extern bfd_boolean _bfd_elf_fixup_eh_frame_hdr (struct bfd_link_info *);
 extern bfd_boolean _bfd_elf_write_section_eh_frame_hdr
   (bfd *, struct bfd_link_info *);
 extern bfd_boolean _bfd_elf_eh_frame_present
-  (struct bfd_link_info *);
-extern bfd_boolean _bfd_elf_eh_frame_entry_present
   (struct bfd_link_info *);
 extern bfd_boolean _bfd_elf_maybe_strip_eh_frame_hdr
   (struct bfd_link_info *);
@@ -2060,6 +1991,8 @@ extern long _bfd_elf_link_lookup_local_dynindx
   (struct bfd_link_info *, bfd *, long);
 extern bfd_boolean _bfd_elf_compute_section_file_positions
   (bfd *, struct bfd_link_info *);
+extern void _bfd_elf_assign_file_positions_for_relocs
+  (bfd *);
 extern file_ptr _bfd_elf_assign_file_position_for_section
   (Elf_Internal_Shdr *, file_ptr, bfd_boolean);
 
@@ -2074,8 +2007,6 @@ extern bfd_boolean _bfd_elf_create_dynamic_sections
   (bfd *, struct bfd_link_info *);
 extern bfd_boolean _bfd_elf_create_got_section
   (bfd *, struct bfd_link_info *);
-extern asection *_bfd_elf_section_for_symbol
-  (struct elf_reloc_cookie *, unsigned long, bfd_boolean);
 extern struct elf_link_hash_entry *_bfd_elf_define_linkage_sym
   (bfd *, struct bfd_link_info *, asection *, const char *);
 extern void _bfd_elf_init_1_index_section
@@ -2096,7 +2027,7 @@ extern bfd_boolean _bfd_elf_link_output_relocs
    struct elf_link_hash_entry **);
 
 extern bfd_boolean _bfd_elf_adjust_dynamic_copy
-  (struct bfd_link_info *, struct elf_link_hash_entry *, asection *);
+  (struct elf_link_hash_entry *, asection *);
 
 extern bfd_boolean _bfd_elf_dynamic_symbol_p
   (struct elf_link_hash_entry *, struct bfd_link_info *, bfd_boolean);
@@ -2305,8 +2236,6 @@ extern bfd_boolean _bfd_elf_is_function_type (unsigned int);
 extern bfd_size_type _bfd_elf_maybe_function_sym (const asymbol *, asection *,
 						  bfd_vma *);
 
-extern asection *_bfd_elf_get_reloc_section (asection *);
-
 extern int bfd_elf_get_default_section_type (flagword);
 
 extern bfd_boolean bfd_elf_lookup_section_flags
@@ -2349,10 +2278,6 @@ extern char *elfcore_write_s390_last_break
 extern char *elfcore_write_s390_system_call
   (bfd *, char *, int *, const void *, int);
 extern char *elfcore_write_s390_tdb
-  (bfd *, char *, int *, const void *, int);
-extern char *elfcore_write_s390_vxrs_low
-  (bfd *, char *, int *, const void *, int);
-extern char *elfcore_write_s390_vxrs_high
   (bfd *, char *, int *, const void *, int);
 extern char *elfcore_write_arm_vfp
   (bfd *, char *, int *, const void *, int);
@@ -2404,30 +2329,30 @@ extern char *elfcore_write_ppc_linux_prpsinfo32
   (bfd *, char *, int *, const struct elf_internal_linux_prpsinfo *);
 
 extern bfd *_bfd_elf32_bfd_from_remote_memory
-  (bfd *templ, bfd_vma ehdr_vma, bfd_size_type size, bfd_vma *loadbasep,
+  (bfd *templ, bfd_vma ehdr_vma, bfd_vma *loadbasep,
    int (*target_read_memory) (bfd_vma, bfd_byte *, bfd_size_type));
 extern bfd *_bfd_elf64_bfd_from_remote_memory
-  (bfd *templ, bfd_vma ehdr_vma, bfd_size_type size, bfd_vma *loadbasep,
+  (bfd *templ, bfd_vma ehdr_vma, bfd_vma *loadbasep,
    int (*target_read_memory) (bfd_vma, bfd_byte *, bfd_size_type));
 
 extern bfd_vma bfd_elf_obj_attr_size (bfd *);
 extern void bfd_elf_set_obj_attr_contents (bfd *, bfd_byte *, bfd_vma);
-extern int bfd_elf_get_obj_attr_int (bfd *, int, unsigned int);
-extern void bfd_elf_add_obj_attr_int (bfd *, int, unsigned int, unsigned int);
+extern int bfd_elf_get_obj_attr_int (bfd *, int, int);
+extern void bfd_elf_add_obj_attr_int (bfd *, int, int, unsigned int);
 #define bfd_elf_add_proc_attr_int(BFD, TAG, VALUE) \
   bfd_elf_add_obj_attr_int ((BFD), OBJ_ATTR_PROC, (TAG), (VALUE))
-extern void bfd_elf_add_obj_attr_string (bfd *, int, unsigned int, const char *);
+extern void bfd_elf_add_obj_attr_string (bfd *, int, int, const char *);
 #define bfd_elf_add_proc_attr_string(BFD, TAG, VALUE) \
   bfd_elf_add_obj_attr_string ((BFD), OBJ_ATTR_PROC, (TAG), (VALUE))
-extern void bfd_elf_add_obj_attr_int_string (bfd *, int, unsigned int,
-					     unsigned int, const char *);
+extern void bfd_elf_add_obj_attr_int_string (bfd *, int, int, unsigned int,
+					     const char *);
 #define bfd_elf_add_proc_attr_int_string(BFD, TAG, INTVAL, STRVAL) \
   bfd_elf_add_obj_attr_int_string ((BFD), OBJ_ATTR_PROC, (TAG), \
 				   (INTVAL), (STRVAL))
 
 extern char *_bfd_elf_attr_strdup (bfd *, const char *);
 extern void _bfd_elf_copy_obj_attributes (bfd *, bfd *);
-extern int _bfd_elf_obj_attrs_arg_type (bfd *, int, unsigned int);
+extern int _bfd_elf_obj_attrs_arg_type (bfd *, int, int);
 extern void _bfd_elf_parse_attributes (bfd *, Elf_Internal_Shdr *);
 extern bfd_boolean _bfd_elf_merge_object_attributes (bfd *, bfd *);
 extern bfd_boolean _bfd_elf_merge_unknown_attribute_low (bfd *, bfd *, int);
@@ -2459,9 +2384,6 @@ extern bfd_boolean _bfd_elf_create_ifunc_sections
 extern bfd_boolean _bfd_elf_allocate_ifunc_dyn_relocs
   (struct bfd_link_info *, struct elf_link_hash_entry *,
    struct elf_dyn_relocs **, unsigned int, unsigned int, unsigned int);
-extern long _bfd_elf_ifunc_get_synthetic_symtab
-  (bfd *, long, asymbol **, long, asymbol **, asymbol **, asection *,
-   bfd_vma *(*) (bfd *, asymbol **, asection *, asection *));
 
 extern void elf_append_rela (bfd *, asection *, Elf_Internal_Rela *);
 extern void elf_append_rel (bfd *, asection *, Elf_Internal_Rela *);
@@ -2502,11 +2424,6 @@ extern asection _bfd_elf_large_com_section;
 	return FALSE;							\
 									\
       h = sym_hashes[r_symndx - symtab_hdr->sh_info];			\
-									\
-      if (info->wrap_hash != NULL					\
-	  && (input_section->flags & SEC_DEBUGGING) != 0)		\
-	h = ((struct elf_link_hash_entry *)				\
-	     unwrap_hash_lookup (info, input_bfd, &h->root));		\
 									\
       while (h->root.type == bfd_link_hash_indirect			\
 	     || h->root.type == bfd_link_hash_warning)			\
@@ -2613,7 +2530,4 @@ extern asection _bfd_elf_large_com_section;
     (!(H)->unique_global \
      && ((INFO)->symbolic || ((INFO)->dynamic && !(H)->dynamic)))
 
-#ifdef __cplusplus
-}
-#endif
 #endif /* _LIBELF_H_ */

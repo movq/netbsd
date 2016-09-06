@@ -1,4 +1,4 @@
-.\"	$NetBSD: rnd.4,v 1.23 2016/05/06 03:04:14 riastradh Exp $
+.\"	$NetBSD: rnd.4,v 1.20.10.1 2015/03/18 07:54:26 snj Exp $
 .\"
 .\" Copyright (c) 2014 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -199,10 +199,10 @@ kernel has started.
 For those that don't, the
 .Xr rndctl 8
 command can do it once userland has started, for example by setting
-.Dq Va random_seed=YES
+.Dq Va rndctl=YES
 in
-.Pa /etc/rc.conf ,
-which is enabled by default; see
+.Pa /etc/rc.conf ;
+see
 .Xr rc.conf 5 .
 .Sh LIMITATIONS
 Some people worry about recovery from state compromise -- that is,
@@ -244,7 +244,7 @@ The
 and
 .Pa /dev/urandom
 devices support a number of ioctls, defined in the
-.In sys/rndio.h
+.In sys/rnd.h
 header file, for querying and controlling the entropy pool.
 .Pp
 Since timing between hardware events contributes to the entropy pool,

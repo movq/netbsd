@@ -23,21 +23,18 @@ class XCoreTargetMachine : public LLVMTargetMachine {
   std::unique_ptr<TargetLoweringObjectFile> TLOF;
   XCoreSubtarget Subtarget;
 public:
-  XCoreTargetMachine(const Target &T, const Triple &TT, StringRef CPU,
-                     StringRef FS, const TargetOptions &Options,
+  XCoreTargetMachine(const Target &T, StringRef TT,
+                     StringRef CPU, StringRef FS, const TargetOptions &Options,
                      Reloc::Model RM, CodeModel::Model CM,
                      CodeGenOpt::Level OL);
   ~XCoreTargetMachine() override;
 
-  const XCoreSubtarget *getSubtargetImpl() const { return &Subtarget; }
-  const XCoreSubtarget *getSubtargetImpl(const Function &) const override {
-    return &Subtarget;
-  }
+  const XCoreSubtarget *getSubtargetImpl() const override { return &Subtarget; }
 
   // Pass Pipeline Configuration
   TargetPassConfig *createPassConfig(PassManagerBase &PM) override;
 
-  TargetIRAnalysis getTargetIRAnalysis() override;
+  void addAnalysisPasses(PassManagerBase &PM) override;
   TargetLoweringObjectFile *getObjFileLowering() const override {
     return TLOF.get();
   }

@@ -11,7 +11,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "int_lib.h"
 #include <stdio.h>
 
 #if __LDBL_MANT_DIG__ == 113
@@ -19,7 +18,7 @@
 #include "fp_test.h"
 
 // Returns: a + b
-COMPILER_RT_ABI long double __addtf3(long double a, long double b);
+long double __addtf3(long double a, long double b);
 
 int test__addtf3(long double a, long double b,
                  uint64_t expectedHi, uint64_t expectedLo)

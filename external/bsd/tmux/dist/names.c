@@ -1,4 +1,4 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
  * Copyright (c) 2009 Nicholas Marriott <nicm@users.sourceforge.net>
@@ -25,91 +25,52 @@
 
 #include "tmux.h"
 
-void	name_time_callback(int, short, void *);
-int	name_time_expired(struct window *, struct timeval *);
+void	 window_name_callback(unused int, unused short, void *);
 
 void
-name_time_callback(unused int fd, unused short events, void *arg)
+queue_window_name(struct window *w)
 {
-	struct window	*w = arg;
+	struct timeval	tv;
 
-	/* The event loop will call check_window_name for us on the way out. */
-	log_debug("@%u name timer expired", w->id);
-}
+	tv.tv_sec = 0;
+	tv.tv_usec = NAME_INTERVAL * 1000L;
 
-int
-name_time_expired(struct window *w, struct timeval *tv)
-{
-	struct timeval	offset;
-
-	timersub(tv, &w->name_time, &offset);
-	if (offset.tv_sec != 0 || offset.tv_usec > NAME_INTERVAL)
-		return (0);
-	return (NAME_INTERVAL - offset.tv_usec);
+	if (event_initialized(&w->name_timer))
+		evtimer_del(&w->name_timer);
+	evtimer_set(&w->name_timer, window_name_callback, w);
+	evtimer_add(&w->name_timer, &tv);
 }
 
 void
-check_window_name(struct window *w)
+window_name_callback(unused int fd, unused short events, void *data)
 {
-	struct timeval	 tv, next;
+	struct window	*w = data;
 	char		*name;
-	int		 left;
 
 	if (w->active == NULL)
 		return;
 
-	if (!options_get_number(&w->options, "automatic-rename"))
-		return;
-
-	if (~w->active->flags & PANE_CHANGED) {
-		log_debug("@%u active pane not changed", w->id);
+	if (!options_get_number(&w->options, "automatic-rename")) {
+		if (event_initialized(&w->name_timer))
+			event_del(&w->name_timer);
 		return;
 	}
-	log_debug("@%u active pane changed", w->id);
-
-	gettimeofday(&tv, NULL);
-	left = name_time_expired(w, &tv);
-	if (left != 0) {
-		if (!event_initialized(&w->name_event))
-			evtimer_set(&w->name_event, name_time_callback, w);
-		if (!evtimer_pending(&w->name_event, NULL)) {
-			log_debug("@%u name timer queued (%d left)", w->id, left);
-			timerclear(&next);
-			next.tv_usec = left;
-			event_add(&w->name_event, &next);
-		} else
-			log_debug("@%u name timer already queued (%d left)", w->id, left);
-		return;
-	}
-	memcpy(&w->name_time, &tv, sizeof w->name_time);
-	if (event_initialized(&w->name_event))
-		evtimer_del(&w->name_event);
-
-	w->active->flags &= ~PANE_CHANGED;
+	queue_window_name(w);
 
 	name = format_window_name(w);
 	if (strcmp(name, w->name) != 0) {
-		log_debug("@%u new name %s (was %s)", w->id, name, w->name);
 		window_set_name(w, name);
 		server_status_window(w);
-	} else
-		log_debug("@%u name not changed (still %s)", w->id, w->name);
-
+	}
 	free(name);
 }
 
 char *
 default_window_name(struct window *w)
 {
-	char    *cmd, *s;
-
-	cmd = cmd_stringify_argv(w->active->argc, w->active->argv);
-	if (cmd != NULL && *cmd != '\0')
-		s = parse_window_name(cmd);
-	else
-		s = parse_window_name(w->active->shell);
-	free(cmd);
-	return (s);
+	if (w->active->cmd != NULL && *w->active->cmd != '\0')
+		return (parse_window_name(w->active->cmd));
+	return (parse_window_name(w->active->shell));
 }
 
 char *
@@ -119,8 +80,8 @@ format_window_name(struct window *w)
 	char			*fmt, *name;
 
 	ft = format_create();
-	format_defaults_window(ft, w);
-	format_defaults_pane(ft, w->active);
+	format_window(ft, w);
+	format_window_pane(ft, w->active);
 
 	fmt = options_get_string(&w->options, "automatic-rename-format");
 	name = format_expand(ft, fmt);

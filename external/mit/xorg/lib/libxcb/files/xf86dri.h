@@ -20,7 +20,7 @@ extern "C" {
 
 #define XCB_XF86DRI_MAJOR_VERSION 4
 #define XCB_XF86DRI_MINOR_VERSION 1
-
+  
 extern xcb_extension_t xcb_xf86dri_id;
 
 /**
@@ -397,6 +397,16 @@ typedef struct xcb_xf86dri_auth_connection_reply_t {
  * decreased by one. The member data points to the next
  * element. The member index is increased by sizeof(xcb_xf86dri_drm_clip_rect_t)
  */
+
+/*****************************************************************************
+ **
+ ** void xcb_xf86dri_drm_clip_rect_next
+ ** 
+ ** @param xcb_xf86dri_drm_clip_rect_iterator_t *i
+ ** @returns void
+ **
+ *****************************************************************************/
+ 
 void
 xcb_xf86dri_drm_clip_rect_next (xcb_xf86dri_drm_clip_rect_iterator_t *i  /**< */);
 
@@ -409,6 +419,16 @@ xcb_xf86dri_drm_clip_rect_next (xcb_xf86dri_drm_clip_rect_iterator_t *i  /**< */
  * The member rem is set to 0. The member data points to the
  * last element.
  */
+
+/*****************************************************************************
+ **
+ ** xcb_generic_iterator_t xcb_xf86dri_drm_clip_rect_end
+ ** 
+ ** @param xcb_xf86dri_drm_clip_rect_iterator_t i
+ ** @returns xcb_generic_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_generic_iterator_t
 xcb_xf86dri_drm_clip_rect_end (xcb_xf86dri_drm_clip_rect_iterator_t i  /**< */);
 
@@ -418,8 +438,18 @@ xcb_xf86dri_drm_clip_rect_end (xcb_xf86dri_drm_clip_rect_iterator_t i  /**< */);
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_query_version_cookie_t xcb_xf86dri_query_version
+ ** 
+ ** @param xcb_connection_t *c
+ ** @returns xcb_xf86dri_query_version_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_query_version_cookie_t
 xcb_xf86dri_query_version (xcb_connection_t *c  /**< */);
 
@@ -429,11 +459,21 @@ xcb_xf86dri_query_version (xcb_connection_t *c  /**< */);
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  * This form can be used only if the request will cause
  * a reply to be generated. Any returned error will be
  * placed in the event queue.
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_query_version_cookie_t xcb_xf86dri_query_version_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @returns xcb_xf86dri_query_version_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_query_version_cookie_t
 xcb_xf86dri_query_version_unchecked (xcb_connection_t *c  /**< */);
 
@@ -444,13 +484,25 @@ xcb_xf86dri_query_version_unchecked (xcb_connection_t *c  /**< */);
  * @param e      The xcb_generic_error_t supplied
  *
  * Returns the reply of the request asked by
- *
+ * 
  * The parameter @p e supplied to this function must be NULL if
  * xcb_xf86dri_query_version_unchecked(). is used.
  * Otherwise, it stores the error if any.
  *
  * The returned value must be freed by the caller using free().
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_query_version_reply_t * xcb_xf86dri_query_version_reply
+ ** 
+ ** @param xcb_connection_t                    *c
+ ** @param xcb_xf86dri_query_version_cookie_t   cookie
+ ** @param xcb_generic_error_t                **e
+ ** @returns xcb_xf86dri_query_version_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_query_version_reply_t *
 xcb_xf86dri_query_version_reply (xcb_connection_t                    *c  /**< */,
                                  xcb_xf86dri_query_version_cookie_t   cookie  /**< */,
@@ -462,8 +514,19 @@ xcb_xf86dri_query_version_reply (xcb_connection_t                    *c  /**< */
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_query_direct_rendering_capable_cookie_t xcb_xf86dri_query_direct_rendering_capable
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @returns xcb_xf86dri_query_direct_rendering_capable_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_query_direct_rendering_capable_cookie_t
 xcb_xf86dri_query_direct_rendering_capable (xcb_connection_t *c  /**< */,
                                             uint32_t          screen  /**< */);
@@ -474,11 +537,22 @@ xcb_xf86dri_query_direct_rendering_capable (xcb_connection_t *c  /**< */,
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  * This form can be used only if the request will cause
  * a reply to be generated. Any returned error will be
  * placed in the event queue.
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_query_direct_rendering_capable_cookie_t xcb_xf86dri_query_direct_rendering_capable_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @returns xcb_xf86dri_query_direct_rendering_capable_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_query_direct_rendering_capable_cookie_t
 xcb_xf86dri_query_direct_rendering_capable_unchecked (xcb_connection_t *c  /**< */,
                                                       uint32_t          screen  /**< */);
@@ -490,13 +564,25 @@ xcb_xf86dri_query_direct_rendering_capable_unchecked (xcb_connection_t *c  /**< 
  * @param e      The xcb_generic_error_t supplied
  *
  * Returns the reply of the request asked by
- *
+ * 
  * The parameter @p e supplied to this function must be NULL if
  * xcb_xf86dri_query_direct_rendering_capable_unchecked(). is used.
  * Otherwise, it stores the error if any.
  *
  * The returned value must be freed by the caller using free().
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_query_direct_rendering_capable_reply_t * xcb_xf86dri_query_direct_rendering_capable_reply
+ ** 
+ ** @param xcb_connection_t                                     *c
+ ** @param xcb_xf86dri_query_direct_rendering_capable_cookie_t   cookie
+ ** @param xcb_generic_error_t                                 **e
+ ** @returns xcb_xf86dri_query_direct_rendering_capable_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_query_direct_rendering_capable_reply_t *
 xcb_xf86dri_query_direct_rendering_capable_reply (xcb_connection_t                                     *c  /**< */,
                                                   xcb_xf86dri_query_direct_rendering_capable_cookie_t   cookie  /**< */,
@@ -511,8 +597,19 @@ xcb_xf86dri_open_connection_sizeof (const void  *_buffer  /**< */);
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_open_connection_cookie_t xcb_xf86dri_open_connection
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @returns xcb_xf86dri_open_connection_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_open_connection_cookie_t
 xcb_xf86dri_open_connection (xcb_connection_t *c  /**< */,
                              uint32_t          screen  /**< */);
@@ -523,21 +620,62 @@ xcb_xf86dri_open_connection (xcb_connection_t *c  /**< */,
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  * This form can be used only if the request will cause
  * a reply to be generated. Any returned error will be
  * placed in the event queue.
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_open_connection_cookie_t xcb_xf86dri_open_connection_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @returns xcb_xf86dri_open_connection_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_open_connection_cookie_t
 xcb_xf86dri_open_connection_unchecked (xcb_connection_t *c  /**< */,
                                        uint32_t          screen  /**< */);
 
+
+/*****************************************************************************
+ **
+ ** char * xcb_xf86dri_open_connection_bus_id
+ ** 
+ ** @param const xcb_xf86dri_open_connection_reply_t *R
+ ** @returns char *
+ **
+ *****************************************************************************/
+ 
 char *
 xcb_xf86dri_open_connection_bus_id (const xcb_xf86dri_open_connection_reply_t *R  /**< */);
 
+
+/*****************************************************************************
+ **
+ ** int xcb_xf86dri_open_connection_bus_id_length
+ ** 
+ ** @param const xcb_xf86dri_open_connection_reply_t *R
+ ** @returns int
+ **
+ *****************************************************************************/
+ 
 int
 xcb_xf86dri_open_connection_bus_id_length (const xcb_xf86dri_open_connection_reply_t *R  /**< */);
 
+
+/*****************************************************************************
+ **
+ ** xcb_generic_iterator_t xcb_xf86dri_open_connection_bus_id_end
+ ** 
+ ** @param const xcb_xf86dri_open_connection_reply_t *R
+ ** @returns xcb_generic_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_generic_iterator_t
 xcb_xf86dri_open_connection_bus_id_end (const xcb_xf86dri_open_connection_reply_t *R  /**< */);
 
@@ -548,13 +686,25 @@ xcb_xf86dri_open_connection_bus_id_end (const xcb_xf86dri_open_connection_reply_
  * @param e      The xcb_generic_error_t supplied
  *
  * Returns the reply of the request asked by
- *
+ * 
  * The parameter @p e supplied to this function must be NULL if
  * xcb_xf86dri_open_connection_unchecked(). is used.
  * Otherwise, it stores the error if any.
  *
  * The returned value must be freed by the caller using free().
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_open_connection_reply_t * xcb_xf86dri_open_connection_reply
+ ** 
+ ** @param xcb_connection_t                      *c
+ ** @param xcb_xf86dri_open_connection_cookie_t   cookie
+ ** @param xcb_generic_error_t                  **e
+ ** @returns xcb_xf86dri_open_connection_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_open_connection_reply_t *
 xcb_xf86dri_open_connection_reply (xcb_connection_t                      *c  /**< */,
                                    xcb_xf86dri_open_connection_cookie_t   cookie  /**< */,
@@ -566,11 +716,22 @@ xcb_xf86dri_open_connection_reply (xcb_connection_t                      *c  /**
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  * This form can be used only if the request will not cause
  * a reply to be generated. Any returned error will be
  * saved for handling by xcb_request_check().
  */
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_xf86dri_close_connection_checked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_xf86dri_close_connection_checked (xcb_connection_t *c  /**< */,
                                       uint32_t          screen  /**< */);
@@ -581,8 +742,19 @@ xcb_xf86dri_close_connection_checked (xcb_connection_t *c  /**< */,
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  */
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_xf86dri_close_connection
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_xf86dri_close_connection (xcb_connection_t *c  /**< */,
                               uint32_t          screen  /**< */);
@@ -596,8 +768,19 @@ xcb_xf86dri_get_client_driver_name_sizeof (const void  *_buffer  /**< */);
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_get_client_driver_name_cookie_t xcb_xf86dri_get_client_driver_name
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @returns xcb_xf86dri_get_client_driver_name_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_get_client_driver_name_cookie_t
 xcb_xf86dri_get_client_driver_name (xcb_connection_t *c  /**< */,
                                     uint32_t          screen  /**< */);
@@ -608,21 +791,62 @@ xcb_xf86dri_get_client_driver_name (xcb_connection_t *c  /**< */,
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  * This form can be used only if the request will cause
  * a reply to be generated. Any returned error will be
  * placed in the event queue.
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_get_client_driver_name_cookie_t xcb_xf86dri_get_client_driver_name_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @returns xcb_xf86dri_get_client_driver_name_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_get_client_driver_name_cookie_t
 xcb_xf86dri_get_client_driver_name_unchecked (xcb_connection_t *c  /**< */,
                                               uint32_t          screen  /**< */);
 
+
+/*****************************************************************************
+ **
+ ** char * xcb_xf86dri_get_client_driver_name_client_driver_name
+ ** 
+ ** @param const xcb_xf86dri_get_client_driver_name_reply_t *R
+ ** @returns char *
+ **
+ *****************************************************************************/
+ 
 char *
 xcb_xf86dri_get_client_driver_name_client_driver_name (const xcb_xf86dri_get_client_driver_name_reply_t *R  /**< */);
 
+
+/*****************************************************************************
+ **
+ ** int xcb_xf86dri_get_client_driver_name_client_driver_name_length
+ ** 
+ ** @param const xcb_xf86dri_get_client_driver_name_reply_t *R
+ ** @returns int
+ **
+ *****************************************************************************/
+ 
 int
 xcb_xf86dri_get_client_driver_name_client_driver_name_length (const xcb_xf86dri_get_client_driver_name_reply_t *R  /**< */);
 
+
+/*****************************************************************************
+ **
+ ** xcb_generic_iterator_t xcb_xf86dri_get_client_driver_name_client_driver_name_end
+ ** 
+ ** @param const xcb_xf86dri_get_client_driver_name_reply_t *R
+ ** @returns xcb_generic_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_generic_iterator_t
 xcb_xf86dri_get_client_driver_name_client_driver_name_end (const xcb_xf86dri_get_client_driver_name_reply_t *R  /**< */);
 
@@ -633,13 +857,25 @@ xcb_xf86dri_get_client_driver_name_client_driver_name_end (const xcb_xf86dri_get
  * @param e      The xcb_generic_error_t supplied
  *
  * Returns the reply of the request asked by
- *
+ * 
  * The parameter @p e supplied to this function must be NULL if
  * xcb_xf86dri_get_client_driver_name_unchecked(). is used.
  * Otherwise, it stores the error if any.
  *
  * The returned value must be freed by the caller using free().
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_get_client_driver_name_reply_t * xcb_xf86dri_get_client_driver_name_reply
+ ** 
+ ** @param xcb_connection_t                             *c
+ ** @param xcb_xf86dri_get_client_driver_name_cookie_t   cookie
+ ** @param xcb_generic_error_t                         **e
+ ** @returns xcb_xf86dri_get_client_driver_name_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_get_client_driver_name_reply_t *
 xcb_xf86dri_get_client_driver_name_reply (xcb_connection_t                             *c  /**< */,
                                           xcb_xf86dri_get_client_driver_name_cookie_t   cookie  /**< */,
@@ -651,8 +887,21 @@ xcb_xf86dri_get_client_driver_name_reply (xcb_connection_t                      
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_create_context_cookie_t xcb_xf86dri_create_context
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @param uint32_t          visual
+ ** @param uint32_t          context
+ ** @returns xcb_xf86dri_create_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_create_context_cookie_t
 xcb_xf86dri_create_context (xcb_connection_t *c  /**< */,
                             uint32_t          screen  /**< */,
@@ -665,11 +914,24 @@ xcb_xf86dri_create_context (xcb_connection_t *c  /**< */,
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  * This form can be used only if the request will cause
  * a reply to be generated. Any returned error will be
  * placed in the event queue.
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_create_context_cookie_t xcb_xf86dri_create_context_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @param uint32_t          visual
+ ** @param uint32_t          context
+ ** @returns xcb_xf86dri_create_context_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_create_context_cookie_t
 xcb_xf86dri_create_context_unchecked (xcb_connection_t *c  /**< */,
                                       uint32_t          screen  /**< */,
@@ -683,13 +945,25 @@ xcb_xf86dri_create_context_unchecked (xcb_connection_t *c  /**< */,
  * @param e      The xcb_generic_error_t supplied
  *
  * Returns the reply of the request asked by
- *
+ * 
  * The parameter @p e supplied to this function must be NULL if
  * xcb_xf86dri_create_context_unchecked(). is used.
  * Otherwise, it stores the error if any.
  *
  * The returned value must be freed by the caller using free().
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_create_context_reply_t * xcb_xf86dri_create_context_reply
+ ** 
+ ** @param xcb_connection_t                     *c
+ ** @param xcb_xf86dri_create_context_cookie_t   cookie
+ ** @param xcb_generic_error_t                 **e
+ ** @returns xcb_xf86dri_create_context_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_create_context_reply_t *
 xcb_xf86dri_create_context_reply (xcb_connection_t                     *c  /**< */,
                                   xcb_xf86dri_create_context_cookie_t   cookie  /**< */,
@@ -701,11 +975,23 @@ xcb_xf86dri_create_context_reply (xcb_connection_t                     *c  /**< 
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  * This form can be used only if the request will not cause
  * a reply to be generated. Any returned error will be
  * saved for handling by xcb_request_check().
  */
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_xf86dri_destroy_context_checked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @param uint32_t          context
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_xf86dri_destroy_context_checked (xcb_connection_t *c  /**< */,
                                      uint32_t          screen  /**< */,
@@ -717,8 +1003,20 @@ xcb_xf86dri_destroy_context_checked (xcb_connection_t *c  /**< */,
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  */
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_xf86dri_destroy_context
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @param uint32_t          context
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_xf86dri_destroy_context (xcb_connection_t *c  /**< */,
                              uint32_t          screen  /**< */,
@@ -730,8 +1028,20 @@ xcb_xf86dri_destroy_context (xcb_connection_t *c  /**< */,
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_create_drawable_cookie_t xcb_xf86dri_create_drawable
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @param uint32_t          drawable
+ ** @returns xcb_xf86dri_create_drawable_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_create_drawable_cookie_t
 xcb_xf86dri_create_drawable (xcb_connection_t *c  /**< */,
                              uint32_t          screen  /**< */,
@@ -743,11 +1053,23 @@ xcb_xf86dri_create_drawable (xcb_connection_t *c  /**< */,
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  * This form can be used only if the request will cause
  * a reply to be generated. Any returned error will be
  * placed in the event queue.
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_create_drawable_cookie_t xcb_xf86dri_create_drawable_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @param uint32_t          drawable
+ ** @returns xcb_xf86dri_create_drawable_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_create_drawable_cookie_t
 xcb_xf86dri_create_drawable_unchecked (xcb_connection_t *c  /**< */,
                                        uint32_t          screen  /**< */,
@@ -760,13 +1082,25 @@ xcb_xf86dri_create_drawable_unchecked (xcb_connection_t *c  /**< */,
  * @param e      The xcb_generic_error_t supplied
  *
  * Returns the reply of the request asked by
- *
+ * 
  * The parameter @p e supplied to this function must be NULL if
  * xcb_xf86dri_create_drawable_unchecked(). is used.
  * Otherwise, it stores the error if any.
  *
  * The returned value must be freed by the caller using free().
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_create_drawable_reply_t * xcb_xf86dri_create_drawable_reply
+ ** 
+ ** @param xcb_connection_t                      *c
+ ** @param xcb_xf86dri_create_drawable_cookie_t   cookie
+ ** @param xcb_generic_error_t                  **e
+ ** @returns xcb_xf86dri_create_drawable_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_create_drawable_reply_t *
 xcb_xf86dri_create_drawable_reply (xcb_connection_t                      *c  /**< */,
                                    xcb_xf86dri_create_drawable_cookie_t   cookie  /**< */,
@@ -778,11 +1112,23 @@ xcb_xf86dri_create_drawable_reply (xcb_connection_t                      *c  /**
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  * This form can be used only if the request will not cause
  * a reply to be generated. Any returned error will be
  * saved for handling by xcb_request_check().
  */
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_xf86dri_destroy_drawable_checked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @param uint32_t          drawable
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_xf86dri_destroy_drawable_checked (xcb_connection_t *c  /**< */,
                                       uint32_t          screen  /**< */,
@@ -794,8 +1140,20 @@ xcb_xf86dri_destroy_drawable_checked (xcb_connection_t *c  /**< */,
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  */
+
+/*****************************************************************************
+ **
+ ** xcb_void_cookie_t xcb_xf86dri_destroy_drawable
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @param uint32_t          drawable
+ ** @returns xcb_void_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_void_cookie_t
 xcb_xf86dri_destroy_drawable (xcb_connection_t *c  /**< */,
                               uint32_t          screen  /**< */,
@@ -810,8 +1168,20 @@ xcb_xf86dri_get_drawable_info_sizeof (const void  *_buffer  /**< */);
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_get_drawable_info_cookie_t xcb_xf86dri_get_drawable_info
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @param uint32_t          drawable
+ ** @returns xcb_xf86dri_get_drawable_info_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_get_drawable_info_cookie_t
 xcb_xf86dri_get_drawable_info (xcb_connection_t *c  /**< */,
                                uint32_t          screen  /**< */,
@@ -823,31 +1193,103 @@ xcb_xf86dri_get_drawable_info (xcb_connection_t *c  /**< */,
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  * This form can be used only if the request will cause
  * a reply to be generated. Any returned error will be
  * placed in the event queue.
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_get_drawable_info_cookie_t xcb_xf86dri_get_drawable_info_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @param uint32_t          drawable
+ ** @returns xcb_xf86dri_get_drawable_info_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_get_drawable_info_cookie_t
 xcb_xf86dri_get_drawable_info_unchecked (xcb_connection_t *c  /**< */,
                                          uint32_t          screen  /**< */,
                                          uint32_t          drawable  /**< */);
 
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_drm_clip_rect_t * xcb_xf86dri_get_drawable_info_clip_rects
+ ** 
+ ** @param const xcb_xf86dri_get_drawable_info_reply_t *R
+ ** @returns xcb_xf86dri_drm_clip_rect_t *
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_drm_clip_rect_t *
 xcb_xf86dri_get_drawable_info_clip_rects (const xcb_xf86dri_get_drawable_info_reply_t *R  /**< */);
 
+
+/*****************************************************************************
+ **
+ ** int xcb_xf86dri_get_drawable_info_clip_rects_length
+ ** 
+ ** @param const xcb_xf86dri_get_drawable_info_reply_t *R
+ ** @returns int
+ **
+ *****************************************************************************/
+ 
 int
 xcb_xf86dri_get_drawable_info_clip_rects_length (const xcb_xf86dri_get_drawable_info_reply_t *R  /**< */);
 
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_drm_clip_rect_iterator_t xcb_xf86dri_get_drawable_info_clip_rects_iterator
+ ** 
+ ** @param const xcb_xf86dri_get_drawable_info_reply_t *R
+ ** @returns xcb_xf86dri_drm_clip_rect_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_drm_clip_rect_iterator_t
 xcb_xf86dri_get_drawable_info_clip_rects_iterator (const xcb_xf86dri_get_drawable_info_reply_t *R  /**< */);
 
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_drm_clip_rect_t * xcb_xf86dri_get_drawable_info_back_clip_rects
+ ** 
+ ** @param const xcb_xf86dri_get_drawable_info_reply_t *R
+ ** @returns xcb_xf86dri_drm_clip_rect_t *
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_drm_clip_rect_t *
 xcb_xf86dri_get_drawable_info_back_clip_rects (const xcb_xf86dri_get_drawable_info_reply_t *R  /**< */);
 
+
+/*****************************************************************************
+ **
+ ** int xcb_xf86dri_get_drawable_info_back_clip_rects_length
+ ** 
+ ** @param const xcb_xf86dri_get_drawable_info_reply_t *R
+ ** @returns int
+ **
+ *****************************************************************************/
+ 
 int
 xcb_xf86dri_get_drawable_info_back_clip_rects_length (const xcb_xf86dri_get_drawable_info_reply_t *R  /**< */);
 
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_drm_clip_rect_iterator_t xcb_xf86dri_get_drawable_info_back_clip_rects_iterator
+ ** 
+ ** @param const xcb_xf86dri_get_drawable_info_reply_t *R
+ ** @returns xcb_xf86dri_drm_clip_rect_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_drm_clip_rect_iterator_t
 xcb_xf86dri_get_drawable_info_back_clip_rects_iterator (const xcb_xf86dri_get_drawable_info_reply_t *R  /**< */);
 
@@ -858,13 +1300,25 @@ xcb_xf86dri_get_drawable_info_back_clip_rects_iterator (const xcb_xf86dri_get_dr
  * @param e      The xcb_generic_error_t supplied
  *
  * Returns the reply of the request asked by
- *
+ * 
  * The parameter @p e supplied to this function must be NULL if
  * xcb_xf86dri_get_drawable_info_unchecked(). is used.
  * Otherwise, it stores the error if any.
  *
  * The returned value must be freed by the caller using free().
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_get_drawable_info_reply_t * xcb_xf86dri_get_drawable_info_reply
+ ** 
+ ** @param xcb_connection_t                        *c
+ ** @param xcb_xf86dri_get_drawable_info_cookie_t   cookie
+ ** @param xcb_generic_error_t                    **e
+ ** @returns xcb_xf86dri_get_drawable_info_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_get_drawable_info_reply_t *
 xcb_xf86dri_get_drawable_info_reply (xcb_connection_t                        *c  /**< */,
                                      xcb_xf86dri_get_drawable_info_cookie_t   cookie  /**< */,
@@ -879,8 +1333,19 @@ xcb_xf86dri_get_device_info_sizeof (const void  *_buffer  /**< */);
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_get_device_info_cookie_t xcb_xf86dri_get_device_info
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @returns xcb_xf86dri_get_device_info_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_get_device_info_cookie_t
 xcb_xf86dri_get_device_info (xcb_connection_t *c  /**< */,
                              uint32_t          screen  /**< */);
@@ -891,21 +1356,62 @@ xcb_xf86dri_get_device_info (xcb_connection_t *c  /**< */,
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  * This form can be used only if the request will cause
  * a reply to be generated. Any returned error will be
  * placed in the event queue.
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_get_device_info_cookie_t xcb_xf86dri_get_device_info_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @returns xcb_xf86dri_get_device_info_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_get_device_info_cookie_t
 xcb_xf86dri_get_device_info_unchecked (xcb_connection_t *c  /**< */,
                                        uint32_t          screen  /**< */);
 
+
+/*****************************************************************************
+ **
+ ** uint32_t * xcb_xf86dri_get_device_info_device_private
+ ** 
+ ** @param const xcb_xf86dri_get_device_info_reply_t *R
+ ** @returns uint32_t *
+ **
+ *****************************************************************************/
+ 
 uint32_t *
 xcb_xf86dri_get_device_info_device_private (const xcb_xf86dri_get_device_info_reply_t *R  /**< */);
 
+
+/*****************************************************************************
+ **
+ ** int xcb_xf86dri_get_device_info_device_private_length
+ ** 
+ ** @param const xcb_xf86dri_get_device_info_reply_t *R
+ ** @returns int
+ **
+ *****************************************************************************/
+ 
 int
 xcb_xf86dri_get_device_info_device_private_length (const xcb_xf86dri_get_device_info_reply_t *R  /**< */);
 
+
+/*****************************************************************************
+ **
+ ** xcb_generic_iterator_t xcb_xf86dri_get_device_info_device_private_end
+ ** 
+ ** @param const xcb_xf86dri_get_device_info_reply_t *R
+ ** @returns xcb_generic_iterator_t
+ **
+ *****************************************************************************/
+ 
 xcb_generic_iterator_t
 xcb_xf86dri_get_device_info_device_private_end (const xcb_xf86dri_get_device_info_reply_t *R  /**< */);
 
@@ -916,13 +1422,25 @@ xcb_xf86dri_get_device_info_device_private_end (const xcb_xf86dri_get_device_inf
  * @param e      The xcb_generic_error_t supplied
  *
  * Returns the reply of the request asked by
- *
+ * 
  * The parameter @p e supplied to this function must be NULL if
  * xcb_xf86dri_get_device_info_unchecked(). is used.
  * Otherwise, it stores the error if any.
  *
  * The returned value must be freed by the caller using free().
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_get_device_info_reply_t * xcb_xf86dri_get_device_info_reply
+ ** 
+ ** @param xcb_connection_t                      *c
+ ** @param xcb_xf86dri_get_device_info_cookie_t   cookie
+ ** @param xcb_generic_error_t                  **e
+ ** @returns xcb_xf86dri_get_device_info_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_get_device_info_reply_t *
 xcb_xf86dri_get_device_info_reply (xcb_connection_t                      *c  /**< */,
                                    xcb_xf86dri_get_device_info_cookie_t   cookie  /**< */,
@@ -934,8 +1452,20 @@ xcb_xf86dri_get_device_info_reply (xcb_connection_t                      *c  /**
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_auth_connection_cookie_t xcb_xf86dri_auth_connection
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @param uint32_t          magic
+ ** @returns xcb_xf86dri_auth_connection_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_auth_connection_cookie_t
 xcb_xf86dri_auth_connection (xcb_connection_t *c  /**< */,
                              uint32_t          screen  /**< */,
@@ -947,11 +1477,23 @@ xcb_xf86dri_auth_connection (xcb_connection_t *c  /**< */,
  * @return A cookie
  *
  * Delivers a request to the X server.
- *
+ * 
  * This form can be used only if the request will cause
  * a reply to be generated. Any returned error will be
  * placed in the event queue.
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_auth_connection_cookie_t xcb_xf86dri_auth_connection_unchecked
+ ** 
+ ** @param xcb_connection_t *c
+ ** @param uint32_t          screen
+ ** @param uint32_t          magic
+ ** @returns xcb_xf86dri_auth_connection_cookie_t
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_auth_connection_cookie_t
 xcb_xf86dri_auth_connection_unchecked (xcb_connection_t *c  /**< */,
                                        uint32_t          screen  /**< */,
@@ -964,13 +1506,25 @@ xcb_xf86dri_auth_connection_unchecked (xcb_connection_t *c  /**< */,
  * @param e      The xcb_generic_error_t supplied
  *
  * Returns the reply of the request asked by
- *
+ * 
  * The parameter @p e supplied to this function must be NULL if
  * xcb_xf86dri_auth_connection_unchecked(). is used.
  * Otherwise, it stores the error if any.
  *
  * The returned value must be freed by the caller using free().
  */
+
+/*****************************************************************************
+ **
+ ** xcb_xf86dri_auth_connection_reply_t * xcb_xf86dri_auth_connection_reply
+ ** 
+ ** @param xcb_connection_t                      *c
+ ** @param xcb_xf86dri_auth_connection_cookie_t   cookie
+ ** @param xcb_generic_error_t                  **e
+ ** @returns xcb_xf86dri_auth_connection_reply_t *
+ **
+ *****************************************************************************/
+ 
 xcb_xf86dri_auth_connection_reply_t *
 xcb_xf86dri_auth_connection_reply (xcb_connection_t                      *c  /**< */,
                                    xcb_xf86dri_auth_connection_cookie_t   cookie  /**< */,

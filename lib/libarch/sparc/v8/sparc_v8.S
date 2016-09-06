@@ -10,6 +10,7 @@
 	.align 4
 	.global .umul
 	.type	 .umul,@function
+	.proc	016
 
 .umul:
 	!#PROLOGUE# 0
@@ -23,6 +24,7 @@
 	.align 4
 	.global .mul
 	.type	 .mul,@function
+	.proc	04
 .mul:
 	!#PROLOGUE# 0
 	!#PROLOGUE# 1
@@ -35,6 +37,7 @@
 	.align 4
 	.global .udiv
 	.type	 .udiv,@function
+	.proc	016
 .udiv:
 	wr	%g0, 0, %y
 	nop; nop; nop
@@ -47,6 +50,8 @@
 	.align 4
 	.global .div
 	.type	 .div,@function
+	.proc	04
+
 .div:
 	sra	%o0, 31, %g2
 	wr	%g2, 0, %y
@@ -60,6 +65,7 @@
 	.align 4
 	.global .urem
 	.type	 .urem,@function
+	.proc	016
 .urem:
 	wr	%g0, %g0, %y
 	nop; nop; nop
@@ -74,6 +80,7 @@
 	.align 4
 	.global .rem
 	.type	 .rem,@function
+	.proc	04
 .rem:
 	sra	%o0, 31, %g3
 	wr	%g3, 0, %y

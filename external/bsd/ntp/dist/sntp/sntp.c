@@ -1,4 +1,4 @@
-/*	$NetBSD: sntp.c,v 1.4 2016/01/08 21:35:40 christos Exp $	*/
+/*	$NetBSD: sntp.c,v 1.1.1.2.4.1 2014/12/24 00:05:24 riz Exp $	*/
 
 #include <config.h>
 

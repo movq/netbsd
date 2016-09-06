@@ -1,4 +1,4 @@
-/*	$NetBSD: smtpd_check.c,v 1.1.1.10 2015/01/24 18:08:30 tron Exp $	*/
+/*	$NetBSD: smtpd_check.c,v 1.1.1.9.2.1 2015/01/27 08:14:03 martin Exp $	*/
 
 /*++
 /* NAME

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.ev64260.inc,v 1.8 2016/07/28 22:46:48 maya Exp $
+#	$NetBSD: Makefile.ev64260.inc,v 1.7.4.1 2016/08/27 15:19:09 bouyer Exp $
 
 MKIMG?=	${HOST_SH} ${THISPPC}/compile/walnut-mkimg.sh
 

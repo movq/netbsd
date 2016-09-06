@@ -1,4 +1,4 @@
-/* $NetBSD: pass1.c,v 1.45 2015/10/03 08:30:13 dholland Exp $	 */
+/* $NetBSD: pass1.c,v 1.37 2013/06/18 18:18:58 christos Exp $	 */
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -36,7 +36,6 @@
 
 #define vnode uvnode
 #include <ufs/lfs/lfs.h>
-#include <ufs/lfs/lfs_accessors.h>
 #include <ufs/lfs/lfs_inode.h>
 #undef vnode
 
@@ -55,13 +54,16 @@
 #include "extern.h"
 #include "fsutil.h"
 
-blkcnt_t badblkcount;
-static blkcnt_t dupblkcount;
+SEGUSE *seg_table;
+extern ulfs_daddr_t *din_table;
+
+ulfs_daddr_t badblk;
+static ulfs_daddr_t dupblk;
 static int i_d_cmp(const void *, const void *);
 
 struct ino_daddr {
 	ino_t ino;
-	daddr_t daddr;
+	ulfs_daddr_t daddr;
 };
 
 static int
@@ -87,8 +89,8 @@ pass1(void)
 	ino_t inumber;
 	int i;
 	struct inodesc idesc;
-	union lfs_dinode *tinode;
-	IFILE *ifp;
+	struct ulfs1_dinode *tinode;
+	struct ifile *ifp;
 	struct ubuf *bp;
 	struct ino_daddr **dins;
 
@@ -109,11 +111,11 @@ pass1(void)
 	for (i = 0; i < maxino; i++) {
 		dins[i] = emalloc(sizeof(**dins));
 		dins[i]->ino = i;
-		if (i == LFS_IFILE_INUM)
-			dins[i]->daddr = lfs_sb_getidaddr(fs);
+		if (i == fs->lfs_ifile)
+			dins[i]->daddr = fs->lfs_idaddr;
 		else {
 			LFS_IENTRY(ifp, fs, i, bp);
-			dins[i]->daddr = lfs_if_getdaddr(fs, ifp);
+			dins[i]->daddr = ifp->if_daddr;
 			brelse(bp, 0);
 		}
 	}
@@ -128,7 +130,7 @@ pass1(void)
 		if (inumber == 0 || dins[i]->daddr == 0)
 			continue;
 		tinode = ginode(inumber);
-		if (tinode && (lfs_dino_getmode(fs, tinode) & LFS_IFMT) == LFS_IFDIR)
+		if (tinode && (tinode->di_mode & LFS_IFMT) == LFS_IFDIR)
 			numdirs++;
 	}
 
@@ -156,41 +158,15 @@ pass1(void)
 	free(dins);
 }
 
-static int
-nonzero_db(union lfs_dinode *dip)
-{
-	unsigned i;
-
-	for (i=0; i<ULFS_NDADDR; i++) {
-		if (lfs_dino_getdb(fs, dip, i) != 0) {
-			return 1;
-		}
-	}
-	return 0;
-}
-
-static int
-nonzero_ib(union lfs_dinode *dip)
-{
-	unsigned i;
-
-	for (i=0; i<ULFS_NIADDR; i++) {
-		if (lfs_dino_getib(fs, dip, i) != 0) {
-			return 1;
-		}
-	}
-	return 0;
-}
-
 void
 checkinode(ino_t inumber, struct inodesc * idesc)
 {
-	union lfs_dinode *dp;
+	struct ulfs1_dinode *dp;
 	struct uvnode  *vp;
 	struct zlncnt *zlnp;
 	struct ubuf *bp;
 	IFILE *ifp;
-	int64_t ndb, j;
+	int ndb, j;
 	mode_t mode;
 
 	vp = vget(fs, inumber);
@@ -203,13 +179,14 @@ checkinode(ino_t inumber, struct inodesc * idesc)
 		statemap[inumber] = USTATE;
 		return;
 	}
-	mode = lfs_dino_getmode(fs, dp) & LFS_IFMT;
+	mode = dp->di_mode & LFS_IFMT;
 
 	/* XXX - LFS doesn't have this particular problem (?) */
 	if (mode == 0) {
-		if (nonzero_db(dp) || nonzero_ib(dp) ||
-		    lfs_dino_getmode(fs, dp) || lfs_dino_getsize(fs, dp)) {
-			pwarn("mode=o%o, ifmt=o%o\n", lfs_dino_getmode(fs, dp), mode);
+		if (memcmp(dp->di_db, zino.di_db, ULFS_NDADDR * sizeof(ulfs_daddr_t)) ||
+		    memcmp(dp->di_ib, zino.di_ib, ULFS_NIADDR * sizeof(ulfs_daddr_t)) ||
+		    dp->di_mode || dp->di_size) {
+			pwarn("mode=o%o, ifmt=o%o\n", dp->di_mode, mode);
 			pfatal("PARTIALLY ALLOCATED INODE I=%llu",
 			    (unsigned long long)inumber);
 			if (reply("CLEAR") == 1) {
@@ -222,25 +199,25 @@ checkinode(ino_t inumber, struct inodesc * idesc)
 		return;
 	}
 	lastino = inumber;
-	if (/* lfs_dino_getsize(fs, dp) < 0 || */
-	    lfs_dino_getsize(fs, dp) + lfs_sb_getbsize(fs) - 1 < lfs_dino_getsize(fs, dp)) {
+	if (/* dp->di_size < 0 || */
+	    dp->di_size + fs->lfs_bsize - 1 < dp->di_size) {
 		if (debug)
-			printf("bad size %ju:",
-			    (uintmax_t)lfs_dino_getsize(fs, dp));
+			printf("bad size %llu:",
+			    (unsigned long long) dp->di_size);
 		goto unknown;
 	}
 	if (!preen && mode == LFS_IFMT && reply("HOLD BAD BLOCK") == 1) {
 		vp = vget(fs, inumber);
 		dp = VTOD(vp);
-		lfs_dino_setsize(fs, dp, lfs_sb_getfsize(fs));
-		lfs_dino_setmode(fs, dp, LFS_IFREG | 0600);
+		dp->di_size = fs->lfs_fsize;
+		dp->di_mode = LFS_IFREG | 0600;
 		inodirty(VTOI(vp));
 	}
-	ndb = howmany(lfs_dino_getsize(fs, dp), lfs_sb_getbsize(fs));
+	ndb = howmany(dp->di_size, fs->lfs_bsize);
 	if (ndb < 0) {
 		if (debug)
-			printf("bad size %ju ndb %jd:",
-			    (uintmax_t)lfs_dino_getsize(fs, dp), (intmax_t)ndb);
+			printf("bad size %llu ndb %d:",
+			    (unsigned long long) dp->di_size, ndb);
 		goto unknown;
 	}
 	if (mode == LFS_IFBLK || mode == LFS_IFCHR)
@@ -250,9 +227,9 @@ checkinode(ino_t inumber, struct inodesc * idesc)
 		 * Fake ndb value so direct/indirect block checks below
 		 * will detect any garbage after symlink string.
 		 */
-		if (lfs_dino_getsize(fs, dp) < lfs_sb_getmaxsymlinklen(fs) ||
-		    (lfs_sb_getmaxsymlinklen(fs) == 0 && lfs_dino_getblocks(fs, dp) == 0)) {
-			ndb = howmany(lfs_dino_getsize(fs, dp), LFS_BLKPTRSIZE(fs));
+		if (dp->di_size < fs->lfs_maxsymlinklen ||
+		    (fs->lfs_maxsymlinklen == 0 && dp->di_blocks == 0)) {
+			ndb = howmany(dp->di_size, sizeof(ulfs_daddr_t));
 			if (ndb > ULFS_NDADDR) {
 				j = ndb - ULFS_NDADDR;
 				for (ndb = 1; j > 1; j--)
@@ -262,37 +239,33 @@ checkinode(ino_t inumber, struct inodesc * idesc)
 		}
 	}
 	for (j = ndb; j < ULFS_NDADDR; j++)
-		if (lfs_dino_getdb(fs, dp, j) != 0) {
+		if (dp->di_db[j] != 0) {
 			if (debug)
-				printf("bad direct addr for size %ju lbn %jd: 0x%jx\n",
-					(uintmax_t)lfs_dino_getsize(fs, dp),
-					(intmax_t)j,
-					(intmax_t)lfs_dino_getdb(fs, dp, j));
+				printf("bad direct addr for size %lld lbn %d: 0x%x\n",
+					(long long)dp->di_size, j, (unsigned)dp->di_db[j]);
 			goto unknown;
 		}
 	for (j = 0, ndb -= ULFS_NDADDR; ndb > 0; j++)
 		ndb /= LFS_NINDIR(fs);
 	for (; j < ULFS_NIADDR; j++)
-		if (lfs_dino_getib(fs, dp, j) != 0) {
+		if (dp->di_ib[j] != 0) {
 			if (debug)
-				printf("bad indirect addr for size %ju # %jd: 0x%jx\n",
-					(uintmax_t)lfs_dino_getsize(fs, dp),
-					(intmax_t)j,
-					(intmax_t)lfs_dino_getib(fs, dp, j));
+				printf("bad indirect addr for size %lld # %d: 0x%x\n",
+					(long long)dp->di_size, j, (unsigned)dp->di_ib[j]);
 			goto unknown;
 		}
 	if (ftypeok(dp) == 0)
 		goto unknown;
 	n_files++;
-	lncntp[inumber] = lfs_dino_getnlink(fs, dp);
-	if (lfs_dino_getnlink(fs, dp) <= 0) {
+	lncntp[inumber] = dp->di_nlink;
+	if (dp->di_nlink <= 0) {
 		zlnp = emalloc(sizeof *zlnp);
 		zlnp->zlncnt = inumber;
 		zlnp->next = zlnhead;
 		zlnhead = zlnp;
 	}
 	if (mode == LFS_IFDIR) {
-		if (lfs_dino_getsize(fs, dp) == 0)
+		if (dp->di_size == 0)
 			statemap[inumber] = DCLEAR;
 		else
 			statemap[inumber] = DSTATE;
@@ -305,9 +278,9 @@ checkinode(ino_t inumber, struct inodesc * idesc)
 	 * to rewrite blocks from a file whose directory operation (removal)
 	 * is in progress.
 	 */
-	if (lfs_dino_getnlink(fs, dp) <= 0) {
+	if (dp->di_nlink <= 0) {
 		LFS_IENTRY(ifp, fs, inumber, bp);
-		if (lfs_if_getnextfree(fs, ifp) == LFS_ORPHAN_NEXTFREE) {
+		if (ifp->if_nextfree == LFS_ORPHAN_NEXTFREE) {
 			statemap[inumber] = (mode == LFS_IFDIR ? DCLEAR : FCLEAR);
 			/* Add this to our list of orphans */
 			zlnp = emalloc(sizeof *zlnp);
@@ -318,21 +291,19 @@ checkinode(ino_t inumber, struct inodesc * idesc)
 		brelse(bp, 0);
 	}
 
-	/* XXX: why VTOD(vp) instead of dp here? */
-
 	typemap[inumber] = LFS_IFTODT(mode);
-	badblkcount = dupblkcount = 0;
+	badblk = dupblk = 0;
 	idesc->id_number = inumber;
 	(void) ckinode(VTOD(vp), idesc);
-	if (lfs_dino_getblocks(fs, dp) != idesc->id_entryno) {
-		pwarn("INCORRECT BLOCK COUNT I=%llu (%ju SHOULD BE %lld)",
-		    (unsigned long long)inumber, lfs_dino_getblocks(fs, dp),
+	if (dp->di_blocks != idesc->id_entryno) {
+		pwarn("INCORRECT BLOCK COUNT I=%llu (%d SHOULD BE %d)",
+		    (unsigned long long)inumber, dp->di_blocks,
 		    idesc->id_entryno);
 		if (preen)
 			printf(" (CORRECTED)\n");
 		else if (reply("CORRECT") == 0)
 			return;
-		lfs_dino_setblocks(fs, VTOD(vp), idesc->id_entryno);
+		VTOI(vp)->i_ffs1_blocks = idesc->id_entryno;
 		inodirty(VTOI(vp));
 	}
 	return;
@@ -358,7 +329,7 @@ pass1check(struct inodesc *idesc)
 
 	if ((anyout = chkrange(blkno, idesc->id_numfrags)) != 0) {
 		blkerror(idesc->id_number, "BAD", blkno);
-		if (badblkcount++ >= MAXBAD) {
+		if (badblk++ >= MAXBAD) {
 			pwarn("EXCESSIVE BAD BLKS I=%llu",
 			    (unsigned long long)idesc->id_number);
 			if (preen)
@@ -368,7 +339,7 @@ pass1check(struct inodesc *idesc)
 			return (STOP);
 		}
 	} else if (!testbmap(blkno)) {
-		seg_table[lfs_dtosn(fs, blkno)].su_nbytes += idesc->id_numfrags * lfs_sb_getfsize(fs);
+		seg_table[lfs_dtosn(fs, blkno)].su_nbytes += idesc->id_numfrags * fs->lfs_fsize;
 	}
 	for (ndblks = idesc->id_numfrags; ndblks > 0; blkno++, ndblks--) {
 		if (anyout && chkrange(blkno, 1)) {
@@ -387,7 +358,7 @@ pass1check(struct inodesc *idesc)
 				(long long)idesc->id_lblkno,
 				(long long)testbmap(blkno));
 #endif
-			if (dupblkcount++ >= MAXDUP) {
+			if (dupblk++ >= MAXDUP) {
 				pwarn("EXCESSIVE DUP BLKS I=%llu",
 				    (unsigned long long)idesc->id_number);
 				if (preen)

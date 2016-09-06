@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_lwp.c,v 1.185 2016/07/03 14:24:58 christos Exp $	*/
+/*	$NetBSD: kern_lwp.c,v 1.177 2013/11/25 16:29:25 christos Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2006, 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -211,7 +211,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_lwp.c,v 1.185 2016/07/03 14:24:58 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_lwp.c,v 1.177 2013/11/25 16:29:25 christos Exp $");
 
 #include "opt_ddb.h"
 #include "opt_lockdebug.h"
@@ -251,11 +251,18 @@ struct lwplist		alllwp		__cacheline_aligned;
 static void		lwp_dtor(void *, void *);
 
 /* DTrace proc provider probes */
-SDT_PROVIDER_DEFINE(proc);
-
-SDT_PROBE_DEFINE1(proc, kernel, , lwp__create, "struct lwp *");
-SDT_PROBE_DEFINE1(proc, kernel, , lwp__start, "struct lwp *");
-SDT_PROBE_DEFINE1(proc, kernel, , lwp__exit, "struct lwp *");
+SDT_PROBE_DEFINE(proc,,,lwp_create,lwp-create,
+	"struct lwp *", NULL,
+	NULL, NULL, NULL, NULL,
+	NULL, NULL, NULL, NULL);
+SDT_PROBE_DEFINE(proc,,,lwp_start,lwp-start,
+	"struct lwp *", NULL,
+	NULL, NULL, NULL, NULL,
+	NULL, NULL, NULL, NULL);
+SDT_PROBE_DEFINE(proc,,,lwp_exit,lwp-exit,
+	"struct lwp *", NULL,
+	NULL, NULL, NULL, NULL,
+	NULL, NULL, NULL, NULL);
 
 struct turnstile turnstile0;
 struct lwp lwp0 __aligned(MIN_LWP_ALIGNMENT) = {
@@ -509,7 +516,7 @@ lwp_unstop(struct lwp *l)
 	if (l->l_wchan == NULL) {
 		/* setrunnable() will release the lock. */
 		setrunnable(l);
-	} else if (p->p_xsig && (l->l_flag & LW_SINTR) != 0) {
+	} else if (p->p_xstat && (l->l_flag & LW_SINTR) != 0) {
 		/* setrunnable() so we can receive the signal */
 		setrunnable(l);
 	} else {
@@ -829,8 +836,6 @@ lwp_create(lwp_t *l1, proc_t *p2, vaddr_t uaddr, int flags,
 	l2->l_kpribase = PRI_KERNEL;
 	l2->l_priority = l1->l_priority;
 	l2->l_inheritedprio = -1;
-	l2->l_protectprio = -1;
-	l2->l_auxprio = -1;
 	l2->l_flag = 0;
 	l2->l_pflag = LP_MPSAFE;
 	TAILQ_INIT(&l2->l_ld_locks);
@@ -956,7 +961,7 @@ lwp_create(lwp_t *l1, proc_t *p2, vaddr_t uaddr, int flags,
 	}
 	mutex_exit(p2->p_lock);
 
-	SDT_PROBE(proc, kernel, , lwp__create, l2, 0, 0, 0, 0);
+	SDT_PROBE(proc,,,lwp_create, l2, 0,0,0,0);
 
 	mutex_enter(proc_lock);
 	LIST_INSERT_HEAD(&alllwp, l2, l_list);
@@ -976,11 +981,11 @@ lwp_create(lwp_t *l1, proc_t *p2, vaddr_t uaddr, int flags,
  * previous LWP, at splsched.
  */
 void
-lwp_startup(struct lwp *prev, struct lwp *new_lwp)
+lwp_startup(struct lwp *prev, struct lwp *new)
 {
-	KASSERTMSG(new_lwp == curlwp, "l %p curlwp %p prevlwp %p", new_lwp, curlwp, prev);
+	KASSERTMSG(new == curlwp, "l %p curlwp %p prevlwp %p", new, curlwp, prev);
 
-	SDT_PROBE(proc, kernel, , lwp__start, new_lwp, 0, 0, 0, 0);
+	SDT_PROBE(proc,,,lwp_start, new, 0,0,0,0);
 
 	KASSERT(kpreempt_disabled());
 	if (prev != NULL) {
@@ -993,18 +998,18 @@ lwp_startup(struct lwp *prev, struct lwp *new_lwp)
 		membar_exit();
 		prev->l_ctxswtch = 0;
 	}
-	KPREEMPT_DISABLE(new_lwp);
-	if (__predict_true(new_lwp->l_proc->p_vmspace))
-		pmap_activate(new_lwp);
+	KPREEMPT_DISABLE(new);
 	spl0();
+	if (__predict_true(new->l_proc->p_vmspace))
+		pmap_activate(new);
 
 	/* Note trip through cpu_switchto(). */
 	pserialize_switchpoint();
 
 	LOCKDEBUG_BARRIER(NULL, 0);
-	KPREEMPT_ENABLE(new_lwp);
-	if ((new_lwp->l_pflag & LP_MPSAFE) == 0) {
-		KERNEL_LOCK(1, new_lwp);
+	KPREEMPT_ENABLE(new);
+	if ((new->l_pflag & LP_MPSAFE) == 0) {
+		KERNEL_LOCK(1, new);
 	}
 }
 
@@ -1023,7 +1028,7 @@ lwp_exit(struct lwp *l)
 	KASSERT(current || (l->l_stat == LSIDL && l->l_target_cpu == NULL));
 	KASSERT(p == curproc);
 
-	SDT_PROBE(proc, kernel, , lwp__exit, l, 0, 0, 0, 0);
+	SDT_PROBE(proc,,,lwp_exit, l, 0,0,0,0);
 
 	/*
 	 * Verify that we hold no locks other than the kernel lock.
@@ -1045,7 +1050,7 @@ lwp_exit(struct lwp *l)
 		KASSERT(current == true);
 		KASSERT(p != &proc0);
 		/* XXXSMP kernel_lock not held */
-		exit1(l, 0, 0);
+		exit1(l, 0);
 		/* NOTREACHED */
 	}
 	p->p_nzlwps++;
@@ -1404,7 +1409,7 @@ lwp_find(struct proc *p, lwpid_t id)
  *
  * This happens early in the syscall path, on user trap, and on LWP
  * creation.  A long-running LWP can also voluntarily choose to update
- * its credentials by calling this routine.  This may be called from
+ * it's credentials by calling this routine.  This may be called from
  * LWP_CACHE_CREDS(), which checks l->l_cred != p->p_cred beforehand.
  */
 void
@@ -1441,13 +1446,13 @@ lwp_locked(struct lwp *l, kmutex_t *mtx)
  * Lend a new mutex to an LWP.  The old mutex must be held.
  */
 void
-lwp_setlock(struct lwp *l, kmutex_t *mtx)
+lwp_setlock(struct lwp *l, kmutex_t *new)
 {
 
 	KASSERT(mutex_owned(l->l_mutex));
 
 	membar_exit();
-	l->l_mutex = mtx;
+	l->l_mutex = new;
 }
 
 /*
@@ -1455,7 +1460,7 @@ lwp_setlock(struct lwp *l, kmutex_t *mtx)
  * must be held.
  */
 void
-lwp_unlock_to(struct lwp *l, kmutex_t *mtx)
+lwp_unlock_to(struct lwp *l, kmutex_t *new)
 {
 	kmutex_t *old;
 
@@ -1463,7 +1468,7 @@ lwp_unlock_to(struct lwp *l, kmutex_t *mtx)
 
 	old = l->l_mutex;
 	membar_exit();
-	l->l_mutex = mtx;
+	l->l_mutex = new;
 	mutex_spin_exit(old);
 }
 
@@ -1745,8 +1750,7 @@ lwp_ctl_alloc(vaddr_t *uaddr)
 		lp->lp_cur = 0;
 		lp->lp_max = LWPCTL_UAREA_SZ;
 		lp->lp_uva = p->p_emul->e_vm_default_addr(p,
-		     (vaddr_t)p->p_vmspace->vm_daddr, LWPCTL_UAREA_SZ,
-		     p->p_vmspace->vm_map.flags & VM_MAP_TOPDOWN);
+		     (vaddr_t)p->p_vmspace->vm_daddr, LWPCTL_UAREA_SZ);
 		error = uvm_map(&p->p_vmspace->vm_map, &lp->lp_uva,
 		    LWPCTL_UAREA_SZ, lp->lp_uao, 0, 0, UVM_MAPFLAG(UVM_PROT_RW,
 		    UVM_PROT_RW, UVM_INH_NONE, UVM_ADV_NORMAL, 0));

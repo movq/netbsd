@@ -1,5 +1,5 @@
 /* aarch64-opc.c -- AArch64 opcode support.
-   Copyright (C) 2009-2015 Free Software Foundation, Inc.
+   Copyright 2009, 2010, 2011, 2012, 2013  Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of the GNU opcodes library.
@@ -192,7 +192,6 @@ const aarch64_field fields[] =
     { 11,  1 },	/* index: in ld/st inst deciding the pre/post-index.  */
     { 24,  1 },	/* index2: in ld/st pair inst deciding the pre/post-index.  */
     { 31,  1 },	/* sf: in integer data processing instructions.  */
-    { 30,  1 },	/* lse_size: in LSE extension atomic instructions.  */
     { 11,  1 },	/* H: in advsimd scalar x indexed element instructions.  */
     { 21,  1 },	/* L: in advsimd scalar x indexed element instructions.  */
     { 20,  1 },	/* M: in advsimd scalar x indexed element instructions.  */
@@ -1255,25 +1254,6 @@ operand_general_constraint_met_p (const aarch64_opnd_info *opnds, int idx,
   switch (aarch64_operands[type].op_class)
     {
     case AARCH64_OPND_CLASS_INT_REG:
-      /* Check pair reg constraints for cas* instructions.  */
-      if (type == AARCH64_OPND_PAIRREG)
-	{
-	  assert (idx == 1 || idx == 3);
-	  if (opnds[idx - 1].reg.regno % 2 != 0)
-	    {
-	      set_syntax_error (mismatch_detail, idx - 1,
-				_("reg pair must start from even reg"));
-	      return 0;
-	    }
-	  if (opnds[idx].reg.regno != opnds[idx - 1].reg.regno + 1)
-	    {
-	      set_syntax_error (mismatch_detail, idx,
-				_("reg pair must be contiguous"));
-	      return 0;
-	    }
-	  break;
-	}
-
       /* <Xt> may be optional in some IC and TLBI instructions.  */
       if (type == AARCH64_OPND_Rt_SYS)
 	{
@@ -2302,12 +2282,9 @@ print_register_offset_address (char *buf, size_t size,
   else
     tb[0] = '\0';
 
-  snprintf (buf, size, "[%s,%s%s]",
+  snprintf (buf, size, "[%s,%c%d%s]",
 	    get_64bit_int_reg_name (opnd->addr.base_regno, 1),
-	    get_int_reg_name (opnd->addr.offset.regno,
-			      wm_p ? AARCH64_OPND_QLF_W : AARCH64_OPND_QLF_X,
-			      0 /* sp_reg_p */),
-	    tb);
+	    wm_p ? 'w' : 'x', opnd->addr.offset.regno, tb);
 }
 
 /* Generate the string representation of the operand OPNDS[IDX] for OPCODE
@@ -2347,7 +2324,6 @@ aarch64_print_operand (char *buf, size_t size, bfd_vma pc,
     case AARCH64_OPND_Rs:
     case AARCH64_OPND_Ra:
     case AARCH64_OPND_Rt_SYS:
-    case AARCH64_OPND_PAIRREG:
       /* The optional-ness of <Xt> in e.g. IC <ic_op>{, <Xt>} is determined by
 	 the <ic_op>, therefore we we use opnd->present to override the
 	 generic optional-ness information.  */
@@ -2723,12 +2699,6 @@ aarch64_print_operand (char *buf, size_t size, bfd_vma pc,
 #endif
 #define F_DEPRECATED	0x1	/* Deprecated system register.  */
 
-#ifdef F_ARCHEXT
-#undef F_ARCHEXT
-#endif
-#define F_ARCHEXT	0x2	/* Architecture dependent system register.  */
-
-
 /* TODO there are two more issues need to be resolved
    1. handle read-only and write-only system registers
    2. handle cpu-implementation-defined system registers.  */
@@ -2740,7 +2710,6 @@ const aarch64_sys_reg aarch64_sys_regs [] =
   { "spsel",            CPEN_(0,C2,0),	0 },
   { "daif",             CPEN_(3,C2,1),	0 },
   { "currentel",        CPEN_(0,C2,2),	0 }, /* RO */
-  { "pan",		CPEN_(0,C2,3),	F_ARCHEXT },
   { "nzcv",             CPEN_(3,C2,0),	0 },
   { "fpcr",             CPEN_(3,C4,0),	0 },
   { "fpsr",             CPEN_(3,C4,1),	0 },
@@ -2772,7 +2741,6 @@ const aarch64_sys_reg aarch64_sys_regs [] =
   { "id_mmfr1_el1",     CPENC(3,0,C0,C1,5),	0 }, /* RO */
   { "id_mmfr2_el1",     CPENC(3,0,C0,C1,6),	0 }, /* RO */
   { "id_mmfr3_el1",     CPENC(3,0,C0,C1,7),	0 }, /* RO */
-  { "id_mmfr4_el1",     CPENC(3,0,C0,C2,6),	0 }, /* RO */
   { "id_isar0_el1",     CPENC(3,0,C0,C2,0),	0 }, /* RO */
   { "id_isar1_el1",     CPENC(3,0,C0,C2,1),	0 }, /* RO */
   { "id_isar2_el1",     CPENC(3,0,C0,C2,2),	0 }, /* RO */
@@ -3051,44 +3019,13 @@ aarch64_sys_reg_deprecated_p (const aarch64_sys_reg *reg)
   return (reg->flags & F_DEPRECATED) != 0;
 }
 
-bfd_boolean
-aarch64_sys_reg_supported_p (const aarch64_feature_set features,
-			     const aarch64_sys_reg *reg)
-{
-  if (!(reg->flags & F_ARCHEXT))
-    return TRUE;
-
-  /* PAN.  Values are from aarch64_sys_regs.  */
-  if (reg->value == CPEN_(0,C2,3)
-      && !AARCH64_CPU_HAS_FEATURE (features, AARCH64_FEATURE_PAN))
-    return FALSE;
-
-  return TRUE;
-}
-
 const aarch64_sys_reg aarch64_pstatefields [] =
 {
   { "spsel",            0x05,	0 },
   { "daifset",          0x1e,	0 },
   { "daifclr",          0x1f,	0 },
-  { "pan",		0x04,	F_ARCHEXT },
   { 0,          CPENC(0,0,0,0,0), 0 },
 };
-
-bfd_boolean
-aarch64_pstatefield_supported_p (const aarch64_feature_set features,
-				 const aarch64_sys_reg *reg)
-{
-  if (!(reg->flags & F_ARCHEXT))
-    return TRUE;
-
-  /* PAN.  Values are from aarch64_pstatefields.  */
-  if (reg->value == 0x04
-      && !AARCH64_CPU_HAS_FEATURE (features, AARCH64_FEATURE_PAN))
-    return FALSE;
-
-  return TRUE;
-}
 
 const aarch64_sys_ins_reg aarch64_sys_regs_ic[] =
 {

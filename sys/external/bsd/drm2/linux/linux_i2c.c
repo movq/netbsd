@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_i2c.c,v 1.3 2015/03/05 17:29:18 riastradh Exp $	*/
+/*	$NetBSD: linux_i2c.c,v 1.2.8.1 2015/03/06 21:39:10 snj Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_i2c.c,v 1.3 2015/03/05 17:29:18 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_i2c.c,v 1.2.8.1 2015/03/06 21:39:10 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/errno.h>

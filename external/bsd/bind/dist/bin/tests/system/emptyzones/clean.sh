@@ -13,6 +13,4 @@
 # PERFORMANCE OF THIS SOFTWARE.
 
 rm -f ns1/named.conf
-rm -f ns*/named.run
-rm -f ns*/named.memstats
 rm -f dig.out.test*

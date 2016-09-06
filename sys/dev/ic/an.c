@@ -1,4 +1,4 @@
-/*	$NetBSD: an.c,v 1.63 2016/06/10 13:27:13 ozaki-r Exp $	*/
+/*	$NetBSD: an.c,v 1.61.4.1 2015/02/16 21:25:34 martin Exp $	*/
 /*
  * Copyright (c) 1997, 1998, 1999
  *	Bill Paul <wpaul@ctr.columbia.edu>.  All rights reserved.
@@ -77,7 +77,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: an.c,v 1.63 2016/06/10 13:27:13 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: an.c,v 1.61.4.1 2015/02/16 21:25:34 martin Exp $");
 
 
 #include <sys/param.h>
@@ -1438,7 +1438,7 @@ an_rx_intr(struct an_softc *sc)
 	    len;
 
 	memcpy(m->m_data, &frmhdr.an_whdr, sizeof(struct ieee80211_frame));
-	m_set_rcvif(m, ifp);
+	m->m_pkthdr.rcvif = ifp;
 	CSR_WRITE_2(sc, AN_EVENT_ACK, AN_EV_RX);
 
 	if (sc->sc_drvbpf) {

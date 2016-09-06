@@ -1,5 +1,5 @@
-/*	Id: init.c,v 1.99 2015/11/17 19:19:40 ragge Exp 	*/	
-/*	$NetBSD: init.c,v 1.1.1.8 2016/02/09 20:28:50 plunky Exp $	*/
+/*	Id: init.c,v 1.90 2014/05/17 20:42:15 plunky Exp 	*/	
+/*	$NetBSD: init.c,v 1.1.1.7 2014/07/24 19:23:38 plunky Exp $	*/
 
 /*
  * Copyright (c) 2004, 2007 Anders Magnusson (ragge@ludd.ltu.se).
@@ -65,11 +65,6 @@
 #include "pass1.h"
 #include "unicode.h"
 #include <string.h>
-
-#define	NODE P1ND
-#define	tfree p1tfree
-#define	nfree p1nfree
-#define	fwalk p1fwalk
 
 /*
  * The following machine-dependent routines may be called during
@@ -245,8 +240,8 @@ inval(CONSZ off, int fsz, NODE *p)
 		return;
 	}
 	if (p->n_type == BOOL) {
-		if ((U_CONSZ)glval(p) > 1)
-			slval(p, 1);
+		if ((U_CONSZ)p->n_lval > 1)
+			p->n_lval = 1;
 		p->n_type = BOOL_TYPE;
 	}
 	if (ninval(off, fsz, p))
@@ -255,10 +250,10 @@ inval(CONSZ off, int fsz, NODE *p)
 	if (t > BTMASK)
 		t = INTPTR;
 
-	val = (CONSZ)(glval(p) & SZMASK(sztable[t]));
+	val = (CONSZ)(p->n_lval & SZMASK(sztable[t]));
 	if (t <= ULONGLONG) {
 		sp = p->n_sp;
-		printf(PRTPREF "%s ",astypnames[t]);
+		printf("%s ",astypnames[t]);
 		if (val || sp == NULL)
 			printf(CONFMT, val);
 		if (val && sp != NULL)
@@ -268,10 +263,9 @@ inval(CONSZ off, int fsz, NODE *p)
 				/* fix problem with &&label not defined yet */
 				int o = sp->soffset;
 				printf(LABFMT, o < 0 ? -o : o);
-				if ((sp->sflags & SMASK) == SSTRING)
-					sp->sflags |= SASG;
 			} else
-				printf("%s", getexname(sp));
+				printf("%s", sp->soname ?
+				    sp->soname : exname(sp->sname));
 		}
 		printf("\n");
 	} else
@@ -299,7 +293,7 @@ infld(CONSZ off, int fsz, CONSZ val)
 	while (fsz + inbits >= SZCHAR) {
 		int shsz = SZCHAR-inbits;
 		xinval = (xinval << shsz) | (val >> (fsz - shsz));
-		printf(PRTPREF "%s " CONFMT "\n",
+		printf("%s " CONFMT "\n",
 		    astypnames[CHAR], xinval & SZMASK(SZCHAR));
 		fsz -= shsz;
 		val &= SZMASK(fsz);
@@ -313,7 +307,7 @@ infld(CONSZ off, int fsz, CONSZ val)
 	while (fsz + inbits >= SZCHAR) {
 		int shsz = SZCHAR-inbits;
 		xinval |= (val << inbits);
-		printf(PRTPREF "%s " CONFMT "\n",
+		printf("%s " CONFMT "\n",
 		    astypnames[CHAR], (CONSZ)(xinval & SZMASK(SZCHAR)));
 		fsz -= shsz;
 		val >>= shsz;
@@ -350,7 +344,7 @@ zbits(OFFSZ off, int fsz)
 		} else {
 			fsz -= m;
 			xinval <<= m;
-			printf(PRTPREF "%s " CONFMT "\n", 
+			printf("%s " CONFMT "\n", 
 			    astypnames[CHAR], xinval & SZMASK(SZCHAR));
 			xinval = inbits = 0;
 		}
@@ -363,14 +357,14 @@ zbits(OFFSZ off, int fsz)
 			return;
 		} else {
 			fsz -= m;
-			printf(PRTPREF "%s " CONFMT "\n", 
+			printf("%s " CONFMT "\n", 
 			    astypnames[CHAR], (CONSZ)(xinval & SZMASK(SZCHAR)));
 			xinval = inbits = 0;
 		}
 	}
 #endif
 	if (fsz >= SZCHAR) {
-		printf(PRTPREF "%s %d\n", asspace, fsz/SZCHAR);
+		printf("%s %d\n", asspace, fsz/SZCHAR);
 		fsz -= (fsz/SZCHAR) * SZCHAR;
 	}
 	if (fsz) {
@@ -728,9 +722,6 @@ scalinit(NODE *p)
 		    pstk->in_sym->sap);
 
 	nsetval(woff, fsz, q);
-	if (q->n_op == ICON && q->n_sp &&
-	    ((q->n_sp->sflags & SMASK) == SSTRING))
-		q->n_sp->sflags |= SASG;
 
 	stkpop();
 #ifdef PCC_DEBUG
@@ -842,7 +833,7 @@ endinit(int seg)
 #ifdef PCC_DEBUG
 			if (idebug > 1) {
 				printf("off " CONFMT " size %d val " CONFMT " type ",
-				    ll->begsz+il->off, il->fsz, glval(il->n));
+				    ll->begsz+il->off, il->fsz, il->n->n_lval);
 				tprint(il->n->n_type, 0);
 				printf("\n");
 			}
@@ -877,7 +868,7 @@ endinit(int seg)
 					    (ll->begsz + il->off) - lastoff);
 				if (fsz < 0) {
 					fsz = -fsz;
-					infld(il->off, fsz, glval(il->n));
+					infld(il->off, fsz, il->n->n_lval);
 				} else
 					inval(il->off, fsz, il->n);
 				tfree(il->n);
@@ -999,7 +990,7 @@ mkstack(NODE *p)
 			cerror("mkstack");
 		if (!ISARY(pstk->in_t))
 			uerror("array indexing non-array");
-		pstk->in_n = (int)glval(p->n_right);
+		pstk->in_n = (int)p->n_right->n_lval;
 		nfree(p->n_right);
 		break;
 
@@ -1069,12 +1060,8 @@ strcvt(NODE *p)
 #endif
 
 	for (s = p->n_sp->sname; *s != 0; ) {
-		if (p->n_type == ARY+WCHAR_TYPE)
-			i = u82cp(&s);
-		else if (*s == '\\')
-			i = esccon(&s);
-		else
-			i = (unsigned char)*s++;
+		if(p->n_type==ARY+WCHAR_TYPE) i=u82cp(&s);
+		else i=(unsigned char)*s++;
 		asginit(bcon(i));
 	} 
 	tfree(q);
@@ -1216,18 +1203,6 @@ simpleinit(struct symtab *sp, NODE *p)
 			inval(0, sz, p->n_right->n_right);
 			tfree(p);
 			break;
-		} else if (ISITY(p->n_type) || ISITY(q->n_type)) {
-			/* XXX merge this with code from imop() */
-			int li = 0, ri = 0;
-			if (ISITY(p->n_type))
-				li = 1, p->n_type = p->n_type - (FIMAG-FLOAT);
-			if (ISITY(q->n_type))
-				ri = 1, q->n_type = q->n_type - (FIMAG-FLOAT);
-			if (!(li && ri)) {
-				tfree(p);
-				p = bcon(0);
-			}
-			/* continue below */
 		}
 #endif
 #ifdef TARGET_TIMODE
@@ -1246,9 +1221,6 @@ simpleinit(struct symtab *sp, NODE *p)
 			break;
 		}
 #endif
-		if (p->n_op == NAME && p->n_sp &&
-		    (p->n_sp->sflags & SMASK) == SSTRING)
-			p->n_sp->sflags |= SASG;
 		p = optloop(buildtree(ASSIGN, nt, p));
 		q = p->n_right;
 		t = q->n_type;
@@ -1271,8 +1243,6 @@ simpleinit(struct symtab *sp, NODE *p)
 
 		if (ANYCX(q) || ANYCX(p))
 			r = cxop(ASSIGN, q, p);
-		else if (ISITY(p->n_type) || ISITY(q->n_type))
-			r = imop(ASSIGN, q, p);
 		else
 #endif
 			r = buildtree(ASSIGN, q, p);

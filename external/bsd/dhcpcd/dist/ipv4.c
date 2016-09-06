@@ -1,9 +1,9 @@
 #include <sys/cdefs.h>
- __RCSID("$NetBSD: ipv4.c,v 1.25 2016/08/15 11:04:53 roy Exp $");
+ __RCSID("$NetBSD: ipv4.c,v 1.1.1.7.2.2 2015/02/05 15:13:12 martin Exp $");
 
 /*
  * dhcpcd - DHCP client daemon
- * Copyright (c) 2006-2016 Roy Marples <roy@marples.name>
+ * Copyright (c) 2006-2015 Roy Marples <roy@marples.name>
  * All rights reserved
 
  * Redistribution and use in source and binary forms, with or without
@@ -31,17 +31,15 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#include <arpa/inet.h>
-#include <net/if.h>
-#include <net/route.h>
-#include <netinet/if_ether.h>
 #include <netinet/in.h>
+#include <arpa/inet.h>
+#include <net/route.h>
 
-#include <assert.h>
 #include <ctype.h>
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
+#include <syslog.h>
 #include <unistd.h>
 
 #include "config.h"
@@ -52,13 +50,11 @@
 #include "if.h"
 #include "if-options.h"
 #include "ipv4.h"
-#include "ipv4ll.h"
 #include "script.h"
 
 #define IPV4_LOOPBACK_ROUTE
-#if defined(__linux__) || defined(__sun) || (defined(BSD) && defined(RTF_LOCAL))
-/* Linux has had loopback routes in the local table since 2.2
- * Solaris does not seem to support loopback routes. */
+#ifdef __linux__
+/* Linux has had loopback routes in the local table since 2.2 */
 #undef IPV4_LOOPBACK_ROUTE
 #endif
 
@@ -117,7 +113,7 @@ ipv4_getnetmask(uint32_t addr)
 
 struct ipv4_addr *
 ipv4_iffindaddr(struct interface *ifp,
-    const struct in_addr *addr, const struct in_addr *mask)
+    const struct in_addr *addr, const struct in_addr *net)
 {
 	struct ipv4_state *state;
 	struct ipv4_addr *ap;
@@ -126,7 +122,7 @@ ipv4_iffindaddr(struct interface *ifp,
 	if (state) {
 		TAILQ_FOREACH(ap, &state->addrs, next) {
 			if ((addr == NULL || ap->addr.s_addr == addr->s_addr) &&
-			    (mask == NULL || ap->mask.s_addr == mask->s_addr))
+			    (net == NULL || ap->net.s_addr == net->s_addr))
 				return ap;
 		}
 	}
@@ -149,23 +145,6 @@ ipv4_iffindlladdr(struct interface *ifp)
 	return NULL;
 }
 
-static struct ipv4_addr *
-ipv4_iffindmaskaddr(struct interface *ifp, const struct in_addr *addr)
-{
-	struct ipv4_state *state;
-	struct ipv4_addr *ap;
-
-	state = IPV4_STATE(ifp);
-	if (state) {
-		TAILQ_FOREACH (ap, &state->addrs, next) {
-			if ((ap->addr.s_addr & ap->mask.s_addr) ==
-			    (addr->s_addr & ap->mask.s_addr))
-				return ap;
-		}
-	}
-	return NULL;
-}
-
 struct ipv4_addr *
 ipv4_findaddr(struct dhcpcd_ctx *ctx, const struct in_addr *addr)
 {
@@ -180,40 +159,37 @@ ipv4_findaddr(struct dhcpcd_ctx *ctx, const struct in_addr *addr)
 	return NULL;
 }
 
-struct ipv4_addr *
-ipv4_findmaskaddr(struct dhcpcd_ctx *ctx, const struct in_addr *addr)
+int
+ipv4_addrexists(struct dhcpcd_ctx *ctx, const struct in_addr *addr)
 {
 	struct interface *ifp;
-	struct ipv4_addr *ap;
+	struct dhcp_state *state;
 
 	TAILQ_FOREACH(ifp, ctx->ifaces, next) {
-		ap = ipv4_iffindmaskaddr(ifp, addr);
-		if (ap)
-			return ap;
+		state = D_STATE(ifp);
+		if (state) {
+			if (addr == NULL) {
+				if (state->addr.s_addr != INADDR_ANY)
+					return 1;
+			} else if (addr->s_addr == state->addr.s_addr)
+				return 1;
+		}
+		if (addr != NULL && ipv4_iffindaddr(ifp, addr, NULL))
+			return 1;
 	}
-	return NULL;
-}
-
-int
-ipv4_hasaddr(const struct interface *ifp)
-{
-	const struct dhcp_state *dstate;
-	const struct ipv4ll_state *istate;
-
-	dstate = D_CSTATE(ifp);
-	istate = IPV4LL_CSTATE(ifp);
-	return ((dstate &&
-	    dstate->added == STATE_ADDED &&
-	    dstate->addr != NULL) ||
-	    (istate && istate->addr));
+	return 0;
 }
 
 void
 ipv4_freeroutes(struct rt_head *rts)
 {
+	struct rt *r;
 
 	if (rts) {
-		ipv4_freerts(rts);
+		while ((r = TAILQ_FIRST(rts))) {
+			TAILQ_REMOVE(rts, r, next);
+			free(r);
+		}
 		free(rts);
 	}
 }
@@ -228,19 +204,15 @@ ipv4_init(struct dhcpcd_ctx *ctx)
 			return -1;
 		TAILQ_INIT(ctx->ipv4_routes);
 	}
-	if (ctx->ipv4_kroutes == NULL) {
-		ctx->ipv4_kroutes = malloc(sizeof(*ctx->ipv4_kroutes));
-		if (ctx->ipv4_kroutes == NULL)
-			return -1;
-		TAILQ_INIT(ctx->ipv4_kroutes);
-	}
 	return 0;
 }
 
+
 /* Interface comparer for working out ordering. */
-int
+static int
 ipv4_ifcmp(const struct interface *si, const struct interface *ti)
 {
+	int sill, till;
 	const struct dhcp_state *sis, *tis;
 
 	sis = D_CSTATE(si);
@@ -264,12 +236,53 @@ ipv4_ifcmp(const struct interface *si, const struct interface *ti)
 	/* If we are either, they neither have a lease, or they both have.
 	 * We need to check for IPv4LL and make it non-preferred. */
 	if (sis->new && tis->new) {
-		if (IS_DHCP(sis->new) && !IS_DHCP(tis->new))
-			return -1;
-		if (!IS_DHCP(sis->new) && IS_DHCP(tis->new))
+		sill = (sis->new->cookie == htonl(MAGIC_COOKIE));
+		till = (tis->new->cookie == htonl(MAGIC_COOKIE));
+		if (!sill && till)
 			return 1;
+		if (sill && !till)
+			return -1;
 	}
+	/* Then carrier status. */
+	if (si->carrier > ti->carrier)
+		return -1;
+	if (si->carrier < ti->carrier)
+		return 1;
+	/* Finally, metric */
+	if (si->metric < ti->metric)
+		return -1;
+	if (si->metric > ti->metric)
+		return 1;
 	return 0;
+}
+
+/* Sort the interfaces into a preferred order - best first, worst last. */
+void
+ipv4_sortinterfaces(struct dhcpcd_ctx *ctx)
+{
+	struct if_head sorted;
+	struct interface *ifp, *ift;
+
+	if (ctx->ifaces == NULL ||
+	    (ifp = TAILQ_FIRST(ctx->ifaces)) == NULL ||
+	    TAILQ_NEXT(ifp, next) == NULL)
+		return;
+
+	TAILQ_INIT(&sorted);
+	TAILQ_REMOVE(ctx->ifaces, ifp, next);
+	TAILQ_INSERT_HEAD(&sorted, ifp, next);
+	while ((ifp = TAILQ_FIRST(ctx->ifaces))) {
+		TAILQ_REMOVE(ctx->ifaces, ifp, next);
+		TAILQ_FOREACH(ift, &sorted, next) {
+			if (ipv4_ifcmp(ifp, ift) == -1) {
+				TAILQ_INSERT_BEFORE(ift, ifp, next);
+				break;
+			}
+		}
+		if (ift == NULL)
+			TAILQ_INSERT_TAIL(&sorted, ifp, next);
+	}
+	TAILQ_CONCAT(ctx->ifaces, &sorted, next);
 }
 
 static struct rt *
@@ -281,12 +294,12 @@ find_route(struct rt_head *rts, const struct rt *r, const struct rt *srt)
 		return NULL;
 	TAILQ_FOREACH(rt, rts, next) {
 		if (rt->dest.s_addr == r->dest.s_addr &&
-#ifdef HAVE_ROUTE_METRIC
-		    (srt || (r->iface == NULL || rt->iface == NULL ||
-		    rt->iface->metric == r->iface->metric)) &&
+#if HAVE_ROUTE_METRIC
+		    (srt || (!rt->iface ||
+			rt->iface->metric == r->iface->metric)) &&
 #endif
                     (!srt || srt != rt) &&
-		    rt->mask.s_addr == r->mask.s_addr)
+		    rt->net.s_addr == r->net.s_addr)
 			return rt;
 	}
 	return NULL;
@@ -295,191 +308,67 @@ find_route(struct rt_head *rts, const struct rt *r, const struct rt *srt)
 static void
 desc_route(const char *cmd, const struct rt *rt)
 {
-	char addr[INET_ADDRSTRLEN];
-	struct dhcpcd_ctx *ctx = rt->iface ? rt->iface->ctx : NULL;
-	const char *ifname = rt->iface ? rt->iface->name : NULL;
+	char addr[sizeof("000.000.000.000") + 1];
+	const char *ifname = rt->iface->name;
 
 	strlcpy(addr, inet_ntoa(rt->dest), sizeof(addr));
-	if (rt->mask.s_addr == htonl(INADDR_BROADCAST) &&
-	    rt->gate.s_addr == htonl(INADDR_ANY))
-		logger(ctx, LOG_INFO, "%s: %s host route to %s",
-		    ifname, cmd, addr);
-	else if (rt->mask.s_addr == htonl(INADDR_BROADCAST))
-		logger(ctx, LOG_INFO, "%s: %s host route to %s via %s",
-		    ifname, cmd, addr, inet_ntoa(rt->gate));
-	else if (rt->dest.s_addr == htonl(INADDR_ANY) &&
-	    rt->mask.s_addr == htonl(INADDR_ANY) &&
-	    rt->gate.s_addr == htonl(INADDR_ANY))
-		logger(ctx, LOG_INFO, "%s: %s default route",
-		    ifname, cmd);
-	else if (rt->gate.s_addr == htonl(INADDR_ANY))
-		logger(ctx, LOG_INFO, "%s: %s route to %s/%d",
-		    ifname, cmd, addr, inet_ntocidr(rt->mask));
-	else if (rt->dest.s_addr == htonl(INADDR_ANY) &&
-	    rt->mask.s_addr == htonl(INADDR_ANY))
-		logger(ctx, LOG_INFO, "%s: %s default route via %s",
-		    ifname, cmd, inet_ntoa(rt->gate));
-	else
-		logger(ctx, LOG_INFO, "%s: %s route to %s/%d via %s",
-		    ifname, cmd, addr, inet_ntocidr(rt->mask),
+	if (rt->gate.s_addr == INADDR_ANY)
+		syslog(LOG_INFO, "%s: %s route to %s/%d", ifname, cmd,
+		    addr, inet_ntocidr(rt->net));
+	else if (rt->gate.s_addr == rt->dest.s_addr &&
+	    rt->net.s_addr == INADDR_BROADCAST)
+		syslog(LOG_INFO, "%s: %s host route to %s", ifname, cmd,
+		    addr);
+	else if (rt->gate.s_addr == htonl(INADDR_LOOPBACK) &&
+	    rt->net.s_addr == INADDR_BROADCAST)
+		syslog(LOG_INFO, "%s: %s host route to %s via %s", ifname, cmd,
+		    addr, inet_ntoa(rt->gate));
+	else if (rt->dest.s_addr == INADDR_ANY && rt->net.s_addr == INADDR_ANY)
+		syslog(LOG_INFO, "%s: %s default route via %s", ifname, cmd,
 		    inet_ntoa(rt->gate));
-}
-
-static struct rt *
-ipv4_findrt(struct dhcpcd_ctx *ctx, const struct rt *rt, int flags)
-{
-	struct rt *r;
-
-	if (ctx->ipv4_kroutes == NULL)
-		return NULL;
-	TAILQ_FOREACH(r, ctx->ipv4_kroutes, next) {
-		if (rt->dest.s_addr == r->dest.s_addr &&
-#ifdef HAVE_ROUTE_METRIC
-		    (rt->iface == NULL || rt->iface == r->iface) &&
-		    (!flags || rt->metric == r->metric) &&
-#else
-		    (!flags || rt->iface == r->iface) &&
-#endif
-		    rt->mask.s_addr == r->mask.s_addr)
-			return r;
-	}
-	return NULL;
-}
-
-void
-ipv4_freerts(struct rt_head *routes)
-{
-	struct rt *rt;
-
-	while ((rt = TAILQ_FIRST(routes))) {
-		TAILQ_REMOVE(routes, rt, next);
-		free(rt);
-	}
+	else
+		syslog(LOG_INFO, "%s: %s route to %s/%d via %s", ifname, cmd,
+		    addr, inet_ntocidr(rt->net), inet_ntoa(rt->gate));
 }
 
 /* If something other than dhcpcd removes a route,
  * we need to remove it from our internal table. */
 int
-ipv4_handlert(struct dhcpcd_ctx *ctx, int cmd, const struct rt *rt, int flags)
+ipv4_routedeleted(struct dhcpcd_ctx *ctx, const struct rt *rt)
 {
 	struct rt *f;
 
-	if (ctx->ipv4_kroutes == NULL)
+	f = find_route(ctx->ipv4_routes, rt, NULL);
+	if (f == NULL)
 		return 0;
-
-	f = ipv4_findrt(ctx, rt, 1);
-	switch (cmd) {
-	case RTM_ADD:
-		if (f == NULL) {
-			if ((f = malloc(sizeof(*f))) == NULL)
-				return -1;
-			*f = *rt;
-			TAILQ_INSERT_TAIL(ctx->ipv4_kroutes, f, next);
-		}
-		break;
-	case RTM_DELETE:
-		if (f) {
-			TAILQ_REMOVE(ctx->ipv4_kroutes, f, next);
-			free(f);
-		}
-
-		/* If we manage the route, remove it */
-		if ((f = find_route(ctx->ipv4_routes, rt, NULL))) {
-			desc_route("deleted", f);
-			TAILQ_REMOVE(ctx->ipv4_routes, f, next);
-			free(f);
-		}
-		break;
-	}
-
-	return flags ? 0 : ipv4ll_handlert(ctx, cmd, rt);
+	desc_route("removing", f);
+	TAILQ_REMOVE(ctx->ipv4_routes, f, next);
+	free(f);
+	return 1;
 }
 
-#define n_route(a)	 nc_route(NULL, a)
-#define c_route(a, b)	 nc_route(a, b)
+#define n_route(a)	 nc_route(1, a, a)
+#define c_route(a, b)	 nc_route(0, a, b)
 static int
-nc_route(struct rt *ort, struct rt *nrt)
+nc_route(int add, struct rt *ort, struct rt *nrt)
 {
-	int change;
 
 	/* Don't set default routes if not asked to */
 	if (nrt->dest.s_addr == 0 &&
-	    nrt->mask.s_addr == 0 &&
+	    nrt->net.s_addr == 0 &&
 	    !(nrt->iface->options->options & DHCPCD_GATEWAY))
 		return -1;
 
-	desc_route(ort == NULL ? "adding" : "changing", nrt);
-
-	change = 0;
-	if (ort == NULL) {
-		ort = ipv4_findrt(nrt->iface->ctx, nrt, 0);
-		if (ort &&
-		    ((ort->flags & RTF_REJECT && nrt->flags & RTF_REJECT) ||
-		     (ort->iface == nrt->iface &&
-#ifdef HAVE_ROUTE_METRIC
-		    ort->metric == nrt->metric &&
-#endif
-		    ort->gate.s_addr == nrt->gate.s_addr)))
-		{
-			if (ort->mtu == nrt->mtu)
-				return 0;
-			change = 1;
-		}
-	} else if (ort->state & STATE_FAKE && !(nrt->state & STATE_FAKE) &&
-	    ort->iface == nrt->iface &&
-#ifdef HAVE_ROUTE_METRIC
-	    ort->metric == nrt->metric &&
-#endif
-	    ort->dest.s_addr == nrt->dest.s_addr &&
-	    ort->mask.s_addr ==  nrt->mask.s_addr &&
-	    ort->gate.s_addr == nrt->gate.s_addr)
-	{
-		if (ort->mtu == nrt->mtu)
-			return 0;
-		change = 1;
-	}
-
-#ifdef RTF_CLONING
-	/* BSD can set routes to be cloning routes.
-	 * Cloned routes inherit the parent flags.
-	 * As such, we need to delete and re-add the route to flush children
-	 * to correct the flags. */
-	if (change && ort != NULL && ort->flags & RTF_CLONING)
-		change = 0;
-#endif
-
-	if (change) {
-		if (if_route(RTM_CHANGE, nrt) != -1)
-			return 0;
-		if (errno != ESRCH)
-			logger(nrt->iface->ctx, LOG_ERR, "if_route (CHG): %m");
-	}
-
-#ifdef HAVE_ROUTE_METRIC
-	/* With route metrics, we can safely add the new route before
-	 * deleting the old route. */
-	if (if_route(RTM_ADD, nrt) != -1) {
-		if (ort && if_route(RTM_DELETE, ort) == -1 && errno != ESRCH)
-			logger(nrt->iface->ctx, LOG_ERR, "if_route (DEL): %m");
+	desc_route(add ? "adding" : "changing", nrt);
+	/* We delete and add the route so that we can change metric and
+	 * prefer the interface.
+	 * This also has the nice side effect of flushing ARP entries so
+	 * we don't have to do that manually. */
+	if (if_delroute(ort) == -1 && errno != ESRCH)
+		syslog(LOG_ERR, "%s: ipv4_delroute: %m", ort->iface->name);
+	if (!if_addroute(nrt))
 		return 0;
-	}
-
-	/* If the kernel claims the route exists we need to rip out the
-	 * old one first. */
-	if (errno != EEXIST || ort == NULL)
-		goto logerr;
-#endif
-
-	/* No route metrics, we need to delete the old route before
-	 * adding the new one. */
-	if (ort && if_route(RTM_DELETE, ort) == -1 && errno != ESRCH)
-		logger(nrt->iface->ctx, LOG_ERR, "if_route (DEL): %m");
-	if (if_route(RTM_ADD, nrt) != -1)
-		return 0;
-#ifdef HAVE_ROUTE_METRIC
-logerr:
-#endif
-	logger(nrt->iface->ctx, LOG_ERR, "if_route (ADD): %m");
+	syslog(LOG_ERR, "%s: if_addroute: %m", nrt->iface->name);
 	return -1;
 }
 
@@ -489,47 +378,57 @@ d_route(struct rt *rt)
 	int retval;
 
 	desc_route("deleting", rt);
-	retval = if_route(RTM_DELETE, rt) == -1 ? -1 : 0;
-	if (retval == -1 && errno != ENOENT && errno != ESRCH)
-		logger(rt->iface->ctx, LOG_ERR,
-		    "%s: if_delroute: %m", rt->iface->name);
+	retval = if_delroute(rt);
+	if (retval != 0 && errno != ENOENT && errno != ESRCH)
+		syslog(LOG_ERR,"%s: if_delroute: %m", rt->iface->name);
 	return retval;
+}
+
+static struct rt *
+get_subnet_route(struct dhcpcd_ctx *ctx, struct dhcp_message *dhcp)
+{
+	in_addr_t addr;
+	struct in_addr net;
+	struct rt *rt;
+
+	addr = dhcp->yiaddr;
+	if (addr == 0)
+		addr = dhcp->ciaddr;
+	/* Ensure we have all the needed values */
+	if (get_option_addr(ctx, &net, dhcp, DHO_SUBNETMASK) == -1)
+		net.s_addr = ipv4_getnetmask(addr);
+	if (net.s_addr == INADDR_BROADCAST || net.s_addr == INADDR_ANY)
+		return NULL;
+	rt = malloc(sizeof(*rt));
+	rt->dest.s_addr = addr & net.s_addr;
+	rt->net.s_addr = net.s_addr;
+	rt->gate.s_addr = 0;
+	return rt;
 }
 
 static struct rt_head *
 add_subnet_route(struct rt_head *rt, const struct interface *ifp)
 {
-	const struct dhcp_state *state;
 	struct rt *r;
+	const struct dhcp_state *s;
 
 	if (rt == NULL) /* earlier malloc failed */
 		return NULL;
 
-	/* P2P interfaces don't have subnet routes as such. */
-	if (ifp->flags & IFF_POINTOPOINT)
+	s = D_CSTATE(ifp);
+	if (s->net.s_addr == INADDR_BROADCAST ||
+	    s->net.s_addr == INADDR_ANY)
 		return rt;
 
-	state = D_CSTATE(ifp);
-	/* Don't create a subnet route for these addresses */
-	if (state->addr->mask.s_addr == INADDR_ANY)
-		return rt;
-#ifndef BSD
-	/* BSD adds a route in this instance */
-	if (state->addr->mask.s_addr == INADDR_BROADCAST)
-		return rt;
-#endif
-
-	if ((r = calloc(1, sizeof(*r))) == NULL) {
-		logger(ifp->ctx, LOG_ERR, "%s: %m", __func__);
+	r = malloc(sizeof(*r));
+	if (r == NULL) {
+		syslog(LOG_ERR, "%s: %m", __func__);
 		ipv4_freeroutes(rt);
 		return NULL;
 	}
-	r->dest.s_addr = state->addr->addr.s_addr & state->addr->mask.s_addr;
-	r->mask.s_addr = state->addr->mask.s_addr;
-	r->gate.s_addr = INADDR_ANY;
-	r->mtu = dhcp_get_mtu(ifp);
-	r->src = state->addr->addr;
-
+	r->dest.s_addr = s->addr.s_addr & s->net.s_addr;
+	r->net.s_addr = s->net.s_addr;
+	r->gate.s_addr = 0;
 	TAILQ_INSERT_HEAD(rt, r, next);
 	return rt;
 }
@@ -539,25 +438,24 @@ static struct rt_head *
 add_loopback_route(struct rt_head *rt, const struct interface *ifp)
 {
 	struct rt *r;
-	const struct dhcp_state *state;
+	const struct dhcp_state *s;
 
 	if (rt == NULL) /* earlier malloc failed */
 		return NULL;
 
-	state = D_CSTATE(ifp);
-	if (state->addr == NULL)
+	s = D_CSTATE(ifp);
+	if (s->addr.s_addr == INADDR_ANY)
 		return rt;
 
-	if ((r = calloc(1, sizeof(*r))) == NULL) {
-		logger(ifp->ctx, LOG_ERR, "%s: %m", __func__);
+	r = malloc(sizeof(*r));
+	if (r == NULL) {
+		syslog(LOG_ERR, "%s: %m", __func__);
 		ipv4_freeroutes(rt);
 		return NULL;
 	}
-	r->dest = state->addr->addr;
-	r->mask.s_addr = INADDR_BROADCAST;
+	r->dest.s_addr = s->addr.s_addr;
+	r->net.s_addr = INADDR_BROADCAST;
 	r->gate.s_addr = htonl(INADDR_LOOPBACK);
-	r->mtu = dhcp_get_mtu(ifp);
-	r->src = state->addr->addr;
 	TAILQ_INSERT_HEAD(rt, r, next);
 	return rt;
 }
@@ -568,59 +466,65 @@ get_routes(struct interface *ifp)
 {
 	struct rt_head *nrt;
 	struct rt *rt, *r = NULL;
-	const struct dhcp_state *state;
 
 	if (ifp->options->routes && TAILQ_FIRST(ifp->options->routes)) {
-		if ((nrt = malloc(sizeof(*nrt))) == NULL)
-			return NULL;
+		nrt = malloc(sizeof(*nrt));
 		TAILQ_INIT(nrt);
 		TAILQ_FOREACH(rt, ifp->options->routes, next) {
 			if (rt->gate.s_addr == 0)
 				break;
-			if ((r = calloc(1, sizeof(*r))) == NULL) {
-				logger(ifp->ctx, LOG_ERR, "%s: %m", __func__);
+			r = malloc(sizeof(*r));
+			if (r == NULL) {
+				syslog(LOG_ERR, "%s: %m", __func__);
 				ipv4_freeroutes(nrt);
 				return NULL;
 			}
 			memcpy(r, rt, sizeof(*r));
 			TAILQ_INSERT_TAIL(nrt, r, next);
 		}
-	} else
-		nrt = dhcp_get_routes(ifp);
-
-	/* Copy our address as the source address */
-	if (nrt) {
-		state = D_CSTATE(ifp);
-		TAILQ_FOREACH(rt, nrt, next) {
-			rt->src = state->addr->addr;
-		}
+		return nrt;
 	}
 
-	return nrt;
+	return get_option_routes(ifp, D_STATE(ifp)->new);
+}
+
+/* Some DHCP servers add set host routes by setting the gateway
+ * to the assinged IP address. This differs from our notion of a host route
+ * where the gateway is the destination address, so we fix it. */
+static struct rt_head *
+massage_host_routes(struct rt_head *rt, const struct interface *ifp)
+{
+	struct rt *r;
+
+	if (rt) {
+		TAILQ_FOREACH(r, rt, next) {
+			if (r->gate.s_addr == D_CSTATE(ifp)->addr.s_addr &&
+			    r->net.s_addr == INADDR_BROADCAST)
+				r->gate.s_addr = r->dest.s_addr;
+		}
+	}
+	return rt;
 }
 
 static struct rt_head *
-add_destination_route(struct rt_head *rt, const struct interface *ifp)
+add_destination_route(struct rt_head *rt, const struct interface *iface)
 {
 	struct rt *r;
-	const struct dhcp_state *state;
 
 	if (rt == NULL || /* failed a malloc earlier probably */
-	    !(ifp->flags & IFF_POINTOPOINT) ||
-	    !has_option_mask(ifp->options->dstmask, DHO_ROUTER) ||
-	    (state = D_CSTATE(ifp)) == NULL)
+	    !(iface->flags & IFF_POINTOPOINT) ||
+	    !has_option_mask(iface->options->dstmask, DHO_ROUTER))
 		return rt;
 
-	if ((r = calloc(1, sizeof(*r))) == NULL) {
-		logger(ifp->ctx, LOG_ERR, "%s: %m", __func__);
+	r = malloc(sizeof(*r));
+	if (r == NULL) {
+		syslog(LOG_ERR, "%s: %m", __func__);
 		ipv4_freeroutes(rt);
 		return NULL;
 	}
 	r->dest.s_addr = INADDR_ANY;
-	r->mask.s_addr = INADDR_ANY;
-	r->gate = state->addr->brd;
-	r->mtu = dhcp_get_mtu(ifp);
-	r->src = state->addr->addr;
+	r->net.s_addr = INADDR_ANY;
+	r->gate.s_addr = D_CSTATE(iface)->dst.s_addr;
 	TAILQ_INSERT_HEAD(rt, r, next);
 	return rt;
 }
@@ -632,15 +536,9 @@ add_router_host_route(struct rt_head *rt, const struct interface *ifp)
 {
 	struct rt *rtp, *rtn;
 	const char *cp, *cp2, *cp3, *cplim;
-	struct if_options *ifo;
-	const struct dhcp_state *state;
 
 	if (rt == NULL) /* earlier malloc failed */
 		return NULL;
-
-	/* Don't add a host route for these interfaces. */
-	if (ifp->flags & (IFF_LOOPBACK | IFF_POINTOPOINT))
-		return rt;
 
 	TAILQ_FOREACH(rtp, rt, next) {
 		if (rtp->dest.s_addr != INADDR_ANY)
@@ -655,8 +553,8 @@ add_router_host_route(struct rt_head *rt, const struct interface *ifp)
 			/* match subnet */
 			cp = (const char *)&rtp->gate.s_addr;
 			cp2 = (const char *)&rtn->dest.s_addr;
-			cp3 = (const char *)&rtn->mask.s_addr;
-			cplim = cp3 + sizeof(rtn->mask.s_addr);
+			cp3 = (const char *)&rtn->net.s_addr;
+			cplim = cp3 + sizeof(rtn->net.s_addr);
 			while (cp3 < cplim) {
 				if ((*cp++ ^ *cp2++) & *cp3++)
 					break;
@@ -666,136 +564,50 @@ add_router_host_route(struct rt_head *rt, const struct interface *ifp)
 		}
 		if (rtn != rtp)
 			continue;
-		if ((state = D_CSTATE(ifp)) == NULL)
-			continue;
-		ifo = ifp->options;
 		if (ifp->flags & IFF_NOARP) {
-			if (!(ifo->options & DHCPCD_ROUTER_HOST_ROUTE_WARNED) &&
-			    !(state->added & STATE_FAKE))
-			{
-				ifo->options |= DHCPCD_ROUTER_HOST_ROUTE_WARNED;
-				logger(ifp->ctx, LOG_WARNING,
-				    "%s: forcing router %s through interface",
-				    ifp->name, inet_ntoa(rtp->gate));
-			}
+			syslog(LOG_WARNING,
+			    "%s: forcing router %s through interface",
+			    ifp->name, inet_ntoa(rtp->gate));
 			rtp->gate.s_addr = 0;
 			continue;
 		}
-		if (!(ifo->options & DHCPCD_ROUTER_HOST_ROUTE_WARNED) &&
-		    !(state->added & STATE_FAKE))
-		{
-			ifo->options |= DHCPCD_ROUTER_HOST_ROUTE_WARNED;
-			logger(ifp->ctx, LOG_WARNING,
-			    "%s: router %s requires a host route",
-			    ifp->name, inet_ntoa(rtp->gate));
-		}
-		if ((rtn = calloc(1, sizeof(*rtn))) == NULL) {
-			logger(ifp->ctx, LOG_ERR, "%s: %m", __func__);
+		syslog(LOG_WARNING, "%s: router %s requires a host route",
+		    ifp->name, inet_ntoa(rtp->gate));
+		rtn = malloc(sizeof(*rtn));
+		if (rtn == NULL) {
+			syslog(LOG_ERR, "%s: %m", __func__);
 			ipv4_freeroutes(rt);
 			return NULL;
 		}
 		rtn->dest.s_addr = rtp->gate.s_addr;
-		rtn->mask.s_addr = htonl(INADDR_BROADCAST);
-		rtn->gate.s_addr = htonl(INADDR_ANY);
-		rtn->mtu = dhcp_get_mtu(ifp);
-		rtn->src = state->addr->addr;
+		rtn->net.s_addr = INADDR_BROADCAST;
+		rtn->gate.s_addr = rtp->gate.s_addr;
 		TAILQ_INSERT_BEFORE(rtp, rtn, next);
 	}
 	return rt;
-}
-
-static int
-ipv4_doroute(struct rt *rt, struct rt_head *nrs)
-{
-	const struct dhcp_state *state;
-	struct rt *or;
-
-	state = D_CSTATE(rt->iface);
-	rt->state = state->added & STATE_FAKE;
-#ifdef HAVE_ROUTE_METRIC
-	rt->metric = rt->iface->metric;
-#endif
-	/* Is this route already in our table? */
-	if ((find_route(nrs, rt, NULL)) != NULL)
-		return 0;
-	/* Do we already manage it? */
-	if ((or = find_route(rt->iface->ctx->ipv4_routes, rt, NULL))) {
-		if (state->added & STATE_FAKE)
-			return 0;
-		if (or->state & STATE_FAKE ||
-		    or->iface != rt->iface ||
-#ifdef HAVE_ROUTE_METRIC
-		    or->metric != rt->metric ||
-#endif
-		    or->gate.s_addr != rt->gate.s_addr ||
-		    or->src.s_addr != rt->src.s_addr ||
-		    or->mtu != rt->mtu)
-		{
-			if (c_route(or, rt) != 0)
-				return 0;
-		}
-		TAILQ_REMOVE(rt->iface->ctx->ipv4_routes, or, next);
-		free(or);
-	} else {
-		if (state->added & STATE_FAKE) {
-			if ((or = ipv4_findrt(rt->iface->ctx, rt, 1)) == NULL)
-				return 0;
-			rt->iface = or->iface;
-			rt->gate.s_addr = or->gate.s_addr;
-#ifdef HAVE_ROUTE_METRIC
-			rt->metric = or->metric;
-#endif
-			rt->mtu = or->mtu;
-			rt->flags = or->flags;
-		} else {
-			if (n_route(rt) != 0)
-				return 0;
-		}
-	}
-	return 1;
 }
 
 void
 ipv4_buildroutes(struct dhcpcd_ctx *ctx)
 {
 	struct rt_head *nrs, *dnr;
-	struct rt *rt, *rtn;
+	struct rt *or, *rt, *rtn;
 	struct interface *ifp;
 	const struct dhcp_state *state;
-	int has_default;
 
-	/* We need to have the interfaces in the correct order to ensure
-	 * our routes are managed correctly. */
-	if_sortinterfaces(ctx);
-
-	if ((nrs = malloc(sizeof(*nrs))) == NULL) {
-		logger(ctx, LOG_ERR, "%s: %m", __func__);
+	nrs = malloc(sizeof(*nrs));
+	if (nrs == NULL) {
+		syslog(LOG_ERR, "%s: %m", __func__);
 		return;
 	}
 	TAILQ_INIT(nrs);
-
-	has_default = 0;
 	TAILQ_FOREACH(ifp, ctx->ifaces, next) {
 		state = D_CSTATE(ifp);
-		if (state != NULL && state->new != NULL && state->added) {
-			dnr = get_routes(ifp);
-			dnr = add_subnet_route(dnr, ifp);
-		} else
-			dnr = NULL;
-		if ((rt = ipv4ll_subnet_route(ifp)) != NULL) {
-			if (dnr == NULL) {
-				if ((dnr = malloc(sizeof(*dnr))) == NULL) {
-					logger(ifp->ctx, LOG_ERR,
-					    "%s: malloc %m", __func__);
-					free(rt);
-					continue;
-				}
-				TAILQ_INIT(dnr);
-			}
-			TAILQ_INSERT_HEAD(dnr, rt, next);
-		}
-		if (dnr == NULL)
+		if (state == NULL || state->new == NULL || !state->added)
 			continue;
+		dnr = get_routes(ifp);
+		dnr = massage_host_routes(dnr, ifp);
+		dnr = add_subnet_route(dnr, ifp);
 #ifdef IPV4_LOOPBACK_ROUTE
 		dnr = add_loopback_route(dnr, ifp);
 #endif
@@ -803,90 +615,82 @@ ipv4_buildroutes(struct dhcpcd_ctx *ctx)
 			dnr = add_router_host_route(dnr, ifp);
 			dnr = add_destination_route(dnr, ifp);
 		}
-		if (dnr == NULL)
+		if (dnr == NULL) /* failed to malloc all new routes */
 			continue;
 		TAILQ_FOREACH_SAFE(rt, dnr, next, rtn) {
 			rt->iface = ifp;
-			if (ipv4_doroute(rt, nrs) == 1) {
-				TAILQ_REMOVE(dnr, rt, next);
-				TAILQ_INSERT_TAIL(nrs, rt, next);
-				if (rt->dest.s_addr == INADDR_ANY)
-					has_default = 1;
+			rt->metric = ifp->metric;
+			/* Is this route already in our table? */
+			if ((find_route(nrs, rt, NULL)) != NULL)
+				continue;
+			rt->src.s_addr = state->addr.s_addr;
+			/* Do we already manage it? */
+			if ((or = find_route(ctx->ipv4_routes, rt, NULL))) {
+				if (state->added & STATE_FAKE)
+					continue;
+				if (or->flags & STATE_FAKE ||
+				    or->iface != ifp ||
+				    or->src.s_addr != state->addr.s_addr ||
+				    rt->gate.s_addr != or->gate.s_addr ||
+				    rt->metric != or->metric)
+				{
+					if (c_route(or, rt) != 0)
+						continue;
+				}
+				TAILQ_REMOVE(ctx->ipv4_routes, or, next);
+				free(or);
+			} else {
+				if (!(state->added & STATE_FAKE) &&
+				    n_route(rt) != 0)
+					continue;
 			}
+			rt->flags = STATE_ADDED;
+			if (state->added & STATE_FAKE)
+				rt->flags |= STATE_FAKE;
+			TAILQ_REMOVE(dnr, rt, next);
+			TAILQ_INSERT_TAIL(nrs, rt, next);
 		}
 		ipv4_freeroutes(dnr);
 	}
 
-	/* If there is no default route, grab one without a
-	 * gateway for any IPv4LL enabled interfaces. */
-	if (!has_default) {
-		struct rt def;
-
-		memset(&def, 0, sizeof(def));
-		if (ipv4_findrt(ctx, &def, 0) == NULL) {
-			TAILQ_FOREACH(ifp, ctx->ifaces, next) {
-				if ((rt = ipv4ll_default_route(ifp)) != NULL) {
-					if (ipv4_doroute(rt, nrs) == 1) {
-						TAILQ_INSERT_TAIL(nrs, rt, next);
-						break;
-					} else
-						free(rt);
-				}
-			}
-		}
-	}
-
 	/* Remove old routes we used to manage */
-	if (ctx->ipv4_routes) {
-		TAILQ_FOREACH(rt, ctx->ipv4_routes, next) {
-			if (find_route(nrs, rt, NULL) == NULL &&
-			    (rt->iface->options->options &
-			    (DHCPCD_EXITING | DHCPCD_PERSISTENT)) !=
-			    (DHCPCD_EXITING | DHCPCD_PERSISTENT))
-				d_route(rt);
-		}
+	TAILQ_FOREACH(rt, ctx->ipv4_routes, next) {
+		if (find_route(nrs, rt, NULL) == NULL &&
+		    (rt->iface->options->options &
+		    (DHCPCD_EXITING | DHCPCD_PERSISTENT)) !=
+		    (DHCPCD_EXITING | DHCPCD_PERSISTENT))
+			d_route(rt);
 	}
 	ipv4_freeroutes(ctx->ipv4_routes);
+
 	ctx->ipv4_routes = nrs;
 }
 
-int
-ipv4_deladdr(struct ipv4_addr *addr, int keeparp)
+static int
+delete_address1(struct interface *ifp,
+    const struct in_addr *addr, const struct in_addr *net)
 {
 	int r;
 	struct ipv4_state *state;
 	struct ipv4_addr *ap;
-	struct arp_state *astate;
 
-	logger(addr->iface->ctx, LOG_DEBUG,
-	    "%s: deleting IP address %s", addr->iface->name, addr->saddr);
-
-	r = if_address(RTM_DELADDR, addr);
+	syslog(LOG_DEBUG, "%s: deleting IP address %s/%d",
+	    ifp->name, inet_ntoa(*addr), inet_ntocidr(*net));
+	r = if_deladdress(ifp, addr, net);
 	if (r == -1 && errno != EADDRNOTAVAIL && errno != ENXIO &&
 	    errno != ENODEV)
-		logger(addr->iface->ctx, LOG_ERR, "%s: %s: %m",
-		    addr->iface->name, __func__);
+		syslog(LOG_ERR, "%s: %s: %m", ifp->name, __func__);
 
-	if (!keeparp && (astate = arp_find(addr->iface, &addr->addr)) != NULL)
-		arp_free(astate);
-
-	state = IPV4_STATE(addr->iface);
+	state = IPV4_STATE(ifp);
 	TAILQ_FOREACH(ap, &state->addrs, next) {
-		if (IPV4_MASK_EQ(ap, addr)) {
-			struct dhcp_state *dstate;
-
-			dstate = D_STATE(ap->iface);
+		if (ap->addr.s_addr == addr->s_addr &&
+		    ap->net.s_addr == net->s_addr)
+		{
 			TAILQ_REMOVE(&state->addrs, ap, next);
 			free(ap);
-
-			if (dstate && dstate->addr == ap) {
-				dstate->added = 0;
-				dstate->addr = NULL;
-			}
 			break;
 		}
 	}
-
 	return r;
 }
 
@@ -902,11 +706,14 @@ delete_address(struct interface *ifp)
 	if (ifo->options & DHCPCD_INFORM ||
 	    (ifo->options & DHCPCD_STATIC && ifo->req_addr.s_addr == 0))
 		return 0;
-	r = ipv4_deladdr(state->addr, 0);
+	r = delete_address1(ifp, &state->addr, &state->net);
+	state->added = 0;
+	state->addr.s_addr = 0;
+	state->net.s_addr = 0;
 	return r;
 }
 
-struct ipv4_state *
+static struct ipv4_state *
 ipv4_getstate(struct interface *ifp)
 {
 	struct ipv4_state *state;
@@ -916,190 +723,37 @@ ipv4_getstate(struct interface *ifp)
 	        ifp->if_data[IF_DATA_IPV4] = malloc(sizeof(*state));
 		state = IPV4_STATE(ifp);
 		if (state == NULL) {
-			logger(ifp->ctx, LOG_ERR, "%s: %m", __func__);
+			syslog(LOG_ERR, "%s: %m", __func__);
 			return NULL;
 		}
 		TAILQ_INIT(&state->addrs);
-		TAILQ_INIT(&state->routes);
-#ifdef BSD
-		state->buffer_size = state->buffer_len = state->buffer_pos = 0;
-		state->buffer = NULL;
-#endif
 	}
 	return state;
 }
 
-#ifdef ALIAS_ADDR
-/* Find the next logical aliase address we can use. */
 static int
-ipv4_aliasaddr(struct ipv4_addr *ia, struct ipv4_addr **repl)
+ipv4_addaddr(struct interface *ifp, const struct dhcp_lease *lease)
 {
-	struct ipv4_state *state;
-	struct ipv4_addr *iap;
-	unsigned int lun;
-	char alias[IF_NAMESIZE];
+	int r;
 
-	if (ia->alias[0] != '\0')
-		return 0;
-
-	lun = 0;
-	state = IPV4_STATE(ia->iface);
-find_lun:
-	if (lun == 0)
-		strlcpy(alias, ia->iface->name, sizeof(alias));
-	else
-		snprintf(alias, sizeof(alias), "%s:%u", ia->iface->name, lun);
-	TAILQ_FOREACH(iap, &state->addrs, next) {
-		if (iap->alias[0] != '\0' && iap->addr.s_addr == INADDR_ANY) {
-			/* No address assigned? Lets use it. */
-			strlcpy(ia->alias, iap->alias, sizeof(ia->alias));
-			if (repl)
-				*repl = iap;
-			return 1;
-		}
-		if (strcmp(iap->alias, alias) == 0)
-			break;
-	}
-
-	if (iap != NULL) {
-		if (lun == UINT_MAX) {
-			errno = ERANGE;
-			return -1;
-		}
-		lun++;
-		goto find_lun;
-	}
-
-	strlcpy(ia->alias, alias, sizeof(ia->alias));
-	return 0;
-}
-#endif
-
-struct ipv4_addr *
-ipv4_addaddr(struct interface *ifp, const struct in_addr *addr,
-    const struct in_addr *mask, const struct in_addr *bcast)
-{
-	struct ipv4_state *state;
-	struct ipv4_addr *ia;
-#ifdef ALIAS_ADDR
-	int replaced, blank;
-	struct ipv4_addr *replaced_ia;
-#endif
-
-	if ((state = ipv4_getstate(ifp)) == NULL) {
-		logger(ifp->ctx, LOG_ERR, "%s: ipv4_getstate: %m", __func__);
-		return NULL;
-	}
 	if (ifp->options->options & DHCPCD_NOALIAS) {
-		struct ipv4_addr *ian;
+		struct ipv4_state *state;
+		struct ipv4_addr *ap, *apn;
 
-		TAILQ_FOREACH_SAFE(ia, &state->addrs, next, ian) {
-			if (ia->addr.s_addr != addr->s_addr)
-				ipv4_deladdr(ia, 0);
+		state = IPV4_STATE(ifp);
+		TAILQ_FOREACH_SAFE(ap, &state->addrs, next, apn) {
+			if (ap->addr.s_addr != lease->addr.s_addr)
+				delete_address1(ifp, &ap->addr, &ap->net);
 		}
 	}
 
-	if ((ia = malloc(sizeof(*ia))) == NULL) {
-		logger(ifp->ctx, LOG_ERR, "%s: %m", __func__);
-		return NULL;
-	}
-
-	ia->iface = ifp;
-	ia->addr = *addr;
-	ia->mask = *mask;
-	ia->brd = *bcast;
-#ifdef IN_IFF_TENTATIVE
-	ia->addr_flags = IN_IFF_TENTATIVE;
-#endif
-	snprintf(ia->saddr, sizeof(ia->saddr), "%s/%d",
-	    inet_ntoa(*addr), inet_ntocidr(*mask));
-
-#ifdef ALIAS_ADDR
-	blank = (ia->alias[0] == '\0');
-	if ((replaced = ipv4_aliasaddr(ia, &replaced_ia)) == -1) {
-		logger(ifp->ctx, LOG_ERR, "%s: ipv4_aliasaddr: %m", ifp->name);
-		free(ia);
-		return NULL;
-	}
-	if (blank)
-		logger(ia->iface->ctx, LOG_DEBUG, "%s: aliased %s",
-		    ia->alias, ia->saddr);
-#endif
-
-	logger(ifp->ctx, LOG_DEBUG, "%s: adding IP address %s broadcast %s",
-	    ifp->name, ia->saddr, inet_ntoa(*bcast));
-	if (if_address(RTM_NEWADDR, ia) == -1) {
-		if (errno != EEXIST)
-			logger(ifp->ctx, LOG_ERR, "%s: if_addaddress: %m",
-			    __func__);
-		free(ia);
-		return NULL;
-	}
-
-#ifdef ALIAS_ADDR
-	if (replaced) {
-		TAILQ_REMOVE(&state->addrs, replaced_ia, next);
-		free(replaced_ia);
-	}
-#endif
-
-	TAILQ_INSERT_TAIL(&state->addrs, ia, next);
-	return ia;
-}
-
-static int
-ipv4_daddaddr(struct interface *ifp, const struct dhcp_lease *lease)
-{
-	struct dhcp_state *state;
-	struct ipv4_addr *ia;
-
-	ia = ipv4_addaddr(ifp, &lease->addr, &lease->mask, &lease->brd);
-	if (ia == NULL)
-		return -1;
-
-	state = D_STATE(ifp);
-	state->added = STATE_ADDED;
-	state->addr = ia;
-	return 0;
-}
-
-int
-ipv4_preferanother(struct interface *ifp)
-{
-	struct dhcp_state *state = D_STATE(ifp), *nstate;
-	struct interface *ifn;
-	int preferred;
-
-	if (state == NULL)
-		return 0;
-
-	preferred = 0;
-	if (!state->added)
-		goto out;
-
-	TAILQ_FOREACH(ifn, ifp->ctx->ifaces, next) {
-		if (ifn == ifp)
-			break; /* We are already the most preferred */
-		nstate = D_STATE(ifn);
-		if (nstate && !nstate->added &&
-		    state->addr != NULL &&
-		    nstate->lease.addr.s_addr == state->addr->addr.s_addr)
-		{
-			preferred = 1;
-			delete_address(ifp);
-			if (ifn->options->options & DHCPCD_ARP)
-				dhcp_bind(ifn);
-			else {
-				ipv4_daddaddr(ifn, &nstate->lease);
-				nstate->added = STATE_ADDED;
-			}
-			break;
-		}
-	}
-
-out:
-	ipv4_buildroutes(ifp->ctx);
-	return preferred;
+	syslog(LOG_DEBUG, "%s: adding IP address %s/%d",
+	    ifp->name, inet_ntoa(lease->addr),
+	    inet_ntocidr(lease->net));
+	r = if_addaddress(ifp, &lease->addr, &lease->net, &lease->brd);
+	if (r == -1 && errno != EEXIST)
+		syslog(LOG_ERR, "%s: if_addaddress: %m", __func__);
+	return r;
 }
 
 void
@@ -1107,25 +761,55 @@ ipv4_applyaddr(void *arg)
 {
 	struct interface *ifp = arg, *ifn;
 	struct dhcp_state *state = D_STATE(ifp), *nstate;
+	struct dhcp_message *dhcp;
 	struct dhcp_lease *lease;
 	struct if_options *ifo = ifp->options;
-	struct ipv4_addr *ia;
+	struct ipv4_addr *ap;
+	struct ipv4_state *istate;
+	struct rt *rt;
 	int r;
+
+	/* As we are now adjusting an interface, we need to ensure
+	 * we have them in the right order for routing and configuration. */
+	ipv4_sortinterfaces(ifp->ctx);
 
 	if (state == NULL)
 		return;
-
+	dhcp = state->new;
 	lease = &state->lease;
-	if_sortinterfaces(ifp->ctx);
 
-	if (state->new == NULL) {
+	if (dhcp == NULL) {
 		if ((ifo->options & (DHCPCD_EXITING | DHCPCD_PERSISTENT)) !=
 		    (DHCPCD_EXITING | DHCPCD_PERSISTENT))
 		{
-			if (state->added && !ipv4_preferanother(ifp)) {
+			if (state->added) {
+				struct in_addr addr;
+
+				addr = state->addr;
 				delete_address(ifp);
-				ipv4_buildroutes(ifp->ctx);
+				TAILQ_FOREACH(ifn, ifp->ctx->ifaces, next) {
+					if (ifn == ifp ||
+					    strcmp(ifn->name, ifp->name) == 0)
+						continue;
+					nstate = D_STATE(ifn);
+					if (nstate && !nstate->added &&
+					    nstate->addr.s_addr == addr.s_addr)
+					{
+						if (ifn->options->options &
+						    DHCPCD_ARP)
+						{
+							dhcp_bind(ifn, NULL);
+						} else {
+							ipv4_addaddr(ifn,
+							    &nstate->lease);
+							nstate->added =
+							    STATE_ADDED;
+						}
+						break;
+					}
+				}
 			}
+			ipv4_buildroutes(ifp->ctx);
 			script_runreason(ifp, state->reason);
 		} else
 			ipv4_buildroutes(ifp->ctx);
@@ -1133,30 +817,28 @@ ipv4_applyaddr(void *arg)
 	}
 
 	/* Ensure only one interface has the address */
-	r = 0;
 	TAILQ_FOREACH(ifn, ifp->ctx->ifaces, next) {
-		if (ifn == ifp) {
-			r = 1; /* past ourselves */
+		if (ifn == ifp || strcmp(ifn->name, ifp->name) == 0)
 			continue;
-		}
 		nstate = D_STATE(ifn);
 		if (nstate && nstate->added &&
-		    nstate->addr &&
-		    nstate->addr->addr.s_addr == lease->addr.s_addr)
+		    nstate->addr.s_addr == lease->addr.s_addr)
 		{
-			if (r == 0) {
-				logger(ifp->ctx, LOG_INFO,
-				    "%s: preferring %s on %s",
+			if (ifn->metric <= ifp->metric) {
+				syslog(LOG_INFO, "%s: preferring %s on %s",
 				    ifp->name,
 				    inet_ntoa(lease->addr),
 				    ifn->name);
-				return;
+				state->addr.s_addr = lease->addr.s_addr;
+				state->net.s_addr = lease->net.s_addr;
+				goto routes;
 			}
-			logger(ifp->ctx, LOG_INFO, "%s: preferring %s on %s",
+			syslog(LOG_INFO, "%s: preferring %s on %s",
 			    ifn->name,
 			    inet_ntoa(lease->addr),
 			    ifp->name);
-			ipv4_deladdr(nstate->addr, 0);
+			delete_address1(ifn, &nstate->addr, &nstate->net);
+			nstate->added = 0;
 			break;
 		}
 	}
@@ -1164,83 +846,71 @@ ipv4_applyaddr(void *arg)
 	/* Does another interface already have the address from a prior boot? */
 	if (ifn == NULL) {
 		TAILQ_FOREACH(ifn, ifp->ctx->ifaces, next) {
-			if (ifn == ifp)
+			if (ifn == ifp || strcmp(ifn->name, ifp->name) == 0)
 				continue;
-			ia = ipv4_iffindaddr(ifn, &lease->addr, NULL);
-			if (ia != NULL)
-				ipv4_deladdr(ia, 0);
+			ap = ipv4_iffindaddr(ifn, &lease->addr, NULL);
+			if (ap)
+				delete_address1(ifn, &ap->addr, &ap->net);
 		}
 	}
 
-	/* If the netmask or broadcast is different, re-add the addresss */
-	ia = ipv4_iffindaddr(ifp, &lease->addr, NULL);
-	if (ia &&
-	    ia->mask.s_addr == lease->mask.s_addr &&
-	    ia->brd.s_addr == lease->brd.s_addr)
-		logger(ifp->ctx, LOG_DEBUG,
-		    "%s: IP address %s already exists",
-		    ifp->name, ia->saddr);
+	/* If the netmask is different, delete the addresss */
+	ap = ipv4_iffindaddr(ifp, &lease->addr, NULL);
+	if (ap && ap->net.s_addr != lease->net.s_addr)
+		delete_address1(ifp, &ap->addr, &ap->net);
+
+	if (ipv4_iffindaddr(ifp, &lease->addr, &lease->net))
+		syslog(LOG_DEBUG, "%s: IP address %s/%d already exists",
+		    ifp->name, inet_ntoa(lease->addr),
+		    inet_ntocidr(lease->net));
 	else {
-#if __linux__
-		/* Linux does not change netmask/broadcast address
-		 * for re-added addresses, so we need to delete the old one
-		 * first. */
-		if (ia != NULL)
-			ipv4_deladdr(ia, 0);
-#endif
-		r = ipv4_daddaddr(ifp, lease);
+		r = ipv4_addaddr(ifp, lease);
 		if (r == -1 && errno != EEXIST)
 			return;
+		istate = ipv4_getstate(ifp);
+		ap = malloc(sizeof(*ap));
+		ap->addr = lease->addr;
+		ap->net = lease->net;
+		ap->dst.s_addr = INADDR_ANY;
+		TAILQ_INSERT_TAIL(&istate->addrs, ap, next);
 	}
 
-	ia = ipv4_iffindaddr(ifp, &lease->addr, NULL);
-	if (ia == NULL) {
-		logger(ifp->ctx, LOG_ERR, "%s: added address vanished",
-		    ifp->name);
-		return;
-	}
-#ifdef IN_IFF_NOTUSEABLE
-	if (ia->addr_flags & IN_IFF_NOTUSEABLE)
-		return;
-#endif
-
-	/* Delete the old address if different */
-	if (state->addr &&
-	    state->addr->addr.s_addr != lease->addr.s_addr &&
+	/* Now delete the old address if different */
+	if (state->addr.s_addr != lease->addr.s_addr &&
+	    state->addr.s_addr != 0 &&
 	    ipv4_iffindaddr(ifp, &lease->addr, NULL))
 		delete_address(ifp);
 
-	state->addr = ia;
 	state->added = STATE_ADDED;
+	state->defend = 0;
+	state->addr.s_addr = lease->addr.s_addr;
+	state->net.s_addr = lease->net.s_addr;
 
-	/* Find any freshly added routes, such as the subnet route.
-	 * We do this because we cannot rely on recieving the kernel
-	 * notification right now via our link socket. */
-	if_initrt(ifp->ctx);
+	/* We need to delete the subnet route to have our metric or
+	 * prefer the interface. */
+	rt = get_subnet_route(ifp->ctx, dhcp);
+	if (rt != NULL) {
+		rt->iface = ifp;
+		rt->metric = 0;
+		if (!find_route(ifp->ctx->ipv4_routes, rt, NULL))
+			if_delroute(rt);
+		free(rt);
+	}
+
+routes:
 	ipv4_buildroutes(ifp->ctx);
-	/* Announce the address */
-	if (ifo->options & DHCPCD_ARP) {
-		struct arp_state *astate;
-
-		if ((astate = arp_new(ifp, &state->addr->addr)) != NULL)
-			arp_announce(astate);
-	}
-	if (state->state == DHS_BOUND) {
-		script_runreason(ifp, state->reason);
-		dhcpcd_daemonise(ifp->ctx);
-	}
+	script_runreason(ifp, state->reason);
 }
 
 void
 ipv4_handleifa(struct dhcpcd_ctx *ctx,
-    int cmd, struct if_head *ifs, const char *ifname,
-    const struct in_addr *addr, const struct in_addr *mask,
-    const struct in_addr *brd)
+    int type, struct if_head *ifs, const char *ifname,
+    const struct in_addr *addr, const struct in_addr *net,
+    const struct in_addr *dst)
 {
 	struct interface *ifp;
 	struct ipv4_state *state;
-	struct ipv4_addr *ia;
-	int flags;
+	struct ipv4_addr *ap;
 
 	if (ifs == NULL)
 		ifs = ctx->ifaces;
@@ -1248,81 +918,62 @@ ipv4_handleifa(struct dhcpcd_ctx *ctx,
 		errno = ESRCH;
 		return;
 	}
-	if ((ifp = if_find(ifs, ifname)) == NULL)
+	if (addr->s_addr == INADDR_ANY) {
+		errno = EINVAL;
 		return;
-	if ((state = ipv4_getstate(ifp)) == NULL) {
+	}
+
+	TAILQ_FOREACH(ifp, ifs, next) {
+		if (strcmp(ifp->name, ifname) == 0)
+			break;
+	}
+	if (ifp == NULL) {
+		errno = ESRCH;
+		return;
+	}
+	state = ipv4_getstate(ifp);
+	if (state == NULL) {
 		errno = ENOENT;
 		return;
 	}
 
-	ia = ipv4_iffindaddr(ifp, addr, NULL);
-	switch (cmd) {
-	case RTM_NEWADDR:
-		if (ia == NULL) {
-			if ((ia = malloc(sizeof(*ia))) == NULL) {
-				logger(ifp->ctx, LOG_ERR, "%s: %m", __func__);
-				return;
-			}
-			ia->iface = ifp;
-			ia->addr = *addr;
-#ifdef ALIAS_ADDR
-			strlcpy(ia->alias, ifname, sizeof(ia->alias));
-#endif
-			TAILQ_INSERT_TAIL(&state->addrs, ia, next);
+	ap = ipv4_iffindaddr(ifp, addr, net);
+	if (type == RTM_NEWADDR && ap == NULL) {
+		ap = malloc(sizeof(*ap));
+		if (ap == NULL) {
+			syslog(LOG_ERR, "%s: %m", __func__);
+			return;
 		}
-		/* Mask could have changed */
-		ia->mask = *mask;
-		snprintf(ia->saddr, sizeof(ia->saddr), "%s/%d",
-		    inet_ntoa(*addr), inet_ntocidr(*mask));
-		if (brd != NULL)
-			ia->brd = *brd;
+		ap->addr.s_addr = addr->s_addr;
+		ap->net.s_addr = net->s_addr;
+		if (dst)
+			ap->dst.s_addr = dst->s_addr;
 		else
-			ia->brd.s_addr = INADDR_ANY;
-
-		flags = if_addrflags(ia);
-		if (flags == -1) {
-			logger(ia->iface->ctx, LOG_ERR,
-			    "%s: %s: if_addrflags: %m",
-			    ia->iface->name, ia->saddr);
+			ap->dst.s_addr = INADDR_ANY;
+		TAILQ_INSERT_TAIL(&state->addrs, ap, next);
+	} else if (type == RTM_DELADDR) {
+		if (ap == NULL)
 			return;
-		}
-		ia->addr_flags = flags;
-		break;
-	case RTM_DELADDR:
-		if (ia == NULL)
-			return;
-		TAILQ_REMOVE(&state->addrs, ia, next);
-		break;
-	default:
-		return;
+		TAILQ_REMOVE(&state->addrs, ap, next);
+		free(ap);
 	}
 
-	if (addr->s_addr != INADDR_ANY && addr->s_addr != INADDR_BROADCAST) {
-		arp_handleifa(cmd, ia);
-		dhcp_handleifa(cmd, ia);
-	}
-
-	if (cmd == RTM_DELADDR)
-		free(ia);
+	dhcp_handleifa(type, ifp, addr, net, dst);
 }
 
 void
 ipv4_free(struct interface *ifp)
 {
 	struct ipv4_state *state;
-	struct ipv4_addr *ia;
+	struct ipv4_addr *addr;
 
 	if (ifp) {
 		state = IPV4_STATE(ifp);
 		if (state) {
-		        while ((ia = TAILQ_FIRST(&state->addrs))) {
-				TAILQ_REMOVE(&state->addrs, ia, next);
-				free(ia);
+		        while ((addr = TAILQ_FIRST(&state->addrs))) {
+				TAILQ_REMOVE(&state->addrs, addr, next);
+				free(addr);
 			}
-			ipv4_freerts(&state->routes);
-#ifdef BSD
-			free(state->buffer);
-#endif
 			free(state);
 		}
 	}
@@ -1333,5 +984,4 @@ ipv4_ctxfree(struct dhcpcd_ctx *ctx)
 {
 
 	ipv4_freeroutes(ctx->ipv4_routes);
-	ipv4_freeroutes(ctx->ipv4_kroutes);
 }

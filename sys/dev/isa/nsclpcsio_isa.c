@@ -1,4 +1,4 @@
-/* $NetBSD: nsclpcsio_isa.c,v 1.31 2015/04/23 23:23:00 pgoyette Exp $ */
+/* $NetBSD: nsclpcsio_isa.c,v 1.30 2011/07/15 20:56:26 jmcneill Exp $ */
 
 /*
  * Copyright (c) 2002
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nsclpcsio_isa.c,v 1.31 2015/04/23 23:23:00 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nsclpcsio_isa.c,v 1.30 2011/07/15 20:56:26 jmcneill Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -675,7 +675,7 @@ nsclpcsio_gpio_pin_ctl(void *aux, int pin, int flags)
 }
 #endif /* NGPIO */
 
-MODULE(MODULE_CLASS_DRIVER, nsclpcsio, "sysmon_envsys");
+MODULE(MODULE_CLASS_DRIVER, nsclpcsio, NULL);
 
 #ifdef _MODULE
 #include "ioconf.c"

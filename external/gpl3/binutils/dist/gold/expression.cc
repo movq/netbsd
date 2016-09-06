@@ -1,6 +1,6 @@
 // expression.cc -- expressions in linker scripts for gold
 
-// Copyright (C) 2006-2015 Free Software Foundation, Inc.
+// Copyright 2006, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -68,16 +68,6 @@ struct Expression::Expression_eval_info
   Output_section** result_section_pointer;
   // Pointer to where the alignment of the result should be stored.
   uint64_t* result_alignment_pointer;
-  // Pointer to where the type of the symbol on the RHS should be stored.
-  elfcpp::STT* type_pointer;
-  // Pointer to where the visibility of the symbol on the RHS should be stored.
-  elfcpp::STV* vis_pointer;
-  // Pointer to where the rest of the symbol's st_other field should be stored.
-  unsigned char* nonvis_pointer;
-  // Whether the value is valid.  In Symbol_assignment::set_if_absolute, we
-  // may be trying to evaluate the address of a section whose address is not
-  // yet finalized, and we need to fail the evaluation gracefully.
-  bool *is_valid_pointer;
 };
 
 // Evaluate an expression.
@@ -86,8 +76,8 @@ uint64_t
 Expression::eval(const Symbol_table* symtab, const Layout* layout,
 		 bool check_assertions)
 {
-  return this->eval_maybe_dot(symtab, layout, check_assertions, false, 0,
-			      NULL, NULL, NULL, NULL, NULL, NULL, false, NULL);
+  return this->eval_maybe_dot(symtab, layout, check_assertions,
+			      false, 0, NULL, NULL, NULL, false);
 }
 
 // Evaluate an expression which may refer to the dot symbol.
@@ -102,8 +92,8 @@ Expression::eval_with_dot(const Symbol_table* symtab, const Layout* layout,
 {
   return this->eval_maybe_dot(symtab, layout, check_assertions, true,
 			      dot_value, dot_section, result_section_pointer,
-			      result_alignment_pointer, NULL, NULL, NULL,
-			      is_section_dot_assignment, NULL);
+			      result_alignment_pointer,
+			      is_section_dot_assignment);
 }
 
 // Evaluate an expression which may or may not refer to the dot
@@ -115,11 +105,7 @@ Expression::eval_maybe_dot(const Symbol_table* symtab, const Layout* layout,
 			   uint64_t dot_value, Output_section* dot_section,
 			   Output_section** result_section_pointer,
 			   uint64_t* result_alignment_pointer,
-			   elfcpp::STT* type_pointer,
-			   elfcpp::STV* vis_pointer,
-			   unsigned char* nonvis_pointer,
-			   bool is_section_dot_assignment,
-			   bool* is_valid_pointer)
+			   bool is_section_dot_assignment)
 {
   Expression_eval_info eei;
   eei.symtab = symtab;
@@ -135,25 +121,9 @@ Expression::eval_maybe_dot(const Symbol_table* symtab, const Layout* layout,
     *result_section_pointer = NULL;
   eei.result_section_pointer = result_section_pointer;
 
-  // For symbol=symbol assignments, we need to track the type, visibility,
-  // and remaining st_other bits.
-  eei.type_pointer = type_pointer;
-  eei.vis_pointer = vis_pointer;
-  eei.nonvis_pointer = nonvis_pointer;
-
   eei.result_alignment_pointer = result_alignment_pointer;
 
-  // Assume the value is valid until we try to evaluate an expression
-  // that can't be evaluated yet.
-  bool is_valid = true;
-  eei.is_valid_pointer = &is_valid;
-
   uint64_t val = this->value(&eei);
-
-  if (is_valid_pointer != NULL)
-    *is_valid_pointer = is_valid;
-  else
-    gold_assert(is_valid);
 
   // If this is an assignment to dot within a section, and the value
   // is absolute, treat it as a section-relative offset.
@@ -226,12 +196,6 @@ Symbol_expression::value(const Expression_eval_info* eei)
 
   if (eei->result_section_pointer != NULL)
     *eei->result_section_pointer = sym->output_section();
-  if (eei->type_pointer != NULL)
-    *eei->type_pointer = sym->type();
-  if (eei->vis_pointer != NULL)
-    *eei->vis_pointer = sym->visibility();
-  if (eei->nonvis_pointer != NULL)
-    *eei->nonvis_pointer = sym->nonvis();
 
   if (parameters->target().get_size() == 32)
     return eei->symtab->get_sized_symbol<32>(sym)->value();
@@ -307,11 +271,7 @@ class Unary_expression : public Expression
 				      eei->dot_section,
 				      arg_section_pointer,
 				      eei->result_alignment_pointer,
-				      NULL,
-				      NULL,
-				      NULL,
-				      false,
-				      eei->is_valid_pointer);
+				      false);
   }
 
   void
@@ -391,11 +351,7 @@ class Binary_expression : public Expression
 				       eei->dot_section,
 				       section_pointer,
 				       alignment_pointer,
-				       NULL,
-				       NULL,
-				       NULL,
-				       false,
-				       eei->is_valid_pointer);
+				       false);
   }
 
   uint64_t
@@ -410,11 +366,7 @@ class Binary_expression : public Expression
 					eei->dot_section,
 					section_pointer,
 					alignment_pointer,
-					NULL,
-					NULL,
-					NULL,
-					false,
-					eei->is_valid_pointer);
+					false);
   }
 
   void
@@ -565,11 +517,7 @@ class Trinary_expression : public Expression
 				       eei->dot_section,
 				       section_pointer,
 				       NULL,
-				       NULL,
-				       NULL,
-				       NULL,
-				       false,
-				       eei->is_valid_pointer);
+				       false);
   }
 
   uint64_t
@@ -584,11 +532,7 @@ class Trinary_expression : public Expression
 				       eei->dot_section,
 				       section_pointer,
 				       alignment_pointer,
-				       NULL,
-				       NULL,
-				       NULL,
-				       false,
-				       eei->is_valid_pointer);
+				       false);
   }
 
   uint64_t
@@ -603,11 +547,7 @@ class Trinary_expression : public Expression
 				       eei->dot_section,
 				       section_pointer,
 				       alignment_pointer,
-				       NULL,
-				       NULL,
-				       NULL,
-				       false,
-				       eei->is_valid_pointer);
+				       false);
   }
 
   void
@@ -966,10 +906,7 @@ class Addr_expression : public Section_expression
   {
     if (eei->result_section_pointer != NULL)
       *eei->result_section_pointer = os;
-    if (os->is_address_valid())
-      return os->address();
-    *eei->is_valid_pointer = false;
-    return 0;
+    return os->address();
   }
 
   uint64_t

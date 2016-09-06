@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.6 2014/10/14 16:35:20 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.3.4.2 2015/02/27 11:29:44 martin Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.

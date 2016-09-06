@@ -1,5 +1,5 @@
 /* opncls.c -- open and close a BFD.
-   Copyright (C) 1990-2015 Free Software Foundation, Inc.
+   Copyright 1990-2013 Free Software Foundation, Inc.
 
    Written by Cygnus Support.
 
@@ -109,8 +109,6 @@ _bfd_new_bfd_contained_in (bfd *obfd)
   nbfd->my_archive = obfd;
   nbfd->direction = read_direction;
   nbfd->target_defaulted = obfd->target_defaulted;
-  nbfd->lto_output = obfd->lto_output;
-  nbfd->no_export = obfd->no_export;
   return nbfd;
 }
 
@@ -939,23 +937,14 @@ void *
 bfd_alloc (bfd *abfd, bfd_size_type size)
 {
   void *ret;
-  unsigned long ul_size = (unsigned long) size;
 
-  if (size != ul_size
-      /* Note - although objalloc_alloc takes an unsigned long as its
-	 argument, internally the size is treated as a signed long.  This can
-	 lead to problems where, for example, a request to allocate -1 bytes
-	 can result in just 1 byte being allocated, rather than
-	 ((unsigned long) -1) bytes.  Also memory checkers will often
-	 complain about attempts to allocate a negative amount of memory.
-	 So to stop these problems we fail if the size is negative.  */
-      || ((signed long) ul_size) < 0)
+  if (size != (unsigned long) size)
     {
       bfd_set_error (bfd_error_no_memory);
       return NULL;
     }
 
-  ret = objalloc_alloc ((struct objalloc *) abfd->memory, ul_size);
+  ret = objalloc_alloc ((struct objalloc *) abfd->memory, (unsigned long) size);
   if (ret == NULL)
     bfd_set_error (bfd_error_no_memory);
   return ret;
@@ -976,6 +965,8 @@ DESCRIPTION
 void *
 bfd_alloc2 (bfd *abfd, bfd_size_type nmemb, bfd_size_type size)
 {
+  void *ret;
+
   if ((nmemb | size) >= HALF_BFD_SIZE_TYPE
       && size != 0
       && nmemb > ~(bfd_size_type) 0 / size)
@@ -984,7 +975,18 @@ bfd_alloc2 (bfd *abfd, bfd_size_type nmemb, bfd_size_type size)
       return NULL;
     }
 
-  return bfd_alloc (abfd, size * nmemb);
+  size *= nmemb;
+
+  if (size != (unsigned long) size)
+    {
+      bfd_set_error (bfd_error_no_memory);
+      return NULL;
+    }
+
+  ret = objalloc_alloc ((struct objalloc *) abfd->memory, (unsigned long) size);
+  if (ret == NULL)
+    bfd_set_error (bfd_error_no_memory);
+  return ret;
 }
 
 /*
@@ -1176,7 +1178,7 @@ bfd_get_debug_link_info (bfd *abfd, unsigned long *crc32_out)
   asection *sect;
   unsigned long crc32;
   bfd_byte *contents;
-  unsigned int crc_offset;
+  int crc_offset;
   char *name;
 
   BFD_ASSERT (abfd);
@@ -1194,13 +1196,10 @@ bfd_get_debug_link_info (bfd *abfd, unsigned long *crc32_out)
       return NULL;
     }
 
-  /* CRC value is stored after the filename, aligned up to 4 bytes.  */
+  /* Crc value is stored after the filename, aligned up to 4 bytes.  */
   name = (char *) contents;
-  /* PR 17597: avoid reading off the end of the buffer.  */
-  crc_offset = strnlen (name, bfd_get_section_size (sect)) + 1;
+  crc_offset = strlen (name) + 1;
   crc_offset = (crc_offset + 3) & ~3;
-  if (crc_offset >= bfd_get_section_size (sect))
-    return NULL;
 
   crc32 = bfd_get_32 (abfd, contents + crc_offset);
 
@@ -1232,7 +1231,7 @@ bfd_get_alt_debug_link_info (bfd * abfd, bfd_size_type *buildid_len,
 {
   asection *sect;
   bfd_byte *contents;
-  unsigned int buildid_offset;
+  int buildid_offset;
   char *name;
 
   BFD_ASSERT (abfd);
@@ -1253,9 +1252,7 @@ bfd_get_alt_debug_link_info (bfd * abfd, bfd_size_type *buildid_len,
 
   /* BuildID value is stored after the filename.  */
   name = (char *) contents;
-  buildid_offset = strnlen (name, bfd_get_section_size (sect)) + 1;
-  if (buildid_offset >= bfd_get_section_size (sect))
-    return NULL;
+  buildid_offset = strlen (name) + 1;
 
   *buildid_len = bfd_get_section_size (sect) - buildid_offset;
   *buildid_out = bfd_malloc (*buildid_len);

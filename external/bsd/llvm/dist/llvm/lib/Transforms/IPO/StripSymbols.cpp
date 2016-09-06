@@ -142,9 +142,9 @@ static bool OnlyUsedBy(Value *V, Value *Usr) {
 static void RemoveDeadConstant(Constant *C) {
   assert(C->use_empty() && "Constant is not dead!");
   SmallPtrSet<Constant*, 4> Operands;
-  for (Value *Op : C->operands())
-    if (OnlyUsedBy(Op, C))
-      Operands.insert(cast<Constant>(Op));
+  for (unsigned i = 0, e = C->getNumOperands(); i != e; ++i)
+    if (OnlyUsedBy(C->getOperand(i), C))
+      Operands.insert(cast<Constant>(C->getOperand(i)));
   if (GlobalVariable *GV = dyn_cast<GlobalVariable>(C)) {
     if (!GV->hasLocalLinkage()) return;   // Don't delete non-static globals.
     GV->eraseFromParent();
@@ -211,13 +211,13 @@ static bool StripSymbolNames(Module &M, bool PreserveDbgInfo) {
 
   for (Module::global_iterator I = M.global_begin(), E = M.global_end();
        I != E; ++I) {
-    if (I->hasLocalLinkage() && llvmUsedValues.count(&*I) == 0)
+    if (I->hasLocalLinkage() && llvmUsedValues.count(I) == 0)
       if (!PreserveDbgInfo || !I->getName().startswith("llvm.dbg"))
         I->setName("");     // Internal symbols can't participate in linkage
   }
 
   for (Module::iterator I = M.begin(), E = M.end(); I != E; ++I) {
-    if (I->hasLocalLinkage() && llvmUsedValues.count(&*I) == 0)
+    if (I->hasLocalLinkage() && llvmUsedValues.count(I) == 0)
       if (!PreserveDbgInfo || !I->getName().startswith("llvm.dbg"))
         I->setName("");     // Internal symbols can't participate in linkage
     StripSymtab(I->getValueSymbolTable(), PreserveDbgInfo);
@@ -305,37 +305,41 @@ bool StripDeadDebugInfo::runOnModule(Module &M) {
   SmallVector<Metadata *, 64> LiveSubprograms;
   DenseSet<const MDNode *> VisitedSet;
 
-  std::set<DISubprogram *> LiveSPs;
-  for (Function &F : M) {
-    if (DISubprogram *SP = F.getSubprogram())
-      LiveSPs.insert(SP);
-  }
+  for (DICompileUnit DIC : F.compile_units()) {
+    assert(DIC.Verify() && "DIC must verify as a DICompileUnit.");
 
-  for (DICompileUnit *DIC : F.compile_units()) {
     // Create our live subprogram list.
+    DIArray SPs = DIC.getSubprograms();
     bool SubprogramChange = false;
-    for (DISubprogram *DISP : DIC->getSubprograms()) {
+    for (unsigned i = 0, e = SPs.getNumElements(); i != e; ++i) {
+      DISubprogram DISP(SPs.getElement(i));
+      assert(DISP.Verify() && "DISP must verify as a DISubprogram.");
+
       // Make sure we visit each subprogram only once.
       if (!VisitedSet.insert(DISP).second)
         continue;
 
       // If the function referenced by DISP is not null, the function is live.
-      if (LiveSPs.count(DISP))
+      if (DISP.getFunction())
         LiveSubprograms.push_back(DISP);
       else
         SubprogramChange = true;
     }
 
     // Create our live global variable list.
+    DIArray GVs = DIC.getGlobalVariables();
     bool GlobalVariableChange = false;
-    for (DIGlobalVariable *DIG : DIC->getGlobalVariables()) {
+    for (unsigned i = 0, e = GVs.getNumElements(); i != e; ++i) {
+      DIGlobalVariable DIG(GVs.getElement(i));
+      assert(DIG.Verify() && "DIG must verify as DIGlobalVariable.");
+
       // Make sure we only visit each global variable only once.
       if (!VisitedSet.insert(DIG).second)
         continue;
 
       // If the global variable referenced by DIG is not null, the global
       // variable is live.
-      if (DIG->getVariable())
+      if (DIG.getGlobal())
         LiveGlobalVariables.push_back(DIG);
       else
         GlobalVariableChange = true;
@@ -345,12 +349,12 @@ bool StripDeadDebugInfo::runOnModule(Module &M) {
     // subprogram list/global variable list with our new live subprogram/global
     // variable list.
     if (SubprogramChange) {
-      DIC->replaceSubprograms(MDTuple::get(C, LiveSubprograms));
+      DIC.replaceSubprograms(DIArray(MDNode::get(C, LiveSubprograms)));
       Changed = true;
     }
 
     if (GlobalVariableChange) {
-      DIC->replaceGlobalVariables(MDTuple::get(C, LiveGlobalVariables));
+      DIC.replaceGlobalVariables(DIArray(MDNode::get(C, LiveGlobalVariables)));
       Changed = true;
     }
 

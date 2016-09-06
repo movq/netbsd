@@ -1,4 +1,4 @@
-/*	$NetBSD: rfcomm_upper.c,v 1.22 2014/11/16 21:34:27 plunky Exp $	*/
+/*	$NetBSD: rfcomm_upper.c,v 1.21.2.1 2014/11/18 18:45:30 snj Exp $	*/
 
 /*-
  * Copyright (c) 2006 Itronix Inc.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rfcomm_upper.c,v 1.22 2014/11/16 21:34:27 plunky Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rfcomm_upper.c,v 1.21.2.1 2014/11/18 18:45:30 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>

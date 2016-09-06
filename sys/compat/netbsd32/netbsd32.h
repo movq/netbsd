@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32.h,v 1.109 2015/11/26 13:15:34 martin Exp $	*/
+/*	$NetBSD: netbsd32.h,v 1.102.2.1 2015/11/04 17:46:21 riz Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001, 2008, 2015 Matthew R. Green
@@ -145,7 +145,6 @@ typedef netbsd32_pointer_t netbsd32_u_charp;
 typedef netbsd32_pointer_t netbsd32_charpp;
 typedef netbsd32_pointer_t netbsd32_size_tp;
 typedef netbsd32_pointer_t netbsd32_intp;
-typedef netbsd32_pointer_t netbsd32_uintp;
 typedef netbsd32_pointer_t netbsd32_longp;
 typedef netbsd32_pointer_t netbsd32_caddrp;
 typedef netbsd32_pointer_t netbsd32_caddr;
@@ -155,8 +154,10 @@ typedef netbsd32_pointer_t netbsd32_lwpidp;
 typedef netbsd32_pointer_t netbsd32_ucontextp;
 typedef netbsd32_pointer_t netbsd32_caddr_t;
 typedef netbsd32_pointer_t netbsd32_lwpctlp;
+typedef netbsd32_pointer_t netbsd32_posix_spawn_file_actionsp;
+typedef netbsd32_pointer_t netbsd32_posix_spawnattrp;
+typedef netbsd32_pointer_t netbsd32_posix_spawn_file_actions_entryp;
 typedef netbsd32_pointer_t netbsd32_pid_tp;
-typedef netbsd32_pointer_t netbsd32_psetidp_t;
 
 /*
  * now, the compatibility structures and their fake pointer types.
@@ -168,12 +169,6 @@ typedef netbsd32_intptr_t netbsd32_semid_t;
 typedef netbsd32_pointer_t netbsd32_semidp_t;
 typedef netbsd32_uint64 netbsd32_dev_t;
 typedef netbsd32_int64 netbsd32_off_t;
-typedef netbsd32_uint64 netbsd32_ino_t;
-
-/* from <sys/spawn.h> */
-typedef netbsd32_pointer_t netbsd32_posix_spawn_file_actionsp;
-typedef netbsd32_pointer_t netbsd32_posix_spawnattrp;
-typedef netbsd32_pointer_t netbsd32_posix_spawn_file_actions_entryp;
 
 /* from <sys/uio.h> */
 typedef netbsd32_pointer_t netbsd32_iovecp_t;
@@ -916,20 +911,6 @@ struct netbsd32_kevent {
 typedef netbsd32_pointer_t netbsd32_sched_paramp_t;
 typedef netbsd32_pointer_t netbsd32_cpusetp_t;
 
-/* from <fs/tmpfs/tmpfs_args.h> */
-struct netbsd32_tmpfs_args {
-        int                     ta_version;
-
-        /* Size counters. */
-        netbsd32_ino_t          ta_nodes_max;
-        netbsd32_off_t          ta_size_max;
-
-        /* Root node attributes. */
-        uid_t                   ta_root_uid;
-        gid_t                   ta_root_gid;
-        mode_t                  ta_root_mode;
-};
-
 /* from <fs/cd9660/cd9660_mount.h> */
 struct netbsd32_iso_args {
 	netbsd32_charp fspec;
@@ -1050,27 +1031,12 @@ struct netbsd32_posix_spawn_file_actions {
 	netbsd32_posix_spawn_file_actions_entryp fae;
 };
 
-struct netbsd32_modctl_load {
-	netbsd32_charp ml_filename;
-	int ml_flags;
-	netbsd32_charp ml_props;
-	netbsd32_size_t ml_propslen;
-};
-
-struct netbsd32_mq_attr {
-	netbsd32_long	mq_flags;
-	netbsd32_long	mq_maxmsg;
-	netbsd32_long	mq_msgsize;
-	netbsd32_long	mq_curmsgs;
-};
-typedef netbsd32_pointer_t netbsd32_mq_attrp_t;
-
 #if 0
 int	netbsd32_kevent(struct lwp *, void *, register_t *);
 #endif
 
 /*
- * here are some macros to convert between netbsd32 and native 64 bit types.
+ * here are some macros to convert between netbsd32 and sparc64 types.
  * note that they do *NOT* act like good macros and put ()'s around all
  * arguments cuz this _breaks_ SCARG().
  */
@@ -1100,12 +1066,11 @@ int	coredump_netbsd32(struct lwp *, struct coredump_iostate *);
 #include <compat/common/compat_util.h>
 #include <compat/sys/siginfo.h>
 
-vaddr_t netbsd32_vm_default_addr(struct proc *, vaddr_t, vsize_t, int);
+vaddr_t netbsd32_vm_default_addr(struct proc *, vaddr_t, vsize_t);
 void netbsd32_adjust_limits(struct proc *);
 
 void	netbsd32_si_to_si32(siginfo32_t *, const siginfo_t *);
-void	netbsd32_ksi32_to_ksi(struct _ksiginfo *si, const struct __ksiginfo32 *si32);
-
+void	netbsd32_si32_to_si(siginfo_t *, const siginfo32_t *);
 
 void	startlwp32(void *);
 struct compat_50_netbsd32___semctl14_args;

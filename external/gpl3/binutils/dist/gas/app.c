@@ -1,5 +1,7 @@
 /* This is the Assembler Pre-Processor
-   Copyright (C) 1987-2015 Free Software Foundation, Inc.
+   Copyright 1987, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
+   1999, 2000, 2001, 2002, 2003, 2005, 2006, 2007, 2008, 2009, 2010, 2012
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -158,10 +160,7 @@ do_scrub_begin (int m68k_mri ATTRIBUTE_UNUSED)
   for (p = line_comment_chars; *p; p++)
     lex[(unsigned char) *p] = LEX_IS_LINE_COMMENT_START;
 
-#ifndef tc_line_separator_chars
-#define tc_line_separator_chars line_separator_chars
-#endif
-  for (p = tc_line_separator_chars; *p; p++)
+  for (p = line_separator_chars; *p; p++)
     lex[(unsigned char) *p] = LEX_IS_LINE_SEPARATOR;
 
 #ifdef tc_parallel_separator_chars
@@ -247,7 +246,7 @@ struct app_save
 char *
 app_push (void)
 {
-  struct app_save *saved;
+  register struct app_save *saved;
 
   saved = (struct app_save *) xmalloc (sizeof (*saved));
   saved->state = state;
@@ -284,7 +283,7 @@ app_push (void)
 void
 app_pop (char *arg)
 {
-  struct app_save *saved = (struct app_save *) arg;
+  register struct app_save *saved = (struct app_save *) arg;
 
   /* There is no do_scrub_end ().  */
   state = saved->state;
@@ -360,7 +359,7 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
   char *from;
   char *fromend;
   size_t fromlen;
-  int ch, ch2 = 0;
+  register int ch, ch2 = 0;
   /* Character that started the string we're working on.  */
   static char quotechar;
 
@@ -685,7 +684,7 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
 	case 16:
 	  /* We have seen an 'a' at the start of a symbol, look for an 'f'.  */
 	  ch = GET ();
-	  if (ch == 'f' || ch == 'F')
+	  if (ch == 'f' || ch == 'F') 
 	    {
 	      state = 17;
 	      PUT (ch);
@@ -1218,16 +1217,9 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
 		  while (ch != EOF && !IS_NEWLINE (ch))
 		    ch = GET ();
 		  if (ch == EOF)
-		    {
-		      as_warn (_("end of file in comment; newline inserted"));
-		      PUT ('\n');
-		    }
-		  else /* IS_NEWLINE (ch) */
-		    {
-		      /* To process non-zero add_newlines.  */
-		      UNGET (ch);
-		    }
+		    as_warn (_("end of file in comment; newline inserted"));
 		  state = 0;
+		  PUT ('\n');
 		  break;
 		}
 	      /* Looks like `# 123 "filename"' from cpp.  */
@@ -1338,12 +1330,12 @@ do_scrub_chars (size_t (*get) (char *, size_t), char *tostart, size_t tolen)
 
 #ifdef TC_Z80
 	  /* "af'" is a symbol containing '\''.  */
-	  if (state == 3 && (ch == 'a' || ch == 'A'))
+	  if (state == 3 && (ch == 'a' || ch == 'A')) 
 	    {
 	      state = 16;
 	      PUT (ch);
 	      ch = GET ();
-	      if (ch == 'f' || ch == 'F')
+	      if (ch == 'f' || ch == 'F') 
 		{
 		  state = 17;
 		  PUT (ch);

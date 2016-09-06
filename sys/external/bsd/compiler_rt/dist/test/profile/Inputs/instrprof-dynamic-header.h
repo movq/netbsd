@@ -1,7 +1,5 @@
-template <class T> void bar(int X) {
-  if (X) {
-    X *= 4;
-  }
+template <class T> void bar() {
+  if (true) {}
 }
 void a();
 void b();

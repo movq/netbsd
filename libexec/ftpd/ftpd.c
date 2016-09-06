@@ -1,4 +1,4 @@
-/*	$NetBSD: ftpd.c,v 1.203 2016/07/19 21:25:38 shm Exp $	*/
+/*	$NetBSD: ftpd.c,v 1.200.4.1 2015/04/30 06:07:34 riz Exp $	*/
 
 /*
  * Copyright (c) 1997-2009 The NetBSD Foundation, Inc.
@@ -97,7 +97,7 @@ __COPYRIGHT("@(#) Copyright (c) 1985, 1988, 1990, 1992, 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)ftpd.c	8.5 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: ftpd.c,v 1.203 2016/07/19 21:25:38 shm Exp $");
+__RCSID("$NetBSD: ftpd.c,v 1.200.4.1 2015/04/30 06:07:34 riz Exp $");
 #endif
 #endif /* not lint */
 
@@ -1967,8 +1967,7 @@ getdatasock(const char *fmode)
 	t = errno;
 	if (! dropprivs)
 		(void) seteuid((uid_t)pw->pw_uid);
-	if (s >= 0)
-		(void) close(s);
+	(void) close(s);
 	errno = t;
 	return (NULL);
 }
@@ -3483,10 +3482,8 @@ send_file_list(const char *whichf)
 		while ((dir = readdir(dirp)) != NULL) {
 			char nbuf[MAXPATHLEN];
 
-			if (urgflag && handleoobcmd()) {
-				(void) closedir(dirp);
+			if (urgflag && handleoobcmd())
 				goto cleanup_send_file_list;
-			}
 
 			if (ISDOTDIR(dir->d_name) || ISDOTDOTDIR(dir->d_name))
 				continue;
@@ -3509,10 +3506,8 @@ send_file_list(const char *whichf)
 				if (dout == NULL) {
 					dout = dataconn("file list", (off_t)-1,
 						"w");
-					if (dout == NULL) {
-						(void) closedir(dirp);
+					if (dout == NULL)
 						goto cleanup_send_file_list;
-					}
 					transflag = 1;
 				}
 				p = nbuf;

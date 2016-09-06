@@ -1,4 +1,4 @@
-/*	$NetBSD: recvbuff.h,v 1.5 2016/05/01 23:32:00 christos Exp $	*/
+/*	$NetBSD: recvbuff.h,v 1.1.1.3.4.2 2016/05/11 11:35:37 martin Exp $	*/
 
 #ifndef RECVBUFF_H
 #define RECVBUFF_H

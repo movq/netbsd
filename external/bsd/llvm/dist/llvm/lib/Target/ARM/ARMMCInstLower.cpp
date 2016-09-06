@@ -30,38 +30,38 @@ MCOperand ARMAsmPrinter::GetSymbolRef(const MachineOperand &MO,
   unsigned Option = MO.getTargetFlags() & ARMII::MO_OPTION_MASK;
   switch (Option) {
   default: {
-    Expr = MCSymbolRefExpr::create(Symbol, MCSymbolRefExpr::VK_None,
+    Expr = MCSymbolRefExpr::Create(Symbol, MCSymbolRefExpr::VK_None,
                                    OutContext);
     switch (Option) {
     default: llvm_unreachable("Unknown target flag on symbol operand");
     case ARMII::MO_NO_FLAG:
       break;
     case ARMII::MO_LO16:
-      Expr = MCSymbolRefExpr::create(Symbol, MCSymbolRefExpr::VK_None,
+      Expr = MCSymbolRefExpr::Create(Symbol, MCSymbolRefExpr::VK_None,
                                      OutContext);
-      Expr = ARMMCExpr::createLower16(Expr, OutContext);
+      Expr = ARMMCExpr::CreateLower16(Expr, OutContext);
       break;
     case ARMII::MO_HI16:
-      Expr = MCSymbolRefExpr::create(Symbol, MCSymbolRefExpr::VK_None,
+      Expr = MCSymbolRefExpr::Create(Symbol, MCSymbolRefExpr::VK_None,
                                      OutContext);
-      Expr = ARMMCExpr::createUpper16(Expr, OutContext);
+      Expr = ARMMCExpr::CreateUpper16(Expr, OutContext);
       break;
     }
     break;
   }
 
   case ARMII::MO_PLT:
-    Expr = MCSymbolRefExpr::create(Symbol, MCSymbolRefExpr::VK_PLT,
+    Expr = MCSymbolRefExpr::Create(Symbol, MCSymbolRefExpr::VK_PLT,
                                    OutContext);
     break;
   }
 
   if (!MO.isJTI() && MO.getOffset())
-    Expr = MCBinaryExpr::createAdd(Expr,
-                                   MCConstantExpr::create(MO.getOffset(),
+    Expr = MCBinaryExpr::CreateAdd(Expr,
+                                   MCConstantExpr::Create(MO.getOffset(),
                                                           OutContext),
                                    OutContext);
-  return MCOperand::createExpr(Expr);
+  return MCOperand::CreateExpr(Expr);
 
 }
 
@@ -74,13 +74,13 @@ bool ARMAsmPrinter::lowerOperand(const MachineOperand &MO,
     if (MO.isImplicit() && MO.getReg() != ARM::CPSR)
       return false;
     assert(!MO.getSubReg() && "Subregs should be eliminated!");
-    MCOp = MCOperand::createReg(MO.getReg());
+    MCOp = MCOperand::CreateReg(MO.getReg());
     break;
   case MachineOperand::MO_Immediate:
-    MCOp = MCOperand::createImm(MO.getImm());
+    MCOp = MCOperand::CreateImm(MO.getImm());
     break;
   case MachineOperand::MO_MachineBasicBlock:
-    MCOp = MCOperand::createExpr(MCSymbolRefExpr::create(
+    MCOp = MCOperand::CreateExpr(MCSymbolRefExpr::Create(
         MO.getMBB()->getSymbol(), OutContext));
     break;
   case MachineOperand::MO_GlobalAddress: {
@@ -105,7 +105,7 @@ bool ARMAsmPrinter::lowerOperand(const MachineOperand &MO,
     APFloat Val = MO.getFPImm()->getValueAPF();
     bool ignored;
     Val.convert(APFloat::IEEEdouble, APFloat::rmTowardZero, &ignored);
-    MCOp = MCOperand::createFPImm(Val.convertToDouble());
+    MCOp = MCOperand::CreateFPImm(Val.convertToDouble());
     break;
   }
   case MachineOperand::MO_RegisterMask:

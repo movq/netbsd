@@ -257,8 +257,6 @@ isc_hash_ctxcreate
 isc_hash_ctxdetach
 isc_hash_ctxinit
 isc_hash_destroy
-isc_hash_function
-isc_hash_function_reverse
 isc_hash_init
 isc_heap_create
 isc_heap_decreased
@@ -398,9 +396,9 @@ isc_mem_ondestroy
 isc_mem_printallactive
 isc_mem_references
 isc_mem_register
-@IF NOTYET
+@IF JSON
 isc_mem_renderjson
-@END NOTYET
+@END JSON
 @IF LIBXML2
 isc_mem_renderxml
 @END LIBXML2
@@ -454,7 +452,6 @@ isc_netaddr_getzone
 isc_netaddr_isexperimental
 isc_netaddr_islinklocal
 isc_netaddr_ismulticast
-isc_netaddr_isnetzero
 isc_netaddr_issitelocal
 isc_netaddr_masktoprefixlen
 isc_netaddr_prefixok
@@ -572,7 +569,6 @@ isc_sockaddr_hash
 isc_sockaddr_isexperimental
 isc_sockaddr_islinklocal
 isc_sockaddr_ismulticast
-isc_sockaddr_isnetzero
 isc_sockaddr_issitelocal
 isc_sockaddr_pf
 isc_sockaddr_setport
@@ -644,9 +640,9 @@ isc_taskmgr_createinctx
 isc_taskmgr_destroy
 isc_taskmgr_excltask
 isc_taskmgr_mode
-@IF NOTYET
+@IF JSON
 isc_taskmgr_renderjson
-@END NOTYET
+@END JSON
 @IF LIBXML2
 isc_taskmgr_renderxml
 @END LIBXML2

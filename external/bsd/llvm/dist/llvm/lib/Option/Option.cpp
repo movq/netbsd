@@ -11,7 +11,6 @@
 #include "llvm/ADT/Twine.h"
 #include "llvm/Option/Arg.h"
 #include "llvm/Option/ArgList.h"
-#include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/raw_ostream.h"
 #include <algorithm>
@@ -36,10 +35,13 @@ Option::Option(const OptTable::Info *info, const OptTable *owner)
   }
 }
 
-void Option::print(raw_ostream &O) const {
-  O << "<";
+Option::~Option() {
+}
+
+void Option::dump() const {
+  llvm::errs() << "<";
   switch (getKind()) {
-#define P(N) case N: O << #N; break
+#define P(N) case N: llvm::errs() << #N; break
     P(GroupClass);
     P(InputClass);
     P(UnknownClass);
@@ -55,34 +57,32 @@ void Option::print(raw_ostream &O) const {
   }
 
   if (Info->Prefixes) {
-    O << " Prefixes:[";
-    for (const char *const *Pre = Info->Prefixes; *Pre != nullptr; ++Pre) {
-      O << '"' << *Pre << (*(Pre + 1) == nullptr ? "\"" : "\", ");
+    llvm::errs() << " Prefixes:[";
+    for (const char * const *Pre = Info->Prefixes; *Pre != nullptr; ++Pre) {
+      llvm::errs() << '"' << *Pre << (*(Pre + 1) == nullptr ? "\"" : "\", ");
     }
-    O << ']';
+    llvm::errs() << ']';
   }
 
-  O << " Name:\"" << getName() << '"';
+  llvm::errs() << " Name:\"" << getName() << '"';
 
   const Option Group = getGroup();
   if (Group.isValid()) {
-    O << " Group:";
-    Group.print(O);
+    llvm::errs() << " Group:";
+    Group.dump();
   }
 
   const Option Alias = getAlias();
   if (Alias.isValid()) {
-    O << " Alias:";
-    Alias.print(O);
+    llvm::errs() << " Alias:";
+    Alias.dump();
   }
 
   if (getKind() == MultiArgClass)
-    O << " NumArgs:" << getNumArgs();
+    llvm::errs() << " NumArgs:" << getNumArgs();
 
-  O << ">\n";
+  llvm::errs() << ">\n";
 }
-
-void Option::dump() const { print(dbgs()); }
 
 bool Option::matches(OptSpecifier Opt) const {
   // Aliases are never considered in matching, look through them.
@@ -128,11 +128,6 @@ Arg *Option::accept(const ArgList &Args,
         Val += strlen(Val) + 1;
       }
     }
-
-    if (UnaliasedOption.getKind() == JoinedClass && !getAliasArgs())
-      // A Flag alias for a Joined option must provide an argument.
-      A->getValues().push_back("");
-
     return A;
   }
   case JoinedClass: {

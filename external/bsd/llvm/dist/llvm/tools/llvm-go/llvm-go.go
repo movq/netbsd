@@ -24,11 +24,6 @@ import (
 	"strings"
 )
 
-const (
-	linkmodeComponentLibs = "component-libs"
-	linkmodeDylib         = "dylib"
-)
-
 type pkg struct {
 	llvmpath, pkgpath string
 }
@@ -51,7 +46,7 @@ var components = []string{
 	"bitwriter",
 	"codegen",
 	"core",
-	"debuginfodwarf",
+	"debuginfo",
 	"executionengine",
 	"instrumentation",
 	"interpreter",
@@ -71,12 +66,11 @@ var components = []string{
 func llvmConfig(args ...string) string {
 	configpath := os.Getenv("LLVM_CONFIG")
 	if configpath == "" {
-		bin, _ := filepath.Split(os.Args[0])
-		configpath = filepath.Join(bin, "llvm-config")
+		// strip llvm-go, add llvm-config
+		configpath = os.Args[0][:len(os.Args[0])-7] + "llvm-config"
 	}
 
 	cmd := exec.Command(configpath, args...)
-	cmd.Stderr = os.Stderr
 	out, err := cmd.Output()
 	if err != nil {
 		panic(err.Error())
@@ -84,21 +78,11 @@ func llvmConfig(args ...string) string {
 
 	outstr := string(out)
 	outstr = strings.TrimSuffix(outstr, "\n")
-	outstr = strings.Replace(outstr, "\n", " ", -1)
-	return outstr
+	return strings.Replace(outstr, "\n", " ", -1)
 }
 
-func llvmFlags(linkmode string) compilerFlags {
-	ldflags := llvmConfig("--ldflags")
-	switch linkmode {
-	case linkmodeComponentLibs:
-		ldflags += " " + llvmConfig(append([]string{"--libs"}, components...)...)
-	case linkmodeDylib:
-		ldflags += " -lLLVM"
-	default:
-		panic("invalid linkmode: " + linkmode)
-	}
-	ldflags += " " + llvmConfig("--system-libs")
+func llvmFlags() compilerFlags {
+	ldflags := llvmConfig(append([]string{"--ldflags", "--libs", "--system-libs"}, components...)...)
 	if runtime.GOOS != "darwin" {
 		// OS X doesn't like -rpath with cgo. See:
 		// https://code.google.com/p/go/issues/detail?id=7293
@@ -133,8 +117,8 @@ func printComponents() {
 	fmt.Println(strings.Join(components, " "))
 }
 
-func printConfig(linkmode string) {
-	flags := llvmFlags(linkmode)
+func printConfig() {
+	flags := llvmFlags()
 
 	fmt.Printf(`// +build !byollvm
 
@@ -153,7 +137,7 @@ type (run_build_sh int)
 `, flags.cpp, flags.cxx, flags.ld)
 }
 
-func runGoWithLLVMEnv(args []string, cc, cxx, gocmd, llgo, cppflags, cxxflags, ldflags, linkmode string) {
+func runGoWithLLVMEnv(args []string, cc, cxx, llgo, cppflags, cxxflags, ldflags string) {
 	args = addTag(args, "byollvm")
 
 	srcdir := llvmConfig("--src-root")
@@ -178,11 +162,31 @@ func runGoWithLLVMEnv(args []string, cc, cxx, gocmd, llgo, cppflags, cxxflags, l
 
 	newpath := os.Getenv("PATH")
 
+	if llgo != "" {
+		bindir := filepath.Join(tmpgopath, "bin")
+
+		err = os.MkdirAll(bindir, os.ModePerm)
+		if err != nil {
+			panic(err.Error())
+		}
+
+		err = os.Symlink(llgo, filepath.Join(bindir, "gccgo"))
+		if err != nil {
+			panic(err.Error())
+		}
+
+		newpathlist := []string{bindir}
+		newpathlist = append(newpathlist, filepath.SplitList(newpath)...)
+		newpath = strings.Join(newpathlist, string(filepath.ListSeparator))
+
+		args = append([]string{args[0], "-compiler", "gccgo"}, args[1:]...)
+	}
+
 	newgopathlist := []string{tmpgopath}
 	newgopathlist = append(newgopathlist, filepath.SplitList(os.Getenv("GOPATH"))...)
 	newgopath := strings.Join(newgopathlist, string(filepath.ListSeparator))
 
-	flags := llvmFlags(linkmode)
+	flags := llvmFlags()
 
 	newenv := []string{
 		"CC=" + cc,
@@ -193,29 +197,24 @@ func runGoWithLLVMEnv(args []string, cc, cxx, gocmd, llgo, cppflags, cxxflags, l
 		"GOPATH=" + newgopath,
 		"PATH=" + newpath,
 	}
-	if llgo != "" {
-		newenv = append(newenv, "GCCGO="+llgo)
-	}
-
 	for _, v := range os.Environ() {
 		if !strings.HasPrefix(v, "CC=") &&
 			!strings.HasPrefix(v, "CXX=") &&
 			!strings.HasPrefix(v, "CGO_CPPFLAGS=") &&
 			!strings.HasPrefix(v, "CGO_CXXFLAGS=") &&
 			!strings.HasPrefix(v, "CGO_LDFLAGS=") &&
-			!strings.HasPrefix(v, "GCCGO=") &&
 			!strings.HasPrefix(v, "GOPATH=") &&
 			!strings.HasPrefix(v, "PATH=") {
 			newenv = append(newenv, v)
 		}
 	}
 
-	gocmdpath, err := exec.LookPath(gocmd)
+	gocmdpath, err := exec.LookPath("go")
 	if err != nil {
 		panic(err.Error())
 	}
 
-	proc, err := os.StartProcess(gocmdpath, append([]string{gocmd}, args...),
+	proc, err := os.StartProcess(gocmdpath, append([]string{"go"}, args...),
 		&os.ProcAttr{
 			Env:   newenv,
 			Files: []*os.File{os.Stdin, os.Stdout, os.Stderr},
@@ -248,46 +247,43 @@ func main() {
 	cppflags := os.Getenv("CGO_CPPFLAGS")
 	cxxflags := os.Getenv("CGO_CXXFLAGS")
 	ldflags := os.Getenv("CGO_LDFLAGS")
-	gocmd := "go"
 	llgo := ""
-	linkmode := linkmodeComponentLibs
-
-	flags := []struct {
-		name string
-		dest *string
-	}{
-		{"cc", &cc},
-		{"cxx", &cxx},
-		{"go", &gocmd},
-		{"llgo", &llgo},
-		{"cppflags", &cppflags},
-		{"ldflags", &ldflags},
-		{"linkmode", &linkmode},
-	}
 
 	args := os.Args[1:]
-LOOP:
-	for {
-		if len(args) == 0 {
+	DONE: for {
+		switch {
+		case len(args) == 0:
 			usage()
+		case strings.HasPrefix(args[0], "cc="):
+			cc = args[0][3:]
+			args = args[1:]
+		case strings.HasPrefix(args[0], "cxx="):
+			cxx = args[0][4:]
+			args = args[1:]
+		case strings.HasPrefix(args[0], "llgo="):
+			llgo = args[0][5:]
+			args = args[1:]
+		case strings.HasPrefix(args[0], "cppflags="):
+			cppflags = args[0][9:]
+			args = args[1:]
+		case strings.HasPrefix(args[0], "cxxflags="):
+			cxxflags = args[0][9:]
+			args = args[1:]
+		case strings.HasPrefix(args[0], "ldflags="):
+			ldflags = args[0][8:]
+			args = args[1:]
+		default:
+			break DONE
 		}
-		for _, flag := range flags {
-			if strings.HasPrefix(args[0], flag.name+"=") {
-				*flag.dest = args[0][len(flag.name)+1:]
-				args = args[1:]
-				continue LOOP
-			}
-		}
-		break
 	}
 
 	switch args[0] {
 	case "build", "get", "install", "run", "test":
-		runGoWithLLVMEnv(args, cc, cxx, gocmd, llgo, cppflags, cxxflags, ldflags, linkmode)
+		runGoWithLLVMEnv(args, cc, cxx, llgo, cppflags, cxxflags, ldflags)
 	case "print-components":
 		printComponents()
 	case "print-config":
-		printConfig(linkmode)
+		printConfig()
 	default:
 		usage()
 	}

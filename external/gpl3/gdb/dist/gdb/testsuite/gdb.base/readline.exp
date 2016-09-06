@@ -1,4 +1,4 @@
-# Copyright 2002-2015 Free Software Foundation, Inc.
+# Copyright 2002-2014 Free Software Foundation, Inc.
 
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -145,11 +145,6 @@ proc operate_and_get_next {name args} {
 gdb_start
 gdb_reinitialize_dir $srcdir/$subdir
 
-if { ![readline_is_used] } {
-    unsupported "readline isn't used."
-    return -1
-}
-
 set oldtimeout1 $timeout
 set timeout 30
 
@@ -185,11 +180,11 @@ gdb_test_multiple "if 1 > 0\n\033\[A\033\[A\nend" $msg {
 if [info exists env(GDBHISTFILE)] {
     set old_gdbhistfile $env(GDBHISTFILE)
 }
-if [info exists env(GDBHISTSIZE)] {
-    set old_gdbhistsize $env(GDBHISTSIZE)
+if [info exists env(HISTSIZE)] {
+    set old_histsize $env(HISTSIZE)
 }
 set env(GDBHISTFILE) "${srcdir}/${subdir}/gdb_history"
-set env(GDBHISTSIZE) "10"
+set env(HISTSIZE) "10"
 
 gdb_exit
 gdb_start
@@ -207,10 +202,10 @@ if [info exists old_gdbhistfile] {
 } else {
     unset env(GDBHISTFILE)
 }
-if [info exists old_gdbhistsize] {
-    set env(GDBHISTSIZE) $old_gdbhistsize
+if [info exists old_histsize] {
+    set env(HISTSIZE) $old_histsize
 } else {
-    unset env(GDBHISTSIZE)
+    unset env(HISTSIZE)
 }
 set timeout $oldtimeout1
 

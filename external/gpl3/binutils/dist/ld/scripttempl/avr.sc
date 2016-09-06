@@ -1,36 +1,15 @@
-# Copyright (C) 2014-2015 Free Software Foundation, Inc.
-# 
-# Copying and distribution of this file, with or without modification,
-# are permitted in any medium without royalty provided the copyright
-# notice and this notice are preserved.
-
 cat <<EOF
-/* Copyright (C) 2014-2015 Free Software Foundation, Inc.
-
-   Copying and distribution of this script, with or without modification,
-   are permitted in any medium without royalty provided the copyright
-   notice and this notice are preserved.  */
-
 OUTPUT_FORMAT("${OUTPUT_FORMAT}","${OUTPUT_FORMAT}","${OUTPUT_FORMAT}")
 OUTPUT_ARCH(${ARCH})
 
-__TEXT_REGION_LENGTH__ = DEFINED(__TEXT_REGION_LENGTH__) ? __TEXT_REGION_LENGTH__ : $TEXT_LENGTH;
-__DATA_REGION_LENGTH__ = DEFINED(__DATA_REGION_LENGTH__) ? __DATA_REGION_LENGTH__ : $DATA_LENGTH;
-__EEPROM_REGION_LENGTH__ = DEFINED(__EEPROM_REGION_LENGTH__) ? __EEPROM_REGION_LENGTH__ : 64K;
-__FUSE_REGION_LENGTH__ = DEFINED(__FUSE_REGION_LENGTH__) ? __FUSE_REGION_LENGTH__ : 1K;
-__LOCK_REGION_LENGTH__ = DEFINED(__LOCK_REGION_LENGTH__) ? __LOCK_REGION_LENGTH__ : 1K;
-__SIGNATURE_REGION_LENGTH__ = DEFINED(__SIGNATURE_REGION_LENGTH__) ? __SIGNATURE_REGION_LENGTH__ : 1K;
-__USER_SIGNATURE_REGION_LENGTH__ = DEFINED(__USER_SIGNATURE_REGION_LENGTH__) ? __USER_SIGNATURE_REGION_LENGTH__ : 1K;
-
 MEMORY
 {
-  text   (rx)   : ORIGIN = 0, LENGTH = __TEXT_REGION_LENGTH__
-  data   (rw!x) : ORIGIN = $DATA_ORIGIN, LENGTH = __DATA_REGION_LENGTH__
-  eeprom (rw!x) : ORIGIN = 0x810000, LENGTH = __EEPROM_REGION_LENGTH__
-  fuse      (rw!x) : ORIGIN = 0x820000, LENGTH = __FUSE_REGION_LENGTH__
-  lock      (rw!x) : ORIGIN = 0x830000, LENGTH = __LOCK_REGION_LENGTH__
-  signature (rw!x) : ORIGIN = 0x840000, LENGTH = __SIGNATURE_REGION_LENGTH__
-  user_signatures (rw!x) : ORIGIN = 0x850000, LENGTH = __USER_SIGNATURE_REGION_LENGTH__
+  text   (rx)   : ORIGIN = 0, LENGTH = $TEXT_LENGTH
+  data   (rw!x) : ORIGIN = $DATA_ORIGIN, LENGTH = $DATA_LENGTH
+  eeprom (rw!x) : ORIGIN = 0x810000, LENGTH = 64K
+  fuse      (rw!x) : ORIGIN = 0x820000, LENGTH = 1K
+  lock      (rw!x) : ORIGIN = 0x830000, LENGTH = 1K
+  signature (rw!x) : ORIGIN = 0x840000, LENGTH = 1K
 }
 
 SECTIONS
@@ -102,29 +81,24 @@ SECTIONS
     KEEP(*(.vectors))
 
     /* For data that needs to reside in the lower 64k of progmem.  */
-    ${RELOCATING+ *(.progmem.gcc*)}
-
-    /* PR 13812: Placing the trampolines here gives a better chance
-       that they will be in range of the code that uses them.  */
+    *(.progmem.gcc*)
+    *(.progmem*)
     ${RELOCATING+. = ALIGN(2);}
+
     ${CONSTRUCTING+ __trampolines_start = . ; }
     /* The jump trampolines for the 16-bit limited relocs will reside here.  */
     *(.trampolines)
-    ${RELOCATING+ *(.trampolines*)}
+    *(.trampolines*)
     ${CONSTRUCTING+ __trampolines_end = . ; }
-
-    ${RELOCATING+ *(.progmem*)}
-    
-    ${RELOCATING+. = ALIGN(2);}
 
     /* For future tablejump instruction arrays for 3 byte pc devices.
        We don't relax jump/call instructions within these sections.  */
     *(.jumptables) 
-    ${RELOCATING+ *(.jumptables*)}
+    *(.jumptables*) 
 
     /* For code that needs to reside in the lower 128k progmem.  */
     *(.lowtext)
-    ${RELOCATING+ *(.lowtext*)}
+    *(.lowtext*)
 
     ${CONSTRUCTING+ __ctors_start = . ; }
     ${CONSTRUCTING+ *(.ctors) }
@@ -159,7 +133,7 @@ SECTIONS
     KEEP (*(.init9))
     *(.text)
     ${RELOCATING+. = ALIGN(2);}
-    ${RELOCATING+ *(.text.*)}
+    *(.text.*)
     ${RELOCATING+. = ALIGN(2);}
     *(.fini9)  /* _exit() starts here.  */
     KEEP (*(.fini9))
@@ -184,24 +158,27 @@ SECTIONS
     ${RELOCATING+ _etext = . ; }
   } ${RELOCATING+ > text}
 
-  .data        ${RELOCATING-0} :
+  .data	${RELOCATING-0} : ${RELOCATING+AT (ADDR (.text) + SIZEOF (.text))}
   {
     ${RELOCATING+ PROVIDE (__data_start = .) ; }
-    *(.data)
-    ${RELOCATING+ *(.data*)}
+    /* --gc-sections will delete empty .data. This leads to wrong start
+       addresses for subsequent sections because -Tdata= from the command
+       line will have no effect, see PR13697.  Thus, keep .data  */
+    KEEP (*(.data))    
+    *(.data*)
     *(.rodata)  /* We need to include .rodata here if gcc is used */
-    ${RELOCATING+ *(.rodata*)} /* with -fdata-sections.  */
+    *(.rodata*) /* with -fdata-sections.  */
     *(.gnu.linkonce.d*)
     ${RELOCATING+. = ALIGN(2);}
     ${RELOCATING+ _edata = . ; }
     ${RELOCATING+ PROVIDE (__data_end = .) ; }
-  } ${RELOCATING+ > data ${RELOCATING+AT> text}}
+  } ${RELOCATING+ > data}
 
-  .bss ${RELOCATING+ ADDR(.data) + SIZEOF (.data)} ${RELOCATING-0} :${RELOCATING+ AT (ADDR (.bss))}
+  .bss ${RELOCATING-0} :${RELOCATING+ AT (ADDR (.bss))}
   {
     ${RELOCATING+ PROVIDE (__bss_start = .) ; }
     *(.bss)
-    ${RELOCATING+ *(.bss*)}
+    *(.bss*)
     *(COMMON)
     ${RELOCATING+ PROVIDE (__bss_end = .) ; }
   } ${RELOCATING+ > data}
@@ -221,8 +198,7 @@ SECTIONS
 
   .eeprom ${RELOCATING-0}:
   {
-    /* See .data above...  */
-    KEEP(*(.eeprom*))
+    *(.eeprom*)
     ${RELOCATING+ __eeprom_end = . ; }
   } ${RELOCATING+ > eeprom}
 
@@ -251,12 +227,39 @@ SECTIONS
   .stab.exclstr 0 : { *(.stab.exclstr) }
   .stab.index 0 : { *(.stab.index) }
   .stab.indexstr 0 : { *(.stab.indexstr) }
-  .comment 0 : { *(.comment) } 
-  .note.gnu.build-id : { *(.note.gnu.build-id) }
-EOF
+  .comment 0 : { *(.comment) }
+ 
+  /* DWARF debug sections.
+     Symbols in the DWARF debugging sections are relative to the beginning
+     of the section so we begin them at 0.  */
 
-. $srcdir/scripttempl/DWARF.sc
+  /* DWARF 1 */
+  .debug          0 : { *(.debug) }
+  .line           0 : { *(.line) }
 
-cat <<EOF
+  /* GNU DWARF 1 extensions */
+  .debug_srcinfo  0 : { *(.debug_srcinfo) }
+  .debug_sfnames  0 : { *(.debug_sfnames) }
+
+  /* DWARF 1.1 and DWARF 2 */
+  .debug_aranges  0 : { *(.debug_aranges) }
+  .debug_pubnames 0 : { *(.debug_pubnames) }
+
+  /* DWARF 2 */
+  .debug_info     0 : { *(.debug_info) *(.gnu.linkonce.wi.*) }
+  .debug_abbrev   0 : { *(.debug_abbrev) }
+  .debug_line     0 : { *(.debug_line) }
+  .debug_frame    0 : { *(.debug_frame) }
+  .debug_str      0 : { *(.debug_str) }
+  .debug_loc      0 : { *(.debug_loc) }
+  .debug_macinfo  0 : { *(.debug_macinfo) }
+
+  /* DWARF 3 */
+  .debug_pubtypes 0 : { *(.debug_pubtypes) }
+  .debug_ranges   0 : { *(.debug_ranges) }
+
+  /* DWARF Extension.  */
+  .debug_macro    0 : { *(.debug_macro) } 
 }
 EOF
+

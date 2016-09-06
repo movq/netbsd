@@ -1,4 +1,4 @@
-/*	$NetBSD: fpu.c,v 1.11 2016/08/18 12:36:35 maxv Exp $	*/
+/*	$NetBSD: fpu.c,v 1.9 2014/02/25 22:16:52 dsl Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.  All
@@ -100,7 +100,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fpu.c,v 1.11 2016/08/18 12:36:35 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fpu.c,v 1.9 2014/02/25 22:16:52 dsl Exp $");
 
 #include "opt_multiprocessor.h"
 
@@ -408,7 +408,7 @@ fpudna(struct trapframe *frame)
 	/* Save our state if on a remote CPU. */
 	if (pcb->pcb_fpcpu != NULL) {
 		/* Explicitly disable preemption before dropping spl. */
-		kpreempt_disable();
+		KPREEMPT_DISABLE(l);
 		splx(s);
 
 		/* Actually enable interrupts */
@@ -417,7 +417,7 @@ fpudna(struct trapframe *frame)
 		fpusave_lwp(l, true);
 		KASSERT(pcb->pcb_fpcpu == NULL);
 		s = splhigh();
-		kpreempt_enable();
+		KPREEMPT_ENABLE(l);
 	}
 
 	/*
@@ -550,6 +550,7 @@ fpu_save_area_clear(struct lwp *lwp, unsigned int x87_cw)
 	union savefpu *fpu_save;
 
 	fpusave_lwp(lwp, false);
+
 	fpu_save = process_fpframe(lwp);
 
 	if (i386_use_fxsave) {
@@ -644,32 +645,29 @@ process_write_fpregs_s87(struct lwp *lwp, const struct save87 *fpregs)
 void
 process_read_fpregs_xmm(struct lwp *lwp, struct fxsave *fpregs)
 {
-	union savefpu *fpu_save;
-
 	fpusave_lwp(lwp, true);
-	fpu_save = process_fpframe(lwp);
 
 	if (i386_use_fxsave) {
-		memcpy(fpregs, &fpu_save->sv_xmm, sizeof(fpu_save->sv_xmm));
+		memcpy(fpregs, &process_fpframe(lwp)->sv_xmm,
+		    sizeof process_fpframe(lwp)->sv_xmm);
 	} else {
 		/* This usually gets copied to userspace */
-		memset(fpregs, 0, sizeof(*fpregs));
-		process_s87_to_xmm(&fpu_save->sv_87, fpregs);
+		memset(fpregs, 0, sizeof *fpregs);
+		process_s87_to_xmm(&process_fpframe(lwp)->sv_87, fpregs);
+
 	}
 }
 
 void
 process_read_fpregs_s87(struct lwp *lwp, struct save87 *fpregs)
 {
-	union savefpu *fpu_save;
-
 	fpusave_lwp(lwp, true);
-	fpu_save = process_fpframe(lwp);
 
 	if (i386_use_fxsave) {
 		memset(fpregs, 0, 12);
-		process_xmm_to_s87(&fpu_save->sv_xmm, fpregs);
+		process_xmm_to_s87(&process_fpframe(lwp)->sv_xmm, fpregs);
 	} else {
-		memcpy(fpregs, &fpu_save->sv_87, sizeof(fpu_save->sv_87));
+		memcpy(fpregs, &process_fpframe(lwp)->sv_87,
+		    sizeof process_fpframe(lwp)->sv_87);
 	}
 }

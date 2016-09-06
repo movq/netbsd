@@ -34,7 +34,7 @@ struct UseListOrder {
   UseListOrder(const Value *V, const Function *F, size_t ShuffleSize)
       : V(V), F(F), Shuffle(ShuffleSize) {}
 
-  UseListOrder() : V(nullptr), F(nullptr) {}
+  UseListOrder() : V(0), F(0) {}
   UseListOrder(UseListOrder &&X)
       : V(X.V), F(X.F), Shuffle(std::move(X.Shuffle)) {}
   UseListOrder &operator=(UseListOrder &&X) {
@@ -45,12 +45,18 @@ struct UseListOrder {
   }
 
 private:
-  UseListOrder(const UseListOrder &X) = delete;
-  UseListOrder &operator=(const UseListOrder &X) = delete;
+  UseListOrder(const UseListOrder &X) LLVM_DELETED_FUNCTION;
+  UseListOrder &operator=(const UseListOrder &X) LLVM_DELETED_FUNCTION;
 };
 
 typedef std::vector<UseListOrder> UseListOrderStack;
 
+/// \brief Whether to preserve use-list ordering.
+bool shouldPreserveBitcodeUseListOrder();
+bool shouldPreserveAssemblyUseListOrder();
+void setPreserveBitcodeUseListOrder(bool ShouldPreserve);
+void setPreserveAssemblyUseListOrder(bool ShouldPreserve);
+
 } // end namespace llvm
 
-#endif // LLVM_IR_USELISTORDER_H
+#endif

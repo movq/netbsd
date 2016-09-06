@@ -54,6 +54,8 @@ alpha:
 	nop
 
         .type beta,%function
+beta:
+	bkpt
 
 	.thumb_set beta, alpha
 

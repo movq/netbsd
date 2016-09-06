@@ -1,4 +1,4 @@
-/*	$NetBSD: tape.c,v 1.68 2015/03/02 03:17:24 enami Exp $	*/
+/*	$NetBSD: tape.c,v 1.67.8.1 2016/03/03 14:30:52 martin Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -39,7 +39,7 @@
 #if 0
 static char sccsid[] = "@(#)tape.c	8.9 (Berkeley) 5/1/95";
 #else
-__RCSID("$NetBSD: tape.c,v 1.68 2015/03/02 03:17:24 enami Exp $");
+__RCSID("$NetBSD: tape.c,v 1.67.8.1 2016/03/03 14:30:52 martin Exp $");
 #endif
 #endif /* not lint */
 

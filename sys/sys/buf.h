@@ -1,4 +1,4 @@
-/*     $NetBSD: buf.h,v 1.125 2016/01/11 08:40:52 martin Exp $ */
+/*     $NetBSD: buf.h,v 1.119 2012/02/17 08:45:11 yamt Exp $ */
 
 /*-
  * Copyright (c) 1999, 2000, 2007, 2008 The NetBSD Foundation, Inc.
@@ -88,10 +88,6 @@ struct kauth_cred;
 extern kmutex_t bufcache_lock;
 extern kmutex_t buffer_lock;
 
-#if defined(_KERNEL)
-extern void (*biodone_vfs)(buf_t *);
-#endif
-
 /*
  * The buffer header describes an I/O operation in the kernel.
  *
@@ -105,20 +101,13 @@ extern void (*biodone_vfs)(buf_t *);
  * For buffers associated with a vnode, b_objlock points to vp->v_interlock.
  * If not associated with a vnode, it points to the generic buffer_lock.
  */
-
-/* required for the conditional union member below to be ~safe */
-#if defined(_KERNEL)
-__CTASSERT(sizeof(struct work) <= sizeof(TAILQ_ENTRY(buf)));
-#endif
-
 struct buf {
 	union {
 		TAILQ_ENTRY(buf) u_actq;
 		rb_node_t u_rbnode;
-#if defined(_KERNEL)
-		/* u_work is smaller than u_actq */
+#if defined(_KERNEL) /* u_work is smaller than u_actq. XXX */
 		struct work u_work;
-#endif
+#endif /* defined(_KERNEL) */
 	} b_u;					/* b: device driver queue */
 #define	b_actq	b_u.u_actq
 #define	b_work	b_u.u_work
@@ -273,44 +262,28 @@ struct bqueue {
 extern struct bqueue bufqueues[BQUEUES];
 
 __BEGIN_DECLS
-/*
- * bufferio(9) ops
- */
-void	biodone(buf_t *);
-int	biowait(buf_t *);
-buf_t	*getiobuf(struct vnode *, bool);
-void	putiobuf(buf_t *);
-void	nestiobuf_setup(buf_t *, buf_t *, int, size_t);
-void	nestiobuf_done(buf_t *, int, int);
-
-void	nestiobuf_iodone(buf_t *);
-int	physio(void (*)(buf_t *), buf_t *, dev_t, int,
-	       void (*)(buf_t *), struct uio *);
-
-/*
- * buffercache(9) ops
- */
-int	bread(struct vnode *, daddr_t, int, int, buf_t **);
-int	breadn(struct vnode *, daddr_t, int, daddr_t *, int *, int,
-	       int, buf_t **);
-int	bwrite(buf_t *);
+int	allocbuf(buf_t *, int, int);
 void	bawrite(buf_t *);
 void	bdwrite(buf_t *);
-buf_t	*getblk(struct vnode *, daddr_t, int, int, int);
-buf_t	*geteblk(int);
-buf_t	*incore(struct vnode *, daddr_t);
-int	allocbuf(buf_t *, int, int);
+void	biodone(buf_t *);
+int	biowait(buf_t *);
+int	bread(struct vnode *, daddr_t, int, struct kauth_cred *, int, buf_t **);
+int	breadn(struct vnode *, daddr_t, int, daddr_t *, int *, int,
+	       struct kauth_cred *, int, buf_t **);
 void	brelsel(buf_t *, int);
 void	brelse(buf_t *, int);
-
-/*
- * So-far indeterminate ops that might belong to either
- * bufferio(9) or buffercache(9).
- */
 void	bremfree(buf_t *);
 void	bufinit(void);
 void	bufinit2(void);
+int	bwrite(buf_t *);
+buf_t	*getblk(struct vnode *, daddr_t, int, int, int);
+buf_t	*geteblk(int);
+buf_t	*incore(struct vnode *, daddr_t);
+
 void	minphys(buf_t *);
+int	physio(void (*)(buf_t *), buf_t *, dev_t, int,
+	       void (*)(buf_t *), struct uio *);
+
 void	brelvp(buf_t *);
 void	reassignbuf(buf_t *, struct vnode *);
 void	bgetvp(struct vnode *, buf_t *);
@@ -322,10 +295,15 @@ int	buf_setvalimit(vsize_t);
 void	vfs_buf_print(buf_t *, int, void (*)(const char *, ...)
     __printflike(1, 2));
 #endif
+buf_t	*getiobuf(struct vnode *, bool);
+void	putiobuf(buf_t *);
 void	buf_init(buf_t *);
 void	buf_destroy(buf_t *);
 int	bbusy(buf_t *, bool, int, kmutex_t *);
 
+void	nestiobuf_iodone(buf_t *);
+void	nestiobuf_setup(buf_t *, buf_t *, int, size_t);
+void	nestiobuf_done(buf_t *, int, int);
 
 __END_DECLS
 #endif /* _KERNEL */

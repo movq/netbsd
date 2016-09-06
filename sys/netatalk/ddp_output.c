@@ -1,4 +1,4 @@
-/*	$NetBSD: ddp_output.c,v 1.19 2016/06/20 06:46:38 knakahara Exp $	 */
+/*	$NetBSD: ddp_output.c,v 1.17 2013/09/12 19:47:58 martin Exp $	 */
 
 /*
  * Copyright (c) 1990,1991 Regents of The University of Michigan.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ddp_output.c,v 1.19 2016/06/20 06:46:38 knakahara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ddp_output.c,v 1.17 2013/09/12 19:47:58 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -52,9 +52,15 @@ __KERNEL_RCSID(0, "$NetBSD: ddp_output.c,v 1.19 2016/06/20 06:46:38 knakahara Ex
 int ddp_cksum = 1;
 
 int
-ddp_output(struct mbuf *m, struct ddpcb *ddp)
+ddp_output(struct mbuf *m,...)
 {
+	struct ddpcb   *ddp;
 	struct ddpehdr *deh;
+	va_list         ap;
+
+	va_start(ap, m);
+	ddp = va_arg(ap, struct ddpcb *);
+	va_end(ap);
 
 	M_PREPEND(m, sizeof(struct ddpehdr), M_DONTWAIT);
 	if (!m)
@@ -203,5 +209,5 @@ ddp_route(struct mbuf *m, struct route *ro)
 #endif
 		looutput(lo0ifp, copym, rtcache_getdst(ro), NULL);
 	}
-	return if_output_lock(ifp, ifp, m, (struct sockaddr *)&gate, NULL);
+	return (*ifp->if_output)(ifp, m, (struct sockaddr *)&gate, NULL);
 }

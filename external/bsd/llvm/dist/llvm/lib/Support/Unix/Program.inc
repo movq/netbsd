@@ -18,12 +18,10 @@
 
 #include "Unix.h"
 #include "llvm/ADT/StringExtras.h"
-#include "llvm/Config/config.h"
 #include "llvm/Support/Compiler.h"
-#include "llvm/Support/Errc.h"
 #include "llvm/Support/FileSystem.h"
-#include "llvm/Support/Path.h"
 #include "llvm/Support/raw_ostream.h"
+#include <llvm/Config/config.h>
 #if HAVE_SYS_STAT_H
 #include <sys/stat.h>
 #endif
@@ -44,18 +42,7 @@
 #define  _RESTRICT_KYWD
 #endif
 #include <spawn.h>
-
-#if defined(__APPLE__)
-#include <TargetConditionals.h>
-#endif
-
-#if defined(__APPLE__) && !(defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE)
-#define USE_NSGETENVIRON 1
-#else
-#define USE_NSGETENVIRON 0
-#endif
-
-#if !USE_NSGETENVIRON
+#if !defined(__APPLE__)
   extern char **environ;
 #else
 #include <crt_externs.h> // _NSGetEnviron
@@ -93,7 +80,7 @@ ErrorOr<std::string> sys::findProgramByName(StringRef Name,
     if (sys::fs::can_execute(FilePath.c_str()))
       return std::string(FilePath.str()); // Found the executable!
   }
-  return errc::no_such_file_or_directory;
+  return std::errc::no_such_file_or_directory;
 }
 
 static bool RedirectIO(const StringRef *Path, int FD, std::string* ErrMsg) {
@@ -230,7 +217,7 @@ static bool Execute(ProcessInfo &PI, StringRef Program, const char **args,
     }
 
     if (!envp)
-#if !USE_NSGETENVIRON
+#if !defined(__APPLE__)
       envp = const_cast<const char **>(environ);
 #else
       // environ is missing in dylibs.
@@ -323,6 +310,7 @@ namespace llvm {
 
 ProcessInfo sys::Wait(const ProcessInfo &PI, unsigned SecondsToWait,
                       bool WaitUntilTerminates, std::string *ErrMsg) {
+#ifdef HAVE_SYS_WAIT_H
   struct sigaction Act, Old;
   assert(PI.Pid && "invalid pid to wait on, process not started?");
 
@@ -416,6 +404,12 @@ ProcessInfo sys::Wait(const ProcessInfo &PI, unsigned SecondsToWait,
     // signal during execution as opposed to failing to execute.
     WaitResult.ReturnCode = -2;
   }
+#else
+  if (ErrMsg)
+    *ErrMsg = "Program::Wait is not implemented on this platform yet!";
+  ProcessInfo WaitResult;
+  WaitResult.ReturnCode = -2;
+#endif
   return WaitResult;
 }
 
@@ -441,12 +435,12 @@ llvm::sys::writeFileWithEncoding(StringRef FileName, StringRef Contents,
   OS << Contents;
 
   if (OS.has_error())
-    return make_error_code(errc::io_error);
+    return std::make_error_code(std::errc::io_error);
 
   return EC;
 }
 
-bool llvm::sys::commandLineFitsWithinSystemLimits(StringRef Program, ArrayRef<const char*> Args) {
+bool llvm::sys::argumentsFitWithinSystemLimits(ArrayRef<const char*> Args) {
   static long ArgMax = sysconf(_SC_ARG_MAX);
 
   // System says no practical limit.
@@ -456,7 +450,7 @@ bool llvm::sys::commandLineFitsWithinSystemLimits(StringRef Program, ArrayRef<co
   // Conservatively account for space required by environment variables.
   long HalfArgMax = ArgMax / 2;
 
-  size_t ArgLength = Program.size() + 1;
+  size_t ArgLength = 0;
   for (ArrayRef<const char*>::iterator I = Args.begin(), E = Args.end();
        I != E; ++I) {
     ArgLength += strlen(*I) + 1;

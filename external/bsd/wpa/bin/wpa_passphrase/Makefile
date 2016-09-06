@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.4 2016/06/29 19:16:23 christos Exp $
+# $NetBSD: Makefile,v 1.2.4.1 2015/04/29 20:28:34 snj Exp $
 
 .include "${.CURDIR}/../Makefile.inc"
 
@@ -18,9 +18,7 @@ DPADD+= ${LIBSSL} ${LIBCRYPTO} ${LIBDES}
 LDADD+= -lssl -lcrypto -ldes
 .else
 CPPFLAGS+= -DINTERNAL_AES -DINTERNAL_MD5 -DINTERNAL_SHA1
-CPPFLAGS+= -DCONFIG_CRYPTO_INTERNAL
 SRCS+=	tls_none.c md5-internal.c sha1-internal.c
-SRCS+= sha1-pbkdf2.c sha1.c md5.c
 .endif
 
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_ttm.c,v 1.4 2015/04/03 01:09:42 riastradh Exp $	*/
+/*	$NetBSD: nouveau_ttm.c,v 1.2.4.2 2015/04/23 07:31:17 snj Exp $	*/
 
 /*
  * Copyright (c) 2007-2008 Tungsten Graphics, Inc., Cedar Park, TX., USA,
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_ttm.c,v 1.4 2015/04/03 01:09:42 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_ttm.c,v 1.2.4.2 2015/04/23 07:31:17 snj Exp $");
 
 #include <subdev/fb.h>
 #include <subdev/vm.h>

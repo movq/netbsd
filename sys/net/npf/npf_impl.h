@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_impl.h,v 1.61 2015/02/02 00:31:39 rmind Exp $	*/
+/*	$NetBSD: npf_impl.h,v 1.58.2.3 2015/02/04 07:13:04 snj Exp $	*/
 
 /*-
  * Copyright (c) 2009-2014 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: ifiter_ioctl.c,v 1.5 2016/01/08 21:35:37 christos Exp $	*/
+/*	$NetBSD: ifiter_ioctl.c,v 1.1.1.3.4.2 2015/04/23 18:53:01 snj Exp $	*/
 
 /*
  * Copyright (C) 2004-2009  Internet Systems Consortium, Inc. ("ISC")

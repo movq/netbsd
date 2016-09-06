@@ -1,6 +1,6 @@
 /* Process record and replay target code for GNU/Linux.
 
-   Copyright (C) 2008-2015 Free Software Foundation, Inc.
+   Copyright (C) 2008-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -174,7 +174,6 @@ struct linux_record_tdep
   int arg4;
   int arg5;
   int arg6;
-  int arg7;
 };
 
 /* Enum that defines the gdb-canonical set of Linux syscall identifiers.

@@ -1,4 +1,4 @@
-/* $NetBSD: sbmac.c,v 1.46 2016/07/21 17:02:47 christos Exp $ */
+/* $NetBSD: sbmac.c,v 1.42 2012/07/22 14:32:52 matt Exp $ */
 
 /*
  * Copyright 2000, 2001, 2004
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbmac.c,v 1.46 2016/07/21 17:02:47 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbmac.c,v 1.42 2012/07/22 14:32:52 matt Exp $");
 
 #include "opt_inet.h"
 #include "opt_ns.h"
@@ -111,8 +111,8 @@ typedef enum { sbmac_state_uninit, sbmac_state_off, sbmac_state_on,
 #define	dprintf(x)
 #endif
 
-#define	SBMAC_READCSR(t) mips3_ld((register_t)(t))
-#define	SBMAC_WRITECSR(t, v) mips3_sd((register_t)(t), (v))
+#define	SBMAC_READCSR(t) mips3_ld((volatile uint64_t *) (t))
+#define	SBMAC_WRITECSR(t, v) mips3_sd((volatile uint64_t *) (t), (v))
 
 #define	PKSEG1(x) ((sbmac_port_t) MIPS_PHYS_TO_KSEG1(x))
 
@@ -640,7 +640,7 @@ sbdma_add_txbuffer(sbmacdma_t *d, struct mbuf *m)
 			 * Check to see if the mbuf spans a page boundary.  If
 			 * it does, and the physical pages behind the virtual
 			 * pages are not contiguous, split it so that each
-			 * virtual page uses its own Tx descriptor.
+			 * virtual page uses it's own Tx descriptor.
 			 */
 			if (trunc_page(addr) != trunc_page(addr + len - 1)) {
 				next_len = (addr + len) - trunc_page(addr + len);
@@ -918,7 +918,7 @@ sbdma_rx_process(struct sbmac_softc *sc, sbmacdma_t *d)
 			m->m_pkthdr.len = m->m_len = len;
 
 			ifp->if_ipackets++;
-			m_set_rcvif(m, ifp);
+			m->m_pkthdr.rcvif = ifp;
 
 
 			/*
@@ -938,7 +938,7 @@ sbdma_rx_process(struct sbmac_softc *sc, sbmacdma_t *d)
 			/*
 			 * Pass the buffer to the kernel
 			 */
-			if_percpuq_enqueue(ifp->if_percpuq, m);
+			(*ifp->if_input)(ifp, m);
 		} else {
 			/*
 			 * Packet was mangled somehow.  Just drop it and

@@ -1,5 +1,5 @@
 %{
-/* $NetBSD: scan.l,v 1.66 2016/07/20 17:42:14 christos Exp $ */
+/* $NetBSD: scan.l,v 1.59 2014/04/21 21:52:24 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -35,7 +35,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: scan.l,v 1.66 2016/07/20 17:42:14 christos Exp $");
+__RCSID("$NetBSD: scan.l,v 1.59 2014/04/21 21:52:24 christos Exp $");
 #endif
 
 #include <stdlib.h>
@@ -49,7 +49,7 @@ __RCSID("$NetBSD: scan.l,v 1.66 2016/07/20 17:42:14 christos Exp $");
 #include "lint1.h"
 #include "cgram.h"
 
-#define CHAR_MASK	((int)(~(~0U << CHAR_BIT)))
+#define CHAR_MASK	(~(~0 << CHAR_BIT))
 
 /* Current position (its also updated when an included file is parsed) */
 pos_t	curr_pos = { 1, "", 0 };
@@ -86,11 +86,9 @@ static	int	wcstrg(void);
 
 %}
 
-
 L	[_A-Za-z]
 D	[0-9]
 NZD	[1-9]
-BD	[0-1]
 OD	[0-7]
 HD	[0-9A-Fa-f]
 EX	([eE][+-]?[0-9]+)
@@ -102,7 +100,6 @@ TL	([fFlL]?[i]?)
 %%
 
 {L}({L}|{D})*		 	return (name());
-0[bB]{BD}+[lLuU]*		return (icon(2));
 0{OD}*[lLuU]*			return (icon(8));
 {NZD}{D}*[lLuU]*		return (icon(10));
 0[xX]{HD}+[lLuU]*		return (icon(16));
@@ -215,8 +212,6 @@ static	struct	kwtab {
 	{ "transparent_union",T_AT_TUNION,0,	0,	0,	  0, 0, 1, 1 },
 	{ "__unused__",	T_AT_UNUSED,	0,	0,	0,	  0, 0, 1, 1 },
 	{ "unused",	T_AT_UNUSED,	0,	0,	0,	  0, 0, 1, 1 },
-	{ "__gnu_inline__",T_AT_GNU_INLINE,0,	0,	0,	  0, 0, 1, 1 },
-	{ "gnu_inline",	T_AT_GNU_INLINE,0,	0,	0,	  0, 0, 1, 1 },
 	{ "__deprecated__",T_AT_DEPRECATED,0,	0,	0,	  0, 0, 1, 1 },
 	{ "deprecated",	T_AT_DEPRECATED,0,	0,	0,	  0, 0, 1, 1 },
 	{ "__may_alias__",T_AT_MAY_ALIAS,0,	0,	0,	  0, 0, 1, 1 },
@@ -296,12 +291,6 @@ static	struct	kwtab {
 	{ "volatile",	T_QUAL,		0,	0,	VOLATILE, 1, 0, 0, 0 },
 	{ "__volatile__", T_QUAL,	0,	0,	VOLATILE, 0, 0, 0, 0 },
 	{ "__volatile",	T_QUAL,		0,	0,	VOLATILE, 0, 0, 0, 0 },
-	{ "visibility", T_AT_VISIBILITY,0,	0,	0,	  0, 0, 1, 1 },
-	{ "__visibility",T_AT_VISIBILITY,0,	0,	0,	  0, 0, 1, 1 },
-	{ "__visibility__",T_AT_VISIBILITY,0,	0,	0,	  0, 0, 1, 1 },
-	{ "weak",	T_AT_WEAK,	0,	0,	0,	  0, 0, 1, 1 },
-	{ "__weak",	T_AT_WEAK,	0,	0,	0,	  0, 0, 1, 1 },
-	{ "__weak__",	T_AT_WEAK,	0,	0,	0,	  0, 0, 1, 1 },
 	{ "while",	T_WHILE,	0,	0,	0,	  0, 0, 0, 0 },
 	{ NULL,		0,		0,	0,	0,	  0, 0, 0, 0 }
 };
@@ -445,7 +434,7 @@ hash(const char *s)
  * more deeply by data written to yylval.
  *
  * If it is a symbol, T_NAME is returned and the pointer to a sbuf struct
- * is stored in yylval. This struct contains the name of the symbol, its
+ * is stored in yylval. This struct contains the name of the symbol, it's
  * length and hash value. If there is already a symbol of the same name
  * and type in the symbol table, the sbuf struct also contains a pointer
  * to the symbol table entry.
@@ -543,8 +532,8 @@ icon(int base)
 	cp = yytext;
 	len = yyleng;
 
-	/* skip 0[xX] or 0[bB] */
-	if (base == 16 || base == 2) {
+	/* skip 0x */
+	if (base == 16) {
 		cp += 2;
 		len -= 2;
 	}

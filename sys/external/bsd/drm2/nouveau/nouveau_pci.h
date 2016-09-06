@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_pci.h,v 1.2 2015/10/17 12:02:44 jmcneill Exp $	*/
+/*	$NetBSD: nouveau_pci.h,v 1.1.2.3 2016/02/11 22:48:22 snj Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.

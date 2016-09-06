@@ -42,7 +42,7 @@ public:
   ClangCheckerRegistry(ArrayRef<std::string> plugins,
                        DiagnosticsEngine *diags = nullptr);
 };
-
+  
 } // end anonymous namespace
 
 ClangCheckerRegistry::ClangCheckerRegistry(ArrayRef<std::string> plugins,
@@ -52,12 +52,7 @@ ClangCheckerRegistry::ClangCheckerRegistry(ArrayRef<std::string> plugins,
   for (ArrayRef<std::string>::iterator i = plugins.begin(), e = plugins.end();
        i != e; ++i) {
     // Get access to the plugin.
-    std::string err;
-    DynamicLibrary lib = DynamicLibrary::getPermanentLibrary(i->c_str(), &err);
-    if (!lib.isValid()) {
-      diags->Report(diag::err_fe_unable_to_load_plugin) << *i << err;
-      continue;
-    }
+    DynamicLibrary lib = DynamicLibrary::getPermanentLibrary(i->c_str());
 
     // See if it's compatible with this build of clang.
     const char *pluginAPIVersion =
@@ -83,7 +78,10 @@ bool ClangCheckerRegistry::isCompatibleAPIVersion(const char *versionString) {
 
   // For now, none of the static analyzer API is considered stable.
   // Versions must match exactly.
-  return strcmp(versionString, CLANG_ANALYZER_API_VERSION_STRING) == 0;
+  if (strcmp(versionString, CLANG_ANALYZER_API_VERSION_STRING) == 0)
+    return true;
+
+  return false;
 }
 
 void ClangCheckerRegistry::warnIncompatible(DiagnosticsEngine *diags,
@@ -116,7 +114,6 @@ ento::createCheckerManager(AnalyzerOptions &opts, const LangOptions &langOpts,
 
   ClangCheckerRegistry allCheckers(plugins, &diags);
   allCheckers.initializeManager(*checkerMgr, checkerOpts);
-  allCheckers.validateCheckerOptions(opts, diags);
   checkerMgr->finishedCheckerRegistration();
 
   for (unsigned i = 0, e = checkerOpts.size(); i != e; ++i) {
@@ -128,7 +125,7 @@ ento::createCheckerManager(AnalyzerOptions &opts, const LangOptions &langOpts,
 
   }
 
-  return checkerMgr;
+  return std::move(checkerMgr);
 }
 
 void ento::printCheckerHelp(raw_ostream &out, ArrayRef<std::string> plugins) {

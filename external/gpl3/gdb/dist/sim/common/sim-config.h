@@ -1,6 +1,6 @@
 /* The common simulator framework for GDB, the GNU Debugger.
 
-   Copyright 2002-2015 Free Software Foundation, Inc.
+   Copyright 2002-2014 Free Software Foundation, Inc.
 
    Contributed by Andrew Cagney and Red Hat.
 
@@ -360,7 +360,7 @@ enum sim_environment {
 #endif
 
 /* If the simulator doesn't specify SIM_AC_OPTION_ENVIRONMENT in its
-   configure.ac, the only supported environment is the user environment.  */
+   configure.in, the only supported environment is the user environment.  */
 #ifndef WITH_ENVIRONMENT
 #define WITH_ENVIRONMENT USER_ENVIRONMENT
 #endif
@@ -487,10 +487,10 @@ extern int current_floating_point;
 #endif
 
 /* Include the tracing code.  Disabling this eliminates all tracing
-   code.  Default to all tracing but internal debug.  */
+   code */
 
 #ifndef WITH_TRACE
-#define WITH_TRACE			(~TRACE_debug)
+#define WITH_TRACE                      (-1)
 #endif
 
 /* Include the profiling code.  Disabling this eliminates all profiling

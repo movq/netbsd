@@ -1,4 +1,4 @@
-/*	$NetBSD: elf_flag.c,v 1.3 2016/02/20 02:43:42 christos Exp $	*/
+/*	$NetBSD: elf_flag.c,v 1.2 2014/03/09 16:58:04 christos Exp $	*/
 
 /*-
  * Copyright (c) 2006,2008-2009,2011 Joseph Koshy
@@ -26,12 +26,14 @@
  * SUCH DAMAGE.
  */
 
+#include <sys/cdefs.h>
+
 #include <libelf.h>
 
 #include "_libelf.h"
 
-__RCSID("$NetBSD: elf_flag.c,v 1.3 2016/02/20 02:43:42 christos Exp $");
-ELFTC_VCSID("Id: elf_flag.c 3174 2015-03-27 17:13:41Z emaste ");
+__RCSID("$NetBSD: elf_flag.c,v 1.2 2014/03/09 16:58:04 christos Exp $");
+ELFTC_VCSID("Id: elf_flag.c 2272 2011-12-03 17:07:31Z jkoshy ");
 
 unsigned int
 elf_flagarhdr(Elf_Arhdr *a, Elf_Cmd c, unsigned int flags)
@@ -112,7 +114,7 @@ elf_flagehdr(Elf *e, Elf_Cmd c, unsigned int flags)
 unsigned int
 elf_flagelf(Elf *e, Elf_Cmd c, unsigned int flags)
 {
-	unsigned int r;
+	int r;
 
 	if (e == NULL)
 		return (0);
@@ -174,7 +176,7 @@ elf_flagphdr(Elf *e, Elf_Cmd c, unsigned int flags)
 unsigned int
 elf_flagscn(Elf_Scn *s, Elf_Cmd c, unsigned int flags)
 {
-	unsigned int r;
+	int r;
 
 	if (s == NULL)
 		return (0);

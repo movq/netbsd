@@ -1,4 +1,4 @@
-/*	$NetBSD: ixp425_if_npe.c,v 1.31 2016/06/10 13:27:11 ozaki-r Exp $ */
+/*	$NetBSD: ixp425_if_npe.c,v 1.26.2.1 2015/07/05 20:34:51 snj Exp $ */
 
 /*-
  * Copyright (c) 2006 Sam Leffler.  All rights reserved.
@@ -28,7 +28,7 @@
 #if 0
 __FBSDID("$FreeBSD: src/sys/arm/xscale/ixp425/if_npe.c,v 1.1 2006/11/19 23:55:23 sam Exp $");
 #endif
-__KERNEL_RCSID(0, "$NetBSD: ixp425_if_npe.c,v 1.31 2016/06/10 13:27:11 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ixp425_if_npe.c,v 1.26.2.1 2015/07/05 20:34:51 snj Exp $");
 
 /*
  * Intel XScale NPE Ethernet driver.
@@ -68,7 +68,7 @@ __KERNEL_RCSID(0, "$NetBSD: ixp425_if_npe.c,v 1.31 2016/06/10 13:27:11 ozaki-r E
 
 #include <net/bpf.h>
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <arm/xscale/ixp425reg.h>
 #include <arm/xscale/ixp425var.h>
@@ -953,7 +953,7 @@ npe_rxdone(int qid, void *arg)
 			/* set m_len etc. per rx frame size */
 			mrx->m_len = be32toh(hw->ix_ne[0].len) & 0xffff;
 			mrx->m_pkthdr.len = mrx->m_len;
-			m_set_rcvif(mrx, ifp);
+			mrx->m_pkthdr.rcvif = ifp;
 			/* Don't add M_HASFCS. See below */
 
 #if 1
@@ -1055,7 +1055,7 @@ npe_rxdone(int qid, void *arg)
 			 * Tap off here if there is a bpf listener.
 			 */
 			bpf_mtap(ifp, mrx);
-			if_percpuq_enqueue(ifp->if_percpuq, mrx);
+			ifp->if_input(ifp, mrx);
 		} else {
 fail:
 			/* discard frame and re-use mbuf */
@@ -1220,7 +1220,7 @@ npeinit(struct ifnet *ifp)
 /*
  * Defragment an mbuf chain, returning at most maxfrags separate
  * mbufs+clusters.  If this is not possible NULL is returned and
- * the original mbuf chain is left in its present (potentially
+ * the original mbuf chain is left in it's present (potentially
  * modified) state.  We use two techniques: collapsing consecutive
  * mbufs and replacing consecutive mbufs by a cluster.
  */

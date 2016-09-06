@@ -1,5 +1,8 @@
+<!DOCTYPE book PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN"
+               "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd"
+	       [<!ENTITY mdash "&#8212;">]>
 <!--
- - Copyright (C) 2009, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
+ - Copyright (C) 2009, 2014  Internet Systems Consortium, Inc. ("ISC")
  -
  - Permission to use, copy, modify, and/or distribute this software for any
  - purpose with or without fee is hereby granted, provided that the above
@@ -14,14 +17,9 @@
  - PERFORMANCE OF THIS SOFTWARE.
 -->
 
-<!-- Converted by db4-upgrade version 1.0 -->
-<refentry xmlns="http://docbook.org/ns/docbook" version="5.0" xml:id="man.pkcs11-list">
-  <info>
-    <date>2009-10-05</date>
-  </info>
+<refentry id="man.pkcs11-list">
   <refentryinfo>
-    <corpname>ISC</corpname>
-    <corpauthor>Internet Systems Consortium, Inc.</corpauthor>
+    <date>October 05, 2009</date>
   </refentryinfo>
 
   <refmeta>
@@ -39,34 +37,33 @@
     <copyright>
       <year>2009</year>
       <year>2014</year>
-      <year>2015</year>
       <holder>Internet Systems Consortium, Inc. ("ISC")</holder>
     </copyright>
   </docinfo>
 
   <refsynopsisdiv>
-    <cmdsynopsis sepchar=" ">
+    <cmdsynopsis>
       <command>pkcs11-list</command>
-      <arg choice="opt" rep="norepeat"><option>-P</option></arg>
-      <arg choice="opt" rep="norepeat"><option>-m <replaceable class="parameter">module</replaceable></option></arg>
-      <arg choice="opt" rep="norepeat"><option>-s <replaceable class="parameter">slot</replaceable></option></arg>
-      <arg choice="opt" rep="norepeat">-i <replaceable class="parameter">ID</replaceable></arg>
-      <arg choice="opt" rep="norepeat">-l <replaceable class="parameter">label</replaceable></arg>
-      <arg choice="opt" rep="norepeat"><option>-p <replaceable class="parameter">PIN</replaceable></option></arg>
+      <arg><option>-P</option></arg>
+      <arg><option>-m <replaceable class="parameter">module</replaceable></option></arg>
+      <arg><option>-s <replaceable class="parameter">slot</replaceable></option></arg>
+      <arg choice="opt">-i <replaceable class="parameter">ID</replaceable></arg>
+      <arg choice="opt">-l <replaceable class="parameter">label</replaceable></arg>
+      <arg><option>-p <replaceable class="parameter">PIN</replaceable></option></arg>
     </cmdsynopsis>
   </refsynopsisdiv>
 
-  <refsection><info><title>DESCRIPTION</title></info>
-
+  <refsect1>
+    <title>DESCRIPTION</title>
     <para>
       <command>pkcs11-list</command>
       lists the PKCS#11 objects with <option>ID</option> or
       <option>label</option> or by default all objects.
     </para>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>ARGUMENTS</title></info>
-
+  <refsect1>
+    <title>ARGUMENTS</title>
     <variablelist>
       <varlistentry>
         <term>-P</term>
@@ -127,10 +124,10 @@
         </listitem>
       </varlistentry>
     </variablelist>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>SEE ALSO</title></info>
-
+  <refsect1>
+    <title>SEE ALSO</title>
     <para>
       <citerefentry>
         <refentrytitle>pkcs11-destroy</refentrytitle><manvolnum>8</manvolnum>
@@ -142,6 +139,16 @@
         <refentrytitle>pkcs11-tokens</refentrytitle><manvolnum>8</manvolnum>
       </citerefentry>
     </para>
-  </refsection>
+  </refsect1>
 
-</refentry>
+  <refsect1>
+    <title>AUTHOR</title>
+    <para><corpauthor>Internet Systems Consortium</corpauthor>
+    </para>
+  </refsect1>
+
+</refentry><!--
+ - Local variables:
+ - mode: sgml
+ - End:
+-->

@@ -1,4 +1,4 @@
-/*	$NetBSD: fts.c,v 1.49 2016/05/31 07:49:09 pgoyette Exp $	*/
+/*	$NetBSD: fts.c,v 1.46 2012/09/26 15:33:43 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993, 1994
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)fts.c	8.6 (Berkeley) 8/14/94";
 #else
-__RCSID("$NetBSD: fts.c,v 1.49 2016/05/31 07:49:09 pgoyette Exp $");
+__RCSID("$NetBSD: fts.c,v 1.46 2012/09/26 15:33:43 msaitoh Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -133,8 +133,9 @@ fts_open(char * const *argv, int options,
 	}
 
 	/* Allocate/initialize the stream */
-	if ((sp = calloc(1, sizeof(FTS))) == NULL)
+	if ((sp = malloc(sizeof(FTS))) == NULL)
 		return (NULL);
+	memset(sp, 0, sizeof(FTS));
 	sp->fts_compar = compar;
 	sp->fts_options = options;
 
@@ -429,19 +430,8 @@ fts_read(FTS *sp)
 		goto name;
 	}
 
-next:	
 	/* Move to the next node on this level. */
-	tmp = p;
-
-	/* 
-	 * We are going to free sp->fts_cur, set it to NULL so 
-	 * that fts_close() does not attempt to free it again 
-	 * if we exit without setting it to a new value because
-	 * FCHDIR() failed below.
-	 */
-	assert(tmp == sp->fts_cur);
-	sp->fts_cur = NULL;
-	
+next:	tmp = p;
 	if ((p = p->fts_link) != NULL) {
 		fts_free(tmp);
 
@@ -611,7 +601,7 @@ fts_children(FTS *sp, int instr)
 	    ISSET(FTS_NOCHDIR))
 		return (sp->fts_child = fts_build(sp, instr));
 
-	if ((fd = open(".", O_RDONLY | O_CLOEXEC, 0)) == -1)
+	if ((fd = open(".", O_RDONLY, 0)) == -1)
 		return (sp->fts_child = NULL);
 	sp->fts_child = fts_build(sp, instr);
 	if (fchdir(fd)) {
@@ -1221,7 +1211,7 @@ fts_safe_changedir(const FTS *sp, const FTSENT *p, int fd, const char *path)
 	if (ISSET(FTS_NOCHDIR))
 		return 0;
 
-	if (oldfd < 0 && (fd = open(path, O_RDONLY | O_CLOEXEC)) == -1)
+	if (oldfd < 0 && (fd = open(path, O_RDONLY)) == -1)
 		return -1;
 
 	if (fstat(fd, &sb) == -1)

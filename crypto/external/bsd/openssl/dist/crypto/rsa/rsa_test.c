@@ -302,11 +302,11 @@ int main(int argc, char *argv[])
             ctext[n] ^= 1;
             num = RSA_private_decrypt(clen, ctext, ptext, key,
                                           RSA_PKCS1_OAEP_PADDING);
-            if (num > 0) {
-                printf("Corrupt data decrypted!\n");
-                err = 1;
+                if (num > 0) {
+                    printf("Corrupt data decrypted!\n");
+                    err = 1;
                 break;
-            }
+                }
             ctext[n] ^= 1;
         }
 

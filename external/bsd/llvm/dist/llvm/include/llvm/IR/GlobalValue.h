@@ -28,12 +28,8 @@ class Comdat;
 class PointerType;
 class Module;
 
-namespace Intrinsic {
-  enum ID : unsigned;
-}
-
 class GlobalValue : public Constant {
-  GlobalValue(const GlobalValue &) = delete;
+  GlobalValue(const GlobalValue &) LLVM_DELETED_FUNCTION;
 public:
   /// @brief An enumeration for the kinds of linkage for global values.
   enum LinkageTypes {
@@ -66,15 +62,14 @@ public:
 
 protected:
   GlobalValue(Type *Ty, ValueTy VTy, Use *Ops, unsigned NumOps,
-              LinkageTypes Linkage, const Twine &Name, unsigned AddressSpace)
-      : Constant(PointerType::get(Ty, AddressSpace), VTy, Ops, NumOps),
-        ValueType(Ty), Linkage(Linkage), Visibility(DefaultVisibility),
-        UnnamedAddr(0), DllStorageClass(DefaultStorageClass),
-        ThreadLocal(NotThreadLocal), IntID((Intrinsic::ID)0U), Parent(nullptr) {
+              LinkageTypes Linkage, const Twine &Name)
+      : Constant(Ty, VTy, Ops, NumOps), Linkage(Linkage),
+        Visibility(DefaultVisibility), UnnamedAddr(0),
+        DllStorageClass(DefaultStorageClass),
+        ThreadLocal(NotThreadLocal), Parent(nullptr) {
     setName(Name);
   }
 
-  Type *ValueType;
   // Note: VC++ treats enums as signed, so an extra bit is required to prevent
   // Linkage and Visibility from turning into negative values.
   LinkageTypes Linkage : 5;   // The linkage of this global
@@ -84,31 +79,18 @@ protected:
 
   unsigned ThreadLocal : 3; // Is this symbol "Thread Local", if so, what is
                             // the desired model?
-  static const unsigned GlobalValueSubClassDataBits = 19;
 
 private:
   // Give subclasses access to what otherwise would be wasted padding.
   // (19 + 3 + 2 + 1 + 2 + 5) == 32.
-  unsigned SubClassData : GlobalValueSubClassDataBits;
-
-  friend class Constant;
-  void destroyConstantImpl();
-  Value *handleOperandChangeImpl(Value *From, Value *To, Use *U);
-
+  unsigned SubClassData : 19;
 protected:
-  /// \brief The intrinsic ID for this subclass (which must be a Function).
-  ///
-  /// This member is defined by this class, but not used for anything.
-  /// Subclasses can use it to store their intrinsic ID, if they have one.
-  ///
-  /// This is stored here to save space in Function on 64-bit hosts.
-  Intrinsic::ID IntID;
-
+  static const unsigned GlobalValueSubClassDataBits = 19;
   unsigned getGlobalValueSubClassData() const {
     return SubClassData;
   }
   void setGlobalValueSubClassData(unsigned V) {
-    assert(V < (1 << GlobalValueSubClassDataBits) && "It will not fit");
+    assert(V < (1 << 19) && "It will not fit");
     SubClassData = V;
   }
 
@@ -122,7 +104,7 @@ public:
     LocalExecTLSModel
   };
 
-  ~GlobalValue() override {
+  ~GlobalValue() {
     removeDeadConstantUsers();   // remove any dead constants using this.
   }
 
@@ -183,9 +165,9 @@ public:
   const char *getSection() const;
 
   /// Global values are always pointers.
-  PointerType *getType() const { return cast<PointerType>(User::getType()); }
-
-  Type *getValueType() const { return ValueType; }
+  inline PointerType *getType() const {
+    return cast<PointerType>(User::getType());
+  }
 
   static LinkageTypes getLinkOnceLinkage(bool ODR) {
     return ODR ? LinkOnceODRLinkage : LinkOnceAnyLinkage;
@@ -237,8 +219,7 @@ public:
   /// Whether the definition of this global may be discarded if it is not used
   /// in its compilation unit.
   static bool isDiscardableIfUnused(LinkageTypes Linkage) {
-    return isLinkOnceLinkage(Linkage) || isLocalLinkage(Linkage) ||
-           isAvailableExternallyLinkage(Linkage);
+    return isLinkOnceLinkage(Linkage) || isLocalLinkage(Linkage);
   }
 
   /// Whether the definition of this global may be replaced by something
@@ -254,9 +235,10 @@ public:
   /// mistake: when working at the IR level use mayBeOverridden instead as it
   /// knows about ODR semantics.
   static bool isWeakForLinker(LinkageTypes Linkage)  {
-    return Linkage == WeakAnyLinkage || Linkage == WeakODRLinkage ||
-           Linkage == LinkOnceAnyLinkage || Linkage == LinkOnceODRLinkage ||
-           Linkage == CommonLinkage || Linkage == ExternalWeakLinkage;
+    return Linkage == AvailableExternallyLinkage || Linkage == WeakAnyLinkage ||
+           Linkage == WeakODRLinkage || Linkage == LinkOnceAnyLinkage ||
+           Linkage == LinkOnceODRLinkage || Linkage == CommonLinkage ||
+           Linkage == ExternalWeakLinkage;
   }
 
   bool hasExternalLinkage() const { return isExternalLinkage(Linkage); }
@@ -322,12 +304,25 @@ public:
   /// function has been read in yet or not.
   bool isMaterializable() const;
 
+  /// Returns true if this function was loaded from a GVMaterializer that's
+  /// still attached to its Module and that knows how to dematerialize the
+  /// function.
+  bool isDematerializable() const;
+
   /// Make sure this GlobalValue is fully read. If the module is corrupt, this
   /// returns true and fills in the optional string with information about the
   /// problem.  If successful, this returns false.
   std::error_code materialize();
 
+  /// If this GlobalValue is read in, and if the GVMaterializer supports it,
+  /// release the memory for the function, and set it up to be materialized
+  /// lazily. If !isDematerializable(), this method is a noop.
+  void Dematerialize();
+
 /// @}
+
+  /// Override from Constant class.
+  void destroyConstant() override;
 
   /// Return true if the primary definition of this global value is outside of
   /// the current translation unit.
@@ -340,16 +335,6 @@ public:
     return isDeclaration();
   }
 
-  /// Returns true if this global's definition will be the one chosen by the
-  /// linker.
-  bool isStrongDefinitionForLinker() const {
-    return !(isDeclarationForLinker() || isWeakForLinker());
-  }
-
-  // Returns true if the alignment of the value can be unilaterally
-  // increased.
-  bool canIncreaseAlignment() const;
-
   /// This method unlinks 'this' from the containing module, but does not delete
   /// it.
   virtual void removeFromParent() = 0;
@@ -358,11 +343,13 @@ public:
   virtual void eraseFromParent() = 0;
 
   /// Get the module that this global value is contained inside of...
-  Module *getParent() { return Parent; }
-  const Module *getParent() const { return Parent; }
+  inline Module *getParent() { return Parent; }
+  inline const Module *getParent() const { return Parent; }
+
+  const DataLayout *getDataLayout() const;
 
   // Methods for support type inquiry through isa, cast, and dyn_cast:
-  static bool classof(const Value *V) {
+  static inline bool classof(const Value *V) {
     return V->getValueID() == Value::FunctionVal ||
            V->getValueID() == Value::GlobalVariableVal ||
            V->getValueID() == Value::GlobalAliasVal;

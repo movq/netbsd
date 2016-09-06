@@ -2122,8 +2122,8 @@ int X509_STORE_CTX_init(X509_STORE_CTX *ctx, X509_STORE *store, X509 *x509,
      * allocated with X509_STORE_CTX_new() this is our last chance to do so.
      */
     X509_STORE_CTX_cleanup(ctx);
-    return 0;
-}
+        return 0;
+    }
 
 /*
  * Set alternative lookup method: just a STACK of trusted certificates. This

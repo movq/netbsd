@@ -1,4 +1,4 @@
-/*	$NetBSD: am335x_prcm.c,v 1.8 2014/09/30 11:34:07 jmcneill Exp $	*/
+/*	$NetBSD: am335x_prcm.c,v 1.7.2.1 2015/04/16 06:12:56 snj Exp $	*/
 
 /*
  * TI OMAP Power, Reset, and Clock Management on the AM335x
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: am335x_prcm.c,v 1.8 2014/09/30 11:34:07 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: am335x_prcm.c,v 1.7.2.1 2015/04/16 06:12:56 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>

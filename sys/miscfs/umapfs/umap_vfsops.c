@@ -1,4 +1,4 @@
-/*	$NetBSD: umap_vfsops.c,v 1.95 2014/11/09 18:08:07 maxv Exp $	*/
+/*	$NetBSD: umap_vfsops.c,v 1.93.2.2 2015/01/17 12:10:54 martin Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: umap_vfsops.c,v 1.95 2014/11/09 18:08:07 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: umap_vfsops.c,v 1.93.2.2 2015/01/17 12:10:54 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

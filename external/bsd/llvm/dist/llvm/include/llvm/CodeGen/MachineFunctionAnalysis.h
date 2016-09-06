@@ -19,7 +19,6 @@
 namespace llvm {
 
 class MachineFunction;
-class MachineFunctionInitializer;
 class TargetMachine;
 
 /// MachineFunctionAnalysis - This class is a Pass that manages a
@@ -29,13 +28,10 @@ private:
   const TargetMachine &TM;
   MachineFunction *MF;
   unsigned NextFnNum;
-  MachineFunctionInitializer *MFInitializer;
-
 public:
   static char ID;
-  explicit MachineFunctionAnalysis(const TargetMachine &tm,
-                                   MachineFunctionInitializer *MFInitializer);
-  ~MachineFunctionAnalysis() override;
+  explicit MachineFunctionAnalysis(const TargetMachine &tm);
+  ~MachineFunctionAnalysis();
 
   MachineFunction &getMF() const { return *MF; }
 

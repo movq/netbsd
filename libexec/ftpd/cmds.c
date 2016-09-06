@@ -1,4 +1,4 @@
-/*	$NetBSD: cmds.c,v 1.35 2016/01/17 14:46:07 christos Exp $	*/
+/*	$NetBSD: cmds.c,v 1.33 2013/07/03 14:15:47 christos Exp $	*/
 
 /*
  * Copyright (c) 1999-2009 The NetBSD Foundation, Inc.
@@ -90,7 +90,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: cmds.c,v 1.35 2016/01/17 14:46:07 christos Exp $");
+__RCSID("$NetBSD: cmds.c,v 1.33 2013/07/03 14:15:47 christos Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>
@@ -249,10 +249,8 @@ mlsd(const char *path)
 		goto mlsdperror;
 
 	dout = dataconn("MLSD", (off_t)-1, "w");
-	if (dout == NULL) {
-		(void) closedir(dirp);
+	if (dout == NULL)
 		return;
-	}
 
 	memset(&f, 0, sizeof(f));
 	f.stat = &sb;
@@ -600,7 +598,7 @@ static void
 fact_perm(const char *fact, FILE *fd, factelem *fe)
 {
 	int		rok, wok, xok, pdirwok;
-	struct stat	*pdir, dir;
+	struct stat	*pdir;
 
 	if (fe->stat->st_uid == geteuid()) {
 		rok = ((fe->stat->st_mode & S_IRUSR) != 0);
@@ -627,6 +625,7 @@ fact_perm(const char *fact, FILE *fd, factelem *fe)
 	if (pdir == NULL && CURCLASS_FLAGS_ISSET(modify)) {
 		size_t		len;
 		char		realdir[MAXPATHLEN], *p;
+		struct stat	dir;
 
 		len = strlcpy(realdir, fe->path, sizeof(realdir));
 		if (len < sizeof(realdir) - 4) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sn.c,v 1.36 2016/06/10 13:27:12 ozaki-r Exp $	*/
+/*	$NetBSD: if_sn.c,v 1.34 2012/10/13 06:24:15 tsutsui Exp $	*/
 
 /*
  * National Semiconductor  DP8393X SONIC Driver
@@ -16,7 +16,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sn.c,v 1.36 2016/06/10 13:27:12 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sn.c,v 1.34 2012/10/13 06:24:15 tsutsui Exp $");
 
 #include "opt_inet.h"
 
@@ -1059,7 +1059,7 @@ sonic_read(struct sn_softc *sc, void *pkt, int len)
 		return 0;
 	/* Pass the packet to any BPF listeners. */
 	bpf_mtap(ifp, m);
-	if_percpuq_enqueue(ifp->if_percpuq, m);
+	(*ifp->if_input)(ifp, m);
 	return 1;
 }
 
@@ -1075,7 +1075,7 @@ sonic_get(struct sn_softc *sc, void *pkt, int datalen)
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (m == 0)
 		return 0;
-	m_set_rcvif(m, &sc->sc_if);
+	m->m_pkthdr.rcvif = &sc->sc_if;
 	m->m_pkthdr.len = datalen;
 	len = MHLEN;
 	top = 0;

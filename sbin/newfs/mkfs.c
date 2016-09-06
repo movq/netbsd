@@ -1,4 +1,4 @@
-/*	$NetBSD: mkfs.c,v 1.127 2016/03/07 15:55:06 christos Exp $	*/
+/*	$NetBSD: mkfs.c,v 1.122 2014/04/26 14:15:08 martin Exp $	*/
 
 /*
  * Copyright (c) 1980, 1989, 1993
@@ -73,7 +73,7 @@
 #if 0
 static char sccsid[] = "@(#)mkfs.c	8.11 (Berkeley) 5/3/95";
 #else
-__RCSID("$NetBSD: mkfs.c,v 1.127 2016/03/07 15:55:06 christos Exp $");
+__RCSID("$NetBSD: mkfs.c,v 1.122 2014/04/26 14:15:08 martin Exp $");
 #endif
 #endif /* not lint */
 
@@ -110,8 +110,7 @@ union dinode {
 
 static void initcg(int, const struct timeval *);
 static int fsinit(const struct timeval *, mode_t, uid_t, gid_t);
-union Buffer;
-static int makedir(union Buffer *, struct direct *, int);
+static int makedir(struct direct *, int);
 static daddr_t alloc(int, int);
 static void iput(union dinode *, ino_t);
 static void rdfs(daddr_t, int, void *);
@@ -133,13 +132,13 @@ static void *mkfs_malloc(size_t size);
 union {
 	struct fs fs;
 	char data[SBLOCKSIZE];
-} *fsun;
-#define	sblock	fsun->fs
+} fsun;
+#define	sblock	fsun.fs
 
-union Buffer {
+union {
 	struct quota2_header q2h;
 	char data[MAXBSIZE];
-};
+} buf;
 
 struct	csum *fscs_0;		/* first block of cylinder summaries */
 struct	csum *fscs_next;	/* place for next summary */
@@ -150,8 +149,8 @@ uint	fs_csaddr;		/* fragment number to write to */
 union {
 	struct cg cg;
 	char pad[MAXBSIZE];
-} *cgun;
-#define	acg	cgun->cg
+} cgun;
+#define	acg	cgun.cg
 
 #define DIP(dp, field) \
 	((sblock.fs_magic == FS_UFS1_MAGIC) ? \
@@ -200,11 +199,6 @@ mkfs(const char *fsys, int fi, int fo,
 			exit(12);
 	}
 #endif
-	if ((fsun = calloc(1, sizeof(*fsun))) == NULL)
-		exit(12);
-	if ((cgun = calloc(1, sizeof(*cgun))) == NULL)
-		exit(12);
-
 	fsi = fi;
 	fso = fo;
 	if (Oflag == 0) {
@@ -734,11 +728,9 @@ mkfs(const char *fsys, int fi, int fo,
 	/*
 	 * Write out the super-block and zeros until the first cg info
 	 */
-	i = cgsblock(&sblock, 0) * sblock.fs_fsize - sblock.fs_sblockloc;
-	if ((size_t)i < sizeof(sblock))
-		errx(1, "No space for superblock");
-	memcpy(iobuf, &sblock, sizeof(sblock));
-	memset(iobuf + sizeof(sblock), 0, i - sizeof(sblock));
+	i = cgsblock(&sblock, 0) * sblock.fs_fsize - sblock.fs_sblockloc,
+	memset(iobuf, 0, i);
+	memcpy(iobuf, &sblock, sizeof sblock);
 	if (needswap)
 		ffs_sb_swap(&sblock, (struct fs *)iobuf);
 	if ((sblock.fs_old_flags & FS_FLAGS_UPDATED) == 0)
@@ -1032,7 +1024,6 @@ int
 fsinit(const struct timeval *tv, mode_t mfsmode, uid_t mfsuid, gid_t mfsgid)
 {
 	union dinode node;
-	union Buffer buf;
 	int i;
 	int qblocks = 0;
 	int qinos = 0;
@@ -1057,12 +1048,12 @@ fsinit(const struct timeval *tv, mode_t mfsmode, uid_t mfsuid, gid_t mfsgid)
 	 */
 	memset(&node, 0, sizeof(node));
 	if (Oflag == 0) {
-		(void)makedir(&buf, (struct direct *)olost_found_dir, 2);
+		(void)makedir((struct direct *)olost_found_dir, 2);
 		for (i = dirblksiz; i < sblock.fs_bsize; i += dirblksiz)
 			copy_dir((struct direct*)&olost_found_dir[2],
 				(struct direct*)&buf[i]);
 	} else {
-		(void)makedir(&buf, lost_found_dir, 2);
+		(void)makedir(lost_found_dir, 2);
 		for (i = dirblksiz; i < sblock.fs_bsize; i += dirblksiz)
 			copy_dir(&lost_found_dir[2], (struct direct*)&buf[i]);
 	}
@@ -1128,10 +1119,10 @@ fsinit(const struct timeval *tv, mode_t mfsmode, uid_t mfsuid, gid_t mfsgid)
 		}
 		node.dp1.di_nlink = PREDEFDIR;
 		if (Oflag == 0)
-			node.dp1.di_size = makedir(&buf, 
-			    (struct direct *)oroot_dir, PREDEFDIR);
+			node.dp1.di_size = makedir((struct direct *)oroot_dir,
+			    PREDEFDIR);
 		else
-			node.dp1.di_size = makedir(&buf, root_dir, PREDEFDIR);
+			node.dp1.di_size = makedir(root_dir, PREDEFDIR);
 		node.dp1.di_db[0] = alloc(sblock.fs_fsize, node.dp1.di_mode);
 		if (node.dp1.di_db[0] == 0)
 			return (0);
@@ -1158,7 +1149,7 @@ fsinit(const struct timeval *tv, mode_t mfsmode, uid_t mfsuid, gid_t mfsgid)
 		node.dp2.di_birthtime = tv->tv_sec;
 		node.dp2.di_birthnsec = tv->tv_usec * 1000;
 		node.dp2.di_nlink = PREDEFDIR;
-		node.dp2.di_size = makedir(&buf, root_dir, PREDEFDIR);
+		node.dp2.di_size = makedir(root_dir, PREDEFDIR);
 		node.dp2.di_db[0] = alloc(sblock.fs_fsize, node.dp2.di_mode);
 		if (node.dp2.di_db[0] == 0)
 			return (0);
@@ -1263,7 +1254,7 @@ fsinit(const struct timeval *tv, mode_t mfsmode, uid_t mfsuid, gid_t mfsgid)
  * return size of directory.
  */
 int
-makedir(union Buffer *buf, struct direct *protodir, int entries)
+makedir(struct direct *protodir, int entries)
 {
 	char *cp;
 	int i, spcleft;
@@ -1271,9 +1262,9 @@ makedir(union Buffer *buf, struct direct *protodir, int entries)
 	if (isappleufs)
 		dirblksiz = APPLEUFS_DIRBLKSIZ;
 
-	memset(buf, 0, dirblksiz);
+	memset(&buf, 0, UFS_DIRBLKSIZ);
 	spcleft = dirblksiz;
-	for (cp = buf->data, i = 0; i < entries - 1; i++) {
+	for (cp = buf.data, i = 0; i < entries - 1; i++) {
 		protodir[i].d_reclen = UFS_DIRSIZ(Oflag == 0, &protodir[i], 0);
 		copy_dir(&protodir[i], (struct direct*)cp);
 		cp += protodir[i].d_reclen;
@@ -1575,7 +1566,7 @@ ilog2(int val)
 	for (n = 0; n < sizeof(n) * CHAR_BIT; n++)
 		if (1 << n == val)
 			return (n);
-	errx(1, "ilog2: %d is not a power of 2", val);
+	errx(1, "ilog2: %d is not a power of 2\n", val);
 }
 
 static void

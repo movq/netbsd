@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_rfc2553.h,v 1.4 2016/01/08 21:35:35 christos Exp $	*/
+/*	$NetBSD: ntp_rfc2553.h,v 1.1.1.3.4.1 2014/12/24 00:05:16 riz Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.

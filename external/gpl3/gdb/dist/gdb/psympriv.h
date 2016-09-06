@@ -1,6 +1,6 @@
 /* Private partial symbol table definitions.
 
-   Copyright (C) 2009-2015 Free Software Foundation, Inc.
+   Copyright (C) 2009-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -98,6 +98,12 @@ struct partial_symtab
 
   const char *dirname;
 
+  /* Set of relocation offsets to apply to each section.
+     This is typically objfile->section_offsets, but in some cases
+     it's different.  See, e.g., elfstab_offset_sections.  */
+
+  struct section_offsets *section_offsets;
+
   /* Range of text addresses covered by this file; texthigh is the
      beginning of the next section.  Do not use if PSYMTABS_ADDRMAP_SUPPORTED
      is set.  */
@@ -186,10 +192,10 @@ struct partial_symtab
 
   ENUM_BITFIELD (psymtab_search_status) searched_flag : 2;
 
-  /* Pointer to compunit eventually allocated for this source file, 0 if
+  /* Pointer to symtab eventually allocated for this source file, 0 if
      !readin or if we haven't looked for the symtab after it was readin.  */
 
-  struct compunit_symtab *compunit_symtab;
+  struct symtab *symtab;
 
   /* Pointer to function which will read in the symtab corresponding to
      this psymtab.  */
@@ -218,6 +224,7 @@ extern void add_psymbol_to_list (const char *, int,
 extern void init_psymbol_list (struct objfile *, int);
 
 extern struct partial_symtab *start_psymtab_common (struct objfile *,
+						    struct section_offsets *,
 						    const char *, CORE_ADDR,
 						    struct partial_symbol **,
 						    struct partial_symbol **);

@@ -15,9 +15,11 @@
 #include "clang/Rewrite/Core/Rewriter.h"
 #include "clang/Basic/Diagnostic.h"
 #include "clang/Basic/DiagnosticIDs.h"
+#include "clang/Basic/FileManager.h"
 #include "clang/Basic/SourceManager.h"
 #include "clang/Lex/Lexer.h"
 #include "llvm/ADT/SmallString.h"
+#include "llvm/Config/llvm-config.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace clang;
@@ -33,7 +35,7 @@ raw_ostream &RewriteBuffer::write(raw_ostream &os) const {
 
 /// \brief Return true if this character is non-new-line whitespace:
 /// ' ', '\\t', '\\f', '\\v', '\\r'.
-static inline bool isWhitespaceExceptNL(unsigned char c) {
+static inline bool isWhitespace(unsigned char c) {
   switch (c) {
   case ' ':
   case '\t':
@@ -52,7 +54,7 @@ void RewriteBuffer::RemoveText(unsigned OrigOffset, unsigned Size,
   if (Size == 0) return;
 
   unsigned RealOffset = getMappedOffset(OrigOffset, true);
-  assert(RealOffset+Size <= Buffer.size() && "Invalid location");
+  assert(RealOffset+Size < Buffer.size() && "Invalid location");
 
   // Remove the dead characters.
   Buffer.erase(RealOffset, Size);
@@ -78,7 +80,7 @@ void RewriteBuffer::RemoveText(unsigned OrigOffset, unsigned Size,
   
     unsigned lineSize = 0;
     posI = curLineStart;
-    while (posI != end() && isWhitespaceExceptNL(*posI)) {
+    while (posI != end() && isWhitespace(*posI)) {
       ++posI;
       ++lineSize;
     }
@@ -254,7 +256,7 @@ bool Rewriter::InsertText(SourceLocation Loc, StringRef Str,
     StringRef indentSpace;
     {
       unsigned i = lineOffs;
-      while (isWhitespaceExceptNL(MB[i]))
+      while (isWhitespace(MB[i]))
         ++i;
       indentSpace = MB.substr(lineOffs, i-lineOffs);
     }
@@ -361,12 +363,12 @@ bool Rewriter::IncreaseIndentation(CharSourceRange range,
   StringRef parentSpace, startSpace;
   {
     unsigned i = parentLineOffs;
-    while (isWhitespaceExceptNL(MB[i]))
+    while (isWhitespace(MB[i]))
       ++i;
     parentSpace = MB.substr(parentLineOffs, i-parentLineOffs);
 
     i = startLineOffs;
-    while (isWhitespaceExceptNL(MB[i]))
+    while (isWhitespace(MB[i]))
       ++i;
     startSpace = MB.substr(startLineOffs, i-startLineOffs);
   }
@@ -382,7 +384,7 @@ bool Rewriter::IncreaseIndentation(CharSourceRange range,
   for (unsigned lineNo = startLineNo; lineNo <= endLineNo; ++lineNo) {
     unsigned offs = Content->SourceLineCache[lineNo];
     unsigned i = offs;
-    while (isWhitespaceExceptNL(MB[i]))
+    while (isWhitespace(MB[i]))
       ++i;
     StringRef origIndent = MB.substr(offs, i-offs);
     if (origIndent.startswith(startSpace))
@@ -407,7 +409,7 @@ public:
     TempFilename = Filename;
     TempFilename += "-%%%%%%%%";
     int FD;
-    if (llvm::sys::fs::createUniqueFile(TempFilename, FD, TempFilename)) {
+    if (llvm::sys::fs::createUniqueFile(TempFilename.str(), FD, TempFilename)) {
       AllWritten = false;
       Diagnostics.Report(clang::diag::err_unable_to_make_temp)
         << TempFilename;
@@ -419,15 +421,19 @@ public:
   ~AtomicallyMovedFile() {
     if (!ok()) return;
 
-    // Close (will also flush) theFileStream.
-    FileStream->close();
-    if (std::error_code ec = llvm::sys::fs::rename(TempFilename, Filename)) {
+    FileStream->flush();
+#ifdef LLVM_ON_WIN32
+    // Win32 does not allow rename/removing opened files.
+    FileStream.reset();
+#endif
+    if (std::error_code ec =
+            llvm::sys::fs::rename(TempFilename.str(), Filename)) {
       AllWritten = false;
       Diagnostics.Report(clang::diag::err_unable_to_rename_temp)
         << TempFilename << Filename << ec.message();
       // If the remove fails, there's not a lot we can do - this is already an
       // error.
-      llvm::sys::fs::remove(TempFilename);
+      llvm::sys::fs::remove(TempFilename.str());
     }
   }
 

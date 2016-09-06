@@ -16,11 +16,11 @@ using namespace llvm;
 #define DEBUG_TYPE "nvptx-mcexpr"
 
 const NVPTXFloatMCExpr*
-NVPTXFloatMCExpr::create(VariantKind Kind, APFloat Flt, MCContext &Ctx) {
+NVPTXFloatMCExpr::Create(VariantKind Kind, APFloat Flt, MCContext &Ctx) {
   return new (Ctx) NVPTXFloatMCExpr(Kind, Flt);
 }
 
-void NVPTXFloatMCExpr::printImpl(raw_ostream &OS, const MCAsmInfo *MAI) const {
+void NVPTXFloatMCExpr::PrintImpl(raw_ostream &OS) const {
   bool Ignored;
   unsigned NumHex;
   APFloat APF = getAPFloat();
@@ -44,17 +44,4 @@ void NVPTXFloatMCExpr::printImpl(raw_ostream &OS, const MCAsmInfo *MAI) const {
   if (HexStr.length() < NumHex)
     OS << std::string(NumHex - HexStr.length(), '0');
   OS << utohexstr(API.getZExtValue());
-}
-
-const NVPTXGenericMCSymbolRefExpr*
-NVPTXGenericMCSymbolRefExpr::create(const MCSymbolRefExpr *SymExpr,
-                                    MCContext &Ctx) {
-  return new (Ctx) NVPTXGenericMCSymbolRefExpr(SymExpr);
-}
-
-void NVPTXGenericMCSymbolRefExpr::printImpl(raw_ostream &OS,
-                                            const MCAsmInfo *MAI) const {
-  OS << "generic(";
-  SymExpr->print(OS, MAI);
-  OS << ")";
 }

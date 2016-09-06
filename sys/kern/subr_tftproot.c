@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_tftproot.c,v 1.18 2016/06/10 13:27:15 ozaki-r Exp $ */
+/*	$NetBSD: subr_tftproot.c,v 1.12.12.2 2015/04/06 01:37:29 snj Exp $ */
 
 /*-
  * Copyright (c) 2007 Emmanuel Dreyfus, all rights reserved.
@@ -39,7 +39,7 @@
 #include "opt_md.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_tftproot.c,v 1.18 2016/06/10 13:27:15 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: subr_tftproot.c,v 1.12.12.2 2015/04/06 01:37:29 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
@@ -131,20 +131,16 @@ tftproot_dhcpboot(device_t bootdv)
 	int error = -1;
 
 	if (rootspec != NULL) {
-		int s = pserialize_read_enter();
-		IFNET_READER_FOREACH(ifp)
+		IFNET_FOREACH(ifp)
 			if (strcmp(rootspec, ifp->if_xname) == 0)
 				break;
-		pserialize_read_exit(s);
 	} 
 
 	if ((ifp == NULL) &&
 	    (bootdv != NULL && device_class(bootdv) == DV_IFNET)) {
-		int s = pserialize_read_enter();
-		IFNET_READER_FOREACH(ifp)
+		IFNET_FOREACH(ifp)
 			if (strcmp(device_xname(bootdv), ifp->if_xname) == 0)
 				break;
-		pserialize_read_exit(s);
 	}
 
 	if (ifp == NULL) {
@@ -211,7 +207,7 @@ tftproot_getfile(struct tftproot_handle *trh, struct lwp *l)
 	struct socket *so = NULL;
 	struct mbuf *m_serv = NULL;
 	struct mbuf *m_outbuf = NULL;
-	struct sockaddr_in sin;
+	struct sockaddr_in *sin;
 	struct tftphdr *tftp;
 	size_t packetlen, namelen;
 	int error = -1;
@@ -237,8 +233,11 @@ tftproot_getfile(struct tftproot_handle *trh, struct lwp *l)
 	/*
 	 * Set server address and port
 	 */
-	memcpy(&sin, &trh->trh_nd->nd_root.ndm_saddr, sizeof(sin));
-	sin.sin_port = htons(IPPORT_TFTP);
+	m_serv = m_get(M_WAIT, MT_SONAME);
+	m_serv->m_len = sizeof(*sin);
+	sin = mtod(m_serv, struct sockaddr_in *);
+	memcpy(sin, &trh->trh_nd->nd_root.ndm_saddr, sizeof(*sin));
+	sin->sin_port = htons(IPPORT_TFTP);
 
 	/*
 	 * Set send buffer, prepare the TFTP packet
@@ -255,7 +254,7 @@ tftproot_getfile(struct tftproot_handle *trh, struct lwp *l)
 	m_clget(m_outbuf, M_WAIT);
 	m_outbuf->m_len = packetlen;
 	m_outbuf->m_pkthdr.len = packetlen;
-	m_reset_rcvif(m_outbuf);
+	m_outbuf->m_pkthdr.rcvif = NULL;
 
 	tftp = mtod(m_outbuf, struct tftphdr *);
 	memset(tftp, 0, packetlen);
@@ -269,8 +268,9 @@ tftproot_getfile(struct tftproot_handle *trh, struct lwp *l)
 	/* 
 	 * Perform the file transfer
 	 */
+	sin = (struct sockaddr_in *)&trh->trh_nd->nd_root.ndm_saddr;
 	printf("tftproot: download %s:%s ", 
-	    inet_ntoa(sin.sin_addr), trh->trh_nd->nd_bootfile);
+	    inet_ntoa(sin->sin_addr), trh->trh_nd->nd_bootfile);
 
 	do {
 		/*
@@ -287,7 +287,7 @@ tftproot_getfile(struct tftproot_handle *trh, struct lwp *l)
 		 * We get the sender address here, which should be
 		 * the same server with a different port
 		 */
-		if ((error = nfs_boot_sendrecv(so, &sin, NULL, m_outbuf,
+		if ((error = nfs_boot_sendrecv(so, m_serv, NULL, m_outbuf,
 		    tftproot_recv, NULL, &m_serv, trh, l)) != 0) {
 			DPRINTF(("%s():%d sendrecv failed %d\n", 
 			    __func__, __LINE__, error));
@@ -320,7 +320,7 @@ tftproot_getfile(struct tftproot_handle *trh, struct lwp *l)
 	 * we do not want to free it ourselves.
 	 * Ignore errors, as we already have the whole file.
 	 */
-	if ((error = (*so->so_send)(so, mtod(m_serv, struct sockaddr *), NULL,
+	if ((error = (*so->so_send)(so, m_serv, NULL, 
 	    m_outbuf, NULL, 0, l)) != 0)
 		DPRINTF(("%s():%d tftproot: sosend returned %d\n", 
 		    __func__, __LINE__, error));

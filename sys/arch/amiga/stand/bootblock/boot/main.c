@@ -1,5 +1,5 @@
 /*
- * $NetBSD: main.c,v 1.31 2016/06/11 07:01:25 dholland Exp $
+ * $NetBSD: main.c,v 1.29 2014/03/29 12:49:15 mlelstv Exp $
  *
  *
  * Copyright (c) 1996,1999 Ignatios Souvatzis
@@ -122,7 +122,6 @@ pain(void *aio,	void *cons)
 	struct MemHead *mh;
 	u_int32_t from, size, vfrom, vsize;
 	int contflag, mapped1to1;
-	int8_t mempri;
 
 	int ncd, nseg;
 	char c;
@@ -164,7 +163,7 @@ again:
 	printf("\n");
 	printf("Boot: [%s] ", kernel_name);
 
-	kgets(linebuf, sizeof(linebuf));
+	gets(linebuf);
 
 	if (*linebuf == 'q')
 		return 1;
@@ -201,7 +200,7 @@ again:
 					    (get_number(&path) & 3) << 1;
 					break;
 				case 'p':	/* Select fastmem by priority */
-					p_flag = 1;
+					p_flag++;
 					break;
 				case 'q':
 					boothowto |= AB_QUIET;
@@ -275,7 +274,6 @@ again:
 	vfrom = mh->Lower & -__PGSZ;
 	vsize = (mh->Upper & -__PGSZ) - vfrom;
 	contflag = mapped1to1 = 0;
-	mempri = -128;
 
 	do {
 		size = vsize;
@@ -320,12 +318,9 @@ again:
 			size += from;
 			cmemsz = size;
 			from = 0;
-		} else if (mapped1to1 && ((!p_flag && fmemsz < size) ||
-		    (p_flag && (mempri < mh->Pri ||
-		    (mempri == mh->Pri && fmemsz < size))))) {
+		} else if ((fmemsz < size) && mapped1to1) {
 			fmem = from;
 			fmemsz = size;
-			mempri = mh->Pri;
 		}
 
 		memseg[nseg].ms_start = from;

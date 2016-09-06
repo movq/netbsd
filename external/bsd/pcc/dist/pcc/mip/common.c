@@ -1,5 +1,5 @@
-/*	Id: common.c,v 1.122 2015/09/30 20:04:30 ragge Exp 	*/	
-/*	$NetBSD: common.c,v 1.7 2016/02/09 20:37:32 plunky Exp $	*/
+/*	Id: common.c,v 1.111 2014/06/07 07:04:10 plunky Exp 	*/	
+/*	$NetBSD: common.c,v 1.6 2014/07/24 20:12:50 plunky Exp $	*/
 /*
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -75,7 +75,6 @@
 int nerrors = 0;  /* number of errors */
 extern char *ftitle;
 int lineno;
-int savstringsz, newattrsz, nodesszcnt;
 
 int warniserr = 0;
 
@@ -96,7 +95,7 @@ incerr(void)
  * it tells where the error took place
  */
 void
-uerror(const char *s, ...)
+uerror(char *s, ...)
 {
 	va_list ap;
 
@@ -112,7 +111,7 @@ uerror(const char *s, ...)
  * compiler error: die
  */
 void
-cerror(const char *s, ...)
+cerror(char *s, ...)
 {
 	va_list ap;
 
@@ -149,21 +148,13 @@ u8error(const char *s, ...)
 		incerr();
 }
 
-#ifdef MKEXT
-int wdebug;
-#endif
-
 /*
  * warning
  */
 void
-werror(const char *s, ...)
+werror(char *s, ...)
 {
-	extern int wdebug;
 	va_list ap;
-
-	if (wdebug)
-		return;
 	va_start(ap, s);
 	WHERE('w');
 	fprintf(stderr, "warning: ");
@@ -302,12 +293,10 @@ warner(int type, ...)
 {
 	va_list ap;
 	char *t;
-#ifndef PASS2
 	extern int issyshdr;
 
 	if (issyshdr && type == Wtruncate)
 		return; /* Too many false positives */
-#endif
 
 	if (Warnings[type].warn == 0)
 		return; /* no warning */
@@ -339,7 +328,7 @@ talloc(void)
 
 	if (freelink != NULL) {
 		p = freelink;
-		freelink = p->n_left;
+		freelink = p->next;
 		if (p->n_op != FREE)
 			cerror("node not FREE: %p", p);
 		if (ndebug)
@@ -348,7 +337,6 @@ talloc(void)
 	}
 
 	p = permalloc(sizeof(NODE));
-	nodesszcnt += sizeof(NODE);
 	p->n_op = FREE;
 	if (ndebug)
 		printf("alloc node %p from memory\n", p);
@@ -384,11 +372,7 @@ tcopy(NODE *p)
 void
 tcheck(void)
 {
-#ifdef LANG_CXX
 	extern int inlnodecnt;
-#else
-#define	inlnodecnt 0
-#endif
 
 	if (nerrors)
 		return;
@@ -431,14 +415,14 @@ nfree(NODE *p)
 	while (q != NULL) {
 		if (q == p)
 			cerror("freeing free node %p", p);
-		q = q->n_left;
+		q = q->next;
 	}
 #endif
 
 	if (ndebug)
 		printf("freeing node %p\n", p);
 	p->n_op = FREE;
-	p->n_left = freelink;
+	p->next = freelink;
 	freelink = p;
 	usednodes--;
 	return l;
@@ -454,12 +438,8 @@ nfree(NODE *p)
 #ifdef MKEXT
 #define coptype(o)	(dope[o]&TYFLG)
 #else
-#ifndef PASS2
 int cdope(int);
 #define coptype(o)	(cdope(o)&TYFLG)
-#else
-#define coptype(o)	(dope[o]&TYFLG)
-#endif
 #endif
 
 void
@@ -542,6 +522,7 @@ struct dopest {
 	{ RS, ">>", BITYPE|SHFFLG, },
 	{ OR, "|", BITYPE|COMMFLG|SIMPFLG, },
 	{ ER, "^", BITYPE|COMMFLG|SIMPFLG, },
+	{ STREF, "->", BITYPE, },
 	{ CALL, "CALL", BITYPE|CALLFLG, },
 	{ FORTCALL, "FCALL", BITYPE|CALLFLG, },
 	{ EQ, "==", BITYPE|LOGFLG, },
@@ -586,7 +567,7 @@ mkdope(void)
 void
 tprint(TWORD t, TWORD q)
 {
-	static char * tnames[BTMASK+1] = {
+	static char * tnames[] = {
 		"undef",
 		"bool",
 		"char",
@@ -616,7 +597,7 @@ tprint(TWORD t, TWORD q)
 		"dcomplex", /* pass1 */
 		"lcomplex", /* pass1 */
 		"enumty", /* pass1 */
-		"?", "?", "?"
+		"?", "?"
 		};
 
 	for(;; t = DECREF(t), q = DECREF(q)) {
@@ -832,7 +813,6 @@ newstring(char *s, size_t len)
 	char *u, *c;
 
 	len++;
-	savstringsz += len;
 	if (allocleft < len) {
 		u = c = permalloc(len);
 	} else {
@@ -910,104 +890,4 @@ deunsign(TWORD t)
 	if (BTYPE(t) >= CHAR && BTYPE(t) <= ULONGLONG)
 		t &= ~1;
 	return t;
-}
-
-/*
- * Attribute functions.
- */
-struct attr *
-attr_new(int type, int nelem)
-{
-	struct attr *ap;
-	int sz;
-
-	sz = sizeof(struct attr) + nelem * sizeof(union aarg);
-
-	ap = memset(permalloc(sz), 0, sz);
-	newattrsz += sz;
-	ap->atype = type;
-	ap->sz = nelem;
-	return ap;
-}
-
-/*
- * Add attribute list new before old and return new.
- */
-struct attr *
-attr_add(struct attr *old, struct attr *new)
-{
-	struct attr *ap;
-
-	if (new == NULL)
-		return old; /* nothing to add */
-
-	for (ap = new; ap->next; ap = ap->next)
-		;
-	ap->next = old;
-	return new;
-}
-
-/*
- * Search for attribute type in list ap.  Return entry or NULL.
- */
-struct attr *
-attr_find(struct attr *ap, int type)
-{
-
-	for (; ap && ap->atype != type; ap = ap->next)
-		;
-	return ap;
-}
-
-/*
- * Copy an attribute struct.
- * Return destination.
- */
-struct attr *
-attr_copy(struct attr *aps, struct attr *apd, int n)
-{
-	int sz = sizeof(struct attr) + n * sizeof(union aarg);
-	return memcpy(apd, aps, sz);
-}
-
-/*
- * Duplicate an attribute, like strdup.
- */
-struct attr *
-attr_dup(struct attr *ap)
-{
-	int sz = sizeof(struct attr) + ap->sz * sizeof(union aarg);
-	ap = memcpy(permalloc(sz), ap, sz);
-	ap->next = NULL;
-	return ap;
-}
-
-void *
-xmalloc(int size)
-{
-	void *rv;
-
-	if ((rv = malloc(size)) == NULL)
-		cerror("out of memory!");
-	return rv;
-}
-
-void *
-xstrdup(char *s)
-{
-	void *rv;
-
-	if ((rv = strdup(s)) == NULL)
-		cerror("out of memory!");
-	return rv;
-}
-
-void *
-xcalloc(int a, int b)
-{
-	void *rv;
-
-	if ((rv = calloc(a, b)) == NULL)
-		cerror("out of memory!");
-	return rv;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: i386-asm.S,v 1.4 2015/03/01 18:02:42 tnn Exp $	*/
+/*	$NetBSD: i386-asm.S,v 1.3.8.1 2015/03/09 07:58:34 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000, 2004, 2006, 2007 The NetBSD Foundation, Inc.

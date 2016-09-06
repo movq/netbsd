@@ -1,4 +1,4 @@
-/*	$NetBSD: lom.c,v 1.15 2015/04/27 11:55:29 martin Exp $	*/
+/*	$NetBSD: lom.c,v 1.13.4.1 2015/02/21 18:28:13 martin Exp $	*/
 /*	$OpenBSD: lom.c,v 1.21 2010/02/28 20:44:39 kettenis Exp $	*/
 /*
  * Copyright (c) 2009 Mark Kettenis
@@ -17,7 +17,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lom.c,v 1.15 2015/04/27 11:55:29 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lom.c,v 1.13.4.1 2015/02/21 18:28:13 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -265,7 +265,7 @@ lom_attach(device_t parent, device_t self, void *aux)
 	struct ebus_attach_args *ea = aux;
 	uint8_t reg, fw_rev, config, config2, config3;
 	uint8_t cal, low;
-	int i, err;
+	int i;
 	const struct sysctlnode *node = NULL, *newnode;
 
 	if (strcmp(ea->ea_name, "SUNW,lomh") == 0) {
@@ -415,10 +415,9 @@ lom_attach(device_t parent, device_t self, void *aux)
 	sc->sc_sme->sme_name = device_xname(self);
 	sc->sc_sme->sme_cookie = sc;
 	sc->sc_sme->sme_refresh = lom_refresh;
-	err = sysmon_envsys_register(sc->sc_sme);
-	if (err) {
+	if (sysmon_envsys_register(sc->sc_sme)) {
 		aprint_error_dev(self,
-		    "unable to register envsys with sysmon, error %d\n", err);
+		    "unable to register envsys with sysmon\n");
 		sysmon_envsys_destroy(sc->sc_sme);
 		return;
 	}

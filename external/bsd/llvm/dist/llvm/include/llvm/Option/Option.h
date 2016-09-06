@@ -70,6 +70,7 @@ protected:
 
 public:
   Option(const OptTable::Info *Info, const OptTable *Owner);
+  ~Option();
 
   bool isValid() const {
     return Info != nullptr;
@@ -195,7 +196,6 @@ public:
   ///                start.
   Arg *accept(const ArgList &Args, unsigned &Index, unsigned ArgSize) const;
 
-  void print(raw_ostream &O) const;
   void dump() const;
 };
 

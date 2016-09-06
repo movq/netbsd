@@ -1,6 +1,6 @@
 /* Remote notification in GDB protocol
 
-   Copyright (C) 1988-2015 Free Software Foundation, Inc.
+   Copyright (C) 1988-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -38,8 +38,9 @@
 #include "event-loop.h"
 #include "target.h"
 #include "inferior.h"
-#include "infrun.h"
 #include "gdbcmd.h"
+
+#include <string.h>
 
 int notif_debug = 0;
 
@@ -133,7 +134,7 @@ handle_notification (struct remote_notif_state *state, char *buf)
     {
       const char *name = notifs[i]->name;
 
-      if (startswith (buf, name)
+      if (strncmp (buf, name, strlen (name)) == 0
 	  && buf[strlen (name)] == ':')
 	break;
     }

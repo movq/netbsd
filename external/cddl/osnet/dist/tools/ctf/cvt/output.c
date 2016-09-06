@@ -104,12 +104,10 @@ static tdtrav_cb_f burst_types_cbs[] = {
 	NULL,
 	save_type_by_id,	/* intrinsic */
 	save_type_by_id,	/* pointer */
-	save_type_by_id,	/* reference */
 	save_type_by_id,	/* array */
 	save_type_by_id,	/* function */
 	save_type_by_id,	/* struct */
 	save_type_by_id,	/* union */
-	save_type_by_id,	/* class */
 	save_type_by_id,	/* enum */
 	save_type_by_id,	/* forward */
 	save_type_by_id,	/* typedef */
@@ -757,7 +755,7 @@ write_ctf(tdata_t *td, const char *curname, const char *newname, int flags)
 		elfterminate(curname, "Cannot write");
 
 	if (gelf_getehdr(elf, &ehdr)) {
-#if BYTE_ORDER == BIG_ENDIAN
+#if BYTE_ORDER == _BIG_ENDIAN
 		byteorder = ELFDATA2MSB;
 #else
 		byteorder = ELFDATA2LSB;

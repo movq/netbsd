@@ -1,4 +1,4 @@
-/*	$NetBSD: cmpci.c,v 1.49 2016/08/15 09:30:22 maxv Exp $	*/
+/*	$NetBSD: cmpci.c,v 1.47 2014/03/29 19:28:24 christos Exp $	*/
 
 /*
  * Copyright (c) 2000, 2001, 2008 The NetBSD Foundation, Inc.
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cmpci.c,v 1.49 2016/08/15 09:30:22 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cmpci.c,v 1.47 2014/03/29 19:28:24 christos Exp $");
 
 #if defined(AUDIO_DEBUG) || defined(DEBUG)
 #define DPRINTF(x) if (cmpcidebug) printf x
@@ -461,7 +461,7 @@ cmpci_attach(device_t parent, device_t self, void *aux)
 	cmpci_mixerreg_write(sc, CMPCI_SB16_MIXER_OUTMIX,
 	    CMPCI_SB16_SW_CD|CMPCI_SB16_SW_MIC | CMPCI_SB16_SW_LINE);
 	for (i = 0; i < CMPCI_NDEVS; i++) {
-		switch (i) {
+		switch(i) {
 		/*
 		 * CMI8738 defaults are
 		 *  master:	0xe0	(0x00 - 0xf8)
@@ -1016,7 +1016,7 @@ cmpci_alloc_dmamem(struct cmpci_softc *sc, size_t size, void **r_addr)
 	struct cmpci_dmanode *n;
 
 	error = 0;
-	n = kmem_alloc(sizeof(*n), KM_SLEEP);
+	n = kmem_alloc(sizeof(struct cmpci_dmanode), KM_SLEEP);
 	if (n == NULL) {
 		error = ENOMEM;
 		goto quit;

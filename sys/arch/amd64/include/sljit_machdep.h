@@ -1,4 +1,4 @@
-/*	$NetBSD: sljit_machdep.h,v 1.2 2015/06/10 23:16:27 alnsn Exp $	*/
+/*	$NetBSD: sljit_machdep.h,v 1.1.4.1 2015/07/08 21:58:53 snj Exp $	*/
 
 /*-
  * Copyright (c) 2012-2013 The NetBSD Foundation, Inc.

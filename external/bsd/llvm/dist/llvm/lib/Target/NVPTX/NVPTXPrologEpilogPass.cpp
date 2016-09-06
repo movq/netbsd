@@ -48,9 +48,9 @@ MachineFunctionPass *llvm::createNVPTXPrologEpilogPass() {
 char NVPTXPrologEpilogPass::ID = 0;
 
 bool NVPTXPrologEpilogPass::runOnMachineFunction(MachineFunction &MF) {
-  const TargetSubtargetInfo &STI = MF.getSubtarget();
-  const TargetFrameLowering &TFI = *STI.getFrameLowering();
-  const TargetRegisterInfo &TRI = *STI.getRegisterInfo();
+  const TargetMachine &TM = MF.getTarget();
+  const TargetFrameLowering &TFI = *TM.getSubtargetImpl()->getFrameLowering();
+  const TargetRegisterInfo &TRI = *TM.getSubtargetImpl()->getRegisterInfo();
   bool Modified = false;
 
   calculateFrameObjectOffsets(MF);
@@ -68,11 +68,11 @@ bool NVPTXPrologEpilogPass::runOnMachineFunction(MachineFunction &MF) {
   }
 
   // Add function prolog/epilog
-  TFI.emitPrologue(MF, MF.front());
+  TFI.emitPrologue(MF);
 
   for (MachineFunction::iterator I = MF.begin(), E = MF.end(); I != E; ++I) {
     // If last instruction is a return instruction, add an epilogue
-    if (I->isReturnBlock())
+    if (!I->empty() && I->back().isReturn())
       TFI.emitEpilogue(MF, *I);
   }
 

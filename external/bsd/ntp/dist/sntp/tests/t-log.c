@@ -1,4 +1,4 @@
-/*	$NetBSD: t-log.c,v 1.1.1.3 2016/01/08 21:21:33 christos Exp $	*/
+/*	$NetBSD: t-log.c,v 1.1.1.1.8.3 2016/05/11 11:35:42 martin Exp $	*/
 
 #include "config.h"
 #include "unity.h"

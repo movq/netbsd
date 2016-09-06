@@ -37,7 +37,6 @@ namespace llvm {
   class Comdat;
   class MDString;
   class MDNode;
-  struct SlotMapping;
   class StructType;
 
   /// ValID - Represents a reference of a definition of some sort with no type.
@@ -46,32 +45,29 @@ namespace llvm {
   /// or a symbolic (%var) reference.  This is just a discriminated union.
   struct ValID {
     enum {
-      t_LocalID, t_GlobalID,           // ID in UIntVal.
-      t_LocalName, t_GlobalName,       // Name in StrVal.
-      t_APSInt, t_APFloat,             // Value in APSIntVal/APFloatVal.
-      t_Null, t_Undef, t_Zero, t_None, // No value.
-      t_EmptyArray,                    // No value:  []
-      t_Constant,                      // Value in ConstantVal.
-      t_InlineAsm,                     // Value in FTy/StrVal/StrVal2/UIntVal.
-      t_ConstantStruct,                // Value in ConstantStructElts.
-      t_PackedConstantStruct           // Value in ConstantStructElts.
-    } Kind = t_LocalID;
+      t_LocalID, t_GlobalID,      // ID in UIntVal.
+      t_LocalName, t_GlobalName,  // Name in StrVal.
+      t_APSInt, t_APFloat,        // Value in APSIntVal/APFloatVal.
+      t_Null, t_Undef, t_Zero,    // No value.
+      t_EmptyArray,               // No value:  []
+      t_Constant,                 // Value in ConstantVal.
+      t_InlineAsm,                // Value in StrVal/StrVal2/UIntVal.
+      t_ConstantStruct,           // Value in ConstantStructElts.
+      t_PackedConstantStruct      // Value in ConstantStructElts.
+    } Kind;
 
     LLLexer::LocTy Loc;
     unsigned UIntVal;
-    FunctionType *FTy = nullptr;
     std::string StrVal, StrVal2;
     APSInt APSIntVal;
-    APFloat APFloatVal{0.0};
+    APFloat APFloatVal;
     Constant *ConstantVal;
-    std::unique_ptr<Constant *[]> ConstantStructElts;
+    Constant **ConstantStructElts;
 
-    ValID() = default;
-    ValID(const ValID &RHS)
-        : Kind(RHS.Kind), Loc(RHS.Loc), UIntVal(RHS.UIntVal), FTy(RHS.FTy),
-          StrVal(RHS.StrVal), StrVal2(RHS.StrVal2), APSIntVal(RHS.APSIntVal),
-          APFloatVal(RHS.APFloatVal), ConstantVal(RHS.ConstantVal) {
-      assert(!RHS.ConstantStructElts);
+    ValID() : Kind(t_LocalID), APFloatVal(0.0) {}
+    ~ValID() {
+      if (Kind == t_ConstantStruct || Kind == t_PackedConstantStruct)
+        delete [] ConstantStructElts;
     }
 
     bool operator<(const ValID &RHS) const {
@@ -84,6 +80,31 @@ namespace llvm {
     }
   };
 
+  /// Structure to represent an optional metadata field.
+  template <class FieldTy> struct MDFieldImpl {
+    typedef MDFieldImpl ImplTy;
+    FieldTy Val;
+    bool Seen;
+
+    void assign(FieldTy Val) {
+      Seen = true;
+      this->Val = Val;
+    }
+
+    explicit MDFieldImpl(FieldTy Default) : Val(Default), Seen(false) {}
+  };
+  template <class NumTy> struct MDUnsignedField : public MDFieldImpl<NumTy> {
+    typedef typename MDUnsignedField::ImplTy ImplTy;
+    NumTy Max;
+
+    MDUnsignedField(NumTy Default = 0,
+                    NumTy Max = std::numeric_limits<NumTy>::max())
+        : ImplTy(Default), Max(Max) {}
+  };
+  struct MDField : public MDFieldImpl<Metadata *> {
+    MDField() : ImplTy(nullptr) {}
+  };
+
   class LLParser {
   public:
     typedef LLLexer::LocTy LocTy;
@@ -91,7 +112,6 @@ namespace llvm {
     LLVMContext &Context;
     LLLexer Lex;
     Module *M;
-    SlotMapping *Slots;
 
     // Instruction metadata resolution.  Each instruction can have a list of
     // MDRef info associated with them.
@@ -113,10 +133,10 @@ namespace llvm {
     // Type resolution handling data structures.  The location is set when we
     // have processed a use of the type but not a definition yet.
     StringMap<std::pair<Type*, LocTy> > NamedTypes;
-    std::map<unsigned, std::pair<Type*, LocTy> > NumberedTypes;
+    std::vector<std::pair<Type*, LocTy> > NumberedTypes;
 
-    std::map<unsigned, TrackingMDNodeRef> NumberedMetadata;
-    std::map<unsigned, std::pair<TempMDTuple, LocTy>> ForwardRefMDNodes;
+    std::vector<TrackingMDNodeRef> NumberedMetadata;
+    std::map<unsigned, std::pair<MDNodeFwdDecl *, LocTy>> ForwardRefMDNodes;
 
     // Global Value reference information.
     std::map<std::string, std::pair<GlobalValue*, LocTy> > ForwardRefVals;
@@ -140,13 +160,10 @@ namespace llvm {
     std::map<unsigned, AttrBuilder> NumberedAttrBuilders;
 
   public:
-    LLParser(StringRef F, SourceMgr &SM, SMDiagnostic &Err, Module *M,
-             SlotMapping *Slots = nullptr)
-        : Context(M->getContext()), Lex(F, SM, Err, M->getContext()), M(M),
-          Slots(Slots), BlockAddressPFS(nullptr) {}
+    LLParser(StringRef F, SourceMgr &SM, SMDiagnostic &Err, Module *m)
+        : Context(m->getContext()), Lex(F, SM, Err, m->getContext()), M(m),
+          BlockAddressPFS(nullptr) {}
     bool Run();
-
-    bool parseStandaloneConstantValue(Constant *&C, const SlotMapping *Slots);
 
     LLVMContext &getContext() { return Context; }
 
@@ -158,10 +175,6 @@ namespace llvm {
     bool TokError(const Twine &Msg) const {
       return Error(Lex.getLoc(), Msg);
     }
-
-    /// Restore the internal name and slot mappings using the mappings that
-    /// were created at an earlier parsing stage.
-    void restoreParsingState(const SlotMapping *Slots);
 
     /// GetGlobalVal - Get a value with the specified name or ID, creating a
     /// forward reference record if needed.  This can return null if the value
@@ -219,8 +232,6 @@ namespace llvm {
       return ParseUInt64(Val);
     }
 
-    bool ParseStringAttribute(AttrBuilder &B);
-
     bool ParseTLSModel(GlobalVariable::ThreadLocalMode &TLM);
     bool ParseOptionalThreadLocal(GlobalVariable::ThreadLocalMode &TLM);
     bool parseOptionalUnnamedAddr(bool &UnnamedAddr) {
@@ -237,7 +248,7 @@ namespace llvm {
     bool ParseOptionalDLLStorageClass(unsigned &DLLStorageClass);
     bool ParseOptionalCallingConv(unsigned &CC);
     bool ParseOptionalAlignment(unsigned &Alignment);
-    bool ParseOptionalDerefAttrBytes(lltok::Kind AttrKind, uint64_t &Bytes);
+    bool ParseOptionalDereferenceableBytes(uint64_t &Bytes);
     bool ParseScopeAndOrdering(bool isAtomic, SynchronizationScope &Scope,
                                AtomicOrdering &Ordering);
     bool ParseOrdering(AtomicOrdering &Ordering);
@@ -354,12 +365,10 @@ namespace llvm {
     bool ConvertValIDToValue(Type *Ty, ValID &ID, Value *&V,
                              PerFunctionState *PFS);
 
-    bool parseConstantValue(Type *Ty, Constant *&C);
     bool ParseValue(Type *Ty, Value *&V, PerFunctionState *PFS);
     bool ParseValue(Type *Ty, Value *&V, PerFunctionState &PFS) {
       return ParseValue(Ty, V, &PFS);
     }
-
     bool ParseValue(Type *Ty, Value *&V, LocTy &Loc,
                     PerFunctionState &PFS) {
       Loc = Lex.getLoc();
@@ -394,13 +403,6 @@ namespace llvm {
                             bool IsMustTailCall = false,
                             bool InVarArgsFunc = false);
 
-    bool
-    ParseOptionalOperandBundles(SmallVectorImpl<OperandBundleDef> &BundleList,
-                                PerFunctionState &PFS);
-
-    bool ParseExceptionArgs(SmallVectorImpl<Value *> &Args,
-                            PerFunctionState &PFS);
-
     // Constant Parsing.
     bool ParseValID(ValID &ID, PerFunctionState *PFS = nullptr);
     bool ParseGlobalValue(Type *Ty, Constant *&V);
@@ -408,29 +410,20 @@ namespace llvm {
     bool ParseGlobalValueVector(SmallVectorImpl<Constant *> &Elts);
     bool parseOptionalComdat(StringRef GlobalName, Comdat *&C);
     bool ParseMetadataAsValue(Value *&V, PerFunctionState &PFS);
-    bool ParseValueAsMetadata(Metadata *&MD, const Twine &TypeMsg,
-                              PerFunctionState *PFS);
+    bool ParseValueAsMetadata(Metadata *&MD, PerFunctionState *PFS);
     bool ParseMetadata(Metadata *&MD, PerFunctionState *PFS);
     bool ParseMDTuple(MDNode *&MD, bool IsDistinct = false);
     bool ParseMDNode(MDNode *&MD);
     bool ParseMDNodeTail(MDNode *&MD);
     bool ParseMDNodeVector(SmallVectorImpl<Metadata *> &MDs);
-    bool ParseMetadataAttachment(unsigned &Kind, MDNode *&MD);
-    bool ParseInstructionMetadata(Instruction &Inst);
-    bool ParseOptionalFunctionMetadata(Function &F);
+    bool ParseInstructionMetadata(Instruction *Inst, PerFunctionState *PFS);
 
-    template <class FieldTy>
-    bool ParseMDField(LocTy Loc, StringRef Name, FieldTy &Result);
-    template <class FieldTy> bool ParseMDField(StringRef Name, FieldTy &Result);
-    template <class ParserTy>
-    bool ParseMDFieldsImplBody(ParserTy parseField);
-    template <class ParserTy>
-    bool ParseMDFieldsImpl(ParserTy parseField, LocTy &ClosingLoc);
+    bool ParseMDField(LocTy Loc, StringRef Name,
+                      MDUnsignedField<uint32_t> &Result);
+    bool ParseMDField(LocTy Loc, StringRef Name, MDField &Result);
+    template <class ParserTy> bool ParseMDFieldsImpl(ParserTy parseField);
     bool ParseSpecializedMDNode(MDNode *&N, bool IsDistinct = false);
-
-#define HANDLE_SPECIALIZED_MDNODE_LEAF(CLASS)                                  \
-  bool Parse##CLASS(MDNode *&Result, bool IsDistinct);
-#include "llvm/IR/Metadata.def"
+    bool ParseMDLocation(MDNode *&Result, bool IsDistinct);
 
     // Function Parsing.
     struct ArgInfo {
@@ -461,11 +454,6 @@ namespace llvm {
     bool ParseIndirectBr(Instruction *&Inst, PerFunctionState &PFS);
     bool ParseInvoke(Instruction *&Inst, PerFunctionState &PFS);
     bool ParseResume(Instruction *&Inst, PerFunctionState &PFS);
-    bool ParseCleanupRet(Instruction *&Inst, PerFunctionState &PFS);
-    bool ParseCatchRet(Instruction *&Inst, PerFunctionState &PFS);
-    bool ParseCatchSwitch(Instruction *&Inst, PerFunctionState &PFS);
-    bool ParseCatchPad(Instruction *&Inst, PerFunctionState &PFS);
-    bool ParseCleanupPad(Instruction *&Inst, PerFunctionState &PFS);
 
     bool ParseArithmetic(Instruction *&I, PerFunctionState &PFS, unsigned Opc,
                          unsigned OperandType);

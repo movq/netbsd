@@ -1,4 +1,4 @@
-/*	$NetBSD: sockaddrtest.h,v 1.5 2016/01/08 21:35:42 christos Exp $	*/
+/*	$NetBSD: sockaddrtest.h,v 1.1.1.1.6.2 2015/11/08 01:51:16 riz Exp $	*/
 
 #ifndef TESTS_SOCKADDRTEST_H
 #define TESTS_SOCKADDRTEST_H

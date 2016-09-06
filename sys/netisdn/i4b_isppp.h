@@ -18,15 +18,13 @@
  *
  * From: if_sppp.h,v 1.14 1999/03/30 13:28:26 phk Exp
  *
- * $Id: i4b_isppp.h,v 1.4 2015/09/06 06:01:01 dholland Exp $
+ * $Id: i4b_isppp.h,v 1.3 2007/03/04 06:03:30 christos Exp $
  */
 
 #ifndef _NETISDN_I4B_ISPPP_H_
 #define _NETISDN_I4B_ISPPP_H_
 
 #define SPPP_VJ			/* use VJ compression */
-
-#include <sys/ioccom.h>
 
 
 #ifdef SPPP_VJ

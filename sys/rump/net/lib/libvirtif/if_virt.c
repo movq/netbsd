@@ -1,4 +1,4 @@
-/*	$NetBSD: if_virt.c,v 1.53 2016/06/16 02:38:40 ozaki-r Exp $	*/
+/*	$NetBSD: if_virt.c,v 1.48 2014/08/09 09:47:02 ozaki-r Exp $	*/
 
 /*
  * Copyright (c) 2008, 2013 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_virt.c,v 1.53 2016/06/16 02:38:40 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_virt.c,v 1.48 2014/08/09 09:47:02 ozaki-r Exp $");
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -121,8 +121,7 @@ virtif_clone(struct if_clone *ifc, int num)
 	ifp->if_mtu = ETHERMTU;
 	ifp->if_dlt = DLT_EN10MB;
 
-	if_initialize(ifp);
-	if_register(ifp);
+	if_attach(ifp);
 
 #ifndef RUMP_VIF_LINKSTR
 	/*
@@ -374,15 +373,11 @@ VIF_DELIVERPKT(struct virtif_sc *sc, struct iovec *iov, size_t iovlen)
 	}
 
 	if (passup) {
-		int bound;
 		ifp->if_ipackets++;
-		m_set_rcvif(m, ifp);
+		m->m_pkthdr.rcvif = ifp;
 		KERNEL_LOCK(1, NULL);
-		/* Prevent LWP migrations between CPUs for psref(9) */
-		bound = curlwp_bind();
 		bpf_mtap(ifp, m);
-		if_input(ifp, m);
-		curlwp_bindx(bound);
+		ifp->if_input(ifp, m);
 		KERNEL_UNLOCK_LAST(NULL);
 	} else {
 		m_freem(m);
@@ -390,16 +385,10 @@ VIF_DELIVERPKT(struct virtif_sc *sc, struct iovec *iov, size_t iovlen)
 	m = NULL;
 }
 
-/*
- * The following ensures that no two modules using if_virt end up with
- * the same module name.  MODULE() and modcmd wrapped in ... bad mojo.
- */
-#define VIF_MOJO(x) MODULE(MODULE_CLASS_DRIVER,x,NULL);
-#define VIF_MODULE() VIF_MOJO(VIF_BASENAME(if_virt_,VIRTIF_BASE))
-#define VIF_MODCMD VIF_BASENAME3(if_virt_,VIRTIF_BASE,_modcmd)
-VIF_MODULE();
+MODULE(MODULE_CLASS_DRIVER, if_virt, NULL);
+
 static int
-VIF_MODCMD(modcmd_t cmd, void *opaque)
+if_virt_modcmd(modcmd_t cmd, void *opaque)
 {
 	int error = 0;
 

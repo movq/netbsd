@@ -11,8 +11,6 @@ sbin_PROGRAMS = amd sun2amd
 # man pages
 man_MANS = amd.8 sun2amd.8
 
-YLWRAP= $(top_srcdir)/ylwrap.amd
-
 # test scripts
 TESTS = test1.sh
 
@@ -100,18 +98,14 @@ EXTRA_amd_SOURCES =	\
 	ops_cachefs.c	\
 	ops_cdfs.c	\
 	ops_efs.c	\
-	ops_ext.c	\
 	ops_lofs.c	\
-	ops_lustre.c	\
 	ops_mfs.c	\
 	ops_nfs.c	\
 	ops_nfs3.c	\
-	ops_nfs4.c	\
 	ops_nullfs.c	\
 	ops_pcfs.c	\
 	ops_tfs.c	\
 	ops_tmpfs.c	\
-	ops_udf.c	\
 	ops_ufs.c	\
 	ops_umapfs.c	\
 	ops_unionfs.c	\
@@ -145,11 +139,11 @@ DISTCLEANFILES = build_version.h ops_autofs.c
 dist-hook:
 	(cd $(distdir) && rm -f $(BUILT_SOURCES))
 
-AM_CPPFLAGS = -I$(top_srcdir)/include
+INCLUDES = -I$(top_srcdir)/include
 
 # allow users to add their own flags via "configure --enable-am-flags=ARG"
 AMU_CFLAGS = @AMU_CFLAGS@
-AM_CFLAGS = $(AMU_CFLAGS)
+AM_CFLAGS = @CFLAGS@ $(AMU_CFLAGS)
 
 # dependencies
 $(PROGRAMS): $(LDADD)

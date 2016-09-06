@@ -1,4 +1,4 @@
-/*	$NetBSD: refclock_local.c,v 1.5 2016/01/08 21:35:39 christos Exp $	*/
+/*	$NetBSD: refclock_local.c,v 1.1.1.1.26.3 2016/05/11 11:35:39 martin Exp $	*/
 
 
 /*

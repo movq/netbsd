@@ -1,4 +1,4 @@
-/* $NetBSD: aibs_acpi.c,v 1.5 2015/04/23 23:23:00 pgoyette Exp $ */
+/* $NetBSD: aibs_acpi.c,v 1.4 2012/08/14 14:36:43 jruoho Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -47,7 +47,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aibs_acpi.c,v 1.5 2015/04/23 23:23:00 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aibs_acpi.c,v 1.4 2012/08/14 14:36:43 jruoho Exp $");
 
 #include <sys/param.h>
 #include <sys/kmem.h>
@@ -743,7 +743,7 @@ aibs_sensor_limits(struct sysmon_envsys *sme, envsys_data_t *edata,
 	}
 }
 
-MODULE(MODULE_CLASS_DRIVER, aibs, "sysmon_envsys");
+MODULE(MODULE_CLASS_DRIVER, aibs, NULL);
 
 #ifdef _MODULE
 #include "ioconf.c"

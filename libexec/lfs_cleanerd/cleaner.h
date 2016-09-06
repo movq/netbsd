@@ -16,13 +16,7 @@ struct clfs_seguse {
  * The cleaner's view of the superblock data structure.
  */
 struct clfs {
-	union {
-		struct dlfs u_32;
-		struct dlfs64 u_64;
-	} lfs_dlfs_u;
-	unsigned lfs_is64 : 1,
-		lfs_dobyteswap : 1,
-		lfs_hasolddirfmt : 1;
+	struct dlfs lfs_dlfs;	   /* Leverage LFS lfs_* defines here */
 
 	/* Ifile */
 	int clfs_ifilefd;	   /* Ifile file descriptor */
@@ -44,13 +38,6 @@ struct clfs {
 };
 
 /*
- * Get lfs accessors that use struct clfs. This must come after the
- * definition of struct clfs. (blah)
- */
-#define STRUCT_LFS struct clfs
-#include <ufs/lfs/lfs_accessors.h>
-
-/*
  * Fraction of the could-be-clean segments required to be clean.
  */
 #define BUSY_LIM 0.5
@@ -61,21 +48,25 @@ __BEGIN_DECLS
 /* lfs_cleanerd.c */
 void pwarn(const char *, ...);
 void calc_cb(struct clfs *, int, struct clfs_seguse *);
+int clean_fs(struct clfs *, CLEANERINFO *);
 void dlog(const char *, ...);
 void handle_error(struct clfs **, int);
 int init_fs(struct clfs *, char *);
 int invalidate_segment(struct clfs *, int);
 void lfs_ientry(IFILE **, struct clfs *, ino_t, struct ubuf **);
 int load_segment(struct clfs *, int, BLOCK_INFO **, int *);
+int needs_cleaning(struct clfs *, CLEANERINFO *);
+int32_t parse_pseg(struct clfs *, daddr_t, BLOCK_INFO **, int *);
 int reinit_fs(struct clfs *);
 void reload_ifile(struct clfs *);
-void toss_old_blocks(struct clfs *, BLOCK_INFO **, blkcnt_t *, int *);
+void toss_old_blocks(struct clfs *, BLOCK_INFO **, int *, int *);
 
 /* cleansrv.c */
 void check_control_socket(void);
 void try_to_become_master(int, char **);
 
 /* coalesce.c */
+int log2int(int);
 int clean_all_inodes(struct clfs *);
 int fork_coalesce(struct clfs *);
 

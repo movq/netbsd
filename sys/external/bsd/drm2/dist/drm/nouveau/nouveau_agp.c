@@ -1,7 +1,7 @@
-/*	$NetBSD: nouveau_agp.c,v 1.3 2015/04/03 01:09:42 riastradh Exp $	*/
+/*	$NetBSD: nouveau_agp.c,v 1.2.4.1 2015/04/23 07:31:17 snj Exp $	*/
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_agp.c,v 1.3 2015/04/03 01:09:42 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_agp.c,v 1.2.4.1 2015/04/23 07:31:17 snj Exp $");
 
 #include <linux/module.h>
 #include <linux/moduleparam.h>

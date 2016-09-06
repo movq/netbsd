@@ -1,4 +1,4 @@
-#	$NetBSD: LEGACY,v 1.1 2015/03/07 07:28:37 mrg Exp $
+#	$NetBSD: LEGACY,v 1.1.2.2 2015/03/09 09:06:04 snj Exp $
 
 # LEGACY kernel -- includes vga@isa and pcdisplay@isa for pre-PCI
 # systems, due to significant pain making them fail to attach when

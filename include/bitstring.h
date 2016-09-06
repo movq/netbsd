@@ -1,4 +1,4 @@
-/*	$NetBSD: bitstring.h,v 1.14 2016/03/17 02:25:32 christos Exp $	*/
+/*	$NetBSD: bitstring.h,v 1.9 2010/05/06 18:54:22 christos Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -81,19 +81,16 @@ typedef	unsigned char bitstr_t;
 
 				/* set bit N of bitstring name */
 #define	bit_set(name, bit) \
-	/*LINTED bitwise on signed*/ \
-	((name)[_bit_byte(bit)] = \
-	(unsigned char)(_bit_mask(bit) | (name)[_bit_byte(bit)]))
+	/*LINTED bitwise on signed*/((name)[_bit_byte(bit)] |= _bit_mask(bit))
 
 				/* clear bit N of bitstring name */
 #define	bit_clear(name, bit) \
-	/*LINTED bitwise on signed*/ \
-	((name)[_bit_byte(bit)] &= (unsigned char)~_bit_mask(bit))
+	/*LINTED bitwise on signed*/((name)[_bit_byte(bit)] &= ~_bit_mask(bit))
 
 				/* clear bits start ... stop in bitstring */
 #define	bit_nclear(name, start, stop) do { \
 	bitstr_t *_name = name; \
-	size_t _start = start, _stop = stop; \
+	int _start = start, _stop = stop; \
 	while (_start <= _stop) { \
 		bit_clear(_name, _start); \
 		_start++; \
@@ -103,7 +100,7 @@ typedef	unsigned char bitstr_t;
 				/* set bits start ... stop in bitstring */
 #define	bit_nset(name, start, stop) do { \
 	bitstr_t *_name = name; \
-	size_t _start = start, _stop = stop; \
+	int _start = start, _stop = stop; \
 	while (_start <= _stop) { \
 		bit_set(_name, _start); \
 		_start++; \
@@ -112,9 +109,8 @@ typedef	unsigned char bitstr_t;
 
 				/* find first bit clear in name */
 #define	bit_ffc(name, nbits, value) do { \
-	const bitstr_t *_name = name; \
-	size_t _bit, _nbits = nbits; \
-	int _value = -1; \
+	bitstr_t *_name = name; \
+	int _bit, _nbits = nbits, _value = -1; \
 	for (_bit = 0; _bit < _nbits; ++_bit) \
 		if (!bit_test(_name, _bit)) { \
 			_value = _bit; \
@@ -125,9 +121,8 @@ typedef	unsigned char bitstr_t;
 
 				/* find first bit set in name */
 #define	bit_ffs(name, nbits, value) do { \
-	const bitstr_t *_name = name; \
-	size_t _bit, _nbits = nbits; \
-	int _value = -1; \
+	bitstr_t *_name = name; \
+	int _bit, _nbits = nbits, _value = -1; \
 	for (_bit = 0; _bit < _nbits; ++_bit) \
 		if (bit_test(_name, _bit)) { \
 			_value = _bit; \

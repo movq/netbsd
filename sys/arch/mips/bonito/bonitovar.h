@@ -1,4 +1,4 @@
-/*	$NetBSD: bonitovar.h,v 1.6 2015/06/09 22:50:50 matt Exp $	*/
+/*	$NetBSD: bonitovar.h,v 1.5 2011/08/27 12:59:17 bouyer Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -33,8 +33,6 @@
 #define	_MIPS_BONITO_BONITOVAR_H_
 
 #include <dev/pci/pcivar.h>
-
-#include <mips/cpuregs.h>
 
 struct bonito_config {
 	int		bc_adbase;	/* AD line base for config access */

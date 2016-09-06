@@ -1,4 +1,4 @@
-/*	$NetBSD: if_bm.c,v 1.49 2016/07/15 22:10:47 macallan Exp $	*/
+/*	$NetBSD: if_bm.c,v 1.46 2012/07/22 14:32:51 matt Exp $	*/
 
 /*-
  * Copyright (C) 1998, 1999, 2000 Tsubai Masanari.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_bm.c,v 1.49 2016/07/15 22:10:47 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_bm.c,v 1.46 2012/07/22 14:32:51 matt Exp $");
 
 #include "opt_inet.h"
 
@@ -214,9 +214,8 @@ bmac_attach(device_t parent, device_t self, void *aux)
 
 	sc->sc_txdma = mapiodev(ca->ca_reg[2], PAGE_SIZE, false);
 	sc->sc_rxdma = mapiodev(ca->ca_reg[4], PAGE_SIZE, false);
-	sc->sc_txcmd = dbdma_alloc(BMAC_TXBUFS * sizeof(dbdma_command_t), NULL);
-	sc->sc_rxcmd = dbdma_alloc((BMAC_RXBUFS + 1) * sizeof(dbdma_command_t),
-	    NULL);
+	sc->sc_txcmd = dbdma_alloc(BMAC_TXBUFS * sizeof(dbdma_command_t));
+	sc->sc_rxcmd = dbdma_alloc((BMAC_RXBUFS + 1) * sizeof(dbdma_command_t));
 	sc->sc_txbuf = malloc(BMAC_BUFLEN * BMAC_TXBUFS, M_DEVBUF, M_NOWAIT);
 	sc->sc_rxbuf = malloc(BMAC_BUFLEN * BMAC_RXBUFS, M_DEVBUF, M_NOWAIT);
 	if (sc->sc_txbuf == NULL || sc->sc_rxbuf == NULL ||
@@ -503,7 +502,7 @@ bmac_rint(void *v)
 		 * If so, hand off the raw packet to BPF.
 		 */
 		bpf_mtap(ifp, m);
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		(*ifp->if_input)(ifp, m);
 		ifp->if_ipackets++;
 
 next:
@@ -646,7 +645,7 @@ bmac_get(struct bmac_softc *sc, void *pkt, int totlen)
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (m == 0)
 		return 0;
-	m_set_rcvif(m, &sc->sc_if);
+	m->m_pkthdr.rcvif = &sc->sc_if;
 	m->m_pkthdr.len = totlen;
 	len = MHLEN;
 	top = 0;

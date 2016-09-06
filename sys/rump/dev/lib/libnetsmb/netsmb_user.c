@@ -1,4 +1,4 @@
-/*	$NetBSD: netsmb_user.c,v 1.3 2014/11/16 15:31:12 nakayama Exp $	*/
+/*	$NetBSD: netsmb_user.c,v 1.3.4.2 2014/12/01 09:31:39 martin Exp $	*/
 
 /*
  * Copyright (c) 2014 Takeshi Nakayama.

@@ -1,5 +1,6 @@
 /* dwarf.h - DWARF support header file
-   Copyright (C) 2005-2015 Free Software Foundation, Inc.
+   Copyright 2005, 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -25,9 +26,22 @@ typedef unsigned HOST_WIDEST_INT  dwarf_size_type;
 /* Structure found in the .debug_line section.  */
 typedef struct
 {
+  unsigned char li_length          [4];
+  unsigned char li_version         [2];
+  unsigned char li_prologue_length [4];
+  unsigned char li_min_insn_length [1];
+  unsigned char li_default_is_stmt [1];
+  unsigned char li_line_base       [1];
+  unsigned char li_line_range      [1];
+  unsigned char li_opcode_base     [1];
+}
+DWARF2_External_LineInfo;
+
+typedef struct
+{
   dwarf_vma	 li_length;
   unsigned short li_version;
-  dwarf_vma      li_prologue_length;
+  unsigned int   li_prologue_length;
   unsigned char  li_min_insn_length;
   unsigned char  li_max_ops_per_insn;
   unsigned char  li_default_is_stmt;
@@ -40,6 +54,15 @@ DWARF2_Internal_LineInfo;
 /* Structure found in .debug_pubnames section.  */
 typedef struct
 {
+  unsigned char pn_length  [4];
+  unsigned char pn_version [2];
+  unsigned char pn_offset  [4];
+  unsigned char pn_size    [4];
+}
+DWARF2_External_PubNames;
+
+typedef struct
+{
   dwarf_vma	 pn_length;
   unsigned short pn_version;
   dwarf_vma	 pn_offset;
@@ -50,6 +73,15 @@ DWARF2_Internal_PubNames;
 /* Structure found in .debug_info section.  */
 typedef struct
 {
+  unsigned char  cu_length        [4];
+  unsigned char  cu_version       [2];
+  unsigned char  cu_abbrev_offset [4];
+  unsigned char  cu_pointer_size  [1];
+}
+DWARF2_External_CompUnit;
+
+typedef struct
+{
   dwarf_vma	 cu_length;
   unsigned short cu_version;
   dwarf_vma	 cu_abbrev_offset;
@@ -57,7 +89,16 @@ typedef struct
 }
 DWARF2_Internal_CompUnit;
 
-/* Structure found in .debug_aranges section.  */
+typedef struct
+{
+  unsigned char  ar_length       [4];
+  unsigned char  ar_version      [2];
+  unsigned char  ar_info_offset  [4];
+  unsigned char  ar_pointer_size [1];
+  unsigned char  ar_segment_size [1];
+}
+DWARF2_External_ARange;
+
 typedef struct
 {
   dwarf_vma	 ar_length;
@@ -68,8 +109,6 @@ typedef struct
 }
 DWARF2_Internal_ARange;
 
-/* N.B. The order here must match the order in debug_displays.  */
-
 enum dwarf_section_display_enum
 {
   abbrev = 0,
@@ -78,14 +117,12 @@ enum dwarf_section_display_enum
   info,
   line,
   pubnames,
-  gnu_pubnames,
   eh_frame,
   macinfo,
   macro,
   str,
   loc,
   pubtypes,
-  gnu_pubtypes,
   ranges,
   static_func,
   static_vars,
@@ -106,8 +143,6 @@ enum dwarf_section_display_enum
   str_index,
   str_index_dwo,
   debug_addr,
-  dwp_cu_index,
-  dwp_tu_index,
   max
 };
 
@@ -124,13 +159,6 @@ struct dwarf_section
   dwarf_vma address;
   dwarf_size_type size;
   enum dwarf_section_display_enum abbrev_sec;
-
-  /* Used by clients to help them implement the reloc_at callback.  */
-  void * reloc_info;
-  unsigned long num_relocs;
-
-  /* A spare field for random use.  */
-  void *user_data;
 };
 
 /* A structure containing the name of a debug section
@@ -140,7 +168,7 @@ struct dwarf_section_display
   struct dwarf_section section;
   int (*display) (struct dwarf_section *, void *);
   int *enabled;
-  bfd_boolean relocate;
+  unsigned int relocate : 1;
 };
 
 extern struct dwarf_section_display debug_displays [];
@@ -172,7 +200,7 @@ typedef struct
 }
 debug_info;
 
-extern unsigned int eh_addr_size;
+extern int eh_addr_size;
 
 extern int do_debug_info;
 extern int do_debug_abbrevs;
@@ -190,8 +218,6 @@ extern int do_gdb_index;
 extern int do_trace_info;
 extern int do_trace_abbrevs;
 extern int do_trace_aranges;
-extern int do_debug_addr;
-extern int do_debug_cu_index;
 extern int do_wide;
 
 extern int dwarf_cutoff_level;
@@ -201,9 +227,7 @@ extern int dwarf_check;
 
 extern void init_dwarf_regnames (unsigned int);
 extern void init_dwarf_regnames_i386 (void);
-extern void init_dwarf_regnames_iamcu (void);
 extern void init_dwarf_regnames_x86_64 (void);
-extern void init_dwarf_regnames_aarch64 (void);
 
 extern int load_debug_section (enum dwarf_section_display_enum, void *);
 extern void free_debug_section (enum dwarf_section_display_enum);
@@ -214,16 +238,8 @@ extern void dwarf_select_sections_by_names (const char *);
 extern void dwarf_select_sections_by_letters (const char *);
 extern void dwarf_select_sections_all (void);
 
-extern unsigned int * find_cu_tu_set (void *, unsigned int);
+void * cmalloc (size_t, size_t);
+void * xcmalloc (size_t, size_t);
+void * xcrealloc (void *, size_t, size_t);
 
-extern void * cmalloc (size_t, size_t);
-extern void * xcalloc2 (size_t, size_t);
-extern void * xcmalloc (size_t, size_t);
-extern void * xcrealloc (void *, size_t, size_t);
-
-extern dwarf_vma read_leb128 (unsigned char *, unsigned int *, bfd_boolean, const unsigned char * const);
-
-/* A callback into the client.  Retuns TRUE if there is a
-   relocation against the given debug section at the given
-   offset.  */
-extern bfd_boolean reloc_at (struct dwarf_section *, dwarf_vma);
+dwarf_vma read_leb128 (unsigned char *, unsigned int *, int);

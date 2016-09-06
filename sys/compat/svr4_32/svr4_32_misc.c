@@ -1,4 +1,4 @@
-/*	$NetBSD: svr4_32_misc.c,v 1.76 2016/02/28 23:24:36 khorben Exp $	 */
+/*	$NetBSD: svr4_32_misc.c,v 1.74 2011/09/27 00:56:14 christos Exp $	 */
 
 /*-
  * Copyright (c) 1994, 2008 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: svr4_32_misc.c,v 1.76 2016/02/28 23:24:36 khorben Exp $");
+__KERNEL_RCSID(0, "$NetBSD: svr4_32_misc.c,v 1.74 2011/09/27 00:56:14 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -226,7 +226,7 @@ svr4_32_sys_getdents64(struct lwp *l, const struct svr4_32_sys_getdents64_args *
 		goto out1;
 	}
 
-	vp = fp->f_vnode;
+	vp = fp->f_data;
 	if (vp->v_type != VDIR) {
 		error = EINVAL;
 		goto out1;
@@ -350,7 +350,7 @@ svr4_32_sys_getdents(struct lwp *l, const struct svr4_32_sys_getdents_args *uap,
 		goto out1;
 	}
 
-	vp = fp->f_vnode;
+	vp = fp->f_data;
 	if (vp->v_type != VDIR) {
 		error = EINVAL;
 		goto out1;
@@ -490,7 +490,7 @@ svr4_32_sys_mmap(struct lwp *l, const struct svr4_32_sys_mmap_args *uap, registe
 
 	error = sys_mmap(l, &mm, retval);
 	if ((u_long)*retval > (u_long)UINT_MAX) {
-		printf("svr4_32_mmap: retval out of range: 0x%lx\n",
+		printf("svr4_32_mmap: retval out of range: 0x%lx",
 		       (u_long)*retval);
 		/* Should try to recover and return an error here. */
 	}
@@ -523,7 +523,7 @@ svr4_32_sys_mmap64(struct lwp *l, const struct svr4_32_sys_mmap64_args *uap, reg
 
 	error = sys_mmap(l, &mm, retval);
 	if ((u_long)*retval > (u_long)UINT_MAX) {
-		printf("svr4_32_mmap64: retval out of range: 0x%lx\n",
+		printf("svr4_32_mmap64: retval out of range: 0x%lx",
 		       (u_long)*retval);
 		/* Should try to recover and return an error here. */
 	}

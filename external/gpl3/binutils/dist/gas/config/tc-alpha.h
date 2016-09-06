@@ -1,5 +1,7 @@
 /* This file is tc-alpha.h
-   Copyright (C) 1994-2015 Free Software Foundation, Inc.
+   Copyright 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003
+   2005, 2006, 2007, 2009
+   Free Software Foundation, Inc.
    Written by Ken Raeburn <raeburn@cygnus.com>.
 
    This file is part of GAS, the GNU Assembler.
@@ -71,8 +73,7 @@ extern valueT alpha_gp_value;
 
 #define tc_canonicalize_symbol_name evax_shorten_name
 
-#define TC_CONS_FIX_NEW(FRAG,OFF,LEN,EXP,RELOC)	\
-      (void) RELOC,				\
+#define TC_CONS_FIX_NEW(FRAG,OFF,LEN,EXP) \
       fix_new_exp (FRAG, OFF, (int)LEN, EXP, 0, \
 	LEN == 2 ? BFD_RELOC_16 \
 	: LEN == 4 ? BFD_RELOC_32 \

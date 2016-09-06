@@ -1,5 +1,5 @@
 /* Target operations for the remote server for GDB.
-   Copyright (C) 2002-2015 Free Software Foundation, Inc.
+   Copyright (C) 2002-2014 Free Software Foundation, Inc.
 
    Contributed by MontaVista Software.
 
@@ -21,14 +21,12 @@
 #ifndef TARGET_H
 #define TARGET_H
 
-#include "target/target.h"
 #include "target/resume.h"
 #include "target/wait.h"
 #include "target/waitstatus.h"
-#include "mem-break.h"
-#include "btrace-common.h"
 
 struct emit_ops;
+struct btrace_target_info;
 struct buffer;
 struct process_info;
 
@@ -138,8 +136,8 @@ struct target_ops
      inferior such that it is possible to access memory.
 
      This should generally only be called from client facing routines,
-     such as gdb_read_memory/gdb_write_memory, or the GDB breakpoint
-     insertion routine.
+     such as gdb_read_memory/gdb_write_memory, or the insert_point
+     callbacks.
 
      Like `read_memory' and `write_memory' below, returns 0 on success
      and errno on failure.  */
@@ -189,42 +187,17 @@ struct target_ops
   int (*read_auxv) (CORE_ADDR offset, unsigned char *myaddr,
 		    unsigned int len);
 
-  /* Returns true if GDB Z breakpoint type TYPE is supported, false
-     otherwise.  The type is coded as follows:
+  /* Insert and remove a break or watchpoint.
+     Returns 0 on success, -1 on failure and 1 on unsupported.
+     The type is coded as follows:
        '0' - software-breakpoint
        '1' - hardware-breakpoint
        '2' - write watchpoint
        '3' - read watchpoint
-       '4' - access watchpoint
-  */
-  int (*supports_z_point_type) (char z_type);
+       '4' - access watchpoint  */
 
-  /* Insert and remove a break or watchpoint.
-     Returns 0 on success, -1 on failure and 1 on unsupported.  */
-
-  int (*insert_point) (enum raw_bkpt_type type, CORE_ADDR addr,
-		       int size, struct raw_breakpoint *bp);
-  int (*remove_point) (enum raw_bkpt_type type, CORE_ADDR addr,
-		       int size, struct raw_breakpoint *bp);
-
-  /* Returns 1 if the target stopped because it executed a software
-     breakpoint instruction, 0 otherwise.  */
-  int (*stopped_by_sw_breakpoint) (void);
-
-  /* Returns true if the target knows whether a trap was caused by a
-     SW breakpoint triggering.  */
-  int (*supports_stopped_by_sw_breakpoint) (void);
-
-  /* Returns 1 if the target stopped for a hardware breakpoint.  */
-  int (*stopped_by_hw_breakpoint) (void);
-
-  /* Returns true if the target knows whether a trap was caused by a
-     HW breakpoint triggering.  */
-  int (*supports_stopped_by_hw_breakpoint) (void);
-
-  /* Returns true if the target can evaluate conditions of
-     breakpoints.  */
-  int (*supports_conditional_breakpoints) (void);
+  int (*insert_point) (char type, CORE_ADDR addr, int len);
+  int (*remove_point) (char type, CORE_ADDR addr, int len);
 
   /* Returns 1 if target was stopped due to a watchpoint hit, 0 otherwise.  */
 
@@ -281,15 +254,6 @@ struct target_ops
   /* Returns true if the target supports multi-process debugging.  */
   int (*supports_multi_process) (void);
 
-  /* Returns true if fork events are supported.  */
-  int (*supports_fork_events) (void);
-
-  /* Returns true if vfork events are supported.  */
-  int (*supports_vfork_events) (void);
-
-  /* Allows target to re-initialize connection-specific settings.  */
-  void (*handle_new_gdb_connection) (void);
-
   /* If not NULL, target-specific routine to process monitor command.
      Returns 1 if handled, or 0 to perform default processing.  */
   int (*handle_monitor_command) (char *);
@@ -331,6 +295,9 @@ struct target_ops
      pair should not end up resuming threads that were stopped before
      the pause call.  */
   void (*unpause_all) (int unfreeze);
+
+  /* Cancel all pending breakpoints hits in all threads.  */
+  void (*cancel_breakpoints) (void);
 
   /* Stabilize all threads.  That is, force them out of jump pads.  */
   void (*stabilize_threads) (void);
@@ -383,59 +350,21 @@ struct target_ops
   int (*supports_agent) (void);
 
   /* Check whether the target supports branch tracing.  */
-  int (*supports_btrace) (struct target_ops *, enum btrace_format);
+  int (*supports_btrace) (void);
 
-  /* Enable branch tracing for PTID based on CONF and allocate a branch trace
-     target information struct for reading and for disabling branch trace.  */
-  struct btrace_target_info *(*enable_btrace)
-    (ptid_t ptid, const struct btrace_config *conf);
+  /* Enable branch tracing for @ptid and allocate a branch trace target
+     information struct for reading and for disabling branch trace.  */
+  struct btrace_target_info *(*enable_btrace) (ptid_t ptid);
 
-  /* Disable branch tracing.
-     Returns zero on success, non-zero otherwise.  */
+  /* Disable branch tracing.  */
   int (*disable_btrace) (struct btrace_target_info *tinfo);
 
   /* Read branch trace data into buffer.  We use an int to specify the type
-     to break a cyclic dependency.
-     Return 0 on success; print an error message into BUFFER and return -1,
-     otherwise.  */
-  int (*read_btrace) (struct btrace_target_info *, struct buffer *, int type);
-
-  /* Read the branch trace configuration into BUFFER.
-     Return 0 on success; print an error message into BUFFER and return -1
-     otherwise.  */
-  int (*read_btrace_conf) (const struct btrace_target_info *, struct buffer *);
+     to break a cyclic dependency.  */
+  void (*read_btrace) (struct btrace_target_info *, struct buffer *, int type);
 
   /* Return true if target supports range stepping.  */
   int (*supports_range_stepping) (void);
-
-  /* Return the full absolute name of the executable file that was
-     run to create the process PID.  If the executable file cannot
-     be determined, NULL is returned.  Otherwise, a pointer to a
-     character string containing the pathname is returned.  This
-     string should be copied into a buffer by the client if the string
-     will not be immediately used, or if it must persist.  */
-  char *(*pid_to_exec_file) (int pid);
-
-  /* Multiple-filesystem-aware open.  Like open(2), but operating in
-     the filesystem as it appears to process PID.  Systems where all
-     processes share a common filesystem should set this to NULL.
-     If NULL, the caller should fall back to open(2).  */
-  int (*multifs_open) (int pid, const char *filename,
-		       int flags, mode_t mode);
-
-  /* Multiple-filesystem-aware unlink.  Like unlink(2), but operates
-     in the filesystem as it appears to process PID.  Systems where
-     all processes share a common filesystem should set this to NULL.
-     If NULL, the caller should fall back to unlink(2).  */
-  int (*multifs_unlink) (int pid, const char *filename);
-
-  /* Multiple-filesystem-aware readlink.  Like readlink(2), but
-     operating in the filesystem as it appears to process PID.
-     Systems where all processes share a common filesystem should
-     set this to NULL.  If NULL, the caller should fall back to
-     readlink(2).  */
-  ssize_t (*multifs_readlink) (int pid, const char *filename,
-			       char *buf, size_t bufsiz);
 };
 
 extern struct target_ops *the_target;
@@ -449,21 +378,6 @@ void set_target_ops (struct target_ops *);
   (*the_target->attach) (pid)
 
 int kill_inferior (int);
-
-#define target_supports_fork_events() \
-  (the_target->supports_fork_events ? \
-   (*the_target->supports_fork_events) () : 0)
-
-#define target_supports_vfork_events() \
-  (the_target->supports_vfork_events ? \
-   (*the_target->supports_vfork_events) () : 0)
-
-#define target_handle_new_gdb_connection()		 \
-  do							 \
-    {							 \
-      if (the_target->handle_new_gdb_connection != NULL) \
-	(*the_target->handle_new_gdb_connection) ();	 \
-    } while (0)
 
 #define detach_inferior(pid) \
   (*the_target->detach) (pid)
@@ -528,6 +442,13 @@ int kill_inferior (int);
 	(*the_target->unpause_all) (unfreeze);	\
     } while (0)
 
+#define cancel_breakpoints()			\
+  do						\
+    {						\
+      if (the_target->cancel_breakpoints)     	\
+	(*the_target->cancel_breakpoints) ();  	\
+    } while (0)
+
 #define stabilize_threads()			\
   do						\
     {						\
@@ -567,12 +488,11 @@ int kill_inferior (int);
   (the_target->supports_agent ? \
    (*the_target->supports_agent) () : 0)
 
-#define target_supports_btrace(format)			\
-  (the_target->supports_btrace				\
-   ? (*the_target->supports_btrace) (the_target, format) : 0)
+#define target_supports_btrace() \
+  (the_target->supports_btrace ? (*the_target->supports_btrace) () : 0)
 
-#define target_enable_btrace(ptid, conf) \
-  (*the_target->enable_btrace) (ptid, conf)
+#define target_enable_btrace(ptid) \
+  (*the_target->enable_btrace) (ptid)
 
 #define target_disable_btrace(tinfo) \
   (*the_target->disable_btrace) (tinfo)
@@ -580,32 +500,9 @@ int kill_inferior (int);
 #define target_read_btrace(tinfo, buffer, type)	\
   (*the_target->read_btrace) (tinfo, buffer, type)
 
-#define target_read_btrace_conf(tinfo, buffer)	\
-  (*the_target->read_btrace_conf) (tinfo, buffer)
-
 #define target_supports_range_stepping() \
   (the_target->supports_range_stepping ? \
    (*the_target->supports_range_stepping) () : 0)
-
-#define target_supports_stopped_by_sw_breakpoint() \
-  (the_target->supports_stopped_by_sw_breakpoint ? \
-   (*the_target->supports_stopped_by_sw_breakpoint) () : 0)
-
-#define target_stopped_by_sw_breakpoint() \
-  (the_target->stopped_by_sw_breakpoint ? \
-   (*the_target->stopped_by_sw_breakpoint) () : 0)
-
-#define target_supports_stopped_by_hw_breakpoint() \
-  (the_target->supports_stopped_by_hw_breakpoint ? \
-   (*the_target->supports_stopped_by_hw_breakpoint) () : 0)
-
-#define target_supports_conditional_breakpoints() \
-  (the_target->supports_conditional_breakpoints ? \
-   (*the_target->supports_conditional_breakpoints) () : 0)
-
-#define target_stopped_by_hw_breakpoint() \
-  (the_target->stopped_by_hw_breakpoint ? \
-   (*the_target->stopped_by_hw_breakpoint) () : 0)
 
 /* Start non-stop mode, returns 0 on success, -1 on failure.   */
 
@@ -635,7 +532,7 @@ int read_inferior_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len);
 int write_inferior_memory (CORE_ADDR memaddr, const unsigned char *myaddr,
 			   int len);
 
-void set_desired_thread (int id);
+void set_desired_inferior (int id);
 
 const char *target_pid_to_str (ptid_t);
 

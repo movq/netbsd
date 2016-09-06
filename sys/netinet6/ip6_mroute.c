@@ -1,4 +1,4 @@
-/*	$NetBSD: ip6_mroute.c,v 1.112 2016/07/15 07:40:09 ozaki-r Exp $	*/
+/*	$NetBSD: ip6_mroute.c,v 1.107 2014/05/17 21:26:20 rmind Exp $	*/
 /*	$KAME: ip6_mroute.c,v 1.49 2001/07/25 09:21:18 jinmei Exp $	*/
 
 /*
@@ -117,12 +117,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip6_mroute.c,v 1.112 2016/07/15 07:40:09 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip6_mroute.c,v 1.107 2014/05/17 21:26:20 rmind Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
 #include "opt_mrouting.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -1016,7 +1014,8 @@ static int
 socket_send(struct socket *s, struct mbuf *mm, struct sockaddr_in6 *src)
 {
 	if (s) {
-		if (sbappendaddr(&s->so_rcv, sin6tosa(src), mm, NULL) != 0) {
+		if (sbappendaddr(&s->so_rcv,
+		    (struct sockaddr *)src, mm, NULL) != 0) {
 			sorwakeup(s);
 			return 0;
 		}
@@ -1071,16 +1070,16 @@ ip6_mforward(struct ip6_hdr *ip6, struct ifnet *ifp, struct mbuf *m)
 	 */
 	if (IN6_IS_ADDR_UNSPECIFIED(&ip6->ip6_src)) {
 		IP6_STATINC(IP6_STAT_CANTFORWARD);
-		if (ip6_log_time + ip6_log_interval < time_uptime) {
-			ip6_log_time = time_uptime;
+		if (ip6_log_time + ip6_log_interval < time_second) {
+			ip6_log_time = time_second;
 			log(LOG_DEBUG,
 			    "cannot forward "
 			    "from %s to %s nxt %d received on %s\n",
 			    ip6_sprintf(&ip6->ip6_src),
 			    ip6_sprintf(&ip6->ip6_dst),
 			    ip6->ip6_nxt,
-			    m->m_pkthdr.rcvif_index ?
-			    if_name(m_get_rcvif_NOMPSAFE(m)) : "?");
+			    m->m_pkthdr.rcvif ?
+			    if_name(m->m_pkthdr.rcvif) : "?");
 		}
 		return 0;
 	}
@@ -1472,7 +1471,7 @@ ip6_mdq(struct mbuf *m, struct ifnet *ifp, struct mf6c *rt)
 	}			/* if wrong iif */
 
 	/* If I sourced this packet, it counts as output, else it was input. */
-	if (m->m_pkthdr.rcvif_index == 0) {
+	if (m->m_pkthdr.rcvif == NULL) {
 		/* XXX: is rcvif really NULL when output?? */
 		mif6table[mifi].m6_pkt_out++;
 		mif6table[mifi].m6_bytes_out += plen;
@@ -1560,10 +1559,10 @@ phyint_send(struct ip6_hdr *ip6, struct mif6 *mifp, struct mbuf *m)
 	 * Otherwise, we can simply send the packet to the interface
 	 * sending queue.
 	 */
-	if (m->m_pkthdr.rcvif_index == 0) {
+	if (m->m_pkthdr.rcvif == NULL) {
 		struct ip6_moptions im6o;
 
-		im6o.im6o_multicast_if_index = if_get_index(ifp);
+		im6o.im6o_multicast_ifp = ifp;
 		/* XXX: ip6_output will override ip6->ip6_hlim */
 		im6o.im6o_multicast_hlim = ip6->ip6_hlim;
 		im6o.im6o_multicast_loop = 1;
@@ -1908,8 +1907,8 @@ pim6_input(struct mbuf **mp, int *offp, int proto)
 		}
 #endif
 
-		looutput(mif6table[reg_mif_num].m6_ifp, m, sin6tocsa(&dst),
-		    NULL);
+		looutput(mif6table[reg_mif_num].m6_ifp, m,
+			      (struct sockaddr *)__UNCONST(&dst), NULL);
 
 		/* prepare the register head to send to the mrouting daemon */
 		m = mcp;

@@ -1,6 +1,6 @@
 #name: bl local instructions for v4t.
 #objdump: -drw --prefix-addresses --show-raw-insn
-#target: *-*-*eabi* *-*-nacl*
+#skip: *-*-*coff *-*-pe *-*-wince *-*-*aout* *-*-netbsd *-*-riscix* *-*-elf
 #as:
 # stderr: blx-local-thumb.l
 

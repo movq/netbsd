@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.122 2015/08/07 14:12:04 maxv Exp $
+# $NetBSD: GENERIC,v 1.115.6.3 2015/05/15 03:44:17 snj Exp $
 #
 # GENERIC machine description file
 # 
@@ -47,11 +47,12 @@ options 	SYSVSHM		# System V-like memory sharing
 # Diagnostic/debugging support options
 #options 	DIAGNOSTIC	# cheap kernel consistency checks
 #options 	DEBUG		# expensive debugging checks/support
+#options 	KMEMSTATS	# kernel memory statistics (vmstat -m)
 options 	DDB		# in-kernel debugger
 #options 	KGDB			# remote debugger
 #options 	"KGDB_DEVNAME=\"scif\"",KGDB_DEVRATE=57600
 #makeoptions	DEBUG="-g"	# compile full symbol table
-makeoptions	COPY_SYMTAB=1
+options 	SYMTAB_SPACE=330000
 #options 	SYSCALL_DEBUG
 #options 	UVMHIST
 #options 	UVMHIST_PRINT
@@ -60,10 +61,9 @@ makeoptions	COPY_SYMTAB=1
 options 	COMPAT_16	# NetBSD 1.6,
 options 	COMPAT_20	# NetBSD 2.0,
 options 	COMPAT_30	# NetBSD 3.0,
-options 	COMPAT_40	# NetBSD 4.0,
-options 	COMPAT_50	# NetBSD 5.0,
-options 	COMPAT_60	# NetBSD 6.0, and
-options 	COMPAT_70	# NetBSD 7.0 binary compatibility.
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
+options 	COMPAT_50	# NetBSD 5.0 compatibility.
+options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_43	# and 4.3BSD
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
 options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.

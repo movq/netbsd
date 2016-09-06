@@ -2663,19 +2663,19 @@ class PrettyUnitTestResultPrinter : public TestEventListener {
   }
 
   // The following methods override what's in the TestEventListener class.
-  void OnTestProgramStart(const UnitTest & /*unit_test*/) override {}
-  void OnTestIterationStart(const UnitTest &unit_test, int iteration) override;
-  void OnEnvironmentsSetUpStart(const UnitTest &unit_test) override;
-  void OnEnvironmentsSetUpEnd(const UnitTest & /*unit_test*/) override {}
-  void OnTestCaseStart(const TestCase &test_case) override;
-  void OnTestStart(const TestInfo &test_info) override;
-  void OnTestPartResult(const TestPartResult &result) override;
-  void OnTestEnd(const TestInfo &test_info) override;
-  void OnTestCaseEnd(const TestCase &test_case) override;
-  void OnEnvironmentsTearDownStart(const UnitTest &unit_test) override;
-  void OnEnvironmentsTearDownEnd(const UnitTest & /*unit_test*/) override {}
-  void OnTestIterationEnd(const UnitTest &unit_test, int iteration) override;
-  void OnTestProgramEnd(const UnitTest & /*unit_test*/) override {}
+  virtual void OnTestProgramStart(const UnitTest& /*unit_test*/) {}
+  virtual void OnTestIterationStart(const UnitTest& unit_test, int iteration);
+  virtual void OnEnvironmentsSetUpStart(const UnitTest& unit_test);
+  virtual void OnEnvironmentsSetUpEnd(const UnitTest& /*unit_test*/) {}
+  virtual void OnTestCaseStart(const TestCase& test_case);
+  virtual void OnTestStart(const TestInfo& test_info);
+  virtual void OnTestPartResult(const TestPartResult& result);
+  virtual void OnTestEnd(const TestInfo& test_info);
+  virtual void OnTestCaseEnd(const TestCase& test_case);
+  virtual void OnEnvironmentsTearDownStart(const UnitTest& unit_test);
+  virtual void OnEnvironmentsTearDownEnd(const UnitTest& /*unit_test*/) {}
+  virtual void OnTestIterationEnd(const UnitTest& unit_test, int iteration);
+  virtual void OnTestProgramEnd(const UnitTest& /*unit_test*/) {}
 
  private:
   static void PrintFailedTests(const UnitTest& unit_test);
@@ -2869,7 +2869,7 @@ void PrettyUnitTestResultPrinter::OnTestIterationEnd(const UnitTest& unit_test,
 class TestEventRepeater : public TestEventListener {
  public:
   TestEventRepeater() : forwarding_enabled_(true) {}
-  ~TestEventRepeater() override;
+  virtual ~TestEventRepeater();
   void Append(TestEventListener *listener);
   TestEventListener* Release(TestEventListener* listener);
 
@@ -2878,19 +2878,19 @@ class TestEventRepeater : public TestEventListener {
   bool forwarding_enabled() const { return forwarding_enabled_; }
   void set_forwarding_enabled(bool enable) { forwarding_enabled_ = enable; }
 
-  void OnTestProgramStart(const UnitTest &unit_test) override;
-  void OnTestIterationStart(const UnitTest &unit_test, int iteration) override;
-  void OnEnvironmentsSetUpStart(const UnitTest &unit_test) override;
-  void OnEnvironmentsSetUpEnd(const UnitTest &unit_test) override;
-  void OnTestCaseStart(const TestCase &test_case) override;
-  void OnTestStart(const TestInfo &test_info) override;
-  void OnTestPartResult(const TestPartResult &result) override;
-  void OnTestEnd(const TestInfo &test_info) override;
-  void OnTestCaseEnd(const TestCase &test_case) override;
-  void OnEnvironmentsTearDownStart(const UnitTest &unit_test) override;
-  void OnEnvironmentsTearDownEnd(const UnitTest &unit_test) override;
-  void OnTestIterationEnd(const UnitTest &unit_test, int iteration) override;
-  void OnTestProgramEnd(const UnitTest &unit_test) override;
+  virtual void OnTestProgramStart(const UnitTest& unit_test);
+  virtual void OnTestIterationStart(const UnitTest& unit_test, int iteration);
+  virtual void OnEnvironmentsSetUpStart(const UnitTest& unit_test);
+  virtual void OnEnvironmentsSetUpEnd(const UnitTest& unit_test);
+  virtual void OnTestCaseStart(const TestCase& test_case);
+  virtual void OnTestStart(const TestInfo& test_info);
+  virtual void OnTestPartResult(const TestPartResult& result);
+  virtual void OnTestEnd(const TestInfo& test_info);
+  virtual void OnTestCaseEnd(const TestCase& test_case);
+  virtual void OnEnvironmentsTearDownStart(const UnitTest& unit_test);
+  virtual void OnEnvironmentsTearDownEnd(const UnitTest& unit_test);
+  virtual void OnTestIterationEnd(const UnitTest& unit_test, int iteration);
+  virtual void OnTestProgramEnd(const UnitTest& unit_test);
 
  private:
   // Controls whether events will be forwarded to listeners_. Set to false
@@ -2983,7 +2983,7 @@ class XmlUnitTestResultPrinter : public EmptyTestEventListener {
  public:
   explicit XmlUnitTestResultPrinter(const char* output_file);
 
-  void OnTestIterationEnd(const UnitTest &unit_test, int iteration) override;
+  virtual void OnTestIterationEnd(const UnitTest& unit_test, int iteration);
 
  private:
   // Is c a whitespace character that is normalized to a space character
@@ -3310,16 +3310,16 @@ class StreamingListener : public EmptyTestEventListener {
     Send("gtest_streaming_protocol_version=1.0\n");
   }
 
-  ~StreamingListener() override {
+  virtual ~StreamingListener() {
     if (sockfd_ != -1)
       CloseConnection();
   }
 
-  void OnTestProgramStart(const UnitTest & /* unit_test */) override {
+  void OnTestProgramStart(const UnitTest& /* unit_test */) {
     Send("event=TestProgramStart\n");
   }
 
-  void OnTestProgramEnd(const UnitTest &unit_test) override {
+  void OnTestProgramEnd(const UnitTest& unit_test) {
     // Note that Google Test current only report elapsed time for each
     // test iteration, not for the entire test program.
     Send(String::Format("event=TestProgramEnd&passed=%d\n",
@@ -3329,41 +3329,39 @@ class StreamingListener : public EmptyTestEventListener {
     CloseConnection();
   }
 
-  void OnTestIterationStart(const UnitTest & /* unit_test */,
-                            int iteration) override {
+  void OnTestIterationStart(const UnitTest& /* unit_test */, int iteration) {
     Send(String::Format("event=TestIterationStart&iteration=%d\n",
                         iteration));
   }
 
-  void OnTestIterationEnd(const UnitTest &unit_test,
-                          int /* iteration */) override {
+  void OnTestIterationEnd(const UnitTest& unit_test, int /* iteration */) {
     Send(String::Format("event=TestIterationEnd&passed=%d&elapsed_time=%sms\n",
                         unit_test.Passed(),
                         StreamableToString(unit_test.elapsed_time()).c_str()));
   }
 
-  void OnTestCaseStart(const TestCase &test_case) override {
+  void OnTestCaseStart(const TestCase& test_case) {
     Send(String::Format("event=TestCaseStart&name=%s\n", test_case.name()));
   }
 
-  void OnTestCaseEnd(const TestCase &test_case) override {
+  void OnTestCaseEnd(const TestCase& test_case) {
     Send(String::Format("event=TestCaseEnd&passed=%d&elapsed_time=%sms\n",
                         test_case.Passed(),
                         StreamableToString(test_case.elapsed_time()).c_str()));
   }
 
-  void OnTestStart(const TestInfo &test_info) override {
+  void OnTestStart(const TestInfo& test_info) {
     Send(String::Format("event=TestStart&name=%s\n", test_info.name()));
   }
 
-  void OnTestEnd(const TestInfo &test_info) override {
+  void OnTestEnd(const TestInfo& test_info) {
     Send(String::Format(
         "event=TestEnd&passed=%d&elapsed_time=%sms\n",
         (test_info.result())->Passed(),
         StreamableToString((test_info.result())->elapsed_time()).c_str()));
   }
 
-  void OnTestPartResult(const TestPartResult &test_part_result) override {
+  void OnTestPartResult(const TestPartResult& test_part_result) {
     const char* file_name = test_part_result.file_name();
     if (file_name == NULL)
       file_name = "";

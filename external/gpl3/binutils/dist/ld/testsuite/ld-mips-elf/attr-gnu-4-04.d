@@ -1,5 +1,9 @@
 #source: attr-gnu-4-0.s
-#source: attr-gnu-4-4.s -W
+#source: attr-gnu-4-4.s
 #ld: -r
-#error: \A[^\n]*: [^\n]* linking -mfp64 module with previous -mfp32 modules\n
-#error:   [^\n]*: failed to merge target specific data of file [^\n]*\.o\Z
+#readelf: -A
+#target: mips*-*-*
+
+Attribute Section: gnu
+File Attributes
+  Tag_GNU_MIPS_ABI_FP: Hard float \(MIPS32r2 64-bit FPU\)

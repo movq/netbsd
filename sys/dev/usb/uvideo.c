@@ -1,4 +1,4 @@
-/*	$NetBSD: uvideo.c,v 1.43 2016/07/07 06:55:42 msaitoh Exp $	*/
+/*	$NetBSD: uvideo.c,v 1.40 2014/01/28 13:43:33 martin Exp $	*/
 
 /*
  * Copyright (c) 2008 Patrick Mahoney
@@ -42,10 +42,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uvideo.c,v 1.43 2016/07/07 06:55:42 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uvideo.c,v 1.40 2014/01/28 13:43:33 martin Exp $");
 
 #ifdef _KERNEL_OPT
-#include "opt_usb.h"
+#include "opt_uvideo.h"
 #endif
 
 #ifdef _MODULE
@@ -55,6 +55,7 @@ __KERNEL_RCSID(0, "$NetBSD: uvideo.c,v 1.43 2016/07/07 06:55:42 msaitoh Exp $");
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
+/* #include <sys/malloc.h> */
 #include <sys/kmem.h>
 #include <sys/device.h>
 #include <sys/ioctl.h>
@@ -182,14 +183,14 @@ struct uvideo_stream;
 struct uvideo_isoc {
 	struct uvideo_isoc_xfer	*i_ix;
 	struct uvideo_stream	*i_vs;
-	struct usbd_xfer	*i_xfer;
+	usbd_xfer_handle	i_xfer;
 	uint8_t			*i_buf;
 	uint16_t		*i_frlengths;
 };
 
 struct uvideo_isoc_xfer {
 	uint8_t			ix_endpt;
-	struct usbd_pipe	*ix_pipe;
+	usbd_pipe_handle	ix_pipe;
 	struct uvideo_isoc	ix_i[UVIDEO_NXFERS];
 	uint32_t		ix_nframes;
 	uint32_t		ix_uframe_len;
@@ -199,8 +200,8 @@ struct uvideo_isoc_xfer {
 
 struct uvideo_bulk_xfer {
 	uint8_t			bx_endpt;
-	struct usbd_pipe	*bx_pipe;
-	struct usbd_xfer	*bx_xfer;
+	usbd_pipe_handle	bx_pipe;
+	usbd_xfer_handle	bx_xfer;
 	uint8_t			*bx_buffer;
 	int			bx_buflen;
 	bool			bx_running;
@@ -210,7 +211,7 @@ struct uvideo_bulk_xfer {
 
 struct uvideo_stream {
 	struct uvideo_softc	*vs_parent;
-	struct usbd_interface	*vs_iface;
+	usbd_interface_handle	vs_iface;
 	uint8_t			vs_ifaceno;
 	uint8_t			vs_subtype;  /* input or output */
 	uint16_t		vs_probelen; /* length of probe and
@@ -240,8 +241,8 @@ SLIST_HEAD(uvideo_stream_list, uvideo_stream);
 
 struct uvideo_softc {
         device_t   	sc_dev;		/* base device */
-        struct usbd_device	*sc_udev;	/* device */
-	struct usbd_interface	*sc_iface;	/* interface handle */
+        usbd_device_handle      sc_udev;	/* device */
+	usbd_interface_handle   sc_iface;	/* interface handle */
         int     		sc_ifaceno;	/* interface number */
 	char			*sc_devname;
 
@@ -323,14 +324,14 @@ static struct uvideo_format *	uvideo_stream_guess_format(
 	enum video_pixel_format, uint32_t, uint32_t);
 static struct uvideo_stream *	uvideo_stream_alloc(void);
 static usbd_status		uvideo_stream_init(
-	struct uvideo_stream *,
-	struct uvideo_softc *,
-	const usb_interface_descriptor_t *,
-	uint8_t);
+	struct uvideo_stream *stream,
+	struct uvideo_softc *sc,
+	const usb_interface_descriptor_t *ifdesc,
+	uint8_t idx);
 static usbd_status		uvideo_stream_init_desc(
 	struct uvideo_stream *,
-	const usb_interface_descriptor_t *,
-	usbd_desc_iter_t *);
+	const usb_interface_descriptor_t *ifdesc,
+	usbd_desc_iter_t *iter);
 static usbd_status		uvideo_stream_init_frame_based_format(
 	struct uvideo_stream *,
 	const uvideo_descriptor_t *,
@@ -343,8 +344,8 @@ static usbd_status	uvideo_stream_recv_process(struct uvideo_stream *,
 						   uint8_t *, uint32_t);
 static usbd_status	uvideo_stream_recv_isoc_start(struct uvideo_stream *);
 static usbd_status	uvideo_stream_recv_isoc_start1(struct uvideo_isoc *);
-static void		uvideo_stream_recv_isoc_complete(struct usbd_xfer *,
-							 void *,
+static void		uvideo_stream_recv_isoc_complete(usbd_xfer_handle,
+							 usbd_private_handle,
 							 usbd_status);
 static void		uvideo_stream_recv_bulk_transfer(void *);
 
@@ -469,14 +470,14 @@ static void print_vs_format_dv_descriptor(
 int
 uvideo_match(device_t parent, cfdata_t match, void *aux)
 {
-	struct usbif_attach_arg *uiaa = aux;
+	struct usbif_attach_arg *uaa = aux;
 
         /* TODO: May need to change in the future to work with
          * Interface Association Descriptor. */
 
 	/* Trigger on the Video Control Interface which must be present */
-	if (uiaa->uiaa_class == UICLASS_VIDEO &&
-	    uiaa->uiaa_subclass == UISUBCLASS_VIDEOCONTROL)
+	if (uaa->class == UICLASS_VIDEO &&
+	    uaa->subclass == UISUBCLASS_VIDEOCONTROL)
 		return UMATCH_IFACECLASS_IFACESUBCLASS;
 
 	return UMATCH_NONE;
@@ -486,7 +487,7 @@ void
 uvideo_attach(device_t parent, device_t self, void *aux)
 {
 	struct uvideo_softc *sc = device_private(self);
-	struct usbif_attach_arg *uiaa = aux;
+	struct usbif_attach_arg *uaa = aux;
 	usbd_desc_iter_t iter;
 	const usb_interface_descriptor_t *ifdesc;
 	struct uvideo_stream *vs;
@@ -495,19 +496,19 @@ uvideo_attach(device_t parent, device_t self, void *aux)
 
 	sc->sc_dev = self;
 
-	sc->sc_devname = usbd_devinfo_alloc(uiaa->uiaa_device, 0);
+	sc->sc_devname = usbd_devinfo_alloc(uaa->device, 0);
 
 	aprint_naive("\n");
 	aprint_normal(": %s\n", sc->sc_devname);
 
-	sc->sc_udev = uiaa->uiaa_device;
-	sc->sc_iface = uiaa->uiaa_iface;
-	sc->sc_ifaceno = uiaa->uiaa_ifaceno;
+	sc->sc_udev = uaa->device;
+	sc->sc_iface = uaa->iface;
+	sc->sc_ifaceno = uaa->ifaceno;
 	sc->sc_dying = 0;
 	sc->sc_state = UVIDEO_STATE_CLOSED;
 	SLIST_INIT(&sc->sc_stream_list);
 	snprintf(sc->sc_businfo, sizeof(sc->sc_businfo), "usb:%08x",
-	    sc->sc_udev->ud_cookie.cookie);
+	    sc->sc_udev->cookie.cookie);
 
 #ifdef UVIDEO_DEBUG
 	/* Debugging dump of descriptors. TODO: move this to userspace
@@ -608,7 +609,8 @@ uvideo_attach(device_t parent, device_t self, void *aux)
 	}
 
 
-	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev, sc->sc_dev);
+	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
+			   sc->sc_dev);
 
 	if (!pmf_device_register(self, NULL, NULL))
 		aprint_error_dev(self, "couldn't establish power handler\n");
@@ -691,7 +693,8 @@ uvideo_detach(device_t self, int flags)
 	if (sc->sc_videodev != NULL)
 		rv = config_detach(sc->sc_videodev, flags);
 
-	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev, sc->sc_dev);
+	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
+	    sc->sc_dev);
 
 	usbd_devinfo_free(sc->sc_devname);
 
@@ -759,7 +762,7 @@ uvideo_stream_guess_format(struct uvideo_stream *vs,
 static struct uvideo_stream *
 uvideo_stream_alloc(void)
 {
-	return kmem_alloc(sizeof(struct uvideo_stream), KM_NOSLEEP);
+	return (kmem_alloc(sizeof(struct uvideo_stream), KM_NOSLEEP));
 }
 
 
@@ -1465,7 +1468,6 @@ uvideo_stream_start_xfer(struct uvideo_stream *vs)
 	uint32_t uframe_len;	/* bytes per usb frame (TODO: or microframe?) */
 	uint32_t nframes;	/* number of usb frames (TODO: or microframs?) */
 	int i, ret;
-	int error;
 
 	struct uvideo_alternate *alt, *alt_maybe;
 	usbd_status err;
@@ -1475,6 +1477,23 @@ uvideo_stream_start_xfer(struct uvideo_stream *vs)
 		ret = 0;
 		bx = &vs->vs_xfer.bulk;
 
+		bx->bx_xfer = usbd_alloc_xfer(sc->sc_udev);
+		if (bx->bx_xfer == NULL) {
+			DPRINTF(("uvideo: couldn't allocate xfer\n"));
+			return ENOMEM;
+		}
+		DPRINTF(("uvideo: xfer %p\n", bx->bx_xfer));
+
+		bx->bx_buflen = vs->vs_max_payload_size;
+
+		DPRINTF(("uvideo: allocating %u byte buffer\n", bx->bx_buflen));
+		bx->bx_buffer = usbd_alloc_buffer(bx->bx_xfer, bx->bx_buflen);
+
+		if (bx->bx_buffer == NULL) {
+			DPRINTF(("uvideo: couldn't allocate buffer\n"));
+			return ENOMEM;
+		}
+
 		err = usbd_open_pipe(vs->vs_iface, bx->bx_endpt, 0,
 		    &bx->bx_pipe);
 		if (err != USBD_NORMAL_COMPLETION) {
@@ -1483,17 +1502,6 @@ uvideo_stream_start_xfer(struct uvideo_stream *vs)
 			return EIO;
 		}
 		DPRINTF(("uvideo: pipe %p\n", bx->bx_pipe));
-
-		error = usbd_create_xfer(bx->bx_pipe, vs->vs_max_payload_size,
-		    USBD_SHORT_XFER_OK, 0, &bx->bx_xfer);
-		if (error) {
-			DPRINTF(("uvideo: couldn't allocate xfer\n"));
-			return error;
-		}
-		DPRINTF(("uvideo: xfer %p\n", bx->bx_xfer));
-
-		bx->bx_buflen = vs->vs_max_payload_size;
-		bx->bx_buffer = usbd_get_buffer(bx->bx_xfer);
 
 		mutex_enter(&bx->bx_lock);
 		if (bx->bx_running == false) {
@@ -1595,16 +1603,23 @@ uvideo_stream_start_xfer(struct uvideo_stream *vs)
 
 		for (i = 0; i < UVIDEO_NXFERS; i++) {
 			struct uvideo_isoc *isoc = &ix->ix_i[i];
-			error = usbd_create_xfer(ix->ix_pipe,
-			    nframes * uframe_len, 0, ix->ix_nframes,
-			    &isoc->i_xfer);
-			if (error) {
-				DPRINTF(("uvideo: "
-				    "couldn't allocate xfer (%d)\n", error));
-				return error;
+			isoc->i_xfer = usbd_alloc_xfer(sc->sc_udev);
+			if (isoc->i_xfer == NULL) {
+				DPRINTF(("uvideo: failed to alloc xfer: %s"
+				 " (%d)\n",
+				 usbd_errstr(err), err));
+				return ENOMEM;
 			}
 
-			isoc->i_buf = usbd_get_buffer(isoc->i_xfer);
+			isoc->i_buf = usbd_alloc_buffer(isoc->i_xfer,
+					       nframes * uframe_len);
+
+			if (isoc->i_buf == NULL) {
+				DPRINTF(("uvideo: failed to alloc buf: %s"
+				 " (%d)\n",
+				 usbd_errstr(err), err));
+				return ENOMEM;
+			}
 		}
 
 		uvideo_stream_recv_isoc_start(vs);
@@ -1643,16 +1658,13 @@ uvideo_stream_stop_xfer(struct uvideo_stream *vs)
 
 		if (bx->bx_pipe) {
 			usbd_abort_pipe(bx->bx_pipe);
+			usbd_close_pipe(bx->bx_pipe);
+			bx->bx_pipe = NULL;
 		}
 
 		if (bx->bx_xfer) {
-			usbd_destroy_xfer(bx->bx_xfer);
+			usbd_free_xfer(bx->bx_xfer);
 			bx->bx_xfer = NULL;
-		}
-
-		if (bx->bx_pipe) {
-			usbd_close_pipe(bx->bx_pipe);
-			bx->bx_pipe = NULL;
 		}
 
 		DPRINTF(("uvideo_stream_stop_xfer: UE_BULK: done\n"));
@@ -1662,12 +1674,15 @@ uvideo_stream_stop_xfer(struct uvideo_stream *vs)
 		ix = &vs->vs_xfer.isoc;
 		if (ix->ix_pipe != NULL) {
 			usbd_abort_pipe(ix->ix_pipe);
+			usbd_close_pipe(ix->ix_pipe);
+			ix->ix_pipe = NULL;
 		}
 
 		for (i = 0; i < UVIDEO_NXFERS; i++) {
 			struct uvideo_isoc *isoc = &ix->ix_i[i];
 			if (isoc->i_xfer != NULL) {
-				usbd_destroy_xfer(isoc->i_xfer);
+				usbd_free_buffer(isoc->i_xfer);
+				usbd_free_xfer(isoc->i_xfer);
 				isoc->i_xfer = NULL;
 			}
 
@@ -1679,10 +1694,6 @@ uvideo_stream_stop_xfer(struct uvideo_stream *vs)
 			}
 		}
 
-		if (ix->ix_pipe != NULL) {
-			usbd_close_pipe(ix->ix_pipe);
-			ix->ix_pipe = NULL;
-		}
 		/* Give it some time to settle */
 		usbd_delay_ms(vs->vs_parent->sc_udev, 1000);
 
@@ -1730,10 +1741,11 @@ uvideo_stream_recv_isoc_start1(struct uvideo_isoc *isoc)
 		isoc->i_frlengths[i] = ix->ix_uframe_len;
 
 	usbd_setup_isoc_xfer(isoc->i_xfer,
+			     ix->ix_pipe,
 			     isoc,
 			     isoc->i_frlengths,
 			     ix->ix_nframes,
-			     USBD_SHORT_XFER_OK,
+			     USBD_NO_COPY | USBD_SHORT_XFER_OK,
 			     uvideo_stream_recv_isoc_complete);
 
 	err = usbd_transfer(isoc->i_xfer);
@@ -1779,8 +1791,8 @@ uvideo_stream_recv_process(struct uvideo_stream *vs, uint8_t *buf, uint32_t len)
 
 /* Callback on completion of usb isoc transfer */
 static void
-uvideo_stream_recv_isoc_complete(struct usbd_xfer *xfer,
-				 void *priv,
+uvideo_stream_recv_isoc_complete(usbd_xfer_handle xfer,
+				 usbd_private_handle priv,
 				 usbd_status status)
 {
 	struct uvideo_stream *vs;
@@ -1841,8 +1853,9 @@ uvideo_stream_recv_bulk_transfer(void *addr)
 	while (bx->bx_running) {
 		len = bx->bx_buflen;
 		err = usbd_bulk_transfer(bx->bx_xfer, bx->bx_pipe,
-		    USBD_SHORT_XFER_OK, USBD_NO_TIMEOUT,
-		    bx->bx_buffer, &len);
+		    USBD_SHORT_XFER_OK | USBD_NO_COPY,
+		    USBD_NO_TIMEOUT,
+		    bx->bx_buffer, &len, "uvideorb");
 
 		if (err == USBD_NORMAL_COMPLETION) {
 			uvideo_stream_recv_process(vs, bx->bx_buffer, len);
@@ -3008,7 +3021,7 @@ usb_desc_iter_next_non_interface(usbd_desc_iter_t *iter)
 	if ((desc = usb_desc_iter_peek_next(iter)) != NULL &&
 	    desc->bDescriptorType != UDESC_INTERFACE)
 	{
-		return usb_desc_iter_next(iter);
+		return (usb_desc_iter_next(iter));
 	} else {
 		return NULL;
 	}
@@ -3055,5 +3068,5 @@ usb_guid_cmp(const usb_guid_t *uguid, const guid_t *guid)
 	else if (guid->data3 < UGETW(uguid->data3))
 		return -1;
 
-	return memcmp(guid->data4, uguid->data4, 8);
+	return (memcmp(guid->data4, uguid->data4, 8));
 }

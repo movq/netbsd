@@ -17,21 +17,12 @@
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
-#include "llvm/IR/Module.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace llvm;
 
-namespace {
-enum ManglerPrefixTy {
-  Default,      ///< Emit default string before each symbol.
-  Private,      ///< Emit "private" prefix before each symbol.
-  LinkerPrivate ///< Emit "linker private" prefix before each symbol.
-};
-}
-
-static void getNameWithPrefixImpl(raw_ostream &OS, const Twine &GVName,
-                                  ManglerPrefixTy PrefixTy,
-                                  const DataLayout &DL, char Prefix) {
+static void getNameWithPrefixx(raw_ostream &OS, const Twine &GVName,
+                              Mangler::ManglerPrefixTy PrefixTy,
+                              const DataLayout &DL, char Prefix) {
   SmallString<256> TmpData;
   StringRef Name = GVName.toStringRef(TmpData);
   assert(!Name.empty() && "getNameWithPrefix requires non-empty name");
@@ -43,9 +34,9 @@ static void getNameWithPrefixImpl(raw_ostream &OS, const Twine &GVName,
     return;
   }
 
-  if (PrefixTy == Private)
+  if (PrefixTy == Mangler::Private)
     OS << DL.getPrivateGlobalPrefix();
-  else if (PrefixTy == LinkerPrivate)
+  else if (PrefixTy == Mangler::LinkerPrivate)
     OS << DL.getLinkerPrivateGlobalPrefix();
 
   if (Prefix != '\0')
@@ -55,23 +46,17 @@ static void getNameWithPrefixImpl(raw_ostream &OS, const Twine &GVName,
   OS << Name;
 }
 
-static void getNameWithPrefixImpl(raw_ostream &OS, const Twine &GVName,
-                                  const DataLayout &DL,
-                                  ManglerPrefixTy PrefixTy) {
-  char Prefix = DL.getGlobalPrefix();
-  return getNameWithPrefixImpl(OS, GVName, PrefixTy, DL, Prefix);
-}
-
 void Mangler::getNameWithPrefix(raw_ostream &OS, const Twine &GVName,
-                                const DataLayout &DL) {
-  return getNameWithPrefixImpl(OS, GVName, DL, Default);
+                                ManglerPrefixTy PrefixTy) const {
+  char Prefix = DL->getGlobalPrefix();
+  return getNameWithPrefixx(OS, GVName, PrefixTy, *DL, Prefix);
 }
 
 void Mangler::getNameWithPrefix(SmallVectorImpl<char> &OutName,
-                                const Twine &GVName, const DataLayout &DL) {
+                                const Twine &GVName,
+                                ManglerPrefixTy PrefixTy) const {
   raw_svector_ostream OS(OutName);
-  char Prefix = DL.getGlobalPrefix();
-  return getNameWithPrefixImpl(OS, GVName, Default, DL, Prefix);
+  return getNameWithPrefix(OS, GVName, PrefixTy);
 }
 
 static bool hasByteCountSuffix(CallingConv::ID CC) {
@@ -88,7 +73,7 @@ static bool hasByteCountSuffix(CallingConv::ID CC) {
 /// Microsoft fastcall and stdcall functions require a suffix on their name
 /// indicating the number of words of arguments they take.
 static void addByteCountSuffix(raw_ostream &OS, const Function *F,
-                               const DataLayout &DL) {
+                               const DataLayout &TD) {
   // Calculate arguments size total.
   unsigned ArgWords = 0;
   for (Function::const_arg_iterator AI = F->arg_begin(), AE = F->arg_end();
@@ -98,8 +83,8 @@ static void addByteCountSuffix(raw_ostream &OS, const Function *F,
     if (AI->hasByValOrInAllocaAttr())
       Ty = cast<PointerType>(Ty)->getElementType();
     // Size should be aligned to pointer size.
-    unsigned PtrSize = DL.getPointerSize();
-    ArgWords += RoundUpToAlignment(DL.getTypeAllocSize(Ty), PtrSize);
+    unsigned PtrSize = TD.getPointerSize();
+    ArgWords += RoundUpToAlignment(TD.getTypeAllocSize(Ty), PtrSize);
   }
 
   OS << '@' << ArgWords;
@@ -107,15 +92,14 @@ static void addByteCountSuffix(raw_ostream &OS, const Function *F,
 
 void Mangler::getNameWithPrefix(raw_ostream &OS, const GlobalValue *GV,
                                 bool CannotUsePrivateLabel) const {
-  ManglerPrefixTy PrefixTy = Default;
+  ManglerPrefixTy PrefixTy = Mangler::Default;
   if (GV->hasPrivateLinkage()) {
     if (CannotUsePrivateLabel)
-      PrefixTy = LinkerPrivate;
+      PrefixTy = Mangler::LinkerPrivate;
     else
-      PrefixTy = Private;
+      PrefixTy = Mangler::Private;
   }
 
-  const DataLayout &DL = GV->getParent()->getDataLayout();
   if (!GV->hasName()) {
     // Get the ID for the global, assigning a new one if we haven't got one
     // already.
@@ -124,12 +108,12 @@ void Mangler::getNameWithPrefix(raw_ostream &OS, const GlobalValue *GV,
       ID = NextAnonGlobalID++;
 
     // Must mangle the global into a unique ID.
-    getNameWithPrefixImpl(OS, "__unnamed_" + Twine(ID), DL, PrefixTy);
+    getNameWithPrefix(OS, "__unnamed_" + Twine(ID), PrefixTy);
     return;
   }
 
   StringRef Name = GV->getName();
-  char Prefix = DL.getGlobalPrefix();
+  char Prefix = DL->getGlobalPrefix();
 
   // Mangle functions with Microsoft calling conventions specially.  Only do
   // this mangling for x86_64 vectorcall and 32-bit x86.
@@ -138,7 +122,7 @@ void Mangler::getNameWithPrefix(raw_ostream &OS, const GlobalValue *GV,
     MSFunc = nullptr; // Don't mangle when \01 is present.
   CallingConv::ID CC =
       MSFunc ? MSFunc->getCallingConv() : (unsigned)CallingConv::C;
-  if (!DL.hasMicrosoftFastStdCallMangling() &&
+  if (!DL->hasMicrosoftFastStdCallMangling() &&
       CC != CallingConv::X86_VectorCall)
     MSFunc = nullptr;
   if (MSFunc) {
@@ -148,7 +132,7 @@ void Mangler::getNameWithPrefix(raw_ostream &OS, const GlobalValue *GV,
       Prefix = '\0'; // vectorcall functions have no prefix.
   }
 
-  getNameWithPrefixImpl(OS, Name, PrefixTy, DL, Prefix);
+  getNameWithPrefixx(OS, Name, PrefixTy, *DL, Prefix);
 
   if (!MSFunc)
     return;
@@ -163,7 +147,7 @@ void Mangler::getNameWithPrefix(raw_ostream &OS, const GlobalValue *GV,
       // "Pure" variadic functions do not receive @0 suffix.
       (!FT->isVarArg() || FT->getNumParams() == 0 ||
        (FT->getNumParams() == 1 && MSFunc->hasStructRetAttr())))
-    addByteCountSuffix(OS, MSFunc, DL);
+    addByteCountSuffix(OS, MSFunc, *DL);
 }
 
 void Mangler::getNameWithPrefix(SmallVectorImpl<char> &OutName,

@@ -14,18 +14,15 @@ using namespace llvm;
 uint8_t MipsABIFlagsSection::getFpABIValue() {
   switch (FpABI) {
   case FpABIKind::ANY:
-    return Mips::Val_GNU_MIPS_ABI_FP_ANY;
-  case FpABIKind::SOFT:
-    return Mips::Val_GNU_MIPS_ABI_FP_SOFT;
+    return Val_GNU_MIPS_ABI_FP_ANY;
   case FpABIKind::XX:
-    return Mips::Val_GNU_MIPS_ABI_FP_XX;
+    return Val_GNU_MIPS_ABI_FP_XX;
   case FpABIKind::S32:
-    return Mips::Val_GNU_MIPS_ABI_FP_DOUBLE;
+    return Val_GNU_MIPS_ABI_FP_DOUBLE;
   case FpABIKind::S64:
     if (Is32BitABI)
-      return OddSPReg ? Mips::Val_GNU_MIPS_ABI_FP_64
-                      : Mips::Val_GNU_MIPS_ABI_FP_64A;
-    return Mips::Val_GNU_MIPS_ABI_FP_DOUBLE;
+      return OddSPReg ? Val_GNU_MIPS_ABI_FP_64 : Val_GNU_MIPS_ABI_FP_64A;
+    return Val_GNU_MIPS_ABI_FP_DOUBLE;
   }
 
   llvm_unreachable("unexpected fp abi value");
@@ -46,7 +43,7 @@ StringRef MipsABIFlagsSection::getFpABIString(FpABIKind Value) {
 
 uint8_t MipsABIFlagsSection::getCPR1SizeValue() {
   if (FpABI == FpABIKind::XX)
-    return (uint8_t)Mips::AFL_REG_32;
+    return (uint8_t)AFL_REG_32;
   return (uint8_t)CPR1Size;
 }
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: mkswap.c,v 1.10 2015/09/03 13:53:36 uebayasi Exp $	*/
+/*	$NetBSD: mkswap.c,v 1.7.26.1 2015/03/06 21:00:23 snj Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -45,7 +45,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: mkswap.c,v 1.10 2015/09/03 13:53:36 uebayasi Exp $");
+__RCSID("$NetBSD: mkswap.c,v 1.7.26.1 2015/03/06 21:00:23 snj Exp $");
 
 #include <sys/param.h>
 #include <errno.h>

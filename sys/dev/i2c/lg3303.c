@@ -1,4 +1,4 @@
-/* $NetBSD: lg3303.c,v 1.9 2015/03/07 14:16:51 jmcneill Exp $ */
+/* $NetBSD: lg3303.c,v 1.8.28.1 2015/03/21 17:11:35 snj Exp $ */
 
 /*-
  * Copyright 2007 Jason Harmening
@@ -28,7 +28,7 @@
  */
 
 #include <sys/param.h>
-__KERNEL_RCSID(0, "$NetBSD: lg3303.c,v 1.9 2015/03/07 14:16:51 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lg3303.c,v 1.8.28.1 2015/03/21 17:11:35 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/kmem.h>

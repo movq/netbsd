@@ -13,8 +13,8 @@ entry:
 ; CHECK: mfspr 3, 269
 ; CHECK: mfspr 4, 268
 ; CHECK: mfspr [[REG:[0-9]+]], 269
-; CHECK: cmpw 3, [[REG]]
-; CHECK: bne 0, .LBB
+; CHECK: cmpw [[CR:[0-9]+]], 3, [[REG]]
+; CHECK: bne [[CR]], .LBB
 
 declare i64 @llvm.readcyclecounter()
 

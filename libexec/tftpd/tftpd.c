@@ -1,4 +1,4 @@
-/*	$NetBSD: tftpd.c,v 1.45 2016/07/20 20:18:21 shm Exp $	*/
+/*	$NetBSD: tftpd.c,v 1.43 2013/10/04 07:51:48 jnemeth Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -36,7 +36,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1993\
 #if 0
 static char sccsid[] = "@(#)tftpd.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: tftpd.c,v 1.45 2016/07/20 20:18:21 shm Exp $");
+__RCSID("$NetBSD: tftpd.c,v 1.43 2013/10/04 07:51:48 jnemeth Exp $");
 #endif
 #endif /* not lint */
 
@@ -110,7 +110,6 @@ static int	secure;
 static char	pathsep = '\0';
 static char	*securedir;
 static int	unrestricted_writes;    /* uploaded files don't have to exist */
-static int	broadcast_client = 0; /* Some clients ack to the broadcast address */
 
 struct formats;
 
@@ -143,7 +142,7 @@ usage(void)
 {
 
 	syslog(LOG_ERR,
-    "Usage: %s [-bcdln] [-g group] [-p pathsep] [-s directory] [-u user] [directory ...]",
+    "Usage: %s [-cdln] [-g group] [-p pathsep] [-s directory] [-u user] [directory ...]",
 		    getprogname());
 	exit(1);
 }
@@ -173,30 +172,8 @@ main(int argc, char *argv[])
 	curuid = getuid();
 	curgid = getgid();
 
-	while ((ch = getopt(argc, argv, "bcdg:lnp:s:u:")) != -1)
+	while ((ch = getopt(argc, argv, "cdg:lnp:s:u:")) != -1)
 		switch (ch) {
-		case 'b':
-			/*
-			 * Some clients, notably older Cisco boot loaders, 
-			 * send their acknowledgements to the broadcast address
-			 * rather than the unicast address of the server.
-			 * Allow those clients to inter-operate with us.
-			 * It's worth noting that this interaction doesn't cause the
-			 * server to change where it sends the responses, meaning
-			 * servers that have this flag enabled are no more
-			 * susceptible to magnifcation DOS attacks than those
-			 * servers that don't use this flag.  This flag merely
-			 * permits the reception of acknowledgement traffic to the
-			 * broadcast address/specific port number that's being used for 
-			 * this session as well as the unicast address/specific port
-			 * number for this session.  For example, if the session is
-			 * expecting acks on 192.168.1.40:50201, then this flag
-			 * would also allow acks to be returned to
-			 * 192.168.1.255:50201, assuming that 192.168.1.255 is the
-			 * broadcast address for the subnet containing 192.168.1.40.
-			 */
-			broadcast_client = 1;
-			break;
 		case 'c':
 			unrestricted_writes = 1;
 			break;
@@ -416,15 +393,12 @@ main(int argc, char *argv[])
 		syslog(LOG_ERR, "socket: %m");
 		exit(1);
 	}
-	if (broadcast_client) {
-		soopt = 1;
-		if (setsockopt(peer, SOL_SOCKET, SO_BROADCAST, (void *) &soopt, sizeof(soopt)) < 0) {
-			syslog(LOG_ERR, "set SO_BROADCAST: %m");
-			exit(1);
-		}
-	}
 	if (bind(peer, (struct sockaddr *)&me, me.ss_len) < 0) {
 		syslog(LOG_ERR, "bind: %m");
+		exit(1);
+	}
+	if (connect(peer, (struct sockaddr *)&from, from.ss_len) < 0) {
+		syslog(LOG_ERR, "connect: %m");
 		exit(1);
 	}
 	soopt = 65536;	/* larger than we'll ever need */
@@ -981,7 +955,7 @@ sendfile(struct formats *pf, volatile int etftp, int acklength)
 send_data:
 		if (!etftp && debug)
 			syslog(LOG_DEBUG, "Send DATA %u", block);
-		if ((n = sendto(peer, dp, size + 4, 0, (struct sockaddr *)&from, fromlen)) != size + 4) {
+		if ((n = send(peer, dp, size + 4, 0)) != size + 4) {
 			syslog(LOG_ERR, "tftpd: write: %m");
 			goto abort;
 		}
@@ -989,8 +963,7 @@ send_data:
 			read_ahead(file, tftp_blksize, pf->f_convert);
 		for ( ; ; ) {
 			alarm(rexmtval);        /* read the ack */
-			n = recvfrom(peer, ackbuf, tftp_blksize, 0,(struct sockaddr
-			*)&from, &fromlen );
+			n = recv(peer, ackbuf, tftp_blksize, 0);
 			alarm(0);
 			if (n < 0) {
 				syslog(LOG_ERR, "tftpd: read: %m");
@@ -1018,7 +991,6 @@ send_data:
 				(void) synchnet(peer, tftp_blksize);
 				if (ap->th_block == (u_short)(block - 1))
 					goto send_data;
-				/* FALLTHROUGH */
 			default:
 				syslog(LOG_INFO, "Received %s in sendfile\n",
 				    opcode(dp->th_opcode));
@@ -1077,15 +1049,14 @@ recvfile(struct formats *pf, volatile int etftp, volatile int acklength)
 		(void) setjmp(timeoutbuf);
 send_ack:
 		ap = (struct tftphdr *) (etftp ? oackbuf : ackbuf);
-		if (sendto(peer, ap, acklength, 0, (struct sockaddr *)&from, fromlen) != acklength) {
+		if (send(peer, ap, acklength, 0) != acklength) {
 			syslog(LOG_ERR, "tftpd: write: %m");
 			goto abort;
 		}
 		write_behind(file, pf->f_convert);
 		for ( ; ; ) {
 			alarm(rexmtval);
-			n = recvfrom(peer, dp, tftp_blksize + 4, 0, (struct sockaddr
-			*)&from, &fromlen);
+			n = recv(peer, dp, tftp_blksize + 4, 0);
 			alarm(0);
 			if (n < 0) {            /* really? */
 				syslog(LOG_ERR, "tftpd: read: %m");
@@ -1137,16 +1108,16 @@ done:
 	ap->th_block = htons((u_short)(block));
 	if (debug)
 		syslog(LOG_DEBUG, "Send final ACK %u", block);
-	(void) sendto(peer, ackbuf, 4, 0, (struct sockaddr *)&from, fromlen);
+	(void) send(peer, ackbuf, 4, 0);
 
 	signal(SIGALRM, justquit);      /* just quit on timeout */
 	alarm(rexmtval);
-	n = recvfrom(peer, buf, sizeof (buf), 0, (struct sockaddr *)&from, &fromlen); /* normally times out and quits */
+	n = recv(peer, buf, sizeof (buf), 0); /* normally times out and quits */
 	alarm(0);
 	if (n >= 4 &&                   /* if read some data */
 	    dp->th_opcode == DATA &&    /* and got a data block */
 	    block == dp->th_block) {	/* then my last ack was lost */
-		(void) sendto(peer, ackbuf, 4, 0, (struct sockaddr *)&from, fromlen);     /* resend final ack */
+		(void) send(peer, ackbuf, 4, 0);     /* resend final ack */
 	}
 abort:
 	return;
@@ -1214,7 +1185,7 @@ nak(int error)
 		syslog(LOG_DEBUG, "Send NACK %s", tp->th_msg);
 	length = strlen(tp->th_msg);
 	msglen = &tp->th_msg[length + 1] - buf;
-	if (sendto(peer, buf, msglen, 0, (struct sockaddr *)&from, fromlen) != (ssize_t)msglen)
+	if (send(peer, buf, msglen, 0) != (ssize_t)msglen)
 		syslog(LOG_ERR, "nak: %m");
 }
 

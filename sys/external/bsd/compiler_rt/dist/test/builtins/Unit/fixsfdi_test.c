@@ -22,7 +22,7 @@
 
 // seee eeee emmm mmmm mmmm mmmm mmmm mmmm
 
-COMPILER_RT_ABI di_int __fixsfdi(float a);
+di_int __fixsfdi(float a);
 
 int test__fixsfdi(float a, di_int expected)
 {

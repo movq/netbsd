@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -60,8 +60,7 @@ struct mutex;
 
 #define ACPI_USE_NATIVE_DIVIDE
 
-/* #define ACPI_THREAD_ID               thread_id */
-
+// #define ACPI_THREAD_ID               thread_id
 #define ACPI_SEMAPHORE              sem_id
 #define ACPI_SPINLOCK               spinlock *
 #define ACPI_CPU_FLAGS              cpu_status

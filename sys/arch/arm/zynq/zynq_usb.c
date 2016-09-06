@@ -1,4 +1,4 @@
-/*	$NetBSD: zynq_usb.c,v 1.4 2016/04/23 10:15:29 skrll Exp $	*/
+/*	$NetBSD: zynq_usb.c,v 1.1.4.2 2015/05/11 11:00:33 msaitoh Exp $	*/
 /*-
  * Copyright (c) 2015  Genetec Corporation.  All rights reserved.
  * Written by Hashimoto Kenichi for Genetec Corporation.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: zynq_usb.c,v 1.4 2016/04/23 10:15:29 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: zynq_usb.c,v 1.1.4.2 2015/05/11 11:00:33 msaitoh Exp $");
 
 #include "opt_zynq.h"
 
@@ -56,9 +56,6 @@ static uint8_t ulpi_read(struct zynqehci_softc *sc, int addr);
 static void ulpi_write(struct zynqehci_softc *sc, int addr, uint8_t data);
 static void ulpi_reset(struct zynqehci_softc *sc);
 
-static void zynqusb_select_interface(struct zynqehci_softc *, enum zynq_usb_if);
-static void zynqusb_init(struct ehci_softc *);
-
 /* attach structures */
 CFATTACH_DECL_NEW(zynqusb, sizeof(struct zynqehci_softc),
     zynqusb_match, zynqusb_attach, NULL, NULL);
@@ -71,6 +68,7 @@ zynqusb_attach_common(device_t parent, device_t self, bus_space_tag_t iot,
 	struct zynqehci_softc *sc = device_private(self);
 	ehci_softc_t *hsc = &sc->sc_hsc;
 	uint16_t hcirev;
+	usbd_status r;
 	uint32_t id, hwhost, hwdevice;
 	const char *comma;
 
@@ -79,10 +77,9 @@ zynqusb_attach_common(device_t parent, device_t self, bus_space_tag_t iot,
 	sc->sc_iftype = type;
 	sc->sc_role = role;
 
-	hsc->sc_bus.ub_hcpriv = sc;
-	hsc->sc_bus.ub_revision = USBREV_2_0;
+	hsc->sc_bus.hci_private = sc;
+	hsc->sc_bus.usbrev = USBREV_2_0;
 	hsc->sc_flags |= EHCIF_ETTF;
-	hsc->sc_vendor_init = zynqusb_init;
 
 	aprint_normal("\n");
 
@@ -131,7 +128,7 @@ zynqusb_attach_common(device_t parent, device_t self, bus_space_tag_t iot,
 	}
 	aprint_normal("\n");
 
-	sc->sc_hsc.sc_bus.ub_dmatag = dmat;
+	sc->sc_hsc.sc_bus.dmatag = dmat;
 
 	sc->sc_hsc.sc_offs = bus_space_read_1(iot, sc->sc_hsc.ioh,
 	    EHCI_CAPLENGTH);
@@ -152,8 +149,10 @@ zynqusb_attach_common(device_t parent, device_t self, bus_space_tag_t iot,
 		ulpi_reset(sc);
 	}
 
+	zynqusb_host_mode(sc);
+
 	if (sc->sc_iftype == ZYNQUSBC_IF_ULPI) {
-		if (hsc->sc_bus.ub_revision == USBREV_2_0) {
+		if(hsc->sc_bus.usbrev == USBREV_2_0) {
 			ulpi_write(sc, ULPI_FUNCTION_CONTROL + ULPI_REG_CLEAR,
 			    FUNCTION_CONTROL_XCVRSELECT);
 			ulpi_write(sc, ULPI_FUNCTION_CONTROL + ULPI_REG_SET,
@@ -180,9 +179,9 @@ zynqusb_attach_common(device_t parent, device_t self, bus_space_tag_t iot,
 	/* Figure out vendor for root hub descriptor. */
 	strlcpy(hsc->sc_vendor, "Xilinx", sizeof(hsc->sc_vendor));
 
-	int err = ehci_init(hsc);
-	if (err) {
-		aprint_error_dev(self, "init failed, error = %d\n", err);
+	r = ehci_init(hsc);
+	if (r != USBD_NORMAL_COMPLETION) {
+		aprint_error_dev(self, "init failed, error=%d\n", r);
 		return;
 	}
 
@@ -190,7 +189,10 @@ zynqusb_attach_common(device_t parent, device_t self, bus_space_tag_t iot,
 	hsc->sc_child = config_found(self, &hsc->sc_bus, usbctlprint);
 }
 
-static void
+
+
+
+void
 zynqusb_select_interface(struct zynqehci_softc *sc, enum zynq_usb_if interface)
 {
 	uint32_t reg;
@@ -216,6 +218,7 @@ zynqusb_select_interface(struct zynqehci_softc *sc, enum zynq_usb_if interface)
 	}
 	EOWRITE4(hsc, EHCI_PORTSC(1), reg);
 }
+
 
 static uint32_t
 ulpi_wakeup(struct zynqehci_softc *sc, int tout)
@@ -353,10 +356,10 @@ zynqusb_reset(struct zynqehci_softc *sc)
 	usb_delay_ms(&hsc->sc_bus, 100);
 }
 
-static void
-zynqusb_init(struct ehci_softc *hsc)
+void
+zynqusb_host_mode(struct zynqehci_softc *sc)
 {
-	struct zynqehci_softc *sc = device_private(hsc->sc_dev);
+	struct ehci_softc *hsc = &sc->sc_hsc;
 	uint32_t reg;
 
 	reg = EOREAD4(hsc, EHCI_PORTSC(1));
@@ -369,8 +372,7 @@ zynqusb_init(struct ehci_softc *hsc)
 	reg |= OTGSC_DPIE | OTGSC_IDIE;
 	bus_space_write_4(sc->sc_iot, sc->sc_ioh, ZYNQUSB_OTGSC, reg);
 
-	reg = bus_space_read_4(sc->sc_iot, sc->sc_ioh, ZYNQUSB_USBMODE);
-	reg &= ~USBMODE_CM;
+	reg = bus_space_read_4(sc->sc_iot, sc->sc_ioh, ZYNQUSB_OTGMODE);
 	reg |= USBMODE_CM_HOST;
-	bus_space_write_4(sc->sc_iot, sc->sc_ioh, ZYNQUSB_USBMODE, reg);
+	bus_space_write_4(sc->sc_iot, sc->sc_ioh, ZYNQUSB_OTGMODE, reg);
 }

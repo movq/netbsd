@@ -1,4 +1,4 @@
-/*	$NetBSD: partman.c,v 1.13 2016/05/30 17:03:21 dholland Exp $ */
+/*	$NetBSD: partman.c,v 1.4.4.4 2015/05/14 07:58:49 snj Exp $ */
 
 /*
  * Copyright 2012 Eugene Lozovoy
@@ -469,11 +469,9 @@ pm_raid_set_value(menudesc *m, void *arg)
 		case PMR_MENU_NUMROW:
 			process_menu(MENU_ok, deconst(MSG_raid_nomultidim));
 			return 0;
-#if 0 /* notyet */
 			msg_to_show = MSG_raid_numrow_ask;
 			out_var = &(dev_ptr->numRow);
 			break;
-#endif
 		case PMR_MENU_NUMCOL:
 			msg_to_show = MSG_raid_numcol_ask;
 			out_var = &(dev_ptr->numCol);
@@ -692,7 +690,7 @@ pm_raid_commit(void)
 							raids[i].node) == 0
 			) {
 			raids[i].blocked = 1; /* RAID creation done, remove it from list to 
-									 prevent its repeated reinitialization */
+									 prevent it's repeated reinitialization */
 			for (ii = 0; ii < MAX_IN_RAID; ii++)
 				if (raids[i].pm[ii] != NULL)
 					raids[i].pm[ii]->blocked++;
@@ -736,7 +734,7 @@ pm_vnd_edit_menufmt(menudesc *m, int opt, void *arg)
 			break;
 		case PMV_MENU_EXIST:
 			wprintw(m->mw, msg_string(MSG_vnd_assgn_fmt),
-				dev_ptr->is_exist? msg_string(MSG_No) : msg_string(MSG_Yes));
+				dev_ptr->is_exist? msg_string(MSG_Yes) : msg_string(MSG_No));
 			break;
 		case PMV_MENU_SIZE:
 			if (!dev_ptr->is_exist)
@@ -1807,7 +1805,6 @@ pm_wedge_create(int num, pm_devs_t **pm_dk)
 		if (! wedges[i].allocated && wedges[i].todel) {
 			hackerr = run_program(RUN_SILENT | RUN_ERROR_OK,
 				"dkctl %s delwedge dk%d", wedges[num].pm->diskdev, i);
-			(void)hackerr; /* XXX */
 			wedges[i].todel = 0;
 		}
 

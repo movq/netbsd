@@ -38,14 +38,14 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
-#ifdef illumos
+#if defined(sun)
 #include <dlfcn.h>
 #else
 #include <zlib.h>
 #endif
 #include <gelf.h>
 
-#ifdef illumos
+#if defined(sun)
 #ifdef _LP64
 static const char *_libctf_zlib = "/usr/lib/64/libz.so";
 #else
@@ -62,7 +62,7 @@ static struct {
 static size_t _PAGESIZE;
 static size_t _PAGEMASK;
 
-#ifdef illumos
+#if defined(sun)
 #pragma init(_libctf_init)
 #else
 void    _libctf_init(void) __attribute__ ((constructor));
@@ -70,7 +70,7 @@ void    _libctf_init(void) __attribute__ ((constructor));
 void
 _libctf_init(void)
 {
-#ifdef illumos
+#if defined(sun)
 	const char *p = getenv("LIBCTF_DECOMPRESSOR");
 
 	if (p != NULL)
@@ -91,7 +91,7 @@ _libctf_init(void)
 void *
 ctf_zopen(int *errp)
 {
-#ifdef illumos
+#if defined(sun)
 	ctf_dprintf("decompressing CTF data using %s\n", _libctf_zlib);
 
 	if (zlib.z_dlp != NULL)
@@ -220,7 +220,6 @@ ctf_fdopen(int fd, int *errp)
 {
 	ctf_sect_t ctfsect, symsect, strsect;
 	ctf_file_t *fp = NULL;
-	size_t shstrndx, shnum;
 
 	struct stat64 st;
 	ssize_t nbytes;
@@ -257,7 +256,7 @@ ctf_fdopen(int fd, int *errp)
 		if (ctfsect.cts_data == MAP_FAILED)
 			return (ctf_set_open_errno(errp, errno));
 
-		ctfsect.cts_name = _CTF_SECTION;
+		ctfsect.cts_name = (char *)_CTF_SECTION;
 		ctfsect.cts_type = SHT_PROGBITS;
 		ctfsect.cts_flags = SHF_ALLOC;
 		ctfsect.cts_size = (size_t)st.st_size;
@@ -278,15 +277,16 @@ ctf_fdopen(int fd, int *errp)
 	 */
 	if (nbytes >= (ssize_t) sizeof (Elf32_Ehdr) &&
 	    bcmp(&hdr.e32.e_ident[EI_MAG0], ELFMAG, SELFMAG) == 0) {
-#if BYTE_ORDER == _BIG_ENDIAN
+#ifdef	_BIG_ENDIAN
 		uchar_t order = ELFDATA2MSB;
 #else
 		uchar_t order = ELFDATA2LSB;
 #endif
+		GElf_Half i, n;
 		GElf_Shdr *sp;
 
 		void *strs_map;
-		size_t strs_mapsz, i;
+		size_t strs_mapsz;
 		char *strs;
 
 		if (hdr.e32.e_ident[EI_DATA] != order)
@@ -302,38 +302,11 @@ ctf_fdopen(int fd, int *errp)
 			ehdr_to_gelf(&e32, &hdr.e64);
 		}
 
-		shnum = hdr.e64.e_shnum;
-		shstrndx = hdr.e64.e_shstrndx;
-
-		/* Extended ELF sections */
-		if ((shstrndx == SHN_XINDEX) || (shnum == 0)) {
-			if (hdr.e32.e_ident[EI_CLASS] == ELFCLASS32) {
-				Elf32_Shdr x32;
-
-				if (pread64(fd, &x32, sizeof (x32),
-				    hdr.e64.e_shoff) != sizeof (x32))
-					return (ctf_set_open_errno(errp,
-					    errno));
-
-				shnum = x32.sh_size;
-				shstrndx = x32.sh_link;
-			} else {
-				Elf64_Shdr x64;
-
-				if (pread64(fd, &x64, sizeof (x64),
-				    hdr.e64.e_shoff) != sizeof (x64))
-					return (ctf_set_open_errno(errp,
-					    errno));
-
-				shnum = x64.sh_size;
-				shstrndx = x64.sh_link;
-			}
-		}
-
-		if (shstrndx >= shnum)
+		if (hdr.e64.e_shstrndx >= hdr.e64.e_shnum)
 			return (ctf_set_open_errno(errp, ECTF_CORRUPT));
 
-		nbytes = sizeof (GElf_Shdr) * shnum;
+		n = hdr.e64.e_shnum;
+		nbytes = sizeof (GElf_Shdr) * n;
 
 		if ((sp = malloc(nbytes)) == NULL)
 			return (ctf_set_open_errno(errp, errno));
@@ -345,7 +318,7 @@ ctf_fdopen(int fd, int *errp)
 		if (hdr.e32.e_ident[EI_CLASS] == ELFCLASS32) {
 			Elf32_Shdr *sp32;
 
-			nbytes = sizeof (Elf32_Shdr) * shnum;
+			nbytes = sizeof (Elf32_Shdr) * n;
 
 			if ((sp32 = malloc(nbytes)) == NULL || pread64(fd,
 			    sp32, nbytes, hdr.e64.e_shoff) != nbytes) {
@@ -353,7 +326,7 @@ ctf_fdopen(int fd, int *errp)
 				return (ctf_set_open_errno(errp, errno));
 			}
 
-			for (i = 0; i < shnum; i++)
+			for (i = 0; i < n; i++)
 				shdr_to_gelf(&sp32[i], &sp[i]);
 
 			free(sp32);
@@ -367,14 +340,14 @@ ctf_fdopen(int fd, int *errp)
 		 * Now mmap the section header strings section so that we can
 		 * perform string comparison on the section names.
 		 */
-		strs_mapsz = sp[shstrndx].sh_size +
-		    (sp[shstrndx].sh_offset & ~_PAGEMASK);
+		strs_mapsz = sp[hdr.e64.e_shstrndx].sh_size +
+		    (sp[hdr.e64.e_shstrndx].sh_offset & ~_PAGEMASK);
 
 		strs_map = mmap64(NULL, strs_mapsz, PROT_READ, MAP_PRIVATE,
-		    fd, sp[shstrndx].sh_offset & _PAGEMASK);
+		    fd, sp[hdr.e64.e_shstrndx].sh_offset & _PAGEMASK);
 
 		strs = (char *)strs_map +
-		    (sp[shstrndx].sh_offset & ~_PAGEMASK);
+		    (sp[hdr.e64.e_shstrndx].sh_offset & ~_PAGEMASK);
 
 		if (strs_map == MAP_FAILED) {
 			free(sp);
@@ -385,15 +358,15 @@ ctf_fdopen(int fd, int *errp)
 		 * Iterate over the section header array looking for the CTF
 		 * section and symbol table.  The strtab is linked to symtab.
 		 */
-		for (i = 0; i < shnum; i++) {
+		for (i = 0; i < n; i++) {
 			const GElf_Shdr *shp = &sp[i];
 			const GElf_Shdr *lhp = &sp[shp->sh_link];
 
-			if (shp->sh_link >= shnum)
+			if (shp->sh_link >= hdr.e64.e_shnum)
 				continue; /* corrupt sh_link field */
 
-			if (shp->sh_name >= sp[shstrndx].sh_size ||
-			    lhp->sh_name >= sp[shstrndx].sh_size)
+			if (shp->sh_name >= sp[hdr.e64.e_shstrndx].sh_size ||
+			    lhp->sh_name >= sp[hdr.e64.e_shstrndx].sh_size)
 				continue; /* corrupt sh_name field */
 
 			if (shp->sh_type == SHT_PROGBITS &&

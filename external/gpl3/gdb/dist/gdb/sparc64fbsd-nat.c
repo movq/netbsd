@@ -1,6 +1,6 @@
 /* Native-dependent code for FreeBSD/sparc64.
 
-   Copyright (C) 2003-2015 Free Software Foundation, Inc.
+   Copyright (C) 2003-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -70,9 +70,12 @@ _initialize_sparc64fbsd_nat (void)
 
   /* Add some extra features to the generic SPARC target.  */
   t = sparc_target ();
-  fbsd_nat_add_target (t);
+  t->to_pid_to_exec_file = fbsd_pid_to_exec_file;
+  t->to_find_memory_regions = fbsd_find_memory_regions;
+  t->to_make_corefile_notes = fbsd_make_corefile_notes;
+  add_target (t);
 
-  sparc_gregmap = &sparc64fbsd_gregmap;
+  sparc_gregset = &sparc64fbsd_gregset;
 
   /* Support debugging kernel virtual memory images.  */
   bsd_kvm_add_target (sparc64fbsd_kvm_supply_pcb);

@@ -17,8 +17,7 @@ namespace llvm {
 
 class MachineFunction;
 class MachineInstr;
-class DILocalVariable;
-class DILocation;
+class MDNode;
 class TargetRegisterInfo;
 
 // For each user variable, keep a list of instruction ranges where this variable
@@ -32,19 +31,16 @@ class DbgValueHistoryMap {
 public:
   typedef std::pair<const MachineInstr *, const MachineInstr *> InstrRange;
   typedef SmallVector<InstrRange, 4> InstrRanges;
-  typedef std::pair<const DILocalVariable *, const DILocation *>
-      InlinedVariable;
-  typedef MapVector<InlinedVariable, InstrRanges> InstrRangesMap;
-
+  typedef MapVector<const MDNode *, InstrRanges> InstrRangesMap;
 private:
   InstrRangesMap VarInstrRanges;
 
 public:
-  void startInstrRange(InlinedVariable Var, const MachineInstr &MI);
-  void endInstrRange(InlinedVariable Var, const MachineInstr &MI);
+  void startInstrRange(const MDNode *Var, const MachineInstr &MI);
+  void endInstrRange(const MDNode *Var, const MachineInstr &MI);
   // Returns register currently describing @Var. If @Var is currently
   // unaccessible or is not described by a register, returns 0.
-  unsigned getRegisterForVar(InlinedVariable Var) const;
+  unsigned getRegisterForVar(const MDNode *Var) const;
 
   bool empty() const { return VarInstrRanges.empty(); }
   void clear() { VarInstrRanges.clear(); }

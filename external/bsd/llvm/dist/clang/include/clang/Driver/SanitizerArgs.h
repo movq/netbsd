@@ -10,32 +10,28 @@
 #define LLVM_CLANG_DRIVER_SANITIZERARGS_H
 
 #include "clang/Basic/Sanitizers.h"
-#include "clang/Driver/Types.h"
 #include "llvm/Option/Arg.h"
 #include "llvm/Option/ArgList.h"
 #include <string>
-#include <vector>
 
 namespace clang {
 namespace driver {
 
+class Driver;
 class ToolChain;
 
 class SanitizerArgs {
   SanitizerSet Sanitizers;
   SanitizerSet RecoverableSanitizers;
-  SanitizerSet TrapSanitizers;
 
-  std::vector<std::string> BlacklistFiles;
-  std::vector<std::string> ExtraDeps;
-  int CoverageFeatures;
+  std::string BlacklistFile;
+  int SanitizeCoverage;
   int MsanTrackOrigins;
-  bool MsanUseAfterDtor;
-  bool CfiCrossDso;
   int AsanFieldPadding;
+  bool AsanZeroBaseShadow;
+  bool UbsanTrapOnError;
   bool AsanSharedRuntime;
   bool LinkCXXRuntimes;
-  bool NeedPIE;
 
  public:
   /// Parses the sanitizer arguments from an argument list.
@@ -51,20 +47,17 @@ class SanitizerArgs {
   }
   bool needsUbsanRt() const;
   bool needsDfsanRt() const { return Sanitizers.has(SanitizerKind::DataFlow); }
-  bool needsSafeStackRt() const {
-    return Sanitizers.has(SanitizerKind::SafeStack);
-  }
-  bool needsCfiRt() const;
-  bool needsCfiDiagRt() const;
 
+  bool sanitizesVptr() const { return Sanitizers.has(SanitizerKind::Vptr); }
   bool requiresPIE() const;
   bool needsUnwindTables() const;
   bool linkCXXRuntimes() const { return LinkCXXRuntimes; }
-  void addArgs(const ToolChain &TC, const llvm::opt::ArgList &Args,
-               llvm::opt::ArgStringList &CmdArgs, types::ID InputType) const;
+  void addArgs(const llvm::opt::ArgList &Args,
+               llvm::opt::ArgStringList &CmdArgs) const;
 
  private:
   void clear();
+  bool getDefaultBlacklist(const Driver &D, std::string &BLPath);
 };
 
 }  // namespace driver

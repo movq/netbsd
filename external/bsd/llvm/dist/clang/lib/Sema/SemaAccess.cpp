@@ -182,20 +182,15 @@ struct AccessTarget : public AccessedEntity {
 
   class SavedInstanceContext {
   public:
-    SavedInstanceContext(SavedInstanceContext &&S)
-        : Target(S.Target), Has(S.Has) {
-      S.Target = nullptr;
-    }
     ~SavedInstanceContext() {
-      if (Target)
-        Target->HasInstanceContext = Has;
+      Target.HasInstanceContext = Has;
     }
 
   private:
     friend struct AccessTarget;
     explicit SavedInstanceContext(AccessTarget &Target)
-        : Target(&Target), Has(Target.HasInstanceContext) {}
-    AccessTarget *Target;
+      : Target(Target), Has(Target.HasInstanceContext) {}
+    AccessTarget &Target;
     bool Has;
   };
 
@@ -1467,7 +1462,7 @@ static Sema::AccessResult CheckAccess(Sema &S, SourceLocation Loc,
   case AR_inaccessible: return Sema::AR_inaccessible;
   case AR_dependent: return Sema::AR_dependent;
   }
-  llvm_unreachable("invalid access result");
+  llvm_unreachable("falling off end");
 }
 
 void Sema::HandleDelayedAccessCheck(DelayedDiagnostic &DD, Decl *D) {
@@ -1771,7 +1766,7 @@ Sema::AccessResult Sema::CheckFriendAccess(NamedDecl *target) {
   case AR_inaccessible: return Sema::AR_inaccessible;
   case AR_dependent: return Sema::AR_dependent;
   }
-  llvm_unreachable("invalid access result");
+  llvm_unreachable("falling off end");
 }
 
 Sema::AccessResult Sema::CheckAddressOfMemberAccess(Expr *OvlExpr,

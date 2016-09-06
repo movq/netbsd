@@ -10,7 +10,6 @@
 // The machine combiner pass uses machine trace metrics to ensure the combined
 // instructions does not lengthen the critical path or the resource depth.
 //===----------------------------------------------------------------------===//
-
 #define DEBUG_TYPE "machine-combiner"
 
 #include "llvm/ADT/Statistic.h"
@@ -46,7 +45,7 @@ class MachineCombiner : public MachineFunctionPass {
 
   TargetSchedModel TSchedModel;
 
-  /// True if optimizing for code size.
+  /// OptSize - True if optimizing for code size.
   bool OptSize;
 
 public:
@@ -68,11 +67,10 @@ private:
   unsigned getLatency(MachineInstr *Root, MachineInstr *NewRoot,
                       MachineTraceMetrics::Trace BlockTrace);
   bool
-  improvesCriticalPathLen(MachineBasicBlock *MBB, MachineInstr *Root,
-                          MachineTraceMetrics::Trace BlockTrace,
-                          SmallVectorImpl<MachineInstr *> &InsInstrs,
-                          DenseMap<unsigned, unsigned> &InstrIdxForVirtReg,
-                          MachineCombinerPattern Pattern);
+  preservesCriticalPathLen(MachineBasicBlock *MBB, MachineInstr *Root,
+                           MachineTraceMetrics::Trace BlockTrace,
+                           SmallVectorImpl<MachineInstr *> &InsInstrs,
+                           DenseMap<unsigned, unsigned> &InstrIdxForVirtReg);
   bool preservesResourceLen(MachineBasicBlock *MBB,
                             MachineTraceMetrics::Trace BlockTrace,
                             SmallVectorImpl<MachineInstr *> &InsInstrs,
@@ -111,7 +109,7 @@ MachineInstr *MachineCombiner::getOperandDef(const MachineOperand &MO) {
   return DefInstr;
 }
 
-/// Computes depth of instructions in vector \InsInstr.
+/// getDepth - Computes depth of instructions in vector \InsInstr.
 ///
 /// \param InsInstrs is a vector of machine instructions
 /// \param InstrIdxForVirtReg is a dense map of virtual register to index
@@ -123,17 +121,18 @@ unsigned
 MachineCombiner::getDepth(SmallVectorImpl<MachineInstr *> &InsInstrs,
                           DenseMap<unsigned, unsigned> &InstrIdxForVirtReg,
                           MachineTraceMetrics::Trace BlockTrace) {
-  SmallVector<unsigned, 16> InstrDepth;
-  assert(TSchedModel.hasInstrSchedModelOrItineraries() &&
-         "Missing machine model\n");
 
-  // For each instruction in the new sequence compute the depth based on the
+  SmallVector<unsigned, 16> InstrDepth;
+  assert(TSchedModel.hasInstrSchedModel() && "Missing machine model\n");
+
+  // Foreach instruction in in the new sequence compute the depth based on the
   // operands. Use the trace information when possible. For new operands which
   // are tracked in the InstrIdxForVirtReg map depth is looked up in InstrDepth
   for (auto *InstrPtr : InsInstrs) { // for each Use
     unsigned IDepth = 0;
     DEBUG(dbgs() << "NEW INSTR "; InstrPtr->dump(); dbgs() << "\n";);
-    for (const MachineOperand &MO : InstrPtr->operands()) {
+    for (unsigned i = 0, e = InstrPtr->getNumOperands(); i != e; ++i) {
+      const MachineOperand &MO = InstrPtr->getOperand(i);
       // Check for virtual register operand.
       if (!(MO.isReg() && TargetRegisterInfo::isVirtualRegister(MO.getReg())))
         continue;
@@ -170,7 +169,8 @@ MachineCombiner::getDepth(SmallVectorImpl<MachineInstr *> &InsInstrs,
   return InstrDepth[NewRootIdx];
 }
 
-/// Computes instruction latency as max of latency of defined operands.
+/// getLatency - Computes instruction latency as max of latency of defined
+/// operands
 ///
 /// \param Root is a machine instruction that could be replaced by NewRoot.
 /// It is used to compute a more accurate latency information for NewRoot in
@@ -181,13 +181,14 @@ MachineCombiner::getDepth(SmallVectorImpl<MachineInstr *> &InsInstrs,
 /// \returns Latency of \p NewRoot
 unsigned MachineCombiner::getLatency(MachineInstr *Root, MachineInstr *NewRoot,
                                      MachineTraceMetrics::Trace BlockTrace) {
-  assert(TSchedModel.hasInstrSchedModelOrItineraries() &&
-         "Missing machine model\n");
+
+  assert(TSchedModel.hasInstrSchedModel() && "Missing machine model\n");
 
   // Check each definition in NewRoot and compute the latency
   unsigned NewRootLatency = 0;
 
-  for (const MachineOperand &MO : NewRoot->operands()) {
+  for (unsigned i = 0, e = NewRoot->getNumOperands(); i != e; ++i) {
+    const MachineOperand &MO = NewRoot->getOperand(i);
     // Check for virtual register operand.
     if (!(MO.isReg() && TargetRegisterInfo::isVirtualRegister(MO.getReg())))
       continue;
@@ -203,86 +204,53 @@ unsigned MachineCombiner::getLatency(MachineInstr *Root, MachineInstr *NewRoot,
           NewRoot, NewRoot->findRegisterDefOperandIdx(MO.getReg()), UseMO,
           UseMO->findRegisterUseOperandIdx(MO.getReg()));
     } else {
-      LatencyOp = TSchedModel.computeInstrLatency(NewRoot);
+      LatencyOp = TSchedModel.computeInstrLatency(NewRoot->getOpcode());
     }
     NewRootLatency = std::max(NewRootLatency, LatencyOp);
   }
   return NewRootLatency;
 }
 
-/// The combiner's goal may differ based on which pattern it is attempting
-/// to optimize.
-enum class CombinerObjective {
-  MustReduceDepth, // The data dependency chain must be improved.
-  Default          // The critical path must not be lengthened.
-};
-
-static CombinerObjective getCombinerObjective(MachineCombinerPattern P) {
-  // TODO: If C++ ever gets a real enum class, make this part of the
-  // MachineCombinerPattern class.
-  switch (P) {
-  case MachineCombinerPattern::REASSOC_AX_BY:
-  case MachineCombinerPattern::REASSOC_AX_YB:
-  case MachineCombinerPattern::REASSOC_XA_BY:
-  case MachineCombinerPattern::REASSOC_XA_YB:
-    return CombinerObjective::MustReduceDepth;
-  default:
-    return CombinerObjective::Default;
-  }
-}
-
-/// The DAGCombine code sequence ends in MI (Machine Instruction) Root.
-/// The new code sequence ends in MI NewRoot. A necessary condition for the new
-/// sequence to replace the old sequence is that it cannot lengthen the critical
-/// path. The definition of "improve" may be restricted by specifying that the
-/// new path improves the data dependency chain (MustReduceDepth).
-bool MachineCombiner::improvesCriticalPathLen(
+/// preservesCriticalPathlen - True when the new instruction sequence does not
+/// lengthen the critical path. The DAGCombine code sequence ends in MI
+/// (Machine Instruction) Root. The new code sequence ends in MI NewRoot. A
+/// necessary condition for the new sequence to replace the old sequence is that
+/// is cannot lengthen the critical path. This is decided by the formula
+/// (NewRootDepth + NewRootLatency) <=  (RootDepth + RootLatency + RootSlack)).
+/// The slack is the number of cycles Root can be delayed before the critical
+/// patch becomes longer.
+bool MachineCombiner::preservesCriticalPathLen(
     MachineBasicBlock *MBB, MachineInstr *Root,
     MachineTraceMetrics::Trace BlockTrace,
     SmallVectorImpl<MachineInstr *> &InsInstrs,
-    DenseMap<unsigned, unsigned> &InstrIdxForVirtReg,
-    MachineCombinerPattern Pattern) {
-  assert(TSchedModel.hasInstrSchedModelOrItineraries() &&
-         "Missing machine model\n");
-  // NewRoot is the last instruction in the \p InsInstrs vector.
+    DenseMap<unsigned, unsigned> &InstrIdxForVirtReg) {
+
+  assert(TSchedModel.hasInstrSchedModel() && "Missing machine model\n");
+  // NewRoot is the last instruction in the \p InsInstrs vector
+  // Get depth and latency of NewRoot
   unsigned NewRootIdx = InsInstrs.size() - 1;
   MachineInstr *NewRoot = InsInstrs[NewRootIdx];
-
-  // Get depth and latency of NewRoot and Root.
   unsigned NewRootDepth = getDepth(InsInstrs, InstrIdxForVirtReg, BlockTrace);
-  unsigned RootDepth = BlockTrace.getInstrCycles(Root).Depth;
-
-  DEBUG(dbgs() << "DEPENDENCE DATA FOR " << Root << "\n";
-        dbgs() << " NewRootDepth: " << NewRootDepth << "\n";
-        dbgs() << " RootDepth: " << RootDepth << "\n");
-
-  // For a transform such as reassociation, the cost equation is
-  // conservatively calculated so that we must improve the depth (data
-  // dependency cycles) in the critical path to proceed with the transform.
-  // Being conservative also protects against inaccuracies in the underlying
-  // machine trace metrics and CPU models.
-  if (getCombinerObjective(Pattern) == CombinerObjective::MustReduceDepth)
-    return NewRootDepth < RootDepth;
-
-  // A more flexible cost calculation for the critical path includes the slack
-  // of the original code sequence. This may allow the transform to proceed
-  // even if the instruction depths (data dependency cycles) become worse.
   unsigned NewRootLatency = getLatency(Root, NewRoot, BlockTrace);
+
+  // Get depth, latency and slack of Root
+  unsigned RootDepth = BlockTrace.getInstrCycles(Root).Depth;
   unsigned RootLatency = TSchedModel.computeInstrLatency(Root);
   unsigned RootSlack = BlockTrace.getInstrSlack(Root);
 
-  DEBUG(dbgs() << " NewRootLatency: " << NewRootLatency << "\n";
-        dbgs() << " RootLatency: " << RootLatency << "\n";
-        dbgs() << " RootSlack: " << RootSlack << "\n";
-        dbgs() << " NewRootDepth + NewRootLatency = "
+  DEBUG(dbgs() << "DEPENDENCE DATA FOR " << Root << "\n";
+        dbgs() << " NewRootDepth: " << NewRootDepth
+               << " NewRootLatency: " << NewRootLatency << "\n";
+        dbgs() << " RootDepth: " << RootDepth << " RootLatency: " << RootLatency
+               << " RootSlack: " << RootSlack << "\n";
+        dbgs() << " NewRootDepth + NewRootLatency "
                << NewRootDepth + NewRootLatency << "\n";
-        dbgs() << " RootDepth + RootLatency + RootSlack = "
+        dbgs() << " RootDepth + RootLatency + RootSlack "
                << RootDepth + RootLatency + RootSlack << "\n";);
 
-  unsigned NewCycleCount = NewRootDepth + NewRootLatency;
-  unsigned OldCycleCount = RootDepth + RootLatency + RootSlack;
-  
-  return NewCycleCount <= OldCycleCount;
+  /// True when the new sequence does not lenghten the critical path.
+  return ((NewRootDepth + NewRootLatency) <=
+          (RootDepth + RootLatency + RootSlack));
 }
 
 /// helper routine to convert instructions into SC
@@ -296,14 +264,12 @@ void MachineCombiner::instr2instrSC(
     InstrsSC.push_back(SC);
   }
 }
-
-/// True when the new instructions do not increase resource length
+/// preservesResourceLen - True when the new instructions do not increase
+/// resource length
 bool MachineCombiner::preservesResourceLen(
     MachineBasicBlock *MBB, MachineTraceMetrics::Trace BlockTrace,
     SmallVectorImpl<MachineInstr *> &InsInstrs,
     SmallVectorImpl<MachineInstr *> &DelInstrs) {
-  if (!TSchedModel.hasInstrSchedModel())
-    return true;
 
   // Compute current resource length
 
@@ -322,7 +288,7 @@ bool MachineCombiner::preservesResourceLen(
   ArrayRef<const MCSchedClassDesc *> MSCInsArr = makeArrayRef(InsInstrsSC);
   ArrayRef<const MCSchedClassDesc *> MSCDelArr = makeArrayRef(DelInstrsSC);
 
-  // Compute new resource length.
+  // Compute new resource length
   unsigned ResLenAfterCombine =
       BlockTrace.getResourceLength(MBBarr, MSCInsArr, MSCDelArr);
 
@@ -334,16 +300,16 @@ bool MachineCombiner::preservesResourceLen(
 }
 
 /// \returns true when new instruction sequence should be generated
-/// independent if it lengthens critical path or not
+/// independent if it lenghtens critical path or not
 bool MachineCombiner::doSubstitute(unsigned NewSize, unsigned OldSize) {
   if (OptSize && (NewSize < OldSize))
     return true;
-  if (!TSchedModel.hasInstrSchedModelOrItineraries())
+  if (!TSchedModel.hasInstrSchedModel())
     return true;
   return false;
 }
 
-/// Substitute a slow code sequence with a faster one by
+/// combineInstructions - substitute a slow code sequence with a faster one by
 /// evaluating instruction combining pattern.
 /// The prototype of such a pattern is MUl + ADD -> MADD. Performs instruction
 /// combining based on machine trace metrics. Only combine a sequence of
@@ -360,7 +326,7 @@ bool MachineCombiner::combineInstructions(MachineBasicBlock *MBB) {
     auto &MI = *BlockIter++;
 
     DEBUG(dbgs() << "INSTR "; MI.dump(); dbgs() << "\n";);
-    SmallVector<MachineCombinerPattern, 16> Patterns;
+    SmallVector<MachineCombinerPattern::MC_PATTERN, 16> Pattern;
     // The motivating example is:
     //
     //     MUL  Other        MUL_op1 MUL_op2  Other
@@ -383,58 +349,56 @@ bool MachineCombiner::combineInstructions(MachineBasicBlock *MBB) {
     //
     // The algorithm does not try to evaluate all patterns and pick the best.
     // This is only an artificial restriction though. In practice there is
-    // mostly one pattern, and getMachineCombinerPatterns() can order patterns
-    // based on an internal cost heuristic.
+    // mostly one pattern and hasPattern() can order patterns based on an
+    // internal cost heuristic.
 
-    if (!TII->getMachineCombinerPatterns(MI, Patterns))
-      continue;
-
-    for (auto P : Patterns) {
-      SmallVector<MachineInstr *, 16> InsInstrs;
-      SmallVector<MachineInstr *, 16> DelInstrs;
-      DenseMap<unsigned, unsigned> InstrIdxForVirtReg;
-      if (!MinInstr)
-        MinInstr = Traces->getEnsemble(MachineTraceMetrics::TS_MinInstrCount);
-      MachineTraceMetrics::Trace BlockTrace = MinInstr->getTrace(MBB);
-      Traces->verifyAnalysis();
-      TII->genAlternativeCodeSequence(MI, P, InsInstrs, DelInstrs,
-                                      InstrIdxForVirtReg);
-      unsigned NewInstCount = InsInstrs.size();
-      unsigned OldInstCount = DelInstrs.size();
-      // Found pattern, but did not generate alternative sequence.
-      // This can happen e.g. when an immediate could not be materialized
-      // in a single instruction.
-      if (!NewInstCount)
-        continue;
-
-      // Substitute when we optimize for codesize and the new sequence has
-      // fewer instructions OR
-      // the new sequence neither lengthens the critical path nor increases
-      // resource pressure.
-      if (doSubstitute(NewInstCount, OldInstCount) ||
-          (improvesCriticalPathLen(MBB, &MI, BlockTrace, InsInstrs,
-                                   InstrIdxForVirtReg, P) &&
-           preservesResourceLen(MBB, BlockTrace, InsInstrs, DelInstrs))) {
-        for (auto *InstrPtr : InsInstrs)
-          MBB->insert((MachineBasicBlock::iterator) &MI, InstrPtr);
-        for (auto *InstrPtr : DelInstrs)
-          InstrPtr->eraseFromParentAndMarkDBGValuesForRemoval();
-
-        Changed = true;
-        ++NumInstCombined;
-
-        Traces->invalidate(MBB);
+    if (TII->hasPattern(MI, Pattern)) {
+      for (auto P : Pattern) {
+        SmallVector<MachineInstr *, 16> InsInstrs;
+        SmallVector<MachineInstr *, 16> DelInstrs;
+        DenseMap<unsigned, unsigned> InstrIdxForVirtReg;
+        if (!MinInstr)
+          MinInstr = Traces->getEnsemble(MachineTraceMetrics::TS_MinInstrCount);
+        MachineTraceMetrics::Trace BlockTrace = MinInstr->getTrace(MBB);
         Traces->verifyAnalysis();
-        // Eagerly stop after the first pattern fires.
-        break;
-      } else {
-        // Cleanup instructions of the alternative code sequence. There is no
-        // use for them.
-        MachineFunction *MF = MBB->getParent();
-        for (auto *InstrPtr : InsInstrs)
-          MF->DeleteMachineInstr(InstrPtr);
+        TII->genAlternativeCodeSequence(MI, P, InsInstrs, DelInstrs,
+                                        InstrIdxForVirtReg);
+        // Found pattern, but did not generate alternative sequence.
+        // This can happen e.g. when an immediate could not be materialized
+        // in a single instruction.
+        if (!InsInstrs.size())
+          continue;
+        // Substitute when we optimize for codesize and the new sequence has
+        // fewer instructions OR
+        // the new sequence neither lenghten the critical path nor increases
+        // resource pressure.
+        if (doSubstitute(InsInstrs.size(), DelInstrs.size()) ||
+            (preservesCriticalPathLen(MBB, &MI, BlockTrace, InsInstrs,
+                                      InstrIdxForVirtReg) &&
+             preservesResourceLen(MBB, BlockTrace, InsInstrs, DelInstrs))) {
+          for (auto *InstrPtr : InsInstrs)
+            MBB->insert((MachineBasicBlock::iterator) & MI,
+                        (MachineInstr *)InstrPtr);
+          for (auto *InstrPtr : DelInstrs)
+            InstrPtr->eraseFromParentAndMarkDBGValuesForRemoval();
+
+          Changed = true;
+          ++NumInstCombined;
+
+          Traces->invalidate(MBB);
+          Traces->verifyAnalysis();
+          // Eagerly stop after the first pattern fired
+          break;
+        } else {
+          // Cleanup instructions of the alternative code sequence. There is no
+          // use for them.
+          for (auto *InstrPtr : InsInstrs) {
+            MachineFunction *MF = MBB->getParent();
+            MF->DeleteMachineInstr((MachineInstr *)InstrPtr);
+          }
+        }
+        InstrIdxForVirtReg.clear();
       }
-      InstrIdxForVirtReg.clear();
     }
   }
 
@@ -442,15 +406,18 @@ bool MachineCombiner::combineInstructions(MachineBasicBlock *MBB) {
 }
 
 bool MachineCombiner::runOnMachineFunction(MachineFunction &MF) {
-  const TargetSubtargetInfo &STI = MF.getSubtarget();
+  const TargetSubtargetInfo &STI =
+      MF.getTarget().getSubtarget<TargetSubtargetInfo>();
   TII = STI.getInstrInfo();
   TRI = STI.getRegisterInfo();
   SchedModel = STI.getSchedModel();
   TSchedModel.init(SchedModel, &STI, TII);
   MRI = &MF.getRegInfo();
   Traces = &getAnalysis<MachineTraceMetrics>();
-  MinInstr = nullptr;
-  OptSize = MF.getFunction()->optForSize();
+  MinInstr = 0;
+
+  OptSize = MF.getFunction()->getAttributes().hasAttribute(
+      AttributeSet::FunctionIndex, Attribute::OptimizeForSize);
 
   DEBUG(dbgs() << getPassName() << ": " << MF.getName() << '\n');
   if (!TII->useMachineCombiner()) {

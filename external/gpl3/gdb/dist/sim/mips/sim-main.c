@@ -152,7 +152,9 @@ load_memory (SIM_DESC SD,
 		    pr_addr (pAddr));
     }
 
+#if defined(TRACE)
   dotrace (SD, CPU, tracefh,((IorD == isDATA) ? 0 : 2),(unsigned int)(pAddr&0xFFFFFFFF),(AccessLength + 1),"load%s",((IorD == isDATA) ? "" : " instruction"));
+#endif /* TRACE */
   
   /* Read the specified number of bytes from memory.  Adjust for
      host/target byte ordering/ Align the least significant byte
@@ -262,7 +264,9 @@ store_memory (SIM_DESC SD,
 		  (LOADDRMASK + 1) << 3,
 		  pr_addr(pAddr));
   
+#if defined(TRACE)
   dotrace (SD, CPU, tracefh,1,(unsigned int)(pAddr&0xFFFFFFFF),(AccessLength + 1),"store");
+#endif /* TRACE */
   
 #ifdef DEBUG
   printf("DBG: StoreMemory: offset = %d MemElem = 0x%s%s\n",(unsigned int)(pAddr & LOADDRMASK),pr_uword64(MemElem1),pr_uword64(MemElem));

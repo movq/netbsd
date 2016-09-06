@@ -16,10 +16,8 @@
 #ifndef LLVM_CODEGEN_ASMPRINTER_H
 #define LLVM_CODEGEN_ASMPRINTER_H
 
-#include "llvm/ADT/MapVector.h"
 #include "llvm/ADT/Twine.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
-#include "llvm/CodeGen/DwarfStringPoolEntry.h"
 #include "llvm/IR/InlineAsm.h"
 #include "llvm/Support/DataTypes.h"
 #include "llvm/Support/ErrorHandling.h"
@@ -31,8 +29,6 @@ class ByteStreamer;
 class GCStrategy;
 class Constant;
 class ConstantArray;
-class DIE;
-class DIEAbbrev;
 class GCMetadataPrinter;
 class GlobalValue;
 class GlobalVariable;
@@ -50,11 +46,11 @@ class MCCFIInstruction;
 class MCContext;
 class MCExpr;
 class MCInst;
+class MCInstrInfo;
 class MCSection;
 class MCStreamer;
 class MCSubtargetInfo;
 class MCSymbol;
-class MCTargetOptions;
 class MDNode;
 class DwarfDebug;
 class Mangler;
@@ -73,6 +69,7 @@ public:
   ///
   const MCAsmInfo *MAI;
 
+  const MCInstrInfo *MII;
   /// This is the context for the output file that we are streaming. This owns
   /// all of the global MC-related objects for the generated translation unit.
   MCContext &OutContext;
@@ -80,7 +77,7 @@ public:
   /// This is the MCStreamer object for the file we are generating. This
   /// contains the transient state for the current translation unit that we are
   /// generating (such as the current section etc).
-  std::unique_ptr<MCStreamer> OutStreamer;
+  MCStreamer &OutStreamer;
 
   /// The current machine function.
   const MachineFunction *MF;
@@ -102,16 +99,7 @@ public:
   /// default, this is equal to CurrentFnSym.
   MCSymbol *CurrentFnSymForSize;
 
-  /// Map global GOT equivalent MCSymbols to GlobalVariables and keep track of
-  /// its number of uses by other globals.
-  typedef std::pair<const GlobalVariable *, unsigned> GOTEquivUsePair;
-  MapVector<const MCSymbol *, GOTEquivUsePair> GlobalGOTEquivs;
-
 private:
-  MCSymbol *CurrentFnBegin;
-  MCSymbol *CurrentFnEnd;
-  MCSymbol *CurExceptionSym;
-
   // The garbage collection metadata printer table.
   void *GCMetadataPrinters; // Really a DenseMap.
 
@@ -139,10 +127,10 @@ private:
   DwarfDebug *DD;
 
 protected:
-  explicit AsmPrinter(TargetMachine &TM, std::unique_ptr<MCStreamer> Streamer);
+  explicit AsmPrinter(TargetMachine &TM, MCStreamer &Streamer);
 
 public:
-  ~AsmPrinter() override;
+  virtual ~AsmPrinter();
 
   DwarfDebug *getDwarfDebug() { return DD; }
   DwarfDebug *getDwarfDebug() const { return DD; }
@@ -155,18 +143,11 @@ public:
   ///
   unsigned getFunctionNumber() const;
 
-  MCSymbol *getFunctionBegin() const { return CurrentFnBegin; }
-  MCSymbol *getFunctionEnd() const { return CurrentFnEnd; }
-  MCSymbol *getCurExceptionSym();
-
   /// Return information about object file lowering.
   const TargetLoweringObjectFile &getObjFileLowering() const;
 
   /// Return information about data layout.
   const DataLayout &getDataLayout() const;
-
-  /// Return the pointer size from the TargetMachine
-  unsigned getPointerSize() const;
 
   /// Return information about subtarget.
   const MCSubtargetInfo &getSubtargetInfo() const;
@@ -203,6 +184,7 @@ public:
   /// Emit the specified function out to the OutStreamer.
   bool runOnMachineFunction(MachineFunction &MF) override {
     SetupMachineFunction(MF);
+    EmitFunctionHeader();
     EmitFunctionBody();
     return false;
   }
@@ -214,6 +196,9 @@ public:
   /// This should be called when a new MachineFunction is being processed from
   /// runOnMachineFunction.
   void SetupMachineFunction(MachineFunction &MF);
+
+  /// This method emits the header for the current function.
+  void EmitFunctionHeader();
 
   /// This method emits the body and trailer for a function.
   void EmitFunctionBody();
@@ -236,12 +221,7 @@ public:
   /// Print assembly representations of the jump tables used by the current
   /// function to the current output stream.
   ///
-  virtual void EmitJumpTableInfo();
-
-  /// Emit the control variable for an emulated TLS variable.
-  virtual void EmitEmulatedTLSControlVariable(const GlobalVariable *GV,
-                                              MCSymbol *EmittedSym,
-                                              bool AllZeroInitValue);
+  void EmitJumpTableInfo();
 
   /// Emit the specified global variable to the .s file.
   virtual void EmitGlobalVariable(const GlobalVariable *GV);
@@ -258,26 +238,15 @@ public:
   ///
   void EmitAlignment(unsigned NumBits, const GlobalObject *GO = nullptr) const;
 
+  /// This method prints the label for the specified MachineBasicBlock, an
+  /// alignment (if present) and a comment describing it if appropriate.
+  void EmitBasicBlockStart(const MachineBasicBlock &MBB) const;
+
   /// Lower the specified LLVM Constant to an MCExpr.
-  virtual const MCExpr *lowerConstant(const Constant *CV);
+  const MCExpr *lowerConstant(const Constant *CV);
 
   /// \brief Print a general LLVM constant to the .s file.
-  void EmitGlobalConstant(const DataLayout &DL, const Constant *CV);
-
-  /// \brief Unnamed constant global variables solely contaning a pointer to
-  /// another globals variable act like a global variable "proxy", or GOT
-  /// equivalents, i.e., it's only used to hold the address of the latter. One
-  /// optimization is to replace accesses to these proxies by using the GOT
-  /// entry for the final global instead. Hence, we select GOT equivalent
-  /// candidates among all the module global variables, avoid emitting them
-  /// unnecessarily and finally replace references to them by pc relative
-  /// accesses to GOT entries.
-  void computeGlobalGOTEquivs(Module &M);
-
-  /// \brief Constant expressions using GOT equivalent globals may not be
-  /// eligible for PC relative GOT entry conversion, in such cases we need to
-  /// emit the proxies we previously omitted in EmitGlobalVariable.
-  void emitGlobalGOTEquivs();
+  void EmitGlobalConstant(const Constant *CV);
 
   //===------------------------------------------------------------------===//
   // Overridable Hooks
@@ -302,12 +271,6 @@ public:
   /// function.
   virtual void EmitFunctionBodyEnd() {}
 
-  /// Targets can override this to emit stuff at the start of a basic block.
-  /// By default, this method prints the label for the specified
-  /// MachineBasicBlock, an alignment (if present) and a comment describing it
-  /// if appropriate.
-  virtual void EmitBasicBlockStart(const MachineBasicBlock &MBB) const;
-
   /// Targets can override this to emit stuff at the end of a basic block.
   virtual void EmitBasicBlockEnd(const MachineBasicBlock &MBB) {}
 
@@ -325,9 +288,7 @@ public:
 
   /// Targets can override this to change how global constants that are part of
   /// a C++ static/global constructor list are emitted.
-  virtual void EmitXXStructor(const DataLayout &DL, const Constant *CV) {
-    EmitGlobalConstant(DL, CV);
-  }
+  virtual void EmitXXStructor(const Constant *CV) { EmitGlobalConstant(CV); }
 
   /// Return true if the basic block has exactly one predecessor and the control
   /// transfer mechanism between the predecessor and this block is a
@@ -343,7 +304,12 @@ public:
   // Symbol Lowering Routines.
   //===------------------------------------------------------------------===//
 public:
-  MCSymbol *createTempSymbol(const Twine &Name) const;
+  /// Return the MCSymbol corresponding to the assembler temporary label with
+  /// the specified stem and unique ID.
+  MCSymbol *GetTempSymbol(Twine Name, unsigned ID) const;
+
+  /// Return an assembler temporary label with the specified stem.
+  MCSymbol *GetTempSymbol(Twine Name) const;
 
   /// Return the MCSymbol for a private symbol with global value name as its
   /// base, with the specified suffix.
@@ -414,6 +380,9 @@ public:
   void EmitULEB128(uint64_t Value, const char *Desc = nullptr,
                    unsigned PadTo = 0) const;
 
+  /// Emit a .byte 42 directive for a DW_CFA_xxx value.
+  void EmitCFAByte(unsigned Val) const;
+
   /// Emit a .byte 42 directive that corresponds to an encoding.  If verbose
   /// assembly output is enabled, we output comments describing the encoding.
   /// Desc is a string saying what the encoding is specifying (e.g. "LSDA").
@@ -425,25 +394,45 @@ public:
   /// Emit reference to a ttype global with a specified encoding.
   void EmitTTypeReference(const GlobalValue *GV, unsigned Encoding) const;
 
-  /// Emit a reference to a symbol for use in dwarf. Different object formats
-  /// represent this in different ways. Some use a relocation others encode
-  /// the label offset in its section.
-  void emitDwarfSymbolReference(const MCSymbol *Label,
-                                bool ForceOffset = false) const;
-
-  /// Emit the 4-byte offset of a string from the start of its section.
+  /// Emit the 4-byte offset of Label from the start of its section.  This can
+  /// be done with a special directive if the target supports it (e.g. cygwin)
+  /// or by emitting it as an offset from a label at the start of the section.
   ///
-  /// When possible, emit a DwarfStringPool section offset without any
-  /// relocations, and without using the symbol.  Otherwise, defers to \a
-  /// emitDwarfSymbolReference().
-  void emitDwarfStringOffset(DwarfStringPoolEntryRef S) const;
+  /// SectionLabel is a temporary label emitted at the start of the section
+  /// that Label lives in.
+  void EmitSectionOffset(const MCSymbol *Label,
+                         const MCSymbol *SectionLabel) const;
 
   /// Get the value for DW_AT_APPLE_isa. Zero if no isa encoding specified.
   virtual unsigned getISAEncoding() { return 0; }
 
+  /// Emit a dwarf register operation for describing
+  /// - a small value occupying only part of a register or
+  /// - a register representing only part of a value.
+  void EmitDwarfOpPiece(ByteStreamer &Streamer, unsigned SizeInBits,
+                        unsigned OffsetInBits = 0) const;
+
+
+  /// \brief Emit a partial DWARF register operation.
+  /// \param MLoc             the register
+  /// \param PieceSize        size and
+  /// \param PieceOffset      offset of the piece in bits, if this is one
+  ///                         piece of an aggregate value.
+  ///
+  /// If size and offset is zero an operation for the entire
+  /// register is emitted: Some targets do not provide a DWARF
+  /// register number for every register.  If this is the case, this
+  /// function will attempt to emit a DWARF register by emitting a
+  /// piece of a super-register or by piecing together multiple
+  /// subregisters that alias the register.
+  void EmitDwarfRegOpPiece(ByteStreamer &BS, const MachineLocation &MLoc,
+                           unsigned PieceSize = 0,
+                           unsigned PieceOffset = 0) const;
+
   /// EmitDwarfRegOp - Emit a dwarf register operation.
-  virtual void EmitDwarfRegOp(ByteStreamer &BS,
-                              const MachineLocation &MLoc) const;
+  /// \param Indirect   whether this is a register-indirect address
+  virtual void EmitDwarfRegOp(ByteStreamer &BS, const MachineLocation &MLoc,
+                              bool Indirect) const;
 
   //===------------------------------------------------------------------===//
   // Dwarf Lowering Routines
@@ -451,21 +440,6 @@ public:
 
   /// \brief Emit frame instruction to describe the layout of the frame.
   void emitCFIInstruction(const MCCFIInstruction &Inst) const;
-
-  /// \brief Emit Dwarf abbreviation table.
-  template <typename T> void emitDwarfAbbrevs(const T &Abbrevs) const {
-    // For each abbreviation.
-    for (const auto &Abbrev : Abbrevs)
-      emitDwarfAbbrev(*Abbrev);
-
-    // Mark end of abbreviations.
-    EmitULEB128(0, "EOM(3)");
-  }
-
-  void emitDwarfAbbrev(const DIEAbbrev &Abbrev) const;
-
-  /// \brief Recursively emit Dwarf DIE tree.
-  void emitDwarfDIE(const DIE &Die) const;
 
   //===------------------------------------------------------------------===//
   // Inline Asm Support
@@ -500,7 +474,7 @@ public:
 
   /// Let the target do anything it needs to do before emitting inlineasm.
   /// \p StartInfo - the subtarget info before parsing inline asm
-  virtual void emitInlineAsmStart() const;
+  virtual void emitInlineAsmStart(const MCSubtargetInfo &StartInfo) const;
 
   /// Let the target do anything it needs to do after emitting inlineasm.
   /// This callback can be used restore the original mode in case the
@@ -517,15 +491,11 @@ private:
   mutable const MachineInstr *LastMI;
   mutable unsigned LastFn;
   mutable unsigned Counter;
-
-  /// This method emits the header for the current function.
-  virtual void EmitFunctionHeader();
+  mutable unsigned SetCounter;
 
   /// Emit a blob of inline asm to the output streamer.
   void
-  EmitInlineAsm(StringRef Str, const MCSubtargetInfo &STI,
-                const MCTargetOptions &MCOptions,
-                const MDNode *LocMDNode = nullptr,
+  EmitInlineAsm(StringRef Str, const MDNode *LocMDNode = nullptr,
                 InlineAsm::AsmDialect AsmDialect = InlineAsm::AD_ATT) const;
 
   /// This method formats and emits the specified machine instruction that is an
@@ -548,8 +518,7 @@ private:
   void EmitLLVMUsedList(const ConstantArray *InitList);
   /// Emit llvm.ident metadata in an '.ident' directive.
   void EmitModuleIdents(Module &M);
-  void EmitXXStructorList(const DataLayout &DL, const Constant *List,
-                          bool isCtor);
+  void EmitXXStructorList(const Constant *List, bool isCtor);
   GCMetadataPrinter *GetOrCreateGCPrinter(GCStrategy &C);
 };
 }

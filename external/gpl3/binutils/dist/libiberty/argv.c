@@ -1,5 +1,5 @@
 /* Create and destroy argument vectors (argv's)
-   Copyright (C) 1992, 2001, 2010, 2012 Free Software Foundation, Inc.
+   Copyright (C) 1992, 2001, 2010 Free Software Foundation, Inc.
    Written by Fred Fish @ Cygnus Support
 
 This file is part of the libiberty library.
@@ -72,13 +72,20 @@ dupargv (char **argv)
   
   /* the vector */
   for (argc = 0; argv[argc] != NULL; argc++);
-  copy = (char **) xmalloc ((argc + 1) * sizeof (char *));
-
+  copy = (char **) malloc ((argc + 1) * sizeof (char *));
+  if (copy == NULL)
+    return NULL;
+  
   /* the strings */
   for (argc = 0; argv[argc] != NULL; argc++)
     {
       int len = strlen (argv[argc]);
-      copy[argc] = (char *) xmalloc (len + 1);
+      copy[argc] = (char *) malloc (len + 1);
+      if (copy[argc] == NULL)
+	{
+	  freeargv (copy);
+	  return NULL;
+	}
       strcpy (copy[argc], argv[argc]);
     }
   copy[argc] = NULL;
@@ -142,7 +149,7 @@ remains unchanged.  The last element of the vector is followed by a
 @code{NULL} element.
 
 All of the memory for the pointer array and copies of the string
-is obtained from @code{xmalloc}.  All of the memory can be returned to the
+is obtained from @code{malloc}.  All of the memory can be returned to the
 system with the single function call @code{freeargv}, which takes the
 returned result of @code{buildargv}, as it's argument.
 
@@ -184,7 +191,7 @@ char **buildargv (const char *input)
 
   if (input != NULL)
     {
-      copybuf = (char *) xmalloc (strlen (input) + 1);
+      copybuf = (char *) alloca (strlen (input) + 1);
       /* Is a do{}while to always execute the loop once.  Always return an
 	 argv, even for null strings.  See NOTES above, test case below. */
       do
@@ -198,12 +205,21 @@ char **buildargv (const char *input)
 	      if (argv == NULL)
 		{
 		  maxargc = INITIAL_MAXARGC;
-		  nargv = (char **) xmalloc (maxargc * sizeof (char *));
+		  nargv = (char **) malloc (maxargc * sizeof (char *));
 		}
 	      else
 		{
 		  maxargc *= 2;
-		  nargv = (char **) xrealloc (argv, maxargc * sizeof (char *));
+		  nargv = (char **) realloc (argv, maxargc * sizeof (char *));
+		}
+	      if (nargv == NULL)
+		{
+		  if (argv != NULL)
+		    {
+		      freeargv (argv);
+		      argv = NULL;
+		    }
+		  break;
 		}
 	      argv = nargv;
 	      argv[argc] = NULL;
@@ -268,15 +284,19 @@ char **buildargv (const char *input)
 		}
 	    }
 	  *arg = EOS;
-	  argv[argc] = xstrdup (copybuf);
+	  argv[argc] = strdup (copybuf);
+	  if (argv[argc] == NULL)
+	    {
+	      freeargv (argv);
+	      argv = NULL;
+	      break;
+	    }
 	  argc++;
 	  argv[argc] = NULL;
 
 	  consume_whitespace (&input);
 	}
       while (*input != EOS);
-
-      free (copybuf);
     }
   return (argv);
 }
@@ -435,7 +455,14 @@ expandargv (int *argcp, char ***argvp)
 	file_argv = buildargv (buffer);
       /* If *ARGVP is not already dynamically allocated, copy it.  */
       if (!argv_dynamic)
-	*argvp = dupargv (*argvp);
+	{
+	  *argvp = dupargv (*argvp);
+	  if (!*argvp)
+	    {
+	      fputs ("\nout of memory\n", stderr);
+	      xexit (1);
+	    }
+	}
       /* Count the number of arguments.  */
       file_argc = 0;
       while (file_argv[file_argc])

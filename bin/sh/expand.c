@@ -1,4 +1,4 @@
-/*	$NetBSD: expand.c,v 1.101 2016/03/31 16:16:35 christos Exp $	*/
+/*	$NetBSD: expand.c,v 1.91 2014/01/20 14:05:51 roy Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)expand.c	8.5 (Berkeley) 5/15/95";
 #else
-__RCSID("$NetBSD: expand.c,v 1.101 2016/03/31 16:16:35 christos Exp $");
+__RCSID("$NetBSD: expand.c,v 1.91 2014/01/20 14:05:51 roy Exp $");
 #endif
 #endif /* not lint */
 
@@ -98,7 +98,7 @@ struct arglist exparg;		/* holds expanded arg list */
 STATIC void argstr(char *, int);
 STATIC char *exptilde(char *, int);
 STATIC void expbackq(union node *, int, int);
-STATIC int subevalvar(char *, char *, int, int, int, int, int);
+STATIC int subevalvar(char *, char *, int, int, int, int);
 STATIC char *evalvar(char *, int);
 STATIC int varisset(char *, int);
 STATIC void varvalue(char *, int, int, int);
@@ -121,7 +121,6 @@ STATIC char *cvtnum(int, char *);
 void
 expandhere(union node *arg, int fd)
 {
-
 	herefd = fd;
 	expandarg(arg, NULL, 0);
 	xwrite(fd, stackblock(), expdest - stackblock());
@@ -163,7 +162,7 @@ expandarg(union node *arg, struct arglist *arglist, int flag)
 	} else {
 		if (flag & EXP_REDIR) /*XXX - for now, just remove escapes */
 			rmescapes(p);
-		sp = stalloc(sizeof(*sp));
+		sp = (struct strlist *)stalloc(sizeof (struct strlist));
 		sp->text = p;
 		*exparg.lastp = sp;
 		exparg.lastp = &sp->next;
@@ -188,13 +187,13 @@ STATIC void
 argstr(char *p, int flag)
 {
 	char c;
-	int quotes = flag & (EXP_FULL | EXP_CASE | EXP_REDIR);	/* do CTLESC */
+	int quotes = flag & (EXP_FULL | EXP_CASE);	/* do CTLESC */
 	int firsteq = 1;
 	const char *ifs = NULL;
 	int ifs_split = EXP_IFS_SPLIT;
 
 	if (flag & EXP_IFS_SPLIT)
-		ifs = ifsval();
+		ifs = ifsset() ? ifsval() : " \t\n";
 
 	if (*p == '~' && (flag & (EXP_TILDE | EXP_VARTILDE)))
 		p = exptilde(p, flag);
@@ -205,8 +204,7 @@ argstr(char *p, int flag)
 			return;
 		case CTLQUOTEMARK:
 			/* "$@" syntax adherence hack */
-			if (p[0] == CTLVAR && p[1] & VSQUOTE &&
-			    p[2] == '@' && p[3] == '=')
+			if (p[0] == CTLVAR && p[2] == '@' && p[3] == '=')
 				break;
 			if ((flag & EXP_FULL) != 0)
 				STPUTC(c, expdest);
@@ -332,7 +330,7 @@ removerecordregions(int endoff)
 		}
 		return;
 	}
-
+	
 	ifslastp = &ifsfirst;
 	while (ifslastp->next && ifslastp->next->begoff < endoff)
 		ifslastp=ifslastp->next;
@@ -453,8 +451,7 @@ expbackq(union node *cmd, int quoted, int flag)
 		if (--in.nleft < 0) {
 			if (in.fd < 0)
 				break;
-			while ((i = read(in.fd, buf, sizeof buf)) < 0 && errno == EINTR)
-				continue;
+			while ((i = read(in.fd, buf, sizeof buf)) < 0 && errno == EINTR);
 			TRACE(("expbackq: read returns %d\n", i));
 			if (i <= 0)
 				break;
@@ -497,7 +494,7 @@ expbackq(union node *cmd, int quoted, int flag)
 
 
 STATIC int
-subevalvar(char *p, char *str, int strloc, int subtype, int startloc, int varflags, int quotes)
+subevalvar(char *p, char *str, int strloc, int subtype, int startloc, int varflags)
 {
 	char *startp;
 	char *loc = NULL;
@@ -513,7 +510,7 @@ subevalvar(char *p, char *str, int strloc, int subtype, int startloc, int varfla
 	case VSTRIMLEFTMAX:
 	case VSTRIMRIGHT:
 	case VSTRIMRIGHTMAX:
-		how = (varflags & (VSQUOTE|VSPATQ)) == VSQUOTE ? 0 : EXP_CASE;
+		how = (varflags & VSQUOTE) ? 0 : EXP_CASE;
 		break;
 	default:
 		how = 0;
@@ -550,10 +547,10 @@ subevalvar(char *p, char *str, int strloc, int subtype, int startloc, int varfla
 		for (loc = startp; loc < str; loc++) {
 			c = *loc;
 			*loc = '\0';
-			if (patmatch(str, startp, quotes))
+			if (patmatch(str, startp, varflags & VSQUOTE))
 				goto recordleft;
 			*loc = c;
-			if (quotes && *loc == CTLESC)
+			if ((varflags & VSQUOTE) && *loc == CTLESC)
 			        loc++;
 		}
 		return 0;
@@ -562,11 +559,11 @@ subevalvar(char *p, char *str, int strloc, int subtype, int startloc, int varfla
 		for (loc = str - 1; loc >= startp;) {
 			c = *loc;
 			*loc = '\0';
-			if (patmatch(str, startp, quotes))
+			if (patmatch(str, startp, varflags & VSQUOTE))
 				goto recordleft;
 			*loc = c;
 			loc--;
-			if (quotes && loc > startp &&
+			if ((varflags & VSQUOTE) && loc > startp &&
 			    *(loc - 1) == CTLESC) {
 				for (q = startp; q < loc; q++)
 					if (*q == CTLESC)
@@ -579,10 +576,10 @@ subevalvar(char *p, char *str, int strloc, int subtype, int startloc, int varfla
 
 	case VSTRIMRIGHT:
 	        for (loc = str - 1; loc >= startp;) {
-			if (patmatch(str, loc, quotes))
+			if (patmatch(str, loc, varflags & VSQUOTE))
 				goto recordright;
 			loc--;
-			if (quotes && loc > startp &&
+			if ((varflags & VSQUOTE) && loc > startp &&
 			    *(loc - 1) == CTLESC) { 
 				for (q = startp; q < loc; q++)
 					if (*q == CTLESC)
@@ -595,9 +592,9 @@ subevalvar(char *p, char *str, int strloc, int subtype, int startloc, int varfla
 
 	case VSTRIMRIGHTMAX:
 		for (loc = startp; loc < str - 1; loc++) {
-			if (patmatch(str, loc, quotes))
+			if (patmatch(str, loc, varflags & VSQUOTE))
 				goto recordright;
-			if (quotes && *loc == CTLESC)
+			if ((varflags & VSQUOTE) && *loc == CTLESC)
 			        loc++;
 		}
 		return 0;
@@ -642,7 +639,7 @@ evalvar(char *p, int flag)
 	int startloc;
 	int varlen;
 	int apply_ifs;
-	int quotes = flag & (EXP_FULL | EXP_CASE | EXP_REDIR);
+	int quotes = flag & (EXP_FULL | EXP_CASE);
 
 	varflags = (unsigned char)*p++;
 	subtype = varflags & VSTYPE;
@@ -706,6 +703,7 @@ again: /* jump here after setting a variable with ${var=text} */
 						STPUTC(CTLESC, expdest);
 					STPUTC(*val++, expdest);
 				}
+
 			}
 		}
 	}
@@ -746,9 +744,8 @@ again: /* jump here after setting a variable with ${var=text} */
 			 * 'apply_ifs = 0' apparently breaks ${1+"$@"}..
 			 * ${x-'a b' c} should generate 2 args.
 			 */
-			if (*p != CTLENDVAR)
 			/* We should have marked stuff already */
-				apply_ifs = 0;
+			apply_ifs = 0;
 		}
 		break;
 
@@ -765,7 +762,7 @@ again: /* jump here after setting a variable with ${var=text} */
 		STPUTC('\0', expdest);
 		patloc = expdest - stackblock();
 		if (subevalvar(p, NULL, patloc, subtype,
-			       startloc, varflags, quotes) == 0) {
+			       startloc, varflags) == 0) {
 			int amount = (expdest - stackblock() - patloc) + 1;
 			STADJUST(-amount, expdest);
 		}
@@ -778,7 +775,7 @@ again: /* jump here after setting a variable with ${var=text} */
 	case VSQUESTION:
 		if (set)
 			break;
-		if (subevalvar(p, var, 0, subtype, startloc, varflags, quotes)) {
+		if (subevalvar(p, var, 0, subtype, startloc, varflags)) {
 			varflags &= ~VSNUL;
 			/* 
 			 * Remove any recorded regions beyond 
@@ -907,7 +904,7 @@ numvar:
 		expdest = cvtnum(num, expdest);
 		break;
 	case '-':
-		for (i = 0; optlist[i].name || optlist[i].letter; i++) {
+		for (i = 0; optlist[i].name; i++) {
 			if (optlist[i].val && optlist[i].letter)
 				STPUTC(optlist[i].letter, expdest);
 		}
@@ -924,7 +921,10 @@ numvar:
 		}
 		/* fall through */
 	case '*':
-		sep = ifsval()[0];
+		if (ifsset() != 0)
+			sep = ifsval()[0];
+		else
+			sep = ' ';
 		for (ap = shellparam.p ; (p = *ap++) != NULL ; ) {
 			STRTODEST(p);
 			if (*ap && sep)
@@ -1001,14 +1001,14 @@ ifsbreakup(char *string, struct arglist *arglist)
 
 	if (ifslastp == NULL) {
 		/* Return entire argument, IFS doesn't apply to any of it */
-		sp = stalloc(sizeof(*sp));
+		sp = (struct strlist *)stalloc(sizeof *sp);
 		sp->text = start;
 		*arglist->lastp = sp;
 		arglist->lastp = &sp->next;
 		return;
 	}
 
-	ifs = ifsval();
+	ifs = ifsset() ? ifsval() : " \t\n";
 
 	for (ifsp = &ifsfirst; ifsp != NULL; ifsp = ifsp->next) {
 		p = string + ifsp->begoff;
@@ -1042,7 +1042,7 @@ ifsbreakup(char *string, struct arglist *arglist)
 
 			/* Save this argument... */
 			*q = '\0';
-			sp = stalloc(sizeof(*sp));
+			sp = (struct strlist *)stalloc(sizeof *sp);
 			sp->text = start;
 			*arglist->lastp = sp;
 			arglist->lastp = &sp->next;
@@ -1076,7 +1076,7 @@ ifsbreakup(char *string, struct arglist *arglist)
 	 * should only generate one....
 	 */
 	if (had_param_ch || *start != 0) {
-		sp = stalloc(sizeof(*sp));
+		sp = (struct strlist *)stalloc(sizeof *sp);
 		sp->text = start;
 		*arglist->lastp = sp;
 		arglist->lastp = &sp->next;
@@ -1299,7 +1299,7 @@ addfname(char *name)
 
 	p = stalloc(strlen(name) + 1);
 	scopy(name, p);
-	sp = stalloc(sizeof(*sp));
+	sp = (struct strlist *)stalloc(sizeof *sp);
 	sp->text = p;
 	*exparg.lastp = sp;
 	exparg.lastp = &sp->next;

@@ -49,9 +49,7 @@ protected:
   // EH frame sections with the memory manager.
   SmallVector<EHFrameRelatedSections, 2> UnregisteredEHFrameSections;
 
-  RuntimeDyldMachO(RuntimeDyld::MemoryManager &MemMgr,
-                   RuntimeDyld::SymbolResolver &Resolver)
-      : RuntimeDyldImpl(MemMgr, Resolver) {}
+  RuntimeDyldMachO(RTDyldMemoryManager *mm) : RuntimeDyldImpl(mm) {}
 
   /// This convenience method uses memcpy to extract a contiguous addend (the
   /// addend size and offset are taken from the corresponding fields of the RE).
@@ -72,18 +70,13 @@ protected:
 
     bool IsPCRel = Obj.getAnyRelocationPCRel(RelInfo);
     unsigned Size = Obj.getAnyRelocationLength(RelInfo);
-    uint64_t Offset = RI->getOffset();
+    uint64_t Offset;
+    RI->getOffset(Offset);
     MachO::RelocationInfoType RelType =
       static_cast<MachO::RelocationInfoType>(Obj.getAnyRelocationType(RelInfo));
 
     return RelocationEntry(SectionID, Offset, RelType, 0, IsPCRel, Size);
   }
-
-  /// Process a scattered vanilla relocation.
-  relocation_iterator processScatteredVANILLA(
-                           unsigned SectionID, relocation_iterator RelI,
-                           const ObjectFile &BaseObjT,
-                           RuntimeDyldMachO::ObjSectionToIDMap &ObjSectionToID);
 
   /// Construct a RelocationValueRef representing the relocation target.
   /// For Symbols in known sections, this will return a RelocationValueRef
@@ -101,6 +94,7 @@ protected:
 
   /// Make the RelocationValueRef addend PC-relative.
   void makeValueAddendPCRel(RelocationValueRef &Value,
+                            const ObjectFile &BaseTObj,
                             const relocation_iterator &RI,
                             unsigned OffsetToNextPC);
 
@@ -120,10 +114,8 @@ protected:
 public:
 
   /// Create a RuntimeDyldMachO instance for the given target architecture.
-  static std::unique_ptr<RuntimeDyldMachO>
-  create(Triple::ArchType Arch,
-         RuntimeDyld::MemoryManager &MemMgr,
-         RuntimeDyld::SymbolResolver &Resolver);
+  static std::unique_ptr<RuntimeDyldMachO> create(Triple::ArchType Arch,
+                                                  RTDyldMemoryManager *mm);
 
   std::unique_ptr<RuntimeDyld::LoadedObjectInfo>
   loadObject(const object::ObjectFile &O) override;
@@ -146,13 +138,11 @@ private:
   Impl &impl() { return static_cast<Impl &>(*this); }
   const Impl &impl() const { return static_cast<const Impl &>(*this); }
 
-  unsigned char *processFDE(uint8_t *P, int64_t DeltaForText,
+  unsigned char *processFDE(unsigned char *P, int64_t DeltaForText,
                             int64_t DeltaForEH);
 
 public:
-  RuntimeDyldMachOCRTPBase(RuntimeDyld::MemoryManager &MemMgr,
-                           RuntimeDyld::SymbolResolver &Resolver)
-    : RuntimeDyldMachO(MemMgr, Resolver) {}
+  RuntimeDyldMachOCRTPBase(RTDyldMemoryManager *mm) : RuntimeDyldMachO(mm) {}
 
   void finalizeLoad(const ObjectFile &Obj,
                     ObjSectionToIDMap &SectionMap) override;

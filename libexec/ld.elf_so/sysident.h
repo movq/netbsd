@@ -1,4 +1,4 @@
-/* $NetBSD: sysident.h,v 1.19 2016/02/09 10:20:03 skrll Exp $ */
+/* $NetBSD: sysident.h,v 1.17.4.1 2016/02/26 22:33:51 snj Exp $ */
 
 /*
  * Copyright (c) 1997 Christopher G. Demetriou

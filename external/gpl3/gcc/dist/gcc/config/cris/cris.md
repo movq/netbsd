@@ -1,5 +1,5 @@
 ;; GCC machine description for CRIS cpu cores.
-;; Copyright (C) 1998-2015 Free Software Foundation, Inc.
+;; Copyright (C) 1998-2013 Free Software Foundation, Inc.
 ;; Contributed by Axis Communications.
 
 ;; This file is part of GCC.
@@ -919,8 +919,6 @@
     (match_operand:SI 1 "cris_general_operand_or_symbol" ""))]
   ""
 {
-  enum cris_symbol_type t;
-
   /* If the output goes to a MEM, make sure we have zero or a register as
      input.  */
   if (MEM_P (operands[0])
@@ -936,12 +934,12 @@
      valid symbol?  Can we exclude global PIC addresses with an added
      offset?  */
     if (flag_pic
-	&& CONSTANT_P (operands[1])
+	&& CONSTANT_ADDRESS_P (operands[1])
 	&& !cris_valid_pic_const (operands[1], false))
       {
-	t = cris_symbol_type_of (operands[1]);
+	enum cris_pic_symbol_type t = cris_pic_symbol_type_of (operands[1]);
 
-	gcc_assert (t != cris_no_symbol && t != cris_offsettable_symbol);
+	gcc_assert (t != cris_no_symbol);
 
 	if (! REG_S_P (operands[0]))
 	  {
@@ -1088,12 +1086,7 @@
 	 if (!flag_pic
 	     && (GET_CODE (operands[1]) == SYMBOL_REF
 		 || GET_CODE (operands[1]) == LABEL_REF
-		 || (GET_CODE (operands[1]) == CONST
-		     && (GET_CODE (XEXP (operands[1], 0)) != UNSPEC
-			 || (XINT (XEXP (operands[1], 0), 1)
-			     == CRIS_UNSPEC_PLT_PCREL)
-			 || (XINT (XEXP (operands[1], 0), 1)
-			     == CRIS_UNSPEC_PCREL)))))
+		 || GET_CODE (operands[1]) == CONST))
 	   {
 	     /* FIXME: Express this through (set_attr cc none) instead,
 		since we can't express the ``none'' at this point.  FIXME:
@@ -1176,12 +1169,6 @@
 	  case CRIS_UNSPEC_PCREL:
 	  case CRIS_UNSPEC_PLT_PCREL:
 	    gcc_assert (TARGET_V32);
-	    /* LAPC doesn't set condition codes; clear them to make the
-	       (equivalence-marked) result of this insn not presumed
-	       present.  This instruction can be a PIC symbol load (for
-	       a hidden symbol) which for weak symbols will be followed
-	       by a test for NULL.  */
-	    CC_STATUS_INIT;
 	    return "lapc %1,%0";
 
 	  default:
@@ -3723,16 +3710,15 @@
 {
   gcc_assert (MEM_P (operands[0]));
   if (flag_pic)
-    cris_expand_pic_call_address (&operands[0], &operands[1]);
-  else
-    operands[1] = const0_rtx;
+    cris_expand_pic_call_address (&operands[0]);
 })
 
-;; Accept operands for operand 0 in order of preference.
+;; Accept *anything* as operand 1.  Accept operands for operand 0 in
+;; order of preference.
 
 (define_insn "*expanded_call_non_v32"
   [(call (mem:QI (match_operand:SI 0 "general_operand" "r,Q>,g"))
-	 (match_operand:SI 1 "cris_call_type_marker" "rM,rM,rM"))
+	 (match_operand 1 "" ""))
    (clobber (reg:SI CRIS_SRP_REGNUM))]
   "!TARGET_V32"
   "jsr %0")
@@ -3741,7 +3727,7 @@
   [(call
     (mem:QI
      (match_operand:SI 0 "cris_nonmemory_operand_or_callable_symbol" "n,r,U,i"))
-    (match_operand:SI 1 "cris_call_type_marker" "rM,rM,rM,rM"))
+    (match_operand 1 "" ""))
    (clobber (reg:SI CRIS_SRP_REGNUM))]
   "TARGET_V32"
   "@
@@ -3754,21 +3740,19 @@
 ;; Parallel when calculating and reusing address of indirect pointer
 ;; with simple offset.  (Makes most sense with PIC.)  It looks a bit
 ;; wrong not to have the clobber last, but that's the way combine
-;; generates it (except it doesn't look into the *inner* mem, so this
+;; generates it (except it doesn' look into the *inner* mem, so this
 ;; just matches a peephole2).  FIXME: investigate that.
 (define_insn "*expanded_call_side"
   [(call (mem:QI
 	  (mem:SI
 	   (plus:SI (match_operand:SI 0 "cris_bdap_operand" "%r,  r,r")
 		    (match_operand:SI 1 "cris_bdap_operand" "r>Rn,r,>Rn"))))
-	 (match_operand:SI 2 "cris_call_type_marker" "rM,rM,rM"))
+	 (match_operand 2 "" ""))
    (clobber (reg:SI CRIS_SRP_REGNUM))
    (set (match_operand:SI 3 "register_operand" "=*0,r,r")
 	(plus:SI (match_dup 0)
 		 (match_dup 1)))]
-  ;; Disabled until after reload until we can avoid an output reload for
-  ;; operand 3 (being forbidden for call insns).
-  "reload_completed && !TARGET_AVOID_GOTPLT && !TARGET_V32"
+  "!TARGET_AVOID_GOTPLT && !TARGET_V32"
   "jsr [%3=%0%S1]")
 
 (define_expand "call_value"
@@ -3780,12 +3764,10 @@
 {
   gcc_assert (MEM_P (operands[1]));
   if (flag_pic)
-    cris_expand_pic_call_address (&operands[1], &operands[2]);
-  else
-    operands[2] = const0_rtx;
+    cris_expand_pic_call_address (&operands[1]);
 })
 
-;; The validity other than "general" of
+;; Accept *anything* as operand 2.  The validity other than "general" of
 ;; operand 0 will be checked elsewhere.  Accept operands for operand 1 in
 ;; order of preference (Q includes r, but r is shorter, faster).
 ;;  We also accept a PLT symbol.  We output it as [rPIC+sym:GOTPLT] rather
@@ -3794,7 +3776,7 @@
 (define_insn "*expanded_call_value_non_v32"
   [(set (match_operand 0 "nonimmediate_operand" "=g,g,g")
 	(call (mem:QI (match_operand:SI 1 "general_operand" "r,Q>,g"))
-	      (match_operand:SI 2 "cris_call_type_marker" "rM,rM,rM")))
+	      (match_operand 2 "" "")))
    (clobber (reg:SI CRIS_SRP_REGNUM))]
   "!TARGET_V32"
   "Jsr %1"
@@ -3808,14 +3790,12 @@
 	  (mem:SI
 	   (plus:SI (match_operand:SI 1 "cris_bdap_operand" "%r,  r,r")
 		    (match_operand:SI 2 "cris_bdap_operand" "r>Rn,r,>Rn"))))
-	 (match_operand:SI 3 "cris_call_type_marker" "rM,rM,rM")))
+	      (match_operand 3 "" "")))
    (clobber (reg:SI CRIS_SRP_REGNUM))
    (set (match_operand:SI 4 "register_operand" "=*1,r,r")
 	(plus:SI (match_dup 1)
 		 (match_dup 2)))]
-  ;; Disabled until after reload until we can avoid an output reload for
-  ;; operand 4 (being forbidden for call insns).
-  "reload_completed && !TARGET_AVOID_GOTPLT && !TARGET_V32"
+  "!TARGET_AVOID_GOTPLT && !TARGET_V32"
   "Jsr [%4=%1%S2]"
   [(set_attr "cc" "clobber")])
 
@@ -3825,7 +3805,7 @@
     (call
      (mem:QI
       (match_operand:SI 1 "cris_nonmemory_operand_or_callable_symbol" "n,r,U,i"))
-     (match_operand:SI 2 "cris_call_type_marker" "rM,rM,rM,rM")))
+     (match_operand 2 "" "")))
    (clobber (reg:SI 16))]
   "TARGET_V32"
   "@
@@ -4732,7 +4712,7 @@
      (set (match_dup 0) (plus:SI (match_dup 1) (match_dup 2)))])]
   ;; Checking the previous insn is a bit too awkward for the condition.
 {
-  rtx_insn *prev = prev_nonnote_insn (curr_insn);
+  rtx prev = prev_nonnote_insn (curr_insn);
   if (prev != NULL_RTX)
     {
       rtx set = single_set (prev);
@@ -4847,7 +4827,7 @@
   /* Make sure we have canonical RTX so we match the insn pattern -
      not a constant in the first operand.  We also require the order
      (plus reg mem) to match the final pattern.  */
-  if (CRIS_CONSTANT_P (otherop) || MEM_P (otherop))
+  if (CONSTANT_P (otherop) || MEM_P (otherop))
     {
       operands[7] = operands[1];
       operands[8] = otherop;
@@ -4898,7 +4878,7 @@
   /* Make sure we have canonical RTX so we match the insn pattern -
      not a constant in the first operand.  We also require the order
      (plus reg mem) to match the final pattern.  */
-  if (CRIS_CONSTANT_P (otherop) || MEM_P (otherop))
+  if (CONSTANT_P (otherop) || MEM_P (otherop))
     {
       operands[7] = operands[1];
       operands[8] = otherop;
@@ -4997,8 +4977,8 @@
   [(set (match_dup 0) (match_dup 4))
    (set (match_dup 5) (match_dup 6))]
 {
-  machine_mode zmode = INTVAL (operands[3]) <= 255 ? QImode : HImode;
-  machine_mode amode
+  enum machine_mode zmode = INTVAL (operands[3]) <= 255 ? QImode : HImode;
+  enum machine_mode amode
     = satisfies_constraint_O (operands[3]) ? SImode : zmode;
   rtx op1
     = (REG_S_P (operands[1])
@@ -5035,7 +5015,7 @@
   [(set (match_dup 0) (match_dup 3))
    (set (match_dup 0) (and:SI (match_dup 0) (match_dup 4)))]
 {
-  machine_mode zmode = INTVAL (operands[2]) <= 255 ? QImode : HImode;
+  enum machine_mode zmode = INTVAL (operands[2]) <= 255 ? QImode : HImode;
   rtx op1
     = (REG_S_P (operands[2])
        ? gen_rtx_REG (zmode, REGNO (operands[2]))

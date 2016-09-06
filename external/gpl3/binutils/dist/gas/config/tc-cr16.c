@@ -1,5 +1,6 @@
 /* tc-cr16.c -- Assembler code for the CR16 CPU core.
-   Copyright (C) 2007-2015 Free Software Foundation, Inc.
+   Copyright 2007, 2008, 2009, 2010, 2011
+   Free Software Foundation, Inc.
 
    Contributed by M R Swami Reddy <MR.Swami.Reddy@nsc.com>
 
@@ -206,7 +207,7 @@ l_cons (int nbytes)
                   return;
                 }
 
-              value |= ((~(-(1 << width)) & exp.X_add_number)
+              value |= ((~(-1 << width) & exp.X_add_number)
                         << ((BITS_PER_CHAR * nbytes) - bits_available));
 
               if ((bits_available -= width) == 0
@@ -335,7 +336,7 @@ get_register_pair (char *reg_name)
   char tmp_rp[16]="\0";
 
   /* Add '(' and ')' to the reg pair, if its not present.  */
-  if (reg_name[0] != '(')
+  if (reg_name[0] != '(') 
     {
       tmp_rp[0] = '(';
       strcat (tmp_rp, reg_name);
@@ -349,7 +350,7 @@ get_register_pair (char *reg_name)
     return rreg->value.reg_val;
 
   return nullregister;
-}
+} 
 
 /* Get the index register 'reg_name'.  */
 
@@ -492,9 +493,10 @@ cr16_force_relocation (fixS *fix)
 /* Record a fixup for a cons expression.  */
 
 void
-cr16_cons_fix_new (fragS *frag, int offset, int len, expressionS *exp,
-		   bfd_reloc_code_real_type rtype)
+cr16_cons_fix_new (fragS *frag, int offset, int len, expressionS *exp)
 {
+  int rtype = BFD_RELOC_UNUSED;
+
   switch (len)
     {
     default: rtype = BFD_RELOC_NONE; break;
@@ -522,9 +524,9 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS * fixP)
   arelent * reloc;
 
   /* If symbols are local and resolved, then no relocation needed.  */
-  if ( ((fixP->fx_addsy)
+  if ( ((fixP->fx_addsy) 
         && (S_GET_SEGMENT (fixP->fx_addsy) == absolute_section))
-       || ((fixP->fx_subsy)
+       || ((fixP->fx_subsy) 
 	   && (S_GET_SEGMENT (fixP->fx_subsy) == absolute_section)))
      return NULL;
 
@@ -932,7 +934,7 @@ process_label_constant (char *str, ins * cr16_ins)
       else if (strneq (input_line_pointer, "@GOT", 4)
           || strneq (input_line_pointer, "@got", 4))
 	{
-          if ((strneq (input_line_pointer, "+", 1))
+          if ((strneq (input_line_pointer, "+", 1)) 
 	       || (strneq (input_line_pointer, "-", 1)))
            as_warn (_("GOT bad expression with %s."), input_line_pointer);
 
@@ -2457,7 +2459,7 @@ print_insn (ins *insn)
              int size;
 
              reloc_howto = bfd_reloc_type_lookup (stdoutput, insn->rtype);
-
+  
              if (!reloc_howto)
                abort ();
 

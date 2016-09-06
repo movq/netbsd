@@ -1,4 +1,4 @@
-.\"	$NetBSD: xfer,v 1.74 2015/05/09 08:13:35 snj Exp $
+.\"	$NetBSD: xfer,v 1.73.20.1 2015/05/24 11:14:43 martin Exp $
 .\"
 .\" Copyright (c) 1999-2004 The NetBSD Foundation, Inc.
 .\" All rights reserved.

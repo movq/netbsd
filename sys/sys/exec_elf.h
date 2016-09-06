@@ -1,4 +1,4 @@
-/*	$NetBSD: exec_elf.h,v 1.155 2016/05/31 20:02:16 christos Exp $	*/
+/*	$NetBSD: exec_elf.h,v 1.141.2.2 2016/03/07 08:08:52 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1994 The NetBSD Foundation, Inc.
@@ -44,7 +44,6 @@
 #include <sys/types.h>
 #else
 #include <inttypes.h>
-#include <stddef.h>
 #endif /* _KERNEL || _STANDALONE */
 
 #if HAVE_NBTOOL_CONFIG_H
@@ -209,8 +208,7 @@ typedef struct {
 #define EM_386		3	/* Intel 80386 */
 #define EM_68K		4	/* Motorola 68000 */
 #define EM_88K		5	/* Motorola 88000 */
-#define EM_486		6	/* Intel 80486 [old] */
-#define EM_IAMCU	6	/* Intel MCU. */
+#define EM_486		6	/* Intel 80486 */
 #define EM_860		7	/* Intel 80860 */
 #define EM_MIPS		8	/* MIPS I Architecture */
 #define EM_S370		9	/* Amdahl UTS on System/370 */
@@ -282,8 +280,7 @@ typedef struct {
 #define EM_MN10300	89	/* Matsushita MN10300 */
 #define EM_MN10200	90	/* Matsushita MN10200 */
 #define EM_PJ		91	/* picoJava */
-#define EM_OR1K		92	/* OpenRISC 32-bit embedded processor */
-#define EM_OPENRISC	EM_OR1K
+#define EM_OPENRISC	92	/* OpenRISC 32-bit embedded processor */
 #define EM_ARC_A5	93	/* ARC Cores Tangent-A5 */
 #define EM_XTENSA	94	/* Tensilica Xtensa Architecture */
 #define EM_VIDEOCORE	95	/* Alphamosaic VideoCore processor */
@@ -302,17 +299,10 @@ typedef struct {
 #define EM_SEP		108	/* Sharp embedded microprocessor */
 #define EM_ARCA		109	/* Arca RISC microprocessor */
 #define EM_UNICORE	110	/* UNICORE from PKU-Unity Ltd. and MPRC Peking University */
-#define EM_ALTERA_NIOS2	113	/* Altera Nios II soft-core processor */
 #define EM_AARCH64	183	/* AArch64 64-bit ARM microprocessor */
-#define EM_AVR32	185	/* Atmel Corporation 32-bit microprocessor family*/
-#define EM_TILE64	187	/* Tilera TILE64 multicore architecture family */
-#define EM_TILEPRO	188	/* Tilera TILEPro multicore architecture family */
-#define EM_MICROBLAZE	189	/* Xilinx MicroBlaze 32-bit RISC soft processor core */
-#define EM_TILEGX	192	/* Tilera TILE-GX multicore architecture family */
-#define EM_Z80		220	/* Zilog Z80 */
-#define EM_RISCV	243	/* RISC-V */
 
 /* Unofficial machine types follow */
+#define EM_AVR32	6317	/* used by NetBSD/avr32 */
 #define EM_ALPHA_EXP	36902	/* used by NetBSD/alpha; obsolete */
 #define EM_NUM		36903
 
@@ -955,7 +945,7 @@ typedef struct {
 #define ELF_NOTE_PAX_MPROTECT		0x01	/* Force enable Mprotect */
 #define ELF_NOTE_PAX_NOMPROTECT		0x02	/* Force disable Mprotect */
 #define ELF_NOTE_PAX_GUARD		0x04	/* Force enable Segvguard */
-#define ELF_NOTE_PAX_NOGUARD		0x08	/* Force disable Segvguard */
+#define ELF_NOTE_PAX_NOGUARD		0x08	/* Force disable Servguard */
 #define ELF_NOTE_PAX_ASLR		0x10	/* Force enable ASLR */
 #define ELF_NOTE_PAX_NOASLR		0x20	/* Force disable ASLR */
 #define ELF_NOTE_PAX_NAMESZ		4
@@ -975,8 +965,6 @@ typedef struct {
  *
  *	ELF_NOTE_NETBSD_CORE_PROCINFO
  *		Note is a "netbsd_elfcore_procinfo" structure.
- *	ELF_NOTE_NETBSD_CORE_AUXV
- *		Note is an array of AuxInfo structures.
  *
  * We also use ptrace(2) request numbers (the ones that exist in
  * machine-dependent space) to identify register info notes.  The
@@ -990,7 +978,6 @@ typedef struct {
 #define ELF_NOTE_NETBSD_CORE_NAME	"NetBSD-CORE"
 
 #define ELF_NOTE_NETBSD_CORE_PROCINFO	1
-#define ELF_NOTE_NETBSD_CORE_AUXV	2
 
 #define NETBSD_ELFCORE_PROCINFO_VERSION 1
 
@@ -1059,7 +1046,6 @@ struct netbsd_elfcore_procinfo {
 #define ELFNAME2(x,y)	CONCAT(x,CONCAT(_elf,CONCAT(ELFSIZE,CONCAT(_,y))))
 #define ELFNAMEEND(x)	CONCAT(x,CONCAT(_elf,ELFSIZE))
 #define ELFDEFNNAME(x)	CONCAT(ELF,CONCAT(ELFSIZE,CONCAT(_,x)))
-#define	ElfW(x)		CONCAT(Elf,CONCAT(ELFSIZE,CONCAT(_,x)))
 #endif
 
 #if defined(ELFSIZE) && (ELFSIZE == 32)
@@ -1309,7 +1295,6 @@ struct elf_args {
 struct ps_strings;
 struct coredump_iostate;
 struct note_state;
-struct exec_package;
 
 #ifdef EXEC_ELF32
 int	exec_elf32_makecmds(struct lwp *, struct exec_package *);

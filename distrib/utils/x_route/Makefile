@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.18 2014/11/07 02:57:19 uebayasi Exp $
+#	$NetBSD: Makefile,v 1.17.26.1 2015/01/08 11:01:01 martin Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/5/93
 
 SRCDIR=		${.CURDIR}/../../../sbin/route

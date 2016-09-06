@@ -1,4 +1,4 @@
-/*	$NetBSD: sd.c,v 1.317 2015/08/24 23:13:15 pooka Exp $	*/
+/*	$NetBSD: sd.c,v 1.308.2.1 2014/11/11 10:36:41 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2003, 2004 The NetBSD Foundation, Inc.
@@ -47,11 +47,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sd.c,v 1.317 2015/08/24 23:13:15 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sd.c,v 1.308.2.1 2014/11/11 10:36:41 martin Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_scsi.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -71,7 +69,8 @@ __KERNEL_RCSID(0, "$NetBSD: sd.c,v 1.317 2015/08/24 23:13:15 pooka Exp $");
 #include <sys/proc.h>
 #include <sys/conf.h>
 #include <sys/vnode.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
+#include <sys/cprng.h>
 
 #include <dev/scsipi/scsi_spc.h>
 #include <dev/scsipi/scsipi_all.h>
@@ -183,10 +182,7 @@ const struct cdevsw sd_cdevsw = {
 	.d_flag = D_DISK
 };
 
-static struct dkdriver sddkdriver = {
-	.d_strategy = sdstrategy,
-	.d_minphys = sdminphys
-};
+static struct dkdriver sddkdriver = { sdstrategy, sdminphys };
 
 static const struct scsipi_periphsw sd_switch = {
 	sd_interpret_sense,	/* check our error handler first */
@@ -1057,12 +1053,36 @@ sdioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 		}
 	}
 
-	error = disk_ioctl(&sd->sc_dk, dev, cmd, addr, flag, l); 
+	error = disk_ioctl(&sd->sc_dk, cmd, addr, flag, l); 
 	if (error != EPASSTHROUGH)
 		return (error);
 
 	error = 0;
 	switch (cmd) {
+	case DIOCGDINFO:
+		*(struct disklabel *)addr = *(sd->sc_dk.dk_label);
+		return (0);
+
+#ifdef __HAVE_OLD_DISKLABEL
+	case ODIOCGDINFO:
+		newlabel = malloc(sizeof *newlabel, M_TEMP, M_WAITOK);
+		if (newlabel == NULL)
+			return EIO;
+		memcpy(newlabel, sd->sc_dk.dk_label, sizeof (*newlabel));
+		if (newlabel->d_npartitions <= OLDMAXPARTITIONS)
+			memcpy(addr, newlabel, sizeof (struct olddisklabel));
+		else
+			error = ENOTTY;
+		free(newlabel, M_TEMP);
+		return error;
+#endif
+
+	case DIOCGPART:
+		((struct partinfo *)addr)->disklab = sd->sc_dk.dk_label;
+		((struct partinfo *)addr)->part =
+		    &sd->sc_dk.dk_label->d_partitions[part];
+		return (0);
+
 	case DIOCWDINFO:
 	case DIOCSDINFO:
 #ifdef __HAVE_OLD_DISKLABEL
@@ -1203,6 +1223,48 @@ sdioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 		}
 		return (error);
 
+	case DIOCAWEDGE:
+	    {
+	    	struct dkwedge_info *dkw = (void *) addr;
+
+		if ((flag & FWRITE) == 0)
+			return (EBADF);
+
+		/* If the ioctl happens here, the parent is us. */
+		strlcpy(dkw->dkw_parent, device_xname(sd->sc_dev),
+			sizeof(dkw->dkw_parent));
+		return (dkwedge_add(dkw));
+	    }
+
+	case DIOCDWEDGE:
+	    {
+	    	struct dkwedge_info *dkw = (void *) addr;
+
+		if ((flag & FWRITE) == 0)
+			return (EBADF);
+
+		/* If the ioctl happens here, the parent is us. */
+		strlcpy(dkw->dkw_parent, device_xname(sd->sc_dev),
+			sizeof(dkw->dkw_parent));
+		return (dkwedge_del(dkw));
+	    }
+
+	case DIOCLWEDGES:
+	    {
+	    	struct dkwedge_list *dkwl = (void *) addr;
+
+		return (dkwedge_list(&sd->sc_dk, dkwl, l));
+	    }
+
+	case DIOCMWEDGES:
+	    {
+		if ((flag & FWRITE) == 0)
+			return (EBADF);
+
+		dkwedge_discover(&sd->sc_dk);
+		return 0;
+	    }
+
 	case DIOCGSTRATEGY:
 	    {
 		struct disk_strategy *dks = addr;
@@ -1219,8 +1281,8 @@ sdioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 	case DIOCSSTRATEGY:
 	    {
 		struct disk_strategy *dks = addr;
-		struct bufq_state *new_bufq;
-		struct bufq_state *old_bufq;
+		struct bufq_state *new;
+		struct bufq_state *old;
 
 		if ((flag & FWRITE) == 0) {
 			return EBADF;
@@ -1230,17 +1292,17 @@ sdioctl(dev_t dev, u_long cmd, void *addr, int flag, struct lwp *l)
 			return EINVAL;
 		}
 		dks->dks_name[sizeof(dks->dks_name) - 1] = 0; /* ensure term */
-		error = bufq_alloc(&new_bufq, dks->dks_name,
+		error = bufq_alloc(&new, dks->dks_name,
 		    BUFQ_EXACT|BUFQ_SORT_RAWBLOCK);
 		if (error) {
 			return error;
 		}
 		s = splbio();
-		old_bufq = sd->buf_queue;
-		bufq_move(new_bufq, old_bufq);
-		sd->buf_queue = new_bufq;
+		old = sd->buf_queue;
+		bufq_move(new, old);
+		sd->buf_queue = new;
 		splx(s);
-		bufq_free(old_bufq);
+		bufq_free(old);
 		
 		return 0;
 	    }
@@ -1270,10 +1332,10 @@ sdgetdefaultlabel(struct sd_softc *sd, struct disklabel *lp)
 
 	switch (SCSIPI_BUSTYPE_TYPE(scsipi_periph_bustype(sd->sc_periph))) {
 	case SCSIPI_BUSTYPE_SCSI:
-		lp->d_type = DKTYPE_SCSI;
+		lp->d_type = DTYPE_SCSI;
 		break;
 	case SCSIPI_BUSTYPE_ATAPI:
-		lp->d_type = DKTYPE_ATAPI;
+		lp->d_type = DTYPE_ATAPI;
 		break;
 	}
 	/*
@@ -2083,13 +2145,15 @@ sd_get_parms(struct sd_softc *sd, struct disk_parms *dp, int flags)
 	if (sd->type == T_SIMPLE_DIRECT) {
 		error = sd_get_simplifiedparms(sd, dp, flags);
 		if (!error)
-			goto setprops;
+			disk_blocksize(&sd->sc_dk, dp->blksize);
 		return (error);
 	}
 
 	error = sd_get_capacity(sd, dp, flags);
 	if (error)
 		return (error);
+
+	disk_blocksize(&sd->sc_dk, dp->blksize);
 
 	if (sd->type == T_OPTICAL)
 		goto page0;

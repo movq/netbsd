@@ -1,4 +1,4 @@
-/*	$NetBSD: dtrace_asm.S,v 1.6 2016/06/23 04:35:35 pgoyette Exp $	*/
+/*	$NetBSD: dtrace_asm.S,v 1.4.10.1 2016/07/10 10:00:20 martin Exp $	*/
 
 /*
  * CDDL HEADER START
@@ -35,6 +35,7 @@
 #include <sys/cpuvar_defs.h>
 #include <sys/dtrace.h>
 #include <machine/asm.h>
+#define END(a)
 #define MEXITCOUNT
 
 #include "assym.h"

@@ -25,7 +25,8 @@ static cl::opt<bool> CompileForDebugging("debug-compile",
 
 void NVPTXMCAsmInfo::anchor() {}
 
-NVPTXMCAsmInfo::NVPTXMCAsmInfo(const Triple &TheTriple) {
+NVPTXMCAsmInfo::NVPTXMCAsmInfo(StringRef TT) {
+  Triple TheTriple(TT);
   if (TheTriple.getArch() == Triple::nvptx64) {
     PointerSize = CalleeSaveStackSlotSize = 8;
   }
@@ -38,8 +39,6 @@ NVPTXMCAsmInfo::NVPTXMCAsmInfo(const Triple &TheTriple) {
   InlineAsmEnd = " inline asm";
 
   SupportsDebugInformation = CompileForDebugging;
-  // PTX does not allow .align on functions.
-  HasFunctionAlignment = false;
   HasDotTypeDotSizeDirective = false;
 
   Data8bitsDirective = " .b8 ";

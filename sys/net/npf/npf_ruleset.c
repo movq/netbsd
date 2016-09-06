@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_ruleset.c,v 1.42 2015/03/20 23:36:28 rmind Exp $	*/
+/*	$NetBSD: npf_ruleset.c,v 1.37.2.4 2015/03/21 17:49:03 snj Exp $	*/
 
 /*-
  * Copyright (c) 2009-2015 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_ruleset.c,v 1.42 2015/03/20 23:36:28 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_ruleset.c,v 1.37.2.4 2015/03/21 17:49:03 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

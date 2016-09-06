@@ -1,5 +1,5 @@
 /* TILE-Gx ELF specific backend routines.
-   Copyright (C) 2011-2015 Free Software Foundation, Inc.
+   Copyright 2011 Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 

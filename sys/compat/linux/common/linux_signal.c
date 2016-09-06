@@ -1,4 +1,4 @@
-/*	$NetBSD: linux_signal.c,v 1.77 2015/11/14 13:29:35 christos Exp $	*/
+/*	$NetBSD: linux_signal.c,v 1.75.26.1 2015/01/17 12:10:54 martin Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1998 The NetBSD Foundation, Inc.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: linux_signal.c,v 1.77 2015/11/14 13:29:35 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: linux_signal.c,v 1.75.26.1 2015/01/17 12:10:54 martin Exp $");
 
 #define COMPAT_LINUX 1
 
@@ -331,7 +331,7 @@ linux_sys_rt_sigaction(struct lwp *l, const struct linux_sys_rt_sigaction_args *
 	int error, sig;
 	void *tramp = NULL;
 	int vers = 0;
-#ifdef LINUX_SA_RESTORER
+#if defined __amd64__
 	struct sigacts *ps = l->l_proc->p_sigacts;
 #endif
 
@@ -354,10 +354,11 @@ linux_sys_rt_sigaction(struct lwp *l, const struct linux_sys_rt_sigaction_args *
 		sigemptyset(&obsa.sa_mask);
 		obsa.sa_flags = 0;
 	} else {
-#ifdef LINUX_SA_RESTORER
-		if ((nlsa.linux_sa_flags & LINUX_SA_RESTORER) &&
-		    (tramp = nlsa.linux_sa_restorer) != NULL)
-				vers = 2;
+#if defined __amd64__
+		if (nlsa.linux_sa_flags & LINUX_SA_RESTORER) {
+			if ((tramp = nlsa.linux_sa_restorer) != NULL)
+				vers = 2; /* XXX arch dependent */
+		}
 #endif
 
 		error = sigaction1(l, linux_to_native_signo[sig],
@@ -370,7 +371,7 @@ linux_sys_rt_sigaction(struct lwp *l, const struct linux_sys_rt_sigaction_args *
 	if (SCARG(uap, osa)) {
 		native_to_linux_sigaction(&olsa, &obsa);
 
-#ifdef LINUX_SA_RESTORER
+#if defined __amd64__
 		if (ps->sa_sigdesc[sig].sd_vers != 0) {
 			olsa.linux_sa_restorer = ps->sa_sigdesc[sig].sd_tramp;
 			olsa.linux_sa_flags |= LINUX_SA_RESTORER;

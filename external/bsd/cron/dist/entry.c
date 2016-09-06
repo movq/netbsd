@@ -1,4 +1,4 @@
-/*	$NetBSD: entry.c,v 1.7 2015/11/20 23:43:52 christos Exp $	*/
+/*	$NetBSD: entry.c,v 1.5 2014/06/24 09:17:54 skrll Exp $	*/
 
 /*
  * Copyright 1988,1990,1993,1994 by Paul Vixie
@@ -26,7 +26,7 @@
 #if 0
 static char rcsid[] = "Id: entry.c,v 1.17 2004/01/23 18:56:42 vixie Exp";
 #else
-__RCSID("$NetBSD: entry.c,v 1.7 2015/11/20 23:43:52 christos Exp $");
+__RCSID("$NetBSD: entry.c,v 1.5 2014/06/24 09:17:54 skrll Exp $");
 #endif
 #endif
 
@@ -420,7 +420,7 @@ get_list(bitstr_t *bits, int low, int high, const char * const names[],
 	
 	/* clear the bit string, since the default is 'off'.
 	 */
-	bit_nclear(bits, 0, (size_t)(high-low+1));
+	bit_nclear(bits, 0, (high-low+1));
 
 	/* process all ranges
 	 */
@@ -453,7 +453,7 @@ random_with_range(int low, int high)
 	if (low >= high)
 		return low;
 	else
-		return (int)arc4random() % (high - low + 1) + low;
+		return arc4random() % (high - low + 1) + low;
 }
 
 static int
@@ -588,7 +588,7 @@ get_number(int *numptr, int low, const char * const names[], int ch, FILE *file,
 	while (isdigit((unsigned char)ch)) {
 		if (++len >= MAX_TEMPSTR)
 			goto bad;
-		*pc++ = (char)ch;
+		*pc++ = ch;
 		ch = get_char(file);
 	}
 	*pc = '\0';
@@ -605,7 +605,7 @@ get_number(int *numptr, int low, const char * const names[], int ch, FILE *file,
 		while (isalpha((unsigned char)ch)) {
 			if (++len >= MAX_TEMPSTR)
 				goto bad;
-			*pc++ = (char)ch;
+			*pc++ = ch;
 			ch = get_char(file);
 		}
 		*pc = '\0';

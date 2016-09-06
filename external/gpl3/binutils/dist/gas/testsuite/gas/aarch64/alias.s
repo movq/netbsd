@@ -2,7 +2,7 @@
    preference.  It is also used to test the -Mno-aliases option in
    the disassemler.
 
-   Copyright (C) 2012-2015 Free Software Foundation, Inc.
+   Copyright 2012, 2013 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of GAS.
@@ -117,14 +117,3 @@
 
 	asimdshll	s
 	asimdshll	u
-
-	csinc	w0, w1, w1, nv
-	csinc	w0, w1, w1, al
-	csinc	w0, wzr, wzr, nv
-	csinc	w0, wzr, wzr, al
-	csinv	w0, w1, w1, nv
-	csinv	w0, w1, w1, al
-	csinv	w0, wzr, wzr, nv
-	csinv	w0, wzr, wzr, al
-	csneg	w0, w1, w1, nv
-	csneg	w0, w1, w1, al

@@ -31,7 +31,7 @@
 
 ******************************************************************************/
 /*$FreeBSD: head/sys/dev/ixgbe/ixgbe_vf.c 251964 2013-06-18 21:28:19Z jfv $*/
-/*$NetBSD: ixgbe_vf.c,v 1.6 2016/02/06 02:39:51 riastradh Exp $*/
+/*$NetBSD: ixgbe_vf.c,v 1.1.28.3 2016/06/14 08:42:34 snj Exp $*/
 
 
 #include "ixgbe_api.h"

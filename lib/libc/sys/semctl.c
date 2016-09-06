@@ -1,4 +1,4 @@
-/*	$NetBSD: semctl.c,v 1.18 2015/01/29 20:44:38 joerg Exp $	*/
+/*	$NetBSD: semctl.c,v 1.16 2014/08/10 17:55:09 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2000 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: semctl.c,v 1.18 2015/01/29 20:44:38 joerg Exp $");
+__RCSID("$NetBSD: semctl.c,v 1.16 2014/08/10 17:55:09 joerg Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include <sys/types.h>

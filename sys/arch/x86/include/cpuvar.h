@@ -1,4 +1,4 @@
-/* 	$NetBSD: cpuvar.h,v 1.47 2015/12/13 15:02:19 maxv Exp $ */
+/* 	$NetBSD: cpuvar.h,v 1.46.14.1 2016/03/06 17:53:26 martin Exp $ */
 
 /*-
  * Copyright (c) 2000, 2007 The NetBSD Foundation, Inc.

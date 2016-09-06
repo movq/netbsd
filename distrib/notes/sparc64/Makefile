@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.4 2015/05/20 05:21:24 snj Exp $
+#	$NetBSD: Makefile,v 1.3.78.1 2015/05/24 11:14:45 martin Exp $
 
 MERGED_SRCS+=	${COMMON}/xfer
 

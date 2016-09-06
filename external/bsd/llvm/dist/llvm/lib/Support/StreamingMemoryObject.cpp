@@ -8,9 +8,12 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Support/StreamingMemoryObject.h"
+#include "llvm/Support/Compiler.h"
 #include <cassert>
 #include <cstddef>
 #include <cstring>
+
+
 using namespace llvm;
 
 namespace {
@@ -42,8 +45,8 @@ private:
     return static_cast<std::ptrdiff_t>(address) < LastChar - FirstChar;
   }
 
-  RawMemoryObject(const RawMemoryObject&) = delete;
-  void operator=(const RawMemoryObject&) = delete;
+  RawMemoryObject(const RawMemoryObject&) LLVM_DELETED_FUNCTION;
+  void operator=(const RawMemoryObject&) LLVM_DELETED_FUNCTION;
 };
 
 uint64_t RawMemoryObject::readBytes(uint8_t *Buf, uint64_t Size,
@@ -73,7 +76,7 @@ namespace llvm {
 // block until we actually want to read it.
 bool StreamingMemoryObject::isValidAddress(uint64_t address) const {
   if (ObjectSize && address < ObjectSize) return true;
-  return fetchToPos(address);
+    return fetchToPos(address);
 }
 
 uint64_t StreamingMemoryObject::getExtent() const {
@@ -87,18 +90,13 @@ uint64_t StreamingMemoryObject::getExtent() const {
 uint64_t StreamingMemoryObject::readBytes(uint8_t *Buf, uint64_t Size,
                                           uint64_t Address) const {
   fetchToPos(Address + Size - 1);
-  // Note: For wrapped bitcode files will set ObjectSize after the
-  // first call to fetchToPos. In such cases, ObjectSize can be
-  // smaller than BytesRead.
-  size_t MaxAddress =
-      (ObjectSize && ObjectSize < BytesRead) ? ObjectSize : BytesRead;
-  if (Address >= MaxAddress)
+  if (Address >= BytesRead)
     return 0;
 
   uint64_t End = Address + Size;
-  if (End > MaxAddress)
-    End = MaxAddress;
-  assert(End >= Address);
+  if (End > BytesRead)
+    End = BytesRead;
+  assert(static_cast<int64_t>(End - Address) >= 0);
   Size = End - Address;
   memcpy(Buf, &Bytes[Address + BytesSkipped], Size);
   return Size;
@@ -114,8 +112,6 @@ bool StreamingMemoryObject::dropLeadingBytes(size_t s) {
 void StreamingMemoryObject::setKnownObjectSize(size_t size) {
   ObjectSize = size;
   Bytes.reserve(size);
-  if (ObjectSize <= BytesRead)
-    EOFReached = true;
 }
 
 MemoryObject *getNonStreamedMemoryObject(const unsigned char *Start,
@@ -123,10 +119,9 @@ MemoryObject *getNonStreamedMemoryObject(const unsigned char *Start,
   return new RawMemoryObject(Start, End);
 }
 
-StreamingMemoryObject::StreamingMemoryObject(
-    std::unique_ptr<DataStreamer> Streamer)
-    : Bytes(kChunkSize), Streamer(std::move(Streamer)), BytesRead(0),
-      BytesSkipped(0), ObjectSize(0), EOFReached(false) {
-  BytesRead = this->Streamer->GetBytes(&Bytes[0], kChunkSize);
+StreamingMemoryObject::StreamingMemoryObject(DataStreamer *streamer) :
+  Bytes(kChunkSize), Streamer(streamer), BytesRead(0), BytesSkipped(0),
+  ObjectSize(0), EOFReached(false) {
+  BytesRead = streamer->GetBytes(&Bytes[0], kChunkSize);
 }
 }

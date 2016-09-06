@@ -1,5 +1,5 @@
 /* Model support.
-   Copyright (C) 1996-2015 Free Software Foundation, Inc.
+   Copyright (C) 1996-2014 Free Software Foundation, Inc.
    Contributed by Cygnus Support.
 
 This file is part of GDB, the GNU debugger.
@@ -204,7 +204,6 @@ sim_model_init (SIM_DESC sd)
     {
       /* Set the default model.  */
       const MODEL *model = sim_model_lookup (WITH_DEFAULT_MODEL);
-      SIM_ASSERT (model != NULL);
       sim_model_set (sd, NULL, model);
     }
 

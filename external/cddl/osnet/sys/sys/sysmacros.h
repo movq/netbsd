@@ -1,4 +1,4 @@
-/*	$NetBSD: sysmacros.h,v 1.7 2016/02/01 02:12:55 christos Exp $	*/
+/*	$NetBSD: sysmacros.h,v 1.4 2010/03/02 21:08:36 darran Exp $	*/
 
 /*
  * CDDL HEADER START
@@ -33,7 +33,6 @@
 #define	_SYS_SYSMACROS_H
 
 #include <sys/param.h>
-#include <sys/opentypes.h>
 
 #ifdef	__cplusplus
 extern "C" {
@@ -231,7 +230,6 @@ extern unsigned char bcd_to_byte[256];
  */
 #undef howmany
 #define	howmany(x, y)	(((x)+((y)-1))/(y))
-#undef roundup
 #define	roundup(x, y)	((((x)+((y)-1))/(y))*(y))
 
 #endif	/* !__NetBSD__ */
@@ -349,7 +347,7 @@ extern unsigned char bcd_to_byte[256];
  * because if a field crosses a byte boundary it's not likely to be meaningful
  * without reassembly in its nonnative endianness.
  */
-#ifdef notdef
+#if !defined(__NetBSD__) && !defined(__APPLE__)
 #if defined(_BIT_FIELDS_LTOH)
 #define	DECL_BITFIELD2(_a, _b)				\
 	uint8_t _a, _b
@@ -409,19 +407,19 @@ highbit(ulong_t i)
 		h += 32; i >>= 32;
 	}
 #endif
-	if (i & 0xffff0000ul) {
+	if (i & 0xffff0000) {
 		h += 16; i >>= 16;
 	}
-	if (i & 0xff00ul) {
+	if (i & 0xff00) {
 		h += 8; i >>= 8;
 	}
-	if (i & 0xf0ul) {
+	if (i & 0xf0) {
 		h += 4; i >>= 4;
 	}
-	if (i & 0xcul) {
+	if (i & 0xc) {
 		h += 2; i >>= 2;
 	}
-	if (i & 0x2ul) {
+	if (i & 0x2) {
 		h += 1;
 	}
 	return (h);

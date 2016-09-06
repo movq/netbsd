@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,14 +41,13 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+
 #include "acpi.h"
 #include "accommon.h"
 #include "acdisasm.h"
 
-#ifdef _KERNEL
-#define MpSaveGpioInfo(a, b, c, d, e)
-#define MpSaveSerialInfo(a, b, c)
-#endif
+
+#ifdef ACPI_DISASSEMBLER
 
 #define _COMPONENT          ACPI_CA_DEBUGGER
         ACPI_MODULE_NAME    ("dbresrcl2")
@@ -57,28 +56,24 @@
 
 static void
 AcpiDmI2cSerialBusDescriptor (
-    ACPI_OP_WALK_INFO       *Info,
     AML_RESOURCE            *Resource,
     UINT32                  Length,
     UINT32                  Level);
 
 static void
 AcpiDmSpiSerialBusDescriptor (
-    ACPI_OP_WALK_INFO       *Info,
     AML_RESOURCE            *Resource,
     UINT32                  Length,
     UINT32                  Level);
 
 static void
 AcpiDmUartSerialBusDescriptor (
-    ACPI_OP_WALK_INFO       *Info,
     AML_RESOURCE            *Resource,
     UINT32                  Length,
     UINT32                  Level);
 
 static void
 AcpiDmGpioCommon (
-    ACPI_OP_WALK_INFO       *Info,
     AML_RESOURCE            *Resource,
     UINT32                  Level);
 
@@ -156,7 +151,6 @@ AcpiDmDumpRawDataBuffer (
 
             AcpiOsPrintf (", ");
         }
-
         AcpiOsPrintf ("\n");
         AcpiDmIndent (Level + 2);
 
@@ -174,8 +168,7 @@ Finish:
  *
  * FUNCTION:    AcpiDmGpioCommon
  *
- * PARAMETERS:  Info                - Extra resource info
- *              Resource            - Pointer to the resource descriptor
+ * PARAMETERS:  Resource            - Pointer to the resource descriptor
  *              Level               - Current source code indentation level
  *
  * RETURN:      None
@@ -186,14 +179,12 @@ Finish:
 
 static void
 AcpiDmGpioCommon (
-    ACPI_OP_WALK_INFO       *Info,
     AML_RESOURCE            *Resource,
     UINT32                  Level)
 {
+    UINT32                  PinCount;
     UINT16                  *PinList;
     UINT8                   *VendorData;
-    char                    *DeviceName = NULL;
-    UINT32                  PinCount;
     UINT32                  i;
 
 
@@ -202,9 +193,9 @@ AcpiDmGpioCommon (
     AcpiDmIndent (Level + 1);
     if (Resource->Gpio.ResSourceOffset)
     {
-        DeviceName = ACPI_ADD_PTR (char,
-            Resource, Resource->Gpio.ResSourceOffset),
-        AcpiUtPrintString (DeviceName, ACPI_UINT16_MAX);
+        AcpiUtPrintString (
+            ACPI_ADD_PTR (char, Resource, Resource->Gpio.ResSourceOffset),
+            ACPI_UINT16_MAX);
     }
 
     AcpiOsPrintf (", ");
@@ -247,15 +238,11 @@ AcpiDmGpioCommon (
     for (i = 0; i < PinCount; i++)
     {
         AcpiDmIndent (Level + 2);
-        AcpiOsPrintf ("0x%4.4X%s\n", PinList[i],
-            ((i + 1) < PinCount) ? "," : "");
+        AcpiOsPrintf ("0x%4.4X%s\n", PinList[i], ((i + 1) < PinCount) ? "," : "");
     }
 
     AcpiDmIndent (Level + 1);
     AcpiOsPrintf ("}\n");
-
-    MpSaveGpioInfo (Info->MappingOp, Resource,
-        PinCount, PinList, DeviceName);
 }
 
 
@@ -263,8 +250,7 @@ AcpiDmGpioCommon (
  *
  * FUNCTION:    AcpiDmGpioIntDescriptor
  *
- * PARAMETERS:  Info                - Extra resource info
- *              Resource            - Pointer to the resource descriptor
+ * PARAMETERS:  Resource            - Pointer to the resource descriptor
  *              Length              - Length of the descriptor in bytes
  *              Level               - Current source code indentation level
  *
@@ -276,7 +262,6 @@ AcpiDmGpioCommon (
 
 static void
 AcpiDmGpioIntDescriptor (
-    ACPI_OP_WALK_INFO       *Info,
     AML_RESOURCE            *Resource,
     UINT32                  Length,
     UINT32                  Level)
@@ -289,7 +274,7 @@ AcpiDmGpioIntDescriptor (
     AcpiDmIndent (Level);
     AcpiOsPrintf ("GpioInt (%s, %s, %s, ",
         AcpiGbl_HeDecode [ACPI_GET_1BIT_FLAG (Resource->Gpio.IntFlags)],
-        AcpiGbl_LlDecode [ACPI_EXTRACT_2BIT_FLAG (Resource->Gpio.IntFlags, 1)],
+        AcpiGbl_LlDecode [ACPI_EXTRACT_1BIT_FLAG (Resource->Gpio.IntFlags, 1)],
         AcpiGbl_ShrDecode [ACPI_EXTRACT_2BIT_FLAG (Resource->Gpio.IntFlags, 3)]);
 
     /* PinConfig, DebounceTimeout */
@@ -307,7 +292,7 @@ AcpiDmGpioIntDescriptor (
 
     /* Dump the GpioInt/GpioIo common portion of the descriptor */
 
-    AcpiDmGpioCommon (Info, Resource, Level);
+    AcpiDmGpioCommon (Resource, Level);
 }
 
 
@@ -315,8 +300,7 @@ AcpiDmGpioIntDescriptor (
  *
  * FUNCTION:    AcpiDmGpioIoDescriptor
  *
- * PARAMETERS:  Info                - Extra resource info
- *              Resource            - Pointer to the resource descriptor
+ * PARAMETERS:  Resource            - Pointer to the resource descriptor
  *              Length              - Length of the descriptor in bytes
  *              Level               - Current source code indentation level
  *
@@ -328,7 +312,6 @@ AcpiDmGpioIntDescriptor (
 
 static void
 AcpiDmGpioIoDescriptor (
-    ACPI_OP_WALK_INFO       *Info,
     AML_RESOURCE            *Resource,
     UINT32                  Length,
     UINT32                  Level)
@@ -361,7 +344,7 @@ AcpiDmGpioIoDescriptor (
 
     /* Dump the GpioInt/GpioIo common portion of the descriptor */
 
-    AcpiDmGpioCommon (Info, Resource, Level);
+    AcpiDmGpioCommon (Resource, Level);
 }
 
 
@@ -369,8 +352,7 @@ AcpiDmGpioIoDescriptor (
  *
  * FUNCTION:    AcpiDmGpioDescriptor
  *
- * PARAMETERS:  Info                - Extra resource info
- *              Resource            - Pointer to the resource descriptor
+ * PARAMETERS:  Resource            - Pointer to the resource descriptor
  *              Length              - Length of the descriptor in bytes
  *              Level               - Current source code indentation level
  *
@@ -382,7 +364,6 @@ AcpiDmGpioIoDescriptor (
 
 void
 AcpiDmGpioDescriptor (
-    ACPI_OP_WALK_INFO       *Info,
     AML_RESOURCE            *Resource,
     UINT32                  Length,
     UINT32                  Level)
@@ -396,12 +377,12 @@ AcpiDmGpioDescriptor (
     {
     case AML_RESOURCE_GPIO_TYPE_INT:
 
-        AcpiDmGpioIntDescriptor (Info, Resource, Length, Level);
+        AcpiDmGpioIntDescriptor (Resource, Length, Level);
         break;
 
     case AML_RESOURCE_GPIO_TYPE_IO:
 
-        AcpiDmGpioIoDescriptor (Info, Resource, Length, Level);
+        AcpiDmGpioIoDescriptor (Resource, Length, Level);
         break;
 
     default:
@@ -479,8 +460,7 @@ AcpiDmDumpSerialBusVendorData (
  *
  * FUNCTION:    AcpiDmI2cSerialBusDescriptor
  *
- * PARAMETERS:  Info                - Extra resource info
- *              Resource            - Pointer to the resource descriptor
+ * PARAMETERS:  Resource            - Pointer to the resource descriptor
  *              Length              - Length of the descriptor in bytes
  *              Level               - Current source code indentation level
  *
@@ -492,19 +472,17 @@ AcpiDmDumpSerialBusVendorData (
 
 static void
 AcpiDmI2cSerialBusDescriptor (
-    ACPI_OP_WALK_INFO       *Info,
     AML_RESOURCE            *Resource,
     UINT32                  Length,
     UINT32                  Level)
 {
     UINT32                  ResourceSourceOffset;
-    char                    *DeviceName;
 
 
     /* SlaveAddress, SlaveMode, ConnectionSpeed, AddressingMode */
 
     AcpiDmIndent (Level);
-    AcpiOsPrintf ("I2cSerialBusV2 (0x%4.4X, %s, 0x%8.8X,\n",
+    AcpiOsPrintf ("I2cSerialBus (0x%4.4X, %s, 0x%8.8X,\n",
         Resource->I2cSerialBus.SlaveAddress,
         AcpiGbl_SmDecode [ACPI_GET_1BIT_FLAG (Resource->I2cSerialBus.Flags)],
         Resource->I2cSerialBus.ConnectionSpeed);
@@ -518,8 +496,9 @@ AcpiDmI2cSerialBusDescriptor (
     ResourceSourceOffset = sizeof (AML_RESOURCE_COMMON_SERIALBUS) +
         Resource->CommonSerialBus.TypeDataLength;
 
-    DeviceName = ACPI_ADD_PTR (char, Resource, ResourceSourceOffset),
-    AcpiUtPrintString (DeviceName, ACPI_UINT16_MAX);
+    AcpiUtPrintString (
+        ACPI_ADD_PTR (char, Resource, ResourceSourceOffset),
+        ACPI_UINT16_MAX);
 
     /* ResourceSourceIndex, ResourceUsage */
 
@@ -533,19 +512,13 @@ AcpiDmI2cSerialBusDescriptor (
     /* Insert a descriptor name */
 
     AcpiDmDescriptorName ();
-
-    /* Share */
-
-    AcpiOsPrintf (", %s,\n",
-        AcpiGbl_ShrDecode [ACPI_EXTRACT_1BIT_FLAG (Resource->I2cSerialBus.Flags, 2)]);
+    AcpiOsPrintf (",\n");
 
     /* Dump the vendor data */
 
     AcpiDmIndent (Level + 1);
     AcpiDmDumpSerialBusVendorData (Resource, Level);
     AcpiOsPrintf (")\n");
-
-    MpSaveSerialInfo (Info->MappingOp, Resource, DeviceName);
 }
 
 
@@ -553,8 +526,7 @@ AcpiDmI2cSerialBusDescriptor (
  *
  * FUNCTION:    AcpiDmSpiSerialBusDescriptor
  *
- * PARAMETERS:  Info                - Extra resource info
- *              Resource            - Pointer to the resource descriptor
+ * PARAMETERS:  Resource            - Pointer to the resource descriptor
  *              Length              - Length of the descriptor in bytes
  *              Level               - Current source code indentation level
  *
@@ -566,19 +538,17 @@ AcpiDmI2cSerialBusDescriptor (
 
 static void
 AcpiDmSpiSerialBusDescriptor (
-    ACPI_OP_WALK_INFO       *Info,
     AML_RESOURCE            *Resource,
     UINT32                  Length,
     UINT32                  Level)
 {
     UINT32                  ResourceSourceOffset;
-    char                    *DeviceName;
 
 
     /* DeviceSelection, DeviceSelectionPolarity, WireMode, DataBitLength */
 
     AcpiDmIndent (Level);
-    AcpiOsPrintf ("SpiSerialBusV2 (0x%4.4X, %s, %s, 0x%2.2X,\n",
+    AcpiOsPrintf ("SpiSerialBus (0x%4.4X, %s, %s, 0x%2.2X,\n",
         Resource->SpiSerialBus.DeviceSelection,
         AcpiGbl_DpDecode [ACPI_EXTRACT_1BIT_FLAG (Resource->SpiSerialBus.TypeSpecificFlags, 1)],
         AcpiGbl_WmDecode [ACPI_GET_1BIT_FLAG (Resource->SpiSerialBus.TypeSpecificFlags)],
@@ -601,8 +571,9 @@ AcpiDmSpiSerialBusDescriptor (
     ResourceSourceOffset = sizeof (AML_RESOURCE_COMMON_SERIALBUS) +
         Resource->CommonSerialBus.TypeDataLength;
 
-    DeviceName = ACPI_ADD_PTR (char, Resource, ResourceSourceOffset),
-    AcpiUtPrintString (DeviceName, ACPI_UINT16_MAX);
+    AcpiUtPrintString (
+        ACPI_ADD_PTR (char, Resource, ResourceSourceOffset),
+        ACPI_UINT16_MAX);
 
     /* ResourceSourceIndex, ResourceUsage */
 
@@ -616,19 +587,13 @@ AcpiDmSpiSerialBusDescriptor (
     /* Insert a descriptor name */
 
     AcpiDmDescriptorName ();
-
-    /* Share */
-
-    AcpiOsPrintf (", %s,\n",
-        AcpiGbl_ShrDecode [ACPI_EXTRACT_1BIT_FLAG (Resource->SpiSerialBus.Flags, 2)]);
+    AcpiOsPrintf (",\n");
 
     /* Dump the vendor data */
 
     AcpiDmIndent (Level + 1);
     AcpiDmDumpSerialBusVendorData (Resource, Level);
     AcpiOsPrintf (")\n");
-
-    MpSaveSerialInfo (Info->MappingOp, Resource, DeviceName);
 }
 
 
@@ -636,8 +601,7 @@ AcpiDmSpiSerialBusDescriptor (
  *
  * FUNCTION:    AcpiDmUartSerialBusDescriptor
  *
- * PARAMETERS:  Info                - Extra resource info
- *              Resource            - Pointer to the resource descriptor
+ * PARAMETERS:  Resource            - Pointer to the resource descriptor
  *              Length              - Length of the descriptor in bytes
  *              Level               - Current source code indentation level
  *
@@ -649,19 +613,17 @@ AcpiDmSpiSerialBusDescriptor (
 
 static void
 AcpiDmUartSerialBusDescriptor (
-    ACPI_OP_WALK_INFO       *Info,
     AML_RESOURCE            *Resource,
     UINT32                  Length,
     UINT32                  Level)
 {
     UINT32                  ResourceSourceOffset;
-    char                    *DeviceName;
 
 
     /* ConnectionSpeed, BitsPerByte, StopBits */
 
     AcpiDmIndent (Level);
-    AcpiOsPrintf ("UartSerialBusV2 (0x%8.8X, %s, %s,\n",
+    AcpiOsPrintf ("UartSerialBus (0x%8.8X, %s, %s,\n",
         Resource->UartSerialBus.DefaultBaudRate,
         AcpiGbl_BpbDecode [ACPI_EXTRACT_3BIT_FLAG (Resource->UartSerialBus.TypeSpecificFlags, 4)],
         AcpiGbl_SbDecode [ACPI_EXTRACT_2BIT_FLAG (Resource->UartSerialBus.TypeSpecificFlags, 2)]);
@@ -687,8 +649,9 @@ AcpiDmUartSerialBusDescriptor (
     ResourceSourceOffset = sizeof (AML_RESOURCE_COMMON_SERIALBUS) +
         Resource->CommonSerialBus.TypeDataLength;
 
-    DeviceName = ACPI_ADD_PTR (char, Resource, ResourceSourceOffset),
-    AcpiUtPrintString (DeviceName, ACPI_UINT16_MAX);
+    AcpiUtPrintString (
+        ACPI_ADD_PTR (char, Resource, ResourceSourceOffset),
+        ACPI_UINT16_MAX);
 
     /* ResourceSourceIndex, ResourceUsage */
 
@@ -702,19 +665,13 @@ AcpiDmUartSerialBusDescriptor (
     /* Insert a descriptor name */
 
     AcpiDmDescriptorName ();
-
-    /* Share */
-
-    AcpiOsPrintf (", %s,\n",
-        AcpiGbl_ShrDecode [ACPI_EXTRACT_1BIT_FLAG (Resource->UartSerialBus.Flags, 2)]);
+    AcpiOsPrintf (",\n");
 
     /* Dump the vendor data */
 
     AcpiDmIndent (Level + 1);
     AcpiDmDumpSerialBusVendorData (Resource, Level);
     AcpiOsPrintf (")\n");
-
-    MpSaveSerialInfo (Info->MappingOp, Resource, DeviceName);
 }
 
 
@@ -722,8 +679,7 @@ AcpiDmUartSerialBusDescriptor (
  *
  * FUNCTION:    AcpiDmSerialBusDescriptor
  *
- * PARAMETERS:  Info                - Extra resource info
- *              Resource            - Pointer to the resource descriptor
+ * PARAMETERS:  Resource            - Pointer to the resource descriptor
  *              Length              - Length of the descriptor in bytes
  *              Level               - Current source code indentation level
  *
@@ -735,12 +691,13 @@ AcpiDmUartSerialBusDescriptor (
 
 void
 AcpiDmSerialBusDescriptor (
-    ACPI_OP_WALK_INFO       *Info,
     AML_RESOURCE            *Resource,
     UINT32                  Length,
     UINT32                  Level)
 {
 
     SerialBusResourceDispatch [Resource->CommonSerialBus.Type] (
-        Info, Resource, Length, Level);
+        Resource, Length, Level);
 }
+
+#endif

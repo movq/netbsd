@@ -1,4 +1,4 @@
-#	$NetBSD: OPENBLOCKS266_OPT,v 1.19 2016/03/19 23:21:02 gdt Exp $
+#	$NetBSD: OPENBLOCKS266_OPT,v 1.17 2012/09/01 18:17:50 jakllsch Exp $
 #
 
 include		"arch/evbppc/conf/OPENBLOCKS266"
@@ -195,7 +195,6 @@ audio* at uaudio?
 
 # USB MIDI
 umidi*	at uhub? port ? configuration ?
-midi*	at midibus?
 
 # USB IrDA
 # USB-IrDA bridge spec
@@ -267,7 +266,7 @@ ukyopon* at uhub? port ?
 ucom*	at ukyopon? portno ?
 
 # USB scanners
-#uscanner* at uhub? port ?
+uscanner* at uhub? port ?
 
 # USB scanners that use SCSI emulation, e.g., HP5300
 usscanner* at uhub? port ?

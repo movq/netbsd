@@ -20,7 +20,6 @@
 #include "llvm/CodeGen/MachineInstrBuilder.h"
 #include "llvm/CodeGen/MachineModuleInfo.h"
 #include "llvm/CodeGen/MachineRegisterInfo.h"
-#include "llvm/CodeGen/WinEHFuncInfo.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DebugInfo.h"
 #include "llvm/IR/DerivedTypes.h"
@@ -32,7 +31,6 @@
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MathExtras.h"
-#include "llvm/Support/raw_ostream.h"
 #include "llvm/Target/TargetFrameLowering.h"
 #include "llvm/Target/TargetInstrInfo.h"
 #include "llvm/Target/TargetLowering.h"
@@ -86,13 +84,10 @@ void FunctionLoweringInfo::set(const Function &fn, MachineFunction &mf,
   MF = &mf;
   TLI = MF->getSubtarget().getTargetLowering();
   RegInfo = &MF->getRegInfo();
-  MachineModuleInfo &MMI = MF->getMMI();
-  const TargetFrameLowering *TFI = MF->getSubtarget().getFrameLowering();
 
   // Check whether the function can return without sret-demotion.
   SmallVector<ISD::OutputArg, 4> Outs;
-  GetReturnInfo(Fn->getReturnType(), Fn->getAttributes(), Outs, *TLI,
-                mf.getDataLayout());
+  GetReturnInfo(Fn->getReturnType(), Fn->getAttributes(), Outs, *TLI);
   CanLowerReturn = TLI->CanLowerReturn(Fn->getCallingConv(), *MF,
                                        Fn->isVarArg(), Outs, Fn->getContext());
 
@@ -104,29 +99,28 @@ void FunctionLoweringInfo::set(const Function &fn, MachineFunction &mf,
     for (BasicBlock::const_iterator I = BB->begin(), E = BB->end();
          I != E; ++I) {
       if (const AllocaInst *AI = dyn_cast<AllocaInst>(I)) {
-        Type *Ty = AI->getAllocatedType();
-        unsigned Align =
-          std::max((unsigned)MF->getDataLayout().getPrefTypeAlignment(Ty),
-                   AI->getAlignment());
-        unsigned StackAlign = TFI->getStackAlignment();
-
-        // Static allocas can be folded into the initial stack frame
-        // adjustment. For targets that don't realign the stack, don't
-        // do this if there is an extra alignment requirement.
-        if (AI->isStaticAlloca() && 
-            (TFI->isStackRealignable() || (Align <= StackAlign))) {
+        // Static allocas can be folded into the initial stack frame adjustment.
+        if (AI->isStaticAlloca()) {
           const ConstantInt *CUI = cast<ConstantInt>(AI->getArraySize());
-          uint64_t TySize = MF->getDataLayout().getTypeAllocSize(Ty);
+          Type *Ty = AI->getAllocatedType();
+          uint64_t TySize = TLI->getDataLayout()->getTypeAllocSize(Ty);
+          unsigned Align =
+              std::max((unsigned)TLI->getDataLayout()->getPrefTypeAlignment(Ty),
+                       AI->getAlignment());
 
           TySize *= CUI->getZExtValue();   // Get total allocated size.
           if (TySize == 0) TySize = 1; // Don't create zero-sized stack objects.
 
           StaticAllocaMap[AI] =
             MF->getFrameInfo()->CreateStackObject(TySize, Align, false, AI);
+
         } else {
-          // FIXME: Overaligned static allocas should be grouped into
-          // a single dynamic allocation instead of using a separate
-          // stack allocation for each one.
+          unsigned Align = std::max(
+              (unsigned)TLI->getDataLayout()->getPrefTypeAlignment(
+                AI->getAllocatedType()),
+              AI->getAlignment());
+          unsigned StackAlign =
+              MF->getSubtarget().getFrameLowering()->getStackAlignment();
           if (Align <= StackAlign)
             Align = 0;
           // Inform the Frame Information that we have variable-sized objects.
@@ -136,22 +130,21 @@ void FunctionLoweringInfo::set(const Function &fn, MachineFunction &mf,
 
       // Look for inline asm that clobbers the SP register.
       if (isa<CallInst>(I) || isa<InvokeInst>(I)) {
-        ImmutableCallSite CS(&*I);
+        ImmutableCallSite CS(I);
         if (isa<InlineAsm>(CS.getCalledValue())) {
           unsigned SP = TLI->getStackPointerRegisterToSaveRestore();
-          const TargetRegisterInfo *TRI = MF->getSubtarget().getRegisterInfo();
           std::vector<TargetLowering::AsmOperandInfo> Ops =
-              TLI->ParseConstraints(Fn->getParent()->getDataLayout(), TRI, CS);
+            TLI->ParseConstraints(CS);
           for (size_t I = 0, E = Ops.size(); I != E; ++I) {
             TargetLowering::AsmOperandInfo &Op = Ops[I];
             if (Op.Type == InlineAsm::isClobber) {
               // Clobbers don't have SDValue operands, hence SDValue().
               TLI->ComputeConstraintToUse(Op, SDValue(), DAG);
               std::pair<unsigned, const TargetRegisterClass *> PhysReg =
-                  TLI->getRegForInlineAsmConstraint(TRI, Op.ConstraintCode,
-                                                    Op.ConstraintVT);
+                  TLI->getRegForInlineAsmConstraint(Op.ConstraintCode,
+                                                   Op.ConstraintVT);
               if (PhysReg.first == SP)
-                MF->getFrameInfo()->setHasOpaqueSPAdjustment(true);
+                MF->getFrameInfo()->setHasInlineAsmWithSPAdjust(true);
             }
           }
         }
@@ -165,7 +158,7 @@ void FunctionLoweringInfo::set(const Function &fn, MachineFunction &mf,
           MF->getFrameInfo()->setHasVAStart(true);
       }
 
-      // If we have a musttail call in a variadic function, we need to ensure we
+      // If we have a musttail call in a variadic funciton, we need to ensure we
       // forward implicit register parameters.
       if (const auto *CI = dyn_cast<CallInst>(I)) {
         if (CI->isMustTailCall() && Fn->isVarArg())
@@ -174,17 +167,22 @@ void FunctionLoweringInfo::set(const Function &fn, MachineFunction &mf,
 
       // Mark values used outside their block as exported, by allocating
       // a virtual register for them.
-      if (isUsedOutsideOfDefiningBlock(&*I))
-        if (!isa<AllocaInst>(I) || !StaticAllocaMap.count(cast<AllocaInst>(I)))
-          InitializeRegForValue(&*I);
+      if (isUsedOutsideOfDefiningBlock(I))
+        if (!isa<AllocaInst>(I) ||
+            !StaticAllocaMap.count(cast<AllocaInst>(I)))
+          InitializeRegForValue(I);
 
       // Collect llvm.dbg.declare information. This is done now instead of
       // during the initial isel pass through the IR so that it is done
       // in a predictable order.
       if (const DbgDeclareInst *DI = dyn_cast<DbgDeclareInst>(I)) {
-        assert(DI->getVariable() && "Missing variable");
-        assert(DI->getDebugLoc() && "Missing location");
-        if (MMI.hasDebugInfo()) {
+        MachineModuleInfo &MMI = MF->getMMI();
+        DIVariable DIVar(DI->getVariable());
+        assert((!DIVar || DIVar.isVariable()) &&
+          "Variable in DbgDeclareInst should be either null or a DIVariable.");
+        if (MMI.hasDebugInfo() &&
+            DIVar &&
+            !DI->getDebugLoc().isUnknown()) {
           // Don't handle byval struct arguments or VLAs, for example.
           // Non-byval arguments are handled here (they refer to the stack
           // temporary alloca at this point).
@@ -206,36 +204,15 @@ void FunctionLoweringInfo::set(const Function &fn, MachineFunction &mf,
       }
 
       // Decide the preferred extend type for a value.
-      PreferredExtendType[&*I] = getPreferredExtendForValue(&*I);
+      PreferredExtendType[I] = getPreferredExtendForValue(I);
     }
 
   // Create an initial MachineBasicBlock for each LLVM BasicBlock in F.  This
   // also creates the initial PHI MachineInstrs, though none of the input
   // operands are populated.
   for (BB = Fn->begin(); BB != EB; ++BB) {
-    // Don't create MachineBasicBlocks for imaginary EH pad blocks. These blocks
-    // are really data, and no instructions can live here.
-    if (BB->isEHPad()) {
-      const Instruction *I = BB->getFirstNonPHI();
-      // If this is a non-landingpad EH pad, mark this function as using
-      // funclets.
-      // FIXME: SEH catchpads do not create funclets, so we could avoid setting
-      // this in such cases in order to improve frame layout.
-      if (!isa<LandingPadInst>(I)) {
-        MMI.setHasEHFunclets(true);
-        MF->getFrameInfo()->setHasOpaqueSPAdjustment(true);
-      }
-      if (isa<CatchSwitchInst>(I)) {
-        assert(&*BB->begin() == I &&
-               "WinEHPrepare failed to remove PHIs from imaginary BBs");
-        continue;
-      }
-      if (isa<FuncletPadInst>(I))
-        assert(&*BB->begin() == I && "WinEHPrepare failed to demote PHIs");
-    }
-
-    MachineBasicBlock *MBB = mf.CreateMachineBasicBlock(&*BB);
-    MBBMap[&*BB] = MBB;
+    MachineBasicBlock *MBB = mf.CreateMachineBasicBlock(BB);
+    MBBMap[BB] = MBB;
     MF->push_back(MBB);
 
     // Transfer the address-taken flag. This is necessary because there could
@@ -259,7 +236,7 @@ void FunctionLoweringInfo::set(const Function &fn, MachineFunction &mf,
       assert(PHIReg && "PHI node does not have an assigned virtual register!");
 
       SmallVector<EVT, 4> ValueVTs;
-      ComputeValueVTs(*TLI, MF->getDataLayout(), PN->getType(), ValueVTs);
+      ComputeValueVTs(*TLI, PN->getType(), ValueVTs);
       for (unsigned vti = 0, vte = ValueVTs.size(); vti != vte; ++vti) {
         EVT VT = ValueVTs[vti];
         unsigned NumRegisters = TLI->getNumRegisters(Fn->getContext(), VT);
@@ -272,71 +249,31 @@ void FunctionLoweringInfo::set(const Function &fn, MachineFunction &mf,
   }
 
   // Mark landing pad blocks.
-  SmallVector<const LandingPadInst *, 4> LPads;
-  for (BB = Fn->begin(); BB != EB; ++BB) {
-    const Instruction *FNP = BB->getFirstNonPHI();
-    if (BB->isEHPad() && MBBMap.count(&*BB))
-      MBBMap[&*BB]->setIsEHPad();
-    if (const auto *LPI = dyn_cast<LandingPadInst>(FNP))
-      LPads.push_back(LPI);
-  }
-
-  // If this personality uses funclets, we need to do a bit more work.
-  if (!Fn->hasPersonalityFn())
-    return;
-  EHPersonality Personality = classifyEHPersonality(Fn->getPersonalityFn());
-  if (!isFuncletEHPersonality(Personality))
-    return;
-
-  // Calculate state numbers if we haven't already.
-  WinEHFuncInfo &EHInfo = *MF->getWinEHFuncInfo();
-  if (Personality == EHPersonality::MSVC_CXX)
-    calculateWinCXXEHStateNumbers(&fn, EHInfo);
-  else if (isAsynchronousEHPersonality(Personality))
-    calculateSEHStateNumbers(&fn, EHInfo);
-  else if (Personality == EHPersonality::CoreCLR)
-    calculateClrEHStateNumbers(&fn, EHInfo);
-
-  // Map all BB references in the WinEH data to MBBs.
-  for (WinEHTryBlockMapEntry &TBME : EHInfo.TryBlockMap) {
-    for (WinEHHandlerType &H : TBME.HandlerArray) {
-      if (H.CatchObj.Alloca) {
-        assert(StaticAllocaMap.count(H.CatchObj.Alloca));
-        H.CatchObj.FrameIndex = StaticAllocaMap[H.CatchObj.Alloca];
-      } else {
-        H.CatchObj.FrameIndex = INT_MAX;
-      }
-      if (H.Handler)
-        H.Handler = MBBMap[H.Handler.get<const BasicBlock *>()];
-    }
-  }
-  for (CxxUnwindMapEntry &UME : EHInfo.CxxUnwindMap)
-    if (UME.Cleanup)
-      UME.Cleanup = MBBMap[UME.Cleanup.get<const BasicBlock *>()];
-  for (SEHUnwindMapEntry &UME : EHInfo.SEHUnwindMap) {
-    const BasicBlock *BB = UME.Handler.get<const BasicBlock *>();
-    UME.Handler = MBBMap[BB];
-  }
-  for (ClrEHUnwindMapEntry &CME : EHInfo.ClrEHUnwindMap) {
-    const BasicBlock *BB = CME.Handler.get<const BasicBlock *>();
-    CME.Handler = MBBMap[BB];
-  }
+  for (BB = Fn->begin(); BB != EB; ++BB)
+    if (const InvokeInst *Invoke = dyn_cast<InvokeInst>(BB->getTerminator()))
+      MBBMap[Invoke->getSuccessor(1)]->setIsLandingPad();
 }
 
 /// clear - Clear out all the function-specific state. This returns this
 /// FunctionLoweringInfo to an empty state, ready to be used for a
 /// different function.
 void FunctionLoweringInfo::clear() {
+  assert(CatchInfoFound.size() == CatchInfoLost.size() &&
+         "Not all catch info was assigned to a landing pad!");
+
   MBBMap.clear();
   ValueMap.clear();
   StaticAllocaMap.clear();
+#ifndef NDEBUG
+  CatchInfoLost.clear();
+  CatchInfoFound.clear();
+#endif
   LiveOutRegInfo.clear();
   VisitedBBs.clear();
   ArgDbgValues.clear();
   ByValArgFrameIndexMap.clear();
   RegFixups.clear();
   StatepointStackSlots.clear();
-  StatepointRelocatedValues.clear();
   PreferredExtendType.clear();
 }
 
@@ -357,7 +294,7 @@ unsigned FunctionLoweringInfo::CreateRegs(Type *Ty) {
   const TargetLowering *TLI = MF->getSubtarget().getTargetLowering();
 
   SmallVector<EVT, 4> ValueVTs;
-  ComputeValueVTs(*TLI, MF->getDataLayout(), Ty, ValueVTs);
+  ComputeValueVTs(*TLI, Ty, ValueVTs);
 
   unsigned FirstReg = 0;
   for (unsigned Value = 0, e = ValueVTs.size(); Value != e; ++Value) {
@@ -404,7 +341,7 @@ void FunctionLoweringInfo::ComputePHILiveOutRegInfo(const PHINode *PN) {
     return;
 
   SmallVector<EVT, 1> ValueVTs;
-  ComputeValueVTs(*TLI, MF->getDataLayout(), Ty, ValueVTs);
+  ComputeValueVTs(*TLI, Ty, ValueVTs);
   assert(ValueVTs.size() == 1 &&
          "PHIs with non-vector integer types should have a single VT.");
   EVT IntVT = ValueVTs[0];
@@ -510,17 +447,6 @@ int FunctionLoweringInfo::getArgumentFrameIndex(const Argument *A) {
   return 0;
 }
 
-unsigned FunctionLoweringInfo::getCatchPadExceptionPointerVReg(
-    const Value *CPI, const TargetRegisterClass *RC) {
-  MachineRegisterInfo &MRI = MF->getRegInfo();
-  auto I = CatchPadExceptionPointers.insert({CPI, 0});
-  unsigned &VReg = I.first->second;
-  if (I.second)
-    VReg = MRI.createVirtualRegister(RC);
-  assert(VReg && "null vreg in exception pointer table!");
-  return VReg;
-}
-
 /// ComputeUsesVAFloatArgument - Determine if any floating-point values are
 /// being passed to this variadic function, and set the MachineModuleInfo's
 /// usesVAFloatArgument flag if so. This flag is used to emit an undefined
@@ -534,7 +460,8 @@ void llvm::ComputeUsesVAFloatArgument(const CallInst &I,
   if (FT->isVarArg() && !MMI->usesVAFloatArgument()) {
     for (unsigned i = 0, e = I.getNumArgOperands(); i != e; ++i) {
       Type* T = I.getArgOperand(i)->getType();
-      for (auto i : post_order(T)) {
+      for (po_iterator<Type*> i = po_begin(T), e = po_end(T);
+           i != e; ++i) {
         if (i->isFloatingPointTy()) {
           MMI->setUsesVAFloatArgument(true);
           return;
@@ -544,13 +471,66 @@ void llvm::ComputeUsesVAFloatArgument(const CallInst &I,
   }
 }
 
+/// AddCatchInfo - Extract the personality and type infos from an eh.selector
+/// call, and add them to the specified machine basic block.
+void llvm::AddCatchInfo(const CallInst &I, MachineModuleInfo *MMI,
+                        MachineBasicBlock *MBB) {
+  // Inform the MachineModuleInfo of the personality for this landing pad.
+  const ConstantExpr *CE = cast<ConstantExpr>(I.getArgOperand(1));
+  assert(CE->getOpcode() == Instruction::BitCast &&
+         isa<Function>(CE->getOperand(0)) &&
+         "Personality should be a function");
+  MMI->addPersonality(MBB, cast<Function>(CE->getOperand(0)));
+
+  // Gather all the type infos for this landing pad and pass them along to
+  // MachineModuleInfo.
+  std::vector<const GlobalValue *> TyInfo;
+  unsigned N = I.getNumArgOperands();
+
+  for (unsigned i = N - 1; i > 1; --i) {
+    if (const ConstantInt *CI = dyn_cast<ConstantInt>(I.getArgOperand(i))) {
+      unsigned FilterLength = CI->getZExtValue();
+      unsigned FirstCatch = i + FilterLength + !FilterLength;
+      assert(FirstCatch <= N && "Invalid filter length");
+
+      if (FirstCatch < N) {
+        TyInfo.reserve(N - FirstCatch);
+        for (unsigned j = FirstCatch; j < N; ++j)
+          TyInfo.push_back(ExtractTypeInfo(I.getArgOperand(j)));
+        MMI->addCatchTypeInfo(MBB, TyInfo);
+        TyInfo.clear();
+      }
+
+      if (!FilterLength) {
+        // Cleanup.
+        MMI->addCleanup(MBB);
+      } else {
+        // Filter.
+        TyInfo.reserve(FilterLength - 1);
+        for (unsigned j = i + 1; j < FirstCatch; ++j)
+          TyInfo.push_back(ExtractTypeInfo(I.getArgOperand(j)));
+        MMI->addFilterTypeInfo(MBB, TyInfo);
+        TyInfo.clear();
+      }
+
+      N = i;
+    }
+  }
+
+  if (N > 2) {
+    TyInfo.reserve(N - 2);
+    for (unsigned j = 2; j < N; ++j)
+      TyInfo.push_back(ExtractTypeInfo(I.getArgOperand(j)));
+    MMI->addCatchTypeInfo(MBB, TyInfo);
+  }
+}
+
 /// AddLandingPadInfo - Extract the exception handling information from the
 /// landingpad instruction and add them to the specified machine module info.
 void llvm::AddLandingPadInfo(const LandingPadInst &I, MachineModuleInfo &MMI,
                              MachineBasicBlock *MBB) {
-  if (const auto *PF = dyn_cast<Function>(
-      I.getParent()->getParent()->getPersonalityFn()->stripPointerCasts()))
-    MMI.addPersonality(PF);
+  MMI.addPersonality(MBB,
+                     cast<Function>(I.getPersonalityFn()->stripPointerCasts()));
 
   if (I.isCleanup())
     MMI.addCleanup(MBB);

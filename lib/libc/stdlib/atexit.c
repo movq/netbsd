@@ -1,4 +1,4 @@
-/*	$NetBSD: atexit.c,v 1.29 2015/04/19 18:15:26 joerg Exp $	*/
+/*	$NetBSD: atexit.c,v 1.26.4.2 2015/04/21 04:50:17 snj Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #if defined(LIBC_SCCS) && !defined(lint)
-__RCSID("$NetBSD: atexit.c,v 1.29 2015/04/19 18:15:26 joerg Exp $");
+__RCSID("$NetBSD: atexit.c,v 1.26.4.2 2015/04/21 04:50:17 snj Exp $");
 #endif /* LIBC_SCCS and not lint */
 
 #include "reentrant.h"
@@ -120,12 +120,10 @@ atexit_handler_alloc(void *dso)
 void __section(".text.startup")
 __libc_atexit_init(void)
 {
-#ifdef _REENTRANT
 	mutexattr_t atexit_mutex_attr;
 	mutexattr_init(&atexit_mutex_attr);
 	mutexattr_settype(&atexit_mutex_attr, PTHREAD_MUTEX_RECURSIVE);
 	mutex_init(&__atexit_mutex, &atexit_mutex_attr);
-#endif
 }
 
 /*

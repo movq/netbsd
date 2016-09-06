@@ -1,4 +1,4 @@
-.\"	$NetBSD: hier.7,v 1.121 2016/08/16 07:52:05 wiz Exp $
+.\"	$NetBSD: hier.7,v 1.109.4.1 2015/08/21 17:24:01 snj Exp $
 .\"
 .\" Copyright (c) 1990, 1993, 1994
 .\"	The Regents of the University of California.  All rights reserved.
@@ -29,14 +29,14 @@
 .\"
 .\"	@(#)hier.7	8.5 (Berkeley) 6/1/94
 .\"
-.Dd August 15, 2016
+.Dd May 25, 2015
 .Dt HIER 7
 .Os
 .Sh NAME
 .Nm hier
-.Nd layout of file systems
+.Nd layout of filesystems
 .Sh DESCRIPTION
-An outline of the file system hierarchy.
+An outline of the filesystem hierarchy.
 .Pp
 Naming is very important.
 The
@@ -50,612 +50,599 @@ Not all files will be in every system.
 .Pp
 .Bl -tag -width "/altroot/"
 .It Sy \&/
-Root directory of the system.
+root directory of the system
 .It Sy /COPYRIGHT
-System copyright notice, most often put on
+system copyright notice, most often put on
 .Tn CD-ROM
 distributions.
 .It Sy "/[a-z]/"
-User file systems.
+user filesystems
 .It Sy /altroot/
-Alternate root file system, in case of disaster.
+alternate root filesystem, in case of disaster
 .\" .It Sy /amd/
-.\" Home directories mount point; see
-.\" .Xr amd 8 .
+.\" home directories mount point; see
+.\" .Xr amd 8
 .It Sy /bin/
-Utilities used in both single and multi-user environments.
+utilities used in both single and multi-user environments
 .It Sy /boot*
-Second-stage boot loader(s) for some platforms; see
-.Xr installboot 8 .
+second-stage boot loader(s) for some platforms; see
+.Xr installboot 8
 .It Sy /cdrom/
-Empty directory commonly used by
-system administrators as a temporary mount point for ISO-9660 file
-systems on CD (or DVD) media.
+empty directory commonly used by
+system administrators as a temporary mount point for CD devices
+for ISO-9660 file systems
 .It Sy /dev/
-Block, character, and other special device files.
+block, character and other special device files
 .Pp
 .Bl -tag -width "MAKEDEV" -compact
 .It Sy MAKEDEV
-Script for creating device files;
+script for creating device files;
 see
-.Xr makedev 8 .
+.Xr makedev 8
 .It Sy console
-The computer's console device.
+the computer's console device
 .It Sy drum
-The computer's swap space device; see
-.Xr drum 4 .
+system swap space; see
+.Xr drum 4
 .It Sy fd/
-File descriptor files;
+file descriptor files;
 see
-.Xr fd 4 .
+.Xr fd 4
 .It Sy klog
-Kernel logging device; see
-.Xr syslog 3 .
+kernel logging device; see
+.Xr syslog 3
 .It Sy kmem
-Kernel virtual memory device; see
-.Xr mem 4 .
+kernel virtual memory device; see
+.Xr mem 4
 .It Sy log
 .Ux
 domain datagram log socket; see
-.Xr syslogd 8 .
+.Xr syslogd 8
 .It Sy mem
-Kernel physical memory device; see
-.Xr mem 4 .
+kernel physical memory device; see
+.Xr mem 4
 .It Sy null
-The null device; see
-.Xr null 4 .
+the null device; see
+.Xr null 4
 .It Sy pts/
-Mount point for the pseudo-terminal device file system; see
-.Xr mount_ptyfs 8 .
+mount point for the pseudo-terminal device file system; see
+.Xr mount_ptyfs 8
 .It Sy stderr
 .It Sy stdin
 .It Sy stdout
-File descriptor files;
+file descriptor files;
 see
-.Xr fd 4 .
+.Xr fd 4
 .It Sy tty
-Device pointing to each process's own controlling terminal; see
-.Xr tty 4 .
+process' controlling terminal device; see
+.Xr tty 4
 .It Sy zero
-The zero device; see
-.Xr zero 4 .
+the zero device; see
+.Xr zero 4
 .El
 .\" .It Sy /dump/
-.\" Online
+.\" online
 .\" .Xr dump 8
-.\" repository.
+.\" repository
 .It Sy /etc/
-System configuration files and scripts.
+system configuration files and scripts
 .Pp
 .Bl -tag -width "master.passwd" -compact
 .It Sy amd*
-Configuration files for
-.Xr amd 8 .
+configuration files for
+.Xr amd 8
 .It Sy changelist
-Files backed up by the
-.Sy security
-script.
+files backed up by the security script
 .It Sy crontab
-Schedule used by the
+schedule used by the
 .Xr cron 8
-daemon.
+daemon
 .It Sy csh.cshrc
 .It Sy csh.login
 .It Sy csh.logout
-System-wide scripts for
-.Xr csh 1 .
+system-wide scripts for
+.Xr csh 1
 .It Sy daily
-Script run each day by
-.Xr cron 8 .
+script run each day by
+.Xr cron 8
 .It Sy daily.conf
-Configuration file for
+configuration file for
 .Sy daily ;
 see
-.Xr daily.conf 5 .
+.Xr daily.conf 5
 .It Sy defaults/
-Default configuration files read by various
+default configuration files read by various
 .Pa /etc/*.conf
-files.
+files
 .It Sy disktab
-Disk description file; see
-.Xr disktab 5 .
+disk description file, see
+.Xr disktab 5
 .It Sy dm.conf
-Dungeon master configuration; see
-.Xr dm.conf 5 .
+dungeon master configuration; see
+.Xr dm.conf 5
 .It Sy dumpdates
-Dump history; see
-.Xr dump 8 .
+dump history; see
+.Xr dump 8
 .It Sy exports
-File system export information; see
-.Xr mountd 8 .
+filesystem export information; see
+.Xr mountd 8
 .It Sy fstab
-File system mounting table; see
+filesystem information; see
 .Xr fstab 5
 and
-.Xr mount 8 .
+.Xr mount 8
 .It Sy ftpusers
-Users denied
+users denied
 .Xr ftp 1
 access; see
-.Xr ftpd 8 .
+.Xr ftpd 8
 .It Sy ftpwelcome
 .Xr ftp 1
 initial message; see
-.Xr ftpd 8 .
+.Xr ftpd 8
 .It Sy gettytab
-Terminal configuration database; see
-.Xr gettytab 5 .
+terminal configuration database; see
+.Xr gettytab 5
 .It Sy group
-Group permissions file; see
-.Xr group 5 .
+group permissions file; see
+.Xr group 5
 .It Sy hosts
-Host name database backup for
+host name database backup for
 .Xr named 8 ;
 see
-.Xr hosts 5 .
+.Xr hosts 5
 .It Sy hosts.equiv
-Trusted machines with equivalent user IDs.
-(Obsolete.)
+trusted machines with equivalent user ID's
 .It Sy hosts.lpd
-Trusted machines with printing privileges.
+trusted machines with printing privileges
 .It Sy inetd.conf
 Internet server configuration file; see
-.Xr inetd 8 .
+.Xr inetd 8
 .It Sy kerberosV/
-Configuration files for Kerberos version V;
+configuration files for the kerberos version V;
 see
-.Xr kerberos 8 .
+.Xr kerberos 8
 .It Sy localtime
-Local time zone;
+local timezone information;
 see
-.Xr ctime 3 .
-.It Sy login.conf
-Configuration of user classes and limits; see
-.Xr login.conf 5 .
+.Xr ctime 3
 .It Sy mail/
-Configuration files for
-.Xr sendmail 1 .
+configuration files for
+.Xr sendmail 1
 .Pp
 .Bl -tag -width "sendmail.*" -compact
 .It Sy aliases*
-Username alias files.
+name alias files
 .It Sy sendmail.*
 .Xr sendmail 1
-configuration information.
+configuration information
 .El
 .It Sy mail.rc
-System-wide initialization script for
-.Xr mail 1 .
+system-wide initialization script for
+.Xr mail 1
 .It Sy man.conf
-Configuration file for
+configuration file for
 .Xr man 1 ;
 see
-.Xr man.conf 5 .
+.Xr man.conf 5
 .It Sy master.passwd
 Main password file, readable only by root; see
-.Xr passwd 5 .
+.Xr passwd 5
 .It Sy mk.conf
-Optional file containing
+optional file containing
 .Xr make 1
-variables, used to configure pkgsrc and the system sources.
+variables, read by pkgsrc and the system sources.
 .It Sy monthly
-Script run each month by
-.Xr cron 8 .
+script run each month by
+.Xr cron 8
 .It Sy monthly.conf
-Configuration file for
+configuration file for
 .Sy monthly ;
 see
-.Xr monthly.conf 5 .
+.Xr monthly.conf 5
 .It Sy motd
-System message of the day.
+system message of the day
 .It Sy mtree/
+mtree configuration files;
+see
 .Xr mtree 8
-configuration files.
 .It Sy named.*
 .It Sy namedb/
+named configuration files and databases;
+see
 .Xr named 8
-configuration files and databases.
 .It Sy netgroup
-Network groups; see
-.Xr netgroup 5 .
+network groups; see
+.Xr netgroup 5
 .It Sy netstart
-Network startup script .
+network startup script
 .It Sy networks
-Network name database; see
-.Xr networks 5 .
+network name data base; see
+.Xr networks 5
 .It Sy passwd
 World readable password file generated from master.passwd; see
 .Xr passwd 5 ,
-.Xr pwd_mkdb 8 .
+.Xr pwd_mkdb 8
 .It Sy phones
-Remote host telephone number data base; see
-.Xr phones 5 .
+remote host phone number data base; see
+.Xr phones 5
 .It Sy printcap
-Printer configuration for
-.Xr lpr 1 ;
-see
-.Xr printcap 5 .
-.It Sy profile
-System-wide scripts for
-.Xr sh 1 .
+system printer configuration; see
+.Xr printcap 5
 .It Sy protocols
-Protocol name database; see
-.Xr protocols 5 .
+protocol name database; see
+.Xr protocols 5
 .It Sy pwd.db
-Database form of passwd file; see
-.Xr pwd_mkdb 8 .
+database form of passwd file; see
+.Xr pwd_mkdb 8
 .It Sy rc
-Master system startup script invoked by
+master system startup script invoked by
 .Xr init 8 ;
 see
-.Xr rc 8 .
+.Xr rc 8
 .It Sy rc.conf
-Configuration file for system startup and shutdown scripts; see
-.Xr rc.conf 5 .
+configuration file for system startup and shutdown scripts; see
+.Xr rc.conf 5
 .It Sy rc.d/
-Directory containing per-subsystem startup and shutdown scripts; see
-.Xr rc 8 .
+directory containing per-subsystem startup and shutdown scripts; see
+.Xr rc 8
 .It Sy rc.local
-Locally editable system startup script.
+locally editable system startup script
 .It Sy rc.shutdown
-Master system shutdown script invoked by
+master system shutdown script invoked by
 .Xr shutdown 8 ;
 see
-.Xr rc 8 .
+.Xr rc 8
 .It Sy remote
-Remote host description file; see
-.Xr remote 5 .
+remote host description file; see
+.Xr remote 5
 .It Sy security
-Daily (in)security script run by
-.Xr cron 8 .
+daily (in)security script run by
+.Xr cron 8
 .It Sy security.conf
-Configuration file for
+configuration file for
 .Sy security ;
 see
-.Xr security.conf 5 .
+.Xr security.conf 5
 .It Sy services
-Service name data base; see
-.Xr services 5 .
+service name data base; see
+.Xr services 5
 .It Sy shells
-List of permitted shells; see
-.Xr shells 5 .
-.It Sy skel/
-Sample initialization files for new user accounts.
+list of permitted shells; see
+.Xr shells 5
 .It Sy sliphome/
 .Tn SLIP
 login/logout scripts; see
-.Xr sliplogin 8 .
+.Xr sliplogin 8
 .It Sy spwd.db
-Database form of master.passwd file; see
-.Xr pwd_mkdb 8 .
+database form of master.passwd file; see
+.Xr pwd_mkdb 8
 .It Sy syslog.conf
 .Xr syslogd 8
-Configuration file; see
-.Xr syslog.conf 5 .
-.It Sy ttyaction
-Login hooks for specific ttys, typically used to chown console
-devices.
-See
-.Xr ttyaction 5 .
+configuration file; see
+.Xr syslog.conf 5
 .It Sy ttys
-Terminal initialization information; see
-.Xr ttys 5 .
+terminal initialization information; see
+.Xr ttys 5
 .It Sy weekly
-Script run each week by
-.Xr cron 8 .
+script run each week by
+.Xr cron 8
 .It Sy weekly.conf
-Configuration file for
+configuration file for
 .Sy weekly ;
 see
-.Xr weekly.conf 5 .
+.Xr weekly.conf 5
 .El
 .It Sy /home/
-Default location for user home directories.
+mount point for the automounter; see
+.Xr amd 8
 .It Sy /kern/
-Mount point for the kern file system; see
-.Xr mount_kernfs 8 .
+mount point for the kern file system; see
+.Xr mount_kernfs 8
 .It Sy /lib/
-Dynamic linked libraries used by dynamically linked programs
-that cannot rely upon
-.Pa /usr/lib/
-being available, such as those in
+dynamic linked libraries used by dynamic linked programs
+(such as those in
 .Pa /bin/
 and
-.Pa /sbin/ .
+.Pa /sbin/ )
+that cannot rely upon
+.Pa /usr/lib/
+being available.
 .It Sy /libdata/
-Non-executable files
+non-executable files
 .Pq such as device firmware
 required at boot time, when
 .Pa /usr/libdata
 may not be available.
 .It Sy /libexec/
-System utilities (such as the dynamic linker) required by programs
+system utilities (such as the dynamic linker) required by programs
 and libraries that cannot rely upon
 .Pa /usr/libexec/
 being available.
 .It Sy /mnt/
-Empty directory commonly used by
-system administrators as a temporary mount point.
+empty directory commonly used by
+system administrators as a temporary mount point
 .It Sy /netbsd
-Kernel executable image (the operating system loaded into memory
+pure kernel executable (the operating system loaded into memory
 at boot time).
 .It Sy /proc/
-Mount point for the process file system; see
-.Xr mount_procfs 8 .
+mount point for the process file system; see
+.Xr mount_procfs 8
 .It Sy /rescue/
-Statically linked rescue tools, for use in system recovery.
+statically linked rescue tools, for use in system recovery
 .It Sy /root/
-Home directory for the super-user.
+home directory for the super-user
 .Pp
 .Bl -tag -width ".profile" -compact
 .It Sy \&.cshrc
-Super-user start-up file for
-.Xr csh 1 .
+super-user start-up file
 .It Sy \&.login
-super-user start-up file for
-.Xr csh 1 .
+super-user start-up file
 .It Sy \&.profile
-super-user start-up file for
-.Xr sh 1 .
+super-user start-up file
 .It Sy \&.rhosts
-Super-user id mapping between machines.
-(Obsolete.)
+super-user id mapping between machines
 .El
 .It Sy /sbin/
-System programs and administration utilities
-used in both single-user and multi-user environments.
+system programs and administration utilities
+used in both single-user and multi-user environments
 .It Sy /stand/
-Programs used in a standalone environment.
+programs used in a standalone environment
 .It Sy /tmp/
-Temporary files.
-The contents of
+temporary files, usually a
+.Xr mfs 8
+memory-based filesystem (the contents of
 .Pa /tmp
 are usually
 .Em not
-preserved across a system reboot.
+preserved across a system reboot)
 .It Sy /usr/
-Contains the majority of the system utilities and files.
+contains the majority of the system utilities and files
 .Pp
 .Bl -tag -width "libdata/" -compact
 .It Sy X11R6/
-X11 files (for X11 revision 6).
+X11 files
 .It Sy X11R7/
-X11 files (for X11 revision 7).
+X11 files
 .Pp
 .Bl -tag -width "include/" -compact
 .It Sy bin/
-X11 binaries.
+X11 binaries
 .It Sy include/
-X11 include files.
+X11 include files
 .It Sy lib/
-X11 libraries.
+X11 libraries
 .El
 .Pp
 .It Sy bin/
-Common utilities, programming tools, and applications.
+common utilities, programming tools, and applications
 .It Sy games/
-The important stuff.
+the important stuff
 .It Sy include/
-Standard C (and extension) include files.
+standard C include files
 .Pp
 .Bl -tag -width "protocols/" -compact
 .It Sy arpa/
-Include files for Internet service protocols.
+include files for Internet service protocols
 .It Sy atf/
-Include files for the Automated Testing Framework; see
-.Xr atf 7 .
+include files for the Automated Testing Framework; see
+.Xr atf 7
 .It Sy g++/
-Include files for the GNU C++ compiler.
+include files for the C++ compiler
 .It Sy machine/
-Machine specific include files.
+machine specific include files
 .It Sy net/
-Miscellaneous network include files.
 .It Sy netatalk/
 C include files for AppleTalk protocols
+miscellaneous network include files;
 see
-.Xr atalk 4 .
+.Xr atalk 4
 .It Sy netinet/
-Include files for Internet standard protocols; see
-.Xr inet 4 .
+include files for Internet standard protocols; see
+.Xr inet 4
 .It Sy netinet6/
-Include files for Internet protocol version 6; see
-.Xr inet6 4 .
+include files for Internet protocol version 6; see
+.Xr inet6 4
 .It Sy netkey/
-Include files for secret key management, used for security protocols; see
-.Xr ipsec 4 .
+include files for secret key management, used for security protocols; see
+.Xr ipsec 4
 .It Sy netnatm/
-C include files for native mode ATM.
+C include files for native mode ATM
 .It Sy nfs/
-C include files for NFS (Network File System).
+C include files for NFS (Network File System)
 .It Sy protocols/
-C include files for Berkeley service protocols.
+C include files for Berkeley service protocols
 .It Sy sys/
-``System-level'' C include files.
+system C include files (kernel data structures)
 .It Sy ufs/
-C include files for several mutually related file systems.
-(The `u' was originally for
-.Ux . )
+C include files for UFS (The U-word File System)
 .El
 .Pp
 .It Sy lib/
-Archive, profiled, position independent archive, and shared libraries.
+archive, profiled, position independent archive, and shared libraries
 .Pp
 .Bl -tag -width "lua/" -compact
 .It Sy lua/
 .Bl -tag -width "5.3/" -compact
 .It Sy 5.3/
-Lua 5.3 modules.
+Lua 5.3 modules
 .El
 .El
 .Pp
 .It Sy libdata/
-Miscellaneous utility data files.
+miscellaneous utility data files
 .It Sy libexec/
-System daemons \*[Am] system utilities (executed by other programs).
+system daemons \*[Am] system utilities (executed by other programs)
 .Pp
 .It Sy mdec/
-Boot blocks, etc.
+boot blocks, etc.
 .It Sy obj/
-Architecture-specific target tree produced by building the
+architecture-specific target tree produced by building the
 .Pa /usr/src
-tree; often a symbolic link or mounted file system.
+tree; normally a symbolic link or mounted filesystem
 .It Sy pkg/
-Installed third-party software packages.
+packages maintained by groups other than the
+.Nx
+Project.
 .Pp
 .Bl -tag -width "include/" -compact
 .It Sy bin/
-Package binaries.
+contributed binaries
 .It Sy include/
-Package include files.
+contributed include files
 .It Sy lib/
-Package libraries.
+contributed libraries
 .It Sy libdata/
-Package data files.
+contributed data files
 .It Sy libexec/
-Package daemons.
+contributed daemons
 .It Sy sbin/
-Package system utilities.
+contributed system utilities
 .El
 .Pp
 .It Sy pkgsrc/
-Build descriptions (packaging) for the
+build descriptions ("packages") for the
 .Nx
-package system.
+packages system.
 .Pp
 .Bl -tag -width "distfilesX" -compact
 .It Sy distfiles/
-Downloaded upstream source archives.
+Where unchanged source archives are fetched to/stored
 .It Sy packages/
-Compiled binary packages.
+Where compiled binary packages are stored
 .El
 .Pp
 There are also several other subdirectories which contain packages of
 a certain category, e.g., archivers, graphics, ...
 .Pp
 .It Sy sbin/
-System daemons and system utilities (normally executed by the super-user).
+system daemons and system utilities (normally executed by the super-user)
 .It Sy share/
-Architecture-independent files, mostly text.
+architecture-independent text files
 .Pp
 .Bl -tag -width "calendar/" -compact
 .It Sy calendar/
-A variety of calendar files; see
-.Xr calendar 1 .
+a variety of calendar files; see
+.Xr calendar 1
 .It Sy dict/
-Word lists;
+word lists;
 see
 .Xr look 1
 and
-.Xr spell 1 .
+.Xr spell 1
 .Pp
 .Bl -tag -width "special/" -compact
 .It Sy words
-Common words.
+common words
 .It Sy web2
-Words from Webster's Second International Dictionary.
+words of Webster's 2nd International
 .It Sy papers/
-Reference databases;
+reference databases;
 see
-.Xr refer 1 .
+.Xr refer 1
 .It Sy special/
-Custom word lists;
+custom word lists;
 see
-.Xr spell 1 .
+.Xr spell 1
 .El
 .Pp
 .It Sy doc/
-Miscellaneous documentation.
+miscellaneous documentation; source for most of the printed
+.Bx 4.3
+manuals (available
+from the
+.Tn USENIX
+association)
 .It Sy games/
-Data files used by various games.
+text files used by various games
 .It Sy i18n/
 internationalization databases; see
-.Xr iconv 3 .
+.Xr iconv 3
 .It Sy locale/
-Locale databases and gettext message catalogs; see
+locale databases and gettext message catalogs; see
 .Xr setlocale 3
 and
-.Xr gettext 3 .
+.Xr gettext 3
 .It Sy man/
-Manual pages.
+formatted manual pages
 .It Sy me/
-Macros for use with the
+macros for use with the
 .Xr me 7
-roff macro package.
+macro package
 .It Sy misc/
-Miscellaneous system-wide text files.
+miscellaneous system-wide text files
 .Pp
 .Bl -tag -width "terminfo.cdb" -compact
 .It Sy terminfo
-Terminal characteristics database;
+terminal characteristics database;
 see
-.Xr terminfo 5 .
+.Xr terminfo 5
 .It Sy terminfo.cdb
 database form of terminfo file; see
-.Xr tic 1 .
+.Xr tic 1
 .El
 .Pp
 .It Sy mk/
-Include files for
-.Xr make 1 .
+include files for
+.Xr make 1
 .It Sy ms/
-Macros for use with the
+macros for use with the
 .Xr ms 7
-roff macro package.
+macro package
 .It Sy nls/
-Message catalogs; see
-.Xr catgets 3 .
+message catalogs; see
+.Xr catgets 3
+.It Sy skel/
+sample initialization files for new user accounts
 .It Sy tmac/
-Text processing macros;
+text processing macros;
 see
 .Xr nroff 1
 and
-.Xr troff 1 .
+.Xr troff 1
 .It Sy zoneinfo/
-Time zone database;
+timezone configuration information;
 see
-.Xr tzfile 5 .
+.Xr tzfile 5
 .El
 .It Sy tests/
-Test programs; see
-.Xr tests 7
-for information on how to run them.
+test programs; see
+.Xr atf-run 1
+for information on how to run them
 .El
 .Pp
 .It Sy /usr/src/
 .Nx
-and local source files.
+and local source files
 .Pp
 .Bl -tag -width "domestic/" -compact
 .It Sy bin/
-Source for utilities/files in
-.Pa /bin .
+source for utilities/files in
+.Pa /bin
 .It Sy common/
-Sources shared between kernel and userland.
+sources shared between kernel and userland
 .It Sy crypto/
-Cryptographic source, which may have import or export restrictions.
+cryptographic source, which may have import or export restrictions
 .It Sy dist/
-Third-party
+third-party
 .Sq virgin
-source code, referenced by other parts of the source tree.
-(Deprecated; use
+source code, referenced by other parts of the source tree (deprecated, use
 .Sy external/
-instead.)
+instead)
 .It Sy distrib/
-Tools and data files for making
-.Nx
-releases and distributions.
+tools and data-files for making distributions
 .It Sy doc/
-Documentation about the source tree (i.e., about the tree, not about
-how to use the software in the tree.)
+documentation about the source tree (i.e., about the tree, not about
+how to use the built software.)
 .It Sy etc/
-Source (usually example files) for files in
-.Pa /etc .
+source (usually example files) for files in
+.Pa /etc
 .It Sy external/
-Source for programs from external third parties
+source for programs from external third parties
 (where
 .Nx
 is the not the primary maintainer),
-grouped by license, and then products per license.
+grouped by license, and then products per license
 .Pp
 .Bl -tag -width "intel-fw-public/" -compact
 .It Sy apache2/
@@ -690,429 +677,417 @@ BSD-like zlib license.
 .El
 .Pp
 .It Sy games/
-Source for utilities/files in
-.Pa /usr/games .
+source for utilities/files in
+.Pa /usr/games
 .It Sy gnu/
-Source for programs covered by the
+source for programs covered by the
 .Tn GNU
 license (or similar) (deprecated; use
 .Sy external/gpl2/
 or
 .Sy external/gpl3/
-as appropriate).
+as appropriate)
 .It Sy include/
-Source for files in
-.Pa /usr/include .
+source for files in
+.Pa /usr/include
 .It Sy lib/
-Source for libraries in
-.Pa /usr/lib .
+source for libraries in
+.Pa /usr/lib
 .It Sy libexec/
-Source for utilities/files in
-.Pa /usr/libexec .
+source for utilities/files in
+.Pa /usr/libexec
 .It Sy regress/
-Various legacy regression tests.
+various regression tests
 .It Sy rescue/
-Source/makefiles for
-.Pa /rescue .
+source/makefiles for /rescue
 .It Sy sbin/
-Source for utilities/files in
-.Pa /sbin .
+source for utilities/files in
+.Pa /sbin
 .It Sy share/
-Source for files in
-.Pa /usr/share .
+source for files in
+.Pa /usr/share
 .Pp
 .Bl -tag -width "doc/" -compact
 .It Sy doc/
 .Pp
 .Bl -tag -width "papers/" -compact
 .It Sy papers/
-Source for various historical technical papers (many from Berkeley).
+source for various Berkeley technical papers
 .It Sy psd/
-Source for Programmer's Supplementary Documents.
+source for Programmer's Supplementary Documents
 .It Sy smm/
-Source for System Manager's Manual.
+source for System Manager's Manual
 .It Sy usd/
-Source for User's Supplementary Documents.
+source for User's Supplementary Documents
 .Pp
 .El
 .El
 .It Sy sys/
-Kernel source files.
+kernel source files
 .Pp
 .Bl -tag -width "gdbscripts/" -compact
 .It Sy arch/
-Architecture-specific support.
+architecture-specific support
 .Pp
 .Bl -tag -width "playstation2/" -compact
 .It Sy acorn26/
-Acorn Archimedes, A-series and R-series systems.
+Acorn Archimedes, A-series and R-series systems
 .It Sy acorn32/
-Acorn RiscPC/A7000 and VLSI RC7500.
+Acorn RiscPC/A7000 and VLSI RC7500
 .It Sy algor/
-Algorithmics Ltd. MIPS evaluations boards.
+Algorithmics Ltd. MIPS evaluations boards
 .It Sy alpha/
-Digital/Compaq Alpha.
+Digital/Compaq Alpha
 .It Sy amd64/
-Computers with x86_64 capable CPUs.
+Computers with x86_64 capable CPUs
 .It Sy amiga/
-Commodore Amiga and MacroSystem DraCo.
+Commodore Amiga and MacroSystem DraCo
 .It Sy amigappc/
-PowerPC based Amiga boards.
+PowerPC based Amiga boards
 .It Sy arc/
-MIPS-based machines following the Advanced RISC Computing spec.
+MIPS-based machines following the Advanced RISC Computing spec
 .It Sy arm/
-ARM processor general support.
+ARM processor general support
 .It Sy atari/
-Atari TT030, Falcon and Hades.
+Atari TT030, Falcon and Hades
 .It Sy bebox/
-Be Inc. BeBox.
+Be Inc. BeBox
 .It Sy cats/
-Chalice Technology's CATS and Intel's EBSA-285 evaluation boards.
+Chalice Technology's CATS and Intel's EBSA-285 evaluation boards
 .It Sy cesfic/
-CES FIC8234 VME processor board.
+CES FIC8234 VME processor board
 .It Sy cobalt/
-Cobalt Networks' MIPS-based Microserver.
+Cobalt Networks' MIPS-based Microserver
 .It Sy dreamcast/
-Sega Dreamcast game console.
+Sega Dreamcast game console
 .It Sy emips/
-Machines based on Extensible MIPS.
+Machines based on Extensible MIPS
 .It Sy evbarm/
-ARM based evaluation boards.
+ARM based evaluation boards
 .It Sy evbmips/
-MIPS based evaluation boards.
+MIPS based evaluation boards
 .It Sy evbppc/
-PowerPC based evaluation boards and appliances.
+PowerPC based evaluation boards and appliances
 .It Sy evbsh3/
-SH3/SH4 based evaluation boards.
+SH3/SH4 based evaluation boards
 .It Sy ews4800mips/
-NEC's MIPS based EWS4800 workstations.
+NEC's MIPS based EWS4800 workstations
 .It Sy hp300/
-Hewlett-Packard 9000/300 and 400 680x0-based workstations.
+Hewlett-Packard 9000/300 and 400 680x0-based workstations
 .It Sy hppa/
-Hewlett-Packard 9000/700 and 9000/800 HPPA based workstations.
+Hewlett-Packard 9000/700 and 9000/800 HPPA based workstations
 .It Sy hpcarm/
-StrongARM based WinCE PDA machines.
+StrongARM based WinCE PDA machines
 .It Sy hpcmips/
-MIPS based WinCE PDA machines.
+MIPS based WinCE PDA machines
 .It Sy hpcsh/
-Hitachi SH3/4 based WinCE PDA machines.
+Hitachi SH3/4 based WinCE PDA machines
 .It Sy hppa/
-HPPA processor general support.
+HPPA processor general support
 .It Sy i386/
-32-bit 80x86-based IBM PCs and clones.
+80x86-based IBM PCs and clones
 .It Sy ibmnws/
-IBM Network Station 1000.
+IBM Network Station 1000
 .It Sy iyonix/
-Castle Technology's Iyonix ARM based PCs.
+Castle Technology's Iyonix ARM based PCs
 .It Sy luna68k/
-Omron Tateishi Electric's 680x0-based LUNA workstations.
+Omron Tateishi Electric's 680x0-based LUNA workstations
 .It Sy m68k/
-680x0 processor general support.
+680x0 processor general support
 .It Sy mac68k/
-Apple Macintosh with 68k CPU.
+Apple Macintosh with 68k CPU
 .It Sy macppc/
-Apple Power Macintosh and clones.
+Apple Power Macintosh and clones
 .It Sy mips/
-MIPS processor general support.
+MIPS processor general support
 .It Sy mipsco/
-MIPS Computer Systems Inc. family of workstations and servers.
+MIPS Computer Systems Inc. family of workstations and servers
 .It Sy mmeye/
-Brains Inc. SH3 based mmEye multimedia server.
+Brains Inc. SH3 based mmEye multimedia server
 .It Sy mvme68k/
-Motorola MVME 680x0-based SBCs.
+Motorola MVME 680x0-based SBCs
 .It Sy mvmeppc/
-Motorola PowerPC VME SBCs.
+Motorola PowerPC VME SBCs
 .It Sy netwinder/
-StrongARM based NetWinder machines.
+StrongARM based NetWinder machines
 .It Sy news68k/
-Sony's 680x0-based NEWS workstations.
+Sony's 680x0-based NEWS workstations
 .It Sy newsmips/
-Sony's MIPS-based NEWS workstations.
+Sony's MIPS-based NEWS workstations
 .It Sy next68k/
-NeXT 68k "black" hardware.
+NeXT 68k "black" hardware
 .It Sy ofppc/
-Open Firmware PowerPC workstations.
+Open Firmware PowerPC workstations
 .It Sy playstation2/
-SONY PlayStation 2.
+SONY PlayStation 2
 .It Sy pmax/
-Digital MIPS-based DECstations and DECsystems.
+Digital MIPS-based DECstations and DECsystems
 .It Sy powerpc/
-PowerPC processor general support.
+PowerPC processor support
 .It Sy prep/
-PReP (PowerPC Reference Platform) and CHRP (Common Hardware Reference
-Platform) machines.
+PReP (PowerPC Reference Platform) and CHRP machines
 .It Sy sandpoint/
-Motorola Sandpoint reference platform.
+Motorola Sandpoint reference platform
 .It Sy sbmips/
-Broadcom/SiByte evaluation boards.
+Broadcom/SiByte evaluation boards
 .It Sy sgimips/
-Silicon Graphics' MIPS-based workstations.
+Silicon Graphics' MIPS-based workstations
 .It Sy sh3/
-SH3/SH4 processor general support.
+SH3/SH4 processor general support
 .It Sy shark/
-Digital DNARD ("Shark").
+Digital DNARD ("Shark")
 .It Sy sparc/
-Sun Microsystems SPARC (32-bit) and UltraSPARC (in 32-bit mode).
+Sun Microsystems SPARC (32-bit) and UltraSPARC (in 32-bit mode)
 .It Sy sparc64/
-Sun Microsystems UltraSPARC (in native 64-bit mode).
+Sun Microsystems UltraSPARC (in native 64-bit mode)
 .It Sy sun2/
-Sun Microsystems 68010-based Sun 2 architecture.
+Sun Microsystems 68010-based Sun 2 architecture
 .It Sy sun3/
-Sun Microsystems 68020/68030-based Sun 3/3x architecture.
+Sun Microsystems 68020/68030-based Sun 3/3x architecture
 .It Sy sun68k/
-680x0-based Sun architecture general support.
+680x0-based Sun architecture general support
 .It Sy vax/
-Digital VAX.
+Digital VAX
 .It Sy x68k/
-Sharp X680x0 680x0-based workstations.
+Sharp X680x0 680x0-based workstations
 .It Sy x86/
-General support for PC/AT compatibles with ia32 or x86_64 CPUs.
+General support for PC/AT compatibles with ia32 or x86_64 CPUs
 .It Sy xen/
-The Xen virtual machine monitor.
+The Xen virtual machine monitor
 .It Sy zaurus/
-Sharp C3x00 Arm based PDA.
+Sharp C3x00 Arm based PDA
 .El
 .Pp
 .It Sy compat/
-Kernel compatibility modules directory.
+kernel compatibility modules directory
 .Pp
 .Bl -tag -width "ossaudio/" -compact
 .It Sy common/
-Common compatibility routines, old
+common compatibility routines, old
 .Bx 4
 and
 .Nx
 routines.
 .It Sy freebsd/
-Support for
+support for
 .Fx
 binaries; see
-.Xr compat_freebsd 8 .
+.Xr compat_freebsd 8
 .It Sy hpux/
-Support for 68000 HP-UX binaries.
+support for 68000 HP-UX binaries
 .It Sy ibcs2/
-Support for Intel Binary binaries.
+support for Intel Binary binaries
 .It Sy linux/
-Support for Linux binaries; see
-.Xr compat_linux 8 .
+support for Linux binaries; see
+.Xr compat_linux 8
 .It Sy m68k4k/
-Support for 4KB page 68000 binaries.
+support for 4KB page 68000 binaries
 .It Sy netbsd32/
-Support for
+support for
 .Nx
-32-bit binaries on 64 bit platforms with compatible CPU families.
+32-bit binaries on 64 bit platforms with compatible CPU families
 .It Sy osf1/
-Support for
+support for
 .Tn Digital
 .Ux
 .Po
 formerly
 .Tn OSF/1
 .Pc
-binaries.
+binaries
 .It Sy ossaudio/
-Support for OSS audio.
+support for OSS audio
 .It Sy sunos/
-Support for
+support for
 .Tn SunOS 4.x
 binaries; see
-.Xr compat_sunos 8 .
+.Xr compat_sunos 8
 .It Sy svr4/
-Support for System V Release 4 binaries; see
-.Xr compat_svr4 8 .
+support for System V Release 4 binaries; see
+.Xr compat_svr4 8
 .It Sy ultrix/
-Support for
+support for
 .Tn ULTRIX
-binaries.
+binaries
 .It Sy vax1k/
-Support for older VAX binaries that started on a 1 KB boundary.
+support for older VAX binaries that started on a 1 KB boundary
 .El
 .Pp
 .It Sy conf/
-Architecture independent configuration directory.
+architecture independent configuration directory
 .It Sy crypto/
-Cryptographic kernel source, which may have import or export restrictions.
+cryptographic kernel source, which may have import or export restrictions
 .It Sy ddb/
-In-kernel debugger.
+in kernel debugger
 .It Sy dev/
-Architecture independent device support.
+architecture independent device support
 .It Sy fs/
-File systems.
-See also
-.Sy ufs/
-and
-.Sy miscfs/ .
+miscellaneous file systems
 .Bl -tag -width "filecorefs/" -compact
 .It Sy adosfs/
 AmigaDOS file-system support; see
-.Xr mount_ados 8 .
+.Xr mount_ados 8
 .It Sy cd9660/
-Support for the ISO-9660 file system; see
-.Xr mount_cd9660 8 .
+support for the ISO-9660 filesystem; see
+.Xr mount_cd9660 8
 .It Sy filecorefs/
-Support for the Acorn RISC OS filecore file system; see
-.Xr mount_filecore 8 .
+support for the Acorn RISC OS filecore filesystem; see
+.Xr mount_filecore 8
 .It Sy msdosfs/
 .Tn MS-DOS
 file system; see
-.Xr mount_msdos 8 .
+.Xr mount_msdos 8
 .It Sy ntfs/
-NTFS file system support; see
-.Xr mount_ntfs 8 .
+NTFS filesystem support; see
+.Xr mount_ntfs 8
 .It Sy ptyfs/
-Pseudo-terminal device file system; see
-.Xr mount_ptyfs 8 .
+pseudo-terminal device filesystem; see
+.Xr mount_ptyfs 8
 .It Sy smbfs/
-SMB/CIFS file system support; see
-.Xr mount_smbfs 8 .
+SMB/CIFS filesystem support; see
+.Xr mount_smbfs 8
 .It Sy union/
-Union file system; see
-.Xr mount_union 8 .
+union file system; see
+.Xr mount_union 8
 .El
 .It Sy gdbscripts/
-Support for accessing kernel structures from within the debugger
+support for accessing kernel structures from within the debugger
 .Xr gdb 1 .
 .It Sy ipkdb/
-Support for kernel debugging over the network.
+support for kernel debugging over the network
 .Pp
 .It Sy kern/
-Primary kernel source code.
+support for the high kernel (system calls)
 .It Sy lib/
-Libraries supporting the kernel.
+kernel libraries
 .Pp
 .Bl -tag -width "libkern/" -compact
 .It Sy libkern/
-C library routines used in the kernel.
+C library routines used in the kernel
 .It Sy libsa/
-Machine-independent standalone library, used by boot loaders.
+machine independent stand alone kernel library
 .It Sy libz/
-Compression library.
+compression library
 .El
 .Pp
 .It Sy miscfs/
-More file systems.
+miscellaneous file systems
 .Pp
 .Bl -tag -width "deadfs/" -compact
 .It Sy deadfs/
-Kernel only dead file system.
+kernel only dead file system
 .It Sy fdesc/
-File descriptor file system; see
-.Xr mount_fdesc 8 .
+file descriptor file system; see
+.Xr mount_fdesc 8
 .It Sy fifofs/
-POSIX FIFO (named pipe) support.
+POSIX FIFO support
 .It Sy genfs/
-Generic file system code that supports other file systems.
+kernel only generic file system
 .It Sy kernfs/
-Kernel namespace file system; see
-.Xr mount_kernfs 8 .
+kernel namespace file system; see
+.Xr mount_kernfs 8
 .It Sy nullfs/
-Loop back file system; see
-.Xr mount_null 8 .
+loop back file system; see
+.Xr mount_null 8
 .It Sy overlay/
-Overlay file system; see
-.Xr mount_overlay 8 .
+overlay file system; see
+.Xr mount_overlay 8
 .It Sy procfs/
-Process file system; see
-.Xr mount_procfs 8 .
+process file system; see
+.Xr mount_procfs 8
 .It Sy specfs/
-Support for block and character special files.
+kernel only special file system
 .It Sy syncfs/
-Kernel trickle sync algorithm.
+kernel trickle sync algorithm
 .It Sy umapfs/
-User and group re-mapping file system; see
-.Xr mount_umap 8 .
+user and group re-mapping file system; see
+.Xr mount_umap 8
 .El
 .Pp
 .It Sy net/
-Miscellaneous networking support.
+miscellaneous networking support
 .It Sy netatalk/
-AppleTalk networking support.
+AppleTalk networking support
 .It Sy netinet/
-IP networking support.
+IP networking support
 .It Sy netinet6/
-IPv6 networking support.
+IPv6 networking support
 .It Sy netkey/
-Key database for IPsec networking support.
+Key database for IPsec networking support
 .It Sy netnatm/
-ATM networking support.
+ATM networking support
 .It Sy nfs/
-NFS (network file system) support, both client and server.
+NFS support
 .It Sy stand/
-Kernel standalone support.
+kernel standalone support
 .It Sy sys/
-Kernel (and system) include files.
+kernel (and system) include files
 .It Sy ufs/
-Still more file systems.
+local filesystem support
 .Pp
 .Bl -tag -width "ffs/" -compact
-.It Sy chfs/
-A FFS-based file system for use on raw flash.
-.It Sy ext2fs/
-The Linux ext2 file system.
 .It Sy ffs/
-The Berkeley Fast File System.
+the Berkeley Fast File System
 .It Sy lfs/
-The Berkeley log-structured file system.
+the log-structured file system
 .It Sy mfs/
-The in-memory file system.
+the in-memory file system
 .It Sy ufs/
-Shared
+shared
 .Ux
-file system support.
+file system support
 .El
 .It Sy uvm/
-UVM virtual memory system.
+UVM virtual memory system
 .El
 .It Sy tests/
-Source for test programs in
-.Pa /usr/tests .
+source for test programs in
+.Pa /usr/tests
 .It Sy usr.bin/
-Source for utilities/files in
-.Pa /usr/bin .
+source for utilities/files in
+.Pa /usr/bin
 .It Sy usr.sbin/
-Source for utilities/files in
-.Pa /usr/sbin .
+source for utilities/files in
+.Pa /usr/sbin
 .El
 .It Sy /var/
-Multi-purpose log, temporary, transient, and spool files.
+multi-purpose log, temporary, transient, and spool files
 .Pp
 .Bl -tag -width "preserve/" -compact
 .It Sy account/
-System accounting files.
+system accounting files
 .Pp
 .Bl -tag -width "acct" -compact
 .It Sy acct
-Execution accounting file;
+execution accounting file;
 see
-.Xr acct 5 .
+.Xr acct 5
 .El
 .Pp
 .It Sy at/
-Timed command scheduling files;
+timed command scheduling files;
 see
-.Xr at 1 .
+.Xr at 1
 .It Sy backups/
-Miscellaneous backup files, largely of files found in
-.Pa /etc .
+miscellaneous backup files, largely of files found in
+.Pa /etc
 .It Sy chroot/
-Home directories of applications which are run in a
+home directories of applications which are run in a
 .Xr chroot 8
 .Dq cage .
 .It Sy crash/
-System (kernel) crash dumps; see
-.Xr savecore 8 .
+system crash dumps; see
+.Xr savecore 8
 .It Sy cron/
-Scheduled commands configuration files; see
+scheduled commands configuration files; see
 .Xr cron 8
-and
-.Xr crontab 5 .
 .It Sy db/
-Miscellaneous automatically generated system-specific database files,
+miscellaneous automatically generated system-specific database files,
 and persistent files used in the maintenance of third party software.
 .Pp
 .Bl -tag -width "monthly.out" -compact
 .It Sy pkg
-Default location for metadata related to third party software
+default location for metadata related to third party software
 packages.
 See
 .Xr pkg_add 1
@@ -1122,132 +1097,118 @@ Packages Collection, or pkgsrc.
 .El
 .Pp
 .It Sy games/
-Miscellaneous game status, log, and high score files.
+miscellaneous game status and log files
 .It Sy heimdal/
 Kerberos 5 KDC database; see
-.Xr kdc 8 .
+.Xr kdc 8
 .It Sy log/
-Miscellaneous system log files.
+miscellaneous system log files
 .Pp
 .Bl -tag -width "monthly.out" -compact
 .It Sy amd.*
 .Xr amd 8
-logs.
+logs
 .It Sy daily.out
-Output of the last run of the
+output of the last run of the
 .Pa /etc/daily
-script.
+script
 .It Sy ftp.*
 .Xr ftp 1
-logs.
+logs
 .It Sy kerberos.*
 .Xr kerberos 8
-logs.
+logs
 .It Sy lastlog
-System last-time-logged-in database; see
-.Xr utmp 5 .
+system last time logged in log; see
+.Xr utmp 5
 .It Sy lpd-errs.*
-Printer daemon error logs; see
-.Xr lpd 8 .
+printer daemon error logs; see
+.Xr lpd 8
 .It Sy maillog.*
 .Xr sendmail 1
-and
-.Xr postfix 1
-(and other mail-related)
-log files.
+log files
 .It Sy messages.*
-General system information log.
+general system information log
 .It Sy monthly.out
-Output of the last run of the
+output of the last run of the
 .Pa /etc/monthly
-script.
+script
 .It Sy secure
-Sensitive security information log.
+sensitive security information log
 .It Sy sendmail.st
 .Xr sendmail 1
-statistics.
+statistics
 .It Sy timed.*
 .Xr timed 8
-logs.
+logs
 .It Sy weekly.out
-Output of the last run of the
+output of the last run of the
 .Pa /etc/weekly
-script.
+script
 .It Sy wtmp
-Login and logout log;
+login/logout log;
 see
-.Xr utmp 5 .
-.It Sy wtmpx
-Another login and logout log; see
-.Xr utmpx 5 .
+.Xr utmp 5
 .El
 .Pp
 .It Sy mail/
-User e-mail inboxes.
+user system mailboxes
 .It Sy msgs/
-System messages; see
-.Xr msgs 1 .
+system messages; see
+.Xr msgs 1
 .\" since we use nvi (now called vi) this isn't the place any more, is it?
 .It Sy preserve/
-Temporary home of files preserved after an accidental death of
+temporary home of files preserved after an accidental death of
 .Xr ex 1
 or
-.Xr vi 1 .
+.Xr vi 1
 .It Sy quotas/
-File system quota information.
-(Legacy.)
+filesystem quota information
 .It Sy run/
-System information files, rebuilt after each reboot.
+system information files, rebuilt after each reboot
 .Pp
 .Bl -tag -width "utmp" -compact
-.It Sy dmesg.boot
-A dump from
-.Xr dmesg 8
-taken at boot time.
 .It Sy utmp
-Database of currently logged in users; see
-.Xr utmp 5 .
-.It Sy utmpx
-Another database of currently logged in users; see
-.Xr utmpx 5 .
+database of current users; see
+.Xr utmp 5
 .El
 .Pp
 .It Sy rwho/
-Rwho data files; see
+rwho data files; see
 .Xr rwhod 8 ,
 .Xr rwho 1 ,
 and
-.Xr ruptime 1 .
+.Xr ruptime 1
 .It Sy spool/
-Miscellaneous printer and mail system spooling directories.
+miscellaneous printer and mail system spooling directories
 .Pp
 .Bl -tag -width "postfix/" -compact
 .It Sy ftp/
-Commonly
+commonly
 .Dq ~ftp ,
 the anonymous ftp root directory; see
-.Xr ftpd 8 .
+.Xr ftpd 8
 .It Sy mqueue/
-Sendmail mail queue;
+sendmail mail queue;
 see
-.Xr sendmail 1 .
+.Xr sendmail 1
 .It Sy news/
-Network news archival and spooling directories.
+Network news archival and spooling directories
 .It Sy output/
-Printer spooling directories.
+printer spooling directories
 .It Sy postfix/
-Postfix mail queue;
+postfix mail queue;
 see
-.Xr postfix 1 .
+.Xr postfix 1
 .El
 .Pp
 .It Sy tmp/
-Temporary files that are not discarded between system reboots.
+temporary files that are not discarded between system reboots
 .Pp
 .Bl -tag -width "vi.recover/" -compact
 .It Sy vi.recover/
-Recovery directory for new (current)
-.Xr vi 1 .
+recovery directory for new
+.Xr vi 1
 .El
 .Pp
 .It Sy yp/

@@ -1,5 +1,5 @@
-/*	$NetBSD: key.h,v 1.11 2016/03/11 01:55:00 christos Exp $	*/
-/* $OpenBSD: key.h,v 1.49 2015/12/04 16:41:28 markus Exp $ */
+/*	$NetBSD: key.h,v 1.7.4.1 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: key.h,v 1.47 2015/01/28 22:36:00 djm Exp $ */
 
 /*
  * Copyright (c) 2000, 2001 Markus Friedl.  All rights reserved.
@@ -52,6 +52,7 @@ typedef struct sshkey Key;
 #define key_ecdsa_key_to_nid	sshkey_ecdsa_key_to_nid
 #define key_is_cert		sshkey_is_cert
 #define key_type_plain		sshkey_type_plain
+#define key_cert_is_legacy	sshkey_cert_is_legacy
 #define key_curve_name_to_nid	sshkey_curve_name_to_nid
 #define key_curve_nid_to_bits	sshkey_curve_nid_to_bits
 #define key_curve_nid_to_name	sshkey_curve_nid_to_name
@@ -69,7 +70,7 @@ int	 key_read(Key *, char **);
 
 Key	*key_generate(int, u_int);
 Key	*key_from_private(const Key *);
-int	 key_to_certified(Key *);
+int	 key_to_certified(Key *, int);
 int	 key_drop_cert(Key *);
 int	 key_certify(Key *, Key *);
 void	 key_cert_copy(const Key *, Key *);
@@ -85,8 +86,7 @@ int	 key_ec_validate_private(const EC_KEY *);
 Key	*key_from_blob(const u_char *, u_int);
 int	 key_to_blob(const Key *, u_char **, u_int *);
 
-int	 key_sign(const Key *, u_char **, u_int *, const u_char *, u_int,
-    const char *);
+int	 key_sign(const Key *, u_char **, u_int *, const u_char *, u_int);
 int	 key_verify(const Key *, const u_char *, u_int, const u_char *, u_int);
 
 void     key_private_serialize(const Key *, struct sshbuf *);

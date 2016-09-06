@@ -1,5 +1,5 @@
 /* Support for the generic parts of PE/PEI, for BFD.
-   Copyright (C) 1995-2015 Free Software Foundation, Inc.
+   Copyright 1995-2013 Free Software Foundation, Inc.
    Written by Cygnus Solutions.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -271,7 +271,6 @@ pe_mkobject (bfd * abfd)
   /* in_reloc_p is architecture dependent.  */
   pe->in_reloc_p = in_reloc_p;
 
-  memset (& pe->pe_opthdr, 0, sizeof pe->pe_opthdr);
   return TRUE;
 }
 
@@ -568,7 +567,6 @@ pe_ILF_make_a_symbol (pe_ILF_vars *  vars,
   ent->u.syment.n_sclass          = sclass;
   ent->u.syment.n_scnum           = section->target_index;
   ent->u.syment._n._n_n._n_offset = (bfd_hostptr_t) sym;
-  ent->is_sym = TRUE;
 
   sym->symbol.the_bfd = vars->abfd;
   sym->symbol.name    = vars->string_ptr;
@@ -973,15 +971,6 @@ pe_ILF_build_a_bfd (bfd *           abfd,
 	}
       else
 #endif
-#ifdef AMD64MAGIC
-      if (magic == AMD64MAGIC)
-	{
-	  pe_ILF_make_a_symbol_reloc (&vars, (bfd_vma) jtab[i].offset,
-				      BFD_RELOC_32_PCREL, (asymbol **) imp_sym,
-				      imp_index);
-	}
-      else
-#endif
 	pe_ILF_make_a_symbol_reloc (&vars, (bfd_vma) jtab[i].offset,
 				    BFD_RELOC_32, (asymbol **) imp_sym,
 				    imp_index);
@@ -1088,7 +1077,7 @@ pe_ILF_build_a_bfd (bfd *           abfd,
 static const bfd_target *
 pe_ILF_object_p (bfd * abfd)
 {
-  bfd_byte        buffer[14];
+  bfd_byte        buffer[16];
   bfd_byte *      ptr;
   char *          symbol_name;
   char *          source_dll;
@@ -1098,12 +1087,16 @@ pe_ILF_object_p (bfd * abfd)
   unsigned int    types;
   unsigned int    magic;
 
-  /* Upon entry the first six bytes of the ILF header have
+  /* Upon entry the first four buyes of the ILF header have
       already been read.  Now read the rest of the header.  */
-  if (bfd_bread (buffer, (bfd_size_type) 14, abfd) != 14)
+  if (bfd_bread (buffer, (bfd_size_type) 16, abfd) != 16)
     return NULL;
 
   ptr = buffer;
+
+  /*  We do not bother to check the version number.
+      version = H_GET_16 (abfd, ptr);  */
+  ptr += 2;
 
   machine = H_GET_16 (abfd, ptr);
   ptr += 2;
@@ -1255,112 +1248,27 @@ pe_ILF_object_p (bfd * abfd)
   return abfd->xvec;
 }
 
-static void
-pe_bfd_read_buildid(bfd *abfd)
-{
-  pe_data_type *pe = pe_data (abfd);
-  struct internal_extra_pe_aouthdr *extra = &pe->pe_opthdr;
-  asection *section;
-  bfd_byte *data = 0;
-  bfd_size_type dataoff;
-  unsigned int i;
-
-  bfd_vma addr = extra->DataDirectory[PE_DEBUG_DATA].VirtualAddress;
-  bfd_size_type size = extra->DataDirectory[PE_DEBUG_DATA].Size;
-
-  if (size == 0)
-    return;
-
-  addr += extra->ImageBase;
-
-  /* Search for the section containing the DebugDirectory */
-  for (section = abfd->sections; section != NULL; section = section->next)
-    {
-      if ((addr >= section->vma) && (addr < (section->vma + section->size)))
-        break;
-    }
-
-  if (section == NULL)
-    {
-      return;
-    }
-  else if (!(section->flags & SEC_HAS_CONTENTS))
-    {
-      return;
-    }
-
-  dataoff = addr - section->vma;
-
-  /* Read the whole section. */
-  if (!bfd_malloc_and_get_section (abfd, section, &data))
-    {
-      if (data != NULL)
-	free (data);
-      return;
-    }
-
-  /* Search for a CodeView entry in the DebugDirectory */
-  for (i = 0; i < size / sizeof (struct external_IMAGE_DEBUG_DIRECTORY); i++)
-    {
-      struct external_IMAGE_DEBUG_DIRECTORY *ext
-	= &((struct external_IMAGE_DEBUG_DIRECTORY *)(data + dataoff))[i];
-      struct internal_IMAGE_DEBUG_DIRECTORY idd;
-
-      _bfd_XXi_swap_debugdir_in (abfd, ext, &idd);
-
-      if (idd.Type == PE_IMAGE_DEBUG_TYPE_CODEVIEW)
-        {
-          char buffer[256 + 1];
-          CODEVIEW_INFO *cvinfo = (CODEVIEW_INFO *) buffer;
-
-          /*
-            The debug entry doesn't have to have to be in a section, in which
-            case AddressOfRawData is 0, so always use PointerToRawData.
-          */
-          if (_bfd_XXi_slurp_codeview_record (abfd,
-                                              (file_ptr) idd.PointerToRawData,
-                                              idd.SizeOfData, cvinfo))
-            {
-              struct bfd_build_id* build_id = bfd_alloc(abfd,
-                         sizeof(struct bfd_build_id) + cvinfo->SignatureLength);
-              if (build_id)
-                {
-                  build_id->size = cvinfo->SignatureLength;
-                  memcpy(build_id->data,  cvinfo->Signature,
-                         cvinfo->SignatureLength);
-                  abfd->build_id = build_id;
-                }
-            }
-          break;
-        }
-    }
-}
-
 static const bfd_target *
 pe_bfd_object_p (bfd * abfd)
 {
-  bfd_byte buffer[6];
+  bfd_byte buffer[4];
   struct external_PEI_DOS_hdr dos_hdr;
   struct external_PEI_IMAGE_hdr image_hdr;
   struct internal_filehdr internal_f;
   struct internal_aouthdr internal_a;
   file_ptr opt_hdr_size;
   file_ptr offset;
-  const bfd_target *result;
 
   /* Detect if this a Microsoft Import Library Format element.  */
-  /* First read the beginning of the header.  */
   if (bfd_seek (abfd, (file_ptr) 0, SEEK_SET) != 0
-      || bfd_bread (buffer, (bfd_size_type) 6, abfd) != 6)
+      || bfd_bread (buffer, (bfd_size_type) 4, abfd) != 4)
     {
       if (bfd_get_error () != bfd_error_system_call)
 	bfd_set_error (bfd_error_wrong_format);
       return NULL;
     }
 
-  /* Then check the magic and the version (only 0 is supported).  */
-  if (H_GET_32 (abfd, buffer) == 0xffff0000
-      && H_GET_16 (abfd, buffer + 4) == 0)
+  if (H_GET_32 (abfd, buffer) == 0xffff0000)
     return pe_ILF_object_p (abfd);
 
   if (bfd_seek (abfd, (file_ptr) 0, SEEK_SET) != 0
@@ -1406,7 +1314,7 @@ pe_bfd_object_p (bfd * abfd)
 
   /* Swap file header, so that we get the location for calling
      real_object_p.  */
-  bfd_coff_swap_filehdr_in (abfd, &image_hdr, &internal_f);
+  bfd_coff_swap_filehdr_in (abfd, (PTR)&image_hdr, &internal_f);
 
   if (! bfd_coff_bad_format_hook (abfd, &internal_f)
       || internal_f.f_opthdr > bfd_coff_aoutsz (abfd))
@@ -1420,40 +1328,22 @@ pe_bfd_object_p (bfd * abfd)
 
   if (opt_hdr_size != 0)
     {
-      bfd_size_type amt = opt_hdr_size;
-      void * opthdr;
+      PTR opthdr;
 
-      /* PR 17521 file: 230-131433-0.004.  */
-      if (amt < sizeof (PEAOUTHDR))
-	amt = sizeof (PEAOUTHDR);
-
-      opthdr = bfd_zalloc (abfd, amt);
+      opthdr = bfd_alloc (abfd, opt_hdr_size);
       if (opthdr == NULL)
 	return NULL;
       if (bfd_bread (opthdr, opt_hdr_size, abfd)
 	  != (bfd_size_type) opt_hdr_size)
 	return NULL;
 
-      bfd_set_error (bfd_error_no_error);
-      bfd_coff_swap_aouthdr_in (abfd, opthdr, & internal_a);
-      if (bfd_get_error () != bfd_error_no_error)
-	return NULL;
+      bfd_coff_swap_aouthdr_in (abfd, opthdr, (PTR) & internal_a);
     }
 
-
-  result = coff_real_object_p (abfd, internal_f.f_nscns, &internal_f,
-                               (opt_hdr_size != 0
-                                ? &internal_a
-                                : (struct internal_aouthdr *) NULL));
-
-
-  if (result)
-    {
-      /* Now the whole header has been processed, see if there is a build-id */
-      pe_bfd_read_buildid(abfd);
-    }
-
-  return result;
+  return coff_real_object_p (abfd, internal_f.f_nscns, &internal_f,
+                            (opt_hdr_size != 0
+                             ? &internal_a
+                             : (struct internal_aouthdr *) NULL));
 }
 
 #define coff_object_p pe_bfd_object_p

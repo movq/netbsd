@@ -27,7 +27,7 @@ class NVPTXInstrInfo : public NVPTXGenInstrInfo {
   const NVPTXRegisterInfo RegInfo;
   virtual void anchor();
 public:
-  explicit NVPTXInstrInfo();
+  explicit NVPTXInstrInfo(NVPTXSubtarget &STI);
 
   const NVPTXRegisterInfo &getRegisterInfo() const { return RegInfo; }
 
@@ -56,6 +56,7 @@ public:
                            unsigned &DestReg) const;
   bool isLoadInstr(const MachineInstr &MI, unsigned &AddrSpace) const;
   bool isStoreInstr(const MachineInstr &MI, unsigned &AddrSpace) const;
+  bool isReadSpecialReg(MachineInstr &MI) const;
 
   virtual bool CanTailMerge(const MachineInstr *MI) const;
   // Branch analysis.
@@ -65,7 +66,7 @@ public:
   unsigned RemoveBranch(MachineBasicBlock &MBB) const override;
   unsigned InsertBranch(
       MachineBasicBlock &MBB, MachineBasicBlock *TBB, MachineBasicBlock *FBB,
-      ArrayRef<MachineOperand> Cond, DebugLoc DL) const override;
+      const SmallVectorImpl<MachineOperand> &Cond, DebugLoc DL) const override;
   unsigned getLdStCodeAddrSpace(const MachineInstr &MI) const {
     return MI.getOperand(2).getImm();
   }

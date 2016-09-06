@@ -1,8 +1,9 @@
-; RUN: llc -mcpu=pwr7 -mtriple=powerpc64-unknown-linux-gnu -mattr=+vsx < %s | FileCheck %s
-; RUN: llc -mcpu=pwr7 -mtriple=powerpc64-unknown-linux-gnu -mattr=+vsx < %s | FileCheck -check-prefix=CHECK-REG %s
-; RUN: llc -mcpu=pwr7 -mtriple=powerpc64-unknown-linux-gnu -mattr=+vsx -fast-isel -O0 < %s | FileCheck %s
-; RUN: llc -mcpu=pwr7 -mtriple=powerpc64-unknown-linux-gnu -mattr=+vsx -fast-isel -O0 < %s | FileCheck -check-prefix=CHECK-FISL %s
-; RUN: llc -mcpu=pwr8 -mtriple=powerpc64le-unknown-linux-gnu -mattr=+vsx < %s | FileCheck -check-prefix=CHECK-LE %s
+; RUN: llc -mcpu=pwr7 -mattr=+vsx < %s | FileCheck %s
+; RUN: llc -mcpu=pwr7 -mattr=+vsx < %s | FileCheck -check-prefix=CHECK-REG %s
+; RUN: llc -mcpu=pwr7 -mattr=+vsx -fast-isel -O0 < %s | FileCheck %s
+; RUN: llc -mcpu=pwr7 -mattr=+vsx -fast-isel -O0 < %s | FileCheck -check-prefix=CHECK-FISL %s
+target datalayout = "E-m:e-i64:64-n32:64"
+target triple = "powerpc64-unknown-linux-gnu"
 
 define double @test1(double %a, double %b) {
 entry:
@@ -12,10 +13,6 @@ entry:
 ; CHECK-LABEL: @test1
 ; CHECK: xsmuldp 1, 1, 2
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test1
-; CHECK-LE: xsmuldp 1, 1, 2
-; CHECK-LE: blr
 }
 
 define double @test2(double %a, double %b) {
@@ -26,10 +23,6 @@ entry:
 ; CHECK-LABEL: @test2
 ; CHECK: xsdivdp 1, 1, 2
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test2
-; CHECK-LE: xsdivdp 1, 1, 2
-; CHECK-LE: blr
 }
 
 define double @test3(double %a, double %b) {
@@ -40,10 +33,6 @@ entry:
 ; CHECK-LABEL: @test3
 ; CHECK: xsadddp 1, 1, 2
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test3
-; CHECK-LE: xsadddp 1, 1, 2
-; CHECK-LE: blr
 }
 
 define <2 x double> @test4(<2 x double> %a, <2 x double> %b) {
@@ -54,10 +43,6 @@ entry:
 ; CHECK-LABEL: @test4
 ; CHECK: xvadddp 34, 34, 35
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test4
-; CHECK-LE: xvadddp 34, 34, 35
-; CHECK-LE: blr
 }
 
 define <4 x i32> @test5(<4 x i32> %a, <4 x i32> %b) {
@@ -70,15 +55,11 @@ entry:
 ; CHECK-REG: blr
 
 ; CHECK-FISL-LABEL: @test5
-; CHECK-FISL: vor
-; CHECK-FISL: vor
-; CHECK-FISL: xxlxor
-; CHECK-FISL: vor 2
+; CHECK-FISL: vor 4, 2, 2
+; CHECK-FISL: vor 5, 3, 3
+; CHECK-FISL: xxlxor 36, 36, 37
+; CHECK-FISL: vor 2, 4, 4
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test5
-; CHECK-LE: xxlxor 34, 34, 35
-; CHECK-LE: blr
 }
 
 define <8 x i16> @test6(<8 x i16> %a, <8 x i16> %b) {
@@ -96,10 +77,6 @@ entry:
 ; CHECK-FISL: xxlxor 36, 36, 37
 ; CHECK-FISL: vor 2, 4, 4
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test6
-; CHECK-LE: xxlxor 34, 34, 35
-; CHECK-LE: blr
 }
 
 define <16 x i8> @test7(<16 x i8> %a, <16 x i8> %b) {
@@ -117,10 +94,6 @@ entry:
 ; CHECK-FISL: xxlxor 36, 36, 37
 ; CHECK-FISL: vor 2, 4, 4
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test7
-; CHECK-LE: xxlxor 34, 34, 35
-; CHECK-LE: blr
 }
 
 define <4 x i32> @test8(<4 x i32> %a, <4 x i32> %b) {
@@ -133,15 +106,11 @@ entry:
 ; CHECK-REG: blr
 
 ; CHECK-FISL-LABEL: @test8
-; CHECK-FISL: vor
-; CHECK-FISL: vor
-; CHECK-FISL: xxlor
-; CHECK-FISL: vor 2
+; CHECK-FISL: vor 4, 2, 2
+; CHECK-FISL: vor 5, 3, 3
+; CHECK-FISL: xxlor 36, 36, 37
+; CHECK-FISL: vor 2, 4, 4
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test8
-; CHECK-LE: xxlor 34, 34, 35
-; CHECK-LE: blr
 }
 
 define <8 x i16> @test9(<8 x i16> %a, <8 x i16> %b) {
@@ -159,10 +128,6 @@ entry:
 ; CHECK-FISL: xxlor 36, 36, 37
 ; CHECK-FISL: vor 2, 4, 4
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test9
-; CHECK-LE: xxlor 34, 34, 35
-; CHECK-LE: blr
 }
 
 define <16 x i8> @test10(<16 x i8> %a, <16 x i8> %b) {
@@ -180,10 +145,6 @@ entry:
 ; CHECK-FISL: xxlor 36, 36, 37
 ; CHECK-FISL: vor 2, 4, 4
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test10
-; CHECK-LE: xxlor 34, 34, 35
-; CHECK-LE: blr
 }
 
 define <4 x i32> @test11(<4 x i32> %a, <4 x i32> %b) {
@@ -196,15 +157,11 @@ entry:
 ; CHECK-REG: blr
 
 ; CHECK-FISL-LABEL: @test11
-; CHECK-FISL: vor
-; CHECK-FISL: vor
-; CHECK-FISL: xxland
-; CHECK-FISL: vor 2
+; CHECK-FISL: vor 4, 2, 2
+; CHECK-FISL: vor 5, 3, 3
+; CHECK-FISL: xxland 36, 36, 37
+; CHECK-FISL: vor 2, 4, 4
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test11
-; CHECK-LE: xxland 34, 34, 35
-; CHECK-LE: blr
 }
 
 define <8 x i16> @test12(<8 x i16> %a, <8 x i16> %b) {
@@ -222,10 +179,6 @@ entry:
 ; CHECK-FISL: xxland 36, 36, 37
 ; CHECK-FISL: vor 2, 4, 4
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test12
-; CHECK-LE: xxland 34, 34, 35
-; CHECK-LE: blr
 }
 
 define <16 x i8> @test13(<16 x i8> %a, <16 x i8> %b) {
@@ -243,10 +196,6 @@ entry:
 ; CHECK-FISL: xxland 36, 36, 37
 ; CHECK-FISL: vor 2, 4, 4
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test13
-; CHECK-LE: xxland 34, 34, 35
-; CHECK-LE: blr
 }
 
 define <4 x i32> @test14(<4 x i32> %a, <4 x i32> %b) {
@@ -260,19 +209,18 @@ entry:
 ; CHECK-REG: blr
 
 ; CHECK-FISL-LABEL: @test14
-; CHECK-FISL: vor 4, 3, 3
-; CHECK-FISL: vor 5, 2, 2
-; CHECK-FISL: xxlor 0, 37, 36
-; CHECK-FISL: xxlnor 36, 37, 36
+; CHECK-FISL: vor 4, 2, 2
+; CHECK-FISL: vor 5, 3, 3
+; CHECK-FISL: xxlor 36, 36, 37
+; CHECK-FISL: vor 0, 4, 4
+; CHECK-FISL: vor 4, 2, 2
+; CHECK-FISL: vor 5, 3, 3
+; CHECK-FISL: xxlnor 36, 36, 37
 ; CHECK-FISL: vor 2, 4, 4
 ; CHECK-FISL: lis 0, -1
 ; CHECK-FISL: ori 0, 0, 65520
-; CHECK-FISL: stxvd2x 0, 1, 0
+; CHECK-FISL: stvx 0, 1, 0
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test14
-; CHECK-LE: xxlnor 34, 34, 35
-; CHECK-LE: blr
 }
 
 define <8 x i16> @test15(<8 x i16> %a, <8 x i16> %b) {
@@ -298,10 +246,6 @@ entry:
 ; CHECK-FISL: ori 0, 0, 65520
 ; CHECK-FISL: stvx 0, 1, 0
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test15
-; CHECK-LE: xxlnor 34, 34, 35
-; CHECK-LE: blr
 }
 
 define <16 x i8> @test16(<16 x i8> %a, <16 x i8> %b) {
@@ -327,10 +271,6 @@ entry:
 ; CHECK-FISL: ori 0, 0, 65520
 ; CHECK-FISL: stvx 0, 1, 0
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test16
-; CHECK-LE: xxlnor 34, 34, 35
-; CHECK-LE: blr
 }
 
 define <4 x i32> @test17(<4 x i32> %a, <4 x i32> %b) {
@@ -344,18 +284,16 @@ entry:
 ; CHECK-REG: blr
 
 ; CHECK-FISL-LABEL: @test17
-; CHECK-FISL: vor 4, 3, 3
+; CHECK-FISL: vspltisb 4, -1
+; CHECK-FISL: vor 5, 3, 3
+; CHECK-FISL: vor 0, 4, 4
+; CHECK-FISL: xxlxor 37, 37, 32
+; CHECK-FISL: vor 3, 5, 5
 ; CHECK-FISL: vor 5, 2, 2
-; CHECK-FISL: vspltisb 2, -1
-; CHECK-FISL: vor 0, 2, 2
-; CHECK-FISL: xxlxor 36, 36, 32
-; CHECK-FISL: xxland 36, 37, 36
-; CHECK-FISL: vor 2, 4, 4
+; CHECK-FISL: vor 0, 3, 3
+; CHECK-FISL: xxland 37, 37, 32
+; CHECK-FISL: vor 2, 5, 5
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test17
-; CHECK-LE: xxlandc 34, 34, 35
-; CHECK-LE: blr
 }
 
 define <8 x i16> @test18(<8 x i16> %a, <8 x i16> %b) {
@@ -382,10 +320,6 @@ entry:
 ; CHECK-FISL: ori 0, 0, 65520
 ; CHECK-FISL: stvx 4, 1, 0
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test18
-; CHECK-LE: xxlandc 34, 34, 35
-; CHECK-LE: blr
 }
 
 define <16 x i8> @test19(<16 x i8> %a, <16 x i8> %b) {
@@ -412,10 +346,6 @@ entry:
 ; CHECK-FISL: ori 0, 0, 65520
 ; CHECK-FISL: stvx 4, 1, 0
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test19
-; CHECK-LE: xxlandc 34, 34, 35
-; CHECK-LE: blr
 }
 
 define <4 x i32> @test20(<4 x i32> %a, <4 x i32> %b, <4 x i32> %c, <4 x i32> %d) {
@@ -429,25 +359,14 @@ entry:
 ; CHECK-REG: xxsel 34, 35, 34, {{[0-9]+}}
 ; CHECK-REG: blr
 
-; FIXME: The fast-isel code is pretty miserable for this one.
-
 ; CHECK-FISL-LABEL: @test20
-; CHECK-FISL: vor 0, 5, 5
-; CHECK-FISL: vor 1, 4, 4
-; CHECK-FISL: vor 6, 3, 3
-; CHECK-FISL: vor 7, 2, 2
-; CHECK-FISL: vor 2, 1, 1
-; CHECK-FISL: vor 3, 0, 0
-; CHECK-FISL: vcmpequw 2, 2, 3
-; CHECK-FISL: vor 0, 2, 2
-; CHECK-FISL: xxsel 32, 38, 39, 32
+; CHECK-FISL: vcmpequw 4, 4, 5
+; CHECK-FISL: vor 0, 3, 3
+; CHECK-FISL: vor 1, 2, 2
+; CHECK-FISL: vor 6, 4, 4
+; CHECK-FISL: xxsel 32, 32, 33, 38
 ; CHECK-FISL: vor 2, 0, 0
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test20
-; CHECK-LE: vcmpequw {{[0-9]+}}, 4, 5
-; CHECK-LE: xxsel 34, 35, 34, {{[0-9]+}}
-; CHECK-LE: blr
 }
 
 define <4 x float> @test21(<4 x float> %a, <4 x float> %b, <4 x float> %c, <4 x float> %d) {
@@ -470,11 +389,6 @@ entry:
 ; CHECK-FISL: xxsel 32, 38, 39, 32
 ; CHECK-FISL: vor 2, 0, 0
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test21
-; CHECK-LE: xvcmpeqsp [[V1:[0-9]+]], 36, 37
-; CHECK-LE: xxsel 34, 35, 34, [[V1]]
-; CHECK-LE: blr
 }
 
 define <4 x float> @test22(<4 x float> %a, <4 x float> %b, <4 x float> %c, <4 x float> %d) {
@@ -504,17 +418,6 @@ entry:
 ; CHECK-FISL-DAG: xxlor
 ; CHECK-FISL: xxsel 0, 38, 39, {{[0-9]+}}
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test22
-; CHECK-LE-DAG: xvcmpeqsp {{[0-9]+}}, 37, 37
-; CHECK-LE-DAG: xvcmpeqsp {{[0-9]+}}, 36, 36
-; CHECK-LE-DAG: xvcmpeqsp {{[0-9]+}}, 36, 37
-; CHECK-LE-DAG: xxlnor
-; CHECK-LE-DAG: xxlnor
-; CHECK-LE-DAG: xxlor
-; CHECK-LE-DAG: xxlor
-; CHECK-LE: xxsel 34, 35, 34, {{[0-9]+}}
-; CHECK-LE: blr
 }
 
 define <8 x i16> @test23(<8 x i16> %a, <8 x i16> %b, <8 x i16> %c, <8 x i16> %d) {
@@ -536,11 +439,6 @@ entry:
 ; CHECK-FISL: xxsel 32, 32, 33, 38
 ; CHECK-FISL: vor 2, 0, 
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test23
-; CHECK-LE: vcmpequh {{[0-9]+}}, 4, 5
-; CHECK-LE: xxsel 34, 35, 34, {{[0-9]+}}
-; CHECK-LE: blr
 }
 
 define <16 x i8> @test24(<16 x i8> %a, <16 x i8> %b, <16 x i8> %c, <16 x i8> %d) {
@@ -562,11 +460,6 @@ entry:
 ; CHECK-FISL: xxsel 32, 32, 33, 38
 ; CHECK-FISL: vor 2, 0, 0
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test24
-; CHECK-LE: vcmpequb {{[0-9]+}}, 4, 5
-; CHECK-LE: xxsel 34, 35, 34, {{[0-9]+}}
-; CHECK-LE: blr
 }
 
 define <2 x double> @test25(<2 x double> %a, <2 x double> %b, <2 x double> %c, <2 x double> %d) {
@@ -579,11 +472,6 @@ entry:
 ; CHECK: xvcmpeqdp [[V1:[0-9]+]], 36, 37
 ; CHECK: xxsel 34, 35, 34, [[V1]]
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test25
-; CHECK-LE: xvcmpeqdp [[V1:[0-9]+]], 36, 37
-; CHECK-LE: xxsel 34, 35, 34, [[V1]]
-; CHECK-LE: blr
 }
 
 define <2 x i64> @test26(<2 x i64> %a, <2 x i64> %b) {
@@ -601,9 +489,6 @@ define <2 x i64> @test26(<2 x i64> %a, <2 x i64> %b) {
 ; CHECK: add
 ; CHECK: add
 ; CHECK: blr
-
-; CHECK-LE: vaddudm 2, 2, 3
-; CHECK-LE: blr
 }
 
 define <2 x i64> @test27(<2 x i64> %a, <2 x i64> %b) {
@@ -613,24 +498,15 @@ define <2 x i64> @test27(<2 x i64> %a, <2 x i64> %b) {
 ; CHECK-LABEL: @test27
 ; CHECK: xxland 34, 34, 35
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test27
-; CHECK-LE: xxland 34, 34, 35
-; CHECK-LE: blr
 }
 
 define <2 x double> @test28(<2 x double>* %a) {
-  %v = load <2 x double>, <2 x double>* %a, align 16
+  %v = load <2 x double>* %a, align 16
   ret <2 x double> %v
 
 ; CHECK-LABEL: @test28
 ; CHECK: lxvd2x 34, 0, 3
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test28
-; CHECK-LE: lxvd2x [[V1:[0-9]+]], 0, 3
-; CHECK-LE: xxswapd 34, [[V1]]
-; CHECK-LE: blr
 }
 
 define void @test29(<2 x double>* %a, <2 x double> %b) {
@@ -640,25 +516,15 @@ define void @test29(<2 x double>* %a, <2 x double> %b) {
 ; CHECK-LABEL: @test29
 ; CHECK: stxvd2x 34, 0, 3
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test29
-; CHECK-LE: xxswapd [[V1:[0-9]+]], 34
-; CHECK-LE: stxvd2x [[V1]], 0, 3
-; CHECK-LE: blr
 }
 
 define <2 x double> @test28u(<2 x double>* %a) {
-  %v = load <2 x double>, <2 x double>* %a, align 8
+  %v = load <2 x double>* %a, align 8
   ret <2 x double> %v
 
 ; CHECK-LABEL: @test28u
 ; CHECK: lxvd2x 34, 0, 3
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test28u
-; CHECK-LE: lxvd2x [[V1:[0-9]+]], 0, 3
-; CHECK-LE: xxswapd 34, [[V1]]
-; CHECK-LE: blr
 }
 
 define void @test29u(<2 x double>* %a, <2 x double> %b) {
@@ -668,15 +534,10 @@ define void @test29u(<2 x double>* %a, <2 x double> %b) {
 ; CHECK-LABEL: @test29u
 ; CHECK: stxvd2x 34, 0, 3
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test29u
-; CHECK-LE: xxswapd [[V1:[0-9]+]], 34
-; CHECK-LE: stxvd2x [[V1]], 0, 3
-; CHECK-LE: blr
 }
 
 define <2 x i64> @test30(<2 x i64>* %a) {
-  %v = load <2 x i64>, <2 x i64>* %a, align 16
+  %v = load <2 x i64>* %a, align 16
   ret <2 x i64> %v
 
 ; CHECK-REG-LABEL: @test30
@@ -689,11 +550,6 @@ define <2 x i64> @test30(<2 x i64>* %a) {
 ; CHECK-FISL: vor 3, 2, 2
 ; CHECK-FISL: vor 2, 3, 3
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test30
-; CHECK-LE: lxvd2x [[V1:[0-9]+]], 0, 3
-; CHECK-LE: xxswapd 34, [[V1]]
-; CHECK-LE: blr
 }
 
 define void @test31(<2 x i64>* %a, <2 x i64> %b) {
@@ -703,15 +559,10 @@ define void @test31(<2 x i64>* %a, <2 x i64> %b) {
 ; CHECK-LABEL: @test31
 ; CHECK: stxvd2x 34, 0, 3
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test31
-; CHECK-LE: xxswapd [[V1:[0-9]+]], 34
-; CHECK-LE: stxvd2x [[V1]], 0, 3
-; CHECK-LE: blr
 }
 
 define <4 x float> @test32(<4 x float>* %a) {
-  %v = load <4 x float>, <4 x float>* %a, align 16
+  %v = load <4 x float>* %a, align 16
   ret <4 x float> %v
 
 ; CHECK-REG-LABEL: @test32
@@ -722,11 +573,6 @@ define <4 x float> @test32(<4 x float>* %a) {
 ; CHECK-FISL: lxvw4x 0, 0, 3
 ; CHECK-FISL: xxlor 34, 0, 0
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test32
-; CHECK-LE: lxvd2x [[V1:[0-9]+]], 0, 3
-; CHECK-LE: xxswapd 34, [[V1]]
-; CHECK-LE: blr
 }
 
 define void @test33(<4 x float>* %a, <4 x float> %b) {
@@ -741,15 +587,10 @@ define void @test33(<4 x float>* %a, <4 x float> %b) {
 ; CHECK-FISL: vor 3, 2, 2
 ; CHECK-FISL: stxvw4x 35, 0, 3
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test33
-; CHECK-LE: xxswapd [[V1:[0-9]+]], 34
-; CHECK-LE: stxvd2x [[V1]], 0, 3
-; CHECK-LE: blr
 }
 
 define <4 x float> @test32u(<4 x float>* %a) {
-  %v = load <4 x float>, <4 x float>* %a, align 8
+  %v = load <4 x float>* %a, align 8
   ret <4 x float> %v
 
 ; CHECK-LABEL: @test32u
@@ -758,11 +599,6 @@ define <4 x float> @test32u(<4 x float>* %a) {
 ; CHECK-DAG: lvx
 ; CHECK: vperm 2,
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test32u
-; CHECK-LE: lxvd2x [[V1:[0-9]+]], 0, 3
-; CHECK-LE: xxswapd 34, [[V1]]
-; CHECK-LE: blr
 }
 
 define void @test33u(<4 x float>* %a, <4 x float> %b) {
@@ -777,15 +613,10 @@ define void @test33u(<4 x float>* %a, <4 x float> %b) {
 ; CHECK-FISL: vor 3, 2, 2
 ; CHECK-FISL: stxvw4x 35, 0, 3
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test33u
-; CHECK-LE: xxswapd [[V1:[0-9]+]], 34
-; CHECK-LE: stxvd2x [[V1]], 0, 3
-; CHECK-LE: blr
 }
 
 define <4 x i32> @test34(<4 x i32>* %a) {
-  %v = load <4 x i32>, <4 x i32>* %a, align 16
+  %v = load <4 x i32>* %a, align 16
   ret <4 x i32> %v
 
 ; CHECK-REG-LABEL: @test34
@@ -795,12 +626,9 @@ define <4 x i32> @test34(<4 x i32>* %a) {
 ; CHECK-FISL-LABEL: @test34
 ; CHECK-FISL: lxvw4x 0, 0, 3
 ; CHECK-FISL: xxlor 34, 0, 0
+; CHECK-FISL: vor 3, 2, 2
+; CHECK-FISL: vor 2, 3, 3
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test34
-; CHECK-LE: lxvd2x [[V1:[0-9]+]], 0, 3
-; CHECK-LE: xxswapd 34, [[V1]]
-; CHECK-LE: blr
 }
 
 define void @test35(<4 x i32>* %a, <4 x i32> %b) {
@@ -815,11 +643,6 @@ define void @test35(<4 x i32>* %a, <4 x i32> %b) {
 ; CHECK-FISL: vor 3, 2, 2
 ; CHECK-FISL: stxvw4x 35, 0, 3
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test35
-; CHECK-LE: xxswapd [[V1:[0-9]+]], 34
-; CHECK-LE: stxvd2x [[V1]], 0, 3
-; CHECK-LE: blr
 }
 
 define <2 x double> @test40(<2 x i64> %a) {
@@ -829,10 +652,6 @@ define <2 x double> @test40(<2 x i64> %a) {
 ; CHECK-LABEL: @test40
 ; CHECK: xvcvuxddp 34, 34
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test40
-; CHECK-LE: xvcvuxddp 34, 34
-; CHECK-LE: blr
 }
 
 define <2 x double> @test41(<2 x i64> %a) {
@@ -842,10 +661,6 @@ define <2 x double> @test41(<2 x i64> %a) {
 ; CHECK-LABEL: @test41
 ; CHECK: xvcvsxddp 34, 34
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test41
-; CHECK-LE: xvcvsxddp 34, 34
-; CHECK-LE: blr
 }
 
 define <2 x i64> @test42(<2 x double> %a) {
@@ -855,10 +670,6 @@ define <2 x i64> @test42(<2 x double> %a) {
 ; CHECK-LABEL: @test42
 ; CHECK: xvcvdpuxds 34, 34
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test42
-; CHECK-LE: xvcvdpuxds 34, 34
-; CHECK-LE: blr
 }
 
 define <2 x i64> @test43(<2 x double> %a) {
@@ -868,10 +679,6 @@ define <2 x i64> @test43(<2 x double> %a) {
 ; CHECK-LABEL: @test43
 ; CHECK: xvcvdpsxds 34, 34
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test43
-; CHECK-LE: xvcvdpsxds 34, 34
-; CHECK-LE: blr
 }
 
 define <2 x float> @test44(<2 x i64> %a) {
@@ -911,7 +718,7 @@ define <2 x i64> @test47(<2 x float> %a) {
 }
 
 define <2 x double> @test50(double* %a) {
-  %v = load double, double* %a, align 8
+  %v = load double* %a, align 8
   %w = insertelement <2 x double> undef, double %v, i32 0
   %x = insertelement <2 x double> %w, double %v, i32 1
   ret <2 x double> %x
@@ -919,10 +726,6 @@ define <2 x double> @test50(double* %a) {
 ; CHECK-LABEL: @test50
 ; CHECK: lxvdsx 34, 0, 3
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test50
-; CHECK-LE: lxvdsx 34, 0, 3
-; CHECK-LE: blr
 }
 
 define <2 x double> @test51(<2 x double> %a, <2 x double> %b) {
@@ -930,12 +733,8 @@ define <2 x double> @test51(<2 x double> %a, <2 x double> %b) {
   ret <2 x double> %v
 
 ; CHECK-LABEL: @test51
-; CHECK: xxspltd 34, 34, 0
+; CHECK: xxpermdi 34, 34, 34, 0
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test51
-; CHECK-LE: xxspltd 34, 34, 1
-; CHECK-LE: blr
 }
 
 define <2 x double> @test52(<2 x double> %a, <2 x double> %b) {
@@ -943,12 +742,8 @@ define <2 x double> @test52(<2 x double> %a, <2 x double> %b) {
   ret <2 x double> %v
 
 ; CHECK-LABEL: @test52
-; CHECK: xxmrghd 34, 34, 35
+; CHECK: xxpermdi 34, 34, 35, 0
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test52
-; CHECK-LE: xxmrgld 34, 35, 34
-; CHECK-LE: blr
 }
 
 define <2 x double> @test53(<2 x double> %a, <2 x double> %b) {
@@ -956,12 +751,8 @@ define <2 x double> @test53(<2 x double> %a, <2 x double> %b) {
   ret <2 x double> %v
 
 ; CHECK-LABEL: @test53
-; CHECK: xxmrghd 34, 35, 34
+; CHECK: xxpermdi 34, 35, 34, 0
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test53
-; CHECK-LE: xxmrgld 34, 34, 35
-; CHECK-LE: blr
 }
 
 define <2 x double> @test54(<2 x double> %a, <2 x double> %b) {
@@ -971,10 +762,6 @@ define <2 x double> @test54(<2 x double> %a, <2 x double> %b) {
 ; CHECK-LABEL: @test54
 ; CHECK: xxpermdi 34, 34, 35, 2
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test54
-; CHECK-LE: xxpermdi 34, 35, 34, 2
-; CHECK-LE: blr
 }
 
 define <2 x double> @test55(<2 x double> %a, <2 x double> %b) {
@@ -982,12 +769,8 @@ define <2 x double> @test55(<2 x double> %a, <2 x double> %b) {
   ret <2 x double> %v
 
 ; CHECK-LABEL: @test55
-; CHECK: xxmrgld 34, 34, 35
+; CHECK: xxpermdi 34, 34, 35, 3
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test55
-; CHECK-LE: xxmrghd 34, 35, 34
-; CHECK-LE: blr
 }
 
 define <2 x i64> @test56(<2 x i64> %a, <2 x i64> %b) {
@@ -995,12 +778,8 @@ define <2 x i64> @test56(<2 x i64> %a, <2 x i64> %b) {
   ret <2 x i64> %v
 
 ; CHECK-LABEL: @test56
-; CHECK: xxmrgld 34, 34, 35
+; CHECK: xxpermdi 34, 34, 35, 3
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test56
-; CHECK-LE: xxmrghd 34, 35, 34
-; CHECK-LE: blr
 }
 
 define <2 x i64> @test60(<2 x i64> %a, <2 x i64> %b) {
@@ -1057,10 +836,6 @@ define double @test63(<2 x double> %a) {
 ; CHECK-FISL: xxlor 0, 34, 34
 ; CHECK-FISL: fmr 1, 0
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test63
-; CHECK-LE: xxswapd 1, 34
-; CHECK-LE: blr
 }
 
 define double @test64(<2 x double> %a) {
@@ -1068,17 +843,14 @@ define double @test64(<2 x double> %a) {
   ret double %v
 
 ; CHECK-REG-LABEL: @test64
-; CHECK-REG: xxswapd 1, 34
+; CHECK-REG: xxpermdi 1, 34, 34, 2
 ; CHECK-REG: blr
 
 ; CHECK-FISL-LABEL: @test64
-; CHECK-FISL: xxswapd  34, 34
+; CHECK-FISL: xxpermdi 34, 34, 34, 2
 ; CHECK-FISL: xxlor 0, 34, 34
 ; CHECK-FISL: fmr 1, 0
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test64
-; CHECK-LE: xxlor 1, 34, 34
 }
 
 define <2 x i1> @test65(<2 x i64> %a, <2 x i64> %b) {
@@ -1095,10 +867,6 @@ define <2 x i1> @test65(<2 x i64> %a, <2 x i64> %b) {
 ; CHECK-FISL: vcmpequw 4, 5, 4
 ; CHECK-FISL: vor 2, 4, 4
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test65
-; CHECK-LE: vcmpequd 2, 2, 3
-; CHECK-LE: blr
 }
 
 define <2 x i1> @test66(<2 x i64> %a, <2 x i64> %b) {
@@ -1114,11 +882,6 @@ define <2 x i1> @test66(<2 x i64> %a, <2 x i64> %b) {
 ; CHECK-FISL: vcmpequw {{[0-9]+}}, 5, 4
 ; CHECK-FISL: xxlnor 34, {{[0-9]+}}, {{[0-9]+}}
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test66
-; CHECK-LE: vcmpequd {{[0-9]+}}, 2, 3
-; CHECK-LE: xxlnor 34, {{[0-9]+}}, {{[0-9]+}}
-; CHECK-LE: blr
 }
 
 define <2 x i1> @test67(<2 x i64> %a, <2 x i64> %b) {
@@ -1133,10 +896,6 @@ define <2 x i1> @test67(<2 x i64> %a, <2 x i64> %b) {
 ; CHECK: cmpld
 ; CHECK: lxvd2x
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test67
-; CHECK-LE: vcmpgtud 2, 3, 2
-; CHECK-LE: blr
 }
 
 define <2 x double> @test68(<2 x i32> %a) {
@@ -1147,11 +906,6 @@ define <2 x double> @test68(<2 x i32> %a) {
 ; CHECK: xxsldwi [[V1:[0-9]+]], 34, 34, 1
 ; CHECK: xvcvsxwdp 34, [[V1]]
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test68
-; CHECK-LE: xxsldwi [[V1:[0-9]+]], 34, 34, 1
-; CHECK-LE: xvcvsxwdp 34, [[V1]]
-; CHECK-LE: blr
 }
 
 define <2 x double> @test69(<2 x i16> %a) {
@@ -1166,15 +920,6 @@ define <2 x double> @test69(<2 x i16> %a) {
 ; CHECK: xxsldwi [[V4:[0-9]+]], {{[0-9]+}}, {{[0-9]+}}, 1
 ; CHECK: xvcvsxwdp 34, [[V4]]
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test69
-; CHECK-LE: vspltisw [[V1:[0-9]+]], 8
-; CHECK-LE: vadduwm [[V2:[0-9]+]], [[V1]], [[V1]]
-; CHECK-LE: vslw [[V3:[0-9]+]], {{[0-9]+}}, [[V2]]
-; CHECK-LE: vsraw {{[0-9]+}}, [[V3]], [[V2]]
-; CHECK-LE: xxsldwi [[V4:[0-9]+]], {{[0-9]+}}, {{[0-9]+}}, 1
-; CHECK-LE: xvcvsxwdp 34, [[V4]]
-; CHECK-LE: blr
 }
 
 define <2 x double> @test70(<2 x i8> %a) {
@@ -1189,15 +934,6 @@ define <2 x double> @test70(<2 x i8> %a) {
 ; CHECK: xxsldwi [[V4:[0-9]+]], {{[0-9]+}}, {{[0-9]+}}, 1
 ; CHECK: xvcvsxwdp 34, [[V4]]
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test70
-; CHECK-LE: vspltisw [[V1:[0-9]+]], 12
-; CHECK-LE: vadduwm [[V2:[0-9]+]], [[V1]], [[V1]]
-; CHECK-LE: vslw [[V3:[0-9]+]], {{[0-9]+}}, [[V2]]
-; CHECK-LE: vsraw {{[0-9]+}}, [[V3]], [[V2]]
-; CHECK-LE: xxsldwi [[V4:[0-9]+]], {{[0-9]+}}, {{[0-9]+}}, 1
-; CHECK-LE: xvcvsxwdp 34, [[V4]]
-; CHECK-LE: blr
 }
 
 define <2 x i32> @test80(i32 %v) {
@@ -1224,15 +960,6 @@ define <2 x i32> @test80(i32 %v) {
 ; CHECK-FISL-DAG: std [[R3]], -16(1)
 ; CHECK-FISL-DAG: lxvd2x 0, 0, [[R2]]
 ; CHECK-FISL: blr
-
-; CHECK-LE-LABEL: @test80
-; CHECK-LE-DAG: mtvsrd [[R1:[0-9]+]], 3
-; CHECK-LE-DAG: addi [[R2:[0-9]+]], {{[0-9]+}}, .LCPI
-; CHECK-LE-DAG: lxvd2x [[V2:[0-9]+]], 0, [[R2]]
-; CHECK-LE-DAG: xxspltd 34, [[R1]]
-; CHECK-LE-DAG: xxswapd 35, [[V2]]
-; CHECK-LE: vaddudm 2, 2, 3
-; CHECK-LE: blr
 }
 
 define <2 x double> @test81(<4 x float> %b) {
@@ -1241,9 +968,6 @@ define <2 x double> @test81(<4 x float> %b) {
 
 ; CHECK-LABEL: @test81
 ; CHECK: blr
-
-; CHECK-LE-LABEL: @test81
-; CHECK-LE: blr
 }
 
 define double @test82(double %a, double %b, double %c, double %d) {
@@ -1259,8 +983,4 @@ entry:
 ; CHECK-FISL-LABEL: @test82
 ; CHECK-FISL: xscmpudp [[REG:[0-9]+]], 3, 4
 ; CHECK-FISL: beq [[REG]], {{.*}}
-
-; CHECK-LE-LABEL: @test82
-; CHECK-LE: xscmpudp [[REG:[0-9]+]], 3, 4
-; CHECK-LE: beqlr [[REG]]
 }

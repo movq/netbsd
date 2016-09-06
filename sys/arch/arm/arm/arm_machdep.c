@@ -1,4 +1,4 @@
-/*	$NetBSD: arm_machdep.c,v 1.49 2015/05/02 16:20:41 skrll Exp $	*/
+/*	$NetBSD: arm_machdep.c,v 1.42.2.1 2014/11/09 16:05:25 martin Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -76,11 +76,10 @@
 #include "opt_cputypes.h"
 #include "opt_arm_debug.h"
 #include "opt_multiprocessor.h"
-#include "opt_modular.h"
 
 #include <sys/param.h>
 
-__KERNEL_RCSID(0, "$NetBSD: arm_machdep.c,v 1.49 2015/05/02 16:20:41 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: arm_machdep.c,v 1.42.2.1 2014/11/09 16:05:25 martin Exp $");
 
 #include <sys/exec.h>
 #include <sys/proc.h>
@@ -213,7 +212,7 @@ setregs(struct lwp *l, struct exec_package *pack, vaddr_t stack)
 void
 startlwp(void *arg)
 {
-	ucontext_t *uc = (ucontext_t *)arg; 
+	ucontext_t *uc = arg; 
 	lwp_t *l = curlwp;
 	int error __diagused;
 
@@ -266,7 +265,7 @@ cpu_need_resched(struct cpu_info *ci, int flags)
 #ifdef __HAVE_PREEMPTION
 		atomic_or_uint(&l->l_dopreempt, DOPREEMPT_ACTIVE);
 		if (ci == cur_ci) {
-			atomic_or_uint(&ci->ci_astpending, __BIT(1));
+			softint_trigger(SOFTINT_KPREEMPT);
 		} else {
 			ipi = IPI_KPREEMPT;
 			goto send_ipi;
@@ -274,17 +273,14 @@ cpu_need_resched(struct cpu_info *ci, int flags)
 #endif /* __HAVE_PREEMPTION */
 		return;
 	}
+	ci->ci_astpending = 1;
 #ifdef MULTIPROCESSOR
-	if (ci == cur_ci || !immed) {
-		setsoftast(ci);
+	if (ci == curcpu() || !immed)
 		return;
-	}
 	ipi = IPI_AST;
 
    send_ipi:
 	intr_ipi_send(ci->ci_kcpuset, ipi);
-#else
-	setsoftast(ci);
 #endif /* MULTIPROCESSOR */
 }
 
@@ -310,45 +306,3 @@ ucas_ras_check(trapframe_t *tf)
 		tf->tf_pc = (vaddr_t)ucas_32_ras_start;
 	}
 }
-
-#ifdef MODULAR
-struct lwp *
-arm_curlwp(void)
-{
-	return curlwp;
-}
-
-struct cpu_info *
-arm_curcpu(void)
-{
-	return curcpu();
-}
-#endif
-
-#ifdef __HAVE_PREEMPTION
-void
-cpu_set_curpri(int pri)
-{
-	kpreempt_disable();
-	curcpu()->ci_schedstate.spc_curpriority = pri;
-	kpreempt_enable();
-}
-
-bool
-cpu_kpreempt_enter(uintptr_t where, int s)
-{
-	return s == IPL_NONE;
-}
-
-void
-cpu_kpreempt_exit(uintptr_t where)
-{
-	atomic_and_uint(&curcpu()->ci_astpending, (unsigned int)~__BIT(1));
-}
-
-bool
-cpu_kpreempt_disabled(void)
-{
-	return curcpu()->ci_cpl != IPL_NONE;
-}
-#endif /* __HAVE_PREEMPTION */

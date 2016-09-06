@@ -1,4 +1,4 @@
-/*	$NetBSD: lan9118var.h,v 1.5 2015/04/13 16:33:24 riastradh Exp $	*/
+/*	$NetBSD: lan9118var.h,v 1.4 2012/02/02 19:43:03 tls Exp $	*/
 /*
  * Copyright (c) 2008 KIYOHARA Takashi
  * All rights reserved.
@@ -28,7 +28,7 @@
 #ifndef _LAN9118VAR_H_
 #define _LAN9118VAR_H_
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #define LAN9118_DEFAULT_TX_FIF_SZ	5 /*kB*/
 

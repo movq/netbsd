@@ -22,21 +22,18 @@
 
 #include "llvm/ADT/IndexedMap.h"
 #include "llvm/ADT/SmallVector.h"
-#include "llvm/Analysis/AliasAnalysis.h"
 #include "llvm/CodeGen/LiveInterval.h"
 #include "llvm/CodeGen/MachineBasicBlock.h"
 #include "llvm/CodeGen/MachineFunctionPass.h"
 #include "llvm/CodeGen/SlotIndexes.h"
 #include "llvm/Support/Allocator.h"
-#include "llvm/Support/CommandLine.h"
 #include "llvm/Target/TargetRegisterInfo.h"
 #include <cmath>
 #include <iterator>
 
 namespace llvm {
 
-extern cl::opt<bool> UseSegmentSetForPhysRegs;
-
+  class AliasAnalysis;
   class BitVector;
   class BlockFrequency;
   class LiveRangeCalc;
@@ -100,7 +97,7 @@ extern cl::opt<bool> UseSegmentSetForPhysRegs;
   public:
     static char ID; // Pass identification, replacement for typeid
     LiveIntervals();
-    ~LiveIntervals() override;
+    virtual ~LiveIntervals();
 
     // Calculate the spill weight to assign to a single instruction.
     static float getSpillWeight(bool isDef, bool isUse,
@@ -147,12 +144,13 @@ extern cl::opt<bool> UseSegmentSetForPhysRegs;
     LiveInterval::Segment addSegmentToEndOfBlock(unsigned reg,
                                                  MachineInstr* startInst);
 
-    /// After removing some uses of a register, shrink its live range to just
-    /// the remaining uses. This method does not compute reaching defs for new
-    /// uses, and it doesn't remove dead defs.
-    /// Dead PHIDef values are marked as unused. New dead machine instructions
-    /// are added to the dead vector. Returns true if the interval may have been
-    /// separated into multiple connected components.
+    /// shrinkToUses - After removing some uses of a register, shrink its live
+    /// range to just the remaining uses. This method does not compute reaching
+    /// defs for new uses, and it doesn't remove dead defs.
+    /// Dead PHIDef values are marked as unused.
+    /// New dead machine instructions are added to the dead vector.
+    /// Return true if the interval may have been separated into multiple
+    /// connected components.
     bool shrinkToUses(LiveInterval *li,
                       SmallVectorImpl<MachineInstr*> *dead = nullptr);
 
@@ -160,8 +158,6 @@ extern cl::opt<bool> UseSegmentSetForPhysRegs;
     /// shrinkToUses(LiveInterval *li, SmallVectorImpl<MachineInstr*> *dead)
     /// that works on a subregister live range and only looks at uses matching
     /// the lane mask of the subregister range.
-    /// This may leave the subrange empty which needs to be cleaned up with
-    /// LiveInterval::removeEmptySubranges() afterwards.
     void shrinkToUses(LiveInterval::SubRange &SR, unsigned Reg);
 
     /// extendToIndices - Extend the live range of LI to reach all points in
@@ -183,6 +179,12 @@ extern cl::opt<bool> UseSegmentSetForPhysRegs;
     /// Calling pruneValue() and extendToIndices() can be used to reconstruct
     /// SSA form after adding defs to a virtual register.
     void pruneValue(LiveRange &LR, SlotIndex Kill,
+                    SmallVectorImpl<SlotIndex> *EndPoints);
+
+    /// Subregister aware variant of pruneValue(LiveRange &LR, SlotIndex Kill,
+    /// SmallVectorImpl<SlotIndex> &EndPoints). Prunes the value in the main
+    /// range and all sub ranges.
+    void pruneValue(LiveInterval &LI, SlotIndex Kill,
                     SmallVectorImpl<SlotIndex> *EndPoints);
 
     SlotIndexes *getSlotIndexes() const {
@@ -256,6 +258,11 @@ extern cl::opt<bool> UseSegmentSetForPhysRegs;
 
     void ReplaceMachineInstrInMaps(MachineInstr *MI, MachineInstr *NewMI) {
       Indexes->replaceMachineInstrInMaps(MI, NewMI);
+    }
+
+    bool findLiveInMBBs(SlotIndex Start, SlotIndex End,
+                        SmallVectorImpl<MachineBasicBlock*> &MBBs) const {
+      return Indexes->findLiveInMBBs(Start, End, MBBs);
     }
 
     VNInfo::Allocator& getVNInfoAllocator() { return VNInfoAllocator; }
@@ -376,8 +383,7 @@ extern cl::opt<bool> UseSegmentSetForPhysRegs;
       LiveRange *LR = RegUnitRanges[Unit];
       if (!LR) {
         // Compute missing ranges on demand.
-        // Use segment set to speed-up initial computation of the live range.
-        RegUnitRanges[Unit] = LR = new LiveRange(UseSegmentSetForPhysRegs);
+        RegUnitRanges[Unit] = LR = new LiveRange();
         computeRegUnitRange(*LR, Unit);
       }
       return *LR;
@@ -392,19 +398,6 @@ extern cl::opt<bool> UseSegmentSetForPhysRegs;
     const LiveRange *getCachedRegUnit(unsigned Unit) const {
       return RegUnitRanges[Unit];
     }
-
-    /// Remove value numbers and related live segments starting at position
-    /// @p Pos that are part of any liverange of physical register @p Reg or one
-    /// of its subregisters.
-    void removePhysRegDefAt(unsigned Reg, SlotIndex Pos);
-
-    /// Remove value number and related live segments of @p LI and its subranges
-    /// that start at position @p Pos.
-    void removeVRegDefAt(LiveInterval &LI, SlotIndex Pos);
-
-    /// Split separate components in LiveInterval \p LI into separate intervals.
-    void splitSeparateComponents(LiveInterval &LI,
-                                 SmallVectorImpl<LiveInterval*> &SplitLIs);
 
   private:
     /// Compute live intervals for all virtual registers.
@@ -440,7 +433,7 @@ extern cl::opt<bool> UseSegmentSetForPhysRegs;
     void repairOldRegInRange(MachineBasicBlock::iterator Begin,
                              MachineBasicBlock::iterator End,
                              const SlotIndex endIdx, LiveRange &LR,
-                             unsigned Reg, LaneBitmask LaneMask = ~0u);
+                             unsigned Reg, unsigned LaneMask = ~0u);
 
     class HMEditor;
   };

@@ -232,7 +232,7 @@ Make use of hi register variants of cmp: tCMPhir / tCMPZhir.
 //===---------------------------------------------------------------------===//
 
 Thumb1 immediate field sometimes keep pre-scaled values. See
-ThumbRegisterInfo::eliminateFrameIndex. This is inconsistent from ARM and
+Thumb1RegisterInfo::eliminateFrameIndex. This is inconsistent from ARM and
 Thumb2.
 
 //===---------------------------------------------------------------------===//

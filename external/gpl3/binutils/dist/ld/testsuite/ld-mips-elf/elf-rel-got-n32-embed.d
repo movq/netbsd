@@ -1,7 +1,6 @@
 #name: MIPS ELF got reloc n32
 #as: -march=from-abi -EB -n32 -KPIC
-#objcopy_objects: -R .MIPS.abiflags
-#source: ../../../gas/testsuite/gas/mips/elf-rel-got-n32.s RUN_OBJCOPY
+#source: ../../../gas/testsuite/gas/mips/elf-rel-got-n32.s
 #ld:
 #objdump: -D --show-raw-insn
 

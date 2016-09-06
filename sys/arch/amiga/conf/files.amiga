@@ -1,4 +1,4 @@
-#	$NetBSD: files.amiga,v 1.177 2015/03/04 19:10:20 mlelstv Exp $
+#	$NetBSD: files.amiga,v 1.176.2.1 2015/05/26 02:28:46 msaitoh Exp $
 
 # maxpartitions must be first item in files.${ARCH}.newconf
 maxpartitions 16			# NOTE THAT AMIGA IS SPECIAL!

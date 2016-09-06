@@ -318,12 +318,7 @@ NestedNameSpecifier::print(raw_ostream &OS,
   OS << "::";
 }
 
-void NestedNameSpecifier::dump(const LangOptions &LO) const {
-  print(llvm::errs(), PrintingPolicy(LO));
-}
-
-void NestedNameSpecifier::dump() const {
-  LangOptions LO;
+void NestedNameSpecifier::dump(const LangOptions &LO) {
   print(llvm::errs(), PrintingPolicy(LO));
 }
 
@@ -440,19 +435,17 @@ TypeLoc NestedNameSpecifierLoc::getTypeLoc() const {
 namespace {
   void Append(char *Start, char *End, char *&Buffer, unsigned &BufferSize,
               unsigned &BufferCapacity) {
-    if (Start == End)
-      return;
-
     if (BufferSize + (End - Start) > BufferCapacity) {
       // Reallocate the buffer.
-      unsigned NewCapacity = std::max(
-          (unsigned)(BufferCapacity ? BufferCapacity * 2 : sizeof(void *) * 2),
-          (unsigned)(BufferSize + (End - Start)));
+      unsigned NewCapacity 
+      = std::max((unsigned)(BufferCapacity? BufferCapacity * 2 
+                            : sizeof(void*) * 2),
+                 (unsigned)(BufferSize + (End - Start)));
       char *NewBuffer = static_cast<char *>(malloc(NewCapacity));
-      if (BufferCapacity) {
-        memcpy(NewBuffer, Buffer, BufferSize);
+      memcpy(NewBuffer, Buffer, BufferSize);
+      
+      if (BufferCapacity)
         free(Buffer);
-      }
       Buffer = NewBuffer;
       BufferCapacity = NewCapacity;
     }

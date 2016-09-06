@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.14 2016/02/27 21:47:35 joerg Exp $
+#	$NetBSD: Makefile,v 1.12.2.1 2015/06/04 20:05:45 snj Exp $
 
 LIB=	LLVMX86CodeGen
 
@@ -7,8 +7,6 @@ LIB=	LLVMX86CodeGen
 .PATH: ${LLVM_SRCDIR}/lib/Target/X86
 
 SRCS+=	X86AsmPrinter.cpp \
-	X86CallFrameOptimization.cpp \
-	X86ExpandPseudo.cpp \
 	X86FastISel.cpp \
 	X86FixupLEAs.cpp \
 	X86FloatingPoint.cpp \
@@ -18,17 +16,14 @@ SRCS+=	X86AsmPrinter.cpp \
 	X86InstrInfo.cpp \
 	X86MachineFunctionInfo.cpp \
 	X86MCInstLower.cpp \
-	X86OptimizeLEAs.cpp \
 	X86PadShortFunction.cpp \
 	X86RegisterInfo.cpp \
 	X86SelectionDAGInfo.cpp \
-	X86ShuffleDecodeConstantPool.cpp \
 	X86Subtarget.cpp \
 	X86TargetMachine.cpp \
 	X86TargetObjectFile.cpp \
 	X86TargetTransformInfo.cpp \
-	X86VZeroUpper.cpp \
-	X86WinEHState.cpp
+	X86VZeroUpper.cpp
 
 TABLEGEN_SRC=		X86.td
 TABLEGEN_INCLUDES=	-I${LLVM_SRCDIR}/lib/Target/X86

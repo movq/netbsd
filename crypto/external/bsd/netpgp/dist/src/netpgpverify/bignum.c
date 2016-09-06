@@ -45,7 +45,6 @@
 # include <sys/kmem.h>
 #else
 # include <arpa/inet.h>
-# include <limits.h>
 # include <stdarg.h>
 # include <stdio.h>
 # include <stdlib.h>
@@ -87,10 +86,6 @@
 
 #ifndef __arraycount
 #define	__arraycount(__x)	(sizeof(__x) / sizeof(__x[0]))
-#endif
-
-#ifndef MIN
-#define MIN(a,b)	(((a)<(b))?(a):(b))
 #endif
 
 #define MP_ISZERO(a) (((a)->used == 0) ? MP_YES : MP_NO)
@@ -221,7 +216,7 @@ trim_unused_digits(mp_int * a)
 
 /* copy, b = a */
 static int
-mp_copy(PGPV_BIGNUM *a, PGPV_BIGNUM *b)
+mp_copy(BIGNUM *a, BIGNUM *b)
 {
 	int	res;
 
@@ -1338,13 +1333,13 @@ fast_modular_inverse(mp_int * a, mp_int * b, mp_int * c)
 
 top:
 	/* 4.  while u is even do */
-	while (PGPV_BN_is_even(&u) == 1) {
+	while (BN_is_even(&u) == 1) {
 		/* 4.1 u = u/2 */
 		if ((res = half(&u, &u)) != MP_OKAY) {
 			goto LBL_ERR;
 		}
 		/* 4.2 if B is odd then */
-		if (PGPV_BN_is_odd(&B) == 1) {
+		if (BN_is_odd(&B) == 1) {
 			if ((res = signed_subtract(&B, &x, &B)) != MP_OKAY) {
 				goto LBL_ERR;
 			}
@@ -1356,13 +1351,13 @@ top:
 	}
 
 	/* 5.  while v is even do */
-	while (PGPV_BN_is_even(&v) == 1) {
+	while (BN_is_even(&v) == 1) {
 		/* 5.1 v = v/2 */
 		if ((res = half(&v, &v)) != MP_OKAY) {
 			goto LBL_ERR;
 		}
 		/* 5.2 if D is odd then */
-		if (PGPV_BN_is_odd(&D) == 1) {
+		if (BN_is_odd(&D) == 1) {
 			/* D = (D-x)/2 */
 			if ((res = signed_subtract(&D, &x, &D)) != MP_OKAY) {
 				goto LBL_ERR;
@@ -1451,7 +1446,7 @@ slow_modular_inverse(mp_int * a, mp_int * b, mp_int * c)
 	}
 
 	/* 2. [modified] if x,y are both even then return an error! */
-	if (PGPV_BN_is_even(&x) == 1 && PGPV_BN_is_even(&y) == 1) {
+	if (BN_is_even(&x) == 1 && BN_is_even(&y) == 1) {
 		res = MP_VAL;
 		goto LBL_ERR;
 	}
@@ -1468,13 +1463,13 @@ slow_modular_inverse(mp_int * a, mp_int * b, mp_int * c)
 
 top:
 	/* 4.  while u is even do */
-	while (PGPV_BN_is_even(&u) == 1) {
+	while (BN_is_even(&u) == 1) {
 		/* 4.1 u = u/2 */
 		if ((res = half(&u, &u)) != MP_OKAY) {
 			goto LBL_ERR;
 		}
 		/* 4.2 if A or B is odd then */
-		if (PGPV_BN_is_odd(&A) == 1 || PGPV_BN_is_odd(&B) == 1) {
+		if (BN_is_odd(&A) == 1 || BN_is_odd(&B) == 1) {
 			/* A = (A+y)/2, B = (B-x)/2 */
 			if ((res = signed_add(&A, &y, &A)) != MP_OKAY) {
 				 goto LBL_ERR;
@@ -1493,13 +1488,13 @@ top:
 	}
 
 	/* 5.  while v is even do */
-	while (PGPV_BN_is_even(&v) == 1) {
+	while (BN_is_even(&v) == 1) {
 		/* 5.1 v = v/2 */
 		if ((res = half(&v, &v)) != MP_OKAY) {
 			goto LBL_ERR;
 		}
 		/* 5.2 if C or D is odd then */
-		if (PGPV_BN_is_odd(&C) == 1 || PGPV_BN_is_odd(&D) == 1) {
+		if (BN_is_odd(&C) == 1 || BN_is_odd(&D) == 1) {
 			/* C = (C+y)/2, D = (D-x)/2 */
 			if ((res = signed_add(&C, &y, &C)) != MP_OKAY) {
 				 goto LBL_ERR;
@@ -1547,7 +1542,7 @@ top:
 	}
 
 	/* if not zero goto step 4 */
-	if (PGPV_BN_is_zero(&u) == 0) {
+	if (BN_is_zero(&u) == 0) {
 		goto top;
 	}
 	/* now a = C, b = D, gcd == g*v */
@@ -1589,7 +1584,7 @@ modular_inverse(mp_int *c, mp_int *a, mp_int *b)
 	}
 
 	/* if the modulus is odd we can use a faster routine instead */
-	if (PGPV_BN_is_odd(b) == 1) {
+	if (BN_is_odd(b) == 1) {
 		return fast_modular_inverse(a, b, c);
 	}
 	return slow_modular_inverse(a, b, c);
@@ -4356,7 +4351,7 @@ exponent_modulo(mp_int * G, mp_int * X, mp_int * P, mp_int *Y)
 	}
 
 	/* if the modulus is odd or diminished_radix, use the montgomery method */
-	if (PGPV_BN_is_odd(P) == 1 || diminished_radix) {
+	if (BN_is_odd(P) == 1 || diminished_radix) {
 		return fast_exponent_modulo(G, X, P, Y, diminished_radix);
 	}
 	/* otherwise use the generic Barrett reduction technique */
@@ -5024,7 +5019,7 @@ mp_toradix_n(mp_int * a, char *str, int radix, int maxlen)
 }
 
 static char *
-formatbn(const PGPV_BIGNUM *a, const int radix)
+formatbn(const BIGNUM *a, const int radix)
 {
 	char	*s;
 	int	 len;
@@ -5086,11 +5081,11 @@ mp_getradix_num(mp_int *a, int radix, char *s)
 }
 
 static int
-getbn(PGPV_BIGNUM **a, const char *str, int radix)
+getbn(BIGNUM **a, const char *str, int radix)
 {
 	int	len;
 
-	if (a == NULL || str == NULL || (*a = PGPV_BN_new()) == NULL) {
+	if (a == NULL || str == NULL || (*a = BN_new()) == NULL) {
 		return 0;
 	}
 	if (mp_getradix_num(*a, radix, __UNCONST(str)) != MP_OKAY) {
@@ -5121,120 +5116,32 @@ subtract_modulo(mp_int *a, mp_int *b, mp_int *c, mp_int *d)
 	return res;
 }
 
-/* bn_mp_gcd.c */
-/* Greatest Common Divisor using the binary method */
-static int
-mp_gcd(mp_int *a, mp_int *b, mp_int *c)
-{
-	mp_int  u, v;
-	int     k, u_lsb, v_lsb, res;
-
-	/* either zero than gcd is the largest */
-	if (PGPV_BN_is_zero(a) == MP_YES) {
-		return absolute(b, c);
-	}
-	if (PGPV_BN_is_zero(b) == MP_YES) {
-		return absolute(a, c);
-	}
-
-	/* get copies of a and b we can modify */
-	if ((res = mp_init_copy(&u, a)) != MP_OKAY) {
-		return res;
-	}
-
-	if ((res = mp_init_copy(&v, b)) != MP_OKAY) {
-		goto LBL_U;
-	}
-
-	/* must be positive for the remainder of the algorithm */
-	u.sign = v.sign = MP_ZPOS;
-
-	/* B1.  Find the common power of two for u and v */
-	u_lsb = mp_cnt_lsb(&u);
-	v_lsb = mp_cnt_lsb(&v);
-	k = MIN(u_lsb, v_lsb);
-
-	if (k > 0) {
-		/* divide the power of two out */
-		if ((res = rshift_bits(&u, k, &u, NULL)) != MP_OKAY) {
-			goto LBL_V;
-		}
-
-		if ((res = rshift_bits(&v, k, &v, NULL)) != MP_OKAY) {
-			goto LBL_V;
-		}
-	}
-
-	/* divide any remaining factors of two out */
-	if (u_lsb != k) {
-		if ((res = rshift_bits(&u, u_lsb - k, &u, NULL)) != MP_OKAY) {
-			goto LBL_V;
-		}
-	}
-
-	if (v_lsb != k) {
-		if ((res = rshift_bits(&v, v_lsb - k, &v, NULL)) != MP_OKAY) {
-			goto LBL_V;
-		}
-	}
-
-	while (PGPV_BN_is_zero(&v) == 0) {
-		/* make sure v is the largest */
-		if (compare_magnitude(&u, &v) == MP_GT) {
-			/* swap u and v to make sure v is >= u */
-			mp_exch(&u, &v);
-		}
-
-		/* subtract smallest from largest */
-		if ((res = signed_subtract(&v, &u, &v)) != MP_OKAY) {
-			goto LBL_V;
-		}
-
-		/* Divide out all factors of two */
-		if ((res = rshift_bits(&v, mp_cnt_lsb(&v), &v, NULL)) != MP_OKAY) {
-			goto LBL_V;
-		} 
-	} 
-
-	/* multiply by 2**k which we divided out at the beginning */
-	if ((res = lshift_bits(&u, k, c)) != MP_OKAY) {
-		goto LBL_V;
-	}
-	c->sign = MP_ZPOS;
-	res = MP_OKAY;
-LBL_V:
-	mp_clear (&u);
-LBL_U:
-	mp_clear (&v);
-	return res;
-}
-
 /**************************************************************************/
 
-/* PGPV_BIGNUM emulation layer */
+/* BIGNUM emulation layer */
 
 /* essentiually, these are just wrappers around the libtommath functions */
 /* usually the order of args changes */
-/* the PGPV_BIGNUM API tends to have more const poisoning */
+/* the BIGNUM API tends to have more const poisoning */
 /* these wrappers also check the arguments passed for sanity */
 
-PGPV_BIGNUM *
-PGPV_BN_bin2bn(const uint8_t *data, int len, PGPV_BIGNUM *ret)
+BIGNUM *
+BN_bin2bn(const uint8_t *data, int len, BIGNUM *ret)
 {
 	if (data == NULL) {
-		return PGPV_BN_new();
+		return BN_new();
 	}
 	if (ret == NULL) {
-		ret = PGPV_BN_new();
+		ret = BN_new();
 	}
 	return (mp_read_unsigned_bin(ret, data, len) == MP_OKAY) ? ret : NULL;
 }
 
 /* store in unsigned [big endian] format */
 int
-PGPV_BN_bn2bin(const PGPV_BIGNUM *a, unsigned char *b)
+BN_bn2bin(const BIGNUM *a, unsigned char *b)
 {
-	PGPV_BIGNUM	t;
+	BIGNUM	t;
 	int    	x;
 
 	if (a == NULL || b == NULL) {
@@ -5243,7 +5150,7 @@ PGPV_BN_bn2bin(const PGPV_BIGNUM *a, unsigned char *b)
 	if (mp_init_copy (&t, __UNCONST(a)) != MP_OKAY) {
 		return -1;
 	}
-	for (x = 0; !PGPV_BN_is_zero(&t) ; ) {
+	for (x = 0; !BN_is_zero(&t) ; ) {
 		b[x++] = (unsigned char) (t.dp[0] & 0xff);
 		if (rshift_bits(&t, 8, &t, NULL) != MP_OKAY) {
 			mp_clear(&t);
@@ -5256,17 +5163,17 @@ PGPV_BN_bn2bin(const PGPV_BIGNUM *a, unsigned char *b)
 }
 
 void
-PGPV_BN_init(PGPV_BIGNUM *a)
+BN_init(BIGNUM *a)
 {
 	if (a != NULL) {
 		mp_init(a);
 	}
 }
 
-PGPV_BIGNUM *
-PGPV_BN_new(void)
+BIGNUM *
+BN_new(void)
 {
-	PGPV_BIGNUM	*a;
+	BIGNUM	*a;
 
 	if ((a = allocate(1, sizeof(*a))) != NULL) {
 		mp_init(a);
@@ -5276,7 +5183,7 @@ PGPV_BN_new(void)
 
 /* copy, b = a */
 int
-PGPV_BN_copy(PGPV_BIGNUM *b, const PGPV_BIGNUM *a)
+BN_copy(BIGNUM *b, const BIGNUM *a)
 {
 	if (a == NULL || b == NULL) {
 		return MP_VAL;
@@ -5284,22 +5191,22 @@ PGPV_BN_copy(PGPV_BIGNUM *b, const PGPV_BIGNUM *a)
 	return mp_copy(__UNCONST(a), b);
 }
 
-PGPV_BIGNUM *
-PGPV_BN_dup(const PGPV_BIGNUM *a)
+BIGNUM *
+BN_dup(const BIGNUM *a)
 {
-	PGPV_BIGNUM	*ret;
+	BIGNUM	*ret;
 
 	if (a == NULL) {
 		return NULL;
 	}
-	if ((ret = PGPV_BN_new()) != NULL) {
-		PGPV_BN_copy(ret, a);
+	if ((ret = BN_new()) != NULL) {
+		BN_copy(ret, a);
 	}
 	return ret;
 }
 
 void
-PGPV_BN_swap(PGPV_BIGNUM *a, PGPV_BIGNUM *b)
+BN_swap(BIGNUM *a, BIGNUM *b)
 {
 	if (a && b) {
 		mp_exch(a, b);
@@ -5307,47 +5214,47 @@ PGPV_BN_swap(PGPV_BIGNUM *a, PGPV_BIGNUM *b)
 }
 
 int
-PGPV_BN_lshift(PGPV_BIGNUM *r, const PGPV_BIGNUM *a, int n)
+BN_lshift(BIGNUM *r, const BIGNUM *a, int n)
 {
 	if (r == NULL || a == NULL || n < 0) {
 		return 0;
 	}
-	PGPV_BN_copy(r, a);
+	BN_copy(r, a);
 	return lshift_digits(r, n) == MP_OKAY;
 }
 
 int
-PGPV_BN_lshift1(PGPV_BIGNUM *r, PGPV_BIGNUM *a)
+BN_lshift1(BIGNUM *r, BIGNUM *a)
 {
 	if (r == NULL || a == NULL) {
 		return 0;
 	}
-	PGPV_BN_copy(r, a);
+	BN_copy(r, a);
 	return lshift_digits(r, 1) == MP_OKAY;
 }
 
 int
-PGPV_BN_rshift(PGPV_BIGNUM *r, const PGPV_BIGNUM *a, int n)
+BN_rshift(BIGNUM *r, const BIGNUM *a, int n)
 {
 	if (r == NULL || a == NULL || n < 0) {
 		return MP_VAL;
 	}
-	PGPV_BN_copy(r, a);
+	BN_copy(r, a);
 	return rshift_digits(r, n) == MP_OKAY;
 }
 
 int
-PGPV_BN_rshift1(PGPV_BIGNUM *r, PGPV_BIGNUM *a)
+BN_rshift1(BIGNUM *r, BIGNUM *a)
 {
 	if (r == NULL || a == NULL) {
 		return 0;
 	}
-	PGPV_BN_copy(r, a);
+	BN_copy(r, a);
 	return rshift_digits(r, 1) == MP_OKAY;
 }
 
 int
-PGPV_BN_set_word(PGPV_BIGNUM *a, PGPV_BN_ULONG w)
+BN_set_word(BIGNUM *a, BN_ULONG w)
 {
 	if (a == NULL) {
 		return 0;
@@ -5357,7 +5264,7 @@ PGPV_BN_set_word(PGPV_BIGNUM *a, PGPV_BN_ULONG w)
 }
 
 int
-PGPV_BN_add(PGPV_BIGNUM *r, const PGPV_BIGNUM *a, const PGPV_BIGNUM *b)
+BN_add(BIGNUM *r, const BIGNUM *a, const BIGNUM *b)
 {
 	if (a == NULL || b == NULL || r == NULL) {
 		return 0;
@@ -5366,7 +5273,7 @@ PGPV_BN_add(PGPV_BIGNUM *r, const PGPV_BIGNUM *a, const PGPV_BIGNUM *b)
 }
 
 int
-PGPV_BN_sub(PGPV_BIGNUM *r, const PGPV_BIGNUM *a, const PGPV_BIGNUM *b)
+BN_sub(BIGNUM *r, const BIGNUM *a, const BIGNUM *b)
 {
 	if (a == NULL || b == NULL || r == NULL) {
 		return 0;
@@ -5375,7 +5282,7 @@ PGPV_BN_sub(PGPV_BIGNUM *r, const PGPV_BIGNUM *a, const PGPV_BIGNUM *b)
 }
 
 int
-PGPV_BN_mul(PGPV_BIGNUM *r, const PGPV_BIGNUM *a, const PGPV_BIGNUM *b, PGPV_BN_CTX *ctx)
+BN_mul(BIGNUM *r, const BIGNUM *a, const BIGNUM *b, BN_CTX *ctx)
 {
 	if (a == NULL || b == NULL || r == NULL) {
 		return 0;
@@ -5385,7 +5292,7 @@ PGPV_BN_mul(PGPV_BIGNUM *r, const PGPV_BIGNUM *a, const PGPV_BIGNUM *b, PGPV_BN_
 }
 
 int
-PGPV_BN_div(PGPV_BIGNUM *dv, PGPV_BIGNUM *rem, const PGPV_BIGNUM *a, const PGPV_BIGNUM *d, PGPV_BN_CTX *ctx)
+BN_div(BIGNUM *dv, BIGNUM *rem, const BIGNUM *a, const BIGNUM *d, BN_CTX *ctx)
 {
 	if ((dv == NULL && rem == NULL) || a == NULL || d == NULL) {
 		return 0;
@@ -5396,7 +5303,7 @@ PGPV_BN_div(PGPV_BIGNUM *dv, PGPV_BIGNUM *rem, const PGPV_BIGNUM *a, const PGPV_
 
 /* perform a bit operation on the 2 bignums */
 int
-PGPV_BN_bitop(PGPV_BIGNUM *r, const PGPV_BIGNUM *a, char op, const PGPV_BIGNUM *b)
+BN_bitop(BIGNUM *r, const BIGNUM *a, char op, const BIGNUM *b)
 {
 	unsigned	ndigits;
 	mp_digit	ad;
@@ -5406,11 +5313,11 @@ PGPV_BN_bitop(PGPV_BIGNUM *r, const PGPV_BIGNUM *a, char op, const PGPV_BIGNUM *
 	if (a == NULL || b == NULL || r == NULL) {
 		return 0;
 	}
-	if (PGPV_BN_cmp(__UNCONST(a), __UNCONST(b)) >= 0) {
-		PGPV_BN_copy(r, a);
+	if (BN_cmp(__UNCONST(a), __UNCONST(b)) >= 0) {
+		BN_copy(r, a);
 		ndigits = a->used;
 	} else {
-		PGPV_BN_copy(r, b);
+		BN_copy(r, b);
 		ndigits = b->used;
 	}
 	for (i = 0 ; i < (int)ndigits ; i++) {
@@ -5434,7 +5341,7 @@ PGPV_BN_bitop(PGPV_BIGNUM *r, const PGPV_BIGNUM *a, char op, const PGPV_BIGNUM *
 }
 
 void
-PGPV_BN_free(PGPV_BIGNUM *a)
+BN_free(BIGNUM *a)
 {
 	if (a) {
 		mp_clear(a);
@@ -5442,7 +5349,7 @@ PGPV_BN_free(PGPV_BIGNUM *a)
 }
 
 void
-PGPV_BN_clear(PGPV_BIGNUM *a)
+BN_clear(BIGNUM *a)
 {
 	if (a) {
 		mp_clear(a);
@@ -5450,7 +5357,7 @@ PGPV_BN_clear(PGPV_BIGNUM *a)
 }
 
 void
-PGPV_BN_clear_free(PGPV_BIGNUM *a)
+BN_clear_free(BIGNUM *a)
 {
 	if (a) {
 		mp_clear(a);
@@ -5458,7 +5365,7 @@ PGPV_BN_clear_free(PGPV_BIGNUM *a)
 }
 
 int
-PGPV_BN_num_bytes(const PGPV_BIGNUM *a)
+BN_num_bytes(const BIGNUM *a)
 {
 	if (a == NULL) {
 		return MP_VAL;
@@ -5467,7 +5374,7 @@ PGPV_BN_num_bytes(const PGPV_BIGNUM *a)
 }
 
 int
-PGPV_BN_num_bits(const PGPV_BIGNUM *a)
+BN_num_bits(const BIGNUM *a)
 {
 	if (a == NULL) {
 		return 0;
@@ -5476,7 +5383,7 @@ PGPV_BN_num_bits(const PGPV_BIGNUM *a)
 }
 
 void
-PGPV_BN_set_negative(PGPV_BIGNUM *a, int n)
+BN_set_negative(BIGNUM *a, int n)
 {
 	if (a) {
 		a->sign = (n) ? MP_NEG : 0;
@@ -5484,7 +5391,7 @@ PGPV_BN_set_negative(PGPV_BIGNUM *a, int n)
 }
 
 int
-PGPV_BN_cmp(PGPV_BIGNUM *a, PGPV_BIGNUM *b)
+BN_cmp(BIGNUM *a, BIGNUM *b)
 {
 	if (a == NULL || b == NULL) {
 		return MP_VAL;
@@ -5501,7 +5408,7 @@ PGPV_BN_cmp(PGPV_BIGNUM *a, PGPV_BIGNUM *b)
 }
 
 int
-PGPV_BN_mod_exp(PGPV_BIGNUM *Y, PGPV_BIGNUM *G, PGPV_BIGNUM *X, PGPV_BIGNUM *P, PGPV_BN_CTX *ctx)
+BN_mod_exp(BIGNUM *Y, BIGNUM *G, BIGNUM *X, BIGNUM *P, BN_CTX *ctx)
 {
 	if (Y == NULL || G == NULL || X == NULL || P == NULL) {
 		return MP_VAL;
@@ -5510,8 +5417,8 @@ PGPV_BN_mod_exp(PGPV_BIGNUM *Y, PGPV_BIGNUM *G, PGPV_BIGNUM *X, PGPV_BIGNUM *P, 
 	return exponent_modulo(G, X, P, Y) == MP_OKAY;
 }
 
-PGPV_BIGNUM *
-PGPV_BN_mod_inverse(PGPV_BIGNUM *r, PGPV_BIGNUM *a, const PGPV_BIGNUM *n, PGPV_BN_CTX *ctx)
+BIGNUM *
+BN_mod_inverse(BIGNUM *r, BIGNUM *a, const BIGNUM *n, BN_CTX *ctx)
 {
 	USE_ARG(ctx);
 	if (r == NULL || a == NULL || n == NULL) {
@@ -5521,7 +5428,7 @@ PGPV_BN_mod_inverse(PGPV_BIGNUM *r, PGPV_BIGNUM *a, const PGPV_BIGNUM *n, PGPV_B
 }
 
 int
-PGPV_BN_mod_mul(PGPV_BIGNUM *ret, PGPV_BIGNUM *a, PGPV_BIGNUM *b, const PGPV_BIGNUM *m, PGPV_BN_CTX *ctx)
+BN_mod_mul(BIGNUM *ret, BIGNUM *a, BIGNUM *b, const BIGNUM *m, BN_CTX *ctx)
 {
 	USE_ARG(ctx);
 	if (ret == NULL || a == NULL || b == NULL || m == NULL) {
@@ -5530,14 +5437,14 @@ PGPV_BN_mod_mul(PGPV_BIGNUM *ret, PGPV_BIGNUM *a, PGPV_BIGNUM *b, const PGPV_BIG
 	return multiply_modulo(ret, a, b, __UNCONST(m)) == MP_OKAY;
 }
 
-PGPV_BN_CTX *
-PGPV_BN_CTX_new(void)
+BN_CTX *
+BN_CTX_new(void)
 {
-	return allocate(1, sizeof(PGPV_BN_CTX));
+	return allocate(1, sizeof(BN_CTX));
 }
 
 void
-PGPV_BN_CTX_init(PGPV_BN_CTX *c)
+BN_CTX_init(BN_CTX *c)
 {
 	if (c != NULL) {
 		c->arraysize = 15;
@@ -5547,61 +5454,61 @@ PGPV_BN_CTX_init(PGPV_BN_CTX *c)
 	}
 }
 
-PGPV_BIGNUM *
-PGPV_BN_CTX_get(PGPV_BN_CTX *ctx)
+BIGNUM *
+BN_CTX_get(BN_CTX *ctx)
 {
 	if (ctx == NULL || ctx->v == NULL || ctx->arraysize == 0 || ctx->count == ctx->arraysize - 1) {
 		return NULL;
 	}
-	return ctx->v[ctx->count++] = PGPV_BN_new();
+	return ctx->v[ctx->count++] = BN_new();
 }
 
 void
-PGPV_BN_CTX_start(PGPV_BN_CTX *ctx)
+BN_CTX_start(BN_CTX *ctx)
 {
-	PGPV_BN_CTX_init(ctx);
+	BN_CTX_init(ctx);
 }
 
 void
-PGPV_BN_CTX_free(PGPV_BN_CTX *c)
+BN_CTX_free(BN_CTX *c)
 {
 	unsigned	i;
 
 	if (c != NULL && c->v != NULL) {
 		for (i = 0 ; i < c->count ; i++) {
-			PGPV_BN_clear_free(c->v[i]);
+			BN_clear_free(c->v[i]);
 		}
 		deallocate(c->v, sizeof(*c->v) * c->arraysize);
 	}
 }
 
 void
-PGPV_BN_CTX_end(PGPV_BN_CTX *ctx)
+BN_CTX_end(BN_CTX *ctx)
 {
-	PGPV_BN_CTX_free(ctx);
+	BN_CTX_free(ctx);
 }
 
 char *
-PGPV_BN_bn2hex(const PGPV_BIGNUM *a)
+BN_bn2hex(const BIGNUM *a)
 {
 	return (a == NULL) ? NULL : formatbn(a, 16);
 }
 
 char *
-PGPV_BN_bn2dec(const PGPV_BIGNUM *a)
+BN_bn2dec(const BIGNUM *a)
 {
 	return (a == NULL) ? NULL : formatbn(a, 10);
 }
 
 char *
-PGPV_BN_bn2radix(const PGPV_BIGNUM *a, unsigned radix)
+BN_bn2radix(const BIGNUM *a, unsigned radix)
 {
 	return (a == NULL) ? NULL : formatbn(a, (int)radix);
 }
 
 #ifndef _KERNEL
 int
-PGPV_BN_print_fp(FILE *fp, const PGPV_BIGNUM *a)
+BN_print_fp(FILE *fp, const BIGNUM *a)
 {
 	char	*s;
 	int	 ret;
@@ -5609,16 +5516,16 @@ PGPV_BN_print_fp(FILE *fp, const PGPV_BIGNUM *a)
 	if (fp == NULL || a == NULL) {
 		return 0;
 	}
-	s = PGPV_BN_bn2hex(a);
+	s = BN_bn2hex(a);
 	ret = fprintf(fp, "%s", s);
 	deallocate(s, strlen(s) + 1);
 	return ret;
 }
 #endif
 
-#ifdef PGPV_BN_RAND_NEEDED
+#ifdef BN_RAND_NEEDED
 int
-PGPV_BN_rand(PGPV_BIGNUM *rnd, int bits, int top, int bottom)
+BN_rand(BIGNUM *rnd, int bits, int top, int bottom)
 {
 	uint64_t	r;
 	int		digits;
@@ -5633,7 +5540,6 @@ PGPV_BN_rand(PGPV_BIGNUM *rnd, int bits, int top, int bottom)
 		r <<= 32;
 		r |= arc4random();
 		rnd->dp[i] = (r & MP_MASK);
-		rnd->used += 1;
 	}
 	if (top == 0) {
 		rnd->dp[rnd->used - 1] |= (((mp_digit)1)<<((mp_digit)DIGIT_BIT));
@@ -5649,18 +5555,18 @@ PGPV_BN_rand(PGPV_BIGNUM *rnd, int bits, int top, int bottom)
 }
 
 int
-PGPV_BN_rand_range(PGPV_BIGNUM *rnd, PGPV_BIGNUM *range)
+BN_rand_range(BIGNUM *rnd, BIGNUM *range)
 {
-	if (rnd == NULL || range == NULL || PGPV_BN_is_zero(range)) {
+	if (rnd == NULL || range == NULL || BN_is_zero(range)) {
 		return 0;
 	}
-	PGPV_BN_rand(rnd, PGPV_BN_num_bits(range), 1, 0);
+	BN_rand(rnd, BN_num_bits(range), 1, 0);
 	return modulo(rnd, range, rnd) == MP_OKAY;
 }
 #endif
 
 int
-PGPV_BN_is_prime(const PGPV_BIGNUM *a, int checks, void (*callback)(int, int, void *), PGPV_BN_CTX *ctx, void *cb_arg)
+BN_is_prime(const BIGNUM *a, int checks, void (*callback)(int, int, void *), BN_CTX *ctx, void *cb_arg)
 {
 	int	primality;
 
@@ -5673,35 +5579,35 @@ PGPV_BN_is_prime(const PGPV_BIGNUM *a, int checks, void (*callback)(int, int, vo
 	return (mp_prime_is_prime(__UNCONST(a), checks, &primality) == MP_OKAY) ? primality : 0; 
 }
 
-const PGPV_BIGNUM *
-PGPV_BN_value_one(void)
+const BIGNUM *
+BN_value_one(void)
 {
 	static mp_digit		digit = 1UL;
-	static const PGPV_BIGNUM	one = { &digit, 1, 1, 0 };
+	static const BIGNUM	one = { &digit, 1, 1, 0 };
 
 	return &one;
 }
 
 int
-PGPV_BN_hex2bn(PGPV_BIGNUM **a, const char *str)
+BN_hex2bn(BIGNUM **a, const char *str)
 {
 	return getbn(a, str, 16);
 }
 
 int
-PGPV_BN_dec2bn(PGPV_BIGNUM **a, const char *str)
+BN_dec2bn(BIGNUM **a, const char *str)
 {
 	return getbn(a, str, 10);
 }
 
 int
-PGPV_BN_radix2bn(PGPV_BIGNUM **a, const char *str, unsigned radix)
+BN_radix2bn(BIGNUM **a, const char *str, unsigned radix)
 {
 	return getbn(a, str, (int)radix);
 }
 
 int
-PGPV_BN_mod_sub(PGPV_BIGNUM *r, PGPV_BIGNUM *a, PGPV_BIGNUM *b, const PGPV_BIGNUM *m, PGPV_BN_CTX *ctx)
+BN_mod_sub(BIGNUM *r, BIGNUM *a, BIGNUM *b, const BIGNUM *m, BN_CTX *ctx)
 {
 	USE_ARG(ctx);
 	if (r == NULL || a == NULL || b == NULL || m == NULL) {
@@ -5711,7 +5617,7 @@ PGPV_BN_mod_sub(PGPV_BIGNUM *r, PGPV_BIGNUM *a, PGPV_BIGNUM *b, const PGPV_BIGNU
 }
 
 int
-PGPV_BN_is_bit_set(const PGPV_BIGNUM *a, int n)
+BN_is_bit_set(const BIGNUM *a, int n)
 {
 	if (a == NULL || n < 0 || n >= a->used * DIGIT_BIT) {
 		return 0;
@@ -5721,59 +5627,52 @@ PGPV_BN_is_bit_set(const PGPV_BIGNUM *a, int n)
 
 /* raise 'a' to power of 'b' */
 int
-PGPV_BN_raise(PGPV_BIGNUM *res, PGPV_BIGNUM *a, PGPV_BIGNUM *b)
+BN_raise(BIGNUM *res, BIGNUM *a, BIGNUM *b)
 {
 	uint64_t	 exponent;
-	PGPV_BIGNUM		*power;
-	PGPV_BIGNUM		*temp;
+	BIGNUM		*power;
+	BIGNUM		*temp;
 	char		*t;
 
-	t = PGPV_BN_bn2dec(b);
+	t = BN_bn2dec(b);
 	exponent = (uint64_t)strtoull(t, NULL, 10);
 	free(t);
 	if (exponent == 0) {
-		PGPV_BN_copy(res, PGPV_BN_value_one());
+		BN_copy(res, BN_value_one());
 	} else {
-		power = PGPV_BN_dup(a);
+		power = BN_dup(a);
 		for ( ; (exponent & 1) == 0 ; exponent >>= 1) {
-			PGPV_BN_mul(power, power, power, NULL);
+			BN_mul(power, power, power, NULL);
 		}
-		temp = PGPV_BN_dup(power);
+		temp = BN_dup(power);
 		for (exponent >>= 1 ; exponent > 0 ; exponent >>= 1) {
-			PGPV_BN_mul(power, power, power, NULL);
+			BN_mul(power, power, power, NULL);
 			if (exponent & 1) {
-				PGPV_BN_mul(temp, power, temp, NULL);
+				BN_mul(temp, power, temp, NULL);
 			}
 		}
-		PGPV_BN_copy(res, temp);
-		PGPV_BN_free(power);
-		PGPV_BN_free(temp);
+		BN_copy(res, temp);
+		BN_free(power);
+		BN_free(temp);
 	}
 	return 1;
 }
 
 /* compute the factorial */
 int
-PGPV_BN_factorial(PGPV_BIGNUM *res, PGPV_BIGNUM *f)
+BN_factorial(BIGNUM *res, BIGNUM *f)
 {
-	PGPV_BIGNUM	*one;
-	PGPV_BIGNUM	*i;
+	BIGNUM	*one;
+	BIGNUM	*i;
 
-	i = PGPV_BN_dup(f);
-	one = __UNCONST(PGPV_BN_value_one());
-	PGPV_BN_sub(i, i, one);
-	PGPV_BN_copy(res, f);
-	while (PGPV_BN_cmp(i, one) > 0) {
-		PGPV_BN_mul(res, res, i, NULL);
-		PGPV_BN_sub(i, i, one);
+	i = BN_dup(f);
+	one = __UNCONST(BN_value_one());
+	BN_sub(i, i, one);
+	BN_copy(res, f);
+	while (BN_cmp(i, one) > 0) {
+		BN_mul(res, res, i, NULL);
+		BN_sub(i, i, one);
 	}
-	PGPV_BN_free(i);
+	BN_free(i);
 	return 1;
-}
-
-/* get greatest common divisor */
-int
-PGPV_BN_gcd(PGPV_BIGNUM *r, PGPV_BIGNUM *a, PGPV_BIGNUM *b, PGPV_BN_CTX *ctx)
-{
-	return mp_gcd(a, b, r);
 }

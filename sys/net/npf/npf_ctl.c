@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_ctl.c,v 1.43 2015/10/28 01:54:10 christos Exp $	*/
+/*	$NetBSD: npf_ctl.c,v 1.38.2.3 2015/06/10 16:57:58 snj Exp $	*/
 
 /*-
  * Copyright (c) 2009-2014 The NetBSD Foundation, Inc.
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_ctl.c,v 1.43 2015/10/28 01:54:10 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_ctl.c,v 1.38.2.3 2015/06/10 16:57:58 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -609,6 +609,7 @@ fail:
 	/*
 	 * Note: destroy rulesets first, to drop references to the tableset.
 	 */
+	KASSERT(error == 0 || (nset || rpset || rlset || tblset));
 	if (nset) {
 		npf_ruleset_destroy(nset);
 	}

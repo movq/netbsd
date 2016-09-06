@@ -1,4 +1,4 @@
-/*	$NetBSD: vax.c,v 1.18 2014/11/13 16:02:25 christos Exp $	*/
+/*	$NetBSD: vax.c,v 1.17.6.1 2014/12/14 16:41:30 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(__lint)
-__RCSID("$NetBSD: vax.c,v 1.18 2014/11/13 16:02:25 christos Exp $");
+__RCSID("$NetBSD: vax.c,v 1.17.6.1 2014/12/14 16:41:30 martin Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>

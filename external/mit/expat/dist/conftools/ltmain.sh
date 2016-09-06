@@ -3987,13 +3987,13 @@ func_exec_program ()
 {
   case \" \$* \" in
   *\\ --lt-*)
-    for lt_wr_arg
-    do
-      case \$lt_wr_arg in
-      --lt-*) ;;
-      *) set x \"\$@\" \"\$lt_wr_arg\"; shift;;
-      esac
-      shift
+  for lt_wr_arg
+  do
+    case \$lt_wr_arg in
+    --lt-*) ;;
+    *) set x \"\$@\" \"\$lt_wr_arg\"; shift;;
+    esac
+    shift
     done ;;
   esac
   func_exec_program_core \${1+\"\$@\"}

@@ -1,5 +1,8 @@
+<!DOCTYPE book PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN"
+               "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd"
+	       [<!ENTITY mdash "&#8212;">]>
 <!--
- - Copyright (C) 2004-2016  Internet Systems Consortium, Inc. ("ISC")
+ - Copyright (C) 2004-2014  Internet Systems Consortium, Inc. ("ISC")
  -
  - Permission to use, copy, modify, and/or distribute this software for any
  - purpose with or without fee is hereby granted, provided that the above
@@ -14,14 +17,9 @@
  - PERFORMANCE OF THIS SOFTWARE.
 -->
 
-<!-- Converted by db4-upgrade version 1.0 -->
-<refentry xmlns="http://docbook.org/ns/docbook" version="5.0" xml:id="man.named.conf">
-  <info>
-    <date>2014-01-08</date>
-  </info>
+<refentry>
   <refentryinfo>
-    <corpname>ISC</corpname>
-    <corpauthor>Internet Systems Consortium, Inc.</corpauthor>
+    <date>January 08, 2014</date>
   </refentryinfo>
 
   <refmeta>
@@ -48,20 +46,18 @@
       <year>2012</year>
       <year>2013</year>
       <year>2014</year>
-      <year>2015</year>
-      <year>2016</year>
       <holder>Internet Systems Consortium, Inc. ("ISC")</holder>
     </copyright>
   </docinfo>
 
   <refsynopsisdiv>
-    <cmdsynopsis sepchar=" ">
+    <cmdsynopsis>
       <command>named.conf</command>
     </cmdsynopsis>
   </refsynopsisdiv>
 
-  <refsection><info><title>DESCRIPTION</title></info>
-
+  <refsect1>
+    <title>DESCRIPTION</title>
     <para><filename>named.conf</filename> is the configuration file
       for
       <command>named</command>.  Statements are enclosed
@@ -78,39 +74,39 @@
     <para>
       Unix style: # to end of line
     </para>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>ACL</title></info>
-
-    <literallayout class="normal">
+  <refsect1>
+    <title>ACL</title>
+    <literallayout>
 acl <replaceable>string</replaceable> { <replaceable>address_match_element</replaceable>; ... };
 
 </literallayout>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>KEY</title></info>
-
-    <literallayout class="normal">
+  <refsect1>
+    <title>KEY</title>
+    <literallayout>
 key <replaceable>domain_name</replaceable> {
 	algorithm <replaceable>string</replaceable>;
 	secret <replaceable>string</replaceable>;
 };
 </literallayout>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>MASTERS</title></info>
-
-    <literallayout class="normal">
+  <refsect1>
+    <title>MASTERS</title>
+    <literallayout>
 masters <replaceable>string</replaceable> <optional> port <replaceable>integer</replaceable> </optional> {
 	( <replaceable>masters</replaceable> | <replaceable>ipv4_address</replaceable> <optional>port <replaceable>integer</replaceable></optional> |
 	<replaceable>ipv6_address</replaceable> <optional>port <replaceable>integer</replaceable></optional> ) <optional> key <replaceable>string</replaceable> </optional>; ...
 };
 </literallayout>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>SERVER</title></info>
-
-    <literallayout class="normal">
+  <refsect1>
+    <title>SERVER</title>
+    <literallayout>
 server ( <replaceable>ipv4_address<optional>/prefixlen</optional></replaceable> | <replaceable>ipv6_address<optional>/prefixlen</optional></replaceable> ) {
 	bogus <replaceable>boolean</replaceable>;
 	edns <replaceable>boolean</replaceable>;
@@ -129,29 +125,29 @@ server ( <replaceable>ipv4_address<optional>/prefixlen</optional></replaceable> 
 	support-ixfr <replaceable>boolean</replaceable>; // obsolete
 };
 </literallayout>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>TRUSTED-KEYS</title></info>
-
-    <literallayout class="normal">
+  <refsect1>
+    <title>TRUSTED-KEYS</title>
+    <literallayout>
 trusted-keys {
-	<replaceable>domain_name</replaceable> <replaceable>flags</replaceable> <replaceable>protocol</replaceable> <replaceable>algorithm</replaceable> <replaceable>key</replaceable>; ...
+	<replaceable>domain_name</replaceable> <replaceable>flags</replaceable> <replaceable>protocol</replaceable> <replaceable>algorithm</replaceable> <replaceable>key</replaceable>; ... 
 };
 </literallayout>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>MANAGED-KEYS</title></info>
-
-    <literallayout class="normal">
+  <refsect1>
+    <title>MANAGED-KEYS</title>
+    <literallayout>
 managed-keys {
-	<replaceable>domain_name</replaceable> <constant>initial-key</constant> <replaceable>flags</replaceable> <replaceable>protocol</replaceable> <replaceable>algorithm</replaceable> <replaceable>key</replaceable>; ...
+	<replaceable>domain_name</replaceable> <constant>initial-key</constant> <replaceable>flags</replaceable> <replaceable>protocol</replaceable> <replaceable>algorithm</replaceable> <replaceable>key</replaceable>; ... 
 };
 </literallayout>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>CONTROLS</title></info>
-
-    <literallayout class="normal">
+  <refsect1>
+    <title>CONTROLS</title>
+    <literallayout>
 controls {
 	inet ( <replaceable>ipv4_address</replaceable> | <replaceable>ipv6_address</replaceable> | * )
 		<optional> port ( <replaceable>integer</replaceable> | * ) </optional>
@@ -160,11 +156,11 @@ controls {
 	unix <replaceable>unsupported</replaceable>; // not implemented
 };
 </literallayout>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>LOGGING</title></info>
-
-    <literallayout class="normal">
+  <refsect1>
+    <title>LOGGING</title>
+    <literallayout>
 logging {
 	channel <replaceable>string</replaceable> {
 		file <replaceable>log_file</replaceable>;
@@ -179,11 +175,11 @@ logging {
 	category <replaceable>string</replaceable> { <replaceable>string</replaceable>; ... };
 };
 </literallayout>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>LWRES</title></info>
-
-    <literallayout class="normal">
+  <refsect1>
+    <title>LWRES</title>
+    <literallayout>
 lwres {
 	listen-on <optional> port <replaceable>integer</replaceable> </optional> {
 		( <replaceable>ipv4_address</replaceable> | <replaceable>ipv6_address</replaceable> ) <optional> port <replaceable>integer</replaceable> </optional>; ...
@@ -193,11 +189,11 @@ lwres {
 	ndots <replaceable>integer</replaceable>;
 };
 </literallayout>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>OPTIONS</title></info>
-
-    <literallayout class="normal">
+  <refsect1>
+    <title>OPTIONS</title>
+    <literallayout>
 options {
 	avoid-v4-udp-ports { <replaceable>port</replaceable>; ... };
 	avoid-v6-udp-ports { <replaceable>port</replaceable>; ... };
@@ -237,6 +233,7 @@ options {
 	transfers-per-ns <replaceable>integer</replaceable>;
 	transfers-in <replaceable>integer</replaceable>;
 	transfers-out <replaceable>integer</replaceable>;
+	use-ixfr <replaceable>boolean</replaceable>;
 	version ( <replaceable>quoted_string</replaceable> | none );
 	allow-recursion { <replaceable>address_match_element</replaceable>; ... };
 	allow-recursion-on { <replaceable>address_match_element</replaceable>; ... };
@@ -376,8 +373,6 @@ options {
 	zero-no-soa-ttl <replaceable>boolean</replaceable>;
 	zero-no-soa-ttl-cache <replaceable>boolean</replaceable>;
 	dnssec-secure-to-insecure <replaceable>boolean</replaceable>;
-	automatic-interface-scan <replaceable>boolean</replaceable>;
-
 	deny-answer-addresses {
 		<replaceable>address_match_list</replaceable>
 	} <optional> except-from { <replaceable>namelist</replaceable> } </optional>;
@@ -399,14 +394,13 @@ options {
 	serial-queries <replaceable>integer</replaceable>; // obsolete
 	treat-cr-as-space <replaceable>boolean</replaceable>; // obsolete
 	use-id-pool <replaceable>boolean</replaceable>; // obsolete
-	use-ixfr <replaceable>boolean</replaceable>; // obsolete
 };
 </literallayout>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>VIEW</title></info>
-
-    <literallayout class="normal">
+  <refsect1>
+    <title>VIEW</title>
+    <literallayout>
 view <replaceable>string</replaceable> <replaceable>optional_class</replaceable> {
 	match-clients { <replaceable>address_match_element</replaceable>; ... };
 	match-destinations { <replaceable>address_match_element</replaceable>; ... };
@@ -568,11 +562,11 @@ view <replaceable>string</replaceable> <replaceable>optional_class</replaceable>
 	max-ixfr-log-size <replaceable>size</replaceable>; // obsolete
 };
 </literallayout>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>ZONE</title></info>
-
-    <literallayout class="normal">
+  <refsect1>
+    <title>ZONE</title>
+    <literallayout>
 zone <replaceable>string</replaceable> <replaceable>optional_class</replaceable> {
 	type ( master | slave | stub | hint | redirect |
 		forward | delegation-only );
@@ -666,16 +660,16 @@ zone <replaceable>string</replaceable> <replaceable>optional_class</replaceable>
 	pubkey <replaceable>integer</replaceable> <replaceable>integer</replaceable> <replaceable>integer</replaceable> <replaceable>quoted_string</replaceable>; // obsolete
 };
 </literallayout>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>FILES</title></info>
-
+  <refsect1>
+    <title>FILES</title>
     <para><filename>/etc/named.conf</filename>
     </para>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>SEE ALSO</title></info>
-
+  <refsect1>
+    <title>SEE ALSO</title>
     <para><citerefentry>
         <refentrytitle>named</refentrytitle><manvolnum>8</manvolnum>
       </citerefentry>,
@@ -687,6 +681,10 @@ zone <replaceable>string</replaceable> <replaceable>optional_class</replaceable>
       </citerefentry>,
       <citetitle>BIND 9 Administrator Reference Manual</citetitle>.
     </para>
-  </refsection>
+  </refsect1>
 
-</refentry>
+</refentry><!--
+ - Local variables:
+ - mode: sgml
+ - End:
+-->

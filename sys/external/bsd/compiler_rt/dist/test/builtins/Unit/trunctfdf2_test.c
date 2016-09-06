@@ -11,14 +11,13 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "int_lib.h"
 #include <stdio.h>
 
 #if __LDBL_MANT_DIG__ == 113
 
 #include "fp_test.h"
 
-COMPILER_RT_ABI double __trunctfdf2(long double a);
+double __trunctfdf2(long double a);
 
 int test__trunctfdf2(long double a, uint64_t expected)
 {

@@ -18,6 +18,7 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/DataLayout.h"
 #include "llvm/IR/DerivedTypes.h"
+#include "llvm/IR/GetElementPtrTypeIterator.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/IR/Type.h"
 
@@ -33,15 +34,15 @@ class Operator : public User {
 private:
   // The Operator class is intended to be used as a utility, and is never itself
   // instantiated.
-  void *operator new(size_t, unsigned) = delete;
-  void *operator new(size_t s) = delete;
-  Operator() = delete;
+  void *operator new(size_t, unsigned) LLVM_DELETED_FUNCTION;
+  void *operator new(size_t s) LLVM_DELETED_FUNCTION;
+  Operator() LLVM_DELETED_FUNCTION;
 
 protected:
-  // NOTE: Cannot use = delete because it's not legal to delete
+  // NOTE: Cannot use LLVM_DELETED_FUNCTION because it's not legal to delete
   // an overridden method that's not deleted in the base class. Cannot leave
   // this unimplemented because that leads to an ODR-violation.
-  ~Operator() override;
+  ~Operator();
 
 public:
   /// Return the opcode for this Instruction or ConstantExpr.
@@ -180,17 +181,17 @@ public:
   { }
 
   /// Whether any flag is set
-  bool any() const { return Flags != 0; }
+  bool any() { return Flags != 0; }
 
   /// Set all the flags to false
   void clear() { Flags = 0; }
 
   /// Flag queries
-  bool noNaNs() const          { return 0 != (Flags & NoNaNs); }
-  bool noInfs() const          { return 0 != (Flags & NoInfs); }
-  bool noSignedZeros() const   { return 0 != (Flags & NoSignedZeros); }
-  bool allowReciprocal() const { return 0 != (Flags & AllowReciprocal); }
-  bool unsafeAlgebra() const   { return 0 != (Flags & UnsafeAlgebra); }
+  bool noNaNs()          { return 0 != (Flags & NoNaNs); }
+  bool noInfs()          { return 0 != (Flags & NoInfs); }
+  bool noSignedZeros()   { return 0 != (Flags & NoSignedZeros); }
+  bool allowReciprocal() { return 0 != (Flags & AllowReciprocal); }
+  bool unsafeAlgebra()   { return 0 != (Flags & UnsafeAlgebra); }
 
   /// Flag setters
   void setNoNaNs()          { Flags |= NoNaNs; }
@@ -305,8 +306,7 @@ public:
   float getFPAccuracy() const;
 
   static inline bool classof(const Instruction *I) {
-    return I->getType()->isFPOrFPVectorTy() ||
-      I->getOpcode() == Instruction::FCmp;
+    return I->getType()->isFPOrFPVectorTy();
   }
   static inline bool classof(const Value *V) {
     return isa<Instruction>(V) && classof(cast<Instruction>(V));
@@ -400,8 +400,6 @@ public:
     return getPointerOperand()->getType();
   }
 
-  Type *getSourceElementType() const;
-
   /// Method to return the address space of the pointer operand.
   unsigned getPointerAddressSpace() const {
     return getPointerOperandType()->getPointerAddressSpace();
@@ -447,7 +445,36 @@ public:
   /// undefined (it is *not* preserved!). The APInt passed into this routine
   /// must be at exactly as wide as the IntPtr type for the address space of the
   /// base GEP pointer.
-  bool accumulateConstantOffset(const DataLayout &DL, APInt &Offset) const;
+  bool accumulateConstantOffset(const DataLayout &DL, APInt &Offset) const {
+    assert(Offset.getBitWidth() ==
+           DL.getPointerSizeInBits(getPointerAddressSpace()) &&
+           "The offset must have exactly as many bits as our pointer.");
+
+    for (gep_type_iterator GTI = gep_type_begin(this), GTE = gep_type_end(this);
+         GTI != GTE; ++GTI) {
+      ConstantInt *OpC = dyn_cast<ConstantInt>(GTI.getOperand());
+      if (!OpC)
+        return false;
+      if (OpC->isZero())
+        continue;
+
+      // Handle a struct index, which adds its field offset to the pointer.
+      if (StructType *STy = dyn_cast<StructType>(*GTI)) {
+        unsigned ElementIdx = OpC->getZExtValue();
+        const StructLayout *SL = DL.getStructLayout(STy);
+        Offset += APInt(Offset.getBitWidth(),
+                        SL->getElementOffset(ElementIdx));
+        continue;
+      }
+
+      // For array or vector indices, scale the index by the size of the type.
+      APInt Index = OpC->getValue().sextOrTrunc(Offset.getBitWidth());
+      Offset += Index * APInt(Offset.getBitWidth(),
+                              DL.getTypeAllocSize(GTI.getIndexedType()));
+    }
+    return true;
+  }
+
 };
 
 class PtrToIntOperator
@@ -477,20 +504,6 @@ public:
   }
 };
 
-class BitCastOperator
-    : public ConcreteOperator<Operator, Instruction::BitCast> {
-  friend class BitCastInst;
-  friend class ConstantExpr;
-
-public:
-  Type *getSrcTy() const {
-    return getOperand(0)->getType();
-  }
-
-  Type *getDestTy() const {
-    return getType();
-  }
-};
 
 } // End llvm namespace
 

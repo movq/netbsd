@@ -33,7 +33,7 @@ public:
 
   MachinePostDominatorTree();
 
-  ~MachinePostDominatorTree() override;
+  ~MachinePostDominatorTree();
 
   FunctionPass *createMachinePostDominatorTreePass();
 

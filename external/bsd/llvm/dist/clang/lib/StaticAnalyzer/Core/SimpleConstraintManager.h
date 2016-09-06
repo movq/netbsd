@@ -27,7 +27,7 @@ class SimpleConstraintManager : public ConstraintManager {
 public:
   SimpleConstraintManager(SubEngine *subengine, SValBuilder &SB)
     : SU(subengine), SVB(SB) {}
-  ~SimpleConstraintManager() override;
+  virtual ~SimpleConstraintManager();
 
   //===------------------------------------------------------------------===//
   // Common implementation for the interface provided by ConstraintManager.
@@ -38,23 +38,10 @@ public:
 
   ProgramStateRef assume(ProgramStateRef state, NonLoc Cond, bool Assumption);
 
-  ProgramStateRef assumeWithinInclusiveRange(ProgramStateRef State,
-                                             NonLoc Value,
-                                             const llvm::APSInt &From,
-                                             const llvm::APSInt &To,
-                                             bool InRange) override;
-
   ProgramStateRef assumeSymRel(ProgramStateRef state,
                               const SymExpr *LHS,
                               BinaryOperator::Opcode op,
                               const llvm::APSInt& Int);
-
-  ProgramStateRef assumeSymWithinInclusiveRange(ProgramStateRef State,
-                                                SymbolRef Sym,
-                                                const llvm::APSInt &From,
-                                                const llvm::APSInt &To,
-                                                bool InRange);
-
 
 protected:
 
@@ -88,14 +75,6 @@ protected:
                                      const llvm::APSInt& V,
                                      const llvm::APSInt& Adjustment) = 0;
 
-
-  virtual ProgramStateRef assumeSymbolWithinInclusiveRange(
-      ProgramStateRef State, SymbolRef Sym, const llvm::APSInt &From,
-      const llvm::APSInt &To, const llvm::APSInt &Adjustment) = 0;
-
-  virtual ProgramStateRef assumeSymbolOutOfInclusiveRange(
-      ProgramStateRef state, SymbolRef Sym, const llvm::APSInt &From,
-      const llvm::APSInt &To, const llvm::APSInt &Adjustment) = 0;
   //===------------------------------------------------------------------===//
   // Internal implementation.
   //===------------------------------------------------------------------===//

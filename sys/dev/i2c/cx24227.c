@@ -1,4 +1,4 @@
-/* $NetBSD: cx24227.c,v 1.7 2015/03/07 14:16:51 jmcneill Exp $ */
+/* $NetBSD: cx24227.c,v 1.6.14.1 2015/03/21 17:11:35 snj Exp $ */
 
 /*
  * Copyright (c) 2008, 2011 Jonathan A. Kollasch
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cx24227.c,v 1.7 2015/03/07 14:16:51 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cx24227.c,v 1.6.14.1 2015/03/21 17:11:35 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_engine_device_base.c,v 1.11 2016/05/11 02:28:33 riastradh Exp $	*/
+/*	$NetBSD: nouveau_engine_device_base.c,v 1.2.4.4 2016/04/15 08:46:42 snj Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_device_base.c,v 1.11 2016/05/11 02:28:33 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_device_base.c,v 1.2.4.4 2016/04/15 08:46:42 snj Exp $");
 
 #include <core/object.h>
 #include <core/device.h>
@@ -297,6 +297,12 @@ nouveau_devobj_ctor(struct nouveau_object *parent,
 #ifdef __NetBSD__
 	if (!(args->disable & NV_DEVICE_DISABLE_MMIO) &&
 	    !nv_subdev(device)->mmiosz) {
+		/*
+		 * Map only through PRAMIN -- don't map the command
+		 * FIFO MMIO regions, which start at NV_FIFO_OFFSET =
+		 * 0x800000 and are mapped separately.
+		 */
+		mmio_size = MIN(mmio_size, 0x800000);
 		/* XXX errno NetBSD->Linux */
 		ret = -bus_space_map(mmiot, mmio_base, mmio_size, 0, &mmioh);
 		if (ret) {
@@ -533,8 +539,8 @@ nv_device_resource_tag(struct nouveau_device *device, unsigned int bar)
 		else
 			return pa->pa_iot;
 	} else {
-		KASSERT(bar < device->platformdev->nresource);
-		return device->platformdev->resource[bar].tag;
+		/* XXX nouveau platform device */
+		panic("can't handle non-PCI nouveau devices");
 	}
 }
 #endif
@@ -546,9 +552,8 @@ nv_device_resource_start(struct nouveau_device *device, unsigned int bar)
 		return pci_resource_start(device->pdev, bar);
 	} else {
 #ifdef __NetBSD__
-		if (bar >= device->platformdev->nresource)
-			return 0;
-		return device->platformdev->resource[bar].start;
+		/* XXX nouveau platform device */
+		panic("can't handle non-PCI nouveau devices");
 #else
 		struct resource *res;
 		res = platform_get_resource(device->platformdev,
@@ -567,9 +572,8 @@ nv_device_resource_len(struct nouveau_device *device, unsigned int bar)
 		return pci_resource_len(device->pdev, bar);
 	} else {
 #ifdef __NetBSD__
-		if (bar >= device->platformdev->nresource)
-			return 0;
-		return device->platformdev->resource[bar].len;
+		/* XXX nouveau platform device */
+		panic("can't handle non-PCI nouveau devices");
 #else
 		struct resource *res;
 		res = platform_get_resource(device->platformdev,

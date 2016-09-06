@@ -25,11 +25,10 @@ namespace {
   class X86WinCOFFObjectWriter : public MCWinCOFFObjectTargetWriter {
   public:
     X86WinCOFFObjectWriter(bool Is64Bit);
-    ~X86WinCOFFObjectWriter() override;
+    virtual ~X86WinCOFFObjectWriter();
 
     unsigned getRelocType(const MCValue &Target, const MCFixup &Fixup,
-                          bool IsCrossSection,
-                          const MCAsmBackend &MAB) const override;
+                          bool IsCrossSection) const override;
   };
 }
 
@@ -41,8 +40,7 @@ X86WinCOFFObjectWriter::~X86WinCOFFObjectWriter() {}
 
 unsigned X86WinCOFFObjectWriter::getRelocType(const MCValue &Target,
                                               const MCFixup &Fixup,
-                                              bool IsCrossSection,
-                                              const MCAsmBackend &MAB) const {
+                                              bool IsCrossSection) const {
   unsigned FixupKind = IsCrossSection ? FK_PCRel_4 : Fixup.getKind();
 
   MCSymbolRefExpr::VariantKind Modifier = Target.isAbsolute() ?
@@ -90,7 +88,7 @@ unsigned X86WinCOFFObjectWriter::getRelocType(const MCValue &Target,
     llvm_unreachable("Unsupported COFF machine type.");
 }
 
-MCObjectWriter *llvm::createX86WinCOFFObjectWriter(raw_pwrite_stream &OS,
+MCObjectWriter *llvm::createX86WinCOFFObjectWriter(raw_ostream &OS,
                                                    bool Is64Bit) {
   MCWinCOFFObjectTargetWriter *MOTW = new X86WinCOFFObjectWriter(Is64Bit);
   return createWinCOFFObjectWriter(MOTW, OS);

@@ -1,4 +1,4 @@
-/*	$NetBSD: gethostname.c,v 1.1.1.4 2015/12/17 03:21:55 christos Exp $	*/
+/*	$NetBSD: gethostname.c,v 1.1.1.3.2.3 2016/03/13 08:06:05 martin Exp $	*/
 
 /*
  * Copyright (C) 2014, 2015  Internet Systems Consortium, Inc. ("ISC")

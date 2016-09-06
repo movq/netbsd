@@ -1,4 +1,4 @@
-/*	$NetBSD: spsp.c,v 1.1 2014/10/02 21:36:37 ast Exp $	*/
+/*	$NetBSD: spsp.c,v 1.1.2.2 2014/10/05 10:21:04 martin Exp $	*/
 
 /*-
  * Copyright (c) 2014 Colin Percival
@@ -36,7 +36,7 @@ __COPYRIGHT("@(#) Copyright (c) 1989, 1993\
 #if 0
 static char sccsid[] = "@(#)primes.c    8.5 (Berkeley) 5/10/95";
 #else
-__RCSID("$NetBSD: spsp.c,v 1.1 2014/10/02 21:36:37 ast Exp $");
+__RCSID("$NetBSD: spsp.c,v 1.1.2.2 2014/10/05 10:21:04 martin Exp $");
 #endif
 #endif /* not lint */
 

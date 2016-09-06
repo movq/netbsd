@@ -1,5 +1,5 @@
 #! /usr/bin/env sh
-#	$NetBSD: build.sh,v 1.310 2016/06/03 00:00:01 kre Exp $
+#	$NetBSD: build.sh,v 1.294.2.3 2014/11/14 14:58:27 martin Exp $
 #
 # Copyright (c) 2001-2011 The NetBSD Foundation, Inc.
 # All rights reserved.
@@ -204,7 +204,7 @@ fi
 if test -n "$errmsg"; then
     if $re_exec_allowed; then
 	for othershell in \
-	    "${HOST_SH}" /usr/xpg4/bin/sh ksh ksh88 mksh pdksh dash bash
+	    "${HOST_SH}" /usr/xpg4/bin/sh ksh ksh88 mksh pdksh bash dash
 	    # NOTE: some shells known not to work are:
 	    # any shell using csh syntax;
 	    # Solaris /bin/sh (missing many modern features);
@@ -506,7 +506,7 @@ initdefaults()
 	# XXX Except that doesn't work on Solaris. Or many Linuces.
 	#
 	unset PWD
-	TOP=$( (exec pwd -P 2>/dev/null) || (exec pwd 2>/dev/null) )
+	TOP=$(/bin/pwd -P 2>/dev/null || /bin/pwd 2>/dev/null)
 
 	# The user can set HOST_SH in the environment, or we try to
 	# guess an appropriate value.  Then we set several other
@@ -543,7 +543,6 @@ initdefaults()
 	do_release=false
 	do_kernel=false
 	do_releasekernel=false
-	do_kernels=false
 	do_modules=false
 	do_installmodules=false
 	do_install=false
@@ -651,7 +650,7 @@ MACHINE=evbarm		MACHINE_ARCH=earmv7	ALIAS=evbearmv7-el
 MACHINE=evbarm		MACHINE_ARCH=earmv7eb	ALIAS=evbearmv7-eb
 MACHINE=evbarm		MACHINE_ARCH=earmv7hf	ALIAS=evbearmv7hf-el
 MACHINE=evbarm		MACHINE_ARCH=earmv7hfeb	ALIAS=evbearmv7hf-eb
-MACHINE=evbarm64	MACHINE_ARCH=aarch64	ALIAS=evbarm64-el DEFAULT
+MACHINE=evbarm64	MACHINE_ARCH=aarch64	ALIAS=evbarm64-el
 MACHINE=evbarm64	MACHINE_ARCH=aarch64eb	ALIAS=evbarm64-eb
 MACHINE=evbcf		MACHINE_ARCH=coldfire
 MACHINE=evbmips		MACHINE_ARCH=		NO_DEFAULT
@@ -692,13 +691,10 @@ MACHINE=newsmips	MACHINE_ARCH=mipseb
 MACHINE=next68k		MACHINE_ARCH=m68k
 MACHINE=ofppc		MACHINE_ARCH=powerpc	DEFAULT
 MACHINE=ofppc		MACHINE_ARCH=powerpc64	ALIAS=ofppc64
-MACHINE=or1k		MACHINE_ARCH=or1k
 MACHINE=playstation2	MACHINE_ARCH=mipsel
 MACHINE=pmax		MACHINE_ARCH=mips64el	ALIAS=pmax64
 MACHINE=pmax		MACHINE_ARCH=mipsel	DEFAULT
 MACHINE=prep		MACHINE_ARCH=powerpc
-MACHINE=riscv		MACHINE_ARCH=riscv64	ALIAS=riscv64 DEFAULT
-MACHINE=riscv		MACHINE_ARCH=riscv32	ALIAS=riscv32
 MACHINE=rs6000		MACHINE_ARCH=powerpc
 MACHINE=sandpoint	MACHINE_ARCH=powerpc
 MACHINE=sbmips		MACHINE_ARCH=		NO_DEFAULT
@@ -1026,9 +1022,8 @@ Usage: ${progname} [-EhnorUuxy] [-a arch] [-B buildid] [-C cdextras]
                         except \`etc'.  Useful after "distribution" or "release"
     kernel=conf         Build kernel with config file \`conf'
     kernel.gdb=conf     Build kernel (including netbsd.gdb) with config
-                        file \`conf'
+    			file \`conf'
     releasekernel=conf  Install kernel built by kernel=conf to RELEASEDIR.
-    kernels             Build all kernels
     installmodules=idir Run "make installmodules" to \`idir' to install all
                         kernel modules.
     modules             Build kernel modules.
@@ -1045,8 +1040,8 @@ Usage: ${progname} [-EhnorUuxy] [-a arch] [-B buildid] [-C cdextras]
                         RELEASEDIR/RELEASEMACHINEDIR/installation/liveimage.
     install-image       Create bootable installation image in
                         RELEASEDIR/RELEASEMACHINEDIR/installation/installimage.
-    disk-image=target   Create bootable disk image in
-                        RELEASEDIR/RELEASEMACHINEDIR/binary/gzimg/target.img.gz.
+    disk-image=target	Creae bootable disk image in
+			RELEASEDIR/RELEASEMACHINEDIR/binary/gzimg/target.img.gz.
     params              Display various make(1) parameters.
     list-arch           Display a list of valid MACHINE/MACHINE_ARCH values,
                         and exit.  The list may be narrowed by passing glob
@@ -1347,7 +1342,6 @@ parseoptions()
 		install-image|\
 		iso-image-source|\
 		iso-image|\
-		kernels|\
 		live-image|\
 		makewrapper|\
 		modules|\
@@ -1593,28 +1587,21 @@ rebuildmake()
 	fi
 
 	# Build bootstrap ${toolprefix}make if needed.
-	if ! ${do_rebuildmake}; then
-		return
+	if ${do_rebuildmake}; then
+		statusmsg "Bootstrapping ${toolprefix}make"
+		${runcmd} cd "${tmpdir}"
+		${runcmd} env CC="${HOST_CC-cc}" CPPFLAGS="${HOST_CPPFLAGS}" \
+			CFLAGS="${HOST_CFLAGS--O}" LDFLAGS="${HOST_LDFLAGS}" \
+			${HOST_SH} "${TOP}/tools/make/configure" ||
+		    ( cp ${tmpdir}/config.log ${tmpdir}-config.log
+		      bomb "Configure of ${toolprefix}make failed, see ${tmpdir}-config.log for details" )
+		${runcmd} ${HOST_SH} buildmake.sh ||
+		    bomb "Build of ${toolprefix}make failed"
+		make="${tmpdir}/${toolprefix}make"
+		${runcmd} cd "${TOP}"
+		${runcmd} rm -f usr.bin/make/*.o usr.bin/make/lst.lib/*.o
+		done_rebuildmake=true
 	fi
-
-	statusmsg "Bootstrapping ${toolprefix}make"
-	${runcmd} cd "${tmpdir}"
-	${runcmd} env \
-\
-CC="${HOST_CC-cc}" \
-CPPFLAGS="${HOST_CPPFLAGS} -D_PATH_DEFSYSPATH="'\"'${NETBSDSRCDIR}/share/mk'\"' \
-CFLAGS="${HOST_CFLAGS--O}" \
-LDFLAGS="${HOST_LDFLAGS}" \
-\
-	    ${HOST_SH} "${TOP}/tools/make/configure" ||
-	( cp ${tmpdir}/config.log ${tmpdir}-config.log
-	      bomb "Configure of ${toolprefix}make failed, see ${tmpdir}-config.log for details" )
-	${runcmd} ${HOST_SH} buildmake.sh ||
-	    bomb "Build of ${toolprefix}make failed"
-	make="${tmpdir}/${toolprefix}make"
-	${runcmd} cd "${TOP}"
-	${runcmd} rm -f usr.bin/make/*.o usr.bin/make/lst.lib/*.o
-	done_rebuildmake=true
 }
 
 # validatemakeparams --
@@ -1876,7 +1863,7 @@ createmakewrapper()
 	eval cat <<EOF ${makewrapout}
 #! ${HOST_SH}
 # Set proper variables to allow easy "make" building of a NetBSD subtree.
-# Generated from:  \$NetBSD: build.sh,v 1.310 2016/06/03 00:00:01 kre Exp $
+# Generated from:  \$NetBSD: build.sh,v 1.294.2.3 2014/11/14 14:58:27 martin Exp $
 # with these arguments: ${_args}
 #
 
@@ -1991,10 +1978,8 @@ buildkernel()
 	fi
 	[ -x "${TOOLDIR}/bin/${toolprefix}config" ] \
 	|| bomb "${TOOLDIR}/bin/${toolprefix}config does not exist. You need to \"$0 tools\" first."
-	CONFIGOPTS=$(getmakevar CONFIGOPTS)
-	${runcmd} "${TOOLDIR}/bin/${toolprefix}config" ${CONFIGOPTS} \
-		-b "${kernelbuildpath}" -s "${TOP}/sys" ${configopts} \
-		"${kernelconfpath}" ||
+	${runcmd} "${TOOLDIR}/bin/${toolprefix}config" -b "${kernelbuildpath}" \
+		${ksymopts} -s "${TOP}/sys" "${kernelconfpath}" ||
 	    bomb "${toolprefix}config failed for ${kernelconf}"
 	make_in_dir "${kernelbuildpath}" depend
 	make_in_dir "${kernelbuildpath}" all
@@ -2025,14 +2010,6 @@ releasekernel()
 		else
 			gzip -c -9 < "${builtkern}" > "${releasekern}"
 		fi
-	done
-}
-
-buildkernels()
-{
-	allkernels=$( runcmd= make_in_dir etc '-V ${ALL_KERNELS}' )
-	for k in $allkernels; do
-		buildkernel "${k}"
 	done
 }
 
@@ -2253,16 +2230,12 @@ main()
 			;;
 		kernel.gdb=*)
 			arg=${op#*=}
-			configopts="-D DEBUG=-g"
+			ksymopts="-D DEBUG=-g"
 			buildkernel "${arg}"
 			;;
 		releasekernel=*)
 			arg=${op#*=}
 			releasekernel "${arg}"
-			;;
-
-		kernels)
-			buildkernels
 			;;
 
 		disk-image=*)

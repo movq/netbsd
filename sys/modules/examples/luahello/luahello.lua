@@ -1,4 +1,4 @@
-#	$NetBSD: luahello.lua,v 1.2 2015/05/13 22:37:53 pgoyette Exp $
+#	$NetBSD: luahello.lua,v 1.2.2.2 2015/06/03 06:51:40 snj Exp $
 #
 #
 # Copyright (c) 2015 The NetBSD Foundation, Inc.

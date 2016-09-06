@@ -1,4 +1,4 @@
-/*	$NetBSD: hmacsha.c,v 1.10 2015/12/17 04:00:45 christos Exp $	*/
+/*	$NetBSD: hmacsha.c,v 1.7.2.2 2016/03/13 08:06:14 martin Exp $	*/
 
 /*
  * Copyright (C) 2005-2007, 2009, 2011-2015  Internet Systems Consortium, Inc. ("ISC")

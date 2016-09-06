@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2014/09/19 17:23:24 matt Exp $
+#	$NetBSD: Makefile,v 1.1.6.1 2015/01/25 00:19:41 martin Exp $
 
 # install multilib c++config.h files
 

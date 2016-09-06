@@ -1,4 +1,4 @@
-/*	$NetBSD: ustir.c,v 1.35 2016/07/07 06:55:42 msaitoh Exp $	*/
+/*	$NetBSD: ustir.c,v 1.33 2013/05/27 16:23:20 kiyohara Exp $	*/
 
 /*
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -30,13 +30,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ustir.c,v 1.35 2016/07/07 06:55:42 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ustir.c,v 1.33 2013/05/27 16:23:20 kiyohara Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/device.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/conf.h>
 #include <sys/file.h>
 #include <sys/poll.h>
@@ -90,17 +90,17 @@ Static struct ustir_speedrec const ustir_speeds[USTIR_NSPEEDS] = {
 
 struct ustir_softc {
 	device_t		sc_dev;
-	struct usbd_device	*sc_udev;
-	struct usbd_interface	*sc_iface;
+	usbd_device_handle	sc_udev;
+	usbd_interface_handle	sc_iface;
 
-	uint8_t			*sc_ur_buf; /* Unencapsulated frame */
+	u_int8_t		*sc_ur_buf; /* Unencapsulated frame */
 	u_int			sc_ur_framelen;
 
-	uint8_t			*sc_rd_buf; /* Raw incoming data stream */
+	u_int8_t		*sc_rd_buf; /* Raw incoming data stream */
 	size_t			sc_rd_index;
 	int			sc_rd_addr;
-	struct usbd_pipe	*sc_rd_pipe;
-	struct usbd_xfer	*sc_rd_xfer;
+	usbd_pipe_handle	sc_rd_pipe;
+	usbd_xfer_handle	sc_rd_xfer;
 	u_int			sc_rd_count;
 	int			sc_rd_readinprogress;
 	u_int			sc_rd_expectdataticks;
@@ -109,11 +109,11 @@ struct ustir_softc {
 	struct lwp		*sc_thread;
 	struct selinfo		sc_rd_sel;
 
-	uint8_t			*sc_wr_buf;
+	u_int8_t		*sc_wr_buf;
 	int			sc_wr_addr;
 	int			sc_wr_stalewrite;
-	struct usbd_xfer	*sc_wr_xfer;
-	struct usbd_pipe	*sc_wr_pipe;
+	usbd_xfer_handle	sc_wr_xfer;
+	usbd_pipe_handle	sc_wr_pipe;
 	struct selinfo		sc_wr_sel;
 
 	enum {
@@ -138,19 +138,19 @@ struct ustir_softc {
 
 #define USTIR_WR_TIMEOUT 200
 
-Static int ustir_activate(device_t, enum devact);
-Static int ustir_open(void *, int, int, struct lwp *);
-Static int ustir_close(void *, int, int, struct lwp *);
-Static int ustir_read(void *, struct uio *, int);
-Static int ustir_write(void *, struct uio *, int);
-Static int ustir_set_params(void *, struct irda_params *);
-Static int ustir_get_speeds(void *, int *);
-Static int ustir_get_turnarounds(void *, int *);
-Static int ustir_poll(void *, int, struct lwp *);
-Static int ustir_kqfilter(void *, struct knote *);
+Static int ustir_activate(device_t self, enum devact act);
+Static int ustir_open(void *h, int flag, int mode, struct lwp *l);
+Static int ustir_close(void *h, int flag, int mode, struct lwp *l);
+Static int ustir_read(void *h, struct uio *uio, int flag);
+Static int ustir_write(void *h, struct uio *uio, int flag);
+Static int ustir_set_params(void *h, struct irda_params *params);
+Static int ustir_get_speeds(void *h, int *speeds);
+Static int ustir_get_turnarounds(void *h, int *times);
+Static int ustir_poll(void *h, int events, struct lwp *l);
+Static int ustir_kqfilter(void *h, struct knote *kn);
 
 #ifdef USTIR_DEBUG_IOCTLS
-Static int ustir_ioctl(void *, u_long, void *, int, struct lwp *);
+Static int ustir_ioctl(void *h, u_long cmd, void *addr, int flag, struct lwp *l);
 #endif
 
 Static struct irframe_methods const ustir_methods = {
@@ -162,13 +162,13 @@ Static struct irframe_methods const ustir_methods = {
 #endif
 };
 
-Static void ustir_rd_cb(struct usbd_xfer *, void *, usbd_status);
+Static void ustir_rd_cb(usbd_xfer_handle, usbd_private_handle, usbd_status);
 Static usbd_status ustir_start_read(struct ustir_softc *);
 Static void ustir_periodic(struct ustir_softc *);
 Static void ustir_thread(void *);
 
 static usbd_status
-ustir_read_reg(struct ustir_softc *sc, unsigned int reg, uint8_t *data)
+ustir_read_reg(struct ustir_softc *sc, unsigned int reg, u_int8_t *data)
 {
 	usb_device_request_t req;
 
@@ -182,7 +182,7 @@ ustir_read_reg(struct ustir_softc *sc, unsigned int reg, uint8_t *data)
 }
 
 static usbd_status
-ustir_write_reg(struct ustir_softc *sc, unsigned int reg, uint8_t data)
+ustir_write_reg(struct ustir_softc *sc, unsigned int reg, u_int8_t data)
 {
 	usb_device_request_t req;
 
@@ -197,7 +197,7 @@ ustir_write_reg(struct ustir_softc *sc, unsigned int reg, uint8_t data)
 
 #ifdef USTIR_DEBUG
 static void
-ustir_dumpdata(uint8_t const *data, size_t dlen, char const *desc)
+ustir_dumpdata(u_int8_t const *data, size_t dlen, char const *desc)
 {
 	size_t bdindex;
 	printf("%s: (%lx)", desc, (unsigned long)dlen);
@@ -216,30 +216,30 @@ extern struct cfdriver ustir_cd;
 CFATTACH_DECL2_NEW(ustir, sizeof(struct ustir_softc), ustir_match,
     ustir_attach, ustir_detach, ustir_activate, NULL, ustir_childdet);
 
-int
+int 
 ustir_match(device_t parent, cfdata_t match, void *aux)
 {
 	struct usb_attach_arg *uaa = aux;
 
 	DPRINTFN(50,("ustir_match\n"));
 
-	if (uaa->uaa_vendor == USB_VENDOR_SIGMATEL &&
-	    uaa->uaa_product == USB_PRODUCT_SIGMATEL_IRDA)
+	if (uaa->vendor == USB_VENDOR_SIGMATEL &&
+	    uaa->product == USB_PRODUCT_SIGMATEL_IRDA)
 		return UMATCH_VENDOR_PRODUCT;
 
 	return UMATCH_NONE;
 }
 
-void
+void 
 ustir_attach(device_t parent, device_t self, void *aux)
 {
 	struct ustir_softc *sc = device_private(self);
 	struct usb_attach_arg *uaa = aux;
-	struct usbd_device *dev = uaa->uaa_device;
-	struct usbd_interface *iface;
+	usbd_device_handle dev = uaa->device;
+	usbd_interface_handle iface;
 	char *devinfop;
 	usb_endpoint_descriptor_t *ed;
-	uint8_t epcount;
+	u_int8_t epcount;
 	int i;
 	struct ir_attach_args ia;
 
@@ -289,7 +289,8 @@ ustir_attach(device_t parent, device_t self, void *aux)
 
 	DPRINTFN(10, ("ustir_attach: %p\n", sc->sc_udev));
 
-	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev, sc->sc_dev);
+	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
+			   sc->sc_dev);
 
 	ia.ia_type = IR_TYPE_IRFRAME;
 	ia.ia_methods = &ustir_methods;
@@ -311,7 +312,7 @@ ustir_childdet(device_t self, device_t child)
 	sc->sc_child = NULL;
 }
 
-int
+int 
 ustir_detach(device_t self, int flags)
 {
 	struct ustir_softc *sc = device_private(self);
@@ -330,25 +331,11 @@ ustir_detach(device_t self, int flags)
 	/* Abort all pipes.  Causes processes waiting for transfer to wake. */
 	if (sc->sc_rd_pipe != NULL) {
 		usbd_abort_pipe(sc->sc_rd_pipe);
-	}
-	if (sc->sc_wr_pipe != NULL) {
-		usbd_abort_pipe(sc->sc_wr_pipe);
-	}
-	if (sc->sc_rd_xfer != NULL) {
-		usbd_destroy_xfer(sc->sc_rd_xfer);
-		sc->sc_rd_xfer = NULL;
-		sc->sc_rd_buf = NULL;
-	}
-	if (sc->sc_wr_xfer != NULL) {
-		usbd_destroy_xfer(sc->sc_wr_xfer);
-		sc->sc_wr_xfer = NULL;
-		sc->sc_wr_buf = NULL;
-	}
-	if (sc->sc_rd_pipe != NULL) {
 		usbd_close_pipe(sc->sc_rd_pipe);
 		sc->sc_rd_pipe = NULL;
 	}
 	if (sc->sc_wr_pipe != NULL) {
+		usbd_abort_pipe(sc->sc_wr_pipe);
 		usbd_close_pipe(sc->sc_wr_pipe);
 		sc->sc_wr_pipe = NULL;
 	}
@@ -365,7 +352,8 @@ ustir_detach(device_t self, int flags)
 	if (sc->sc_child != NULL)
 		rv = config_detach(sc->sc_child, flags);
 
-	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev, sc->sc_dev);
+	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
+			   sc->sc_dev);
 
 	seldestroy(&sc->sc_rd_sel);
 	seldestroy(&sc->sc_wr_sel);
@@ -378,7 +366,7 @@ static int
 deframe_rd_ur(struct ustir_softc *sc)
 {
 	while (sc->sc_rd_index < sc->sc_rd_count) {
-		uint8_t const *buf;
+		u_int8_t const *buf;
 		size_t buflen;
 		enum frameresult fresult;
 
@@ -440,7 +428,7 @@ ustir_periodic(struct ustir_softc *sc)
 	if (sc->sc_direction == udir_output ||
 	    sc->sc_direction == udir_stalled) {
 		usbd_status err;
-		uint8_t regval;
+		u_int8_t regval;
 
 		DPRINTFN(60, ("%s: reading status register\n",
 			      __func__));
@@ -549,11 +537,11 @@ ustir_thread(void *arg)
 }
 
 Static void
-ustir_rd_cb(struct usbd_xfer *xfer, void *priv,
+ustir_rd_cb(usbd_xfer_handle xfer, usbd_private_handle priv,
 	    usbd_status status)
 {
 	struct ustir_softc *sc = priv;
-	uint32_t size;
+	u_int32_t size;
 
 	DPRINTFN(60, ("%s: sc=%p\n", __func__, sc));
 
@@ -660,9 +648,10 @@ ustir_start_read(struct ustir_softc *sc)
 		usbd_clear_endpoint_stall(sc->sc_rd_pipe);
 	}
 
-	usbd_setup_xfer(sc->sc_rd_xfer, sc, sc->sc_rd_buf,
-	    sc->sc_params.maxsize, USBD_SHORT_XFER_OK, USBD_NO_TIMEOUT,
-	    ustir_rd_cb);
+	usbd_setup_xfer(sc->sc_rd_xfer, sc->sc_rd_pipe, sc, sc->sc_rd_buf,
+			sc->sc_params.maxsize,
+			USBD_SHORT_XFER_OK | USBD_NO_COPY,
+			USBD_NO_TIMEOUT, ustir_rd_cb);
 	err = usbd_transfer(sc->sc_rd_xfer);
 	if (err != USBD_IN_PROGRESS) {
 		DPRINTFN(0, ("%s: err=%d\n", __func__, (int)err));
@@ -706,20 +695,29 @@ ustir_open(void *h, int flag, int mode,
 		error = EIO;
 		goto bad2;
 	}
-	error = usbd_create_xfer(sc->sc_rd_pipe, IRDA_MAX_FRAME_SIZE,
-	    USBD_SHORT_XFER_OK, 0, &sc->sc_rd_xfer);
-	if (error)
+	sc->sc_rd_xfer = usbd_alloc_xfer(sc->sc_udev);
+	if (sc->sc_rd_xfer == NULL) {
+		error = ENOMEM;
 		goto bad3;
-	sc->sc_rd_buf = usbd_get_buffer(sc->sc_rd_xfer);
-
-	error = usbd_create_xfer(sc->sc_wr_pipe,
-	    IRDA_MAX_FRAME_SIZE + STIR_OUTPUT_HEADER_SIZE,
-	    USBD_FORCE_SHORT_XFER, 0, &sc->sc_wr_xfer);
-	if (error)
+	}
+	sc->sc_wr_xfer = usbd_alloc_xfer(sc->sc_udev);
+	if (sc->sc_wr_xfer == NULL) {
+		error = ENOMEM;
 		goto bad4;
-	sc->sc_wr_buf = usbd_get_buffer(sc->sc_wr_xfer);
-
-	sc->sc_ur_buf = kmem_alloc(IRDA_MAX_FRAME_SIZE, KM_SLEEP);
+	}
+	sc->sc_rd_buf = usbd_alloc_buffer(sc->sc_rd_xfer,
+			    IRDA_MAX_FRAME_SIZE);
+	if (sc->sc_rd_buf == NULL) {
+		error = ENOMEM;
+		goto bad5;
+	}
+	sc->sc_wr_buf = usbd_alloc_buffer(sc->sc_wr_xfer,
+			    IRDA_MAX_FRAME_SIZE + STIR_OUTPUT_HEADER_SIZE);
+	if (sc->sc_wr_buf == NULL) {
+		error = ENOMEM;
+		goto bad5;
+	}
+	sc->sc_ur_buf = malloc(IRDA_MAX_FRAME_SIZE, M_USBDEV, M_NOWAIT);
 	if (sc->sc_ur_buf == NULL) {
 		error = ENOMEM;
 		goto bad5;
@@ -753,10 +751,10 @@ ustir_open(void *h, int flag, int mode,
 	return 0;
 
  bad5:
-	usbd_destroy_xfer(sc->sc_wr_xfer);
+	usbd_free_xfer(sc->sc_wr_xfer);
 	sc->sc_wr_xfer = NULL;
  bad4:
-	usbd_destroy_xfer(sc->sc_rd_xfer);
+	usbd_free_xfer(sc->sc_rd_xfer);
 	sc->sc_rd_xfer = NULL;
  bad3:
 	usbd_close_pipe(sc->sc_wr_pipe);
@@ -789,33 +787,27 @@ ustir_close(void *h, int flag, int mode,
 
 	if (sc->sc_rd_pipe != NULL) {
 		usbd_abort_pipe(sc->sc_rd_pipe);
-		sc->sc_rd_pipe = NULL;
-	}
-	if (sc->sc_wr_pipe != NULL) {
-		usbd_abort_pipe(sc->sc_wr_pipe);
-		sc->sc_wr_pipe = NULL;
-	}
-	if (sc->sc_rd_xfer != NULL) {
-		usbd_destroy_xfer(sc->sc_rd_xfer);
-		sc->sc_rd_xfer = NULL;
-		sc->sc_rd_buf = NULL;
-	}
-	if (sc->sc_wr_xfer != NULL) {
-		usbd_destroy_xfer(sc->sc_wr_xfer);
-		sc->sc_wr_xfer = NULL;
-		sc->sc_wr_buf = NULL;
-	}
-	if (sc->sc_ur_buf != NULL) {
-		kmem_free(sc->sc_ur_buf, IRDA_MAX_FRAME_SIZE);
-		sc->sc_ur_buf = NULL;
-	}
-	if (sc->sc_rd_pipe != NULL) {
 		usbd_close_pipe(sc->sc_rd_pipe);
 		sc->sc_rd_pipe = NULL;
 	}
 	if (sc->sc_wr_pipe != NULL) {
+		usbd_abort_pipe(sc->sc_wr_pipe);
 		usbd_close_pipe(sc->sc_wr_pipe);
 		sc->sc_wr_pipe = NULL;
+	}
+	if (sc->sc_rd_xfer != NULL) {
+		usbd_free_xfer(sc->sc_rd_xfer);
+		sc->sc_rd_xfer = NULL;
+		sc->sc_rd_buf = NULL;
+	}
+	if (sc->sc_wr_xfer != NULL) {
+		usbd_free_xfer(sc->sc_wr_xfer);
+		sc->sc_wr_xfer = NULL;
+		sc->sc_wr_buf = NULL;
+	}
+	if (sc->sc_ur_buf != NULL) {
+		free(sc->sc_ur_buf, M_USBDEV);
+		sc->sc_ur_buf = NULL;
 	}
 
 	if (--sc->sc_refcnt < 0)
@@ -900,9 +892,9 @@ ustir_write(void *h, struct uio *uio, int flag)
 {
 	struct ustir_softc *sc = h;
 	usbd_status err;
-	uint32_t wrlen;
+	u_int32_t wrlen;
 	int error, sirlength;
-	uint8_t *wrbuf;
+	u_int8_t *wrbuf;
 	int s;
 
 	DPRINTFN(1,("%s: sc=%p\n", __func__, sc));
@@ -974,7 +966,7 @@ ustir_write(void *h, struct uio *uio, int flag)
 	if (sirlength < 0) {
 		error = -sirlength;
 	} else {
-		uint32_t btlen;
+		u_int32_t btlen;
 
 		DPRINTFN(1, ("%s: transfer %u bytes\n", __func__,
 			     (unsigned int)wrlen));
@@ -992,7 +984,9 @@ ustir_write(void *h, struct uio *uio, int flag)
 #endif
 
 		err = usbd_bulk_transfer(sc->sc_wr_xfer, sc->sc_wr_pipe,
-		    USBD_FORCE_SHORT_XFER, USTIR_WR_TIMEOUT, wrbuf, &btlen);
+					 USBD_FORCE_SHORT_XFER | USBD_NO_COPY,
+					 USTIR_WR_TIMEOUT,
+					 wrbuf, &btlen, "ustiwr");
 		DPRINTFN(2, ("%s: err=%d\n", __func__, err));
 		if (err != USBD_NORMAL_COMPLETION) {
 			if (err == USBD_INTERRUPTED)
@@ -1064,7 +1058,7 @@ filt_ustirread(struct knote *kn, long hint)
 	struct ustir_softc *sc = kn->kn_hook;
 
 	kn->kn_data = sc->sc_ur_framelen;
-	return kn->kn_data > 0;
+	return (kn->kn_data > 0);
 }
 
 static void
@@ -1085,7 +1079,7 @@ filt_ustirwrite(struct knote *kn, long hint)
 	struct ustir_softc *sc = kn->kn_hook;
 
 	kn->kn_data = 0;
-	return sc->sc_direction != udir_input;
+	return (sc->sc_direction != udir_input);
 }
 
 static const struct filterops ustirread_filtops =
@@ -1110,7 +1104,7 @@ ustir_kqfilter(void *h, struct knote *kn)
 		kn->kn_fop = &ustirwrite_filtops;
 		break;
 	default:
-		return EINVAL;
+		return (EINVAL);
 	}
 
 	kn->kn_hook = sc;
@@ -1119,7 +1113,7 @@ ustir_kqfilter(void *h, struct knote *kn)
 	SLIST_INSERT_HEAD(klist, kn, kn_selnext);
 	splx(s);
 
-	return 0;
+	return (0);
 }
 
 #ifdef USTIR_DEBUG_IOCTLS
@@ -1129,7 +1123,7 @@ Static int ustir_ioctl(void *h, u_long cmd, void *addr, int flag, struct lwp *l)
 	int error;
 	unsigned int regnum;
 	usbd_status err;
-	uint8_t regdata;
+	u_int8_t regdata;
 
 	if (sc->sc_dying)
 		return EIO;
@@ -1241,8 +1235,8 @@ ustir_set_params(void *h, struct irda_params *p)
 
 	if (speedblk != NULL) {
 		usbd_status err;
-		uint8_t regmode;
-		uint8_t regbrate;
+		u_int8_t regmode;
+		u_int8_t regbrate;
 
 		sc->sc_speedrec = speedblk;
 

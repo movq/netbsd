@@ -1,4 +1,4 @@
-/*	$NetBSD: ofdisk.c,v 1.51 2015/04/26 15:15:20 mlelstv Exp $	*/
+/*	$NetBSD: ofdisk.c,v 1.47 2014/07/25 08:10:37 dholland Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ofdisk.c,v 1.51 2015/04/26 15:15:20 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ofdisk.c,v 1.47 2014/07/25 08:10:37 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -108,10 +108,7 @@ const struct cdevsw ofdisk_cdevsw = {
 
 static void ofminphys(struct buf *);
 
-struct dkdriver ofdisk_dkdriver = {
-	.d_strategy = ofdisk_strategy,
-	.d_minphys = ofminphys
-};
+struct dkdriver ofdisk_dkdriver = { ofdisk_strategy, ofminphys };
 
 void ofdisk_getdefaultlabel (struct ofdisk_softc *, struct disklabel *);
 void ofdisk_getdisklabel (dev_t);
@@ -362,21 +359,26 @@ ofdisk_ioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 #ifdef __HAVE_OLD_DISKLABEL
 	struct disklabel newlabel;
 #endif
-	/* XXX: Why not allow wedges on floppy? */
+
 	switch (cmd) {
-	case DIOCDWEDGE:
-	case DIOCAWEDGE:
-	case DIOCLWEDGES:
-	case DIOCMWEDGES:
-		if (OFDISK_FLOPPY_P(of))
+	case DIOCGDINFO:
+		*(struct disklabel *)data = *of->sc_dk.dk_label;
+		return 0;
+#ifdef __HAVE_OLD_DISKLABEL
+	case ODIOCGDINFO:
+		newlabel = *of->sc_dk.dk_label;
+		if (newlabel.d_npartitions > OLDMAXPARTITIONS)
 			return ENOTTY;
-	}
+		memcpy(data, &newlabel, sizeof (struct olddisklabel));
+		return 0;
+#endif
 
-	error = disk_ioctl(&of->sc_dk, dev, cmd, data, flag, l);
-	if (error != EPASSTHROUGH)
-		return error;
+	case DIOCGPART:
+		((struct partinfo *)data)->disklab = of->sc_dk.dk_label;
+		((struct partinfo *)data)->part =
+			&of->sc_dk.dk_label->d_partitions[DISKPART(dev)];
+		return 0;
 
-	switch (cmd) {
 	case DIOCWDINFO:
 	case DIOCSDINFO:
 #ifdef __HAVE_OLD_DISKLABEL
@@ -428,6 +430,48 @@ ofdisk_ioctl(dev_t dev, u_long cmd, void *data, int flag, struct lwp *l)
 		memcpy(data, &newlabel, sizeof (struct olddisklabel));
 		return 0;
 #endif
+
+	case DIOCAWEDGE:
+	    {
+	    	struct dkwedge_info *dkw = (void *) data;
+
+		if (OFDISK_FLOPPY_P(of))
+			return (ENOTTY);
+
+		if ((flag & FWRITE) == 0)
+			return (EBADF);
+
+		/* If the ioctl happens here, the parent is us. */
+		strlcpy(dkw->dkw_parent, device_xname(of->sc_dev),
+			sizeof(dkw->dkw_parent));
+		return (dkwedge_add(dkw));
+	    }
+
+	case DIOCDWEDGE:
+	    {
+	    	struct dkwedge_info *dkw = (void *) data;
+
+		if (OFDISK_FLOPPY_P(of))
+			return (ENOTTY);
+
+		if ((flag & FWRITE) == 0)
+			return (EBADF);
+
+		/* If the ioctl happens here, the parent is us. */
+		strlcpy(dkw->dkw_parent, device_xname(of->sc_dev),
+			sizeof(dkw->dkw_parent));
+		return (dkwedge_del(dkw));
+	    }
+
+	case DIOCLWEDGES:
+	    {
+	    	struct dkwedge_list *dkwl = (void *) data;
+
+		if (OFDISK_FLOPPY_P(of))
+			return (ENOTTY);
+
+		return (dkwedge_list(&of->sc_dk, dkwl, l));
+	    }
 
 	default:
 		return ENOTTY;

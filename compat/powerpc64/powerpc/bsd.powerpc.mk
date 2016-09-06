@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.powerpc.mk,v 1.4 2015/06/24 22:20:25 matt Exp $
+#	$NetBSD: bsd.powerpc.mk,v 1.2.6.1 2015/02/04 22:00:24 martin Exp $
 
 LD+=			-m elf32ppc_nbsd
 .if empty(LDFLAGS:M*elf32ppc_nbsd*)
@@ -15,7 +15,6 @@ CSU_MACHINE_ARCH=	${MLIBDIR}
 CRYPTO_MACHINE_CPU=	${MLIBDIR}
 LDELFSO_MACHINE_ARCH=	${MLIBDIR}
 GOMP_MACHINE_ARCH=	${MLIBDIR}
-XORG_MACHINE_ARCH=	${MLIBDIR}
 
 .include "${.PARSEDIR}/../../m32.mk"
 .endif

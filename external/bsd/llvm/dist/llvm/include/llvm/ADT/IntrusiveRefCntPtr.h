@@ -21,9 +21,10 @@
 #ifndef LLVM_ADT_INTRUSIVEREFCNTPTR_H
 #define LLVM_ADT_INTRUSIVEREFCNTPTR_H
 
+#include "llvm/Support/Casting.h"
+#include "llvm/Support/Compiler.h"
 #include <atomic>
-#include <cassert>
-#include <cstddef>
+#include <memory>
 
 namespace llvm {
 
@@ -83,7 +84,7 @@ namespace llvm {
     friend struct IntrusiveRefCntPtrInfo;
   };
 
-
+  
   template <typename T> struct IntrusiveRefCntPtrInfo {
     static void retain(T *obj) { obj->Retain(); }
     static void release(T *obj) { obj->Release(); }
@@ -113,7 +114,7 @@ public:
       delete static_cast<const Derived*>(this);
   }
 };
-
+  
 //===----------------------------------------------------------------------===//
 /// IntrusiveRefCntPtr - A template class that implements a "smart pointer"
 ///  that assumes the wrapped object has a reference count associated
@@ -154,7 +155,7 @@ public:
 
     template <class X>
     IntrusiveRefCntPtr(IntrusiveRefCntPtr<X>&& S) : Obj(S.get()) {
-      S.Obj = nullptr;
+      S.Obj = 0;
     }
 
     template <class X>
@@ -176,7 +177,7 @@ public:
 
     T* get() const { return Obj; }
 
-    explicit operator bool() const { return Obj; }
+    LLVM_EXPLICIT operator bool() const { return Obj; }
 
     void swap(IntrusiveRefCntPtr& other) {
       T* tmp = other.Obj;
@@ -190,7 +191,7 @@ public:
     }
 
     void resetWithoutRelease() {
-      Obj = nullptr;
+      Obj = 0;
     }
 
   private:
@@ -266,8 +267,6 @@ public:
 //===----------------------------------------------------------------------===//
 // LLVM-style downcasting support for IntrusiveRefCntPtr objects
 //===----------------------------------------------------------------------===//
-
-  template <typename From> struct simplify_type;
 
   template<class T> struct simplify_type<IntrusiveRefCntPtr<T> > {
     typedef T* SimpleType;

@@ -1,4 +1,4 @@
-/*	$NetBSD: chutest.c,v 1.5 2016/01/08 21:35:35 christos Exp $	*/
+/*	$NetBSD: chutest.c,v 1.1.1.2.4.2 2015/11/08 01:51:05 riz Exp $	*/
 
 /* chutest.c,v 3.1 1993/07/06 01:05:21 jbj Exp
  * chutest - test the CHU clock

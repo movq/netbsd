@@ -26,15 +26,10 @@ namespace {
                                 Is64Bit ?  ELF::EM_SPARCV9 : ELF::EM_SPARC,
                                 /*HasRelocationAddend*/ true) {}
 
-    ~SparcELFObjectWriter() override {}
-
+    virtual ~SparcELFObjectWriter() {}
   protected:
     unsigned GetRelocType(const MCValue &Target, const MCFixup &Fixup,
                           bool IsPCRel) const override;
-
-    bool needsRelocateWithSymbol(const MCSymbol &Sym,
-                                 unsigned Type) const override;
-
   };
 }
 
@@ -109,31 +104,9 @@ unsigned SparcELFObjectWriter::GetRelocType(const MCValue &Target,
   return ELF::R_SPARC_NONE;
 }
 
-bool SparcELFObjectWriter::needsRelocateWithSymbol(const MCSymbol &Sym,
-                                                 unsigned Type) const {
-  switch (Type) {
-    default:
-      return false;
-
-    // All relocations that use a GOT need a symbol, not an offset, as
-    // the offset of the symbol within the section is irrelevant to
-    // where the GOT entry is. Don't need to list all the TLS entries,
-    // as they're all marked as requiring a symbol anyways.
-    case ELF::R_SPARC_GOT10:
-    case ELF::R_SPARC_GOT13:
-    case ELF::R_SPARC_GOT22:
-    case ELF::R_SPARC_GOTDATA_HIX22:
-    case ELF::R_SPARC_GOTDATA_LOX10:
-    case ELF::R_SPARC_GOTDATA_OP_HIX22:
-    case ELF::R_SPARC_GOTDATA_OP_LOX10:
-      return true;
-  }
-}
-
-MCObjectWriter *llvm::createSparcELFObjectWriter(raw_pwrite_stream &OS,
+MCObjectWriter *llvm::createSparcELFObjectWriter(raw_ostream &OS,
                                                  bool Is64Bit,
-                                                 bool IsLittleEndian,
                                                  uint8_t OSABI) {
   MCELFObjectTargetWriter *MOTW = new SparcELFObjectWriter(Is64Bit, OSABI);
-  return createELFObjectWriter(MOTW, OS, IsLittleEndian);
+  return createELFObjectWriter(MOTW, OS,  /*IsLittleEndian=*/false);
 }

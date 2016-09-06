@@ -1,5 +1,6 @@
 /* BFD support for the ns32k architecture.
-   Copyright (C) 1990-2015 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1994, 1995, 1998, 1999, 2000, 2001, 2002, 2003,
+   2004, 2005, 2007, 2012 Free Software Foundation, Inc.
    Almost totally rewritten by Ian Dall from initial work
    by Andrew Cagney.
 
@@ -585,9 +586,8 @@ _bfd_do_ns32k_reloc_contents (reloc_howto_type *howto,
   switch (size)
     {
     default:
-      abort ();
     case 0:
-      return bfd_reloc_ok;
+      abort ();
     case 1:
     case 2:
     case 4:

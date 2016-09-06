@@ -1,4 +1,4 @@
-/* $NetBSD: setup.c,v 1.61 2016/03/17 18:56:14 christos Exp $ */
+/* $NetBSD: setup.c,v 1.44 2013/06/18 18:18:58 christos Exp $ */
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -73,7 +73,6 @@
 
 #define vnode uvnode
 #include <ufs/lfs/lfs.h>
-#include <ufs/lfs/lfs_accessors.h>
 #include <ufs/lfs/lfs_inode.h>
 #undef vnode
 
@@ -96,9 +95,9 @@
 #include "fsutil.h"
 
 extern u_int32_t cksum(void *, size_t);
-static uint64_t calcmaxfilesize(unsigned);
+static uint64_t calcmaxfilesize(int);
 
-daddr_t *din_table;
+ulfs_daddr_t *din_table;
 SEGUSE *seg_table;
 
 #ifdef DKTYPENAMES
@@ -118,12 +117,12 @@ useless(void)
  * calculate the maximum file size allowed with the specified block shift.
  */
 static uint64_t
-calcmaxfilesize(unsigned bshift)
+calcmaxfilesize(int bshift)
 {
 	uint64_t nptr; /* number of block pointers per block */
 	uint64_t maxblock;
 
-	nptr = (1 << bshift) / LFS_BLKPTRSIZE(fs);
+	nptr = (1 << bshift) / sizeof(uint32_t);
 	maxblock = ULFS_NDADDR + nptr + nptr * nptr + nptr * nptr * nptr;
 
 	return maxblock << bshift;
@@ -163,9 +162,7 @@ extern time_t write_time;
 int
 setup(const char *dev)
 {
-#ifndef VERBOSE_BLOCKMAP
 	long bmapsize;
-#endif
 	struct stat statb;
 	int doskipclean;
 	u_int64_t maxfilesize;
@@ -175,7 +172,6 @@ setup(const char *dev)
 	int i, isdirty;
 	long sn, curseg;
 	SEGUSE *sup;
-	size_t sumstart;
 
 	havesb = 0;
 	doskipclean = skipclean;
@@ -220,9 +216,9 @@ setup(const char *dev)
 	}
 
         /* Resize buffer cache now that we have a superblock to guess from. */ 
-        bufrehash((lfs_sb_getsegtabsz(fs) + maxino / lfs_sb_getifpb(fs)) << 4);
+        bufrehash((fs->lfs_segtabsz + maxino / fs->lfs_ifpb) << 4);
 
-	if (lfs_sb_getpflags(fs) & LFS_PF_CLEAN) {
+	if (fs->lfs_pflags & LFS_PF_CLEAN) {
 		if (doskipclean) {
 			if (!quiet)
 				pwarn("%sile system is clean; not checking\n",
@@ -240,52 +236,50 @@ setup(const char *dev)
 		int bc;
 
 		if (debug)
-			pwarn("adjusting offset, serial for -i 0x%jx\n",
-				(uintmax_t)idaddr);
+			pwarn("adjusting offset, serial for -i 0x%lx\n",
+				(unsigned long)idaddr);
 		tdaddr = lfs_sntod(fs, lfs_dtosn(fs, idaddr));
 		if (lfs_sntod(fs, lfs_dtosn(fs, tdaddr)) == tdaddr) {
-			if (tdaddr == lfs_sb_gets0addr(fs))
+			if (tdaddr == fs->lfs_start)
 				tdaddr += lfs_btofsb(fs, LFS_LABELPAD);
 			for (i = 0; i < LFS_MAXNUMSB; i++) {
-				if (lfs_sb_getsboff(fs, i) == tdaddr)
+				if (fs->lfs_sboffs[i] == tdaddr)
 					tdaddr += lfs_btofsb(fs, LFS_SBPAD);
-				if (lfs_sb_getsboff(fs, i) > tdaddr)
+				if (fs->lfs_sboffs[i] > tdaddr)
 					break;
 			}
 		}
-		lfs_sb_setoffset(fs, tdaddr);
+		fs->lfs_offset = tdaddr;
 		if (debug)
-			pwarn("begin with offset/serial 0x%jx/%jd\n",
-				(uintmax_t)lfs_sb_getoffset(fs),
-				(intmax_t)lfs_sb_getserial(fs));
+			pwarn("begin with offset/serial 0x%x/%d\n",
+				(int)fs->lfs_offset, (int)fs->lfs_serial);
 		while (tdaddr < idaddr) {
 			bread(fs->lfs_devvp, LFS_FSBTODB(fs, tdaddr),
-			      lfs_sb_getsumsize(fs),
-			      0, &bp);
+			      fs->lfs_sumsize,
+			      NULL, 0, &bp);
 			sp = (SEGSUM *)bp->b_data;
-			sumstart = lfs_ss_getsumstart(fs);
-			if (lfs_ss_getsumsum(fs, sp) !=
-			    cksum((char *)sp + sumstart,
-				  lfs_sb_getsumsize(fs) - sumstart)) {
+			if (sp->ss_sumsum != cksum(&sp->ss_datasum,
+						   fs->lfs_sumsize -
+						   sizeof(sp->ss_sumsum))) {
 				brelse(bp, 0);
 				if (debug)
-					printf("bad cksum at %jx\n",
-					       (uintmax_t)tdaddr);
+					printf("bad cksum at %x\n",
+					       (unsigned)tdaddr);
 				break;
 			}
-			fp = SEGSUM_FINFOBASE(fs, sp);
-			bc = howmany(lfs_ss_getninos(fs, sp), LFS_INOPB(fs)) <<
-				(lfs_sb_getversion(fs) > 1 ? lfs_sb_getffshift(fs) :
-						       lfs_sb_getbshift(fs));
-			for (i = 0; i < lfs_ss_getnfinfo(fs, sp); i++) {
-				bc += lfs_fi_getlastlength(fs, fp) + ((lfs_fi_getnblocks(fs, fp) - 1)
-					<< lfs_sb_getbshift(fs));
-				fp = NEXT_FINFO(fs, fp);
+			fp = (FINFO *)(sp + 1);
+			bc = howmany(sp->ss_ninos, LFS_INOPB(fs)) <<
+				(fs->lfs_version > 1 ? fs->lfs_ffshift :
+						       fs->lfs_bshift);
+			for (i = 0; i < sp->ss_nfinfo; i++) {
+				bc += fp->fi_lastlength + ((fp->fi_nblocks - 1)
+					<< fs->lfs_bshift);
+				fp = (FINFO *)(fp->fi_blocks + fp->fi_nblocks);
 			}
 
 			tdaddr += lfs_btofsb(fs, bc) + 1;
-			lfs_sb_setoffset(fs, tdaddr);
-			lfs_sb_setserial(fs, lfs_ss_getserial(fs, sp) + 1);
+			fs->lfs_offset = tdaddr;
+			fs->lfs_serial = sp->ss_serial + 1;
 			brelse(bp, 0);
 		}
 
@@ -293,10 +287,10 @@ setup(const char *dev)
 		 * Set curseg, nextseg appropriately -- inlined from
 		 * lfs_newseg()
 		 */
-		curseg = lfs_dtosn(fs, lfs_sb_getoffset(fs));
-		lfs_sb_setcurseg(fs, lfs_sntod(fs, curseg));
-		for (sn = curseg + lfs_sb_getinterleave(fs);;) {  
-			sn = (sn + 1) % lfs_sb_getnseg(fs);
+		curseg = lfs_dtosn(fs, fs->lfs_offset);
+		fs->lfs_curseg = lfs_sntod(fs, curseg);
+		for (sn = curseg + fs->lfs_interleave;;) {  
+			sn = (sn + 1) % fs->lfs_nseg;
 			if (sn == curseg)
 				errx(1, "init: no clean segments");
 			LFS_SEGENTRY(sup, fs, sn, bp);
@@ -309,96 +303,94 @@ setup(const char *dev)
 
 		/* Skip superblock if necessary */
 		for (i = 0; i < LFS_MAXNUMSB; i++)
-			if (lfs_sb_getoffset(fs) == lfs_sb_getsboff(fs, i))
-				lfs_sb_addoffset(fs, lfs_btofsb(fs, LFS_SBPAD));
+			if (fs->lfs_offset == fs->lfs_sboffs[i])
+				fs->lfs_offset += lfs_btofsb(fs, LFS_SBPAD);
 
 		++fs->lfs_nactive;
-		lfs_sb_setnextseg(fs, lfs_sntod(fs, sn));
+		fs->lfs_nextseg = lfs_sntod(fs, sn);
 		if (debug) {
-			pwarn("offset = 0x%" PRIx64 ", serial = %" PRIu64 "\n",
-				lfs_sb_getoffset(fs), lfs_sb_getserial(fs));
-			pwarn("curseg = %" PRIx64 ", nextseg = %" PRIx64 "\n",
-				lfs_sb_getcurseg(fs), lfs_sb_getnextseg(fs));
+			pwarn("offset = 0x%" PRIx32 ", serial = %" PRId64 "\n",
+				fs->lfs_offset, fs->lfs_serial);
+			pwarn("curseg = %" PRIx32 ", nextseg = %" PRIx32 "\n",
+				fs->lfs_curseg, fs->lfs_nextseg);
 		}
 
 		if (!nflag && !skipclean) {
-			lfs_sb_setidaddr(fs, idaddr);
+			fs->lfs_idaddr = idaddr;
 			fsmodified = 1;
 			sbdirty();
 		}
 	}
 
 	if (debug) {
-		pwarn("idaddr    = 0x%jx\n", idaddr ? (uintmax_t)idaddr :
-			(uintmax_t)lfs_sb_getidaddr(fs));
+		pwarn("idaddr    = 0x%lx\n", idaddr ? (unsigned long)idaddr :
+			(unsigned long)fs->lfs_idaddr);
 		pwarn("dev_bsize = %lu\n", dev_bsize);
-		pwarn("lfs_bsize = %lu\n", (unsigned long) lfs_sb_getbsize(fs));
-		pwarn("lfs_fsize = %lu\n", (unsigned long) lfs_sb_getfsize(fs));
-		pwarn("lfs_frag  = %lu\n", (unsigned long) lfs_sb_getfrag(fs));
-		pwarn("lfs_inopb = %lu\n", (unsigned long) lfs_sb_getinopb(fs));
+		pwarn("lfs_bsize = %lu\n", (unsigned long) fs->lfs_bsize);
+		pwarn("lfs_fsize = %lu\n", (unsigned long) fs->lfs_fsize);
+		pwarn("lfs_frag  = %lu\n", (unsigned long) fs->lfs_frag);
+		pwarn("lfs_inopb = %lu\n", (unsigned long) fs->lfs_inopb);
 	}
-	if (lfs_sb_getversion(fs) == 1)
-		maxfsblock = lfs_blkstofrags(fs, lfs_sb_getsize(fs));
+	if (fs->lfs_version == 1)
+		maxfsblock = fs->lfs_size * (fs->lfs_bsize / dev_bsize);
 	else
-		maxfsblock = lfs_sb_getsize(fs);
-	maxfilesize = calcmaxfilesize(lfs_sb_getbshift(fs));
-	if (/* lfs_sb_getminfree(fs) < 0 || */ lfs_sb_getminfree(fs) > 99) {
-		pfatal("IMPOSSIBLE MINFREE=%u IN SUPERBLOCK",
-		    lfs_sb_getminfree(fs));
+		maxfsblock = fs->lfs_size;
+	maxfilesize = calcmaxfilesize(fs->lfs_bshift);
+	if (/* fs->lfs_minfree < 0 || */ fs->lfs_minfree > 99) {
+		pfatal("IMPOSSIBLE MINFREE=%d IN SUPERBLOCK",
+		    fs->lfs_minfree);
 		if (reply("SET TO DEFAULT") == 1) {
-			lfs_sb_setminfree(fs, 10);
+			fs->lfs_minfree = 10;
 			sbdirty();
 		}
 	}
-	if (lfs_sb_getbmask(fs) != lfs_sb_getbsize(fs) - 1) {
-		pwarn("INCORRECT BMASK=0x%jx IN SUPERBLOCK (SHOULD BE 0x%x)",
-		    (uintmax_t)lfs_sb_getbmask(fs),
-		    lfs_sb_getbsize(fs) - 1);
-		lfs_sb_setbmask(fs, lfs_sb_getbsize(fs) - 1);
+	if (fs->lfs_bmask != fs->lfs_bsize - 1) {
+		pwarn("INCORRECT BMASK=0x%x IN SUPERBLOCK (SHOULD BE 0x%x)",
+		    (unsigned int) fs->lfs_bmask,
+		    (unsigned int) fs->lfs_bsize - 1);
+		fs->lfs_bmask = fs->lfs_bsize - 1;
 		if (preen)
 			printf(" (FIXED)\n");
 		if (preen || reply("FIX") == 1) {
 			sbdirty();
 		}
 	}
-	if (lfs_sb_getffmask(fs) != lfs_sb_getfsize(fs) - 1) {
-		pwarn("INCORRECT FFMASK=0x%jx IN SUPERBLOCK (SHOULD BE 0x%x)",
-		    (uintmax_t)lfs_sb_getffmask(fs),
-		    lfs_sb_getfsize(fs) - 1);
-		lfs_sb_setffmask(fs, lfs_sb_getfsize(fs) - 1);
+	if (fs->lfs_ffmask != fs->lfs_fsize - 1) {
+		pwarn("INCORRECT FFMASK=%" PRId64 " IN SUPERBLOCK",
+		    fs->lfs_ffmask);
+		fs->lfs_ffmask = fs->lfs_fsize - 1;
 		if (preen)
 			printf(" (FIXED)\n");
 		if (preen || reply("FIX") == 1) {
 			sbdirty();
 		}
 	}
-	if (lfs_sb_getfbmask(fs) != (1U << lfs_sb_getfbshift(fs)) - 1) {
-		pwarn("INCORRECT FBMASK=0x%jx IN SUPERBLOCK (SHOULD BE 0x%x)",
-		    (uintmax_t)lfs_sb_getfbmask(fs),
-		      (1U << lfs_sb_getfbshift(fs)) - 1);
-		lfs_sb_setfbmask(fs, (1U << lfs_sb_getfbshift(fs)) - 1);
+	if (fs->lfs_fbmask != (1 << fs->lfs_fbshift) - 1) {
+		pwarn("INCORRECT FBMASK=%" PRId64 " IN SUPERBLOCK",
+		    fs->lfs_fbmask);
+		fs->lfs_fbmask = (1 << fs->lfs_fbshift) - 1;
 		if (preen)
 			printf(" (FIXED)\n");
 		if (preen || reply("FIX") == 1) {
 			sbdirty();
 		}
 	}
-	if (lfs_sb_getmaxfilesize(fs) != maxfilesize) {
+	if (fs->lfs_maxfilesize != maxfilesize) {
 		pwarn(
-		    "INCORRECT MAXFILESIZE=%ju IN SUPERBLOCK (SHOULD BE %ju WITH BSHIFT %u)",
-		    (uintmax_t) lfs_sb_getmaxfilesize(fs),
-		    (uintmax_t) maxfilesize, lfs_sb_getbshift(fs));
+		    "INCORRECT MAXFILESIZE=%llu IN SUPERBLOCK (SHOULD BE %llu WITH BSHIFT %d)",
+		    (unsigned long long) fs->lfs_maxfilesize,
+		    (unsigned long long) maxfilesize, (int)fs->lfs_bshift);
 		if (preen)
 			printf(" (FIXED)\n");
 		if (preen || reply("FIX") == 1) {
-			lfs_sb_setmaxfilesize(fs, maxfilesize);
+			fs->lfs_maxfilesize = maxfilesize;
 			sbdirty();
 		}
 	}
-	if (lfs_sb_getmaxsymlinklen(fs) != LFS_MAXSYMLINKLEN(fs)) {
-		pwarn("INCORRECT MAXSYMLINKLEN=%d IN SUPERBLOCK (SHOULD BE %zu)",
-		    lfs_sb_getmaxsymlinklen(fs), LFS_MAXSYMLINKLEN(fs));
-		lfs_sb_setmaxsymlinklen(fs, LFS_MAXSYMLINKLEN(fs));
+	if (fs->lfs_maxsymlinklen != ULFS1_MAXSYMLINKLEN) {
+		pwarn("INCORRECT MAXSYMLINKLEN=%d IN SUPERBLOCK",
+		    fs->lfs_maxsymlinklen);
+		fs->lfs_maxsymlinklen = ULFS1_MAXSYMLINKLEN;
 		if (preen)
 			printf(" (FIXED)\n");
 		if (preen || reply("FIX") == 1) {
@@ -414,12 +406,12 @@ setup(const char *dev)
 	 * XXX dirty while we do the rest.
 	 */
 	ivp = fs->lfs_ivnode;
-	maxino = ((lfs_dino_getsize(fs, VTOI(ivp)->i_din) - (lfs_sb_getcleansz(fs) + lfs_sb_getsegtabsz(fs))
-		* lfs_sb_getbsize(fs)) / lfs_sb_getbsize(fs)) * lfs_sb_getifpb(fs);
+	maxino = ((VTOI(ivp)->i_ffs1_size - (fs->lfs_cleansz + fs->lfs_segtabsz)
+		* fs->lfs_bsize) / fs->lfs_bsize) * fs->lfs_ifpb;
 	if (debug)
 		pwarn("maxino    = %llu\n", (unsigned long long)maxino);
-	for (i = 0; i < lfs_dino_getsize(fs, VTOI(ivp)->i_din); i += lfs_sb_getbsize(fs)) {
-		bread(ivp, i >> lfs_sb_getbshift(fs), lfs_sb_getbsize(fs), 0, &bp);
+	for (i = 0; i < VTOI(ivp)->i_ffs1_size; i += fs->lfs_bsize) {
+		bread(ivp, i >> fs->lfs_bshift, fs->lfs_bsize, NOCRED, 0, &bp);
 		/* XXX check B_ERROR */
 		brelse(bp, 0);
 	}
@@ -428,9 +420,9 @@ setup(const char *dev)
 	 * allocate and initialize the necessary maps
 	 */
 	din_table = ecalloc(maxino, sizeof(*din_table));
-	seg_table = ecalloc(lfs_sb_getnseg(fs), sizeof(SEGUSE));
+	seg_table = ecalloc(fs->lfs_nseg, sizeof(SEGUSE));
 	/* Get segment flags */
-	for (i = 0; i < lfs_sb_getnseg(fs); i++) {
+	for (i = 0; i < fs->lfs_nseg; i++) {
 		LFS_SEGENTRY(sup, fs, i, bp);
 		seg_table[i].su_flags = sup->su_flags & ~SEGUSE_ACTIVE;
 		if (preen)
@@ -439,13 +431,14 @@ setup(const char *dev)
 	}
 
 	/* Initialize Ifile entry */
-	din_table[LFS_IFILE_INUM] = lfs_sb_getidaddr(fs);
-	seg_table[lfs_dtosn(fs, lfs_sb_getidaddr(fs))].su_nbytes += DINOSIZE(fs);
+	din_table[fs->lfs_ifile] = fs->lfs_idaddr;
+	seg_table[lfs_dtosn(fs, fs->lfs_idaddr)].su_nbytes += LFS_DINODE1_SIZE;
 
 #ifndef VERBOSE_BLOCKMAP
 	bmapsize = roundup(howmany(maxfsblock, NBBY), sizeof(int16_t));
 	blockmap = ecalloc(bmapsize, sizeof(char));
 #else
+	bmapsize = maxfsblock * sizeof(ino_t);
 	blockmap = ecalloc(maxfsblock, sizeof(ino_t));
 #endif
 	statemap = ecalloc(maxino, sizeof(char));
@@ -453,8 +446,8 @@ setup(const char *dev)
 	lncntp = ecalloc(maxino, sizeof(int16_t));
 
 	if (preen) {
-		n_files = lfs_sb_getnfiles(fs);
-		n_blks  = lfs_sb_getdsize(fs) - lfs_sb_getbfree(fs);
+		n_files = fs->lfs_nfiles;
+		n_blks  = fs->lfs_dsize - fs->lfs_bfree;
 		numdirs = maxino;
 		inplast = 0; 
 		listmax = numdirs + 10;

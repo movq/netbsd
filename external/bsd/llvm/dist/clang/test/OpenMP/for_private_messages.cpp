@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -verify -fopenmp %s
+// RUN: %clang_cc1 -verify -fopenmp=libiomp5 %s
 
 void foo() {
 }
@@ -47,7 +47,7 @@ int foomain(I argc, C **argv) {
   I e(4);
   I g(5);
   int i;
-  int &j = i;
+  int &j = i;           // expected-note {{'j' defined here}}
 #pragma omp for private // expected-error {{expected '(' after 'private'}}
   for (int k = 0; k < argc; ++k)
     ++k;
@@ -99,7 +99,7 @@ int foomain(I argc, C **argv) {
   }
 #pragma omp parallel shared(i)
 #pragma omp parallel private(i)
-#pragma omp for private(j)
+#pragma omp for private(j) // expected-error {{arguments of OpenMP clause 'private' cannot be of reference type}}
   for (int k = 0; k < argc; ++k)
     ++k;
 #pragma omp for private(i)
@@ -108,26 +108,11 @@ int foomain(I argc, C **argv) {
   return 0;
 }
 
-void bar(S4 a[2]) {
-#pragma omp parallel
-#pragma omp for private(a)
-  for (int i = 0; i < 2; ++i)
-    foo();
-}
-
-namespace A {
-double x;
-#pragma omp threadprivate(x) // expected-note {{defined as threadprivate or thread local}}
-}
-namespace B {
-using A::x;
-}
-
 int main(int argc, char **argv) {
   S4 e(4);
   S5 g(5);
   int i;
-  int &j = i;
+  int &j = i;           // expected-note {{'j' defined here}}
 #pragma omp for private // expected-error {{expected '(' after 'private'}}
   for (int k = 0; k < argc; ++k)
     ++k;
@@ -164,9 +149,6 @@ int main(int argc, char **argv) {
 #pragma omp for private(h) // expected-error {{threadprivate or thread local variable cannot be private}}
   for (int k = 0; k < argc; ++k)
     ++k;
-#pragma omp for private(B::x) // expected-error {{threadprivate or thread local variable cannot be private}}
-  for (int k = 0; k < argc; ++k)
-    ++k;
 #pragma omp for shared(i) // expected-error {{unexpected OpenMP clause 'shared' in directive '#pragma omp for'}}
   for (int k = 0; k < argc; ++k)
     ++k;
@@ -179,16 +161,12 @@ int main(int argc, char **argv) {
   }
 #pragma omp parallel shared(i)
 #pragma omp parallel private(i)
-#pragma omp for private(j)
+#pragma omp for private(j) // expected-error {{arguments of OpenMP clause 'private' cannot be of reference type}}
   for (int k = 0; k < argc; ++k)
     ++k;
 #pragma omp for private(i)
   for (int k = 0; k < argc; ++k)
     ++k;
-  static int si;
-#pragma omp for private(si) // OK
-  for(int k = 0; k < argc; ++k)
-    si = k + 1;
 
   return 0;
 }

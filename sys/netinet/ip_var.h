@@ -1,4 +1,4 @@
-/*	$NetBSD: ip_var.h,v 1.115 2016/08/01 10:22:53 knakahara Exp $	*/
+/*	$NetBSD: ip_var.h,v 1.106 2014/06/05 23:48:16 rmind Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1993
@@ -52,9 +52,8 @@ struct ipovly {
  * IP Flow structure
  */
 struct ipflow {
-	TAILQ_ENTRY(ipflow) ipf_list;	/* next in active list */
-	TAILQ_ENTRY(ipflow) ipf_hash;	/* next ipflow in bucket */
-	size_t ipf_hashidx;		/* own hash index of ipflowtable[] */
+	LIST_ENTRY(ipflow) ipf_list;	/* next in active list */
+	LIST_ENTRY(ipflow) ipf_hash;	/* next ipflow in bucket */
 	struct in_addr ipf_dst;		/* destination address */
 	struct in_addr ipf_src;		/* source address */
 	uint8_t ipf_tos;		/* type-of-service */
@@ -115,7 +114,7 @@ struct ipoption {
  * passed to ip_output when IP multicast options are in use.
  */
 struct ip_moptions {
-	if_index_t imo_multicast_if_index; /* I/F for outgoing multicasts */
+	struct	  ifnet *imo_multicast_ifp; /* ifp for outgoing multicasts */
 	struct in_addr imo_multicast_addr; /* ifindex/addr on MULTICAST_IF */
 	u_int8_t  imo_multicast_ttl;	/* TTL for outgoing multicasts */
 	u_int8_t  imo_multicast_loop;	/* 1 => hear sends if a member */
@@ -211,8 +210,7 @@ void	 ip_drainstub(void);
 void	 ip_freemoptions(struct ip_moptions *);
 int	 ip_optcopy(struct ip *, struct ip *);
 u_int	 ip_optlen(struct inpcb *);
-int	 ip_output(struct mbuf *, struct mbuf *, struct route *, int,
-	    struct ip_moptions *, struct socket *);
+int	 ip_output(struct mbuf *, ...);
 int	 ip_fragment(struct mbuf *, struct ifnet *, u_long);
 
 void	 ip_reass_init(void);
@@ -232,19 +230,14 @@ void *	 rip_ctlinput(int, const struct sockaddr *, void *);
 int	 rip_ctloutput(int, struct socket *, struct sockopt *);
 void	 rip_init(void);
 void	 rip_input(struct mbuf *, ...);
-int	 rip_output(struct mbuf *, struct inpcb *);
+int	 rip_output(struct mbuf *, ...);
 int	 rip_usrreq(struct socket *,
 	    int, struct mbuf *, struct mbuf *, struct mbuf *, struct lwp *);
-
-int	ip_setmoptions(struct ip_moptions **, const struct sockopt *sopt);
-int	ip_getmoptions(struct ip_moptions *, struct sockopt *sopt);
-
-int	ip_if_output(struct ifnet * const, struct mbuf * const,
-	    const struct sockaddr * const, const struct rtentry *);
 
 /* IP Flow interface. */
 void	ipflow_init(void);
 void	ipflow_poolinit(void);
+struct ipflow *ipflow_reap(bool);
 void	ipflow_create(const struct route *, struct mbuf *);
 void	ipflow_slowtimo(void);
 int	ipflow_invalidate_all(int);

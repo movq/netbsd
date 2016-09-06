@@ -1,4 +1,4 @@
-/*	$NetBSD: a_1.c,v 1.7 2016/05/26 16:49:59 christos Exp $	*/
+/*	$NetBSD: a_1.c,v 1.4.4.1 2016/03/13 08:06:13 martin Exp $	*/
 
 /*
  * Copyright (C) 2005, 2007, 2009, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
@@ -46,8 +46,7 @@ fromtext_ch_a(ARGS_FROMTEXT) {
 	/* get domain name */
 	dns_name_init(&name, NULL);
 	buffer_fromregion(&buffer, &token.value.as_region);
-	if (origin == NULL)
-		origin = dns_rootname;
+	origin = (origin != NULL) ? origin : dns_rootname;
 	RETTOK(dns_name_fromtext(&name, &buffer, origin, options, target));
 	if ((options & DNS_RDATA_CHECKNAMES) != 0 &&
 	    (options & DNS_RDATA_CHECKREVERSE) != 0) {

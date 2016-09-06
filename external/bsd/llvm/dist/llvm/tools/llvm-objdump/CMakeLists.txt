@@ -1,10 +1,6 @@
 set(LLVM_LINK_COMPONENTS
-  AllTargetsAsmPrinters
-  AllTargetsDescs
-  AllTargetsDisassemblers
-  AllTargetsInfos
-  CodeGen
-  DebugInfoDWARF
+  ${LLVM_TARGETS_TO_BUILD}
+  DebugInfo
   MC
   MCDisassembler
   Object

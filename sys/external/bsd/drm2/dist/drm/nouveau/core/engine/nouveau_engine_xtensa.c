@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_engine_xtensa.c,v 1.2 2014/08/23 08:03:33 riastradh Exp $	*/
+/*	$NetBSD: nouveau_engine_xtensa.c,v 1.1.1.1.4.1 2014/09/21 17:41:52 snj Exp $	*/
 
 /*
  * Copyright 2013 Ilia Mirkin
@@ -23,7 +23,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_xtensa.c,v 1.2 2014/08/23 08:03:33 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_engine_xtensa.c,v 1.1.1.1.4.1 2014/09/21 17:41:52 snj Exp $");
 
 #include <engine/xtensa.h>
 

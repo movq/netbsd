@@ -45,36 +45,38 @@ PreprocessingRecord::PreprocessingRecord(SourceManager &SM)
 
 /// \brief Returns a pair of [Begin, End) iterators of preprocessed entities
 /// that source range \p Range encompasses.
-llvm::iterator_range<PreprocessingRecord::iterator>
+std::pair<PreprocessingRecord::iterator, PreprocessingRecord::iterator>
 PreprocessingRecord::getPreprocessedEntitiesInRange(SourceRange Range) {
   if (Range.isInvalid())
-    return llvm::make_range(iterator(), iterator());
+    return std::make_pair(iterator(), iterator());
 
   if (CachedRangeQuery.Range == Range) {
-    return llvm::make_range(iterator(this, CachedRangeQuery.Result.first),
-                            iterator(this, CachedRangeQuery.Result.second));
+    return std::make_pair(iterator(this, CachedRangeQuery.Result.first),
+                          iterator(this, CachedRangeQuery.Result.second));
   }
 
   std::pair<int, int> Res = getPreprocessedEntitiesInRangeSlow(Range);
   
   CachedRangeQuery.Range = Range;
   CachedRangeQuery.Result = Res;
-
-  return llvm::make_range(iterator(this, Res.first),
-                          iterator(this, Res.second));
+  
+  return std::make_pair(iterator(this, Res.first), iterator(this, Res.second));
 }
 
 static bool isPreprocessedEntityIfInFileID(PreprocessedEntity *PPE, FileID FID,
                                            SourceManager &SM) {
-  assert(FID.isValid());
+  assert(!FID.isInvalid());
   if (!PPE)
     return false;
 
   SourceLocation Loc = PPE->getSourceRange().getBegin();
   if (Loc.isInvalid())
     return false;
-
-  return SM.isInFileID(SM.getFileLoc(Loc), FID);
+  
+  if (SM.isInFileID(SM.getFileLoc(Loc), FID))
+    return true;
+  else
+    return false;
 }
 
 /// \brief Returns true if the preprocessed entity that \arg PPEI iterator
@@ -88,7 +90,7 @@ bool PreprocessingRecord::isEntityInFileID(iterator PPEI, FileID FID) {
   if (FID.isInvalid())
     return false;
 
-  int Pos = std::distance(iterator(this, 0), PPEI);
+  int Pos = PPEI.Position;
   if (Pos < 0) {
     if (unsigned(-Pos-1) >= LoadedPreprocessedEntities.size()) {
       assert(0 && "Out-of bounds loaded preprocessed entity");
@@ -246,11 +248,10 @@ PreprocessingRecord::addPreprocessedEntity(PreprocessedEntity *Entity) {
   assert(Entity);
   SourceLocation BeginLoc = Entity->getSourceRange().getBegin();
 
-  if (isa<MacroDefinitionRecord>(Entity)) {
+  if (isa<MacroDefinition>(Entity)) {
     assert((PreprocessedEntities.empty() ||
-            !SourceMgr.isBeforeInTranslationUnit(
-                BeginLoc,
-                PreprocessedEntities.back()->getSourceRange().getBegin())) &&
+            !SourceMgr.isBeforeInTranslationUnit(BeginLoc,
+                   PreprocessedEntities.back()->getSourceRange().getBegin())) &&
            "a macro definition was encountered out-of-order");
     PreprocessedEntities.push_back(Entity);
     return getPPEntityID(PreprocessedEntities.size()-1, /*isLoaded=*/false);
@@ -319,7 +320,7 @@ unsigned PreprocessingRecord::allocateLoadedEntities(unsigned NumEntities) {
 }
 
 void PreprocessingRecord::RegisterMacroDefinition(MacroInfo *Macro,
-                                                  MacroDefinitionRecord *Def) {
+                                                  MacroDefinition *Def) {
   MacroDefinitions[Macro] = Def;
 }
 
@@ -356,10 +357,9 @@ PreprocessingRecord::getLoadedPreprocessedEntity(unsigned Index) {
   return Entity;
 }
 
-MacroDefinitionRecord *
-PreprocessingRecord::findMacroDefinition(const MacroInfo *MI) {
-  llvm::DenseMap<const MacroInfo *, MacroDefinitionRecord *>::iterator Pos =
-      MacroDefinitions.find(MI);
+MacroDefinition *PreprocessingRecord::findMacroDefinition(const MacroInfo *MI) {
+  llvm::DenseMap<const MacroInfo *, MacroDefinition *>::iterator Pos
+    = MacroDefinitions.find(MI);
   if (Pos == MacroDefinitions.end())
     return nullptr;
 
@@ -374,34 +374,35 @@ void PreprocessingRecord::addMacroExpansion(const Token &Id,
     return;
 
   if (MI->isBuiltinMacro())
-    addPreprocessedEntity(new (*this)
-                              MacroExpansion(Id.getIdentifierInfo(), Range));
-  else if (MacroDefinitionRecord *Def = findMacroDefinition(MI))
-    addPreprocessedEntity(new (*this) MacroExpansion(Def, Range));
+    addPreprocessedEntity(
+                      new (*this) MacroExpansion(Id.getIdentifierInfo(),Range));
+  else if (MacroDefinition *Def = findMacroDefinition(MI))
+    addPreprocessedEntity(
+                       new (*this) MacroExpansion(Def, Range));
 }
 
 void PreprocessingRecord::Ifdef(SourceLocation Loc, const Token &MacroNameTok,
-                                const MacroDefinition &MD) {
+                                const MacroDirective *MD) {
   // This is not actually a macro expansion but record it as a macro reference.
   if (MD)
-    addMacroExpansion(MacroNameTok, MD.getMacroInfo(),
+    addMacroExpansion(MacroNameTok, MD->getMacroInfo(),
                       MacroNameTok.getLocation());
 }
 
 void PreprocessingRecord::Ifndef(SourceLocation Loc, const Token &MacroNameTok,
-                                 const MacroDefinition &MD) {
+                                 const MacroDirective *MD) {
   // This is not actually a macro expansion but record it as a macro reference.
   if (MD)
-    addMacroExpansion(MacroNameTok, MD.getMacroInfo(),
+    addMacroExpansion(MacroNameTok, MD->getMacroInfo(),
                       MacroNameTok.getLocation());
 }
 
 void PreprocessingRecord::Defined(const Token &MacroNameTok,
-                                  const MacroDefinition &MD,
+                                  const MacroDirective *MD,
                                   SourceRange Range) {
   // This is not actually a macro expansion but record it as a macro reference.
   if (MD)
-    addMacroExpansion(MacroNameTok, MD.getMacroInfo(),
+    addMacroExpansion(MacroNameTok, MD->getMacroInfo(),
                       MacroNameTok.getLocation());
 }
 
@@ -409,26 +410,27 @@ void PreprocessingRecord::SourceRangeSkipped(SourceRange Range) {
   SkippedRanges.push_back(Range);
 }
 
-void PreprocessingRecord::MacroExpands(const Token &Id,
-                                       const MacroDefinition &MD,
+void PreprocessingRecord::MacroExpands(const Token &Id,const MacroDirective *MD,
                                        SourceRange Range,
                                        const MacroArgs *Args) {
-  addMacroExpansion(Id, MD.getMacroInfo(), Range);
+  addMacroExpansion(Id, MD->getMacroInfo(), Range);
 }
 
 void PreprocessingRecord::MacroDefined(const Token &Id,
                                        const MacroDirective *MD) {
   const MacroInfo *MI = MD->getMacroInfo();
   SourceRange R(MI->getDefinitionLoc(), MI->getDefinitionEndLoc());
-  MacroDefinitionRecord *Def =
-      new (*this) MacroDefinitionRecord(Id.getIdentifierInfo(), R);
+  MacroDefinition *Def
+      = new (*this) MacroDefinition(Id.getIdentifierInfo(), R);
   addPreprocessedEntity(Def);
   MacroDefinitions[MI] = Def;
 }
 
 void PreprocessingRecord::MacroUndefined(const Token &Id,
-                                         const MacroDefinition &MD) {
-  MD.forAllDefinitions([&](MacroInfo *MI) { MacroDefinitions.erase(MI); });
+                                         const MacroDirective *MD) {
+  // Note: MI may be null (when #undef'ining an undefined macro).
+  if (MD)
+    MacroDefinitions.erase(MD->getMacroInfo());
 }
 
 void PreprocessingRecord::InclusionDirective(

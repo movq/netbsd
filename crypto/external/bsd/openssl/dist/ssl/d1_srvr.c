@@ -419,7 +419,7 @@ int dtls1_accept(SSL *s)
                          DTLS1_SCTP_AUTH_LABEL);
 
                 if (SSL_export_keying_material(s, sctpauthkey,
-                        sizeof(sctpauthkey), labelbuffer,
+                                           sizeof(sctpauthkey), labelbuffer,
                         sizeof(labelbuffer), NULL, 0, 0) <= 0) {
                     ret = -1;
                     s->state = SSL_ST_ERR;

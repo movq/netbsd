@@ -1,4 +1,4 @@
-/*	$NetBSD: if_gm.c,v 1.47 2016/06/10 13:27:11 ozaki-r Exp $	*/
+/*	$NetBSD: if_gm.c,v 1.44 2014/08/10 16:44:34 tls Exp $	*/
 
 /*-
  * Copyright (c) 2000 Tsubai Masanari.  All rights reserved.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_gm.c,v 1.47 2016/06/10 13:27:11 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_gm.c,v 1.44 2014/08/10 16:44:34 tls Exp $");
 
 #include "opt_inet.h"
 
@@ -40,7 +40,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_gm.c,v 1.47 2016/06/10 13:27:11 ozaki-r Exp $");
 #include <sys/systm.h>
 #include <sys/callout.h>
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <uvm/uvm_extern.h>
 
@@ -382,7 +382,7 @@ gmac_rint(struct gmac_softc *sc)
 		 * If so, hand off the raw packet to BPF.
 		 */
 		bpf_mtap(ifp, m);
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		(*ifp->if_input)(ifp, m);
 		ifp->if_ipackets++;
 
 next:
@@ -412,7 +412,7 @@ gmac_get(struct gmac_softc *sc, void *pkt, int totlen)
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (m == 0)
 		return 0;
-	m_set_rcvif(m, &sc->sc_if);
+	m->m_pkthdr.rcvif = &sc->sc_if;
 	m->m_pkthdr.len = totlen;
 	len = MHLEN;
 	top = 0;

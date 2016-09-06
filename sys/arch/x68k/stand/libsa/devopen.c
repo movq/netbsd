@@ -1,4 +1,4 @@
-/*	$NetBSD: devopen.c,v 1.7 2016/06/26 04:17:17 isaki Exp $	*/
+/*	$NetBSD: devopen.c,v 1.6 2012/10/12 20:15:52 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 2001 Minoura Makoto
@@ -28,7 +28,6 @@
 
 #include <sys/param.h>
 #include <sys/disklabel.h>
-#include <machine/bootinfo.h>
 #include <lib/libkern/libkern.h>
 #include <lib/libsa/stand.h>
 #include "libx68k.h"
@@ -39,34 +38,17 @@ int devopen_open_dir = 0;
 /*
  * Parse a device spec.
  *
- * [ha@]<dev><unit><part>:<file>
- *  ha   - host adaptor ("spc0", "spc1", "mha0")
- *  dev  - device name (e.g., "sd")
+ * sd<unit><part>:<file>
  *  unit - 0-7
  *  part - a-p
  */
 int
-devparse(const char *fname, int *ha, int *dev, int *unit, int *part,
-	char **file)
+devparse(const char *fname, int *dev, int *unit, int *part, char **file)
 {
 	char const *s;
 	int i;
 
 	s = fname;
-
-	if (strncmp(s, "spc0@", 5) == 0) {
-		*ha = (X68K_BOOT_SCSIIF_SPC << 4) | 0;
-		s += 5;
-	} else if (strncmp(s, "spc1@", 5) == 0) {
-		*ha = (X68K_BOOT_SCSIIF_SPC << 4) | 1;
-		s += 5;
-	} else if (strncmp(s, "mha0@", 5) == 0) {
-		*ha = (X68K_BOOT_SCSIIF_MHA << 4) | 0;
-		s += 5;
-	} else {
-		*ha = 0;
-	}
-
 	for (i = 0; devspec[i].ds_name != 0; i++) {
 		if (strncmp (devspec[i].ds_name, s,
 			     strlen(devspec[i].ds_name)) == 0)
@@ -109,10 +91,10 @@ int
 devopen(struct open_file *f, const char *fname, char **file)
 {
 	int error;
-	int ha, dev, unit, part;
+	int dev, unit, part;
 	struct devsw *dp = &devsw[0];
 
-	error = devparse(fname, &ha, &dev, &unit, &part, file);
+	error = devparse(fname, &dev, &unit, &part, file);
 	if (error)
 		return error;
 

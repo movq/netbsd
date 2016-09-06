@@ -17,7 +17,7 @@
 
 // Returns: 1 if number of bits is odd else returns 0
 
-COMPILER_RT_ABI si_int __paritydi2(di_int a);
+si_int __paritydi2(di_int a);
 
 int naive_parity(di_int a)
 {

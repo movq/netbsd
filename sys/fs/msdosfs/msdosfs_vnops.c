@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_vnops.c,v 1.96 2016/02/01 16:53:23 christos Exp $	*/
+/*	$NetBSD: msdosfs_vnops.c,v 1.91 2014/07/25 08:20:51 dholland Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -48,7 +48,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msdosfs_vnops.c,v 1.96 2016/02/01 16:53:23 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msdosfs_vnops.c,v 1.91 2014/07/25 08:20:51 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -522,7 +522,7 @@ msdosfs_read(void *v)
 		 * vnode for the directory.
 		 */
 		error = bread(pmp->pm_devvp, de_bn2kb(pmp, lbn), blsize,
-		    0, &bp);
+		    NOCRED, 0, &bp);
 		if (error) {
 			goto bad;
 		}
@@ -532,13 +532,8 @@ msdosfs_read(void *v)
 	} while (error == 0 && uio->uio_resid > 0 && n != 0);
 
 out:
-	if ((ap->a_ioflag & IO_SYNC) == IO_SYNC) {
-		int uerror;
-
-		uerror = deupdat(dep, 1);
-		if (error == 0)
-			error = uerror;
-	}
+	if ((ap->a_ioflag & IO_SYNC) == IO_SYNC)
+		error = deupdat(dep, 1);
 bad:
 	fstrans_done(vp->v_mount);
 	return (error);
@@ -1110,7 +1105,7 @@ abortit:
 		} else
 			bn = cntobn(pmp, cn);
 		error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn),
-		    pmp->pm_bpcluster, B_MODIFY, &bp);
+		    pmp->pm_bpcluster, NOCRED, B_MODIFY, &bp);
 		if (error) {
 			/* XXX should really panic here, fs is corrupt */
 			VOP_UNLOCK(fvp);
@@ -1394,7 +1389,6 @@ msdosfs_readdir(void *v)
 	int ncookies = 0, nc = 0;
 	off_t offset, uio_off;
 	int chksum = -1;
-	uint16_t namlen;
 
 #ifdef MSDOSFS_DEBUG
 	printf("msdosfs_readdir(): vp %p, uio %p, cred %p, eofflagp %p\n",
@@ -1502,7 +1496,7 @@ msdosfs_readdir(void *v)
 		if ((error = pcbmap(dep, lbn, &bn, &cn, &blsize)) != 0)
 			break;
 		error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize,
-		    0, &bp);
+		    NOCRED, 0, &bp);
 		if (error) {
 			goto bad;
 		}
@@ -1542,10 +1536,7 @@ msdosfs_readdir(void *v)
 				if (pmp->pm_flags & MSDOSFSMNT_SHORTNAME)
 					continue;
 				chksum = win2unixfn((struct winentry *)dentp,
-				    dirbuf, chksum, &namlen,
-				    pmp->pm_flags & MSDOSFSMNT_UTF8);
-				if (chksum != -1)
-					dirbuf->d_namlen = namlen;
+				    dirbuf, chksum);
 				continue;
 			}
 
@@ -1588,7 +1579,6 @@ msdosfs_readdir(void *v)
 				    pmp->pm_flags & MSDOSFSMNT_SHORTNAME);
 			else
 				dirbuf->d_name[dirbuf->d_namlen] = 0;
-			namlen = dirbuf->d_namlen;
 			chksum = -1;
 			dirbuf->d_reclen = _DIRENT_SIZE(dirbuf);
 			if (uio->uio_resid < dirbuf->d_reclen) {

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sk.c,v 1.82 2016/06/10 13:27:14 ozaki-r Exp $	*/
+/*	$NetBSD: if_sk.c,v 1.78 2014/08/10 16:44:36 tls Exp $	*/
 
 /*-
  * Copyright (c) 2003 The NetBSD Foundation, Inc.
@@ -115,7 +115,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sk.c,v 1.82 2016/06/10 13:27:14 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sk.c,v 1.78 2014/08/10 16:44:36 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -138,7 +138,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_sk.c,v 1.82 2016/06/10 13:27:14 ozaki-r Exp $");
 #include <net/if_media.h>
 
 #include <net/bpf.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
@@ -2109,7 +2109,7 @@ sk_rxeof(struct sk_if_softc *sc_if)
 			m_adj(m0, ETHER_ALIGN);
 			m = m0;
 		} else {
-			m_set_rcvif(m, ifp);
+			m->m_pkthdr.rcvif = ifp;
 			m->m_pkthdr.len = m->m_len = total_len;
 		}
 
@@ -2117,7 +2117,7 @@ sk_rxeof(struct sk_if_softc *sc_if)
 
 		bpf_mtap(ifp, m);
 		/* pass it on. */
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		(*ifp->if_input)(ifp, m);
 	}
 }
 
@@ -2220,10 +2220,7 @@ sk_tick(void *xsc_if)
 	SK_XM_CLRBIT_2(sc_if, XM_IMR, XM_IMR_GP0_SET);
 	SK_XM_READ_2(sc_if, XM_ISR);
 	mii_tick(mii);
-	if (ifp->if_link_state != LINK_STATE_UP)
-		callout_reset(&sc_if->sk_tick_ch, hz, sk_tick, sc_if);
-	else
-		callout_stop(&sc_if->sk_tick_ch);
+	callout_stop(&sc_if->sk_tick_ch);
 }
 
 void
@@ -2875,7 +2872,6 @@ sk_init(struct ifnet *ifp)
 
 	ifp->if_flags |= IFF_RUNNING;
 	ifp->if_flags &= ~IFF_OACTIVE;
-	callout_reset(&sc_if->sk_tick_ch, hz, sk_tick, sc_if);
 
 out:
 	splx(s);

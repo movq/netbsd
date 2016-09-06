@@ -1,4 +1,4 @@
-/*	$NetBSD: amiga.c,v 1.9 2015/06/05 05:02:48 mlelstv Exp $	*/
+/*	$NetBSD: amiga.c,v 1.8.6.1 2015/07/16 21:36:59 snj Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2002 The NetBSD Foundation, Inc.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(__lint)
-__RCSID("$NetBSD: amiga.c,v 1.9 2015/06/05 05:02:48 mlelstv Exp $");
+__RCSID("$NetBSD: amiga.c,v 1.8.6.1 2015/07/16 21:36:59 snj Exp $");
 #endif	/* !__lint */
 
 #include <sys/param.h>

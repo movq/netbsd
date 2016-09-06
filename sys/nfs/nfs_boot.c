@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_boot.c,v 1.86 2016/07/07 06:55:43 msaitoh Exp $	*/
+/*	$NetBSD: nfs_boot.c,v 1.81.4.1 2015/04/06 01:37:29 snj Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1997 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_boot.c,v 1.86 2016/07/07 06:55:43 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_boot.c,v 1.81.4.1 2015/04/06 01:37:29 snj Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_nfs.h"
@@ -366,7 +366,7 @@ nfs_boot_deladdress(struct ifnet *ifp, struct lwp *lwp, uint32_t addr)
 	memcpy(ifr.ifr_name, ifp->if_xname, IFNAMSIZ);
 
 	sockaddr_in_init(&sin, &ia, 0);
-	ifreq_setaddr(SIOCDIFADDR, &ifr, sintocsa(&sin));
+	ifreq_setaddr(SIOCDIFADDR, &ifr, sintocsa(&sin)); 
 
 	error = ifioctl(so, SIOCDIFADDR, &ifr, lwp);
 	if (error) {
@@ -404,14 +404,18 @@ nfs_boot_enbroadcast(struct socket *so)
 int
 nfs_boot_sobind_ipport(struct socket *so, uint16_t port, struct lwp *l)
 {
-	struct sockaddr_in sin;
+	struct mbuf *m;
+	struct sockaddr_in *sin;
 	int error;
 
-	sin.sin_len = sizeof(sin);
-	sin.sin_family = AF_INET;
-	sin.sin_addr.s_addr = INADDR_ANY;
-	sin.sin_port = htons(port);
-	error = sobind(so, (struct sockaddr *)&sin, l);
+	m = m_getclr(M_WAIT, MT_SONAME);
+	sin = mtod(m, struct sockaddr_in *);
+	sin->sin_len = m->m_len = sizeof(*sin);
+	sin->sin_family = AF_INET;
+	sin->sin_addr.s_addr = INADDR_ANY;
+	sin->sin_port = htons(port);
+	error = sobind(so, m, l);
+	m_freem(m);
 	return (error);
 }
 
@@ -425,7 +429,7 @@ nfs_boot_sobind_ipport(struct socket *so, uint16_t port, struct lwp *l)
 #define TOTAL_TIMEOUT   30	/* seconds */
 
 int
-nfs_boot_sendrecv(struct socket *so, struct sockaddr_in *nam,
+nfs_boot_sendrecv(struct socket *so, struct mbuf *nam,
 		int (*sndproc)(struct mbuf *, void *, int),
 		struct mbuf *snd,
 		int (*rcvproc)(struct mbuf **, void *),
@@ -468,8 +472,7 @@ send_again:
 		error = ENOBUFS;
 		goto out;
 	}
-	error = (*so->so_send)(so, (struct sockaddr *)nam, NULL,
-	    m, NULL, 0, lwp);
+	error = (*so->so_send)(so, nam, NULL, m, NULL, 0, lwp);
 	if (error) {
 		printf("nfs_boot: sosend: %d\n", error);
 		goto out;

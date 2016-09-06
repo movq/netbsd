@@ -129,7 +129,11 @@ public:
   /// required.
   ///
   /// \param RD The class whose vtable was used.
-  virtual void HandleVTable(CXXRecordDecl *RD) {}
+  ///
+  /// \param DefinitionRequired Whether a definition of this vtable is
+  /// required in this translation unit; otherwise, it is only needed if
+  /// it was actually used.
+  virtual void HandleVTable(CXXRecordDecl *RD, bool DefinitionRequired) {}
 
   /// \brief If the consumer is interested in entities getting modified after
   /// their initial creation, it should return a pointer to

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_fpa.c,v 1.60 2015/01/25 07:33:24 martin Exp $	*/
+/*	$NetBSD: if_fpa.c,v 1.59.4.1 2015/01/31 07:44:13 snj Exp $	*/
 
 /*-
  * Copyright (c) 1995, 1996 Matt Thomas <matt@3am-software.com>
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_fpa.c,v 1.60 2015/01/25 07:33:24 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_fpa.c,v 1.59.4.1 2015/01/31 07:44:13 snj Exp $");
 
 #ifdef __NetBSD__
 #include "opt_inet.h"

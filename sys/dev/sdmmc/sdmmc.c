@@ -1,4 +1,4 @@
-/*	$NetBSD: sdmmc.c,v 1.33 2015/12/22 09:55:38 mlelstv Exp $	*/
+/*	$NetBSD: sdmmc.c,v 1.22.4.3 2015/05/26 01:29:53 msaitoh Exp $	*/
 /*	$OpenBSD: sdmmc.c,v 1.18 2009/01/09 10:58:38 jsg Exp $	*/
 
 /*
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sdmmc.c,v 1.33 2015/12/22 09:55:38 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sdmmc.c,v 1.22.4.3 2015/05/26 01:29:53 msaitoh Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_sdmmc.h"
@@ -148,34 +148,11 @@ sdmmc_attach(device_t parent, device_t self, void *aux)
 	sdmmc_init_task(&sc->sc_discover_task, sdmmc_discover_task, sc);
 	sdmmc_init_task(&sc->sc_intr_task, sdmmc_intr_task, sc);
 
-	mutex_init(&sc->sc_mtx, MUTEX_DEFAULT, IPL_NONE);
+	mutex_init(&sc->sc_mtx, MUTEX_DEFAULT, IPL_SDMMC);
 	mutex_init(&sc->sc_tskq_mtx, MUTEX_DEFAULT, IPL_SDMMC);
 	mutex_init(&sc->sc_discover_task_mtx, MUTEX_DEFAULT, IPL_SDMMC);
 	mutex_init(&sc->sc_intr_task_mtx, MUTEX_DEFAULT, IPL_SDMMC);
 	cv_init(&sc->sc_tskq_cv, "mmctaskq");
-
-	evcnt_attach_dynamic(&sc->sc_ev_xfer, EVCNT_TYPE_MISC, NULL,
-	    device_xname(self), "xfer");
-	evcnt_attach_dynamic(&sc->sc_ev_xfer_aligned[0], EVCNT_TYPE_MISC,
-	    &sc->sc_ev_xfer, device_xname(self), "xfer 512");
-	evcnt_attach_dynamic(&sc->sc_ev_xfer_aligned[1], EVCNT_TYPE_MISC,
-	    &sc->sc_ev_xfer, device_xname(self), "xfer 1024");
-	evcnt_attach_dynamic(&sc->sc_ev_xfer_aligned[2], EVCNT_TYPE_MISC,
-	    &sc->sc_ev_xfer, device_xname(self), "xfer 2048");
-	evcnt_attach_dynamic(&sc->sc_ev_xfer_aligned[3], EVCNT_TYPE_MISC,
-	    &sc->sc_ev_xfer, device_xname(self), "xfer 4096");
-	evcnt_attach_dynamic(&sc->sc_ev_xfer_aligned[4], EVCNT_TYPE_MISC,
-	    &sc->sc_ev_xfer, device_xname(self), "xfer 8192");
-	evcnt_attach_dynamic(&sc->sc_ev_xfer_aligned[5], EVCNT_TYPE_MISC,
-	    &sc->sc_ev_xfer, device_xname(self), "xfer 16384");
-	evcnt_attach_dynamic(&sc->sc_ev_xfer_aligned[6], EVCNT_TYPE_MISC,
-	    &sc->sc_ev_xfer, device_xname(self), "xfer 32768");
-	evcnt_attach_dynamic(&sc->sc_ev_xfer_aligned[7], EVCNT_TYPE_MISC,
-	    &sc->sc_ev_xfer, device_xname(self), "xfer 65536");
-	evcnt_attach_dynamic(&sc->sc_ev_xfer_unaligned, EVCNT_TYPE_MISC,
-	    &sc->sc_ev_xfer, device_xname(self), "xfer unaligned");
-	evcnt_attach_dynamic(&sc->sc_ev_xfer_error, EVCNT_TYPE_MISC,
-	    &sc->sc_ev_xfer, device_xname(self), "xfer error");
 
 	if (ISSET(sc->sc_caps, SMC_CAPS_POLL_CARD_DET)) {
 		callout_init(&sc->sc_card_detect_ch, 0);
@@ -201,7 +178,7 @@ static int
 sdmmc_detach(device_t self, int flags)
 {
 	struct sdmmc_softc *sc = device_private(self);
-	int error, i;
+	int error;
 
 	mutex_enter(&sc->sc_tskq_mtx);
 	sc->sc_dying = 1;
@@ -231,12 +208,6 @@ sdmmc_detach(device_t self, int flags)
 	mutex_destroy(&sc->sc_discover_task_mtx);
 	mutex_destroy(&sc->sc_tskq_mtx);
 	mutex_destroy(&sc->sc_mtx);
-
-	evcnt_detach(&sc->sc_ev_xfer_error);
-	evcnt_detach(&sc->sc_ev_xfer_unaligned);
-	for (i = 0; i < __arraycount(sc->sc_ev_xfer_aligned); i++)
-		evcnt_detach(&sc->sc_ev_xfer_aligned[i]);
-	evcnt_detach(&sc->sc_ev_xfer);
 
 	return 0;
 }
@@ -344,28 +315,19 @@ static void
 sdmmc_discover_task(void *arg)
 {
 	struct sdmmc_softc *sc = (struct sdmmc_softc *)arg;
-	int card_detect, card_present;
 
-	mutex_enter(&sc->sc_discover_task_mtx);
-	card_detect = sdmmc_chip_card_detect(sc->sc_sct, sc->sc_sch);
-	card_present = ISSET(sc->sc_flags, SMF_CARD_PRESENT);
-	if (card_detect)
-		SET(sc->sc_flags, SMF_CARD_PRESENT);
-	else
-		CLR(sc->sc_flags, SMF_CARD_PRESENT);
-	mutex_exit(&sc->sc_discover_task_mtx);
-
-	if (card_detect) {
-		if (!card_present) {
+	if (sdmmc_chip_card_detect(sc->sc_sct, sc->sc_sch)) {
+		if (!ISSET(sc->sc_flags, SMF_CARD_PRESENT)) {
+			SET(sc->sc_flags, SMF_CARD_PRESENT);
 			sdmmc_card_attach(sc);
-			mutex_enter(&sc->sc_discover_task_mtx);
 			if (!ISSET(sc->sc_flags, SMF_CARD_ATTACHED))
 				CLR(sc->sc_flags, SMF_CARD_PRESENT);
-			mutex_exit(&sc->sc_discover_task_mtx);
 		}
 	} else {
-		if (card_present)
+		if (ISSET(sc->sc_flags, SMF_CARD_PRESENT)) {
+			CLR(sc->sc_flags, SMF_CARD_PRESENT);
 			sdmmc_card_detach(sc, DETACH_FORCE);
+		}
 	}
 }
 
@@ -373,15 +335,21 @@ static void
 sdmmc_polling_card(void *arg)
 {
 	struct sdmmc_softc *sc = (struct sdmmc_softc *)arg;
-	int card_detect, card_present;
+	int card_detect;
+	int s;
 
-	mutex_enter(&sc->sc_discover_task_mtx);
+	s = splsdmmc();
 	card_detect = sdmmc_chip_card_detect(sc->sc_sct, sc->sc_sch);
-	card_present = ISSET(sc->sc_flags, SMF_CARD_PRESENT);
-	mutex_exit(&sc->sc_discover_task_mtx);
-
-	if (card_detect != card_present)
-		sdmmc_needs_discover(sc->sc_dev);
+	if (card_detect) {
+		if (!ISSET(sc->sc_flags, SMF_CARD_PRESENT)) {
+			sdmmc_needs_discover(sc->sc_dev);
+		}
+	} else {
+		if (ISSET(sc->sc_flags, SMF_CARD_PRESENT)) {
+			sdmmc_needs_discover(sc->sc_dev);
+		}
+	}
+	splx(s);
 
 	callout_schedule(&sc->sc_card_detect_ch, hz);
 }
@@ -556,8 +524,7 @@ sdmmc_enable(struct sdmmc_softc *sc)
 	/*
 	 * Select the minimum clock frequency.
 	 */
-	error = sdmmc_chip_bus_clock(sc->sc_sct, sc->sc_sch, SDMMC_SDCLK_400K,
-	    false);
+	error = sdmmc_chip_bus_clock(sc->sc_sct, sc->sc_sch, SDMMC_SDCLK_400K);
 	if (error) {
 		aprint_error_dev(sc->sc_dev, "couldn't supply clock\n");
 		goto out;
@@ -603,8 +570,7 @@ sdmmc_disable(struct sdmmc_softc *sc)
 
 	/* Turn off bus power and clock. */
 	(void)sdmmc_chip_bus_width(sc->sc_sct, sc->sc_sch, 1);
-	(void)sdmmc_chip_bus_clock(sc->sc_sct, sc->sc_sch, SDMMC_SDCLK_OFF,
-	    false);
+	(void)sdmmc_chip_bus_clock(sc->sc_sct, sc->sc_sch, SDMMC_SDCLK_OFF);
 	(void)sdmmc_chip_bus_power(sc->sc_sct, sc->sc_sch, 0);
 	sc->sc_busclk = sc->sc_clkmax;
 }
@@ -798,7 +764,7 @@ sdmmc_app_command(struct sdmmc_softc *sc, struct sdmmc_function *sf, struct sdmm
 	memset(&acmd, 0, sizeof(acmd));
 	acmd.c_opcode = MMC_APP_CMD;
 	acmd.c_arg = (sf != NULL) ? (sf->rca << 16) : 0;
-	acmd.c_flags = SCF_CMD_AC | SCF_RSP_R1 | SCF_RSP_SPI_R1 | (cmd->c_flags & SCF_TOUT_OK);
+	acmd.c_flags = SCF_CMD_AC | SCF_RSP_R1 | SCF_RSP_SPI_R1;
 
 	error = sdmmc_mmc_command(sc, &acmd);
 	if (error == 0) {
@@ -846,32 +812,7 @@ sdmmc_mmc_command(struct sdmmc_softc *sc, struct sdmmc_command *cmd)
 
 	DPRINTF(1,("sdmmc_mmc_command: error=%d\n", error));
 
-	if (error &&
-	   (cmd->c_opcode == MMC_READ_BLOCK_MULTIPLE ||
-	    cmd->c_opcode == MMC_WRITE_BLOCK_MULTIPLE)) {
-		sdmmc_stop_transmission(sc);
-	}
-
 	return error;
-}
-
-/*
- * Send the "STOP TRANSMISSION" command
- */
-void
-sdmmc_stop_transmission(struct sdmmc_softc *sc)
-{
-	struct sdmmc_command cmd;
-
-	DPRINTF(1,("sdmmc_stop_transmission\n"));
-
-	/* Don't lock */
-
-	memset(&cmd, 0, sizeof(cmd));
-	cmd.c_opcode = MMC_STOP_TRANSMISSION;
-	cmd.c_flags = SCF_CMD_AC | SCF_RSP_R1B | SCF_RSP_SPI_R1B;
-
-	(void)sdmmc_mmc_command(sc, &cmd);
 }
 
 /*
@@ -904,11 +845,8 @@ sdmmc_set_relative_addr(struct sdmmc_softc *sc, struct sdmmc_function *sf)
 
 	/* Don't lock */
 
-	if (ISSET(sc->sc_caps, SMC_CAPS_SPI_MODE)) {
-		aprint_error_dev(sc->sc_dev,
-			"sdmmc_set_relative_addr: SMC_CAPS_SPI_MODE set");
+	if (ISSET(sc->sc_caps, SMC_CAPS_SPI_MODE))
 		return EIO;
-	}
 
 	memset(&cmd, 0, sizeof(cmd));
 	if (ISSET(sc->sc_flags, SMF_SD_MODE)) {
@@ -937,11 +875,8 @@ sdmmc_select_card(struct sdmmc_softc *sc, struct sdmmc_function *sf)
 
 	/* Don't lock */
 
-	if (ISSET(sc->sc_caps, SMC_CAPS_SPI_MODE)) {
-		aprint_error_dev(sc->sc_dev,
-			"sdmmc_select_card: SMC_CAPS_SPI_MODE set");
+	if (ISSET(sc->sc_caps, SMC_CAPS_SPI_MODE))
 		return EIO;
-	}
 
 	if (sc->sc_card == sf
 	 || (sf && sc->sc_card && sc->sc_card->rca == sf->rca)) {

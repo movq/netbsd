@@ -1,4 +1,4 @@
-/*	$NetBSD: getdiskrawname.c,v 1.5 2014/09/17 23:54:42 christos Exp $	*/
+/*	$NetBSD: getdiskrawname.c,v 1.2.4.1 2014/09/22 11:19:20 martin Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: getdiskrawname.c,v 1.5 2014/09/17 23:54:42 christos Exp $");
+__RCSID("$NetBSD: getdiskrawname.c,v 1.2.4.1 2014/09/22 11:19:20 martin Exp $");
 
 #include <sys/stat.h>
 

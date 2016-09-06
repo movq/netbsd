@@ -1,4 +1,4 @@
-/*	$NetBSD: wsdisplay_vcons.c,v 1.35 2015/11/08 16:49:20 christos Exp $ */
+/*	$NetBSD: wsdisplay_vcons.c,v 1.32.4.1 2014/11/11 12:50:48 martin Exp $ */
 
 /*-
  * Copyright (c) 2005, 2006 Michael Lorenz
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: wsdisplay_vcons.c,v 1.35 2015/11/08 16:49:20 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: wsdisplay_vcons.c,v 1.32.4.1 2014/11/11 12:50:48 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -285,21 +285,15 @@ vcons_init_screen(struct vcons_data *vd, struct vcons_screen *scr,
 #else
 	cnt = ri->ri_rows * ri->ri_cols;
 #endif
-	scr->scr_attrs = malloc(cnt * (sizeof(long) + 
+	scr->scr_attrs = (long *)malloc(cnt * (sizeof(long) + 
 	    sizeof(uint32_t)), M_DEVBUF, M_WAITOK);
 	if (scr->scr_attrs == NULL)
 		return ENOMEM;
 
 	scr->scr_chars = (uint32_t *)&scr->scr_attrs[cnt];
 
-	i = ri->ri_ops.allocattr(ri, WS_DEFAULT_FG, WS_DEFAULT_BG, 0, defattr);
-	if (i != 0) {
-#ifdef DIAGNOSTIC
-		printf("vcons: error allocating attribute %d\n", i);
-#endif
-		scr->scr_defattr = 0;
-	} else
-		scr->scr_defattr = *defattr;
+	ri->ri_ops.allocattr(ri, WS_DEFAULT_FG, WS_DEFAULT_BG, 0, defattr);
+	scr->scr_defattr = *defattr;
 
 	/* 
 	 * fill the attribute buffer with *defattr, chars with 0x20 
@@ -742,10 +736,9 @@ vcons_copycols(void *cookie, int row, int srccol, int dstcol, int ncols)
 
 	vcons_lock(scr);
 	if (SCREEN_IS_VISIBLE(scr) && SCREEN_CAN_DRAW(scr)) {
-#if defined(VCONS_DRAW_INTR)
-		vcons_update_screen(scr);
-#else
 		scr->scr_vd->copycols(cookie, row, srccol, dstcol, ncols);
+#if defined(VCONS_DRAW_INTR)
+		vcons_invalidate_cache(scr->scr_vd);
 #endif
 	}
 	vcons_unlock(scr);
@@ -914,10 +907,9 @@ vcons_copyrows(void *cookie, int srcrow, int dstrow, int nrows)
 
 	vcons_lock(scr);
 	if (SCREEN_IS_VISIBLE(scr) && SCREEN_CAN_DRAW(scr)) {
-#if defined(VCONS_DRAW_INTR)
-		vcons_update_screen(scr);
-#else
 		scr->scr_vd->copyrows(cookie, srcrow, dstrow, nrows);
+#if defined(VCONS_DRAW_INTR)
+		vcons_invalidate_cache(scr->scr_vd);
 #endif
 	}
 	vcons_unlock(scr);
@@ -1146,7 +1138,6 @@ vcons_putwschar(struct vcons_screen *scr, struct wsdisplay_char *wsc)
 {
 	long attr;
 	struct rasops_info *ri;
-	int error;
 
 	KASSERT(scr != NULL && wsc != NULL);
 
@@ -1159,10 +1150,8 @@ vcons_putwschar(struct vcons_screen *scr, struct wsdisplay_char *wsc)
 	if ((wsc->row >= 0) && (wsc->row < ri->ri_rows) && (wsc->col >= 0) && 
 	     (wsc->col < ri->ri_cols)) {
 
-		error = ri->ri_ops.allocattr(ri, wsc->foreground,
-		    wsc->background, wsc->flags, &attr);
-		if (error)
-			return error;
+		ri->ri_ops.allocattr(ri, wsc->foreground, wsc->background,
+		    wsc->flags, &attr);
 		vcons_putchar(ri, wsc->row, wsc->col, wsc->letter, attr);
 #ifdef VCONS_DEBUG
 		printf("vcons_putwschar(%d, %d, %x, %lx\n", wsc->row, wsc->col,

@@ -1,5 +1,5 @@
-/*	Id: inline.c,v 1.65 2015/11/17 19:19:40 ragge Exp 	*/	
-/*	$NetBSD: inline.c,v 1.1.1.7 2016/02/09 20:28:50 plunky Exp $	*/
+/*	Id: inline.c,v 1.54 2014/05/29 19:20:03 plunky Exp 	*/	
+/*	$NetBSD: inline.c,v 1.1.1.6 2014/07/24 19:23:38 plunky Exp $	*/
 /*
  * Copyright (c) 2003, 2008 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -74,10 +74,9 @@ static int nlabs, svclass;
 #endif
 
 int isinlining;
-int inlstatcnt;
+int inlnodecnt, inlstatcnt;
 
 #define	SZSI	sizeof(struct istat)
-int istatsz = SZSI;
 #define	ialloc() memset(permalloc(SZSI), 0, SZSI); inlstatcnt++
 
 /*
@@ -93,6 +92,20 @@ getprol(struct istat *is, int type)
 			return (struct interpass_prolog *)ip;
 	cerror("getprol: %d not found", type);
 	return 0; /* XXX */
+}
+
+
+static void
+tcnt(NODE *p, void *arg)
+{
+	inlnodecnt++;
+	if (nlabs > 1 && (p->n_op == REG || p->n_op == OREG) &&
+	    regno(p) == FPREG)
+		SLIST_FIRST(&ipole)->flags &= ~CANINL; /* no stack refs */
+	if (p->n_op == NAME || p->n_op == ICON)
+		p->n_sp = NULL; /* let symtabs be freed for inline funcs */
+	if (ndebug)
+		printf("locking node %p\n", p);
 }
 
 static struct istat *
@@ -119,77 +132,17 @@ refnode(struct symtab *sp)
 	inline_addarg(ip);
 }
 
-/*
- * Save attributes permanent.
- */
-static struct attr *
-inapcopy(struct attr *ap)
-{
-	struct attr *nap = attr_dup(ap);
-
-	if (ap->next)
-		nap->next = inapcopy(ap->next);
-	return nap;
-}
-
-/*
- * Copy a tree onto the permanent heap to save for inline.
- */
-static NODE *
-intcopy(NODE *p)
-{
-	NODE *q = permalloc(sizeof(NODE));
-	int o = coptype(p->n_op); /* XXX pass2 optype? */
-
-	*q = *p;
-	if (nlabs > 1 && (p->n_op == REG || p->n_op == OREG) &&
-	    regno(p) == FPREG)
-		SLIST_FIRST(&ipole)->flags &= ~CANINL; /* no stack refs */
-	if (q->n_ap)
-		q->n_ap = inapcopy(q->n_ap);
-	if (q->n_op == NAME || q->n_op == ICON ||
-	    q->n_op == XASM || q->n_op == XARG) {
-		if (*q->n_name)
-			q->n_name = xstrdup(q->n_name); /* XXX permstrdup */
-		else
-			q->n_name = "";
-	}
-	if (o == BITYPE)
-		q->n_right = intcopy(q->n_right);
-	if (o != LTYPE)
-		q->n_left = intcopy(q->n_left);
-	return q;
-}
-
 void
 inline_addarg(struct interpass *ip)
 {
-	struct interpass_prolog *ipp;
-	NODE *q;
-	static int g = 0;
-	extern P1ND *cftnod;
+	extern NODE *cftnod;
 
 	SDEBUG(("inline_addarg(%p)\n", ip));
 	DLIST_INSERT_BEFORE(&cifun->shead, ip, qelem);
-	switch (ip->type) {
-	case IP_ASM:
-		ip->ip_asm = xstrdup(ip->ip_asm);
-		break;
-	case IP_DEFLAB:
+	if (ip->type == IP_DEFLAB)
 		nlabs++;
-		break;
-	case IP_NODE:
-		q = ip->ip_node;
-		ip->ip_node = intcopy(ip->ip_node);
-		tfree(q);
-		break;
-	case IP_EPILOG:
-		ipp = (struct interpass_prolog *)ip;
-		if (ipp->ip_labels[0])
-			uerror("no computed goto in inlined functions");
-		ipp->ip_labels = &g;
-		break;
-	}
+	if (ip->type == IP_NODE)
+		walkf(ip->ip_node, tcnt, 0); /* Count as saved */
 	if (cftnod)
 		cifun->retval = regno(cftnod);
 }
@@ -326,7 +279,7 @@ puto(struct istat *w)
 				epp = (struct interpass_prolog *)ip;
 				crslab += (epp->ip_lblnum - ipp->ip_lblnum);
 			}
-			pp = xmalloc(sizeof(struct interpass_prolog));
+			pp = tmpalloc(sizeof(struct interpass_prolog));
 			memcpy(pp, ip, sizeof(struct interpass_prolog));
 			pp->ip_lblnum += lbloff;
 #ifdef PCC_DEBUG
@@ -341,18 +294,16 @@ puto(struct istat *w)
 			break;
 
 		default:
-			nip = xmalloc(sizeof(struct interpass));
+			nip = tmpalloc(sizeof(struct interpass));
 			*nip = *ip;
 			if (nip->type == IP_NODE) {
 				NODE *p;
 
-				p = nip->ip_node = tcopy(nip->ip_node);
+				p = nip->ip_node = ccopy(nip->ip_node);
 				if (p->n_op == GOTO)
-					slval(p->n_left,
-					    glval(p->n_left) + lbloff);
+					p->n_left->n_lval += lbloff;
 				else if (p->n_op == CBRANCH)
-					slval(p->n_right,
-					    glval(p->n_right) + lbloff);
+					p->n_right->n_lval += lbloff;
 			} else if (nip->type == IP_DEFLAB)
 				nip->ip_lbl += lbloff;
 			pass2_compile(nip);
@@ -402,10 +353,7 @@ printip(struct interpass *pole)
 		switch (ip->type) {
 		case IP_NODE: printf("\n");
 #ifdef PCC_DEBUG
-#ifndef TWOPASS
-			{ extern void e2print(NODE *p, int down, int *a, int *b);
-			fwalk(ip->ip_node, e2print, 0); break; }
-#endif
+			fwalk(ip->ip_node, eprint, 0); break;
 #endif
 		case IP_PROLOG:
 			ipplg = (struct interpass_prolog *)ip;
@@ -433,10 +381,10 @@ printip(struct interpass *pole)
 
 static int toff;
 
-static P1ND *
-mnode(struct ntds *nt, P1ND *p)
+static NODE *
+mnode(struct ntds *nt, NODE *p)
 {
-	P1ND *q;
+	NODE *q;
 	int num = nt->temp + toff;
 
 	if (p->n_op == CM) {
@@ -468,23 +416,20 @@ rtmps(NODE *p, void *arg)
  * - Label numbers must be updated with an offset.
  * - The stack block must be relocated (add to REG or OREG).
  * - Temporaries should be updated (but no must)
- *
- * Extra tricky:  The call is P1ND, nut the resulting tree is already NODE...
  */
-P1ND *
-inlinetree(struct symtab *sp, P1ND *f, P1ND *ap)
+NODE *
+inlinetree(struct symtab *sp, NODE *f, NODE *ap)
 {
 	extern int crslab, tvaloff;
 	struct istat *is = findfun(sp);
 	struct interpass *ip, *ipf, *ipl;
 	struct interpass_prolog *ipp, *ipe;
 	int lmin, l0, l1, l2, gainl, n;
-	NODE *pp;
-	P1ND *p, *rp;
+	NODE *p, *rp;
 
 	if (is == NULL || nerrors) {
 		inline_ref(sp); /* prototype of not yet declared inline ftn */
-		return NULL;
+		return NIL;
 	}
 
 	SDEBUG(("inlinetree(%p,%p) OK %d\n", f, ap, is->flags & CANINL));
@@ -503,19 +448,19 @@ inlinetree(struct symtab *sp, P1ND *f, P1ND *ap)
 	if ((is->flags & CANINL) == 0 || (xinline == 0 && gainl == 0)) {
 		if (is->sp->sclass == STATIC || is->sp->sclass == USTATIC)
 			inline_ref(sp);
-		return NULL;
+		return NIL;
 	}
 
 	if (isinlining && cifun->sp == sp) {
 		/* Do not try to inline ourselves */
 		inline_ref(sp);
-		return NULL;
+		return NIL;
 	}
 
 #ifdef mach_i386
 	if (kflag) {
 		is->flags |= REFD; /* if static inline, emit */
-		return NULL; /* XXX cannot handle hidden ebx arg */
+		return NIL; /* XXX cannot handle hidden ebx arg */
 	}
 #endif
 
@@ -525,8 +470,6 @@ inlinetree(struct symtab *sp, P1ND *f, P1ND *ap)
 	l2 = getlab();
 	SDEBUG(("branch labels %d,%d,%d\n", l0, l1, l2));
 
-	/* From here it is NODE */
-
 	ipp = getprol(is, IP_PROLOG);
 	ipe = getprol(is, IP_EPILOG);
 
@@ -534,7 +477,7 @@ inlinetree(struct symtab *sp, P1ND *f, P1ND *ap)
 
 	SDEBUG(("pre-offsets crslab %d tvaloff %d\n", crslab, tvaloff));
 	lmin = crslab - ipp->ip_lblnum;
-	crslab += (ipe->ip_lblnum - ipp->ip_lblnum) + 2;
+	crslab += (ipe->ip_lblnum - ipp->ip_lblnum) + 1;
 	toff = tvaloff - ipp->ip_tmpnum;
 	tvaloff += (ipe->ip_tmpnum - ipp->ip_tmpnum) + 1;
 	SDEBUG(("offsets crslab %d lmin %d tvaloff %d toff %d\n",
@@ -561,23 +504,20 @@ inlinetree(struct symtab *sp, P1ND *f, P1ND *ap)
 	for (ip = ipf; ip != ipl; ip = DLIST_NEXT(ip, qelem)) {
 		switch (ip->type) {
 		case IP_NODE:
-			pp = tcopy(ip->ip_node);
-			if (pp->n_op == GOTO)
-				slval(pp->n_left, glval(pp->n_left) + lmin);
-			else if (pp->n_op == CBRANCH)
-				slval(pp->n_right, glval(pp->n_right) + lmin);
-			walkf(pp, rtmps, 0);
+			p = ccopy(ip->ip_node);
+			if (p->n_op == GOTO)
+				p->n_left->n_lval += lmin;
+			else if (p->n_op == CBRANCH)
+				p->n_right->n_lval += lmin;
+			walkf(p, rtmps, 0);
 #ifdef PCC_DEBUG
-#ifndef TWOPASS
 			if (sdebug) {
-				extern void e2print(NODE *p, int down, int *a, int *b);
 				printf("converted node\n");
-				fwalk(ip->ip_node, e2print, 0);
-				fwalk(pp, e2print, 0);
+				fwalk(ip->ip_node, eprint, 0);
+				fwalk(p, eprint, 0);
 			}
 #endif
-#endif
-			send_passt(IP_NODE, pp);
+			send_passt(IP_NODE, p);
 			break;
 
 		case IP_DEFLAB:
@@ -604,13 +544,12 @@ inlinetree(struct symtab *sp, P1ND *f, P1ND *ap)
 	branch(l2);
 	plabel(l0);
 
-	/* Here we are P1ND again */
-	rp = block(GOTO, bcon(l1), NULL, INT, 0, 0);
+	rp = block(GOTO, bcon(l1), NIL, INT, 0, 0);
 	if (is->retval)
 		p = tempnode(is->retval + toff, DECREF(sp->stype),
 		    sp->sdf, sp->sap);
 	else
-		p = xbcon(0, NULL, DECREF(sp->stype));
+		p = bcon(0);
 	rp = buildtree(COMOP, rp, p);
 
 	if (is->nargs) {
@@ -618,7 +557,7 @@ inlinetree(struct symtab *sp, P1ND *f, P1ND *ap)
 		rp = buildtree(COMOP, p, rp);
 	}
 
-	p1tfree(f);
+	tfree(f);
 	return rp;
 }
 

@@ -1,5 +1,6 @@
 /* Disassembly routines for TMS320C30 architecture
-   Copyright (C) 1998-2015 Free Software Foundation, Inc.
+   Copyright 1998, 1999, 2000, 2002, 2005, 2007, 2009, 2012
+   Free Software Foundation, Inc.
    Contributed by Steven Haworth (steve@pm.cse.rmit.edu.au)
 
    This file is part of the GNU opcodes library.
@@ -669,9 +670,9 @@ print_branch (disassemble_info *info,
       if (address == 0)
 	info->fprintf_func (info->stream, " <%s>", sym->name);
       else
-	info->fprintf_func (info->stream, " <%s %c %lu>", sym->name,
+	info->fprintf_func (info->stream, " <%s %c %d>", sym->name,
 			    ((short) address < 0) ? '-' : '+',
-			    address);
+			    abs (address));
     }
   return 1;
 }

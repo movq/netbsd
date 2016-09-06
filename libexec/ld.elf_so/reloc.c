@@ -1,4 +1,4 @@
-/*	$NetBSD: reloc.c,v 1.109 2016/06/14 13:06:41 christos Exp $	 */
+/*	$NetBSD: reloc.c,v 1.106.18.1 2016/03/06 18:17:55 martin Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -39,7 +39,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: reloc.c,v 1.109 2016/06/14 13:06:41 christos Exp $");
+__RCSID("$NetBSD: reloc.c,v 1.106.18.1 2016/03/06 18:17:55 martin Exp $");
 #endif /* not lint */
 
 #include <err.h>
@@ -170,13 +170,12 @@ _rtld_relocate_objects(Obj_Entry *first, bool bind_now)
 		    (long)(obj->pltrelalim - obj->pltrela)));
 
 		if (obj->textrel) {
-			xwarnx("%s: text relocations", obj->path);
 			/*
 			 * There are relocations to the write-protected text
 			 * segment.
 			 */
 			if (mprotect(obj->mapbase, obj->textsize,
-				PROT_READ | PROT_WRITE) == -1) {
+				PROT_READ | PROT_WRITE | PROT_EXEC) == -1) {
 				_rtld_error("%s: Cannot write-enable text "
 				    "segment: %s", obj->path, xstrerror(errno));
 				return -1;
@@ -223,17 +222,6 @@ _rtld_relocate_objects(Obj_Entry *first, bool bind_now)
 		/* Set the special PLTGOT entries. */
 		if (obj->pltgot != NULL)
 			_rtld_setup_pltgot(obj);
-#ifdef GNU_RELRO
-		if (obj->relro_size > 0) {
-			if (mprotect(obj->relro_page, obj->relro_size,
-			    PROT_READ) == -1) {
-				_rtld_error("%s: Cannot enforce relro "
-				    "protection: %s", obj->path,
-				    xstrerror(errno));
-				return -1;
-			}
-		}
-#endif
 	}
 
 	return 0;

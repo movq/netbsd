@@ -1,5 +1,3 @@
-/*	$NetBSD: rumpfiber.h,v 1.4 2015/02/15 00:54:32 justin Exp $	*/
-
 /*
  * Copyright (c) 2014 Justin Cormack.  All Rights Reserved.
  *
@@ -33,6 +31,16 @@
 #include <ucontext.h>
 #include <unistd.h>
 
+static void printk(const char *s);
+
+static void
+printk(const char *msg)
+{
+	int ret __attribute__((unused));
+
+	ret = write(2, msg, strlen(msg));
+}
+
 struct thread {
     char *name;
     void *lwp;
@@ -40,7 +48,7 @@ struct thread {
     int64_t wakeup_time;
     TAILQ_ENTRY(thread) thread_list;
     ucontext_t ctx;
-    int flags;
+    uint32_t flags;
     int threrrno;
 };
 

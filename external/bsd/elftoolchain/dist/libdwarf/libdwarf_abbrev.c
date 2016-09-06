@@ -1,4 +1,4 @@
-/*	$NetBSD: libdwarf_abbrev.c,v 1.3 2016/02/20 02:43:41 christos Exp $	*/
+/*	$NetBSD: libdwarf_abbrev.c,v 1.2 2014/03/09 16:58:04 christos Exp $	*/
 
 /*-
  * Copyright (c) 2007 John Birrell (jb@freebsd.org)
@@ -29,8 +29,8 @@
 
 #include "_libdwarf.h"
 
-__RCSID("$NetBSD: libdwarf_abbrev.c,v 1.3 2016/02/20 02:43:41 christos Exp $");
-ELFTC_VCSID("Id: libdwarf_abbrev.c 3136 2014-12-24 16:04:38Z kaiwang27 ");
+__RCSID("$NetBSD: libdwarf_abbrev.c,v 1.2 2014/03/09 16:58:04 christos Exp $");
+ELFTC_VCSID("Id: libdwarf_abbrev.c 2070 2011-10-27 03:05:32Z jkoshy ");
 
 int
 _dwarf_abbrev_add(Dwarf_CU cu, uint64_t entry, uint64_t tag, uint8_t children,
@@ -183,9 +183,7 @@ _dwarf_abbrev_find(Dwarf_CU cu, uint64_t entry, Dwarf_Abbrev *abp,
 
 	/* Load and search the abbrev table. */
 	ds = _dwarf_find_section(cu->cu_dbg, ".debug_abbrev");
-	if (ds == NULL)
-		return (DW_DLE_NO_ENTRY);
-
+	assert(ds != NULL);
 	offset = cu->cu_abbrev_offset_cur;
 	while (offset < ds->ds_size) {
 		ret = _dwarf_abbrev_parse(cu->cu_dbg, cu, &offset, &ab, error);

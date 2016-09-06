@@ -28,16 +28,16 @@ class DwarfUnit;
 class DIEAbbrev;
 class MCSymbol;
 class DIE;
+class DISubprogram;
 class LexicalScope;
 class StringRef;
 class DwarfDebug;
 class MCSection;
-class MDNode;
 class DwarfFile {
   // Target of Dwarf emission, used for sizing of abbreviations.
   AsmPrinter *Asm;
 
-  BumpPtrAllocator AbbrevAllocator;
+  DwarfDebug &DD;
 
   // Used to uniquely define abbreviations.
   FoldingSet<DIEAbbrev> AbbreviationsSet;
@@ -59,10 +59,11 @@ class DwarfFile {
   /// Maps MDNodes for type system with the corresponding DIEs. These DIEs can
   /// be shared across CUs, that is why we keep the map here instead
   /// of in DwarfCompileUnit.
-  DenseMap<const MDNode *, DIE *> DITypeNodeToDieMap;
+  DenseMap<const MDNode *, DIE *> MDTypeNodeToDieMap;
 
 public:
-  DwarfFile(AsmPrinter *AP, StringRef Pref, BumpPtrAllocator &DA);
+  DwarfFile(AsmPrinter *AP, DwarfDebug &DD, StringRef Pref,
+            BumpPtrAllocator &DA);
 
   ~DwarfFile();
 
@@ -74,30 +75,27 @@ public:
   /// \brief Compute the size and offset of all the DIEs.
   void computeSizeAndOffsets();
 
-  /// Define a unique number for the abbreviation.
-  ///
-  /// Compute the abbreviation for \c Die, look up its unique number, and
-  /// return a reference to it in the uniquing table.
-  DIEAbbrev &assignAbbrevNumber(DIE &Die);
+  /// \brief Define a unique number for the abbreviation.
+  void assignAbbrevNumber(DIEAbbrev &Abbrev);
 
   /// \brief Add a unit to the list of CUs.
   void addUnit(std::unique_ptr<DwarfUnit> U);
 
   /// \brief Emit all of the units to the section listed with the given
   /// abbreviation section.
-  void emitUnits(bool UseOffsets);
+  void emitUnits(const MCSymbol *ASectionSym);
 
   /// \brief Emit a set of abbreviations to the specific section.
-  void emitAbbrevs(MCSection *);
+  void emitAbbrevs(const MCSection *);
 
   /// \brief Emit all of the strings to the section given.
-  void emitStrings(MCSection *StrSection, MCSection *OffsetSection = nullptr);
+  void emitStrings(const MCSection *StrSection,
+                   const MCSection *OffsetSection = nullptr);
 
   /// \brief Returns the string pool.
   DwarfStringPool &getStringPool() { return StrPool; }
 
-  /// \returns false if the variable was merged with a previous one.
-  bool addScopeVariable(LexicalScope *LS, DbgVariable *Var);
+  void addScopeVariable(LexicalScope *LS, DbgVariable *Var);
 
   DenseMap<LexicalScope *, SmallVector<DbgVariable *, 8>> &getScopeVariables() {
     return ScopeVariables;
@@ -108,10 +106,10 @@ public:
   }
 
   void insertDIE(const MDNode *TypeMD, DIE *Die) {
-    DITypeNodeToDieMap.insert(std::make_pair(TypeMD, Die));
+    MDTypeNodeToDieMap.insert(std::make_pair(TypeMD, Die));
   }
   DIE *getDIE(const MDNode *TypeMD) {
-    return DITypeNodeToDieMap.lookup(TypeMD);
+    return MDTypeNodeToDieMap.lookup(TypeMD);
   }
 };
 }

@@ -1,5 +1,5 @@
-#	Id: Makefile.in,v 1.36 2015/11/17 22:34:17 plunky Exp 	
-#	$NetBSD: Makefile.in,v 1.1.1.6 2016/02/09 20:28:40 plunky Exp $
+#	Id: Makefile.in,v 1.34 2012/09/25 11:17:17 plunky Exp 	
+#	$NetBSD: Makefile.in,v 1.1.1.5 2014/07/24 19:21:56 plunky Exp $
 #
 # Makefile.in for the cc part of pcc.
 #
@@ -17,7 +17,6 @@ datarootdir = @datarootdir@
 mandir = @mandir@
 CC = @CC@
 EXEEXT = @EXEEXT@
-BINPREFIX = @BINPREFIX@
 TARGOS = @targos@
 TARGOSVER = @targosver@
 TARGMACH = @targmach@
@@ -30,10 +29,8 @@ CPPFLAGS = @CPPFLAGS@ -DLIBEXECDIR=\"$(libexecdir)/\" \
 	@ADD_CPPFLAGS@ -DINCLUDEDIR=\"$(includedir)/\" \
 	-DPCCINCDIR=\"$(PCCINCDIR)/\" -DPCCLIBDIR=\"$(PCCLIBDIR)/\" \
 	-Dos_$(TARGOS) -Dmach_$(TARGMACH) -DTARGOSVER=$(TARGOSVER) \
-	-DCXXPROGNAME=\"$(BINPREFIX)p++$(EXEEXT)\" \
-	-DCPPROGNAME=\"$(BINPREFIX)pcpp$(EXEEXT)\" \
-	-I$(top_srcdir)/cc/driver -I$(top_builddir) \
-	-I$(top_srcdir)/os/$(TARGOS) -I$(MIPDIR) -I$(MDIR)
+	-DCPPROGNAME=\"$(CPPDEST)\" -I$(top_srcdir)/cc/driver \
+	-I$(top_builddir) -I$(top_srcdir)/os/$(TARGOS) -I$(MIPDIR) -I$(MDIR)
 LIBS = @LIBS@
 LDFLAGS = @LDFLAGS@
 INSTALL = @INSTALL@
@@ -43,8 +40,8 @@ INSTALL_DATA = @INSTALL_DATA@
 MIPDIR=$(top_srcdir)/mip
 MDIR=$(top_srcdir)/arch/$(TARGMACH)
 
-DEST=cc$(EXEEXT)
-DRIVERS=pcc pcpp p++
+DEST=@BINPREFIX@pcc$(EXEEXT)
+CPPDEST=@BINPREFIX@pcpp$(EXEEXT)
 
 all: $(DEST)
 
@@ -67,16 +64,15 @@ $(DEST): $(OBJS)
 
 install:
 	test -z "$(DESTDIR)$(bindir)" || mkdir -p "$(DESTDIR)$(bindir)"
+	$(INSTALL_PROGRAM) $(DEST) $(DESTDIR)$(bindir)
+	$(INSTALL_PROGRAM) $(DEST) $(DESTDIR)$(bindir)/$(CPPDEST)
 	test -z "$(DESTDIR)$(mandir)/man1" || mkdir -p "$(DESTDIR)$(mandir)/man1"
-	@for driver in $(DRIVERS); do \
-		$(INSTALL_PROGRAM) $(DEST) $(DESTDIR)$(bindir)/$(BINPREFIX)$$driver$(EXEEXT); \
-		$(INSTALL_DATA) $(srcdir)/cc.1 $(DESTDIR)$(mandir)/man1/$$driver.1; \
-	done
+	$(INSTALL_DATA) $(srcdir)/cc.1 $(DESTDIR)$(mandir)/man1/$(DEST).1
 	test -z "$(DESTDIR)$(PCCINCDIR)" || mkdir -p "$(DESTDIR)$(PCCINCDIR)"
 	test -z "$(DESTDIR)$(PCCLIBDIR)" || mkdir -p "$(DESTDIR)$(PCCLIBDIR)"
 
 clean:
-	rm -f  $(OBJS) $(DEST)
+	rm -f  $(OBJS) $(CPPDEST) $(DEST)
 
 distclean: clean
 	rm -f  Makefile

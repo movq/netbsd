@@ -1,4 +1,4 @@
-/*	$NetBSD: _elftc.h,v 1.5 2016/03/13 03:47:41 christos Exp $	*/
+/*	$NetBSD: _elftc.h,v 1.2 2014/03/09 16:58:03 christos Exp $	*/
 
 /*-
  * Copyright (c) 2009 Joseph Koshy
@@ -25,7 +25,7 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * Id: _elftc.h 3244 2015-08-31 19:53:08Z emaste 
+ * Id: _elftc.h 2922 2013-03-17 22:53:15Z kaiwang27 
  */
 
 /**
@@ -78,17 +78,10 @@
  * SUCH DAMAGE.
  */
 
-#ifndef	LIST_FOREACH_SAFE
-#define	LIST_FOREACH_SAFE(var, head, field, tvar)		\
-	for ((var) = LIST_FIRST((head));			\
-	    (var) && ((tvar) = LIST_NEXT((var), field), 1);	\
-	    (var) = (tvar))
-#endif
-
 #ifndef	SLIST_FOREACH_SAFE
-#define	SLIST_FOREACH_SAFE(var, head, field, tvar)		\
-	for ((var) = SLIST_FIRST((head));			\
-	    (var) && ((tvar) = SLIST_NEXT((var), field), 1);	\
+#define	SLIST_FOREACH_SAFE(var, head, field, tvar)			\
+	for ((var) = SLIST_FIRST((head));				\
+	    (var) && ((tvar) = SLIST_NEXT((var), field), 1);		\
 	    (var) = (tvar))
 #endif
 
@@ -296,8 +289,7 @@ struct name {							\
 #define	ELFTC_VCSID(ID)		__FBSDID(ID)
 #endif
 
-#if defined(__APPLE__) || defined(__GLIBC__) || defined(__GNU__) || \
-    defined(__linux__)
+#if defined(__linux__) || defined(__GNU__) || defined(__GLIBC__)
 #if defined(__GNUC__)
 #define	ELFTC_VCSID(ID)		__asm__(".ident\t\"" ID "\"")
 #else
@@ -325,10 +317,6 @@ struct name {							\
 #endif	/* __GNUC__ */
 #endif
 
-#ifndef ELFTC_VCSID
-#define	ELFTC_VCSID(ID)		/**/
-#endif
-
 #endif	/* ELFTC_VCSID */
 
 /*
@@ -337,8 +325,8 @@ struct name {							\
 
 #ifndef	ELFTC_GETPROGNAME
 
-#if defined(__APPLE__) || defined(__DragonFly__) || defined(__FreeBSD__) || \
-    defined(__minix) || defined(__NetBSD__)
+#if defined(__DragonFly__) || defined(__FreeBSD__) || defined(__minix) || \
+    defined(__NetBSD__)
 
 #include <stdlib.h>
 
@@ -347,18 +335,17 @@ struct name {							\
 #endif	/* __DragonFly__ || __FreeBSD__ || __minix || __NetBSD__ */
 
 
-#if defined(__GLIBC__) || defined(__linux__)
-#ifndef _GNU_SOURCE
+#if defined(__GLIBC__)
+
 /*
  * GLIBC based systems have a global 'char *' pointer referencing
  * the executable's name.
  */
 extern const char *program_invocation_short_name;
-#endif	/* !_GNU_SOURCE */
 
 #define	ELFTC_GETPROGNAME()	program_invocation_short_name
 
-#endif	/* __GLIBC__ || __linux__ */
+#endif	/* __GLIBC__ */
 
 
 #if defined(__OpenBSD__)
@@ -372,27 +359,9 @@ extern const char *__progname;
 #endif	/* ELFTC_GETPROGNAME */
 
 
-#ifndef HAVE_NBTOOL_CONFIG_H
 /**
  ** Per-OS configuration.
  **/
-
-#if defined(__APPLE__)
-
-#include <libkern/OSByteOrder.h>
-#define	htobe32(x)	OSSwapHostToBigInt32(x)
-#define	roundup2	roundup
-
-#define	ELFTC_BYTE_ORDER			_BYTE_ORDER
-#define	ELFTC_BYTE_ORDER_LITTLE_ENDIAN		_LITTLE_ENDIAN
-#define	ELFTC_BYTE_ORDER_BIG_ENDIAN		_BIG_ENDIAN
-
-#define	ELFTC_HAVE_MMAP				1
-#define	ELFTC_HAVE_STRMODE			1
-
-#define ELFTC_NEED_BYTEORDER_EXTENSIONS		1
-#endif /* __APPLE__ */
-
 
 #if defined(__DragonFly__)
 
@@ -407,7 +376,7 @@ extern const char *__progname;
 
 #endif
 
-#if defined(__GLIBC__) || defined(__linux__)
+#if defined(__GLIBC__)
 
 #include <endian.h>
 
@@ -427,7 +396,7 @@ extern const char *__progname;
 
 #define	roundup2	roundup
 
-#endif	/* __GLIBC__ || __linux__ */
+#endif	/* __GLIBC__ */
 
 
 #if defined(__FreeBSD__)
@@ -463,7 +432,11 @@ extern const char *__progname;
 
 #define	ELFTC_HAVE_MMAP				1
 #define	ELFTC_HAVE_STRMODE			1
-
+#if __NetBSD_Version__ <= 599002100
+/* from src/doc/CHANGES: flex(1): Import flex-2.5.35 [christos 20091025] */
+/* and 5.99.21 was from Wed Oct 21 21:28:36 2009 UTC */
+#  define ELFTC_BROKEN_YY_NO_INPUT		1
+#endif
 #endif	/* __NetBSD __ */
 
 
@@ -483,19 +456,5 @@ extern const char *__progname;
 #define	roundup2	roundup
 
 #endif	/* __OpenBSD__ */
-
-#else /* Crosscompiling for NetBSD tools */
-
-#include <sys/param.h>
-#include <sys/endian.h>
-
-#define	ELFTC_BYTE_ORDER			_BYTE_ORDER
-#define	ELFTC_BYTE_ORDER_LITTLE_ENDIAN		_LITTLE_ENDIAN
-#define	ELFTC_BYTE_ORDER_BIG_ENDIAN		_BIG_ENDIAN
-
-#define	ELFTC_HAVE_MMAP				1
-#define	ELFTC_HAVE_STRMODE			1
-
-#endif /* NBTOOL_CONFIG_H */
 
 #endif	/* _ELFTC_H */

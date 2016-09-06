@@ -1,4 +1,4 @@
-/*	$NetBSD: process.c,v 1.21 2016/06/08 01:11:49 christos Exp $	*/
+/*	$NetBSD: process.c,v 1.19 2013/10/19 17:16:37 christos Exp $	*/
 
 /*
  * Copyright (c) 1993-95 Mats O Jansson.  All rights reserved.
@@ -24,9 +24,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "port.h"
+#include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: process.c,v 1.21 2016/06/08 01:11:49 christos Exp $");
+__RCSID("$NetBSD: process.c,v 1.19 2013/10/19 17:16:37 christos Exp $");
 #endif
 
 #include "os.h"
@@ -217,7 +217,7 @@ mopStartLoad(const u_char *dst, const u_char *src, struct dllist *dl_rpr,
 
 	slot = -1;
 	
-	/* Look if we have a non terminated load, if so, use its slot */
+	/* Look if we have a non terminated load, if so, use it's slot */
 
 	for (i = 0, dle = dllist; i < MAXDL; i++, dle++) {
 		if (dle->status != DL_STATUS_FREE) {

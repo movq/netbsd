@@ -1,4 +1,4 @@
-/*	$NetBSD: dnssec-settime.c,v 1.14 2016/05/26 16:49:55 christos Exp $	*/
+/*	$NetBSD: dnssec-settime.c,v 1.10.2.3 2016/03/13 08:06:03 martin Exp $	*/
 
 /*
  * Copyright (C) 2009-2015  Internet Systems Consortium, Inc. ("ISC")
@@ -131,8 +131,7 @@ main(int argc, char **argv) {
 #else
 	const char	*engine = NULL;
 #endif
-	const char 	*filename = NULL;
-	char		*directory = NULL;
+	char		*filename = NULL, *directory = NULL;
 	char		newname[1024];
 	char		keystr[DST_KEY_FORMATSIZE];
 	char		*endp, *p;

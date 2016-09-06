@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_lookup.c,v 1.205 2016/04/22 05:34:58 riastradh Exp $	*/
+/*	$NetBSD: vfs_lookup.c,v 1.201 2014/02/07 15:29:22 hannken Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -37,11 +37,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_lookup.c,v 1.205 2016/04/22 05:34:58 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_lookup.c,v 1.201 2014/02/07 15:29:22 hannken Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_magiclinks.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -484,21 +482,22 @@ struct namei_state {
 static void
 namei_init(struct namei_state *state, struct nameidata *ndp)
 {
-
 	state->ndp = ndp;
 	state->cnp = &ndp->ni_cnd;
+	KASSERT((state->cnp->cn_flags & INRELOOKUP) == 0);
 
 	state->docache = 0;
 	state->rdonly = 0;
 	state->slashes = 0;
 
-	KASSERTMSG((state->cnp->cn_cred != NULL), "namei: bad cred/proc");
-	KASSERTMSG(((state->cnp->cn_nameiop & (~OPMASK)) == 0),
-	    "namei: nameiop contaminated with flags: %08"PRIx32,
-	    state->cnp->cn_nameiop);
-	KASSERTMSG(((state->cnp->cn_flags & OPMASK) == 0),
-	    "name: flags contaminated with nameiops: %08"PRIx32,
-	    state->cnp->cn_flags);
+#ifdef DIAGNOSTIC
+	if (!state->cnp->cn_cred)
+		panic("namei: bad cred/proc");
+	if (state->cnp->cn_nameiop & (~OPMASK))
+		panic("namei: nameiop contaminated with flags");
+	if (state->cnp->cn_flags & OPMASK)
+		panic("namei: flags contaminated with nameiops");
+#endif
 
 	/*
 	 * The buffer for name translation shall be the one inside the
@@ -893,13 +892,6 @@ lookup_parsepath(struct namei_state *state)
  * Call VOP_LOOKUP for a single lookup; return a new search directory
  * (used when crossing mountpoints up or searching union mounts down) and 
  * the found object, which for create operations may be NULL on success.
- *
- * Note that the new search directory may be null, which means the
- * searchdir was unlocked and released. This happens in the common case
- * when crossing a mount point downwards, in order to avoid coupling
- * locks between different file system volumes. Importantly, this can
- * happen even if the call fails. (XXX: this is gross and should be
- * tidied somehow.)
  */
 static int
 lookup_once(struct namei_state *state,
@@ -993,9 +985,10 @@ unionlookup:
 	error = VOP_LOOKUP(searchdir, &foundobj, cnp);
 
 	if (error != 0) {
-		KASSERTMSG((foundobj == NULL),
-		    "leaf `%s' should be empty but is %p",
-		    cnp->cn_nameptr, foundobj);
+#ifdef DIAGNOSTIC
+		if (foundobj != NULL)
+			panic("leaf `%s' should be empty", cnp->cn_nameptr);
+#endif /* DIAGNOSTIC */
 #ifdef NAMEI_DIAGNOSTIC
 		printf("not found\n");
 #endif /* NAMEI_DIAGNOSTIC */
@@ -1080,48 +1073,39 @@ unionlookup:
 	 * Check to see if the vnode has been mounted on;
 	 * if so find the root of the mounted file system.
 	 */
-	KASSERT(searchdir != NULL);
 	while (foundobj->v_type == VDIR &&
 	       (mp = foundobj->v_mountedhere) != NULL &&
 	       (cnp->cn_flags & NOCROSSMOUNT) == 0) {
-
-		KASSERT(searchdir != foundobj);
-
 		error = vfs_busy(mp, NULL);
 		if (error != 0) {
-			vput(foundobj);
+			if (searchdir != foundobj) {
+				vput(foundobj);
+			} else {
+				vrele(foundobj);
+			}
 			goto done;
 		}
-		if (searchdir != NULL) {
+		if (searchdir != foundobj) {
 			VOP_UNLOCK(searchdir);
 		}
 		vput(foundobj);
 		error = VFS_ROOT(mp, &foundobj);
 		vfs_unbusy(mp, false, NULL);
 		if (error) {
-			if (searchdir != NULL) {
-				vn_lock(searchdir, LK_EXCLUSIVE | LK_RETRY);
-			}
+			vn_lock(searchdir, LK_EXCLUSIVE | LK_RETRY);
 			goto done;
 		}
 		/*
-		 * Avoid locking vnodes from two filesystems because
-		 * it's prone to deadlock, e.g. when using puffs.
-		 * Also, it isn't a good idea to propagate slowness of
-		 * a filesystem up to the root directory. For now,
-		 * only handle the common case, where foundobj is
-		 * VDIR.
-		 *
-		 * In this case set searchdir to null to avoid using
-		 * it again. It is not correct to set searchdir ==
-		 * foundobj here as that will confuse the caller.
-		 * (See PR 40740.)
+		 * avoid locking vnodes from two filesystems because it's
+		 * prune to deadlock.  eg. when using puffs.
+		 * also, it isn't a good idea to propagate slowness of a
+		 * filesystem up to the root directory.
+		 * for now, only handle the common case.  (ie. foundobj is VDIR)
 		 */
-		if (searchdir == NULL) {
-			/* already been here once; do nothing further */
-		} else if (foundobj->v_type == VDIR) {
+		if (foundobj->v_type == VDIR) {
 			vrele(searchdir);
-			*newsearchdir_ret = searchdir = NULL;
+			*newsearchdir_ret = searchdir = foundobj;
+			vref(searchdir);
 		} else {
 			VOP_UNLOCK(foundobj);
 			vn_lock(searchdir, LK_EXCLUSIVE | LK_RETRY);
@@ -1132,8 +1116,7 @@ unionlookup:
 	*foundobj_ret = foundobj;
 	error = 0;
 done:
-	KASSERT(*newsearchdir_ret == NULL ||
-		VOP_ISLOCKED(*newsearchdir_ret) == LK_EXCLUSIVE);
+	KASSERT(VOP_ISLOCKED(*newsearchdir_ret) == LK_EXCLUSIVE);
 	/*
 	 * *foundobj_ret is valid only if error == 0.
 	 */
@@ -1194,8 +1177,6 @@ namei_oneroot(struct namei_state *state,
 	}
 
 	for (;;) {
-		KASSERT(searchdir != NULL);
-		KASSERT(VOP_ISLOCKED(searchdir) == LK_EXCLUSIVE);
 
 		/*
 		 * If the directory we're on is unmounted, bail out.
@@ -1231,9 +1212,7 @@ namei_oneroot(struct namei_state *state,
 
 		error = lookup_once(state, searchdir, &searchdir, &foundobj);
 		if (error) {
-			if (searchdir != NULL) {
-				vput(searchdir);
-			}
+			vput(searchdir);
 			ndp->ni_dvp = NULL;
 			ndp->ni_vp = NULL;
 			/*
@@ -1257,8 +1236,6 @@ namei_oneroot(struct namei_state *state,
 			 * the code below doesn't have to test for
 			 * foundobj == NULL.
 			 */
-			/* lookup_once can't have dropped the searchdir */
-			KASSERT(searchdir != NULL);
 			break;
 		}
 
@@ -1273,28 +1250,6 @@ namei_oneroot(struct namei_state *state,
 			ndp->ni_next -= state->slashes;
 			if (neverfollow) {
 				error = EINVAL;
-			} else if (searchdir == NULL) {
-				/*
-				 * dholland 20160410: lookup_once only
-				 * drops searchdir if it crossed a
-				 * mount point. Therefore, if we get
-				 * here it means we crossed a mount
-				 * point to a mounted filesystem whose
-				 * root vnode is a symlink. In theory
-				 * we could continue at this point by
-				 * using the pre-crossing searchdir
-				 * (e.g. just take out an extra
-				 * reference on it before calling
-				 * lookup_once so we still have it),
-				 * but this will make an ugly mess and
-				 * it should never happen in practice
-				 * as only badly broken filesystems
-				 * have non-directory root vnodes. (I
-				 * have seen this sort of thing with
-				 * NFS occasionally but even then it
-				 * means something's badly wrong.)
-				 */
-				error = ENOTDIR;
 			} else {
 				/*
 				 * dholland 20110410: if we're at a
@@ -1309,9 +1264,7 @@ namei_oneroot(struct namei_state *state,
 			}
 			if (error) {
 				KASSERT(searchdir != foundobj);
-				if (searchdir != NULL) {
-					vput(searchdir);
-				}
+				vput(searchdir);
 				vput(foundobj);
 				ndp->ni_dvp = NULL;
 				ndp->ni_vp = NULL;
@@ -1328,7 +1281,6 @@ namei_oneroot(struct namei_state *state,
 			 * is the searchdir.
 			 */
 			if (cnp->cn_nameptr[0] == '\0') {
-				KASSERT(searchdir != NULL);
 				foundobj = searchdir;
 				searchdir = NULL;
 				cnp->cn_flags |= ISLASTCN;
@@ -1346,8 +1298,9 @@ namei_oneroot(struct namei_state *state,
 		 */
 		if ((foundobj->v_type != VDIR) &&
 		    (cnp->cn_flags & REQUIREDIR)) {
-			KASSERT(foundobj != searchdir);
-			if (searchdir) {
+			if (searchdir == foundobj) {
+				vrele(searchdir);
+			} else {
 				vput(searchdir);
 			}
 			vput(foundobj);
@@ -1370,7 +1323,7 @@ namei_oneroot(struct namei_state *state,
 		cnp->cn_nameptr = ndp->ni_next;
 		if (searchdir == foundobj) {
 			vrele(searchdir);
-		} else if (searchdir != NULL) {
+		} else {
 			vput(searchdir);
 		}
 		searchdir = foundobj;
@@ -1658,7 +1611,7 @@ do_lookup_for_nfsd_index(struct namei_state *state)
 	error = lookup_once(state, startdir, &startdir, &foundobj);
 	if (error == 0 && startdir == foundobj) {
 		vrele(startdir);
-	} else if (startdir != NULL) {
+	} else {
 		vput(startdir);
 	}
 	if (error) {
@@ -1783,21 +1736,25 @@ relookup(struct vnode *dvp, struct vnode **vpp, struct componentname *cnp, int d
 	 * We now have a segment name to search for, and a directory to search.
 	 */
 	*vpp = NULL;
+	cnp->cn_flags |= INRELOOKUP;
 	error = VOP_LOOKUP(dvp, vpp, cnp);
+	cnp->cn_flags &= ~INRELOOKUP;
 	if ((error) != 0) {
-		KASSERTMSG((*vpp == NULL),
-		    "leaf `%s' should be empty but is %p",
-		    cnp->cn_nameptr, *vpp);
+#ifdef DIAGNOSTIC
+		if (*vpp != NULL)
+			panic("leaf `%s' should be empty", cnp->cn_nameptr);
+#endif
 		if (error != EJUSTRETURN)
 			goto bad;
 	}
 
+#ifdef DIAGNOSTIC
 	/*
 	 * Check for symbolic link
 	 */
-	KASSERTMSG((*vpp == NULL || (*vpp)->v_type != VLNK ||
-		(cnp->cn_flags & FOLLOW) == 0),
-	    "relookup: symlink found");
+	if (*vpp && (*vpp)->v_type == VLNK && (cnp->cn_flags & FOLLOW))
+		panic("relookup: symlink found");
+#endif
 
 	/*
 	 * Check for read-only lookups.

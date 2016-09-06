@@ -1,3 +1,5 @@
+/* Id */
+
 /*
  * Copyright (c) 2013 Nicholas Marriott <nicm@users.sourceforge.net>
  *
@@ -40,12 +42,8 @@ openat(int fd, const char *path, int flags, ...)
 		dotfd = open(".", O_RDONLY);
 		if (dotfd == -1)
 			return (-1);
-		if (fchdir(fd) != 0) {
-			saved_errno = errno;
-			close(dotfd);
-			errno = saved_errno;
+		if (fchdir(fd) != 0)
 			return (-1);
-		}
 	}
 
 	retval = open(path, flags, mode);

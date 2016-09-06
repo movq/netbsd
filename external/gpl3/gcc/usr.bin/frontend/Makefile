@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.10 2016/03/15 19:12:06 mrg Exp $
+#	$NetBSD: Makefile,v 1.8.2.1 2015/01/25 00:19:41 martin Exp $
 
 LIBISPRIVATE=	yes
 
@@ -21,11 +21,12 @@ SRCS+=		driver-rs6000.c
 .PATH:		${DIST}/gcc/config/rs6000
 .endif
 
-.include "../Makefile.target-defines"
-
-CPPFLAGS+=	-I${GCCARCH} -I. \
+CPPFLAGS+=	-I${GCCARCH} -I${BACKENDOBJ} -I. \
 		${G_ALL_CFLAGS:M-D*} ${G_INCLUDES:M-I*:N-I.*} \
-		-DPREFIX=\"/usr\"
+		-DPREFIX=\"/usr\" \
+		-DDEFAULT_TARGET_VERSION=\"${G_version}\" \
+		-DDEFAULT_TARGET_MACHINE=\"${MACHINE_GNU_PLATFORM}\" \
+		-DCONFIGURE_SPECS="\"\""
 HOST_CPPFLAGS+=	-I${GCCARCH} ${G_ALL_CFLAGS:M-D*} ${G_INCLUDES:M-I*:N-I.*}
 
 DPSRCS+=	specs.h

@@ -1,4 +1,4 @@
-/*	$NetBSD: info_trimble.c,v 1.7 2016/01/08 21:35:39 christos Exp $	*/
+/*	$NetBSD: info_trimble.c,v 1.3.4.2 2015/04/23 18:53:02 snj Exp $	*/
 
 /*
  * Automatically generated - do not modify

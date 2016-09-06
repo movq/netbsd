@@ -39,9 +39,6 @@
     !defined(__OpenBSD__) && !defined(__Bitrig__)
 #include <malloc.h>
 #endif
-#if defined(HAVE_MALLCTL)
-#include <malloc_np.h>
-#endif
 #ifdef HAVE_MALLOC_MALLOC_H
 #include <malloc/malloc.h>
 #endif
@@ -101,12 +98,6 @@ size_t Process::GetMallocUsage() {
   malloc_statistics_t Stats;
   malloc_zone_statistics(malloc_default_zone(), &Stats);
   return Stats.size_in_use;   // darwin
-#elif defined(HAVE_MALLCTL)
-  size_t alloc, sz;
-  sz = sizeof(size_t);
-  if (mallctl("stats.allocated", &alloc, &sz, NULL, 0) == 0)
-    return alloc;
-  return 0;
 #elif defined(HAVE_SBRK)
   // Note this is only an approximation and more closely resembles
   // the value returned by mallinfo in the arena field.
@@ -114,7 +105,8 @@ size_t Process::GetMallocUsage() {
   char *EndOfMemory = (char*)sbrk(0);
   if (EndOfMemory != ((char*)-1) && StartOfMemory != ((char*)-1))
     return EndOfMemory - StartOfMemory;
-  return 0;
+  else
+    return 0;
 #else
 #warning Cannot get malloc info on this platform
   return 0;
@@ -199,8 +191,8 @@ public:
   }
 
 private:
-  FDCloser(const FDCloser &) = delete;
-  void operator=(const FDCloser &) = delete;
+  FDCloser(const FDCloser &) LLVM_DELETED_FUNCTION;
+  void operator=(const FDCloser &) LLVM_DELETED_FUNCTION;
 
   int &FD;
   bool KeepOpen;
@@ -430,18 +422,13 @@ const char *Process::ResetColor() {
 #if !defined(HAVE_DECL_ARC4RANDOM) || !HAVE_DECL_ARC4RANDOM
 static unsigned GetRandomNumberSeed() {
   // Attempt to get the initial seed from /dev/urandom, if possible.
-  int urandomFD = open("/dev/urandom", O_RDONLY);
-
-  if (urandomFD != -1) {
+  if (FILE *RandomSource = ::fopen("/dev/urandom", "r")) {
     unsigned seed;
-    // Don't use a buffered read to avoid reading more data
-    // from /dev/urandom than we need.
-    int count = read(urandomFD, (void *)&seed, sizeof(seed));
-
-    close(urandomFD);
+    int count = ::fread((void *)&seed, sizeof(seed), 1, RandomSource);
+    ::fclose(RandomSource);
 
     // Return the seed if the read was successful.
-    if (count == sizeof(seed))
+    if (count == 1)
       return seed;
   }
 

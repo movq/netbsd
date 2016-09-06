@@ -1,6 +1,6 @@
-======================================
-Kaleidoscope: Adding Debug Information
-======================================
+=======================================================
+Kaleidoscope: Extending the Language: Debug Information
+=======================================================
 
 .. contents::
    :local:
@@ -75,8 +75,8 @@ statement be our "main":
 
 .. code-block:: udiff
 
-  -    auto Proto = llvm::make_unique<PrototypeAST>("", std::vector<std::string>());
-  +    auto Proto = llvm::make_unique<PrototypeAST>("main", std::vector<std::string>());
+  -    PrototypeAST *Proto = new PrototypeAST("", std::vector<std::string>());
+  +    PrototypeAST *Proto = new PrototypeAST("main", std::vector<std::string>());
 
 just with the simple change of giving it a name.
 
@@ -108,19 +108,19 @@ code is that the llvm IR goes to standard error:
   @@ -1108,17 +1108,8 @@ static void HandleExtern() {
    static void HandleTopLevelExpression() {
      // Evaluate a top-level expression into an anonymous function.
-     if (auto FnAST = ParseTopLevelExpr()) {
-  -    if (auto *FnIR = FnAST->codegen()) {
+     if (FunctionAST *F = ParseTopLevelExpr()) {
+  -    if (Function *LF = F->Codegen()) {
   -      // We're just doing this to make sure it executes.
   -      TheExecutionEngine->finalizeObject();
   -      // JIT the function, returning a function pointer.
-  -      void *FPtr = TheExecutionEngine->getPointerToFunction(FnIR);
+  -      void *FPtr = TheExecutionEngine->getPointerToFunction(LF);
   -
   -      // Cast it to the right type (takes no arguments, returns a double) so we
   -      // can call it as a native function.
   -      double (*FP)() = (double (*)())(intptr_t)FPtr;
   -      // Ignore the return value for this.
   -      (void)FP;
-  +    if (!F->codegen()) {
+  +    if (!F->Codegen()) {
   +      fprintf(stderr, "Error generating code for top level expr");
        }
      } else {
@@ -165,13 +165,13 @@ DWARF Emission Setup
 ====================
 
 Similar to the ``IRBuilder`` class we have a
-`DIBuilder <http://llvm.org/doxygen/classllvm_1_1DIBuilder.html>`_ class
+```DIBuilder`` <http://llvm.org/doxygen/classllvm_1_1DIBuilder.html>`_ class
 that helps in constructing debug metadata for an llvm IR file. It
 corresponds 1:1 similarly to ``IRBuilder`` and llvm IR, but with nicer names.
 Using it does require that you be more familiar with DWARF terminology than
 you needed to be with ``IRBuilder`` and ``Instruction`` names, but if you
 read through the general documentation on the
-`Metadata Format <http://llvm.org/docs/SourceLevelDebugging.html>`_ it
+```Metadata Format`` <http://llvm.org/docs/SourceLevelDebugging.html>`_ it
 should be a little more clear. We'll be using this class to construct all
 of our IR level descriptions. Construction for it takes a module so we
 need to construct it shortly after we construct our module. We've left it
@@ -187,13 +187,13 @@ expressions:
   static DIBuilder *DBuilder;
 
   struct DebugInfo {
-    DICompileUnit *TheCU;
-    DIType *DblTy;
+    DICompileUnit TheCU;
+    DIType DblTy;
 
-    DIType *getDoubleTy();
+    DIType getDoubleTy();
   } KSDbgInfo;
 
-  DIType *DebugInfo::getDoubleTy() {
+  DIType DebugInfo::getDoubleTy() {
     if (DblTy.isValid())
       return DblTy;
 
@@ -237,7 +237,7 @@ Functions
 =========
 
 Now that we have our ``Compile Unit`` and our source locations, we can add
-function definitions to the debug info. So in ``PrototypeAST::codegen()`` we
+function definitions to the debug info. So in ``PrototypeAST::Codegen`` we
 add a few lines of code to describe a context for our subprogram, in this
 case the "File", and the actual definition of the function itself.
 
@@ -245,27 +245,26 @@ So the context:
 
 .. code-block:: c++
 
-  DIFile *Unit = DBuilder->createFile(KSDbgInfo.TheCU.getFilename(),
-                                      KSDbgInfo.TheCU.getDirectory());
+  DIFile Unit = DBuilder->createFile(KSDbgInfo.TheCU.getFilename(),
+                                     KSDbgInfo.TheCU.getDirectory());
 
-giving us an DIFile and asking the ``Compile Unit`` we created above for the
+giving us a DIFile and asking the ``Compile Unit`` we created above for the
 directory and filename where we are currently. Then, for now, we use some
 source locations of 0 (since our AST doesn't currently have source location
 information) and construct our function definition:
 
 .. code-block:: c++
 
-  DIScope *FContext = Unit;
+  DIDescriptor FContext(Unit);
   unsigned LineNo = 0;
   unsigned ScopeLine = 0;
-  DISubprogram *SP = DBuilder->createFunction(
+  DISubprogram SP = DBuilder->createFunction(
       FContext, Name, StringRef(), Unit, LineNo,
       CreateFunctionType(Args.size(), Unit), false /* internal linkage */,
-      true /* definition */, ScopeLine, DINode::FlagPrototyped, false);
-  F->setSubprogram(SP);
+      true /* definition */, ScopeLine, DIDescriptor::FlagPrototyped, false, F);
 
-and we now have an DISubprogram that contains a reference to all of our
-metadata for the function.
+and we now have a DISubprogram that contains a reference to all of our metadata
+for the function.
 
 Source Locations
 ================
@@ -308,12 +307,10 @@ and then we have added to all of our AST classes a source location:
      SourceLocation Loc;
 
      public:
-       ExprAST(SourceLocation Loc = CurLoc) : Loc(Loc) {}
-       virtual ~ExprAST() {}
-       virtual Value* codegen() = 0;
        int getLine() const { return Loc.Line; }
        int getCol() const { return Loc.Col; }
-       virtual raw_ostream &dump(raw_ostream &out, int ind) {
+       ExprAST(SourceLocation Loc = CurLoc) : Loc(Loc) {}
+       virtual std::ostream &dump(std::ostream &out, int ind) {
          return out << ':' << getLine() << ':' << getCol() << '\n';
        }
 
@@ -321,8 +318,7 @@ that we pass down through when we create a new expression:
 
 .. code-block:: c++
 
-   LHS = llvm::make_unique<BinaryExprAST>(BinLoc, BinOp, std::move(LHS),
-                                          std::move(RHS));
+   LHS = new BinaryExprAST(BinLoc, BinOp, LHS, RHS);
 
 giving us locations for each of our expressions and variables.
 
@@ -336,11 +332,11 @@ by constructing another small function:
   void DebugInfo::emitLocation(ExprAST *AST) {
     DIScope *Scope;
     if (LexicalBlocks.empty())
-      Scope = TheCU;
+      Scope = &TheCU;
     else
       Scope = LexicalBlocks.back();
     Builder.SetCurrentDebugLocation(
-        DebugLoc::get(AST->getLine(), AST->getCol(), Scope));
+        DebugLoc::get(AST->getLine(), AST->getCol(), DIScope(*Scope)));
   }
 
 that both tells the main ``IRBuilder`` where we are, but also what scope
@@ -352,10 +348,10 @@ of scopes:
 .. code-block:: c++
 
    std::vector<DIScope *> LexicalBlocks;
-   std::map<const PrototypeAST *, DIScope *> FnScopeMap;
+   std::map<const PrototypeAST *, DIScope> FnScopeMap;
 
-and keep a map of each function to the scope that it represents (an
-DISubprogram is also an DIScope).
+and keep a map of each function to the scope that it represents (a DISubprogram
+is also a DIScope).
 
 Then we make sure to:
 
@@ -397,14 +393,15 @@ argument allocas in ``PrototypeAST::CreateArgumentAllocas``.
 .. code-block:: c++
 
   DIScope *Scope = KSDbgInfo.LexicalBlocks.back();
-  DIFile *Unit = DBuilder->createFile(KSDbgInfo.TheCU.getFilename(),
-                                      KSDbgInfo.TheCU.getDirectory());
-  DILocalVariable D = DBuilder->createParameterVariable(
-      Scope, Args[Idx], Idx + 1, Unit, Line, KSDbgInfo.getDoubleTy(), true);
+  DIFile Unit = DBuilder->createFile(KSDbgInfo.TheCU.getFilename(),
+                                     KSDbgInfo.TheCU.getDirectory());
+  DIVariable D = DBuilder->createLocalVariable(dwarf::DW_TAG_arg_variable,
+                                               *Scope, Args[Idx], Unit, Line,
+                                               KSDbgInfo.getDoubleTy(), Idx);
 
-  DBuilder->insertDeclare(Alloca, D, DBuilder->createExpression(),
-                          DebugLoc::get(Line, 0, Scope),
-                          Builder.GetInsertBlock());
+  Instruction *Call = DBuilder->insertDeclare(
+      Alloca, D, DBuilder->createExpression(), Builder.GetInsertBlock());
+  Call->setDebugLoc(DebugLoc::get(Line, 0, *Scope));
 
 Here we're doing a few things. First, we're grabbing our current scope
 for the variable so we can say what range of code our variable is valid
@@ -412,7 +409,7 @@ through. Second, we're creating the variable, giving it the scope,
 the name, source location, type, and since it's an argument, the argument
 index. Third, we create an ``lvm.dbg.declare`` call to indicate at the IR
 level that we've got a variable in an alloca (and it gives a starting
-location for the variable), and setting a source location for the
+location for the variable). Lastly, we set a source location for the
 beginning of the scope on the declare.
 
 One interesting thing to note at this point is that various debuggers have

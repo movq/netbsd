@@ -1,4 +1,4 @@
-/* $NetBSD: decl.c,v 1.64 2016/08/19 11:51:27 christos Exp $ */
+/* $NetBSD: decl.c,v 1.59 2014/04/18 00:20:37 christos Exp $ */
 
 /*
  * Copyright (c) 1996 Christopher G. Demetriou.  All Rights Reserved.
@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: decl.c,v 1.64 2016/08/19 11:51:27 christos Exp $");
+__RCSID("$NetBSD: decl.c,v 1.59 2014/04/18 00:20:37 christos Exp $");
 #endif
 
 #include <sys/param.h>
@@ -664,7 +664,7 @@ popdecl(void)
  *
  * There is no need to clear d_asm in dinfo structs with context AUTO,
  * because these structs are freed at the end of the compound statement.
- * But it must be cleared in the outermost dinfo struct, which has
+ * But it must be cleard in the outermost dinfo struct, which has
  * context EXTERN. This could be done in clrtyp() and would work for
  * C, but not for C++ (due to mixed statements and declarations). Thus
  * we clear it in glclup(), which is used to do some cleanup after
@@ -901,7 +901,7 @@ length(type_t *tp, const char *name)
 	default:
 		elsz = size(tp->t_tspec);
 		if (elsz <= 0)
-			LERROR("length(%d)", elsz);
+			LERROR("length()");
 		break;
 	}
 	return (elem * elsz);
@@ -1772,26 +1772,20 @@ compltag(type_t *tp, sym_t *fmem)
 			setpackedsize(tp);
 		else
 			sp->size = dcs->d_offset;
-
 		if (sp->size == 0) {
 			/* zero sized %s */
 			(void)c99ism(47, ttab[t].tt_name);
-		}
-
-		n = 0;
-		for (mem = fmem; mem != NULL; mem = mem->s_nxt) {
-			/* bind anonymous members to the structure */
-			if (mem->s_styp == NULL) {
-				mem->s_styp = sp;
-				sp->size += tsize(mem->s_type);
+		} else {
+			n = 0;
+			for (mem = fmem; mem != NULL; mem = mem->s_nxt) {
+				if (mem->s_name != unnamed)
+					n++;
 			}
-			if (mem->s_name != unnamed)
-				n++;
-		}
-
-		if (n == 0 && sp->size != 0) {
-			/* %s has no named members */
-			warning(65, t == STRUCT ? "structure" : "union");
+			if (n == 0) {
+				/* %s has no named members */
+				warning(65,
+					t == STRUCT ? "structure" : "union");
+			}
 		}
 	} else {
 		tp->t_enum->elem = fmem;

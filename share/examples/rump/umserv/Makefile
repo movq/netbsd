@@ -5,8 +5,6 @@ LDADD+=-lrumpdev_disk -lrumpdev
 LDADD+=-lrumpvfs
 LDADD+=-lrump -lrumpuser -lpthread
 
-CPPFLAGS+= -D_KERNTYPES
-
 WARNS=4
 DBG=-g
 

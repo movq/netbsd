@@ -23,6 +23,7 @@
 #include "llvm/Support/Program.h"
 #include <cassert>
 #include <cerrno>
+#include <cstdio>
 #include <cstring>
 #include <new>
 #include <sys/types.h>
@@ -57,8 +58,7 @@ void MemoryBuffer::init(const char *BufStart, const char *BufEnd,
 /// CopyStringRef - Copies contents of a StringRef into a block of memory and
 /// null-terminates it.
 static void CopyStringRef(char *Memory, StringRef Data) {
-  if (!Data.empty())
-    memcpy(Memory, Data.data(), Data.size());
+  memcpy(Memory, Data.data(), Data.size());
   Memory[Data.size()] = 0; // Null terminate string.
 }
 
@@ -162,14 +162,13 @@ MemoryBuffer::getNewMemBuffer(size_t Size, StringRef BufferName) {
 }
 
 ErrorOr<std::unique_ptr<MemoryBuffer>>
-MemoryBuffer::getFileOrSTDIN(const Twine &Filename, int64_t FileSize,
-                             bool RequiresNullTerminator) {
+MemoryBuffer::getFileOrSTDIN(const Twine &Filename, int64_t FileSize) {
   SmallString<256> NameBuf;
   StringRef NameRef = Filename.toStringRef(NameBuf);
 
   if (NameRef == "-")
     return getSTDIN();
-  return getFile(Filename, FileSize, RequiresNullTerminator);
+  return getFile(Filename, FileSize);
 }
 
 ErrorOr<std::unique_ptr<MemoryBuffer>>

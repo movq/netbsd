@@ -1,5 +1,5 @@
 /* Register support routines for the remote server for GDB.
-   Copyright (C) 2001-2015 Free Software Foundation, Inc.
+   Copyright (C) 2001-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,7 +20,10 @@
 #include "regdef.h"
 #include "gdbthread.h"
 #include "tdesc.h"
-#include "rsp-low.h"
+
+#include <stdlib.h>
+#include <string.h>
+
 #ifndef IN_PROCESS_AGENT
 
 struct regcache *
@@ -41,7 +44,8 @@ get_thread_regcache (struct thread_info *thread, int fetch)
     {
       struct process_info *proc = get_thread_process (thread);
 
-      gdb_assert (proc->tdesc != NULL);
+      if (proc->tdesc == NULL)
+	fatal ("no target description");
 
       regcache = new_register_cache (proc->tdesc);
       set_inferior_regcache_data (thread, regcache);
@@ -49,26 +53,15 @@ get_thread_regcache (struct thread_info *thread, int fetch)
 
   if (fetch && regcache->registers_valid == 0)
     {
-      struct thread_info *saved_thread = current_thread;
+      struct thread_info *saved_inferior = current_inferior;
 
-      current_thread = thread;
-      /* Invalidate all registers, to prevent stale left-overs.  */
-      memset (regcache->register_status, REG_UNAVAILABLE,
-	      regcache->tdesc->num_registers);
+      current_inferior = thread;
       fetch_inferior_registers (regcache, -1);
-      current_thread = saved_thread;
+      current_inferior = saved_inferior;
       regcache->registers_valid = 1;
     }
 
   return regcache;
-}
-
-/* See common/common-regcache.h.  */
-
-struct regcache *
-get_thread_regcache_for_ptid (ptid_t ptid)
-{
-  return get_thread_regcache (find_thread_ptid (ptid), 1);
 }
 
 void
@@ -83,11 +76,11 @@ regcache_invalidate_thread (struct thread_info *thread)
 
   if (regcache->registers_valid)
     {
-      struct thread_info *saved_thread = current_thread;
+      struct thread_info *saved_inferior = current_inferior;
 
-      current_thread = thread;
+      current_inferior = thread;
       store_inferior_registers (regcache, -1);
-      current_thread = saved_thread;
+      current_inferior = saved_inferior;
     }
 
   regcache->registers_valid = 0;
@@ -111,7 +104,7 @@ void
 regcache_invalidate (void)
 {
   /* Only update the threads of the current process.  */
-  int pid = ptid_get_pid (current_thread->entry.id);
+  int pid = ptid_get_pid (current_inferior->entry.id);
 
   find_inferior (&all_threads, regcache_invalidate_one, &pid);
 }
@@ -123,9 +116,9 @@ init_register_cache (struct regcache *regcache,
 		     const struct target_desc *tdesc,
 		     unsigned char *regbuf)
 {
+#ifndef IN_PROCESS_AGENT
   if (regbuf == NULL)
     {
-#ifndef IN_PROCESS_AGENT
       /* Make sure to zero-initialize the register cache when it is
 	 created, in case there are registers the target never
 	 fetches.  This way they'll read as zero instead of
@@ -135,11 +128,13 @@ init_register_cache (struct regcache *regcache,
       regcache->registers_owned = 1;
       regcache->register_status = xcalloc (1, tdesc->num_registers);
       gdb_assert (REG_UNAVAILABLE == 0);
-#else
-      gdb_assert_not_reached ("can't allocate memory from the heap");
-#endif
     }
   else
+#else
+  if (regbuf == NULL)
+    fatal ("init_register_cache: can't allocate memory from the heap");
+  else
+#endif
     {
       regcache->tdesc = tdesc;
       regcache->registers = regbuf;
@@ -211,7 +206,8 @@ registers_to_string (struct regcache *regcache, char *buf)
     {
       if (regcache->register_status[i] == REG_VALID)
 	{
-	  bin2hex (registers, buf, register_size (tdesc, i));
+	  convert_int_to_ascii (registers, buf,
+				register_size (tdesc, i));
 	  buf += register_size (tdesc, i) * 2;
 	}
       else
@@ -238,7 +234,7 @@ registers_from_string (struct regcache *regcache, char *buf)
       if (len > tdesc->registers_size * 2)
 	len = tdesc->registers_size * 2;
     }
-  hex2bin (buf, registers, len / 2);
+  convert_ascii_to_int (buf, registers, len / 2);
 }
 
 struct reg *
@@ -249,8 +245,8 @@ find_register_by_name (const struct target_desc *tdesc, const char *name)
   for (i = 0; i < tdesc->num_registers; i++)
     if (strcmp (name, tdesc->reg_defs[i].name) == 0)
       return &tdesc->reg_defs[i];
-  internal_error (__FILE__, __LINE__, "Unknown register %s requested",
-		  name);
+  fatal ("Unknown register %s requested", name);
+  return 0;
 }
 
 int
@@ -261,8 +257,8 @@ find_regno (const struct target_desc *tdesc, const char *name)
   for (i = 0; i < tdesc->num_registers; i++)
     if (strcmp (name, tdesc->reg_defs[i].name) == 0)
       return i;
-  internal_error (__FILE__, __LINE__, "Unknown register %s requested",
-		  name);
+  fatal ("Unknown register %s requested", name);
+  return -1;
 }
 
 struct reg *
@@ -422,8 +418,8 @@ collect_register (struct regcache *regcache, int n, void *buf)
 void
 collect_register_as_string (struct regcache *regcache, int n, char *buf)
 {
-  bin2hex (register_data (regcache, n, 1), buf,
-	   register_size (regcache->tdesc, n));
+  convert_int_to_ascii (register_data (regcache, n, 1), buf,
+			register_size (regcache->tdesc, n));
 }
 
 void

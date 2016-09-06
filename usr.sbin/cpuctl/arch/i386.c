@@ -1,4 +1,4 @@
-/*	$NetBSD: i386.c,v 1.73 2016/07/21 08:37:18 msaitoh Exp $	*/
+/*	$NetBSD: i386.c,v 1.58.2.5 2016/03/06 17:49:56 martin Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -57,7 +57,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: i386.c,v 1.73 2016/07/21 08:37:18 msaitoh Exp $");
+__RCSID("$NetBSD: i386.c,v 1.58.2.5 2016/03/06 17:49:56 martin Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>
@@ -98,16 +98,14 @@ struct cpu_info {
 	uint32_t	ci_signature;	 /* X86 cpuid type */
 	uint32_t	ci_family;	 /* from ci_signature */
 	uint32_t	ci_model;	 /* from ci_signature */
-	uint32_t	ci_feat_val[9];	 /* X86 CPUID feature bits
+	uint32_t	ci_feat_val[8];	 /* X86 CPUID feature bits
 					  *	[0] basic features %edx
 					  *	[1] basic features %ecx
 					  *	[2] extended features %edx
 					  *	[3] extended features %ecx
 					  *	[4] VIA padlock features
-					  *	[5] structure ext. feat. %ebx
-					  *	[6] structure ext. feat. %ecx
-					  *	[7] XCR0 bits (d:0 %eax)
-					  *	[8] xsave flags (d:1 %eax)
+					  *	[5] XCR0 bits (d:0 %eax)
+					  *	[6] xsave flags (d:1 %eax)
 					  */
 	uint32_t	ci_cpu_class;	 /* CPU class */
 	uint32_t	ci_brand_id;	 /* Intel brand id */
@@ -165,7 +163,7 @@ static const char * const i386_intel_brand[] = {
 	"Pentium III Xeon", /* Intel (R) Pentium (R) III Xeon (TM) processor */
 	"Pentium III",      /* Intel (R) Pentium (R) III processor */
 	"",		    /* 0x05: Reserved */
-	"Mobile Pentium III",/* Mobile Intel (R) Pentium (R) III processor-M */
+	"Mobile Pentium III", /* Mobile Intel (R) Pentium (R) III processor-M */
 	"Mobile Celeron",   /* Mobile Intel (R) Celeron (R) processor */    
 	"Pentium 4",	    /* Intel (R) Pentium (R) 4 processor */
 	"Pentium 4",	    /* Intel (R) Pentium (R) 4 processor */
@@ -300,7 +298,7 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 				"Pentium (P54C)", "Pentium (P24T)",
 				"Pentium/MMX", "Pentium", 0,
 				"Pentium (P54C)", "Pentium/MMX (Tillamook)",
-				"Quark X1000", 0, 0, 0, 0, 0, 0,
+				0, 0, 0, 0, 0, 0, 0,
 			},
 			"Pentium",	/* Default */
 			NULL,
@@ -370,17 +368,12 @@ const struct cpu_cpuid_nameclass i386_cpuid_cpus[] = {
 				[0x4c] = "Atom X[57]-Z8000 (Airmont)",
 				[0x4d] = "Atom C2000",
 				[0x4e] = "6th gen Core, Xeon E3-1[25]00 v5 (Skylake)",
-				[0x4f] = "Xeon E[57] v4 (Broadwell), Core i7-69xx Extreme",
-				[0x55] = "Future Xeon",
+				[0x4f] = "Future gen Xeon (Broadwell)",
 				[0x56] = "Xeon D-1500 (Broadwell)",
-				[0x57] = "Xeon Phi [357]200",
+				[0x57] = "Next gen Xeon Phi",
 				[0x5a] = "Atom E3500",
-				[0x5c] = "Next Atom (Goldmont)",
 				[0x5d] = "Atom X3-C3000 (Silvermont)",
 				[0x5e] = "6th gen Core, Xeon E3-1[25]00 v5 (Skylake)",
-				[0x5f] = "Future Atom (Goldmont)",
-				[0x8e] = "Future Core",
-				[0x9e] = "Future Core",
 			},
 			"Pentium Pro, II or III",	/* Default */
 			NULL,
@@ -1526,25 +1519,18 @@ cpu_probe_base_features(struct cpu_info *ci, const char *cpuname)
 		ci->ci_cpu_serial[1] = descs[3];
 	}
 
-	if (ci->ci_cpuid_level < 0x7)
-		return;
-
-	x86_cpuid(7, descs);
-	ci->ci_feat_val[5] = descs[1];
-	ci->ci_feat_val[6] = descs[2];
-
 	if (ci->ci_cpuid_level < 0xd)
 		return;
 
 	/* Get support XCR0 bits */
 	x86_cpuid2(0xd, 0, descs);
-	ci->ci_feat_val[7] = descs[0];	/* Actually 64 bits */
+	ci->ci_feat_val[5] = descs[0];	/* Actually 64 bits */
 	ci->ci_cur_xsave = descs[1];
 	ci->ci_max_xsave = descs[2];
 
 	/* Additional flags (eg xsaveopt support) */
 	x86_cpuid2(0xd, 1, descs);
-	ci->ci_feat_val[8] = descs[0];   /* Actually 64 bits */
+	ci->ci_feat_val[6] = descs[0];   /* Actually 64 bits */
 }
 
 static void
@@ -1892,9 +1878,9 @@ identifycpu(int fd, const char *cpuname)
 	print_bits(cpuname, "padloack features", CPUID_FLAGS_PADLOCK,
 	    ci->ci_feat_val[4]);
 
-	print_bits(cpuname, "xsave features", XCR0_FLAGS1, ci->ci_feat_val[7]);
+	print_bits(cpuname, "xsave features", XCR0_FLAGS1, ci->ci_feat_val[5]);
 	print_bits(cpuname, "xsave instructions", CPUID_PES1_FLAGS,
-	    ci->ci_feat_val[8]);
+	    ci->ci_feat_val[6]);
 
 	if (ci->ci_max_xsave != 0) {
 		aprint_normal("%s: xsave area size: current %d, maximum %d",
@@ -1916,8 +1902,9 @@ identifycpu(int fd, const char *cpuname)
 		    ci->ci_cpu_serial[2] / 65536, ci->ci_cpu_serial[2] % 65536);
 	}
 
-	if (ci->ci_cpu_class == CPUCLASS_386)
+	if (ci->ci_cpu_class == CPUCLASS_386) {
 		errx(1, "NetBSD requires an 80486 or later processor");
+	}
 
 	if (ci->ci_cpu_type == CPU_486DLC) {
 #ifndef CYRIX_CACHE_WORKS

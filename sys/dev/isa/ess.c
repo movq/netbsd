@@ -1,4 +1,4 @@
-/*	$NetBSD: ess.c,v 1.83 2016/07/14 10:19:06 msaitoh Exp $	*/
+/*	$NetBSD: ess.c,v 1.80.24.1 2014/08/23 03:46:55 riz Exp $	*/
 
 /*
  * Copyright 1997
@@ -66,7 +66,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ess.c,v 1.83 2016/07/14 10:19:06 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ess.c,v 1.80.24.1 2014/08/23 03:46:55 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -185,8 +185,7 @@ u_char	ess_read_mix_reg(struct ess_softc *, u_char);
 void	ess_write_mix_reg(struct ess_softc *, u_char, u_char);
 void	ess_clear_mreg_bits(struct ess_softc *, u_char, u_char);
 void	ess_set_mreg_bits(struct ess_softc *, u_char, u_char);
-void	ess_read_multi_mix_reg(struct ess_softc *, u_char, u_int8_t *,
-    bus_size_t);
+void	ess_read_multi_mix_reg(struct ess_softc *, u_char, u_int8_t *, bus_size_t);
 
 static const char *essmodel[] = {
 	"unsupported",
@@ -917,7 +916,7 @@ essattach(struct ess_softc *sc, int enablejoy)
 	u_int v;
 
 	if (ess_setup_sc(sc, 0)) {
-		aprint_error(": setup failed\n");
+		printf(": setup failed\n");
 		return;
 	}
 
@@ -975,8 +974,7 @@ essattach(struct ess_softc *sc, int enablejoy)
 
 		if (isa_dmamap_create(sc->sc_ic, sc->sc_audio2.drq,
 		    sc->sc_audio2.maxsize, BUS_DMA_NOWAIT|BUS_DMA_ALLOCNOW)) {
-			aprint_error_dev(sc->sc_dev,
-			    "can't create map for drq %d\n",
+			aprint_error_dev(sc->sc_dev, "can't create map for drq %d\n",
 			    sc->sc_audio2.drq);
 			goto fail;
 		}

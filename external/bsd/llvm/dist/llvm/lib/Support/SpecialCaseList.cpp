@@ -15,11 +15,13 @@
 //===----------------------------------------------------------------------===//
 
 #include "llvm/Support/SpecialCaseList.h"
+#include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/ADT/StringSet.h"
 #include "llvm/Support/MemoryBuffer.h"
 #include "llvm/Support/Regex.h"
+#include "llvm/Support/raw_ostream.h"
 #include <string>
 #include <system_error>
 #include <utility>
@@ -44,27 +46,19 @@ struct SpecialCaseList::Entry {
   }
 };
 
-SpecialCaseList::SpecialCaseList() : Entries(), Regexps(), IsCompiled(false) {}
+SpecialCaseList::SpecialCaseList() : Entries() {}
 
-std::unique_ptr<SpecialCaseList>
-SpecialCaseList::create(const std::vector<std::string> &Paths,
-                        std::string &Error) {
-  std::unique_ptr<SpecialCaseList> SCL(new SpecialCaseList());
-  for (auto Path : Paths) {
-    ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr =
-        MemoryBuffer::getFile(Path);
-    if (std::error_code EC = FileOrErr.getError()) {
-      Error = (Twine("can't open file '") + Path + "': " + EC.message()).str();
-      return nullptr;
-    }
-    std::string ParseError;
-    if (!SCL->parse(FileOrErr.get().get(), ParseError)) {
-      Error = (Twine("error parsing file '") + Path + "': " + ParseError).str();
-      return nullptr;
-    }
+std::unique_ptr<SpecialCaseList> SpecialCaseList::create(StringRef Path,
+                                                         std::string &Error) {
+  if (Path.empty())
+    return std::unique_ptr<SpecialCaseList>(new SpecialCaseList());
+  ErrorOr<std::unique_ptr<MemoryBuffer>> FileOrErr =
+      MemoryBuffer::getFile(Path);
+  if (std::error_code EC = FileOrErr.getError()) {
+    Error = (Twine("Can't open file '") + Path + "': " + EC.message()).str();
+    return nullptr;
   }
-  SCL->compile();
-  return SCL;
+  return create(FileOrErr.get().get(), Error);
 }
 
 std::unique_ptr<SpecialCaseList> SpecialCaseList::create(const MemoryBuffer *MB,
@@ -72,14 +66,12 @@ std::unique_ptr<SpecialCaseList> SpecialCaseList::create(const MemoryBuffer *MB,
   std::unique_ptr<SpecialCaseList> SCL(new SpecialCaseList());
   if (!SCL->parse(MB, Error))
     return nullptr;
-  SCL->compile();
   return SCL;
 }
 
-std::unique_ptr<SpecialCaseList>
-SpecialCaseList::createOrDie(const std::vector<std::string> &Paths) {
+std::unique_ptr<SpecialCaseList> SpecialCaseList::createOrDie(StringRef Path) {
   std::string Error;
-  if (auto SCL = create(Paths, Error))
+  if (auto SCL = create(Path, Error))
     return SCL;
   report_fatal_error(Error);
 }
@@ -88,8 +80,12 @@ bool SpecialCaseList::parse(const MemoryBuffer *MB, std::string &Error) {
   // Iterate through each line in the blacklist file.
   SmallVector<StringRef, 16> Lines;
   SplitString(MB->getBuffer(), Lines, "\n\r");
+  StringMap<StringMap<std::string> > Regexps;
+  assert(Entries.empty() &&
+         "parse() should be called on an empty SpecialCaseList");
   int LineNo = 1;
-  for (auto I = Lines.begin(), E = Lines.end(); I != E; ++I, ++LineNo) {
+  for (SmallVectorImpl<StringRef>::iterator I = Lines.begin(), E = Lines.end();
+       I != E; ++I, ++LineNo) {
     // Ignore empty lines and lines starting with "#"
     if (I->empty() || I->startswith("#"))
       continue;
@@ -98,7 +94,7 @@ bool SpecialCaseList::parse(const MemoryBuffer *MB, std::string &Error) {
     StringRef Prefix = SplitLine.first;
     if (SplitLine.second.empty()) {
       // Missing ':' in the line.
-      Error = (Twine("malformed line ") + Twine(LineNo) + ": '" +
+      Error = (Twine("Malformed line ") + Twine(LineNo) + ": '" +
                SplitLine.first + "'").str();
       return false;
     }
@@ -123,7 +119,7 @@ bool SpecialCaseList::parse(const MemoryBuffer *MB, std::string &Error) {
     Regex CheckRE(Regexp);
     std::string REError;
     if (!CheckRE.isValid(REError)) {
-      Error = (Twine("malformed regex in line ") + Twine(LineNo) + ": '" +
+      Error = (Twine("Malformed regex in line ") + Twine(LineNo) + ": '" +
                SplitLine.second + "': " + REError).str();
       return false;
     }
@@ -133,14 +129,10 @@ bool SpecialCaseList::parse(const MemoryBuffer *MB, std::string &Error) {
       Regexps[Prefix][Category] += "|";
     Regexps[Prefix][Category] += "^" + Regexp + "$";
   }
-  return true;
-}
 
-void SpecialCaseList::compile() {
-  assert(!IsCompiled && "compile() should only be called once");
   // Iterate through each of the prefixes, and create Regexs for them.
-  for (StringMap<StringMap<std::string>>::const_iterator I = Regexps.begin(),
-                                                         E = Regexps.end();
+  for (StringMap<StringMap<std::string> >::const_iterator I = Regexps.begin(),
+                                                          E = Regexps.end();
        I != E; ++I) {
     for (StringMap<std::string>::const_iterator II = I->second.begin(),
                                                 IE = I->second.end();
@@ -148,15 +140,13 @@ void SpecialCaseList::compile() {
       Entries[I->getKey()][II->getKey()].RegEx.reset(new Regex(II->getValue()));
     }
   }
-  Regexps.clear();
-  IsCompiled = true;
+  return true;
 }
 
 SpecialCaseList::~SpecialCaseList() {}
 
 bool SpecialCaseList::inSection(StringRef Section, StringRef Query,
                                 StringRef Category) const {
-  assert(IsCompiled && "SpecialCaseList::compile() was not called!");
   StringMap<StringMap<Entry> >::const_iterator I = Entries.find(Section);
   if (I == Entries.end()) return false;
   StringMap<Entry>::const_iterator II = I->second.find(Category);

@@ -1,8 +1,4 @@
 
-Attribute Section: gnu
-File Attributes
-  Tag_GNU_MIPS_ABI_FP: Hard float \(double precision\)
-
 Primary GOT:
  Canonical gp value: 000a7ff0
 

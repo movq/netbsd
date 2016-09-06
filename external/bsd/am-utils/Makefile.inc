@@ -1,9 +1,8 @@
-#	$NetBSD: Makefile.inc,v 1.7 2015/02/02 16:18:27 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.5 2013/02/14 01:57:42 christos Exp $
 
 .ifndef AMU_MAKEFILE_INC
 AMU_MAKEFILE_INC=
 WARNS?=	1
-CWARNFLAGS.clang+=	-Wno-error=enum-conversion
 
 .include <bsd.own.mk>
 
@@ -18,7 +17,7 @@ CPPFLAGS+= -DHAVE_CONFIG_H -I${.CURDIR}/../../include -I${IDIST}/libamu \
     -I${IDIST}/include
 
 LIBAMUOBJDIR!=	cd ${AMUTILS}/lib/libamu && ${PRINTOBJDIR}
-CPPFLAGS+=	-I${LIBAMUOBJDIR} -DDEBUG
+CPPFLAGS+=	-I${LIBAMUOBJDIR}
 
 .if (${USE_HESIOD} != "no")
 CPPFLAGS+=-DHAVE_MAP_HESIOD=1

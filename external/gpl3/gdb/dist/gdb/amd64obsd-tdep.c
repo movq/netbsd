@@ -1,6 +1,6 @@
 /* Target-dependent code for OpenBSD/amd64.
 
-   Copyright (C) 2003-2015 Free Software Foundation, Inc.
+   Copyright (C) 2003-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -29,7 +29,9 @@
 #include "target.h"
 #include "trad-frame.h"
 
-#include "obsd-tdep.h"
+#include "gdb_assert.h"
+#include <string.h>
+
 #include "amd64-tdep.h"
 #include "i387-tdep.h"
 #include "solib-svr4.h"
@@ -42,8 +44,7 @@ amd64obsd_supply_regset (const struct regset *regset,
 			 struct regcache *regcache, int regnum,
 			 const void *regs, size_t len)
 {
-  struct gdbarch *gdbarch = get_regcache_arch (regcache);
-  const struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
+  const struct gdbarch_tdep *tdep = gdbarch_tdep (regset->arch);
 
   gdb_assert (len >= tdep->sizeof_gregset + I387_SIZEOF_FXSAVE);
 
@@ -52,24 +53,24 @@ amd64obsd_supply_regset (const struct regset *regset,
 		       ((const gdb_byte *)regs) + tdep->sizeof_gregset);
 }
 
-static const struct regset amd64obsd_combined_regset =
-  {
-    NULL, amd64obsd_supply_regset, NULL
-  };
-
-static void
-amd64obsd_iterate_over_regset_sections (struct gdbarch *gdbarch,
-					iterate_over_regset_sections_cb *cb,
-					void *cb_data,
-					const struct regcache *regcache)
+static const struct regset *
+amd64obsd_regset_from_core_section (struct gdbarch *gdbarch,
+				    const char *sect_name, size_t sect_size)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
   /* OpenBSD core dumps don't use seperate register sets for the
      general-purpose and floating-point registers.  */
 
-  cb (".reg", tdep->sizeof_gregset + I387_SIZEOF_FXSAVE,
-      &amd64obsd_combined_regset, NULL, cb_data);
+  if (strcmp (sect_name, ".reg") == 0
+      && sect_size >= tdep->sizeof_gregset + I387_SIZEOF_FXSAVE)
+    {
+      if (tdep->gregset == NULL)
+        tdep->gregset = regset_alloc (gdbarch, amd64obsd_supply_regset, NULL);
+      return tdep->gregset;
+    }
+
+  return NULL;
 }
 
 
@@ -372,7 +373,7 @@ amd64obsd_trapframe_cache (struct frame_info *this_frame, void **this_cache)
   sp = get_frame_register_unsigned (this_frame, AMD64_RSP_REGNUM);
 
   find_pc_partial_function (func, &name, NULL, NULL);
-  if (name && startswith (name, "Xintr"))
+  if (name && strncmp (name, "Xintr", 5) == 0)
     addr = sp + 8;		/* It's an interrupt frame.  */
   else
     addr = sp;
@@ -436,7 +437,7 @@ amd64obsd_trapframe_sniffer (const struct frame_unwind *self,
   return (name && ((strcmp (name, "calltrap") == 0)
 		   || (strcmp (name, "osyscall1") == 0)
 		   || (strcmp (name, "Xsyscall") == 0)
-		   || (startswith (name, "Xintr"))));
+		   || (strncmp (name, "Xintr", 5) == 0)));
 }
 
 static const struct frame_unwind amd64obsd_trapframe_unwind = {
@@ -458,7 +459,6 @@ amd64obsd_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
 
   amd64_init_abi (info, gdbarch);
-  obsd_init_abi (info, gdbarch);
 
   /* Initialize general-purpose register set details.  */
   tdep->gregset_reg_offset = amd64obsd_r_reg_offset;
@@ -491,8 +491,8 @@ amd64obsd_core_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
   amd64obsd_init_abi (info, gdbarch);
 
-  set_gdbarch_iterate_over_regset_sections
-    (gdbarch, amd64obsd_iterate_over_regset_sections);
+  set_gdbarch_regset_from_core_section
+    (gdbarch, amd64obsd_regset_from_core_section);
 }
 
 

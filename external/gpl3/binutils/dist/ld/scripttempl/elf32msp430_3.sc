@@ -1,16 +1,4 @@
-# Copyright (C) 2014-2015 Free Software Foundation, Inc.
-# 
-# Copying and distribution of this file, with or without modification,
-# are permitted in any medium without royalty provided the copyright
-# notice and this notice are preserved.
-
 cat <<EOF
-/* Copyright (C) 2014-2015 Free Software Foundation, Inc.
-
-   Copying and distribution of this script, with or without modification,
-   are permitted in any medium without royalty provided the copyright
-   notice and this notice are preserved.  */
-
 OUTPUT_FORMAT("${OUTPUT_FORMAT}","${OUTPUT_FORMAT}","${OUTPUT_FORMAT}")
 OUTPUT_ARCH(${ARCH})
 
@@ -110,8 +98,6 @@ SECTIONS
     *(.text)
     ${RELOCATING+. = ALIGN(2);}
     *(.text.*)
-    ${RELOCATING+. = ALIGN(2);}
-    *(.text:*)
 
     ${RELOCATING+. = ALIGN(2);}
     *(SORT_NONE(.fini9))
@@ -129,31 +115,22 @@ SECTIONS
     ${RELOCATING+ _etext = . ; }
   } ${RELOCATING+ > text}
 
-  .rodata :
-  {
-    *(.rodata .rodata.* .gnu.linkonce.r.*)
-    *(.const)
-    *(.const:*)
-  } ${RELOCATING+ > text}
-
-  .data ${RELOCATING-0} :
+  .data ${RELOCATING-0} : ${RELOCATING+AT (ADDR (.text) + SIZEOF (.text))}
   {  
     ${RELOCATING+ PROVIDE (__data_start = .) ; }
-    ${RELOCATING+. = ALIGN(2);}
     *(.data)
-    *(.data.*)
     *(.gnu.linkonce.d*)
     ${RELOCATING+. = ALIGN(2);}
     ${RELOCATING+ _edata = . ; }
-  } ${RELOCATING+ > data ${RELOCATING+AT> text}}
+  } ${RELOCATING+ > data}
   
   .bss ${RELOCATING+ SIZEOF(.data) + ADDR(.data)} :
   {
-    ${RELOCATING+. = ALIGN(2);}
     ${RELOCATING+ PROVIDE (__bss_start = .) ; }
     *(.bss)
     *(COMMON)
     ${RELOCATING+ PROVIDE (__bss_end = .) ; }
+    ${RELOCATING+ _end = . ;  }
   } ${RELOCATING+ > data}
 
   .noinit ${RELOCATING+ SIZEOF(.bss) + ADDR(.bss)} :
@@ -162,16 +139,8 @@ SECTIONS
     *(.noinit)
     *(COMMON)
     ${RELOCATING+ PROVIDE (__noinit_end = .) ; }
+    ${RELOCATING+ _end = . ;  }
   } ${RELOCATING+ > data}
-
-  .persistent ${RELOCATING+ SIZEOF(.noinit) + ADDR(.noinit)} :
-  {
-    ${RELOCATING+ PROVIDE (__persistent_start = .) ; }
-    *(.persistent)
-    ${RELOCATING+ PROVIDE (__persistent_end = .) ; }
-  } ${RELOCATING+ > data}
-
-  ${RELOCATING+ _end = . ;}
 
   .vectors ${RELOCATING-0}:
   {
@@ -179,13 +148,6 @@ SECTIONS
     *(.vectors*)
     ${RELOCATING+ _vectors_end = . ; }
   } ${RELOCATING+ > vectors}
-
-  .MP430.attributes 0 :
-  {
-    KEEP (*(.MSP430.attributes))
-    KEEP (*(.gnu.attributes))
-    KEEP (*(__TI_build_attributes))
-  }
 
   /* Stabs debugging sections.  */
   .stab 0 : { *(.stab) } 
@@ -196,11 +158,38 @@ SECTIONS
   .stab.indexstr 0 : { *(.stab.indexstr) }
   .comment 0 : { *(.comment) }
  
-EOF
+  /* DWARF debug sections.
+     Symbols in the DWARF debugging sections are relative to the beginning
+     of the section so we begin them at 0.  */
 
-. $srcdir/scripttempl/DWARF.sc
+  /* DWARF 1 */
+  .debug          0 : { *(.debug) }
+  .line           0 : { *(.line) }
 
-cat <<EOF
+  /* GNU DWARF 1 extensions */
+  .debug_srcinfo  0 : { *(.debug_srcinfo) }
+  .debug_sfnames  0 : { *(.debug_sfnames) }
+
+  /* DWARF 1.1 and DWARF 2 */
+  .debug_aranges  0 : { *(.debug_aranges) }
+  .debug_pubnames 0 : { *(.debug_pubnames) }
+
+  /* DWARF 2 */
+  .debug_info     0 : { *(.debug_info) *(.gnu.linkonce.wi.*) }
+  .debug_abbrev   0 : { *(.debug_abbrev) }
+  .debug_line     0 : { *(.debug_line) }
+  .debug_frame    0 : { *(.debug_frame) }
+  .debug_str      0 : { *(.debug_str) }
+  .debug_loc      0 : { *(.debug_loc) }
+  .debug_macinfo  0 : { *(.debug_macinfo) }
+
+  /* DWARF 3 */
+  .debug_pubtypes 0 : { *(.debug_pubtypes) }
+  .debug_ranges   0 : { *(.debug_ranges) }
+
+  /* DWARF Extension.  */
+  .debug_macro    0 : { *(.debug_macro) } 
+
   PROVIDE (__stack = ${STACK}) ;
   PROVIDE (__data_start_rom = _etext) ;
   PROVIDE (__data_end_rom   = _etext + SIZEOF (.data)) ;

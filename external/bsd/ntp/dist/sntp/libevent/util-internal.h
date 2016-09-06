@@ -1,4 +1,4 @@
-/*	$NetBSD: util-internal.h,v 1.5 2016/01/08 21:35:40 christos Exp $	*/
+/*	$NetBSD: util-internal.h,v 1.1.1.1.6.2 2015/04/23 18:53:06 snj Exp $	*/
 
 /*
  * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson

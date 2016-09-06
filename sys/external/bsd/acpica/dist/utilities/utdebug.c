@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,11 +41,11 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+#define __UTDEBUG_C__
 #define EXPORT_ACPI_INTERFACES
 
 #include "acpi.h"
 #include "accommon.h"
-#include "acinterp.h"
 
 #define _COMPONENT          ACPI_UTILITIES
         ACPI_MODULE_NAME    ("utdebug")
@@ -53,9 +53,15 @@
 
 #ifdef ACPI_DEBUG_OUTPUT
 
-static ACPI_THREAD_ID       AcpiGbl_PreviousThreadId = (ACPI_THREAD_ID) 0xFFFFFFFF;
-static const char           *AcpiGbl_FunctionEntryPrefix = "----Entry";
-static const char           *AcpiGbl_FunctionExitPrefix  = "----Exit-";
+static ACPI_THREAD_ID       AcpiGbl_PrevThreadId = (ACPI_THREAD_ID) 0xFFFFFFFF;
+static const char           *AcpiGbl_FnEntryStr = "----Entry";
+static const char           *AcpiGbl_FnExitStr  = "----Exit-";
+
+/* Local prototypes */
+
+static const char *
+AcpiUtTrimFunctionName (
+    const char              *FunctionName);
 
 
 /*******************************************************************************
@@ -195,16 +201,16 @@ AcpiDebugPrint (
      * Thread tracking and context switch notification
      */
     ThreadId = AcpiOsGetThreadId ();
-    if (ThreadId != AcpiGbl_PreviousThreadId)
+    if (ThreadId != AcpiGbl_PrevThreadId)
     {
         if (ACPI_LV_THREADS & AcpiDbgLevel)
         {
             AcpiOsPrintf (
                 "\n**** Context Switch from TID %u to TID %u ****\n\n",
-                (UINT32) AcpiGbl_PreviousThreadId, (UINT32) ThreadId);
+                (UINT32) AcpiGbl_PrevThreadId, (UINT32) ThreadId);
         }
 
-        AcpiGbl_PreviousThreadId = ThreadId;
+        AcpiGbl_PrevThreadId = ThreadId;
         AcpiGbl_NestingLevel = 0;
     }
 
@@ -319,7 +325,7 @@ AcpiUtTrace (
     {
         AcpiDebugPrint (ACPI_LV_FUNCTIONS,
             LineNumber, FunctionName, ModuleName, ComponentId,
-            "%s\n", AcpiGbl_FunctionEntryPrefix);
+            "%s\n", AcpiGbl_FnEntryStr);
     }
 }
 
@@ -349,7 +355,7 @@ AcpiUtTracePtr (
     const char              *FunctionName,
     const char              *ModuleName,
     UINT32                  ComponentId,
-    const void              *Pointer)
+    void                    *Pointer)
 {
 
     AcpiGbl_NestingLevel++;
@@ -361,7 +367,7 @@ AcpiUtTracePtr (
     {
         AcpiDebugPrint (ACPI_LV_FUNCTIONS,
             LineNumber, FunctionName, ModuleName, ComponentId,
-            "%s %p\n", AcpiGbl_FunctionEntryPrefix, Pointer);
+            "%s %p\n", AcpiGbl_FnEntryStr, Pointer);
     }
 }
 
@@ -401,7 +407,7 @@ AcpiUtTraceStr (
     {
         AcpiDebugPrint (ACPI_LV_FUNCTIONS,
             LineNumber, FunctionName, ModuleName, ComponentId,
-            "%s %s\n", AcpiGbl_FunctionEntryPrefix, String);
+            "%s %s\n", AcpiGbl_FnEntryStr, String);
     }
 }
 
@@ -441,7 +447,7 @@ AcpiUtTraceU32 (
     {
         AcpiDebugPrint (ACPI_LV_FUNCTIONS,
             LineNumber, FunctionName, ModuleName, ComponentId,
-            "%s %08X\n", AcpiGbl_FunctionEntryPrefix, Integer);
+            "%s %08X\n", AcpiGbl_FnEntryStr, Integer);
     }
 }
 
@@ -476,7 +482,7 @@ AcpiUtExit (
     {
         AcpiDebugPrint (ACPI_LV_FUNCTIONS,
             LineNumber, FunctionName, ModuleName, ComponentId,
-            "%s\n", AcpiGbl_FunctionExitPrefix);
+            "%s\n", AcpiGbl_FnExitStr);
     }
 
     if (AcpiGbl_NestingLevel)
@@ -522,14 +528,14 @@ AcpiUtStatusExit (
         {
             AcpiDebugPrint (ACPI_LV_FUNCTIONS,
                 LineNumber, FunctionName, ModuleName, ComponentId,
-                "%s %s\n", AcpiGbl_FunctionExitPrefix,
+                "%s %s\n", AcpiGbl_FnExitStr,
                 AcpiFormatException (Status));
         }
         else
         {
             AcpiDebugPrint (ACPI_LV_FUNCTIONS,
                 LineNumber, FunctionName, ModuleName, ComponentId,
-                "%s ****Exception****: %s\n", AcpiGbl_FunctionExitPrefix,
+                "%s ****Exception****: %s\n", AcpiGbl_FnExitStr,
                 AcpiFormatException (Status));
         }
     }
@@ -575,7 +581,7 @@ AcpiUtValueExit (
     {
         AcpiDebugPrint (ACPI_LV_FUNCTIONS,
             LineNumber, FunctionName, ModuleName, ComponentId,
-            "%s %8.8X%8.8X\n", AcpiGbl_FunctionExitPrefix,
+            "%s %8.8X%8.8X\n", AcpiGbl_FnExitStr,
             ACPI_FORMAT_UINT64 (Value));
     }
 
@@ -620,7 +626,7 @@ AcpiUtPtrExit (
     {
         AcpiDebugPrint (ACPI_LV_FUNCTIONS,
             LineNumber, FunctionName, ModuleName, ComponentId,
-            "%s %p\n", AcpiGbl_FunctionExitPrefix, Ptr);
+            "%s %p\n", AcpiGbl_FnExitStr, Ptr);
     }
 
     if (AcpiGbl_NestingLevel)
@@ -629,112 +635,4 @@ AcpiUtPtrExit (
     }
 }
 
-
-/*******************************************************************************
- *
- * FUNCTION:    AcpiUtStrExit
- *
- * PARAMETERS:  LineNumber          - Caller's line number
- *              FunctionName        - Caller's procedure name
- *              ModuleName          - Caller's module name
- *              ComponentId         - Caller's component ID
- *              String              - String to display
- *
- * RETURN:      None
- *
- * DESCRIPTION: Function exit trace. Prints only if TRACE_FUNCTIONS bit is
- *              set in DebugLevel. Prints exit value also.
- *
- ******************************************************************************/
-
-void
-AcpiUtStrExit (
-    UINT32                  LineNumber,
-    const char              *FunctionName,
-    const char              *ModuleName,
-    UINT32                  ComponentId,
-    const char              *String)
-{
-
-    /* Check if enabled up-front for performance */
-
-    if (ACPI_IS_DEBUG_ENABLED (ACPI_LV_FUNCTIONS, ComponentId))
-    {
-        AcpiDebugPrint (ACPI_LV_FUNCTIONS,
-            LineNumber, FunctionName, ModuleName, ComponentId,
-            "%s %s\n", AcpiGbl_FunctionExitPrefix, String);
-    }
-
-    if (AcpiGbl_NestingLevel)
-    {
-        AcpiGbl_NestingLevel--;
-    }
-}
-
-
-/*******************************************************************************
- *
- * FUNCTION:    AcpiTracePoint
- *
- * PARAMETERS:  Type                - Trace event type
- *              Begin               - TRUE if before execution
- *              Aml                 - Executed AML address
- *              Pathname            - Object path
- *              Pointer             - Pointer to the related object
- *
- * RETURN:      None
- *
- * DESCRIPTION: Interpreter execution trace.
- *
- ******************************************************************************/
-
-void
-AcpiTracePoint (
-    ACPI_TRACE_EVENT_TYPE   Type,
-    BOOLEAN                 Begin,
-    UINT8                   *Aml,
-    char                    *Pathname)
-{
-
-    ACPI_FUNCTION_ENTRY ();
-
-    AcpiExTracePoint (Type, Begin, Aml, Pathname);
-
-#ifdef ACPI_USE_SYSTEM_TRACER
-    AcpiOsTracePoint (Type, Begin, Aml, Pathname);
-#endif
-}
-
-ACPI_EXPORT_SYMBOL (AcpiTracePoint)
-
-#endif
-
-
-#ifdef ACPI_APPLICATION
-/*******************************************************************************
- *
- * FUNCTION:    AcpiLogError
- *
- * PARAMETERS:  Format              - Printf format field
- *              ...                 - Optional printf arguments
- *
- * RETURN:      None
- *
- * DESCRIPTION: Print error message to the console, used by applications.
- *
- ******************************************************************************/
-
-void  ACPI_INTERNAL_VAR_XFACE
-AcpiLogError (
-    const char              *Format,
-    ...)
-{
-    va_list                 Args;
-
-    va_start (Args, Format);
-    (void) AcpiUtFileVprintf (ACPI_FILE_ERR, Format, Args);
-    va_end (Args);
-}
-
-ACPI_EXPORT_SYMBOL (AcpiLogError)
 #endif

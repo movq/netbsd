@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -62,22 +62,14 @@
 #include <errno.h>
 
 
-typedef enum
-{
-    AH_DECODE_DEFAULT           = 0,
-    AH_DECODE_ASL,
-    AH_DECODE_ASL_KEYWORD,
-    AH_DECODE_PREDEFINED_NAME,
-    AH_DECODE_AML,
-    AH_DECODE_AML_OPCODE,
-    AH_DISPLAY_DEVICE_IDS,
-    AH_DECODE_EXCEPTION,
-    AH_DECODE_ASL_AML,
-    AH_DISPLAY_UUIDS,
-    AH_DISPLAY_TABLES,
-    AH_DISPLAY_DIRECTIVES
-
-} AH_OPTION_TYPES;
+#define     AH_DECODE_DEFAULT           0
+#define     AH_DECODE_ASL               1
+#define     AH_DECODE_ASL_KEYWORD       2
+#define     AH_DECODE_PREDEFINED_NAME   3
+#define     AH_DECODE_AML               4
+#define     AH_DECODE_AML_OPCODE        5
+#define     AH_DISPLAY_DEVICE_IDS       6
+#define     AH_DECODE_EXCEPTION         7
 
 #define     AH_MAX_ASL_LINE_LENGTH      70
 #define     AH_MAX_AML_LINE_LENGTH      100
@@ -112,20 +104,22 @@ typedef struct ah_asl_keyword
 
 } AH_ASL_KEYWORD;
 
-typedef struct ah_directive_info
+typedef struct ah_device_id
 {
     char            *Name;
     char            *Description;
 
-} AH_DIRECTIVE_INFO;
+} AH_DEVICE_ID;
+
 
 extern const AH_AML_OPCODE          AmlOpcodeInfo[];
 extern const AH_ASL_OPERATOR        AslOperatorInfo[];
 extern const AH_ASL_KEYWORD         AslKeywordInfo[];
-extern const AH_UUID                AcpiUuids[];
-extern const AH_DIRECTIVE_INFO      PreprocessorDirectives[];
-extern const AH_TABLE               AcpiSupportedTables[];
 extern BOOLEAN                      AhDisplayAll;
+
+void
+AhStrupr (
+    char                    *SrcString);
 
 void
 AhFindAmlOpcode (
@@ -144,10 +138,6 @@ AhFindPredefinedNames (
     char                    *Name);
 
 void
-AhFindAslAndAmlOperators (
-    char                    *Name);
-
-UINT32
 AhFindAslOperators (
     char                    *Name);
 
@@ -157,22 +147,6 @@ AhFindAslKeywords (
 
 void
 AhDisplayDeviceIds (
-    char                    *Name);
-
-void
-AhDisplayTables (
-    void);
-
-const AH_TABLE *
-AcpiAhGetTableInfo (
-    char                    *Signature);
-
-void
-AhDisplayUuids (
-    void);
-
-void
-AhDisplayDirectives (
     void);
 
 #endif /* __ACPIHELP_H */

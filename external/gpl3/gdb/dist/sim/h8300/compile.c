@@ -34,7 +34,6 @@
 #include "gdb/sim-h8300.h"
 #include "sys/stat.h"
 #include "sys/types.h"
-#include "sim-options.h"
 
 #ifndef SIGTRAP
 # define SIGTRAP 5
@@ -1860,6 +1859,15 @@ init_pointers (SIM_DESC sd)
     }
 }
 
+/* Grotty global variable for use by control_c signal handler.  */
+static SIM_DESC control_c_sim_desc;
+
+static void
+control_c (int sig)
+{
+  sim_engine_set_run_state (control_c_sim_desc, sim_stopped, SIGINT);
+}
+
 int
 sim_stop (SIM_DESC sd)
 {
@@ -1893,6 +1901,7 @@ sim_resume (SIM_DESC sd, int step, int siggnal)
   int cycles = 0;
   int insts = 0;
   int tick_start = get_now ();
+  void (*prev) ();
   int poll_count = 0;
   int res;
   int tmp;
@@ -1907,6 +1916,9 @@ sim_resume (SIM_DESC sd, int step, int siggnal)
   int sigrc;
 
   init_pointers (sd);
+
+  control_c_sim_desc = sd;
+  prev = signal (SIGINT, control_c);
 
   if (step)
     {
@@ -3063,8 +3075,7 @@ sim_resume (SIM_DESC sd, int step, int siggnal)
 	    stat_ptr = (h8300hmode && !h8300_normal_mode) ? GET_L_REG (1) : GET_W_REG (1);
 
 	    /* Callback stat and return.  */
-	    fstat_return = sim_callback->to_fstat (sim_callback, fd,
-						   &stat_rec);
+	    fstat_return = sim_callback->fstat (sim_callback, fd, &stat_rec);
 
 	    /* Have stat_ptr point to starting of stat_rec.  */
 	    temp_stat_ptr = (char *) (&stat_rec);
@@ -3138,7 +3149,7 @@ sim_resume (SIM_DESC sd, int step, int siggnal)
 
 	    /* Callback stat and return.  */
 	    stat_return =
-	      sim_callback->to_stat (sim_callback, filename, &stat_rec);
+	      sim_callback->stat (sim_callback, filename, &stat_rec);
 
 	    /* Have stat_ptr point to starting of stat_rec.  */
 	    temp_stat_ptr = (char *) (&stat_rec);
@@ -4593,6 +4604,16 @@ sim_resume (SIM_DESC sd, int step, int siggnal)
     h8_set_exr (sd, (trace<<7) | intMask);
 
   h8_set_mask (sd, oldmask);
+  signal (SIGINT, prev);
+}
+
+int
+sim_trace (SIM_DESC sd)
+{
+  /* FIXME: Unfinished.  */
+  (*sim_callback->printf_filtered) (sim_callback,
+				    "sim_trace: trace not supported.\n");
+  return 1;	/* Done.  */
 }
 
 int
@@ -4782,6 +4803,14 @@ sim_stop_reason (SIM_DESC sd, enum sim_stop *reason, int *sigrc)
   sim_engine_get_run_state (sd, reason, sigrc);
 }
 
+/* FIXME: Rename to sim_set_mem_size.  */
+
+void
+sim_size (int n)
+{
+  /* Memory size is fixed.  */
+}
+
 static void
 set_simcache_size (SIM_DESC sd, int n)
 {
@@ -4865,18 +4894,6 @@ set_h8300h (unsigned long machine)
     h8300_normal_mode = 1;
 }
 
-static sim_cia
-h8300_pc_get (sim_cpu *cpu)
-{
-  return cpu->pc;
-}
-
-static void
-h8300_pc_set (sim_cpu *cpu, sim_cia pc)
-{
-  cpu->pc = pc;
-}
-
 /* Cover function of sim_state_free to free the cpu buffers as well.  */
 
 static void
@@ -4895,19 +4912,11 @@ sim_open (SIM_OPEN_KIND kind,
 	  struct bfd *abfd, 
 	  char **argv)
 {
-  int i;
   SIM_DESC sd;
   sim_cpu *cpu;
 
   sd = sim_state_alloc (kind, callback);
-
-  /* The cpu data is kept in a separately allocated chunk of memory.  */
-  if (sim_cpu_alloc_all (sd, 1, /*cgen_cpu_max_extra_bytes ()*/0) != SIM_RC_OK)
-    {
-      free_state (sd);
-      return 0;
-    }
-
+  sd->cpu = sim_cpu_alloc (sd, 0);
   cpu = STATE_CPU (sd, 0);
   SIM_ASSERT (STATE_MAGIC (sd) == SIM_MAGIC_NUMBER);
   sim_state_initialize (sd, cpu);
@@ -4960,15 +4969,6 @@ sim_open (SIM_OPEN_KIND kind,
       return 0;
     }
 
-  /* CPU specific initialization.  */
-  for (i = 0; i < MAX_NR_PROCESSORS; ++i)
-    {
-      SIM_CPU *cpu = STATE_CPU (sd, i);
-
-      CPU_PC_FETCH (cpu) = h8300_pc_get;
-      CPU_PC_STORE (cpu) = h8300_pc_set;
-    }
-
   /*  sim_hw_configure (sd); */
 
   /* FIXME: Much of the code in sim_load can be moved here.  */
@@ -4988,7 +4988,7 @@ sim_close (SIM_DESC sd, int quitting)
 /* Called by gdb to load a program into memory.  */
 
 SIM_RC
-sim_load (SIM_DESC sd, const char *prog, bfd *abfd, int from_tty)
+sim_load (SIM_DESC sd, char *prog, bfd *abfd, int from_tty)
 {
   bfd *prog_bfd;
 
@@ -5106,4 +5106,10 @@ sim_create_inferior (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
     }
   
   return SIM_RC_OK;
+}
+
+void
+sim_set_callbacks (struct host_callback_struct *ptr)
+{
+  sim_callback = ptr;
 }

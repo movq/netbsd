@@ -21,28 +21,10 @@
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/Triple.h"
 #include "llvm/Support/DataTypes.h"
-#include <bitset>
 
 namespace llvm {
   class raw_ostream;
   class StringRef;
-
-// A container class for subtarget features.
-// This is convenient because std::bitset does not have a constructor
-// with an initializer list of set bits.
-const unsigned MAX_SUBTARGET_FEATURES = 128;
-class FeatureBitset : public std::bitset<MAX_SUBTARGET_FEATURES> {
-public:
-  // Cannot inherit constructors because it's not supported by VC++..
-  FeatureBitset() : bitset() {}
-
-  FeatureBitset(const bitset<MAX_SUBTARGET_FEATURES>& B) : bitset(B) {}
-
-  FeatureBitset(std::initializer_list<unsigned> Init) : bitset() {
-    for (auto I : Init)
-      set(I);
-  }
-};
 
 //===----------------------------------------------------------------------===//
 ///
@@ -52,17 +34,12 @@ public:
 struct SubtargetFeatureKV {
   const char *Key;                      // K-V key string
   const char *Desc;                     // Help descriptor
-  FeatureBitset Value;                  // K-V integer value
-  FeatureBitset Implies;                // K-V bit mask
+  uint64_t Value;                       // K-V integer value
+  uint64_t Implies;                     // K-V bit mask
 
   // Compare routine for std::lower_bound
   bool operator<(StringRef S) const {
     return StringRef(Key) < S;
-  }
-
-  // Compare routine for std::is_sorted.
-  bool operator<(const SubtargetFeatureKV &Other) const {
-    return StringRef(Key) < StringRef(Other.Key);
   }
 };
 
@@ -101,18 +78,15 @@ public:
   std::string getString() const;
 
   /// Adding Features.
-  void AddFeature(StringRef String, bool Enable = true);
+  void AddFeature(StringRef String);
 
-  /// ToggleFeature - Toggle a feature and update the feature bits.
-  static void ToggleFeature(FeatureBitset &Bits, StringRef String,
-                            ArrayRef<SubtargetFeatureKV> FeatureTable);
-
-  /// Apply the feature flag and update the feature bits.
-  static void ApplyFeatureFlag(FeatureBitset &Bits, StringRef Feature,
-                               ArrayRef<SubtargetFeatureKV> FeatureTable);
+  /// ToggleFeature - Toggle a feature and returns the newly updated feature
+  /// bits.
+  uint64_t ToggleFeature(uint64_t Bits, StringRef String,
+                         ArrayRef<SubtargetFeatureKV> FeatureTable);
 
   /// Get feature bits of a CPU.
-  FeatureBitset getFeatureBits(StringRef CPU,
+  uint64_t getFeatureBits(StringRef CPU,
                           ArrayRef<SubtargetFeatureKV> CPUTable,
                           ArrayRef<SubtargetFeatureKV> FeatureTable);
 

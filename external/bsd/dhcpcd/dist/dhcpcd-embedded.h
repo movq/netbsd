@@ -1,4 +1,4 @@
-/* $NetBSD: dhcpcd-embedded.h,v 1.10 2016/04/20 08:53:01 roy Exp $ */
+/* $NetBSD: dhcpcd-embedded.h,v 1.1.1.4.2.2 2015/02/05 15:13:12 martin Exp $ */
 
 /*
  * dhcpcd - DHCP client daemon
@@ -27,8 +27,7 @@
  * SUCH DAMAGE.
  */
 
-#define INITDEFINES	     123
-#define INITDEFINENDS	       6
+#define INITDEFINES	     121
 #define INITDEFINE6S	      68
 
 extern const char * const dhcpcd_embedded_conf[];

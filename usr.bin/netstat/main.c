@@ -1,4 +1,4 @@
-/*	$NetBSD: main.c,v 1.99 2016/07/14 20:13:10 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.91.2.1 2015/01/08 11:01:01 martin Exp $	*/
 
 /*
  * Copyright (c) 1983, 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1983, 1988, 1993\
 #if 0
 static char sccsid[] = "from: @(#)main.c	8.4 (Berkeley) 3/1/94";
 #else
-__RCSID("$NetBSD: main.c,v 1.99 2016/07/14 20:13:10 christos Exp $");
+__RCSID("$NetBSD: main.c,v 1.91.2.1 2015/01/08 11:01:01 martin Exp $");
 #endif
 #endif /* not lint */
 
@@ -146,23 +146,35 @@ struct nlist nl[] = {
 	{ "_rip6stat", 0, 0, 0, 0 },	/* not available via kvm */
 #define	N_ARPINTRQ	38
 	{ "_arpintrq", 0, 0, 0, 0 },
-#define	N_ATINTRQ1	39
+#define	N_IPINTRQ	39
+	{ "_ipintrq", 0, 0, 0, 0 },
+#define	N_IP6INTRQ	40
+	{ "_ip6intrq", 0, 0, 0, 0 },
+#define	N_ATINTRQ1	41
 	{ "_atintrq1", 0, 0, 0, 0 },
-#define	N_ATINTRQ2	40
+#define	N_ATINTRQ2	42
 	{ "_atintrq2", 0, 0, 0, 0 },
-#define	N_NATMINTRQ	41
+#define	N_NSINTRQ	43
+	{ "_nsintrq", 0, 0, 0, 0 },
+#define	N_LLCINTRQ	44
+	{ "_llcintrq", 0, 0, 0, 0 },
+#define	N_HDINTRQ	45
+	{ "_hdintrq", 0, 0, 0, 0 },
+#define	N_NATMINTRQ	46
 	{ "_natmintrq", 0, 0, 0, 0 },
-#define	N_PPPOEDISCINQ	42
+#define	N_PPPOEDISCINQ	47
 	{ "_ppoediscinq", 0, 0, 0, 0 },
-#define	N_PPPOEINQ	43
+#define	N_PPPOEINQ	48
 	{ "_ppoeinq", 0, 0, 0, 0 },
-#define	N_HARDCLOCK_TICKS 44
+#define	N_PKINTRQ	49
+	{ "_pkintrq", 0, 0, 0, 0 },
+#define	N_HARDCLOCK_TICKS 50
 	{ "_hardclock_ticks", 0, 0, 0, 0 },
-#define N_PIMSTAT	45
+#define N_PIMSTAT	51
 	{ "_pimstat", 0, 0, 0, 0 },
-#define N_CARPSTAT	46
+#define N_CARPSTAT	52
 	{ "_carpstats", 0, 0, 0, 0 },	/* not available via kvm */
-#define N_PFSYNCSTAT	47
+#define N_PFSYNCSTAT	53
 	{ "_pfsyncstats", 0, 0, 0, 0},  /* not available via kvm */
 	{ "", 0, 0, 0, 0 },
 };
@@ -172,13 +184,13 @@ struct protox {
 	u_char	pr_sindex;		/* index into nlist of stat block */
 	u_char	pr_wanted;		/* 1 if wanted, 0 otherwise */
 	void	(*pr_cblocks)		/* control blocks printing routine */
-			(u_long, const char *);
+			__P((u_long, const char *));
 	void	(*pr_stats)		/* statistics printing routine */
-			(u_long, const char *);
+			__P((u_long, const char *));
 	void	(*pr_istats)
-			(const char *);	/* per/if statistics printing routine */
+			__P((const char *));	/* per/if statistics printing routine */
 	void	(*pr_dump)		/* PCB state dump routine */
-			(u_long, const char *, u_long);
+			__P((u_long, const char *, u_long));
 	const char *pr_name;		/* well-known name */
 } protox[] = {
 	{ N_TCBTABLE,	N_TCPSTAT,	1,	protopr,
@@ -276,19 +288,25 @@ const struct softintrq {
 	int siq_index;
 } softintrq[] = {
 	{ "arpintrq", N_ARPINTRQ },
+	{ "ipintrq", N_IPINTRQ },
+	{ "ip6intrq", N_IP6INTRQ },
 	{ "atintrq1", N_ATINTRQ1 },
 	{ "atintrq2", N_ATINTRQ2 },
+	{ "llcintrq", N_LLCINTRQ },
+	{ "hdintrq", N_HDINTRQ },
 	{ "natmintrq", N_NATMINTRQ },
 	{ "ppoediscinq", N_PPPOEDISCINQ },
 	{ "ppoeinq", N_PPPOEINQ },
+	{ "pkintrq", N_PKINTRQ },
 	{ NULL, -1 },
 };
 
-static void printproto(struct protox *, const char *);
-static void print_softintrq(void);
+int main __P((int, char *[]));
+static void printproto __P((struct protox *, const char *));
+static void print_softintrq __P((void));
 __dead static void usage(void);
-static struct protox *name2protox(const char *);
-static struct protox *knownname(const char *);
+static struct protox *name2protox __P((const char *));
+static struct protox *knownname __P((const char *));
 static void prepare(const char *, const char *, struct protox *tp);
 static kvm_t *prepare_kvmd(const char *, const char *, char *);
 
@@ -327,19 +345,15 @@ prepare(const char *nf, const char *mf, struct protox *tp)
 	/*
 	 * Try to figure out if we can use sysctl or not.
 	 */
-	if (nf != NULL || mf != NULL) {
+	if (nf != NULL && mf != NULL) {
 		/* Of course, we can't use sysctl with dumps. */
 		if (force_sysctl)
 			errx(EXIT_FAILURE, "can't use sysctl with dumps");
 
-		/*
-		 * If we have -M or -N, we're not dealing with live memory
-		 * or want to use kvm interface explicitly.  It is sometimes
-		 * useful to dig inside of kernel without extending
-		 * sysctl interface (i.e., without rebuilding kernel).
-		 */
+		/* If we have -M and -N, we're not dealing with live memory. */
 		use_sysctl = 0;
 	} else if (qflag ||
+		   iflag ||
 #ifndef SMALL
 		   gflag ||
 #endif
@@ -402,7 +416,7 @@ main(int argc, char *argv[])
 	    "AabBdf:ghI:LliM:mN:nP:p:qrsStTuVvw:X")) != -1)
 		switch (ch) {
 		case 'A':
-			Aflag = RT_AFLAG;
+			Aflag = 1;
 			break;
 		case 'a':
 			aflag = 1;
@@ -435,7 +449,7 @@ main(int argc, char *argv[])
 			iflag = 1;
 			break;
 		case 'L':
-			Lflag = RT_LFLAG;
+			Lflag = 1;
 			break;
 		case 'l':
 			lflag = 1;
@@ -482,7 +496,7 @@ main(int argc, char *argv[])
 			tflag = 1;
 			break;
 		case 'T':
-			tagflag = RT_TFLAG;
+			tagflag = 1;
 			break;
 		case 'u':
 			af = AF_LOCAL;
@@ -491,7 +505,7 @@ main(int argc, char *argv[])
 			Vflag++;
 			break;
 		case 'v':
-			vflag = RT_VFLAG;
+			vflag++;
 			break;
 		case 'w':
 			interval = atoi(optarg);
@@ -619,8 +633,7 @@ main(int argc, char *argv[])
 				rt_stats(use_sysctl ? 0 : nl[N_RTSTAT].n_value);
 			else {
 				if (use_sysctl)
-					p_rttables(af,
-					    nflag|tagflag|vflag|Lflag, 0, ~0);
+					p_rttables(af, nflag, 0, ~0);
 				else
 					routepr(nl[N_RTREE].n_value);
 			}
@@ -705,7 +718,7 @@ main(int argc, char *argv[])
 static void
 printproto(struct protox *tp, const char *name)
 {
-	void (*pr)(u_long, const char *);
+	void (*pr) __P((u_long, const char *));
 	u_long off;
 
 	if (sflag) {

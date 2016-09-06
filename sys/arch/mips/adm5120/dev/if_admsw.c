@@ -1,4 +1,4 @@
-/* $NetBSD: if_admsw.c,v 1.14 2016/06/10 13:27:12 ozaki-r Exp $ */
+/* $NetBSD: if_admsw.c,v 1.12 2014/06/16 16:48:16 msaitoh Exp $ */
 
 /*-
  * Copyright (c) 2007 Ruslan Ermilov and Vsevolod Lobko.
@@ -76,7 +76,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_admsw.c,v 1.14 2016/06/10 13:27:12 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_admsw.c,v 1.12 2014/06/16 16:48:16 msaitoh Exp $");
 
 
 #include <sys/param.h>
@@ -991,7 +991,7 @@ admsw_rxintr(struct admsw_softc *sc, int high)
 			continue;
 		}
 
-		m_set_rcvif(m, ifp);
+		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = len;
 		if ((stat & ADM5120_DMA_TYPE) == ADM5120_DMA_TYPE_IP) {
 			m->m_pkthdr.csum_flags |= M_CSUM_IPv4;
@@ -1002,7 +1002,7 @@ admsw_rxintr(struct admsw_softc *sc, int high)
 		bpf_mtap(ifp, m);
 
 		/* Pass it on. */
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		(*ifp->if_input)(ifp, m);
 		ifp->if_ipackets++;
 	}
 #ifdef ADMSW_EVENT_COUNTERS

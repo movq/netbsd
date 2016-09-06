@@ -1,5 +1,5 @@
 /* FLEX lexer for Ada expressions, for GDB.
-   Copyright (C) 1994-2015 Free Software Foundation, Inc.
+   Copyright (C) 1994-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -48,9 +48,8 @@ POSEXP  (e"+"?{NUM10})
 static char numbuf[NUMERAL_WIDTH];
  static void canonicalizeNumeral (char *s1, const char *);
 static struct stoken processString (const char*, int);
-static int processInt (struct parser_state *, const char *, const char *,
-		       const char *);
-static int processReal (struct parser_state *, const char *);
+static int processInt (const char *, const char *, const char *);
+static int processReal (const char *);
 static struct stoken processId (const char *, int);
 static int processAttribute (const char *);
 static int find_dot_all (const char *);
@@ -90,42 +89,40 @@ static int find_dot_all (const char *);
 
 {NUM10}{POSEXP}  {
 		   canonicalizeNumeral (numbuf, yytext);
-		   return processInt (pstate, NULL, numbuf,
-				      strrchr (numbuf, 'e') + 1);
+		   return processInt (NULL, numbuf, strrchr(numbuf, 'e')+1);
 		 }
 
 {NUM10}          {
 		   canonicalizeNumeral (numbuf, yytext);
-		   return processInt (pstate, NULL, numbuf, NULL);
+		   return processInt (NULL, numbuf, NULL);
 		 }
 
 {NUM10}"#"{HEXDIG}({HEXDIG}|_)*"#"{POSEXP} {
 		   canonicalizeNumeral (numbuf, yytext);
-		   return processInt (pstate, numbuf,
+    		   return processInt (numbuf,
 				      strchr (numbuf, '#') + 1,
 				      strrchr(numbuf, '#') + 1);
 		 }
 
 {NUM10}"#"{HEXDIG}({HEXDIG}|_)*"#" {
 		   canonicalizeNumeral (numbuf, yytext);
-		   return processInt (pstate, numbuf, strchr (numbuf, '#') + 1,
-				      NULL);
+    		   return processInt (numbuf, strchr (numbuf, '#') + 1, NULL);
 		 }
 
 "0x"{HEXDIG}+	{
 		  canonicalizeNumeral (numbuf, yytext+2);
-		  return processInt (pstate, "16#", numbuf, NULL);
+		  return processInt ("16#", numbuf, NULL);
 		}
 
 
 {NUM10}"."{NUM10}{EXP} {
 		   canonicalizeNumeral (numbuf, yytext);
-		   return processReal (pstate, numbuf);
+		   return processReal (numbuf);
 		}
 
 {NUM10}"."{NUM10} {
 		   canonicalizeNumeral (numbuf, yytext);
-		   return processReal (pstate, numbuf);
+		   return processReal (numbuf);
 		}
 
 {NUM10}"#"{NUM16}"."{NUM16}"#"{EXP} {
@@ -137,14 +134,14 @@ static int find_dot_all (const char *);
 		}
 
 <INITIAL>"'"({GRAPHIC}|\")"'" {
-		   yylval.typed_val.type = type_char (pstate);
+		   yylval.typed_val.type = type_char ();
 		   yylval.typed_val.val = yytext[1];
 		   return CHARLIT;
 		}
 
 <INITIAL>"'[\""{HEXDIG}{2}"\"]'"   {
                    int v;
-                   yylval.typed_val.type = type_char (pstate);
+                   yylval.typed_val.type = type_char ();
 		   sscanf (yytext+3, "%2x", &v);
 		   yylval.typed_val.val = v;
 		   return CHARLIT;
@@ -291,6 +288,8 @@ false		{ return FALSEKEYWORD; }
 %%
 
 #include <ctype.h>
+#include <string.h>
+
 /* Initialize the lexer for processing new expression. */
 
 static void
@@ -325,8 +324,7 @@ canonicalizeNumeral (char *s1, const char *s2)
  */
 
 static int
-processInt (struct parser_state *par_state, const char *base0,
-	    const char *num0, const char *exp0)
+processInt (const char *base0, const char *num0, const char *exp0)
 {
   ULONGEST result;
   long exp;
@@ -362,11 +360,11 @@ processInt (struct parser_state *par_state, const char *base0,
       exp -= 1;
     }
 
-  if ((result >> (gdbarch_int_bit (parse_gdbarch (par_state))-1)) == 0)
-    yylval.typed_val.type = type_int (par_state);
-  else if ((result >> (gdbarch_long_bit (parse_gdbarch (par_state))-1)) == 0)
-    yylval.typed_val.type = type_long (par_state);
-  else if (((result >> (gdbarch_long_bit (parse_gdbarch (par_state))-1)) >> 1) == 0)
+  if ((result >> (gdbarch_int_bit (parse_gdbarch)-1)) == 0)
+    yylval.typed_val.type = type_int ();
+  else if ((result >> (gdbarch_long_bit (parse_gdbarch)-1)) == 0)
+    yylval.typed_val.type = type_long ();
+  else if (((result >> (gdbarch_long_bit (parse_gdbarch)-1)) >> 1) == 0)
     {
       /* We have a number representable as an unsigned integer quantity.
          For consistency with the C treatment, we will treat it as an
@@ -376,7 +374,7 @@ processInt (struct parser_state *par_state, const char *base0,
          assignment does the trick (no, it doesn't; read the reference manual).
        */
       yylval.typed_val.type
-	= builtin_type (parse_gdbarch (par_state))->builtin_unsigned_long;
+	= builtin_type (parse_gdbarch)->builtin_unsigned_long;
       if (result & LONGEST_SIGN)
 	yylval.typed_val.val =
 	  (LONGEST) (result & ~LONGEST_SIGN)
@@ -386,24 +384,24 @@ processInt (struct parser_state *par_state, const char *base0,
       return INT;
     }
   else
-    yylval.typed_val.type = type_long_long (par_state);
+    yylval.typed_val.type = type_long_long ();
 
   yylval.typed_val.val = (LONGEST) result;
   return INT;
 }
 
 static int
-processReal (struct parser_state *par_state, const char *num0)
+processReal (const char *num0)
 {
   sscanf (num0, "%" DOUBLEST_SCAN_FORMAT, &yylval.typed_val_float.dval);
 
-  yylval.typed_val_float.type = type_float (par_state);
-  if (sizeof(DOUBLEST) >= gdbarch_double_bit (parse_gdbarch (par_state))
+  yylval.typed_val_float.type = type_float ();
+  if (sizeof(DOUBLEST) >= gdbarch_double_bit (parse_gdbarch)
 			    / TARGET_CHAR_BIT)
-    yylval.typed_val_float.type = type_double (par_state);
-  if (sizeof(DOUBLEST) >= gdbarch_long_double_bit (parse_gdbarch (par_state))
+    yylval.typed_val_float.type = type_double ();
+  if (sizeof(DOUBLEST) >= gdbarch_long_double_bit (parse_gdbarch)
 			    / TARGET_CHAR_BIT)
-    yylval.typed_val_float.type = type_long_double (par_state);
+    yylval.typed_val_float.type = type_long_double ();
 
   return FLOAT;
 }

@@ -1,6 +1,6 @@
 /* Target-dependent code for the Tilera TILE-Gx processor.
 
-   Copyright (C) 2012-2015 Free Software Foundation, Inc.
+   Copyright (C) 2012-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -30,6 +30,8 @@
 #include "value.h"
 #include "dis-asm.h"
 #include "inferior.h"
+#include <string.h>
+#include "gdb_assert.h"
 #include "arch-utils.h"
 #include "floatformat.h"
 #include "regcache.h"
@@ -771,10 +773,10 @@ tilegx_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR start_pc)
 				  NULL, NULL);
 }
 
-/* This is the implementation of gdbarch method stack_frame_destroyed_p.  */
+/* This is the implementation of gdbarch method in_function_epilogue_p.  */
 
 static int
-tilegx_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR pc)
+tilegx_in_function_epilogue_p (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   CORE_ADDR func_addr = 0, func_end = 0;
 
@@ -1051,7 +1053,8 @@ tilegx_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   set_gdbarch_skip_prologue (gdbarch, tilegx_skip_prologue);
 
-  set_gdbarch_stack_frame_destroyed_p (gdbarch, tilegx_stack_frame_destroyed_p);
+  set_gdbarch_in_function_epilogue_p (gdbarch,
+				      tilegx_in_function_epilogue_p);
 
   /* Map debug registers into internal register numbers.  */
   set_gdbarch_dwarf2_reg_to_regnum (gdbarch, tilegx_dwarf2_reg_to_regnum);

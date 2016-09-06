@@ -1,4 +1,4 @@
-/*	$NetBSD: devopen.c,v 1.11 2015/09/01 13:55:25 tsutsui Exp $	*/
+/*	$NetBSD: devopen.c,v 1.8 2014/04/21 11:06:55 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1992 OMRON Corporation.
@@ -136,73 +136,60 @@ make_device(const char *str, int *devp, int *unitp, int *partp, char **fname)
 	 */
 	/* find end of dev type name */
 	for (cp = str, i = 0; *cp != '\0' && *cp != '(' && i < MAXDEVNAME; i++)
-		devname[i] = *cp++;
+			devname[i] = *cp++;
 	if (*cp != '(') {
-		/* no device name is specified; assume default */
-		cp = str;
-		/* compare dev type name */
-		for (dp = devsw; dp->dv_name; dp++)
-			if (!strcmp(default_bootdev, dp->dv_name))
-				break;
-		if (dp->dv_name == NULL) {
+		return (-1);
+	}
+	devname[i] = '\0';
+	/* compare dev type name */
+	for (dp = devsw; dp->dv_name; dp++)
+		if (!strcmp(devname, dp->dv_name))
+			break;
+	cp++;
+	if (dp->dv_name == NULL) {
+		return (-1);
+	}
+	dev = dp - devsw;
+	/* get mixed controller and unit number */
+	haveunit = false;
+	for (; *cp != ',' && *cp != ')'; cp++) {
+		if (*cp == '\0')
 			return -1;
+		if (*cp >= '0' && *cp <= '9') {
+			unit = unit * 10 + *cp - '0';
+			haveunit = true;
 		}
-		dev = dp - devsw;
+	}
+	if (unit < 0 || CTLR(unit) >= 2 || TARGET(unit) > 7) {
+#ifdef DEBUG
+		printf("%s: invalid unit number (%d)\n", __func__, unit);
+#endif
+		return (-1);
+	}
+	if (!haveunit && strcmp(devname, default_bootdev) == 0)
 		unit = default_unit;
-	} else {
-		devname[i] = '\0';
-		/* compare dev type name */
-		for (dp = devsw; dp->dv_name; dp++)
-			if (!strcmp(devname, dp->dv_name))
-				break;
+	/* get optional partition number */
+	if (*cp == ',')
 		cp++;
-		if (dp->dv_name == NULL) {
-			return -1;
-		}
-		dev = dp - devsw;
-		/* get mixed controller and unit number */
-		haveunit = false;
-		for (; *cp != ',' && *cp != ')'; cp++) {
-			if (*cp == '\0')
-				return -1;
-			if (*cp >= '0' && *cp <= '9') {
-				unit = unit * 10 + *cp - '0';
-				haveunit = true;
-			}
-		}
-		if (unit < 0 || CTLR(unit) >= 2 || TARGET(unit) > 7) {
-#ifdef DEBUG
-			printf("%s: invalid unit number (%d)\n",
-			    __func__, unit);
-#endif
-			return -1;
-		}
-		if (!haveunit && strcmp(devname, default_bootdev) == 0)
-			unit = default_unit;
-		/* get optional partition number */
-		if (*cp == ',')
-			cp++;
 
-		for (; /* *cp != ',' && */ *cp != ')'; cp++) {
-			if (*cp == '\0')
-				return -1;
-			if (*cp >= '0' && *cp <= '9')
-				part = part * 10 + *cp - '0';
-		}
-		if (part < 0 || part >= MAXPARTITIONS) {
-#ifdef DEBUG
-			printf("%s: invalid partition number (%d)\n",
-			    __func__, part);
-#endif
+	for (; /* *cp != ',' && */ *cp != ')'; cp++) {
+		if (*cp == '\0')
 			return -1;
-		}
-		cp++;
+		if (*cp >= '0' && *cp <= '9')
+			part = part * 10 + *cp - '0';
+	}
+	if (part < 0 || part >= MAXPARTITIONS) {
+#ifdef DEBUG
+		printf("%s: invalid partition number (%d)\n", __func__, part);
+#endif
+		return (-1);
 	}
 	/* check out end of dev spec */
 	*devp  = dev;
 	*unitp = unit;
 	*partp = part;
 	if (fname != NULL) {
+		cp++;
 		if (*cp == '\0')
 			*fname = "netbsd";
 		else

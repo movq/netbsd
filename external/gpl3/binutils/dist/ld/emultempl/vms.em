@@ -1,5 +1,6 @@
 # This shell script emits a C file. -*- C -*-
-#   Copyright (C) 2010-2015 Free Software Foundation, Inc.
+#   Copyright 2010, 2012
+#   Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -57,7 +58,7 @@ gld${EMULATION_NAME}_open_dynamic_archive (const char *arch ATTRIBUTE_UNUSED,
 {
   char *string;
 
-  if (! entry->flags.maybe_archive || entry->flags.full_name_provided)
+  if (! entry->flags.maybe_archive)
     return FALSE;
 
   string = (char *) xmalloc (strlen (search->name)
@@ -101,7 +102,7 @@ vms_place_orphan (asection *s,
 
   /* We have nothing to say for anything other than a final link or an excluded
      section.  */
-  if (bfd_link_relocatable (&link_info)
+  if (link_info.relocatable
       || (s->flags & (SEC_EXCLUDE | SEC_LOAD)) != SEC_LOAD)
     return NULL;
 
@@ -207,12 +208,9 @@ gld${EMULATION_NAME}_before_allocation (void)
 static void
 gld${EMULATION_NAME}_after_allocation (void)
 {
-  int need_layout = bfd_elf_discard_info (link_info.output_bfd, &link_info);
-
-  if (need_layout < 0)
-    einfo ("%X%P: .eh_frame/.stab edit: %E\n");
-  else
-    gld${EMULATION_NAME}_map_segments (need_layout);
+  bfd_boolean need_layout = bfd_elf_discard_info (link_info.output_bfd,
+						  &link_info);
+  gld${EMULATION_NAME}_map_segments (need_layout);
 }
 
 static void

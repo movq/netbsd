@@ -1,6 +1,6 @@
 /* Target-dependent code for OpenBSD/hppa
 
-   Copyright (C) 2004-2015 Free Software Foundation, Inc.
+   Copyright (C) 2004-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -21,6 +21,9 @@
 #include "osabi.h"
 #include "regcache.h"
 #include "regset.h"
+
+#include "gdb_assert.h"
+#include <string.h>
 
 #include "hppa-tdep.h"
 #include "hppabsd-tdep.h"
@@ -128,30 +131,32 @@ hppaobsd_supply_fpregset (const struct regset *regset,
 
 /* OpenBSD/hppa register sets.  */
 
-static const struct regset hppaobsd_gregset =
+static struct regset hppaobsd_gregset =
 {
   NULL,
-  hppaobsd_supply_gregset,
-  NULL,
-  REGSET_VARIABLE_SIZE
+  hppaobsd_supply_gregset
 };
 
-static const struct regset hppaobsd_fpregset =
+static struct regset hppaobsd_fpregset =
 {
   NULL,
   hppaobsd_supply_fpregset
 };
 
-/* Iterate over supported core file register note sections. */
+/* Return the appropriate register set for the core section identified
+   by SECT_NAME and SECT_SIZE.  */
 
-static void
-hppaobsd_iterate_over_regset_sections (struct gdbarch *gdbarch,
-				       iterate_over_regset_sections_cb *cb,
-				       void *cb_data,
-				       const struct regcache *regcache)
+static const struct regset *
+hppaobsd_regset_from_core_section (struct gdbarch *gdbarch,
+				  const char *sect_name, size_t sect_size)
 {
-  cb (".reg", HPPAOBSD_SIZEOF_GREGS, &hppaobsd_gregset, NULL, cb_data);
-  cb (".reg2", HPPAOBSD_SIZEOF_FPREGS, &hppaobsd_fpregset, NULL, cb_data);
+  if (strcmp (sect_name, ".reg") == 0 && sect_size >= HPPAOBSD_SIZEOF_GREGS)
+    return &hppaobsd_gregset;
+
+  if (strcmp (sect_name, ".reg2") == 0 && sect_size >= HPPAOBSD_SIZEOF_FPREGS)
+    return &hppaobsd_fpregset;
+
+  return NULL;
 }
 
 
@@ -162,8 +167,8 @@ hppaobsd_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   hppabsd_init_abi (info, gdbarch);
 
   /* Core file support.  */
-  set_gdbarch_iterate_over_regset_sections
-    (gdbarch, hppaobsd_iterate_over_regset_sections);
+  set_gdbarch_regset_from_core_section
+    (gdbarch, hppaobsd_regset_from_core_section);
 }
 
 

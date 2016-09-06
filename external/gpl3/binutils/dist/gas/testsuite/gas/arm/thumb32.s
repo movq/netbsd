@@ -380,6 +380,7 @@ here:
 	strd	r2, r3, [r5]
 	strd	r2, [r5, #0x30]
 	strd	r2, [r5, #-0x30]
+	strd    r2, r3, here
 	
 	ldrbt	r1, [r5]
 	ldrbt	r1, [r5, #0x30]

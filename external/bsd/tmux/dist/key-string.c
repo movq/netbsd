@@ -1,4 +1,4 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
  * Copyright (c) 2007 Nicholas Marriott <nicm@users.sourceforge.net>
@@ -42,6 +42,14 @@ const struct {
 	{ "F10",	KEYC_F10 },
 	{ "F11",	KEYC_F11 },
 	{ "F12",	KEYC_F12 },
+	{ "F13",	KEYC_F13 },
+	{ "F14",	KEYC_F14 },
+	{ "F15",	KEYC_F15 },
+	{ "F16",	KEYC_F16 },
+	{ "F17",	KEYC_F17 },
+	{ "F18",	KEYC_F18 },
+	{ "F19",	KEYC_F19 },
+	{ "F20",	KEYC_F20 },
 	{ "IC",		KEYC_IC },
 	{ "DC",		KEYC_DC },
 	{ "Home",	KEYC_HOME },
@@ -82,19 +90,6 @@ const struct {
 	{ "KPEnter",	KEYC_KP_ENTER },
 	{ "KP0",	KEYC_KP_ZERO },
 	{ "KP.",	KEYC_KP_PERIOD },
-
-	/* Mouse keys. */
-	KEYC_MOUSE_STRING(MOUSEDOWN1, MouseDown1),
-	KEYC_MOUSE_STRING(MOUSEDOWN2, MouseDown2),
-	KEYC_MOUSE_STRING(MOUSEDOWN3, MouseDown3),
-	KEYC_MOUSE_STRING(MOUSEUP1, MouseUp1),
-	KEYC_MOUSE_STRING(MOUSEUP2, MouseUp2),
-	KEYC_MOUSE_STRING(MOUSEUP3, MouseUp3),
-	KEYC_MOUSE_STRING(MOUSEDRAG1, MouseDrag1),
-	KEYC_MOUSE_STRING(MOUSEDRAG2, MouseDrag2),
-	KEYC_MOUSE_STRING(MOUSEDRAG3, MouseDrag3),
-	KEYC_MOUSE_STRING(WHEELUP, WheelUp),
-	KEYC_MOUSE_STRING(WHEELDOWN, WheelDown),
 };
 
 /* Find key string in table. */
@@ -205,9 +200,7 @@ key_string_lookup_key(int key)
 
 	/* Handle no key. */
 	if (key == KEYC_NONE)
-		return ("<NONE>");
-	if (key == KEYC_MOUSE)
-		return ("<MOUSE>");
+		return ("none");
 
 	/*
 	 * Special case: display C-@ as C-Space. Could do this below in

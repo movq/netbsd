@@ -17,7 +17,6 @@
 #include "llvm/Analysis/RegionIterator.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/Timer.h"
-#include "llvm/Support/raw_ostream.h"
 using namespace llvm;
 
 #define DEBUG_TYPE "regionpassmgr"
@@ -84,11 +83,9 @@ bool RGPassManager::runOnFunction(Function &F) {
     for (unsigned Index = 0; Index < getNumContainedPasses(); ++Index) {
       RegionPass *P = (RegionPass*)getContainedPass(Index);
 
-      if (isPassDebuggingExecutionsOrMore()) {
-        dumpPassInfo(P, EXECUTION_MSG, ON_REGION_MSG,
-                     CurrentRegion->getNameStr());
-        dumpRequiredSet(P);
-      }
+      dumpPassInfo(P, EXECUTION_MSG, ON_REGION_MSG,
+                   CurrentRegion->getNameStr());
+      dumpRequiredSet(P);
 
       initializeAnalysisImpl(P);
 
@@ -99,13 +96,11 @@ bool RGPassManager::runOnFunction(Function &F) {
         Changed |= P->runOnRegion(CurrentRegion, *this);
       }
 
-      if (isPassDebuggingExecutionsOrMore()) {
-        if (Changed)
-          dumpPassInfo(P, MODIFICATION_MSG, ON_REGION_MSG,
-                       skipThisRegion ? "<deleted>" :
-                                      CurrentRegion->getNameStr());
-        dumpPreservedSet(P);
-      }
+      if (Changed)
+        dumpPassInfo(P, MODIFICATION_MSG, ON_REGION_MSG,
+                     skipThisRegion ? "<deleted>" :
+                                    CurrentRegion->getNameStr());
+      dumpPreservedSet(P);
 
       if (!skipThisRegion) {
         // Manually check that this region is still healthy. This is done
@@ -125,8 +120,8 @@ bool RGPassManager::runOnFunction(Function &F) {
       removeNotPreservedAnalysis(P);
       recordAvailableAnalysis(P);
       removeDeadPasses(P,
-                       (!isPassDebuggingExecutionsOrMore() || skipThisRegion) ?
-                       "<deleted>" :  CurrentRegion->getNameStr(),
+                       skipThisRegion ? "<deleted>" :
+                                      CurrentRegion->getNameStr(),
                        ON_REGION_MSG);
 
       if (skipThisRegion)
@@ -199,7 +194,7 @@ public:
 
   bool runOnRegion(Region *R, RGPassManager &RGM) override {
     Out << Banner;
-    for (const auto *BB : R->blocks()) {
+    for (const auto &BB : R->blocks()) {
       if (BB)
         BB->print(Out);
       else

@@ -1,4 +1,4 @@
-/*	$NetBSD: stdlib.h,v 1.117 2016/07/01 22:42:01 christos Exp $	*/
+/*	$NetBSD: stdlib.h,v 1.110 2014/06/18 17:48:22 christos Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -123,10 +123,6 @@ double	 strtod(const char * __restrict, char ** __restrict);
 long	 strtol(const char * __restrict, char ** __restrict, int);
 unsigned long
 	 strtoul(const char * __restrict, char ** __restrict, int);
-#ifdef _OPENBSD_SOURCE
-long long strtonum(const char *, long long, long long, const char **);
-void	*reallocarray(void *, size_t, size_t);
-#endif
 int	 system(const char *);
 
 /* These are currently just stubs. */
@@ -234,7 +230,6 @@ long double	strtold(const char * __restrict, char ** __restrict);
 
 #if defined(_ISOC11_SOURCE) || (__STDC_VERSION__ - 0) >= 201101L || \
     defined(_NETBSD_SOURCE) || (__cplusplus - 0) >= 201103L
-void	*aligned_alloc(size_t, size_t);
 int	at_quick_exit(void (*)(void));
 __dead void quick_exit(int);
 #endif
@@ -300,8 +295,6 @@ __aconst char *devname(dev_t, mode_t) __RENAME(__devname50);
 
 int	 humanize_number(char *, size_t, int64_t, const char *, int, int);
 int	 dehumanize_number(const char *, int64_t *);
-ssize_t	 hmac(const char *, const void *, size_t, const void *, size_t, void *,
-   size_t);
 
 devmajor_t getdevmajor(const char *, mode_t);
 int	 getloadavg(double [], int);
@@ -341,8 +334,6 @@ int	 l64a_r(long, char *, int);
 
 size_t	shquote(const char *, char *, size_t);
 size_t	shquotev(int, char * const *, char *, size_t);
-
-int	reallocarr(void *, size_t, size_t);
 #endif /* _NETBSD_SOURCE */
 #endif /* _POSIX_C_SOURCE || _XOPEN_SOURCE || _NETBSD_SOURCE */
 

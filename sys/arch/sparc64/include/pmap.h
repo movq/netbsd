@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.60 2015/09/06 23:48:39 nakayama Exp $	*/
+/*	$NetBSD: pmap.h,v 1.58 2014/04/14 10:54:08 martin Exp $	*/
 
 /*-
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -40,9 +40,6 @@
 #include <uvm/uvm_object.h>
 #ifdef _KERNEL
 #include <machine/cpuset.h>
-#ifdef SUN4V
-#include <machine/hypervisor.h>
-#endif
 #endif
 #endif
 
@@ -237,7 +234,7 @@ void		pmap_zero_page_phys(paddr_t);
 #ifdef SUN4V
 /* sun4v specific */
 void		pmap_setup_intstack_sun4v(paddr_t);
-void		pmap_setup_tsb_sun4v(struct tsb_desc*);
+void		pmap_setup_tsb_sun4v(void);
 #endif
 
 /* Installed physical memory, as discovered during bootstrap. */

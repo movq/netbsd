@@ -1,4 +1,4 @@
-/* $NetBSD: udf_strat_sequential.c,v 1.15 2016/05/24 09:55:57 reinoud Exp $ */
+/* $NetBSD: udf_strat_sequential.c,v 1.13 2014/03/23 09:34:42 christos Exp $ */
 
 /*
  * Copyright (c) 2006, 2008 Reinoud Zandijk
@@ -28,7 +28,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__KERNEL_RCSID(0, "$NetBSD: udf_strat_sequential.c,v 1.15 2016/05/24 09:55:57 reinoud Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udf_strat_sequential.c,v 1.13 2014/03/23 09:34:42 christos Exp $");
 #endif /* not lint */
 
 
@@ -86,7 +86,6 @@ struct strat_private {
 	kmutex_t		 discstrat_mutex;	/* disc strategy    */
 
 	int			 run_thread;		/* thread control */
-	int			 sync_req;		/* thread control */
 	int			 cur_queue;
 
 	struct disk_strategy	 old_strategy_setting;
@@ -129,6 +128,9 @@ udf_wr_nodedscr_callback(struct buf *buf)
 		UDF_UNLOCK_NODE(udf_node, 0);
 		wakeup(&udf_node->outstanding_nodedscr);
 	}
+
+	/* unreference the vnode so it can be recycled */
+	holdrele(udf_node->vnode);
 
 	putiobuf(buf);
 }
@@ -217,6 +219,9 @@ udf_write_logvol_dscr_seq(struct udf_strat_args *args)
 			goto out;
 	}
 
+	/* add reference to the vnode to prevent recycling */
+	vhold(udf_node->vnode);
+
 	if (waitfor) {
 		DPRINTF(WRITE, ("udf_write_logvol_dscr: sync write\n"));
 
@@ -230,6 +235,8 @@ udf_write_logvol_dscr_seq(struct udf_strat_args *args)
 		/* will be UNLOCKED in call back */
 		return error;
 	}
+
+	holdrele(udf_node->vnode);
 out:
 	udf_node->outstanding_nodedscr--;
 	if (udf_node->outstanding_nodedscr == 0) {
@@ -284,30 +291,6 @@ udf_queuebuf_seq(struct udf_strat_args *args)
 
 	/* signal our thread that there might be something to do */
 	cv_signal(&priv->discstrat_cv);
-}
-
-/* --------------------------------------------------------------------- */
-
-static void
-udf_sync_caches_seq(struct udf_strat_args *args)
-{
-	struct udf_mount *ump = args->ump;
-	struct strat_private *priv = PRIV(ump);
-
-	/* we might be called during unmount inadvertedly, be on safe side */
-	if (!priv)
-		return;
-
-	/* signal our thread that there might be something to do */
-	priv->sync_req = 1;
-	cv_signal(&priv->discstrat_cv);
-
-	mutex_enter(&priv->discstrat_mutex);
-		while (priv->sync_req) {
-			cv_timedwait(&priv->discstrat_cv,
-				&priv->discstrat_mutex, hz/8);
-		}
-	mutex_exit(&priv->discstrat_mutex);
 }
 
 /* --------------------------------------------------------------------- */
@@ -564,7 +547,7 @@ udf_discstrat_thread(void *arg)
 
 	empty = 1;
 	mutex_enter(&priv->discstrat_mutex);
-	while (priv->run_thread || !empty || priv->sync_req) {
+	while (priv->run_thread || !empty) {
 		/* process the current selected queue */
 		udf_doshedule(ump);
 		empty  = (bufq_peek(priv->queues[UDF_SHED_READING]) == NULL);
@@ -572,16 +555,9 @@ udf_discstrat_thread(void *arg)
 		empty &= (bufq_peek(priv->queues[UDF_SHED_SEQWRITING]) == NULL);
 
 		/* wait for more if needed */
-		if (empty) {
-			if (priv->sync_req) {
-				/* on sync, we need to simulate a read->write transition */
-				udf_mmc_synchronise_caches(ump);
-				priv->cur_queue = UDF_SHED_READING;
-				priv->sync_req = 0;
-			}
+		if (empty)
 			cv_timedwait(&priv->discstrat_cv,
 				&priv->discstrat_mutex, hz/8);
-		}
 	}
 	mutex_exit(&priv->discstrat_mutex);
 
@@ -653,7 +629,6 @@ udf_discstrat_init_seq(struct udf_strat_args *args)
 
 	/* create our disk strategy thread */
 	priv->run_thread = 1;
-	priv->sync_req   = 0;
 	if (kthread_create(PRI_NONE, 0 /* KTHREAD_MPSAFE*/, NULL /* cpu_info*/,
 		udf_discstrat_thread, ump, &priv->queue_lwp,
 		"%s", "udf_rw")) {
@@ -706,7 +681,6 @@ struct udf_strategy udf_strat_sequential =
 	udf_read_logvol_dscr_seq,
 	udf_write_logvol_dscr_seq,
 	udf_queuebuf_seq,
-	udf_sync_caches_seq,
 	udf_discstrat_init_seq,
 	udf_discstrat_finish_seq
 };

@@ -1,11 +1,11 @@
 #
-# $NetBSD: SMALL030,v 1.20 2014/11/24 08:29:26 tsutsui Exp $
+# $NetBSD: SMALL030,v 1.17.2.1 2014/12/14 15:23:36 martin Exp $
 #
 # This file was automatically created. Changes will be
 # lost when running makeconf in this directory.
 #
 # Created from:
-#		NetBSD: GENERIC.in,v 1.109 2014/11/24 08:23:48 tsutsui Exp $
+#		NetBSD: GENERIC.in,v 1.106.2.1 2014/12/14 15:22:28 martin Exp $
 include "arch/atari/conf/std.atari"
 makeoptions COPTS="-Os" # optimize for space
 maxusers 16
@@ -21,13 +21,12 @@ file-system CD9660 # ISO 9660 filesystem with Rock Ridge
 options WAPBL # File system journaling support
 options FFS_NO_SNAPSHOT # No FFS snapshot support
 options PANICWAIT # Require keystroke to dump/reboot
-options COMPAT_16 # NetBSD 1.6,
-options COMPAT_20 # NetBSD 2.0,
-options COMPAT_30 # NetBSD 3.0,
-options COMPAT_40 # NetBSD 4.0,
-options COMPAT_50 # NetBSD 5.0,
-options COMPAT_60 # NetBSD 6.0, and
-options COMPAT_70 # NetBSD 7.0 binary compatibility.
+options COMPAT_16 # Compatibility with NetBSD 1.6
+options COMPAT_20 # Compatibility with NetBSD 2.0
+options COMPAT_30 # NetBSD 3.0 compatibility.
+options COMPAT_40 # NetBSD 4.0 compatibility.
+options COMPAT_50 # NetBSD 5.0 compatibility.
+options COMPAT_60 # NetBSD 6.0 compatibility.
 options COMPAT_BSDPTY # /dev/[pt]ty?? ptys.
 options PIPE_SOCKETPAIR # smaller, but slower pipe(2)
 options ST_POOL_SIZE=24 # smallest that allows TT-HIGH

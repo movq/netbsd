@@ -1,4 +1,4 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
  * Copyright (c) 2009 Nicholas Marriott <nicm@users.sourceforge.net>
@@ -24,7 +24,7 @@
 #include "tmux.h"
 
 struct cmd_list *
-cmd_list_parse(int argc, char **argv, const char *file, u_int line,
+cmd_list_parse(int argc, char **argv, const char* file, u_int line,
     char **cause)
 {
 	struct cmd_list	*cmdlist;
@@ -103,7 +103,7 @@ size_t
 cmd_list_print(struct cmd_list *cmdlist, char *buf, size_t len)
 {
 	struct cmd	*cmd;
-	size_t		 off, used;
+	size_t		 off;
 
 	off = 0;
 	TAILQ_FOREACH(cmd, &cmdlist->list, qentry) {
@@ -112,12 +112,8 @@ cmd_list_print(struct cmd_list *cmdlist, char *buf, size_t len)
 		off += cmd_print(cmd, buf + off, len - off);
 		if (off >= len)
 			break;
-		if (TAILQ_NEXT(cmd, qentry) != NULL) {
-			used = xsnprintf(buf + off, len - off, " ; ");
-			if (used > len - off)
-				used = len - off;
-			off += used;
-		}
+		if (TAILQ_NEXT(cmd, qentry) != NULL)
+			off += xsnprintf(buf + off, len - off, " ; ");
 	}
 	return (off);
 }

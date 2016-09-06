@@ -1,4 +1,4 @@
-	.section .fini, "a"
+	.section .fini
 	.p2align 6
 	.type	foo2,%function
 foo2:

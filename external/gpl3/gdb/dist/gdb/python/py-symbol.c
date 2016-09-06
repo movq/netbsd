@@ -1,6 +1,6 @@
 /* Python interface to symbols.
 
-   Copyright (C) 2008-2015 Free Software Foundation, Inc.
+   Copyright (C) 2008-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,6 +19,7 @@
 
 #include "defs.h"
 #include "block.h"
+#include "exceptions.h"
 #include "frame.h"
 #include "symtab.h"
 #include "python-internal.h"
@@ -87,10 +88,7 @@ sympy_get_symtab (PyObject *self, void *closure)
 
   SYMPY_REQUIRE_VALID (self, symbol);
 
-  if (!SYMBOL_OBJFILE_OWNED (symbol))
-    Py_RETURN_NONE;
-
-  return symtab_to_symtab_object (symbol_symtab (symbol));
+  return symtab_to_symtab_object (SYMBOL_SYMTAB (symbol));
 }
 
 static PyObject *
@@ -147,42 +145,42 @@ static PyObject *
 sympy_is_constant (PyObject *self, void *closure)
 {
   struct symbol *symbol = NULL;
-  enum address_class theclass;
+  enum address_class class;
 
   SYMPY_REQUIRE_VALID (self, symbol);
 
-  theclass = SYMBOL_CLASS (symbol);
+  class = SYMBOL_CLASS (symbol);
 
-  return PyBool_FromLong (theclass == LOC_CONST || theclass == LOC_CONST_BYTES);
+  return PyBool_FromLong (class == LOC_CONST || class == LOC_CONST_BYTES);
 }
 
 static PyObject *
 sympy_is_function (PyObject *self, void *closure)
 {
   struct symbol *symbol = NULL;
-  enum address_class theclass;
+  enum address_class class;
 
   SYMPY_REQUIRE_VALID (self, symbol);
 
-  theclass = SYMBOL_CLASS (symbol);
+  class = SYMBOL_CLASS (symbol);
 
-  return PyBool_FromLong (theclass == LOC_BLOCK);
+  return PyBool_FromLong (class == LOC_BLOCK);
 }
 
 static PyObject *
 sympy_is_variable (PyObject *self, void *closure)
 {
   struct symbol *symbol = NULL;
-  enum address_class theclass;
+  enum address_class class;
 
   SYMPY_REQUIRE_VALID (self, symbol);
 
-  theclass = SYMBOL_CLASS (symbol);
+  class = SYMBOL_CLASS (symbol);
 
   return PyBool_FromLong (!SYMBOL_IS_ARGUMENT (symbol)
-			  && (theclass == LOC_LOCAL || theclass == LOC_REGISTER
-			      || theclass == LOC_STATIC || theclass == LOC_COMPUTED
-			      || theclass == LOC_OPTIMIZED_OUT));
+			  && (class == LOC_LOCAL || class == LOC_REGISTER
+			      || class == LOC_STATIC || class == LOC_COMPUTED
+			      || class == LOC_OPTIMIZED_OUT));
 }
 
 /* Implementation of gdb.Symbol.needs_frame -> Boolean.
@@ -192,19 +190,16 @@ static PyObject *
 sympy_needs_frame (PyObject *self, void *closure)
 {
   struct symbol *symbol = NULL;
+  volatile struct gdb_exception except;
   int result = 0;
 
   SYMPY_REQUIRE_VALID (self, symbol);
 
-  TRY
+  TRY_CATCH (except, RETURN_MASK_ALL)
     {
       result = symbol_read_needs_frame (symbol);
     }
-  CATCH (except, RETURN_MASK_ALL)
-    {
-      GDB_PY_HANDLE_EXCEPTION (except);
-    }
-  END_CATCH
+  GDB_PY_HANDLE_EXCEPTION (except);
 
   if (result)
     Py_RETURN_TRUE;
@@ -249,6 +244,7 @@ sympy_value (PyObject *self, PyObject *args)
   struct frame_info *frame_info = NULL;
   PyObject *frame_obj = NULL;
   struct value *value = NULL;
+  volatile struct gdb_exception except;
 
   if (!PyArg_ParseTuple (args, "|O", &frame_obj))
     return NULL;
@@ -266,7 +262,7 @@ sympy_value (PyObject *self, PyObject *args)
       return NULL;
     }
 
-  TRY
+  TRY_CATCH (except, RETURN_MASK_ALL)
     {
       if (frame_obj != NULL)
 	{
@@ -280,11 +276,7 @@ sympy_value (PyObject *self, PyObject *args)
 
       value = read_var_value (symbol, frame_info);
     }
-  CATCH (except, RETURN_MASK_ALL)
-    {
-      GDB_PY_HANDLE_EXCEPTION (except);
-    }
-  END_CATCH
+  GDB_PY_HANDLE_EXCEPTION (except);
 
   return value_to_value_object (value);
 }
@@ -299,15 +291,15 @@ set_symbol (symbol_object *obj, struct symbol *symbol)
 {
   obj->symbol = symbol;
   obj->prev = NULL;
-  if (SYMBOL_OBJFILE_OWNED (symbol)
-      && symbol_symtab (symbol) != NULL)
+  if (SYMBOL_SYMTAB (symbol))
     {
-      struct objfile *objfile = symbol_objfile (symbol);
+      obj->next = objfile_data (SYMBOL_SYMTAB (symbol)->objfile,
+				sympy_objfile_data_key);
 
-      obj->next = objfile_data (objfile, sympy_objfile_data_key);
       if (obj->next)
 	obj->next->prev = obj;
-      set_objfile_data (objfile, sympy_objfile_data_key, obj);
+      set_objfile_data (SYMBOL_SYMTAB (symbol)->objfile,
+			sympy_objfile_data_key, obj);
     }
   else
     obj->next = NULL;
@@ -343,11 +335,9 @@ sympy_dealloc (PyObject *obj)
 
   if (sym_obj->prev)
     sym_obj->prev->next = sym_obj->next;
-  else if (sym_obj->symbol != NULL
-	   && SYMBOL_OBJFILE_OWNED (sym_obj->symbol)
-	   && symbol_symtab (sym_obj->symbol) != NULL)
+  else if (sym_obj->symbol && SYMBOL_SYMTAB (sym_obj->symbol))
     {
-      set_objfile_data (symbol_objfile (sym_obj->symbol),
+      set_objfile_data (SYMBOL_SYMTAB (sym_obj->symbol)->objfile,
 			sympy_objfile_data_key, sym_obj->next);
     }
   if (sym_obj->next)
@@ -371,6 +361,7 @@ gdbpy_lookup_symbol (PyObject *self, PyObject *args, PyObject *kw)
   struct symbol *symbol = NULL;
   PyObject *block_obj = NULL, *ret_tuple, *sym_obj, *bool_obj;
   const struct block *block = NULL;
+  volatile struct gdb_exception except;
 
   if (! PyArg_ParseTupleAndKeywords (args, kw, "s|O!i", keywords, &name,
 				     &block_object_type, &block_obj, &domain))
@@ -381,28 +372,21 @@ gdbpy_lookup_symbol (PyObject *self, PyObject *args, PyObject *kw)
   else
     {
       struct frame_info *selected_frame;
+      volatile struct gdb_exception except;
 
-      TRY
+      TRY_CATCH (except, RETURN_MASK_ALL)
 	{
 	  selected_frame = get_selected_frame (_("No frame selected."));
 	  block = get_frame_block (selected_frame, NULL);
 	}
-      CATCH (except, RETURN_MASK_ALL)
-	{
-	  GDB_PY_HANDLE_EXCEPTION (except);
-	}
-      END_CATCH
+      GDB_PY_HANDLE_EXCEPTION (except);
     }
 
-  TRY
+  TRY_CATCH (except, RETURN_MASK_ALL)
     {
       symbol = lookup_symbol (name, block, domain, &is_a_field_of_this);
     }
-  CATCH (except, RETURN_MASK_ALL)
-    {
-      GDB_PY_HANDLE_EXCEPTION (except);
-    }
-  END_CATCH
+  GDB_PY_HANDLE_EXCEPTION (except);
 
   ret_tuple = PyTuple_New (2);
   if (!ret_tuple)
@@ -442,20 +426,17 @@ gdbpy_lookup_global_symbol (PyObject *self, PyObject *args, PyObject *kw)
   static char *keywords[] = { "name", "domain", NULL };
   struct symbol *symbol = NULL;
   PyObject *sym_obj;
+  volatile struct gdb_exception except;
 
   if (! PyArg_ParseTupleAndKeywords (args, kw, "s|i", keywords, &name,
 				     &domain))
     return NULL;
 
-  TRY
+  TRY_CATCH (except, RETURN_MASK_ALL)
     {
-      symbol = lookup_global_symbol (name, NULL, domain);
+      symbol = lookup_symbol_global (name, NULL, domain);
     }
-  CATCH (except, RETURN_MASK_ALL)
-    {
-      GDB_PY_HANDLE_EXCEPTION (except);
-    }
-  END_CATCH
+  GDB_PY_HANDLE_EXCEPTION (except);
 
   if (symbol)
     {

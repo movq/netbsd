@@ -1,4 +1,4 @@
-/* $NetBSD: mpii.c,v 1.8 2016/05/02 19:18:29 christos Exp $ */
+/* $NetBSD: mpii.c,v 1.5 2014/03/29 19:28:25 christos Exp $ */
 /*	OpenBSD: mpii.c,v 1.51 2012/04/11 13:29:14 naddy Exp 	*/
 /*
  * Copyright (c) 2010 Mike Belopuhov <mkb@crypt.org.ru>
@@ -20,7 +20,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mpii.c,v 1.8 2016/05/02 19:18:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mpii.c,v 1.5 2014/03/29 19:28:25 christos Exp $");
 
 #include "bio.h"
 
@@ -4901,6 +4901,8 @@ mpii_ioctl_cache(struct scsi_link *link, u_long cmd, struct dk_cache *dc)
 	    vpg, pagelen) != 0) {
 		rv = EINVAL;
 		goto done;
+		free(vpg, M_TEMP);
+		return (EINVAL);
 	}
 
 	enabled = ((le16toh(vpg->volume_settings) &
@@ -5398,16 +5400,14 @@ mpii_bio_disk(struct mpii_softc *sc, struct bioc_disk *bd, u_int8_t dn)
 
 	bd->bd_size = le64toh(ppg->dev_max_lba) * le16toh(ppg->block_size);
 
-	strnvisx(bd->bd_vendor, sizeof(bd->bd_vendor),
-	    ppg->vendor_id, sizeof(ppg->vendor_id),
-	    VIS_TRIM|VIS_SAFE|VIS_OCTAL);
+	scsipi_strvis(bd->bd_vendor, sizeof(bd->bd_vendor),
+	    ppg->vendor_id, sizeof(ppg->vendor_id));
 	len = strlen(bd->bd_vendor);
 	bd->bd_vendor[len] = ' ';
-	strnvisx(&bd->bd_vendor[len + 1], sizeof(ppg->vendor_id) - len - 1,
-	    ppg->product_id, sizeof(ppg->product_id),
-	    VIS_TRIM|VIS_SAFE|VIS_OCTAL);
-	strnvisx(bd->bd_serial, sizeof(bd->bd_serial),
-	    ppg->serial, sizeof(ppg->serial), VIS_TRIM|VIS_SAFE|VIS_OCTAL);
+	scsipi_strvis(&bd->bd_vendor[len + 1], sizeof(ppg->vendor_id) - len - 1,
+	    ppg->product_id, sizeof(ppg->product_id));
+	scsipi_strvis(bd->bd_serial, sizeof(bd->bd_serial),
+	    ppg->serial, sizeof(ppg->serial));
 
 	free(ppg, M_TEMP);
 	return (0);
@@ -5571,7 +5571,29 @@ mpii_refresh_sensors(struct sysmon_envsys *sme, envsys_data_t *edata)
 	splx(s);
 	KERNEL_UNLOCK_ONE(curlwp);
 	if (error)
-		bv.bv_status = BIOC_SVINVALID;
-	bio_vol_to_envsys(edata, &bv);
+		return;
+	switch(bv.bv_status) {
+	case BIOC_SVOFFLINE:
+		edata->value_cur = ENVSYS_DRIVE_FAIL;
+		edata->state = ENVSYS_SCRITICAL;
+		break;
+	case BIOC_SVDEGRADED:
+		edata->value_cur = ENVSYS_DRIVE_PFAIL;
+		edata->state = ENVSYS_SCRITICAL;
+		break;
+	case BIOC_SVREBUILD:
+		edata->value_cur = ENVSYS_DRIVE_REBUILD;
+		edata->state = ENVSYS_SVALID;
+		break;
+	case BIOC_SVONLINE:
+		edata->value_cur = ENVSYS_DRIVE_ONLINE;
+		edata->state = ENVSYS_SVALID;
+		break;
+	case BIOC_SVINVALID:
+		/* FALLTHROUGH */
+	default:
+		edata->value_cur = 0; /* unknown */
+		edata->state = ENVSYS_SINVALID;
+	}
 }
 #endif /* NBIO > 0 */

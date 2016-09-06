@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,8 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
+#define __RSIRQ_C__
 
 #include "acpi.h"
 #include "accommon.h"
@@ -153,7 +155,7 @@ ACPI_RSCONVERT_INFO     AcpiRsConvertGpio[18] =
  *
  ******************************************************************************/
 
-ACPI_RSCONVERT_INFO     AcpiRsConvertI2cSerialBus[17] =
+ACPI_RSCONVERT_INFO     AcpiRsConvertI2cSerialBus[16] =
 {
     {ACPI_RSC_INITGET,  ACPI_RESOURCE_TYPE_SERIAL_BUS,
                         ACPI_RS_SIZE (ACPI_RESOURCE_I2C_SERIALBUS),
@@ -178,10 +180,6 @@ ACPI_RSCONVERT_INFO     AcpiRsConvertI2cSerialBus[17] =
     {ACPI_RSC_1BITFLAG, ACPI_RS_OFFSET (Data.CommonSerialBus.ProducerConsumer),
                         AML_OFFSET (CommonSerialBus.Flags),
                         1},
-
-    {ACPI_RSC_1BITFLAG, ACPI_RS_OFFSET (Data.CommonSerialBus.ConnectionSharing),
-                        AML_OFFSET (CommonSerialBus.Flags),
-                        2},
 
     {ACPI_RSC_MOVE8,    ACPI_RS_OFFSET (Data.CommonSerialBus.TypeRevisionId),
                         AML_OFFSET (CommonSerialBus.TypeRevisionId),
@@ -237,7 +235,7 @@ ACPI_RSCONVERT_INFO     AcpiRsConvertI2cSerialBus[17] =
  *
  ******************************************************************************/
 
-ACPI_RSCONVERT_INFO     AcpiRsConvertSpiSerialBus[21] =
+ACPI_RSCONVERT_INFO     AcpiRsConvertSpiSerialBus[20] =
 {
     {ACPI_RSC_INITGET,  ACPI_RESOURCE_TYPE_SERIAL_BUS,
                         ACPI_RS_SIZE (ACPI_RESOURCE_SPI_SERIALBUS),
@@ -262,10 +260,6 @@ ACPI_RSCONVERT_INFO     AcpiRsConvertSpiSerialBus[21] =
     {ACPI_RSC_1BITFLAG, ACPI_RS_OFFSET (Data.CommonSerialBus.ProducerConsumer),
                         AML_OFFSET (CommonSerialBus.Flags),
                         1},
-
-    {ACPI_RSC_1BITFLAG, ACPI_RS_OFFSET (Data.CommonSerialBus.ConnectionSharing),
-                        AML_OFFSET (CommonSerialBus.Flags),
-                        2},
 
     {ACPI_RSC_MOVE8,    ACPI_RS_OFFSET (Data.CommonSerialBus.TypeRevisionId),
                         AML_OFFSET (CommonSerialBus.TypeRevisionId),
@@ -337,7 +331,7 @@ ACPI_RSCONVERT_INFO     AcpiRsConvertSpiSerialBus[21] =
  *
  ******************************************************************************/
 
-ACPI_RSCONVERT_INFO     AcpiRsConvertUartSerialBus[23] =
+ACPI_RSCONVERT_INFO     AcpiRsConvertUartSerialBus[22] =
 {
     {ACPI_RSC_INITGET,  ACPI_RESOURCE_TYPE_SERIAL_BUS,
                         ACPI_RS_SIZE (ACPI_RESOURCE_UART_SERIALBUS),
@@ -362,10 +356,6 @@ ACPI_RSCONVERT_INFO     AcpiRsConvertUartSerialBus[23] =
     {ACPI_RSC_1BITFLAG, ACPI_RS_OFFSET (Data.CommonSerialBus.ProducerConsumer),
                         AML_OFFSET (CommonSerialBus.Flags),
                         1},
-
-    {ACPI_RSC_1BITFLAG, ACPI_RS_OFFSET (Data.CommonSerialBus.ConnectionSharing),
-                        AML_OFFSET (CommonSerialBus.Flags),
-                        2},
 
     {ACPI_RSC_MOVE8,    ACPI_RS_OFFSET (Data.CommonSerialBus.TypeRevisionId),
                         AML_OFFSET (CommonSerialBus.TypeRevisionId),

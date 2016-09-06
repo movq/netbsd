@@ -1,4 +1,4 @@
-#	$NetBSD: NetBSD.dist.base,v 1.154 2016/08/20 11:21:50 christos Exp $
+#	$NetBSD: NetBSD.dist.base,v 1.139.2.2 2015/05/07 03:48:27 snj Exp $
 #	@(#)4.4BSD.dist	8.1 (Berkeley) 6/13/93
 
 # Do not customize this file as it may be overwritten on upgrades.
@@ -23,7 +23,6 @@
 ./etc/X11/rstart/commands/x11r6
 ./etc/X11/rstart/contexts
 ./etc/X11/twm
-./etc/X11/ctwm
 ./etc/X11/xdm
 ./etc/X11/xinit
 ./etc/X11/xserver
@@ -61,7 +60,6 @@
 ./etc/skel
 ./etc/sliphome
 ./etc/ssh
-./etc/unbound
 ./etc/zfs
 ./lib
 ./lib/npf
@@ -70,10 +68,8 @@
 ./libdata/firmware/if_athn
 ./libdata/firmware/if_ipw
 ./libdata/firmware/if_iwi
-./libdata/firmware/if_iwm
 ./libdata/firmware/if_iwn
 ./libdata/firmware/if_otus
-./libdata/firmware/if_rtwn
 ./libdata/firmware/if_urtwn
 ./libdata/firmware/if_wpi
 ./libdata/firmware/radeon
@@ -105,7 +101,7 @@
 ./usr/include/c++
 ./usr/include/c++/experimental
 ./usr/include/c++/ext
-./usr/include/clang-3.8
+./usr/include/clang-3.6
 ./usr/include/crypto
 ./usr/include/dev
 ./usr/include/dev/apm
@@ -136,16 +132,7 @@
 ./usr/include/event2
 ./usr/include/filecorefs
 ./usr/include/fs
-./usr/include/fs/efs
-./usr/include/fs/hfs
-./usr/include/fs/nilfs
-./usr/include/fs/ptyfs
-./usr/include/fs/puffs
 ./usr/include/fs/smbfs
-./usr/include/fs/sysvbfs
-./usr/include/fs/tmpfs
-./usr/include/fs/udf
-./usr/include/fs/v7fs
 ./usr/include/g++
 ./usr/include/g++/backward
 ./usr/include/g++/bits
@@ -183,8 +170,9 @@
 ./usr/include/g++/tr1
 ./usr/include/g++/tr1_impl
 ./usr/include/g++/tr2
+./usr/include/gcc-4.1
+./usr/include/gcc-4.5
 ./usr/include/gcc-4.8
-./usr/include/gcc-5
 ./usr/include/gssapi
 ./usr/include/isofs
 ./usr/include/isofs/cd9660
@@ -201,6 +189,7 @@
 ./usr/include/miscfs/overlay
 ./usr/include/miscfs/procfs
 ./usr/include/miscfs/specfs
+./usr/include/miscfs/syncfs
 ./usr/include/miscfs/umapfs
 ./usr/include/miscfs/union
 ./usr/include/msdosfs
@@ -209,7 +198,6 @@
 ./usr/include/netatalk
 ./usr/include/netbt
 ./usr/include/netinet
-./usr/include/net80211
 ./usr/include/netinet6
 ./usr/include/netipsec
 ./usr/include/netisdn
@@ -266,6 +254,7 @@
 ./usr/libdata/debug/usr/mdec
 ./usr/libdata/debug/usr/sbin
 ./usr/libdata/firmware
+./usr/libdata/firmware/radeon
 ./usr/libdata/ldscripts
 ./usr/libdata/lint
 ./usr/libexec
@@ -350,10 +339,7 @@
 ./usr/share/examples/asm
 ./usr/share/examples/asm/hello
 ./usr/share/examples/atf
-./usr/share/examples/blacklist
 ./usr/share/examples/dhcp
-./usr/share/examples/dhcpcd
-./usr/share/examples/dhcpcd/hooks
 ./usr/share/examples/disktab
 ./usr/share/examples/emul
 ./usr/share/examples/emul/linux
@@ -363,6 +349,7 @@
 ./usr/share/examples/emul/ultrix
 ./usr/share/examples/emul/ultrix/etc
 ./usr/share/examples/fstab
+./usr/share/examples/blacklist
 ./usr/share/examples/ftpd
 ./usr/share/examples/getdate
 ./usr/share/examples/hostapd
@@ -1272,7 +1259,6 @@
 ./var/chroot/named/var/tmp	mode=01775 gname=named
 ./var/chroot/ntpd
 ./var/chroot/ntpd/dev
-./var/chroot/ntpd/etc
 ./var/chroot/ntpd/var
 ./var/chroot/ntpd/var/db	mode=0775 gname=ntpd
 ./var/chroot/ntpd/var/run	mode=0775 gname=ntpd
@@ -1284,9 +1270,6 @@
 ./var/chroot/sshd		mode=0755
 ./var/chroot/tcpdump		mode=0755
 ./var/chroot/tftp-proxy		mode=0755
-./var/chroot/unbound		mode=0755 uname=_unbound gname=_unbound
-./var/chroot/unbound/etc	mode=0755 uname=_unbound gname=_unbound
-./var/chroot/unbound/etc/unbound	mode=0755 uname=_unbound gname=_unbound
 ./var/crash			mode=0770
 ./var/cron
 ./var/cron/tabs			mode=0700

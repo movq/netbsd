@@ -1,4 +1,4 @@
-/*	$NetBSD: dkwedge_apple.c,v 1.2 2015/01/24 02:58:56 christos Exp $	*/
+/*	$NetBSD: dkwedge_apple.c,v 1.1.18.1 2015/04/14 05:06:34 snj Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dkwedge_apple.c,v 1.2 2015/01/24 02:58:56 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dkwedge_apple.c,v 1.1.18.1 2015/04/14 05:06:34 snj Exp $");
 
 #include <sys/param.h>
 #ifdef _KERNEL

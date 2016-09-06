@@ -17,8 +17,8 @@
 
 // ENCLS - Execute an Enclave System Function of Specified Leaf Number
 def ENCLS : I<0x01, MRM_CF, (outs), (ins),
-             "encls", []>, TB;
+             "encls", []>, TB, Requires<[HasSGX]>;
 
 // ENCLU - Execute an Enclave User Function of Specified Leaf Number
 def ENCLU : I<0x01, MRM_D7, (outs), (ins),
-             "enclu", []>, TB;
+             "enclu", []>, TB, Requires<[HasSGX]>;

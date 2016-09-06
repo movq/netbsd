@@ -1,4 +1,4 @@
-/* $NetBSD: vmt.c,v 1.14 2016/08/01 03:15:30 ozaki-r Exp $ */
+/* $NetBSD: vmt.c,v 1.10 2014/07/25 07:12:55 ozaki-r Exp $ */
 /* $OpenBSD: vmt.c,v 1.11 2011/01/27 21:29:25 dtucker Exp $ */
 
 /*
@@ -801,16 +801,13 @@ vmt_tclo_tick(void *xarg)
 			sc->sc_rpc_error = 1;
 		}
 	} else if (strcmp(sc->sc_rpc_buf, "Set_Option broadcastIP 1") == 0) {
-		struct ifaddr *iface_addr = NULL;
 		struct ifnet *iface;
 		struct sockaddr_in *guest_ip;
-		int s;
-		struct psref psref;
 
 		/* find first available ipv4 address */
 		guest_ip = NULL;
-		s = pserialize_read_enter();
-		IFNET_READER_FOREACH(iface) {
+		IFNET_FOREACH(iface) {
+			struct ifaddr *iface_addr;
 
 			/* skip loopback */
 			if (strncmp(iface->if_xname, "lo", 2) == 0 &&
@@ -818,17 +815,15 @@ vmt_tclo_tick(void *xarg)
 				continue;
 			}
 
-			IFADDR_READER_FOREACH(iface_addr, iface) {
+			IFADDR_FOREACH(iface_addr, iface) {
 				if (iface_addr->ifa_addr->sa_family != AF_INET) {
 					continue;
 				}
 
 				guest_ip = satosin(iface_addr->ifa_addr);
-				ifa_acquire(iface_addr, &psref);
 				break;
 			}
 		}
-		pserialize_read_exit(s);
 
 		if (guest_ip != NULL) {
 			if (vm_rpc_send_rpci_tx(sc, "info-set guestinfo.ip %s",
@@ -836,7 +831,6 @@ vmt_tclo_tick(void *xarg)
 				device_printf(sc->sc_dev, "unable to send guest IP address\n");
 				sc->sc_rpc_error = 1;
 			}
-			ifa_release(iface_addr, &psref);
 
 			if (vm_rpc_send_str(&sc->sc_tclo_rpc, VM_RPC_REPLY_OK) != 0) {
 				device_printf(sc->sc_dev, "error sending broadcastIP response\n");
@@ -1306,7 +1300,7 @@ vm_rpc_send_rpci_tx(struct vmt_softc *sc, const char *fmt, ...)
  * match the register values to the various constants in this file.
  */
 
-MODULE(MODULE_CLASS_DRIVER, vmt, "sysmon_power,sysmon_taskq");
+MODULE(MODULE_CLASS_DRIVER, vmt, NULL);
 
 #ifdef _MODULE
 #include "ioconf.c"

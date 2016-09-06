@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_syscalls.c,v 1.157 2016/06/10 13:27:16 ozaki-r Exp $	*/
+/*	$NetBSD: nfs_syscalls.c,v 1.154.4.1 2015/11/04 17:46:21 riz Exp $	*/
 
 /*
  * Copyright (c) 1989, 1993
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nfs_syscalls.c,v 1.157 2016/06/10 13:27:16 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nfs_syscalls.c,v 1.154.4.1 2015/11/04 17:46:21 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -394,7 +394,7 @@ nfssvc_addsock(file_t *fp, struct mbuf *mynam)
 	int error;
 	int val;
 
-	so = fp->f_socket;
+	so = (struct socket *)fp->f_data;
 	tslp = (struct nfssvc_sock *)0;
 	/*
 	 * Add it to the list, as required.
@@ -694,7 +694,7 @@ nfssvc_nfsd(struct nfssvc_copy_ops *ops, struct nfsd_srvargs *nsd,
 				}
 				m = mreq;
 				m->m_pkthdr.len = siz;
-				m_reset_rcvif(m);
+				m->m_pkthdr.rcvif = (struct ifnet *)0;
 				/*
 				 * For stream protocols, prepend a Sun RPC
 				 * Record Mark.
@@ -859,7 +859,7 @@ nfsrv_slpderef(struct nfssvc_sock *slp)
 		if (fp != NULL) {
 			slp->ns_fp = NULL;
 			KASSERT(fp != NULL);
-			KASSERT(fp->f_socket == slp->ns_so);
+			KASSERT(fp->f_data == slp->ns_so);
 			KASSERT(fp->f_count > 0);
 			closef(fp);
 			slp->ns_so = NULL;

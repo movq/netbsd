@@ -1,10 +1,7 @@
-#	$NetBSD: airport,v 1.63 2016/06/08 04:25:31 kre Exp $
+#	$NetBSD: airport,v 1.57 2014/07/20 19:19:49 mbalmer Exp $
 #	@(#)airport	8.1 (Berkeley) 6/8/93
 #
 # Some of this information is from http://www.mapping.com/airportcodes.html.
-#
-# Note that these are three letter IATA codes, most airports also have a
-# four letter ICAO code, e.g. Bern is BRN (IATA) and LSZB (ICAO).
 #
 # Airport Code : Airport
 AAA:Anaa, French Polynesia
@@ -625,6 +622,7 @@ BEN:Benghazi (Benina), Libya
 BEO:Newcastle (Belmont Airport), NSW, Australia
 BEP:Bellary, India
 BEQ:Bury St. Edmunds, England, UK
+BER:All Airports around Berlin, Germany
 BES:Brest (Guipavas), France
 BET:Bethel Airport, AK, USA
 BEU:Bedourie, Queensland, Australia
@@ -920,7 +918,7 @@ BRJ:Bright, Victoria, Australia
 BRK:Bourke, New South Wales, Australia
 BRL:Burlington Municipal Airport, IA, USA
 BRM:Barquisimeto, Venezuela
-BRN:Bern Airport, Bern-Belp, Switzerland
+BRN:Bern-Belp, Switzerland
 BRO:Brownsville/South Padre Island, TX, USA
 BRP:Biaru, Papua New Guinea
 BRQ:Brno, Czech Republic
@@ -2856,7 +2854,7 @@ HDL:Holikachuk, AK, USA
 HDM:Hamadan, Iran
 HDN:Steamboat Springs (Hayden), CO, USA
 HDO:Hondo Municipal Airport, TX, USA
-HDY:Hat Yai (Hatyai) [Songkhla], Thailand
+HDY:Hat Yai (Hatyai) [Songkhia], Thailand
 HEA:Herat, Afghanistan
 HEB:Henzada, Myanmar
 HED:Herendeen Bay Airport, AK, USA
@@ -3197,7 +3195,6 @@ IJD:Willimantic (Windham Airport), CT, USA
 IJK:Izhevsk, Udmurtia, Russia
 IJU:Ijui, RS, Brazil
 IJX:Jacksonville Municipal Airport, IL, USA
-IKA:Imam Khomeini International Airport, Ahmadabad, Tehran, Iran
 IKB:Wilkesboro (Wilkes County Airport), NC, USA
 IKI:Iki, Japan
 IKK:Kankakee (Greater Kankakee Airport), IL, USA
@@ -4084,7 +4081,6 @@ LAH:Labuha, Indonesia
 LAI:Lannion, France
 LAJ:Lages, SC, Brazil
 LAK:Aklavik Airport, NT, Canada
-LAKU:Shaikh Zayed International Airport, Kukes, Albania
 LAL:Lakeland Regional Airport, FL, USA
 LAM:Los Alamos Airport, NM, USA
 LAN:Lansing Capital City, Michigan, USA
@@ -7304,7 +7300,7 @@ STK:Sterling (Crosson Field), CO, USA
 STL:St. Louis/Lambert International, Missouri, USA
 STM:Santarem, PA, Brazil
 STN:London (Stansted), UK
-STO:All airports around Stockholm, Sweden
+STO:All Airports around Stockholm, Sweden
 STP:St. Paul (Holman Field), MN, USA
 STQ:St. Marys Municipal Airport, PA, USA
 STR:Stuttgart (Echterdingen), Germany
@@ -7929,7 +7925,7 @@ UBB:Mabuiag Island, Queensland, Australia
 UBE:Cumberland (Municipal Airport), WI, USA
 UBI:Buin, Papua New Guinea
 UBJ:Ube, Japan
-UBP:Ubon Ratchathani, Thailand
+UBP:Ubon Ratchathni, Thailand
 UBS:Columbus (Lowndes County Airport), MS, USA
 UBT:Ubatuba, Brazil
 UBU:Kalumburu, Western Australia, Australia
@@ -8058,7 +8054,7 @@ USH:Ushuaia, Argentina
 USI:Mabaruma, Guyana
 USK:Usinsk, Russia
 USL:Useless Loop, Western Australia, Australia
-USM:Ko Samui, Thailand
+USM:Koh Samui, Thailand
 USN:Ulsan, South Korea
 USO:Usino, Papua New Guinea
 UST:St. Augustine Airport, FL, USA
@@ -9170,7 +9166,9 @@ ZBX:Branson (Table Rock Heliport), MO, USA
 ZBY:Sayaboury, Laos
 ZCC:Baden Baden (Railway Station), Germany
 ZCL:Zacatecas (General Leobardo Ruiz), Mexico
-ZCO:Maquehue Airport, Temuco, Chile
+ZCO:Temuco, Chile
+ZDJ:Bern, Switzerland
+ZDT:Chur, Switzerland
 ZEC:Seconda, South Africa
 ZEF:Elkin Municipal Airport, NC, USA
 ZEG:Senggo, Indonesia

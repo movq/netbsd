@@ -19,7 +19,8 @@ using namespace llvm;
 
 void ARMMCAsmInfoDarwin::anchor() { }
 
-ARMMCAsmInfoDarwin::ARMMCAsmInfoDarwin(const Triple &TheTriple) {
+ARMMCAsmInfoDarwin::ARMMCAsmInfoDarwin(StringRef TT) {
+  Triple TheTriple(TT);
   if ((TheTriple.getArch() == Triple::armeb) ||
       (TheTriple.getArch() == Triple::thumbeb))
     IsLittleEndian = false;
@@ -33,16 +34,15 @@ ARMMCAsmInfoDarwin::ARMMCAsmInfoDarwin(const Triple &TheTriple) {
   SupportsDebugInformation = true;
 
   // Exceptions handling
-  ExceptionsType = TheTriple.isOSDarwin() && !TheTriple.isWatchOS()
-                       ? ExceptionHandling::SjLj
-                       : ExceptionHandling::DwarfCFI;
+  ExceptionsType = ExceptionHandling::SjLj;
 
   UseIntegratedAssembler = true;
 }
 
 void ARMELFMCAsmInfo::anchor() { }
 
-ARMELFMCAsmInfo::ARMELFMCAsmInfo(const Triple &TheTriple) {
+ARMELFMCAsmInfo::ARMELFMCAsmInfo(StringRef TT) {
+  Triple TheTriple(TT);
   if ((TheTriple.getArch() == Triple::armeb) ||
       (TheTriple.getArch() == Triple::thumbeb))
     IsLittleEndian = false;
@@ -59,7 +59,6 @@ ARMELFMCAsmInfo::ARMELFMCAsmInfo(const Triple &TheTriple) {
 
   // Exceptions handling
   switch (TheTriple.getOS()) {
-  case Triple::Bitrig:
   case Triple::NetBSD:
     ExceptionsType = ExceptionHandling::DwarfCFI;
     break;

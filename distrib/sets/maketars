@@ -1,11 +1,10 @@
 #!/bin/sh
 #
-# $NetBSD: maketars,v 1.85 2015/12/19 22:29:23 christos Exp $
+# $NetBSD: maketars,v 1.80 2013/02/07 16:27:41 christos Exp $
 #
 # Make release tar files for some or all lists.  Usage:
 # maketars [-b] [-x] [-i installdir] [-a arch] [-m machine] [-s setsdir]
-#	[-M metalog] [-N etcdir] [-F setlistsdir] [-d destdir]
-#	[-t tardir] [-U] [setname ...]
+#	[-M metalog] [-N etcdir] [-d destdir] [-t tardir] [setname ...]
 #
 # The default sets are "base comp debug etc games man misc tests text"
 # The X sets are "xbase xcomp xdebug xetc xfont xserver"
@@ -27,19 +26,15 @@ dest="${DESTDIR}"
 metalog=
 installdir=
 etcdir=
-setlistdir=
-timestamp=
 setfilesonly=false
 quiet=false
 skipkeys=time,md5,sha1,sha384,sha512,rmd160,cksum
-preserve="-pe"
 
 usage()
 {
 	cat 1>&2 <<USAGE
-Usage: ${prog} [-L base,x,ext] [-b] [-x] [-y] [-i idir] [-a arch] [-m machine]
-	    [-s setsdir] [-S] [-M metalog] [-N etcdir] [-F setlistdir]
-	    [-d dest] [-t targetdir] [setname ...]
+Usage: ${prog} [-L base,x,ext] [-b] [-x] [-y] [-i idir] [-a arch] [-m machine] [-s setsdir] [-S]
+	    [-M metalog] [-N etcdir] [-d dest] [-t targetdir] [setname ...]
 	-L base,x,ext	Make specified lists
 	-b		Make both netbsd and x11 lists
 	-x		Only make x11 lists
@@ -51,14 +46,11 @@ Usage: ${prog} [-L base,x,ext] [-b] [-x] [-y] [-i idir] [-a arch] [-m machine]
 	-m machine	Set machine (e.g, amiga, i386, macppc) [${MACHINE}]
 	-q		Quiet operation
 	-s setsdir	Directory to find sets [${setsdir}]
-	-F setlistdir	output directory for generated set lists [${dest}/etc/mtree/]
 	-S		Exit after creating set files ${dest}/etc/mtree/set.*
 	-M metalog	metalog file
 	-N etcdir	etc dir for metalog use [${dest}/etc]
-	-U		do not preserve file permissions (with -i ..)
 	-d dest		\${DESTDIR}	[${dest}]
 	-t targetdir	\${RELEASEDIR}	[${tars}]
-	-T timestamp	Timestamp to set for all the files in the tar.
 	[setname ...]	Sets to build 	[${lists}]
 USAGE
 	exit 1
@@ -70,7 +62,7 @@ msg()
 }
 
 # handle args
-while getopts L:bxyi:a:m:qs:F:SM:N:Ud:t:T: ch; do
+while getopts L:bxyi:a:m:qs:SM:N:d:t: ch; do
 	case ${ch} in
 	L)
 		save_IFS="${IFS}"
@@ -110,9 +102,6 @@ while getopts L:bxyi:a:m:qs:F:SM:N:Ud:t:T: ch; do
 	s)
 		setsdir="${OPTARG}"
 		;;
-	F)
-		setlistdir="${OPTARG}"
-		;;
 	S)
 		setfilesonly=true
 		;;
@@ -122,17 +111,11 @@ while getopts L:bxyi:a:m:qs:F:SM:N:Ud:t:T: ch; do
 	N)
 		etcdir="${OPTARG}"
 		;;
-	U)
-		preserve=
-		;;
 	d)
 		dest="${OPTARG}"
 		;;
 	t)
 		tars="${OPTARG}"
-		;;
-	T)
-		timestamp="--timestamp $OPTARG"
 		;;
 	*)
 		usage
@@ -161,7 +144,7 @@ fi
 SDIR="$(${MKTEMP} -d "/tmp/${prog}.XXXXXX")"
 TMPFILES=
 
-: ${setlistdir:="${dest}/etc/mtree"}
+setlistdir="${dest}/etc/mtree"
 
 cleanup()
 {
@@ -213,7 +196,7 @@ runpax() {
 	local s="$1"
 	shift
 	(cd "${dest}" && 
-	    ${PAX} -dOw ${timestamp} -N"${etcdir}" -M "$@" < "${setlistdir}/set.${s}")
+	    ${PAX} -dOw -N"${etcdir}" -M "$@" < "${setlistdir}/set.${s}")
 }
 
 #
@@ -223,12 +206,11 @@ runpax() {
 GZIP=-9n		# for pax -z
 export GZIP
 es=0
-
 for setname in ${lists:-${nlists}}; do
 	out="${setname}.tgz"
 	if [ -n "${installdir}" ]; then
 		msg "Copying set ${setname}"
-		runpax "${setname}" -r ${preserve} "${installdir}"
+		runpax "${setname}" -rpe "${installdir}"
 	else
 		if [ -n "${metalog}" -a "${tars}/${out}" -nt "${metalog}" ]
 		then

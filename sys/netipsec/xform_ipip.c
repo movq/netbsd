@@ -1,4 +1,4 @@
-/*	$NetBSD: xform_ipip.c,v 1.42 2016/07/07 09:32:03 ozaki-r Exp $	*/
+/*	$NetBSD: xform_ipip.c,v 1.31 2014/06/05 23:48:17 rmind Exp $	*/
 /*	$FreeBSD: src/sys/netipsec/xform_ipip.c,v 1.3.2.1 2003/01/24 05:11:36 sam Exp $	*/
 /*	$OpenBSD: ip_ipip.c,v 1.25 2002/06/10 18:04:55 itojun Exp $ */
 
@@ -39,7 +39,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xform_ipip.c,v 1.42 2016/07/07 09:32:03 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xform_ipip.c,v 1.31 2014/06/05 23:48:17 rmind Exp $");
 
 /*
  * IP-inside-IP processing
@@ -159,8 +159,10 @@ ip4_input6(struct mbuf **m, int *offp, int proto)
  * Really only a wrapper for ipip_input(), for use with IPv4.
  */
 void
-ip4_input(struct mbuf *m, int off, int proto)
+ip4_input(struct mbuf *m, ...)
 {
+	va_list ap;
+	int iphlen;
 
 #if 0
 	/* If we do not accept IP-in-IP explicitly, drop.  */
@@ -171,8 +173,11 @@ ip4_input(struct mbuf *m, int off, int proto)
 		return;
 	}
 #endif
+	va_start(ap, m);
+	iphlen = va_arg(ap, int);
+	va_end(ap);
 
-	_ipip_input(m, off, NULL);
+	_ipip_input(m, iphlen, NULL);
 }
 #endif /* INET */
 
@@ -330,12 +335,11 @@ _ipip_input(struct mbuf *m, int iphlen, struct ifnet *gifp)
 	}
 
 	/* Check for local address spoofing. */
-	if ((m_get_rcvif_NOMPSAFE(m) == NULL ||
-	    !(m_get_rcvif_NOMPSAFE(m)->if_flags & IFF_LOOPBACK)) &&
+	if ((m->m_pkthdr.rcvif == NULL ||
+	    !(m->m_pkthdr.rcvif->if_flags & IFF_LOOPBACK)) &&
 	    ipip_allow != 2) {
-		int s = pserialize_read_enter();
-		IFNET_READER_FOREACH(ifp) {
-			IFADDR_READER_FOREACH(ifa, ifp) {
+		IFNET_FOREACH(ifp) {
+			IFADDR_FOREACH(ifa, ifp) {
 #ifdef INET
 				if (ipo) {
 					if (ifa->ifa_addr->sa_family !=
@@ -346,7 +350,6 @@ _ipip_input(struct mbuf *m, int iphlen, struct ifnet *gifp)
 
 					if (sin->sin_addr.s_addr ==
 					    ipo->ip_src.s_addr)	{
-						pserialize_read_exit(s);
 						IPIP_STATINC(IPIP_STAT_SPOOF);
 						m_freem(m);
 						return;
@@ -363,7 +366,6 @@ _ipip_input(struct mbuf *m, int iphlen, struct ifnet *gifp)
 					sin6 = (struct sockaddr_in6 *) ifa->ifa_addr;
 
 					if (IN6_ARE_ADDR_EQUAL(&sin6->sin6_addr, &ip6->ip6_src)) {
-						pserialize_read_exit(s);
 						IPIP_STATINC(IPIP_STAT_SPOOF);
 						m_freem(m);
 						return;
@@ -373,7 +375,6 @@ _ipip_input(struct mbuf *m, int iphlen, struct ifnet *gifp)
 #endif /* INET6 */
 			}
 		}
-		pserialize_read_exit(s);
 	}
 
 	/* Statistics */
@@ -645,6 +646,7 @@ bad:
 	return (error);
 }
 
+#ifdef IPSEC
 static int
 ipe4_init(struct secasvar *sav, const struct xformsw *xsp)
 {
@@ -681,21 +683,49 @@ static struct xformsw ipe4_xformsw = {
 };
 
 #ifdef INET
-static struct encapsw ipe4_encapsw = {
-	.encapsw4 = {
-		.pr_input = ip4_input,
-		.pr_ctlinput = NULL,
-	}
+PR_WRAP_CTLOUTPUT(rip_ctloutput)
+#define	rip_ctloutput	rip_ctloutput_wrapper
+
+extern struct domain inetdomain;
+static struct ipprotosw ipe4_protosw = {
+ .pr_type = SOCK_RAW,
+ .pr_domain = &inetdomain,
+ .pr_protocol = IPPROTO_IPV4,
+ .pr_flags = PR_ATOMIC|PR_ADDR|PR_LASTHDR,
+ .pr_input = ip4_input,
+ .pr_output = 0,
+ .pr_ctlinput = 0,
+ .pr_ctloutput = rip_ctloutput,
+ .pr_usrreqs = &rip_usrreqs,
+ .pr_init = 0,
+ .pr_fasttimo = 0,
+ .pr_slowtimo =	0,
+ .pr_drain = 0,
 };
 #endif
 #ifdef INET6
-static struct encapsw ipe4_encapsw6 = {
-	.encapsw6 = {
-		.pr_input = ip4_input6,
-		.pr_ctlinput = NULL,
-	}
+PR_WRAP_CTLOUTPUT(rip6_ctloutput)
+#define	rip6_ctloutput	rip6_ctloutput_wrapper
+
+extern struct domain inet6domain;
+static struct ip6protosw ipe4_protosw6 = {
+ .pr_type = SOCK_RAW,
+ .pr_domain = &inet6domain,
+ .pr_protocol = IPPROTO_IPV6,
+ .pr_flags = PR_ATOMIC|PR_ADDR|PR_LASTHDR,
+ .pr_input = ip4_input6,
+ .pr_output = 0,
+ .pr_ctlinput = 0,
+ .pr_ctloutput = rip6_ctloutput,
+ .pr_usrreqs = &rip6_usrreqs,
+ .pr_init = 0,
+ .pr_fasttimo = 0,
+ .pr_slowtimo = 0,
+ .pr_drain = 0,
 };
 #endif
+
+#endif /* IPSEC */
 
 /*
  * Check the encapsulated packet to see if we want it
@@ -725,20 +755,14 @@ ipe4_attach(void)
 	xform_register(&ipe4_xformsw);
 	/* attach to encapsulation framework */
 	/* XXX save return cookie for detach on module remove */
-
-	encapinit();
-	/* This function is called before ifinit(). Who else gets lock? */
-	(void)encap_lock_enter();
-	/* ipe4_encapsw and ipe4_encapsw must be added atomically */
 #ifdef INET
 	(void) encap_attach_func(AF_INET, -1,
-		ipe4_encapcheck, &ipe4_encapsw, NULL);
+		ipe4_encapcheck, (struct protosw*) &ipe4_protosw, NULL);
 #endif
 #ifdef INET6
 	(void) encap_attach_func(AF_INET6, -1,
-		ipe4_encapcheck, &ipe4_encapsw6, NULL);
+		ipe4_encapcheck, (struct protosw*) &ipe4_protosw6, NULL);
 #endif
-	encap_lock_exit();
 }
 
 #ifdef SYSINIT

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.43 2015/05/20 05:19:19 snj Exp $
+#	$NetBSD: Makefile.inc,v 1.42.4.1 2015/05/24 11:14:42 martin Exp $
 #
 
 # Ross Harvey <ross@NetBSD.org>

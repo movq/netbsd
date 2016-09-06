@@ -1055,10 +1055,10 @@ int tls1_mac(SSL *ssl, unsigned char *md, int send)
          */
         /* Final param == not SSLv3 */
         if (ssl3_cbc_digest_record(mac_ctx,
-                                   md, &md_size,
-                                   header, rec->input,
-                                   rec->length + md_size, orig_len,
-                                   ssl->s3->read_mac_secret,
+                               md, &md_size,
+                               header, rec->input,
+                               rec->length + md_size, orig_len,
+                               ssl->s3->read_mac_secret,
                                    ssl->s3->read_mac_secret_size, 0) <= 0) {
             if (!stream_mac)
                 EVP_MD_CTX_cleanup(&hmac);

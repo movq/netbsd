@@ -1,4 +1,4 @@
-/*	$NetBSD: mmemcard.c,v 1.26 2015/04/26 15:15:19 mlelstv Exp $	*/
+/*	$NetBSD: mmemcard.c,v 1.24 2014/07/25 08:10:32 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mmemcard.c,v 1.26 2015/04/26 15:15:19 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mmemcard.c,v 1.24 2014/07/25 08:10:32 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/buf.h>
@@ -217,9 +217,7 @@ const struct cdevsw mmem_cdevsw = {
 CFATTACH_DECL_NEW(mmem, sizeof(struct mmem_softc),
     mmemmatch, mmemattach, mmemdetach, NULL);
 
-struct dkdriver mmemdkdriver = {
-	.d_strategy = mmemstrategy
-};
+struct dkdriver mmemdkdriver = { mmemstrategy };
 
 static int
 mmemmatch(device_t parent, cfdata_t cf, void *aux)
@@ -383,7 +381,7 @@ mmem_defaultlabel(struct mmem_softc *sc, struct mmem_pt *pt,
 	memset(d, 0, sizeof *d);
 
 #if 0
-	d->d_type = DKTYPE_FLOPPY;		/* XXX? */
+	d->d_type = DTYPE_FLOPPY;		/* XXX? */
 #endif
 	strncpy(d->d_typename, sc->sc_devinfo->di_product_name,
 	    sizeof d->d_typename);

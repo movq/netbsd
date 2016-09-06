@@ -1,5 +1,7 @@
 /* nm.c -- Describe symbol table of a rel file.
-   Copyright (C) 1991-2015 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000,
+   2001, 2002, 2003, 2004, 2005, 2007, 2008, 2009, 2010, 2011, 2012
+   Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -175,11 +177,7 @@ static char other_format[] = "%02x";
 static char desc_format[] = "%04x";
 
 static char *target = NULL;
-#if BFD_SUPPORTS_PLUGINS
-static const char *plugin_target = "plugin";
-#else
-static const char *plugin_target = NULL;
-#endif
+static char *plugin_target = NULL;
 
 /* Used to cache the line numbers for a BFD.  */
 static bfd *lineno_cache_bfd;
@@ -433,10 +431,6 @@ filter_symbols (bfd *abfd, bfd_boolean is_dynamic, void *minisyms,
       sym = bfd_minisymbol_to_symbol (abfd, is_dynamic, (const void *) from, store);
       if (sym == NULL)
 	bfd_fatal (bfd_get_filename (abfd));
-
-      if (strcmp (sym->name, "__gnu_lto_slim") == 0)
-	non_fatal (_("%s: plugin needed to handle lto object"),
-		   bfd_get_filename (abfd));
 
       if (undefined_only)
 	keep = bfd_is_und_section (sym->section);
@@ -806,11 +800,7 @@ get_relocs (bfd *abfd, asection *sec, void *dataarg)
 /* Print a single symbol.  */
 
 static void
-print_symbol (bfd *        abfd,
-	      asymbol *    sym,
-	      bfd_vma      ssize,
-	      bfd *        archive_bfd,
-	      bfd_boolean  is_synthetic)
+print_symbol (bfd *abfd, asymbol *sym, bfd_vma ssize, bfd *archive_bfd)
 {
   symbol_info syminfo;
   struct extended_symbol_info info;
@@ -820,12 +810,12 @@ print_symbol (bfd *        abfd,
   format->print_symbol_filename (archive_bfd, abfd);
 
   bfd_get_symbol_info (abfd, sym, &syminfo);
-
   info.sinfo = &syminfo;
   info.ssize = ssize;
-  /* Synthetic symbols do not have a full elf_symbol_type set of data available.  */
-  info.elfinfo = is_synthetic ? NULL : elf_symbol_from (abfd, sym);
-
+  if (bfd_get_flavour (abfd) == bfd_target_elf_flavour)
+    info.elfinfo = (elf_symbol_type *) sym;
+  else
+    info.elfinfo = NULL;
   format->print_symbol_info (&info, abfd);
 
   if (line_numbers)
@@ -945,17 +935,12 @@ print_symbol (bfd *        abfd,
 /* Print the symbols when sorting by size.  */
 
 static void
-print_size_symbols (bfd *              abfd,
-		    bfd_boolean        is_dynamic,
-		    struct size_sym *  symsizes,
-		    long               symcount,
-		    long               synth_count,
-		    bfd *              archive_bfd)
+print_size_symbols (bfd *abfd, bfd_boolean is_dynamic,
+		    struct size_sym *symsizes, long symcount,
+		    bfd *archive_bfd)
 {
   asymbol *store;
-  struct size_sym *from;
-  struct size_sym *fromend;
-  struct size_sym *fromsynth;
+  struct size_sym *from, *fromend;
 
   store = bfd_make_empty_symbol (abfd);
   if (store == NULL)
@@ -963,44 +948,35 @@ print_size_symbols (bfd *              abfd,
 
   from = symsizes;
   fromend = from + symcount;
-  fromsynth = symsizes + (symcount - synth_count);
-
   for (; from < fromend; from++)
     {
       asymbol *sym;
+      bfd_vma ssize;
 
       sym = bfd_minisymbol_to_symbol (abfd, is_dynamic, from->minisym, store);
       if (sym == NULL)
 	bfd_fatal (bfd_get_filename (abfd));
 
-      print_symbol (abfd, sym, from->size, archive_bfd, from >= fromsynth);
+      /* For elf we have already computed the correct symbol size.  */
+      if (bfd_get_flavour (abfd) == bfd_target_elf_flavour)
+	ssize = from->size;
+      else
+	ssize = from->size - bfd_section_vma (abfd, bfd_get_section (sym));
+
+      print_symbol (abfd, sym, ssize, archive_bfd);
     }
 }
 
 
-/* Print the symbols of ABFD that are held in MINISYMS.
-
-   If ARCHIVE_BFD is non-NULL, it is the archive containing ABFD.
-
-   SYMCOUNT is the number of symbols in MINISYMS and SYNTH_COUNT
-   is the number of these that are synthetic.  Synthetic symbols,
-   if any are present, always come at the end of the MINISYMS.
-
-   SIZE is the size of a symbol in MINISYMS.  */
+/* Print the symbols.  If ARCHIVE_BFD is non-NULL, it is the archive
+   containing ABFD.  */
 
 static void
-print_symbols (bfd *         abfd,
-	       bfd_boolean   is_dynamic,
-	       void *        minisyms,
-	       long          symcount,
-	       long          synth_count,
-	       unsigned int  size,
-	       bfd *         archive_bfd)
+print_symbols (bfd *abfd, bfd_boolean is_dynamic, void *minisyms, long symcount,
+	       unsigned int size, bfd *archive_bfd)
 {
   asymbol *store;
-  bfd_byte *from;
-  bfd_byte *fromend;
-  bfd_byte *fromsynth;
+  bfd_byte *from, *fromend;
 
   store = bfd_make_empty_symbol (abfd);
   if (store == NULL)
@@ -1008,8 +984,6 @@ print_symbols (bfd *         abfd,
 
   from = (bfd_byte *) minisyms;
   fromend = from + symcount * size;
-  fromsynth = (bfd_byte *) minisyms + ((symcount - synth_count) * size);
-
   for (; from < fromend; from += size)
     {
       asymbol *sym;
@@ -1018,7 +992,7 @@ print_symbols (bfd *         abfd,
       if (sym == NULL)
 	bfd_fatal (bfd_get_filename (abfd));
 
-      print_symbol (abfd, sym, (bfd_vma) 0, archive_bfd, from >= fromsynth);
+      print_symbol (abfd, sym, (bfd_vma) 0, archive_bfd);
     }
 }
 
@@ -1028,7 +1002,6 @@ static void
 display_rel_file (bfd *abfd, bfd *archive_bfd)
 {
   long symcount;
-  long synth_count = 0;
   void *minisyms;
   unsigned int size;
   struct size_sym *symsizes;
@@ -1044,15 +1017,7 @@ display_rel_file (bfd *abfd, bfd *archive_bfd)
 
   symcount = bfd_read_minisymbols (abfd, dynamic, &minisyms, &size);
   if (symcount < 0)
-    {
-      if (dynamic && bfd_get_error () == bfd_error_no_symbols)
-	{
-	  non_fatal (_("%s: no symbols"), bfd_get_filename (abfd));
-	  return;
-	}
-
-      bfd_fatal (bfd_get_filename (abfd));
-    }
+    bfd_fatal (bfd_get_filename (abfd));
 
   if (symcount == 0)
     {
@@ -1063,6 +1028,7 @@ display_rel_file (bfd *abfd, bfd *archive_bfd)
   if (show_synthetic && size == sizeof (asymbol *))
     {
       asymbol *synthsyms;
+      long synth_count;
       asymbol **static_syms = NULL;
       asymbol **dyn_syms = NULL;
       long static_count = 0;
@@ -1088,7 +1054,6 @@ display_rel_file (bfd *abfd, bfd *archive_bfd)
 		bfd_fatal (bfd_get_filename (abfd));
 	    }
 	}
-
       synth_count = bfd_get_synthetic_symtab (abfd, static_count, static_syms,
 					      dyn_count, dyn_syms, &synthsyms);
       if (synth_count > 0)
@@ -1134,9 +1099,9 @@ display_rel_file (bfd *abfd, bfd *archive_bfd)
     }
 
   if (! sort_by_size)
-    print_symbols (abfd, dynamic, minisyms, symcount, synth_count, size, archive_bfd);
+    print_symbols (abfd, dynamic, minisyms, symcount, size, archive_bfd);
   else
-    print_size_symbols (abfd, dynamic, symsizes, symcount, synth_count, archive_bfd);
+    print_size_symbols (abfd, dynamic, symsizes, symcount, archive_bfd);
 
   free (minisyms);
   free (symsizes);
@@ -1209,8 +1174,6 @@ display_archive (bfd *file)
 	  bfd_close (last_arfile);
 	  lineno_cache_bfd = NULL;
 	  lineno_cache_rel_bfd = NULL;
-	  if (arfile == last_arfile)
-	    return;
 	}
       last_arfile = arfile;
     }
@@ -1464,6 +1427,7 @@ print_symbol_info_bsd (struct extended_symbol_info *info, bfd *abfd)
 	print_value (abfd, SYM_SIZE (info));
       else
 	print_value (abfd, SYM_VALUE (info));
+
       if (print_size && SYM_SIZE (info))
 	{
 	  printf (" ");
@@ -1570,7 +1534,6 @@ main (int argc, char **argv)
 
   program_name = *argv;
   xmalloc_set_program_name (program_name);
-  bfd_set_error_program_name (program_name);
 #if BFD_SUPPORTS_PLUGINS
   bfd_plugin_set_program_name (program_name);
 #endif
@@ -1684,6 +1647,7 @@ main (int argc, char **argv)
 
 	case OPTION_PLUGIN:	/* --plugin */
 #if BFD_SUPPORTS_PLUGINS
+	  plugin_target = "plugin";
 	  bfd_plugin_set_plugin (optarg);
 #else
 	  fatal (_("sorry - this program has been built without plugin support\n"));

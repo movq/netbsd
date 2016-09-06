@@ -1,4 +1,4 @@
-/* $NetBSD: omap2_reg.h,v 1.33 2016/07/11 14:51:11 kiyohara Exp $ */
+/* $NetBSD: omap2_reg.h,v 1.28.2.2 2015/06/10 16:38:05 snj Exp $ */
 
 /*
  * Copyright (c) 2007 Microsoft
@@ -140,28 +140,6 @@
 
 #define	TI_DM37XX_L4_EMULATION_BASE	0x54000000
 #define	TI_DM37XX_L4_EMULATION_SIZE	0x00800000	/* 8MB */
-
-
-#define CHIPID_OMAP3503		0x5c00
-#define CHIPID_OMAP3515		0x1c00
-#define CHIPID_OMAP3525		0x4c00
-#define CHIPID_OMAP3530		0x0c00
-
-#define DEVID_OMAP35X_ES10	0x0b6d602f
-#define DEVID_OMAP35X_ES20	0x1b7ae02f
-#define DEVID_OMAP35X_ES21	0x2b7ae02f
-#define DEVID_OMAP35X_ES30	0x3b7ae02f
-#define DEVID_OMAP35X_ES31	0x4b7ae02f
-#define DEVID_OMAP35X_ES312	0x7b7ae02f
-
-#define CHIPID_AM3703		0x5e00	/* or 0x5c00 */
-#define CHIPID_AM3715		0x1e00	/* or 0x1c00 */
-#define CHIPID_DM3725		0x4e00	/* or 0x4c00 */
-#define CHIPID_DM3730		0x0e00	/* or 0x0c00 */
-
-#define DEVID_AMDM37X_ES10	0x0b89102f
-#define DEVID_AMDM37X_ES11	0x1b89102f
-#define DEVID_AMDM37X_ES12	0x2b89102f
 
 /*
  * Clock Management registers base, offsets, and size
@@ -788,23 +766,6 @@
 #define	GPIO4_BASE_TI_DM37XX		0x49054000
 #define	GPIO5_BASE_TI_DM37XX		0x49056000
 #define	GPIO6_BASE_TI_DM37XX		0x49058000
-
-#define	GPIO_SIZE2			0x100
-
-#define	GPIO_REVISION			0x000
-#define	GPIO_SYSCONFIG			0x010
-#define	GPIO_EOI			0x020	/* AM33xx */
-#define	GPIO_IRQSTATUS_RAW_0		0x024
-#define	GPIO_IRQSTATUS_RAW_1		0x028
-#define	GPIO_IRQSTATUS_0		0x02c
-#define	GPIO_IRQSTATUS_1		0x030
-#define	GPIO_IRQSTATUS_SET_0		0x034
-#define	GPIO_IRQSTATUS_SET_1		0x038
-#define	GPIO_IRQSTATUS_CLR_0		0x03c
-#define	GPIO_IRQSTATUS_CLR_1		0x040
-#define	GPIO_IRQWAKEN_0			0x044
-#define	GPIO_IRQWAKEN_1			0x048
-#define	GPIO_SYSSTATUS			0x114
 
 #define	GPIO_IRQSTATUS1			0x018
 #define	GPIO_IRQENABLE1			0x01c

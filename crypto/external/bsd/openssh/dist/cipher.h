@@ -1,5 +1,5 @@
-/*	$NetBSD: cipher.h,v 1.8 2015/08/13 10:33:21 christos Exp $	*/
-/* $OpenBSD: cipher.h,v 1.48 2015/07/08 19:09:25 markus Exp $ */
+/*	$NetBSD: cipher.h,v 1.5.4.1 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: cipher.h,v 1.47 2015/01/14 10:24:42 markus Exp $ */
 
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
@@ -72,6 +72,9 @@ struct sshcipher_ctx {
 	struct aesctr_ctx ac_ctx; /* XXX union with evp? */
 	const struct sshcipher *cipher;
 };
+
+typedef struct sshcipher Cipher;
+typedef struct sshcipher_ctx CipherContext;
 
 u_int	 cipher_mask_ssh1(int);
 const struct sshcipher *cipher_by_name(const char *);

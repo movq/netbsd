@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.39 2016/02/27 21:47:32 joerg Exp $
+#	$NetBSD: Makefile,v 1.32.2.1 2015/06/04 20:05:43 snj Exp $
 
 .include <bsd.init.mk>
 
@@ -11,12 +11,9 @@ INCS=	__wmmintrin_aes.h \
 	ammintrin.h \
 	avx2intrin.h \
 	avx512bwintrin.h \
-	avx512cdintrin.h \
-	avx512dqintrin.h \
 	avx512fintrin.h \
 	avx512erintrin.h \
 	avx512vlbwintrin.h \
-	avx512vldqintrin.h \
 	avx512vlintrin.h \
 	avxintrin.h \
 	bmi2intrin.h \
@@ -26,7 +23,6 @@ INCS=	__wmmintrin_aes.h \
 	f16cintrin.h \
 	fmaintrin.h \
 	fma4intrin.h \
-	fxsrintrin.h \
 	ia32intrin.h \
 	immintrin.h \
 	lzcntintrin.h \
@@ -34,7 +30,6 @@ INCS=	__wmmintrin_aes.h \
 	mmintrin.h \
 	mm_malloc.h \
 	nmmintrin.h \
-	pkuintrin.h \
 	pmmintrin.h \
 	popcntintrin.h \
 	prfchwintrin.h \
@@ -47,22 +42,14 @@ INCS=	__wmmintrin_aes.h \
 	wmmintrin.h \
 	x86intrin.h \
 	xmmintrin.h \
-	xopintrin.h \
-	xsavesintrin.h \
-	xsaveintrin.h \
-	xsaveoptintrin.h \
-	xsavecintrin.h \
-	xtestintrin.h
-
+	xopintrin.h
 .elif ${MACHINE_ARCH} == "powerpc" || ${MACHINE_ARCH} == "powerpc64"
-INCS=	altivec.h \
-	htmintrin.h \
-	htmxlintrin.h
+INCS=	altivec.h
 .elif ${MACHINE_CPU} == "arm"
 INCS=	arm_acle.h \
 	arm_neon.h
 .endif
-INCS+=	stdalign.h stdatomic.h stdnoreturn.h
+INCS+=	stdatomic.h
 INCSDIR=	/usr/include/clang-${CLANG_VERSION:R}
 
 .PATH:	${LLVM_SRCDIR}/include/llvm/IR \
@@ -70,10 +57,7 @@ INCSDIR=	/usr/include/clang-${CLANG_VERSION:R}
 	${CLANG_SRCDIR}/include/clang/Basic \
 	${CLANG_SRCDIR}/include/clang/Driver
 
-TABLEGEN_SRC=	Attributes.td Intrinsics.td Options.td
-
-TABLEGEN_OUTPUT.Attributes.td= \
-	llvm/IR/Attributes.inc|-gen-attrs
+TABLEGEN_SRC=	Intrinsics.td Options.td
 
 TABLEGEN_OUTPUT.Intrinsics.td= \
 	llvm/IR/Intrinsics.gen|-gen-intrinsic
@@ -175,8 +159,6 @@ lld/Config/Version.inc: ${LLVM_TOPLEVEL}/Makefile.inc
 DPSRCS+=	llvm/Config/config.h llvm/Config/llvm-config.h
 CLEANFILES+=	llvm/Config/config.h llvm/Config/llvm-config.h
 
-NATIVE_LIBS=	-lm -lexecinfo
-
 llvm/Config/config.h: ${LLVM_TOPLEVEL}/Makefile.inc ${LLVM_TOPLEVEL}/config/llvm/Config/config.h.in
 	mkdir -p ${.TARGET:H}
 	${TOOL_SED} -e /LLVM_DEFAULT_TARGET_TRIPLE/d -e /LLVM_NATIVE_/d \
@@ -187,7 +169,6 @@ llvm/Config/config.h: ${LLVM_TOPLEVEL}/Makefile.inc ${LLVM_TOPLEVEL}/config/llvm
 	printf '#define PACKAGE_VERSION "${LLVM_VERSION} (trunk ${LLVM_REVISION})"\n' >> ${.TARGET}.tmp
 	printf '#define LLVM_VERSION_MAJOR ${LLVM_VERSION:R:R}\n' >> ${.TARGET}.tmp
 	printf '#define LLVM_VERSION_MINOR ${LLVM_VERSION:R:E}\n' >> ${.TARGET}.tmp
-	printf '#define LLVM_VERSION_STRING "${LLVM_VERSION}"\n' >> ${.TARGET}.tmp
 	printf '#endif\n' >> ${.TARGET}.tmp
 	mv ${.TARGET}.tmp ${.TARGET}
 
@@ -200,7 +181,6 @@ llvm/Config/llvm-config.h: ${LLVM_TOPLEVEL}/Makefile.inc ${LLVM_TOPLEVEL}/config
 	printf '#define LLVM_DEFAULT_TARGET_TRIPLE "${MACHINE_GNU_PLATFORM}"\n' >> ${.TARGET}.tmp
 	printf '#define LLVM_VERSION_MAJOR ${LLVM_VERSION:R:R}\n' >> ${.TARGET}.tmp
 	printf '#define LLVM_VERSION_MINOR ${LLVM_VERSION:R:E}\n' >> ${.TARGET}.tmp
-	printf '#define LLVM_VERSION_STRING "${LLVM_VERSION}"\n' >> ${.TARGET}.tmp
 	printf '#endif\n' >> ${.TARGET}.tmp
 	mv ${.TARGET}.tmp ${.TARGET}
 
@@ -209,15 +189,15 @@ run-configure:
 	mkdir -p tmp
 	cd tmp && ${LLVM_SRCDIR}/configure ${LLVM_CONFIGURE_ARGS} \
 	    CC=${CC:Q} CFLAGS=${CFLAGS:N-Werror:Q} CXX=${CXX:Q} CXXFLAGS=${CXXFLAGS:N-Werror:Q} \
-	    CPPFLAGS=${CPPFLAGS:N-std=c++11:Q} LDFLAGS=${LDFLAGS:Q} LD=${LD:Q} LIBS=${NATIVE_LIBS:Q} \
+	    CPPFLAGS=${CPPFLAGS:N-std=c++11:Q} LDFLAGS=${LDFLAGS:Q} LD=${LD:Q} LIBS=-lm \
 	    ac_cv_func_mmap_fixed_mapped=yes ac_cv_func_mmap_file=yes llvm_cv_c_printf_a=yes
 	cp -r tmp/include/llvm/* ${LLVM_INCLUDE_CONFIG}/llvm/
+	mv ${LLVM_INCLUDE_CONFIG}/llvm/Config/config.h \
+	   ${LLVM_INCLUDE_CONFIG}/llvm/Config/config.h.in
 	mv ${LLVM_INCLUDE_CONFIG}/llvm/Config/llvm-config.h \
 	   ${LLVM_INCLUDE_CONFIG}/llvm/Config/llvm-config.h.in
 	cp -r tmp/tools/clang/include/clang/* ${CLANG_INCLUDE_CONFIG}/clang/
 	rm -r tmp
-	mv ${LLVM_INCLUDE_CONFIG}/llvm/Config/config.h \
-	    ${LLVM_INCLUDE_CONFIG}/llvm/Config/config.h.in
 .endif
 
 depend dependall all: ${DPSRCS}

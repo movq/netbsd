@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveaufb.c,v 1.3 2015/10/17 12:02:44 jmcneill Exp $	*/
+/*	$NetBSD: nouveaufb.c,v 1.1.2.4 2016/02/11 22:48:22 snj Exp $	*/
 
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveaufb.c,v 1.3 2015/10/17 12:02:44 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveaufb.c,v 1.1.2.4 2016/02/11 22:48:22 snj Exp $");
 
 #include <sys/types.h>
 #include <sys/bus.h>

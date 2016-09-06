@@ -1,4 +1,4 @@
-/*	$NetBSD: rtadvd.c,v 1.51 2015/11/11 07:48:41 ozaki-r Exp $	*/
+/*	$NetBSD: rtadvd.c,v 1.46 2014/02/27 17:43:02 joerg Exp $	*/
 /*	$KAME: rtadvd.c,v 1.92 2005/10/17 14:40:02 suz Exp $	*/
 
 /*
@@ -67,7 +67,6 @@
 #include "if.h"
 #include "config.h"
 #include "dump.h"
-#include "prog_ops.h"
 
 struct msghdr rcvmhdr;
 static unsigned char *rcvcmsgbuf;
@@ -176,7 +175,7 @@ int
 main(int argc, char *argv[])
 {
 	struct pollfd set[2];
-	struct timespec *timeout;
+	struct timeval *timeout;
 	int i, ch;
 	int fflag = 0, logopt;
 	struct passwd *pw;
@@ -221,10 +220,6 @@ main(int argc, char *argv[])
 		exit(1);
 	}
 
-	if (prog_init && prog_init() == -1) {
-		err(1, "init failed");
-	}
-
 	logopt = LOG_NDELAY | LOG_PID;
 	if (fflag)
 		logopt |= LOG_PERROR;
@@ -256,7 +251,7 @@ main(int argc, char *argv[])
 		getconfig(*argv++, 1);
 
 	if (!fflag)
-		prog_daemon(1, 0);
+		daemon(1, 0);
 
 	sock_open();
 
@@ -279,17 +274,17 @@ main(int argc, char *argv[])
 		set[1].fd = -1;
 
 	syslog(LOG_INFO, "dropping privileges to %s", RTADVD_USER);
-	if (prog_chroot(pw->pw_dir) == -1) {
+	if (chroot(pw->pw_dir) == -1) {
 		syslog(LOG_ERR, "chroot: %s: %m", pw->pw_dir);
 		exit(1);
 	}
-	if (prog_chdir("/") == -1) {
+	if (chdir("/") == -1) {
 		syslog(LOG_ERR, "chdir: /: %m");
 		exit(1);
 	}
-	if (prog_setgroups(1, &pw->pw_gid) == -1 ||
-	    prog_setgid(pw->pw_gid) == -1 ||
-	    prog_setuid(pw->pw_uid) == -1)
+	if (setgroups(1, &pw->pw_gid) == -1 ||
+	    setgid(pw->pw_gid) == -1 || 
+	    setuid(pw->pw_uid) == -1)
 	{
 		syslog(LOG_ERR, "failed to drop privileges: %m");
 		exit(1);
@@ -316,32 +311,32 @@ main(int argc, char *argv[])
 				getconfig(*argv++, 0);
 		}
 
-		/* timer expiration check and reset the timer */
-		timeout = rtadvd_check_timer();
-
 		if (do_die) {
 			die();
 			/*NOTREACHED*/
 		}
+
+		/* timer expiration check and reset the timer */
+		timeout = rtadvd_check_timer();
 
 		if (timeout != NULL) {
 			syslog(LOG_DEBUG,
 			    "<%s> set timer to %ld:%ld. waiting for "
 			    "inputs or timeout", __func__,
 			    (long int)timeout->tv_sec,
-			    (long int)timeout->tv_nsec);
+			    (long int)timeout->tv_usec);
 		} else {
 			syslog(LOG_DEBUG,
 			    "<%s> there's no timer. waiting for inputs",
 			    __func__);
 		}
 
-		if ((i = prog_poll(set, 2, timeout ? (timeout->tv_sec * 1000 +
-		    (timeout->tv_nsec + 999999) / 1000000) : INFTIM)) < 0)
-		{
+		if ((i = poll(set, 2, timeout ? (timeout->tv_sec * 1000 +
+		    timeout->tv_usec / 1000) : INFTIM)) < 0) {
 			/* EINTR would occur upon SIGUSR1 for status dump */
 			if (errno != EINTR)
-				syslog(LOG_ERR, "<%s> poll: %m", __func__);
+				syslog(LOG_ERR, "<%s> poll: %s",
+				    __func__, strerror(errno));
 			continue;
 		}
 		if (i == 0)	/* timeout */
@@ -451,7 +446,7 @@ rtmsg_input(void)
 	int prefixchange = 0, argc;
 
 	memset(&buffer, 0, sizeof(buffer));
-	n = prog_read(rtsock, &buffer, sizeof(buffer));
+	n = read(rtsock, &buffer, sizeof(buffer));
 
 	/* We read the buffer first to clear the FD */
 	if (do_die)
@@ -721,7 +716,7 @@ rtadvd_input(void)
 	 * receive options.
 	 */
 	rcvmhdr.msg_controllen = rcvcmsgbuflen;
-	if ((i = prog_recvmsg(sock, &rcvmhdr, 0)) < 0)
+	if ((i = recvmsg(sock, &rcvmhdr, 0)) < 0)
 		return;
 
 	/* We read the buffer first to clear the FD */
@@ -996,7 +991,7 @@ void
 ra_timer_set_short_delay(struct rainfo *rai)
 {
 	long delay;	/* must not be greater than 1000000 */
-	struct timespec interval, now, min_delay, tm_tmp, *rest;
+	struct timeval interval, now, min_delay, tm_tmp, *rest;
 
 	/*
 	 * Compute a random delay. If the computed value
@@ -1007,9 +1002,9 @@ ra_timer_set_short_delay(struct rainfo *rai)
 	 */
 	delay = arc4random() % MAX_RA_DELAY_TIME;
 	interval.tv_sec = 0;
-	interval.tv_nsec = delay;
+	interval.tv_usec = delay;
 	rest = rtadvd_timer_rest(rai->timer);
-	if (timespeccmp(rest, &interval, <)) {
+	if (TIMEVAL_LT(*rest, interval)) {
 		syslog(LOG_DEBUG, "<%s> random delay is larger than "
 		    "the rest of current timer", __func__);
 		interval = *rest;
@@ -1022,13 +1017,13 @@ ra_timer_set_short_delay(struct rainfo *rai)
 	 * MIN_DELAY_BETWEEN_RAS plus the random value after the
 	 * previous advertisement was sent.
 	 */
-	prog_clock_gettime(CLOCK_MONOTONIC, &now);
-	timespecsub(&now, &rai->lastsent, &tm_tmp);
+	gettimeofday(&now, NULL);
+	TIMEVAL_SUB(&now, &rai->lastsent, &tm_tmp);
 	min_delay.tv_sec = MIN_DELAY_BETWEEN_RAS;
-	min_delay.tv_nsec = 0;
-	if (timespeccmp(&tm_tmp, &min_delay, <)) {
-		timespecsub(&min_delay, &tm_tmp, &min_delay);
-		timespecadd(&min_delay, &interval, &interval);
+	min_delay.tv_usec = 0;
+	if (TIMEVAL_LT(tm_tmp, min_delay)) {
+		TIMEVAL_SUB(&min_delay, &tm_tmp, &min_delay);
+		TIMEVAL_ADD(&min_delay, &interval, &interval);
 	}
 	rtadvd_set_timer(&interval, rai->timer);
 }
@@ -1204,7 +1199,7 @@ prefix_check(struct nd_opt_prefix_info *pinfo,
 	struct prefix *pp;
 	int inconsistent = 0;
 	char ntopbuf[INET6_ADDRSTRLEN], prefixbuf[INET6_ADDRSTRLEN];
-	struct timespec now;
+	struct timeval now;
 
 #if 0				/* impossible */
 	if (pinfo->nd_opt_pi_type != ND_OPT_PREFIX_INFORMATION)
@@ -1250,7 +1245,7 @@ prefix_check(struct nd_opt_prefix_info *pinfo,
 		 * XXX: can we really expect that all routers on the link
 		 * have synchronized clocks?
 		 */
-		prog_clock_gettime(CLOCK_MONOTONIC, &now);
+		gettimeofday(&now, NULL);
 		preferred_time += now.tv_sec;
 
 		if (!pp->timer && rai->clockskew &&
@@ -1286,7 +1281,7 @@ prefix_check(struct nd_opt_prefix_info *pinfo,
 
 	valid_time = ntohl(pinfo->nd_opt_pi_valid_time);
 	if (pp->vltimeexpire) {
-		prog_clock_gettime(CLOCK_MONOTONIC, &now);
+		gettimeofday(&now, NULL);
 		valid_time += now.tv_sec;
 
 		if (!pp->timer && rai->clockskew &&
@@ -1504,42 +1499,38 @@ sock_open(void)
 				CMSG_SPACE(sizeof(int));
 	rcvcmsgbuf = malloc(rcvcmsgbuflen);
 	if (rcvcmsgbuf == NULL) {
-		syslog(LOG_ERR, "<%s> malloc: %m", __func__);
+		syslog(LOG_ERR, "<%s> not enough core", __func__);
 		exit(1);
 	}
 
-	sndcmsgbuflen = CMSG_SPACE(sizeof(struct in6_pktinfo));
+	sndcmsgbuflen = CMSG_SPACE(sizeof(struct in6_pktinfo)) + 
+				CMSG_SPACE(sizeof(int));
 	sndcmsgbuf = malloc(sndcmsgbuflen);
 	if (sndcmsgbuf == NULL) {
-		syslog(LOG_ERR, "<%s> malloc: %m", __func__);
+		syslog(LOG_ERR, "<%s> not enough core", __func__);
 		exit(1);
 	}
 
-	if ((sock = prog_socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6)) < 0) {
-		syslog(LOG_ERR, "<%s> socket: %m", __func__);
-		exit(1);
-	}
-
-	/* RFC 4861 Section 4.2 */
-	on = 255;
-	if (prog_setsockopt(sock, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, &on,
-		       sizeof(on)) == -1) {
-		syslog(LOG_ERR, "<%s> IPV6_MULTICAST_HOPS: %m", __func__);
+	if ((sock = socket(AF_INET6, SOCK_RAW, IPPROTO_ICMPV6)) < 0) {
+		syslog(LOG_ERR, "<%s> socket: %s", __func__,
+		       strerror(errno));
 		exit(1);
 	}
 
 	/* specify to tell receiving interface */
 	on = 1;
 #ifdef IPV6_RECVPKTINFO
-	if (prog_setsockopt(sock, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on,
+	if (setsockopt(sock, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on,
 		       sizeof(on)) < 0) {
-		syslog(LOG_ERR, "<%s> IPV6_RECVPKTINFO: %m", __func__);
+		syslog(LOG_ERR, "<%s> IPV6_RECVPKTINFO: %s",
+		       __func__, strerror(errno));
 		exit(1);
 	}
 #else  /* old adv. API */
-	if (prog_setsockopt(sock, IPPROTO_IPV6, IPV6_PKTINFO, &on,
+	if (setsockopt(sock, IPPROTO_IPV6, IPV6_PKTINFO, &on,
 		       sizeof(on)) < 0) {
-		syslog(LOG_ERR, "<%s> IPV6_PKTINFO: %m", __func__);
+		syslog(LOG_ERR, "<%s> IPV6_PKTINFO: %s",
+		       __func__, strerror(errno));
 		exit(1);
 	}
 #endif 
@@ -1547,15 +1538,17 @@ sock_open(void)
 	on = 1;
 	/* specify to tell value of hoplimit field of received IP6 hdr */
 #ifdef IPV6_RECVHOPLIMIT
-	if (prog_setsockopt(sock, IPPROTO_IPV6, IPV6_RECVHOPLIMIT, &on,
+	if (setsockopt(sock, IPPROTO_IPV6, IPV6_RECVHOPLIMIT, &on,
 		       sizeof(on)) < 0) {
-		syslog(LOG_ERR, "<%s> IPV6_RECVHOPLIMIT: %m", __func__);
+		syslog(LOG_ERR, "<%s> IPV6_RECVHOPLIMIT: %s",
+		       __func__, strerror(errno));
 		exit(1);
 	}
 #else  /* old adv. API */
-	if (prog_setsockopt(sock, IPPROTO_IPV6, IPV6_HOPLIMIT, &on,
+	if (setsockopt(sock, IPPROTO_IPV6, IPV6_HOPLIMIT, &on,
 		       sizeof(on)) < 0) {
-		syslog(LOG_ERR, "<%s> IPV6_HOPLIMIT: %m", __func__);
+		syslog(LOG_ERR, "<%s> IPV6_HOPLIMIT: %s",
+		       __func__, strerror(errno));
 		exit(1);
 	}
 #endif
@@ -1565,9 +1558,10 @@ sock_open(void)
 	ICMP6_FILTER_SETPASS(ND_ROUTER_ADVERT, &filt);
 	if (accept_rr)
 		ICMP6_FILTER_SETPASS(ICMP6_ROUTER_RENUMBERING, &filt);
-	if (prog_setsockopt(sock, IPPROTO_ICMPV6, ICMP6_FILTER, &filt,
+	if (setsockopt(sock, IPPROTO_ICMPV6, ICMP6_FILTER, &filt,
 		       sizeof(filt)) < 0) {
-		syslog(LOG_ERR, "<%s> IICMP6_FILTER: %m", __func__);
+		syslog(LOG_ERR, "<%s> IICMP6_FILTER: %s",
+		       __func__, strerror(errno));
 		exit(1);
 	}
 
@@ -1583,10 +1577,10 @@ sock_open(void)
 	}
 	TAILQ_FOREACH(ra, &ralist, next) {
 		mreq.ipv6mr_interface = ra->ifindex;
-		if (prog_setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq,
+		if (setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq,
 			       sizeof(mreq)) < 0) {
-			syslog(LOG_ERR, "<%s> IPV6_JOIN_GROUP(link) on %s: %m",
-			       __func__, ra->ifname);
+			syslog(LOG_ERR, "<%s> IPV6_JOIN_GROUP(link) on %s: %s",
+			       __func__, ra->ifname, strerror(errno));
 			exit(1);
 		}
 	}
@@ -1614,12 +1608,13 @@ sock_open(void)
 			}
 		} else
 			mreq.ipv6mr_interface = ra->ifindex;
-		if (prog_setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP,
+		if (setsockopt(sock, IPPROTO_IPV6, IPV6_JOIN_GROUP,
 			       &mreq, sizeof(mreq)) < 0) {
 			syslog(LOG_ERR,
-			       "<%s> IPV6_JOIN_GROUP(site) on %s: %m",
+			       "<%s> IPV6_JOIN_GROUP(site) on %s: %s",
 			       __func__,
-			       mcastif ? mcastif : ra->ifname);
+			       mcastif ? mcastif : ra->ifname,
+			       strerror(errno));
 			exit(1);
 		}
 	}
@@ -1648,8 +1643,9 @@ sock_open(void)
 static void
 rtsock_open(void)
 {
-	if ((rtsock = prog_socket(PF_ROUTE, SOCK_RAW, 0)) < 0) {
-		syslog(LOG_ERR, "<%s> socket: %m", __func__);
+	if ((rtsock = socket(PF_ROUTE, SOCK_RAW, 0)) < 0) {
+		syslog(LOG_ERR,
+		       "<%s> socket: %s", __func__, strerror(errno));
 		exit(1);
 	}
 }
@@ -1696,16 +1692,28 @@ ra_output(struct rainfo *rai)
 	memset(&pi->ipi6_addr, 0, sizeof(pi->ipi6_addr));	/*XXX*/
 	pi->ipi6_ifindex = rai->ifindex;
 
+	/* specify the hop limit of the packet */
+	{
+		int hoplimit = 255;
+
+		cm = CMSG_NXTHDR(&sndmhdr, cm);
+		cm->cmsg_level = IPPROTO_IPV6;
+		cm->cmsg_type = IPV6_HOPLIMIT;
+		cm->cmsg_len = CMSG_LEN(sizeof(int));
+		memcpy(CMSG_DATA(cm), &hoplimit, sizeof(int));
+	}
+
 	syslog(LOG_DEBUG,
 	       "<%s> send RA on %s, # of waitings = %d",
 	       __func__, rai->ifname, rai->waiting); 
 
-	i = prog_sendmsg(sock, &sndmhdr, 0);
+	i = sendmsg(sock, &sndmhdr, 0);
 
 	if (i < 0 || (size_t)i != rai->ra_datalen)  {
 		if (i < 0) {
-			syslog(LOG_ERR, "<%s> sendmsg on %s: %m",
-			       __func__, rai->ifname);
+			syslog(LOG_ERR, "<%s> sendmsg on %s: %s",
+			       __func__, rai->ifname,
+			       strerror(errno));
 		}
 	}
 
@@ -1721,8 +1729,9 @@ ra_output(struct rainfo *rai)
 		if (i < 0 || i != rai->ra_datalen)  {
 			if (i < 0) {
 				syslog(LOG_ERR,
-				    "<%s> unicast sendmsg on %s: %m",
-				    __func__, rai->ifname);
+				    "<%s> unicast sendmsg on %s: %s",
+				    __func__, rai->ifname,
+				    strerror(errno));
 			}
 		}
 #endif
@@ -1758,7 +1767,7 @@ ra_output(struct rainfo *rai)
 	rai->raoutput++;
 
 	/* update timestamp */
-	prog_clock_gettime(CLOCK_MONOTONIC, &rai->lastsent);
+	gettimeofday(&rai->lastsent, NULL);
 
 	/* reset waiting conter */
 	rai->waiting = 0;
@@ -1787,7 +1796,7 @@ ra_timeout(void *data)
 
 /* update RA timer */
 void
-ra_timer_update(void *data, struct timespec *tm)
+ra_timer_update(void *data, struct timeval *tm)
 {
 	struct rainfo *rai = (struct rainfo *)data;
 	long interval;
@@ -1814,12 +1823,12 @@ ra_timer_update(void *data, struct timespec *tm)
 		interval = MAX_INITIAL_RTR_ADVERT_INTERVAL;
 
 	tm->tv_sec = interval;
-	tm->tv_nsec = 0;
+	tm->tv_usec = 0;
 
 	syslog(LOG_DEBUG,
 	       "<%s> RA timer on %s is set to %ld:%ld",
 	       __func__, rai->ifname,
-	       (long int)tm->tv_sec, (long int)tm->tv_nsec);
+	       (long int)tm->tv_sec, (long int)tm->tv_usec);
 
 	return;
 }

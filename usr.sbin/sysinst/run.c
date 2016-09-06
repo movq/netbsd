@@ -1,4 +1,4 @@
-/*	$NetBSD: run.c,v 1.5 2014/12/30 10:10:22 martin Exp $	*/
+/*	$NetBSD: run.c,v 1.2.4.2 2015/02/27 11:29:44 martin Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.

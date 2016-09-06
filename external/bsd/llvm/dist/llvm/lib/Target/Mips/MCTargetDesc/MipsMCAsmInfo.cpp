@@ -18,7 +18,8 @@ using namespace llvm;
 
 void MipsMCAsmInfo::anchor() { }
 
-MipsMCAsmInfo::MipsMCAsmInfo(const Triple &TheTriple) {
+MipsMCAsmInfo::MipsMCAsmInfo(StringRef TT) {
+  Triple TheTriple(TT);
   if ((TheTriple.getArch() == Triple::mips) ||
       (TheTriple.getArch() == Triple::mips64))
     IsLittleEndian = false;

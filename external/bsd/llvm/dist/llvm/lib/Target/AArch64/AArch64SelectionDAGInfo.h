@@ -20,6 +20,8 @@ namespace llvm {
 
 class AArch64SelectionDAGInfo : public TargetSelectionDAGInfo {
 public:
+  explicit AArch64SelectionDAGInfo(const DataLayout *DL);
+  ~AArch64SelectionDAGInfo();
 
   SDValue EmitTargetCodeForMemset(SelectionDAG &DAG, SDLoc dl, SDValue Chain,
                                   SDValue Dst, SDValue Src, SDValue Size,

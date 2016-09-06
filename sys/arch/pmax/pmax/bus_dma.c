@@ -1,4 +1,4 @@
-/*	$NetBSD: bus_dma.c,v 1.58 2015/06/11 08:22:09 matt Exp $	*/
+/*	$NetBSD: bus_dma.c,v 1.57 2012/10/02 23:54:54 christos Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.58 2015/06/11 08:22:09 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus_dma.c,v 1.57 2012/10/02 23:54:54 christos Exp $");
 
 #include "opt_cputype.h"
 
@@ -660,8 +660,7 @@ _bus_dmamem_alloc(bus_dma_tag_t t, bus_size_t size, bus_size_t alignment,
 {
 	return (_bus_dmamem_alloc_range_common(t, size, alignment, boundary,
 	    segs, nsegs, rsegs, flags,
-	    pmap_limits.avail_start /*low*/,
-	    pmap_limits.avail_end - PAGE_SIZE /*high*/));
+	    mips_avail_start /*low*/, mips_avail_end - PAGE_SIZE /*high*/));
 }
 
 /*

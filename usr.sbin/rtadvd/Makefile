@@ -1,29 +1,26 @@
-# $NetBSD: Makefile,v 1.19 2016/06/15 13:57:26 riastradh Exp $
+# $NetBSD: Makefile,v 1.17 2012/08/10 12:10:30 joerg Exp $
 
 WARNS?=	4
 
 .include <bsd.own.mk>
 
-USE_FORT?=	yes	# network server
+USE_FORT?= yes	# network server
 
-RUMPPRG=	rtadvd
-SRCS=		rtadvd.c rrenum.c advcap.c if.c config.c timer.c dump.c
-MAN=		rtadvd.8 rtadvd.conf.5
+PROG=	rtadvd
+SRCS=	rtadvd.c rrenum.c advcap.c if.c config.c timer.c dump.c
 
-CPPFLAGS+=	-DINET6
-LDADD+=		-lutil
-DPADD+=		${LIBUTIL}
+CPPFLAGS+=-DINET6
+MAN=	rtadvd.8 rtadvd.conf.5
+LDADD+=	-lutil
+DPADD+=	${LIBUTIL}
 
 .if ${MKSHARE} != "no"
 FILESDIR=	/usr/share/examples/rtadvd
 FILES=	rtadvd.conf
 .endif
 
-.PATH:	${.CURDIR}/../../lib/libc/net
-RUMPSRCS=	getifaddrs.c getnameinfo.c if_indextoname.c if_nametoindex.c
-.if (${MKRUMP} != "no")
-CPPFLAGS+=	-DRUMP_ACTION
-.endif
-
-
 .include <bsd.prog.mk>
+
+.if defined(HAVE_GCC) || defined(HAVE_LLVM)
+COPTS.dump.c=-fno-strict-aliasing
+.endif

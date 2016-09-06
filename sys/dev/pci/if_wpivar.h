@@ -1,4 +1,4 @@
-/*  $NetBSD: if_wpivar.h,v 1.19 2015/01/06 15:39:54 bouyer Exp $    */
+/*  $NetBSD: if_wpivar.h,v 1.18.2.1 2015/01/12 21:15:12 snj Exp $    */
 
 /*-
  * Copyright (c) 2006

@@ -1,4 +1,4 @@
-/*	$NetBSD: ld_ataraid.c,v 1.41 2016/05/02 19:18:29 christos Exp $	*/
+/*	$NetBSD: ld_ataraid.c,v 1.39 2012/02/02 19:43:02 tls Exp $	*/
 
 /*
  * Copyright (c) 2003 Wasabi Systems, Inc.
@@ -47,7 +47,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ld_ataraid.c,v 1.41 2016/05/02 19:18:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ld_ataraid.c,v 1.39 2012/02/02 19:43:02 tls Exp $");
 
 #include "bio.h"
 
@@ -66,6 +66,7 @@ __KERNEL_RCSID(0, "$NetBSD: ld_ataraid.c,v 1.41 2016/05/02 19:18:29 christos Exp
 #include <sys/malloc.h>
 #include <sys/vnode.h>
 #include <sys/kauth.h>
+#include <sys/rnd.h>
 #if NBIO > 0
 #include <dev/ata/atavar.h>
 #include <dev/ata/atareg.h>
@@ -698,12 +699,12 @@ ld_ataraid_biodisk(struct ld_ataraid_softc *sc, struct bioc_disk *bd)
 	strlcpy(bd->bd_procdev, device_xname(adi->adi_dev),
 	    sizeof(bd->bd_procdev));
 
-	strnvisx(serial, sizeof(serial), wd->sc_params.atap_serial,
-	    sizeof(wd->sc_params.atap_serial), VIS_TRIM|VIS_SAFE|VIS_OCTAL);
-	strnvisx(model, sizeof(model), wd->sc_params.atap_model,
-	    sizeof(wd->sc_params.atap_model), VIS_TRIM|VIS_SAFE|VIS_OCTAL);
-	strnvisx(rev, sizeof(rev), wd->sc_params.atap_revision,
-	    sizeof(wd->sc_params.atap_revision), VIS_TRIM|VIS_SAFE|VIS_OCTAL);
+	scsipi_strvis(serial, sizeof(serial), wd->sc_params.atap_serial,
+	    sizeof(wd->sc_params.atap_serial));
+	scsipi_strvis(model, sizeof(model), wd->sc_params.atap_model,
+	    sizeof(wd->sc_params.atap_model));
+	scsipi_strvis(rev, sizeof(rev), wd->sc_params.atap_revision,
+	    sizeof(wd->sc_params.atap_revision));
 
 	snprintf(bd->bd_vendor, sizeof(bd->bd_vendor), "%s %s", model, rev);
 	strlcpy(bd->bd_serial, serial, sizeof(bd->bd_serial));

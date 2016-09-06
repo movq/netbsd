@@ -1,5 +1,5 @@
-/*      Id: gcc_compat.c,v 1.119 2015/11/13 17:11:40 ragge Exp      */	
-/*      $NetBSD: gcc_compat.c,v 1.6 2016/02/09 20:37:32 plunky Exp $     */
+/*      Id: gcc_compat.c,v 1.106 2014/06/07 07:04:09 plunky Exp      */	
+/*      $NetBSD: gcc_compat.c,v 1.5 2014/07/24 20:12:50 plunky Exp $     */
 /*
  * Copyright (c) 2004 Anders Magnusson (ragge@ludd.luth.se).
  * All rights reserved.
@@ -37,10 +37,6 @@
 
 #include <string.h>
 
-#define	NODE P1ND
-#define	nfree p1nfree
-#define	tfree p1tfree
-
 static struct kw {
 	char *name, *ptr;
 	int rv;
@@ -51,10 +47,10 @@ static struct kw {
  */
 /* 0 */	{ "__asm", NULL, C_ASM },
 /* 1 */	{ "__signed", NULL, 0 },
-/* 2 */	{ "__inline", NULL, 0 },
+/* 2 */	{ "__inline", NULL, C_FUNSPEC },
 /* 3 */	{ "__const", NULL, 0 },
 /* 4 */	{ "__asm__", NULL, C_ASM },
-/* 5 */	{ "__inline__", NULL, 0 },
+/* 5 */	{ "__inline__", NULL, C_FUNSPEC },
 /* 6 */	{ "__thread", NULL, 0 },
 /* 7 */	{ "__FUNCTION__", NULL, 0 },
 /* 8 */	{ "__volatile", NULL, 0 },
@@ -224,9 +220,10 @@ gcc_init(void)
  * See if a string matches a gcc keyword.
  */
 int
-gcc_keyword(char *str)
+gcc_keyword(char *str, NODE **n)
 {
 	extern int inattr, parlvl, parbal;
+	YYSTYPE *yyl = (YYSTYPE *)n; /* XXX should pass yylval */
 	char tlbuf[TLLEN], *tw;
 	struct kw *kwp;
 	int i;
@@ -248,14 +245,11 @@ gcc_keyword(char *str)
 	switch (i) {
 	case 1:  /* __signed */
 	case 14: /* __signed__ */
-		yylval.type = SIGNED;
+		*n = mkty((TWORD)SIGNED, 0, 0);
 		return C_TYPE;
-	case 2: /* __inline */
-	case 5: /* __inline__ */
-		yylval.type = INLINE;
-		return C_FUNSPEC;
 	case 3: /* __const */
-		yylval.type = CON;
+		*n = block(QUALIFIER, NIL, NIL, CON, 0, 0);
+		(*n)->n_qual = CON;
 		return C_QUALIFIER;
 	case 6: /* __thread */
 		snprintf(tlbuf, TLLEN, TS, lineno);
@@ -273,7 +267,8 @@ gcc_keyword(char *str)
 		return C_STRING;
 	case 8: /* __volatile */
 	case 9: /* __volatile__ */
-		yylval.type = VOL;
+		*n = block(QUALIFIER, NIL, NIL, VOL, 0, 0);
+		(*n)->n_qual = VOL;
 		return C_QUALIFIER;
 	case 15: /* __attribute__ */
 	case 16: /* __attribute */
@@ -281,10 +276,10 @@ gcc_keyword(char *str)
 		parlvl = parbal;
 		return C_ATTRIBUTE;
 	case 17: /* __real__ */
-		yylval.intval = XREAL;
+		yyl->intval = XREAL;
 		return C_UNOP;
 	case 18: /* __imag__ */
-		yylval.intval = XIMAG;
+		yyl->intval = XIMAG;
 		return C_UNOP;
 	}
 	cerror("gcc_keyword");
@@ -329,9 +324,6 @@ struct atax {
 	CS(ATTR_QUALTYP)	{ 0, NULL },
 	CS(ATTR_STRUCT)		{ 0, NULL },
 	CS(ATTR_ALIGNED)	{ A_0ARG|A_1ARG, "aligned" },
-	CS(ATTR_NORETURN)	{ A_0ARG, "noreturn" },
-	CS(ATTR_P1LABELS)	{ A_0ARG, "p1labels" },
-	CS(ATTR_SONAME)		{ A_1ARG|A1_STR, "soname" },
 	CS(GCC_ATYP_PACKED)	{ A_0ARG|A_1ARG, "packed" },
 	CS(GCC_ATYP_SECTION)	{ A_1ARG|A1_STR, "section" },
 	CS(GCC_ATYP_TRANSP_UNION) { A_0ARG, "transparent_union" },
@@ -339,6 +331,7 @@ struct atax {
 	CS(GCC_ATYP_DEPRECATED)	{ A_0ARG, "deprecated" },
 	CS(GCC_ATYP_MAYALIAS)	{ A_0ARG, "may_alias" },
 	CS(GCC_ATYP_MODE)	{ A_1ARG|A1_NAME, "mode" },
+	CS(GCC_ATYP_NORETURN)	{ A_0ARG, "noreturn" },
 	CS(GCC_ATYP_FORMAT)	{ A_3ARG|A1_NAME, "format" },
 	CS(GCC_ATYP_NONNULL)	{ A_MANY, "nonnull" },
 	CS(GCC_ATYP_SENTINEL)	{ A_0ARG|A_1ARG, "sentinel" },
@@ -368,11 +361,8 @@ struct atax {
 	CS(GCC_ATYP_WARNING)	{ A_1ARG|A1_STR, "warning" },
 	CS(GCC_ATYP_NOCLONE)	{ A_0ARG, "noclone" },
 	CS(GCC_ATYP_REGPARM)	{ A_1ARG, "regparm" },
-	CS(GCC_ATYP_FASTCALL)	{ A_0ARG, "fastcall" },
 
 	CS(GCC_ATYP_BOUNDED)	{ A_3ARG|A_MANY|A1_NAME, "bounded" },
-
-	CS(GCC_ATYP_WEAKIMPORT)	{ A_0ARG, "weak_import" },
 };
 
 #if SZPOINT(CHAR) == SZLONGLONG
@@ -434,7 +424,7 @@ setaarg(int str, union aarg *aa, NODE *p)
 		    ((str & (A1_NAME|A2_NAME|A3_NAME)) && p->n_op != NAME))
 			uerror("bad arg to attribute");
 		if (p->n_op == STRING) {
-			aa->sarg = p->n_name; /* saved in cgram.y */
+			aa->sarg = newstring(p->n_name, strlen(p->n_name));
 		} else
 			aa->sarg = (char *)p->n_sp;
 		nfree(p);
@@ -580,8 +570,6 @@ gcc_tcattrfix(NODE *p)
 	struct attr *ap;
 	int sz, coff, csz, al, oal, mxal;
 
-	if (!ISSOU(p->n_type)) /* only for structs or unions */
-		return;
 	if ((ap = attr_find(p->n_ap, GCC_ATYP_PACKED)) == NULL)
 		return; /* nothing to fix */
 
@@ -682,11 +670,7 @@ gcc_modefix(NODE *p)
 		return;
 	}
 	i = mods[i].typ;
-	if (i >= 1 && i <= MAXTYPES) {
-		MODTYPE(p->n_type, ctype(i));
-		if (u)
-			p->n_type = ENUNSIGN(p->n_type);
-	} else switch (i) {
+	switch (i) {
 #ifdef TARGET_TIMODE
 	case 800:
 		if (BTYPE(p->n_type) == STRTY)
@@ -703,6 +687,12 @@ gcc_modefix(NODE *p)
 		p->n_ap = attr_add(p->n_ap, a2);
 		break;
 #endif
+	case 1 ... MAXTYPES:
+		MODTYPE(p->n_type, ctype(i));
+		if (u)
+			p->n_type = ENUNSIGN(p->n_type);
+		break;
+
 	case FCOMPLEX:
 	case COMPLEX:
 	case LCOMPLEX:
@@ -720,7 +710,7 @@ gcc_modefix(NODE *p)
 		    i == LDOUBLE ? "0l" : 0;
 		sp = lookup(addname(s), 0);
 		for (ap = sp->sap; ap != NULL; ap = ap->next)
-			p->n_ap = attr_add(p->n_ap, attr_dup(ap));
+			p->n_ap = attr_add(p->n_ap, attr_dup(ap, 3));
 		break;
 
 	default:
@@ -1076,11 +1066,8 @@ dump_attr(struct attr *ap)
 			printf("%s, ", c);
 		} else {
 			printf("%s: ", atax[ap->atype].name);
-			if (atax[ap->atype].typ & A1_STR)
-				printf("%s ", ap->sarg(0));
-			else
-				printf("%d %d %d, ", ap->iarg(0),
-				    ap->iarg(1), ap->iarg(2));
+			printf("%d %d %d, ", ap->iarg(0),
+			    ap->iarg(1), ap->iarg(2));
 		}
 	}
 	printf("\n");

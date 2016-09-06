@@ -1,5 +1,5 @@
-/*	$NetBSD: auth2-chall.c,v 1.10 2016/08/02 13:45:12 christos Exp $	*/
-/* $OpenBSD: auth2-chall.c,v 1.44 2016/05/02 08:49:03 djm Exp $ */
+/*	$NetBSD: auth2-chall.c,v 1.5.4.2 2015/07/31 16:49:41 snj Exp $	*/
+/* $OpenBSD: auth2-chall.c,v 1.42 2015/01/19 20:07:45 markus Exp $ */
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
  * Copyright (c) 2001 Per Allansson.  All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: auth2-chall.c,v 1.10 2016/08/02 13:45:12 christos Exp $");
+__RCSID("$NetBSD: auth2-chall.c,v 1.5.4.2 2015/07/31 16:49:41 snj Exp $");
 #include <sys/types.h>
 
 #include <stdio.h>
@@ -123,8 +123,8 @@ kbdint_alloc(const char *devs)
 			buffer_append(&b, devices[i]->name,
 			    strlen(devices[i]->name));
 		}
-		if ((kbdintctxt->devices = sshbuf_dup_string(&b)) == NULL)
-			fatal("%s: sshbuf_dup_string failed", __func__);
+		buffer_append(&b, "\0", 1);
+		kbdintctxt->devices = xstrdup((const char *)buffer_ptr(&b));
 		buffer_free(&b);
 	} else {
 		kbdintctxt->devices = xstrdup(devs);

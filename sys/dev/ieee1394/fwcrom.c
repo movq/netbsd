@@ -1,4 +1,4 @@
-/*	$NetBSD: fwcrom.c,v 1.17 2014/11/21 23:37:25 joerg Exp $	*/
+/*	$NetBSD: fwcrom.c,v 1.14.4.2 2015/05/15 04:12:07 snj Exp $	*/
 /*-
  * Copyright (c) 2002-2003
  * 	Hidetoshi Shimokawa. All rights reserved.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fwcrom.c,v 1.17 2014/11/21 23:37:25 joerg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fwcrom.c,v 1.14.4.2 2015/05/15 04:12:07 snj Exp $");
 
 #include <sys/param.h>
 #ifdef _KERNEL

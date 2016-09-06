@@ -1,4 +1,4 @@
-/*	$NetBSD: filter.c,v 1.2 2015/02/07 17:56:59 christos Exp $	*/
+/*	$NetBSD: filter.c,v 1.1.1.4.2.1 2015/04/14 05:00:15 snj Exp $	*/
 
 /* filter.c - routines for parsing and dealing with filters */
 /* $OpenLDAP$ */

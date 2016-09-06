@@ -1,5 +1,5 @@
-/*	Id: local2.c,v 1.62 2015/12/13 09:00:04 ragge Exp 	*/	
-/*	$NetBSD: local2.c,v 1.4 2016/02/09 20:37:32 plunky Exp $	*/
+/*	Id: local2.c,v 1.54 2014/07/02 08:59:40 ragge Exp 	*/	
+/*	$NetBSD: local2.c,v 1.3 2014/07/24 20:12:50 plunky Exp $	*/
 /*
  * Copyright (c) 2008 Michael Shalayeff
  * Copyright (c) 2003 Anders Magnusson (ragge@ludd.luth.se).
@@ -280,15 +280,14 @@ fldexpand(NODE *p, int cookie, char **cp)
 static void
 stasg(NODE *p)
 {
-	struct attr *ap = attr_find(p->n_ap, ATTR_P2STRUCT);
 	expand(p, INAREG, "	leaq AL,%rdi\n");
-	if (ap->iarg(0) >= 8)
-		printf("\tmovl $%d,%%ecx\n\trep movsq\n", ap->iarg(0) >> 3);
-	if (ap->iarg(0) & 4)
+	if (p->n_stsize >= 8)
+		printf("\tmovl $%d,%%ecx\n\trep movsq\n", p->n_stsize >> 3);
+	if (p->n_stsize & 4)
 		printf("\tmovsl\n");
-	if (ap->iarg(0) & 2)
+	if (p->n_stsize & 2)
 		printf("\tmovsw\n");
-	if (ap->iarg(0) & 1)
+	if (p->n_stsize & 1)
 		printf("\tmovsb\n");
 }
 
@@ -322,6 +321,9 @@ ultofd(NODE *p)
 static void
 ldtoul(NODE *p)
 {
+	int r __unused;
+
+	r = getlr(p, '1')->n_rval;
 
 	E("	subq $16,%rsp\n");
 	E("	movl $0x5f000000,(%rsp)\n"); /* More than long can have */
@@ -384,7 +386,6 @@ fdtoul(NODE *p)
 void
 zzzcode(NODE *p, int c)
 {
-	struct attr *ap, *ap2;
 	NODE *l;
 	int pr, lr, s;
 	char **rt;
@@ -418,45 +419,34 @@ zzzcode(NODE *p, int c)
 #define	STRIF  9
 #define	STRFI  10
 #define	STRX87 11
-		ap = attr_find(p->n_ap, ATTR_P2STRUCT);
-		ap2 = attr_find(p->n_ap, ATTR_AMD64_CMPLRET);
 		if ((p->n_op == STCALL || p->n_op == USTCALL) &&
-		    ap->iarg(0) == 32 && ap2->iarg(0) == STRX87) {
+		    p->n_stsize == 32 && p->n_stalign == STRX87) {
 			printf("\tfstpt -%d(%%rbp)\n", stkpos);
 			printf("\tfstpt -%d(%%rbp)\n", stkpos-16);
 			printf("\tleaq -%d(%%rbp),%%rax\n", stkpos);
 		}
 		if ((p->n_op == STCALL || p->n_op == USTCALL) &&
-		    ap->iarg(0) <= 16) {
+		    p->n_stsize <= 16) {
 			/* store reg-passed structs on stack */
-			if (ap2->iarg(0) == STRREG || ap2->iarg(0) == STRIF)
+			if (p->n_stalign == STRREG || p->n_stalign == STRIF)
 				printf("\tmovq %%rax,-%d(%%rbp)\n", stkpos);
 			else
 				printf("\tmovsd %%xmm0,-%d(%%rbp)\n", stkpos);
-			if (ap->iarg(0) > 8) {
-				if (ap2->iarg(0) == STRREG)
-					printf("\tmovq %%rdx");
-				else if (ap2->iarg(0) == STRFI)
-					printf("\tmovq %%rax");
-				else if (ap2->iarg(0) == STRIF)
-					printf("\tmovsd %%xmm0");
+			if (p->n_stsize > 8) {
+				if (p->n_stalign == STRREG ||
+				    p->n_stalign == STRFI)
+					printf("\tmovq %%rdx,-%d(%%rbp)\n",
+					    stkpos-8);
 				else
-					printf("\tmovsd %%xmm1");
-				printf(",-%d(%%rbp)\n", stkpos-8);
+					printf("\tmovsd %%xmm1,-%d(%%rbp)\n",
+					    stkpos-8);
 			}
 			printf("\tleaq -%d(%%rbp),%%rax\n", stkpos);
 		}
 		break;
 
-	case 'c': /* xor label */
-		if ((ap = attr_find(p->n_ap, ATTR_AMD64_XORLBL)) == NULL)
-			comperr("missing xor label");
-		printf(LABFMT, ap->iarg(0));
-		break;
-
 	case 'F': /* Structure argument */
-		ap = attr_find(p->n_ap, ATTR_P2STRUCT);
-		printf("	subq $%d,%%rsp\n", ap->iarg(0));
+		printf("	subq $%d,%%rsp\n", p->n_stsize);
 		printf("	movq %%rsp,%%rsi\n");
 		stasg(p);
 		break;
@@ -485,9 +475,7 @@ zzzcode(NODE *p, int c)
 		break;
 
 	case 'P': /* Put hidden argument in rdi */
-		ap = attr_find(p->n_ap, ATTR_P2STRUCT);
-		ap2 = attr_find(p->n_ap, ATTR_AMD64_CMPLRET);
-		if (ap->iarg(0) > 16 && ap2->iarg(0) != STRX87)
+		if (p->n_stsize > 16 && p->n_stalign != STRX87)
 			printf("\tleaq -%d(%%rbp),%%rdi\n", stkpos);
 		break;
 
@@ -611,7 +599,7 @@ adrcon(CONSZ val)
 void
 conput(FILE *fp, NODE *p)
 {
-	long val = getlval(p);
+	long val = p->n_lval;
 
 	switch (p->n_op) {
 	case ICON:
@@ -652,12 +640,12 @@ upput(NODE *p, int size)
 
 	case NAME:
 	case OREG:
-		setlval(p, getlval(p) + size);
+		p->n_lval += size;
 		adrput(stdout, p);
-		setlval(p, getlval(p) - size);
+		p->n_lval -= size;
 		break;
 	case ICON:
-		printf("$" CONFMT, getlval(p) >> 32);
+		printf("$" CONFMT, p->n_lval >> 32);
 		break;
 	default:
 		comperr("upput bad op %d size %d", p->n_op, size);
@@ -675,19 +663,19 @@ adrput(FILE *io, NODE *p)
 
 	case NAME:
 		if (p->n_name[0] != '\0') {
-			if (getlval(p) != 0)
-				fprintf(io, CONFMT "+", getlval(p));
+			if (p->n_lval != 0)
+				fprintf(io, CONFMT "+", p->n_lval);
 			fprintf(io, "%s(%%rip)", p->n_name);
 		} else
-			fprintf(io, CONFMT, getlval(p));
+			fprintf(io, CONFMT, p->n_lval);
 		return;
 
 	case OREG:
 		r = p->n_rval;
 		if (p->n_name[0])
-			printf("%s%s", p->n_name, getlval(p) ? "+" : "");
-		if (getlval(p))
-			fprintf(io, "%lld", getlval(p));
+			printf("%s%s", p->n_name, p->n_lval ? "+" : "");
+		if (p->n_lval)
+			fprintf(io, "%lld", p->n_lval);
 		if (R2TEST(r)) {
 			int r1 = R2UPK1(r);
 			int r2 = R2UPK2(r);
@@ -789,17 +777,12 @@ adjustname(char *s)
 static void
 fixcalls(NODE *p, void *arg)
 {
-	int ps;
-
 	/* Prepare for struct return by allocating bounce space on stack */
 	switch (p->n_op) {
 	case STCALL:
 	case USTCALL:
-		ps = attr_find(p->n_ap, ATTR_P2STRUCT)->iarg(0);
-		if (ps < 16)
-			ps = 16;
-		if (ps+p2autooff > stkpos)
-			stkpos = ps+p2autooff;
+		if (p->n_stsize+p2autooff > stkpos)
+			stkpos = p->n_stsize+p2autooff;
 		break;
 	case XASM:
 		p->n_name = adjustname(p->n_name);
@@ -964,7 +947,7 @@ argsiz(NODE *p)
 	if (t == LDOUBLE)
 		return 16;
 	if (p->n_op == STASG)
-		return attr_find(p->n_ap, ATTR_P2STRUCT)->iarg(0);
+		return p->n_stsize;
 	return 8;
 }
 
@@ -1004,25 +987,25 @@ special(NODE *p, int shape)
 		break;
 	case SPCON:
 		if (o != ICON || p->n_name[0] ||
-		    getlval(p) < 0 || getlval(p) > 0x7fffffff)
+		    p->n_lval < 0 || p->n_lval > 0x7fffffff)
 			break;
 		return SRDIR;
 	case SMIXOR:
 		return tshape(p, SZERO);
 	case SMILWXOR:
 		if (o != ICON || p->n_name[0] ||
-		    getlval(p) == 0 || getlval(p) & 0xffffffff)
+		    p->n_lval == 0 || p->n_lval & 0xffffffff)
 			break;
 		return SRDIR;
 	case SMIHWXOR:
 		if (o != ICON || p->n_name[0] ||
-		     getlval(p) == 0 || (getlval(p) >> 32) != 0)
+		     p->n_lval == 0 || (p->n_lval >> 32) != 0)
 			break;
 		return SRDIR;
 	case SCON32:
 		if (o != ICON || p->n_name[0])
 			break;
-		if (getlval(p) < MIN_INT || getlval(p) > MAX_INT)
+		if (p->n_lval < MIN_INT || p->n_lval > MAX_INT)
 			break;
 		return SRDIR;
 	default:
@@ -1078,7 +1061,7 @@ retry:	switch (c) {
 		p->n_name = tmpstrdup(p->n_name);
 		w = strchr(p->n_name, c);
 		*w = 'r'; /* now reg */
-		return c == 'q' || c == 'x' || c == 't' ? 0 : 1;
+		return c == 'q' || c == 'x' ? 0 : 1;
 
 	case 'I':
 	case 'J':
@@ -1096,7 +1079,7 @@ retry:	switch (c) {
 			}
 			uerror("xasm arg not constant");
 		}
-		v = getlval(p->n_left);
+		v = p->n_left->n_lval;
 		if ((c == 'K' && v < -128) ||
 		    (c == 'L' && v != 0xff && v != 0xffff) ||
 		    (c != 'K' && v < 0) ||
@@ -1118,10 +1101,13 @@ retry:	switch (c) {
 	t = p->n_left->n_type;
 
 	if (t == FLOAT || t == DOUBLE) {
+		p->n_label = CLASSB;
 		reg += 16;
 	} else if (t == LDOUBLE) {
+		p->n_label = CLASSC;
 		reg += 32;
-	}
+	} else
+		p->n_label = CLASSA;
 
 	if (in && ut)
 		in = tcopy(in);
@@ -1211,14 +1197,6 @@ static struct {
 	{ "rdx", RDX },
 	{ "rsi", RSI },
 	{ "rdi", RDI },
-	{ "r8", R08 },
-	{ "r9", R09 },
-	{ "r10", R10 },
-	{ "r11", R11 },
-	{ "r12", R12 },
-	{ "r13", R13 },
-	{ "r14", R14 },
-	{ "r15", R15 },
 	{ "st", 040 },
 	{ "st(0)", 040 },
 	{ "st(1)", 041 },

@@ -1,4 +1,4 @@
-/* $NetBSD: dhcp6.h,v 1.15 2016/07/29 10:07:57 roy Exp $ */
+/* $NetBSD: dhcp6.h,v 1.1.1.7.2.2 2015/02/05 15:13:12 martin Exp $ */
 
 /*
  * dhcpcd - DHCP client daemon
@@ -166,16 +166,15 @@ enum DH6S {
 	DH6S_RENEW_REQUESTED,
 	DH6S_PROBE,
 	DH6S_DELEGATED,
-	DH6S_RELEASE,
-	DH6S_RELEASED
+	DH6S_RELEASE
 };
 
 struct dhcp6_state {
 	enum DH6S state;
-	struct timespec started;
+	time_t start_uptime;
 
 	/* Message retransmission timings */
-	struct timespec RT;
+	struct timeval RT;
 	unsigned int IMD;
 	unsigned int RTC;
 	time_t IRT;
@@ -200,8 +199,7 @@ struct dhcp6_state {
 	struct in6_addr unicast;
 	struct ipv6_addrhead addrs;
 	uint32_t lowpl;
-	/* The +3 is for the possible .pd extension for prefix delegation */
-	char leasefile[sizeof(LEASEFILE6) + IF_NAMESIZE + (IF_SSIDLEN * 4) +3];
+	char leasefile[sizeof(LEASEFILE6) + IF_NAMESIZE];
 	const char *reason;
 
 	struct authstate auth;
@@ -235,27 +233,24 @@ struct dhcp6_state {
 #ifdef INET6
 void dhcp6_printoptions(const struct dhcpcd_ctx *,
     const struct dhcp_opt *, size_t);
-const struct ipv6_addr *dhcp6_iffindaddr(const struct interface *ifp,
-    const struct in6_addr *addr, short flags);
 struct ipv6_addr *dhcp6_findaddr(struct dhcpcd_ctx *, const struct in6_addr *,
     short);
 size_t dhcp6_find_delegates(struct interface *);
 int dhcp6_start(struct interface *, enum DH6S);
 void dhcp6_reboot(struct interface *);
-void dhcp6_renew(struct interface *);
 ssize_t dhcp6_env(char **, const char *, const struct interface *,
     const struct dhcp6_message *, size_t);
 void dhcp6_free(struct interface *);
-void dhcp6_handleifa(int, struct ipv6_addr *);
+void dhcp6_handleifa(struct dhcpcd_ctx *, int, const char *,
+    const struct in6_addr *addr, int);
 int dhcp6_dadcompleted(const struct interface *);
 void dhcp6_drop(struct interface *, const char *);
-void dhcp6_dropnondelegates(struct interface *ifp);
 int dhcp6_dump(struct interface *);
 #else
+#define dhcp6_findaddr(a, b, c) (0)
 #define dhcp6_find_delegates(a) {}
 #define dhcp6_start(a, b) (0)
 #define dhcp6_reboot(a) {}
-#define dhcp6_renew(a) {}
 #define dhcp6_env(a, b, c, d, e) {}
 #define dhcp6_free(a) {}
 #define dhcp6_dadcompleted(a) (0)

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.xen,v 1.40 2015/08/24 14:04:25 uebayasi Exp $
+#	$NetBSD: Makefile.xen,v 1.37 2014/07/20 16:51:29 joerg Exp $
 #	NetBSD: Makefile.i386,v 1.132 2003/07/05 16:56:10 simonb Exp 
 
 # Makefile for NetBSD
@@ -108,7 +108,8 @@ TEXTADDR?=	0xc0100000
 TEXTADDR?=	0xffffffff80100000
 .endif
 LINKFLAGS_NORMAL=	-X
-KERNLDSCRIPT?=	$S/arch/${XEN_BUILD}/conf/kern.ldscript.Xen
+KERN_LDSCRIPT?=	kern.ldscript.Xen
+LINKFORMAT=	-T $S/arch/${XEN_BUILD}/conf/${KERN_LDSCRIPT}
 
 ##
 ## (6) port specific target dependencies

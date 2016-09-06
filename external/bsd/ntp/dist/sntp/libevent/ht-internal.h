@@ -1,4 +1,4 @@
-/*	$NetBSD: ht-internal.h,v 1.5 2016/01/08 21:35:40 christos Exp $	*/
+/*	$NetBSD: ht-internal.h,v 1.1.1.1.6.2 2015/04/23 18:53:05 snj Exp $	*/
 
 /* Copyright 2002 Christopher Clark */
 /* Copyright 2005-2012 Nick Mathewson */

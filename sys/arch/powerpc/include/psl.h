@@ -1,4 +1,4 @@
-/*	$NetBSD: psl.h,v 1.20 2015/07/06 05:36:26 matt Exp $	*/
+/*	$NetBSD: psl.h,v 1.19.4.1 2015/07/17 03:34:01 snj Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.

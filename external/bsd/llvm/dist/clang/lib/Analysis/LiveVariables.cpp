@@ -322,10 +322,11 @@ void TransferFunctions::Visit(Stmt *S) {
       return;
     }
   }
-
-  for (Stmt *Child : S->children()) {
-    if (Child)
-      AddLiveStmt(val.liveStmts, LV.SSetFact, Child);
+  
+  for (Stmt::child_iterator it = S->child_begin(), ei = S->child_end();
+       it != ei; ++it) {
+    if (Stmt *child = *it)
+      AddLiveStmt(val.liveStmts, LV.SSetFact, child);
   }
 }
 
@@ -355,8 +356,11 @@ void TransferFunctions::VisitBinaryOperator(BinaryOperator *B) {
 }
 
 void TransferFunctions::VisitBlockExpr(BlockExpr *BE) {
-  for (const VarDecl *VD :
-       LV.analysisContext.getReferencedBlockVars(BE->getBlockDecl())) {
+  AnalysisDeclContext::referenced_decls_iterator I, E;
+  std::tie(I, E) =
+    LV.analysisContext.getReferencedBlockVars(BE->getBlockDecl());
+  for ( ; I != E ; ++I) {
+    const VarDecl *VD = *I;
     if (isAlwaysAlive(VD))
       continue;
     val.liveDecls = LV.DSetFact.add(val.liveDecls, VD);

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.71 2015/03/21 19:10:43 jmcneill Exp $
+#	$NetBSD: Makefile,v 1.70.4.1 2015/03/26 10:54:35 martin Exp $
 #	@(#)Makefile	8.1 (Berkeley) 6/5/93
 
 # missing: dump.5 plot.5

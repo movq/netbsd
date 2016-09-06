@@ -33,10 +33,14 @@ void HexagonTargetObjectFile::Initialize(MCContext &Ctx,
   TargetLoweringObjectFileELF::Initialize(Ctx, TM);
   InitializeELF(TM.Options.UseInitArray);
 
-  SmallDataSection = getContext().getELFSection(
-      ".sdata", ELF::SHT_PROGBITS, ELF::SHF_WRITE | ELF::SHF_ALLOC);
-  SmallBSSSection = getContext().getELFSection(".sbss", ELF::SHT_NOBITS,
-                                               ELF::SHF_WRITE | ELF::SHF_ALLOC);
+  SmallDataSection =
+    getContext().getELFSection(".sdata", ELF::SHT_PROGBITS,
+                               ELF::SHF_WRITE | ELF::SHF_ALLOC,
+                               SectionKind::getDataRel());
+  SmallBSSSection =
+    getContext().getELFSection(".sbss", ELF::SHT_NOBITS,
+                               ELF::SHF_WRITE | ELF::SHF_ALLOC,
+                               SectionKind::getBSS());
 }
 
 // sdata/sbss support taken largely from the MIPS Backend.
@@ -73,16 +77,16 @@ IsGlobalInSmallSection(const GlobalValue *GV, const TargetMachine &TM,
   if (!GVA)
     return false;
 
-  if (Kind.isBSS() || Kind.isData() || Kind.isCommon()) {
+  if (Kind.isBSS() || Kind.isDataNoRel() || Kind.isCommon()) {
     Type *Ty = GV->getType()->getElementType();
     return IsInSmallSection(
-        GV->getParent()->getDataLayout().getTypeAllocSize(Ty));
+        TM.getSubtargetImpl()->getDataLayout()->getTypeAllocSize(Ty));
   }
 
   return false;
 }
 
-MCSection *
+const MCSection *
 HexagonTargetObjectFile::SelectSectionForGlobal(const GlobalValue *GV,
                                                 SectionKind Kind, Mangler &Mang,
                                                 const TargetMachine &TM) const {
@@ -90,7 +94,7 @@ HexagonTargetObjectFile::SelectSectionForGlobal(const GlobalValue *GV,
   // Handle Small Section classification here.
   if (Kind.isBSS() && IsGlobalInSmallSection(GV, TM, Kind))
     return SmallBSSSection;
-  if (Kind.isData() && IsGlobalInSmallSection(GV, TM, Kind))
+  if (Kind.isDataNoRel() && IsGlobalInSmallSection(GV, TM, Kind))
     return SmallDataSection;
 
   // Otherwise, we work the same as ELF.

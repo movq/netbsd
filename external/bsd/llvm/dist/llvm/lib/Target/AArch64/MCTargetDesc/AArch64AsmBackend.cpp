@@ -18,7 +18,6 @@
 #include "llvm/MC/MCObjectWriter.h"
 #include "llvm/MC/MCSectionELF.h"
 #include "llvm/MC/MCSectionMachO.h"
-#include "llvm/MC/MCValue.h"
 #include "llvm/Support/ErrorHandling.h"
 #include "llvm/Support/MachO.h"
 using namespace llvm;
@@ -247,12 +246,15 @@ bool AArch64AsmBackend::writeNopData(uint64_t Count, MCObjectWriter *OW) const {
   // If the count is not 4-byte aligned, we must be writing data into the text
   // section (otherwise we have unaligned instructions, and thus have far
   // bigger problems), so just write zeros instead.
-  OW->WriteZeros(Count % 4);
+  if ((Count & 3) != 0) {
+    for (uint64_t i = 0, e = (Count & 3); i != e; ++i)
+      OW->Write8(0);
+  }
 
   // We are properly aligned, so write NOPs as requested.
   Count /= 4;
   for (uint64_t i = 0; i != Count; ++i)
-    OW->write32(0xd503201f);
+    OW->Write32(0xd503201f);
   return true;
 }
 
@@ -310,9 +312,45 @@ public:
   DarwinAArch64AsmBackend(const Target &T, const MCRegisterInfo &MRI)
       : AArch64AsmBackend(T), MRI(MRI) {}
 
-  MCObjectWriter *createObjectWriter(raw_pwrite_stream &OS) const override {
+  MCObjectWriter *createObjectWriter(raw_ostream &OS) const override {
     return createAArch64MachObjectWriter(OS, MachO::CPU_TYPE_ARM64,
                                          MachO::CPU_SUBTYPE_ARM64_ALL);
+  }
+
+  bool doesSectionRequireSymbols(const MCSection &Section) const override {
+    // Any section for which the linker breaks things into atoms needs to
+    // preserve symbols, including assembler local symbols, to identify
+    // those atoms. These sections are:
+    // Sections of type:
+    //
+    //    S_CSTRING_LITERALS  (e.g. __cstring)
+    //    S_LITERAL_POINTERS  (e.g.  objc selector pointers)
+    //    S_16BYTE_LITERALS, S_8BYTE_LITERALS, S_4BYTE_LITERALS
+    //
+    // Sections named:
+    //
+    //    __TEXT,__eh_frame
+    //    __TEXT,__ustring
+    //    __DATA,__cfstring
+    //    __DATA,__objc_classrefs
+    //    __DATA,__objc_catlist
+    //
+    // FIXME: It would be better if the compiler used actual linker local
+    // symbols for each of these sections rather than preserving what
+    // are ostensibly assembler local symbols.
+    const MCSectionMachO &SMO = static_cast<const MCSectionMachO &>(Section);
+    return (SMO.getType() == MachO::S_CSTRING_LITERALS ||
+            SMO.getType() == MachO::S_4BYTE_LITERALS ||
+            SMO.getType() == MachO::S_8BYTE_LITERALS ||
+            SMO.getType() == MachO::S_16BYTE_LITERALS ||
+            SMO.getType() == MachO::S_LITERAL_POINTERS ||
+            (SMO.getSegmentName() == "__TEXT" &&
+             (SMO.getSectionName() == "__eh_frame" ||
+              SMO.getSectionName() == "__ustring")) ||
+            (SMO.getSegmentName() == "__DATA" &&
+             (SMO.getSectionName() == "__cfstring" ||
+              SMO.getSectionName() == "__objc_classrefs" ||
+              SMO.getSectionName() == "__objc_catlist")));
   }
 
   /// \brief Generate the compact unwind encoding from the CFI directives.
@@ -458,7 +496,7 @@ public:
   ELFAArch64AsmBackend(const Target &T, uint8_t OSABI, bool IsLittleEndian)
     : AArch64AsmBackend(T), OSABI(OSABI), IsLittleEndian(IsLittleEndian) {}
 
-  MCObjectWriter *createObjectWriter(raw_pwrite_stream &OS) const override {
+  MCObjectWriter *createObjectWriter(raw_ostream &OS) const override {
     return createAArch64ELFObjectWriter(OS, OSABI, IsLittleEndian);
   }
 
@@ -491,28 +529,14 @@ void ELFAArch64AsmBackend::processFixupValue(
     IsResolved = false;
 }
 
-// Returns whether this fixup is based on an address in the .eh_frame section,
-// and therefore should be byte swapped.
-// FIXME: Should be replaced with something more principled.
-static bool isByteSwappedFixup(const MCExpr *E) {
-  MCValue Val;
-  if (!E->evaluateAsRelocatable(Val, nullptr, nullptr))
-    return false;
-
-  if (!Val.getSymA() || Val.getSymA()->getSymbol().isUndefined())
-    return false;
-
-  const MCSectionELF *SecELF =
-      dyn_cast<MCSectionELF>(&Val.getSymA()->getSymbol().getSection());
-  return SecELF->getSectionName() == ".eh_frame";
-}
-
 void ELFAArch64AsmBackend::applyFixup(const MCFixup &Fixup, char *Data,
                                       unsigned DataSize, uint64_t Value,
                                       bool IsPCRel) const {
   // store fixups in .eh_frame section in big endian order
   if (!IsLittleEndian && Fixup.getKind() == FK_Data_4) {
-    if (isByteSwappedFixup(Fixup.getValue()))
+    const MCSection *Sec = Fixup.getValue()->FindAssociatedSection();
+    const MCSectionELF *SecELF = dyn_cast_or_null<const MCSectionELF>(Sec);
+    if (SecELF && SecELF->getSectionName() == ".eh_frame")
       Value = ByteSwap_32(unsigned(Value));
   }
   AArch64AsmBackend::applyFixup (Fixup, Data, DataSize, Value, IsPCRel);
@@ -520,10 +544,11 @@ void ELFAArch64AsmBackend::applyFixup(const MCFixup &Fixup, char *Data,
 }
 
 MCAsmBackend *llvm::createAArch64leAsmBackend(const Target &T,
-                                              const MCRegisterInfo &MRI,
-                                              const Triple &TheTriple,
-                                              StringRef CPU) {
-  if (TheTriple.isOSBinFormatMachO())
+                                            const MCRegisterInfo &MRI,
+                                            StringRef TT, StringRef CPU) {
+  Triple TheTriple(TT);
+
+  if (TheTriple.isOSDarwin())
     return new DarwinAArch64AsmBackend(T, MRI);
 
   assert(TheTriple.isOSBinFormatELF() && "Expect either MachO or ELF target");
@@ -532,9 +557,10 @@ MCAsmBackend *llvm::createAArch64leAsmBackend(const Target &T,
 }
 
 MCAsmBackend *llvm::createAArch64beAsmBackend(const Target &T,
-                                              const MCRegisterInfo &MRI,
-                                              const Triple &TheTriple,
-                                              StringRef CPU) {
+                                            const MCRegisterInfo &MRI,
+                                            StringRef TT, StringRef CPU) {
+  Triple TheTriple(TT);
+
   assert(TheTriple.isOSBinFormatELF() &&
          "Big endian is only supported for ELF targets!");
   uint8_t OSABI = MCELFObjectTargetWriter::getOSABI(TheTriple.getOS());

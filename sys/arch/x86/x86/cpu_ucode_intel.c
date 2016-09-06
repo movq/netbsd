@@ -1,4 +1,4 @@
-/* $NetBSD: cpu_ucode_intel.c,v 1.10 2015/10/04 21:08:30 jym Exp $ */
+/* $NetBSD: cpu_ucode_intel.c,v 1.5.4.3 2015/11/06 22:50:56 riz Exp $ */
 /*
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cpu_ucode_intel.c,v 1.10 2015/10/04 21:08:30 jym Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cpu_ucode_intel.c,v 1.5.4.3 2015/11/06 22:50:56 riz Exp $");
 
 #include "opt_xen.h"
 #include "opt_cpu_ucode.h"

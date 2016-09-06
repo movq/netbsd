@@ -19,7 +19,6 @@
 #include "llvm/IR/Constants.h"
 #include "llvm/IR/Instructions.h"
 #include "llvm/IR/IntrinsicInst.h"
-#include "llvm/IR/Module.h"
 #include "llvm/Support/Debug.h"
 #include "llvm/Support/raw_ostream.h"
 #include "llvm/Transforms/Utils/BasicBlockUtils.h"
@@ -151,13 +150,12 @@ Value *SSAUpdater::GetValueInMiddleOfBlock(BasicBlock *BB) {
                                          ProtoName, &BB->front());
 
   // Fill in all the predecessors of the PHI.
-  for (const auto &PredValue : PredValues)
-    InsertedPHI->addIncoming(PredValue.second, PredValue.first);
+  for (unsigned i = 0, e = PredValues.size(); i != e; ++i)
+    InsertedPHI->addIncoming(PredValues[i].second, PredValues[i].first);
 
   // See if the PHI node can be merged to a single value.  This can happen in
   // loop cases when we get a PHI of itself and one other value.
-  if (Value *V =
-          SimplifyInstruction(InsertedPHI, BB->getModule()->getDataLayout())) {
+  if (Value *V = SimplifyInstruction(InsertedPHI)) {
     InsertedPHI->eraseFromParent();
     return V;
   }
@@ -247,7 +245,8 @@ public:
     // but it is relatively slow.  If we already have PHI nodes in this
     // block, walk one of them to get the predecessor list instead.
     if (PHINode *SomePhi = dyn_cast<PHINode>(BB->begin())) {
-      Preds->append(SomePhi->block_begin(), SomePhi->block_end());
+      for (unsigned PI = 0, E = SomePhi->getNumIncomingValues(); PI != E; ++PI)
+        Preds->push_back(SomePhi->getIncomingBlock(PI));
     } else {
       for (pred_iterator PI = pred_begin(BB), E = pred_end(BB); PI != E; ++PI)
         Preds->push_back(*PI);
@@ -322,12 +321,12 @@ Value *SSAUpdater::GetValueAtEndOfBlockInternal(BasicBlock *BB) {
 //===----------------------------------------------------------------------===//
 
 LoadAndStorePromoter::
-LoadAndStorePromoter(ArrayRef<const Instruction*> Insts,
+LoadAndStorePromoter(const SmallVectorImpl<Instruction*> &Insts,
                      SSAUpdater &S, StringRef BaseName) : SSA(S) {
   if (Insts.empty()) return;
   
-  const Value *SomeVal;
-  if (const LoadInst *LI = dyn_cast<LoadInst>(Insts[0]))
+  Value *SomeVal;
+  if (LoadInst *LI = dyn_cast<LoadInst>(Insts[0]))
     SomeVal = LI;
   else
     SomeVal = cast<StoreInst>(Insts[0])->getOperand(0);
@@ -345,17 +344,20 @@ run(const SmallVectorImpl<Instruction*> &Insts) const {
   // This is important because we have to handle multiple defs/uses in a block
   // ourselves: SSAUpdater is purely for cross-block references.
   DenseMap<BasicBlock*, TinyPtrVector<Instruction*> > UsesByBlock;
-
-  for (Instruction *User : Insts)
+  
+  for (unsigned i = 0, e = Insts.size(); i != e; ++i) {
+    Instruction *User = Insts[i];
     UsesByBlock[User->getParent()].push_back(User);
+  }
   
   // Okay, now we can iterate over all the blocks in the function with uses,
   // processing them.  Keep track of which loads are loading a live-in value.
   // Walk the uses in the use-list order to be determinstic.
   SmallVector<LoadInst*, 32> LiveInLoads;
   DenseMap<Value*, Value*> ReplacedLoads;
-
-  for (Instruction *User : Insts) {
+  
+  for (unsigned i = 0, e = Insts.size(); i != e; ++i) {
+    Instruction *User = Insts[i];
     BasicBlock *BB = User->getParent();
     TinyPtrVector<Instruction*> &BlockUses = UsesByBlock[BB];
     
@@ -378,8 +380,8 @@ run(const SmallVectorImpl<Instruction*> &Insts) const {
     
     // Otherwise, check to see if this block is all loads.
     bool HasStore = false;
-    for (Instruction *I : BlockUses) {
-      if (isa<StoreInst>(I)) {
+    for (unsigned i = 0, e = BlockUses.size(); i != e; ++i) {
+      if (isa<StoreInst>(BlockUses[i])) {
         HasStore = true;
         break;
       }
@@ -389,8 +391,8 @@ run(const SmallVectorImpl<Instruction*> &Insts) const {
     // efficient way to tell which on is first in the block and don't want to
     // scan large blocks, so just add all loads as live ins.
     if (!HasStore) {
-      for (Instruction *I : BlockUses)
-        LiveInLoads.push_back(cast<LoadInst>(I));
+      for (unsigned i = 0, e = BlockUses.size(); i != e; ++i)
+        LiveInLoads.push_back(cast<LoadInst>(BlockUses[i]));
       BlockUses.clear();
       continue;
     }
@@ -401,8 +403,8 @@ run(const SmallVectorImpl<Instruction*> &Insts) const {
     // block is a load, then it uses the live in value.  The last store defines
     // the live out value.  We handle this by doing a linear scan of the block.
     Value *StoredValue = nullptr;
-    for (Instruction &I : *BB) {
-      if (LoadInst *L = dyn_cast<LoadInst>(&I)) {
+    for (BasicBlock::iterator II = BB->begin(), E = BB->end(); II != E; ++II) {
+      if (LoadInst *L = dyn_cast<LoadInst>(II)) {
         // If this is a load from an unrelated pointer, ignore it.
         if (!isInstInList(L, Insts)) continue;
         
@@ -417,8 +419,8 @@ run(const SmallVectorImpl<Instruction*> &Insts) const {
         }
         continue;
       }
-
-      if (StoreInst *SI = dyn_cast<StoreInst>(&I)) {
+      
+      if (StoreInst *SI = dyn_cast<StoreInst>(II)) {
         // If this is a store to an unrelated pointer, ignore it.
         if (!isInstInList(SI, Insts)) continue;
         updateDebugInfo(SI);
@@ -436,7 +438,8 @@ run(const SmallVectorImpl<Instruction*> &Insts) const {
   
   // Okay, now we rewrite all loads that use live-in values in the loop,
   // inserting PHI nodes as necessary.
-  for (LoadInst *ALoad : LiveInLoads) {
+  for (unsigned i = 0, e = LiveInLoads.size(); i != e; ++i) {
+    LoadInst *ALoad = LiveInLoads[i];
     Value *NewVal = SSA.GetValueInMiddleOfBlock(ALoad->getParent());
     replaceLoadWithValue(ALoad, NewVal);
 
@@ -451,7 +454,9 @@ run(const SmallVectorImpl<Instruction*> &Insts) const {
   
   // Now that everything is rewritten, delete the old instructions from the
   // function.  They should all be dead now.
-  for (Instruction *User : Insts) {
+  for (unsigned i = 0, e = Insts.size(); i != e; ++i) {
+    Instruction *User = Insts[i];
+    
     // If this is a load that still has uses, then the load must have been added
     // as a live value in the SSAUpdate data structure for a block (e.g. because
     // the loaded value was stored later).  In this case, we need to recursively

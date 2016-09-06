@@ -1,4 +1,4 @@
-/*	$NetBSD: npftest.c,v 1.19 2016/01/25 12:24:41 pooka Exp $	*/
+/*	$NetBSD: npftest.c,v 1.17 2014/02/13 03:34:40 rmind Exp $	*/
 
 /*
  * NPF testing framework.
@@ -19,8 +19,6 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <arpa/inet.h>
-
-#include <prop/proplib.h>
 
 #include <rump/rump.h>
 #include <rump/rump_syscalls.h>
@@ -117,7 +115,7 @@ load_npf_config(const char *config)
 	/* Pass the XML configuration for NPF kernel component to load. */
 	error = rumpns_npf_test_load(xml);
 	if (error) {
-		errx(EXIT_FAILURE, "npf_test_load: %s", strerror(error));
+		errx(EXIT_FAILURE, "npf_test_load: %s\n", strerror(error));
 	}
 	free(xml);
 

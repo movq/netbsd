@@ -1,4 +1,4 @@
-/*	$NetBSD: uipc_socket.c,v 1.248 2016/06/10 13:27:15 ozaki-r Exp $	*/
+/*	$NetBSD: uipc_socket.c,v 1.234 2014/08/09 05:33:00 rtr Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2007, 2008, 2009 The NetBSD Foundation, Inc.
@@ -71,17 +71,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uipc_socket.c,v 1.248 2016/06/10 13:27:15 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: uipc_socket.c,v 1.234 2014/08/09 05:33:00 rtr Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
 #include "opt_sock_counters.h"
 #include "opt_sosend_loan.h"
 #include "opt_mbuftrace.h"
 #include "opt_somaxkva.h"
 #include "opt_multiprocessor.h"	/* XXX */
-#include "opt_sctp.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -603,7 +600,7 @@ fsocreate(int domain, struct socket **sop, int type, int proto, int *fdout)
 	if (flags & SOCK_NONBLOCK) {
 		so->so_state |= SS_NBIO;
 	}
-	fp->f_socket = so;
+	fp->f_data = so;
 	fd_affix(curproc, fp, fd);
 
 	if (sop != NULL) {
@@ -627,15 +624,11 @@ sofamily(const struct socket *so)
 }
 
 int
-sobind(struct socket *so, struct sockaddr *nam, struct lwp *l)
+sobind(struct socket *so, struct mbuf *nam, struct lwp *l)
 {
 	int	error;
 
 	solock(so);
-	if (nam->sa_family != so->so_proto->pr_domain->dom_family) {
-		sounlock(so);
-		return EAFNOSUPPORT;
-	}
 	error = (*so->so_proto->pr_usrreqs->pr_bind)(so, nam, l);
 	sounlock(so);
 	return error;
@@ -645,7 +638,6 @@ int
 solisten(struct socket *so, int backlog, struct lwp *l)
 {
 	int	error;
-	short	oldopt, oldqlimit;
 
 	solock(so);
 	if ((so->so_state & (SS_ISCONNECTED | SS_ISCONNECTING | 
@@ -653,21 +645,16 @@ solisten(struct socket *so, int backlog, struct lwp *l)
 		sounlock(so);
 		return EINVAL;
 	}
-	oldopt = so->so_options;
-	oldqlimit = so->so_qlimit;
+	error = (*so->so_proto->pr_usrreqs->pr_listen)(so, l);
+	if (error != 0) {
+		sounlock(so);
+		return error;
+	}
 	if (TAILQ_EMPTY(&so->so_q))
 		so->so_options |= SO_ACCEPTCONN;
 	if (backlog < 0)
 		backlog = 0;
 	so->so_qlimit = min(backlog, somaxconn);
-
-	error = (*so->so_proto->pr_usrreqs->pr_listen)(so, l);
-	if (error != 0) {
-		so->so_options = oldopt;
-		so->so_qlimit = oldqlimit;
-		sounlock(so);
-		return error;
-	}
 	sounlock(so);
 	return 0;
 }
@@ -802,7 +789,7 @@ soabort(struct socket *so)
 }
 
 int
-soaccept(struct socket *so, struct sockaddr *nam)
+soaccept(struct socket *so, struct mbuf *nam)
 {
 	int error;
 
@@ -820,7 +807,7 @@ soaccept(struct socket *so, struct sockaddr *nam)
 }
 
 int
-soconnect(struct socket *so, struct sockaddr *nam, struct lwp *l)
+soconnect(struct socket *so, struct mbuf *nam, struct lwp *l)
 {
 	int error;
 
@@ -836,14 +823,10 @@ soconnect(struct socket *so, struct sockaddr *nam, struct lwp *l)
 	 */
 	if (so->so_state & (SS_ISCONNECTED|SS_ISCONNECTING) &&
 	    ((so->so_proto->pr_flags & PR_CONNREQUIRED) ||
-	    (error = sodisconnect(so)))) {
+	    (error = sodisconnect(so))))
 		error = EISCONN;
-	} else {
-		if (nam->sa_family != so->so_proto->pr_domain->dom_family) {
-			return EAFNOSUPPORT;
-		}
+	else
 		error = (*so->so_proto->pr_usrreqs->pr_connect)(so, nam, l);
-	}
 
 	return error;
 }
@@ -892,8 +875,8 @@ sodisconnect(struct socket *so)
  * Data and control buffers are freed on return.
  */
 int
-sosend(struct socket *so, struct sockaddr *addr, struct uio *uio,
-	struct mbuf *top, struct mbuf *control, int flags, struct lwp *l)
+sosend(struct socket *so, struct mbuf *addr, struct uio *uio, struct mbuf *top,
+	struct mbuf *control, int flags, struct lwp *l)
 {
 	struct mbuf	**mp, *m;
 	long		space, len, resid, clen, mlen;
@@ -950,7 +933,7 @@ sosend(struct socket *so, struct sockaddr *addr, struct uio *uio,
 					error = ENOTCONN;
 					goto release;
 				}
-			} else if (addr == NULL) {
+			} else if (addr == 0) {
 				error = EDESTADDRREQ;
 				goto release;
 			}
@@ -998,7 +981,7 @@ sosend(struct socket *so, struct sockaddr *addr, struct uio *uio,
 					m = m_gethdr(M_WAIT, MT_DATA);
 					mlen = MHLEN;
 					m->m_pkthdr.len = 0;
-					m_reset_rcvif(m);
+					m->m_pkthdr.rcvif = NULL;
 				} else {
 					m = m_get(M_WAIT, MT_DATA);
 					mlen = MLEN;
@@ -1064,13 +1047,12 @@ sosend(struct socket *so, struct sockaddr *addr, struct uio *uio,
 				so->so_options |= SO_DONTROUTE;
 			if (resid > 0)
 				so->so_state |= SS_MORETOCOME;
-			if (flags & MSG_OOB) {
+			if (flags & MSG_OOB)
 				error = (*so->so_proto->pr_usrreqs->pr_sendoob)(so,
 				    top, control);
-			} else {
+			else
 				error = (*so->so_proto->pr_usrreqs->pr_send)(so,
 				    top, addr, control, l);
-			}
 			if (dontroute)
 				so->so_options &= ~SO_DONTROUTE;
 			if (resid > 0)
@@ -1330,31 +1312,6 @@ soreceive(struct socket *so, struct mbuf **paddr, struct uio *uio,
 			sbsync(&so->so_rcv, nextrecord);
 		}
 	}
-	if (pr->pr_flags & PR_ADDR_OPT) {
-		/*
-		 * For SCTP we may be getting a
-		 * whole message OR a partial delivery.
-		 */
-		if (m->m_type == MT_SONAME) {
-			orig_resid = 0;
-			if (flags & MSG_PEEK) {
-				if (paddr)
-					*paddr = m_copy(m, 0, m->m_len);
-				m = m->m_next;
-			} else {
-				sbfree(&so->so_rcv, m);
-				if (paddr) {
-					*paddr = m;
-					so->so_rcv.sb_mb = m->m_next;
-					m->m_next = 0;
-					m = so->so_rcv.sb_mb;
-				} else {
-					MFREE(m, so->so_rcv.sb_mb);
-					m = so->so_rcv.sb_mb;
-				}
-			}
-		}
-	}
 
 	/*
 	 * Process one or more MT_CONTROL mbufs present before any data mbufs
@@ -1489,10 +1446,6 @@ soreceive(struct socket *so, struct mbuf **paddr, struct uio *uio,
 		if (len == m->m_len - moff) {
 			if (m->m_flags & M_EOR)
 				flags |= MSG_EOR;
-#ifdef SCTP
-			if (m->m_flags & M_NOTIFICATION)
-				flags |= MSG_NOTIFICATION;
-#endif /* SCTP */
 			if (flags & MSG_PEEK) {
 				m = m->m_next;
 				moff = 0;
@@ -2220,7 +2173,7 @@ filt_sordetach(struct knote *kn)
 {
 	struct socket	*so;
 
-	so = ((file_t *)kn->kn_obj)->f_socket;
+	so = ((file_t *)kn->kn_obj)->f_data;
 	solock(so);
 	SLIST_REMOVE(&so->so_rcv.sb_sel.sel_klist, kn, knote, kn_selnext);
 	if (SLIST_EMPTY(&so->so_rcv.sb_sel.sel_klist))
@@ -2235,7 +2188,7 @@ filt_soread(struct knote *kn, long hint)
 	struct socket	*so;
 	int rv;
 
-	so = ((file_t *)kn->kn_obj)->f_socket;
+	so = ((file_t *)kn->kn_obj)->f_data;
 	if (hint != NOTE_SUBMIT)
 		solock(so);
 	kn->kn_data = so->so_rcv.sb_cc;
@@ -2259,7 +2212,7 @@ filt_sowdetach(struct knote *kn)
 {
 	struct socket	*so;
 
-	so = ((file_t *)kn->kn_obj)->f_socket;
+	so = ((file_t *)kn->kn_obj)->f_data;
 	solock(so);
 	SLIST_REMOVE(&so->so_snd.sb_sel.sel_klist, kn, knote, kn_selnext);
 	if (SLIST_EMPTY(&so->so_snd.sb_sel.sel_klist))
@@ -2274,7 +2227,7 @@ filt_sowrite(struct knote *kn, long hint)
 	struct socket	*so;
 	int rv;
 
-	so = ((file_t *)kn->kn_obj)->f_socket;
+	so = ((file_t *)kn->kn_obj)->f_data;
 	if (hint != NOTE_SUBMIT)
 		solock(so);
 	kn->kn_data = sbspace(&so->so_snd);
@@ -2303,7 +2256,7 @@ filt_solisten(struct knote *kn, long hint)
 	struct socket	*so;
 	int rv;
 
-	so = ((file_t *)kn->kn_obj)->f_socket;
+	so = ((file_t *)kn->kn_obj)->f_data;
 
 	/*
 	 * Set kn_data to number of incoming connections, not
@@ -2331,7 +2284,7 @@ soo_kqfilter(struct file *fp, struct knote *kn)
 	struct socket	*so;
 	struct sockbuf	*sb;
 
-	so = ((file_t *)kn->kn_obj)->f_socket;
+	so = ((file_t *)kn->kn_obj)->f_data;
 	solock(so);
 	switch (kn->kn_filter) {
 	case EVFILT_READ:

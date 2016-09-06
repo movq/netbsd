@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -222,7 +222,6 @@ AcpiOsGetTableByName (
     HKEY                    SubKey;
     ULONG                   i;
     ACPI_TABLE_HEADER       *ReturnTable;
-    ACPI_STATUS             Status = AE_OK;
 
 
     /*
@@ -238,7 +237,7 @@ AcpiOsGetTableByName (
 
     while (1)
     {
-        strcpy (KeyBuffer, "HARDWARE\\ACPI\\");
+        ACPI_STRCPY (KeyBuffer, "HARDWARE\\ACPI\\");
         if (AcpiUtSafeStrcat (KeyBuffer, sizeof (KeyBuffer), Signature))
         {
             return (AE_BUFFER_OVERFLOW);
@@ -295,8 +294,7 @@ AcpiOsGetTableByName (
         {
             fprintf (stderr, "Could not open %s entry: %s\n",
                 Signature, WindowsFormatException (WinStatus));
-            Status = AE_ERROR;
-            goto Cleanup;
+            return (AE_ERROR);
         }
 
         RegCloseKey (Handle);
@@ -315,8 +313,7 @@ AcpiOsGetTableByName (
         {
             fprintf (stderr, "Could not get %s registry entry: %s\n",
                 Signature, WindowsFormatException (WinStatus));
-            Status = AE_ERROR;
-            goto Cleanup;
+            return (AE_ERROR);
         }
 
         if (Type == REG_BINARY)
@@ -333,8 +330,7 @@ AcpiOsGetTableByName (
     {
         fprintf (stderr, "Could not read the %s table size: %s\n",
             Signature, WindowsFormatException (WinStatus));
-        Status = AE_ERROR;
-        goto Cleanup;
+        return (AE_ERROR);
     }
 
     /* Allocate a new buffer for the table */
@@ -342,7 +338,6 @@ AcpiOsGetTableByName (
     ReturnTable = malloc (DataSize);
     if (!ReturnTable)
     {
-        Status = AE_NO_MEMORY;
         goto Cleanup;
     }
 
@@ -355,16 +350,15 @@ AcpiOsGetTableByName (
         fprintf (stderr, "Could not read %s data: %s\n",
             Signature, WindowsFormatException (WinStatus));
         free (ReturnTable);
-        Status = AE_ERROR;
-        goto Cleanup;
+        return (AE_ERROR);
     }
-
-    *Table = ReturnTable;
-    *Address = 0;
 
 Cleanup:
     RegCloseKey (Handle);
-    return (Status);
+
+    *Table = ReturnTable;
+    *Address = 0;
+    return (AE_OK);
 }
 
 

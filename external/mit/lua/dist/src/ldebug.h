@@ -1,4 +1,4 @@
-/*	$NetBSD: ldebug.h,v 1.5 2016/01/28 14:41:39 lneto Exp $	*/
+/*	$NetBSD: ldebug.h,v 1.2.2.2 2015/11/16 11:14:48 msaitoh Exp $	*/
 
 /*
 ** Id: ldebug.h,v 2.14 2015/05/22 17:45:56 roberto Exp 

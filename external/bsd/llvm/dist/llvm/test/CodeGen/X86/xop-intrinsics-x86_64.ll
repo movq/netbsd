@@ -8,14 +8,14 @@ define <2 x double> @test_int_x86_xop_vpermil2pd(<2 x double> %a0, <2 x double> 
 define <2 x double> @test_int_x86_xop_vpermil2pd_mr(<2 x double> %a0, <2 x double>* %a1, <2 x double> %a2) {
   ; CHECK-NOT: vmovaps
   ; CHECK: vpermil2pd
-  %vec = load <2 x double>, <2 x double>* %a1
+  %vec = load <2 x double>* %a1
   %res = call <2 x double> @llvm.x86.xop.vpermil2pd(<2 x double> %a0, <2 x double> %vec, <2 x double> %a2, i8 1) ;  [#uses=1]
   ret <2 x double> %res
 }
 define <2 x double> @test_int_x86_xop_vpermil2pd_rm(<2 x double> %a0, <2 x double> %a1, <2 x double>* %a2) {
   ; CHECK-NOT: vmovaps
   ; CHECK: vpermil2pd
-  %vec = load <2 x double>, <2 x double>* %a2
+  %vec = load <2 x double>* %a2
   %res = call <2 x double> @llvm.x86.xop.vpermil2pd(<2 x double> %a0, <2 x double> %a1, <2 x double> %vec, i8 1) ;  [#uses=1]
   ret <2 x double> %res
 }
@@ -31,7 +31,7 @@ define <4 x double> @test_int_x86_xop_vpermil2pd_256_mr(<4 x double> %a0, <4 x d
   ; CHECK-NOT: vmovaps
   ; CHECK: vpermil2pd
   ; CHECK: ymm
-  %vec = load <4 x double>, <4 x double>* %a1
+  %vec = load <4 x double>* %a1
   %res = call <4 x double> @llvm.x86.xop.vpermil2pd.256(<4 x double> %a0, <4 x double> %vec, <4 x double> %a2, i8 2) ;
   ret <4 x double> %res
 }
@@ -39,7 +39,7 @@ define <4 x double> @test_int_x86_xop_vpermil2pd_256_rm(<4 x double> %a0, <4 x d
   ; CHECK-NOT: vmovaps
   ; CHECK: vpermil2pd
   ; CHECK: ymm
-  %vec = load <4 x double>, <4 x double>* %a2
+  %vec = load <4 x double>* %a2
   %res = call <4 x double> @llvm.x86.xop.vpermil2pd.256(<4 x double> %a0, <4 x double> %a1, <4 x double> %vec, i8 2) ;
   ret <4 x double> %res
 }
@@ -61,14 +61,15 @@ define <8 x float> @test_int_x86_xop_vpermil2ps_256(<8 x float> %a0, <8 x float>
 declare <8 x float> @llvm.x86.xop.vpermil2ps.256(<8 x float>, <8 x float>, <8 x float>, i8) nounwind readnone
 
 define <2 x i64> @test_int_x86_xop_vpcmov(<2 x i64> %a0, <2 x i64> %a1, <2 x i64> %a2) {
-  ; CHECK: vpcmov %xmm2, %xmm1, %xmm0, %xmm0
+  ; CHECK: vpcmov
   %res = call <2 x i64> @llvm.x86.xop.vpcmov(<2 x i64> %a0, <2 x i64> %a1, <2 x i64> %a2) ;
   ret <2 x i64> %res
 }
 declare <2 x i64> @llvm.x86.xop.vpcmov(<2 x i64>, <2 x i64>, <2 x i64>) nounwind readnone
 
 define <4 x i64> @test_int_x86_xop_vpcmov_256(<4 x i64> %a0, <4 x i64> %a1, <4 x i64> %a2) {
-  ; CHECK: vpcmov %ymm2, %ymm1, %ymm0, %ymm0
+  ; CHECK: vpcmov
+  ; CHECK: ymm
   %res = call <4 x i64> @llvm.x86.xop.vpcmov.256(<4 x i64> %a0, <4 x i64> %a1, <4 x i64> %a2) ;
   ret <4 x i64> %res
 }
@@ -76,7 +77,7 @@ define <4 x i64> @test_int_x86_xop_vpcmov_256_mr(<4 x i64> %a0, <4 x i64>* %a1, 
   ; CHECK-NOT: vmovaps
   ; CHECK: vpcmov
   ; CHECK: ymm
-  %vec = load <4 x i64>, <4 x i64>* %a1
+  %vec = load <4 x i64>* %a1
   %res = call <4 x i64> @llvm.x86.xop.vpcmov.256(<4 x i64> %a0, <4 x i64> %vec, <4 x i64> %a2) ;
   ret <4 x i64> %res
 }
@@ -84,462 +85,462 @@ define <4 x i64> @test_int_x86_xop_vpcmov_256_rm(<4 x i64> %a0, <4 x i64> %a1, <
   ; CHECK-NOT: vmovaps
   ; CHECK: vpcmov
   ; CHECK: ymm
- %vec = load <4 x i64>, <4 x i64>* %a2
+ %vec = load <4 x i64>* %a2
  %res = call <4 x i64> @llvm.x86.xop.vpcmov.256(<4 x i64> %a0, <4 x i64> %a1, <4 x i64> %vec) ;
   ret <4 x i64> %res
 }
 declare <4 x i64> @llvm.x86.xop.vpcmov.256(<4 x i64>, <4 x i64>, <4 x i64>) nounwind readnone
 
 define <16 x i8> @test_int_x86_xop_vpcomeqb(<16 x i8> %a0, <16 x i8> %a1) {
-  ; CHECK:vpcomeqb
+  ; CHECK:vpcomb
   %res = call <16 x i8> @llvm.x86.xop.vpcomeqb(<16 x i8> %a0, <16 x i8> %a1) ;
   ret <16 x i8> %res
 }
 define <16 x i8> @test_int_x86_xop_vpcomeqb_mem(<16 x i8> %a0, <16 x i8>* %a1) {
   ; CHECK-NOT: vmovaps
-  ; CHECK:vpcomeqb
-  %vec = load <16 x i8>, <16 x i8>* %a1
+  ; CHECK:vpcomb
+  %vec = load <16 x i8>* %a1
   %res = call <16 x i8> @llvm.x86.xop.vpcomeqb(<16 x i8> %a0, <16 x i8> %vec) ;
   ret <16 x i8> %res
 }
 declare <16 x i8> @llvm.x86.xop.vpcomeqb(<16 x i8>, <16 x i8>) nounwind readnone
 
 define <8 x i16> @test_int_x86_xop_vpcomeqw(<8 x i16> %a0, <8 x i16> %a1) {
-  ; CHECK: vpcomeqw
+  ; CHECK: vpcomw
   %res = call <8 x i16> @llvm.x86.xop.vpcomeqw(<8 x i16> %a0, <8 x i16> %a1) ;
   ret <8 x i16> %res
 }
 declare <8 x i16> @llvm.x86.xop.vpcomeqw(<8 x i16>, <8 x i16>) nounwind readnone
 
 define <4 x i32> @test_int_x86_xop_vpcomeqd(<4 x i32> %a0, <4 x i32> %a1) {
-  ; CHECK: vpcomeqd
+  ; CHECK: vpcomd
   %res = call <4 x i32> @llvm.x86.xop.vpcomeqd(<4 x i32> %a0, <4 x i32> %a1) ;
   ret <4 x i32> %res
 }
 declare <4 x i32> @llvm.x86.xop.vpcomeqd(<4 x i32>, <4 x i32>) nounwind readnone
 
 define <2 x i64> @test_int_x86_xop_vpcomeqq(<2 x i64> %a0, <2 x i64> %a1) {
-  ; CHECK: vpcomeqq
+  ; CHECK: vpcomq
   %res = call <2 x i64> @llvm.x86.xop.vpcomeqq(<2 x i64> %a0, <2 x i64> %a1) ;
   ret <2 x i64> %res
 }
 declare <2 x i64> @llvm.x86.xop.vpcomeqq(<2 x i64>, <2 x i64>) nounwind readnone
 
 define <16 x i8> @test_int_x86_xop_vpcomequb(<16 x i8> %a0, <16 x i8> %a1) {
-  ; CHECK: vpcomequb
+  ; CHECK: vpcomub
   %res = call <16 x i8> @llvm.x86.xop.vpcomequb(<16 x i8> %a0, <16 x i8> %a1) ;
   ret <16 x i8> %res
 }
 declare <16 x i8> @llvm.x86.xop.vpcomequb(<16 x i8>, <16 x i8>) nounwind readnone
 
 define <4 x i32> @test_int_x86_xop_vpcomequd(<4 x i32> %a0, <4 x i32> %a1) {
-  ; CHECK: vpcomequd
+  ; CHECK: vpcomud
   %res = call <4 x i32> @llvm.x86.xop.vpcomequd(<4 x i32> %a0, <4 x i32> %a1) ;
   ret <4 x i32> %res
 }
 declare <4 x i32> @llvm.x86.xop.vpcomequd(<4 x i32>, <4 x i32>) nounwind readnone
 
 define <2 x i64> @test_int_x86_xop_vpcomequq(<2 x i64> %a0, <2 x i64> %a1) {
-  ; CHECK: vpcomequq
+  ; CHECK: vpcomuq
   %res = call <2 x i64> @llvm.x86.xop.vpcomequq(<2 x i64> %a0, <2 x i64> %a1) ;
   ret <2 x i64> %res
 }
 declare <2 x i64> @llvm.x86.xop.vpcomequq(<2 x i64>, <2 x i64>) nounwind readnone
 
 define <8 x i16> @test_int_x86_xop_vpcomequw(<8 x i16> %a0, <8 x i16> %a1) {
-  ; CHECK: vpcomequw
+  ; CHECK: vpcomuw
   %res = call <8 x i16> @llvm.x86.xop.vpcomequw(<8 x i16> %a0, <8 x i16> %a1) ;
   ret <8 x i16> %res
 }
 declare <8 x i16> @llvm.x86.xop.vpcomequw(<8 x i16>, <8 x i16>) nounwind readnone
 
 define <16 x i8> @test_int_x86_xop_vpcomfalseb(<16 x i8> %a0, <16 x i8> %a1) {
-  ; CHECK: vpcomfalseb
+  ; CHECK: vpcomb
   %res = call <16 x i8> @llvm.x86.xop.vpcomfalseb(<16 x i8> %a0, <16 x i8> %a1) ;
   ret <16 x i8> %res
 }
 declare <16 x i8> @llvm.x86.xop.vpcomfalseb(<16 x i8>, <16 x i8>) nounwind readnone
 
 define <4 x i32> @test_int_x86_xop_vpcomfalsed(<4 x i32> %a0, <4 x i32> %a1) {
-  ; CHECK: vpcomfalsed
+  ; CHECK: vpcomd
   %res = call <4 x i32> @llvm.x86.xop.vpcomfalsed(<4 x i32> %a0, <4 x i32> %a1) ;
   ret <4 x i32> %res
 }
 declare <4 x i32> @llvm.x86.xop.vpcomfalsed(<4 x i32>, <4 x i32>) nounwind readnone
 
 define <2 x i64> @test_int_x86_xop_vpcomfalseq(<2 x i64> %a0, <2 x i64> %a1) {
-  ; CHECK: vpcomfalseq
+  ; CHECK: vpcomq
   %res = call <2 x i64> @llvm.x86.xop.vpcomfalseq(<2 x i64> %a0, <2 x i64> %a1) ;
   ret <2 x i64> %res
 }
 declare <2 x i64> @llvm.x86.xop.vpcomfalseq(<2 x i64>, <2 x i64>) nounwind readnone
 
 define <16 x i8> @test_int_x86_xop_vpcomfalseub(<16 x i8> %a0, <16 x i8> %a1) {
-  ; CHECK: vpcomfalseub
+  ; CHECK: vpcomub
   %res = call <16 x i8> @llvm.x86.xop.vpcomfalseub(<16 x i8> %a0, <16 x i8> %a1) ;
   ret <16 x i8> %res
 }
 declare <16 x i8> @llvm.x86.xop.vpcomfalseub(<16 x i8>, <16 x i8>) nounwind readnone
 
 define <4 x i32> @test_int_x86_xop_vpcomfalseud(<4 x i32> %a0, <4 x i32> %a1) {
-  ; CHECK: vpcomfalseud
+  ; CHECK: vpcomud
   %res = call <4 x i32> @llvm.x86.xop.vpcomfalseud(<4 x i32> %a0, <4 x i32> %a1) ;
   ret <4 x i32> %res
 }
 declare <4 x i32> @llvm.x86.xop.vpcomfalseud(<4 x i32>, <4 x i32>) nounwind readnone
 
 define <2 x i64> @test_int_x86_xop_vpcomfalseuq(<2 x i64> %a0, <2 x i64> %a1) {
-  ; CHECK: vpcomfalseuq
+  ; CHECK: vpcomuq
   %res = call <2 x i64> @llvm.x86.xop.vpcomfalseuq(<2 x i64> %a0, <2 x i64> %a1) ;
   ret <2 x i64> %res
 }
 declare <2 x i64> @llvm.x86.xop.vpcomfalseuq(<2 x i64>, <2 x i64>) nounwind readnone
 
 define <8 x i16> @test_int_x86_xop_vpcomfalseuw(<8 x i16> %a0, <8 x i16> %a1) {
-  ; CHECK: vpcomfalseuw
+  ; CHECK: vpcomuw
   %res = call <8 x i16> @llvm.x86.xop.vpcomfalseuw(<8 x i16> %a0, <8 x i16> %a1) ;
   ret <8 x i16> %res
 }
 declare <8 x i16> @llvm.x86.xop.vpcomfalseuw(<8 x i16>, <8 x i16>) nounwind readnone
 
 define <8 x i16> @test_int_x86_xop_vpcomfalsew(<8 x i16> %a0, <8 x i16> %a1) {
-  ; CHECK: vpcomfalsew
+  ; CHECK: vpcomw
   %res = call <8 x i16> @llvm.x86.xop.vpcomfalsew(<8 x i16> %a0, <8 x i16> %a1) ;
   ret <8 x i16> %res
 }
 declare <8 x i16> @llvm.x86.xop.vpcomfalsew(<8 x i16>, <8 x i16>) nounwind readnone
 
 define <16 x i8> @test_int_x86_xop_vpcomgeb(<16 x i8> %a0, <16 x i8> %a1) {
-  ; CHECK: vpcomgeb
+  ; CHECK: vpcomb
   %res = call <16 x i8> @llvm.x86.xop.vpcomgeb(<16 x i8> %a0, <16 x i8> %a1) ;
   ret <16 x i8> %res
 }
 declare <16 x i8> @llvm.x86.xop.vpcomgeb(<16 x i8>, <16 x i8>) nounwind readnone
 
 define <4 x i32> @test_int_x86_xop_vpcomged(<4 x i32> %a0, <4 x i32> %a1) {
-  ; CHECK: vpcomged
+  ; CHECK: vpcomd
   %res = call <4 x i32> @llvm.x86.xop.vpcomged(<4 x i32> %a0, <4 x i32> %a1) ;
   ret <4 x i32> %res
 }
 declare <4 x i32> @llvm.x86.xop.vpcomged(<4 x i32>, <4 x i32>) nounwind readnone
 
 define <2 x i64> @test_int_x86_xop_vpcomgeq(<2 x i64> %a0, <2 x i64> %a1) {
-  ; CHECK: vpcomgeq
+  ; CHECK: vpcomq
   %res = call <2 x i64> @llvm.x86.xop.vpcomgeq(<2 x i64> %a0, <2 x i64> %a1) ;
   ret <2 x i64> %res
 }
 declare <2 x i64> @llvm.x86.xop.vpcomgeq(<2 x i64>, <2 x i64>) nounwind readnone
 
 define <16 x i8> @test_int_x86_xop_vpcomgeub(<16 x i8> %a0, <16 x i8> %a1) {
-  ; CHECK: vpcomgeub
+  ; CHECK: vpcomub
   %res = call <16 x i8> @llvm.x86.xop.vpcomgeub(<16 x i8> %a0, <16 x i8> %a1) ;
   ret <16 x i8> %res
 }
 declare <16 x i8> @llvm.x86.xop.vpcomgeub(<16 x i8>, <16 x i8>) nounwind readnone
 
 define <4 x i32> @test_int_x86_xop_vpcomgeud(<4 x i32> %a0, <4 x i32> %a1) {
-  ; CHECK: vpcomgeud
+  ; CHECK: vpcomud
   %res = call <4 x i32> @llvm.x86.xop.vpcomgeud(<4 x i32> %a0, <4 x i32> %a1) ;
   ret <4 x i32> %res
 }
 declare <4 x i32> @llvm.x86.xop.vpcomgeud(<4 x i32>, <4 x i32>) nounwind readnone
 
 define <2 x i64> @test_int_x86_xop_vpcomgeuq(<2 x i64> %a0, <2 x i64> %a1) {
-  ; CHECK: vpcomgeuq
+  ; CHECK: vpcomuq
   %res = call <2 x i64> @llvm.x86.xop.vpcomgeuq(<2 x i64> %a0, <2 x i64> %a1) ;
   ret <2 x i64> %res
 }
 declare <2 x i64> @llvm.x86.xop.vpcomgeuq(<2 x i64>, <2 x i64>) nounwind readnone
 
 define <8 x i16> @test_int_x86_xop_vpcomgeuw(<8 x i16> %a0, <8 x i16> %a1) {
-  ; CHECK: vpcomgeuw
+  ; CHECK: vpcomuw
   %res = call <8 x i16> @llvm.x86.xop.vpcomgeuw(<8 x i16> %a0, <8 x i16> %a1) ;
   ret <8 x i16> %res
 }
 declare <8 x i16> @llvm.x86.xop.vpcomgeuw(<8 x i16>, <8 x i16>) nounwind readnone
 
 define <8 x i16> @test_int_x86_xop_vpcomgew(<8 x i16> %a0, <8 x i16> %a1) {
-  ; CHECK: vpcomgew
+  ; CHECK: vpcomw
   %res = call <8 x i16> @llvm.x86.xop.vpcomgew(<8 x i16> %a0, <8 x i16> %a1) ;
   ret <8 x i16> %res
 }
 declare <8 x i16> @llvm.x86.xop.vpcomgew(<8 x i16>, <8 x i16>) nounwind readnone
 
 define <16 x i8> @test_int_x86_xop_vpcomgtb(<16 x i8> %a0, <16 x i8> %a1) {
-  ; CHECK: vpcomgtb
+  ; CHECK: vpcomb
   %res = call <16 x i8> @llvm.x86.xop.vpcomgtb(<16 x i8> %a0, <16 x i8> %a1) ;
   ret <16 x i8> %res
 }
 declare <16 x i8> @llvm.x86.xop.vpcomgtb(<16 x i8>, <16 x i8>) nounwind readnone
 
 define <4 x i32> @test_int_x86_xop_vpcomgtd(<4 x i32> %a0, <4 x i32> %a1) {
-  ; CHECK: vpcomgtd
+  ; CHECK: vpcomd
   %res = call <4 x i32> @llvm.x86.xop.vpcomgtd(<4 x i32> %a0, <4 x i32> %a1) ;
   ret <4 x i32> %res
 }
 declare <4 x i32> @llvm.x86.xop.vpcomgtd(<4 x i32>, <4 x i32>) nounwind readnone
 
 define <2 x i64> @test_int_x86_xop_vpcomgtq(<2 x i64> %a0, <2 x i64> %a1) {
-  ; CHECK: vpcomgtq
+  ; CHECK: vpcomq
   %res = call <2 x i64> @llvm.x86.xop.vpcomgtq(<2 x i64> %a0, <2 x i64> %a1) ;
   ret <2 x i64> %res
 }
 declare <2 x i64> @llvm.x86.xop.vpcomgtq(<2 x i64>, <2 x i64>) nounwind readnone
 
 define <16 x i8> @test_int_x86_xop_vpcomgtub(<16 x i8> %a0, <16 x i8> %a1) {
-  ; CHECK: vpcomgtub
+  ; CHECK: vpcomub
   %res = call <16 x i8> @llvm.x86.xop.vpcomgtub(<16 x i8> %a0, <16 x i8> %a1) ;
   ret <16 x i8> %res
 }
 declare <16 x i8> @llvm.x86.xop.vpcomgtub(<16 x i8>, <16 x i8>) nounwind readnone
 
 define <4 x i32> @test_int_x86_xop_vpcomgtud(<4 x i32> %a0, <4 x i32> %a1) {
-  ; CHECK: vpcomgtud
+  ; CHECK: vpcomud
   %res = call <4 x i32> @llvm.x86.xop.vpcomgtud(<4 x i32> %a0, <4 x i32> %a1) ;
   ret <4 x i32> %res
 }
 declare <4 x i32> @llvm.x86.xop.vpcomgtud(<4 x i32>, <4 x i32>) nounwind readnone
 
 define <2 x i64> @test_int_x86_xop_vpcomgtuq(<2 x i64> %a0, <2 x i64> %a1) {
-  ; CHECK: vpcomgtuq
+  ; CHECK: vpcomuq
   %res = call <2 x i64> @llvm.x86.xop.vpcomgtuq(<2 x i64> %a0, <2 x i64> %a1) ;
   ret <2 x i64> %res
 }
 declare <2 x i64> @llvm.x86.xop.vpcomgtuq(<2 x i64>, <2 x i64>) nounwind readnone
 
 define <8 x i16> @test_int_x86_xop_vpcomgtuw(<8 x i16> %a0, <8 x i16> %a1) {
-  ; CHECK: vpcomgtuw
+  ; CHECK: vpcomuw
   %res = call <8 x i16> @llvm.x86.xop.vpcomgtuw(<8 x i16> %a0, <8 x i16> %a1) ;
   ret <8 x i16> %res
 }
 declare <8 x i16> @llvm.x86.xop.vpcomgtuw(<8 x i16>, <8 x i16>) nounwind readnone
 
 define <8 x i16> @test_int_x86_xop_vpcomgtw(<8 x i16> %a0, <8 x i16> %a1) {
-  ; CHECK: vpcomgtw
+  ; CHECK: vpcomw
   %res = call <8 x i16> @llvm.x86.xop.vpcomgtw(<8 x i16> %a0, <8 x i16> %a1) ;
   ret <8 x i16> %res
 }
 declare <8 x i16> @llvm.x86.xop.vpcomgtw(<8 x i16>, <8 x i16>) nounwind readnone
 
 define <16 x i8> @test_int_x86_xop_vpcomleb(<16 x i8> %a0, <16 x i8> %a1) {
-  ; CHECK: vpcomleb
+  ; CHECK: vpcomb
   %res = call <16 x i8> @llvm.x86.xop.vpcomleb(<16 x i8> %a0, <16 x i8> %a1) ;
   ret <16 x i8> %res
 }
 declare <16 x i8> @llvm.x86.xop.vpcomleb(<16 x i8>, <16 x i8>) nounwind readnone
 
 define <4 x i32> @test_int_x86_xop_vpcomled(<4 x i32> %a0, <4 x i32> %a1) {
-  ; CHECK: vpcomled
+  ; CHECK: vpcomd
   %res = call <4 x i32> @llvm.x86.xop.vpcomled(<4 x i32> %a0, <4 x i32> %a1) ;
   ret <4 x i32> %res
 }
 declare <4 x i32> @llvm.x86.xop.vpcomled(<4 x i32>, <4 x i32>) nounwind readnone
 
 define <2 x i64> @test_int_x86_xop_vpcomleq(<2 x i64> %a0, <2 x i64> %a1) {
-  ; CHECK: vpcomleq
+  ; CHECK: vpcomq
   %res = call <2 x i64> @llvm.x86.xop.vpcomleq(<2 x i64> %a0, <2 x i64> %a1) ;
   ret <2 x i64> %res
 }
 declare <2 x i64> @llvm.x86.xop.vpcomleq(<2 x i64>, <2 x i64>) nounwind readnone
 
 define <16 x i8> @test_int_x86_xop_vpcomleub(<16 x i8> %a0, <16 x i8> %a1) {
-  ; CHECK: vpcomleub
+  ; CHECK: vpcomub
   %res = call <16 x i8> @llvm.x86.xop.vpcomleub(<16 x i8> %a0, <16 x i8> %a1) ;
   ret <16 x i8> %res
 }
 declare <16 x i8> @llvm.x86.xop.vpcomleub(<16 x i8>, <16 x i8>) nounwind readnone
 
 define <4 x i32> @test_int_x86_xop_vpcomleud(<4 x i32> %a0, <4 x i32> %a1) {
-  ; CHECK: vpcomleud
+  ; CHECK: vpcomud
   %res = call <4 x i32> @llvm.x86.xop.vpcomleud(<4 x i32> %a0, <4 x i32> %a1) ;
   ret <4 x i32> %res
 }
 declare <4 x i32> @llvm.x86.xop.vpcomleud(<4 x i32>, <4 x i32>) nounwind readnone
 
 define <2 x i64> @test_int_x86_xop_vpcomleuq(<2 x i64> %a0, <2 x i64> %a1) {
-  ; CHECK: vpcomleuq
+  ; CHECK: vpcomuq
   %res = call <2 x i64> @llvm.x86.xop.vpcomleuq(<2 x i64> %a0, <2 x i64> %a1) ;
   ret <2 x i64> %res
 }
 declare <2 x i64> @llvm.x86.xop.vpcomleuq(<2 x i64>, <2 x i64>) nounwind readnone
 
 define <8 x i16> @test_int_x86_xop_vpcomleuw(<8 x i16> %a0, <8 x i16> %a1) {
-  ; CHECK: vpcomleuw
+  ; CHECK: vpcomuw
   %res = call <8 x i16> @llvm.x86.xop.vpcomleuw(<8 x i16> %a0, <8 x i16> %a1) ;
   ret <8 x i16> %res
 }
 declare <8 x i16> @llvm.x86.xop.vpcomleuw(<8 x i16>, <8 x i16>) nounwind readnone
 
 define <8 x i16> @test_int_x86_xop_vpcomlew(<8 x i16> %a0, <8 x i16> %a1) {
-  ; CHECK: vpcomlew
+  ; CHECK: vpcomw
   %res = call <8 x i16> @llvm.x86.xop.vpcomlew(<8 x i16> %a0, <8 x i16> %a1) ;
   ret <8 x i16> %res
 }
 declare <8 x i16> @llvm.x86.xop.vpcomlew(<8 x i16>, <8 x i16>) nounwind readnone
 
 define <16 x i8> @test_int_x86_xop_vpcomltb(<16 x i8> %a0, <16 x i8> %a1) {
-  ; CHECK: vpcomltb
+  ; CHECK: vpcomb
   %res = call <16 x i8> @llvm.x86.xop.vpcomltb(<16 x i8> %a0, <16 x i8> %a1) ;
   ret <16 x i8> %res
 }
 declare <16 x i8> @llvm.x86.xop.vpcomltb(<16 x i8>, <16 x i8>) nounwind readnone
 
 define <4 x i32> @test_int_x86_xop_vpcomltd(<4 x i32> %a0, <4 x i32> %a1) {
-  ; CHECK: vpcomltd
+  ; CHECK: vpcomd
   %res = call <4 x i32> @llvm.x86.xop.vpcomltd(<4 x i32> %a0, <4 x i32> %a1) ;
   ret <4 x i32> %res
 }
 declare <4 x i32> @llvm.x86.xop.vpcomltd(<4 x i32>, <4 x i32>) nounwind readnone
 
 define <2 x i64> @test_int_x86_xop_vpcomltq(<2 x i64> %a0, <2 x i64> %a1) {
-  ; CHECK: vpcomltq
+  ; CHECK: vpcomq
   %res = call <2 x i64> @llvm.x86.xop.vpcomltq(<2 x i64> %a0, <2 x i64> %a1) ;
   ret <2 x i64> %res
 }
 declare <2 x i64> @llvm.x86.xop.vpcomltq(<2 x i64>, <2 x i64>) nounwind readnone
 
 define <16 x i8> @test_int_x86_xop_vpcomltub(<16 x i8> %a0, <16 x i8> %a1) {
-  ; CHECK: vpcomltub
+  ; CHECK: vpcomub
   %res = call <16 x i8> @llvm.x86.xop.vpcomltub(<16 x i8> %a0, <16 x i8> %a1) ;
   ret <16 x i8> %res
 }
 declare <16 x i8> @llvm.x86.xop.vpcomltub(<16 x i8>, <16 x i8>) nounwind readnone
 
 define <4 x i32> @test_int_x86_xop_vpcomltud(<4 x i32> %a0, <4 x i32> %a1) {
-  ; CHECK: vpcomltud
+  ; CHECK: vpcomud
   %res = call <4 x i32> @llvm.x86.xop.vpcomltud(<4 x i32> %a0, <4 x i32> %a1) ;
   ret <4 x i32> %res
 }
 declare <4 x i32> @llvm.x86.xop.vpcomltud(<4 x i32>, <4 x i32>) nounwind readnone
 
 define <2 x i64> @test_int_x86_xop_vpcomltuq(<2 x i64> %a0, <2 x i64> %a1) {
-  ; CHECK: vpcomltuq
+  ; CHECK: vpcomuq
   %res = call <2 x i64> @llvm.x86.xop.vpcomltuq(<2 x i64> %a0, <2 x i64> %a1) ;
   ret <2 x i64> %res
 }
 declare <2 x i64> @llvm.x86.xop.vpcomltuq(<2 x i64>, <2 x i64>) nounwind readnone
 
 define <8 x i16> @test_int_x86_xop_vpcomltuw(<8 x i16> %a0, <8 x i16> %a1) {
-  ; CHECK: vpcomltuw
+  ; CHECK: vpcomuw
   %res = call <8 x i16> @llvm.x86.xop.vpcomltuw(<8 x i16> %a0, <8 x i16> %a1) ;
   ret <8 x i16> %res
 }
 declare <8 x i16> @llvm.x86.xop.vpcomltuw(<8 x i16>, <8 x i16>) nounwind readnone
 
 define <8 x i16> @test_int_x86_xop_vpcomltw(<8 x i16> %a0, <8 x i16> %a1) {
-  ; CHECK: vpcomltw
+  ; CHECK: vpcomw
   %res = call <8 x i16> @llvm.x86.xop.vpcomltw(<8 x i16> %a0, <8 x i16> %a1) ;
   ret <8 x i16> %res
 }
 declare <8 x i16> @llvm.x86.xop.vpcomltw(<8 x i16>, <8 x i16>) nounwind readnone
 
 define <16 x i8> @test_int_x86_xop_vpcomneb(<16 x i8> %a0, <16 x i8> %a1) {
-  ; CHECK: vpcomneqb
+  ; CHECK: vpcomb
   %res = call <16 x i8> @llvm.x86.xop.vpcomneb(<16 x i8> %a0, <16 x i8> %a1) ;
   ret <16 x i8> %res
 }
 declare <16 x i8> @llvm.x86.xop.vpcomneb(<16 x i8>, <16 x i8>) nounwind readnone
 
 define <4 x i32> @test_int_x86_xop_vpcomned(<4 x i32> %a0, <4 x i32> %a1) {
-  ; CHECK: vpcomneqd
+  ; CHECK: vpcomd
   %res = call <4 x i32> @llvm.x86.xop.vpcomned(<4 x i32> %a0, <4 x i32> %a1) ;
   ret <4 x i32> %res
 }
 declare <4 x i32> @llvm.x86.xop.vpcomned(<4 x i32>, <4 x i32>) nounwind readnone
 
 define <2 x i64> @test_int_x86_xop_vpcomneq(<2 x i64> %a0, <2 x i64> %a1) {
-  ; CHECK: vpcomneqq
+  ; CHECK: vpcomq
   %res = call <2 x i64> @llvm.x86.xop.vpcomneq(<2 x i64> %a0, <2 x i64> %a1) ;
   ret <2 x i64> %res
 }
 declare <2 x i64> @llvm.x86.xop.vpcomneq(<2 x i64>, <2 x i64>) nounwind readnone
 
 define <16 x i8> @test_int_x86_xop_vpcomneub(<16 x i8> %a0, <16 x i8> %a1) {
-  ; CHECK: vpcomnequb
+  ; CHECK: vpcomub
   %res = call <16 x i8> @llvm.x86.xop.vpcomneub(<16 x i8> %a0, <16 x i8> %a1) ;
   ret <16 x i8> %res
 }
 declare <16 x i8> @llvm.x86.xop.vpcomneub(<16 x i8>, <16 x i8>) nounwind readnone
 
 define <4 x i32> @test_int_x86_xop_vpcomneud(<4 x i32> %a0, <4 x i32> %a1) {
-  ; CHECK: vpcomnequd
+  ; CHECK: vpcomud
   %res = call <4 x i32> @llvm.x86.xop.vpcomneud(<4 x i32> %a0, <4 x i32> %a1) ;
   ret <4 x i32> %res
 }
 declare <4 x i32> @llvm.x86.xop.vpcomneud(<4 x i32>, <4 x i32>) nounwind readnone
 
 define <2 x i64> @test_int_x86_xop_vpcomneuq(<2 x i64> %a0, <2 x i64> %a1) {
-  ; CHECK: vpcomnequq
+  ; CHECK: vpcomuq
   %res = call <2 x i64> @llvm.x86.xop.vpcomneuq(<2 x i64> %a0, <2 x i64> %a1) ;
   ret <2 x i64> %res
 }
 declare <2 x i64> @llvm.x86.xop.vpcomneuq(<2 x i64>, <2 x i64>) nounwind readnone
 
 define <8 x i16> @test_int_x86_xop_vpcomneuw(<8 x i16> %a0, <8 x i16> %a1) {
-  ; CHECK: vpcomnequw
+  ; CHECK: vpcomuw
   %res = call <8 x i16> @llvm.x86.xop.vpcomneuw(<8 x i16> %a0, <8 x i16> %a1) ;
   ret <8 x i16> %res
 }
 declare <8 x i16> @llvm.x86.xop.vpcomneuw(<8 x i16>, <8 x i16>) nounwind readnone
 
 define <8 x i16> @test_int_x86_xop_vpcomnew(<8 x i16> %a0, <8 x i16> %a1) {
-  ; CHECK: vpcomneqw
+  ; CHECK: vpcomw
   %res = call <8 x i16> @llvm.x86.xop.vpcomnew(<8 x i16> %a0, <8 x i16> %a1) ;
   ret <8 x i16> %res
 }
 declare <8 x i16> @llvm.x86.xop.vpcomnew(<8 x i16>, <8 x i16>) nounwind readnone
 
 define <16 x i8> @test_int_x86_xop_vpcomtrueb(<16 x i8> %a0, <16 x i8> %a1) {
-  ; CHECK: vpcomtrueb
+  ; CHECK: vpcomb
   %res = call <16 x i8> @llvm.x86.xop.vpcomtrueb(<16 x i8> %a0, <16 x i8> %a1) ;
   ret <16 x i8> %res
 }
 declare <16 x i8> @llvm.x86.xop.vpcomtrueb(<16 x i8>, <16 x i8>) nounwind readnone
 
 define <4 x i32> @test_int_x86_xop_vpcomtrued(<4 x i32> %a0, <4 x i32> %a1) {
-  ; CHECK: vpcomtrued
+  ; CHECK: vpcomd
   %res = call <4 x i32> @llvm.x86.xop.vpcomtrued(<4 x i32> %a0, <4 x i32> %a1) ;
   ret <4 x i32> %res
 }
 declare <4 x i32> @llvm.x86.xop.vpcomtrued(<4 x i32>, <4 x i32>) nounwind readnone
 
 define <2 x i64> @test_int_x86_xop_vpcomtrueq(<2 x i64> %a0, <2 x i64> %a1) {
-  ; CHECK: vpcomtrueq
+  ; CHECK: vpcomq
   %res = call <2 x i64> @llvm.x86.xop.vpcomtrueq(<2 x i64> %a0, <2 x i64> %a1) ;
   ret <2 x i64> %res
 }
 declare <2 x i64> @llvm.x86.xop.vpcomtrueq(<2 x i64>, <2 x i64>) nounwind readnone
 
 define <16 x i8> @test_int_x86_xop_vpcomtrueub(<16 x i8> %a0, <16 x i8> %a1) {
-  ; CHECK: vpcomtrueub
+  ; CHECK: vpcomub
   %res = call <16 x i8> @llvm.x86.xop.vpcomtrueub(<16 x i8> %a0, <16 x i8> %a1) ;
   ret <16 x i8> %res
 }
 declare <16 x i8> @llvm.x86.xop.vpcomtrueub(<16 x i8>, <16 x i8>) nounwind readnone
 
 define <4 x i32> @test_int_x86_xop_vpcomtrueud(<4 x i32> %a0, <4 x i32> %a1) {
-  ; CHECK: vpcomtrueud
+  ; CHECK: vpcomud
   %res = call <4 x i32> @llvm.x86.xop.vpcomtrueud(<4 x i32> %a0, <4 x i32> %a1) ;
   ret <4 x i32> %res
 }
 declare <4 x i32> @llvm.x86.xop.vpcomtrueud(<4 x i32>, <4 x i32>) nounwind readnone
 
 define <2 x i64> @test_int_x86_xop_vpcomtrueuq(<2 x i64> %a0, <2 x i64> %a1) {
-  ; CHECK: vpcomtrueuq
+  ; CHECK: vpcomuq
   %res = call <2 x i64> @llvm.x86.xop.vpcomtrueuq(<2 x i64> %a0, <2 x i64> %a1) ;
   ret <2 x i64> %res
 }
 declare <2 x i64> @llvm.x86.xop.vpcomtrueuq(<2 x i64>, <2 x i64>) nounwind readnone
 
 define <8 x i16> @test_int_x86_xop_vpcomtrueuw(<8 x i16> %a0, <8 x i16> %a1) {
-  ; CHECK: vpcomtrueuw
+  ; CHECK: vpcomuw
   %res = call <8 x i16> @llvm.x86.xop.vpcomtrueuw(<8 x i16> %a0, <8 x i16> %a1) ;
   ret <8 x i16> %res
 }
 declare <8 x i16> @llvm.x86.xop.vpcomtrueuw(<8 x i16>, <8 x i16>) nounwind readnone
 
 define <8 x i16> @test_int_x86_xop_vpcomtruew(<8 x i16> %a0, <8 x i16> %a1) {
-  ; CHECK: vpcomtruew
+  ; CHECK: vpcomw
   %res = call <8 x i16> @llvm.x86.xop.vpcomtruew(<8 x i16> %a0, <8 x i16> %a1) ;
   ret <8 x i16> %res
 }
@@ -644,7 +645,7 @@ define <2 x i64> @test_int_x86_xop_vphsubdq(<4 x i32> %a0) {
 define <2 x i64> @test_int_x86_xop_vphsubdq_mem(<4 x i32>* %a0) {
   ; CHECK-NOT: vmovaps
   ; CHECK: vphsubdq
-  %vec = load <4 x i32>, <4 x i32>* %a0
+  %vec = load <4 x i32>* %a0
   %res = call <2 x i64> @llvm.x86.xop.vphsubdq(<4 x i32> %vec) ;
   ret <2 x i64> %res
 }
@@ -658,7 +659,7 @@ define <4 x i32> @test_int_x86_xop_vphsubwd(<8 x i16> %a0) {
 define <4 x i32> @test_int_x86_xop_vphsubwd_mem(<8 x i16>* %a0) {
   ; CHECK-NOT: vmovaps
   ; CHECK: vphsubwd
-  %vec = load <8 x i16>, <8 x i16>* %a0
+  %vec = load <8 x i16>* %a0
   %res = call <4 x i32> @llvm.x86.xop.vphsubwd(<8 x i16> %vec) ;
   ret <4 x i32> %res
 }
@@ -749,7 +750,7 @@ define <4 x i32> @test_int_x86_xop_vpmadcswd(<8 x i16> %a0, <8 x i16> %a1, <4 x 
 define <4 x i32> @test_int_x86_xop_vpmadcswd_mem(<8 x i16> %a0, <8 x i16>* %a1, <4 x i32> %a2) {
   ; CHECK-NOT: vmovaps
   ; CHECK: vpmadcswd
-  %vec = load <8 x i16>, <8 x i16>* %a1
+  %vec = load <8 x i16>* %a1
   %res = call <4 x i32> @llvm.x86.xop.vpmadcswd(<8 x i16> %a0, <8 x i16> %vec, <4 x i32> %a2) ;
   ret <4 x i32> %res
 }
@@ -763,14 +764,14 @@ define <16 x i8> @test_int_x86_xop_vpperm(<16 x i8> %a0, <16 x i8> %a1, <16 x i8
 define <16 x i8> @test_int_x86_xop_vpperm_rm(<16 x i8> %a0, <16 x i8> %a1, <16 x i8>* %a2) {
   ; CHECK-NOT: vmovaps
   ; CHECK: vpperm
-  %vec = load <16 x i8>, <16 x i8>* %a2
+  %vec = load <16 x i8>* %a2
   %res = call <16 x i8> @llvm.x86.xop.vpperm(<16 x i8> %a0, <16 x i8> %a1, <16 x i8> %vec) ;
   ret <16 x i8> %res
 }
 define <16 x i8> @test_int_x86_xop_vpperm_mr(<16 x i8> %a0, <16 x i8>* %a1, <16 x i8> %a2) {
   ; CHECK-NOT: vmovaps
   ; CHECK: vpperm
-  %vec = load <16 x i8>, <16 x i8>* %a1
+  %vec = load <16 x i8>* %a1
   %res = call <16 x i8> @llvm.x86.xop.vpperm(<16 x i8> %a0, <16 x i8> %vec, <16 x i8> %a2) ;
   ret <16 x i8> %res
 }
@@ -803,34 +804,6 @@ define <8 x i16> @test_int_x86_xop_vprotw(<8 x i16> %a0, <8 x i16> %a1) {
   ret <8 x i16> %res
 }
 declare <8 x i16> @llvm.x86.xop.vprotw(<8 x i16>, <8 x i16>) nounwind readnone
-
-define <16 x i8> @test_int_x86_xop_vprotbi(<16 x i8> %a0) {
-  ; CHECK: vprotb
-  %res = call <16 x i8> @llvm.x86.xop.vprotbi(<16 x i8> %a0, i8 1) ;
-  ret <16 x i8> %res
-}
-declare <16 x i8> @llvm.x86.xop.vprotbi(<16 x i8>, i8) nounwind readnone
-
-define <4 x i32> @test_int_x86_xop_vprotdi(<4 x i32> %a0) {
-  ; CHECK: vprotd
-  %res = call <4 x i32> @llvm.x86.xop.vprotdi(<4 x i32> %a0, i8 -2) ;
-  ret <4 x i32> %res
-}
-declare <4 x i32> @llvm.x86.xop.vprotdi(<4 x i32>, i8) nounwind readnone
-
-define <2 x i64> @test_int_x86_xop_vprotqi(<2 x i64> %a0) {
-  ; CHECK: vprotq
-  %res = call <2 x i64> @llvm.x86.xop.vprotqi(<2 x i64> %a0, i8 3) ;
-  ret <2 x i64> %res
-}
-declare <2 x i64> @llvm.x86.xop.vprotqi(<2 x i64>, i8) nounwind readnone
-
-define <8 x i16> @test_int_x86_xop_vprotwi(<8 x i16> %a0) {
-  ; CHECK: vprotw
-  %res = call <8 x i16> @llvm.x86.xop.vprotwi(<8 x i16> %a0, i8 -4) ;
-  ret <8 x i16> %res
-}
-declare <8 x i16> @llvm.x86.xop.vprotwi(<8 x i16>, i8) nounwind readnone
 
 define <16 x i8> @test_int_x86_xop_vpshab(<16 x i8> %a0, <16 x i8> %a1) {
   ; CHECK: vpshab
@@ -889,14 +862,14 @@ define <8 x i16> @test_int_x86_xop_vpshlw(<8 x i16> %a0, <8 x i16> %a1) {
 define <8 x i16> @test_int_x86_xop_vpshlw_rm(<8 x i16> %a0, <8 x i16>* %a1) {
   ; CHECK-NOT: vmovaps
   ; CHECK: vpshlw
-  %vec = load <8 x i16>, <8 x i16>* %a1
+  %vec = load <8 x i16>* %a1
   %res = call <8 x i16> @llvm.x86.xop.vpshlw(<8 x i16> %a0, <8 x i16> %vec) ;
   ret <8 x i16> %res
 }
 define <8 x i16> @test_int_x86_xop_vpshlw_mr(<8 x i16>* %a0, <8 x i16> %a1) {
   ; CHECK-NOT: vmovaps
   ; CHECK: vpshlw
-  %vec = load <8 x i16>, <8 x i16>* %a0
+  %vec = load <8 x i16>* %a0
   %res = call <8 x i16> @llvm.x86.xop.vpshlw(<8 x i16> %vec, <8 x i16> %a1) ;
   ret <8 x i16> %res
 }
@@ -911,7 +884,7 @@ define <4 x float> @test_int_x86_xop_vfrcz_ss(<4 x float> %a0) {
 define <4 x float> @test_int_x86_xop_vfrcz_ss_mem(float* %a0) {
   ; CHECK-NOT: mov
   ; CHECK: vfrczss
-  %elem = load float, float* %a0
+  %elem = load float* %a0
   %vec = insertelement <4 x float> undef, float %elem, i32 0
   %res = call <4 x float> @llvm.x86.xop.vfrcz.ss(<4 x float> %vec) ;
   ret <4 x float> %res
@@ -927,7 +900,7 @@ define <2 x double> @test_int_x86_xop_vfrcz_sd(<2 x double> %a0) {
 define <2 x double> @test_int_x86_xop_vfrcz_sd_mem(double* %a0) {
   ; CHECK-NOT: mov
   ; CHECK: vfrczsd
-  %elem = load double, double* %a0
+  %elem = load double* %a0
   %vec = insertelement <2 x double> undef, double %elem, i32 0
   %res = call <2 x double> @llvm.x86.xop.vfrcz.sd(<2 x double> %vec) ;
   ret <2 x double> %res
@@ -942,7 +915,7 @@ define <2 x double> @test_int_x86_xop_vfrcz_pd(<2 x double> %a0) {
 define <2 x double> @test_int_x86_xop_vfrcz_pd_mem(<2 x double>* %a0) {
   ; CHECK-NOT: vmovaps
   ; CHECK: vfrczpd
-  %vec = load <2 x double>, <2 x double>* %a0
+  %vec = load <2 x double>* %a0
   %res = call <2 x double> @llvm.x86.xop.vfrcz.pd(<2 x double> %vec) ;
   ret <2 x double> %res
 }
@@ -958,7 +931,7 @@ define <4 x double> @test_int_x86_xop_vfrcz_pd_256_mem(<4 x double>* %a0) {
   ; CHECK-NOT: vmovaps
   ; CHECK: vfrczpd
   ; CHECK: ymm
-  %vec = load <4 x double>, <4 x double>* %a0
+  %vec = load <4 x double>* %a0
   %res = call <4 x double> @llvm.x86.xop.vfrcz.pd.256(<4 x double> %vec) ;
   ret <4 x double> %res
 }
@@ -972,7 +945,7 @@ define <4 x float> @test_int_x86_xop_vfrcz_ps(<4 x float> %a0) {
 define <4 x float> @test_int_x86_xop_vfrcz_ps_mem(<4 x float>* %a0) {
   ; CHECK-NOT: vmovaps
   ; CHECK: vfrczps
-  %vec = load <4 x float>, <4 x float>* %a0
+  %vec = load <4 x float>* %a0
   %res = call <4 x float> @llvm.x86.xop.vfrcz.ps(<4 x float> %vec) ;
   ret <4 x float> %res
 }
@@ -988,7 +961,7 @@ define <8 x float> @test_int_x86_xop_vfrcz_ps_256_mem(<8 x float>* %a0) {
   ; CHECK-NOT: vmovaps
   ; CHECK: vfrczps
   ; CHECK: ymm
-  %vec = load <8 x float>, <8 x float>* %a0
+  %vec = load <8 x float>* %a0
   %res = call <8 x float> @llvm.x86.xop.vfrcz.ps.256(<8 x float> %vec) ;
   ret <8 x float> %res
 }

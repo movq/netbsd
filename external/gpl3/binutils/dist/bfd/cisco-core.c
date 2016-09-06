@@ -1,5 +1,7 @@
 /* BFD back-end for CISCO crash dumps.
-   Copyright (C) 1994-2015 Free Software Foundation, Inc.
+   Copyright 1994, 1997, 1999, 2000, 2001, 2002, 2004, 2005, 2006, 2007,
+   2010, 2011, 2012
+   Free Software Foundation, Inc.
 
    This file is part of BFD, the Binary File Descriptor library.
 
@@ -313,9 +315,9 @@ cisco_core_file_failing_signal (bfd *abfd ATTRIBUTE_UNUSED)
   return abfd->tdata.cisco_core_data->sig;
 }
 
-extern const bfd_target core_cisco_le_vec;
+extern const bfd_target cisco_core_little_vec;
 
-const bfd_target core_cisco_be_vec =
+const bfd_target cisco_core_big_vec =
 {
     "cisco-ios-core-big",
     bfd_target_unknown_flavour,
@@ -361,12 +363,12 @@ const bfd_target core_cisco_be_vec =
        BFD_JUMP_TABLE_LINK (_bfd_nolink),
        BFD_JUMP_TABLE_DYNAMIC (_bfd_nodynamic),
 
-    & core_cisco_le_vec,
+    & cisco_core_little_vec,
 
     NULL	/* backend_data */
 };
 
-const bfd_target core_cisco_le_vec =
+const bfd_target cisco_core_little_vec =
 {
     "cisco-ios-core-little",
     bfd_target_unknown_flavour,
@@ -412,7 +414,7 @@ const bfd_target core_cisco_le_vec =
        BFD_JUMP_TABLE_LINK (_bfd_nolink),
        BFD_JUMP_TABLE_DYNAMIC (_bfd_nodynamic),
 
-    &core_cisco_be_vec,
+    &cisco_core_big_vec,
 
     NULL			/* backend_data */
 };

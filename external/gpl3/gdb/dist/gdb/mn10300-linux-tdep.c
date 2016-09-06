@@ -1,6 +1,6 @@
 /* Target-dependent code for the Matsushita MN10300 for GDB, the GNU debugger.
 
-   Copyright (C) 2003-2015 Free Software Foundation, Inc.
+   Copyright (C) 2003-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,8 +19,10 @@
 
 #include "defs.h"
 #include "gdbcore.h"
+#include <string.h>
 #include "regcache.h"
 #include "mn10300-tdep.h"
+#include "gdb_assert.h"
 #include "bfd.h"
 #include "elf-bfd.h"
 #include "osabi.h"
@@ -30,6 +32,8 @@
 #include "trad-frame.h"
 #include "tramp-frame.h"
 #include "linux-tdep.h"
+
+#include <stdlib.h>
 
 /* Transliterated from <asm-mn10300/elf.h>...  */
 #define MN10300_ELF_NGREG 28
@@ -90,7 +94,7 @@ am33_supply_gregset_method (const struct regset *regset,
   const mn10300_elf_greg_t *regp = (const mn10300_elf_greg_t *) gregs;
   int i;
 
-  gdb_assert (len >= sizeof (mn10300_elf_gregset_t));
+  gdb_assert (len == sizeof (mn10300_elf_gregset_t));
 
   switch (regnum) {
   case E_D0_REGNUM:
@@ -245,7 +249,7 @@ am33_supply_fpregset_method (const struct regset *regset,
 {
   const mn10300_elf_fpregset_t *fpregset = fpregs;
 
-  gdb_assert (len >= sizeof (mn10300_elf_fpregset_t));
+  gdb_assert (len == sizeof (mn10300_elf_fpregset_t));
 
   if (regnum == -1)
     {
@@ -278,7 +282,7 @@ am33_collect_gregset_method (const struct regset *regset,
   mn10300_elf_gregset_t *regp = gregs;
   int i;
 
-  gdb_assert (len >= sizeof (mn10300_elf_gregset_t));
+  gdb_assert (len == sizeof (mn10300_elf_gregset_t));
 
   switch (regnum) {
   case E_D0_REGNUM:
@@ -425,7 +429,7 @@ am33_collect_fpregset_method (const struct regset *regset,
 {
   mn10300_elf_fpregset_t *fpregset = fpregs;
 
-  gdb_assert (len >= sizeof (mn10300_elf_fpregset_t));
+  gdb_assert (len == sizeof (mn10300_elf_fpregset_t));
 
   if (regnum == -1)
     {
@@ -447,28 +451,24 @@ am33_collect_fpregset_method (const struct regset *regset,
   return;
 }
 
-static const struct regset am33_gregset =
-  {
-    NULL, am33_supply_gregset_method, am33_collect_gregset_method
-  };
+/* Create a struct regset from a corefile register section.  */
 
-static const struct regset am33_fpregset =
-  {
-    NULL, am33_supply_fpregset_method, am33_collect_fpregset_method
-  };
-
-/* Iterate over core file register note sections.  */
-
-static void
-am33_iterate_over_regset_sections (struct gdbarch *gdbarch,
-				   iterate_over_regset_sections_cb *cb,
-				   void *cb_data,
-				   const struct regcache *regcache)
+static const struct regset *
+am33_regset_from_core_section (struct gdbarch *gdbarch, 
+			       const char *sect_name, 
+			       size_t sect_size)
 {
-  cb (".reg", sizeof (mn10300_elf_gregset_t), &am33_gregset,
-      NULL, cb_data);
-  cb (".reg2", sizeof(mn10300_elf_fpregset_t), &am33_fpregset,
-      NULL, cb_data);
+  /* We will call regset_alloc, and pass the names of the supply and
+     collect methods.  */
+
+  if (sect_size == sizeof (mn10300_elf_fpregset_t))
+    return regset_alloc (gdbarch, 
+			 am33_supply_fpregset_method,
+			 am33_collect_fpregset_method);
+  else
+    return regset_alloc (gdbarch, 
+			 am33_supply_gregset_method,
+			 am33_collect_gregset_method);
 }
 
 static void
@@ -715,8 +715,8 @@ am33_linux_init_osabi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
   linux_init_abi (info, gdbarch);
 
-  set_gdbarch_iterate_over_regset_sections
-    (gdbarch, am33_iterate_over_regset_sections);
+  set_gdbarch_regset_from_core_section (gdbarch, 
+					am33_regset_from_core_section);
   set_solib_svr4_fetch_link_map_offsets
     (gdbarch, svr4_ilp32_fetch_link_map_offsets);
 

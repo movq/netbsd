@@ -20,9 +20,7 @@ set(NVPTXCodeGen_sources
   NVPTXImageOptimizer.cpp
   NVPTXInstrInfo.cpp
   NVPTXLowerAggrCopies.cpp
-  NVPTXLowerKernelArgs.cpp
-  NVPTXLowerAlloca.cpp
-  NVPTXPeephole.cpp
+  NVPTXLowerStructArgs.cpp
   NVPTXMCExpr.cpp
   NVPTXPrologEpilogPass.cpp
   NVPTXRegisterInfo.cpp
@@ -31,6 +29,7 @@ set(NVPTXCodeGen_sources
   NVPTXTargetMachine.cpp
   NVPTXTargetTransformInfo.cpp
   NVPTXUtilities.cpp
+  NVPTXutil.cpp
   NVVMReflect.cpp
   )
 

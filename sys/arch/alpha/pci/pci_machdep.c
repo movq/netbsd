@@ -1,4 +1,4 @@
-/* $NetBSD: pci_machdep.c,v 1.23 2014/10/17 18:31:07 uebayasi Exp $ */
+/* $NetBSD: pci_machdep.c,v 1.22 2014/03/29 19:28:25 christos Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.23 2014/10/17 18:31:07 uebayasi Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.22 2014/03/29 19:28:25 christos Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -64,15 +64,12 @@ __KERNEL_RCSID(0, "$NetBSD: pci_machdep.c,v 1.23 2014/10/17 18:31:07 uebayasi Ex
 void
 pci_display_console(bus_space_tag_t iot, bus_space_tag_t memt, pci_chipset_tag_t pc, int bus, int device, int function)
 {
-#if NVGA_PCI || NTGA
 	pcitag_t tag;
 	pcireg_t id, class;
 	int match, nmatch;
-#endif
 	int (*fn)(bus_space_tag_t, bus_space_tag_t, pci_chipset_tag_t,
 	    int, int, int);
 
-#if NVGA_PCI || NTGA
 	tag = pci_make_tag(pc, bus, device, function);
 	id = pci_conf_read(pc, tag, PCI_ID_REG);
 	if (id == 0 || id == 0xffffffff)
@@ -80,8 +77,7 @@ pci_display_console(bus_space_tag_t iot, bus_space_tag_t memt, pci_chipset_tag_t
 		    bus, device, function);
 	class = pci_conf_read(pc, tag, PCI_CLASS_REG);
 
-	match = 0;
-#endif
+	nmatch = match = 0; /* XXX really only if we've got FBs configured */
 	fn = NULL;
 
 #if NVGA_PCI

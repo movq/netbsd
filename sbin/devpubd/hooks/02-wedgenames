@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: 02-wedgenames,v 1.4 2016/08/15 12:54:40 mlelstv Exp $
+# $NetBSD: 02-wedgenames,v 1.1.12.2 2015/03/07 06:00:01 snj Exp $
 #
 # Try to maintain symlinks to wedge devices
 #
@@ -12,7 +12,7 @@ devices=$@
 wedgedir=/dev/wedges
 
 remove_wedge() {
-	test -d $wedgedir && find $wedgedir -print \
+	find $wedgedir -print \
 	| sed -e 's# #\\ #g' \
 	| while read w; do
 		t=$(readlink "$w")

@@ -1,4 +1,4 @@
-/*	$NetBSD: mkioconf.c,v 1.33 2015/11/12 14:38:21 pooka Exp $	*/
+/*	$NetBSD: mkioconf.c,v 1.21.10.1 2015/03/06 21:00:23 snj Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -45,7 +45,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: mkioconf.c,v 1.33 2015/11/12 14:38:21 pooka Exp $");
+__RCSID("$NetBSD: mkioconf.c,v 1.21.10.1 2015/03/06 21:00:23 snj Exp $");
 
 #include <sys/param.h>
 #include <err.h>
@@ -91,10 +91,6 @@ mkioconf(void)
 		warn("cannot write ioconf.c");
 		return (1);
 	}
-
-	fprintf(fp, "#include \"ioconf.h\"\n");
-	if (ioconfname)
-		fprintf(fp, "#define IOCONF %s\n", ioconfname);
 
 	emithdr(fp);
 	emitcfdrivers(fp);
@@ -149,10 +145,9 @@ emithdr(FILE *ofp)
 
 	autogen_comment(ofp, "ioconf.c");
 
-	(void)snprintf(ifnbuf, sizeof(ifnbuf), "%s/arch/%s/conf/ioconf.incl.%s",
-	    srcdir,
+	(void)snprintf(ifnbuf, sizeof(ifnbuf), "arch/%s/conf/ioconf.incl.%s",
 	    machine ? machine : "(null)", machine ? machine : "(null)");
-	ifn = ifnbuf;
+	ifn = sourcepath(ifnbuf);
 	if ((ifp = fopen(ifn, "r")) != NULL) {
 		while ((n = fread(buf, 1, sizeof(buf), ifp)) > 0)
 			(void)fwrite(buf, 1, n, ofp);
@@ -165,6 +160,7 @@ emithdr(FILE *ofp)
 			"#include <sys/device.h>\n"
 			"#include <sys/mount.h>\n", ofp);
 	}
+	free(ifn);
 }
 
 /*
@@ -480,6 +476,10 @@ emitpseudo(FILE *fp)
 	struct devbase *d;
 
 	fputs("\n/* pseudo-devices */\n", fp);
+	TAILQ_FOREACH(i, &allpseudo, i_next) {
+		fprintf(fp, "void %sattach(int);\n",
+		    i->i_base->d_name);
+	}
 	fputs("\nconst struct pdevinit pdevinit[] = {\n", fp);
 	TAILQ_FOREACH(i, &allpseudo, i_next) {
 		d = i->i_base;

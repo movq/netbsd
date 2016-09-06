@@ -1,4 +1,4 @@
-/*	$NetBSD: sftp-common.c,v 1.7 2015/04/03 23:58:19 christos Exp $	*/
+/*	$NetBSD: sftp-common.c,v 1.5.4.1 2015/04/30 06:07:30 riz Exp $	*/
 /* $OpenBSD: sftp-common.c,v 1.28 2015/01/20 23:14:00 deraadt Exp $ */
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: sftp-common.c,v 1.7 2015/04/03 23:58:19 christos Exp $");
+__RCSID("$NetBSD: sftp-common.c,v 1.5.4.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/param.h>	/* MAX */
 #include <sys/types.h>
 #include <sys/stat.h>

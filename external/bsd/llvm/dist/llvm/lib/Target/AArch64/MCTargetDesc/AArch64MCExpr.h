@@ -112,7 +112,7 @@ public:
   /// @name Construction
   /// @{
 
-  static const AArch64MCExpr *create(const MCExpr *Expr, VariantKind Kind,
+  static const AArch64MCExpr *Create(const MCExpr *Expr, VariantKind Kind,
                                    MCContext &Ctx);
 
   /// @}
@@ -120,7 +120,7 @@ public:
   /// @{
 
   /// Get the kind of this expression.
-  VariantKind getKind() const { return Kind; }
+  VariantKind getKind() const { return static_cast<VariantKind>(Kind); }
 
   /// Get the expression this modifier applies to.
   const MCExpr *getSubExpr() const { return Expr; }
@@ -145,14 +145,15 @@ public:
   /// (e.g. ":got:", ":lo12:").
   StringRef getVariantKindName() const;
 
-  void printImpl(raw_ostream &OS, const MCAsmInfo *MAI) const override;
+  void PrintImpl(raw_ostream &OS) const override;
 
   void visitUsedExpr(MCStreamer &Streamer) const override;
 
-  MCFragment *findAssociatedFragment() const override;
+  const MCSection *FindAssociatedSection() const override;
 
-  bool evaluateAsRelocatableImpl(MCValue &Res, const MCAsmLayout *Layout,
-                                 const MCFixup *Fixup) const override;
+  bool EvaluateAsRelocatableImpl(MCValue &Res,
+                                 const MCAsmLayout *Layout,
+				 const MCFixup *Fixup) const override;
 
   void fixELFSymbolsInTLSFixups(MCAssembler &Asm) const override;
 
@@ -161,6 +162,7 @@ public:
   }
 
   static bool classof(const AArch64MCExpr *) { return true; }
+
 };
 } // end namespace llvm
 

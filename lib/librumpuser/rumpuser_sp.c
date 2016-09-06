@@ -1,4 +1,4 @@
-/*      $NetBSD: rumpuser_sp.c,v 1.70 2015/08/16 11:37:39 pooka Exp $	*/
+/*      $NetBSD: rumpuser_sp.c,v 1.66.2.1 2014/12/09 19:14:27 martin Exp $	*/
 
 /*
  * Copyright (c) 2010, 2011 Antti Kantee.  All Rights Reserved.
@@ -37,7 +37,7 @@
 #include "rumpuser_port.h"
 
 #if !defined(lint)
-__RCSID("$NetBSD: rumpuser_sp.c,v 1.70 2015/08/16 11:37:39 pooka Exp $");
+__RCSID("$NetBSD: rumpuser_sp.c,v 1.66.2.1 2014/12/09 19:14:27 martin Exp $");
 #endif /* !lint */
 
 #include <sys/types.h>
@@ -89,8 +89,8 @@ static char banner[MAXBANNER];
 #define PROTOMINOR 4
 
 
-/* either no atomic ops, or we haven't figured out how to use them */
-#if defined(__linux__) || defined(__APPLE__) || defined(__CYGWIN__) || defined(__OpenBSD__) || defined(__GNU__) || defined(__GLIBC__)
+/* how to use atomic ops on Linux? */
+#if defined(__linux__) || defined(__APPLE__) || defined(__CYGWIN__) || defined(__OpenBSD__)
 static pthread_mutex_t discomtx = PTHREAD_MUTEX_INITIALIZER;
 
 static void
@@ -862,7 +862,7 @@ int
 rumpuser_sp_anonmmap(void *arg, size_t howmuch, void **addr)
 {
 	struct spclient *spc = arg;
-	void *resp, *rdata = NULL; /* XXXuninit */
+	void *resp, *rdata;
 	int nlocks, rv;
 
 	rumpkern_unsched(&nlocks, NULL);
@@ -1362,7 +1362,7 @@ rumpuser_sp_init(const char *url,
 	/*LINTED*/
 	if (bind(s, sap, parsetab[idx].slen) == -1) {
 		error = errno;
-		fprintf(stderr, "rump_sp: failed to bind to URL %s\n", url);
+		fprintf(stderr, "rump_sp: server bind failed\n");
 		goto out;
 	}
 	if (listen(s, MAXCLI) == -1) {

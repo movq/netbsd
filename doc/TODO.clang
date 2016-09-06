@@ -1,4 +1,4 @@
-$NetBSD: TODO.clang,v 1.19 2016/02/27 21:42:14 joerg Exp $
+$NetBSD: TODO.clang,v 1.13 2014/08/10 19:12:08 joerg Exp $
 
 Hacks for the clang integration
 -------------------------------
@@ -6,15 +6,11 @@ Hacks for the clang integration
 "-no-integrated-as" is used in src/sys/arch/i386/stand to compensate
 for the incomplete explicit positioning support in LLVM MC.
 
+Workaround for .fpu handling in src/sys/lib/libunwind for ARM by forcing
+GNU as.
+
 src/external/gpl3/gcc/usr.bin/backend forces tree.c to be compiled with -O0.
-g++ otherwise crashes on trivial input.
+g++ otherwise on trivial input.
 
 src/external/mit/xorg/lib/pixman uses -fno-integrated-as on ARM for the
 macro (ab)use.
-
-src/tests/lib/libc/sync disables tests for atomics shorter than 32bit on
-SPARC64 due to missing codegen support.
-
-src/external/bsd/llvm/lib/libLLVMSupport and src/external/bsd/libc++/lib
-explicitly require -Wa,-Av8plus at the moment, because atomic ops are
-always lowered to CAS.

@@ -1,4 +1,4 @@
-/*	$NetBSD: quip_client.c,v 1.12 2016/02/17 19:51:29 christos Exp $	*/
+/*	$NetBSD: quip_client.c,v 1.10 2013/10/19 17:16:37 christos Exp $	*/
 /*	$KAME: quip_client.c,v 1.9 2003/05/17 05:59:00 itojun Exp $	*/
 /*
  * Copyright (C) 1999-2000
@@ -122,7 +122,8 @@ quip_openserver(void)
 	strlcpy(addr.sun_path, QUIP_PATH,sizeof(addr.sun_path));
 
 	if (connect(fd, (struct sockaddr *)&addr, sizeof(addr)) < 0) {
-		warnx("can't talk to altqd;probably, altqd is not running");
+		fprintf(stderr, "can't talk to altqd!\n"
+			"probably, altqd is not running\n");
 		return (-1);
 	}
 
@@ -357,7 +358,7 @@ quip_selectqdisc(char *ifname, char *qdisc_name)
 	if (result_code != 200)
 		errx(1, "can't get qdisc info");
 
-	if (sscanf(buf, "%63s", qdisc) != 1)
+	if (sscanf(buf, "%s", qdisc) != 1)
 		errx(1, "can't get qdisc name");
 
 	if (qdisc_name != NULL && strcmp(qdisc, qdisc_name) != 0)

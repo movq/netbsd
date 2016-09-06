@@ -1,4 +1,4 @@
-.\"	$NetBSD: prep,v 1.15 2015/05/09 08:13:34 snj Exp $
+.\"	$NetBSD: prep,v 1.14.26.1 2015/05/24 11:14:42 martin Exp $
 .
 First and foremost, before beginning the installation process,
 .Em make sure you have a reliable backup

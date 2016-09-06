@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_ec.c,v 1.74 2014/12/08 16:16:45 msaitoh Exp $	*/
+/*	$NetBSD: acpi_ec.c,v 1.73.2.1 2015/01/08 11:07:43 martin Exp $	*/
 
 /*-
  * Copyright (c) 2007 Joerg Sonnenberger <joerg@NetBSD.org>.
@@ -59,7 +59,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_ec.c,v 1.74 2014/12/08 16:16:45 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_ec.c,v 1.73.2.1 2015/01/08 11:07:43 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/callout.h>

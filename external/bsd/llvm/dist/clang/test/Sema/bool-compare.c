@@ -1,4 +1,4 @@
-// RUN: %clang_cc1 -fsyntax-only -verify %s -Wno-logical-not-parentheses
+// RUN: %clang_cc1 -fsyntax-only -verify %s
 
 
 void f(int x, int y, int z) {

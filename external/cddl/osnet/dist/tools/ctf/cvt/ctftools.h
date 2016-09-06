@@ -137,12 +137,10 @@ typedef enum stabtype {
 	STABTYPE_FIRST, /* do not use */
 	INTRINSIC,
 	POINTER,
-	REFERENCE,
 	ARRAY,
 	FUNCTION,
 	STRUCT,
 	UNION,
-	CLASS,
 	ENUM,
 	FORWARD,
 	TYPEDEF,
@@ -441,13 +439,13 @@ int streq(const char *, const char *);
 int findelfsecidx(Elf *, const char *, const char *);
 size_t elf_ptrsz(Elf *);
 char *mktmpname(const char *, const char *);
-void terminate(const char *, ...) __printflike(1, 2) __dead;
-void aborterr(const char *, ...) __printflike(1, 2) __dead;
+void terminate(const char *, ...);
+void aborterr(const char *, ...);
 void set_terminate_cleanup(void (*)(void));
-void elfterminate(const char *, const char *, ...) __printflike(2, 3) __dead;
-void warning(const char *, ...) __printflike(1, 2);
-void vadebug(int, const char *, va_list) __printflike(2, 0);
-void debug(int, const char *, ...) __printflike(2, 3);
+void elfterminate(const char *, const char *, ...);
+void warning(const char *, ...);
+void vadebug(int, const char *, va_list);
+void debug(int, const char *, ...);
 
 
 void watch_dump(int);

@@ -1,5 +1,5 @@
 /* $FreeBSD: src/sys/net80211/ieee80211_radiotap.h,v 1.5 2005/01/22 20:12:05 sam Exp $ */
-/* $NetBSD: radiotap.h,v 1.4 2014/10/16 19:29:30 christos Exp $ */
+/* $NetBSD: radiotap.h,v 1.3.4.1 2015/04/29 20:28:38 snj Exp $ */
 
 /*-
  * Copyright (c) 2003, 2004 David Young.  All rights reserved.

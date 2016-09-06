@@ -1,4 +1,4 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
  * Copyright (c) 2009 Nicholas Marriott <nicm@users.sourceforge.net>
@@ -19,6 +19,7 @@
 #include <sys/types.h>
 
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "tmux.h"
 
@@ -29,16 +30,17 @@
 enum cmd_retval	 cmd_list_panes_exec(struct cmd *, struct cmd_q *);
 
 void	cmd_list_panes_server(struct cmd *, struct cmd_q *);
-void	cmd_list_panes_session(struct cmd *, struct session *, struct cmd_q *,
-	    int);
-void	cmd_list_panes_window(struct cmd *, struct session *, struct winlink *,
-	    struct cmd_q *, int);
+void	cmd_list_panes_session(
+	    struct cmd *, struct session *, struct cmd_q *, int);
+void	cmd_list_panes_window(struct cmd *,
+	    struct session *, struct winlink *, struct cmd_q *, int);
 
 const struct cmd_entry cmd_list_panes_entry = {
 	"list-panes", "lsp",
 	"asF:t:", 0, 0,
 	"[-as] [-F format] " CMD_TARGET_WINDOW_USAGE,
 	0,
+	NULL,
 	cmd_list_panes_exec
 };
 
@@ -76,8 +78,8 @@ cmd_list_panes_server(struct cmd *self, struct cmd_q *cmdq)
 }
 
 void
-cmd_list_panes_session(struct cmd *self, struct session *s, struct cmd_q *cmdq,
-    int type)
+cmd_list_panes_session(
+    struct cmd *self, struct session *s, struct cmd_q *cmdq, int type)
 {
 	struct winlink	*wl;
 
@@ -86,8 +88,8 @@ cmd_list_panes_session(struct cmd *self, struct session *s, struct cmd_q *cmdq,
 }
 
 void
-cmd_list_panes_window(struct cmd *self, struct session *s, struct winlink *wl,
-    struct cmd_q *cmdq, int type)
+cmd_list_panes_window(struct cmd *self,
+    struct session *s, struct winlink *wl, struct cmd_q *cmdq, int type)
 {
 	struct args		*args = self->args;
 	struct window_pane	*wp;
@@ -114,9 +116,9 @@ cmd_list_panes_window(struct cmd *self, struct session *s, struct winlink *wl,
 			    "#{?pane_active, (active),}#{?pane_dead, (dead),}";
 			break;
 		case 2:
-			template = "#{session_name}:#{window_index}."
-			    "#{pane_index}: [#{pane_width}x#{pane_height}] "
-			    "[history #{history_size}/#{history_limit}, "
+			template = "#{session_name}:#{window_index}.#{pane_index}: "
+			    "[#{pane_width}x#{pane_height}] [history "
+			    "#{history_size}/#{history_limit}, "
 			    "#{history_bytes} bytes] #{pane_id}"
 			    "#{?pane_active, (active),}#{?pane_dead, (dead),}";
 			break;
@@ -127,7 +129,9 @@ cmd_list_panes_window(struct cmd *self, struct session *s, struct winlink *wl,
 	TAILQ_FOREACH(wp, &wl->window->panes, entry) {
 		ft = format_create();
 		format_add(ft, "line", "%u", n);
-		format_defaults(ft, NULL, s, wl, wp);
+		format_session(ft, s);
+		format_winlink(ft, s, wl);
+		format_window_pane(ft, wp);
 
 		line = format_expand(ft, template);
 		cmdq_print(cmdq, "%s", line);

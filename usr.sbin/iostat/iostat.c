@@ -1,4 +1,4 @@
-/*	$NetBSD: iostat.c,v 1.63 2015/10/25 02:47:17 mrg Exp $	*/
+/*	$NetBSD: iostat.c,v 1.61.2.1 2015/11/08 00:49:05 riz Exp $	*/
 
 /*
  * Copyright (c) 1996 John M. Vinopal
@@ -71,7 +71,7 @@ __COPYRIGHT("@(#) Copyright (c) 1986, 1991, 1993\
 #if 0
 static char sccsid[] = "@(#)iostat.c	8.3 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: iostat.c,v 1.63 2015/10/25 02:47:17 mrg Exp $");
+__RCSID("$NetBSD: iostat.c,v 1.61.2.1 2015/11/08 00:49:05 riz Exp $");
 #endif
 #endif /* not lint */
 

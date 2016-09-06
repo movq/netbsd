@@ -1,4 +1,4 @@
-/*	$NetBSD: pq3pci.c,v 1.21 2015/10/02 05:22:51 msaitoh Exp $	*/
+/*	$NetBSD: pq3pci.c,v 1.17 2014/07/30 10:50:54 joerg Exp $	*/
 /*-
  * Copyright (c) 2010, 2011 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -44,7 +44,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: pq3pci.c,v 1.21 2015/10/02 05:22:51 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pq3pci.c,v 1.17 2014/07/30 10:50:54 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>
@@ -92,11 +92,6 @@ __KERNEL_RCSID(0, "$NetBSD: pq3pci.c,v 1.21 2015/10/02 05:22:51 msaitoh Exp $");
 	__SHIFTIN(field##_##P20x0##_##value, PORDEVSR_##field), result), \
     TRUTH_ENCODE(SVR_P1016v1, inst, PORDEVSR_##field, \
 	__SHIFTIN(field##_##P20x0##_##value, PORDEVSR_##field), result)
-#define	PORDEVSR_P1023_TRUTH_ENCODE(inst, field, value, result) \
-    TRUTH_ENCODE(SVR_P1023v1, inst, PORDEVSR_##field, \
-	__SHIFTIN(field##_##value, PORDEVSR_##field), result), \
-    TRUTH_ENCODE(SVR_P1017v1, inst, PORDEVSR_##field, \
-	__SHIFTIN(field##_##value, PORDEVSR_##field), result)
 
 #define	PORDEVSR_TRUTH_ENCODE(svr, inst, field, value, result) \
     TRUTH_ENCODE(svr, inst, PORDEVSR_##field, \
@@ -175,21 +170,6 @@ const struct e500_truthtab pq3pci_pcie_lanes[] = {
     PORDEVSR_P1025_TRUTH_ENCODE(1, IOSEL, PCIE1_X2_SGMII23, 2),
 
     PORDEVSR_P1025_TRUTH_ENCODE(2, IOSEL, PCIE12_X1_SGMII23, 1),
-#endif
-
-#ifdef P1023
-    PORDEVSR_P1023_TRUTH_ENCODE(1, IOSEL_P1023, PCIE12_X1, 1),
-    PORDEVSR_P1023_TRUTH_ENCODE(1, IOSEL_P1023, PCIE123_X1, 1),
-    PORDEVSR_P1023_TRUTH_ENCODE(1, IOSEL_P1023, PCIE123_X1_SGMII2, 1),
-    PORDEVSR_P1023_TRUTH_ENCODE(1, IOSEL_P1023, PCIE12_X1_SGMII12, 1),
-
-    PORDEVSR_P1023_TRUTH_ENCODE(2, IOSEL_P1023, PCIE12_X1, 1),
-    PORDEVSR_P1023_TRUTH_ENCODE(2, IOSEL_P1023, PCIE123_X1, 1),
-    PORDEVSR_P1023_TRUTH_ENCODE(2, IOSEL_P1023, PCIE123_X1_SGMII2, 1),
-    PORDEVSR_P1023_TRUTH_ENCODE(2, IOSEL_P1023, PCIE12_X1_SGMII12, 1),
-
-    PORDEVSR_P1023_TRUTH_ENCODE(3, IOSEL_P1023, PCIE123_X1, 1),
-    PORDEVSR_P1023_TRUTH_ENCODE(3, IOSEL_P1023, PCIE123_X1_SGMII2, 1),
 #endif
 };
 
@@ -1058,10 +1038,8 @@ pq3pci_conf_read(void *v, pcitag_t tag, int reg)
 	struct pq3pci_softc * const sc = v;
 	struct genppc_pci_chipset * const pc = &sc->sc_pc;
 
-	if (reg < 0)
-		return 0xffffffff;
-	if (reg >= PCI_CONF_SIZE) {
-		if (!sc->sc_pcie || reg >= PCI_EXTCONF_SIZE)
+	if (reg >= 256) {
+		if (!sc->sc_pcie)
 			return 0xffffffff;
 		reg = (reg & 0xff) | ((reg & 0xf00) << 16);
 	}
@@ -1098,10 +1076,8 @@ pq3pci_conf_write(void *v, pcitag_t tag, int reg, pcireg_t data)
 	struct pq3pci_softc * const sc = v;
 	struct genppc_pci_chipset * const pc = &sc->sc_pc;
 
-	if (reg < 0)
-		return;
-	if (reg >= PCI_CONF_SIZE) {
-		if (!sc->sc_pcie || reg >= PCI_EXTCONF_SIZE)
+	if (reg >= 256) {
+		if (!sc->sc_pcie)
 			return;
 		reg = (reg & 0xff) | ((reg & 0xf00) << 16);
 	}

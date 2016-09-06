@@ -1,4 +1,4 @@
-/*	$NetBSD: ymd2yd.c,v 1.4 2016/01/08 21:35:39 christos Exp $	*/
+/*	$NetBSD: ymd2yd.c,v 1.1.1.2.4.1 2014/12/24 00:05:20 riz Exp $	*/
 
 /*
  * ymd2yd - compute the date in the year from y/m/d

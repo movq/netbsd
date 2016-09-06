@@ -49,18 +49,20 @@ TargetMachine *EngineBuilder::selectTarget(const Triple &TargetTriple,
   // Adjust the triple to match what the user requested.
   const Target *TheTarget = nullptr;
   if (!MArch.empty()) {
-    auto I = std::find_if(
-        TargetRegistry::targets().begin(), TargetRegistry::targets().end(),
-        [&](const Target &T) { return MArch == T.getName(); });
+    for (TargetRegistry::iterator it = TargetRegistry::begin(),
+           ie = TargetRegistry::end(); it != ie; ++it) {
+      if (MArch == it->getName()) {
+        TheTarget = &*it;
+        break;
+      }
+    }
 
-    if (I == TargetRegistry::targets().end()) {
+    if (!TheTarget) {
       if (ErrorStr)
         *ErrorStr = "No available targets are compatible with this -march, "
                     "see -version for the available targets.\n";
       return nullptr;
     }
-
-    TheTarget = &*I;
 
     // Adjust the triple to match (if known), otherwise stick with the
     // requested/host triple.

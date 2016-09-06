@@ -1,5 +1,5 @@
-/*	$NetBSD: progressmeter.c,v 1.8 2016/08/02 13:45:12 christos Exp $	*/
-/* $OpenBSD: progressmeter.c,v 1.45 2016/06/30 05:17:05 dtucker Exp $ */
+/*	$NetBSD: progressmeter.c,v 1.5.4.1 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: progressmeter.c,v 1.41 2015/01/14 13:54:13 djm Exp $ */
 /*
  * Copyright (c) 2003 Nils Nordman.  All rights reserved.
  *
@@ -25,7 +25,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: progressmeter.c,v 1.8 2016/08/02 13:45:12 christos Exp $");
+__RCSID("$NetBSD: progressmeter.c,v 1.5.4.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/uio.h>
@@ -64,8 +64,8 @@ void refresh_progress_meter(void);
 /* signal handler for updating the progress meter */
 static void update_progress_meter(int);
 
-static double start;		/* start progress */
-static double last_update;	/* last progress update */
+static time_t start;		/* start progress */
+static time_t last_update;	/* last progress update */
 static const char *file;	/* name of the file being transferred */
 static off_t start_pos;		/* initial position of transfer */
 static off_t end_pos;		/* ending position of transfer */
@@ -123,8 +123,9 @@ void
 refresh_progress_meter(void)
 {
 	char buf[MAX_WINSIZE + 1];
+	time_t now;
 	off_t transferred;
-	double elapsed, now;
+	double elapsed;
 	int percent;
 	off_t bytes_left;
 	int cur_speed;
@@ -135,7 +136,7 @@ refresh_progress_meter(void)
 
 	transferred = *counter - (cur_pos ? cur_pos : start_pos);
 	cur_pos = *counter;
-	now = monotime_double();
+	now = monotime();
 	bytes_left = end_pos - cur_pos;
 
 	delta_pos = cur_pos - last_pos;
@@ -179,11 +180,11 @@ refresh_progress_meter(void)
 	}
 
 	/* percent of transfer done */
-	if (end_pos == 0 || cur_pos == end_pos)
-		percent = 100;
-	else
+	if (end_pos != 0)
 		percent = ((float)cur_pos / end_pos) * 100;
-	snprintf(buf + strlen(buf), win_size - strlen(buf),
+	else
+		percent = 100;
+	snprintf(buf + strlen(buf), win_size - strlen(buf) - 8,
 	    " %3d%% ", percent);
 
 	/* amount transferred */
@@ -267,7 +268,7 @@ update_progress_meter(int ignore)
 void
 start_progress_meter(const char *f, off_t filesize, off_t *ctr)
 {
-	start = last_update = monotime_double();
+	start = last_update = monotime();
 	file = f;
 	start_pos = *ctr;
 	end_pos = filesize;

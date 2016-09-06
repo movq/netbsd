@@ -1,6 +1,6 @@
 /* Main header file for the bfd library -- portable access to object files.
 
-   Copyright (C) 1990-2015 Free Software Foundation, Inc.
+   Copyright 1990-2013 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.
 
@@ -292,13 +292,10 @@ typedef struct bfd_section *sec_ptr;
 
 #define bfd_is_com_section(ptr) (((ptr)->flags & SEC_IS_COMMON) != 0)
 
-#define bfd_get_section_limit_octets(bfd, sec)			\
-  ((bfd)->direction != write_direction && (sec)->rawsize != 0	\
-   ? (sec)->rawsize : (sec)->size)
-
 /* Find the address one past the end of SEC.  */
 #define bfd_get_section_limit(bfd, sec) \
-  (bfd_get_section_limit_octets(bfd, sec) / bfd_octets_per_byte (bfd))
+  (((bfd)->direction != write_direction && (sec)->rawsize != 0	\
+    ? (sec)->rawsize : (sec)->size) / bfd_octets_per_byte (bfd))
 
 /* Return TRUE if input section SEC has been discarded.  */
 #define discarded_section(sec)				\
@@ -436,16 +433,6 @@ extern void bfd_hash_traverse
    tables allocated using bfd_hash_table_init will be created with
    this size.  */
 extern unsigned long bfd_hash_set_default_size (unsigned long);
-
-/* Types of compressed DWARF debug sections.  We currently support
-   zlib.  */
-enum compressed_debug_section_type
-{
-  COMPRESS_DEBUG_NONE = 0,
-  COMPRESS_DEBUG = 1 << 0,
-  COMPRESS_DEBUG_GNU_ZLIB = COMPRESS_DEBUG | 1 << 1,
-  COMPRESS_DEBUG_GABI_ZLIB = COMPRESS_DEBUG | 1 << 2
-};
 
 /* This structure is used to keep track of stabs in sections
    information while linking.  */
@@ -671,7 +658,7 @@ extern int bfd_elf_get_dyn_lib_class
   (bfd *);
 extern struct bfd_link_needed_list *bfd_elf_get_runpath_list
   (bfd *, struct bfd_link_info *);
-extern int bfd_elf_discard_info
+extern bfd_boolean bfd_elf_discard_info
   (bfd *, struct bfd_link_info *);
 extern unsigned int _bfd_elf_default_action_discarded
   (struct bfd_section *);
@@ -693,21 +680,19 @@ extern int bfd_get_elf_phdrs
   (bfd *abfd, void *phdrs);
 
 /* Create a new BFD as if by bfd_openr.  Rather than opening a file,
-   reconstruct an ELF file by reading the segments out of remote
-   memory based on the ELF file header at EHDR_VMA and the ELF program
-   headers it points to.  If non-zero, SIZE is the known extent of the
-   object.  If not null, *LOADBASEP is filled in with the difference
-   between the VMAs from which the segments were read, and the VMAs
-   the file headers (and hence BFD's idea of each section's VMA) put
-   them at.
+   reconstruct an ELF file by reading the segments out of remote memory
+   based on the ELF file header at EHDR_VMA and the ELF program headers it
+   points to.  If not null, *LOADBASEP is filled in with the difference
+   between the VMAs from which the segments were read, and the VMAs the
+   file headers (and hence BFD's idea of each section's VMA) put them at.
 
-   The function TARGET_READ_MEMORY is called to copy LEN bytes from
-   the remote memory at target address VMA into the local buffer at
-   MYADDR; it should return zero on success or an `errno' code on
-   failure.  TEMPL must be a BFD for a target with the word size and
-   byte order found in the remote memory.  */
+   The function TARGET_READ_MEMORY is called to copy LEN bytes from the
+   remote memory at target address VMA into the local buffer at MYADDR; it
+   should return zero on success or an `errno' code on failure.  TEMPL must
+   be a BFD for an ELF target with the word size and byte order found in
+   the remote memory.  */
 extern bfd *bfd_elf_bfd_from_remote_memory
-  (bfd *templ, bfd_vma ehdr_vma, bfd_size_type size, bfd_vma *loadbasep,
+  (bfd *templ, bfd_vma ehdr_vma, bfd_vma *loadbasep,
    int (*target_read_memory) (bfd_vma vma, bfd_byte *myaddr,
 			      bfd_size_type len));
 
@@ -819,6 +804,12 @@ struct internal_syment;
 union internal_auxent;
 #endif
 
+extern bfd_boolean bfd_coff_get_syment
+  (bfd *, struct bfd_symbol *, struct internal_syment *);
+
+extern bfd_boolean bfd_coff_get_auxent
+  (bfd *, struct bfd_symbol *, int, union internal_auxent *);
+
 extern bfd_boolean bfd_coff_set_symbol_class
   (bfd *, struct bfd_symbol *, unsigned int);
 
@@ -886,19 +877,15 @@ extern bfd_boolean bfd_elf32_arm_get_bfd_for_interworking
 extern bfd_boolean bfd_elf32_arm_add_glue_sections_to_bfd
   (bfd *, struct bfd_link_info *);
 
-/* ELF ARM mapping symbol support.  */
+/* ELF ARM mapping symbol support */
 #define BFD_ARM_SPECIAL_SYM_TYPE_MAP	(1 << 0)
 #define BFD_ARM_SPECIAL_SYM_TYPE_TAG	(1 << 1)
 #define BFD_ARM_SPECIAL_SYM_TYPE_OTHER  (1 << 2)
 #define BFD_ARM_SPECIAL_SYM_TYPE_ANY	(~0)
-
 extern bfd_boolean bfd_is_arm_special_symbol_name
-  (const char *, int);
+  (const char * name, int type);
 
-extern void bfd_elf32_arm_set_byteswap_code
-  (struct bfd_link_info *, int);
-
-extern void bfd_elf32_arm_use_long_plt (void);
+extern void bfd_elf32_arm_set_byteswap_code (struct bfd_link_info *, int);
 
 /* ARM Note section processing.  */
 extern bfd_boolean bfd_arm_merge_machines
@@ -944,10 +931,10 @@ extern void bfd_elf32_aarch64_init_maps
   (bfd *);
 
 extern void bfd_elf64_aarch64_set_options
-  (bfd *, struct bfd_link_info *, int, int, int, int, int);
+  (bfd *, struct bfd_link_info *, int, int, int);
 
 extern void bfd_elf32_aarch64_set_options
-  (bfd *, struct bfd_link_info *, int, int, int, int, int);
+  (bfd *, struct bfd_link_info *, int, int, int);
 
 /* ELF AArch64 mapping symbol support.  */
 #define BFD_AARCH64_SPECIAL_SYM_TYPE_MAP	(1 << 0)
@@ -999,9 +986,22 @@ extern void bfd_elf32_ia64_after_parse
 extern void bfd_elf64_ia64_after_parse
   (int);
 
-/* V850 Note manipulation routines.  */
-extern bfd_boolean v850_elf_create_sections
-  (struct bfd_link_info *);
+/* This structure is used for a comdat section, as in PE.  A comdat
+   section is associated with a particular symbol.  When the linker
+   sees a comdat section, it keeps only one of the sections with a
+   given name and associated with a given symbol.  */
 
-extern bfd_boolean v850_elf_set_note
-  (bfd *, unsigned int, unsigned int);
+struct coff_comdat_info
+{
+  /* The name of the symbol associated with a comdat section.  */
+  const char *name;
+
+  /* The local symbol table index of the symbol associated with a
+     comdat section.  This is only meaningful to the object file format
+     specific code; it is not an index into the list returned by
+     bfd_canonicalize_symtab.  */
+  long symbol;
+};
+
+extern struct coff_comdat_info * bfd_coff_get_comdat_section
+  (bfd *, struct bfd_section *);

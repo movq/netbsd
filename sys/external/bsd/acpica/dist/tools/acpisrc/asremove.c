@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -77,6 +77,7 @@ AsRemoveStatement (
     KeywordLength = strlen (Keyword);
     SubBuffer = Buffer;
     SubString = Buffer;
+
 
     while (SubString)
     {
@@ -159,6 +160,7 @@ AsRemoveConditionalCompile (
     SubBuffer = Buffer;
     SubString = Buffer;
 
+
     while (SubString)
     {
         SubBuffer = strstr (SubString, Keyword);
@@ -223,7 +225,6 @@ AsRemoveConditionalCompile (
         {
             SubString--;
         }
-
         SubString++;
 
         /* Find the "#ifxxxx" */
@@ -298,7 +299,6 @@ AsRemoveConditionalCompile (
 }
 
 
-#ifdef _OBSOLETE_FUNCTIONS
 /******************************************************************************
  *
  * FUNCTION:    AsRemoveMacro
@@ -307,11 +307,6 @@ AsRemoveConditionalCompile (
  *              skip comments.
  *
  ******************************************************************************/
-
-NOTE: This function is no longer used and is commented out for now.
-
-Also, it appears to have one or more bugs in it. It can incorrectly remove
-lines of code, producing some garbage.
 
 void
 AsRemoveMacro (
@@ -325,6 +320,7 @@ AsRemoveMacro (
 
     SubBuffer = Buffer;
     SubString = Buffer;
+
 
     while (SubString)
     {
@@ -372,7 +368,7 @@ AsRemoveMacro (
         }
     }
 }
-#endif
+
 
 /******************************************************************************
  *
@@ -394,6 +390,7 @@ AsRemoveLine (
 
     SubBuffer = Buffer;
     SubString = Buffer;
+
 
     while (SubString)
     {
@@ -447,6 +444,7 @@ AsReduceTypedefs (
 
     SubBuffer = Buffer;
     SubString = Buffer;
+
 
     while (SubString)
     {
@@ -551,7 +549,6 @@ AsRemoveEmptyBlocks (
                         EmptyBlock = FALSE;
                         break;
                     }
-
                     SubBuffer++;
                 }
 
@@ -617,7 +614,6 @@ AsRemoveDebugMacros (
 
     AsReplaceString ("return_VOID",         "return", REPLACE_WHOLE_WORD, Buffer);
     AsReplaceString ("return_PTR",          "return", REPLACE_WHOLE_WORD, Buffer);
-    AsReplaceString ("return_STR",          "return", REPLACE_WHOLE_WORD, Buffer);
     AsReplaceString ("return_ACPI_STATUS",  "return", REPLACE_WHOLE_WORD, Buffer);
     AsReplaceString ("return_acpi_status",  "return", REPLACE_WHOLE_WORD, Buffer);
     AsReplaceString ("return_VALUE",        "return", REPLACE_WHOLE_WORD, Buffer);
@@ -662,7 +658,6 @@ AsCleanupSpecialMacro (
             {
                 SubString++;
             }
-
             SubString++;
 
             NestLevel = 1;
@@ -696,7 +691,6 @@ SkipLine:
                 {
                     NewLine = TRUE;
                 }
-
                 SubString++;
             }
 

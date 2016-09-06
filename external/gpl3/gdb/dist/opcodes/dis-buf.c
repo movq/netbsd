@@ -1,5 +1,6 @@
 /* Disassemble from a buffer, for GNU.
-   Copyright (C) 1993-2015 Free Software Foundation, Inc.
+   Copyright 1993, 1994, 1996, 1997, 1998, 1999, 2000, 2001, 2003, 2005,
+   2007, 2009, 2010  Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -38,9 +39,7 @@ buffer_read_memory (bfd_vma memaddr,
 
   if (memaddr < info->buffer_vma
       || memaddr - info->buffer_vma > max_addr_offset
-      || memaddr - info->buffer_vma + end_addr_offset > max_addr_offset
-      || (info->stop_vma && (memaddr >= info->stop_vma
-			     || memaddr + end_addr_offset > info->stop_vma)))
+      || memaddr - info->buffer_vma + end_addr_offset > max_addr_offset)
     /* Out of bounds.  Use EIO because GDB uses it.  */
     return EIO;
   memcpy (myaddr, info->buffer + octets, length);
