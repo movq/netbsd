@@ -60,10 +60,9 @@ namespace llvm {
     IntrinsicSignature IS;
 
     // Memory mod/ref behavior of this intrinsic.
-    enum ModRefKind {
+    enum {
       NoMem, ReadArgMem, ReadMem, ReadWriteArgMem, ReadWriteMem
-    };
-    ModRefKind ModRef;
+    } ModRef;
 
     /// This is set to true if the intrinsic is overloaded by its argument
     /// types.
@@ -80,9 +79,6 @@ namespace llvm {
 
     /// isNoReturn - True if the intrinsic is no-return.
     bool isNoReturn;
-
-    /// isConvergent - True if the intrinsic is marked as convergent.
-    bool isConvergent;
 
     enum ArgAttribute {
       NoCapture,

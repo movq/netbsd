@@ -1,4 +1,4 @@
-/*	$NetBSD: regress.c,v 1.8 2015/01/29 07:26:02 spz Exp $	*/
+/*	$NetBSD: regress.c,v 1.7.8.1 2015/02/03 08:23:40 bouyer Exp $	*/
 /*
  * Copyright (c) 2003-2007 Niels Provos <provos@citi.umich.edu>
  * Copyright (c) 2007-2012 Niels Provos and Nick Mathewson
@@ -33,7 +33,7 @@
 
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: regress.c,v 1.8 2015/01/29 07:26:02 spz Exp $");
+__RCSID("$NetBSD: regress.c,v 1.7.8.1 2015/02/03 08:23:40 bouyer Exp $");
 
 #include <sys/types.h>
 #include <sys/stat.h>

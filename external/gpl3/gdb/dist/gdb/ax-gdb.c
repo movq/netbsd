@@ -1,6 +1,6 @@
 /* GDB-specific functions for operating on agent expressions.
 
-   Copyright (C) 1998-2015 Free Software Foundation, Inc.
+   Copyright (C) 1998-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -30,6 +30,7 @@
 #include "target.h"
 #include "ax.h"
 #include "ax-gdb.h"
+#include <string.h>
 #include "block.h"
 #include "regcache.h"
 #include "user-regs.h"
@@ -40,7 +41,6 @@
 #include "arch-utils.h"
 #include "cli/cli-utils.h"
 #include "linespec.h"
-#include "objfiles.h"
 
 #include "valprint.h"
 #include "c-lang.h"
@@ -712,14 +712,14 @@ gen_var_ref (struct gdbarch *gdbarch, struct agent_expr *ax,
 
     case LOC_UNRESOLVED:
       {
-	struct bound_minimal_symbol msym
+	struct minimal_symbol *msym
 	  = lookup_minimal_symbol (SYMBOL_LINKAGE_NAME (var), NULL, NULL);
 
-	if (!msym.minsym)
+	if (!msym)
 	  error (_("Couldn't resolve symbol `%s'."), SYMBOL_PRINT_NAME (var));
 
 	/* Push the address of the variable.  */
-	ax_const_l (ax, BMSYMBOL_VALUE_ADDRESS (msym));
+	ax_const_l (ax, SYMBOL_VALUE_ADDRESS (msym));
 	value->kind = axs_lvalue_memory;
       }
       break;
@@ -885,7 +885,7 @@ gen_conversion (struct agent_expr *ax, struct type *from, struct type *to)
   /* If we're converting to a narrower type, then we need to clear out
      the upper bits.  */
   if (TYPE_LENGTH (to) < TYPE_LENGTH (from))
-    gen_extend (ax, to);
+    gen_extend (ax, from);
 
   /* If the two values have equal width, but different signednesses,
      then we need to extend.  */
@@ -2187,7 +2187,7 @@ gen_expr (struct expression *exp, union exp_element **pc,
     case OP_THIS:
       {
 	struct symbol *sym, *func;
-	const struct block *b;
+	struct block *b;
 	const struct language_defn *lang;
 
 	b = block_for_pc (ax->scope);

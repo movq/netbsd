@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.6 2015/10/18 17:13:33 maxv Exp $	*/
+/*	$NetBSD: machdep.c,v 1.4 2014/04/18 18:32:00 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002 The NetBSD Foundation, Inc.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.6 2015/10/18 17:13:33 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.4 2014/04/18 18:32:00 martin Exp $");
 
 #include "opt_cputype.h"
 #include "opt_ddb.h"
@@ -981,11 +981,10 @@ delay(u_int us)
 		end = start + n * cpu_ticksnum / cpu_ticksdenom;
 
 		/* N.B. Interval Timer may wrap around */
-		if (end < start) {
-			do {
+		if (end < start)
+			do
 				mfctl(CR_ITMR, start);
-			} while (start > end);
-		}
+			while (start > end);
 
 		do
 			mfctl(CR_ITMR, start);
@@ -1884,7 +1883,7 @@ hppa_setvmspace(struct lwp *l)
 	tf->tf_sr4 = tf->tf_sr5 = tf->tf_sr6 =
 	tf->tf_iisq_head = tf->tf_iisq_tail = space;
 
-	/* Load the protection registers. */
+	/* Load the protection regsiters. */
 	tf->tf_pidr1 = tf->tf_pidr2 = pmap->pm_pid;
 }
 

@@ -30,7 +30,7 @@ class MultiplexConsumer : public SemaConsumer {
 public:
   // Takes ownership of the pointers in C.
   MultiplexConsumer(std::vector<std::unique_ptr<ASTConsumer>> C);
-  ~MultiplexConsumer() override;
+  ~MultiplexConsumer();
 
   // ASTConsumer
   void Initialize(ASTContext &Context) override;
@@ -49,7 +49,7 @@ public:
                             llvm::StringRef Value) override;
   void HandleDependentLibrary(llvm::StringRef Lib) override;
   void CompleteTentativeDefinition(VarDecl *D) override;
-  void HandleVTable(CXXRecordDecl *RD) override;
+  void HandleVTable(CXXRecordDecl *RD, bool DefinitionRequired) override;
   ASTMutationListener *GetASTMutationListener() override;
   ASTDeserializationListener *GetASTDeserializationListener() override;
   void PrintStats() override;

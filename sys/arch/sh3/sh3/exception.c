@@ -1,4 +1,4 @@
-/*	$NetBSD: exception.c,v 1.64 2015/03/04 09:39:26 skrll Exp $	*/
+/*	$NetBSD: exception.c,v 1.63 2012/07/08 20:14:12 dsl Exp $	*/
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc. All rights reserved.
@@ -79,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: exception.c,v 1.64 2015/03/04 09:39:26 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: exception.c,v 1.63 2012/07/08 20:14:12 dsl Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -417,22 +417,11 @@ tlb_exception(struct lwp *l, struct trapframe *tf, uint32_t va)
 	/* Page not found. */
 	if (usermode) {
 		KSI_INIT_TRAP(&ksi);
-		switch (err) {
-		case ENOMEM:
+		if (err == ENOMEM)
 			ksi.ksi_signo = SIGKILL;
-			break;
-		case EINVAL:
-			ksi.ksi_signo = SIGBUS;
-			ksi.ksi_code = BUS_ADRERR;
-			break;
-		case EACCES:
-			ksi.ksi_signo = SIGSEGV;
-			ksi.ksi_code = SEGV_ACCERR;
-			break;
-		default:
+		else {
 			ksi.ksi_signo = SIGSEGV;
 			ksi.ksi_code = SEGV_MAPERR;
-			break;
 		}
 		goto user_fault;
 	} else {

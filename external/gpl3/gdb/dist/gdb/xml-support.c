@@ -1,6 +1,6 @@
 /* Helper routines for parsing XML using Expat.
 
-   Copyright (C) 2006-2015 Free Software Foundation, Inc.
+   Copyright (C) 2006-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,8 +19,11 @@
 
 #include "defs.h"
 #include "gdbcmd.h"
+#include "exceptions.h"
 #include "xml-support.h"
 #include "filestuff.h"
+
+#include <string.h>
 #include "safe-ctype.h"
 
 /* Debugging flag.  */
@@ -91,7 +94,7 @@ gdb_xml_body_text (void *data, const XML_Char *text, int length)
 
   if (scope->body == NULL)
     {
-      scope->body = XCNEW (struct obstack);
+      scope->body = XZALLOC (struct obstack);
       obstack_init (scope->body);
     }
 
@@ -313,22 +316,22 @@ gdb_xml_start_element_wrapper (void *data, const XML_Char *name,
 			       const XML_Char **attrs)
 {
   struct gdb_xml_parser *parser = data;
+  volatile struct gdb_exception ex;
 
   if (parser->error.reason < 0)
     return;
 
-  TRY
+  TRY_CATCH (ex, RETURN_MASK_ALL)
     {
       gdb_xml_start_element (data, name, attrs);
     }
-  CATCH (ex, RETURN_MASK_ALL)
+  if (ex.reason < 0)
     {
       parser->error = ex;
 #ifdef HAVE_XML_STOPPARSER
       XML_StopParser (parser->expat_parser, XML_FALSE);
 #endif
     }
-  END_CATCH
 }
 
 /* Handle the end of an element.  DATA is our local XML parser, and
@@ -396,22 +399,22 @@ static void
 gdb_xml_end_element_wrapper (void *data, const XML_Char *name)
 {
   struct gdb_xml_parser *parser = data;
+  volatile struct gdb_exception ex;
 
   if (parser->error.reason < 0)
     return;
 
-  TRY
+  TRY_CATCH (ex, RETURN_MASK_ALL)
     {
       gdb_xml_end_element (data, name);
     }
-  CATCH (ex, RETURN_MASK_ALL)
+  if (ex.reason < 0)
     {
       parser->error = ex;
 #ifdef HAVE_XML_STOPPARSER
       XML_StopParser (parser->expat_parser, XML_FALSE);
 #endif
     }
-  END_CATCH
 }
 
 /* Free a parser and all its associated state.  */
@@ -451,7 +454,7 @@ gdb_xml_create_parser_and_cleanup (const char *name,
   struct cleanup *result;
 
   /* Initialize the parser.  */
-  parser = XCNEW (struct gdb_xml_parser);
+  parser = XZALLOC (struct gdb_xml_parser);
   parser->expat_parser = XML_ParserCreateNS (NULL, '!');
   if (parser->expat_parser == NULL)
     {
@@ -874,7 +877,7 @@ xml_process_xincludes (const char *name, const char *text,
   struct cleanup *back_to;
   char *result = NULL;
 
-  data = XCNEW (struct xinclude_parsing_data);
+  data = XZALLOC (struct xinclude_parsing_data);
   obstack_init (&data->obstack);
   back_to = make_cleanup (xml_xinclude_cleanup, data);
 

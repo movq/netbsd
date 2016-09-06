@@ -1,5 +1,5 @@
 #include <sys/cdefs.h>
- __RCSID("$NetBSD: script.c,v 1.27 2016/06/17 19:42:32 roy Exp $");
+ __RCSID("$NetBSD: script.c,v 1.7.2.2 2015/02/05 15:13:12 martin Exp $");
 
 /*
  * dhcpcd - DHCP client daemon
@@ -42,6 +42,7 @@
  * config.h will pull it in, or our compat one. */
 #include <stdlib.h>
 #include <string.h>
+#include <syslog.h>
 #include <unistd.h>
 
 #include "config.h"
@@ -50,7 +51,6 @@
 #include "dhcp6.h"
 #include "if.h"
 #include "if-options.h"
-#include "ipv4ll.h"
 #include "ipv6nd.h"
 #include "script.h"
 
@@ -90,18 +90,21 @@ if_printoptions(void)
 		printf(" -  %s\n", *p);
 }
 
+#ifdef USE_SIGNALS
+#define U
+#else
+#define U __unused
+#endif
 static int
-exec_script(const struct dhcpcd_ctx *ctx, char *const *argv, char *const *env)
+exec_script(U const struct dhcpcd_ctx *ctx, char *const *argv, char *const *env)
+#undef U
 {
 	pid_t pid;
 	posix_spawnattr_t attr;
-	int r;
+	int i;
 #ifdef USE_SIGNALS
-	size_t i;
 	short flags;
 	sigset_t defsigs;
-#else
-	UNUSED(ctx);
 #endif
 
 	/* posix_spawn is a safe way of executing another image
@@ -112,15 +115,15 @@ exec_script(const struct dhcpcd_ctx *ctx, char *const *argv, char *const *env)
 	flags = POSIX_SPAWN_SETSIGMASK | POSIX_SPAWN_SETSIGDEF;
 	posix_spawnattr_setflags(&attr, flags);
 	sigemptyset(&defsigs);
-	for (i = 0; i < dhcpcd_signals_len; i++)
-		sigaddset(&defsigs, dhcpcd_signals[i]);
+	for (i = 0; i < dhcpcd_handlesigs[i]; i++)
+		sigaddset(&defsigs, dhcpcd_handlesigs[i]);
 	posix_spawnattr_setsigdefault(&attr, &defsigs);
 	posix_spawnattr_setsigmask(&attr, &ctx->sigset);
 #endif
 	errno = 0;
-	r = posix_spawn(&pid, argv[0], NULL, &attr, argv, env);
-	if (r) {
-		errno = r;
+	i = posix_spawn(&pid, argv[0], NULL, &attr, argv, env);
+	if (i) {
+		errno = i;
 		return -1;
 	}
 	return pid;
@@ -128,14 +131,15 @@ exec_script(const struct dhcpcd_ctx *ctx, char *const *argv, char *const *env)
 
 #ifdef INET
 static char *
-make_var(struct dhcpcd_ctx *ctx, const char *prefix, const char *var)
+make_var(const char *prefix, const char *var)
 {
 	size_t len;
 	char *v;
 
 	len = strlen(prefix) + strlen(var) + 2;
-	if ((v = malloc(len)) == NULL) {
-		logger(ctx, LOG_ERR, "%s: %m", __func__);
+	v = malloc(len);
+	if (v == NULL) {
+		syslog(LOG_ERR, "%s: %m", __func__);
 		return NULL;
 	}
 	snprintf(v, len, "%s_%s", prefix, var);
@@ -144,7 +148,7 @@ make_var(struct dhcpcd_ctx *ctx, const char *prefix, const char *var)
 
 
 static int
-append_config(struct dhcpcd_ctx *ctx, char ***env, size_t *len,
+append_config(char ***env, size_t *len,
     const char *prefix, const char *const *config)
 {
 	size_t i, j, e1;
@@ -160,12 +164,10 @@ append_config(struct dhcpcd_ctx *ctx, char ***env, size_t *len,
 		eq = strchr(config[i], '=');
 		e1 = (size_t)(eq - config[i] + 1);
 		for (j = 0; j < *len; j++) {
-			if (strncmp(ne[j], prefix, strlen(prefix)) == 0 &&
-			    ne[j][strlen(prefix)] == '_' &&
-			    strncmp(ne[j] + strlen(prefix) + 1,
-			    config[i], e1) == 0)
+			if (strncmp(ne[j] + strlen(prefix) + 1,
+				config[i], e1) == 0)
 			{
-				p = make_var(ctx, prefix, config[i]);
+				p = make_var(prefix, config[i]);
 				if (p == NULL) {
 					ret = -1;
 					break;
@@ -177,14 +179,14 @@ append_config(struct dhcpcd_ctx *ctx, char ***env, size_t *len,
 		}
 		if (j == *len) {
 			j++;
-			p = make_var(ctx, prefix, config[i]);
+			p = make_var(prefix, config[i]);
 			if (p == NULL) {
 				ret = -1;
 				break;
 			}
 			nep = realloc(ne, sizeof(char *) * (j + 1));
 			if (nep == NULL) {
-				logger(ctx, LOG_ERR, "%s: %m", __func__);
+				syslog(LOG_ERR, "%s: %m", __func__);
 				free(p);
 				ret = -1;
 				break;
@@ -235,24 +237,21 @@ make_env(const struct interface *ifp, const char *reason, char ***argv)
 #endif
 	const struct if_options *ifo = ifp->options;
 	const struct interface *ifp2;
-	int af;
 #ifdef INET
-	int dhcp, ipv4ll;
+	int dhcp;
 	const struct dhcp_state *state;
-	const struct ipv4ll_state *istate;
 #endif
 #ifdef INET6
 	const struct dhcp6_state *d6_state;
-	int static6, dhcp6, ra;
+	int dhcp6, ra;
 #endif
 
 #ifdef INET
-	dhcp = ipv4ll = 0;
+	dhcp = 0;
 	state = D_STATE(ifp);
-	istate = IPV4LL_CSTATE(ifp);
 #endif
 #ifdef INET6
-	static6 = dhcp6 = ra = 0;
+	dhcp6 = ra = 0;
 	d6_state = D6_CSTATE(ifp);
 #endif
 	if (strcmp(reason, "TEST") == 0) {
@@ -264,15 +263,11 @@ make_env(const struct interface *ifp, const char *reason, char ***argv)
 			ra = 1;
 #endif
 #ifdef INET
-		else if (istate && istate->addr != NULL)
-			ipv4ll = 1;
 		else
 			dhcp = 1;
 #endif
 	}
 #ifdef INET6
-	else if (strcmp(reason, "STATIC6") == 0)
-		static6 = 1;
 	else if (reason[strlen(reason) - 1] == '6')
 		dhcp6 = 1;
 	else if (strcmp(reason, "ROUTERADVERT") == 0)
@@ -288,8 +283,6 @@ make_env(const struct interface *ifp, const char *reason, char ***argv)
 		/* This space left intentionally blank */
 	}
 #ifdef INET
-	else if (strcmp(reason, "IPV4LL") == 0)
-		ipv4ll = 1;
 	else
 		dhcp = 1;
 #endif
@@ -299,11 +292,11 @@ make_env(const struct interface *ifp, const char *reason, char ***argv)
 	if (ifp->ctx->options & DHCPCD_DUMPLEASE)
 		elen = 2;
 	else
-		elen = 11;
+		elen = 13;
 
 #define EMALLOC(i, l) if ((env[(i)] = malloc((l))) == NULL) goto eexit;
 	/* Make our env + space for profile, wireless and debug */
-	env = calloc(1, sizeof(char *) * (elen + 4 + 1));
+	env = calloc(1, sizeof(char *) * (elen + 3 + 1));
 	if (env == NULL)
 		goto eexit;
 	e = strlen("interface") + strlen(ifp->name) + 2;
@@ -328,10 +321,11 @@ make_env(const struct interface *ifp, const char *reason, char ***argv)
 	EMALLOC(6, e);
 	snprintf(env[6], e, "ifflags=%u", ifp->flags);
 	EMALLOC(7, e);
-	snprintf(env[7], e, "ifmtu=%d", if_getmtu(ifp));
+	snprintf(env[7], e, "ifmtu=%d", if_getmtu(ifp->name));
 	l = e = strlen("interface_order=");
 	TAILQ_FOREACH(ifp2, ifp->ctx->ifaces, next) {
-		e += strlen(ifp2->name) + 1;
+		if (!(ifp2->options->options & DHCPCD_PFXDLGONLY))
+			e += strlen(ifp2->name) + 1;
 	}
 	EMALLOC(8, e);
 	p = env[8];
@@ -339,11 +333,13 @@ make_env(const struct interface *ifp, const char *reason, char ***argv)
 	e -= l;
 	p += l;
 	TAILQ_FOREACH(ifp2, ifp->ctx->ifaces, next) {
-		l = strlcpy(p, ifp2->name, e);
-		p += l;
-		e -= l;
-		*p++ = ' ';
-		e--;
+		if (!(ifp2->options->options & DHCPCD_PFXDLGONLY)) {
+			l = strlcpy(p, ifp2->name, e);
+			p += l;
+			e -= l;
+			*p++ = ' ';
+			e--;
+		}
 	}
 	*--p = '\0';
 	if (strcmp(reason, "STOPPED") == 0) {
@@ -362,10 +358,8 @@ make_env(const struct interface *ifp, const char *reason, char ***argv)
 	} else if (1 == 2 /* appease ifdefs */
 #ifdef INET
 	    || (dhcp && state && state->new)
-	    || (ipv4ll && IPV4LL_STATE_RUNNING(ifp))
 #endif
 #ifdef INET6
-	    || (static6 && IPV6_STATE_RUNNING(ifp))
 	    || (dhcp6 && d6_state && d6_state->new)
 	    || (ra && ipv6nd_hasra(ifp))
 #endif
@@ -379,22 +373,18 @@ make_env(const struct interface *ifp, const char *reason, char ***argv)
 	}
 	if (env[9] == NULL || env[10] == NULL)
 		goto eexit;
-	if ((af = dhcpcd_ifafwaiting(ifp)) != AF_MAX) {
-		e = 20;
-		EMALLOC(elen, e);
-		snprintf(env[elen++], e, "if_afwaiting=%d", af);
-	}
-	if ((af = dhcpcd_afwaiting(ifp->ctx)) != AF_MAX) {
-		TAILQ_FOREACH(ifp2, ifp->ctx->ifaces, next) {
-			if ((af = dhcpcd_ifafwaiting(ifp2)) != AF_MAX)
-				break;
-		}
-	}
-	if (af != AF_MAX) {
-		e = 20;
-		EMALLOC(elen, e);
-		snprintf(env[elen++], e, "af_waiting=%d", af);
-	}
+	if (dhcpcd_oneup(ifp->ctx))
+		env[11] = strdup("if_oneup=true");
+	else
+		env[11] = strdup("if_oneup=false");
+	if (env[11] == NULL)
+		goto eexit;
+	if (dhcpcd_ipwaited(ifp->ctx))
+		env[12] = strdup("if_ipwaited=true");
+	else
+		env[12] = strdup("if_ipwaited=false");
+	if (env[12] == NULL)
+		goto eexit;
 	if (ifo->options & DHCPCD_DEBUG) {
 		e = strlen("syslog_debug=true") + 1;
 		EMALLOC(elen, e);
@@ -411,20 +401,20 @@ make_env(const struct interface *ifp, const char *reason, char ***argv)
 		ssize_t psl;
 
 		pfx_len = strlen(pfx);
-		psl = print_string(NULL, 0, OT_ESCSTRING,
+		psl = print_string(NULL, 0, ESCSTRING,
 		    (const uint8_t *)ifp->ssid, ifp->ssid_len);
 		if (psl != -1) {
 			EMALLOC(elen, pfx_len + (size_t)psl + 1);
 			memcpy(env[elen], pfx, pfx_len);
 			print_string(env[elen] + pfx_len, (size_t)psl + 1,
-			    OT_ESCSTRING,
+			    ESCSTRING,
 			    (const uint8_t *)ifp->ssid, ifp->ssid_len);
 			elen++;
 		}
 	}
 #ifdef INET
 	if (dhcp && state && state->old) {
-		n = dhcp_env(NULL, NULL, state->old, state->old_len, ifp);
+		n = dhcp_env(NULL, NULL, state->old, ifp);
 		if (n == -1)
 			goto eexit;
 		if (n > 0) {
@@ -433,18 +423,27 @@ make_env(const struct interface *ifp, const char *reason, char ***argv)
 			if (nenv == NULL)
 				goto eexit;
 			env = nenv;
-			n = dhcp_env(env + elen, "old",
-			    state->old, state->old_len, ifp);
+			n = dhcp_env(env + elen, "old", state->old, ifp);
 			if (n == -1)
 				goto eexit;
 			elen += (size_t)n;
 		}
-		if (append_config(ifp->ctx, &env, &elen, "old",
+		if (append_config(&env, &elen, "old",
 		    (const char *const *)ifo->config) == -1)
 			goto eexit;
 	}
 #endif
 #ifdef INET6
+	if (dhcp6 && d6_state && ifo->options & DHCPCD_PFXDLGONLY) {
+		nenv = realloc(env, sizeof(char *) * (elen + 2));
+		if (nenv == NULL)
+			goto eexit;
+		env = nenv;
+		env[elen] = strdup("ifclass=pd");
+		if (env[elen] == NULL)
+			goto eexit;
+		elen++;
+	}
 	if (dhcp6 && d6_state && d6_state->old) {
 		n = dhcp6_env(NULL, NULL, ifp,
 		    d6_state->old, d6_state->old_len);
@@ -465,22 +464,8 @@ make_env(const struct interface *ifp, const char *reason, char ***argv)
 
 dumplease:
 #ifdef INET
-	if (ipv4ll) {
-		n = ipv4ll_env(NULL, NULL, ifp);
-		if (n > 0) {
-			nenv = realloc(env, sizeof(char *) *
-			    (elen + (size_t)n + 1));
-			if (nenv == NULL)
-				goto eexit;
-			env = nenv;
-			if ((n = ipv4ll_env(env + elen,
-			    istate->down ? "old" : "new", ifp)) == -1)
-				goto eexit;
-			elen += (size_t)n;
-		}
-	}
 	if (dhcp && state && state->new) {
-		n = dhcp_env(NULL, NULL, state->new, state->new_len, ifp);
+		n = dhcp_env(NULL, NULL, state->new, ifp);
 		if (n > 0) {
 			nenv = realloc(env, sizeof(char *) *
 			    (elen + (size_t)n + 1));
@@ -488,31 +473,17 @@ dumplease:
 				goto eexit;
 			env = nenv;
 			n = dhcp_env(env + elen, "new",
-			    state->new, state->new_len, ifp);
+			    state->new, ifp);
 			if (n == -1)
 				goto eexit;
 			elen += (size_t)n;
 		}
-		if (append_config(ifp->ctx, &env, &elen, "new",
+		if (append_config(&env, &elen, "new",
 		    (const char *const *)ifo->config) == -1)
 			goto eexit;
 	}
 #endif
 #ifdef INET6
-	if (static6) {
-		n = ipv6_env(NULL, NULL, ifp);
-		if (n > 0) {
-			nenv = realloc(env, sizeof(char *) *
-			    (elen + (size_t)n + 1));
-			if (nenv == NULL)
-				goto eexit;
-			env = nenv;
-			n = ipv6_env(env + elen, "new", ifp);
-			if (n == -1)
-				goto eexit;
-			elen += (size_t)n;
-		}
-	}
 	if (dhcp6 && D6_STATE_RUNNING(ifp)) {
 		n = dhcp6_env(NULL, NULL, ifp,
 		    d6_state->new, d6_state->new_len);
@@ -569,7 +540,7 @@ dumplease:
 	return (ssize_t)elen;
 
 eexit:
-	logger(ifp->ctx, LOG_ERR, "%s: %m", __func__);
+	syslog(LOG_ERR, "%s: %m", __func__);
 	if (env) {
 		nenv = env;
 		while (*nenv)
@@ -593,9 +564,9 @@ send_interface1(struct fd_list *fd, const struct interface *iface,
 	elen = (size_t)arraytostr((const char *const *)env, &s);
 	if ((ssize_t)elen == -1) {
 		free(s);
-		retval = -1;
-	} else
-		retval = control_queue(fd, s, elen, 1);
+		return -1;
+	}
+	retval = control_queue(fd, s, elen, 1);
 	ep = env;
 	while (*ep)
 		free(*ep++);
@@ -634,17 +605,9 @@ send_interface(struct fd_list *fd, const struct interface *ifp)
 		if (send_interface1(fd, ifp, d->reason) == -1)
 			retval = -1;
 	}
-	if (IPV4LL_STATE_RUNNING(ifp)) {
-		if (send_interface1(fd, ifp, "IPV4LL") == -1)
-			retval = -1;
-	}
 #endif
 
 #ifdef INET6
-	if (IPV6_STATE_RUNNING(ifp)) {
-		if (send_interface1(fd, ifp, "STATIC6") == -1)
-			retval = -1;
-	}
 	if (RS_STATE_RUNNING(ifp)) {
 		if (send_interface1(fd, ifp, "ROUTERADVERT") == -1)
 			retval = -1;
@@ -672,30 +635,23 @@ script_runreason(const struct interface *ifp, const char *reason)
 
 	if (ifp->options->script &&
 	    (ifp->options->script[0] == '\0' ||
-	    strcmp(ifp->options->script, "/dev/null") == 0) &&
-	    TAILQ_FIRST(&ifp->ctx->control_fds) == NULL)
+	    strcmp(ifp->options->script, "/dev/null") == 0))
 		return 0;
+
+	argv[0] = ifp->options->script ? ifp->options->script : UNCONST(SCRIPT);
+	argv[1] = NULL;
+	syslog(LOG_DEBUG, "%s: executing `%s' %s",
+	    ifp->name, argv[0], reason);
 
 	/* Make our env */
 	elen = (size_t)make_env(ifp, reason, &env);
 	if (elen == (size_t)-1) {
-		logger(ifp->ctx, LOG_ERR, "%s: make_env: %m", ifp->name);
+		syslog(LOG_ERR, "%s: make_env: %m", ifp->name);
 		return -1;
 	}
-
-	if (ifp->options->script &&
-	    (ifp->options->script[0] == '\0' ||
-	    strcmp(ifp->options->script, "/dev/null") == 0))
-	    	goto send_listeners;
-
-	argv[0] = ifp->options->script ? ifp->options->script : UNCONST(SCRIPT);
-	argv[1] = NULL;
-	logger(ifp->ctx, LOG_DEBUG, "%s: executing `%s' %s",
-	    ifp->name, argv[0], reason);
-
 	/* Resize for PATH and RC_SVCNAME */
 	svcname = getenv(RC_SVCNAME);
-	ep = reallocarray(env, elen + 2 + (svcname ? 1 : 0), sizeof(char *));
+	ep = realloc(env, sizeof(char *) * (elen + 2 + (svcname ? 1 : 0)));
 	if (ep == NULL) {
 		elen = 0;
 		goto out;
@@ -731,27 +687,26 @@ script_runreason(const struct interface *ifp, const char *reason)
 
 	pid = exec_script(ifp->ctx, argv, env);
 	if (pid == -1)
-		logger(ifp->ctx, LOG_ERR, "%s: %s: %m", __func__, argv[0]);
+		syslog(LOG_ERR, "%s: %s: %m", __func__, argv[0]);
 	else if (pid != 0) {
 		/* Wait for the script to finish */
 		while (waitpid(pid, &status, 0) == -1) {
 			if (errno != EINTR) {
-				logger(ifp->ctx, LOG_ERR, "waitpid: %m");
+				syslog(LOG_ERR, "waitpid: %m");
 				status = 0;
 				break;
 			}
 		}
 		if (WIFEXITED(status)) {
 			if (WEXITSTATUS(status))
-				logger(ifp->ctx, LOG_ERR,
+				syslog(LOG_ERR,
 				    "%s: %s: WEXITSTATUS %d",
 				    __func__, argv[0], WEXITSTATUS(status));
 		} else if (WIFSIGNALED(status))
-			logger(ifp->ctx, LOG_ERR, "%s: %s: %s",
+			syslog(LOG_ERR, "%s: %s: %s",
 			    __func__, argv[0], strsignal(WTERMSIG(status)));
 	}
 
-send_listeners:
 	/* Send to our listeners */
 	bigenv = NULL;
 	status = 0;
@@ -762,14 +717,13 @@ send_listeners:
 			elen = (size_t)arraytostr((const char *const *)env,
 			    &bigenv);
 			if ((ssize_t)elen == -1) {
-				logger(ifp->ctx, LOG_ERR, "%s: arraytostr: %m",
+				syslog(LOG_ERR, "%s: arraytostr: %m",
 				    ifp->name);
 				    break;
 			}
 		}
 		if (control_queue(fd, bigenv, elen, 1) == -1)
-			logger(ifp->ctx, LOG_ERR,
-			    "%s: control_queue: %m", __func__);
+			syslog(LOG_ERR, "%s: control_queue: %m", __func__);
 		else
 			status = 1;
 	}
@@ -782,9 +736,7 @@ out:
 	while (*ep)
 		free(*ep++);
 	free(env);
-	if (elen == 0) {
-		logger(ifp->ctx, LOG_ERR, "%s: malloc: %m", __func__);
+	if (elen == 0)
 		return -1;
-	}
 	return WEXITSTATUS(status);
 }

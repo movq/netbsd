@@ -1,4 +1,4 @@
-/* $NetBSD: test.c,v 1.7 2016/06/11 06:26:50 dholland Exp $ */
+/* $NetBSD: test.c,v 1.5 2011/01/22 19:19:15 joerg Exp $ */
 
 /*
  * Copyright (c) 1999 Christopher G. Demetriou.  All rights reserved.
@@ -115,7 +115,7 @@ main(unsigned long pfn, unsigned long ptb, unsigned long bim, unsigned long bip,
 
 	do {
 		printf("test> ");
-		kgets(input_buf, sizeof(input_buf));
+		gets(input_buf);
 
 		dispatch_cmd(input_buf, toplevel_cmds);
 	} while (!done);
@@ -275,7 +275,7 @@ toplevel_dpb(const char *buf)
 	}
 	buf = cvt_number(buf, &startaddr);
 	if (*buf != '\0' && !isspace(*buf)) {
-		printf("bad character '%c' in starting address\n", *buf);
+		printf("bad character '%c' in starting address\n");
 		return;
 	}
 
@@ -283,7 +283,7 @@ toplevel_dpb(const char *buf)
 	if (buf != NULL) {
 		buf = cvt_number(buf, &count);
 		if (*buf != '\0' && !isspace(*buf)) {
-			printf("bad character '%c' in count\n", *buf);
+			printf("bad character '%c' in count\n");
 			return;
 		}
 		buf = advance_past_space(buf);

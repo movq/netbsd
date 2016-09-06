@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sl.c,v 1.126 2016/08/07 17:38:34 christos Exp $	*/
+/*	$NetBSD: if_sl.c,v 1.119 2014/06/05 23:48:16 rmind Exp $	*/
 
 /*
  * Copyright (c) 1987, 1989, 1992, 1993
@@ -60,11 +60,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sl.c,v 1.126 2016/08/07 17:38:34 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sl.c,v 1.119 2014/06/05 23:48:16 rmind Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -85,8 +83,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_sl.c,v 1.126 2016/08/07 17:38:34 christos Exp $")
 #endif
 #include <sys/cpu.h>
 #include <sys/intr.h>
-#include <sys/device.h>
-#include <sys/module.h>
 
 #include <net/if.h>
 #include <net/if_types.h>
@@ -108,8 +104,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_sl.c,v 1.126 2016/08/07 17:38:34 christos Exp $")
 
 #include <sys/time.h>
 #include <net/bpf.h>
-
-#include "ioconf.h"
 
 /*
  * SLMAX is a hard limit on input packet size.  To simplify the code
@@ -192,7 +186,7 @@ struct if_clone sl_cloner =
 
 static void	slintr(void *);
 
-static int	slcreate(struct sl_softc *);
+static int	slinit(struct sl_softc *);
 static struct mbuf *sl_btom(struct sl_softc *, int);
 
 static int	slclose(struct tty *, int);
@@ -200,7 +194,7 @@ static int	slinput(int, struct tty *);
 static int	slioctl(struct ifnet *, u_long, void *);
 static int	slopen(dev_t, struct tty *);
 static int	sloutput(struct ifnet *, struct mbuf *, const struct sockaddr *,
-			 const struct rtentry *);
+			 struct rtentry *);
 static int	slstart(struct tty *);
 static int	sltioctl(struct tty *, u_long, void *, int, struct lwp *);
 
@@ -217,41 +211,16 @@ static struct linesw slip_disc = {
 	.l_poll = ttyerrpoll
 };
 
+void	slattach(void);
+
 void
-slattach(int n __unused)
-{
-
-	/*
-	 * Nothing to do here, initialization is handled by the
-	 * module initialization code in slinit() below).
-	 */
-}
-
-static void
-slinit(void)
+slattach(void)
 {
 
 	if (ttyldisc_attach(&slip_disc) != 0)
-		panic("%s", __func__);
+		panic("slattach");
 	LIST_INIT(&sl_softc_list);
 	if_clone_attach(&sl_cloner);
-}
-
-static int
-sldetach(void)
-{
-	int error = 0;
-
-	if (!LIST_EMPTY(&sl_softc_list))
-		error = EBUSY;
-
-	if (error == 0)
-		error = ttyldisc_detach(&slip_disc);
-
-	if (error == 0)
-		if_clone_detach(&sl_cloner);
-
-	return error;
 }
 
 static int
@@ -296,7 +265,7 @@ sl_clone_destroy(struct ifnet *ifp)
 }
 
 static int
-slcreate(struct sl_softc *sc)
+slinit(struct sl_softc *sc)
 {
 
 	if (sc->sc_mbuf == NULL) {
@@ -341,7 +310,7 @@ slopen(dev_t dev, struct tty *tp)
 			    slintr, sc);
 			if (sc->sc_si == NULL)
 				return ENOMEM;
-			if (slcreate(sc) == 0) {
+			if (slinit(sc) == 0) {
 				softint_disestablish(sc->sc_si);
 				return ENOBUFS;
 			}
@@ -462,14 +431,15 @@ sltioctl(struct tty *tp, u_long cmd, void *data, int flag,
  */
 static int
 sloutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
-    const struct rtentry *rtp)
+    struct rtentry *rtp)
 {
 	struct sl_softc *sc = ifp->if_softc;
 	struct ip *ip;
 	struct ifqueue *ifq = NULL;
 	int s, error;
+	ALTQ_DECL(struct altq_pktattr pktattr;)
 
-	IFQ_CLASSIFY(&ifp->if_snd, m, dst->sa_family);
+	IFQ_CLASSIFY(&ifp->if_snd, m, dst->sa_family, &pktattr);
 
 	/*
 	 * `Cannot happen' (see slioctl).  Someday we will extend
@@ -520,7 +490,8 @@ sloutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 	if ((ip->ip_tos & IPTOS_LOWDELAY) != 0)
 		ifq = &sc->sc_fastq;
 #endif
-	if ((error = ifq_enqueue2(ifp, ifq, m)) != 0) {
+	if ((error = ifq_enqueue2(ifp, ifq, m ALTQ_COMMA
+	    ALTQ_DECL(&pktattr))) != 0) {
 		splx(s);
 		return error;
 	}
@@ -594,7 +565,7 @@ sl_btom(struct sl_softc *sc, int len)
 	m->m_data = sc->sc_pktstart;
 
 	m->m_pkthdr.len = m->m_len = len;
-	m_set_rcvif(m, &sc->sc_if);
+	m->m_pkthdr.rcvif = &sc->sc_if;
 	return m;
 }
 
@@ -1065,12 +1036,3 @@ slioctl(struct ifnet *ifp, u_long cmd, void *data)
 	splx(s);
 	return error;
 }
-
-
-/*
- * Module infrastructure
- */
-
-#include "if_module.h"
-
-IF_MODULE(MODULE_CLASS_DRIVER, sl, "slcompress");

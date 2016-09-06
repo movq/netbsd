@@ -1,4 +1,4 @@
-/*	$NetBSD: tty_pty.c,v 1.142 2015/08/20 09:45:45 christos Exp $	*/
+/*	$NetBSD: tty_pty.c,v 1.140 2014/07/25 08:10:40 dholland Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tty_pty.c,v 1.142 2015/08/20 09:45:45 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tty_pty.c,v 1.140 2014/07/25 08:10:40 dholland Exp $");
 
 #include "opt_ptm.h"
 
@@ -61,8 +61,6 @@ __KERNEL_RCSID(0, "$NetBSD: tty_pty.c,v 1.142 2015/08/20 09:45:45 christos Exp $
 #include <sys/poll.h>
 #include <sys/pty.h>
 #include <sys/kauth.h>
-
-#include "ioconf.h"
 
 #define	DEFAULT_NPTYS		16	/* default number of initial ptys */
 #define DEFAULT_MAXPTYS		992	/* default maximum number of ptys */
@@ -88,6 +86,7 @@ int npty = 0;			/* for pstat -t */
 #define	PF_NOSTOP	0x40
 #define PF_UCNTL	0x80		/* user control mode */
 
+void	ptyattach(int);
 void	ptcwakeup(struct tty *, int);
 void	ptsstart(struct tty *);
 int	pty_maxptys(int, int);
@@ -244,7 +243,7 @@ pty_check(int ptn)
 
 		/*
 		 * Now grab the pty array mutex - we need to ensure
-		 * that the pty array is consistent while copying its
+		 * that the pty array is consistent while copying it's
 		 * content to newly allocated, larger space; we also
 		 * need to be safe against pty_maxptys().
 		 */

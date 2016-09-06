@@ -1,4 +1,4 @@
-/* $NetBSD: globals.h,v 1.21 2015/09/30 14:14:32 phx Exp $ */
+/* $NetBSD: globals.h,v 1.19.14.1 2016/01/16 10:04:05 snj Exp $ */
 
 #ifdef DEBUG
 #define	DPRINTF(x)	printf x

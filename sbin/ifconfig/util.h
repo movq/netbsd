@@ -13,8 +13,6 @@ struct afswtch {
 	short af_af;
 	void (*af_status)(prop_dictionary_t, prop_dictionary_t, bool);
 	void (*af_addr_commit)(prop_dictionary_t, prop_dictionary_t);
-	bool (*af_addr_tentative)(struct ifaddrs *);
-	bool (*af_addr_tentative_or_detached)(struct ifaddrs *);
 	SIMPLEQ_ENTRY(afswtch)	af_next;
 };
 

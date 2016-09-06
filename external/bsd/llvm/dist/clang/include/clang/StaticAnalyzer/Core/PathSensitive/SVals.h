@@ -45,8 +45,8 @@ class SVal {
 public:
   enum BaseKind {
     // The enumerators must be representable using 2 bits.
-    UndefinedValKind = 0,  // for subclass UndefinedVal (an uninitialized value)
-    UnknownValKind = 1,    // for subclass UnknownVal (a void value)
+    UndefinedKind = 0,  // for subclass UndefinedVal (an uninitialized value)
+    UnknownKind = 1,    // for subclass UnknownVal (a void value)
     LocKind = 2,        // for subclass Loc (an L-value)
     NonLocKind = 3      // for subclass NonLoc (an R-value that's not
                         //   an L-value)
@@ -115,19 +115,19 @@ public:
   }
 
   inline bool isUnknown() const {
-    return getRawKind() == UnknownValKind;
+    return getRawKind() == UnknownKind;
   }
 
   inline bool isUndef() const {
-    return getRawKind() == UndefinedValKind;
+    return getRawKind() == UndefinedKind;
   }
 
   inline bool isUnknownOrUndef() const {
-    return getRawKind() <= UnknownValKind;
+    return getRawKind() <= UnknownKind;
   }
 
   inline bool isValid() const {
-    return getRawKind() > UnknownValKind;
+    return getRawKind() > UnknownKind;
   }
 
   bool isConstant() const;
@@ -190,12 +190,12 @@ public:
 
 class UndefinedVal : public SVal {
 public:
-  UndefinedVal() : SVal(UndefinedValKind) {}
+  UndefinedVal() : SVal(UndefinedKind) {}
 
 private:
   friend class SVal;
   static bool isKind(const SVal& V) {
-    return V.getBaseKind() == UndefinedValKind;
+    return V.getBaseKind() == UndefinedKind;
   }
 };
 
@@ -203,8 +203,8 @@ class DefinedOrUnknownSVal : public SVal {
 private:
   // We want calling these methods to be a compiler error since they are
   // tautologically false.
-  bool isUndef() const = delete;
-  bool isValid() const = delete;
+  bool isUndef() const LLVM_DELETED_FUNCTION;
+  bool isValid() const LLVM_DELETED_FUNCTION;
   
 protected:
   DefinedOrUnknownSVal() {}
@@ -223,12 +223,12 @@ private:
   
 class UnknownVal : public DefinedOrUnknownSVal {
 public:
-  explicit UnknownVal() : DefinedOrUnknownSVal(UnknownValKind) {}
+  explicit UnknownVal() : DefinedOrUnknownSVal(UnknownKind) {}
   
 private:
   friend class SVal;
   static bool isKind(const SVal &V) {
-    return V.getBaseKind() == UnknownValKind;
+    return V.getBaseKind() == UnknownKind;
   }
 };
 
@@ -236,9 +236,9 @@ class DefinedSVal : public DefinedOrUnknownSVal {
 private:
   // We want calling these methods to be a compiler error since they are
   // tautologically true/false.
-  bool isUnknown() const = delete;
-  bool isUnknownOrUndef() const = delete;
-  bool isValid() const = delete;
+  bool isUnknown() const LLVM_DELETED_FUNCTION;
+  bool isUnknownOrUndef() const LLVM_DELETED_FUNCTION;
+  bool isValid() const LLVM_DELETED_FUNCTION;
 protected:
   DefinedSVal() {}
   explicit DefinedSVal(const void *d, bool isLoc, unsigned ValKind)
@@ -465,7 +465,7 @@ private:
 
 namespace loc {
 
-enum Kind { GotoLabelKind, MemRegionValKind, ConcreteIntKind };
+enum Kind { GotoLabelKind, MemRegionKind, ConcreteIntKind };
 
 class GotoLabel : public Loc {
 public:
@@ -490,7 +490,7 @@ private:
 
 class MemRegionVal : public Loc {
 public:
-  explicit MemRegionVal(const MemRegion* r) : Loc(MemRegionValKind, r) {}
+  explicit MemRegionVal(const MemRegion* r) : Loc(MemRegionKind, r) {}
 
   /// \brief Get the underlining region.
   const MemRegion* getRegion() const {
@@ -518,11 +518,11 @@ private:
   MemRegionVal() {}
   static bool isKind(const SVal& V) {
     return V.getBaseKind() == LocKind &&
-           V.getSubKind() == MemRegionValKind;
+           V.getSubKind() == MemRegionKind;
   }
 
   static bool isKind(const Loc& V) {
-    return V.getSubKind() == MemRegionValKind;
+    return V.getSubKind() == MemRegionKind;
   }
 };
 

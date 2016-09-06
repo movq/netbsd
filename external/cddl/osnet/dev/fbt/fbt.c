@@ -1,4 +1,4 @@
-/*	$NetBSD: fbt.c,v 1.19 2016/07/17 02:09:10 pgoyette Exp $	*/
+/*	$NetBSD: fbt.c,v 1.16 2014/07/26 04:54:20 ryoon Exp $	*/
 
 /*
  * CDDL HEADER START
@@ -152,18 +152,9 @@ static void	fbt_resume(void *, dtrace_id_t, void *);
 #define	FBT_PROBETAB_SIZE	0x8000		/* 32k entries -- 128K total */
 
 static const struct cdevsw fbt_cdevsw = {
-	.d_open		= fbt_open,
-	.d_close	= noclose,
-	.d_read		= noread,
-	.d_write	= nowrite,
-	.d_ioctl	= noioctl,
-	.d_stop		= nostop,
-	.d_tty		= notty,
-	.d_poll		= nopoll,
-	.d_mmap		= nommap,
-	.d_kqfilter	= nokqfilter,
-	.d_discard	= nodiscard,
-	.d_flag		= D_OTHER
+	fbt_open, noclose, noread, nowrite, noioctl,
+	nostop, notty, nopoll, nommap, nokqfilter, nodiscard,
+	D_OTHER
 };
 
 static dtrace_pattr_t fbt_attr = {
@@ -2113,10 +2104,9 @@ fbt_unload(void)
 
 
 static int
-dtrace_fbt_modcmd(modcmd_t cmd, void *data)
+fbt_modcmd(modcmd_t cmd, void *data)
 {
 	int bmajor = -1, cmajor = -1;
-	int error;
 
 	switch (cmd) {
 	case MODULE_CMD_INIT:
@@ -2124,12 +2114,8 @@ dtrace_fbt_modcmd(modcmd_t cmd, void *data)
 		return devsw_attach("fbt", NULL, &bmajor,
 		    &fbt_cdevsw, &cmajor);
 	case MODULE_CMD_FINI:
-		error = fbt_unload();
-		if (error != 0)
-			return error;
+		fbt_unload();
 		return devsw_detach(NULL, &fbt_cdevsw);
-	case MODULE_CMD_AUTOUNLOAD:
-		return EBUSY;
 	default:
 		return ENOTTY;
 	}
@@ -2141,4 +2127,4 @@ fbt_open(dev_t dev, int flags, int mode, struct lwp *l)
 	return (0);
 }
 
-MODULE(MODULE_CLASS_MISC, dtrace_fbt, "dtrace");
+MODULE(MODULE_CLASS_MISC, fbt, "dtrace");

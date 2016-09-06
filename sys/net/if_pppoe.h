@@ -1,4 +1,4 @@
-/* $NetBSD: if_pppoe.h,v 1.13 2016/04/15 01:31:29 ozaki-r Exp $ */
+/* $NetBSD: if_pppoe.h,v 1.11 2008/04/28 20:24:09 martin Exp $ */
 
 /*-
  * Copyright (c) 2002 The NetBSD Foundation, Inc.
@@ -32,8 +32,6 @@
 #ifndef _NET_IF_PPPOE_H_
 #define _NET_IF_PPPOE_H_
 
-#include <sys/ioccom.h>
-
 struct pppoediscparms {
 	char	ifname[IFNAMSIZ];	/* pppoe interface name */
 	char	eth_ifname[IFNAMSIZ];	/* external ethernet interface name */
@@ -66,8 +64,11 @@ struct pppoeconnectionstate {
 
 #ifdef _KERNEL
 
-void pppoe_input(struct ifnet *, struct mbuf *);
-void pppoedisc_input(struct ifnet *, struct mbuf *);
+extern struct ifqueue ppoediscinq;
+extern struct ifqueue ppoeinq;
+
+extern void *pppoe_softintr;			/* softinterrupt cookie */
+
 #endif /* _KERNEL */
 #endif /* !_NET_IF_PPPOE_H_ */
 

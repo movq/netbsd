@@ -1,4 +1,4 @@
-/*	$NetBSD: alpha_reloc.c,v 1.41 2014/08/25 20:40:52 joerg Exp $	*/
+/*	$NetBSD: alpha_reloc.c,v 1.40.22.1 2016/03/06 18:17:55 martin Exp $	*/
 
 /*
  * Copyright (c) 2001 Wasabi Systems, Inc.
@@ -62,7 +62,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: alpha_reloc.c,v 1.41 2014/08/25 20:40:52 joerg Exp $");
+__RCSID("$NetBSD: alpha_reloc.c,v 1.40.22.1 2016/03/06 18:17:55 martin Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>

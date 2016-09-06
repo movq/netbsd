@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tun.c,v 1.128 2016/08/07 17:38:34 christos Exp $	*/
+/*	$NetBSD: if_tun.c,v 1.120 2014/07/25 08:10:40 dholland Exp $	*/
 
 /*
  * Copyright (c) 1988, Julian Onions <jpo@cs.nott.ac.uk>
@@ -15,11 +15,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tun.c,v 1.128 2016/08/07 17:38:34 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tun.c,v 1.120 2014/07/25 08:10:40 dholland Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -39,8 +37,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_tun.c,v 1.128 2016/08/07 17:38:34 christos Exp $"
 #include <sys/kauth.h>
 #include <sys/mutex.h>
 #include <sys/cpu.h>
-#include <sys/device.h>
-#include <sys/module.h>
 
 #include <net/if.h>
 #include <net/if_types.h>
@@ -62,12 +58,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_tun.c,v 1.128 2016/08/07 17:38:34 christos Exp $"
 
 #include <net/if_tun.h>
 
-#include "ioconf.h"
-
 #define TUNDEBUG	if (tundebug) printf
 int	tundebug = 0;
 
 extern int ifqmaxlen;
+void	tunattach(int);
 
 static LIST_HEAD(, tun_softc) tun_softc_list;
 static LIST_HEAD(, tun_softc) tunz_softc_list;
@@ -75,7 +70,7 @@ static kmutex_t tun_softc_lock;
 
 static int	tun_ioctl(struct ifnet *, u_long, void *);
 static int	tun_output(struct ifnet *, struct mbuf *,
-			const struct sockaddr *, const struct rtentry *rt);
+			const struct sockaddr *, struct rtentry *rt);
 static int	tun_clone_create(struct if_clone *, int);
 static int	tun_clone_destroy(struct ifnet *);
 
@@ -83,7 +78,7 @@ static struct if_clone tun_cloner =
     IF_CLONE_INITIALIZER("tun", tun_clone_create, tun_clone_destroy);
 
 static void tunattach0(struct tun_softc *);
-static void tuncreate(struct tun_softc *);
+static void tuninit(struct tun_softc *);
 static void tun_i_softintr(void *);
 static void tun_o_softintr(void *);
 #ifdef ALTQ
@@ -119,36 +114,10 @@ void
 tunattach(int unused)
 {
 
-	/*
-	 * Nothing to do here, initialization is handled by the
-	 * module initialization code in pppinit() below).
-	 */
-}
-
-static void
-tuninit(void)
-{
-
 	mutex_init(&tun_softc_lock, MUTEX_DEFAULT, IPL_NET);
 	LIST_INIT(&tun_softc_list);
 	LIST_INIT(&tunz_softc_list);
 	if_clone_attach(&tun_cloner);
-}
-
-static int
-tundetach(void)
-{
-	int error = 0;
-
-	if (!LIST_EMPTY(&tun_softc_list) || !LIST_EMPTY(&tunz_softc_list))
-		error = EBUSY;
-
-	if (error == 0) {
-		if_clone_detach(&tun_cloner);
-		mutex_destroy(&tun_softc_lock);
-	}
-
-	return error;
 }
 
 /*
@@ -389,7 +358,7 @@ tunclose(dev_t dev, int flag, int mode,
 		if (ifp->if_flags & IFF_RUNNING) {
 			/* find internet addresses and delete routes */
 			struct ifaddr *ifa;
-			IFADDR_READER_FOREACH(ifa, ifp) {
+			IFADDR_FOREACH(ifa, ifp) {
 #if defined(INET) || defined(INET6)
 				if (ifa->ifa_addr->sa_family == AF_INET ||
 				    ifa->ifa_addr->sa_family == AF_INET6) {
@@ -410,18 +379,18 @@ out_nolock:
  * Call at splnet().
  */
 static void
-tuncreate(struct tun_softc *tp)
+tuninit(struct tun_softc *tp)
 {
 	struct ifnet	*ifp = &tp->tun_if;
 	struct ifaddr	*ifa;
 
-	TUNDEBUG("%s: %s\n", __func__, ifp->if_xname);
+	TUNDEBUG("%s: tuninit\n", ifp->if_xname);
 
 	mutex_enter(&tp->tun_lock);
 	ifp->if_flags |= IFF_UP | IFF_RUNNING;
 
 	tp->tun_flags &= ~(TUN_IASET|TUN_DSTADDR);
-	IFADDR_READER_FOREACH(ifa, ifp) {
+	IFADDR_FOREACH(ifa, ifp) {
 #ifdef INET
 		if (ifa->ifa_addr->sa_family == AF_INET) {
 			struct sockaddr_in *sin;
@@ -466,15 +435,13 @@ tun_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	int		error = 0, s;
 	struct tun_softc *tp = (struct tun_softc *)(ifp->if_softc);
-	struct ifreq *ifr = (struct ifreq *)data;
-	struct ifaddr *ifa = (struct ifaddr *)data;
+	struct ifreq *ifr = data;
 
 	s = splnet();
 
 	switch (cmd) {
 	case SIOCINITIFADDR:
-		tuncreate(tp);
-		ifa->ifa_rtrequest = p2p_rtrequest;
+		tuninit(tp);
 		TUNDEBUG("%s: address set\n", ifp->if_xname);
 		break;
 	case SIOCSIFBRDADDR:
@@ -522,7 +489,7 @@ tun_ioctl(struct ifnet *ifp, u_long cmd, void *data)
  */
 static int
 tun_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
-    const struct rtentry *rt)
+    struct rtentry *rt)
 {
 	struct tun_softc *tp = ifp->if_softc;
 	int		s;
@@ -531,6 +498,7 @@ tun_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 	int		mlen;
 	uint32_t	*af;
 #endif
+	ALTQ_DECL(struct altq_pktattr pktattr;)
 
 	s = splnet();
 	mutex_enter(&tp->tun_lock);
@@ -547,7 +515,7 @@ tun_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 	 * if the queueing discipline needs packet classification,
 	 * do it before prepending link headers.
 	 */
-	IFQ_CLASSIFY(&ifp->if_snd, m0, dst->sa_family);
+	IFQ_CLASSIFY(&ifp->if_snd, m0, dst->sa_family, &pktattr);
 
 	bpf_mtap_af(ifp, dst->sa_family, m0);
 
@@ -591,7 +559,7 @@ tun_output(struct ifnet *ifp, struct mbuf *m0, const struct sockaddr *dst,
 		}
 		/* FALLTHROUGH */
 	case AF_UNSPEC:
-		IFQ_ENQUEUE(&ifp->if_snd, m0, error);
+		IFQ_ENQUEUE(&ifp->if_snd, m0, &pktattr, error);
 		if (error) {
 			ifp->if_collisions++;
 			error = EAFNOSUPPORT;
@@ -962,7 +930,7 @@ tunwrite(dev_t dev, struct uio *uio, int ioflag)
 	}
 
 	top->m_pkthdr.len = tlen;
-	m_set_rcvif(top, ifp);
+	top->m_pkthdr.rcvif = ifp;
 
 	bpf_mtap_af(ifp, dst.sa_family, top);
 
@@ -1141,10 +1109,3 @@ out_nolock:
 	splx(s);
 	return (rv);
 }
-
-/*
- * Module infrastructure
- */
-#include "if_module.h"
-
-IF_MODULE(MODULE_CLASS_DRIVER, tun, "")

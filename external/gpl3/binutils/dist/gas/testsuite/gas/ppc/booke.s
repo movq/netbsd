@@ -38,3 +38,5 @@ branch_target_2:
 	mtsprg7 0
 
 	dcbt 5,6
+	dcbt 0,5,6
+	dcbt 8,5,6

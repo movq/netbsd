@@ -1,4 +1,4 @@
-/*	$NetBSD: tcp_output.c,v 1.186 2016/06/10 13:27:16 ozaki-r Exp $	*/
+/*	$NetBSD: tcp_output.c,v 1.176.2.5 2015/07/24 07:30:40 martin Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -135,13 +135,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcp_output.c,v 1.186 2016/06/10 13:27:16 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcp_output.c,v 1.176.2.5 2015/07/24 07:30:40 martin Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
 #include "opt_ipsec.h"
 #include "opt_tcp_debug.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -1022,19 +1020,11 @@ again:
 		long adv = min(win, (long)TCP_MAXWIN << tp->rcv_scale) -
 			(tp->rcv_adv - tp->rcv_nxt);
 
-		/*
-		 * If the new window size ends up being the same as the old
-		 * size when it is scaled, then don't force a window update.
-		 */
-		if ((tp->rcv_adv - tp->rcv_nxt) >> tp->rcv_scale ==
-		    (adv + tp->rcv_adv - tp->rcv_nxt) >> tp->rcv_scale)
-			goto dontupdate;
 		if (adv >= (long) (2 * rxsegsize))
 			goto send;
 		if (2 * adv >= (long) so->so_rcv.sb_hiwat)
 			goto send;
 	}
-dontupdate:
 
 	/*
 	 * Send if we owe peer an ACK.
@@ -1240,10 +1230,7 @@ send:
 		*bp++ = TCPOPT_NOP;
 		*bp++ = TCPOPT_EOL;
  		optlen += 2;
- 	} else if ((tp->t_flags & TF_SIGNATURE) != 0) {
-		error = ECONNABORTED;
-		goto out;
-	}
+ 	}
 #endif /* TCP_SIGNATURE */
 
 	hdrlen += optlen;
@@ -1302,7 +1289,7 @@ send:
 		m->m_data += max_linkhdr;
 		m->m_len = hdrlen;
 	}
-	m_reset_rcvif(m);
+	m->m_pkthdr.rcvif = NULL;
 	switch (af) {
 #ifdef INET
 	case AF_INET:
@@ -1602,7 +1589,9 @@ timer:
 			 * setsockopt. Also, desired default hop limit might
 			 * be changed via Neighbor Discovery.
 			 */
-			ip6->ip6_hlim = in6_selecthlim_rt(tp->t_in6pcb);
+			ip6->ip6_hlim = in6_selecthlim(tp->t_in6pcb,
+				(rt = rtcache_validate(ro)) != NULL ? rt->rt_ifp
+				                                    : NULL);
 		}
 		ip6->ip6_flow |= htonl(ecn_tos << 20);
 		/* ip6->ip6_flow = ??? (from template) */

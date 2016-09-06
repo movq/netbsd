@@ -1,5 +1,6 @@
 /* ldctor.h - linker constructor support
-   Copyright (C) 1991-2015 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1994, 1995, 1998, 2000, 2002, 2003, 2005,
+   2007, 2008  Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 

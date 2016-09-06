@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -79,7 +79,7 @@ ApDoOptions (
     int                     argc,
     char                    **argv);
 
-static int
+static void
 ApInsertAction (
     char                    *Argument,
     UINT32                  ToBeDone);
@@ -92,7 +92,7 @@ UINT32                      CurrentAction = 0;
 
 
 #define AP_UTILITY_NAME             "ACPI Binary Table Dump Utility"
-#define AP_SUPPORTED_OPTIONS        "?a:bc:f:hn:o:r:svxz"
+#define AP_SUPPORTED_OPTIONS        "?a:bcf:hn:o:r:svz"
 
 
 /******************************************************************************
@@ -111,6 +111,7 @@ ApDisplayUsage (
     ACPI_USAGE_HEADER ("acpidump [options]");
 
     ACPI_OPTION ("-b",                      "Dump tables to binary files");
+    ACPI_OPTION ("-c",                      "Dump customized tables");
     ACPI_OPTION ("-h -?",                   "This help message");
     ACPI_OPTION ("-o <File>",               "Redirect output to file");
     ACPI_OPTION ("-r <Address>",            "Dump tables from specified RSDP");
@@ -118,16 +119,13 @@ ApDisplayUsage (
     ACPI_OPTION ("-v",                      "Display version information");
     ACPI_OPTION ("-z",                      "Verbose mode");
 
-    ACPI_USAGE_TEXT ("\nTable Options:\n");
+    printf ("\nTable Options:\n");
 
     ACPI_OPTION ("-a <Address>",            "Get table via a physical address");
-    ACPI_OPTION ("-c <on|off>",             "Turning on/off customized table dumping");
     ACPI_OPTION ("-f <BinaryFile>",         "Get table via a binary file");
     ACPI_OPTION ("-n <Signature>",          "Get table via a name/signature");
-    ACPI_OPTION ("-x",                      "Do not use but dump XSDT");
-    ACPI_OPTION ("-x -x",                   "Do not use or dump XSDT");
 
-    ACPI_USAGE_TEXT (
+    printf (
         "\n"
         "Invocation without parameters dumps all available tables\n"
         "Multiple mixed instances of -a, -f, and -n are supported\n\n");
@@ -141,13 +139,13 @@ ApDisplayUsage (
  * PARAMETERS:  Argument            - Pointer to the argument for this action
  *              ToBeDone            - What to do to process this action
  *
- * RETURN:      Status
+ * RETURN:      None. Exits program if action table becomes full.
  *
  * DESCRIPTION: Add an action item to the action table
  *
  ******************************************************************************/
 
-static int
+static void
 ApInsertAction (
     char                    *Argument,
     UINT32                  ToBeDone)
@@ -161,11 +159,9 @@ ApInsertAction (
     CurrentAction++;
     if (CurrentAction > AP_MAX_ACTIONS)
     {
-        AcpiLogError ("Too many table options (max %u)\n", AP_MAX_ACTIONS);
-        return (-1);
+        fprintf (stderr, "Too many table options (max %u)\n", AP_MAX_ACTIONS);
+        exit (-1);
     }
-
-    return (0);
 }
 
 
@@ -193,7 +189,7 @@ ApDoOptions (
 
     /* Command line options */
 
-    while ((j = AcpiGetopt (argc, argv, AP_SUPPORTED_OPTIONS)) != ACPI_OPT_END) switch (j)
+    while ((j = AcpiGetopt (argc, argv, AP_SUPPORTED_OPTIONS)) != EOF) switch (j)
     {
     /*
      * Global options
@@ -205,45 +201,31 @@ ApDoOptions (
 
     case 'c':   /* Dump customized tables */
 
-        if (!strcmp (AcpiGbl_Optarg, "on"))
-        {
-            Gbl_DumpCustomizedTables = TRUE;
-        }
-        else if (!strcmp (AcpiGbl_Optarg, "off"))
-        {
-            Gbl_DumpCustomizedTables = FALSE;
-        }
-        else
-        {
-            AcpiLogError ("%s: Cannot handle this switch, please use on|off\n",
-                AcpiGbl_Optarg);
-            return (-1);
-        }
+        Gbl_DumpCustomizedTables = TRUE;
         continue;
 
     case 'h':
     case '?':
 
         ApDisplayUsage ();
-        return (1);
+        exit (0);
 
     case 'o':   /* Redirect output to a single file */
 
         if (ApOpenOutputFile (AcpiGbl_Optarg))
         {
-            return (-1);
+            exit (-1);
         }
         continue;
 
     case 'r':   /* Dump tables from specified RSDP */
 
-        Status = AcpiUtStrtoul64 (AcpiGbl_Optarg, ACPI_ANY_BASE,
-            ACPI_MAX64_BYTE_WIDTH, &Gbl_RsdpBase);
+        Status = AcpiUtStrtoul64 (AcpiGbl_Optarg, 0, &Gbl_RsdpBase);
         if (ACPI_FAILURE (Status))
         {
-            AcpiLogError ("%s: Could not convert to a physical address\n",
+            fprintf (stderr, "%s: Could not convert to a physical address\n",
                 AcpiGbl_Optarg);
-            return (-1);
+            exit (-1);
         }
         continue;
 
@@ -252,27 +234,15 @@ ApDoOptions (
         Gbl_SummaryMode = TRUE;
         continue;
 
-    case 'x':   /* Do not use XSDT */
-
-        if (!AcpiGbl_DoNotUseXsdt)
-        {
-            AcpiGbl_DoNotUseXsdt = TRUE;
-        }
-        else
-        {
-            Gbl_DoNotDumpXsdt = TRUE;
-        }
-        continue;
-
     case 'v':   /* Revision/version */
 
-        AcpiOsPrintf (ACPI_COMMON_SIGNON (AP_UTILITY_NAME));
-        return (1);
+        printf (ACPI_COMMON_SIGNON (AP_UTILITY_NAME));
+        exit (0);
 
     case 'z':   /* Verbose mode */
 
         Gbl_VerboseMode = TRUE;
-        AcpiLogError (ACPI_COMMON_SIGNON (AP_UTILITY_NAME));
+        fprintf (stderr, ACPI_COMMON_SIGNON (AP_UTILITY_NAME));
         continue;
 
     /*
@@ -280,42 +250,30 @@ ApDoOptions (
      */
     case 'a':   /* Get table by physical address */
 
-        if (ApInsertAction (AcpiGbl_Optarg, AP_DUMP_TABLE_BY_ADDRESS))
-        {
-            return (-1);
-        }
+        ApInsertAction (AcpiGbl_Optarg, AP_DUMP_TABLE_BY_ADDRESS);
         break;
 
     case 'f':   /* Get table from a file */
 
-        if (ApInsertAction (AcpiGbl_Optarg, AP_DUMP_TABLE_BY_FILE))
-        {
-            return (-1);
-        }
+        ApInsertAction (AcpiGbl_Optarg, AP_DUMP_TABLE_BY_FILE);
         break;
 
     case 'n':   /* Get table by input name (signature) */
 
-        if (ApInsertAction (AcpiGbl_Optarg, AP_DUMP_TABLE_BY_NAME))
-        {
-            return (-1);
-        }
+        ApInsertAction (AcpiGbl_Optarg, AP_DUMP_TABLE_BY_NAME);
         break;
 
     default:
 
         ApDisplayUsage ();
-        return (-1);
+        exit (-1);
     }
 
     /* If there are no actions, this means "get/dump all tables" */
 
     if (CurrentAction == 0)
     {
-        if (ApInsertAction (NULL, AP_DUMP_ALL_TABLES))
-        {
-            return (-1);
-        }
+        ApInsertAction (NULL, AP_DUMP_ALL_TABLES);
     }
 
     return (0);
@@ -334,17 +292,10 @@ ApDoOptions (
  *
  ******************************************************************************/
 
-#ifndef _GNU_EFI
 int ACPI_SYSTEM_XFACE
 main (
     int                     argc,
     char                    *argv[])
-#else
-int ACPI_SYSTEM_XFACE
-acpi_main (
-    int                     argc,
-    char                    *argv[])
-#endif
 {
     int                     Status = 0;
     AP_DUMP_ACTION          *Action;
@@ -353,19 +304,12 @@ acpi_main (
 
 
     ACPI_DEBUG_INITIALIZE (); /* For debug version only */
-    AcpiOsInitialize ();
-    Gbl_OutputFile = ACPI_FILE_OUT;
 
     /* Process command line options */
 
-    Status = ApDoOptions (argc, argv);
-    if (Status > 0)
+    if (ApDoOptions (argc, argv))
     {
-        return (0);
-    }
-    if (Status < 0)
-    {
-        return (Status);
+        return (-1);
     }
 
     /* Get/dump ACPI table(s) as requested */
@@ -397,7 +341,7 @@ acpi_main (
 
         default:
 
-            AcpiLogError ("Internal error, invalid action: 0x%X\n",
+            fprintf (stderr, "Internal error, invalid action: 0x%X\n",
                 Action->ToBeDone);
             return (-1);
         }
@@ -408,18 +352,18 @@ acpi_main (
         }
     }
 
-    if (Gbl_OutputFilename)
+    if (Gbl_OutputFile)
     {
         if (Gbl_VerboseMode)
         {
             /* Summary for the output file */
 
-            FileSize = CmGetFileSize (Gbl_OutputFile);
-            AcpiLogError ("Output file %s contains 0x%X (%u) bytes\n\n",
+            FileSize = ApGetFileSize (Gbl_OutputFile);
+            fprintf (stderr, "Output file %s contains 0x%X (%u) bytes\n\n",
                 Gbl_OutputFilename, FileSize, FileSize);
         }
 
-        AcpiOsCloseFile (Gbl_OutputFile);
+        fclose (Gbl_OutputFile);
     }
 
     return (Status);

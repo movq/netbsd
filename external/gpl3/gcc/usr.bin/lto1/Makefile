@@ -1,13 +1,7 @@
-#	$NetBSD: Makefile,v 1.4 2016/03/24 00:02:52 christos Exp $
+#	$NetBSD: Makefile,v 1.2.2.2 2015/01/25 00:19:45 martin Exp $
 
 PROG=		lto1
-SRCS=		lto-partition.c \
-		lto-object.c \
-		lto.c \
-		lto-lang.c \
-		lto-symtab.c \
-		attribs.c \
-		main.c
+SRCS=		lto-partition.c lto-object.c lto.c lto-lang.c attribs.c main.c
 
 CPPFLAGS+=	-DPREFIX=\"/usr\"
 
@@ -21,11 +15,6 @@ COPTS.lto-lang.c+=	-Wno-stack-protector
 .include "../Makefile.libcpp"
 .include "../Makefile.libdecnumber"
 .include "../Makefile.libiberty"
-
-.if ${MACHINE_ARCH} == "vax"
-COPTS.lto-lang.c+=-O0
-COPTS.lto-symtab.c+=-O0
-.endif
 
 LDADD+= ${LIBIBERTYOBJ}/libiberty.a
 DPADD+= ${LIBIBERTYOBJ}/libiberty.a

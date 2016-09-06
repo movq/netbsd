@@ -1,4 +1,4 @@
-/*	$NetBSD: schizovar.h,v 1.7 2015/11/23 21:40:14 jdc Exp $	*/
+/*	$NetBSD: schizovar.h,v 1.6.14.1 2016/01/26 01:25:32 riz Exp $	*/
 /*	$OpenBSD: schizovar.h,v 1.10 2007/01/14 16:19:49 kettenis Exp $	*/
 
 /*

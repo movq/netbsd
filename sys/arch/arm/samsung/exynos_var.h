@@ -1,4 +1,4 @@
-/*	$NetBSD: exynos_var.h,v 1.23 2015/12/30 04:30:27 marty Exp $	*/
+/*	$NetBSD: exynos_var.h,v 1.12.4.1 2015/01/04 11:19:00 martin Exp $	*/
 
 /*-
  * Copyright (c) 2013, 2014 The NetBSD Foundation, Inc.
@@ -94,7 +94,7 @@ struct exyo_attach_args {
 };
 
 struct exynos_gpio_pinset {
-	char pinset_bank[10];
+	char pinset_group[10];
 	uint8_t pinset_func;
 	uint8_t pinset_mask;
 };
@@ -104,21 +104,6 @@ struct exynos_gpio_pindata {
 	int pd_pin;
 };
 
-struct exynos_gpio_pin_cfg {
-	uint32_t cfg;
-	uint32_t pud;
-	uint32_t drv;
-	uint32_t conpwd;
-	uint32_t pudpwd;
-};
-
-struct exynos_gpio_softc {
-	device_t		sc_dev;
-	bus_space_tag_t		sc_bst;
-	bus_space_handle_t	sc_bsh;
-	struct exynos_gpio_bank *sc_bank;
-	int			sc_phandle;
-};
 
 #define EXYNOS_MAX_IIC_BUSSES 9
 struct i2c_controller;
@@ -130,8 +115,6 @@ extern struct bus_space exynos_a4x_bs_tag;
 extern struct arm32_bus_dma_tag exynos_bus_dma_tag;
 extern struct arm32_bus_dma_tag exynos_coherent_bus_dma_tag;
 
-extern struct bus_space armv7_generic_bs_tag;
-extern struct bus_space armv7_generic_a4x_bs_tag;
 extern bus_space_handle_t exynos_core_bsh;
 extern bus_space_handle_t exynos_wdt_bsh;
 extern bus_space_handle_t exynos_pmu_bsh;
@@ -140,13 +123,7 @@ extern bus_space_handle_t exynos_sysreg_bsh;
 
 extern void exynos_bootstrap(vaddr_t, vaddr_t);
 extern void exynos_dma_bootstrap(psize_t memsize);
-
-struct exynos_pinctrl_softc;
-struct exynos_gpio_softc;
-struct fdt_attach_args;
-
-extern struct exynos_gpio_softc * exynos_gpio_bank_config(struct exynos_pinctrl_softc *,
-				    const struct fdt_attach_args *, int);
+extern void exynos_gpio_bootstrap(void);
 extern void exynos_wdt_reset(void);
 
 extern void exynos_init_clkout_for_usb(void);	// board specific
@@ -163,17 +140,13 @@ extern void exynos_usb_soc_powerup(void);
 extern void exyo_device_register(device_t self, void *aux);
 extern void exyo_device_register_post_config(device_t self, void *aux);
 
-extern struct exynos_gpio_bank *exynos_gpio_bank_lookup(const char *name);
 extern bool exynos_gpio_pinset_available(const struct exynos_gpio_pinset *);
 extern void exynos_gpio_pinset_acquire(const struct exynos_gpio_pinset *);
 extern void exynos_gpio_pinset_release(const struct exynos_gpio_pinset *);
 extern void exynos_gpio_pinset_to_pindata(const struct exynos_gpio_pinset *,
 	int pinnr, struct exynos_gpio_pindata *);
 extern bool exynos_gpio_pin_reserve(const char *, struct exynos_gpio_pindata *);
-extern void exynos_gpio_pin_ctl_read(const struct exynos_gpio_bank *,
-				     struct exynos_gpio_pin_cfg *);
-extern void exynos_gpio_pin_ctl_write(const struct exynos_gpio_bank *,
-				      const struct exynos_gpio_pin_cfg *);
+
 static inline void
 exynos_gpio_pindata_write(const struct exynos_gpio_pindata *pd, int value)
 {

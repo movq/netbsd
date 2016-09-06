@@ -28,7 +28,7 @@
 #if 0
 __FBSDID("$FreeBSD: head/lib/msun/src/s_csqrtl.c 181402 2008-08-08 00:15:16Z das $");
 #else
-__RCSID("$NetBSD: csqrtl.c,v 1.2 2014/10/11 00:43:51 christos Exp $");
+__RCSID("$NetBSD: csqrtl.c,v 1.2.2.2 2014/10/13 19:34:58 martin Exp $");
 #endif
 
 #include "../src/namespace.h"

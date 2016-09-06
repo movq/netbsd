@@ -1,4 +1,4 @@
-/* 	$NetBSD: if_temac.c,v 1.11 2016/06/10 13:27:11 ozaki-r Exp $ */
+/* 	$NetBSD: if_temac.c,v 1.9 2012/07/22 14:32:51 matt Exp $ */
 
 /*
  * Copyright (c) 2006 Jachym Holecek
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_temac.c,v 1.11 2016/06/10 13:27:11 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_temac.c,v 1.9 2012/07/22 14:32:51 matt Exp $");
 
 
 #include <sys/param.h>
@@ -1190,7 +1190,7 @@ temac_rxreap(struct temac_softc *sc)
 		    BUS_DMASYNC_POSTREAD);
 
 		m = sc->sc_rxsoft[sc->sc_rxreap].rxs_mbuf;
-		m_set_rcvif(m, ifp);
+		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = rxsize;
 
  badframe:
@@ -1211,7 +1211,7 @@ temac_rxreap(struct temac_softc *sc)
 		bpf_mtap(ifp, m);
 
 		ifp->if_ipackets++;
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		(ifp->if_input)(ifp, m);
 
 		/* Refresh descriptor, bail out if we're out of buffers. */
 		if (temac_rxalloc(sc, tail, 1) != 0) {

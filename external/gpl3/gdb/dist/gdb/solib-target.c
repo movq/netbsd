@@ -1,6 +1,6 @@
 /* Definitions for targets which report shared library events.
 
-   Copyright (C) 2007-2015 Free Software Foundation, Inc.
+   Copyright (C) 2007-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,6 +25,8 @@
 #include "target.h"
 #include "vec.h"
 #include "solib-target.h"
+
+#include <string.h>
 
 /* Private data for each loaded library.  */
 struct lm_info
@@ -117,7 +119,7 @@ library_list_start_library (struct gdb_xml_parser *parser,
 			    void *user_data, VEC(gdb_xml_value_s) *attributes)
 {
   VEC(lm_info_p) **list = user_data;
-  struct lm_info *item = XCNEW (struct lm_info);
+  struct lm_info *item = XZALLOC (struct lm_info);
   const char *name = xml_find_attribute (attributes, "name")->value;
 
   item->name = xstrdup (name);
@@ -146,18 +148,12 @@ library_list_start_list (struct gdb_xml_parser *parser,
 			 const struct gdb_xml_element *element,
 			 void *user_data, VEC(gdb_xml_value_s) *attributes)
 {
-  struct gdb_xml_value *version = xml_find_attribute (attributes, "version");
+  char *version = xml_find_attribute (attributes, "version")->value;
 
-  /* #FIXED attribute may be omitted, Expat returns NULL in such case.  */
-  if (version != NULL)
-    {
-      const char *string = version->value;
-
-      if (strcmp (string, "1.0") != 0)
-	gdb_xml_error (parser,
-		       _("Library list has unsupported version \"%s\""),
-		       version);
-    }
+  if (strcmp (version, "1.0") != 0)
+    gdb_xml_error (parser,
+		   _("Library list has unsupported version \"%s\""),
+		   version);
 }
 
 /* Discard the constructed library list.  */
@@ -216,7 +212,7 @@ static const struct gdb_xml_element library_list_children[] = {
 };
 
 static const struct gdb_xml_attribute library_list_attributes[] = {
-  { "version", GDB_XML_AF_OPTIONAL, NULL, NULL },
+  { "version", GDB_XML_AF_NONE, NULL, NULL },
   { NULL, GDB_XML_AF_NONE, NULL, NULL }
 };
 
@@ -278,7 +274,7 @@ solib_target_current_sos (void)
   /* Build a struct so_list for each entry on the list.  */
   for (ix = 0; VEC_iterate (lm_info_p, library_list, ix, info); ix++)
     {
-      new_solib = XCNEW (struct so_list);
+      new_solib = XZALLOC (struct so_list);
       strncpy (new_solib->so_name, info->name, SO_NAME_MAX_PATH_SIZE - 1);
       new_solib->so_name[SO_NAME_MAX_PATH_SIZE - 1] = '\0';
       strncpy (new_solib->so_original_name, info->name,

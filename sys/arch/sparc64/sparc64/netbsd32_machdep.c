@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_machdep.c,v 1.109 2015/11/26 13:15:34 martin Exp $	*/
+/*	$NetBSD: netbsd32_machdep.c,v 1.103.4.1 2015/11/16 13:33:40 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 1998, 2001 Matthew R. Green
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.109 2015/11/26 13:15:34 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.103.4.1 2015/11/16 13:33:40 msaitoh Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_compat_netbsd.h"
@@ -76,6 +76,9 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_machdep.c,v 1.109 2015/11/26 13:15:34 marti
 #include <compat/sys/siginfo.h>
 #include <compat/sys/ucontext.h>
 
+#ifndef SUN4U
+#define SUN4U	/* see .../sparc/include/frame.h for the reason */
+#endif
 #include <machine/frame.h>
 #include <machine/pcb.h>
 #include <machine/reg.h>
@@ -178,7 +181,6 @@ netbsd32_sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 	struct trapframe64 *tf;
 	int addr, onstack, error;
 	struct rwindow32 *oldsp, *newsp;
-	register32_t sp;
 	sig_t catcher = SIGACTION(p, sig).sa_handler;
 	struct sparc32_sigframe sf;
 	extern char netbsd32_sigcode[], netbsd32_esigcode[];
@@ -249,11 +251,9 @@ netbsd32_sendsig_sigcontext(const ksiginfo_t *ksi, const sigset_t *mask)
 	    printf("sendsig: saving sf to %p, setting stack pointer %p to %p\n",
 		   fp, &(((struct rwindow32 *)newsp)->rw_in[6]), oldsp);
 #endif
-	sp = NETBSD32PTR32I(oldsp);
 	error = (rwindow_save(l) || 
-	    copyout(&sf, fp, sizeof sf) || 
-	    copyout(&sp, &(((struct rwindow32 *)newsp)->rw_in[6]),
-	        sizeof(sp)));
+	    copyout((void *)&sf, (void *)fp, sizeof sf) || 
+	    suword(&(((struct rwindow32 *)newsp)->rw_in[6]), (u_long)oldsp));
 	mutex_enter(p->p_lock);
 	if (error) {
 		/*
@@ -323,7 +323,6 @@ netbsd32_sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	netbsd32_intptr_t catcher;
 	struct trapframe64 *tf = l->l_md.md_tf;
 	struct rwindow32 *oldsp, *newsp;
-	register32_t sp;
 	int ucsz, error;
 
 	/* Need to attempt to zero extend this 32-bit pointer */
@@ -368,10 +367,9 @@ netbsd32_sendsig_siginfo(const ksiginfo_t *ksi, const sigset_t *mask)
 	netbsd32_si_to_si32(&si32, (const siginfo_t *)&ksi->ksi_info);
 	ucsz = (int)(intptr_t)&uc.__uc_pad - (int)(intptr_t)&uc;
 	newsp = (struct rwindow32*)((intptr_t)fp - sizeof(struct frame32));
-	sp = NETBSD32PTR32I(oldsp);
 	error = (copyout(&si32, &fp->sf_si, sizeof si32) ||
 	    copyout(&uc, &fp->sf_uc, ucsz) ||
-	    copyout(&sp, &newsp->rw_in[6], sizeof(sp)));
+	    suword(&newsp->rw_in[6], (intptr_t)oldsp));
 	mutex_enter(p->p_lock);
 
 	if (error) {
@@ -1338,8 +1336,7 @@ startlwp32(void *arg)
 }
 
 vaddr_t
-netbsd32_vm_default_addr(struct proc *p, vaddr_t base, vsize_t size,
-     int topdown)
+netbsd32_vm_default_addr(struct proc *p, vaddr_t base, vsize_t size)
 {
 	return round_page((vaddr_t)(base) + (vsize_t)MAXDSIZ32);
 }

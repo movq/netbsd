@@ -1,6 +1,6 @@
 ## Process this file with automake to generate Makefile.in
 #
-#   Copyright (C) 2012-2015 Free Software Foundation, Inc.
+#   Copyright 2012 Free Software Foundation
 #
 # This file is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,6 +19,9 @@
 
 AUTOMAKE_OPTIONS = 1.11 no-dist foreign
 ACLOCAL_AMFLAGS = -I . -I .. -I ../config
+
+# Uncomment the following line when doing a release.
+# RELEASE=y
 
 INCDIR = $(srcdir)/../include
 CSEARCH = -I. -I$(srcdir) -I$(INCDIR)
@@ -43,15 +46,9 @@ noinst_LTLIBRARIES = libbfd.la
 libbfd_la_LDFLAGS += -rpath $(rpath_bfdlibdir)
 endif
 
-# This is where we get zlib from.  zlibdir is -L../zlib and zlibinc is
-# -I../zlib, unless we were configured with --with-system-zlib, in which
-# case both are empty.
-ZLIB = @zlibdir@ -lz
-ZLIBINC = @zlibinc@
-
 WARN_CFLAGS = @WARN_CFLAGS@
 NO_WERROR = @NO_WERROR@
-AM_CFLAGS = $(WARN_CFLAGS) $(ZLIBINC)
+AM_CFLAGS = $(WARN_CFLAGS)
 AM_CPPFLAGS = -DBINDIR='"$(bindir)"'
 if PLUGINS
 bfdinclude_HEADERS += $(INCDIR)/plugin-api.h
@@ -70,19 +67,21 @@ BFD_H = bfd.h
 # debugger).
 BFD32_LIBS = \
 	archive.lo archures.lo bfd.lo bfdio.lo bfdwin.lo \
-	cache.lo coff-bfd.lo compress.lo corefile.lo format.lo hash.lo \
-	init.lo libbfd.lo linker.lo merge.lo opncls.lo reloc.lo \
-	section.lo simple.lo stab-syms.lo stabs.lo syms.lo targets.lo \
-	binary.lo ihex.lo srec.lo tekhex.lo verilog.lo
+	cache.lo coffgen.lo corefile.lo \
+	format.lo init.lo libbfd.lo opncls.lo reloc.lo \
+	section.lo syms.lo targets.lo hash.lo linker.lo \
+	srec.lo binary.lo tekhex.lo ihex.lo stabs.lo stab-syms.lo \
+	merge.lo dwarf2.lo simple.lo compress.lo verilog.lo
 
 BFD64_LIBS = archive64.lo
 
 BFD32_LIBS_CFILES = \
 	archive.c archures.c bfd.c bfdio.c bfdwin.c \
-	cache.c coff-bfd.c compress.c corefile.c format.c hash.c \
-	init.c libbfd.c linker.c merge.c opncls.c reloc.c \
-	section.c simple.c stab-syms.c stabs.c syms.c targets.c \
-	binary.c ihex.c srec.c tekhex.c verilog.c
+	cache.c coffgen.c corefile.c \
+	format.c init.c libbfd.c opncls.c reloc.c \
+	section.c syms.c targets.c hash.c linker.c \
+	srec.c binary.c tekhex.c ihex.c stabs.c stab-syms.c \
+	merge.c dwarf2.c simple.c compress.c verilog.c
 
 BFD64_LIBS_CFILES = archive64.c
 
@@ -105,13 +104,11 @@ ALL_MACHINES = \
 	cpu-epiphany.lo \
 	cpu-fr30.lo \
 	cpu-frv.lo \
-	cpu-ft32.lo \
 	cpu-h8300.lo \
 	cpu-h8500.lo \
 	cpu-hppa.lo \
 	cpu-i370.lo \
 	cpu-i386.lo \
-	cpu-iamcu.lo \
 	cpu-l1om.lo \
 	cpu-k1om.lo \
 	cpu-i860.lo \
@@ -142,7 +139,8 @@ ALL_MACHINES = \
 	cpu-nds32.lo \
 	cpu-nios2.lo \
 	cpu-ns32k.lo \
-	cpu-or1k.lo \
+	cpu-openrisc.lo \
+	cpu-or32.lo \
 	cpu-pdp11.lo \
 	cpu-pj.lo \
 	cpu-plugin.lo \
@@ -165,7 +163,6 @@ ALL_MACHINES = \
 	cpu-v850.lo \
 	cpu-v850_rh850.lo \
 	cpu-vax.lo \
-	cpu-visium.lo \
 	cpu-w65.lo \
 	cpu-we32k.lo \
 	cpu-xc16x.lo \
@@ -192,13 +189,11 @@ ALL_MACHINES_CFILES = \
 	cpu-epiphany.c \
 	cpu-fr30.c \
 	cpu-frv.c \
-	cpu-ft32.c \
 	cpu-h8300.c \
 	cpu-h8500.c \
 	cpu-hppa.c \
 	cpu-i370.c \
 	cpu-i386.c \
-	cpu-iamcu.c \
 	cpu-l1om.c \
 	cpu-k1om.c \
 	cpu-i860.c \
@@ -229,7 +224,8 @@ ALL_MACHINES_CFILES = \
 	cpu-nds32.c \
 	cpu-ns32k.c \
 	cpu-nios2.c \
-	cpu-or1k.c \
+	cpu-openrisc.c \
+	cpu-or32.c \
 	cpu-pdp11.c \
 	cpu-pj.c \
 	cpu-plugin.c \
@@ -252,7 +248,6 @@ ALL_MACHINES_CFILES = \
 	cpu-v850.c \
 	cpu-v850_rh850.c \
 	cpu-vax.c \
-	cpu-visium.c \
 	cpu-w65.c \
 	cpu-we32k.c \
 	cpu-xc16x.c \
@@ -289,6 +284,7 @@ BFD32_BACKENDS = \
 	coff-m68k.lo \
 	coff-m88k.lo \
 	coff-mips.lo \
+	coff-or32.lo \
 	coff-rs6000.lo \
 	coff-sh.lo \
 	coff-sparc.lo \
@@ -303,10 +299,8 @@ BFD32_BACKENDS = \
 	coff-we32k.lo \
 	coff-z80.lo \
 	coff-z8k.lo \
-	coffgen.lo \
 	cofflink.lo \
 	dwarf1.lo \
-	dwarf2.lo \
 	ecoff.lo \
 	ecofflink.lo \
 	elf-attrs.lo \
@@ -333,7 +327,6 @@ BFD32_BACKENDS = \
 	elf32-epiphany.lo \
 	elf32-fr30.lo \
 	elf32-frv.lo \
-	elf32-ft32.lo \
 	elf32-gen.lo \
 	elf32-h8300.lo \
 	elf32-hppa.lo \
@@ -360,7 +353,8 @@ BFD32_BACKENDS = \
 	elf32-mt.lo \
 	elf32-nds32.lo \
 	elf32-nios2.lo \
-	elf32-or1k.lo \
+	elf32-openrisc.lo \
+	elf32-or32.lo \
 	elf32-pj.lo \
 	elf32-ppc.lo \
 	elf32-rl78.lo \
@@ -377,7 +371,6 @@ BFD32_BACKENDS = \
 	elf32-tilepro.lo \
 	elf32-v850.lo \
 	elf32-vax.lo \
-	elf32-visium.lo \
 	elf32-xc16x.lo \
 	elf32-xgate.lo \
 	elf32-xstormy16.lo \
@@ -480,6 +473,7 @@ BFD32_BACKENDS_CFILES = \
 	coff-m68k.c \
 	coff-m88k.c \
 	coff-mips.c \
+	coff-or32.c \
 	coff-rs6000.c \
 	coff-sh.c \
 	coff-sparc.c \
@@ -494,10 +488,8 @@ BFD32_BACKENDS_CFILES = \
 	coff-we32k.c \
 	coff-z80.c \
 	coff-z8k.c \
-	coffgen.c \
 	cofflink.c \
 	dwarf1.c \
-	dwarf2.c \
 	ecoff.c \
 	ecofflink.c \
 	elf-attrs.c \
@@ -524,7 +516,6 @@ BFD32_BACKENDS_CFILES = \
 	elf32-epiphany.c \
 	elf32-fr30.c \
 	elf32-frv.c \
-	elf32-ft32.c \
 	elf32-gen.c \
 	elf32-h8300.c \
 	elf32-hppa.c \
@@ -551,7 +542,8 @@ BFD32_BACKENDS_CFILES = \
 	elf32-mt.c \
 	elf32-nds32.c \
 	elf32-nios2.c \
-	elf32-or1k.c \
+	elf32-openrisc.c \
+	elf32-or32.c \
 	elf32-pj.c \
 	elf32-ppc.c \
 	elf32-rl78.c \
@@ -568,7 +560,6 @@ BFD32_BACKENDS_CFILES = \
 	elf32-tilepro.c \
 	elf32-v850.c \
 	elf32-vax.c \
-	elf32-visium.c \
 	elf32-xc16x.c \
 	elf32-xgate.c \
 	elf32-xstormy16.c \
@@ -750,14 +741,15 @@ OPTIONAL_BACKENDS_CFILES = \
 	sco5-core.c \
 	trad-core.c
 
-# Reconfigure if config.bfd or configure.host changes.
-# development.sh is used to determine -Werror default.
+# We want to rerun configure if configure.in, config.bfd or
+# configure.host change. configure.in is needed since the version
+# number in Makefile comes from configure.in.
 CONFIG_STATUS_DEPENDENCIES = \
+	$(srcdir)/configure.in \
 	$(srcdir)/config.bfd \
-	$(srcdir)/configure.host \
-	$(srcdir)/development.sh
+	$(srcdir)/configure.host
 
-# These are defined by configure:
+# These are defined by configure.in:
 WORDSIZE = @wordsize@
 ALL_BACKENDS = @all_backends@
 BFD_BACKENDS = @bfd_backends@
@@ -848,7 +840,7 @@ ofiles: stamp-ofiles ; @true
 libbfd_la_SOURCES = $(BFD32_LIBS_CFILES)
 EXTRA_libbfd_la_SOURCES = $(CFILES)
 libbfd_la_DEPENDENCIES = $(OFILES) ofiles
-libbfd_la_LIBADD = `cat ofiles` @SHARED_LIBADD@ $(LIBDL) $(ZLIB)
+libbfd_la_LIBADD = `cat ofiles` @SHARED_LIBADD@ $(LIBDL)
 libbfd_la_LDFLAGS += -release `cat libtool-soversion` @SHARED_LDFLAGS@
 
 # libtool will build .libs/libbfd.a.  We create libbfd.a in the build
@@ -1040,15 +1032,14 @@ CLEANFILES = bfd.h dep.sed stmp-bfd-h DEP DEPA DEP1 DEP2 libbfd.a stamp-lib \
 
 DISTCLEANFILES = $(BUILD_CFILES) $(BUILD_HFILES) libtool-soversion
 
-bfdver.h: $(srcdir)/version.h $(srcdir)/development.sh $(srcdir)/Makefile.in
+bfdver.h: $(srcdir)/version.h $(srcdir)/Makefile.in
 	@echo "creating $@"
 	@bfd_version=`echo "$(VERSION)" | sed -e 's/\([^\.]*\)\.*\([^\.]*\)\.*\([^\.]*\)\.*\([^\.]*\)\.*\([^\.]*\).*/\1.00\2.00\3.00\4.00\5/' -e 's/\([^\.]*\)\..*\(..\)\..*\(..\)\..*\(..\)\..*\(..\)$$/\1\2\3\4\5/'` ;\
 	bfd_version_string="\"$(VERSION)\"" ;\
 	bfd_soversion="$(VERSION)" ;\
 	bfd_version_package="\"$(PKGVERSION)\"" ;\
 	report_bugs_to="\"$(REPORT_BUGS_TO)\"" ;\
-	. $(srcdir)/development.sh ;\
-	if test "$$development" = true ; then \
+	if test "x$(RELEASE)" = x ; then \
 	  bfd_version_date=`sed -n -e 's/.*DATE //p' < $(srcdir)/version.h` ;\
 	  bfd_version_string="\"$(VERSION).$${bfd_version_date}\"" ;\
 	  bfd_soversion="$(VERSION).$${bfd_version_date}" ;\

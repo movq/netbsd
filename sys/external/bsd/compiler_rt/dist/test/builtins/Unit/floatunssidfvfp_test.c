@@ -11,13 +11,12 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "int_lib.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
 
 
-extern COMPILER_RT_ABI double __floatunssidfvfp(unsigned int a);
+extern double __floatunssidfvfp(unsigned int a);
 
 #if __arm__
 int test__floatunssidfvfp(unsigned int a)

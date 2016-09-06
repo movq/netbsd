@@ -1,4 +1,4 @@
-/*	$NetBSD: vga_raster.c,v 1.44 2015/03/01 07:05:59 mlelstv Exp $	*/
+/*	$NetBSD: vga_raster.c,v 1.41.2.1 2015/01/14 18:27:05 martin Exp $	*/
 
 /*
  * Copyright (c) 2001, 2002 Bang Jun-Young
@@ -56,7 +56,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vga_raster.c,v 1.44 2015/03/01 07:05:59 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vga_raster.c,v 1.41.2.1 2015/01/14 18:27:05 martin Exp $");
 
 #include "opt_vga.h"
 #include "opt_wsmsgattrs.h" /* for WSDISPLAY_CUSTOM_OUTPUT */
@@ -567,7 +567,6 @@ vga_cndetach(void)
 
 		bus_space_unmap(vh->vh_iot, vh->vh_ioh_vga, 0x10);
 		bus_space_unmap(vh->vh_iot, vh->vh_ioh_6845, 0x10);
-		bus_space_unmap(vh->vh_memt, vh->vh_allmemh, 0x20000);
 
 		vga_console_attached = 0;
 		vgaconsole = 0;

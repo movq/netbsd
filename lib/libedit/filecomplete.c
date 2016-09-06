@@ -1,4 +1,4 @@
-/*	$NetBSD: filecomplete.c,v 1.43 2016/04/11 00:50:13 christos Exp $	*/
+/*	$NetBSD: filecomplete.c,v 1.32.2.1 2015/05/13 13:33:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -31,25 +31,30 @@
 
 #include "config.h"
 #if !defined(lint) && !defined(SCCSID)
-__RCSID("$NetBSD: filecomplete.c,v 1.43 2016/04/11 00:50:13 christos Exp $");
+__RCSID("$NetBSD: filecomplete.c,v 1.32.2.1 2015/05/13 13:33:55 martin Exp $");
 #endif /* not lint && not SCCSID */
 
 #include <sys/types.h>
 #include <sys/stat.h>
+#include <stdio.h>
 #include <dirent.h>
+#include <string.h>
+#include <pwd.h>
+#include <ctype.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <limits.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <limits.h>
-#include <pwd.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 
 #include "el.h"
+#include "fcns.h"		/* for EL_NUM_FCNS */
+#include "histedit.h"
 #include "filecomplete.h"
 
-static const wchar_t break_chars[] = L" \t\n\"\\'`@$><=;|&{(";
+static const Char break_chars[] = { ' ', '\t', '\n', '"', '\\', '\'', '`', '@',
+    '$', '>', '<', '=', ';', '|', '&', '{', '(', '\0' };
+
 
 /********************************/
 /* completion functions */
@@ -91,9 +96,9 @@ fn_tilde_expand(const char *txt)
 	}
 	if (temp[0] == 0) {
 #ifdef HAVE_GETPW_R_POSIX
-		if (getpwuid_r(getuid(), &pwres, pwbuf, sizeof(pwbuf),
+ 		if (getpwuid_r(getuid(), &pwres, pwbuf, sizeof(pwbuf),
 		    &pass) != 0)
-			pass = NULL;
+ 			pass = NULL;
 #elif HAVE_GETPW_R_DRAFT
 		pass = getpwuid_r(getuid(), &pwres, pwbuf, sizeof(pwbuf));
 #else
@@ -408,14 +413,14 @@ int
 fn_complete(EditLine *el,
 	char *(*complet_func)(const char *, int),
 	char **(*attempted_completion_function)(const char *, int, int),
-	const wchar_t *word_break, const wchar_t *special_prefixes,
+	const Char *word_break, const Char *special_prefixes,
 	const char *(*app_func)(const char *), size_t query_items,
 	int *completion_type, int *over, int *point, int *end)
 {
-	const LineInfoW *li;
-	wchar_t *temp;
+	const TYPE(LineInfo) *li;
+	Char *temp;
         char **matches;
-	const wchar_t *ctemp;
+	const Char *ctemp;
 	size_t len;
 	int what_to_do = '\t';
 	int retval = CC_NORM;
@@ -433,21 +438,21 @@ fn_complete(EditLine *el,
 		app_func = append_char_function;
 
 	/* We now look backwards for the start of a filename/variable word */
-	li = el_wline(el);
+	li = FUN(el,line)(el);
 	ctemp = li->cursor;
 	while (ctemp > li->buffer
-	    && !wcschr(word_break, ctemp[-1])
-	    && (!special_prefixes || !wcschr(special_prefixes, ctemp[-1]) ) )
+	    && !Strchr(word_break, ctemp[-1])
+	    && (!special_prefixes || !Strchr(special_prefixes, ctemp[-1]) ) )
 		ctemp--;
 
 	len = (size_t)(li->cursor - ctemp);
 	temp = el_malloc((len + 1) * sizeof(*temp));
-	(void)wcsncpy(temp, ctemp, len);
+	(void)Strncpy(temp, ctemp, len);
 	temp[len] = '\0';
 
 	/* these can be used by function called in completion_matches() */
 	/* or (*attempted_completion_function)() */
-	if (point != NULL)
+	if (point != 0)
 		*point = (int)(li->cursor - li->buffer);
 	if (end != NULL)
 		*end = (int)(li->lastchar - li->buffer);
@@ -458,8 +463,8 @@ fn_complete(EditLine *el,
 		    ct_encode_string(temp, &el->el_scratch),
 		    cur_off - (int)len, cur_off);
 	} else
-		matches = NULL;
-	if (!attempted_completion_function ||
+		matches = 0;
+	if (!attempted_completion_function || 
 	    (over != NULL && !*over && !matches))
 		matches = completion_matches(
 		    ct_encode_string(temp, &el->el_scratch), complet_func);
@@ -478,7 +483,7 @@ fn_complete(EditLine *el,
 		 */
 		if (matches[0][0] != '\0') {
 			el_deletestr(el, (int) len);
-			el_winsertstr(el,
+			FUN(el,insertstr)(el,
 			    ct_decode_string(matches[0], &el->el_scratch));
 		}
 
@@ -492,7 +497,7 @@ fn_complete(EditLine *el,
 			 * it, unless we do filename completion and the
 			 * object is a directory.
 			 */
-			el_winsertstr(el,
+			FUN(el,insertstr)(el,
 			    ct_decode_string((*app_func)(matches[0]),
 			    &el->el_scratch));
 		} else if (what_to_do == '!') {
@@ -509,7 +514,7 @@ fn_complete(EditLine *el,
 			}
 			/* matches[1] through matches[i-1] are available */
 			matches_num = (size_t)(i - 1);
-
+				
 			/* newline to get on next line from command line */
 			(void)fprintf(el->el_outfile, "\n");
 

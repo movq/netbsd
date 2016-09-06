@@ -1,4 +1,4 @@
-/* $NetBSD: amlogic_genfb.c,v 1.5 2015/04/03 18:03:05 jmcneill Exp $ */
+/* $NetBSD: amlogic_genfb.c,v 1.1.2.5 2015/05/15 04:12:07 snj Exp $ */
 
 /*-
  * Copyright (c) 2015 Jared D. McNeill <jmcneill@invisible.ca>
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: amlogic_genfb.c,v 1.5 2015/04/03 18:03:05 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: amlogic_genfb.c,v 1.1.2.5 2015/05/15 04:12:07 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>

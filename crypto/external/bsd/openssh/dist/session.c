@@ -1,5 +1,5 @@
-/*	$NetBSD: session.c,v 1.20 2016/08/02 13:45:12 christos Exp $	*/
-/* $OpenBSD: session.c,v 1.282 2016/03/10 11:47:57 djm Exp $ */
+/*	$NetBSD: session.c,v 1.12.4.2 2016/05/17 18:50:34 snj Exp $	*/
+/* $OpenBSD: session.c,v 1.277 2015/01/16 06:40:12 deraadt Exp $ */
 /*
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
  *                    All rights reserved
@@ -35,7 +35,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: session.c,v 1.20 2016/08/02 13:45:12 christos Exp $");
+__RCSID("$NetBSD: session.c,v 1.12.4.2 2016/05/17 18:50:34 snj Exp $");
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <sys/un.h>
@@ -43,7 +43,6 @@ __RCSID("$NetBSD: session.c,v 1.20 2016/08/02 13:45:12 christos Exp $");
 #include <sys/socket.h>
 #include <sys/queue.h>
 
-#include <ctype.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <grp.h>
@@ -148,7 +147,6 @@ login_cap_t *lc;
 #endif
 
 static int is_child = 0;
-static int in_chroot = 0;
 
 /* Name and directory of socket for authentication agent forwarding. */
 static char *auth_sock_name = NULL;
@@ -263,21 +261,6 @@ do_authenticated(Authctxt *authctxt)
 	do_cleanup(authctxt);
 }
 
-/* Check untrusted xauth strings for metacharacters */
-static int
-xauth_valid_string(const char *s)
-{
-	size_t i;
-
-	for (i = 0; s[i] != '\0'; i++) {
-		if (!isalnum((u_char)s[i]) &&
-		    s[i] != '.' && s[i] != ':' && s[i] != '/' &&
-		    s[i] != '-' && s[i] != '_')
-		return 0;
-	}
-	return 1;
-}
-
 /*
  * Prepares for an interactive session.  This is called after the user has
  * been successfully authenticated.  During this message exchange, pseudo
@@ -351,13 +334,7 @@ do_authenticated1(Authctxt *authctxt)
 				s->screen = 0;
 			}
 			packet_check_eom();
-			if (xauth_valid_string(s->auth_proto) &&
-			    xauth_valid_string(s->auth_data))
-				success = session_setup_x11fwd(s);
-			else {
-				success = 0;
-				error("Invalid X11 forwarding data");
-			}
+			success = session_setup_x11fwd(s);
 			if (!success) {
 				free(s->auth_proto);
 				free(s->auth_data);
@@ -790,10 +767,9 @@ do_exec_pty(Session *s, const char *command)
 int
 do_exec(Session *s, const char *command)
 {
-	struct ssh *ssh = active_state; /* XXX */
 	int ret;
-	const char *forced = NULL, *tty = NULL;
-	char session_type[1024];
+	const char *forced = NULL;
+	char session_type[1024], *tty = NULL;
 
 	if (options.adm_forced_command) {
 		original_command = command;
@@ -828,14 +804,13 @@ do_exec(Session *s, const char *command)
 			tty += 5;
 	}
 
-	verbose("Starting session: %s%s%s for %s from %.200s port %d id %d",
+	verbose("Starting session: %s%s%s for %s from %.200s port %d",
 	    session_type,
 	    tty == NULL ? "" : " on ",
 	    tty == NULL ? "" : tty,
 	    s->pw->pw_name,
-	    ssh_remote_ipaddr(ssh),
-	    ssh_remote_port(ssh),
-	    s->self);
+	    get_remote_ipaddr(),
+	    get_remote_port());
 
 #ifdef GSSAPI
 	if (options.gss_authentication) {
@@ -866,7 +841,6 @@ do_exec(Session *s, const char *command)
 void
 do_login(Session *s, const char *command)
 {
-	struct ssh *ssh = active_state;	/* XXX */
 	socklen_t fromlen;
 	struct sockaddr_storage from;
 	struct passwd * pw = s->pw;
@@ -889,7 +863,7 @@ do_login(Session *s, const char *command)
 	/* Record that there was a login on that tty from the remote host. */
 	if (!use_privsep)
 		record_login(pid, s->tty, pw->pw_name, pw->pw_uid,
-		    session_get_remote_name_or_ip(ssh, utmp_len,
+		    get_remote_name_or_ip(utmp_len,
 		    options.use_dns),
 		    (struct sockaddr *)&from, fromlen);
 
@@ -1000,7 +974,7 @@ child_set_env(char ***envp, u_int *envsizep, const char *name,
 			if (envsize >= 1000)
 				fatal("child_set_env: too many env vars");
 			envsize += 50;
-			env = (*envp) = xreallocarray(env, envsize, sizeof(char *));
+			env = (*envp) = xrealloc(env, envsize, sizeof(char *));
 			*envsizep = envsize;
 		}
 		/* Need to set the NULL pointer at end of array beyond the new slot. */
@@ -1148,7 +1122,6 @@ void copy_environment(char **source, char ***env, u_int *envsize)
 static char **
 do_setup_env(Session *s, const char *shell)
 {
-	struct ssh *ssh = active_state; /* XXX */
 	char buf[256];
 	u_int i, envsize;
 	char **env, *laddr;
@@ -1217,14 +1190,12 @@ do_setup_env(Session *s, const char *shell)
 
 	/* SSH_CLIENT deprecated */
 	snprintf(buf, sizeof buf, "%.50s %d %d",
-	    ssh_remote_ipaddr(ssh), ssh_remote_port(ssh),
-	    ssh_local_port(ssh));
+	    get_remote_ipaddr(), get_remote_port(), get_local_port());
 	child_set_env(&env, &envsize, "SSH_CLIENT", buf);
 
 	laddr = get_local_ipaddr(packet_get_connection_in());
 	snprintf(buf, sizeof buf, "%.50s %d %.50s %d",
-	    ssh_remote_ipaddr(ssh), ssh_remote_port(ssh),
-	    laddr, ssh_local_port(ssh));
+	    get_remote_ipaddr(), get_remote_port(), laddr, get_local_port());
 	free(laddr);
 	child_set_env(&env, &envsize, "SSH_CONNECTION", buf);
 
@@ -1368,17 +1339,16 @@ do_nologin(struct passwd *pw)
 	if (login_getcapbool(lc, "ignorenologin", 0) || pw->pw_uid == 0)
 		return;
 	nl = login_getcapstr(lc, "nologin", def_nl, def_nl);
-#else
-	if (pw->pw_uid == 0)
-		return;
-	nl = def_nl;
-#endif
+
 	if (stat(nl, &sb) == -1) {
 		if (nl != def_nl)
 			free(nl);
 		return;
 	}
-
+#else
+	if (pw->pw_uid)
+		nl = def_nl;
+#endif
 	/* /etc/nologin exists.  Print its contents if we can and exit. */
 	logit("User %.100s not allowed because %s exists", pw->pw_name, nl);
 	if ((f = fopen(nl, "r")) != NULL) {
@@ -1488,7 +1458,7 @@ do_setusercontext(struct passwd *pw)
 		}
 # endif /* USE_PAM */
 #endif
-		if (!in_chroot && options.chroot_directory != NULL &&
+		if (options.chroot_directory != NULL &&
 		    strcasecmp(options.chroot_directory, "none") != 0) {
                         tmp = tilde_expand_filename(options.chroot_directory,
 			    pw->pw_uid);
@@ -1500,7 +1470,6 @@ do_setusercontext(struct passwd *pw)
 			/* Make sure we don't attempt to chroot again */
 			free(options.chroot_directory);
 			options.chroot_directory = NULL;
-			in_chroot = 1;
 		}
 
 #ifdef HAVE_LOGIN_CAP
@@ -1588,7 +1557,7 @@ child_close_fds(void)
 	 * initgroups, because at least on Solaris 2.3 it leaves file
 	 * descriptors open.
 	 */
-	(void)closefrom(STDERR_FILENO + 1);
+	closefrom(STDERR_FILENO + 1);
 }
 
 /*
@@ -1600,7 +1569,6 @@ child_close_fds(void)
 void
 do_child(Session *s, const char *command)
 {
-	struct ssh *ssh = active_state;	/* XXX */
 	extern char **environ;
 	char **env;
 	char *argv[ARGV_MAX];
@@ -1664,14 +1632,14 @@ do_child(Session *s, const char *command)
 
 	/* we have to stash the hostname before we close our socket. */
 	if (options.use_login)
-		hostname = session_get_remote_name_or_ip(ssh, utmp_len,
+		hostname = get_remote_name_or_ip(utmp_len,
 		    options.use_dns);
 	/*
 	 * Close the connection descriptors; note that this is the child, and
 	 * the server will still have the socket open, and it is important
 	 * that we do not shutdown it.  Note that the descriptors cannot be
 	 * closed before building the environment, as we call
-	 * ssh_remote_ipaddr there.
+	 * get_remote_ipaddr there.
 	 */
 	child_close_fds();
 
@@ -1711,16 +1679,16 @@ do_child(Session *s, const char *command)
 	if (chdir(pw->pw_dir) < 0) {
 		/* Suppress missing homedir warning for chroot case */
 		r = login_getcapbool(lc, "requirehome", 0);
-		if (r || !in_chroot) {
+		if (r || options.chroot_directory == NULL ||
+		    strcasecmp(options.chroot_directory, "none") == 0)
 			fprintf(stderr, "Could not chdir to home "
 			    "directory %s: %s\n", pw->pw_dir,
 			    strerror(errno));
-		}
 		if (r)
 			exit(1);
 	}
 
-	(void)closefrom(STDERR_FILENO + 1);
+	closefrom(STDERR_FILENO + 1);
 
 	if (!options.use_login)
 		do_rc_files(s, shell);
@@ -1832,7 +1800,7 @@ session_new(void)
 			return NULL;
 		debug2("%s: allocate (allocated %d max %d)",
 		    __func__, sessions_nalloc, options.max_sessions);
-		tmp = xreallocarray(sessions, sessions_nalloc + 1,
+		tmp = xrealloc(sessions, sessions_nalloc + 1,
 		    sizeof(*sessions));
 		if (tmp == NULL) {
 			error("%s: cannot allocate %d sessions",
@@ -2099,13 +2067,7 @@ session_x11_req(Session *s)
 	s->screen = packet_get_int();
 	packet_check_eom();
 
-	if (xauth_valid_string(s->auth_proto) &&
-	    xauth_valid_string(s->auth_data))
-		success = session_setup_x11fwd(s);
-	else {
-		success = 0;
-		error("Invalid X11 forwarding data");
-	}
+	success = session_setup_x11fwd(s);
 	if (!success) {
 		free(s->auth_proto);
 		free(s->auth_data);
@@ -2165,7 +2127,7 @@ session_env_req(Session *s)
 	for (i = 0; i < options.num_accept_env; i++) {
 		if (match_pattern(name, options.accept_env[i])) {
 			debug2("Setting env %d: %s=%s", s->num_env, name, val);
-			s->env = xreallocarray(s->env, s->num_env + 1,
+			s->env = xrealloc(s->env, s->num_env + 1,
 			    sizeof(*s->env));
 			s->env[s->num_env].name = name;
 			s->env[s->num_env].val = val;
@@ -2427,15 +2389,9 @@ session_exit_message(Session *s, int status)
 void
 session_close(Session *s)
 {
-	struct ssh *ssh = active_state; /* XXX */
 	u_int i;
 
-	verbose("Close session: user %s from %.200s port %d id %d",
-	    s->pw->pw_name,
-	    ssh_remote_ipaddr(ssh),
-	    ssh_remote_port(ssh),
-	    s->self);
-
+	debug("session_close: session %d pid %ld", s->self, (long)s->pid);
 	if (s->ttyfd != -1)
 		session_pty_cleanup(s);
 	free(s->term);
@@ -2687,18 +2643,3 @@ do_cleanup(Authctxt *authctxt)
 	if (!use_privsep || mm_is_monitor())
 		session_destroy_all(session_pty_cleanup2);
 }
-
-/* Return a name for the remote host that fits inside utmp_size */
-
-const char *
-session_get_remote_name_or_ip(struct ssh *ssh, u_int utmp_size, int use_dns)
-{
-	const char *remote = "";
-
-	if (utmp_size > 0)
-		remote = auth_get_canonical_hostname(ssh, use_dns);
-	if (utmp_size == 0 || strlen(remote) > utmp_size)
-		remote = ssh_remote_ipaddr(ssh);
-	return remote;
-}
-

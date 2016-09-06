@@ -1,5 +1,5 @@
-/*	$NetBSD: auth-rhosts.c,v 1.6 2016/08/02 13:45:12 christos Exp $	*/
-/* $OpenBSD: auth-rhosts.c,v 1.47 2016/03/07 19:02:43 djm Exp $ */
+/*	$NetBSD: auth-rhosts.c,v 1.3.26.1 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: auth-rhosts.c,v 1.46 2014/12/23 22:42:48 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -16,7 +16,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: auth-rhosts.c,v 1.6 2016/08/02 13:45:12 christos Exp $");
+__RCSID("$NetBSD: auth-rhosts.c,v 1.3.26.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/types.h>
 #include <sys/stat.h>
 
@@ -29,15 +29,14 @@ __RCSID("$NetBSD: auth-rhosts.c,v 1.6 2016/08/02 13:45:12 christos Exp $");
 #include <unistd.h>
 
 #include "packet.h"
+#include "buffer.h"
 #include "uidswap.h"
 #include "pathnames.h"
 #include "log.h"
 #include "misc.h"
-#include "buffer.h" /* XXX */
-#include "key.h" /* XXX */
 #include "servconf.h"
 #include "canohost.h"
-#include "sshkey.h"
+#include "key.h"
 #include "hostfile.h"
 #include "auth.h"
 
@@ -189,11 +188,10 @@ check_rhosts_file(const char *filename, const char *hostname,
 int
 auth_rhosts(struct passwd *pw, const char *client_user)
 {
-	struct ssh *ssh = active_state;	/* XXX */
 	const char *hostname, *ipaddr;
 
-	hostname = auth_get_canonical_hostname(ssh, options.use_dns);
-	ipaddr = ssh_remote_ipaddr(ssh);
+	hostname = get_canonical_hostname(options.use_dns);
+	ipaddr = get_remote_ipaddr();
 	return auth_rhosts2(pw, client_user, hostname, ipaddr);
 }
 

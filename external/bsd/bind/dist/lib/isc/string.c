@@ -1,7 +1,7 @@
-/*	$NetBSD: string.c,v 1.7 2016/05/26 16:49:59 christos Exp $	*/
+/*	$NetBSD: string.c,v 1.5 2014/03/01 03:24:39 christos Exp $	*/
 
 /*
- * Copyright (C) 2004-2007, 2011, 2012, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
+ * Copyright (C) 2004-2007, 2011, 2012, 2014  Internet Systems Consortium, Inc. ("ISC")
  * Copyright (C) 1999-2001, 2003  Internet Software Consortium.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
@@ -58,14 +58,14 @@
 #include <isc/string.h>
 #include <isc/util.h>
 
-static const char digits[] = "0123456789abcdefghijklmnoprstuvwxyz";
+static char digits[] = "0123456789abcdefghijklmnoprstuvwxyz";
 
 isc_uint64_t
 isc_string_touint64(char *source, char **end, int base) {
 	isc_uint64_t tmp;
 	isc_uint64_t overflow;
 	char *s = source;
-	const char *o;
+	char *o;
 	char c;
 
 	if ((base < 0) || (base == 1) || (base > 36)) {

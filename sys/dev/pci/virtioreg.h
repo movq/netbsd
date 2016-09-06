@@ -1,4 +1,4 @@
-/*	$NetBSD: virtioreg.h,v 1.6 2015/10/29 01:56:12 christos Exp $	*/
+/*	$NetBSD: virtioreg.h,v 1.2 2013/12/06 02:39:58 yamt Exp $	*/
 
 /*
  * Copyright (c) 2010 Minoura Makoto.
@@ -73,11 +73,7 @@
 #define PCI_PRODUCT_VIRTIO_CONSOLE	3
 #define PCI_PRODUCT_VIRTIO_ENTROPY	4
 #define PCI_PRODUCT_VIRTIO_BALLOON	5
-#define	PCI_PRODUCT_VIRTIO_IOMEM	6
-#define PCI_PRODUCT_VIRTIO_RPMSG	7
-#define PCI_PRODUCT_VIRTIO_SCSI		8
 #define PCI_PRODUCT_VIRTIO_9P		9
-#define PCI_PRODUCT_VIRTIO_MAC80211	10
 
 /* Virtio header */
 #define VIRTIO_CONFIG_DEVICE_FEATURES	0 /* 32bit */
@@ -99,17 +95,7 @@
 #define  VIRTIO_CONFIG_ISR_CONFIG_CHANGE	2
 #define VIRTIO_CONFIG_CONFIG_VECTOR	20 /* 16bit, optional */
 #define VIRTIO_CONFIG_DEVICE_CONFIG_NOMSI	20
-#define VIRTIO_CONFIG_DEVICE_CONFIG_MSI		24
-/* MSI/MSI-X */
-#define VIRTIO_CONFIG_MSI_CONFIG_VECTOR		20
-#define VIRTIO_CONFIG_MSI_QUEUE_VECTOR		22
-
-#define VIRTIO_COMMON_FLAG_BITS \
-        "\20" \
-	"\x1f""BAD_FEATURE" \
-	"\x1e""EVENT_IDX" \
-	"\x1d""INDIRECT_DESC" \
-	"\x19""NOTIFY_ON_EMPTY"
+#define VIRTIO_CONFIG_DEVICE_CONFIG_MSI		22
 
 /* Virtqueue */
 /* This marks a buffer as continuing via the next field. */

@@ -1,5 +1,5 @@
 /* Support for printing Pascal types for GDB, the GNU debugger.
-   Copyright (C) 2000-2015 Free Software Foundation, Inc.
+   Copyright (C) 2000-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -31,6 +31,8 @@
 #include "p-lang.h"
 #include "typeprint.h"
 #include "gdb-demangle.h"
+#include <string.h>
+#include <errno.h>
 #include <ctype.h>
 
 static void pascal_type_print_varspec_suffix (struct type *, struct ui_file *,
@@ -154,8 +156,8 @@ void
 pascal_type_print_method_args (const char *physname, const char *methodname,
 			       struct ui_file *stream)
 {
-  int is_constructor = (startswith (physname, "__ct__"));
-  int is_destructor = (startswith (physname, "__dt__"));
+  int is_constructor = (strncmp (physname, "__ct__", 6) == 0);
+  int is_destructor = (strncmp (physname, "__dt__", 6) == 0);
 
   if (is_constructor || is_destructor)
     {
@@ -239,7 +241,7 @@ pascal_type_print_varspec_prefix (struct type *type, struct ui_file *stream,
       if (passed_a_ptr)
 	{
 	  fprintf_filtered (stream, " ");
-	  pascal_type_print_base (TYPE_SELF_TYPE (type),
+	  pascal_type_print_base (TYPE_DOMAIN_TYPE (type),
 				  stream, 0, passed_a_ptr, flags);
 	  fprintf_filtered (stream, "::");
 	}
@@ -567,7 +569,7 @@ pascal_type_print_base (struct type *type, struct ui_file *stream, int show,
 	    {
 	      QUIT;
 	      /* Don't print out virtual function table.  */
-	      if ((startswith (TYPE_FIELD_NAME (type, i), "_vptr"))
+	      if ((strncmp (TYPE_FIELD_NAME (type, i), "_vptr", 5) == 0)
 		  && is_cplus_marker ((TYPE_FIELD_NAME (type, i))[5]))
 		continue;
 
@@ -643,8 +645,8 @@ pascal_type_print_base (struct type *type, struct ui_file *stream, int show,
 		{
 		  const char *physname = TYPE_FN_FIELD_PHYSNAME (f, j);
 
-		  int is_constructor = (startswith (physname, "__ct__"));
-		  int is_destructor = (startswith (physname, "__dt__"));
+		  int is_constructor = (strncmp (physname, "__ct__", 6) == 0);
+		  int is_destructor = (strncmp (physname, "__dt__", 6) == 0);
 
 		  QUIT;
 		  if (TYPE_FN_FIELD_PROTECTED (f, j))

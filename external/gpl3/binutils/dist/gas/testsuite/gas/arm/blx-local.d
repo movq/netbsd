@@ -1,6 +1,6 @@
 #name: Local BLX instructions
 #objdump: -drw --prefix-addresses --show-raw-insn
-#target: *-*-*eabi* *-*-nacl*
+#skip: *-*-*coff *-*-pe *-*-wince *-*-*aout* *-*-netbsd *-*-riscix* *-*-elf
 #as:
 # stderr: blx-local.l
 # Test assembler resolution of blx and bl instructions in ARM mode.

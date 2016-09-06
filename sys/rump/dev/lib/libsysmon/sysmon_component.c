@@ -1,4 +1,4 @@
-/*	$NetBSD: sysmon_component.c,v 1.3 2016/01/26 23:12:16 pooka Exp $	*/
+/*	$NetBSD: sysmon_component.c,v 1.1 2014/03/13 01:47:07 pooka Exp $	*/
 
 /*
  * Copyright (c) 2010 Antti Kantee.  All Rights Reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysmon_component.c,v 1.3 2016/01/26 23:12:16 pooka Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysmon_component.c,v 1.1 2014/03/13 01:47:07 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -36,9 +36,14 @@ __KERNEL_RCSID(0, "$NetBSD: sysmon_component.c,v 1.3 2016/01/26 23:12:16 pooka E
 #include <dev/sysmon/sysmon_taskq.h>
 #include <dev/sysmon/sysmonvar.h>
 
-#include <rump-sys/kern.h>
-#include <rump-sys/dev.h>
-#include <rump-sys/vfs.h>
+#include "rump_private.h"
+#include "rump_dev_private.h"
+#include "rump_vfs_private.h"
+
+#include "ioconf.c"
+
+void swwdogattach(int);
+void swsensorattach(int);
 
 RUMP_COMPONENT(RUMP_COMPONENT_DEV)
 {
@@ -46,16 +51,16 @@ RUMP_COMPONENT(RUMP_COMPONENT_DEV)
 	devmajor_t bmaj, cmaj;
 	int error;
 
-	/*
-	 * Temporarily attach the devsw so we can determine our
-	 * major device number.  We'll detach it immediately, so
-	 * normal module initialization can permanently attach.
-	 */
+	if ((error = config_init_component(cfdriver_ioconf_swwdog,
+	    cfattach_ioconf_swwdog, cfdata_ioconf_swwdog)) != 0) {
+		printf("cannot attach swwdog: %d\n", error);
+		return;
+	}
+
 	bmaj = cmaj = -1;
 	if ((error = devsw_attach("sysmon", NULL, &bmaj,
 	    &sysmon_cdevsw, &cmaj)) != 0)
 		panic("sysmon devsw attach failed: %d", error);
-	devsw_detach(NULL, &sysmon_cdevsw);
 
 	if ((error = rump_vfs_makeonedevnode(S_IFCHR, "/dev/sysmon",
 	    cmaj, SYSMON_MINOR_ENVSYS)) != 0)
@@ -66,4 +71,12 @@ RUMP_COMPONENT(RUMP_COMPONENT_DEV)
 	if ((error = rump_vfs_makeonedevnode(S_IFCHR, "/dev/power",
 	    cmaj, SYSMON_MINOR_POWER)) != 0)
 		panic("cannot create /dev/power: %d", error);
+
+	sysmon_task_queue_preinit();
+	sysmon_task_queue_init();
+	sysmon_envsys_init();
+	sysmon_power_init();
+	sysmon_wdog_init();
+
+	rump_pdev_add(swwdogattach, 0);
 }

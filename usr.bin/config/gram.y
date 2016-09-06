@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: gram.y,v 1.54 2016/08/07 10:37:24 christos Exp $	*/
+/*	$NetBSD: gram.y,v 1.39.2.2 2016/05/11 11:21:18 martin Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -42,7 +42,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: gram.y,v 1.54 2016/08/07 10:37:24 christos Exp $");
+__RCSID("$NetBSD: gram.y,v 1.39.2.2 2016/05/11 11:21:18 martin Exp $");
 
 #include <sys/types.h>
 #include <sys/param.h>
@@ -60,7 +60,6 @@ __RCSID("$NetBSD: gram.y,v 1.54 2016/08/07 10:37:24 christos Exp $");
 #define	stop(s)	cfgerror(s), exit(1)
 
 static	struct	config conf;	/* at most one active at a time */
-static	int	nowarn;		/* if warning suppression is on */
 
 
 /*
@@ -179,9 +178,9 @@ static struct loclist *namelocvals(const char *, struct loclist *);
 %token	IDENT IOCONF
 %token	LINKZERO
 %token	XMACHINE MAJOR MAKEOPTIONS MAXUSERS MAXPARTITIONS MINOR
-%token	NEEDS_COUNT NEEDS_FLAG NO CNO
+%token	NEEDS_COUNT NEEDS_FLAG NO
 %token	XOBJECT OBSOLETE ON OPTIONS
-%token	PACKAGE PLUSEQ PREFIX BUILDPREFIX PSEUDO_DEVICE PSEUDO_ROOT
+%token	PACKAGE PLUSEQ PREFIX PSEUDO_DEVICE PSEUDO_ROOT
 %token	ROOT
 %token	SELECT SINGLE SOURCE
 %token	TYPE
@@ -214,7 +213,7 @@ static struct loclist *namelocvals(const char *, struct loclist *);
 %type	<str>	value
 %type	<val>	major_minor
 %type	<num>	signed_number
-%type	<i32>	int32 npseudo device_flags no
+%type	<i32>	int32 npseudo device_flags
 %type	<str>	deffs
 %type	<list>	deffses
 %type	<defoptlist>	defopt
@@ -293,11 +292,6 @@ subarches:
 	| subarches WORD		{ $$ = new_nx($2, $1); }
 ;
 
-no:
-	  NO	{ $$ = 0; }
-	| CNO	{ $$ = 1; }
-;
-
 /************************************************************/
 
 /*
@@ -324,7 +318,6 @@ definition:
 	| define_object
 	| define_device_major
 	| define_prefix
-	| define_buildprefix
 	| define_devclass
 	| define_filesystems
 	| define_attribute
@@ -351,7 +344,7 @@ define_file:
 
 /* object file: object zot.o foo|zot needs-flag */
 define_object:
-	XOBJECT filename fopts oflags	{ addfile($2, $3, $4, NULL); }
+	XOBJECT filename fopts oflags	{ addobject($2, $3, $4); }
 ;
 
 /* device major declaration */
@@ -367,12 +360,6 @@ define_device_major:
 define_prefix:
 	  PREFIX filename		{ prefix_push($2); }
 	| PREFIX			{ prefix_pop(); }
-;
-
-define_buildprefix:
-	  BUILDPREFIX filename		{ buildprefix_push($2); }
-	| BUILDPREFIX WORD		{ buildprefix_push($2); }
-	| BUILDPREFIX			{ buildprefix_pop(); }
 ;
 
 define_devclass:
@@ -487,7 +474,7 @@ oflags:
 
 /* a single flag for an object file */
 oflag:
-	NEEDS_FLAG			{ $$ = FI_NEEDSFLAG; }
+	NEEDS_FLAG			{ $$ = OI_NEEDSFLAG; }
 ;
 
 /* char 55 */
@@ -746,11 +733,11 @@ select_attr:
 ;
 
 select_no_attr:
-	no SELECT WORD			{ delattr($3, $1); }
+	NO SELECT WORD			{ delattr($3); }
 ;
 
 select_no_filesystems:
-	no FILE_SYSTEM { nowarn = $1; } no_fs_list { nowarn = 0; }
+	NO FILE_SYSTEM no_fs_list
 ;
 
 select_filesystems:
@@ -758,7 +745,7 @@ select_filesystems:
 ;
 
 select_no_makeoptions:
-	no MAKEOPTIONS { nowarn = $1; } no_mkopt_list { nowarn = 0; }
+	NO MAKEOPTIONS no_mkopt_list
 ;
 
 select_makeoptions:
@@ -766,7 +753,7 @@ select_makeoptions:
 ;
 
 select_no_options:
-	no OPTIONS { nowarn = $1; } no_opt_list { nowarn = 0; }
+	NO OPTIONS no_opt_list
 ;
 
 select_options:
@@ -782,7 +769,7 @@ select_ident:
 ;
 
 select_no_ident:
-	no IDENT			{ setident(NULL); }
+	NO IDENT			{ setident(NULL); }
 ;
 
 select_config:
@@ -791,11 +778,11 @@ select_config:
 ;
 
 select_no_config:
-	no CONFIG WORD			{ delconf($3, $1); }
+	NO CONFIG WORD			{ delconf($3); }
 ;
 
 select_no_pseudodev:
-	no PSEUDO_DEVICE WORD		{ delpseudo($3, $1); }
+	NO PSEUDO_DEVICE WORD		{ delpseudo($3); }
 ;
 
 select_pseudodev:
@@ -807,16 +794,16 @@ select_pseudoroot:
 ;
 
 select_no_device_instance_attachment:
-	no device_instance AT attachment
-					{ deldevi($2, $4, $1); }
+	NO device_instance AT attachment
+					{ deldevi($2, $4); }
 ;
 
 select_no_device_attachment:
-	no DEVICE AT attachment		{ deldeva($4, $1); }
+	NO DEVICE AT attachment		{ deldeva($4); }
 ;
 
 select_no_device_instance:
-	no device_instance		{ deldev($2, $1); }
+	NO device_instance		{ deldev($2); }
 ;
 
 select_device_instance:
@@ -843,7 +830,7 @@ no_fs_list:
 
 /* one filesystem that had NO in front */
 no_fsoption:
-	WORD				{ delfsoption($1, nowarn); }
+	WORD				{ delfsoption($1); }
 ;
 
 /* list of make options */
@@ -868,7 +855,7 @@ no_mkopt_list:
 /* one make option that had NO in front */
 /* XXX shouldn't this be mkvarname rather than WORD? */
 no_mkoption:
-	WORD				{ delmkoption($1, nowarn); }
+	WORD				{ delmkoption($1); }
 ;
 
 /* list of options */
@@ -891,7 +878,7 @@ no_opt_list:
 
 /* one option that had NO in front */
 no_option:
-	WORD				{ deloption($1, nowarn); }
+	WORD				{ deloption($1); }
 ;
 
 /* the name in "config name root on ..." */

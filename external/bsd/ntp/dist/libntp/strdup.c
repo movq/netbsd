@@ -1,4 +1,4 @@
-/*	$NetBSD: strdup.c,v 1.4 2016/01/08 21:35:39 christos Exp $	*/
+/*	$NetBSD: strdup.c,v 1.1.1.2.20.2 2015/11/08 01:51:07 riz Exp $	*/
 
 #include <config.h>
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: sdmmcreg.h,v 1.22 2016/08/10 04:24:17 nonaka Exp $	*/
+/*	$NetBSD: sdmmcreg.h,v 1.14 2013/05/03 16:38:35 matt Exp $	*/
 /*	$OpenBSD: sdmmcreg.h,v 1.4 2009/01/09 10:55:22 jsg Exp $	*/
 
 /*
@@ -36,8 +36,6 @@
 #define MMC_SET_BLOCKLEN		16	/* R1 */
 #define MMC_READ_BLOCK_SINGLE		17	/* R1 */
 #define MMC_READ_BLOCK_MULTIPLE		18	/* R1 */
-#define MMC_SEND_TUNING_BLOCK		19	/* R1 */
-#define MMC_SEND_TUNING_BLOCK_HS200	21	/* R1 */
 #define MMC_SET_BLOCK_COUNT		23	/* R1 */
 #define MMC_WRITE_BLOCK_SINGLE		24	/* R1 */
 #define MMC_WRITE_BLOCK_MULTIPLE	25	/* R1 */
@@ -60,7 +58,6 @@
 #define SD_SEND_RELATIVE_ADDR 	  	3	/* R6 */
 #define SD_SEND_SWITCH_FUNC		6	/* R1 */
 #define SD_SEND_IF_COND			8	/* R7 */
-#define SD_VOLTAGE_SWITCH		11	/* R1 */
 
 /* SD application commands */			/* response type */
 #define SD_APP_SET_BUS_WIDTH		6	/* R1 */
@@ -70,11 +67,7 @@
 
 /* OCR bits */
 #define MMC_OCR_MEM_READY		(1U<<31)/* memory power-up status bit */
-#define MMC_OCR_HCS			(1<<30)	/* SD only */
-#define MMC_OCR_ACCESS_MODE_MASK	(3<<29)	/* MMC only */
-#define MMC_OCR_ACCESS_MODE_BYTE	(0<<29)	/* MMC only */
-#define MMC_OCR_ACCESS_MODE_SECTOR	(2<<29)	/* MMC only */
-#define MMC_OCR_S18A			(1<<24)
+#define MMC_OCR_HCS			(1<<30)
 #define MMC_OCR_3_5V_3_6V		(1<<23)
 #define MMC_OCR_3_4V_3_5V		(1<<22)
 #define MMC_OCR_3_3V_3_4V		(1<<21)
@@ -91,11 +84,13 @@
 #define MMC_OCR_2_2V_2_3V		(1<<10)
 #define MMC_OCR_2_1V_2_2V		(1<<9)
 #define MMC_OCR_2_0V_2_1V		(1<<8)
-#define MMC_OCR_1_65V_1_95V		(1<<7)
+#define MMC_OCR_1_9V_2_0V		(1<<7)
+#define MMC_OCR_1_8V_1_9V		(1<<6)
+#define MMC_OCR_1_7V_1_8V		(1<<5)
+#define MMC_OCR_1_6V_1_7V		(1<<4)
 
 /* R1 response type bits */
 #define MMC_R1_READY_FOR_DATA		(1<<8)	/* ready for next transfer */
-#define MMC_R1_SWITCH_ERROR		(1<<7)	/* switch command failed */
 #define MMC_R1_APP_CMD			(1<<5)	/* app. commands supported */
 
 /* 48-bit response decoding (32 bits w/o CRC) */
@@ -120,7 +115,6 @@
 #define EXT_CSD_REV			192	/* RO */
 #define EXT_CSD_STRUCTURE		194	/* RO */
 #define EXT_CSD_CARD_TYPE		196	/* RO */
-#define EXT_CSD_SEC_COUNT		212	/* RO */
 
 /* EXT_CSD field definitions */
 #define EXT_CSD_CMD_SET_NORMAL		(1U << 0)
@@ -138,14 +132,12 @@
 #define EXT_CSD_STRUCTURE_VER_1_2	2	/* Version 4.1-4.2-4.3 */
 
 /* EXT_CSD_CARD_TYPE */
+/* The only currently valid values for this field are 0x01, 0x03, 0x07,
+ * 0x0B and 0x0F. */
 #define EXT_CSD_CARD_TYPE_F_26M		(1 << 0)
 #define EXT_CSD_CARD_TYPE_F_52M		(1 << 1)
 #define EXT_CSD_CARD_TYPE_F_52M_1_8V	(1 << 2)
 #define EXT_CSD_CARD_TYPE_F_52M_1_2V	(1 << 3)
-#define EXT_CSD_CARD_TYPE_F_HS200_1_8V	(1 << 4)
-#define EXT_CSD_CARD_TYPE_F_HS200_1_2V	(1 << 5)
-#define EXT_CSD_CARD_TYPE_F_HS400_1_8V	(1 << 6)
-#define EXT_CSD_CARD_TYPE_F_HS400_1_2V	(1 << 7)
 #define EXT_CSD_CARD_TYPE_26M		0x01
 #define EXT_CSD_CARD_TYPE_52M		0x03
 #define EXT_CSD_CARD_TYPE_52M_V18	0x07
@@ -336,12 +328,6 @@
 /* Status of Switch Function */
 #define SFUNC_STATUS_GROUP(status, group) \
 	(__bitfield((uint32_t *)(status), 400 + (group - 1) * 16, 16))
-
-#define SD_ACCESS_MODE_SDR12	0
-#define SD_ACCESS_MODE_SDR25	1
-#define SD_ACCESS_MODE_SDR50	2
-#define SD_ACCESS_MODE_SDR104	3
-#define SD_ACCESS_MODE_DDR50	4
 
 /* This assumes the response fields are in host byte order in 32-bit units.  */
 #define MMC_RSP_BITS(resp, start, len)	__bitfield((resp), (start)-8, (len))

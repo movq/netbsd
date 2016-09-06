@@ -1,4 +1,4 @@
-.\"	$NetBSD: prep.OPENFIRMWARE,v 1.18 2015/05/09 08:13:35 snj Exp $
+.\"	$NetBSD: prep.OPENFIRMWARE,v 1.15.20.2 2015/05/24 11:14:44 martin Exp $
 .if \*[OF_VERSION_3] \{\
 .
 .Ss2 Updating your BootROM

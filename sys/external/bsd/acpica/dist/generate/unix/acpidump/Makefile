@@ -31,47 +31,23 @@ OBJECTS = \
 	$(OBJDIR)/apdump.o\
 	$(OBJDIR)/apfiles.o\
 	$(OBJDIR)/apmain.o\
-	$(OBJDIR)/cmfsize.o\
-	$(OBJDIR)/getopt.o\
-	$(OBJDIR)/oslibcfs.o\
 	$(OBJDIR)/osunixdir.o\
 	$(OBJDIR)/osunixmap.o\
-	$(OBJDIR)/osunixxf.o\
 	$(OBJDIR)/tbprint.o\
 	$(OBJDIR)/tbxfroot.o\
-	$(OBJDIR)/utascii.o\
 	$(OBJDIR)/utbuffer.o\
-	$(OBJDIR)/utdebug.o\
 	$(OBJDIR)/utexcep.o\
-	$(OBJDIR)/utglobal.o\
 	$(OBJDIR)/utmath.o\
-	$(OBJDIR)/utnonansi.o\
-	$(OBJDIR)/utprint.o\
 	$(OBJDIR)/utstring.o\
-	$(OBJDIR)/utxferror.o
+	$(OBJDIR)/utxferror.o\
+	$(OBJDIR)/getopt.o
 
 #
 # Per-host interfaces
 #
-ifeq ($(HOST), _DragonFly)
-HOST_FAMILY = BSD
-endif
-
 ifeq ($(HOST), _FreeBSD)
-HOST_FAMILY = BSD
-endif
-
-ifeq ($(HOST), _NetBSD)
-HOST_FAMILY = BSD
-endif
-
-ifeq ($(HOST), _QNX)
-HOST_FAMILY = BSD
-endif
-
-ifeq ($(HOST_FAMILY), BSD)
 OBJECTS += \
-	$(OBJDIR)/osbsdtbl.o
+	$(OBJDIR)/osfreebsdtbl.o
 else
 OBJECTS += \
 	$(OBJDIR)/oslinuxtbl.o

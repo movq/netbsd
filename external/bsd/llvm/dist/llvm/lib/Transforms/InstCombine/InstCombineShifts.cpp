@@ -11,7 +11,7 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include "InstCombineInternal.h"
+#include "InstCombine.h"
 #include "llvm/Analysis/ConstantFolding.h"
 #include "llvm/Analysis/InstructionSimplify.h"
 #include "llvm/IR/IntrinsicInst.h"
@@ -55,7 +55,7 @@ Instruction *InstCombiner::commonShiftTransforms(BinaryOperator &I) {
   return nullptr;
 }
 
-/// See if we can compute the specified value, but shifted
+/// CanEvaluateShifted - See if we can compute the specified value, but shifted
 /// logically to the left or right by some number of bits.  This should return
 /// true if the expression can be computed for the same cost as the current
 /// expression tree.  This is used to eliminate extraneous shifting from things
@@ -175,8 +175,8 @@ static bool CanEvaluateShifted(Value *V, unsigned NumBits, bool isLeftShift,
     // get into trouble with cyclic PHIs here because we only consider
     // instructions with a single use.
     PHINode *PN = cast<PHINode>(I);
-    for (Value *IncValue : PN->incoming_values())
-      if (!CanEvaluateShifted(IncValue, NumBits, isLeftShift,
+    for (unsigned i = 0, e = PN->getNumIncomingValues(); i != e; ++i)
+      if (!CanEvaluateShifted(PN->getIncomingValue(i), NumBits, isLeftShift,
                               IC, PN))
         return false;
     return true;
@@ -184,10 +184,10 @@ static bool CanEvaluateShifted(Value *V, unsigned NumBits, bool isLeftShift,
   }
 }
 
-/// When CanEvaluateShifted returned true for an expression,
+/// GetShiftedValue - When CanEvaluateShifted returned true for an expression,
 /// this value inserts the new computation that produces the shifted value.
 static Value *GetShiftedValue(Value *V, unsigned NumBits, bool isLeftShift,
-                              InstCombiner &IC, const DataLayout &DL) {
+                              InstCombiner &IC) {
   // We can always evaluate constants shifted.
   if (Constant *C = dyn_cast<Constant>(V)) {
     if (isLeftShift)
@@ -196,7 +196,8 @@ static Value *GetShiftedValue(Value *V, unsigned NumBits, bool isLeftShift,
       V = IC.Builder->CreateLShr(C, NumBits);
     // If we got a constantexpr back, try to simplify it with TD info.
     if (ConstantExpr *CE = dyn_cast<ConstantExpr>(V))
-      V = ConstantFoldConstantExpression(CE, DL, IC.getTargetLibraryInfo());
+      V = ConstantFoldConstantExpression(CE, IC.getDataLayout(),
+                                         IC.getTargetLibraryInfo());
     return V;
   }
 
@@ -209,10 +210,8 @@ static Value *GetShiftedValue(Value *V, unsigned NumBits, bool isLeftShift,
   case Instruction::Or:
   case Instruction::Xor:
     // Bitwise operators can all arbitrarily be arbitrarily evaluated shifted.
-    I->setOperand(
-        0, GetShiftedValue(I->getOperand(0), NumBits, isLeftShift, IC, DL));
-    I->setOperand(
-        1, GetShiftedValue(I->getOperand(1), NumBits, isLeftShift, IC, DL));
+    I->setOperand(0, GetShiftedValue(I->getOperand(0), NumBits,isLeftShift,IC));
+    I->setOperand(1, GetShiftedValue(I->getOperand(1), NumBits,isLeftShift,IC));
     return I;
 
   case Instruction::Shl: {
@@ -298,10 +297,8 @@ static Value *GetShiftedValue(Value *V, unsigned NumBits, bool isLeftShift,
   }
 
   case Instruction::Select:
-    I->setOperand(
-        1, GetShiftedValue(I->getOperand(1), NumBits, isLeftShift, IC, DL));
-    I->setOperand(
-        2, GetShiftedValue(I->getOperand(2), NumBits, isLeftShift, IC, DL));
+    I->setOperand(1, GetShiftedValue(I->getOperand(1), NumBits,isLeftShift,IC));
+    I->setOperand(2, GetShiftedValue(I->getOperand(2), NumBits,isLeftShift,IC));
     return I;
   case Instruction::PHI: {
     // We can change a phi if we can change all operands.  Note that we never
@@ -309,8 +306,8 @@ static Value *GetShiftedValue(Value *V, unsigned NumBits, bool isLeftShift,
     // instructions with a single use.
     PHINode *PN = cast<PHINode>(I);
     for (unsigned i = 0, e = PN->getNumIncomingValues(); i != e; ++i)
-      PN->setIncomingValue(i, GetShiftedValue(PN->getIncomingValue(i), NumBits,
-                                              isLeftShift, IC, DL));
+      PN->setIncomingValue(i, GetShiftedValue(PN->getIncomingValue(i),
+                                              NumBits, isLeftShift, IC));
     return PN;
   }
   }
@@ -340,8 +337,8 @@ Instruction *InstCombiner::FoldShiftByConstant(Value *Op0, Constant *Op1,
     DEBUG(dbgs() << "ICE: GetShiftedValue propagating shift through expression"
               " to eliminate shift:\n  IN: " << *Op0 << "\n  SH: " << I <<"\n");
 
-    return ReplaceInstUsesWith(
-        I, GetShiftedValue(Op0, COp1->getZExtValue(), isLeftShift, *this, DL));
+    return ReplaceInstUsesWith(I,
+                 GetShiftedValue(Op0, COp1->getZExtValue(), isLeftShift, *this));
   }
 
   // See if we can simplify any instructions used by the instruction whose sole

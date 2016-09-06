@@ -1,4 +1,4 @@
-/*	$NetBSD: smc91cxx.c,v 1.93 2016/07/07 06:55:41 msaitoh Exp $	*/
+/*	$NetBSD: smc91cxx.c,v 1.88 2014/08/10 16:44:35 tls Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -71,7 +71,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: smc91cxx.c,v 1.93 2016/07/07 06:55:41 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: smc91cxx.c,v 1.88 2014/08/10 16:44:35 tls Exp $");
 
 #include "opt_inet.h"
 
@@ -85,7 +85,7 @@ __KERNEL_RCSID(0, "$NetBSD: smc91cxx.c,v 1.93 2016/07/07 06:55:41 msaitoh Exp $"
 #include <sys/malloc.h>
 #include <sys/ioctl.h>
 #include <sys/errno.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <sys/bus.h>
 #include <sys/intr.h>
@@ -318,8 +318,7 @@ smc91cxx_attach(struct smc91cxx_softc *sc, u_int8_t *myea)
 	sc->sc_mii.mii_readreg = smc91cxx_mii_readreg;
 	sc->sc_mii.mii_writereg = smc91cxx_mii_writereg;
 	sc->sc_mii.mii_statchg = smc91cxx_statchg;
-	ifmedia_init(ifm, IFM_IMASK, smc91cxx_mediachange,
-	    smc91cxx_mediastatus);
+	ifmedia_init(ifm, IFM_IMASK, smc91cxx_mediachange, smc91cxx_mediastatus);
 
 	SMC_SELECT_BANK(sc, 1);
 	tmp = bus_space_read_2(bst, bsh, CONFIG_REG_W);
@@ -525,11 +524,8 @@ smc91cxx_init(struct smc91cxx_softc *sc)
 	sc->sc_txpacketno = ARR_FAILED;
 	for (;;) {
 		tmp = bus_space_read_2(bst, bsh, MMU_CMD_REG_W);
-		if (tmp == 0xffff) {
-			/* card went away! */
-			splx(s);
+		if (tmp == 0xffff)	/* card went away! */
 			return;
-		}
 		if ((tmp & MMUCR_BUSY) == 0)
 			break;
 	}
@@ -1168,7 +1164,7 @@ smc91cxx_read(struct smc91cxx_softc *sc)
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (m == NULL)
 		goto out;
-	m_set_rcvif(m, ifp);
+	m->m_pkthdr.rcvif = ifp;
 	m->m_pkthdr.len = packetlen;
 
 	/*
@@ -1244,7 +1240,7 @@ smc91cxx_read(struct smc91cxx_softc *sc)
 	 */
 	bpf_mtap(ifp, m);
 
-	if_percpuq_enqueue(ifp->if_percpuq, m);
+	(*ifp->if_input)(ifp, m);
 
  out:
 	/*

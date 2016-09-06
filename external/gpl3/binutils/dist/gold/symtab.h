@@ -1,6 +1,6 @@
 // symtab.h -- the gold symbol table   -*- C++ -*-
 
-// Copyright (C) 2006-2015 Free Software Foundation, Inc.
+// Copyright 2006, 2007, 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -62,7 +62,7 @@ class Garbage_collection;
 class Icf;
 
 // The base class of an entry in the symbol table.  The symbol table
-// can have a lot of entries, so we don't want this class too big.
+// can have a lot of entries, so we don't want this class to big.
 // Size dependent fields can be found in the template class
 // Sized_symbol.  Targets may support their own derived classes.
 
@@ -121,10 +121,6 @@ class Symbol
   version() const
   { return this->version_; }
 
-  void
-  clear_version()
-  { this->version_ = NULL; }
-
   // Return whether this version is the default for this symbol name
   // (eg, "foo@@V2" is a default version; "foo@V1" is not).  Only
   // meaningful for versioned symbols.
@@ -139,11 +135,6 @@ class Symbol
   void
   set_is_default()
   { this->is_def_ = true; }
-
-  // Set that this version is not the default for this symbol name.
-  void
-  set_is_not_default()
-  { this->is_def_ = false; }
 
   // Return the symbol's name as name@version (or name@@version).
   std::string
@@ -220,11 +211,6 @@ class Symbol
   type() const
   { return this->type_; }
 
-  // Set the symbol type.
-  void
-  set_type(elfcpp::STT type)
-  { this->type_ = type; }
-
   // Return true for function symbol.
   bool
   is_func() const
@@ -248,7 +234,7 @@ class Symbol
   override_visibility(elfcpp::STV);
 
   // Set whether the symbol was originally a weak undef or a regular undef
-  // when resolved by a dynamic def or by a special symbol.
+  // when resolved by a dynamic def.
   inline void
   set_undef_binding(elfcpp::STB bind)
   {
@@ -259,8 +245,7 @@ class Symbol
       }
   }
 
-  // Return TRUE if a weak undef was resolved by a dynamic def or
-  // by a special symbol.
+  // Return TRUE if a weak undef was resolved by a dynamic def.
   inline bool
   is_undef_binding_weak() const
   { return this->undef_binding_weak_; }
@@ -269,11 +254,6 @@ class Symbol
   unsigned char
   nonvis() const
   { return this->nonvis_; }
-
-  // Set the non-visibility part of the st_other field.
-  void
-  set_nonvis(unsigned int nonvis)
-  { this->nonvis_ = nonvis; }
 
   // Return whether this symbol is a forwarder.  This will never be
   // true of a symbol found in the hash table, but may be true of
@@ -528,22 +508,7 @@ class Symbol
   // Return whether this is a weak undefined symbol.
   bool
   is_weak_undefined() const
-  {
-    return (this->is_undefined()
-	    && (this->binding() == elfcpp::STB_WEAK
-		|| this->is_undef_binding_weak()
-		|| parameters->options().weak_unresolved_symbols()));
-  }
-
-  // Return whether this is a strong undefined symbol.
-  bool
-  is_strong_undefined() const
-  {
-    return (this->is_undefined()
-	    && this->binding() != elfcpp::STB_WEAK
-	    && !this->is_undef_binding_weak()
-	    && !parameters->options().weak_unresolved_symbols());
-  }
+  { return this->is_undefined() && this->binding() == elfcpp::STB_WEAK; }
 
   // Return whether this is an absolute symbol.
   bool
@@ -562,6 +527,8 @@ class Symbol
   {
     if (this->source_ != FROM_OBJECT)
       return false;
+    if (this->type_ == elfcpp::STT_COMMON)
+      return true;
     bool is_ordinary;
     unsigned int shndx = this->shndx(&is_ordinary);
     return !is_ordinary && Symbol::is_common_shndx(shndx);
@@ -605,11 +572,7 @@ class Symbol
     if (!parameters->options().shared())
       return false;
 
-    // If the symbol was named in a --dynamic-list script, it is preemptible.
-    if (parameters->options().in_dynamic_list(this->name()))
-      return true;
-
-    // If the user used -Bsymbolic, then nothing (else) is preemptible.
+    // If the user used -Bsymbolic, then nothing is preemptible.
     if (parameters->options().Bsymbolic())
       return false;
 
@@ -671,10 +634,7 @@ class Symbol
     // A TLS-related reference.
     TLS_REF = 4,
     // A reference that can always be treated as a function call.
-    FUNCTION_CALL = 8,
-    // When set, says that dynamic relocations are needed even if a
-    // symbol has a plt entry.
-    FUNC_DESC_ABI = 16,
+    FUNCTION_CALL = 8
   };
 
   // Given a direct absolute or pc-relative static relocation against
@@ -711,8 +671,7 @@ class Symbol
 
     // A reference to any PLT entry in a non-position-independent executable
     // does not need a dynamic relocation.
-    if (!(flags & FUNC_DESC_ABI)
-	&& !parameters->options().output_is_position_independent()
+    if (!parameters->options().output_is_position_independent()
         && this->has_plt_offset())
       return false;
 
@@ -804,18 +763,6 @@ class Symbol
   void
   set_output_section(Output_section*);
 
-  // Set the symbol's output segment.  This is used for pre-defined
-  // symbols whose segments aren't known until after layout is done
-  // (e.g., __ehdr_start).
-  void
-  set_output_segment(Output_segment*, Segment_offset_base);
-
-  // Set the symbol to undefined.  This is used for pre-defined
-  // symbols whose segments aren't known until after layout is done
-  // (e.g., __ehdr_start).
-  void
-  set_undefined();
-
   // Return whether there should be a warning for references to this
   // symbol.
   bool
@@ -855,7 +802,8 @@ class Symbol
   bool
   may_need_copy_reloc() const
   {
-    return (parameters->options().copyreloc()
+    return (!parameters->options().output_is_position_independent()
+	    && parameters->options().copyreloc()
 	    && this->is_from_dynobj()
 	    && !this->is_func());
   }
@@ -864,11 +812,6 @@ class Symbol
   bool
   is_predefined() const
   { return this->is_predefined_; }
-
-  // Return true if this is a C++ vtable symbol.
-  bool
-  is_cxx_vtable() const
-  { return is_prefix_of("_ZTV", this->name_); }
 
  protected:
   // Instances of this class should always be created at a specific
@@ -1063,7 +1006,7 @@ class Symbol
   // True if UNDEF_BINDING_WEAK_ has been set (bit 32).
   bool undef_binding_set_ : 1;
   // True if this symbol was a weak undef resolved by a dynamic def
-  // or by a special symbol (bit 33).
+  // (bit 33).
   bool undef_binding_weak_ : 1;
   // True if this symbol is a predefined linker symbol (bit 34).
   bool is_predefined_ : 1;
@@ -1237,25 +1180,6 @@ struct Define_symbol_in_segment
   bool only_if_ref;
 };
 
-// Specify an object/section/offset location.  Used by ODR code.
-
-struct Symbol_location
-{
-  // Object where the symbol is defined.
-  Object* object;
-  // Section-in-object where the symbol is defined.
-  unsigned int shndx;
-  // For relocatable objects, offset-in-section where the symbol is defined.
-  // For dynamic objects, address where the symbol is defined.
-  off_t offset;
-  bool operator==(const Symbol_location& that) const
-  {
-    return (this->object == that.object
-	    && this->shndx == that.shndx
-	    && this->offset == that.offset);
-  }
-};
-
 // This class manages warnings.  Warnings are a GNU extension.  When
 // we see a section named .gnu.warning.SYM in an object file, and if
 // we wind using the definition of SYM from that object file, then we
@@ -1375,7 +1299,7 @@ class Symbol_table
  
   // Returns true if ICF determined that this is a duplicate section. 
   bool
-  is_section_folded(Relobj* obj, unsigned int shndx) const;
+  is_section_folded(Object* obj, unsigned int shndx) const;
 
   void
   set_gc(Garbage_collection* gc)
@@ -1675,6 +1599,19 @@ class Symbol_table
   // the locations the symbols is (weakly) defined (and certain other
   // conditions are met).  This map will be used later to detect
   // possible One Definition Rule (ODR) violations.
+  struct Symbol_location
+  {
+    Object* object;         // Object where the symbol is defined.
+    unsigned int shndx;     // Section-in-object where the symbol is defined.
+    off_t offset;           // Offset-in-section where the symbol is defined.
+    bool operator==(const Symbol_location& that) const
+    {
+      return (this->object == that.object
+              && this->shndx == that.shndx
+              && this->offset == that.offset);
+    }
+  };
+
   struct Symbol_location_hash
   {
     size_t operator()(const Symbol_location& loc) const
@@ -1711,8 +1648,7 @@ class Symbol_table
 	  const elfcpp::Sym<size, big_endian>& sym,
 	  unsigned int st_shndx, bool is_ordinary,
 	  unsigned int orig_st_shndx,
-	  Object*, const char* version,
-	  bool is_default_version);
+	  Object*, const char* version);
 
   template<int size, bool big_endian>
   void
@@ -1731,7 +1667,7 @@ class Symbol_table
   // resolve.cc.
   static bool
   should_override(const Symbol*, unsigned int, elfcpp::STT, Defined,
-		  Object*, bool*, bool*, bool);
+		  Object*, bool*, bool*);
 
   // Report a problem in symbol resolution.
   static void

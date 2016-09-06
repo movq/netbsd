@@ -19,18 +19,15 @@ entry:
 }
 
 ; CHECK-LABEL: call_once:
-; CHECK: addi 3, {{[0-9]+}}, __once_callable@got@tlsgd@l
+; CHECK: addis 3, 2, __once_callable@got@tlsgd@ha
+; CHECK: addi 3, 3, __once_callable@got@tlsgd@l
 ; CHECK: bl __tls_get_addr(__once_callable@tlsgd)
 ; CHECK-NEXT: nop
-; FIXME: We could check here for 'std {{[0-9]+}}, 0(3)', but that no longer
-; works because, with new scheduling freedom, we create a copy of R3 based on the
-; initial scheduling, but don't coalesce it again after we move the instructions
-; so that the copy is no longer necessary.
-; CHECK: addi 3, {{[0-9]+}}, __once_call@got@tlsgd@l
+; CHECK: std {{[0-9]+}}, 0(3)
+; CHECK: addis 3, 2, __once_call@got@tlsgd@ha
+; CHECK: addi 3, 3, __once_call@got@tlsgd@l
 ; CHECK: bl __tls_get_addr(__once_call@tlsgd)
 ; CHECK-NEXT: nop
-; FIXME: We don't really need the copy here either, we could move the store up.
-; CHECK: mr [[REG1:[0-9]+]], 3
-; CHECK: std {{[0-9]+}}, 0([[REG1]])
+; CHECK: std {{[0-9]+}}, 0(3)
 
 declare void @__once_call_impl()

@@ -1,4 +1,4 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
  * Copyright (c) 2009 Nicholas Marriott <nicm@users.sourceforge.net>
@@ -31,6 +31,7 @@ const struct cmd_entry cmd_display_panes_entry = {
 	"t:", 0, 0,
 	CMD_TARGET_CLIENT_USAGE,
 	0,
+	NULL,
 	cmd_display_panes_exec
 };
 

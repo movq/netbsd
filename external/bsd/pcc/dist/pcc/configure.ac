@@ -2,7 +2,7 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.59)
-AC_INIT([Portable C Compiler], [1.2.0.DEVEL], [pcc@lists.ludd.ltu.se], [pcc], [http://pcc.ludd.ltu.se/])
+AC_INIT([pcc], [1.1.0.DEVEL], <pcc-list@ludd.ltu.se>)
 AC_CONFIG_HEADER([config.h])
 
 AC_CANONICAL_TARGET
@@ -89,41 +89,15 @@ case "$target_os" in
 	esac
 	;;
 
-    linux-android*)
-	targos=android
-	abi=elf
-	stabs=yes
-	case "$target_cpu" in
-	    arm*) targmach=arm ;;
-	    i?86) targmach=i386 ;;
-	    x86_64) targmach=amd64 ;;
-	    mipseb) targmach=mips endian=big ;;
-	    mips*) targmach=mips ;;
-	esac
-	;;
-
     linux*)
 	targos=linux
 	abi=elf
 	stabs=yes
 	case "$target_cpu" in
-	    arm*) targmach=arm ;;
 	    i?86) targmach=i386 ;;
 	    powerpc*) targmach=powerpc endian=big ;;
 	    x86_64) targmach=amd64 ;;
 	    mipseb) targmach=mips endian=big ;;
-	    mips*) targmach=mips ;;
-	esac
-	case "$target_os" in
-	    *-musl*) ADD_CPPFLAGS="$ADD_CPPFLAGS -DUSE_MUSL" ;;
-	esac
-	;;
-
-    litebsd*)
-	targos=litebsd
-	abi=elf
-	wchar_type=USHORT
-	case "$target_cpu" in
 	    mips*) targmach=mips ;;
 	esac
 	;;
@@ -160,8 +134,6 @@ case "$target_os" in
 	case "$target_cpu" in
 	    i86) targmach=i86 ;;
 	    i?86) targmach=i386 ;;
-	    arm*) targmach=arm ;;
-	    x86_64) targmach=amd64 ;;
 	esac
 	;;
 
@@ -197,8 +169,6 @@ case "$target_os" in
 	    mips*) targmach=mips ;;
 	    pdp10) targmach=pdp10 ;;
 	    powerpc) targmach=powerpc endian=big ;;
-	    riscv32) targmach=riscv32 ;;
-	    riscv64) targmach=riscv64 ;;
 	    sparc64) targmach=sparc64 endian=big ;;
 	    vax) targmach=vax ;;
 	    x86_64) targmach=amd64 ;;
@@ -261,7 +231,6 @@ case "$target_os" in
 	case "$target_cpu" in
 	    m16c) targmach=m16c ;;
 	    nova) targmach=nova ;;
-	    i86) targmach=i86 ;;
 	esac
 	;;
 esac
@@ -279,6 +248,10 @@ case "$host_os" in
         hostos=bsd
 	;;
     darwin*)
+	echo $targosver
+	if test "$targosver" -ge 10 ; then
+		targmach=amd64
+	fi
 	hostos=darwin
 	;;
     dragonfly*)
@@ -288,11 +261,7 @@ case "$host_os" in
         hostos=freebsd
 	;;
     linux*)
-	ADD_CPPFLAGS="$ADD_CPPFLAGS -D_BSD_SOURCE"
         hostos=linux
-	;;
-    litebsd*)
-	hostos=litebsd
 	;;
     midnightbsd*)
         hostos=midnightbsd
@@ -355,73 +324,57 @@ if test "$stabs" = "yes"; then
 fi
 
 # Specify alternate assembler, linker, include and lib paths
-AC_ARG_ENABLE(multiarch,
-	AS_HELP_STRING([--enable-multiarch=yes/no/auto/<triplet>],
-		[Enable use of Linux Multi-Arch paths (default: auto)]),
-	[multiarch=$enableval], [multiarch=auto])
 AC_ARG_WITH(incdir,
-	AS_HELP_STRING([--with-incdir=<path>],
+	AC_HELP_STRING([--with-incdir=<path>],
 		[Specify the default include path.]),
 	altincdir=$withval,
 	[])
 AC_ARG_WITH(libdir,
-	AS_HELP_STRING([--with-libdir=<path>],
+	AC_HELP_STRING([--with-libdir=<path>],
 		[Specify the default library path.]),
 	altlibdir=$withval,
 	[])
 AC_ARG_WITH(assembler,
-	AS_HELP_STRING([--with-assembler=<path>],
+	AC_HELP_STRING([--with-assembler=<path>],
 		[Specify alternate assember.]),
 	assembler=$withval,
 	[])
 AC_ARG_WITH(linker,
-	AS_HELP_STRING([--with-linker=<path>],
+	AC_HELP_STRING([--with-linker=<path>],
 		[Specify alternate linker.]),
 	linker=$withval,
 	[])
 AC_ARG_ENABLE(tls,
-	AS_HELP_STRING([--enable-tls],
+	AC_HELP_STRING([--enable-tls],
 		[Enable Thread-local storage (TLS).]),
 	[tls=$enableval], [])
 if test "$tls" = "yes"; then
 	AC_DEFINE(TLS, 1, [Enable thread-local storage (TLS).])
 fi
 AC_ARG_ENABLE(Werror,
-	AS_HELP_STRING([--enable-Werror],
+	AC_HELP_STRING([--enable-Werror],
 		[Enable use of compiler -Werror flag]),
 	[werror=$enableval], [])
 if test "$werror" = "yes"; then
 	ADD_CFLAGS="$ADD_CFLAGS -Werror"
 fi
 AC_ARG_ENABLE(gcc-compat,
-	AS_HELP_STRING([--disable-gcc-compat],
+	AC_HELP_STRING([--disable-gcc-compat],
 		[Disable GCC compatibility]),
 	[gcccompat=$enableval], [])
 if test "$gcccompat" = "yes"; then
 	ADD_CPPFLAGS="$ADD_CPPFLAGS -DGCC_COMPAT";
 fi
 AC_ARG_ENABLE(pcc-debug,
-	AS_HELP_STRING([--disable-pcc-debug],
+	AC_HELP_STRING([--disable-pcc-debug],
 		[Disable PCC debugging]),
 	[pccdebug=$enableval], [])
 if test "$pccdebug" = "yes"; then
 	ADD_CPPFLAGS="$ADD_CPPFLAGS -DPCC_DEBUG";
 fi
-AC_ARG_ENABLE(twopass,
-	AS_HELP_STRING([--enable-twopass],
-		[Link PCC as a two-pass compiler]),
-	[twopass=$enableval], [])
-if test "$twopass" = "yes"; then
-	ADD_CPPFLAGS="$ADD_CPPFLAGS -DTWOPASS";
-	CCNAMES='$(BINPREFIX)cc0$(EXEEXT) $(BINPREFIX)cc1$(EXEEXT)'
-	CF0='-DPASS1'
-	CF1='-DPASS2'
-else
-	CCNAMES='$(BINPREFIX)ccom$(EXEEXT)'
-fi
 
 AC_ARG_ENABLE(stripping,
-	AS_HELP_STRING([--disable-stripping],
+	AC_HELP_STRING([--disable-stripping],
 		[Disable stripping of symbols in installed binaries]),
 	[stripping=$enableval], [])
 if test "$stripping" = "yes"; then
@@ -433,7 +386,7 @@ if test "$stripping" = "yes"; then
 fi
 
 AC_ARG_WITH(yasm,
-	AS_HELP_STRING([--use-yasm], [Use yasm assembler]),
+	AC_HELP_STRING([--use-yasm], [Use yasm assembler]),
 	useyasm=$withval,
 	[])
 if test "$useyasm" = "yes"; then
@@ -441,49 +394,10 @@ if test "$useyasm" = "yes"; then
 	ADD_CPPFLAGS="$ADD_CPPFLAGS -DUSE_YASM"
 fi
 AC_ARG_ENABLE(native,
-	AS_HELP_STRING([--enable-native],
+	AC_HELP_STRING([--enable-native],
 		[Build the compiler as a native rather than cross-build compiler]),
 	[native=$enableval], [])
 
-# Setup for ubuntu multiarch
-multiarch_path=
-case x$multiarch in
-xno)
-	;;
-xyes)
-	multiarch_path=`dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null` || multiarch_path=
-	case $multiarch_path in
-	*-*-*) ;;
-	*)
-		AC_MSG_ERROR([Cannot determine Multi-Arch path '$multiarch_path'!])
-		;;
-	esac
-	;;
-xauto|x)
-	multiarch_path=`dpkg-architecture -qDEB_HOST_MULTIARCH 2>/dev/null` || multiarch_path=
-	case x$multiarch_path in
-	x*-*-*) ;;
-	x) ;;
-	*)
-		AC_MSG_WARN([Ignoring unrecognised Multi-Arch path '$multiarch_path'!])
-		multiarch_path=
-		;;
-	esac
-	;;
-x*-*-*)
-	multiarch_path=$multiarch
-	;;
-*)
-	AC_MSG_ERROR([Ignoring unrecognised Multi-Arch path '$multiarch_path'!])
-	;;
-esac
-if test -n "$multiarch_path"; then
-	AC_DEFINE_UNQUOTED([MULTIARCH_PATH], ["$multiarch_path"],
-		[Define target Multi-Arch path])
-	multiarch="\"$multiarch_path\""
-else
-	multiarch="(no)"
-fi
 # setup for building a cross-compiler
 if test "X$native" = "Xyes" -o "X$target_alias" = "X$host_alias" -o "X$target_alias" = "X"; then
 	BINPREFIX=""
@@ -597,7 +511,7 @@ fi
 # Byteorder of host
 AC_C_BIGENDIAN([AC_DEFINE(HOST_BIG_ENDIAN, 1, [Define if host is BIG endian])],
 	[AC_DEFINE(HOST_LITTLE_ENDIAN, 1, [Define if host is LITTLE endian])],
-	[])
+	[],[])
 
 # Checks for programs.
 AC_PROG_MAKE_SET
@@ -616,8 +530,7 @@ AC_HEADER_SYS_WAIT
 ##  AC_FUNC_STRTOD
 # AC_FUNC_VPRINTF
 # AC_CHECK_FUNCS([memset strchr strdup strrchr strtol])
-AC_CHECK_FUNCS([strtold vsnprintf snprintf mkstemp strlcat strlcpy getopt ffs vfork])
-AC_FUNC_ALLOCA
+AC_CHECK_FUNCS([strtold vsnprintf snprintf mkstemp strlcat strlcpy basename getopt ffs vfork])
 
 AC_EXEEXT
 
@@ -632,9 +545,6 @@ AC_SUBST(includedir)
 AC_SUBST(PACKAGE_VERSION)
 AC_SUBST(ADD_CFLAGS)
 AC_SUBST(ADD_CPPFLAGS)
-AC_SUBST(CCNAMES)
-AC_SUBST(CF0)
-AC_SUBST(CF1)
 
 pcc_major=`echo $PACKAGE_VERSION | awk -F. '{print $1}'`
 pcc_minor=`echo $PACKAGE_VERSION | awk -F. '{print $2}'`
@@ -673,7 +583,6 @@ echo "Installing compiler into ......... ${bindir}"
 echo "Installing pre-processor into .... ${libexecdir}"
 echo "Using assembler .................. ${assembler-<default>}"
 echo "Using linker ..................... ${linker-<default>}"
-echo "Using Multi-Arch path ............ ${multiarch}"
 echo "Using include path ............... ${altincdir-<default>}"
 echo "Using library path ............... ${altlibdir-<default>}"
 echo "Has TLS support .................. $tls"

@@ -1,4 +1,4 @@
-/*	$NetBSD: res_query.c,v 1.16 2015/02/24 17:56:20 christos Exp $	*/
+/*	$NetBSD: res_query.c,v 1.14 2012/03/13 21:13:44 christos Exp $	*/
 
 /*
  * Portions Copyright (C) 2004, 2005, 2008  Internet Systems Consortium, Inc. ("ISC")
@@ -29,7 +29,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgement:
+ * 	This product includes software developed by the University of
+ * 	California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -89,7 +93,7 @@
 static const char sccsid[] = "@(#)res_query.c	8.1 (Berkeley) 6/4/93";
 static const char rcsid[] = "Id: res_query.c,v 1.11 2008/11/14 02:36:51 marka Exp";
 #else
-__RCSID("$NetBSD: res_query.c,v 1.16 2015/02/24 17:56:20 christos Exp $");
+__RCSID("$NetBSD: res_query.c,v 1.14 2012/03/13 21:13:44 christos Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 
@@ -447,7 +451,7 @@ res_hostalias(const res_state statp, const char *name, char *dst, size_t siz) {
 	if (issetugid())
 		return (NULL);
 	file = getenv("HOSTALIASES");
-	if (file == NULL || (fp = fopen(file, "re")) == NULL)
+	if (file == NULL || (fp = fopen(file, "r")) == NULL)
 		return (NULL);
 	buf[sizeof(buf) - 1] = '\0';
 	while (fgets(buf, (int)sizeof(buf), fp)) {

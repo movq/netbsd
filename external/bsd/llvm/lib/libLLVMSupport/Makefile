@@ -1,6 +1,8 @@
-#	$NetBSD: Makefile,v 1.32 2016/02/27 21:47:34 joerg Exp $
+#	$NetBSD: Makefile,v 1.29.2.1 2015/06/04 20:05:45 snj Exp $
 
 LIB=	LLVMSupport
+
+NOGCCERROR=	yes
 
 .include <bsd.init.mk>
 
@@ -15,7 +17,6 @@ SRCS+=	APFloat.cpp \
 	BlockFrequency.cpp \
 	BranchProbability.cpp \
 	circular_raw_ostream.cpp \
-	COM.cpp \
 	CommandLine.cpp \
 	Compression.cpp \
 	ConvertUTF.c \
@@ -37,7 +38,8 @@ SRCS+=	APFloat.cpp \
 	IntEqClasses.cpp \
 	IntervalMap.cpp \
 	IntrusiveRefCntPtr.cpp \
-	JamCRC.cpp \
+	IsInf.cpp \
+	IsNAN.cpp \
 	LEB128.cpp \
 	LineIterator.cpp \
 	Locale.cpp \
@@ -61,9 +63,7 @@ SRCS+=	APFloat.cpp \
 	StringMap.cpp \
 	StringPool.cpp \
 	StringRef.cpp \
-	StringSaver.cpp \
 	SystemUtils.cpp \
-	TargetParser.cpp \
 	TargetRegistry.cpp \
 	Timer.cpp \
 	ToolOutputFile.cpp \
@@ -96,7 +96,6 @@ SRCS+=	Atomic.cpp \
 	SearchForAddressOfSpecialSymbol.cpp \
 	Signals.cpp \
 	ThreadLocal.cpp \
-	ThreadPool.cpp \
 	Threading.cpp \
 	TimeValue.cpp \
 	Valgrind.cpp
@@ -118,10 +117,6 @@ SRCS+=	Host.inc \
 .for src in ${SRCS:M*.c}
 CPPFLAGS.${src}+=	-std=gnu99
 .endfor
-
-.if !defined(HOSTLIB) && ${MACHINE_ARCH} == "sparc"
-COPTS.Atomic.cpp+=	${${ACTIVE_CC} == "clang":? -Wa,-Av8plus :}
-.endif
 
 .if defined(HOSTLIB)
 .include <bsd.hostlib.mk>

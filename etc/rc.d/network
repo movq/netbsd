@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: network,v 1.71 2016/03/06 18:50:06 christos Exp $
+# $NetBSD: network,v 1.66 2014/04/29 09:58:18 uebayasi Exp $
 #
 
 # PROVIDE: network
@@ -51,7 +51,6 @@ network_start()
 	network_start_defaultroute6
 	have_inet6 &&
 	network_start_ipv6_autoconf
-	network_wait_dad
 	network_start_local
 }
 
@@ -61,7 +60,7 @@ network_start_hostname()
 	# otherwise use /etc/myname
 	#
 	if [ -z "$hostname" ] && [ -f /etc/myname ]; then
-		hostname=$(kat /etc/myname)
+		hostname=$(cat /etc/myname)
 	fi
 	if [ -n "$hostname" ]; then
 		echo "Hostname: $hostname"
@@ -85,7 +84,7 @@ network_start_domainname()
 	# for NIS/YP domain name
 	#
 	if [ -z "$domainname" ] && [ -f /etc/defaultdomain ]; then
-		domainname=$(kat /etc/defaultdomain)
+		domainname=$(cat /etc/defaultdomain)
 	fi
 	if [ -n "$domainname" ]; then
 		echo "NIS domainname: $domainname"
@@ -403,7 +402,7 @@ network_start_defaultroute()
 	# /etc/hosts.
 	#
 	if [ -z "$defaultroute" ] && [ -f /etc/mygate ]; then
-		defaultroute=$(kat /etc/mygate)
+		defaultroute=$(cat /etc/mygate)
 	fi
 	if [ -n "$defaultroute" ]; then
 		/sbin/route add default $defaultroute
@@ -418,7 +417,7 @@ network_start_defaultroute6()
 	# address if it is not using an stf* interface.
 	#
 	if [ -z "$defaultroute6" ] && [ -f /etc/mygate6 ]; then
-		defaultroute6=$(kat /etc/mygate6)
+		defaultroute6=$(cat /etc/mygate6)
 	fi
 	if [ -n "$defaultroute6" ]; then
 		if [ "$ip6mode" = "autohost" ]; then
@@ -433,24 +432,33 @@ network_start_defaultroute6()
 network_start_ipv6_autoconf()
 {
 	# IPv6 interface autoconfiguration.
+	#
+	# wait till DAD is completed. always invoke it in case
+	# if are configured manually by ifconfig
+	#
+	echo 'Waiting for DAD completion for' \
+	    'statically configured addresses...'
+	dadcount=$(/sbin/sysctl -n net.inet6.ip6.dad_count 2>/dev/null)
+	sleep $dadcount
+	sleep 1
 
-	# dhcpcd will ensure DAD completes before forking
-	if checkyesnox rtsol && ! checkyesno dhcpcd; then
+	if checkyesno rtsol; then
 		if [ "$ip6mode" = "autohost" ]; then
+			echo 'Sending router solicitation...'
+			/sbin/rtsol $rtsol_flags
+		else
 			echo
-			warn "rtsol has been removed, " \
-			    "please configure dhcpcd in its place."
+			warn \
+		    "ip6mode must be set to 'autohost' to use rtsol."
 		fi
-	fi
-}
 
-network_wait_dad()
-{
-	# Wait for the DAD flags to clear form all addresses.
-	if [ -n "$ifconfig_wait_dad_flags" ]; then
-		echo 'Waiting for DAD to complete for' \
-		    'statically configured addresses...'
-		ifconfig $ifconfig_wait_dad_flags
+		# wait till DAD is completed, for global addresses
+		# configured by router advert message.
+		#
+		echo 'Waiting for DAD completion for' \
+		    'addresses configured by router advert message...'
+		sleep $dadcount
+		sleep 1
 	fi
 }
 

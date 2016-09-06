@@ -1,6 +1,4 @@
-#	$NetBSD: Makefile,v 1.8 2016/08/04 17:07:24 christos Exp $
-
-.include <bsd.init.mk>
+#	$NetBSD: Makefile,v 1.7 2013/09/11 23:04:10 joerg Exp $
 
 .PATH: ${.CURDIR}/../../dist/common/zfs
 .PATH: ${.CURDIR}/../../dist/common/fs/zfs

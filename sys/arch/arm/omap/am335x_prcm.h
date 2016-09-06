@@ -1,4 +1,4 @@
-/*	$NetBSD: am335x_prcm.h,v 1.9 2015/06/06 14:00:32 jmcneill Exp $	*/
+/*	$NetBSD: am335x_prcm.h,v 1.8.2.1 2015/06/10 16:38:05 snj Exp $	*/
 
 /*
  * TI OMAP Power, Reset, and Clock Management on the AM335x

@@ -46,6 +46,7 @@ add_llvm_target(MipsCodeGen
   MipsSubtarget.cpp
   MipsTargetMachine.cpp
   MipsTargetObjectFile.cpp
+  MipsSelectionDAGInfo.cpp
   )
 
 add_subdirectory(InstPrinter)

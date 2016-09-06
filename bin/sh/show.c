@@ -1,4 +1,4 @@
-/*	$NetBSD: show.c,v 1.33 2016/05/11 17:28:30 kre Exp $	*/
+/*	$NetBSD: show.c,v 1.28 2011/08/23 10:01:32 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)show.c	8.3 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: show.c,v 1.33 2016/05/11 17:28:30 kre Exp $");
+__RCSID("$NetBSD: show.c,v 1.28 2011/08/23 10:01:32 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -52,215 +52,126 @@ __RCSID("$NetBSD: show.c,v 1.33 2016/05/11 17:28:30 kre Exp $");
 #include "mystring.h"
 #include "show.h"
 #include "options.h"
-#ifndef SMALL
-#define DEFINE_NODENAMES
-#include "nodenames.h"
-#endif
 
-
-FILE *tracefile;
 
 #ifdef DEBUG
-static int shtree(union node *, int, int, char *, FILE*);
-static int shcmd(union node *, FILE *);
-static int shsubsh(union node *, FILE *);
-static int shredir(union node *, FILE *, int);
-static int sharg(union node *, FILE *);
-static int indent(int, char *, FILE *);
+static void shtree(union node *, int, char *, FILE*);
+static void shcmd(union node *, FILE *);
+static void sharg(union node *, FILE *);
+static void indent(int, char *, FILE *);
 static void trstring(char *);
+
 
 void
 showtree(union node *n)
 {
-	FILE *fp;
-
-	fp = tracefile ? tracefile : stdout;
-
-	trputs("showtree(");
-		if (n == NULL)
-			trputs("NULL");
-		else if (n == NEOF)
-			trputs("NEOF");
-	trputs(") called\n");
-	if (n != NULL && n != NEOF)
-		shtree(n, 1, 1, NULL, fp);
+	trputs("showtree called\n");
+	shtree(n, 1, NULL, stdout);
 }
 
 
-static int
-shtree(union node *n, int ind, int nl, char *pfx, FILE *fp)
+static void
+shtree(union node *n, int ind, char *pfx, FILE *fp)
 {
 	struct nodelist *lp;
 	const char *s;
-	int len;
 
-	if (n == NULL) {
-		if (nl)
-			fputc('\n', fp);
-		return 0;
-	}
+	if (n == NULL)
+		return;
 
-	len = indent(ind, pfx, fp);
-	switch (n->type) {
+	indent(ind, pfx, fp);
+	switch(n->type) {
 	case NSEMI:
 		s = "; ";
-		len += 2;
 		goto binop;
 	case NAND:
 		s = " && ";
-		len += 4;
 		goto binop;
 	case NOR:
 		s = " || ";
-		len += 4;
 binop:
-		len += shtree(n->nbinary.ch1, 0, 0, NULL, fp);
-		fputs(s, fp);
-		if (len >= 60) {
-			putc('\n', fp);
-			len = indent(ind < 0 ? 2 : ind + 1, pfx, fp);
-		}
-		len += shtree(n->nbinary.ch2, 0, nl, NULL, fp);
+		shtree(n->nbinary.ch1, ind, NULL, fp);
+	   /*    if (ind < 0) */
+			fputs(s, fp);
+		shtree(n->nbinary.ch2, ind, NULL, fp);
 		break;
 	case NCMD:
-		len += shcmd(n, fp);
-		if (nl && len > 0)
-			len = 0, putc('\n', fp);
+		shcmd(n, fp);
+		if (ind >= 0)
+			putc('\n', fp);
 		break;
 	case NPIPE:
 		for (lp = n->npipe.cmdlist ; lp ; lp = lp->next) {
-			len += shcmd(lp->n, fp);
-			if (lp->next) {
-				len += 3, fputs(" | ", fp);
-				if (len >= 60)  {
-					fputc('\n', fp);
-					len = indent(ind < 0 ? 2 : ind + 1,
-					    pfx, fp);
-				}
-			}
+			shcmd(lp->n, fp);
+			if (lp->next)
+				fputs(" | ", fp);
 		}
 		if (n->npipe.backgnd)
-			len += 2, fputs(" &", fp);
-		if (nl || len >= 60)
-			len = 0, fputc('\n', fp);
-		break;
-	case NSUBSHELL:
-		len += shsubsh(n, fp);
-		if (nl && len > 0)
-			len = 0, putc('\n', fp);
+			fputs(" &", fp);
+		if (ind >= 0)
+			putc('\n', fp);
 		break;
 	default:
-#ifdef NODETYPENAME
-		len += fprintf(fp, "<node type %d [%s]>", n->type,
-		    NODETYPENAME(n->type));
-#else
-		len += fprintf(fp, "<node type %d>", n->type);
-#endif
-		if (nl)
-			len = 0, putc('\n', fp);
+		fprintf(fp, "<node type %d>", n->type);
+		if (ind >= 0)
+			putc('\n', fp);
 		break;
 	}
-	return len;
 }
 
 
 
-static int
+static void
 shcmd(union node *cmd, FILE *fp)
 {
 	union node *np;
 	int first;
 	const char *s;
 	int dftfd;
-	int len = 0;
 
 	first = 1;
 	for (np = cmd->ncmd.args ; np ; np = np->narg.next) {
 		if (! first)
-			len++, fputc(' ', fp);
-		len += sharg(np, fp);
+			putchar(' ');
+		sharg(np, fp);
 		first = 0;
 	}
-	return len + shredir(cmd, fp, first);
-}
-
-static int
-shsubsh(union node *cmd, FILE *fp)
-{
-	int len = 6;
-
-	fputs(" ( ", fp);
-	len += shtree(cmd->nredir.n, -1, 0, NULL, fp);
-	fputs(" ) ", fp);
-	len += shredir(cmd, fp, 1);
-
-	return len;
-}
-
-static int
-shredir(union node *cmd, FILE *fp, int first)
-{
-	union node *np;
-	const char *s;
-	int dftfd;
-	int len = 0;
-	char buf[106];
-
 	for (np = cmd->ncmd.redirect ; np ; np = np->nfile.next) {
 		if (! first)
-			len++, fputc(' ', fp);
+			putchar(' ');
 		switch (np->nfile.type) {
-			case NTO:	s = ">";  dftfd = 1; len += 1; break;
-			case NCLOBBER:	s = ">|"; dftfd = 1; len += 2; break;
-			case NAPPEND:	s = ">>"; dftfd = 1; len += 2; break;
-			case NTOFD:	s = ">&"; dftfd = 1; len += 2; break;
-			case NFROM:	s = "<";  dftfd = 0; len += 1; break;
-			case NFROMFD:	s = "<&"; dftfd = 0; len += 2; break;
-			case NFROMTO:	s = "<>"; dftfd = 0; len += 2; break;
-			case NXHERE:	/* FALLTHROUGH */ 
-			case NHERE:	s = "<<"; dftfd = 0; len += 2; break;
-			default:   s = "*error*"; dftfd = 0; len += 7; break;
+			case NTO:	s = ">";  dftfd = 1; break;
+			case NCLOBBER:	s = ">|"; dftfd = 1; break;
+			case NAPPEND:	s = ">>"; dftfd = 1; break;
+			case NTOFD:	s = ">&"; dftfd = 1; break;
+			case NFROM:	s = "<";  dftfd = 0; break;
+			case NFROMFD:	s = "<&"; dftfd = 0; break;
+			case NFROMTO:	s = "<>"; dftfd = 0; break;
+			default:  	s = "*error*"; dftfd = 0; break;
 		}
 		if (np->nfile.fd != dftfd)
-			len += fprintf(fp, "%d", np->nfile.fd);
+			fprintf(fp, "%d", np->nfile.fd);
 		fputs(s, fp);
 		if (np->nfile.type == NTOFD || np->nfile.type == NFROMFD) {
-			len += fprintf(fp, "%d", np->ndup.dupfd);
-		} else
-		    if (np->nfile.type == NHERE || np->nfile.type == NXHERE) {
-			if (np->nfile.type == NHERE)
-				fputc('\\', fp);
-			fputs("!!!\n", fp);
-			s = np->nhere.doc->narg.text;
-			if (strlen(s) > 100) {
-				memmove(buf, s, 100);
-				buf[100] = '\0';
-				strcat(buf, " ...");
-				s = buf;
-			}
-			fputs(s, fp);
-			fputs("!!!", fp);
-			len = 3;
+			fprintf(fp, "%d", np->ndup.dupfd);
 		} else {
-			len += sharg(np->nfile.fname, fp);
+			sharg(np->nfile.fname, fp);
 		}
 		first = 0;
 	}
-	return len;
 }
 
 
 
-static int
+static void
 sharg(union node *arg, FILE *fp)
 {
 	char *p;
 	struct nodelist *bqlist;
 	int subtype;
-	int len = 0;
 
 	if (arg->type != NARG) {
-		fprintf(fp, "<node type %d>\n", arg->type);
+		printf("<node type %d>\n", arg->type);
 		abort();
 	}
 	bqlist = arg->narg.backquote;
@@ -268,107 +179,84 @@ sharg(union node *arg, FILE *fp)
 		switch (*p) {
 		case CTLESC:
 			putc(*++p, fp);
-			len++;
 			break;
 		case CTLVAR:
 			putc('$', fp);
 			putc('{', fp);
-			len += 2;
 			subtype = *++p;
 			if (subtype == VSLENGTH)
-				len++, putc('#', fp);
+				putc('#', fp);
 
-			while (*++p != '=')
-				len++, putc(*p, fp);
+			while (*p != '=')
+				putc(*p++, fp);
 
 			if (subtype & VSNUL)
-				len++, putc(':', fp);
+				putc(':', fp);
 
 			switch (subtype & VSTYPE) {
 			case VSNORMAL:
 				putc('}', fp);
-				len++;
 				break;
 			case VSMINUS:
 				putc('-', fp);
-				len++;
 				break;
 			case VSPLUS:
 				putc('+', fp);
-				len++;
 				break;
 			case VSQUESTION:
 				putc('?', fp);
-				len++;
 				break;
 			case VSASSIGN:
 				putc('=', fp);
-				len++;
 				break;
 			case VSTRIMLEFT:
 				putc('#', fp);
-				len++;
 				break;
 			case VSTRIMLEFTMAX:
 				putc('#', fp);
 				putc('#', fp);
-				len += 2;
 				break;
 			case VSTRIMRIGHT:
 				putc('%', fp);
-				len++;
 				break;
 			case VSTRIMRIGHTMAX:
 				putc('%', fp);
 				putc('%', fp);
-				len += 2;
 				break;
 			case VSLENGTH:
 				break;
 			default:
-				len += fprintf(fp, "<subtype %d>", subtype);
+				printf("<subtype %d>", subtype);
 			}
 			break;
 		case CTLENDVAR:
 		     putc('}', fp);
-		     len++;
 		     break;
 		case CTLBACKQ:
 		case CTLBACKQ|CTLQUOTE:
 			putc('$', fp);
 			putc('(', fp);
-			len += shtree(bqlist->n, -1, 0, NULL, fp) + 3;
+			shtree(bqlist->n, -1, NULL, fp);
 			putc(')', fp);
 			break;
 		default:
 			putc(*p, fp);
-			len++;
 			break;
 		}
 	}
-	return len;
 }
 
 
-static int
+static void
 indent(int amount, char *pfx, FILE *fp)
 {
 	int i;
-	int len = 0;
 
-	/*
-	 * in practice, pfx is **always** NULL
-	 * but here, we assume if it were not, at least strlen(pfx) < 8
-	 * if that is invalid, output will look messy
-	 */
 	for (i = 0 ; i < amount ; i++) {
 		if (pfx && i == amount - 1)
 			fputs(pfx, fp);
 		putc('\t', fp);
-		len |= 7;
-		len++;
 	}
-	return len;
 }
 #endif
 
@@ -379,6 +267,7 @@ indent(int amount, char *pfx, FILE *fp)
  */
 
 
+FILE *tracefile;
 
 
 #ifdef DEBUG
@@ -502,7 +391,21 @@ opentrace(void)
 		/* leave open because libedit might be using it */
 		return;
 	}
+#ifdef not_this_way
+	{
+		char *p;
+		if ((p = getenv("HOME")) == NULL) {
+			if (geteuid() == 0)
+				p = "/";
+			else
+				p = "/tmp";
+		}
+		scopy(p, s);
+		strcat(s, "/trace");
+	}
+#else
 	snprintf(s, sizeof(s), "./trace.%d", (int)getpid());
+#endif /* not_this_way */
 	if (tracefile) {
 		if (!freopen(s, "a", tracefile)) {
 			fprintf(stderr, "Can't re-open %s\n", s);

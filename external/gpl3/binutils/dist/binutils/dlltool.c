@@ -1,5 +1,6 @@
 /* dlltool.c -- tool to generate stuff for PE style DLLs
-   Copyright (C) 1995-2015 Free Software Foundation, Inc.
+   Copyright 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
+   2005, 2006, 2007, 2008, 2009, 2011, 2012 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -370,7 +371,7 @@ typedef struct dll_name_list_t
 {
   dll_name_list_node_type * head;
   dll_name_list_node_type * tail;
-} dll_name_list_type;
+} dll_name_list_type; 
 
 /* Types used to pass data to iterator functions.  */
 typedef struct symname_search_data_t
@@ -383,7 +384,7 @@ typedef struct identify_data_t
 {
    dll_name_list_type * list;
    bfd_boolean          ms_style_implib;
-} identify_data_type;
+} identify_data_type; 
 
 
 static char *head_label;
@@ -482,7 +483,7 @@ static char * mcore_elf_linker_flags = NULL;
 #endif
 
 /* What's the right name for this ?  */
-#define PATHMAX 250
+#define PATHMAX 250		
 
 /* External name alias numbering starts here.  */
 #define PREFIX_ALIAS_BASE	20000
@@ -588,7 +589,7 @@ static const unsigned char ppc_jtab[] =
 static bfd_vma ppc_glue_insn = 0x80410004;
 #endif
 
-static const char i386_trampoline[] =
+static const char i386_trampoline[] =  
   "\tpushl %%ecx\n"
   "\tpushl %%edx\n"
   "\tpushl %%eax\n"
@@ -598,7 +599,7 @@ static const char i386_trampoline[] =
   "\tpopl %%ecx\n"
   "\tjmp *%%eax\n";
 
-static const char i386_x64_trampoline[] =
+static const char i386_x64_trampoline[] =  
   "\tpushq %%rcx\n"
   "\tpushq %%rdx\n"
   "\tpushq %%r8\n"
@@ -880,18 +881,17 @@ dlltmp (char **buf, const char *fmt)
 }
 
 static void
-inform (const char * message, ...)
+inform VPARAMS ((const char * message, ...))
 {
-  va_list args;
-
-  va_start (args, message);
+  VA_OPEN (args, message);
+  VA_FIXEDARG (args, const char *, message);
 
   if (!verbose)
     return;
 
   report (message, args);
 
-  va_end (args);
+  VA_CLOSE (args);
 }
 
 static const char *
@@ -1084,7 +1084,7 @@ set_dll_name_from_def (const char *name, char is_dll)
   if (image_basename != name)
     non_fatal (_("%s: Path components stripped from image name, '%s'."),
 	      def_file, name);
-  /* Append the default suffix, if none specified.  */
+  /* Append the default suffix, if none specified.  */ 
   if (strchr (image_basename, '.') == 0)
     {
       const char * suffix = is_dll ? ".dll" : ".exe";
@@ -1694,15 +1694,10 @@ scan_obj_file (const char *filename)
       bfd *arfile = bfd_openr_next_archived_file (f, 0);
       while (arfile)
 	{
-	  bfd *next;
 	  if (bfd_check_format (arfile, bfd_object))
 	    scan_open_obj_file (arfile);
-	  next = bfd_openr_next_archived_file (f, arfile);
 	  bfd_close (arfile);
-	  /* PR 17512: file: 58715298.  */
-	  if (next == arfile)
-	    break;
-	  arfile = next;
+	  arfile = bfd_openr_next_archived_file (f, arfile);
 	}
 
 #ifdef DLLTOOL_MCORE_ELF
@@ -1994,31 +1989,6 @@ assemble_file (const char * source, const char * dest)
   run (as_name, cmd);
 }
 
-static const char * temp_file_to_remove[5];
-#define TEMP_EXPORT_FILE 0
-#define TEMP_HEAD_FILE   1
-#define TEMP_TAIL_FILE   2
-#define TEMP_HEAD_O_FILE 3
-#define TEMP_TAIL_O_FILE 4
-
-static void
-unlink_temp_files (void)
-{
-  unsigned i;
-
-  if (dontdeltemps > 0)
-    return;
-
-  for (i = 0; i < ARRAY_SIZE (temp_file_to_remove); i++)
-    {
-      if (temp_file_to_remove[i])
-	{
-	  unlink (temp_file_to_remove[i]);
-	  temp_file_to_remove[i] = NULL;
-	}
-    }
-}
-
 static void
 gen_exp_file (void)
 {
@@ -2034,8 +2004,6 @@ gen_exp_file (void)
   if (!f)
     /* xgettext:c-format */
     fatal (_("Unable to open temporary assembler file: %s"), TMP_ASM);
-
-  temp_file_to_remove[TEMP_EXPORT_FILE] = TMP_ASM;
 
   /* xgettext:c-format */
   inform (_("Opened temporary file: %s"), TMP_ASM);
@@ -2173,6 +2141,7 @@ gen_exp_file (void)
 	}
     }
 
+
   /* Add to the output file a way of getting to the exported names
      without using the import library.  */
   if (add_indirect)
@@ -2260,10 +2229,7 @@ gen_exp_file (void)
   assemble_file (TMP_ASM, exp_name);
 
   if (dontdeltemps == 0)
-    {
-      temp_file_to_remove[TEMP_EXPORT_FILE] = NULL;
-      unlink (TMP_ASM);
-    }
+    unlink (TMP_ASM);
 
   inform (_("Generated exports file"));
 }
@@ -2310,9 +2276,6 @@ typedef struct
   unsigned char *data;
 } sinfo;
 
-#define INIT_SEC_DATA(id, name, flags, align) \
-        { id, name, flags, align, NULL, NULL, NULL, 0, NULL }
-
 #ifndef DLLTOOL_PPC
 
 #define TEXT 0
@@ -2330,6 +2293,8 @@ typedef struct
 #define DATA_SEC_FLAGS   (SEC_ALLOC | SEC_LOAD | SEC_DATA)
 #define BSS_SEC_FLAGS     SEC_ALLOC
 
+#define INIT_SEC_DATA(id, name, flags, align) \
+        { id, name, flags, align, NULL, NULL, NULL, 0, NULL }
 static sinfo secdata[NSECS] =
 {
   INIT_SEC_DATA (TEXT,   ".text",    TEXT_SEC_FLAGS,   2),
@@ -2359,15 +2324,15 @@ static sinfo secdata[NSECS] =
 
 static sinfo secdata[NSECS] =
 {
-  INIT_SEC_DATA (TEXT,   ".text",    SEC_CODE | SEC_HAS_CONTENTS, 3),
-  INIT_SEC_DATA (PDATA,  ".pdata",   SEC_HAS_CONTENTS,            2),
-  INIT_SEC_DATA (RDATA,  ".reldata", SEC_HAS_CONTENTS,            2),
-  INIT_SEC_DATA (IDATA5, ".idata$5", SEC_HAS_CONTENTS,            2),
-  INIT_SEC_DATA (IDATA4, ".idata$4", SEC_HAS_CONTENTS,            2),
-  INIT_SEC_DATA (IDATA6, ".idata$6", SEC_HAS_CONTENTS,            1),
-  INIT_SEC_DATA (IDATA7, ".idata$7", SEC_HAS_CONTENTS,            2),
-  INIT_SEC_DATA (DATA,   ".data",    SEC_DATA,                    2),
-  INIT_SEC_DATA (BSS,    ".bss",     0,                           2)
+  { TEXT,   ".text",    SEC_CODE | SEC_HAS_CONTENTS, 3},
+  { PDATA,  ".pdata",   SEC_HAS_CONTENTS,            2},
+  { RDATA,  ".reldata", SEC_HAS_CONTENTS,            2},
+  { IDATA5, ".idata$5", SEC_HAS_CONTENTS,            2},
+  { IDATA4, ".idata$4", SEC_HAS_CONTENTS,            2},
+  { IDATA6, ".idata$6", SEC_HAS_CONTENTS,            1},
+  { IDATA7, ".idata$7", SEC_HAS_CONTENTS,            2},
+  { DATA,   ".data",    SEC_DATA,                    2},
+  { BSS,    ".bss",     0,                           2}
 };
 
 #endif
@@ -2746,7 +2711,7 @@ make_one_lib_file (export_type *exp, int i, int delay)
 	    {
 	      si->data = xmalloc (4);
 	      si->size = 4;
-
+	      
 	      if (exp->noname)
 	        {
 		  si->data[0] = exp->ordinal ;
@@ -2783,7 +2748,6 @@ make_one_lib_file (export_type *exp, int i, int delay)
 	      else
 	        si->size = strlen (xlate (exp->import_name)) + 3;
 	      si->data = xmalloc (si->size);
-	      memset (si->data, 0, si->size);
 	      si->data[0] = idx & 0xff;
 	      si->data[1] = idx >> 8;
 	      if (exp->its_name)
@@ -2953,7 +2917,7 @@ make_one_lib_file (export_type *exp, int i, int delay)
     /* xgettext:c-format */
     fatal (_("bfd_open failed reopen stub file: %s: %s"),
 	   outname, bfd_get_errmsg ());
-
+ 
   return abfd;
 }
 
@@ -2968,8 +2932,6 @@ make_head (void)
       fatal (_("failed to open temporary head file: %s"), TMP_HEAD_S);
       return NULL;
     }
-
-  temp_file_to_remove[TEMP_HEAD_FILE] = TMP_HEAD_S;
 
   fprintf (f, "%s IMAGE_IMPORT_DESCRIPTOR\n", ASM_C);
   fprintf (f, "\t.section\t.idata$2\n");
@@ -3032,7 +2994,6 @@ make_head (void)
     fatal (_("failed to open temporary head file: %s: %s"),
 	   TMP_HEAD_O, bfd_get_errmsg ());
 
-  temp_file_to_remove[TEMP_HEAD_O_FILE] = TMP_HEAD_O;
   return abfd;
 }
 
@@ -3047,8 +3008,6 @@ make_delay_head (void)
       fatal (_("failed to open temporary head file: %s"), TMP_HEAD_S);
       return NULL;
     }
-
-  temp_file_to_remove[TEMP_HEAD_FILE] = TMP_HEAD_S;
 
   /* Output the __tailMerge__xxx function */
   fprintf (f, "%s Import trampoline\n", ASM_C);
@@ -3118,7 +3077,6 @@ make_delay_head (void)
     fatal (_("failed to open temporary head file: %s: %s"),
 	   TMP_HEAD_O, bfd_get_errmsg ());
 
-  temp_file_to_remove[TEMP_HEAD_O_FILE] = TMP_HEAD_O;
   return abfd;
 }
 
@@ -3133,8 +3091,6 @@ make_tail (void)
       fatal (_("failed to open temporary tail file: %s"), TMP_TAIL_S);
       return NULL;
     }
-
-  temp_file_to_remove[TEMP_TAIL_FILE] = TMP_TAIL_S;
 
   if (!no_idata4)
     {
@@ -3192,7 +3148,6 @@ make_tail (void)
     fatal (_("failed to open temporary tail file: %s: %s"),
 	   TMP_TAIL_O, bfd_get_errmsg ());
 
-  temp_file_to_remove[TEMP_TAIL_O_FILE] = TMP_TAIL_O;
   return abfd;
 }
 
@@ -3217,8 +3172,6 @@ gen_lib_file (int delay)
 
   /* xgettext:c-format */
   inform (_("Creating library file: %s"), imp_name);
-
-  xatexit (unlink_temp_files);
 
   bfd_set_format (outarch, bfd_archive);
   outarch->has_armap = 1;
@@ -3289,7 +3242,13 @@ gen_lib_file (int delay)
     }
 
   /* Delete all the temp files.  */
-  unlink_temp_files ();
+  if (dontdeltemps == 0)
+    {
+      unlink (TMP_HEAD_O);
+      unlink (TMP_HEAD_S);
+      unlink (TMP_TAIL_O);
+      unlink (TMP_TAIL_S);
+    }
 
   if (dontdeltemps < 2)
     {
@@ -3344,7 +3303,7 @@ dll_name_list_append (dll_name_list_type * list, bfd_byte * data)
 
 /* Count the number of entries in list.  */
 
-static int
+static int 
 dll_name_list_count (dll_name_list_type * list)
 {
   dll_name_list_node_type * p;
@@ -3366,7 +3325,7 @@ dll_name_list_count (dll_name_list_type * list)
 
 /* Print each entry in list to stdout.  */
 
-static void
+static void 
 dll_name_list_print (dll_name_list_type * list)
 {
   dll_name_list_node_type * p;
@@ -3401,7 +3360,7 @@ dll_name_list_free (dll_name_list_type * list)
 /* Recursive function to free all nodes entry->next->next...
    as well as entry itself.  */
 
-static void
+static void 
 dll_name_list_free_contents (dll_name_list_node_type * entry)
 {
   if (entry)
@@ -3422,7 +3381,7 @@ dll_name_list_free_contents (dll_name_list_node_type * entry)
 
 /* Allocate and initialize a dll_name_list_type object,
    including its sentinel node.  Caller is responsible
-   for calling dll_name_list_free when finished with
+   for calling dll_name_list_free when finished with 
    the list.  */
 
 static dll_name_list_type *
@@ -3446,9 +3405,9 @@ dll_name_list_create (void)
    OBJ (where obj is cast to const char *).  If found, set global variable
    identify_member_contains_symname_result TRUE.  It is the caller's
    responsibility to set the result variable FALSE before iterating with
-   this function.  */
+   this function.  */   
 
-static void
+static void 
 identify_member_contains_symname (bfd  * abfd,
 				  bfd  * archive_bfd ATTRIBUTE_UNUSED,
 				  void * obj)
@@ -3504,9 +3463,9 @@ identify_member_contains_symname (bfd  * abfd,
    of all sections which meet the criteria to a linked list of dll names.
 
    Finally, print them all to stdout. (If --identify-strict, an error is
-   reported if more than one match was found).  */
+   reported if more than one match was found).  */   
 
-static void
+static void 
 identify_dll_for_implib (void)
 {
   bfd * abfd = NULL;
@@ -3544,7 +3503,7 @@ identify_dll_for_implib (void)
 			   (void *)(& search_data));
   if (search_data.found)
     identify_data.ms_style_implib = TRUE;
-
+  
   /* Rewind the bfd.  */
   if (! bfd_close (abfd))
     bfd_fatal (identify_imp_name);
@@ -3559,7 +3518,7 @@ identify_dll_for_implib (void)
 
       fatal (_("%s is not a library"), identify_imp_name);
     }
-
+ 
   /* Now search for the dll name.  */
   identify_search_archive (abfd,
 			   identify_search_member,
@@ -3593,10 +3552,10 @@ identify_dll_for_implib (void)
 
 /* Loop over all members of the archive, applying the supplied function to
    each member that is a bfd_object.  The function will be called as if:
-      func (member_bfd, abfd, user_storage)  */
+      func (member_bfd, abfd, user_storage)  */   
 
 static void
-identify_search_archive (bfd * abfd,
+identify_search_archive (bfd * abfd, 
 			 void (* operation) (bfd *, bfd *, void *),
 			 void * user_storage)
 {
@@ -3624,15 +3583,7 @@ identify_search_archive (bfd * abfd,
         }
 
       if (last_arfile != NULL)
-	{
-	  bfd_close (last_arfile);
-	  /* PR 17512: file: 8b2168d4.  */
-	  if (last_arfile == arfile)
-	    {
-	      last_arfile = NULL;
-	      break;
-	    }
-	}
+	bfd_close (last_arfile);
 
       last_arfile = arfile;
     }
@@ -3644,7 +3595,7 @@ identify_search_archive (bfd * abfd,
 }
 
 /* Call the identify_search_section() function for each section of this
-   archive member.  */
+   archive member.  */   
 
 static void
 identify_search_member (bfd  *abfd,
@@ -3656,7 +3607,7 @@ identify_search_member (bfd  *abfd,
 
 /* This predicate returns true if section->name matches the desired value.
    By default, this is .idata$7 (.idata$6 on PPC, or if the import
-   library is ms-style).  */
+   library is ms-style).  */   
 
 static bfd_boolean
 identify_process_section_p (asection * section, bfd_boolean ms_style_implib)
@@ -3669,10 +3620,10 @@ identify_process_section_p (asection * section, bfd_boolean ms_style_implib)
   ".idata$7";
 #endif
   static const char * MS_SECTION_NAME = ".idata$6";
-
+  
   const char * section_name =
     (ms_style_implib ? MS_SECTION_NAME : SECTION_NAME);
-
+  
   if (strcmp (section_name, section->name) == 0)
     return TRUE;
   return FALSE;
@@ -3719,7 +3670,7 @@ identify_search_section (bfd * abfd, asection * section, void * obj)
 
   /* Use a heuristic to determine if data is a dll name.
      Possible to defeat this if (a) the library has MANY
-     (more than 0x302f) imports, (b) it is an ms-style
+     (more than 0x302f) imports, (b) it is an ms-style 
      import library, but (c) it is buggy, in that the SEC_DATA
      flag is set on the "wrong" sections.  This heuristic might
      also fail to record a valid dll name if the dllname uses
@@ -4087,14 +4038,13 @@ main (int ac, char **av)
   bindtextdomain (PACKAGE, LOCALEDIR);
   textdomain (PACKAGE);
 
-  bfd_set_error_program_name (program_name);
   expandargv (&ac, &av);
 
   while ((c = getopt_long (ac, av,
 #ifdef DLLTOOL_MCORE_ELF
-                           "m:e:l:aD:d:z:b:xp:cCuUkAS:t:f:nI:vVHhM:L:F:",
+			   "m:e:l:aD:d:z:b:xp:cCuUkAS:f:nI:vVHhM:L:F:",
 #else
-                           "m:e:l:y:aD:d:z:b:xp:cCuUkAS:t:f:nI:vVHh",
+			   "m:e:l:y:aD:d:z:b:xp:cCuUkAS:f:nI:vVHh",
 #endif
 			   long_options, 0))
 	 != EOF)
@@ -4152,9 +4102,6 @@ main (int ac, char **av)
 	  break;
 	case 'z':
 	  output_def = fopen (optarg, FOPEN_WT);
-	  if (!output_def)
-	    /* xgettext:c-format */
-	    fatal (_("Unable to open def-file: %s"), optarg);
 	  break;
 	case 'D':
 	  dll_name = (char*) lbasename (optarg);
@@ -4263,8 +4210,8 @@ main (int ac, char **av)
     {
       /* If we are inferring dll_name from exp_name,
          strip off any path components, without emitting
-         a warning.  */
-      const char* exp_basename = lbasename (exp_name);
+         a warning.  */  
+      const char* exp_basename = lbasename (exp_name); 
       const int len = strlen (exp_basename) + 5;
       dll_name = xmalloc (len);
       strcpy (dll_name, exp_basename);

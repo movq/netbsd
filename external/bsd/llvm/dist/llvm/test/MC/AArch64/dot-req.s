@@ -1,8 +1,6 @@
-// RUN: llvm-mc -triple=aarch64-none-linux-gnu -show-encoding < %s 2>&1 | FileCheck %s
+// RUN: llvm-mc -triple=aarch64-none-linux-gnu -show-encoding < %s | FileCheck %s
 
 bar:
-        fred .req x5
-// CHECK-NOT: ignoring redefinition of register alias 'fred'
         fred .req x5
         mov fred, x11
         .unreq fred

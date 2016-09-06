@@ -263,7 +263,8 @@ private:
 template <typename CGSCCPassT>
 ModuleToPostOrderCGSCCPassAdaptor<CGSCCPassT>
 createModuleToPostOrderCGSCCPassAdaptor(CGSCCPassT Pass) {
-  return ModuleToPostOrderCGSCCPassAdaptor<CGSCCPassT>(std::move(Pass));
+  return std::move(
+      ModuleToPostOrderCGSCCPassAdaptor<CGSCCPassT>(std::move(Pass)));
 }
 
 /// \brief A CGSCC analysis which acts as a proxy for a function analysis
@@ -358,7 +359,7 @@ private:
 /// returned PreservedAnalysis set.
 class CGSCCAnalysisManagerFunctionProxy {
 public:
-  /// \brief Result proxy object for \c CGSCCAnalysisManagerFunctionProxy.
+  /// \brief Result proxy object for \c ModuleAnalysisManagerFunctionProxy.
   class Result {
   public:
     explicit Result(const CGSCCAnalysisManager &CGAM) : CGAM(&CGAM) {}
@@ -483,7 +484,7 @@ private:
 template <typename FunctionPassT>
 CGSCCToFunctionPassAdaptor<FunctionPassT>
 createCGSCCToFunctionPassAdaptor(FunctionPassT Pass) {
-  return CGSCCToFunctionPassAdaptor<FunctionPassT>(std::move(Pass));
+  return std::move(CGSCCToFunctionPassAdaptor<FunctionPassT>(std::move(Pass)));
 }
 }
 

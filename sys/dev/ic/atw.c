@@ -1,4 +1,4 @@
-/*	$NetBSD: atw.c,v 1.160 2016/06/10 13:27:13 ozaki-r Exp $  */
+/*	$NetBSD: atw.c,v 1.156 2013/11/22 00:01:09 riz Exp $  */
 
 /*-
  * Copyright (c) 1998, 1999, 2000, 2002, 2003, 2004 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atw.c,v 1.160 2016/06/10 13:27:13 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atw.c,v 1.156 2013/11/22 00:01:09 riz Exp $");
 
 
 #include <sys/param.h>
@@ -988,11 +988,9 @@ atw_wcsr_init(struct atw_softc *sc)
 	uint32_t wcsr;
 
 	wcsr = ATW_READ(sc, ATW_WCSR);
-	wcsr &= ~ATW_WCSR_BLN_MASK;
+	wcsr &= ~(ATW_WCSR_BLN_MASK|ATW_WCSR_LSOE|ATW_WCSR_MPRE|ATW_WCSR_LSOE);
 	wcsr |= __SHIFTIN(7, ATW_WCSR_BLN_MASK);
-	/* We always want to wake up on link loss or TSFT out of range */
-	wcsr |= ATW_WCSR_LSOE|ATW_WCSR_TSFTWE;
-	ATW_WRITE(sc, ATW_WCSR, wcsr);
+	ATW_WRITE(sc, ATW_WCSR, wcsr);	/* XXX resets wake-up status bits */
 
 	DPRINTF(sc, ("%s: %s reg[WCSR] = %08x\n",
 	    device_xname(sc->sc_dev), __func__, ATW_READ(sc, ATW_WCSR)));
@@ -3139,7 +3137,7 @@ atw_rxintr(struct atw_softc *sc)
 		}
 
 		ifp->if_ipackets++;
-		m_set_rcvif(m, ifp);
+		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = MIN(m->m_ext.ext_size, len);
 
 		rate = (rate0 < __arraycount(rate_tbl)) ? rate_tbl[rate0] : 0;
@@ -3491,8 +3489,8 @@ atw_start(struct ifnet *ifp)
 		 */
 		IF_DEQUEUE(&ic->ic_mgtq, m0);
 		if (m0 != NULL) {
-			ni = M_GETCTX(m0, struct ieee80211_node *);
-			M_CLEARCTX(m0);
+			ni = (struct ieee80211_node *)m0->m_pkthdr.rcvif;
+			m0->m_pkthdr.rcvif = NULL;
 		} else if (ic->ic_state != IEEE80211_S_RUN)
 			break; /* send no data until associated */
 		else {

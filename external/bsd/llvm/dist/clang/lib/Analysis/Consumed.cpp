@@ -946,9 +946,10 @@ void ConsumedStmtVisitor::VisitVarDecl(const VarDecl *Var) {
 namespace clang {
 namespace consumed {
 
-static void splitVarStateForIf(const IfStmt *IfNode, const VarTestResult &Test,
-                               ConsumedStateMap *ThenStates,
-                               ConsumedStateMap *ElseStates) {
+void splitVarStateForIf(const IfStmt * IfNode, const VarTestResult &Test,
+                        ConsumedStateMap *ThenStates,
+                        ConsumedStateMap *ElseStates) {
+
   ConsumedState VarState = ThenStates->getState(Test.Var);
   
   if (VarState == CS_Unknown) {
@@ -963,9 +964,9 @@ static void splitVarStateForIf(const IfStmt *IfNode, const VarTestResult &Test,
   }
 }
 
-static void splitVarStateForIfBinOp(const PropagationInfo &PInfo,
-                                    ConsumedStateMap *ThenStates,
-                                    ConsumedStateMap *ElseStates) {
+void splitVarStateForIfBinOp(const PropagationInfo &PInfo,
+  ConsumedStateMap *ThenStates, ConsumedStateMap *ElseStates) {
+  
   const VarTestResult &LTest = PInfo.getLTest(),
                       &RTest = PInfo.getRTest();
   
@@ -1038,54 +1039,65 @@ bool ConsumedBlockInfo::allBackEdgesVisited(const CFGBlock *CurrBlock,
   return true;
 }
 
-void ConsumedBlockInfo::addInfo(
-    const CFGBlock *Block, ConsumedStateMap *StateMap,
-    std::unique_ptr<ConsumedStateMap> &OwnedStateMap) {
-
+void ConsumedBlockInfo::addInfo(const CFGBlock *Block,
+                                ConsumedStateMap *StateMap,
+                                bool &AlreadyOwned) {
+  
   assert(Block && "Block pointer must not be NULL");
-
-  auto &Entry = StateMapsArray[Block->getBlockID()];
-
+  
+  ConsumedStateMap *Entry = StateMapsArray[Block->getBlockID()];
+    
   if (Entry) {
-    Entry->intersect(*StateMap);
-  } else if (OwnedStateMap)
-    Entry = std::move(OwnedStateMap);
-  else
-    Entry = llvm::make_unique<ConsumedStateMap>(*StateMap);
+    Entry->intersect(StateMap);
+    
+  } else if (AlreadyOwned) {
+    StateMapsArray[Block->getBlockID()] = new ConsumedStateMap(*StateMap);
+    
+  } else {
+    StateMapsArray[Block->getBlockID()] = StateMap;
+    AlreadyOwned = true;
+  }
 }
 
 void ConsumedBlockInfo::addInfo(const CFGBlock *Block,
-                                std::unique_ptr<ConsumedStateMap> StateMap) {
+                                ConsumedStateMap *StateMap) {
 
   assert(Block && "Block pointer must not be NULL");
 
-  auto &Entry = StateMapsArray[Block->getBlockID()];
-
+  ConsumedStateMap *Entry = StateMapsArray[Block->getBlockID()];
+    
   if (Entry) {
-    Entry->intersect(*StateMap);
+    Entry->intersect(StateMap);
+    delete StateMap;
+    
   } else {
-    Entry = std::move(StateMap);
+    StateMapsArray[Block->getBlockID()] = StateMap;
   }
 }
 
 ConsumedStateMap* ConsumedBlockInfo::borrowInfo(const CFGBlock *Block) {
   assert(Block && "Block pointer must not be NULL");
   assert(StateMapsArray[Block->getBlockID()] && "Block has no block info");
-
-  return StateMapsArray[Block->getBlockID()].get();
+  
+  return StateMapsArray[Block->getBlockID()];
 }
 
 void ConsumedBlockInfo::discardInfo(const CFGBlock *Block) {
-  StateMapsArray[Block->getBlockID()] = nullptr;
+  unsigned int BlockID = Block->getBlockID();
+  delete StateMapsArray[BlockID];
+  StateMapsArray[BlockID] = nullptr;
 }
 
-std::unique_ptr<ConsumedStateMap>
-ConsumedBlockInfo::getInfo(const CFGBlock *Block) {
+ConsumedStateMap* ConsumedBlockInfo::getInfo(const CFGBlock *Block) {
   assert(Block && "Block pointer must not be NULL");
-
-  auto &Entry = StateMapsArray[Block->getBlockID()];
-  return isBackEdgeTarget(Block) ? llvm::make_unique<ConsumedStateMap>(*Entry)
-                                 : std::move(Entry);
+  
+  ConsumedStateMap *StateMap = StateMapsArray[Block->getBlockID()];
+  if (isBackEdgeTarget(Block)) {
+    return new ConsumedStateMap(*StateMap);
+  } else {
+    StateMapsArray[Block->getBlockID()] = nullptr;
+    return StateMap;
+  }
 }
 
 bool ConsumedBlockInfo::isBackEdge(const CFGBlock *From, const CFGBlock *To) {
@@ -1155,15 +1167,15 @@ ConsumedStateMap::getState(const CXXBindTemporaryExpr *Tmp) const {
   return CS_None;
 }
 
-void ConsumedStateMap::intersect(const ConsumedStateMap &Other) {
+void ConsumedStateMap::intersect(const ConsumedStateMap *Other) {
   ConsumedState LocalState;
-
-  if (this->From && this->From == Other.From && !Other.Reachable) {
+  
+  if (this->From && this->From == Other->From && !Other->Reachable) {
     this->markUnreachable();
     return;
   }
-
-  for (const auto &DM : Other.VarMap) {
+  
+  for (const auto &DM : Other->VarMap) {
     LocalState = this->getState(DM.first);
     
     if (LocalState == CS_None)
@@ -1271,14 +1283,14 @@ bool ConsumedAnalyzer::splitState(const CFGBlock *CurrBlock,
     if (PInfo.isVarTest()) {
       CurrStates->setSource(Cond);
       FalseStates->setSource(Cond);
-      splitVarStateForIf(IfNode, PInfo.getVarTest(), CurrStates.get(),
+      splitVarStateForIf(IfNode, PInfo.getVarTest(), CurrStates,
                          FalseStates.get());
-
+      
     } else if (PInfo.isBinTest()) {
       CurrStates->setSource(PInfo.testSourceNode());
       FalseStates->setSource(PInfo.testSourceNode());
-      splitVarStateForIfBinOp(PInfo, CurrStates.get(), FalseStates.get());
-
+      splitVarStateForIfBinOp(PInfo, CurrStates, FalseStates.get());
+      
     } else {
       return false;
     }
@@ -1326,13 +1338,14 @@ bool ConsumedAnalyzer::splitState(const CFGBlock *CurrBlock,
   CFGBlock::const_succ_iterator SI = CurrBlock->succ_begin();
   
   if (*SI)
-    BlockInfo.addInfo(*SI, std::move(CurrStates));
+    BlockInfo.addInfo(*SI, CurrStates);
   else
-    CurrStates = nullptr;
-
+    delete CurrStates;
+    
   if (*++SI)
-    BlockInfo.addInfo(*SI, std::move(FalseStates));
+    BlockInfo.addInfo(*SI, FalseStates.release());
 
+  CurrStates = nullptr;
   return true;
 }
 
@@ -1351,10 +1364,10 @@ void ConsumedAnalyzer::run(AnalysisDeclContext &AC) {
   // AC.getCFG()->viewCFG(LangOptions());
   
   BlockInfo = ConsumedBlockInfo(CFGraph->getNumBlockIDs(), SortedGraph);
-
-  CurrStates = llvm::make_unique<ConsumedStateMap>();
-  ConsumedStmtVisitor Visitor(AC, *this, CurrStates.get());
-
+  
+  CurrStates = new ConsumedStateMap();
+  ConsumedStmtVisitor Visitor(AC, *this, CurrStates);
+  
   // Add all trackable parameters to the state map.
   for (const auto *PI : D->params())
     Visitor.VisitParmVarDecl(PI);
@@ -1368,12 +1381,13 @@ void ConsumedAnalyzer::run(AnalysisDeclContext &AC) {
       continue;
       
     } else if (!CurrStates->isReachable()) {
+      delete CurrStates;
       CurrStates = nullptr;
       continue;
     }
-
-    Visitor.reset(CurrStates.get());
-
+    
+    Visitor.reset(CurrStates);
+    
     // Visit all of the basic block's statements.
     for (const auto &B : *CurrBlock) {
       switch (B.getKind()) {
@@ -1416,24 +1430,28 @@ void ConsumedAnalyzer::run(AnalysisDeclContext &AC) {
       if (CurrBlock->succ_size() > 1 ||
           (CurrBlock->succ_size() == 1 &&
            (*CurrBlock->succ_begin())->pred_size() > 1)) {
-
-        auto *RawState = CurrStates.get();
-
+        
+        bool OwnershipTaken = false;
+        
         for (CFGBlock::const_succ_iterator SI = CurrBlock->succ_begin(),
              SE = CurrBlock->succ_end(); SI != SE; ++SI) {
 
           if (*SI == nullptr) continue;
 
           if (BlockInfo.isBackEdge(CurrBlock, *SI)) {
-            BlockInfo.borrowInfo(*SI)->intersectAtLoopHead(
-                *SI, CurrBlock, RawState, WarningsHandler);
-
-            if (BlockInfo.allBackEdgesVisited(CurrBlock, *SI))
+            BlockInfo.borrowInfo(*SI)->intersectAtLoopHead(*SI, CurrBlock,
+                                                           CurrStates,
+                                                           WarningsHandler);
+            
+            if (BlockInfo.allBackEdgesVisited(*SI, CurrBlock))
               BlockInfo.discardInfo(*SI);
           } else {
-            BlockInfo.addInfo(*SI, RawState, CurrStates);
+            BlockInfo.addInfo(*SI, CurrStates, OwnershipTaken);
           }
         }
+        
+        if (!OwnershipTaken)
+          delete CurrStates;
 
         CurrStates = nullptr;
       }
@@ -1446,8 +1464,8 @@ void ConsumedAnalyzer::run(AnalysisDeclContext &AC) {
   } // End of block iterator.
   
   // Delete the last existing state map.
-  CurrStates = nullptr;
-
+  delete CurrStates;
+  
   WarningsHandler.emitDiagnostics();
 }
 }} // end namespace clang::consumed

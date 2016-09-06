@@ -1,4 +1,4 @@
-/*	$NetBSD: advcap.c,v 1.16 2015/11/11 07:48:41 ozaki-r Exp $	*/
+/*	$NetBSD: advcap.c,v 1.14 2012/12/13 15:36:35 roy Exp $	*/
 /*	$KAME: advcap.c,v 1.11 2003/05/19 09:46:50 keiichi Exp $	*/
 
 /*
@@ -46,7 +46,6 @@
 #include <errno.h>
 #include <string.h>
 #include "pathnames.h"
-#include "prog_ops.h"
 
 #ifndef __UNCONST
 #define __UNCONST(a)		((void *)(unsigned long)(const void *)(a))
@@ -137,7 +136,8 @@ getent(char *bp, char *name, char *cp)
 		tf = open(RM = cp, O_RDONLY);
 	}
 	if (tf < 0) {
-		syslog(LOG_INFO, "<%s> open: %m", __func__);
+		syslog(LOG_INFO,
+		       "<%s> open: %s", __func__, strerror(errno));
 		return (-2);
 	}
 	for (;;) {
@@ -160,7 +160,7 @@ getent(char *bp, char *name, char *cp)
 				break;
 			}
 			if (cp >= bp + BUFSIZ) {
-				prog_write(2,"Remcap entry too long\n", 23);
+				write(2,"Remcap entry too long\n", 23);
 				break;
 			} else
 				*cp++ = c;
@@ -196,7 +196,7 @@ tnchktc(void)
 	p = tbuf + strlen(tbuf) - 2;	/* before the last colon */
 	while (*--p != ':')
 		if (p < tbuf) {
-			prog_write(2, "Bad remcap entry\n", 18);
+			write(2, "Bad remcap entry\n", 18);
 			return (0);
 		}
 	p++;
@@ -209,7 +209,7 @@ tnchktc(void)
 		q++;
 	*q = 0;
 	if (++hopcount > MAXHOP) {
-		prog_write(2, "Infinite tc= loop\n", 18);
+		write(2, "Infinite tc= loop\n", 18);
 		return (0);
 	}
 	if (getent(tcbuf, tcname, remotefile) != 1) {
@@ -219,7 +219,7 @@ tnchktc(void)
 		;
 	l = p - holdtbuf + strlen(q);
 	if (l > BUFSIZ) {
-		prog_write(2, "Remcap entry too long\n", 23);
+		write(2, "Remcap entry too long\n", 23);
 		q[BUFSIZ - (p-holdtbuf)] = 0;
 	}
 	strcpy(p, q);

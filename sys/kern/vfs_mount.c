@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_mount.c,v 1.40 2016/07/07 06:55:43 msaitoh Exp $	*/
+/*	$NetBSD: vfs_mount.c,v 1.30.2.3 2015/11/04 17:55:23 riz Exp $	*/
 
 /*-
  * Copyright (c) 1997-2011 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_mount.c,v 1.40 2016/07/07 06:55:43 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_mount.c,v 1.30.2.3 2015/11/04 17:55:23 riz Exp $");
 
 #define _VFS_VNODE_PRIVATE
 
@@ -93,10 +93,12 @@ __KERNEL_RCSID(0, "$NetBSD: vfs_mount.c,v 1.40 2016/07/07 06:55:43 msaitoh Exp $
 #include <sys/vnode.h>
 
 #include <miscfs/genfs/genfs.h>
+#include <miscfs/syncfs/syncfs.h>
 #include <miscfs/specfs/specdev.h>
 
-/* Root filesystem. */
+/* Root filesystem and device. */
 vnode_t *			rootvnode;
+device_t			root_device;
 
 /* Mounted filesystem list. */
 struct mntlist			mountlist;
@@ -339,14 +341,14 @@ vfs_unbusy(struct mount *mp, bool keepref, struct mount **nextp)
 
 struct vnode_iterator {
 	struct vnode vi_vnode;
-};
+}; 
 
 void
 vfs_vnode_iterator_init(struct mount *mp, struct vnode_iterator **vip)
 {
 	struct vnode *vp;
 
-	vp = vnalloc_marker(mp);
+	vp = vnalloc(mp);
 
 	mutex_enter(&mntvnode_lock);
 	TAILQ_INSERT_HEAD(&mp->mnt_vnodelist, vp, v_mntvnodes);
@@ -362,13 +364,13 @@ vfs_vnode_iterator_destroy(struct vnode_iterator *vi)
 	struct vnode *mvp = &vi->vi_vnode;
 
 	mutex_enter(&mntvnode_lock);
-	KASSERT(vnis_marker(mvp));
+	KASSERT(ISSET(mvp->v_iflag, VI_MARKER));
 	if (mvp->v_usecount != 0) {
 		TAILQ_REMOVE(&mvp->v_mount->mnt_vnodelist, mvp, v_mntvnodes);
 		mvp->v_usecount = 0;
 	}
 	mutex_exit(&mntvnode_lock);
-	vnfree_marker(mvp);
+	vnfree(mvp);
 }
 
 struct vnode *
@@ -380,7 +382,7 @@ vfs_vnode_iterator_next(struct vnode_iterator *vi,
 	struct vnode *vp;
 	int error;
 
-	KASSERT(vnis_marker(mvp));
+	KASSERT(ISSET(mvp->v_iflag, VI_MARKER));
 
 	do {
 		mutex_enter(&mntvnode_lock);
@@ -393,9 +395,8 @@ again:
 	       		return NULL;
 		}
 		mutex_enter(vp->v_interlock);
-		if (vnis_marker(vp) ||
-		    vdead_check(vp, VDEAD_NOWAIT) ||
-		    (f && !(*f)(cl, vp))) {
+		if (ISSET(vp->v_iflag, VI_MARKER) ||
+		    (f && !ISSET(vp->v_iflag, VI_XLOCK) && !(*f)(cl, vp))) {
 			mutex_exit(vp->v_interlock);
 			vp = TAILQ_NEXT(vp, v_mntvnodes);
 			goto again;
@@ -404,7 +405,7 @@ again:
 		TAILQ_INSERT_AFTER(&mp->mnt_vnodelist, vp, mvp, v_mntvnodes);
 		mvp->v_usecount = 1;
 		mutex_exit(&mntvnode_lock);
-		error = vget(vp, 0, true /* wait */);
+		error = vget(vp, 0);
 		KASSERT(error == 0 || error == ENOENT);
 	} while (error != 0);
 
@@ -508,7 +509,7 @@ vflush(struct mount *mp, vnode_t *skipvp, int flags)
 {
 	vnode_t *vp;
 	struct vnode_iterator *marker;
-	int error, busy = 0, when = 0;
+	int busy = 0, when = 0;
 	struct vflush_ctx ctx;
 
 	/* First, flush out any vnode references from vrele_list. */
@@ -541,31 +542,7 @@ vflush(struct mount *mp, vnode_t *skipvp, int flags)
 	vfs_vnode_iterator_destroy(marker);
 	if (busy)
 		return (EBUSY);
-
-	/* Wait for all vnodes to be reclaimed. */
-	for (;;) {
-		mutex_enter(&mntvnode_lock);
-		TAILQ_FOREACH(vp, &mp->mnt_vnodelist, v_mntvnodes) {
-			if (vp == skipvp)
-				continue;
-			if ((flags & SKIPSYSTEM) && (vp->v_vflag & VV_SYSTEM))
-				continue;
-			break;
-		}
-		if (vp != NULL) {
-			mutex_enter(vp->v_interlock);
-			mutex_exit(&mntvnode_lock);
-			error = vget(vp, 0, true /* wait */);
-			if (error == ENOENT)
-				continue;
-			else if (error == 0)
-				vrele(vp);
-			return EBUSY;
-		} else {
-			mutex_exit(&mntvnode_lock);
-			return 0;
-		}
-	}
+	return (0);
 }
 
 /*
@@ -746,9 +723,12 @@ mount_domount(struct lwp *l, vnode_t **vpp, struct vfsops *vfsops,
 	TAILQ_INSERT_TAIL(&mountlist, mp, mnt_list);
 	mutex_exit(&mountlist_lock);
 	if ((mp->mnt_flag & (MNT_RDONLY | MNT_ASYNC)) == 0)
-		vfs_syncer_add_to_worklist(mp);
-	vp->v_mountedhere = mp;
+		error = vfs_allocate_syncvnode(mp);
+	if (error == 0)
+		vp->v_mountedhere = mp;
 	vput(nd.ni_vp);
+	if (error != 0)
+		goto err_onmountlist;
 
 	mount_checkdirs(vp);
 	mutex_exit(&mp->mnt_updating);
@@ -766,6 +746,12 @@ mount_domount(struct lwp *l, vnode_t **vpp, struct vfsops *vfsops,
 	vfs_destroy(mp);
 	*vpp = NULL;
 	return error;
+
+err_onmountlist:
+	mutex_enter(&mountlist_lock);
+	TAILQ_REMOVE(&mountlist, mp, mnt_list);
+	mp->mnt_iflag |= IMNT_GONE;
+	mutex_exit(&mountlist_lock);
 
 err_mounted:
 	if (VFS_UNMOUNT(mp, MNT_FORCE) != 0)
@@ -823,7 +809,7 @@ dounmount(struct mount *mp, int flags, struct lwp *l)
 		return ENOENT;
 	}
 
-	used_syncer = (mp->mnt_iflag & IMNT_ONWORKLIST) != 0;
+	used_syncer = (mp->mnt_syncer != NULL);
 	used_extattr = mp->mnt_flag & MNT_EXTATTR;
 
 	/*
@@ -846,8 +832,8 @@ dounmount(struct mount *mp, int flags, struct lwp *l)
 	async = mp->mnt_flag & MNT_ASYNC;
 	mp->mnt_flag &= ~MNT_ASYNC;
 	cache_purgevfs(mp);	/* remove cache entries for this file sys */
-	if (used_syncer)
-		vfs_syncer_remove_from_worklist(mp);
+	if (mp->mnt_syncer != NULL)
+		vfs_deallocate_syncvnode(mp);
 	error = 0;
 	if (((mp->mnt_flag & MNT_RDONLY) == 0) && ((flags & MNT_FORCE) == 0)) {
 		error = VFS_SYNC(mp, MNT_WAIT, l->l_cred);
@@ -859,7 +845,7 @@ dounmount(struct mount *mp, int flags, struct lwp *l)
 		mp->mnt_iflag &= ~IMNT_UNMOUNT;
 		mutex_exit(&mp->mnt_unmounting);
 		if ((mp->mnt_flag & (MNT_RDONLY | MNT_ASYNC)) == 0)
-			vfs_syncer_add_to_worklist(mp);
+			(void) vfs_allocate_syncvnode(mp);
 		mp->mnt_flag |= async;
 		mutex_exit(&mp->mnt_updating);
 		if (used_syncer)

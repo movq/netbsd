@@ -52,11 +52,12 @@ void MachineTraceMetrics::getAnalysisUsage(AnalysisUsage &AU) const {
 
 bool MachineTraceMetrics::runOnMachineFunction(MachineFunction &Func) {
   MF = &Func;
-  const TargetSubtargetInfo &ST = MF->getSubtarget();
-  TII = ST.getInstrInfo();
-  TRI = ST.getRegisterInfo();
+  TII = MF->getSubtarget().getInstrInfo();
+  TRI = MF->getSubtarget().getRegisterInfo();
   MRI = &MF->getRegInfo();
   Loops = &getAnalysis<MachineLoopInfo>();
+  const TargetSubtargetInfo &ST =
+    MF->getTarget().getSubtarget<TargetSubtargetInfo>();
   SchedModel.init(ST.getSchedModel(), &ST, TII);
   BlockInfo.resize(MF->getNumBlockIDs());
   ProcResourceCycles.resize(MF->getNumBlockIDs() *
@@ -320,7 +321,9 @@ MinInstrCountEnsemble::pickTracePred(const MachineBasicBlock *MBB) {
   unsigned CurCount = MTM.getResources(MBB)->InstrCount;
   const MachineBasicBlock *Best = nullptr;
   unsigned BestDepth = 0;
-  for (const MachineBasicBlock *Pred : MBB->predecessors()) {
+  for (MachineBasicBlock::const_pred_iterator
+       I = MBB->pred_begin(), E = MBB->pred_end(); I != E; ++I) {
+    const MachineBasicBlock *Pred = *I;
     const MachineTraceMetrics::TraceBlockInfo *PredTBI =
       getDepthResources(Pred);
     // Ignore cycles that aren't natural loops.
@@ -342,7 +345,9 @@ MinInstrCountEnsemble::pickTraceSucc(const MachineBasicBlock *MBB) {
   const MachineLoop *CurLoop = getLoopFor(MBB);
   const MachineBasicBlock *Best = nullptr;
   unsigned BestHeight = 0;
-  for (const MachineBasicBlock *Succ : MBB->successors()) {
+  for (MachineBasicBlock::const_succ_iterator
+       I = MBB->succ_begin(), E = MBB->succ_end(); I != E; ++I) {
+    const MachineBasicBlock *Succ = *I;
     // Don't consider back-edges.
     if (CurLoop && Succ == CurLoop->getHeader())
       continue;
@@ -459,11 +464,13 @@ void MachineTraceMetrics::Ensemble::computeTrace(const MachineBasicBlock *MBB) {
   // Run an upwards post-order search for the trace start.
   Bounds.Downward = false;
   Bounds.Visited.clear();
-  for (auto I : inverse_post_order_ext(MBB, Bounds)) {
+  typedef ipo_ext_iterator<const MachineBasicBlock*, LoopBounds> UpwardPO;
+  for (UpwardPO I = ipo_ext_begin(MBB, Bounds), E = ipo_ext_end(MBB, Bounds);
+       I != E; ++I) {
     DEBUG(dbgs() << "  pred for BB#" << I->getNumber() << ": ");
     TraceBlockInfo &TBI = BlockInfo[I->getNumber()];
     // All the predecessors have been visited, pick the preferred one.
-    TBI.Pred = pickTracePred(I);
+    TBI.Pred = pickTracePred(*I);
     DEBUG({
       if (TBI.Pred)
         dbgs() << "BB#" << TBI.Pred->getNumber() << '\n';
@@ -471,17 +478,19 @@ void MachineTraceMetrics::Ensemble::computeTrace(const MachineBasicBlock *MBB) {
         dbgs() << "null\n";
     });
     // The trace leading to I is now known, compute the depth resources.
-    computeDepthResources(I);
+    computeDepthResources(*I);
   }
 
   // Run a downwards post-order search for the trace end.
   Bounds.Downward = true;
   Bounds.Visited.clear();
-  for (auto I : post_order_ext(MBB, Bounds)) {
+  typedef po_ext_iterator<const MachineBasicBlock*, LoopBounds> DownwardPO;
+  for (DownwardPO I = po_ext_begin(MBB, Bounds), E = po_ext_end(MBB, Bounds);
+       I != E; ++I) {
     DEBUG(dbgs() << "  succ for BB#" << I->getNumber() << ": ");
     TraceBlockInfo &TBI = BlockInfo[I->getNumber()];
     // All the successors have been visited, pick the preferred one.
-    TBI.Succ = pickTraceSucc(I);
+    TBI.Succ = pickTraceSucc(*I);
     DEBUG({
       if (TBI.Succ)
         dbgs() << "BB#" << TBI.Succ->getNumber() << '\n';
@@ -489,7 +498,7 @@ void MachineTraceMetrics::Ensemble::computeTrace(const MachineBasicBlock *MBB) {
         dbgs() << "null\n";
     });
     // The trace leaving I is now known, compute the height resources.
-    computeHeightResources(I);
+    computeHeightResources(*I);
   }
 }
 
@@ -509,17 +518,18 @@ MachineTraceMetrics::Ensemble::invalidate(const MachineBasicBlock *BadMBB) {
             << " height.\n");
       // Find any MBB predecessors that have MBB as their preferred successor.
       // They are the only ones that need to be invalidated.
-      for (const MachineBasicBlock *Pred : MBB->predecessors()) {
-        TraceBlockInfo &TBI = BlockInfo[Pred->getNumber()];
+      for (MachineBasicBlock::const_pred_iterator
+           I = MBB->pred_begin(), E = MBB->pred_end(); I != E; ++I) {
+        TraceBlockInfo &TBI = BlockInfo[(*I)->getNumber()];
         if (!TBI.hasValidHeight())
           continue;
         if (TBI.Succ == MBB) {
           TBI.invalidateHeight();
-          WorkList.push_back(Pred);
+          WorkList.push_back(*I);
           continue;
         }
         // Verify that TBI.Succ is actually a *I successor.
-        assert((!TBI.Succ || Pred->isSuccessor(TBI.Succ)) && "CFG changed");
+        assert((!TBI.Succ || (*I)->isSuccessor(TBI.Succ)) && "CFG changed");
       }
     } while (!WorkList.empty());
   }
@@ -534,17 +544,18 @@ MachineTraceMetrics::Ensemble::invalidate(const MachineBasicBlock *BadMBB) {
             << " depth.\n");
       // Find any MBB successors that have MBB as their preferred predecessor.
       // They are the only ones that need to be invalidated.
-      for (const MachineBasicBlock *Succ : MBB->successors()) {
-        TraceBlockInfo &TBI = BlockInfo[Succ->getNumber()];
+      for (MachineBasicBlock::const_succ_iterator
+           I = MBB->succ_begin(), E = MBB->succ_end(); I != E; ++I) {
+        TraceBlockInfo &TBI = BlockInfo[(*I)->getNumber()];
         if (!TBI.hasValidDepth())
           continue;
         if (TBI.Pred == MBB) {
           TBI.invalidateDepth();
-          WorkList.push_back(Succ);
+          WorkList.push_back(*I);
           continue;
         }
         // Verify that TBI.Pred is actually a *I predecessor.
-        assert((!TBI.Pred || Succ->isPredecessor(TBI.Pred)) && "CFG changed");
+        assert((!TBI.Pred || (*I)->isPredecessor(TBI.Pred)) && "CFG changed");
       }
     } while (!WorkList.empty());
   }
@@ -624,17 +635,11 @@ struct DataDep {
 static bool getDataDeps(const MachineInstr *UseMI,
                         SmallVectorImpl<DataDep> &Deps,
                         const MachineRegisterInfo *MRI) {
-  // Debug values should not be included in any calculations.
-  if (UseMI->isDebugValue())
-    return false;
-  
   bool HasPhysRegs = false;
-  for (MachineInstr::const_mop_iterator I = UseMI->operands_begin(),
-       E = UseMI->operands_end(); I != E; ++I) {
-    const MachineOperand &MO = *I;
-    if (!MO.isReg())
+  for (ConstMIOperands MO(UseMI); MO.isValid(); ++MO) {
+    if (!MO->isReg())
       continue;
-    unsigned Reg = MO.getReg();
+    unsigned Reg = MO->getReg();
     if (!Reg)
       continue;
     if (TargetRegisterInfo::isPhysicalRegister(Reg)) {
@@ -642,8 +647,8 @@ static bool getDataDeps(const MachineInstr *UseMI,
       continue;
     }
     // Collect virtual register reads.
-    if (MO.readsReg())
-      Deps.push_back(DataDep(MRI, Reg, UseMI->getOperandNo(I)));
+    if (MO->readsReg())
+      Deps.push_back(DataDep(MRI, Reg, MO.getOperandNo()));
   }
   return HasPhysRegs;
 }
@@ -694,42 +699,41 @@ static void updatePhysDepsDownwards(const MachineInstr *UseMI,
   SmallVector<unsigned, 8> Kills;
   SmallVector<unsigned, 8> LiveDefOps;
 
-  for (MachineInstr::const_mop_iterator MI = UseMI->operands_begin(),
-       ME = UseMI->operands_end(); MI != ME; ++MI) {
-    const MachineOperand &MO = *MI;
-    if (!MO.isReg())
+  for (ConstMIOperands MO(UseMI); MO.isValid(); ++MO) {
+    if (!MO->isReg())
       continue;
-    unsigned Reg = MO.getReg();
+    unsigned Reg = MO->getReg();
     if (!TargetRegisterInfo::isPhysicalRegister(Reg))
       continue;
     // Track live defs and kills for updating RegUnits.
-    if (MO.isDef()) {
-      if (MO.isDead())
+    if (MO->isDef()) {
+      if (MO->isDead())
         Kills.push_back(Reg);
       else
-        LiveDefOps.push_back(UseMI->getOperandNo(MI));
-    } else if (MO.isKill())
+        LiveDefOps.push_back(MO.getOperandNo());
+    } else if (MO->isKill())
       Kills.push_back(Reg);
     // Identify dependencies.
-    if (!MO.readsReg())
+    if (!MO->readsReg())
       continue;
     for (MCRegUnitIterator Units(Reg, TRI); Units.isValid(); ++Units) {
       SparseSet<LiveRegUnit>::iterator I = RegUnits.find(*Units);
       if (I == RegUnits.end())
         continue;
-      Deps.push_back(DataDep(I->MI, I->Op, UseMI->getOperandNo(MI)));
+      Deps.push_back(DataDep(I->MI, I->Op, MO.getOperandNo()));
       break;
     }
   }
 
   // Update RegUnits to reflect live registers after UseMI.
   // First kills.
-  for (unsigned Kill : Kills)
-    for (MCRegUnitIterator Units(Kill, TRI); Units.isValid(); ++Units)
+  for (unsigned i = 0, e = Kills.size(); i != e; ++i)
+    for (MCRegUnitIterator Units(Kills[i], TRI); Units.isValid(); ++Units)
       RegUnits.erase(*Units);
 
   // Second, live defs.
-  for (unsigned DefOp : LiveDefOps) {
+  for (unsigned i = 0, e = LiveDefOps.size(); i != e; ++i) {
+    unsigned DefOp = LiveDefOps[i];
     for (MCRegUnitIterator Units(UseMI->getOperand(DefOp).getReg(), TRI);
          Units.isValid(); ++Units) {
       LiveRegUnit &LRU = RegUnits[*Units];
@@ -755,7 +759,8 @@ computeCrossBlockCriticalPath(const TraceBlockInfo &TBI) {
   assert(TBI.HasValidInstrDepths && "Missing depth info");
   assert(TBI.HasValidInstrHeights && "Missing height info");
   unsigned MaxLen = 0;
-  for (const LiveInReg &LIR : TBI.LiveIns) {
+  for (unsigned i = 0, e = TBI.LiveIns.size(); i != e; ++i) {
+    const LiveInReg &LIR = TBI.LiveIns[i];
     if (!TargetRegisterInfo::isVirtualRegister(LIR.Reg))
       continue;
     const MachineInstr *DefMI = MTM.MRI->getVRegDef(LIR.Reg);
@@ -829,7 +834,8 @@ computeInstrDepths(const MachineBasicBlock *MBB) {
 
       // Filter and process dependencies, computing the earliest issue cycle.
       unsigned Cycle = 0;
-      for (const DataDep &Dep : Deps) {
+      for (unsigned i = 0, e = Deps.size(); i != e; ++i) {
+        const DataDep &Dep = Deps[i];
         const TraceBlockInfo&DepTBI =
           BlockInfo[Dep.DefMI->getParent()->getNumber()];
         // Ignore dependencies from outside the current trace.
@@ -867,18 +873,15 @@ static unsigned updatePhysDepsUpwards(const MachineInstr *MI, unsigned Height,
                                       const TargetInstrInfo *TII,
                                       const TargetRegisterInfo *TRI) {
   SmallVector<unsigned, 8> ReadOps;
-
-  for (MachineInstr::const_mop_iterator MOI = MI->operands_begin(),
-       MOE = MI->operands_end(); MOI != MOE; ++MOI) {
-    const MachineOperand &MO = *MOI;
-    if (!MO.isReg())
+  for (ConstMIOperands MO(MI); MO.isValid(); ++MO) {
+    if (!MO->isReg())
       continue;
-    unsigned Reg = MO.getReg();
+    unsigned Reg = MO->getReg();
     if (!TargetRegisterInfo::isPhysicalRegister(Reg))
       continue;
-    if (MO.readsReg())
-      ReadOps.push_back(MI->getOperandNo(MOI));
-    if (!MO.isDef())
+    if (MO->readsReg())
+      ReadOps.push_back(MO.getOperandNo());
+    if (!MO->isDef())
       continue;
     // This is a def of Reg. Remove corresponding entries from RegUnits, and
     // update MI Height to consider the physreg dependencies.
@@ -891,7 +894,7 @@ static unsigned updatePhysDepsUpwards(const MachineInstr *MI, unsigned Height,
         // We may not know the UseMI of this dependency, if it came from the
         // live-in list. SchedModel can handle a NULL UseMI.
         DepHeight += SchedModel
-          .computeOperandLatency(MI, MI->getOperandNo(MOI), I->MI, I->Op);
+          .computeOperandLatency(MI, MO.getOperandNo(), I->MI, I->Op);
       }
       Height = std::max(Height, DepHeight);
       // This regunit is dead above MI.
@@ -998,7 +1001,8 @@ computeInstrHeights(const MachineBasicBlock *MBB) {
   // MBB is the highest precomputed block in the trace.
   if (MBB) {
     TraceBlockInfo &TBI = BlockInfo[MBB->getNumber()];
-    for (LiveInReg &LI : TBI.LiveIns) {
+    for (unsigned i = 0, e = TBI.LiveIns.size(); i != e; ++i) {
+      LiveInReg LI = TBI.LiveIns[i];
       if (TargetRegisterInfo::isVirtualRegister(LI.Reg)) {
         // For virtual registers, the def latency is included.
         unsigned &Height = Heights[MTM.MRI->getVRegDef(LI.Reg)];
@@ -1086,9 +1090,9 @@ computeInstrHeights(const MachineBasicBlock *MBB) {
                                       MTM.SchedModel, MTM.TII, MTM.TRI);
 
       // Update the required height of any virtual registers read by MI.
-      for (const DataDep &Dep : Deps)
-        if (pushDepHeight(Dep, MI, Cycle, Heights, MTM.SchedModel, MTM.TII))
-          addLiveIns(Dep.DefMI, Dep.DefOp, Stack);
+      for (unsigned i = 0, e = Deps.size(); i != e; ++i)
+        if (pushDepHeight(Deps[i], MI, Cycle, Heights, MTM.SchedModel, MTM.TII))
+          addLiveIns(Deps[i].DefMI, Deps[i].DefOp, Stack);
 
       InstrCycles &MICycles = Cycles[MI];
       MICycles.Height = Cycle;
@@ -1104,7 +1108,8 @@ computeInstrHeights(const MachineBasicBlock *MBB) {
     // Update virtual live-in heights. They were added by addLiveIns() with a 0
     // height because the final height isn't known until now.
     DEBUG(dbgs() << "BB#" << MBB->getNumber() <<  " Live-ins:");
-    for (LiveInReg &LIR : TBI.LiveIns) {
+    for (unsigned i = 0, e = TBI.LiveIns.size(); i != e; ++i) {
+      LiveInReg &LIR = TBI.LiveIns[i];
       const MachineInstr *DefMI = MTM.MRI->getVRegDef(LIR.Reg);
       LIR.Height = Heights.lookup(DefMI);
       DEBUG(dbgs() << ' ' << PrintReg(LIR.Reg) << '@' << LIR.Height);
@@ -1130,16 +1135,11 @@ computeInstrHeights(const MachineBasicBlock *MBB) {
 
 MachineTraceMetrics::Trace
 MachineTraceMetrics::Ensemble::getTrace(const MachineBasicBlock *MBB) {
-  TraceBlockInfo &TBI = BlockInfo[MBB->getNumber()];
-
-  if (!TBI.hasValidDepth() || !TBI.hasValidHeight())
-    computeTrace(MBB);
-  if (!TBI.HasValidInstrDepths)
-    computeInstrDepths(MBB);
-  if (!TBI.HasValidInstrHeights)
-    computeInstrHeights(MBB);
-  
-  return Trace(*this, TBI);
+  // FIXME: Check cache tags, recompute as needed.
+  computeTrace(MBB);
+  computeInstrDepths(MBB);
+  computeInstrHeights(MBB);
+  return Trace(*this, BlockInfo[MBB->getNumber()]);
 }
 
 unsigned
@@ -1208,7 +1208,8 @@ unsigned MachineTraceMetrics::Trace::getResourceLength(
                             unsigned ResourceIdx)
                          ->unsigned {
     unsigned Cycles = 0;
-    for (const MCSchedClassDesc *SC : Instrs) {
+    for (unsigned I = 0; I != Instrs.size(); ++I) {
+      const MCSchedClassDesc *SC = Instrs[I];
       if (!SC->isValid())
         continue;
       for (TargetSchedModel::ProcResIter
@@ -1226,8 +1227,8 @@ unsigned MachineTraceMetrics::Trace::getResourceLength(
 
   for (unsigned K = 0; K != PRDepths.size(); ++K) {
     unsigned PRCycles = PRDepths[K] + PRHeights[K];
-    for (const MachineBasicBlock *MBB : Extrablocks)
-      PRCycles += TE.MTM.getProcResourceCycles(MBB->getNumber())[K];
+    for (unsigned I = 0; I != Extrablocks.size(); ++I)
+      PRCycles += TE.MTM.getProcResourceCycles(Extrablocks[I]->getNumber())[K];
     PRCycles += extraCycles(ExtraInstrs, K);
     PRCycles -= extraCycles(RemoveInstrs, K);
     PRMax = std::max(PRMax, PRCycles);
@@ -1238,8 +1239,8 @@ unsigned MachineTraceMetrics::Trace::getResourceLength(
   // Instrs: #instructions in current trace outside current block.
   unsigned Instrs = TBI.InstrDepth + TBI.InstrHeight;
   // Add instruction count from the extra blocks.
-  for (const MachineBasicBlock *MBB : Extrablocks)
-    Instrs += TE.MTM.getResources(MBB)->InstrCount;
+  for (unsigned i = 0, e = Extrablocks.size(); i != e; ++i)
+    Instrs += TE.MTM.getResources(Extrablocks[i])->InstrCount;
   Instrs += ExtraInstrs.size();
   Instrs -= RemoveInstrs.size();
   if (unsigned IW = TE.MTM.SchedModel.getIssueWidth())

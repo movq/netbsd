@@ -19,16 +19,12 @@
  *
  * CDDL HEADER END
  */
-
 /*
  * Copyright 2005 Sun Microsystems, Inc.  All rights reserved.
  * Use is subject to license terms.
  */
 
-/*
- * Copyright (c) 2013 by Delphix. All rights reserved.
- * Copyright (c) 2013 Joyent, Inc. All rights reserved.
- */
+#pragma ident	"%Z%%M%	%I%	%E% SMI"
 
 #include <strings.h>
 #include <stdio.h>
@@ -175,8 +171,8 @@ dt_dis_setx(const dtrace_difo_t *dp, const char *name, dif_instr_t in, FILE *fp)
 	    intptr, DIF_INSTR_RD(in));
 
 	if (intptr < dp->dtdo_intlen) {
-		(void) fprintf(fp, "\t\t! 0x%llx",
-		    (unsigned long long)dp->dtdo_inttab[intptr]);
+		(void) fprintf(fp, "\t\t! 0x%" PRIx64,
+		    dp->dtdo_inttab[intptr]);
 	}
 }
 
@@ -216,22 +212,12 @@ dt_dis_pushts(const dtrace_difo_t *dp,
 {
 	static const char *const tnames[] = { "D type", "string" };
 	uint_t type = DIF_INSTR_TYPE(in);
-	const char *pad;
 
-	if (DIF_INSTR_OP(in) == DIF_OP_PUSHTV) {
-		(void) fprintf(fp, "%-4s DT_TYPE(%u), %%r%u",
-		    name, type, DIF_INSTR_RS(in));
-		pad = "\t\t";
-	} else {
-		(void) fprintf(fp, "%-4s DT_TYPE(%u), %%r%u, %%r%u",
-		    name, type, DIF_INSTR_R2(in), DIF_INSTR_RS(in));
-		pad = "\t";
-	}
+	(void) fprintf(fp, "%-4s DT_TYPE(%u), %%r%u, %%r%u",
+	    name, type, DIF_INSTR_R2(in), DIF_INSTR_RS(in));
 
-	if (type < sizeof (tnames) / sizeof (tnames[0])) {
-		(void) fprintf(fp, "%s! DT_TYPE(%u) = %s", pad,
-		    type, tnames[type]);
-	}
+	if (type < sizeof (tnames) / sizeof (tnames[0]))
+		(void) fprintf(fp, "\t! DT_TYPE(%u) = %s", type, tnames[type]);
 }
 
 static void
@@ -313,10 +299,9 @@ dt_dis_typestr(const dtrace_diftype_t *t, char *buf, size_t len)
 		(void) snprintf(ckind, sizeof (ckind), "0x%x", t->dtdt_ckind);
 	}
 
-	if (t->dtdt_flags & (DIF_TF_BYREF | DIF_TF_BYUREF)) {
-		(void) snprintf(buf, len, "%s (%s) by %sref (size %lu)",
-		    kind, ckind, (t->dtdt_flags & DIF_TF_BYUREF) ? "user " : "",
-		    (ulong_t)t->dtdt_size);
+	if (t->dtdt_flags & DIF_TF_BYREF) {
+		(void) snprintf(buf, len, "%s (%s) by ref (size %lu)",
+		    kind, ckind, (ulong_t)t->dtdt_size);
 	} else {
 		(void) snprintf(buf, len, "%s (%s) (size %lu)",
 		    kind, ckind, (ulong_t)t->dtdt_size);
@@ -333,9 +318,8 @@ dt_dis_rtab(const char *rtag, const dtrace_difo_t *dp, FILE *fp,
 	    rtag, "OFFSET", "DATA", "NAME");
 
 	for (; len != 0; len--, rp++) {
-		(void) fprintf(fp, "%-4u %-8llu %-8llu %s\n",
-		    rp->dofr_type, (unsigned long long)rp->dofr_offset,
-		    (unsigned long long)rp->dofr_data,
+		(void) fprintf(fp, "%-4u %-8" PRIu64 "%-8" PRIu64 "%s\n",
+		    rp->dofr_type, rp->dofr_offset, rp->dofr_data,
 		    &dp->dtdo_strtab[rp->dofr_name]);
 	}
 }

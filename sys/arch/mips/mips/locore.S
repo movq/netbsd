@@ -1,4 +1,4 @@
-/*	$NetBSD: locore.S,v 1.206 2016/08/19 10:05:35 skrll Exp $	*/
+/*	$NetBSD: locore.S,v 1.190 2013/03/01 18:25:47 joerg Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -58,18 +58,17 @@
 #include <sys/cdefs.h>
 #include <sys/errno.h>
 
+#include <machine/param.h>
 #include <mips/asm.h>
 #include <mips/cpuregs.h>
 #include <mips/trap.h>
 
-RCSID("$NetBSD: locore.S,v 1.206 2016/08/19 10:05:35 skrll Exp $")
-
 #include "assym.h"
 
-#if defined(MIPS1) || defined(MIPS2) || defined(MIPS3)
-#define MFC0_HAZARD	nop
+#if defined(MIPS1) || defined(MIPS2)
+#define	NOP_L		nop
 #else
-#define MFC0_HAZARD	/* nothing */
+#define	NOP_L		/* nothing */
 #endif
 
 	.set	noreorder
@@ -81,7 +80,6 @@ _C_LABEL(kernel_text):
 #if (defined(MIPS3_PLUS) && !defined(MIPS1)) || defined(emips)
 	/* keep firmware exception handler until we hook. */
 	mfc0	v0, MIPS_COP_0_STATUS
-	MFC0_HAZARD
 #if defined(emips)
 	and	v0, MIPS_SR_TS | MIPS3_SR_RE
 #else
@@ -92,30 +90,6 @@ _C_LABEL(kernel_text):
 #else
 	mtc0	zero, MIPS_COP_0_STATUS		# Disable interrupts
 	COP0_SYNC
-#endif
-	mtc0	zero, MIPS_COP_0_CAUSE
-	COP0_SYNC
-#ifdef MIPS64_OCTEON
-	//
-	// U-boot on the erlite starts all cpus at the kernel entry point.
-	// Use EBASE to find our CPU number and if it's not 0, call
-	// octeon_cpu_spinup if MP or loop using the wait instruction since
-	// non-primary CPUs can't do anything useful.
-	//
-	mfc0	a0, MIPS_COP_0_EBASE		# EBASE
-	COP0_SYNC
-	ext	a1, a0, 0, 10			# get CPU number
-	beqz	a1, 2f				# normal startup if 0
-	 nop
-#ifdef MULTIPROCESSOR
-	j	_C_LABEL(octeon_cpu_spinup)
-	 nop
-#else
-1:	wait
-	b	1b
-	 nop
-#endif /* MIPS64_OCTEON */
-2:
 #endif
 /*
  * Initialize stack and call machine startup.
@@ -137,9 +111,7 @@ _C_LABEL(kernel_text):
 
 #ifdef NOFPU /* No FPU; avoid touching FPU registers */
 #if !defined(emips)   /*  XXX??? we have already disabled interrupts! */
-#ifdef __mips_n32
-	li	t0, MIPS_SR_KX			# turn on XKSEG and XKPHYS
-#elif defined(_LP64)
+#ifdef _LP64
 	li	t0, MIPS_SR_KX | MIPS_SR_UX	# turn on XKSEG and XKPHYS
 #else
 	li	t0, 0				# Disable interrupts and
@@ -157,8 +129,7 @@ _C_LABEL(kernel_text):
 #endif /* HPCMIPS_L1CACHE_DISABLE */
 #else
 	mfc0	t0, MIPS_COP_0_STATUS
-	MFC0_HAZARD
-#if defined(_LP64) || defined(__mips_n32)
+#ifdef _LP64
 	or	t0, MIPS_SR_KX			# turn on XKSEG and XKPHYS
 #endif
 	or	t0, MIPS_SR_COP_1_BIT		# Disable interrupts, and
@@ -191,14 +162,9 @@ _C_LABEL(kernel_text):
 	/*
 	 * Now enable interrupts (but they are all masked).
 	 */
-#if __mips_isa_rev >= 2
-	ei
-#else
 	mfc0	v0, MIPS_COP_0_STATUS
-	MFC0_HAZARD
 	or	v0, MIPS_SR_INT_IE
 	mtc0	v0, MIPS_COP_0_STATUS
-#endif
 	COP0_SYNC
 
 	jal	_C_LABEL(main)			# main(void)
@@ -220,29 +186,20 @@ _C_LABEL(verylocore):
  * called at IPL_SCHED
  */
 NESTED(cpu_switchto, CALLFRAME_SIZ, ra)
-#if defined(PARANOIA)
+#ifdef PARANOIA
 	/*
 	 * Make sure we are at IPL_SCHED
 	 */
 	PTR_L	v0, L_CPU(MIPS_CURLWP)
 	INT_L	v1, CPU_INFO_CPL(v0)
-#if __mips >= 32
-	tnei	v1, IPL_SCHED
-#else
 	li	v0, IPL_SCHED
 10:	bne	v0, v1, 10b
 	 nop
-#endif
 
 	mfc0	t0, MIPS_COP_0_STATUS
-	MFC0_HAZARD
 	and	t0, MIPS_SR_INT_IE
-#if __mips >= 32
-	teqi	t0, 0
-#else
 11:	beqz	t0, 11b
 	 nop
-#endif
 #endif /* PARANOIA */
 	/*
 	 * Save old context, unless the LWP is exiting.
@@ -270,13 +227,13 @@ NESTED(cpu_switchto, CALLFRAME_SIZ, ra)
 #endif
 	REG_EPILOGUE
 1:
-#if defined(PARANOID_SPL)
+#ifdef PARANOIA
 	/*
 	 * Verify interrupt configuration matches IPL_SCHED
 	 */
 	jal	_C_LABEL(splcheck)
 	 nop
-#endif /* PARANOID_SPL */
+#endif /* PARANOIA */
 
 	move	s6, a0				# s6 = old lwp
 	move	MIPS_CURLWP, a1			# t8 = new lwp
@@ -311,10 +268,7 @@ NESTED(cpu_switchto, CALLFRAME_SIZ, ra)
 	move	v0, s6				# Save return value (old lwp)
 	REG_PROLOGUE
 	REG_L	t0, PCB_CONTEXT+SF_REG_SR(s5)
-#if defined(PARANOIA) && __mips >= 32
-	and	t1, t0, MIPS_SR_INT_IE
-	teqi	t1, 0
-#elif defined(PARANOID_LOOP)
+#ifdef PARANOID_LOOP
 	and	t1, t0, MIPS_SR_INT_IE
 2:	beqz	t1, 2b			# status reg should not differ
 	 nop
@@ -338,7 +292,7 @@ NESTED(cpu_switchto, CALLFRAME_SIZ, ra)
 	REG_L	s8, PCB_CONTEXT+SF_REG_S8(a0)
 	REG_EPILOGUE
 	mtc0	t0, MIPS_COP_0_STATUS
-#if defined(PARANOID_SPL)
+#ifdef PARANOIA
 	COP0_SYNC
 	/*
 	 * Verify interrupt configuration still matches IPL_SCHED
@@ -347,7 +301,7 @@ NESTED(cpu_switchto, CALLFRAME_SIZ, ra)
 	 nop
 #else
 	JR_HB_RA
-#endif /* PARANOID_SPL */
+#endif /* PARANOIA */
 END(cpu_switchto)
 
 #ifdef __HAVE_FAST_SOFTINTS
@@ -360,14 +314,9 @@ END(cpu_switchto)
 softint_cleanup:
 #ifdef PARANOIA
 	mfc0	t1, MIPS_COP_0_STATUS
-	MFC0_HAZARD
 	and	v0, t1, MIPS_SR_INT_IE
-#if __mips >= 32
-	teqi	v0, 0
-#else
 1:	beqz	v0, 1b
 	 nop
-#endif
 #endif /* PARANOIA */
 	PTR_L	t0, L_CPU(MIPS_CURLWP)
 	NOP_L					# load delay
@@ -403,12 +352,7 @@ NESTED(softint_fast_dispatch, CALLFRAME_SIZ, ra)
 	 * to.
  	 */
 	mfc0	t1, MIPS_COP_0_STATUS
-#if defined(PARANOIA) && __mips >= 32
-	MFC0_HAZARD
-	and	v0, t1, MIPS_SR_INT_IE		# assert interrupts are on
-	teqi	v0, 0
-#elif defined(PARANOID_LOOP)
-	MFC0_HAZARD
+#ifdef PARANOID_LOOP
 	and	v0, t1, MIPS_SR_INT_IE		# assert interrupts are on
 1:	beqz	v0, 1b
 	 nop
@@ -493,22 +437,17 @@ LEAF(lwp_oncpu)
 	jr	ra				# and return.
 	 nop
 END(lwp_oncpu)
-
+	
 
 /*
  * void savectx(struct pcb *)
  */
 LEAF(savectx)
-	mfc0	v0, MIPS_COP_0_STATUS
 #ifdef PARANOIA
-	MFC0_HAZARD
+	mfc0	v0, MIPS_COP_0_STATUS
 	and	t0, v0, MIPS_SR_INT_IE
-#if __mips >= 32
-	teqi	t0, 0
-#else
 1:	beqz	t0, 1b
 	 nop
-#endif
 #endif /* PARANOIA */
 	REG_PROLOGUE
 	REG_S	s0, PCB_CONTEXT+SF_REG_S0(a0)
@@ -821,7 +760,7 @@ END(mips_pagezero)
 
 
 #ifndef DDB_TRACE
-
+
 #if defined(DEBUG) || defined(DDB) || defined(KGDB) || defined(geo)
 /*
  * Stacktrace support hooks which use type punnign to access
@@ -880,14 +819,6 @@ XNESTED(logstacktrace)
 END(stacktrace)
 #endif	/* DEBUG || DDB */
 #endif	/* DDB_TRACE */
-
-	.section .stub, "ax"
-NESTED_NOPROFILE(tlb_update_addr, 0, ra)
-	lui	v0,%hi(_C_LABEL(mips_locore_jumpvec)+LJV_TLB_UPDATE_ADDR)
-	PTR_L	t9,%lo(_C_LABEL(mips_locore_jumpvec)+LJV_TLB_UPDATE_ADDR)(v0)
-	jr	t9
-	 nop
-END(tlb_update_addr)
 
 	.sdata
 	.globl	_C_LABEL(esym)

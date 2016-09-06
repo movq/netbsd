@@ -3,7 +3,8 @@
    THIS FILE IS MACHINE GENERATED WITH CGEN: Cpu tools GENerator.
    - the resultant file is machine generated, cgen-ibld.in isn't
 
-   Copyright (C) 1996-2015 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2005, 2006, 2007,
+   2008, 2010  Free Software Foundation, Inc.
 
    This file is part of libopcodes.
 
@@ -154,7 +155,7 @@ insert_normal (CGEN_CPU_DESC cd,
     {
       long minval = - (1L << (length - 1));
       unsigned long maxval = mask;
-
+      
       if ((value > 0 && (unsigned long) value > maxval)
 	  || value < minval)
 	{
@@ -192,7 +193,7 @@ insert_normal (CGEN_CPU_DESC cd,
 	{
 	  long minval = - (1L << (length - 1));
 	  long maxval =   (1L << (length - 1)) - 1;
-
+	  
 	  if (value < minval || value > maxval)
 	    {
 	      sprintf
@@ -1170,12 +1171,12 @@ epiphany_cgen_extract_operand (CGEN_CPU_DESC cd,
   return length;
 }
 
-cgen_insert_fn * const epiphany_cgen_insert_handlers[] =
+cgen_insert_fn * const epiphany_cgen_insert_handlers[] = 
 {
   insert_insn_normal,
 };
 
-cgen_extract_fn * const epiphany_cgen_extract_handlers[] =
+cgen_extract_fn * const epiphany_cgen_extract_handlers[] = 
 {
   extract_insn_normal,
 };

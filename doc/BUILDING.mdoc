@@ -1,4 +1,4 @@
-.\"	$NetBSD: BUILDING.mdoc,v 1.115 2016/01/29 13:51:13 wiz Exp $
+.\"	$NetBSD: BUILDING.mdoc,v 1.104.2.2 2015/03/18 08:27:34 snj Exp $
 .\"
 .\" Copyright (c) 2001-2011 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -33,7 +33,7 @@
 .\" Toolchain prefix for commands
 .ds toolprefix nb
 .
-.Dd January 29, 2016
+.Dd August 7, 2014
 .Dt BUILDING 8
 .Os NetBSD
 .
@@ -151,15 +151,10 @@ Sources to the
 .Nx
 userland (non-kernel) programs.
 If any of these directories are missing, they will be skipped during the build.
-.It Pa external/mit/xorg/
+.It Pa x11/
 .Dq Reachover
-build structure for modular Xorg; the source is in
+build structure for X11R6; the source is in
 .Sy X11SRCDIR .
-.It Pa extsrc/
-.Dq Reachover
-build structure for externally added programs and libraries;
-the source is in
-.Sy EXTSRCSRCDIR .
 .El
 .
 .Ss Build tree layout
@@ -421,15 +416,6 @@ unless run in
 .Sq expert
 mode.
 .
-.It Sy EXTSRCSRCDIR
-Directory containing sources of externally added programs
-and libraries.
-If specified, must be an absolute path.
-.DFLT
-.Sy NETBSDRCDIR Ns Pa /../extsrc ,
-if that exists; otherwise
-.Pa /usr/extsrc .
-.
 .It Sy MAKECONF
 The name of the
 .Xr make 1
@@ -520,12 +506,6 @@ Indicates whether system documentation destined for
 .Sy DESTDIR Ns Pa /usr/share/doc
 will be installed during a build.
 .DFLTy
-.
-.It Sy MKEXTSRC
-.YorN
-Indicates whether extsrc is built from
-.Sy EXTSRCSRCDIR .
-.DFLTn
 .
 .It Sy MKHTML
 .YorN
@@ -651,14 +631,6 @@ This enables different switches to make two builds from the same
 source tree result in the same build results.
 .DFLTn
 .
-.It Sy MKREPRO_TIMESTAMP
-Unix timestamp.
-When
-.Sy MKREPRO
-is set, the timestamp of all files in the sets will be set
-to this value.
-.DFLTu
-.
 .It Sy MKSHARE
 .YorN
 Indicates whether files destined to reside in
@@ -776,14 +748,25 @@ outside the
 source tree.
 .
 .It Sy X11SRCDIR
-Directory containing the modular Xorg source.
+Directory containing the X11R6 source.
 If specified, must be an absolute path.
-The main modular Xorg source is found in
-.Sy X11SRCDIR Ns Pa /external/mit .
+The main X11R6 source is found in
+.Sy X11SRCDIR Ns Pa /xfree/xc .
 .DFLT
 .Sy NETBSDRCDIR Ns Pa /../xsrc ,
 if that exists; otherwise
 .Pa /usr/xsrc .
+.
+.It Sy X11FLAVOUR
+The style of X11 cross-built, set to either
+.Dq Xorg
+or
+.Dq XFree86 .
+.DFLT
+.Dq Xorg
+on amd64, i386, macppc, shark and sparc64 platforms,
+.Dq XFree86
+on everything else.
 .
 .El
 .
@@ -1288,7 +1271,7 @@ relies on information in
 Create
 .Nx
 live images in the
-.Sy RELEASEDIR/images
+.Sy RELEASEDIR/RELEASEMACHINEDIR Ns Pa /installation/liveimage
 directory.
 The live image contains all necessary files
 to boot
@@ -1523,13 +1506,6 @@ file alongside of the kernel
 which contains a full symbol table and can be used for debugging
 (for example with a cross-gdb built by
 .Sy MKCROSSGDB ) .
-.It Sy kernels
-This command will build all kernels defined in port specific release build
-procedure.
-.Pp
-This command internally calls the
-.Sy kernel Ns = Ns Ar kconf
-operation for each found kernel configuration file.
 .It Sy modules
 This command will build kernel modules and install them into
 .Sy DESTDIR .
@@ -1959,18 +1935,6 @@ absolute path before being used.
 .It Fl x
 Set
 .Sy MKX11=yes .
-.
-.It Fl Y Ar extsrcdir
-Set the value of
-.Sy EXTSRCSRCDIR
-to
-.Ar extsrcdir .
-If a relative path is specified, it will be converted to an
-absolute path before being used.
-.
-.It Fl y
-Set
-.Sy MKEXTSRC=yes .
 .
 .It Fl Z Ar var
 Unset ("zap") the environment variable

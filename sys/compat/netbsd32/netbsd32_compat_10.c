@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_compat_10.c,v 1.25 2015/12/03 10:38:21 pgoyette Exp $	*/
+/*	$NetBSD: netbsd32_compat_10.c,v 1.24 2010/04/23 15:19:20 rmind Exp $	*/
 
 /*
  * Copyright (c) 1994 Adam Glass and Charles M. Hannum.  All rights reserved.
@@ -31,11 +31,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_10.c,v 1.25 2015/12/03 10:38:21 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_10.c,v 1.24 2010/04/23 15:19:20 rmind Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_sysv.h"
-#include "opt_compat_netbsd.h"
 #endif
 
 #include <sys/param.h>
@@ -51,8 +50,7 @@ __KERNEL_RCSID(0, "$NetBSD: netbsd32_compat_10.c,v 1.25 2015/12/03 10:38:21 pgoy
 #include <compat/netbsd32/netbsd32_syscallargs.h>
 #include <compat/sys/shm.h>
 
-#if defined(COMPAT_10)
-#if defined(SYSVSEM)
+#if defined(SYSVSEM) || !defined(_KERNEL_OPT)
 int
 compat_10_netbsd32_semsys(struct lwp *l, const struct compat_10_netbsd32_semsys_args *uap, register_t *retval)
 {
@@ -114,7 +112,7 @@ compat_10_netbsd32_semsys(struct lwp *l, const struct compat_10_netbsd32_semsys_
 }
 #endif
 
-#if defined(SYSVSHM)
+#if defined(SYSVSHM) || !defined(_KERNEL_OPT)
 int
 compat_10_netbsd32_shmsys(struct lwp *l, const struct compat_10_netbsd32_shmsys_args *uap, register_t *retval)
 {
@@ -172,7 +170,7 @@ compat_10_netbsd32_shmsys(struct lwp *l, const struct compat_10_netbsd32_shmsys_
 }
 #endif
 
-#if defined(SYSVMSG)
+#if defined(SYSVMSG) || !defined(_KERNEL)
 int
 compat_10_netbsd32_msgsys(struct lwp *l, const struct compat_10_netbsd32_msgsys_args *uap, register_t *retval)
 {
@@ -239,4 +237,3 @@ compat_10_netbsd32_msgsys(struct lwp *l, const struct compat_10_netbsd32_msgsys_
 	}
 }
 #endif
-#endif /* COMPAT_10 */

@@ -1,4 +1,4 @@
-/*	$NetBSD: in6_var.h,v 1.84 2016/08/01 03:15:31 ozaki-r Exp $	*/
+/*	$NetBSD: in6_var.h,v 1.70 2014/07/01 05:49:19 rtr Exp $	*/
 /*	$KAME: in6_var.h,v 1.81 2002/06/08 11:16:51 itojun Exp $	*/
 
 /*
@@ -65,7 +65,6 @@
 #define _NETINET6_IN6_VAR_H_
 
 #include <sys/callout.h>
-#include <sys/ioccom.h>
 
 /*
  * Interface address, Internet version.  One of these structures
@@ -89,7 +88,6 @@ struct in6_addrlifetime {
 	u_int32_t ia6t_pltime;	/* prefix lifetime */
 };
 
-struct lltable;
 struct nd_ifinfo;
 struct in6_ifextra {
 	struct in6_ifstat *in6_ifstat;
@@ -98,10 +96,8 @@ struct in6_ifextra {
 	struct scope6_id *scope6_id;
 	int nprefixes;
 	int ndefrouters;
-	struct lltable *lltable;
 };
 
-LIST_HEAD(in6_multihead, in6_multi);
 struct	in6_ifaddr {
 	struct	ifaddr ia_ifa;		/* protocol-independent info */
 #define	ia_ifp		ia_ifa.ifa_ifp
@@ -111,9 +107,8 @@ struct	in6_ifaddr {
 	struct	sockaddr_in6 ia_dstaddr; /* space for destination addr */
 	struct	sockaddr_in6 ia_prefixmask; /* prefix mask */
 	u_int32_t ia_plen;		/* prefix length */
-	/* DEPRECATED. Keep it to avoid breaking kvm(3) users */
 	struct	in6_ifaddr *ia_next;	/* next in6 list of IP6 addresses */
-	struct	in6_multihead ia6_multiaddrs;
+	LIST_HEAD(in6_multihead, in6_multi) ia6_multiaddrs;
 					/* list of multicast addresses */
 	int	ia6_flags;
 
@@ -128,30 +123,7 @@ struct	in6_ifaddr {
 
 	/* multicast addresses joined from the kernel */
 	LIST_HEAD(, in6_multi_mship) ia6_memberships;
-
-#ifdef _KERNEL
-	struct pslist_entry	ia6_pslist_entry;
-#endif
 };
-
-#ifdef _KERNEL
-static inline void
-ia6_acquire(struct in6_ifaddr *ia, struct psref *psref)
-{
-
-	KASSERT(ia != NULL);
-	ifa_acquire(&ia->ia_ifa, psref);
-}
-
-static inline void
-ia6_release(struct in6_ifaddr *ia, struct psref *psref)
-{
-
-	if (ia == NULL)
-		return;
-	ifa_release(&ia->ia_ifa, psref);
-}
-#endif
 
 /* control structure to manage address selection policy */
 struct in6_addrpolicy {
@@ -508,65 +480,13 @@ struct	in6_rrenumreq {
 
 #ifdef _KERNEL
 
-#include <sys/mutex.h>
-#include <sys/pserialize.h>
-
 #include <net/pktqueue.h>
 
 extern pktqueue_t *ip6_pktq;
 
 MALLOC_DECLARE(M_IP6OPT);
 
-extern struct pslist_head	in6_ifaddr_list;
-extern kmutex_t			in6_ifaddr_lock;
-
-#define IN6_ADDRLIST_ENTRY_INIT(__ia) \
-	PSLIST_ENTRY_INIT((__ia), ia6_pslist_entry)
-#define IN6_ADDRLIST_ENTRY_DESTROY(__ia) \
-	PSLIST_ENTRY_DESTROY((__ia), ia6_pslist_entry)
-#define IN6_ADDRLIST_READER_EMPTY() \
-	(PSLIST_READER_FIRST(&in6_ifaddr_list, struct in6_ifaddr, \
-	                     ia6_pslist_entry) == NULL)
-#define IN6_ADDRLIST_READER_FIRST() \
-	PSLIST_READER_FIRST(&in6_ifaddr_list, struct in6_ifaddr, \
-	                    ia6_pslist_entry)
-#define IN6_ADDRLIST_READER_NEXT(__ia) \
-	PSLIST_READER_NEXT((__ia), struct in6_ifaddr, ia6_pslist_entry)
-#define IN6_ADDRLIST_READER_FOREACH(__ia) \
-	PSLIST_READER_FOREACH((__ia), &in6_ifaddr_list, \
-	                      struct in6_ifaddr, ia6_pslist_entry)
-#define IN6_ADDRLIST_WRITER_INSERT_HEAD(__ia) \
-	PSLIST_WRITER_INSERT_HEAD(&in6_ifaddr_list, (__ia), ia6_pslist_entry)
-#define IN6_ADDRLIST_WRITER_REMOVE(__ia) \
-	PSLIST_WRITER_REMOVE((__ia), ia6_pslist_entry)
-#define IN6_ADDRLIST_WRITER_FOREACH(__ia) \
-	PSLIST_WRITER_FOREACH((__ia), &in6_ifaddr_list, struct in6_ifaddr, \
-	                      ia6_pslist_entry)
-#define IN6_ADDRLIST_WRITER_FIRST() \
-	PSLIST_WRITER_FIRST(&in6_ifaddr_list, struct in6_ifaddr, \
-	                    ia6_pslist_entry)
-#define IN6_ADDRLIST_WRITER_NEXT(__ia) \
-	PSLIST_WRITER_NEXT((__ia), struct in6_ifaddr, ia6_pslist_entry)
-#define IN6_ADDRLIST_WRITER_INSERT_AFTER(__ia, __new) \
-	PSLIST_WRITER_INSERT_AFTER((__ia), (__new), ia6_pslist_entry)
-#define IN6_ADDRLIST_WRITER_EMPTY() \
-	(PSLIST_WRITER_FIRST(&in6_ifaddr_list, struct in6_ifaddr, \
-	    ia6_pslist_entry) == NULL)
-#define IN6_ADDRLIST_WRITER_INSERT_TAIL(__new)				\
-	do {								\
-		if (IN6_ADDRLIST_WRITER_EMPTY()) {			\
-			IN6_ADDRLIST_WRITER_INSERT_HEAD((__new));	\
-		} else {						\
-			struct in6_ifaddr *__ia;			\
-			IN6_ADDRLIST_WRITER_FOREACH(__ia) {		\
-				if (IN6_ADDRLIST_WRITER_NEXT(__ia) == NULL) { \
-					IN6_ADDRLIST_WRITER_INSERT_AFTER(__ia,\
-					    (__new));			\
-					break;				\
-				}					\
-			}						\
-		}							\
-	} while (0)
+extern struct in6_ifaddr *in6_ifaddr;
 
 #define in6_ifstat_inc(ifp, tag) \
 do {								\
@@ -578,38 +498,31 @@ extern const struct in6_addr zeroin6_addr;
 extern const u_char inet6ctlerrmap[];
 extern unsigned long in6_maxmtu;
 extern bool in6_present;
-extern callout_t in6_tmpaddrtimer_ch;
 
 /*
  * Macro for finding the internet address structure (in6_ifaddr) corresponding
  * to a given interface (ifnet structure).
  */
 static inline struct in6_ifaddr *
-in6_get_ia_from_ifp(struct ifnet *ifp)
+ifp_to_ia6(struct ifnet *ifp)
 {
 	struct ifaddr *ifa;
 
-	IFADDR_READER_FOREACH(ifa, ifp) {
+	IFADDR_FOREACH(ifa, ifp) {
+		if (ifa->ifa_addr == NULL)
+			continue;
 		if (ifa->ifa_addr->sa_family == AF_INET6)
 			break;
 	}
 	return (struct in6_ifaddr *)ifa;
 }
 
-static inline struct in6_ifaddr *
-in6_get_ia_from_ifp_psref(struct ifnet *ifp, struct psref *psref)
-{
-	struct in6_ifaddr *ia;
-	int s;
+#define	IFP_TO_IA6(__ifp, __ia)				\
+do {							\
+	(__ia) = ifp_to_ia6((__ifp));				\
+} while (/*CONSTCOND*/0)
 
-	s = pserialize_read_enter();
-	ia = in6_get_ia_from_ifp(ifp);
-	if (ia != NULL)
-		ia6_acquire(ia, psref);
-	pserialize_read_exit(s);
 
-	return ia;
-}
 #endif /* _KERNEL */
 
 /*
@@ -660,18 +573,13 @@ in6_lookup_multi(struct in6_addr *addr, struct ifnet *ifp)
 {
 	struct in6_multi *in6m;
 	struct in6_ifaddr *ia;
-	int s;
 
-	s = pserialize_read_enter();
-	if ((ia = in6_get_ia_from_ifp(ifp)) == NULL) {
-		pserialize_read_exit(s);
+	if ((ia = ifp_to_ia6(ifp)) == NULL)
 	  	return NULL;
-	}
 	LIST_FOREACH(in6m, &ia->ia6_multiaddrs, in6m_entry) {
 		if (IN6_ARE_ADDR_EQUAL(&in6m->in6m_addr, addr))
 			break;
 	}
-	pserialize_read_exit(s);
 	return in6m;
 }
 
@@ -701,8 +609,7 @@ in6_next_multi(struct in6_multistep *step)
 	}
 	while (step->i_ia != NULL) {
 		in6m = LIST_FIRST(&step->i_ia->ia6_multiaddrs);
-		/* FIXME NOMPSAFE */
-		step->i_ia = IN6_ADDRLIST_READER_NEXT(step->i_ia);
+		step->i_ia = step->i_ia->ia_next;
 		if (in6m != NULL) {
 			step->i_in6m = LIST_NEXT(in6m, in6m_entry);
 			break;
@@ -714,9 +621,7 @@ in6_next_multi(struct in6_multistep *step)
 static inline struct in6_multi *
 in6_first_multi(struct in6_multistep *step)
 {						
-
-	/* FIXME NOMPSAFE */
-	step->i_ia = IN6_ADDRLIST_READER_FIRST();
+	step->i_ia = in6_ifaddr;		
 	step->i_in6m = NULL;			
 	return in6_next_multi(step);		
 }
@@ -768,8 +673,6 @@ do {									\
 } while (/*CONSTCOND*/ 0)
 #endif
 
-void	in6_init(void);
-
 struct	in6_multi *in6_addmulti(struct in6_addr *, struct ifnet *,
 	int *, int);
 void	in6_delmulti(struct in6_multi *);
@@ -781,6 +684,7 @@ int	in6_control(struct socket *, u_long, void *, struct ifnet *);
 int	in6_update_ifa(struct ifnet *, struct in6_aliasreq *,
 	struct in6_ifaddr *, int);
 void	in6_purgeaddr(struct ifaddr *);
+int	in6if_do_dad(struct ifnet *);
 void	in6_purgeif(struct ifnet *);
 void	in6_savemkludge(struct in6_ifaddr *);
 void	in6_setmaxmtu  (void);
@@ -788,20 +692,13 @@ int	in6_if2idlen  (struct ifnet *);
 void	*in6_domifattach(struct ifnet *);
 void	in6_domifdetach(struct ifnet *, void *);
 void	in6_restoremkludge(struct in6_ifaddr *, struct ifnet *);
-void	in6_ifremlocal(struct ifaddr *);
-void	in6_ifaddlocal(struct ifaddr *);
+void	in6_ifremloop(struct ifaddr *);
+void	in6_ifaddloop(struct ifaddr *);
 void	in6_createmkludge(struct ifnet *);
 void	in6_purgemkludge(struct ifnet *);
-struct in6_ifaddr *
-	in6ifa_ifpforlinklocal(const struct ifnet *, int);
-struct in6_ifaddr *
-	in6ifa_ifpforlinklocal_psref(const struct ifnet *, int, struct psref *);
-struct in6_ifaddr *
-	in6ifa_ifpwithaddr(const struct ifnet *, const struct in6_addr *);
-struct in6_ifaddr *
-	in6ifa_ifpwithaddr_psref(const struct ifnet *, const struct in6_addr *,
-	    struct psref *);
-struct in6_ifaddr *in6ifa_ifwithaddr(const struct in6_addr *, uint32_t);
+struct in6_ifaddr *in6ifa_ifpforlinklocal(const struct ifnet *, int);
+struct in6_ifaddr *in6ifa_ifpwithaddr(const struct ifnet *,
+    const struct in6_addr *);
 char	*ip6_sprintf(const struct in6_addr *);
 int	in6_matchlen(struct in6_addr *, struct in6_addr *);
 int	in6_are_prefix_equal(struct in6_addr *, struct in6_addr *, int);
@@ -813,9 +710,6 @@ int	ip6flow_fastforward(struct mbuf **); /* IPv6 fast forward routine */
 int in6_src_ioctl(u_long, void *);
 int	in6_is_addr_deprecated(struct sockaddr_in6 *);
 struct in6pcb;
-
-#define	LLTABLE6(ifp)	(((struct in6_ifextra *)(ifp)->if_afdata[AF_INET6])->lltable)
-
 #endif /* _KERNEL */
 
 #endif /* !_NETINET6_IN6_VAR_H_ */

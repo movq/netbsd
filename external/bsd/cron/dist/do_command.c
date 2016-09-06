@@ -1,4 +1,4 @@
-/*	$NetBSD: do_command.c,v 1.7 2015/12/17 22:36:48 christos Exp $	*/
+/*	$NetBSD: do_command.c,v 1.5 2014/06/23 01:00:48 christos Exp $	*/
 
 /* Copyright 1988,1990,1993,1994 by Paul Vixie
  * All rights reserved
@@ -25,7 +25,7 @@
 #if 0
 static char rcsid[] = "Id: do_command.c,v 1.9 2004/01/23 18:56:42 vixie Exp";
 #else
-__RCSID("$NetBSD: do_command.c,v 1.7 2015/12/17 22:36:48 christos Exp $");
+__RCSID("$NetBSD: do_command.c,v 1.5 2014/06/23 01:00:48 christos Exp $");
 #endif
 #endif
 
@@ -128,7 +128,7 @@ child_process(entry *e) {
 			}
 
 			if (!(escaped = (ch == '\\'))) {
-				*p++ = (char)ch;
+				*p++ = ch;
 			}
 		}
 		if (ch == '\0') {
@@ -454,7 +454,7 @@ child_process(entry *e) {
 				(void)fprintf(mail, "To: %s\n", mailto);
 				(void)fprintf(mail,
 				    "Subject: Cron <%s@%s> %s\n",
-				    usernm, hostname, e->cmd);
+				    usernm, first_word(hostname, "."), e->cmd);
 				(void)fprintf(mail,
 				    "Auto-Submitted: auto-generated\n");
 #ifdef MAIL_DATE

@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,11 +41,15 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+
 #include "acpi.h"
 #include "accommon.h"
 #include "amlcode.h"
 #include "acdebug.h"
+#include "acdisasm.h"
 
+
+#ifdef ACPI_DEBUGGER
 
 #define _COMPONENT          ACPI_CA_DEBUGGER
         ACPI_MODULE_NAME    ("dbxface")
@@ -101,10 +105,12 @@ AcpiDbStartCommand (
         {
             /* Handshake with the front-end that gets user command lines */
 
-            AcpiOsReleaseMutex (AcpiGbl_DbCommandComplete);
-
-            Status = AcpiOsAcquireMutex (AcpiGbl_DbCommandReady,
-                ACPI_WAIT_FOREVER);
+            Status = AcpiUtReleaseMutex (ACPI_MTX_DEBUG_CMD_COMPLETE);
+            if (ACPI_FAILURE (Status))
+            {
+                return (Status);
+            }
+            Status = AcpiUtAcquireMutex (ACPI_MTX_DEBUG_CMD_READY);
             if (ACPI_FAILURE (Status))
             {
                 return (Status);
@@ -135,8 +141,7 @@ AcpiDbStartCommand (
                 ACPI_DB_LINE_BUFFER_SIZE, NULL);
             if (ACPI_FAILURE (Status))
             {
-                ACPI_EXCEPTION ((AE_INFO, Status,
-                    "While parsing command line"));
+                ACPI_EXCEPTION ((AE_INFO, Status, "While parsing command line"));
                 return (Status);
             }
         }
@@ -147,40 +152,6 @@ AcpiDbStartCommand (
     /* AcpiUtAcquireMutex (ACPI_MTX_NAMESPACE); */
 
     return (Status);
-}
-
-
-/*******************************************************************************
- *
- * FUNCTION:    AcpiDbSignalBreakPoint
- *
- * PARAMETERS:  WalkState       - Current walk
- *
- * RETURN:      Status
- *
- * DESCRIPTION: Called for AML_BREAK_POINT_OP
- *
- ******************************************************************************/
-
-void
-AcpiDbSignalBreakPoint (
-    ACPI_WALK_STATE         *WalkState)
-{
-
-#ifndef ACPI_APPLICATION
-    if (AcpiGbl_DbThreadId != AcpiOsGetThreadId ())
-    {
-        return;
-    }
-#endif
-
-    /*
-     * Set the single-step flag. This will cause the debugger (if present)
-     * to break to the console within the AML debugger at the start of the
-     * next AML instruction.
-     */
-    AcpiGbl_CmSingleStep = TRUE;
-    AcpiOsPrintf ("**break** Executed AML BreakPoint opcode\n");
 }
 
 
@@ -209,18 +180,10 @@ AcpiDbSingleStep (
     UINT32                  OriginalDebugLevel;
     ACPI_PARSE_OBJECT       *DisplayOp;
     ACPI_PARSE_OBJECT       *ParentOp;
-    UINT32                  AmlOffset;
 
 
     ACPI_FUNCTION_ENTRY ();
 
-
-#ifndef ACPI_APPLICATION
-    if (AcpiGbl_DbThreadId != AcpiOsGetThreadId ())
-    {
-        return (AE_OK);
-    }
-#endif
 
     /* Check the abort flag */
 
@@ -230,18 +193,15 @@ AcpiDbSingleStep (
         return (AE_ABORT_METHOD);
     }
 
-    AmlOffset = (UINT32) ACPI_PTR_DIFF (Op->Common.Aml,
-        WalkState->ParserState.AmlStart);
-
     /* Check for single-step breakpoint */
 
     if (WalkState->MethodBreakpoint &&
-       (WalkState->MethodBreakpoint <= AmlOffset))
+       (WalkState->MethodBreakpoint <= Op->Common.AmlOffset))
     {
         /* Check if the breakpoint has been reached or passed */
         /* Hit the breakpoint, resume single step, reset breakpoint */
 
-        AcpiOsPrintf ("***Break*** at AML offset %X\n", AmlOffset);
+        AcpiOsPrintf ("***Break*** at AML offset %X\n", Op->Common.AmlOffset);
         AcpiGbl_CmSingleStep = TRUE;
         AcpiGbl_StepToNextCall = FALSE;
         WalkState->MethodBreakpoint = 0;
@@ -250,10 +210,10 @@ AcpiDbSingleStep (
     /* Check for user breakpoint (Must be on exact Aml offset) */
 
     else if (WalkState->UserBreakpoint &&
-            (WalkState->UserBreakpoint == AmlOffset))
+            (WalkState->UserBreakpoint == Op->Common.AmlOffset))
     {
         AcpiOsPrintf ("***UserBreakpoint*** at AML offset %X\n",
-            AmlOffset);
+            Op->Common.AmlOffset);
         AcpiGbl_CmSingleStep = TRUE;
         AcpiGbl_StepToNextCall = FALSE;
         WalkState->MethodBreakpoint = 0;
@@ -349,9 +309,7 @@ AcpiDbSingleStep (
 
         /* Now we can display it */
 
-#ifdef ACPI_DISASSEMBLER
         AcpiDmDisassemble (WalkState, DisplayOp, ACPI_UINT32_MAX);
-#endif
 
         if ((Op->Common.AmlOpcode == AML_IF_OP) ||
             (Op->Common.AmlOpcode == AML_WHILE_OP))
@@ -435,7 +393,7 @@ AcpiDbSingleStep (
 
 /*******************************************************************************
  *
- * FUNCTION:    AcpiInitializeDebugger
+ * FUNCTION:    AcpiDbInitialize
  *
  * PARAMETERS:  None
  *
@@ -446,13 +404,13 @@ AcpiDbSingleStep (
  ******************************************************************************/
 
 ACPI_STATUS
-AcpiInitializeDebugger (
+AcpiDbInitialize (
     void)
 {
     ACPI_STATUS             Status;
 
 
-    ACPI_FUNCTION_TRACE (AcpiInitializeDebugger);
+    ACPI_FUNCTION_TRACE (DbInitialize);
 
 
     /* Init globals */
@@ -465,24 +423,24 @@ AcpiInitializeDebugger (
     AcpiGbl_DbConsoleDebugLevel = ACPI_NORMAL_DEFAULT | ACPI_LV_TABLES;
     AcpiGbl_DbOutputFlags       = ACPI_DB_CONSOLE_OUTPUT;
 
-    AcpiGbl_DbOpt_NoIniMethods  = FALSE;
+    AcpiGbl_DbOpt_tables        = FALSE;
+    AcpiGbl_DbOpt_disasm        = FALSE;
+    AcpiGbl_DbOpt_stats         = FALSE;
+    AcpiGbl_DbOpt_verbose       = TRUE;
+    AcpiGbl_DbOpt_ini_methods   = TRUE;
 
     AcpiGbl_DbBuffer = AcpiOsAllocate (ACPI_DEBUG_BUFFER_SIZE);
     if (!AcpiGbl_DbBuffer)
     {
         return_ACPI_STATUS (AE_NO_MEMORY);
     }
-    memset (AcpiGbl_DbBuffer, 0, ACPI_DEBUG_BUFFER_SIZE);
+    ACPI_MEMSET (AcpiGbl_DbBuffer, 0, ACPI_DEBUG_BUFFER_SIZE);
 
     /* Initial scope is the root */
 
     AcpiGbl_DbScopeBuf [0] = AML_ROOT_PREFIX;
     AcpiGbl_DbScopeBuf [1] =  0;
     AcpiGbl_DbScopeNode = AcpiGbl_RootNode;
-
-    /* Initialize user commands loop */
-
-    AcpiGbl_DbTerminateLoop = FALSE;
 
     /*
      * If configured for multi-thread support, the debug executor runs in
@@ -493,16 +451,14 @@ AcpiInitializeDebugger (
     {
         /* These were created with one unit, grab it */
 
-        Status = AcpiOsAcquireMutex (AcpiGbl_DbCommandComplete,
-            ACPI_WAIT_FOREVER);
+        Status = AcpiUtAcquireMutex (ACPI_MTX_DEBUG_CMD_COMPLETE);
         if (ACPI_FAILURE (Status))
         {
             AcpiOsPrintf ("Could not get debugger mutex\n");
             return_ACPI_STATUS (Status);
         }
 
-        Status = AcpiOsAcquireMutex (AcpiGbl_DbCommandReady,
-            ACPI_WAIT_FOREVER);
+        Status = AcpiUtAcquireMutex (ACPI_MTX_DEBUG_CMD_READY);
         if (ACPI_FAILURE (Status))
         {
             AcpiOsPrintf ("Could not get debugger mutex\n");
@@ -511,31 +467,27 @@ AcpiInitializeDebugger (
 
         /* Create the debug execution thread to execute commands */
 
-        AcpiGbl_DbThreadsTerminated = FALSE;
-        Status = AcpiOsExecute (OSL_DEBUGGER_MAIN_THREAD,
-            AcpiDbExecuteThread, NULL);
+        Status = AcpiOsExecute (OSL_DEBUGGER_THREAD, AcpiDbExecuteThread, NULL);
         if (ACPI_FAILURE (Status))
         {
-            ACPI_EXCEPTION ((AE_INFO, Status,
-                "Could not start debugger thread"));
-            AcpiGbl_DbThreadsTerminated = TRUE;
+            ACPI_EXCEPTION ((AE_INFO, Status, "Could not start debugger thread"));
             return_ACPI_STATUS (Status);
         }
     }
-    else
+
+    if (!AcpiGbl_DbOpt_verbose)
     {
-        AcpiGbl_DbThreadId = AcpiOsGetThreadId ();
+        AcpiGbl_DbOpt_disasm = TRUE;
+        AcpiGbl_DbOpt_stats = FALSE;
     }
 
     return_ACPI_STATUS (AE_OK);
 }
 
-ACPI_EXPORT_SYMBOL (AcpiInitializeDebugger)
-
 
 /*******************************************************************************
  *
- * FUNCTION:    AcpiTerminateDebugger
+ * FUNCTION:    AcpiDbTerminate
  *
  * PARAMETERS:  None
  *
@@ -546,25 +498,9 @@ ACPI_EXPORT_SYMBOL (AcpiInitializeDebugger)
  ******************************************************************************/
 
 void
-AcpiTerminateDebugger (
+AcpiDbTerminate (
     void)
 {
-
-    /* Terminate the AML Debugger */
-
-    AcpiGbl_DbTerminateLoop = TRUE;
-
-    if (AcpiGbl_DebuggerConfiguration & DEBUGGER_MULTI_THREADED)
-    {
-        AcpiOsReleaseMutex (AcpiGbl_DbCommandReady);
-
-        /* Wait the AML Debugger threads */
-
-        while (!AcpiGbl_DbThreadsTerminated)
-        {
-            AcpiOsSleep (100);
-        }
-    }
 
     if (AcpiGbl_DbBuffer)
     {
@@ -577,26 +513,34 @@ AcpiTerminateDebugger (
     AcpiGbl_DbOutputFlags = ACPI_DB_DISABLE_OUTPUT;
 }
 
-ACPI_EXPORT_SYMBOL (AcpiTerminateDebugger)
 
-
+#ifdef ACPI_OBSOLETE_FUNCTIONS
 /*******************************************************************************
  *
- * FUNCTION:    AcpiSetDebuggerThreadId
+ * FUNCTION:    AcpiDbMethodEnd
  *
- * PARAMETERS:  ThreadId        - Debugger thread ID
+ * PARAMETERS:  WalkState       - Current walk
  *
- * RETURN:      None
+ * RETURN:      Status
  *
- * DESCRIPTION: Set debugger thread ID
+ * DESCRIPTION: Called at method termination
  *
  ******************************************************************************/
 
 void
-AcpiSetDebuggerThreadId (
-    ACPI_THREAD_ID          ThreadId)
+AcpiDbMethodEnd (
+    ACPI_WALK_STATE         *WalkState)
 {
-    AcpiGbl_DbThreadId = ThreadId;
-}
 
-ACPI_EXPORT_SYMBOL (AcpiSetDebuggerThreadId)
+    if (!AcpiGbl_CmSingleStep)
+    {
+        return;
+    }
+
+    AcpiOsPrintf ("<Method Terminating>\n");
+
+    AcpiDbStartCommand (WalkState, NULL);
+}
+#endif
+
+#endif /* ACPI_DEBUGGER */

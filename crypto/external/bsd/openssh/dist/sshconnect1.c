@@ -1,6 +1,5 @@
-/*	$NetBSD: sshconnect1.c,v 1.8 2016/08/02 13:45:12 christos Exp $	*/
-/* $OpenBSD: sshconnect1.c,v 1.78 2015/11/15 22:26:49 jcs Exp $ */
-
+/*	$NetBSD: sshconnect1.c,v 1.4.4.1 2015/04/30 06:07:31 riz Exp $	*/
+/* $OpenBSD: sshconnect1.c,v 1.77 2015/01/14 20:05:27 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -16,7 +15,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: sshconnect1.c,v 1.8 2016/08/02 13:45:12 christos Exp $");
+__RCSID("$NetBSD: sshconnect1.c,v 1.4.4.1 2015/04/30 06:07:31 riz Exp $");
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
@@ -240,19 +239,17 @@ try_krb4_authentication(void)
 	MSG_DAT msg_data;
 	struct sockaddr_in local, foreign;
 	struct stat st;
-	struct ssh *ssh = active_state;	/* XXX */
 
 	/* Don't do anything if we don't have any tickets. */
 	if (stat(tkt_string(), &st) < 0)
 		return 0;
 
-	strlcpy(inst, (char *)krb_get_phost(auth_get_canonical_hostname(ssh,
-	    1)), INST_SZ);
+	strlcpy(inst, (char *)krb_get_phost(get_canonical_hostname(1)),
+	    INST_SZ);
 
-	realm = (char *)krb_realmofhost(auth_get_canonical_hostname(ssh, 1));
+	realm = (char *)krb_realmofhost(get_canonical_hostname(1));
 	if (!realm) {
-		debug("Kerberos v4: no realm for %s",
-		auth_get_canonical_hostname(ssh, 1));
+		debug("Kerberos v4: no realm for %s", get_canonical_hostname(1));
 		return 0;
 	}
 	/* This can really be anything. */
@@ -357,7 +354,7 @@ try_rsa_authentication(int idx)
 {
 	BIGNUM *challenge;
 	Key *public, *private;
-	char buf[300], *passphrase = NULL, *comment, *authfile;
+	char buf[300], *passphrase, *comment, *authfile;
 	int i, perm_ok = 1, type, quit;
 
 	public = options.identity_keys[idx];
@@ -419,20 +416,13 @@ try_rsa_authentication(int idx)
 				debug2("no passphrase given, try next key");
 				quit = 1;
 			}
+			explicit_bzero(passphrase, strlen(passphrase));
+			free(passphrase);
 			if (private != NULL || quit)
 				break;
 			debug2("bad passphrase given, try again...");
 		}
 	}
-
-	if (private != NULL)
-		maybe_add_key_to_agent(authfile, private, comment, passphrase);
-
-	if (passphrase != NULL) {
-		explicit_bzero(passphrase, strlen(passphrase));
-		free(passphrase);
-	}
-
 	/* We no longer need the comment. */
 	free(comment);
 
@@ -489,7 +479,6 @@ try_krb5_authentication(krb5_context *context, krb5_auth_context *auth_context)
 	krb5_ap_rep_enc_part *reply = NULL;
 	int ret;
 	const char *errtxt;
-	struct ssh *ssh = active_state;	/* XXX */
 
 	memset(&ap, 0, sizeof(ap));
 
@@ -524,7 +513,7 @@ try_krb5_authentication(krb5_context *context, krb5_auth_context *auth_context)
 		goto out;
 	}
 
-	remotehost = auth_get_canonical_hostname(ssh, 1);
+	remotehost = get_canonical_hostname(1);
 
 	problem = krb5_mk_req(*context, auth_context, AP_OPTS_MUTUAL_REQUIRED,
 	    "host", remotehost, NULL, ccache, &ap);
@@ -601,7 +590,6 @@ send_krb5_tgt(krb5_context context, krb5_auth_context auth_context)
 	krb5_kdc_flags flags;
 	const char *remotehost;
 	const char *errtxt;
-	struct ssh *ssh = active_state;	/* XXX */
 
 	memset(&creds, 0, sizeof(creds));
 	memset(&outbuf, 0, sizeof(outbuf));
@@ -633,7 +621,7 @@ send_krb5_tgt(krb5_context context, krb5_auth_context auth_context)
 	flags.b.forwardable = krb5_config_get_bool(context,  NULL,
 	    "libdefaults", "forwardable", NULL);
 
-	remotehost = auth_get_canonical_hostname(ssh, 1);
+	remotehost = get_canonical_hostname(1);
 
 	problem = krb5_get_forwarded_creds(context, auth_context,
 	    ccache, flags.i, remotehost, &creds, &outbuf);

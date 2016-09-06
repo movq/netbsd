@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_msgif.h,v 1.84 2015/02/15 20:21:29 manu Exp $	*/
+/*	$NetBSD: puffs_msgif.h,v 1.80.14.3 2015/02/27 19:39:56 martin Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007  Antti Kantee.  All Rights Reserved.

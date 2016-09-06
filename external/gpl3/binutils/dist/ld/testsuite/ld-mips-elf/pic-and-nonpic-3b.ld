@@ -32,6 +32,4 @@ SECTIONS
 
   . = 0xa1000;
   .data : { *(.data) }
-
-  /DISCARD/ : { *(.MIPS.abiflags) }
 }

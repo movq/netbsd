@@ -1,7 +1,6 @@
 #objdump: -dr --prefix-addresses --show-raw-insn
-#name: Barrier Instruction Operands (Thumb)
-#source: barrier.s
-#as: -mcpu=cortex-a8 -mthumb
+#name: Barrier Instruction Operands
+#as: -mcpu=cortex-a8
 # This test is only valid on ELF based ports.
 #not-target: *-*-*coff *-*-pe *-*-wince *-*-*aout* *-*-netbsd
 

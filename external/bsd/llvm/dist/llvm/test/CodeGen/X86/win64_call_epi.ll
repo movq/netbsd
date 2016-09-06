@@ -5,7 +5,7 @@ declare void @baz()
 declare i32 @personality(...)
 
 ; Check for 'nop' between the last call and the epilogue.
-define void @foo1() personality i32 (...)* @personality {
+define void @foo1() {
 
     invoke void @bar()
         to label %normal
@@ -15,7 +15,7 @@ normal:
     ret void
 
 catch:
-    %1 = landingpad { i8*, i32 } cleanup
+    %1 = landingpad { i8*, i32 } personality i32 (...)* @personality cleanup
     resume { i8*, i32 } %1
 }
 ; WIN64-LABEL: foo1:

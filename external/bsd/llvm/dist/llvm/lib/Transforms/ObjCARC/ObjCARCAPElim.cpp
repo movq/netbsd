@@ -72,9 +72,12 @@ bool ObjCARCAPElim::MayAutorelease(ImmutableCallSite CS, unsigned Depth) {
   if (const Function *Callee = CS.getCalledFunction()) {
     if (Callee->isDeclaration() || Callee->mayBeOverridden())
       return true;
-    for (const BasicBlock &BB : *Callee) {
-      for (const Instruction &I : BB)
-        if (ImmutableCallSite JCS = ImmutableCallSite(&I))
+    for (Function::const_iterator I = Callee->begin(), E = Callee->end();
+         I != E; ++I) {
+      const BasicBlock *BB = I;
+      for (BasicBlock::const_iterator J = BB->begin(), F = BB->end();
+           J != F; ++J)
+        if (ImmutableCallSite JCS = ImmutableCallSite(J))
           // This recursion depth limit is arbitrary. It's just great
           // enough to cover known interesting testcases.
           if (Depth < 3 &&
@@ -93,12 +96,12 @@ bool ObjCARCAPElim::OptimizeBB(BasicBlock *BB) {
 
   Instruction *Push = nullptr;
   for (BasicBlock::iterator I = BB->begin(), E = BB->end(); I != E; ) {
-    Instruction *Inst = &*I++;
-    switch (GetBasicARCInstKind(Inst)) {
-    case ARCInstKind::AutoreleasepoolPush:
+    Instruction *Inst = I++;
+    switch (GetBasicInstructionClass(Inst)) {
+    case IC_AutoreleasepoolPush:
       Push = Inst;
       break;
-    case ARCInstKind::AutoreleasepoolPop:
+    case IC_AutoreleasepoolPop:
       // If this pop matches a push and nothing in between can autorelease,
       // zap the pair.
       if (Push && cast<CallInst>(Inst)->getArgOperand(0) == Push) {
@@ -112,7 +115,7 @@ bool ObjCARCAPElim::OptimizeBB(BasicBlock *BB) {
       }
       Push = nullptr;
       break;
-    case ARCInstKind::CallOrUser:
+    case IC_CallOrUser:
       if (MayAutorelease(ImmutableCallSite(Inst)))
         Push = nullptr;
       break;
@@ -166,7 +169,7 @@ bool ObjCARCAPElim::runOnModule(Module &M) {
     if (std::next(F->begin()) != F->end())
       continue;
     // Ok, a single-block constructor function definition. Try to optimize it.
-    Changed |= OptimizeBB(&F->front());
+    Changed |= OptimizeBB(F->begin());
   }
 
   return Changed;

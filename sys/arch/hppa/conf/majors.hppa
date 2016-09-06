@@ -1,4 +1,4 @@
-#	$NetBSD: majors.hppa,v 1.3 2016/05/09 15:23:23 skrll Exp $
+#	$NetBSD: majors.hppa,v 1.1 2014/02/24 07:23:42 skrll Exp $
 #
 # Device majors for hppa
 #
@@ -45,12 +45,10 @@ device-major	audio		char 40			audio
 device-major	ses		char 41			ses
 device-major	pci		char 42			pci
 device-major	wd		char 43  block 11	wd
-device-major	sysmon          char 44                 sysmon
+device-major	sysmon          char 44                 sysmon_power
 
 device-major	nsmb		char 98			nsmb
 
 # Majors up to 143 are reserved for machine-dependent drivers.
 # New machine-independent driver majors are assigned in
 # sys/conf/majors.
-
-include "conf/majors.usb"

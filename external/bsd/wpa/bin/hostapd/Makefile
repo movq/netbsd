@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.9 2016/06/29 19:16:23 christos Exp $
+# $NetBSD: Makefile,v 1.5.4.1 2015/04/29 20:28:34 snj Exp $
 
 .include "${.CURDIR}/../Makefile.inc"
 
@@ -86,6 +86,7 @@ eap_server_methods.c
 
 # crypto
 SRCS+= \
+crypto_openssl.c \
 random.c \
 sha1-prf.c
 
@@ -149,7 +150,6 @@ aes-ctr.c \
 aes-eax.c \
 aes-encblock.c \
 aes-omac1.c \
-crypto_openssl.c \
 dh_groups.c \
 fips_prf_openssl.c \
 ms_funcs.c \
@@ -196,9 +196,7 @@ DPADD+= ${LIBSSL} ${LIBCRYPTO} ${LIBDES}
 LDADD+= -lssl -lcrypto -ldes
 .else
 CPPFLAGS+= -DINTERNAL_AES -DINTERNAL_MD5 -DINTERNAL_SHA1 -DCONFIG_NO_PBKDF2
-CPPFLAGS+= -DCONFIG_CRYPTO_INTERNAL
 SRCS+=  tls_none.c sha1-internal.c md5-internal.c aes-xinternal.c rc4.c
-SRCS+= sha1-pbkdf2.c sha1.c md5.c
 .endif
 
 .include <bsd.prog.mk>

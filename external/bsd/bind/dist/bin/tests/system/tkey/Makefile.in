@@ -19,7 +19,7 @@ srcdir =	@srcdir@
 VPATH =		@srcdir@
 top_srcdir =	@top_srcdir@
 
-VERSION=@BIND9_VERSION@
+@BIND9_VERSION@
 
 @BIND9_MAKE_INCLUDES@
 

@@ -1,5 +1,5 @@
 /* Common configuration file for NetBSD ELF targets.
-   Copyright (C) 2002-2015 Free Software Foundation, Inc.
+   Copyright (C) 2002-2013 Free Software Foundation, Inc.
    Contributed by Wasabi Systems, Inc.
 
 This file is part of GCC.
@@ -85,26 +85,17 @@ along with GCC; see the file COPYING3.  If not see
      %{!static: \
        %{rdynamic:-export-dynamic} \
        -dynamic-linker /usr/libexec/ld.elf_so} \
-     %{static:-static}} \
-   %{!nostdlib:%{!nodefaultlibs:\
-     %{%:sanitize(address): -lasan } \
-     %{%:sanitize(undefined): -lubsan}}}"
-
-/* Provide the standard list of subtarget extra specs for NetBSD targets.  */
-#define NETBSD_SUBTARGET_EXTRA_SPECS \
-  { "netbsd_cpp_spec",          NETBSD_CPP_SPEC }, \
-  { "netbsd_link_spec",         NETBSD_LINK_SPEC_ELF }, \
-  { "netbsd_entry_point",       NETBSD_ENTRY_POINT }, \
-  { "netbsd_endfile_spec",      NETBSD_ENDFILE_SPEC },
-
-#undef SUBTARGET_EXTRA_SPECS
-#define SUBTARGET_EXTRA_SPECS   NETBSD_SUBTARGET_EXTRA_SPECS
-
+     %{static:-static}}"
 
 /* Use --as-needed -lgcc_s for eh support.  */
 #ifdef HAVE_LD_AS_NEEDED
 #define USE_LD_AS_NEEDED 1
 #endif
+
+#define MFLIB_SPEC " %{fmudflap: -export-dynamic -lmudflap \
+ %{static:%(link_gcc_c_sequence) -lmudflap}} \
+ %{fmudflapth: -export-dynamic -lmudflapth -lpthread \
+ %{static:%(link_gcc_c_sequence) -lmudflapth}} "
 
 #undef TARGET_UNWIND_TABLES_DEFAULT
 #define TARGET_UNWIND_TABLES_DEFAULT true

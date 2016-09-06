@@ -208,8 +208,8 @@ bool XCoreRegisterInfo::needsFrameMoves(const MachineFunction &MF) {
     MF.getFunction()->needsUnwindTableEntry();
 }
 
-const MCPhysReg *
-XCoreRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
+const MCPhysReg* XCoreRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF)
+                                                                         const {
   // The callee saved registers LR & FP are explicitly handled during
   // emitPrologue & emitEpilogue and related functions.
   static const MCPhysReg CalleeSavedRegs[] = {
@@ -222,7 +222,7 @@ XCoreRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
     XCore::R8, XCore::R9,
     0
   };
-  const XCoreFrameLowering *TFI = getFrameLowering(*MF);
+  const TargetFrameLowering *TFI = MF->getSubtarget().getFrameLowering();
   if (TFI->hasFP(*MF))
     return CalleeSavedRegsFP;
   return CalleeSavedRegs;
@@ -230,7 +230,7 @@ XCoreRegisterInfo::getCalleeSavedRegs(const MachineFunction *MF) const {
 
 BitVector XCoreRegisterInfo::getReservedRegs(const MachineFunction &MF) const {
   BitVector Reserved(getNumRegs());
-  const XCoreFrameLowering *TFI = getFrameLowering(MF);
+  const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
 
   Reserved.set(XCore::CP);
   Reserved.set(XCore::DP);
@@ -270,7 +270,7 @@ XCoreRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
   const XCoreInstrInfo &TII =
       *static_cast<const XCoreInstrInfo *>(MF.getSubtarget().getInstrInfo());
 
-  const XCoreFrameLowering *TFI = getFrameLowering(MF);
+  const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
   int Offset = MF.getFrameInfo()->getObjectOffset(FrameIndex);
   int StackSize = MF.getFrameInfo()->getStackSize();
 
@@ -324,7 +324,7 @@ XCoreRegisterInfo::eliminateFrameIndex(MachineBasicBlock::iterator II,
 
 
 unsigned XCoreRegisterInfo::getFrameRegister(const MachineFunction &MF) const {
-  const XCoreFrameLowering *TFI = getFrameLowering(MF);
+  const TargetFrameLowering *TFI = MF.getSubtarget().getFrameLowering();
 
   return TFI->hasFP(MF) ? XCore::R10 : XCore::SP;
 }

@@ -1,4 +1,4 @@
-#	$NetBSD: KUROBOX_PRO,v 1.8 2015/07/18 15:05:52 htodd Exp $
+#	$NetBSD: KUROBOX_PRO,v 1.6 2014/07/27 03:34:41 dholland Exp $
 #
 #  KUROBOX_PRO -- KUROUTOSHIKOU. KURO-BOX/PRO platform kernel
 #
@@ -23,12 +23,13 @@ options 	DIAGNOSTIC	# internal consistency checks
 options 	DEBUG
 #options 	PMAP_DEBUG	# Enable pmap_debug_level code
 #options 	VERBOSE_INIT_ARM # verbose bootstraping messages
+options 	DDB		# in-kernel debugger
 #options 	DDB_HISTORY_SIZE=100	# Enable history editing in DDB
 #options 	KGDB
 #options 	DEBUG_KGDB
 makeoptions	DEBUG="-g"	# compile full symbol table
 #makeoptions	COPTS="-O2"
-makeoptions	COPY_SYMTAB=1
+options 	SYMTAB_SPACE=780000
 #options 	AUDIO_DEBUG=2
 
 

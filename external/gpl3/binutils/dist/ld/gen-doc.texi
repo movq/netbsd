@@ -1,6 +1,3 @@
-@c Copyright (C) 2012-2015 Free Software Foundation, Inc.
-@c For copying conditions, see the file ld.texinfo.
-
 @c ------------------------------ CONFIGURATION VARS:
 @c 1. Inclusiveness of this manual
 @set GENERIC
@@ -13,11 +10,8 @@
 @set I960
 @set M68HC11
 @set M68K
-@set MIPS
 @set MMIX
 @set MSP430
-@set NDS32
-@set NIOSII
 @set POWERPC
 @set POWERPC64
 @set Renesas

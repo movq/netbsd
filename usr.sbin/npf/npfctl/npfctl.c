@@ -1,4 +1,4 @@
-/*	$NetBSD: npfctl.c,v 1.47 2016/06/29 21:40:20 christos Exp $	*/
+/*	$NetBSD: npfctl.c,v 1.42.2.3 2015/02/04 07:13:04 snj Exp $	*/
 
 /*-
  * Copyright (c) 2009-2014 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: npfctl.c,v 1.47 2016/06/29 21:40:20 christos Exp $");
+__RCSID("$NetBSD: npfctl.c,v 1.42.2.3 2015/02/04 07:13:04 snj Exp $");
 
 #include <sys/ioctl.h>
 #include <sys/stat.h>
@@ -44,7 +44,8 @@ __RCSID("$NetBSD: npfctl.c,v 1.47 2016/06/29 21:40:20 christos Exp $");
 #include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
-#include <sha1.h>
+
+#include <openssl/sha.h>
 
 #include "npfctl.h"
 
@@ -385,17 +386,6 @@ npfctl_parse_rule(int argc, char **argv)
 }
 
 static void
-SHA1(const uint8_t *d, unsigned int n, uint8_t *md)
-{
-    SHA1_CTX c;
-
-    SHA1Init(&c);
-    SHA1Update(&c, d, n);
-    SHA1Final(md, &c);
-    memset(&c, 0, sizeof(c));
-}
-
-static void
 npfctl_generate_key(nl_rule_t *rl, void *key)
 {
 	void *meta;
@@ -404,9 +394,9 @@ npfctl_generate_key(nl_rule_t *rl, void *key)
 	if ((meta = npf_rule_export(rl, &len)) == NULL) {
 		errx(EXIT_FAILURE, "error generating rule key");
 	}
-	__CTASSERT(NPF_RULE_MAXKEYLEN >= SHA1_DIGEST_LENGTH);
+	__CTASSERT(NPF_RULE_MAXKEYLEN >= SHA_DIGEST_LENGTH);
 	memset(key, 0, NPF_RULE_MAXKEYLEN);
-	SHA1(meta, (unsigned int)len, key);
+	SHA1(meta, len, key);
 	free(meta);
 }
 

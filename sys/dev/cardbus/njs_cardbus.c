@@ -1,4 +1,4 @@
-/*	$NetBSD: njs_cardbus.c,v 1.18 2016/07/11 11:31:50 msaitoh Exp $	*/
+/*	$NetBSD: njs_cardbus.c,v 1.17 2011/08/01 11:20:28 drochner Exp $	*/
 
 /*-
  * Copyright (c) 2004 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: njs_cardbus.c,v 1.18 2016/07/11 11:31:50 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: njs_cardbus.c,v 1.17 2011/08/01 11:20:28 drochner Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -174,8 +174,7 @@ njs_cardbus_attach(device_t parent, device_t self, void *aux)
 			csr |= PCI_COMMAND_IO_ENABLE;
 			sc->sc_flags = NJSC32_IO_MAPPED;
 		} else {
-			aprint_error_dev(self,
-			    "unable to map device registers\n");
+			aprint_error_dev(self, "unable to map device registers\n");
 			return;
 		}
 	}
@@ -204,7 +203,8 @@ njs_cardbus_attach(device_t parent, device_t self, void *aux)
 	 */
 	sc->sc_ih = Cardbus_intr_establish(ct, IPL_BIO, njsc32_intr, sc);
 	if (sc->sc_ih == NULL) {
-		aprint_error_dev(self, "unable to establish interrupt\n");
+		aprint_error_dev(self,
+				 "unable to establish interrupt\n");
 		return;
 	}
 

@@ -50,7 +50,7 @@
 /*
  * NetBSD local changes
  */
-__RCSID("$NetBSD: auth-pam.c,v 1.9 2016/08/02 13:45:12 christos Exp $");
+__RCSID("$NetBSD: auth-pam.c,v 1.4 2013/11/08 19:18:24 christos Exp $");
 #undef USE_POSIX_THREADS /* Not yet */
 #define HAVE_SECURITY_PAM_APPL_H
 #define HAVE_PAM_GETENVLIST
@@ -108,15 +108,12 @@ void sshpam_password_change_required(int);
 #include "packet.h"
 #include "misc.h"
 #include "servconf.h"
-#include "channels.h"
-#include "session.h"
 #include "ssh2.h"
 #include "auth-options.h"
 #ifdef GSSAPI
 #include "ssh-gss.h"
 #endif
 #include "monitor_wrap.h"
-#include "pfilter.h"
 
 extern ServerOptions options;
 extern Buffer loginmsg;
@@ -642,7 +639,6 @@ sshpam_init(Authctxt *authctxt)
 {
 	const char *pam_rhost, *pam_user, *user = authctxt->user;
 	const char **ptr_pam_user = &pam_user;
-	struct ssh *ssh = active_state; /* XXX */
 
 	if (sshpam_handle != NULL) {
 		/* We already have a PAM context; check if the user matches */
@@ -663,7 +659,7 @@ sshpam_init(Authctxt *authctxt)
 		sshpam_handle = NULL;
 		return (-1);
 	}
-	pam_rhost = session_get_remote_name_or_ip(ssh, utmp_len, options.use_dns);
+	pam_rhost = get_remote_name_or_ip(utmp_len, options.use_dns);
 	debug("PAM: setting PAM_RHOST to \"%s\"", pam_rhost);
 	sshpam_err = pam_set_item(sshpam_handle, PAM_RHOST, pam_rhost);
 	if (sshpam_err != PAM_SUCCESS) {
@@ -740,7 +736,6 @@ sshpam_query(void *ctx, char **name, char **info,
 	u_char type;
 	char *msg;
 	size_t len, mlen;
-	struct ssh *ssh = active_state; /* XXX */
 
 	debug3("PAM: %s entering", __func__);
 	buffer_init(&buffer);
@@ -759,7 +754,7 @@ sshpam_query(void *ctx, char **name, char **info,
 		case PAM_PROMPT_ECHO_OFF:
 			*num = 1;
 			len = plen + mlen + 1;
-			**prompts = xreallocarray(**prompts, 1, len);
+			**prompts = xrealloc(**prompts, 1, len);
 			strlcpy(**prompts + plen, msg, len - plen);
 			plen += mlen;
 			**echo_on = (type == PAM_PROMPT_ECHO_ON);
@@ -769,7 +764,7 @@ sshpam_query(void *ctx, char **name, char **info,
 		case PAM_TEXT_INFO:
 			/* accumulate messages */
 			len = plen + mlen + 2;
-			**prompts = xreallocarray(**prompts, 1, len);
+			**prompts = xrealloc(**prompts, 1, len);
 			strlcpy(**prompts + plen, msg, len - plen);
 			plen += mlen;
 			strlcat(**prompts + plen, "\n", len - plen);
@@ -814,12 +809,10 @@ sshpam_query(void *ctx, char **name, char **info,
 				free(msg);
 				return (0);
 			}
-			pfilter_notify(1);
 			error("PAM: %s for %s%.100s from %.100s", msg,
 			    sshpam_authctxt->valid ? "" : "illegal user ",
 			    sshpam_authctxt->user,
-			    session_get_remote_name_or_ip(ssh, utmp_len,
-				options.use_dns));
+			    get_remote_name_or_ip(utmp_len, options.use_dns));
 			/* FALLTHROUGH */
 		default:
 			*num = 0;

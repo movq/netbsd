@@ -1,4 +1,4 @@
-/*	$NetBSD: syntax.h,v 1.6 2016/03/16 19:02:26 christos Exp $	*/
+/*	$NetBSD: syntax.h,v 1.2 2004/01/17 17:38:12 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -59,6 +59,8 @@
 
 #define PEOF (CHAR_MIN - 1)
 #define SYNBASE (-PEOF)
+/* XXX UPEOF is CHAR_MAX, so is a valid 'char' value... */
+#define UPEOF ((char)PEOF)
 
 
 #define BASESYNTAX (basesyntax + SYNBASE)
@@ -66,13 +68,12 @@
 #define SQSYNTAX (sqsyntax + SYNBASE)
 #define ARISYNTAX (arisyntax + SYNBASE)
 
-/* These defines assume that the digits are contiguous (which is guaranteed) */
-#define	is_digit(c)	((unsigned)((c) - '0') <= 9)
-#define sh_ctype(c)	(is_type+SYNBASE)[(int)(c)]
-#define	is_alpha(c)	(sh_ctype(c) & (ISUPPER|ISLOWER))
-#define	is_name(c)	(sh_ctype(c) & (ISUPPER|ISLOWER|ISUNDER))
-#define	is_in_name(c)	(sh_ctype(c) & (ISUPPER|ISLOWER|ISUNDER|ISDIGIT))
-#define is_special(c)	(sh_ctype(c) & (ISSPECL|ISDIGIT))
+/* These defines assume that the digits are contiguous */
+#define is_digit(c)	((unsigned)((c) - '0') <= 9)
+#define is_alpha(c)	(((char)(c)) != UPEOF && ((c) < CTL_FIRST || (c) > CTL_LAST) && isalpha((unsigned char)(c)))
+#define is_name(c)	(((char)(c)) != UPEOF && ((c) < CTL_FIRST || (c) > CTL_LAST) && ((c) == '_' || isalpha((unsigned char)(c))))
+#define is_in_name(c)	(((char)(c)) != UPEOF && ((c) < CTL_FIRST || (c) > CTL_LAST) && ((c) == '_' || isalnum((unsigned char)(c))))
+#define is_special(c)	((is_type+SYNBASE)[c] & (ISSPECL|ISDIGIT))
 #define digit_val(c)	((c) - '0')
 
 extern const char basesyntax[];

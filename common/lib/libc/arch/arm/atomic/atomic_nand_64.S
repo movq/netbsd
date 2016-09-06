@@ -1,4 +1,4 @@
-/*	$NetBSD: atomic_nand_64.S,v 1.4 2015/12/11 12:41:10 skrll Exp $	*/
+/*	$NetBSD: atomic_nand_64.S,v 1.3.6.1 2016/02/26 22:29:04 snj Exp $	*/
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
  * All rights reserved.

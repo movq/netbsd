@@ -1,6 +1,4 @@
 . ${srcdir}/emulparams/plt_unwind.sh
-. ${srcdir}/emulparams/extern_protected_data.sh
-. ${srcdir}/emulparams/call_nop.sh
 SCRIPT_NAME=elf
 ELFSIZE=64
 OUTPUT_FORMAT="elf64-k1om"
@@ -16,9 +14,7 @@ GENERATE_SHLIB_SCRIPT=yes
 GENERATE_PIE_SCRIPT=yes
 NO_SMALL_DATA=yes
 LARGE_SECTIONS=yes
-LARGE_BSS_AFTER_BSS=
 SEPARATE_GOTPLT="SIZEOF (.got.plt) >= 24 ? 24 : 0"
-IREL_IN_PLT=
 
 if [ "x${host}" = "x${target}" ]; then
   case " $EMULATION_LIBPATH " in

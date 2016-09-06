@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_pci_link.c,v 1.22 2014/09/14 19:54:05 mrg Exp $	*/
+/*	$NetBSD: acpi_pci_link.c,v 1.21.2.1 2014/09/22 10:47:39 martin Exp $	*/
 
 /*-
  * Copyright (c) 2002 Mitsuru IWASAKI <iwasaki@jp.freebsd.org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_pci_link.c,v 1.22 2014/09/14 19:54:05 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_pci_link.c,v 1.21.2.1 2014/09/22 10:47:39 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>

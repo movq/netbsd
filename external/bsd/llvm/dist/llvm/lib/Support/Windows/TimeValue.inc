@@ -47,7 +47,6 @@ std::string TimeValue::str() const {
   __time64_t OurTime = this->toEpochTime();
   int Error = ::_localtime64_s(&Storage, &OurTime);
   assert(!Error);
-  (void)Error;
   LT = &Storage;
 #endif
 

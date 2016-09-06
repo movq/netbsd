@@ -1,5 +1,7 @@
 /* ldwrite.c -- write out the linked file
-   Copyright (C) 1991-2015 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998, 2000, 2002,
+   2003, 2004, 2005, 2006, 2007, 2008, 2010, 2012
+   Free Software Foundation, Inc.
    Written by Steve Chamberlain sac@cygnus.com
 
    This file is part of the GNU Binutils.
@@ -336,7 +338,7 @@ clone_section (bfd *abfd, asection *s, const char *name, int *count)
 {
   char *tname;
   char *sname;
-  unsigned int len;
+  unsigned int len;	
   asection *n;
   struct bfd_link_hash_entry *h;
 
@@ -488,13 +490,13 @@ split_sections (bfd *abfd, struct bfd_link_info *info)
 		  || info->strip == strip_some)
 		thislines = sec->lineno_count;
 
-	      if (bfd_link_relocatable (info))
+	      if (info->relocatable)
 		thisrelocs = sec->reloc_count;
 
 	      thissize = sec->size;
 
 	    }
-	  else if (bfd_link_relocatable (info)
+	  else if (info->relocatable
 		   && (p->type == bfd_section_reloc_link_order
 		       || p->type == bfd_symbol_reloc_link_order))
 	    thisrelocs++;
@@ -572,7 +574,6 @@ ldwrite (void)
   /* Reset error indicator, which can typically something like invalid
      format from opening up the .o files.  */
   bfd_set_error (bfd_error_no_error);
-  lang_clear_os_map ();
   lang_for_each_statement (build_link_order);
 
   if (config.split_by_reloc != (unsigned) -1

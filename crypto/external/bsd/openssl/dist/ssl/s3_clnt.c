@@ -2269,31 +2269,31 @@ int ssl3_get_cert_status(SSL *s)
          */
         s->s3->tmp.reuse_message = 1;
     } else {
-        if (n < 4) {
-            /* need at least status type + length */
-            al = SSL_AD_DECODE_ERROR;
-            SSLerr(SSL_F_SSL3_GET_CERT_STATUS, SSL_R_LENGTH_MISMATCH);
-            goto f_err;
-        }
-        p = (unsigned char *)s->init_msg;
-        if (*p++ != TLSEXT_STATUSTYPE_ocsp) {
-            al = SSL_AD_DECODE_ERROR;
-            SSLerr(SSL_F_SSL3_GET_CERT_STATUS, SSL_R_UNSUPPORTED_STATUS_TYPE);
-            goto f_err;
-        }
-        n2l3(p, resplen);
-        if (resplen + 4 != n) {
-            al = SSL_AD_DECODE_ERROR;
-            SSLerr(SSL_F_SSL3_GET_CERT_STATUS, SSL_R_LENGTH_MISMATCH);
-            goto f_err;
-        }
-        s->tlsext_ocsp_resp = BUF_memdup(p, resplen);
+    if (n < 4) {
+        /* need at least status type + length */
+        al = SSL_AD_DECODE_ERROR;
+        SSLerr(SSL_F_SSL3_GET_CERT_STATUS, SSL_R_LENGTH_MISMATCH);
+        goto f_err;
+    }
+    p = (unsigned char *)s->init_msg;
+    if (*p++ != TLSEXT_STATUSTYPE_ocsp) {
+        al = SSL_AD_DECODE_ERROR;
+        SSLerr(SSL_F_SSL3_GET_CERT_STATUS, SSL_R_UNSUPPORTED_STATUS_TYPE);
+        goto f_err;
+    }
+    n2l3(p, resplen);
+    if (resplen + 4 != n) {
+        al = SSL_AD_DECODE_ERROR;
+        SSLerr(SSL_F_SSL3_GET_CERT_STATUS, SSL_R_LENGTH_MISMATCH);
+        goto f_err;
+    }
+    s->tlsext_ocsp_resp = BUF_memdup(p, resplen);
         if (s->tlsext_ocsp_resp == NULL) {
-            al = SSL_AD_INTERNAL_ERROR;
-            SSLerr(SSL_F_SSL3_GET_CERT_STATUS, ERR_R_MALLOC_FAILURE);
-            goto f_err;
-        }
-        s->tlsext_ocsp_resplen = resplen;
+        al = SSL_AD_INTERNAL_ERROR;
+        SSLerr(SSL_F_SSL3_GET_CERT_STATUS, ERR_R_MALLOC_FAILURE);
+        goto f_err;
+    }
+    s->tlsext_ocsp_resplen = resplen;
     }
     if (s->ctx->tlsext_status_cb) {
         int ret;
@@ -2860,7 +2860,7 @@ int ssl3_send_client_key_exchange(SSL *s)
 
             if (pkey_ctx == NULL
                     || EVP_PKEY_encrypt_init(pkey_ctx) <= 0
-                    /* Generate session key */
+            /* Generate session key */
                     || RAND_bytes(premaster_secret, 32) <= 0) {
                 EVP_PKEY_CTX_free(pkey_ctx);
                 SSLerr(SSL_F_SSL3_SEND_CLIENT_KEY_EXCHANGE,

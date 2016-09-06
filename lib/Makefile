@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.246 2016/08/20 11:22:26 christos Exp $
+#	$NetBSD: Makefile,v 1.215.2.3 2016/03/06 18:05:09 martin Exp $
 #	from: @(#)Makefile	5.25.1.1 (Berkeley) 5/7/91
 
 .include <bsd.own.mk>
@@ -33,10 +33,9 @@ SUBDIR+=	libarch \
 SUBDIR+=	libkern
 .endif
 
-.if (${MACHINE_CPU} == "arm" || ${MACHINE_CPU} == "aarch64")
+.if (${MACHINE_CPU} == "arm")
 LIBC_MACHINE_ARCH?=${MACHINE_ARCH}
-LIBC_MACHINE_CPU?=${MACHINE_CPU}
-.if ${LIBC_MACHINE_CPU} == "arm" && empty(LIBC_MACHINE_ARCH:M*hf*)
+.if empty(LIBC_MACHINE_ARCH:M*hf*)
 SUBDIR+=	libc_vfp
 .endif
 .endif
@@ -64,26 +63,16 @@ SUBDIR+=	../external/bsd/sljit/lib
 SUBDIR+=	libbpfjit
 .endif
 
-.if (${MKZFS} != "no")
-SUBDIR+=        ../external/cddl/osnet/lib/libavl
-SUBDIR+=        ../external/cddl/osnet/lib/libnvpair
-SUBDIR+=        ../external/cddl/osnet/lib/libumem
-SUBDIR+=        ../external/cddl/osnet/lib/libuutil
-.endif
-
 SUBDIR+=	../external/mit/expat/lib
 
 SUBDIR+=	../external/public-domain/sqlite/lib
+SUBDIR+=	../external/public-domain/xz/lib
 
-SUBDIR+=	../external/gpl2/libmalloc
+SUBDIR+=	../gnu/lib/libmalloc
 
 .if (${MKGCC} != "no")
 SUBDIR+=	../external/gpl3/${EXTERNAL_GCC_SUBDIR}/lib/libobjc
 SUBDIR+=	../external/gpl3/${EXTERNAL_GCC_SUBDIR}/lib/libgomp
-. if ${HAVE_GCC} == 48
-SUBDIR+=	../external/gpl3/${EXTERNAL_GCC_SUBDIR}/lib/libmudflap
-SUBDIR+=	../external/gpl3/${EXTERNAL_GCC_SUBDIR}/lib/libmudflapth
-. endif
 # Should probably move GMP, MPFR and MPC builds into the GCC >= 4.5
 # specific build area, but we get better parallelism this way.
 # We don't build compat versions of these.
@@ -100,16 +89,6 @@ SUBDIR+=	../external/lgpl3/mpc/lib/libmpc
 #
 #==================== 1st library dependency barrier ====================
 SUBDIR+=	.WAIT
-
-.if ${MKDTRACE} != "no"
-SUBDIR+=	../external/bsd/librtld_db/lib		# depends on libutil
-.endif
-
-.if ${MKCTF} != "no"
-SUBDIR+=        ../external/cddl/osnet/lib/libctf
-.endif
-
-SUBDIR+=	../external/public-domain/xz/lib	# depends on libpthread
 
 .if (${MKCRYPTO} != "no")
 SUBDIR+=	../crypto/external/bsd/netpgp/libmj
@@ -147,17 +126,14 @@ SUBDIR+=	../external/bsd/file/lib	# depends on libz
 SUBDIR+=	../external/bsd/iscsi/lib	# depends on libpthread
 .endif
 
-.if (${MKZFS} != "no")
-SUBDIR+=        ../external/cddl/osnet/lib/libzfs
-SUBDIR+=        ../external/cddl/osnet/lib/libzpool
-.endif
+SUBDIR+=	../external/bsd/libarchive/lib	# depends on libxz
 
 .if (${MKLVM} != "no")
 SUBDIR+=	../external/gpl2/lvm2/lib	# depends on libprop
 .endif
 
 .if (${MKBINUTILS} != "no")
-SUBDIR+=	../external/gpl3/${EXTERNAL_BINUTILS_SUBDIR}/lib	# libbfd depends on libz
+SUBDIR+=	../external/gpl3/binutils/lib	# libbfd depends on libz
 .endif
 
 .if (${MKLIBCXX} != "no")
@@ -168,17 +144,12 @@ SUBDIR+=	../external/bsd/libc++
 SUBDIR+=	../external/gpl3/${EXTERNAL_GCC_SUBDIR}/lib/libstdc++-v3
 SUBDIR+=	../external/gpl3/${EXTERNAL_GCC_SUBDIR}/lib/libsupc++
 .endif
+.if (${HAVE_GCC:U} == "48")
+SUBDIR+=	../external/gpl3/${EXTERNAL_GCC_SUBDIR}/lib/libasan
+.endif
 
 #==================== 2nd library dependency barrier ====================
 SUBDIR+=	.WAIT
-
-.for sanitizer in asan ubsan
-.if exists(../external/gpl3/${EXTERNAL_GCC_SUBDIR}/lib/lib${sanitizer})
-SUBDIR+= ../external/gpl3/${EXTERNAL_GCC_SUBDIR}/lib/lib${sanitizer}
-.endif
-.endfor
-
-SUBDIR+=	../external/bsd/libarchive/lib	# depends on libxz
 
 .if (${MKNPF} != "no")
 SUBDIR+=	npf		# depends on libnpf
@@ -194,7 +165,6 @@ SUBDIR+=	../external/bsd/lutok/lib	# depends on lua and libstdc++
 
 SUBDIR+=	libform		# depends on libcurses
 SUBDIR+=	libmenu		# depends on libcurses
-SUBDIR+=	libpanel	# depends on libcurses
 SUBDIR+=	libradius	# depends on libcrypto if (${MKCRYPTO} != "no")
 .if (${MKRUMP} != "no")
 SUBDIR+=	librump		# depends on librumpuser
@@ -211,9 +181,6 @@ SUBDIR+=	../crypto/external/bsd/netpgp/lib  # depends on libcrypto, ...
 .endif
 
 SUBDIR+=	../external/bsd/libevent/lib	# depends on libcrypto
-.if ${MKDTRACE} != "no"
-SUBDIR+=	../external/bsd/libproc/lib	# depends on libstdc++, libctf
-.endif
 SUBDIR+=	../external/bsd/fetch/lib	# depends on libssl
 
 .if (${MKLDAP} != "no")
@@ -224,13 +191,6 @@ SUBDIR+=	../external/bsd/openldap/lib	# depends on libcrypto, ...
 SUBDIR+=	.WAIT
 
 SUBDIR+=	../external/bsd/bind/lib	# depends on heimdal, libcrypto
-.if ${MKCRYPTO} != "no" && ${MKUNBOUND} != "no"
-SUBDIR+=	../external/bsd/unbound/lib	# depends on libcrypto
-.endif
-
-.if ${MKDTRACE} != "no"
-SUBDIR+=        ../external/cddl/osnet/lib/libdtrace	# depends on libproc
-.endif
 
 .if (${MKRUMP} != "no")
 SUBDIR+=	librumpdev	# depends on librump

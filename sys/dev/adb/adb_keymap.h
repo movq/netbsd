@@ -1,4 +1,4 @@
-/*	$NetBSD: adb_keymap.h,v 1.6 2016/06/20 00:05:58 jakllsch Exp $	*/
+/*	$NetBSD: adb_keymap.h,v 1.4.14.1 2016/07/05 19:14:59 snj Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.

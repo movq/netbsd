@@ -1,4 +1,4 @@
-/*	$NetBSD: uvm_extern.h,v 1.198 2016/07/20 12:38:43 maxv Exp $	*/
+/*	$NetBSD: uvm_extern.h,v 1.191.2.2 2015/03/25 16:54:37 snj Exp $	*/
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.
@@ -175,23 +175,19 @@
 /*
  * flags for ubc_alloc()
  */
-#define UBC_READ	0x001	/* reading from object */
-#define UBC_WRITE	0x002	/* writing to object */
-#define UBC_FAULTBUSY	0x004	/* nobody else is using these pages, so busy
-				 * them at alloc and unbusy at release (e.g.,
-				 * for writes extending a file) */
+#define UBC_READ	0x001
+#define UBC_WRITE	0x002
+#define UBC_FAULTBUSY	0x004
 
 /*
  * flags for ubc_release()
  */
-#define UBC_UNMAP	0x010	/* unmap pages now -- don't leave the
-				 * mappings cached indefinitely */
+#define UBC_UNMAP	0x010
 
 /*
- * flags for ubc_uiomove()
+ * flags for ubc_uiomve()
  */
-#define	UBC_PARTIALOK	0x100	/* return early on error; otherwise, zero all
-				 * remaining bytes after error */
+#define	UBC_PARTIALOK	0x100
 
 /*
  * flags for uvn_findpages().
@@ -469,10 +465,8 @@ extern bool vm_page_zero_enable;
 #include <uvm/uvm_param.h>
 #include <uvm/uvm_prot.h>
 #include <uvm/uvm_pmap.h>
-#if defined(_KERNEL) || defined(_KMEMUSER)
 #include <uvm/uvm_map.h>
 #include <uvm/uvm_pager.h>
-#endif
 
 /*
  * helpers for calling ubc_release()
@@ -484,7 +478,6 @@ extern bool vm_page_zero_enable;
 #endif
 #define UBC_UNMAP_FLAG(vp) (UBC_WANT_UNMAP(vp) ? UBC_UNMAP : 0)
 
-#if defined(_KERNEL) || defined(_KMEMUSER)
 /*
  * Shareable process virtual address space.
  * May eventually be merged with vm_map.
@@ -510,7 +503,6 @@ struct vmspace {
 	size_t vm_aslr_delta_mmap;	/* mmap() random delta for ASLR */
 };
 #define	VMSPACE_IS_KERNEL_P(vm)	VM_MAP_IS_KERNEL(&(vm)->vm_map)
-#endif
 
 #ifdef _KERNEL
 
@@ -622,13 +614,11 @@ void			uvm_cpu_attach(struct cpu_info *);
 void			uvm_init(void);
 
 /* uvm_io.c */
-int			uvm_io(struct vm_map *, struct uio *, int);
+int			uvm_io(struct vm_map *, struct uio *);
 
 /* uvm_km.c */
 vaddr_t			uvm_km_alloc(struct vm_map *, vsize_t, vsize_t,
 			    uvm_flag_t);
-int			uvm_km_protect(struct vm_map *, vaddr_t, vsize_t,
-			    vm_prot_t);
 void			uvm_km_free(struct vm_map *, vaddr_t, vsize_t,
 			    uvm_flag_t);
 
@@ -681,8 +671,7 @@ int			uvm_pctparam_createsysctlnode(struct uvm_pctparam *,
 int			uvm_mmap_dev(struct proc *, void **, size_t, dev_t,
 			    off_t);
 int			uvm_mmap_anon(struct proc *, void **, size_t);
-vaddr_t			uvm_default_mapaddr(struct proc *, vaddr_t, vsize_t,
-			    int);
+vaddr_t			uvm_default_mapaddr(struct proc *, vaddr_t, vsize_t);
 
 /* uvm_mremap.c */
 int			uvm_mremap(struct vm_map *, vaddr_t, vsize_t,

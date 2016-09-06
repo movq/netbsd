@@ -1,8 +1,8 @@
-/* $NetBSD: dhcpcd.h,v 1.19 2016/07/29 10:07:58 roy Exp $ */
+/* $NetBSD: dhcpcd.h,v 1.1.1.19.2.2 2015/02/05 15:13:12 martin Exp $ */
 
 /*
  * dhcpcd - DHCP client daemon
- * Copyright (c) 2006-2016 Roy Marples <roy@marples.name>
+ * Copyright (c) 2006-2015 Roy Marples <roy@marples.name>
  * All rights reserved
 
  * Redistribution and use in source and binary forms, with or without
@@ -34,59 +34,49 @@
 #include <net/if.h>
 
 #include "config.h"
-#ifdef HAVE_SYS_QUEUE_H
-#include <sys/queue.h>
-#endif
-
 #include "defs.h"
 #include "control.h"
 #include "if-options.h"
 
 #define HWADDR_LEN	20
-#define IF_SSIDLEN	32
+#define IF_SSIDSIZE	33
 #define PROFILE_LEN	64
 #define SECRET_LEN	64
-
-#define IF_INACTIVE	0
-#define IF_ACTIVE	1
-#define IF_ACTIVE_USER	2
 
 #define LINK_UP		1
 #define LINK_UNKNOWN	0
 #define LINK_DOWN	-1
 
 #define IF_DATA_IPV4	0
-#define IF_DATA_ARP	1
-#define IF_DATA_IPV4LL	2
-#define IF_DATA_DHCP	3
-#define IF_DATA_IPV6	4
-#define IF_DATA_IPV6ND	5
-#define IF_DATA_DHCP6	6
-#define IF_DATA_MAX	7
+#define IF_DATA_DHCP	1
+#define IF_DATA_IPV6	2
+#define IF_DATA_IPV6ND	3
+#define IF_DATA_DHCP6	4
+#define IF_DATA_MAX	5
 
 /* If the interface does not support carrier status (ie PPP),
  * dhcpcd can poll it for the relevant flags periodically */
 #define IF_POLL_UP	100	/* milliseconds */
 
-#ifdef __QNX__
-/* QNX carries defines for, but does not actually support PF_LINK */
-#undef IFLR_ACTIVE
-#endif
-
 struct interface {
 	struct dhcpcd_ctx *ctx;
 	TAILQ_ENTRY(interface) next;
 	char name[IF_NAMESIZE];
+#ifdef __linux
+	char alias[IF_NAMESIZE];
+#endif
 	unsigned int index;
-	unsigned int active;
 	unsigned int flags;
 	sa_family_t family;
+#ifdef __FreeBSD__
+	struct sockaddr_storage linkaddr;
+#endif
 	unsigned char hwaddr[HWADDR_LEN];
 	uint8_t hwlen;
 	unsigned int metric;
 	int carrier;
 	int wireless;
-	uint8_t ssid[IF_SSIDLEN + 1]; /* NULL terminated */
+	uint8_t ssid[IF_SSIDSIZE];
 	unsigned int ssid_len;
 
 	char profile[PROFILE_LEN];
@@ -96,11 +86,11 @@ struct interface {
 TAILQ_HEAD(if_head, interface);
 
 struct dhcpcd_ctx {
-	char pidfile[sizeof(PIDFILE) + IF_NAMESIZE + 1];
+#ifdef USE_SIGNALS
+	sigset_t sigset;
+#endif
 	const char *cffile;
 	unsigned long long options;
-	char *logfile;
-	int log_fd;
 	int argc;
 	char **argv;
 	int ifac;	/* allowed interfaces */
@@ -113,21 +103,11 @@ struct dhcpcd_ctx {
 	char **ifcv;	/* configured interfaces */
 	unsigned char *duid;
 	size_t duid_len;
+	int pid_fd;
+	int link_fd;
 	struct if_head *ifaces;
 
-	int pf_inet_fd;
-#ifdef IFLR_ACTIVE
-	int pf_link_fd;
-#endif
-	void *priv;
-	int link_fd;
-	int seq;	/* route message sequence no */
-	int sseq;	/* successful seq no sent */
-
-#ifdef USE_SIGNALS
-	sigset_t sigset;
-#endif
-	struct eloop *eloop;
+	struct eloop_ctx *eloop;
 
 	int control_fd;
 	int control_unpriv_fd;
@@ -139,35 +119,23 @@ struct dhcpcd_ctx {
 	struct dhcp_opt *vivso;
 	size_t vivso_len;
 
-	char *randomstate; /* original state */
-
-	/* Used to track the last routing message,
-	 * so we can ignore messages the parent process sent
-	 * but the child receives when forking.
-	 * getppid(2) is unreliable because we detach. */
-	pid_t ppid;	/* parent pid */
-	int pseq;	/* last seq in parent */
-
 #ifdef INET
 	struct dhcp_opt *dhcp_opts;
 	size_t dhcp_opts_len;
 	struct rt_head *ipv4_routes;
-	struct rt_head *ipv4_kroutes;
 
 	int udp_fd;
+	uint8_t *packet;
 
 	/* Our aggregate option buffer.
 	 * We ONLY use this when options are split, which for most purposes is
 	 * practically never. See RFC3396 for details. */
 	uint8_t *opt_buffer;
-	size_t opt_buffer_len;
 #endif
 #ifdef INET6
-	uint8_t *secret;
+	unsigned char secret[SECRET_LEN];
 	size_t secret_len;
 
-	struct dhcp_opt *nd_opts;
-	size_t nd_opts_len;
 	struct dhcp_opt *dhcp6_opts;
 	size_t dhcp6_opts_len;
 	struct ipv6_ctx *ipv6;
@@ -185,23 +153,22 @@ struct dhcpcd_ctx {
 };
 
 #ifdef USE_SIGNALS
-extern const int dhcpcd_signals[];
-extern const size_t dhcpcd_signals_len;
+extern const int dhcpcd_handlesigs[];
 #endif
 
-int dhcpcd_ifafwaiting(const struct interface *);
-int dhcpcd_afwaiting(const struct dhcpcd_ctx *);
+int dhcpcd_oneup(struct dhcpcd_ctx *);
+int dhcpcd_ipwaited(struct dhcpcd_ctx *);
 pid_t dhcpcd_daemonise(struct dhcpcd_ctx *);
 
 int dhcpcd_handleargs(struct dhcpcd_ctx *, struct fd_list *, int, char **);
 void dhcpcd_handlecarrier(struct dhcpcd_ctx *, int, unsigned int, const char *);
 int dhcpcd_handleinterface(void *, int, const char *);
 void dhcpcd_handlehwaddr(struct dhcpcd_ctx *, const char *,
-    const void *, uint8_t);
+    const unsigned char *, uint8_t);
 void dhcpcd_dropinterface(struct interface *, const char *);
 int dhcpcd_selectprofile(struct interface *, const char *);
 
 void dhcpcd_startinterface(void *);
-void dhcpcd_activateinterface(struct interface *, unsigned long long);
+void dhcpcd_initstate(struct interface *);
 
 #endif

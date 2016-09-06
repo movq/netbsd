@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_resource.c,v 1.175 2016/07/13 09:52:00 njoly Exp $	*/
+/*	$NetBSD: kern_resource.c,v 1.173 2014/02/25 18:30:11 pooka Exp $	*/
 
 /*-
  * Copyright (c) 1982, 1986, 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_resource.c,v 1.175 2016/07/13 09:52:00 njoly Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_resource.c,v 1.173 2014/02/25 18:30:11 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -385,7 +385,7 @@ dosetrlimit(struct lwp *l, struct proc *p, int which, struct rlimit *limp)
 		/*
 		 * Return EINVAL if the new stack size limit is lower than
 		 * current usage. Otherwise, the process would get SIGSEGV the
-		 * moment it would try to access anything on its current stack.
+		 * moment it would try to access anything on it's current stack.
 		 * This conforms to SUSv2.
 		 */
 		if (limp->rlim_cur < p->p_vmspace->vm_ssize * PAGE_SIZE ||
@@ -404,7 +404,6 @@ dosetrlimit(struct lwp *l, struct proc *p, int which, struct rlimit *limp)
 		 * overlap).  If stack limit is going up make more
 		 * accessible, if going down make inaccessible.
 		 */
-		limp->rlim_max = round_page(limp->rlim_max);
 		limp->rlim_cur = round_page(limp->rlim_cur);
 		if (limp->rlim_cur != alimp->rlim_cur) {
 			vaddr_t addr;

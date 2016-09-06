@@ -1,5 +1,6 @@
 /* This file is tc-sh.h
-   Copyright (C) 1993-2015 Free Software Foundation, Inc.
+   Copyright 1993, 1994, 1995, 1996, 1997, 1998, 1999, 2000, 2001, 2002,
+   2003, 2004, 2005, 2006, 2007, 2008, 2010 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -232,10 +233,9 @@ extern bfd_boolean sh_fix_adjustable (struct fix *);
 int sh_parse_name (char const *, expressionS *,
 		   enum expr_mode, char *);
 
-#define TC_CONS_FIX_NEW(FRAG, OFF, LEN, EXP, RELOC)	\
-  sh_cons_fix_new ((FRAG), (OFF), (LEN), (EXP), (RELOC))
-void sh_cons_fix_new (fragS *, int, int, expressionS *,
-		      bfd_reloc_code_real_type);
+#define TC_CONS_FIX_NEW(FRAG, OFF, LEN, EXP) \
+  sh_cons_fix_new ((FRAG), (OFF), (LEN), (EXP))
+void sh_cons_fix_new (fragS *, int, int, expressionS *);
 
 /* This is used to construct expressions out of @GOTOFF, @PLT and @GOT
    symbols.  The relocation type is stored in X_md.  */

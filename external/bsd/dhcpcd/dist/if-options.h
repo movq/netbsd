@@ -1,8 +1,8 @@
-/* $NetBSD: if-options.h,v 1.20 2016/07/29 10:07:58 roy Exp $ */
+/* $NetBSD: if-options.h,v 1.1.1.23.2.2 2015/02/05 15:13:12 martin Exp $ */
 
 /*
  * dhcpcd - DHCP client daemon
- * Copyright (c) 2006-2016 Roy Marples <roy@marples.name>
+ * Copyright (c) 2006-2015 Roy Marples <roy@marples.name>
  * All rights reserved
 
  * Redistribution and use in source and binary forms, with or without
@@ -43,9 +43,7 @@
 
 /* Don't set any optional arguments here so we retain POSIX
  * compatibility with getopt */
-#define IF_OPTS "146bc:de:f:gh:i:j:kl:m:no:pqr:s:t:u:v:wxy:z:" \
-		"ABC:DEF:GHI:JKLMNO:PQ:S:TUVW:X:Z:"
-#define NOERR_IF_OPTS		":" IF_OPTS
+#define IF_OPTS "46bc:de:f:gh:i:kl:m:no:pqr:s:t:u:v:wxy:z:ABC:DEF:GHI:JKLMO:Q:S:TUVW:X:Z:"
 
 #define DEFAULT_TIMEOUT		30
 #define DEFAULT_REBOOT		5
@@ -107,24 +105,10 @@
 #define DHCPCD_IAID			(1ULL << 48)
 #define DHCPCD_DHCP			(1ULL << 49)
 #define DHCPCD_DHCP6			(1ULL << 50)
-#define DHCPCD_IF_UP			(1ULL << 51)
-#define DHCPCD_INFORM6			(1ULL << 52)
-#define DHCPCD_RTM_PPID			(1ULL << 53)
+#define DHCPCD_NOPFXDLG			(1ULL << 51)
+#define DHCPCD_PFXDLGONLY		(1ULL << 52)
+#define DHCPCD_PFXDLGMIX		(1ULL << 53)
 #define DHCPCD_IPV6RA_AUTOCONF		(1ULL << 54)
-#define DHCPCD_ROUTER_HOST_ROUTE_WARNED	(1ULL << 55)
-#define DHCPCD_LASTLEASE_EXTEND		(1ULL << 56)
-#define DHCPCD_BOOTP			(1ULL << 57)
-#define DHCPCD_INITIAL_DELAY		(1ULL << 58)
-#define DHCPCD_PRINT_PIDFILE		(1ULL << 59)
-#define DHCPCD_ONESHOT			(1ULL << 60)
-#define DHCPCD_INACTIVE			(1ULL << 61)
-
-#define DHCPCD_NODROP	(DHCPCD_EXITING | DHCPCD_PERSISTENT)
-
-#define DHCPCD_WAITOPTS	(DHCPCD_WAITIP | DHCPCD_WAITIP4 | DHCPCD_WAITIP6)
-
-#define DHCPCD_WARNINGS	(DHCPCD_CSR_WARNED | \
-		DHCPCD_ROUTER_HOST_ROUTE_WARNED)
 
 extern const struct option cf_options[];
 
@@ -132,7 +116,6 @@ struct if_sla {
 	char ifname[IF_NAMESIZE];
 	uint32_t sla;
 	uint8_t prefix_len;
-	uint64_t suffix;
 	int8_t sla_set;
 };
 
@@ -155,22 +138,17 @@ struct vivco {
 };
 
 struct if_options {
-	time_t mtime;
 	uint8_t iaid[4];
 	int metric;
 	uint8_t requestmask[256 / NBBY];
 	uint8_t requiremask[256 / NBBY];
 	uint8_t nomask[256 / NBBY];
 	uint8_t rejectmask[256 / NBBY];
-	uint8_t dstmask[256 / NBBY];
-	uint8_t requestmasknd[(UINT16_MAX + 1) / NBBY];
-	uint8_t requiremasknd[(UINT16_MAX + 1) / NBBY];
-	uint8_t nomasknd[(UINT16_MAX + 1) / NBBY];
-	uint8_t rejectmasknd[(UINT16_MAX + 1) / NBBY];
 	uint8_t requestmask6[(UINT16_MAX + 1) / NBBY];
 	uint8_t requiremask6[(UINT16_MAX + 1) / NBBY];
 	uint8_t nomask6[(UINT16_MAX + 1) / NBBY];
 	uint8_t rejectmask6[(UINT16_MAX + 1) / NBBY];
+	uint8_t dstmask[256 / NBBY];
 	uint32_t leasetime;
 	time_t timeout;
 	time_t reboot;
@@ -179,16 +157,13 @@ struct if_options {
 	struct in_addr req_addr;
 	struct in_addr req_mask;
 	struct rt_head *routes;
-	struct in6_addr req_addr6;
-	uint8_t req_prefix_len;
-	unsigned int mtu;
 	char **config;
 
 	char **environ;
 	char *script;
 
 	char hostname[HOSTNAME_MAX_LEN + 1]; /* We don't store the length */
-	uint8_t fqdn;
+	int fqdn;
 	uint8_t vendorclassid[VENDORCLASSID_MAX_LEN + 2];
 	uint8_t clientid[CLIENTID_MAX_LEN + 2];
 	uint8_t userclass[USERCLASS_MAX_LEN + 2];
@@ -207,8 +182,6 @@ struct if_options {
 
 	struct dhcp_opt *dhcp_override;
 	size_t dhcp_override_len;
-	struct dhcp_opt *nd_override;
-	size_t nd_override_len;
 	struct dhcp_opt *dhcp6_override;
 	size_t dhcp6_override_len;
 	uint32_t vivco_en;
@@ -220,7 +193,6 @@ struct if_options {
 	struct auth auth;
 };
 
-struct if_options *default_config(struct dhcpcd_ctx *);
 struct if_options *read_config(struct dhcpcd_ctx *,
     const char *, const char *, const char *);
 int add_options(struct dhcpcd_ctx *, const char *,

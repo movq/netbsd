@@ -82,9 +82,8 @@ createReplacementInstr(ConstantExpr *CE, Instruction *Instr) {
     case Instruction::GetElementPtr: {
       SmallVector<Value *,4> CEOpVec(CE->op_begin(), CE->op_end());
       ArrayRef<Value *> CEOps(CEOpVec);
-      return dyn_cast<Instruction>(Builder.CreateInBoundsGEP(
-          cast<GEPOperator>(CE)->getSourceElementType(), CEOps[0],
-          CEOps.slice(1)));
+      return dyn_cast<Instruction>(Builder.CreateInBoundsGEP(CEOps[0],
+                                                             CEOps.slice(1)));
     }
     case Instruction::Add:
     case Instruction::Sub:
@@ -138,7 +137,7 @@ static bool replaceConstantExprOp(ConstantExpr *CE, Pass *P) {
             if (PN->getIncomingValue(I) == CE) {
               BasicBlock *PredBB = PN->getIncomingBlock(I);
               if (PredBB->getTerminator()->getNumSuccessors() > 1)
-                PredBB = SplitEdge(PredBB, PN->getParent());
+                PredBB = SplitEdge(PredBB, PN->getParent(), P);
               Instruction *InsertPos = PredBB->getTerminator();
               Instruction *NewInst = createReplacementInstr(CE, InsertPos);
               PN->setOperand(I, NewInst);
@@ -209,12 +208,11 @@ bool XCoreLowerThreadLocal::lowerGlobal(GlobalVariable *GV) {
     IRBuilder<> Builder(Inst);
     Function *GetID = Intrinsic::getDeclaration(GV->getParent(),
                                                 Intrinsic::xcore_getid);
-    Value *ThreadID = Builder.CreateCall(GetID, {});
+    Value *ThreadID = Builder.CreateCall(GetID);
     SmallVector<Value *, 2> Indices;
     Indices.push_back(Constant::getNullValue(Type::getInt64Ty(Ctx)));
     Indices.push_back(ThreadID);
-    Value *Addr =
-        Builder.CreateInBoundsGEP(NewGV->getValueType(), NewGV, Indices);
+    Value *Addr = Builder.CreateInBoundsGEP(NewGV, Indices);
     U->replaceUsesOfWith(GV, Addr);
   }
 
@@ -228,9 +226,12 @@ bool XCoreLowerThreadLocal::runOnModule(Module &M) {
   // Find thread local globals.
   bool MadeChange = false;
   SmallVector<GlobalVariable *, 16> ThreadLocalGlobals;
-  for (GlobalVariable &GV : M.globals())
-    if (GV.isThreadLocal())
-      ThreadLocalGlobals.push_back(&GV);
+  for (Module::global_iterator GVI = M.global_begin(), E = M.global_end();
+       GVI != E; ++GVI) {
+    GlobalVariable *GV = GVI;
+    if (GV->isThreadLocal())
+      ThreadLocalGlobals.push_back(GV);
+  }
   for (unsigned I = 0, E = ThreadLocalGlobals.size(); I != E; ++I) {
     MadeChange |= lowerGlobal(ThreadLocalGlobals[I]);
   }

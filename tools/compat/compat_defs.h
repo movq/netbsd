@@ -1,4 +1,4 @@
-/*	$NetBSD: compat_defs.h,v 1.103 2015/09/21 21:50:16 pooka Exp $	*/
+/*	$NetBSD: compat_defs.h,v 1.97.2.2 2015/04/22 07:18:58 snj Exp $	*/
 
 #ifndef	__NETBSD_COMPAT_DEFS_H__
 #define	__NETBSD_COMPAT_DEFS_H__
@@ -77,11 +77,6 @@
 #undef __UNCONST
 #endif
 #define __UNCONST(a)   ((void *)(unsigned long)(const void *)(a))
-#ifdef __UNVOLATILE
-#undef __UNVOLATILE
-#endif
-#define __UNVOLATILE(a)        ((void *)(unsigned long)(volatile void *)(a))
-
 
 #undef __predict_false
 #define __predict_false(x) (x)
@@ -469,10 +464,6 @@ ssize_t pwrite(int, const void *, size_t, off_t);
 int raise_default_signal(int);
 #endif
 
-#if !HAVE_REALLOCARR
-int reallocarr(void *, size_t, size_t);
-#endif
-
 #if !HAVE_SETENV
 int setenv(const char *, const char *, int);
 #endif
@@ -611,9 +602,6 @@ void *setmode(const char *);
 #endif
 #ifndef O_SHLOCK
 #define O_SHLOCK 0
-#endif
-#ifndef O_CLOEXEC
-#define O_CLOEXEC 0
 #endif
 
 /* <inttypes.h> */
@@ -910,13 +898,6 @@ void *setmode(const char *);
 #define LLONG_MIN ((long long)(~LLONG_MAX))
 #endif
 
-#ifndef MAXPATHLEN
-#define MAXPATHLEN	4096
-#endif
-#ifndef PATH_MAX
-#define PATH_MAX	MAXPATHLEN
-#endif
-
 /* <paths.h> */
 
 /* The host's _PATH_BSHELL might be broken, so override it. */
@@ -1155,9 +1136,6 @@ __GEN_ENDIAN_DEC(64, le)
 #endif
 #ifndef MAXPHYS
 #define MAXPHYS (64 * 1024)
-#endif
-#ifndef MAXHOSTNAMELEN
-#define MAXHOSTNAMELEN	256
 #endif
 
 /* XXX needed by makefs; this should be done in a better way */

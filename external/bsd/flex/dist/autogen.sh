@@ -29,5 +29,4 @@
 #Makefile first.)
 
 touch ChangeLog
-libtoolize --install --force
-autoreconf --install --force
+autoreconf --install --verbose --force

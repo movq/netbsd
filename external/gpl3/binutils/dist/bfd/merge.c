@@ -1,5 +1,6 @@
 /* SEC_MERGE support.
-   Copyright (C) 2001-2015 Free Software Foundation, Inc.
+   Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+   Free Software Foundation, Inc.
    Written by Jakub Jelinek <jakub@redhat.com>.
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -25,7 +26,6 @@
 
 #include "sysdep.h"
 #include "bfd.h"
-#include "elf-bfd.h"
 #include "libbfd.h"
 #include "hashtab.h"
 #include "libiberty.h"
@@ -284,8 +284,7 @@ sec_merge_add (struct sec_merge_hash *tab, const char *str,
 }
 
 static bfd_boolean
-sec_merge_emit (bfd *abfd, struct sec_merge_hash_entry *entry,
-		unsigned char *contents, file_ptr offset)
+sec_merge_emit (bfd *abfd, struct sec_merge_hash_entry *entry)
 {
   struct sec_merge_sec_info *secinfo = entry->secinfo;
   asection *sec = secinfo->sec;
@@ -308,12 +307,7 @@ sec_merge_emit (bfd *abfd, struct sec_merge_hash_entry *entry,
       len = -off & (entry->alignment - 1);
       if (len != 0)
 	{
-	  if (contents)
-	    {
-	      memcpy (contents + offset, pad, len);
-	      offset += len;
-	    }
-	  else if (bfd_bwrite (pad, len, abfd) != len)
+	  if (bfd_bwrite (pad, len, abfd) != len)
 	    goto err;
 	  off += len;
 	}
@@ -321,12 +315,7 @@ sec_merge_emit (bfd *abfd, struct sec_merge_hash_entry *entry,
       str = entry->root.string;
       len = entry->len;
 
-      if (contents)
-	{
-	  memcpy (contents + offset, str, len);
-	  offset += len;
-	}
-      else if (bfd_bwrite (str, len, abfd) != len)
+      if (bfd_bwrite (str, len, abfd) != len)
 	goto err;
 
       off += len;
@@ -334,13 +323,9 @@ sec_merge_emit (bfd *abfd, struct sec_merge_hash_entry *entry,
 
   /* Trailing alignment needed?  */
   off = sec->size - off;
-  if (off != 0)
-    {
-      if (contents)
-	memcpy (contents + offset, pad, off);
-      else if (bfd_bwrite (pad, off, abfd) != off)
-	goto err;
-    }
+  if (off != 0
+      && bfd_bwrite (pad, off, abfd) != off)
+    goto err;
 
   if (pad != NULL)
     free (pad);
@@ -801,8 +786,6 @@ _bfd_write_merged_section (bfd *output_bfd, asection *sec, void *psecinfo)
 {
   struct sec_merge_sec_info *secinfo;
   file_ptr pos;
-  unsigned char *contents;
-  Elf_Internal_Shdr *hdr;
 
   secinfo = (struct sec_merge_sec_info *) psecinfo;
 
@@ -813,26 +796,11 @@ _bfd_write_merged_section (bfd *output_bfd, asection *sec, void *psecinfo)
     return TRUE;
 
   /* FIXME: octets_per_byte.  */
-  hdr = &elf_section_data (sec->output_section)->this_hdr;
-  if (hdr->sh_offset == (file_ptr) -1)
-    {
-      /* We must compress this section.  Write output to the
-	 buffer.  */
-      contents = hdr->contents;
-      if ((sec->output_section->flags & SEC_ELF_COMPRESS) == 0
-	  || contents == NULL)
-	abort ();
-    }
-  else
-    {
-      contents = NULL;
-      pos = sec->output_section->filepos + sec->output_offset;
-      if (bfd_seek (output_bfd, pos, SEEK_SET) != 0)
-	return FALSE;
-    }
+  pos = sec->output_section->filepos + sec->output_offset;
+  if (bfd_seek (output_bfd, pos, SEEK_SET) != 0)
+    return FALSE;
 
-  if (! sec_merge_emit (output_bfd, secinfo->first_str, contents,
-			sec->output_offset))
+  if (! sec_merge_emit (output_bfd, secinfo->first_str))
     return FALSE;
 
   return TRUE;
@@ -916,18 +884,4 @@ _bfd_merged_section_offset (bfd *output_bfd ATTRIBUTE_UNUSED, asection **psec,
 
   *psec = entry->secinfo->sec;
   return entry->u.index + (secinfo->contents + offset - p);
-}
-
-/* Tidy up when done.  */
-
-void
-_bfd_merge_sections_free (void *xsinfo)
-{
-  struct sec_merge_info *sinfo;
-
-  for (sinfo = (struct sec_merge_info *) xsinfo; sinfo; sinfo = sinfo->next)
-    {
-      bfd_hash_table_free (&sinfo->htab->table);
-      free (sinfo->htab);
-    }
 }

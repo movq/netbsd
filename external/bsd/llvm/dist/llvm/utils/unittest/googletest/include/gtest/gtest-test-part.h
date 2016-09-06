@@ -159,8 +159,8 @@ class GTEST_API_ HasNewFatalFailureHelper
     : public TestPartResultReporterInterface {
  public:
   HasNewFatalFailureHelper();
-  ~HasNewFatalFailureHelper() override;
-  void ReportTestPartResult(const TestPartResult &result) override;
+  virtual ~HasNewFatalFailureHelper();
+  virtual void ReportTestPartResult(const TestPartResult& result);
   bool has_new_fatal_failure() const { return has_new_fatal_failure_; }
  private:
   bool has_new_fatal_failure_;

@@ -25,7 +25,9 @@
 #include <string>
 
 namespace llvm {
+class Deserializer;
 class FoldingSetNodeID;
+class Serializer;
 class StringRef;
 class hash_code;
 class raw_ostream;
@@ -129,7 +131,7 @@ class APInt {
 
   /// \brief Clear unused high order bits
   ///
-  /// This method is used internally to clear the top "N" bits in the high order
+  /// This method is used internally to clear the to "N" bits in the high order
   /// word that are not used by the APInt. This is needed after the most
   /// significant word is assigned a value to ensure that those bits are
   /// zero'd out.
@@ -294,12 +296,11 @@ public:
       delete[] pVal;
   }
 
-  /// \brief Default constructor that creates an uninteresting APInt
-  /// representing a 1-bit zero value.
+  /// \brief Default constructor that creates an uninitialized APInt.
   ///
   /// This is useful for object deserialization (pair this with the static
   ///  method Read).
-  explicit APInt() : BitWidth(1), VAL(0) {}
+  explicit APInt() : BitWidth(1) {}
 
   /// \brief Returns whether this instance allocated memory.
   bool needsCleanup() const { return !isSingleWord(); }
@@ -352,7 +353,8 @@ public:
   /// This checks to see if the value of this APInt is the maximum signed
   /// value for the APInt's bit width.
   bool isMaxSignedValue() const {
-    return !isNegative() && countPopulation() == BitWidth - 1;
+    return BitWidth == 1 ? VAL == 0
+                         : !isNegative() && countPopulation() == BitWidth - 1;
   }
 
   /// \brief Determine if this is the smallest unsigned value.
@@ -366,7 +368,7 @@ public:
   /// This checks to see if the value of this APInt is the minimum signed
   /// value for the APInt's bit width.
   bool isMinSignedValue() const {
-    return isNegative() && isPowerOf2();
+    return BitWidth == 1 ? VAL == 1 : isNegative() && isPowerOf2();
   }
 
   /// \brief Check if this APInt has an N-bits unsigned integer value.
@@ -406,13 +408,6 @@ public:
     return (getActiveBits() > 64 || getZExtValue() > Limit) ? Limit
                                                             : getZExtValue();
   }
-
-  /// \brief Check if the APInt consists of a repeated bit pattern.
-  ///
-  /// e.g. 0x01010101 satisfies isSplat(8).
-  /// \param SplatSizeInBits The size of the pattern in bits. Must divide bit
-  /// width without remainder.
-  bool isSplat(unsigned SplatSizeInBits) const;
 
   /// @}
   /// \name Value Generators
@@ -796,7 +791,7 @@ public:
 
   /// \brief Bitwise OR function.
   ///
-  /// Performs a bitwise or on *this and RHS. This is implemented by simply
+  /// Performs a bitwise or on *this and RHS. This is implemented bny simply
   /// calling operator|.
   ///
   /// \returns An APInt value representing the bitwise OR of *this and RHS.
@@ -1039,9 +1034,7 @@ public:
   /// the validity of the less-than relationship.
   ///
   /// \returns true if *this < RHS when considered unsigned.
-  bool ult(uint64_t RHS) const {
-    return getActiveBits() > 64 ? false : getZExtValue() < RHS;
-  }
+  bool ult(uint64_t RHS) const { return ult(APInt(getBitWidth(), RHS)); }
 
   /// \brief Signed less than comparison
   ///
@@ -1057,9 +1050,7 @@ public:
   /// the validity of the less-than relationship.
   ///
   /// \returns true if *this < RHS when considered signed.
-  bool slt(int64_t RHS) const {
-    return getMinSignedBits() > 64 ? isNegative() : getSExtValue() < RHS;
-  }
+  bool slt(uint64_t RHS) const { return slt(APInt(getBitWidth(), RHS)); }
 
   /// \brief Unsigned less or equal comparison
   ///
@@ -1075,7 +1066,7 @@ public:
   /// the validity of the less-or-equal relationship.
   ///
   /// \returns true if *this <= RHS when considered unsigned.
-  bool ule(uint64_t RHS) const { return !ugt(RHS); }
+  bool ule(uint64_t RHS) const { return ule(APInt(getBitWidth(), RHS)); }
 
   /// \brief Signed less or equal comparison
   ///
@@ -1091,7 +1082,7 @@ public:
   /// validity of the less-or-equal relationship.
   ///
   /// \returns true if *this <= RHS when considered signed.
-  bool sle(uint64_t RHS) const { return !sgt(RHS); }
+  bool sle(uint64_t RHS) const { return sle(APInt(getBitWidth(), RHS)); }
 
   /// \brief Unsigned greather than comparison
   ///
@@ -1107,9 +1098,7 @@ public:
   /// the validity of the greater-than relationship.
   ///
   /// \returns true if *this > RHS when considered unsigned.
-  bool ugt(uint64_t RHS) const {
-    return getActiveBits() > 64 ? true : getZExtValue() > RHS;
-  }
+  bool ugt(uint64_t RHS) const { return ugt(APInt(getBitWidth(), RHS)); }
 
   /// \brief Signed greather than comparison
   ///
@@ -1125,9 +1114,7 @@ public:
   /// the validity of the greater-than relationship.
   ///
   /// \returns true if *this > RHS when considered signed.
-  bool sgt(int64_t RHS) const {
-    return getMinSignedBits() > 64 ? !isNegative() : getSExtValue() > RHS;
-  }
+  bool sgt(uint64_t RHS) const { return sgt(APInt(getBitWidth(), RHS)); }
 
   /// \brief Unsigned greater or equal comparison
   ///
@@ -1143,7 +1130,7 @@ public:
   /// the validity of the greater-or-equal relationship.
   ///
   /// \returns true if *this >= RHS when considered unsigned.
-  bool uge(uint64_t RHS) const { return !ult(RHS); }
+  bool uge(uint64_t RHS) const { return uge(APInt(getBitWidth(), RHS)); }
 
   /// \brief Signed greather or equal comparison
   ///
@@ -1159,7 +1146,7 @@ public:
   /// the validity of the greater-or-equal relationship.
   ///
   /// \returns true if *this >= RHS when considered signed.
-  bool sge(int64_t RHS) const { return !slt(RHS); }
+  bool sge(uint64_t RHS) const { return sge(APInt(getBitWidth(), RHS)); }
 
   /// This operation tests if there are any pairs of corresponding bits
   /// between this APInt and RHS that are both set.
@@ -1369,7 +1356,7 @@ public:
 
   /// \brief Count the number of leading one bits.
   ///
-  /// This function is an APInt version of the countLeadingOnes
+  /// This function is an APInt version of the countLeadingOnes_{32,64}
   /// functions in MathExtras.h. It counts the number of ones from the most
   /// significant bit to the first zero bit.
   ///
@@ -1385,7 +1372,7 @@ public:
 
   /// \brief Count the number of trailing zero bits.
   ///
-  /// This function is an APInt version of the countTrailingZeros
+  /// This function is an APInt version of the countTrailingZeros_{32,64}
   /// functions in MathExtras.h. It counts the number of zeros from the least
   /// significant bit to the first set bit.
   ///
@@ -1395,7 +1382,7 @@ public:
 
   /// \brief Count the number of trailing one bits.
   ///
-  /// This function is an APInt version of the countTrailingOnes
+  /// This function is an APInt version of the countTrailingOnes_{32,64}
   /// functions in MathExtras.h. It counts the number of ones from the least
   /// significant bit to the first zero bit.
   ///
@@ -1403,19 +1390,19 @@ public:
   /// of ones from the least significant bit to the first zero bit.
   unsigned countTrailingOnes() const {
     if (isSingleWord())
-      return llvm::countTrailingOnes(VAL);
+      return CountTrailingOnes_64(VAL);
     return countTrailingOnesSlowCase();
   }
 
   /// \brief Count the number of bits set.
   ///
-  /// This function is an APInt version of the countPopulation functions
+  /// This function is an APInt version of the countPopulation_{32,64} functions
   /// in MathExtras.h. It counts the number of 1 bits in the APInt value.
   ///
   /// \returns 0 if the value is zero, otherwise returns the number of set bits.
   unsigned countPopulation() const {
     if (isSingleWord())
-      return llvm::countPopulation(VAL);
+      return CountPopulation_64(VAL);
     return countPopulationSlowCase();
   }
 
@@ -1529,7 +1516,7 @@ public:
   /// \returns the nearest log base 2 of this APInt. Ties round up.
   ///
   /// NOTE: When we have a BitWidth of 1, we define:
-  ///
+  /// 
   ///   log2(0) = UINT32_MAX
   ///   log2(1) = 0
   ///

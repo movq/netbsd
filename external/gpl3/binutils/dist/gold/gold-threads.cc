@@ -1,6 +1,6 @@
 // gold-threads.cc -- thread support for gold
 
-// Copyright (C) 2006-2015 Free Software Foundation, Inc.
+// Copyright 2006, 2007, 2008, 2009, 2010 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -335,10 +335,7 @@ c_run_once(void)
 // Class Once.
 
 Once::Once()
-  : was_run_(false)
-#if defined(ENABLE_THREADS) && defined(__GCC_HAVE_SYNC_COMPARE_AND_SWAP_4)
-    , was_run_lock_(0)
-#endif
+  : was_run_(false), was_run_lock_(0)
 {
 #ifndef ENABLE_THREADS
   this->once_ = NULL;

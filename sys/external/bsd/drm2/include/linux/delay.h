@@ -1,4 +1,4 @@
-/*	$NetBSD: delay.h,v 1.4 2016/02/19 21:08:19 skrll Exp $	*/
+/*	$NetBSD: delay.h,v 1.3.2.1 2016/04/15 08:46:42 snj Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

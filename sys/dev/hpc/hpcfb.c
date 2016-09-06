@@ -1,4 +1,4 @@
-/*	$NetBSD: hpcfb.c,v 1.60 2015/04/07 01:24:32 ozaki-r Exp $	*/
+/*	$NetBSD: hpcfb.c,v 1.58.34.2 2015/05/18 01:56:40 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1999
@@ -43,7 +43,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hpcfb.c,v 1.60 2015/04/07 01:24:32 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hpcfb.c,v 1.58.34.2 2015/05/18 01:56:40 msaitoh Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_hpcfb.h"

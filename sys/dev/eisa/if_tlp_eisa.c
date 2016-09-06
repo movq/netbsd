@@ -1,4 +1,4 @@
-/*	$NetBSD: if_tlp_eisa.c,v 1.27 2016/07/14 04:00:45 msaitoh Exp $	*/
+/*	$NetBSD: if_tlp_eisa.c,v 1.25 2014/03/29 19:28:24 christos Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2000 The NetBSD Foundation, Inc.
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_tlp_eisa.c,v 1.27 2016/07/14 04:00:45 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_tlp_eisa.c,v 1.25 2014/03/29 19:28:24 christos Exp $");
 
 #include "opt_inet.h"
 
@@ -169,7 +169,7 @@ tlp_eisa_attach(device_t parent, device_t self, void *aux)
 	 */
 	if (bus_space_map(iot, EISA_SLOT_ADDR(ea->ea_slot),
 	    EISA_SLOT_SIZE, 0, &ioh)) {
-		aprint_error(": unable to map I/O space\n");
+		printf(": unable to map I/O space\n");
 		return;
 	}
 
@@ -179,7 +179,7 @@ tlp_eisa_attach(device_t parent, device_t self, void *aux)
 
 	tep = tlp_eisa_lookup(ea);
 	if (tep == NULL) {
-		aprint_normal("\n");
+		printf("\n");
 		panic("tlp_eisa_attach: impossible");
 	}
 	sc->sc_chip = tep->tep_chip;
@@ -209,7 +209,7 @@ tlp_eisa_attach(device_t parent, device_t self, void *aux)
 	 */
 	sc->sc_rev = bus_space_read_4(iot, ioh, DE425_CFRV) & 0xff;
 
-	aprint_normal(": %s Ethernet, pass %d.%d\n",
+	printf(": %s Ethernet, pass %d.%d\n",
 	    tep->tep_name, (sc->sc_rev >> 4) & 0xf, sc->sc_rev & 0xf);
 
 	sc->sc_dmat = ea->ea_dmat;
@@ -251,7 +251,7 @@ tlp_eisa_attach(device_t parent, device_t self, void *aux)
 	sc->sc_mediasw = &tlp_21040_mediasw;
 
 	/*
-	 * Figure out which IRQ we want to use, and determine if it's
+	 * Figure out which IRQ we want to use, and determine of it's
 	 * edge- or level-triggered.
 	 */
 	val = bus_space_read_4(iot, ioh, DE425_CFG0);
@@ -261,7 +261,8 @@ tlp_eisa_attach(device_t parent, device_t self, void *aux)
 	 * Map and establish our interrupt.
 	 */
 	if (eisa_intr_map(ec, irq, &ih)) {
-		aprint_error_dev(self, "unable to map interrupt (%u)\n", irq);
+		aprint_error_dev(self, "unable to map interrupt (%u)\n",
+		    irq);
 		return;
 	}
 	intrstr = eisa_intr_string(ec, ih, intrbuf, sizeof(intrbuf));

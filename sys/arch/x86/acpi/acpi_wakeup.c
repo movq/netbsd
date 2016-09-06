@@ -1,4 +1,4 @@
-/*	$NetBSD: acpi_wakeup.c,v 1.41 2016/07/27 13:04:28 maxv Exp $	*/
+/*	$NetBSD: acpi_wakeup.c,v 1.38 2014/02/25 18:30:08 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2011 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.41 2016/07/27 13:04:28 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.38 2014/02/25 18:30:08 pooka Exp $");
 
 /*-
  * Copyright (c) 2001 Takanori Watanabe <takawata@jp.freebsd.org>
@@ -62,7 +62,7 @@ __KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.41 2016/07/27 13:04:28 maxv Exp $"
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.41 2016/07/27 13:04:28 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: acpi_wakeup.c,v 1.38 2014/02/25 18:30:08 pooka Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -165,8 +165,10 @@ acpi_md_sleep_patch(struct cpu_info *ci)
 
 #ifdef __i386__
 	WAKECODE_FIXUP(WAKEUP_r_cr4, uint32_t, ci->ci_suspend_cr4);
-#endif
+#else
 	WAKECODE_FIXUP(WAKEUP_efer, uint32_t, ci->ci_suspend_efer);
+#endif
+
 	WAKECODE_FIXUP(WAKEUP_curcpu, void *, ci);
 #ifdef __i386__
 	WAKECODE_FIXUP(WAKEUP_r_cr3, uint32_t, tmp_pdir);
@@ -262,9 +264,10 @@ acpi_cpu_sleep(struct cpu_info *ci)
 		return;
 
 	/* Execute Wakeup */
+#ifndef __i386__
 	cpu_init_msrs(ci, false);
+#endif
 	fpuinit(ci);
-
 #if NLAPIC > 0
 	lapic_enable();
 	lapic_set_lvt();
@@ -297,7 +300,7 @@ acpi_md_sleep(int state)
 		return -1;
 	}
 
-	AcpiSetFirmwareWakingVector(acpi_wakeup_paddr, acpi_wakeup_paddr);
+	AcpiSetFirmwareWakingVector(acpi_wakeup_paddr);
 
 	s = splhigh();
 	fpusave_cpu(true);

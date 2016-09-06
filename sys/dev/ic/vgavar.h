@@ -1,4 +1,4 @@
-/* $NetBSD: vgavar.h,v 1.33 2015/01/14 17:45:27 chs Exp $ */
+/* $NetBSD: vgavar.h,v 1.30.12.2 2015/01/14 18:27:05 martin Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.

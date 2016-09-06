@@ -46,7 +46,6 @@
 #include "llvm/IR/PassManagerInternal.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/raw_ostream.h"
 #include "llvm/Support/type_traits.h"
 #include <list>
 #include <memory>
@@ -203,8 +202,7 @@ public:
 
     for (unsigned Idx = 0, Size = Passes.size(); Idx != Size; ++Idx) {
       if (DebugLogging)
-        dbgs() << "Running pass: " << Passes[Idx]->name() << " on "
-               << IR.getName() << "\n";
+        dbgs() << "Running pass: " << Passes[Idx]->name() << "\n";
 
       PreservedAnalyses PassPA = Passes[Idx]->run(IR, AM);
 
@@ -243,8 +241,8 @@ public:
 private:
   typedef detail::PassConcept<IRUnitT> PassConceptT;
 
-  PassManager(const PassManager &) = delete;
-  PassManager &operator=(const PassManager &) = delete;
+  PassManager(const PassManager &) LLVM_DELETED_FUNCTION;
+  PassManager &operator=(const PassManager &) LLVM_DELETED_FUNCTION;
 
   std::vector<std::unique_ptr<PassConceptT>> Passes;
 
@@ -283,9 +281,9 @@ template <typename DerivedT, typename IRUnitT> class AnalysisManagerBase {
     return static_cast<const DerivedT *>(this);
   }
 
-  AnalysisManagerBase(const AnalysisManagerBase &) = delete;
+  AnalysisManagerBase(const AnalysisManagerBase &) LLVM_DELETED_FUNCTION;
   AnalysisManagerBase &
-  operator=(const AnalysisManagerBase &) = delete;
+  operator=(const AnalysisManagerBase &) LLVM_DELETED_FUNCTION;
 
 protected:
   typedef detail::AnalysisResultConcept<IRUnitT> ResultConceptT;
@@ -455,8 +453,8 @@ public:
   }
 
 private:
-  AnalysisManager(const AnalysisManager &) = delete;
-  AnalysisManager &operator=(const AnalysisManager &) = delete;
+  AnalysisManager(const AnalysisManager &) LLVM_DELETED_FUNCTION;
+  AnalysisManager &operator=(const AnalysisManager &) LLVM_DELETED_FUNCTION;
 
   /// \brief Get an analysis result, running the pass if necessary.
   ResultConceptT &getResultImpl(void *PassID, IRUnitT &IR) {
@@ -473,12 +471,6 @@ private:
         dbgs() << "Running analysis: " << P.name() << "\n";
       AnalysisResultListT &ResultList = AnalysisResultLists[&IR];
       ResultList.emplace_back(PassID, P.run(IR, this));
-
-      // P.run may have inserted elements into AnalysisResults and invalidated
-      // RI.
-      RI = AnalysisResults.find(std::make_pair(PassID, &IR));
-      assert(RI != AnalysisResults.end() && "we just inserted it!");
-
       RI->second = std::prev(ResultList.end());
     }
 
@@ -510,7 +502,7 @@ private:
   PreservedAnalyses invalidateImpl(IRUnitT &IR, PreservedAnalyses PA) {
     // Short circuit for a common case of all analyses being preserved.
     if (PA.areAllPreserved())
-      return PA;
+      return std::move(PA);
 
     if (DebugLogging)
       dbgs() << "Invalidating all non-preserved analyses for: "
@@ -550,7 +542,7 @@ private:
     if (ResultsList.empty())
       AnalysisResultLists.erase(&IR);
 
-    return PA;
+    return std::move(PA);
   }
 
   /// \brief List of function analysis pass IDs and associated concept pointers.
@@ -790,11 +782,8 @@ public:
       FAM = &AM->getResult<FunctionAnalysisManagerModuleProxy>(M).getManager();
 
     PreservedAnalyses PA = PreservedAnalyses::all();
-    for (Function &F : M) {
-      if (F.isDeclaration())
-        continue;
-
-      PreservedAnalyses PassPA = Pass.run(F, FAM);
+    for (Module::iterator I = M.begin(), E = M.end(); I != E; ++I) {
+      PreservedAnalyses PassPA = Pass.run(*I, FAM);
 
       // We know that the function pass couldn't have invalidated any other
       // function's analyses (that's the contract of a function pass), so
@@ -802,7 +791,7 @@ public:
       // update our preserved set to reflect that these have already been
       // handled.
       if (FAM)
-        PassPA = FAM->invalidate(F, std::move(PassPA));
+        PassPA = FAM->invalidate(*I, std::move(PassPA));
 
       // Then intersect the preserved set so that invalidation of module
       // analyses will eventually occur when the module pass completes.
@@ -828,7 +817,7 @@ private:
 template <typename FunctionPassT>
 ModuleToFunctionPassAdaptor<FunctionPassT>
 createModuleToFunctionPassAdaptor(FunctionPassT Pass) {
-  return ModuleToFunctionPassAdaptor<FunctionPassT>(std::move(Pass));
+  return std::move(ModuleToFunctionPassAdaptor<FunctionPassT>(std::move(Pass)));
 }
 
 /// \brief A template utility pass to force an analysis result to be available.

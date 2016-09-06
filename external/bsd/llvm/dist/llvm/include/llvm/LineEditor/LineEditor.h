@@ -119,7 +119,7 @@ private:
   };
 
   struct ListCompleterConcept : CompleterConcept {
-    ~ListCompleterConcept() override;
+    ~ListCompleterConcept();
     CompletionAction complete(StringRef Buffer, size_t Pos) const override;
     static std::string getCommonPrefix(const std::vector<Completion> &Comps);
     virtual std::vector<Completion> getCompletions(StringRef Buffer,

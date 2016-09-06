@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_snapshot.c,v 1.140 2015/06/28 10:04:32 maxv Exp $	*/
+/*	$NetBSD: ffs_snapshot.c,v 1.136 2014/07/10 06:02:40 dholland Exp $	*/
 
 /*
  * Copyright 2000 Marshall Kirk McKusick. All Rights Reserved.
@@ -38,7 +38,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_snapshot.c,v 1.140 2015/06/28 10:04:32 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_snapshot.c,v 1.136 2014/07/10 06:02:40 dholland Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -77,13 +77,11 @@ __KERNEL_RCSID(0, "$NetBSD: ffs_snapshot.c,v 1.140 2015/06/28 10:04:32 maxv Exp 
 
 #include <uvm/uvm.h>
 
-TAILQ_HEAD(inodelst, inode);			/* List of active snapshots */
-
 struct snap_info {
 	kmutex_t si_lock;			/* Lock this snapinfo */
 	kmutex_t si_snaplock;			/* Snapshot vnode common lock */
-	lwp_t *si_owner;			/* Snaplock owner */
-	struct inodelst si_snapshots;		/* List of active snapshots */
+	lwp_t *si_owner;			/* Sanplock owner */
+	TAILQ_HEAD(inodelst, inode) si_snapshots; /* List of active snapshots */
 	daddr_t *si_snapblklist;		/* Snapshot block hints list */
 	uint32_t si_gen;			/* Incremented on change */
 };
@@ -198,12 +196,12 @@ ffs_snapshot(struct mount *mp, struct vnode *vp, struct timespec *ctime)
 	/*
 	 * If the vnode already is a snapshot, return.
 	 */
-	if ((ip->i_flags & SF_SNAPSHOT)) {
-		if ((ip->i_flags & SF_SNAPINVAL))
+	if ((VTOI(vp)->i_flags & SF_SNAPSHOT)) {
+		if ((VTOI(vp)->i_flags & SF_SNAPINVAL))
 			return EINVAL;
 		if (ctime) {
-			ctime->tv_sec = DIP(ip, mtime);
-			ctime->tv_nsec = DIP(ip, mtimensec);
+			ctime->tv_sec = DIP(VTOI(vp), mtime);
+			ctime->tv_nsec = DIP(VTOI(vp), mtimensec);
 		}
 		return 0;
 	}
@@ -269,9 +267,9 @@ ffs_snapshot(struct mount *mp, struct vnode *vp, struct timespec *ctime)
 	 * Create a copy of the superblock and its summary information.
 	 */
 	error = snapshot_copyfs(mp, vp, &sbbuf);
+	copy_fs = (struct fs *)((char *)sbbuf + ffs_blkoff(fs, fs->fs_sblockloc));
 	if (error)
 		goto out;
-	copy_fs = (struct fs *)((char *)sbbuf + ffs_blkoff(fs, fs->fs_sblockloc));
 	/*
 	 * Expunge unlinked files from our view.
 	 */
@@ -553,6 +551,7 @@ snapshot_copyfs(struct mount *mp, struct vnode *vp, void **sbbuf)
 	int32_t *lp;
 	struct buf *bp;
 	struct fs *copyfs, *fs = VFSTOUFS(mp)->um_fs;
+	struct lwp *l = curlwp;
 	struct vnode *devvp = VTOI(vp)->i_devvp;
 
 	/*
@@ -581,7 +580,7 @@ snapshot_copyfs(struct mount *mp, struct vnode *vp, void **sbbuf)
 	len = (i == fs->fs_frag) ? 0 : i * fs->fs_fsize;
 	if (len > 0) {
 		if ((error = bread(devvp, FFS_FSBTODB(fs, fs->fs_csaddr + loc),
-		    len, 0, &bp)) != 0) {
+		    len, l->l_cred, 0, &bp)) != 0) {
 			free(copyfs->fs_csp, M_UFSMNT);
 			free(*sbbuf, M_UFSMNT);
 			*sbbuf = NULL;
@@ -859,7 +858,7 @@ snapshot_writefs(struct mount *mp, struct vnode *vp, void *sbbuf)
 	if (error)
 		return error;
 	for (loc = 0; loc < len; loc++) {
-		error = bread(vp, blkno + loc, fs->fs_bsize,
+		error = bread(vp, blkno + loc, fs->fs_bsize, l->l_cred,
 		    B_MODIFY, &bp);
 		if (error) {
 			break;
@@ -871,7 +870,7 @@ snapshot_writefs(struct mount *mp, struct vnode *vp, void *sbbuf)
 	if (error)
 		goto out;
 	error = bread(vp, ffs_lblkno(fs, fs->fs_sblockloc),
-	    fs->fs_bsize, B_MODIFY, &bp);
+	    fs->fs_bsize, l->l_cred, B_MODIFY, &bp);
 	if (error) {
 		goto out;
 	} else {
@@ -965,7 +964,7 @@ cgaccount1(int cg, struct vnode *vp, void *data, int passno)
 	fs = ip->i_fs;
 	ns = UFS_FSNEEDSWAP(fs);
 	error = bread(ip->i_devvp, FFS_FSBTODB(fs, cgtod(fs, cg)),
-		(int)fs->fs_cgsize, 0, &bp);
+		(int)fs->fs_cgsize, l->l_cred, 0, &bp);
 	if (error) {
 		return (error);
 	}
@@ -1061,7 +1060,7 @@ expunge(struct vnode *snapvp, struct inode *cancelip, struct fs *fs,
 	if (error)
 		return error;
 	if (blkno != 0) {
-		error = bread(snapvp, lbn, fs->fs_bsize,
+		error = bread(snapvp, lbn, fs->fs_bsize, l->l_cred,
 		    B_MODIFY, &bp);
 	} else {
 		error = ffs_balloc(snapvp, ffs_lblktosize(fs, (off_t)lbn),
@@ -2093,11 +2092,11 @@ ffs_snapshot_read(struct vnode *vp, struct uio *uio, int ioflag)
 			if (ffs_lblktosize(fs, lbn) + size > fsbytes)
 				size = ffs_fragroundup(fs,
 				    fsbytes - ffs_lblktosize(fs, lbn));
-			error = bread(vp, lbn, size, 0, &bp);
+			error = bread(vp, lbn, size, NOCRED, 0, &bp);
 		} else {
 			int nextsize = fs->fs_bsize;
 			error = breadn(vp, lbn,
-			    size, &nextlbn, &nextsize, 1, 0, &bp);
+			    size, &nextlbn, &nextsize, 1, NOCRED, 0, &bp);
 		}
 		if (error)
 			break;
@@ -2161,7 +2160,7 @@ snapblkaddr(struct vnode *vp, daddr_t lbn, daddr_t *res)
 		mutex_exit(&bufcache_lock);
 		return error;
 	}
-	error = bread(vp, indirs[num-1].in_lbn, fs->fs_bsize, 0, &bp);
+	error = bread(vp, indirs[num-1].in_lbn, fs->fs_bsize, NOCRED, 0, &bp);
 	if (error == 0) {
 		*res = idb_get(ip, bp->b_data, indirs[num-1].in_off);
 		brelse(bp, 0);

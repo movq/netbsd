@@ -63,10 +63,10 @@ private:
 
 public:
   AsmToken() {}
-  AsmToken(TokenKind Kind, StringRef Str, APInt IntVal)
-      : Kind(Kind), Str(Str), IntVal(IntVal) {}
-  AsmToken(TokenKind Kind, StringRef Str, int64_t IntVal = 0)
-      : Kind(Kind), Str(Str), IntVal(64, IntVal, true) {}
+  AsmToken(TokenKind _Kind, StringRef _Str, APInt _IntVal)
+    : Kind(_Kind), Str(_Str), IntVal(_IntVal) {}
+  AsmToken(TokenKind _Kind, StringRef _Str, int64_t _IntVal = 0)
+    : Kind(_Kind), Str(_Str), IntVal(64, _IntVal, true) {}
 
   TokenKind getKind() const { return Kind; }
   bool is(TokenKind K) const { return Kind == K; }
@@ -118,14 +118,14 @@ public:
 /// lexers.
 class MCAsmLexer {
   /// The current token, stored in the base class for faster access.
-  SmallVector<AsmToken, 1> CurTok;
+  AsmToken CurTok;
 
   /// The location and description of the current error
   SMLoc ErrLoc;
   std::string Err;
 
-  MCAsmLexer(const MCAsmLexer &) = delete;
-  void operator=(const MCAsmLexer &) = delete;
+  MCAsmLexer(const MCAsmLexer &) LLVM_DELETED_FUNCTION;
+  void operator=(const MCAsmLexer &) LLVM_DELETED_FUNCTION;
 protected: // Can only create subclasses.
   const char *TokStart;
   bool SkipSpace;
@@ -135,7 +135,7 @@ protected: // Can only create subclasses.
 
   virtual AsmToken LexToken() = 0;
 
-  void SetError(SMLoc errLoc, const std::string &err) {
+  void SetError(const SMLoc &errLoc, const std::string &err) {
     ErrLoc = errLoc;
     Err = err;
   }
@@ -148,15 +148,7 @@ public:
   /// The lexer will continuosly return the end-of-file token once the end of
   /// the main input file has been reached.
   const AsmToken &Lex() {
-    assert(!CurTok.empty());
-    CurTok.erase(CurTok.begin());
-    if (CurTok.empty())
-      CurTok.emplace_back(LexToken());
-    return CurTok.front();
-  }
-
-  void UnLex(AsmToken const &Token) {
-    CurTok.insert(CurTok.begin(), Token);
+    return CurTok = LexToken();
   }
 
   virtual StringRef LexUntilEndOfStatement() = 0;
@@ -166,28 +158,14 @@ public:
 
   /// Get the current (last) lexed token.
   const AsmToken &getTok() const {
-    return CurTok[0];
+    return CurTok;
   }
 
   /// Look ahead at the next token to be lexed.
-  const AsmToken peekTok(bool ShouldSkipSpace = true) {
-    AsmToken Tok;
-
-    MutableArrayRef<AsmToken> Buf(Tok);
-    size_t ReadCount = peekTokens(Buf, ShouldSkipSpace);
-
-    assert(ReadCount == 1);
-    (void)ReadCount;
-
-    return Tok;
-  }
-
-  /// Look ahead an arbitrary number of tokens.
-  virtual size_t peekTokens(MutableArrayRef<AsmToken> Buf,
-                            bool ShouldSkipSpace = true) = 0;
+  virtual const AsmToken peekTok(bool ShouldSkipSpace = true) = 0;
 
   /// Get the current error location
-  SMLoc getErrLoc() {
+  const SMLoc &getErrLoc() {
     return ErrLoc;
   }
 
@@ -197,13 +175,13 @@ public:
   }
 
   /// Get the kind of current token.
-  AsmToken::TokenKind getKind() const { return getTok().getKind(); }
+  AsmToken::TokenKind getKind() const { return CurTok.getKind(); }
 
   /// Check if the current token has kind \p K.
-  bool is(AsmToken::TokenKind K) const { return getTok().is(K); }
+  bool is(AsmToken::TokenKind K) const { return CurTok.is(K); }
 
   /// Check if the current token has kind \p K.
-  bool isNot(AsmToken::TokenKind K) const { return getTok().isNot(K); }
+  bool isNot(AsmToken::TokenKind K) const { return CurTok.isNot(K); }
 
   /// Set whether spaces should be ignored by the lexer
   void setSkipSpace(bool val) { SkipSpace = val; }

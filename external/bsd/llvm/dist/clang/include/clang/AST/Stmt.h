@@ -22,7 +22,6 @@
 #include "clang/Basic/SourceLocation.h"
 #include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/PointerIntPair.h"
-#include "llvm/ADT/iterator.h"
 #include "llvm/Support/Compiler.h"
 #include "llvm/Support/ErrorHandling.h"
 #include <string>
@@ -50,13 +49,59 @@ namespace clang {
   class Token;
   class VarDecl;
 
+  //===--------------------------------------------------------------------===//
+  // ExprIterator - Iterators for iterating over Stmt* arrays that contain
+  //  only Expr*.  This is needed because AST nodes use Stmt* arrays to store
+  //  references to children (to be compatible with StmtIterator).
+  //===--------------------------------------------------------------------===//
+
+  class Stmt;
+  class Expr;
+
+  class ExprIterator {
+    Stmt** I;
+  public:
+    ExprIterator(Stmt** i) : I(i) {}
+    ExprIterator() : I(nullptr) {}
+    ExprIterator& operator++() { ++I; return *this; }
+    ExprIterator operator-(size_t i) { return I-i; }
+    ExprIterator operator+(size_t i) { return I+i; }
+    Expr* operator[](size_t idx);
+    // FIXME: Verify that this will correctly return a signed distance.
+    signed operator-(const ExprIterator& R) const { return I - R.I; }
+    Expr* operator*() const;
+    Expr* operator->() const;
+    bool operator==(const ExprIterator& R) const { return I == R.I; }
+    bool operator!=(const ExprIterator& R) const { return I != R.I; }
+    bool operator>(const ExprIterator& R) const { return I > R.I; }
+    bool operator>=(const ExprIterator& R) const { return I >= R.I; }
+  };
+
+  class ConstExprIterator {
+    const Stmt * const *I;
+  public:
+    ConstExprIterator(const Stmt * const *i) : I(i) {}
+    ConstExprIterator() : I(nullptr) {}
+    ConstExprIterator& operator++() { ++I; return *this; }
+    ConstExprIterator operator+(size_t i) const { return I+i; }
+    ConstExprIterator operator-(size_t i) const { return I-i; }
+    const Expr * operator[](size_t idx) const;
+    signed operator-(const ConstExprIterator& R) const { return I - R.I; }
+    const Expr * operator*() const;
+    const Expr * operator->() const;
+    bool operator==(const ConstExprIterator& R) const { return I == R.I; }
+    bool operator!=(const ConstExprIterator& R) const { return I != R.I; }
+    bool operator>(const ConstExprIterator& R) const { return I > R.I; }
+    bool operator>=(const ConstExprIterator& R) const { return I >= R.I; }
+  };
+
 //===----------------------------------------------------------------------===//
 // AST classes for statements.
 //===----------------------------------------------------------------------===//
 
 /// Stmt - This represents one statement.
 ///
-class LLVM_ALIGNAS(LLVM_PTR_SIZE) Stmt {
+class Stmt {
 public:
   enum StmtClass {
     NoStmtClass = 0,
@@ -71,10 +116,10 @@ public:
 
   // Make vanilla 'new' and 'delete' illegal for Stmts.
 protected:
-  void *operator new(size_t bytes) LLVM_NOEXCEPT {
+  void* operator new(size_t bytes) throw() {
     llvm_unreachable("Stmts cannot be allocated with regular 'new'.");
   }
-  void operator delete(void *data) LLVM_NOEXCEPT {
+  void operator delete(void* data) throw() {
     llvm_unreachable("Stmts cannot be released with regular 'delete'.");
   }
 
@@ -130,7 +175,7 @@ protected:
     friend class CharacterLiteral;
     unsigned : NumExprBits;
 
-    unsigned Kind : 3;
+    unsigned Kind : 2;
   };
 
   enum APFloatSemantics {
@@ -242,6 +287,9 @@ protected:
   };
 
   union {
+    // FIXME: this is wasteful on 64-bit platforms.
+    void *Aligner;
+
     StmtBitfields StmtBits;
     CompoundStmtBitfields CompoundStmtBits;
     ExprBitfields ExprBits;
@@ -272,12 +320,14 @@ public:
     return operator new(bytes, *C, alignment);
   }
 
-  void *operator new(size_t bytes, void *mem) LLVM_NOEXCEPT { return mem; }
+  void* operator new(size_t bytes, void* mem) throw() {
+    return mem;
+  }
 
-  void operator delete(void *, const ASTContext &, unsigned) LLVM_NOEXCEPT {}
-  void operator delete(void *, const ASTContext *, unsigned) LLVM_NOEXCEPT {}
-  void operator delete(void *, size_t) LLVM_NOEXCEPT {}
-  void operator delete(void *, void *) LLVM_NOEXCEPT {}
+  void operator delete(void*, const ASTContext&, unsigned) throw() { }
+  void operator delete(void*, const ASTContext*, unsigned) throw() { }
+  void operator delete(void*, size_t) throw() { }
+  void operator delete(void*, void*) throw() { }
 
 public:
   /// \brief A placeholder type used to construct an empty shell of a
@@ -285,51 +335,19 @@ public:
   /// de-serialization).
   struct EmptyShell { };
 
-protected:
-  /// Iterator for iterating over Stmt * arrays that contain only Expr *
-  ///
-  /// This is needed because AST nodes use Stmt* arrays to store
-  /// references to children (to be compatible with StmtIterator).
-  struct ExprIterator
-      : llvm::iterator_adaptor_base<ExprIterator, Stmt **,
-                                    std::random_access_iterator_tag, Expr *> {
-    ExprIterator() : iterator_adaptor_base(nullptr) {}
-    ExprIterator(Stmt **I) : iterator_adaptor_base(I) {}
-
-    reference operator*() const {
-      assert((*I)->getStmtClass() >= firstExprConstant &&
-             (*I)->getStmtClass() <= lastExprConstant);
-      return *reinterpret_cast<Expr **>(I);
-    }
-  };
-
-  /// Const iterator for iterating over Stmt * arrays that contain only Expr *
-  struct ConstExprIterator
-      : llvm::iterator_adaptor_base<ConstExprIterator, const Stmt *const *,
-                                    std::random_access_iterator_tag,
-                                    const Expr *const> {
-    ConstExprIterator() : iterator_adaptor_base(nullptr) {}
-    ConstExprIterator(const Stmt *const *I) : iterator_adaptor_base(I) {}
-
-    reference operator*() const {
-      assert((*I)->getStmtClass() >= firstExprConstant &&
-             (*I)->getStmtClass() <= lastExprConstant);
-      return *reinterpret_cast<const Expr *const *>(I);
-    }
-  };
-
 private:
   /// \brief Whether statistic collection is enabled.
   static bool StatisticsEnabled;
 
 protected:
   /// \brief Construct an empty statement.
-  explicit Stmt(StmtClass SC, EmptyShell) : Stmt(SC) {}
+  explicit Stmt(StmtClass SC, EmptyShell) {
+    StmtBits.sClass = SC;
+    if (StatisticsEnabled) Stmt::addStmtClass(SC);
+  }
 
 public:
   Stmt(StmtClass SC) {
-    static_assert(sizeof(*this) % llvm::AlignOf<void *>::Alignment == 0,
-                  "Insufficient alignment!");
     StmtBits.sClass = SC;
     if (StatisticsEnabled) Stmt::addStmtClass(SC);
   }
@@ -356,7 +374,6 @@ public:
   void dump() const;
   void dump(SourceManager &SM) const;
   void dump(raw_ostream &OS, SourceManager &SM) const;
-  void dump(raw_ostream &OS) const;
 
   /// dumpColor - same as dump(), but forces color highlighting.
   void dumpColor() const;
@@ -392,20 +409,19 @@ public:
   typedef StmtIterator       child_iterator;
   typedef ConstStmtIterator  const_child_iterator;
 
-  typedef llvm::iterator_range<child_iterator> child_range;
-  typedef llvm::iterator_range<const_child_iterator> const_child_range;
+  typedef StmtRange          child_range;
+  typedef ConstStmtRange     const_child_range;
 
   child_range children();
   const_child_range children() const {
-    auto Children = const_cast<Stmt *>(this)->children();
-    return const_child_range(Children.begin(), Children.end());
+    return const_cast<Stmt*>(this)->children();
   }
 
-  child_iterator child_begin() { return children().begin(); }
-  child_iterator child_end() { return children().end(); }
+  child_iterator child_begin() { return children().first; }
+  child_iterator child_end() { return children().second; }
 
-  const_child_iterator child_begin() const { return children().begin(); }
-  const_child_iterator child_end() const { return children().end(); }
+  const_child_iterator child_begin() const { return children().first; }
+  const_child_iterator child_end() const { return children().second; }
 
   /// \brief Produce a unique representation of the given statement.
   ///
@@ -526,9 +542,7 @@ public:
     return T->getStmtClass() == NullStmtClass;
   }
 
-  child_range children() {
-    return child_range(child_iterator(), child_iterator());
-  }
+  child_range children() { return child_range(); }
 
   friend class ASTStmtReader;
   friend class ASTStmtWriter;
@@ -558,7 +572,7 @@ public:
     CompoundStmtBits.NumStmts = 0;
   }
 
-  void setStmts(const ASTContext &C, ArrayRef<Stmt *> Stmts);
+  void setStmts(const ASTContext &C, Stmt **Stmts, unsigned NumStmts);
 
   bool body_empty() const { return CompoundStmtBits.NumStmts == 0; }
   unsigned size() const { return CompoundStmtBits.NumStmts; }
@@ -569,7 +583,6 @@ public:
   body_range body() { return body_range(body_begin(), body_end()); }
   body_iterator body_begin() { return Body; }
   body_iterator body_end() { return Body + size(); }
-  Stmt *body_front() { return !body_empty() ? Body[0] : nullptr; }
   Stmt *body_back() { return !body_empty() ? Body[size()-1] : nullptr; }
 
   void setLastStmt(Stmt *S) {
@@ -585,9 +598,6 @@ public:
   }
   const_body_iterator body_begin() const { return Body; }
   const_body_iterator body_end() const { return Body + size(); }
-  const Stmt *body_front() const {
-    return !body_empty() ? Body[0] : nullptr;
-  }
   const Stmt *body_back() const {
     return !body_empty() ? Body[size() - 1] : nullptr;
   }
@@ -627,8 +637,7 @@ public:
   }
 
   const_child_range children() const {
-    return const_child_range(child_iterator(Body),
-                             child_iterator(Body + CompoundStmtBits.NumStmts));
+    return child_range(Body, Body + CompoundStmtBits.NumStmts);
   }
 };
 
@@ -675,10 +684,10 @@ public:
 };
 
 class CaseStmt : public SwitchCase {
-  SourceLocation EllipsisLoc;
   enum { LHS, RHS, SUBSTMT, END_EXPR };
   Stmt* SubExprs[END_EXPR];  // The expression for the RHS is Non-null for
                              // GNU "case 1 ... 4" extension
+  SourceLocation EllipsisLoc;
 public:
   CaseStmt(Expr *lhs, Expr *rhs, SourceLocation caseLoc,
            SourceLocation ellipsisLoc, SourceLocation colonLoc)
@@ -775,16 +784,12 @@ inline SourceLocation SwitchCase::getLocEnd() const {
 ///    foo: return;
 ///
 class LabelStmt : public Stmt {
-  SourceLocation IdentLoc;
   LabelDecl *TheDecl;
   Stmt *SubStmt;
-
+  SourceLocation IdentLoc;
 public:
   LabelStmt(SourceLocation IL, LabelDecl *D, Stmt *substmt)
-      : Stmt(LabelStmtClass), IdentLoc(IL), TheDecl(D), SubStmt(substmt) {
-    static_assert(sizeof(LabelStmt) ==
-                      2 * sizeof(SourceLocation) + 2 * sizeof(void *),
-                  "LabelStmt too big");
+    : Stmt(LabelStmtClass), TheDecl(D), SubStmt(substmt), IdentLoc(IL) {
   }
 
   // \brief Build an empty label statement.
@@ -825,20 +830,18 @@ class AttributedStmt : public Stmt {
   AttributedStmt(SourceLocation Loc, ArrayRef<const Attr*> Attrs, Stmt *SubStmt)
     : Stmt(AttributedStmtClass), SubStmt(SubStmt), AttrLoc(Loc),
       NumAttrs(Attrs.size()) {
-    std::copy(Attrs.begin(), Attrs.end(), getAttrArrayPtr());
+    memcpy(getAttrArrayPtr(), Attrs.data(), Attrs.size() * sizeof(Attr *));
   }
 
   explicit AttributedStmt(EmptyShell Empty, unsigned NumAttrs)
     : Stmt(AttributedStmtClass, Empty), NumAttrs(NumAttrs) {
-    std::fill_n(getAttrArrayPtr(), NumAttrs, nullptr);
+    memset(getAttrArrayPtr(), 0, NumAttrs * sizeof(Attr *));
   }
 
-  const Attr *const *getAttrArrayPtr() const {
-    return reinterpret_cast<const Attr *const *>(this + 1);
+  Attr *const *getAttrArrayPtr() const {
+    return reinterpret_cast<Attr *const *>(this + 1);
   }
-  const Attr **getAttrArrayPtr() {
-    return reinterpret_cast<const Attr **>(this + 1);
-  }
+  Attr **getAttrArrayPtr() { return reinterpret_cast<Attr **>(this + 1); }
 
 public:
   static AttributedStmt *Create(const ASTContext &C, SourceLocation Loc,
@@ -936,14 +939,16 @@ public:
 /// SwitchStmt - This represents a 'switch' stmt.
 ///
 class SwitchStmt : public Stmt {
-  SourceLocation SwitchLoc;
   enum { VAR, COND, BODY, END_EXPR };
   Stmt* SubExprs[END_EXPR];
-  // This points to a linked list of case and default statements and, if the
-  // SwitchStmt is a switch on an enum value, records whether all the enum
-  // values were covered by CaseStmts.  The coverage information value is meant
-  // to be a hint for possible clients.
-  llvm::PointerIntPair<SwitchCase *, 1, bool> FirstCase;
+  // This points to a linked list of case and default statements.
+  SwitchCase *FirstCase;
+  SourceLocation SwitchLoc;
+
+  /// If the SwitchStmt is a switch on an enum value, this records whether
+  /// all the enum values were covered by CaseStmts.  This value is meant to
+  /// be a hint for possible clients.
+  unsigned AllEnumCasesCovered : 1;
 
 public:
   SwitchStmt(const ASTContext &C, VarDecl *Var, Expr *cond);
@@ -971,16 +976,16 @@ public:
 
   const Expr *getCond() const { return reinterpret_cast<Expr*>(SubExprs[COND]);}
   const Stmt *getBody() const { return SubExprs[BODY]; }
-  const SwitchCase *getSwitchCaseList() const { return FirstCase.getPointer(); }
+  const SwitchCase *getSwitchCaseList() const { return FirstCase; }
 
   Expr *getCond() { return reinterpret_cast<Expr*>(SubExprs[COND]);}
   void setCond(Expr *E) { SubExprs[COND] = reinterpret_cast<Stmt *>(E); }
   Stmt *getBody() { return SubExprs[BODY]; }
   void setBody(Stmt *S) { SubExprs[BODY] = S; }
-  SwitchCase *getSwitchCaseList() { return FirstCase.getPointer(); }
+  SwitchCase *getSwitchCaseList() { return FirstCase; }
 
   /// \brief Set the case list for this switch statement.
-  void setSwitchCaseList(SwitchCase *SC) { FirstCase.setPointer(SC); }
+  void setSwitchCaseList(SwitchCase *SC) { FirstCase = SC; }
 
   SourceLocation getSwitchLoc() const { return SwitchLoc; }
   void setSwitchLoc(SourceLocation L) { SwitchLoc = L; }
@@ -992,17 +997,21 @@ public:
   void addSwitchCase(SwitchCase *SC) {
     assert(!SC->getNextSwitchCase()
            && "case/default already added to a switch");
-    SC->setNextSwitchCase(FirstCase.getPointer());
-    FirstCase.setPointer(SC);
+    SC->setNextSwitchCase(FirstCase);
+    FirstCase = SC;
   }
 
   /// Set a flag in the SwitchStmt indicating that if the 'switch (X)' is a
   /// switch over an enum value then all cases have been explicitly covered.
-  void setAllEnumCasesCovered() { FirstCase.setInt(true); }
+  void setAllEnumCasesCovered() {
+    AllEnumCasesCovered = 1;
+  }
 
   /// Returns true if the SwitchStmt is a switch of an enum value and all cases
   /// have been explicitly covered.
-  bool isAllEnumCasesCovered() const { return FirstCase.getInt(); }
+  bool isAllEnumCasesCovered() const {
+    return (bool) AllEnumCasesCovered;
+  }
 
   SourceLocation getLocStart() const LLVM_READONLY { return SwitchLoc; }
   SourceLocation getLocEnd() const LLVM_READONLY {
@@ -1023,9 +1032,9 @@ public:
 /// WhileStmt - This represents a 'while' stmt.
 ///
 class WhileStmt : public Stmt {
-  SourceLocation WhileLoc;
   enum { VAR, COND, BODY, END_EXPR };
   Stmt* SubExprs[END_EXPR];
+  SourceLocation WhileLoc;
 public:
   WhileStmt(const ASTContext &C, VarDecl *Var, Expr *cond, Stmt *body,
             SourceLocation WL);
@@ -1078,9 +1087,9 @@ public:
 /// DoStmt - This represents a 'do/while' stmt.
 ///
 class DoStmt : public Stmt {
-  SourceLocation DoLoc;
   enum { BODY, COND, END_EXPR };
   Stmt* SubExprs[END_EXPR];
+  SourceLocation DoLoc;
   SourceLocation WhileLoc;
   SourceLocation RParenLoc;  // Location of final ')' in do stmt condition.
 
@@ -1129,9 +1138,9 @@ public:
 /// specified in the source.
 ///
 class ForStmt : public Stmt {
-  SourceLocation ForLoc;
   enum { INIT, CONDVAR, COND, INC, BODY, END_EXPR };
   Stmt* SubExprs[END_EXPR]; // SubExprs[INIT] is an expression or declstmt.
+  SourceLocation ForLoc;
   SourceLocation LParenLoc, RParenLoc;
 
 public:
@@ -1226,9 +1235,7 @@ public:
   }
 
   // Iterators
-  child_range children() {
-    return child_range(child_iterator(), child_iterator());
-  }
+  child_range children() { return child_range(); }
 };
 
 /// IndirectGotoStmt - This represents an indirect goto.
@@ -1296,21 +1303,15 @@ public:
   }
 
   // Iterators
-  child_range children() {
-    return child_range(child_iterator(), child_iterator());
-  }
+  child_range children() { return child_range(); }
 };
 
 /// BreakStmt - This represents a break.
 ///
 class BreakStmt : public Stmt {
   SourceLocation BreakLoc;
-
 public:
-  BreakStmt(SourceLocation BL) : Stmt(BreakStmtClass), BreakLoc(BL) {
-    static_assert(sizeof(BreakStmt) == 2 * sizeof(SourceLocation),
-                  "BreakStmt too large");
-  }
+  BreakStmt(SourceLocation BL) : Stmt(BreakStmtClass), BreakLoc(BL) {}
 
   /// \brief Build an empty break statement.
   explicit BreakStmt(EmptyShell Empty) : Stmt(BreakStmtClass, Empty) { }
@@ -1326,9 +1327,7 @@ public:
   }
 
   // Iterators
-  child_range children() {
-    return child_range(child_iterator(), child_iterator());
-  }
+  child_range children() { return child_range(); }
 };
 
 
@@ -1342,16 +1341,18 @@ public:
 /// depend on the return type of the function and the presence of an argument.
 ///
 class ReturnStmt : public Stmt {
-  SourceLocation RetLoc;
   Stmt *RetExpr;
+  SourceLocation RetLoc;
   const VarDecl *NRVOCandidate;
 
 public:
-  explicit ReturnStmt(SourceLocation RL) : ReturnStmt(RL, nullptr, nullptr) {}
+  ReturnStmt(SourceLocation RL)
+    : Stmt(ReturnStmtClass), RetExpr(nullptr), RetLoc(RL),
+      NRVOCandidate(nullptr) {}
 
   ReturnStmt(SourceLocation RL, Expr *E, const VarDecl *NRVOCandidate)
-      : Stmt(ReturnStmtClass), RetLoc(RL), RetExpr((Stmt *)E),
-        NRVOCandidate(NRVOCandidate) {}
+    : Stmt(ReturnStmtClass), RetExpr((Stmt*) E), RetLoc(RL),
+      NRVOCandidate(NRVOCandidate) {}
 
   /// \brief Build an empty return expression.
   explicit ReturnStmt(EmptyShell Empty) : Stmt(ReturnStmtClass, Empty) { }
@@ -1383,7 +1384,7 @@ public:
   // Iterators
   child_range children() {
     if (RetExpr) return child_range(&RetExpr, &RetExpr+1);
-    return child_range(child_iterator(), child_iterator());
+    return child_range();
   }
 };
 
@@ -1967,9 +1968,7 @@ public:
   }
 
   // Iterators
-  child_range children() {
-    return child_range(child_iterator(), child_iterator());
-  }
+  child_range children() { return child_range(); }
 };
 
 /// \brief This captures a statement into a function. For example, the following
@@ -1988,7 +1987,6 @@ public:
   enum VariableCaptureKind {
     VCK_This,
     VCK_ByRef,
-    VCK_ByCopy,
     VCK_VLAType,
   };
 
@@ -2008,10 +2006,24 @@ public:
     /// \param Var The variable being captured, or null if capturing this.
     ///
     Capture(SourceLocation Loc, VariableCaptureKind Kind,
-            VarDecl *Var = nullptr);
+            VarDecl *Var = nullptr)
+      : VarAndKind(Var, Kind), Loc(Loc) {
+      switch (Kind) {
+      case VCK_This:
+        assert(!Var && "'this' capture cannot have a variable!");
+        break;
+      case VCK_ByRef:
+        assert(Var && "capturing by reference must have a variable!");
+        break;
+      case VCK_VLAType:
+        assert(!Var &&
+               "Variable-length array type capture cannot have a variable!");
+        break;
+      }
+    }
 
     /// \brief Determine the kind of capture.
-    VariableCaptureKind getCaptureKind() const;
+    VariableCaptureKind getCaptureKind() const { return VarAndKind.getInt(); }
 
     /// \brief Retrieve the source location at which the variable or 'this' was
     /// first used.
@@ -2020,13 +2032,8 @@ public:
     /// \brief Determine whether this capture handles the C++ 'this' pointer.
     bool capturesThis() const { return getCaptureKind() == VCK_This; }
 
-    /// \brief Determine whether this capture handles a variable (by reference).
+    /// \brief Determine whether this capture handles a variable.
     bool capturesVariable() const { return getCaptureKind() == VCK_ByRef; }
-
-    /// \brief Determine whether this capture handles a variable by copy.
-    bool capturesVariableByCopy() const {
-      return getCaptureKind() == VCK_ByCopy;
-    }
 
     /// \brief Determine whether this capture handles a variable-length array
     /// type.
@@ -2037,8 +2044,11 @@ public:
     /// \brief Retrieve the declaration of the variable being captured.
     ///
     /// This operation is only valid if this capture captures a variable.
-    VarDecl *getCapturedVar() const;
-
+    VarDecl *getCapturedVar() const {
+      assert(capturesVariable() &&
+             "No variable available for 'this' or VAT capture");
+      return VarAndKind.getPointer();
+    }
     friend class ASTStmtReader;
   };
 
@@ -2060,10 +2070,8 @@ private:
   /// \brief Construct an empty captured statement.
   CapturedStmt(EmptyShell Empty, unsigned NumCaptures);
 
-  Stmt **getStoredStmts() { return reinterpret_cast<Stmt **>(this + 1); }
-
-  Stmt *const *getStoredStmts() const {
-    return reinterpret_cast<Stmt *const *>(this + 1);
+  Stmt **getStoredStmts() const {
+    return reinterpret_cast<Stmt **>(const_cast<CapturedStmt *>(this) + 1);
   }
 
   Capture *getStoredCaptures() const;
@@ -2082,20 +2090,31 @@ public:
 
   /// \brief Retrieve the statement being captured.
   Stmt *getCapturedStmt() { return getStoredStmts()[NumCaptures]; }
-  const Stmt *getCapturedStmt() const { return getStoredStmts()[NumCaptures]; }
+  const Stmt *getCapturedStmt() const {
+    return const_cast<CapturedStmt *>(this)->getCapturedStmt();
+  }
 
   /// \brief Retrieve the outlined function declaration.
-  CapturedDecl *getCapturedDecl();
-  const CapturedDecl *getCapturedDecl() const;
+  CapturedDecl *getCapturedDecl() { return CapDeclAndKind.getPointer(); }
+  const CapturedDecl *getCapturedDecl() const {
+    return const_cast<CapturedStmt *>(this)->getCapturedDecl();
+  }
 
   /// \brief Set the outlined function declaration.
-  void setCapturedDecl(CapturedDecl *D);
+  void setCapturedDecl(CapturedDecl *D) {
+    assert(D && "null CapturedDecl");
+    CapDeclAndKind.setPointer(D);
+  }
 
   /// \brief Retrieve the captured region kind.
-  CapturedRegionKind getCapturedRegionKind() const;
+  CapturedRegionKind getCapturedRegionKind() const {
+    return CapDeclAndKind.getInt();
+  }
 
   /// \brief Set the captured region kind.
-  void setCapturedRegionKind(CapturedRegionKind Kind);
+  void setCapturedRegionKind(CapturedRegionKind Kind) {
+    CapDeclAndKind.setInt(Kind);
+  }
 
   /// \brief Retrieve the record declaration for captured variables.
   const RecordDecl *getCapturedRecordDecl() const { return TheRecordDecl; }
@@ -2139,36 +2158,18 @@ public:
   typedef Expr **capture_init_iterator;
   typedef llvm::iterator_range<capture_init_iterator> capture_init_range;
 
-  /// \brief Const iterator that walks over the capture initialization
-  /// arguments.
-  typedef Expr *const *const_capture_init_iterator;
-  typedef llvm::iterator_range<const_capture_init_iterator>
-      const_capture_init_range;
-
-  capture_init_range capture_inits() {
+  capture_init_range capture_inits() const {
     return capture_init_range(capture_init_begin(), capture_init_end());
   }
 
-  const_capture_init_range capture_inits() const {
-    return const_capture_init_range(capture_init_begin(), capture_init_end());
-  }
-
   /// \brief Retrieve the first initialization argument.
-  capture_init_iterator capture_init_begin() {
+  capture_init_iterator capture_init_begin() const {
     return reinterpret_cast<Expr **>(getStoredStmts());
-  }
-
-  const_capture_init_iterator capture_init_begin() const {
-    return reinterpret_cast<Expr *const *>(getStoredStmts());
   }
 
   /// \brief Retrieve the iterator pointing one past the last initialization
   /// argument.
-  capture_init_iterator capture_init_end() {
-    return capture_init_begin() + NumCaptures;
-  }
-
-  const_capture_init_iterator capture_init_end() const {
+  capture_init_iterator capture_init_end() const {
     return capture_init_begin() + NumCaptures;
   }
 

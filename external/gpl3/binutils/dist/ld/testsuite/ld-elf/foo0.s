@@ -11,6 +11,6 @@ main:
 
 	.section .foo,"ax",%progbits
 	.p2align 2
-	.global foo
+.globl foo
 	.type	foo,%function
 foo:

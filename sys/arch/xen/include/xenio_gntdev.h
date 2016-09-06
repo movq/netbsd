@@ -33,8 +33,6 @@
 #ifndef __XEN_GNTDEV_H__
 #define __XEN_GNTDEV_H__
 
-#include <sys/ioccom.h>
-
 struct ioctl_gntdev_grant_ref {
 	/* The domain ID of the grant to be mapped. */
 	uint32_t domid;

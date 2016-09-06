@@ -1,4 +1,4 @@
-/* $NetBSD: gpioctl.c,v 1.23 2016/04/05 10:58:04 bouyer Exp $ */
+/* $NetBSD: gpioctl.c,v 1.20 2013/05/19 15:31:23 mbalmer Exp $ */
 
 /*
  * Copyright (c) 2008, 2010, 2011, 2013 Marc Balmer <mbalmer@NetBSD.org>
@@ -49,6 +49,9 @@ static void gpiounset(int pin, char *name);
 static void devattach(char *, int, uint32_t, uint32_t);
 __dead static void usage(void);
 
+extern long long strtonum(const char *numstr, long long minval,
+    long long maxval, const char **errstrp);
+
 static const struct bitstr {
 	unsigned int mask;
 	const char *string;
@@ -64,18 +67,6 @@ static const struct bitstr {
 	{ GPIO_PIN_INVIN, "iin" },
 	{ GPIO_PIN_INVOUT, "iout" },
 	{ GPIO_PIN_PULSATE, "pulsate" },
-	{ GPIO_PIN_ALT0, "alt0" },
-	{ GPIO_PIN_ALT1, "alt1" },
-	{ GPIO_PIN_ALT2, "alt2" },
-	{ GPIO_PIN_ALT3, "alt3" },
-	{ GPIO_PIN_ALT4, "alt4" },
-	{ GPIO_PIN_ALT5, "alt5" },
-	{ GPIO_PIN_ALT6, "alt6" },
-	{ GPIO_PIN_ALT7, "alt7" },
-	{ GPIO_PIN_EVENTS, "events" },
-	{ GPIO_PIN_LEVEL, "level" },
-	{ GPIO_PIN_FALLING, "falling" },
-	{ GPIO_PIN_USER, "user" },
 	{ 0, NULL },
 };
 

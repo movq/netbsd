@@ -1,4 +1,4 @@
-/*	$NetBSD: hid.c,v 1.45 2016/04/27 19:35:17 jakllsch Exp $	*/
+/*	$NetBSD: hid.c,v 1.35.14.2 2016/02/26 21:34:27 snj Exp $	*/
 /*	$FreeBSD: src/sys/dev/usb/hid.c,v 1.11 1999/11/17 22:33:39 n_hibma Exp $ */
 
 /*
@@ -32,16 +32,12 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hid.c,v 1.45 2016/04/27 19:35:17 jakllsch Exp $");
-
-#ifdef _KERNEL_OPT
-#include "opt_usb.h"
-#endif
+__KERNEL_RCSID(0, "$NetBSD: hid.c,v 1.35.14.2 2016/02/26 21:34:27 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbhid.h>
@@ -95,13 +91,11 @@ hid_start_parse(const void *d, int len, enum hid_kind kind)
 {
 	struct hid_data *s;
 
-	s = kmem_zalloc(sizeof(*s), KM_SLEEP);
-	if (s == NULL)
-		return s;
+	s = malloc(sizeof *s, M_TEMP, M_WAITOK|M_ZERO);
 	s->start = s->p = d;
 	s->end = (const char *)d + len;
 	s->kind = kind;
-	return s;
+	return (s);
 }
 
 void
@@ -110,10 +104,10 @@ hid_end_parse(struct hid_data *s)
 
 	while (s->cur.next != NULL) {
 		struct hid_item *hi = s->cur.next->next;
-		kmem_free(s->cur.next, sizeof(*s->cur.next));
+		free(s->cur.next, M_TEMP);
 		s->cur.next = hi;
 	}
-	kmem_free(s, sizeof(*s));
+	free(s, M_TEMP);
 }
 
 int
@@ -121,7 +115,7 @@ hid_get_item(struct hid_data *s, struct hid_item *h)
 {
 	struct hid_item *c = &s->cur;
 	unsigned int bTag, bType, bSize;
-	uint32_t oldpos;
+	u_int32_t oldpos;
 	const u_char *data;
 	int32_t dval;
 	const u_char *p;
@@ -140,7 +134,7 @@ hid_get_item(struct hid_data *s, struct hid_item *h)
 			c->loc.pos += c->loc.size;
 			h->next = NULL;
 			DPRINTFN(5,("return multi\n"));
-			return 1;
+			return (1);
 		} else {
 			c->loc.count = s->multimax;
 			s->multimax = 0;
@@ -151,7 +145,7 @@ hid_get_item(struct hid_data *s, struct hid_item *h)
 	for (;;) {
 		p = s->p;
 		if (p >= s->end)
-			return 0;
+			return (0);
 
 		bSize = *p++;
 		if (bSize == 0xfe) {
@@ -177,19 +171,17 @@ hid_get_item(struct hid_data *s, struct hid_item *h)
 			dval = 0;
 			break;
 		case 1:
-			dval = (int8_t)*data++;
+			dval = /*(int8_t)*/ *data++;
 			break;
 		case 2:
 			dval = *data++;
 			dval |= *data++ << 8;
-			dval = (int16_t)dval;
 			break;
 		case 4:
 			dval = *data++;
 			dval |= *data++ << 8;
 			dval |= *data++ << 16;
 			dval |= *data++ << 24;
-			dval = (int32_t)dval;
 			break;
 		default:
 			printf("BAD LENGTH %d\n", bSize);
@@ -228,8 +220,7 @@ hid_get_item(struct hid_data *s, struct hid_item *h)
 					}
 					goto top;
 				} else {
-					if (s->minset)
-						c->usage = c->usage_minimum;
+					c->usage = c->_usage_page; /* XXX */
 					*h = *c;
 					h->next = NULL;
 					c->loc.pos +=
@@ -237,7 +228,7 @@ hid_get_item(struct hid_data *s, struct hid_item *h)
 					s->minset = 0;
 					s->nu = 0;
 					hid_clear_local(c);
-					return 1;
+					return (1);
 				}
 			case 9:		/* Output */
 				retkind = hid_output;
@@ -249,7 +240,7 @@ hid_get_item(struct hid_data *s, struct hid_item *h)
 				*h = *c;
 				hid_clear_local(c);
 				s->nu = 0;
-				return 1;
+				return (1);
 			case 11:	/* Feature */
 				retkind = hid_feature;
 				goto ret;
@@ -258,7 +249,7 @@ hid_get_item(struct hid_data *s, struct hid_item *h)
 				c->collevel--;
 				*h = *c;
 				s->nu = 0;
-				return 1;
+				return (1);
 			default:
 				printf("Main bTag=%d\n", bTag);
 				break;
@@ -298,18 +289,16 @@ hid_get_item(struct hid_data *s, struct hid_item *h)
 				c->loc.count = dval;
 				break;
 			case 10: /* Push */
-				hi = kmem_alloc(sizeof(*hi), KM_SLEEP);
+				hi = malloc(sizeof *hi, M_TEMP, M_WAITOK);
 				*hi = *c;
 				c->next = hi;
 				break;
 			case 11: /* Pop */
 				hi = c->next;
-				if (hi == NULL)
-					break;
 				oldpos = c->loc.pos;
 				*c = *hi;
 				c->loc.pos = oldpos;
-				kmem_free(hi, sizeof(*hi));
+				free(hi, M_TEMP);
 				break;
 			default:
 				printf("Global bTag=%d\n", bTag);
@@ -377,7 +366,7 @@ hid_get_item(struct hid_data *s, struct hid_item *h)
 }
 
 int
-hid_report_size(const void *buf, int len, enum hid_kind k, uint8_t id)
+hid_report_size(const void *buf, int len, enum hid_kind k, u_int8_t id)
 {
 	struct hid_data *d;
 	struct hid_item h;
@@ -405,12 +394,12 @@ hid_report_size(const void *buf, int len, enum hid_kind k, uint8_t id)
 		}
 	}
 	hid_end_parse(d);
-	return (hi - lo + 7) / 8;
+	return ((hi - lo + 7) / 8);
 }
 
 int
-hid_locate(const void *desc, int size, uint32_t u, uint8_t id, enum hid_kind k,
-	   struct hid_location *loc, uint32_t *flags)
+hid_locate(const void *desc, int size, u_int32_t u, u_int8_t id, enum hid_kind k,
+	   struct hid_location *loc, u_int32_t *flags)
 {
 	struct hid_data *d;
 	struct hid_item h;
@@ -427,13 +416,12 @@ hid_locate(const void *desc, int size, uint32_t u, uint8_t id, enum hid_kind k,
 			if (flags != NULL)
 				*flags = h.flags;
 			hid_end_parse(d);
-			return 1;
+			return (1);
 		}
 	}
 	hid_end_parse(d);
-	if (loc != NULL)
-		loc->size = 0;
-	return 0;
+	loc->size = 0;
+	return (0);
 }
 
 long
@@ -443,12 +431,12 @@ hid_get_data(const u_char *buf, const struct hid_location *loc)
 	u_long data;
 
 	if (hsize == 0)
-		return 0;
+		return (0);
 
 	data = hid_get_udata(buf, loc);
-	if (data < (1UL << (hsize - 1)) || hsize == sizeof(data) * NBBY)
-		return data;
-	return data - (1UL << hsize);
+	if (data < (1 << (hsize - 1)))
+		return (data);
+	return data - (1 << hsize);
 }
 
 u_long
@@ -460,7 +448,7 @@ hid_get_udata(const u_char *buf, const struct hid_location *loc)
 	u_long data;
 
 	if (hsize == 0)
-		return 0;
+		return (0);
 
 	data = 0;
 	off = hpos / 8;
@@ -470,11 +458,10 @@ hid_get_udata(const u_char *buf, const struct hid_location *loc)
 		data |= (unsigned long)buf[off + i] << (i * 8);
 
 	data >>= hpos % 8;
-	if (hsize < sizeof(data) * NBBY)
-		data &= (1UL << hsize) - 1;
+	data &= (1 << hsize) - 1;
 
 	DPRINTFN(10,("hid_get_udata: loc %d/%d = %lu\n", hpos, hsize, data));
-	return data;
+	return (data);
 }
 
 /*
@@ -489,7 +476,7 @@ hid_get_udata(const u_char *buf, const struct hid_location *loc)
  * kind of report is considered. The current HID code that uses this for
  * matching is actually only looking for input reports, so this works
  * for now.
- *
+ * 
  * This function could try all report kinds (input, output and feature)
  * consecutively if necessary, but it may be better to integrate the
  * libusbhid code which can consider multiple report kinds simultaneously
@@ -497,15 +484,15 @@ hid_get_udata(const u_char *buf, const struct hid_location *loc)
  * Needs some thought.
  */
 int
-hid_is_collection(const void *desc, int size, uint8_t id, uint32_t usage)
+hid_is_collection(const void *desc, int size, u_int8_t id, u_int32_t usage)
 {
 	struct hid_data *hd;
 	struct hid_item hi;
-	uint32_t coll_usage = ~0;
+	u_int32_t coll_usage = ~0;
 
 	hd = hid_start_parse(desc, size, hid_input);
 	if (hd == NULL)
-		return 0;
+		return (0);
 
 	DPRINTFN(2,("hid_is_collection: id=%d usage=0x%x\n", id, usage));
 	while (hid_get_item(hd, &hi)) {
@@ -525,10 +512,10 @@ hid_is_collection(const void *desc, int size, uint8_t id, uint32_t usage)
 		    hi.report_ID == id) {
 			DPRINTFN(2,("hid_is_collection: found\n"));
 			hid_end_parse(hd);
-			return 1;
+			return (1);
 		}
 	}
 	DPRINTFN(2,("hid_is_collection: not found\n"));
 	hid_end_parse(hd);
-	return 0;
+	return (0);
 }

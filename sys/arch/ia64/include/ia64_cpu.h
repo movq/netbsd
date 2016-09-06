@@ -1,7 +1,6 @@
-/*	$NetBSD: ia64_cpu.h,v 1.3 2016/08/08 12:25:35 scole Exp $	*/
+/*	$NetBSD: ia64_cpu.h,v 1.2 2009/07/20 04:41:37 kiyohara Exp $	*/
 
 /*-
- * Copyright (c) 2007 Marcel Moolenaar
  * Copyright (c) 2000 Doug Rabson
  * All rights reserved.
  *
@@ -26,35 +25,11 @@
  * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
  * SUCH DAMAGE.
  *
- * $FreeBSD: releng/10.1/sys/ia64/include/ia64_cpu.h 223170 2011-06-17 04:26:03Z marcel $
+ *	$FreeBSD$
  */
 
 #ifndef _MACHINE_IA64_CPU_H_
 #define _MACHINE_IA64_CPU_H_
-
-/*
- * Local Interrupt ID.
- */
-#define	IA64_LID_GET_SAPIC_ID(x)	((u_int)((x) >> 16) & 0xffff)
-#define	IA64_LID_SET_SAPIC_ID(x)	((u_int)((x) & 0xffff) << 16)
-
-/*
- * Definition of DCR bits.
- */
-#define	IA64_DCR_PP		0x0000000000000001
-#define	IA64_DCR_BE		0x0000000000000002
-#define	IA64_DCR_LC		0x0000000000000004
-#define	IA64_DCR_DM		0x0000000000000100
-#define	IA64_DCR_DP		0x0000000000000200
-#define	IA64_DCR_DK		0x0000000000000400
-#define	IA64_DCR_DX		0x0000000000000800
-#define	IA64_DCR_DR		0x0000000000001000
-#define	IA64_DCR_DA		0x0000000000002000
-#define	IA64_DCR_DD		0x0000000000004000
-
-#define	IA64_DCR_DEFAULT					\
-    (IA64_DCR_DM | IA64_DCR_DP | IA64_DCR_DK | IA64_DCR_DX |	\
-     IA64_DCR_DR | IA64_DCR_DA | IA64_DCR_DD)
 
 /*
  * Definition of PSR and IPSR bits.
@@ -205,6 +180,10 @@ ia64_fc(uint64_t va)
 	__asm __volatile("fc %0" :: "r"(va));
 }
 
+/*
+ * Flush Instruction Cache
+ */
+
 static __inline void
 ia64_fc_i(uint64_t va)
 {
@@ -259,7 +238,7 @@ ia64_tpa(uint64_t va)
 static __inline void
 ia64_ptc_e(uint64_t v)
 {
-	__asm __volatile("ptc.e %0;; srlz.i;;" :: "r"(v));
+	__asm __volatile("ptc.e %0;; srlz.d;;" :: "r"(v));
 }
 
 /*
@@ -268,7 +247,7 @@ ia64_ptc_e(uint64_t v)
 static __inline void
 ia64_ptc_g(uint64_t va, uint64_t log2size)
 {
-	__asm __volatile("ptc.g %0,%1;;" :: "r"(va), "r"(log2size));
+	__asm __volatile("ptc.g %0,%1;; srlz.d;;" :: "r"(va), "r"(log2size));
 }
 
 /*
@@ -277,7 +256,7 @@ ia64_ptc_g(uint64_t va, uint64_t log2size)
 static __inline void
 ia64_ptc_ga(uint64_t va, uint64_t log2size)
 {
-	__asm __volatile("ptc.ga %0,%1;;" :: "r"(va), "r"(log2size));
+	__asm __volatile("ptc.ga %0,%1;; srlz.d;;" :: "r"(va), "r"(log2size));
 }
 
 /*
@@ -286,84 +265,7 @@ ia64_ptc_ga(uint64_t va, uint64_t log2size)
 static __inline void
 ia64_ptc_l(uint64_t va, uint64_t log2size)
 {
-	__asm __volatile("ptc.l %0,%1;; srlz.i;;" :: "r"(va), "r"(log2size));
-}
-
-/*
- * Invalidate the ALAT on the local processor.
- */
-static __inline void
-ia64_invala(void)
-{
-	__asm __volatile("invala;;");
-}
-
-/*
- * Unordered memory load.
- */
-
-static __inline uint8_t
-ia64_ld1(uint8_t *p)
-{
-	uint8_t v;
-
-	__asm __volatile("ld1 %0=[%1];;" : "=r"(v) : "r"(p));
-	return (v);
-}
-
-static __inline uint16_t
-ia64_ld2(uint16_t *p)        
-{
-	uint16_t v;
-
-	__asm __volatile("ld2 %0=[%1];;" : "=r"(v) : "r"(p));
-	return (v);
-}
-
-static __inline uint32_t
-ia64_ld4(uint32_t *p)        
-{
-	uint32_t v;
-
-	__asm __volatile("ld4 %0=[%1];;" : "=r"(v) : "r"(p));
-	return (v);
-}
-
-static __inline uint64_t
-ia64_ld8(uint64_t *p)        
-{
-	uint64_t v;
-
-	__asm __volatile("ld8 %0=[%1];;" : "=r"(v) : "r"(p));
-	return (v);
-}
-
-/*
- * Unordered memory store.
- */
-
-static __inline void
-ia64_st1(uint8_t *p, uint8_t v)
-{
-	__asm __volatile("st1 [%0]=%1;;" :: "r"(p), "r"(v));
-}
-
-static __inline void
-ia64_st2(uint16_t *p, uint16_t v)
-{
-	__asm __volatile("st2 [%0]=%1;;" :: "r"(p), "r"(v));
-}
-
-static __inline void
-ia64_st4(uint32_t *p, uint32_t v)
-{
-	__asm __volatile("st4 [%0]=%1;;" :: "r"(p), "r"(v));
-}
-
-static __inline void
-ia64_st8(uint64_t *p, uint64_t v)
-{
-	__asm __volatile("st8 [%0]=%1;;" :: "r"(p), "r"(v));
+	__asm __volatile("ptc.l %0,%1;; srlz.d;;" :: "r"(va), "r"(log2size));
 }
 
 /*
@@ -491,7 +393,7 @@ IA64_CR(lrr1)
 static __inline void
 ia64_set_rr(uint64_t rrbase, uint64_t v)
 {
-	__asm __volatile("mov rr[%0]=%1"
+	__asm __volatile("mov rr[%0]=%1;; srlz.d;;"
 			 :: "r"(rrbase), "r"(v) : "memory");
 }
 
@@ -519,14 +421,17 @@ ia64_enable_highfp(void)
 	__asm __volatile("rsm psr.dfh;; srlz.d");
 }
 
-/*
- * Avoid inline functions for the following so that they still work
- * correctly when inlining is not enabled (e.g. -O0). Function calls
- * need data serialization after setting psr, which results in a
- * hazard.
- */
-#define	ia64_srlz_d()	__asm __volatile("srlz.d")
-#define	ia64_srlz_i()	__asm __volatile("srlz.i;;")
+static __inline void
+ia64_srlz_d(void)
+{
+	__asm __volatile("srlz.d");
+}
+
+static __inline void
+ia64_srlz_i(void)
+{
+	__asm __volatile("srlz.i;;");
+}
 
 #endif /* !_LOCORE */
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_qn.c,v 1.42 2016/06/10 13:27:10 ozaki-r Exp $ */
+/*	$NetBSD: if_qn.c,v 1.39 2012/10/27 17:17:29 chs Exp $ */
 
 /*
  * Copyright (c) 1995 Mika Kortelainen
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_qn.c,v 1.42 2016/06/10 13:27:10 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_qn.c,v 1.39 2012/10/27 17:17:29 chs Exp $");
 
 #include "qn.h"
 #if NQN > 0
@@ -105,6 +105,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_qn.c,v 1.42 2016/06/10 13:27:10 ozaki-r Exp $");
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
 #include <netinet/if_inarp.h>
+#endif
+
+#ifdef NS
+#include <netns/ns.h>
+#include <netns/ns_if.h>
 #endif
 
 #include <machine/cpu.h>
@@ -540,7 +545,7 @@ qn_get_packet(struct qn_softc *sc, u_short len)
 	if (len & 1)
 		len++;
 
-	m_set_rcvif(m, &sc->sc_ethercom.ec_if);
+	m->m_pkthdr.rcvif = &sc->sc_ethercom.ec_if;
 	m->m_pkthdr.len = len;
 	m->m_len = 0;
 	head = m;
@@ -585,7 +590,7 @@ qn_get_packet(struct qn_softc *sc, u_short len)
 	/* Tap off BPF listeners */
 	bpf_mtap(ifp, head);
 
-	if_percpuq_enqueue(ifp->if_percpuq, head);
+	(*ifp->if_input)(ifp, head);
 	return;
 
 bad:
@@ -822,6 +827,22 @@ qnioctl(register struct ifnet *ifp, u_long cmd, void *data)
 			qninit(sc);
 			arp_ifinit(ifp, ifa);
 			break;
+#endif
+#ifdef NS
+		case AF_NS:
+		    {
+			register struct ns_addr *ina = &(IA_SNS(ifa)->sns_addr);
+
+			if (ns_nullhost(*ina))
+				ina->x_host =
+				    *(union ns_host *)LLADDR(ifp->if_sadl);
+			else
+				bcopy(ina->x_host.c_host,
+				    LLADDR(ifp->if_sadl), ETHER_ADDR_LEN);
+			qnstop(sc);
+			qninit(sc);
+			break;
+		    }
 #endif
 		default:
 			log(LOG_INFO, "qn:sa_family:default (not tested)\n");

@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,8 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
+#define __NSLOAD_C__
 
 #include "acpi.h"
 #include "accommon.h"
@@ -128,21 +130,7 @@ AcpiNsLoadTable (
     }
     else
     {
-        /*
-         * On error, delete any namespace objects created by this table.
-         * We cannot initialize these objects, so delete them. There are
-         * a couple of expecially bad cases:
-         * AE_ALREADY_EXISTS - namespace collision.
-         * AE_NOT_FOUND - the target of a Scope operator does not
-         * exist. This target of Scope must already exist in the
-         * namespace, as per the ACPI specification.
-         */
-        (void) AcpiUtReleaseMutex (ACPI_MTX_NAMESPACE);
-        AcpiNsDeleteNamespaceByOwner (
-            AcpiGbl_RootTableList.Tables[TableIndex].OwnerId);
-
-        AcpiTbReleaseOwnerId (TableIndex);
-        return_ACPI_STATUS (Status);
+        (void) AcpiTbReleaseOwnerId (TableIndex);
     }
 
 Unlock:
@@ -160,30 +148,12 @@ Unlock:
      * parse trees.
      */
     ACPI_DEBUG_PRINT ((ACPI_DB_INFO,
-        "**** Begin Table Object Initialization\n"));
+        "**** Begin Table Method Parsing and Object Initialization\n"));
 
     Status = AcpiDsInitializeObjects (TableIndex, Node);
 
     ACPI_DEBUG_PRINT ((ACPI_DB_INFO,
-        "**** Completed Table Object Initialization\n"));
-
-    /*
-     * Execute any module-level code that was detected during the table load
-     * phase. Although illegal since ACPI 2.0, there are many machines that
-     * contain this type of code. Each block of detected executable AML code
-     * outside of any control method is wrapped with a temporary control
-     * method object and placed on a global list. The methods on this list
-     * are executed below.
-     *
-     * This case executes the module-level code for each table immediately
-     * after the table has been loaded. This provides compatibility with
-     * other ACPI implementations. Optionally, the execution can be deferred
-     * until later, see AcpiInitializeObjects.
-     */
-    if (!AcpiGbl_GroupModuleLevelCode)
-    {
-        AcpiNsExecModuleCodeList ();
-    }
+        "**** Completed Table Method Parsing and Object Initialization\n"));
 
     return_ACPI_STATUS (Status);
 }
@@ -277,8 +247,8 @@ AcpiNsDeleteSubtree (
 
 
     ParentHandle = StartHandle;
-    ChildHandle = NULL;
-    Level = 1;
+    ChildHandle  = NULL;
+    Level        = 1;
 
     /*
      * Traverse the tree of objects until we bubble back up
@@ -289,7 +259,7 @@ AcpiNsDeleteSubtree (
         /* Attempt to get the next object in this scope */
 
         Status = AcpiGetNextObject (ACPI_TYPE_ANY, ParentHandle,
-            ChildHandle, &NextChildHandle);
+                                    ChildHandle, &NextChildHandle);
 
         ChildHandle = NextChildHandle;
 
@@ -300,7 +270,7 @@ AcpiNsDeleteSubtree (
             /* Check if this object has any children */
 
             if (ACPI_SUCCESS (AcpiGetNextObject (ACPI_TYPE_ANY, ChildHandle,
-                NULL, &Dummy)))
+                                    NULL, &Dummy)))
             {
                 /*
                  * There is at least one child of this object,
@@ -378,6 +348,7 @@ AcpiNsUnloadNamespace (
     /* This function does the real work */
 
     Status = AcpiNsDeleteSubtree (Handle);
+
     return_ACPI_STATUS (Status);
 }
 #endif

@@ -1,4 +1,4 @@
-/* $NetBSD: t_ldexp.c,v 1.14 2014/11/04 00:20:19 justin Exp $ */
+/* $NetBSD: t_ldexp.c,v 1.13 2014/03/12 21:40:07 martin Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -29,11 +29,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_ldexp.c,v 1.14 2014/11/04 00:20:19 justin Exp $");
+__RCSID("$NetBSD: t_ldexp.c,v 1.13 2014/03/12 21:40:07 martin Exp $");
 
 #include <sys/param.h>
 
 #include <atf-c.h>
+#include <atf-c/config.h>
 
 #include <math.h>
 #include <limits.h>

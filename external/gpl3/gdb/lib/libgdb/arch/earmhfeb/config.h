@@ -36,7 +36,7 @@
 #define DEFAULT_BFD_ARCH bfd_arm_arch
 
 /* Define to BFD's default target vector. */
-#define DEFAULT_BFD_VEC arm_elf32_be_vec
+#define DEFAULT_BFD_VEC bfd_elf32_bigarm_vec
 
 /* Define to 1 if translation of program messages to the user's native
    language is requested. */
@@ -80,6 +80,9 @@
 /* Define to 1 if you have the `btowc' function. */
 #define HAVE_BTOWC 1
 
+/* Define to 1 if you have the `canonicalize_file_name' function. */
+/* #undef HAVE_CANONICALIZE_FILE_NAME */
+
 /* Define to 1 if you have the <cursesX.h> header file. */
 /* #undef HAVE_CURSESX_H */
 
@@ -89,17 +92,6 @@
 /* Define to 1 if you have the declaration of `ADDR_NO_RANDOMIZE', and to 0 if
    you don't. */
 #define HAVE_DECL_ADDR_NO_RANDOMIZE 0
-
-/* Define to 1 if you have the declaration of `asprintf', and to 0 if you
-   don't. */
-#define HAVE_DECL_ASPRINTF 1
-
-/* Define to 1 if you have the declaration of `basename(char *)', and to 0 if
-   you don't. */
-#define HAVE_DECL_BASENAME 0
-
-/* Define to 1 if you have the declaration of `ffs', and to 0 if you don't. */
-#define HAVE_DECL_FFS 1
 
 /* Define to 1 if you have the declaration of `free', and to 0 if you don't.
    */
@@ -133,34 +125,6 @@
    */
 #define HAVE_DECL_STRSTR 1
 
-/* Define to 1 if you have the declaration of `strtol', and to 0 if you don't.
-   */
-#define HAVE_DECL_STRTOL 1
-
-/* Define to 1 if you have the declaration of `strtoll', and to 0 if you
-   don't. */
-#define HAVE_DECL_STRTOLL 1
-
-/* Define to 1 if you have the declaration of `strtoul', and to 0 if you
-   don't. */
-#define HAVE_DECL_STRTOUL 1
-
-/* Define to 1 if you have the declaration of `strtoull', and to 0 if you
-   don't. */
-#define HAVE_DECL_STRTOULL 1
-
-/* Define to 1 if you have the declaration of `strverscmp', and to 0 if you
-   don't. */
-#define HAVE_DECL_STRVERSCMP 0
-
-/* Define to 1 if you have the declaration of `vasprintf', and to 0 if you
-   don't. */
-#define HAVE_DECL_VASPRINTF 1
-
-/* Define to 1 if you have the declaration of `vsnprintf', and to 0 if you
-   don't. */
-#define HAVE_DECL_VSNPRINTF 1
-
 /* Define to 1 if you have the <dlfcn.h> header file. */
 #define HAVE_DLFCN_H 1
 
@@ -182,9 +146,6 @@
 /* Define if <sys/procfs.h> has fpregset_t. */
 /* #undef HAVE_FPREGSET_T */
 
-/* Define to 1 if you have the `getauxval' function. */
-/* #undef HAVE_GETAUXVAL */
-
 /* Define to 1 if you have the `getgid' function. */
 #define HAVE_GETGID 1
 
@@ -203,12 +164,6 @@
 /* Define if <sys/procfs.h> has gregset_t. */
 /* #undef HAVE_GREGSET_T */
 
-/* Define if Guile interpreter is being linked in. */
-/* #undef HAVE_GUILE */
-
-/* Define if Guile supports manual finalization. */
-/* #undef HAVE_GUILE_MANUAL_FINALIZATION */
-
 /* Define if you have the iconv() function. */
 #define HAVE_ICONV 1
 
@@ -217,9 +172,6 @@
 
 /* Define to 1 if you have the <inttypes.h> header file. */
 #define HAVE_INTTYPES_H 1
-
-/* Define to 1 if your system has the kinfo_getvmmap function. */
-#define HAVE_KINFO_GETVMMAP 1
 
 /* Define if you have <langinfo.h> and nl_langinfo(CODESET). */
 #define HAVE_LANGINFO_CODESET 1
@@ -238,9 +190,6 @@
 
 /* Define to 1 if you have the `libiconvlist' function. */
 /* #undef HAVE_LIBICONVLIST */
-
-/* Define if you have the ipt library. */
-/* #undef HAVE_LIBIPT */
 
 /* Define if you have the lzma library. */
 /* #undef HAVE_LIBLZMA */
@@ -278,8 +227,8 @@
 /* Define to 1 if the compiler supports long double. */
 #define HAVE_LONG_DOUBLE 1
 
-/* Define to 1 if the system has the type `long long'. */
-#define HAVE_LONG_LONG 1
+/* Define to 1 if you have the `lstat' function. */
+#define HAVE_LSTAT 1
 
 /* Define if <sys/procfs.h> has lwpid_t. */
 /* #undef HAVE_LWPID_T */
@@ -289,9 +238,6 @@
 
 /* Define to 1 if you have the <memory.h> header file. */
 #define HAVE_MEMORY_H 1
-
-/* Define to 1 if you have the `mkdtemp' function. */
-#define HAVE_MKDTEMP 1
 
 /* Define to 1 if you have a working `mmap' system call. */
 #define HAVE_MMAP 1
@@ -386,20 +332,20 @@
 /* Define if Python interpreter is being linked in. */
 /* #undef HAVE_PYTHON */
 
+/* Define to 1 if you have the `readlink' function. */
+#define HAVE_READLINK 1
+
+/* Define to 1 if you have the `realpath' function. */
+#define HAVE_REALPATH 1
+
 /* Define to 1 if you have the `resize_term' function. */
 /* #undef HAVE_RESIZE_TERM */
 
 /* Define to 1 if you have the `sbrk' function. */
 #define HAVE_SBRK 1
 
-/* Define to 1 if you have the `scm_new_smob' function. */
-/* #undef HAVE_SCM_NEW_SMOB */
-
 /* Define to 1 if you have the `setlocale' function. */
 #define HAVE_SETLOCALE 1
-
-/* Define to 1 if you have the `setns' function. */
-/* #undef HAVE_SETNS */
 
 /* Define to 1 if you have the `setpgid' function. */
 #define HAVE_SETPGID 1
@@ -418,9 +364,6 @@
 
 /* Define to 1 if you have the `sigaction' function. */
 #define HAVE_SIGACTION 1
-
-/* Define to 1 if you have the `sigaltstack' function. */
-#define HAVE_SIGALTSTACK 1
 
 /* Define to 1 if you have the <signal.h> header file. */
 #define HAVE_SIGNAL_H 1
@@ -578,9 +521,6 @@
 /* Define to 1 if you have the `wborder' function. */
 #define HAVE_WBORDER 1
 
-/* Define to 1 if you have the <windows.h> header file. */
-/* #undef HAVE_WINDOWS_H */
-
 /* Define to 1 if `fork' works. */
 #define HAVE_WORKING_FORK 1
 
@@ -592,6 +532,9 @@
 
 /* Define to 1 if you have the `XML_StopParser' function. */
 /* #undef HAVE_XML_STOPPARSER */
+
+/* Define to 1 if you have the <zlib.h> header file. */
+#define HAVE_ZLIB_H 1
 
 /* Define to 1 if your system has the _etext variable. */
 #define HAVE__ETEXT 1
@@ -690,9 +633,6 @@
 
 /* The size of `long', as computed by sizeof. */
 /* #undef SIZEOF_LONG */
-
-/* The size of `long long', as computed by sizeof. */
-#define SIZEOF_LONG_LONG 8
 
 /* The size of `unsigned long', as computed by sizeof. */
 #define SIZEOF_UNSIGNED_LONG 4

@@ -1,4 +1,4 @@
-/*	$NetBSD: rtl81x9.c,v 1.100 2016/06/10 13:27:13 ozaki-r Exp $	*/
+/*	$NetBSD: rtl81x9.c,v 1.95 2014/08/10 16:44:35 tls Exp $	*/
 
 /*
  * Copyright (c) 1997, 1998
@@ -86,7 +86,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rtl81x9.c,v 1.100 2016/06/10 13:27:13 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rtl81x9.c,v 1.95 2014/08/10 16:44:35 tls Exp $");
 
 
 #include <sys/param.h>
@@ -106,7 +106,7 @@ __KERNEL_RCSID(0, "$NetBSD: rtl81x9.c,v 1.100 2016/06/10 13:27:13 ozaki-r Exp $"
 #include <net/if_media.h>
 
 #include <net/bpf.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <sys/bus.h>
 #include <machine/endian.h>
@@ -1038,7 +1038,7 @@ rtk_rxeof(struct rtk_softc *sc)
 			}
 		}
 		m->m_data += RTK_ETHER_ALIGN;	/* for alignment */
-		m_set_rcvif(m, ifp);
+		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = total_len;
 		dst = mtod(m, void *);
 
@@ -1077,7 +1077,7 @@ rtk_rxeof(struct rtk_softc *sc)
 
 		bpf_mtap(ifp, m);
 		/* pass it on. */
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		(*ifp->if_input)(ifp, m);
 	}
 }
 

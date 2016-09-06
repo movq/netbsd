@@ -1,4 +1,4 @@
-/*	$NetBSD: ffs_bswap.c,v 1.39 2015/05/20 18:21:17 riastradh Exp $	*/
+/*	$NetBSD: ffs_bswap.c,v 1.37.8.1 2015/11/04 14:56:32 riz Exp $	*/
 
 /*
  * Copyright (c) 1998 Manuel Bouyer.
@@ -30,7 +30,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ffs_bswap.c,v 1.39 2015/05/20 18:21:17 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ffs_bswap.c,v 1.37.8.1 2015/11/04 14:56:32 riz Exp $");
 
 #include <sys/param.h>
 #if defined(_KERNEL)

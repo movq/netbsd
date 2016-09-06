@@ -296,18 +296,10 @@
 #endif
 
 /*
- * If the 32-bit "atomic swap" operation is available on this
- * architecture, ISC_PLATFORM_HAVEATOMICSTORE" will be defined.
+ * If the "atomic swap" operation is available on this architecture,
+ * ISC_PLATFORM_HAVEATOMICSTORE" will be defined.
  */
 #define ISC_PLATFORM_HAVEATOMICSTORE 1
-
-/*
- * If the 64-bit "atomic swap" operation is available on this
- * architecture, ISC_PLATFORM_HAVEATOMICSTORE" will be defined.
- */
-#ifdef __HAVE_ATOMIC64_OPS
-#define ISC_PLATFORM_HAVEATOMICSTOREQ 1
-#endif
 
 /*
  * If the "compare-and-exchange" operation is available on this architecture,
@@ -354,7 +346,7 @@
 /*
  * Defined if we are enabling SIT (Source Identity Token).
  */
-#define ISC_PLATFORM_USESIT 1
+#undef ISC_PLATFORM_USESIT
 
 /***
  ***	Windows dll support.

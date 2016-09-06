@@ -1,5 +1,6 @@
 /* srconv.c -- Sysroff conversion program
-   Copyright (C) 1994-2015 Free Software Foundation, Inc.
+   Copyright 1994, 1995, 1996, 1998, 1999, 2000, 2001, 2002, 2003, 2004,
+   2005, 2007, 2008, 2009 Free Software Foundation, Inc.
 
    This file is part of GNU Binutils.
 
@@ -167,8 +168,7 @@ checksum (FILE *ffile, unsigned char *ptr, int size, int ccode)
 
   last = !(ccode & 0xff00);
   if (size & 0x7)
-    fatal (_("Checksum failure"));
-
+    abort ();
   ptr[0] = ccode | (last ? 0x80 : 0);
   ptr[1] = bytes + 1;
 
@@ -179,7 +179,7 @@ checksum (FILE *ffile, unsigned char *ptr, int size, int ccode)
   ptr[bytes] = ~sum;
   if (fwrite (ptr, bytes + 1, 1, ffile) != 1)
     /* FIXME: Return error status.  */
-    fatal (_("Failed to write checksum"));
+    abort ();
 }
 
 
@@ -219,7 +219,7 @@ writeINT (int n, unsigned char *ptr, int *idx, int size, FILE *ffile)
       ptr[byte + 3] = n >> 0;
       break;
     default:
-      fatal (_("Unsupported integer write size: %d"), size);
+      abort ();
     }
   *idx += size * 8;
 }
@@ -305,7 +305,7 @@ wr_tr (void)
 
   if (fwrite (b, sizeof (b), 1, file) != 1)
     /* FIXME: Return error status.  */
-    fatal (_("Failed to write TR block"));
+    abort ();
 }
 
 static void
@@ -396,8 +396,7 @@ wr_hd (struct coff_ofile *p)
 	  toolname = "C_H8/300S";
 	  break;
 	default:
-	  fatal (_("Unrecognized H8300 sub-architecture: %ld"),
-		 bfd_get_mach (abfd));
+	  abort();
 	}
       rnames = rname_h8300;
       break;
@@ -414,7 +413,7 @@ wr_hd (struct coff_ofile *p)
       rnames = rname_sh;
       break;
     default:
-      fatal (_("Unsupported architecture: %d"), bfd_get_arch (abfd));
+      abort ();
     }
 
   if (! (bfd_get_file_flags(abfd) & EXEC_P))
@@ -868,7 +867,7 @@ walk_tree_type_1 (struct coff_sfile *sfile, struct coff_symbol *symbol,
       break;
 
     default:
-      fatal (_("Unrecognised type: %d"), type->type);
+      abort ();
     }
 }
 
@@ -997,7 +996,7 @@ walk_tree_symbol (struct coff_sfile *sfile, struct coff_section *section ATTRIBU
       return;
 
     default:
-      fatal (_("Unrecognised coff symbol type: %d"), symbol->type->type);
+      abort ();
     }
 
   if (symbol->where->where == coff_where_member_of_struct)
@@ -1059,7 +1058,7 @@ walk_tree_symbol (struct coff_sfile *sfile, struct coff_section *section ATTRIBU
       break;
 
     default:
-      fatal (_("Unrecognised coff symbol visibility: %d"), symbol->visible->type);
+      abort ();
     }
 
   dsy.dlength = symbol->type->size;
@@ -1085,7 +1084,7 @@ walk_tree_symbol (struct coff_sfile *sfile, struct coff_section *section ATTRIBU
       break;
 
     default:
-      fatal (_("Unrecognised coff symbol location: %d"), symbol->where->where);
+      abort ();
     }
 
   switch (symbol->where->where)
@@ -1130,7 +1129,7 @@ walk_tree_symbol (struct coff_sfile *sfile, struct coff_section *section ATTRIBU
       break;
 
     default:
-      fatal (_("Unrecognised coff symbol location: %d"), symbol->where->where);
+      abort ();
     }
 
   if (symbol->where->where == coff_where_register)
@@ -1159,7 +1158,7 @@ walk_tree_symbol (struct coff_sfile *sfile, struct coff_section *section ATTRIBU
       break;
 
     default:
-      fatal (_("Unrecognised coff symbol visibility: %d"), symbol->visible->type);
+      abort ();
     }
 
   dsy.sfn = 0;
@@ -1204,8 +1203,6 @@ walk_tree_sfile (struct coff_section *section, struct coff_sfile *sfile)
 static void
 wr_program_structure (struct coff_ofile *p, struct coff_sfile *sfile)
 {
-  if (p->nsections < 4)
-    return;
   walk_tree_sfile (p->sections + 4, sfile);
 }
 
@@ -1464,7 +1461,7 @@ wr_cs (void)
 
   if (fwrite (b, sizeof (b), 1, file) != 1)
     /* FIXME: Return error status.  */
-    fatal (_("Failed to write CS struct"));
+    abort ();
 }
 
 /* Write out the SC records for a unit.  Create an SC
@@ -1581,7 +1578,6 @@ wr_sc (struct coff_ofile *ptr, struct coff_sfile *sfile)
       sysroff_swap_sc_out (file, &sc);
       scount++;
     }
-  free (info);
   return scount;
 }
 
@@ -1707,9 +1703,6 @@ prescan (struct coff_ofile *otree)
   struct coff_symbol *s;
   struct coff_section *common_section;
 
-  if (otree->nsections < 3)
-    return;
-
   /* Find the common section - always section 3.  */
   common_section = otree->sections + 3;
 
@@ -1720,6 +1713,7 @@ prescan (struct coff_ofile *otree)
       if (s->visible->type == coff_vis_common)
 	{
 	  struct coff_where *w = s->where;
+
 	  /*      s->visible->type = coff_vis_ext_def; leave it as common */
 	  common_section->size = align (common_section->size);
 	  w->offset = common_section->size + common_section->address;
@@ -1778,7 +1772,6 @@ main (int ac, char **av)
 
   program_name = av[0];
   xmalloc_set_program_name (program_name);
-  bfd_set_error_program_name (program_name);
 
   expandargv (&ac, &av);
 
@@ -1890,12 +1883,10 @@ main (int ac, char **av)
     printf ("ids %d %d\n", base1, base2);
 
   tree = coff_grok (abfd);
-  if (tree)
-    {
-      if (!noprescan)
-	prescan (tree);
 
-      wr_module (tree);
-    }
+  if (!noprescan)
+    prescan (tree);
+
+  wr_module (tree);
   return 0;
 }

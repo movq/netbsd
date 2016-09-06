@@ -1,7 +1,8 @@
-<!DOCTYPE book [
-<!ENTITY mdash "&#8212;">]>
+<!DOCTYPE book PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN"
+               "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd"
+	       [<!ENTITY mdash "&#8212;">]>
 <!--
- - Copyright (C) 2004, 2005, 2007, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
+ - Copyright (C) 2004, 2005, 2007, 2014  Internet Systems Consortium, Inc. ("ISC")
  - Copyright (C) 2000, 2001, 2003  Internet Software Consortium.
  -
  - Permission to use, copy, modify, and/or distribute this software for any
@@ -17,14 +18,10 @@
  - PERFORMANCE OF THIS SOFTWARE.
 -->
 
-<!-- Converted by db4-upgrade version 1.0 -->
-<refentry xmlns="http://docbook.org/ns/docbook" version="5.0">
-  <info>
-    <date>2007-06-18</date>
-  </info>
+<refentry>
+
   <refentryinfo>
-    <corpname>ISC</corpname>
-    <corpauthor>Internet Systems Consortium, Inc.</corpauthor>
+    <date>June 18, 2007</date>
   </refentryinfo>
 
   <refmeta>
@@ -39,7 +36,6 @@
       <year>2005</year>
       <year>2007</year>
       <year>2014</year>
-      <year>2015</year>
       <holder>Internet Systems Consortium, Inc. ("ISC")</holder>
     </copyright>
     <copyright>
@@ -119,8 +115,8 @@ void *
       </funcprototype>
 </funcsynopsis>
   </refsynopsisdiv>
-  <refsection><info><title>DESCRIPTION</title></info>
-
+  <refsect1>
+    <title>DESCRIPTION</title>
 
     <para><function>lwres_context_create()</function>
       creates a <type>lwres_context_t</type> structure for use in
@@ -216,10 +212,10 @@ void *
       written to this receive buffer is returned in
       <parameter>*recvd_len</parameter>.
     </para>
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>RETURN VALUES</title></info>
-
+  <refsect1>
+    <title>RETURN VALUES</title>
 
     <para><function>lwres_context_create()</function>
       returns <errorcode>LWRES_R_NOMEMORY</errorcode> if memory for
@@ -243,9 +239,9 @@ void *
       <function>lwres_context_sendrecv()</function>
       times out waiting for a response.
     </para>
-  </refsection>
-  <refsection><info><title>SEE ALSO</title></info>
-
+  </refsect1>
+  <refsect1>
+    <title>SEE ALSO</title>
     <para><citerefentry>
         <refentrytitle>lwres_conf_init</refentrytitle><manvolnum>3</manvolnum>
       </citerefentry>,
@@ -258,5 +254,9 @@ void *
         <refentrytitle>free</refentrytitle><manvolnum>3</manvolnum>
       </citerefentry>.
     </para>
-  </refsection>
-</refentry>
+  </refsect1>
+</refentry><!--
+ - Local variables:
+ - mode: sgml
+ - End:
+-->

@@ -1,5 +1,6 @@
 /* tc-m32r.c -- Assembler for the Renesas M32R.
-   Copyright (C) 1996-2015 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2004, 2005,
+   2006, 2007, 2009, 2011, 2012 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -567,10 +568,13 @@ debug_sym (int ignore ATTRIBUTE_UNUSED)
 {
   char *name;
   char delim;
+  char *end_name;
   symbolS *symbolP;
   sym_linkS *lnk;
 
-  delim = get_symbol_name (&name);
+  name = input_line_pointer;
+  delim = get_symbol_end ();
+  end_name = input_line_pointer;
 
   if ((symbolP = symbol_find (name)) == NULL
       && (symbolP = md_undefined_symbol (name)) == NULL)
@@ -592,7 +596,7 @@ debug_sym (int ignore ATTRIBUTE_UNUSED)
       symbol_get_obj (symbolP)->local = 1;
     }
 
-  (void) restore_line_pointer (delim);
+  *end_name = delim;
   demand_empty_rest_of_line ();
 }
 
@@ -1450,7 +1454,7 @@ md_section_align (segT segment, valueT size)
 {
   int align = bfd_get_section_alignment (stdoutput, segment);
 
-  return ((size + (1 << align) - 1) & -(1 << align));
+  return ((size + (1 << align) - 1) & (-1 << align));
 }
 
 symbolS *
@@ -1477,12 +1481,13 @@ m32r_scomm (int ignore ATTRIBUTE_UNUSED)
   offsetT align;
   int align2;
 
-  c = get_symbol_name (&name);
+  name = input_line_pointer;
+  c = get_symbol_end ();
 
   /* Just after name is now '\0'.  */
   p = input_line_pointer;
   *p = c;
-  SKIP_WHITESPACE_AFTER_NAME ();
+  SKIP_WHITESPACE ();
   if (*input_line_pointer != ',')
     {
       as_bad (_("Expected comma after symbol-name: rest of line ignored."));
@@ -2194,9 +2199,9 @@ tc_gen_reloc (asection * section, fixS * fixP)
 {
   arelent * reloc;
   bfd_reloc_code_real_type code;
-
+ 
   reloc = xmalloc (sizeof (* reloc));
-
+ 
   reloc->sym_ptr_ptr = xmalloc (sizeof (asymbol *));
   *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixP->fx_addsy);
   reloc->address = fixP->fx_frag->fr_address + fixP->fx_where;
@@ -2211,7 +2216,7 @@ tc_gen_reloc (asection * section, fixS * fixP)
           bfd_set_error (bfd_error_bad_value);
 	}
     }
-
+ 
   code = fixP->fx_r_type;
   if (pic_code)
     {
@@ -2263,7 +2268,7 @@ printf("%s",bfd_get_reloc_code_name(code));
 printf(" => %s",bfd_get_reloc_code_name(code));
 #endif
     }
-
+ 
   reloc->howto = bfd_reloc_type_lookup (stdoutput, code);
 
 #ifdef DEBUG_PIC
@@ -2277,7 +2282,7 @@ printf(" => %s\n",reloc->howto->name);
             fixP->fx_r_type, bfd_get_reloc_code_name (code));
       return NULL;
     }
-
+ 
   /* Use fx_offset for these cases.  */
   if (   fixP->fx_r_type == BFD_RELOC_VTABLE_ENTRY
       || fixP->fx_r_type == BFD_RELOC_VTABLE_INHERIT
@@ -2295,7 +2300,7 @@ printf(" => %s\n",reloc->howto->name);
     reloc->addend  = fixP->fx_offset;
   else
     reloc->addend  = fixP->fx_addnumber;
-
+ 
   return reloc;
 }
 

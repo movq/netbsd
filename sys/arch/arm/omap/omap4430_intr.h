@@ -1,4 +1,4 @@
-/*	$NetBSD: omap4430_intr.h,v 1.3 2015/04/09 21:33:54 matt Exp $	*/
+/*	$NetBSD: omap4430_intr.h,v 1.2.18.1 2015/07/30 09:37:37 martin Exp $	*/
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.

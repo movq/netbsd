@@ -1,4 +1,4 @@
-/*	$NetBSD: wapbl.h,v 1.17 2016/01/23 16:02:09 christos Exp $	*/
+/*	$NetBSD: wapbl.h,v 1.15 2013/09/30 18:58:00 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2003,2008 The NetBSD Foundation, Inc.
@@ -34,9 +34,7 @@
 
 #include <sys/mutex.h>
 
-#if defined(_KERNEL) || defined(_KMEMUSER)
 #include <miscfs/specfs/specdev.h>
-#endif
 
 /* This header file describes the api and data structures for
  * write ahead physical block logging (WAPBL) support.
@@ -217,7 +215,6 @@ wapbl_vphaswapbl(struct vnode *vp)
 /* Replay support */
 
 #ifdef WAPBL_INTERNAL
-LIST_HEAD(wapbl_blk_head, wapbl_blk);
 struct wapbl_replay {
 	struct vnode *wr_logvp;
 	struct vnode *wr_devvp;
@@ -231,7 +228,7 @@ struct wapbl_replay {
 
 	void *wr_scratch;
 
-	struct wapbl_blk_head *wr_blkhash;
+	LIST_HEAD(wapbl_blk_head, wapbl_blk) *wr_blkhash;
 	u_long wr_blkhashmask;
 	int wr_blkhashcnt;
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: evdns.c,v 1.3 2015/01/29 07:26:02 spz Exp $	*/
+/*	$NetBSD: evdns.c,v 1.2.8.1 2015/02/03 08:23:39 bouyer Exp $	*/
 /* Copyright 2006-2007 Niels Provos
  * Copyright 2007-2012 Nick Mathewson and Niels Provos
  *
@@ -52,7 +52,7 @@
 #include <sys/types.h>
 #include "event2/event-config.h"
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: evdns.c,v 1.3 2015/01/29 07:26:02 spz Exp $");
+__RCSID("$NetBSD: evdns.c,v 1.2.8.1 2015/02/03 08:23:39 bouyer Exp $");
 
 #ifndef _FORTIFY_SOURCE
 #define _FORTIFY_SOURCE 3

@@ -38,7 +38,6 @@
 #include "llvm/ADT/Twine.h"
 #include "llvm/Support/CommandLine.h"
 #include "llvm/Support/ManagedStatic.h"
-#include "llvm/Support/Path.h"
 #include "llvm/Support/PrettyStackTrace.h"
 #include "llvm/Support/Signals.h"
 #include "llvm/Support/WindowsError.h"
@@ -328,9 +327,11 @@ int main(int argc, char **argv) {
   if (TraceExecution)
     errs() << ToolName << ": Found Program: " << ProgramToRun << '\n';
 
-  for (const std::string &Arg : Argv) {
+  for (std::vector<std::string>::iterator i = Argv.begin(),
+                                          e = Argv.end();
+                                          i != e; ++i) {
     CommandLine.push_back(' ');
-    CommandLine.append(Arg);
+    CommandLine.append(*i);
   }
 
   if (TraceExecution)

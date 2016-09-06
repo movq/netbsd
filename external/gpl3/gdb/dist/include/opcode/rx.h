@@ -1,5 +1,6 @@
 /* Opcode decoder for the Renesas RX
-   Copyright (C) 2008-2015 Free Software Foundation, Inc.
+   Copyright 2008, 2009, 2010
+   Free Software Foundation, Inc.
    Written by DJ Delorie <dj@redhat.com>
 
    This file is part of GDB, the GNU Debugger and GAS, the GNU Assembler.
@@ -22,10 +23,6 @@
 /* The RX decoder in libopcodes is used by the simulator, gdb's
    analyzer, and the disassembler.  Given an opcode data source,
    it decodes the next opcode into the following structures.  */
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 typedef enum
 {
@@ -216,7 +213,3 @@ typedef struct
    registers.  32..47 are condition codes.  */
 
 int rx_decode_opcode (unsigned long, RX_Opcode_Decoded *, int (*)(void *), void *);
-
-#ifdef __cplusplus
-}
-#endif

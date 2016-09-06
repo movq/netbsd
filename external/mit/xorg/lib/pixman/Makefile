@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.35 2016/03/30 16:19:06 macallan Exp $
+#	$NetBSD: Makefile,v 1.31 2014/08/10 19:11:08 joerg Exp $
 
 NOLINT=	1	# defined
 
@@ -41,7 +41,7 @@ SRCS+=					\
 	pixman-x86.c			\
 	pixman-mips.c			\
 	pixman-arm.c			\
-	pixman-ppc.c
+	pixman-ppc.c			\
 
 # XXX
 
@@ -61,7 +61,7 @@ SRCS+=	pixman-sse2.c pixman-ssse3.c
 COPTS.pixman-sse2.c=	-msse2 -fvisibility=hidden
 COPTS.pixman-ssse3.c=	-msse3 -mssse3 -fvisibility=hidden
 CPPFLAGS+=		-DUSE_SSE2 -DUSE_SSSE3
-MKDEPFLAGS+=		-msse2 -msse3 -mssse3 -fvisibility=hidden
+MKDEPFLAGS+=		-msse2 -mssse3 -mssse3 -fvisibility=hidden
 .endif
 
 .if ${MACHINE_ARCH} == "powerpc"
@@ -90,12 +90,12 @@ AFLAGS+=	${${ACTIVE_CC} == "clang" :? -fno-integrated-as :}
 #CPPFLAGS+=	-DUSE_ARM_IWMMXT
 .endif
 
-.if ${MACHINE_ARCH} == "mips64el"
+.if ${MACHINE} == "evbmips"
 # Loongson MMI
 SRCS+=		pixman-mmx.c
 CPPFLAGS+=	-DUSE_LOONGSON_MMI
 # SIMD instructions use floatpoint registers so we need to enable their use
-COPTS.pixman-mmx.c=	-march=loongson2f -mhard-float -Wa,-mhard-float
+COPTS.pixman-mmx.c=	-march=loongson2f -mhard-float
 .endif
 
 INCS=	pixman.h pixman-version.h

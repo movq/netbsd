@@ -1,4 +1,4 @@
-/*	$NetBSD: dt.c,v 1.12 2015/06/28 09:15:45 maxv Exp $	*/
+/*	$NetBSD: dt.c,v 1.11.28.1 2015/07/05 20:32:56 snj Exp $	*/
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -133,7 +133,7 @@ SOFTWARE.
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: dt.c,v 1.12 2015/06/28 09:15:45 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: dt.c,v 1.11.28.1 2015/07/05 20:32:56 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

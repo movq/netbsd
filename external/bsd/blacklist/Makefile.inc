@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.3 2015/01/23 03:57:22 christos Exp $
+#	$NetBSD: Makefile.inc,v 1.3.2.2 2015/04/30 06:07:33 riz Exp $
 
 WARNS=6
 .if !defined(LIB)

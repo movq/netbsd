@@ -1,5 +1,4 @@
-/*	$NetBSD: xhci_pci.c,v 1.6 2016/05/03 13:14:44 skrll Exp $	*/
-/*	OpenBSD: xhci_pci.c,v 1.4 2014/07/12 17:38:51 yuo Exp	*/
+/*	$NetBSD: xhci_pci.c,v 1.3 2014/03/29 19:28:25 christos Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -32,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xhci_pci.c,v 1.6 2016/05/03 13:14:44 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xhci_pci.c,v 1.3 2014/03/29 19:28:25 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -44,7 +43,6 @@ __KERNEL_RCSID(0, "$NetBSD: xhci_pci.c,v 1.6 2016/05/03 13:14:44 skrll Exp $");
 #include <sys/bus.h>
 
 #include <dev/pci/pcivar.h>
-#include <dev/pci/pcidevs.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbdi.h>
@@ -58,8 +56,6 @@ struct xhci_pci_softc {
 	struct xhci_softc	sc_xhci;
 	pci_chipset_tag_t	sc_pc;
 	pcitag_t		sc_tag;
-	void			*sc_ih;
-	pci_intr_handle_t	*sc_pihp;
 };
 
 static int
@@ -75,42 +71,6 @@ xhci_pci_match(device_t parent, cfdata_t match, void *aux)
 	return 0;
 }
 
-static int
-xhci_pci_port_route(struct xhci_pci_softc *psc)
-{
-	struct xhci_softc * const sc = &psc->sc_xhci;
-
-	pcireg_t val;
-
-	/*
-	 * Check USB3 Port Routing Mask register that indicates the ports
-	 * can be changed from OS, and turn on by USB3 Port SS Enable register.
-	 */
-	val = pci_conf_read(psc->sc_pc, psc->sc_tag, PCI_XHCI_INTEL_USB3PRM);
-	aprint_debug_dev(sc->sc_dev,
-	    "USB3PRM / USB3.0 configurable ports: 0x%08x\n", val);
-
-	pci_conf_write(psc->sc_pc, psc->sc_tag, PCI_XHCI_INTEL_USB3_PSSEN, val);
-	val = pci_conf_read(psc->sc_pc, psc->sc_tag,PCI_XHCI_INTEL_USB3_PSSEN);
-	aprint_debug_dev(sc->sc_dev,
-	    "USB3_PSSEN / Enabled USB3.0 ports under xHCI: 0x%08x\n", val);
-
-	/*
-	 * Check USB2 Port Routing Mask register that indicates the USB2.0
-	 * ports to be controlled by xHCI HC, and switch them to xHCI HC.
-	 */
-	val = pci_conf_read(psc->sc_pc, psc->sc_tag, PCI_XHCI_INTEL_USB2PRM);
-	aprint_debug_dev(sc->sc_dev,
-	    "XUSB2PRM / USB2.0 ports can switch from EHCI to xHCI:"
-	    "0x%08x\n", val);
-	pci_conf_write(psc->sc_pc, psc->sc_tag, PCI_XHCI_INTEL_XUSB2PR, val);
-	val = pci_conf_read(psc->sc_pc, psc->sc_tag, PCI_XHCI_INTEL_XUSB2PR);
-	aprint_debug_dev(sc->sc_dev,
-	    "XUSB2PR / USB2.0 ports under xHCI: 0x%08x\n", val);
-
-	return 0;
-}
-
 static void
 xhci_pci_attach(device_t parent, device_t self, void *aux)
 {
@@ -120,23 +80,22 @@ xhci_pci_attach(device_t parent, device_t self, void *aux)
 	const pci_chipset_tag_t pc = pa->pa_pc;
 	const pcitag_t tag = pa->pa_tag;
 	char const *intrstr;
+	pci_intr_handle_t ih;
 	pcireg_t csr, memtype;
 	int err;
+	//const char *vendor;
 	uint32_t hccparams;
 	char intrbuf[PCI_INTRSTR_LEN];
 
 	sc->sc_dev = self;
-	sc->sc_bus.ub_hcpriv = sc;
+	sc->sc_bus.hci_private = sc;
 
 	pci_aprint_devinfo(pa, "USB Controller");
-
-	/* Check for quirks */
-	sc->sc_quirks = 0;
 
 	/* check if memory space access is enabled */
 	csr = pci_conf_read(pc, tag, PCI_COMMAND_STATUS_REG);
 #ifdef DEBUG
-	printf("%s: csr: %08x\n", __func__, csr);
+	printf("csr: %08x\n", csr);
 #endif
 	if ((csr & PCI_COMMAND_MEM_ENABLE) == 0) {
 		aprint_error_dev(self, "memory access is disabled\n");
@@ -158,32 +117,35 @@ xhci_pci_attach(device_t parent, device_t self, void *aux)
 	default:
 		aprint_error_dev(self, "BAR not 64 or 32-bit MMIO\n");
 		return;
+		break;
 	}
 
 	psc->sc_pc = pc;
 	psc->sc_tag = tag;
 
-	hccparams = bus_space_read_4(sc->sc_iot, sc->sc_ioh, XHCI_HCCPARAMS);
+	hccparams = bus_space_read_4(sc->sc_iot, sc->sc_ioh, 0x10);
 
-	if (pci_dma64_available(pa) && (XHCI_HCC_AC64(hccparams) != 0))
-		sc->sc_bus.ub_dmatag = pa->pa_dmat64;
+	if (pci_dma64_available(pa) && ((hccparams&1)==1))
+		sc->sc_bus.dmatag = pa->pa_dmat64;
 	else
-		sc->sc_bus.ub_dmatag = pa->pa_dmat;
+		sc->sc_bus.dmatag = pa->pa_dmat;
 
 	/* Enable the device. */
 	pci_conf_write(pc, tag, PCI_COMMAND_STATUS_REG,
 		       csr | PCI_COMMAND_MASTER_ENABLE);
 
-	/* Allocate and establish the interrupt. */
-	if (pci_intr_alloc(pa, &psc->sc_pihp, NULL, 0)) {
-		aprint_error_dev(self, "can't allocate handler\n");
+	/* Map and establish the interrupt. */
+	if (pci_intr_map(pa, &ih)) {
+		aprint_error_dev(self, "couldn't map interrupt\n");
 		goto fail;
 	}
-	intrstr = pci_intr_string(pc, psc->sc_pihp[0], intrbuf,
-	    sizeof(intrbuf));
-	psc->sc_ih = pci_intr_establish(pc, psc->sc_pihp[0], IPL_USB,
-	    xhci_intr, sc);
-	if (psc->sc_ih == NULL) {
+
+	/*
+	 * Allocate IRQ
+	 */
+	intrstr = pci_intr_string(pc, ih, intrbuf, sizeof(intrbuf));
+	sc->sc_ih = pci_intr_establish(pc, ih, IPL_USB, xhci_intr, sc);
+	if (sc->sc_ih == NULL) {
 		aprint_error_dev(self, "couldn't establish interrupt");
 		if (intrstr != NULL)
 			aprint_error(" at %s", intrstr);
@@ -192,28 +154,22 @@ xhci_pci_attach(device_t parent, device_t self, void *aux)
 	}
 	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
+#if 0
 	/* Figure out vendor for root hub descriptor. */
+	vendor = pci_findvendor(pa->pa_id);
 	sc->sc_id_vendor = PCI_VENDOR(pa->pa_id);
-	pci_findvendor(sc->sc_vendor, sizeof(sc->sc_vendor),
-	    sc->sc_id_vendor);
-
-	/* Intel chipset requires SuperSpeed enable and USB2 port routing */
-	switch (PCI_VENDOR(pa->pa_id)) {
-	case PCI_VENDOR_INTEL:
-		sc->sc_quirks |= XHCI_QUIRK_INTEL;
-		break;
-	default:
-		break;
-	}
+	if (vendor)
+		strlcpy(sc->sc_vendor, vendor, sizeof(sc->sc_vendor));
+	else
+		snprintf(sc->sc_vendor, sizeof(sc->sc_vendor),
+		    "vendor 0x%04x", PCI_VENDOR(pa->pa_id));
+#endif
 
 	err = xhci_init(sc);
 	if (err) {
 		aprint_error_dev(self, "init failed, error=%d\n", err);
 		goto fail;
 	}
-
-	if ((sc->sc_quirks & XHCI_QUIRK_INTEL) != 0)
-		xhci_pci_port_route(psc);
 
 	if (!pmf_device_register1(self, xhci_suspend, xhci_resume,
 	                          xhci_shutdown))
@@ -224,9 +180,9 @@ xhci_pci_attach(device_t parent, device_t self, void *aux)
 	return;
 
 fail:
-	if (psc->sc_ih) {
-		pci_intr_release(psc->sc_pc, psc->sc_pihp, 1);
-		psc->sc_ih = NULL;
+	if (sc->sc_ih) {
+		pci_intr_disestablish(psc->sc_pc, sc->sc_ih);
+		sc->sc_ih = NULL;
 	}
 	if (sc->sc_ios) {
 		bus_space_unmap(sc->sc_iot, sc->sc_ioh, sc->sc_ios);
@@ -258,9 +214,9 @@ xhci_pci_detach(device_t self, int flags)
 #endif
 	}
 
-	if (psc->sc_ih != NULL) {
-		pci_intr_release(psc->sc_pc, psc->sc_pihp, 1);
-		psc->sc_ih = NULL;
+	if (sc->sc_ih != NULL) {
+		pci_intr_disestablish(psc->sc_pc, sc->sc_ih);
+		sc->sc_ih = NULL;
 	}
 	if (sc->sc_ios) {
 		bus_space_unmap(sc->sc_iot, sc->sc_ioh, sc->sc_ios);

@@ -1,6 +1,6 @@
 /* GDB CLI command scripting.
 
-   Copyright (C) 1986-2015 Free Software Foundation, Inc.
+   Copyright (C) 1986-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,15 +23,17 @@
 #include <ctype.h>
 
 #include "ui-out.h"
+#include <string.h>
+#include "exceptions.h"
 #include "top.h"
 #include "breakpoint.h"
 #include "cli/cli-cmds.h"
 #include "cli/cli-decode.h"
 #include "cli/cli-script.h"
+#include "gdb_assert.h"
 
-#include "extension.h"
+#include "python/python.h"
 #include "interps.h"
-#include "compile/compile.h"
 
 /* Prototypes for local functions.  */
 
@@ -88,9 +90,7 @@ multi_line_command_p (enum command_control_type type)
     case while_control:
     case while_stepping_control:
     case commands_control:
-    case compile_control:
     case python_control:
-    case guile_control:
       return 1;
     default:
       return 0;
@@ -266,32 +266,6 @@ print_command_lines (struct ui_out *uiout, struct command_line *cmd,
 	  ui_out_text (uiout, "\n");
 	  /* Don't indent python code at all.  */
 	  print_command_lines (uiout, *list->body_list, 0);
-	  if (depth)
-	    ui_out_spaces (uiout, 2 * depth);
-	  ui_out_field_string (uiout, NULL, "end");
-	  ui_out_text (uiout, "\n");
-	  list = list->next;
-	  continue;
-	}
-
-      if (list->control_type == compile_control)
-	{
-	  ui_out_field_string (uiout, NULL, "compile expression");
-	  ui_out_text (uiout, "\n");
-	  print_command_lines (uiout, *list->body_list, 0);
-	  if (depth)
-	    ui_out_spaces (uiout, 2 * depth);
-	  ui_out_field_string (uiout, NULL, "end");
-	  ui_out_text (uiout, "\n");
-	  list = list->next;
-	  continue;
-	}
-
-      if (list->control_type == guile_control)
-	{
-	  ui_out_field_string (uiout, NULL, "guile");
-	  ui_out_text (uiout, "\n");
-	  print_command_lines (uiout, *list->body_list, depth + 1);
 	  if (depth)
 	    ui_out_spaces (uiout, 2 * depth);
 	  ui_out_field_string (uiout, NULL, "end");
@@ -614,16 +588,9 @@ execute_control_command (struct command_line *cmd)
 	break;
       }
 
-    case compile_control:
-      eval_compile_command (cmd, NULL, cmd->control_u.compile.scope,
-			    cmd->control_u.compile.scope_data);
-      ret = simple_control;
-      break;
-
     case python_control:
-    case guile_control:
       {
-	eval_ext_lang_from_control_command (cmd);
+	eval_python_from_control_command (cmd);
 	ret = simple_control;
 	break;
       }
@@ -801,7 +768,7 @@ locate_arg (char *p)
 {
   while ((p = strchr (p, '$')))
     {
-      if (startswith (p, "$arg")
+      if (strncmp (p, "$arg", 4) == 0
 	  && (isdigit (p[4]) || p[4] == 'c'))
 	return p;
       p++;
@@ -989,7 +956,7 @@ process_next_line (char *p, struct command_line **command, int parse_commands,
 
   /* 'end' is always recognized, regardless of parse_commands value.
      We also permit whitespace before end and after.  */
-  if (p_end - p_start == 3 && startswith (p_start, "end"))
+  if (p_end - p_start == 3 && !strncmp (p_start, "end", 3))
     return end_command;
   
   if (parse_commands)
@@ -1006,14 +973,14 @@ process_next_line (char *p, struct command_line **command, int parse_commands,
 	return nop_command;
 
       /* Is the else clause of an if control structure?  */
-      if (p_end - p == 4 && startswith (p, "else"))
+      if (p_end - p == 4 && !strncmp (p, "else", 4))
 	return else_command;
 
       /* Check for while, if, break, continue, etc and build a new
 	 command line structure for them.  */
-      if ((p_end - p >= 14 && startswith (p, "while-stepping"))
-	  || (p_end - p >= 8 && startswith (p, "stepping"))
-	  || (p_end - p >= 2 && startswith (p, "ws")))
+      if ((p_end - p >= 14 && !strncmp (p, "while-stepping", 14))
+	  || (p_end - p >= 8 && !strncmp (p, "stepping", 8))
+	  || (p_end - p >= 2 && !strncmp (p, "ws", 2)))
 	{
 	  /* Because validate_actionline and encode_action lookup
 	     command's line as command, we need the line to
@@ -1028,7 +995,7 @@ process_next_line (char *p, struct command_line **command, int parse_commands,
 	     not.  */
 	  *command = build_command_line (while_stepping_control, p);
 	}
-      else if (p_end - p > 5 && startswith (p, "while"))
+      else if (p_end - p > 5 && !strncmp (p, "while", 5))
 	{
 	  char *first_arg;
 
@@ -1037,7 +1004,7 @@ process_next_line (char *p, struct command_line **command, int parse_commands,
 	    first_arg++;
 	  *command = build_command_line (while_control, first_arg);
 	}
-      else if (p_end - p > 2 && startswith (p, "if"))
+      else if (p_end - p > 2 && !strncmp (p, "if", 2))
 	{
 	  char *first_arg;
 
@@ -1046,7 +1013,7 @@ process_next_line (char *p, struct command_line **command, int parse_commands,
 	    first_arg++;
 	  *command = build_command_line (if_control, first_arg);
 	}
-      else if (p_end - p >= 8 && startswith (p, "commands"))
+      else if (p_end - p >= 8 && !strncmp (p, "commands", 8))
 	{
 	  char *first_arg;
 
@@ -1055,26 +1022,13 @@ process_next_line (char *p, struct command_line **command, int parse_commands,
 	    first_arg++;
 	  *command = build_command_line (commands_control, first_arg);
 	}
-      else if (p_end - p == 6 && startswith (p, "python"))
+      else if (p_end - p == 6 && !strncmp (p, "python", 6))
 	{
 	  /* Note that we ignore the inline "python command" form
 	     here.  */
 	  *command = build_command_line (python_control, "");
 	}
-      else if (p_end - p == 6 && startswith (p, "compile"))
-	{
-	  /* Note that we ignore the inline "compile command" form
-	     here.  */
-	  *command = build_command_line (compile_control, "");
-	  (*command)->control_u.compile.scope = COMPILE_I_INVALID_SCOPE;
-	}
-
-      else if (p_end - p == 5 && startswith (p, "guile"))
-	{
-	  /* Note that we ignore the inline "guile command" form here.  */
-	  *command = build_command_line (guile_control, "");
-	}
-      else if (p_end - p == 10 && startswith (p, "loop_break"))
+      else if (p_end - p == 10 && !strncmp (p, "loop_break", 10))
 	{
 	  *command = (struct command_line *)
 	    xmalloc (sizeof (struct command_line));
@@ -1084,7 +1038,7 @@ process_next_line (char *p, struct command_line **command, int parse_commands,
 	  (*command)->body_count = 0;
 	  (*command)->body_list = NULL;
 	}
-      else if (p_end - p == 13 && startswith (p, "loop_continue"))
+      else if (p_end - p == 13 && !strncmp (p, "loop_continue", 13))
 	{
 	  *command = (struct command_line *)
 	    xmalloc (sizeof (struct command_line));
@@ -1112,17 +1066,17 @@ process_next_line (char *p, struct command_line **command, int parse_commands,
 
   if (validator)
     {
+      volatile struct gdb_exception ex;
 
-      TRY
+      TRY_CATCH (ex, RETURN_MASK_ALL)
 	{
 	  validator ((*command)->line, closure);
 	}
-      CATCH (ex, RETURN_MASK_ALL)
+      if (ex.reason < 0)
 	{
 	  xfree (*command);
 	  throw_exception (ex);
 	}
-      END_CATCH
     }
 
   /* Nothing special.  */
@@ -1161,9 +1115,7 @@ recurse_read_control_structure (char * (*read_next_line_func) (void),
 
       next = NULL;
       val = process_next_line (read_next_line_func (), &next, 
-			       current_cmd->control_type != python_control
-			       && current_cmd->control_type != guile_control
-			       && current_cmd->control_type != compile_control,
+			       current_cmd->control_type != python_control,
 			       validator, closure);
 
       /* Just skip blanks and comments.  */
@@ -1533,7 +1485,7 @@ define_command (char *comname, int from_tty)
     {
       int q;
 
-      if (c->theclass == class_user || c->theclass == class_alias)
+      if (c->class == class_user || c->class == class_alias)
 	q = query (_("Redefine command \"%s\"? "), c->name);
       else
 	q = query (_("Really redefine built-in command \"%s\"? "), c->name);
@@ -1585,11 +1537,11 @@ define_command (char *comname, int from_tty)
 	     "Type commands for definition of \"%s\".", comfull);
   cmds = read_command_lines (tmpbuf, from_tty, 1, 0, 0);
 
-  if (c && c->theclass == class_user)
+  if (c && c->class == class_user)
     free_command_lines (&c->user_commands);
 
   newc = add_cmd (comname, class_user, user_defined_command,
-		  (c && c->theclass == class_user)
+		  (c && c->class == class_user)
 		  ? c->doc : xstrdup ("User-defined."), list);
   newc->user_commands = cmds;
 
@@ -1630,7 +1582,7 @@ document_command (char *comname, int from_tty)
   tem = comname;
   c = lookup_cmd (&tem, *list, "", 0, 1);
 
-  if (c->theclass != class_user)
+  if (c->class != class_user)
     error (_("Command \"%s\" is built-in."), comfull);
 
   xsnprintf (tmpbuf, sizeof (tmpbuf), "Type documentation for \"%s\".",
@@ -1638,27 +1590,24 @@ document_command (char *comname, int from_tty)
   doclines = read_command_lines (tmpbuf, from_tty, 0, 0, 0);
 
   if (c->doc)
-    xfree ((char *) c->doc);
+    xfree (c->doc);
 
   {
     struct command_line *cl1;
     int len = 0;
-    char *doc;
 
     for (cl1 = doclines; cl1; cl1 = cl1->next)
       len += strlen (cl1->line) + 1;
 
-    doc = (char *) xmalloc (len + 1);
-    *doc = 0;
+    c->doc = (char *) xmalloc (len + 1);
+    *c->doc = 0;
 
     for (cl1 = doclines; cl1; cl1 = cl1->next)
       {
-	strcat (doc, cl1->line);
+	strcat (c->doc, cl1->line);
 	if (cl1->next)
-	  strcat (doc, "\n");
+	  strcat (c->doc, "\n");
       }
-
-    c->doc = doc;
   }
 
   free_command_lines (&doclines);
@@ -1697,24 +1646,26 @@ script_from_file (FILE *stream, const char *file)
   source_line_number = 0;
   source_file_name = file;
 
-  make_cleanup_restore_integer (&interpreter_async);
-  interpreter_async = 0;
-
   {
+    volatile struct gdb_exception e;
 
-    TRY
+    TRY_CATCH (e, RETURN_MASK_ERROR)
       {
 	read_command_file (stream);
       }
-    CATCH (e, RETURN_MASK_ERROR)
+    switch (e.reason)
       {
+      case 0:
+	break;
+      case RETURN_ERROR:
 	/* Re-throw the error, but with the file name information
 	   prepended.  */
 	throw_error (e.error,
 		     _("%s:%d: Error in sourced command file:\n%s"),
 		     source_file_name, source_line_number, e.message);
+      default:
+	internal_error (__FILE__, __LINE__, _("bad reason"));
       }
-    END_CATCH
   }
 
   do_cleanups (old_cleanups);
@@ -1732,19 +1683,19 @@ show_user_1 (struct cmd_list_element *c, const char *prefix, const char *name,
 
   if (c->prefixlist != NULL)
     {
-      const char *prefixname = c->prefixname;
+      char *prefixname = c->prefixname;
 
       for (c = *c->prefixlist; c != NULL; c = c->next)
-	if (c->theclass == class_user || c->prefixlist != NULL)
+	if (c->class == class_user || c->prefixlist != NULL)
 	  show_user_1 (c, prefixname, c->name, gdb_stdout);
       return;
     }
 
   cmdlines = c->user_commands;
-  fprintf_filtered (stream, "User command \"%s%s\":\n", prefix, name);
-
   if (!cmdlines)
     return;
+  fprintf_filtered (stream, "User command \"%s%s\":\n", prefix, name);
+
   print_command_lines (current_uiout, cmdlines, 1);
   fputs_filtered ("\n", stream);
 }

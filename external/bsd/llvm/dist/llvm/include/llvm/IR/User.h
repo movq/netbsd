@@ -19,11 +19,9 @@
 #ifndef LLVM_IR_USER_H
 #define LLVM_IR_USER_H
 
-#include "llvm/ADT/ArrayRef.h"
 #include "llvm/ADT/iterator.h"
 #include "llvm/ADT/iterator_range.h"
 #include "llvm/IR/Value.h"
-#include "llvm/Support/AlignOf.h"
 #include "llvm/Support/ErrorHandling.h"
 
 namespace llvm {
@@ -35,58 +33,35 @@ template <class>
 struct OperandTraits;
 
 class User : public Value {
-  User(const User &) = delete;
+  User(const User &) LLVM_DELETED_FUNCTION;
+  void *operator new(size_t) LLVM_DELETED_FUNCTION;
   template <unsigned>
   friend struct HungoffOperandTraits;
   virtual void anchor();
-
-  LLVM_ATTRIBUTE_ALWAYS_INLINE inline static void *
-  allocateFixedOperandUser(size_t, unsigned, unsigned);
-
 protected:
-  /// Allocate a User with an operand pointer co-allocated.
+  /// \brief This is a pointer to the array of Uses for this User.
   ///
-  /// This is used for subclasses which need to allocate a variable number
-  /// of operands, ie, 'hung off uses'.
-  void *operator new(size_t Size);
+  /// For nodes of fixed arity (e.g. a binary operator) this array will live
+  /// prefixed to some derived class instance.  For nodes of resizable variable
+  /// arity (e.g. PHINodes, SwitchInst etc.), this memory will be dynamically
+  /// allocated and should be destroyed by the classes' virtual dtor.
+  Use *OperandList;
 
-  /// Allocate a User with the operands co-allocated.
-  ///
-  /// This is used for subclasses which have a fixed number of operands.
-  void *operator new(size_t Size, unsigned Us);
-
-  /// Allocate a User with the operands co-allocated.  If DescBytes is non-zero
-  /// then allocate an additional DescBytes bytes before the operands. These
-  /// bytes can be accessed by calling getDescriptor.
-  ///
-  /// DescBytes needs to be divisible by sizeof(void *).  The allocated
-  /// descriptor, if any, is aligned to sizeof(void *) bytes.
-  ///
-  /// This is used for subclasses which have a fixed number of operands.
-  void *operator new(size_t Size, unsigned Us, unsigned DescBytes);
-
-  User(Type *ty, unsigned vty, Use *, unsigned NumOps)
-      : Value(ty, vty) {
-    assert(NumOps < (1u << NumUserOperandsBits) && "Too many operands");
-    NumUserOperands = NumOps;
-    // If we have hung off uses, then the operand list should initially be
-    // null.
-    assert((!HasHungOffUses || !getOperandList()) &&
-           "Error in initializing hung off uses for User");
+  void *operator new(size_t s, unsigned Us);
+  User(Type *ty, unsigned vty, Use *OpList, unsigned NumOps)
+      : Value(ty, vty), OperandList(OpList) {
+    NumOperands = NumOps;
   }
-
-  /// \brief Allocate the array of Uses, followed by a pointer
-  /// (with bottom bit set) to the User.
-  /// \param IsPhi identifies callers which are phi nodes and which need
-  /// N BasicBlock* allocated along with N
-  void allocHungoffUses(unsigned N, bool IsPhi = false);
-
-  /// \brief Grow the number of hung off uses.  Note that allocHungoffUses
-  /// should be called if there are no uses.
-  void growHungoffUses(unsigned N, bool IsPhi = false);
-
+  Use *allocHungoffUses(unsigned) const;
+  void dropHungoffUses() {
+    Use::zap(OperandList, OperandList + NumOperands, true);
+    OperandList = nullptr;
+    // Reset NumOperands so User::operator delete() does the right thing.
+    NumOperands = 0;
+  }
 public:
-  ~User() override {
+  ~User() {
+    Use::zap(OperandList, OperandList + NumOperands);
   }
   /// \brief Free memory allocated for User and Use objects.
   void operator delete(void *Usr);
@@ -110,74 +85,28 @@ protected:
   template <int Idx> const Use &Op() const {
     return OpFrom<Idx>(this);
   }
-private:
-  Use *&getHungOffOperands() { return *(reinterpret_cast<Use **>(this) - 1); }
-
-  Use *getIntrusiveOperands() {
-    return reinterpret_cast<Use *>(this) - NumUserOperands;
-  }
-
-  void setOperandList(Use *NewList) {
-    assert(HasHungOffUses &&
-           "Setting operand list only required for hung off uses");
-    getHungOffOperands() = NewList;
-  }
 public:
-  Use *getOperandList() {
-    return HasHungOffUses ? getHungOffOperands() : getIntrusiveOperands();
-  }
-  const Use *getOperandList() const {
-    return const_cast<User *>(this)->getOperandList();
-  }
   Value *getOperand(unsigned i) const {
-    assert(i < NumUserOperands && "getOperand() out of range!");
-    return getOperandList()[i];
+    assert(i < NumOperands && "getOperand() out of range!");
+    return OperandList[i];
   }
   void setOperand(unsigned i, Value *Val) {
-    assert(i < NumUserOperands && "setOperand() out of range!");
+    assert(i < NumOperands && "setOperand() out of range!");
     assert((!isa<Constant>((const Value*)this) ||
             isa<GlobalValue>((const Value*)this)) &&
            "Cannot mutate a constant with setOperand!");
-    getOperandList()[i] = Val;
+    OperandList[i] = Val;
   }
   const Use &getOperandUse(unsigned i) const {
-    assert(i < NumUserOperands && "getOperandUse() out of range!");
-    return getOperandList()[i];
+    assert(i < NumOperands && "getOperandUse() out of range!");
+    return OperandList[i];
   }
   Use &getOperandUse(unsigned i) {
-    assert(i < NumUserOperands && "getOperandUse() out of range!");
-    return getOperandList()[i];
+    assert(i < NumOperands && "getOperandUse() out of range!");
+    return OperandList[i];
   }
 
-  unsigned getNumOperands() const { return NumUserOperands; }
-
-  /// Returns the descriptor co-allocated with this User instance.
-  ArrayRef<const uint8_t> getDescriptor() const;
-
-  /// Returns the descriptor co-allocated with this User instance.
-  MutableArrayRef<uint8_t> getDescriptor();
-
-  /// Set the number of operands on a GlobalVariable.
-  ///
-  /// GlobalVariable always allocates space for a single operands, but
-  /// doesn't always use it.
-  ///
-  /// FIXME: As that the number of operands is used to find the start of
-  /// the allocated memory in operator delete, we need to always think we have
-  /// 1 operand before delete.
-  void setGlobalVariableNumOperands(unsigned NumOps) {
-    assert(NumOps <= 1 && "GlobalVariable can only have 0 or 1 operands");
-    NumUserOperands = NumOps;
-  }
-
-  /// \brief Subclasses with hung off uses need to manage the operand count
-  /// themselves.  In these instances, the operand count isn't used to find the
-  /// OperandList, so there's no issue in having the operand count change.
-  void setNumHungOffUseOperands(unsigned NumOps) {
-    assert(HasHungOffUses && "Must have hung off uses to use this method");
-    assert(NumOps < (1u << NumUserOperandsBits) && "Too many operands");
-    NumUserOperands = NumOps;
-  }
+  unsigned getNumOperands() const { return NumOperands; }
 
   // ---------------------------------------------------------------------------
   // Operand Iterator interface...
@@ -187,18 +116,14 @@ public:
   typedef iterator_range<op_iterator> op_range;
   typedef iterator_range<const_op_iterator> const_op_range;
 
-  op_iterator       op_begin()       { return getOperandList(); }
-  const_op_iterator op_begin() const { return getOperandList(); }
-  op_iterator       op_end()         {
-    return getOperandList() + NumUserOperands;
-  }
-  const_op_iterator op_end()   const {
-    return getOperandList() + NumUserOperands;
-  }
-  op_range operands() {
+  inline op_iterator       op_begin()       { return OperandList; }
+  inline const_op_iterator op_begin() const { return OperandList; }
+  inline op_iterator       op_end()         { return OperandList+NumOperands; }
+  inline const_op_iterator op_end()   const { return OperandList+NumOperands; }
+  inline op_range operands() {
     return op_range(op_begin(), op_end());
   }
-  const_op_range operands() const {
+  inline const_op_range operands() const {
     return const_op_range(op_begin(), op_end());
   }
 
@@ -213,14 +138,14 @@ public:
     Value *operator->() const { return operator*(); }
   };
 
-  value_op_iterator value_op_begin() {
+  inline value_op_iterator value_op_begin() {
     return value_op_iterator(op_begin());
   }
-  value_op_iterator value_op_end() {
+  inline value_op_iterator value_op_end() {
     return value_op_iterator(op_end());
   }
-  iterator_range<value_op_iterator> operand_values() {
-    return make_range(value_op_begin(), value_op_end());
+  inline iterator_range<value_op_iterator> operand_values() {
+    return iterator_range<value_op_iterator>(value_op_begin(), value_op_end());
   }
 
   /// \brief Drop all references to operands.
@@ -247,11 +172,6 @@ public:
     return isa<Instruction>(V) || isa<Constant>(V);
   }
 };
-// Either Use objects, or a Use pointer can be prepended to User.
-static_assert(AlignOf<Use>::Alignment >= AlignOf<User>::Alignment,
-              "Alignment is insufficient after objects prepended to User");
-static_assert(AlignOf<Use *>::Alignment >= AlignOf<User>::Alignment,
-              "Alignment is insufficient after objects prepended to User");
 
 template<> struct simplify_type<User::op_iterator> {
   typedef Value* SimpleType;

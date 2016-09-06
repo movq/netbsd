@@ -1,4 +1,4 @@
-/*	$$NetBSD: pwdog.c,v 1.9 2016/07/14 10:19:06 msaitoh Exp $ */
+/*	$$NetBSD: pwdog.c,v 1.7 2011/08/30 07:22:12 mbalmer Exp $ */
 /*	$OpenBSD: pwdog.c,v 1.7 2010/04/08 00:23:53 tedu Exp $ */
 
 /*
@@ -83,7 +83,6 @@ pwdog_attach(device_t parent, device_t self, void *aux)
 	struct pci_attach_args *const pa = (struct pci_attach_args *)aux;
 	pcireg_t memtype;
 
-	aprint_naive("\n");
 	memtype = pci_mapreg_type(pa->pa_pc, pa->pa_tag, PCI_MAPREG_START);
 	if (pci_mapreg_map(pa, PCI_MAPREG_START, memtype, 0, &sc->sc_iot,
 	    &sc->sc_ioh, NULL, &sc->sc_iosize)) {
@@ -92,7 +91,7 @@ pwdog_attach(device_t parent, device_t self, void *aux)
 		    memtype == PCI_MAPREG_TYPE_IO ? "I/O" : "memory");
 		return;
 	}
-	aprint_normal("\n");
+	printf("\n");
 
 	sc->sc_dev = self;
 
@@ -192,7 +191,7 @@ pwdog_tickle(struct sysmon_wdog *smw)
 	return 0;
 }
 
-MODULE(MODULE_CLASS_DRIVER, pwdog, "pci,sysmon_wdog");
+MODULE(MODULE_CLASS_DRIVER, pwdog, "pci");
 
 #ifdef _MODULE
 #include "ioconf.c"

@@ -419,7 +419,7 @@ int MAIN(int argc, char **argv)
             ERR_print_errors(bio_err);
             goto end;
         }
-        BIO_printf(bio_err, "ok\n");
+            BIO_printf(bio_err, "ok\n");
 
     }
 

@@ -1,4 +1,4 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
  * Copyright (c) 2006 Nicholas Marriott <nicm@users.sourceforge.net>
@@ -39,10 +39,10 @@
 		fatalx("size too big");					\
 	if ((a)->space == 0) {						\
 	       	(a)->space = ARRAY_INITIALSPACE(a);			\
-		(a)->list = xrealloc((a)->list, (a)->space);		\
+		(a)->list = xrealloc((a)->list, 1, (a)->space);		\
 	}								\
 	while ((a)->space <= ((a)->num + (n)) * ARRAY_ITEMSIZE(a)) {	\
-		(a)->list = xreallocarray((a)->list, 2, (a)->space);	\
+		(a)->list = xrealloc((a)->list, 2, (a)->space);		\
 		(a)->space *= 2;					\
 	}								\
 } while (0)

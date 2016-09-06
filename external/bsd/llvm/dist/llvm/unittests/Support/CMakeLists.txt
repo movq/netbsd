@@ -1,5 +1,4 @@
 set(LLVM_LINK_COMPONENTS
-  ${LLVM_TARGETS_TO_BUILD}
   Support
   )
 
@@ -14,8 +13,6 @@ add_llvm_unittest(SupportTests
   CompressionTest.cpp
   ConvertUTFTest.cpp
   DataExtractorTest.cpp
-  DwarfTest.cpp
-  EndianStreamTest.cpp
   EndianTest.cpp
   ErrorOrTest.cpp
   FileOutputBufferTest.cpp
@@ -32,25 +29,19 @@ add_llvm_unittest(SupportTests
   ProcessTest.cpp
   ProgramTest.cpp
   RegexTest.cpp
-  ReplaceFileTest.cpp
   ScaledNumberTest.cpp
   SourceMgrTest.cpp
   SpecialCaseListTest.cpp
   StreamingMemoryObject.cpp
   StringPool.cpp
   SwapByteOrderTest.cpp
-  TargetRegistry.cpp
   ThreadLocalTest.cpp
-  ThreadPool.cpp
-  TimerTest.cpp
   TimeValueTest.cpp
-  TrailingObjectsTest.cpp
   UnicodeTest.cpp
   YAMLIOTest.cpp
   YAMLParserTest.cpp
   formatted_raw_ostream_test.cpp
   raw_ostream_test.cpp
-  raw_pwrite_stream_test.cpp
   )
 
 # ManagedStatic.cpp uses <pthread>.

@@ -1,4 +1,4 @@
-/* Copyright (C) 2009-2015 Free Software Foundation, Inc.
+/* Copyright (C) 2009-2013 Free Software Foundation, Inc.
    Contributed by Anatoly Sokolov (aesok@post.ru)
 
    This file is part of GCC.
@@ -25,17 +25,7 @@
 #include "tm.h"
 #include "tm_p.h"
 #include "cpplib.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
-#include "stor-layout.h"
 #include "target.h"
 #include "c-family/c-common.h"
 #include "langhooks.h"
@@ -124,7 +114,7 @@ avr_resolve_overloaded_builtin (unsigned int iloc, tree fndecl, void *vargs)
       fold = targetm.builtin_decl (id, true);
 
       if (fold != error_mark_node)
-        fold = build_function_call_vec (loc, vNULL, fold, &args, NULL);
+        fold = build_function_call_vec (loc, fold, &args, NULL);
 
       break; // absfx
 
@@ -190,7 +180,7 @@ avr_resolve_overloaded_builtin (unsigned int iloc, tree fndecl, void *vargs)
       fold = targetm.builtin_decl (id, true);
 
       if (fold != error_mark_node)
-        fold = build_function_call_vec (loc, vNULL, fold, &args, NULL);
+        fold = build_function_call_vec (loc, fold, &args, NULL);
 
       break; // roundfx
 
@@ -247,7 +237,7 @@ avr_resolve_overloaded_builtin (unsigned int iloc, tree fndecl, void *vargs)
       fold = targetm.builtin_decl (id, true);
 
       if (fold != error_mark_node)
-        fold = build_function_call_vec (loc, vNULL, fold, &args, NULL);
+        fold = build_function_call_vec (loc, fold, &args, NULL);
 
       break; // countlsfx
     }
@@ -305,11 +295,10 @@ avr_cpu_cpp_builtins (struct cpp_reader *pfile)
 
   builtin_define_std ("AVR");
 
-  /* __AVR_DEVICE_NAME__ and  avr_mcu_types[].macro like __AVR_ATmega8__
-	 are defined by -D command option, see device-specs file.  */
-
-  if (avr_arch->macro)
-    cpp_define_formatted (pfile, "__AVR_ARCH__=%s", avr_arch->macro);
+  if (avr_current_arch->macro)
+    cpp_define_formatted (pfile, "__AVR_ARCH__=%s", avr_current_arch->macro);
+  if (avr_current_device->macro)
+    cpp_define (pfile, avr_current_device->macro);
   if (AVR_HAVE_RAMPD)    cpp_define (pfile, "__AVR_HAVE_RAMPD__");
   if (AVR_HAVE_RAMPX)    cpp_define (pfile, "__AVR_HAVE_RAMPX__");
   if (AVR_HAVE_RAMPY)    cpp_define (pfile, "__AVR_HAVE_RAMPY__");
@@ -319,38 +308,21 @@ avr_cpu_cpp_builtins (struct cpp_reader *pfile)
   if (AVR_HAVE_MOVW)     cpp_define (pfile, "__AVR_HAVE_MOVW__");
   if (AVR_HAVE_LPMX)     cpp_define (pfile, "__AVR_HAVE_LPMX__");
 
-  if (avr_arch->asm_only)
+  if (avr_current_arch->asm_only)
     cpp_define (pfile, "__AVR_ASM_ONLY__");
   if (AVR_HAVE_MUL)
     {
       cpp_define (pfile, "__AVR_ENHANCED__");
       cpp_define (pfile, "__AVR_HAVE_MUL__");
     }
-  if (avr_arch->have_jmp_call)
+  if (avr_current_arch->have_jmp_call)
     {
       cpp_define (pfile, "__AVR_MEGA__");
       cpp_define (pfile, "__AVR_HAVE_JMP_CALL__");
     }
   if (AVR_XMEGA)
     cpp_define (pfile, "__AVR_XMEGA__");
-
-  if (AVR_TINY)
-    {
-      cpp_define (pfile, "__AVR_TINY__");
-
-      /* Define macro "__AVR_TINY_PM_BASE_ADDRESS__" with mapped program memory
-         start address.  This macro shall be used where mapped program
-         memory is accessed, eg. copying data section (__do_copy_data)
-         contents to data memory region.
-         NOTE:
-         Program memory of AVR_TINY devices cannot be accessed directly,
-         it has been mapped to the data memory.  For AVR_TINY devices
-         (ATtiny4/5/9/10/20 and 40) mapped program memory starts at 0x4000. */
-
-      cpp_define (pfile, "__AVR_TINY_PM_BASE_ADDRESS__=0x4000");
-    }
-
-  if (AVR_HAVE_EIJMP_EICALL)
+  if (avr_current_arch->have_eijmp_eicall)
     {
       cpp_define (pfile, "__AVR_HAVE_EIJMP_EICALL__");
       cpp_define (pfile, "__AVR_3_BYTE_PC__");
@@ -365,27 +337,25 @@ avr_cpu_cpp_builtins (struct cpp_reader *pfile)
   else
     cpp_define (pfile, "__AVR_HAVE_16BIT_SP__");
 
+  if (avr_sp8)
+    cpp_define (pfile, "__AVR_SP8__");
+
   if (AVR_HAVE_SPH)
     cpp_define (pfile, "__AVR_HAVE_SPH__");
-  else
-    cpp_define (pfile, "__AVR_SP8__");
 
   if (TARGET_NO_INTERRUPTS)
     cpp_define (pfile, "__NO_INTERRUPTS__");
 
-  if (TARGET_SKIP_BUG)
+  if (avr_current_device->errata_skip)
     {
       cpp_define (pfile, "__AVR_ERRATA_SKIP__");
 
-      if (AVR_HAVE_JMP_CALL)
+      if (avr_current_arch->have_jmp_call)
         cpp_define (pfile, "__AVR_ERRATA_SKIP_JMP_CALL__");
     }
 
-  if (TARGET_RMW)
-    cpp_define (pfile, "__AVR_ISA_RMW__");
-
   cpp_define_formatted (pfile, "__AVR_SFR_OFFSET__=0x%x",
-                        avr_arch->sfr_offset);
+                        avr_current_arch->sfr_offset);
 
 #ifdef WITH_AVRLIBC
   cpp_define (pfile, "__WITH_AVRLIBC__");
@@ -397,17 +367,14 @@ avr_cpu_cpp_builtins (struct cpp_reader *pfile)
      (as mentioned in ISO/IEC DTR 18037; Annex F.2) which is not
      implemented in GCC up to now.  */
 
-  if (lang_GNU_C ())
+  if (!strcmp (lang_hooks.name, "GNU C"))
     {
       for (i = 0; i < ADDR_SPACE_COUNT; i++)
         if (!ADDR_SPACE_GENERIC_P (i)
             /* Only supply __FLASH<n> macro if the address space is reasonable
                for this target.  The address space qualifier itself is still
                supported, but using it will throw an error.  */
-            && avr_addrspace[i].segment < avr_n_flash
-	    /* Only support __MEMX macro if we have LPM.  */
-	    && (AVR_HAVE_LPM || avr_addrspace[i].pointer_size <= 2))
-
+            && avr_addrspace[i].segment < avr_current_device->n_flash)
           {
             const char *name = avr_addrspace[i].name;
             char *Name = (char*) alloca (1 + strlen (name));

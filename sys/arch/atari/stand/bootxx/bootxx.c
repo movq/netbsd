@@ -1,4 +1,4 @@
-/*	$NetBSD: bootxx.c,v 1.17 2016/06/11 06:28:07 dholland Exp $	*/
+/*	$NetBSD: bootxx.c,v 1.15.38.1 2014/12/14 16:36:32 martin Exp $	*/
 
 /*
  * Copyright (c) 1995 Waldi Ravens.
@@ -66,7 +66,7 @@ bootxx(void *readsector, void *disklabel, int autoboot)
 	setheap((void *)HEAPSTART, (void *)HEAPEND);
 
 	printf("\033v\nNetBSD/atari secondary bootloader"
-						" ($Revision: 1.17 $)\n\n");
+						" ($Revision: 1.15.38.1 $)\n\n");
 
 	if (init_dskio(readsector, disklabel, -1))
 		return -1;
@@ -109,7 +109,7 @@ usr_info(osdsc_t *od)
 
 	printf("\nEnter os-type [.%s] root-fs [:a] kernel [%s]"
 	       " options [none]:\n\033e", od->ostype, od->osname);
-	kgets(p, sizeof(line));
+	gets(p);
 	printf("\033f");
 
 	for (;;) {

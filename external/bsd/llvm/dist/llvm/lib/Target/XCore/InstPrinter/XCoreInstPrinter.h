@@ -19,6 +19,8 @@
 
 namespace llvm {
 
+class TargetMachine;
+
 class XCoreInstPrinter : public MCInstPrinter {
 public:
   XCoreInstPrinter(const MCAsmInfo &MAI, const MCInstrInfo &MII,
@@ -30,8 +32,7 @@ public:
   static const char *getRegisterName(unsigned RegNo);
 
   void printRegName(raw_ostream &OS, unsigned RegNo) const override;
-  void printInst(const MCInst *MI, raw_ostream &O, StringRef Annot,
-                 const MCSubtargetInfo &STI) override;
+  void printInst(const MCInst *MI, raw_ostream &O, StringRef Annot) override;
 private:
   void printInlineJT(const MCInst *MI, int opNum, raw_ostream &O);
   void printInlineJT32(const MCInst *MI, int opNum, raw_ostream &O);

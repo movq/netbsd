@@ -1,5 +1,6 @@
 /* macro.h - header file for macro support for gas
-   Copyright (C) 1994-2015 Free Software Foundation, Inc.
+   Copyright 1994, 1995, 1996, 1997, 1998, 2000, 2002, 2003, 2004, 2005, 2006,
+   2007, 2012 Free Software Foundation, Inc.
 
    Written by Steve and Judy Chamberlain of Cygnus Support,
       sac@cygnus.com

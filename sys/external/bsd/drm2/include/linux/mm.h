@@ -1,4 +1,4 @@
-/*	$NetBSD: mm.h,v 1.6 2015/10/18 14:03:20 jmcneill Exp $	*/
+/*	$NetBSD: mm.h,v 1.3.2.2 2015/04/23 07:31:17 snj Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -68,12 +68,6 @@ vm_mmap(struct file *file __unused, unsigned long base __unused,
 {
 
 	return -ENODEV;
-}
-
-static inline unsigned long
-get_num_physpages(void)
-{
-	return uvmexp.npages;
 }
 
 #endif  /* _LINUX_MM_H_ */

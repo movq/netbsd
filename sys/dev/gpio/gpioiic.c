@@ -1,4 +1,4 @@
-/* $NetBSD: gpioiic.c,v 1.7 2015/09/01 19:25:32 phx Exp $ */
+/* $NetBSD: gpioiic.c,v 1.6.12.1 2015/11/04 21:08:09 riz Exp $ */
 /*	$OpenBSD: gpioiic.c,v 1.8 2008/11/24 12:12:12 mbalmer Exp $	*/
 
 /*
@@ -18,7 +18,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: gpioiic.c,v 1.7 2015/09/01 19:25:32 phx Exp $");
+__KERNEL_RCSID(0, "$NetBSD: gpioiic.c,v 1.6.12.1 2015/11/04 21:08:09 riz Exp $");
 
 /*
  * I2C bus bit-banging through GPIO pins.

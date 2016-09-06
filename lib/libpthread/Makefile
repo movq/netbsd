@@ -1,8 +1,7 @@
-#	$NetBSD: Makefile,v 1.87 2016/07/03 14:24:58 christos Exp $
+#	$NetBSD: Makefile,v 1.84 2014/08/10 23:25:49 matt Exp $
 #
 
 WARNS?=	5
-LIB=	pthread
 
 .include <bsd.own.mk>
 
@@ -36,10 +35,7 @@ CPPFLAGS+=	-D__LIBPTHREAD_SOURCE__ -D__LIBC_THREAD_STUBS
 # XXX: This crappy poke at libc's internals needs to be fixed.
 CPPFLAGS+=-I${NETBSDSRCDIR}/sys -I${.CURDIR}/../libc
 
-# providing alternative MI implementations for creating an lwp is
-# possible by setting PTHREAD_MAKELWP.  Currently, alternatives are
-# set by the rumprun software stacks (see repo.rumpkernel.org)
-PTHREAD_MAKELWP?=	pthread_makelwp_netbsd.c
+LIB=	pthread
 
 #
 # NOTE: When you create a new file for libpthread, make sure that pthread.c
@@ -49,14 +45,9 @@ PTHREAD_MAKELWP?=	pthread_makelwp_netbsd.c
 SRCS=	pthread.c 
 SRCS+=	pthread_attr.c
 SRCS+=	pthread_barrier.c
-# used by rumprun-posix to work around symbol collisions
-.if ${PTHREAD_CANCELSTUB:Uyes} != "no"
 SRCS+=	pthread_cancelstub.c
-.endif
 SRCS+=	pthread_cond.c
-SRCS+=	pthread_getcpuclockid.c
 SRCS+=	pthread_lock.c 
-SRCS+=	${PTHREAD_MAKELWP}
 SRCS+=	pthread_misc.c
 SRCS+=	pthread_mutex.c
 SRCS+=	pthread_once.c
@@ -135,7 +126,6 @@ MAN+=	affinity.3 pthread.3 \
 	pthread_create.3 pthread_detach.3 pthread_equal.3 \
 	pthread_curcpu_np.3 \
 	pthread_exit.3 \
-	pthread_getcpuclockid.3 \
 	pthread_getname_np.3 \
 	pthread_getspecific.3 pthread_join.3 \
 	pthread_key_create.3 pthread_kill.3 \
@@ -177,8 +167,6 @@ MLINKS+=	pthread_barrier.3 pthread_barrier_wait.3
 
 MLINKS+=	pthread_barrierattr.3 pthread_barrierattr_init.3
 MLINKS+=	pthread_barrierattr.3 pthread_barrierattr_destroy.3
-MLINKS+=	pthread_barrierattr.3 pthread_barrierattr_getpshared.3
-MLINKS+=	pthread_barrierattr.3 pthread_barrierattr_setpshared.3
 
 MLINKS+=	pthread_cond.3 pthread_cond_init.3
 MLINKS+=	pthread_cond.3 pthread_cond_destroy.3
@@ -190,9 +178,6 @@ MLINKS+=	pthread_cond.3 pthread_cond_timedwait.3
 MLINKS+=	pthread_condattr.3 pthread_condattr_init.3
 MLINKS+=	pthread_condattr.3 pthread_condattr_destroy.3
 MLINKS+=	pthread_condattr.3 pthread_condattr_setclock.3
-MLINKS+=	pthread_condattr.3 pthread_condattr_getclock.3
-MLINKS+=	pthread_condattr.3 pthread_condattr_getpshared.3
-MLINKS+=	pthread_condattr.3 pthread_condattr_setpshared.3
 
 MLINKS+=	pthread_getname_np.3 pthread_setname_np.3
 MLINKS+=	pthread_getspecific.3 pthread_setspecific.3
@@ -203,20 +188,11 @@ MLINKS+=	pthread_mutex.3 pthread_mutex_destroy.3
 MLINKS+=	pthread_mutex.3 pthread_mutex_lock.3
 MLINKS+=	pthread_mutex.3 pthread_mutex_trylock.3
 MLINKS+=	pthread_mutex.3 pthread_mutex_unlock.3
-MLINKS+=	pthread_mutex.3 pthread_mutex_timedlock.3
-MLINKS+=	pthread_mutex.3	pthread_mutex_getprioceiling.3
-MLINKS+=	pthread_mutex.3	pthread_mutex_setprioceiling.3 
 
 MLINKS+=	pthread_mutexattr.3 pthread_mutexattr_init.3
 MLINKS+=	pthread_mutexattr.3 pthread_mutexattr_destroy.3
-MLINKS+=	pthread_mutexattr.3 pthread_mutexattr_getpshared.3
-MLINKS+=	pthread_mutexattr.3 pthread_mutexattr_setpshared.3
 MLINKS+=	pthread_mutexattr.3 pthread_mutexattr_settype.3
 MLINKS+=	pthread_mutexattr.3 pthread_mutexattr_gettype.3
-MLINKS+=	pthread_mutexattr.3 pthread_mutexattr_getprotocol.3
-MLINKS+=	pthread_mutexattr.3 pthread_mutexattr_setprotocol.3
-MLINKS+=	pthread_mutexattr.3 pthread_mutexattr_getprioceiling.3
-MLINKS+=	pthread_mutexattr.3 pthread_mutexattr_setprioceiling.3	
 
 MLINKS+=	pthread_rwlock.3 pthread_rwlock_init.3
 MLINKS+=	pthread_rwlock.3 pthread_rwlock_destroy.3
@@ -231,8 +207,6 @@ MLINKS+=	pthread_rwlock.3 pthread_rwlock_trywrlock.3
 
 MLINKS+=	pthread_rwlockattr.3 pthread_rwlockattr_init.3
 MLINKS+=	pthread_rwlockattr.3 pthread_rwlockattr_destroy.3
-MLINKS+=	pthread_rwlockattr.3 pthread_rwlockattr_getpshared.3
-MLINKS+=	pthread_rwlockattr.3 pthread_rwlockattr_setpshared.3
 
 MLINKS+=	pthread_spin.3 pthread_spin_init.3
 MLINKS+=	pthread_spin.3 pthread_spin_destroy.3

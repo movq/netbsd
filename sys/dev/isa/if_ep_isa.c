@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ep_isa.c,v 1.45 2016/07/14 10:19:06 msaitoh Exp $	*/
+/*	$NetBSD: if_ep_isa.c,v 1.44 2009/03/14 21:04:20 dsl Exp $	*/
 
 /*-
  * Copyright (c) 1996, 1997 The NetBSD Foundation, Inc.
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ep_isa.c,v 1.45 2016/07/14 10:19:06 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ep_isa.c,v 1.44 2009/03/14 21:04:20 dsl Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -362,7 +362,7 @@ ep_isa_attach(device_t parent, device_t self, void *aux)
 
 	/* Map i/o space. */
 	if (bus_space_map(iot, ia->ia_io[0].ir_addr, 0x10, 0, &ioh)) {
-		aprint_error(": can't map i/o space\n");
+		printf(": can't map i/o space\n");
 		return;
 	}
 
@@ -377,14 +377,14 @@ ep_isa_attach(device_t parent, device_t self, void *aux)
 
 	chipset = (int)(long)ia->ia_aux;
 	if ((chipset & 0xfff0) == PROD_ID_3C509) {
-		aprint_normal(": 3Com 3C509 Ethernet\n");
+		printf(": 3Com 3C509 Ethernet\n");
 		epconfig(sc, ELINK_CHIPSET_3C509, NULL);
 	} else {
 		/*
 		 * XXX: Maybe a 3c515, but the check in ep_isa_probe looks
 		 * at the moment only for a 3c509.
 		 */
-		aprint_error(": unknown 3Com Ethernet card: %04x\n", chipset);
+		printf(": unknown 3Com Ethernet card: %04x\n", chipset);
 		return;
 	}
 

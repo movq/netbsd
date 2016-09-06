@@ -20,6 +20,8 @@ namespace llvm {
 
 class HexagonSelectionDAGInfo : public TargetSelectionDAGInfo {
 public:
+  explicit HexagonSelectionDAGInfo(const DataLayout &DL);
+  ~HexagonSelectionDAGInfo();
 
   SDValue EmitTargetCodeForMemcpy(SelectionDAG &DAG, SDLoc dl,
                                   SDValue Chain,

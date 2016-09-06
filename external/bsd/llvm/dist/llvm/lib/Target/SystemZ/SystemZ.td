@@ -40,7 +40,6 @@ include "SystemZOperands.td"
 include "SystemZPatterns.td"
 include "SystemZInstrFormats.td"
 include "SystemZInstrInfo.td"
-include "SystemZInstrVector.td"
 include "SystemZInstrFP.td"
 
 def SystemZInstrInfo : InstrInfo {}

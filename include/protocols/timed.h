@@ -1,4 +1,4 @@
-/*	$NetBSD: timed.h,v 1.13 2016/01/22 23:13:20 dholland Exp $	*/
+/*	$NetBSD: timed.h,v 1.11 2008/02/16 07:30:15 matt Exp $	*/
 
 /*
  * Copyright (c) 1983, 1993
@@ -34,9 +34,6 @@
 #ifndef	_PROTOCOLS_TIMED_H_
 #define	_PROTOCOLS_TIMED_H_
 
-#include <stdint.h>
-#include <limits.h>
-
 /*
  * Time Synchronization Protocol
  */
@@ -55,7 +52,7 @@ struct tsp {
 		} tspu_time;
 		char tspu_hopcnt;
 	} tsp_u;
-	char tsp_name[_POSIX_HOST_NAME_MAX+1];
+	char tsp_name[MAXHOSTNAMELEN];
 };
 
 #define	tsp_time	tsp_u.tspu_time

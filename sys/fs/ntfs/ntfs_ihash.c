@@ -1,4 +1,4 @@
-/*	$NetBSD: ntfs_ihash.c,v 1.11 2015/02/20 17:08:13 maxv Exp $	*/
+/*	$NetBSD: ntfs_ihash.c,v 1.10 2012/01/27 19:48:40 para Exp $	*/
 
 /*
  * Copyright (c) 1982, 1986, 1989, 1991, 1993, 1995
@@ -33,13 +33,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ntfs_ihash.c,v 1.11 2015/02/20 17:08:13 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ntfs_ihash.c,v 1.10 2012/01/27 19:48:40 para Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
 #include <sys/lock.h>
 #include <sys/vnode.h>
+#include <sys/proc.h>
 #include <sys/mount.h>
 #include <sys/mallocvar.h>
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: radeondrmkmsfb.h,v 1.2 2014/11/18 09:28:36 nonaka Exp $	*/
+/*	$NetBSD: radeondrmkmsfb.h,v 1.1.4.1 2014/11/28 10:03:03 martin Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: ppp_tty.c,v 1.62 2016/08/06 02:35:06 pgoyette Exp $	*/
+/*	$NetBSD: ppp_tty.c,v 1.58 2014/05/22 16:31:19 dholland Exp $	*/
 /*	Id: ppp_tty.c,v 1.3 1996/07/01 01:04:11 paulus Exp 	*/
 
 /*
@@ -93,12 +93,11 @@
 /* from NetBSD: if_ppp.c,v 1.15.2.2 1994/07/28 05:17:58 cgd Exp */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ppp_tty.c,v 1.62 2016/08/06 02:35:06 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ppp_tty.c,v 1.58 2014/05/22 16:31:19 dholland Exp $");
 
-#ifdef _KERNEL_OPT
 #include "ppp.h"
+
 #include "opt_ppp.h"
-#endif
 #define VJC
 #define PPP_COMPRESS
 
@@ -395,7 +394,7 @@ pppwrite(struct tty *tp, struct uio *uio, int flag)
 
     m0->m_len = 0;
     m0->m_pkthdr.len = uio->uio_resid;
-    m_reset_rcvif(m0);
+    m0->m_pkthdr.rcvif = NULL;
 
     if (uio->uio_resid >= MCLBYTES / 2)
 	MCLGET(m0, M_DONTWAIT);
@@ -424,7 +423,7 @@ pppwrite(struct tty *tp, struct uio *uio, int flag)
     dst.sa_family = AF_UNSPEC;
     bcopy(mtod(m0, u_char *), dst.sa_data, PPP_HDRLEN);
     m_adj(m0, PPP_HDRLEN);
-    return if_output_lock(&sc->sc_if, &sc->sc_if, m0, &dst, (struct rtentry *)0);
+    return ((*sc->sc_if.if_output)(&sc->sc_if, m0, &dst, (struct rtentry *)0));
 }
 
 /*

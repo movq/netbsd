@@ -80,16 +80,16 @@ void ReturnUndefChecker::checkPreStmt(const ReturnStmt *RS,
 
 static void emitBug(CheckerContext &C, BuiltinBug &BT, const Expr *RetE,
                     const Expr *TrackingE = nullptr) {
-  ExplodedNode *N = C.generateErrorNode();
+  ExplodedNode *N = C.generateSink();
   if (!N)
     return;
 
-  auto Report = llvm::make_unique<BugReport>(BT, BT.getDescription(), N);
+  BugReport *Report = new BugReport(BT, BT.getDescription(), N);
 
   Report->addRange(RetE->getSourceRange());
   bugreporter::trackNullOrUndefValue(N, TrackingE ? TrackingE : RetE, *Report);
 
-  C.emitReport(std::move(Report));
+  C.emitReport(Report);
 }
 
 void ReturnUndefChecker::emitUndef(CheckerContext &C, const Expr *RetE) const {

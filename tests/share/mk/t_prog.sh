@@ -31,10 +31,6 @@ defaults__build_and_install_head() {
 	atf_set "require.progs" "/usr/bin/mandoc"
 }
 defaults__build_and_install_body() {
-	if [ ! -e /usr/bin/gcc -a -e /usr/bin/clang ]; then
-		export HAVE_LLVM=yes
-	fi
-
 	cat >hello.c <<EOF
 #include <stdio.h>
 int main(void) { printf("Hello, test!\n"); return 0; }
@@ -65,10 +61,6 @@ EOF
 
 atf_test_case without_man__build_and_install
 without_man__build_and_install_body() {
-	if [ ! -e /usr/bin/gcc -a -e /usr/bin/clang ]; then
-		export HAVE_LLVM=yes
-	fi
-
 	cat >hello.c <<EOF
 #include <stdio.h>
 int main(void) { printf("Hello, test!\n"); return 0; }

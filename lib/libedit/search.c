@@ -1,4 +1,4 @@
-/*	$NetBSD: search.c,v 1.47 2016/05/09 21:46:56 christos Exp $	*/
+/*	$NetBSD: search.c,v 1.30 2011/10/04 15:27:04 christos Exp $	*/
 
 /*-
  * Copyright (c) 1992, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)search.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: search.c,v 1.47 2016/05/09 21:46:56 christos Exp $");
+__RCSID("$NetBSD: search.c,v 1.30 2011/10/04 15:27:04 christos Exp $");
 #endif
 #endif /* not lint && not SCCSID */
 
@@ -45,16 +45,12 @@ __RCSID("$NetBSD: search.c,v 1.47 2016/05/09 21:46:56 christos Exp $");
  * search.c: History and character search functions
  */
 #include <stdlib.h>
-#include <string.h>
 #if defined(REGEX)
 #include <regex.h>
 #elif defined(REGEXP)
 #include <regexp.h>
 #endif
-
 #include "el.h"
-#include "common.h"
-#include "fcns.h"
 
 /*
  * Adjust cursor in vi mode to include the character under it
@@ -66,7 +62,7 @@ __RCSID("$NetBSD: search.c,v 1.47 2016/05/09 21:46:56 christos Exp $");
 /* search_init():
  *	Initialize the search stuff
  */
-libedit_private int
+protected int
 search_init(EditLine *el)
 {
 
@@ -74,10 +70,9 @@ search_init(EditLine *el)
 	    sizeof(*el->el_search.patbuf));
 	if (el->el_search.patbuf == NULL)
 		return -1;
-	el->el_search.patbuf[0] = L'\0';
 	el->el_search.patlen = 0;
 	el->el_search.patdir = -1;
-	el->el_search.chacha = L'\0';
+	el->el_search.chacha = '\0';
 	el->el_search.chadir = CHAR_FWD;
 	el->el_search.chatflg = 0;
 	return 0;
@@ -87,7 +82,7 @@ search_init(EditLine *el)
 /* search_end():
  *	Initialize the search stuff
  */
-libedit_private void
+protected void
 search_end(EditLine *el)
 {
 
@@ -100,7 +95,7 @@ search_end(EditLine *el)
 /* regerror():
  *	Handle regular expression errors
  */
-void
+public void
 /*ARGSUSED*/
 regerror(const char *msg)
 {
@@ -111,10 +106,12 @@ regerror(const char *msg)
 /* el_match():
  *	Return if string matches pattern
  */
-libedit_private int
-el_match(const wchar_t *str, const wchar_t *pat)
+protected int
+el_match(const Char *str, const Char *pat)
 {
+#ifdef WIDECHAR
 	static ct_buffer_t conv;
+#endif
 #if defined (REGEX)
 	regex_t re;
 	int rv;
@@ -126,7 +123,7 @@ el_match(const wchar_t *str, const wchar_t *pat)
 	extern int	 re_exec(const char *);
 #endif
 
-	if (wcsstr(str, pat) != 0)
+	if (Strstr(str, pat) != 0)
 		return 1;
 
 #if defined(REGEX)
@@ -150,7 +147,7 @@ el_match(const wchar_t *str, const wchar_t *pat)
 	if (re_comp(ct_encode_string(pat, &conv)) != NULL)
 		return 0;
 	else
-		return re_exec(ct_encode_string(str, &conv)) == 1;
+		return re_exec(ct_encode_string(str, &conv) == 1);
 #endif
 }
 
@@ -158,8 +155,8 @@ el_match(const wchar_t *str, const wchar_t *pat)
 /* c_hmatch():
  *	 return True if the pattern matches the prefix
  */
-libedit_private int
-c_hmatch(EditLine *el, const wchar_t *str)
+protected int
+c_hmatch(EditLine *el, const Char *str)
 {
 #ifdef SDEBUG
 	(void) fprintf(el->el_errfile, "match `%s' with `%s'\n",
@@ -173,7 +170,7 @@ c_hmatch(EditLine *el, const wchar_t *str)
 /* c_setpat():
  *	Set the history seatch pattern
  */
-libedit_private void
+protected void
 c_setpat(EditLine *el)
 {
 	if (el->el_state.lastcmd != ED_SEARCH_PREV_HISTORY &&
@@ -183,11 +180,11 @@ c_setpat(EditLine *el)
 		if (el->el_search.patlen >= EL_BUFSIZ)
 			el->el_search.patlen = EL_BUFSIZ - 1;
 		if (el->el_search.patlen != 0) {
-			(void) wcsncpy(el->el_search.patbuf, el->el_line.buffer,
+			(void) Strncpy(el->el_search.patbuf, el->el_line.buffer,
 			    el->el_search.patlen);
 			el->el_search.patbuf[el->el_search.patlen] = '\0';
 		} else
-			el->el_search.patlen = wcslen(el->el_search.patbuf);
+			el->el_search.patlen = Strlen(el->el_search.patbuf);
 	}
 #ifdef SDEBUG
 	(void) fprintf(el->el_errfile, "\neventno = %d\n",
@@ -205,14 +202,15 @@ c_setpat(EditLine *el)
 /* ce_inc_search():
  *	Emacs incremental search
  */
-libedit_private el_action_t
+protected el_action_t
 ce_inc_search(EditLine *el, int dir)
 {
-	static const wchar_t STRfwd[] = L"fwd", STRbck[] = L"bck";
-	static wchar_t pchar = L':';  /* ':' = normal, '?' = failed */
-	static wchar_t endcmd[2] = {'\0', '\0'};
-	wchar_t *ocursor = el->el_line.cursor, oldpchar = pchar, ch;
-	const wchar_t *cp;
+	static const Char STRfwd[] = {'f', 'w', 'd', '\0'},
+	     STRbck[] = {'b', 'c', 'k', '\0'};
+	static Char pchar = ':';/* ':' = normal, '?' = failed */
+	static Char endcmd[2] = {'\0', '\0'};
+	Char ch, *ocursor = el->el_line.cursor, oldpchar = pchar;
+	const Char *cp;
 
 	el_action_t ret = CC_NORM;
 
@@ -251,7 +249,7 @@ ce_inc_search(EditLine *el, int dir)
 		*el->el_line.lastchar = '\0';
 		re_refresh(el);
 
-		if (el_wgetc(el, &ch) != 1)
+		if (FUN(el,getc)(el, &ch) != 1)
 			return ed_end_of_file(el, 0);
 
 		switch (el->el_map.current[(unsigned char) ch]) {
@@ -327,7 +325,7 @@ ce_inc_search(EditLine *el, int dir)
 
 			default:	/* Terminate and execute cmd */
 				endcmd[0] = ch;
-				el_wpush(el, endcmd);
+				FUN(el,push)(el, endcmd);
 				/* FALLTHROUGH */
 
 			case 0033:	/* ESC: Terminate */
@@ -347,14 +345,14 @@ ce_inc_search(EditLine *el, int dir)
 
 			/* Can't search if unmatched '[' */
 			for (cp = &el->el_search.patbuf[el->el_search.patlen-1],
-			    ch = L']';
+			    ch = ']';
 			    cp >= &el->el_search.patbuf[LEN];
 			    cp--)
 				if (*cp == '[' || *cp == ']') {
 					ch = *cp;
 					break;
 				}
-			if (el->el_search.patlen > LEN && ch != L'[') {
+			if (el->el_search.patlen > LEN && ch != '[') {
 				if (redo && newdir == dir) {
 					if (pchar == '?') { /* wrap around */
 						el->el_history.eventno =
@@ -452,11 +450,11 @@ ce_inc_search(EditLine *el, int dir)
 /* cv_search():
  *	Vi search.
  */
-libedit_private el_action_t
+protected el_action_t
 cv_search(EditLine *el, int dir)
 {
-	wchar_t ch;
-	wchar_t tmpbuf[EL_BUFSIZ];
+	Char ch;
+	Char tmpbuf[EL_BUFSIZ];
 	ssize_t tmplen;
 
 #ifdef ANCHOR
@@ -468,7 +466,7 @@ cv_search(EditLine *el, int dir)
 	el->el_search.patdir = dir;
 
 	tmplen = c_gets(el, &tmpbuf[LEN],
-		dir == ED_SEARCH_PREV_HISTORY ? L"\n/" : L"\n?" );
+		dir == ED_SEARCH_PREV_HISTORY ? STR("\n/") : STR("\n?") );
 	if (tmplen == -1)
 		return CC_REFRESH;
 
@@ -487,11 +485,11 @@ cv_search(EditLine *el, int dir)
 #ifdef ANCHOR
 		if (el->el_search.patbuf[0] != '.' &&
 		    el->el_search.patbuf[0] != '*') {
-			(void) wcsncpy(tmpbuf, el->el_search.patbuf,
+			(void) Strncpy(tmpbuf, el->el_search.patbuf,
 			    sizeof(tmpbuf) / sizeof(*tmpbuf) - 1);
 			el->el_search.patbuf[0] = '.';
 			el->el_search.patbuf[1] = '*';
-			(void) wcsncpy(&el->el_search.patbuf[2], tmpbuf,
+			(void) Strncpy(&el->el_search.patbuf[2], tmpbuf,
 			    EL_BUFSIZ - 3);
 			el->el_search.patlen++;
 			el->el_search.patbuf[el->el_search.patlen++] = '.';
@@ -505,7 +503,7 @@ cv_search(EditLine *el, int dir)
 		tmpbuf[tmplen++] = '*';
 #endif
 		tmpbuf[tmplen] = '\0';
-		(void) wcsncpy(el->el_search.patbuf, tmpbuf, EL_BUFSIZ - 1);
+		(void) Strncpy(el->el_search.patbuf, tmpbuf, EL_BUFSIZ - 1);
 		el->el_search.patlen = (size_t)tmplen;
 	}
 	el->el_state.lastcmd = (el_action_t) dir;	/* avoid c_setpat */
@@ -526,12 +524,12 @@ cv_search(EditLine *el, int dir)
 /* ce_search_line():
  *	Look for a pattern inside a line
  */
-libedit_private el_action_t
+protected el_action_t
 ce_search_line(EditLine *el, int dir)
 {
-	wchar_t *cp = el->el_line.cursor;
-	wchar_t *pattern = el->el_search.patbuf;
-	wchar_t oc, *ocp;
+	Char *cp = el->el_line.cursor;
+	Char *pattern = el->el_search.patbuf;
+	Char oc, *ocp;
 #ifdef ANCHOR
 	ocp = &pattern[1];
 	oc = *ocp;
@@ -568,8 +566,8 @@ ce_search_line(EditLine *el, int dir)
 /* cv_repeat_srch():
  *	Vi repeat search
  */
-libedit_private el_action_t
-cv_repeat_srch(EditLine *el, wint_t c)
+protected el_action_t
+cv_repeat_srch(EditLine *el, Int c)
 {
 
 #ifdef SDEBUG
@@ -594,17 +592,19 @@ cv_repeat_srch(EditLine *el, wint_t c)
 /* cv_csearch():
  *	Vi character search
  */
-libedit_private el_action_t
-cv_csearch(EditLine *el, int direction, wint_t ch, int count, int tflag)
+protected el_action_t
+cv_csearch(EditLine *el, int direction, Int ch, int count, int tflag)
 {
-	wchar_t *cp;
+	Char *cp;
 
 	if (ch == 0)
 		return CC_ERROR;
 
-	if (ch == (wint_t)-1) {
-		if (el_wgetc(el, &ch) != 1)
+	if (ch == (Int)-1) {
+		Char c;
+		if (FUN(el,getc)(el, &c) != 1)
 			return ed_end_of_file(el, 0);
+		ch = c;
 	}
 
 	/* Save for ';' and ',' commands */
@@ -614,14 +614,14 @@ cv_csearch(EditLine *el, int direction, wint_t ch, int count, int tflag)
 
 	cp = el->el_line.cursor;
 	while (count--) {
-		if ((wint_t)*cp == ch)
+		if ((Int)*cp == ch)
 			cp += direction;
 		for (;;cp += direction) {
 			if (cp >= el->el_line.lastchar)
 				return CC_ERROR;
 			if (cp < el->el_line.buffer)
 				return CC_ERROR;
-			if ((wint_t)*cp == ch)
+			if ((Int)*cp == ch)
 				break;
 		}
 	}

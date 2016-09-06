@@ -1,5 +1,5 @@
-// RUN: %clang_cc1 -triple i386-unknown-unknown -O3 -emit-llvm %s -o - | FileCheck %s
-// CHECK: ret i32 9
+// RUN: %clang_cc1 -triple i386-unknown-unknown -O3 -emit-llvm %s -o %t
+// RUN: grep "ret i32 9" %t
 
 struct s0 {
   int *var;

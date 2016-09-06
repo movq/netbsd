@@ -2258,7 +2258,7 @@ static int sv_body(char *hostname, int s, unsigned char *context)
                     SRP_user_pwd_free(srp_callback_parm.user);
                     srp_callback_parm.user =
                         SRP_VBASE_get1_by_user(srp_callback_parm.vb,
-                                               srp_callback_parm.login);
+                                              srp_callback_parm.login);
                     if (srp_callback_parm.user)
                         BIO_printf(bio_s_out, "LOOKUP done %s\n",
                                    srp_callback_parm.user->info);
@@ -2315,7 +2315,7 @@ static int sv_body(char *hostname, int s, unsigned char *context)
                     SRP_user_pwd_free(srp_callback_parm.user);
                     srp_callback_parm.user =
                         SRP_VBASE_get1_by_user(srp_callback_parm.vb,
-                                               srp_callback_parm.login);
+                                              srp_callback_parm.login);
                     if (srp_callback_parm.user)
                         BIO_printf(bio_s_out, "LOOKUP done %s\n",
                                    srp_callback_parm.user->info);
@@ -2403,7 +2403,7 @@ static int init_ssl_connection(SSL *con)
         SRP_user_pwd_free(srp_callback_parm.user);
         srp_callback_parm.user =
             SRP_VBASE_get1_by_user(srp_callback_parm.vb,
-                                   srp_callback_parm.login);
+                                  srp_callback_parm.login);
         if (srp_callback_parm.user)
             BIO_printf(bio_s_out, "LOOKUP done %s\n",
                        srp_callback_parm.user->info);
@@ -2633,7 +2633,7 @@ static int www_body(char *hostname, int s, unsigned char *context)
                 SRP_user_pwd_free(srp_callback_parm.user);
                 srp_callback_parm.user =
                     SRP_VBASE_get1_by_user(srp_callback_parm.vb,
-                                           srp_callback_parm.login);
+                                          srp_callback_parm.login);
                 if (srp_callback_parm.user)
                     BIO_printf(bio_s_out, "LOOKUP done %s\n",
                                srp_callback_parm.user->info);

@@ -1,4 +1,4 @@
-#	$NetBSD: NetBSD.dist.Xorg,v 1.18 2016/08/18 08:11:22 mrg Exp $
+#	$NetBSD: NetBSD.dist.Xorg,v 1.14 2014/03/20 09:05:28 mrg Exp $
 ./usr/X11R7
 ./usr/X11R7/bin
 ./usr/X11R7/include
@@ -19,13 +19,13 @@
 ./usr/X11R7/include/X11/extensions
 ./usr/X11R7/include/X11/fonts
 ./usr/X11R7/include/X11/pixmaps
-./usr/X11R7/include/X11/pixmaps/ctwm
-./usr/X11R7/include/epoxy
 ./usr/X11R7/include/fontconfig
 ./usr/X11R7/include/freetype2
-./usr/X11R7/include/freetype2/freetype
-./usr/X11R7/include/freetype2/freetype/cache
-./usr/X11R7/include/freetype2/freetype/config
+./usr/X11R7/include/freetype2
+./usr/X11R7/include/freetype2/cache
+./usr/X11R7/include/freetype2/config
+./usr/X11R7/include/freetype2/internal
+./usr/X11R7/include/freetype2/internal/services
 ./usr/X11R7/include/libdrm
 ./usr/X11R7/include/libkms
 ./usr/X11R7/include/pixman-1
@@ -152,19 +152,16 @@
 ./usr/X11R7/man/cat1
 ./usr/X11R7/man/cat3
 ./usr/X11R7/man/cat4
-./usr/X11R7/man/cat4/x86
 ./usr/X11R7/man/cat5
 ./usr/X11R7/man/cat7
 ./usr/X11R7/man/html1
 ./usr/X11R7/man/html3
 ./usr/X11R7/man/html4
-./usr/X11R7/man/html4/x86
 ./usr/X11R7/man/html5
 ./usr/X11R7/man/html7
 ./usr/X11R7/man/man1
 ./usr/X11R7/man/man3
 ./usr/X11R7/man/man4
-./usr/X11R7/man/man4/x86
 ./usr/X11R7/man/man5
 ./usr/X11R7/man/man7
 ./usr/X11R7/share

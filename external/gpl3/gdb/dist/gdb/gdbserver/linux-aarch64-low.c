@@ -1,7 +1,7 @@
 /* GNU/Linux/AArch64 specific low level interface, for the remote server for
    GDB.
 
-   Copyright (C) 2009-2015 Free Software Foundation, Inc.
+   Copyright (C) 2009-2014 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of GDB.
@@ -26,7 +26,6 @@
 #include <signal.h>
 #include <sys/user.h>
 #include <sys/ptrace.h>
-#include <asm/ptrace.h>
 #include <sys/uio.h>
 
 #include "gdb_proc_service.h"
@@ -46,10 +45,8 @@ extern const struct target_desc *tdesc_aarch64;
 #define AARCH64_PC_REGNO   32
 #define AARCH64_CPSR_REGNO 33
 #define AARCH64_V0_REGNO   34
-#define AARCH64_FPSR_REGNO (AARCH64_V0_REGNO + AARCH64_V_REGS_NUM)
-#define AARCH64_FPCR_REGNO (AARCH64_V0_REGNO + AARCH64_V_REGS_NUM + 1)
 
-#define AARCH64_NUM_REGS (AARCH64_V0_REGNO + AARCH64_V_REGS_NUM + 2)
+#define AARCH64_NUM_REGS (AARCH64_V0_REGNO + AARCH64_V_REGS_NUM)
 
 static int
 aarch64_regmap [] =
@@ -211,6 +208,49 @@ struct arch_lwp_info
 static int aarch64_num_bp_regs;
 static int aarch64_num_wp_regs;
 
+/* Hardware breakpoint/watchpoint types.
+   The values map to their encodings in the bit 4 and bit 3 of the
+   hardware breakpoint/watchpoint control registers.  */
+
+enum target_point_type
+{
+  hw_execute = 0,		/* Execute HW breakpoint */
+  hw_read = 1,			/* Read    HW watchpoint */
+  hw_write = 2,			/* Common  HW watchpoint */
+  hw_access = 3,		/* Access  HW watchpoint */
+  point_type_unsupported
+};
+
+#define Z_PACKET_SW_BP '0'
+#define Z_PACKET_HW_BP '1'
+#define Z_PACKET_WRITE_WP '2'
+#define Z_PACKET_READ_WP '3'
+#define Z_PACKET_ACCESS_WP '4'
+
+/* Map the protocol breakpoint/watchpoint type TYPE to
+   enum target_point_type.  */
+
+static enum target_point_type
+Z_packet_to_point_type (char type)
+{
+  switch (type)
+    {
+    case Z_PACKET_SW_BP:
+      /* Leave the handling of the sw breakpoint with the gdb client.  */
+      return point_type_unsupported;
+    case Z_PACKET_HW_BP:
+      return hw_execute;
+    case Z_PACKET_WRITE_WP:
+      return hw_write;
+    case Z_PACKET_READ_WP:
+      return hw_read;
+    case Z_PACKET_ACCESS_WP:
+      return hw_access;
+    default:
+      return point_type_unsupported;
+    }
+}
+
 static int
 aarch64_cannot_store_register (int regno)
 {
@@ -257,8 +297,6 @@ aarch64_fill_fpregset (struct regcache *regcache, void *buf)
 
   for (i = 0; i < AARCH64_V_REGS_NUM; i++)
     collect_register (regcache, AARCH64_V0_REGNO + i, &regset->vregs[i]);
-  collect_register (regcache, AARCH64_FPSR_REGNO, &regset->fpsr);
-  collect_register (regcache, AARCH64_FPCR_REGNO, &regset->fpcr);
 }
 
 static void
@@ -269,9 +307,10 @@ aarch64_store_fpregset (struct regcache *regcache, const void *buf)
 
   for (i = 0; i < AARCH64_V_REGS_NUM; i++)
     supply_register (regcache, AARCH64_V0_REGNO + i, &regset->vregs[i]);
-  supply_register (regcache, AARCH64_FPSR_REGNO, &regset->fpsr);
-  supply_register (regcache, AARCH64_FPCR_REGNO, &regset->fpcr);
 }
+
+/* Debugging of hardware breakpoint/watchpoint support.  */
+extern int debug_hw_points;
 
 /* Enable miscellaneous debugging output.  The name is historical - it
    was originally used to debug LinuxThreads support.  */
@@ -284,7 +323,7 @@ aarch64_get_pc (struct regcache *regcache)
 
   collect_register_by_name (regcache, "pc", &pc);
   if (debug_threads)
-    debug_printf ("stop pc is %08lx\n", pc);
+    fprintf (stderr, "stop pc is %08lx\n", pc);
   return pc;
 }
 
@@ -295,21 +334,19 @@ aarch64_set_pc (struct regcache *regcache, CORE_ADDR pc)
   supply_register_by_name (regcache, "pc", &newpc);
 }
 
+/* Correct in either endianness.  */
+
 #define aarch64_breakpoint_len 4
 
-/* AArch64 BRK software debug mode instruction.
-   This instruction needs to match gdb/aarch64-tdep.c
-   (aarch64_default_breakpoint).  */
-static const gdb_byte aarch64_breakpoint[] = {0x00, 0x00, 0x20, 0xd4};
+static const unsigned long aarch64_breakpoint = 0x00800011;
 
 static int
 aarch64_breakpoint_at (CORE_ADDR where)
 {
-  gdb_byte insn[aarch64_breakpoint_len];
+  unsigned long insn;
 
-  (*the_target->read_memory) (where, (unsigned char *) &insn,
-			      aarch64_breakpoint_len);
-  if (memcmp (insn, aarch64_breakpoint, aarch64_breakpoint_len) == 0)
+  (*the_target->read_memory) (where, (unsigned char *) &insn, 4);
+  if (insn == aarch64_breakpoint)
     return 1;
 
   return 0;
@@ -321,7 +358,7 @@ aarch64_breakpoint_at (CORE_ADDR where)
 static void
 aarch64_show_debug_reg_state (struct aarch64_debug_reg_state *state,
 			      const char *func, CORE_ADDR addr,
-			      int len, enum target_hw_bp_type type)
+			      int len, enum target_point_type type)
 {
   int i;
 
@@ -411,31 +448,12 @@ aarch64_watchpoint_length (unsigned int ctrl)
    breakpoint/watchpoint control register.  */
 
 static unsigned int
-aarch64_point_encode_ctrl_reg (enum target_hw_bp_type type, int len)
+aarch64_point_encode_ctrl_reg (enum target_point_type type, int len)
 {
-  unsigned int ctrl, ttype;
+  unsigned int ctrl;
 
   /* type */
-  switch (type)
-    {
-    case hw_write:
-      ttype = 2;
-      break;
-    case hw_read:
-      ttype = 1;
-      break;
-    case hw_access:
-      ttype = 3;
-      break;
-    case hw_execute:
-      ttype = 0;
-      break;
-    default:
-      perror_with_name (_("Unrecognized breakpoint/watchpoint type"));
-    }
-
-  /* type */
-  ctrl = ttype << 3;
+  ctrl = type << 3;
   /* length bitmask */
   ctrl |= ((1 << len) - 1) << 5;
   /* enabled at el0 */
@@ -620,8 +638,7 @@ struct aarch64_dr_update_callback_param
 static int
 debug_reg_change_callback (struct inferior_list_entry *entry, void *ptr)
 {
-  struct thread_info *thread = (struct thread_info *) entry;
-  struct lwp_info *lwp = get_thread_lwp (thread);
+  struct lwp_info *lwp = (struct lwp_info *) entry;
   struct aarch64_dr_update_callback_param *param_p
     = (struct aarch64_dr_update_callback_param *) ptr;
   int pid = param_p->pid;
@@ -631,12 +648,12 @@ debug_reg_change_callback (struct inferior_list_entry *entry, void *ptr)
   dr_changed_t *dr_changed_ptr;
   dr_changed_t dr_changed;
 
-  if (show_debug_regs)
+  if (debug_hw_points)
     {
       fprintf (stderr, "debug_reg_change_callback: \n\tOn entry:\n");
       fprintf (stderr, "\tpid%d, tid: %ld, dr_changed_bp=0x%llx, "
 	       "dr_changed_wp=0x%llx\n",
-	       pid, lwpid_of (thread), info->dr_changed_bp,
+	       pid, lwpid_of (lwp), info->dr_changed_bp,
 	       info->dr_changed_wp);
     }
 
@@ -645,7 +662,7 @@ debug_reg_change_callback (struct inferior_list_entry *entry, void *ptr)
   dr_changed = *dr_changed_ptr;
 
   /* Only update the threads of this process.  */
-  if (pid_of (thread) == pid)
+  if (pid_of (lwp) == pid)
     {
       gdb_assert (idx >= 0
 		  && (idx <= (is_watchpoint ? aarch64_num_wp_regs
@@ -682,12 +699,11 @@ debug_reg_change_callback (struct inferior_list_entry *entry, void *ptr)
 	linux_stop_lwp (lwp);
     }
 
-  if (show_debug_regs)
+  if (debug_hw_points)
     {
       fprintf (stderr, "\tOn exit:\n\tpid%d, tid: %ld, dr_changed_bp=0x%llx, "
 	       "dr_changed_wp=0x%llx\n",
-	       pid, lwpid_of (thread), info->dr_changed_bp,
-	       info->dr_changed_wp);
+	       pid, lwpid_of (lwp), info->dr_changed_bp, info->dr_changed_wp);
     }
 
   return 0;
@@ -705,12 +721,12 @@ aarch64_notify_debug_reg_change (const struct aarch64_debug_reg_state *state,
   struct aarch64_dr_update_callback_param param;
 
   /* Only update the threads of this process.  */
-  param.pid = pid_of (current_thread);
+  param.pid = pid_of (get_thread_lwp (current_inferior));
 
   param.is_watchpoint = is_watchpoint;
   param.idx = idx;
 
-  find_inferior (&all_threads, debug_reg_change_callback, (void *) &param);
+  find_inferior (&all_lwps, debug_reg_change_callback, (void *) &param);
 }
 
 
@@ -723,7 +739,7 @@ aarch64_get_debug_reg_state ()
   struct process_info *proc;
 
   proc = current_process ();
-  return &proc->priv->arch_private->debug_reg_state;
+  return &proc->private->arch_private->debug_reg_state;
 }
 
 /* Record the insertion of one breakpoint/watchpoint, as represented
@@ -731,7 +747,7 @@ aarch64_get_debug_reg_state ()
 
 static int
 aarch64_dr_state_insert_one_point (struct aarch64_debug_reg_state *state,
-				   enum target_hw_bp_type type,
+				   enum target_point_type type,
 				   CORE_ADDR addr, int len)
 {
   int i, idx, num_regs, is_watchpoint;
@@ -804,7 +820,7 @@ aarch64_dr_state_insert_one_point (struct aarch64_debug_reg_state *state,
 
 static int
 aarch64_dr_state_remove_one_point (struct aarch64_debug_reg_state *state,
-				   enum target_hw_bp_type type,
+				   enum target_point_type type,
 				   CORE_ADDR addr, int len)
 {
   int i, num_regs, is_watchpoint;
@@ -858,7 +874,7 @@ aarch64_dr_state_remove_one_point (struct aarch64_debug_reg_state *state,
 }
 
 static int
-aarch64_handle_breakpoint (enum target_hw_bp_type type, CORE_ADDR addr,
+aarch64_handle_breakpoint (enum target_point_type type, CORE_ADDR addr,
 			   int len, int is_insert)
 {
   struct aarch64_debug_reg_state *state;
@@ -880,7 +896,7 @@ aarch64_handle_breakpoint (enum target_hw_bp_type type, CORE_ADDR addr,
    from that it is an aligned watchpoint to be handled.  */
 
 static int
-aarch64_handle_aligned_watchpoint (enum target_hw_bp_type type,
+aarch64_handle_aligned_watchpoint (enum target_point_type type,
 				   CORE_ADDR addr, int len, int is_insert)
 {
   struct aarch64_debug_reg_state *state;
@@ -901,7 +917,7 @@ aarch64_handle_aligned_watchpoint (enum target_hw_bp_type type,
    Return 0 if succeed.  */
 
 static int
-aarch64_handle_unaligned_watchpoint (enum target_hw_bp_type type,
+aarch64_handle_unaligned_watchpoint (enum target_point_type type,
 				     CORE_ADDR addr, int len, int is_insert)
 {
   struct aarch64_debug_reg_state *state
@@ -922,7 +938,7 @@ aarch64_handle_unaligned_watchpoint (enum target_hw_bp_type type,
 	ret = aarch64_dr_state_remove_one_point (state, type, aligned_addr,
 						 aligned_len);
 
-      if (show_debug_regs)
+      if (debug_hw_points)
 	fprintf (stderr,
  "handle_unaligned_watchpoint: is_insert: %d\n"
  "                             aligned_addr: 0x%s, aligned_len: %d\n"
@@ -938,29 +954,13 @@ aarch64_handle_unaligned_watchpoint (enum target_hw_bp_type type,
 }
 
 static int
-aarch64_handle_watchpoint (enum target_hw_bp_type type, CORE_ADDR addr,
+aarch64_handle_watchpoint (enum target_point_type type, CORE_ADDR addr,
 			   int len, int is_insert)
 {
   if (aarch64_point_is_aligned (1 /* is_watchpoint */ , addr, len))
     return aarch64_handle_aligned_watchpoint (type, addr, len, is_insert);
   else
     return aarch64_handle_unaligned_watchpoint (type, addr, len, is_insert);
-}
-
-static int
-aarch64_supports_z_point_type (char z_type)
-{
-  switch (z_type)
-    {
-    case Z_PACKET_SW_BP:
-    case Z_PACKET_HW_BP:
-    case Z_PACKET_WRITE_WP:
-    case Z_PACKET_READ_WP:
-    case Z_PACKET_ACCESS_WP:
-      return 1;
-    default:
-      return 0;
-    }
 }
 
 /* Insert a hardware breakpoint/watchpoint.
@@ -972,18 +972,19 @@ aarch64_supports_z_point_type (char z_type)
    Return -1 if an error occurs.  */
 
 static int
-aarch64_insert_point (enum raw_bkpt_type type, CORE_ADDR addr,
-		      int len, struct raw_breakpoint *bp)
+aarch64_insert_point (char type, CORE_ADDR addr, int len)
 {
   int ret;
-  enum target_hw_bp_type targ_type;
+  enum target_point_type targ_type;
 
-  if (show_debug_regs)
+  if (debug_hw_points)
     fprintf (stderr, "insert_point on entry (addr=0x%08lx, len=%d)\n",
 	     (unsigned long) addr, len);
 
-  /* Determine the type from the raw breakpoint type.  */
-  targ_type = raw_bkpt_type_to_target_hw_bp_type (type);
+  /* Determine the type from the packet.  */
+  targ_type = Z_packet_to_point_type (type);
+  if (targ_type == point_type_unsupported)
+    return 1;
 
   if (targ_type != hw_execute)
     ret =
@@ -992,7 +993,7 @@ aarch64_insert_point (enum raw_bkpt_type type, CORE_ADDR addr,
     ret =
       aarch64_handle_breakpoint (targ_type, addr, len, 1 /* is_insert */);
 
-  if (show_debug_regs)
+  if (debug_hw_points > 1)
     aarch64_show_debug_reg_state (aarch64_get_debug_reg_state (),
 				  "insert_point", addr, len, targ_type);
 
@@ -1008,18 +1009,19 @@ aarch64_insert_point (enum raw_bkpt_type type, CORE_ADDR addr,
    Return -1 if an error occurs.  */
 
 static int
-aarch64_remove_point (enum raw_bkpt_type type, CORE_ADDR addr,
-		      int len, struct raw_breakpoint *bp)
+aarch64_remove_point (char type, CORE_ADDR addr, int len)
 {
   int ret;
-  enum target_hw_bp_type targ_type;
+  enum target_point_type targ_type;
 
-  if (show_debug_regs)
+  if (debug_hw_points)
     fprintf (stderr, "remove_point on entry (addr=0x%08lx, len=%d)\n",
 	     (unsigned long) addr, len);
 
-  /* Determine the type from the raw breakpoint type.  */
-  targ_type = raw_bkpt_type_to_target_hw_bp_type (type);
+  /* Determine the type from the packet.  */
+  targ_type = Z_packet_to_point_type (type);
+  if (targ_type == point_type_unsupported)
+    return 1;
 
   /* Set up state pointers.  */
   if (targ_type != hw_execute)
@@ -1029,7 +1031,7 @@ aarch64_remove_point (enum raw_bkpt_type type, CORE_ADDR addr,
     ret =
       aarch64_handle_breakpoint (targ_type, addr, len, 0 /* is_insert */);
 
-  if (show_debug_regs)
+  if (debug_hw_points > 1)
     aarch64_show_debug_reg_state (aarch64_get_debug_reg_state (),
 				  "remove_point", addr, len, targ_type);
 
@@ -1046,7 +1048,7 @@ aarch64_stopped_data_address (void)
   int pid, i;
   struct aarch64_debug_reg_state *state;
 
-  pid = lwpid_of (current_thread);
+  pid = lwpid_of (get_thread_lwp (current_inferior));
 
   /* Get the siginfo.  */
   if (ptrace (PTRACE_GETSIGINFO, pid, NULL, &siginfo) != 0)
@@ -1123,8 +1125,8 @@ aarch64_linux_new_process (void)
 
 /* Called when a new thread is detected.  */
 
-static void
-aarch64_linux_new_thread (struct lwp_info *lwp)
+static struct arch_lwp_info *
+aarch64_linux_new_thread (void)
 {
   struct arch_lwp_info *info = xcalloc (1, sizeof (*info));
 
@@ -1134,34 +1136,7 @@ aarch64_linux_new_thread (struct lwp_info *lwp)
   DR_MARK_ALL_CHANGED (info->dr_changed_bp, aarch64_num_bp_regs);
   DR_MARK_ALL_CHANGED (info->dr_changed_wp, aarch64_num_wp_regs);
 
-  lwp->arch_private = info;
-}
-
-static void
-aarch64_linux_new_fork (struct process_info *parent,
-			struct process_info *child)
-{
-  /* These are allocated by linux_add_process.  */
-  gdb_assert (parent->priv != NULL
-	      && parent->priv->arch_private != NULL);
-  gdb_assert (child->priv != NULL
-	      && child->priv->arch_private != NULL);
-
-  /* Linux kernel before 2.6.33 commit
-     72f674d203cd230426437cdcf7dd6f681dad8b0d
-     will inherit hardware debug registers from parent
-     on fork/vfork/clone.  Newer Linux kernels create such tasks with
-     zeroed debug registers.
-
-     GDB core assumes the child inherits the watchpoints/hw
-     breakpoints of the parent, and will remove them all from the
-     forked off process.  Copy the debug registers mirrors into the
-     new process so that all breakpoints and watchpoints can be
-     removed together.  The debug registers mirror will become zeroed
-     in the end before detaching the forked off process, thus making
-     this compatible with older Linux kernels too.  */
-
-  *child->priv->arch_private = *parent->priv->arch_private;
+  return info;
 }
 
 /* Called when resuming a thread.
@@ -1170,8 +1145,7 @@ aarch64_linux_new_fork (struct process_info *parent,
 static void
 aarch64_linux_prepare_to_resume (struct lwp_info *lwp)
 {
-  struct thread_info *thread = get_lwp_thread (lwp);
-  ptid_t ptid = ptid_of (thread);
+  ptid_t ptid = ptid_of (lwp);
   struct arch_lwp_info *info = lwp->arch_private;
 
   if (DR_HAS_CHANGED (info->dr_changed_bp)
@@ -1180,10 +1154,10 @@ aarch64_linux_prepare_to_resume (struct lwp_info *lwp)
       int tid = ptid_get_lwp (ptid);
       struct process_info *proc = find_process_pid (ptid_get_pid (ptid));
       struct aarch64_debug_reg_state *state
-	= &proc->priv->arch_private->debug_reg_state;
+	= &proc->private->arch_private->debug_reg_state;
 
-      if (show_debug_regs)
-	fprintf (stderr, "prepare_to_resume thread %ld\n", lwpid_of (thread));
+      if (debug_hw_points)
+	fprintf (stderr, "prepare_to_resume thread %ld\n", lwpid_of (lwp));
 
       /* Watchpoints.  */
       if (DR_HAS_CHANGED (info->dr_changed_wp))
@@ -1221,7 +1195,7 @@ aarch64_arch_setup (void)
 
   current_process ()->tdesc = tdesc_aarch64;
 
-  pid = lwpid_of (current_thread);
+  pid = lwpid_of (get_thread_lwp (current_inferior));
   iov.iov_base = &dreg_state;
   iov.iov_len = sizeof (dreg_state);
 
@@ -1318,7 +1292,6 @@ struct linux_target_ops the_low_target =
   NULL,
   0,
   aarch64_breakpoint_at,
-  aarch64_supports_z_point_type,
   aarch64_insert_point,
   aarch64_remove_point,
   aarch64_stopped_by_watchpoint,
@@ -1328,7 +1301,6 @@ struct linux_target_ops the_low_target =
   NULL,
   aarch64_linux_new_process,
   aarch64_linux_new_thread,
-  aarch64_linux_new_fork,
   aarch64_linux_prepare_to_resume,
 };
 

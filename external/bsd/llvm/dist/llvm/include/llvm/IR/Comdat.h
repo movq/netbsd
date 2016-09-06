@@ -42,14 +42,14 @@ public:
   SelectionKind getSelectionKind() const { return SK; }
   void setSelectionKind(SelectionKind Val) { SK = Val; }
   StringRef getName() const;
-  void print(raw_ostream &OS, bool IsForDebug = false) const;
+  void print(raw_ostream &OS) const;
   void dump() const;
 
 private:
   friend class Module;
   Comdat();
   Comdat(SelectionKind SK, StringMapEntry<Comdat> *Name);
-  Comdat(const Comdat &) = delete;
+  Comdat(const Comdat &) LLVM_DELETED_FUNCTION;
 
   // Points to the map in Module.
   StringMapEntry<Comdat> *Name;

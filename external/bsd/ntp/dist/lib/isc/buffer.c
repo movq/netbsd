@@ -1,4 +1,4 @@
-/*	$NetBSD: buffer.c,v 1.4 2016/01/08 21:35:36 christos Exp $	*/
+/*	$NetBSD: buffer.c,v 1.1.1.2.4.2 2016/05/11 11:35:37 martin Exp $	*/
 
 /*
  * Copyright (C) 2004-2008  Internet Systems Consortium, Inc. ("ISC")

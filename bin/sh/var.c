@@ -1,4 +1,4 @@
-/*	$NetBSD: var.c,v 1.49 2016/03/31 16:16:35 christos Exp $	*/
+/*	$NetBSD: var.c,v 1.43 2013/11/01 16:49:02 christos Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)var.c	8.3 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: var.c,v 1.49 2016/03/31 16:16:35 christos Exp $");
+__RCSID("$NetBSD: var.c,v 1.43 2013/11/01 16:49:02 christos Exp $");
 #endif
 #endif /* not lint */
 
@@ -87,6 +87,9 @@ struct varinit {
 
 struct localvar *localvars;
 
+#if ATTY
+struct var vatty;
+#endif
 #ifndef SMALL
 struct var vhistsize;
 struct var vterm;
@@ -101,9 +104,11 @@ struct var vps4;
 struct var vvers;
 struct var voptind;
 
-char ifs_default[] = " \t\n";
-
 const struct varinit varinit[] = {
+#if ATTY
+	{ &vatty,	VSTRFIXED|VTEXTFIXED|VUNSET,	"ATTY=",
+	  NULL },
+#endif
 #ifndef SMALL
 	{ &vhistsize,	VSTRFIXED|VTEXTFIXED|VUNSET,	"HISTSIZE=",
 	  sethistsize },
@@ -113,8 +118,6 @@ const struct varinit varinit[] = {
 	{ &vmail,	VSTRFIXED|VTEXTFIXED|VUNSET,	"MAIL=",
 	  NULL },
 	{ &vmpath,	VSTRFIXED|VTEXTFIXED|VUNSET,	"MAILPATH=",
-	  NULL },
-	{ &vvers,	VSTRFIXED|VTEXTFIXED|VNOEXPORT, "NETBSD_SHELL=",
 	  NULL },
 	{ &vpath,	VSTRFIXED|VTEXTFIXED,		"PATH=" _PATH_DEFPATH,
 	  changepath },
@@ -145,14 +148,10 @@ STATIC struct var *find_var(const char *, struct var ***, int *);
  */
 
 #ifdef mkinit
-INCLUDE <stdio.h>
-INCLUDE <unistd.h>
 INCLUDE "var.h"
-INCLUDE "version.h"
 MKINIT char **environ;
 INIT {
 	char **envp;
-	char buf[64];
 
 	initvar();
 	for (envp = environ ; *envp ; envp++) {
@@ -160,16 +159,6 @@ INIT {
 			setvareq(*envp, VEXPORT|VTEXTFIXED);
 		}
 	}
-
-	/*
-	 * PPID is readonly
-	 *	set after processing environ to override anything there
-	 * Always default IFS, ignore any value from environment.
-	 */
-	snprintf(buf, sizeof(buf), "%d", (int)getppid());
-	setvar("PPID", buf, VREADONLY);
-	setvar("IFS", ifs_default, VTEXTFIXED);
-	setvar("NETBSD_SHELL", NETBSD_SHELL, VTEXTFIXED|VREADONLY|VNOEXPORT);
 }
 #endif
 
@@ -201,17 +190,9 @@ initvar(void)
 	if (find_var("PS1", &vpp, &vps1.name_len) == NULL) {
 		vps1.next = *vpp;
 		*vpp = &vps1;
+		vps1.text = strdup(geteuid() ? "PS1=$ " : "PS1=# ");
 		vps1.flags = VSTRFIXED|VTEXTFIXED;
-		vps1.text = NULL;
-		choose_ps1();
 	}
-}
-
-void
-choose_ps1(void)
-{
-	free(vps1.text);
-	vps1.text = strdup(geteuid() ? "PS1=$ " : "PS1=# ");
 }
 
 /*
@@ -299,7 +280,7 @@ setvareq(char *s, int flags)
 	struct var *vp, **vpp;
 	int nlen;
 
-	if (aflag && !(flags & VNOEXPORT))
+	if (aflag)
 		flags |= VEXPORT;
 	vp = find_var(s, &vpp, &nlen);
 	if (vp != NULL) {
@@ -316,8 +297,6 @@ setvareq(char *s, int flags)
 			ckfree(vp->text);
 
 		vp->flags &= ~(VTEXTFIXED|VSTACK|VUNSET);
-		if (flags & VNOEXPORT)
-			vp->flags &= ~VEXPORT;
 		vp->flags |= flags & ~VNOFUNC;
 		vp->text = s;
 
@@ -536,7 +515,7 @@ sort_var(const void *v_v1, const void *v_v2)
  */
 
 int
-showvars(const char *name, int flag, int show_value, const char *xtra)
+showvars(const char *name, int flag, int show_value)
 {
 	struct var **vpp;
 	struct var *vp;
@@ -572,8 +551,6 @@ showvars(const char *name, int flag, int show_value, const char *xtra)
 		vp = *vpp;
 		if (name)
 			out1fmt("%s ", name);
-		if (xtra)
-			out1fmt("%s ", xtra);
 		for (p = vp->text ; *p != '=' ; p++)
 			out1c(*p);
 		if (!(vp->flags & VUNSET) && show_value) {
@@ -598,68 +575,27 @@ exportcmd(int argc, char **argv)
 	char *name;
 	const char *p;
 	int flag = argv[0][0] == 'r'? VREADONLY : VEXPORT;
-	int pflg = 0;
-	int nflg = 0;
-	int xflg = 0;
-	int res;
-	int c;
+	int pflag;
 
-
-	while ((c = nextopt("npx")) != '\0') {
-		switch (c) {
-		case 'p':
-			if (nflg)
-				return 1;
-			pflg = 3;
-			break;
-		case 'n':
-			if (pflg || xflg || flag == VREADONLY)
-				return 1;
-			nflg = 1;
-			break;
-		case 'x':
-			if (nflg || flag == VREADONLY)
-				return 1;
-			flag = VNOEXPORT;
-			xflg = 1;
-			break;
-		default:
-			return 1;
-		}
-	}
-
-	if (nflg && *argptr == NULL)
-		return 1;
-
-	if (pflg || *argptr == NULL) {
-		showvars( pflg ? argv[0] : 0, flag, pflg,
-		    pflg && xflg ? "-x" : NULL );
+	pflag = nextopt("p") == 'p' ? 3 : 0;
+	if (argc <= 1 || pflag) {
+		showvars( pflag ? argv[0] : 0, flag, pflag );
 		return 0;
 	}
 
-	res = 0;
 	while ((name = *argptr++) != NULL) {
 		if ((p = strchr(name, '=')) != NULL) {
 			p++;
 		} else {
 			vp = find_var(name, NULL, NULL);
 			if (vp != NULL) {
-				if (nflg)
-					vp->flags &= ~flag;
-				else if (flag&VEXPORT && vp->flags&VNOEXPORT)
-					res = 1;
-				else {
-					vp->flags |= flag;
-					if (flag == VNOEXPORT)
-						vp->flags &= ~VEXPORT;
-				}
+				vp->flags |= flag;
 				continue;
 			}
 		}
-		if (!nflg)
-			setvar(name, p, flag);
+		setvar(name, p, flag);
 	}
-	return res;
+	return 0;
 }
 
 
@@ -820,7 +756,7 @@ unsetvar(const char *s, int unexport)
 	if (vp == NULL)
 		return 0;
 
-	if (vp->flags & VREADONLY && !unexport)
+	if (vp->flags & VREADONLY)
 		return 1;
 
 	INTOFF;

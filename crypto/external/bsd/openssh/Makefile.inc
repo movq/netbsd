@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.9 2015/07/23 08:03:25 mrg Exp $
+#	$NetBSD: Makefile.inc,v 1.5.22.2 2015/04/30 06:07:29 riz Exp $
 
 WARNS?=	4
 
@@ -39,7 +39,9 @@ CPPFLAGS+=-DKRB5 -DHEIMDAL
 CPPFLAGS+=-DWITH_LDAP_PUBKEY
 .endif
 
+.if ${X11FLAVOUR} == "Xorg"
 CPPFLAGS+=-DX11BASE=\"/usr/X11R7\"
+.endif
 
 CPPFLAGS+=-DSUPPORT_UTMP -DSUPPORT_UTMPX
 CPPFLAGS+=-DLIBWRAP

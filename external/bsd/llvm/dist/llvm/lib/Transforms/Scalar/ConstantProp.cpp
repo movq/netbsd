@@ -22,10 +22,11 @@
 #include "llvm/ADT/Statistic.h"
 #include "llvm/Analysis/ConstantFolding.h"
 #include "llvm/IR/Constant.h"
+#include "llvm/IR/DataLayout.h"
 #include "llvm/IR/InstIterator.h"
 #include "llvm/IR/Instruction.h"
 #include "llvm/Pass.h"
-#include "llvm/Analysis/TargetLibraryInfo.h"
+#include "llvm/Target/TargetLibraryInfo.h"
 #include <set>
 using namespace llvm;
 
@@ -44,7 +45,7 @@ namespace {
 
     void getAnalysisUsage(AnalysisUsage &AU) const override {
       AU.setPreservesCFG();
-      AU.addRequired<TargetLibraryInfoWrapperPass>();
+      AU.addRequired<TargetLibraryInfo>();
     }
   };
 }
@@ -52,7 +53,7 @@ namespace {
 char ConstantPropagation::ID = 0;
 INITIALIZE_PASS_BEGIN(ConstantPropagation, "constprop",
                 "Simple constant propagation", false, false)
-INITIALIZE_PASS_DEPENDENCY(TargetLibraryInfoWrapperPass)
+INITIALIZE_PASS_DEPENDENCY(TargetLibraryInfo)
 INITIALIZE_PASS_END(ConstantPropagation, "constprop",
                 "Simple constant propagation", false, false)
 
@@ -67,9 +68,9 @@ bool ConstantPropagation::runOnFunction(Function &F) {
       WorkList.insert(&*i);
   }
   bool Changed = false;
-  const DataLayout &DL = F.getParent()->getDataLayout();
-  TargetLibraryInfo *TLI =
-      &getAnalysis<TargetLibraryInfoWrapperPass>().getTLI();
+  DataLayoutPass *DLP = getAnalysisIfAvailable<DataLayoutPass>();
+  const DataLayout *DL = DLP ? &DLP->getDataLayout() : nullptr;
+  TargetLibraryInfo *TLI = &getAnalysis<TargetLibraryInfo>();
 
   while (!WorkList.empty()) {
     Instruction *I = *WorkList.begin();

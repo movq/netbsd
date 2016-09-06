@@ -1,4 +1,4 @@
-/*	$NetBSD: init_main.c,v 1.482 2016/07/07 06:55:43 msaitoh Exp $	*/
+/*	$NetBSD: init_main.c,v 1.458.2.2 2015/03/09 08:56:01 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -97,10 +97,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.482 2016/07/07 06:55:43 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.458.2.2 2015/03/09 08:56:01 snj Exp $");
 
 #include "opt_ddb.h"
-#include "opt_inet.h"
 #include "opt_ipsec.h"
 #include "opt_modular.h"
 #include "opt_ntp.h"
@@ -114,15 +113,14 @@ __KERNEL_RCSID(0, "$NetBSD: init_main.c,v 1.482 2016/07/07 06:55:43 msaitoh Exp 
 #include "opt_wapbl.h"
 #include "opt_ptrace.h"
 #include "opt_rnd_printf.h"
-#include "opt_splash.h"
 
-#if defined(SPLASHSCREEN) && defined(makeoptions_SPLASHSCREEN_IMAGE)
-extern void *_binary_splash_image_start;
-extern void *_binary_splash_image_end;
-#endif
-
+#include "drvctl.h"
 #include "ksyms.h"
 
+#include "sysmon_envsys.h"
+#include "sysmon_power.h"
+#include "sysmon_taskq.h"
+#include "sysmon_wdog.h"
 #include "veriexec.h"
 
 #include <sys/param.h>
@@ -178,6 +176,15 @@ extern void *_binary_splash_image_end;
 #ifdef IPSEC
 #include <netipsec/ipsec.h>
 #endif
+#ifdef SYSVSHM
+#include <sys/shm.h>
+#endif
+#ifdef SYSVSEM
+#include <sys/sem.h>
+#endif
+#ifdef SYSVMSG
+#include <sys/msg.h>
+#endif
 #include <sys/domain.h>
 #include <sys/namei.h>
 #include <sys/rnd.h>
@@ -198,26 +205,35 @@ extern void *_binary_splash_image_end;
 #include <sys/syscall.h>
 #include <sys/syscallargs.h>
 
+#if defined(PAX_MPROTECT) || defined(PAX_SEGVGUARD) || defined(PAX_ASLR)
 #include <sys/pax.h>
+#endif /* PAX_MPROTECT || PAX_SEGVGUARD || PAX_ASLR */
 
 #include <secmodel/secmodel.h>
 
 #include <ufs/ufs/quota.h>
 
 #include <miscfs/genfs/genfs.h>
+#include <miscfs/syncfs/syncfs.h>
 #include <miscfs/specfs/specdev.h>
 
 #include <sys/cpu.h>
 
 #include <uvm/uvm.h>	/* extern struct uvm uvm */
 
+#if NSYSMON_TASKQ > 0
+#include <dev/sysmon/sysmon_taskq.h>
+#endif
+
 #include <dev/cons.h>
-#include <dev/splash/splash.h>
+
+#if NSYSMON_ENVSYS > 0 || NSYSMON_POWER > 0 || NSYSMON_WDOG > 0
+#include <dev/sysmon/sysmonvar.h>
+#endif
 
 #include <net/bpf.h>
 #include <net/if.h>
 #include <net/raw_cb.h>
-#include <net/if_llatbl.h>
 
 #include <prop/proplib.h>
 
@@ -352,13 +368,6 @@ main(void)
 	/* Initialize the buffer cache */
 	bufinit();
 
-
-#if defined(SPLASHSCREEN) && defined(SPLASHSCREEN_IMAGE)
-	size_t splash_size = (&_binary_splash_image_end -
-	    &_binary_splash_image_start) * sizeof(void *);
-	splash_setimage(&_binary_splash_image_start, splash_size);
-#endif
-
 	/* Initialize sockets. */
 	soinit();
 
@@ -458,6 +467,23 @@ main(void)
 	/* Initialize kqueue. */
 	kqueue_init();
 
+	/* Initialize the system monitor subsystems. */
+#if NSYSMON_TASKQ > 0
+	sysmon_task_queue_preinit();
+#endif
+
+#if NSYSMON_ENVSYS > 0
+	sysmon_envsys_init();
+#endif
+
+#if NSYSMON_POWER > 0
+	sysmon_power_init();
+#endif
+
+#if NSYSMON_WDOG > 0
+	sysmon_wdog_init();
+#endif
+
 	inittimecounter();
 	ntp_init();
 
@@ -502,9 +528,6 @@ main(void)
 	/* Now timer is working.  Enable preemption. */
 	kpreempt_enable();
 
-	/* Get the threads going and into any sleeps before continuing. */
-	yield();
-
 	/* Enable deferred processing of RNG samples */
 	rnd_init_softint();
 
@@ -513,10 +536,25 @@ main(void)
 	kprintf_init_callout();
 #endif
 
+#ifdef SYSVSHM
+	/* Initialize System V style shared memory. */
+	shminit();
+#endif
+
 	vmem_rehash_start();	/* must be before exec_init */
 
 	/* Initialize exec structures */
 	exec_init(1);		/* seminit calls exithook_establish() */
+
+#ifdef SYSVSEM
+	/* Initialize System V style semaphores. */
+	seminit();
+#endif
+
+#ifdef SYSVMSG
+	/* Initialize System V style message queues. */
+	msginit();
+#endif
 
 #if NVERIEXEC > 0
 	/*
@@ -525,7 +563,9 @@ main(void)
 	veriexec_init();
 #endif /* NVERIEXEC > 0 */
 
+#if defined(PAX_MPROTECT) || defined(PAX_SEGVGUARD) || defined(PAX_ASLR)
 	pax_init();
+#endif /* PAX_MPROTECT || PAX_SEGVGUARD || PAX_ASLR */
 
 #ifdef	IPSEC
 	/* Attach network crypto subsystem */
@@ -538,9 +578,6 @@ main(void)
 	 */
 	s = splnet();
 	ifinit();
-#if defined(INET) || defined(INET6)
-	lltableinit();
-#endif
 	domaininit(true);
 	if_attachdomain();
 	splx(s);
@@ -568,11 +605,12 @@ main(void)
 	ptrace_init();
 #endif /* PTRACE */
 
+	/* Initialize the UUID system calls. */
+	uuid_init();
+
 	machdep_init();
 
 	procinit_sysctl();
-
-	scdebug_init();
 
 	/*
 	 * Create process 1 (init(8)).  We do this now, as Unix has
@@ -708,9 +746,9 @@ configure(void)
 	config_twiddle_init();
 
 	pmf_init();
-
-	/* Initialize driver modules */
-	module_init_class(MODULE_CLASS_DRIVER);
+#if NDRVCTL > 0
+	drvctl_init();
+#endif
 
 	userconf_init();
 	if (boothowto & RB_USERCONF)
@@ -771,6 +809,9 @@ configure2(void)
 	 * devices that want interrupts enabled.
 	 */
 	config_create_interruptthreads();
+
+	/* Get the threads going and into any sleeps before continuing. */
+	yield();
 }
 
 static void
@@ -790,12 +831,12 @@ configure3(void)
 static void
 rootconf_handle_wedges(void)
 {
-	struct disklabel label;
+	struct partinfo dpart;
 	struct partition *p;
 	struct vnode *vp;
 	daddr_t startblk;
 	uint64_t nblks;
-	device_t dev;
+	device_t dev; 
 	int error;
 
 	if (booted_nblks) {
@@ -823,7 +864,7 @@ rootconf_handle_wedges(void)
 		if (vp == NULL)
 			return;
 
-		error = VOP_IOCTL(vp, DIOCGDINFO, &label, FREAD, NOCRED);
+		error = VOP_IOCTL(vp, DIOCGPART, &dpart, FREAD, NOCRED);
 		VOP_CLOSE(vp, FREAD, NOCRED);
 		vput(vp);
 		if (error)
@@ -832,7 +873,7 @@ rootconf_handle_wedges(void)
 		KASSERT(booted_partition >= 0
 			&& booted_partition < MAXPARTITIONS);
 
-		p = &label.d_partitions[booted_partition];
+		p = &dpart.disklab->d_partitions[booted_partition];
 
 		dev      = booted_device;
 		startblk = p->p_offset;
@@ -901,7 +942,7 @@ start_init(void *arg)
 	register_t retval[2];
 	char flags[4], *flagsp;
 	const char *path, *slash;
-	char *ucp, **uap, *arg0, *arg1, *argv[3];
+	char *ucp, **uap, *arg0, *arg1 = NULL;
 	char ipath[129];
 	int ipx, len;
 
@@ -1007,10 +1048,8 @@ start_init(void *arg)
 #endif
 			arg1 = STACK_ALLOC(ucp, i);
 			ucp = STACK_MAX(arg1, i);
-			if ((error = copyout((void *)flags, arg1, i)) != 0)
-				goto copyerr;
-		} else
-			arg1 = NULL;
+			(void)copyout((void *)flags, arg1, i);
+		}
 
 		/*
 		 * Move out the file name (also arg 0).
@@ -1024,27 +1063,28 @@ start_init(void *arg)
 #endif
 		arg0 = STACK_ALLOC(ucp, i);
 		ucp = STACK_MAX(arg0, i);
-		if ((error = copyout(path, arg0, i)) != 0)
-			goto copyerr;
+		(void)copyout(path, arg0, i);
 
 		/*
 		 * Move out the arg pointers.
 		 */
 		ucp = (void *)STACK_ALIGN(ucp, STACK_ALIGNBYTES);
-		uap = (char **)STACK_ALLOC(ucp, sizeof(argv));
+		uap = (char **)STACK_ALLOC(ucp, sizeof(char *) * 3);
 		SCARG(&args, path) = arg0;
 		SCARG(&args, argp) = uap;
 		SCARG(&args, envp) = NULL;
 		slash = strrchr(path, '/');
-
-		argv[0] = slash ? arg0 + (slash + 1 - path) : arg0;
-		argv[1] = arg1;
-		argv[2] = NULL;
-		if ((error = copyout(argv, uap, sizeof(argv))) != 0)
-			goto copyerr;
+		if (slash)
+			(void)suword((void *)uap++,
+			    (long)arg0 + (slash + 1 - path));
+		else
+			(void)suword((void *)uap++, (long)arg0);
+		if (options != 0)
+			(void)suword((void *)uap++, (long)arg1);
+		(void)suword((void *)uap++, 0);	/* terminator */
 
 		/*
-		 * Now try to exec the program.  If it can't for any reason
+		 * Now try to exec the program.  If can't for any reason
 		 * other than it doesn't exist, complain.
 		 */
 		error = sys_execve(l, &args, retval);
@@ -1056,8 +1096,6 @@ start_init(void *arg)
 	}
 	printf("init: not found\n");
 	panic("no init");
-copyerr:
-	panic("copyout %d", error);
 }
 
 /*

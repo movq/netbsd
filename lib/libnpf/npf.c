@@ -1,4 +1,4 @@
-/*	$NetBSD: npf.c,v 1.35 2015/02/02 00:55:28 rmind Exp $	*/
+/*	$NetBSD: npf.c,v 1.32.2.2 2015/02/04 07:13:04 snj Exp $	*/
 
 /*-
  * Copyright (c) 2010-2015 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf.c,v 1.35 2015/02/02 00:55:28 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf.c,v 1.32.2.2 2015/02/04 07:13:04 snj Exp $");
 
 #include <sys/types.h>
 #include <netinet/in_systm.h>

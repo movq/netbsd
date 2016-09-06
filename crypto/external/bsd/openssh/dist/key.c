@@ -1,11 +1,11 @@
-/*	$NetBSD: key.c,v 1.19 2016/08/02 13:45:12 christos Exp $	*/
-/* $OpenBSD: key.c,v 1.130 2016/05/02 09:36:42 djm Exp $ */
+/*	$NetBSD: key.c,v 1.14.4.1 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: key.c,v 1.127 2015/01/28 22:36:00 djm Exp $ */
 /*
  * placed in the public domain
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: key.c,v 1.19 2016/08/02 13:45:12 christos Exp $");
+__RCSID("$NetBSD: key.c,v 1.14.4.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/param.h>
 #include <sys/types.h>
 #include <errno.h>
@@ -134,7 +134,7 @@ key_to_blob(const Key *key, u_char **blobp, u_int *lenp)
 
 int
 key_sign(const Key *key, u_char **sigp, u_int *lenp,
-    const u_char *data, u_int datalen, const char *alg)
+    const u_char *data, u_int datalen)
 {
 	int r;
 	u_char *sig;
@@ -145,7 +145,7 @@ key_sign(const Key *key, u_char **sigp, u_int *lenp,
 	if (lenp != NULL)
 		*lenp = 0;
 	if ((r = sshkey_sign(key, &sig, &siglen,
-	    data, datalen, alg, datafellows)) != 0) {
+	    data, datalen, datafellows)) != 0) {
 		fatal_on_fatal_errors(r, __func__, 0);
 		error("%s: %s", __func__, ssh_err(r));
 		return -1;
@@ -186,11 +186,11 @@ key_demote(const Key *k)
 }
 
 int
-key_to_certified(Key *k)
+key_to_certified(Key *k, int legacy)
 {
 	int r;
 
-	if ((r = sshkey_to_certified(k)) != 0) {
+	if ((r = sshkey_to_certified(k, legacy)) != 0) {
 		fatal_on_fatal_errors(r, __func__, 0);
 		error("%s: %s", __func__, ssh_err(r));
 		return -1;
@@ -216,7 +216,7 @@ key_certify(Key *k, Key *ca)
 {
 	int r;
 
-	if ((r = sshkey_certify(k, ca, NULL)) != 0) {
+	if ((r = sshkey_certify(k, ca)) != 0) {
 		fatal_on_fatal_errors(r, __func__, 0);
 		error("%s: %s", __func__, ssh_err(r));
 		return -1;

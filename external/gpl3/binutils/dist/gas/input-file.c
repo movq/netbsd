@@ -1,5 +1,7 @@
 /* input_file.c - Deal with Input Files -
-   Copyright (C) 1987-2015 Free Software Foundation, Inc.
+   Copyright 1987, 1990, 1991, 1992, 1993, 1994, 1995, 1999, 2000, 2001,
+   2002, 2003, 2005, 2006, 2007, 2009, 2012
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -79,7 +81,7 @@ input_file_buffer_size (void)
 char *
 input_file_push (void)
 {
-  struct saved_file *saved;
+  register struct saved_file *saved;
 
   saved = (struct saved_file *) xmalloc (sizeof *saved);
 
@@ -98,7 +100,7 @@ input_file_push (void)
 void
 input_file_pop (char *arg)
 {
-  struct saved_file *saved = (struct saved_file *) arg;
+  register struct saved_file *saved = (struct saved_file *) arg;
 
   input_file_end ();		/* Close out old file.  */
 
@@ -216,7 +218,7 @@ input_file_get (char *buf, size_t buflen)
 
   if (feof (f_in))
     return 0;
-
+  
   size = fread (buf, sizeof (char), buflen, f_in);
   if (ferror (f_in))
     as_bad (_("can't read from %s: %s"), file_name, xstrerror (errno));

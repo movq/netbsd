@@ -1,4 +1,4 @@
-/*      $NetBSD: en.c,v 1.18 2015/01/23 03:36:58 chs Exp $        */
+/*      $NetBSD: en.c,v 1.17.38.1 2015/02/04 06:56:10 snj Exp $        */
 /*
  * Copyright (c) 1996 Rolf Grossmann
  * All rights reserved.

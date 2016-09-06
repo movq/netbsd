@@ -64,9 +64,11 @@ control_notify_window_layout_changed(struct window *w)
 	struct session		*s;
 	struct format_tree	*ft;
 	struct winlink		*wl;
+	u_int			 i;
 	const char		*template;
 
-	TAILQ_FOREACH(c, &clients, entry) {
+	for (i = 0; i < ARRAY_LENGTH(&clients); i++) {
+		c = ARRAY_ITEM(&clients, i);
 		if (!CONTROL_SHOULD_NOTIFY_CLIENT(c) || c->session == NULL)
 			continue;
 		s = c->session;
@@ -86,7 +88,7 @@ control_notify_window_layout_changed(struct window *w)
 		ft = format_create();
 		wl = winlink_find_by_window(&s->windows, w);
 		if (wl != NULL) {
-			format_defaults(ft, c, NULL, wl, NULL);
+			format_winlink(ft, c->session, wl);
 			control_write(c, "%s", format_expand(ft, template));
 		}
 		format_free(ft);
@@ -97,17 +99,14 @@ void
 control_notify_window_unlinked(unused struct session *s, struct window *w)
 {
 	struct client	*c;
-	struct session	*cs;
+	u_int		 i;
 
-	TAILQ_FOREACH(c, &clients, entry) {
+	for (i = 0; i < ARRAY_LENGTH(&clients); i++) {
+		c = ARRAY_ITEM(&clients, i);
 		if (!CONTROL_SHOULD_NOTIFY_CLIENT(c) || c->session == NULL)
 			continue;
-		cs = c->session;
 
-		if (winlink_find_by_window_id(&cs->windows, w->id) != NULL)
-			control_write(c, "%%window-close @%u", w->id);
-		else
-			control_write(c, "%%unlinked-window-close @%u", w->id);
+		control_write(c, "%%window-close @%u", w->id);
 	}
 }
 
@@ -116,8 +115,10 @@ control_notify_window_linked(unused struct session *s, struct window *w)
 {
 	struct client	*c;
 	struct session	*cs;
+	u_int		 i;
 
-	TAILQ_FOREACH(c, &clients, entry) {
+	for (i = 0; i < ARRAY_LENGTH(&clients); i++) {
+		c = ARRAY_ITEM(&clients, i);
 		if (!CONTROL_SHOULD_NOTIFY_CLIENT(c) || c->session == NULL)
 			continue;
 		cs = c->session;
@@ -133,20 +134,14 @@ void
 control_notify_window_renamed(struct window *w)
 {
 	struct client	*c;
-	struct session	*cs;
+	u_int		 i;
 
-	TAILQ_FOREACH(c, &clients, entry) {
+	for (i = 0; i < ARRAY_LENGTH(&clients); i++) {
+		c = ARRAY_ITEM(&clients, i);
 		if (!CONTROL_SHOULD_NOTIFY_CLIENT(c) || c->session == NULL)
 			continue;
-		cs = c->session;
 
-		if (winlink_find_by_window_id(&cs->windows, w->id) != NULL) {
-			control_write(c, "%%window-renamed @%u %s", w->id,
-			    w->name);
-		} else {
-			control_write(c, "%%unlinked-window-renamed @%u %s",
-			    w->id, w->name);
-		}
+		control_write(c, "%%window-renamed @%u %s", w->id, w->name);
 	}
 }
 
@@ -166,8 +161,10 @@ void
 control_notify_session_renamed(struct session *s)
 {
 	struct client	*c;
+	u_int		 i;
 
-	TAILQ_FOREACH(c, &clients, entry) {
+	for (i = 0; i < ARRAY_LENGTH(&clients); i++) {
+		c = ARRAY_ITEM(&clients, i);
 		if (!CONTROL_SHOULD_NOTIFY_CLIENT(c))
 			continue;
 
@@ -179,8 +176,10 @@ void
 control_notify_session_created(unused struct session *s)
 {
 	struct client	*c;
+	u_int		 i;
 
-	TAILQ_FOREACH(c, &clients, entry) {
+	for (i = 0; i < ARRAY_LENGTH(&clients); i++) {
+		c = ARRAY_ITEM(&clients, i);
 		if (!CONTROL_SHOULD_NOTIFY_CLIENT(c))
 			continue;
 
@@ -192,8 +191,10 @@ void
 control_notify_session_close(unused struct session *s)
 {
 	struct client	*c;
+	u_int		 i;
 
-	TAILQ_FOREACH(c, &clients, entry) {
+	for (i = 0; i < ARRAY_LENGTH(&clients); i++) {
+		c = ARRAY_ITEM(&clients, i);
 		if (!CONTROL_SHOULD_NOTIFY_CLIENT(c))
 			continue;
 

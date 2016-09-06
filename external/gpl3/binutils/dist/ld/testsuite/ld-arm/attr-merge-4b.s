@@ -5,6 +5,3 @@
 
 	@ Tag_also_compatible_with = v4T
 	.eabi_attribute Tag_also_compatible_with, "\006\002"
-
-	.eabi_attribute Tag_ABI_FP_number_model, 0
-	.eabi_attribute Tag_ABI_VFP_args, 0

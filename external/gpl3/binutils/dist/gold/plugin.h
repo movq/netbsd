@@ -1,6 +1,6 @@
 // plugin.h -- plugin manager for gold      -*- C++ -*-
 
-// Copyright (C) 2008-2015 Free Software Foundation, Inc.
+// Copyright 2008, 2009, 2010, 2011 Free Software Foundation, Inc.
 // Written by Cary Coutant <ccoutant@google.com>.
 
 // This file is part of gold.
@@ -134,8 +134,7 @@ class Plugin_manager
       in_claim_file_handler_(false),
       options_(options), workqueue_(NULL), task_(NULL), input_objects_(NULL),
       symtab_(NULL), layout_(NULL), dirpath_(NULL), mapfile_(NULL),
-      this_blocker_(NULL), extra_search_path_(), lock_(NULL),
-      initialize_lock_(&lock_)
+      this_blocker_(NULL), extra_search_path_()
   { this->current_ = plugins_.end(); }
 
   ~Plugin_manager();
@@ -282,10 +281,6 @@ class Plugin_manager
   input_objects() const
   { return this->input_objects_; }
 
-  Symbol_table*
-  symtab()
-  { return this->symtab_; }
-
   Layout*
   layout()
   { return this->layout_; }
@@ -381,8 +376,6 @@ class Plugin_manager
   // An extra directory to seach for the libraries passed by
   // add_input_library.
   std::string extra_search_path_;
-  Lock* lock_;
-  Initialize_lock initialize_lock_;
 };
 
 
@@ -400,8 +393,7 @@ class Pluginobj : public Object
 
   // Fill in the symbol resolution status for the given plugin symbols.
   ld_plugin_status
-  get_symbol_resolution_info(Symbol_table* symtab,
-			     int nsyms,
+  get_symbol_resolution_info(int nsyms,
 			     ld_plugin_symbol* syms,
 			     int version) const;
 
@@ -433,16 +425,6 @@ class Pluginobj : public Object
   filesize()
   { return this->filesize_; }
 
-  // Return the word size of the object file.
-  int
-  elfsize() const
-  { gold_unreachable(); }
-
-  // Return TRUE if this is a big-endian object file.
-  bool
-  is_big_endian() const
-  { gold_unreachable(); }
-
  protected:
   // Return TRUE if this is an object claimed by a plugin.
   virtual Pluginobj*
@@ -451,7 +433,7 @@ class Pluginobj : public Object
 
   // The number of symbols provided by the plugin.
   int nsyms_;
-
+  
   // The symbols provided by the plugin.
   const struct ld_plugin_symbol* syms_;
 
@@ -508,7 +490,7 @@ class Sized_pluginobj : public Pluginobj
 
   // Get the name of a section.
   std::string
-  do_section_name(unsigned int shndx) const;
+  do_section_name(unsigned int shndx);
 
   // Return a view of the contents of a section.
   const unsigned char*
@@ -572,11 +554,11 @@ class Plugin_hook : public Task
 {
  public:
   Plugin_hook(const General_options& options, Input_objects* input_objects,
-	      Symbol_table* symtab, Layout* /*layout*/, Dirsearch* dirpath,
+	      Symbol_table* symtab, Layout* layout, Dirsearch* dirpath,
 	      Mapfile* mapfile, Task_token* this_blocker,
 	      Task_token* next_blocker)
     : options_(options), input_objects_(input_objects), symtab_(symtab),
-      dirpath_(dirpath), mapfile_(mapfile),
+      layout_(layout), dirpath_(dirpath), mapfile_(mapfile),
       this_blocker_(this_blocker), next_blocker_(next_blocker)
   { }
 
@@ -601,6 +583,7 @@ class Plugin_hook : public Task
   const General_options& options_;
   Input_objects* input_objects_;
   Symbol_table* symtab_;
+  Layout* layout_;
   Dirsearch* dirpath_;
   Mapfile* mapfile_;
   Task_token* this_blocker_;

@@ -1,4 +1,4 @@
-/*	$NetBSD: keysock.c,v 1.50 2016/06/10 13:27:16 ozaki-r Exp $	*/
+/*	$NetBSD: keysock.c,v 1.43 2014/08/09 05:33:01 rtr Exp $	*/
 /*	$FreeBSD: src/sys/netipsec/keysock.c,v 1.3.2.1 2003/01/24 05:11:36 sam Exp $	*/
 /*	$KAME: keysock.c,v 1.25 2001/08/13 20:07:41 itojun Exp $	*/
 
@@ -32,7 +32,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: keysock.c,v 1.50 2016/06/10 13:27:16 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: keysock.c,v 1.43 2014/08/09 05:33:01 rtr Exp $");
+
+#include "opt_ipsec.h"
 
 /* This code has derived from sys/net/rtsock.c on FreeBSD2.2.5 */
 
@@ -61,6 +63,8 @@ __KERNEL_RCSID(0, "$NetBSD: keysock.c,v 1.50 2016/06/10 13:27:16 ozaki-r Exp $")
 #include <netipsec/ipsec_osdep.h>
 #include <netipsec/ipsec_private.h>
 
+typedef int	pr_output_t (struct mbuf *, struct socket *);
+
 struct key_cb {
 	int key_count;
 	int any_count;
@@ -76,7 +80,6 @@ static struct sockaddr key_src = {
     .sa_family = PF_KEY,
 };
 
-static const struct protosw keysw[];
 
 static int key_sendup0(struct rawcb *, struct mbuf *, int, int);
 
@@ -85,12 +88,18 @@ int key_registered_sb_max = (2048 * MHLEN); /* XXX arbitrary */
 /*
  * key_output()
  */
-static int
-key_output(struct mbuf *m, struct socket *so)
+int
+key_output(struct mbuf *m, ...)
 {
 	struct sadb_msg *msg;
 	int len, error = 0;
 	int s;
+	struct socket *so;
+	va_list ap;
+
+	va_start(ap, m);
+	so = va_arg(ap, struct socket *);
+	va_end(ap);
 
 	if (m == 0)
 		panic("key_output: NULL pointer was passed");
@@ -271,7 +280,7 @@ key_sendup(struct socket *so, struct sadb_msg *msg, u_int len,
 		n = NULL;
 	}
 	m->m_pkthdr.len = len;
-	m_reset_rcvif(m);
+	m->m_pkthdr.rcvif = NULL;
 	m_copyback(m, 0, len, msg);
 
 	/* avoid duplicated statistics */
@@ -476,7 +485,7 @@ key_detach(struct socket *so)
 }
 
 static int
-key_accept(struct socket *so, struct sockaddr *nam)
+key_accept(struct socket *so, struct mbuf *nam)
 {
 	KASSERT(solocked(so));
 
@@ -486,7 +495,7 @@ key_accept(struct socket *so, struct sockaddr *nam)
 }
 
 static int
-key_bind(struct socket *so, struct sockaddr *nam, struct lwp *l)
+key_bind(struct socket *so, struct mbuf *nam, struct lwp *l)
 {
 	KASSERT(solocked(so));
 
@@ -502,7 +511,7 @@ key_listen(struct socket *so, struct lwp *l)
 }
 
 static int
-key_connect(struct socket *so, struct sockaddr *nam, struct lwp *l)
+key_connect(struct socket *so, struct mbuf *nam, struct lwp *l)
 {
 	KASSERT(solocked(so));
 
@@ -576,7 +585,7 @@ key_stat(struct socket *so, struct stat *ub)
 }
 
 static int
-key_peeraddr(struct socket *so, struct sockaddr *nam)
+key_peeraddr(struct socket *so, struct mbuf *nam)
 {
 	struct rawcb *rp = sotorawcb(so);
 
@@ -592,7 +601,7 @@ key_peeraddr(struct socket *so, struct sockaddr *nam)
 }
 
 static int
-key_sockaddr(struct socket *so, struct sockaddr *nam)
+key_sockaddr(struct socket *so, struct mbuf *nam)
 {
 	struct rawcb *rp = sotorawcb(so);
 
@@ -624,17 +633,16 @@ key_recvoob(struct socket *so, struct mbuf *m, int flags)
 }
 
 static int
-key_send(struct socket *so, struct mbuf *m, struct sockaddr *nam,
+key_send(struct socket *so, struct mbuf *m, struct mbuf *nam,
     struct mbuf *control, struct lwp *l)
 {
 	int error = 0;
 	int s;
 
 	KASSERT(solocked(so));
-	KASSERT(so->so_proto == &keysw[0]);
 
 	s = splsoftnet();
-	error = raw_send(so, m, nam, control, l, &key_output);
+	error = raw_send(so, m, nam, control, l);
 	splx(s);
 
 	return error;
@@ -658,6 +666,44 @@ key_purgeif(struct socket *so, struct ifnet *ifa)
 	panic("key_purgeif");
 
 	return EOPNOTSUPP;
+}
+
+/*
+ * key_usrreq()
+ * derived from net/rtsock.c:route_usrreq()
+ */
+static int
+key_usrreq(struct socket *so, int req,struct mbuf *m, struct mbuf *nam,
+    struct mbuf *control, struct lwp *l)
+{
+	int s, error = 0;
+
+	KASSERT(req != PRU_ATTACH);
+	KASSERT(req != PRU_DETACH);
+	KASSERT(req != PRU_ACCEPT);
+	KASSERT(req != PRU_BIND);
+	KASSERT(req != PRU_LISTEN);
+	KASSERT(req != PRU_CONNECT);
+	KASSERT(req != PRU_CONNECT2);
+	KASSERT(req != PRU_DISCONNECT);
+	KASSERT(req != PRU_SHUTDOWN);
+	KASSERT(req != PRU_ABORT);
+	KASSERT(req != PRU_CONTROL);
+	KASSERT(req != PRU_SENSE);
+	KASSERT(req != PRU_PEERADDR);
+	KASSERT(req != PRU_SOCKADDR);
+	KASSERT(req != PRU_RCVD);
+	KASSERT(req != PRU_RCVOOB);
+	KASSERT(req != PRU_SEND);
+	KASSERT(req != PRU_SENDOOB);
+	KASSERT(req != PRU_PURGEIF);
+
+	s = splsoftnet();
+	error = raw_usrreq(so, req, m, nam, control, l);
+	m = control = NULL;	/* reclaimed in raw_usrreq */
+	splx(s);
+
+	return error;
 }
 
 /*
@@ -686,8 +732,9 @@ PR_WRAP_USRREQS(key)
 #define	key_send	key_send_wrapper
 #define	key_sendoob	key_sendoob_wrapper
 #define	key_purgeif	key_purgeif_wrapper
+#define	key_usrreq	key_usrreq_wrapper
 
-static const struct pr_usrreqs key_usrreqs = {
+const struct pr_usrreqs key_usrreqs = {
 	.pr_attach	= key_attach,
 	.pr_detach	= key_detach,
 	.pr_accept	= key_accept,
@@ -707,14 +754,16 @@ static const struct pr_usrreqs key_usrreqs = {
 	.pr_send	= key_send,
 	.pr_sendoob	= key_sendoob,
 	.pr_purgeif	= key_purgeif,
+	.pr_generic	= key_usrreq,
 };
 
-static const struct protosw keysw[] = {
+const struct protosw keysw[] = {
     {
 	.pr_type = SOCK_RAW,
 	.pr_domain = &keydomain,
 	.pr_protocol = PF_KEY_V2,
 	.pr_flags = PR_ATOMIC|PR_ADDR,
+	.pr_output = key_output,
 	.pr_ctlinput = raw_ctlinput,
 	.pr_usrreqs = &key_usrreqs,
 	.pr_init = raw_init,

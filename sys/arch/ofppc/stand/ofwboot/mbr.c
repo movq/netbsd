@@ -1,4 +1,4 @@
-/*	$NetBSD: mbr.c,v 1.5 2016/03/30 21:14:54 christos Exp $	*/
+/*	$NetBSD: mbr.c,v 1.4 2012/02/02 21:54:34 phx Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -130,6 +130,7 @@ find_mbr_part(struct of_dev *devp, uint32_t off, char *buf,
 		}
 	}
 
+	recursion--;
 	return 0;
 }
 

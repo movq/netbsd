@@ -1,11 +1,10 @@
-#	$NetBSD: Makefile,v 1.9 2016/08/04 17:07:24 christos Exp $
+#	$NetBSD: Makefile,v 1.4 2013/09/10 11:23:20 christos Exp $
 
 # $FreeBSD: src/cddl/lib/libctf/Makefile,v 1.2.2.1 2009/08/03 08:13:06 kensmith Exp $
 
-.include <bsd.init.mk>
+.include	"../../Makefile.inc"
 
 LIB=		ctf
-MAN=		ctf.5
 
 SRCS=		ctf_create.c \
 		ctf_decl.c \
@@ -30,8 +29,6 @@ CPPFLAGS+=	-I${OSNETDIR}/sys \
 		-I${OPENSOLARIS_USR_DISTDIR}/common/ctf \
 		-I${OPENSOLARIS_USR_DISTDIR}/lib/libctf/common \
 		-I${OPENSOLARIS_SYS_DISTDIR}/uts/common
-
-LIBDPLIBS+=	z	${NETBSDSRCDIR}/lib/libz
 
 .include <bsd.lib.mk>
 

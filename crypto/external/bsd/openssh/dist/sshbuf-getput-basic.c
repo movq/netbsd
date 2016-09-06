@@ -1,4 +1,4 @@
-/*	$OpenBSD: sshbuf-getput-basic.c,v 1.6 2016/06/16 11:00:17 dtucker Exp $	*/
+/*	$OpenBSD: sshbuf-getput-basic.c,v 1.4 2015/01/14 15:02:39 djm Exp $	*/
 /*
  * Copyright (c) 2011 Damien Miller
  *
@@ -15,11 +15,9 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include "includes.h"
-__RCSID("$NetBSD: sshbuf-getput-basic.c,v 1.5 2016/08/02 13:45:12 christos Exp $");
+__RCSID("$NetBSD: sshbuf-getput-basic.c,v 1.3.2.2 2015/04/30 06:07:31 riz Exp $");
 
 #include <sys/types.h>
-
-#include <stdarg.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -133,7 +131,7 @@ sshbuf_get_string_direct(struct sshbuf *buf, const u_char **valp, size_t *lenp)
 		*lenp = 0;
 	if ((r = sshbuf_peek_string_direct(buf, &p, &len)) < 0)
 		return r;
-	if (valp != NULL)
+	if (valp != 0)
 		*valp = p;
 	if (lenp != NULL)
 		*lenp = len;
@@ -170,7 +168,7 @@ sshbuf_peek_string_direct(const struct sshbuf *buf, const u_char **valp,
 		SSHBUF_DBG(("SSH_ERR_MESSAGE_INCOMPLETE"));
 		return SSH_ERR_MESSAGE_INCOMPLETE;
 	}
-	if (valp != NULL)
+	if (valp != 0)
 		*valp = p + 4;
 	if (lenp != NULL)
 		*lenp = len;
@@ -450,7 +448,7 @@ sshbuf_get_bignum2_bytes_direct(struct sshbuf *buf,
 		d++;
 		len--;
 	}
-	if (valp != NULL)
+	if (valp != 0)
 		*valp = d;
 	if (lenp != NULL)
 		*lenp = len;

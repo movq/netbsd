@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_cout.c,v 1.38 2016/01/23 02:33:09 dholland Exp $	*/
+/*	$NetBSD: rpc_cout.c,v 1.33 2013/12/15 00:40:17 christos Exp $	*/
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
  * unrestricted use provided that this legend is included on all tape
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)rpc_cout.c 1.13 89/02/22 (C) 1987 SMI";
 #else
-__RCSID("$NetBSD: rpc_cout.c,v 1.38 2016/01/23 02:33:09 dholland Exp $");
+__RCSID("$NetBSD: rpc_cout.c,v 1.33 2013/12/15 00:40:17 christos Exp $");
 #endif
 #endif
 
@@ -112,7 +112,7 @@ emit(definition *def)
 		break;
 	case DEF_PROGRAM:
 	case DEF_CONST:
-		errx(1, "Internal error at %s:%d: Case %d not handled",
+		errx(1, "Internal error %s, %d: Case %d not handled",
 		    __FILE__, __LINE__, def->def_kind);
 		break;
 	}
@@ -203,9 +203,9 @@ static void
 print_ifsizeof(const char *prefix, const char *type)
 {
 	if (streq(type, "bool")) {
-		f_print(fout, ", (unsigned int)sizeof(bool_t), (xdrproc_t)xdr_bool");
+		f_print(fout, ", (u_int)sizeof(bool_t), (xdrproc_t)xdr_bool");
 	} else {
-		f_print(fout, ", (unsigned int)sizeof(");
+		f_print(fout, ", (u_int)sizeof(");
 		if (undefined(type) && prefix) {
 			f_print(fout, "%s ", prefix);
 		}
@@ -272,10 +272,10 @@ print_ifstat(int indent, const char *prefix, const char *type, relation rel,
 			}
 			print_ifarg("(char **)(void *)");
 			if (*objname == '&') {
-				f_print(fout, "%s.%s_val, (unsigned int *)%s.%s_len",
+				f_print(fout, "%s.%s_val, (u_int *)%s.%s_len",
 				    objname, name, objname, name);
 			} else {
-				f_print(fout, "&%s->%s_val, (unsigned int *)&%s->%s_len",
+				f_print(fout, "&%s->%s_val, (u_int *)&%s->%s_len",
 				    objname, name, objname, name);
 			}
 		}
@@ -476,9 +476,11 @@ emit_struct(definition *def)
 					else {
 						char *nsizestr;
 
-						nsizestr = realloc(sizestr, strlen(sizestr) + strlen(ptemp) + 1);
+						nsizestr = (char *) realloc(sizestr, strlen(sizestr) + strlen(ptemp) + 1);
 						if (nsizestr == NULL) {
-							err(EXIT_FAILURE, "realloc");
+
+							f_print(stderr, "Fatal error : no memory\n");
+							crash();
 						}
 						sizestr = nsizestr;
 						sizestr = strcat(sizestr, ptemp);	/* build up length of
@@ -658,7 +660,7 @@ emit_inline(declaration *decl, int flag)
 		break;
 	case REL_ARRAY:
 	case REL_POINTER:
-		errx(1, "Internal error at %s:%d: Case %d not handled",
+		errx(1, "Internal error %s, %d: Case %d not handled",
 		    __FILE__, __LINE__, decl->rel);
 	}
 }
@@ -710,10 +712,11 @@ upcase(const char *str)
 	char   *ptr, *hptr;
 
 
-	ptr = malloc(strlen(str) + 1);
+	ptr = (char *) malloc(strlen(str) + 1);
 	if (ptr == NULL) {
-		errx(EXIT_FAILURE, "Out of memory");
-	}
+		f_print(stderr, "malloc failed\n");
+		exit(1);
+	};
 
 	hptr = ptr;
 	while (*str != '\0')

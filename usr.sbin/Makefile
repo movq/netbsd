@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.273 2015/12/13 02:26:08 christos Exp $
+#	$NetBSD: Makefile,v 1.269.2.1 2015/04/21 05:22:58 snj Exp $
 #	from: @(#)Makefile	5.20 (Berkeley) 6/12/93
 
 .include <bsd.own.mk>
@@ -11,7 +11,7 @@ SUBDIR=	ac accton acpitools altq apm apmd arp \
 	flashctl fssconfig fusermount fwctl \
 	gpioctl grfconfig gspa \
 	hdaudioctl \
-	i2cscan ifwatchd inetd installboot intrctl iopctl iostat ipwctl irdaattach \
+	i2cscan ifwatchd inetd installboot iopctl iostat ipwctl irdaattach \
 	isdn isibootd iteconfig iwictl \
 	kgmon \
 	lastlogin ldpd link lmcconfig lockstat lpr \
@@ -20,7 +20,7 @@ SUBDIR=	ac accton acpitools altq apm apmd arp \
 	ndbootd ndiscvt netgroup_mkdb nfsd \
 	ofctl \
 	paxctl pcictl perfused psrset pstat pwd_mkdb postinstall \
-	powerd puffs \
+	powerd \
 	quot quotacheck quotaon quotarestore \
 	rarpd rbootd rdate repquota rmt rpc.bootparamd rpc.lockd \
 	rpc.pcnfsd rpc.statd rpcbind rwhod \
@@ -41,12 +41,16 @@ SUBDIR+= makemandb
 SUBDIR+= rpc.yppasswdd ypbind yppoll ypserv ypset
 .endif
 
+.if (${MKRUMP} != "no")
+SUBDIR+= puffs
+.endif
+
 .if ${TOOLCHAIN_MISSING} != "no"
 SUBDIR+= mdsetimage
 .endif
 
 .if (${MKINET6} != "no")
-SUBDIR+=faithd ifmcstat ip6addrctl ndp rip6query rtsold
+SUBDIR+=faithd ifmcstat ndp rip6query rtsold
 .endif
 .if (${USE_INET6} != "no")
 SUBDIR+=mld6query route6d rtadvd traceroute6 

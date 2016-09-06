@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_parser.y,v 1.14 2016/06/03 20:39:02 christos Exp $	*/
+/*	$NetBSD: ntp_parser.y,v 1.7.4.5 2016/07/14 18:36:22 martin Exp $	*/
 
 /* ntp_parser.y
  *

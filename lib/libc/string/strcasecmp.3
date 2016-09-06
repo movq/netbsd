@@ -28,9 +28,9 @@
 .\" SUCH DAMAGE.
 .\"
 .\"     from: @(#)strcasecmp.3	8.1 (Berkeley) 6/9/93
-.\"	$NetBSD: strcasecmp.3,v 1.21 2016/07/13 09:05:16 abhinav Exp $
+.\"	$NetBSD: strcasecmp.3,v 1.17 2006/10/16 08:48:45 wiz Exp $
 .\"
-.Dd July 11, 2016
+.Dd June 9, 1993
 .Dt STRCASECMP 3
 .Os
 .Sh NAME
@@ -69,7 +69,6 @@ is greater than
 .Pp
 The
 .Fn strncasecmp
-function
 compares at most
 .Fa len
 characters.
@@ -79,13 +78,6 @@ characters.
 .Xr strcmp 3 ,
 .Xr strcoll 3 ,
 .Xr strxfrm 3
-.Sh STANDARDS
-The
-.Fn strcasecmp
-and
-.Fn strncasecmp
-functions conform to
-.St -p1003.1-2001 .
 .Sh HISTORY
 The
 .Fn strcasecmp
@@ -96,6 +88,6 @@ functions first appeared in
 .Sh NOTES
 If
 .Fa len
-is 0
+is zero
 .Fn strncasecmp
-always returns 0.
+returns always 0.

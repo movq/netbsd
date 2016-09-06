@@ -1,6 +1,6 @@
-/*	$NetBSD: ulfs_quota2.c,v 1.28 2016/07/07 06:55:44 msaitoh Exp $	*/
-/*  from NetBSD: ufs_quota2.c,v 1.40 2015/03/28 19:24:05 maxv Exp Exp  */
-/*  from NetBSD: ffs_quota2.c,v 1.5 2015/02/22 14:12:48 maxv Exp  */
+/*	$NetBSD: ulfs_quota2.c,v 1.16 2014/06/28 22:27:51 dholland Exp $	*/
+/*  from NetBSD: ufs_quota2.c,v 1.35 2012/09/27 07:47:56 bouyer Exp  */
+/*  from NetBSD: ffs_quota2.c,v 1.4 2011/06/12 03:36:00 rmind Exp  */
 
 /*-
   * Copyright (c) 2010 Manuel Bouyer
@@ -29,7 +29,7 @@
   */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ulfs_quota2.c,v 1.28 2016/07/07 06:55:44 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ulfs_quota2.c,v 1.16 2014/06/28 22:27:51 dholland Exp $");
 
 #include <sys/buf.h>
 #include <sys/param.h>
@@ -42,12 +42,10 @@ __KERNEL_RCSID(0, "$NetBSD: ulfs_quota2.c,v 1.28 2016/07/07 06:55:44 msaitoh Exp
 #include <sys/mount.h>
 #include <sys/fstrans.h>
 #include <sys/kauth.h>
+#include <sys/wapbl.h>
 #include <sys/quota.h>
 #include <sys/quotactl.h>
-#include <sys/timevar.h>
 
-#include <ufs/lfs/lfs.h>
-#include <ufs/lfs/lfs_accessors.h>
 #include <ufs/lfs/lfs_extern.h>
 
 #include <ufs/lfs/ulfs_quota2.h>
@@ -151,7 +149,8 @@ getq2h(struct ulfsmount *ump, int type,
 	struct quota2_header *q2h;
 
 	KASSERT(mutex_owned(&lfs_dqlock));
-	error = bread(ump->um_quotas[type], 0, ump->umq2_bsize, flags, &bp);
+	error = bread(ump->um_quotas[type], 0, ump->umq2_bsize,
+	    ump->um_cred[type], flags, &bp);
 	if (error)
 		return error;
 	if (bp->b_resid != 0) 
@@ -177,7 +176,8 @@ getq2e(struct ulfsmount *ump, int type, daddr_t lblkno, int blkoffset,
 		panic("dq2get: %s quota file corrupted",
 		    lfs_quotatypes[type]);
 	}
-	error = bread(ump->um_quotas[type], lblkno, ump->umq2_bsize, flags, &bp);
+	error = bread(ump->um_quotas[type], lblkno, ump->umq2_bsize,
+	    ump->um_cred[type], flags, &bp);
 	if (error)
 		return error;
 	if (bp->b_resid != 0) {
@@ -218,7 +218,8 @@ quota2_walk_list(struct ulfsmount *ump, struct buf *hbp, int type,
 			bp = obp;
 		} else {
 			ret = bread(ump->um_quotas[type], lblkno, 
-			    ump->umq2_bsize, flags, &bp);
+			    ump->umq2_bsize,
+			    ump->um_cred[type], flags, &bp);
 			if (ret)
 				return ret;
 			if (bp->b_resid != 0) {
@@ -600,19 +601,19 @@ lfsquota2_handle_cmd_put(struct ulfsmount *ump, const struct quotakey *key,
 		error = getq2h(ump, key->qk_idtype, &bp, &q2h, B_MODIFY);
 		if (error) {
 			mutex_exit(&lfs_dqlock);
-			goto out_error;
+			goto out_wapbl;
 		}
 		lfsquota2_ulfs_rwq2e(&q2h->q2h_defentry, &q2e, needswap);
 		quota2_dict_update_q2e_limits(key->qk_objtype, val, &q2e);
 		lfsquota2_ulfs_rwq2e(&q2e, &q2h->q2h_defentry, needswap);
 		mutex_exit(&lfs_dqlock);
 		quota2_bwrite(ump->um_mountp, bp);
-		goto out_error;
+		goto out_wapbl;
 	}
 
 	error = lfs_dqget(NULLVP, key->qk_id, ump, key->qk_idtype, &dq);
 	if (error)
-		goto out_error;
+		goto out_wapbl;
 
 	mutex_enter(&dq->dq_interlock);
 	if (dq->dq2_lblkno == 0 && dq->dq2_blkoff == 0) {
@@ -630,15 +631,6 @@ lfsquota2_handle_cmd_put(struct ulfsmount *ump, const struct quotakey *key,
 		goto out_il;
 	
 	lfsquota2_ulfs_rwq2e(q2ep, &q2e, needswap);
-	/*
-	 * Reset time limit if previously had no soft limit or were
-	 * under it, but now have a soft limit and are over it.
-	 */
-	if (val->qv_softlimit &&
-	    q2e.q2e_val[key->qk_objtype].q2v_cur >= val->qv_softlimit &&
-	    (q2e.q2e_val[key->qk_objtype].q2v_softlimit == 0 ||
-	     q2e.q2e_val[key->qk_objtype].q2v_cur < q2e.q2e_val[key->qk_objtype].q2v_softlimit))
-		q2e.q2e_val[key->qk_objtype].q2v_time = time_second + val->qv_grace;
 	quota2_dict_update_q2e_limits(key->qk_objtype, val, &q2e);
 	lfsquota2_ulfs_rwq2e(&q2e, q2ep, needswap);
 	quota2_bwrite(ump->um_mountp, bp);
@@ -646,7 +638,7 @@ lfsquota2_handle_cmd_put(struct ulfsmount *ump, const struct quotakey *key,
 out_il:
 	mutex_exit(&dq->dq_interlock);
 	lfs_dqrele(NULLVP, dq);
-out_error:
+out_wapbl:
 	return error;
 }
 
@@ -728,7 +720,7 @@ lfsquota2_handle_cmd_del(struct ulfsmount *ump, const struct quotakey *qk)
 	error = getq2e(ump, idtype, dq->dq2_lblkno, dq->dq2_blkoff,
 	    &bp, &q2ep, B_MODIFY);
 	if (error)
-		goto out_error;
+		goto out_wapbl;
 
 	/* make sure we can index by the objtype passed in */
 	CTASSERT(QUOTA_OBJTYPE_BLOCKS == QL_BLOCK);
@@ -761,7 +753,7 @@ lfsquota2_handle_cmd_del(struct ulfsmount *ump, const struct quotakey *qk)
 
 	if (canfree == 0) {
 		quota2_bwrite(ump->um_mountp, bp);
-		goto out_error;
+		goto out_wapbl;
 	}
 	/* we can free it. release bp so we can walk the list */
 	brelse(bp, 0);
@@ -782,7 +774,7 @@ lfsquota2_handle_cmd_del(struct ulfsmount *ump, const struct quotakey *qk)
 
 out_dqlock:
 	mutex_exit(&lfs_dqlock);
-out_error:
+out_wapbl:
 out_il:
 	mutex_exit(&dq->dq_interlock);
 	lfs_dqrele(NULLVP, dq);
@@ -1282,7 +1274,7 @@ lfsquota2_handle_cmd_cursorget(struct ulfsmount *ump, struct quotakcursor *qkc,
 	struct q2cursor_state state;
 	struct quota2_entry default_q2e;
 	int idtype;
-	int quota2_hash_size = 0; /* XXXuninit */
+	int quota2_hash_size;
 
 	/*
 	 * Convert and validate the cursor.
@@ -1565,7 +1557,7 @@ lfs_quota2_mount(struct mount *mp)
 {
 	struct ulfsmount *ump = VFSTOULFS(mp);
 	struct lfs *fs = ump->um_lfs;
-	int error;
+	int error = 0;
 	struct vnode *vp;
 	struct lwp *l = curlwp;
 
@@ -1573,24 +1565,22 @@ lfs_quota2_mount(struct mount *mp)
 		return 0;
 
 	fs->um_flags |= ULFS_QUOTA2;
-	ump->umq2_bsize = lfs_sb_getbsize(fs);
-	ump->umq2_bmask = lfs_sb_getbmask(fs);
+	ump->umq2_bsize = fs->lfs_bsize;
+	ump->umq2_bmask = fs->lfs_bmask;
 	if (fs->lfs_quota_magic != Q2_HEAD_MAGIC) {
 		printf("%s: Invalid quota magic number\n",
 		    mp->mnt_stat.f_mntonname);
 		return EINVAL;
 	}
-
-	error = 0;
         if ((fs->lfs_quota_flags & FS_Q2_DO_TYPE(ULFS_USRQUOTA)) &&
             fs->lfs_quotaino[ULFS_USRQUOTA] == 0) {
-                printf("%s: No user quota inode\n",
-		    mp->mnt_stat.f_mntonname);
+                printf("%s: no user quota inode\n",
+		    mp->mnt_stat.f_mntonname); 
                 error = EINVAL;
         }
         if ((fs->lfs_quota_flags & FS_Q2_DO_TYPE(ULFS_GRPQUOTA)) &&
             fs->lfs_quotaino[ULFS_GRPQUOTA] == 0) {
-                printf("%s: No group quota inode\n",
+                printf("%s: no group quota inode\n",
 		    mp->mnt_stat.f_mntonname);
                 error = EINVAL;
         }
@@ -1630,7 +1620,6 @@ lfs_quota2_mount(struct mount *mp)
 		mutex_exit(vp->v_interlock);
 		VOP_UNLOCK(vp);
 	}
-
 	mp->mnt_flag |= MNT_QUOTA;
 	return 0;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: diff.c,v 1.10 2015/12/17 04:00:43 christos Exp $	*/
+/*	$NetBSD: diff.c,v 1.7.4.2 2016/03/13 08:06:12 martin Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007-2009, 2011, 2013-2015  Internet Systems Consortium, Inc. ("ISC")

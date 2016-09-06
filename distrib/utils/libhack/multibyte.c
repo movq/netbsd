@@ -1,4 +1,4 @@
-/*      $NetBSD: multibyte.c,v 1.7 2014/11/15 19:15:51 htodd Exp $      */
+/*      $NetBSD: multibyte.c,v 1.5.8.2 2014/11/16 11:18:05 martin Exp $      */
 
 /*
  * Ignore all multibyte sequences, removes all the citrus code.

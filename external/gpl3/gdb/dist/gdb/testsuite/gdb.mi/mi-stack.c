@@ -1,4 +1,4 @@
-/* Copyright 1999-2015 Free Software Foundation, Inc.
+/* Copyright 1999-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -32,23 +32,22 @@ int callee4 (void)
   C = A + B;
   return 0;
 }
-
-void callee3 (char *strarg)
+callee3 (char *strarg)
 {
   callee4 ();
 }
 
-void callee2 (int intarg, char *strarg)
+callee2 (int intarg, char *strarg)
 {
   callee3 (strarg);
 }
 
-void callee1 (int intarg, char *strarg, double fltarg)
+callee1 (int intarg, char *strarg, double fltarg)
 {
   callee2 (intarg, strarg);
 }
 
-int main ()
+main ()
 {
   callee1 (2, "A string argument.", 3.5);
   callee1 (2, "A string argument.", 3.5);

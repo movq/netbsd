@@ -1,4 +1,4 @@
-/*	$OpenBSD: sshbuf-getput-crypto.c,v 1.5 2016/01/12 23:42:54 djm Exp $	*/
+/*	$OpenBSD: sshbuf-getput-crypto.c,v 1.4 2015/01/14 15:02:39 djm Exp $	*/
 /*
  * Copyright (c) 2011 Damien Miller
  *
@@ -15,7 +15,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 #include "includes.h"
-__RCSID("$NetBSD: sshbuf-getput-crypto.c,v 1.6 2016/08/02 13:45:12 christos Exp $");
+__RCSID("$NetBSD: sshbuf-getput-crypto.c,v 1.3.2.2 2015/04/30 06:07:31 riz Exp $");
 
 #include <sys/types.h>
 #include <stdlib.h>
@@ -154,10 +154,10 @@ sshbuf_put_bignum2(struct sshbuf *buf, const BIGNUM *v)
 	if (len > 0 && (d[1] & 0x80) != 0)
 		prepend = 1;
 	if ((r = sshbuf_put_string(buf, d + 1 - prepend, len + prepend)) < 0) {
-		explicit_bzero(d, sizeof(d));
+		bzero(d, sizeof(d));
 		return r;
 	}
-	explicit_bzero(d, sizeof(d));
+	bzero(d, sizeof(d));
 	return 0;
 }
 
@@ -173,13 +173,13 @@ sshbuf_put_bignum1(struct sshbuf *buf, const BIGNUM *v)
 	if (BN_bn2bin(v, d) != (int)len_bytes)
 		return SSH_ERR_INTERNAL_ERROR; /* Shouldn't happen */
 	if ((r = sshbuf_reserve(buf, len_bytes + 2, &dp)) < 0) {
-		explicit_bzero(d, sizeof(d));
+		bzero(d, sizeof(d));
 		return r;
 	}
 	POKE_U16(dp, len_bits);
 	if (len_bytes != 0)
 		memcpy(dp + 2, d, len_bytes);
-	explicit_bzero(d, sizeof(d));
+	bzero(d, sizeof(d));
 	return 0;
 }
 
@@ -205,7 +205,7 @@ sshbuf_put_ec(struct sshbuf *buf, const EC_POINT *v, const EC_GROUP *g)
 	}
 	BN_CTX_free(bn_ctx);
 	ret = sshbuf_put_string(buf, d, len);
-	explicit_bzero(d, len);
+	bzero(d, len);
 	return ret;
 }
 

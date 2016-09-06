@@ -1,4 +1,4 @@
-/*	$NetBSD: rb.c,v 1.13 2014/08/22 17:19:48 matt Exp $	*/
+/*	$NetBSD: rb.c,v 1.11.22.1 2014/08/29 11:32:01 martin Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -39,10 +39,10 @@
 #else
 #define KASSERT(s)	do { } while (/*CONSTCOND*/ 0)
 #endif
-__RCSID("$NetBSD: rb.c,v 1.13 2014/08/22 17:19:48 matt Exp $");
+__RCSID("$NetBSD: rb.c,v 1.11.22.1 2014/08/29 11:32:01 martin Exp $");
 #else
 #include <lib/libkern/libkern.h>
-__KERNEL_RCSID(0, "$NetBSD: rb.c,v 1.13 2014/08/22 17:19:48 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rb.c,v 1.11.22.1 2014/08/29 11:32:01 martin Exp $");
 #endif
 
 #ifdef _LIBC

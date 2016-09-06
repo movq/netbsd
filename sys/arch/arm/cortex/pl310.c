@@ -1,4 +1,4 @@
-/*	$NetBSD: pl310.c,v 1.17 2015/02/27 20:40:09 jmcneill Exp $	*/
+/*	$NetBSD: pl310.c,v 1.15.2.1 2015/03/21 08:51:18 snj Exp $	*/
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pl310.c,v 1.17 2015/02/27 20:40:09 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: pl310.c,v 1.15.2.1 2015/03/21 08:51:18 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

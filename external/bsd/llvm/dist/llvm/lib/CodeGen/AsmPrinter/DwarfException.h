@@ -21,24 +21,17 @@ namespace llvm {
 class MachineFunction;
 class ARMTargetStreamer;
 
-class LLVM_LIBRARY_VISIBILITY DwarfCFIExceptionBase : public EHStreamer {
-protected:
-  DwarfCFIExceptionBase(AsmPrinter *A);
-
-  /// Per-function flag to indicate if frame CFI info should be emitted.
-  bool shouldEmitCFI;
-
-  void markFunctionEnd() override;
-};
-
-class LLVM_LIBRARY_VISIBILITY DwarfCFIException : public DwarfCFIExceptionBase {
-  /// Per-function flag to indicate if .cfi_personality should be emitted.
+class DwarfCFIException : public EHStreamer {
+  /// shouldEmitPersonality - Per-function flag to indicate if .cfi_personality
+  /// should be emitted.
   bool shouldEmitPersonality;
 
-  /// Per-function flag to indicate if .cfi_lsda should be emitted.
+  /// shouldEmitLSDA - Per-function flag to indicate if .cfi_lsda
+  /// should be emitted.
   bool shouldEmitLSDA;
 
-  /// Per-function flag to indicate if frame moves info should be emitted.
+  /// shouldEmitMoves - Per-function flag to indicate if frame moves info
+  /// should be emitted.
   bool shouldEmitMoves;
 
   AsmPrinter::CFIMoveType moveTypeModule;
@@ -48,38 +41,44 @@ public:
   // Main entry points.
   //
   DwarfCFIException(AsmPrinter *A);
-  ~DwarfCFIException() override;
+  virtual ~DwarfCFIException();
 
-  /// Emit all exception information that should come after the content.
+  /// endModule - Emit all exception information that should come after the
+  /// content.
   void endModule() override;
 
-  /// Gather pre-function exception information.  Assumes being emitted
-  /// immediately after the function entry point.
+  /// beginFunction - Gather pre-function exception information.  Assumes being
+  /// emitted immediately after the function entry point.
   void beginFunction(const MachineFunction *MF) override;
 
-  /// Gather and emit post-function exception information.
+  /// endFunction - Gather and emit post-function exception information.
   void endFunction(const MachineFunction *) override;
 };
 
-class LLVM_LIBRARY_VISIBILITY ARMException : public DwarfCFIExceptionBase {
+class ARMException : public EHStreamer {
   void emitTypeInfos(unsigned TTypeEncoding) override;
   ARMTargetStreamer &getTargetStreamer();
+
+  /// shouldEmitCFI - Per-function flag to indicate if frame CFI info
+  /// should be emitted.
+  bool shouldEmitCFI;
 
 public:
   //===--------------------------------------------------------------------===//
   // Main entry points.
   //
   ARMException(AsmPrinter *A);
-  ~ARMException() override;
+  virtual ~ARMException();
 
-  /// Emit all exception information that should come after the content.
+  /// endModule - Emit all exception information that should come after the
+  /// content.
   void endModule() override;
 
-  /// Gather pre-function exception information.  Assumes being emitted
-  /// immediately after the function entry point.
+  /// beginFunction - Gather pre-function exception information.  Assumes being
+  /// emitted immediately after the function entry point.
   void beginFunction(const MachineFunction *MF) override;
 
-  /// Gather and emit post-function exception information.
+  /// endFunction - Gather and emit post-function exception information.
   void endFunction(const MachineFunction *) override;
 };
 } // End of namespace llvm

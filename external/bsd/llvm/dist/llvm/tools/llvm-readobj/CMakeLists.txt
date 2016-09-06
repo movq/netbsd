@@ -1,4 +1,5 @@
 set(LLVM_LINK_COMPONENTS
+  ${LLVM_TARGETS_TO_BUILD}
   Object
   Support
   )
@@ -7,7 +8,6 @@ add_llvm_tool(llvm-readobj
   ARMAttributeParser.cpp
   ARMWinEHPrinter.cpp
   COFFDumper.cpp
-  COFFImportDumper.cpp
   ELFDumper.cpp
   Error.cpp
   llvm-readobj.cpp

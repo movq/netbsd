@@ -1,4 +1,4 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
  * Copyright (c) 2007 Nicholas Marriott <nicm@users.sourceforge.net>
@@ -39,6 +39,7 @@ const struct cmd_entry cmd_show_options_entry = {
 	"gqst:vw", 0, 1,
 	"[-gqsvw] [-t target-session|target-window] [option]",
 	0,
+	NULL,
 	cmd_show_options_exec
 };
 
@@ -47,6 +48,7 @@ const struct cmd_entry cmd_show_window_options_entry = {
 	"gvt:", 0, 1,
 	"[-gv] " CMD_TARGET_WINDOW_USAGE " [option]",
 	0,
+	NULL,
 	cmd_show_options_exec
 };
 
@@ -98,17 +100,15 @@ cmd_show_options_one(struct cmd *self, struct cmd_q *cmdq,
     struct options *oo, int quiet)
 {
 	struct args				*args = self->args;
-	const char				*name = args->argv[0];
 	const struct options_table_entry	*table, *oe;
 	struct options_entry			*o;
 	const char				*optval;
 
-retry:
-	if (*name == '@') {
-		if ((o = options_find1(oo, name)) == NULL) {
+	if (*args->argv[0] == '@') {
+		if ((o = options_find1(oo, args->argv[0])) == NULL) {
 			if (quiet)
 				return (CMD_RETURN_NORMAL);
-			cmdq_error(cmdq, "unknown option: %s", name);
+			cmdq_error(cmdq, "unknown option: %s", args->argv[0]);
 			return (CMD_RETURN_ERROR);
 		}
 		if (args_has(self->args, 'v'))
@@ -119,19 +119,15 @@ retry:
 	}
 
 	table = oe = NULL;
-	if (options_table_find(name, &table, &oe) != 0) {
-		cmdq_error(cmdq, "ambiguous option: %s", name);
+	if (options_table_find(args->argv[0], &table, &oe) != 0) {
+		cmdq_error(cmdq, "ambiguous option: %s", args->argv[0]);
 		return (CMD_RETURN_ERROR);
 	}
 	if (oe == NULL) {
 		if (quiet)
 		    return (CMD_RETURN_NORMAL);
-		cmdq_error(cmdq, "unknown option: %s", name);
+		cmdq_error(cmdq, "unknown option: %s", args->argv[0]);
 		return (CMD_RETURN_ERROR);
-	}
-	if (oe->style != NULL) {
-		name = oe->style;
-		goto retry;
 	}
 	if ((o = options_find1(oo, oe->name)) == NULL)
 		return (CMD_RETURN_NORMAL);
@@ -161,8 +157,6 @@ cmd_show_options_all(struct cmd *self, struct cmd_q *cmdq,
 	}
 
 	for (oe = table; oe->name != NULL; oe++) {
-		if (oe->style != NULL)
-			continue;
 		if ((o = options_find1(oo, oe->name)) == NULL)
 			continue;
 		optval = options_table_print_entry(oe, o,

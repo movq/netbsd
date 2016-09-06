@@ -99,12 +99,12 @@
 #undef PROG
 #define PROG ca_main
 
-#define BASE_SECTION            "ca"
-#define CONFIG_FILE             "openssl.cnf"
+#define BASE_SECTION    "ca"
+#define CONFIG_FILE "openssl.cnf"
 
 #define ENV_DEFAULT_CA          "default_ca"
 
-#define STRING_MASK             "string_mask"
+#define STRING_MASK     "string_mask"
 #define UTF8_IN                 "utf8"
 
 #define ENV_NEW_CERTS_DIR       "new_certs_dir"

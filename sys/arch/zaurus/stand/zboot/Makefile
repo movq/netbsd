@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.18 2016/01/31 15:32:12 christos Exp $
+#	$NetBSD: Makefile,v 1.16 2014/01/12 15:26:31 tsutsui Exp $
 
 PROG=		zboot
 
@@ -12,7 +12,7 @@ SRCS+=		pathfs.c
 
 NOMAN=		# defined
 
-.include <bsd.init.mk>
+.include <bsd.own.mk>
 
 CFLAGS+=	-Wall -Wno-main
 CFLAGS+=	-Wmissing-prototypes -Wstrict-prototypes -Wpointer-arith
@@ -61,7 +61,7 @@ LIBSA=		${SALIB}
 ${PROG}: ${OBJS} ${LIBSA} ${LIBZ} ${LIBKERN} ${VERSIONFILE}
 	${_MKTARGET_LINK}
 	${HOST_SH} ${S}/conf/newvers_stand.sh ${${MKREPRO} == "yes" :?:-D} \
-	    ${VERSIONFILE} zaurus ${NEWVERSWHAT}
+	    ${VERSIONFILE} ${MACHINE} ${NEWVERSWHAT}
 	${CC} ${CFLAGS} ${CPPFLAGS} -c vers.c
 	${LD} ${LDFLAGS} -o ${PROG} ${OBJS} vers.o ${LIBSA} ${LIBZ} ${LIBKERN}
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_vte.c,v 1.15 2016/07/11 11:31:51 msaitoh Exp $	*/
+/*	$NetBSD: if_vte.c,v 1.11 2014/08/10 16:44:36 tls Exp $	*/
 
 /*
  * Copyright (c) 2011 Manuel Bouyer.  All rights reserved.
@@ -55,7 +55,7 @@
 /* Driver for DM&P Electronics, Inc, Vortex86 RDC R6040 FastEthernet. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_vte.c,v 1.15 2016/07/11 11:31:51 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_vte.c,v 1.11 2014/08/10 16:44:36 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -79,7 +79,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_vte.c,v 1.15 2016/07/11 11:31:51 msaitoh Exp $");
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include "opt_inet.h"
 #include <net/if_ether.h>
@@ -222,11 +222,10 @@ vte_attach(device_t parent, device_t self, void *aux)
 
 	/* Map and establish interrupts */
 	if (pci_intr_map(pa, &intrhandle)) {
-		aprint_error_dev(self, "couldn't map interrupt\n");
-		return;
+	    aprint_error_dev(self, "couldn't map interrupt\n");
+	    return;
 	}
-	intrstr = pci_intr_string(pa->pa_pc, intrhandle, intrbuf,
-	    sizeof(intrbuf));
+	intrstr = pci_intr_string(pa->pa_pc, intrhandle, intrbuf, sizeof(intrbuf));
 	sc->vte_ih = pci_intr_establish(pa->pa_pc, intrhandle, IPL_NET,
 	    vte_intr, sc);
 	if (sc->vte_ih == NULL) {
@@ -261,13 +260,13 @@ vte_attach(device_t parent, device_t self, void *aux)
 
         strlcpy(ifp->if_xname, device_xname(self), IFNAMSIZ);
         ifp->if_flags = IFF_BROADCAST|IFF_SIMPLEX|IFF_NOTRAILERS|IFF_MULTICAST;
-        ifp->if_ioctl = vte_ifioctl;
-        ifp->if_start = vte_ifstart;
+        ifp->if_ioctl = vte_ifioctl;  
+        ifp->if_start = vte_ifstart;  
         ifp->if_watchdog = vte_ifwatchdog;
-        ifp->if_init = vte_init;
-        ifp->if_stop = vte_stop;
+        ifp->if_init = vte_init;      
+        ifp->if_stop = vte_stop;      
         ifp->if_timer = 0;
-        IFQ_SET_READY(&ifp->if_snd);
+        IFQ_SET_READY(&ifp->if_snd); 
         if_attach(ifp);
         ether_ifattach(&(sc)->vte_if, (sc)->vte_eaddr);
 
@@ -1078,9 +1077,7 @@ vte_newbuf(struct vte_softc *sc, struct vte_rxdesc *rxd)
 	    htole32(rxd->rx_dmamap->dm_segs[0].ds_addr);
 	rxd->rx_desc->drlen = htole16(
 	    VTE_RX_LEN(rxd->rx_dmamap->dm_segs[0].ds_len));
-	DPRINTF(("rx data %p mbuf %p buf 0x%x/0x%x\n", rxd, m,
-		(u_int)rxd->rx_dmamap->dm_segs[0].ds_addr,
-		rxd->rx_dmamap->dm_segs[0].ds_len));
+	DPRINTF(("rx data %p mbuf %p buf 0x%x/0x%x\n", rxd, m, (u_int)rxd->rx_dmamap->dm_segs[0].ds_addr, rxd->rx_dmamap->dm_segs[0].ds_len));
 	rxd->rx_desc->drst = htole16(VTE_DRST_RX_OWN);
 
 	return (0);
@@ -1106,9 +1103,7 @@ vte_rxeof(struct vte_softc *sc)
 	    VTE_DESC_INC(cons, VTE_RX_RING_CNT)) {
 		rxd = &sc->vte_cdata.vte_rxdesc[cons];
 		status = le16toh(rxd->rx_desc->drst);
-		DPRINTF(("vte_rxoef rxd %d/%p mbuf %p status 0x%x len %d\n",
-			cons, rxd, rxd->rx_m, status,
-			VTE_RX_LEN(le16toh(rxd->rx_desc->drlen))));
+		DPRINTF(("vte_rxoef rxd %d/%p mbuf %p status 0x%x len %d\n", cons, rxd, rxd->rx_m, status, VTE_RX_LEN(le16toh(rxd->rx_desc->drlen))));
 		if ((status & VTE_DRST_RX_OWN) != 0)
 			break;
 		total_len = VTE_RX_LEN(le16toh(rxd->rx_desc->drlen));
@@ -1133,10 +1128,10 @@ vte_rxeof(struct vte_softc *sc)
 		 * It seems there is no way to strip FCS bytes.
 		 */
 		m->m_pkthdr.len = m->m_len = total_len - ETHER_CRC_LEN;
-		m_set_rcvif(m, ifp);
+		m->m_pkthdr.rcvif = ifp;
 		ifp->if_ipackets++;
 		bpf_mtap(ifp, m);
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		(*ifp->if_input)(ifp, m);
 	}
 
 	if (prog > 0) {
@@ -1340,8 +1335,7 @@ vte_init(struct ifnet *ifp)
 	/* Acknowledge all pending interrupts and clear it. */
 	CSR_WRITE_2(sc, VTE_MIER, VTE_INTRS);
 	CSR_WRITE_2(sc, VTE_MISR, 0);
-	DPRINTF(("before ipend 0x%x 0x%x\n", CSR_READ_2(sc, VTE_MIER),
-		CSR_READ_2(sc, VTE_MISR)));
+	DPRINTF(("before ipend 0x%x 0x%x\n", CSR_READ_2(sc, VTE_MIER), CSR_READ_2(sc, VTE_MISR)));
 
 	sc->vte_flags &= ~VTE_FLAG_LINK;
 	ifp->if_flags |= IFF_RUNNING;
@@ -1358,8 +1352,7 @@ vte_init(struct ifnet *ifp)
 
 	callout_reset(&sc->vte_tick_ch, hz, vte_tick, sc);
 
-	DPRINTF(("ipend 0x%x 0x%x\n", CSR_READ_2(sc, VTE_MIER),
-		CSR_READ_2(sc, VTE_MISR)));
+	DPRINTF(("ipend 0x%x 0x%x\n", CSR_READ_2(sc, VTE_MIER), CSR_READ_2(sc, VTE_MISR)));
 	splx(s);
 	return 0;
 }

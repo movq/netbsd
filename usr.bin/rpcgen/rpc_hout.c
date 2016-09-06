@@ -1,4 +1,4 @@
-/*	$NetBSD: rpc_hout.c,v 1.25 2016/01/23 02:33:09 dholland Exp $	*/
+/*	$NetBSD: rpc_hout.c,v 1.22 2013/12/15 00:40:17 christos Exp $	*/
 /*
  * Sun RPC is a product of Sun Microsystems, Inc. and is provided for
  * unrestricted use provided that this legend is included on all tape
@@ -38,7 +38,7 @@
 #if 0
 static char sccsid[] = "@(#)rpc_hout.c 1.12 89/02/22 (C) 1987 SMI";
 #else
-__RCSID("$NetBSD: rpc_hout.c,v 1.25 2016/01/23 02:33:09 dholland Exp $");
+__RCSID("$NetBSD: rpc_hout.c,v 1.22 2013/12/15 00:40:17 christos Exp $");
 #endif
 #endif
 
@@ -193,11 +193,10 @@ pargdef(definition *def)
 	}
 	did = 0;
 	for (vers = def->def.pr.versions; vers != NULL; vers = vers->next) {
+		if (!newstyle || plist->arg_num < 2) {
+			continue;	/* old style or single args */
+		}
 		for (plist = vers->procs; plist != NULL; plist = plist->next) {
-			if (!newstyle || plist->arg_num < 2) {
-				continue;	/* old style or single args */
-			}
-
 			if (!did) {
 				cplusplusstart();
 				did = 1;
@@ -282,7 +281,7 @@ define_printed(proc_list *stop, version_list *start)
 				}
 		}
 	}
-	errx(1, "Internal error at %s:%d: procedure not found",
+	errx(1, "Internal error %s, %d: procedure not found",
 	    __FILE__, __LINE__);
 	/* NOTREACHED */
 }
@@ -447,7 +446,7 @@ ptypedef(definition *def)
 		switch (rel) {
 		case REL_ARRAY:
 			f_print(fout, "struct {\n");
-			f_print(fout, "\tunsigned int %s_len;\n", name);
+			f_print(fout, "\tu_int %s_len;\n", name);
 			f_print(fout, "\t%s%s *%s_val;\n", prefix, old, name);
 			f_print(fout, "} %s", name);
 			break;
@@ -511,7 +510,7 @@ pdeclaration(const char *name, declaration *dec, int tab,
 		case REL_ARRAY:
 			f_print(fout, "struct {\n");
 			tabify(fout, tab);
-			f_print(fout, "\tunsigned int %s_len;\n", dec->name);
+			f_print(fout, "\tu_int %s_len;\n", dec->name);
 			tabify(fout, tab);
 			f_print(fout, "\t%s%s *%s_val;\n", prefix, type, dec->name);
 			tabify(fout, tab);

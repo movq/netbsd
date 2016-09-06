@@ -1,4 +1,4 @@
-/*	$NetBSD: daemon-bozo.c,v 1.17 2015/12/28 07:37:59 mrg Exp $	*/
+/*	$NetBSD: daemon-bozo.c,v 1.16.4.1 2016/04/10 10:33:11 martin Exp $	*/
 
 /*	$eterna: daemon-bozo.c,v 1.24 2011/11/18 09:21:15 mrg Exp $	*/
 

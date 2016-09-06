@@ -19,7 +19,6 @@
 #include "llvm/CodeGen/MachineFrameInfo.h"
 #include "llvm/CodeGen/MachineFunction.h"
 #include "llvm/IR/CallingConv.h"
-#include "llvm/MC/MCRegisterInfo.h"
 #include "llvm/Target/TargetCallingConv.h"
 
 namespace llvm {
@@ -123,8 +122,8 @@ public:
   // There is no need to differentiate between a pending CCValAssign and other
   // kinds, as they are stored in a different list.
   static CCValAssign getPending(unsigned ValNo, MVT ValVT, MVT LocVT,
-                                LocInfo HTP, unsigned ExtraInfo = 0) {
-    return getReg(ValNo, ValVT, ExtraInfo, LocVT, HTP);
+                                LocInfo HTP) {
+    return getReg(ValNo, ValVT, 0, LocVT, HTP);
   }
 
   void convertToReg(unsigned RegNo) {
@@ -147,7 +146,6 @@ public:
 
   unsigned getLocReg() const { assert(isRegLoc()); return Loc; }
   unsigned getLocMemOffset() const { assert(isMemLoc()); return Loc; }
-  unsigned getExtraInfo() const { return Loc; }
   MVT getLocVT() const { return LocVT; }
 
   LocInfo getLocInfo() const { return HTP; }
@@ -201,7 +199,6 @@ private:
   LLVMContext &Context;
 
   unsigned StackOffset;
-  unsigned MaxStackArgAlign;
   SmallVector<uint32_t, 16> UsedRegs;
   SmallVector<CCValAssign, 4> PendingLocs;
 
@@ -271,18 +268,7 @@ public:
   CallingConv::ID getCallingConv() const { return CallingConv; }
   bool isVarArg() const { return IsVarArg; }
 
-  /// getNextStackOffset - Return the next stack offset such that all stack
-  /// slots satisfy their alignment requirements.
-  unsigned getNextStackOffset() const {
-    return StackOffset;
-  }
-
-  /// getAlignedCallFrameSize - Return the size of the call frame needed to
-  /// be able to store all arguments and such that the alignment requirement
-  /// of each of the arguments is satisfied.
-  unsigned getAlignedCallFrameSize() const {
-    return RoundUpToAlignment(StackOffset, MaxStackArgAlign);
-  }
+  unsigned getNextStackOffset() const { return StackOffset; }
 
   /// isAllocated - Return true if the specified register (or an alias) is
   /// allocated.
@@ -326,13 +312,13 @@ public:
   /// produce a single value.
   void AnalyzeCallResult(MVT VT, CCAssignFn Fn);
 
-  /// getFirstUnallocated - Return the index of the first unallocated register
-  /// in the set, or Regs.size() if they are all allocated.
-  unsigned getFirstUnallocated(ArrayRef<MCPhysReg> Regs) const {
-    for (unsigned i = 0; i < Regs.size(); ++i)
+  /// getFirstUnallocated - Return the first unallocated register in the set, or
+  /// NumRegs if they are all allocated.
+  unsigned getFirstUnallocated(const MCPhysReg *Regs, unsigned NumRegs) const {
+    for (unsigned i = 0; i != NumRegs; ++i)
       if (!isAllocated(Regs[i]))
         return i;
-    return Regs.size();
+    return NumRegs;
   }
 
   /// AllocateReg - Attempt to allocate one register.  If it is not available,
@@ -355,9 +341,9 @@ public:
   /// AllocateReg - Attempt to allocate one of the specified registers.  If none
   /// are available, return zero.  Otherwise, return the first one available,
   /// marking it and any aliases as allocated.
-  unsigned AllocateReg(ArrayRef<MCPhysReg> Regs) {
-    unsigned FirstUnalloc = getFirstUnallocated(Regs);
-    if (FirstUnalloc == Regs.size())
+  unsigned AllocateReg(const MCPhysReg *Regs, unsigned NumRegs) {
+    unsigned FirstUnalloc = getFirstUnallocated(Regs, NumRegs);
+    if (FirstUnalloc == NumRegs)
       return 0;    // Didn't find the reg.
 
     // Mark the register and any aliases as allocated.
@@ -369,7 +355,7 @@ public:
   /// AllocateRegBlock - Attempt to allocate a block of RegsRequired consecutive
   /// registers. If this is not possible, return zero. Otherwise, return the first
   /// register of the block that were allocated, marking the entire block as allocated.
-  unsigned AllocateRegBlock(ArrayRef<MCPhysReg> Regs, unsigned RegsRequired) {
+  unsigned AllocateRegBlock(ArrayRef<uint16_t> Regs, unsigned RegsRequired) {
     if (RegsRequired > Regs.size())
       return 0;
 
@@ -396,9 +382,10 @@ public:
   }
 
   /// Version of AllocateReg with list of registers to be shadowed.
-  unsigned AllocateReg(ArrayRef<MCPhysReg> Regs, const MCPhysReg *ShadowRegs) {
-    unsigned FirstUnalloc = getFirstUnallocated(Regs);
-    if (FirstUnalloc == Regs.size())
+  unsigned AllocateReg(const MCPhysReg *Regs, const MCPhysReg *ShadowRegs,
+                       unsigned NumRegs) {
+    unsigned FirstUnalloc = getFirstUnallocated(Regs, NumRegs);
+    if (FirstUnalloc == NumRegs)
       return 0;    // Didn't find the reg.
 
     // Mark the register and any aliases as allocated.
@@ -412,10 +399,9 @@ public:
   /// and alignment.
   unsigned AllocateStack(unsigned Size, unsigned Align) {
     assert(Align && ((Align - 1) & Align) == 0); // Align is power of 2.
-    StackOffset = RoundUpToAlignment(StackOffset, Align);
+    StackOffset = ((StackOffset + Align - 1) & ~(Align - 1));
     unsigned Result = StackOffset;
     StackOffset += Size;
-    MaxStackArgAlign = std::max(Align, MaxStackArgAlign);
     MF.getFrameInfo()->ensureMaxAlignment(Align);
     return Result;
   }
@@ -429,8 +415,8 @@ public:
   /// Version of AllocateStack with list of extra registers to be shadowed.
   /// Note that, unlike AllocateReg, this shadows ALL of the shadow registers.
   unsigned AllocateStack(unsigned Size, unsigned Align,
-                         ArrayRef<MCPhysReg> ShadowRegs) {
-    for (unsigned i = 0; i < ShadowRegs.size(); ++i)
+                         const MCPhysReg *ShadowRegs, unsigned NumShadowRegs) {
+    for (unsigned i = 0; i < NumShadowRegs; ++i)
       MarkAllocated(ShadowRegs[i]);
     return AllocateStack(Size, Align);
   }

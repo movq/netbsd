@@ -1,6 +1,8 @@
 /* Low-level I/O routines for BFDs.
 
-   Copyright (C) 1990-2015 Free Software Foundation, Inc.
+   Copyright 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009, 2011
+   Free Software Foundation, Inc.
 
    Written by Cygnus Support.
 
@@ -87,7 +89,7 @@ real_fopen (const char *filename, const char *modes)
 #ifdef VMS
   char *vms_attr;
 
-  /* On VMS, fopen allows file attributes as optional arguments.
+  /* On VMS, fopen allows file attributes as optionnal arguments.
      We need to use them but we'd better to use the common prototype.
      In fopen-vms.h, they are separated from the mode with a comma.
      Split here.  */

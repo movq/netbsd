@@ -1,5 +1,5 @@
 /*
- * Some or all of this work - Copyright (c) 2006 - 2016, Intel Corp.
+ * Some or all of this work - Copyright (c) 2006 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without modification,
@@ -1280,10 +1280,6 @@ DefinitionBlock (
             Store ("****** There were errors during the execution of the test ******", Debug)
         }
 
-        // Flush all notifies
-
-        Sleep (250)
-
         //
         // Last Test
         //
@@ -1925,6 +1921,8 @@ DefinitionBlock (
                 0x11, 0x12, 0x12, 0x14, 0x15, 0x16
             }
         })
+
+    /* Parser thinks this is a method invocation!! */
 
         Store (RefOf (MAIN), Local5)
 

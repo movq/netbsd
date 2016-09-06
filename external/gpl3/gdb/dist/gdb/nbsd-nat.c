@@ -1,6 +1,6 @@
 /* Native-dependent code for NetBSD.
 
-   Copyright (C) 2006-2015 Free Software Foundation, Inc.
+   Copyright (C) 2006-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,19 +25,19 @@
    the child process identified by PID.  */
 
 char *
-nbsd_pid_to_exec_file (struct target_ops *self, int pid)
+nbsd_pid_to_exec_file (int pid)
 {
-  ssize_t len;
-  static char buf[PATH_MAX];
-  char name[PATH_MAX];
+  size_t len = PATH_MAX;
+  char *buf = xcalloc (len, sizeof (char));
+  char *path;
 
-  xsnprintf (name, PATH_MAX, "/proc/%d/exe", pid);
-  len = readlink (name, buf, PATH_MAX - 1);
-  if (len != -1)
+  path = xstrprintf ("/proc/%d/exe", pid);
+  if (readlink (path, buf, PATH_MAX - 1) == -1)
     {
-      buf[len] = '\0';
-      return buf;
+      xfree (buf);
+      buf = NULL;
     }
 
-  return NULL;
+  xfree (path);
+  return buf;
 }

@@ -21,7 +21,7 @@
 
 namespace llvm {
 namespace NVPTXISD {
-enum NodeType : unsigned {
+enum NodeType {
   // Start the numbering from where ISD NodeType finishes.
   FIRST_NUMBER = ISD::BUILTIN_OP_END,
   Wrapper,
@@ -436,13 +436,16 @@ class NVPTXSubtarget;
 //===--------------------------------------------------------------------===//
 class NVPTXTargetLowering : public TargetLowering {
 public:
-  explicit NVPTXTargetLowering(const NVPTXTargetMachine &TM,
-                               const NVPTXSubtarget &STI);
+  explicit NVPTXTargetLowering(const NVPTXTargetMachine &TM);
   SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
 
   SDValue LowerGlobalAddress(SDValue Op, SelectionDAG &DAG) const;
+  SDValue LowerGlobalAddress(const GlobalValue *GV, int64_t Offset,
+                             SelectionDAG &DAG) const;
 
   const char *getTargetNodeName(unsigned Opcode) const override;
+
+  bool isTypeSupportedInIntrinsic(MVT VT) const;
 
   bool getTgtMemIntrinsic(IntrinsicInfo &Info, const CallInst &I,
                           unsigned Intrinsic) const override;
@@ -452,28 +455,22 @@ public:
   /// Used to guide target specific optimizations, like loop strength
   /// reduction (LoopStrengthReduce.cpp) and memory optimization for
   /// address mode (CodeGenPrepare.cpp)
-  bool isLegalAddressingMode(const DataLayout &DL, const AddrMode &AM, Type *Ty,
-                             unsigned AS) const override;
+  bool isLegalAddressingMode(const AddrMode &AM, Type *Ty) const override;
 
-  bool isTruncateFree(Type *SrcTy, Type *DstTy) const override {
-    // Truncating 64-bit to 32-bit is free in SASS.
-    if (!SrcTy->isIntegerTy() || !DstTy->isIntegerTy())
-      return false;
-    return SrcTy->getPrimitiveSizeInBits() == 64 &&
-           DstTy->getPrimitiveSizeInBits() == 32;
-  }
+  /// getFunctionAlignment - Return the Log2 alignment of this function.
+  unsigned getFunctionAlignment(const Function *F) const;
 
-  EVT getSetCCResultType(const DataLayout &DL, LLVMContext &Ctx,
-                         EVT VT) const override {
+  EVT getSetCCResultType(LLVMContext &Ctx, EVT VT) const override {
     if (VT.isVector())
       return EVT::getVectorVT(Ctx, MVT::i1, VT.getVectorNumElements());
     return MVT::i1;
   }
 
-  ConstraintType getConstraintType(StringRef Constraint) const override;
+  ConstraintType
+  getConstraintType(const std::string &Constraint) const override;
   std::pair<unsigned, const TargetRegisterClass *>
-  getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
-                               StringRef Constraint, MVT VT) const override;
+  getRegForInlineAsmConstraint(const std::string &Constraint,
+                               MVT VT) const override;
 
   SDValue LowerFormalArguments(
       SDValue Chain, CallingConv::ID CallConv, bool isVarArg,
@@ -483,7 +480,7 @@ public:
   SDValue LowerCall(CallLoweringInfo &CLI,
                     SmallVectorImpl<SDValue> &InVals) const override;
 
-  std::string getPrototype(const DataLayout &DL, Type *, const ArgListTy &,
+  std::string getPrototype(Type *, const ArgListTy &,
                            const SmallVectorImpl<ISD::OutputArg> &,
                            unsigned retAlignment,
                            const ImmutableCallSite *CS) const;
@@ -501,9 +498,7 @@ public:
   const NVPTXTargetMachine *nvTM;
 
   // PTX always uses 32-bit shift amounts
-  MVT getScalarShiftAmountTy(const DataLayout &, EVT) const override {
-    return MVT::i32;
-  }
+  MVT getScalarShiftAmountTy(EVT LHSTy) const override { return MVT::i32; }
 
   TargetLoweringBase::LegalizeTypeAction
   getPreferredVectorAction(EVT VT) const override;
@@ -515,8 +510,12 @@ public:
   bool enableAggressiveFMAFusion(EVT VT) const override { return true; }
 
 private:
-  const NVPTXSubtarget &STI; // cache the subtarget here
+  const NVPTXSubtarget &nvptxSubtarget; // cache the subtarget here
+
+  SDValue getExtSymb(SelectionDAG &DAG, const char *name, int idx,
+                     EVT = MVT::i32) const;
   SDValue getParamSymbol(SelectionDAG &DAG, int idx, EVT) const;
+  SDValue getParamHelpSymbol(SelectionDAG &DAG, int idx);
 
   SDValue LowerCONCAT_VECTORS(SDValue Op, SelectionDAG &DAG) const;
 
@@ -529,8 +528,6 @@ private:
 
   SDValue LowerShiftRightParts(SDValue Op, SelectionDAG &DAG) const;
   SDValue LowerShiftLeftParts(SDValue Op, SelectionDAG &DAG) const;
-
-  SDValue LowerSelect(SDValue Op, SelectionDAG &DAG) const;
 
   void ReplaceNodeResults(SDNode *N, SmallVectorImpl<SDValue> &Results,
                           SelectionDAG &DAG) const override;

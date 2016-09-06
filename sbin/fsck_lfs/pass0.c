@@ -1,4 +1,4 @@
-/* $NetBSD: pass0.c,v 1.42 2015/09/01 06:11:06 dholland Exp $	 */
+/* $NetBSD: pass0.c,v 1.35 2013/06/08 02:16:03 dholland Exp $	 */
 
 /*-
  * Copyright (c) 1999, 2000, 2001, 2002, 2003 The NetBSD Foundation, Inc.
@@ -65,7 +65,6 @@
 
 #define vnode uvnode
 #include <ufs/lfs/lfs.h>
-#include <ufs/lfs/lfs_accessors.h>
 #include <ufs/lfs/lfs_inode.h>
 #undef vnode
 
@@ -116,7 +115,7 @@ pass0(void)
 	plastino = 0;
 	lowfreeino = maxino;
 	LFS_CLEANERINFO(cip, fs, cbp);
-	freehd = ino = lfs_ci_getfree_head(fs, cip);
+	freehd = ino = cip->free_head;
 	brelse(cbp, 0);
 
 	while (ino) {
@@ -133,15 +132,15 @@ pass0(void)
 			if (preen || reply("FIX") == 1) {
 				/* plastino can't be zero */
 				LFS_IENTRY(ifp, fs, plastino, bp);
-				lfs_if_setnextfree(fs, ifp, 0);
+				ifp->if_nextfree = 0;
 				VOP_BWRITE(bp);
 			}
 			break;
 		}
 		visited[ino] = 1;
 		LFS_IENTRY(ifp, fs, ino, bp);
-		nextino = lfs_if_getnextfree(fs, ifp);
-		daddr = lfs_if_getdaddr(fs, ifp);
+		nextino = ifp->if_nextfree;
+		daddr = ifp->if_daddr;
 		brelse(bp, 0);
 		if (daddr) {
 			pwarn("INO %llu WITH DADDR 0x%llx ON FREE LIST\n",
@@ -152,7 +151,7 @@ pass0(void)
 					sbdirty();
 				} else {
 					LFS_IENTRY(ifp, fs, plastino, bp);
-					lfs_if_setnextfree(fs, ifp, nextino);
+					ifp->if_nextfree = nextino;
 					VOP_BWRITE(bp);
 				}
 				ino = nextino;
@@ -172,7 +171,7 @@ pass0(void)
 			continue;
 
 		LFS_IENTRY(ifp, fs, ino, bp);
-		if (lfs_if_getdaddr(fs, ifp)) {
+		if (ifp->if_daddr) {
 			brelse(bp, 0);
 			continue;
 		}
@@ -180,7 +179,7 @@ pass0(void)
 		    (unsigned long long)ino);
 		if (preen || reply("FIX") == 1) {
 			assert(ino != freehd);
-			lfs_if_setnextfree(fs, ifp, freehd);
+			ifp->if_nextfree = freehd;
 			VOP_BWRITE(bp);
 
 			freehd = ino;
@@ -194,25 +193,25 @@ pass0(void)
 	}
 
 	LFS_CLEANERINFO(cip, fs, cbp);
-	if (lfs_ci_getfree_head(fs, cip) != freehd) {
+	if (cip->free_head != freehd) {
 		/* They've already given us permission for this change */
-		lfs_ci_setfree_head(fs, cip, freehd);
+		cip->free_head = freehd;
 		writeit = 1;
 	}
-	if (freehd != lfs_sb_getfreehd(fs)) {
-		pwarn("FREE LIST HEAD IN SUPERBLOCK SHOULD BE %ju (WAS %ju)\n",
-			(uintmax_t)freehd, (uintmax_t)lfs_sb_getfreehd(fs));
+	if (freehd != fs->lfs_freehd) {
+		pwarn("FREE LIST HEAD IN SUPERBLOCK SHOULD BE %d (WAS %d)\n",
+			(int)fs->lfs_freehd, (int)freehd);
 		if (preen || reply("FIX")) {
-			lfs_sb_setfreehd(fs, freehd);
+			fs->lfs_freehd = freehd;
 			sbdirty();
 		}
 	}
-	if (lfs_ci_getfree_tail(fs, cip) != plastino) {
+	if (cip->free_tail != plastino) {
 		pwarn("FREE LIST TAIL SHOULD BE %llu (WAS %llu)\n",
 		    (unsigned long long)plastino,
-		    (unsigned long long)lfs_ci_getfree_tail(fs, cip));
+		    (unsigned long long)cip->free_tail);
 		if (preen || reply("FIX")) {
-			lfs_ci_setfree_tail(fs, cip, plastino);
+			cip->free_tail = plastino;
 			writeit = 1;
 		}
 	}
@@ -222,7 +221,7 @@ pass0(void)
 	else
 		brelse(cbp, 0);
 
-	if (lfs_sb_getfreehd(fs) == 0) {
+	if (fs->lfs_freehd == 0) {
 		pwarn("%sree list head is 0x0\n", preen ? "f" : "F");
 		if (preen || reply("FIX"))
 			extend_ifile(fs);

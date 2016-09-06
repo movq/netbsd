@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_subdev_therm_base.c,v 1.2 2015/10/31 09:14:27 mrg Exp $	*/
+/*	$NetBSD: nouveau_subdev_therm_base.c,v 1.1.1.1.4.1 2016/02/11 23:06:01 snj Exp $	*/
 
 /*
  * Copyright 2012 The Nouveau community
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_therm_base.c,v 1.2 2015/10/31 09:14:27 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_therm_base.c,v 1.1.1.1.4.1 2016/02/11 23:06:01 snj Exp $");
 
 #include <core/object.h>
 #include <core/device.h>

@@ -1,6 +1,6 @@
 /* Common target dependent code for GDB on AArch64 systems.
 
-   Copyright (C) 2009-2015 Free Software Foundation, Inc.
+   Copyright (C) 2009-2014 Free Software Foundation, Inc.
    Contributed by ARM Ltd.
 
    This file is part of GDB.
@@ -82,20 +82,16 @@ struct gdbarch_tdep
   /* And the size of each entry in the buf.  */
   size_t jb_elt_size;
 
+  /* Cached core file helpers.  */
+  struct regset *gregset;
+  struct regset *fpregset;
+
   /* Types for AdvSISD registers.  */
   struct type *vnq_type;
   struct type *vnd_type;
   struct type *vns_type;
   struct type *vnh_type;
   struct type *vnb_type;
-
-  /* syscall record.  */
-  int (*aarch64_syscall_record) (struct regcache *regcache, unsigned long svc_number);
 };
-
-extern struct target_desc *tdesc_aarch64;
-
-extern int aarch64_process_record (struct gdbarch *gdbarch,
-                               struct regcache *regcache, CORE_ADDR addr);
 
 #endif /* aarch64-tdep.h */

@@ -1,4 +1,4 @@
-/*	$NetBSD: sync_fetch_and_nand_8.S,v 1.5 2015/12/11 12:41:10 skrll Exp $	*/
+/*	$NetBSD: sync_fetch_and_nand_8.S,v 1.2.6.1 2016/02/26 22:29:04 snj Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include "atomic_op_asm.h"
 
-#if defined(_ARM_ARCH_6)
+#ifdef _ARM_ARCH_6
 
 ENTRY_NP(__sync_fetch_and_nand_8)
 	push	{r4-r7}

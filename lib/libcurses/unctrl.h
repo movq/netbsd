@@ -1,4 +1,4 @@
-/*	$NetBSD: unctrl.h,v 1.5 2015/05/28 06:28:37 wiz Exp $	*/
+/*	$NetBSD: unctrl.h,v 1.4.54.1 2015/06/01 19:26:26 snj Exp $	*/
 
 /*
  * Copyright (c) 1982, 1993

@@ -1,4 +1,3 @@
-/*	$NetBSD: if_alc.c,v 1.21 2016/06/10 13:27:14 ozaki-r Exp $	*/
 /*	$OpenBSD: if_alc.c,v 1.1 2009/08/08 09:31:13 kevlo Exp $	*/
 /*-
  * Copyright (c) 2009, Pyun YongHyeon <yongari@FreeBSD.org>
@@ -68,6 +67,8 @@
 #include <net/if_vlanvar.h>
 
 #include <net/bpf.h>
+
+#include <sys/rnd.h>
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
@@ -467,9 +468,8 @@ alc_dsp_fixup(struct alc_softc *sc, int media)
 		len = alc_miiext_readreg(sc, MII_EXT_PCS, MII_EXT_CLDCTL6);
 		len = (len >> EXT_CLDCTL6_CAB_LEN_SHIFT) &
 		    EXT_CLDCTL6_CAB_LEN_MASK;
-		/* XXX: used to be (alc >> shift) & mask which is 0 */
-		agc = alc_miidbg_readreg(sc, MII_DBG_AGC) & DBG_AGC_2_VGA_MASK;
-		agc >>= DBG_AGC_2_VGA_SHIFT;
+		agc = alc_miidbg_readreg(sc, MII_DBG_AGC);
+		agc = (agc >> DBG_AGC_2_VGA_SHIFT) & DBG_AGC_2_VGA_MASK;
 		if ((media == IFM_1000_T && len > EXT_CLDCTL6_CAB_LEN_SHORT1G &&
 		    agc > DBG_AGC_LONG1G_LIMT) ||
 		    (media == IFM_100_TX && len > DBG_AGC_LONG100M_LIMT &&
@@ -527,9 +527,6 @@ alc_mediastatus(struct ifnet *ifp, struct ifmediareq *ifmr)
 {
 	struct alc_softc *sc = ifp->if_softc;
 	struct mii_data *mii = &sc->sc_miibus;
-
-	if ((ifp->if_flags & IFF_UP) == 0)
-		return;
 
 	mii_pollstat(mii);
 	ifmr->ifm_status = mii->mii_media_status;
@@ -1409,6 +1406,7 @@ alc_attach(device_t parent, device_t self, void *aux)
 	ifp->if_start = alc_start;
 	ifp->if_stop = alc_stop;
 	ifp->if_watchdog = alc_watchdog;
+	ifp->if_baudrate = IF_Gbps(1);
 	IFQ_SET_MAXLEN(&ifp->if_snd, ALC_TX_RING_CNT - 1);
 	IFQ_SET_READY(&ifp->if_snd);
 	strlcpy(ifp->if_xname, device_xname(sc->sc_dev), IFNAMSIZ);
@@ -1418,7 +1416,7 @@ alc_attach(device_t parent, device_t self, void *aux)
 #ifdef ALC_CHECKSUM
 	ifp->if_capabilities |= IFCAP_CSUM_IPv4_Tx | IFCAP_CSUM_IPv4_Rx |
 				IFCAP_CSUM_TCPv4_Tx | IFCAP_CSUM_TCPv4_Rx |
-				IFCAP_CSUM_UDPv4_Tx | IFCAP_CSUM_UDPv4_Rx;
+				IFCAP_CSUM_UDPv4_Tx | IFCAP_CSUM_TCPv4_Rx;
 #endif
 
 #if NVLAN > 0
@@ -1962,10 +1960,6 @@ alc_start(struct ifnet *ifp)
 
 	if ((ifp->if_flags & (IFF_RUNNING | IFF_OACTIVE)) != IFF_RUNNING)
 		return;
-	if ((sc->alc_flags & ALC_FLAG_LINK) == 0)
-		return;
-	if (IFQ_IS_EMPTY(&ifp->if_snd))
-		return;
 
 	/* Reclaim transmitted frames. */
 	if (sc->alc_cdata.alc_tx_cnt >= ALC_TX_DESC_HIWAT)
@@ -2028,49 +2022,20 @@ alc_watchdog(struct ifnet *ifp)
 	printf("%s: watchdog timeout\n", device_xname(sc->sc_dev));
 	ifp->if_oerrors++;
 	alc_init_backend(ifp, false);
-	alc_start(ifp);
+
+	if (!IFQ_IS_EMPTY(&ifp->if_snd))
+		 alc_start(ifp);
 }
 
 static int
 alc_ioctl(struct ifnet *ifp, u_long cmd, void *data)
 {
 	struct alc_softc *sc = ifp->if_softc;
-	struct mii_data *mii = &sc->sc_miibus;
-	struct ifreq *ifr = (struct ifreq *)data;
 	int s, error = 0;
 
 	s = splnet();
 
 	error = ether_ioctl(ifp, cmd, data);
-	switch (cmd) {
-	case SIOCSIFADDR:
-		ifp->if_flags |= IFF_UP;
-		if (!(ifp->if_flags & IFF_RUNNING))
-			alc_init(ifp);
-		break;
- 
-	case SIOCSIFFLAGS:
-		if (ifp->if_flags & IFF_UP) {
-			if (ifp->if_flags & IFF_RUNNING)
-				error = ENETRESET;
-			else
-				alc_init(ifp);
-		} else {
-			if (ifp->if_flags & IFF_RUNNING)
-				alc_stop(ifp, 0);
-		}
-		break;
- 
-	case SIOCSIFMEDIA:
-	case SIOCGIFMEDIA:
-		error = ifmedia_ioctl(ifp, ifr, &mii->mii_media, cmd);
-		break;
- 
-	default:
-		error = ether_ioctl(ifp, cmd, data);
-		break;
-	}
- 
 	if (error == ENETRESET) {
 		if (ifp->if_flags & IFF_RUNNING)
 			alc_iff(sc);
@@ -2125,13 +2090,13 @@ alc_stats_clear(struct alc_softc *sc)
 	if ((sc->alc_flags & ALC_FLAG_SMB_BUG) == 0) {
 		bus_dmamap_sync(sc->sc_dmat, sc->alc_cdata.alc_smb_map, 0,
 		    sc->alc_cdata.alc_smb_map->dm_mapsize,
-		    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
+		    BUS_DMASYNC_POSTREAD);
 		smb = sc->alc_rdata.alc_smb;
 		/* Update done, clear. */
 		smb->updated = 0;
 		bus_dmamap_sync(sc->sc_dmat, sc->alc_cdata.alc_smb_map, 0,
 		    sc->alc_cdata.alc_smb_map->dm_mapsize,
-		    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
+		    BUS_DMASYNC_PREWRITE);
 	} else {
 		for (reg = &sb.rx_frames, i = 0; reg <= &sb.rx_pkts_filtered;
 		    reg++) {
@@ -2160,7 +2125,7 @@ alc_stats_update(struct alc_softc *sc)
 	if ((sc->alc_flags & ALC_FLAG_SMB_BUG) == 0) {
 		bus_dmamap_sync(sc->sc_dmat, sc->alc_cdata.alc_smb_map, 0,
 		    sc->alc_cdata.alc_smb_map->dm_mapsize,
-		    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
+		    BUS_DMASYNC_POSTREAD);
 		smb = sc->alc_rdata.alc_smb;
 		if (smb->updated == 0)
 			return;
@@ -2226,6 +2191,7 @@ alc_stats_update(struct alc_softc *sc)
 	stat->tx_multi_colls += smb->tx_multi_colls;
 	stat->tx_late_colls += smb->tx_late_colls;
 	stat->tx_excess_colls += smb->tx_excess_colls;
+	stat->tx_abort += smb->tx_abort;
 	stat->tx_underrun += smb->tx_underrun;
 	stat->tx_desc_underrun += smb->tx_desc_underrun;
 	stat->tx_lenerrs += smb->tx_lenerrs;
@@ -2238,10 +2204,17 @@ alc_stats_update(struct alc_softc *sc)
 
 	ifp->if_collisions += smb->tx_single_colls +
 	    smb->tx_multi_colls * 2 + smb->tx_late_colls +
-	    smb->tx_excess_colls * HDPX_CFG_RETRY_DEFAULT;
+	    smb->tx_abort * HDPX_CFG_RETRY_DEFAULT;
 
-	ifp->if_oerrors += smb->tx_late_colls + smb->tx_excess_colls +
-	    smb->tx_underrun + smb->tx_pkts_truncated;
+	/*
+	 * XXX
+	 * tx_pkts_truncated counter looks suspicious. It constantly
+	 * increments with no sign of Tx errors. This may indicate
+	 * the counter name is not correct one so I've removed the
+	 * counter in output errors.
+	 */
+	ifp->if_oerrors += smb->tx_abort + smb->tx_late_colls +
+	    smb->tx_underrun;
 
 	ifp->if_ipackets += smb->rx_frames;
 
@@ -2254,8 +2227,7 @@ alc_stats_update(struct alc_softc *sc)
 		/* Update done, clear. */
 		smb->updated = 0;
 		bus_dmamap_sync(sc->sc_dmat, sc->alc_cdata.alc_smb_map, 0,
-		sc->alc_cdata.alc_smb_map->dm_mapsize,
-		BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
+		sc->alc_cdata.alc_smb_map->dm_mapsize, BUS_DMASYNC_PREWRITE);
 	}
 }
 
@@ -2347,8 +2319,6 @@ alc_txeof(struct alc_softc *sc)
 		txd = &sc->alc_cdata.alc_txdesc[cons];
 		if (txd->tx_m != NULL) {
 			/* Reclaim transmitted mbufs. */
-			bus_dmamap_sync(sc->sc_dmat, txd->tx_dmamap, 0,
-			    txd->tx_dmamap->dm_mapsize, BUS_DMASYNC_POSTWRITE);
 			bus_dmamap_unload(sc->sc_dmat, txd->tx_dmamap);
 			m_freem(txd->tx_m);
 			txd->tx_m = NULL;
@@ -2357,7 +2327,7 @@ alc_txeof(struct alc_softc *sc)
 
 	if ((sc->alc_flags & ALC_FLAG_CMB_BUG) == 0)
 	    bus_dmamap_sync(sc->sc_dmat, sc->alc_cdata.alc_cmb_map, 0,
-	        sc->alc_cdata.alc_cmb_map->dm_mapsize, BUS_DMASYNC_PREREAD);
+	        sc->alc_cdata.alc_cmb_map->dm_mapsize, BUS_DMASYNC_PREWRITE);
 	sc->alc_cdata.alc_tx_cons = cons;
 	/*
 	 * Unarm watchdog timer only when there is no pending
@@ -2389,6 +2359,13 @@ alc_newbuf(struct alc_softc *sc, struct alc_rxdesc *rxd, bool init)
 	    sc->alc_cdata.alc_rx_sparemap, m, BUS_DMA_NOWAIT);
 
 	if (error != 0) {
+		if (!error) {
+			bus_dmamap_unload(sc->sc_dmat,
+			    sc->alc_cdata.alc_rx_sparemap);
+			error = EFBIG;
+			printf("%s: too many segments?!\n",
+			    device_xname(sc->sc_dev));
+		}
 		m_freem(m);
 
 		if (init)
@@ -2405,8 +2382,6 @@ alc_newbuf(struct alc_softc *sc, struct alc_rxdesc *rxd, bool init)
 	map = rxd->rx_dmamap;
 	rxd->rx_dmamap = sc->alc_cdata.alc_rx_sparemap;
 	sc->alc_cdata.alc_rx_sparemap = map;
-	bus_dmamap_sync(sc->sc_dmat, rxd->rx_dmamap, 0, rxd->rx_dmamap->dm_mapsize,
-	    BUS_DMASYNC_PREREAD);
 	rxd->rx_m = m;
 	rxd->rx_desc->addr = htole64(rxd->rx_dmamap->dm_segs[0].ds_addr);
 	return (0);
@@ -2421,11 +2396,9 @@ alc_rxintr(struct alc_softc *sc)
 	int rr_cons, prog;
 
 	bus_dmamap_sync(sc->sc_dmat, sc->alc_cdata.alc_rr_ring_map, 0,
-	    sc->alc_cdata.alc_rr_ring_map->dm_mapsize,
-	    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
+	    sc->alc_cdata.alc_rr_ring_map->dm_mapsize, BUS_DMASYNC_POSTREAD);
 	bus_dmamap_sync(sc->sc_dmat, sc->alc_cdata.alc_rx_ring_map, 0,
-	    sc->alc_cdata.alc_rx_ring_map->dm_mapsize,
-	    BUS_DMASYNC_POSTREAD | BUS_DMASYNC_POSTWRITE);
+	    sc->alc_cdata.alc_rx_ring_map->dm_mapsize, BUS_DMASYNC_POSTREAD);
 	rr_cons = sc->alc_cdata.alc_rr_cons;
 	for (prog = 0; (ifp->if_flags & IFF_RUNNING) != 0;) {
 		rrd = &sc->alc_rdata.alc_rr_ring[rr_cons];
@@ -2455,7 +2428,7 @@ alc_rxintr(struct alc_softc *sc)
 		/* Sync Rx return descriptors. */
 		bus_dmamap_sync(sc->sc_dmat, sc->alc_cdata.alc_rr_ring_map, 0,
 		    sc->alc_cdata.alc_rr_ring_map->dm_mapsize,
-		    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
+		    BUS_DMASYNC_PREWRITE);
 		/*
 		 * Sync updated Rx descriptors such that controller see
 		 * modified buffer addresses.
@@ -2574,7 +2547,7 @@ alc_rxeof(struct alc_softc *sc, struct rx_rdesc *rrd)
 				}
 			} else
 				m->m_len = m->m_pkthdr.len;
-			m_set_rcvif(m, ifp);
+			m->m_pkthdr.rcvif = ifp;
 #if NVLAN > 0
 			/*
 			 * Due to hardware bugs, Rx checksum offloading
@@ -2589,7 +2562,7 @@ alc_rxeof(struct alc_softc *sc, struct rx_rdesc *rrd)
 			bpf_mtap(ifp, m);
 
 			/* Pass it on. */
-			if_percpuq_enqueue(ifp->if_percpuq, m);
+			(*ifp->if_input)(ifp, m);
 		}
 	}
 	/* Reset mbuf chains. */
@@ -3181,8 +3154,6 @@ alc_stop(struct ifnet *ifp, int disable)
 	for (i = 0; i < ALC_RX_RING_CNT; i++) {
 		rxd = &sc->alc_cdata.alc_rxdesc[i];
 		if (rxd->rx_m != NULL) {
-			bus_dmamap_sync(sc->sc_dmat, rxd->rx_dmamap, 0,
-			    rxd->rx_dmamap->dm_mapsize, BUS_DMASYNC_POSTREAD);
 			bus_dmamap_unload(sc->sc_dmat, rxd->rx_dmamap);
 			m_freem(rxd->rx_m);
 			rxd->rx_m = NULL;
@@ -3191,8 +3162,6 @@ alc_stop(struct ifnet *ifp, int disable)
 	for (i = 0; i < ALC_TX_RING_CNT; i++) {
 		txd = &sc->alc_cdata.alc_txdesc[i];
 		if (txd->tx_m != NULL) {
-			bus_dmamap_sync(sc->sc_dmat, txd->tx_dmamap, 0,
-			    txd->tx_dmamap->dm_mapsize, BUS_DMASYNC_POSTWRITE);
 			bus_dmamap_unload(sc->sc_dmat, txd->tx_dmamap);
 			m_freem(txd->tx_m);
 			txd->tx_m = NULL;
@@ -3351,8 +3320,7 @@ alc_init_rr_ring(struct alc_softc *sc)
 	rd = &sc->alc_rdata;
 	memset(rd->alc_rr_ring, 0, ALC_RR_RING_SZ);
 	bus_dmamap_sync(sc->sc_dmat, sc->alc_cdata.alc_rr_ring_map, 0,
-	    sc->alc_cdata.alc_rr_ring_map->dm_mapsize,
-	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
+	    sc->alc_cdata.alc_rr_ring_map->dm_mapsize, BUS_DMASYNC_PREWRITE);
 }
 
 static void
@@ -3363,8 +3331,7 @@ alc_init_cmb(struct alc_softc *sc)
 	rd = &sc->alc_rdata;
 	memset(rd->alc_cmb, 0, ALC_CMB_SZ);
 	bus_dmamap_sync(sc->sc_dmat, sc->alc_cdata.alc_cmb_map, 0,
-	    sc->alc_cdata.alc_cmb_map->dm_mapsize,
-	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
+	    sc->alc_cdata.alc_cmb_map->dm_mapsize, BUS_DMASYNC_PREWRITE);
 }
 
 static void
@@ -3375,8 +3342,7 @@ alc_init_smb(struct alc_softc *sc)
 	rd = &sc->alc_rdata;
 	memset(rd->alc_smb, 0, ALC_SMB_SZ);
 	bus_dmamap_sync(sc->sc_dmat, sc->alc_cdata.alc_smb_map, 0,
-	    sc->alc_cdata.alc_smb_map->dm_mapsize,
-	    BUS_DMASYNC_PREREAD | BUS_DMASYNC_PREWRITE);
+	    sc->alc_cdata.alc_smb_map->dm_mapsize, BUS_DMASYNC_PREWRITE);
 }
 
 static void

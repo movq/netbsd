@@ -15,14 +15,14 @@
 #define LLVM_LIB_TARGET_ARM_THUMB2INSTRINFO_H
 
 #include "ARMBaseInstrInfo.h"
-#include "ThumbRegisterInfo.h"
+#include "Thumb2RegisterInfo.h"
 
 namespace llvm {
 class ARMSubtarget;
 class ScheduleHazardRecognizer;
 
 class Thumb2InstrInfo : public ARMBaseInstrInfo {
-  ThumbRegisterInfo RI;
+  Thumb2RegisterInfo RI;
 public:
   explicit Thumb2InstrInfo(const ARMSubtarget &STI);
 
@@ -60,7 +60,7 @@ public:
   /// such, whenever a client has an instance of instruction info, it should
   /// always be able to get register info as well (through this method).
   ///
-  const ThumbRegisterInfo &getRegisterInfo() const override { return RI; }
+  const Thumb2RegisterInfo &getRegisterInfo() const override { return RI; }
 
 private:
   void expandLoadStackGuard(MachineBasicBlock::iterator MI,

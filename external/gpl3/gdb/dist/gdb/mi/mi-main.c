@@ -1,6 +1,6 @@
 /* MI Command Set.
 
-   Copyright (C) 2000-2015 Free Software Foundation, Inc.
+   Copyright (C) 2000-2014 Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions (a Red Hat company).
 
@@ -23,7 +23,8 @@
 #include "arch-utils.h"
 #include "target.h"
 #include "inferior.h"
-#include "infrun.h"
+#include <string.h>
+#include "exceptions.h"
 #include "top.h"
 #include "gdbthread.h"
 #include "mi-cmds.h"
@@ -51,8 +52,9 @@
 #include "ctf.h"
 #include "ada-lang.h"
 #include "linespec.h"
-#include "extension.h"
-#include "gdbcmd.h"
+#ifdef HAVE_PYTHON
+#include "python/python-internal.h"
+#endif
 
 #include <ctype.h>
 #include <sys/time.h>
@@ -103,45 +105,6 @@ static int register_changed_p (int regnum, struct regcache *,
 			       struct regcache *);
 static void output_register (struct frame_info *, int regnum, int format,
 			     int skip_unavailable);
-
-/* Controls whether the frontend wants MI in async mode.  */
-static int mi_async = 0;
-
-/* The set command writes to this variable.  If the inferior is
-   executing, mi_async is *not* updated.  */
-static int mi_async_1 = 0;
-
-static void
-set_mi_async_command (char *args, int from_tty,
-		      struct cmd_list_element *c)
-{
-  if (have_live_inferiors ())
-    {
-      mi_async_1 = mi_async;
-      error (_("Cannot change this setting while the inferior is running."));
-    }
-
-  mi_async = mi_async_1;
-}
-
-static void
-show_mi_async_command (struct ui_file *file, int from_tty,
-		       struct cmd_list_element *c,
-		       const char *value)
-{
-  fprintf_filtered (file,
-		    _("Whether MI is in asynchronous mode is %s.\n"),
-		    value);
-}
-
-/* A wrapper for target_can_async_p that takes the MI setting into
-   account.  */
-
-int
-mi_async_p (void)
-{
-  return mi_async && target_can_async_p ();
-}
 
 /* Command implementations.  FIXME: Is this libgdb?  No.  This is the MI
    layer that calls libgdb.  Any operation used in the below should be
@@ -251,8 +214,8 @@ proceed_thread (struct thread_info *thread, int pid)
     return;
 
   switch_to_thread (thread->ptid);
-  clear_proceed_status (0);
-  proceed ((CORE_ADDR) -1, GDB_SIGNAL_DEFAULT);
+  clear_proceed_status ();
+  proceed ((CORE_ADDR) -1, GDB_SIGNAL_DEFAULT, 0);
 }
 
 static int
@@ -267,8 +230,6 @@ proceed_thread_callback (struct thread_info *thread, void *arg)
 static void
 exec_continue (char **argv, int argc)
 {
-  prepare_execution_command (&current_target, mi_async_p ());
-
   if (non_stop)
     {
       /* In non-stop mode, 'resume' always resumes a single thread.
@@ -435,8 +396,8 @@ run_one_inferior (struct inferior *inf, void *arg)
       switch_to_thread (null_ptid);
       set_current_program_space (inf->pspace);
     }
-  mi_execute_cli_command (run_cmd, mi_async_p (),
-			  mi_async_p () ? "&" : NULL);
+  mi_execute_cli_command (run_cmd, target_can_async_p (),
+			  target_can_async_p () ? "&" : NULL);
   return 0;
 }
 
@@ -490,8 +451,8 @@ mi_cmd_exec_run (char *command, char **argv, int argc)
     {
       const char *run_cmd = start_p ? "start" : "run";
 
-      mi_execute_cli_command (run_cmd, mi_async_p (),
-			      mi_async_p () ? "&" : NULL);
+      mi_execute_cli_command (run_cmd, target_can_async_p (),
+			      target_can_async_p () ? "&" : NULL);
     }
 }
 
@@ -657,9 +618,6 @@ print_one_inferior (struct inferior *inferior, void *xdata)
 
       ui_out_field_fmt (uiout, "id", "i%d", inferior->num);
       ui_out_field_string (uiout, "type", "process");
-      if (inferior->has_exit_code)
-	ui_out_field_string (uiout, "exit-code",
-			     int_string (inferior->exit_code, 8, 0, 0, 1));
       if (inferior->pid != 0)
 	ui_out_field_int (uiout, "pid", inferior->pid);
 
@@ -1595,7 +1553,6 @@ mi_cmd_data_read_memory_bytes (char *command, char **argv, int argc)
   int ix;
   VEC(memory_read_result_s) *result;
   long offset = 0;
-  int unit_size = gdbarch_addressable_memory_unit_size (gdbarch);
   int oind = 0;
   char *oarg;
   enum opt
@@ -1651,11 +1608,10 @@ mi_cmd_data_read_memory_bytes (char *command, char **argv, int argc)
 			      - addr);
       ui_out_field_core_addr (uiout, "end", gdbarch, read_result->end);
 
-      data = xmalloc (
-	  (read_result->end - read_result->begin) * 2 * unit_size + 1);
+      data = xmalloc ((read_result->end - read_result->begin) * 2 + 1);
 
       for (i = 0, p = data;
-	   i < ((read_result->end - read_result->begin) * unit_size);
+	   i < (read_result->end - read_result->begin);
 	   ++i, p += 2)
 	{
 	  sprintf (p, "%02x", read_result->data[i]);
@@ -1764,36 +1720,29 @@ mi_cmd_data_write_memory_bytes (char *command, char **argv, int argc)
   char *cdata;
   gdb_byte *data;
   gdb_byte *databuf;
-  size_t len_hex, len_bytes, len_units, i, steps, remaining_units;
-  long int count_units;
+  size_t len, i, steps, remainder;
+  long int count, j;
   struct cleanup *back_to;
-  int unit_size;
 
   if (argc != 2 && argc != 3)
     error (_("Usage: ADDR DATA [COUNT]."));
 
   addr = parse_and_eval_address (argv[0]);
   cdata = argv[1];
-  len_hex = strlen (cdata);
-  unit_size = gdbarch_addressable_memory_unit_size (get_current_arch ());
-
-  if (len_hex % (unit_size * 2) != 0)
-    error (_("Hex-encoded '%s' must represent an integral number of "
-	     "addressable memory units."),
+  if (strlen (cdata) % 2)
+    error (_("Hex-encoded '%s' must have an even number of characters."),
 	   cdata);
 
-  len_bytes = len_hex / 2;
-  len_units = len_bytes / unit_size;
-
+  len = strlen (cdata)/2;
   if (argc == 3)
-    count_units = strtoul (argv[2], NULL, 10);
+    count = strtoul (argv[2], NULL, 10);
   else
-    count_units = len_units;
+    count = len;
 
-  databuf = xmalloc (len_bytes * sizeof (gdb_byte));
+  databuf = xmalloc (len * sizeof (gdb_byte));
   back_to = make_cleanup (xfree, databuf);
 
-  for (i = 0; i < len_bytes; ++i)
+  for (i = 0; i < len; ++i)
     {
       int x;
       if (sscanf (cdata + i * 2, "%02x", &x) != 1)
@@ -1801,32 +1750,29 @@ mi_cmd_data_write_memory_bytes (char *command, char **argv, int argc)
       databuf[i] = (gdb_byte) x;
     }
 
-  if (len_units < count_units)
+  if (len < count)
     {
-      /* Pattern is made of less units than count:
+      /* Pattern is made of less bytes than count:
          repeat pattern to fill memory.  */
-      data = xmalloc (count_units * unit_size);
+      data = xmalloc (count);
       make_cleanup (xfree, data);
 
-      /* Number of times the pattern is entirely repeated.  */
-      steps = count_units / len_units;
-      /* Number of remaining addressable memory units.  */
-      remaining_units = count_units % len_units;
-      for (i = 0; i < steps; i++)
-        memcpy (data + i * len_bytes, databuf, len_bytes);
+      steps = count / len;
+      remainder = count % len;
+      for (j = 0; j < steps; j++)
+        memcpy (data + j * len, databuf, len);
 
-      if (remaining_units > 0)
-        memcpy (data + steps * len_bytes, databuf,
-		remaining_units * unit_size);
+      if (remainder > 0)
+        memcpy (data + steps * len, databuf, remainder);
     }
   else
     {
       /* Pattern is longer than or equal to count:
-         just copy count addressable memory units.  */
+         just copy len bytes.  */
       data = databuf;
     }
 
-  write_memory_with_notification (addr, data, count_units);
+  write_memory_with_notification (addr, data, count);
 
   do_cleanups (back_to);
 }
@@ -1874,8 +1820,10 @@ mi_cmd_list_features (char *command, char **argv, int argc)
       ui_out_field_string (uiout, NULL, "undefined-command-error-code");
       ui_out_field_string (uiout, NULL, "exec-run-start-option");
 
-      if (ext_lang_initialized_p (get_ext_lang_defn (EXT_LANG_PYTHON)))
+#if HAVE_PYTHON
+      if (gdb_python_initialized)
 	ui_out_field_string (uiout, NULL, "python");
+#endif
 
       do_cleanups (cleanup);
       return;
@@ -1893,10 +1841,11 @@ mi_cmd_list_target_features (char *command, char **argv, int argc)
       struct ui_out *uiout = current_uiout;
 
       cleanup = make_cleanup_ui_out_list_begin_end (uiout, "features");
-      if (mi_async_p ())
+      if (target_can_async_p ())
 	ui_out_field_string (uiout, NULL, "async");
       if (target_can_execute_reverse)
 	ui_out_field_string (uiout, NULL, "reverse");
+
       do_cleanups (cleanup);
       return;
     }
@@ -2092,6 +2041,7 @@ mi_execute_command (const char *cmd, int from_tty)
 {
   char *token;
   struct mi_parse *command = NULL;
+  volatile struct gdb_exception exception;
 
   /* This is to handle EOF (^D). We just quit gdb.  */
   /* FIXME: we should call some API function here.  */
@@ -2100,19 +2050,18 @@ mi_execute_command (const char *cmd, int from_tty)
 
   target_log_command (cmd);
 
-  TRY
+  TRY_CATCH (exception, RETURN_MASK_ALL)
     {
       command = mi_parse (cmd, &token);
     }
-  CATCH (exception, RETURN_MASK_ALL)
+  if (exception.reason < 0)
     {
       mi_print_exception (token, exception);
       xfree (token);
     }
-  END_CATCH
-
-  if (command != NULL)
+  else
     {
+      volatile struct gdb_exception result;
       ptid_t previous_ptid = inferior_ptid;
 
       command->token = token;
@@ -2124,18 +2073,17 @@ mi_execute_command (const char *cmd, int from_tty)
 	  timestamp (command->cmd_start);
 	}
 
-      TRY
+      TRY_CATCH (result, RETURN_MASK_ALL)
 	{
 	  captured_mi_execute_command (current_uiout, command);
 	}
-      CATCH (result, RETURN_MASK_ALL)
+      if (result.reason < 0)
 	{
 	  /* The command execution failed and error() was called
 	     somewhere.  */
 	  mi_print_exception (command->token, result);
 	  mi_out_rewind (current_uiout);
 	}
-      END_CATCH
 
       bpstat_do_actions ();
 
@@ -2324,7 +2272,7 @@ mi_execute_async_cli_command (char *cli_command, char **argv, int argc)
   struct cleanup *old_cleanups;
   char *run;
 
-  if (mi_async_p ())
+  if (target_can_async_p ())
     run = xstrprintf ("%s %s&", cli_command, argc ? *argv : "");
   else
     run = xstrprintf ("%s %s", cli_command, argc ? *argv : "");
@@ -2539,7 +2487,8 @@ mi_cmd_trace_find (char *command, char **argv, int argc)
       return;
     }
 
-  check_trace_running (current_trace_status ());
+  if (current_trace_status ()->running)
+    error (_("May not look at trace frames while trace is running."));
 
   if (strcmp (mode, "frame-number") == 0)
     {
@@ -2974,26 +2923,4 @@ mi_cmd_trace_frame_collected (char *command, char **argv, int argc)
   }
 
   do_cleanups (old_chain);
-}
-
-void
-_initialize_mi_main (void)
-{
-  struct cmd_list_element *c;
-
-  add_setshow_boolean_cmd ("mi-async", class_run,
-			   &mi_async_1, _("\
-Set whether MI asynchronous mode is enabled."), _("\
-Show whether MI asynchronous mode is enabled."), _("\
-Tells GDB whether MI should be in asynchronous mode."),
-			   set_mi_async_command,
-			   show_mi_async_command,
-			   &setlist,
-			   &showlist);
-
-  /* Alias old "target-async" to "mi-async".  */
-  c = add_alias_cmd ("target-async", "mi-async", class_run, 0, &setlist);
-  deprecate_cmd (c, "set mi-async");
-  c = add_alias_cmd ("target-async", "mi-async", class_run, 0, &showlist);
-  deprecate_cmd (c, "show mi-async");
 }

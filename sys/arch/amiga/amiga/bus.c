@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.c,v 1.2 2015/11/12 12:01:53 phx Exp $ */
+/*	$NetBSD: bus.c,v 1.1 2011/08/04 17:48:50 rkujawa Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -48,7 +48,11 @@ paddr_t
 bus_space_mmap(bus_space_tag_t t, bus_addr_t addr, off_t off, int prot,
 	int flags)
 {
-	return MD_BTOP(addr + off);
+#if defined(__m68k__)
+	return m68k_btop(addr + off);
+#else
+	return -1; /* FIXME */
+#endif
 }
 
 void *
@@ -59,3 +63,4 @@ bus_space_vaddr(bus_space_tag_t space, bus_space_handle_t handle)
 
 	return va;
 }
+

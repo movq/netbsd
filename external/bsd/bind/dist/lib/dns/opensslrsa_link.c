@@ -1,4 +1,4 @@
-/*	$NetBSD: opensslrsa_link.c,v 1.12 2016/05/26 16:49:58 christos Exp $	*/
+/*	$NetBSD: opensslrsa_link.c,v 1.8.4.2 2016/03/13 08:06:13 martin Exp $	*/
 
 /*
  * Copyright (C) 2004-2009, 2011-2015  Internet Systems Consortium, Inc. ("ISC")
@@ -775,7 +775,7 @@ opensslrsa_generate(dst_key_t *key, int exp, void (*callback)(int)) {
 	} u;
 	RSA *rsa = RSA_new();
 	BIGNUM *e = BN_new();
-#if OPENSSL_VERSION_NUMBER < 0x10100000L || defined(LIBRESSL_VERSION_NUMBER)
+#if OPENSSL_VERSION_NUMBER < 0x10100000L
 	BN_GENCB _cb;
 #endif
 	BN_GENCB *cb = BN_GENCB_new();
@@ -1400,7 +1400,8 @@ opensslrsa_fromlabel(dst_key_t *key, const char *engine, const char *label,
 	UNUSED(pin);
 
 	if (engine == NULL) {
-		if (strchr(label, ':') == NULL)
+		colon = strchr(label, ':');
+		if (colon == NULL)
 			DST_RET(DST_R_NOENGINE);
 		tmpengine = isc_mem_strdup(key->mctx, label);
 		if (tmpengine == NULL)

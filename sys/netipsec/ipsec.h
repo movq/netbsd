@@ -1,4 +1,4 @@
-/*	$NetBSD: ipsec.h,v 1.37 2015/04/01 02:49:44 ozaki-r Exp $	*/
+/*	$NetBSD: ipsec.h,v 1.35 2014/05/30 01:39:03 christos Exp $	*/
 /*	$FreeBSD: /usr/local/www/cvsroot/FreeBSD/src/sys/netipsec/ipsec.h,v 1.2.4.2 2004/02/14 22:23:23 bms Exp $	*/
 /*	$KAME: ipsec.h,v 1.53 2001/11/20 08:32:38 itojun Exp $	*/
 
@@ -260,9 +260,6 @@ int ipsec4_output(struct mbuf *, struct socket *, int,
 	struct secpolicy **, u_long *, bool *, bool *);
 int ipsec4_input(struct mbuf *, int);
 int ipsec4_forward(struct mbuf *, int *);
-#ifdef INET6
-int ipsec6_input(struct mbuf *);
-#endif
 
 static __inline struct secpolicy*
 ipsec4_getpolicybysock(
@@ -277,8 +274,8 @@ ipsec4_getpolicybysock(
 
 static __inline int
 ipsec_copy_pcbpolicy(
-    struct inpcbpolicy *oldp,
-    struct inpcbpolicy *newp
+    struct inpcbpolicy *old,
+    struct inpcbpolicy *new
 )
 {
   /*XXX do nothing */

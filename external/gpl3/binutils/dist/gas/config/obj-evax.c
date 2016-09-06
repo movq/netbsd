@@ -1,5 +1,6 @@
 /* obj-evax.c - EVAX (openVMS/Alpha) object file format.
-   Copyright (C) 1996-2015 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 2005, 2007, 2008, 2009, 2010, 2011, 2012
+   Free Software Foundation, Inc.
    Contributed by Klaus Kämpf (kkaempf@progis.de) of
      proGIS Software, Aachen, Germany.
    Extensively enhanced by Douglas Rupp of AdaCore.
@@ -60,9 +61,10 @@ s_evax_weak (int ignore ATTRIBUTE_UNUSED)
 
   do
     {
-      c = get_symbol_name (&name);
+      name = input_line_pointer;
+      c = get_symbol_end ();
       symbolP = symbol_find_or_make (name);
-      (void) restore_line_pointer (c);
+      *input_line_pointer = c;
       SKIP_WHITESPACE ();
       S_SET_WEAK (symbolP);
       if (c == ',')
@@ -331,7 +333,7 @@ evax_shorten_name (char *id)
    which further designates that the name was truncated):
 
    "original_identifier"_haaaaabbbccc
-
+   
    aaaaa = 32-bit CRC
    bbb = length of original identifier
    ccc = sum of 32-bit CRC characters
@@ -360,7 +362,7 @@ static char decodings[256];
 /* Table used by the crc32 function to calcuate the checksum.  */
 static unsigned int crc32_table[256] = {0, 0};
 
-/* Given a string in BUF, calculate a 32-bit CRC for it.
+/* Given a string in BUF, calculate a 32-bit CRC for it. 
 
    This is used as a reasonably unique hash for the given string.  */
 
@@ -498,7 +500,7 @@ is_truncated_identifier (char *id)
      a truncated identifier.  */
   if (len != MAX_LABEL_LENGTH)
     return 0;
-
+  
   /* Start scanning backwards for a _h.  */
   len = len - 3 - 3 - 5 - 2;
   ptr = id + len;

@@ -1,4 +1,4 @@
-/*	$NetBSD: sdhcvar.h,v 1.26 2015/12/31 11:53:19 ryo Exp $	*/
+/*	$NetBSD: sdhcvar.h,v 1.13.12.4 2015/11/08 01:22:54 riz Exp $	*/
 /*	$OpenBSD: sdhcvar.h,v 1.3 2007/09/06 08:01:01 jsg Exp $	*/
 
 /*
@@ -52,18 +52,10 @@ struct sdhc_softc {
 #define	SDHC_FLAG_NO_HS_BIT	0x00002000 /* Don't set SDHC_HIGH_SPEED bit */
 #define	SDHC_FLAG_EXTERNAL_DMA	0x00004000
 #define	SDHC_FLAG_EXTDMA_DMAEN	0x00008000 /* ext. dma need SDHC_DMA_ENABLE */
-#define	SDHC_FLAG_NO_CLKBASE	0x00020000 /* ignore clkbase register */
-#define	SDHC_FLAG_SINGLE_POWER_WRITE 0x00040000
-#define	SDHC_FLAG_NO_TIMEOUT	0x00080000 /* ignore timeout interrupts */
-#define	SDHC_FLAG_USE_ADMA2	0x00100000
-#define	SDHC_FLAG_POLL_CARD_DET	0x00200000 /* polling card detect */
-#define	SDHC_FLAG_SLOW_SDR50  	0x00400000 /* reduce SDR50 speed */
-#define	SDHC_FLAG_USDHC		0x00800000 /* Freescale uSDHC */
 
 	uint32_t		sc_clkbase;
 	int			sc_clkmsk;	/* Mask for SDCLK */
 	uint32_t		sc_caps;/* attachment provided capabilities */
-	uint32_t		sc_caps2;
 
 	int (*sc_vendor_rod)(struct sdhc_softc *, int);
 	int (*sc_vendor_write_protect)(struct sdhc_softc *);
@@ -81,6 +73,5 @@ int	sdhc_detach(struct sdhc_softc *, int);
 bool	sdhc_suspend(device_t, const pmf_qual_t *);
 bool	sdhc_resume(device_t, const pmf_qual_t *);
 bool	sdhc_shutdown(device_t, int);
-kmutex_t *sdhc_host_lock(struct sdhc_host *);
 
 #endif	/* _SDHCVAR_H_ */

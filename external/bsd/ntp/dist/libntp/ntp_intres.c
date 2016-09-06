@@ -1,4 +1,4 @@
-/*	$NetBSD: ntp_intres.c,v 1.9 2016/05/01 23:32:00 christos Exp $	*/
+/*	$NetBSD: ntp_intres.c,v 1.3.6.3 2016/05/11 11:35:38 martin Exp $	*/
 
 /*
  * ntp_intres.c - Implements a generic blocking worker child or thread,

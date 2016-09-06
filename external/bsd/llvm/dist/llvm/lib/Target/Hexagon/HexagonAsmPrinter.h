@@ -25,12 +25,9 @@ namespace llvm {
     const HexagonSubtarget *Subtarget;
 
   public:
-    explicit HexagonAsmPrinter(TargetMachine &TM,
-                               std::unique_ptr<MCStreamer> Streamer);
-
-    bool runOnMachineFunction(MachineFunction &Fn) override {
-      Subtarget = &Fn.getSubtarget<HexagonSubtarget>();
-      return AsmPrinter::runOnMachineFunction(Fn);
+    explicit HexagonAsmPrinter(TargetMachine &TM, MCStreamer &Streamer)
+      : AsmPrinter(TM, Streamer) {
+      Subtarget = &TM.getSubtarget<HexagonSubtarget>();
     }
 
     const char *getPassName() const override {
@@ -41,10 +38,6 @@ namespace llvm {
                                    const MachineBasicBlock *MBB) const override;
 
     void EmitInstruction(const MachineInstr *MI) override;
-
-    void HexagonProcessInstruction(MCInst &Inst,
-                                   const MachineInstr &MBB);
-
 
     void printOperand(const MachineInstr *MI, unsigned OpNo, raw_ostream &O);
     bool PrintAsmOperand(const MachineInstr *MI, unsigned OpNo,

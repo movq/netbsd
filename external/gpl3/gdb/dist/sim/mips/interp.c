@@ -22,6 +22,13 @@ code on the hardware.
 
 */
 
+/* The TRACE manifests enable the provision of extra features. If they
+   are not defined then a simpler (quicker) simulator is constructed
+   without the required run-time checks, etc. */
+#if 1 /* 0 to allow user build selection, 1 to force inclusion */
+#define TRACE (1)
+#endif
+
 #include "config.h"
 #include "bfd.h"
 #include "sim-main.h"
@@ -150,13 +157,11 @@ static SIM_RC sim_firmware_command (SIM_DESC sd, char* arg);
 #define MEM_SIZE (8 << 20)	/* 8 MBytes */
 
 
-#if WITH_TRACE_ANY_P
+#if defined(TRACE)
 static char *tracefile = "trace.din"; /* default filename for trace log */
 FILE *tracefh = NULL;
 static void open_trace (SIM_DESC sd);
-#else
-#define open_trace(sd)
-#endif
+#endif /* TRACE */
 
 static const char * get_insn_name (sim_cpu *, int);
 
@@ -177,14 +182,18 @@ enum {
 static int display_mem_info = 0;
 
 static SIM_RC
-mips_option_handler (SIM_DESC sd, sim_cpu *cpu, int opt, char *arg,
-                     int is_command)
+mips_option_handler (sd, cpu, opt, arg, is_command)
+     SIM_DESC sd;
+     sim_cpu *cpu;
+     int opt;
+     char *arg;
+     int is_command;
 {
   int cpu_nr;
   switch (opt)
     {
     case OPTION_DINERO_TRACE: /* ??? */
-#if WITH_TRACE_ANY_P
+#if defined(TRACE)
       /* Eventually the simTRACE flag could be treated as a toggle, to
 	 allow external control of the program points being traced
 	 (i.e. only from main onwards, excluding the run-time setup,
@@ -209,15 +218,15 @@ mips_option_handler (SIM_DESC sd, sim_cpu *cpu, int opt, char *arg,
 	    }
 	}
       return SIM_RC_OK;
-#else /* !WITH_TRACE_ANY_P */
+#else /* !TRACE */
       fprintf(stderr,"\
 Simulator constructed without dinero tracing support (for performance).\n\
-Re-compile simulator with \"-DWITH_TRACE_ANY_P\" to enable this option.\n");
+Re-compile simulator with \"-DTRACE\" to enable this option.\n");
       return SIM_RC_FAIL;
-#endif /* !WITH_TRACE_ANY_P */
+#endif /* !TRACE */
 
     case OPTION_DINERO_FILE:
-#if WITH_TRACE_ANY_P
+#if defined(TRACE)
       if (optarg != NULL) {
 	char *tmp;
 	tmp = (char *)malloc(strlen(optarg) + 1);
@@ -232,7 +241,7 @@ Re-compile simulator with \"-DWITH_TRACE_ANY_P\" to enable this option.\n");
 	  sim_io_printf(sd,"Placing trace information into file \"%s\"\n",tracefile);
 	}
       }
-#endif /* WITH_TRACE_ANY_P */
+#endif /* TRACE */
       return SIM_RC_OK;
 
     case OPTION_FIRMWARE:
@@ -306,7 +315,7 @@ void
 interrupt_event (SIM_DESC sd, void *data)
 {
   sim_cpu *cpu = STATE_CPU (sd, 0); /* FIXME */
-  address_word cia = CPU_PC_GET (cpu);
+  address_word cia = CIA_GET (cpu);
   if (SR & status_IE)
     {
       interrupt_pending = 0;
@@ -331,32 +340,17 @@ static void device_init(SIM_DESC sd) {
 /*-- GDB simulator interface ------------------------------------------------*/
 /*---------------------------------------------------------------------------*/
 
-static sim_cia
-mips_pc_get (sim_cpu *cpu)
-{
-  return PC;
-}
-
-static void
-mips_pc_set (sim_cpu *cpu, sim_cia pc)
-{
-  PC = pc;
-}
-
 SIM_DESC
-sim_open (SIM_OPEN_KIND kind, host_callback *cb, struct bfd *abfd, char **argv)
+sim_open (kind, cb, abfd, argv)
+     SIM_OPEN_KIND kind;
+     host_callback *cb;
+     struct bfd *abfd;
+     char **argv;
 {
-  int i;
   SIM_DESC sd = sim_state_alloc (kind, cb);
-  sim_cpu *cpu;
+  sim_cpu *cpu = STATE_CPU (sd, 0); /* FIXME */
 
   SIM_ASSERT (STATE_MAGIC (sd) == SIM_MAGIC_NUMBER);
-
-  /* The cpu data is kept in a separately allocated chunk of memory.  */
-  if (sim_cpu_alloc_all (sd, 1, /*cgen_cpu_max_extra_bytes ()*/0) != SIM_RC_OK)
-    return 0;
-
-  cpu = STATE_CPU (sd, 0); /* FIXME */
 
   /* FIXME: watchpoints code shouldn't need this */
   STATE_WATCHPOINTS (sd)->pc = &(PC);
@@ -690,8 +684,10 @@ sim_open (SIM_OPEN_KIND kind, host_callback *cb, struct bfd *abfd, char **argv)
 
   }
 
+#if defined(TRACE)
   if (STATE & simTRACE)
     open_trace(sd);
+#endif /* TRACE */
 
   /*
   sim_io_eprintf (sd, "idt@%x pmon@%x lsipmon@%x\n", 
@@ -723,7 +719,7 @@ sim_open (SIM_OPEN_KIND kind, host_callback *cb, struct bfd *abfd, char **argv)
 			     (((loop >> 2) & RSVD_INSTRUCTION_ARG_MASK)
 			      << RSVD_INSTRUCTION_ARG_SHIFT));
 	  H2T (insn);
-	  sim_write (sd, vaddr, (unsigned char *)&insn, sizeof (insn));
+	  sim_write (sd, vaddr, (char *)&insn, sizeof (insn));
 	}
     }
 
@@ -771,13 +767,13 @@ sim_open (SIM_OPEN_KIND kind, host_callback *cb, struct bfd *abfd, char **argv)
 	if (pmon_monitor_base != 0)
 	  {
 	    address_word vaddr = (pmon_monitor_base + (loop * 4));
-	    sim_write (sd, vaddr, (unsigned char *)&value, sizeof (value));
+	    sim_write (sd, vaddr, (char *)&value, sizeof (value));
 	  }
 
 	if (lsipmon_monitor_base != 0)
 	  {
 	    address_word vaddr = (lsipmon_monitor_base + (loop * 4));
-	    sim_write (sd, vaddr, (unsigned char *)&value, sizeof (value));
+	    sim_write (sd, vaddr, (char *)&value, sizeof (value));
 	  }
       }
 
@@ -792,31 +788,25 @@ sim_open (SIM_OPEN_KIND kind, host_callback *cb, struct bfd *abfd, char **argv)
 			     HALT_INSTRUCTION /* BREAK */ };
       H2T (halt[0]);
       H2T (halt[1]);
-      sim_write (sd, 0x80000000, (unsigned char *) halt, sizeof (halt));
-      sim_write (sd, 0x80000180, (unsigned char *) halt, sizeof (halt));
-      sim_write (sd, 0x80000200, (unsigned char *) halt, sizeof (halt));
+      sim_write (sd, 0x80000000, (char *) halt, sizeof (halt));
+      sim_write (sd, 0x80000180, (char *) halt, sizeof (halt));
+      sim_write (sd, 0x80000200, (char *) halt, sizeof (halt));
       /* XXX: Write here unconditionally? */
-      sim_write (sd, 0xBFC00200, (unsigned char *) halt, sizeof (halt));
-      sim_write (sd, 0xBFC00380, (unsigned char *) halt, sizeof (halt));
-      sim_write (sd, 0xBFC00400, (unsigned char *) halt, sizeof (halt));
+      sim_write (sd, 0xBFC00200, (char *) halt, sizeof (halt));
+      sim_write (sd, 0xBFC00380, (char *) halt, sizeof (halt));
+      sim_write (sd, 0xBFC00400, (char *) halt, sizeof (halt));
     }
   }
 
-  /* CPU specific initialization.  */
-  for (i = 0; i < MAX_NR_PROCESSORS; ++i)
-    {
-      SIM_CPU *cpu = STATE_CPU (sd, i);
 
-      CPU_PC_FETCH (cpu) = mips_pc_get;
-      CPU_PC_STORE (cpu) = mips_pc_set;
-    }
 
   return sd;
 }
 
-#if WITH_TRACE_ANY_P
+#if defined(TRACE)
 static void
-open_trace (SIM_DESC sd)
+open_trace(sd)
+     SIM_DESC sd;
 {
   tracefh = fopen(tracefile,"wb+");
   if (tracefh == NULL)
@@ -825,7 +815,7 @@ open_trace (SIM_DESC sd)
       tracefh = stderr;
   }
 }
-#endif
+#endif /* TRACE */
 
 /* Return name of an insn, used by insn profiling.  */
 static const char *
@@ -835,7 +825,9 @@ get_insn_name (sim_cpu *cpu, int i)
 }
 
 void
-sim_close (SIM_DESC sd, int quitting)
+sim_close (sd, quitting)
+     SIM_DESC sd;
+     int quitting;
 {
 #ifdef DEBUG
   printf("DBG: sim_close: entered (quitting = %d)\n",quitting);
@@ -851,11 +843,11 @@ sim_close (SIM_DESC sd, int quitting)
      mechanism are released: */
   sim_io_shutdown (sd);
 
-#if WITH_TRACE_ANY_P
+#if defined(TRACE)
   if (tracefh != NULL && tracefh != stderr)
    fclose(tracefh);
   tracefh = NULL;
-#endif
+#endif /* TRACE */
 
   /* FIXME - free SD */
 
@@ -864,7 +856,11 @@ sim_close (SIM_DESC sd, int quitting)
 
 
 int
-sim_write (SIM_DESC sd, SIM_ADDR addr, const unsigned char *buffer, int size)
+sim_write (sd,addr,buffer,size)
+     SIM_DESC sd;
+     SIM_ADDR addr;
+     const unsigned char *buffer;
+     int size;
 {
   int index;
   sim_cpu *cpu = STATE_CPU (sd, 0); /* FIXME */
@@ -892,7 +888,11 @@ sim_write (SIM_DESC sd, SIM_ADDR addr, const unsigned char *buffer, int size)
 }
 
 int
-sim_read (SIM_DESC sd, SIM_ADDR addr, unsigned char *buffer, int size)
+sim_read (sd,addr,buffer,size)
+     SIM_DESC sd;
+     SIM_ADDR addr;
+     unsigned char *buffer;
+     int size;
 {
   int index;
   sim_cpu *cpu = STATE_CPU (sd, 0); /* FIXME */
@@ -917,7 +917,11 @@ sim_read (SIM_DESC sd, SIM_ADDR addr, unsigned char *buffer, int size)
 }
 
 int
-sim_store_register (SIM_DESC sd, int rn, unsigned char *memory, int length)
+sim_store_register (sd,rn,memory,length)
+     SIM_DESC sd;
+     int rn;
+     unsigned char *memory;
+     int length;
 {
   sim_cpu *cpu = STATE_CPU (sd, 0); /* FIXME */
   /* NOTE: gdb (the client) stores registers in target byte order
@@ -1002,7 +1006,11 @@ sim_store_register (SIM_DESC sd, int rn, unsigned char *memory, int length)
 }
 
 int
-sim_fetch_register (SIM_DESC sd, int rn, unsigned char *memory, int length)
+sim_fetch_register (sd,rn,memory,length)
+     SIM_DESC sd;
+     int rn;
+     unsigned char *memory;
+     int length;
 {
   sim_cpu *cpu = STATE_CPU (sd, 0); /* FIXME */
   /* NOTE: gdb (the client) stores registers in target byte order
@@ -1085,8 +1093,13 @@ sim_fetch_register (SIM_DESC sd, int rn, unsigned char *memory, int length)
   return 0;
 }
 
+
 SIM_RC
-sim_create_inferior (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
+sim_create_inferior (sd, abfd, argv,env)
+     SIM_DESC sd;
+     struct bfd *abfd;
+     char **argv;
+     char **env;
 {
 
 #ifdef DEBUG
@@ -1105,7 +1118,7 @@ sim_create_inferior (SIM_DESC sd, struct bfd *abfd, char **argv, char **env)
       for (cpu_nr = 0; cpu_nr < sim_engine_nr_cpus (sd); cpu_nr++)
 	{
 	  sim_cpu *cpu = STATE_CPU (sd, cpu_nr);
-	  CPU_PC_SET (cpu, (unsigned64) bfd_get_start_address (abfd));
+	  CIA_SET (cpu, (unsigned64) bfd_get_start_address (abfd));
 	}
     }
 
@@ -1137,11 +1150,11 @@ fetch_str (SIM_DESC sd,
 {
   char *buf;
   int nr = 0;
-  unsigned char null;
+  char null;
   while (sim_read (sd, addr + nr, &null, 1) == 1 && null != 0)
     nr++;
   buf = NZALLOC (char, nr + 1);
-  sim_read (sd, addr, (unsigned char *)buf, nr);
+  sim_read (sd, addr, buf, nr);
   return buf;
 }
 
@@ -1269,7 +1282,7 @@ sim_monitor (SIM_DESC sd,
 	int nr = A2;
 	char *buf = zalloc (nr);
 	V0 = sim_io_read (sd, fd, buf, nr);
-	sim_write (sd, A1, (unsigned char *)buf, nr);
+	sim_write (sd, A1, buf, nr);
 	free (buf);
       }
       break;
@@ -1279,7 +1292,7 @@ sim_monitor (SIM_DESC sd,
 	int fd = A0;
 	int nr = A2;
 	char *buf = zalloc (nr);
-	sim_read (sd, A1, (unsigned char *)buf, nr);
+	sim_read (sd, A1, buf, nr);
 	V0 = sim_io_write (sd, fd, buf, nr);
 	if (fd == 1)
 	    sim_io_flush_stdout (sd);
@@ -1376,9 +1389,9 @@ sim_monitor (SIM_DESC sd,
 
 	value = mem_size;
 	H2T (value);
-	sim_write (sd, A0 + 0, (unsigned char *)&value, 4);
-	sim_write (sd, A0 + 4, (unsigned char *)&zero, 4);
-	sim_write (sd, A0 + 8, (unsigned char *)&zero, 4);
+	sim_write (sd, A0 + 0, (char *)&value, 4);
+	sim_write (sd, A0 + 4, (char *)&zero, 4);
+	sim_write (sd, A0 + 8, (char *)&zero, 4);
 	/* sim_io_eprintf (sd, "sim: get_mem_info() deprecated\n"); */
 	break;
       }
@@ -1392,7 +1405,7 @@ sim_monitor (SIM_DESC sd,
       /* The following is based on the PMON printf source */
       {
 	address_word s = A0;
-	unsigned char c;
+	char c;
 	signed_word *ap = &A1; /* 1st argument */
         /* This isn't the quickest way, since we call the host print
            routine for every character almost. But it does avoid
@@ -1449,7 +1462,7 @@ sim_monitor (SIM_DESC sd,
 		    if ((int)*ap != 0)
 		      {
 			address_word p = *ap++;
-			unsigned char ch;
+			char ch;
 			while (sim_read (sd, p++, &ch, 1) == 1 && ch != '\0')
 			  sim_io_printf(sd, "%c", ch);
 		      }
@@ -1669,16 +1682,16 @@ mips16_entry (SIM_DESC sd,
 
 /*-- trace support ----------------------------------------------------------*/
 
-/* The trace support is provided (if required) in the memory accessing
+/* The TRACE support is provided (if required) in the memory accessing
    routines. Since we are also providing the architecture specific
    features, the architecture simulation code can also deal with
-   notifying the trace world of cache flushes, etc. Similarly we do
+   notifying the TRACE world of cache flushes, etc. Similarly we do
    not need to provide profiling support in the simulator engine,
    since we can sample in the instruction fetch control loop. By
-   defining the trace manifest, we add tracing as a run-time
+   defining the TRACE manifest, we add tracing as a run-time
    option. */
 
-#if WITH_TRACE_ANY_P
+#if defined(TRACE)
 /* Tracing by default produces "din" format (as required by
    dineroIII). Each line of such a trace file *MUST* have a din label
    and address field. The rest of the line is ignored, so comments can
@@ -1742,7 +1755,7 @@ dotrace (SIM_DESC sd,
 
   return;
 }
-#endif /* WITH_TRACE_ANY_P */
+#endif /* TRACE */
 
 /*---------------------------------------------------------------------------*/
 /*-- simulator engine -------------------------------------------------------*/
@@ -2453,7 +2466,8 @@ get_cell (void)
 static int thirty_two = 32;	
 
 char* 
-pr_addr (SIM_ADDR addr)
+pr_addr(addr)
+  SIM_ADDR addr;
 {
   char *paddr_str=get_cell();
   switch (sizeof(addr))
@@ -2475,7 +2489,8 @@ pr_addr (SIM_ADDR addr)
 }
 
 char* 
-pr_uword64 (uword64 addr)
+pr_uword64(addr)
+  uword64 addr;
 {
   char *paddr_str=get_cell();
   sprintf(paddr_str,"%08lx%08lx",

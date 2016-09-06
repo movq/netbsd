@@ -22,8 +22,6 @@
 
 namespace llvm {
 
-class SparcSubtarget;
-
 /// SPII - This namespace holds all of the target specific flags that
 /// instruction info tracks.
 ///
@@ -73,11 +71,9 @@ public:
   unsigned RemoveBranch(MachineBasicBlock &MBB) const override;
 
   unsigned InsertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
-                        MachineBasicBlock *FBB, ArrayRef<MachineOperand> Cond,
+                        MachineBasicBlock *FBB,
+                        const SmallVectorImpl<MachineOperand> &Cond,
                         DebugLoc DL) const override;
-
-  bool
-  ReverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond) const override;
 
   void copyPhysReg(MachineBasicBlock &MBB,
                    MachineBasicBlock::iterator I, DebugLoc DL,

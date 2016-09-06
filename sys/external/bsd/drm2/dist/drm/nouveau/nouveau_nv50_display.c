@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_nv50_display.c,v 1.5 2016/02/05 23:46:40 riastradh Exp $	*/
+/*	$NetBSD: nouveau_nv50_display.c,v 1.1.1.1.4.4 2016/02/11 23:28:05 snj Exp $	*/
 
 	/*
  * Copyright 2011 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_nv50_display.c,v 1.5 2016/02/05 23:46:40 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_nv50_display.c,v 1.1.1.1.4.4 2016/02/11 23:28:05 snj Exp $");
 
 #include <linux/dma-mapping.h>
 #include <linux/err.h>

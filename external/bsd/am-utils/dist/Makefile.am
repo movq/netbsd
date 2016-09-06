@@ -6,8 +6,6 @@
 
 @SET_MAKE@
 
-ACLOCAL_AMFLAGS = -I m4
-
 SUBDIRS =		\
 	libamu		\
 	amd		\
@@ -63,7 +61,6 @@ EXTRA_DIST_M4 =				\
 	m4/macros/check_mnt2_gen_opt.m4			\
 	m4/macros/check_mnt2_nfs_opt.m4			\
 	m4/macros/check_mnt2_pcfs_opt.m4		\
-	m4/macros/check_mnt2_udf_opt.m4			\
 	m4/macros/check_mnttab_file_name.m4		\
 	m4/macros/check_mnttab_location.m4		\
 	m4/macros/check_mnttab_opt.m4			\
@@ -287,8 +284,7 @@ EXTRA_DIST_INCLUDE =		\
 	include/am_defs.h	\
 	include/amq_defs.h	\
 	include/mount_headers1.h \
-	include/mount_headers2.h \
-	include/nfs_common.h
+	include/mount_headers2.h
 
 EXTRA_DIST =			\
 	$(EXTRA_DIST_M4)	\
@@ -314,8 +310,7 @@ EXTRA_DIST =			\
 	ldap-id.ms		\
 	ldap-id.txt		\
 	stamp-h.in		\
-	tasks			\
-	ylwrap.amd
+	tasks
 
 DISTCLEANFILES = amu_nfs_prot.h amu_autofs_prot.h config.cache.old dbgcf.h
 CLEANFILES = dbgcf.h

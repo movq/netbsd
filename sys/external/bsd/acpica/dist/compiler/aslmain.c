@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -97,8 +97,7 @@ Usage (
     printf ("\nGeneral:\n");
     ACPI_OPTION ("-@ <file>",       "Specify command file");
     ACPI_OPTION ("-I <dir>",        "Specify additional include directory");
-    ACPI_OPTION ("-T <sig list>|ALL",   "Create ACPI table template/example files");
-    ACPI_OPTION ("-T <count>",      "Emit DSDT and <count> SSDTs to same file");
+    ACPI_OPTION ("-T <sig>|ALL|*",  "Create table template file for ACPI <Sig>");
     ACPI_OPTION ("-p <prefix>",     "Specify path/filename prefix for all output files");
     ACPI_OPTION ("-v",              "Display compiler version");
     ACPI_OPTION ("-vo",             "Enable optimization comments");
@@ -131,7 +130,6 @@ Usage (
     ACPI_OPTION ("-of",             "Disable constant folding");
     ACPI_OPTION ("-oi",             "Disable integer optimization to Zero/One/Ones");
     ACPI_OPTION ("-on",             "Disable named reference string optimization");
-    ACPI_OPTION ("-ot",             "Disable typechecking");
     ACPI_OPTION ("-cr",             "Disable Resource Descriptor error checking");
     ACPI_OPTION ("-in",             "Ignore NoOp operators");
     ACPI_OPTION ("-r <revision>",   "Override table header Revision (1-255)");
@@ -144,10 +142,8 @@ Usage (
 
     printf ("\nOptional Listing Files:\n");
     ACPI_OPTION ("-l",              "Create mixed listing file (ASL source and AML) (*.lst)");
-    ACPI_OPTION ("-lm",             "Create hardware summary map file (*.map)");
     ACPI_OPTION ("-ln",             "Create namespace file (*.nsp)");
     ACPI_OPTION ("-ls",             "Create combined source file (expanded includes) (*.src)");
-    ACPI_OPTION ("-lx",             "Create cross-reference file (*.xrf)");
 
     printf ("\nData Table Compiler:\n");
     ACPI_OPTION ("-G",              "Compile custom table that contains generic operators");
@@ -160,23 +156,18 @@ Usage (
     ACPI_OPTION ("-db",             "Do not translate Buffers to Resource Templates");
     ACPI_OPTION ("-dc <f1 f2 ...>", "Disassemble AML and immediately compile it");
     ACPI_OPTION ("",                "  (Obtain DSDT from current system if no input file)");
-    ACPI_OPTION ("-df",             "Force disassembler to assume table contains valid AML");
-    ACPI_OPTION ("-dl",             "Emit legacy ASL code only (no C-style operators)");
     ACPI_OPTION ("-e  <f1 f2 ...>", "Include ACPI table(s) for external symbol resolution");
     ACPI_OPTION ("-fe <file>",      "Specify external symbol declaration file");
+    ACPI_OPTION ("-g",              "Get ACPI tables and write to files (*.dat)");
     ACPI_OPTION ("-in",             "Ignore NoOp opcodes");
-    ACPI_OPTION ("-l",              "Disassemble to mixed ASL and AML code");
     ACPI_OPTION ("-vt",             "Dump binary table data in hex format within output file");
 
     printf ("\nDebug Options:\n");
-    ACPI_OPTION ("-bf",             "Create debug file (full output) (*.txt)");
-    ACPI_OPTION ("-bs",             "Create debug file (parse tree only) (*.txt)");
-    ACPI_OPTION ("-bp <depth>",     "Prune ASL parse tree");
-    ACPI_OPTION ("-bt <type>",      "Object type to be pruned from the parse tree");
+    ACPI_OPTION ("-bf -bt",         "Create debug file (full or parse tree only) (*.txt)");
     ACPI_OPTION ("-f",              "Ignore errors, force creation of AML output file(s)");
     ACPI_OPTION ("-m <size>",       "Set internal line buffer size (in Kbytes)");
     ACPI_OPTION ("-n",              "Parse only, no output generation");
-    ACPI_OPTION ("-oc",             "Display compile times and statistics");
+    ACPI_OPTION ("-ot",             "Display compile times and statistics");
     ACPI_OPTION ("-x <level>",      "Set debug level for trace output");
     ACPI_OPTION ("-z",              "Do not insert new compiler ID for DataTables");
 }
@@ -235,7 +226,7 @@ AslSignalHandler (
 
     /* Close all open files */
 
-    Gbl_Files[ASL_FILE_PREPROCESSOR].Handle = NULL; /* the .pre file is same as source file */
+    Gbl_Files[ASL_FILE_PREPROCESSOR].Handle = NULL; /* the .i file is same as source file */
 
     for (i = ASL_FILE_INPUT; i < ASL_MAX_FILE_TYPE; i++)
     {
@@ -272,14 +263,6 @@ AslInitialize (
     UINT32                  i;
 
 
-    AcpiGbl_DmOpt_Verbose = FALSE;
-
-    /* Default integer width is 64 bits */
-
-    AcpiGbl_IntegerBitWidth = 64;
-    AcpiGbl_IntegerNybbleWidth = 16;
-    AcpiGbl_IntegerByteWidth = 8;
-
     for (i = 0; i < ASL_NUM_FILES; i++)
     {
         Gbl_Files[i].Handle = NULL;
@@ -315,22 +298,8 @@ main (
     ACPI_STATUS             Status;
     int                     Index1;
     int                     Index2;
-    int                     ReturnStatus = 0;
 
 
-    /*
-     * Big-endian machines are not currently supported. ACPI tables must
-     * be little-endian, and support for big-endian machines needs to
-     * be implemented.
-     */
-    if (UtIsBigEndianMachine ())
-    {
-        fprintf (stderr,
-            "iASL is not currently supported on big-endian machines.\n");
-        return (-1);
-    }
-
-    AcpiOsInitialize ();
     ACPI_DEBUG_INITIALIZE (); /* For debug version only */
 
     /* Initialize preprocessor and compiler before command line processing */
@@ -349,6 +318,16 @@ main (
     UtExpandLineBuffers ();
 
     /* Perform global actions first/only */
+
+    if (Gbl_GetAllTables)
+    {
+        Status = AslDoOneFile (NULL);
+        if (ACPI_FAILURE (Status))
+        {
+            return (-1);
+        }
+        return (0);
+    }
 
     if (Gbl_DisassembleAll)
     {
@@ -381,23 +360,16 @@ main (
         Status = AslDoOneFile (argv[Index2]);
         if (ACPI_FAILURE (Status))
         {
-            ReturnStatus = -1;
-            goto CleanupAndExit;
+            return (-1);
         }
 
         Index2++;
     }
-
-
-CleanupAndExit:
-
-    UtFreeLineBuffers ();
-    AslParserCleanup ();
 
     if (AcpiGbl_ExternalFileList)
     {
         AcpiDmClearExternalFileList();
     }
 
-    return (ReturnStatus);
+    return (0);
 }

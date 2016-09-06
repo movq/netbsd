@@ -1,4 +1,4 @@
-//===-- llvm-mc.cpp - Machine Code Hacking Driver ---------------*- C++ -*-===//
+//===-- llvm-mc.cpp - Machine Code Hacking Driver -------------------------===//
 //
 //                     The LLVM Compiler Infrastructure
 //
@@ -39,7 +39,6 @@
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Support/ToolOutputFile.h"
-
 using namespace llvm;
 
 static cl::opt<std::string>
@@ -70,9 +69,6 @@ OutputAsmVariant("output-asm-variant",
 static cl::opt<bool>
 PrintImmHex("print-imm-hex", cl::init(false),
             cl::desc("Prefer hex format for immediate values"));
-
-static cl::list<std::string>
-DefineSymbol("defsym", cl::desc("Defines a symbol to be an integer constant"));
 
 enum OutputFileType {
   OFT_Null,
@@ -235,7 +231,7 @@ static void setDwarfDebugFlags(int argc, char **argv) {
 }
 
 static std::string DwarfDebugProducer;
-static void setDwarfDebugProducer() {
+static void setDwarfDebugProducer(void) {
   if(!getenv("DEBUG_PRODUCER"))
     return;
   DwarfDebugProducer += getenv("DEBUG_PRODUCER");
@@ -320,26 +316,6 @@ static int AsLexInput(SourceMgr &SrcMgr, MCAsmInfo &MAI,
   return Error;
 }
 
-static int fillCommandLineSymbols(MCAsmParser &Parser){
-  for(auto &I: DefineSymbol){
-    auto Pair = StringRef(I).split('=');
-    if(Pair.second.empty()){
-      errs() << "error: defsym must be of the form: sym=value: " << I;
-      return 1;
-    }
-    int64_t Value;
-    if(Pair.second.getAsInteger(0, Value)){
-      errs() << "error: Value is not an integer: " << Pair.second;
-      return 1;
-    }
-    auto &Context = Parser.getContext();
-    auto Symbol = Context.getOrCreateSymbol(Pair.first);
-    Parser.getStreamer().EmitAssignment(Symbol,
-                                        MCConstantExpr::create(Value, Context));
-  }
-  return 0;
-}
-
 static int AssembleInput(const char *ProgName, const Target *TheTarget,
                          SourceMgr &SrcMgr, MCContext &Ctx, MCStreamer &Str,
                          MCAsmInfo &MAI, MCSubtargetInfo &STI,
@@ -355,9 +331,6 @@ static int AssembleInput(const char *ProgName, const Target *TheTarget,
     return 1;
   }
 
-  int SymbolResult = fillCommandLineSymbols(*Parser);
-  if(SymbolResult)
-    return SymbolResult;
   Parser->setShowParsedOperands(ShowInstOperands);
   Parser->setTargetParser(*TAP);
 
@@ -392,14 +365,11 @@ int main(int argc, char **argv) {
   const Target *TheTarget = GetTarget(ProgName);
   if (!TheTarget)
     return 1;
-  // Now that GetTarget() has (potentially) replaced TripleName, it's safe to
-  // construct the Triple object.
-  Triple TheTriple(TripleName);
 
   ErrorOr<std::unique_ptr<MemoryBuffer>> BufferPtr =
       MemoryBuffer::getFileOrSTDIN(InputFilename);
   if (std::error_code EC = BufferPtr.getError()) {
-    errs() << InputFilename << ": " << EC.message() << '\n';
+    errs() << ProgName << ": " << EC.message() << '\n';
     return 1;
   }
   MemoryBuffer *Buffer = BufferPtr->get();
@@ -432,7 +402,7 @@ int main(int argc, char **argv) {
   // MCObjectFileInfo needs a MCContext reference in order to initialize itself.
   MCObjectFileInfo MOFI;
   MCContext Ctx(MAI.get(), MRI.get(), &MOFI, &SrcMgr);
-  MOFI.InitMCObjectFileInfo(TheTriple, RelocModel, CMModel, Ctx);
+  MOFI.InitMCObjectFileInfo(TripleName, RelocModel, CMModel, Ctx);
 
   if (SaveTempLabels)
     Ctx.setAllowTemporaryLabels(false);
@@ -468,8 +438,7 @@ int main(int argc, char **argv) {
   if (!Out)
     return 1;
 
-  std::unique_ptr<buffer_ostream> BOS;
-  raw_pwrite_stream *OS = &Out->os();
+  formatted_raw_ostream FOS(Out->os());
   std::unique_ptr<MCStreamer> Str;
 
   std::unique_ptr<MCInstrInfo> MCII(TheTarget->createMCInstrInfo());
@@ -478,8 +447,8 @@ int main(int argc, char **argv) {
 
   MCInstPrinter *IP = nullptr;
   if (FileType == OFT_AssemblyFile) {
-    IP = TheTarget->createMCInstPrinter(Triple(TripleName), OutputAsmVariant,
-                                        *MAI, *MCII, *MRI);
+    IP =
+      TheTarget->createMCInstPrinter(OutputAsmVariant, *MAI, *MCII, *MRI, *STI);
 
     // Set the display preference for hex vs. decimal immediates.
     IP->setPrintImmHex(PrintImmHex);
@@ -488,33 +457,21 @@ int main(int argc, char **argv) {
     MCCodeEmitter *CE = nullptr;
     MCAsmBackend *MAB = nullptr;
     if (ShowEncoding) {
-      CE = TheTarget->createMCCodeEmitter(*MCII, *MRI, Ctx);
+      CE = TheTarget->createMCCodeEmitter(*MCII, *MRI, *STI, Ctx);
       MAB = TheTarget->createMCAsmBackend(*MRI, TripleName, MCPU);
     }
-    auto FOut = llvm::make_unique<formatted_raw_ostream>(*OS);
-    Str.reset(TheTarget->createAsmStreamer(
-        Ctx, std::move(FOut), /*asmverbose*/ true,
-        /*useDwarfDirectory*/ true, IP, CE, MAB, ShowInst));
+    Str.reset(TheTarget->createAsmStreamer(Ctx, FOS, /*asmverbose*/ true,
+                                           /*useDwarfDirectory*/ true, IP, CE,
+                                           MAB, ShowInst));
 
   } else if (FileType == OFT_Null) {
-    Str.reset(TheTarget->createNullStreamer(Ctx));
+    Str.reset(createNullStreamer(Ctx));
   } else {
     assert(FileType == OFT_ObjectFile && "Invalid file type!");
-
-    // Don't waste memory on names of temp labels.
-    Ctx.setUseNamesOnTempLabels(false);
-
-    if (!Out->os().supportsSeeking()) {
-      BOS = make_unique<buffer_ostream>(Out->os());
-      OS = BOS.get();
-    }
-
-    MCCodeEmitter *CE = TheTarget->createMCCodeEmitter(*MCII, *MRI, Ctx);
+    MCCodeEmitter *CE = TheTarget->createMCCodeEmitter(*MCII, *MRI, *STI, Ctx);
     MCAsmBackend *MAB = TheTarget->createMCAsmBackend(*MRI, TripleName, MCPU);
-    Str.reset(TheTarget->createMCObjectStreamer(
-        TheTriple, Ctx, *MAB, *OS, CE, *STI, MCOptions.MCRelaxAll,
-        MCOptions.MCIncrementalLinkerCompatible,
-        /*DWARFMustBeAtTheEnd*/ false));
+    Str.reset(TheTarget->createMCObjectStreamer(TripleName, Ctx, *MAB, FOS, CE,
+                                                *STI, RelaxAll));
     if (NoExecStack)
       Str->InitSections(true);
   }

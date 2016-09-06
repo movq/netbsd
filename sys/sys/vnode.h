@@ -1,4 +1,4 @@
-/*	$NetBSD: vnode.h,v 1.264 2016/08/20 12:37:09 hannken Exp $	*/
+/*	$NetBSD: vnode.h,v 1.249 2014/07/05 09:33:15 hannken Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -65,18 +65,15 @@
 #include <sys/condvar.h>
 #include <sys/rwlock.h>
 #include <sys/mutex.h>
-#include <sys/time.h>
 
 /* XXX: clean up includes later */
 #include <uvm/uvm_param.h>	/* XXX */
-#if defined(_KERNEL) || defined(_KMEMUSER)
 #include <uvm/uvm_pglist.h>	/* XXX */
 #include <uvm/uvm_object.h>	/* XXX */
 #include <uvm/uvm_extern.h>	/* XXX */
 
 struct namecache;
 struct uvm_ractx;
-#endif
 
 /*
  * The vnode is the focus of all file activity in UNIX.  There is a
@@ -114,7 +111,6 @@ enum vtagtype	{
     "VT_TMPFS", "VT_UDF", "VT_SYSVBFS", "VT_PUFFS", "VT_HFS", "VT_EFS", \
     "VT_ZFS", "VT_RUMP", "VT_NILFS", "VT_V7FS", "VT_CHFS"
 
-#if defined(_KERNEL) || defined(_KMEMUSER)
 struct vnode;
 struct buf;
 
@@ -183,7 +179,6 @@ struct vnode {
 
 typedef struct vnodelst vnodelst_t;
 typedef struct vnode vnode_t;
-#endif
 
 /*
  * Vnode flags.  The first set are locked by vnode lock or are stable.
@@ -204,7 +199,19 @@ typedef struct vnode vnode_t;
 #define	VI_EXECMAP	0x00000200	/* might have PROT_EXEC mappings */
 #define	VI_WRMAP	0x00000400	/* might have PROT_WRITE u. mappings */
 #define	VI_WRMAPDIRTY	0x00000800	/* might have dirty pages */
+#ifdef _VFS_VNODE_PRIVATE
+#define	VI_XLOCK	0x00001000	/* vnode is locked to change type */
+#endif	/* _VFS_VNODE_PRIVATE */
 #define	VI_ONWORKLST	0x00004000	/* On syncer work-list */
+#ifdef _VFS_VNODE_PRIVATE
+#define	VI_MARKER	0x00008000	/* Dummy marker vnode */
+#endif	/* _VFS_VNODE_PRIVATE */
+#define	VI_LAYER	0x00020000	/* vnode is on a layer filesystem */
+#define	VI_LOCKSHARE	0x00040000	/* v_interlock is shared */
+#ifdef _VFS_VNODE_PRIVATE
+#define	VI_CLEAN	0x00080000	/* has been reclaimed */
+#define	VI_CHANGING	0x00100000	/* vnode changes state */
+#endif	/* _VFS_VNODE_PRIVATE */
 
 /*
  * The third set are locked by the underlying file system.
@@ -213,7 +220,8 @@ typedef struct vnode vnode_t;
 
 #define	VNODE_FLAGBITS \
     "\20\1ROOT\2SYSTEM\3ISTTY\4MAPPED\5MPSAFE\6LOCKSWORK\11TEXT\12EXECMAP" \
-    "\13WRMAP\14WRMAPDIRTY\17ONWORKLST\31DIROP"
+    "\13WRMAP\14WRMAPDIRTY\15XLOCK\17ONWORKLST\20MARKER" \
+    "\22LAYER\24CLEAN\25CHANGING\31DIROP"
 
 #define	VSIZENOTSET	((voff_t)-1)
 
@@ -248,7 +256,7 @@ struct vattr {
 	dev_t		va_rdev;	/* device the special file represents */
 	u_quad_t	va_bytes;	/* bytes of disk space held by file */
 	u_quad_t	va_filerev;	/* file modification number */
-	unsigned int	va_vaflags;	/* operations flags, see below */
+	u_int		va_vaflags;	/* operations flags, see below */
 	long		va_spare;	/* remain quad aligned */
 };
 
@@ -375,7 +383,13 @@ VN_KNOTE(struct vnode *vp, long hint)
  */
 extern struct vnode	*rootvnode;	/* root (i.e. "/") vnode */
 extern int		desiredvnodes;	/* number of vnodes desired */
-extern unsigned int	numvnodes;	/* current number of vnodes */
+extern u_int		numvnodes;	/* current number of vnodes */
+
+/*
+ * Macro/function to check for client cache inconsistency w.r.t. leasing.
+ */
+#define	LEASE_READ	0x1		/* Check lease for readers */
+#define	LEASE_WRITE	0x2		/* Check lease for modifiers */
 
 #endif /* _KERNEL */
 
@@ -516,13 +530,16 @@ struct vnode;
 void	vfs_vnode_sysinit(void);
 int 	bdevvp(dev_t, struct vnode **);
 int 	cdevvp(dev_t, struct vnode **);
+int 	getnewvnode(enum vtagtype, struct mount *, int (**)(void *),
+	    kmutex_t *, struct vnode **);
+void	ungetnewvnode(struct vnode *);
 int	vaccess(enum vtype, mode_t, uid_t, gid_t, mode_t, kauth_cred_t);
 void 	vattr_null(struct vattr *);
 void	vdevgone(int, int, int, enum vtype);
 int	vfinddev(dev_t, enum vtype, struct vnode **);
 int	vflush(struct mount *, struct vnode *, int);
 int	vflushbuf(struct vnode *, int);
-int 	vget(struct vnode *, int, bool);
+int 	vget(struct vnode *, int);
 void 	vgone(struct vnode *);
 int	vinvalbuf(struct vnode *, int, kauth_cred_t, struct lwp *, bool, int);
 void	vprint(const char *, struct vnode *);
@@ -535,14 +552,16 @@ int	vtruncbuf(struct vnode *, daddr_t, bool, int);
 void	vwakeup(struct buf *);
 int	vdead_check(struct vnode *, int);
 void	vrevoke(struct vnode *);
+struct vnode *
+	vnalloc(struct mount *);
+void	vnfree(struct vnode *);
 void	vremfree(struct vnode *);
 int	vcache_get(struct mount *, const void *, size_t, struct vnode **);
-int	vcache_new(struct mount *, struct vnode *,
-	    struct vattr *, kauth_cred_t, struct vnode **);
 int	vcache_rekey_enter(struct mount *, struct vnode *,
 	    const void *, size_t, const void *, size_t);
 void	vcache_rekey_exit(struct mount *, struct vnode *,
 	    const void *, size_t, const void *, size_t);
+void	vcache_remove(struct mount *, const void *, size_t);
 
 /* see vnsubr(9) */
 int	vn_bwrite(void *);
@@ -554,8 +573,8 @@ int	vn_marktext(struct vnode *);
 int 	vn_open(struct nameidata *, int, int);
 int 	vn_rdwr(enum uio_rw, struct vnode *, void *, int, off_t, enum uio_seg,
     int, kauth_cred_t, size_t *, struct lwp *);
-int	vn_readdir(struct file *, char *, int, unsigned int, int *,
-    struct lwp *, off_t **, int *);
+int	vn_readdir(struct file *, char *, int, u_int, int *, struct lwp *,
+    off_t **, int *);
 int	vn_stat(struct vnode *, struct stat *);
 int	vn_kqfilter(struct file *, struct knote *);
 int	vn_writechk(struct vnode *);
@@ -572,9 +591,9 @@ int	vn_fifo_bypass(void *);
 void	vntblinit(void);
 
 /* misc stuff */
-void	sched_sync(void *);
 void	vn_syncer_add_to_worklist(struct vnode *, int);
 void	vn_syncer_remove_from_worklist(struct vnode *);
+int	speedup_syncer(void);
 int	dorevoke(struct vnode *, kauth_cred_t);
 int	rawdev_mounted(struct vnode *, struct vnode **);
 uint8_t	vtype2dt(enum vtype);
@@ -589,18 +608,6 @@ void	vfs_vnode_print(struct vnode *, int, void (*)(const char *, ...)
 void	vfs_mount_print(struct mount *, int, void (*)(const char *, ...)
     __printflike(1, 2));
 #endif /* DDB */
-
-#ifdef _VFS_VNODE_PRIVATE
-/*
- * Private vnode manipulation functions.
- */
-struct vnode *
-	vnalloc_marker(struct mount *);
-void	vnfree_marker(vnode_t *);
-bool	vnis_marker(vnode_t *);
-void	vcache_print(vnode_t *, const char *,
-    void (*)(const char *, ...) __printflike(1, 2));
-#endif	/* _VFS_VNODE_PRIVATE */
 
 #endif /* _KERNEL */
 

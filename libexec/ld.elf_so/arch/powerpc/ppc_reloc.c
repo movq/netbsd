@@ -1,4 +1,4 @@
-/*	$NetBSD: ppc_reloc.c,v 1.53 2014/08/25 20:40:52 joerg Exp $	*/
+/*	$NetBSD: ppc_reloc.c,v 1.52.2.1 2016/03/06 18:17:55 martin Exp $	*/
 
 /*-
  * Copyright (C) 1998	Tsubai Masanari
@@ -30,7 +30,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ppc_reloc.c,v 1.53 2014/08/25 20:40:52 joerg Exp $");
+__RCSID("$NetBSD: ppc_reloc.c,v 1.52.2.1 2016/03/06 18:17:55 martin Exp $");
 #endif /* not lint */
 
 #include <stdarg.h>

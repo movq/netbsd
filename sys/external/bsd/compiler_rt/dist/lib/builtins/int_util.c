@@ -8,8 +8,8 @@
  * ===----------------------------------------------------------------------===
  */
 
-#include "int_lib.h"
 #include "int_util.h"
+#include "int_lib.h"
 
 /* NOTE: The definitions in this file are declared weak because we clients to be
  * able to arbitrarily package individual functions into separate .a files. If
@@ -23,7 +23,7 @@
 
 #ifdef KERNEL_USE
 
-NORETURN extern void panic(const char *, ...);
+extern void panic(const char *, ...) __attribute__((noreturn));
 #ifndef _WIN32
 __attribute__((visibility("hidden")))
 #endif
@@ -34,8 +34,8 @@ void compilerrt_abort_impl(const char *file, int line, const char *function) {
 #elif __APPLE__
 
 /* from libSystem.dylib */
-NORETURN extern void __assert_rtn(const char *func, const char *file, int line,
-                                  const char *message);
+extern void __assert_rtn(const char *func, const char *file, 
+                     int line, const char * message) __attribute__((noreturn));
 
 #ifndef _WIN32
 __attribute__((weak))

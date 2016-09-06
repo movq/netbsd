@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,10 +41,16 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+
 #include "acpisrc.h"
 #include "acapps.h"
 
 /* Local prototypes */
+
+int
+AsStricmp (
+    char                    *String1,
+    char                    *String2);
 
 int
 AsExaminePaths (
@@ -99,6 +105,38 @@ BOOLEAN                 Gbl_IgnoreTranslationEscapes = FALSE;
 
 /******************************************************************************
  *
+ * FUNCTION:    AsStricmp
+ *
+ * DESCRIPTION: Implementation of the non-ANSI stricmp function (compare
+ *              strings with no case sensitivity)
+ *
+ ******************************************************************************/
+
+int
+AsStricmp (
+    char                    *String1,
+    char                    *String2)
+{
+    int                     c1;
+    int                     c2;
+
+
+    do
+    {
+        c1 = tolower ((int) *String1);
+        c2 = tolower ((int) *String2);
+
+        String1++;
+        String2++;
+    }
+    while ((c1 == c2) && (c1));
+
+    return (c1 - c2);
+}
+
+
+/******************************************************************************
+ *
  * FUNCTION:    AsExaminePaths
  *
  * DESCRIPTION: Source and Target pathname verification and handling
@@ -140,7 +178,7 @@ AsExaminePaths (
         return (0);
     }
 
-    if (!AcpiUtStricmp (Source, Target))
+    if (!AsStricmp (Source, Target))
     {
         printf ("Target path is the same as the source path, overwrite?\n");
         Response = getchar ();
@@ -204,8 +242,8 @@ AsDisplayStats (
     printf ("%8u Total bytes (%.1fK/file)\n",
         Gbl_TotalSize, ((double) Gbl_TotalSize/Gbl_Files)/1024);
     printf ("%8u Tabs found\n", Gbl_Tabs);
-    printf ("%8u Missing if/else/while braces\n", Gbl_MissingBraces);
-    printf ("%8u Non-ANSI // comments found\n", Gbl_NonAnsiComments);
+    printf ("%8u Missing if/else braces\n", Gbl_MissingBraces);
+    printf ("%8u Non-ANSI comments found\n", Gbl_NonAnsiComments);
     printf ("%8u Total Lines\n", Gbl_TotalLines);
     printf ("%8u Lines of code\n", Gbl_SourceLines);
     printf ("%8u Lines of non-comment whitespace\n", Gbl_WhiteLines);
@@ -221,8 +259,7 @@ AsDisplayStats (
     if ((Gbl_CommentLines + Gbl_NonAnsiComments) > 0)
     {
         printf ("%8.1f Ratio of code to comments\n",
-            ((float) Gbl_SourceLines /
-            (float) (Gbl_CommentLines + Gbl_NonAnsiComments)));
+            ((float) Gbl_SourceLines / (float) (Gbl_CommentLines + Gbl_NonAnsiComments)));
     }
 
     if (!Gbl_TotalLines)
@@ -260,7 +297,7 @@ AsDisplayUsage (
     ACPI_OPTION ("-l",          "Generate Linux version of the source");
     ACPI_OPTION ("-u",          "Generate Custom source translation");
 
-    ACPI_USAGE_TEXT ("\n");
+    printf ("\n");
     ACPI_OPTION ("-d",          "Leave debug statements in code");
     ACPI_OPTION ("-s",          "Generate source statistics only");
     ACPI_OPTION ("-v",          "Display version information");
@@ -290,7 +327,6 @@ main (
 
 
     ACPI_DEBUG_INITIALIZE (); /* For debug version only */
-    AcpiOsInitialize ();
     printf (ACPI_COMMON_SIGNON (AS_UTILITY_NAME));
 
     if (argc < 2)
@@ -301,7 +337,7 @@ main (
 
     /* Command line options */
 
-    while ((j = AcpiGetopt (argc, argv, AS_SUPPORTED_OPTIONS)) != ACPI_OPT_END) switch(j)
+    while ((j = AcpiGetopt (argc, argv, AS_SUPPORTED_OPTIONS)) != EOF) switch(j)
     {
     case 'l':
 
@@ -457,27 +493,17 @@ main (
 
         if (strstr (SourcePath, ".h"))
         {
-            AsProcessOneFile (ConversionTable, NULL, TargetPath, 0,
-                SourcePath, FILE_TYPE_HEADER);
-        }
-        else if (strstr (SourcePath, ".c"))
-        {
-            AsProcessOneFile (ConversionTable, NULL, TargetPath, 0,
-                SourcePath, FILE_TYPE_SOURCE);
-        }
-        else if (strstr (SourcePath, ".patch"))
-        {
-            AsProcessOneFile (ConversionTable, NULL, TargetPath, 0,
-                SourcePath, FILE_TYPE_PATCH);
+            AsProcessOneFile (ConversionTable, NULL, TargetPath, 0, SourcePath, FILE_TYPE_HEADER);
         }
         else
         {
-            printf ("Unknown file type - %s\n", SourcePath);
+            AsProcessOneFile (ConversionTable, NULL, TargetPath, 0, SourcePath, FILE_TYPE_SOURCE);
         }
     }
 
     /* Always display final summary and stats */
 
     AsDisplayStats ();
+
     return (0);
 }

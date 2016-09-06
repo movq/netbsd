@@ -1,4 +1,4 @@
-/*	$NetBSD: ace_ebus.c,v 1.19 2015/04/26 15:15:19 mlelstv Exp $	*/
+/*	$NetBSD: ace_ebus.c,v 1.13 2014/08/10 16:44:33 tls Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ace_ebus.c,v 1.19 2015/04/26 15:15:19 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ace_ebus.c,v 1.13 2014/08/10 16:44:33 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -54,7 +54,7 @@ __KERNEL_RCSID(0, "$NetBSD: ace_ebus.c,v 1.19 2015/04/26 15:15:19 mlelstv Exp $"
 #include <sys/lock.h>
 #include <sys/queue.h>
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <machine/intr.h>
 #include <machine/bus.h>
@@ -1585,10 +1585,7 @@ void  acestart(void *);
 void  __acestart(struct ace_softc*, struct buf *);
 void  acerestart(void *);
 
-struct dkdriver acedkdriver = {
-	.d_strategy = acestrategy,
-	.d_minphys = minphys
-};
+struct dkdriver acedkdriver = { acestrategy, minphys };
 
 #ifdef HAS_BAD144_HANDLING
 static void bad144intern(struct ace_softc *);
@@ -2079,7 +2076,7 @@ acegetdefaultlabel(struct ace_softc *ace, struct disklabel *lp)
 	     ace->sc_params.CurrentSectorsPerTrack);
 	lp->d_secpercyl = lp->d_ntracks * lp->d_nsectors;
 
-	lp->d_type = DKTYPE_ST506; /* ?!? */
+	lp->d_type = DTYPE_ST506; /* ?!? */
 
 	strncpy(lp->d_typename, ace->sc_params.ModelNumber, 16);
 	strncpy(lp->d_packname, "fictitious", 16);
@@ -2175,7 +2172,7 @@ aceioctl(dev_t dev, u_long xfer, void *addr, int flag, struct lwp *l)
 	if ((ace->sc_flags & ACEF_LOADED) == 0)
 		return EIO;
 
-	error = disk_ioctl(&ace->sc_dk, dev, xfer, addr, flag, l);
+	error = disk_ioctl(&ace->sc_dk, xfer, addr, flag, l);
 	if (error != EPASSTHROUGH)
 		return error;
 
@@ -2189,6 +2186,15 @@ aceioctl(dev_t dev, u_long xfer, void *addr, int flag, struct lwp *l)
 		bad144intern(ace);
 		return 0;
 #endif
+	case DIOCGDINFO:
+		*(struct disklabel *)addr = *(ace->sc_dk.dk_label);
+		return 0;
+
+	case DIOCGPART:
+		((struct partinfo *)addr)->disklab = ace->sc_dk.dk_label;
+		((struct partinfo *)addr)->part =
+		    &ace->sc_dk.dk_label->d_partitions[ACEPART(dev)];
+		return 0;
 
 	case DIOCWDINFO:
 	case DIOCSDINFO:
@@ -2240,6 +2246,37 @@ aceioctl(dev_t dev, u_long xfer, void *addr, int flag, struct lwp *l)
 
 	case DIOCCACHESYNC:
 		return 0;
+
+	case DIOCAWEDGE:
+	    {
+		struct dkwedge_info *dkw = (void *) addr;
+
+		if ((flag & FWRITE) == 0)
+			return EBADF;
+
+		/* If the ioctl happens here, the parent is us. */
+		strcpy(dkw->dkw_parent, device_xname(ace->sc_dev));
+		return dkwedge_add(dkw);
+	    }
+
+	case DIOCDWEDGE:
+	    {
+		struct dkwedge_info *dkw = (void *) addr;
+
+		if ((flag & FWRITE) == 0)
+			return EBADF;
+
+		/* If the ioctl happens here, the parent is us. */
+		strcpy(dkw->dkw_parent, device_xname(ace->sc_dev));
+		return dkwedge_del(dkw);
+	    }
+
+	case DIOCLWEDGES:
+	    {
+		struct dkwedge_list *dkwl = (void *) addr;
+
+		return dkwedge_list(&ace->sc_dk, dkwl, l);
+	    }
 
 	case DIOCGSTRATEGY:
 	    {

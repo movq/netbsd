@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.94 2015/12/13 02:05:15 christos Exp $
+# $NetBSD: Makefile,v 1.89.6.2 2015/08/06 21:13:44 snj Exp $
 
 .include <bsd.own.mk>
 
@@ -22,8 +22,8 @@ CONFIGFILES=\
 		fsck fsck_root ftp_proxy ftpd \
 		gpio \
 		hostapd httpd \
-		identd ifwatchd inetd ip6addrctl ipfilter ipfs ipmon ipnat \
-		ipsec irdaattach iscsi_target iscsid isdnd isibootd \
+		identd ifwatchd inetd ipfilter ipfs ipmon ipnat ipsec \
+		irdaattach iscsi_target isdnd isibootd \
 		kdc \
 		ldconfig ldpd local lpd lvm \
 		makemandb mdnsd mixerctl modules mopd motd mountall \
@@ -33,8 +33,8 @@ CONFIGFILES=\
 		perusertmp pf pf_boot pflogd postfix powerd ppp pwcheck \
 		quota \
 		racoon rpcbind raidframe raidframeparity random_seed rarpd \
-		rbootd resize_root rndctl root route6d routed rtadvd \
-		rtclocaltime rwho \
+		rbootd resize_root rndctl root route6d routed rtadvd rtclocaltime \
+		rtsold rwho \
 		savecore screenblank securelevel sshd \
 		staticroute swap1 swap2 sysctl sysdb syslogd \
 		timed tpctl ttys \

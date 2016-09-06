@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,8 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+#define __TBFADT_C__
+
 #include "acpi.h"
 #include "accommon.h"
 #include "actables.h"
@@ -56,8 +58,7 @@ AcpiTbInitGenericAddress (
     UINT8                   SpaceId,
     UINT8                   ByteWidth,
     UINT64                  Address,
-    const char              *RegisterName,
-    UINT8                   Flags);
+    char                    *RegisterName);
 
 static void
 AcpiTbConvertFadt (
@@ -83,14 +84,13 @@ typedef struct acpi_fadt_info
     UINT16                  Address32;
     UINT16                  Length;
     UINT8                   DefaultLength;
-    UINT8                   Flags;
+    UINT8                   Type;
 
 } ACPI_FADT_INFO;
 
 #define ACPI_FADT_OPTIONAL          0
 #define ACPI_FADT_REQUIRED          1
 #define ACPI_FADT_SEPARATE_LENGTH   2
-#define ACPI_FADT_GPE_REGISTER      4
 
 static ACPI_FADT_INFO     FadtInfoTable[] =
 {
@@ -141,14 +141,14 @@ static ACPI_FADT_INFO     FadtInfoTable[] =
         ACPI_FADT_OFFSET (Gpe0Block),
         ACPI_FADT_OFFSET (Gpe0BlockLength),
         0,
-        ACPI_FADT_SEPARATE_LENGTH | ACPI_FADT_GPE_REGISTER},
+        ACPI_FADT_SEPARATE_LENGTH},
 
     {"Gpe1Block",
         ACPI_FADT_OFFSET (XGpe1Block),
         ACPI_FADT_OFFSET (Gpe1Block),
         ACPI_FADT_OFFSET (Gpe1BlockLength),
         0,
-        ACPI_FADT_SEPARATE_LENGTH | ACPI_FADT_GPE_REGISTER}
+        ACPI_FADT_SEPARATE_LENGTH}
 };
 
 #define ACPI_FADT_INFO_ENTRIES \
@@ -212,31 +212,21 @@ AcpiTbInitGenericAddress (
     UINT8                   SpaceId,
     UINT8                   ByteWidth,
     UINT64                  Address,
-    const char              *RegisterName,
-    UINT8                   Flags)
+    char                    *RegisterName)
 {
     UINT8                   BitWidth;
 
 
-    /*
-     * Bit width field in the GAS is only one byte long, 255 max.
-     * Check for BitWidth overflow in GAS.
-     */
+    /* Bit width field in the GAS is only one byte long, 255 max */
+
     BitWidth = (UINT8) (ByteWidth * 8);
-    if (ByteWidth > 31)     /* (31*8)=248, (32*8)=256 */
+
+    if (ByteWidth > 31) /* (31*8)=248 */
     {
-        /*
-         * No error for GPE blocks, because we do not use the BitWidth
-         * for GPEs, the legacy length (ByteWidth) is used instead to
-         * allow for a large number of GPEs.
-         */
-        if (!(Flags & ACPI_FADT_GPE_REGISTER))
-        {
-            ACPI_ERROR ((AE_INFO,
-                "%s - 32-bit FADT register is too long (%u bytes, %u bits) "
-                "to convert to GAS struct - 255 bits max, truncating",
-                RegisterName, ByteWidth, (ByteWidth * 8)));
-        }
+        ACPI_ERROR ((AE_INFO,
+            "%s - 32-bit FADT register is too long (%u bytes, %u bits) "
+            "to convert to GAS struct - 255 bits max, truncating",
+            RegisterName, ByteWidth, (ByteWidth * 8)));
 
         BitWidth = 255;
     }
@@ -326,7 +316,7 @@ AcpiTbSelectAddress (
  *
  * FUNCTION:    AcpiTbParseFadt
  *
- * PARAMETERS:  None
+ * PARAMETERS:  TableIndex          - Index for the FADT
  *
  * RETURN:      None
  *
@@ -337,7 +327,7 @@ AcpiTbSelectAddress (
 
 void
 AcpiTbParseFadt (
-    void)
+    UINT32                  TableIndex)
 {
     UINT32                  Length;
     ACPI_TABLE_HEADER       *Table;
@@ -350,10 +340,10 @@ AcpiTbParseFadt (
      * Get a local copy of the FADT and convert it to a common format
      * Map entire FADT, assumed to be smaller than one page.
      */
-    Length = AcpiGbl_RootTableList.Tables[AcpiGbl_FadtIndex].Length;
+    Length = AcpiGbl_RootTableList.Tables[TableIndex].Length;
 
     Table = AcpiOsMapMemory (
-        AcpiGbl_RootTableList.Tables[AcpiGbl_FadtIndex].Address, Length);
+                AcpiGbl_RootTableList.Tables[TableIndex].Address, Length);
     if (!Table)
     {
         return;
@@ -375,23 +365,15 @@ AcpiTbParseFadt (
 
     /* Obtain the DSDT and FACS tables via their addresses within the FADT */
 
-    AcpiTbInstallFixedTable ((ACPI_PHYSICAL_ADDRESS) AcpiGbl_FADT.XDsdt,
-        ACPI_SIG_DSDT, &AcpiGbl_DsdtIndex);
+    AcpiTbInstallTable ((ACPI_PHYSICAL_ADDRESS) AcpiGbl_FADT.XDsdt,
+        ACPI_SIG_DSDT, ACPI_TABLE_INDEX_DSDT);
 
     /* If Hardware Reduced flag is set, there is no FACS */
 
     if (!AcpiGbl_ReducedHardware)
     {
-        if (AcpiGbl_FADT.Facs)
-        {
-            AcpiTbInstallFixedTable ((ACPI_PHYSICAL_ADDRESS) AcpiGbl_FADT.Facs,
-                ACPI_SIG_FACS, &AcpiGbl_FacsIndex);
-        }
-        if (AcpiGbl_FADT.XFacs)
-        {
-            AcpiTbInstallFixedTable ((ACPI_PHYSICAL_ADDRESS) AcpiGbl_FADT.XFacs,
-                ACPI_SIG_FACS, &AcpiGbl_XFacsIndex);
-        }
+        AcpiTbInstallTable ((ACPI_PHYSICAL_ADDRESS) AcpiGbl_FADT.XFacs,
+            ACPI_SIG_FACS, ACPI_TABLE_INDEX_FACS);
     }
 }
 
@@ -420,25 +402,24 @@ AcpiTbCreateLocalFadt (
 
     /*
      * Check if the FADT is larger than the largest table that we expect
-     * (typically the current ACPI specification version). If so, truncate
-     * the table, and issue a warning.
+     * (the ACPI 5.0 version). If so, truncate the table, and issue
+     * a warning.
      */
     if (Length > sizeof (ACPI_TABLE_FADT))
     {
         ACPI_BIOS_WARNING ((AE_INFO,
-            "FADT (revision %u) is longer than %s length, "
+            "FADT (revision %u) is longer than ACPI 5.0 version, "
             "truncating length %u to %u",
-            Table->Revision, ACPI_FADT_CONFORMANCE, Length,
-            (UINT32) sizeof (ACPI_TABLE_FADT)));
+            Table->Revision, Length, (UINT32) sizeof (ACPI_TABLE_FADT)));
     }
 
     /* Clear the entire local FADT */
 
-    memset (&AcpiGbl_FADT, 0, sizeof (ACPI_TABLE_FADT));
+    ACPI_MEMSET (&AcpiGbl_FADT, 0, sizeof (ACPI_TABLE_FADT));
 
     /* Copy the original FADT, up to sizeof (ACPI_TABLE_FADT) */
 
-    memcpy (&AcpiGbl_FADT, Table,
+    ACPI_MEMCPY (&AcpiGbl_FADT, Table,
         ACPI_MIN (Length, sizeof (ACPI_TABLE_FADT)));
 
     /* Take a copy of the Hardware Reduced flag */
@@ -507,11 +488,10 @@ static void
 AcpiTbConvertFadt (
     void)
 {
-    const char              *Name;
+    char                    *Name;
     ACPI_GENERIC_ADDRESS    *Address64;
     UINT32                  Address32;
     UINT8                   Length;
-    UINT8                   Flags;
     UINT32                  i;
 
 
@@ -542,9 +522,12 @@ AcpiTbConvertFadt (
     AcpiGbl_FADT.Header.Length = sizeof (ACPI_TABLE_FADT);
 
     /*
-     * Expand the 32-bit DSDT addresses to 64-bit as necessary.
+     * Expand the 32-bit FACS and DSDT addresses to 64-bit as necessary.
      * Later ACPICA code will always use the X 64-bit field.
      */
+    AcpiGbl_FADT.XFacs = AcpiTbSelectAddress (__UNCONST("FACS"),
+        AcpiGbl_FADT.Facs, AcpiGbl_FADT.XFacs);
+
     AcpiGbl_FADT.XDsdt = AcpiTbSelectAddress (__UNCONST("DSDT"),
         AcpiGbl_FADT.Dsdt, AcpiGbl_FADT.XDsdt);
 
@@ -573,7 +556,6 @@ AcpiTbConvertFadt (
             &AcpiGbl_FADT, FadtInfoTable[i].Length);
 
         Name = __UNCONST(FadtInfoTable[i].Name);
-        Flags = FadtInfoTable[i].Flags;
 
         /*
          * Expand the ACPI 1.0 32-bit addresses to the ACPI 2.0 64-bit "X"
@@ -610,7 +592,7 @@ AcpiTbConvertFadt (
                     ACPI_ADR_SPACE_SYSTEM_IO,
                     *ACPI_ADD_PTR (UINT8, &AcpiGbl_FADT,
                         FadtInfoTable[i].Length),
-                    (UINT64) Address32, Name, Flags);
+                    (UINT64) Address32, Name);
             }
             else if (Address64->Address != (UINT64) Address32)
             {
@@ -631,7 +613,7 @@ AcpiTbConvertFadt (
                         ACPI_ADR_SPACE_SYSTEM_IO,
                         *ACPI_ADD_PTR (UINT8, &AcpiGbl_FADT,
                             FadtInfoTable[i].Length),
-                        (UINT64) Address32, Name, Flags);
+                        (UINT64) Address32, Name);
                 }
             }
         }
@@ -652,7 +634,7 @@ AcpiTbConvertFadt (
                 Name, ACPI_MUL_8 (Length), Address64->BitWidth));
         }
 
-        if (FadtInfoTable[i].Flags & ACPI_FADT_REQUIRED)
+        if (FadtInfoTable[i].Type & ACPI_FADT_REQUIRED)
         {
             /*
              * Field is required (PM1aEvent, PM1aControl).
@@ -666,7 +648,7 @@ AcpiTbConvertFadt (
                     Name, ACPI_FORMAT_UINT64 (Address64->Address), Length));
             }
         }
-        else if (FadtInfoTable[i].Flags & ACPI_FADT_SEPARATE_LENGTH)
+        else if (FadtInfoTable[i].Type & ACPI_FADT_SEPARATE_LENGTH)
         {
             /*
              * Field is optional (PM2Control, GPE0, GPE1) AND has its own
@@ -677,11 +659,9 @@ AcpiTbConvertFadt (
                 (!Address64->Address && Length))
             {
                 ACPI_BIOS_WARNING ((AE_INFO,
-                    "Optional FADT field %s has valid %s but zero %s: "
-                    "0x%8.8X%8.8X/0x%X", Name,
-                    (Length ? "Length" : "Address"),
-                    (Length ? "Address": "Length"),
-                    ACPI_FORMAT_UINT64 (Address64->Address), Length));
+                    "Optional FADT field %s has zero address or length: "
+                    "0x%8.8X%8.8X/0x%X",
+                    Name, ACPI_FORMAT_UINT64 (Address64->Address), Length));
             }
         }
     }
@@ -775,7 +755,7 @@ AcpiTbSetupFadtRegisters (
                 Source64->SpaceId, Pm1RegisterByteWidth,
                 Source64->Address +
                     (FadtPmInfoTable[i].RegisterNum * Pm1RegisterByteWidth),
-                __UNCONST("PmRegisters"), 0);
+                __UNCONST("PmRegisters"));
         }
     }
 }

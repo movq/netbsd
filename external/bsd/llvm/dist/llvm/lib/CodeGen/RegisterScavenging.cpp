@@ -31,12 +31,9 @@ using namespace llvm;
 #define DEBUG_TYPE "reg-scavenging"
 
 /// setUsed - Set the register units of this register as used.
-void RegScavenger::setRegUsed(unsigned Reg, LaneBitmask LaneMask) {
-  for (MCRegUnitMaskIterator RUI(Reg, TRI); RUI.isValid(); ++RUI) {
-    LaneBitmask UnitMask = (*RUI).second;
-    if (UnitMask == 0 || (LaneMask & UnitMask) != 0)
-      RegUnitsAvailable.reset((*RUI).first);
-  }
+void RegScavenger::setRegUsed(unsigned Reg) {
+  for (MCRegUnitIterator RUI(Reg, TRI); RUI.isValid(); ++RUI)
+    RegUnitsAvailable.reset(*RUI);
 }
 
 void RegScavenger::initRegState() {
@@ -53,12 +50,12 @@ void RegScavenger::initRegState() {
     return;
 
   // Live-in registers are in use.
-  for (const auto &LI : MBB->liveins())
-    setRegUsed(LI.PhysReg, LI.LaneMask);
+  for (MachineBasicBlock::livein_iterator I = MBB->livein_begin(),
+         E = MBB->livein_end(); I != E; ++I)
+    setRegUsed(*I);
 
   // Pristine CSRs are also unavailable.
-  const MachineFunction &MF = *MBB->getParent();
-  BitVector PR = MF.getFrameInfo()->getPristineRegs(MF);
+  BitVector PR = MBB->getParent()->getFrameInfo()->getPristineRegs(MBB);
   for (int I = PR.find_first(); I>0; I = PR.find_next(I))
     setRegUsed(I);
 }
@@ -105,6 +102,10 @@ void RegScavenger::determineKillsAndDefs() {
 
   // Find out which registers are early clobbered, killed, defined, and marked
   // def-dead in this instruction.
+  // FIXME: The scavenger is not predication aware. If the instruction is
+  // predicated, conservatively assume "kill" markers do not actually kill the
+  // register. Similarly ignores "dead" markers.
+  bool isPred = TII->isPredicated(MI);
   KillRegUnits.reset();
   DefRegUnits.reset();
   for (unsigned i = 0, e = MI->getNumOperands(); i != e; ++i) {
@@ -122,7 +123,7 @@ void RegScavenger::determineKillsAndDefs() {
       }
       
       // Apply the mask.
-      KillRegUnits |= TmpRegUnits;
+      (isPred ? DefRegUnits : KillRegUnits) |= TmpRegUnits;
     }
     if (!MO.isReg())
       continue;
@@ -134,11 +135,11 @@ void RegScavenger::determineKillsAndDefs() {
       // Ignore undef uses.
       if (MO.isUndef())
         continue;
-      if (MO.isKill())
+      if (!isPred && MO.isKill())
         addRegUnits(KillRegUnits, Reg);
     } else {
       assert(MO.isDef());
-      if (MO.isDead())
+      if (!isPred && MO.isDead())
         addRegUnits(KillRegUnits, Reg);
       else
         addRegUnits(DefRegUnits, Reg);

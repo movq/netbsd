@@ -16,7 +16,6 @@
 
 #include "clang/AST/ExprCXX.h"
 #include "clang/AST/ExprObjC.h"
-#include "clang/AST/ExprOpenMP.h"
 #include "clang/AST/StmtCXX.h"
 #include "clang/AST/StmtObjC.h"
 #include "clang/AST/StmtOpenMP.h"
@@ -94,7 +93,6 @@ public:
       case UO_Real:      DISPATCH(UnaryReal,      UnaryOperator);
       case UO_Imag:      DISPATCH(UnaryImag,      UnaryOperator);
       case UO_Extension: DISPATCH(UnaryExtension, UnaryOperator);
-      case UO_Coawait:   DISPATCH(UnaryCoawait,   UnaryOperator);
       }
     }
 
@@ -159,7 +157,7 @@ public:
   UNARYOP_FALLBACK(Plus)      UNARYOP_FALLBACK(Minus)
   UNARYOP_FALLBACK(Not)       UNARYOP_FALLBACK(LNot)
   UNARYOP_FALLBACK(Real)      UNARYOP_FALLBACK(Imag)
-  UNARYOP_FALLBACK(Extension) UNARYOP_FALLBACK(Coawait)
+  UNARYOP_FALLBACK(Extension)
 #undef UNARYOP_FALLBACK
 
   // Base case, ignore it. :)

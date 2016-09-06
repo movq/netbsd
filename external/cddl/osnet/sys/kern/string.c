@@ -1,4 +1,4 @@
-/*	$NetBSD: string.c,v 1.3 2016/06/23 05:19:42 pgoyette Exp $	*/
+/*	$NetBSD: string.c,v 1.2.24.1 2016/07/10 10:00:20 martin Exp $	*/
 
 /*
  * CDDL HEADER START

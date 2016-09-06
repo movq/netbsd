@@ -1,4 +1,4 @@
-.\"	$NetBSD: puffs_ops.3,v 1.44 2015/11/12 17:51:05 christos Exp $
+.\"	$NetBSD: puffs_ops.3,v 1.36.10.2 2014/11/05 18:11:31 snj Exp $
 .\"
 .\" Copyright (c) 2007 Antti Kantee.  All rights reserved.
 .\"
@@ -23,7 +23,7 @@
 .\" OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
 .\" SUCH DAMAGE.
 .\"
-.Dd November 9, 2015
+.Dd October 31, 2014
 .Dt PUFFS_OPS 3
 .Os
 .Sh NAME
@@ -51,7 +51,7 @@
 .Fa "struct puffs_usermount *pu" "puffs_cookie_t cookie" "void *fid"
 .Fa "size_t *fidsize"
 .Fc
-.Ft int
+.Ft void
 .Fo puffs_fs_extattrctl
 .Fa "struct puffs_usermount *pu" "int cmd" "puffs_cookie_t cookie" "int flags"
 .Fa "int attrnamespace" "const char *attrname"
@@ -114,7 +114,7 @@
 .Fc
 .Ft int
 .Fo puffs_node_setattr_ttl
-.Fa "struct puffs_usermount *pu" "puffs_cookie_t opc" "struct vattr *vap"
+.Fa "struct puffs_usermount *pu" "puffs_cookie_t opc" "const struct vattr *vap"
 .Fa "const struct puffs_cred *pcr" "struct timespec *va_ttl" "int xflag"
 .Fc
 .Ft int
@@ -217,7 +217,7 @@
 .Ft int
 .Fo puffs_node_listextattr
 .Fa "struct puffs_usermount *pu" "puffs_cookie_t opc" "int attrnamespace"
-.Fa "size_t *attrssize" "uint8_t *attrs" "size_t *resid" "int flag"
+.Fa "size_t *attrssize" "uint8_t *attrs" "iint flag" "size_t *resid"
 .Fa "const struct puffs_cred *pcr"
 .Fc
 .Ft int
@@ -508,7 +508,7 @@ was called with, e.g.
 and
 .Dv O_NONBLOCK .
 .Fn puffs_node_open2
-allows the file system to pass back information for the file in
+allows the filesystem to pass back information for the file in
 .Fa oflags .
 The only implemented flag for now is
 .Dv PUFFS_OPEN_IO_DIRECT
@@ -579,7 +579,7 @@ bitmask and return.
 .Pp
 In case this function returns an error,
 .Dv POLLERR
-(or its
+(or it's
 .Xr select 2
 equivalent) will be delivered to the calling process.
 .Pp
@@ -838,13 +838,13 @@ Same as
 .Fn puffs_node_reclaim
 with an addditional argument for the number of lookups that have been done
 on the node (Node creation is counted as a lookup). This can be used by the
-file system to avoid a race condition, where the kernel sends a reclaim
+filesystem to avoid a race condition, where the kernel sends a reclaim
 while it does not have received the reply for a lookup.
-If the file system tracks lookup count, and compares to
+If the filesystem tracks lookup count, and compares to
 .Fa nlookup
 it can detect this situation and ignore the reclaim.
 .Pp
-If the file system maps cookies to
+If the filesystem maps cookies to
 .Vt struct puffs_node
 then the framework will do that work, and
 .Fn puffs_node_reclaim

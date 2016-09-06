@@ -18,8 +18,7 @@
 
 // Returns: the quotient of (a + ib) / (c + id)
 
-COMPILER_RT_ABI double _Complex
-__divdc3(double __a, double __b, double __c, double __d);
+double _Complex __divdc3(double __a, double __b, double __c, double __d);
 
 enum {zero, non_zero, inf, NaN, non_zero_nan};
 

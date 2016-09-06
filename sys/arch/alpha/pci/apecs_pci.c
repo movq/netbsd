@@ -1,4 +1,4 @@
-/* $NetBSD: apecs_pci.c,v 1.26 2015/10/02 05:22:49 msaitoh Exp $ */
+/* $NetBSD: apecs_pci.c,v 1.25 2012/02/06 02:14:14 matt Exp $ */
 
 /*
  * Copyright (c) 1995, 1996 Carnegie-Mellon University.
@@ -29,7 +29,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: apecs_pci.c,v 1.26 2015/10/02 05:22:49 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: apecs_pci.c,v 1.25 2012/02/06 02:14:14 matt Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -101,9 +101,6 @@ apecs_conf_read(void *cpv, pcitag_t tag, int offset)
 	int s, secondary, ba;
 	int32_t old_haxr2;					/* XXX */
 
-	if ((unsigned int)offset >= PCI_CONF_SIZE)
-		return (pcireg_t) -1;
-
 	s = 0;					/* XXX gcc -Wuninitialized */
 	old_haxr2 = 0;				/* XXX gcc -Wuninitialized */
 
@@ -148,9 +145,6 @@ apecs_conf_write(void *cpv, pcitag_t tag, int offset, pcireg_t data)
 	pcireg_t *datap;
 	int s, secondary;
 	int32_t old_haxr2;					/* XXX */
-
-	if ((unsigned int)offset >= PCI_CONF_SIZE)
-		return;
 
 	s = 0;					/* XXX gcc -Wuninitialized */
 	old_haxr2 = 0;				/* XXX gcc -Wuninitialized */

@@ -1,5 +1,5 @@
-/*	$NetBSD: channels.c,v 1.16 2016/08/02 13:45:12 christos Exp $	*/
-/* $OpenBSD: channels.c,v 1.351 2016/07/19 11:38:53 dtucker Exp $ */
+/*	$NetBSD: channels.c,v 1.11.4.2 2016/03/11 12:22:42 martin Exp $	*/
+/* $OpenBSD: channels.c,v 1.341 2015/02/06 23:21:59 millert Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -41,7 +41,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: channels.c,v 1.16 2016/08/02 13:45:12 christos Exp $");
+__RCSID("$NetBSD: channels.c,v 1.11.4.2 2016/03/11 12:22:42 martin Exp $");
 #include <sys/param.h>
 #include <sys/types.h>
 #include <sys/param.h>	/* MIN MAX */
@@ -139,9 +139,6 @@ static int num_adm_permitted_opens = 0;
 
 /* special-case port number meaning allow any port */
 #define FWD_PERMIT_ANY_PORT	0
-
-/* special-case wildcard meaning allow any host */
-#define FWD_PERMIT_ANY_HOST	"*"
 
 /*
  * If this is true, all opens are permitted.  This is the case on the server
@@ -311,7 +308,7 @@ channel_new(const char *ctype, int type, int rfd, int wfd, int efd,
 		if (channels_alloc > 10000)
 			fatal("channel_new: internal error: channels_alloc %d "
 			    "too big.", channels_alloc);
-		channels = xreallocarray(channels, channels_alloc + 10,
+		channels = xrealloc(channels, channels_alloc + 10,
 		    sizeof(Channel *));
 		channels_alloc += 10;
 		debug2("channel: expanding %d", channels_alloc);
@@ -665,7 +662,7 @@ channel_open_message(void)
 		case SSH_CHANNEL_INPUT_DRAINING:
 		case SSH_CHANNEL_OUTPUT_DRAINING:
 			snprintf(buf, sizeof buf,
-			    "  #%d %.300s (t%d r%d i%u/%d o%u/%d fd %d/%d cc %d)\r\n",
+			    "  #%d %.300s (t%d r%d i%d/%d o%d/%d fd %d/%d cc %d)\r\n",
 			    c->self, c->remote_name,
 			    c->type, c->remote_id,
 			    c->istate, buffer_len(&c->input),
@@ -1445,7 +1442,7 @@ port_open_helper(Channel *c, const char *rtype)
 {
 	char buf[1024];
 	char *local_ipaddr = get_local_ipaddr(c->sock);
-	int local_port = c->sock == -1 ? 65536 : get_local_port(c->sock);
+	int local_port = c->sock == -1 ? 65536 : get_sock_port(c->sock, 1);
 	char *remote_ipaddr = get_peer_ipaddr(c->sock);
 	int remote_port = get_peer_port(c->sock);
 
@@ -1915,13 +1912,13 @@ read_mux(Channel *c, u_int need)
 	if (buffer_len(&c->input) < need) {
 		rlen = need - buffer_len(&c->input);
 		len = read(c->rfd, buf, MIN(rlen, CHAN_RBUF));
-		if (len < 0 && (errno == EINTR || errno == EAGAIN))
-			return buffer_len(&c->input);
 		if (len <= 0) {
-			debug2("channel %d: ctl read<=0 rfd %d len %d",
-			    c->self, c->rfd, len);
-			chan_read_failed(c);
-			return 0;
+			if (errno != EINTR && errno != EAGAIN) {
+				debug2("channel %d: ctl read<=0 rfd %d len %d",
+				    c->self, c->rfd, len);
+				chan_read_failed(c);
+				return 0;
+			}
 		} else
 			buffer_append(&c->input, buf, len);
 	}
@@ -2227,8 +2224,8 @@ channel_prepare_select(fd_set **readsetp, fd_set **writesetp, int *maxfdp,
 
 	/* perhaps check sz < nalloc/2 and shrink? */
 	if (*readsetp == NULL || sz > *nallocp) {
-		*readsetp = xreallocarray(*readsetp, nfdset, sizeof(fd_mask));
-		*writesetp = xreallocarray(*writesetp, nfdset, sizeof(fd_mask));
+		*readsetp = xrealloc(*readsetp, nfdset, sizeof(fd_mask));
+		*writesetp = xrealloc(*writesetp, nfdset, sizeof(fd_mask));
 		*nallocp = sz;
 	}
 	*maxfdp = n;
@@ -2306,7 +2303,7 @@ channel_output_poll(void)
 					packet_put_int(c->remote_id);
 					packet_put_string(data, dlen);
 					packet_length = packet_sendx();
-					c->remote_window -= dlen;
+					c->remote_window -= dlen + 4;
 					free(data);
 				}
 				continue;
@@ -2678,7 +2675,7 @@ channel_input_window_adjust(int type, u_int32_t seq, void *ctxt)
 {
 	Channel *c;
 	int id;
-	u_int adjust, tmp;
+	u_int adjust;
 
 	if (!compat20)
 		return 0;
@@ -2694,10 +2691,7 @@ channel_input_window_adjust(int type, u_int32_t seq, void *ctxt)
 	adjust = packet_get_int();
 	packet_check_eom();
 	debug2("channel %d: rcvd adjust %u", id, adjust);
-	if ((tmp = c->remote_window + adjust) < c->remote_window)
-		fatal("channel %d: adjust %u overflows remote window %u",
-		    id, adjust, c->remote_window);
-	c->remote_window = tmp;
+	c->remote_window += adjust;
 	return 0;
 }
 
@@ -2852,21 +2846,17 @@ channel_setup_fwd_listener_tcpip(int type, struct Forward *fwd,
 	char ntop[NI_MAXHOST], strport[NI_MAXSERV];
 	in_port_t *lport_p;
 
+	host = (type == SSH_CHANNEL_RPORT_LISTENER) ?
+	    fwd->listen_host : fwd->connect_host;
 	is_client = (type == SSH_CHANNEL_PORT_LISTENER);
 
-	if (is_client && fwd->connect_path != NULL) {
-		host = fwd->connect_path;
-	} else {
-		host = (type == SSH_CHANNEL_RPORT_LISTENER) ?
-		    fwd->listen_host : fwd->connect_host;
-		if (host == NULL) {
-			error("No forward host name.");
-			return 0;
-		}
-		if (strlen(host) >= NI_MAXHOST) {
-			error("Forward host name too long.");
-			return 0;
-		}
+	if (host == NULL) {
+		error("No forward host name.");
+		return 0;
+	}
+	if (strlen(host) >= NI_MAXHOST) {
+		error("Forward host name too long.");
+		return 0;
 	}
 
 	/* Determine the bind address, cf. channel_fwd_bind_addr() comment */
@@ -2957,7 +2947,7 @@ channel_setup_fwd_listener_tcpip(int type, struct Forward *fwd,
 		if (type == SSH_CHANNEL_RPORT_LISTENER && fwd->listen_port == 0 &&
 		    allocated_listen_port != NULL &&
 		    *allocated_listen_port == 0) {
-			*allocated_listen_port = get_local_port(sock);
+			*allocated_listen_port = get_sock_port(sock, 1);
 			debug("Allocated listen port %d",
 			    *allocated_listen_port);
 		}
@@ -3288,7 +3278,7 @@ channel_request_remote_forwarding(struct Forward *fwd)
 	}
 	if (success) {
 		/* Record that connection to this host/port is permitted. */
-		permitted_opens = xreallocarray(permitted_opens,
+		permitted_opens = xrealloc(permitted_opens,
 		    num_permitted_opens + 1, sizeof(*permitted_opens));
 		idx = num_permitted_opens++;
 		if (fwd->connect_path != NULL) {
@@ -3326,8 +3316,7 @@ open_match(ForwardPermission *allowed_open, const char *requestedhost,
 	if (allowed_open->port_to_connect != FWD_PERMIT_ANY_PORT &&
 	    allowed_open->port_to_connect != requestedport)
 		return 0;
-	if (strcmp(allowed_open->host_to_connect, FWD_PERMIT_ANY_HOST) != 0 &&
-	    strcmp(allowed_open->host_to_connect, requestedhost) != 0)
+	if (strcmp(allowed_open->host_to_connect, requestedhost) != 0)
 		return 0;
 	return 1;
 }
@@ -3518,7 +3507,7 @@ channel_add_permitted_opens(char *host, int port)
 {
 	debug("allow port forwarding to host %s port %d", host, port);
 
-	permitted_opens = xreallocarray(permitted_opens,
+	permitted_opens = xrealloc(permitted_opens,
 	    num_permitted_opens + 1, sizeof(*permitted_opens));
 	permitted_opens[num_permitted_opens].host_to_connect = xstrdup(host);
 	permitted_opens[num_permitted_opens].port_to_connect = port;
@@ -3568,7 +3557,7 @@ channel_add_adm_permitted_opens(char *host, int port)
 {
 	debug("config allows port forwarding to host %s port %d", host, port);
 
-	permitted_adm_opens = xreallocarray(permitted_adm_opens,
+	permitted_adm_opens = xrealloc(permitted_adm_opens,
 	    num_adm_permitted_opens + 1, sizeof(*permitted_adm_opens));
 	permitted_adm_opens[num_adm_permitted_opens].host_to_connect
 	     = xstrdup(host);
@@ -3583,7 +3572,7 @@ void
 channel_disable_adm_local_opens(void)
 {
 	channel_clear_adm_permitted_opens();
-	permitted_adm_opens = xcalloc(sizeof(*permitted_adm_opens), 1);
+	permitted_adm_opens = xmalloc(sizeof(*permitted_adm_opens));
 	permitted_adm_opens[num_adm_permitted_opens].host_to_connect = NULL;
 	num_adm_permitted_opens = 1;
 }

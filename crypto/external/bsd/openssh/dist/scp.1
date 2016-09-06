@@ -1,4 +1,4 @@
-.\"	$NetBSD: scp.1,v 1.12 2016/08/02 13:45:12 christos Exp $
+.\"	$NetBSD: scp.1,v 1.7.4.1 2015/04/30 06:07:30 riz Exp $
 .\"  -*- nroff -*-
 .\"
 .\" scp.1
@@ -10,9 +10,9 @@
 .\"
 .\" Created: Sun May  7 00:14:37 1995 ylo
 .\"
-.\" $OpenBSD: scp.1,v 1.71 2016/07/16 06:57:55 jmc Exp $
+.\" $OpenBSD: scp.1,v 1.66 2015/01/30 11:43:14 djm Exp $
 .\"
-.Dd July 16 2016
+.Dd January 30 2015
 .Dt SCP 1
 .Os
 .Sh NAME
@@ -135,7 +135,6 @@ For full details of the options listed below, and their possible values, see
 .It CanonicalizeHostname
 .It CanonicalizeMaxDots
 .It CanonicalizePermittedCNAMEs
-.It CertificateFile
 .It ChallengeResponseAuthentication
 .It CheckHostIP
 .It Cipher
@@ -157,9 +156,8 @@ For full details of the options listed below, and their possible values, see
 .It HostKeyAlgorithms
 .It HostKeyAlias
 .It HostName
-.It IdentitiesOnly
-.It IdentityAgent
 .It IdentityFile
+.It IdentitiesOnly
 .It IPQoS
 .It KbdInteractiveAuthentication
 .It KbdInteractiveDevices
@@ -174,8 +172,6 @@ For full details of the options listed below, and their possible values, see
 .It PreferredAuthentications
 .It Protocol
 .It ProxyCommand
-.It ProxyJump
-.It PubkeyAcceptedKeyTypes
 .It PubkeyAuthentication
 .It RekeyLimit
 .It RhostsRSAAuthentication

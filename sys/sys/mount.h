@@ -1,4 +1,4 @@
-/*	$NetBSD: mount.h,v 1.219 2016/07/07 06:55:44 msaitoh Exp $	*/
+/*	$NetBSD: mount.h,v 1.215 2014/06/28 22:27:50 dholland Exp $	*/
 
 /*
  * Copyright (c) 1989, 1991, 1993
@@ -100,7 +100,6 @@
 #ifndef _STANDALONE
 
 struct vnode;
-struct vattr;
 
 /*
  * Structure per mounted file system.  Each mounted file system has an
@@ -112,7 +111,7 @@ struct mount {
 	TAILQ_HEAD(, vnode) mnt_vnodelist;	/* list of vnodes this mount */
 	struct vfsops	*mnt_op;		/* operations on fs */
 	struct vnode	*mnt_vnodecovered;	/* vnode we mounted on */
-	int		mnt_synclist_slot;	/* synclist slot index */
+	struct vnode	*mnt_syncer;		/* syncer vnode */
 	void		*mnt_transinfo;		/* for FS-internal use */
 	void		*mnt_data;		/* private data */
 	kmutex_t	mnt_unmounting;		/* to prevent new activity */
@@ -223,9 +222,6 @@ struct vfsops {
 	int	(*vfs_vget)	(struct mount *, ino_t, struct vnode **);
 	int	(*vfs_loadvnode) (struct mount *, struct vnode *,
 				    const void *, size_t, const void **);
-	int	(*vfs_newvnode) (struct mount *, struct vnode *, struct vnode *,
-				    struct vattr *, kauth_cred_t,
-				    size_t *, const void **);
 	int	(*vfs_fhtovp)	(struct mount *, struct fid *,
 				    struct vnode **);
 	int	(*vfs_vptofh)	(struct vnode *, struct fid *, size_t *);
@@ -250,8 +246,6 @@ struct vfsops {
 #define VFS_VGET(MP, INO, VPP)    (*(MP)->mnt_op->vfs_vget)(MP, INO, VPP)
 #define VFS_LOADVNODE(MP, VP, KEY, KEY_LEN, NEW_KEY) \
 	(*(MP)->mnt_op->vfs_loadvnode)(MP, VP, KEY, KEY_LEN, NEW_KEY)
-#define VFS_NEWVNODE(MP, DVP, VP, VAP, CRED, NEW_LEN, NEW_KEY) \
-	(*(MP)->mnt_op->vfs_newvnode)(MP, DVP, VP, VAP, CRED, NEW_LEN, NEW_KEY)
 
 #define VFS_RENAMELOCK_ENTER(MP)  (*(MP)->mnt_op->vfs_renamelock_enter)(MP)
 #define VFS_RENAMELOCK_EXIT(MP)   (*(MP)->mnt_op->vfs_renamelock_exit)(MP)
@@ -293,9 +287,6 @@ int	fsname##_sync(struct mount *, int, struct kauth_cred *);	\
 int	fsname##_vget(struct mount *, ino_t, struct vnode **);		\
 int	fsname##_loadvnode(struct mount *, struct vnode *,		\
 		const void *, size_t, const void **);			\
-int	fsname##_newvnode(struct mount *, struct vnode *,		\
-		struct vnode *, struct vattr *, kauth_cred_t,		\
-		size_t *, const void **);				\
 int	fsname##_fhtovp(struct mount *, struct fid *, struct vnode **);	\
 int	fsname##_vptofh(struct vnode *, struct fid *, size_t *);	\
 void	fsname##_init(void);						\
@@ -454,16 +445,6 @@ void	vfs_vnode_iterator_destroy(struct vnode_iterator *);
 struct vnode *vfs_vnode_iterator_next(struct vnode_iterator *,
     bool (*)(void *, struct vnode *), void *);
 
-/* Syncer */
-extern int	syncer_maxdelay;
-extern kmutex_t	syncer_mutex;
-extern time_t	syncdelay;
-extern time_t	filedelay;
-extern time_t	dirdelay;
-extern time_t	metadelay;
-void	vfs_syncer_add_to_worklist(struct mount *);
-void	vfs_syncer_remove_from_worklist(struct mount *);
-
 extern	TAILQ_HEAD(mntlist, mount) mountlist;	/* mounted filesystem list */
 extern	struct vfsops *vfssw[];			/* filesystem type table */
 extern	int nvfssw;
@@ -475,7 +456,7 @@ long	makefstype(const char *);
 int	mount_domount(struct lwp *, struct vnode **, struct vfsops *,
 	    const char *, int, void *, size_t *);
 int	dounmount(struct mount *, int, struct lwp *);
-int	do_sys_mount(struct lwp *, const char *, enum uio_seg, const char *,
+int	do_sys_mount(struct lwp *, struct vfsops *, const char *, const char *,
 	    int, void *, enum uio_seg, size_t, register_t *);
 void	vfsinit(void);
 void	vfs_opv_init(const struct vnodeopv_desc * const *);

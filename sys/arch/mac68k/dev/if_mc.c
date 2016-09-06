@@ -1,4 +1,4 @@
-/*	$NetBSD: if_mc.c,v 1.42 2016/06/10 13:27:11 ozaki-r Exp $	*/
+/*	$NetBSD: if_mc.c,v 1.40 2013/10/19 19:47:55 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 David Huang <khym@azeotrope.org>
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_mc.c,v 1.42 2016/06/10 13:27:11 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_mc.c,v 1.40 2013/10/19 19:47:55 martin Exp $");
 
 #include "opt_ddb.h"
 #include "opt_inet.h"
@@ -585,7 +585,7 @@ mace_read(struct mc_softc *sc, void *pkt, int len)
 	bpf_mtap(ifp, m);
 
 	/* Pass the packet up. */
-	if_percpuq_enqueue(ifp->if_percpuq, m);
+	(*ifp->if_input)(ifp, m);
 }
 
 /*
@@ -604,7 +604,7 @@ mace_get(struct mc_softc *sc, void *pkt, int totlen)
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (m == 0)
 		return (0);
-	m_set_rcvif(m, &sc->sc_if);
+	m->m_pkthdr.rcvif = &sc->sc_if;
 	m->m_pkthdr.len = totlen;
 	len = MHLEN;
 	top = 0;

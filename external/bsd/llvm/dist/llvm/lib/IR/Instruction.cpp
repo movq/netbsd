@@ -26,10 +26,14 @@ Instruction::Instruction(Type *ty, unsigned it, Use *Ops, unsigned NumOps,
 
   // If requested, insert this instruction into a basic block...
   if (InsertBefore) {
-    BasicBlock *BB = InsertBefore->getParent();
-    assert(BB && "Instruction to insert before is not in a basic block!");
-    BB->getInstList().insert(InsertBefore->getIterator(), this);
+    assert(InsertBefore->getParent() &&
+           "Instruction to insert before is not in a basic block!");
+    InsertBefore->getParent()->getInstList().insert(InsertBefore, this);
   }
+}
+
+const DataLayout *Instruction::getDataLayout() const {
+  return getParent()->getDataLayout();
 }
 
 Instruction::Instruction(Type *ty, unsigned it, Use *Ops, unsigned NumOps,
@@ -54,46 +58,32 @@ void Instruction::setParent(BasicBlock *P) {
   Parent = P;
 }
 
-const Module *Instruction::getModule() const {
-  return getParent()->getModule();
-}
-
-Module *Instruction::getModule() {
-  return getParent()->getModule();
-}
-
-Function *Instruction::getFunction() { return getParent()->getParent(); }
-
-const Function *Instruction::getFunction() const {
-  return getParent()->getParent();
-}
-
 void Instruction::removeFromParent() {
-  getParent()->getInstList().remove(getIterator());
+  getParent()->getInstList().remove(this);
 }
 
-iplist<Instruction>::iterator Instruction::eraseFromParent() {
-  return getParent()->getInstList().erase(getIterator());
+void Instruction::eraseFromParent() {
+  getParent()->getInstList().erase(this);
 }
 
-/// Insert an unlinked instruction into a basic block immediately before the
-/// specified instruction.
+/// insertBefore - Insert an unlinked instructions into a basic block
+/// immediately before the specified instruction.
 void Instruction::insertBefore(Instruction *InsertPos) {
-  InsertPos->getParent()->getInstList().insert(InsertPos->getIterator(), this);
+  InsertPos->getParent()->getInstList().insert(InsertPos, this);
 }
 
-/// Insert an unlinked instruction into a basic block immediately after the
-/// specified instruction.
+/// insertAfter - Insert an unlinked instructions into a basic block
+/// immediately after the specified instruction.
 void Instruction::insertAfter(Instruction *InsertPos) {
-  InsertPos->getParent()->getInstList().insertAfter(InsertPos->getIterator(),
-                                                    this);
+  InsertPos->getParent()->getInstList().insertAfter(InsertPos, this);
 }
 
-/// Unlink this instruction from its current basic block and insert it into the
-/// basic block that MovePos lives in, right before MovePos.
+/// moveBefore - Unlink this instruction from its current basic block and
+/// insert it into the basic block that MovePos lives in, right before
+/// MovePos.
 void Instruction::moveBefore(Instruction *MovePos) {
-  MovePos->getParent()->getInstList().splice(
-      MovePos->getIterator(), getParent()->getInstList(), getIterator());
+  MovePos->getParent()->getInstList().splice(MovePos,getParent()->getInstList(),
+                                             this);
 }
 
 /// Set or clear the unsafe-algebra flag on this instruction, which must be an
@@ -201,10 +191,6 @@ const char *Instruction::getOpcodeName(unsigned OpCode) {
   case Invoke: return "invoke";
   case Resume: return "resume";
   case Unreachable: return "unreachable";
-  case CleanupRet: return "cleanupret";
-  case CatchRet: return "catchret";
-  case CatchPad: return "catchpad";
-  case CatchSwitch: return "catchswitch";
 
   // Standard binary operators...
   case Add: return "add";
@@ -265,7 +251,6 @@ const char *Instruction::getOpcodeName(unsigned OpCode) {
   case ExtractValue:   return "extractvalue";
   case InsertValue:    return "insertvalue";
   case LandingPad:     return "landingpad";
-  case CleanupPad:     return "cleanuppad";
 
   default: return "<Invalid operator> ";
   }
@@ -295,12 +280,11 @@ static bool haveSameSpecialState(const Instruction *I1, const Instruction *I2,
   if (const CallInst *CI = dyn_cast<CallInst>(I1))
     return CI->isTailCall() == cast<CallInst>(I2)->isTailCall() &&
            CI->getCallingConv() == cast<CallInst>(I2)->getCallingConv() &&
-           CI->getAttributes() == cast<CallInst>(I2)->getAttributes() &&
-           CI->hasIdenticalOperandBundleSchema(*cast<CallInst>(I2));
+           CI->getAttributes() == cast<CallInst>(I2)->getAttributes();
   if (const InvokeInst *CI = dyn_cast<InvokeInst>(I1))
     return CI->getCallingConv() == cast<InvokeInst>(I2)->getCallingConv() &&
-           CI->getAttributes() == cast<InvokeInst>(I2)->getAttributes() &&
-           CI->hasIdenticalOperandBundleSchema(*cast<InvokeInst>(I2));
+           CI->getAttributes() ==
+             cast<InvokeInst>(I2)->getAttributes();
   if (const InsertValueInst *IVI = dyn_cast<InsertValueInst>(I1))
     return IVI->getIndices() == cast<InsertValueInst>(I2)->getIndices();
   if (const ExtractValueInst *EVI = dyn_cast<ExtractValueInst>(I1))
@@ -418,8 +402,6 @@ bool Instruction::mayReadFromMemory() const {
   case Instruction::Fence: // FIXME: refine definition of mayReadFromMemory
   case Instruction::AtomicCmpXchg:
   case Instruction::AtomicRMW:
-  case Instruction::CatchPad:
-  case Instruction::CatchRet:
     return true;
   case Instruction::Call:
     return !cast<CallInst>(this)->doesNotAccessMemory();
@@ -440,8 +422,6 @@ bool Instruction::mayWriteToMemory() const {
   case Instruction::VAArg:
   case Instruction::AtomicCmpXchg:
   case Instruction::AtomicRMW:
-  case Instruction::CatchPad:
-  case Instruction::CatchRet:
     return true;
   case Instruction::Call:
     return !cast<CallInst>(this)->onlyReadsMemory();
@@ -470,10 +450,6 @@ bool Instruction::isAtomic() const {
 bool Instruction::mayThrow() const {
   if (const CallInst *CI = dyn_cast<CallInst>(this))
     return !CI->doesNotThrow();
-  if (const auto *CRI = dyn_cast<CleanupReturnInst>(this))
-    return CRI->unwindsToCaller();
-  if (const auto *CatchSwitch = dyn_cast<CatchSwitchInst>(this))
-    return CatchSwitch->unwindsToCaller();
   return isa<ResumeInst>(this);
 }
 
@@ -553,23 +529,8 @@ bool Instruction::isNilpotent(unsigned Opcode) {
   return Opcode == Xor;
 }
 
-Instruction *Instruction::cloneImpl() const {
-  llvm_unreachable("Subclass of Instruction failed to implement cloneImpl");
-}
-
 Instruction *Instruction::clone() const {
-  Instruction *New = nullptr;
-  switch (getOpcode()) {
-  default:
-    llvm_unreachable("Unhandled Opcode.");
-#define HANDLE_INST(num, opc, clas)                                            \
-  case Instruction::opc:                                                       \
-    New = cast<clas>(this)->cloneImpl();                                       \
-    break;
-#include "llvm/IR/Instruction.def"
-#undef HANDLE_INST
-  }
-
+  Instruction *New = clone_impl();
   New->SubclassOptionalData = SubclassOptionalData;
   if (!hasMetadata())
     return New;

@@ -1,4 +1,4 @@
-/* $NetBSD: axp22x.c,v 1.2 2014/11/21 22:31:09 jmcneill Exp $ */
+/* $NetBSD: axp22x.c,v 1.1.2.3 2014/11/23 13:13:26 martin Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: axp22x.c,v 1.2 2014/11/21 22:31:09 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: axp22x.c,v 1.1.2.3 2014/11/23 13:13:26 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

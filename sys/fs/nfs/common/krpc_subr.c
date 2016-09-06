@@ -44,7 +44,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("FreeBSD: head/sys/nfs/krpc_subr.c 248207 2013-03-12 13:42:47Z glebius "); */
-__RCSID("$NetBSD: krpc_subr.c,v 1.4 2016/06/10 13:27:15 ozaki-r Exp $");
+__RCSID("$NetBSD: krpc_subr.c,v 1.1.1.1.8.1 2015/02/16 21:25:34 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -279,7 +279,6 @@ krpc_call(struct sockaddr_in *sa, u_int prog, u_int vers, u_int func,
 	 */
 	mhead = m_gethdr(M_WAITOK, MT_DATA);
 	mhead->m_next = *data;
-	*data = NULL;
 	call = mtod(mhead, struct krpc_call *);
 	mhead->m_len = sizeof(*call);
 	bzero((caddr_t)call, sizeof(*call));
@@ -302,7 +301,7 @@ krpc_call(struct sockaddr_in *sa, u_int prog, u_int vers, u_int func,
 	 * Setup packet header
 	 */
 	m_fixhdr(mhead);
-	m_reset_rcvif(mhead);
+	mhead->m_pkthdr.rcvif = NULL;
 
 	/*
 	 * Send it, repeatedly, until a reply is received,

@@ -1,5 +1,5 @@
 /* Internal interfaces for the GNU/Linux specific target code for gdbserver.
-   Copyright (C) 2002-2015 Free Software Foundation, Inc.
+   Copyright (C) 2002-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -16,16 +16,14 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "nat/linux-nat.h"
-#include "nat/gdb_thread_db.h"
+#include "gdb_thread_db.h"
 #include <signal.h>
 
 #include "gdbthread.h"
 #include "gdb_proc_service.h"
 
 /* Included for ptrace type definitions.  */
-#include "nat/linux-ptrace.h"
-#include "target/waitstatus.h" /* For enum target_stop_reason.  */
+#include "linux-ptrace.h"
 
 #define PTRACE_XFER_TYPE long
 
@@ -155,12 +153,8 @@ struct linux_target_ops
 
   /* Breakpoint and watchpoint related functions.  See target.h for
      comments.  */
-  int (*supports_z_point_type) (char z_type);
-  int (*insert_point) (enum raw_bkpt_type type, CORE_ADDR addr,
-		       int size, struct raw_breakpoint *bp);
-  int (*remove_point) (enum raw_bkpt_type type, CORE_ADDR addr,
-		       int size, struct raw_breakpoint *bp);
-
+  int (*insert_point) (char type, CORE_ADDR addr, int len);
+  int (*remove_point) (char type, CORE_ADDR addr, int len);
   int (*stopped_by_watchpoint) (void);
   CORE_ADDR (*stopped_data_address) (void);
 
@@ -185,10 +179,7 @@ struct linux_target_ops
   /* Hook to call when a new thread is detected.
      If extra per-thread architecture-specific data is needed,
      allocate it here.  */
-  void (*new_thread) (struct lwp_info *);
-
-  /* Hook to call, if any, when a new fork is attached.  */
-  void (*new_fork) (struct process_info *parent, struct process_info *child);
+  struct arch_lwp_info * (*new_thread) (void);
 
   /* Hook to call prior to resuming a thread.  */
   void (*prepare_to_resume) (struct lwp_info *);
@@ -232,23 +223,19 @@ struct linux_target_ops
 
 extern struct linux_target_ops the_low_target;
 
-#define get_thread_lwp(thr) ((struct lwp_info *) (inferior_target_data (thr)))
-#define get_lwp_thread(lwp) ((lwp)->thread)
+#define ptid_of(proc) ((proc)->head.id)
+#define pid_of(proc) ptid_get_pid ((proc)->head.id)
+#define lwpid_of(proc) ptid_get_lwp ((proc)->head.id)
 
-/* This struct is recorded in the target_data field of struct thread_info.
-
-   On linux ``all_threads'' is keyed by the LWP ID, which we use as the
-   GDB protocol representation of the thread ID.  Threads also have
-   a "process ID" (poorly named) which is (presently) the same as the
-   LWP ID.
-
-   There is also ``all_processes'' is keyed by the "overall process ID",
-   which GNU/Linux calls tgid, "thread group ID".  */
+#define get_lwp(inf) ((struct lwp_info *)(inf))
+#define get_thread_lwp(thr) (get_lwp (inferior_target_data (thr)))
+#define get_lwp_thread(proc) ((struct thread_info *)			\
+			      find_inferior_id (&all_threads,		\
+						get_lwp (proc)->head.id))
 
 struct lwp_info
 {
-  /* Backlink to the parent object.  */
-  struct thread_info *thread;
+  struct inferior_list_entry head;
 
   /* If this flag is set, the next SIGSTOP will be ignored (the
      process will be immediately resumed).  This means that either we
@@ -266,18 +253,16 @@ struct lwp_info
      event already received in a wait()).  */
   int stopped;
 
+  /* If this flag is set, the lwp is known to be dead already (exit
+     event already received in a wait(), and is cached in
+     status_pending).  */
+  int dead;
+
   /* When stopped is set, the last wait status recorded for this lwp.  */
   int last_status;
 
-  /* If WAITSTATUS->KIND != TARGET_WAITKIND_IGNORE, the waitstatus for
-     this LWP's last event, to pass to GDB without any further
-     processing.  This is used to store extended ptrace event
-     information or exit status until it can be reported to GDB.  */
-  struct target_waitstatus waitstatus;
-
-  /* When stopped is set, this is where the lwp last stopped, with
-     decr_pc_after_break already accounted for.  If the LWP is
-     running, this is the address at which the lwp was resumed.  */
+  /* When stopped is set, this is where the lwp stopped, with
+     decr_pc_after_break already accounted for.  */
   CORE_ADDR stop_pc;
 
   /* If this flag is set, STATUS_PENDING is a waitstatus that has not yet
@@ -285,9 +270,9 @@ struct lwp_info
   int status_pending_p;
   int status_pending;
 
-  /* The reason the LWP last stopped, if we need to track it
-     (breakpoint, watchpoint, etc.)  */
-  enum target_stop_reason stop_reason;
+  /* STOPPED_BY_WATCHPOINT is non-zero if this LWP stopped with a data
+     watchpoint trap.  */
+  int stopped_by_watchpoint;
 
   /* On architectures where it is possible to know the data address of
      a triggered watchpoint, STOPPED_DATA_ADDRESS is non-zero, and
@@ -352,14 +337,13 @@ struct lwp_info
   struct arch_lwp_info *arch_private;
 };
 
+extern struct inferior_list all_lwps;
+
 int linux_pid_exe_is_elf_64_file (int pid, unsigned int *machine);
 
-/* Attach to PTID.  Returns 0 on success, non-zero otherwise (an
-   errno).  */
-int linux_attach_lwp (ptid_t ptid);
-
+void linux_attach_lwp (unsigned long pid);
 struct lwp_info *find_lwp_pid (ptid_t ptid);
-/* For linux_stop_lwp see nat/linux-nat.h.  */
+void linux_stop_lwp (struct lwp_info *lwp);
 
 #ifdef HAVE_LINUX_REGSETS
 void initialize_regsets_info (struct regsets_info *regsets_info);

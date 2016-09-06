@@ -19,12 +19,12 @@ using namespace llvm;
 #define DEBUG_TYPE "ppcmcexpr"
 
 const PPCMCExpr*
-PPCMCExpr::create(VariantKind Kind, const MCExpr *Expr,
+PPCMCExpr::Create(VariantKind Kind, const MCExpr *Expr,
                   bool isDarwin, MCContext &Ctx) {
   return new (Ctx) PPCMCExpr(Kind, Expr, isDarwin);
 }
 
-void PPCMCExpr::printImpl(raw_ostream &OS, const MCAsmInfo *MAI) const {
+void PPCMCExpr::PrintImpl(raw_ostream &OS) const {
   if (isDarwinSyntax()) {
     switch (Kind) {
     default: llvm_unreachable("Invalid kind!");
@@ -34,10 +34,10 @@ void PPCMCExpr::printImpl(raw_ostream &OS, const MCAsmInfo *MAI) const {
     }
 
     OS << '(';
-    getSubExpr()->print(OS, MAI);
+    getSubExpr()->print(OS);
     OS << ')';
   } else {
-    getSubExpr()->print(OS, MAI);
+    getSubExpr()->print(OS);
 
     switch (Kind) {
     default: llvm_unreachable("Invalid kind!");
@@ -53,21 +53,21 @@ void PPCMCExpr::printImpl(raw_ostream &OS, const MCAsmInfo *MAI) const {
 }
 
 bool
-PPCMCExpr::evaluateAsConstant(int64_t &Res) const {
+PPCMCExpr::EvaluateAsConstant(int64_t &Res) const {
   MCValue Value;
 
-  if (!getSubExpr()->evaluateAsRelocatable(Value, nullptr, nullptr))
+  if (!getSubExpr()->EvaluateAsRelocatable(Value, nullptr, nullptr))
     return false;
 
   if (!Value.isAbsolute())
     return false;
 
-  Res = evaluateAsInt64(Value.getConstant());
+  Res = EvaluateAsInt64(Value.getConstant());
   return true;
 }
 
 int64_t
-PPCMCExpr::evaluateAsInt64(int64_t Value) const {
+PPCMCExpr::EvaluateAsInt64(int64_t Value) const {
   switch (Kind) {
     case VK_PPC_LO:
       return Value & 0xffff;
@@ -90,16 +90,16 @@ PPCMCExpr::evaluateAsInt64(int64_t Value) const {
 }
 
 bool
-PPCMCExpr::evaluateAsRelocatableImpl(MCValue &Res,
+PPCMCExpr::EvaluateAsRelocatableImpl(MCValue &Res,
                                      const MCAsmLayout *Layout,
                                      const MCFixup *Fixup) const {
   MCValue Value;
 
-  if (!getSubExpr()->evaluateAsRelocatable(Value, Layout, Fixup))
+  if (!getSubExpr()->EvaluateAsRelocatable(Value, Layout, Fixup))
     return false;
 
   if (Value.isAbsolute()) {
-    int64_t Result = evaluateAsInt64(Value.getConstant());
+    int64_t Result = EvaluateAsInt64(Value.getConstant());
     if ((Fixup == nullptr || (unsigned)Fixup->getKind() != PPC::fixup_ppc_half16) &&
         (Result >= 0x8000))
       return false;
@@ -138,7 +138,7 @@ PPCMCExpr::evaluateAsRelocatableImpl(MCValue &Res,
         Modifier = MCSymbolRefExpr::VK_PPC_HIGHESTA;
         break;
     }
-    Sym = MCSymbolRefExpr::create(&Sym->getSymbol(), Modifier, Context);
+    Sym = MCSymbolRefExpr::Create(&Sym->getSymbol(), Modifier, Context);
     Res = MCValue::get(Sym, Value.getSymB(), Value.getConstant());
   }
 

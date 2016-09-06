@@ -1,5 +1,6 @@
 /* Print National Semiconductor 32000 instructions.
-   Copyright (C) 1986-2015 Free Software Foundation, Inc.
+   Copyright 1986, 1988, 1991, 1992, 1994, 1998, 2001, 2002, 2005, 2007,
+   2009  Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -57,7 +58,7 @@ struct private
   bfd_byte *max_fetched;
   bfd_byte the_buffer[MAXLEN];
   bfd_vma insn_start;
-  OPCODES_SIGJMP_BUF bailout;
+  jmp_buf bailout;
 };
 
 
@@ -82,7 +83,7 @@ fetch_data (struct disassemble_info *info, bfd_byte *addr)
   if (status != 0)
     {
       (*info->memory_error_func) (status, start, info);
-      OPCODES_SIGLONGJMP (priv->bailout, 1);
+      longjmp (priv->bailout, 1);
     }
   else
     priv->max_fetched = addr;
@@ -745,7 +746,7 @@ print_insn_ns32k (bfd_vma memaddr, disassemble_info *info)
   info->private_data = & priv;
   priv.max_fetched = priv.the_buffer;
   priv.insn_start = memaddr;
-  if (OPCODES_SIGSETJMP (priv.bailout) != 0)
+  if (setjmp (priv.bailout) != 0)
     /* Error return.  */
     return -1;
 

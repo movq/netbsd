@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,8 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
+#define __UTCACHE_C__
 
 #include "acpi.h"
 #include "accommon.h"
@@ -91,10 +93,11 @@ AcpiOsCreateCache (
     }
 
     /* Populate the cache object and return it */
-    memset (Cache, 0, sizeof (ACPI_MEMORY_LIST));
+
+    ACPI_MEMSET (Cache, 0, sizeof (ACPI_MEMORY_LIST));
     Cache->ListName   = __UNCONST(CacheName);
     Cache->ObjectSize = ObjectSize;
-    Cache->MaxDepth = MaxDepth;
+    Cache->MaxDepth   = MaxDepth;
 
     *ReturnCache = Cache;
     return (AE_OK);
@@ -241,7 +244,7 @@ AcpiOsReleaseObject (
 
         /* Mark the object as cached */
 
-        memset (Object, 0xCA, Cache->ObjectSize);
+        ACPI_MEMSET (Object, 0xCA, Cache->ObjectSize);
         ACPI_SET_DESCRIPTOR_TYPE (Object, ACPI_DESC_TYPE_CACHED);
 
         /* Put the object at the head of the cache list */
@@ -278,7 +281,7 @@ AcpiOsAcquireObject (
     void                    *Object;
 
 
-    ACPI_FUNCTION_TRACE (OsAcquireObject);
+    ACPI_FUNCTION_NAME (OsAcquireObject);
 
 
     if (!Cache)
@@ -317,7 +320,7 @@ AcpiOsAcquireObject (
 
         /* Clear (zero) the previously used Object */
 
-        memset (Object, 0, Cache->ObjectSize);
+        ACPI_MEMSET (Object, 0, Cache->ObjectSize);
     }
     else
     {

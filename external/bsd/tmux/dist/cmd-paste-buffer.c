@@ -1,4 +1,4 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
  * Copyright (c) 2007 Nicholas Marriott <nicm@users.sourceforge.net>
@@ -35,8 +35,9 @@ void	cmd_paste_buffer_filter(struct window_pane *,
 const struct cmd_entry cmd_paste_buffer_entry = {
 	"paste-buffer", "pasteb",
 	"db:prs:t:", 0, 0,
-	"[-dpr] [-s separator] " CMD_BUFFER_USAGE " " CMD_TARGET_PANE_USAGE,
+	"[-dpr] [-s separator] [-b buffer-index] " CMD_TARGET_PANE_USAGE,
 	0,
+	NULL,
 	cmd_paste_buffer_exec
 };
 
@@ -47,28 +48,36 @@ cmd_paste_buffer_exec(struct cmd *self, struct cmd_q *cmdq)
 	struct window_pane	*wp;
 	struct session		*s;
 	struct paste_buffer	*pb;
-	const char		*sepstr, *bufname, *bufdata, *bufend, *line;
-	size_t			 seplen, bufsize;
-	int			 bracket = args_has(args, 'p');
+	const char		*sepstr;
+	char			*cause;
+	int			 buffer;
+	int			 pflag;
 
 	if (cmd_find_pane(cmdq, args_get(args, 't'), &s, &wp) == NULL)
 		return (CMD_RETURN_ERROR);
 
-	bufname = NULL;
-	if (args_has(args, 'b'))
-		bufname = args_get(args, 'b');
-
-	if (bufname == NULL)
-		pb = paste_get_top(NULL);
+	if (!args_has(args, 'b'))
+		buffer = -1;
 	else {
-		pb = paste_get_name(bufname);
-		if (pb == NULL) {
-			cmdq_error(cmdq, "no buffer %s", bufname);
+		buffer = args_strtonum(args, 'b', 0, INT_MAX, &cause);
+		if (cause != NULL) {
+			cmdq_error(cmdq, "buffer %s", cause);
+			free(cause);
 			return (CMD_RETURN_ERROR);
 		}
 	}
 
-	if (pb != NULL && ~wp->flags & PANE_INPUTOFF) {
+	if (buffer == -1)
+		pb = paste_get_top(&global_buffers);
+	else {
+		pb = paste_get_index(&global_buffers, buffer);
+		if (pb == NULL) {
+			cmdq_error(cmdq, "no buffer %d", buffer);
+			return (CMD_RETURN_ERROR);
+		}
+	}
+
+	if (pb != NULL) {
 		sepstr = args_get(args, 's');
 		if (sepstr == NULL) {
 			if (args_has(args, 'r'))
@@ -76,33 +85,17 @@ cmd_paste_buffer_exec(struct cmd *self, struct cmd_q *cmdq)
 			else
 				sepstr = "\r";
 		}
-		seplen = strlen(sepstr);
-
-		if (bracket && (wp->screen->mode & MODE_BRACKETPASTE))
-			bufferevent_write(wp->event, "\033[200~", 6);
-
-		bufdata = paste_buffer_data(pb, &bufsize);
-		bufend = bufdata + bufsize;
-
-		for (;;) {
-			line = memchr(bufdata, '\n', bufend - bufdata);
-			if (line == NULL)
-				break;
-
-			bufferevent_write(wp->event, bufdata, line - bufdata);
-			bufferevent_write(wp->event, sepstr, seplen);
-
-			bufdata = line + 1;
-		}
-		if (bufdata != bufend)
-			bufferevent_write(wp->event, bufdata, bufend - bufdata);
-
-		if (bracket && (wp->screen->mode & MODE_BRACKETPASTE))
-			bufferevent_write(wp->event, "\033[201~", 6);
+		pflag = (wp->screen->mode & MODE_BRACKETPASTE);
+		paste_send_pane(pb, wp, sepstr, args_has(args, 'p') && pflag);
 	}
 
-	if (pb != NULL && args_has(args, 'd'))
-		paste_free(pb);
+	/* Delete the buffer if -d. */
+	if (args_has(args, 'd')) {
+		if (buffer == -1)
+			paste_free_top(&global_buffers);
+		else
+			paste_free_index(&global_buffers, buffer);
+	}
 
 	return (CMD_RETURN_NORMAL);
 }

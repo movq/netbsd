@@ -1,4 +1,4 @@
-/*	$NetBSD: if_el.c,v 1.93 2016/06/10 13:27:14 ozaki-r Exp $	*/
+/*	$NetBSD: if_el.c,v 1.90 2014/08/10 16:44:35 tls Exp $	*/
 
 /*
  * Copyright (c) 1994, Matthew E. Kimmel.  Permission is hereby granted
@@ -19,7 +19,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_el.c,v 1.93 2016/06/10 13:27:14 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_el.c,v 1.90 2014/08/10 16:44:35 tls Exp $");
 
 #include "opt_inet.h"
 
@@ -31,7 +31,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_el.c,v 1.93 2016/06/10 13:27:14 ozaki-r Exp $");
 #include <sys/socket.h>
 #include <sys/syslog.h>
 #include <sys/device.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -591,7 +591,7 @@ elread(struct el_softc *sc, int len)
 	 */
 	bpf_mtap(ifp, m);
 
-	if_percpuq_enqueue(ifp->if_percpuq, m);
+	(*ifp->if_input)(ifp, m);
 }
 
 /*
@@ -611,7 +611,7 @@ elget(struct el_softc *sc, int totlen)
 	MGETHDR(m0, M_DONTWAIT, MT_DATA);
 	if (m0 == 0)
 		return (0);
-	m_set_rcvif(m0, ifp);
+	m0->m_pkthdr.rcvif = ifp;
 	m0->m_pkthdr.len = totlen;
 	len = MHLEN;
 	m = m0;

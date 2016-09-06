@@ -1,4 +1,4 @@
-/*	$NetBSD: ohci_pci.c,v 1.55 2016/04/23 10:15:31 skrll Exp $	*/
+/*	$NetBSD: ohci_pci.c,v 1.52 2014/03/29 19:28:25 christos Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ohci_pci.c,v 1.55 2016/04/23 10:15:31 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ohci_pci.c,v 1.52 2014/03/29 19:28:25 christos Exp $");
 
 #include "ehci.h"
 
@@ -89,10 +89,12 @@ ohci_pci_attach(device_t parent, device_t self, void *aux)
 	char const *intrstr;
 	pci_intr_handle_t ih;
 	pcireg_t csr;
+	usbd_status r;
+	const char *vendor;
 	char intrbuf[PCI_INTRSTR_LEN];
 
 	sc->sc.sc_dev = self;
-	sc->sc.sc_bus.ub_hcpriv = sc;
+	sc->sc.sc_bus.hci_private = sc;
 
 	if (PCI_VENDOR(pa->pa_id) == PCI_VENDOR_NS &&
 	    PCI_PRODUCT(pa->pa_id) == PCI_PRODUCT_NS_USB) {
@@ -125,7 +127,7 @@ ohci_pci_attach(device_t parent, device_t self, void *aux)
 
 	sc->sc_pc = pc;
 	sc->sc_tag = tag;
-	sc->sc.sc_bus.ub_dmatag = pa->pa_dmat;
+	sc->sc.sc_bus.dmatag = pa->pa_dmat;
 
 	/* Enable the device. */
 	pci_conf_write(pc, tag, PCI_COMMAND_STATUS_REG,
@@ -141,7 +143,7 @@ ohci_pci_attach(device_t parent, device_t self, void *aux)
 	 * Allocate IRQ
 	 */
 	intrstr = pci_intr_string(pc, ih, intrbuf, sizeof(intrbuf));
-	sc->sc_ih = pci_intr_establish(pc, ih, IPL_USB, ohci_intr, sc);
+	sc->sc_ih = pci_intr_establish(pc, ih, IPL_SCHED, ohci_intr, sc);
 	if (sc->sc_ih == NULL) {
 		aprint_error_dev(self, "couldn't establish interrupt");
 		if (intrstr != NULL)
@@ -152,12 +154,17 @@ ohci_pci_attach(device_t parent, device_t self, void *aux)
 	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
 
 	/* Figure out vendor for root hub descriptor. */
+	vendor = pci_findvendor(pa->pa_id);
 	sc->sc.sc_id_vendor = PCI_VENDOR(pa->pa_id);
-	pci_findvendor(sc->sc.sc_vendor, sizeof(sc->sc.sc_vendor),
-	    sc->sc.sc_id_vendor);
-	int err = ohci_init(&sc->sc);
-	if (err) {
-		aprint_error_dev(self, "init failed, error=%d\n", err);
+	if (vendor)
+		strlcpy(sc->sc.sc_vendor, vendor, sizeof(sc->sc.sc_vendor));
+	else
+		snprintf(sc->sc.sc_vendor, sizeof(sc->sc.sc_vendor),
+		    "vendor 0x%04x", PCI_VENDOR(pa->pa_id));
+
+	r = ohci_init(&sc->sc);
+	if (r != USBD_NORMAL_COMPLETION) {
+		aprint_error_dev(self, "init failed, error=%d\n", r);
 		goto fail;
 	}
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_athn_usb.h,v 1.3 2016/04/23 10:15:31 skrll Exp $	*/
+/*	$NetBSD: if_athn_usb.h,v 1.2 2013/03/30 14:14:31 christos Exp $	*/
 /*	$OpenBSD: if_athn_usb.h,v 1.3 2012/11/10 14:35:06 mikeb Exp $	*/
 
 /*-
@@ -394,13 +394,13 @@ struct athn_usb_rx_stream {
 
 struct athn_usb_rx_data {
 	struct athn_usb_softc	*sc;
-	struct usbd_xfer	*xfer;
+	usbd_xfer_handle	xfer;
 	uint8_t			*buf;
 };
 
 struct athn_usb_tx_data {
 	struct athn_usb_softc		*sc;
-	struct usbd_xfer		*xfer;
+	usbd_xfer_handle		xfer;
 	uint8_t				*buf;
 	TAILQ_ENTRY(athn_usb_tx_data)	next;
 };
@@ -443,13 +443,12 @@ struct athn_usb_softc {
 
 	int				usc_athn_attached;
 
-	kcondvar_t			usc_task_cv;
 	kmutex_t			usc_task_mtx;
 	kmutex_t			usc_tx_mtx;
 
 	/* USB specific goo. */
-	struct usbd_device		*usc_udev;
-	struct usbd_interface		*usc_iface;
+	usbd_device_handle		usc_udev;
+	usbd_interface_handle		usc_iface;
 	struct usb_task			usc_task;
 	int				usc_dying;
 
@@ -459,12 +458,11 @@ struct athn_usb_softc {
 
 	struct athn_usb_rx_stream	usc_rx_stream;
 
-	struct usbd_pipe		*usc_tx_data_pipe;
-	struct usbd_pipe		*usc_rx_data_pipe;
-	struct usbd_pipe		*usc_rx_intr_pipe;
-	struct usbd_pipe		*usc_tx_intr_pipe;
+	usbd_pipe_handle		usc_tx_data_pipe;
+	usbd_pipe_handle		usc_rx_data_pipe;
+	usbd_pipe_handle		usc_rx_intr_pipe;
+	usbd_pipe_handle		usc_tx_intr_pipe;
 	uint8_t 			*usc_ibuf;
-	size_t				usc_ibufsize;
 
 	struct ar_wmi_cmd_reg_write	usc_wbuf[AR_MAX_WRITE_COUNT];
 	int				usc_wcount;

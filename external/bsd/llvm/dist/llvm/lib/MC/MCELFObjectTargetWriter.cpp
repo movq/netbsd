@@ -24,12 +24,7 @@ MCELFObjectTargetWriter::MCELFObjectTargetWriter(bool Is64Bit_,
     IsN64(IsN64_){
 }
 
-bool MCELFObjectTargetWriter::needsRelocateWithSymbol(const MCSymbol &Sym,
+bool MCELFObjectTargetWriter::needsRelocateWithSymbol(const MCSymbolData &SD,
                                                       unsigned Type) const {
   return false;
-}
-
-void
-MCELFObjectTargetWriter::sortRelocs(const MCAssembler &Asm,
-                                    std::vector<ELFRelocationEntry> &Relocs) {
 }

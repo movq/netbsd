@@ -1,4 +1,4 @@
-/*	$NetBSD: yacc.y,v 1.11 2016/06/28 09:24:46 wiz Exp $	*/
+/*	$NetBSD: yacc.y,v 1.6 2011/09/16 15:39:27 joerg Exp $	*/
 
 %{
 /*-
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: yacc.y,v 1.11 2016/06/28 09:24:46 wiz Exp $");
+__RCSID("$NetBSD: yacc.y,v 1.6 2011/09/16 15:39:27 joerg Exp $");
 #endif /* not lint */
 
 #include <assert.h>
@@ -276,7 +276,7 @@ do_mkdb(FILE *in)
 	else
 		out = stdout;
 
-	if (out == NULL)
+	if (out==NULL)
 		err(EXIT_FAILURE, "fopen");
 
 	ret = _lookup_factory_convert(out, in);
@@ -284,15 +284,17 @@ do_mkdb(FILE *in)
 	if (ret && output)
 		unlink(output); /* dump failure */
 	if (ret)
-		errc(EXIT_FAILURE, ret, NULL);
+		errx(EXIT_FAILURE, "%s\n", strerror(ret));
 }
 
 __dead static void
 usage(void)
 {
-	fprintf(stderr, "Usage: %s [-dm] [-o outfile] [infile]\n",
-	    getprogname());
-	exit(EXIT_FAILURE);
+	errx(EXIT_FAILURE,
+	     "usage:\n"
+	     "\t%s [-o outfile] [infile]\n"
+	     "\t%s -m [-o outfile] [infile]",
+	     getprogname(), getprogname());
 }
 
 int

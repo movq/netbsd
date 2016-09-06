@@ -36,7 +36,8 @@ MDNode *MDBuilder::createFPMath(float Accuracy) {
 
 MDNode *MDBuilder::createBranchWeights(uint32_t TrueWeight,
                                        uint32_t FalseWeight) {
-  return createBranchWeights({TrueWeight, FalseWeight});
+  uint32_t Weights[] = {TrueWeight, FalseWeight};
+  return createBranchWeights(Weights);
 }
 
 MDNode *MDBuilder::createBranchWeights(ArrayRef<uint32_t> Weights) {
@@ -52,38 +53,24 @@ MDNode *MDBuilder::createBranchWeights(ArrayRef<uint32_t> Weights) {
   return MDNode::get(Context, Vals);
 }
 
-MDNode *MDBuilder::createUnpredictable() {
-  return MDNode::get(Context, None);
-}
-
-MDNode *MDBuilder::createFunctionEntryCount(uint64_t Count) {
-  Type *Int64Ty = Type::getInt64Ty(Context);
-  return MDNode::get(Context,
-                     {createString("function_entry_count"),
-                      createConstant(ConstantInt::get(Int64Ty, Count))});
-}
-
 MDNode *MDBuilder::createRange(const APInt &Lo, const APInt &Hi) {
   assert(Lo.getBitWidth() == Hi.getBitWidth() && "Mismatched bitwidths!");
-
-  Type *Ty = IntegerType::get(Context, Lo.getBitWidth());
-  return createRange(ConstantInt::get(Ty, Lo), ConstantInt::get(Ty, Hi));
-}
-
-MDNode *MDBuilder::createRange(Constant *Lo, Constant *Hi) {
   // If the range is everything then it is useless.
   if (Hi == Lo)
     return nullptr;
 
   // Return the range [Lo, Hi).
-  return MDNode::get(Context, {createConstant(Lo), createConstant(Hi)});
+  Type *Ty = IntegerType::get(Context, Lo.getBitWidth());
+  Metadata *Range[2] = {createConstant(ConstantInt::get(Ty, Lo)),
+                        createConstant(ConstantInt::get(Ty, Hi))};
+  return MDNode::get(Context, Range);
 }
 
 MDNode *MDBuilder::createAnonymousAARoot(StringRef Name, MDNode *Extra) {
   // To ensure uniqueness the root node is self-referential.
-  auto Dummy = MDNode::getTemporary(Context, None);
+  MDNode *Dummy = MDNode::getTemporary(Context, None);
 
-  SmallVector<Metadata *, 3> Args(1, Dummy.get());
+  SmallVector<Metadata *, 3> Args(1, Dummy);
   if (Extra)
     Args.push_back(Extra);
   if (!Name.empty())
@@ -95,7 +82,7 @@ MDNode *MDBuilder::createAnonymousAARoot(StringRef Name, MDNode *Extra) {
   //   !1 = metadata !{metadata !0} <- root
   // Replace the dummy operand with the root node itself and delete the dummy.
   Root->replaceOperandWith(0, Root);
-
+  MDNode::deleteTemporary(Dummy);
   // We now have
   //   !1 = metadata !{metadata !1} <- self-referential root
   return Root;
@@ -111,10 +98,12 @@ MDNode *MDBuilder::createTBAANode(StringRef Name, MDNode *Parent,
                                   bool isConstant) {
   if (isConstant) {
     Constant *Flags = ConstantInt::get(Type::getInt64Ty(Context), 1);
-    return MDNode::get(Context,
-                       {createString(Name), Parent, createConstant(Flags)});
+    Metadata *Ops[3] = {createString(Name), Parent, createConstant(Flags)};
+    return MDNode::get(Context, Ops);
+  } else {
+    Metadata *Ops[2] = {createString(Name), Parent};
+    return MDNode::get(Context, Ops);
   }
-  return MDNode::get(Context, {createString(Name), Parent});
 }
 
 MDNode *MDBuilder::createAliasScopeDomain(StringRef Name) {
@@ -122,7 +111,8 @@ MDNode *MDBuilder::createAliasScopeDomain(StringRef Name) {
 }
 
 MDNode *MDBuilder::createAliasScope(StringRef Name, MDNode *Domain) {
-  return MDNode::get(Context, {createString(Name), Domain});
+  Metadata *Ops[2] = {createString(Name), Domain};
+  return MDNode::get(Context, Ops);
 }
 
 /// \brief Return metadata for a tbaa.struct node with the given
@@ -157,19 +147,16 @@ MDNode *MDBuilder::createTBAAStructTypeNode(
 MDNode *MDBuilder::createTBAAScalarTypeNode(StringRef Name, MDNode *Parent,
                                             uint64_t Offset) {
   ConstantInt *Off = ConstantInt::get(Type::getInt64Ty(Context), Offset);
-  return MDNode::get(Context,
-                     {createString(Name), Parent, createConstant(Off)});
+  Metadata *Ops[3] = {createString(Name), Parent, createConstant(Off)};
+  return MDNode::get(Context, Ops);
 }
 
 /// \brief Return metadata for a TBAA tag node with the given
 /// base type, access type and offset relative to the base type.
 MDNode *MDBuilder::createTBAAStructTagNode(MDNode *BaseType, MDNode *AccessType,
-                                           uint64_t Offset, bool IsConstant) {
-  IntegerType *Int64 = Type::getInt64Ty(Context);
-  ConstantInt *Off = ConstantInt::get(Int64, Offset);
-  if (IsConstant) {
-    return MDNode::get(Context, {BaseType, AccessType, createConstant(Off),
-                                 createConstant(ConstantInt::get(Int64, 1))});
-  }
-  return MDNode::get(Context, {BaseType, AccessType, createConstant(Off)});
+                                           uint64_t Offset) {
+  Type *Int64 = Type::getInt64Ty(Context);
+  Metadata *Ops[3] = {BaseType, AccessType,
+                      createConstant(ConstantInt::get(Int64, Offset))};
+  return MDNode::get(Context, Ops);
 }

@@ -61,16 +61,10 @@ STATISTIC(NumScalarInsnsUsed, "Number of scalar instructions used");
 STATISTIC(NumCopiesDeleted, "Number of cross-class copies deleted");
 STATISTIC(NumCopiesInserted, "Number of cross-class copies inserted");
 
-namespace llvm {
-void initializeAArch64AdvSIMDScalarPass(PassRegistry &);
-}
-
-#define AARCH64_ADVSIMD_NAME "AdvSIMD Scalar Operation Optimization"
-
 namespace {
 class AArch64AdvSIMDScalar : public MachineFunctionPass {
   MachineRegisterInfo *MRI;
-  const TargetInstrInfo *TII;
+  const AArch64InstrInfo *TII;
 
 private:
   // isProfitableToTransform - Predicate function to determine whether an
@@ -88,14 +82,12 @@ private:
 
 public:
   static char ID; // Pass identification, replacement for typeid.
-  explicit AArch64AdvSIMDScalar() : MachineFunctionPass(ID) {
-    initializeAArch64AdvSIMDScalarPass(*PassRegistry::getPassRegistry());
-  }
+  explicit AArch64AdvSIMDScalar() : MachineFunctionPass(ID) {}
 
   bool runOnMachineFunction(MachineFunction &F) override;
 
   const char *getPassName() const override {
-    return AARCH64_ADVSIMD_NAME;
+    return "AdvSIMD Scalar Operation Optimization";
   }
 
   void getAnalysisUsage(AnalysisUsage &AU) const override {
@@ -105,9 +97,6 @@ public:
 };
 char AArch64AdvSIMDScalar::ID = 0;
 } // end anonymous namespace
-
-INITIALIZE_PASS(AArch64AdvSIMDScalar, "aarch64-simd-scalar",
-                AARCH64_ADVSIMD_NAME, false, false)
 
 static bool isGPR64(unsigned Reg, unsigned SubReg,
                     const MachineRegisterInfo *MRI) {
@@ -169,7 +158,7 @@ static unsigned getSrcFromCopy(const MachineInstr *MI,
 // getTransformOpcode - For any opcode for which there is an AdvSIMD equivalent
 // that we're considering transforming to, return that AdvSIMD opcode. For all
 // others, return the original opcode.
-static unsigned getTransformOpcode(unsigned Opc) {
+static int getTransformOpcode(unsigned Opc) {
   switch (Opc) {
   default:
     break;
@@ -190,7 +179,7 @@ static unsigned getTransformOpcode(unsigned Opc) {
 }
 
 static bool isTransformable(const MachineInstr *MI) {
-  unsigned Opc = MI->getOpcode();
+  int Opc = MI->getOpcode();
   return Opc != getTransformOpcode(Opc);
 }
 
@@ -279,7 +268,7 @@ AArch64AdvSIMDScalar::isProfitableToTransform(const MachineInstr *MI) const {
   return TransformAll;
 }
 
-static MachineInstr *insertCopy(const TargetInstrInfo *TII, MachineInstr *MI,
+static MachineInstr *insertCopy(const AArch64InstrInfo *TII, MachineInstr *MI,
                                 unsigned Dst, unsigned Src, bool IsKill) {
   MachineInstrBuilder MIB =
       BuildMI(*MI->getParent(), MI, MI->getDebugLoc(), TII->get(AArch64::COPY),
@@ -297,8 +286,8 @@ void AArch64AdvSIMDScalar::transformInstruction(MachineInstr *MI) {
   DEBUG(dbgs() << "Scalar transform: " << *MI);
 
   MachineBasicBlock *MBB = MI->getParent();
-  unsigned OldOpc = MI->getOpcode();
-  unsigned NewOpc = getTransformOpcode(OldOpc);
+  int OldOpc = MI->getOpcode();
+  int NewOpc = getTransformOpcode(OldOpc);
   assert(OldOpc != NewOpc && "transform an instruction to itself?!");
 
   // Check if we need a copy for the source registers.
@@ -387,12 +376,14 @@ bool AArch64AdvSIMDScalar::runOnMachineFunction(MachineFunction &mf) {
   bool Changed = false;
   DEBUG(dbgs() << "***** AArch64AdvSIMDScalar *****\n");
 
+  const TargetMachine &TM = mf.getTarget();
   MRI = &mf.getRegInfo();
-  TII = mf.getSubtarget().getInstrInfo();
+  TII = static_cast<const AArch64InstrInfo *>(
+      TM.getSubtargetImpl()->getInstrInfo());
 
   // Just check things on a one-block-at-a-time basis.
   for (MachineFunction::iterator I = mf.begin(), E = mf.end(); I != E; ++I)
-    if (processMachineBasicBlock(&*I))
+    if (processMachineBasicBlock(I))
       Changed = true;
   return Changed;
 }

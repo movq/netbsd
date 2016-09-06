@@ -1,6 +1,6 @@
 /* Block-related functions for the GNU debugger, GDB.
 
-   Copyright (C) 2003-2015 Free Software Foundation, Inc.
+   Copyright (C) 2003-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -25,7 +25,7 @@
 #include "cp-support.h"
 #include "addrmap.h"
 #include "gdbtypes.h"
-#include "objfiles.h"
+#include "exceptions.h"
 
 /* This is used by struct block to store namespace-related info for
    C++ files, namely using declarations and the current namespace in
@@ -34,36 +34,11 @@
 struct block_namespace_info
 {
   const char *scope;
-  struct using_direct *using_decl;
+  struct using_direct *using;
 };
 
 static void block_initialize_namespace (struct block *block,
 					struct obstack *obstack);
-
-/* See block.h.  */
-
-struct objfile *
-block_objfile (const struct block *block)
-{
-  const struct global_block *global_block;
-
-  if (BLOCK_FUNCTION (block) != NULL)
-    return symbol_objfile (BLOCK_FUNCTION (block));
-
-  global_block = (struct global_block *) block_global_block (block);
-  return COMPUNIT_OBJFILE (global_block->compunit_symtab);
-}
-
-/* See block.  */
-
-struct gdbarch *
-block_gdbarch (const struct block *block)
-{
-  if (BLOCK_FUNCTION (block) != NULL)
-    return symbol_arch (BLOCK_FUNCTION (block));
-
-  return get_objfile_arch (block_objfile (block));
-}
 
 /* Return Nonzero if block a is lexically nested within block b,
    or if a and b have the same pc range.
@@ -132,7 +107,7 @@ block_inlined_p (const struct block *bl)
    It returns the containing block if there is one, or else NULL.  */
 
 static struct block *
-find_block_in_blockvector (const struct blockvector *bl, CORE_ADDR pc)
+find_block_in_blockvector (struct blockvector *bl, CORE_ADDR pc)
 {
   struct block *b;
   int bot, top, half;
@@ -180,23 +155,22 @@ find_block_in_blockvector (const struct blockvector *bl, CORE_ADDR pc)
    is none.  PBLOCK is a pointer to the block.  If PBLOCK is NULL, we
    don't pass this information back to the caller.  */
 
-const struct blockvector *
+struct blockvector *
 blockvector_for_pc_sect (CORE_ADDR pc, struct obj_section *section,
-			 const struct block **pblock,
-			 struct compunit_symtab *cust)
+			 struct block **pblock, struct symtab *symtab)
 {
-  const struct blockvector *bl;
+  struct blockvector *bl;
   struct block *b;
 
-  if (cust == NULL)
+  if (symtab == 0)		/* if no symtab specified by caller */
     {
       /* First search all symtabs for one whose file contains our pc */
-      cust = find_pc_sect_compunit_symtab (pc, section);
-      if (cust == NULL)
+      symtab = find_pc_sect_symtab (pc, section);
+      if (symtab == 0)
 	return 0;
     }
 
-  bl = COMPUNIT_BLOCKVECTOR (cust);
+  bl = BLOCKVECTOR (symtab);
 
   /* Then search that symtab for the smallest block that wins.  */
   b = find_block_in_blockvector (bl, pc);
@@ -211,7 +185,7 @@ blockvector_for_pc_sect (CORE_ADDR pc, struct obj_section *section,
 /* Return true if the blockvector BV contains PC, false otherwise.  */
 
 int
-blockvector_contains_pc (const struct blockvector *bv, CORE_ADDR pc)
+blockvector_contains_pc (struct blockvector *bv, CORE_ADDR pc)
 {
   return find_block_in_blockvector (bv, pc) != NULL;
 }
@@ -223,14 +197,14 @@ blockvector_contains_pc (const struct blockvector *bv, CORE_ADDR pc)
 struct call_site *
 call_site_for_pc (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
-  struct compunit_symtab *cust;
+  struct symtab *symtab;
   void **slot = NULL;
 
   /* -1 as tail call PC can be already after the compilation unit range.  */
-  cust = find_pc_compunit_symtab (pc - 1);
+  symtab = find_pc_symtab (pc - 1);
 
-  if (cust != NULL && COMPUNIT_CALL_SITE_HTAB (cust) != NULL)
-    slot = htab_find_slot (COMPUNIT_CALL_SITE_HTAB (cust), &pc, NO_INSERT);
+  if (symtab != NULL && symtab->call_site_htab != NULL)
+    slot = htab_find_slot (symtab->call_site_htab, &pc, NO_INSERT);
 
   if (slot == NULL)
     {
@@ -243,7 +217,7 @@ call_site_for_pc (struct gdbarch *gdbarch, CORE_ADDR pc)
 		     "DW_TAG_GNU_call_site %s in %s"),
 		   paddress (gdbarch, pc),
 		   (msym.minsym == NULL ? "???"
-		    : MSYMBOL_PRINT_NAME (msym.minsym)));
+		    : SYMBOL_PRINT_NAME (msym.minsym)));
     }
 
   return *slot;
@@ -253,8 +227,8 @@ call_site_for_pc (struct gdbarch *gdbarch, CORE_ADDR pc)
    containing the specified pc value, or 0 if there is none.
    Backward compatibility, no section.  */
 
-const struct blockvector *
-blockvector_for_pc (CORE_ADDR pc, const struct block **pblock)
+struct blockvector *
+blockvector_for_pc (CORE_ADDR pc, struct block **pblock)
 {
   return blockvector_for_pc_sect (pc, find_pc_mapped_section (pc),
 				  pblock, NULL);
@@ -263,11 +237,11 @@ blockvector_for_pc (CORE_ADDR pc, const struct block **pblock)
 /* Return the innermost lexical block containing the specified pc value
    in the specified section, or 0 if there is none.  */
 
-const struct block *
+struct block *
 block_for_pc_sect (CORE_ADDR pc, struct obj_section *section)
 {
-  const struct blockvector *bl;
-  const struct block *b;
+  struct blockvector *bl;
+  struct block *b;
 
   bl = blockvector_for_pc_sect (pc, section, &b, NULL);
   if (bl)
@@ -278,7 +252,7 @@ block_for_pc_sect (CORE_ADDR pc, struct obj_section *section)
 /* Return the innermost lexical block containing the specified pc value,
    or 0 if there is none.  Backward compatibility, no section.  */
 
-const struct block *
+struct block *
 block_for_pc (CORE_ADDR pc)
 {
   return block_for_pc_sect (pc, find_pc_mapped_section (pc));
@@ -326,7 +300,7 @@ block_using (const struct block *block)
   if (block == NULL || BLOCK_NAMESPACE (block) == NULL)
     return NULL;
   else
-    return BLOCK_NAMESPACE (block)->using_decl;
+    return BLOCK_NAMESPACE (block)->using;
 }
 
 /* Set BLOCK's using member to USING; if needed, allocate memory via
@@ -335,12 +309,12 @@ block_using (const struct block *block)
 
 void
 block_set_using (struct block *block,
-		 struct using_direct *using_decl,
+		 struct using_direct *using,
 		 struct obstack *obstack)
 {
   block_initialize_namespace (block, obstack);
 
-  BLOCK_NAMESPACE (block)->using_decl = using_decl;
+  BLOCK_NAMESPACE (block)->using = using;
 }
 
 /* If BLOCK_NAMESPACE (block) is NULL, allocate it via OBSTACK and
@@ -354,7 +328,7 @@ block_initialize_namespace (struct block *block, struct obstack *obstack)
       BLOCK_NAMESPACE (block)
 	= obstack_alloc (obstack, sizeof (struct block_namespace_info));
       BLOCK_NAMESPACE (block)->scope = NULL;
-      BLOCK_NAMESPACE (block)->using_decl = NULL;
+      BLOCK_NAMESPACE (block)->using = NULL;
     }
 }
 
@@ -400,7 +374,14 @@ block_global_block (const struct block *block)
 struct block *
 allocate_block (struct obstack *obstack)
 {
-  struct block *bl = OBSTACK_ZALLOC (obstack, struct block);
+  struct block *bl = obstack_alloc (obstack, sizeof (struct block));
+
+  BLOCK_START (bl) = 0;
+  BLOCK_END (bl) = 0;
+  BLOCK_FUNCTION (bl) = NULL;
+  BLOCK_SUPERBLOCK (bl) = NULL;
+  BLOCK_DICT (bl) = NULL;
+  BLOCK_NAMESPACE (bl) = NULL;
 
   return bl;
 }
@@ -415,30 +396,30 @@ allocate_global_block (struct obstack *obstack)
   return &bl->block;
 }
 
-/* Set the compunit of the global block.  */
+/* Set the symtab of the global block.  */
 
 void
-set_block_compunit_symtab (struct block *block, struct compunit_symtab *cu)
+set_block_symtab (struct block *block, struct symtab *symtab)
 {
   struct global_block *gb;
 
   gdb_assert (BLOCK_SUPERBLOCK (block) == NULL);
   gb = (struct global_block *) block;
-  gdb_assert (gb->compunit_symtab == NULL);
-  gb->compunit_symtab = cu;
+  gdb_assert (gb->symtab == NULL);
+  gb->symtab = symtab;
 }
 
-/* Return the compunit of the global block.  */
+/* Return the symtab of the global block.  */
 
-static struct compunit_symtab *
-get_block_compunit_symtab (const struct block *block)
+static struct symtab *
+get_block_symtab (const struct block *block)
 {
   struct global_block *gb;
 
   gdb_assert (BLOCK_SUPERBLOCK (block) == NULL);
   gb = (struct global_block *) block;
-  gdb_assert (gb->compunit_symtab != NULL);
-  return gb->compunit_symtab;
+  gdb_assert (gb->symtab != NULL);
+  return gb->symtab;
 }
 
 
@@ -452,19 +433,19 @@ initialize_block_iterator (const struct block *block,
 			   struct block_iterator *iter)
 {
   enum block_enum which;
-  struct compunit_symtab *cu;
+  struct symtab *symtab;
 
   iter->idx = -1;
 
   if (BLOCK_SUPERBLOCK (block) == NULL)
     {
       which = GLOBAL_BLOCK;
-      cu = get_block_compunit_symtab (block);
+      symtab = get_block_symtab (block);
     }
   else if (BLOCK_SUPERBLOCK (BLOCK_SUPERBLOCK (block)) == NULL)
     {
       which = STATIC_BLOCK;
-      cu = get_block_compunit_symtab (BLOCK_SUPERBLOCK (block));
+      symtab = get_block_symtab (BLOCK_SUPERBLOCK (block));
     }
   else
     {
@@ -477,14 +458,14 @@ initialize_block_iterator (const struct block *block,
 
   /* If this is an included symtab, find the canonical includer and
      use it instead.  */
-  while (cu->user != NULL)
-    cu = cu->user;
+  while (symtab->user != NULL)
+    symtab = symtab->user;
 
   /* Putting this check here simplifies the logic of the iterator
      functions.  If there are no included symtabs, we only need to
      search a single block, so we might as well just do that
      directly.  */
-  if (cu->includes == NULL)
+  if (symtab->includes == NULL)
     {
       iter->d.block = block;
       /* A signal value meaning that we're iterating over a single
@@ -493,20 +474,20 @@ initialize_block_iterator (const struct block *block,
     }
   else
     {
-      iter->d.compunit_symtab = cu;
+      iter->d.symtab = symtab;
       iter->which = which;
     }
 }
 
-/* A helper function that finds the current compunit over whose static
+/* A helper function that finds the current symtab over whose static
    or global block we should iterate.  */
 
-static struct compunit_symtab *
-find_iterator_compunit_symtab (struct block_iterator *iterator)
+static struct symtab *
+find_iterator_symtab (struct block_iterator *iterator)
 {
   if (iterator->idx == -1)
-    return iterator->d.compunit_symtab;
-  return iterator->d.compunit_symtab->includes[iterator->idx];
+    return iterator->d.symtab;
+  return iterator->d.symtab->includes[iterator->idx];
 }
 
 /* Perform a single step for a plain block iterator, iterating across
@@ -524,16 +505,14 @@ block_iterator_step (struct block_iterator *iterator, int first)
     {
       if (first)
 	{
-	  struct compunit_symtab *cust
-	    = find_iterator_compunit_symtab (iterator);
+	  struct symtab *symtab = find_iterator_symtab (iterator);
 	  const struct block *block;
 
 	  /* Iteration is complete.  */
-	  if (cust == NULL)
+	  if (symtab == NULL)
 	    return  NULL;
 
-	  block = BLOCKVECTOR_BLOCK (COMPUNIT_BLOCKVECTOR (cust),
-				     iterator->which);
+	  block = BLOCKVECTOR_BLOCK (BLOCKVECTOR (symtab), iterator->which);
 	  sym = dict_iterator_first (BLOCK_DICT (block), &iterator->dict_iter);
 	}
       else
@@ -591,16 +570,14 @@ block_iter_name_step (struct block_iterator *iterator, const char *name,
     {
       if (first)
 	{
-	  struct compunit_symtab *cust
-	    = find_iterator_compunit_symtab (iterator);
+	  struct symtab *symtab = find_iterator_symtab (iterator);
 	  const struct block *block;
 
 	  /* Iteration is complete.  */
-	  if (cust == NULL)
+	  if (symtab == NULL)
 	    return  NULL;
 
-	  block = BLOCKVECTOR_BLOCK (COMPUNIT_BLOCKVECTOR (cust),
-				     iterator->which);
+	  block = BLOCKVECTOR_BLOCK (BLOCKVECTOR (symtab), iterator->which);
 	  sym = dict_iter_name_first (BLOCK_DICT (block), name,
 				      &iterator->dict_iter);
 	}
@@ -662,16 +639,14 @@ block_iter_match_step (struct block_iterator *iterator,
     {
       if (first)
 	{
-	  struct compunit_symtab *cust
-	    = find_iterator_compunit_symtab (iterator);
+	  struct symtab *symtab = find_iterator_symtab (iterator);
 	  const struct block *block;
 
 	  /* Iteration is complete.  */
-	  if (cust == NULL)
+	  if (symtab == NULL)
 	    return  NULL;
 
-	  block = BLOCKVECTOR_BLOCK (COMPUNIT_BLOCKVECTOR (cust),
-				     iterator->which);
+	  block = BLOCKVECTOR_BLOCK (BLOCKVECTOR (symtab), iterator->which);
 	  sym = dict_iter_match_first (BLOCK_DICT (block), name,
 				       compare, &iterator->dict_iter);
 	}
@@ -717,149 +692,4 @@ block_iter_match_next (const char *name,
     return dict_iter_match_next (name, compare, &iterator->dict_iter);
 
   return block_iter_match_step (iterator, name, compare, 0);
-}
-
-/* See block.h.
-
-   Note that if NAME is the demangled form of a C++ symbol, we will fail
-   to find a match during the binary search of the non-encoded names, but
-   for now we don't worry about the slight inefficiency of looking for
-   a match we'll never find, since it will go pretty quick.  Once the
-   binary search terminates, we drop through and do a straight linear
-   search on the symbols.  Each symbol which is marked as being a ObjC/C++
-   symbol (language_cplus or language_objc set) has both the encoded and
-   non-encoded names tested for a match.  */
-
-struct symbol *
-block_lookup_symbol (const struct block *block, const char *name,
-		     const domain_enum domain)
-{
-  struct block_iterator iter;
-  struct symbol *sym;
-
-  if (!BLOCK_FUNCTION (block))
-    {
-      struct symbol *other = NULL;
-
-      ALL_BLOCK_SYMBOLS_WITH_NAME (block, name, iter, sym)
-	{
-	  if (SYMBOL_DOMAIN (sym) == domain)
-	    return sym;
-	  /* This is a bit of a hack, but symbol_matches_domain might ignore
-	     STRUCT vs VAR domain symbols.  So if a matching symbol is found,
-	     make sure there is no "better" matching symbol, i.e., one with
-	     exactly the same domain.  PR 16253.  */
-	  if (symbol_matches_domain (SYMBOL_LANGUAGE (sym),
-				     SYMBOL_DOMAIN (sym), domain))
-	    other = sym;
-	}
-      return other;
-    }
-  else
-    {
-      /* Note that parameter symbols do not always show up last in the
-	 list; this loop makes sure to take anything else other than
-	 parameter symbols first; it only uses parameter symbols as a
-	 last resort.  Note that this only takes up extra computation
-	 time on a match.
-	 It's hard to define types in the parameter list (at least in
-	 C/C++) so we don't do the same PR 16253 hack here that is done
-	 for the !BLOCK_FUNCTION case.  */
-
-      struct symbol *sym_found = NULL;
-
-      ALL_BLOCK_SYMBOLS_WITH_NAME (block, name, iter, sym)
-	{
-	  if (symbol_matches_domain (SYMBOL_LANGUAGE (sym),
-				     SYMBOL_DOMAIN (sym), domain))
-	    {
-	      sym_found = sym;
-	      if (!SYMBOL_IS_ARGUMENT (sym))
-		{
-		  break;
-		}
-	    }
-	}
-      return (sym_found);	/* Will be NULL if not found.  */
-    }
-}
-
-/* See block.h.  */
-
-struct symbol *
-block_lookup_symbol_primary (const struct block *block, const char *name,
-			     const domain_enum domain)
-{
-  struct symbol *sym, *other;
-  struct dict_iterator dict_iter;
-
-  /* Verify BLOCK is STATIC_BLOCK or GLOBAL_BLOCK.  */
-  gdb_assert (BLOCK_SUPERBLOCK (block) == NULL
-	      || BLOCK_SUPERBLOCK (BLOCK_SUPERBLOCK (block)) == NULL);
-
-  other = NULL;
-  for (sym = dict_iter_name_first (block->dict, name, &dict_iter);
-       sym != NULL;
-       sym = dict_iter_name_next (name, &dict_iter))
-    {
-      if (SYMBOL_DOMAIN (sym) == domain)
-	return sym;
-
-      /* This is a bit of a hack, but symbol_matches_domain might ignore
-	 STRUCT vs VAR domain symbols.  So if a matching symbol is found,
-	 make sure there is no "better" matching symbol, i.e., one with
-	 exactly the same domain.  PR 16253.  */
-      if (symbol_matches_domain (SYMBOL_LANGUAGE (sym),
-				 SYMBOL_DOMAIN (sym), domain))
-	other = sym;
-    }
-
-  return other;
-}
-
-/* See block.h.  */
-
-struct symbol *
-block_find_symbol (const struct block *block, const char *name,
-		   const domain_enum domain,
-		   block_symbol_matcher_ftype *matcher, void *data)
-{
-  struct block_iterator iter;
-  struct symbol *sym;
-
-  /* Verify BLOCK is STATIC_BLOCK or GLOBAL_BLOCK.  */
-  gdb_assert (BLOCK_SUPERBLOCK (block) == NULL
-	      || BLOCK_SUPERBLOCK (BLOCK_SUPERBLOCK (block)) == NULL);
-
-  ALL_BLOCK_SYMBOLS_WITH_NAME (block, name, iter, sym)
-    {
-      /* MATCHER is deliberately called second here so that it never sees
-	 a non-domain-matching symbol.  */
-      if (symbol_matches_domain (SYMBOL_LANGUAGE (sym),
-				 SYMBOL_DOMAIN (sym), domain)
-	  && matcher (sym, data))
-	return sym;
-    }
-  return NULL;
-}
-
-/* See block.h.  */
-
-int
-block_find_non_opaque_type (struct symbol *sym, void *data)
-{
-  return !TYPE_IS_OPAQUE (SYMBOL_TYPE (sym));
-}
-
-/* See block.h.  */
-
-int
-block_find_non_opaque_type_preferred (struct symbol *sym, void *data)
-{
-  struct symbol **best = data;
-
-  if (!TYPE_IS_OPAQUE (SYMBOL_TYPE (sym)))
-    return 1;
-  *best = sym;
-  return 0;
 }

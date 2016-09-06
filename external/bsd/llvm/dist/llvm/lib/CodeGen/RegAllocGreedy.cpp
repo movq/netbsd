@@ -86,14 +86,6 @@ static cl::opt<bool> EnableLocalReassignment(
              "may be compile time intensive"),
     cl::init(false));
 
-static cl::opt<bool> EnableDeferredSpilling(
-    "enable-deferred-spilling", cl::Hidden,
-    cl::desc("Instead of spilling a variable right away, defer the actual "
-             "code insertion to the end of the allocation. That way the "
-             "allocator might still find a suitable coloring for this "
-             "variable because of other evicted variables."),
-    cl::init(false));
-
 // FIXME: Find a good default for this flag and remove the flag.
 static cl::opt<unsigned>
 CSRFirstTimeCost("regalloc-csr-first-time-cost",
@@ -164,11 +156,6 @@ class RAGreedy : public MachineFunctionPass,
 
     /// Live range will be spilled.  No more splitting will be attempted.
     RS_Spill,
-
-
-    /// Live range is in memory. Because of other evictions, it might get moved
-    /// in a register in the end.
-    RS_Memory,
 
     /// There is nothing more we can do to this live range.  Abort compilation
     /// if it can't be assigned.
@@ -413,8 +400,6 @@ private:
   typedef SmallVector<HintInfo, 4> HintsInfo;
   BlockFrequency getBrokenHintFreq(const HintsInfo &, unsigned);
   void collectHintInfo(unsigned, HintsInfo &);
-
-  bool isUnusedCalleeSavedReg(unsigned PhysReg) const;
 };
 } // end anonymous namespace
 
@@ -427,7 +412,6 @@ const char *const RAGreedy::StageName[] = {
     "RS_Split",
     "RS_Split2",
     "RS_Spill",
-    "RS_Memory",
     "RS_Done"
 };
 #endif
@@ -461,8 +445,8 @@ void RAGreedy::getAnalysisUsage(AnalysisUsage &AU) const {
   AU.setPreservesCFG();
   AU.addRequired<MachineBlockFrequencyInfo>();
   AU.addPreserved<MachineBlockFrequencyInfo>();
-  AU.addRequired<AAResultsWrapperPass>();
-  AU.addPreserved<AAResultsWrapperPass>();
+  AU.addRequired<AliasAnalysis>();
+  AU.addPreserved<AliasAnalysis>();
   AU.addRequired<LiveIntervals>();
   AU.addPreserved<LiveIntervals>();
   AU.addRequired<SlotIndexes>();
@@ -550,20 +534,12 @@ void RAGreedy::enqueue(PQueue &CurQueue, LiveInterval *LI) {
     // Unsplit ranges that couldn't be allocated immediately are deferred until
     // everything else has been allocated.
     Prio = Size;
-  } else if (ExtraRegInfo[Reg].Stage == RS_Memory) {
-    // Memory operand should be considered last.
-    // Change the priority such that Memory operand are assigned in
-    // the reverse order that they came in.
-    // TODO: Make this a member variable and probably do something about hints.
-    static unsigned MemOp = 0;
-    Prio = MemOp++;
   } else {
     // Giant live ranges fall back to the global assignment heuristic, which
     // prevents excessive spilling in pathological cases.
     bool ReverseLocal = TRI->reverseLocalAssignment();
-    const TargetRegisterClass &RC = *MRI->getRegClass(Reg);
     bool ForceGlobal = !ReverseLocal &&
-      (Size / SlotIndex::InstrDist) > (2 * RC.getNumRegs());
+      (Size / SlotIndex::InstrDist) > (2 * MRI->getRegClass(Reg)->getNumRegs());
 
     if (ExtraRegInfo[Reg].Stage == RS_Assign && !ForceGlobal && !LI->empty() &&
         LIS->intervalIsInOneMBB(*LI)) {
@@ -576,10 +552,10 @@ void RAGreedy::enqueue(PQueue &CurQueue, LiveInterval *LI) {
         // Allocating bottom up may allow many short LRGs to be assigned first
         // to one of the cheap registers. This could be much faster for very
         // large blocks on targets with many physical registers.
-        Prio = Indexes->getZeroIndex().getInstrDistance(LI->endIndex());
+        Prio = Indexes->getZeroIndex().getInstrDistance(LI->beginIndex());
       }
-      Prio |= RC.AllocationPriority << 24;
-    } else {
+    }
+    else {
       // Allocate global and split ranges in long->short order. Long ranges that
       // don't fit should be spilled (or split) ASAP so they don't create
       // interference.  Mark a bit to prioritize global above local ranges.
@@ -658,7 +634,7 @@ unsigned RAGreedy::tryAssign(LiveInterval &VirtReg,
 //===----------------------------------------------------------------------===//
 
 unsigned RAGreedy::canReassign(LiveInterval &VirtReg, unsigned PrevReg) {
-  AllocationOrder Order(VirtReg.reg, *VRM, RegClassInfo, Matrix);
+  AllocationOrder Order(VirtReg.reg, *VRM, RegClassInfo);
   unsigned PhysReg;
   while ((PhysReg = Order.next())) {
     if (PhysReg == PrevReg)
@@ -839,16 +815,6 @@ void RAGreedy::evictInterference(LiveInterval &VirtReg, unsigned PhysReg,
   }
 }
 
-/// Returns true if the given \p PhysReg is a callee saved register and has not
-/// been used for allocation yet.
-bool RAGreedy::isUnusedCalleeSavedReg(unsigned PhysReg) const {
-  unsigned CSR = RegClassInfo.getLastCalleeSavedAlias(PhysReg);
-  if (CSR == 0)
-    return false;
-
-  return !Matrix->isPhysRegUsed(PhysReg);
-}
-
 /// tryEvict - Try to evict all interferences for a physreg.
 /// @param  VirtReg Currently unassigned virtual register.
 /// @param  Order   Physregs to try.
@@ -894,12 +860,13 @@ unsigned RAGreedy::tryEvict(LiveInterval &VirtReg,
       continue;
     // The first use of a callee-saved register in a function has cost 1.
     // Don't start using a CSR when the CostPerUseLimit is low.
-    if (CostPerUseLimit == 1 && isUnusedCalleeSavedReg(PhysReg)) {
-      DEBUG(dbgs() << PrintReg(PhysReg, TRI) << " would clobber CSR "
-            << PrintReg(RegClassInfo.getLastCalleeSavedAlias(PhysReg), TRI)
-            << '\n');
-      continue;
-    }
+    if (CostPerUseLimit == 1)
+     if (unsigned CSR = RegClassInfo.getLastCalleeSavedAlias(PhysReg))
+       if (!MRI->isPhysRegUsed(CSR)) {
+         DEBUG(dbgs() << PrintReg(PhysReg, TRI) << " would clobber CSR "
+                      << PrintReg(CSR, TRI) << '\n');
+         continue;
+       }
 
     if (!canEvictInterference(VirtReg, PhysReg, false, BestCost))
       continue;
@@ -1380,8 +1347,9 @@ unsigned RAGreedy::calculateRegionSplitCost(LiveInterval &VirtReg,
   unsigned BestCand = NoCand;
   Order.rewind();
   while (unsigned PhysReg = Order.next()) {
-    if (IgnoreCSR && isUnusedCalleeSavedReg(PhysReg))
-      continue;
+   if (unsigned CSR = RegClassInfo.getLastCalleeSavedAlias(PhysReg))
+     if (IgnoreCSR && !MRI->isPhysRegUsed(CSR))
+       continue;
 
     // Discard bad candidates before we run out of interference cache cursors.
     // This will only affect register classes with a lot of registers (>32).
@@ -1586,8 +1554,7 @@ RAGreedy::tryInstructionSplit(LiveInterval &VirtReg, AllocationOrder &Order,
 
   DEBUG(dbgs() << "Split around " << Uses.size() << " individual instrs.\n");
 
-  const TargetRegisterClass *SuperRC =
-      TRI->getLargestLegalSuperClass(CurRC, *MF);
+  const TargetRegisterClass *SuperRC = TRI->getLargestLegalSuperClass(CurRC);
   unsigned SuperRCNumAllocatableRegs = RCI.getNumAllocatableRegs(SuperRC);
   // Split around every non-copy instruction if this split will relax
   // the constraints on the virtual register.
@@ -2165,8 +2132,7 @@ unsigned RAGreedy::tryLastChanceRecoloring(LiveInterval &VirtReg,
       unsigned ItVirtReg = (*It)->reg;
       if (VRM->hasPhys(ItVirtReg))
         Matrix->unassign(**It);
-      unsigned ItPhysReg = VirtRegToPhysReg[ItVirtReg];
-      Matrix->assign(**It, ItPhysReg);
+      Matrix->assign(**It, VirtRegToPhysReg[ItVirtReg]);
     }
   }
 
@@ -2471,13 +2437,18 @@ unsigned RAGreedy::selectOrSplitImpl(LiveInterval &VirtReg,
                                      unsigned Depth) {
   unsigned CostPerUseLimit = ~0u;
   // First try assigning a free register.
-  AllocationOrder Order(VirtReg.reg, *VRM, RegClassInfo, Matrix);
+  AllocationOrder Order(VirtReg.reg, *VRM, RegClassInfo);
   if (unsigned PhysReg = tryAssign(VirtReg, Order, NewVRegs)) {
+    // We check other options if we are using a CSR for the first time.
+    bool CSRFirstUse = false;
+    if (unsigned CSR = RegClassInfo.getLastCalleeSavedAlias(PhysReg))
+      if (!MRI->isPhysRegUsed(CSR))
+        CSRFirstUse = true;
+
     // When NewVRegs is not empty, we may have made decisions such as evicting
     // a virtual register, go with the earlier decisions and use the physical
     // register.
-    if (CSRCost.getFrequency() && isUnusedCalleeSavedReg(PhysReg) &&
-        NewVRegs.empty()) {
+    if (CSRCost.getFrequency() && CSRFirstUse && NewVRegs.empty()) {
       unsigned CSRReg = tryAssignCSRFirstTime(VirtReg, Order, PhysReg,
                                               CostPerUseLimit, NewVRegs);
       if (CSRReg || !NewVRegs.empty())
@@ -2533,23 +2504,13 @@ unsigned RAGreedy::selectOrSplitImpl(LiveInterval &VirtReg,
     return PhysReg;
 
   // Finally spill VirtReg itself.
-  if (EnableDeferredSpilling && getStage(VirtReg) < RS_Memory) {
-    // TODO: This is experimental and in particular, we do not model
-    // the live range splitting done by spilling correctly.
-    // We would need a deep integration with the spiller to do the
-    // right thing here. Anyway, that is still good for early testing.
-    setStage(VirtReg, RS_Memory);
-    DEBUG(dbgs() << "Do as if this register is in memory\n");
-    NewVRegs.push_back(VirtReg.reg);
-  } else {
-    NamedRegionTimer T("Spiller", TimerGroupName, TimePassesIsEnabled);
-    LiveRangeEdit LRE(&VirtReg, NewVRegs, *MF, *LIS, VRM, this);
-    spiller().spill(LRE);
-    setStage(NewVRegs.begin(), NewVRegs.end(), RS_Done);
+  NamedRegionTimer T("Spiller", TimerGroupName, TimePassesIsEnabled);
+  LiveRangeEdit LRE(&VirtReg, NewVRegs, *MF, *LIS, VRM, this);
+  spiller().spill(LRE);
+  setStage(NewVRegs.begin(), NewVRegs.end(), RS_Done);
 
-    if (VerifyEnabled)
-      MF->verify(this, "After spilling");
-  }
+  if (VerifyEnabled)
+    MF->verify(this, "After spilling");
 
   // The live virtual register requesting allocation was spilled, so tell
   // the caller not to allocate anything during this round.
@@ -2586,7 +2547,7 @@ bool RAGreedy::runOnMachineFunction(MachineFunction &mf) {
 
   initializeCSRCost();
 
-  calculateSpillWeightsAndHints(*LIS, mf, VRM, *Loops, *MBFI);
+  calculateSpillWeightsAndHints(*LIS, mf, *Loops, *MBFI);
 
   DEBUG(LIS->dump());
 

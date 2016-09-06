@@ -1,4 +1,4 @@
-/*	$NetBSD: ciss.c,v 1.36 2016/07/14 04:00:45 msaitoh Exp $	*/
+/*	$NetBSD: ciss.c,v 1.32 2013/10/17 21:24:24 christos Exp $	*/
 /*	$OpenBSD: ciss.c,v 1.68 2013/05/30 16:15:02 deraadt Exp $	*/
 
 /*
@@ -19,7 +19,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ciss.c,v 1.36 2016/07/14 04:00:45 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ciss.c,v 1.32 2013/10/17 21:24:24 christos Exp $");
 
 #include "bio.h"
 
@@ -142,12 +142,12 @@ ciss_attach(struct ciss_softc *sc)
 	    (u_int32_t *)&sc->cfg, sizeof(sc->cfg) / 4);
 
 	if (sc->cfg.signature != CISS_SIGNATURE) {
-		aprint_error(": bad sign 0x%08x\n", sc->cfg.signature);
+		printf(": bad sign 0x%08x\n", sc->cfg.signature);
 		return -1;
 	}
 
 	if (!(sc->cfg.methods & CISS_METH_SIMPL)) {
-		aprint_error(": not simple 0x%08x\n", sc->cfg.methods);
+		printf(": not simple 0x%08x\n", sc->cfg.methods);
 		return -1;
 	}
 
@@ -202,7 +202,7 @@ ciss_attach(struct ciss_softc *sc)
 
 	if (!(bus_space_read_4(sc->sc_iot, sc->cfg_ioh, sc->cfgoff +
 	    offsetof(struct ciss_config, amethod)) & CISS_METH_READY)) {
-		aprint_error(": she never came ready for me 0x%08x\n",
+		printf(": she never came ready for me 0x%08x\n",
 		    sc->cfg.amethod);
 		return -1;
 	}
@@ -221,27 +221,27 @@ ciss_attach(struct ciss_softc *sc)
 	total = sc->ccblen * sc->maxcmd;
 	if ((error = bus_dmamem_alloc(sc->sc_dmat, total, PAGE_SIZE, 0,
 	    sc->cmdseg, 1, &rseg, BUS_DMA_NOWAIT))) {
-		aprint_error(": cannot allocate CCBs (%d)\n", error);
+		printf(": cannot allocate CCBs (%d)\n", error);
 		return -1;
 	}
 
 	if ((error = bus_dmamem_map(sc->sc_dmat, sc->cmdseg, rseg, total,
 	    (void **)&sc->ccbs, BUS_DMA_NOWAIT))) {
-		aprint_error(": cannot map CCBs (%d)\n", error);
+		printf(": cannot map CCBs (%d)\n", error);
 		return -1;
 	}
 	memset(sc->ccbs, 0, total);
 
 	if ((error = bus_dmamap_create(sc->sc_dmat, total, 1,
 	    total, 0, BUS_DMA_NOWAIT | BUS_DMA_ALLOCNOW, &sc->cmdmap))) {
-		aprint_error(": cannot create CCBs dmamap (%d)\n", error);
+		printf(": cannot create CCBs dmamap (%d)\n", error);
 		bus_dmamem_free(sc->sc_dmat, sc->cmdseg, 1);
 		return -1;
 	}
 
 	if ((error = bus_dmamap_load(sc->sc_dmat, sc->cmdmap, sc->ccbs, total,
 	    NULL, BUS_DMA_NOWAIT))) {
-		aprint_error(": cannot load CCBs dmamap (%d)\n", error);
+		printf(": cannot load CCBs dmamap (%d)\n", error);
 		bus_dmamem_free(sc->sc_dmat, sc->cmdseg, 1);
 		bus_dmamap_destroy(sc->sc_dmat, sc->cmdmap);
 		return -1;
@@ -278,7 +278,7 @@ ciss_attach(struct ciss_softc *sc)
 	}
 
 	if (i < sc->maxcmd) {
-		aprint_error(": cannot create ccb#%d dmamap (%d)\n", i, error);
+		printf(": cannot create ccb#%d dmamap (%d)\n", i, error);
 		if (i == 0) {
 			/* TODO leaking cmd's dmamaps and shitz */
 			bus_dmamem_free(sc->sc_dmat, sc->cmdseg, 1);
@@ -289,22 +289,22 @@ ciss_attach(struct ciss_softc *sc)
 
 	if ((error = bus_dmamem_alloc(sc->sc_dmat, PAGE_SIZE, PAGE_SIZE, 0,
 	    seg, 1, &rseg, BUS_DMA_NOWAIT))) {
-		aprint_error(": cannot allocate scratch buffer (%d)\n", error);
+		printf(": cannot allocate scratch buffer (%d)\n", error);
 		return -1;
 	}
 
 	if ((error = bus_dmamem_map(sc->sc_dmat, seg, rseg, PAGE_SIZE,
 	    (void **)&sc->scratch, BUS_DMA_NOWAIT))) {
-		aprint_error(": cannot map scratch buffer (%d)\n", error);
+		printf(": cannot map scratch buffer (%d)\n", error);
 		return -1;
 	}
 	memset(sc->scratch, 0, PAGE_SIZE);
 	sc->sc_waitflag = XS_CTL_NOSLEEP;		/* can't sleep yet */
 
-	mutex_enter(&sc->sc_mutex_scratch);	/* is this really needed? */
+	mutex_enter(&sc->sc_mutex_scratch);		/* is this really needed? */
 	inq = sc->scratch;
 	if (ciss_inq(sc, inq)) {
-		aprint_error(": adapter inquiry failed\n");
+		printf(": adapter inquiry failed\n");
 		mutex_exit(&sc->sc_mutex_scratch);
 		bus_dmamem_free(sc->sc_dmat, sc->cmdseg, 1);
 		bus_dmamap_destroy(sc->sc_dmat, sc->cmdmap);
@@ -312,7 +312,7 @@ ciss_attach(struct ciss_softc *sc)
 	}
 
 	if (!(inq->flags & CISS_INQ_BIGMAP)) {
-		aprint_error(": big map is not supported, flags=0x%x\n",
+		printf(": big map is not supported, flags=0x%x\n",
 		    inq->flags);
 		mutex_exit(&sc->sc_mutex_scratch);
 		bus_dmamem_free(sc->sc_dmat, sc->cmdseg, 1);
@@ -323,15 +323,15 @@ ciss_attach(struct ciss_softc *sc)
 	sc->maxunits = inq->numld;
 	sc->nbus = inq->nscsi_bus;
 	sc->ndrives = inq->buswidth ? inq->buswidth : 256;
-	aprint_normal(": %d LD%s, HW rev %d, FW %4.4s/%4.4s",
+	printf(": %d LD%s, HW rev %d, FW %4.4s/%4.4s",
 	    inq->numld, inq->numld == 1? "" : "s",
 	    inq->hw_rev, inq->fw_running, inq->fw_stored);
 
 	if (sc->cfg.methods & CISS_METH_FIFO64)
-		aprint_normal(", 64bit fifo");
+		printf(", 64bit fifo");
 	else if (sc->cfg.methods & CISS_METH_FIFO64_RRO)
-		aprint_normal(", 64bit fifo rro");
-	aprint_normal("\n");
+		printf(", 64bit fifo rro");
+	printf("\n");
 
 	mutex_exit(&sc->sc_mutex_scratch);
 
@@ -357,8 +357,7 @@ ciss_attach(struct ciss_softc *sc)
 
 	sc->sc_flush = CISS_FLUSH_ENABLE;
 	if (!(sc->sc_sh = shutdownhook_establish(ciss_shutdown, sc))) {
-		aprint_error_dev(sc->sc_dev,
-		    "unable to establish shutdown hook\n");
+		printf(": unable to establish shutdown hook\n");
 		bus_dmamem_free(sc->sc_dmat, sc->cmdseg, 1);
 		bus_dmamap_destroy(sc->sc_dmat, sc->cmdmap);
 		return -1;
@@ -438,97 +437,6 @@ cissminphys(struct buf *bp)
 	minphys(bp);
 }
 
-static struct ciss_ccb *
-ciss_poll1(struct ciss_softc *sc)
-{
-	struct ciss_ccb *ccb;
-	uint32_t id;
-
-	if (!(bus_space_read_4(sc->sc_iot, sc->sc_ioh, CISS_ISR) & sc->iem)) {
-		CISS_DPRINTF(CISS_D_CMD, ("N"));
-		return NULL;
-	}
-
-	if (sc->cfg.methods & CISS_METH_FIFO64) {
-		if (bus_space_read_4(sc->sc_iot, sc->sc_ioh, CISS_OUTQ64_HI) ==
-		    0xffffffff) {
-			CISS_DPRINTF(CISS_D_CMD, ("Q"));
-			return NULL;
-		}
-		id = bus_space_read_4(sc->sc_iot, sc->sc_ioh, CISS_OUTQ64_LO);
-	} else if (sc->cfg.methods & CISS_METH_FIFO64_RRO) {
-		id = bus_space_read_4(sc->sc_iot, sc->sc_ioh, CISS_OUTQ64_LO);
-		if (id == 0xffffffff) {
-			CISS_DPRINTF(CISS_D_CMD, ("Q"));
-			return NULL;
-		}
-		(void)bus_space_read_4(sc->sc_iot, sc->sc_ioh, CISS_OUTQ64_HI);
-	} else {
-		id = bus_space_read_4(sc->sc_iot, sc->sc_ioh, CISS_OUTQ);
-		if (id == 0xffffffff) {
-			CISS_DPRINTF(CISS_D_CMD, ("Q"));
-			return NULL;
-		}
-	}
-
-	CISS_DPRINTF(CISS_D_CMD, ("got=0x%x ", id));
-	ccb = (struct ciss_ccb *) ((char *)sc->ccbs + (id >> 2) * sc->ccblen);
-	ccb->ccb_cmd.id = htole32(id);
-	ccb->ccb_cmd.id_hi = htole32(0);
-	return ccb;
-}
-
-static int
-ciss_poll(struct ciss_softc *sc, struct ciss_ccb *ccb, int ms)
-{
-	struct ciss_ccb *ccb1;
-
-	ms /= 10;
-
-	while (ms-- > 0) {
-		DELAY(10);
-		ccb1 = ciss_poll1(sc);
-		if (ccb1 == NULL)
-			continue;
-		ciss_done(ccb1);
-		if (ccb1 == ccb)
-			return 0;
-	}
-
-	return ETIMEDOUT;
-}
-
-static int
-ciss_wait(struct ciss_softc *sc, struct ciss_ccb *ccb, int ms)
-{
-	int tohz, etick;
-
-	tohz = mstohz(ms);
-	if (tohz == 0)
-		tohz = 1;
-	etick = hardclock_ticks + tohz;
-
-	for (;;) {
-		ccb->ccb_state = CISS_CCB_POLL;
-		CISS_DPRINTF(CISS_D_CMD, ("cv_timedwait(%d) ", tohz));
-		mutex_enter(&sc->sc_mutex);
-		if (cv_timedwait(&sc->sc_condvar, &sc->sc_mutex, tohz)
-		    == EWOULDBLOCK) {
-			mutex_exit(&sc->sc_mutex);
-			return EWOULDBLOCK;
-		}
-		mutex_exit(&sc->sc_mutex);
-		if (ccb->ccb_state == CISS_CCB_ONQ) {
-			ciss_done(ccb);
-			return 0;
-		}
-		tohz = etick - hardclock_ticks;
-		if (tohz <= 0)
-			return EWOULDBLOCK;
-		CISS_DPRINTF(CISS_D_CMD, ("T"));
-	}
-}
-
 /*
  * submit a command and optionally wait for completition.
  * wait arg abuses XS_CTL_POLL|XS_CTL_NOSLEEP flags to request
@@ -540,9 +448,11 @@ ciss_cmd(struct ciss_ccb *ccb, int flags, int wait)
 {
 	struct ciss_softc *sc = ccb->ccb_sc;
 	struct ciss_cmd *cmd = &ccb->ccb_cmd;
+	struct ciss_ccb *ccb1;
 	bus_dmamap_t dmap = ccb->ccb_dmamap;
+	u_int32_t id;
 	u_int64_t addr;
-	int i, error = 0;
+	int i, tohz, error = 0;
 
 	if (ccb->ccb_state != CISS_CCB_READY) {
 		printf("%s: ccb %d not ready state=0x%x\n", device_xname(sc->sc_dev),
@@ -617,18 +527,83 @@ ciss_cmd(struct ciss_ccb *ccb, int flags, int wait)
 		    ccb->ccb_cmdpa);
 
 	if (wait & XS_CTL_POLL) {
-		int ms;
+		int etick;
 		CISS_DPRINTF(CISS_D_CMD, ("waiting "));
 
-		ms = ccb->ccb_xs ? ccb->ccb_xs->timeout : 60000;
-		if (wait & XS_CTL_NOSLEEP)
-			error = ciss_poll(sc, ccb, ms);
-		else
-			error = ciss_wait(sc, ccb, ms);
+		i = ccb->ccb_xs? ccb->ccb_xs->timeout : 60000;
+		tohz = (i / 1000) * hz + (i % 1000) * (hz / 1000);
+		if (tohz == 0)
+			tohz = 1;
+		for (i *= 100, etick = tick + tohz; i--; ) {
+			if (!(wait & XS_CTL_NOSLEEP)) {
+				ccb->ccb_state = CISS_CCB_POLL;
+				CISS_DPRINTF(CISS_D_CMD, ("cv_timedwait(%d) ", tohz));
+				mutex_enter(&sc->sc_mutex);
+				if (cv_timedwait(&sc->sc_condvar,
+				    &sc->sc_mutex, tohz) == EWOULDBLOCK) {
+					mutex_exit(&sc->sc_mutex);
+					break;
+				}
+				mutex_exit(&sc->sc_mutex);
+				if (ccb->ccb_state != CISS_CCB_ONQ) {
+					tohz = etick - tick;
+					if (tohz <= 0)
+						break;
+					CISS_DPRINTF(CISS_D_CMD, ("T"));
+					continue;
+				}
+				ccb1 = ccb;
+			} else {
+				DELAY(10);
+
+				if (!(bus_space_read_4(sc->sc_iot, sc->sc_ioh,
+				    CISS_ISR) & sc->iem)) {
+					CISS_DPRINTF(CISS_D_CMD, ("N"));
+					continue;
+				}
+
+				if (sc->cfg.methods & CISS_METH_FIFO64) {
+					if (bus_space_read_4(sc->sc_iot,
+					    sc->sc_ioh,
+					    CISS_OUTQ64_HI) == 0xffffffff) {
+						CISS_DPRINTF(CISS_D_CMD, ("Q"));
+						continue;
+					}
+					id = bus_space_read_4(sc->sc_iot,
+					    sc->sc_ioh, CISS_OUTQ64_LO);
+				} else if (sc->cfg.methods &
+				    CISS_METH_FIFO64_RRO) {
+					id = bus_space_read_4(sc->sc_iot,
+					    sc->sc_ioh, CISS_OUTQ64_LO);
+					if (id == 0xffffffff) {
+						CISS_DPRINTF(CISS_D_CMD, ("Q"));
+						continue;
+					}
+					(void)bus_space_read_4(sc->sc_iot,
+					    sc->sc_ioh, CISS_OUTQ64_HI);
+				} else {
+					id = bus_space_read_4(sc->sc_iot,
+					    sc->sc_ioh, CISS_OUTQ);
+					if (id == 0xffffffff) {
+						CISS_DPRINTF(CISS_D_CMD, ("Q"));
+						continue;
+					}
+				}
+
+				CISS_DPRINTF(CISS_D_CMD, ("got=0x%x ", id));
+				ccb1 = (struct ciss_ccb *)
+					((char *)sc->ccbs + (id >> 2) * sc->ccblen);
+				ccb1->ccb_cmd.id = htole32(id);
+				ccb1->ccb_cmd.id_hi = htole32(0);
+			}
+
+			error = ciss_done(ccb1);
+			if (ccb1 == ccb)
+				break;
+		}
 
 		/* if never got a chance to be done above... */
 		if (ccb->ccb_state != CISS_CCB_FREE) {
-			KASSERT(error);
 			ccb->ccb_err.cmd_stat = CISS_ERR_TMO;
 			error = ciss_done(ccb);
 		}
@@ -977,7 +952,7 @@ ciss_pdscan(struct ciss_softc *sc, int ld)
 	pdid = sc->scratch;
 	if (sc->ndrives == 256) {
 		for (i = 0; i < CISS_BIGBIT; i++)
-			if (!ciss_pdid(sc, i, pdid,
+			if (!ciss_pdid(sc, i, pdid, 
 					XS_CTL_POLL|XS_CTL_NOSLEEP) &&
 			    (pdid->present & CISS_PD_PRESENT))
 				buf[k++] = i;
@@ -1353,7 +1328,7 @@ ciss_ioctl(device_t dev, u_long cmd, void *addr)
 			}
 			bd->bd_size = (u_int64_t)le32toh(pdid->nblocks) *
 			    le16toh(pdid->blksz);
-			bd->bd_channel = pdid->bus;
+			bd->bd_channel = pdid->bus;  
 			bd->bd_target = pdid->target;
 			bd->bd_lun = 0;
 			strlcpy(bd->bd_vendor, pdid->model,
@@ -1566,9 +1541,38 @@ ciss_sensor_refresh(struct sysmon_envsys *sme, envsys_data_t *edata)
 
 	memset(&bv, 0, sizeof(bv));
 	bv.bv_volid = edata->sensor;
-	if (ciss_ioctl_vol(sc, &bv))
-		bv.bv_status = BIOC_SVINVALID;
+	if (ciss_ioctl_vol(sc, &bv)) {
+		return;
+	}
 
-	bio_vol_to_envsys(edata, &bv);
+	switch(bv.bv_status) {
+	case BIOC_SVOFFLINE:
+		edata->value_cur = ENVSYS_DRIVE_FAIL;
+		edata->state = ENVSYS_SCRITICAL;
+		break;
+
+	case BIOC_SVDEGRADED:
+		edata->value_cur = ENVSYS_DRIVE_PFAIL;
+		edata->state = ENVSYS_SCRITICAL;
+		break;
+
+	case BIOC_SVSCRUB:
+	case BIOC_SVONLINE:
+		edata->value_cur = ENVSYS_DRIVE_ONLINE;
+		edata->state = ENVSYS_SVALID;
+		break;
+
+	case BIOC_SVREBUILD:
+	case BIOC_SVBUILDING:
+		edata->value_cur = ENVSYS_DRIVE_REBUILD;
+		edata->state = ENVSYS_SVALID;
+		break;
+
+	case BIOC_SVINVALID:
+		/* FALLTRHOUGH */
+	default:
+		edata->value_cur = 0; /* unknown */
+		edata->state = ENVSYS_SINVALID;
+	}
 }
 #endif /* NBIO > 0 */

@@ -35,7 +35,7 @@ extern "C" void LLVMLinkInInterpreter() { }
 ExecutionEngine *Interpreter::create(std::unique_ptr<Module> M,
                                      std::string *ErrStr) {
   // Tell this Module to materialize everything and release the GVMaterializer.
-  if (std::error_code EC = M->materializeAll()) {
+  if (std::error_code EC = M->materializeAllPermanently()) {
     if (ErrStr)
       *ErrStr = EC.message();
     // We got an error, just return 0
@@ -49,15 +49,16 @@ ExecutionEngine *Interpreter::create(std::unique_ptr<Module> M,
 // Interpreter ctor - Initialize stuff
 //
 Interpreter::Interpreter(std::unique_ptr<Module> M)
-    : ExecutionEngine(std::move(M)) {
+  : ExecutionEngine(std::move(M)), TD(Modules.back().get()) {
 
   memset(&ExitValue.Untyped, 0, sizeof(ExitValue.Untyped));
+  setDataLayout(&TD);
   // Initialize the "backend"
   initializeExecutionEngine();
   initializeExternalFunctions();
   emitGlobals();
 
-  IL = new IntrinsicLowering(getDataLayout());
+  IL = new IntrinsicLowering(TD);
 }
 
 Interpreter::~Interpreter() {
@@ -66,7 +67,7 @@ Interpreter::~Interpreter() {
 
 void Interpreter::runAtExitHandlers () {
   while (!AtExitHandlers.empty()) {
-    callFunction(AtExitHandlers.back(), None);
+    callFunction(AtExitHandlers.back(), std::vector<GenericValue>());
     AtExitHandlers.pop_back();
     run();
   }
@@ -74,8 +75,9 @@ void Interpreter::runAtExitHandlers () {
 
 /// run - Start execution with the specified function and arguments.
 ///
-GenericValue Interpreter::runFunction(Function *F,
-                                      ArrayRef<GenericValue> ArgValues) {
+GenericValue
+Interpreter::runFunction(Function *F,
+                         const std::vector<GenericValue> &ArgValues) {
   assert (F && "Function *F was null at entry to run()");
 
   // Try extra hard not to pass extra args to a function that isn't
@@ -85,9 +87,10 @@ GenericValue Interpreter::runFunction(Function *F,
   // parameters than it is declared to take. This does not attempt to
   // take into account gratuitous differences in declared types,
   // though.
-  const size_t ArgCount = F->getFunctionType()->getNumParams();
-  ArrayRef<GenericValue> ActualArgs =
-      ArgValues.slice(0, std::min(ArgValues.size(), ArgCount));
+  std::vector<GenericValue> ActualArgs;
+  const unsigned ArgCount = F->getFunctionType()->getNumParams();
+  for (unsigned i = 0; i < ArgCount; ++i)
+    ActualArgs.push_back(ArgValues[i]);
 
   // Set up the function call.
   callFunction(F, ActualArgs);

@@ -1,4 +1,4 @@
-/*	$NetBSD: rt2661.c,v 1.33 2016/06/10 13:27:13 ozaki-r Exp $	*/
+/*	$NetBSD: rt2661.c,v 1.29 2012/02/18 13:38:36 drochner Exp $	*/
 /*	$OpenBSD: rt2661.c,v 1.17 2006/05/01 08:41:11 damien Exp $	*/
 /*	$FreeBSD: rt2560.c,v 1.5 2006/06/02 19:59:31 csjp Exp $	*/
 
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rt2661.c,v 1.33 2016/06/10 13:27:13 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rt2661.c,v 1.29 2012/02/18 13:38:36 drochner Exp $");
 
 
 #include <sys/param.h>
@@ -1108,7 +1108,7 @@ rt2661_rx_intr(struct rt2661_softc *sc)
 		desc->physaddr = htole32(data->map->dm_segs->ds_addr);
 
 		/* finalize mbuf */
-		m_set_rcvif(m, ifp);
+		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len =
 		    (le32toh(desc->flags) >> 16) & 0xfff;
 
@@ -1806,8 +1806,8 @@ rt2661_start(struct ifnet *ifp)
 			if (m0 == NULL)
 				break;
 
-			ni = M_GETCTX(m0, struct ieee80211_node *);
-			M_CLEARCTX(m0);
+			ni = (struct ieee80211_node *)m0->m_pkthdr.rcvif;
+			m0->m_pkthdr.rcvif = NULL;
 			bpf_mtap3(ic->ic_rawbpf, m0);
 			if (rt2661_tx_mgt(sc, m0, ni) != 0)
 				break;
@@ -2572,7 +2572,7 @@ rt2661_init(struct ifnet *ifp)
 
 		if (firmware_read(fh, 0, ucode, size) != 0) {
 			aprint_error_dev(sc->sc_dev, "could not read microcode %s\n", name);
-			firmware_free(ucode, size);
+			firmware_free(ucode, 0);
 			firmware_close(fh);
 			rt2661_stop(ifp, 1);
 			return EIO;
@@ -2580,13 +2580,13 @@ rt2661_init(struct ifnet *ifp)
 
 		if (rt2661_load_microcode(sc, ucode, size) != 0) {
 			aprint_error_dev(sc->sc_dev, "could not load 8051 microcode\n");
-			firmware_free(ucode, size);
+			firmware_free(ucode, 0);
 			firmware_close(fh);
 			rt2661_stop(ifp, 1);
 			return EIO;
 		}
 
-		firmware_free(ucode, size);
+		firmware_free(ucode, 0);
 		firmware_close(fh);
 		sc->sc_flags |= RT2661_FWLOADED;
 	}

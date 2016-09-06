@@ -1,4 +1,4 @@
-/*	$NetBSD: tmpfs_vnops.c,v 1.128 2016/08/20 12:37:08 hannken Exp $	*/
+/*	$NetBSD: tmpfs_vnops.c,v 1.120.2.3 2016/05/10 19:04:15 snj Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tmpfs_vnops.c,v 1.128 2016/08/20 12:37:08 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tmpfs_vnops.c,v 1.120.2.3 2016/05/10 19:04:15 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/dirent.h>
@@ -173,10 +173,10 @@ tmpfs_lookup(void *v)
 	if (cachefound && *vpp == NULLVP) {
 		/* Negative cache hit. */
 		error = ENOENT;
-		goto out;
+		goto out_unlocked;
 	} else if (cachefound) {
 		error = 0;
-		goto out;
+		goto out_unlocked;
 	}
 
 	/*
@@ -205,8 +205,21 @@ tmpfs_lookup(void *v)
 			goto out;
 		}
 
-		error = vcache_get(dvp->v_mount, &pnode, sizeof(pnode), vpp);
+		/*
+		 * Lock the parent tn_vlock before releasing the vnode lock,
+		 * and thus prevent parent from disappearing.
+		 */
+		mutex_enter(&pnode->tn_vlock);
+		VOP_UNLOCK(dvp);
+
+		/*
+		 * Get a vnode of the '..' entry and re-acquire the lock.
+		 * Release the tn_vlock.
+		 */
+		error = tmpfs_vnode_get(dvp->v_mount, pnode, vpp);
+		vn_lock(dvp, LK_EXCLUSIVE | LK_RETRY);
 		goto out;
+
 	} else if (cnp->cn_namelen == 1 && cnp->cn_nameptr[0] == '.') {
 		/*
 		 * Lookup of "." case.
@@ -279,7 +292,8 @@ tmpfs_lookup(void *v)
 	}
 
 	/* Get a vnode for the matching entry. */
-	error = vcache_get(dvp->v_mount, &tnode, sizeof(tnode), vpp);
+	mutex_enter(&tnode->tn_vlock);
+	error = tmpfs_vnode_get(dvp->v_mount, tnode, vpp);
 done:
 	/*
 	 * Cache the result, unless request was for creation (as it does
@@ -290,6 +304,9 @@ done:
 			    cnp->cn_flags);
 	}
 out:
+	if (error == 0 && *vpp != dvp)
+		VOP_UNLOCK(*vpp);
+out_unlocked:
 	KASSERT(VOP_ISLOCKED(dvp));
 
 	return error;
@@ -732,7 +749,7 @@ out:
 int
 tmpfs_link(void *v)
 {
-	struct vop_link_v2_args /* {
+	struct vop_link_args /* {
 		struct vnode *a_dvp;
 		struct vnode *a_vp;
 		struct componentname *a_cnp;
@@ -789,6 +806,7 @@ tmpfs_link(void *v)
 	error = 0;
 out:
 	VOP_UNLOCK(vp);
+	vput(dvp);
 	return error;
 }
 
@@ -1068,14 +1086,22 @@ tmpfs_reclaim(void *v)
 	vnode_t *vp = ap->a_vp;
 	tmpfs_mount_t *tmp = VFS_TO_TMPFS(vp->v_mount);
 	tmpfs_node_t *node = VP_TO_TMPFS_NODE(vp);
+	bool recycle;
+
+	mutex_enter(&node->tn_vlock);
 
 	/* Disassociate inode from vnode. */
 	node->tn_vnode = NULL;
 	vp->v_data = NULL;
 
 	/* If inode is not referenced, i.e. no links, then destroy it. */
-	if (node->tn_links == 0)
+	recycle = node->tn_links == 0 && TMPFS_NODE_RECLAIMING(node) == 0;
+
+	mutex_exit(&node->tn_vlock);
+
+	if (recycle) {
 		tmpfs_free_node(tmp, node);
+	}
 	return 0;
 }
 

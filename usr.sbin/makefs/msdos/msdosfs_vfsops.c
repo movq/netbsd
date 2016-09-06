@@ -50,7 +50,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msdosfs_vfsops.c,v 1.10 2016/01/30 09:59:27 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msdosfs_vfsops.c,v 1.8 2014/07/09 06:04:16 maxv Exp $");
 
 #include <sys/param.h>
 
@@ -96,7 +96,7 @@ msdosfs_mount(struct vnode *devvp, int flags)
 	unsigned secsize = 512;
 
 	DPRINTF(("%s(bread 0)\n", __func__));
-	if ((error = bread(devvp, 0, secsize, 0, &bp)) != 0)
+	if ((error = bread(devvp, 0, secsize, NULL, 0, &bp)) != 0)
 		goto error_exit;
 
 	bsp = (union bootsector *)bp->b_data;
@@ -151,12 +151,6 @@ msdosfs_mount(struct vnode *devvp, int flags)
 			goto error_exit;
 		}
 	}
-
-	pmp->pm_flags = flags & MSDOSFSMNT_MNTOPT;
-	if (pmp->pm_flags & MSDOSFSMNT_GEMDOSFS)
-		pmp->pm_flags |= MSDOSFSMNT_NOWIN95;
-	if (pmp->pm_flags & MSDOSFSMNT_NOWIN95)
-		pmp->pm_flags |= MSDOSFSMNT_SHORTNAME;
 
 	if (pmp->pm_Sectors == 0) {
 		pmp->pm_HiddenSects = getulong(b50->bpbHiddenSecs);
@@ -342,7 +336,7 @@ msdosfs_mount(struct vnode *devvp, int flags)
 		DPRINTF(("%s(bread %lu)\n", __func__,
 		    (unsigned long)de_bn2kb(pmp, pmp->pm_fsinfo)));
 		if ((error = bread(devvp, de_bn2kb(pmp, pmp->pm_fsinfo),
-		    pmp->pm_BytesPerSec, 0, &bp)) != 0)
+		    pmp->pm_BytesPerSec, NULL, 0, &bp)) != 0)
 			goto error_exit;
 		fp = (struct fsinfo *)bp->b_data;
 		if (!memcmp(fp->fsisig1, "RRaA", 4)

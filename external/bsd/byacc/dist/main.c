@@ -1,17 +1,13 @@
-/*	$NetBSD: main.c,v 1.12 2016/01/09 22:05:33 christos Exp $	*/
+/*	$NetBSD: main.c,v 1.9 2013/12/30 19:08:55 christos Exp $	*/
 
 #include "defs.h"
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: main.c,v 1.12 2016/01/09 22:05:33 christos Exp $");
-/* Id: main.c,v 1.55 2015/07/11 00:34:19 tom Exp  */
+__RCSID("$NetBSD: main.c,v 1.9 2013/12/30 19:08:55 christos Exp $");
+/* Id: main.c,v 1.40 2012/09/29 13:11:00 Adrian.Bunk Exp  */
 
 #include <signal.h>
-#ifndef _WIN32
 #include <unistd.h>		/* for _exit() */
-#else
-#include <stdlib.h>		/* for _exit() */
-#endif
 
 
 #ifdef HAVE_MKSTEMP
@@ -83,32 +79,21 @@ FILE *union_file;	/*  a temp file, used to save the union             */
 FILE *verbose_file;	/*  y.output                                        */
 FILE *graph_file;	/*  y.dot                                           */
 
-Value_t nitems;
-Value_t nrules;
-Value_t nsyms;
-Value_t ntokens;
-Value_t nvars;
+int nitems;
+int nrules;
+int nsyms;
+int ntokens;
+int nvars;
 
 Value_t start_symbol;
 char **symbol_name;
 char **symbol_pname;
 Value_t *symbol_value;
-Value_t *symbol_prec;
+short *symbol_prec;
 char *symbol_assoc;
 
 int pure_parser;
 int token_table;
-int error_verbose;
-
-#if defined(YYBTYACC)
-Value_t *symbol_pval;
-char **symbol_destructor;
-char **symbol_type_tag;
-int locations = 0;	/* default to no position processing */
-int backtrack = 0;	/* default is no backtracking */
-char *initial_action = NULL;
-#endif
-
 int exit_code;
 
 Value_t *ritem;
@@ -137,10 +122,6 @@ done(int k)
 {
     DO_CLOSE(input_file);
     DO_CLOSE(output_file);
-    if (iflag)
-	DO_CLOSE(externs_file);
-    if (rflag)
-	DO_CLOSE(code_file);
 
     DO_CLOSE(action_file);
     DO_CLOSE(defines_file);
@@ -174,10 +155,12 @@ done(int k)
     lr0_leaks();
     lalr_leaks();
     mkpar_leaks();
-    mstring_leaks();
     output_leaks();
     reader_leaks();
 #endif
+
+    if (rflag)
+	DO_CLOSE(code_file);
 
     exit(k);
 }
@@ -214,13 +197,11 @@ usage(void)
 	""
 	,"Options:"
 	,"  -b file_prefix        set filename prefix (default \"y.\")"
-	,"  -B                    create a backtracking parser"
-	,"  -d                    write definitions (" DEFINES_SUFFIX ")"
+	,"  -d                    write definitions (y.tab.h)"
 	,"  -i                    write interface (y.tab.i)"
 	,"  -g                    write a graphical description"
 	,"  -l                    suppress #line directives"
-	,"  -L                    enable position processing, e.g., \"%locations\""
-	,"  -o output_file        (default \"" OUTPUT_SUFFIX "\")"
+	,"  -o output_file        (default \"y.tab.c\")"
 	,"  -p symbol_prefix      set symbol prefix (default \"yy\")"
 	,"  -P                    create a reentrant parser, e.g., \"%pure-parser\""
 	,"  -r                    produce separate code and table files (y.code.c)"
@@ -244,14 +225,6 @@ setflag(int ch)
 {
     switch (ch)
     {
-    case 'B':
-#if defined(YYBTYACC)
-	backtrack = 1;
-#else
-	unsupported_flag_warning("-B", "reconfigure with --enable-btyacc");
-#endif
-	break;
-
     case 'd':
 	dflag = 1;
 	break;
@@ -266,14 +239,6 @@ setflag(int ch)
 
     case 'l':
 	lflag = 1;
-	break;
-
-    case 'L':
-#if defined(YYBTYACC)
-	locations = 1;
-#else
-	unsupported_flag_warning("-B", "reconfigure with --enable-btyacc");
-#endif
 	break;
 
     case 'P':
@@ -406,18 +371,10 @@ allocate(size_t n)
 }
 
 #define CREATE_FILE_NAME(dest, suffix) \
-	dest = alloc_file_name(len, suffix)
-
-static char *
-alloc_file_name(size_t len, const char *suffix)
-{
-    char *result = TMALLOC(char, len + strlen(suffix) + 1);
-    if (result == 0)
-	no_space();
-    strcpy(result, file_prefix);
-    strcpy(result + len, suffix);
-    return result;
-}
+	dest = TMALLOC(char, len + strlen(suffix) + 1); \
+	NO_SPACE(dest); \
+	strcpy(dest, file_prefix); \
+	strcpy(dest + len, suffix)
 
 static void
 create_file_names(void)
@@ -434,7 +391,7 @@ create_file_names(void)
     /* compute the file_prefix from the user provided output_file_name */
     if (output_file_name != 0)
     {
-	if (!(prefix = strstr(output_file_name, OUTPUT_SUFFIX))
+	if (!(prefix = strstr(output_file_name, ".tab.c"))
 	    && (prefix = strstr(output_file_name, ".c")))
 	{
 	    defines_suffix = ".h";
@@ -529,8 +486,8 @@ close_tmpfiles(void)
     {
 	MY_TMPFILES *next = my_tmpfiles->next;
 
-	(void)chmod(my_tmpfiles->name, 0644);
-	(void)unlink(my_tmpfiles->name);
+	chmod(my_tmpfiles->name, 0644);
+	unlink(my_tmpfiles->name);
 
 	free(my_tmpfiles->name);
 	free(my_tmpfiles);
@@ -589,7 +546,6 @@ my_mkstemp(char *temp)
 static FILE *
 open_tmpfile(const char *label)
 {
-#define MY_FMT "%s/%.*sXXXXXX"
     FILE *result;
 #if USE_MKSTEMP
     int fd;
@@ -608,21 +564,15 @@ open_tmpfile(const char *label)
 	    tmpdir = ".";
     }
 
-    /* The size of the format is guaranteed to be longer than the result from
-     * printing empty strings with it; this calculation accounts for the
-     * string-lengths as well.
-     */
-    name = malloc(strlen(tmpdir) + sizeof(MY_FMT) + strlen(label));
+    name = malloc(strlen(tmpdir) + 10 + strlen(label));
 
     result = 0;
     if (name != 0)
     {
-	mode_t save_umask = umask(0177);
-
 	if ((mark = strrchr(label, '_')) == 0)
 	    mark = label + strlen(label);
 
-	sprintf(name, MY_FMT, tmpdir, (int)(mark - label), label);
+	sprintf(name, "%s/%.*sXXXXXX", tmpdir, (int)(mark - label), label);
 	fd = mkstemp(name);
 	if (fd >= 0)
 	{
@@ -646,7 +596,6 @@ open_tmpfile(const char *label)
 		my_tmpfiles = item;
 	    }
 	}
-	(void)umask(save_umask);
     }
 #else
     result = tmpfile();
@@ -655,7 +604,6 @@ open_tmpfile(const char *label)
     if (result == 0)
 	open_error(label);
     return result;
-#undef MY_FMT
 }
 
 static void

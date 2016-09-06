@@ -27,7 +27,7 @@ using namespace llvm;
 #include "MSP430GenAsmWriter.inc"
 
 void MSP430InstPrinter::printInst(const MCInst *MI, raw_ostream &O,
-                                  StringRef Annot, const MCSubtargetInfo &STI) {
+                                  StringRef Annot) {
   printInstruction(MI, O);
   printAnnotation(O, Annot);
 }
@@ -39,7 +39,7 @@ void MSP430InstPrinter::printPCRelImmOperand(const MCInst *MI, unsigned OpNo,
     O << Op.getImm();
   else {
     assert(Op.isExpr() && "unknown pcrel immediate operand");
-    Op.getExpr()->print(O, &MAI);
+    O << *Op.getExpr();
   }
 }
 
@@ -53,8 +53,7 @@ void MSP430InstPrinter::printOperand(const MCInst *MI, unsigned OpNo,
     O << '#' << Op.getImm();
   } else {
     assert(Op.isExpr() && "unknown operand kind in printOperand");
-    O << '#';
-    Op.getExpr()->print(O, &MAI);
+    O << '#' << *Op.getExpr();
   }
 }
 
@@ -76,7 +75,7 @@ void MSP430InstPrinter::printSrcMemOperand(const MCInst *MI, unsigned OpNo,
     O << '&';
 
   if (Disp.isExpr())
-    Disp.getExpr()->print(O, &MAI);
+    O << *Disp.getExpr();
   else {
     assert(Disp.isImm() && "Expected immediate in displacement field");
     O << Disp.getImm();

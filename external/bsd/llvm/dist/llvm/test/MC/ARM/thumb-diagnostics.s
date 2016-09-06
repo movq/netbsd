@@ -235,16 +235,12 @@ error: invalid operand for instruction
 @ CHECK-ERRORS: error: branch target out of range
 
 @------------------------------------------------------------------------------
-@ SEV/WFE/WFI/YIELD - are not supported pre v6M or v6T2
+@ WFE/WFI/YIELD - are not supported pre v6T2
 @------------------------------------------------------------------------------
-        sev
         wfe
         wfi
         yield
 
-@ CHECK-ERRORS: error: instruction requires: armv6m or armv6t2
-@ CHECK-ERRORS: sev
-@ CHECK-ERRORS: ^
 @ CHECK-ERRORS: error: instruction requires: armv6m or armv6t2
 @ CHECK-ERRORS: wfe
 @ CHECK-ERRORS: ^

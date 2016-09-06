@@ -1,4 +1,4 @@
-/*	$NetBSD: rcache.c,v 1.25 2015/08/24 17:34:03 bouyer Exp $	*/
+/*	$NetBSD: rcache.c,v 1.24.6.1 2015/11/06 20:26:43 riz Exp $	*/
 
 /*-
  * Copyright (c) 1999 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: rcache.c,v 1.25 2015/08/24 17:34:03 bouyer Exp $");
+__RCSID("$NetBSD: rcache.c,v 1.24.6.1 2015/11/06 20:26:43 riz Exp $");
 #endif /* not lint */
 
 #include <sys/types.h>

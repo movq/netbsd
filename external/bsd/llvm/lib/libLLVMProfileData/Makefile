@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.3 2015/01/29 20:41:36 joerg Exp $
+#	$NetBSD: Makefile,v 1.2.2.1 2015/06/04 20:05:44 snj Exp $
 
 LIB=	LLVMProfileData
 

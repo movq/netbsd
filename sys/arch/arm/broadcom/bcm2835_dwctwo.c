@@ -1,4 +1,4 @@
-/*	$NetBSD: bcm2835_dwctwo.c,v 1.7 2016/04/23 10:15:27 skrll Exp $	*/
+/*	$NetBSD: bcm2835_dwctwo.c,v 1.1 2013/09/05 20:49:25 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bcm2835_dwctwo.c,v 1.7 2016/04/23 10:15:27 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bcm2835_dwctwo.c,v 1.1 2013/09/05 20:49:25 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -84,8 +84,6 @@ static struct dwc2_core_params bcmdwc2_params = {
 	.reload_ctl			= 0,
 	.ahbcfg				= 0x10,
 	.uframe_sched			= 1,
-	.external_id_pin_ctl		= -1,
-	.hibernation			= -1,
 };
 
 static int bcmdwc2_match(device_t, struct cfdata *, void *);
@@ -118,7 +116,7 @@ bcmdwc2_attach(device_t parent, device_t self, void *aux)
 	sc->sc_dwc2.sc_dev = self;
 
 	sc->sc_dwc2.sc_iot = aaa->aaa_iot;
-	sc->sc_dwc2.sc_bus.ub_dmatag = aaa->aaa_dmat;
+	sc->sc_dwc2.sc_bus.dmatag = aaa->aaa_dmat;
 	sc->sc_dwc2.sc_params = &bcmdwc2_params;
 
 	error = bus_space_map(aaa->aaa_iot, aaa->aaa_addr, aaa->aaa_size, 0,
@@ -132,8 +130,8 @@ bcmdwc2_attach(device_t parent, device_t self, void *aux)
 	aprint_naive(": USB controller\n");
 	aprint_normal(": USB controller\n");
 
-	sc->sc_ih = intr_establish(aaa->aaa_intr, IPL_VM,
-	    IST_LEVEL | IST_MPSAFE, dwc2_intr, &sc->sc_dwc2);
+	sc->sc_ih = bcm2835_intr_establish(aaa->aaa_intr, IPL_USB,
+	   dwc2_intr, &sc->sc_dwc2);
 
 	if (sc->sc_ih == NULL) {
 		aprint_error_dev(self, "failed to establish interrupt %d\n",

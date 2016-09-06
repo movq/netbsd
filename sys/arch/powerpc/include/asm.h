@@ -1,4 +1,4 @@
-/*	$NetBSD: asm.h,v 1.48 2015/01/12 02:32:33 dennis Exp $	*/
+/*	$NetBSD: asm.h,v 1.46.4.1 2015/02/04 22:00:24 martin Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996 Wolfgang Solfrank.
@@ -104,11 +104,7 @@
 # define SF_SP		 0
 # define SF_CR		 8
 # define SF_LR		16
-# define SF_COMP	24
-# define SF_LD		32
-# define SF_TOC		40
 # define SF_PARAM	SF_HEADER_SZ
-# define SF_ALIGN(x)	(((x) + 0xf) & ~0xf)
 
 # define _XENTRY(y)			\
 	.globl	y;			\

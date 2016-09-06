@@ -555,7 +555,7 @@ class TestFactoryBase {
 template <class TestClass>
 class TestFactoryImpl : public TestFactoryBase {
  public:
-   Test *CreateTest() override { return new TestClass; }
+  virtual Test* CreateTest() { return new TestClass; }
 };
 
 #if GTEST_OS_WINDOWS

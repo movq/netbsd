@@ -1,6 +1,6 @@
 /* Target-dependent code for GDB, the GNU debugger.
 
-   Copyright (C) 2001-2015 Free Software Foundation, Inc.
+   Copyright (C) 2001-2014 Free Software Foundation, Inc.
 
    Contributed by D.J. Barrow (djbarrow@de.ibm.com,barrow_dj@yahoo.com)
    for IBM Deutschland Entwicklung GmbH, IBM Corporation.
@@ -24,7 +24,6 @@
 #include "arch-utils.h"
 #include "frame.h"
 #include "inferior.h"
-#include "infrun.h"
 #include "symtab.h"
 #include "target.h"
 #include "gdbcore.h"
@@ -39,13 +38,13 @@
 #include "reggroups.h"
 #include "regset.h"
 #include "value.h"
+#include "gdb_assert.h"
 #include "dis-asm.h"
 #include "solib-svr4.h"
 #include "prologue-value.h"
 #include "linux-tdep.h"
 #include "s390-linux-tdep.h"
 #include "auxv.h"
-#include "xml-syscall.h"
 
 #include "stap-probe.h"
 #include "ax.h"
@@ -54,8 +53,6 @@
 #include "cli/cli-utils.h"
 #include <ctype.h>
 #include "elf/common.h"
-#include "elf/s390.h"
-#include "elf-bfd.h"
 
 #include "features/s390-linux32.c"
 #include "features/s390-linux32v1.c"
@@ -64,49 +61,29 @@
 #include "features/s390-linux64v1.c"
 #include "features/s390-linux64v2.c"
 #include "features/s390-te-linux64.c"
-#include "features/s390-vx-linux64.c"
-#include "features/s390-tevx-linux64.c"
 #include "features/s390x-linux64.c"
 #include "features/s390x-linux64v1.c"
 #include "features/s390x-linux64v2.c"
 #include "features/s390x-te-linux64.c"
-#include "features/s390x-vx-linux64.c"
-#include "features/s390x-tevx-linux64.c"
-
-#define XML_SYSCALL_FILENAME_S390 "syscalls/s390-linux.xml"
-#define XML_SYSCALL_FILENAME_S390X "syscalls/s390x-linux.xml"
-
-enum s390_abi_kind
-{
-  ABI_LINUX_S390,
-  ABI_LINUX_ZSERIES
-};
-
-enum s390_vector_abi_kind
-{
-  S390_VECTOR_ABI_NONE,
-  S390_VECTOR_ABI_128
-};
 
 /* The tdep structure.  */
 
 struct gdbarch_tdep
 {
   /* ABI version.  */
-  enum s390_abi_kind abi;
-
-  /* Vector ABI.  */
-  enum s390_vector_abi_kind vector_abi;
+  enum { ABI_LINUX_S390, ABI_LINUX_ZSERIES } abi;
 
   /* Pseudo register numbers.  */
   int gpr_full_regnum;
   int pc_regnum;
   int cc_regnum;
-  int v0_full_regnum;
 
-  int have_linux_v1;
-  int have_linux_v2;
-  int have_tdb;
+  /* Core file register sets.  */
+  const struct regset *gregset;
+  int sizeof_gregset;
+
+  const struct regset *fpregset;
+  int sizeof_fpregset;
 };
 
 
@@ -170,52 +147,41 @@ s390_write_pc (struct regcache *regcache, CORE_ADDR pc)
 
 static const short s390_dwarf_regmap[] =
 {
-  /* 0-15: General Purpose Registers.  */
+  /* General Purpose Registers.  */
   S390_R0_REGNUM, S390_R1_REGNUM, S390_R2_REGNUM, S390_R3_REGNUM,
   S390_R4_REGNUM, S390_R5_REGNUM, S390_R6_REGNUM, S390_R7_REGNUM,
   S390_R8_REGNUM, S390_R9_REGNUM, S390_R10_REGNUM, S390_R11_REGNUM,
   S390_R12_REGNUM, S390_R13_REGNUM, S390_R14_REGNUM, S390_R15_REGNUM,
 
-  /* 16-31: Floating Point Registers / Vector Registers 0-15. */
+  /* Floating Point Registers.  */
   S390_F0_REGNUM, S390_F2_REGNUM, S390_F4_REGNUM, S390_F6_REGNUM,
   S390_F1_REGNUM, S390_F3_REGNUM, S390_F5_REGNUM, S390_F7_REGNUM,
   S390_F8_REGNUM, S390_F10_REGNUM, S390_F12_REGNUM, S390_F14_REGNUM,
   S390_F9_REGNUM, S390_F11_REGNUM, S390_F13_REGNUM, S390_F15_REGNUM,
 
-  /* 32-47: Control Registers (not mapped).  */
+  /* Control Registers (not mapped).  */
   -1, -1, -1, -1, -1, -1, -1, -1,
   -1, -1, -1, -1, -1, -1, -1, -1,
 
-  /* 48-63: Access Registers.  */
+  /* Access Registers.  */
   S390_A0_REGNUM, S390_A1_REGNUM, S390_A2_REGNUM, S390_A3_REGNUM,
   S390_A4_REGNUM, S390_A5_REGNUM, S390_A6_REGNUM, S390_A7_REGNUM,
   S390_A8_REGNUM, S390_A9_REGNUM, S390_A10_REGNUM, S390_A11_REGNUM,
   S390_A12_REGNUM, S390_A13_REGNUM, S390_A14_REGNUM, S390_A15_REGNUM,
 
-  /* 64-65: Program Status Word.  */
+  /* Program Status Word.  */
   S390_PSWM_REGNUM,
   S390_PSWA_REGNUM,
-
-  /* 66-67: Reserved.  */
-  -1, -1,
-
-  /* 68-83: Vector Registers 16-31.  */
-  S390_V16_REGNUM, S390_V18_REGNUM, S390_V20_REGNUM, S390_V22_REGNUM,
-  S390_V17_REGNUM, S390_V19_REGNUM, S390_V21_REGNUM, S390_V23_REGNUM,
-  S390_V24_REGNUM, S390_V26_REGNUM, S390_V28_REGNUM, S390_V30_REGNUM,
-  S390_V25_REGNUM, S390_V27_REGNUM, S390_V29_REGNUM, S390_V31_REGNUM,
-
-  /* End of "official" DWARF registers.  The remainder of the map is
-     for GDB internal use only.  */
 
   /* GPR Lower Half Access.  */
   S390_R0_REGNUM, S390_R1_REGNUM, S390_R2_REGNUM, S390_R3_REGNUM,
   S390_R4_REGNUM, S390_R5_REGNUM, S390_R6_REGNUM, S390_R7_REGNUM,
   S390_R8_REGNUM, S390_R9_REGNUM, S390_R10_REGNUM, S390_R11_REGNUM,
   S390_R12_REGNUM, S390_R13_REGNUM, S390_R14_REGNUM, S390_R15_REGNUM,
-};
 
-enum { s390_dwarf_reg_r0l = ARRAY_SIZE (s390_dwarf_regmap) - 16 };
+  /* GNU/Linux-specific registers (not mapped).  */
+  -1, -1, -1,
+};
 
 /* Convert DWARF register number REG to the appropriate register
    number used by GDB.  */
@@ -223,30 +189,19 @@ static int
 s390_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  int gdb_reg = -1;
 
-  /* In a 32-on-64 debug scenario, debug info refers to the full
-     64-bit GPRs.  Note that call frame information still refers to
-     the 32-bit lower halves, because s390_adjust_frame_regnum uses
-     special register numbers to access GPRs.  */
+  /* In a 32-on-64 debug scenario, debug info refers to the full 64-bit
+     GPRs.  Note that call frame information still refers to the 32-bit
+     lower halves, because s390_adjust_frame_regnum uses register numbers
+     66 .. 81 to access GPRs.  */
   if (tdep->gpr_full_regnum != -1 && reg >= 0 && reg < 16)
     return tdep->gpr_full_regnum + reg;
 
   if (reg >= 0 && reg < ARRAY_SIZE (s390_dwarf_regmap))
-    gdb_reg = s390_dwarf_regmap[reg];
+    return s390_dwarf_regmap[reg];
 
-  if (tdep->v0_full_regnum == -1)
-    {
-      if (gdb_reg >= S390_V16_REGNUM && gdb_reg <= S390_V31_REGNUM)
-	gdb_reg = -1;
-    }
-  else
-    {
-      if (gdb_reg >= S390_F0_REGNUM && gdb_reg <= S390_F15_REGNUM)
-	gdb_reg = gdb_reg - S390_F0_REGNUM + tdep->v0_full_regnum;
-    }
-
-  return gdb_reg;
+  warning (_("Unmapped DWARF Register #%d encountered."), reg);
+  return -1;
 }
 
 /* Translate a .eh_frame register to DWARF register, or adjust a
@@ -255,7 +210,7 @@ static int
 s390_adjust_frame_regnum (struct gdbarch *gdbarch, int num, int eh_frame_p)
 {
   /* See s390_dwarf_reg_to_regnum for comments.  */
-  return (num >= 0 && num < 16) ? num + s390_dwarf_reg_r0l : num;
+  return (num >= 0 && num < 16)? num + 66 : num;
 }
 
 
@@ -267,29 +222,6 @@ regnum_is_gpr_full (struct gdbarch_tdep *tdep, int regnum)
   return (tdep->gpr_full_regnum != -1
 	  && regnum >= tdep->gpr_full_regnum
 	  && regnum <= tdep->gpr_full_regnum + 15);
-}
-
-/* Check whether REGNUM indicates a full vector register (v0-v15).
-   These pseudo-registers are composed of f0-f15 and v0l-v15l.  */
-
-static int
-regnum_is_vxr_full (struct gdbarch_tdep *tdep, int regnum)
-{
-  return (tdep->v0_full_regnum != -1
-	  && regnum >= tdep->v0_full_regnum
-	  && regnum <= tdep->v0_full_regnum + 15);
-}
-
-/* Return the name of register REGNO.  Return the empty string for
-   registers that shouldn't be visible.  */
-
-static const char *
-s390_register_name (struct gdbarch *gdbarch, int regnum)
-{
-  if (regnum >= S390_V0_LOWER_REGNUM
-      && regnum <= S390_V15_LOWER_REGNUM)
-    return "";
-  return tdesc_register_name (gdbarch, regnum);
 }
 
 static const char *
@@ -312,15 +244,6 @@ s390_pseudo_register_name (struct gdbarch *gdbarch, int regnum)
       return full_name[regnum - tdep->gpr_full_regnum];
     }
 
-  if (regnum_is_vxr_full (tdep, regnum))
-    {
-      static const char *full_name[] = {
-	"v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7",
-	"v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15"
-      };
-      return full_name[regnum - tdep->v0_full_regnum];
-    }
-
   internal_error (__FILE__, __LINE__, _("invalid regnum"));
 }
 
@@ -337,9 +260,6 @@ s390_pseudo_register_type (struct gdbarch *gdbarch, int regnum)
 
   if (regnum_is_gpr_full (tdep, regnum))
     return builtin_type (gdbarch)->builtin_uint64;
-
-  if (regnum_is_vxr_full (tdep, regnum))
-    return tdesc_find_type (gdbarch, "vec128");
 
   internal_error (__FILE__, __LINE__, _("invalid regnum"));
 }
@@ -402,19 +322,6 @@ s390_pseudo_register_read (struct gdbarch *gdbarch, struct regcache *regcache,
       return status;
     }
 
-  if (regnum_is_vxr_full (tdep, regnum))
-    {
-      enum register_status status;
-
-      regnum -= tdep->v0_full_regnum;
-
-      status = regcache_raw_read (regcache, S390_F0_REGNUM + regnum, buf);
-      if (status == REG_VALID)
-	status = regcache_raw_read (regcache,
-				    S390_V0_LOWER_REGNUM + regnum, buf + 8);
-      return status;
-    }
-
   internal_error (__FILE__, __LINE__, _("invalid regnum"));
 }
 
@@ -462,34 +369,22 @@ s390_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
       return;
     }
 
-  if (regnum_is_vxr_full (tdep, regnum))
-    {
-      regnum -= tdep->v0_full_regnum;
-      regcache_raw_write (regcache, S390_F0_REGNUM + regnum, buf);
-      regcache_raw_write (regcache, S390_V0_LOWER_REGNUM + regnum, buf + 8);
-      return;
-    }
-
   internal_error (__FILE__, __LINE__, _("invalid regnum"));
 }
 
 /* 'float' values are stored in the upper half of floating-point
-   registers, even though we are otherwise a big-endian platform.  The
-   same applies to a 'float' value within a vector.  */
+   registers, even though we are otherwise a big-endian platform.  */
 
 static struct value *
-s390_value_from_register (struct gdbarch *gdbarch, struct type *type,
-			  int regnum, struct frame_id frame_id)
+s390_value_from_register (struct type *type, int regnum,
+			  struct frame_info *frame)
 {
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  struct value *value = default_value_from_register (gdbarch, type,
-						     regnum, frame_id);
+  struct value *value = default_value_from_register (type, regnum, frame);
+
   check_typedef (type);
 
-  if ((regnum >= S390_F0_REGNUM && regnum <= S390_F15_REGNUM
-       && TYPE_LENGTH (type) < 8)
-      || regnum_is_vxr_full (tdep, regnum)
-      || (regnum >= S390_V16_REGNUM && regnum <= S390_V31_REGNUM))
+  if (regnum >= S390_F0_REGNUM && regnum <= S390_F15_REGNUM
+      && TYPE_LENGTH (type) < 8)
     set_value_offset (value, 0);
 
   return value;
@@ -514,86 +409,210 @@ s390_pseudo_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
   if (group == save_reggroup || group == restore_reggroup)
     return regnum == tdep->pc_regnum || regnum == tdep->cc_regnum;
 
-  if (group == vector_reggroup)
-    return regnum_is_vxr_full (tdep, regnum);
-
-  if (group == general_reggroup && regnum_is_vxr_full (tdep, regnum))
-    return 0;
-
   return default_register_reggroup_p (gdbarch, regnum, group);
 }
 
 
 /* Maps for register sets.  */
 
-static const struct regcache_map_entry s390_gregmap[] =
+const short s390_regmap_gregset[] =
   {
-    { 1, S390_PSWM_REGNUM },
-    { 1, S390_PSWA_REGNUM },
-    { 16, S390_R0_REGNUM },
-    { 16, S390_A0_REGNUM },
-    { 1, S390_ORIG_R2_REGNUM },
-    { 0 }
+    0x00, S390_PSWM_REGNUM,
+    0x04, S390_PSWA_REGNUM,
+    0x08, S390_R0_REGNUM,
+    0x0c, S390_R1_REGNUM,
+    0x10, S390_R2_REGNUM,
+    0x14, S390_R3_REGNUM,
+    0x18, S390_R4_REGNUM,
+    0x1c, S390_R5_REGNUM,
+    0x20, S390_R6_REGNUM,
+    0x24, S390_R7_REGNUM,
+    0x28, S390_R8_REGNUM,
+    0x2c, S390_R9_REGNUM,
+    0x30, S390_R10_REGNUM,
+    0x34, S390_R11_REGNUM,
+    0x38, S390_R12_REGNUM,
+    0x3c, S390_R13_REGNUM,
+    0x40, S390_R14_REGNUM,
+    0x44, S390_R15_REGNUM,
+    0x48, S390_A0_REGNUM,
+    0x4c, S390_A1_REGNUM,
+    0x50, S390_A2_REGNUM,
+    0x54, S390_A3_REGNUM,
+    0x58, S390_A4_REGNUM,
+    0x5c, S390_A5_REGNUM,
+    0x60, S390_A6_REGNUM,
+    0x64, S390_A7_REGNUM,
+    0x68, S390_A8_REGNUM,
+    0x6c, S390_A9_REGNUM,
+    0x70, S390_A10_REGNUM,
+    0x74, S390_A11_REGNUM,
+    0x78, S390_A12_REGNUM,
+    0x7c, S390_A13_REGNUM,
+    0x80, S390_A14_REGNUM,
+    0x84, S390_A15_REGNUM,
+    0x88, S390_ORIG_R2_REGNUM,
+    -1, -1
   };
 
-static const struct regcache_map_entry s390_fpregmap[] =
+const short s390x_regmap_gregset[] =
   {
-    { 1, S390_FPC_REGNUM, 8 },
-    { 16, S390_F0_REGNUM, 8 },
-    { 0 }
+    0x00, S390_PSWM_REGNUM,
+    0x08, S390_PSWA_REGNUM,
+    0x10, S390_R0_REGNUM,
+    0x18, S390_R1_REGNUM,
+    0x20, S390_R2_REGNUM,
+    0x28, S390_R3_REGNUM,
+    0x30, S390_R4_REGNUM,
+    0x38, S390_R5_REGNUM,
+    0x40, S390_R6_REGNUM,
+    0x48, S390_R7_REGNUM,
+    0x50, S390_R8_REGNUM,
+    0x58, S390_R9_REGNUM,
+    0x60, S390_R10_REGNUM,
+    0x68, S390_R11_REGNUM,
+    0x70, S390_R12_REGNUM,
+    0x78, S390_R13_REGNUM,
+    0x80, S390_R14_REGNUM,
+    0x88, S390_R15_REGNUM,
+    0x90, S390_A0_REGNUM,
+    0x94, S390_A1_REGNUM,
+    0x98, S390_A2_REGNUM,
+    0x9c, S390_A3_REGNUM,
+    0xa0, S390_A4_REGNUM,
+    0xa4, S390_A5_REGNUM,
+    0xa8, S390_A6_REGNUM,
+    0xac, S390_A7_REGNUM,
+    0xb0, S390_A8_REGNUM,
+    0xb4, S390_A9_REGNUM,
+    0xb8, S390_A10_REGNUM,
+    0xbc, S390_A11_REGNUM,
+    0xc0, S390_A12_REGNUM,
+    0xc4, S390_A13_REGNUM,
+    0xc8, S390_A14_REGNUM,
+    0xcc, S390_A15_REGNUM,
+    0x10, S390_R0_UPPER_REGNUM,
+    0x18, S390_R1_UPPER_REGNUM,
+    0x20, S390_R2_UPPER_REGNUM,
+    0x28, S390_R3_UPPER_REGNUM,
+    0x30, S390_R4_UPPER_REGNUM,
+    0x38, S390_R5_UPPER_REGNUM,
+    0x40, S390_R6_UPPER_REGNUM,
+    0x48, S390_R7_UPPER_REGNUM,
+    0x50, S390_R8_UPPER_REGNUM,
+    0x58, S390_R9_UPPER_REGNUM,
+    0x60, S390_R10_UPPER_REGNUM,
+    0x68, S390_R11_UPPER_REGNUM,
+    0x70, S390_R12_UPPER_REGNUM,
+    0x78, S390_R13_UPPER_REGNUM,
+    0x80, S390_R14_UPPER_REGNUM,
+    0x88, S390_R15_UPPER_REGNUM,
+    0xd0, S390_ORIG_R2_REGNUM,
+    -1, -1
   };
 
-static const struct regcache_map_entry s390_regmap_upper[] =
+const short s390_regmap_fpregset[] =
   {
-    { 16, S390_R0_UPPER_REGNUM, 4 },
-    { 0 }
+    0x00, S390_FPC_REGNUM,
+    0x08, S390_F0_REGNUM,
+    0x10, S390_F1_REGNUM,
+    0x18, S390_F2_REGNUM,
+    0x20, S390_F3_REGNUM,
+    0x28, S390_F4_REGNUM,
+    0x30, S390_F5_REGNUM,
+    0x38, S390_F6_REGNUM,
+    0x40, S390_F7_REGNUM,
+    0x48, S390_F8_REGNUM,
+    0x50, S390_F9_REGNUM,
+    0x58, S390_F10_REGNUM,
+    0x60, S390_F11_REGNUM,
+    0x68, S390_F12_REGNUM,
+    0x70, S390_F13_REGNUM,
+    0x78, S390_F14_REGNUM,
+    0x80, S390_F15_REGNUM,
+    -1, -1
   };
 
-static const struct regcache_map_entry s390_regmap_last_break[] =
+const short s390_regmap_upper[] =
   {
-    { 1, REGCACHE_MAP_SKIP, 4 },
-    { 1, S390_LAST_BREAK_REGNUM, 4 },
-    { 0 }
+    0x00, S390_R0_UPPER_REGNUM,
+    0x04, S390_R1_UPPER_REGNUM,
+    0x08, S390_R2_UPPER_REGNUM,
+    0x0c, S390_R3_UPPER_REGNUM,
+    0x10, S390_R4_UPPER_REGNUM,
+    0x14, S390_R5_UPPER_REGNUM,
+    0x18, S390_R6_UPPER_REGNUM,
+    0x1c, S390_R7_UPPER_REGNUM,
+    0x20, S390_R8_UPPER_REGNUM,
+    0x24, S390_R9_UPPER_REGNUM,
+    0x28, S390_R10_UPPER_REGNUM,
+    0x2c, S390_R11_UPPER_REGNUM,
+    0x30, S390_R12_UPPER_REGNUM,
+    0x34, S390_R13_UPPER_REGNUM,
+    0x38, S390_R14_UPPER_REGNUM,
+    0x3c, S390_R15_UPPER_REGNUM,
+    -1, -1
   };
 
-static const struct regcache_map_entry s390x_regmap_last_break[] =
+const short s390_regmap_last_break[] =
   {
-    { 1, S390_LAST_BREAK_REGNUM, 8 },
-    { 0 }
+    0x04, S390_LAST_BREAK_REGNUM,
+    -1, -1
   };
 
-static const struct regcache_map_entry s390_regmap_system_call[] =
+const short s390x_regmap_last_break[] =
   {
-    { 1, S390_SYSTEM_CALL_REGNUM, 4 },
-    { 0 }
+    0x00, S390_LAST_BREAK_REGNUM,
+    -1, -1
   };
 
-static const struct regcache_map_entry s390_regmap_tdb[] =
+const short s390_regmap_system_call[] =
   {
-    { 1, S390_TDB_DWORD0_REGNUM, 8 },
-    { 1, S390_TDB_ABORT_CODE_REGNUM, 8 },
-    { 1, S390_TDB_CONFLICT_TOKEN_REGNUM, 8 },
-    { 1, S390_TDB_ATIA_REGNUM, 8 },
-    { 12, REGCACHE_MAP_SKIP, 8 },
-    { 16, S390_TDB_R0_REGNUM, 8 },
-    { 0 }
+    0x00, S390_SYSTEM_CALL_REGNUM,
+    -1, -1
   };
 
-static const struct regcache_map_entry s390_regmap_vxrs_low[] =
+const short s390_regmap_tdb[] =
   {
-    { 16, S390_V0_LOWER_REGNUM, 8 },
-    { 0 }
+    0x00, S390_TDB_DWORD0_REGNUM,
+    0x08, S390_TDB_ABORT_CODE_REGNUM,
+    0x10, S390_TDB_CONFLICT_TOKEN_REGNUM,
+    0x18, S390_TDB_ATIA_REGNUM,
+    0x80, S390_TDB_R0_REGNUM,
+    0x88, S390_TDB_R1_REGNUM,
+    0x90, S390_TDB_R2_REGNUM,
+    0x98, S390_TDB_R3_REGNUM,
+    0xa0, S390_TDB_R4_REGNUM,
+    0xa8, S390_TDB_R5_REGNUM,
+    0xb0, S390_TDB_R6_REGNUM,
+    0xb8, S390_TDB_R7_REGNUM,
+    0xc0, S390_TDB_R8_REGNUM,
+    0xc8, S390_TDB_R9_REGNUM,
+    0xd0, S390_TDB_R10_REGNUM,
+    0xd8, S390_TDB_R11_REGNUM,
+    0xe0, S390_TDB_R12_REGNUM,
+    0xe8, S390_TDB_R13_REGNUM,
+    0xf0, S390_TDB_R14_REGNUM,
+    0xf8, S390_TDB_R15_REGNUM,
+    -1, -1
   };
 
-static const struct regcache_map_entry s390_regmap_vxrs_high[] =
-  {
-    { 16, S390_V16_REGNUM, 16 },
-    { 0 }
-  };
 
+/* Supply register REGNUM from the register set REGSET to register cache
+   REGCACHE.  If REGNUM is -1, do this for all registers in REGSET.  */
+static void
+s390_supply_regset (const struct regset *regset, struct regcache *regcache,
+		    int regnum, const void *regs, size_t len)
+{
+  const short *map;
+  for (map = regset->descr; map[0] >= 0; map += 2)
+    if (regnum == -1 || regnum == map[1])
+      regcache_raw_supply (regcache, map[1],
+			   regs ? (const char *)regs + map[0] : NULL);
+}
 
-/* Supply the TDB regset.  Like regcache_supply_regset, but invalidate
-   the TDB registers unless the TDB format field is valid.  */
+/* Supply the TDB regset.  Like s390_supply_regset, but invalidate the
+   TDB registers unless the TDB format field is valid.  */
 
 static void
 s390_supply_tdb_regset (const struct regset *regset, struct regcache *regcache,
@@ -603,152 +622,212 @@ s390_supply_tdb_regset (const struct regset *regset, struct regcache *regcache,
   enum register_status ret;
   int i;
 
-  regcache_supply_regset (regset, regcache, regnum, regs, len);
+  s390_supply_regset (regset, regcache, regnum, regs, len);
   ret = regcache_cooked_read_unsigned (regcache, S390_TDB_DWORD0_REGNUM, &tdw);
   if (ret != REG_VALID || (tdw >> 56) != 1)
-    regcache_supply_regset (regset, regcache, regnum, NULL, len);
+    s390_supply_regset (regset, regcache, regnum, NULL, len);
 }
 
-const struct regset s390_gregset = {
-  s390_gregmap,
-  regcache_supply_regset,
-  regcache_collect_regset
+/* Collect register REGNUM from the register cache REGCACHE and store
+   it in the buffer specified by REGS and LEN as described by the
+   general-purpose register set REGSET.  If REGNUM is -1, do this for
+   all registers in REGSET.  */
+static void
+s390_collect_regset (const struct regset *regset,
+		     const struct regcache *regcache,
+		     int regnum, void *regs, size_t len)
+{
+  const short *map;
+  for (map = regset->descr; map[0] >= 0; map += 2)
+    if (regnum == -1 || regnum == map[1])
+      regcache_raw_collect (regcache, map[1], (char *)regs + map[0]);
+}
+
+static const struct regset s390_gregset = {
+  s390_regmap_gregset,
+  s390_supply_regset,
+  s390_collect_regset
 };
 
-const struct regset s390_fpregset = {
-  s390_fpregmap,
-  regcache_supply_regset,
-  regcache_collect_regset
+static const struct regset s390x_gregset = {
+  s390x_regmap_gregset,
+  s390_supply_regset,
+  s390_collect_regset
+};
+
+static const struct regset s390_fpregset = {
+  s390_regmap_fpregset,
+  s390_supply_regset,
+  s390_collect_regset
 };
 
 static const struct regset s390_upper_regset = {
   s390_regmap_upper,
-  regcache_supply_regset,
-  regcache_collect_regset
+  s390_supply_regset,
+  s390_collect_regset
 };
 
-const struct regset s390_last_break_regset = {
+static const struct regset s390_last_break_regset = {
   s390_regmap_last_break,
-  regcache_supply_regset,
-  regcache_collect_regset
+  s390_supply_regset,
+  s390_collect_regset
 };
 
-const struct regset s390x_last_break_regset = {
+static const struct regset s390x_last_break_regset = {
   s390x_regmap_last_break,
-  regcache_supply_regset,
-  regcache_collect_regset
+  s390_supply_regset,
+  s390_collect_regset
 };
 
-const struct regset s390_system_call_regset = {
+static const struct regset s390_system_call_regset = {
   s390_regmap_system_call,
-  regcache_supply_regset,
-  regcache_collect_regset
+  s390_supply_regset,
+  s390_collect_regset
 };
 
-const struct regset s390_tdb_regset = {
+static const struct regset s390_tdb_regset = {
   s390_regmap_tdb,
   s390_supply_tdb_regset,
-  regcache_collect_regset
+  s390_collect_regset
 };
 
-const struct regset s390_vxrs_low_regset = {
-  s390_regmap_vxrs_low,
-  regcache_supply_regset,
-  regcache_collect_regset
+static struct core_regset_section s390_linux32_regset_sections[] =
+{
+  { ".reg", s390_sizeof_gregset, "general-purpose" },
+  { ".reg2", s390_sizeof_fpregset, "floating-point" },
+  { NULL, 0}
 };
 
-const struct regset s390_vxrs_high_regset = {
-  s390_regmap_vxrs_high,
-  regcache_supply_regset,
-  regcache_collect_regset
+static struct core_regset_section s390_linux32v1_regset_sections[] =
+{
+  { ".reg", s390_sizeof_gregset, "general-purpose" },
+  { ".reg2", s390_sizeof_fpregset, "floating-point" },
+  { ".reg-s390-last-break", 8, "s390 last-break address" },
+  { NULL, 0}
 };
 
-/* Iterate over supported core file register note sections. */
+static struct core_regset_section s390_linux32v2_regset_sections[] =
+{
+  { ".reg", s390_sizeof_gregset, "general-purpose" },
+  { ".reg2", s390_sizeof_fpregset, "floating-point" },
+  { ".reg-s390-last-break", 8, "s390 last-break address" },
+  { ".reg-s390-system-call", 4, "s390 system-call" },
+  { NULL, 0}
+};
 
-static void
-s390_iterate_over_regset_sections (struct gdbarch *gdbarch,
-				   iterate_over_regset_sections_cb *cb,
-				   void *cb_data,
-				   const struct regcache *regcache)
+static struct core_regset_section s390_linux64_regset_sections[] =
+{
+  { ".reg", s390_sizeof_gregset, "general-purpose" },
+  { ".reg2", s390_sizeof_fpregset, "floating-point" },
+  { ".reg-s390-high-gprs", 16*4, "s390 GPR upper halves" },
+  { NULL, 0}
+};
+
+static struct core_regset_section s390_linux64v1_regset_sections[] =
+{
+  { ".reg", s390_sizeof_gregset, "general-purpose" },
+  { ".reg2", s390_sizeof_fpregset, "floating-point" },
+  { ".reg-s390-high-gprs", 16*4, "s390 GPR upper halves" },
+  { ".reg-s390-last-break", 8, "s930 last-break address" },
+  { NULL, 0}
+};
+
+static struct core_regset_section s390_linux64v2_regset_sections[] =
+{
+  { ".reg", s390_sizeof_gregset, "general-purpose" },
+  { ".reg2", s390_sizeof_fpregset, "floating-point" },
+  { ".reg-s390-high-gprs", 16*4, "s390 GPR upper halves" },
+  { ".reg-s390-last-break", 8, "s930 last-break address" },
+  { ".reg-s390-system-call", 4, "s390 system-call" },
+  { ".reg-s390-tdb", s390_sizeof_tdbregset, "s390 TDB" },
+  { NULL, 0}
+};
+
+static struct core_regset_section s390x_linux64_regset_sections[] =
+{
+  { ".reg", s390x_sizeof_gregset, "general-purpose" },
+  { ".reg2", s390_sizeof_fpregset, "floating-point" },
+  { NULL, 0}
+};
+
+static struct core_regset_section s390x_linux64v1_regset_sections[] =
+{
+  { ".reg", s390x_sizeof_gregset, "general-purpose" },
+  { ".reg2", s390_sizeof_fpregset, "floating-point" },
+  { ".reg-s390-last-break", 8, "s930 last-break address" },
+  { NULL, 0}
+};
+
+static struct core_regset_section s390x_linux64v2_regset_sections[] =
+{
+  { ".reg", s390x_sizeof_gregset, "general-purpose" },
+  { ".reg2", s390_sizeof_fpregset, "floating-point" },
+  { ".reg-s390-last-break", 8, "s930 last-break address" },
+  { ".reg-s390-system-call", 4, "s390 system-call" },
+  { ".reg-s390-tdb", s390_sizeof_tdbregset, "s390 TDB" },
+  { NULL, 0}
+};
+
+
+/* Return the appropriate register set for the core section identified
+   by SECT_NAME and SECT_SIZE.  */
+static const struct regset *
+s390_regset_from_core_section (struct gdbarch *gdbarch,
+			       const char *sect_name, size_t sect_size)
 {
   struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  const int gregset_size = (tdep->abi == ABI_LINUX_S390 ?
-			    s390_sizeof_gregset : s390x_sizeof_gregset);
 
-  cb (".reg", gregset_size, &s390_gregset, NULL, cb_data);
-  cb (".reg2", s390_sizeof_fpregset, &s390_fpregset, NULL, cb_data);
+  if (strcmp (sect_name, ".reg") == 0 && sect_size >= tdep->sizeof_gregset)
+    return tdep->gregset;
 
-  if (tdep->abi == ABI_LINUX_S390 && tdep->gpr_full_regnum != -1)
-    cb (".reg-s390-high-gprs", 16 * 4, &s390_upper_regset,
-	"s390 GPR upper halves", cb_data);
+  if (strcmp (sect_name, ".reg2") == 0 && sect_size >= tdep->sizeof_fpregset)
+    return tdep->fpregset;
 
-  if (tdep->have_linux_v1)
-    cb (".reg-s390-last-break", 8,
-	(gdbarch_ptr_bit (gdbarch) == 32
-	 ? &s390_last_break_regset : &s390x_last_break_regset),
-	"s930 last-break address", cb_data);
+  if (strcmp (sect_name, ".reg-s390-high-gprs") == 0 && sect_size >= 16*4)
+    return &s390_upper_regset;
 
-  if (tdep->have_linux_v2)
-    cb (".reg-s390-system-call", 4, &s390_system_call_regset,
-	"s390 system-call", cb_data);
+  if (strcmp (sect_name, ".reg-s390-last-break") == 0 && sect_size >= 8)
+    return (gdbarch_ptr_bit (gdbarch) == 32
+	    ?  &s390_last_break_regset : &s390x_last_break_regset);
 
-  /* If regcache is set, we are in "write" (gcore) mode.  In this
-     case, don't iterate over the TDB unless its registers are
-     available.  */
-  if (tdep->have_tdb
-      && (regcache == NULL
-	  || REG_VALID == regcache_register_status (regcache,
-						    S390_TDB_DWORD0_REGNUM)))
-    cb (".reg-s390-tdb", s390_sizeof_tdbregset, &s390_tdb_regset,
-	"s390 TDB", cb_data);
+  if (strcmp (sect_name, ".reg-s390-system-call") == 0 && sect_size >= 4)
+    return &s390_system_call_regset;
 
-  if (tdep->v0_full_regnum != -1)
-    {
-      cb (".reg-s390-vxrs-low", 16 * 8, &s390_vxrs_low_regset,
-	  "s390 vector registers 0-15 lower half", cb_data);
-      cb (".reg-s390-vxrs-high", 16 * 16, &s390_vxrs_high_regset,
-	  "s390 vector registers 16-31", cb_data);
-    }
+  if (strcmp (sect_name, ".reg-s390-tdb") == 0 && sect_size >= 256)
+    return &s390_tdb_regset;
+
+  return NULL;
 }
 
 static const struct target_desc *
 s390_core_read_description (struct gdbarch *gdbarch,
 			    struct target_ops *target, bfd *abfd)
 {
+  asection *high_gprs = bfd_get_section_by_name (abfd, ".reg-s390-high-gprs");
+  asection *v1 = bfd_get_section_by_name (abfd, ".reg-s390-last-break");
+  asection *v2 = bfd_get_section_by_name (abfd, ".reg-s390-system-call");
   asection *section = bfd_get_section_by_name (abfd, ".reg");
   CORE_ADDR hwcap = 0;
-  int high_gprs, v1, v2, te, vx;
 
   target_auxv_search (target, AT_HWCAP, &hwcap);
   if (!section)
     return NULL;
 
-  high_gprs = (bfd_get_section_by_name (abfd, ".reg-s390-high-gprs")
-	       != NULL);
-  v1 = (bfd_get_section_by_name (abfd, ".reg-s390-last-break") != NULL);
-  v2 = (bfd_get_section_by_name (abfd, ".reg-s390-system-call") != NULL);
-  vx = (hwcap & HWCAP_S390_VX);
-  te = (hwcap & HWCAP_S390_TE);
-
   switch (bfd_section_size (abfd, section))
     {
     case s390_sizeof_gregset:
       if (high_gprs)
-	return (te && vx ? tdesc_s390_tevx_linux64 :
-		vx ? tdesc_s390_vx_linux64 :
-		te ? tdesc_s390_te_linux64 :
-		v2 ? tdesc_s390_linux64v2 :
-		v1 ? tdesc_s390_linux64v1 : tdesc_s390_linux64);
+	return ((hwcap & HWCAP_S390_TE) ? tdesc_s390_te_linux64 :
+		v2? tdesc_s390_linux64v2 :
+		v1? tdesc_s390_linux64v1 : tdesc_s390_linux64);
       else
-	return (v2 ? tdesc_s390_linux32v2 :
-		v1 ? tdesc_s390_linux32v1 : tdesc_s390_linux32);
+	return (v2? tdesc_s390_linux32v2 :
+		v1? tdesc_s390_linux32v1 : tdesc_s390_linux32);
 
     case s390x_sizeof_gregset:
-      return (te && vx ? tdesc_s390x_tevx_linux64 :
-	      vx ? tdesc_s390x_vx_linux64 :
-	      te ? tdesc_s390x_te_linux64 :
-	      v2 ? tdesc_s390x_linux64v2 :
-	      v1 ? tdesc_s390x_linux64v1 : tdesc_s390x_linux64);
+      return ((hwcap & HWCAP_S390_TE) ? tdesc_s390x_te_linux64 :
+	      v2? tdesc_s390x_linux64v2 :
+	      v1? tdesc_s390x_linux64v1 : tdesc_s390x_linux64);
 
     default:
       return NULL;
@@ -826,7 +905,6 @@ enum
     op1_brxhg= 0xec,   op2_brxhg= 0x44,
     op_brxle = 0x85,
     op1_brxlg= 0xec,   op2_brxlg= 0x45,
-    op_svc   = 0x0a,
   };
 
 
@@ -1473,23 +1551,15 @@ static CORE_ADDR
 s390_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   struct s390_prologue_data data;
-  CORE_ADDR skip_pc, func_addr;
-
-  if (find_pc_partial_function (pc, NULL, &func_addr, NULL))
-    {
-      CORE_ADDR post_prologue_pc
-	= skip_prologue_using_sal (gdbarch, func_addr);
-      if (post_prologue_pc != 0)
-	return max (pc, post_prologue_pc);
-    }
-
+  CORE_ADDR skip_pc;
   skip_pc = s390_analyze_prologue (gdbarch, pc, (CORE_ADDR)-1, &data);
   return skip_pc ? skip_pc : pc;
 }
 
-/* Implmement the stack_frame_destroyed_p gdbarch method.  */
+/* Return true if we are in the functin's epilogue, i.e. after the
+   instruction that destroyed the function's stack frame.  */
 static int
-s390_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR pc)
+s390_in_function_epilogue_p (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   int word_size = gdbarch_ptr_bit (gdbarch) / 8;
 
@@ -1837,9 +1907,9 @@ s390_prologue_frame_unwind_cache (struct frame_info *this_frame,
       && (next_frame == NULL
 	  || get_frame_type (get_next_frame (this_frame)) != NORMAL_FRAME))
     {
-      /* See the comment in s390_stack_frame_destroyed_p on why this is
+      /* See the comment in s390_in_function_epilogue_p on why this is
 	 not completely reliable ...  */
-      if (s390_stack_frame_destroyed_p (gdbarch, get_frame_pc (this_frame)))
+      if (s390_in_function_epilogue_p (gdbarch, get_frame_pc (this_frame)))
 	{
 	  memset (&data, 0, sizeof (data));
 	  size = 0;
@@ -1970,7 +2040,6 @@ s390_frame_unwind_cache (struct frame_info *this_frame,
 			 void **this_prologue_cache)
 {
   struct s390_unwind_cache *info;
-
   if (*this_prologue_cache)
     return *this_prologue_cache;
 
@@ -1981,19 +2050,10 @@ s390_frame_unwind_cache (struct frame_info *this_frame,
   info->frame_base = -1;
   info->local_base = -1;
 
-  TRY
-    {
-      /* Try to use prologue analysis to fill the unwind cache.
-	 If this fails, fall back to reading the stack backchain.  */
-      if (!s390_prologue_frame_unwind_cache (this_frame, info))
-	s390_backchain_frame_unwind_cache (this_frame, info);
-    }
-  CATCH (ex, RETURN_MASK_ERROR)
-    {
-      if (ex.error != NOT_AVAILABLE_ERROR)
-	throw_exception (ex);
-    }
-  END_CATCH
+  /* Try to use prologue analysis to fill the unwind cache.
+     If this fails, fall back to reading the stack backchain.  */
+  if (!s390_prologue_frame_unwind_cache (this_frame, info))
+    s390_backchain_frame_unwind_cache (this_frame, info);
 
   return info;
 }
@@ -2261,7 +2321,7 @@ s390_sigtramp_frame_sniffer (const struct frame_unwind *self,
   if (target_read_memory (pc, sigreturn, 2))
     return 0;
 
-  if (sigreturn[0] != op_svc)
+  if (sigreturn[0] != 0x0a /* svc */)
     return 0;
 
   if (sigreturn[1] != 119 /* sigreturn */
@@ -2279,36 +2339,6 @@ static const struct frame_unwind s390_sigtramp_frame_unwind = {
   NULL,
   s390_sigtramp_frame_sniffer
 };
-
-/* Retrieve the syscall number at a ptrace syscall-stop.  Return -1
-   upon error. */
-
-static LONGEST
-s390_linux_get_syscall_number (struct gdbarch *gdbarch,
-			       ptid_t ptid)
-{
-  struct regcache *regs = get_thread_regcache (ptid);
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
-  ULONGEST pc;
-  ULONGEST svc_number = -1;
-  unsigned opcode;
-
-  /* Assume that the PC points after the 2-byte SVC instruction.  We
-     don't currently support SVC via EXECUTE. */
-  regcache_cooked_read_unsigned (regs, tdep->pc_regnum, &pc);
-  pc -= 2;
-  opcode = read_memory_unsigned_integer ((CORE_ADDR) pc, 1, byte_order);
-  if (opcode != op_svc)
-    return -1;
-
-  svc_number = read_memory_unsigned_integer ((CORE_ADDR) pc + 1, 1,
-					     byte_order);
-  if (svc_number == 0)
-    regcache_cooked_read_unsigned (regs, S390_R1_REGNUM, &svc_number);
-
-  return svc_number;
-}
 
 
 /* Frame base handling.  */
@@ -2399,262 +2429,202 @@ s390_dwarf2_frame_init_reg (struct gdbarch *gdbarch, int regnum,
 
 /* Dummy function calls.  */
 
-/* Unwrap any single-field structs in TYPE and return the effective
-   "inner" type.  E.g., yield "float" for all these cases:
-
-     float x;
-     struct { float x };
-     struct { struct { float x; } x; };
-     struct { struct { struct { float x; } x; } x; };
-
-   However, if an inner type is smaller than MIN_SIZE, abort the
-   unwrapping.  */
-
-static struct type *
-s390_effective_inner_type (struct type *type, unsigned int min_size)
+/* Return non-zero if TYPE is an integer-like type, zero otherwise.
+   "Integer-like" types are those that should be passed the way
+   integers are: integers, enums, ranges, characters, and booleans.  */
+static int
+is_integer_like (struct type *type)
 {
-  while (TYPE_CODE (type) == TYPE_CODE_STRUCT
-	 && TYPE_NFIELDS (type) == 1)
-    {
-      struct type *inner = check_typedef (TYPE_FIELD_TYPE (type, 0));
+  enum type_code code = TYPE_CODE (type);
 
-      if (TYPE_LENGTH (inner) < min_size)
-	break;
-      type = inner;
+  return (code == TYPE_CODE_INT
+	  || code == TYPE_CODE_ENUM
+	  || code == TYPE_CODE_RANGE
+	  || code == TYPE_CODE_CHAR
+	  || code == TYPE_CODE_BOOL);
+}
+
+/* Return non-zero if TYPE is a pointer-like type, zero otherwise.
+   "Pointer-like" types are those that should be passed the way
+   pointers are: pointers and references.  */
+static int
+is_pointer_like (struct type *type)
+{
+  enum type_code code = TYPE_CODE (type);
+
+  return (code == TYPE_CODE_PTR
+	  || code == TYPE_CODE_REF);
+}
+
+
+/* Return non-zero if TYPE is a `float singleton' or `double
+   singleton', zero otherwise.
+
+   A `T singleton' is a struct type with one member, whose type is
+   either T or a `T singleton'.  So, the following are all float
+   singletons:
+
+   struct { float x };
+   struct { struct { float x; } x; };
+   struct { struct { struct { float x; } x; } x; };
+
+   ... and so on.
+
+   All such structures are passed as if they were floats or doubles,
+   as the (revised) ABI says.  */
+static int
+is_float_singleton (struct type *type)
+{
+  if (TYPE_CODE (type) == TYPE_CODE_STRUCT && TYPE_NFIELDS (type) == 1)
+    {
+      struct type *singleton_type = TYPE_FIELD_TYPE (type, 0);
+      CHECK_TYPEDEF (singleton_type);
+
+      return (TYPE_CODE (singleton_type) == TYPE_CODE_FLT
+	      || TYPE_CODE (singleton_type) == TYPE_CODE_DECFLOAT
+	      || is_float_singleton (singleton_type));
     }
 
-  return type;
+  return 0;
 }
 
-/* Return non-zero if TYPE should be passed like "float" or
-   "double".  */
 
+/* Return non-zero if TYPE is a struct-like type, zero otherwise.
+   "Struct-like" types are those that should be passed as structs are:
+   structs and unions.
+
+   As an odd quirk, not mentioned in the ABI, GCC passes float and
+   double singletons as if they were a plain float, double, etc.  (The
+   corresponding union types are handled normally.)  So we exclude
+   those types here.  *shrug* */
 static int
-s390_function_arg_float (struct type *type)
+is_struct_like (struct type *type)
 {
-  /* Note that long double as well as complex types are intentionally
-     excluded. */
-  if (TYPE_LENGTH (type) > 8)
-    return 0;
+  enum type_code code = TYPE_CODE (type);
 
-  /* A struct containing just a float or double is passed like a float
-     or double.  */
-  type = s390_effective_inner_type (type, 0);
+  return (code == TYPE_CODE_UNION
+	  || (code == TYPE_CODE_STRUCT && ! is_float_singleton (type)));
+}
 
+
+/* Return non-zero if TYPE is a float-like type, zero otherwise.
+   "Float-like" types are those that should be passed as
+   floating-point values are.
+
+   You'd think this would just be floats, doubles, long doubles, etc.
+   But as an odd quirk, not mentioned in the ABI, GCC passes float and
+   double singletons as if they were a plain float, double, etc.  (The
+   corresponding union types are handled normally.)  So we include
+   those types here.  *shrug* */
+static int
+is_float_like (struct type *type)
+{
   return (TYPE_CODE (type) == TYPE_CODE_FLT
-	  || TYPE_CODE (type) == TYPE_CODE_DECFLOAT);
+	  || TYPE_CODE (type) == TYPE_CODE_DECFLOAT
+	  || is_float_singleton (type));
 }
 
-/* Return non-zero if TYPE should be passed like a vector.  */
-
-static int
-s390_function_arg_vector (struct type *type)
-{
-  if (TYPE_LENGTH (type) > 16)
-    return 0;
-
-  /* Structs containing just a vector are passed like a vector.  */
-  type = s390_effective_inner_type (type, TYPE_LENGTH (type));
-
-  return TYPE_CODE (type) == TYPE_CODE_ARRAY && TYPE_VECTOR (type);
-}
-
-/* Determine whether N is a power of two.  */
 
 static int
 is_power_of_two (unsigned int n)
 {
-  return n && ((n & (n - 1)) == 0);
+  return ((n & (n - 1)) == 0);
 }
 
-/* For an argument whose type is TYPE and which is not passed like a
-   float or vector, return non-zero if it should be passed like "int"
-   or "long long".  */
-
+/* Return non-zero if TYPE should be passed as a pointer to a copy,
+   zero otherwise.  */
 static int
-s390_function_arg_integer (struct type *type)
+s390_function_arg_pass_by_reference (struct type *type)
 {
-  enum type_code code = TYPE_CODE (type);
+  if (TYPE_LENGTH (type) > 8)
+    return 1;
 
+  return (is_struct_like (type) && !is_power_of_two (TYPE_LENGTH (type)))
+	  || TYPE_CODE (type) == TYPE_CODE_COMPLEX
+	  || (TYPE_CODE (type) == TYPE_CODE_ARRAY && TYPE_VECTOR (type));
+}
+
+/* Return non-zero if TYPE should be passed in a float register
+   if possible.  */
+static int
+s390_function_arg_float (struct type *type)
+{
   if (TYPE_LENGTH (type) > 8)
     return 0;
 
-  if (code == TYPE_CODE_INT
-      || code == TYPE_CODE_ENUM
-      || code == TYPE_CODE_RANGE
-      || code == TYPE_CODE_CHAR
-      || code == TYPE_CODE_BOOL
-      || code == TYPE_CODE_PTR
-      || code == TYPE_CODE_REF)
-    return 1;
-
-  return ((code == TYPE_CODE_UNION || code == TYPE_CODE_STRUCT)
-	  && is_power_of_two (TYPE_LENGTH (type)));
+  return is_float_like (type);
 }
 
-/* Argument passing state: Internal data structure passed to helper
-   routines of s390_push_dummy_call.  */
-
-struct s390_arg_state
-  {
-    /* Register cache, or NULL, if we are in "preparation mode".  */
-    struct regcache *regcache;
-    /* Next available general/floating-point/vector register for
-       argument passing.  */
-    int gr, fr, vr;
-    /* Current pointer to copy area (grows downwards).  */
-    CORE_ADDR copy;
-    /* Current pointer to parameter area (grows upwards).  */
-    CORE_ADDR argp;
-  };
-
-/* Prepare one argument ARG for a dummy call and update the argument
-   passing state AS accordingly.  If the regcache field in AS is set,
-   operate in "write mode" and write ARG into the inferior.  Otherwise
-   run "preparation mode" and skip all updates to the inferior.  */
-
-static void
-s390_handle_arg (struct s390_arg_state *as, struct value *arg,
-		 struct gdbarch_tdep *tdep, int word_size,
-		 enum bfd_endian byte_order, int is_unnamed)
+/* Return non-zero if TYPE should be passed in an integer register
+   (or a pair of integer registers) if possible.  */
+static int
+s390_function_arg_integer (struct type *type)
 {
+  if (TYPE_LENGTH (type) > 8)
+    return 0;
+
+   return is_integer_like (type)
+	  || is_pointer_like (type)
+	  || (is_struct_like (type) && is_power_of_two (TYPE_LENGTH (type)));
+}
+
+/* Return ARG, a `SIMPLE_ARG', sign-extended or zero-extended to a full
+   word as required for the ABI.  */
+static LONGEST
+extend_simple_arg (struct gdbarch *gdbarch, struct value *arg)
+{
+  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   struct type *type = check_typedef (value_type (arg));
-  unsigned int length = TYPE_LENGTH (type);
-  int write_mode = as->regcache != NULL;
 
-  if (s390_function_arg_float (type))
+  /* Even structs get passed in the least significant bits of the
+     register / memory word.  It's not really right to extract them as
+     an integer, but it does take care of the extension.  */
+  if (TYPE_UNSIGNED (type))
+    return extract_unsigned_integer (value_contents (arg),
+				     TYPE_LENGTH (type), byte_order);
+  else
+    return extract_signed_integer (value_contents (arg),
+				   TYPE_LENGTH (type), byte_order);
+}
+
+
+/* Return the alignment required by TYPE.  */
+static int
+alignment_of (struct type *type)
+{
+  int alignment;
+
+  if (is_integer_like (type)
+      || is_pointer_like (type)
+      || TYPE_CODE (type) == TYPE_CODE_FLT
+      || TYPE_CODE (type) == TYPE_CODE_DECFLOAT)
+    alignment = TYPE_LENGTH (type);
+  else if (TYPE_CODE (type) == TYPE_CODE_STRUCT
+	   || TYPE_CODE (type) == TYPE_CODE_UNION)
     {
-      /* The GNU/Linux for S/390 ABI uses FPRs 0 and 2 to pass
-	 arguments.  The GNU/Linux for zSeries ABI uses 0, 2, 4, and
-	 6.  */
-      if (as->fr <= (tdep->abi == ABI_LINUX_S390 ? 2 : 6))
-	{
-	  /* When we store a single-precision value in an FP register,
-	     it occupies the leftmost bits.  */
-	  if (write_mode)
-	    regcache_cooked_write_part (as->regcache,
-					S390_F0_REGNUM + as->fr,
-					0, length,
-					value_contents (arg));
-	  as->fr += 2;
-	}
-      else
-	{
-	  /* When we store a single-precision value in a stack slot,
-	     it occupies the rightmost bits.  */
-	  as->argp = align_up (as->argp + length, word_size);
-	  if (write_mode)
-	    write_memory (as->argp - length, value_contents (arg),
-			  length);
-	}
-    }
-  else if (tdep->vector_abi == S390_VECTOR_ABI_128
-	   && s390_function_arg_vector (type))
-    {
-      static const char use_vr[] = {24, 26, 28, 30, 25, 27, 29, 31};
+      int i;
 
-      if (!is_unnamed && as->vr < ARRAY_SIZE (use_vr))
+      alignment = 1;
+      for (i = 0; i < TYPE_NFIELDS (type); i++)
 	{
-	  int regnum = S390_V24_REGNUM + use_vr[as->vr] - 24;
+	  int field_alignment
+	    = alignment_of (check_typedef (TYPE_FIELD_TYPE (type, i)));
 
-	  if (write_mode)
-	    regcache_cooked_write_part (as->regcache, regnum,
-					0, length,
-					value_contents (arg));
-	  as->vr++;
-	}
-      else
-	{
-	  if (write_mode)
-	    write_memory (as->argp, value_contents (arg), length);
-	  as->argp = align_up (as->argp + length, word_size);
-	}
-    }
-  else if (s390_function_arg_integer (type) && length <= word_size)
-    {
-      /* Initialize it just to avoid a GCC false warning.  */
-      ULONGEST val = 0;
-
-      if (write_mode)
-	{
-	  /* Place value in least significant bits of the register or
-	     memory word and sign- or zero-extend to full word size.
-	     This also applies to a struct or union.  */
-	  val = TYPE_UNSIGNED (type)
-	    ? extract_unsigned_integer (value_contents (arg),
-					length, byte_order)
-	    : extract_signed_integer (value_contents (arg),
-				      length, byte_order);
-	}
-
-      if (as->gr <= 6)
-	{
-	  if (write_mode)
-	    regcache_cooked_write_unsigned (as->regcache,
-					    S390_R0_REGNUM + as->gr,
-					    val);
-	  as->gr++;
-	}
-      else
-	{
-	  if (write_mode)
-	    write_memory_unsigned_integer (as->argp, word_size,
-					   byte_order, val);
-	  as->argp += word_size;
-	}
-    }
-  else if (s390_function_arg_integer (type) && length == 8)
-    {
-      if (as->gr <= 5)
-	{
-	  if (write_mode)
-	    {
-	      regcache_cooked_write (as->regcache,
-				     S390_R0_REGNUM + as->gr,
-				     value_contents (arg));
-	      regcache_cooked_write (as->regcache,
-				     S390_R0_REGNUM + as->gr + 1,
-				     value_contents (arg) + word_size);
-	    }
-	  as->gr += 2;
-	}
-      else
-	{
-	  /* If we skipped r6 because we couldn't fit a DOUBLE_ARG
-	     in it, then don't go back and use it again later.  */
-	  as->gr = 7;
-
-	  if (write_mode)
-	    write_memory (as->argp, value_contents (arg), length);
-	  as->argp += length;
+	  if (field_alignment > alignment)
+	    alignment = field_alignment;
 	}
     }
   else
-    {
-      /* This argument type is never passed in registers.  Place the
-	 value in the copy area and pass a pointer to it.  Use 8-byte
-	 alignment as a conservative assumption.  */
-      as->copy = align_down (as->copy - length, 8);
-      if (write_mode)
-	write_memory (as->copy, value_contents (arg), length);
+    alignment = 1;
 
-      if (as->gr <= 6)
-	{
-	  if (write_mode)
-	    regcache_cooked_write_unsigned (as->regcache,
-					    S390_R0_REGNUM + as->gr,
-					    as->copy);
-	  as->gr++;
-	}
-      else
-	{
-	  if (write_mode)
-	    write_memory_unsigned_integer (as->argp, word_size,
-					   byte_order, as->copy);
-	  as->argp += word_size;
-	}
-    }
+  /* Check that everything we ever return is a power of two.  Lots of
+     code doesn't want to deal with aligning things to arbitrary
+     boundaries.  */
+  gdb_assert ((alignment & (alignment - 1)) == 0);
+
+  return alignment;
 }
+
 
 /* Put the actual parameter values pointed to by ARGS[0..NARGS-1] in
    place to be passed to a function, as specified by the "GNU/Linux
@@ -2670,7 +2640,6 @@ s390_handle_arg (struct s390_arg_state *as, struct value *arg,
 
    Our caller has taken care of any type promotions needed to satisfy
    prototypes or the old K&R argument-passing rules.  */
-
 static CORE_ADDR
 s390_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
 		      struct regcache *regcache, CORE_ADDR bp_addr,
@@ -2681,55 +2650,151 @@ s390_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   int word_size = gdbarch_ptr_bit (gdbarch) / 8;
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
   int i;
-  struct s390_arg_state arg_state, arg_prep;
-  CORE_ADDR param_area_start, new_sp;
-  struct type *ftype = check_typedef (value_type (function));
 
-  if (TYPE_CODE (ftype) == TYPE_CODE_PTR)
-    ftype = check_typedef (TYPE_TARGET_TYPE (ftype));
+  /* If the i'th argument is passed as a reference to a copy, then
+     copy_addr[i] is the address of the copy we made.  */
+  CORE_ADDR *copy_addr = alloca (nargs * sizeof (CORE_ADDR));
 
-  arg_prep.copy = sp;
-  arg_prep.gr = struct_return ? 3 : 2;
-  arg_prep.fr = 0;
-  arg_prep.vr = 0;
-  arg_prep.argp = 0;
-  arg_prep.regcache = NULL;
-
-  /* Initialize arg_state for "preparation mode".  */
-  arg_state = arg_prep;
-
-  /* Update arg_state.copy with the start of the reference-to-copy area
-     and arg_state.argp with the size of the parameter area.  */
+  /* Reserve space for the reference-to-copy area.  */
   for (i = 0; i < nargs; i++)
-    s390_handle_arg (&arg_state, args[i], tdep, word_size, byte_order,
-		     TYPE_VARARGS (ftype) && i >= TYPE_NFIELDS (ftype));
+    {
+      struct value *arg = args[i];
+      struct type *type = check_typedef (value_type (arg));
 
-  param_area_start = align_down (arg_state.copy - arg_state.argp, 8);
+      if (s390_function_arg_pass_by_reference (type))
+	{
+	  sp -= TYPE_LENGTH (type);
+	  sp = align_down (sp, alignment_of (type));
+	  copy_addr[i] = sp;
+	}
+    }
+
+  /* Reserve space for the parameter area.  As a conservative
+     simplification, we assume that everything will be passed on the
+     stack.  Since every argument larger than 8 bytes will be
+     passed by reference, we use this simple upper bound.  */
+  sp -= nargs * 8;
+
+  /* After all that, make sure it's still aligned on an eight-byte
+     boundary.  */
+  sp = align_down (sp, 8);
 
   /* Allocate the standard frame areas: the register save area, the
-     word reserved for the compiler, and the back chain pointer.  */
-  new_sp = param_area_start - (16 * word_size + 32);
+     word reserved for the compiler (which seems kind of meaningless),
+     and the back chain pointer.  */
+  sp -= 16*word_size + 32;
 
-  /* Now we have the final stack pointer.  Make sure we didn't
-     underflow; on 31-bit, this would result in addresses with the
-     high bit set, which causes confusion elsewhere.  Note that if we
-     error out here, stack and registers remain untouched.  */
-  if (gdbarch_addr_bits_remove (gdbarch, new_sp) != new_sp)
+  /* Now we have the final SP value.  Make sure we didn't underflow;
+     on 31-bit, this would result in addresses with the high bit set,
+     which causes confusion elsewhere.  Note that if we error out
+     here, stack and registers remain untouched.  */
+  if (gdbarch_addr_bits_remove (gdbarch, sp) != sp)
     error (_("Stack overflow"));
 
-  /* Pass the structure return address in general register 2.  */
-  if (struct_return)
-    regcache_cooked_write_unsigned (regcache, S390_R2_REGNUM, struct_addr);
 
-  /* Initialize arg_state for "write mode".  */
-  arg_state = arg_prep;
-  arg_state.argp = param_area_start;
-  arg_state.regcache = regcache;
+  /* Finally, place the actual parameters, working from SP towards
+     higher addresses.  The code above is supposed to reserve enough
+     space for this.  */
+  {
+    int fr = 0;
+    int gr = 2;
+    CORE_ADDR starg = sp + 16*word_size + 32;
 
-  /* Write all parameters.  */
-  for (i = 0; i < nargs; i++)
-    s390_handle_arg (&arg_state, args[i], tdep, word_size, byte_order,
-		     TYPE_VARARGS (ftype) && i >= TYPE_NFIELDS (ftype));
+    /* A struct is returned using general register 2.  */
+    if (struct_return)
+      {
+	regcache_cooked_write_unsigned (regcache, S390_R0_REGNUM + gr,
+					struct_addr);
+	gr++;
+      }
+
+    for (i = 0; i < nargs; i++)
+      {
+	struct value *arg = args[i];
+	struct type *type = check_typedef (value_type (arg));
+	unsigned length = TYPE_LENGTH (type);
+
+	if (s390_function_arg_pass_by_reference (type))
+	  {
+	    /* Actually copy the argument contents to the stack slot
+	       that was reserved above.  */
+	    write_memory (copy_addr[i], value_contents (arg), length);
+
+	    if (gr <= 6)
+	      {
+		regcache_cooked_write_unsigned (regcache, S390_R0_REGNUM + gr,
+						copy_addr[i]);
+		gr++;
+	      }
+	    else
+	      {
+		write_memory_unsigned_integer (starg, word_size, byte_order,
+					       copy_addr[i]);
+		starg += word_size;
+	      }
+	  }
+	else if (s390_function_arg_float (type))
+	  {
+	    /* The GNU/Linux for S/390 ABI uses FPRs 0 and 2 to pass arguments,
+	       the GNU/Linux for zSeries ABI uses 0, 2, 4, and 6.  */
+	    if (fr <= (tdep->abi == ABI_LINUX_S390 ? 2 : 6))
+	      {
+		/* When we store a single-precision value in an FP register,
+		   it occupies the leftmost bits.  */
+		regcache_cooked_write_part (regcache, S390_F0_REGNUM + fr,
+					    0, length, value_contents (arg));
+		fr += 2;
+	      }
+	    else
+	      {
+		/* When we store a single-precision value in a stack slot,
+		   it occupies the rightmost bits.  */
+		starg = align_up (starg + length, word_size);
+		write_memory (starg - length, value_contents (arg), length);
+	      }
+	  }
+	else if (s390_function_arg_integer (type) && length <= word_size)
+	  {
+	    if (gr <= 6)
+	      {
+		/* Integer arguments are always extended to word size.  */
+		regcache_cooked_write_signed (regcache, S390_R0_REGNUM + gr,
+					      extend_simple_arg (gdbarch,
+								 arg));
+		gr++;
+	      }
+	    else
+	      {
+		/* Integer arguments are always extended to word size.  */
+		write_memory_signed_integer (starg, word_size, byte_order,
+					     extend_simple_arg (gdbarch, arg));
+		starg += word_size;
+	      }
+	  }
+	else if (s390_function_arg_integer (type) && length == 2*word_size)
+	  {
+	    if (gr <= 5)
+	      {
+		regcache_cooked_write (regcache, S390_R0_REGNUM + gr,
+				       value_contents (arg));
+		regcache_cooked_write (regcache, S390_R0_REGNUM + gr + 1,
+				       value_contents (arg) + word_size);
+		gr += 2;
+	      }
+	    else
+	      {
+		/* If we skipped r6 because we couldn't fit a DOUBLE_ARG
+		   in it, then don't go back and use it again later.  */
+		gr = 7;
+
+		write_memory (starg, value_contents (arg), length);
+		starg += length;
+	      }
+	  }
+	else
+	  internal_error (__FILE__, __LINE__, _("unknown argument type"));
+      }
+  }
 
   /* Store return PSWA.  In 31-bit mode, keep addressing mode bit.  */
   if (word_size == 4)
@@ -2741,11 +2806,11 @@ s390_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
   regcache_cooked_write_unsigned (regcache, S390_RETADDR_REGNUM, bp_addr);
 
   /* Store updated stack pointer.  */
-  regcache_cooked_write_unsigned (regcache, S390_SP_REGNUM, new_sp);
+  regcache_cooked_write_unsigned (regcache, S390_SP_REGNUM, sp);
 
   /* We need to return the 'stack part' of the frame ID,
      which is actually the top of the register save area.  */
-  return param_area_start;
+  return sp + 16*word_size + 32;
 }
 
 /* Assuming THIS_FRAME is a dummy, return the frame ID of that
@@ -2772,113 +2837,110 @@ s390_frame_align (struct gdbarch *gdbarch, CORE_ADDR addr)
 }
 
 
-/* Helper for s390_return_value: Set or retrieve a function return
-   value if it resides in a register.  */
+/* Function return value access.  */
 
-static void
-s390_register_return_value (struct gdbarch *gdbarch, struct type *type,
-			    struct regcache *regcache,
-			    gdb_byte *out, const gdb_byte *in)
+static enum return_value_convention
+s390_return_value_convention (struct gdbarch *gdbarch, struct type *type)
 {
-  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
-  int word_size = gdbarch_ptr_bit (gdbarch) / 8;
-  int length = TYPE_LENGTH (type);
-  int code = TYPE_CODE (type);
+  if (TYPE_LENGTH (type) > 8)
+    return RETURN_VALUE_STRUCT_CONVENTION;
 
-  if (code == TYPE_CODE_FLT || code == TYPE_CODE_DECFLOAT)
+  switch (TYPE_CODE (type))
     {
-      /* Float-like value: left-aligned in f0.  */
-      if (in != NULL)
-	regcache_cooked_write_part (regcache, S390_F0_REGNUM,
-				    0, length, in);
-      else
-	regcache_cooked_read_part (regcache, S390_F0_REGNUM,
-				   0, length, out);
+    case TYPE_CODE_STRUCT:
+    case TYPE_CODE_UNION:
+    case TYPE_CODE_ARRAY:
+    case TYPE_CODE_COMPLEX:
+      return RETURN_VALUE_STRUCT_CONVENTION;
+
+    default:
+      return RETURN_VALUE_REGISTER_CONVENTION;
     }
-  else if (code == TYPE_CODE_ARRAY)
-    {
-      /* Vector: left-aligned in v24.  */
-      if (in != NULL)
-	regcache_cooked_write_part (regcache, S390_V24_REGNUM,
-				    0, length, in);
-      else
-	regcache_cooked_read_part (regcache, S390_V24_REGNUM,
-				   0, length, out);
-    }
-  else if (length <= word_size)
-    {
-      /* Integer: zero- or sign-extended in r2.  */
-      if (out != NULL)
-	regcache_cooked_read_part (regcache, S390_R2_REGNUM,
-				   word_size - length, length, out);
-      else if (TYPE_UNSIGNED (type))
-	regcache_cooked_write_unsigned
-	  (regcache, S390_R2_REGNUM,
-	   extract_unsigned_integer (in, length, byte_order));
-      else
-	regcache_cooked_write_signed
-	  (regcache, S390_R2_REGNUM,
-	   extract_signed_integer (in, length, byte_order));
-    }
-  else if (length == 2 * word_size)
-    {
-      /* Double word: in r2 and r3.  */
-      if (in != NULL)
-	{
-	  regcache_cooked_write (regcache, S390_R2_REGNUM, in);
-	  regcache_cooked_write (regcache, S390_R3_REGNUM,
-				 in + word_size);
-	}
-      else
-	{
-	  regcache_cooked_read (regcache, S390_R2_REGNUM, out);
-	  regcache_cooked_read (regcache, S390_R3_REGNUM,
-				out + word_size);
-	}
-    }
-  else
-    internal_error (__FILE__, __LINE__, _("invalid return type"));
 }
-
-
-/* Implement the 'return_value' gdbarch method.  */
 
 static enum return_value_convention
 s390_return_value (struct gdbarch *gdbarch, struct value *function,
 		   struct type *type, struct regcache *regcache,
 		   gdb_byte *out, const gdb_byte *in)
 {
+  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+  int word_size = gdbarch_ptr_bit (gdbarch) / 8;
   enum return_value_convention rvc;
+  int length;
 
   type = check_typedef (type);
+  rvc = s390_return_value_convention (gdbarch, type);
+  length = TYPE_LENGTH (type);
 
-  switch (TYPE_CODE (type))
+  if (in)
     {
-    case TYPE_CODE_STRUCT:
-    case TYPE_CODE_UNION:
-    case TYPE_CODE_COMPLEX:
-      rvc = RETURN_VALUE_STRUCT_CONVENTION;
-      break;
-    case TYPE_CODE_ARRAY:
-      rvc = (gdbarch_tdep (gdbarch)->vector_abi == S390_VECTOR_ABI_128
-	     && TYPE_LENGTH (type) <= 16 && TYPE_VECTOR (type))
-	? RETURN_VALUE_REGISTER_CONVENTION
-	: RETURN_VALUE_STRUCT_CONVENTION;
-      break;
-    default:
-      rvc = TYPE_LENGTH (type) <= 8
-	? RETURN_VALUE_REGISTER_CONVENTION
-	: RETURN_VALUE_STRUCT_CONVENTION;
+      switch (rvc)
+	{
+	case RETURN_VALUE_REGISTER_CONVENTION:
+	  if (TYPE_CODE (type) == TYPE_CODE_FLT
+	      || TYPE_CODE (type) == TYPE_CODE_DECFLOAT)
+	    {
+	      /* When we store a single-precision value in an FP register,
+		 it occupies the leftmost bits.  */
+	      regcache_cooked_write_part (regcache, S390_F0_REGNUM,
+					  0, length, in);
+	    }
+	  else if (length <= word_size)
+	    {
+	      /* Integer arguments are always extended to word size.  */
+	      if (TYPE_UNSIGNED (type))
+		regcache_cooked_write_unsigned (regcache, S390_R2_REGNUM,
+			extract_unsigned_integer (in, length, byte_order));
+	      else
+		regcache_cooked_write_signed (regcache, S390_R2_REGNUM,
+			extract_signed_integer (in, length, byte_order));
+	    }
+	  else if (length == 2*word_size)
+	    {
+	      regcache_cooked_write (regcache, S390_R2_REGNUM, in);
+	      regcache_cooked_write (regcache, S390_R3_REGNUM, in + word_size);
+	    }
+	  else
+	    internal_error (__FILE__, __LINE__, _("invalid return type"));
+	  break;
+
+	case RETURN_VALUE_STRUCT_CONVENTION:
+	  error (_("Cannot set function return value."));
+	  break;
+	}
     }
-
-  if (in != NULL || out != NULL)
+  else if (out)
     {
-      if (rvc == RETURN_VALUE_REGISTER_CONVENTION)
-	s390_register_return_value (gdbarch, type, regcache, out, in);
-      else if (in != NULL)
-	error (_("Cannot set function return value."));
-      else
-	error (_("Function return value unknown."));
+      switch (rvc)
+	{
+	case RETURN_VALUE_REGISTER_CONVENTION:
+	  if (TYPE_CODE (type) == TYPE_CODE_FLT
+	      || TYPE_CODE (type) == TYPE_CODE_DECFLOAT)
+	    {
+	      /* When we store a single-precision value in an FP register,
+		 it occupies the leftmost bits.  */
+	      regcache_cooked_read_part (regcache, S390_F0_REGNUM,
+					 0, length, out);
+	    }
+	  else if (length <= word_size)
+	    {
+	      /* Integer arguments occupy the rightmost bits.  */
+	      regcache_cooked_read_part (regcache, S390_R2_REGNUM,
+					 word_size - length, length, out);
+	    }
+	  else if (length == 2*word_size)
+	    {
+	      regcache_cooked_read (regcache, S390_R2_REGNUM, out);
+	      regcache_cooked_read (regcache, S390_R3_REGNUM, out + word_size);
+	    }
+	  else
+	    internal_error (__FILE__, __LINE__, _("invalid return type"));
+	  break;
+
+	case RETURN_VALUE_STRUCT_CONVENTION:
+	  error (_("Function return value unknown."));
+	  break;
+	}
     }
 
   return rvc;
@@ -2938,26 +3000,6 @@ s390_address_class_name_to_type_flags (struct gdbarch *gdbarch,
     return 0;
 }
 
-/* Implement gdbarch_gcc_target_options.  GCC does not know "-m32" or
-   "-mcmodel=large".  */
-
-static char *
-s390_gcc_target_options (struct gdbarch *gdbarch)
-{
-  return xstrdup (gdbarch_ptr_bit (gdbarch) == 64 ? "-m64" : "-m31");
-}
-
-/* Implement gdbarch_gnu_triplet_regexp.  Target triplets are "s390-*"
-   for 31-bit and "s390x-*" for 64-bit, while the BFD arch name is
-   always "s390".  Note that an s390x compiler supports "-m31" as
-   well.  */
-
-static const char *
-s390_gnu_triplet_regexp (struct gdbarch *gdbarch)
-{
-  return "s390x?";
-}
-
 /* Implementation of `gdbarch_stap_is_single_operand', as defined in
    gdbarch.h.  */
 
@@ -2980,12 +3022,9 @@ s390_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   struct gdbarch *gdbarch;
   struct gdbarch_tdep *tdep;
   int tdep_abi;
-  enum s390_vector_abi_kind vector_abi;
   int have_upper = 0;
   int have_linux_v1 = 0;
   int have_linux_v2 = 0;
-  int have_tdb = 0;
-  int have_vx = 0;
   int first_pseudo_reg, last_pseudo_reg;
   static const char *const stap_register_prefixes[] = { "%", NULL };
   static const char *const stap_register_indirection_prefixes[] = { "(",
@@ -3044,14 +3083,6 @@ s390_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 	"tdb0", "tac", "tct", "atia",
 	"tr0", "tr1", "tr2", "tr3", "tr4", "tr5", "tr6", "tr7",
 	"tr8", "tr9", "tr10", "tr11", "tr12", "tr13", "tr14", "tr15"
-      };
-      static const char *const vxrs_low[] = {
-	"v0l", "v1l", "v2l", "v3l", "v4l", "v5l", "v6l", "v7l", "v8l",
-	"v9l", "v10l", "v11l", "v12l", "v13l", "v14l", "v15l",
-      };
-      static const char *const vxrs_high[] = {
-	"v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "v24",
-	"v25", "v26", "v27", "v28", "v29", "v30", "v31",
       };
       const struct tdesc_feature *feature;
       int i, valid_p = 1;
@@ -3138,22 +3169,6 @@ s390_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 	    valid_p &= tdesc_numbered_register (feature, tdesc_data,
 						S390_TDB_DWORD0_REGNUM + i,
 						tdb_regs[i]);
-	  have_tdb = 1;
-	}
-
-      /* Vector registers.  */
-      feature = tdesc_find_feature (tdesc, "org.gnu.gdb.s390.vx");
-      if (feature)
-	{
-	  for (i = 0; i < 16; i++)
-	    valid_p &= tdesc_numbered_register (feature, tdesc_data,
-						S390_V0_LOWER_REGNUM + i,
-						vxrs_low[i]);
-	  for (i = 0; i < 16; i++)
-	    valid_p &= tdesc_numbered_register (feature, tdesc_data,
-						S390_V16_REGNUM + i,
-						vxrs_high[i]);
-	  have_vx = 1;
 	}
 
       if (!valid_p)
@@ -3162,18 +3177,6 @@ s390_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 	  return NULL;
 	}
     }
-
-  /* Determine vector ABI.  */
-  vector_abi = S390_VECTOR_ABI_NONE;
-#ifdef HAVE_ELF
-  if (have_vx
-      && info.abfd != NULL
-      && info.abfd->format == bfd_object
-      && bfd_get_flavour (info.abfd) == bfd_target_elf_flavour
-      && bfd_elf_get_obj_attr_int (info.abfd, OBJ_ATTR_GNU,
-				   Tag_GNU_S390_ABI_Vector) == 2)
-    vector_abi = S390_VECTOR_ABI_128;
-#endif
 
   /* Find a candidate among extant architectures.  */
   for (arches = gdbarch_list_lookup_by_info (arches, &info);
@@ -3185,8 +3188,6 @@ s390_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 	continue;
       if (tdep->abi != tdep_abi)
 	continue;
-      if (tdep->vector_abi != vector_abi)
-	continue;
       if ((tdep->gpr_full_regnum != -1) != have_upper)
 	continue;
       if (tdesc_data != NULL)
@@ -3195,12 +3196,8 @@ s390_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     }
 
   /* Otherwise create a new gdbarch for the specified machine type.  */
-  tdep = XCNEW (struct gdbarch_tdep);
+  tdep = XCALLOC (1, struct gdbarch_tdep);
   tdep->abi = tdep_abi;
-  tdep->vector_abi = vector_abi;
-  tdep->have_linux_v1 = have_linux_v1;
-  tdep->have_linux_v2 = have_linux_v2;
-  tdep->have_tdb = have_tdb;
   gdbarch = gdbarch_alloc (&info, tdep);
 
   set_gdbarch_believe_pcc_promotion (gdbarch, 0);
@@ -3220,7 +3217,7 @@ s390_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);
   set_gdbarch_breakpoint_from_pc (gdbarch, s390_breakpoint_from_pc);
   set_gdbarch_skip_prologue (gdbarch, s390_skip_prologue);
-  set_gdbarch_stack_frame_destroyed_p (gdbarch, s390_stack_frame_destroyed_p);
+  set_gdbarch_in_function_epilogue_p (gdbarch, s390_in_function_epilogue_p);
 
   set_gdbarch_num_regs (gdbarch, S390_NUM_REGS);
   set_gdbarch_sp_regnum (gdbarch, S390_SP_REGNUM);
@@ -3228,9 +3225,9 @@ s390_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_stab_reg_to_regnum (gdbarch, s390_dwarf_reg_to_regnum);
   set_gdbarch_dwarf2_reg_to_regnum (gdbarch, s390_dwarf_reg_to_regnum);
   set_gdbarch_value_from_register (gdbarch, s390_value_from_register);
+  set_gdbarch_regset_from_core_section (gdbarch,
+					s390_regset_from_core_section);
   set_gdbarch_core_read_description (gdbarch, s390_core_read_description);
-  set_gdbarch_iterate_over_regset_sections (gdbarch,
-					    s390_iterate_over_regset_sections);
   set_gdbarch_cannot_store_register (gdbarch, s390_cannot_store_register);
   set_gdbarch_write_pc (gdbarch, s390_write_pc);
   set_gdbarch_pseudo_register_read (gdbarch, s390_pseudo_register_read);
@@ -3240,7 +3237,6 @@ s390_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_tdesc_pseudo_register_reggroup_p (gdbarch,
 					s390_pseudo_register_reggroup_p);
   tdesc_use_registers (gdbarch, tdesc, tdesc_data);
-  set_gdbarch_register_name (gdbarch, s390_register_name);
 
   /* Assign pseudo register numbers.  */
   first_pseudo_reg = gdbarch_num_regs (gdbarch);
@@ -3249,12 +3245,6 @@ s390_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   if (have_upper)
     {
       tdep->gpr_full_regnum = last_pseudo_reg;
-      last_pseudo_reg += 16;
-    }
-  tdep->v0_full_regnum = -1;
-  if (have_vx)
-    {
-      tdep->v0_full_regnum = last_pseudo_reg;
       last_pseudo_reg += 16;
     }
   tdep->pc_regnum = last_pseudo_reg++;
@@ -3267,9 +3257,6 @@ s390_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_dummy_id (gdbarch, s390_dummy_id);
   set_gdbarch_frame_align (gdbarch, s390_frame_align);
   set_gdbarch_return_value (gdbarch, s390_return_value);
-
-  /* Syscall handling.  */
-  set_gdbarch_get_syscall_number (gdbarch, s390_linux_get_syscall_number);
 
   /* Frame handling.  */
   dwarf2_frame_set_init_reg (gdbarch, s390_dwarf2_frame_init_reg);
@@ -3289,7 +3276,8 @@ s390_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_displaced_step_fixup (gdbarch, s390_displaced_step_fixup);
   set_gdbarch_displaced_step_free_closure (gdbarch,
 					   simple_displaced_step_free_closure);
-  set_gdbarch_displaced_step_location (gdbarch, linux_displaced_step_location);
+  set_gdbarch_displaced_step_location (gdbarch,
+				       displaced_step_at_entry_point);
   set_gdbarch_max_insn_length (gdbarch, S390_MAX_INSTR_SIZE);
 
   /* Note that GNU/Linux is the only OS supported on this
@@ -3299,14 +3287,47 @@ s390_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   switch (tdep->abi)
     {
     case ABI_LINUX_S390:
+      tdep->gregset = &s390_gregset;
+      tdep->sizeof_gregset = s390_sizeof_gregset;
+      tdep->fpregset = &s390_fpregset;
+      tdep->sizeof_fpregset = s390_sizeof_fpregset;
+
       set_gdbarch_addr_bits_remove (gdbarch, s390_addr_bits_remove);
       set_solib_svr4_fetch_link_map_offsets
 	(gdbarch, svr4_ilp32_fetch_link_map_offsets);
 
-      set_xml_syscall_file_name (gdbarch, XML_SYSCALL_FILENAME_S390);
+      if (have_upper)
+	{
+	  if (have_linux_v2)
+	    set_gdbarch_core_regset_sections (gdbarch,
+					      s390_linux64v2_regset_sections);
+	  else if (have_linux_v1)
+	    set_gdbarch_core_regset_sections (gdbarch,
+					      s390_linux64v1_regset_sections);
+	  else
+	    set_gdbarch_core_regset_sections (gdbarch,
+					      s390_linux64_regset_sections);
+	}
+      else
+	{
+	  if (have_linux_v2)
+	    set_gdbarch_core_regset_sections (gdbarch,
+					      s390_linux32v2_regset_sections);
+	  else if (have_linux_v1)
+	    set_gdbarch_core_regset_sections (gdbarch,
+					      s390_linux32v1_regset_sections);
+	  else
+	    set_gdbarch_core_regset_sections (gdbarch,
+					      s390_linux32_regset_sections);
+	}
       break;
 
     case ABI_LINUX_ZSERIES:
+      tdep->gregset = &s390x_gregset;
+      tdep->sizeof_gregset = s390x_sizeof_gregset;
+      tdep->fpregset = &s390_fpregset;
+      tdep->sizeof_fpregset = s390_sizeof_fpregset;
+
       set_gdbarch_long_bit (gdbarch, 64);
       set_gdbarch_long_long_bit (gdbarch, 64);
       set_gdbarch_ptr_bit (gdbarch, 64);
@@ -3318,7 +3339,16 @@ s390_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 						    s390_address_class_type_flags_to_name);
       set_gdbarch_address_class_name_to_type_flags (gdbarch,
 						    s390_address_class_name_to_type_flags);
-      set_xml_syscall_file_name (gdbarch, XML_SYSCALL_FILENAME_S390X);
+
+      if (have_linux_v2)
+	set_gdbarch_core_regset_sections (gdbarch,
+					  s390x_linux64v2_regset_sections);
+      else if (have_linux_v1)
+	set_gdbarch_core_regset_sections (gdbarch,
+					  s390x_linux64v1_regset_sections);
+      else
+	set_gdbarch_core_regset_sections (gdbarch,
+					  s390x_linux64_regset_sections);
       break;
     }
 
@@ -3330,6 +3360,8 @@ s390_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_fetch_tls_load_module_address (gdbarch,
 					     svr4_fetch_objfile_link_map);
 
+  set_gdbarch_get_siginfo_type (gdbarch, linux_get_siginfo_type);
+
   /* SystemTap functions.  */
   set_gdbarch_stap_register_prefixes (gdbarch, stap_register_prefixes);
   set_gdbarch_stap_register_indirection_prefixes (gdbarch,
@@ -3337,8 +3369,6 @@ s390_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_stap_register_indirection_suffixes (gdbarch,
 					  stap_register_indirection_suffixes);
   set_gdbarch_stap_is_single_operand (gdbarch, s390_stap_is_single_operand);
-  set_gdbarch_gcc_target_options (gdbarch, s390_gcc_target_options);
-  set_gdbarch_gnu_triplet_regexp (gdbarch, s390_gnu_triplet_regexp);
 
   return gdbarch;
 }
@@ -3360,12 +3390,8 @@ _initialize_s390_tdep (void)
   initialize_tdesc_s390_linux64v1 ();
   initialize_tdesc_s390_linux64v2 ();
   initialize_tdesc_s390_te_linux64 ();
-  initialize_tdesc_s390_vx_linux64 ();
-  initialize_tdesc_s390_tevx_linux64 ();
   initialize_tdesc_s390x_linux64 ();
   initialize_tdesc_s390x_linux64v1 ();
   initialize_tdesc_s390x_linux64v2 ();
   initialize_tdesc_s390x_te_linux64 ();
-  initialize_tdesc_s390x_vx_linux64 ();
-  initialize_tdesc_s390x_tevx_linux64 ();
 }

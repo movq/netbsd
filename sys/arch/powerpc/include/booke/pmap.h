@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.16 2016/07/11 16:06:52 matt Exp $	*/
+/*	$NetBSD: pmap.h,v 1.14 2014/04/03 13:55:34 matt Exp $	*/
 /*-
  * Copyright (c) 2010, 2011 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -92,12 +92,6 @@ void	pmap_md_init(void);
 
 bool	pmap_md_tlb_check_entry(void *, vaddr_t, tlb_asid_t, pt_entry_t);
 
-#ifdef MULTIPROCESSOR
-#define	PMAP_MD_NEED_TLB_MISS_LOCK
-void	pmap_md_tlb_miss_lock_enter(void);
-void	pmap_md_tlb_miss_lock_exit(void);
-#endif	/* MULTIPROCESSOR */
-
 #ifdef PMAP_MINIMALTLB
 vaddr_t	pmap_kvptefill(vaddr_t, vaddr_t, pt_entry_t);
 #endif
@@ -131,7 +125,7 @@ pmap_md_vca_add(struct vm_page *pg, vaddr_t va, pt_entry_t *nptep)
 }
 
 static inline void
-pmap_md_vca_remove(struct vm_page *pg, vaddr_t va, bool dirty)
+pmap_md_vca_remove(struct vm_page *pg, vaddr_t va)
 {
 
 }
@@ -140,20 +134,11 @@ static inline void
 pmap_md_vca_clean(struct vm_page *pg, vaddr_t va, int op)
 {
 }
-#endif
 
-#ifdef __PMAP_PRIVATE
 static inline size_t
 pmap_md_tlb_asid_max(void)
 {
 	return PMAP_TLB_NUM_PIDS - 1;
-}
-
-struct vm_physseg;
-static inline bool
-pmap_md_ok_to_steal_p(const struct vm_physseg *seg, size_t npgs)
-{
-	return true;
 }
 #endif
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: if_sq.c,v 1.46 2016/06/10 13:27:12 ozaki-r Exp $	*/
+/*	$NetBSD: if_sq.c,v 1.43 2012/02/02 19:43:00 tls Exp $	*/
 
 /*
  * Copyright (c) 2001 Rafal K. Boni
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_sq.c,v 1.46 2016/06/10 13:27:12 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_sq.c,v 1.43 2012/02/02 19:43:00 tls Exp $");
 
 
 #include <sys/param.h>
@@ -124,9 +124,9 @@ CFATTACH_DECL_NEW(sq, sizeof(struct sq_softc),
 #define ETHER_PAD_LEN (ETHER_MIN_LEN - ETHER_CRC_LEN)
 
 #define sq_seeq_read(sc, off) \
-	bus_space_read_1(sc->sc_regt, sc->sc_regh, (off << 2) + 3)
+	bus_space_read_1(sc->sc_regt, sc->sc_regh, off)
 #define sq_seeq_write(sc, off, val) \
-	bus_space_write_1(sc->sc_regt, sc->sc_regh, (off << 2) + 3, val)
+	bus_space_write_1(sc->sc_regt, sc->sc_regh, off, val)
 
 #define sq_hpc_read(sc, off) \
 	bus_space_read_4(sc->sc_hpct, sc->sc_hpch, off)
@@ -1013,7 +1013,7 @@ sq_rxintr(struct sq_softc *sc)
 
 
 		m->m_data += 2;
-		m_set_rcvif(m, ifp);
+		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = framelen;
 
 		ifp->if_ipackets++;
@@ -1022,7 +1022,7 @@ sq_rxintr(struct sq_softc *sc)
 		    device_xname(sc->sc_dev), i, framelen));
 
 		bpf_mtap(ifp, m);
-		if_percpuq_enqueue(ifp->if_percpuq, m);
+		(*ifp->if_input)(ifp, m);
 	}
 
 

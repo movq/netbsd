@@ -1,4 +1,4 @@
-/*	$NetBSD: init.c,v 1.107 2015/10/14 15:53:24 christos Exp $	*/
+/*	$NetBSD: init.c,v 1.105 2012/11/09 06:27:17 msaitoh Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -42,7 +42,7 @@ __COPYRIGHT("@(#) Copyright (c) 1991, 1993\
 #if 0
 static char sccsid[] = "@(#)init.c	8.2 (Berkeley) 4/28/95";
 #else
-__RCSID("$NetBSD: init.c,v 1.107 2015/10/14 15:53:24 christos Exp $");
+__RCSID("$NetBSD: init.c,v 1.105 2012/11/09 06:27:17 msaitoh Exp $");
 #endif
 #endif /* not lint */
 
@@ -110,9 +110,9 @@ static const struct timespec dtrtime = {.tv_sec = 0, .tv_nsec = 250000};
 static void handle(sig_t, ...);
 static void delset(sigset_t *, ...);
 
-static void stall(const char *, ...) __sysloglike(1, 2);
-static void warning(const char *, ...) __sysloglike(1, 2);
-static void emergency(const char *, ...) __sysloglike(1, 2);
+static void stall(const char *, ...) __printflike(1, 2);
+static void warning(const char *, ...) __printflike(1, 2);
+static void emergency(const char *, ...) __printflike(1, 2);
 __dead static void disaster(int);
 static void badsys(int);
 
@@ -1720,7 +1720,7 @@ mfs_dev(void)
 		if (waitpid(pid, &status, 0) == -1)
 			break;
 		if (status != 0)
-			warn("MAKEDEV exit status %d", status);
+			warn("MAKEDEV exit status %d\n", status);
 		/*
 		 * If /dev/console got created, then return 0
 		 * regardless of MAKEDEV exit status.

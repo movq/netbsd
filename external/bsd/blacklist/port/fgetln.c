@@ -1,4 +1,4 @@
-/*	$NetBSD: fgetln.c,v 1.1 2015/01/22 03:48:07 christos Exp $	*/
+/*	$NetBSD: fgetln.c,v 1.1.2.2 2015/04/30 06:07:34 riz Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

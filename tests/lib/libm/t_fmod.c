@@ -1,4 +1,4 @@
-/* $NetBSD: t_fmod.c,v 1.3 2015/01/03 14:23:53 gson Exp $ */
+/* $NetBSD: t_fmod.c,v 1.2.6.1 2015/01/12 21:03:09 snj Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

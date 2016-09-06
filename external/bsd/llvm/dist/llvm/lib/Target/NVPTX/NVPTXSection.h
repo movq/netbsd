@@ -19,14 +19,15 @@
 #include <vector>
 
 namespace llvm {
-/// Represents a section in PTX PTX does not have sections. We create this class
-/// in order to use the ASMPrint interface.
+/// NVPTXSection - Represents a section in PTX
+/// PTX does not have sections. We create this class in order to use
+/// the ASMPrint interface.
 ///
-class NVPTXSection final : public MCSection {
+class NVPTXSection : public MCSection {
   virtual void anchor();
 public:
-  NVPTXSection(SectionVariant V, SectionKind K) : MCSection(V, K, nullptr) {}
-  ~NVPTXSection() {}
+  NVPTXSection(SectionVariant V, SectionKind K) : MCSection(V, K) {}
+  virtual ~NVPTXSection() {}
 
   /// Override this as NVPTX has its own way of printing switching
   /// to a section.
@@ -35,8 +36,11 @@ public:
                             const MCExpr *Subsection) const override {}
 
   /// Base address of PTX sections is zero.
+  bool isBaseAddressKnownZero() const override { return true; }
   bool UseCodeAlign() const override { return false; }
   bool isVirtualSection() const override { return false; }
+  std::string getLabelBeginName() const override { return ""; }
+  std::string getLabelEndName() const override { return ""; }
 };
 
 } // end namespace llvm

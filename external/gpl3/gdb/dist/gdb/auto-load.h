@@ -1,6 +1,6 @@
 /* GDB routines for supporting auto-loaded scripts.
 
-   Copyright (C) 2012-2015 Free Software Foundation, Inc.
+   Copyright (C) 2012-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,10 +20,25 @@
 #ifndef AUTO_LOAD_H
 #define AUTO_LOAD_H 1
 
-struct objfile;
 struct program_space;
-struct auto_load_pspace_info;
-struct extension_language_defn;
+
+struct script_language
+{
+  /* The name of the language, lowercase.  */
+  const char *name;
+
+  /* The suffix added to objfiles to get their auto-load script.
+     E.g., "-gdb.py".  */
+  const char *suffix;
+
+  /* Returns non-zero if auto-loading scripts in this language is enabled.  */
+  int (*auto_load_enabled) (void);
+
+  /* Worker routine to load the script.  It has already been opened and
+     deemed safe to load.  */
+  void (*source_script_for_objfile) (struct objfile *objfile, FILE *file,
+				     const char *filename);
+};
 
 extern int global_auto_load;
 
@@ -33,22 +48,22 @@ extern int auto_load_local_gdbinit_loaded;
 
 extern struct auto_load_pspace_info *
   get_auto_load_pspace_data_for_loading (struct program_space *pspace);
-extern void auto_load_objfile_script (struct objfile *objfile,
-				      const struct extension_language_defn *);
+extern int maybe_add_script (struct auto_load_pspace_info *pspace_info,
+			     int loaded, const char *name,
+			     const char *full_path,
+			     const struct script_language *language);
 extern void load_auto_scripts_for_objfile (struct objfile *objfile);
+extern int
+  script_not_found_warning_print (struct auto_load_pspace_info *pspace_info);
 extern char auto_load_info_scripts_pattern_nl[];
 extern void auto_load_info_scripts (char *pattern, int from_tty,
-				    const struct extension_language_defn *);
+				    const struct script_language *language);
 
 extern struct cmd_list_element **auto_load_set_cmdlist_get (void);
 extern struct cmd_list_element **auto_load_show_cmdlist_get (void);
 extern struct cmd_list_element **auto_load_info_cmdlist_get (void);
 
 extern int file_is_auto_load_safe (const char *filename,
-				   const char *debug_fmt, ...)
-  ATTRIBUTE_PRINTF (2, 3);
-
-extern int auto_load_gdb_scripts_enabled
-  (const struct extension_language_defn *extlang);
+				   const char *debug_fmt, ...);
 
 #endif /* AUTO_LOAD_H */

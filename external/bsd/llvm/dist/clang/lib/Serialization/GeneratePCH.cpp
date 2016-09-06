@@ -19,21 +19,21 @@
 #include "clang/Lex/Preprocessor.h"
 #include "clang/Sema/SemaConsumer.h"
 #include "llvm/Bitcode/BitstreamWriter.h"
+#include "llvm/Support/raw_ostream.h"
 #include <string>
 
 using namespace clang;
 
-PCHGenerator::PCHGenerator(
-  const Preprocessor &PP, StringRef OutputFile,
-  clang::Module *Module, StringRef isysroot,
-  std::shared_ptr<PCHBuffer> Buffer,
-  ArrayRef<llvm::IntrusiveRefCntPtr<ModuleFileExtension>> Extensions,
-  bool AllowASTWithErrors, bool IncludeTimestamps)
-    : PP(PP), OutputFile(OutputFile), Module(Module), isysroot(isysroot.str()),
-      SemaPtr(nullptr), Buffer(Buffer), Stream(Buffer->Data),
-      Writer(Stream, Extensions, IncludeTimestamps),
-      AllowASTWithErrors(AllowASTWithErrors) {
-  Buffer->IsComplete = false;
+PCHGenerator::PCHGenerator(const Preprocessor &PP,
+                           StringRef OutputFile,
+                           clang::Module *Module,
+                           StringRef isysroot,
+                           raw_ostream *OS, bool AllowASTWithErrors)
+  : PP(PP), OutputFile(OutputFile), Module(Module), 
+    isysroot(isysroot.str()), Out(OS), 
+    SemaPtr(nullptr), Stream(Buffer), Writer(Stream),
+    AllowASTWithErrors(AllowASTWithErrors),
+    HasEmittedPCH(false) {
 }
 
 PCHGenerator::~PCHGenerator() {
@@ -47,13 +47,21 @@ void PCHGenerator::HandleTranslationUnit(ASTContext &Ctx) {
   bool hasErrors = PP.getDiagnostics().hasErrorOccurred();
   if (hasErrors && !AllowASTWithErrors)
     return;
-
-  // Emit the PCH file to the Buffer.
+  
+  // Emit the PCH file
   assert(SemaPtr && "No Sema?");
-  Buffer->Signature =
-      Writer.WriteAST(*SemaPtr, OutputFile, Module, isysroot, hasErrors);
+  Writer.WriteAST(*SemaPtr, OutputFile, Module, isysroot, hasErrors);
 
-  Buffer->IsComplete = true;
+  // Write the generated bitstream to "Out".
+  Out->write((char *)&Buffer.front(), Buffer.size());
+
+  // Make sure it hits disk now.
+  Out->flush();
+
+  // Free up some memory, in case the process is kept alive.
+  Buffer.clear();
+
+  HasEmittedPCH = true;
 }
 
 ASTMutationListener *PCHGenerator::GetASTMutationListener() {

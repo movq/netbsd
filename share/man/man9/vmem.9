@@ -1,4 +1,4 @@
-.\"	$NetBSD: vmem.9,v 1.16 2016/02/29 00:34:17 chs Exp $
+.\"	$NetBSD: vmem.9,v 1.15 2013/01/29 22:02:17 wiz Exp $
 .\"
 .\" Copyright (c)2006 YAMAMOTO Takashi,
 .\" All rights reserved.
@@ -25,7 +25,7 @@
 .\" SUCH DAMAGE.
 .\"
 .\" ------------------------------------------------------------
-.Dd February 28, 2016
+.Dd January 29, 2013
 .Dt VMEM 9
 .Os
 .\" ------------------------------------------------------------
@@ -83,7 +83,7 @@ other than virtual memory.
 .Fn vmem_create
 creates a new vmem arena.
 .Pp
-.Bl -tag -offset indent -width qcache_max
+.Bl -tag -width qcache_max
 .It Fa name
 The string to describe the vmem.
 .It Fa base
@@ -118,7 +118,7 @@ calls
 to import a span of size at least
 .Fa size .
 .Fa allocfn
-must accept the same
+should accept the same
 .Fa flags
 as
 .Fn vmem_alloc .
@@ -169,8 +169,7 @@ It is merely a hint and can be ignored.
 Either of:
 .Bl -tag -width VM_NOSLEEP
 .It Dv VM_SLEEP
-If the allocation cannot be satisfied immediately, sleep until enough
-resources are available.
+Can sleep until enough resources are available.
 .It Dv VM_NOSLEEP
 Don't sleep.
 Immediately return
@@ -185,7 +184,7 @@ Interrupt level to be blocked for allocating from vmem.
 .Fn vmem_xcreate
 creates a new vmem arena.
 .Pp
-.Bl -tag -offset indent -width qcache_max
+.Bl -tag -width qcache_max
 .It Fa name
 The string to describe the vmem.
 .It Fa base
@@ -221,7 +220,7 @@ calls
 to import a span of size at least
 .Fa size .
 .Fa allocfn
-must accept the same
+should accept the same
 .Fa flags
 as
 .Fn vmem_alloc .
@@ -275,8 +274,7 @@ It is merely a hint and can be ignored.
 Either of:
 .Bl -tag -width VM_NOSLEEP
 .It Dv VM_SLEEP
-If the allocation cannot be satisfied immediately, sleep until enough
-resources are available.
+Can sleep until enough resources are available.
 .It Dv VM_NOSLEEP
 Don't sleep.
 Immediately return
@@ -299,26 +297,23 @@ Returns
 on success,
 .Dv ENOMEM
 on failure.
-.Bl -tag -offset indent -width flags
-.It Fa flags
-Either of:
+.Fa flags
+should be one of:
 .Bl -tag -width VM_NOSLEEP
 .It Dv VM_SLEEP
-If the allocation cannot be satisfied immediately, sleep until enough
-resources are available.
+Can sleep until enough resources are available.
 .It Dv VM_NOSLEEP
 Don't sleep.
 Immediately return
 .Dv ENOMEM
 if there are not enough resources available.
 .El
-.El
 .Pp
 .\" - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 .Fn vmem_xalloc
 allocates a resource from the arena.
 .Pp
-.Bl -tag -offset indent -width nocross
+.Bl -tag -width nocross
 .It Fa vm
 The arena which we allocate from.
 .It Fa size
@@ -338,10 +333,10 @@ If
 .Fa align
 is zero,
 .Fa phase
-must be zero.
+should be zero.
 Otherwise,
 .Fa phase
-must be smaller than
+should be smaller than
 .Fa align .
 .It Fa nocross
 Request a resource which doesn't cross
@@ -358,7 +353,7 @@ if the caller does not care.
 .It Fa flags
 A bitwise OR of an allocation strategy and a sleep flag.
 .Pp
-The allocation strategy must be one of:
+The allocation strategy is one of:
 .Bl -tag -width VM_INSTANTFIT
 .It Dv VM_BESTFIT
 Prefer space efficiency.
@@ -366,11 +361,10 @@ Prefer space efficiency.
 Prefer performance.
 .El
 .Pp
-The sleep flag must be one of:
+The sleep flag should be one of:
 .Bl -tag -width VM_NOSLEEP
 .It Dv VM_SLEEP
-If the allocation cannot be satisfied immediately, sleep until enough
-resources are available.
+Can sleep until enough resources are available.
 .It Dv VM_NOSLEEP
 Don't sleep.
 Immediately return
@@ -392,14 +386,14 @@ frees resource allocated by
 .Fn vmem_xalloc
 to the arena.
 .Pp
-.Bl -tag -offset indent -width addr
+.Bl -tag -width addr
 .It Fa vm
 The arena which we free to.
 .It Fa addr
 The resource being freed.
-It must have been allocated via
+It must be the one returned by
 .Fn vmem_xalloc .
-Notably, it must not have been allocated via
+Notably, it must not be the one from
 .Fn vmem_alloc .
 Otherwise, the behaviour is undefined.
 .It Fa size
@@ -414,7 +408,7 @@ argument used for
 .Fn vmem_alloc
 allocates a resource from the arena.
 .Pp
-.Bl -tag -offset indent -width flags
+.Bl -tag -width flags
 .It Fa vm
 The arena which we allocate from.
 .It Fa size
@@ -422,7 +416,7 @@ Specify the size of the allocation.
 .It Fa flags
 A bitwise OR of an allocation strategy and a sleep flag.
 .Pp
-The allocation strategy must be one of:
+The allocation strategy is one of:
 .Bl -tag -width VM_INSTANTFIT
 .It Dv VM_BESTFIT
 Prefer space efficiency.
@@ -430,11 +424,10 @@ Prefer space efficiency.
 Prefer performance.
 .El
 .Pp
-The sleep flag must be one of:
+The sleep flag should be one of:
 .Bl -tag -width VM_NOSLEEP
 .It Dv VM_SLEEP
-If the allocation cannot be satisfied immediately, sleep until enough
-resources are available.
+Can sleep until enough resources are available.
 .It Dv VM_NOSLEEP
 Don't sleep.
 Immediately return
@@ -456,14 +449,14 @@ frees resource allocated by
 .Fn vmem_alloc
 to the arena.
 .Pp
-.Bl -tag -offset indent -width addr
+.Bl -tag -width addr
 .It Fa vm
 The arena which we free to.
 .It Fa addr
 The resource being freed.
-It must have been allocated via
+It must be the one returned by
 .Fn vmem_alloc .
-Notably, it must not have been allocated via
+Notably, it must not be the one from
 .Fn vmem_xalloc .
 Otherwise, the behaviour is undefined.
 .It Fa size
@@ -478,10 +471,10 @@ argument used for
 .Fn vmem_destroy
 destroys a vmem arena.
 .Pp
-.Bl -tag -offset indent -width vm
+.Bl -tag -width vm
 .It Fa vm
 The vmem arena being destroyed.
-The caller must ensure that no one will use it anymore.
+The caller should ensure that no one will use it anymore.
 .El
 .\" ------------------------------------------------------------
 .Sh RETURN VALUES

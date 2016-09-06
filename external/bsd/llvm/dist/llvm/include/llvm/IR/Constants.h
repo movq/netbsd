@@ -12,7 +12,7 @@
 /// which represent the different flavors of constant values that live in LLVM.
 /// Note that Constants are immutable (once created they never change) and are
 /// fully shared by structural equivalence.  This means that two structurally
-/// equivalent constants will always have the same address.  Constants are
+/// equivalent constants will always have the same address.  Constant's are
 /// created on demand as needed and never deleted: thus clients don't have to
 /// worry about the lifetime of the objects.
 //
@@ -46,15 +46,10 @@ template <class ConstantClass> struct ConstantAggrKeyType;
 /// @brief Class for constant integers.
 class ConstantInt : public Constant {
   void anchor() override;
-  void *operator new(size_t, unsigned) = delete;
-  ConstantInt(const ConstantInt &) = delete;
+  void *operator new(size_t, unsigned) LLVM_DELETED_FUNCTION;
+  ConstantInt(const ConstantInt &) LLVM_DELETED_FUNCTION;
   ConstantInt(IntegerType *Ty, const APInt& V);
   APInt Val;
-
-  friend class Constant;
-  void destroyConstantImpl();
-  Value *handleOperandChangeImpl(Value *From, Value *To, Use *U);
-
 protected:
   // allocate space for exactly zero operands
   void *operator new(size_t s) {
@@ -233,14 +228,9 @@ public:
 class ConstantFP : public Constant {
   APFloat Val;
   void anchor() override;
-  void *operator new(size_t, unsigned) = delete;
-  ConstantFP(const ConstantFP &) = delete;
+  void *operator new(size_t, unsigned) LLVM_DELETED_FUNCTION;
+  ConstantFP(const ConstantFP &) LLVM_DELETED_FUNCTION;
   friend class LLVMContextImpl;
-
-  friend class Constant;
-  void destroyConstantImpl();
-  Value *handleOperandChangeImpl(Value *From, Value *To, Use *U);
-
 protected:
   ConstantFP(Type *Ty, const APFloat& V);
 protected:
@@ -261,7 +251,6 @@ public:
   static Constant *get(Type* Ty, double V);
   static Constant *get(Type* Ty, StringRef Str);
   static ConstantFP *get(LLVMContext &Context, const APFloat &V);
-  static Constant *getNaN(Type *Ty, bool Negative = false, unsigned type = 0);
   static Constant *getNegativeZero(Type *Ty);
   static Constant *getInfinity(Type *Ty, bool Negative = false);
 
@@ -305,13 +294,8 @@ public:
 /// ConstantAggregateZero - All zero aggregate value
 ///
 class ConstantAggregateZero : public Constant {
-  void *operator new(size_t, unsigned) = delete;
-  ConstantAggregateZero(const ConstantAggregateZero &) = delete;
-
-  friend class Constant;
-  void destroyConstantImpl();
-  Value *handleOperandChangeImpl(Value *From, Value *To, Use *U);
-
+  void *operator new(size_t, unsigned) LLVM_DELETED_FUNCTION;
+  ConstantAggregateZero(const ConstantAggregateZero &) LLVM_DELETED_FUNCTION;
 protected:
   explicit ConstantAggregateZero(Type *ty)
     : Constant(ty, ConstantAggregateZeroVal, nullptr, 0) {}
@@ -322,6 +306,8 @@ protected:
   }
 public:
   static ConstantAggregateZero *get(Type *Ty);
+
+  void destroyConstant() override;
 
   /// getSequentialElement - If this CAZ has array or vector type, return a zero
   /// with the right element type.
@@ -355,12 +341,7 @@ public:
 ///
 class ConstantArray : public Constant {
   friend struct ConstantAggrKeyType<ConstantArray>;
-  ConstantArray(const ConstantArray &) = delete;
-
-  friend class Constant;
-  void destroyConstantImpl();
-  Value *handleOperandChangeImpl(Value *From, Value *To, Use *U);
-
+  ConstantArray(const ConstantArray &) LLVM_DELETED_FUNCTION;
 protected:
   ConstantArray(ArrayType *T, ArrayRef<Constant *> Val);
 public:
@@ -381,6 +362,9 @@ public:
     return cast<ArrayType>(Value::getType());
   }
 
+  void destroyConstant() override;
+  void replaceUsesOfWithOnConstant(Value *From, Value *To, Use *U) override;
+
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static bool classof(const Value *V) {
     return V->getValueID() == ConstantArrayVal;
@@ -399,12 +383,7 @@ DEFINE_TRANSPARENT_OPERAND_ACCESSORS(ConstantArray, Constant)
 //
 class ConstantStruct : public Constant {
   friend struct ConstantAggrKeyType<ConstantStruct>;
-  ConstantStruct(const ConstantStruct &) = delete;
-
-  friend class Constant;
-  void destroyConstantImpl();
-  Value *handleOperandChangeImpl(Value *From, Value *To, Use *U);
-
+  ConstantStruct(const ConstantStruct &) LLVM_DELETED_FUNCTION;
 protected:
   ConstantStruct(StructType *T, ArrayRef<Constant *> Val);
 public:
@@ -441,6 +420,9 @@ public:
     return cast<StructType>(Value::getType());
   }
 
+  void destroyConstant() override;
+  void replaceUsesOfWithOnConstant(Value *From, Value *To, Use *U) override;
+
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static bool classof(const Value *V) {
     return V->getValueID() == ConstantStructVal;
@@ -460,12 +442,7 @@ DEFINE_TRANSPARENT_OPERAND_ACCESSORS(ConstantStruct, Constant)
 ///
 class ConstantVector : public Constant {
   friend struct ConstantAggrKeyType<ConstantVector>;
-  ConstantVector(const ConstantVector &) = delete;
-
-  friend class Constant;
-  void destroyConstantImpl();
-  Value *handleOperandChangeImpl(Value *From, Value *To, Use *U);
-
+  ConstantVector(const ConstantVector &) LLVM_DELETED_FUNCTION;
 protected:
   ConstantVector(VectorType *T, ArrayRef<Constant *> Val);
 public:
@@ -494,6 +471,9 @@ public:
   /// elements have the same value, return that value. Otherwise return NULL.
   Constant *getSplatValue() const;
 
+  void destroyConstant() override;
+  void replaceUsesOfWithOnConstant(Value *From, Value *To, Use *U) override;
+
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static bool classof(const Value *V) {
     return V->getValueID() == ConstantVectorVal;
@@ -511,13 +491,8 @@ DEFINE_TRANSPARENT_OPERAND_ACCESSORS(ConstantVector, Constant)
 /// ConstantPointerNull - a constant pointer value that points to null
 ///
 class ConstantPointerNull : public Constant {
-  void *operator new(size_t, unsigned) = delete;
-  ConstantPointerNull(const ConstantPointerNull &) = delete;
-
-  friend class Constant;
-  void destroyConstantImpl();
-  Value *handleOperandChangeImpl(Value *From, Value *To, Use *U);
-
+  void *operator new(size_t, unsigned) LLVM_DELETED_FUNCTION;
+  ConstantPointerNull(const ConstantPointerNull &) LLVM_DELETED_FUNCTION;
 protected:
   explicit ConstantPointerNull(PointerType *T)
     : Constant(T,
@@ -531,6 +506,8 @@ protected:
 public:
   /// get() - Static factory methods - Return objects of the specified value
   static ConstantPointerNull *get(PointerType *T);
+
+  void destroyConstant() override;
 
   /// getType - Specialize the getType() method to always return an PointerType,
   /// which reduces the amount of casting needed in parts of the compiler.
@@ -565,17 +542,12 @@ class ConstantDataSequential : public Constant {
   /// element array of i8, or a 1-element array of i32.  They'll both end up in
   /// the same StringMap bucket, linked up.
   ConstantDataSequential *Next;
-  void *operator new(size_t, unsigned) = delete;
-  ConstantDataSequential(const ConstantDataSequential &) = delete;
-
-  friend class Constant;
-  void destroyConstantImpl();
-  Value *handleOperandChangeImpl(Value *From, Value *To, Use *U);
-
+  void *operator new(size_t, unsigned) LLVM_DELETED_FUNCTION;
+  ConstantDataSequential(const ConstantDataSequential &) LLVM_DELETED_FUNCTION;
 protected:
   explicit ConstantDataSequential(Type *ty, ValueTy VT, const char *Data)
     : Constant(ty, VT, nullptr, 0), DataElements(Data), Next(nullptr) {}
-  ~ConstantDataSequential() override { delete Next; }
+  ~ConstantDataSequential() { delete Next; }
 
   static Constant *getImpl(StringRef Bytes, Type *Ty);
 
@@ -590,7 +562,7 @@ public:
   /// formed with a vector or array of the specified element type.
   /// ConstantDataArray only works with normal float and int types that are
   /// stored densely in memory, not with things like i42 or x86_f80.
-  static bool isElementTypeCompatible(Type *Ty);
+  static bool isElementTypeCompatible(const Type *Ty);
 
   /// getElementAsInteger - If this is a sequential container of integers (of
   /// any size), return the specified element in the low bits of a uint64_t.
@@ -662,6 +634,8 @@ public:
   /// host endianness of the data elements.
   StringRef getRawDataValues() const;
 
+  void destroyConstant() override;
+
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   ///
   static bool classof(const Value *V) {
@@ -679,8 +653,8 @@ private:
 /// operands because it stores all of the elements of the constant as densely
 /// packed data, instead of as Value*'s.
 class ConstantDataArray : public ConstantDataSequential {
-  void *operator new(size_t, unsigned) = delete;
-  ConstantDataArray(const ConstantDataArray &) = delete;
+  void *operator new(size_t, unsigned) LLVM_DELETED_FUNCTION;
+  ConstantDataArray(const ConstantDataArray &) LLVM_DELETED_FUNCTION;
   void anchor() override;
   friend class ConstantDataSequential;
   explicit ConstantDataArray(Type *ty, const char *Data)
@@ -701,15 +675,6 @@ public:
   static Constant *get(LLVMContext &Context, ArrayRef<uint64_t> Elts);
   static Constant *get(LLVMContext &Context, ArrayRef<float> Elts);
   static Constant *get(LLVMContext &Context, ArrayRef<double> Elts);
-
-  /// getFP() constructors - Return a constant with array type with an element
-  /// count and element type of float with precision matching the number of
-  /// bits in the ArrayRef passed in. (i.e. half for 16bits, float for 32bits,
-  /// double for 64bits) Note that this can return a ConstantAggregateZero
-  /// object.
-  static Constant *getFP(LLVMContext &Context, ArrayRef<uint16_t> Elts);
-  static Constant *getFP(LLVMContext &Context, ArrayRef<uint32_t> Elts);
-  static Constant *getFP(LLVMContext &Context, ArrayRef<uint64_t> Elts);
 
   /// getString - This method constructs a CDS and initializes it with a text
   /// string. The default behavior (AddNull==true) causes a null terminator to
@@ -740,8 +705,8 @@ public:
 /// operands because it stores all of the elements of the constant as densely
 /// packed data, instead of as Value*'s.
 class ConstantDataVector : public ConstantDataSequential {
-  void *operator new(size_t, unsigned) = delete;
-  ConstantDataVector(const ConstantDataVector &) = delete;
+  void *operator new(size_t, unsigned) LLVM_DELETED_FUNCTION;
+  ConstantDataVector(const ConstantDataVector &) LLVM_DELETED_FUNCTION;
   void anchor() override;
   friend class ConstantDataSequential;
   explicit ConstantDataVector(Type *ty, const char *Data)
@@ -762,15 +727,6 @@ public:
   static Constant *get(LLVMContext &Context, ArrayRef<uint64_t> Elts);
   static Constant *get(LLVMContext &Context, ArrayRef<float> Elts);
   static Constant *get(LLVMContext &Context, ArrayRef<double> Elts);
-
-  /// getFP() constructors - Return a constant with vector type with an element
-  /// count and element type of float with the precision matching the number of
-  /// bits in the ArrayRef passed in.  (i.e. half for 16bits, float for 32bits,
-  /// double for 64bits) Note that this can return a ConstantAggregateZero
-  /// object.
-  static Constant *getFP(LLVMContext &Context, ArrayRef<uint16_t> Elts);
-  static Constant *getFP(LLVMContext &Context, ArrayRef<uint32_t> Elts);
-  static Constant *getFP(LLVMContext &Context, ArrayRef<uint64_t> Elts);
 
   /// getSplat - Return a ConstantVector with the specified constant in each
   /// element.  The specified constant has to be a of a compatible type (i8/i16/
@@ -795,44 +751,14 @@ public:
   }
 };
 
-//===----------------------------------------------------------------------===//
-/// ConstantTokenNone - a constant token which is empty
-///
-class ConstantTokenNone : public Constant {
-  void *operator new(size_t, unsigned) = delete;
-  ConstantTokenNone(const ConstantTokenNone &) = delete;
 
-  friend class Constant;
-  void destroyConstantImpl();
-  Value *handleOperandChangeImpl(Value *From, Value *To, Use *U);
-
-protected:
-  explicit ConstantTokenNone(LLVMContext &Context)
-      : Constant(Type::getTokenTy(Context), ConstantTokenNoneVal, nullptr, 0) {}
-  // allocate space for exactly zero operands
-  void *operator new(size_t s) { return User::operator new(s, 0); }
-
-public:
-  /// Return the ConstantTokenNone.
-  static ConstantTokenNone *get(LLVMContext &Context);
-
-  /// @brief Methods to support type inquiry through isa, cast, and dyn_cast.
-  static bool classof(const Value *V) {
-    return V->getValueID() == ConstantTokenNoneVal;
-  }
-};
 
 /// BlockAddress - The address of a basic block.
 ///
 class BlockAddress : public Constant {
-  void *operator new(size_t, unsigned) = delete;
+  void *operator new(size_t, unsigned) LLVM_DELETED_FUNCTION;
   void *operator new(size_t s) { return User::operator new(s, 2); }
   BlockAddress(Function *F, BasicBlock *BB);
-
-  friend class Constant;
-  void destroyConstantImpl();
-  Value *handleOperandChangeImpl(Value *From, Value *To, Use *U);
-
 public:
   /// get - Return a BlockAddress for the specified function and basic block.
   static BlockAddress *get(Function *F, BasicBlock *BB);
@@ -852,6 +778,9 @@ public:
 
   Function *getFunction() const { return (Function*)Op<0>().get(); }
   BasicBlock *getBasicBlock() const { return (BasicBlock*)Op<1>().get(); }
+
+  void destroyConstant() override;
+  void replaceUsesOfWithOnConstant(Value *From, Value *To, Use *U) override;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const Value *V) {
@@ -876,10 +805,6 @@ DEFINE_TRANSPARENT_OPERAND_ACCESSORS(BlockAddress, Value)
 /// maintained in the Value::SubclassData field.
 class ConstantExpr : public Constant {
   friend struct ConstantExprKeyType;
-
-  friend class Constant;
-  void destroyConstantImpl();
-  Value *handleOperandChangeImpl(Value *From, Value *To, Use *U);
 
 protected:
   ConstantExpr(Type *ty, unsigned Opcode, Use *Ops, unsigned NumOps)
@@ -1111,46 +1036,44 @@ public:
                            bool OnlyIfReduced = false);
 
   /// Getelementptr form.  Value* is only accepted for convenience;
-  /// all elements must be Constants.
+  /// all elements must be Constant's.
   ///
   /// \param OnlyIfReducedTy see \a getWithOperands() docs.
-  static Constant *getGetElementPtr(Type *Ty, Constant *C,
-                                    ArrayRef<Constant *> IdxList,
+  static Constant *getGetElementPtr(Constant *C, ArrayRef<Constant *> IdxList,
                                     bool InBounds = false,
                                     Type *OnlyIfReducedTy = nullptr) {
     return getGetElementPtr(
-        Ty, C, makeArrayRef((Value * const *)IdxList.data(), IdxList.size()),
+        C, makeArrayRef((Value * const *)IdxList.data(), IdxList.size()),
         InBounds, OnlyIfReducedTy);
   }
-  static Constant *getGetElementPtr(Type *Ty, Constant *C, Constant *Idx,
+  static Constant *getGetElementPtr(Constant *C, Constant *Idx,
                                     bool InBounds = false,
                                     Type *OnlyIfReducedTy = nullptr) {
     // This form of the function only exists to avoid ambiguous overload
     // warnings about whether to convert Idx to ArrayRef<Constant *> or
     // ArrayRef<Value *>.
-    return getGetElementPtr(Ty, C, cast<Value>(Idx), InBounds, OnlyIfReducedTy);
+    return getGetElementPtr(C, cast<Value>(Idx), InBounds, OnlyIfReducedTy);
   }
-  static Constant *getGetElementPtr(Type *Ty, Constant *C,
-                                    ArrayRef<Value *> IdxList,
+  static Constant *getGetElementPtr(Constant *C, ArrayRef<Value *> IdxList,
                                     bool InBounds = false,
                                     Type *OnlyIfReducedTy = nullptr);
 
   /// Create an "inbounds" getelementptr. See the documentation for the
   /// "inbounds" flag in LangRef.html for details.
-  static Constant *getInBoundsGetElementPtr(Type *Ty, Constant *C,
+  static Constant *getInBoundsGetElementPtr(Constant *C,
                                             ArrayRef<Constant *> IdxList) {
-    return getGetElementPtr(Ty, C, IdxList, true);
+    return getGetElementPtr(C, IdxList, true);
   }
-  static Constant *getInBoundsGetElementPtr(Type *Ty, Constant *C,
+  static Constant *getInBoundsGetElementPtr(Constant *C,
                                             Constant *Idx) {
     // This form of the function only exists to avoid ambiguous overload
     // warnings about whether to convert Idx to ArrayRef<Constant *> or
     // ArrayRef<Value *>.
-    return getGetElementPtr(Ty, C, Idx, true);
+    return getGetElementPtr(C, Idx, true);
   }
-  static Constant *getInBoundsGetElementPtr(Type *Ty, Constant *C,
+  static Constant *getInBoundsGetElementPtr(Constant *C,
                                             ArrayRef<Value *> IdxList) {
-    return getGetElementPtr(Ty, C, IdxList, true);
+    return getGetElementPtr(C, IdxList, true);
   }
 
   static Constant *getExtractElement(Constant *Vec, Constant *Idx,
@@ -1200,18 +1123,19 @@ public:
   /// gets constant-folded, the type changes, or the expression is otherwise
   /// canonicalized.  This parameter should almost always be \c false.
   Constant *getWithOperands(ArrayRef<Constant *> Ops, Type *Ty,
-                            bool OnlyIfReduced = false,
-                            Type *SrcTy = nullptr) const;
+                            bool OnlyIfReduced = false) const;
 
-  /// getAsInstruction - Returns an Instruction which implements the same
-  /// operation as this ConstantExpr. The instruction is not linked to any basic
-  /// block.
+  /// getAsInstruction - Returns an Instruction which implements the same operation
+  /// as this ConstantExpr. The instruction is not linked to any basic block.
   ///
   /// A better approach to this could be to have a constructor for Instruction
   /// which would take a ConstantExpr parameter, but that would have spread
   /// implementation details of ConstantExpr outside of Constants.cpp, which
   /// would make it harder to remove ConstantExprs altogether.
   Instruction *getAsInstruction();
+
+  void destroyConstant() override;
+  void replaceUsesOfWithOnConstant(Value *From, Value *To, Use *U) override;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static inline bool classof(const Value *V) {
@@ -1244,13 +1168,8 @@ DEFINE_TRANSPARENT_OPERAND_ACCESSORS(ConstantExpr, Constant)
 /// LangRef.html#undefvalues for details.
 ///
 class UndefValue : public Constant {
-  void *operator new(size_t, unsigned) = delete;
-  UndefValue(const UndefValue &) = delete;
-
-  friend class Constant;
-  void destroyConstantImpl();
-  Value *handleOperandChangeImpl(Value *From, Value *To, Use *U);
-
+  void *operator new(size_t, unsigned) LLVM_DELETED_FUNCTION;
+  UndefValue(const UndefValue &) LLVM_DELETED_FUNCTION;
 protected:
   explicit UndefValue(Type *T) : Constant(T, UndefValueVal, nullptr, 0) {}
 protected:
@@ -1282,6 +1201,8 @@ public:
 
   /// \brief Return the number of elements in the array, vector, or struct.
   unsigned getNumElements() const;
+
+  void destroyConstant() override;
 
   /// Methods for support type inquiry through isa, cast, and dyn_cast:
   static bool classof(const Value *V) {

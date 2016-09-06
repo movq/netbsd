@@ -1,4 +1,4 @@
-/*	$NetBSD: mopd.c,v 1.15 2016/06/08 01:11:49 christos Exp $	*/
+/*	$NetBSD: mopd.c,v 1.14 2011/08/30 19:49:11 joerg Exp $	*/
 
 /*
  * Copyright (c) 1993-96 Mats O Jansson.  All rights reserved.
@@ -23,9 +23,10 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-#include "port.h"
+
+#include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mopd.c,v 1.15 2016/06/08 01:11:49 christos Exp $");
+__RCSID("$NetBSD: mopd.c,v 1.14 2011/08/30 19:49:11 joerg Exp $");
 #endif
 
 /*
@@ -46,6 +47,8 @@ __RCSID("$NetBSD: mopd.c,v 1.15 2016/06/08 01:11:49 christos Exp $");
 #include "print.h"
 #include "process.h"
 #include "rc.h"
+
+#include <util.h>
 
 /*
  * The list of all interfaces that are being listened to. 

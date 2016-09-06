@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -241,7 +241,6 @@ AsMixedCaseToUnderscores (
 
                 SubBuffer++;
             }
-
             SubBuffer++;
             continue;
         }
@@ -261,7 +260,6 @@ AsMixedCaseToUnderscores (
                     LineNumber, Filename);
                 return;
             }
-
             continue;
         }
 
@@ -537,7 +535,6 @@ AsLowerCaseIdentifiers (
                     SubBuffer++;
                     break;
                 }
-
                 SubBuffer++;
             }
         }

@@ -1,4 +1,6 @@
-#	$NetBSD: dot.login,v 1.10 2016/03/08 09:51:15 mlelstv Exp $
+#	$NetBSD: dot.login,v 1.9 2009/05/15 23:57:50 ad Exp $
+
+eval `tset -sQrm 'unknown:?unknown'`
 
 # Do not display in 'su -' case
 if ( ! $?SU_FROM ) then

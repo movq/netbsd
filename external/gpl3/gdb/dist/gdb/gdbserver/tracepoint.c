@@ -1,5 +1,5 @@
 /* Tracepoint code for remote server for GDB.
-   Copyright (C) 2009-2015 Free Software Foundation, Inc.
+   Copyright (C) 2009-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,13 +20,15 @@
 #include "tracepoint.h"
 #include "gdbthread.h"
 #include "agent.h"
-#include "rsp-low.h"
 
 #include <ctype.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <sys/time.h>
+#include <stddef.h>
 #include <inttypes.h>
+#include <stdint.h>
+
 #include "ax.h"
 #include "tdesc.h"
 
@@ -59,8 +61,6 @@
 
 */
 
-#ifdef IN_PROCESS_AGENT
-
 static void trace_vdebug (const char *, ...) ATTRIBUTE_PRINTF (1, 2);
 
 static void
@@ -81,59 +81,73 @@ trace_vdebug (const char *fmt, ...)
       trace_vdebug ((fmt), ##args);		\
   } while (0)
 
-#else
-
-#define trace_debug_1(level, fmt, args...)	\
-  do {						\
-    if (level <= debug_threads)			\
-      {						\
-	debug_printf ((fmt), ##args);		\
-	debug_printf ("\n");			\
-      }						\
-  } while (0)
-
-#endif
-
 #define trace_debug(FMT, args...)		\
   trace_debug_1 (1, FMT, ##args)
 
-/* Prefix exported symbols, for good citizenship.  All the symbols
-   that need exporting are defined in this module.  Note that all
-   these symbols must be tagged with IP_AGENT_EXPORT_*.  */
+#if defined(__GNUC__)
+#  define ATTR_USED __attribute__((used))
+#  define ATTR_NOINLINE __attribute__((noinline))
+#  define ATTR_CONSTRUCTOR __attribute__ ((constructor))
+#else
+#  define ATTR_USED
+#  define ATTR_NOINLINE
+#  define ATTR_CONSTRUCTOR
+#endif
+
+/* Make sure the functions the IPA needs to export (symbols GDBserver
+   needs to query GDB about) are exported.  */
+
 #ifdef IN_PROCESS_AGENT
-# define gdb_tp_heap_buffer IPA_SYM_EXPORTED_NAME (gdb_tp_heap_buffer)
-# define gdb_jump_pad_buffer IPA_SYM_EXPORTED_NAME (gdb_jump_pad_buffer)
-# define gdb_jump_pad_buffer_end IPA_SYM_EXPORTED_NAME (gdb_jump_pad_buffer_end)
-# define gdb_trampoline_buffer IPA_SYM_EXPORTED_NAME (gdb_trampoline_buffer)
-# define gdb_trampoline_buffer_end IPA_SYM_EXPORTED_NAME (gdb_trampoline_buffer_end)
-# define gdb_trampoline_buffer_error IPA_SYM_EXPORTED_NAME (gdb_trampoline_buffer_error)
-# define collecting IPA_SYM_EXPORTED_NAME (collecting)
-# define gdb_collect IPA_SYM_EXPORTED_NAME (gdb_collect)
-# define stop_tracing IPA_SYM_EXPORTED_NAME (stop_tracing)
-# define flush_trace_buffer IPA_SYM_EXPORTED_NAME (flush_trace_buffer)
-# define about_to_request_buffer_space IPA_SYM_EXPORTED_NAME (about_to_request_buffer_space)
-# define trace_buffer_is_full IPA_SYM_EXPORTED_NAME (trace_buffer_is_full)
-# define stopping_tracepoint IPA_SYM_EXPORTED_NAME (stopping_tracepoint)
-# define expr_eval_result IPA_SYM_EXPORTED_NAME (expr_eval_result)
-# define error_tracepoint IPA_SYM_EXPORTED_NAME (error_tracepoint)
-# define tracepoints IPA_SYM_EXPORTED_NAME (tracepoints)
-# define tracing IPA_SYM_EXPORTED_NAME (tracing)
-# define trace_buffer_ctrl IPA_SYM_EXPORTED_NAME (trace_buffer_ctrl)
-# define trace_buffer_ctrl_curr IPA_SYM_EXPORTED_NAME (trace_buffer_ctrl_curr)
-# define trace_buffer_lo IPA_SYM_EXPORTED_NAME (trace_buffer_lo)
-# define trace_buffer_hi IPA_SYM_EXPORTED_NAME (trace_buffer_hi)
-# define traceframe_read_count IPA_SYM_EXPORTED_NAME (traceframe_read_count)
-# define traceframe_write_count IPA_SYM_EXPORTED_NAME (traceframe_write_count)
-# define traceframes_created IPA_SYM_EXPORTED_NAME (traceframes_created)
-# define trace_state_variables IPA_SYM_EXPORTED_NAME (trace_state_variables)
-# define get_raw_reg IPA_SYM_EXPORTED_NAME (get_raw_reg)
+# if defined _WIN32 || defined __CYGWIN__
+#   define IP_AGENT_EXPORT __declspec(dllexport) ATTR_USED
+# else
+#   if __GNUC__ >= 4
+#     define IP_AGENT_EXPORT \
+  __attribute__ ((visibility("default"))) ATTR_USED
+#   else
+#     define IP_AGENT_EXPORT ATTR_USED
+#   endif
+# endif
+#else
+#  define IP_AGENT_EXPORT
+#endif
+
+/* Prefix exported symbols, for good citizenship.  All the symbols
+   that need exporting are defined in this module.  */
+#ifdef IN_PROCESS_AGENT
+# define gdb_tp_heap_buffer gdb_agent_gdb_tp_heap_buffer
+# define gdb_jump_pad_buffer gdb_agent_gdb_jump_pad_buffer
+# define gdb_jump_pad_buffer_end gdb_agent_gdb_jump_pad_buffer_end
+# define gdb_trampoline_buffer gdb_agent_gdb_trampoline_buffer
+# define gdb_trampoline_buffer_end gdb_agent_gdb_trampoline_buffer_end
+# define gdb_trampoline_buffer_error gdb_agent_gdb_trampoline_buffer_error
+# define collecting gdb_agent_collecting
+# define gdb_collect gdb_agent_gdb_collect
+# define stop_tracing gdb_agent_stop_tracing
+# define flush_trace_buffer gdb_agent_flush_trace_buffer
+# define about_to_request_buffer_space gdb_agent_about_to_request_buffer_space
+# define trace_buffer_is_full gdb_agent_trace_buffer_is_full
+# define stopping_tracepoint gdb_agent_stopping_tracepoint
+# define expr_eval_result gdb_agent_expr_eval_result
+# define error_tracepoint gdb_agent_error_tracepoint
+# define tracepoints gdb_agent_tracepoints
+# define tracing gdb_agent_tracing
+# define trace_buffer_ctrl gdb_agent_trace_buffer_ctrl
+# define trace_buffer_ctrl_curr gdb_agent_trace_buffer_ctrl_curr
+# define trace_buffer_lo gdb_agent_trace_buffer_lo
+# define trace_buffer_hi gdb_agent_trace_buffer_hi
+# define traceframe_read_count gdb_agent_traceframe_read_count
+# define traceframe_write_count gdb_agent_traceframe_write_count
+# define traceframes_created gdb_agent_traceframes_created
+# define trace_state_variables gdb_agent_trace_state_variables
+# define get_raw_reg gdb_agent_get_raw_reg
 # define get_trace_state_variable_value \
-  IPA_SYM_EXPORTED_NAME (get_trace_state_variable_value)
+  gdb_agent_get_trace_state_variable_value
 # define set_trace_state_variable_value \
-  IPA_SYM_EXPORTED_NAME (set_trace_state_variable_value)
-# define ust_loaded IPA_SYM_EXPORTED_NAME (ust_loaded)
-# define helper_thread_id IPA_SYM_EXPORTED_NAME (helper_thread_id)
-# define cmd_buf IPA_SYM_EXPORTED_NAME (cmd_buf)
+  gdb_agent_set_trace_state_variable_value
+# define ust_loaded gdb_agent_ust_loaded
+# define helper_thread_id gdb_agent_helper_thread_id
+# define cmd_buf gdb_agent_cmd_buf
 #endif
 
 #ifndef IN_PROCESS_AGENT
@@ -324,7 +338,7 @@ tracepoint_look_up_symbols (void)
       if (look_up_one_symbol (symbol_list[i].name, addrp, 1) == 0)
 	{
 	  if (debug_threads)
-	    debug_printf ("symbol `%s' not found\n", symbol_list[i].name);
+	    fprintf (stderr, "symbol `%s' not found\n", symbol_list[i].name);
 	  return;
 	}
     }
@@ -366,14 +380,14 @@ read_inferior_memory (CORE_ADDR memaddr, unsigned char *myaddr, int len)
 #  define UNKNOWN_SIDE_EFFECTS() do {} while (0)
 #endif
 
-IP_AGENT_EXPORT_FUNC void
+IP_AGENT_EXPORT void ATTR_USED ATTR_NOINLINE
 stop_tracing (void)
 {
   /* GDBserver places breakpoint here.  */
   UNKNOWN_SIDE_EFFECTS();
 }
 
-IP_AGENT_EXPORT_FUNC void
+IP_AGENT_EXPORT void ATTR_USED ATTR_NOINLINE
 flush_trace_buffer (void)
 {
   /* GDBserver places breakpoint here.  */
@@ -832,26 +846,10 @@ struct wstep_state
 
 #endif
 
-EXTERN_C_PUSH
-
 /* The linked list of all tracepoints.  Marked explicitly as used as
    the in-process library doesn't use it for the fast tracepoints
    support.  */
-IP_AGENT_EXPORT_VAR struct tracepoint *tracepoints;
-
-/* The first tracepoint to exceed its pass count.  */
-
-IP_AGENT_EXPORT_VAR struct tracepoint *stopping_tracepoint;
-
-/* True if the trace buffer is full or otherwise no longer usable.  */
-
-IP_AGENT_EXPORT_VAR int trace_buffer_is_full;
-
-/* The first error that occurred during expression evaluation.  */
-
-IP_AGENT_EXPORT_VAR enum eval_result_type expr_eval_result = expr_eval_no_error;
-
-EXTERN_C_POP
+IP_AGENT_EXPORT struct tracepoint *tracepoints ATTR_USED;
 
 #ifndef IN_PROCESS_AGENT
 
@@ -859,6 +857,19 @@ EXTERN_C_POP
    linked in at the end.  */
 
 static struct tracepoint *last_tracepoint;
+#endif
+
+/* The first tracepoint to exceed its pass count.  */
+
+IP_AGENT_EXPORT struct tracepoint *stopping_tracepoint;
+
+/* True if the trace buffer is full or otherwise no longer usable.  */
+
+IP_AGENT_EXPORT int trace_buffer_is_full;
+
+static enum eval_result_type expr_eval_result = expr_eval_no_error;
+
+#ifndef IN_PROCESS_AGENT
 
 static const char *eval_result_names[] =
   {
@@ -876,9 +887,7 @@ static const char *eval_result_names[] =
 
 /* The tracepoint in which the error occurred.  */
 
-EXTERN_C_PUSH
-IP_AGENT_EXPORT_VAR struct tracepoint *error_tracepoint;
-EXTERN_C_POP
+static struct tracepoint *error_tracepoint;
 
 struct trace_state_variable
 {
@@ -912,7 +921,7 @@ struct trace_state_variable
 struct trace_state_variable *alloced_trace_state_variables;
 #endif
 
-IP_AGENT_EXPORT_VAR struct trace_state_variable *trace_state_variables;
+IP_AGENT_EXPORT struct trace_state_variable *trace_state_variables;
 
 /* The results of tracing go into a fixed-size space known as the
    "trace buffer".  Because usage follows a limited number of
@@ -995,18 +1004,14 @@ static int circular_trace_buffer;
 
 static LONGEST trace_buffer_size;
 
-EXTERN_C_PUSH
-
 /* Pointer to the block of memory that traceframes all go into.  */
 
-IP_AGENT_EXPORT_VAR unsigned char *trace_buffer_lo;
+static unsigned char *trace_buffer_lo;
 
 /* Pointer to the end of the trace buffer, more precisely to the byte
    after the end of the buffer.  */
 
-IP_AGENT_EXPORT_VAR unsigned char *trace_buffer_hi;
-
-EXTERN_C_POP
+static unsigned char *trace_buffer_hi;
 
 /* Control structure holding the read/write/etc. pointers into the
    trace buffer.  We need more than one of these to implement a
@@ -1160,8 +1165,8 @@ A GDBserver update of `trace_buffer_ctrl_curr' does:
 #define GDBSERVER_UPDATED_FLUSH_COUNT_BIT 0x80000000
 
 #ifdef IN_PROCESS_AGENT
-IP_AGENT_EXPORT_VAR struct trace_buffer_control trace_buffer_ctrl[3];
-IP_AGENT_EXPORT_VAR unsigned int trace_buffer_ctrl_curr;
+IP_AGENT_EXPORT struct trace_buffer_control trace_buffer_ctrl[3];
+IP_AGENT_EXPORT unsigned int trace_buffer_ctrl_curr;
 
 # define TRACE_BUFFER_CTRL_CURR \
   (trace_buffer_ctrl_curr & ~GDBSERVER_FLUSH_COUNT_MASK)
@@ -1206,8 +1211,8 @@ struct trace_buffer_control trace_buffer_ctrl[1];
    of complete traceframes present in the trace buffer.  The IP agent
    writes to the write count, GDBserver writes to read count.  */
 
-IP_AGENT_EXPORT_VAR unsigned int traceframe_write_count;
-IP_AGENT_EXPORT_VAR unsigned int traceframe_read_count;
+IP_AGENT_EXPORT unsigned int traceframe_write_count;
+IP_AGENT_EXPORT unsigned int traceframe_read_count;
 
 /* Convenience macro.  */
 
@@ -1217,7 +1222,7 @@ IP_AGENT_EXPORT_VAR unsigned int traceframe_read_count;
 /* The count of all traceframes created in the current run, including
    ones that were discarded to make room.  */
 
-IP_AGENT_EXPORT_VAR int traceframes_created;
+IP_AGENT_EXPORT int traceframes_created;
 
 #ifndef IN_PROCESS_AGENT
 
@@ -1247,7 +1252,7 @@ static struct readonly_region *readonly_regions;
 
 /* The global that controls tracing overall.  */
 
-IP_AGENT_EXPORT_VAR int tracing;
+IP_AGENT_EXPORT int tracing;
 
 #ifndef IN_PROCESS_AGENT
 
@@ -1504,7 +1509,7 @@ init_trace_buffer (LONGEST bufsize)
 
 #ifdef IN_PROCESS_AGENT
 
-IP_AGENT_EXPORT_FUNC void
+IP_AGENT_EXPORT void ATTR_USED ATTR_NOINLINE
 about_to_request_buffer_space (void)
 {
   /* GDBserver places breakpoint here while it goes about to flush
@@ -2107,7 +2112,7 @@ create_trace_state_variable (int num, int gdb)
   return tsv;
 }
 
-IP_AGENT_EXPORT_FUNC LONGEST
+IP_AGENT_EXPORT LONGEST
 get_trace_state_variable_value (int num)
 {
   struct trace_state_variable *tsv;
@@ -2133,7 +2138,7 @@ get_trace_state_variable_value (int num)
   return tsv->value;
 }
 
-IP_AGENT_EXPORT_FUNC void
+IP_AGENT_EXPORT void
 set_trace_state_variable_value (int num, LONGEST val)
 {
   struct trace_state_variable *tsv;
@@ -2357,13 +2362,6 @@ cmd_qtinit (char *packet)
 {
   struct trace_state_variable *tsv, *prev, *next;
 
-  /* Can't do this command without a pid attached.  */
-  if (current_thread == NULL)
-    {
-      write_enn (packet);
-      return;
-    }
-
   /* Make sure we don't try to read from a trace frame.  */
   current_traceframe = -1;
 
@@ -2430,6 +2428,7 @@ clear_installed_tracepoints (void)
   struct tracepoint *prev_stpoint;
 
   pause_all (1);
+  cancel_breakpoints ();
 
   prev_stpoint = NULL;
 
@@ -2693,7 +2692,7 @@ cmd_qtdpsrc (char *own_buf)
   packet = unpack_varlen_hex (packet, &slen);
   ++packet; /* skip a colon */
   src = xmalloc (slen + 1);
-  nbytes = hex2bin (packet, (gdb_byte *) src, strlen (packet) / 2);
+  nbytes = unhexify (src, packet, strlen (packet) / 2);
   src[nbytes] = '\0';
 
   newlast = xmalloc (sizeof (struct source_string));
@@ -2735,7 +2734,7 @@ cmd_qtdv (char *own_buf)
 
   nbytes = strlen (packet) / 2;
   varname = xmalloc (nbytes + 1);
-  nbytes = hex2bin (packet, (gdb_byte *) varname, nbytes);
+  nbytes = unhexify (varname, packet, nbytes);
   varname[nbytes] = '\0';
 
   tsv = create_trace_state_variable (num, 1);
@@ -2928,10 +2927,7 @@ get_jump_space_head (void)
     {
       if (read_inferior_data_pointer (ipa_sym_addrs.addr_gdb_jump_pad_buffer,
 				      &gdb_jump_pad_head))
-	{
-	  internal_error (__FILE__, __LINE__,
-			  "error extracting jump_pad_buffer");
-	}
+	fatal ("error extracting jump_pad_buffer");
     }
 
   return gdb_jump_pad_head;
@@ -2962,15 +2958,15 @@ claim_trampoline_space (ULONGEST used, CORE_ADDR *trampoline)
       if (read_inferior_data_pointer (ipa_sym_addrs.addr_gdb_trampoline_buffer,
 				      &trampoline_buffer_tail))
 	{
-	  internal_error (__FILE__, __LINE__,
-			  "error extracting trampoline_buffer");
+	  fatal ("error extracting trampoline_buffer");
+	  return 0;
 	}
 
       if (read_inferior_data_pointer (ipa_sym_addrs.addr_gdb_trampoline_buffer_end,
 				      &trampoline_buffer_head))
 	{
-	  internal_error (__FILE__, __LINE__,
-			  "error extracting trampoline_buffer_end");
+	  fatal ("error extracting trampoline_buffer_end");
+	  return 0;
 	}
     }
 
@@ -3005,8 +3001,8 @@ have_fast_tracepoint_trampoline_buffer (char *buf)
   if (read_inferior_data_pointer (ipa_sym_addrs.addr_gdb_trampoline_buffer_end,
 				  &trampoline_end))
     {
-      internal_error (__FILE__, __LINE__,
-		      "error extracting trampoline_buffer_end");
+      fatal ("error extracting trampoline_buffer_end");
+      return 0;
     }
   
   if (buf)
@@ -3016,8 +3012,8 @@ have_fast_tracepoint_trampoline_buffer (char *buf)
       if (read_inferior_data_pointer (ipa_sym_addrs.addr_gdb_trampoline_buffer_error,
 				  &errbuf))
 	{
-	  internal_error (__FILE__, __LINE__,
-			  "error extracting errbuf");
+	  fatal ("error extracting errbuf");
+	  return 0;
 	}
 
       read_inferior_memory (errbuf, (unsigned char *) buf, 100);
@@ -3359,25 +3355,14 @@ cmd_qtstart (char *packet)
   if (agent_loaded_p ())
     {
       if (write_inferior_integer (ipa_sym_addrs.addr_tracing, 1))
-	{
-	  internal_error (__FILE__, __LINE__,
-			  "Error setting tracing variable in lib");
-	}
+	fatal ("Error setting tracing variable in lib");
 
       if (write_inferior_data_pointer (ipa_sym_addrs.addr_stopping_tracepoint,
 				       0))
-	{
-	  internal_error (__FILE__, __LINE__,
-			  "Error clearing stopping_tracepoint variable"
-			  " in lib");
-	}
+	fatal ("Error clearing stopping_tracepoint variable in lib");
 
       if (write_inferior_integer (ipa_sym_addrs.addr_trace_buffer_is_full, 0))
-	{
-	  internal_error (__FILE__, __LINE__,
-			  "Error clearing trace_buffer_is_full variable"
-			  " in lib");
-	}
+	fatal ("Error clearing trace_buffer_is_full variable in lib");
 
       stop_tracing_bkpt = set_breakpoint_at (ipa_sym_addrs.addr_stop_tracing,
 					     stop_tracing_handler);
@@ -3419,6 +3404,9 @@ stop_tracing (void)
      We can't now, since we may be getting here due to the inferior
      agent calling us.  */
   pause_all (1);
+  /* Since we're removing breakpoints, cancel breakpoint hits,
+     possibly related to the breakpoints we're about to delete.  */
+  cancel_breakpoints ();
 
   /* Stop logging. Tracepoints can still be hit, but they will not be
      recorded.  */
@@ -3426,10 +3414,7 @@ stop_tracing (void)
   if (agent_loaded_p ())
     {
       if (write_inferior_integer (ipa_sym_addrs.addr_tracing, 0))
-	{
-	  internal_error (__FILE__, __LINE__,
-			  "Error clearing tracing variable in lib");
-	}
+	fatal ("Error clearing tracing variable in lib");
     }
 
   tracing_stop_time = get_timestamp ();
@@ -3549,14 +3534,14 @@ cmd_qtframe (char *own_buf)
 
   packet += strlen ("QTFrame:");
 
-  if (startswith (packet, "pc:"))
+  if (strncmp (packet, "pc:", strlen ("pc:")) == 0)
     {
       packet += strlen ("pc:");
       unpack_varlen_hex (packet, &pc);
       trace_debug ("Want to find next traceframe at pc=0x%s", paddress (pc));
       tframe = find_next_traceframe_in_range (pc, pc, 1, &tfnum);
     }
-  else if (startswith (packet, "range:"))
+  else if (strncmp (packet, "range:", strlen ("range:")) == 0)
     {
       packet += strlen ("range:");
       packet = unpack_varlen_hex (packet, &lo);
@@ -3566,7 +3551,7 @@ cmd_qtframe (char *own_buf)
 		   paddress (lo), paddress (hi));
       tframe = find_next_traceframe_in_range (lo, hi, 1, &tfnum);
     }
-  else if (startswith (packet, "outside:"))
+  else if (strncmp (packet, "outside:", strlen ("outside:")) == 0)
     {
       packet += strlen ("outside:");
       packet = unpack_varlen_hex (packet, &lo);
@@ -3577,7 +3562,7 @@ cmd_qtframe (char *own_buf)
 		   paddress (lo), paddress (hi));
       tframe = find_next_traceframe_in_range (lo, hi, 0, &tfnum);
     }
-  else if (startswith (packet, "tdp:"))
+  else if (strncmp (packet, "tdp:", strlen ("tdp:")) == 0)
     {
       packet += strlen ("tdp:");
       unpack_varlen_hex (packet, &num);
@@ -3613,8 +3598,7 @@ static void
 cmd_qtstatus (char *packet)
 {
   char *stop_reason_rsp = NULL;
-  char *buf1, *buf2, *buf3;
-  const char *str;
+  char *buf1, *buf2, *buf3, *str;
   int slen;
 
   /* Translate the plain text of the notes back into hex for
@@ -3623,17 +3607,17 @@ cmd_qtstatus (char *packet)
   str = (tracing_user_name ? tracing_user_name : "");
   slen = strlen (str);
   buf1 = (char *) alloca (slen * 2 + 1);
-  bin2hex ((gdb_byte *) str, buf1, slen);
+  hexify (buf1, str, slen);
 
   str = (tracing_notes ? tracing_notes : "");
   slen = strlen (str);
   buf2 = (char *) alloca (slen * 2 + 1);
-  bin2hex ((gdb_byte *) str, buf2, slen);
+  hexify (buf2, str, slen);
 
   str = (tracing_stop_note ? tracing_stop_note : "");
   slen = strlen (str);
   buf3 = (char *) alloca (slen * 2 + 1);
-  bin2hex ((gdb_byte *) str, buf3, slen);
+  hexify (buf3, str, slen);
 
   trace_debug ("Returning trace status as %d, stop reason %s",
 	       tracing, tracing_stop_reason);
@@ -3652,7 +3636,7 @@ cmd_qtstatus (char *packet)
   /* The user visible error string in terror needs to be hex encoded.
      We leave it as plain string in `tracing_stop_reason' to ease
      debugging.  */
-  if (startswith (stop_reason_rsp, "terror:"))
+  if (strncmp (stop_reason_rsp, "terror:", strlen ("terror:")) == 0)
     {
       const char *result_name;
       int hexstr_len;
@@ -3663,7 +3647,7 @@ cmd_qtstatus (char *packet)
       p = stop_reason_rsp = alloca (strlen ("terror:") + hexstr_len + 1);
       strcpy (p, "terror:");
       p += strlen (p);
-      bin2hex ((gdb_byte *) result_name, p, strlen (result_name));
+      convert_int_to_ascii ((gdb_byte *) result_name, p, strlen (result_name));
     }
 
   /* If this was a forced stop, include any stop note that was supplied.  */
@@ -3782,7 +3766,7 @@ response_source (char *packet,
 
   len = strlen (src->str);
   buf = alloca (len * 2 + 1);
-  bin2hex ((gdb_byte *) src->str, buf, len);
+  convert_int_to_ascii ((gdb_byte *) src->str, buf, len);
 
   sprintf (packet, "Z%x:%s:%s:%x:%x:%s",
 	   tpoint->number, paddress (tpoint->address),
@@ -3871,7 +3855,7 @@ response_tsv (char *packet, struct trace_state_variable *tsv)
     {
       namelen = strlen (tsv->name);
       buf = alloca (namelen * 2 + 1);
-      bin2hex ((gdb_byte *) tsv->name, buf, namelen);
+      convert_int_to_ascii ((gdb_byte *) tsv->name, buf, namelen);
     }
 
   sprintf (packet, "%x:%s:%x:%s", tsv->number, phex_nz (tsv->initial_value, 0),
@@ -3943,17 +3927,6 @@ cmd_qtstmat (char *packet)
     run_inferior_command (packet, strlen (packet) + 1);
 }
 
-/* Helper for gdb_agent_about_to_close.
-   Return non-zero if thread ENTRY is in the same process in DATA.  */
-
-static int
-same_process_p (struct inferior_list_entry *entry, void *data)
-{
-  int *pid = data;
-
-  return ptid_get_pid (entry->id) == *pid;
-}
-
 /* Sent the agent a command to close it.  */
 
 void
@@ -3963,19 +3936,26 @@ gdb_agent_about_to_close (int pid)
 
   if (!maybe_write_ipa_not_loaded (buf))
     {
-      struct thread_info *saved_thread;
+      struct thread_info *save_inferior;
+      struct inferior_list_entry *inf = all_threads.head;
 
-      saved_thread = current_thread;
+      save_inferior = current_inferior;
 
-      /* Find any thread which belongs to process PID.  */
-      current_thread = (struct thread_info *)
-	find_inferior (&all_threads, same_process_p, &pid);
+      /* Find a certain thread which belongs to process PID.  */
+      while (inf != NULL)
+	{
+	  if (ptid_get_pid (inf->id) == pid)
+	    break;
+	  inf = inf->next;
+	}
+
+      current_inferior = (struct thread_info *) inf;
 
       strcpy (buf, "close");
 
       run_inferior_command (buf, strlen (buf) + 1);
 
-      current_thread = saved_thread;
+      current_inferior = save_inferior;
     }
 }
 
@@ -3985,7 +3965,7 @@ gdb_agent_about_to_close (int pid)
 static void
 cmd_qtminftpilen (char *packet)
 {
-  if (current_thread == NULL)
+  if (current_inferior == NULL)
     {
       /* Indicate that the minimum length is currently unknown.  */
       strcpy (packet, "0");
@@ -4045,7 +4025,7 @@ cmd_qtbuffer (char *own_buf)
   if (num >= (PBUFSIZ - 16) / 2 )
     num = (PBUFSIZ - 16) / 2;
 
-  bin2hex (tbp, own_buf, num);
+  convert_int_to_ascii (tbp, own_buf, num);
 }
 
 static void
@@ -4105,42 +4085,42 @@ cmd_qtnotes (char *own_buf)
 
   while (*packet)
     {
-      if (startswith (packet, "user:"))
+      if (strncmp ("user:", packet, strlen ("user:")) == 0)
 	{
 	  packet += strlen ("user:");
 	  saved = packet;
 	  packet = strchr (packet, ';');
 	  nbytes = (packet - saved) / 2;
 	  user = xmalloc (nbytes + 1);
-	  nbytes = hex2bin (saved, (gdb_byte *) user, nbytes);
+	  nbytes = unhexify (user, saved, nbytes);
 	  user[nbytes] = '\0';
 	  ++packet; /* skip the semicolon */
 	  trace_debug ("User is '%s'", user);
 	  xfree (tracing_user_name);
 	  tracing_user_name = user;
 	}
-      else if (startswith (packet, "notes:"))
+      else if (strncmp ("notes:", packet, strlen ("notes:")) == 0)
 	{
 	  packet += strlen ("notes:");
 	  saved = packet;
 	  packet = strchr (packet, ';');
 	  nbytes = (packet - saved) / 2;
 	  notes = xmalloc (nbytes + 1);
-	  nbytes = hex2bin (saved, (gdb_byte *) notes, nbytes);
+	  nbytes = unhexify (notes, saved, nbytes);
 	  notes[nbytes] = '\0';
 	  ++packet; /* skip the semicolon */
 	  trace_debug ("Notes is '%s'", notes);
 	  xfree (tracing_notes);
 	  tracing_notes = notes;
 	}
-      else if (startswith (packet, "tstop:"))
+      else if (strncmp ("tstop:", packet, strlen ("tstop:")) == 0)
 	{
 	  packet += strlen ("tstop:");
 	  saved = packet;
 	  packet = strchr (packet, ';');
 	  nbytes = (packet - saved) / 2;
 	  stopnote = xmalloc (nbytes + 1);
-	  nbytes = hex2bin (saved, (gdb_byte *) stopnote, nbytes);
+	  nbytes = unhexify (stopnote, saved, nbytes);
 	  stopnote[nbytes] = '\0';
 	  ++packet; /* skip the semicolon */
 	  trace_debug ("tstop note is '%s'", stopnote);
@@ -4162,32 +4142,32 @@ handle_tracepoint_general_set (char *packet)
       cmd_qtinit (packet);
       return 1;
     }
-  else if (startswith (packet, "QTDP:"))
+  else if (strncmp ("QTDP:", packet, strlen ("QTDP:")) == 0)
     {
       cmd_qtdp (packet);
       return 1;
     }
-  else if (startswith (packet, "QTDPsrc:"))
+  else if (strncmp ("QTDPsrc:", packet, strlen ("QTDPsrc:")) == 0)
     {
       cmd_qtdpsrc (packet);
       return 1;
     }
-  else if (startswith (packet, "QTEnable:"))
+  else if (strncmp ("QTEnable:", packet, strlen ("QTEnable:")) == 0)
     {
       cmd_qtenable_disable (packet, 1);
       return 1;
     }
-  else if (startswith (packet, "QTDisable:"))
+  else if (strncmp ("QTDisable:", packet, strlen ("QTDisable:")) == 0)
     {
       cmd_qtenable_disable (packet, 0);
       return 1;
     }
-  else if (startswith (packet, "QTDV:"))
+  else if (strncmp ("QTDV:", packet, strlen ("QTDV:")) == 0)
     {
       cmd_qtdv (packet);
       return 1;
     }
-  else if (startswith (packet, "QTro:"))
+  else if (strncmp ("QTro:", packet, strlen ("QTro:")) == 0)
     {
       cmd_qtro (packet);
       return 1;
@@ -4202,27 +4182,28 @@ handle_tracepoint_general_set (char *packet)
       cmd_qtstop (packet);
       return 1;
     }
-  else if (startswith (packet, "QTDisconnected:"))
+  else if (strncmp ("QTDisconnected:", packet,
+		    strlen ("QTDisconnected:")) == 0)
     {
       cmd_qtdisconnected (packet);
       return 1;
     }
-  else if (startswith (packet, "QTFrame:"))
+  else if (strncmp ("QTFrame:", packet, strlen ("QTFrame:")) == 0)
     {
       cmd_qtframe (packet);
       return 1;
     }
-  else if (startswith (packet, "QTBuffer:circular:"))
+  else if (strncmp ("QTBuffer:circular:", packet, strlen ("QTBuffer:circular:")) == 0)
     {
       cmd_bigqtbuffer_circular (packet);
       return 1;
     }
-  else if (startswith (packet, "QTBuffer:size:"))
+  else if (strncmp ("QTBuffer:size:", packet, strlen ("QTBuffer:size:")) == 0)
     {
       cmd_bigqtbuffer_size (packet);
       return 1;
     }
-  else if (startswith (packet, "QTNotes:"))
+  else if (strncmp ("QTNotes:", packet, strlen ("QTNotes:")) == 0)
     {
       cmd_qtnotes (packet);
       return 1;
@@ -4239,7 +4220,7 @@ handle_tracepoint_query (char *packet)
       cmd_qtstatus (packet);
       return 1;
     }
-  else if (startswith (packet, "qTP:"))
+  else if (strncmp ("qTP:", packet, strlen ("qTP:")) == 0)
     {
       cmd_qtp (packet);
       return 1;
@@ -4264,12 +4245,12 @@ handle_tracepoint_query (char *packet)
       cmd_qtsv (packet);
       return 1;
     }
-  else if (startswith (packet, "qTV:"))
+  else if (strncmp ("qTV:", packet, strlen ("qTV:")) == 0)
     {
       cmd_qtv (packet);
       return 1;
     }
-  else if (startswith (packet, "qTBuffer:"))
+  else if (strncmp ("qTBuffer:", packet, strlen ("qTBuffer:")) == 0)
     {
       cmd_qtbuffer (packet);
       return 1;
@@ -4284,7 +4265,7 @@ handle_tracepoint_query (char *packet)
       cmd_qtsstm (packet);
       return 1;
     }
-  else if (startswith (packet, "qTSTMat:"))
+  else if (strncmp ("qTSTMat:", packet, strlen ("qTSTMat:")) == 0)
     {
       cmd_qtstmat (packet);
       return 1;
@@ -5607,29 +5588,17 @@ fast_tracepoint_collecting (CORE_ADDR thread_area,
 
   if (read_inferior_data_pointer (ipa_sym_addrs.addr_gdb_jump_pad_buffer,
 				  &ipa_gdb_jump_pad_buffer))
-    {
-      internal_error (__FILE__, __LINE__,
-		      "error extracting `gdb_jump_pad_buffer'");
-    }
+    fatal ("error extracting `gdb_jump_pad_buffer'");
   if (read_inferior_data_pointer (ipa_sym_addrs.addr_gdb_jump_pad_buffer_end,
 				  &ipa_gdb_jump_pad_buffer_end))
-    {
-      internal_error (__FILE__, __LINE__,
-		      "error extracting `gdb_jump_pad_buffer_end'");
-    }
+    fatal ("error extracting `gdb_jump_pad_buffer_end'");
 
   if (read_inferior_data_pointer (ipa_sym_addrs.addr_gdb_trampoline_buffer,
 				  &ipa_gdb_trampoline_buffer))
-    {
-      internal_error (__FILE__, __LINE__,
-		      "error extracting `gdb_trampoline_buffer'");
-    }
+    fatal ("error extracting `gdb_trampoline_buffer'");
   if (read_inferior_data_pointer (ipa_sym_addrs.addr_gdb_trampoline_buffer_end,
 				  &ipa_gdb_trampoline_buffer_end))
-    {
-      internal_error (__FILE__, __LINE__,
-		      "error extracting `gdb_trampoline_buffer_end'");
-    }
+    fatal ("error extracting `gdb_trampoline_buffer_end'");
 
   if (ipa_gdb_jump_pad_buffer <= stop_pc
       && stop_pc < ipa_gdb_jump_pad_buffer_end)
@@ -5777,15 +5746,13 @@ fast_tracepoint_collecting, returning continue-until-break at %s",
    NULL if it isn't locked.  Note that this lock *must* be set while
    executing any *function other than the jump pad.  See
    fast_tracepoint_collecting.  */
-EXTERN_C_PUSH
-IP_AGENT_EXPORT_VAR collecting_t *collecting;
-EXTERN_C_POP
+static collecting_t * ATTR_USED collecting;
 
 /* This routine, called from the jump pad (in asm) is designed to be
    called from the jump pads of fast tracepoints, thus it is on the
    critical path.  */
 
-IP_AGENT_EXPORT_FUNC void
+IP_AGENT_EXPORT void ATTR_USED
 gdb_collect (struct tracepoint *tpoint, unsigned char *regs)
 {
   struct fast_tracepoint_ctx ctx;
@@ -5951,10 +5918,7 @@ target_malloc (ULONGEST size)
       /* We have the pointer *address*, need what it points to.  */
       if (read_inferior_data_pointer (ipa_sym_addrs.addr_gdb_tp_heap_buffer,
 				      &target_tp_heap))
-	{
-	  internal_error (__FILE__, __LINE__,
-			  "couldn't get target heap head pointer");
-	}
+	fatal ("could get target heap head pointer");
     }
 
   ptr = target_tp_heap;
@@ -6121,7 +6085,7 @@ tracepoint_send_agent (struct tracepoint *tpoint)
   if (ret)
     return ret;
 
-  if (!startswith (buf, "OK"))
+  if (strncmp (buf, "OK", 2) != 0)
     return 1;
 
   /* The value of tracepoint's target address is stored in BUF.  */
@@ -6178,10 +6142,7 @@ download_tracepoint (struct tracepoint *tpoint)
       if (read_inferior_data_pointer (tp_prev->obj_addr_on_target
 				      + offsetof (struct tracepoint, next),
 				      &tp_prev_target_next_addr))
-	{
-	  internal_error (__FILE__, __LINE__,
-			  "error reading `tp_prev->next'");
-	}
+	fatal ("error reading `tp_prev->next'");
 
       /* tpoint->next = tp_prev->next */
       write_inferior_data_ptr (tpoint->obj_addr_on_target
@@ -6258,7 +6219,10 @@ download_trace_state_variables (void)
 				   name_addr);
 	}
 
-      gdb_assert (tsv->getter == NULL);
+      if (tsv->getter != NULL)
+	{
+	  fatal ("what to do with these?");
+	}
     }
 
   if (prev_ptr != 0)
@@ -6431,13 +6395,9 @@ upload_fast_traceframes (void)
 	error ("Uploading: couldn't read traceframe at %s\n", paddress (tf));
 
       if (ipa_tframe.tpnum == 0)
-	{
-	  internal_error (__FILE__, __LINE__,
-			  "Uploading: No (more) fast traceframes, but"
-			  " ipa_traceframe_count == %u??\n",
-			  ipa_traceframe_write_count
-			  - ipa_traceframe_read_count);
-	}
+	fatal ("Uploading: No (more) fast traceframes, but "
+	       "ipa_traceframe_count == %u??\n",
+	       ipa_traceframe_write_count - ipa_traceframe_read_count);
 
       /* Note that this will be incorrect for multi-location
 	 tracepoints...  */
@@ -6523,6 +6483,7 @@ upload_fast_traceframes (void)
   trace_debug ("Done uploading traceframes [%d]\n", curr_tbctrl_idx);
 
   pause_all (1);
+  cancel_breakpoints ();
 
   delete_breakpoint (about_to_request_buffer_space_bkpt);
   about_to_request_buffer_space_bkpt = NULL;
@@ -6536,8 +6497,8 @@ upload_fast_traceframes (void)
 
 #ifdef IN_PROCESS_AGENT
 
-IP_AGENT_EXPORT_VAR int ust_loaded;
-IP_AGENT_EXPORT_VAR char cmd_buf[IPA_CMD_BUF_SIZE];
+IP_AGENT_EXPORT int ust_loaded;
+IP_AGENT_EXPORT char cmd_buf[IPA_CMD_BUF_SIZE];
 
 #ifdef HAVE_UST
 
@@ -6828,9 +6789,7 @@ run_inferior_command (char *cmd, int len)
 
 /* Thread ID of the helper thread.  GDBserver reads this to know which
    is the help thread.  This is an LWP id on Linux.  */
-EXTERN_C_PUSH
-IP_AGENT_EXPORT_VAR int helper_thread_id;
-EXTERN_C_POP
+int helper_thread_id;
 
 static int
 init_named_socket (const char *name)
@@ -6955,7 +6914,7 @@ cstr_to_hexstr (const char *str)
 {
   int len = strlen (str);
   char *hexstr = xmalloc (len * 2 + 1);
-  bin2hex ((gdb_byte *) str, hexstr, len);
+  convert_int_to_ascii ((gdb_byte *) str, hexstr, len);
   return hexstr;
 }
 
@@ -7131,6 +7090,7 @@ gdb_ust_init (void)
 #endif /* HAVE_UST */
 
 #include <sys/syscall.h>
+#include <stdlib.h>
 
 static void
 gdb_agent_remove_socket (void)
@@ -7173,7 +7133,7 @@ gdb_agent_helper_thread (void *arg)
 
 	  do
 	    {
-	      fd = accept (listen_fd, (struct sockaddr *) &sockaddr, &tmp);
+	      fd = accept (listen_fd, &sockaddr, &tmp);
 	    }
 	  /* It seems an ERESTARTSYS can escape out of accept.  */
 	  while (fd == -512 || (fd == -1 && errno == EINTR));
@@ -7200,7 +7160,7 @@ gdb_agent_helper_thread (void *arg)
 
 	  if (cmd_buf[0])
 	    {
-	      if (startswith (cmd_buf, "close"))
+	      if (strncmp ("close", cmd_buf, 5) == 0)
 		{
 		  stop_loop = 1;
 		}
@@ -7213,15 +7173,21 @@ gdb_agent_helper_thread (void *arg)
 		{
 		  cmd_qtsstm (cmd_buf);
 		}
-	      else if (startswith (cmd_buf, "unprobe_marker_at:"))
+	      else if (strncmp ("unprobe_marker_at:",
+				cmd_buf,
+				sizeof ("unprobe_marker_at:") - 1) == 0)
 		{
 		  unprobe_marker_at (cmd_buf);
 		}
-	      else if (startswith (cmd_buf, "probe_marker_at:"))
+	      else if (strncmp ("probe_marker_at:",
+				cmd_buf,
+				sizeof ("probe_marker_at:") - 1) == 0)
 		{
 		  probe_marker_at (cmd_buf);
 		}
-	      else if (startswith (cmd_buf, "qTSTMat:"))
+	      else if (strncmp ("qTSTMat:",
+				cmd_buf,
+				sizeof ("qTSTMat:") - 1) == 0)
 		{
 		  cmd_qtstmat (cmd_buf);
 		}
@@ -7239,9 +7205,9 @@ gdb_agent_helper_thread (void *arg)
 
 	      /* Sleep endlessly to wait the whole inferior stops.  This
 		 thread can not exit because GDB or GDBserver may still need
-		 'current_thread' (representing this thread) to access
+		 'current_inferior' (representing this thread) to access
 		 inferior memory.  Otherwise, this thread exits earlier than
-		 other threads, and 'current_thread' is set to NULL.  */
+		 other threads, and 'current_inferior' is set to NULL.  */
 	      while (1)
 		sleep (10);
 	    }
@@ -7254,9 +7220,7 @@ gdb_agent_helper_thread (void *arg)
 #include <signal.h>
 #include <pthread.h>
 
-EXTERN_C_PUSH
-IP_AGENT_EXPORT_VAR int gdb_agent_capability = AGENT_CAPA_STATIC_TRACE;
-EXTERN_C_POP
+IP_AGENT_EXPORT int gdb_agent_capability = AGENT_CAPA_STATIC_TRACE;
 
 static void
 gdb_agent_init (void)
@@ -7272,7 +7236,7 @@ gdb_agent_init (void)
   sigfillset (&new_mask);
   res = pthread_sigmask (SIG_SETMASK, &new_mask, &orig_mask);
   if (res)
-    perror_with_name ("pthread_sigmask (1)");
+    fatal ("pthread_sigmask (1) failed: %s", strerror (res));
 
   res = pthread_create (&thread,
 			NULL,
@@ -7281,7 +7245,7 @@ gdb_agent_init (void)
 
   res = pthread_sigmask (SIG_SETMASK, &orig_mask, NULL);
   if (res)
-    perror_with_name ("pthread_sigmask (2)");
+    fatal ("pthread_sigmask (2) failed: %s", strerror (res));
 
   while (helper_thread_id == 0)
     usleep (1);
@@ -7294,12 +7258,12 @@ gdb_agent_init (void)
 #include <sys/mman.h>
 #include <fcntl.h>
 
-IP_AGENT_EXPORT_VAR char *gdb_tp_heap_buffer;
-IP_AGENT_EXPORT_VAR char *gdb_jump_pad_buffer;
-IP_AGENT_EXPORT_VAR char *gdb_jump_pad_buffer_end;
-IP_AGENT_EXPORT_VAR char *gdb_trampoline_buffer;
-IP_AGENT_EXPORT_VAR char *gdb_trampoline_buffer_end;
-IP_AGENT_EXPORT_VAR char *gdb_trampoline_buffer_error;
+IP_AGENT_EXPORT char *gdb_tp_heap_buffer;
+IP_AGENT_EXPORT char *gdb_jump_pad_buffer;
+IP_AGENT_EXPORT char *gdb_jump_pad_buffer_end;
+IP_AGENT_EXPORT char *gdb_trampoline_buffer;
+IP_AGENT_EXPORT char *gdb_trampoline_buffer_end;
+IP_AGENT_EXPORT char *gdb_trampoline_buffer_error;
 
 /* Record the result of getting buffer space for fast tracepoint
    trampolines.  Any error message is copied, since caller may not be
@@ -7362,7 +7326,7 @@ initialize_tracepoint (void)
 
     pagesize = sysconf (_SC_PAGE_SIZE);
     if (pagesize == -1)
-      perror_with_name ("sysconf");
+      fatal ("sysconf");
 
     gdb_tp_heap_buffer = xmalloc (5 * 1024 * 1024);
 
@@ -7381,7 +7345,9 @@ initialize_tracepoint (void)
       }
 
     if (addr == 0)
-      perror_with_name ("mmap");
+      fatal ("\
+initialize_tracepoint: mmap'ing jump pad buffer failed with %s",
+	     strerror (errno));
 
     gdb_jump_pad_buffer_end = gdb_jump_pad_buffer + pagesize * SCRATCH_BUFFER_NPAGES;
   }

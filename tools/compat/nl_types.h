@@ -1,4 +1,4 @@
-/*	$NetBSD: nl_types.h,v 1.3 2014/11/12 15:08:52 joerg Exp $	*/
+/*	$NetBSD: nl_types.h,v 1.2.4.1 2014/11/14 16:24:40 martin Exp $	*/
 
 #if defined(_NLS_PRIVATE)
 #include "../../include/nl_types.h"

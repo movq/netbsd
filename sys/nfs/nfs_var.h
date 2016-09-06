@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_var.h,v 1.94 2015/07/15 03:28:55 manu Exp $	*/
+/*	$NetBSD: nfs_var.h,v 1.92.2.2 2015/11/04 17:46:21 riz Exp $	*/
 
 /*-
  * Copyright (c) 1996 The NetBSD Foundation, Inc.

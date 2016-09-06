@@ -173,7 +173,7 @@ usage(FILE *fp)
 	return (E_USAGE);
 }
 
-static void __printflike(1, 0)
+static void
 verror(const char *fmt, va_list ap)
 {
 	int error = errno;
@@ -186,7 +186,7 @@ verror(const char *fmt, va_list ap)
 }
 
 /*PRINTFLIKE1*/
-static void __printflike(1, 2) __dead
+static void
 fatal(const char *fmt, ...)
 {
 	va_list ap;
@@ -199,7 +199,7 @@ fatal(const char *fmt, ...)
 }
 
 /*PRINTFLIKE1*/
-static void __printflike(1, 2) __dead
+static void
 dfatal(const char *fmt, ...)
 {
 #if !defined(sun) && defined(NEED_ERRLOC)
@@ -239,7 +239,7 @@ dfatal(const char *fmt, ...)
 }
 
 /*PRINTFLIKE1*/
-static void __printflike(1, 2)
+static void
 error(const char *fmt, ...)
 {
 	va_list ap;
@@ -250,7 +250,7 @@ error(const char *fmt, ...)
 }
 
 /*PRINTFLIKE1*/
-static void __printflike(1, 2)
+static void
 notice(const char *fmt, ...)
 {
 	va_list ap;
@@ -264,7 +264,7 @@ notice(const char *fmt, ...)
 }
 
 /*PRINTFLIKE1*/
-static void __printflike(1, 2)
+static void
 oprintf(const char *fmt, ...)
 {
 	va_list ap;
@@ -770,7 +770,7 @@ compile_str(dtrace_cmd_t *dcp)
 }
 
 /*ARGSUSED*/
-static void __dead
+static void
 prochandler(struct ps_prochandle *P, const char *msg, void *arg)
 {
 fatal("DOODAD in function %s, file %s, line %d\n",__FUNCTION__,__FILE__,__LINE__);
@@ -819,7 +819,7 @@ fatal("DOODAD in function %s, file %s, line %d\n",__FUNCTION__,__FILE__,__LINE__
 static int
 errhandler(const dtrace_errdata_t *data, void *arg)
 {
-	error("%s", data->dteda_msg);
+	error(data->dteda_msg);
 	return (DTRACE_HANDLE_OK);
 }
 
@@ -827,7 +827,7 @@ errhandler(const dtrace_errdata_t *data, void *arg)
 static int
 drophandler(const dtrace_dropdata_t *data, void *arg)
 {
-	error("%s", data->dtdda_msg);
+	error(data->dtdda_msg);
 	return (DTRACE_HANDLE_OK);
 }
 
@@ -850,16 +850,16 @@ setopthandler(const dtrace_setoptdata_t *data, void *arg)
 #define	BUFDUMPSTR(ptr, field) \
 	(void) printf("%s: %20s => ", g_pname, #field);	\
 	if ((ptr)->field != NULL) {			\
-		const char *xc = (ptr)->field;		\
+		const char *c = (ptr)->field;		\
 		(void) printf("\"");			\
 		do {					\
-			if (*xc == '\n') {		\
+			if (*c == '\n') {		\
 				(void) printf("\\n");	\
 				continue;		\
 			}				\
 							\
-			(void) printf("%c", *xc);	\
-		} while (*xc++ != '\0');		\
+			(void) printf("%c", *c);	\
+		} while (*c++ != '\0');			\
 		(void) printf("\"\n");			\
 	} else {					\
 		(void) printf("<NULL>\n");		\
@@ -896,7 +896,7 @@ bufhandler(const dtrace_bufdata_t *bufdata, void *arg)
 	    { "AGGFORMAT",	DTRACE_BUFDATA_AGGFORMAT },
 	    { "AGGLAST",	DTRACE_BUFDATA_AGGLAST },
 	    { "???",		UINT32_MAX },
-	    { NULL,		0 }
+	    { NULL }
 	};
 
 	if (bufdata->dtbda_probe != NULL) {
@@ -1052,7 +1052,7 @@ chew(const dtrace_probedata_t *data, void *arg)
 			(void) snprintf(name, sizeof (name), "%s:%s",
 			    pd->dtpd_func, pd->dtpd_name);
 
-			oprintf("%3d %6d %32s ", (int)cpu, pd->dtpd_id, name);
+			oprintf("%3d %6d %32s ", cpu, pd->dtpd_id, name);
 		}
 	} else {
 		int indent = data->dtpda_indent;
@@ -1072,7 +1072,7 @@ chew(const dtrace_probedata_t *data, void *arg)
 			    data->dtpda_prefix, pd->dtpd_func);
 		}
 
-		oprintf("%3d %-41s ", (int)cpu, name);
+		oprintf("%3d %-41s ", cpu, name);
 	}
 
 	return (DTRACE_CONSUME_THIS);
@@ -1084,19 +1084,19 @@ go(void)
 	int i;
 
 	struct {
-		const char *name;
-		const char *optname;
+		char *name;
+		char *optname;
 		dtrace_optval_t val;
 	} bufs[] = {
-		{ "buffer size", "bufsize", 0 },
-		{ "aggregation size", "aggsize", 0 },
-		{ "speculation size", "specsize", 0 },
-		{ "dynamic variable size", "dynvarsize", 0 },
-		{ NULL, NULL, 0 }
+		{ "buffer size", "bufsize" },
+		{ "aggregation size", "aggsize" },
+		{ "speculation size", "specsize" },
+		{ "dynamic variable size", "dynvarsize" },
+		{ NULL }
 	}, rates[] = {
-		{ "cleaning rate", "cleanrate", 0 },
-		{ "status rate", "statusrate", 0 },
-		{ NULL, NULL ,0 }
+		{ "cleaning rate", "cleanrate" },
+		{ "status rate", "statusrate" },
+		{ NULL }
 	};
 
 	for (i = 0; bufs[i].name != NULL; i++) {
@@ -1141,7 +1141,7 @@ go(void)
 
 	for (i = 0; rates[i].name != NULL; i++) {
 		dtrace_optval_t nval;
-		const char *dir;
+		char *dir;
 
 		if (rates[i].val == DTRACEOPT_UNSET)
 			continue;
@@ -1761,7 +1761,7 @@ main(int argc, char *argv[])
 		}
 
 		if (g_ofile == NULL) {
-			char *pv;
+			char *p;
 
 			if (g_cmdc > 1) {
 				(void) fprintf(stderr, "%s: -h requires an "
@@ -1771,8 +1771,8 @@ main(int argc, char *argv[])
 				return (E_USAGE);
 			}
 
-			if ((pv = strrchr(g_cmdv[0].dc_arg, '.')) == NULL ||
-			    strcmp(pv, ".d") != 0) {
+			if ((p = strrchr(g_cmdv[0].dc_arg, '.')) == NULL ||
+			    strcmp(p, ".d") != 0) {
 				(void) fprintf(stderr, "%s: -h requires an "
 				    "output file if no scripts are "
 				    "specified\n", g_pname);
@@ -1780,9 +1780,9 @@ main(int argc, char *argv[])
 				return (E_USAGE);
 			}
 
-			pv[0] = '\0'; /* strip .d suffix */
-			g_ofile = pv = g_cmdv[0].dc_ofile;
-			(void) snprintf(pv, sizeof (g_cmdv[0].dc_ofile),
+			p[0] = '\0'; /* strip .d suffix */
+			g_ofile = p = g_cmdv[0].dc_ofile;
+			(void) snprintf(p, sizeof (g_cmdv[0].dc_ofile),
 			    "%s.h", basename(g_cmdv[0].dc_arg));
 		}
 

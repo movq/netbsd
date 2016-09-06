@@ -17,6 +17,7 @@
 #ifndef LLVM_SUPPORT_REGEX_H
 #define LLVM_SUPPORT_REGEX_H
 
+#include "llvm/Support/Compiler.h"
 #include <string>
 
 struct llvm_regex;
@@ -45,7 +46,7 @@ namespace llvm {
 
     /// Compiles the given regular expression \p Regex.
     Regex(StringRef Regex, unsigned Flags = NoFlags);
-    Regex(const Regex &) = delete;
+    Regex(const Regex &) LLVM_DELETED_FUNCTION;
     Regex &operator=(Regex regex) {
       std::swap(preg, regex.preg);
       std::swap(error, regex.error);

@@ -1,7 +1,6 @@
-# $NetBSD: Makefile,v 1.13 2016/08/12 01:15:50 mrg Exp $
+# $NetBSD: Makefile,v 1.10 2010/11/23 08:22:32 mrg Exp $
 
 XMODULEDIR=	${X11USRLIBDIR}/modules/extensions
-XMODULEDIRANDSTATIC=	# define
 
 .include "../../../Makefile.serverlib"
 .include "../../../Makefile.servermod"
@@ -9,7 +8,7 @@ XMODULEDIRANDSTATIC=	# define
 LIB=	dri
 
 .PATH:	${X11SRCDIR.xorg-server}/hw/xfree86/${LIB}
-SRCS=	dri.c xf86dri.c
+SRCS=	dri.c drimodule.c xf86dri.c
 
 CPPFLAGS+=	-I${X11SRCDIR.xorg-server}/hw/xfree86/${LIB} \
 		-I${X11SRCDIR.xorg-server}/include \
@@ -35,8 +34,9 @@ CPPFLAGS+=	-I${X11SRCDIR.xorg-server}/hw/xfree86/${LIB} \
 CPPFLAGS+=	-DXF86DRI \
 		${X11FLAGS.DIX}
 
-CPPFLAGS.dri.c=		#-Wno-error
-CPPFLAGS.xf86dri.c=	#-Wno-error	# XXX xf86dristr.h
+CPPFLAGS.dri.c=		-Wno-error
+CPPFLAGS.drimodule.c=	-Wno-error	# XXX xf86dristr.h
+CPPFLAGS.xf86dri.c=	-Wno-error	# XXX xf86dristr.h
 
 LIBDPLIBS=	drm ${.CURDIR}/../../../../../lib/libdrm
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: isqemu.h,v 1.4 2015/01/03 14:21:05 gson Exp $	*/
+/*	$NetBSD: isqemu.h,v 1.3.10.1 2015/01/12 21:02:09 snj Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

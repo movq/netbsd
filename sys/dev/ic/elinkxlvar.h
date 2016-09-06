@@ -1,4 +1,4 @@
-/*	$NetBSD: elinkxlvar.h,v 1.25 2015/04/13 16:33:24 riastradh Exp $	*/
+/*	$NetBSD: elinkxlvar.h,v 1.24 2012/02/02 19:43:03 tls Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 /*
  * Ethernet software status per interface.

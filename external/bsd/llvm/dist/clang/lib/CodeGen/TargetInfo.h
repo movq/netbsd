@@ -47,18 +47,18 @@ class TargetCodeGenInfo {
 
 public:
   // WARNING: Acquires the ownership of ABIInfo.
-  TargetCodeGenInfo(ABIInfo *info = nullptr) : Info(info) {}
+  TargetCodeGenInfo(ABIInfo *info = 0) : Info(info) {}
   virtual ~TargetCodeGenInfo();
 
   /// getABIInfo() - Returns ABI info helper for the target.
   const ABIInfo &getABIInfo() const { return *Info; }
 
-  /// setTargetAttributes - Provides a convenient hook to handle extra
+  /// SetTargetAttributes - Provides a convenient hook to handle extra
   /// target-specific attributes for the given global.
-  virtual void setTargetAttributes(const Decl *D, llvm::GlobalValue *GV,
+  virtual void SetTargetAttributes(const Decl *D, llvm::GlobalValue *GV,
                                    CodeGen::CodeGenModule &M) const {}
 
-  /// emitTargetMD - Provides a convenient hook to handle extra
+  /// EmitTargetMD - Provides a convenient hook to handle extra
   /// target-specific metadata for the given global.
   virtual void emitTargetMD(const Decl *D, llvm::GlobalValue *GV,
                             CodeGen::CodeGenModule &M) const {}
@@ -218,7 +218,14 @@ public:
   virtual void getDetectMismatchOption(llvm::StringRef Name,
                                        llvm::StringRef Value,
                                        llvm::SmallString<32> &Opt) const {}
-};
-} // namespace clang
 
-#endif // LLVM_CLANG_LIB_CODEGEN_TARGETINFO_H
+  /// Gets the target-specific default alignment used when an 'aligned' clause
+  /// is used with a 'simd' OpenMP directive without specifying a specific
+  /// alignment.
+  virtual unsigned getOpenMPSimdDefaultAlignment(QualType Type) const {
+    return 0;
+  }
+};
+}
+
+#endif

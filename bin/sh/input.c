@@ -1,4 +1,4 @@
-/*	$NetBSD: input.c,v 1.51 2016/06/01 05:11:52 kre Exp $	*/
+/*	$NetBSD: input.c,v 1.46 2013/10/30 08:38:40 mrg Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)input.c	8.3 (Berkeley) 6/9/95";
 #else
-__RCSID("$NetBSD: input.c,v 1.51 2016/06/01 05:11:52 kre Exp $");
+__RCSID("$NetBSD: input.c,v 1.46 2013/10/30 08:38:40 mrg Exp $");
 #endif
 #endif /* not lint */
 
@@ -48,7 +48,6 @@ __RCSID("$NetBSD: input.c,v 1.51 2016/06/01 05:11:52 kre Exp $");
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/stat.h>
 
 /*
  * This file implements the input routines used by the parser.
@@ -393,7 +392,6 @@ setinputfile(const char *fname, int push)
 	unsigned char magic[4];
 	int fd;
 	int fd2;
-	struct stat sb;
 
 	INTOFF;
 	if ((fd = open(fname, O_RDONLY)) < 0)
@@ -404,27 +402,23 @@ setinputfile(const char *fname, int push)
 	 * avoid that message. The first lseek tries to make sure that
 	 * we can later rewind the file.
 	 */
-	if (fstat(fd, &sb) == 0 && S_ISREG(sb.st_mode) &&
-	    lseek(fd, 0, SEEK_SET) == 0) {
+	if (lseek(fd, 0, SEEK_SET) == 0) {
 		if (read(fd, magic, 4) == 4) {
-			if (memcmp(magic, "\177ELF", 4) == 0) {
-				(void)close(fd);
+			if (memcmp(magic, "\177ELF", 4) == 0)
 				error("Cannot execute ELF binary %s", fname);
-			}
 		}
-		if (lseek(fd, 0, SEEK_SET) != 0) {
-			(void)close(fd);
+		if (lseek(fd, 0, SEEK_SET) != 0)
 			error("Cannot rewind the file %s", fname);
-		}
 	}
 
-	fd2 = to_upper_fd(fd);	/* closes fd, returns higher equiv */
-	if (fd2 == fd) {
-		(void) close(fd);
-		error("Out of file descriptors");
+	if (fd < 10) {
+		fd2 = copyfd(fd, 10, 0);
+		close(fd);
+		if (fd2 < 0)
+			error("Out of file descriptors");
+		fd = fd2;
 	}
-
-	setinputfd(fd2, push);
+	setinputfd(fd, push);
 	INTON;
 }
 
@@ -459,7 +453,6 @@ setinputfd(int fd, int push)
 void
 setinputstring(char *string, int push)
 {
-
 	INTOFF;
 	if (push)
 		pushfile();

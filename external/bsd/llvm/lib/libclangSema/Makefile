@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.16 2016/02/27 21:47:35 joerg Exp $
+#	$NetBSD: Makefile,v 1.14.4.1 2015/06/04 20:05:46 snj Exp $
 
 LIB=	clangSema
 
@@ -25,7 +25,6 @@ SRCS+=	AnalysisBasedWarnings.cpp \
 	SemaChecking.cpp \
 	SemaCodeComplete.cpp \
 	SemaConsumer.cpp \
-	SemaCoroutine.cpp \
 	SemaDecl.cpp \
 	SemaDeclAttr.cpp \
 	SemaDeclCXX.cpp \

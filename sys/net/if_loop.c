@@ -1,4 +1,4 @@
-/*	$NetBSD: if_loop.c,v 1.92 2016/08/11 13:57:02 kre Exp $	*/
+/*	$NetBSD: if_loop.c,v 1.80 2014/06/07 11:00:29 rmind Exp $	*/
 
 /*
  * Copyright (C) 1995, 1996, 1997, and 1998 WIDE Project.
@@ -65,15 +65,14 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_loop.c,v 1.92 2016/08/11 13:57:02 kre Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_loop.c,v 1.80 2014/06/07 11:00:29 rmind Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
 #include "opt_atalk.h"
+#include "opt_ipx.h"
 #include "opt_mbuftrace.h"
 #include "opt_mpls.h"
-#include "opt_net_mpsafe.h"
-#endif
+
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -83,8 +82,6 @@ __KERNEL_RCSID(0, "$NetBSD: if_loop.c,v 1.92 2016/08/11 13:57:02 kre Exp $");
 #include <sys/errno.h>
 #include <sys/ioctl.h>
 #include <sys/time.h>
-#include <sys/device.h>
-#include <sys/module.h>
 
 #include <sys/cpu.h>
 
@@ -108,6 +105,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_loop.c,v 1.92 2016/08/11 13:57:02 kre Exp $");
 #include <netinet6/in6_var.h>
 #include <netinet6/in6_offload.h>
 #include <netinet/ip6.h>
+#endif
+
+#ifdef IPX
+#include <netipx/ipx.h>
+#include <netipx/ipx_if.h>
 #endif
 
 #ifdef MPLS
@@ -144,28 +146,8 @@ void
 loopattach(int n)
 {
 
-	/*
-	 * Nothing to do here, initialization is handled by the
-	 * module initialization code in loopnit() below).
-	 */
-}
-
-void
-loopinit(void)
-{
-
-	if (lo0ifp != NULL)	/* can happen in rump kernel */
-		return;
-
 	(void)loop_clone_create(&loop_cloner, 0);	/* lo0 always exists */
 	if_clone_attach(&loop_cloner);
-}
-
-static int
-loopdetach(void)
-{
-	/* no detach for now; we don't allow lo0 to be deleted */
-	return EBUSY;
 }
 
 static int
@@ -179,7 +161,6 @@ loop_clone_create(struct if_clone *ifc, int unit)
 
 	ifp->if_mtu = LOMTU;
 	ifp->if_flags = IFF_LOOPBACK | IFF_MULTICAST | IFF_RUNNING;
-	ifp->if_extflags = IFEF_OUTPUT_MPSAFE;
 	ifp->if_ioctl = loioctl;
 	ifp->if_output = looutput;
 #ifdef ALTQ
@@ -228,30 +209,27 @@ loop_clone_destroy(struct ifnet *ifp)
 
 int
 looutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
-    const struct rtentry *rt)
+    struct rtentry *rt)
 {
 	pktqueue_t *pktq = NULL;
 	struct ifqueue *ifq = NULL;
 	int s, isr = -1;
 	int csum_flags;
-	int error = 0;
 	size_t pktlen;
 
 	MCLAIM(m, ifp->if_mowner);
-
-	KERNEL_LOCK(1, NULL);
+	KASSERT(KERNEL_LOCKED_P());
 
 	if ((m->m_flags & M_PKTHDR) == 0)
 		panic("looutput: no header mbuf");
 	if (ifp->if_flags & IFF_LOOPBACK)
 		bpf_mtap_af(ifp, dst->sa_family, m);
-	m_set_rcvif(m, ifp);
+	m->m_pkthdr.rcvif = ifp;
 
 	if (rt && rt->rt_flags & (RTF_REJECT|RTF_BLACKHOLE)) {
 		m_freem(m);
-		error = (rt->rt_flags & RTF_BLACKHOLE ? 0 :
+		return (rt->rt_flags & RTF_BLACKHOLE ? 0 :
 			rt->rt_flags & RTF_HOST ? EHOSTUNREACH : ENETUNREACH);
-		goto out;
 	}
 
 	pktlen = m->m_pkthdr.len;
@@ -265,21 +243,25 @@ looutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 	 */
 	if ((ALTQ_IS_ENABLED(&ifp->if_snd) || TBR_IS_ENABLED(&ifp->if_snd)) &&
 	    ifp->if_start == lostart) {
+		struct altq_pktattr pktattr;
+		int error;
+
 		/*
 		 * If the queueing discipline needs packet classification,
 		 * do it before prepending the link headers.
 		 */
-		IFQ_CLASSIFY(&ifp->if_snd, m, dst->sa_family);
+		IFQ_CLASSIFY(&ifp->if_snd, m, dst->sa_family, &pktattr);
 
 		M_PREPEND(m, sizeof(uint32_t), M_DONTWAIT);
-		if (m == NULL) {
-			error = ENOBUFS;
-			goto out;
-		}
+		if (m == NULL)
+			return (ENOBUFS);
 		*(mtod(m, uint32_t *)) = dst->sa_family;
 
-		error = if_transmit_lock(ifp, m);
-		goto out;
+		s = splnet();
+		IFQ_ENQUEUE(&ifp->if_snd, m, &pktattr, error);
+		(*ifp->if_start)(ifp);
+		splx(s);
+		return (error);
 	}
 #endif /* ALTQ */
 
@@ -324,6 +306,12 @@ looutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 		pktq = ip6_pktq;
 		break;
 #endif
+#ifdef IPX
+	case AF_IPX:
+		ifq = &ipxintrq;
+		isr = NETISR_IPX;
+		break;
+#endif
 #ifdef NETATALK
 	case AF_APPLETALK:
 	        ifq = &atintrq2;
@@ -334,13 +322,12 @@ looutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 		printf("%s: can't handle af%d\n", ifp->if_xname,
 		    dst->sa_family);
 		m_freem(m);
-		error = EAFNOSUPPORT;
-		goto out;
+		return (EAFNOSUPPORT);
 	}
 
 	s = splnet();
 	if (__predict_true(pktq)) {
-		error = 0;
+		int error = 0;
 
 		if (__predict_true(pktq_enqueue(pktq, m, 0))) {
 			ifp->if_ipackets++;
@@ -350,23 +337,20 @@ looutput(struct ifnet *ifp, struct mbuf *m, const struct sockaddr *dst,
 			error = ENOBUFS;
 		}
 		splx(s);
-		goto out;
+		return error;
 	}
 	if (IF_QFULL(ifq)) {
 		IF_DROP(ifq);
 		m_freem(m);
 		splx(s);
-		error = ENOBUFS;
-		goto out;
+		return (ENOBUFS);
 	}
 	IF_ENQUEUE(ifq, m);
 	schednetisr(isr);
 	ifp->if_ipackets++;
 	ifp->if_ibytes += m->m_pkthdr.len;
 	splx(s);
-out:
-	KERNEL_UNLOCK_ONE(NULL);
-	return error;
+	return (0);
 }
 
 #ifdef ALTQ
@@ -398,6 +382,12 @@ lostart(struct ifnet *ifp)
 		case AF_INET6:
 			m->m_flags |= M_LOOP;
 			pktq = ip6_pktq;
+			break;
+#endif
+#ifdef IPX
+		case AF_IPX:
+			ifq = &ipxintrq;
+			isr = NETISR_IPX;
 			break;
 #endif
 #ifdef NETATALK
@@ -509,10 +499,3 @@ loioctl(struct ifnet *ifp, u_long cmd, void *data)
 	}
 	return (error);
 }
-
-/*
- * Module infrastructure
- */
-#include "if_module.h"
-
-IF_MODULE(MODULE_CLASS_DRIVER, loop, "")

@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs_node.c,v 1.37 2016/08/20 12:37:08 hannken Exp $	*/
+/*	$NetBSD: puffs_node.c,v 1.31.4.5 2015/01/17 12:10:54 martin Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007  Antti Kantee.  All Rights Reserved.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: puffs_node.c,v 1.37 2016/08/20 12:37:08 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: puffs_node.c,v 1.31.4.5 2015/01/17 12:10:54 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/hash.h>
@@ -193,6 +193,7 @@ puffs_putvnode(struct vnode *vp)
 
 	KASSERT(vp->v_tag == VT_PUFFS);
 
+	vcache_remove(vp->v_mount, &pnode->pn_cookie, sizeof(pnode->pn_cookie));
 	genfs_node_destroy(vp);
 	
 	/*

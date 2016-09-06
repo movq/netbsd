@@ -726,7 +726,7 @@ EXTERN_DEVICE\
    */
 
 EXTERN_DEVICE\
-(void) device_error
+(void volatile) device_error
 (device *me,
  const char *fmt,
  ...) __attribute__ ((format (printf, 2, 3)));

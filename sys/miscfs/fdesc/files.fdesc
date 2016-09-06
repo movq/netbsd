@@ -1,7 +1,6 @@
-#	$NetBSD: files.fdesc,v 1.4 2014/10/11 06:42:20 uebayasi Exp $
+#	$NetBSD: files.fdesc,v 1.3 2005/12/11 12:24:50 christos Exp $
 
 deffs	FDESC
 
-define	fdesc: vfs
 file	miscfs/fdesc/fdesc_vfsops.c	fdesc
 file	miscfs/fdesc/fdesc_vnops.c	fdesc

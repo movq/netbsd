@@ -10,8 +10,6 @@
  * You may distribute under the terms of the GNU General Public License as
  * specified in the README file that comes with the CVS source distribution.
  */
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: parseinfo.c,v 1.4 2016/05/17 14:00:09 christos Exp $");
 
 #include "cvs.h"
 #include "getline.h"

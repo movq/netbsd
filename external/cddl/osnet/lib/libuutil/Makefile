@@ -1,6 +1,5 @@
-#	$NetBSD: Makefile,v 1.5 2016/08/04 17:07:24 christos Exp $
+#	$NetBSD: Makefile,v 1.4 2011/01/13 23:18:24 haad Exp $
 
-.include <bsd.init.mk>
 .PATH: ${.CURDIR}/../../dist/lib/libuutil/common
 .PATH: ${.CURDIR}/../../dist/common/avl
 

@@ -1,4 +1,4 @@
-.\"	$NetBSD: ddb.4,v 1.161 2016/04/13 00:47:01 ozaki-r Exp $
+.\"	$NetBSD: ddb.4,v 1.156 2014/06/12 13:47:58 christos Exp $
 .\"
 .\" Copyright (c) 1997 - 2009 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -56,7 +56,7 @@
 .\" any improvements or extensions that they make and grant Carnegie Mellon
 .\" the rights to redistribute these changes.
 .\"
-.Dd April 13, 2016
+.Dd June 12, 2014
 .Dt DDB 4
 .Os
 .Sh NAME
@@ -149,8 +149,6 @@ Abort switch on CPU card.
 rcons console.
 .It ""
 \*[Lt]Break\*[Gt] on serial console.
-.It sandpoint
-\*[Lt]Break\*[Gt] on serial console.
 .It sparc
 \*[Lt]L1\*[Gt]-A, or \*[Lt]Stop\*[Gt]-A on a
 .Tn Sun
@@ -210,6 +208,7 @@ or by setting
 with
 .Xr sysctl 8 .
 Multiple commands can be separated by a semi-colon.
+
 .Sh COMMAND SYNTAX
 The general command syntax is:
 .Bd -ragged -offset indent
@@ -602,11 +601,11 @@ LWP name and wait channel message.
 LWPs currently running on a CPU are marked with the '\&>' sign.
 This is the default.
 .El
-.It Ic show routes
+.It Ic show arptab
 Dump the entire
 .Dv AF_INET
 routing table.
-This command is available only on systems which support inet.
+This command is available only on systems which support inet and ARP.
 .It Ic show breaks
 Display all breakpoints.
 .It Ic show buf Ns Oo Cm /f Oc Ar address
@@ -741,14 +740,11 @@ queue, the queue index will be prefixed with a
 .Sq \&! .
 .It Ic show uvmexp
 Print a selection of UVM counters and statistics.
-.It Ic show kernhist Oo Ar addr Oc
-Dumps all the kernel histories if no address is specified, or the history
-at the address.
+.It Ic show kernhist
+Dumps the kernel histories.
 This command is available only if a kernel is compiled with
 .Cd options KERNHIST
 or
-.Cd options USB_DEBUG
-(or related options) or
 .Cd options UVMHIST .
 .It Ic show vnode Ns Oo Cm /f Oc Ar address
 Print the vnode at

@@ -1,4 +1,4 @@
-/*	$NetBSD: sysv_sem.c,v 1.95 2015/11/06 02:26:42 pgoyette Exp $	*/
+/*	$NetBSD: sysv_sem.c,v 1.90 2014/02/25 18:30:11 pooka Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2007 The NetBSD Foundation, Inc.
@@ -39,11 +39,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysv_sem.c,v 1.95 2015/11/06 02:26:42 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysv_sem.c,v 1.90 2014/02/25 18:30:11 pooka Exp $");
 
-#ifdef _KERNEL_OPT
-#include "opt_sysv.h"
-#endif
+#define SYSVSEM
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -53,7 +51,6 @@ __KERNEL_RCSID(0, "$NetBSD: sysv_sem.c,v 1.95 2015/11/06 02:26:42 pgoyette Exp $
 #include <sys/mount.h>		/* XXX for <sys/syscallargs.h> */
 #include <sys/syscallargs.h>
 #include <sys/kauth.h>
-#include <sys/once.h>
 
 /* 
  * Memory areas:
@@ -88,21 +85,12 @@ static u_int		sem_waiters		__cacheline_aligned;
 #define SEM_PRINTF(a)
 #endif
 
-void *hook;	/* cookie from exithook_establish() */
-
-extern int kern_has_sysvsem;
-
-SYSCTL_SETUP_PROTO(sysctl_ipc_sem_setup);
-
 struct sem_undo *semu_alloc(struct proc *);
 int semundo_adjust(struct proc *, struct sem_undo **, int, int, int);
 void semundo_clear(int, int);
 
-static ONCE_DECL(exithook_control);
-static int seminit_exithook(void);
-
 void
-seminit(struct sysctllog **clog)
+seminit(void)
 {
 	int i, sz;
 	vaddr_t v;
@@ -140,61 +128,9 @@ seminit(struct sysctllog **clog)
 		suptr->un_proc = NULL;
 	}
 	semu_list = NULL;
+	exithook_establish(semexit, NULL);
 
-	kern_has_sysvsem = 1;
-
-#ifdef _MODULE
-	if (clog)
-		sysctl_ipc_sem_setup(clog);
-#endif
-}
-
-static int
-seminit_exithook(void)
-{
-
-	hook = exithook_establish(semexit, NULL);
-	return 0;
-}
-
-int
-semfini(void)
-{
-	int i, sz;
-	vaddr_t v = (vaddr_t)sema;
-
-	/* Don't allow module unload if we're busy */
-	mutex_enter(&semlock);
-	if (semtot) {
-		mutex_exit(&semlock);
-		return 1;
-	}
-
-	/* Remove the exit hook */
-	if (hook)
-		exithook_disestablish(hook);
-
-	/* Destroy all our condvars */
-	for (i = 0; i < seminfo.semmni; i++) {
-		cv_destroy(&semcv[i]);
-	}
-
-	/* Free the wired memory that we allocated */
-	sz = ALIGN(seminfo.semmni * sizeof(struct semid_ds)) +
-	    ALIGN(seminfo.semmns * sizeof(struct __sem)) +
-	    ALIGN(seminfo.semmni * sizeof(kcondvar_t)) +
-	    ALIGN(seminfo.semmnu * seminfo.semusz);
-	sz = round_page(sz);
-	uvm_km_free(kernel_map, v, sz, UVM_KMF_WIRED);
-
-	/* Destroy the last cv and mutex */
-	cv_destroy(&sem_realloc_cv);
-	mutex_exit(&semlock);
-	mutex_destroy(&semlock);
-
-	kern_has_sysvsem = 0;
-
-	return 0;
+	sysvipcinit();
 }
 
 static int
@@ -347,8 +283,6 @@ int
 sys_semconfig(struct lwp *l, const struct sys_semconfig_args *uap, register_t *retval)
 {
 
-	RUN_ONCE(&exithook_control, seminit_exithook);
-
 	*retval = 0;
 	return 0;
 }
@@ -410,7 +344,7 @@ semundo_adjust(struct proc *p, struct sem_undo **supptr, int semid, int semnum,
     int adjval)
 {
 	struct sem_undo *suptr;
-	struct sem_undo_entry *sunptr;
+	struct undo *sunptr;
 	int i;
 
 	KASSERT(mutex_owned(&semlock));
@@ -468,7 +402,7 @@ void
 semundo_clear(int semid, int semnum)
 {
 	struct sem_undo *suptr;
-	struct sem_undo_entry *sunptr, *sunend;
+	struct undo *sunptr, *sunend;
 
 	KASSERT(mutex_owned(&semlock));
 
@@ -505,8 +439,6 @@ sys_____semctl50(struct lwp *l, const struct sys_____semctl50_args *uap,
 	int cmd, error;
 	void *pass_arg;
 	union __semun karg;
-
-	RUN_ONCE(&exithook_control, seminit_exithook);
 
 	cmd = SCARG(uap, cmd);
 
@@ -709,8 +641,6 @@ sys_semget(struct lwp *l, const struct sys_semget_args *uap, register_t *retval)
 	int semflg = SCARG(uap, semflg);
 	kauth_cred_t cred = l->l_cred;
 
-	RUN_ONCE(&exithook_control, seminit_exithook);
-
 	SEM_PRINTF(("semget(0x%x, %d, 0%o)\n", key, nsems, semflg));
 
 	mutex_enter(&semlock);
@@ -817,8 +747,6 @@ sys_semop(struct lwp *l, const struct sys_semop_args *uap, register_t *retval)
 	kauth_cred_t cred = l->l_cred;
 	int i, error;
 	int do_wakeup, do_undos;
-
-	RUN_ONCE(&exithook_control, seminit_exithook);
 
 	SEM_PRINTF(("call to semop(%d, %p, %zd)\n", semid, SCARG(uap,sops), nsops));
 
@@ -1135,6 +1063,7 @@ semexit(struct proc *p, void *v)
 
 			semaptr = &sema[semid];
 			if ((semaptr->sem_perm.mode & SEM_ALLOC) == 0)
+				panic("semexit - semid not allocated");
 			if (semnum >= semaptr->sem_nsems)
 				panic("semexit - semnum out of range");
 

@@ -1,4 +1,4 @@
-# $NetBSD: GENERIC,v 1.322 2016/05/28 22:24:51 sevan Exp $
+# $NetBSD: GENERIC,v 1.312.4.3 2015/05/15 03:44:18 snj Exp $
 #
 # GENERIC machine description file
 # 
@@ -22,7 +22,7 @@ include		"arch/macppc/conf/std.macppc"
 
 options 	INCLUDE_CONFIG_FILE	# embed config file in kernel binary
 
-#ident 		"GENERIC-$Revision: 1.322 $"
+#ident 		"GENERIC-$Revision: 1.312.4.3 $"
 
 maxusers	32
 
@@ -74,10 +74,9 @@ options 	COMPAT_15	# NetBSD 1.5,
 options 	COMPAT_16	# NetBSD 1.6,
 options 	COMPAT_20	# NetBSD 2.0,
 options 	COMPAT_30	# NetBSD 3.0,
-options 	COMPAT_40	# NetBSD 4.0,
-options 	COMPAT_50	# NetBSD 5.0,
-options 	COMPAT_60	# NetBSD 6.0, and
-options 	COMPAT_70	# NetBSD 7.0 binary compatibility.
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
+options 	COMPAT_50	# NetBSD 5.0 compatibility.
+options 	COMPAT_60	# NetBSD 6.0 compatibility.
 options 	COMPAT_43	# and 4.3BSD
 #options 	COMPAT_386BSD_MBRPART # recognize old partition ID
 #options 	COMPAT_LINUX	# Linux binary compatibility
@@ -87,9 +86,9 @@ options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 # Wedge support
 options         DKWEDGE_AUTODISCOVER    # Automatically add dk(4) instances
 options         DKWEDGE_METHOD_GPT      # Supports GPT partitions as wedges
-#options		DKWEDGE_METHOD_BSDLABEL # Support disklabel entries as wedges
-#options		DKWEDGE_METHOD_MBR      # Support MBR partitions as wedges
-#options		DKWEDGE_METHOD_APPLE    # Support Apple partitions as wedges
+# The following two options can break /etc/fstab, so handle with care
+#options        DKWEDGE_METHOD_BSDLABEL # Support disklabel entries as wedges
+#options        DKWEDGE_METHOD_MBR      # Support MBR partitions as wedges
 
 # File systems
 file-system 	FFS		# UFS
@@ -297,6 +296,7 @@ voodoofb*	at pci? function ?	# 3Dfx Voodoo3
 
 # ATI Radeon. Still has problems on some hardware
 radeonfb*	at pci? function ?
+options 	RADEONFB_MMAP_BARS	# allow mmap()ing BARs - needed for X
 
 # generic PCI framebuffer, should work with everything supported by OF
 genfb*		at pci? function ?
@@ -526,7 +526,7 @@ udav*	at uhub? port ?		# Davicom DM9601 based adapters
 ukyopon* at uhub? port ?				# Kyocera AIR-EDGE PHONE
 ucom*	at ukyopon? portno ?
 
-#uscanner* at uhub? port ?				# USB scanners
+uscanner* at uhub? port ?				# USB scanners
 uyap* at uhub? port ?					# Y@P firmware loader
 ugen*	at uhub? port ? configuration ? interface ?	# USB Generic driver
 

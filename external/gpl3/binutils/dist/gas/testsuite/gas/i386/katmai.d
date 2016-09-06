@@ -160,6 +160,7 @@ Disassembly of section .text:
  237:	0f 18 0c 98 [ 	]*prefetcht0 \(%eax,%ebx,4\)
  23b:	0f 18 12 [ 	]*prefetcht1 \(%edx\)
  23e:	0f 18 19 [ 	]*prefetcht2 \(%ecx\)
- 241:	65 0f ae[ 	]*gs \(bad\).*
+ 241:	65 [ 	]*gs
+ 242:	0f ae[ 	]*\(bad\).*
  244:	ff 00 [ 	]*incl   \(%eax\)
 #pass

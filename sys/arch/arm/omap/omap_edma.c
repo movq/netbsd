@@ -1,4 +1,4 @@
-/* $NetBSD: omap_edma.c,v 1.3 2016/07/09 15:04:06 kiyohara Exp $ */
+/* $NetBSD: omap_edma.c,v 1.1.2.2 2015/04/19 04:37:17 msaitoh Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: omap_edma.c,v 1.3 2016/07/09 15:04:06 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: omap_edma.c,v 1.1.2.2 2015/04/19 04:37:17 msaitoh Exp $");
 
 #include "opt_omap.h"
 
@@ -39,16 +39,14 @@ __KERNEL_RCSID(0, "$NetBSD: omap_edma.c,v 1.3 2016/07/09 15:04:06 kiyohara Exp $
 #include <sys/bus.h>
 #include <sys/bitops.h>
 
-#include <arm/mainbus/mainbus.h>
-
 #include <arm/omap/am335x_prcm.h>
 #include <arm/omap/omap2_prcm.h>
 #include <arm/omap/sitara_cm.h>
 #include <arm/omap/sitara_cmreg.h>
 
 #include <arm/omap/omap2_reg.h>
+#include <arm/omap/omap2_obiovar.h>
 #include <arm/omap/omap_edma.h>
-#include <arm/omap/omap_var.h>
 
 #ifdef TI_AM335X
 static const struct omap_module edma3cc_module =
@@ -122,12 +120,12 @@ CFATTACH_DECL_NEW(edma, sizeof(struct edma_softc),
 static int
 edma_match(device_t parent, cfdata_t match, void *aux)
 {
-	struct mainbus_attach_args *mb = aux;
+	struct obio_attach_args *obio = aux;
 
 #ifdef TI_AM335X
-	if (mb->mb_iobase == AM335X_TPCC_BASE &&
-	    mb->mb_iosize == AM335X_TPCC_SIZE &&
-	    mb->mb_intrbase == AM335X_INT_EDMACOMPINT)
+	if (obio->obio_addr == AM335X_TPCC_BASE &&
+	    obio->obio_size == AM335X_TPCC_SIZE &&
+	    obio->obio_intrbase == AM335X_INT_EDMACOMPINT)
 		return 1;
 #endif
 
@@ -138,13 +136,13 @@ static void
 edma_attach(device_t parent, device_t self, void *aux)
 {
 	struct edma_softc *sc = device_private(self);
-	struct mainbus_attach_args *mb = aux;
+	struct obio_attach_args *obio = aux;
 	int idx;
 
 	sc->sc_dev = self;
-	sc->sc_iot = &omap_bs_tag;
+	sc->sc_iot = obio->obio_iot;
 	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_SCHED);
-	if (bus_space_map(sc->sc_iot, mb->mb_iobase, mb->mb_iosize,
+	if (bus_space_map(obio->obio_iot, obio->obio_addr, obio->obio_size,
 	    0, &sc->sc_ioh) != 0) {
 		aprint_error(": couldn't map address spcae\n");
 		return;
@@ -165,13 +163,13 @@ edma_attach(device_t parent, device_t self, void *aux)
 
 	edma_init(sc);
 
-	sc->sc_ih = intr_establish(mb->mb_intrbase + 0,
+	sc->sc_ih = intr_establish(obio->obio_intrbase + 0,
 	    IPL_SCHED, IST_LEVEL, edma_intr, sc);
 	KASSERT(sc->sc_ih != NULL);
 
-	sc->sc_mperr_ih = intr_establish(mb->mb_intrbase + 1,
+	sc->sc_mperr_ih = intr_establish(obio->obio_intrbase + 1,
 	    IPL_SCHED, IST_LEVEL, edma_mperr_intr, sc);
-	sc->sc_errint_ih = intr_establish(mb->mb_intrbase + 2,
+	sc->sc_errint_ih = intr_establish(obio->obio_intrbase + 2,
 	    IPL_SCHED, IST_LEVEL, edma_errint_intr, sc);
 }
 
@@ -504,7 +502,7 @@ edma_halt(struct edma_channel *ch)
 	bus_size_t off = (ch->ch_index < 32 ? 0 : 4);
 	uint32_t bit = __BIT(ch->ch_index < 32 ?
 			     ch->ch_index : ch->ch_index - 32);
-
+	
 	EDMA_WRITE(sc, EDMA_EECR_REG + off, bit);
 	EDMA_WRITE(sc, EDMA_ECR_REG + off, bit);
 	EDMA_WRITE(sc, EDMA_SECR_REG + off, bit);

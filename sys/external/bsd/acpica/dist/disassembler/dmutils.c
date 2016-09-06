@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,7 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+
 #include "acpi.h"
 #include "accommon.h"
 #include "amlcode.h"
@@ -50,6 +51,7 @@
 #include <acnamesp.h>
 #endif
 
+#ifdef ACPI_DISASSEMBLER
 
 #define _COMPONENT          ACPI_CA_DEBUGGER
         ACPI_MODULE_NAME    ("dmutils")
@@ -227,7 +229,7 @@ AcpiDmIndent (
         return;
     }
 
-    AcpiOsPrintf ("%*.s", (Level * 4), " ");
+    AcpiOsPrintf ("%*.s", ACPI_MUL_4 (Level), " ");
 }
 
 
@@ -255,13 +257,6 @@ AcpiDmCommaIfListMember (
 
     if (AcpiDmListType (Op->Common.Parent) & BLOCK_COMMA_LIST)
     {
-        /* Exit if Target has been marked IGNORE */
-
-        if (Op->Common.Next->Common.DisasmFlags & ACPI_PARSEOP_IGNORE)
-        {
-            return (FALSE);
-        }
-
         /* Check for a NULL target operand */
 
         if ((Op->Common.Next->Common.AmlOpcode == AML_INT_NAMEPATH_OP) &&
@@ -279,24 +274,18 @@ AcpiDmCommaIfListMember (
             }
         }
 
-        if ((Op->Common.DisasmFlags & ACPI_PARSEOP_PARAMETER_LIST) &&
-            (!(Op->Common.Next->Common.DisasmFlags & ACPI_PARSEOP_PARAMETER_LIST)))
+        if ((Op->Common.DisasmFlags & ACPI_PARSEOP_PARAMLIST) &&
+            (!(Op->Common.Next->Common.DisasmFlags & ACPI_PARSEOP_PARAMLIST)))
         {
             return (FALSE);
         }
 
-        /* Emit comma only if this is not a C-style operator */
-
-        if (!Op->Common.OperatorSymbol)
-        {
-            AcpiOsPrintf (", ");
-        }
-
+        AcpiOsPrintf (", ");
         return (TRUE);
     }
 
-    else if ((Op->Common.DisasmFlags & ACPI_PARSEOP_PARAMETER_LIST) &&
-             (Op->Common.Next->Common.DisasmFlags & ACPI_PARSEOP_PARAMETER_LIST))
+    else if ((Op->Common.DisasmFlags & ACPI_PARSEOP_PARAMLIST) &&
+             (Op->Common.Next->Common.DisasmFlags & ACPI_PARSEOP_PARAMLIST))
     {
         AcpiOsPrintf (", ");
         return (TRUE);
@@ -328,3 +317,5 @@ AcpiDmCommaIfFieldMember (
         AcpiOsPrintf (", ");
     }
 }
+
+#endif

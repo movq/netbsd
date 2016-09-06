@@ -1,4 +1,4 @@
-/* $NetBSD: configmenu.c,v 1.5 2015/05/11 13:07:57 martin Exp $ */
+/* $NetBSD: configmenu.c,v 1.2.4.2 2015/05/14 07:58:49 snj Exp $ */
 
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.

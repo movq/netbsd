@@ -18,6 +18,7 @@
 
 #include "llvm/MC/MCDirectives.h"
 #include "llvm/MC/MCDwarf.h"
+#include "llvm/MC/MachineLocation.h"
 #include <cassert>
 #include <vector>
 
@@ -36,17 +37,17 @@ enum class EncodingType {
   ARM,     /// Windows NT (Windows on ARM)
   CE,      /// Windows CE ARM, PowerPC, SH3, SH4
   Itanium, /// Windows x64, Windows Itanium (IA-64)
-  X86,     /// Windows x86, uses no CFI, just EH tables
   MIPS = Alpha,
 };
 }
 
 enum class ExceptionHandling {
-  None,     /// No exception support
-  DwarfCFI, /// DWARF-like instruction based exceptions
-  SjLj,     /// setjmp/longjmp based exceptions
-  ARM,      /// ARM EHABI
-  WinEH,    /// Windows Exception Handling
+  None,         /// No exception support
+  DwarfCFI,     /// DWARF-like instruction based exceptions
+  SjLj,         /// setjmp/longjmp based exceptions
+  ARM,          /// ARM EHABI
+  ItaniumWinEH, /// Itanium EH built on Windows unwind info (.pdata and .xdata)
+  MSVC,         /// MSVC compatible exception handling
 };
 
 namespace LCOMM {
@@ -118,9 +119,6 @@ protected:
   // Print the EH begin symbol with an assignment. Defaults to false.
   bool UseAssignmentForEHBegin;
 
-  // Do we need to create a local symbol for .size?
-  bool NeedsLocalForSize;
-
   /// This prefix is used for globals like constant pool entries that are
   /// completely private to the .s file and should not have names in the .o
   /// file.  Defaults to "L"
@@ -154,10 +152,6 @@ protected:
   /// This is true if the assembler allows @ characters in symbol names.
   /// Defaults to false.
   bool AllowAtInName;
-
-  /// If this is true, symbol names with invalid characters will be printed in
-  /// quotes.
-  bool SupportsQuotedNames;
 
   /// This is true if data region markers should be printed as
   /// ".data_region/.end_data_region" directives. If false, use "$d/$a" labels
@@ -232,7 +226,7 @@ protected:
 
   /// True if the expression
   ///   .long f - g
-  /// uses a relocation but it can be suppressed by writing
+  /// uses an relocation but it can be supressed by writting
   ///   a = f - g
   ///   .long a
   bool SetDirectiveSuppressesReloc;
@@ -259,10 +253,6 @@ protected:
   /// Describes if the .lcomm directive for the target supports an alignment
   /// argument and how it is interpreted.  Defaults to NoAlignment.
   LCOMM::LCOMMType LCOMMDirectiveAlignmentType;
-
-  // True if the target allows .align directives on functions. This is true for
-  // most targets, so defaults to true.
-  bool HasFunctionAlignment;
 
   /// True if the target has .type and .size directives, this is true for most
   /// ELF targets.  Defaults to true.
@@ -343,7 +333,7 @@ protected:
 
   std::vector<MCCFIInstruction> InitialFrameState;
 
-  //===--- Integrated Assembler Information ----------------------------===//
+  //===--- Integrated Assembler State ----------------------------------===//
 
   /// Should we use the integrated assembler?
   /// The integrated assembler should be enabled by default (by the
@@ -354,10 +344,6 @@ protected:
 
   /// Compress DWARF debug sections. Defaults to false.
   bool CompressDebugSections;
-
-  /// True if the integrated assembler should interpret 'a >> b' constant
-  /// expressions as logical rather than arithmetic.
-  bool UseLogicalShr;
 
 public:
   explicit MCAsmInfo();
@@ -392,7 +378,7 @@ public:
   /// Targets can implement this method to specify a section to switch to if the
   /// translation unit doesn't have any trampolines that require an executable
   /// stack.
-  virtual MCSection *getNonexecutableStackSection(MCContext &Ctx) const {
+  virtual const MCSection *getNonexecutableStackSection(MCContext &Ctx) const {
     return nullptr;
   }
 
@@ -409,19 +395,6 @@ public:
   virtual const MCExpr *getExprForFDESymbol(const MCSymbol *Sym,
                                             unsigned Encoding,
                                             MCStreamer &Streamer) const;
-
-  /// Return true if the identifier \p Name does not need quotes to be
-  /// syntactically correct.
-  virtual bool isValidUnquotedName(StringRef Name) const;
-
-  /// Return true if the .section directive should be omitted when
-  /// emitting \p SectionName.  For example:
-  ///
-  /// shouldOmitSectionDirective(".text")
-  ///
-  /// returns false => .section .text,#alloc,#execinstr
-  /// returns true  => .text
-  virtual bool shouldOmitSectionDirective(StringRef SectionName) const;
 
   bool usesSunStyleELFSectionSwitchSyntax() const {
     return SunStyleELFSectionSwitchSyntax;
@@ -455,7 +428,6 @@ public:
   const char *getLabelSuffix() const { return LabelSuffix; }
 
   bool useAssignmentForEHBegin() const { return UseAssignmentForEHBegin; }
-  bool needsLocalForSize() const { return NeedsLocalForSize; }
   const char *getPrivateGlobalPrefix() const { return PrivateGlobalPrefix; }
   const char *getPrivateLabelPrefix() const { return PrivateLabelPrefix; }
   bool hasLinkerPrivateGlobalPrefix() const {
@@ -473,7 +445,6 @@ public:
   const char *getCode64Directive() const { return Code64Directive; }
   unsigned getAssemblerDialect() const { return AssemblerDialect; }
   bool doesAllowAtInName() const { return AllowAtInName; }
-  bool supportsNameQuoting() const { return SupportsQuotedNames; }
   bool doesSupportDataRegionDirectives() const {
     return UseDataRegionDirectives;
   }
@@ -493,7 +464,6 @@ public:
   LCOMM::LCOMMType getLCOMMDirectiveAlignmentType() const {
     return LCOMMDirectiveAlignmentType;
   }
-  bool hasFunctionAlignment() const { return HasFunctionAlignment; }
   bool hasDotTypeDotSizeDirective() const { return HasDotTypeDotSizeDirective; }
   bool hasSingleParameterDotFile() const { return HasSingleParameterDotFile; }
   bool hasIdentDirective() const { return HasIdentDirective; }
@@ -520,17 +490,18 @@ public:
   ExceptionHandling getExceptionHandlingType() const { return ExceptionsType; }
   WinEH::EncodingType getWinEHEncodingType() const { return WinEHEncodingType; }
 
-  /// Returns true if the exception handling method for the platform uses call
-  /// frame information to unwind.
-  bool usesCFIForEH() const {
+  /// Return true if the exception handling type uses the language-specific data
+  /// area (LSDA) format specified by the Itanium C++ ABI.
+  bool usesItaniumLSDAForExceptions() const {
     return (ExceptionsType == ExceptionHandling::DwarfCFI ||
-            ExceptionsType == ExceptionHandling::ARM || usesWindowsCFI());
+            ExceptionsType == ExceptionHandling::ARM ||
+            // This Windows EH type uses the Itanium LSDA encoding.
+            ExceptionsType == ExceptionHandling::ItaniumWinEH);
   }
 
   bool usesWindowsCFI() const {
-    return ExceptionsType == ExceptionHandling::WinEH &&
-           (WinEHEncodingType != WinEH::EncodingType::Invalid &&
-            WinEHEncodingType != WinEH::EncodingType::X86);
+    return ExceptionsType == ExceptionHandling::ItaniumWinEH ||
+           ExceptionsType == ExceptionHandling::MSVC;
   }
 
   bool doesDwarfUseRelocationsAcrossSections() const {
@@ -561,8 +532,6 @@ public:
   void setCompressDebugSections(bool CompressDebugSections) {
     this->CompressDebugSections = CompressDebugSections;
   }
-
-  bool shouldUseLogicalShr() const { return UseLogicalShr; }
 };
 }
 

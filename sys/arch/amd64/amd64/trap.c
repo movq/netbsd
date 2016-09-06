@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.84 2016/08/11 14:58:29 maxv Exp $	*/
+/*	$NetBSD: trap.c,v 1.78 2014/03/11 20:54:29 para Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2000 The NetBSD Foundation, Inc.
@@ -68,7 +68,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.84 2016/08/11 14:58:29 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.78 2014/03/11 20:54:29 para Exp $");
 
 #include "opt_ddb.h"
 #include "opt_kgdb.h"
@@ -261,7 +261,7 @@ trap(struct trapframe *frame)
 	/*
 	 * A trap can occur while DTrace executes a probe. Before
 	 * executing the probe, DTrace blocks re-scheduling and sets
-	 * a flag in its per-cpu flags to indicate that it doesn't
+	 * a flag in it's per-cpu flags to indicate that it doesn't
 	 * want to fault. On returning from the the probe, the no-fault
 	 * flag is cleared and finally re-scheduling is enabled.
 	 *
@@ -342,16 +342,6 @@ kernelfault:
 		/* Get %rsp value before fault - there may be a pad word
 		 * below the trap frame. */
 		vframe = (void *)frame->tf_rsp;
-		if (frame->tf_rip == 0) {
-			/*
-			 * Assume that if we jumped to null we
-			 * probably did it via a null function
-			 * pointer, so print the return address.
-			 */
-			printf("kernel jumped to null; return addr was %p\n",
-			       *(void **)frame->tf_rsp);
-			goto we_re_toast;
-		}
 		switch (*(uint16_t *)frame->tf_rip) {
 		case 0xcf48:	/* iretq */
 			/*
@@ -374,7 +364,7 @@ kernelfault:
 		case 0x848e:	/* mov 0xa8(%rsp),%es (8e 84 24 a8 00 00 00) */
 		case 0x9c8e:	/* mov 0xb0(%rsp),%ds (8e 9c 24 b0 00 00 00) */
 			/*
-			 * We faulted loading one of the user segment registers.
+			 * We faulted loading one if the user segment registers.
 			 * The stack frame containing the user registers is
 			 * still valid and pointed to by tf_rsp.
 			 * Maybe we should check the iretq follows.
@@ -515,14 +505,6 @@ kernelfault:
 		}
 
 		cr2 = rcr2();
-
-		if (frame->tf_err & PGEX_X) {
-			/* SMEP might have brought us here */
-			if (cr2 > VM_MIN_ADDRESS && cr2 <= VM_MAXUSER_ADDRESS)
-				panic("prevented execution of %p (SMEP)",
-				    (void *)cr2);
-		}
-
 		goto faultcommon;
 
 	case T_PAGEFLT|T_USER: {	/* page fault */
@@ -626,6 +608,15 @@ faultcommon:
 			}
 			goto out;
 		}
+		KSI_INIT_TRAP(&ksi);
+		ksi.ksi_trap = type & ~T_USER;
+		ksi.ksi_addr = (void *)cr2;
+		if (error == EACCES) {
+			ksi.ksi_code = SEGV_ACCERR;
+			error = EFAULT;
+		} else {
+			ksi.ksi_code = SEGV_MAPERR;
+		}
 
 		if (type == T_PAGEFLT) {
 			onfault = onfault_handler(pcb, frame);
@@ -635,38 +626,20 @@ faultcommon:
 			    map, va, ftype, error);
 			goto kernelfault;
 		}
-
-		KSI_INIT_TRAP(&ksi);
-		ksi.ksi_trap = type & ~T_USER;
-		ksi.ksi_addr = (void *)cr2;
-		switch (error) {
-		case EINVAL:
-			ksi.ksi_signo = SIGBUS;
-			ksi.ksi_code = BUS_ADRERR;
-			break;
-		case EACCES:
-			ksi.ksi_signo = SIGSEGV;
-			ksi.ksi_code = SEGV_ACCERR;
-			error = EFAULT;
-			break;
-		case ENOMEM:
+		if (error == ENOMEM) {
 			ksi.ksi_signo = SIGKILL;
-			printf("UVM: pid %d.%d (%s), uid %d killed: "
-			    "out of swap\n", p->p_pid, l->l_lid, p->p_comm,
-			    l->l_cred ?  kauth_cred_geteuid(l->l_cred) : -1);
-			break;
-		default:
-			ksi.ksi_signo = SIGSEGV;
-			ksi.ksi_code = SEGV_MAPERR;
-			break;
-		}
-
+			printf("UVM: pid %d.%d (%s), uid %d killed: out of swap\n",
+			       p->p_pid, l->l_lid, p->p_comm,
+			       l->l_cred ?
+			       kauth_cred_geteuid(l->l_cred) : -1);
+		} else {
 #ifdef TRAP_SIGDEBUG
-		printf("pid %d.%d (%s): signal %d at rip %lx addr %lx "
-		    "error %d\n", p->p_pid, l->l_lid, p->p_comm, ksi.ksi_signo,
-		    frame->tf_rip, va, error);
-		frame_dump(frame);
+			printf("pid %d.%d (%s): SEGV at rip %lx addr %lx\n",
+			    p->p_pid, l->l_lid, p->p_comm, frame->tf_rip, va);
+			frame_dump(frame);
 #endif
+			ksi.ksi_signo = SIGSEGV;
+		}
 		(*p->p_emul->e_trapsignal)(l, &ksi);
 		break;
 	}
@@ -763,7 +736,7 @@ frame_dump(struct trapframe *tf)
 	printf("cs %lx  ds %lx  es %lx  fs %lx  gs %lx  ss %lx\n",
 		tf->tf_cs & 0xffff, tf->tf_ds & 0xffff, tf->tf_es & 0xffff,
 		tf->tf_fs & 0xffff, tf->tf_gs & 0xffff, tf->tf_ss & 0xffff);
-
+	
 	printf("\n");
 	printf("Stack dump:\n");
 	for (i = 0, p = (unsigned long *) tf; i < 20; i ++, p += 4)

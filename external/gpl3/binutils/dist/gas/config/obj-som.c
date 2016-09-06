@@ -1,5 +1,6 @@
 /* SOM object file format.
-   Copyright (C) 1993-2015 Free Software Foundation, Inc.
+   Copyright 1993, 1994, 1998, 2000, 2002, 2003, 2004, 2005, 2006,
+   2007, 2008, 2009  Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -24,6 +25,7 @@
 #include "as.h"
 #include "subsegs.h"
 #include "aout/stab_gnu.h"
+#include "obstack.h"
 
 static int version_seen = 0;
 static int copyright_seen = 0;
@@ -302,10 +304,11 @@ obj_som_weak (int ignore ATTRIBUTE_UNUSED)
 
   do
     {
-      c = get_symbol_name (&name);
+      name = input_line_pointer;
+      c = get_symbol_end ();
       symbolP = symbol_find_or_make (name);
       *input_line_pointer = c;
-      SKIP_WHITESPACE_AFTER_NAME ();
+      SKIP_WHITESPACE ();
       S_SET_WEAK (symbolP);
       if (c == ',')
 	{

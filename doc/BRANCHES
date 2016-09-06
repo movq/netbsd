@@ -1,4 +1,4 @@
-#	$NetBSD: BRANCHES,v 1.336 2016/07/19 02:04:06 pgoyette Exp $
+#	$NetBSD: BRANCHES,v 1.331 2014/03/18 18:20:35 riastradh Exp $
 #
 # This file contains a list of branches that exist in the NetBSD CVS
 # tree and their current state.
@@ -195,7 +195,7 @@ Notes:
 
 Branch:		netbsd-4
 Description:	The NetBSD 4 release branch
-Status:		Terminated
+Status:		Active
 Start Date:	8 Aug 2006
 End Date:
 Base Tag:	netbsd-4-base
@@ -206,9 +206,9 @@ Notes:
 
 Branch:		netbsd-5
 Description:	The NetBSD 5 release branch
-Status:		Terminated
+Status:		Active
 Start Date:	31 Oct 2008
-End Date:	9 Nov 2015
+End Date:
 Base Tag:	netbsd-5-base
 Maintainer:	5.0 Release Engineering <releng-5@NetBSD.org>
 Scope:		Entire tree. (src + xsrc)
@@ -217,31 +217,11 @@ Notes:
 
 Branch:		netbsd-5-0
 Description:	Tracking security/critical fixes for NetBSD 5.0
-Status:		Terminated
+Status:		Active
 Start Date:	29 Apr 2009
 End Date:
 Base Tag:	netbsd-5-0-RELEASE
 Maintainer:	5.0 Release Engineering <releng-5@NetBSD.org>
-Scope:		Entire tree. (src + xsrc)
-Notes:		Commits restricted to Release Engineering.
-
-Branch:		netbsd-5-1
-Description:	Tracking security/critical fixes for NetBSD 5.1
-Status:		Terminated
-Start Date:
-End Date:	9 Nov 2015
-Base Tag:	netbsd-5-1-RELEASE
-Maintainer:	5.1 Release Engineering <releng-5@NetBSD.org>
-Scope:		Entire tree. (src + xsrc)
-Notes:		Commits restricted to Release Engineering.
-
-Branch:		netbsd-5-2
-Description:	Tracking security/critical fixes for NetBSD 5.2
-Status:		Terminated
-Start Date:
-End Date:	9 Nov 2015
-Base Tag:	netbsd-5-2-RELEASE
-Maintainer:	5.2 Release Engineering <releng-5@NetBSD.org>
 Scope:		Entire tree. (src + xsrc)
 Notes:		Commits restricted to Release Engineering.
 
@@ -256,49 +236,6 @@ Scope:		Entire tree. (src + xsrc)
 Notes:
 		Commits restricted to Release Engineering.
 
-Branch:		netbsd-6-0
-Description:	Tracking security/critical fixes for NetBSD 6.0
-Status:		Active
-Start Date:	17 Oct 2012
-End Date:
-Base Tag:	netbsd-6-0-RELEASE
-Maintainer:	6.0 Release Engineering <releng-6@NetBSD.org>
-Scope:		Entire tree. (src + xsrc)
-Notes:
-		Commits restricted to Release Engineering.
-
-Branch:		netbsd-6-1
-Description:	Tracking security/critical fixes for NetBSD 6.1
-Status:		Active
-Start Date:	01 Feb 2013
-End Date:
-Base Tag:	netbsd-6-1-RELEASE
-Maintainer:	6.1 Release Engineering <releng-6@NetBSD.org>
-Scope:		Entire tree. (src + xsrc)
-Notes:
-		Commits restricted to Release Engineering.
-
-Branch:		netbsd-7
-Description:	The NetBSD 7 release branch
-Status:		Active
-Start Date:	11 Aug 2014
-End Date:
-Base Tag:	netbsd-7-base
-Maintainer:	7.0 Release Engineering <releng-7@NetBSD.org>
-Scope:		Entire tree. (src + xsrc)
-Notes:
-		Commits restricted to Release Engineering.
-
-Branch:		netbsd-7-0
-Description:	Tracking security/critical fixes for NetBSD 7.0
-Status:		Active
-Start Date:	10 Oct 2015
-End Date:
-Base Tag:	netbsd-7-0-RELEASE
-Maintainer:	7.0 Release Engineering <releng-7@NetBSD.org>
-Scope:		Entire tree. (src + xsrc)
-Notes:
-		Commits restricted to Release Engineering.
 ########################################################################
 # Individual developers' branches (Active/Dormant):
 ########################################################################
@@ -863,18 +800,6 @@ Base Tag:	bouyer-quota2-base
 Maintainer:	Manuel Bouyer <bouyer@NetBSD.org>
 Scope:		src/
 Notes:
-
-Branch:		pgoyette-localcount
-Description:	Implement localcount reference counting as proposed by
-		riastradh@
-Status:		Active
-Start Date:	Fri Jul 15 2016
-End Date:
-Base Tag:	pgoyette-localcount-base
-Maintainer:	pgoyette
-Scope:		src/sys/
-Notes:
-
 
 ########################################################################
 # Individual developers' branches (Terminated):

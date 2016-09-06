@@ -1,4 +1,4 @@
-#	$NetBSD: files.amlogic,v 1.13 2015/11/29 16:52:00 jmcneill Exp $
+#	$NetBSD: files.amlogic,v 1.8.2.4 2015/04/30 19:34:40 snj Exp $
 #
 # Configuration info for Amlogic ARM Peripherals
 #
@@ -10,11 +10,11 @@ file	arch/arm/arm32/arm32_boot.c
 file	arch/arm/arm32/arm32_kvminit.c
 file	arch/arm/arm32/arm32_reboot.c
 file	arch/arm/arm32/irq_dispatch.S
-file	arch/arm/arm32/armv7_generic_space.c
-file	arch/arm/arm/bus_space_a4x.S
 
 file	arch/arm/amlogic/amlogic_board.c
 file	arch/arm/amlogic/amlogic_cpufreq.c
+file	arch/arm/amlogic/amlogic_space.c
+file	arch/arm/arm/bus_space_a4x.S
 
 # On-board I/O
 device	amlogicio { [port=-1] } : bus_space_generic
@@ -34,11 +34,6 @@ file	arch/arm/amlogic/amlogic_gpio.c		amlogic_gpio
 # Framebuffer console
 attach	genfb at amlogicio with amlogic_genfb
 file	arch/arm/amlogic/amlogic_genfb.c	amlogic_genfb needs-flag
-
-# SDIO
-device	amlogicsdio: sdmmcbus
-attach	amlogicsdio at amlogicio with amlogic_sdio
-file	arch/arm/amlogic/amlogic_sdio.c		amlogic_sdio
 
 # SDHC
 device	amlogicsdhc: sdmmcbus
@@ -70,3 +65,6 @@ defparam opt_amlogic.h			CONMODE
 
 # Memory parameters
 defparam opt_amlogic.h			MEMSIZE
+
+# CPU parameters
+defparam opt_amlogic.h			CPUFREQ

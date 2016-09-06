@@ -1,5 +1,5 @@
 /* M32C Pragma support
-   Copyright (C) 2004-2015 Free Software Foundation, Inc.
+   Copyright (C) 2004-2013 Free Software Foundation, Inc.
    Contributed by Red Hat, Inc.
 
    This file is part of GCC.
@@ -22,15 +22,6 @@
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
 #include "c-family/c-pragma.h"
 #include "c-family/c-common.h"
@@ -55,9 +46,9 @@ m32c_pragma_memregs (cpp_reader * reader ATTRIBUTE_UNUSED)
   type = pragma_lex (&val);
   if (type == CPP_NUMBER)
     {
-      if (tree_fits_uhwi_p (val))
+      if (host_integerp (val, 1))
 	{
-	  i = tree_to_uhwi (val);
+	  i = tree_low_cst (val, 1);
 
 	  type = pragma_lex (&val);
 	  if (type != CPP_EOF)
@@ -104,7 +95,7 @@ m32c_pragma_address (cpp_reader * reader ATTRIBUTE_UNUSED)
 	{
 	  if (var != error_mark_node)
 	    {
-	      unsigned uaddr = tree_to_uhwi (addr);
+	      unsigned uaddr = tree_low_cst (addr, 1);
 	      m32c_note_pragma_address (IDENTIFIER_POINTER (var), uaddr);
 	    }
 

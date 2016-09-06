@@ -1,4 +1,4 @@
-/*	$NetBSD: pthread_mutex.c,v 1.62 2016/07/17 13:49:43 skrll Exp $	*/
+/*	$NetBSD: pthread_mutex.c,v 1.59 2014/02/03 15:51:01 rmind Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2003, 2006, 2007, 2008 The NetBSD Foundation, Inc.
@@ -47,11 +47,10 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pthread_mutex.c,v 1.62 2016/07/17 13:49:43 skrll Exp $");
+__RCSID("$NetBSD: pthread_mutex.c,v 1.59 2014/02/03 15:51:01 rmind Exp $");
 
 #include <sys/types.h>
 #include <sys/lwpctl.h>
-#include <sys/sched.h>
 #include <sys/lock.h>
 
 #include <errno.h>
@@ -68,26 +67,11 @@ __RCSID("$NetBSD: pthread_mutex.c,v 1.62 2016/07/17 13:49:43 skrll Exp $");
 #define	MUTEX_WAITERS_BIT		((uintptr_t)0x01)
 #define	MUTEX_RECURSIVE_BIT		((uintptr_t)0x02)
 #define	MUTEX_DEFERRED_BIT		((uintptr_t)0x04)
-#define	MUTEX_PROTECT_BIT		((uintptr_t)0x08)
-#define	MUTEX_THREAD			((uintptr_t)~0x0f)
+#define	MUTEX_THREAD			((uintptr_t)-16L)
 
 #define	MUTEX_HAS_WAITERS(x)		((uintptr_t)(x) & MUTEX_WAITERS_BIT)
 #define	MUTEX_RECURSIVE(x)		((uintptr_t)(x) & MUTEX_RECURSIVE_BIT)
-#define	MUTEX_PROTECT(x)		((uintptr_t)(x) & MUTEX_PROTECT_BIT)
 #define	MUTEX_OWNER(x)			((uintptr_t)(x) & MUTEX_THREAD)
-
-#define	MUTEX_GET_TYPE(x)		\
-    ((int)(((uintptr_t)(x) & 0x000000ff) >> 0))
-#define	MUTEX_SET_TYPE(x, t) 		\
-    (x) = (void *)(((uintptr_t)(x) & ~0x000000ff) | ((t) << 0))
-#define	MUTEX_GET_PROTOCOL(x)		\
-    ((int)(((uintptr_t)(x) & 0x0000ff00) >> 8))
-#define	MUTEX_SET_PROTOCOL(x, p)	\
-    (x) = (void *)(((uintptr_t)(x) & ~0x0000ff00) | ((p) << 8))
-#define	MUTEX_GET_CEILING(x)		\
-    ((int)(((uintptr_t)(x) & 0x00ff0000) >> 16))
-#define	MUTEX_SET_CEILING(x, c)	\
-    (x) = (void *)(((uintptr_t)(x) & ~0x00ff0000) | ((c) << 16))
 
 #if __GNUC_PREREQ__(3, 0)
 #define	NOINLINE		__attribute ((noinline))
@@ -96,8 +80,7 @@ __RCSID("$NetBSD: pthread_mutex.c,v 1.62 2016/07/17 13:49:43 skrll Exp $");
 #endif
 
 static void	pthread__mutex_wakeup(pthread_t, pthread_mutex_t *);
-static int	pthread__mutex_lock_slow(pthread_mutex_t *,
-    const struct timespec *);
+static int	pthread__mutex_lock_slow(pthread_mutex_t *);
 static int	pthread__mutex_unlock_slow(pthread_mutex_t *);
 static void	pthread__mutex_pause(void);
 
@@ -120,22 +103,16 @@ __strong_alias(__libc_mutexattr_settype,pthread_mutexattr_settype)
 int
 pthread_mutex_init(pthread_mutex_t *ptm, const pthread_mutexattr_t *attr)
 {
-	uintptr_t type, proto, val, ceil;
+	intptr_t type;
 
 	if (__predict_false(__uselibcstub))
 		return __libc_mutex_init_stub(ptm, attr);
 
-	if (attr == NULL) {
+	if (attr == NULL)
 		type = PTHREAD_MUTEX_NORMAL;
-		proto = PTHREAD_PRIO_NONE;
-		ceil = 0;
-	} else {
-		val = (uintptr_t)attr->ptma_private;
+	else
+		type = (intptr_t)attr->ptma_private;
 
-		type = MUTEX_GET_TYPE(val);
-		proto = MUTEX_GET_PROTOCOL(val);
-		ceil = MUTEX_GET_CEILING(val);
-	}
 	switch (type) {
 	case PTHREAD_MUTEX_ERRORCHECK:
 		__cpu_simple_lock_set(&ptm->ptm_errorcheck);
@@ -150,18 +127,10 @@ pthread_mutex_init(pthread_mutex_t *ptm, const pthread_mutexattr_t *attr)
 		ptm->ptm_owner = NULL;
 		break;
 	}
-	switch (proto) {
-	case PTHREAD_PRIO_PROTECT:
-		val = (uintptr_t)ptm->ptm_owner;
-		val |= MUTEX_PROTECT_BIT;
-		ptm->ptm_owner = (void *)val;
-		break;
 
-	}
 	ptm->ptm_magic = _PT_MUTEX_MAGIC;
 	ptm->ptm_waiters = NULL;
 	ptm->ptm_recursed = 0;
-	ptm->ptm_ceiling = (unsigned char)ceil;
 
 	return 0;
 }
@@ -199,24 +168,7 @@ pthread_mutex_lock(pthread_mutex_t *ptm)
 #endif
 		return 0;
 	}
-	return pthread__mutex_lock_slow(ptm, NULL);
-}
-
-int
-pthread_mutex_timedlock(pthread_mutex_t* ptm, const struct timespec *ts)
-{
-	pthread_t self;
-	void *val;
-
-	self = pthread__self();
-	val = atomic_cas_ptr(&ptm->ptm_owner, NULL, self);
-	if (__predict_true(val == NULL)) {
-#ifndef PTHREAD__ATOMIC_IS_MEMBAR
-		membar_enter();
-#endif
-		return 0;
-	}
-	return pthread__mutex_lock_slow(ptm, ts);
+	return pthread__mutex_lock_slow(ptm);
 }
 
 /* We want function call overhead. */
@@ -306,12 +258,11 @@ again:
 }
 
 NOINLINE static int
-pthread__mutex_lock_slow(pthread_mutex_t *ptm, const struct timespec *ts)
+pthread__mutex_lock_slow(pthread_mutex_t *ptm)
 {
 	void *waiters, *new, *owner, *next;
 	pthread_t self;
 	int serrno;
-	int error;
 
 	pthread__error(EINVAL, "Invalid mutex",
 	    ptm->ptm_magic == _PT_MUTEX_MAGIC);
@@ -331,10 +282,6 @@ pthread__mutex_lock_slow(pthread_mutex_t *ptm, const struct timespec *ts)
 			return EDEADLK;
 	}
 
-	/* priority protect */
-	if (MUTEX_PROTECT(owner) && _sched_protect(ptm->ptm_ceiling) == -1) {
-		return errno;
-	}
 	serrno = errno;
 	for (;; owner = ptm->ptm_owner) {
 		/* Spin while the owner is running. */
@@ -392,23 +339,12 @@ pthread__mutex_lock_slow(pthread_mutex_t *ptm, const struct timespec *ts)
 		 */
 		while (self->pt_mutexwait) {
 			self->pt_blocking++;
-			error = _lwp_park(CLOCK_REALTIME, TIMER_ABSTIME, ts,
+			(void)_lwp_park(CLOCK_REALTIME, TIMER_ABSTIME, NULL,
 			    self->pt_unpark, __UNVOLATILE(&ptm->ptm_waiters),
 			    __UNVOLATILE(&ptm->ptm_waiters));
 			self->pt_unpark = 0;
 			self->pt_blocking--;
 			membar_sync();
-			if (__predict_true(error != -1)) {
-				continue;
-			}
-			if (errno == ETIMEDOUT && self->pt_mutexwait) {
-				/*Remove self from waiters list*/
-				pthread__mutex_wakeup(self, ptm);
-				/*priority protect*/
-				if (MUTEX_PROTECT(owner))
-					(void)_sched_protect(-1);
-				return ETIMEDOUT;
-			}
 		}
 	}
 }
@@ -524,10 +460,6 @@ pthread__mutex_unlock_slow(pthread_mutex_t *ptm)
 	 */
 	if (new != owner) {
 		owner = atomic_swap_ptr(&ptm->ptm_owner, new);
-		if (__predict_false(MUTEX_PROTECT(owner))) {
-			/* restore elevated priority */
-			(void)_sched_protect(-1);
-		}
 		if (MUTEX_HAS_WAITERS(owner) != 0) {
 			pthread__mutex_wakeup(self, ptm);
 			return 0;
@@ -659,18 +591,16 @@ pthread_mutexattr_destroy(pthread_mutexattr_t *attr)
 int
 pthread_mutexattr_gettype(const pthread_mutexattr_t *attr, int *typep)
 {
-
 	pthread__error(EINVAL, "Invalid mutex attribute",
 	    attr->ptma_magic == _PT_MUTEXATTR_MAGIC);
 
-	*typep = MUTEX_GET_TYPE(attr->ptma_private);
+	*typep = (int)(intptr_t)attr->ptma_private;
 	return 0;
 }
 
 int
 pthread_mutexattr_settype(pthread_mutexattr_t *attr, int type)
 {
-
 	if (__predict_false(__uselibcstub))
 		return __libc_mutexattr_settype_stub(attr, type);
 
@@ -681,91 +611,12 @@ pthread_mutexattr_settype(pthread_mutexattr_t *attr, int type)
 	case PTHREAD_MUTEX_NORMAL:
 	case PTHREAD_MUTEX_ERRORCHECK:
 	case PTHREAD_MUTEX_RECURSIVE:
-		MUTEX_SET_TYPE(attr->ptma_private, type);
+		attr->ptma_private = (void *)(intptr_t)type;
 		return 0;
 	default:
 		return EINVAL;
 	}
 }
-
-int
-pthread_mutexattr_getprotocol(const pthread_mutexattr_t *attr, int*proto)
-{
-	
-	pthread__error(EINVAL, "Invalid mutex attribute",
-	    attr->ptma_magic == _PT_MUTEXATTR_MAGIC);
-
-	*proto = MUTEX_GET_PROTOCOL(attr->ptma_private);
-	return 0;
-}
-
-int 
-pthread_mutexattr_setprotocol(pthread_mutexattr_t* attr, int proto)
-{
-
-	pthread__error(EINVAL, "Invalid mutex attribute",
-	    attr->ptma_magic == _PT_MUTEXATTR_MAGIC);
-
-	switch (proto) {
-	case PTHREAD_PRIO_NONE:
-	case PTHREAD_PRIO_PROTECT:
-		MUTEX_SET_PROTOCOL(attr->ptma_private, proto);
-		return 0;
-	case PTHREAD_PRIO_INHERIT:
-		return ENOTSUP;
-	default:
-		return EINVAL;
-	}
-}
-
-int 
-pthread_mutexattr_getprioceiling(const pthread_mutexattr_t *attr, int *ceil)
-{
-	
-	pthread__error(EINVAL, "Invalid mutex attribute",
-		attr->ptma_magic == _PT_MUTEXATTR_MAGIC);
-
-	*ceil = MUTEX_GET_CEILING(attr->ptma_private);
-	return 0;
-}
-
-int 
-pthread_mutexattr_setprioceiling(pthread_mutexattr_t *attr, int ceil) 
-{
-
-	pthread__error(EINVAL, "Invalid mutex attribute",
-		attr->ptma_magic == _PT_MUTEXATTR_MAGIC);
-
-	if (ceil & ~0xff)
-		return EINVAL;
-
-	MUTEX_SET_CEILING(attr->ptma_private, ceil);
-	return 0;
-}
-
-#ifdef _PTHREAD_PSHARED
-int
-pthread_mutexattr_getpshared(const pthread_mutexattr_t * __restrict attr,
-    int * __restrict pshared)
-{
-
-	*pshared = PTHREAD_PROCESS_PRIVATE;
-	return 0;
-}
-
-int
-pthread_mutexattr_setpshared(pthread_mutexattr_t *attr, int pshared)
-{
-
-	switch(pshared) {
-	case PTHREAD_PROCESS_PRIVATE:
-		return 0;
-	case PTHREAD_PROCESS_SHARED:
-		return ENOSYS;
-	}
-	return EINVAL;
-}
-#endif
 
 /*
  * pthread__mutex_deferwake: try to defer unparking threads in self->pt_waiters
@@ -791,28 +642,6 @@ pthread__mutex_deferwake(pthread_t self, pthread_mutex_t *ptm)
 		    (uintptr_t)&ptm->ptm_owner,
 		    (unsigned long)MUTEX_DEFERRED_BIT);
 	}
-}
-
-int
-pthread_mutex_getprioceiling(const pthread_mutex_t *ptm, int *ceil) 
-{
-	*ceil = ptm->ptm_ceiling;
-	return 0;
-}
-
-int
-pthread_mutex_setprioceiling(pthread_mutex_t *ptm, int ceil, int *old_ceil) 
-{
-	int error;
-
-	error = pthread_mutex_lock(ptm);
-	if (error == 0) {
-		*old_ceil = ptm->ptm_ceiling;
-		/*check range*/
-		ptm->ptm_ceiling = ceil;
-		pthread_mutex_unlock(ptm);
-	}
-	return error;
 }
 
 int

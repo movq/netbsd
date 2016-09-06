@@ -1,4 +1,4 @@
-#	$NetBSD: files.bcm2835,v 1.26 2015/11/21 07:41:29 mlelstv Exp $
+#	$NetBSD: files.bcm2835,v 1.21.2.4 2015/03/15 22:55:47 snj Exp $
 #
 # Configuration info for Broadcom BCM2835 ARM Peripherals
 #
@@ -100,14 +100,3 @@ file	arch/arm/broadcom/bcm2835_vcaudio.c	vcaudio
 device	bcmgpio: gpiobus
 attach	bcmgpio at obio
 file	arch/arm/broadcom/bcm2835_gpio.c
-
-# Clock Manager (BCM2835_CM_BASE)
-device	bcmcm
-attach	bcmcm at obio with bcmcm_amba
-file	arch/arm/broadcom/bcm2835_cm.c		bcmcm		needs-flag
-
-# PWM Controller (BCM2835_PWM_BASE)
-device	bcmpwm
-attach	bcmpwm at obio with bcmpwm_amba
-file	arch/arm/broadcom/bcm2835_pwm.c		bcmpwm		needs-flag
-

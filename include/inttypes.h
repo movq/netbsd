@@ -1,4 +1,4 @@
-/*	$NetBSD: inttypes.h,v 1.11 2015/01/16 18:35:59 christos Exp $	*/
+/*	$NetBSD: inttypes.h,v 1.10.6.1 2015/04/22 07:18:58 snj Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.

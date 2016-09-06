@@ -1,6 +1,6 @@
 /* Print values for GNU debugger GDB.
 
-   Copyright (C) 1986-2015 Free Software Foundation, Inc.
+   Copyright (C) 1986-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,6 +18,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include <string.h>
 #include "frame.h"
 #include "symtab.h"
 #include "gdbtypes.h"
@@ -36,9 +37,11 @@
 #include "objfiles.h"		/* ditto */
 #include "completer.h"		/* for completion functions */
 #include "ui-out.h"
+#include "gdb_assert.h"
 #include "block.h"
 #include "disasm.h"
 #include "dfp.h"
+#include "exceptions.h"
 #include "observer.h"
 #include "solist.h"
 #include "parser-defs.h"
@@ -51,6 +54,17 @@
 #ifdef TUI
 #include "tui/tui.h"		/* For tui_active et al.   */
 #endif
+
+struct format_data
+  {
+    int count;
+    char format;
+    char size;
+
+    /* True if the value should be printed raw -- that is, bypassing
+       python-based formatters.  */
+    unsigned char raw;
+  };
 
 /* Last specified output format.  */
 
@@ -617,7 +631,7 @@ build_address_symbolic (struct gdbarch *gdbarch,
 			int *line,       /* OUT */
 			int *unmapped)   /* OUT */
 {
-  struct bound_minimal_symbol msymbol;
+  struct minimal_symbol *msymbol;
   struct symbol *symbol;
   CORE_ADDR name_location = 0;
   struct obj_section *section = NULL;
@@ -647,7 +661,7 @@ build_address_symbolic (struct gdbarch *gdbarch,
      save some memory, but for many debug format--ELF/DWARF or
      anything/stabs--it would be inconvenient to eliminate those minimal
      symbols anyway).  */
-  msymbol = lookup_minimal_symbol_by_pc_section (addr, section);
+  msymbol = lookup_minimal_symbol_by_pc_section (addr, section).minsym;
   symbol = find_pc_sect_function (addr, section);
 
   if (symbol)
@@ -666,40 +680,40 @@ build_address_symbolic (struct gdbarch *gdbarch,
 	name_temp = SYMBOL_LINKAGE_NAME (symbol);
     }
 
-  if (msymbol.minsym != NULL
-      && MSYMBOL_HAS_SIZE (msymbol.minsym)
-      && MSYMBOL_SIZE (msymbol.minsym) == 0
-      && MSYMBOL_TYPE (msymbol.minsym) != mst_text
-      && MSYMBOL_TYPE (msymbol.minsym) != mst_text_gnu_ifunc
-      && MSYMBOL_TYPE (msymbol.minsym) != mst_file_text)
-    msymbol.minsym = NULL;
+  if (msymbol != NULL
+      && MSYMBOL_HAS_SIZE (msymbol)
+      && MSYMBOL_SIZE (msymbol) == 0
+      && MSYMBOL_TYPE (msymbol) != mst_text
+      && MSYMBOL_TYPE (msymbol) != mst_text_gnu_ifunc
+      && MSYMBOL_TYPE (msymbol) != mst_file_text)
+    msymbol = NULL;
 
-  if (msymbol.minsym != NULL)
+  if (msymbol != NULL)
     {
-      if (BMSYMBOL_VALUE_ADDRESS (msymbol) > name_location || symbol == NULL)
+      if (SYMBOL_VALUE_ADDRESS (msymbol) > name_location || symbol == NULL)
 	{
 	  /* If this is a function (i.e. a code address), strip out any
 	     non-address bits.  For instance, display a pointer to the
 	     first instruction of a Thumb function as <function>; the
 	     second instruction will be <function+2>, even though the
 	     pointer is <function+3>.  This matches the ISA behavior.  */
-	  if (MSYMBOL_TYPE (msymbol.minsym) == mst_text
-	      || MSYMBOL_TYPE (msymbol.minsym) == mst_text_gnu_ifunc
-	      || MSYMBOL_TYPE (msymbol.minsym) == mst_file_text
-	      || MSYMBOL_TYPE (msymbol.minsym) == mst_solib_trampoline)
+	  if (MSYMBOL_TYPE (msymbol) == mst_text
+	      || MSYMBOL_TYPE (msymbol) == mst_text_gnu_ifunc
+	      || MSYMBOL_TYPE (msymbol) == mst_file_text
+	      || MSYMBOL_TYPE (msymbol) == mst_solib_trampoline)
 	    addr = gdbarch_addr_bits_remove (gdbarch, addr);
 
 	  /* The msymbol is closer to the address than the symbol;
 	     use the msymbol instead.  */
 	  symbol = 0;
-	  name_location = BMSYMBOL_VALUE_ADDRESS (msymbol);
+	  name_location = SYMBOL_VALUE_ADDRESS (msymbol);
 	  if (do_demangle || asm_demangle)
-	    name_temp = MSYMBOL_PRINT_NAME (msymbol.minsym);
+	    name_temp = SYMBOL_PRINT_NAME (msymbol);
 	  else
-	    name_temp = MSYMBOL_LINKAGE_NAME (msymbol.minsym);
+	    name_temp = SYMBOL_LINKAGE_NAME (msymbol);
 	}
     }
-  if (symbol == NULL && msymbol.minsym == NULL)
+  if (symbol == NULL && msymbol == NULL)
     return 1;
 
   /* If the nearest symbol is too far away, don't print anything symbolic.  */
@@ -916,7 +930,7 @@ do_examine (struct format_data fmt, struct gdbarch *gdbarch, CORE_ADDR addr)
 }
 
 static void
-validate_format (struct format_data fmt, const char *cmdname)
+validate_format (struct format_data fmt, char *cmdname)
 {
   if (fmt.size != 0)
     error (_("Size letters are meaningless in \"%s\" command."), cmdname);
@@ -928,57 +942,6 @@ validate_format (struct format_data fmt, const char *cmdname)
 	   fmt.format, cmdname);
 }
 
-/* Parse print command format string into *FMTP and update *EXPP.
-   CMDNAME should name the current command.  */
-
-void
-print_command_parse_format (const char **expp, const char *cmdname,
-			    struct format_data *fmtp)
-{
-  const char *exp = *expp;
-
-  if (exp && *exp == '/')
-    {
-      exp++;
-      *fmtp = decode_format (&exp, last_format, 0);
-      validate_format (*fmtp, cmdname);
-      last_format = fmtp->format;
-    }
-  else
-    {
-      fmtp->count = 1;
-      fmtp->format = 0;
-      fmtp->size = 0;
-      fmtp->raw = 0;
-    }
-
-  *expp = exp;
-}
-
-/* Print VAL to console according to *FMTP, including recording it to
-   the history.  */
-
-void
-print_value (struct value *val, const struct format_data *fmtp)
-{
-  struct value_print_options opts;
-  int histindex = record_latest_value (val);
-
-  annotate_value_history_begin (histindex, value_type (val));
-
-  printf_filtered ("$%d = ", histindex);
-
-  annotate_value_history_value ();
-
-  get_formatted_print_options (&opts, fmtp->format);
-  opts.raw = fmtp->raw;
-
-  print_formatted (val, fmtp->size, &opts, gdb_stdout);
-  printf_filtered ("\n");
-
-  annotate_value_history_end ();
-}
-
 /* Evaluate string EXP as an expression in the current language and
    print the resulting value.  EXP may contain a format specifier as the
    first argument ("/x myvar" for example, to print myvar in hex).  */
@@ -988,10 +951,24 @@ print_command_1 (const char *exp, int voidprint)
 {
   struct expression *expr;
   struct cleanup *old_chain = make_cleanup (null_cleanup, NULL);
+  char format = 0;
   struct value *val;
   struct format_data fmt;
 
-  print_command_parse_format (&exp, "print", &fmt);
+  if (exp && *exp == '/')
+    {
+      exp++;
+      fmt = decode_format (&exp, last_format, 0);
+      validate_format (fmt, "print");
+      last_format = format = fmt.format;
+    }
+  else
+    {
+      fmt.count = 1;
+      fmt.format = 0;
+      fmt.size = 0;
+      fmt.raw = 0;
+    }
 
   if (exp && *exp)
     {
@@ -1004,7 +981,32 @@ print_command_1 (const char *exp, int voidprint)
 
   if (voidprint || (val && value_type (val) &&
 		    TYPE_CODE (value_type (val)) != TYPE_CODE_VOID))
-    print_value (val, &fmt);
+    {
+      struct value_print_options opts;
+      int histindex = record_latest_value (val);
+
+      if (histindex >= 0)
+	annotate_value_history_begin (histindex, value_type (val));
+      else
+	annotate_value_begin (value_type (val));
+
+      if (histindex >= 0)
+	printf_filtered ("$%d = ", histindex);
+
+      if (histindex >= 0)
+	annotate_value_history_value ();
+
+      get_formatted_print_options (&opts, format);
+      opts.raw = fmt.raw;
+
+      print_formatted (val, fmt.size, &opts, gdb_stdout);
+      printf_filtered ("\n");
+
+      if (histindex >= 0)
+	annotate_value_history_end ();
+      else
+	annotate_value_end ();
+    }
 
   do_cleanups (old_chain);
 }
@@ -1132,10 +1134,10 @@ sym_info (char *arg, int from_tty)
 	struct cleanup *old_chain;
 
 	matches = 1;
-	offset = sect_addr - MSYMBOL_VALUE_ADDRESS (objfile, msymbol);
+	offset = sect_addr - SYMBOL_VALUE_ADDRESS (msymbol);
 	mapped = section_is_mapped (osect) ? _("mapped") : _("unmapped");
 	sec_name = osect->the_bfd_section->name;
-	msym_name = MSYMBOL_PRINT_NAME (msymbol);
+	msym_name = SYMBOL_PRINT_NAME (msymbol);
 
 	/* Don't print the offset if it is zero.
 	   We assume there's no need to handle i18n of "sym + offset".  */
@@ -1231,7 +1233,7 @@ address_info (char *exp, int from_tty)
 	  struct objfile *objfile = msymbol.objfile;
 
 	  gdbarch = get_objfile_arch (objfile);
-	  load_addr = BMSYMBOL_VALUE_ADDRESS (msymbol);
+	  load_addr = SYMBOL_VALUE_ADDRESS (msymbol.minsym);
 
 	  printf_filtered ("Symbol \"");
 	  fprintf_symbol_filtered (gdb_stdout, exp,
@@ -1239,7 +1241,7 @@ address_info (char *exp, int from_tty)
 	  printf_filtered ("\" is at ");
 	  fputs_filtered (paddress (gdbarch, load_addr), gdb_stdout);
 	  printf_filtered (" in a file compiled without debugging");
-	  section = MSYMBOL_OBJ_SECTION (objfile, msymbol.minsym);
+	  section = SYMBOL_OBJ_SECTION (objfile, msymbol.minsym);
 	  if (section_is_overlay (section))
 	    {
 	      load_addr = overlay_unmapped_address (load_addr, section);
@@ -1260,11 +1262,8 @@ address_info (char *exp, int from_tty)
 			   current_language->la_language, DMGL_ANSI);
   printf_filtered ("\" is ");
   val = SYMBOL_VALUE (sym);
-  if (SYMBOL_OBJFILE_OWNED (sym))
-    section = SYMBOL_OBJ_SECTION (symbol_objfile (sym), sym);
-  else
-    section = NULL;
-  gdbarch = symbol_arch (sym);
+  section = SYMBOL_OBJ_SECTION (SYMBOL_OBJFILE (sym), sym);
+  gdbarch = get_objfile_arch (SYMBOL_SYMTAB (sym)->objfile);
 
   if (SYMBOL_COMPUTED_OPS (sym) != NULL)
     {
@@ -1375,8 +1374,8 @@ address_info (char *exp, int from_tty)
 	  printf_filtered ("unresolved");
 	else
 	  {
-	    section = MSYMBOL_OBJ_SECTION (msym.objfile, msym.minsym);
-	    load_addr = BMSYMBOL_VALUE_ADDRESS (msym);
+	    section = SYMBOL_OBJ_SECTION (msym.objfile, msym.minsym);
+	    load_addr = SYMBOL_VALUE_ADDRESS (msym.minsym);
 
 	    if (section
 		&& (section->the_bfd_section->flags & SEC_THREAD_LOCAL) != 0)
@@ -1505,51 +1504,62 @@ display_command (char *arg, int from_tty)
 {
   struct format_data fmt;
   struct expression *expr;
-  struct display *newobj;
+  struct display *new;
+  int display_it = 1;
   const char *exp = arg;
 
-  if (exp == 0)
+#if defined(TUI)
+  /* NOTE: cagney/2003-02-13 The `tui_active' was previously
+     `tui_version'.  */
+  if (tui_active && exp != NULL && *exp == '$')
+    display_it = (tui_set_layout_for_display_command (exp) == TUI_FAILURE);
+#endif
+
+  if (display_it)
     {
-      do_displays ();
-      return;
+      if (exp == 0)
+	{
+	  do_displays ();
+	  return;
+	}
+
+      if (*exp == '/')
+	{
+	  exp++;
+	  fmt = decode_format (&exp, 0, 0);
+	  if (fmt.size && fmt.format == 0)
+	    fmt.format = 'x';
+	  if (fmt.format == 'i' || fmt.format == 's')
+	    fmt.size = 'b';
+	}
+      else
+	{
+	  fmt.format = 0;
+	  fmt.size = 0;
+	  fmt.count = 0;
+	  fmt.raw = 0;
+	}
+
+      innermost_block = NULL;
+      expr = parse_expression (exp);
+
+      new = (struct display *) xmalloc (sizeof (struct display));
+
+      new->exp_string = xstrdup (exp);
+      new->exp = expr;
+      new->block = innermost_block;
+      new->pspace = current_program_space;
+      new->next = display_chain;
+      new->number = ++display_number;
+      new->format = fmt;
+      new->enabled_p = 1;
+      display_chain = new;
+
+      if (from_tty && target_has_execution)
+	do_one_display (new);
+
+      dont_repeat ();
     }
-
-  if (*exp == '/')
-    {
-      exp++;
-      fmt = decode_format (&exp, 0, 0);
-      if (fmt.size && fmt.format == 0)
-	fmt.format = 'x';
-      if (fmt.format == 'i' || fmt.format == 's')
-	fmt.size = 'b';
-    }
-  else
-    {
-      fmt.format = 0;
-      fmt.size = 0;
-      fmt.count = 0;
-      fmt.raw = 0;
-    }
-
-  innermost_block = NULL;
-  expr = parse_expression (exp);
-
-  newobj = (struct display *) xmalloc (sizeof (struct display));
-
-  newobj->exp_string = xstrdup (exp);
-  newobj->exp = expr;
-  newobj->block = innermost_block;
-  newobj->pspace = current_program_space;
-  newobj->next = display_chain;
-  newobj->number = ++display_number;
-  newobj->format = fmt;
-  newobj->enabled_p = 1;
-  display_chain = newobj;
-
-  if (from_tty)
-    do_one_display (newobj);
-
-  dont_repeat ();
 }
 
 static void
@@ -1616,7 +1626,7 @@ map_display_numbers (char *args,
 
   while (!state.finished)
     {
-      const char *p = state.string;
+      char *p = state.string;
 
       num = get_number_or_range (&state);
       if (num == 0)
@@ -1690,14 +1700,15 @@ do_one_display (struct display *d)
 
   if (d->exp == NULL)
     {
+      volatile struct gdb_exception ex;
 
-      TRY
+      TRY_CATCH (ex, RETURN_MASK_ALL)
 	{
 	  innermost_block = NULL;
 	  d->exp = parse_expression (d->exp_string);
 	  d->block = innermost_block;
 	}
-      CATCH (ex, RETURN_MASK_ALL)
+      if (ex.reason < 0)
 	{
 	  /* Can't re-parse the expression.  Disable this display item.  */
 	  d->enabled_p = 0;
@@ -1705,7 +1716,6 @@ do_one_display (struct display *d)
 		   d->exp_string, ex.message);
 	  return;
 	}
-      END_CATCH
     }
 
   if (d->block)
@@ -1729,6 +1739,7 @@ do_one_display (struct display *d)
   printf_filtered (": ");
   if (d->format.size)
     {
+      volatile struct gdb_exception ex;
 
       annotate_display_format ();
 
@@ -1752,7 +1763,7 @@ do_one_display (struct display *d)
 
       annotate_display_value ();
 
-      TRY
+      TRY_CATCH (ex, RETURN_MASK_ERROR)
         {
 	  struct value *val;
 	  CORE_ADDR addr;
@@ -1763,15 +1774,13 @@ do_one_display (struct display *d)
 	    addr = gdbarch_addr_bits_remove (d->exp->gdbarch, addr);
 	  do_examine (d->format, d->exp->gdbarch, addr);
 	}
-      CATCH (ex, RETURN_MASK_ERROR)
-	{
-	  fprintf_filtered (gdb_stdout, _("<error: %s>\n"), ex.message);
-	}
-      END_CATCH
+      if (ex.reason < 0)
+	fprintf_filtered (gdb_stdout, _("<error: %s>\n"), ex.message);
     }
   else
     {
       struct value_print_options opts;
+      volatile struct gdb_exception ex;
 
       annotate_display_format ();
 
@@ -1790,19 +1799,15 @@ do_one_display (struct display *d)
       get_formatted_print_options (&opts, d->format.format);
       opts.raw = d->format.raw;
 
-      TRY
+      TRY_CATCH (ex, RETURN_MASK_ERROR)
         {
 	  struct value *val;
 
 	  val = evaluate_expression (d->exp);
 	  print_formatted (val, d->format.size, &opts, gdb_stdout);
 	}
-      CATCH (ex, RETURN_MASK_ERROR)
-	{
-	  fprintf_filtered (gdb_stdout, _("<error: %s>"), ex.message);
-	}
-      END_CATCH
-
+      if (ex.reason < 0)
+	fprintf_filtered (gdb_stdout, _("<error: %s>"), ex.message);
       printf_filtered ("\n");
     }
 
@@ -1978,12 +1983,13 @@ print_variable_and_value (const char *name, struct symbol *var,
 			  struct frame_info *frame,
 			  struct ui_file *stream, int indent)
 {
+  volatile struct gdb_exception except;
 
   if (!name)
     name = SYMBOL_PRINT_NAME (var);
 
   fprintf_filtered (stream, "%s%s = ", n_spaces (2 * indent), name);
-  TRY
+  TRY_CATCH (except, RETURN_MASK_ERROR)
     {
       struct value *val;
       struct value_print_options opts;
@@ -1997,13 +2003,9 @@ print_variable_and_value (const char *name, struct symbol *var,
 	 function.  */
       frame = NULL;
     }
-  CATCH (except, RETURN_MASK_ERROR)
-    {
-      fprintf_filtered(stream, "<error reading variable %s (%s)>", name,
-		       except.message);
-    }
-  END_CATCH
-
+  if (except.reason < 0)
+    fprintf_filtered(stream, "<error reading variable %s (%s)>", name,
+		     except.message);
   fprintf_filtered (stream, "\n");
 }
 

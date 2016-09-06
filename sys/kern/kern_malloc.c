@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_malloc.c,v 1.145 2015/02/06 18:21:29 maxv Exp $	*/
+/*	$NetBSD: kern_malloc.c,v 1.143.2.1 2015/03/25 16:54:37 snj Exp $	*/
 
 /*
  * Copyright (c) 1987, 1991, 1993
@@ -70,7 +70,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_malloc.c,v 1.145 2015/02/06 18:21:29 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_malloc.c,v 1.143.2.1 2015/03/25 16:54:37 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/malloc.h>

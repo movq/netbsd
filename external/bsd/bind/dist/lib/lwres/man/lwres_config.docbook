@@ -1,5 +1,8 @@
+<!DOCTYPE book PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN"
+               "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd"
+	       [<!ENTITY mdash "&#8212;">]>
 <!--
- - Copyright (C) 2004, 2005, 2007, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
+ - Copyright (C) 2004, 2005, 2007, 2014  Internet Systems Consortium, Inc. ("ISC")
  - Copyright (C) 2000, 2001  Internet Software Consortium.
  -
  - Permission to use, copy, modify, and/or distribute this software for any
@@ -15,14 +18,10 @@
  - PERFORMANCE OF THIS SOFTWARE.
 -->
 
-<!-- Converted by db4-upgrade version 1.0 -->
-<refentry xmlns="http://docbook.org/ns/docbook" version="5.0">
-  <info>
-    <date>2007-06-18</date>
-  </info>
+<refentry>
   <refentryinfo>
-    <corpname>ISC</corpname>
-    <corpauthor>Internet Systems Consortium, Inc.</corpauthor>
+
+    <date>June 18, 2007</date>
   </refentryinfo>
 
   <refmeta>
@@ -37,7 +36,6 @@
       <year>2005</year>
       <year>2007</year>
       <year>2014</year>
-      <year>2015</year>
       <holder>Internet Systems Consortium, Inc. ("ISC")</holder>
     </copyright>
     <copyright>
@@ -94,8 +92,8 @@ lwres_conf_t *
 </funcsynopsis>
   </refsynopsisdiv>
 
-  <refsection><info><title>DESCRIPTION</title></info>
-
+  <refsect1>
+    <title>DESCRIPTION</title>
 
     <para><function>lwres_conf_init()</function>
       creates an empty
@@ -130,10 +128,10 @@ lwres_conf_t *
       <type>FILE</type>
       <parameter>fp</parameter>.
     </para>
-  </refsection>
-  <refsection><info><title>RETURN VALUES</title></info>
+  </refsect1>
+  <refsect1>
 
-
+    <title>RETURN VALUES</title>
 
     <para><function>lwres_conf_parse()</function>
       returns <errorcode>LWRES_R_SUCCESS</errorcode>
@@ -152,9 +150,9 @@ lwres_conf_t *
       If this happens, the function returns
       <errorcode>LWRES_R_FAILURE</errorcode>.
     </para>
-  </refsection>
-  <refsection><info><title>SEE ALSO</title></info>
-
+  </refsect1>
+  <refsect1>
+    <title>SEE ALSO</title>
     <para><citerefentry>
         <refentrytitle>stdio</refentrytitle><manvolnum>3</manvolnum>
       </citerefentry>,
@@ -162,10 +160,14 @@ lwres_conf_t *
         <refentrytitle>resolver</refentrytitle><manvolnum>5</manvolnum>
       </citerefentry>.
     </para>
-  </refsection>
-  <refsection><info><title>FILES</title></info>
-
+  </refsect1>
+  <refsect1>
+    <title>FILES</title>
     <para><filename>/etc/resolv.conf</filename>
     </para>
-  </refsection>
-</refentry>
+  </refsect1>
+</refentry><!--
+ - Local variables:
+ - mode: sgml
+ - End:
+-->

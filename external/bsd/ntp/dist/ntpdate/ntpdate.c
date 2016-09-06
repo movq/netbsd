@@ -1,4 +1,4 @@
-/*	$NetBSD: ntpdate.c,v 1.10 2016/05/01 23:32:01 christos Exp $	*/
+/*	$NetBSD: ntpdate.c,v 1.4.4.3 2016/05/11 11:35:39 martin Exp $	*/
 
 /*
  * ntpdate - set the time of day by polling one or more NTP servers

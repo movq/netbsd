@@ -77,7 +77,7 @@ int EVP_CIPHER_param_to_asn1(EVP_CIPHER_CTX *c, ASN1_TYPE *type)
             break;
 
         default:
-            ret = EVP_CIPHER_set_asn1_iv(c, type);
+        ret = EVP_CIPHER_set_asn1_iv(c, type);
         }
     } else
         ret = -1;
@@ -100,7 +100,7 @@ int EVP_CIPHER_asn1_to_param(EVP_CIPHER_CTX *c, ASN1_TYPE *type)
             break;
 
         default:
-            ret = EVP_CIPHER_get_asn1_iv(c, type);
+        ret = EVP_CIPHER_get_asn1_iv(c, type);
             break;
         }
     } else

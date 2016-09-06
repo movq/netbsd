@@ -1,4 +1,4 @@
-/* $NetBSD: awin_sysconfig.c,v 1.2 2015/10/25 20:46:46 bouyer Exp $ */
+/* $NetBSD: awin_sysconfig.c,v 1.1.2.2 2014/11/09 14:42:33 martin Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
@@ -29,7 +29,7 @@
 #include "opt_allwinner.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: awin_sysconfig.c,v 1.2 2015/10/25 20:46:46 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awin_sysconfig.c,v 1.1.2.2 2014/11/09 14:42:33 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -154,8 +154,7 @@ awin_sysconfig_get_int(const char *key, const char *subkey)
 	if (awin_sysconfig_parse(key, subkey, &value) == false)
 		return -1;
 
-	if (value.type != AWIN_SYSCONFIG_TYPE_SINGLE_WORD)
-		return -1;
+	KASSERT(value.type == AWIN_SYSCONFIG_TYPE_SINGLE_WORD);
 
 	memcpy(&ret, &awin_sysconfig[value.offset << 2], sizeof(ret));
 
@@ -170,8 +169,7 @@ awin_sysconfig_get_string(const char *key, const char *subkey)
 	if (awin_sysconfig_parse(key, subkey, &value) == false)
 		return NULL;
 
-	if (value.type != AWIN_SYSCONFIG_TYPE_STRING)
-		return NULL;
+	KASSERT(value.type == AWIN_SYSCONFIG_TYPE_STRING);
 
 	return &awin_sysconfig[value.offset << 2];
 }

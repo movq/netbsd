@@ -20,7 +20,7 @@
 
 // Effects: sets overflow if a * b overflows
 
-COMPILER_RT_ABI ti_int __muloti4(ti_int a, ti_int b, int *overflow);
+ti_int __muloti4(ti_int a, ti_int b, int *overflow);
 
 int test__muloti4(ti_int a, ti_int b, ti_int expected, int expected_overflow)
 {

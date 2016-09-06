@@ -1,11 +1,10 @@
-# $NetBSD: Makefile,v 1.10 2016/08/08 16:31:53 kre Exp $
+# $NetBSD: Makefile,v 1.7 2013/11/16 17:12:35 rmind Exp $
 #
 # Public Domain
 #
 
 PROG=		npftest
 NOMAN=		# no man page
-PAXCTL_FLAGS.npftest += +m
 
 WARNS=		5
 NOLINT=		# disabled (note: deliberately)
@@ -17,9 +16,8 @@ LIBNPFTEST!=	cd ${.CURDIR}/libnpftest && ${MAKE} -V .OBJDIR
 DPADD+=		${LIBNPFTEST}/libnpftest.a
 LDADD+=		-L${LIBNPFTEST} -lnpftest
 
-LDADD+=		-lrump -lrumpvfs -lrumpuser -lrumpnet -lrumpnet_net
+LDADD+=		-lrump -lrumpvfs -lrumpnet -lrumpnet_net
 LDADD+=		-lrumpdev_bpf
-LDADD+=		-lrumpdev
 
 .include <bsd.own.mk>
 

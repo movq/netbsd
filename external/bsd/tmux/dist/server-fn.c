@@ -1,4 +1,4 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
  * Copyright (c) 2007 Nicholas Marriott <nicm@users.sourceforge.net>
@@ -31,19 +31,19 @@ void		server_callback_identify(int, short, void *);
 void
 server_fill_environ(struct session *s, struct environ *env)
 {
-	char	var[PATH_MAX], *term;
+	char	var[MAXPATHLEN], *term;
 	u_int	idx;
 	long	pid;
 
 	if (s != NULL) {
-		term = options_get_string(&global_options, "default-terminal");
+		term = options_get_string(&s->options, "default-terminal");
 		environ_set(env, "TERM", term);
 
 		idx = s->id;
 	} else
-		idx = (u_int)-1;
+		idx = -1;
 	pid = getpid();
-	xsnprintf(var, sizeof var, "%s,%ld,%u", socket_path, pid, idx);
+	xsnprintf(var, sizeof var, "%s,%ld,%d", socket_path, pid, idx);
 	environ_set(env, "TMUX", var);
 }
 
@@ -77,8 +77,12 @@ server_write_session(struct session *s, enum msgtype type, const void *buf,
     size_t len)
 {
 	struct client	*c;
+	u_int		 i;
 
-	TAILQ_FOREACH(c, &clients, entry) {
+	for (i = 0; i < ARRAY_LENGTH(&clients); i++) {
+		c = ARRAY_ITEM(&clients, i);
+		if (c == NULL || c->session == NULL)
+			continue;
 		if (c->session == s)
 			server_write_client(c, type, buf, len);
 	}
@@ -100,8 +104,12 @@ void
 server_redraw_session(struct session *s)
 {
 	struct client	*c;
+	u_int		 i;
 
-	TAILQ_FOREACH(c, &clients, entry) {
+	for (i = 0; i < ARRAY_LENGTH(&clients); i++) {
+		c = ARRAY_ITEM(&clients, i);
+		if (c == NULL || c->session == NULL)
+			continue;
 		if (c->session == s)
 			server_redraw_client(c);
 	}
@@ -124,8 +132,12 @@ void
 server_status_session(struct session *s)
 {
 	struct client	*c;
+	u_int		 i;
 
-	TAILQ_FOREACH(c, &clients, entry) {
+	for (i = 0; i < ARRAY_LENGTH(&clients); i++) {
+		c = ARRAY_ITEM(&clients, i);
+		if (c == NULL || c->session == NULL)
+			continue;
 		if (c->session == s)
 			server_status_client(c);
 	}
@@ -148,9 +160,13 @@ void
 server_redraw_window(struct window *w)
 {
 	struct client	*c;
+	u_int		 i;
 
-	TAILQ_FOREACH(c, &clients, entry) {
-		if (c->session != NULL && c->session->curw->window == w)
+	for (i = 0; i < ARRAY_LENGTH(&clients); i++) {
+		c = ARRAY_ITEM(&clients, i);
+		if (c == NULL || c->session == NULL)
+			continue;
+		if (c->session->curw->window == w)
 			server_redraw_client(c);
 	}
 	w->flags |= WINDOW_REDRAW;
@@ -160,9 +176,13 @@ void
 server_redraw_window_borders(struct window *w)
 {
 	struct client	*c;
+	u_int		 i;
 
-	TAILQ_FOREACH(c, &clients, entry) {
-		if (c->session != NULL && c->session->curw->window == w)
+	for (i = 0; i < ARRAY_LENGTH(&clients); i++) {
+		c = ARRAY_ITEM(&clients, i);
+		if (c == NULL || c->session == NULL)
+			continue;
+		if (c->session->curw->window == w)
 			c->flags |= CLIENT_BORDERS;
 	}
 }
@@ -179,7 +199,7 @@ server_status_window(struct window *w)
 	 */
 
 	RB_FOREACH(s, sessions, &sessions) {
-		if (session_has(s, w))
+		if (session_has(s, w) != NULL)
 			server_status_session(s);
 	}
 }
@@ -188,10 +208,13 @@ void
 server_lock(void)
 {
 	struct client	*c;
+	u_int		 i;
 
-	TAILQ_FOREACH(c, &clients, entry) {
-		if (c->session != NULL)
-			server_lock_client(c);
+	for (i = 0; i < ARRAY_LENGTH(&clients); i++) {
+		c = ARRAY_ITEM(&clients, i);
+		if (c == NULL || c->session == NULL)
+			continue;
+		server_lock_client(c);
 	}
 }
 
@@ -199,10 +222,13 @@ void
 server_lock_session(struct session *s)
 {
 	struct client	*c;
+	u_int		 i;
 
-	TAILQ_FOREACH(c, &clients, entry) {
-		if (c->session == s)
-			server_lock_client(c);
+	for (i = 0; i < ARRAY_LENGTH(&clients); i++) {
+		c = ARRAY_ITEM(&clients, i);
+		if (c == NULL || c->session == NULL || c->session != s)
+			continue;
+		server_lock_client(c);
 	}
 }
 
@@ -242,9 +268,8 @@ server_kill_window(struct window *w)
 		s = next_s;
 		next_s = RB_NEXT(sessions, &sessions, s);
 
-		if (!session_has(s, w))
+		if (session_has(s, w) == NULL)
 			continue;
-		server_unzoom_window(w);
 		while ((wl = winlink_find_by_window(&s->windows, w)) != NULL) {
 			if (session_detach(s, wl)) {
 				server_destroy_session_group(s);
@@ -266,8 +291,7 @@ server_kill_window(struct window *w)
 
 int
 server_link_window(struct session *src, struct winlink *srcwl,
-    struct session *dst, int dstidx, int killflag, int selectflag,
-    char **cause)
+    struct session *dst, int dstidx, int killflag, int selectflag, char **cause)
 {
 	struct winlink		*dstwl;
 	struct session_group	*srcsg, *dstsg;
@@ -337,9 +361,6 @@ server_destroy_pane(struct window_pane *wp)
 
 	old_fd = wp->fd;
 	if (wp->fd != -1) {
-#ifdef HAVE_UTEMPTER
-		utempter_remove_record(wp->fd);
-#endif
 		bufferevent_free(wp->event);
 		close(wp->fd);
 		wp->fd = -1;
@@ -407,14 +428,16 @@ server_destroy_session(struct session *s)
 {
 	struct client	*c;
 	struct session	*s_new;
+	u_int		 i;
 
 	if (!options_get_number(&s->options, "detach-on-destroy"))
 		s_new = server_next_session(s);
 	else
 		s_new = NULL;
 
-	TAILQ_FOREACH(c, &clients, entry) {
-		if (c->session != s)
+	for (i = 0; i < ARRAY_LENGTH(&clients); i++) {
+		c = ARRAY_ITEM(&clients, i);
+		if (c == NULL || c->session != s)
 			continue;
 		if (s_new == NULL) {
 			c->session = NULL;
@@ -422,10 +445,8 @@ server_destroy_session(struct session *s)
 		} else {
 			c->last_session = NULL;
 			c->session = s_new;
-			status_timer_start(c);
 			notify_attached_session_changed(c);
-			session_update_activity(s_new, NULL);
-			gettimeofday(&s_new->last_attached_time, NULL);
+			session_update_activity(s_new);
 			server_redraw_client(c);
 		}
 	}
@@ -581,8 +602,7 @@ server_set_stdin_callback(struct client *c, void (*cb)(struct client *, int,
 void
 server_unzoom_window(struct window *w)
 {
-	if (window_unzoom(w) == 0) {
-		server_redraw_window(w);
-		server_status_window(w);
-	}
+	window_unzoom(w);
+	server_redraw_window(w);
+	server_status_window(w);
 }

@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2016/02/27 21:47:36 joerg Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2015/06/04 20:05:46 snj Exp $
 
 LIB=	clangToolingCore
 
@@ -6,8 +6,7 @@ LIB=	clangToolingCore
 
 .PATH: ${CLANG_SRCDIR}/lib/Tooling/Core
 
-SRCS+=	Lookup.cpp \
-	Replacement.cpp
+SRCS+=	Replacement.cpp
 
 .if defined(HOSTLIB)
 .include <bsd.hostlib.mk>

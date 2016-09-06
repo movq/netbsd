@@ -1,4 +1,4 @@
-/* $NetBSD: amlogic_com.c,v 1.5 2015/04/03 15:50:15 jmcneill Exp $ */
+/* $NetBSD: amlogic_com.c,v 1.4.2.3 2015/04/06 01:45:17 snj Exp $ */
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: amlogic_com.c,v 1.5 2015/04/03 15:50:15 jmcneill Exp $");
+__KERNEL_RCSID(1, "$NetBSD: amlogic_com.c,v 1.4.2.3 2015/04/06 01:45:17 snj Exp $");
 
 #define cn_trap()			\
 	do {				\

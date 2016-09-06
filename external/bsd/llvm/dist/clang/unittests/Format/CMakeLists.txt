@@ -7,8 +7,6 @@ add_clang_unittest(FormatTests
   FormatTestJava.cpp
   FormatTestJS.cpp
   FormatTestProto.cpp
-  FormatTestSelective.cpp
-  SortIncludesTest.cpp
   )
 
 target_link_libraries(FormatTests

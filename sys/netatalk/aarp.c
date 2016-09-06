@@ -1,4 +1,4 @@
-/*	$NetBSD: aarp.c,v 1.39 2016/08/01 03:15:30 ozaki-r Exp $	*/
+/*	$NetBSD: aarp.c,v 1.36 2012/01/31 09:53:44 hauke Exp $	*/
 
 /*
  * Copyright (c) 1990,1991 Regents of The University of Michigan.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: aarp.c,v 1.39 2016/08/01 03:15:30 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: aarp.c,v 1.36 2012/01/31 09:53:44 hauke Exp $");
 
 #include "opt_mbuftrace.h"
 
@@ -131,11 +131,11 @@ aarptimer(void *ignored)
 struct ifaddr *
 at_ifawithnet(const struct sockaddr_at *sat, struct ifnet *ifp)
 {
-	struct ifaddr *ifa;
+	struct ifaddr  *ifa;
 	struct sockaddr_at *sat2;
 	struct netrange *nr;
 
-	IFADDR_READER_FOREACH(ifa, ifp) {
+	IFADDR_FOREACH(ifa, ifp) {
 		if (ifa->ifa_addr->sa_family != AF_APPLETALK)
 			continue;
 
@@ -149,7 +149,6 @@ at_ifawithnet(const struct sockaddr_at *sat, struct ifnet *ifp)
 		    && (ntohs(nr->nr_lastnet) >= ntohs(sat->sat_addr.s_net)))
 			break;
 	}
-
 	return ifa;
 }
 
@@ -239,7 +238,7 @@ aarpwhohas(struct ifnet *ifp, const struct sockaddr_at *sat)
 
 	sa.sa_len = sizeof(struct sockaddr);
 	sa.sa_family = AF_UNSPEC;
-	if_output_lock(ifp, ifp, m, &sa, NULL);	/* XXX NULL should be routing */
+	(*ifp->if_output) (ifp, m, &sa, NULL);	/* XXX NULL should be routing */
 						/* information */
 }
 
@@ -252,24 +251,17 @@ aarpresolve(struct ifnet *ifp, struct mbuf *m,
 	int             s;
 
 	if (at_broadcast(destsat)) {
-		struct ifaddr *ifa;
-
-		s = pserialize_read_enter();
-		ifa = at_ifawithnet(destsat, ifp);
-		if (ifa == NULL) {
-			pserialize_read_exit(s);
+		aa = (struct at_ifaddr *) at_ifawithnet(destsat, ifp);
+		if (aa == NULL) {
 			m_freem(m);
 			return (0);
 		}
-		aa = (struct at_ifaddr *)ifa;
-
 		if (aa->aa_flags & AFA_PHASE2)
 			memcpy(desten, atmulticastaddr,
 			    sizeof(atmulticastaddr));
 		else
 			memcpy(desten, etherbroadcastaddr,
 			    sizeof(etherbroadcastaddr));
-		pserialize_read_exit(s);
 		return 1;
 	}
 	s = splnet();
@@ -339,6 +331,7 @@ at_aarpinput(struct ifnet *ifp, struct mbuf *m)
 {
 	struct ether_aarp *ea;
 	struct at_ifaddr *aa;
+	struct ifaddr *ia;
 	struct aarptab *aat;
 	struct ether_header *eh;
 	struct llc     *llc;
@@ -347,9 +340,6 @@ at_aarpinput(struct ifnet *ifp, struct mbuf *m)
 	struct at_addr  spa, tpa, ma;
 	int             op;
 	u_int16_t       net;
-	int		s;
-	struct psref	psref;
-	struct ifaddr *ifa;
 
 	ea = mtod(m, struct ether_aarp *);
 
@@ -365,18 +355,11 @@ at_aarpinput(struct ifnet *ifp, struct mbuf *m)
 		sat.sat_len = sizeof(struct sockaddr_at);
 		sat.sat_family = AF_APPLETALK;
 		sat.sat_addr.s_net = net;
-
-		s = pserialize_read_enter();
-		ifa = at_ifawithnet(&sat, ifp);
-		if (ifa == NULL) {
-			pserialize_read_exit(s);
+		aa = (struct at_ifaddr *) at_ifawithnet(&sat, ifp);
+		if (aa == NULL) {
 			m_freem(m);
 			return;
 		}
-		ifa_acquire(ifa, &psref);
-		pserialize_read_exit(s);
-		aa = (struct at_ifaddr *)ifa;
-
 		memcpy(&spa.s_net, ea->aarp_spnet, sizeof(spa.s_net));
 		memcpy(&tpa.s_net, ea->aarp_tpnet, sizeof(tpa.s_net));
 	} else {
@@ -384,18 +367,13 @@ at_aarpinput(struct ifnet *ifp, struct mbuf *m)
 		 * Since we don't know the net, we just look for the first
 		 * phase 1 address on the interface.
 		 */
-		s = pserialize_read_enter();
-		IFADDR_READER_FOREACH(ifa, ifp) {
-			aa = (struct at_ifaddr *)ifa;
+		IFADDR_FOREACH(ia, ifp) {
+			aa = (struct at_ifaddr *)ia;
 			if (AA_SAT(aa)->sat_family == AF_APPLETALK &&
-			    (aa->aa_flags & AFA_PHASE2) == 0) {
-				ifa_acquire(ifa, &psref);
+			    (aa->aa_flags & AFA_PHASE2) == 0)
 				break;
-			}
 		}
-		pserialize_read_exit(s);
-
-		if (ifa == NULL) {
+		if (ia == NULL) {
 			m_freem(m);
 			return;
 		}
@@ -420,7 +398,7 @@ at_aarpinput(struct ifnet *ifp, struct mbuf *m)
 			callout_stop(&aa->aa_probe_ch);
 			wakeup(aa);
 			m_freem(m);
-			goto out;
+			return;
 		} else if (op != AARPOP_PROBE) {
 			/*
 		         * This is not a probe, and we're not probing.
@@ -430,7 +408,7 @@ at_aarpinput(struct ifnet *ifp, struct mbuf *m)
 			log(LOG_ERR, "aarp: duplicate AT address!! %s\n",
 			    ether_sprintf(ea->aarp_sha));
 			m_freem(m);
-			goto out;
+			return;
 		}
 	}
 	AARPTAB_LOOK(aat, spa);
@@ -443,7 +421,7 @@ at_aarpinput(struct ifnet *ifp, struct mbuf *m)
 		         */
 			aarptfree(aat);
 			m_freem(m);
-			goto out;
+			return;
 		}
 		memcpy(aat->aat_enaddr, ea->aarp_sha, sizeof(ea->aarp_sha));
 		aat->aat_flags |= ATF_COM;
@@ -451,7 +429,7 @@ at_aarpinput(struct ifnet *ifp, struct mbuf *m)
 			sat.sat_len = sizeof(struct sockaddr_at);
 			sat.sat_family = AF_APPLETALK;
 			sat.sat_addr = spa;
-			if_output_lock(ifp, ifp, aat->aat_hold,
+			(*ifp->if_output)(ifp, aat->aat_hold,
 			    (struct sockaddr *) & sat, NULL);	/* XXX */
 			aat->aat_hold = 0;
 		}
@@ -471,7 +449,7 @@ at_aarpinput(struct ifnet *ifp, struct mbuf *m)
 	if (tpa.s_net != ma.s_net || tpa.s_node != ma.s_node ||
 	    op == AARPOP_RESPONSE || (aa->aa_flags & AFA_PROBING)) {
 		m_freem(m);
-		goto out;
+		return;
 	}
 
 	/*
@@ -489,7 +467,7 @@ at_aarpinput(struct ifnet *ifp, struct mbuf *m)
 	if (aa->aa_flags & AFA_PHASE2) {
 		M_PREPEND(m, sizeof(struct llc), M_DONTWAIT);
 		if (m == NULL)
-			goto out;
+			return;
 
 		llc = mtod(m, struct llc *);
 		llc->llc_dsap = llc->llc_ssap = LLC_SNAP_LSAP;
@@ -511,8 +489,6 @@ at_aarpinput(struct ifnet *ifp, struct mbuf *m)
 	sa.sa_len = sizeof(struct sockaddr);
 	sa.sa_family = AF_UNSPEC;
 	(*ifp->if_output) (ifp, m, &sa, NULL);	/* XXX */
-out:
-	ifa_release(ifa, &psref);
 	return;
 }
 
@@ -584,7 +560,7 @@ aarpprobe(void *arp)
          * interface with the same address as we're looking for. If the
          * net is phase 2, generate an 802.2 and SNAP header.
          */
-	IFADDR_READER_FOREACH(ia, ifp) {
+	IFADDR_FOREACH(ia, ifp) {
 		aa = (struct at_ifaddr *)ia;
 		if (AA_SAT(aa)->sat_family == AF_APPLETALK &&
 		    (aa->aa_flags & AFA_PROBING))

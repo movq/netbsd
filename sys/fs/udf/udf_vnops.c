@@ -1,4 +1,4 @@
-/* $NetBSD: udf_vnops.c,v 1.102 2016/08/20 12:37:08 hannken Exp $ */
+/* $NetBSD: udf_vnops.c,v 1.94 2014/07/29 15:48:22 reinoud Exp $ */
 
 /*
  * Copyright (c) 2006, 2008 Reinoud Zandijk
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__KERNEL_RCSID(0, "$NetBSD: udf_vnops.c,v 1.102 2016/08/20 12:37:08 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: udf_vnops.c,v 1.94 2014/07/29 15:48:22 reinoud Exp $");
 #endif /* not lint */
 
 
@@ -97,7 +97,9 @@ udf_inactive(void *v)
 	}
 
 	/*
-	 * Optionally flush metadata to disc.
+	 * Optionally flush metadata to disc. If the file has not been
+	 * referenced anymore in a directory we ought to free up the resources
+	 * on disc if applicable.
 	 */
 	if (udf_node->fe) {
 		refcnt = udf_rw16(udf_node->fe->link_cnt);
@@ -114,7 +116,10 @@ udf_inactive(void *v)
 
 	*ap->a_recycle = false;
 	if ((refcnt == 0) && ((vp->v_vflag & VV_SYSTEM) == 0)) {
+	 	/* remove this file's allocation */
+		DPRINTF(NODE, ("udf_inactive deleting unlinked file\n"));
 		*ap->a_recycle = true;
+		udf_delete_node(udf_node);
 		VOP_UNLOCK(vp);
 		return 0;
 	}
@@ -129,6 +134,8 @@ udf_inactive(void *v)
 
 /* --------------------------------------------------------------------- */
 
+int udf_sync(struct mount *mp, int waitfor, kauth_cred_t cred, struct lwp *lwp);
+
 int
 udf_reclaim(void *v)
 {
@@ -137,7 +144,6 @@ udf_reclaim(void *v)
 	} */ *ap = v;
 	struct vnode *vp = ap->a_vp;
 	struct udf_node *udf_node = VTOI(vp);
-	int refcnt;
 
 	DPRINTF(NODE, ("udf_reclaim called for node %p\n", udf_node));
 	if (prtactive && vp->v_usecount > 1)
@@ -146,23 +152,6 @@ udf_reclaim(void *v)
 	if (udf_node == NULL) {
 		DPRINTF(NODE, ("udf_reclaim(): null udfnode\n"));
 		return 0;
-	}
-
-	/*
-	 * If the file has not been referenced anymore in a directory
-	 * we ought to free up the resources on disc if applicable.
-	 */
-	if (udf_node->fe) {
-		refcnt = udf_rw16(udf_node->fe->link_cnt);
-	} else {
-		assert(udf_node->efe);
-		refcnt = udf_rw16(udf_node->efe->link_cnt);
-	}
-
-	if ((refcnt == 0) && ((vp->v_vflag & VV_SYSTEM) == 0)) {
-	 	/* remove this file's allocation */
-		DPRINTF(NODE, ("udf_inactive deleting unlinked file\n"));
-		udf_delete_node(udf_node);
 	}
 
 	/* update note for closure */
@@ -262,13 +251,8 @@ udf_read(void *v)
 	/* note access time unless not requested */
 	if (!(vp->v_mount->mnt_flag & MNT_NOATIME)) {
 		udf_node->i_flags |= IN_ACCESS;
-		if ((ioflag & IO_SYNC) == IO_SYNC) {
-			int uerror;
-
-			uerror = udf_update(vp, NULL, NULL, NULL, UPDATE_WAIT);
-			if (error == 0)
-				error = uerror;
-		}
+		if ((ioflag & IO_SYNC) == IO_SYNC)
+			error = udf_update(vp, NULL, NULL, NULL, UPDATE_WAIT);
 	}
 
 	return error;
@@ -1590,7 +1574,7 @@ udf_do_link(struct vnode *dvp, struct vnode *vp, struct componentname *cnp)
 int
 udf_link(void *v)
 {
-	struct vop_link_v2_args /* {
+	struct vop_link_args /* {
 		struct vnode *a_dvp;
 		struct vnode *a_vp;
 		struct componentname *a_cnp;
@@ -1606,6 +1590,7 @@ udf_link(void *v)
 
 	VN_KNOTE(vp, NOTE_LINK);
 	VN_KNOTE(dvp, NOTE_WRITE);
+	vput(dvp);
 
 	return error;
 }
@@ -1755,9 +1740,8 @@ udf_symlink(void *v)
 		error = udf_do_symlink(udf_node, ap->a_target);
 		if (error) {
 			/* remove node */
+			udf_shrink_node(udf_node, 0);
 			udf_dir_detach(udf_node->ump, dir_node, udf_node, cnp);
-			vrele(*vpp);
-			*vpp = NULL;
 		}
 	}
 	return error;

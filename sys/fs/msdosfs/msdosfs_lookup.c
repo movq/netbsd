@@ -1,4 +1,4 @@
-/*	$NetBSD: msdosfs_lookup.c,v 1.35 2016/01/30 09:59:27 mlelstv Exp $	*/
+/*	$NetBSD: msdosfs_lookup.c,v 1.33 2014/07/08 09:21:52 hannken Exp $	*/
 
 /*-
  * Copyright (C) 1994, 1995, 1997 Wolfgang Solfrank.
@@ -52,7 +52,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: msdosfs_lookup.c,v 1.35 2016/01/30 09:59:27 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: msdosfs_lookup.c,v 1.33 2014/07/08 09:21:52 hannken Exp $");
 
 #include <sys/param.h>
 
@@ -187,12 +187,12 @@ msdosfs_lookup(void *v)
 		break;
 	case 2:
 		wincnt = winSlotCnt((const u_char *)cnp->cn_nameptr,
-		    cnp->cn_namelen, pmp->pm_flags & MSDOSFSMNT_UTF8) + 1;
+		    cnp->cn_namelen) + 1;
 		break;
 	case 3:
 		olddos = 0;
 		wincnt = winSlotCnt((const u_char *)cnp->cn_nameptr,
-		    cnp->cn_namelen, pmp->pm_flags & MSDOSFSMNT_UTF8) + 1;
+		    cnp->cn_namelen) + 1;
 		break;
 	}
 	if (pmp->pm_flags & MSDOSFSMNT_SHORTNAME)
@@ -231,7 +231,7 @@ msdosfs_lookup(void *v)
 				break;
 			return (error);
 		}
-		error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize,
+		error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize, NOCRED,
 		    0, &bp);
 		if (error) {
 			return (error);
@@ -282,8 +282,7 @@ msdosfs_lookup(void *v)
 					chksum = winChkName((const u_char *)cnp->cn_nameptr,
 							    cnp->cn_namelen,
 							    (struct winentry *)dep,
-							    chksum,
-							    pmp->pm_flags & MSDOSFSMNT_UTF8);
+							    chksum);
 					continue;
 				}
 
@@ -604,7 +603,7 @@ createde(struct denode *dep, struct denode *ddep, struct denode **depp, struct c
 	clusoffset = ddep->de_fndoffset;
 	if (dirclust != MSDOSFSROOT)
 		clusoffset &= pmp->pm_crbomask;
-	if ((error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize,
+	if ((error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize, NOCRED,
 	    B_MODIFY, &bp)) != 0) {
 		goto err_norollback;
 	}
@@ -642,7 +641,7 @@ createde(struct denode *dep, struct denode *ddep, struct denode **depp, struct c
 					goto rollback;
 
 				error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn),
-				    blsize, B_MODIFY, &bp);
+				    blsize, NOCRED, B_MODIFY, &bp);
 				if (error) {
 					goto rollback;
 				}
@@ -653,8 +652,7 @@ createde(struct denode *dep, struct denode *ddep, struct denode **depp, struct c
 				fndoffset -= sizeof(struct direntry);
 			}
 			if (!unix2winfn(un, unlen, (struct winentry *)ndep,
-					wcnt, chksum,
-					ddep->de_pmp->pm_flags & MSDOSFSMNT_UTF8))
+						wcnt, chksum))
 				break;
 		}
 	}
@@ -706,7 +704,7 @@ createde(struct denode *dep, struct denode *ddep, struct denode **depp, struct c
 	       &bn, NULL, &blsize);
 	if (rberror)
 		goto err_norollback;
-	if ((rberror = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize,
+	if ((rberror = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize, NOCRED,
 	    B_MODIFY, &bp)) != 0) {
 		goto err_norollback;
 	}
@@ -734,7 +732,7 @@ createde(struct denode *dep, struct denode *ddep, struct denode **depp, struct c
 				goto err_norollback;
 
 			rberror = bread(pmp->pm_devvp, de_bn2kb(pmp, bn),
-			    blsize, B_MODIFY, &bp);
+			    blsize, NOCRED, B_MODIFY, &bp);
 			if (rberror) {
 				goto err_norollback;
 			}
@@ -781,7 +779,7 @@ dosdirempty(struct denode *dep)
 				return (1);	/* it's empty */
 			return (0);
 		}
-		error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize,
+		error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize, NOCRED,
 		    0, &bp);
 		if (error) {
 			return (0);
@@ -873,7 +871,7 @@ doscheckpath(struct denode *source, struct denode *target)
 		}
 		scn = dep->de_StartCluster;
 		error = bread(pmp->pm_devvp, de_bn2kb(pmp, cntobn(pmp, scn)),
-			      pmp->pm_bpcluster, 0, &bp);
+			      pmp->pm_bpcluster, NOCRED, 0, &bp);
 		if (error)
 			break;
 
@@ -950,7 +948,7 @@ readep(struct msdosfsmount *pmp, u_long dirclust, u_long diroffset, struct buf *
 	    && de_blk(pmp, diroffset + blsize) > pmp->pm_rootdirsize)
 		blsize = de_bn2off(pmp, pmp->pm_rootdirsize) & pmp->pm_crbomask;
 	bn = detobn(pmp, dirclust, diroffset);
-	if ((error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize,
+	if ((error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize, NOCRED,
 	    0, bpp)) != 0) {
 		*bpp = NULL;
 		return (error);
@@ -1023,7 +1021,7 @@ removede(struct denode *pdep, struct denode *dep)
 		error = pcbmap(pdep, de_cluster(pmp, offset), &bn, 0, &blsize);
 		if (error)
 			return error;
-		error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize,
+		error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize, NOCRED,
 		    B_MODIFY, &bp);
 		if (error) {
 			return error;
@@ -1097,7 +1095,7 @@ uniqdosname(struct denode *dep, struct componentname *cnp, u_char *cp)
 				return error;
 			}
 			error = bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize,
-			    0, &bp);
+			    NOCRED, 0, &bp);
 			if (error) {
 				return error;
 			}
@@ -1147,7 +1145,7 @@ findwin95(struct denode *dep)
 	for (cn = 0;; cn++) {
 		if (pcbmap(dep, cn, &bn, 0, &blsize))
 			return win95;
-		if (bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize,
+		if (bread(pmp->pm_devvp, de_bn2kb(pmp, bn), blsize, NOCRED,
 		    0, &bp)) {
 			return win95;
 		}

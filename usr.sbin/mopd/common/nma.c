@@ -1,4 +1,4 @@
-/*	$NetBSD: nma.c,v 1.7 2016/06/08 01:11:49 christos Exp $	*/
+/*	$NetBSD: nma.c,v 1.6 2011/08/30 19:49:11 joerg Exp $	*/
 
 /*
  * Copyright (c) 1995 Mats O Jansson.  All rights reserved.
@@ -24,9 +24,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "port.h"
+#include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: nma.c,v 1.7 2016/06/08 01:11:49 christos Exp $");
+__RCSID("$NetBSD: nma.c,v 1.6 2011/08/30 19:49:11 joerg Exp $");
 #endif
 
 #include "os.h"

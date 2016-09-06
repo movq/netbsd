@@ -245,8 +245,8 @@ class AttrListInfo {
   SmallVector<CXIdxAttrInfo *, 2> CXAttrs;
   unsigned ref_cnt;
 
-  AttrListInfo(const AttrListInfo &) = delete;
-  void operator=(const AttrListInfo &) = delete;
+  AttrListInfo(const AttrListInfo &) LLVM_DELETED_FUNCTION;
+  void operator=(const AttrListInfo &) LLVM_DELETED_FUNCTION;
 public:
   AttrListInfo(const Decl *D, IndexingContext &IdxCtx);
 

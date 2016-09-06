@@ -1,4 +1,4 @@
-/*	$NetBSD: if_le_ebus.c,v 1.9 2016/06/10 13:27:11 ozaki-r Exp $	*/
+/*	$NetBSD: if_le_ebus.c,v 1.6 2014/08/10 16:44:33 tls Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_le_ebus.c,v 1.9 2016/06/10 13:27:11 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_le_ebus.c,v 1.6 2014/08/10 16:44:33 tls Exp $");
 
 #include "opt_inet.h"
 
@@ -60,7 +60,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_le_ebus.c,v 1.9 2016/06/10 13:27:11 ozaki-r Exp $
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <emips/ebus/ebusvar.h>
 #include <emips/emips/machdep.h>
@@ -451,7 +451,7 @@ enic_post_recv(struct enic_softc *sc, struct mbuf *m)
 		MGETHDR(m, waitmode, MT_DATA);
 		if (m == 0)
 			break;
-		m_set_rcvif(m, &sc->sc_ethercom.ec_if);
+		m->m_pkthdr.rcvif = &sc->sc_ethercom.ec_if;
 		m->m_pkthdr.len = 0;
 
 		MCLGET(m, waitmode);
@@ -498,7 +498,7 @@ void enic_refill(struct enic_softc *sc)
 	MGETHDR(m, waitmode, MT_DATA);
 	if (m == NULL)
 		return;
-	m_set_rcvif(m, &sc->sc_ethercom.ec_if);
+	m->m_pkthdr.rcvif = &sc->sc_ethercom.ec_if;
 	m->m_pkthdr.len = 0;
 
 	MCLGET(m, waitmode);
@@ -768,7 +768,7 @@ enic_rint(struct enic_softc *sc, uint32_t saf, paddr_t phys)
 		bpf_mtap(ifp, m);
 
 	/* Pass the packet up. */
-	if_percpuq_enqueue(ifp->if_percpuq, m);
+	(*ifp->if_input)(ifp, m);
 
 	/* Need to refill now */
 	enic_refill(sc);
@@ -969,7 +969,7 @@ int enic_put(struct enic_softc *sc, struct mbuf **pm)
 	MGETHDR(n, M_NOWAIT, MT_DATA);
 	if (n == NULL)
 		goto Bad;
-	m_set_rcvif(n, &sc->sc_ethercom.ec_if);
+	n->m_pkthdr.rcvif = &sc->sc_ethercom.ec_if;
 	n->m_pkthdr.len = tlen;
 
 	MCLGET(n, M_NOWAIT);

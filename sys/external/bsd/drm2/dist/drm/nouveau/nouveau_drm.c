@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_drm.c,v 1.8 2016/02/11 04:51:44 riastradh Exp $	*/
+/*	$NetBSD: nouveau_drm.c,v 1.2.4.5 2016/04/15 08:46:42 snj Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_drm.c,v 1.8 2016/02/11 04:51:44 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_drm.c,v 1.2.4.5 2016/04/15 08:46:42 snj Exp $");
 
 #include <linux/console.h>
 #include <linux/module.h>

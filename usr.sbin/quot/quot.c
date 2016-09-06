@@ -1,4 +1,4 @@
-/*	$NetBSD: quot.c,v 1.34 2016/07/28 08:24:58 martin Exp $	*/
+/*	$NetBSD: quot.c,v 1.33.4.1 2016/08/27 15:17:34 bouyer Exp $	*/
 
 /*
  * Copyright (C) 1991, 1994 Wolfgang Solfrank.
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: quot.c,v 1.34 2016/07/28 08:24:58 martin Exp $");
+__RCSID("$NetBSD: quot.c,v 1.33.4.1 2016/08/27 15:17:34 bouyer Exp $");
 #endif /* not lint */
 
 #include <sys/param.h>

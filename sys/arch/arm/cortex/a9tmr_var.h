@@ -1,4 +1,4 @@
-/* $NetBSD: a9tmr_var.h,v 1.4 2015/01/02 21:58:03 jmcneill Exp $ */
+/* $NetBSD: a9tmr_var.h,v 1.3.10.1 2015/03/21 08:51:18 snj Exp $ */
 /*-
  * Copyright (c) 2012 The NetBSD Foundation, Inc.
  * All rights reserved.

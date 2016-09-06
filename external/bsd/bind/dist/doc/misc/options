@@ -33,7 +33,7 @@ logging {
                 print-time <boolean>;
                 severity <log_severity>;
                 stderr;
-                syslog [ <syslog_facility> ];
+                syslog <optional_facility>;
         };
 };
 
@@ -42,7 +42,7 @@ lwres {
             | <ipv6_address> ) [ port <integer> ] [ dscp <integer> ]; ... };
         ndots <integer>;
         search { <string>; ... };
-        view <string> [ <class> ];
+        view <string> <optional_class>;
 };
 
 managed-keys { <string> <string> <integer> <integer> <integer>
@@ -96,14 +96,14 @@ options {
         check-wildcard <boolean>;
         cleaning-interval <integer>;
         clients-per-query <integer>;
-        coresize ( unlimited | default | <sizeval> );
-        datasize ( unlimited | default | <sizeval> );
+        coresize <size>;
+        datasize <size>;
         deallocate-on-exit <boolean>; // obsolete
         deny-answer-addresses { <address_match_element>; ... } [
             except-from { <quoted_string>; ... } ];
         deny-answer-aliases { <quoted_string>; ... } [ except-from {
             <quoted_string>; ... } ];
-        dialup ( notify | notify-passive | refresh | passive | <boolean> );
+        dialup <dialuptype>;
         directory <quoted_string>;
         disable-algorithms <string> { <string>; ... };
         disable-ds-digests <string> { <string>; ... };
@@ -139,14 +139,10 @@ options {
         empty-zones-enable <boolean>;
         fake-iquery <boolean>; // obsolete
         fetch-glue <boolean>; // obsolete
-        fetch-quota-params <integer> <fixedpoint>
-            <fixedpoint> <fixedpoint>; // not configured
-        fetches-per-server <integer> [ ( drop | fail ) ]; // not configured
-        fetches-per-zone <integer> [ ( drop | fail ) ]; // not configured
-        files ( unlimited | default | <sizeval> );
+        files <size>;
         filter-aaaa { <address_match_element>; ... }; // not configured
-        filter-aaaa-on-v4 ( break-dnssec | <boolean> ); // not configured
-        filter-aaaa-on-v6 ( break-dnssec | <boolean> ); // not configured
+        filter-aaaa-on-v4 <filter_aaaa>; // not configured
+        filter-aaaa-on-v6 <filter_aaaa>; // not configured
         flush-zones-on-shutdown <boolean>;
         forward ( first | only );
         forwarders [ port <integer> ] [ dscp <integer> ] { ( <ipv4_address>
@@ -159,7 +155,7 @@ options {
         hostname ( <quoted_string> | none );
         inline-signing <boolean>;
         interface-interval <integer>;
-        ixfr-from-differences ( master | slave | <boolean> );
+        ixfr-from-differences <ixfrdiff>;
         key-directory <quoted_string>;
         lame-ttl <integer>;
         listen-on [ port <integer> ] [ dscp <integer> ] {
@@ -174,7 +170,7 @@ options {
         max-cache-size <size_no_default>;
         max-cache-ttl <integer>;
         max-clients-per-query <integer>;
-        max-ixfr-log-size ( unlimited | default | <sizeval> ); // obsolete
+        max-ixfr-log-size <size>; // obsolete
         max-journal-size <size_no_default>;
         max-ncache-ttl <integer>;
         max-recursion-depth <integer>;
@@ -187,7 +183,7 @@ options {
         max-transfer-time-in <integer>;
         max-transfer-time-out <integer>;
         max-udp-size <integer>;
-        max-zone-ttl ( unlimited | <ttlval> );
+        max-zone-ttl <maxttl_no_default>;
         memstatistics <boolean>;
         memstatistics-file <quoted_string>;
         min-refresh-time <integer>;
@@ -199,7 +195,7 @@ options {
         named-xfer <quoted_string>; // obsolete
         no-case-compress { <address_match_element>; ... };
         nosit-udp-size <integer>; // not configured
-        notify ( explicit | master-only | <boolean> );
+        notify <notifytype>;
         notify-delay <integer>;
         notify-source ( <ipv4_address> | * ) [ port ( <integer> | * ) ] [
             dscp <integer> ];
@@ -267,7 +263,7 @@ options {
         sig-validity-interval <integer> [ <integer> ];
         sit-secret <string>; // not configured
         sortlist { <address_match_element>; ... };
-        stacksize ( unlimited | default | <sizeval> );
+        stacksize <size>;
         statistics-file <quoted_string>;
         statistics-interval <integer>; // not yet implemented
         suppress-initial-notify <boolean>; // not yet implemented
@@ -291,14 +287,14 @@ options {
         update-check-ksk <boolean>;
         use-alt-transfer-source <boolean>;
         use-id-pool <boolean>; // obsolete
-        use-ixfr <boolean>; // obsolete
+        use-ixfr <boolean>;
         use-queryport-pool <boolean>; // obsolete
         use-v4-udp-ports { <portrange>; ... };
         use-v6-udp-ports { <portrange>; ... };
         version ( <quoted_string> | none );
         zero-no-soa-ttl <boolean>;
         zero-no-soa-ttl-cache <boolean>;
-        zone-statistics ( full | terse | none | <boolean> );
+        zone-statistics <zonestat>;
 };
 
 server <netprefix> {
@@ -333,7 +329,7 @@ statistics-channels {
 
 trusted-keys { <string> <integer> <integer> <integer> <quoted_string>; ... };
 
-view <string> [ <class> ] {
+view <string> <optional_class> {
         acache-cleaning-interval <integer>;
         acache-enable <boolean>;
         additional-from-auth <boolean>;
@@ -376,7 +372,7 @@ view <string> [ <class> ] {
             except-from { <quoted_string>; ... } ];
         deny-answer-aliases { <quoted_string>; ... } [ except-from {
             <quoted_string>; ... } ];
-        dialup ( notify | notify-passive | refresh | passive | <boolean> );
+        dialup <dialuptype>;
         disable-algorithms <string> { <string>; ... };
         disable-ds-digests <string> { <string>; ... };
         disable-empty-zone <string>;
@@ -412,18 +408,14 @@ view <string> [ <class> ] {
         empty-server <string>;
         empty-zones-enable <boolean>;
         fetch-glue <boolean>; // obsolete
-        fetch-quota-params <integer> <fixedpoint>
-            <fixedpoint> <fixedpoint>; // not configured
-        fetches-per-server <integer> [ ( drop | fail ) ]; // not configured
-        fetches-per-zone <integer> [ ( drop | fail ) ]; // not configured
         filter-aaaa { <address_match_element>; ... }; // not configured
-        filter-aaaa-on-v4 ( break-dnssec | <boolean> ); // not configured
-        filter-aaaa-on-v6 ( break-dnssec | <boolean> ); // not configured
+        filter-aaaa-on-v4 <filter_aaaa>; // not configured
+        filter-aaaa-on-v6 <filter_aaaa>; // not configured
         forward ( first | only );
         forwarders [ port <integer> ] [ dscp <integer> ] { ( <ipv4_address>
             | <ipv6_address> ) [ port <integer> ] [ dscp <integer> ]; ... };
         inline-signing <boolean>;
-        ixfr-from-differences ( master | slave | <boolean> );
+        ixfr-from-differences <ixfrdiff>;
         key <string> {
                 algorithm <string>;
                 secret <string>;
@@ -441,7 +433,7 @@ view <string> [ <class> ] {
         max-cache-size <size_no_default>;
         max-cache-ttl <integer>;
         max-clients-per-query <integer>;
-        max-ixfr-log-size ( unlimited | default | <sizeval> ); // obsolete
+        max-ixfr-log-size <size>; // obsolete
         max-journal-size <size_no_default>;
         max-ncache-ttl <integer>;
         max-recursion-depth <integer>;
@@ -453,7 +445,7 @@ view <string> [ <class> ] {
         max-transfer-time-in <integer>;
         max-transfer-time-out <integer>;
         max-udp-size <integer>;
-        max-zone-ttl ( unlimited | <ttlval> );
+        max-zone-ttl <maxttl_no_default>;
         min-refresh-time <integer>;
         min-retry-time <integer>;
         min-roots <integer>; // not implemented
@@ -461,7 +453,7 @@ view <string> [ <class> ] {
         multi-master <boolean>;
         no-case-compress { <address_match_element>; ... };
         nosit-udp-size <integer>; // not configured
-        notify ( explicit | master-only | <boolean> );
+        notify <notifytype>;
         notify-delay <integer>;
         notify-source ( <ipv4_address> | * ) [ port ( <integer> | * ) ] [
             dscp <integer> ];
@@ -553,7 +545,7 @@ view <string> [ <class> ] {
         use-queryport-pool <boolean>; // obsolete
         zero-no-soa-ttl <boolean>;
         zero-no-soa-ttl-cache <boolean>;
-        zone <string> [ <class> ] {
+        zone <string> <optional_class> {
                 allow-notify { <address_match_element>; ... };
                 allow-query { <address_match_element>; ... };
                 allow-query-on { <address_match_element>; ... };
@@ -580,8 +572,7 @@ view <string> [ <class> ] {
                 check-wildcard <boolean>;
                 database <string>;
                 delegation-only <boolean>;
-                dialup ( notify | notify-passive | refresh | passive |
-                    <boolean> );
+                dialup <dialuptype>;
                 dlz <string>;
                 dnssec-dnskey-kskonly <boolean>;
                 dnssec-loadkeys-interval <integer>;
@@ -604,8 +595,7 @@ view <string> [ <class> ] {
                 masters [ port <integer> ] [ dscp <integer> ] { ( <masters>
                     | <ipv4_address> [ port <integer> ] | <ipv6_address> [
                     port <integer> ] ) [ key <string> ]; ... };
-                max-ixfr-log-size ( unlimited | default |
-                    <sizeval> ); // obsolete
+                max-ixfr-log-size <size>; // obsolete
                 max-journal-size <size_no_default>;
                 max-refresh-time <integer>;
                 max-retry-time <integer>;
@@ -613,11 +603,11 @@ view <string> [ <class> ] {
                 max-transfer-idle-out <integer>;
                 max-transfer-time-in <integer>;
                 max-transfer-time-out <integer>;
-                max-zone-ttl ( unlimited | <ttlval> );
+                max-zone-ttl <maxttl_no_default>;
                 min-refresh-time <integer>;
                 min-retry-time <integer>;
                 multi-master <boolean>;
-                notify ( explicit | master-only | <boolean> );
+                notify <notifytype>;
                 notify-delay <integer>;
                 notify-source ( <ipv4_address> | * ) [ port ( <integer> | *
                     ) ] [ dscp <integer> ];
@@ -651,12 +641,12 @@ view <string> [ <class> ] {
                     ] <rrtypelist>; ... };
                 use-alt-transfer-source <boolean>;
                 zero-no-soa-ttl <boolean>;
-                zone-statistics ( full | terse | none | <boolean> );
+                zone-statistics <zonestat>;
         };
-        zone-statistics ( full | terse | none | <boolean> );
+        zone-statistics <zonestat>;
 };
 
-zone <string> [ <class> ] {
+zone <string> <optional_class> {
         allow-notify { <address_match_element>; ... };
         allow-query { <address_match_element>; ... };
         allow-query-on { <address_match_element>; ... };
@@ -682,7 +672,7 @@ zone <string> [ <class> ] {
         check-wildcard <boolean>;
         database <string>;
         delegation-only <boolean>;
-        dialup ( notify | notify-passive | refresh | passive | <boolean> );
+        dialup <dialuptype>;
         dlz <string>;
         dnssec-dnskey-kskonly <boolean>;
         dnssec-loadkeys-interval <integer>;
@@ -704,7 +694,7 @@ zone <string> [ <class> ] {
         masters [ port <integer> ] [ dscp <integer> ] { ( <masters> |
             <ipv4_address> [ port <integer> ] | <ipv6_address> [ port
             <integer> ] ) [ key <string> ]; ... };
-        max-ixfr-log-size ( unlimited | default | <sizeval> ); // obsolete
+        max-ixfr-log-size <size>; // obsolete
         max-journal-size <size_no_default>;
         max-refresh-time <integer>;
         max-retry-time <integer>;
@@ -712,11 +702,11 @@ zone <string> [ <class> ] {
         max-transfer-idle-out <integer>;
         max-transfer-time-in <integer>;
         max-transfer-time-out <integer>;
-        max-zone-ttl ( unlimited | <ttlval> );
+        max-zone-ttl <maxttl_no_default>;
         min-refresh-time <integer>;
         min-retry-time <integer>;
         multi-master <boolean>;
-        notify ( explicit | master-only | <boolean> );
+        notify <notifytype>;
         notify-delay <integer>;
         notify-source ( <ipv4_address> | * ) [ port ( <integer> | * ) ] [
             dscp <integer> ];
@@ -748,6 +738,6 @@ zone <string> [ <class> ] {
             | zonesub | external ) [ <string> ] <rrtypelist>; ... };
         use-alt-transfer-source <boolean>;
         zero-no-soa-ttl <boolean>;
-        zone-statistics ( full | terse | none | <boolean> );
+        zone-statistics <zonestat>;
 };
 

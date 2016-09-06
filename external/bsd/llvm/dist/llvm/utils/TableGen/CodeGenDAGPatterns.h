@@ -132,24 +132,13 @@ namespace EEVT {
     /// this an other based on this information.
     bool EnforceSmallerThan(EEVT::TypeSet &Other, TreePattern &TP);
 
-    /// EnforceVectorEltTypeIs - 'this' is now constrained to be a vector type
+    /// EnforceVectorEltTypeIs - 'this' is now constrainted to be a vector type
     /// whose element is VT.
     bool EnforceVectorEltTypeIs(EEVT::TypeSet &VT, TreePattern &TP);
 
-    /// EnforceVectorEltTypeIs - 'this' is now constrained to be a vector type
-    /// whose element is VT.
-    bool EnforceVectorEltTypeIs(MVT::SimpleValueType VT, TreePattern &TP);
-
-    /// EnforceVectorSubVectorTypeIs - 'this' is now constrained to
+    /// EnforceVectorSubVectorTypeIs - 'this' is now constrainted to
     /// be a vector type VT.
     bool EnforceVectorSubVectorTypeIs(EEVT::TypeSet &VT, TreePattern &TP);
-
-    /// EnforceVectorSameNumElts - 'this' is now constrained to
-    /// be a vector with same num elements as VT.
-    bool EnforceVectorSameNumElts(EEVT::TypeSet &VT, TreePattern &TP);
-
-    /// EnforceSameSize - 'this' is now constrained to be the same size as VT.
-    bool EnforceSameSize(EEVT::TypeSet &VT, TreePattern &TP);
 
     bool operator!=(const TypeSet &RHS) const { return TypeVec != RHS.TypeVec; }
     bool operator==(const TypeSet &RHS) const { return TypeVec == RHS.TypeVec; }
@@ -176,7 +165,7 @@ struct SDTypeConstraint {
   enum {
     SDTCisVT, SDTCisPtrTy, SDTCisInt, SDTCisFP, SDTCisVec, SDTCisSameAs,
     SDTCisVTSmallerThanOp, SDTCisOpSmallerThanOp, SDTCisEltOfVec,
-    SDTCisSubVecOfVec, SDTCVecEltisVT, SDTCisSameNumEltsAs, SDTCisSameSizeAs
+    SDTCisSubVecOfVec
   } ConstraintType;
 
   union {   // The discriminated union.
@@ -198,15 +187,6 @@ struct SDTypeConstraint {
     struct {
       unsigned OtherOperandNum;
     } SDTCisSubVecOfVec_Info;
-    struct {
-      MVT::SimpleValueType VT;
-    } SDTCVecEltisVT_Info;
-    struct {
-      unsigned OtherOperandNum;
-    } SDTCisSameNumEltsAs_Info;
-    struct {
-      unsigned OtherOperandNum;
-    } SDTCisSameSizeAs_Info;
   } x;
 
   /// ApplyTypeConstraint - Given a node in a pattern, apply this type

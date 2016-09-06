@@ -247,19 +247,19 @@ IFS=$as_save_IFS
 
       if test "x$CONFIG_SHELL" != x; then :
   export CONFIG_SHELL
-             # We cannot yet assume a decent shell, so we have to provide a
-# neutralization value for shells without unset; and this also
-# works around shells that cannot unset nonexistent variables.
-# Preserve -v and -x to the replacement shell.
-BASH_ENV=/dev/null
-ENV=/dev/null
-(unset BASH_ENV) >/dev/null 2>&1 && unset BASH_ENV ENV
-case $- in # ((((
-  *v*x* | *x*v* ) as_opts=-vx ;;
-  *v* ) as_opts=-v ;;
-  *x* ) as_opts=-x ;;
-  * ) as_opts= ;;
-esac
+  # We cannot yet assume a decent shell, so we have to provide a
+	# neutralization value for shells without unset; and this also
+	# works around shells that cannot unset nonexistent variables.
+	# Preserve -v and -x to the replacement shell.
+	BASH_ENV=/dev/null
+	ENV=/dev/null
+	(unset BASH_ENV) >/dev/null 2>&1 && unset BASH_ENV ENV
+	case $- in # ((((
+	  *v*x* | *x*v* ) as_opts=-vx ;;
+	  *v* ) as_opts=-v ;;
+	  *x* ) as_opts=-x ;;
+	  * ) as_opts= ;;
+	esac
 exec $CONFIG_SHELL $as_opts "$as_myself" ${1+"$@"}
 # Admittedly, this is quite paranoid, since all the known shells bail
 # out after a failed `exec'.
@@ -555,7 +555,7 @@ else
   as_mkdir_p=false
 fi
 
-as_test_x='test -x'
+  as_test_x='test -x'
 as_executable_p=as_fn_executable_p
 
 # Sed expression to map a string onto a valid CPP name.
@@ -5952,8 +5952,8 @@ s390*-*linux*|s390*-*tpf*|sparc*-*linux*)
 		LD="${LD-ld} -m elf32_x86_64"
 		;;
 	      *)
-		LD="${LD-ld} -m elf_i386"
-		;;
+	    LD="${LD-ld} -m elf_i386"
+	    ;;
 	    esac
 	    ;;
 	  powerpc64le-*)
@@ -16671,7 +16671,7 @@ as_fn_executable_p ()
 {
   test -f "$1" && test -x "$1"
 } # as_fn_executable_p
-as_test_x='test -x'
+  as_test_x='test -x'
 as_executable_p=as_fn_executable_p
 
 # Sed expression to map a string onto a valid CPP name.

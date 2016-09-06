@@ -1,4 +1,4 @@
-/*	$NetBSD: sdmmc_io.c,v 1.12 2015/10/06 14:32:51 mlelstv Exp $	*/
+/*	$NetBSD: sdmmc_io.c,v 1.7 2012/02/01 22:34:43 matt Exp $	*/
 /*	$OpenBSD: sdmmc_io.c,v 1.10 2007/09/17 01:33:33 krw Exp $	*/
 
 /*
@@ -20,7 +20,7 @@
 /* Routines for SD I/O cards. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sdmmc_io.c,v 1.12 2015/10/06 14:32:51 mlelstv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sdmmc_io.c,v 1.7 2012/02/01 22:34:43 matt Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_sdmmc.h"
@@ -231,8 +231,7 @@ sdmmc_io_init(struct sdmmc_softc *sc, struct sdmmc_function *sf)
 		if (sc->sc_busclk > sf->csd.tran_speed)
 			sc->sc_busclk = sf->csd.tran_speed;
 		error =
-		    sdmmc_chip_bus_clock(sc->sc_sct, sc->sc_sch, sc->sc_busclk,
-			false);
+		    sdmmc_chip_bus_clock(sc->sc_sct, sc->sc_sch, sc->sc_busclk);
 		if (error)
 			aprint_error_dev(sc->sc_dev,
 			    "can't change bus clock\n");
@@ -566,7 +565,7 @@ sdmmc_io_send_op_cond(struct sdmmc_softc *sc, u_int32_t ocr, u_int32_t *ocrp)
 		memset(&cmd, 0, sizeof cmd);
 		cmd.c_opcode = SD_IO_SEND_OP_COND;
 		cmd.c_arg = ocr;
-		cmd.c_flags = SCF_CMD_BCR | SCF_RSP_R4 | SCF_TOUT_OK;
+		cmd.c_flags = SCF_CMD_BCR | SCF_RSP_R4;
 
 		error = sdmmc_mmc_command(sc, &cmd);
 		if (error)
@@ -597,11 +596,9 @@ sdmmc_intr_enable(struct sdmmc_function *sf)
 	uint8_t reg;
 
 	SDMMC_LOCK(sc);
-	mutex_enter(&sc->sc_intr_task_mtx);
 	reg = sdmmc_io_read_1(sf0, SD_IO_CCCR_FN_INTEN);
 	reg |= 1 << sf->number;
 	sdmmc_io_write_1(sf0, SD_IO_CCCR_FN_INTEN, reg);
-	mutex_exit(&sc->sc_intr_task_mtx);
 	SDMMC_UNLOCK(sc);
 }
 
@@ -613,11 +610,9 @@ sdmmc_intr_disable(struct sdmmc_function *sf)
 	uint8_t reg;
 
 	SDMMC_LOCK(sc);
-	mutex_enter(&sc->sc_intr_task_mtx);
 	reg = sdmmc_io_read_1(sf0, SD_IO_CCCR_FN_INTEN);
 	reg &= ~(1 << sf->number);
 	sdmmc_io_write_1(sf0, SD_IO_CCCR_FN_INTEN, reg);
-	mutex_exit(&sc->sc_intr_task_mtx);
 	SDMMC_UNLOCK(sc);
 }
 
@@ -632,6 +627,7 @@ sdmmc_intr_establish(device_t dev, int (*fun)(void *), void *arg,
 {
 	struct sdmmc_softc *sc = device_private(dev);
 	struct sdmmc_intr_handler *ih;
+	int s;
 
 	if (sc->sc_sct->card_enable_intr == NULL)
 		return NULL;
@@ -651,13 +647,13 @@ sdmmc_intr_establish(device_t dev, int (*fun)(void *), void *arg,
 	ih->ih_fun = fun;
 	ih->ih_arg = arg;
 
-	mutex_enter(&sc->sc_mtx);
+	s = splhigh();
 	if (TAILQ_EMPTY(&sc->sc_intrq)) {
 		sdmmc_intr_enable(sc->sc_fn0);
 		sdmmc_chip_card_enable_intr(sc->sc_sct, sc->sc_sch, 1);
 	}
 	TAILQ_INSERT_TAIL(&sc->sc_intrq, ih, entry);
-	mutex_exit(&sc->sc_mtx);
+	splx(s);
 
 	return ih;
 }
@@ -670,17 +666,18 @@ sdmmc_intr_disestablish(void *cookie)
 {
 	struct sdmmc_intr_handler *ih = cookie;
 	struct sdmmc_softc *sc = ih->ih_softc;
+	int s;
 
 	if (sc->sc_sct->card_enable_intr == NULL)
 		return;
 
-	mutex_enter(&sc->sc_mtx);
+	s = splhigh();
 	TAILQ_REMOVE(&sc->sc_intrq, ih, entry);
 	if (TAILQ_EMPTY(&sc->sc_intrq)) {
 		sdmmc_chip_card_enable_intr(sc->sc_sct, sc->sc_sch, 0);
 		sdmmc_intr_disable(sc->sc_fn0);
 	}
-	mutex_exit(&sc->sc_mtx);
+	splx(s);
 
 	free(ih->ih_name, M_DEVBUF);
 	free(ih, M_DEVBUF);
@@ -696,13 +693,12 @@ sdmmc_card_intr(device_t dev)
 {
 	struct sdmmc_softc *sc = device_private(dev);
 
-	if (sc->sc_sct->card_enable_intr == NULL)
-		return;
-
-	mutex_enter(&sc->sc_intr_task_mtx);
-	if (!sdmmc_task_pending(&sc->sc_intr_task))
-		sdmmc_add_task(sc, &sc->sc_intr_task);
-	mutex_exit(&sc->sc_intr_task_mtx);
+	if (sc->sc_sct->card_enable_intr) {
+		mutex_enter(&sc->sc_intr_task_mtx);
+		if (!sdmmc_task_pending(&sc->sc_intr_task))
+			sdmmc_add_task(sc, &sc->sc_intr_task);
+		mutex_exit(&sc->sc_intr_task_mtx);
+	}
 }
 
 void
@@ -710,13 +706,15 @@ sdmmc_intr_task(void *arg)
 {
 	struct sdmmc_softc *sc = (struct sdmmc_softc *)arg;
 	struct sdmmc_intr_handler *ih;
+	int s;
 
-	mutex_enter(&sc->sc_mtx);
+	s = splsdmmc();
 	TAILQ_FOREACH(ih, &sc->sc_intrq, entry) {
+		splx(s);
 		/* XXX examine return value and do evcount stuff*/
 		(void)(*ih->ih_fun)(ih->ih_arg);
+		s = splsdmmc();
 	}
-	mutex_exit(&sc->sc_mtx);
-
 	sdmmc_chip_card_intr_ack(sc->sc_sct, sc->sc_sch);
+	splx(s);
 }

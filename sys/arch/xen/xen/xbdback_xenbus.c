@@ -1,4 +1,4 @@
-/*      $NetBSD: xbdback_xenbus.c,v 1.62 2016/01/06 15:28:40 bouyer Exp $      */
+/*      $NetBSD: xbdback_xenbus.c,v 1.59.4.3 2016/01/08 21:05:14 snj Exp $      */
 
 /*
  * Copyright (c) 2006 Manuel Bouyer.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xbdback_xenbus.c,v 1.62 2016/01/06 15:28:40 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xbdback_xenbus.c,v 1.59.4.3 2016/01/08 21:05:14 snj Exp $");
 
 #include <sys/atomic.h>
 #include <sys/buf.h>

@@ -1,5 +1,5 @@
 /* Serial interface for a pipe to a separate program
-   Copyright (C) 1999-2015 Free Software Foundation, Inc.
+   Copyright (C) 1999-2014 Free Software Foundation, Inc.
 
    Contributed by Cygnus Solutions.
 
@@ -29,6 +29,7 @@
 #include <sys/socket.h>
 #include <sys/time.h>
 #include <fcntl.h>
+#include <string.h>
 #include "filestuff.h"
 
 #include <signal.h>
@@ -133,7 +134,7 @@ pipe_open (struct serial *scb, const char *name)
   if (err_pdes[1] != -1)
     close (err_pdes[1]);
   /* :end chunk */
-  state = XNEW (struct pipe_state);
+  state = XMALLOC (struct pipe_state);
   state->pid = pid;
   scb->fd = pdes[0];
   scb->error_fd = err_pdes[0];
@@ -224,7 +225,6 @@ static const struct serial_ops pipe_ops =
   ser_base_noflush_set_tty_state,
   ser_base_setbaudrate,
   ser_base_setstopbits,
-  ser_base_setparity,
   ser_base_drain_output,
   ser_base_async,
   ser_unix_read_prim,

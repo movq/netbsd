@@ -36,13 +36,10 @@ namespace llvm {
 namespace clang {
 class ASTContext;
 class CXXRecordDecl;
-class CXXMethodDecl;
 class CodeGenOptions;
-class CoverageSourceInfo;
 class DiagnosticsEngine;
-class HeaderSearchOptions;
 class ObjCMethodDecl;
-class PreprocessorOptions;
+class CoverageSourceInfo;
 
 namespace CodeGen {
 class CGFunctionInfo;
@@ -51,7 +48,7 @@ class CodeGenModule;
 class CodeGenABITypes
 {
 public:
-  CodeGenABITypes(ASTContext &C, llvm::Module &M,
+  CodeGenABITypes(ASTContext &C, llvm::Module &M, const llvm::DataLayout &TD,
                   CoverageSourceInfo *CoverageInfo = nullptr);
   ~CodeGenABITypes();
 
@@ -61,13 +58,12 @@ public:
   const CGFunctionInfo &arrangeObjCMessageSendSignature(
                                                      const ObjCMethodDecl *MD,
                                                      QualType receiverType);
-  const CGFunctionInfo &arrangeFreeFunctionType(CanQual<FunctionProtoType> Ty,
-                                                const FunctionDecl *FD);
+  const CGFunctionInfo &arrangeFreeFunctionType(
+                                               CanQual<FunctionProtoType> Ty);
   const CGFunctionInfo &arrangeFreeFunctionType(
                                              CanQual<FunctionNoProtoType> Ty);
   const CGFunctionInfo &arrangeCXXMethodType(const CXXRecordDecl *RD,
-                                             const FunctionProtoType *FTP,
-                                             const CXXMethodDecl *MD);
+                                             const FunctionProtoType *FTP);
   const CGFunctionInfo &arrangeFreeFunctionCall(CanQualType returnType,
                                                 ArrayRef<CanQualType> argTypes,
                                                 FunctionType::ExtInfo info,
@@ -77,12 +73,10 @@ private:
   /// Default CodeGenOptions object used to initialize the
   /// CodeGenModule and otherwise not used. More specifically, it is
   /// not used in ABI type generation, so none of the options matter.
-  std::unique_ptr<CodeGenOptions> CGO;
-  std::unique_ptr<HeaderSearchOptions> HSO;
-  std::unique_ptr<PreprocessorOptions> PPO;
+  CodeGenOptions *CGO;
 
   /// The CodeGenModule we use get to the CodeGenTypes object.
-  std::unique_ptr<CodeGen::CodeGenModule> CGM;
+  CodeGen::CodeGenModule *CGM;
 };
 
 }  // end namespace CodeGen

@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_subdev_bios_base.c,v 1.3 2015/10/27 13:13:47 riastradh Exp $	*/
+/*	$NetBSD: nouveau_subdev_bios_base.c,v 1.1.1.1.4.2 2016/02/11 22:52:58 snj Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_bios_base.c,v 1.3 2015/10/27 13:13:47 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_bios_base.c,v 1.1.1.1.4.2 2016/02/11 22:52:58 snj Exp $");
 
 #include <core/object.h>
 #include <core/device.h>

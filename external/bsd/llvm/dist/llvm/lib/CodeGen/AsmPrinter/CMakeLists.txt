@@ -5,7 +5,6 @@ add_llvm_library(LLVMAsmPrinter
   AsmPrinterDwarf.cpp
   AsmPrinterInlineAsm.cpp
   DbgValueHistoryCalculator.cpp
-  DebugLocStream.cpp
   DIE.cpp
   DIEHash.cpp
   DwarfAccelTable.cpp
@@ -19,7 +18,7 @@ add_llvm_library(LLVMAsmPrinter
   EHStreamer.cpp
   ErlangGCPrinter.cpp
   OcamlGCPrinter.cpp
-  WinException.cpp
+  Win64Exception.cpp
   WinCodeViewLineTables.cpp
   )
 

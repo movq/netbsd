@@ -1,5 +1,6 @@
 /* IBM S/390-specific support for 64-bit ELF
-   Copyright (C) 2000-2015 Free Software Foundation, Inc.
+   Copyright 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009,
+   2010, 2011, 2012 Free Software Foundation, Inc.
    Contributed Martin Schwidefsky (schwidefsky@de.ibm.com).
 
    This file is part of BFD, the Binary File Descriptor library.
@@ -42,7 +43,7 @@ static reloc_howto_type elf_howto_table[] =
 {
   HOWTO (R_390_NONE,		/* type */
 	 0,			/* rightshift */
-	 3,			/* size (0 = byte, 1 = 2 byte, 2 = 4 byte) */
+	 0,			/* size (0 = byte, 1 = 2 byte, 2 = 4 byte) */
 	 0,			/* bitsize */
 	 FALSE,			/* pc_relative */
 	 0,			/* bitpos */
@@ -1183,12 +1184,6 @@ elf_s390_check_relocs (bfd *abfd,
 	  /* Fall through */
 
 	case R_390_TLS_LE64:
-	  /* For static linking and executables this reloc will be
-	     calculated at linktime otherwise a TLS_TPOFF runtime
-	     reloc will be generated.  */
-	  if (r_type == R_390_TLS_LE64 && info->pie)
-	    break;
-
 	  if (!info->shared)
 	    break;
 	  info->flags |= DF_STATIC_TLS;
@@ -1707,7 +1702,7 @@ elf_s390_adjust_dynamic_symbol (struct bfd_link_info *info,
 
   s = htab->sdynbss;
 
-  return _bfd_elf_adjust_dynamic_copy (info, h, s);
+  return _bfd_elf_adjust_dynamic_copy (h, s);
 }
 
 /* Allocate space in .plt, .got and associated reloc sections for
@@ -2001,7 +1996,7 @@ elf_s390_size_dynamic_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
 
   /* Set up .got offsets for local syms, and space for local dynamic
      relocs.  */
-  for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
+  for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link_next)
     {
       bfd_signed_vma *local_got;
       bfd_signed_vma *end_local_got;
@@ -3080,7 +3075,7 @@ elf_s390_relocate_section (bfd *output_bfd,
 	  break;
 
 	case R_390_TLS_LE64:
-	  if (info->shared && !info->pie)
+	  if (info->shared)
 	    {
 	      /* Linking a shared library with non-fpic code requires
 		 a R_390_TLS_TPOFF relocation.  */
@@ -3723,7 +3718,7 @@ elf_s390_finish_dynamic_sections (bfd *output_bfd,
     }
 
   /* Finish dynamic symbol for local IFUNC symbols.  */
-  for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
+  for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link_next)
     {
       struct plt_entry *local_plt;
       Elf_Internal_Sym *isym;
@@ -3766,21 +3761,6 @@ elf_s390_plt_sym_val (bfd_vma i, const asection *plt,
   return plt->vma + PLT_FIRST_ENTRY_SIZE + i * PLT_ENTRY_SIZE;
 }
 
-/* Merge backend specific data from an object file to the output
-   object file when linking.  */
-
-static bfd_boolean
-elf64_s390_merge_private_bfd_data (bfd *ibfd, bfd *obfd)
-{
-  if (!is_s390_elf (ibfd) || !is_s390_elf (obfd))
-    return TRUE;
-
-  if (!elf_s390_merge_obj_attributes (ibfd, obfd))
-    return FALSE;
-
-  return TRUE;
-}
-
 /* Why was the hash table entry size definition changed from
    ARCH_SIZE/8 to 4? This breaks the 64 bit dynamic linker and
    this is the only reason for the s390_elf64_size_info structure.  */
@@ -3816,7 +3796,7 @@ const struct elf_size_info s390_elf64_size_info =
   bfd_elf64_swap_reloca_out
 };
 
-#define TARGET_BIG_SYM	s390_elf64_vec
+#define TARGET_BIG_SYM	bfd_elf64_s390_vec
 #define TARGET_BIG_NAME	"elf64-s390"
 #define ELF_ARCH	bfd_arch_s390
 #define ELF_TARGET_ID	S390_ELF_DATA
@@ -3839,8 +3819,7 @@ const struct elf_size_info s390_elf64_size_info =
 #define bfd_elf64_bfd_is_local_label_name     elf_s390_is_local_label_name
 #define bfd_elf64_bfd_link_hash_table_create  elf_s390_link_hash_table_create
 #define bfd_elf64_bfd_reloc_type_lookup	      elf_s390_reloc_type_lookup
-#define bfd_elf64_bfd_reloc_name_lookup       elf_s390_reloc_name_lookup
-#define bfd_elf64_bfd_merge_private_bfd_data  elf64_s390_merge_private_bfd_data
+#define bfd_elf64_bfd_reloc_name_lookup elf_s390_reloc_name_lookup
 
 #define elf_backend_adjust_dynamic_symbol     elf_s390_adjust_dynamic_symbol
 #define elf_backend_check_relocs	      elf_s390_check_relocs
@@ -3856,7 +3835,6 @@ const struct elf_size_info s390_elf64_size_info =
 #define elf_backend_init_index_section	      _bfd_elf_init_1_index_section
 #define elf_backend_plt_sym_val		      elf_s390_plt_sym_val
 #define elf_backend_add_symbol_hook           elf_s390_add_symbol_hook
-#define elf_backend_sort_relocs_p             elf_s390_elf_sort_relocs_p
 
 #define bfd_elf64_mkobject		elf_s390_mkobject
 #define elf_backend_object_p		elf_s390_object_p

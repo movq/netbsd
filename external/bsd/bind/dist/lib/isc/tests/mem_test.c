@@ -1,4 +1,4 @@
-/*	$NetBSD: mem_test.c,v 1.1.1.2 2015/12/17 03:22:11 christos Exp $	*/
+/*	$NetBSD: mem_test.c,v 1.1.1.1.2.3 2016/03/13 08:06:15 martin Exp $	*/
 
 /*
  * Copyright (C) 2015  Internet Systems Consortium, Inc. ("ISC")

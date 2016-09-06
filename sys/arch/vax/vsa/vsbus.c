@@ -1,4 +1,4 @@
-/*	$NetBSD: vsbus.c,v 1.62 2016/07/07 06:55:39 msaitoh Exp $ */
+/*	$NetBSD: vsbus.c,v 1.60.14.1 2015/06/02 10:14:22 sborrill Exp $ */
 /*
  * Copyright (c) 1996, 1999 Ludd, University of Lule}, Sweden.
  * All rights reserved.
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vsbus.c,v 1.62 2016/07/07 06:55:39 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vsbus.c,v 1.60.14.1 2015/06/02 10:14:22 sborrill Exp $");
 
 #include "opt_cputype.h"
 
@@ -94,7 +94,7 @@ vsbus_print(void *aux, const char *name)
 
 	aprint_normal(" csr 0x%lx vec %o ipl %x maskbit %d", va->va_paddr,
 	    va->va_cvec & 511, va->va_br, va->va_maskno - 1);
-	return UNCONF;
+	return UNCONF; 
 }
 
 int
@@ -374,7 +374,7 @@ vsbus_dma_intr(void)
 {	
 	struct vsbus_dma *vd;
 	
-	vd = SIMPLEQ_FIRST(&vsbus_dma);
+	vd = SIMPLEQ_FIRST(&vsbus_dma); 
 	if (vd == NULL) {
 		vsbus_active = 0;
 		return;

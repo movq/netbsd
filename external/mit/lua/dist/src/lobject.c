@@ -1,4 +1,4 @@
-/*	$NetBSD: lobject.c,v 1.8 2016/01/28 14:41:39 lneto Exp $	*/
+/*	$NetBSD: lobject.c,v 1.3.2.3 2016/07/01 06:35:02 snj Exp $	*/
 
 /*
 ** Id: lobject.c,v 2.108 2015/11/02 16:09:30 roberto Exp 

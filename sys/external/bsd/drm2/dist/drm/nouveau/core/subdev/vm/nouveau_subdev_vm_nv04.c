@@ -1,4 +1,4 @@
-/*	$NetBSD: nouveau_subdev_vm_nv04.c,v 1.3 2015/10/14 00:12:55 mrg Exp $	*/
+/*	$NetBSD: nouveau_subdev_vm_nv04.c,v 1.1.1.1.4.2 2016/02/11 23:20:11 snj Exp $	*/
 
 /*
  * Copyright 2012 Red Hat Inc.
@@ -25,7 +25,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_vm_nv04.c,v 1.3 2015/10/14 00:12:55 mrg Exp $");
+__KERNEL_RCSID(0, "$NetBSD: nouveau_subdev_vm_nv04.c,v 1.1.1.1.4.2 2016/02/11 23:20:11 snj Exp $");
 
 #include <core/gpuobj.h>
 

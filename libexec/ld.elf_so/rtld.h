@@ -1,4 +1,4 @@
-/*	$NetBSD: rtld.h,v 1.125 2016/06/14 13:06:41 christos Exp $	 */
+/*	$NetBSD: rtld.h,v 1.118.2.1 2016/03/06 18:17:55 martin Exp $	 */
 
 /*
  * Copyright 1996 John D. Polstra.
@@ -274,12 +274,6 @@ typedef struct Struct_Obj_Entry {
 	size_t		tlssize;	/* Size of TLS block */
 	size_t		tlsoffset;	/* Offset in the static TLS block */
 	size_t		tlsalign;	/* Needed alignment for static TLS */
-#endif
-
-#ifdef GNU_RELRO
-	/* relocation readonly */
-	void		*relro_page;
-	size_t		relro_size;
 #endif
 
 	/* symbol versioning */

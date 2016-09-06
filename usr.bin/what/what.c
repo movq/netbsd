@@ -1,4 +1,4 @@
-/*	$NetBSD: what.c,v 1.12 2015/12/12 09:50:12 dholland Exp $	*/
+/*	$NetBSD: what.c,v 1.11 2011/09/06 18:45:49 joerg Exp $	*/
 
 /*
  * Copyright (c) 1980, 1988, 1993
@@ -39,7 +39,7 @@ __COPYRIGHT("@(#) Copyright (c) 1980, 1988, 1993\
 #if 0
 static char sccsid[] = "@(#)what.c	8.1 (Berkeley) 6/6/93";
 #endif
-__RCSID("$NetBSD: what.c,v 1.12 2015/12/12 09:50:12 dholland Exp $");
+__RCSID("$NetBSD: what.c,v 1.11 2011/09/06 18:45:49 joerg Exp $");
 #endif /* not lint */
 
 #include <locale.h>
@@ -56,6 +56,7 @@ static int sflag;
 /*
  * what
  */
+/* ARGSUSED */
 int
 main(int argc, char **argv)
 {

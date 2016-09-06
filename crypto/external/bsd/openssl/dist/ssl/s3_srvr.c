@@ -1736,10 +1736,10 @@ int ssl3_send_server_key_exchange(SSL *s)
             }
 
             s->s3->tmp.dh = dh;
-            if (!DH_generate_key(dh)) {
-                SSLerr(SSL_F_SSL3_SEND_SERVER_KEY_EXCHANGE, ERR_R_DH_LIB);
-                goto err;
-            }
+                if (!DH_generate_key(dh)) {
+                    SSLerr(SSL_F_SSL3_SEND_SERVER_KEY_EXCHANGE, ERR_R_DH_LIB);
+                    goto err;
+                }
             r[0] = dh->p;
             r[1] = dh->g;
             r[2] = dh->pub_key;

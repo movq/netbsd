@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.2 2014/10/01 09:30:58 skrll Exp $
+#	$NetBSD: Makefile,v 1.1.24.1 2014/10/06 13:09:41 martin Exp $
 
 XCBEXT=	randr
 

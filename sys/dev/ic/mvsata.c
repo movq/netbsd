@@ -1,4 +1,4 @@
-/*	$NetBSD: mvsata.c,v 1.35 2016/05/02 19:18:29 christos Exp $	*/
+/*	$NetBSD: mvsata.c,v 1.33 2014/02/17 13:41:20 kiyohara Exp $	*/
 /*
  * Copyright (c) 2008 KIYOHARA Takashi
  * All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: mvsata.c,v 1.35 2016/05/02 19:18:29 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: mvsata.c,v 1.33 2014/02/17 13:41:20 kiyohara Exp $");
 
 #include "opt_mvsata.h"
 
@@ -888,12 +888,10 @@ mvsata_atapi_probe_device(struct atapibus_softc *sc, int target)
 		sa.sa_inqbuf.type = ATAPI_CFG_TYPE(id->atap_config);
 		sa.sa_inqbuf.removable = id->atap_config & ATAPI_CFG_REMOV ?
 		    T_REMOV : T_FIXED;
-		strnvisx(model, sizeof(model), id->atap_model, 40,
-		    VIS_TRIM|VIS_SAFE|VIS_OCTAL);
-		strnvisx(serial_number, sizeof(serial_number), id->atap_serial,
-		    20, VIS_TRIM|VIS_SAFE|VIS_OCTAL);
-		strnvisx(firmware_revision, sizeof(firmware_revision),
-		    id->atap_revision, 8, VIS_TRIM|VIS_SAFE|VIS_OCTAL);
+		scsipi_strvis((u_char *)model, 40, id->atap_model, 40);
+		scsipi_strvis((u_char *)serial_number, 20, id->atap_serial, 20);
+		scsipi_strvis((u_char *)firmware_revision, 8, id->atap_revision,
+		    8);
 		sa.sa_inqbuf.vendor = model;
 		sa.sa_inqbuf.product = serial_number;
 		sa.sa_inqbuf.revision = firmware_revision;
@@ -1225,7 +1223,7 @@ do_pio:
 		else
 			wdccommand(chp, 0, cmd, cyl,
 			    head, sect, nblks,
-			    (ata_bio->lp->d_type == DKTYPE_ST506) ?
+			    (ata_bio->lp->d_type == DTYPE_ST506) ?
 			    ata_bio->lp->d_precompcyl / 4 : 0);
 
 		/* start timeout machinery */
@@ -1521,7 +1519,7 @@ geometry:
 		goto multimode;
 	wdccommand(chp, 0, WDCC_IDP, ata_bio->lp->d_ncylinders,
 	    ata_bio->lp->d_ntracks - 1, 0, ata_bio->lp->d_nsectors,
-	    (ata_bio->lp->d_type == DKTYPE_ST506) ?
+	    (ata_bio->lp->d_type == DTYPE_ST506) ?
 	    ata_bio->lp->d_precompcyl / 4 : 0);
 	errstring = "geometry";
 	if (wdcwait(chp, WDCS_DRDY, WDCS_DRDY, ATA_DELAY, flags))

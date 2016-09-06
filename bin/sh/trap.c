@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.37 2015/08/22 12:12:47 christos Exp $	*/
+/*	$NetBSD: trap.c,v 1.35.22.1 2015/11/04 17:58:38 riz Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)trap.c	8.5 (Berkeley) 6/5/95";
 #else
-__RCSID("$NetBSD: trap.c,v 1.37 2015/08/22 12:12:47 christos Exp $");
+__RCSID("$NetBSD: trap.c,v 1.35.22.1 2015/11/04 17:58:38 riz Exp $");
 #endif
 #endif /* not lint */
 

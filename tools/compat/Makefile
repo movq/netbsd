@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.81 2016/03/06 10:19:01 aymeric Exp $
+#	$NetBSD: Makefile,v 1.72.4.1 2015/04/22 07:18:58 snj Exp $
 
 HOSTLIB=	nbcompat
 
@@ -13,8 +13,7 @@ SRCS=		atoll.c basename.c cdbr.c cdbw.c dirname.c \
 		mi_vector_hash.c mkdtemp.c \
 		mkstemp.c pread.c putc_unlocked.c pwcache.c pwrite.c \
 		pw_scan.c \
-		raise_default_signal.c reallocarr.c rmd160.c rmd160hl.c \
-		regcomp.c regerror.c regexec.c regfree.c \
+		raise_default_signal.c rmd160.c rmd160hl.c \
 		setenv.c setgroupent.c \
 		setpassent.c setprogname.c sha1.c sha1hl.c sha2.c \
 		sha256hl.c sha384hl.c sha512hl.c snprintb.c snprintf.c \
@@ -48,7 +47,6 @@ CPPFLAGS+=	-I. -I./include -I${.CURDIR} -I${.CURDIR}/sys \
 		${.CURDIR}/../../lib/libc/hash/sha1 \
 		${.CURDIR}/../../lib/libc/hash/sha2 \
 		${.CURDIR}/../../lib/libc/md \
-		${.CURDIR}/../../lib/libc/regex \
 		${.CURDIR}/../../lib/libc/stdio \
 		${.CURDIR}/../../lib/libc/stdlib \
 		${.CURDIR}/../../lib/libc/string \
@@ -61,7 +59,7 @@ CPPFLAGS+=	-I. -I./include -I${.CURDIR} -I${.CURDIR}/sys \
 		${.CURDIR}/../../common/lib/libc/md \
 		${.CURDIR}/../../common/lib/libc/stdlib \
 		${.CURDIR}/../../common/lib/libutil \
-		${.CURDIR}/../../external/bsd/flex/dist/src
+		${.CURDIR}/../../external/bsd/flex/dist
 
 DPSRCS+=	defs.mk
 CLEANFILES+=	config.log config.status configure.lineno *.stamp

@@ -1,4 +1,4 @@
-/*	$NetBSD: uglydate.c,v 1.1.1.4 2016/01/08 21:21:33 christos Exp $	*/
+/*	$NetBSD: uglydate.c,v 1.1.1.2.8.3 2016/05/11 11:35:43 martin Exp $	*/
 
 #include "config.h"
 #include "ntp_fp.h"

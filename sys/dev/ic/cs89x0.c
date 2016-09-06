@@ -1,4 +1,4 @@
-/*	$NetBSD: cs89x0.c,v 1.37 2016/06/10 13:27:13 ozaki-r Exp $	*/
+/*	$NetBSD: cs89x0.c,v 1.34 2014/08/10 16:44:35 tls Exp $	*/
 
 /*
  * Copyright (c) 2004 Christopher Gilbert
@@ -212,7 +212,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: cs89x0.c,v 1.37 2016/06/10 13:27:13 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: cs89x0.c,v 1.34 2014/08/10 16:44:35 tls Exp $");
 
 #include "opt_inet.h"
 
@@ -226,7 +226,7 @@ __KERNEL_RCSID(0, "$NetBSD: cs89x0.c,v 1.37 2016/06/10 13:27:13 ozaki-r Exp $");
 #include <sys/ioctl.h>
 #include <sys/errno.h>
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_ether.h>
@@ -1665,7 +1665,7 @@ cs_ether_input(struct cs_softc *sc, struct mbuf *m)
 	bpf_mtap(ifp, m);
 
 	/* Pass the packet up. */
-	if_percpuq_enqueue(ifp->if_percpuq, m);
+	(*ifp->if_input)(ifp, m);
 }
 
 void
@@ -1729,7 +1729,7 @@ cs_process_receive(struct cs_softc *sc)
 		    CS_READ_PACKET_PAGE(sc, PKTPG_RX_CFG) | RX_CFG_SKIP);
 		return;
 	}
-	m_set_rcvif(m, ifp);
+	m->m_pkthdr.rcvif = ifp;
 	m->m_pkthdr.len = totlen;
 
 	/* number of bytes to align ip header on word boundary for ipintr */
@@ -1811,7 +1811,7 @@ cs_process_rx_early(struct cs_softc *sc)
 		    CS_READ_PACKET_PAGE(sc, PKTPG_RX_CFG) | RX_CFG_SKIP);
 		return;
 	}
-	m_set_rcvif(m, ifp);
+	m->m_pkthdr.rcvif = ifp;
 	/*
 	 * save processing by always using a mbuf cluster, guaranteed to fit
 	 * packet

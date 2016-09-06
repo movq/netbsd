@@ -1,13 +1,8 @@
-#	$NetBSD: Makefile.inc,v 1.8 2016/01/26 23:12:14 pooka Exp $
+#	$NetBSD: Makefile.inc,v 1.3 2010/03/01 13:12:19 pooka Exp $
 #
 
 RUMPTOP=	${.CURDIR}/../../..
-
-RUMPDEVLIBDIR:= ${.PARSEDIR}
-
-.if defined(RUMP_COMPONENT) && !empty(RUMP_COMPONENT:Mioconf)
-.PATH:	${RUMPDEVLIBDIR}
-SRCS+=   component_simple.c
-.endif
+CPPFLAGS+=	-I${RUMPTOP}/librump/rumpkern -I${RUMPTOP}/librump/rumpdev \
+		-I${RUMPTOP}/librump/rumpdev/opt
 
 .include "${RUMPTOP}/Makefile.rump"

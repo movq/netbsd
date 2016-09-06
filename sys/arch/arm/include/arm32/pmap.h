@@ -1,4 +1,4 @@
-/*	$NetBSD: pmap.h,v 1.144 2016/07/14 05:00:51 skrll Exp $	*/
+/*	$NetBSD: pmap.h,v 1.135.2.2 2015/05/27 05:33:29 msaitoh Exp $	*/
 
 /*
  * Copyright (c) 2002, 2003 Wasabi Systems, Inc.
@@ -80,14 +80,13 @@
 #include <arm/cpufunc.h>
 #include <arm/locore.h>
 #include <uvm/uvm_object.h>
-#include <uvm/pmap/pmap_pvt.h>
 #endif
 
 #ifdef ARM_MMU_EXTENDED
 #define PMAP_TLB_MAX			1
 #define PMAP_TLB_HWPAGEWALKER		1
 #if PMAP_TLB_MAX > 1
-#define PMAP_TLB_NEED_SHOOTDOWN		1
+#define PMAP_NEED_TLB_SHOOTDOWN		1
 #endif
 #define PMAP_TLB_FLUSH_ASID_ON_RESET	(arm_has_tlbiasid_p)
 #define PMAP_TLB_NUM_PIDS		256
@@ -347,9 +346,9 @@ extern int		arm_poolpage_vmfreelist;
 
 #define pmap_phys_address(ppn)		(arm_ptob((ppn)))
 u_int arm32_mmap_flags(paddr_t);
-#define ARM32_MMAP_WRITECOMBINE		0x40000000
+#define ARM32_MMAP_WRITECOMBINE	0x40000000
 #define ARM32_MMAP_CACHEABLE		0x20000000
-#define pmap_mmap_flags(ppn)		arm32_mmap_flags(ppn)
+#define pmap_mmap_flags(ppn)			arm32_mmap_flags(ppn)
 
 #define	PMAP_PTE			0x10000000 /* kenter_pa */
 
@@ -429,9 +428,9 @@ extern vaddr_t	pmap_curmaxkvaddr;
 
 #if defined(ARM_MMU_EXTENDED) && defined(__HAVE_MM_MD_DIRECT_MAPPED_PHYS)
 /*
- * Ending VA of direct mapped memory (usually KERNEL_VM_BASE).
+ * Starting VA of direct mapped memory (usually KERNEL_BASE).
  */
-extern vaddr_t pmap_directlimit;
+extern vaddr_t pmap_directbase;
 #endif
 
 /*
@@ -568,12 +567,10 @@ static inline void
 l2pte_set(pt_entry_t *ptep, pt_entry_t pte, pt_entry_t opte)
 {
 	if (l1pte_lpage_p(pte)) {
-		KASSERTMSG((((uintptr_t)ptep / sizeof(pte)) & (L2_L_SIZE / L2_S_SIZE - 1)) == 0, "%p", ptep);
 		for (size_t k = 0; k < L2_L_SIZE / L2_S_SIZE; k++) {
 			*ptep++ = pte;
 		}
 	} else {
-		KASSERTMSG((((uintptr_t)ptep / sizeof(pte)) & (PAGE_SIZE / L2_S_SIZE - 1)) == 0, "%p", ptep);
 		for (size_t k = 0; k < PAGE_SIZE / L2_S_SIZE; k++) {
 			KASSERTMSG(*ptep == opte, "%#x [*%p] != %#x", *ptep, ptep, opte);
 			*ptep++ = pte;
@@ -587,7 +584,6 @@ l2pte_set(pt_entry_t *ptep, pt_entry_t pte, pt_entry_t opte)
 static inline void
 l2pte_reset(pt_entry_t *ptep)
 {
-	KASSERTMSG((((uintptr_t)ptep / sizeof(*ptep)) & (PAGE_SIZE / L2_S_SIZE - 1)) == 0, "%p", ptep);
 	*ptep = 0;
 	for (vsize_t k = 1; k < PAGE_SIZE / L2_S_SIZE; k++) {
 		ptep[k] = 0;
@@ -795,12 +791,12 @@ extern void (*pmap_zero_page_func)(paddr_t);
 #define	L2_S_CACHE_MASK_generic	(L2_B|L2_C)
 #define	L2_S_CACHE_MASK_xscale	(L2_B|L2_C|L2_XS_T_TEX(TEX_XSCALE_X))
 #define	L2_XS_CACHE_MASK_armv6	(L2_B|L2_C|L2_V6_XS_TEX(TEX_ARMV6_TEX))
+#define	L2_S_CACHE_MASK_armv6n	L2_XS_CACHE_MASK_armv6
 #ifdef	ARMV6_EXTENDED_SMALL_PAGE
 #define	L2_S_CACHE_MASK_armv6c	L2_XS_CACHE_MASK_armv6
 #else
 #define	L2_S_CACHE_MASK_armv6c	L2_S_CACHE_MASK_generic
 #endif
-#define	L2_S_CACHE_MASK_armv6n	(L2_B|L2_C|L2_V6_XS_TEX(TEX_ARMV6_TEX)|L2_XS_S)
 #define	L2_S_CACHE_MASK_armv7	(L2_B|L2_C|L2_V6_XS_TEX(TEX_ARMV6_TEX)|L2_XS_S)
 
 
@@ -1067,11 +1063,11 @@ paddr_t	pmap_unmap_poolpage(vaddr_t);
 #define PMAP_UNMAP_POOLPAGE(va)	pmap_unmap_poolpage(va)
 #endif
 
-#define __HAVE_PMAP_PV_TRACK	1
-
-void pmap_pv_protect(paddr_t, vm_prot_t);
-
-struct pmap_page {
+/*
+ * pmap-specific data store in the vm_page structure.
+ */
+#define	__HAVE_VM_PAGE_MD
+struct vm_page_md {
 	SLIST_HEAD(,pv_entry) pvh_list;		/* pv_entry list */
 	int pvh_attrs;				/* page attributes */
 	u_int uro_mappings;
@@ -1080,24 +1076,10 @@ struct pmap_page {
 		u_short s_mappings[2];	/* Assume kernel count <= 65535 */
 		u_int i_mappings;
 	} k_u;
+#define	kro_mappings	k_u.s_mappings[0]
+#define	krw_mappings	k_u.s_mappings[1]
+#define	k_mappings	k_u.i_mappings
 };
-
-/*
- * pmap-specific data store in the vm_page structure.
- */
-#define	__HAVE_VM_PAGE_MD
-struct vm_page_md {
-	struct pmap_page pp;
-#define	pvh_list	pp.pvh_list
-#define	pvh_attrs	pp.pvh_attrs
-#define	uro_mappings	pp.uro_mappings
-#define	urw_mappings	pp.urw_mappings
-#define	kro_mappings	pp.k_u.s_mappings[0]
-#define	krw_mappings	pp.k_u.s_mappings[1]
-#define	k_mappings	pp.k_u.i_mappings
-};
-
-#define PMAP_PAGE_TO_MD(ppage) container_of((ppage), struct vm_page_md, pp)
 
 /*
  * Set the default color of each page.

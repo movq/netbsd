@@ -1,8 +1,8 @@
-/* $NetBSD: dhcp.h,v 1.17 2016/06/17 19:42:31 roy Exp $ */
+/* $NetBSD: dhcp.h,v 1.1.1.20.2.2 2015/02/05 15:13:12 martin Exp $ */
 
 /*
  * dhcpcd - DHCP client daemon
- * Copyright (c) 2006-2016 Roy Marples <roy@marples.name>
+ * Copyright (c) 2006-2015 Roy Marples <roy@marples.name>
  * All rights reserved
 
  * Redistribution and use in source and binary forms, with or without
@@ -40,27 +40,27 @@
 #include "auth.h"
 #include "dhcp-common.h"
 
-/* UDP port numbers for BOOTP */
-#define BOOTPS			67
-#define BOOTPC			68
+/* UDP port numbers for DHCP */
+#define DHCP_SERVER_PORT    67
+#define DHCP_CLIENT_PORT    68
 
-#define MAGIC_COOKIE		0x63825363
-#define BROADCAST_FLAG		0x8000
+#define MAGIC_COOKIE        0x63825363
+#define BROADCAST_FLAG      0x8000
 
-/* BOOTP message OP code */
-#define BOOTREQUEST		1
-#define BOOTREPLY		2
+/* DHCP message OP code */
+#define DHCP_BOOTREQUEST    1
+#define DHCP_BOOTREPLY      2
 
 /* DHCP message type */
-#define DHCP_DISCOVER		1
-#define DHCP_OFFER		2
-#define DHCP_REQUEST		3
-#define DHCP_DECLINE		4
-#define DHCP_ACK		5
-#define DHCP_NAK		6
-#define DHCP_RELEASE		7
-#define DHCP_INFORM		8
-#define DHCP_FORCERENEW		9
+#define DHCP_DISCOVER       1
+#define DHCP_OFFER          2
+#define DHCP_REQUEST        3
+#define DHCP_DECLINE        4
+#define DHCP_ACK            5
+#define DHCP_NAK            6
+#define DHCP_RELEASE        7
+#define DHCP_INFORM         8
+#define DHCP_FORCERENEW     9
 
 /* Constants taken from RFC 2131. */
 #define T1			0.5
@@ -97,7 +97,7 @@ enum DHO {
 	DHO_VENDOR                 = 43,
 	DHO_IPADDRESS              = 50,
 	DHO_LEASETIME              = 51,
-	DHO_OPTSOVERLOADED         = 52,
+	DHO_OPTIONSOVERLOADED      = 52,
 	DHO_MESSAGETYPE            = 53,
 	DHO_SERVERID               = 54,
 	DHO_PARAMETERREQUESTLIST   = 55,
@@ -133,6 +133,17 @@ enum FQDN {
 	FQDN_BOTH       = 0x31
 };
 
+/* Sizes for DHCP options */
+#define DHCP_CHADDR_LEN         16
+#define SERVERNAME_LEN          64
+#define BOOTFILE_LEN            128
+#define DHCP_UDP_LEN            (14 + 20 + 8)
+#define DHCP_FIXED_LEN          (DHCP_UDP_LEN + 226)
+#define DHCP_OPTION_LEN         (MTU_MAX - DHCP_FIXED_LEN)
+
+/* Some crappy DHCP servers require the BOOTP minimum length */
+#define BOOTP_MESSAGE_LENTH_MIN 300
+
 /* Don't import common.h as that defines __unused which causes problems
  * on some Linux systems which define it as part of a structure */
 #if __GNUC__ > 2 || defined(__INTEL_COMPILER)
@@ -145,40 +156,34 @@ enum FQDN {
 # endif
 #endif
 
-/* Sizes for BOOTP options */
-#define	BOOTP_CHADDR_LEN	 16
-#define	BOOTP_SNAME_LEN		 64
-#define	BOOTP_FILE_LEN		128
-#define	BOOTP_VEND_LEN		 64
-
-/* DHCP is basically an extension to BOOTP */
-struct bootp {
-	uint8_t op;		/* message type */
-	uint8_t htype;		/* hardware address type */
-	uint8_t hlen;		/* hardware address length */
-	uint8_t hops;		/* should be zero in client message */
-	uint32_t xid;		/* transaction id */
-	uint16_t secs;		/* elapsed time in sec. from boot */
-	uint16_t flags;		/* such as broadcast flag */
-	uint32_t ciaddr;	/* (previously allocated) client IP */
-	uint32_t yiaddr;	/* 'your' client IP address */
-	uint32_t siaddr;	/* should be zero in client's messages */
-	uint32_t giaddr;	/* should be zero in client's messages */
-	uint8_t chaddr[BOOTP_CHADDR_LEN];	/* client's hardware address */
-	uint8_t sname[BOOTP_SNAME_LEN];		/* server host name */
-	uint8_t file[BOOTP_FILE_LEN];		/* boot file name */
-	uint8_t vend[BOOTP_VEND_LEN];		/* vendor specific area */
-	/* DHCP allows a variable length vendor area */
+struct dhcp_message {
+	uint8_t op;           /* message type */
+	uint8_t hwtype;       /* hardware address type */
+	uint8_t hwlen;        /* hardware address length */
+	uint8_t hwopcount;    /* should be zero in client message */
+	uint32_t xid;            /* transaction id */
+	uint16_t secs;           /* elapsed time in sec. from boot */
+	uint16_t flags;
+	uint32_t ciaddr;         /* (previously allocated) client IP */
+	uint32_t yiaddr;         /* 'your' client IP address */
+	uint32_t siaddr;         /* should be zero in client's messages */
+	uint32_t giaddr;         /* should be zero in client's messages */
+	uint8_t chaddr[DHCP_CHADDR_LEN];  /* client's hardware address */
+	uint8_t servername[SERVERNAME_LEN];    /* server host name */
+	uint8_t bootfile[BOOTFILE_LEN];    /* boot file name */
+	uint32_t cookie;
+	uint8_t options[DHCP_OPTION_LEN]; /* message options - cookie */
 } __packed;
 
 struct dhcp_lease {
 	struct in_addr addr;
-	struct in_addr mask;
+	struct in_addr net;
 	struct in_addr brd;
 	uint32_t leasetime;
 	uint32_t renewaltime;
 	uint32_t rebindtime;
 	struct in_addr server;
+	time_t leasedfrom;
 	uint8_t frominfo;
 	uint32_t cookie;
 };
@@ -187,26 +192,22 @@ enum DHS {
 	DHS_INIT,
 	DHS_DISCOVER,
 	DHS_REQUEST,
-	DHS_PROBE,
 	DHS_BOUND,
 	DHS_RENEW,
 	DHS_REBIND,
 	DHS_REBOOT,
 	DHS_INFORM,
 	DHS_RENEW_REQUESTED,
-	DHS_RELEASE
+	DHS_IPV4LL_BOUND,
+	DHS_PROBE
 };
 
 struct dhcp_state {
 	enum DHS state;
-	struct bootp *sent;
-	size_t sent_len;
-	struct bootp *offer;
-	size_t offer_len;
-	struct bootp *new;
-	size_t new_len;
-	struct bootp *old;
-	size_t old_len;
+	struct dhcp_message *sent;
+	struct dhcp_message *offer;
+	struct dhcp_message *new;
+	struct dhcp_message *old;
 	struct dhcp_lease lease;
 	const char *reason;
 	time_t interval;
@@ -215,14 +216,29 @@ struct dhcp_state {
 	int socket;
 
 	int raw_fd;
-	struct ipv4_addr *addr;
+	int arp_fd;
+	size_t buffer_size, buffer_len, buffer_pos;
+	unsigned char *buffer;
+
+	struct in_addr addr;
+	struct in_addr net;
+	struct in_addr dst;
 	uint8_t added;
 
-	char leasefile[sizeof(LEASEFILE) + IF_NAMESIZE + (IF_SSIDLEN * 4)];
-	struct timespec started;
+	char leasefile[sizeof(LEASEFILE) + IF_NAMESIZE];
+	time_t start_uptime;
+
 	unsigned char *clientid;
+
 	struct authstate auth;
+	struct arp_statehead arp_states;
+
 	size_t arping_index;
+
+	struct arp_state *arp_ipv4ll;
+	unsigned int conflicts;
+	time_t defend;
+	char randomstate[128];
 };
 
 #define D_STATE(ifp)							       \
@@ -232,33 +248,45 @@ struct dhcp_state {
 #define D_STATE_RUNNING(ifp)						       \
 	(D_CSTATE((ifp)) && D_CSTATE((ifp))->new && D_CSTATE((ifp))->reason)
 
-#define IS_DHCP(b)	((b)->vend[0] == 0x63 &&	\
-			 (b)->vend[1] == 0x82 &&	\
-			 (b)->vend[2] == 0x53 &&	\
-			 (b)->vend[3] == 0x63)
-
 #include "dhcpcd.h"
 #include "if-options.h"
 
 #ifdef INET
 char *decode_rfc3361(const uint8_t *, size_t);
 ssize_t decode_rfc3442(char *, size_t, const uint8_t *p, size_t);
+ssize_t decode_rfc5969(char *, size_t, const uint8_t *p, size_t);
 
 void dhcp_printoptions(const struct dhcpcd_ctx *,
     const struct dhcp_opt *, size_t);
-uint16_t dhcp_get_mtu(const struct interface *);
-struct rt_head *dhcp_get_routes(struct interface *);
-ssize_t dhcp_env(char **, const char *, const struct bootp *, size_t,
+int get_option_addr(struct dhcpcd_ctx *,struct in_addr *,
+    const struct dhcp_message *, uint8_t);
+#define is_bootp(i, m) ((m) &&						\
+	    !IN_LINKLOCAL(htonl((m)->yiaddr)) &&			\
+	    get_option_uint8((i)->ctx, NULL, (m), DHO_MESSAGETYPE) == -1)
+struct rt_head *get_option_routes(struct interface *,
+    const struct dhcp_message *);
+ssize_t dhcp_env(char **, const char *, const struct dhcp_message *,
     const struct interface *);
 
-void dhcp_handleifa(int, struct ipv4_addr *);
+uint32_t dhcp_xid(const struct interface *);
+struct dhcp_message *dhcp_message_new(const struct in_addr *addr,
+    const struct in_addr *mask);
+int dhcp_message_add_addr(struct dhcp_message *, uint8_t, struct in_addr);
+ssize_t make_message(struct dhcp_message **, const struct interface *,
+    uint8_t);
+int valid_dhcp_packet(unsigned char *);
+
+void dhcp_handleifa(int, struct interface *,
+    const struct in_addr *, const struct in_addr *, const struct in_addr *);
+
 void dhcp_drop(struct interface *, const char *);
 void dhcp_start(struct interface *);
-void dhcp_abort(struct interface *);
+void dhcp_stop(struct interface *);
+void dhcp_decline(struct interface *);
 void dhcp_discover(void *);
 void dhcp_inform(struct interface *);
-void dhcp_renew(struct interface *);
-void dhcp_bind(struct interface *);
+void dhcp_probe(struct interface *);
+void dhcp_bind(struct interface *, struct arp_state *);
 void dhcp_reboot_newopts(struct interface *, unsigned long long);
 void dhcp_close(struct interface *);
 void dhcp_free(struct interface *);
@@ -266,8 +294,6 @@ int dhcp_dump(struct interface *);
 #else
 #define dhcp_drop(a, b) {}
 #define dhcp_start(a) {}
-#define dhcp_abort(a) {}
-#define dhcp_renew(a) {}
 #define dhcp_reboot(a, b) (b = b)
 #define dhcp_reboot_newopts(a, b) (b = b)
 #define dhcp_close(a) {}

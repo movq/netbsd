@@ -1,4 +1,4 @@
-/*	$NetBSD: _resumecontext.S,v 1.10 2016/08/13 08:09:17 skrll Exp $	*/
+/*	$NetBSD: _resumecontext.S,v 1.7 2012/09/12 02:00:52 manu Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -35,12 +35,12 @@
 #include "assym.h"
 
 #if defined(SYSLIBC_SCCS) && !defined(lint)
-	RCSID("$NetBSD: _resumecontext.S,v 1.10 2016/08/13 08:09:17 skrll Exp $")
+	RCSID("$NetBSD: _resumecontext.S,v 1.7 2012/09/12 02:00:52 manu Exp $")
 #endif /* SYSLIBC_SCCS && !lint */
 
 	.set	reorder
 	.hidden	_C_LABEL(__resumecontext)
-
+	
 LEAF_NOPROFILE(__resumecontext)
 	/*
 	 * We get here not by a call through $t9 but thru $ra after the
@@ -51,12 +51,11 @@ LEAF_NOPROFILE(__resumecontext)
 	PTR_S		zero, _OFFSETOF_UC_LINK(a0)	# make sure uc_link is 0
 	SYSTRAP(getcontext)				# get context
 	PTR_L		a0, _OFFSETOF_UC_LINK(a0)	# linked context?
-	NOP_L
 	beq		a0, zero, 1f			#   nope, exit process
 	nop
-	SYSTRAP(setcontext)				#   yes, become it.
+	PIC_TAILCALL(setcontext)			#   yes, become it.
 	/* NOTREACHED (in theory) */
-	li		a0, -1				# failure,
+	li		a0, -1				# failure, 
 1:
 	SYSTRAP(exit)					# all hope is lost.
 	/* NOTREACHED */

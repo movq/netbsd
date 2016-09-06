@@ -1,4 +1,4 @@
-/*	$NetBSD: rmixl_intr.c,v 1.11 2016/08/01 18:09:50 dholland Exp $	*/
+/*	$NetBSD: rmixl_intr.c,v 1.8 2011/09/27 01:02:34 jym Exp $	*/
 
 /*-
  * Copyright (c) 2007 Ruslan Ermilov and Vsevolod Lobko.
@@ -64,7 +64,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rmixl_intr.c,v 1.11 2016/08/01 18:09:50 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rmixl_intr.c,v 1.8 2011/09/27 01:02:34 jym Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
@@ -81,6 +81,7 @@ __KERNEL_RCSID(0, "$NetBSD: rmixl_intr.c,v 1.11 2016/08/01 18:09:50 dholland Exp
 #include <sys/mutex.h>
 #include <sys/systm.h>
 
+#include <mips/cpuset.h>
 #include <mips/locore.h>
 
 #include <mips/rmi/rmixlreg.h>
@@ -957,7 +958,7 @@ rmixl_send_ipi(struct cpu_info *ci, int tag)
 	uint64_t req = 1 << tag;
 	uint32_t r;
 
-	if (!kcpuset_isset(cpus_running, cpu_index(ci)))
+	if (! CPUSET_HAS_P(cpus_running, cpu_index(ci)))
 		return -1;
 
 	KASSERT((tag >= 0) && (tag < NIPIS));
@@ -978,7 +979,7 @@ static int
 rmixl_ipi_intr(void *arg)
 {
 	struct cpu_info * const ci = curcpu();
-	const uint64_t ipi_mask = 1ULL << (uintptr_t)arg;
+	const uint64_t ipi_mask = 1 << (uintptr_t)arg;
 
 	KASSERT(ci->ci_cpl >= IPL_SCHED);
 	KASSERT((uintptr_t)arg < NIPIS);

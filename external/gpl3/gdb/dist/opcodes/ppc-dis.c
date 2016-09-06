@@ -1,5 +1,6 @@
 /* ppc-dis.c -- Disassemble PowerPC instructions
-   Copyright (C) 1994-2015 Free Software Foundation, Inc.
+   Copyright 1994, 1995, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007,
+   2008, 2009, 2010, 2011, 2012 Free Software Foundation, Inc.
    Written by Ian Lance Taylor, Cygnus Support
 
    This file is part of the GNU opcodes library.
@@ -76,18 +77,12 @@ struct ppc_mopt ppc_opts[] = {
     0 },
   { "7410",    (PPC_OPCODE_PPC | PPC_OPCODE_ALTIVEC),
     0 },
-  { "7450",    (PPC_OPCODE_PPC | PPC_OPCODE_7450 | PPC_OPCODE_ALTIVEC),
+  { "7450",    (PPC_OPCODE_PPC | PPC_OPCODE_ALTIVEC),
     0 },
   { "7455",    (PPC_OPCODE_PPC | PPC_OPCODE_ALTIVEC),
     0 },
-  { "750cl",   (PPC_OPCODE_PPC | PPC_OPCODE_750 | PPC_OPCODE_PPCPS)
+  { "750cl",   (PPC_OPCODE_PPC | PPC_OPCODE_PPCPS)
     , 0 },
-  { "821",     (PPC_OPCODE_PPC | PPC_OPCODE_860),
-    0 },
-  { "850",     (PPC_OPCODE_PPC | PPC_OPCODE_860),
-    0 },
-  { "860",     (PPC_OPCODE_PPC | PPC_OPCODE_860),
-    0 },
   { "a2",      (PPC_OPCODE_PPC | PPC_OPCODE_ISEL | PPC_OPCODE_POWER4
 		| PPC_OPCODE_POWER5 | PPC_OPCODE_CACHELCK | PPC_OPCODE_64
 		| PPC_OPCODE_A2),
@@ -347,41 +342,37 @@ disassemble_init_powerpc (struct disassemble_info *info)
   int i;
   unsigned short last;
 
-  if (powerpc_opcd_indices[PPC_OPCD_SEGS] == 0)
+  i = powerpc_num_opcodes;
+  while (--i >= 0)
     {
+      unsigned op = PPC_OP (powerpc_opcodes[i].opcode);
 
-      i = powerpc_num_opcodes;
-      while (--i >= 0)
-        {
-          unsigned op = PPC_OP (powerpc_opcodes[i].opcode);
+      powerpc_opcd_indices[op] = i;
+    }
 
-          powerpc_opcd_indices[op] = i;
-        }
+  last = powerpc_num_opcodes;
+  for (i = PPC_OPCD_SEGS; i > 0; --i)
+    {
+      if (powerpc_opcd_indices[i] == 0)
+	powerpc_opcd_indices[i] = last;
+      last = powerpc_opcd_indices[i];
+    }
 
-      last = powerpc_num_opcodes;
-      for (i = PPC_OPCD_SEGS; i > 0; --i)
-        {
-          if (powerpc_opcd_indices[i] == 0)
-	    powerpc_opcd_indices[i] = last;
-          last = powerpc_opcd_indices[i];
-        }
+  i = vle_num_opcodes;
+  while (--i >= 0)
+    {
+      unsigned op = VLE_OP (vle_opcodes[i].opcode, vle_opcodes[i].mask);
+      unsigned seg = VLE_OP_TO_SEG (op);
 
-      i = vle_num_opcodes;
-      while (--i >= 0)
-        {
-          unsigned op = VLE_OP (vle_opcodes[i].opcode, vle_opcodes[i].mask);
-          unsigned seg = VLE_OP_TO_SEG (op);
+      vle_opcd_indices[seg] = i;
+    }
 
-          vle_opcd_indices[seg] = i;
-        }
-
-      last = vle_num_opcodes;
-      for (i = VLE_OPCD_SEGS; i > 0; --i)
-        {
-          if (vle_opcd_indices[i] == 0)
-	    vle_opcd_indices[i] = last;
-          last = vle_opcd_indices[i];
-        }
+  last = vle_num_opcodes;
+  for (i = VLE_OPCD_SEGS; i > 0; --i)
+    {
+      if (vle_opcd_indices[i] == 0)
+	vle_opcd_indices[i] = last;
+      last = vle_opcd_indices[i];
     }
 
   if (info->arch == bfd_arch_powerpc)
@@ -458,8 +449,7 @@ skip_optional_operands (const unsigned char *opindex,
       operand = &powerpc_operands[*opindex];
       if ((operand->flags & PPC_OPERAND_NEXT) != 0
 	  || ((operand->flags & PPC_OPERAND_OPTIONAL) != 0
-	      && operand_value_powerpc (operand, insn, dialect) !=
-		 ppc_optional_operand_value (operand)))
+	      && operand_value_powerpc (operand, insn, dialect) != 0))
 	return 0;
     }
 

@@ -1,6 +1,6 @@
 // debug.h -- gold internal debugging support   -*- C++ -*-
 
-// Copyright (C) 2007-2015 Free Software Foundation, Inc.
+// Copyright 2007, 2008 Free Software Foundation, Inc.
 // Written by Ian Lance Taylor <iant@google.com>.
 
 // This file is part of gold.
@@ -38,11 +38,9 @@ const int DEBUG_SCRIPT = 0x2;
 const int DEBUG_FILES = 0x4;
 const int DEBUG_RELAXATION = 0x8;
 const int DEBUG_INCREMENTAL = 0x10;
-const int DEBUG_LOCATION = 0x20;
 
 const int DEBUG_ALL = (DEBUG_TASK | DEBUG_SCRIPT | DEBUG_FILES
-		       | DEBUG_RELAXATION | DEBUG_INCREMENTAL
-		       | DEBUG_LOCATION);
+		       | DEBUG_RELAXATION | DEBUG_INCREMENTAL);
 
 // Convert a debug string to the appropriate enum.
 inline int
@@ -56,7 +54,6 @@ debug_string_to_enum(const char* arg)
     { "files", DEBUG_FILES },
     { "relaxation", DEBUG_RELAXATION },
     { "incremental", DEBUG_INCREMENTAL },
-    { "location", DEBUG_LOCATION },
     { "all", DEBUG_ALL }
   };
 

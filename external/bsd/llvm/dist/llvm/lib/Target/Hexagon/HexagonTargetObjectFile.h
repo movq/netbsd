@@ -16,9 +16,8 @@
 namespace llvm {
 
   class HexagonTargetObjectFile : public TargetLoweringObjectFileELF {
-    MCSectionELF *SmallDataSection;
-    MCSectionELF *SmallBSSSection;
-
+    const MCSectionELF *SmallDataSection;
+    const MCSectionELF *SmallBSSSection;
   public:
     void Initialize(MCContext &Ctx, const TargetMachine &TM) override;
 
@@ -31,9 +30,9 @@ namespace llvm {
                                 const TargetMachine &TM) const;
 
     bool IsSmallDataEnabled () const;
-    MCSection *SelectSectionForGlobal(const GlobalValue *GV, SectionKind Kind,
-                                      Mangler &Mang,
-                                      const TargetMachine &TM) const override;
+    const MCSection *SelectSectionForGlobal(const GlobalValue *GV,
+                                        SectionKind Kind, Mangler &Mang,
+                                        const TargetMachine &TM) const override;
   };
 
 } // namespace llvm

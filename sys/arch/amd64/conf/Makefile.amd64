@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.amd64,v 1.55 2016/04/29 02:17:25 christos Exp $
+#	$NetBSD: Makefile.amd64,v 1.45 2014/05/24 18:41:46 jakllsch Exp $
 
 # Makefile for NetBSD
 #
@@ -56,6 +56,22 @@ KERN_AS=	library
 ##
 ## (4) local objects, compile rules, and dependencies
 ##
+MD_OBJS=	locore.o vector.o copy.o spl.o
+MD_CFILES=
+MD_SFILES=	${AMD64}/amd64/locore.S ${AMD64}/amd64/vector.S \
+		${AMD64}/amd64/copy.S ${AMD64}/amd64/spl.S
+
+locore.o: ${AMD64}/amd64/locore.S assym.h
+	${NORMAL_S}
+
+vector.o: ${AMD64}/amd64/vector.S assym.h
+	${NORMAL_S}
+
+copy.o: ${AMD64}/amd64/copy.S assym.h
+	${NORMAL_S}
+
+spl.o: ${AMD64}/amd64/spl.S assym.h
+	${NORMAL_S}
 
 ##
 ## (5) link settings
@@ -63,7 +79,8 @@ KERN_AS=	library
 TEXTADDR?=	0xffffffff80100000
 EXTRA_LINKFLAGS=	-z max-page-size=0x100000
 LINKFLAGS_NORMAL=	-X
-KERNLDSCRIPT?= ${AMD64}/conf/kern.ldscript
+KERN_LDSCRIPT?= kern.ldscript
+LINKFORMAT=	-T ${AMD64}/conf/${KERN_LDSCRIPT}
 
 ##
 ## (6) port specific target dependencies

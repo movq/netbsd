@@ -1,4 +1,4 @@
-/*	$NetBSD: intr.c,v 1.69 2016/05/13 21:24:11 nakayama Exp $ */
+/*	$NetBSD: intr.c,v 1.67 2012/08/11 21:50:09 mrg Exp $ */
 
 /*
  * Copyright (c) 1992, 1993
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.69 2016/05/13 21:24:11 nakayama Exp $");
+__KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.67 2012/08/11 21:50:09 mrg Exp $");
 
 #include "opt_ddb.h"
 #include "opt_multiprocessor.h"
@@ -49,7 +49,7 @@ __KERNEL_RCSID(0, "$NetBSD: intr.c,v 1.69 2016/05/13 21:24:11 nakayama Exp $");
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 
 #include <dev/cons.h>
 
@@ -170,21 +170,6 @@ intr_biglock_wrapper(void *vp)
 #endif
 
 /*
- * Allocate memory for interrupt handler.
- * The allocated memory is initialized with zeros so 
- * e.g. pointers in the intrhand structure are properly initialized.
- * A valid pointer is always returned by the function.
- */
-struct intrhand*
-intrhand_alloc(void)
-{
-	struct intrhand *ih = kmem_zalloc(sizeof(struct intrhand), KM_NOSLEEP);
-	if (ih == NULL)
-		panic("%s: failed to allocate intrhand", __func__);
-	return ih;
-}
-
-/*
  * Attach an interrupt handler to the vector chain for the given level.
  * This is not possible if it has been taken away as a fast vector.
  */
@@ -262,7 +247,9 @@ intr_establish(int level, bool mpsafe, struct intrhand *ih)
 			    ("intr_establish: intr reused %x\n",
 			     ih->ih_number));
 			if (q->ih_fun != intr_list_handler) {
-				nih = intrhand_alloc();
+				nih = (struct intrhand *)
+					malloc(sizeof(struct intrhand),
+						M_DEVBUF, M_NOWAIT);
 				/* Point the old IH at the new handler */
 				*nih = *q;
 				nih->ih_next = NULL;
@@ -297,7 +284,10 @@ sparc_softintr_establish(int pil, int (*fun)(void *), void *arg)
 {
 	struct intrhand *ih;
 
-	ih = intrhand_alloc();
+	ih = malloc(sizeof(struct intrhand), M_DEVBUF, M_NOWAIT|M_ZERO);
+	if (ih == NULL)
+		panic("could not allocate softint interrupt handler");
+
 	ih->ih_fun = fun;
 	ih->ih_pil = pil;
 	ih->ih_arg = arg;
@@ -308,7 +298,7 @@ void
 sparc_softintr_disestablish(void *cookie)
 {
 
-	kmem_free(cookie, sizeof(struct intrhand));
+	free(cookie, M_DEVBUF);
 }
 
 void

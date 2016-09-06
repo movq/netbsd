@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ipw.c,v 1.60 2016/06/10 13:27:14 ozaki-r Exp $	*/
+/*	$NetBSD: if_ipw.c,v 1.57 2014/03/29 19:28:24 christos Exp $	*/
 /*	FreeBSD: src/sys/dev/ipw/if_ipw.c,v 1.15 2005/11/13 17:17:40 damien Exp 	*/
 
 /*-
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ipw.c,v 1.60 2016/06/10 13:27:14 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ipw.c,v 1.57 2014/03/29 19:28:24 christos Exp $");
 
 /*-
  * Intel(R) PRO/Wireless 2100 MiniPCI driver
@@ -1054,7 +1054,7 @@ ipw_data_intr(struct ipw_softc *sc, struct ipw_status *status,
 	sbd->bd->physaddr = htole32(sbuf->map->dm_segs[0].ds_addr);
 
 	/* finalize mbuf */
-	m_set_rcvif(m, ifp);
+	m->m_pkthdr.rcvif = ifp;
 	m->m_pkthdr.len = m->m_len = le32toh(status->len);
 
 	if (sc->sc_drvbpf != NULL) {
@@ -1541,8 +1541,7 @@ ipw_watchdog(struct ifnet *ifp)
 static int
 ipw_get_table1(struct ipw_softc *sc, uint32_t *tbl)
 {
-	uint32_t addr, size, data, i;
-	int error;
+	uint32_t addr, size, i;
 
 	if (!(sc->flags & IPW_FLAG_FW_INITED))
 		return ENOTTY;
@@ -1550,14 +1549,13 @@ ipw_get_table1(struct ipw_softc *sc, uint32_t *tbl)
 	CSR_WRITE_4(sc, IPW_CSR_AUTOINC_ADDR, sc->table1_base);
 
 	size = CSR_READ_4(sc, IPW_CSR_AUTOINC_DATA);
-	if ((error = copyout(&size, tbl, sizeof(size))) != 0)
-		return error;
+	if (suword(tbl, size) != 0)
+		return EFAULT;
 
 	for (i = 1, ++tbl; i < size; i++, tbl++) {
 		addr = CSR_READ_4(sc, IPW_CSR_AUTOINC_DATA);
-		data = MEM_READ_4(sc, addr);
-		if ((error = copyout(&data, tbl, sizeof(data))) != 0)
-			return error;
+		if (suword(tbl, MEM_READ_4(sc, addr)) != 0)
+			return EFAULT;
 	}
 	return 0;
 }
@@ -1565,20 +1563,23 @@ ipw_get_table1(struct ipw_softc *sc, uint32_t *tbl)
 static int
 ipw_get_radio(struct ipw_softc *sc, int *ret)
 {
-	uint32_t addr, data;
+	uint32_t addr;
 
 	if (!(sc->flags & IPW_FLAG_FW_INITED))
 		return ENOTTY;
 
 	addr = ipw_read_table1(sc, IPW_INFO_EEPROM_ADDRESS);
-	if ((MEM_READ_4(sc, addr + 32) >> 24) & 1)
-		data = -1;
-	else if (CSR_READ_4(sc, IPW_CSR_IO) & IPW_IO_RADIO_DISABLED)
-		data = 0;
-	else
-		data = 1;
+	if ((MEM_READ_4(sc, addr + 32) >> 24) & 1) {
+		suword(ret, -1);
+		return 0;
+	}
 
-	return copyout(&data, ret, sizeof(data));
+	if (CSR_READ_4(sc, IPW_CSR_IO) & IPW_IO_RADIO_DISABLED)
+		suword(ret, 0);
+	else
+		suword(ret, 1);
+
+	return 0;
 }
 
 static int
@@ -1906,8 +1907,8 @@ ipw_cache_firmware(struct ipw_softc *sc)
 
 	return 0;
 
-fail3:	firmware_free(fw->ucode, fw->ucode_size);
-fail2:	firmware_free(fw->main, fw->main_size);
+fail3:	firmware_free(fw->ucode, 0);
+fail2:	firmware_free(fw->main, 0);
 fail1:  firmware_close(fwh);
 fail0:
 	return error;
@@ -1919,8 +1920,8 @@ ipw_free_firmware(struct ipw_softc *sc)
 	if (!(sc->flags & IPW_FLAG_FW_CACHED))
 		return;
 
-	firmware_free(sc->fw.main, sc->fw.main_size);
-	firmware_free(sc->fw.ucode, sc->fw.ucode_size);
+	firmware_free(sc->fw.main, 0);
+	firmware_free(sc->fw.ucode, 0);
 
 	sc->flags &= ~IPW_FLAG_FW_CACHED;
 }

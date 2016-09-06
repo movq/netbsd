@@ -19,26 +19,26 @@
 
 namespace llvm {
 
+class AArch64InstrInfo;
+class AArch64Subtarget;
 class MachineFunction;
 class RegScavenger;
 class TargetRegisterClass;
-class Triple;
 
 struct AArch64RegisterInfo : public AArch64GenRegisterInfo {
 private:
-  const Triple &TT;
+  const AArch64InstrInfo *TII;
+  const AArch64Subtarget *STI;
 
 public:
-  AArch64RegisterInfo(const Triple &TT);
+  AArch64RegisterInfo(const AArch64InstrInfo *tii, const AArch64Subtarget *sti);
 
   bool isReservedReg(const MachineFunction &MF, unsigned Reg) const;
 
   /// Code Generation virtual methods...
-  const MCPhysReg *getCalleeSavedRegs(const MachineFunction *MF) const override;
   const MCPhysReg *
-  getCalleeSavedRegsViaCopy(const MachineFunction *MF) const override;
-  const uint32_t *getCallPreservedMask(const MachineFunction &MF,
-                                       CallingConv::ID) const override;
+  getCalleeSavedRegs(const MachineFunction *MF = nullptr) const override;
+  const uint32_t *getCallPreservedMask(CallingConv::ID) const override;
 
   unsigned getCSRFirstUseCost() const override {
     // The cost will be compared against BlockFrequency where entry has the
@@ -59,8 +59,7 @@ public:
   ///
   /// Should return NULL in the case that the calling convention does not have
   /// this property
-  const uint32_t *getThisReturnPreservedMask(const MachineFunction &MF,
-                                             CallingConv::ID) const;
+  const uint32_t *getThisReturnPreservedMask(CallingConv::ID) const;
 
   BitVector getReservedRegs(const MachineFunction &MF) const override;
   const TargetRegisterClass *
@@ -74,7 +73,7 @@ public:
   bool requiresFrameIndexScavenging(const MachineFunction &MF) const override;
 
   bool needsFrameBaseReg(MachineInstr *MI, int64_t Offset) const override;
-  bool isFrameOffsetLegal(const MachineInstr *MI, unsigned BaseReg,
+  bool isFrameOffsetLegal(const MachineInstr *MI,
                           int64_t Offset) const override;
   void materializeFrameBaseRegister(MachineBasicBlock *MBB, unsigned BaseReg,
                                     int FrameIdx,

@@ -1,4 +1,4 @@
-/*	$NetBSD: msg.mbr.fr,v 1.4 2015/04/20 14:10:31 maxv Exp $	*/
+/*	$NetBSD: msg.mbr.fr,v 1.2.4.1 2015/05/14 07:27:47 snj Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.

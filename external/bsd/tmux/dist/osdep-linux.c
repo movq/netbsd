@@ -1,4 +1,4 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
  * Copyright (c) 2009 Nicholas Marriott <nicm@users.sourceforge.net>
@@ -18,7 +18,6 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
-#include <sys/param.h>
 
 #include <event.h>
 #include <stdio.h>
@@ -51,7 +50,7 @@ osdep_get_name(int fd, unused char *tty)
 	while ((ch = fgetc(f)) != EOF) {
 		if (ch == '\0')
 			break;
-		buf = xrealloc(buf, len + 2);
+		buf = xrealloc(buf, 1, len + 2);
 		buf[len++] = ch;
 	}
 	if (buf != NULL)
@@ -66,7 +65,7 @@ osdep_get_cwd(int fd)
 {
 	static char	 target[MAXPATHLEN + 1];
 	char		*path;
-	pid_t		 pgrp, sid;
+	pid_t		 pgrp;
 	ssize_t		 n;
 
 	if ((pgrp = tcgetpgrp(fd)) == -1)
@@ -75,13 +74,6 @@ osdep_get_cwd(int fd)
 	xasprintf(&path, "/proc/%lld/cwd", (long long) pgrp);
 	n = readlink(path, target, MAXPATHLEN);
 	free(path);
-
-	if (n == -1 && ioctl(fd, TIOCGSID, &sid) != -1) {
-		xasprintf(&path, "/proc/%lld/cwd", (long long) sid);
-		n = readlink(path, target, MAXPATHLEN);
-		free(path);
-	}
-
 	if (n > 0) {
 		target[n] = '\0';
 		return (target);

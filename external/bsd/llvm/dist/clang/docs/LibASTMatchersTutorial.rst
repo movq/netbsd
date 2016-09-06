@@ -108,6 +108,7 @@ CMakeLists.txt should have the following contents:
 ::
 
       set(LLVM_LINK_COMPONENTS support)
+      set(LLVM_USED_LIBS clangTooling clangBasic clangAST)
 
       add_clang_executable(loop-convert
         LoopConvert.cpp
@@ -168,7 +169,7 @@ You should now be able to run the syntax checker, which is located in
 
 .. code-block:: console
 
-      echo "int main() { return 0; }" > test.cpp
+      cat "int main() { return 0; }" > test.cpp
       bin/loop-convert test.cpp --
 
 Note the two dashes after we specify the source file. The additional

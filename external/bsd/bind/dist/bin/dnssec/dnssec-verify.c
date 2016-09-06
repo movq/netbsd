@@ -1,4 +1,4 @@
-/*	$NetBSD: dnssec-verify.c,v 1.9 2015/07/08 17:28:55 christos Exp $	*/
+/*	$NetBSD: dnssec-verify.c,v 1.7.2.2 2015/07/17 04:31:20 snj Exp $	*/
 
 /*
  * Copyright (C) 2012, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")

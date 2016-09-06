@@ -232,12 +232,12 @@ void PseudoLoweringEmitter::emitLoweringEmitter(raw_ostream &o) {
               << "      TmpInst.addOperand(MCOp);\n";
             break;
             case OpData::Imm:
-            o << "      TmpInst.addOperand(MCOperand::createImm("
+            o << "      TmpInst.addOperand(MCOperand::CreateImm("
               << Expansion.OperandMap[MIOpNo + i].Data.Imm << "));\n";
             break;
             case OpData::Reg: {
               Record *Reg = Expansion.OperandMap[MIOpNo + i].Data.Reg;
-              o << "      TmpInst.addOperand(MCOperand::createReg(";
+              o << "      TmpInst.addOperand(MCOperand::CreateReg(";
               // "zero_reg" is special.
               if (Reg->getName() == "zero_reg")
                 o << "0";

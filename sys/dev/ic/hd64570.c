@@ -1,4 +1,4 @@
-/*	$NetBSD: hd64570.c,v 1.50 2016/06/10 13:27:13 ozaki-r Exp $	*/
+/*	$NetBSD: hd64570.c,v 1.47 2014/06/05 23:48:16 rmind Exp $	*/
 
 /*
  * Copyright (c) 1999 Christian E. Hopps
@@ -65,7 +65,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: hd64570.c,v 1.50 2016/06/10 13:27:13 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: hd64570.c,v 1.47 2014/06/05 23:48:16 rmind Exp $");
 
 #include "opt_inet.h"
 
@@ -160,7 +160,7 @@ static	void sca_port_up(sca_port_t *);
 static	void sca_port_down(sca_port_t *);
 
 static	int sca_output(struct ifnet *, struct mbuf *, const struct sockaddr *,
-			    const struct rtentry *);
+			    struct rtentry *);
 static	int sca_ioctl(struct ifnet *, u_long, void *);
 static	void sca_start(struct ifnet *);
 static	void sca_watchdog(struct ifnet *);
@@ -792,12 +792,13 @@ sca_output(
     struct ifnet *ifp,
     struct mbuf *m,
     const struct sockaddr *dst,
-    const struct rtentry *rt0)
+    struct rtentry *rt0)
 {
 	struct hdlc_header *hdlc;
 	struct ifqueue *ifq = NULL;
 	int s, error, len;
 	short mflags;
+	ALTQ_DECL(struct altq_pktattr pktattr;)
 
 	error = 0;
 
@@ -810,7 +811,7 @@ sca_output(
 	 * If the queueing discipline needs packet classification,
 	 * do it before prepending link headers.
 	 */
-	IFQ_CLASSIFY(&ifp->if_snd, m, dst->sa_family);
+	IFQ_CLASSIFY(&ifp->if_snd, m, dst->sa_family, &pktattr);
 
 	/*
 	 * determine address family, and priority for this packet
@@ -875,7 +876,7 @@ sca_output(
 		} else
 			IF_ENQUEUE(ifq, m);
 	} else
-		IFQ_ENQUEUE(&ifp->if_snd, m, error);
+		IFQ_ENQUEUE(&ifp->if_snd, m, &pktattr, error);
 	if (error != 0) {
 		splx(s);
 		ifp->if_oerrors++;
@@ -1583,7 +1584,7 @@ sca_frame_process(sca_port_t *scp)
 #ifdef INET
 	case HDLC_PROTOCOL_IP:
 		SCA_DPRINTF(SCA_DEBUG_RX, ("Received IP packet\n"));
-		m_set_rcvif(m, &scp->sp_if);
+		m->m_pkthdr.rcvif = &scp->sp_if;
 		m->m_pkthdr.len -= sizeof(struct hdlc_header);
 		m->m_data += sizeof(struct hdlc_header);
 		m->m_len -= sizeof(struct hdlc_header);
@@ -1593,7 +1594,7 @@ sca_frame_process(sca_port_t *scp)
 #ifdef INET6
 	case HDLC_PROTOCOL_IPV6:
 		SCA_DPRINTF(SCA_DEBUG_RX, ("Received IP packet\n"));
-		m_set_rcvif(m, &scp->sp_if);
+		m->m_pkthdr.rcvif = &scp->sp_if;
 		m->m_pkthdr.len -= sizeof(struct hdlc_header);
 		m->m_data += sizeof(struct hdlc_header);
 		m->m_len -= sizeof(struct hdlc_header);
@@ -1620,7 +1621,7 @@ sca_frame_process(sca_port_t *scp)
 
 		cisco = (struct cisco_pkt *)
 		    (mtod(m, u_int8_t *) + HDLC_HDRLEN);
-		m_set_rcvif(m, &scp->sp_if);
+		m->m_pkthdr.rcvif = &scp->sp_if;
 
 		switch (ntohl(cisco->type)) {
 		case CISCO_ADDR_REQ:

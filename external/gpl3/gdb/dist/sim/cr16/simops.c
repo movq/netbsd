@@ -1,5 +1,5 @@
 /* Simulation code for the CR16 processor.
-   Copyright (C) 2008-2015 Free Software Foundation, Inc.
+   Copyright (C) 2008-2014 Free Software Foundation, Inc.
    Contributed by M Ranga Swami Reddy <MR.Swami.Reddy@nsc.com>
 
    This file is part of GDB, the GNU debugger.
@@ -30,23 +30,12 @@
 #ifdef HAVE_STRING_H
 #include <string.h>
 #endif
-#ifdef HAVE_TIME_H
-#include <time.h>
-#endif
-#ifdef HAVE_SYS_TIME_H
-#include <sys/time.h>
-#endif
 
-#include "sim-main.h"
+#include "cr16_sim.h"
 #include "simops.h"
 #include "targ-vals.h"
 
-#ifdef TARGET_SYS_utime
-#include <utime.h>
-#endif
-#ifdef TARGET_SYS_wait
-#include <sys/wait.h>
-#endif
+extern char *strrchr ();
 
 enum op_types {
   OP_VOID,
@@ -138,7 +127,7 @@ enum {
  * LT      Less Than                 Z and N flags are 0
  * GE      Greater Than or Equal To  Z or N flag is 1.  */
 
-static int cond_stat(int cc)
+int cond_stat(int cc)
 {
   switch (cc) 
     {
@@ -200,7 +189,7 @@ move_to_cr (int cr, creg_t mask, creg_t val, int psw_hw_p)
 }
 
 #ifdef DEBUG
-static void trace_input_func (const char *name,
+static void trace_input_func (char *name,
 			      enum op_types in1,
 			      enum op_types in2,
 			      enum op_types in3);
@@ -232,7 +221,11 @@ static void trace_input_func (const char *name,
 #endif
 
 static void
-trace_input_func (const char *name, enum op_types in1, enum op_types in2, enum op_types in3)
+trace_input_func (name, in1, in2, in3)
+     char *name;
+     enum op_types in1;
+     enum op_types in2;
+     enum op_types in3;
 {
   char *comma;
   enum op_types in[3];
@@ -264,21 +257,14 @@ trace_input_func (const char *name, enum op_types in1, enum op_types in2, enum o
 
   else
     {
-      extern SIM_DESC trace_sd;
-
       buf[0] = '\0';
-      byte_pc = PC;
-      if (STATE_TEXT_SECTION (trace_sd)
-	  && byte_pc >= STATE_TEXT_START (trace_sd)
-	  && byte_pc < STATE_TEXT_END (trace_sd))
+      byte_pc = decode_pc ();
+      if (text && byte_pc >= text_start && byte_pc < text_end)
 	{
 	  filename = (const char *)0;
 	  functionname = (const char *)0;
 	  linenumber = 0;
-	  if (bfd_find_nearest_line (STATE_PROG_BFD (trace_sd),
-				     STATE_TEXT_SECTION (trace_sd),
-				     (struct bfd_symbol **)0,
-				     byte_pc - STATE_TEXT_START (trace_sd),
+	  if (bfd_find_nearest_line (prog_bfd, text, (struct bfd_symbol **)0, byte_pc - text_start,
 				     &filename, &functionname, &linenumber))
 	    {
 	      p = buf;
@@ -463,7 +449,6 @@ do_trace_output_finish (void)
   (*cr16_callback->flush_stdout) (cr16_callback);
 }
 
-#if 0
 static void
 trace_output_40 (uint64 val)
 {
@@ -478,7 +463,6 @@ trace_output_40 (uint64 val)
       do_trace_output_finish ();
     }
 }
-#endif
 
 static void
 trace_output_32 (uint32 val)
@@ -509,7 +493,7 @@ trace_output_16 (uint16 val)
 }
 
 static void
-trace_output_void (void)
+trace_output_void ()
 {
   if ((cr16_debug & (DEBUG_TRACE | DEBUG_VALUES)) == (DEBUG_TRACE | DEBUG_VALUES))
     {
@@ -519,7 +503,7 @@ trace_output_void (void)
 }
 
 static void
-trace_output_flag (void)
+trace_output_flag ()
 {
   if ((cr16_debug & (DEBUG_TRACE | DEBUG_VALUES)) == (DEBUG_TRACE | DEBUG_VALUES))
     {
@@ -541,7 +525,7 @@ trace_output_flag (void)
 
 /* addub.  */
 void
-OP_2C_8 (void)
+OP_2C_8 ()
 {
   uint8 tmp;
   uint8 a = OP[0] & 0xff;
@@ -554,7 +538,7 @@ OP_2C_8 (void)
 
 /* addub.  */
 void
-OP_2CB_C (void)
+OP_2CB_C ()
 {
   uint16 tmp;
   uint8 a = ((OP[0]) & 0xff), b = (GPR (OP[1])) & 0xff;
@@ -566,7 +550,7 @@ OP_2CB_C (void)
 
 /* addub.  */
 void
-OP_2D_8 (void)
+OP_2D_8 ()
 {
   uint8 a = (GPR (OP[0])) & 0xff;
   uint8 b = (GPR (OP[1])) & 0xff;
@@ -578,7 +562,7 @@ OP_2D_8 (void)
 
 /* adduw.  */
 void
-OP_2E_8 (void)
+OP_2E_8 ()
 {
   uint16 a = OP[0];
   uint16 b = GPR (OP[1]);
@@ -590,7 +574,7 @@ OP_2E_8 (void)
 
 /* adduw.  */
 void
-OP_2EB_C (void)
+OP_2EB_C ()
 {
   uint16 a = OP[0];
   uint16 b = GPR (OP[1]);
@@ -602,7 +586,7 @@ OP_2EB_C (void)
 
 /* adduw.  */
 void
-OP_2F_8 (void)
+OP_2F_8 ()
 {
   uint16 a = GPR (OP[0]);
   uint16 b = GPR (OP[1]);
@@ -614,12 +598,12 @@ OP_2F_8 (void)
 
 /* addb.  */
 void
-OP_30_8 (void)
+OP_30_8 ()
 {
   uint8 a = OP[0];
   uint8 b = (GPR (OP[1]) & 0xff);
-  uint16 tmp = (a + b) & 0xff;
   trace_input ("addb", OP_CONSTANT4_1, OP_REG, OP_VOID);
+  uint16 tmp = (a + b) & 0xff;
   SET_GPR (OP[1], (tmp | ((GPR (OP[1])) & 0xff00)));
   SET_PSR_C (tmp > 0xFF);
   SET_PSR_F (((a & 0x80) == (b & 0x80)) && ((b & 0x80) != (tmp & 0x80)));
@@ -628,12 +612,12 @@ OP_30_8 (void)
 
 /* addb.  */
 void
-OP_30B_C (void)
+OP_30B_C ()
 {
   uint8 a = (OP[0]) & 0xff;
   uint8 b = (GPR (OP[1]) & 0xff);
-  uint16 tmp = (a + b) & 0xff;
   trace_input ("addb", OP_CONSTANT16, OP_REG, OP_VOID);
+  uint16 tmp = (a + b) & 0xff;
   SET_GPR (OP[1], (tmp | ((GPR (OP[1])) & 0xff00)));
   SET_PSR_C (tmp > 0xFF);
   SET_PSR_F (((a & 0x80) == (b & 0x80)) && ((b & 0x80) != (tmp & 0x80)));
@@ -642,12 +626,12 @@ OP_30B_C (void)
 
 /* addb.  */
 void
-OP_31_8 (void)
+OP_31_8 ()
 {
   uint8 a = (GPR (OP[0]) & 0xff);
   uint8 b = (GPR (OP[1]) & 0xff);
-  uint16 tmp = (a + b) & 0xff;
   trace_input ("addb", OP_REG, OP_REG, OP_VOID);
+  uint16 tmp = (a + b) & 0xff;
   SET_GPR (OP[1], (tmp | ((GPR (OP[1])) & 0xff00)));
   SET_PSR_C (tmp > 0xFF);
   SET_PSR_F (((a & 0x80) == (b & 0x80)) && ((b & 0x80) != (tmp & 0x80)));
@@ -656,12 +640,12 @@ OP_31_8 (void)
 
 /* addw.  */
 void
-OP_32_8 (void)
+OP_32_8 ()
 {
   int16 a = OP[0];
   uint16 tmp, b = GPR (OP[1]);
-  tmp = (a + b);
   trace_input ("addw", OP_CONSTANT4_1, OP_REG, OP_VOID);
+  tmp = (a + b);
   SET_GPR (OP[1], tmp);
   SET_PSR_C (tmp > 0xFFFF);
   SET_PSR_F (((a & 0x8000) == (b & 0x8000)) && ((b & 0x8000) != (tmp & 0x8000)));
@@ -670,7 +654,7 @@ OP_32_8 (void)
 
 /* addw.  */
 void
-OP_32B_C (void)
+OP_32B_C ()
 {
   int16 a = OP[0];
   uint16 tmp, b = GPR (OP[1]);
@@ -684,7 +668,7 @@ OP_32B_C (void)
 
 /* addw.  */
 void
-OP_33_8 (void)
+OP_33_8 ()
 {
   uint16 tmp, a = (GPR (OP[0])), b = (GPR (OP[1]));
   trace_input ("addw", OP_REG, OP_REG, OP_VOID);
@@ -697,7 +681,7 @@ OP_33_8 (void)
 
 /* addcb.  */
 void
-OP_34_8 (void)
+OP_34_8 ()
 {
   uint8 tmp, a = OP[0] & 0xff, b = (GPR (OP[1])) & 0xff;
   trace_input ("addcb", OP_CONSTANT4_1, OP_REG, OP_REG);
@@ -710,12 +694,12 @@ OP_34_8 (void)
 
 /* addcb.  */
 void
-OP_34B_C (void)
+OP_34B_C ()
 {
   int8 a = OP[0] & 0xff;
   uint8 b = (GPR (OP[1])) & 0xff;
-  uint8 tmp = (a + b + PSR_C) & 0xff;
   trace_input ("addcb", OP_CONSTANT16, OP_REG, OP_VOID);
+  uint8 tmp = (a + b + PSR_C) & 0xff;
   SET_GPR (OP[1], (tmp | ((GPR (OP[1])) & 0xff00)));
   SET_PSR_C (tmp > 0xFF);
   SET_PSR_F (((a & 0x80) == (b & 0x80)) && ((b & 0x80) != (tmp & 0x80)));
@@ -724,12 +708,12 @@ OP_34B_C (void)
 
 /* addcb.  */
 void
-OP_35_8 (void)
+OP_35_8 ()
 {
   uint8 a = (GPR (OP[0])) & 0xff;
   uint8 b = (GPR (OP[1])) & 0xff;
-  uint8 tmp = (a + b + PSR_C) & 0xff;
   trace_input ("addcb", OP_REG, OP_REG, OP_VOID);
+  uint8 tmp = (a + b + PSR_C) & 0xff;
   SET_GPR (OP[1], (tmp | ((GPR (OP[1])) & 0xff00)));
   SET_PSR_C (tmp > 0xFF);
   SET_PSR_F (((a & 0x80) == (b & 0x80)) && ((b & 0x80) != (tmp & 0x80)));
@@ -738,12 +722,12 @@ OP_35_8 (void)
 
 /* addcw.  */
 void
-OP_36_8 (void)
+OP_36_8 ()
 {
   uint16 a = OP[0];
   uint16 b = GPR (OP[1]);
-  uint16 tmp = (a + b + PSR_C);
   trace_input ("addcw", OP_CONSTANT4_1, OP_REG, OP_VOID);
+  uint16 tmp = (a + b + PSR_C);
   SET_GPR (OP[1], tmp);
   SET_PSR_C (tmp > 0xFFFF);
   SET_PSR_F (((a & 0x8000) == (b & 0x8000)) && ((b & 0x8000) != (tmp & 0x8000)));
@@ -752,12 +736,12 @@ OP_36_8 (void)
 
 /* addcw.  */
 void
-OP_36B_C (void)
+OP_36B_C ()
 {
   int16 a = OP[0];
   uint16 b = GPR (OP[1]);
-  uint16 tmp = (a + b + PSR_C);
   trace_input ("addcw", OP_CONSTANT16, OP_REG, OP_VOID);
+  uint16 tmp = (a + b + PSR_C);
   SET_GPR (OP[1], tmp);
   SET_PSR_C (tmp > 0xFFFF);
   SET_PSR_F (((a & 0x8000) == (b & 0x8000)) && ((b & 0x8000) != (tmp & 0x8000)));
@@ -766,12 +750,12 @@ OP_36B_C (void)
 
 /* addcw.  */
 void
-OP_37_8 (void)
+OP_37_8 ()
 {
   uint16 a = GPR (OP[1]);
   uint16 b = GPR (OP[1]);
-  uint16 tmp = (a + b + PSR_C);
   trace_input ("addcw", OP_REG, OP_REG, OP_VOID);
+  uint16 tmp = (a + b + PSR_C);
   SET_GPR (OP[1], tmp);
   SET_PSR_C (tmp > 0xFFFF);
   SET_PSR_F (((a & 0x8000) == (b & 0x8000)) && ((b & 0x8000) != (tmp & 0x8000)));
@@ -780,12 +764,12 @@ OP_37_8 (void)
 
 /* addd.  */
 void
-OP_60_8 (void)
+OP_60_8 ()
 {
   int16 a = (OP[0]);
   uint32 b = GPR32 (OP[1]);
-  uint32 tmp = (a + b);
   trace_input ("addd", OP_CONSTANT4_1, OP_REGP, OP_VOID);
+  uint32 tmp = (a + b);
   SET_GPR32 (OP[1], tmp);
   SET_PSR_C (tmp > 0xFFFFFFFF);
   SET_PSR_F (((a & 0x80000000) == (b & 0x80000000)) && ((b & 0x80000000) != (tmp & 0x80000000)));
@@ -794,12 +778,12 @@ OP_60_8 (void)
 
 /* addd.  */
 void
-OP_60B_C (void)
+OP_60B_C ()
 {
   int32 a = (SEXT16(OP[0]));
   uint32 b = GPR32 (OP[1]);
-  uint32 tmp = (a + b);
   trace_input ("addd", OP_CONSTANT16, OP_REGP, OP_VOID);
+  uint32 tmp = (a + b);
   SET_GPR32 (OP[1], tmp);
   SET_PSR_C (tmp > 0xFFFFFFFF);
   SET_PSR_F (((a & 0x80000000) == (b & 0x80000000)) && ((b & 0x80000000) != (tmp & 0x80000000)));
@@ -808,12 +792,12 @@ OP_60B_C (void)
 
 /* addd.  */
 void
-OP_61_8 (void)
+OP_61_8 ()
 {
   uint32 a = GPR32 (OP[0]);
   uint32 b = GPR32 (OP[1]);
-  uint32 tmp = (a + b);
   trace_input ("addd", OP_REGP, OP_REGP, OP_VOID);
+  uint32 tmp = (a + b);
   SET_GPR32 (OP[1], tmp);
   trace_output_32 (tmp);
   SET_PSR_C (tmp > 0xFFFFFFFF);
@@ -822,7 +806,7 @@ OP_61_8 (void)
 
 /* addd.  */
 void
-OP_4_8 (void)
+OP_4_8 ()
 {
   uint32 a = OP[0];
   uint32 b = GPR32 (OP[1]);
@@ -837,7 +821,7 @@ OP_4_8 (void)
 
 /* addd.  */
 void
-OP_2_C (void)
+OP_2_C ()
 {
   int32 a = OP[0];
   uint32 b = GPR32 (OP[1]);
@@ -852,7 +836,7 @@ OP_2_C (void)
 
 /* andb.  */
 void
-OP_20_8 (void)
+OP_20_8 ()
 {
   uint8 tmp, a = (OP[0]) & 0xff, b = (GPR (OP[1])) & 0xff;
   trace_input ("andb", OP_CONSTANT4, OP_REG, OP_VOID);
@@ -863,7 +847,7 @@ OP_20_8 (void)
 
 /* andb.  */
 void
-OP_20B_C (void)
+OP_20B_C ()
 {
   uint8 tmp, a = (OP[0]) & 0xff, b = (GPR (OP[1])) & 0xff;
   trace_input ("andb", OP_CONSTANT16, OP_REG, OP_VOID);
@@ -874,7 +858,7 @@ OP_20B_C (void)
 
 /* andb.  */
 void
-OP_21_8 (void)
+OP_21_8 ()
 {
   uint8 tmp, a = (GPR (OP[0])) & 0xff, b = (GPR (OP[1])) & 0xff;
   trace_input ("andb", OP_REG, OP_REG, OP_VOID);
@@ -885,7 +869,7 @@ OP_21_8 (void)
 
 /* andw.  */
 void
-OP_22_8 (void)
+OP_22_8 ()
 {
   uint16 tmp, a = OP[0], b = GPR (OP[1]);
   trace_input ("andw", OP_CONSTANT4, OP_REG, OP_VOID);
@@ -896,7 +880,7 @@ OP_22_8 (void)
 
 /* andw.  */
 void
-OP_22B_C (void)
+OP_22B_C ()
 {
   uint16 tmp, a = OP[0], b = GPR (OP[1]);
   trace_input ("andw", OP_CONSTANT16, OP_REG, OP_VOID);
@@ -907,7 +891,7 @@ OP_22B_C (void)
 
 /* andw.  */
 void
-OP_23_8 (void)
+OP_23_8 ()
 {
   uint16 tmp, a = GPR (OP[0]), b = GPR (OP[1]);
   trace_input ("andw", OP_REG, OP_REG, OP_VOID);
@@ -918,7 +902,7 @@ OP_23_8 (void)
 
 /* andd.  */
 void
-OP_4_C (void)
+OP_4_C ()
 {
   uint32 tmp, a = OP[0],  b = GPR32 (OP[1]);
   trace_input ("andd", OP_CONSTANT32, OP_REGP, OP_VOID);
@@ -929,7 +913,7 @@ OP_4_C (void)
 
 /* andd.  */
 void
-OP_14B_14 (void)
+OP_14B_14 ()
 {
   uint32 tmp, a = (GPR32 (OP[0])), b = (GPR32 (OP[1]));
   trace_input ("andd", OP_REGP, OP_REGP, OP_VOID);
@@ -940,7 +924,7 @@ OP_14B_14 (void)
 
 /* ord.  */
 void
-OP_5_C (void)
+OP_5_C ()
 {
   uint32 tmp, a = (OP[0]), b = GPR32 (OP[1]);
   trace_input ("ord", OP_CONSTANT32, OP_REG, OP_VOID);
@@ -951,7 +935,7 @@ OP_5_C (void)
 
 /* ord.  */
 void
-OP_149_14 (void)
+OP_149_14 ()
 {
   uint32 tmp, a = GPR32 (OP[0]), b = GPR32 (OP[1]);
   trace_input ("ord", OP_REGP, OP_REGP, OP_VOID);
@@ -962,7 +946,7 @@ OP_149_14 (void)
 
 /* xord.  */
 void
-OP_6_C (void)
+OP_6_C ()
 {
   uint32 tmp, a = (OP[0]), b = GPR32 (OP[1]);
   trace_input ("xord", OP_CONSTANT32, OP_REG, OP_VOID);
@@ -973,7 +957,7 @@ OP_6_C (void)
 
 /* xord.  */
 void
-OP_14A_14 (void)
+OP_14A_14 ()
 {
   uint32 tmp, a = GPR32 (OP[0]), b = GPR32 (OP[1]);
   trace_input ("xord", OP_REGP, OP_REGP, OP_VOID);
@@ -985,9 +969,9 @@ OP_14A_14 (void)
 
 /* b.  */
 void
-OP_1_4 (void)
+OP_1_4 ()
 {
-  uint32 tmp = 0, cc = cond_stat (OP[0]);
+  uint32 tmp, cc = cond_stat (OP[0]);
   trace_input ("b", OP_CONSTANT4, OP_DISPE9, OP_VOID);
   if  (cc)
     {
@@ -1014,9 +998,9 @@ OP_1_4 (void)
 
 /* b.  */
 void
-OP_18_8 (void)
+OP_18_8 ()
 {
-  uint32 tmp = 0, cc = cond_stat (OP[0]);
+  uint32 tmp, cc = cond_stat (OP[0]);
   trace_input ("b", OP_CONSTANT4, OP_DISP17, OP_VOID);
   if (cc)
     {
@@ -1043,9 +1027,9 @@ OP_18_8 (void)
 
 /* b.  */
 void
-OP_10_10 (void)
+OP_10_10 ()
 {
-  uint32 tmp = 0, cc = cond_stat (OP[0]);
+  uint32 tmp, cc = cond_stat (OP[0]);
   trace_input ("b", OP_CONSTANT4, OP_DISP25, OP_VOID);
   if (cc)
     {
@@ -1072,7 +1056,7 @@ OP_10_10 (void)
 
 /* bal.  */
 void
-OP_C0_8 (void)
+OP_C0_8 ()
 {
   uint32 tmp;
   trace_input ("bal", OP_REG, OP_DISP17, OP_VOID);
@@ -1102,7 +1086,7 @@ OP_C0_8 (void)
 
 /* bal.  */
 void
-OP_102_14 (void)
+OP_102_14 ()
 {
   uint32 tmp;
   trace_input ("bal", OP_REGP, OP_DISP25, OP_VOID);
@@ -1130,7 +1114,7 @@ OP_102_14 (void)
 
 /* jal.  */
 void
-OP_148_14 (void)
+OP_148_14 ()
 {
   uint32 tmp;
   trace_input ("jal", OP_REGP, OP_REGP, OP_VOID);
@@ -1156,7 +1140,7 @@ OP_148_14 (void)
 
 /* jal.  */
 void
-OP_D_C (void)
+OP_D_C ()
 {
   uint32 tmp;
   trace_input ("jal", OP_REGP, OP_VOID, OP_VOID);
@@ -1182,7 +1166,7 @@ OP_D_C (void)
 
 /* beq0b.  */
 void
-OP_C_8 (void)
+OP_C_8 ()
 {
   uint32 addr;
   uint8 a = (GPR (OP[0]) & 0xFF);
@@ -1203,7 +1187,7 @@ OP_C_8 (void)
 
 /* bne0b.  */
 void
-OP_D_8 (void)
+OP_D_8 ()
 {
   uint32 addr;
   uint8 a = (GPR (OP[0]) & 0xFF);
@@ -1224,7 +1208,7 @@ OP_D_8 (void)
 
 /* beq0w.  */
 void
-OP_E_8 (void)
+OP_E_8()
 {
   uint32 addr;
   uint16 a = GPR (OP[0]);
@@ -1245,7 +1229,7 @@ OP_E_8 (void)
 
 /* bne0w.  */
 void
-OP_F_8 (void)
+OP_F_8 ()
 {
   uint32 addr;
   uint16 a = GPR (OP[0]);
@@ -1267,9 +1251,9 @@ OP_F_8 (void)
 
 /* jeq.  */
 void
-OP_A0_C (void)
+OP_A0_C ()
 {
-  uint32 tmp = 0;
+  uint32 tmp;
   trace_input ("jeq", OP_REGP, OP_VOID, OP_VOID);
   if ((PSR_Z) == 1)
   {
@@ -1281,9 +1265,9 @@ OP_A0_C (void)
 
 /* jne.  */
 void
-OP_A1_C (void)
+OP_A1_C ()
 {
-  uint32 tmp = 0;
+  uint32 tmp;
   trace_input ("jne", OP_REGP, OP_VOID, OP_VOID);
   if ((PSR_Z) == 0)
   {
@@ -1295,9 +1279,9 @@ OP_A1_C (void)
 
 /* jcs.  */
 void
-OP_A2_C (void)
+OP_A2_C ()
 {
-  uint32 tmp = 0;
+  uint32 tmp;
   trace_input ("jcs", OP_REGP, OP_VOID, OP_VOID);
   if ((PSR_C) == 1)
   {
@@ -1309,9 +1293,9 @@ OP_A2_C (void)
 
 /* jcc.  */
 void
-OP_A3_C (void)
+OP_A3_C ()
 {
-  uint32 tmp = 0;
+  uint32 tmp;
   trace_input ("jcc", OP_REGP, OP_VOID, OP_VOID);
   if ((PSR_C) == 0)
   {
@@ -1323,9 +1307,9 @@ OP_A3_C (void)
 
 /* jhi.  */
 void
-OP_A4_C (void)
+OP_A4_C ()
 {
-  uint32 tmp = 0;
+  uint32 tmp;
   trace_input ("jhi", OP_REGP, OP_VOID, OP_VOID);
   if ((PSR_L) == 1)
   {
@@ -1337,9 +1321,9 @@ OP_A4_C (void)
 
 /* jls.  */
 void
-OP_A5_C (void)
+OP_A5_C ()
 {
-  uint32 tmp = 0;
+  uint32 tmp;
   trace_input ("jls", OP_REGP, OP_VOID, OP_VOID);
   if ((PSR_L) == 0)
   {
@@ -1351,9 +1335,9 @@ OP_A5_C (void)
 
 /* jgt.  */
 void
-OP_A6_C (void)
+OP_A6_C ()
 {
-  uint32 tmp = 0;
+  uint32 tmp;
   trace_input ("jgt", OP_REGP, OP_VOID, OP_VOID);
   if ((PSR_N) == 1)
   {
@@ -1365,9 +1349,9 @@ OP_A6_C (void)
 
 /* jle.  */
 void
-OP_A7_C (void)
+OP_A7_C ()
 {
-  uint32 tmp = 0;
+  uint32 tmp;
   trace_input ("jle", OP_REGP, OP_VOID, OP_VOID);
   if ((PSR_N) == 0)
   {
@@ -1380,9 +1364,9 @@ OP_A7_C (void)
 
 /* jfs.  */
 void
-OP_A8_C (void)
+OP_A8_C ()
 {
-  uint32 tmp = 0;
+  uint32 tmp;
   trace_input ("jfs", OP_REGP, OP_VOID, OP_VOID);
   if ((PSR_F) == 1)
   {
@@ -1394,9 +1378,9 @@ OP_A8_C (void)
 
 /* jfc.  */
 void
-OP_A9_C (void)
+OP_A9_C ()
 {
-  uint32 tmp = 0;
+  uint32 tmp;
   trace_input ("jfc", OP_REGP, OP_VOID, OP_VOID);
   if ((PSR_F) == 0)
   {
@@ -1408,9 +1392,9 @@ OP_A9_C (void)
 
 /* jlo.  */
 void
-OP_AA_C (void)
+OP_AA_C ()
 {
-  uint32 tmp = 0;
+  uint32 tmp;
   trace_input ("jlo", OP_REGP, OP_VOID, OP_VOID);
   if (((PSR_Z) == 0) & ((PSR_L) == 0))
   {
@@ -1422,9 +1406,9 @@ OP_AA_C (void)
 
 /* jhs.  */
 void
-OP_AB_C (void)
+OP_AB_C ()
 {
-  uint32 tmp = 0;
+  uint32 tmp;
   trace_input ("jhs", OP_REGP, OP_VOID, OP_VOID);
   if (((PSR_Z) == 1) | ((PSR_L) == 1))
   {
@@ -1436,9 +1420,9 @@ OP_AB_C (void)
 
 /* jlt.  */
 void
-OP_AC_C (void)
+OP_AC_C ()
 {
-  uint32 tmp = 0;
+  uint32 tmp;
   trace_input ("jlt", OP_REGP, OP_VOID, OP_VOID);
   if (((PSR_Z) == 0) & ((PSR_N) == 0))
   {
@@ -1450,9 +1434,9 @@ OP_AC_C (void)
 
 /* jge.  */
 void
-OP_AD_C (void)
+OP_AD_C ()
 {
-  uint32 tmp = 0;
+  uint32 tmp;
   trace_input ("jge", OP_REGP, OP_VOID, OP_VOID);
   if (((PSR_Z) == 1) | ((PSR_N) == 1))
   {
@@ -1464,7 +1448,7 @@ OP_AD_C (void)
 
 /* jump.  */
 void
-OP_AE_C (void)
+OP_AE_C ()
 {
   uint32 tmp;
   trace_input ("jump", OP_REGP, OP_VOID, OP_VOID);
@@ -1475,7 +1459,7 @@ OP_AE_C (void)
 
 /* jusr.  */
 void
-OP_AF_C (void)
+OP_AF_C ()
 {
   uint32 tmp;
   trace_input ("jusr", OP_REGP, OP_VOID, OP_VOID);
@@ -1487,7 +1471,7 @@ OP_AF_C (void)
 
 /* seq.  */
 void
-OP_80_C (void)
+OP_80_C ()
 {
   trace_input ("seq", OP_REG, OP_VOID, OP_VOID);
   if ((PSR_Z) == 1)
@@ -1498,7 +1482,7 @@ OP_80_C (void)
 }
 /* sne.  */
 void
-OP_81_C (void)
+OP_81_C ()
 {
   trace_input ("sne", OP_REG, OP_VOID, OP_VOID);
   if ((PSR_Z) == 0)
@@ -1510,7 +1494,7 @@ OP_81_C (void)
 
 /* scs.  */
 void
-OP_82_C (void)
+OP_82_C ()
 {
   trace_input ("scs", OP_REG, OP_VOID, OP_VOID);
   if ((PSR_C) == 1)
@@ -1522,7 +1506,7 @@ OP_82_C (void)
 
 /* scc.  */
 void
-OP_83_C (void)
+OP_83_C ()
 {
   trace_input ("scc", OP_REG, OP_VOID, OP_VOID);
   if ((PSR_C) == 0)
@@ -1534,7 +1518,7 @@ OP_83_C (void)
 
 /* shi.  */
 void
-OP_84_C (void)
+OP_84_C ()
 {
   trace_input ("shi", OP_REG, OP_VOID, OP_VOID);
   if ((PSR_L) == 1)
@@ -1546,7 +1530,7 @@ OP_84_C (void)
 
 /* sls.  */
 void
-OP_85_C (void)
+OP_85_C ()
 {
   trace_input ("sls", OP_REG, OP_VOID, OP_VOID);
   if ((PSR_L) == 0)
@@ -1558,7 +1542,7 @@ OP_85_C (void)
 
 /* sgt.  */
 void
-OP_86_C (void)
+OP_86_C ()
 {
   trace_input ("sgt", OP_REG, OP_VOID, OP_VOID);
   if ((PSR_N) == 1)
@@ -1570,7 +1554,7 @@ OP_86_C (void)
 
 /* sle.  */
 void
-OP_87_C (void)
+OP_87_C ()
 {
   trace_input ("sle", OP_REG, OP_VOID, OP_VOID);
   if ((PSR_N) == 0)
@@ -1582,7 +1566,7 @@ OP_87_C (void)
 
 /* sfs.  */
 void
-OP_88_C (void)
+OP_88_C ()
 {
   trace_input ("sfs", OP_REG, OP_VOID, OP_VOID);
   if ((PSR_F) == 1)
@@ -1594,7 +1578,7 @@ OP_88_C (void)
 
 /* sfc.  */
 void
-OP_89_C (void)
+OP_89_C ()
 {
   trace_input ("sfc", OP_REG, OP_VOID, OP_VOID);
   if ((PSR_F) == 0)
@@ -1607,7 +1591,7 @@ OP_89_C (void)
 
 /* slo.  */
 void
-OP_8A_C (void)
+OP_8A_C ()
 {
   trace_input ("slo", OP_REG, OP_VOID, OP_VOID);
   if (((PSR_Z) == 0) & ((PSR_L) == 0))
@@ -1619,7 +1603,7 @@ OP_8A_C (void)
 
 /* shs.  */
 void
-OP_8B_C (void)
+OP_8B_C ()
 {
   trace_input ("shs", OP_REG, OP_VOID, OP_VOID);
   if ( ((PSR_Z) == 1) | ((PSR_L) == 1))
@@ -1631,7 +1615,7 @@ OP_8B_C (void)
 
 /* slt.  */
 void
-OP_8C_C (void)
+OP_8C_C ()
 {
   trace_input ("slt", OP_REG, OP_VOID, OP_VOID);
   if (((PSR_Z) == 0) & ((PSR_N) == 0))
@@ -1643,7 +1627,7 @@ OP_8C_C (void)
 
 /* sge.  */
 void
-OP_8D_C (void)
+OP_8D_C ()
 {
   trace_input ("sge", OP_REG, OP_VOID, OP_VOID);
   if (((PSR_Z) == 1) | ((PSR_N) == 1))
@@ -1655,7 +1639,7 @@ OP_8D_C (void)
 
 /* cbitb.  */
 void
-OP_D7_9 (void)
+OP_D7_9 ()
 {
   uint8 a = OP[0] & 0xff;
   uint32 addr = OP[1], tmp;
@@ -1669,7 +1653,7 @@ OP_D7_9 (void)
 
 /* cbitb.  */
 void
-OP_107_14 (void)
+OP_107_14 ()
 {
   uint8 a = OP[0] & 0xff;
   uint32 addr = OP[1], tmp;
@@ -1683,7 +1667,7 @@ OP_107_14 (void)
 
 /* cbitb.  */
 void
-OP_68_8 (void)
+OP_68_8 ()
 {
   uint8 a = (OP[0]) & 0xff;
   uint32 addr = (GPR (OP[2])) + OP[1], tmp;
@@ -1697,7 +1681,7 @@ OP_68_8 (void)
 
 /* cbitb.  */
 void
-OP_1AA_A (void)
+OP_1AA_A ()
 {
   uint8 a = (OP[0]) & 0xff;
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -1711,7 +1695,7 @@ OP_1AA_A (void)
 
 /* cbitb.  */
 void
-OP_104_14 (void)
+OP_104_14 ()
 {
   uint8 a = (OP[0]) & 0xff;
   uint32 addr = (GPR (OP[2])) + OP[1], tmp;
@@ -1725,7 +1709,7 @@ OP_104_14 (void)
 
 /* cbitb.  */
 void
-OP_D4_9 (void)
+OP_D4_9 ()
 {
   uint8 a = (OP[0]) & 0xff;
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -1739,7 +1723,7 @@ OP_D4_9 (void)
 
 /* cbitb.  */
 void
-OP_D6_9 (void)
+OP_D6_9 ()
 {
   uint8 a = (OP[0]) & 0xff;
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -1754,7 +1738,7 @@ OP_D6_9 (void)
 
 /* cbitb.  */
 void
-OP_105_14 (void)
+OP_105_14 ()
 {
   uint8 a = (OP[0]) & 0xff;
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -1768,7 +1752,7 @@ OP_105_14 (void)
 
 /* cbitb.  */
 void
-OP_106_14 (void)
+OP_106_14 ()
 {
   uint8 a = (OP[0]) & 0xff;
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -1783,7 +1767,7 @@ OP_106_14 (void)
 
 /* cbitw.  */
 void
-OP_6F_8 (void)
+OP_6F_8 ()
 {
   uint16 a = OP[0];
   uint32 addr = OP[1], tmp;
@@ -1797,7 +1781,7 @@ OP_6F_8 (void)
 
 /* cbitw.  */
 void
-OP_117_14 (void)
+OP_117_14 ()
 {
   uint16 a = OP[0];
   uint32 addr = OP[1], tmp;
@@ -1811,7 +1795,7 @@ OP_117_14 (void)
 
 /* cbitw.  */
 void
-OP_36_7 (void)
+OP_36_7 ()
 {
   uint32 addr;
   uint16 a = (OP[0]), tmp;
@@ -1832,7 +1816,7 @@ OP_36_7 (void)
 
 /* cbitw.  */
 void
-OP_1AB_A (void)
+OP_1AB_A ()
 {
   uint16 a = (OP[0]);
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -1846,7 +1830,7 @@ OP_1AB_A (void)
 
 /* cbitw.  */
 void
-OP_114_14 (void)
+OP_114_14 ()
 {
   uint16 a = (OP[0]);
   uint32 addr = (GPR (OP[2])) + OP[1], tmp;
@@ -1861,7 +1845,7 @@ OP_114_14 (void)
 
 /* cbitw.  */
 void
-OP_6E_8 (void)
+OP_6E_8 ()
 {
   uint16 a = (OP[0]);
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -1875,7 +1859,7 @@ OP_6E_8 (void)
 
 /* cbitw.  */
 void
-OP_69_8 (void)
+OP_69_8 ()
 {
   uint16 a = (OP[0]);
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -1890,7 +1874,7 @@ OP_69_8 (void)
 
 /* cbitw.  */
 void
-OP_115_14 (void)
+OP_115_14 ()
 {
   uint16 a = (OP[0]);
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -1904,7 +1888,7 @@ OP_115_14 (void)
 
 /* cbitw.  */
 void
-OP_116_14 (void)
+OP_116_14 ()
 {
   uint16 a = (OP[0]);
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -1918,7 +1902,7 @@ OP_116_14 (void)
 
 /* sbitb.  */
 void
-OP_E7_9 (void)
+OP_E7_9 ()
 {
   uint8 a = OP[0] & 0xff;
   uint32 addr = OP[1], tmp;
@@ -1932,7 +1916,7 @@ OP_E7_9 (void)
 
 /* sbitb.  */
 void
-OP_10B_14 (void)
+OP_10B_14 ()
 {
   uint8 a = OP[0] & 0xff;
   uint32 addr = OP[1], tmp;
@@ -1946,7 +1930,7 @@ OP_10B_14 (void)
 
 /* sbitb.  */
 void
-OP_70_8 (void)
+OP_70_8 ()
 {
   uint8 a = OP[0] & 0xff;
   uint32 addr = (GPR (OP[2])) + OP[1], tmp;
@@ -1960,7 +1944,7 @@ OP_70_8 (void)
 
 /* sbitb.  */
 void
-OP_1CA_A (void)
+OP_1CA_A ()
 {
   uint8 a = OP[0] & 0xff;
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -1974,7 +1958,7 @@ OP_1CA_A (void)
 
 /* sbitb.  */
 void
-OP_108_14 (void)
+OP_108_14 ()
 {
   uint8 a = OP[0] & 0xff;
   uint32 addr = (GPR (OP[2])) + OP[1], tmp;
@@ -1989,7 +1973,7 @@ OP_108_14 (void)
 
 /* sbitb.  */
 void
-OP_E4_9 (void)
+OP_E4_9 ()
 {
   uint8 a = OP[0] & 0xff;
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -2003,7 +1987,7 @@ OP_E4_9 (void)
 
 /* sbitb.  */
 void
-OP_E6_9 (void)
+OP_E6_9 ()
 {
   uint8 a = OP[0] & 0xff;
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -2018,7 +2002,7 @@ OP_E6_9 (void)
 
 /* sbitb.  */
 void
-OP_109_14 (void)
+OP_109_14 ()
 {
   uint8 a = OP[0] & 0xff;
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -2033,7 +2017,7 @@ OP_109_14 (void)
 
 /* sbitb.  */
 void
-OP_10A_14 (void)
+OP_10A_14 ()
 {
   uint8 a = OP[0] & 0xff;
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -2048,7 +2032,7 @@ OP_10A_14 (void)
 
 /* sbitw.  */
 void
-OP_77_8 (void)
+OP_77_8 ()
 {
   uint16 a = OP[0];
   uint32 addr = OP[1], tmp;
@@ -2062,7 +2046,7 @@ OP_77_8 (void)
 
 /* sbitw.  */
 void
-OP_11B_14 (void)
+OP_11B_14 ()
 {
   uint16 a = OP[0];
   uint32 addr = OP[1], tmp;
@@ -2076,7 +2060,7 @@ OP_11B_14 (void)
 
 /* sbitw.  */
 void
-OP_3A_7 (void)
+OP_3A_7 ()
 {
   uint32 addr;
   uint16 a = (OP[0]), tmp;
@@ -2096,7 +2080,7 @@ OP_3A_7 (void)
 
 /* sbitw.  */
 void
-OP_1CB_A (void)
+OP_1CB_A ()
 {
   uint16 a = (OP[0]);
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -2110,7 +2094,7 @@ OP_1CB_A (void)
 
 /* sbitw.  */
 void
-OP_118_14 (void)
+OP_118_14 ()
 {
   uint16 a = (OP[0]);
   uint32 addr = (GPR (OP[2])) + OP[1], tmp;
@@ -2124,7 +2108,7 @@ OP_118_14 (void)
 
 /* sbitw.  */
 void
-OP_76_8 (void)
+OP_76_8 ()
 {
   uint16 a = (OP[0]);
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -2138,7 +2122,7 @@ OP_76_8 (void)
 
 /* sbitw.  */
 void
-OP_71_8 (void)
+OP_71_8 ()
 {
   uint16 a = (OP[0]);
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -2152,7 +2136,7 @@ OP_71_8 (void)
 
 /* sbitw.  */
 void
-OP_119_14 (void)
+OP_119_14 ()
 {
   uint16 a = (OP[0]);
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -2166,7 +2150,7 @@ OP_119_14 (void)
 
 /* sbitw.  */
 void
-OP_11A_14 (void)
+OP_11A_14 ()
 {
   uint16 a = (OP[0]);
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -2181,7 +2165,7 @@ OP_11A_14 (void)
 
 /* tbitb.  */
 void
-OP_F7_9 (void)
+OP_F7_9 ()
 {
   uint8 a = OP[0] & 0xff;
   uint32 addr = OP[1], tmp;
@@ -2193,7 +2177,7 @@ OP_F7_9 (void)
 
 /* tbitb.  */
 void
-OP_10F_14 (void)
+OP_10F_14 ()
 {
   uint8 a = OP[0] & 0xff;
   uint32 addr = OP[1], tmp;
@@ -2205,7 +2189,7 @@ OP_10F_14 (void)
 
 /* tbitb.  */
 void
-OP_78_8 (void)
+OP_78_8 ()
 {
   uint8 a = (OP[0]) & 0xff;
   uint32 addr = (GPR (OP[2])) + OP[1], tmp;
@@ -2217,7 +2201,7 @@ OP_78_8 (void)
 
 /* tbitb.  */
 void
-OP_1EA_A (void)
+OP_1EA_A ()
 {
   uint8 a = (OP[0]) & 0xff;
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -2229,7 +2213,7 @@ OP_1EA_A (void)
 
 /* tbitb.  */
 void
-OP_10C_14 (void)
+OP_10C_14 ()
 {
   uint8 a = (OP[0]) & 0xff;
   uint32 addr = (GPR (OP[2])) + OP[1], tmp;
@@ -2241,7 +2225,7 @@ OP_10C_14 (void)
 
 /* tbitb.  */
 void
-OP_F4_9 (void)
+OP_F4_9 ()
 {
   uint8 a = (OP[0]) & 0xff;
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -2253,7 +2237,7 @@ OP_F4_9 (void)
 
 /* tbitb.  */
 void
-OP_F6_9 (void)
+OP_F6_9 ()
 {
   uint8 a = (OP[0]) & 0xff;
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -2265,7 +2249,7 @@ OP_F6_9 (void)
 
 /* tbitb.  */
 void
-OP_10D_14 (void)
+OP_10D_14 ()
 {
   uint8 a = (OP[0]) & 0xff;
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -2277,7 +2261,7 @@ OP_10D_14 (void)
 
 /* tbitb.  */
 void
-OP_10E_14 (void)
+OP_10E_14 ()
 {
   uint8 a = (OP[0]) & 0xff;
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -2290,7 +2274,7 @@ OP_10E_14 (void)
 
 /* tbitw.  */
 void
-OP_7F_8 (void)
+OP_7F_8 ()
 {
   uint16 a = OP[0];
   uint32 addr = OP[1], tmp;
@@ -2302,7 +2286,7 @@ OP_7F_8 (void)
 
 /* tbitw.  */
 void
-OP_11F_14 (void)
+OP_11F_14 ()
 {
   uint16 a = OP[0];
   uint32 addr = OP[1], tmp;
@@ -2315,7 +2299,7 @@ OP_11F_14 (void)
 
 /* tbitw.  */
 void
-OP_3E_7 (void)
+OP_3E_7 ()
 {
   uint32 addr;
   uint16 a = (OP[0]), tmp;
@@ -2333,7 +2317,7 @@ OP_3E_7 (void)
 
 /* tbitw.  */
 void
-OP_1EB_A (void)
+OP_1EB_A ()
 {
   uint16 a = (OP[0]);
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -2345,7 +2329,7 @@ OP_1EB_A (void)
 
 /* tbitw.  */
 void
-OP_11C_14 (void)
+OP_11C_14 ()
 {
   uint16 a = (OP[0]);
   uint32 addr = (GPR (OP[2])) + OP[1], tmp;
@@ -2357,7 +2341,7 @@ OP_11C_14 (void)
 
 /* tbitw.  */
 void
-OP_7E_8 (void)
+OP_7E_8 ()
 {
   uint16 a = (OP[0]);
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -2369,7 +2353,7 @@ OP_7E_8 (void)
 
 /* tbitw.  */
 void
-OP_79_8 (void)
+OP_79_8 ()
 {
   uint16 a = (OP[0]);
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -2381,7 +2365,7 @@ OP_79_8 (void)
 
 /* tbitw.  */
 void
-OP_11D_14 (void)
+OP_11D_14 ()
 {
   uint16 a = (OP[0]);
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -2394,7 +2378,7 @@ OP_11D_14 (void)
 
 /* tbitw.  */
 void
-OP_11E_14 (void)
+OP_11E_14 ()
 {
   uint16 a = (OP[0]);
   uint32 addr = (GPR32 (OP[2])) + OP[1], tmp;
@@ -2407,7 +2391,7 @@ OP_11E_14 (void)
 
 /* tbit.  */
 void
-OP_6_8 (void)
+OP_6_8 ()
 {
   uint16 a = OP[0];
   uint16 b = (GPR (OP[1]));
@@ -2418,7 +2402,7 @@ OP_6_8 (void)
 
 /* tbit.  */
 void
-OP_7_8 (void)
+OP_7_8 ()
 {
   uint16 a = GPR (OP[0]);
   uint16 b = (GPR (OP[1]));
@@ -2430,7 +2414,7 @@ OP_7_8 (void)
 
 /* cmpb.  */
 void
-OP_50_8 (void)
+OP_50_8 ()
 {
   uint8 a = (OP[0]) & 0xFF; 
   uint8 b = (GPR (OP[1])) & 0xFF;
@@ -2443,7 +2427,7 @@ OP_50_8 (void)
 
 /* cmpb.  */
 void
-OP_50B_C (void)
+OP_50B_C ()
 {
   uint8 a = (OP[0]) & 0xFF; 
   uint8 b = (GPR (OP[1])) & 0xFF;
@@ -2456,7 +2440,7 @@ OP_50B_C (void)
 
 /* cmpb.  */
 void
-OP_51_8 (void)
+OP_51_8 ()
 {
   uint8 a = (GPR (OP[0])) & 0xFF; 
   uint8 b = (GPR (OP[1])) & 0xFF;
@@ -2469,7 +2453,7 @@ OP_51_8 (void)
 
 /* cmpw.  */
 void
-OP_52_8 (void)
+OP_52_8 ()
 {
   uint16 a = (OP[0]); 
   uint16 b = GPR (OP[1]);
@@ -2482,7 +2466,7 @@ OP_52_8 (void)
 
 /* cmpw.  */
 void
-OP_52B_C (void)
+OP_52B_C ()
 {
   uint16 a = (OP[0]); 
   uint16 b = GPR (OP[1]);
@@ -2495,7 +2479,7 @@ OP_52B_C (void)
 
 /* cmpw.  */
 void
-OP_53_8 (void)
+OP_53_8 ()
 {
   uint16 a = GPR (OP[0]) ; 
   uint16 b = GPR (OP[1]) ;
@@ -2508,7 +2492,7 @@ OP_53_8 (void)
 
 /* cmpd.  */
 void
-OP_56_8 (void)
+OP_56_8 ()
 {
   uint32 a = (OP[0]); 
   uint32 b = GPR32 (OP[1]);
@@ -2521,7 +2505,7 @@ OP_56_8 (void)
 
 /* cmpd.  */
 void
-OP_56B_C (void)
+OP_56B_C ()
 {
   uint32 a = (SEXT16(OP[0])); 
   uint32 b = GPR32 (OP[1]);
@@ -2534,7 +2518,7 @@ OP_56B_C (void)
 
 /* cmpd.  */
 void
-OP_57_8 (void)
+OP_57_8 ()
 {
   uint32 a = GPR32 (OP[0]) ; 
   uint32 b = GPR32 (OP[1]) ;
@@ -2547,7 +2531,7 @@ OP_57_8 (void)
 
 /* cmpd.  */
 void
-OP_9_C (void)
+OP_9_C()
 {
   uint32 a = (OP[0]); 
   uint32 b = GPR32 (OP[1]);
@@ -2561,40 +2545,40 @@ OP_9_C (void)
 
 /* movb.  */
 void
-OP_58_8 (void)
+OP_58_8 ()
 {
   uint8 tmp = OP[0] & 0xFF;
-  uint16 a = (GPR (OP[1])) & 0xFF00;
   trace_input ("movb", OP_CONSTANT4, OP_REG, OP_VOID);
+  uint16 a = (GPR (OP[1])) & 0xFF00;
   SET_GPR (OP[1], (a | tmp));
   trace_output_16 (tmp);
 }
 
 /* movb.  */
 void
-OP_58B_C (void)
+OP_58B_C ()
 {
   uint8 tmp = OP[0] & 0xFF;
-  uint16 a = (GPR (OP[1])) & 0xFF00;
   trace_input ("movb", OP_CONSTANT16, OP_REG, OP_VOID);
+  uint16 a = (GPR (OP[1])) & 0xFF00;
   SET_GPR (OP[1], (a | tmp));
   trace_output_16 (tmp);
 }
 
 /* movb.  */
 void
-OP_59_8 (void)
+OP_59_8 ()
 {
   uint8 tmp = (GPR (OP[0])) & 0xFF;
-  uint16 a = (GPR (OP[1])) & 0xFF00;
   trace_input ("movb", OP_REG, OP_REG, OP_VOID);
+  uint16 a = (GPR (OP[1])) & 0xFF00;
   SET_GPR (OP[1], (a | tmp));
   trace_output_16 (tmp);
 }
 
 /* movw.  */
 void
-OP_5A_8 (void)
+OP_5A_8 ()
 {
   uint16 tmp = OP[0];
   trace_input ("movw", OP_CONSTANT4_1, OP_REG, OP_VOID);
@@ -2604,7 +2588,7 @@ OP_5A_8 (void)
 
 /* movw.  */
 void
-OP_5AB_C (void)
+OP_5AB_C ()
 {
   int16 tmp = OP[0];
   trace_input ("movw", OP_CONSTANT16, OP_REG, OP_VOID);
@@ -2614,11 +2598,11 @@ OP_5AB_C (void)
 
 /* movw.  */
 void
-OP_5B_8 (void)
+OP_5B_8 ()
 {
   uint16 tmp = GPR (OP[0]);
-  uint32 a = GPR32 (OP[1]);
   trace_input ("movw", OP_REG, OP_REGP, OP_VOID);
+  uint32 a = GPR32 (OP[1]);
   a = (a & 0xffff0000) | tmp;
   SET_GPR32 (OP[1], a);
   trace_output_16 (tmp);
@@ -2626,7 +2610,7 @@ OP_5B_8 (void)
 
 /* movxb.  */
 void
-OP_5C_8 (void)
+OP_5C_8 ()
 {
   uint8 tmp = (GPR (OP[0])) & 0xFF;
   trace_input ("movxb", OP_REG, OP_REG, OP_VOID);
@@ -2636,7 +2620,7 @@ OP_5C_8 (void)
 
 /* movzb.  */
 void
-OP_5D_8 (void)
+OP_5D_8 ()
 {
   uint8 tmp = (GPR (OP[0])) & 0xFF;
   trace_input ("movzb", OP_REG, OP_REG, OP_VOID);
@@ -2646,7 +2630,7 @@ OP_5D_8 (void)
 
 /* movxw.  */
 void
-OP_5E_8 (void)
+OP_5E_8 ()
 {
   uint16 tmp = GPR (OP[0]);
   trace_input ("movxw", OP_REG, OP_REGP, OP_VOID);
@@ -2656,7 +2640,7 @@ OP_5E_8 (void)
 
 /* movzw.  */
 void
-OP_5F_8 (void)
+OP_5F_8 ()
 {
   uint16 tmp = GPR (OP[0]);
   trace_input ("movzw", OP_REG, OP_REGP, OP_VOID);
@@ -2666,7 +2650,7 @@ OP_5F_8 (void)
 
 /* movd.  */
 void
-OP_54_8 (void)
+OP_54_8 ()
 {
   int32 tmp = OP[0];
   trace_input ("movd", OP_CONSTANT4, OP_REGP, OP_VOID);
@@ -2676,7 +2660,7 @@ OP_54_8 (void)
 
 /* movd.  */
 void
-OP_54B_C (void)
+OP_54B_C ()
 {
   int32 tmp = SEXT16(OP[0]);
   trace_input ("movd", OP_CONSTANT16, OP_REGP, OP_VOID);
@@ -2686,7 +2670,7 @@ OP_54B_C (void)
 
 /* movd.  */
 void
-OP_55_8 (void)
+OP_55_8 ()
 {
   uint32 tmp = GPR32 (OP[0]);
   trace_input ("movd", OP_REGP, OP_REGP, OP_VOID);
@@ -2696,7 +2680,7 @@ OP_55_8 (void)
 
 /* movd.  */
 void
-OP_5_8 (void)
+OP_5_8 ()
 {
   uint32 tmp = OP[0];
   trace_input ("movd", OP_CONSTANT20, OP_REGP, OP_VOID);
@@ -2706,7 +2690,7 @@ OP_5_8 (void)
 
 /* movd.  */
 void
-OP_7_C (void)
+OP_7_C ()
 {
   int32 tmp = OP[0];
   trace_input ("movd", OP_CONSTANT32, OP_REGP, OP_VOID);
@@ -2716,7 +2700,7 @@ OP_7_C (void)
 
 /* loadm.  */
 void
-OP_14_D (void)
+OP_14_D ()
 {
   uint32 addr = GPR (0);
   uint16 count = OP[0], reg = 2, tmp;
@@ -2746,7 +2730,7 @@ OP_14_D (void)
 
 /* loadmp.  */
 void
-OP_15_D (void)
+OP_15_D ()
 {
   uint32 addr = GPR32 (0);
   uint16 count = OP[0], reg = 2, tmp;
@@ -2776,7 +2760,7 @@ OP_15_D (void)
 
 /* loadb.  */
 void
-OP_88_8 (void)
+OP_88_8 ()
 {
   /* loadb ABS20, REG 
    * ADDR = zext24(abs20) | remap (ie 0xF00000)
@@ -2797,7 +2781,7 @@ OP_88_8 (void)
 
 /* loadb.  */
 void
-OP_127_14 (void)
+OP_127_14 ()
 {
   /* loadb ABS24, REG 
    * ADDR = abs24
@@ -2813,7 +2797,7 @@ OP_127_14 (void)
 
 /* loadb.  */
 void
-OP_45_7 (void)
+OP_45_7 ()
 {
   /* loadb [Rindex]ABS20   REG
    * ADDR = Rindex + zext24(disp20)
@@ -2836,7 +2820,7 @@ OP_45_7 (void)
 
 /* loadb.  */
 void
-OP_B_4 (void)
+OP_B_4 ()
 {
   /* loadb DIPS4(REGP)   REG 
    * ADDR = RPBASE + zext24(DISP4)
@@ -2851,7 +2835,7 @@ OP_B_4 (void)
 
 /* loadb.  */
 void
-OP_BE_8 (void)
+OP_BE_8 ()
 {
   /* loadb [Rindex]disp0(RPbasex) REG
    * ADDR = Rpbasex + Rindex
@@ -2875,7 +2859,7 @@ OP_BE_8 (void)
 
 /* loadb.  */
 void
-OP_219_A (void)
+OP_219_A ()
 {
   /* loadb [Rindex]disp14(RPbasex) REG
    * ADDR = Rpbasex + Rindex + zext24(disp14)
@@ -2900,7 +2884,7 @@ OP_219_A (void)
 
 /* loadb.  */
 void
-OP_184_14 (void)
+OP_184_14 ()
 {
   /* loadb DISPE20(REG)   REG
    * zext24(Rbase) + zext24(dispe20)
@@ -2916,7 +2900,7 @@ OP_184_14 (void)
 
 /* loadb.  */
 void
-OP_124_14 (void)
+OP_124_14 ()
 {
   /* loadb DISP20(REG)   REG
    * ADDR = zext24(Rbase) + zext24(disp20)
@@ -2932,7 +2916,7 @@ OP_124_14 (void)
 
 /* loadb.  */
 void
-OP_BF_8 (void)
+OP_BF_8 ()
 {
   /* loadb disp16(REGP)   REG
    * ADDR = RPbase + zext24(disp16)
@@ -2948,7 +2932,7 @@ OP_BF_8 (void)
 
 /* loadb.  */
 void
-OP_125_14 (void)
+OP_125_14 ()
 {
   /* loadb disp20(REGP)   REG
    * ADDR = RPbase + zext24(disp20)
@@ -2964,7 +2948,7 @@ OP_125_14 (void)
 
 /* loadb.  */
 void
-OP_185_14 (void)
+OP_185_14 ()
 {
   /* loadb -disp20(REGP)   REG
    * ADDR = RPbase + zext24(-disp20)
@@ -2979,7 +2963,7 @@ OP_185_14 (void)
 
 /* loadb.  */
 void
-OP_126_14 (void)
+OP_126_14 ()
 {
   /* loadb [Rindex]disp20(RPbasexb) REG
    * ADDR = RPbasex + Rindex + zext24(disp20)
@@ -3004,7 +2988,7 @@ OP_126_14 (void)
 
 /* loadw.  */
 void
-OP_89_8 (void)
+OP_89_8 ()
 {
   /* loadw ABS20, REG 
    * ADDR = zext24(abs20) | remap
@@ -3026,7 +3010,7 @@ OP_89_8 (void)
 
 /* loadw.  */
 void
-OP_12F_14 (void)
+OP_12F_14 ()
 {
   /* loadw ABS24, REG 
    * ADDR = abs24
@@ -3041,7 +3025,7 @@ OP_12F_14 (void)
 
 /* loadw.  */
 void
-OP_47_7 (void)
+OP_47_7 ()
 {
   /* loadw [Rindex]ABS20   REG
    * ADDR = Rindex + zext24(disp20)
@@ -3064,7 +3048,7 @@ OP_47_7 (void)
 
 /* loadw.  */
 void
-OP_9_4 (void)
+OP_9_4 ()
 {
   /* loadw DIPS4(REGP)   REGP
    * ADDR = RPBASE + zext24(DISP4)
@@ -3088,7 +3072,7 @@ OP_9_4 (void)
 
 /* loadw.  */
 void
-OP_9E_8 (void)
+OP_9E_8 ()
 {
   /* loadw [Rindex]disp0(RPbasex) REG
    * ADDR = Rpbasex + Rindex
@@ -3113,7 +3097,7 @@ OP_9E_8 (void)
 
 /* loadw.  */
 void
-OP_21B_A (void)
+OP_21B_A ()
 {
   /* loadw [Rindex]disp14(RPbasex) REG
    * ADDR = Rpbasex + Rindex + zext24(disp14)
@@ -3136,7 +3120,7 @@ OP_21B_A (void)
 
 /* loadw.  */
 void
-OP_18C_14 (void)
+OP_18C_14 ()
 {
   /* loadw dispe20(REG)   REGP
    * REGP = [DISPE20+[REG]]   */
@@ -3160,7 +3144,7 @@ OP_18C_14 (void)
 
 /* loadw.  */
 void
-OP_12C_14 (void)
+OP_12C_14 ()
 {
   /* loadw DISP20(REG)   REGP
    * ADDR = zext24(Rbase) + zext24(disp20)
@@ -3184,7 +3168,7 @@ OP_12C_14 (void)
 
 /* loadw.  */
 void
-OP_9F_8 (void)
+OP_9F_8 ()
 {
   /* loadw disp16(REGP)   REGP
    * ADDR = RPbase + zext24(disp16)
@@ -3207,7 +3191,7 @@ OP_9F_8 (void)
 
 /* loadw.  */
 void
-OP_12D_14 (void)
+OP_12D_14 ()
 {
   /* loadw disp20(REGP)   REGP
    * ADDR = RPbase + zext24(disp20)
@@ -3230,7 +3214,7 @@ OP_12D_14 (void)
 
 /* loadw.  */
 void
-OP_18D_14 (void)
+OP_18D_14 ()
 {
   /* loadw -disp20(REGP)   REG
    * ADDR = RPbase + zext24(-disp20)
@@ -3255,7 +3239,7 @@ OP_18D_14 (void)
 
 /* loadw.  */
 void
-OP_12E_14 (void)
+OP_12E_14 ()
 {
   /* loadw [Rindex]disp20(RPbasexb) REG
    * ADDR = RPbasex + Rindex + zext24(disp20)
@@ -3278,7 +3262,7 @@ OP_12E_14 (void)
 
 /* loadd.  */
 void
-OP_87_8 (void)
+OP_87_8 ()
 {
   /* loadd ABS20, REGP
    * ADDR = zext24(abs20) | remap
@@ -3300,7 +3284,7 @@ OP_87_8 (void)
 
 /* loadd.  */
 void
-OP_12B_14 (void)
+OP_12B_14 ()
 {
   /* loadd ABS24, REGP
    * ADDR = abs24
@@ -3318,7 +3302,7 @@ OP_12B_14 (void)
 
 /* loadd.  */
 void
-OP_46_7 (void)
+OP_46_7 ()
 {
   /* loadd [Rindex]ABS20   REGP
    * ADDR = Rindex + zext24(disp20)
@@ -3341,7 +3325,7 @@ OP_46_7 (void)
 
 /* loadd.  */
 void
-OP_A_4 (void)
+OP_A_4 ()
 {
   /* loadd dips4(regp)   REGP 
    * ADDR = Rpbase + zext24(disp4)
@@ -3358,7 +3342,7 @@ OP_A_4 (void)
 
 /* loadd.  */
 void
-OP_AE_8 (void)
+OP_AE_8 ()
 {
   /* loadd [Rindex]disp0(RPbasex) REGP
    * ADDR = Rpbasex + Rindex
@@ -3381,7 +3365,7 @@ OP_AE_8 (void)
 
 /* loadd.  */
 void
-OP_21A_A (void)
+OP_21A_A ()
 {
   /* loadd [Rindex]disp14(RPbasex) REGP
    * ADDR = Rpbasex + Rindex + zext24(disp14)
@@ -3404,7 +3388,7 @@ OP_21A_A (void)
 
 /* loadd.  */
 void
-OP_188_14 (void)
+OP_188_14 ()
 {
   /* loadd dispe20(REG)   REG
    * zext24(Rbase) + zext24(dispe20)
@@ -3421,7 +3405,7 @@ OP_188_14 (void)
 
 /* loadd.  */
 void
-OP_128_14 (void)
+OP_128_14 ()
 {
   /* loadd DISP20(REG)   REG
    * ADDR = zext24(Rbase) + zext24(disp20)
@@ -3437,7 +3421,7 @@ OP_128_14 (void)
 
 /* loadd.  */
 void
-OP_AF_8 (void)
+OP_AF_8 ()
 {
   /* loadd disp16(REGP)   REGP
    * ADDR = RPbase + zext24(disp16)
@@ -3453,7 +3437,7 @@ OP_AF_8 (void)
 
 /* loadd.  */
 void
-OP_129_14 (void)
+OP_129_14 ()
 {
   /* loadd disp20(REGP)   REGP
    * ADDR = RPbase + zext24(disp20)
@@ -3468,7 +3452,7 @@ OP_129_14 (void)
 
 /* loadd.  */
 void
-OP_189_14 (void)
+OP_189_14 ()
 {
   /* loadd -disp20(REGP)   REGP
    * ADDR = RPbase + zext24(-disp20)
@@ -3484,7 +3468,7 @@ OP_189_14 (void)
 
 /* loadd.  */
 void
-OP_12A_14 (void)
+OP_12A_14 ()
 {
   /* loadd [Rindex]disp20(RPbasexb) REGP
    * ADDR = RPbasex + Rindex + zext24(disp20)
@@ -3507,7 +3491,7 @@ OP_12A_14 (void)
 
 /* storb.  */
 void
-OP_C8_8 (void)
+OP_C8_8 ()
 {
   /* storb REG, ABS20
    * ADDR = zext24(abs20) | remap
@@ -3526,7 +3510,7 @@ OP_C8_8 (void)
 
 /* storb.  */
 void
-OP_137_14 (void)
+OP_137_14 ()
 {
   /* storb REG, ABS24
    * ADDR = abs24
@@ -3541,7 +3525,7 @@ OP_137_14 (void)
 
 /* storb.  */
 void
-OP_65_7 (void)
+OP_65_7 ()
 {
   /* storb REG, [Rindex]ABS20 
    * ADDR = Rindex + zext24(disp20)
@@ -3562,22 +3546,22 @@ OP_65_7 (void)
 
 /* storb.  */
 void
-OP_F_4 (void)
+OP_F_4 ()
 {
   /* storb REG, DIPS4(REGP)
    * ADDR = RPBASE + zext24(DISP4)
    * [ADDR]  = REG.  */
 
   uint16 a = ((GPR (OP[0])) & 0xff);
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storb", OP_REG, OP_RP_BASE_DISPE4, OP_VOID);
+  uint32 addr =  (GPR32 (OP[2])) + OP[1];
   SB (addr, a);
   trace_output_32 (addr);
 }
 
 /* storb.  */
 void
-OP_FE_8 (void)
+OP_FE_8 ()
 {
   /* storb [Rindex]disp0(RPbasex) REG
    * ADDR = Rpbasex + Rindex
@@ -3598,105 +3582,105 @@ OP_FE_8 (void)
 
 /* storb.  */
 void
-OP_319_A (void)
+OP_319_A ()
 {
   /* storb REG, [Rindex]disp14(RPbasex)
    * ADDR = Rpbasex + Rindex + zext24(disp14)
    * [ADDR] = REGR  */
 
   uint8 a = ((GPR (OP[0])) & 0xff);
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storb", OP_REG, OP_RP_INDEX_DISP14, OP_VOID);
+  uint32 addr = (GPR32 (OP[2])) + OP[1];
   SB (addr, a);
   trace_output_32 (addr);
 }
 
 /* storb.  */
 void
-OP_194_14 (void)
+OP_194_14 ()
 {
   /* storb REG, DISPE20(REG) 
    * zext24(Rbase) + zext24(dispe20)
    * [ADDR] = REG  */
 
   uint8 a = ((GPR (OP[0])) & 0xff);
-  uint32 addr = OP[1] + (GPR (OP[2]));
   trace_input ("storb", OP_REG, OP_R_BASE_DISPE20, OP_VOID);
+  uint32 addr = OP[1] + (GPR (OP[2]));
   SB (addr, a);
   trace_output_32 (addr);
 }
 
 /* storb.  */
 void
-OP_134_14 (void)
+OP_134_14 ()
 {
   /* storb REG, DISP20(REG)
    * ADDR = zext24(Rbase) + zext24(disp20)
    * [ADDR] = REG                          */
 
   uint8 a = (GPR (OP[0]) & 0xff);
-  uint32 addr = OP[1] + (GPR (OP[2]));
   trace_input ("storb", OP_REG, OP_R_BASE_DISPS20, OP_VOID);
+  uint32 addr =  OP[1] + (GPR (OP[2]));
   SB (addr, a);
   trace_output_32 (addr);
 }
 
 /* storb.  */
 void
-OP_FF_8 (void)
+OP_FF_8 ()
 {
   /* storb REG, disp16(REGP)
    * ADDR = RPbase + zext24(disp16)
    * [ADDR] = REGP   */
 
   uint8 a = ((GPR (OP[0])) & 0xff);
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storb", OP_REG, OP_RP_BASE_DISP16, OP_VOID);
+  uint32 addr = (GPR32 (OP[2])) + OP[1];
   SB (addr, a);
   trace_output_32 (addr);
 }
 
 /* storb.  */
 void
-OP_135_14 (void)
+OP_135_14 ()
 {
   /* storb REG, disp20(REGP)
    * ADDR = RPbase + zext24(disp20)
    * [ADDR] = REGP   */
 
   uint8 a = ((GPR (OP[0])) & 0xff); 
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storb", OP_REG, OP_RP_BASE_DISPS20, OP_VOID);
+  uint32 addr = (GPR32 (OP[2])) + OP[1];
   SB (addr, a);
   trace_output_32 (addr);
 }
 
 /* storb.  */
 void
-OP_195_14 (void)
+OP_195_14 ()
 {
   /* storb REG, -disp20(REGP)
    * ADDR = RPbase + zext24(-disp20)
    * [ADDR] = REGP  */
 
   uint8 a = (GPR (OP[0]) & 0xff); 
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storb", OP_REG, OP_RP_BASE_DISPE20, OP_VOID);
+  uint32 addr = (GPR32 (OP[2])) + OP[1];
   SB (addr, a);
   trace_output_32 (addr);
 }
 
 /* storb.  */
 void
-OP_136_14 (void)
+OP_136_14 ()
 {
   /* storb REG, [Rindex]disp20(RPbase)
    * ADDR = RPbasex + Rindex + zext24(disp20)
    * [ADDR] = REGP   */
 
   uint8 a = (GPR (OP[0])) & 0xff;
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storb", OP_REG, OP_RP_INDEX_DISPS20, OP_VOID);
+  uint32 addr = (GPR32 (OP[2])) + OP[1];
   SB (addr, a);
   trace_output_32 (addr);
 }
@@ -3704,29 +3688,29 @@ OP_136_14 (void)
 /* STR_IMM instructions.  */
 /* storb . */
 void
-OP_81_8 (void)
+OP_81_8 ()
 {
   uint8 a = (OP[0]) & 0xff;
-  uint32 addr = OP[1];
   trace_input ("storb", OP_CONSTANT4, OP_ABS20_OUTPUT, OP_VOID);
+  uint32 addr = OP[1];
   SB (addr, a);
   trace_output_32 (addr);
 }
 
 /* storb.  */
 void
-OP_123_14 (void)
+OP_123_14 ()
 {
   uint8 a = (OP[0]) & 0xff;
-  uint32 addr = OP[1];
   trace_input ("storb", OP_CONSTANT4, OP_ABS24_OUTPUT, OP_VOID);
+  uint32 addr = OP[1];
   SB (addr, a);
   trace_output_32 (addr);
 }
 
 /* storb.  */
 void
-OP_42_7 (void)
+OP_42_7 ()
 {
   uint32 addr;
   uint8 a = (OP[0]) & 0xff;
@@ -3743,66 +3727,66 @@ OP_42_7 (void)
 
 /* storb.  */
 void
-OP_218_A (void)
+OP_218_A ()
 {
   uint8 a = (OP[0]) & 0xff;
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storb", OP_CONSTANT4, OP_RP_BASE_DISP14, OP_VOID);
+  uint32 addr = (GPR32 (OP[2])) + OP[1];
   SB (addr, a);
   trace_output_32 (addr);
 }
 
 /* storb.  */
 void
-OP_82_8 (void)
+OP_82_8 ()
 {
   uint8 a = (OP[0]) & 0xff;
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storb", OP_CONSTANT4, OP_RP_INDEX_DISP0, OP_VOID);
+  uint32 addr = (GPR32 (OP[2])) + OP[1];
   SB (addr, a);
   trace_output_32 (addr);
 }
 
 /* storb.  */
 void
-OP_120_14 (void)
+OP_120_14 ()
 {
   uint8 a = (OP[0]) & 0xff;
-  uint32 addr = (GPR (OP[2])) + OP[1];
   trace_input ("storb", OP_CONSTANT4, OP_R_BASE_DISPS20, OP_VOID);
+  uint32 addr = (GPR (OP[2])) + OP[1];
   SB (addr, a);
   trace_output_32 (addr);
 }
 
 /* storb.  */
 void
-OP_83_8 (void)
+OP_83_8 ()
 {
   uint8 a = (OP[0]) & 0xff;
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storb", OP_CONSTANT4, OP_RP_BASE_DISP16, OP_VOID);
+  uint32 addr = (GPR32 (OP[2])) + OP[1];
   SB (addr, a);
   trace_output_32 (addr);
 }
 
 /* storb.  */
 void
-OP_121_14 (void)
+OP_121_14 ()
 {
   uint8 a = (OP[0]) & 0xff;
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storb", OP_CONSTANT4, OP_RP_BASE_DISPS20, OP_VOID);
+  uint32 addr = (GPR32 (OP[2])) + OP[1];
   SB (addr, a);
   trace_output_32 (addr);
 }
 
 /* storb.  */
 void
-OP_122_14 (void)
+OP_122_14 ()
 {
   uint8 a = (OP[0]) & 0xff;
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storb", OP_CONSTANT4, OP_RP_INDEX_DISPS20, OP_VOID);
+  uint32 addr = (GPR32 (OP[2])) + OP[1];
   SB (addr, a);
   trace_output_32 (addr);
 }
@@ -3810,29 +3794,29 @@ OP_122_14 (void)
 
 /* storw . */
 void
-OP_C9_8 (void)
+OP_C9_8 ()
 {
   uint16 a = GPR (OP[0]);
-  uint32 addr =  OP[1];
   trace_input ("storw", OP_REG, OP_ABS20_OUTPUT, OP_VOID);
+  uint32 addr =  OP[1];
   SW (addr, a);
   trace_output_32 (addr);
 }
 
 /* storw.  */
 void
-OP_13F_14 (void)
+OP_13F_14 ()
 {
   uint16 a = GPR (OP[0]);
-  uint32 addr =  OP[1];
   trace_input ("storw", OP_REG, OP_ABS24_OUTPUT, OP_VOID);
+  uint32 addr =  OP[1];
   SW (addr, a);
   trace_output_32 (addr);
 }
 
 /* storw.  */
 void
-OP_67_7 (void)
+OP_67_7 ()
 {
   uint32 addr;
   uint16 a = GPR (OP[0]);
@@ -3850,99 +3834,99 @@ OP_67_7 (void)
 
 /* storw.  */
 void
-OP_D_4 (void)
+OP_D_4 ()
 {
   uint16 a = (GPR (OP[0]));
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storw", OP_REGP, OP_RP_BASE_DISPE4, OP_VOID);
+  uint32 addr = (GPR32 (OP[2])) + OP[1]; 
   SW (addr, a);
   trace_output_32 (addr);
 }
 
 /* storw.  */
 void
-OP_DE_8 (void)
+OP_DE_8 ()
 {
   uint16 a = GPR (OP[0]);
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storw", OP_REG, OP_RP_INDEX_DISP0, OP_VOID);
+  uint32 addr = (GPR32 (OP[2])) + OP[1];
   SW (addr, a);
   trace_output_32 (addr);
 }
 
 /* storw.  */
 void
-OP_31B_A (void)
+OP_31B_A ()
 {
   uint16 a = GPR (OP[0]);
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storw", OP_REG, OP_RP_INDEX_DISP14, OP_VOID);
+  uint32 addr = (GPR32 (OP[2])) + OP[1];
   SW (addr, a);
   trace_output_32 (addr);
 }
 
 /* storw.  */
 void
-OP_19C_14 (void)
+OP_19C_14 ()
 {
   uint16 a = (GPR (OP[0]));
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storw", OP_REGP, OP_RP_BASE_DISPE20, OP_VOID);
+  uint32 addr =  (GPR32 (OP[2])) + OP[1];
   SW (addr, a);
   trace_output_32 (addr);
 }
 
 /* storw.  */
 void
-OP_13C_14 (void)
+OP_13C_14 ()
 {
   uint16 a = (GPR (OP[0]));
-  uint32 addr = (GPR (OP[2])) + OP[1];
   trace_input ("storw", OP_REG, OP_R_BASE_DISPS20, OP_VOID);
+  uint32 addr =  (GPR (OP[2])) + OP[1];
   SW (addr, a);
   trace_output_32 (addr);
 }
 
 /* storw.  */
 void
-OP_DF_8 (void)
+OP_DF_8 ()
 {
   uint16 a = (GPR (OP[0]));
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storw", OP_REG, OP_RP_BASE_DISP16, OP_VOID);
+  uint32 addr =  (GPR32 (OP[2])) + OP[1];
   SW (addr, a);
   trace_output_32 (addr);
 }
 
 /* storw.  */
 void
-OP_13D_14 (void)
+OP_13D_14 ()
 {
   uint16 a = (GPR (OP[0]));
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storw", OP_REG, OP_RP_BASE_DISPS20, OP_VOID);
+  uint32 addr =  (GPR32 (OP[2])) + OP[1];
   SW (addr, a);
   trace_output_32 (addr);
 }
 
 /* storw.  */
 void
-OP_19D_14 (void)
+OP_19D_14 ()
 {
   uint16 a = (GPR (OP[0]));
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storw", OP_REG, OP_RP_BASE_DISPE20, OP_VOID);
+  uint32 addr =  (GPR32 (OP[2])) + OP[1];
   SW (addr, a);
   trace_output_32 (addr);
 }
 
 /* storw.  */
 void
-OP_13E_14 (void)
+OP_13E_14 ()
 {
   uint16 a = (GPR (OP[0]));
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storw", OP_REG, OP_RP_INDEX_DISPS20, OP_VOID);
+  uint32 addr =  (GPR32 (OP[2])) + OP[1];
   SW (addr, a);
   trace_output_32 (addr);
 }
@@ -3950,29 +3934,29 @@ OP_13E_14 (void)
 /* STORE-w IMM instruction *****/
 /* storw . */
 void
-OP_C1_8 (void)
+OP_C1_8 ()
 {
   uint16 a = OP[0];
-  uint32 addr = OP[1];
   trace_input ("storw", OP_CONSTANT4, OP_ABS20_OUTPUT, OP_VOID);
+  uint32 addr =  OP[1];
   SW (addr, a);
   trace_output_32 (addr);
 }
 
 /* storw.  */
 void
-OP_133_14 (void)
+OP_133_14 ()
 {
   uint16 a = OP[0];
-  uint32 addr = OP[1];
   trace_input ("storw", OP_CONSTANT4, OP_ABS24_OUTPUT, OP_VOID);
+  uint32 addr =  OP[1];
   SW (addr, a);
   trace_output_32 (addr);
 }
 
 /* storw.  */
 void
-OP_62_7 (void)
+OP_62_7 ()
 {
   uint32 addr;
   uint16 a = OP[0];
@@ -3989,44 +3973,44 @@ OP_62_7 (void)
 
 /* storw.  */
 void
-OP_318_A (void)
+OP_318_A ()
 {
   uint16 a = OP[0];
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storw", OP_CONSTANT4, OP_RP_BASE_DISP14, OP_VOID);
+  uint32 addr =  (GPR32 (OP[2])) + OP[1];
   SW (addr, a);
   trace_output_32 (addr);
 }
 
 /* storw.  */
 void
-OP_C2_8 (void)
+OP_C2_8 ()
 {
   uint16 a = OP[0];
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storw", OP_CONSTANT4, OP_RP_INDEX_DISP0, OP_VOID);
+  uint32 addr =  (GPR32 (OP[2])) + OP[1];
   SW (addr, a);
   trace_output_32 (addr);
 }
 
 /* storw.  */
 void
-OP_130_14 (void)
+OP_130_14 ()
 {
   uint16 a = OP[0];
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storw", OP_CONSTANT4, OP_R_BASE_DISPS20, OP_VOID);
+  uint32 addr =  (GPR32 (OP[2])) + OP[1];
   SW (addr, a);
   trace_output_32 (addr);
 }
 
 /* storw.  */
 void
-OP_C3_8 (void)
+OP_C3_8 ()
 {
   uint16 a = OP[0];
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storw", OP_CONSTANT4, OP_RP_BASE_DISP16, OP_VOID);
+  uint32 addr =  (GPR32 (OP[2])) + OP[1];
   SW (addr, a);
   trace_output_32 (addr);
 }
@@ -4034,22 +4018,22 @@ OP_C3_8 (void)
 
 /* storw.  */
 void
-OP_131_14 (void)
+OP_131_14 ()
 {
   uint16 a = OP[0];
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storw", OP_CONSTANT4, OP_RP_BASE_DISPS20, OP_VOID);
+  uint32 addr =  (GPR32 (OP[2])) + OP[1];
   SW (addr, a);
   trace_output_32 (addr);
 }
 
 /* storw.  */
 void
-OP_132_14 (void)
+OP_132_14 ()
 {
   uint16 a = OP[0];
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("storw", OP_CONSTANT4, OP_RP_INDEX_DISPS20, OP_VOID);
+  uint32 addr =  (GPR32 (OP[2])) + OP[1];
   SW (addr, a);
   trace_output_32 (addr);
 }
@@ -4057,29 +4041,29 @@ OP_132_14 (void)
 
 /* stord.  */
 void
-OP_C7_8 (void)
+OP_C7_8 ()
 {
   uint32 a = GPR32 (OP[0]); 
-  uint32 addr = OP[1];
   trace_input ("stord", OP_REGP, OP_ABS20_OUTPUT, OP_VOID);
+  uint32 addr =  OP[1];
   SLW (addr, a);
   trace_output_32 (addr);
 }
 
 /* stord.  */
 void
-OP_13B_14 (void)
+OP_13B_14 ()
 {
   uint32 a = GPR32 (OP[0]); 
-  uint32 addr = OP[1];
   trace_input ("stord", OP_REGP, OP_ABS24_OUTPUT, OP_VOID);
+  uint32 addr =  OP[1];
   SLW (addr, a);
   trace_output_32 (addr);
 }
 
 /* stord.  */
 void
-OP_66_7 (void)
+OP_66_7 ()
 {
   uint32 addr, a = GPR32 (OP[0]); 
   trace_input ("stord", OP_REGP, OP_R_INDEX8_ABS20, OP_VOID);
@@ -4095,106 +4079,106 @@ OP_66_7 (void)
 
 /* stord.  */
 void
-OP_E_4 (void)
+OP_E_4 ()
 {
   uint32 a = GPR32 (OP[0]); 
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("stord", OP_REGP, OP_RP_BASE_DISPE4, OP_VOID);
+  uint32 addr =  (GPR32 (OP[2])) + OP[1];
   SLW (addr, a);
   trace_output_32 (addr);
 }
 
 /* stord.  */
 void
-OP_EE_8 (void)
+OP_EE_8 ()
 {
   uint32 a = GPR32 (OP[0]); 
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("stord", OP_REGP, OP_RP_INDEX_DISP0, OP_VOID);
+  uint32 addr =  (GPR32 (OP[2])) + OP[1];
   SLW (addr, a);
   trace_output_32 (addr);
 }
 
 /* stord.  */
 void
-OP_31A_A (void)
+OP_31A_A ()
 {
   uint32 a = GPR32 (OP[0]); 
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("stord", OP_REGP, OP_RP_INDEX_DISP14, OP_VOID);
+  uint32 addr =  (GPR32 (OP[2])) + OP[1];
   SLW (addr, a);
   trace_output_32 (addr);
 }
 
 /* stord.  */
 void
-OP_198_14 (void)
+OP_198_14 ()
 {
   uint32 a = GPR32 (OP[0]); 
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("stord", OP_REGP, OP_R_BASE_DISPE20, OP_VOID);
+  uint32 addr =  (GPR32 (OP[2])) + OP[1];
   SLW (addr, a);
   trace_output_32 (addr);
 }
 
 /* stord.  */
 void
-OP_138_14 (void)
+OP_138_14 ()
 {
   uint32 a = GPR32 (OP[0]); 
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("stord", OP_REGP, OP_R_BASE_DISPS20, OP_VOID);
+  uint32 addr =  (GPR32 (OP[2])) + OP[1];
   SLW (addr, a);
   trace_output_32 (addr);
 }
 
 /* stord.  */
 void
-OP_EF_8 (void)
+OP_EF_8 ()
 {
   uint32 a = GPR32 (OP[0]); 
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("stord", OP_REGP, OP_RP_BASE_DISP16, OP_VOID);
+  uint32 addr =  (GPR32 (OP[2])) + OP[1];
   SLW (addr, a);
   trace_output_32 (addr);
 }
 
 /* stord.  */
 void
-OP_139_14 (void)
+OP_139_14 ()
 {
   uint32 a = GPR32 (OP[0]); 
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("stord", OP_REGP, OP_RP_BASE_DISPS20, OP_VOID);
+  uint32 addr =  (GPR32 (OP[2])) + OP[1];
   SLW (addr, a);
   trace_output_32 (addr);
 }
 
 /* stord.  */
 void
-OP_199_14 (void)
+OP_199_14 ()
 {
   uint32 a = GPR32 (OP[0]); 
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("stord", OP_REGP, OP_RP_BASE_DISPE20, OP_VOID);
+  uint32 addr =  (GPR32 (OP[2])) + OP[1];
   SLW (addr, a);
   trace_output_32 (addr);
 }
 
 /* stord.  */
 void
-OP_13A_14 (void)
+OP_13A_14 ()
 {
   uint32 a = GPR32 (OP[0]); 
-  uint32 addr = (GPR32 (OP[2])) + OP[1];
   trace_input ("stord", OP_REGP, OP_RP_INDEX_DISPS20, OP_VOID);
+  uint32 addr =  (GPR32 (OP[2])) + OP[1];
   SLW (addr, a);
   trace_output_32 (addr);
 }
 
 /* macqu.  */
 void
-OP_14D_14 (void)
+OP_14D_14 ()
 {
   int32 tmp;
   int16 src1, src2;
@@ -4209,7 +4193,7 @@ OP_14D_14 (void)
 
 /* macuw.  */
 void
-OP_14E_14 (void)
+OP_14E_14 ()
 {
   uint32 tmp;
   uint16 src1, src2;
@@ -4224,7 +4208,7 @@ OP_14E_14 (void)
 
 /* macsw.  */
 void
-OP_14F_14 (void)
+OP_14F_14 ()
 {
   int32 tmp;
   int16 src1, src2;
@@ -4240,7 +4224,7 @@ OP_14F_14 (void)
 
 /* mulb.  */
 void
-OP_64_8 (void)
+OP_64_8 ()
 {
   int16 tmp;
   int8 a = (OP[0]) & 0xff;
@@ -4253,7 +4237,7 @@ OP_64_8 (void)
 
 /* mulb.  */
 void
-OP_64B_C (void)
+OP_64B_C ()
 {
   int16 tmp;
   int8 a = (OP[0]) & 0xff, b = (GPR (OP[1])) & 0xff;
@@ -4266,7 +4250,7 @@ OP_64B_C (void)
 
 /* mulb.  */
 void
-OP_65_8 (void)
+OP_65_8 ()
 {
   int16 tmp;
   int8 a = (GPR (OP[0])) & 0xff, b = (GPR (OP[1])) & 0xff;
@@ -4279,7 +4263,7 @@ OP_65_8 (void)
 
 /* mulw.  */
 void
-OP_66_8 (void)
+OP_66_8 ()
 {
   int32 tmp;
   uint16 a = OP[0];
@@ -4292,7 +4276,7 @@ OP_66_8 (void)
 
 /* mulw.  */
 void
-OP_66B_C (void)
+OP_66B_C ()
 {
   int32 tmp;
   int16 a = OP[0], b = (GPR (OP[1]));
@@ -4305,7 +4289,7 @@ OP_66B_C (void)
 
 /* mulw.  */
 void
-OP_67_8 (void)
+OP_67_8 ()
 {
   int32 tmp;
   int16 a = (GPR (OP[0])), b = (GPR (OP[1]));
@@ -4318,7 +4302,7 @@ OP_67_8 (void)
 
 /* mulsb.  */
 void
-OP_B_8 (void)
+OP_B_8 ()
 {
   int16 tmp;
   int8 a = (GPR (OP[0])) & 0xff, b = (GPR (OP[1])) & 0xff;
@@ -4330,7 +4314,7 @@ OP_B_8 (void)
 
 /* mulsw.  */
 void
-OP_62_8 (void)
+OP_62_8 ()
 {
   int32 tmp; 
   int16 a = (GPR (OP[0])), b = (GPR (OP[1]));
@@ -4342,7 +4326,7 @@ OP_62_8 (void)
 
 /* muluw.  */
 void
-OP_63_8 (void)
+OP_63_8 ()
 {
   uint32 tmp;
   uint16 a = (GPR (OP[0])), b = (GPR (OP[1]));
@@ -4355,7 +4339,7 @@ OP_63_8 (void)
 
 /* nop.  */
 void
-OP_2C00_10 (void)
+OP_2C00_10 ()
 {
   trace_input ("nop", OP_VOID, OP_VOID, OP_VOID);
 
@@ -4377,7 +4361,7 @@ OP_2C00_10 (void)
 
 /* orb.  */
 void
-OP_24_8 (void)
+OP_24_8 ()
 {
   uint8 tmp, a = (OP[0]) & 0xff, b = (GPR (OP[1])) & 0xff;
   trace_input ("orb", OP_CONSTANT4, OP_REG, OP_VOID);
@@ -4388,7 +4372,7 @@ OP_24_8 (void)
 
 /* orb.  */
 void
-OP_24B_C (void)
+OP_24B_C ()
 {
   uint8 tmp, a = (OP[0]) & 0xff, b = (GPR (OP[1])) & 0xff;
   trace_input ("orb", OP_CONSTANT16, OP_REG, OP_VOID);
@@ -4399,7 +4383,7 @@ OP_24B_C (void)
 
 /* orb.  */
 void
-OP_25_8 (void)
+OP_25_8 ()
 {
   uint8 tmp, a = (GPR (OP[0])) & 0xff, b = (GPR (OP[1])) & 0xff;
   trace_input ("orb", OP_REG, OP_REG, OP_VOID);
@@ -4410,7 +4394,7 @@ OP_25_8 (void)
 
 /* orw.  */
 void
-OP_26_8 (void)
+OP_26_8 ()
 {
   uint16 tmp, a = (OP[0]), b = (GPR (OP[1]));
   trace_input ("orw", OP_CONSTANT4, OP_REG, OP_VOID);
@@ -4422,7 +4406,7 @@ OP_26_8 (void)
 
 /* orw.  */
 void
-OP_26B_C (void)
+OP_26B_C ()
 {
   uint16 tmp, a = (OP[0]), b = (GPR (OP[1]));
   trace_input ("orw", OP_CONSTANT16, OP_REG, OP_VOID);
@@ -4433,7 +4417,7 @@ OP_26B_C (void)
 
 /* orw.  */
 void
-OP_27_8 (void)
+OP_27_8 ()
 {
   uint16 tmp, a = (GPR (OP[0])), b = (GPR (OP[1]));
   trace_input ("orw", OP_REG, OP_REG, OP_VOID);
@@ -4445,7 +4429,7 @@ OP_27_8 (void)
 
 /* lshb.  */
 void
-OP_13_9 (void)
+OP_13_9 ()
 {
   uint16 a = OP[0];
   uint16 tmp, b = (GPR (OP[1])) & 0xFF;
@@ -4465,7 +4449,7 @@ OP_13_9 (void)
 
 /* lshb.  */
 void
-OP_44_8 (void)
+OP_44_8 ()
 {
   uint16 a = (GPR (OP[0])) & 0xff;
   uint16 tmp, b = (GPR (OP[1])) & 0xFF;
@@ -4491,7 +4475,7 @@ OP_44_8 (void)
 
 /* lshw.  */
 void
-OP_46_8 (void)
+OP_46_8 ()
 {
   uint16 tmp, b = GPR (OP[1]);
   int16 a = GPR (OP[0]);
@@ -4517,7 +4501,7 @@ OP_46_8 (void)
 
 /* lshw.  */
 void
-OP_49_8 (void)
+OP_49_8 ()
 {
   uint16 tmp, b = GPR (OP[1]);
   uint16 a = OP[0];
@@ -4536,7 +4520,7 @@ OP_49_8 (void)
 
 /* lshd.  */
 void
-OP_25_7 (void)
+OP_25_7 ()
 {
   uint32 tmp, b = GPR32 (OP[1]);
   uint16 a = OP[0];
@@ -4556,7 +4540,7 @@ OP_25_7 (void)
 
 /* lshd.  */
 void
-OP_47_8 (void)
+OP_47_8 ()
 {
   uint32 tmp, b = GPR32 (OP[1]);
   uint16 a = GPR (OP[0]);
@@ -4582,7 +4566,7 @@ OP_47_8 (void)
 
 /* ashub.  */
 void
-OP_80_9 (void)
+OP_80_9 ()
 {
   uint16 a = OP[0]; 
   int8 tmp, b = (GPR (OP[1])) & 0xFF;
@@ -4602,7 +4586,7 @@ OP_80_9 (void)
 
 /* ashub.  */
 void
-OP_81_9 (void)
+OP_81_9 ()
 {
   uint16 a = OP[0]; 
   int8 tmp, b = (GPR (OP[1])) & 0xFF;
@@ -4623,7 +4607,7 @@ OP_81_9 (void)
 
 /* ashub.  */
 void
-OP_41_8 (void)
+OP_41_8 ()
 {
   int16 a = (GPR (OP[0]));
   int8 tmp, b = (GPR (OP[1])) & 0xFF;
@@ -4652,7 +4636,7 @@ OP_41_8 (void)
 
 /* ashuw.  */
 void
-OP_42_8 (void)
+OP_42_8 ()
 {
   int16 tmp, b = GPR (OP[1]);
   uint16 a = OP[0];
@@ -4672,7 +4656,7 @@ OP_42_8 (void)
 
 /* ashuw.  */
 void
-OP_43_8 (void)
+OP_43_8 ()
 {
   int16 tmp, b = GPR (OP[1]);
   uint16 a = OP[0];
@@ -4691,7 +4675,7 @@ OP_43_8 (void)
 
 /* ashuw.  */
 void
-OP_45_8 (void)
+OP_45_8 ()
 {
   int16 tmp;
   int16 a = GPR (OP[0]), b = GPR (OP[1]);
@@ -4718,7 +4702,7 @@ OP_45_8 (void)
 
 /* ashud.  */
 void
-OP_26_7 (void)
+OP_26_7 ()
 {
   int32 tmp,b = GPR32 (OP[1]);
   uint32 a = OP[0];
@@ -4737,7 +4721,7 @@ OP_26_7 (void)
 
 /* ashud.  */
 void
-OP_27_7 (void)
+OP_27_7 ()
 {
   int32 tmp;
   int32 a = OP[0], b = GPR32 (OP[1]);
@@ -4756,7 +4740,7 @@ OP_27_7 (void)
 
 /* ashud.  */
 void
-OP_48_8 (void)
+OP_48_8 ()
 {
   int32 tmp;
   int32 a = GPR32 (OP[0]), b = GPR32 (OP[1]);
@@ -4783,7 +4767,7 @@ OP_48_8 (void)
 
 /* storm.  */
 void
-OP_16_D (void)
+OP_16_D ()
 {
   uint32 addr = GPR (1);
   uint16 count = OP[0], reg = 2;
@@ -4813,7 +4797,7 @@ OP_16_D (void)
 
 /* stormp.  */
 void
-OP_17_D (void)
+OP_17_D ()
 {
   uint32 addr = GPR32 (6);
   uint16 count = OP[0], reg = 2;
@@ -4841,7 +4825,7 @@ OP_17_D (void)
 
 /* subb.  */
 void
-OP_38_8 (void)
+OP_38_8 ()
 {
   uint8 a = OP[0];
   uint8 b = (GPR (OP[1])) & 0xff;
@@ -4857,7 +4841,7 @@ OP_38_8 (void)
 
 /* subb.  */
 void
-OP_38B_C (void)
+OP_38B_C ()
 {
   uint8 a = OP[0] & 0xFF;
   uint8 b = (GPR (OP[1])) & 0xFF;
@@ -4873,7 +4857,7 @@ OP_38B_C (void)
 
 /* subb.  */
 void
-OP_39_8 (void)
+OP_39_8 ()
 {
   uint8 a = (GPR (OP[0])) & 0xFF;
   uint8 b = (GPR (OP[1])) & 0xFF;
@@ -4889,7 +4873,7 @@ OP_39_8 (void)
 
 /* subw.  */
 void
-OP_3A_8 (void)
+OP_3A_8 ()
 {
   uint16 a = OP[0];
   uint16 b = GPR (OP[1]);
@@ -4905,7 +4889,7 @@ OP_3A_8 (void)
 
 /* subw.  */
 void
-OP_3AB_C (void)
+OP_3AB_C ()
 {
   uint16 a = OP[0];
   uint16 b = GPR (OP[1]);
@@ -4921,7 +4905,7 @@ OP_3AB_C (void)
 
 /* subw.  */
 void
-OP_3B_8 (void)
+OP_3B_8 ()
 {
   uint16 a = GPR (OP[0]);
   uint16 b = GPR (OP[1]);
@@ -4937,7 +4921,7 @@ OP_3B_8 (void)
 
 /* subcb.  */
 void
-OP_3C_8 (void)
+OP_3C_8 ()
 {
   uint8 a = OP[0];
   uint8 b = (GPR (OP[1])) & 0xff;
@@ -4955,7 +4939,7 @@ OP_3C_8 (void)
 
 /* subcb.  */
 void
-OP_3CB_C (void)
+OP_3CB_C ()
 {
   uint16 a = OP[0];
   uint16 b = (GPR (OP[1])) & 0xff;
@@ -4973,7 +4957,7 @@ OP_3CB_C (void)
 
 /* subcb.  */
 void
-OP_3D_8 (void)
+OP_3D_8 ()
 {
   uint16 a = (GPR (OP[0])) & 0xff;
   uint16 b = (GPR (OP[1])) & 0xff;
@@ -4990,7 +4974,7 @@ OP_3D_8 (void)
 
 /* subcw.  */
 void
-OP_3E_8 (void)
+OP_3E_8 ()
 {
   uint16 a = OP[0], b = (GPR (OP[1]));
   uint16 tmp1 = a + (PSR_C);
@@ -5006,7 +4990,7 @@ OP_3E_8 (void)
 
 /* subcw.  */
 void
-OP_3EB_C (void)
+OP_3EB_C ()
 {
   int16 a = OP[0];
   uint16 b = GPR (OP[1]);
@@ -5023,7 +5007,7 @@ OP_3EB_C (void)
 
 /* subcw.  */
 void
-OP_3F_8 (void)
+OP_3F_8 ()
 {
   uint16 a = (GPR (OP[0])), b = (GPR (OP[1]));
   uint16 tmp1 = a + (PSR_C);
@@ -5039,7 +5023,7 @@ OP_3F_8 (void)
 
 /* subd.  */
 void
-OP_3_C (void)
+OP_3_C ()
 {
   int32 a = OP[0];
   uint32 b = GPR32 (OP[1]);
@@ -5056,7 +5040,7 @@ OP_3_C (void)
 
 /* subd.  */
 void
-OP_14C_14 (void)
+OP_14C_14 ()
 {
   uint32 a = GPR32 (OP[0]);
   uint32 b = GPR32 (OP[1]);
@@ -5073,7 +5057,7 @@ OP_14C_14 (void)
 
 /* excp.  */
 void
-OP_C_C (void)
+OP_C_C ()
 {
   uint32 tmp;
   uint16 a;
@@ -5401,7 +5385,7 @@ OP_C_C (void)
 
 	  case 0x408: /* REVISIT: Added a dummy getenv call. */
 	    trace_input ("<getenv>", OP_MEMREF, OP_MEMREF, OP_VOID);
-	    RETVAL32 (0);
+	    RETVAL32(NULL);
 	    trace_output_32 (result);
 	    break;
 
@@ -5513,7 +5497,7 @@ OP_C_C (void)
 
 /* push.  */
 void
-OP_3_9 (void)
+OP_3_9 ()
 {
   uint16 a = OP[0] + 1, b = OP[1], c = OP[2], i = 0;
   uint32 tmp, sp_addr = (GPR32 (15)) - (a * 2) - 4, is_regp = 0;
@@ -5562,7 +5546,7 @@ OP_3_9 (void)
 
 /* push.  */
 void
-OP_1_8 (void)
+OP_1_8 ()
 {
   uint32 sp_addr, tmp, is_regp = 0;
   uint16 a = OP[0] + 1, b = OP[1], c = OP[2], i = 0;
@@ -5620,7 +5604,7 @@ OP_1_8 (void)
 
 /* push.   */
 void
-OP_11E_10 (void)
+OP_11E_10 ()
 {
   uint32 sp_addr = (GPR32 (15)), tmp;
   trace_input ("push", OP_VOID, OP_VOID, OP_VOID);
@@ -5633,7 +5617,7 @@ OP_11E_10 (void)
 
 /* pop.   */
 void
-OP_5_9 (void)
+OP_5_9 ()
 {
   uint16 a = OP[0] + 1, b = OP[1], c = OP[2], i = 0;
   uint32 tmp, sp_addr = (GPR32 (15)), is_regp = 0;;
@@ -5686,7 +5670,7 @@ OP_5_9 (void)
 
 /* pop.  */
 void
-OP_2_8 (void)
+OP_2_8 ()
 {
   uint16 a = OP[0] + 1, b = OP[1], c = OP[2], i = 0;
   uint32 tmp, sp_addr = (GPR32 (15)), is_regp = 0;
@@ -5740,7 +5724,7 @@ OP_2_8 (void)
 
 /* pop.  */
 void
-OP_21E_10 (void)
+OP_21E_10 ()
 {
   uint32 sp_addr = GPR32 (15);
   uint32 tmp;
@@ -5755,7 +5739,7 @@ OP_21E_10 (void)
 
 /* popret.  */
 void
-OP_7_9 (void)
+OP_7_9 ()
 {
   uint16 a = OP[0], b = OP[1];
   trace_input ("popret", OP_CONSTANT3, OP_REG, OP_REG);
@@ -5767,7 +5751,7 @@ OP_7_9 (void)
 
 /* popret.  */
 void
-OP_3_8 (void)
+OP_3_8 ()
 {
   uint16 a = OP[0], b = OP[1];
   trace_input ("popret", OP_CONSTANT3, OP_REG, OP_VOID);
@@ -5779,7 +5763,7 @@ OP_3_8 (void)
 
 /* popret.  */
 void
-OP_31E_10 (void)
+OP_31E_10 ()
 {
   uint32 tmp;
   trace_input ("popret", OP_VOID, OP_VOID, OP_VOID);
@@ -5804,7 +5788,7 @@ OP_31E_10 (void)
 
 /* cinv[i].  */
 void
-OP_A_10 (void)
+OP_A_10 ()
 {
   trace_input ("cinv[i]", OP_VOID, OP_VOID, OP_VOID);
   SET_PSR_I (1);
@@ -5813,7 +5797,7 @@ OP_A_10 (void)
 
 /* cinv[i,u].  */
 void
-OP_B_10 (void)
+OP_B_10 ()
 {
   trace_input ("cinv[i,u]", OP_VOID, OP_VOID, OP_VOID);
   SET_PSR_I (1);
@@ -5822,7 +5806,7 @@ OP_B_10 (void)
 
 /* cinv[d].  */
 void
-OP_C_10 (void)
+OP_C_10 ()
 {
   trace_input ("cinv[d]", OP_VOID, OP_VOID, OP_VOID);
   SET_PSR_I (1);
@@ -5831,7 +5815,7 @@ OP_C_10 (void)
 
 /* cinv[d,u].  */
 void
-OP_D_10 (void)
+OP_D_10 ()
 {
   trace_input ("cinv[i,u]", OP_VOID, OP_VOID, OP_VOID);
   SET_PSR_I (1);
@@ -5840,7 +5824,7 @@ OP_D_10 (void)
 
 /* cinv[d,i].  */
 void
-OP_E_10 (void)
+OP_E_10 ()
 {
   trace_input ("cinv[d,i]", OP_VOID, OP_VOID, OP_VOID);
   SET_PSR_I (1);
@@ -5849,7 +5833,7 @@ OP_E_10 (void)
 
 /* cinv[d,i,u].  */
 void
-OP_F_10 (void)
+OP_F_10 ()
 {
   trace_input ("cinv[d,i,u]", OP_VOID, OP_VOID, OP_VOID);
   SET_PSR_I (1);
@@ -5858,7 +5842,7 @@ OP_F_10 (void)
 
 /* retx.  */
 void
-OP_3_10 (void)
+OP_3_10 ()
 {
   trace_input ("retx", OP_VOID, OP_VOID, OP_VOID);
   SET_PSR_I (1);
@@ -5867,7 +5851,7 @@ OP_3_10 (void)
 
 /* di.  */
 void
-OP_4_10 (void)
+OP_4_10 ()
 {
   trace_input ("di", OP_VOID, OP_VOID, OP_VOID);
   SET_PSR_I (1);
@@ -5876,7 +5860,7 @@ OP_4_10 (void)
 
 /* ei.  */
 void
-OP_5_10 (void)
+OP_5_10 ()
 {
   trace_input ("ei", OP_VOID, OP_VOID, OP_VOID);
   SET_PSR_I (1);
@@ -5885,7 +5869,7 @@ OP_5_10 (void)
 
 /* wait.  */
 void
-OP_6_10 (void)
+OP_6_10 ()
 {
   trace_input ("wait", OP_VOID, OP_VOID, OP_VOID);
   State.exception = SIGTRAP;
@@ -5894,7 +5878,7 @@ OP_6_10 (void)
 
 /* ewait.  */
 void
-OP_7_10 (void)
+OP_7_10 ()
 {
   trace_input ("ewait", OP_VOID, OP_VOID, OP_VOID);
   SET_PSR_I (1);
@@ -5903,7 +5887,7 @@ OP_7_10 (void)
 
 /* xorb. */
 void
-OP_28_8 (void)
+OP_28_8 ()
 {
   uint8 tmp, a = (OP[0]) & 0xff, b = (GPR (OP[1])) & 0xff;
   trace_input ("xorb", OP_CONSTANT4, OP_REG, OP_VOID);
@@ -5914,7 +5898,7 @@ OP_28_8 (void)
 
 /* xorb.  */
 void
-OP_28B_C (void)
+OP_28B_C ()
 {
   uint8 tmp, a = (OP[0]) & 0xff, b = (GPR (OP[1])) & 0xff;
   trace_input ("xorb", OP_CONSTANT16, OP_REG, OP_VOID);
@@ -5925,7 +5909,7 @@ OP_28B_C (void)
 
 /* xorb.  */
 void
-OP_29_8 (void)
+OP_29_8 ()
 {
   uint8 tmp, a = (GPR (OP[0])) & 0xff, b = (GPR (OP[1])) & 0xff;
   trace_input ("xorb", OP_REG, OP_REG, OP_VOID);
@@ -5936,7 +5920,7 @@ OP_29_8 (void)
 
 /* xorw.  */
 void
-OP_2A_8 (void)
+OP_2A_8 ()
 {
   uint16 tmp, a = (OP[0]), b = (GPR (OP[1]));
   trace_input ("xorw", OP_CONSTANT4, OP_REG, OP_VOID);
@@ -5947,7 +5931,7 @@ OP_2A_8 (void)
 
 /* xorw.  */
 void
-OP_2AB_C (void)
+OP_2AB_C ()
 {
   uint16 tmp, a = (OP[0]), b = (GPR (OP[1]));
   trace_input ("xorw", OP_CONSTANT16, OP_REG, OP_VOID);
@@ -5958,7 +5942,7 @@ OP_2AB_C (void)
 
 /* xorw.  */
 void
-OP_2B_8 (void)
+OP_2B_8 ()
 {
   uint16 tmp, a = (GPR (OP[0])), b = (GPR (OP[1]));
   trace_input ("xorw", OP_REG, OP_REG, OP_VOID);
@@ -5971,7 +5955,7 @@ OP_2B_8 (void)
 
 /* lpr.  */
 void
-OP_140_14 (void)
+OP_140_14 ()
 {
   uint16 a = GPR (OP[0]);
   trace_input ("lpr", OP_REG, OP_REG, OP_VOID);
@@ -5981,7 +5965,7 @@ OP_140_14 (void)
 
 /* lprd.  */
 void
-OP_141_14 (void)
+OP_141_14 ()
 {
   uint32 a = GPR32 (OP[0]);
   trace_input ("lprd", OP_REGP, OP_REG, OP_VOID);
@@ -5991,7 +5975,7 @@ OP_141_14 (void)
 
 /* spr.  */
 void
-OP_142_14 (void)
+OP_142_14 ()
 {
   uint16 a = CREG (OP[0]);
   trace_input ("spr", OP_REG, OP_REG, OP_VOID);
@@ -6001,7 +5985,7 @@ OP_142_14 (void)
 
 /* sprd.  */
 void
-OP_143_14 (void)
+OP_143_14 ()
 {
   uint32 a = CREG (OP[0]);
   trace_input ("sprd", OP_REGP, OP_REGP, OP_VOID);
@@ -6011,7 +5995,7 @@ OP_143_14 (void)
 
 /* null.  */
 void
-OP_0_20 (void)
+OP_0_20 ()
 {
   trace_input ("null", OP_VOID, OP_VOID, OP_VOID);
   State.exception = SIG_CR16_STOP;

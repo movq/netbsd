@@ -695,8 +695,6 @@ mDNSlocal void SetNextAnnounceProbeTime(mDNS *const m, const AuthRecord *const r
 		if (m->NextScheduledResponse - (rr->LastAPTime + rr->ThisAPInterval) >= 0)
 			m->NextScheduledResponse = (rr->LastAPTime + rr->ThisAPInterval);
 		}
-		if (m->NextScheduledResponse - m->timenow < 0)
-			m->NextScheduledResponse = m->timenow;
 	}
 
 mDNSlocal void InitializeLastAPTime(mDNS *const m, AuthRecord *const rr)
@@ -4497,7 +4495,7 @@ mDNSexport mDNSs32 mDNS_Execute(mDNS *const m)
 				}
 			if (m->timenow - m->NextScheduledProbe >= 0)
 				{
-				debugf("mDNS_Execute: SendQueries didn't send all its probes (%d - %d = %d) will try again in one second",
+				LogMsg("mDNS_Execute: SendQueries didn't send all its probes (%d - %d = %d) will try again in one second",
 					m->timenow, m->NextScheduledProbe, m->timenow - m->NextScheduledProbe);
 				m->NextScheduledProbe = m->timenow + mDNSPlatformOneSecond;
 				}
@@ -4506,7 +4504,7 @@ mDNSexport mDNSs32 mDNS_Execute(mDNS *const m)
 			if (m->timenow - m->NextScheduledResponse >= 0) SendResponses(m);
 			if (m->timenow - m->NextScheduledResponse >= 0)
 				{
-				debugf("mDNS_Execute: SendResponses didn't send all its responses; will try again in one second");
+				LogMsg("mDNS_Execute: SendResponses didn't send all its responses; will try again in one second");
 				m->NextScheduledResponse = m->timenow + mDNSPlatformOneSecond;
 				}
 			}

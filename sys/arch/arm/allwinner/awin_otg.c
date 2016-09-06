@@ -1,4 +1,4 @@
-/* $NetBSD: awin_otg.c,v 1.7 2016/04/23 10:15:27 skrll Exp $ */
+/* $NetBSD: awin_otg.c,v 1.5.2.2 2014/11/09 14:42:33 martin Exp $ */
 
 /*-
  * Copyright (c) 2014 Jared D. McNeill <jmcneill@invisible.ca>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: awin_otg.c,v 1.7 2016/04/23 10:15:27 skrll Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awin_otg.c,v 1.5.2.2 2014/11/09 14:42:33 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -125,7 +125,7 @@ awin_otg_attach(device_t parent, device_t self, void *aux)
 	}
 
 	sc->sc_motg.sc_dev = self;
-	sc->sc_motg.sc_bus.ub_dmatag = aio->aio_dmat;
+	sc->sc_motg.sc_bus.dmatag = aio->aio_dmat;
 	sc->sc_motg.sc_iot = aio->aio_core_bst;
 	bus_space_subregion(sc->sc_motg.sc_iot, aio->aio_core_bsh,
 	    loc->loc_offset, loc->loc_size, &sc->sc_motg.sc_ioh);
@@ -137,7 +137,7 @@ awin_otg_attach(device_t parent, device_t self, void *aux)
 	sc->sc_motg.sc_ep_max = 5;
 	sc->sc_motg.sc_ep_fifosize = 512;
 
-	sc->sc_ih = intr_establish(loc->loc_intr, IPL_USB, IST_LEVEL,
+	sc->sc_ih = intr_establish(loc->loc_intr, IPL_SCHED, IST_LEVEL,
 	    awin_otg_intr, sc);
 	if (sc->sc_ih == NULL) {
 		aprint_error_dev(self, "couldn't establish interrupt %d\n",

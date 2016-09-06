@@ -66,7 +66,6 @@ void NoReturnFunctionChecker::checkPostCall(const CallEvent &CE,
             .Case("assfail", true)
             .Case("db_error", true)
             .Case("__assert", true)
-            .Case("__assert2", true)
             // For the purpose of static analysis, we do not care that
             //  this MSVC function will return if the user decides to continue.
             .Case("_wassert", true)
@@ -82,7 +81,7 @@ void NoReturnFunctionChecker::checkPostCall(const CallEvent &CE,
   }
 
   if (BuildSinks)
-    C.generateSink(C.getState(), C.getPredecessor());
+    C.generateSink();
 }
 
 void NoReturnFunctionChecker::checkPostObjCMessage(const ObjCMethodCall &Msg,
@@ -91,7 +90,7 @@ void NoReturnFunctionChecker::checkPostObjCMessage(const ObjCMethodCall &Msg,
   if (const ObjCMethodDecl *MD = Msg.getDecl()) {
     MD = MD->getCanonicalDecl();
     if (MD->hasAttr<AnalyzerNoReturnAttr>()) {
-      C.generateSink(C.getState(), C.getPredecessor());
+      C.generateSink();
       return;
     }
   }
@@ -137,7 +136,7 @@ void NoReturnFunctionChecker::checkPostObjCMessage(const ObjCMethodCall &Msg,
   }
 
   // If we got here, it's one of the messages we care about.
-  C.generateSink(C.getState(), C.getPredecessor());
+  C.generateSink();
 }
 
 void ento::registerNoReturnFunctionChecker(CheckerManager &mgr) {

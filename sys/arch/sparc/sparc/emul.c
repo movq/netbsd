@@ -1,4 +1,4 @@
-/*	$NetBSD: emul.c,v 1.19 2016/08/15 08:43:19 maxv Exp $	*/
+/*	$NetBSD: emul.c,v 1.17 2012/05/01 09:40:15 martin Exp $	*/
 
 /*-
  * Copyright (c) 1997 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: emul.c,v 1.19 2016/08/15 08:43:19 maxv Exp $");
+__KERNEL_RCSID(0, "$NetBSD: emul.c,v 1.17 2012/05/01 09:40:15 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -84,7 +84,7 @@ writegpreg(struct trapframe *tf, int i, const void *val)
 	int error = 0;
 
 	if (i == 0)
-		return 0;
+		return error;
 	else if (i < 16)
 		GPR(tf, i) = *(const int32_t *) val;
 	else
@@ -190,17 +190,17 @@ muldiv(struct trapframe *tf,
 		tf->tf_psr &= ~PSR_ICC;
 
 		if (*rd == 0)
-			tf->tf_psr |= PSR_Z;
+			tf->tf_psr |= PSR_Z << 20;
 		else {
 			if (op.bits.sgn && *rd < 0)
-				tf->tf_psr |= PSR_N;
+				tf->tf_psr |= PSR_N << 20;
 			if (op.bits.div) {
 				if (*rd * *rs2 != *rs1)
-					tf->tf_psr |= PSR_O;
+					tf->tf_psr |= PSR_O << 20;
 			}
 			else {
 				if (*rd / *rs2 != *rs1)
-					tf->tf_psr |= PSR_O;
+					tf->tf_psr |= PSR_O << 20;
 			}
 		}
 	}

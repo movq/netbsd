@@ -1,4 +1,4 @@
-/*	$NetBSD: if_ie.c,v 1.59 2016/07/07 06:55:39 msaitoh Exp $ */
+/*	$NetBSD: if_ie.c,v 1.55 2010/04/05 07:19:32 joerg Exp $ */
 
 /*-
  * Copyright (c) 1993, 1994, 1995 Charles M. Hannum.
@@ -98,7 +98,7 @@
 */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_ie.c,v 1.59 2016/07/07 06:55:39 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_ie.c,v 1.55 2010/04/05 07:19:32 joerg Exp $");
 
 #include "opt_inet.h"
 #include "opt_ns.h"
@@ -128,6 +128,11 @@ __KERNEL_RCSID(0, "$NetBSD: if_ie.c,v 1.59 2016/07/07 06:55:39 msaitoh Exp $");
 #include <netinet/in_var.h>
 #include <netinet/ip.h>
 #include <netinet/if_inarp.h>
+#endif
+
+#ifdef NS
+#include <netns/ns.h>
+#include <netns/ns_if.h>
 #endif
 
 #include <uvm/uvm_extern.h>
@@ -830,7 +835,7 @@ ieget(struct ie_softc *sc, int *to_bpf)
 	if (m == 0)
 		return 0;
 
-	m_set_rcvif(m, &sc->sc_if);
+	m->m_pkthdr.rcvif = &sc->sc_if;
 	m->m_pkthdr.len = totlen;
 	len = MHLEN;
 	top = 0;
@@ -859,7 +864,7 @@ ieget(struct ie_softc *sc, int *to_bpf)
 			char *newdata = (char *)
 			    ALIGN(m->m_data + sizeof(struct ether_header)) -
 			    sizeof(struct ether_header);
-			len -= newdata - m->m_data;
+			len -= newdata - m->m_data; 
 			m->m_data = newdata;
 		}
 
@@ -996,7 +1001,7 @@ ie_readframe(struct ie_softc *sc, int num)
 	/*
 	 * Finally pass this packet up to higher layers.
 	 */
-	if_percpuq_enqueue((&sc->sc_if)->if_percpuq, m);
+	(*sc->sc_if.if_input)(&sc->sc_if, m);
 	sc->sc_if.if_ipackets++;
 }
 
@@ -1515,6 +1520,23 @@ ieioctl(struct ifnet *ifp, u_long cmd, void *data)
 			arp_ifinit(ifp, ifa);
 			break;
 #endif
+#ifdef NS
+		/* XXX - This code is probably wrong. */
+		case AF_NS:
+		    {
+			struct ns_addr *ina = &IA_SNS(ifa)->sns_addr;
+
+			if (ns_nullhost(*ina))
+				ina->x_host =
+				    *(union ns_host *)LLADDR(ifp->if_sadl);
+			else
+				memcpy(LLADDR(ifp->if_sadl),
+				    ina->x_host.c_host, ETHER_ADDR_LEN);
+			/* Set new address. */
+			ieinit(sc);
+			break;
+		    }
+#endif /* NS */
 		default:
 			ieinit(sc);
 			break;

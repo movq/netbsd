@@ -1,5 +1,5 @@
 /* Rename SSA copies.
-   Copyright (C) 2004-2015 Free Software Foundation, Inc.
+   Copyright (C) 2004-2013 Free Software Foundation, Inc.
    Contributed by Andrew MacLeod <amacleod@redhat.com>
 
 This file is part of GCC.
@@ -22,51 +22,17 @@ along with GCC; see the file COPYING3.  If not see
 #include "system.h"
 #include "coretypes.h"
 #include "tm.h"
-#include "hash-set.h"
-#include "machmode.h"
-#include "vec.h"
-#include "double-int.h"
-#include "input.h"
-#include "alias.h"
-#include "symtab.h"
-#include "wide-int.h"
-#include "inchash.h"
 #include "tree.h"
-#include "fold-const.h"
-#include "predict.h"
-#include "hard-reg-set.h"
-#include "function.h"
-#include "dominance.h"
-#include "cfg.h"
-#include "basic-block.h"
-#include "tree-ssa-alias.h"
-#include "internal-fn.h"
-#include "gimple-expr.h"
-#include "is-a.h"
 #include "gimple.h"
-#include "gimple-iterator.h"
 #include "flags.h"
+#include "basic-block.h"
+#include "function.h"
 #include "tree-pretty-print.h"
 #include "bitmap.h"
-#include "gimple-ssa.h"
-#include "stringpool.h"
-#include "tree-ssanames.h"
-#include "hashtab.h"
-#include "rtl.h"
-#include "statistics.h"
-#include "real.h"
-#include "fixed-value.h"
-#include "insn-config.h"
-#include "expmed.h"
-#include "dojump.h"
-#include "explow.h"
-#include "calls.h"
-#include "emit-rtl.h"
-#include "varasm.h"
-#include "stmt.h"
-#include "expr.h"
-#include "tree-dfa.h"
+#include "tree-flow.h"
+#include "gimple.h"
 #include "tree-inline.h"
+#include "hashtab.h"
 #include "tree-ssa-live.h"
 #include "tree-pass.h"
 #include "langhooks.h"
@@ -325,48 +291,20 @@ copy_rename_partition_coalesce (var_map map, tree var1, tree var2, FILE *debug)
 }
 
 
-namespace {
-
-const pass_data pass_data_rename_ssa_copies =
-{
-  GIMPLE_PASS, /* type */
-  "copyrename", /* name */
-  OPTGROUP_NONE, /* optinfo_flags */
-  TV_TREE_COPY_RENAME, /* tv_id */
-  ( PROP_cfg | PROP_ssa ), /* properties_required */
-  0, /* properties_provided */
-  0, /* properties_destroyed */
-  0, /* todo_flags_start */
-  0, /* todo_flags_finish */
-};
-
-class pass_rename_ssa_copies : public gimple_opt_pass
-{
-public:
-  pass_rename_ssa_copies (gcc::context *ctxt)
-    : gimple_opt_pass (pass_data_rename_ssa_copies, ctxt)
-  {}
-
-  /* opt_pass methods: */
-  opt_pass * clone () { return new pass_rename_ssa_copies (m_ctxt); }
-  virtual bool gate (function *) { return flag_tree_copyrename != 0; }
-  virtual unsigned int execute (function *);
-
-}; // class pass_rename_ssa_copies
-
 /* This function will make a pass through the IL, and attempt to coalesce any
    SSA versions which occur in PHI's or copies.  Coalescing is accomplished by
    changing the underlying root variable of all coalesced version.  This will
    then cause the SSA->normal pass to attempt to coalesce them all to the same
    variable.  */
 
-unsigned int
-pass_rename_ssa_copies::execute (function *fun)
+static unsigned int
+rename_ssa_copies (void)
 {
   var_map map;
   basic_block bb;
+  gimple_stmt_iterator gsi;
   tree var, part_var;
-  gimple stmt;
+  gimple stmt, phi;
   unsigned x;
   FILE *debug;
 
@@ -379,11 +317,10 @@ pass_rename_ssa_copies::execute (function *fun)
 
   map = init_var_map (num_ssa_names);
 
-  FOR_EACH_BB_FN (bb, fun)
+  FOR_EACH_BB (bb)
     {
       /* Scan for real copies.  */
-      for (gimple_stmt_iterator gsi = gsi_start_bb (bb); !gsi_end_p (gsi);
-	   gsi_next (&gsi))
+      for (gsi = gsi_start_bb (bb); !gsi_end_p (gsi); gsi_next (&gsi))
 	{
 	  stmt = gsi_stmt (gsi);
 	  if (gimple_assign_ssa_name_copy_p (stmt))
@@ -396,15 +333,15 @@ pass_rename_ssa_copies::execute (function *fun)
 	}
     }
 
-  FOR_EACH_BB_FN (bb, fun)
+  FOR_EACH_BB (bb)
     {
       /* Treat PHI nodes as copies between the result and each argument.  */
-      for (gphi_iterator gsi = gsi_start_phis (bb); !gsi_end_p (gsi);
-	   gsi_next (&gsi))
+      for (gsi = gsi_start_phis (bb); !gsi_end_p (gsi); gsi_next (&gsi))
         {
           size_t i;
 	  tree res;
-	  gphi *phi = gsi.phi ();
+
+	  phi = gsi_stmt (gsi);
 	  res = gimple_phi_result (phi);
 
 	  /* Do not process virtual SSA_NAMES.  */
@@ -484,16 +421,36 @@ pass_rename_ssa_copies::execute (function *fun)
       replace_ssa_name_symbol (var, SSA_NAME_VAR (part_var));
     }
 
-  statistics_counter_event (fun, "copies coalesced",
+  statistics_counter_event (cfun, "copies coalesced",
 			    stats.coalesced);
   delete_var_map (map);
   return 0;
 }
 
-} // anon namespace
+/* Return true if copy rename is to be performed.  */
 
-gimple_opt_pass *
-make_pass_rename_ssa_copies (gcc::context *ctxt)
+static bool
+gate_copyrename (void)
 {
-  return new pass_rename_ssa_copies (ctxt);
+  return flag_tree_copyrename != 0;
 }
+
+struct gimple_opt_pass pass_rename_ssa_copies =
+{
+ {
+  GIMPLE_PASS,
+  "copyrename",				/* name */
+  OPTGROUP_NONE,                        /* optinfo_flags */
+  gate_copyrename,			/* gate */
+  rename_ssa_copies,			/* execute */
+  NULL,					/* sub */
+  NULL,					/* next */
+  0,					/* static_pass_number */
+  TV_TREE_COPY_RENAME,			/* tv_id */
+  PROP_cfg | PROP_ssa,			/* properties_required */
+  0,					/* properties_provided */
+  0,					/* properties_destroyed */
+  0,					/* todo_flags_start */
+  TODO_verify_ssa                       /* todo_flags_finish */
+ }
+};

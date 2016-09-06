@@ -22,26 +22,18 @@
 #include "llvm/Support/MathExtras.h"
 using namespace llvm;
 
-namespace llvm {
-void initializeAArch64ExpandPseudoPass(PassRegistry &);
-}
-
-#define AARCH64_EXPAND_PSEUDO_NAME "AArch64 pseudo instruction expansion pass"
-
 namespace {
 class AArch64ExpandPseudo : public MachineFunctionPass {
 public:
   static char ID;
-  AArch64ExpandPseudo() : MachineFunctionPass(ID) {
-    initializeAArch64ExpandPseudoPass(*PassRegistry::getPassRegistry());
-  }
+  AArch64ExpandPseudo() : MachineFunctionPass(ID) {}
 
   const AArch64InstrInfo *TII;
 
   bool runOnMachineFunction(MachineFunction &Fn) override;
 
   const char *getPassName() const override {
-    return AARCH64_EXPAND_PSEUDO_NAME;
+    return "AArch64 pseudo instruction expansion pass";
   }
 
 private:
@@ -52,9 +44,6 @@ private:
 };
 char AArch64ExpandPseudo::ID = 0;
 }
-
-INITIALIZE_PASS(AArch64ExpandPseudo, "aarch64-expand-pseudo",
-                AARCH64_EXPAND_PSEUDO_NAME, false, false)
 
 /// \brief Transfer implicit operands on the pseudo instruction to the
 /// instructions created from the expansion.
@@ -240,7 +229,7 @@ static bool isStartChunk(uint64_t Chunk) {
   if (Chunk == 0 || Chunk == UINT64_MAX)
     return false;
 
-  return isMask_64(~Chunk);
+  return (CountLeadingOnes_64(Chunk) + countTrailingZeros(Chunk)) == 64;
 }
 
 /// \brief Check whether this chunk matches the pattern '0...1...' This pattern
@@ -250,7 +239,7 @@ static bool isEndChunk(uint64_t Chunk) {
   if (Chunk == 0 || Chunk == UINT64_MAX)
     return false;
 
-  return isMask_64(Chunk);
+  return (countLeadingZeros(Chunk) + CountTrailingOnes_64(Chunk)) == 64;
 }
 
 /// \brief Clear or set all bits in the chunk at the given index.
@@ -709,14 +698,11 @@ bool AArch64ExpandPseudo::expandMI(MachineBasicBlock &MBB,
     return expandMOVImm(MBB, MBBI, 32);
   case AArch64::MOVi64imm:
     return expandMOVImm(MBB, MBBI, 64);
-  case AArch64::RET_ReallyLR: {
-    MachineInstrBuilder MIB =
-        BuildMI(MBB, MBBI, MI.getDebugLoc(), TII->get(AArch64::RET))
-          .addReg(AArch64::LR);
-    transferImpOps(MI, MIB, MIB);
+  case AArch64::RET_ReallyLR:
+    BuildMI(MBB, MBBI, MI.getDebugLoc(), TII->get(AArch64::RET))
+        .addReg(AArch64::LR);
     MI.eraseFromParent();
     return true;
-  }
   }
   return false;
 }

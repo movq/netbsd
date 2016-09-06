@@ -1,5 +1,5 @@
-/*	$NetBSD: log.c,v 1.14 2016/08/02 13:45:12 christos Exp $	*/
-/* $OpenBSD: log.c,v 1.48 2016/07/15 05:01:58 dtucker Exp $ */
+/*	$NetBSD: log.c,v 1.10 2013/11/08 19:18:25 christos Exp $	*/
+/* $OpenBSD: log.c,v 1.45 2013/05/16 09:08:41 dtucker Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -36,7 +36,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: log.c,v 1.14 2016/08/02 13:45:12 christos Exp $");
+__RCSID("$NetBSD: log.c,v 1.10 2013/11/08 19:18:25 christos Exp $");
 #include <sys/types.h>
 #include <sys/uio.h>
 
@@ -50,6 +50,7 @@ __RCSID("$NetBSD: log.c,v 1.14 2016/08/02 13:45:12 christos Exp $");
 #include <errno.h>
 #include <vis.h>
 
+#include "xmalloc.h"
 #include "log.h"
 
 static LogLevel log_level = SYSLOG_LEVEL_INFO;
@@ -168,16 +169,6 @@ sigdie(const char *fmt,...)
 	_exit(1);
 }
 
-void
-logdie(const char *fmt,...)
-{
-	va_list args;
-
-	va_start(args, fmt);
-	do_log(SYSLOG_LEVEL_INFO, fmt, args);
-	va_end(args);
-	cleanup_exit(255);
-}
 
 /* Log this message (information that usually should go to the log). */
 
@@ -323,7 +314,7 @@ log_change_level(LogLevel new_log_level)
 int
 log_is_on_stderr(void)
 {
-	return log_on_stderr && log_stderr_fd == STDERR_FILENO;
+	return log_on_stderr;
 }
 
 /* redirect what would usually get written to stderr to specified file */

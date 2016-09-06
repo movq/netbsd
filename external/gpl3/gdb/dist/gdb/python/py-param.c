@@ -1,6 +1,6 @@
 /* GDB parameters implemented in Python
 
-   Copyright (C) 2008-2015 Free Software Foundation, Inc.
+   Copyright (C) 2008-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -20,6 +20,7 @@
 
 #include "defs.h"
 #include "value.h"
+#include "exceptions.h"
 #include "python-internal.h"
 #include "charset.h"
 #include "gdbcmd.h"
@@ -88,7 +89,7 @@ struct parmpy_object
 
 typedef struct parmpy_object parmpy_object;
 
-extern PyTypeObject parmpy_object_type
+static PyTypeObject parmpy_object_type
     CPYCHECKER_TYPE_OBJECT_FOR_TYPEDEF ("parmpy_object");
 
 /* Some handy string constants.  */
@@ -662,6 +663,7 @@ parmpy_init (PyObject *self, PyObject *args, PyObject *kwds)
   int parmclass, cmdtype;
   PyObject *enum_values = NULL;
   struct cmd_list_element **set_list, **show_list;
+  volatile struct gdb_exception except;
 
   if (! PyArg_ParseTuple (args, "sii|O", &name, &cmdtype, &parmclass,
 			  &enum_values))
@@ -723,14 +725,14 @@ parmpy_init (PyObject *self, PyObject *args, PyObject *kwds)
 
   Py_INCREF (self);
 
-  TRY
+  TRY_CATCH (except, RETURN_MASK_ALL)
     {
       add_setshow_generic (parmclass, (enum command_class) cmdtype,
 			   cmd_name, obj,
 			   set_doc, show_doc,
 			   doc, set_list, show_list);
     }
-  CATCH (except, RETURN_MASK_ALL)
+  if (except.reason < 0)
     {
       xfree (cmd_name);
       xfree (set_doc);
@@ -742,8 +744,6 @@ parmpy_init (PyObject *self, PyObject *args, PyObject *kwds)
 		    "%s", except.message);
       return -1;
     }
-  END_CATCH
-
   return 0;
 }
 
@@ -780,7 +780,7 @@ gdbpy_initialize_parameters (void)
 
 
 
-PyTypeObject parmpy_object_type =
+static PyTypeObject parmpy_object_type =
 {
   PyVarObject_HEAD_INIT (NULL, 0)
   "gdb.Parameter",		  /*tp_name*/

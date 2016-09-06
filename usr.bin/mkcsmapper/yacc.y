@@ -1,4 +1,4 @@
-/*	$NetBSD: yacc.y,v 1.11 2016/06/28 09:22:16 wiz Exp $	*/
+/*	$NetBSD: yacc.y,v 1.9 2011/09/16 15:39:27 joerg Exp $	*/
 
 %{
 /*-
@@ -33,7 +33,7 @@
 
 #include <sys/cdefs.h>
 #if !defined(lint)
-__RCSID("$NetBSD: yacc.y,v 1.11 2016/06/28 09:22:16 wiz Exp $");
+__RCSID("$NetBSD: yacc.y,v 1.9 2011/09/16 15:39:27 joerg Exp $");
 #endif /* not lint */
 
 #include <assert.h>
@@ -659,7 +659,7 @@ do_mkpv(FILE *in)
 	else
 		out = stdout;
 
-	if (out == NULL)
+	if (out==NULL)
 		err(EXIT_FAILURE, "fopen");
 
 	ret = _pivot_factory_convert(out, in);
@@ -667,15 +667,18 @@ do_mkpv(FILE *in)
 	if (ret && output)
 		unlink(output); /* dump failure */
 	if (ret)
- 		errc(EXIT_FAILURE, ret, "");
+		errx(EXIT_FAILURE, "%s\n", strerror(ret));
 }
 
 __dead static void
 usage(void)
 {
-	fprintf(stderr, "Usage: %s [-d] [-m|-p] [-o outfile] [infile]\n",
-	    getprogname());
-	exit(EXIT_FAILURE);
+	warnx("usage: \n"
+	      "\t%s [-d] [-o outfile] [infile]\n"
+	      "\t%s -m [-d] [-o outfile] [infile]\n"
+	      "\t%s -p [-d] [-o outfile] [infile]\n",
+	      getprogname(), getprogname(), getprogname());
+	exit(1);
 }
 
 int

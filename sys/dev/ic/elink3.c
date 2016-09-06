@@ -1,4 +1,4 @@
-/*	$NetBSD: elink3.c,v 1.138 2016/06/10 13:27:13 ozaki-r Exp $	*/
+/*	$NetBSD: elink3.c,v 1.135 2014/08/10 16:44:35 tls Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2001 The NetBSD Foundation, Inc.
@@ -62,7 +62,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: elink3.c,v 1.138 2016/06/10 13:27:13 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: elink3.c,v 1.135 2014/08/10 16:44:35 tls Exp $");
 
 #include "opt_inet.h"
 
@@ -77,7 +77,7 @@ __KERNEL_RCSID(0, "$NetBSD: elink3.c,v 1.138 2016/06/10 13:27:13 ozaki-r Exp $")
 #include <sys/syslog.h>
 #include <sys/select.h>
 #include <sys/device.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <net/if.h>
 #include <net/if_dl.h>
@@ -1496,7 +1496,7 @@ again:
 	 */
 	bpf_mtap(ifp, m);
 
-	if_percpuq_enqueue(ifp->if_percpuq, m);
+	(*ifp->if_input)(ifp, m);
 
 	/*
 	 * In periods of high traffic we can actually receive enough
@@ -1565,7 +1565,7 @@ epget(struct ep_softc *sc, int totlen)
 		m->m_flags = M_PKTHDR;
 		memset(&m->m_pkthdr, 0, sizeof(m->m_pkthdr));
 	}
-	m_set_rcvif(m, ifp);
+	m->m_pkthdr.rcvif = ifp;
 	m->m_pkthdr.len = totlen;
 	len = MHLEN;
 

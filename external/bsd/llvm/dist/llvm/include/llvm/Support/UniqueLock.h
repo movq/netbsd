@@ -29,8 +29,8 @@ namespace llvm {
     MutexT *M;
     bool locked;
 
-    unique_lock(const unique_lock &) = delete;
-    void operator=(const unique_lock &) = delete;
+    unique_lock(const unique_lock &) LLVM_DELETED_FUNCTION;
+    void operator=(const unique_lock &) LLVM_DELETED_FUNCTION;
   public:
     unique_lock() : M(nullptr), locked(false) {}
     explicit unique_lock(MutexT &m) : M(&m), locked(true) { M->lock(); }

@@ -9,7 +9,6 @@
 
 #include "clang/AST/NSAPI.h"
 #include "clang/AST/ASTContext.h"
-#include "clang/AST/DeclObjC.h"
 #include "clang/AST/Expr.h"
 #include "llvm/ADT/StringSwitch.h"
 
@@ -28,10 +27,7 @@ IdentifierInfo *NSAPI::getNSClassId(NSClassIdKindKind K) const {
     "NSMutableArray",
     "NSDictionary",
     "NSMutableDictionary",
-    "NSNumber",
-    "NSMutableSet",
-    "NSMutableOrderedSet",
-    "NSValue"
+    "NSNumber"
   };
 
   if (!ClassIds[K])
@@ -128,25 +124,6 @@ Selector NSAPI::getNSArraySelector(NSArrayMethodKind MK) const {
       Sel = Ctx.Selectors.getSelector(2, KeyIdents);
       break;
     }
-    case NSMutableArr_addObject:
-      Sel = Ctx.Selectors.getUnarySelector(&Ctx.Idents.get("addObject"));
-      break;
-    case NSMutableArr_insertObjectAtIndex: {
-      IdentifierInfo *KeyIdents[] = {
-        &Ctx.Idents.get("insertObject"),
-        &Ctx.Idents.get("atIndex")
-      };
-      Sel = Ctx.Selectors.getSelector(2, KeyIdents);
-      break;
-    }
-    case NSMutableArr_setObjectAtIndexedSubscript: {
-      IdentifierInfo *KeyIdents[] = {
-        &Ctx.Idents.get("setObject"),
-        &Ctx.Idents.get("atIndexedSubscript")
-      };
-      Sel = Ctx.Selectors.getSelector(2, KeyIdents);
-      break;
-    }
     }
     return (NSArraySelectors[MK] = Sel);
   }
@@ -232,22 +209,6 @@ Selector NSAPI::getNSDictionarySelector(
       Sel = Ctx.Selectors.getSelector(2, KeyIdents);
       break;
     }
-    case NSMutableDict_setObjectForKeyedSubscript: {
-      IdentifierInfo *KeyIdents[] = {
-        &Ctx.Idents.get("setObject"),
-        &Ctx.Idents.get("forKeyedSubscript")
-      };
-      Sel = Ctx.Selectors.getSelector(2, KeyIdents);
-      break;
-    }
-    case NSMutableDict_setValueForKey: {
-      IdentifierInfo *KeyIdents[] = {
-        &Ctx.Idents.get("setValue"),
-        &Ctx.Idents.get("forKey")
-      };
-      Sel = Ctx.Selectors.getSelector(2, KeyIdents);
-      break;
-    }
     }
     return (NSDictionarySelectors[MK] = Sel);
   }
@@ -260,63 +221,6 @@ NSAPI::getNSDictionaryMethodKind(Selector Sel) {
   for (unsigned i = 0; i != NumNSDictionaryMethods; ++i) {
     NSDictionaryMethodKind MK = NSDictionaryMethodKind(i);
     if (Sel == getNSDictionarySelector(MK))
-      return MK;
-  }
-
-  return None;
-}
-
-Selector NSAPI::getNSSetSelector(NSSetMethodKind MK) const {
-  if (NSSetSelectors[MK].isNull()) {
-    Selector Sel;
-    switch (MK) {
-    case NSMutableSet_addObject:
-      Sel = Ctx.Selectors.getUnarySelector(&Ctx.Idents.get("addObject"));
-      break;
-    case NSOrderedSet_insertObjectAtIndex: {
-      IdentifierInfo *KeyIdents[] = {
-        &Ctx.Idents.get("insertObject"),
-        &Ctx.Idents.get("atIndex")
-      };
-      Sel = Ctx.Selectors.getSelector(2, KeyIdents);
-      break;
-    }
-    case NSOrderedSet_setObjectAtIndex: {
-      IdentifierInfo *KeyIdents[] = {
-        &Ctx.Idents.get("setObject"),
-        &Ctx.Idents.get("atIndex")
-      };
-      Sel = Ctx.Selectors.getSelector(2, KeyIdents);
-      break;
-    }
-    case NSOrderedSet_setObjectAtIndexedSubscript: {
-      IdentifierInfo *KeyIdents[] = {
-        &Ctx.Idents.get("setObject"),
-        &Ctx.Idents.get("atIndexedSubscript")
-      };
-      Sel = Ctx.Selectors.getSelector(2, KeyIdents);
-      break;
-    }
-    case NSOrderedSet_replaceObjectAtIndexWithObject: {
-      IdentifierInfo *KeyIdents[] = {
-        &Ctx.Idents.get("replaceObjectAtIndex"),
-        &Ctx.Idents.get("withObject")
-      };
-      Sel = Ctx.Selectors.getSelector(2, KeyIdents);
-      break;
-    }
-    }
-    return (NSSetSelectors[MK] = Sel);
-  }
-
-  return NSSetSelectors[MK];
-}
-
-Optional<NSAPI::NSSetMethodKind>
-NSAPI::getNSSetMethodKind(Selector Sel) {
-  for (unsigned i = 0; i != NumNSSetMethods; ++i) {
-    NSSetMethodKind MK = NSSetMethodKind(i);
-    if (Sel == getNSSetSelector(MK))
       return MK;
   }
 
@@ -450,19 +354,9 @@ NSAPI::getNSNumberFactoryMethodKind(QualType T) const {
   case BuiltinType::OCLImage1dBuffer:
   case BuiltinType::OCLImage2d:
   case BuiltinType::OCLImage2dArray:
-  case BuiltinType::OCLImage2dDepth:
-  case BuiltinType::OCLImage2dArrayDepth:
-  case BuiltinType::OCLImage2dMSAA:
-  case BuiltinType::OCLImage2dArrayMSAA:
-  case BuiltinType::OCLImage2dMSAADepth:
-  case BuiltinType::OCLImage2dArrayMSAADepth:
   case BuiltinType::OCLImage3d:
   case BuiltinType::OCLSampler:
   case BuiltinType::OCLEvent:
-  case BuiltinType::OCLClkEvent:
-  case BuiltinType::OCLQueue:
-  case BuiltinType::OCLNDRange:
-  case BuiltinType::OCLReserveID:
   case BuiltinType::BoundMember:
   case BuiltinType::Dependent:
   case BuiltinType::Overload:
@@ -471,7 +365,6 @@ NSAPI::getNSNumberFactoryMethodKind(QualType T) const {
   case BuiltinType::Half:
   case BuiltinType::PseudoObject:
   case BuiltinType::BuiltinFn:
-  case BuiltinType::OMPArraySection:
     break;
   }
   
@@ -515,31 +408,6 @@ StringRef NSAPI::GetNSIntegralKind(QualType T) const {
     T = TDT->desugar();
   }
   return StringRef();
-}
-
-bool NSAPI::isMacroDefined(StringRef Id) const {
-  // FIXME: Check whether the relevant module macros are visible.
-  return Ctx.Idents.get(Id).hasMacroDefinition();
-}
-
-bool NSAPI::isSubclassOfNSClass(ObjCInterfaceDecl *InterfaceDecl,
-                                NSClassIdKindKind NSClassKind) const {
-  if (!InterfaceDecl) {
-    return false;
-  }
-
-  IdentifierInfo *NSClassID = getNSClassId(NSClassKind);
-
-  bool IsSubclass = false;
-  do {
-    IsSubclass = NSClassID == InterfaceDecl->getIdentifier();
-
-    if (IsSubclass) {
-      break;
-    }
-  } while ((InterfaceDecl = InterfaceDecl->getSuperClass()));
-
-  return IsSubclass;
 }
 
 bool NSAPI::isObjCTypedef(QualType T,

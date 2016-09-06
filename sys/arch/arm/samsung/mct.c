@@ -1,4 +1,4 @@
-/*	$NetBSD: mct.c,v 1.10 2016/01/07 04:45:10 marty Exp $	*/
+/*	$NetBSD: mct.c,v 1.3.4.1 2015/01/04 11:19:00 martin Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(1, "$NetBSD: mct.c,v 1.10 2016/01/07 04:45:10 marty Exp $");
+__KERNEL_RCSID(1, "$NetBSD: mct.c,v 1.3.4.1 2015/01/04 11:19:00 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>
@@ -41,7 +41,6 @@ __KERNEL_RCSID(1, "$NetBSD: mct.c,v 1.10 2016/01/07 04:45:10 marty Exp $");
 #include <sys/proc.h>
 #include <sys/systm.h>
 #include <sys/timetc.h>
-#include <sys/kmem.h>
 
 #include <prop/proplib.h>
 
@@ -50,17 +49,17 @@ __KERNEL_RCSID(1, "$NetBSD: mct.c,v 1.10 2016/01/07 04:45:10 marty Exp $");
 #include <arm/samsung/mct_reg.h>
 #include <arm/samsung/mct_var.h>
 
-#include <dev/fdt/fdtvar.h>
 
 static int  mct_match(device_t, cfdata_t, void *);
 static void mct_attach(device_t, device_t, void *);
 
 static int clockhandler(void *);
+static u_int mct_get_timecount(struct timecounter *);
+
 
 CFATTACH_DECL_NEW(exyo_mct, 0, mct_match, mct_attach, NULL, NULL);
 
 
-#if 0
 static struct timecounter mct_timecounter = {
 	.tc_get_timecount = mct_get_timecount,
 	.tc_poll_pps = 0,
@@ -71,7 +70,7 @@ static struct timecounter mct_timecounter = {
 	.tc_priv = &mct_sc,
 	.tc_next = NULL,
 };
-#endif
+
 
 static inline uint32_t
 mct_read_global(struct mct_softc *sc, bus_size_t o)
@@ -129,52 +128,80 @@ mct_write_global(struct mct_softc *sc, bus_size_t o, uint32_t v)
 	panic("MCT hangs after writing %#x at %#x", v, (uint32_t) o);
 }
 
+
 static int
 mct_match(device_t parent, cfdata_t cf, void *aux)
 {
-	const char * const compatible[] = { "samsung,exynos4210-mct",
-					    NULL };
+	/* not used if Generic Timer is Available */
+	if (armreg_pfr1_read() & ARM_PFR1_GTIMER_MASK)
+		return 0;
 
-	struct fdt_attach_args * const faa = aux;
-	return of_match_compatible(faa->faa_phandle, compatible);
+	/* sanity check, something is mixed up! */
+	if (!device_is_a(parent, "exyo"))
+		return 1;
+
+	/* there can only be one */
+	if (mct_sc.sc_dev != NULL)
+		return 0;
+
+	return 1;
 }
 
 
 static void
 mct_attach(device_t parent, device_t self, void *aux)
 {
+	struct exyo_attach_args *exyo = (struct exyo_attach_args *) aux;
 	struct mct_softc * const sc = &mct_sc;
-	struct fdt_attach_args * const faa = aux;
-	bus_addr_t addr;
-	bus_size_t size;
-	int error;
-
-	if (fdtbus_get_reg(faa->faa_phandle, 0, &addr, &size) != 0) {
-		aprint_error(": couldn't get registers\n");
-		return;
-	}
+	prop_dictionary_t dict = device_properties(self);
+	char freqbuf[sizeof("XXX SHz")];
+	const char *pin_name;
 
 	self->dv_private = sc;
 	sc->sc_dev = self;
-	sc->sc_bst = faa->faa_bst;
+	sc->sc_bst = exyo->exyo_core_bst;
+	sc->sc_irq = exyo->exyo_loc.loc_intr;
 
-	error = bus_space_map(sc->sc_bst, addr, size, 0, &sc->sc_bsh);
-	if (error) {
-		aprint_error(": couldn't map %#llx: %d",
-			     (uint64_t)addr, error);
-		return;
-	}
+	bus_space_subregion(sc->sc_bst, exyo->exyo_core_bsh,
+		exyo->exyo_loc.loc_offset, exyo->exyo_loc.loc_size, &sc->sc_bsh);
+
+	KASSERTMSG(sc->sc_bsh,
+		"%s: can't map in registers for %#x + %#x for device %s\n",
+		__func__,
+		(uint32_t) exyo->exyo_loc.loc_offset,
+		(uint32_t) exyo->exyo_loc.loc_size,
+		device_xname(sc->sc_dev));
+
+	prop_dictionary_get_uint32(dict, "frequency", &sc->sc_freq);
+
+	humanize_number(freqbuf, sizeof(freqbuf), sc->sc_freq, "Hz", 1000);
 
 	aprint_naive("\n");
-	aprint_normal(": Exynos SoC multi core timer (64 bits) - NOT IMPLEMENTED\n");
+	aprint_normal(": Exynos SoC multi core timer (64 bits) (%s)\n", freqbuf);
 
 	evcnt_attach_dynamic(&sc->sc_ev_missing_ticks, EVCNT_TYPE_MISC, NULL,
 		device_xname(self), "missing interrupts");
 
-	for (int i = 0; i < 12; i++)
-		fdtbus_intr_establish(faa->faa_phandle, i, 0, 0,
-				      clockhandler, 0);
+	sc->sc_global_ih = intr_establish(sc->sc_irq, IPL_CLOCK, IST_EDGE,
+		clockhandler, NULL);
+	if (sc->sc_global_ih == NULL)
+		panic("%s: unable to register timer interrupt", __func__);
+	aprint_normal_dev(sc->sc_dev, "interrupting on irq %d\n", sc->sc_irq);
+
+	/* blink led */
+	if (prop_dictionary_get_cstring_nocopy(dict, "heartbeat", &pin_name)) {
+		if (!exynos_gpio_pin_reserve(pin_name, &sc->sc_gpio_led)) {
+			aprint_error_dev(self,
+				"failed to reserve GPIO \"%s\" "
+				"for heartbeat led\n", pin_name);
+		} else {
+			sc->sc_has_blink_led = true;
+			sc->sc_led_state = false;
+			sc->sc_led_timer = hz;
+		}
+	}
 }
+
 
 static inline uint64_t
 mct_gettime(struct mct_softc *sc)
@@ -185,6 +212,14 @@ mct_gettime(struct mct_softc *sc)
 		lo = mct_read_global(sc, MCT_G_CNT_L);
 	} while (hi != mct_read_global(sc, MCT_G_CNT_U));
 	return ((uint64_t) hi << 32) | lo;
+}
+
+
+static u_int
+mct_get_timecount(struct timecounter *tc)
+{
+	struct mct_softc * const sc = tc->tc_priv;
+	return (u_int) (mct_gettime(sc));
 }
 
 
@@ -211,9 +246,22 @@ clockhandler(void *arg)
 	sc->sc_lastintr = now;
 	hardclock(cf);
 
+	if (sc->sc_has_blink_led) {
+		/* we could subtract `periods' here */
+		sc->sc_led_timer = sc->sc_led_timer - 1;
+		if (sc->sc_led_timer <= 0) {
+			sc->sc_led_state = !sc->sc_led_state;
+			exynos_gpio_pindata_write(&sc->sc_gpio_led,
+				sc->sc_led_state);
+			while (sc->sc_led_timer <= 0)
+				sc->sc_led_timer += hz;
+		}
+	}
+
 	/* handled */
 	return 1;
 }
+
 
 void
 mct_init_cpu_clock(struct cpu_info *ci)
@@ -251,7 +299,6 @@ mct_init_cpu_clock(struct cpu_info *ci)
 }
 
 
-#if 0
 void
 cpu_initclocks(void)
 {
@@ -284,4 +331,9 @@ cpu_initclocks(void)
 #endif
 }
 
-#endif
+
+void
+setstatclockrate(int newhz)
+{
+}
+

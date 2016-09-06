@@ -120,10 +120,7 @@ void COFFDumper::dumpSections(unsigned NumSections) {
       const object::coff_relocation *reloc = Obj.getCOFFRelocation(Reloc);
       COFFYAML::Relocation Rel;
       object::symbol_iterator Sym = Reloc.getSymbol();
-      ErrorOr<StringRef> SymbolNameOrErr = Sym->getName();
-      if (std::error_code EC = SymbolNameOrErr.getError())
-        report_fatal_error(EC.message());
-      Rel.SymbolName = *SymbolNameOrErr;
+      Sym->getName(Rel.SymbolName);
       Rel.VirtualAddress = reloc->VirtualAddress;
       Rel.Type = reloc->Type;
       Relocations.push_back(Rel);
@@ -274,5 +271,5 @@ std::error_code coff2yaml(raw_ostream &Out, const object::COFFObjectFile &Obj) {
   yaml::Output Yout(Out);
   Yout << Dumper.getYAMLObj();
 
-  return std::error_code();
+  return object::object_error::success;
 }

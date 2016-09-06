@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.23 2016/08/16 06:24:02 mrg Exp $
+#	$NetBSD: Makefile,v 1.15.2.3 2015/05/19 05:17:47 snj Exp $
 
 .include <bsd.own.mk>
 
@@ -23,6 +23,7 @@ SRCS+=		i810_hwmc.c
 SRCS+=		i810_memory.c
 SRCS+=		i810_video.c
 SRCS+=		i810_wmark.c
+SRCS+=		i810_xaa.c
 
 # sna
 .PATH:	${X11SRCDIR.${DRIVER}}/src/sna
@@ -172,6 +173,7 @@ CPPFLAGS+=	-DHAVE_SYS_STAT_H=1
 CPPFLAGS+=	-DHAVE_SYS_TYPES_H=1
 CPPFLAGS+=	-DHAVE_UNISTD_H=1
 CPPFLAGS+=	-DHAVE_VGAHW_H=1
+CPPFLAGS+=	-DHAVE_XAA_H=1
 CPPFLAGS+=	-DKMS=1
 CPPFLAGS+=	-DSTDC_HEADERS=1
 CPPFLAGS+=	-DUMS=1
@@ -192,18 +194,9 @@ LIBDPLIBS+=	pthread		${NETBSDSRCDIR}/lib/libpthread
 
 .include "../Makefile.xf86-driver"
 
-.if ${XORG_SERVER_SUBDIR} == "xorg-server.old"
-SRCS+=		i810_xaa.c
-.endif
-
 CWARNFLAGS.clang+=	-Wno-parentheses -Wno-tautological-compare \
 			-Wno-empty-body -Wno-error
 
-COPTS.sna_display.c+=	-Wno-stack-protector
-COPTS.sna_threads.c+=	-Wno-stack-protector
-COPTS.sna_trapezoids.c+=	-Wno-stack-protector
-COPTS.sna_trapezoids_boxes.c+=	-Wno-stack-protector
-COPTS.sna_trapezoids_imprecise.c+=	-Wno-stack-protector
-COPTS.sna_trapezoids_mono.c+=	-Wno-stack-protector
-COPTS.sna_trapezoids_precise.c+=	-Wno-stack-protector
-COPTS.i965_video.c+=	-Wno-stack-protector
+COPTS.sna_display.c=	-Wno-stack-protector
+
+.include <bsd.subdir.mk>

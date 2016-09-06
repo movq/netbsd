@@ -215,17 +215,11 @@ static inline bool inheritsFrom(InstructionContext child,
     return inheritsFrom(child, IC_EVEX_W_K) ||
            inheritsFrom(child, IC_EVEX_L_W_K);
   case IC_EVEX_XS_K:
-  case IC_EVEX_XS_K_B:
-  case IC_EVEX_XS_KZ_B:
     return inheritsFrom(child, IC_EVEX_W_XS_K) ||
            inheritsFrom(child, IC_EVEX_L_W_XS_K);
   case IC_EVEX_XD_K:
-  case IC_EVEX_XD_K_B:
-  case IC_EVEX_XD_KZ_B:
     return inheritsFrom(child, IC_EVEX_W_XD_K) ||
            inheritsFrom(child, IC_EVEX_L_W_XD_K);
-  case IC_EVEX_XS_B:
-  case IC_EVEX_XD_B:
   case IC_EVEX_K_B:
   case IC_EVEX_KZ:
     return false;
@@ -243,9 +237,6 @@ static inline bool inheritsFrom(InstructionContext child,
   case IC_EVEX_OPSIZE_KZ_B:
     return false;
   case IC_EVEX_W_K:
-  case IC_EVEX_W_B:
-  case IC_EVEX_W_K_B:
-  case IC_EVEX_W_KZ_B:
   case IC_EVEX_W_XS_K:
   case IC_EVEX_W_XD_K:
   case IC_EVEX_W_OPSIZE_K:
@@ -255,8 +246,6 @@ static inline bool inheritsFrom(InstructionContext child,
   case IC_EVEX_L_K:
   case IC_EVEX_L_XS_K:
   case IC_EVEX_L_XD_K:
-  case IC_EVEX_L_XD_B:
-  case IC_EVEX_L_XD_K_B:
   case IC_EVEX_L_OPSIZE_K:
   case IC_EVEX_L_OPSIZE_B:
   case IC_EVEX_L_OPSIZE_K_B:
@@ -264,43 +253,24 @@ static inline bool inheritsFrom(InstructionContext child,
   case IC_EVEX_W_KZ:
   case IC_EVEX_W_XS_KZ:
   case IC_EVEX_W_XD_KZ:
-  case IC_EVEX_W_XS_B:
-  case IC_EVEX_W_XD_B:
-  case IC_EVEX_W_XS_K_B:
-  case IC_EVEX_W_XD_K_B:
-  case IC_EVEX_W_XS_KZ_B:
-  case IC_EVEX_W_XD_KZ_B:
   case IC_EVEX_W_OPSIZE_KZ:
   case IC_EVEX_W_OPSIZE_KZ_B:
     return false;
   case IC_EVEX_L_KZ:
   case IC_EVEX_L_XS_KZ:
-  case IC_EVEX_L_XS_B:
-  case IC_EVEX_L_XS_K_B:
-  case IC_EVEX_L_XS_KZ_B:
   case IC_EVEX_L_XD_KZ:
-  case IC_EVEX_L_XD_KZ_B:
   case IC_EVEX_L_OPSIZE_KZ:
   case IC_EVEX_L_OPSIZE_KZ_B:
     return false;
   case IC_EVEX_L_W_K:
-  case IC_EVEX_L_W_B:
-  case IC_EVEX_L_W_K_B:    
   case IC_EVEX_L_W_XS_K:
-  case IC_EVEX_L_W_XS_B:
-  case IC_EVEX_L_W_XS_K_B:
-  case IC_EVEX_L_W_XS_KZ:
-  case IC_EVEX_L_W_XS_KZ_B:
+  case IC_EVEX_L_W_XD_K:
   case IC_EVEX_L_W_OPSIZE_K:
   case IC_EVEX_L_W_OPSIZE_B:
   case IC_EVEX_L_W_OPSIZE_K_B:
   case IC_EVEX_L_W_KZ:
-  case IC_EVEX_L_W_KZ_B:
-  case IC_EVEX_L_W_XD_K:
-  case IC_EVEX_L_W_XD_B:
-  case IC_EVEX_L_W_XD_K_B:
+  case IC_EVEX_L_W_XS_KZ:
   case IC_EVEX_L_W_XD_KZ:
-  case IC_EVEX_L_W_XD_KZ_B:
   case IC_EVEX_L_W_OPSIZE_KZ:
   case IC_EVEX_L_W_OPSIZE_KZ_B:
     return false;
@@ -309,29 +279,21 @@ static inline bool inheritsFrom(InstructionContext child,
   case IC_EVEX_L2_K_B:
   case IC_EVEX_L2_KZ_B:
   case IC_EVEX_L2_XS_K:
-  case IC_EVEX_L2_XS_K_B:
   case IC_EVEX_L2_XS_B:
   case IC_EVEX_L2_XD_B:
   case IC_EVEX_L2_XD_K:
-  case IC_EVEX_L2_XD_K_B:
   case IC_EVEX_L2_OPSIZE_K:
   case IC_EVEX_L2_OPSIZE_B:
   case IC_EVEX_L2_OPSIZE_K_B:
   case IC_EVEX_L2_KZ:
   case IC_EVEX_L2_XS_KZ:
-  case IC_EVEX_L2_XS_KZ_B:
   case IC_EVEX_L2_XD_KZ:
-  case IC_EVEX_L2_XD_KZ_B:
   case IC_EVEX_L2_OPSIZE_KZ:
   case IC_EVEX_L2_OPSIZE_KZ_B:
     return false;
   case IC_EVEX_L2_W_K:
   case IC_EVEX_L2_W_B:
-  case IC_EVEX_L2_W_K_B:
-  case IC_EVEX_L2_W_KZ_B:
   case IC_EVEX_L2_W_XS_K:
-  case IC_EVEX_L2_W_XS_B:
-  case IC_EVEX_L2_W_XS_K_B:
   case IC_EVEX_L2_W_XD_K:
   case IC_EVEX_L2_W_XD_B:
   case IC_EVEX_L2_W_OPSIZE_K:
@@ -339,10 +301,7 @@ static inline bool inheritsFrom(InstructionContext child,
   case IC_EVEX_L2_W_OPSIZE_K_B:
   case IC_EVEX_L2_W_KZ:
   case IC_EVEX_L2_W_XS_KZ:
-  case IC_EVEX_L2_W_XS_KZ_B:
   case IC_EVEX_L2_W_XD_KZ:
-  case IC_EVEX_L2_W_XD_K_B:
-  case IC_EVEX_L2_W_XD_KZ_B:
   case IC_EVEX_L2_W_OPSIZE_KZ:
   case IC_EVEX_L2_W_OPSIZE_KZ_B:
     return false;
@@ -626,8 +585,7 @@ void DisassemblerTables::emitInstructionInfo(raw_ostream &o,
   o << "static const struct OperandSpecifier x86OperandSets[]["
     << X86_MAX_OPERANDS << "] = {\n";
 
-  typedef SmallVector<std::pair<OperandEncoding, OperandType>,
-                      X86_MAX_OPERANDS> OperandListTy;
+  typedef std::vector<std::pair<const char *, const char *> > OperandListTy;
   std::map<OperandListTy, unsigned> OperandSets;
 
   unsigned OperandSetNum = 0;
@@ -636,10 +594,12 @@ void DisassemblerTables::emitInstructionInfo(raw_ostream &o,
 
     for (unsigned OperandIndex = 0; OperandIndex < X86_MAX_OPERANDS;
          ++OperandIndex) {
-      OperandEncoding Encoding = (OperandEncoding)InstructionSpecifiers[Index]
-                                 .operands[OperandIndex].encoding;
-      OperandType Type = (OperandType)InstructionSpecifiers[Index]
-                         .operands[OperandIndex].type;
+      const char *Encoding =
+        stringForOperandEncoding((OperandEncoding)InstructionSpecifiers[Index]
+                                 .operands[OperandIndex].encoding);
+      const char *Type =
+        stringForOperandType((OperandType)InstructionSpecifiers[Index]
+                             .operands[OperandIndex].type);
       OperandList.push_back(std::make_pair(Encoding, Type));
     }
     unsigned &N = OperandSets[OperandList];
@@ -649,9 +609,8 @@ void DisassemblerTables::emitInstructionInfo(raw_ostream &o,
 
     o << "  { /* " << (OperandSetNum - 1) << " */\n";
     for (unsigned i = 0, e = OperandList.size(); i != e; ++i) {
-      const char *Encoding = stringForOperandEncoding(OperandList[i].first);
-      const char *Type     = stringForOperandType(OperandList[i].second);
-      o << "    { " << Encoding << ", " << Type << " },\n";
+      o << "    { " << OperandList[i].first << ", "
+        << OperandList[i].second << " },\n";
     }
     o << "  },\n";
   }
@@ -663,24 +622,32 @@ void DisassemblerTables::emitInstructionInfo(raw_ostream &o,
   i++;
 
   for (unsigned index = 0; index < NumInstructions; ++index) {
-    o.indent(i * 2) << "{ /* " << index << " */\n";
+    o.indent(i * 2) << "{ /* " << index << " */" << "\n";
     i++;
 
     OperandListTy OperandList;
     for (unsigned OperandIndex = 0; OperandIndex < X86_MAX_OPERANDS;
          ++OperandIndex) {
-      OperandEncoding Encoding = (OperandEncoding)InstructionSpecifiers[index]
-                                 .operands[OperandIndex].encoding;
-      OperandType Type = (OperandType)InstructionSpecifiers[index]
-                         .operands[OperandIndex].type;
+      const char *Encoding =
+        stringForOperandEncoding((OperandEncoding)InstructionSpecifiers[index]
+                                 .operands[OperandIndex].encoding);
+      const char *Type =
+        stringForOperandType((OperandType)InstructionSpecifiers[index]
+                             .operands[OperandIndex].type);
       OperandList.push_back(std::make_pair(Encoding, Type));
     }
     o.indent(i * 2) << (OperandSets[OperandList] - 1) << ",\n";
 
-    o.indent(i * 2) << "/* " << InstructionSpecifiers[index].name << " */\n";
+    o.indent(i * 2) << "/* " << InstructionSpecifiers[index].name << " */";
+    o << "\n";
 
     i--;
-    o.indent(i * 2) << "},\n";
+    o.indent(i * 2) << "}";
+
+    if (index + 1 < NumInstructions)
+      o << ",";
+
+    o << "\n";
   }
 
   i--;

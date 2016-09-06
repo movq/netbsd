@@ -1,4 +1,4 @@
-/*	$NetBSD: ftp_var.h,v 1.84 2015/12/16 23:00:39 christos Exp $	*/
+/*	$NetBSD: ftp_var.h,v 1.82.8.2 2016/03/13 11:49:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 1996-2009 The NetBSD Foundation, Inc.

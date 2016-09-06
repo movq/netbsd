@@ -64,7 +64,7 @@ namespace llvm {
     /// ResourcesModel - Represents VLIW state.
     /// Not limited to VLIW targets per say, but assumes
     /// definition of DFA by a target.
-    std::unique_ptr<DFAPacketizer> ResourcesModel;
+    DFAPacketizer *ResourcesModel;
 
     /// Resource model - packet/bundle model. Purely
     /// internal at the time.
@@ -76,6 +76,10 @@ namespace llvm {
 
   public:
     ResourcePriorityQueue(SelectionDAGISel *IS);
+
+    ~ResourcePriorityQueue() {
+      delete ResourcesModel;
+    }
 
     bool isBottomUp() const override { return false; }
 
@@ -119,6 +123,8 @@ namespace llvm {
     SUnit *pop() override;
 
     void remove(SUnit *SU) override;
+
+    void dump(ScheduleDAG* DAG) const override;
 
     /// scheduledNode - Main resource tracking point.
     void scheduledNode(SUnit *Node) override;

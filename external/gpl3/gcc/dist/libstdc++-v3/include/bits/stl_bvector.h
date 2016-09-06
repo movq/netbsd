@@ -1,6 +1,6 @@
 // vector<bool> specialization -*- C++ -*-
 
-// Copyright (C) 2001-2015 Free Software Foundation, Inc.
+// Copyright (C) 2001-2013 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -222,10 +222,6 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
     _Bit_iterator(_Bit_type * __x, unsigned int __y)
     : _Bit_iterator_base(__x, __y) { }
 
-    iterator
-    _M_const_cast() const
-    { return *this; }
-
     reference
     operator*() const
     { return reference(_M_p, 1UL << _M_offset); }
@@ -311,10 +307,6 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 
     _Bit_const_iterator(const _Bit_iterator& __x)
     : _Bit_iterator_base(__x._M_p, __x._M_offset) { }
-
-    _Bit_iterator
-    _M_const_cast() const
-    { return _Bit_iterator(_M_p, _M_offset); }
 
     const_reference
     operator*() const
@@ -410,41 +402,30 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
   template<typename _Alloc>
     struct _Bvector_base
     {
-      typedef typename __gnu_cxx::__alloc_traits<_Alloc>::template
-        rebind<_Bit_type>::other _Bit_alloc_type;
-      typedef typename __gnu_cxx::__alloc_traits<_Bit_alloc_type>
-	_Bit_alloc_traits;
-      typedef typename _Bit_alloc_traits::pointer _Bit_pointer;
-
+      typedef typename _Alloc::template rebind<_Bit_type>::other
+        _Bit_alloc_type;
+      
       struct _Bvector_impl
       : public _Bit_alloc_type
       {
 	_Bit_iterator 	_M_start;
 	_Bit_iterator 	_M_finish;
-	_Bit_pointer 	_M_end_of_storage;
+	_Bit_type* 	_M_end_of_storage;
 
 	_Bvector_impl()
-	: _Bit_alloc_type(), _M_start(), _M_finish(), _M_end_of_storage()
+	: _Bit_alloc_type(), _M_start(), _M_finish(), _M_end_of_storage(0)
 	{ }
  
 	_Bvector_impl(const _Bit_alloc_type& __a)
-	: _Bit_alloc_type(__a), _M_start(), _M_finish(), _M_end_of_storage()
+	: _Bit_alloc_type(__a), _M_start(), _M_finish(), _M_end_of_storage(0)
 	{ }
 
 #if __cplusplus >= 201103L
 	_Bvector_impl(_Bit_alloc_type&& __a)
 	: _Bit_alloc_type(std::move(__a)), _M_start(), _M_finish(),
-	  _M_end_of_storage()
+	  _M_end_of_storage(0)
 	{ }
 #endif
-
-	_Bit_type*
-	_M_end_addr() const _GLIBCXX_NOEXCEPT
-	{
-	  if (_M_end_of_storage)
-	    return std::__addressof(_M_end_of_storage[-1]) + 1;
-	  return 0;
-	}
       };
 
     public:
@@ -477,7 +458,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 	this->_M_impl._M_end_of_storage = __x._M_impl._M_end_of_storage;
 	__x._M_impl._M_start = _Bit_iterator();
 	__x._M_impl._M_finish = _Bit_iterator();
-	__x._M_impl._M_end_of_storage = nullptr;
+	__x._M_impl._M_end_of_storage = 0;
       }
 #endif
 
@@ -487,20 +468,16 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
     protected:
       _Bvector_impl _M_impl;
 
-      _Bit_pointer
+      _Bit_type*
       _M_allocate(size_t __n)
-      { return _Bit_alloc_traits::allocate(_M_impl, _S_nword(__n)); }
+      { return _M_impl.allocate(_S_nword(__n)); }
 
       void
       _M_deallocate()
       {
 	if (_M_impl._M_start._M_p)
-	  {
-	    const size_t __n = _M_impl._M_end_addr() - _M_impl._M_start._M_p;
-	    _Bit_alloc_traits::deallocate(_M_impl,
-					  _M_impl._M_end_of_storage - __n,
-					  __n);
-	  }
+	  _M_impl.deallocate(_M_impl._M_start._M_p,
+			     _M_impl._M_end_of_storage - _M_impl._M_start._M_p);
       }
 
       static size_t
@@ -541,8 +518,6 @@ template<typename _Alloc>
   class vector<bool, _Alloc> : protected _Bvector_base<_Alloc>
   {
     typedef _Bvector_base<_Alloc>			 _Base;
-    typedef typename _Base::_Bit_pointer		 _Bit_pointer;
-    typedef typename _Base::_Bit_alloc_traits		 _Bit_alloc_traits;
 
 #if __cplusplus >= 201103L
     template<typename> friend struct hash;
@@ -573,9 +548,6 @@ template<typename _Alloc>
 
   public:
     vector()
-#if __cplusplus >= 201103L
-      noexcept(is_nothrow_default_constructible<allocator_type>::value)
-#endif
     : _Base() { }
 
     explicit
@@ -593,7 +565,7 @@ template<typename _Alloc>
     : _Base(__a)
     {
       _M_initialize(__n);
-      std::fill(this->_M_impl._M_start._M_p, this->_M_impl._M_end_addr(),
+      std::fill(this->_M_impl._M_start._M_p, this->_M_impl._M_end_of_storage, 
 		__value ? ~0 : 0);
     }
 #else
@@ -603,13 +575,13 @@ template<typename _Alloc>
     : _Base(__a)
     {
       _M_initialize(__n);
-      std::fill(this->_M_impl._M_start._M_p, this->_M_impl._M_end_addr(),
+      std::fill(this->_M_impl._M_start._M_p, this->_M_impl._M_end_of_storage, 
 		__value ? ~0 : 0);
     }
 #endif
 
     vector(const vector& __x)
-    : _Base(_Bit_alloc_traits::_S_select_on_copy(__x._M_get_Bit_allocator()))
+    : _Base(__x._M_get_Bit_allocator())
     {
       _M_initialize(__x.size());
       _M_copy_aligned(__x.begin(), __x.end(), this->_M_impl._M_start);
@@ -618,34 +590,6 @@ template<typename _Alloc>
 #if __cplusplus >= 201103L
     vector(vector&& __x) noexcept
     : _Base(std::move(__x)) { }
-
-    vector(vector&& __x, const allocator_type& __a)
-    noexcept(_Bit_alloc_traits::_S_always_equal())
-    : _Base(__a)
-    {
-      if (__x.get_allocator() == __a)
-	{
-	  this->_M_impl._M_start = __x._M_impl._M_start;
-	  this->_M_impl._M_finish = __x._M_impl._M_finish;
-	  this->_M_impl._M_end_of_storage = __x._M_impl._M_end_of_storage;
-	  __x._M_impl._M_start = _Bit_iterator();
-	  __x._M_impl._M_finish = _Bit_iterator();
-	  __x._M_impl._M_end_of_storage = nullptr;
-	}
-      else
-	{
-	  _M_initialize(__x.size());
-	  _M_copy_aligned(__x.begin(), __x.end(), begin());
-	  __x.clear();
-	}
-    }
-
-    vector(const vector& __x, const allocator_type& __a)
-    : _Base(__a)
-    {
-      _M_initialize(__x.size());
-      _M_copy_aligned(__x.begin(), __x.end(), this->_M_impl._M_start);
-    }
 
     vector(initializer_list<bool> __l,
 	   const allocator_type& __a = allocator_type())
@@ -681,21 +625,6 @@ template<typename _Alloc>
     {
       if (&__x == this)
 	return *this;
-#if __cplusplus >= 201103L
-      if (_Bit_alloc_traits::_S_propagate_on_copy_assign())
-	{
-	  if (this->_M_get_Bit_allocator() != __x._M_get_Bit_allocator())
-	    {
-	      this->_M_deallocate();
-	      std::__alloc_on_copy(_M_get_Bit_allocator(),
-				   __x._M_get_Bit_allocator());
-	      _M_initialize(__x.size());
-	    }
-	  else
-	    std::__alloc_on_copy(_M_get_Bit_allocator(),
-				 __x._M_get_Bit_allocator());
-	}
-#endif
       if (__x.size() > capacity())
 	{
 	  this->_M_deallocate();
@@ -708,32 +637,12 @@ template<typename _Alloc>
 
 #if __cplusplus >= 201103L
     vector&
-    operator=(vector&& __x) noexcept(_Bit_alloc_traits::_S_nothrow_move())
+    operator=(vector&& __x)
     {
-      if (_Bit_alloc_traits::_S_propagate_on_move_assign()
-	  || this->_M_get_Bit_allocator() == __x._M_get_Bit_allocator())
-	{
-	  this->_M_deallocate();
-	  this->_M_impl._M_start = __x._M_impl._M_start;
-	  this->_M_impl._M_finish = __x._M_impl._M_finish;
-	  this->_M_impl._M_end_of_storage = __x._M_impl._M_end_of_storage;
-	  __x._M_impl._M_start = _Bit_iterator();
-	  __x._M_impl._M_finish = _Bit_iterator();
-	  __x._M_impl._M_end_of_storage = nullptr;
-	  std::__alloc_on_move(_M_get_Bit_allocator(),
-			       __x._M_get_Bit_allocator());
-	}
-      else
-	{
-	  if (__x.size() > capacity())
-	    {
-	      this->_M_deallocate();
-	      _M_initialize(__x.size());
-	    }
-	  this->_M_impl._M_finish = _M_copy_aligned(__x.begin(), __x.end(),
-						    begin());
-	  __x.clear();
-	}
+      // NB: DR 1204.
+      // NB: DR 675.
+      this->clear();
+      this->swap(__x); 
       return *this;
     }
 
@@ -835,15 +744,14 @@ template<typename _Alloc>
       const size_type __isize =
 	__gnu_cxx::__numeric_traits<difference_type>::__max
 	- int(_S_word_bit) + 1;
-      const size_type __asize
-	= _Bit_alloc_traits::max_size(_M_get_Bit_allocator());
+      const size_type __asize = _M_get_Bit_allocator().max_size();
       return (__asize <= __isize / int(_S_word_bit)
 	      ? __asize * int(_S_word_bit) : __isize);
     }
 
     size_type
     capacity() const _GLIBCXX_NOEXCEPT
-    { return size_type(const_iterator(this->_M_impl._M_end_addr(), 0)
+    { return size_type(const_iterator(this->_M_impl._M_end_of_storage, 0)
 		       - begin()); }
 
     bool
@@ -869,10 +777,7 @@ template<typename _Alloc>
     _M_range_check(size_type __n) const
     {
       if (__n >= this->size())
-	__throw_out_of_range_fmt(__N("vector<bool>::_M_range_check: __n "
-				     "(which is %zu) >= this->size() "
-				     "(which is %zu)"),
-				 __n, this->size());
+        __throw_out_of_range(__N("vector<bool>::_M_range_check"));
     }
 
   public:
@@ -920,7 +825,7 @@ template<typename _Alloc>
     void
     push_back(bool __x)
     {
-      if (this->_M_impl._M_finish._M_p != this->_M_impl._M_end_addr())
+      if (this->_M_impl._M_finish._M_p != this->_M_impl._M_end_of_storage)
         *this->_M_impl._M_finish++ = __x;
       else
         _M_insert_aux(end(), __x);
@@ -928,16 +833,16 @@ template<typename _Alloc>
 
     void
     swap(vector& __x)
-#if __cplusplus >= 201103L
-      noexcept(_Bit_alloc_traits::_S_nothrow_swap())
-#endif
     {
       std::swap(this->_M_impl._M_start, __x._M_impl._M_start);
       std::swap(this->_M_impl._M_finish, __x._M_impl._M_finish);
       std::swap(this->_M_impl._M_end_of_storage, 
 		__x._M_impl._M_end_of_storage);
-      _Bit_alloc_traits::_S_on_swap(_M_get_Bit_allocator(),
-				    __x._M_get_Bit_allocator());
+
+      // _GLIBCXX_RESOLVE_LIB_DEFECTS
+      // 431. Swapping containers with unequal allocators.
+      std::__alloc_swap<typename _Base::_Bit_alloc_type>::
+	_S_do_it(_M_get_Bit_allocator(), __x._M_get_Bit_allocator());
     }
 
     // [23.2.5]/1, third-to-last entry in synopsis listing
@@ -950,33 +855,24 @@ template<typename _Alloc>
     }
 
     iterator
-#if __cplusplus >= 201103L
-    insert(const_iterator __position, const bool& __x = bool())
-#else
     insert(iterator __position, const bool& __x = bool())
-#endif
     {
       const difference_type __n = __position - begin();
-      if (this->_M_impl._M_finish._M_p != this->_M_impl._M_end_addr()
+      if (this->_M_impl._M_finish._M_p != this->_M_impl._M_end_of_storage
 	  && __position == end())
         *this->_M_impl._M_finish++ = __x;
       else
-        _M_insert_aux(__position._M_const_cast(), __x);
+        _M_insert_aux(__position, __x);
       return begin() + __n;
     }
 
 #if __cplusplus >= 201103L
     template<typename _InputIterator,
 	     typename = std::_RequireInputIter<_InputIterator>>
-      iterator
-      insert(const_iterator __position,
+      void
+      insert(iterator __position,
 	     _InputIterator __first, _InputIterator __last)
-      {
-	difference_type __offset = __position - cbegin();
-	_M_insert_dispatch(__position._M_const_cast(),
-			   __first, __last, __false_type());
-	return begin() + __offset;
-      }
+      { _M_insert_dispatch(__position, __first, __last, __false_type()); }
 #else
     template<typename _InputIterator>
       void
@@ -988,24 +884,13 @@ template<typename _Alloc>
       }
 #endif
 
-#if __cplusplus >= 201103L
-    iterator
-    insert(const_iterator __position, size_type __n, const bool& __x)
-    {
-      difference_type __offset = __position - cbegin();
-      _M_fill_insert(__position._M_const_cast(), __n, __x);
-      return begin() + __offset;
-    }
-#else
     void
     insert(iterator __position, size_type __n, const bool& __x)
     { _M_fill_insert(__position, __n, __x); }
-#endif
 
 #if __cplusplus >= 201103L
-    iterator
-    insert(const_iterator __p, initializer_list<bool> __l)
-    { return this->insert(__p, __l.begin(), __l.end()); }
+    void insert(iterator __p, initializer_list<bool> __l)
+    { this->insert(__p, __l.begin(), __l.end()); }
 #endif
 
     void
@@ -1013,20 +898,21 @@ template<typename _Alloc>
     { --this->_M_impl._M_finish; }
 
     iterator
-#if __cplusplus >= 201103L
-    erase(const_iterator __position)
-#else
     erase(iterator __position)
-#endif
-    { return _M_erase(__position._M_const_cast()); }
+    {
+      if (__position + 1 != end())
+        std::copy(__position + 1, end(), __position);
+      --this->_M_impl._M_finish;
+      return __position;
+    }
 
     iterator
-#if __cplusplus >= 201103L
-    erase(const_iterator __first, const_iterator __last)
-#else
     erase(iterator __first, iterator __last)
-#endif
-    { return _M_erase(__first._M_const_cast(), __last._M_const_cast()); }
+    {
+      if (__first != __last)
+	_M_erase_at_end(std::copy(__last, end(), __first));
+      return __first;
+    }
 
     void
     resize(size_type __new_size, bool __x = bool())
@@ -1046,8 +932,8 @@ template<typename _Alloc>
     void
     flip() _GLIBCXX_NOEXCEPT
     {
-      _Bit_type * const __end = this->_M_impl._M_end_addr();
-      for (_Bit_type * __p = this->_M_impl._M_start._M_p; __p != __end; ++__p)
+      for (_Bit_type * __p = this->_M_impl._M_start._M_p;
+	   __p != this->_M_impl._M_end_of_storage; ++__p)
         *__p = ~*__p;
     }
 
@@ -1055,18 +941,7 @@ template<typename _Alloc>
     clear() _GLIBCXX_NOEXCEPT
     { _M_erase_at_end(begin()); }
 
-#if __cplusplus >= 201103L
-    template<typename... _Args>
-      void
-      emplace_back(_Args&&... __args)
-      { push_back(bool(__args...)); }
-
-    template<typename... _Args>
-      iterator
-      emplace(const_iterator __pos, _Args&&... __args)
-      { return insert(__pos, bool(__args...)); }
-#endif
-
+   
   protected:
     // Precondition: __first._M_offset == 0 && __result._M_offset == 0.
     iterator
@@ -1081,9 +956,9 @@ template<typename _Alloc>
     void
     _M_initialize(size_type __n)
     {
-      _Bit_pointer __q = this->_M_allocate(__n);
+      _Bit_type* __q = this->_M_allocate(__n);
       this->_M_impl._M_end_of_storage = __q + _S_nword(__n);
-      this->_M_impl._M_start = iterator(std::__addressof(*__q), 0);
+      this->_M_impl._M_start = iterator(__q, 0);
       this->_M_impl._M_finish = this->_M_impl._M_start + difference_type(__n);
     }
 
@@ -1105,7 +980,7 @@ template<typename _Alloc>
       {
 	_M_initialize(static_cast<size_type>(__n));
 	std::fill(this->_M_impl._M_start._M_p, 
-		  this->_M_impl._M_end_addr(), __x ? ~0 : 0);
+		  this->_M_impl._M_end_of_storage, __x ? ~0 : 0);
       }
 
     template<typename _InputIterator>
@@ -1153,14 +1028,14 @@ template<typename _Alloc>
       if (__n > size())
 	{
 	  std::fill(this->_M_impl._M_start._M_p, 
-		    this->_M_impl._M_end_addr(), __x ? ~0 : 0);
+		    this->_M_impl._M_end_of_storage, __x ? ~0 : 0);
 	  insert(end(), __n - size(), __x);
 	}
       else
 	{
 	  _M_erase_at_end(begin() + __n);
 	  std::fill(this->_M_impl._M_start._M_p, 
-		    this->_M_impl._M_end_addr(), __x ? ~0 : 0);
+		    this->_M_impl._M_end_of_storage, __x ? ~0 : 0);
 	}
     }
 
@@ -1249,12 +1124,6 @@ template<typename _Alloc>
     void
     _M_erase_at_end(iterator __pos)
     { this->_M_impl._M_finish = __pos; }
-
-    iterator
-    _M_erase(iterator __pos);
-
-    iterator
-    _M_erase(iterator __first, iterator __last);
   };
 
 _GLIBCXX_END_NAMESPACE_CONTAINER

@@ -1,4 +1,4 @@
-/*	$NetBSD: journal.c,v 1.11 2016/05/26 16:49:58 christos Exp $	*/
+/*	$NetBSD: journal.c,v 1.7.4.2 2016/03/13 08:06:12 martin Exp $	*/
 
 /*
  * Copyright (C) 2004, 2005, 2007-2011, 2013-2015  Internet Systems Consortium, Inc. ("ISC")
@@ -680,12 +680,11 @@ journal_open(isc_mem_t *mctx, const char *filename, isc_boolean_t writable,
 
  failure:
 	j->magic = 0;
-	if (j->rawindex != NULL)
-		isc_mem_put(j->mctx, j->rawindex, j->header.index_size *
-			    sizeof(journal_rawpos_t));
-	if (j->index != NULL)
+	if (j->index != NULL) {
 		isc_mem_put(j->mctx, j->index, j->header.index_size *
-			    sizeof(journal_pos_t));
+			    sizeof(journal_rawpos_t));
+		j->index = NULL;
+	}
 	if (j->filename != NULL)
 		isc_mem_free(j->mctx, j->filename);
 	if (j->fp != NULL)

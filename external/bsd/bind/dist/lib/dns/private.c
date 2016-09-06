@@ -1,4 +1,4 @@
-/*	$NetBSD: private.c,v 1.8 2015/12/17 04:00:43 christos Exp $	*/
+/*	$NetBSD: private.c,v 1.5.4.2 2016/03/13 08:06:13 martin Exp $	*/
 
 /*
  * Copyright (C) 2009, 2011, 2012, 2015  Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-/*	$NetBSD: files.c,v 1.42 2015/08/05 07:10:03 mrg Exp $	*/
+/*	$NetBSD: files.c,v 1.41 2009/11/06 18:34:22 joerg Exp $	*/
 
 /*-
  * Copyright (c) 2000-2003 The NetBSD Foundation, Inc.
@@ -64,7 +64,7 @@
 #include "sort.h"
 #include "fsort.h"
 
-__RCSID("$NetBSD: files.c,v 1.42 2015/08/05 07:10:03 mrg Exp $");
+__RCSID("$NetBSD: files.c,v 1.41 2009/11/06 18:34:22 joerg Exp $");
 
 #include <string.h>
 
@@ -226,8 +226,7 @@ seq(FILE *fp, u_char **line)
 void
 putrec(const RECHEADER *rec, FILE *fp)
 {
-	EWRITE(rec, 1, REC_ROUNDUP(offsetof(RECHEADER, data) + rec->length), fp,
-	       "failed to write temp file");
+	EWRITE(rec, 1, REC_ROUNDUP(offsetof(RECHEADER, data) + rec->length), fp);
 }
 
 /*
@@ -236,8 +235,7 @@ putrec(const RECHEADER *rec, FILE *fp)
 void
 putline(const RECHEADER *rec, FILE *fp)
 {
-	EWRITE(rec->data+rec->offset, 1, rec->length - rec->offset, fp,
-	       "failed to write");
+	EWRITE(rec->data+rec->offset, 1, rec->length - rec->offset, fp);
 }
 
 /*
@@ -246,8 +244,7 @@ putline(const RECHEADER *rec, FILE *fp)
 void
 putkeydump(const RECHEADER *rec, FILE *fp)
 {
-	EWRITE(rec, 1, REC_ROUNDUP(offsetof(RECHEADER, data) + rec->offset), fp,
-	       "failed to write debug key");
+	EWRITE(rec, 1, REC_ROUNDUP(offsetof(RECHEADER, data) + rec->offset), fp);
 }
 
 /*

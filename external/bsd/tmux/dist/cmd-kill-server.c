@@ -1,4 +1,4 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
  * Copyright (c) 2007 Nicholas Marriott <nicm@users.sourceforge.net>
@@ -34,6 +34,7 @@ const struct cmd_entry cmd_kill_server_entry = {
 	"", 0, 0,
 	"",
 	0,
+	NULL,
 	cmd_kill_server_exec
 };
 
@@ -42,6 +43,7 @@ const struct cmd_entry cmd_start_server_entry = {
 	"", 0, 0,
 	"",
 	CMD_STARTSERVER,
+	NULL,
 	cmd_kill_server_exec
 };
 

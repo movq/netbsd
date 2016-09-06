@@ -31,7 +31,7 @@ class IRObjectFile : public SymbolicFile {
 
 public:
   IRObjectFile(MemoryBufferRef Object, std::unique_ptr<Module> M);
-  ~IRObjectFile() override;
+  ~IRObjectFile();
   void moveSymbolNext(DataRefImpl &Symb) const override;
   std::error_code printSymbolName(raw_ostream &OS,
                                   DataRefImpl Symb) const override;

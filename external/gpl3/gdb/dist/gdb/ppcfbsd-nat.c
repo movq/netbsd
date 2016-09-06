@@ -1,6 +1,6 @@
 /* Native-dependent code for PowerPC's running FreeBSD, for GDB.
 
-   Copyright (C) 2013-2015 Free Software Foundation, Inc.
+   Copyright (C) 2013-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -22,6 +22,8 @@
 #include "inferior.h"
 #include "regcache.h"
 
+#include "gdb_assert.h"
+#include <stddef.h>
 #include <sys/types.h>
 #include <sys/procfs.h>
 #include <sys/ptrace.h>
@@ -212,7 +214,10 @@ _initialize_ppcfbsd_nat (void)
   t = inf_ptrace_target ();
   t->to_fetch_registers = ppcfbsd_fetch_inferior_registers;
   t->to_store_registers = ppcfbsd_store_inferior_registers;
-  fbsd_nat_add_target (t);
+  t->to_pid_to_exec_file = fbsd_pid_to_exec_file;
+  t->to_find_memory_regions = fbsd_find_memory_regions;
+  t->to_make_corefile_notes = fbsd_make_corefile_notes;
+  add_target (t);
 
   /* Support debugging kernel virtual memory images.  */
   bsd_kvm_add_target (ppcfbsd_supply_pcb);

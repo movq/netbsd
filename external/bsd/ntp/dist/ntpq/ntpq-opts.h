@@ -1,4 +1,4 @@
-/*	$NetBSD: ntpq-opts.h,v 1.8 2016/06/03 20:39:03 christos Exp $	*/
+/*	$NetBSD: ntpq-opts.h,v 1.1.1.3.4.5 2016/07/14 18:36:23 martin Exp $	*/
 
 /*
  *  EDIT THIS FILE WITH CAUTION  (ntpq-opts.h)

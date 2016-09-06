@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -70,7 +70,6 @@
 #define FILE_TYPE_SOURCE                    1
 #define FILE_TYPE_HEADER                    2
 #define FILE_TYPE_DIRECTORY                 3
-#define FILE_TYPE_PATCH                     4
 
 #define CVT_COUNT_TABS                      0x00000001
 #define CVT_COUNT_NON_ANSI_COMMENTS         0x00000002
@@ -190,14 +189,6 @@ typedef struct acpi_conversion_table
     ACPI_IDENTIFIER_TABLE       *HeaderSpecialMacroTable;
     UINT32                      HeaderFunctions;
 
-    ACPI_STRING_TABLE           *PatchStringTable;
-    ACPI_IDENTIFIER_TABLE       *PatchLineTable;
-    ACPI_IDENTIFIER_TABLE       *PatchConditionalTable;
-    ACPI_IDENTIFIER_TABLE       *PatchMacroTable;
-    ACPI_TYPED_IDENTIFIER_TABLE *PatchStructTable;
-    ACPI_IDENTIFIER_TABLE       *PatchSpecialMacroTable;
-    UINT32                      PatchFunctions;
-
 } ACPI_CONVERSION_TABLE;
 
 
@@ -209,19 +200,6 @@ extern ACPI_CONVERSION_TABLE       StatsConversionTable;
 extern ACPI_CONVERSION_TABLE       CustomConversionTable;
 extern ACPI_CONVERSION_TABLE       LicenseConversionTable;
 extern ACPI_CONVERSION_TABLE       IndentConversionTable;
-
-typedef
-char * (*AS_SCAN_CALLBACK) (
-    char                    *Buffer,
-    char                    *Filename,
-    UINT32                  LineNumber);
-
-typedef struct as_brace_info
-{
-    char                    *Operator;
-    UINT32                  Length;
-
-} AS_BRACE_INFO;
 
 
 /* Prototypes */
@@ -257,6 +235,11 @@ AsLowerCaseString (
 
 void
 AsRemoveLine (
+    char                    *Buffer,
+    char                    *Keyword);
+
+void
+AsRemoveMacro (
     char                    *Buffer,
     char                    *Keyword);
 
@@ -426,3 +409,7 @@ AsInsertCarriageReturns (
 void
 AsConvertToLineFeeds (
     char                    *Buffer);
+
+void
+AsStrlwr (
+    char                    *SrcString);

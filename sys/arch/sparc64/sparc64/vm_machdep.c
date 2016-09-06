@@ -1,4 +1,4 @@
-/*	$NetBSD: vm_machdep.c,v 1.101 2015/11/06 15:30:59 martin Exp $ */
+/*	$NetBSD: vm_machdep.c,v 1.100.4.1 2015/11/16 13:33:40 msaitoh Exp $ */
 
 /*
  * Copyright (c) 1996-2002 Eduardo Horvath.  All rights reserved.
@@ -50,7 +50,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.101 2015/11/06 15:30:59 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vm_machdep.c,v 1.100.4.1 2015/11/16 13:33:40 msaitoh Exp $");
 
 #include "opt_multiprocessor.h"
 

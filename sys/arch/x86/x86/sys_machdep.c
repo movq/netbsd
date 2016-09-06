@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_machdep.c,v 1.29 2015/10/23 18:53:26 christos Exp $	*/
+/*	$NetBSD: sys_machdep.c,v 1.28.2.1 2015/11/08 00:38:45 riz Exp $	*/
 
 /*-
  * Copyright (c) 1998, 2007, 2009 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.29 2015/10/23 18:53:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_machdep.c,v 1.28.2.1 2015/11/08 00:38:45 riz Exp $");
 
 #include "opt_mtrr.h"
 #include "opt_perfctrs.h"

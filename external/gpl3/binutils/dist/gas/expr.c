@@ -1,5 +1,7 @@
 /* expr.c -operands, expressions-
-   Copyright (C) 1987-2015 Free Software Foundation, Inc.
+   Copyright 1987, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 1998,
+   1999, 2000, 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2009, 2010, 2011,
+   2012 Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -27,6 +29,7 @@
 
 #include "as.h"
 #include "safe-ctype.h"
+#include "obstack.h"
 
 #ifdef HAVE_LIMITS_H
 #include <limits.h>
@@ -87,7 +90,6 @@ make_expr_symbol (expressionS *expressionP)
       zero.X_op = O_constant;
       zero.X_add_number = 0;
       zero.X_unsigned = 0;
-      zero.X_extrabit = 0;
       clean_up_expression (&zero);
       expressionP = &zero;
     }
@@ -124,7 +126,7 @@ make_expr_symbol (expressionS *expressionP)
 int
 expr_symbol_where (symbolS *sym, char **pfile, unsigned int *pline)
 {
-  struct expr_symbol_line *l;
+  register struct expr_symbol_line *l;
 
   for (l = expr_symbol_lines; l != NULL; l = l->next)
     {
@@ -159,7 +161,6 @@ expr_build_uconstant (offsetT value)
   e.X_op = O_constant;
   e.X_add_number = value;
   e.X_unsigned = 1;
-  e.X_extrabit = 0;
   return make_expr_symbol (&e);
 }
 
@@ -284,12 +285,6 @@ integer_constant (int radix, expressionS *expressionP)
 #else /* includes non-bfd case, mostly */
 #define valuesize 32
 #endif
-
-  if (is_end_of_line[(unsigned char) *input_line_pointer])
-    {
-      expressionP->X_op = O_absent;
-      return;
-    }
 
   if ((NUMBERS_WITH_SUFFIX || flag_m68k_mri) && radix == 0)
     {
@@ -737,7 +732,6 @@ operand (expressionS *expressionP, enum expr_mode mode)
      something like ``.quad 0x80000000'' is not sign extended even
      though it appears negative if valueT is 32 bits.  */
   expressionP->X_unsigned = 1;
-  expressionP->X_extrabit = 0;
 
   /* Digits, assume it is a bignum.  */
 
@@ -838,28 +832,32 @@ operand (expressionS *expressionP, enum expr_mode mode)
 	  break;
 
 	case 'b':
-	  if (LOCAL_LABELS_FB && !flag_m68k_mri
-	      && input_line_pointer[1] != '0'
-	      && input_line_pointer[1] != '1')
+	  if (LOCAL_LABELS_FB && ! (flag_m68k_mri || NUMBERS_WITH_SUFFIX))
 	    {
-	      /* Parse this as a back reference to label 0.  */
-	      input_line_pointer--;
-	      integer_constant (10, expressionP);
-	      break;
+	      /* This code used to check for '+' and '-' here, and, in
+		 some conditions, fall through to call
+		 integer_constant.  However, that didn't make sense,
+		 as integer_constant only accepts digits.  */
+	      /* Some of our code elsewhere does permit digits greater
+		 than the expected base; for consistency, do the same
+		 here.  */
+	      if (input_line_pointer[1] < '0'
+		  || input_line_pointer[1] > '9')
+		{
+		  /* Parse this as a back reference to label 0.  */
+		  input_line_pointer--;
+		  integer_constant (10, expressionP);
+		  break;
+		}
+	      /* Otherwise, parse this as a binary number.  */
 	    }
-	  /* Otherwise, parse this as a binary number.  */
 	  /* Fall through.  */
 	case 'B':
-	  if (input_line_pointer[1] == '0'
-	      || input_line_pointer[1] == '1')
-	    {
-	      input_line_pointer++;
-	      integer_constant (2, expressionP);
-	      break;
-	    }
+	  input_line_pointer++;
 	  if (flag_m68k_mri || NUMBERS_WITH_SUFFIX)
-	    input_line_pointer++;
-	  goto default_case;
+	    goto default_case;
+	  integer_constant (2, expressionP);
+	  break;
 
 	case '0':
 	case '1':
@@ -877,35 +875,48 @@ operand (expressionS *expressionP, enum expr_mode mode)
 	case 'f':
 	  if (LOCAL_LABELS_FB)
 	    {
-	      int is_label = 1;
-
 	      /* If it says "0f" and it could possibly be a floating point
 		 number, make it one.  Otherwise, make it a local label,
 		 and try to deal with parsing the rest later.  */
-	      if (!is_end_of_line[(unsigned char) input_line_pointer[1]]
-		  && strchr (FLT_CHARS, 'f') != NULL)
-		{
-		  char *cp = input_line_pointer + 1;
+	      if (!input_line_pointer[1]
+		  || (is_end_of_line[0xff & input_line_pointer[1]])
+		  || strchr (FLT_CHARS, 'f') == NULL)
+		goto is_0f_label;
+	      {
+		char *cp = input_line_pointer + 1;
+		int r = atof_generic (&cp, ".", EXP_CHARS,
+				      &generic_floating_point_number);
+		switch (r)
+		  {
+		  case 0:
+		  case ERROR_EXPONENT_OVERFLOW:
+		    if (*cp == 'f' || *cp == 'b')
+		      /* Looks like a difference expression.  */
+		      goto is_0f_label;
+		    else if (cp == input_line_pointer + 1)
+		      /* No characters has been accepted -- looks like
+			 end of operand.  */
+		      goto is_0f_label;
+		    else
+		      goto is_0f_float;
+		  default:
+		    as_fatal (_("expr.c(operand): bad atof_generic return val %d"),
+			      r);
+		  }
+	      }
 
-		  atof_generic (&cp, ".", EXP_CHARS,
-				&generic_floating_point_number);
+	      /* Okay, now we've sorted it out.  We resume at one of these
+		 two labels, depending on what we've decided we're probably
+		 looking at.  */
+	    is_0f_label:
+	      input_line_pointer--;
+	      integer_constant (10, expressionP);
+	      break;
 
-		  /* Was nothing parsed, or does it look like an
-		     expression?  */
-		  is_label = (cp == input_line_pointer + 1
-			      || (cp == input_line_pointer + 2
-				  && (cp[-1] == '-' || cp[-1] == '+'))
-			      || *cp == 'f'
-			      || *cp == 'b');
-		}
-	      if (is_label)
-		{
-		  input_line_pointer--;
-		  integer_constant (10, expressionP);
-		  break;
-		}
+	    is_0f_float:
+	      /* Fall through.  */
+	      ;
 	    }
-	  /* Fall through.  */
 
 	case 'd':
 	case 'D':
@@ -1010,14 +1021,11 @@ operand (expressionS *expressionP, enum expr_mode mode)
 	    /* input_line_pointer -> char after operand.  */
 	    if (c == '-')
 	      {
-		expressionP->X_add_number
-		  = - (addressT) expressionP->X_add_number;
+		expressionP->X_add_number = - expressionP->X_add_number;
 		/* Notice: '-' may overflow: no warning is given.
 		   This is compatible with other people's
 		   assemblers.  Sigh.  */
 		expressionP->X_unsigned = 0;
-		if (expressionP->X_add_number)
-		  expressionP->X_extrabit ^= 1;
 	      }
 	    else if (c == '~' || c == '"')
 	      expressionP->X_add_number = ~ expressionP->X_add_number;
@@ -1070,7 +1078,6 @@ operand (expressionS *expressionP, enum expr_mode mode)
 		expressionP->X_add_number = i >= expressionP->X_add_number;
 		expressionP->X_op = O_constant;
 		expressionP->X_unsigned = 1;
-		expressionP->X_extrabit = 0;
 	      }
 	  }
 	else if (expressionP->X_op != O_illegal
@@ -1142,7 +1149,8 @@ operand (expressionS *expressionP, enum expr_mode mode)
 
 	      ++input_line_pointer;
 	      SKIP_WHITESPACE ();
-	      c = get_symbol_name (& name);
+	      name = input_line_pointer;
+	      c = get_symbol_end ();
 
 	      buf = (char *) xmalloc (strlen (name) + 10);
 	      if (start)
@@ -1157,7 +1165,7 @@ operand (expressionS *expressionP, enum expr_mode mode)
 	      expressionP->X_add_number = 0;
 
 	      *input_line_pointer = c;
-	      SKIP_WHITESPACE_AFTER_NAME ();
+	      SKIP_WHITESPACE ();
 	      if (*input_line_pointer != ')')
 		as_bad (_("syntax error in .startof. or .sizeof."));
 	      else
@@ -1213,13 +1221,13 @@ operand (expressionS *expressionP, enum expr_mode mode)
 #if defined(md_need_index_operator) || defined(TC_M68K)
     de_fault:
 #endif
-      if (is_name_beginner (c) || c == '"')	/* Here if did not begin with a digit.  */
+      if (is_name_beginner (c))	/* Here if did not begin with a digit.  */
 	{
 	  /* Identifier begins here.
 	     This is kludged for speed, so code is repeated.  */
 	isname:
-	  -- input_line_pointer;
-	  c = get_symbol_name (&name);
+	  name = --input_line_pointer;
+	  c = get_symbol_end ();
 
 #ifdef md_operator
 	  {
@@ -1228,15 +1236,15 @@ operand (expressionS *expressionP, enum expr_mode mode)
 	    switch (op)
 	      {
 	      case O_uminus:
-		restore_line_pointer (c);
+		*input_line_pointer = c;
 		c = '-';
 		goto unary;
 	      case O_bit_not:
-		restore_line_pointer (c);
+		*input_line_pointer = c;
 		c = '~';
 		goto unary;
 	      case O_logical_not:
-		restore_line_pointer (c);
+		*input_line_pointer = c;
 		c = '!';
 		goto unary;
 	      case O_illegal:
@@ -1245,10 +1253,9 @@ operand (expressionS *expressionP, enum expr_mode mode)
 	      default:
 		break;
 	      }
-
 	    if (op != O_absent && op != O_illegal)
 	      {
-		restore_line_pointer (c);
+		*input_line_pointer = c;
 		expr (9, expressionP, mode);
 		expressionP->X_add_symbol = make_expr_symbol (expressionP);
 		expressionP->X_op_symbol = NULL;
@@ -1266,7 +1273,7 @@ operand (expressionS *expressionP, enum expr_mode mode)
 	     entering it in the symbol table.  */
 	  if (md_parse_name (name, expressionP, mode, &c))
 	    {
-	      restore_line_pointer (c);
+	      *input_line_pointer = c;
 	      break;
 	    }
 #endif
@@ -1286,9 +1293,10 @@ operand (expressionS *expressionP, enum expr_mode mode)
 		       || name[1] == 'T');
 
 	      *input_line_pointer = c;
-	      SKIP_WHITESPACE_AFTER_NAME ();
+	      SKIP_WHITESPACE ();
 
-	      c = get_symbol_name (& name);
+	      name = input_line_pointer;
+	      c = get_symbol_end ();
 
 	      buf = (char *) xmalloc (strlen (name) + 10);
 	      if (start)
@@ -1303,7 +1311,8 @@ operand (expressionS *expressionP, enum expr_mode mode)
 	      expressionP->X_add_number = 0;
 
 	      *input_line_pointer = c;
-	      SKIP_WHITESPACE_AFTER_NAME ();
+	      SKIP_WHITESPACE ();
+
 	      break;
 	    }
 #endif
@@ -1331,8 +1340,7 @@ operand (expressionS *expressionP, enum expr_mode mode)
 	      expressionP->X_add_symbol = symbolP;
 	      expressionP->X_add_number = 0;
 	    }
-
-	  restore_line_pointer (c);
+	  *input_line_pointer = c;
 	}
       else
 	{
@@ -1588,8 +1596,8 @@ operatorf (int *num_chars)
 #ifdef md_operator
   if (is_name_beginner (c))
     {
-      char *name;
-      char ec = get_symbol_name (& name);
+      char *name = input_line_pointer;
+      char ec = get_symbol_end ();
 
       ret = md_operator (name, 2, &ec);
       switch (ret)
@@ -1709,42 +1717,6 @@ operatorf (int *num_chars)
   /* NOTREACHED  */
 }
 
-/* Implement "word-size + 1 bit" addition for
-   {resultP->X_extrabit:resultP->X_add_number} + {rhs_highbit:amount}.  This
-   is used so that the full range of unsigned word values and the full range of
-   signed word values can be represented in an O_constant expression, which is
-   useful e.g. for .sleb128 directives.  */
-
-void
-add_to_result (expressionS *resultP, offsetT amount, int rhs_highbit)
-{
-  valueT ures = resultP->X_add_number;
-  valueT uamount = amount;
-
-  resultP->X_add_number += amount;
-
-  resultP->X_extrabit ^= rhs_highbit;
-
-  if (ures + uamount < ures)
-    resultP->X_extrabit ^= 1;
-}
-
-/* Similarly, for subtraction.  */
-
-void
-subtract_from_result (expressionS *resultP, offsetT amount, int rhs_highbit)
-{
-  valueT ures = resultP->X_add_number;
-  valueT uamount = amount;
-
-  resultP->X_add_number -= amount;
-
-  resultP->X_extrabit ^= rhs_highbit;
-
-  if (ures < uamount)
-    resultP->X_extrabit ^= 1;
-}
-
 /* Parse an expression.  */
 
 segT
@@ -1763,10 +1735,7 @@ expr (int rankarg,		/* Larger # is higher rank.  */
 
   /* Save the value of dot for the fixup code.  */
   if (rank == 0)
-    {
-      dot_value = frag_now_fix ();
-      dot_frag = frag_now;
-    }
+    dot_value = frag_now_fix ();
 
   retval = operand (resultP, mode);
 
@@ -1860,7 +1829,7 @@ expr (int rankarg,		/* Larger # is higher rank.  */
 	  && (md_register_arithmetic || resultP->X_op != O_register))
 	{
 	  /* X + constant.  */
-	  add_to_result (resultP, right.X_add_number, right.X_extrabit);
+	  resultP->X_add_number += right.X_add_number;
 	}
       /* This case comes up in PIC code.  */
       else if (op_left == O_subtract
@@ -1878,11 +1847,10 @@ expr (int rankarg,		/* Larger # is higher rank.  */
 				       symbol_get_frag (right.X_add_symbol),
 				       &frag_off))
 	{
-	  offsetT symval_diff = S_GET_VALUE (resultP->X_add_symbol)
-				- S_GET_VALUE (right.X_add_symbol);
-	  subtract_from_result (resultP, right.X_add_number, right.X_extrabit);
-	  subtract_from_result (resultP, frag_off / OCTETS_PER_BYTE, 0);
-	  add_to_result (resultP, symval_diff, symval_diff < 0);
+	  resultP->X_add_number -= right.X_add_number;
+	  resultP->X_add_number -= frag_off / OCTETS_PER_BYTE;
+	  resultP->X_add_number += (S_GET_VALUE (resultP->X_add_symbol)
+				    - S_GET_VALUE (right.X_add_symbol));
 	  resultP->X_op = O_constant;
 	  resultP->X_add_symbol = 0;
 	}
@@ -1890,7 +1858,7 @@ expr (int rankarg,		/* Larger # is higher rank.  */
 	       && (md_register_arithmetic || resultP->X_op != O_register))
 	{
 	  /* X - constant.  */
-	  subtract_from_result (resultP, right.X_add_number, right.X_extrabit);
+	  resultP->X_add_number -= right.X_add_number;
 	}
       else if (op_left == O_add && resultP->X_op == O_constant
 	       && (md_register_arithmetic || right.X_op != O_register))
@@ -1899,7 +1867,7 @@ expr (int rankarg,		/* Larger # is higher rank.  */
 	  resultP->X_op = right.X_op;
 	  resultP->X_add_symbol = right.X_add_symbol;
 	  resultP->X_op_symbol = right.X_op_symbol;
-	  add_to_result (resultP, right.X_add_number, right.X_extrabit);
+	  resultP->X_add_number += right.X_add_number;
 	  retval = rightseg;
 	}
       else if (resultP->X_op == O_constant && right.X_op == O_constant)
@@ -1939,9 +1907,7 @@ expr (int rankarg,		/* Larger # is higher rank.  */
 	      /* Constant + constant (O_add) is handled by the
 		 previous if statement for constant + X, so is omitted
 		 here.  */
-	    case O_subtract:
-	      subtract_from_result (resultP, v, 0);
-	      break;
+	    case O_subtract:		resultP->X_add_number -= v; break;
 	    case O_eq:
 	      resultP->X_add_number =
 		resultP->X_add_number == v ? ~ (offsetT) 0 : 0;
@@ -1985,11 +1951,10 @@ expr (int rankarg,		/* Larger # is higher rank.  */
 	  resultP->X_op = op_left;
 	  resultP->X_op_symbol = right.X_add_symbol;
 	  if (op_left == O_add)
-	    add_to_result (resultP, right.X_add_number, right.X_extrabit);
+	    resultP->X_add_number += right.X_add_number;
 	  else if (op_left == O_subtract)
 	    {
-	      subtract_from_result (resultP, right.X_add_number,
-				    right.X_extrabit);
+	      resultP->X_add_number -= right.X_add_number;
 	      if (retval == rightseg
 		  && SEG_NORMAL (retval)
 		  && !S_FORCE_RELOC (resultP->X_add_symbol, 0)
@@ -2009,7 +1974,6 @@ expr (int rankarg,		/* Larger # is higher rank.  */
 	  resultP->X_op = op_left;
 	  resultP->X_add_number = 0;
 	  resultP->X_unsigned = 1;
-	  resultP->X_extrabit = 0;
 	}
 
       if (retval != rightseg)
@@ -2317,22 +2281,19 @@ resolve_expression (expressionS *expressionP)
    expr.c is just a branch office read.c anyway, and putting it
    here lessens the crowd at read.c.
 
-   Assume input_line_pointer is at start of symbol name, or the
-    start of a double quote enclosed symbol name.
+   Assume input_line_pointer is at start of symbol name.
    Advance input_line_pointer past symbol name.
-   Turn that character into a '\0', returning its former value,
-    which may be the closing double quote.
+   Turn that character into a '\0', returning its former value.
    This allows a string compare (RMS wants symbol names to be strings)
-    of the symbol name.
+   of the symbol name.
    There will always be a char following symbol name, because all good
    lines end in end-of-line.  */
 
 char
-get_symbol_name (char ** ilp_return)
+get_symbol_end (void)
 {
   char c;
 
-  * ilp_return = input_line_pointer;
   /* We accept \001 in a name in case this is being called with a
      constructed string.  */
   if (is_name_beginner (c = *input_line_pointer++) || c == '\001')
@@ -2343,36 +2304,8 @@ get_symbol_name (char ** ilp_return)
       if (is_name_ender (c))
 	c = *input_line_pointer++;
     }
-  else if (c == '"')
-    {
-      bfd_boolean backslash_seen;
-
-      * ilp_return = input_line_pointer;
-      do
-	{
-	  backslash_seen = c == '\\';
-	  c = * input_line_pointer ++;
-	}
-      while (c != 0 && (c != '"' || backslash_seen));
-
-      if (c == 0)
-	as_warn (_("missing closing '\"'"));
-    }
   *--input_line_pointer = 0;
-  return c;
-}
-
-/* Replace the NUL character pointed to by input_line_pointer
-   with C.  If C is \" then advance past it.  Return the character
-   now pointed to by input_line_pointer.  */
-
-char
-restore_line_pointer (char c)
-{
-  * input_line_pointer = c;
-  if (c == '"')
-    c = * ++ input_line_pointer;
-  return c;
+  return (c);
 }
 
 unsigned int

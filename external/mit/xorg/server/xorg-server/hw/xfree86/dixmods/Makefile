@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.13 2016/08/20 01:03:34 mrg Exp $
+#	$NetBSD: Makefile,v 1.9 2010/05/22 05:45:01 mrg Exp $
 
 .include "../../../Makefile.serverlib"
 .include "../../../Makefile.servermod"
@@ -14,18 +14,19 @@ CPPFLAGS+= \
 	-I${DESTDIR}${X11INCDIR}/xorg \
 	-I${X11SRCDIR.xorg-server}/Xext \
 	-I${X11SRCDIR.xorg-server}/hw/xfree86/${LIB} \
-	-I${X11SRCDIR.xorg-server}/hw/xfree86/common \
 	-I${X11SRCDIR.xorg-server}/hw/xfree86/loader
 
 CPPFLAGS+= \
 	${X11FLAGS.EXTENSION} \
+	-DHAVE_DIX_CONFIG_H \
 	-DXFree86LOADER
-CPPFLAGS+= \
-	-I${X11SRCDIR.xorg-server}/../include ${X11FLAGS.DIX}
 
 SUBDIR = \
+	dbe \
+	extmod \
 	fb \
 	glx \
+	record \
 	shadow \
 	wfb \
 	xorgxkb

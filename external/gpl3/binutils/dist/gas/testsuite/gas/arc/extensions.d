@@ -1,6 +1,5 @@
-#as: -EL
+#as: -EL -marc8
 #objdump: -dr -EL
-#skip: *-*-*
 
 .*: +file format elf32-.*arc
 

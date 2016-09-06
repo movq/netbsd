@@ -32,15 +32,14 @@ CCState::CCState(CallingConv::ID CC, bool isVarArg, MachineFunction &mf,
       CallOrPrologue(Unknown) {
   // No stack is used.
   StackOffset = 0;
-  MaxStackArgAlign = 1;
 
   clearByValRegsInfo();
   UsedRegs.resize((TRI.getNumRegs()+31)/32);
 }
 
-/// Allocate space on the stack large enough to pass an argument by value.
-/// The size and alignment information of the argument is encoded in
-/// its parameter attribute.
+// HandleByVal - Allocate space on the stack large enough to pass an argument
+// by value. The size and alignment information of the argument is encoded in
+// its parameter attribute.
 void CCState::HandleByVal(unsigned ValNo, MVT ValVT,
                           MVT LocVT, CCValAssign::LocInfo LocInfo,
                           int MinSize, int MinAlign,
@@ -58,13 +57,13 @@ void CCState::HandleByVal(unsigned ValNo, MVT ValVT,
   addLoc(CCValAssign::getMem(ValNo, ValVT, Offset, LocVT, LocInfo));
 }
 
-/// Mark a register and all of its aliases as allocated.
+/// MarkAllocated - Mark a register and all of its aliases as allocated.
 void CCState::MarkAllocated(unsigned Reg) {
   for (MCRegAliasIterator AI(Reg, &TRI, true); AI.isValid(); ++AI)
     UsedRegs[*AI/32] |= 1 << (*AI&31);
 }
 
-/// Analyze an array of argument values,
+/// AnalyzeFormalArguments - Analyze an array of argument values,
 /// incorporating info about the formals into this state.
 void
 CCState::AnalyzeFormalArguments(const SmallVectorImpl<ISD::InputArg> &Ins,
@@ -84,8 +83,8 @@ CCState::AnalyzeFormalArguments(const SmallVectorImpl<ISD::InputArg> &Ins,
   }
 }
 
-/// Analyze the return values of a function, returning true if the return can
-/// be performed without sret-demotion and false otherwise.
+/// CheckReturn - Analyze the return values of a function, returning true if
+/// the return can be performed without sret-demotion, and false otherwise.
 bool CCState::CheckReturn(const SmallVectorImpl<ISD::OutputArg> &Outs,
                           CCAssignFn Fn) {
   // Determine which register each value should be copied into.
@@ -98,7 +97,7 @@ bool CCState::CheckReturn(const SmallVectorImpl<ISD::OutputArg> &Outs,
   return true;
 }
 
-/// Analyze the returned values of a return,
+/// AnalyzeReturn - Analyze the returned values of a return,
 /// incorporating info about the result values into this state.
 void CCState::AnalyzeReturn(const SmallVectorImpl<ISD::OutputArg> &Outs,
                             CCAssignFn Fn) {
@@ -116,7 +115,7 @@ void CCState::AnalyzeReturn(const SmallVectorImpl<ISD::OutputArg> &Outs,
   }
 }
 
-/// Analyze the outgoing arguments to a call,
+/// AnalyzeCallOperands - Analyze the outgoing arguments to a call,
 /// incorporating info about the passed values into this state.
 void CCState::AnalyzeCallOperands(const SmallVectorImpl<ISD::OutputArg> &Outs,
                                   CCAssignFn Fn) {
@@ -134,7 +133,8 @@ void CCState::AnalyzeCallOperands(const SmallVectorImpl<ISD::OutputArg> &Outs,
   }
 }
 
-/// Same as above except it takes vectors of types and argument flags.
+/// AnalyzeCallOperands - Same as above except it takes vectors of types
+/// and argument flags.
 void CCState::AnalyzeCallOperands(SmallVectorImpl<MVT> &ArgVTs,
                                   SmallVectorImpl<ISD::ArgFlagsTy> &Flags,
                                   CCAssignFn Fn) {
@@ -152,8 +152,8 @@ void CCState::AnalyzeCallOperands(SmallVectorImpl<MVT> &ArgVTs,
   }
 }
 
-/// Analyze the return values of a call, incorporating info about the passed
-/// values into this state.
+/// AnalyzeCallResult - Analyze the return values of a call,
+/// incorporating info about the passed values into this state.
 void CCState::AnalyzeCallResult(const SmallVectorImpl<ISD::InputArg> &Ins,
                                 CCAssignFn Fn) {
   for (unsigned i = 0, e = Ins.size(); i != e; ++i) {
@@ -169,7 +169,8 @@ void CCState::AnalyzeCallResult(const SmallVectorImpl<ISD::InputArg> &Ins,
   }
 }
 
-/// Same as above except it's specialized for calls that produce a single value.
+/// AnalyzeCallResult - Same as above except it's specialized for calls which
+/// produce a single value.
 void CCState::AnalyzeCallResult(MVT VT, CCAssignFn Fn) {
   if (Fn(0, VT, VT, CCValAssign::Full, ISD::ArgFlagsTy(), *this)) {
 #ifndef NDEBUG
@@ -193,7 +194,6 @@ static bool isValueTypeInRegForCC(CallingConv::ID CC, MVT VT) {
 void CCState::getRemainingRegParmsForType(SmallVectorImpl<MCPhysReg> &Regs,
                                           MVT VT, CCAssignFn Fn) {
   unsigned SavedStackOffset = StackOffset;
-  unsigned SavedMaxStackArgAlign = MaxStackArgAlign;
   unsigned NumLocs = Locs.size();
 
   // Set the 'inreg' flag if it is used for this calling convention.
@@ -225,7 +225,6 @@ void CCState::getRemainingRegParmsForType(SmallVectorImpl<MCPhysReg> &Regs,
   // as allocated so that future queries don't return the same registers, i.e.
   // when i64 and f64 are both passed in GPRs.
   StackOffset = SavedStackOffset;
-  MaxStackArgAlign = SavedMaxStackArgAlign;
   Locs.resize(NumLocs);
 }
 

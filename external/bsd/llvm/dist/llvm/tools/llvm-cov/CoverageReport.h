@@ -14,7 +14,7 @@
 #ifndef LLVM_COV_COVERAGEREPORT_H
 #define LLVM_COV_COVERAGEREPORT_H
 
-#include "CoverageSummaryInfo.h"
+#include "CoverageSummary.h"
 #include "CoverageViewOptions.h"
 
 namespace llvm {
@@ -22,17 +22,16 @@ namespace llvm {
 /// \brief Displays the code coverage report.
 class CoverageReport {
   const CoverageViewOptions &Options;
-  std::unique_ptr<coverage::CoverageMapping> Coverage;
+  CoverageSummary &Summary;
 
   void render(const FileCoverageSummary &File, raw_ostream &OS);
   void render(const FunctionCoverageSummary &Function, raw_ostream &OS);
 
 public:
-  CoverageReport(const CoverageViewOptions &Options,
-                 std::unique_ptr<coverage::CoverageMapping> Coverage)
-      : Options(Options), Coverage(std::move(Coverage)) {}
+  CoverageReport(const CoverageViewOptions &Options, CoverageSummary &Summary)
+      : Options(Options), Summary(Summary) {}
 
-  void renderFunctionReports(ArrayRef<std::string> Files, raw_ostream &OS);
+  void renderFunctionReports(raw_ostream &OS);
 
   void renderFileReports(raw_ostream &OS);
 };

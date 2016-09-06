@@ -1,4 +1,4 @@
-/*	$NetBSD: booke_pmap.c,v 1.24 2016/07/11 16:06:52 matt Exp $	*/
+/*	$NetBSD: booke_pmap.c,v 1.18 2014/03/18 18:20:41 riastradh Exp $	*/
 /*-
  * Copyright (c) 2010, 2011 The NetBSD Foundation, Inc.
  * All rights reserved.
@@ -38,25 +38,28 @@
 
 #include <sys/cdefs.h>
 
-__KERNEL_RCSID(0, "$NetBSD: booke_pmap.c,v 1.24 2016/07/11 16:06:52 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: booke_pmap.c,v 1.18 2014/03/18 18:20:41 riastradh Exp $");
 
 #include <sys/param.h>
 #include <sys/kcore.h>
 #include <sys/buf.h>
-#include <sys/mutex.h>
 
 #include <uvm/uvm.h>
 
 #include <machine/pmap.h>
 
-#if defined(MULTIPROCESSOR)
-kmutex_t pmap_tlb_miss_lock;
+/*
+ * Initialize the kernel pmap.
+ */
+#ifdef MULTIPROCESSOR
+#define	PMAP_SIZE	offsetof(struct pmap, pm_pai[PMAP_TLB_MAX])
+#else
+#define	PMAP_SIZE	sizeof(struct pmap)
 #endif
 
-PMAP_COUNTER(zeroed_pages, "pages zeroed");
-PMAP_COUNTER(copied_pages, "pages copied");
-
 CTASSERT(sizeof(pmap_segtab_t) == NBPG);
+
+pmap_segtab_t pmap_kernel_segtab;
 
 void
 pmap_procwr(struct proc *p, vaddr_t va, size_t len)
@@ -132,7 +135,7 @@ kvtopte(const pmap_segtab_t *stp, vaddr_t va)
 vaddr_t
 pmap_kvptefill(vaddr_t sva, vaddr_t eva, pt_entry_t pt_entry)
 {
-	pmap_segtab_t * const stp = &pmap_kern_segtab;
+	const pmap_segtab_t * const stp = pmap_kernel()->pm_segtab;
 	KASSERT(sva == trunc_page(sva));
 	pt_entry_t *ptep = kvtopte(stp, sva);
 	for (; sva < eva; sva += NBPG) {
@@ -150,16 +153,19 @@ vaddr_t
 pmap_bootstrap(vaddr_t startkernel, vaddr_t endkernel,
 	phys_ram_seg_t *avail, size_t cnt)
 {
-	pmap_segtab_t * const stp = &pmap_kern_segtab;
+	pmap_segtab_t * const stp = &pmap_kernel_segtab;
+
+	/*
+	 * Initialize the kernel segment table.
+	 */
+	pmap_kernel()->pm_segtab = stp;
+	curcpu()->ci_pmap_kern_segtab = stp;
+#ifdef MULTIPROCESSOR
+	pmap_kernel()->pm_active = kcpuset_running;
+	pmap_kernel()->pm_onproc = kcpuset_running;
+#endif
 
 	KASSERT(endkernel == trunc_page(endkernel));
-
-	/* init the lock */
-	pmap_tlb_info_init(&pmap_tlb0_info);
-
-#if defined(MULTIPROCESSOR)
-	mutex_init(&pmap_tlb_miss_lock, MUTEX_SPIN, IPL_HIGH);
-#endif
 
 	/*
 	 * Compute the number of pages kmem_arena will have.
@@ -182,6 +188,9 @@ pmap_bootstrap(vaddr_t startkernel, vaddr_t endkernel,
 	    + 16 * NCARGS
 	    + pager_map_size
 	    + maxproc * USPACE
+#ifdef SYSVSHM
+	    + NBPG * shminfo.shmall
+#endif
 	    + NBPG * nkmempages) >> SEGSHIFT;
 
 	/*
@@ -336,7 +345,6 @@ pmap_md_unmap_poolpage(vaddr_t va, vsize_t size)
 void
 pmap_zero_page(paddr_t pa)
 {
-	PMAP_COUNT(zeroed_pages);
 	vaddr_t va = pmap_md_map_poolpage(pa, NBPG);
 	dcache_zero_page(va);
 
@@ -352,11 +360,9 @@ pmap_copy_page(paddr_t src, paddr_t dst)
 	vaddr_t dst_va = pmap_md_map_poolpage(dst, NBPG);
 	const vaddr_t end = src_va + PAGE_SIZE;
 
-	PMAP_COUNT(copied_pages);
-
 	while (src_va < end) {
-		__asm __volatile(
-			"dcbt	%2,%0"	"\n\t"	/* touch next src cacheline */
+		__asm(
+			"dcbt	%2,%1"	"\n\t"	/* touch next src cachline */
 			"dcba	0,%1"	"\n\t" 	/* don't fetch dst cacheline */
 		    :: "b"(src_va), "b"(dst_va), "b"(line_size));
 		for (u_int i = 0;
@@ -421,19 +427,5 @@ void
 pmap_md_tlb_info_attach(struct pmap_tlb_info *ti, struct cpu_info *ci)
 {
 	/* nothing */
-}
-
-void
-pmap_md_tlb_miss_lock_enter(void)
-{
-
-	mutex_spin_enter(&pmap_tlb_miss_lock);
-}
-
-void
-pmap_md_tlb_miss_lock_exit(void)
-{
-
-	mutex_spin_exit(&pmap_tlb_miss_lock);
 }
 #endif /* MULTIPROCESSOR */

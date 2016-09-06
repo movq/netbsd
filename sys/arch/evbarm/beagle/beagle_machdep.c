@@ -1,4 +1,4 @@
-/*	$NetBSD: beagle_machdep.c,v 1.64 2016/07/03 11:40:58 kiyohara Exp $ */
+/*	$NetBSD: beagle_machdep.c,v 1.60.2.1 2015/11/08 01:22:54 riz Exp $ */
 
 /*
  * Machine dependent functions for kernel setup for TI OSK5912 board.
@@ -125,7 +125,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: beagle_machdep.c,v 1.64 2016/07/03 11:40:58 kiyohara Exp $");
+__KERNEL_RCSID(0, "$NetBSD: beagle_machdep.c,v 1.60.2.1 2015/11/08 01:22:54 riz Exp $");
 
 #include "opt_machdep.h"
 #include "opt_ddb.h"
@@ -141,7 +141,6 @@ __KERNEL_RCSID(0, "$NetBSD: beagle_machdep.c,v 1.64 2016/07/03 11:40:58 kiyohara
 #include "sdhc.h"
 #include "ukbd.h"
 #include "arml2cc.h"
-#include "tps65217pmic.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -422,7 +421,6 @@ beagle_db_trap(int where)
 }
 #endif
 
-#ifdef VERBOSE_INIT_ARM
 void beagle_putchar(char c);
 void
 beagle_putchar(char c)
@@ -444,9 +442,6 @@ beagle_putchar(char c)
 	}
 #endif
 }
-#else
-#define beagle_putchar(c)	((void)0)
-#endif
 
 /*
  * u_int initarm(...)
@@ -702,6 +697,7 @@ beagle_reset(void)
 	*(volatile uint32_t *)(OMAP_L4_CORE_VBASE + (OMAP_L4_WAKEUP_BASE - OMAP_L4_CORE_BASE) + OMAP4_PRM_RSTCTRL) = OMAP4_PRM_RSTCTRL_WARM;
 #elif defined(OMAP_5XXX)
 	*(volatile uint32_t *)(OMAP_L4_CORE_VBASE + (OMAP_L4_WAKEUP_BASE - OMAP_L4_CORE_BASE) + OMAP5_PRM_RSTCTRL) = OMAP4_PRM_RSTCTRL_COLD;
+#elif defined(OMAP_5XXX)
 #elif defined(TI_AM335X)
 	*(volatile uint32_t *)(OMAP_L4_CORE_VBASE + (OMAP2_CM_BASE - OMAP_L4_CORE_BASE) + AM335X_PRCM_PRM_DEVICE + PRM_RSTCTRL) = RST_GLOBAL_WARM_SW;
 #else
@@ -1126,15 +1122,10 @@ beagle_device_register(device_t self, void *aux)
 int
 set_mpu_volt(int mvolt)
 {
-
-#if NTPS65217PMIC > 0
 	if (pmic_dev == NULL)
 		return ENODEV;
 
 	/* MPU voltage is on vdcd2 */
 	return tps65217pmic_set_volt(pmic_dev, "DCDC2", mvolt);
-#else
-	return -1;
-#endif
 }
 #endif

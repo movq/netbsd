@@ -1,4 +1,4 @@
-/*	$NetBSD: moduleparam.h,v 1.5 2015/02/25 14:00:52 riastradh Exp $	*/
+/*	$NetBSD: moduleparam.h,v 1.2.8.2 2015/03/06 21:39:10 snj Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

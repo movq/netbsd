@@ -1,4 +1,4 @@
-/*	$NetBSD: if_xi.c,v 1.77 2016/06/10 13:27:15 ozaki-r Exp $ */
+/*	$NetBSD: if_xi.c,v 1.74 2014/08/10 16:44:36 tls Exp $ */
 /*	OpenBSD: if_xe.c,v 1.9 1999/09/16 11:28:42 niklas Exp 	*/
 
 /*
@@ -55,9 +55,10 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_xi.c,v 1.77 2016/06/10 13:27:15 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_xi.c,v 1.74 2014/08/10 16:44:36 tls Exp $");
 
 #include "opt_inet.h"
+#include "opt_ipx.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,6 +83,12 @@ __KERNEL_RCSID(0, "$NetBSD: if_xi.c,v 1.77 2016/06/10 13:27:15 ozaki-r Exp $");
 #include <netinet/ip.h>
 #include <netinet/if_inarp.h>
 #endif
+
+#ifdef IPX
+#include <netipx/ipx.h>
+#include <netipx/ipx_if.h>
+#endif
+
 
 #include <net/bpf.h>
 #include <net/bpfdesc.h>
@@ -417,7 +424,7 @@ xi_get(struct xi_softc *sc)
 	MGETHDR(m, M_DONTWAIT, MT_DATA);
 	if (m == NULL)
 		return (recvcount);
-	m_set_rcvif(m, ifp);
+	m->m_pkthdr.rcvif = ifp;
 	m->m_pkthdr.len = pktlen;
 	len = MHLEN;
 	top = NULL;
@@ -475,7 +482,7 @@ xi_get(struct xi_softc *sc)
 
 	bpf_mtap(ifp, top);
 
-	if_percpuq_enqueue(ifp->if_percpuq, top);
+	(*ifp->if_input)(ifp, top);
 	return (recvcount);
 }
 

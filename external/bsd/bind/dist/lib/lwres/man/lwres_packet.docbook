@@ -1,5 +1,8 @@
+<!DOCTYPE book PUBLIC "-//OASIS//DTD DocBook XML V4.2//EN"
+               "http://www.oasis-open.org/docbook/xml/4.2/docbookx.dtd"
+	       [<!ENTITY mdash "&#8212;">]>
 <!--
- - Copyright (C) 2004, 2005, 2007, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
+ - Copyright (C) 2004, 2005, 2007, 2014  Internet Systems Consortium, Inc. ("ISC")
  - Copyright (C) 2000, 2001  Internet Software Consortium.
  -
  - Permission to use, copy, modify, and/or distribute this software for any
@@ -15,14 +18,10 @@
  - PERFORMANCE OF THIS SOFTWARE.
 -->
 
-<!-- Converted by db4-upgrade version 1.0 -->
-<refentry xmlns="http://docbook.org/ns/docbook" version="5.0">
-  <info>
-    <date>2007-06-18</date>
-  </info>
+<refentry>
+
   <refentryinfo>
-    <corpname>ISC</corpname>
-    <corpauthor>Internet Systems Consortium, Inc.</corpauthor>
+    <date>June 18, 2007</date>
   </refentryinfo>
 
   <refmeta>
@@ -37,7 +36,6 @@
       <year>2005</year>
       <year>2007</year>
       <year>2014</year>
-      <year>2015</year>
       <holder>Internet Systems Consortium, Inc. ("ISC")</holder>
     </copyright>
     <copyright>
@@ -71,8 +69,8 @@ lwres_result_t
       </funcprototype>
 </funcsynopsis>
   </refsynopsisdiv>
-  <refsection><info><title>DESCRIPTION</title></info>
-
+  <refsect1>
+    <title>DESCRIPTION</title>
     <para>
       These functions rely on a
       <type>struct lwres_lwpacket</type>
@@ -270,10 +268,10 @@ struct lwres_lwpacket {
       <type>lwres_lwpacket_t</type>.
     </para>
 
-  </refsection>
+  </refsect1>
 
-  <refsection><info><title>RETURN VALUES</title></info>
-
+  <refsect1>
+    <title>RETURN VALUES</title>
     <para>
       Successful calls to
       <function>lwres_lwpacket_renderheader()</function> and
@@ -285,5 +283,9 @@ struct lwres_lwpacket {
       return <errorcode>LWRES_R_UNEXPECTEDEND</errorcode>.
     </para>
 
-  </refsection>
-</refentry>
+  </refsect1>
+</refentry><!--
+ - Local variables:
+ - mode: sgml
+ - End:
+-->

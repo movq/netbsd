@@ -1,4 +1,4 @@
-.\"	$NetBSD: sdtemp.4,v 1.6 2016/07/28 09:11:14 msaitoh Exp $
+.\"	$NetBSD: sdtemp.4,v 1.4 2011/10/11 17:53:27 njoly Exp $
 .\"
 .\" Copyright (c) 2008 The NetBSD Foundation, Inc.
 .\" All rights reserved.
@@ -27,7 +27,7 @@
 .\" ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
 .\" POSSIBILITY OF SUCH DAMAGE.
 .\"
-.Dd July 28, 2016
+.Dd January 8, 2011
 .Dt SDTEMP 4
 .Os
 .Sh NAME
@@ -49,7 +49,7 @@ driver provides support for the
 .Tn Microchip Technology
 MCP9805/98242 and other chips that conform to JEDEC Standard 21-C section
 4.7.
-Memory module temperature sensors are optional on DDR2 and newer DIMMs.
+Memory module temperature sensors are optional on DDR2 and DDR3 SDRAM DIMMs.
 Sensors provided by this driver, including the on-chip thresholds for the
 Alarm Window and Critical level, are accessed through the
 .Xr envsys 4
@@ -61,51 +61,32 @@ supports temperature ranges from -256 to +255 degrees C.
 .Pp
 Chips supported by the
 .Nm
-driver include TSE2004av compliant devices and:
+driver include:
 .Pp
 .Bl -bullet -offset indent
+.It
+.Tn Catalyst
+.Em CAT34TS02
+and
+.Em CAT6095
 .It
 .Tn Analog Devices
 .Em ADT7408
 .It
-.Tn Atmel
-.Em AT30TS00
-and
-.Em AT30TSE004
-.It
-.Tn On semiconductor (Catalyst)
-.Em CAT34TS02 ,
-.Em CAT34TS02C ,
-.Em CAT34TS04
-and
-.Em CAT6095
-.It
-.Tn Giantec Semiconductor
-.Em GT30TS00
-and
-.Em GT34TS02
-.It
 .Tn Integrated Deviced Technology
-.Em TSE2002B3 ,
-.Em TSE2002GB2 ,
-.Em TSE2004GB2 ,
-.Em TS3000B3 ,
-.Em TS3000GB0 ,
-.Em TS3000GB2
+.Em TSE2002B3
 and
-.Em TS30001GB2
+.Em TSE3000B3
 .It
 .Tn Maxim
 .Em MAX6604
 .It
 .Tn Microchip Technology
-.Em MCP9804 ,
 .Em MCP9805 ,
 .Em MCP9843 ,
 .Em MCP98242 ,
-.Em MCP98243
 and
-.Em MCP98244
+.Em MCP98243
 .It
 .Tn NXP Semiconductors
 .Em SE97
@@ -113,12 +94,9 @@ and
 .Em SE98
 .It
 .Tn STmicroelectronics
-.Em STTS424 ,
-.Em STTS424E ,
-.Em STTS2002 ,
-.Em STTS2004
+.Em STTS424
 and
-.Em STTS3000
+.Em STTS424E
 .El
 .Sh SEE ALSO
 .Xr envsys 4 ,

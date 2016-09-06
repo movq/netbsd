@@ -1,4 +1,4 @@
-/*	$NetBSD: puffs.h,v 1.127 2015/11/12 17:51:05 christos Exp $	*/
+/*	$NetBSD: puffs.h,v 1.124.10.2 2014/11/05 18:11:31 snj Exp $	*/
 
 /*
  * Copyright (c) 2005, 2006, 2007  Antti Kantee.  All Rights Reserved.
@@ -420,9 +420,9 @@ enum {
 	int fsname##_node_open2(struct puffs_usermount *,		\
 	    puffs_cookie_t, int, const struct puffs_cred *, int *);	\
 	int fsname##_node_fallocate(struct puffs_usermount *,		\
-	    puffs_cookie_t, off_t, off_t);				\
+	    puffs_cookie_t, int, off_t, off_t);				\
 	int fsname##_node_fdiscard(struct puffs_usermount *,		\
-	    puffs_cookie_t, off_t, off_t);
+	    puffs_cookie_t, int, off_t, off_t);
 
 
 #define PUFFSOP_INIT(ops)						\

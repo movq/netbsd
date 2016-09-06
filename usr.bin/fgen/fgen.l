@@ -1,5 +1,5 @@
 %{
-/*	$NetBSD: fgen.l,v 1.37 2016/03/08 20:13:44 christos Exp $	*/
+/*	$NetBSD: fgen.l,v 1.36 2013/10/18 20:47:06 christos Exp $	*/
 /* FLEX input for FORTH input file scanner */
 /*  
  * Copyright (c) 1998 Eduardo Horvath.
@@ -42,7 +42,7 @@
 #endif
 
 #if defined(__RCSID) && !defined(lint)
-__RCSID("$NetBSD: fgen.l,v 1.37 2016/03/08 20:13:44 christos Exp $");
+__RCSID("$NetBSD: fgen.l,v 1.36 2013/10/18 20:47:06 christos Exp $");
 #endif
 
 %}
@@ -66,7 +66,6 @@ tail	{white}
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include <util.h>
 
 #include "fgen.h"
 static TOKEN ltoken;
@@ -102,7 +101,7 @@ static YY_DECL;
 
 static int debug = 0;
 #define ASSERT if (debug) assert
-#define STATE(y, x)	do { if (debug) printf("%lx State %s: token `%s'\n", outpos, x, y); } while (0)
+#define STATE(y, x)	do { if (debug) printf( "%lx State %s: token `%s'\n", outpos, x, y); } while (0)
 static int mark_fload = 0;
 
 %}
@@ -311,7 +310,7 @@ static struct fcode *flookup(struct fcode *, const char *);
 static int aadd(struct macro *, struct macro *);
 static struct macro *alookup(struct macro *, const char *);
 static void initdic(void);
-__dead static void usage(void);
+__dead static void usage(const char *);
 static void tokenize(YY_BUFFER_STATE);
 static int emit(const char *);
 static int spit(long);
@@ -788,8 +787,10 @@ push(Cell val)
 	if (debug > 1)
 		printf("push %lx\n", (long)val);
 	parse_stack[parse_stack_ptr++] = val;
-	if (parse_stack_ptr >= PSTKSIZ)
-		errx(EXIT_FAILURE, "Parse stack overflow");
+	if (parse_stack_ptr >= PSTKSIZ) {
+		(void)printf( "Parse stack overflow\n");
+		exit(1);
+	}
 }
 
 static Cell
@@ -830,7 +831,7 @@ fadd(struct fcode *dict, struct fcode *new)
 			return fadd(dict->l, new);
 		else {
 			if (debug > 5)
-				printf("fadd: new FCode `%s' is %lx\n", 
+				(void)printf( "fadd: new FCode `%s' is %lx\n", 
 					      new->name, new->num);
 			new->l = new->r = NULL;
 			dict->l = new;
@@ -840,7 +841,7 @@ fadd(struct fcode *dict, struct fcode *new)
 			return fadd(dict->r, new);
 		else {
 			if (debug > 5)
-				printf("fadd: new FCode `%s' is %lx\n", 
+				(void)printf( "fadd: new FCode `%s' is %lx\n", 
 					      new->name, new->num);
 			new->l = new->r = NULL;
 			dict->r = new;
@@ -861,7 +862,7 @@ flookup(struct fcode *dict, const char *str)
 	res = strcmp(dict->name, str);
 	ASSERT(dict->type == FCODE);
 	if (debug > 5)
-		printf("flookup: `%s' and `%s' %s match\n", 
+		(void)printf( "flookup: `%s' and `%s' %s match\n", 
 			      str, dict->name, res?"don't":"do");
 	if (!res) return (dict);
 	if (res < 0)
@@ -894,7 +895,7 @@ aadd(struct macro *dict, struct macro *new)
 			new->l = new->r = NULL;
 			dict->l = new;
 			if (debug > 5)
-				printf("aadd: new alias `%s' to `%s'\n", 
+				(void)printf( "aadd: new alias `%s' to `%s'\n", 
 					      new->name, new->equiv);
 		}
 	} else {
@@ -904,7 +905,7 @@ aadd(struct macro *dict, struct macro *new)
 			new->l = new->r = NULL;
 			dict->r = new;
 			if (debug > 5)
-				printf("aadd: new alias `%s' to `%s'\n", 
+				(void)printf( "aadd: new alias `%s' to `%s'\n", 
 					      new->name, new->equiv);
 		}
 	}
@@ -947,8 +948,8 @@ initdic(void)
 
 	while ((++code)->name) {
 		if(!fadd(dictionary, code)) {
-			warnx("%s: duplicate dictionary entry `%s'", __func__,
-			    code->name);
+			printf("init: duplicate dictionary entry %s\n", 
+			       code->name);
 		}
 	}
 
@@ -958,8 +959,8 @@ initdic(void)
 	alias->type = MACRO;
 	while ((++alias)->name) {
 		if(!aadd(aliases, alias)) {
-			warnx("%s: duplicate macro entry `%s'", __func__,
-			    alias->name);
+			printf("init: duplicate macro entry %s\n", 
+			       alias->name);
 		}
 	}
 
@@ -986,11 +987,10 @@ apply_macros(YY_BUFFER_STATE yinput, const char *str)
 }
 
 static void
-usage(void)
+usage(const char *me)
 {
-	(void)fprintf(stderr, "%s: [-d level] [-o outfile] <infile>\n",
-	getprogname());
-	exit(EXIT_FAILURE);
+	(void)fprintf(stderr, "%s: [-d level] [-o outfile] <infile>\n", me);
+	exit(1);
 }
 
 int
@@ -1004,6 +1004,7 @@ main(int argc, char *argv[])
 	int i;
 
 	outf = 1; /* stdout */
+	myname = argv[0];
 
 	while ((ch = getopt(argc, argv, "d:o:")) != -1)
 		switch(ch) {
@@ -1015,13 +1016,13 @@ main(int argc, char *argv[])
 			outfile = optarg;
 			break;
 		default:
-			usage();
+			usage(myname);
 		}
 	argc -= optind;
 	argv += optind;
 	
 	if (argc != 1)
-		usage();
+		usage(myname);
 	
 	infile = argv[0];
 
@@ -1030,8 +1031,8 @@ main(int argc, char *argv[])
 	 */
 	initdic();
 	outbufsiz = BUFCLICK;
-	fheader = emalloc(outbufsiz);
-	outbuf = (void *)fheader;
+	outbuf = malloc(outbufsiz);
+	fheader = (struct fcode_header *)outbuf;
 	outpos = 0;
 	emit(hdrtype);
 	outpos = sizeof(*fheader);
@@ -1040,9 +1041,9 @@ main(int argc, char *argv[])
 	 * Do it.
 	 */
 	if ((inf = fopen(infile, "r")) == NULL)
-		err(EXIT_FAILURE, "Cannot open `%s'", infile);
+		(void)err(1, "can not open %s for reading", infile);
 
-	inbuf = yy_create_buffer(inf, YY_BUF_SIZE);
+	inbuf = yy_create_buffer( inf, YY_BUF_SIZE );
 	yy_switch_to_buffer(inbuf);
 	tokenize(inbuf);
 	yy_delete_buffer(inbuf);
@@ -1058,16 +1059,15 @@ main(int argc, char *argv[])
 	fheader->checksum = htons(fheader->checksum);
 
 	if ((outf = open(outfile, O_WRONLY|O_CREAT|O_TRUNC, 0666)) == -1)
-		err(EXIT_FAILURE, "Cannot open `%s'", outfile);
+		err(1, "can out open %s for writing", outfile);
 
 	if (write(outf, outbuf, outpos) != outpos) {
-		int serrno = errno;
 		close(outf);
 		unlink(outfile);
-		errc(EXIT_FAILURE, serrno, "write error");
+		err(1, "write error");
 	}
 	close(outf);
-	return EXIT_SUCCESS;
+	return (0);
 };
 
 /*
@@ -1134,14 +1134,14 @@ tokenize(YY_BUFFER_STATE yinput)
 		case TOK_STRING_LIT: 
 			STATE(token->text, "TOK_STRING_LIT:");
 		{
-			size_t len;
+			int len;
 			char *p = token->text;
 			
 			++p;			/* Skip the quote */
 			len = strlen(++p);	/* Skip the 1st space */
 
 #define ERR_TOOLONG	\
-	token_err(yylineno, infile, yytext, "string length %zu too long", len)
+	token_err(yylineno, infile, yytext, "string length %d too long", len)
 
 			if (len > 255)
 				ERR_TOOLONG;
@@ -1157,7 +1157,7 @@ tokenize(YY_BUFFER_STATE yinput)
 		case TOK_PSTRING: 
 			STATE(token->text, "TOK_PSTRING:");
 		{
-			size_t len;
+			int len;
 			char *p = token->text;
 
 			if (*p++ == '.') p++; /* Skip over delimiter */
@@ -1179,7 +1179,7 @@ tokenize(YY_BUFFER_STATE yinput)
 		case TOK_ABORT_S:
 			STATE(token->text, "TOK_PSTRING:");
 		{
-			size_t len;
+			int len;
 			Cell value = -2;
 			char *p = token->text;
 
@@ -1235,19 +1235,19 @@ tokenize(YY_BUFFER_STATE yinput)
 				    "EOF in colon definition");
 			
 			/* Add new code to dictionary */
-			fcode = emalloc(sizeof(*fcode));
+			fcode = malloc(sizeof(*fcode));
 			fcode->num = nextfcode++;
-			fcode->name = estrdup(token->text);
+			fcode->name = strdup(token->text);
 			if (!fadd(dictionary, fcode)) {
 				/* Duplicate definition.  Free the memory. */
 				if (debug)
-					printf("%s: duplicate FCode\n",
+					(void)printf("%s: duplicate FCode\n",
 						token->text);
 				free(__UNCONST(fcode->name));
 				free(fcode);
 			}
 			if (debug)
-				printf("Adding %s to dictionary\n", token->text);		
+				(void)printf("Adding %s to dictionary\n", token->text);		
 			if (state == 0)
 				emit("new-token");
 			else {
@@ -1290,23 +1290,21 @@ tokenize(YY_BUFFER_STATE yinput)
 
 			token = yylex();
 			if (token == NULL) {
-				warnx("EOF in alias definition");
+				(void)printf( "EOF in alias definition\n");
 				return;
 			}
 			if (token->type != TOK_OTHER) {
-				warnx("ENDCOMMENT aliasing weird token type %d",
-				    token->type);
+				(void)printf( "ENDCOMMENT aliasing weird token type %d\n",
+					      token->type);
 			}
-			alias = emalloc(sizeof(*alias));
-			alias->name = estrdup(token->text);
+			alias = malloc(sizeof(*alias));
+			alias->name = strdup(token->text);
 			token = yylex();
 			if (token == NULL) {
-				warnx("EOF in alias definition");
-				free(__UNCONST(alias->name));
-				free(alias);
+				(void)printf( "EOF in alias definition\n");
 				return;
 			}			
-			alias->equiv = estrdup(token->text);
+			alias->equiv = strdup(token->text);
 			if (!aadd(aliases, alias)) {
 				free(__UNCONST(alias->name));
 				free(alias);
@@ -1319,19 +1317,22 @@ tokenize(YY_BUFFER_STATE yinput)
 			emit("b(')");
 			token = yylex();
 			if (token == NULL) {
-				warnx("EOF in [']");
+				(void)printf( "EOF in [']\n");
 				return;
 			}
-			if ((fcode = flookup(dictionary, token->text)) == NULL)
-				errx(EXIT_FAILURE, "[']: %s not found",
-				    token->text);
+			if ((fcode = flookup(dictionary, token->text)) == NULL) {
+				(void)printf( "[']: %s not found\n", token->text);
+				exit(1);
+			}
 			spit(fcode->num);
 			break;
 		case TOK_ASCII:
 			STATE(token->text, "TOK_ASCII");
 			token = yylex();
-			if (token == NULL)
-				errx(EXIT_FAILURE, "EOF after \"ascii\"");
+			if (token == NULL) {
+				(void)printf( "EOF after \"ascii\"\n");
+				exit(1);
+			}
 			emit("b(lit)");
 			spit(0);
 			spit(0);
@@ -1348,14 +1349,14 @@ tokenize(YY_BUFFER_STATE yinput)
 
 			token = yylex();
 			if (token == NULL) {
-				warnx("EOF in colon definition");
+				(void)printf( "EOF in colon definition\n");
 				return;
 			}
 			
 			/* Add new code to dictionary */
-			fcode = emalloc(sizeof(*fcode));
+			fcode = malloc(sizeof(*fcode));
 			fcode->num = nextfcode++;
-			fcode->name = estrdup(token->text);
+			fcode->name = strdup(token->text);
 			fadd(dictionary, fcode);
 			
 			if (state == 0)
@@ -1381,14 +1382,14 @@ tokenize(YY_BUFFER_STATE yinput)
 
 			token = yylex();
 			if (token == NULL) {
-				warnx("EOF in constant definition");
+				(void)printf( "EOF in constant definition\n");
 				return;
 			}
 			
 			/* Add new code to dictionary */
-			fcode = emalloc(sizeof(*fcode));
+			fcode = malloc(sizeof(*fcode));
 			fcode->num = nextfcode++;
-			fcode->name = estrdup(token->text);
+			fcode->name = strdup(token->text);
 			fadd(dictionary, fcode);
 			
 			if (state == 0)
@@ -1407,8 +1408,10 @@ tokenize(YY_BUFFER_STATE yinput)
 		case TOK_CONTROL:
 			STATE(token->text, "TOK_CONTROL");
 			token = yylex();
-			if (token == NULL)
-				errx(EXIT_FAILURE, "EOF after \"ascii\"");
+			if (token == NULL) {
+				(void)printf( "EOF after \"ascii\"\n");
+				exit(1);
+			}
 			emit("b(lit)");
 			spit(0);
 			spit(0);
@@ -1420,14 +1423,14 @@ tokenize(YY_BUFFER_STATE yinput)
 			/* Don't know what this does or if it's right */
 			token = yylex();
 			if (token == NULL) {
-				warnx("EOF in create definition");
+				(void)printf( "EOF in create definition\n");
 				return;
 			}
 			
 			/* Add new code to dictionary */
-			fcode = emalloc(sizeof(*fcode));
+			fcode = malloc(sizeof(*fcode));
 			fcode->num = nextfcode++;
-			fcode->name = estrdup(token->text);
+			fcode->name = strdup(token->text);
 			fadd(dictionary, fcode);
 			
 			if (state == 0)
@@ -1462,7 +1465,7 @@ tokenize(YY_BUFFER_STATE yinput)
 
 				token = yylex();
 				if (token == NULL) {
-					warnx("EOF after d#");
+					(void)printf( "EOF after d#\n");
 					return;
 				}
 				if (token->type == TOK_OTHER) {
@@ -1501,14 +1504,14 @@ tokenize(YY_BUFFER_STATE yinput)
 			/* Don't know what this does or if it's right */
 			token = yylex();
 			if (token == NULL) {
-				warnx("EOF in colon definition");
+				(void)printf( "EOF in colon definition\n");
 				return;
 			}
 			
 			/* Add new code to dictionary */
-			fcode = emalloc(sizeof(*fcode));
+			fcode = malloc(sizeof(*fcode));
 			fcode->num = nextfcode++;
-			fcode->name = estrdup(token->text);
+			fcode->name = strdup(token->text);
 			fadd(dictionary, fcode);
 			
 			if (state == 0)
@@ -1595,9 +1598,9 @@ tokenize(YY_BUFFER_STATE yinput)
 						(unsigned char)outbuf[outpos+1];
 				}
 				next = outpos + disp;
-				if (debug > -3)
-					printf("Next endof: %x at %x\n",
-					    disp, next);
+				if (debug > 3)
+					printf("Next endof: %x at %x\n", 
+						disp, next);
 
 				/* process this offset */
 				off = pos - outpos;
@@ -1658,14 +1661,14 @@ tokenize(YY_BUFFER_STATE yinput)
 	
 			token = yylex();
 			if (token == NULL) {
-				warnx("EOF in field definition");
+				(void)printf( "EOF in field definition\n");
 				return;
 			}
 			
 			/* Add new code to dictionary */
-			fcode = emalloc(sizeof(*fcode));
+			fcode = malloc(sizeof(*fcode));
 			fcode->num = nextfcode++;
-			fcode->name = estrdup(token->text);
+			fcode->name = strdup(token->text);
 			fadd(dictionary, fcode);
 			
 			if (state == 0)
@@ -1701,14 +1704,15 @@ tokenize(YY_BUFFER_STATE yinput)
 
 				token = yylex();
 				if (token == NULL) {
-					warnx("EOF after h#");
+					(void)printf( "EOF after h#\n");
 					return;
 				}
 				value = strtol(token->text, &end, 16);
-				if (*end != 0)
-					errx(EXIT_FAILURE, "Illegal number"
-					    " conversion:%s:%d: %s\n",
+				if (*end != 0) {
+					(void)printf("Illegal number conversion:%s:%d: %s\n",
 					    infile, yylineno, yytext);
+					exit(1);
+				}
 				/* 
 				 * If this is a 64-bit value we need to store two literals
 				 * and issue a `lxjoin' to combine them.  But that's a future
@@ -1784,14 +1788,14 @@ tokenize(YY_BUFFER_STATE yinput)
 
 				token = yylex();
 				if (token == NULL) {
-					warnx("EOF after o#");
+					(void)printf( "EOF after o#\n");
 					return;
 				}
 				value = strtol(token->text, &end, 8);
 				if (*end != 0) {
-					errx(EXIT_FAILURE, "Illegal number"
-					    " conversion:%s:%d: %s\n",
+					(void)printf("Illegal number conversion:%s:%d: %s\n",
 					    infile, yylineno, yytext);
+					exit(1);
 				}
 				/* 
 				 * If this is a 64-bit value we need to store two literals
@@ -1889,14 +1893,14 @@ tokenize(YY_BUFFER_STATE yinput)
 
 			token = yylex();
 			if (token == NULL) {
-				warnx("EOF in value definition");
+				(void)printf( "EOF in value definition\n");
 				return;
 			}
 			
 			/* Add new code to dictionary */
-			fcode = emalloc(sizeof(*fcode));
+			fcode = malloc(sizeof(*fcode));
 			fcode->num = nextfcode++;
-			fcode->name = estrdup(token->text);
+			fcode->name = strdup(token->text);
 			fadd(dictionary, fcode);
 			
 			if (state == 0)
@@ -1917,14 +1921,14 @@ tokenize(YY_BUFFER_STATE yinput)
 
 			token = yylex();
 			if (token == NULL) {
-				warnx("EOF in variable definition");
+				(void)printf( "EOF in variable definition\n");
 				return;
 			}
 			
 			/* Add new code to dictionary */
-			fcode = emalloc(sizeof(*fcode));
+			fcode = malloc(sizeof(*fcode));
 			fcode->num = nextfcode++;
-			fcode->name = estrdup(token->text);
+			fcode->name = strdup(token->text);
 			fadd(dictionary, fcode);
 			
 			if (state == 0)
@@ -1977,10 +1981,13 @@ tokenize(YY_BUFFER_STATE yinput)
 				/* Parse a different file for a while */
 				token = yylex();
 				if ((inf = fopen(token->text, "r")) == NULL) {
-					warn("Cannot open `%s'", token->text);
+					(void)printf("%s: Could not "
+						"open %s: %s\n",
+						myname, token->text,
+						strerror(errno));
 					break;
 				}
-				infile = estrdup(token->text);
+				infile = strdup(token->text);
 				if (mark_fload) {
 					/* 
 					 * Insert commands to print out the
@@ -2041,9 +2048,14 @@ tokenize(YY_BUFFER_STATE yinput)
 				emit("drop");
 				emit("execute");
 #else
+				printf("%s:%d: undefined token %s\n",
+					infile, yylineno, yytext);
+				exit(1);
 				token_err(yylineno, infile, yytext,
 					"%s: undefined token `%s'\n",
 					myname, token->text);
+				fflush(stderr);
+				exit(1);
 #endif
 			}
 			break;
@@ -2063,16 +2075,15 @@ token_err(int lineno, const char *file, const char *text, const char *fmt, ...)
 	va_list ap;
 
 	va_start(ap, fmt);
-	fprintf(stderr, "%s: ", getprogname());
 	if (file)
-		(void)fprintf(stderr, "%s,%d: ", file, lineno);
+		(void)fprintf(stderr, "%s:%d: ", file, lineno);
 	if (fmt)
 		(void)vfprintf(stderr, fmt, ap);
 	fputc('\n', stderr);
 	if (text)
 		fprintf(stderr, "\t%s", text);
 	va_end(ap);
-	exit(EXIT_FAILURE);
+	exit(1);
 }
 
 /*
@@ -2084,13 +2095,13 @@ static int
 emit(const char *str)
 {
 	struct fcode *code;
-	if ((code = flookup(dictionary, str)))
+	if ((code = flookup( dictionary, str)))
 		spit(code->num);
 	if (debug > 1) {
 		if (code)
-			printf("emitting `%s'\n", code->name);
+			(void)printf( "emitting `%s'\n", code->name);
 		else
-			printf("emit: not found `%s'\n", str);
+			(void)printf( "emit: not found `%s'\n", str);
 	}
 	return (code == NULL);
 }
@@ -2110,7 +2121,11 @@ spit(long n)
 		count += spit(n >> 8);
 	if ((size_t)outpos >= outbufsiz) {
 		while ((size_t)outpos >= outbufsiz) outbufsiz += BUFCLICK;
-		outbuf = erealloc(outbuf, outbufsiz);
+		if (!(outbuf = realloc(outbuf, outbufsiz))) {
+			(void)printf( "realloc of %ld bytes failed -- out of memory\n",
+				      (long)outbufsiz);
+			exit(1);
+		}
 	}
 	if (debug > 3) printf("%lx: spitting %2.2x\n", outpos, (unsigned char)n);
 	outbuf[outpos++] = n;
@@ -2126,11 +2141,11 @@ sspit(const char *s)
 	int len = strlen(s);
 
 	if (len > 255) {
-		warnx("string length %d too long", len);
+		(void)printf( "string length %d too long\n", len);
 		return;
 	}
 	if (debug > 2)
-		printf("sspit: len %d str `%s'\n", len, s);
+		(void)printf( "sspit: len %d str `%s'\n", len, s);
 	spit(len);
 	while (len--)
 		spit(*s++);

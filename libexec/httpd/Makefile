@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.26 2015/10/30 23:21:05 christos Exp $
+#	$NetBSD: Makefile,v 1.22.2.2 2016/04/10 10:33:11 martin Exp $
 #
 #	$eterna: Makefile,v 1.30 2010/07/11 00:34:27 mrg Exp $
 #

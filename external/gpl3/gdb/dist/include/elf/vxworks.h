@@ -1,5 +1,6 @@
 /* VxWorks ELF support for BFD.
-   Copyright (C) 2007-2015 Free Software Foundation, Inc.
+   Copyright 2007, 2010
+   Free Software Foundation, Inc.
 
    Contributed by Nathan Sidwell <nathan@codesourcery.com>
 

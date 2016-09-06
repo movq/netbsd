@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PACKAGE VERSION\n"
 "Report-Msgid-Bugs-To: bug-binutils@gnu.org\n"
-"POT-Creation-Date: 2014-02-10 09:42+1030\n"
+"POT-Creation-Date: 2011-10-18 14:20+0100\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language-Team: LANGUAGE <LL@li.org>\n"
@@ -121,7 +121,7 @@ msgid ""
 "\n"
 msgstr ""
 
-#: cg_print.c:80 hist.c:471
+#: cg_print.c:80 hist.c:468
 #, c-format
 msgid ""
 "\n"
@@ -171,7 +171,7 @@ msgstr ""
 msgid "descendants"
 msgstr ""
 
-#: cg_print.c:103 hist.c:497
+#: cg_print.c:103 hist.c:494
 msgid "name"
 msgstr ""
 
@@ -216,42 +216,42 @@ msgstr ""
 msgid "%s: unable to parse mapping file %s.\n"
 msgstr ""
 
-#: corefile.c:85 corefile.c:526
+#: corefile.c:85 corefile.c:514
 #, c-format
 msgid "%s: could not open %s.\n"
 msgstr ""
 
-#: corefile.c:187
+#: corefile.c:185
 #, c-format
 msgid "%s: %s: not in executable format\n"
 msgstr ""
 
-#: corefile.c:198
+#: corefile.c:196
 #, c-format
 msgid "%s: can't find .text section in %s\n"
 msgstr ""
 
-#: corefile.c:273
+#: corefile.c:271
 #, c-format
 msgid "%s: ran out room for %lu bytes of text space\n"
 msgstr ""
 
-#: corefile.c:287
+#: corefile.c:285
 #, c-format
 msgid "%s: can't do -c\n"
 msgstr ""
 
-#: corefile.c:330
+#: corefile.c:324
 #, c-format
 msgid "%s: -c not supported on architecture %s\n"
 msgstr ""
 
-#: corefile.c:535 corefile.c:638
+#: corefile.c:523 corefile.c:622
 #, c-format
 msgid "%s: file `%s' has no symbols\n"
 msgstr ""
 
-#: corefile.c:905
+#: corefile.c:884
 #, c-format
 msgid "%s: somebody miscounted: ltab.len=%d instead of %ld\n"
 msgstr ""
@@ -346,7 +346,7 @@ msgstr ""
 msgid "\t%d basic-block count records\n"
 msgstr ""
 
-#: gprof.c:162
+#: gprof.c:159
 #, c-format
 msgid ""
 "Usage: %s [-[abcDhilLsTvwxyz]] [-[ACeEfFJnNOpPqSQZ][name]] [-I dirs]\n"
@@ -354,7 +354,7 @@ msgid ""
 "\t[--[no-]annotated-source[=name]] [--[no-]exec-counts[=name]]\n"
 "\t[--[no-]flat-profile[=name]] [--[no-]graph[=name]]\n"
 "\t[--[no-]time=name] [--all-lines] [--brief] [--debug[=level]]\n"
-"\t[--function-ordering] [--file-ordering] [--inline-file-names]\n"
+"\t[--function-ordering] [--file-ordering]\n"
 "\t[--directory-path=dirs] [--display-unused-functions]\n"
 "\t[--file-format=name] [--file-info] [--help] [--line] [--min-count=n]\n"
 "\t[--no-static] [--print-path] [--separate-files]\n"
@@ -365,61 +365,61 @@ msgid ""
 "\t[image-file] [profile-file...]\n"
 msgstr ""
 
-#: gprof.c:178
+#: gprof.c:175
 #, c-format
 msgid "Report bugs to %s\n"
 msgstr ""
 
-#: gprof.c:254
+#: gprof.c:251
 #, c-format
 msgid "%s: debugging not supported; -d ignored\n"
 msgstr ""
 
-#: gprof.c:334
+#: gprof.c:331
 #, c-format
 msgid "%s: unknown file format %s\n"
 msgstr ""
 
 #. This output is intended to follow the GNU standards document.
-#: gprof.c:422
+#: gprof.c:419
 #, c-format
 msgid "GNU gprof %s\n"
 msgstr ""
 
-#: gprof.c:423
+#: gprof.c:420
 #, c-format
 msgid ""
 "Based on BSD gprof, copyright 1983 Regents of the University of California.\n"
 msgstr ""
 
-#: gprof.c:424
+#: gprof.c:421
 #, c-format
 msgid ""
 "This program is free software.  This program has absolutely no warranty.\n"
 msgstr ""
 
-#: gprof.c:465
+#: gprof.c:462
 #, c-format
 msgid "%s: unknown demangling style `%s'\n"
 msgstr ""
 
-#: gprof.c:488
+#: gprof.c:482
 #, c-format
 msgid ""
 "%s: Only one of --function-ordering and --file-ordering may be specified.\n"
 msgstr ""
 
-#: gprof.c:540
+#: gprof.c:534
 #, c-format
 msgid "%s: sorry, file format `prof' is not yet supported\n"
 msgstr ""
 
-#: gprof.c:594
+#: gprof.c:588
 #, c-format
 msgid "%s: gmon.out file is missing histogram\n"
 msgstr ""
 
-#: gprof.c:601
+#: gprof.c:595
 #, c-format
 msgid "%s: gmon.out file is missing call-graph data\n"
 msgstr ""
@@ -455,53 +455,53 @@ msgstr ""
 msgid "%s: %s: unexpected EOF after reading %u of %u samples\n"
 msgstr ""
 
-#: hist.c:467
+#: hist.c:464
 #, c-format
 msgid "%c%c/call"
 msgstr ""
 
-#: hist.c:475
+#: hist.c:472
 #, c-format
 msgid ""
 " for %.2f%% of %.2f %s\n"
 "\n"
 msgstr ""
 
-#: hist.c:481
+#: hist.c:478
 #, c-format
 msgid ""
 "\n"
 "Each sample counts as %g %s.\n"
 msgstr ""
 
-#: hist.c:486
+#: hist.c:483
 #, c-format
 msgid ""
 " no time accumulated\n"
 "\n"
 msgstr ""
 
-#: hist.c:493
+#: hist.c:490
 msgid "cumulative"
 msgstr ""
 
-#: hist.c:493
+#: hist.c:490
 msgid "self  "
 msgstr ""
 
-#: hist.c:493
+#: hist.c:490
 msgid "total "
 msgstr ""
 
-#: hist.c:496
+#: hist.c:493
 msgid "time"
 msgstr ""
 
-#: hist.c:496
+#: hist.c:493
 msgid "calls"
 msgstr ""
 
-#: hist.c:585
+#: hist.c:582
 #, c-format
 msgid ""
 "\n"
@@ -510,12 +510,12 @@ msgid ""
 "flat profile:\n"
 msgstr ""
 
-#: hist.c:591
+#: hist.c:588
 #, c-format
 msgid "Flat profile:\n"
 msgstr ""
 
-#: hist.c:712
+#: hist.c:709
 #, c-format
 msgid "%s: found a symbol that covers several histogram records"
 msgstr ""
@@ -540,7 +540,7 @@ msgstr ""
 msgid "*** File %s:\n"
 msgstr ""
 
-#: utils.c:106
+#: utils.c:99
 #, c-format
 msgid " <cycle %d>"
 msgstr ""

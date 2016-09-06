@@ -252,8 +252,7 @@ void LocalStackSlotPass::calculateFrameObjectOffsets(MachineFunction &Fn) {
 }
 
 static inline bool
-lookupCandidateBaseReg(unsigned BaseReg,
-                       int64_t BaseOffset,
+lookupCandidateBaseReg(int64_t BaseOffset,
                        int64_t FrameSizeAdjust,
                        int64_t LocalFrameOffset,
                        const MachineInstr *MI,
@@ -261,7 +260,7 @@ lookupCandidateBaseReg(unsigned BaseReg,
   // Check if the relative offset from the where the base register references
   // to the target address is in range for the instruction.
   int64_t Offset = FrameSizeAdjust + LocalFrameOffset - BaseOffset;
-  return TRI->isFrameOffsetLegal(MI, BaseReg, Offset);
+  return TRI->isFrameOffsetLegal(MI, Offset);
 }
 
 bool LocalStackSlotPass::insertFrameReferenceRegisters(MachineFunction &Fn) {
@@ -325,7 +324,7 @@ bool LocalStackSlotPass::insertFrameReferenceRegisters(MachineFunction &Fn) {
   // Sort the frame references by local offset
   array_pod_sort(FrameReferenceInsns.begin(), FrameReferenceInsns.end());
 
-  MachineBasicBlock *Entry = &Fn.front();
+  MachineBasicBlock *Entry = Fn.begin();
 
   unsigned BaseReg = 0;
   int64_t BaseOffset = 0;
@@ -363,9 +362,8 @@ bool LocalStackSlotPass::insertFrameReferenceRegisters(MachineFunction &Fn) {
     // instruction itself will be taken into account by the target,
     // so we don't have to adjust for it here when reusing a base
     // register.
-    if (UsedBaseReg && lookupCandidateBaseReg(BaseReg, BaseOffset,
-                                              FrameSizeAdjust, LocalOffset, MI,
-                                              TRI)) {
+    if (UsedBaseReg && lookupCandidateBaseReg(BaseOffset, FrameSizeAdjust,
+                                              LocalOffset, MI, TRI)) {
       DEBUG(dbgs() << "  Reusing base register " << BaseReg << "\n");
       // We found a register to reuse.
       Offset = FrameSizeAdjust + LocalOffset - BaseOffset;
@@ -384,7 +382,7 @@ bool LocalStackSlotPass::insertFrameReferenceRegisters(MachineFunction &Fn) {
       // then don't bother creating it.
       if (ref + 1 >= e ||
           !lookupCandidateBaseReg(
-              BaseReg, BaseOffset, FrameSizeAdjust,
+              BaseOffset, FrameSizeAdjust,
               FrameReferenceInsns[ref + 1].getLocalOffset(),
               FrameReferenceInsns[ref + 1].getMachineInstr(), TRI)) {
         BaseOffset = PrevBaseOffset;

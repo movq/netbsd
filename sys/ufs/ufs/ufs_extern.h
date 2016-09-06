@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_extern.h,v 1.82 2016/04/12 16:12:22 christos Exp $	*/
+/*	$NetBSD: ufs_extern.h,v 1.75.2.1 2015/01/28 18:34:11 martin Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993, 1994
@@ -115,7 +115,7 @@ int	ufs_truncate(struct vnode *, uint64_t, kauth_cred_t);
 
 /* ufs_lookup.c */
 void	ufs_dirbad(struct inode *, doff_t, const char *);
-const char *ufs_dirbadentry(const struct vnode *, const struct direct *, int);
+int	ufs_dirbadentry(struct vnode *, struct direct *, int);
 void	ufs_makedirentry(struct inode *, struct componentname *,
 			 struct direct *);
 int	ufs_direnter(struct vnode *, const struct ufs_lookup_results *,
@@ -126,7 +126,7 @@ int	ufs_dirremove(struct vnode *, const struct ufs_lookup_results *,
 int	ufs_dirrewrite(struct inode *, off_t,
 		       struct inode *, ino_t, int, int, int);
 int	ufs_dirempty(struct inode *, ino_t, kauth_cred_t);
-int	ufs_blkatoff(struct vnode *, off_t, void *, struct buf **, bool);
+int	ufs_blkatoff(struct vnode *, off_t, char **, struct buf **, bool);
 
 /* ufs_rename.c -- for lfs */
 bool	ufs_gro_directory_empty_p(struct mount *, kauth_cred_t,
@@ -184,10 +184,10 @@ int	ufs_fhtovp(struct mount *, struct ufid *, struct vnode **);
 /* ufs_vnops.c */
 void	ufs_vinit(struct mount *, int (**)(void *),
 		  int (**)(void *), struct vnode **);
+int	ufs_makeinode(int, struct vnode *, const struct ufs_lookup_results *,
+		      struct vnode **, struct componentname *);
 int	ufs_gop_alloc(struct vnode *, off_t, off_t, int, kauth_cred_t);
 void	ufs_gop_markupdate(struct vnode *, int);
-int	ufs_bufio(enum uio_rw, struct vnode *, void *, size_t, off_t, int,
-	    kauth_cred_t, size_t *, struct lwp *);
 
 __END_DECLS
 

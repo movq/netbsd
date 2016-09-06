@@ -1,6 +1,6 @@
 // Multiset implementation -*- C++ -*-
 
-// Copyright (C) 2001-2015 Free Software Foundation, Inc.
+// Copyright (C) 2001-2013 Free Software Foundation, Inc.
 //
 // This file is part of the GNU ISO C++ Library.  This library is free
 // software; you can redistribute it and/or modify it under the
@@ -108,21 +108,18 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 
     private:
       /// This turns a red-black tree into a [multi]set.
-      typedef typename __gnu_cxx::__alloc_traits<_Alloc>::template
-	rebind<_Key>::other _Key_alloc_type;
+      typedef typename _Alloc::template rebind<_Key>::other _Key_alloc_type;
 
       typedef _Rb_tree<key_type, value_type, _Identity<value_type>,
 		       key_compare, _Key_alloc_type> _Rep_type;
       /// The actual tree structure.
       _Rep_type _M_t;
 
-      typedef __gnu_cxx::__alloc_traits<_Key_alloc_type> _Alloc_traits;
-
     public:
-      typedef typename _Alloc_traits::pointer		    pointer;
-      typedef typename _Alloc_traits::const_pointer	    const_pointer;
-      typedef typename _Alloc_traits::reference		    reference;
-      typedef typename _Alloc_traits::const_reference	    const_reference;
+      typedef typename _Key_alloc_type::pointer             pointer;
+      typedef typename _Key_alloc_type::const_pointer       const_pointer;
+      typedef typename _Key_alloc_type::reference           reference;
+      typedef typename _Key_alloc_type::const_reference     const_reference;
       // _GLIBCXX_RESOLVE_LIB_DEFECTS
       // DR 103. set::iterator is required to be modifiable,
       // but this allows modification of keys.
@@ -138,9 +135,6 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  @brief  Default constructor creates no elements.
        */
       multiset()
-#if __cplusplus >= 201103L
-      noexcept(is_nothrow_default_constructible<allocator_type>::value)
-#endif
       : _M_t() { }
 
       /**
@@ -222,33 +216,6 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 	       const allocator_type& __a = allocator_type())
       : _M_t(__comp, _Key_alloc_type(__a))
       { _M_t._M_insert_equal(__l.begin(), __l.end()); }
-
-      /// Allocator-extended default constructor.
-      explicit
-      multiset(const allocator_type& __a)
-      : _M_t(_Compare(), _Key_alloc_type(__a)) { }
-
-      /// Allocator-extended copy constructor.
-      multiset(const multiset& __m, const allocator_type& __a)
-      : _M_t(__m._M_t, _Key_alloc_type(__a)) { }
-
-      /// Allocator-extended move constructor.
-      multiset(multiset&& __m, const allocator_type& __a)
-      noexcept(is_nothrow_copy_constructible<_Compare>::value
-	       && _Alloc_traits::_S_always_equal())
-      : _M_t(std::move(__m._M_t), _Key_alloc_type(__a)) { }
-
-      /// Allocator-extended initialier-list constructor.
-      multiset(initializer_list<value_type> __l, const allocator_type& __a)
-      : _M_t(_Compare(), _Key_alloc_type(__a))
-      { _M_t._M_insert_equal(__l.begin(), __l.end()); }
-
-      /// Allocator-extended range constructor.
-      template<typename _InputIterator>
-        multiset(_InputIterator __first, _InputIterator __last,
-		 const allocator_type& __a)
-	: _M_t(_Compare(), _Key_alloc_type(__a))
-        { _M_t._M_insert_equal(__first, __last); }
 #endif
 
       /**
@@ -266,9 +233,23 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       }
 
 #if __cplusplus >= 201103L
-      /// Move assignment operator.
+      /**
+       *  @brief  %Multiset move assignment operator.
+       *  @param  __x  A %multiset of identical element and allocator types.
+       *
+       *  The contents of @a __x are moved into this %multiset
+       *  (without copying).  @a __x is a valid, but unspecified
+       *  %multiset.
+       */
       multiset&
-      operator=(multiset&&) = default;
+      operator=(multiset&& __x)
+      {
+	// NB: DR 1204.
+	// NB: DR 675.
+	this->clear();
+	this->swap(__x);
+	return *this;
+      }
 
       /**
        *  @brief  %Multiset list assignment operator.
@@ -284,7 +265,8 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       multiset&
       operator=(initializer_list<value_type> __l)
       {
-	_M_t._M_assign_equal(__l.begin(), __l.end());
+	this->clear();
+	this->insert(__l.begin(), __l.end());
 	return *this;
       }
 #endif
@@ -406,9 +388,6 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        */
       void
       swap(multiset& __x)
-#if __cplusplus >= 201103L
-      noexcept(_Alloc_traits::_S_nothrow_swap())
-#endif
       { _M_t.swap(__x._M_t); }
 
       // insert/erase
@@ -446,7 +425,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  improve the performance of the insertion process.  A bad hint would
        *  cause no gains in efficiency.
        *
-       *  See https://gcc.gnu.org/onlinedocs/libstdc++/manual/associative.html#containers.associative.insert_hints
+       *  See http://gcc.gnu.org/onlinedocs/libstdc++/manual/bk01pt07ch17.html
        *  for more on @a hinting.
        *
        *  Insertion requires logarithmic time (if the hint is not taken).
@@ -496,7 +475,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
        *  improve the performance of the insertion process.  A bad hint would
        *  cause no gains in efficiency.
        *
-       *  See https://gcc.gnu.org/onlinedocs/libstdc++/manual/associative.html#containers.associative.insert_hints
+       *  See http://gcc.gnu.org/onlinedocs/libstdc++/manual/bk01pt07ch17.html
        *  for more on @a hinting.
        *
        *  Insertion requires logarithmic time (if the hint is not taken).
@@ -639,7 +618,6 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
 
       // multiset operations:
 
-      //@{
       /**
        *  @brief Finds the number of elements with given key.
        *  @param  __x  Key of elements to be located.
@@ -648,14 +626,6 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       size_type
       count(const key_type& __x) const
       { return _M_t.count(__x); }
-
-#if __cplusplus > 201103L
-      template<typename _Kt>
-	auto
-	count(const _Kt& __x) const -> decltype(_M_t._M_count_tr(__x))
-	{ return _M_t._M_count_tr(__x); }
-#endif
-      //@}
 
       // _GLIBCXX_RESOLVE_LIB_DEFECTS
       // 214.  set::find() missing const overload
@@ -678,20 +648,6 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       const_iterator
       find(const key_type& __x) const
       { return _M_t.find(__x); }
-
-#if __cplusplus > 201103L
-      template<typename _Kt>
-	auto
-	find(const _Kt& __x)
-	-> decltype(iterator{_M_t._M_find_tr(__x)})
-	{ return iterator{_M_t._M_find_tr(__x)}; }
-
-      template<typename _Kt>
-	auto
-	find(const _Kt& __x) const
-	-> decltype(const_iterator{_M_t._M_find_tr(__x)})
-	{ return const_iterator{_M_t._M_find_tr(__x)}; }
-#endif
       //@}
 
       //@{
@@ -713,20 +669,6 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       const_iterator
       lower_bound(const key_type& __x) const
       { return _M_t.lower_bound(__x); }
-
-#if __cplusplus > 201103L
-      template<typename _Kt>
-	auto
-	lower_bound(const _Kt& __x)
-	-> decltype(_M_t._M_lower_bound_tr(__x))
-	{ return _M_t._M_lower_bound_tr(__x); }
-
-      template<typename _Kt>
-	auto
-	lower_bound(const _Kt& __x) const
-	-> decltype(_M_t._M_lower_bound_tr(__x))
-	{ return _M_t._M_lower_bound_tr(__x); }
-#endif
       //@}
 
       //@{
@@ -743,20 +685,6 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       const_iterator
       upper_bound(const key_type& __x) const
       { return _M_t.upper_bound(__x); }
-
-#if __cplusplus > 201103L
-      template<typename _Kt>
-	auto
-	upper_bound(const _Kt& __x)
-	-> decltype(_M_t._M_upper_bound_tr(__x))
-	{ return _M_t._M_upper_bound_tr(__x); }
-
-      template<typename _Kt>
-	auto
-	upper_bound(const _Kt& __x) const
-	-> decltype(_M_t._M_upper_bound_tr(__x))
-	{ return _M_t._M_upper_bound_tr(__x); }
-#endif
       //@}
 
       //@{
@@ -782,20 +710,6 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
       std::pair<const_iterator, const_iterator>
       equal_range(const key_type& __x) const
       { return _M_t.equal_range(__x); }
-
-#if __cplusplus > 201103L
-      template<typename _Kt>
-	auto
-	equal_range(const _Kt& __x)
-	-> decltype(_M_t._M_equal_range_tr(__x))
-	{ return _M_t._M_equal_range_tr(__x); }
-
-      template<typename _Kt>
-	auto
-	equal_range(const _Kt& __x) const
-	-> decltype(_M_t._M_equal_range_tr(__x))
-	{ return _M_t._M_equal_range_tr(__x); }
-#endif
       //@}
 
       template<typename _K1, typename _C1, typename _A1>
@@ -833,7 +747,7 @@ _GLIBCXX_BEGIN_NAMESPACE_CONTAINER
    *  @return  True iff @a __x is lexicographically less than @a __y.
    *
    *  This is a total ordering relation.  It is linear in the size of the
-   *  sets.  The elements must be comparable with @c <.
+   *  maps.  The elements must be comparable with @c <.
    *
    *  See std::lexicographical_compare() for how the determination is made.
   */

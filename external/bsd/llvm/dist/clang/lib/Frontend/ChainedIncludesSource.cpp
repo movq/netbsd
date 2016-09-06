@@ -27,7 +27,7 @@ using namespace clang;
 namespace {
 class ChainedIncludesSource : public ExternalSemaSource {
 public:
-  ~ChainedIncludesSource() override;
+  virtual ~ChainedIncludesSource();
 
   ExternalSemaSource &getFinalReader() const { return *FinalReader; }
 
@@ -43,13 +43,12 @@ protected:
   Selector GetExternalSelector(uint32_t ID) override;
   uint32_t GetNumExternalSelectors() override;
   Stmt *GetExternalDeclStmt(uint64_t Offset) override;
-  CXXCtorInitializer **GetExternalCXXCtorInitializers(uint64_t Offset) override;
   CXXBaseSpecifier *GetExternalCXXBaseSpecifiers(uint64_t Offset) override;
   bool FindExternalVisibleDeclsByName(const DeclContext *DC,
                                       DeclarationName Name) override;
-  void
+  ExternalLoadResult
   FindExternalLexicalDecls(const DeclContext *DC,
-                           llvm::function_ref<bool(Decl::Kind)> IsKindWeWant,
+                           bool (*isKindWeWant)(Decl::Kind),
                            SmallVectorImpl<Decl *> &Result) override;
   void CompleteType(TagDecl *Tag) override;
   void CompleteType(ObjCInterfaceDecl *Class) override;
@@ -80,10 +79,8 @@ createASTReader(CompilerInstance &CI, StringRef pchFile,
                 ASTDeserializationListener *deserialListener = nullptr) {
   Preprocessor &PP = CI.getPreprocessor();
   std::unique_ptr<ASTReader> Reader;
-  Reader.reset(new ASTReader(PP, CI.getASTContext(),
-                             CI.getPCHContainerReader(),
-                             /*Extensions=*/{ },
-                             /*isysroot=*/"", /*DisableValidation=*/true));
+  Reader.reset(new ASTReader(PP, CI.getASTContext(), /*isysroot=*/"",
+                             /*DisableValidation=*/true));
   for (unsigned ti = 0; ti < bufNames.size(); ++ti) {
     StringRef sr(bufNames[ti]);
     Reader->addInMemoryBuffer(sr, std::move(MemBufs[ti]));
@@ -147,8 +144,7 @@ IntrusiveRefCntPtr<ExternalSemaSource> clang::createChainedIncludesSource(
     IntrusiveRefCntPtr<DiagnosticsEngine> Diags(
         new DiagnosticsEngine(DiagID, &CI.getDiagnosticOpts(), DiagClient));
 
-    std::unique_ptr<CompilerInstance> Clang(
-        new CompilerInstance(CI.getPCHContainerOperations()));
+    std::unique_ptr<CompilerInstance> Clang(new CompilerInstance());
     Clang->setInvocation(CInvok.release());
     Clang->setDiagnostics(Diags.get());
     Clang->setTarget(TargetInfo::CreateTargetInfo(
@@ -160,11 +156,11 @@ IntrusiveRefCntPtr<ExternalSemaSource> clang::createChainedIncludesSource(
                                                  &Clang->getPreprocessor());
     Clang->createASTContext();
 
-    auto Buffer = std::make_shared<PCHBuffer>();
-    ArrayRef<llvm::IntrusiveRefCntPtr<ModuleFileExtension>> Extensions;
-    auto consumer = llvm::make_unique<PCHGenerator>(
-        Clang->getPreprocessor(), "-", nullptr, /*isysroot=*/"", Buffer,
-        Extensions);
+    SmallVector<char, 256> serialAST;
+    llvm::raw_svector_ostream OS(serialAST);
+    auto consumer =
+        llvm::make_unique<PCHGenerator>(Clang->getPreprocessor(), "-", nullptr,
+                                        /*isysroot=*/"", &OS);
     Clang->getASTContext().setASTMutationListener(
                                             consumer->GetASTMutationListener());
     Clang->setASTConsumer(std::move(consumer));
@@ -172,7 +168,7 @@ IntrusiveRefCntPtr<ExternalSemaSource> clang::createChainedIncludesSource(
 
     if (firstInclude) {
       Preprocessor &PP = Clang->getPreprocessor();
-      PP.getBuiltinInfo().initializeBuiltins(PP.getIdentifierTable(),
+      PP.getBuiltinInfo().InitializeBuiltins(PP.getIdentifierTable(),
                                              PP.getLangOpts());
     } else {
       assert(!SerialBufs.empty());
@@ -201,11 +197,7 @@ IntrusiveRefCntPtr<ExternalSemaSource> clang::createChainedIncludesSource(
 
     ParseAST(Clang->getSema());
     Clang->getDiagnosticClient().EndSourceFile();
-    assert(Buffer->IsComplete && "serialization did not complete");
-    auto &serialAST = Buffer->Data;
-    SerialBufs.push_back(llvm::MemoryBuffer::getMemBufferCopy(
-        StringRef(serialAST.data(), serialAST.size())));
-    serialAST.clear();
+    SerialBufs.push_back(llvm::MemoryBuffer::getMemBufferCopy(OS.str()));
     source->CIs.push_back(Clang.release());
   }
 
@@ -240,19 +232,16 @@ CXXBaseSpecifier *
 ChainedIncludesSource::GetExternalCXXBaseSpecifiers(uint64_t Offset) {
   return getFinalReader().GetExternalCXXBaseSpecifiers(Offset);
 }
-CXXCtorInitializer **
-ChainedIncludesSource::GetExternalCXXCtorInitializers(uint64_t Offset) {
-  return getFinalReader().GetExternalCXXCtorInitializers(Offset);
-}
 bool
 ChainedIncludesSource::FindExternalVisibleDeclsByName(const DeclContext *DC,
                                                       DeclarationName Name) {
   return getFinalReader().FindExternalVisibleDeclsByName(DC, Name);
 }
-void ChainedIncludesSource::FindExternalLexicalDecls(
-    const DeclContext *DC, llvm::function_ref<bool(Decl::Kind)> IsKindWeWant,
-    SmallVectorImpl<Decl *> &Result) {
-  return getFinalReader().FindExternalLexicalDecls(DC, IsKindWeWant, Result);
+ExternalLoadResult 
+ChainedIncludesSource::FindExternalLexicalDecls(const DeclContext *DC,
+                                      bool (*isKindWeWant)(Decl::Kind),
+                                      SmallVectorImpl<Decl*> &Result) {
+  return getFinalReader().FindExternalLexicalDecls(DC, isKindWeWant, Result);
 }
 void ChainedIncludesSource::CompleteType(TagDecl *Tag) {
   return getFinalReader().CompleteType(Tag);

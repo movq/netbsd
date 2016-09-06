@@ -1,4 +1,4 @@
-/*      $NetBSD: sv.c,v 1.51 2016/07/14 10:19:06 msaitoh Exp $ */
+/*      $NetBSD: sv.c,v 1.50 2014/03/29 19:28:25 christos Exp $ */
 /*      $OpenBSD: sv.c,v 1.2 1998/07/13 01:50:15 csapuntz Exp $ */
 
 /*
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sv.c,v 1.51 2016/07/14 10:19:06 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sv.c,v 1.50 2014/03/29 19:28:25 christos Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -350,8 +350,7 @@ sv_attach(device_t parent, device_t self, void *aux)
 	pa = aux;
 	pc = pa->pa_pc;
 	pt = pa->pa_tag;
-	aprint_naive("\n");
-	aprint_normal("\n");
+	printf ("\n");
 
 	/* Map I/O registers */
 	if (pci_mapreg_map(pa, SV_ENHANCED_PORTBASE_SLOT,
@@ -439,14 +438,14 @@ sv_attach(device_t parent, device_t self, void *aux)
 		mutex_destroy(&sc->sc_intr_lock);
 		return;
 	}
-	aprint_normal_dev(self, "interrupting at %s\n", intrstr);
-	aprint_normal_dev(self, "rev %d",
-	    sv_read_indirect(sc, SV_REVISION_LEVEL));
+	printf("%s: interrupting at %s\n", device_xname(self), intrstr);
+	printf("%s: rev %d", device_xname(self),
+	       sv_read_indirect(sc, SV_REVISION_LEVEL));
 	if (sv_read(sc, SV_CODEC_CONTROL) & SV_CTL_MD1)
-		aprint_normal(", reverb SRAM present");
+		printf(", reverb SRAM present");
 	if (!(sv_read_indirect(sc, SV_WAVETABLE_SOURCE_SELECT) & SV_WSS_WT0))
-		aprint_normal(", wavetable ROM present");
-	aprint_normal("\n");
+		printf(", wavetable ROM present");
+	printf("\n");
 
 	/* Enable DMA interrupts */
 	reg = sv_read(sc, SV_CODEC_INTMASK);

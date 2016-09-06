@@ -21,19 +21,31 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: print-null.c,v 1.5 2015/03/31 21:59:35 christos Exp $");
+#if 0
+static const char rcsid[] _U_ =
+    "@(#) Header: /tcpdump/master/tcpdump/print-null.c,v 1.57 2006-03-23 14:58:44 hannes Exp  (LBL)";
+#else
+__RCSID("$NetBSD: print-null.c,v 1.3 2013/04/06 19:33:08 christos Exp $");
+#endif
 #endif
 
-#define NETDISSECT_REWORKED
 #ifdef HAVE_CONFIG_H
 #include "config.h"
 #endif
 
 #include <tcpdump-stdinc.h>
 
+#include <pcap.h>
+#include <stdio.h>
 #include <string.h>
 
 #include "interface.h"
+#include "addrtoname.h"
+
+#include "ip.h"
+#ifdef INET6
+#include "ip6.h"
+#endif
 #include "af.h"
 
 /*
@@ -57,17 +69,17 @@ __RCSID("$NetBSD: print-null.c,v 1.5 2015/03/31 21:59:35 christos Exp $");
 ((((y)&0xff)<<24) | (((y)&0xff00)<<8) | (((y)&0xff0000)>>8) | (((y)>>24)&0xff))
 
 static inline void
-null_hdr_print(netdissect_options *ndo, u_int family, u_int length)
+null_hdr_print(u_int family, u_int length)
 {
-	if (!ndo->ndo_qflag) {
-		ND_PRINT((ndo, "AF %s (%u)",
-			tok2str(bsd_af_values,"Unknown",family),family));
+	if (!qflag) {
+		(void)printf("AF %s (%u)",
+			tok2str(bsd_af_values,"Unknown",family),family);
 	} else {
-		ND_PRINT((ndo, "%s",
-			tok2str(bsd_af_values,"Unknown AF %u",family)));
+		(void)printf("%s",
+			tok2str(bsd_af_values,"Unknown AF %u",family));
 	}
 
-	ND_PRINT((ndo, ", length %u: ", length));
+	(void)printf(", length %u: ", length);
 }
 
 /*
@@ -77,14 +89,14 @@ null_hdr_print(netdissect_options *ndo, u_int family, u_int length)
  * is the number of bytes actually captured.
  */
 u_int
-null_if_print(netdissect_options *ndo, const struct pcap_pkthdr *h, const u_char *p)
+null_if_print(const struct pcap_pkthdr *h, const u_char *p)
 {
 	u_int length = h->len;
 	u_int caplen = h->caplen;
 	u_int family;
 
 	if (caplen < NULL_HDRLEN) {
-		ND_PRINT((ndo, "[|null]"));
+		printf("[|null]");
 		return (NULL_HDRLEN);
 	}
 
@@ -101,8 +113,8 @@ null_if_print(netdissect_options *ndo, const struct pcap_pkthdr *h, const u_char
 	if ((family & 0xFFFF0000) != 0)
 		family = SWAPLONG(family);
 
-	if (ndo->ndo_eflag)
-		null_hdr_print(ndo, family, length);
+	if (eflag)
+		null_hdr_print(family, length);
 
 	length -= NULL_HDRLEN;
 	caplen -= NULL_HDRLEN;
@@ -111,33 +123,35 @@ null_if_print(netdissect_options *ndo, const struct pcap_pkthdr *h, const u_char
 	switch (family) {
 
 	case BSD_AFNUM_INET:
-		ip_print(ndo, p, length);
+		ip_print(gndo, p, length);
 		break;
 
+#ifdef INET6
 	case BSD_AFNUM_INET6_BSD:
 	case BSD_AFNUM_INET6_FREEBSD:
 	case BSD_AFNUM_INET6_DARWIN:
-		ip6_print(ndo, p, length);
+		ip6_print(gndo, p, length);
 		break;
+#endif
 
 	case BSD_AFNUM_ISO:
-		isoclns_print(ndo, p, length, caplen);
+		isoclns_print(p, length, caplen);
 		break;
 
 	case BSD_AFNUM_APPLETALK:
-		atalk_print(ndo, p, length);
+		atalk_print(p, length);
 		break;
 
 	case BSD_AFNUM_IPX:
-		ipx_print(ndo, p, length);
+		ipx_print(p, length);
 		break;
 
 	default:
 		/* unknown AF_ value */
-		if (!ndo->ndo_eflag)
-			null_hdr_print(ndo, family, length + NULL_HDRLEN);
-		if (!ndo->ndo_suppress_default_print)
-			ND_DEFAULTPRINT(p, caplen);
+		if (!eflag)
+			null_hdr_print(family, length + NULL_HDRLEN);
+		if (!suppress_default_print)
+			default_print(p, caplen);
 	}
 
 	return (NULL_HDRLEN);

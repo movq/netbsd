@@ -1,4 +1,4 @@
-/*	$NetBSD: uhidev.c,v 1.68 2016/07/07 06:55:42 msaitoh Exp $	*/
+/*	$NetBSD: uhidev.c,v 1.61.2.2 2015/03/21 17:30:43 snj Exp $	*/
 
 /*
  * Copyright (c) 2001, 2012 The NetBSD Foundation, Inc.
@@ -35,21 +35,16 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: uhidev.c,v 1.68 2016/07/07 06:55:42 msaitoh Exp $");
-
-#ifdef _KERNEL_OPT
-#include "opt_usb.h"
-#endif
+__KERNEL_RCSID(0, "$NetBSD: uhidev.c,v 1.61.2.2 2015/03/21 17:30:43 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
-#include <sys/kmem.h>
+#include <sys/malloc.h>
 #include <sys/signalvar.h>
 #include <sys/device.h>
 #include <sys/ioctl.h>
 #include <sys/conf.h>
-#include <sys/rndsource.h>
 
 #include <dev/usb/usb.h>
 #include <dev/usb/usbhid.h>
@@ -80,7 +75,7 @@ int	uhidevdebug = 0;
 #define DPRINTFN(n,x)
 #endif
 
-Static void uhidev_intr(struct usbd_xfer *, void *, usbd_status);
+Static void uhidev_intr(usbd_xfer_handle, usbd_private_handle, usbd_status);
 
 Static int uhidev_maxrepid(void *, int);
 Static int uhidevprint(void *, const char *);
@@ -97,28 +92,28 @@ CFATTACH_DECL2_NEW(uhidev, sizeof(struct uhidev_softc), uhidev_match,
 int
 uhidev_match(device_t parent, cfdata_t match, void *aux)
 {
-	struct usbif_attach_arg *uiaa = aux;
+	struct usbif_attach_arg *uaa = aux;
 
 	/* Game controllers in "XInput" mode */
-	if (USBIF_IS_XINPUT(uiaa))
+	if (USBIF_IS_XINPUT(uaa))
 		return UMATCH_IFACECLASS_IFACESUBCLASS_IFACEPROTO;
 	/* Xbox One controllers */
- 	if (USBIF_IS_X1INPUT(uiaa) && uiaa->uiaa_ifaceno == 0)
+ 	if (USBIF_IS_X1INPUT(uaa) && uaa->ifaceno == 0)
 		return UMATCH_IFACECLASS_IFACESUBCLASS_IFACEPROTO;
 
-	if (uiaa->uiaa_class != UICLASS_HID)
-		return UMATCH_NONE;
-	if (usbd_get_quirks(uiaa->uiaa_device)->uq_flags & UQ_HID_IGNORE)
-		return UMATCH_NONE;
-	return UMATCH_IFACECLASS_GENERIC;
+	if (uaa->class != UICLASS_HID)
+		return (UMATCH_NONE);
+	if (usbd_get_quirks(uaa->device)->uq_flags & UQ_HID_IGNORE)
+		return (UMATCH_NONE);
+	return (UMATCH_IFACECLASS_GENERIC);
 }
 
 void
 uhidev_attach(device_t parent, device_t self, void *aux)
 {
 	struct uhidev_softc *sc = device_private(self);
-	struct usbif_attach_arg *uiaa = aux;
-	struct usbd_interface *iface = uiaa->uiaa_iface;
+	struct usbif_attach_arg *uaa = aux;
+	usbd_interface_handle iface = uaa->iface;
 	usb_interface_descriptor_t *id;
 	usb_endpoint_descriptor_t *ed;
 	struct uhidev_attach_arg uha;
@@ -134,17 +129,17 @@ uhidev_attach(device_t parent, device_t self, void *aux)
 	int locs[UHIDBUSCF_NLOCS];
 
 	sc->sc_dev = self;
-	sc->sc_udev = uiaa->uiaa_device;
+	sc->sc_udev = uaa->device;
 	sc->sc_iface = iface;
 
 	aprint_naive("\n");
 	aprint_normal("\n");
 
-	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_SOFTUSB);
+	mutex_init(&sc->sc_lock, MUTEX_DEFAULT, IPL_USB);
 
 	id = usbd_get_interface_descriptor(iface);
 
-	devinfop = usbd_devinfo_alloc(uiaa->uiaa_device, 0);
+	devinfop = usbd_devinfo_alloc(uaa->device, 0);
 	aprint_normal_dev(self, "%s, iclass %d/%d\n",
 	       devinfop, id->bInterfaceClass, id->bInterfaceSubClass);
 	usbd_devinfo_free(devinfop);
@@ -155,7 +150,8 @@ uhidev_attach(device_t parent, device_t self, void *aux)
 	(void)usbd_set_idle(iface, 0, 0);
 #if 0
 
-	if ((usbd_get_quirks(sc->sc_udev)->uq_flags & UQ_NO_SET_PROTO) == 0 &&
+	qflags = usbd_get_quirks(sc->sc_udev)->uq_flags;
+	if ((qflags & UQ_NO_SET_PROTO) == 0 &&
 	    id->bInterfaceSubClass != UISUBCLASS_BOOT)
 		(void)usbd_set_protocol(iface, 1);
 #endif
@@ -204,11 +200,11 @@ uhidev_attach(device_t parent, device_t self, void *aux)
 
 	/* XXX need to extend this */
 	descptr = NULL;
-	if (uiaa->uiaa_vendor == USB_VENDOR_WACOM) {
+	if (uaa->vendor == USB_VENDOR_WACOM) {
 		static uByte reportbuf[] = {2, 2, 2};
 
 		/* The report descriptor for the Wacom Graphire is broken. */
-		switch (uiaa->uiaa_product) {
+		switch (uaa->product) {
 		case USB_PRODUCT_WACOM_GRAPHIRE:
 		case USB_PRODUCT_WACOM_GRAPHIRE2:
 		case USB_PRODUCT_WACOM_GRAPHIRE3_4X5:
@@ -219,10 +215,10 @@ uhidev_attach(device_t parent, device_t self, void *aux)
 			 * feature report ID 2 before it'll start
 			 * returning digitizer data.
 			 */
-			usbd_set_report(uiaa->uiaa_iface, UHID_FEATURE_REPORT, 2,
-			    &reportbuf, sizeof(reportbuf));
+			usbd_set_report(uaa->iface, UHID_FEATURE_REPORT, 2,
+			    &reportbuf, sizeof reportbuf);
 
-			size = sizeof(uhid_graphire3_4x5_report_descr);
+			size = sizeof uhid_graphire3_4x5_report_descr;
 			descptr = uhid_graphire3_4x5_report_descr;
 			break;
 		default:
@@ -230,18 +226,18 @@ uhidev_attach(device_t parent, device_t self, void *aux)
 			break;
 		}
 	}
-	if (USBIF_IS_XINPUT(uiaa)) {
-		size = sizeof(uhid_xinput_report_descr);
+	if (USBIF_IS_XINPUT(uaa)) {
+		size = sizeof uhid_xinput_report_descr;
 		descptr = uhid_xinput_report_descr;
 	}
-	if (USBIF_IS_X1INPUT(uiaa)) {
+	if (USBIF_IS_X1INPUT(uaa)) {
 		sc->sc_flags |= UHIDEV_F_XB1;
-		size = sizeof(uhid_x1input_report_descr);
+		size = sizeof uhid_x1input_report_descr;
 		descptr = uhid_x1input_report_descr;
 	}
 
 	if (descptr) {
-		desc = kmem_alloc(size, KM_SLEEP);
+		desc = malloc(size, M_USBDEV, M_NOWAIT);
 		if (desc == NULL)
 			err = USBD_NOMEM;
 		else {
@@ -250,7 +246,8 @@ uhidev_attach(device_t parent, device_t self, void *aux)
 		}
 	} else {
 		desc = NULL;
-		err = usbd_read_report_desc(uiaa->uiaa_iface, &desc, &size);
+		err = usbd_read_report_desc(uaa->iface, &desc, &size,
+		    M_USBDEV);
 	}
 	if (err) {
 		aprint_error_dev(self, "no report descriptor\n");
@@ -258,8 +255,8 @@ uhidev_attach(device_t parent, device_t self, void *aux)
 		return;
 	}
 
-	if (uiaa->uiaa_vendor == USB_VENDOR_HOSIDEN &&
-	    uiaa->uiaa_product == USB_PRODUCT_HOSIDEN_PPP) {
+	if (uaa->vendor == USB_VENDOR_HOSIDEN &&
+	    uaa->product == USB_PRODUCT_HOSIDEN_PPP) {
 		static uByte reportbuf[] = { 1 };
 		/*
 		 *  This device was sold by Konami with its ParaParaParadise
@@ -267,12 +264,12 @@ uhidev_attach(device_t parent, device_t self, void *aux)
 		 *  before it will send any reports.
 		 */
 
-		usbd_set_report(uiaa->uiaa_iface, UHID_FEATURE_REPORT, 0,
-		    &reportbuf, sizeof(reportbuf));
+		usbd_set_report(uaa->iface, UHID_FEATURE_REPORT, 0,
+		    &reportbuf, sizeof reportbuf);
 	}
 
-	if (uiaa->uiaa_vendor == USB_VENDOR_LOGITECH &&
-	    uiaa->uiaa_product == USB_PRODUCT_LOGITECH_CBT44 && size == 0xb1) {
+	if (uaa->vendor == USB_VENDOR_LOGITECH &&
+	    uaa->product == USB_PRODUCT_LOGITECH_CBT44 && size == 0xb1) {
 		uint8_t *data = desc;
 		/*
 		 * This device has a odd USAGE_MINIMUM value that would
@@ -289,8 +286,8 @@ uhidev_attach(device_t parent, device_t self, void *aux)
 	 * Enable the Six Axis and DualShock 3 controllers.
 	 * See http://ps3.jim.sh/sixaxis/usb/
 	 */
-	if (uiaa->uiaa_vendor == USB_VENDOR_SONY &&
-	    uiaa->uiaa_product == USB_PRODUCT_SONY_PS3CONTROLLER) {
+	if (uaa->vendor == USB_VENDOR_SONY &&
+	    uaa->product == USB_PRODUCT_SONY_PS3CONTROLLER) {
 		usb_device_request_t req;
 		char data[17];
 		int actlen;
@@ -299,7 +296,7 @@ uhidev_attach(device_t parent, device_t self, void *aux)
 		req.bRequest = 1;
 		USETW(req.wValue, 0x3f2);
 		USETW(req.wIndex, 0);
-		USETW(req.wLength, sizeof(data));
+		USETW(req.wLength, sizeof data);
 
 		usbd_do_request_flags(sc->sc_udev, &req, data,
 			USBD_SHORT_XFER_OK, &actlen, USBD_DEFAULT_TIMEOUT);
@@ -308,20 +305,20 @@ uhidev_attach(device_t parent, device_t self, void *aux)
 	sc->sc_repdesc = desc;
 	sc->sc_repdesc_size = size;
 
-	uha.uiaa = uiaa;
+	uha.uaa = uaa;
 	nrepid = uhidev_maxrepid(desc, size);
 	if (nrepid < 0)
 		return;
 	if (nrepid > 0)
 		aprint_normal_dev(self, "%d report ids\n", nrepid);
 	nrepid++;
-	repsizes = kmem_alloc(nrepid * sizeof(*repsizes), KM_SLEEP);
+	repsizes = malloc(nrepid * sizeof(*repsizes), M_TEMP, M_NOWAIT);
 	if (repsizes == NULL)
 		goto nomem;
-	sc->sc_subdevs = kmem_zalloc(nrepid * sizeof(device_t),
-	    KM_SLEEP);
+	sc->sc_subdevs = malloc(nrepid * sizeof(device_t),
+				M_USBDEV, M_NOWAIT | M_ZERO);
 	if (sc->sc_subdevs == NULL) {
-		kmem_free(repsizes, nrepid * sizeof(*repsizes));
+		free(repsizes, M_TEMP);
 nomem:
 		aprint_error_dev(self, "no memory\n");
 		return;
@@ -331,7 +328,8 @@ nomem:
 	sc->sc_isize = maxinpktsize;
 	sc->sc_nrepid = nrepid;
 
-	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev, sc->sc_dev);
+	usbd_add_drv_event(USB_EVENT_DRIVER_ATTACH, sc->sc_udev,
+			   sc->sc_dev);
 
 	for (repid = 0; repid < nrepid; repid++) {
 		repsz = hid_report_size(desc, size, hid_input, repid);
@@ -363,8 +361,7 @@ nomem:
 				DPRINTF(("uhidev_match: repid=%d dev=%p\n",
 					 repid, dev));
 				if (csc->sc_intr == NULL) {
-					kmem_free(repsizes,
-					    nrepid * sizeof(*repsizes));
+					free(repsizes, M_TEMP);
 					aprint_error_dev(self,
 					    "sc_intr == NULL\n");
 					return;
@@ -377,7 +374,7 @@ nomem:
 			}
 		}
 	}
-	kmem_free(repsizes, nrepid * sizeof(*repsizes));
+	free(repsizes, M_TEMP);
 
 	return;
 }
@@ -395,7 +392,7 @@ uhidev_maxrepid(void *buf, int len)
 		if (h.report_ID > maxid)
 			maxid = h.report_ID;
 	hid_end_parse(d);
-	return maxid;
+	return (maxid);
 }
 
 int
@@ -407,7 +404,7 @@ uhidevprint(void *aux, const char *pnp)
 		aprint_normal("uhid at %s", pnp);
 	if (uha->reportid != 0)
 		aprint_normal(" reportid %d", uha->reportid);
-	return UNCONF;
+	return (UNCONF);
 }
 
 int
@@ -452,7 +449,7 @@ uhidev_detach(device_t self, int flags)
 		usbd_abort_pipe(sc->sc_ipipe);
 
 	if (sc->sc_repdesc != NULL)
-		kmem_free(sc->sc_repdesc, sc->sc_repdesc_size);
+		free(sc->sc_repdesc, M_USBDEV);
 
 	rv = 0;
 	for (i = 0; i < sc->sc_nrepid; i++) {
@@ -463,29 +460,30 @@ uhidev_detach(device_t self, int flags)
 		}
 	}
 
-	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev, sc->sc_dev);
+	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
+			   sc->sc_dev);
 
 	pmf_device_deregister(self);
 	mutex_destroy(&sc->sc_lock);
 
-	return rv;
+	return (rv);
 }
 
 void
-uhidev_intr(struct usbd_xfer *xfer, void *addr, usbd_status status)
+uhidev_intr(usbd_xfer_handle xfer, usbd_private_handle addr, usbd_status status)
 {
 	struct uhidev_softc *sc = addr;
 	device_t cdev;
 	struct uhidev *scd;
 	u_char *p;
 	u_int rep;
-	uint32_t cc;
+	u_int32_t cc;
 
 	usbd_get_xfer_status(xfer, NULL, NULL, &cc, NULL);
 
 #ifdef UHIDEV_DEBUG
 	if (uhidevdebug > 5) {
-		uint32_t i;
+		u_int32_t i;
 
 		DPRINTF(("uhidev_intr: status=%d cc=%d\n", status, cc));
 		DPRINTF(("uhidev_intr: data ="));
@@ -556,19 +554,19 @@ uhidev_open(struct uhidev *scd)
 	mutex_enter(&sc->sc_lock);
 	if (scd->sc_state & UHIDEV_OPEN) {
 		mutex_exit(&sc->sc_lock);
-		return EBUSY;
+		return (EBUSY);
 	}
 	scd->sc_state |= UHIDEV_OPEN;
 	if (sc->sc_refcnt++) {
 		mutex_exit(&sc->sc_lock);
-		return 0;
+		return (0);
 	}
 	mutex_exit(&sc->sc_lock);
 
 	if (sc->sc_isize == 0)
-		return 0;
+		return (0);
 
-	sc->sc_ibuf = kmem_alloc(sc->sc_isize, KM_SLEEP);
+	sc->sc_ibuf = malloc(sc->sc_isize, M_USBDEV, M_WAITOK);
 
 	/* Set up input interrupt pipe. */
 	DPRINTF(("uhidev_open: isize=%d, ep=0x%02x\n", sc->sc_isize,
@@ -602,10 +600,10 @@ uhidev_open(struct uhidev *scd)
 		}
 		DPRINTF(("uhidev_open: sc->sc_opipe=%p\n", sc->sc_opipe));
 
-		error = usbd_create_xfer(sc->sc_opipe, UHIDEV_OSIZE, 0, 0,
-		    &sc->sc_oxfer);
-		if (error) {
+		sc->sc_oxfer = usbd_alloc_xfer(sc->sc_udev);
+		if (sc->sc_oxfer == NULL) {
 			DPRINTF(("uhidev_open: couldn't allocate an xfer\n"));
+			error = ENOMEM;
 			goto out3;
 		}
 
@@ -613,7 +611,8 @@ uhidev_open(struct uhidev *scd)
 			uint8_t init_data[] = { 0x05, 0x20 };
 			int init_data_len = sizeof(init_data);
 			err = usbd_intr_transfer(sc->sc_oxfer, sc->sc_opipe, 0,
-			    USBD_NO_TIMEOUT, init_data, &init_data_len);
+			    USBD_NO_TIMEOUT, init_data, &init_data_len,
+			    "uhidevxb1");
 			if (err != USBD_NORMAL_COMPLETION) {
 				DPRINTF(("uhidev_open: xb1 init failed, "
 				    "error=%d\n", err));
@@ -623,11 +622,11 @@ uhidev_open(struct uhidev *scd)
 		}
 	}
 
-	return 0;
+	return (0);
 out4:
 	/* Free output xfer */
 	if (sc->sc_oxfer != NULL)
-		usbd_destroy_xfer(sc->sc_oxfer);
+		usbd_free_xfer(sc->sc_oxfer);
 out3:
 	/* Abort output pipe */
 	usbd_close_pipe(sc->sc_opipe);
@@ -636,7 +635,7 @@ out2:
 	usbd_close_pipe(sc->sc_ipipe);
 out1:
 	DPRINTF(("uhidev_open: failed in someway"));
-	kmem_free(sc->sc_ibuf, sc->sc_isize);
+	free(sc->sc_ibuf, M_USBDEV);
 	mutex_enter(&sc->sc_lock);
 	scd->sc_state &= ~UHIDEV_OPEN;
 	sc->sc_refcnt = 0;
@@ -667,7 +666,7 @@ uhidev_stop(struct uhidev *scd)
 	}
 
 	if (sc->sc_ibuf != NULL) {
-		kmem_free(sc->sc_ibuf, sc->sc_isize);
+		free(sc->sc_ibuf, M_USBDEV);
 		sc->sc_ibuf = NULL;
 	}
 }
@@ -692,10 +691,9 @@ uhidev_close(struct uhidev *scd)
 	DPRINTF(("uhidev_close: close pipe\n"));
 
 	if (sc->sc_oxfer != NULL) {
-		usbd_destroy_xfer(sc->sc_oxfer);
+		usbd_free_xfer(sc->sc_oxfer);
 		sc->sc_oxfer = NULL;
 	}
-
 
 	/* Possibly redundant, but properly handled */
 	uhidev_stop(scd);
@@ -711,14 +709,14 @@ uhidev_set_report(struct uhidev *scd, int type, void *data, int len)
 		return usbd_set_report(scd->sc_parent->sc_iface, type,
 				       scd->sc_report_id, data, len);
 
-	buf = kmem_alloc(len + 1, KM_SLEEP);
+	buf = malloc(len + 1, M_TEMP, M_WAITOK);
 	buf[0] = scd->sc_report_id;
 	memcpy(buf+1, data, len);
 
 	retstat = usbd_set_report(scd->sc_parent->sc_iface, type,
 				  scd->sc_report_id, buf, len + 1);
 
-	kmem_free(buf, len + 1);
+	free(buf, M_TEMP);
 
 	return retstat;
 }
@@ -742,8 +740,8 @@ uhidev_write(struct uhidev_softc *sc, void *data, int len)
 #ifdef UHIDEV_DEBUG
 	if (uhidevdebug > 50) {
 
-		uint32_t i;
-		uint8_t *d = data;
+		u_int32_t i;
+		u_int8_t *d = data;
 
 		DPRINTF(("uhidev_write: data ="));
 		for (i = 0; i < len; i++)
@@ -751,6 +749,6 @@ uhidev_write(struct uhidev_softc *sc, void *data, int len)
 		DPRINTF(("\n"));
 	}
 #endif
-	return usbd_intr_transfer(sc->sc_oxfer, sc->sc_opipe, 0, USBD_NO_TIMEOUT,
-	    data, &len);
+	return usbd_intr_transfer(sc->sc_oxfer, sc->sc_opipe, 0,
+	    USBD_NO_TIMEOUT, data, &len, "uhidevwi");
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: makebuf.c,v 1.18 2015/07/15 19:08:43 christos Exp $	*/
+/*	$NetBSD: makebuf.c,v 1.17.10.1 2015/11/04 16:29:56 riz Exp $	*/
 
 /*-
  * Copyright (c) 1990, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)makebuf.c	8.1 (Berkeley) 6/4/93";
 #else
-__RCSID("$NetBSD: makebuf.c,v 1.18 2015/07/15 19:08:43 christos Exp $");
+__RCSID("$NetBSD: makebuf.c,v 1.17.10.1 2015/11/04 16:29:56 riz Exp $");
 #endif
 #endif /* LIBC_SCCS and not lint */
 

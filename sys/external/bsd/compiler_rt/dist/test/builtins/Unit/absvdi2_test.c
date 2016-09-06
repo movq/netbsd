@@ -19,7 +19,7 @@
 
 // Effects: aborts if abs(x) < 0
 
-COMPILER_RT_ABI di_int __absvdi2(di_int a);
+di_int __absvdi2(di_int a);
 
 int test__absvdi2(di_int a)
 {

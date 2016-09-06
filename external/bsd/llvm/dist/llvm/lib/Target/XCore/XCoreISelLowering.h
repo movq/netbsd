@@ -26,7 +26,7 @@ namespace llvm {
   class XCoreTargetMachine;
 
   namespace XCoreISD {
-    enum NodeType : unsigned {
+    enum NodeType {
       // Start the numbering where the builtin ops and target ops leave off.
       FIRST_NUMBER = ISD::BUILTIN_OP_END,
 
@@ -93,17 +93,15 @@ namespace llvm {
   class XCoreTargetLowering : public TargetLowering
   {
   public:
-    explicit XCoreTargetLowering(const TargetMachine &TM,
-                                 const XCoreSubtarget &Subtarget);
+
+    explicit XCoreTargetLowering(const TargetMachine &TM);
 
     using TargetLowering::isZExtFree;
     bool isZExtFree(SDValue Val, EVT VT2) const override;
 
 
     unsigned getJumpTableEncoding() const override;
-    MVT getScalarShiftAmountTy(const DataLayout &DL, EVT) const override {
-      return MVT::i32;
-    }
+    MVT getScalarShiftAmountTy(EVT LHSTy) const override { return MVT::i32; }
 
     /// LowerOperation - Provide custom lowering hooks for some operations.
     SDValue LowerOperation(SDValue Op, SelectionDAG &DAG) const override;
@@ -122,22 +120,7 @@ namespace llvm {
       EmitInstrWithCustomInserter(MachineInstr *MI,
                                   MachineBasicBlock *MBB) const override;
 
-    bool isLegalAddressingMode(const DataLayout &DL, const AddrMode &AM,
-                               Type *Ty, unsigned AS) const override;
-
-    /// If a physical register, this returns the register that receives the
-    /// exception address on entry to an EH pad.
-    unsigned
-    getExceptionPointerRegister(const Constant *PersonalityFn) const override {
-      return XCore::R0;
-    }
-
-    /// If a physical register, this returns the register that receives the
-    /// exception typeid on entry to a landing pad.
-    unsigned
-    getExceptionSelectorRegister(const Constant *PersonalityFn) const override {
-      return XCore::R1;
-    }
+    bool isLegalAddressingMode(const AddrMode &AM, Type *Ty) const override;
 
   private:
     const TargetMachine &TM;
@@ -189,9 +172,9 @@ namespace llvm {
     SDValue LowerATOMIC_STORE(SDValue Op, SelectionDAG &DAG) const;
 
     // Inline asm support
-    std::pair<unsigned, const TargetRegisterClass *>
-    getRegForInlineAsmConstraint(const TargetRegisterInfo *TRI,
-                                 StringRef Constraint, MVT VT) const override;
+    std::pair<unsigned, const TargetRegisterClass*>
+    getRegForInlineAsmConstraint(const std::string &Constraint,
+                                 MVT VT) const override;
 
     // Expand specifics
     SDValue TryExpandADDWithMul(SDNode *Op, SelectionDAG &DAG) const;

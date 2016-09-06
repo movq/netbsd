@@ -1,4 +1,4 @@
-/* $NetBSD: params.c,v 1.28 2015/11/24 14:07:18 christos Exp $ */
+/* $NetBSD: params.c,v 1.24 2008/09/12 16:51:55 christos Exp $ */
 
 /*-
  * Copyright (c) 2002, 2003 The NetBSD Foundation, Inc.
@@ -31,12 +31,10 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: params.c,v 1.28 2015/11/24 14:07:18 christos Exp $");
+__RCSID("$NetBSD: params.c,v 1.24 2008/09/12 16:51:55 christos Exp $");
 #endif
 
 #include <sys/types.h>
-#include <sys/param.h>
-#include <sys/stat.h>
 
 #include <err.h>
 #include <errno.h>
@@ -48,7 +46,6 @@ __RCSID("$NetBSD: params.c,v 1.28 2015/11/24 14:07:18 christos Exp $");
 #include "params.h"
 #include "pkcs5_pbkdf2.h"
 #include "utils.h"
-#include "cgdconfig.h"
 #include "extern.h"
 
 static void	params_init(struct params *);
@@ -271,16 +268,12 @@ params_verify_method(string_t *in)
 		p->verify_method = VERIFY_FFS;
 	if (!strcmp("re-enter", vm))
 		p->verify_method = VERIFY_REENTER;
-	if (!strcmp("mbr", vm))
-		p->verify_method = VERIFY_MBR;
-	if (!strcmp("gpt", vm))
-		p->verify_method = VERIFY_GPT;
 
 	string_free(in);
 
 	if (p->verify_method == VERIFY_UNKNOWN)
 		warnx("params_setverify_method: unrecognized "
-		    "verify method \"%s\"", vm);
+		    "verify method \"%s\"\n", vm);
 	return p;
 }
 
@@ -518,7 +511,7 @@ keygen_method(string_t *in)
 	string_free(in);
 
 	if (kg->kg_method == KEYGEN_UNKNOWN)
-		warnx("unrecognized key generation method \"%s\"", kgm);
+		warnx("unrecognized key generation method \"%s\"\n", kgm);
 	return kg;
 }
 
@@ -621,16 +614,8 @@ params_cget(const char *fn)
 {
 	struct params	*p;
 	FILE		*f;
-	char		filename[MAXPATHLEN];
 
-	if ((f = fopen(fn, "r")) == NULL && fn[0] != '/') {
-		snprintf(filename, sizeof(filename), "%s/%s",
-		    CGDCONFIG_DIR, fn);
-		fn = filename;
-		f = fopen(fn, "r");
-	}
-
-	if (f == NULL) {
+	if ((f = fopen(fn, "r")) == NULL) {
 		warn("failed to open params file \"%s\"", fn);
 		return NULL;
 	}
@@ -779,12 +764,6 @@ params_fput(struct params *p, FILE *f)
 		break;
 	case VERIFY_REENTER:
 		print_kvpair_cstr(f, ts, "verify_method", "re-enter");
-		break;
-	case VERIFY_MBR:
-		print_kvpair_cstr(f, ts, "verify_method", "mbr");
-		break;
-	case VERIFY_GPT:
-		print_kvpair_cstr(f, ts, "verify_method", "gpt");
 		break;
 	default:
 		warnx("unsupported verify_method (%d)", p->verify_method);

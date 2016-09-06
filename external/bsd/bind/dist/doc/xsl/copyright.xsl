@@ -1,5 +1,5 @@
 <!--
- - Copyright (C) 2005, 2007, 2009, 2015  Internet Systems Consortium, Inc. ("ISC")
+ - Copyright (C) 2005, 2007, 2009  Internet Systems Consortium, Inc. ("ISC")
  -
  - Permission to use, copy, modify, and/or distribute this software for any
  - purpose with or without fee is hereby granted, provided that the above
@@ -14,14 +14,11 @@
  - PERFORMANCE OF THIS SOFTWARE.
 -->
 
-<!-- Id -->
+<!-- Id: copyright.xsl,v 1.8 2009/07/10 23:47:58 tbox Exp  -->
 
 <!-- Generate ISC copyright comments from Docbook copyright metadata. -->
 
-<xsl:stylesheet version="1.0"
-  xmlns:xsl="http://www.w3.org/1999/XSL/Transform"
-  xmlns:xi="http://www.w3.org/2001/XInclude"
-  xmlns:db="http://docbook.org/ns/docbook">
+<xsl:stylesheet xmlns:xsl="http://www.w3.org/1999/XSL/Transform" version="1.0">
 
   <xsl:template name="isc.copyright.format">
     <xsl:param name="text"/>
@@ -55,23 +52,23 @@
   <xsl:variable name="isc.copyright">
     <xsl:call-template name="isc.copyright.format">
       <xsl:with-param name="text">
-        <xsl:for-each select="db:book/db:info/db:copyright | db:refentry/db:docinfo/db:copyright">
+	<xsl:for-each select="/refentry/docinfo/copyright | /book/bookinfo/copyright">
 	  <xsl:text>Copyright (C) </xsl:text>
 	  <xsl:call-template name="copyright.years">
-	    <xsl:with-param name="years" select="db:year"/>
+	    <xsl:with-param name="years" select="year"/>
 	  </xsl:call-template>
 	  <xsl:text> </xsl:text>
-	  <xsl:value-of select="db:holder"/>
-          <xsl:value-of select="$isc.copyright.breakline"/>
+	  <xsl:value-of select="holder"/>
 	  <xsl:text>&#10;</xsl:text>
 	</xsl:for-each>
 	<xsl:value-of select="$isc.copyright.text"/>
       </xsl:with-param>
     </xsl:call-template>
   </xsl:variable>
+
 </xsl:stylesheet>
 
-<!--
+<!-- 
   - Local variables:
   - mode: sgml
   - End:

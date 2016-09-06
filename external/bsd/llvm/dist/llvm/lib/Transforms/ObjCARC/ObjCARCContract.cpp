@@ -35,7 +35,6 @@
 #include "llvm/IR/InlineAsm.h"
 #include "llvm/IR/Operator.h"
 #include "llvm/Support/Debug.h"
-#include "llvm/Support/raw_ostream.h"
 
 using namespace llvm;
 using namespace llvm::objcarc;
@@ -44,10 +43,6 @@ using namespace llvm::objcarc;
 
 STATISTIC(NumPeeps,       "Number of calls peephole-optimized");
 STATISTIC(NumStoreStrongs, "Number objc_storeStrong calls formed");
-
-//===----------------------------------------------------------------------===//
-//                                Declarations
-//===----------------------------------------------------------------------===//
 
 namespace {
   /// \brief Late ARC optimizations
@@ -73,23 +68,17 @@ namespace {
     /// "tail".
     SmallPtrSet<CallInst *, 8> StoreStrongCalls;
 
-    /// Returns true if we eliminated Inst.
-    bool tryToPeepholeInstruction(Function &F, Instruction *Inst,
-                                  inst_iterator &Iter,
-                                  SmallPtrSetImpl<Instruction *> &DepInsts,
-                                  SmallPtrSetImpl<const BasicBlock *> &Visited,
-                                  bool &TailOkForStoreStrong);
+    bool OptimizeRetainCall(Function &F, Instruction *Retain);
 
-    bool optimizeRetainCall(Function &F, Instruction *Retain);
+    bool ContractAutorelease(Function &F, Instruction *Autorelease,
+                             InstructionClass Class,
+                             SmallPtrSetImpl<Instruction *>
+                               &DependingInstructions,
+                             SmallPtrSetImpl<const BasicBlock *>
+                               &Visited);
 
-    bool
-    contractAutorelease(Function &F, Instruction *Autorelease,
-                        ARCInstKind Class,
-                        SmallPtrSetImpl<Instruction *> &DependingInstructions,
-                        SmallPtrSetImpl<const BasicBlock *> &Visited);
-
-    void tryToContractReleaseIntoStoreStrong(Instruction *Release,
-                                             inst_iterator &Iter);
+    void ContractRelease(Instruction *Release,
+                         inst_iterator &Iter);
 
     void getAnalysisUsage(AnalysisUsage &AU) const override;
     bool doInitialization(Module &M) override;
@@ -103,15 +92,30 @@ namespace {
   };
 }
 
-//===----------------------------------------------------------------------===//
-//                               Implementation
-//===----------------------------------------------------------------------===//
+char ObjCARCContract::ID = 0;
+INITIALIZE_PASS_BEGIN(ObjCARCContract,
+                      "objc-arc-contract", "ObjC ARC contraction", false, false)
+INITIALIZE_AG_DEPENDENCY(AliasAnalysis)
+INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
+INITIALIZE_PASS_END(ObjCARCContract,
+                    "objc-arc-contract", "ObjC ARC contraction", false, false)
+
+Pass *llvm::createObjCARCContractPass() {
+  return new ObjCARCContract();
+}
+
+void ObjCARCContract::getAnalysisUsage(AnalysisUsage &AU) const {
+  AU.addRequired<AliasAnalysis>();
+  AU.addRequired<DominatorTreeWrapperPass>();
+  AU.setPreservesCFG();
+}
 
 /// Turn objc_retain into objc_retainAutoreleasedReturnValue if the operand is a
 /// return value. We do this late so we do not disrupt the dataflow analysis in
 /// ObjCARCOpt.
-bool ObjCARCContract::optimizeRetainCall(Function &F, Instruction *Retain) {
-  ImmutableCallSite CS(GetArgRCIdentityRoot(Retain));
+bool
+ObjCARCContract::OptimizeRetainCall(Function &F, Instruction *Retain) {
+  ImmutableCallSite CS(GetObjCArg(Retain));
   const Instruction *Call = CS.getInstruction();
   if (!Call)
     return false;
@@ -119,9 +123,9 @@ bool ObjCARCContract::optimizeRetainCall(Function &F, Instruction *Retain) {
     return false;
 
   // Check that the call is next to the retain.
-  BasicBlock::const_iterator I = ++Call->getIterator();
-  while (IsNoopInstruction(&*I))
-    ++I;
+  BasicBlock::const_iterator I = Call;
+  ++I;
+  while (IsNoopInstruction(I)) ++I;
   if (&*I != Retain)
     return false;
 
@@ -135,7 +139,7 @@ bool ObjCARCContract::optimizeRetainCall(Function &F, Instruction *Retain) {
 
   // We do not have to worry about tail calls/does not throw since
   // retain/retainRV have the same properties.
-  Constant *Decl = EP.get(ARCRuntimeEntryPointKind::RetainRV);
+  Constant *Decl = EP.get(ARCRuntimeEntryPoints::EPT_RetainRV);
   cast<CallInst>(Retain)->setCalledFunction(Decl);
 
   DEBUG(dbgs() << "New: " << *Retain << "\n");
@@ -143,16 +147,19 @@ bool ObjCARCContract::optimizeRetainCall(Function &F, Instruction *Retain) {
 }
 
 /// Merge an autorelease with a retain into a fused call.
-bool ObjCARCContract::contractAutorelease(
-    Function &F, Instruction *Autorelease, ARCInstKind Class,
-    SmallPtrSetImpl<Instruction *> &DependingInstructions,
-    SmallPtrSetImpl<const BasicBlock *> &Visited) {
-  const Value *Arg = GetArgRCIdentityRoot(Autorelease);
+bool
+ObjCARCContract::ContractAutorelease(Function &F, Instruction *Autorelease,
+                                     InstructionClass Class,
+                                     SmallPtrSetImpl<Instruction *>
+                                       &DependingInstructions,
+                                     SmallPtrSetImpl<const BasicBlock *>
+                                       &Visited) {
+  const Value *Arg = GetObjCArg(Autorelease);
 
   // Check that there are no instructions between the retain and the autorelease
   // (such as an autorelease_pop) which may change the count.
   CallInst *Retain = nullptr;
-  if (Class == ARCInstKind::AutoreleaseRV)
+  if (Class == IC_AutoreleaseRV)
     FindDependencies(RetainAutoreleaseRVDep, Arg,
                      Autorelease->getParent(), Autorelease,
                      DependingInstructions, Visited, PA);
@@ -170,207 +177,93 @@ bool ObjCARCContract::contractAutorelease(
   Retain = dyn_cast_or_null<CallInst>(*DependingInstructions.begin());
   DependingInstructions.clear();
 
-  if (!Retain || GetBasicARCInstKind(Retain) != ARCInstKind::Retain ||
-      GetArgRCIdentityRoot(Retain) != Arg)
+  if (!Retain ||
+      GetBasicInstructionClass(Retain) != IC_Retain ||
+      GetObjCArg(Retain) != Arg)
     return false;
 
   Changed = true;
   ++NumPeeps;
 
-  DEBUG(dbgs() << "    Fusing retain/autorelease!\n"
-                  "        Autorelease:" << *Autorelease << "\n"
-                  "        Retain: " << *Retain << "\n");
+  DEBUG(dbgs() << "ObjCARCContract::ContractAutorelease: Fusing "
+                  "retain/autorelease. Erasing: " << *Autorelease << "\n"
+                  "                                      Old Retain: "
+               << *Retain << "\n");
 
-  Constant *Decl = EP.get(Class == ARCInstKind::AutoreleaseRV
-                              ? ARCRuntimeEntryPointKind::RetainAutoreleaseRV
-                              : ARCRuntimeEntryPointKind::RetainAutorelease);
+  Constant *Decl = EP.get(Class == IC_AutoreleaseRV ?
+                          ARCRuntimeEntryPoints::EPT_RetainAutoreleaseRV :
+                          ARCRuntimeEntryPoints::EPT_RetainAutorelease);
   Retain->setCalledFunction(Decl);
 
-  DEBUG(dbgs() << "        New RetainAutorelease: " << *Retain << "\n");
+  DEBUG(dbgs() << "                                      New Retain: "
+               << *Retain << "\n");
 
   EraseInstruction(Autorelease);
   return true;
 }
 
-static StoreInst *findSafeStoreForStoreStrongContraction(LoadInst *Load,
-                                                         Instruction *Release,
-                                                         ProvenanceAnalysis &PA,
-                                                         AliasAnalysis *AA) {
-  StoreInst *Store = nullptr;
-  bool SawRelease = false;
+/// Attempt to merge an objc_release with a store, load, and objc_retain to form
+/// an objc_storeStrong. This can be a little tricky because the instructions
+/// don't always appear in order, and there may be unrelated intervening
+/// instructions.
+void ObjCARCContract::ContractRelease(Instruction *Release,
+                                      inst_iterator &Iter) {
+  LoadInst *Load = dyn_cast<LoadInst>(GetObjCArg(Release));
+  if (!Load || !Load->isSimple()) return;
 
-  // Get the location associated with Load.
-  MemoryLocation Loc = MemoryLocation::get(Load);
+  // For now, require everything to be in one basic block.
+  BasicBlock *BB = Release->getParent();
+  if (Load->getParent() != BB) return;
 
   // Walk down to find the store and the release, which may be in either order.
-  for (auto I = std::next(BasicBlock::iterator(Load)),
-            E = Load->getParent()->end();
-       I != E; ++I) {
-    // If we found the store we were looking for and saw the release,
-    // break. There is no more work to be done.
-    if (Store && SawRelease)
-      break;
+  BasicBlock::iterator I = Load, End = BB->end();
+  ++I;
+  AliasAnalysis::Location Loc = AA->getLocation(Load);
+  StoreInst *Store = nullptr;
+  bool SawRelease = false;
+  for (; !Store || !SawRelease; ++I) {
+    if (I == End)
+      return;
 
-    // Now we know that we have not seen either the store or the release. If I
-    // is the release, mark that we saw the release and continue.
-    Instruction *Inst = &*I;
+    Instruction *Inst = I;
     if (Inst == Release) {
       SawRelease = true;
       continue;
     }
 
-    // Otherwise, we check if Inst is a "good" store. Grab the instruction class
-    // of Inst.
-    ARCInstKind Class = GetBasicARCInstKind(Inst);
+    InstructionClass Class = GetBasicInstructionClass(Inst);
 
-    // If Inst is an unrelated retain, we don't care about it.
-    //
-    // TODO: This is one area where the optimization could be made more
-    // aggressive.
+    // Unrelated retains are harmless.
     if (IsRetain(Class))
       continue;
 
-    // If we have seen the store, but not the release...
     if (Store) {
-      // We need to make sure that it is safe to move the release from its
-      // current position to the store. This implies proving that any
-      // instruction in between Store and the Release conservatively can not use
-      // the RCIdentityRoot of Release. If we can prove we can ignore Inst, so
-      // continue...
-      if (!CanUse(Inst, Load, PA, Class)) {
-        continue;
-      }
-
-      // Otherwise, be conservative and return nullptr.
-      return nullptr;
+      // The store is the point where we're going to put the objc_storeStrong,
+      // so make sure there are no uses after it.
+      if (CanUse(Inst, Load, PA, Class))
+        return;
+    } else if (AA->getModRefInfo(Inst, Loc) & AliasAnalysis::Mod) {
+      // We are moving the load down to the store, so check for anything
+      // else which writes to the memory between the load and the store.
+      Store = dyn_cast<StoreInst>(Inst);
+      if (!Store || !Store->isSimple()) return;
+      if (Store->getPointerOperand() != Loc.Ptr) return;
     }
-
-    // Ok, now we know we have not seen a store yet. See if Inst can write to
-    // our load location, if it can not, just ignore the instruction.
-    if (!(AA->getModRefInfo(Inst, Loc) & MRI_Mod))
-      continue;
-
-    Store = dyn_cast<StoreInst>(Inst);
-
-    // If Inst can, then check if Inst is a simple store. If Inst is not a
-    // store or a store that is not simple, then we have some we do not
-    // understand writing to this memory implying we can not move the load
-    // over the write to any subsequent store that we may find.
-    if (!Store || !Store->isSimple())
-      return nullptr;
-
-    // Then make sure that the pointer we are storing to is Ptr. If so, we
-    // found our Store!
-    if (Store->getPointerOperand() == Loc.Ptr)
-      continue;
-
-    // Otherwise, we have an unknown store to some other ptr that clobbers
-    // Loc.Ptr. Bail!
-    return nullptr;
   }
 
-  // If we did not find the store or did not see the release, fail.
-  if (!Store || !SawRelease)
-    return nullptr;
+  Value *New = StripPointerCastsAndObjCCalls(Store->getValueOperand());
 
-  // We succeeded!
-  return Store;
-}
-
-static Instruction *
-findRetainForStoreStrongContraction(Value *New, StoreInst *Store,
-                                    Instruction *Release,
-                                    ProvenanceAnalysis &PA) {
-  // Walk up from the Store to find the retain.
-  BasicBlock::iterator I = Store->getIterator();
-  BasicBlock::iterator Begin = Store->getParent()->begin();
-  while (I != Begin && GetBasicARCInstKind(&*I) != ARCInstKind::Retain) {
-    Instruction *Inst = &*I;
-
-    // It is only safe to move the retain to the store if we can prove
-    // conservatively that nothing besides the release can decrement reference
-    // counts in between the retain and the store.
-    if (CanDecrementRefCount(Inst, New, PA) && Inst != Release)
-      return nullptr;
+  // Walk up to find the retain.
+  I = Store;
+  BasicBlock::iterator Begin = BB->begin();
+  while (I != Begin && GetBasicInstructionClass(I) != IC_Retain)
     --I;
-  }
-  Instruction *Retain = &*I;
-  if (GetBasicARCInstKind(Retain) != ARCInstKind::Retain)
-    return nullptr;
-  if (GetArgRCIdentityRoot(Retain) != New)
-    return nullptr;
-  return Retain;
-}
-
-/// Attempt to merge an objc_release with a store, load, and objc_retain to form
-/// an objc_storeStrong. An objc_storeStrong:
-///
-///   objc_storeStrong(i8** %old_ptr, i8* new_value)
-///
-/// is equivalent to the following IR sequence:
-///
-///   ; Load old value.
-///   %old_value = load i8** %old_ptr               (1)
-///
-///   ; Increment the new value and then release the old value. This must occur
-///   ; in order in case old_value releases new_value in its destructor causing
-///   ; us to potentially have a dangling ptr.
-///   tail call i8* @objc_retain(i8* %new_value)    (2)
-///   tail call void @objc_release(i8* %old_value)  (3)
-///
-///   ; Store the new_value into old_ptr
-///   store i8* %new_value, i8** %old_ptr           (4)
-///
-/// The safety of this optimization is based around the following
-/// considerations:
-///
-///  1. We are forming the store strong at the store. Thus to perform this
-///     optimization it must be safe to move the retain, load, and release to
-///     (4).
-///  2. We need to make sure that any re-orderings of (1), (2), (3), (4) are
-///     safe.
-void ObjCARCContract::tryToContractReleaseIntoStoreStrong(Instruction *Release,
-                                                          inst_iterator &Iter) {
-  // See if we are releasing something that we just loaded.
-  auto *Load = dyn_cast<LoadInst>(GetArgRCIdentityRoot(Release));
-  if (!Load || !Load->isSimple())
-    return;
-
-  // For now, require everything to be in one basic block.
-  BasicBlock *BB = Release->getParent();
-  if (Load->getParent() != BB)
-    return;
-
-  // First scan down the BB from Load, looking for a store of the RCIdentityRoot
-  // of Load's
-  StoreInst *Store =
-      findSafeStoreForStoreStrongContraction(Load, Release, PA, AA);
-  // If we fail, bail.
-  if (!Store)
-    return;
-
-  // Then find what new_value's RCIdentity Root is.
-  Value *New = GetRCIdentityRoot(Store->getValueOperand());
-
-  // Then walk up the BB and look for a retain on New without any intervening
-  // instructions which conservatively might decrement ref counts.
-  Instruction *Retain =
-      findRetainForStoreStrongContraction(New, Store, Release, PA);
-
-  // If we fail, bail.
-  if (!Retain)
-    return;
+  Instruction *Retain = I;
+  if (GetBasicInstructionClass(Retain) != IC_Retain) return;
+  if (GetObjCArg(Retain) != New) return;
 
   Changed = true;
   ++NumStoreStrongs;
-
-  DEBUG(
-      llvm::dbgs() << "    Contracting retain, release into objc_storeStrong.\n"
-                   << "        Old:\n"
-                   << "            Store:   " << *Store << "\n"
-                   << "            Release: " << *Release << "\n"
-                   << "            Retain:  " << *Retain << "\n"
-                   << "            Load:    " << *Load << "\n");
 
   LLVMContext &C = Release->getContext();
   Type *I8X = PointerType::getUnqual(Type::getInt8Ty(C));
@@ -381,7 +274,7 @@ void ObjCARCContract::tryToContractReleaseIntoStoreStrong(Instruction *Release,
     Args[0] = new BitCastInst(Args[0], I8XX, "", Store);
   if (Args[1]->getType() != I8X)
     Args[1] = new BitCastInst(Args[1], I8X, "", Store);
-  Constant *Decl = EP.get(ARCRuntimeEntryPointKind::StoreStrong);
+  Constant *Decl = EP.get(ARCRuntimeEntryPoints::EPT_StoreStrong);
   CallInst *StoreStrong = CallInst::Create(Decl, Args, "", Store);
   StoreStrong->setDoesNotThrow();
   StoreStrong->setDebugLoc(Store->getDebugLoc());
@@ -391,8 +284,6 @@ void ObjCARCContract::tryToContractReleaseIntoStoreStrong(Instruction *Release,
   // we can set the tail flag once we know it's safe.
   StoreStrongCalls.insert(StoreStrong);
 
-  DEBUG(llvm::dbgs() << "        New Store Strong: " << *StoreStrong << "\n");
-
   if (&*Iter == Store) ++Iter;
   Store->eraseFromParent();
   Release->eraseFromParent();
@@ -401,35 +292,86 @@ void ObjCARCContract::tryToContractReleaseIntoStoreStrong(Instruction *Release,
     Load->eraseFromParent();
 }
 
-bool ObjCARCContract::tryToPeepholeInstruction(
-  Function &F, Instruction *Inst, inst_iterator &Iter,
-  SmallPtrSetImpl<Instruction *> &DependingInsts,
-  SmallPtrSetImpl<const BasicBlock *> &Visited,
-  bool &TailOkForStoreStrongs) {
+bool ObjCARCContract::doInitialization(Module &M) {
+  // If nothing in the Module uses ARC, don't do anything.
+  Run = ModuleHasARC(M);
+  if (!Run)
+    return false;
+
+  EP.Initialize(&M);
+
+  // Initialize RetainRVMarker.
+  RetainRVMarker = nullptr;
+  if (NamedMDNode *NMD =
+        M.getNamedMetadata("clang.arc.retainAutoreleasedReturnValueMarker"))
+    if (NMD->getNumOperands() == 1) {
+      const MDNode *N = NMD->getOperand(0);
+      if (N->getNumOperands() == 1)
+        if (const MDString *S = dyn_cast<MDString>(N->getOperand(0)))
+          RetainRVMarker = S;
+    }
+
+  return false;
+}
+
+bool ObjCARCContract::runOnFunction(Function &F) {
+  if (!EnableARCOpts)
+    return false;
+
+  // If nothing in the Module uses ARC, don't do anything.
+  if (!Run)
+    return false;
+
+  Changed = false;
+  AA = &getAnalysis<AliasAnalysis>();
+  DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
+
+  PA.setAA(&getAnalysis<AliasAnalysis>());
+
+  // Track whether it's ok to mark objc_storeStrong calls with the "tail"
+  // keyword. Be conservative if the function has variadic arguments.
+  // It seems that functions which "return twice" are also unsafe for the
+  // "tail" argument, because they are setjmp, which could need to
+  // return to an earlier stack state.
+  bool TailOkForStoreStrongs = !F.isVarArg() &&
+                               !F.callsFunctionThatReturnsTwice();
+
+  // For ObjC library calls which return their argument, replace uses of the
+  // argument with uses of the call return value, if it dominates the use. This
+  // reduces register pressure.
+  SmallPtrSet<Instruction *, 4> DependingInstructions;
+  SmallPtrSet<const BasicBlock *, 4> Visited;
+  for (inst_iterator I = inst_begin(&F), E = inst_end(&F); I != E; ) {
+    Instruction *Inst = &*I++;
+
+    DEBUG(dbgs() << "ObjCARCContract: Visiting: " << *Inst << "\n");
+
     // Only these library routines return their argument. In particular,
     // objc_retainBlock does not necessarily return its argument.
-  ARCInstKind Class = GetBasicARCInstKind(Inst);
+    InstructionClass Class = GetBasicInstructionClass(Inst);
     switch (Class) {
-    case ARCInstKind::FusedRetainAutorelease:
-    case ARCInstKind::FusedRetainAutoreleaseRV:
-      return false;
-    case ARCInstKind::Autorelease:
-    case ARCInstKind::AutoreleaseRV:
-      return contractAutorelease(F, Inst, Class, DependingInsts, Visited);
-    case ARCInstKind::Retain:
+    case IC_FusedRetainAutorelease:
+    case IC_FusedRetainAutoreleaseRV:
+      break;
+    case IC_Autorelease:
+    case IC_AutoreleaseRV:
+      if (ContractAutorelease(F, Inst, Class, DependingInstructions, Visited))
+        continue;
+      break;
+    case IC_Retain:
       // Attempt to convert retains to retainrvs if they are next to function
       // calls.
-      if (!optimizeRetainCall(F, Inst))
-        return false;
+      if (!OptimizeRetainCall(F, Inst))
+        break;
       // If we succeed in our optimization, fall through.
       // FALLTHROUGH
-    case ARCInstKind::RetainRV: {
+    case IC_RetainRV: {
       // If we're compiling for a target which needs a special inline-asm
       // marker to do the retainAutoreleasedReturnValue optimization,
       // insert it now.
       if (!RetainRVMarker)
-        return false;
-      BasicBlock::iterator BBI = Inst->getIterator();
+        break;
+      BasicBlock::iterator BBI = Inst;
       BasicBlock *InstParent = Inst->getParent();
 
       // Step up to see if the call immediately precedes the RetainRV call.
@@ -440,14 +382,14 @@ bool ObjCARCContract::tryToPeepholeInstruction(
           BasicBlock *Pred = InstParent->getSinglePredecessor();
           if (!Pred)
             goto decline_rv_optimization;
-          BBI = Pred->getTerminator()->getIterator();
+          BBI = Pred->getTerminator();
           break;
         }
         --BBI;
-      } while (IsNoopInstruction(&*BBI));
+      } while (IsNoopInstruction(BBI));
 
-      if (&*BBI == GetArgRCIdentityRoot(Inst)) {
-        DEBUG(dbgs() << "Adding inline asm marker for "
+      if (&*BBI == GetObjCArg(Inst)) {
+        DEBUG(dbgs() << "ObjCARCContract: Adding inline asm marker for "
                         "retainAutoreleasedReturnValue optimization.\n");
         Changed = true;
         InlineAsm *IA =
@@ -458,9 +400,9 @@ bool ObjCARCContract::tryToPeepholeInstruction(
         CallInst::Create(IA, "", Inst);
       }
     decline_rv_optimization:
-      return false;
+      break;
     }
-    case ARCInstKind::InitWeak: {
+    case IC_InitWeak: {
       // objc_initWeak(p, null) => *p = null
       CallInst *CI = cast<CallInst>(Inst);
       if (IsNullOrUndef(CI->getArgOperand(1))) {
@@ -475,80 +417,31 @@ bool ObjCARCContract::tryToPeepholeInstruction(
         CI->replaceAllUsesWith(Null);
         CI->eraseFromParent();
       }
-      return true;
+      continue;
     }
-    case ARCInstKind::Release:
-      // Try to form an objc store strong from our release. If we fail, there is
-      // nothing further to do below, so continue.
-      tryToContractReleaseIntoStoreStrong(Inst, Iter);
-      return true;
-    case ARCInstKind::User:
+    case IC_Release:
+      ContractRelease(Inst, I);
+      continue;
+    case IC_User:
       // Be conservative if the function has any alloca instructions.
       // Technically we only care about escaping alloca instructions,
       // but this is sufficient to handle some interesting cases.
       if (isa<AllocaInst>(Inst))
         TailOkForStoreStrongs = false;
-      return true;
-    case ARCInstKind::IntrinsicUser:
+      continue;
+    case IC_IntrinsicUser:
       // Remove calls to @clang.arc.use(...).
       Inst->eraseFromParent();
-      return true;
-    default:
-      return true;
-    }
-}
-
-//===----------------------------------------------------------------------===//
-//                              Top Level Driver
-//===----------------------------------------------------------------------===//
-
-bool ObjCARCContract::runOnFunction(Function &F) {
-  if (!EnableARCOpts)
-    return false;
-
-  // If nothing in the Module uses ARC, don't do anything.
-  if (!Run)
-    return false;
-
-  Changed = false;
-  AA = &getAnalysis<AAResultsWrapperPass>().getAAResults();
-  DT = &getAnalysis<DominatorTreeWrapperPass>().getDomTree();
-
-  PA.setAA(&getAnalysis<AAResultsWrapperPass>().getAAResults());
-
-  DEBUG(llvm::dbgs() << "**** ObjCARC Contract ****\n");
-
-  // Track whether it's ok to mark objc_storeStrong calls with the "tail"
-  // keyword. Be conservative if the function has variadic arguments.
-  // It seems that functions which "return twice" are also unsafe for the
-  // "tail" argument, because they are setjmp, which could need to
-  // return to an earlier stack state.
-  bool TailOkForStoreStrongs =
-      !F.isVarArg() && !F.callsFunctionThatReturnsTwice();
-
-  // For ObjC library calls which return their argument, replace uses of the
-  // argument with uses of the call return value, if it dominates the use. This
-  // reduces register pressure.
-  SmallPtrSet<Instruction *, 4> DependingInstructions;
-  SmallPtrSet<const BasicBlock *, 4> Visited;
-  for (inst_iterator I = inst_begin(&F), E = inst_end(&F); I != E;) {
-    Instruction *Inst = &*I++;
-
-    DEBUG(dbgs() << "Visiting: " << *Inst << "\n");
-
-    // First try to peephole Inst. If there is nothing further we can do in
-    // terms of undoing objc-arc-expand, process the next inst.
-    if (tryToPeepholeInstruction(F, Inst, I, DependingInstructions, Visited,
-                                 TailOkForStoreStrongs))
       continue;
+    default:
+      continue;
+    }
 
-    // Otherwise, try to undo objc-arc-expand.
+    DEBUG(dbgs() << "ObjCARCContract: Finished List.\n\n");
 
-    // Don't use GetArgRCIdentityRoot because we don't want to look through bitcasts
+    // Don't use GetObjCArg because we don't want to look through bitcasts
     // and such; to do the replacement, the argument must have type i8*.
     Value *Arg = cast<CallInst>(Inst)->getArgOperand(0);
-
-    // TODO: Change this to a do-while.
     for (;;) {
       // If we're compiling bugpointed code, don't get in trouble.
       if (!isa<Instruction>(Arg) && !isa<Argument>(Arg))
@@ -565,7 +458,7 @@ bool ObjCARCContract::runOnFunction(Function &F) {
         // reachability here because an unreachable call is considered to
         // trivially dominate itself, which would lead us to rewriting its
         // argument in terms of its return value, which would lead to
-        // infinite loops in GetArgRCIdentityRoot.
+        // infinite loops in GetObjCArg.
         if (DT->isReachableFromEntry(U) && DT->dominates(Inst, U)) {
           Changed = true;
           Instruction *Replacement = Inst;
@@ -620,46 +513,4 @@ bool ObjCARCContract::runOnFunction(Function &F) {
   StoreStrongCalls.clear();
 
   return Changed;
-}
-
-//===----------------------------------------------------------------------===//
-//                             Misc Pass Manager
-//===----------------------------------------------------------------------===//
-
-char ObjCARCContract::ID = 0;
-INITIALIZE_PASS_BEGIN(ObjCARCContract, "objc-arc-contract",
-                      "ObjC ARC contraction", false, false)
-INITIALIZE_PASS_DEPENDENCY(AAResultsWrapperPass)
-INITIALIZE_PASS_DEPENDENCY(DominatorTreeWrapperPass)
-INITIALIZE_PASS_END(ObjCARCContract, "objc-arc-contract",
-                    "ObjC ARC contraction", false, false)
-
-void ObjCARCContract::getAnalysisUsage(AnalysisUsage &AU) const {
-  AU.addRequired<AAResultsWrapperPass>();
-  AU.addRequired<DominatorTreeWrapperPass>();
-  AU.setPreservesCFG();
-}
-
-Pass *llvm::createObjCARCContractPass() { return new ObjCARCContract(); }
-
-bool ObjCARCContract::doInitialization(Module &M) {
-  // If nothing in the Module uses ARC, don't do anything.
-  Run = ModuleHasARC(M);
-  if (!Run)
-    return false;
-
-  EP.init(&M);
-
-  // Initialize RetainRVMarker.
-  RetainRVMarker = nullptr;
-  if (NamedMDNode *NMD =
-          M.getNamedMetadata("clang.arc.retainAutoreleasedReturnValueMarker"))
-    if (NMD->getNumOperands() == 1) {
-      const MDNode *N = NMD->getOperand(0);
-      if (N->getNumOperands() == 1)
-        if (const MDString *S = dyn_cast<MDString>(N->getOperand(0)))
-          RetainRVMarker = S;
-    }
-
-  return false;
 }

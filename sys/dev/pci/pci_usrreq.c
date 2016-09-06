@@ -1,4 +1,4 @@
-/*	$NetBSD: pci_usrreq.c,v 1.29 2015/08/24 23:55:04 pooka Exp $	*/
+/*	$NetBSD: pci_usrreq.c,v 1.28 2014/07/25 08:10:38 dholland Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -40,11 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: pci_usrreq.c,v 1.29 2015/08/24 23:55:04 pooka Exp $");
-
-#ifdef _KERNEL_OPT
-#include "opt_pci.h"
-#endif
+__KERNEL_RCSID(0, "$NetBSD: pci_usrreq.c,v 1.28 2014/07/25 08:10:38 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -59,6 +55,8 @@ __KERNEL_RCSID(0, "$NetBSD: pci_usrreq.c,v 1.29 2015/08/24 23:55:04 pooka Exp $"
 #include <dev/pci/pcireg.h>
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pciio.h>
+
+#include "opt_pci.h"
 
 static int
 pciopen(dev_t dev, int flags, int mode, struct lwp *l)

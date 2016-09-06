@@ -1256,20 +1256,20 @@ EOF
 	exit ;;
     *:Darwin:*:*)
 	UNAME_PROCESSOR=`uname -p` || UNAME_PROCESSOR=unknown
-	eval $set_cc_for_build
+		eval $set_cc_for_build
 	if test "$UNAME_PROCESSOR" = unknown ; then
 	    UNAME_PROCESSOR=powerpc
 	fi
 	if test `echo "$UNAME_RELEASE" | sed -e 's/\..*//'` -le 10 ; then
-	    if [ "$CC_FOR_BUILD" != 'no_compiler_found' ]; then
-		if (echo '#ifdef __LP64__'; echo IS_64BIT_ARCH; echo '#endif') | \
-		    (CCOPTS= $CC_FOR_BUILD -E - 2>/dev/null) | \
-		    grep IS_64BIT_ARCH >/dev/null
-		then
+		if [ "$CC_FOR_BUILD" != 'no_compiler_found' ]; then
+		  if (echo '#ifdef __LP64__'; echo IS_64BIT_ARCH; echo '#endif') | \
+		      (CCOPTS= $CC_FOR_BUILD -E - 2>/dev/null) | \
+		      grep IS_64BIT_ARCH >/dev/null
+		  then
 		    case $UNAME_PROCESSOR in
 			i386) UNAME_PROCESSOR=x86_64 ;;
 			powerpc) UNAME_PROCESSOR=powerpc64 ;;
-		    esac
+	esac
 		fi
 	    fi
 	elif test "$UNAME_PROCESSOR" = i386 ; then
@@ -1369,7 +1369,7 @@ EOF
     x86_64:VMkernel:*:*)
 	echo ${UNAME_MACHINE}-unknown-esx
 	exit ;;
-esac
+    esac
 
 cat >&2 <<EOF
 $0: unable to guess system type

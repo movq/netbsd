@@ -1,4 +1,4 @@
-/*	$NetBSD: bigkey.c,v 1.7 2015/12/17 04:00:42 christos Exp $	*/
+/*	$NetBSD: bigkey.c,v 1.5.4.1 2016/03/13 08:06:08 martin Exp $	*/
 
 /*
  * Copyright (C) 2012, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")

@@ -1,4 +1,4 @@
-# Copyright 2004-2015 Free Software Foundation, Inc.
+# Copyright 2004-2014 Free Software Foundation, Inc.
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -102,17 +102,6 @@ proc gdb_find_objcopy {} {
 	set objcopy [transform objcopy]
     }
     return $objcopy
-}
-
-# find target objdump
-proc gdb_find_objdump {} {
-    global OBJDUMP_FOR_TARGET
-    if [info exists OBJDUMP_FOR_TARGET] {
-	set objdump $OBJDUMP_FOR_TARGET
-    } else {
-	set objdump [transform objdump]
-    }
-    return $objdump
 }
 
 proc gdb_find_readelf {} {

@@ -1,4 +1,4 @@
-/* $NetBSD: athflash.c,v 1.9 2015/06/09 22:50:50 matt Exp $ */
+/* $NetBSD: athflash.c,v 1.8.2.1 2015/11/05 20:25:30 riz Exp $ */
 
 /*
  * Copyright (c) 2006 Urbana-Champaign Independent Media Center.
@@ -82,7 +82,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: athflash.c,v 1.9 2015/06/09 22:50:50 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: athflash.c,v 1.8.2.1 2015/11/05 20:25:30 riz Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>

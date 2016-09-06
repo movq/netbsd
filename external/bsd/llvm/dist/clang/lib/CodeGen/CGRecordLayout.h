@@ -78,16 +78,16 @@ struct CGBitFieldInfo {
   /// bitfield.
   unsigned StorageSize;
 
-  /// The offset of the bitfield storage from the start of the struct.
-  CharUnits StorageOffset;
+  /// The alignment which should be used when accessing the bitfield.
+  unsigned StorageAlignment;
 
   CGBitFieldInfo()
-      : Offset(), Size(), IsSigned(), StorageSize(), StorageOffset() {}
+      : Offset(), Size(), IsSigned(), StorageSize(), StorageAlignment() {}
 
   CGBitFieldInfo(unsigned Offset, unsigned Size, bool IsSigned,
-                 unsigned StorageSize, CharUnits StorageOffset)
+                 unsigned StorageSize, unsigned StorageAlignment)
       : Offset(Offset), Size(Size), IsSigned(IsSigned),
-        StorageSize(StorageSize), StorageOffset(StorageOffset) {}
+        StorageSize(StorageSize), StorageAlignment(StorageAlignment) {}
 
   void print(raw_ostream &OS) const;
   void dump() const;
@@ -99,7 +99,7 @@ struct CGBitFieldInfo {
                                  const FieldDecl *FD,
                                  uint64_t Offset, uint64_t Size,
                                  uint64_t StorageSize,
-                                 CharUnits StorageOffset);
+                                 uint64_t StorageAlignment);
 };
 
 /// CGRecordLayout - This class handles struct and union layout info while
@@ -109,8 +109,8 @@ struct CGBitFieldInfo {
 class CGRecordLayout {
   friend class CodeGenTypes;
 
-  CGRecordLayout(const CGRecordLayout &) = delete;
-  void operator=(const CGRecordLayout &) = delete;
+  CGRecordLayout(const CGRecordLayout &) LLVM_DELETED_FUNCTION;
+  void operator=(const CGRecordLayout &) LLVM_DELETED_FUNCTION;
 
 private:
   /// The LLVM type corresponding to this record layout; used when

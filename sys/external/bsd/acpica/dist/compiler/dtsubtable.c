@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,6 +41,8 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+#define __DTSUBTABLE_C__
+
 #include "aslcompiler.h"
 #include "dtcompiler.h"
 
@@ -71,16 +73,14 @@ DtCreateSubtable (
     DT_SUBTABLE             **RetSubtable)
 {
     DT_SUBTABLE             *Subtable;
-    char                    *String;
 
 
-    Subtable = UtSubtableCacheCalloc ();
+    Subtable = UtLocalCalloc (sizeof (DT_SUBTABLE));
 
     /* Create a new buffer for the subtable data */
 
-    String = UtStringCacheCalloc (Length);
-    Subtable->Buffer = ACPI_CAST_PTR (UINT8, String);
-    memcpy (Subtable->Buffer, Buffer, Length);
+    Subtable->Buffer = UtLocalCalloc (Length);
+    ACPI_MEMCPY (Subtable->Buffer, Buffer, Length);
 
     Subtable->Length = Length;
     Subtable->TotalLength = Length;
@@ -321,11 +321,6 @@ DtGetSubtableLength (
             Step = 9;
             break;
 
-        case ACPI_DMT_IORTMEM:
-
-            Step = 10;
-            break;
-
         default:
 
             Step = 1;
@@ -379,6 +374,6 @@ DtSetSubtableLength (
         return;
     }
 
-    memcpy (Subtable->LengthField, &Subtable->TotalLength,
+    ACPI_MEMCPY (Subtable->LengthField, &Subtable->TotalLength,
         Subtable->SizeOfLengthField);
 }

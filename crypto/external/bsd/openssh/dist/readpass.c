@@ -1,6 +1,5 @@
-/*	$NetBSD: readpass.c,v 1.7 2016/03/11 01:55:00 christos Exp $	*/
-/* $OpenBSD: readpass.c,v 1.51 2015/12/11 00:20:04 mmcc Exp $ */
-
+/*	$NetBSD: readpass.c,v 1.4.4.1 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: readpass.c,v 1.50 2014/02/02 03:44:31 djm Exp $ */
 /*
  * Copyright (c) 2001 Markus Friedl.  All rights reserved.
  *
@@ -26,7 +25,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: readpass.c,v 1.7 2016/03/11 01:55:00 christos Exp $");
+__RCSID("$NetBSD: readpass.c,v 1.4.4.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/types.h>
 #include <sys/wait.h>
 
@@ -77,7 +76,7 @@ ssh_askpass(const char *askpass, const char *msg)
 		close(p[0]);
 		if (dup2(p[1], STDOUT_FILENO) < 0)
 			fatal("ssh_askpass: dup2: %s", strerror(errno));
-		execlp(askpass, askpass, msg, (char *)NULL);
+		execlp(askpass, askpass, msg, (char *) 0);
 		fatal("ssh_askpass: exec(%s): %s", askpass, strerror(errno));
 	}
 	close(p[1]);

@@ -1,5 +1,6 @@
 /* Print National Semiconductor 32000 instructions.
-   Copyright (C) 1986-2015 Free Software Foundation, Inc.
+   Copyright 1986, 1988, 1991, 1992, 1994, 1998, 2001, 2002, 2005, 2007,
+   2009  Free Software Foundation, Inc.
 
    This file is part of the GNU opcodes library.
 
@@ -57,7 +58,7 @@ struct private
   bfd_byte *max_fetched;
   bfd_byte the_buffer[MAXLEN];
   bfd_vma insn_start;
-  OPCODES_SIGJMP_BUF bailout;
+  jmp_buf bailout;
 };
 
 
@@ -82,7 +83,7 @@ fetch_data (struct disassemble_info *info, bfd_byte *addr)
   if (status != 0)
     {
       (*info->memory_error_func) (status, start, info);
-      OPCODES_SIGLONGJMP (priv->bailout, 1);
+      longjmp (priv->bailout, 1);
     }
   else
     priv->max_fetched = addr;
@@ -413,7 +414,7 @@ invalid_float (bfd_byte *p, int len)
 #else
 /* Assumes the bytes have been swapped to local order.  */
 typedef union
-{
+{ 
   double d;
   float f;
   struct { unsigned m:23, e:8, :1;} sf;
@@ -618,7 +619,7 @@ print_insn_arg (int d,
 	    int bit_index;
 	    static const char *ind = "bwdq";
 	    char *off;
-
+	    
 	    /* Scaled index basemode[R0 -- R7:B,W,D,Q].  */
 	    bit_index = bit_extract (buffer, index_offset - 8, 3);
 	    print_insn_arg (d, index_offset, aoffsetp, buffer, addr,
@@ -745,7 +746,7 @@ print_insn_ns32k (bfd_vma memaddr, disassemble_info *info)
   info->private_data = & priv;
   priv.max_fetched = priv.the_buffer;
   priv.insn_start = memaddr;
-  if (OPCODES_SIGSETJMP (priv.bailout) != 0)
+  if (setjmp (priv.bailout) != 0)
     /* Error return.  */
     return -1;
 
@@ -794,7 +795,7 @@ print_insn_ns32k (bfd_vma memaddr, disassemble_info *info)
 
       /* 0 for operand A, 1 for operand B, greater for other args.  */
       int whicharg = 0;
-
+      
       (*dis_info->fprintf_func)(dis_info->stream, "\t");
 
       maxarg = 0;

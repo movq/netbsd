@@ -1,7 +1,7 @@
-/*	$NetBSD: sun_map.c,v 1.1.1.3 2015/01/17 16:34:15 christos Exp $	*/
+/*	$NetBSD: sun_map.c,v 1.1.1.2 2009/03/20 20:26:50 christos Exp $	*/
 
 /*
- * Copyright (c) 1997-2014 Erez Zadok
+ * Copyright (c) 1997-2009 Erez Zadok
  * Copyright (c) 2005 Daniel P. Ottavio
  * Copyright (c) 1990 Jan-Simon Pendry
  * Copyright (c) 1990 Imperial College of Science, Technology & Medicine
@@ -19,7 +19,11 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 3. Neither the name of the University nor the names of its contributors
+ * 3. All advertising materials mentioning features or use of this software
+ *    must display the following acknowledgment:
+ *      This product includes software developed by the University of
+ *      California, Berkeley and its contributors.
+ * 4. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -165,7 +169,7 @@ sun_strsub(const char *src, const char *str, const char *sub)
   (void)strncat(retval, sub, sub_size);
   (void)strncat(retval, str_end + 1, second_half);
 
-  if (strstr(retval, str) != NULL) {
+  if ((str_start = strstr(retval, str)) != NULL) {
     /*
      * If there is another occurrences of str call this function
      * recursively.
@@ -204,7 +208,7 @@ sun_expand2amd(const char *str)
    * each of the replace attempt will fail and we'll move on to the
    * next char.
    */
-  tmp = xstrdup(str);
+  tmp = strdup(str);
   for (pos = str; *pos != '\0'; pos++) {
     if (*pos != '$') {
       continue;
@@ -256,7 +260,9 @@ sun_expand2amd(const char *str)
   }
   else {
     retval = tmp2;
-    XFREE(tmp);
+    if (tmp != NULL) {
+      XFREE(tmp);
+    }
   }
 
   return retval;
@@ -307,15 +313,19 @@ sun_append_str(char *dest,
    * Try to convert any variable substitutions. If this function
    * returns a new string one or more var subs where expanded.
    */
-  else if (out != NULL && (sub = sun_expand2amd(out)) != NULL) {
+  else if ((sub = sun_expand2amd(out)) != NULL) {
     out = sub;
   }
 
   if (out != NULL) {
     xstrlcat(dest, out, destlen);
   }
-  XFREE(sub);
-  XFREE(sub2);
+  if (sub != NULL) {
+    XFREE(sub);
+  }
+  if (sub2 != NULL) {
+    XFREE(sub2);
+  }
 }
 
 
@@ -547,7 +557,7 @@ sun_entry2amd(const char *key, const char *s_entry_str)
   if (s_entry->mountpt_list != NULL) {
     /* multi-mount point */
     sun_multi2amd(line_buff, sizeof(line_buff), key, s_entry);
-    retval = xstrdup(line_buff);
+    retval = strdup(line_buff);
   }
   else {
     /* single mount point */
@@ -555,12 +565,12 @@ sun_entry2amd(const char *key, const char *s_entry_str)
       if (NSTREQ(s_entry->fstype, SUN_NFS_TYPE, strlen(SUN_NFS_TYPE))) {
 	/* NFS Type */
 	sun_nfs2amd(line_buff, sizeof(line_buff), key, s_entry);
-	retval = xstrdup(line_buff);
+	retval = strdup(line_buff);
       }
       else if (NSTREQ(s_entry->fstype, SUN_HSFS_TYPE, strlen(SUN_HSFS_TYPE))) {
 	/* HSFS Type (CD fs) */
 	sun_hsfs2amd(line_buff, sizeof(line_buff), key, s_entry);
-	retval = xstrdup(line_buff);
+	retval = strdup(line_buff);
       }
       /*
        * XXX: The following fstypes are not yet supported.
@@ -587,11 +597,13 @@ sun_entry2amd(const char *key, const char *s_entry_str)
     else {
       plog(XLOG_INFO, "No SUN fstype specified defaulting to NFS.");
       sun_nfs2amd(line_buff, sizeof(line_buff), key, s_entry);
-      retval = xstrdup(line_buff);
+      retval = strdup(line_buff);
     }
   }
 
  err:
-  XFREE(s_entry);
+  if (s_entry != NULL) {
+    XFREE(s_entry);
+  }
   return retval;
 }

@@ -1,5 +1,6 @@
 /* ldlex.h -
-   Copyright (C) 1991-2015 Free Software Foundation, Inc.
+   Copyright 1991, 1992, 1993, 1994, 1995, 1997, 2000, 2003, 2005, 2006,
+   2007, 2012 Free Software Foundation, Inc.
 
    This file is part of the GNU Binutils.
 
@@ -33,7 +34,6 @@ enum option_values
   OPTION_DEFSYM,
   OPTION_DEMANGLE,
   OPTION_DYNAMIC_LINKER,
-  OPTION_NO_DYNAMIC_LINKER,
   OPTION_SYSROOT,
   OPTION_EB,
   OPTION_EL,
@@ -69,7 +69,6 @@ enum option_values
   OPTION_TTEXT,
   OPTION_TTEXT_SEGMENT,
   OPTION_TRODATA_SEGMENT,
-  OPTION_TLDATA_SEGMENT,
   OPTION_TRADITIONAL_FORMAT,
   OPTION_UR,
   OPTION_VERBOSE,
@@ -137,13 +136,7 @@ enum option_values
 #endif /* ENABLE_PLUGINS */
   OPTION_DEFAULT_SCRIPT,
   OPTION_PRINT_OUTPUT_FORMAT,
-  OPTION_PRINT_SYSROOT,
-  OPTION_IGNORE_UNRESOLVED_SYMBOL,
-  OPTION_PUSH_STATE,
-  OPTION_POP_STATE,
-  OPTION_PRINT_MEMORY_USAGE,
-  OPTION_REQUIRE_DEFINED_SYMBOL,
-  OPTION_ORPHAN_HANDLING,
+  OPTION_IGNORE_UNRESOLVED_SYMBOL
 };
 
 /* The initial parser states.  */
@@ -166,7 +159,6 @@ extern int yylex (void);
 extern void lex_push_file (FILE *, const char *, unsigned int);
 extern void lex_redirect (const char *, const char *, unsigned int);
 extern void ldlex_script (void);
-extern void ldlex_inputlist (void);
 extern void ldlex_mri_script (void);
 extern void ldlex_version_script (void);
 extern void ldlex_version_file (void);

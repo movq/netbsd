@@ -18,7 +18,7 @@ standard C library equivalents
 
  int	BUF_MEM_grow(BUF_MEM *str, int len);
 
- char *BUF_strdup(const char *str);
+ char *	BUF_strdup(const char *str);
 
  char *BUF_strndup(const char *str, size_t siz);
 

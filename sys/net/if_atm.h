@@ -1,4 +1,4 @@
-/*      $NetBSD: if_atm.h,v 1.21 2016/04/28 00:16:56 ozaki-r Exp $       */
+/*      $NetBSD: if_atm.h,v 1.19 2011/02/01 19:46:28 chuck Exp $       */
 
 /*
  * Copyright (c) 1996 Charles D. Cranor and Washington University.
@@ -31,8 +31,6 @@
 
 #ifndef _NET_IF_ATM_H_
 #define _NET_IF_ATM_H_
-
-#include <sys/ioccom.h>
 
 #if (defined(__FreeBSD__) || defined(__bsdi__)) && defined(KERNEL)
 #ifndef _KERNEL
@@ -136,7 +134,7 @@ void	atm_ifattach(struct ifnet *);
 void	atm_input(struct ifnet *, struct atm_pseudohdr *,
 		struct mbuf *, void *);
 int	atm_output(struct ifnet *, struct mbuf *, const struct sockaddr *,
-		const struct rtentry *);
+		struct rtentry *);
 #endif
 #ifdef ATM_PVCEXT
 #ifdef _KERNEL

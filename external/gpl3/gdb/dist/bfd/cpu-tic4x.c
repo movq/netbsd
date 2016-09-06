@@ -1,5 +1,6 @@
 /* bfd back-end for TMS320C[34]x support
-   Copyright (C) 1996-2015 Free Software Foundation, Inc.
+   Copyright 1996, 1997, 2002, 2003, 2005, 2007, 2012
+   Free Software Foundation, Inc.
 
    Contributed by Michael Hayes (m.hayes@elec.canterbury.ac.nz)
 

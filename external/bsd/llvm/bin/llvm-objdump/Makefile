@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.12 2016/02/27 21:47:31 joerg Exp $
+#	$NetBSD: Makefile,v 1.10.2.1 2015/06/04 20:04:22 snj Exp $
 
 PROG_CXX=	llvm-objdump
 NOMAN=		yes
@@ -48,7 +48,7 @@ LLVM_LIBS+= \
 	X86Utils \
 	CodeGen \
 	MCDisassembler \
-	DebugInfoDWARF \
+	DebugInfo \
 	Object \
 	BitReader \
 	MCParser \

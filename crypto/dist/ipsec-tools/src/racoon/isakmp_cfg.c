@@ -1,4 +1,4 @@
-/*	$NetBSD: isakmp_cfg.c,v 1.26 2016/03/09 22:27:17 christos Exp $	*/
+/*	$NetBSD: isakmp_cfg.c,v 1.25.8.1 2016/04/15 07:52:15 snj Exp $	*/
 
 /* Id: isakmp_cfg.c,v 1.55 2006/08/22 18:17:17 manubsd Exp */
 

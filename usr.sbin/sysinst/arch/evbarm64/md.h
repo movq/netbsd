@@ -1,4 +1,4 @@
-/*	$NetBSD: md.h,v 1.2 2015/07/08 01:12:48 matt Exp $	*/
+/*	$NetBSD: md.h,v 1.1.2.2 2014/12/31 06:17:24 snj Exp $	*/
 
 /*
  * Copyright 1997 Piermont Information Systems Inc.
@@ -40,6 +40,8 @@
 /* Constants and defines */
 #define PART_BOOT		PART_E
 #define PART_BOOT_MSDOS		PART_BOOT
+#define PART_BOOT_PI_MOUNT	"/boot"
+#define PART_BOOT_PI_FLAGS	PIF_MOUNT
 
 /* Megs required for a full X installation. */
 #define XNEEDMB 60
@@ -51,11 +53,18 @@
  *  or upgrade. The standard sets are:
  *      base etc comp games man misc tests text xbase xcomp xetc xfont xserver
  */
-#define SET_KERNEL_1_NAME	"kern-A64EMUL"
+#define SET_KERNEL_1_NAME	"kern-ADI_BRH"
+#define SET_KERNEL_2_NAME	"kern-INTEGRATOR"
+#define SET_KERNEL_3_NAME	"kern-IQ80310"
+#define SET_KERNEL_4_NAME	"kern-IQ80321"
+#define SET_KERNEL_5_NAME	"kern-MINI2440"
+#define SET_KERNEL_6_NAME	"kern-TEAMASA_NPWR"
+#define SET_KERNEL_7_NAME	"kern-TS7200"
+#define SET_KERNEL_8_NAME	"kern-RPI"
+#define SET_KERNEL_9_NAME	"kern-KUROBOX_PRO"
+#define SET_KERNEL_RPI		SET_KERNEL_8
 
 #define MD_SETS_SELECTED SET_SYSTEM
-
-#define md_may_remove_boot_medium()	0
 
 /*
  * Machine-specific command to write a new label to a disk.
@@ -69,4 +78,5 @@
 
 /* Special board type routines need a switch */
 #define BOARD_TYPE_NORMAL	0
+#define BOARD_TYPE_RPI		1
 int boardtype;

@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -41,19 +41,28 @@
  * POSSIBILITY OF SUCH DAMAGES.
  */
 
+#define __PSXFACE_C__
+
 #include "acpi.h"
 #include "accommon.h"
 #include "acparser.h"
 #include "acdispat.h"
 #include "acinterp.h"
 #include "actables.h"
-#include "acnamesp.h"
 
 
 #define _COMPONENT          ACPI_PARSER
         ACPI_MODULE_NAME    ("psxface")
 
 /* Local Prototypes */
+
+static void
+AcpiPsStartTrace (
+    ACPI_EVALUATE_INFO      *Info);
+
+static void
+AcpiPsStopTrace (
+    ACPI_EVALUATE_INFO      *Info);
 
 static void
 AcpiPsUpdateParameterList (
@@ -79,7 +88,7 @@ AcpiPsUpdateParameterList (
 
 ACPI_STATUS
 AcpiDebugTrace (
-    const char              *Name,
+    char                    *Name,
     UINT32                  DebugLevel,
     UINT32                  DebugLayer,
     UINT32                  Flags)
@@ -93,14 +102,128 @@ AcpiDebugTrace (
         return (Status);
     }
 
-    AcpiGbl_TraceMethodName = Name;
+    /* TBDs: Validate name, allow full path or just nameseg */
+
+    AcpiGbl_TraceMethodName = *ACPI_CAST_PTR (UINT32, Name);
     AcpiGbl_TraceFlags = Flags;
-    AcpiGbl_TraceDbgLevel = DebugLevel;
-    AcpiGbl_TraceDbgLayer = DebugLayer;
-    Status = AE_OK;
+
+    if (DebugLevel)
+    {
+        AcpiGbl_TraceDbgLevel = DebugLevel;
+    }
+    if (DebugLayer)
+    {
+        AcpiGbl_TraceDbgLayer = DebugLayer;
+    }
 
     (void) AcpiUtReleaseMutex (ACPI_MTX_NAMESPACE);
-    return (Status);
+    return (AE_OK);
+}
+
+
+/*******************************************************************************
+ *
+ * FUNCTION:    AcpiPsStartTrace
+ *
+ * PARAMETERS:  Info        - Method info struct
+ *
+ * RETURN:      None
+ *
+ * DESCRIPTION: Start control method execution trace
+ *
+ ******************************************************************************/
+
+static void
+AcpiPsStartTrace (
+    ACPI_EVALUATE_INFO      *Info)
+{
+    ACPI_STATUS             Status;
+
+
+    ACPI_FUNCTION_ENTRY ();
+
+
+    Status = AcpiUtAcquireMutex (ACPI_MTX_NAMESPACE);
+    if (ACPI_FAILURE (Status))
+    {
+        return;
+    }
+
+    if ((!AcpiGbl_TraceMethodName) ||
+        (AcpiGbl_TraceMethodName != Info->Node->Name.Integer))
+    {
+        goto Exit;
+    }
+
+    AcpiGbl_OriginalDbgLevel = AcpiDbgLevel;
+    AcpiGbl_OriginalDbgLayer = AcpiDbgLayer;
+
+    AcpiDbgLevel = 0x00FFFFFF;
+    AcpiDbgLayer = ACPI_UINT32_MAX;
+
+    if (AcpiGbl_TraceDbgLevel)
+    {
+        AcpiDbgLevel = AcpiGbl_TraceDbgLevel;
+    }
+    if (AcpiGbl_TraceDbgLayer)
+    {
+        AcpiDbgLayer = AcpiGbl_TraceDbgLayer;
+    }
+
+
+Exit:
+    (void) AcpiUtReleaseMutex (ACPI_MTX_NAMESPACE);
+}
+
+
+/*******************************************************************************
+ *
+ * FUNCTION:    AcpiPsStopTrace
+ *
+ * PARAMETERS:  Info        - Method info struct
+ *
+ * RETURN:      None
+ *
+ * DESCRIPTION: Stop control method execution trace
+ *
+ ******************************************************************************/
+
+static void
+AcpiPsStopTrace (
+    ACPI_EVALUATE_INFO      *Info)
+{
+    ACPI_STATUS             Status;
+
+
+    ACPI_FUNCTION_ENTRY ();
+
+
+    Status = AcpiUtAcquireMutex (ACPI_MTX_NAMESPACE);
+    if (ACPI_FAILURE (Status))
+    {
+        return;
+    }
+
+    if ((!AcpiGbl_TraceMethodName) ||
+        (AcpiGbl_TraceMethodName != Info->Node->Name.Integer))
+    {
+        goto Exit;
+    }
+
+    /* Disable further tracing if type is one-shot */
+
+    if (AcpiGbl_TraceFlags & 1)
+    {
+        AcpiGbl_TraceMethodName = 0;
+        AcpiGbl_TraceDbgLevel = 0;
+        AcpiGbl_TraceDbgLayer = 0;
+    }
+
+    AcpiDbgLevel = AcpiGbl_OriginalDbgLevel;
+    AcpiDbgLayer = AcpiGbl_OriginalDbgLayer;
+
+Exit:
+    (void) AcpiUtReleaseMutex (ACPI_MTX_NAMESPACE);
 }
 
 
@@ -163,6 +286,10 @@ AcpiPsExecuteMethod (
      */
     AcpiPsUpdateParameterList (Info, REF_INCREMENT);
 
+    /* Begin tracing if requested */
+
+    AcpiPsStartTrace (Info);
+
     /*
      * Execute the method. Performs parse simultaneously
      */
@@ -172,7 +299,7 @@ AcpiPsExecuteMethod (
 
     /* Create and init a Root Node */
 
-    Op = AcpiPsCreateScopeOp (Info->ObjDesc->Method.AmlStart);
+    Op = AcpiPsCreateScopeOp ();
     if (!Op)
     {
         Status = AE_NO_MEMORY;
@@ -183,7 +310,7 @@ AcpiPsExecuteMethod (
 
     Info->PassNumber = ACPI_IMODE_EXECUTE;
     WalkState = AcpiDsCreateWalkState (
-        Info->ObjDesc->Method.OwnerId, NULL, NULL, NULL);
+                    Info->ObjDesc->Method.OwnerId, NULL, NULL, NULL);
     if (!WalkState)
     {
         Status = AE_NO_MEMORY;
@@ -191,8 +318,8 @@ AcpiPsExecuteMethod (
     }
 
     Status = AcpiDsInitAmlWalk (WalkState, Op, Info->Node,
-        Info->ObjDesc->Method.AmlStart,
-        Info->ObjDesc->Method.AmlLength, Info, Info->PassNumber);
+                Info->ObjDesc->Method.AmlStart,
+                Info->ObjDesc->Method.AmlLength, Info, Info->PassNumber);
     if (ACPI_FAILURE (Status))
     {
         AcpiDsDeleteWalkState (WalkState);
@@ -244,6 +371,10 @@ AcpiPsExecuteMethod (
 
 Cleanup:
     AcpiPsDeleteParseTree (Op);
+
+    /* End optional tracing */
+
+    AcpiPsStopTrace (Info);
 
     /* Take away the extra reference that we gave the parameters above */
 
@@ -303,8 +434,7 @@ AcpiPsUpdateParameterList (
         {
             /* Ignore errors, just do them all */
 
-            (void) AcpiUtUpdateObjectReference (
-                Info->Parameters[i], Action);
+            (void) AcpiUtUpdateObjectReference (Info->Parameters[i], Action);
         }
     }
 }

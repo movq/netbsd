@@ -1,4 +1,4 @@
-/* $NetBSD: fdvar.h,v 1.9 2015/04/13 16:33:24 riastradh Exp $ */
+/* $NetBSD: fdvar.h,v 1.8 2012/02/02 19:43:04 tls Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 /*
  * Floppies come in various flavors, e.g., 1.2MB vs 1.44MB; here is how

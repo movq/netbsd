@@ -1,4 +1,4 @@
-/*	$NetBSD: descr.c,v 1.6 2015/12/31 20:35:21 jakllsch Exp $	*/
+/*	$NetBSD: descr.c,v 1.5 2007/04/11 20:56:20 plunky Exp $	*/
 
 /*
  * Copyright (c) 1999 Lennart Augustsson <augustss@NetBSD.org>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: descr.c,v 1.6 2015/12/31 20:35:21 jakllsch Exp $");
+__RCSID("$NetBSD: descr.c,v 1.5 2007/04/11 20:56:20 plunky Exp $");
 
 #include <sys/types.h>
 
@@ -63,7 +63,7 @@ hid_use_report_desc(const uint8_t *data, unsigned int size)
 	report_desc_t r;
 
 	r = malloc(sizeof(*r) + size);
-	if (r == NULL) {
+	if (r == 0) {
 		errno = ENOMEM;
 		return (NULL);
 	}

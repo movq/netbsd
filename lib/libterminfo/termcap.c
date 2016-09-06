@@ -1,4 +1,4 @@
-/* $NetBSD: termcap.c,v 1.19 2016/04/01 19:59:08 christos Exp $ */
+/* $NetBSD: termcap.c,v 1.17 2011/11/13 15:24:04 christos Exp $ */
 
 /*
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: termcap.c,v 1.19 2016/04/01 19:59:08 christos Exp $");
+__RCSID("$NetBSD: termcap.c,v 1.17 2011/11/13 15:24:04 christos Exp $");
 
 #include <assert.h>
 #include <ctype.h>
@@ -57,17 +57,14 @@ tgetent(__unused char *bp, const char *name)
 	_DIAGASSERT(name != NULL);
 
 	/* Free the old term */
-	if (cur_term != NULL) {
-		if (last != NULL && cur_term != last)
-			del_curterm(last);
-		last = cur_term;
+	if (last != NULL) {
+		del_curterm(last);
+		last = NULL;
 	}
 	errret = -1;
 	if (setupterm(name, STDOUT_FILENO, &errret) != 0)
 		return errret;
-
-	if (last == NULL)
-		last = cur_term;
+	last = cur_term;
 
 	if (pad_char != NULL)
 		PC = pad_char[0];
@@ -556,11 +553,8 @@ captoinfo(char *cap)
 			else
 				len += rl;
 			p = realloc(info, len);
-			if (p == NULL) {
-				if (fv == 1)
-					free(val);
+			if (p == NULL)
 				return NULL;
-			}
 			info = p;
 		}
 

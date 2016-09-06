@@ -1,4 +1,4 @@
-/*	$NetBSD: mount_lfs.c,v 1.39 2016/02/21 22:51:29 christos Exp $	*/
+/*	$NetBSD: mount_lfs.c,v 1.37 2013/10/19 23:14:27 christos Exp $	*/
 
 /*-
  * Copyright (c) 1993, 1994
@@ -39,14 +39,14 @@ __COPYRIGHT("@(#) Copyright (c) 1993, 1994\
 #if 0
 static char sccsid[] = "@(#)mount_lfs.c	8.4 (Berkeley) 4/26/95";
 #else
-__RCSID("$NetBSD: mount_lfs.c,v 1.39 2016/02/21 22:51:29 christos Exp $");
+__RCSID("$NetBSD: mount_lfs.c,v 1.37 2013/10/19 23:14:27 christos Exp $");
 #endif
 #endif /* not lint */
 
 #include <sys/param.h>
 #include <sys/mount.h>
 
-#include <ufs/lfs/lfs.h>
+#include <ufs/ufs/ufsmount.h>
 
 #include <err.h>
 #include <errno.h>
@@ -68,7 +68,6 @@ static const struct mntopt mopts[] = {
 	MOPT_UPDATE,
 	MOPT_GETARGS,
 	MOPT_NOATIME,
-	MOPT_RELATIME,
 	MOPT_NULL,
 };
 
@@ -95,7 +94,7 @@ main(int argc, char **argv)
 
 void
 mount_lfs_parseargs(int argc, char *argv[],
-	struct ulfs_args *args, int *mntflags,
+	struct ufs_args *args, int *mntflags,
 	char *canon_dev, char *canon_dir)
 {
 	int ch;
@@ -150,7 +149,7 @@ mount_lfs_parseargs(int argc, char *argv[],
 int
 mount_lfs(int argc, char *argv[])
 {
-	struct ulfs_args args;
+	struct ufs_args args;
 	int mntflags;
 	int mntsize, oldflags, i;
 	char fs_name[MAXPATHLEN], canon_dev[MAXPATHLEN];

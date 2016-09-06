@@ -1,8 +1,8 @@
-#	$NetBSD: Makefile,v 1.3 2016/08/12 01:15:50 mrg Exp $
+#	$NetBSD: Makefile,v 1.2 2009/06/12 01:59:05 mrg Exp $
 
 LIB=	wfb
 
-SRCS=	fbmodule.c
+SRCS=	fbmodule.c fbcmap_mi.c
 
 CPPFLAGS+=	-DFB_ACCESS_WRAPPER \
 		-I${X11SRCDIR.xorg-server}/Xext \

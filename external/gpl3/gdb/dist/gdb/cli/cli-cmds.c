@@ -1,6 +1,6 @@
 /* GDB CLI commands.
 
-   Copyright (C) 2000-2015 Free Software Foundation, Inc.
+   Copyright (C) 2000-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -18,6 +18,7 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #include "defs.h"
+#include "exceptions.h"
 #include "arch-utils.h"
 #include "dyn-string.h"
 #include "readline/readline.h"
@@ -26,6 +27,7 @@
 #include "target.h"	/* For baud_rate, remote_debug and remote_timeout.  */
 #include "gdb_wait.h"	/* For shell escape implementation.  */
 #include "gdb_regex.h"	/* Used by apropos_command.  */
+#include <string.h>
 #include "gdb_vfork.h"
 #include "linespec.h"
 #include "expression.h"
@@ -48,7 +50,7 @@
 #include "cli/cli-cmds.h"
 #include "cli/cli-utils.h"
 
-#include "extension.h"
+#include "python/python.h"
 
 #ifdef TUI
 #include "tui/tui.h"	/* For tui_active et.al.  */
@@ -202,7 +204,7 @@ static const char *script_ext_mode = script_ext_soft;
    none is supplied.  */
 
 void
-error_no_arg (const char *why)
+error_no_arg (char *why)
 {
   error (_("Argument required (%s)."), why);
 }
@@ -216,7 +218,7 @@ info_command (char *arg, int from_tty)
 {
   printf_unfiltered (_("\"info\" must be followed by "
 		       "the name of an info command.\n"));
-  help_list (infolist, "info ", all_commands, gdb_stdout);
+  help_list (infolist, "info ", -1, gdb_stdout);
 }
 
 /* The "show" command with no arguments shows all the settings.  */
@@ -236,8 +238,7 @@ help_command (char *command, int from_tty)
   help_cmd (command, gdb_stdout);
 }
 
-/* Note: The "complete" command is used by Emacs to implement completion.
-   [Is that why this function writes output with *_unfiltered?]  */
+/* The "complete" command is used by Emacs to implement completion.  */
 
 static void
 complete_command (char *arg, int from_tty)
@@ -247,18 +248,6 @@ complete_command (char *arg, int from_tty)
   VEC (char_ptr) *completions;
 
   dont_repeat ();
-
-  if (max_completions == 0)
-    {
-      /* Only print this for non-mi frontends.  An MI frontend may not
-	 be able to handle this.  */
-      if (!ui_out_is_mi_like_p (current_uiout))
-	{
-	  printf_unfiltered (_("max-completions is zero,"
-			       " completion is disabled.\n"));
-	}
-      return;
-    }
 
   if (arg == NULL)
     arg = "";
@@ -306,15 +295,6 @@ complete_command (char *arg, int from_tty)
 
       xfree (prev);
       VEC_free (char_ptr, completions);
-
-      if (size == max_completions)
-	{
-	  /* ARG_PREFIX and POINT are included in the output so that emacs
-	     will include the message in the output.  */
-	  printf_unfiltered (_("%s%s %s\n"),
-			     arg_prefix, point,
-			     get_max_completions_reached_message ());
-	}
     }
 }
 
@@ -542,33 +522,21 @@ find_and_open_script (const char *script_file, int search_path,
 static void
 source_script_from_stream (FILE *stream, const char *file)
 {
-  if (script_ext_mode != script_ext_off)
+  if (script_ext_mode != script_ext_off
+      && strlen (file) > 3 && !strcmp (&file[strlen (file) - 3], ".py"))
     {
-      const struct extension_language_defn *extlang
-	= get_ext_lang_of_file (file);
-
-      if (extlang != NULL)
+      if (have_python ())
+	source_python_script (stream, file);
+      else if (script_ext_mode == script_ext_soft)
 	{
-	  if (ext_lang_present_p (extlang))
-	    {
-	      script_sourcer_func *sourcer
-		= ext_lang_script_sourcer (extlang);
-
-	      gdb_assert (sourcer != NULL);
-	      sourcer (extlang, stream, file);
-	      return;
-	    }
-	  else if (script_ext_mode == script_ext_soft)
-	    {
-	      /* Assume the file is a gdb script.
-		 This is handled below.  */
-	    }
-	  else
-	    throw_ext_lang_unsupported (extlang);
+	  /* Fallback to GDB script mode.  */
+	  script_from_file (stream, file);
 	}
+      else
+	error (_("Python scripting is not supported in this copy of GDB."));
     }
-
-  script_from_file (stream, file);
+  else
+    script_from_file (stream, file);
 }
 
 /* Worker to perform the "source" command.
@@ -840,7 +808,7 @@ edit_command (char *arg, int from_tty)
 	    error (_("No source file for address %s."),
 		   paddress (get_current_arch (), sal.pc));
 
-	  gdbarch = get_objfile_arch (SYMTAB_OBJFILE (sal.symtab));
+	  gdbarch = get_objfile_arch (sal.symtab->objfile);
           sym = find_pc_function (sal.pc);
           if (sym)
 	    printf_filtered ("%s is in %s (%s:%d).\n",
@@ -894,27 +862,6 @@ list_command (char *arg, int from_tty)
     {
       set_default_source_symtab_and_line ();
       cursal = get_current_source_symtab_and_line ();
-
-      /* If this is the first "list" since we've set the current
-	 source line, center the listing around that line.  */
-      if (get_first_line_listed () == 0)
-	{
-	  int first;
-
-	  first = max (cursal.line - get_lines_to_list () / 2, 1);
-
-	  /* A small special case --- if listing backwards, and we
-	     should list only one line, list the preceding line,
-	     instead of the exact line we've just shown after e.g.,
-	     stopping for a breakpoint.  */
-	  if (arg != NULL && arg[0] == '-'
-	      && get_lines_to_list () == 1 && first > 1)
-	    first -= 1;
-
-	  print_source_lines (cursal.symtab, first,
-			      first + get_lines_to_list (), 0);
-	  return;
-	}
     }
 
   /* "l" or "l +" lists next ten lines.  */
@@ -1025,7 +972,7 @@ list_command (char *arg, int from_tty)
 	error (_("No source file for address %s."),
 	       paddress (get_current_arch (), sal.pc));
 
-      gdbarch = get_objfile_arch (SYMTAB_OBJFILE (sal.symtab));
+      gdbarch = get_objfile_arch (sal.symtab->objfile);
       sym = find_pc_function (sal.pc);
       if (sym)
 	printf_filtered ("%s is in %s (%s:%d).\n",
@@ -1266,7 +1213,8 @@ show_user (char *args, int from_tty)
       const char *comname = args;
 
       c = lookup_cmd (&comname, cmdlist, "", 0, 1);
-      if (!cli_user_command_p (c))
+      /* c->user_commands would be NULL if it's a python command.  */
+      if (c->class != class_user || !c->user_commands)
 	error (_("Not a user command."));
       show_user_1 (c, "", args, gdb_stdout);
     }
@@ -1274,7 +1222,7 @@ show_user (char *args, int from_tty)
     {
       for (c = cmdlist; c; c = c->next)
 	{
-	  if (cli_user_command_p (c) || c->prefixlist != NULL)
+	  if (c->class == class_user || c->prefixlist != NULL)
 	    show_user_1 (c, "", c->name, gdb_stdout);
 	}
     }
@@ -1508,23 +1456,21 @@ compare_symtabs (const void *a, const void *b)
 {
   const struct symtab_and_line *sala = a;
   const struct symtab_and_line *salb = b;
-  const char *dira = SYMTAB_DIRNAME (sala->symtab);
-  const char *dirb = SYMTAB_DIRNAME (salb->symtab);
   int r;
 
-  if (dira == NULL)
+  if (!sala->symtab->dirname)
     {
-      if (dirb != NULL)
+      if (salb->symtab->dirname)
 	return -1;
     }
-  else if (dirb == NULL)
+  else if (!salb->symtab->dirname)
     {
-      if (dira != NULL)
+      if (sala->symtab->dirname)
 	return 1;
     }
   else
     {
-      r = filename_cmp (dira, dirb);
+      r = filename_cmp (sala->symtab->dirname, salb->symtab->dirname);
       if (r)
 	return r;
     }
@@ -1588,7 +1534,7 @@ set_debug (char *arg, int from_tty)
 {
   printf_unfiltered (_("\"set debug\" must be followed by "
 		       "the name of a debug subcommand.\n"));
-  help_list (setdebuglist, "set debug ", all_commands, gdb_stdout);
+  help_list (setdebuglist, "set debug ", -1, gdb_stdout);
 }
 
 static void
@@ -1727,11 +1673,7 @@ strict == evaluate script according to filename extension, error if not supporte
 			show_script_ext_mode,
 			&setlist, &showlist);
 
-  add_com ("quit", class_support, quit_command, _("\
-Exit gdb.\n\
-Usage: quit [EXPR]\n\
-The optional expression EXPR, if present, is evaluated and the result\n\
-used as GDB's exit code.  The default is zero."));
+  add_com ("quit", class_support, quit_command, _("Exit gdb."));
   c = add_com ("help", class_support, help_command,
 	       _("Print list of commands."));
   set_cmd_completer (c, command_completer);
@@ -1846,7 +1788,10 @@ Lines can be specified in these ways:\n\
 With two args if one is empty it stands for ten lines away from \
 the other arg."));
 
-  add_com_alias ("l", "list", class_files, 1);
+  if (!xdb_commands)
+    add_com_alias ("l", "list", class_files, 1);
+  else
+    add_com_alias ("v", "list", class_files, 1);
 
   if (dbx_commands)
     add_com_alias ("file", "list", class_files, 1);
@@ -1865,6 +1810,8 @@ like in the \"break\" command.\n\
 So, for example, if you want to disassemble function bar in file foo.c\n\
 you must type \"disassemble 'foo.c'::bar\" and not \"disassemble foo.c:bar\"."));
   set_cmd_completer (c, location_completer);
+  if (xdb_commands)
+    add_com_alias ("va", "disassemble", class_xdb, 0);
 
   add_com_alias ("!", "shell", class_support, 0);
 
@@ -1872,7 +1819,7 @@ you must type \"disassemble 'foo.c'::bar\" and not \"disassemble foo.c:bar\"."))
 Run the ``make'' program using the rest of the line as arguments."));
   set_cmd_completer (c, filename_completer);
   add_cmd ("user", no_class, show_user, _("\
-Show definitions of non-python/scheme user defined commands.\n\
+Show definitions of non-python user defined commands.\n\
 Argument is the name of the user defined command.\n\
 With no argument, show definitions of all user defined commands."), &showlist);
   add_com ("apropos", class_support, apropos_command,
@@ -1880,8 +1827,8 @@ With no argument, show definitions of all user defined commands."), &showlist);
 
   add_setshow_uinteger_cmd ("max-user-call-depth", no_class,
 			   &max_user_call_depth, _("\
-Set the max call depth for non-python/scheme user-defined commands."), _("\
-Show the max call depth for non-python/scheme user-defined commands."), NULL,
+Set the max call depth for non-python user-defined commands."), _("\
+Show the max call depth for non-python user-defined commands."), NULL,
 			    NULL,
 			    show_max_user_call_depth,
 			    &setlist, &showlist);

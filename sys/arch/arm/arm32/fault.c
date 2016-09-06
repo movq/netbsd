@@ -1,4 +1,4 @@
-/*	$NetBSD: fault.c,v 1.103 2015/03/02 13:36:36 martin Exp $	*/
+/*	$NetBSD: fault.c,v 1.100 2014/04/12 09:11:47 skrll Exp $	*/
 
 /*
  * Copyright 2003 Wasabi Systems, Inc.
@@ -81,7 +81,7 @@
 #include "opt_kgdb.h"
 
 #include <sys/types.h>
-__KERNEL_RCSID(0, "$NetBSD: fault.c,v 1.103 2015/03/02 13:36:36 martin Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fault.c,v 1.100 2014/04/12 09:11:47 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -98,6 +98,8 @@ __KERNEL_RCSID(0, "$NetBSD: fault.c,v 1.103 2015/03/02 13:36:36 martin Exp $");
 #endif
 
 #include <arm/locore.h>
+
+#include <arm/arm32/katelib.h>
 
 #include <machine/pcb.h>
 #if defined(DDB) || defined(KGDB)
@@ -251,14 +253,9 @@ data_abort_handler(trapframe_t *tf)
 	ci->ci_data.cpu_ntrap++;
 
 	/* Re-enable interrupts if they were enabled previously */
-	KASSERT(!TRAP_USERMODE(tf) || VALID_R15_PSR(tf->tf_pc, tf->tf_spsr));
-#ifdef __NO_FIQ
-	if (__predict_true((tf->tf_spsr & I32_bit) != I32_bit))
-		restore_interrupts(tf->tf_spsr & IF32_bits);
-#else
+	KASSERT(!TRAP_USERMODE(tf) || (tf->tf_spsr & IF32_bits) == 0);
 	if (__predict_true((tf->tf_spsr & IF32_bits) != IF32_bits))
 		restore_interrupts(tf->tf_spsr & IF32_bits);
-#endif
 
 	/* Get the current lwp structure */
 
@@ -507,26 +504,15 @@ data_abort_handler(trapframe_t *tf)
 
 	KSI_INIT_TRAP(&ksi);
 
-	switch (error) {
-	case ENOMEM:
+	if (error == ENOMEM) {
 		printf("UVM: pid %d (%s), uid %d killed: "
 		    "out of swap\n", l->l_proc->p_pid, l->l_proc->p_comm,
 		    l->l_cred ? kauth_cred_geteuid(l->l_cred) : -1);
 		ksi.ksi_signo = SIGKILL;
-		break;
-	case EACCES:
+	} else
 		ksi.ksi_signo = SIGSEGV;
-		ksi.ksi_code = SEGV_ACCERR;
-		break;
-	case EINVAL:
-		ksi.ksi_signo = SIGBUS;
-		ksi.ksi_code = BUS_ADRERR;
-		break;
-	default:
-		ksi.ksi_signo = SIGSEGV;
-		ksi.ksi_code = SEGV_MAPERR;
-		break;
-	}
+
+	ksi.ksi_code = (error == EACCES) ? SEGV_ACCERR : SEGV_MAPERR;
 	ksi.ksi_addr = (uint32_t *)(intptr_t) far;
 	ksi.ksi_trap = fsr;
 	UVMHIST_LOG(maphist, " <- error (%d)", error, 0, 0, 0);
@@ -814,19 +800,14 @@ prefetch_abort_handler(trapframe_t *tf)
 	 * from user mode so we know interrupts were not disabled.
 	 * But we check anyway.
 	 */
-	KASSERT(!TRAP_USERMODE(tf) || VALID_R15_PSR(tf->tf_pc, tf->tf_spsr));
-#ifdef __NO_FIQ
-	if (__predict_true((tf->tf_spsr & I32_bit) != I32_bit))
+	KASSERT(!TRAP_USERMODE(tf) || (tf->tf_spsr & IF32_bits) == 0);
+	if (__predict_true((tf->tf_spsr & I32_bit) != IF32_bits))
 		restore_interrupts(tf->tf_spsr & IF32_bits);
-#else
-	if (__predict_true((tf->tf_spsr & IF32_bits) != IF32_bits))
-		restore_interrupts(tf->tf_spsr & IF32_bits);
-#endif
 
 	/* See if the CPU state needs to be fixed up */
 	switch (prefetch_abort_fixup(tf)) {
 	case ABORT_FIXUP_RETURN:
-		KASSERT(!TRAP_USERMODE(tf) || VALID_R15_PSR(tf->tf_pc, tf->tf_spsr));
+		KASSERT(!TRAP_USERMODE(tf) || (tf->tf_spsr & IF32_bits) == 0);
 		return;
 	case ABORT_FIXUP_FAILED:
 		/* Deliver a SIGILL to the process */
@@ -909,7 +890,7 @@ do_trapsignal:
 	call_trapsignal(l, tf, &ksi);
 
 out:
-	KASSERT(!TRAP_USERMODE(tf) || VALID_R15_PSR(tf->tf_pc, tf->tf_spsr));
+	KASSERT(!TRAP_USERMODE(tf) || (tf->tf_spsr & IF32_bits) == 0);
 	userret(l);
 }
 

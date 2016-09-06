@@ -1,4 +1,4 @@
-/*	$NetBSD: igphy.c,v 1.26 2016/07/07 06:55:41 msaitoh Exp $	*/
+/*	$NetBSD: igphy.c,v 1.23.2.1 2016/02/26 22:08:17 snj Exp $	*/
 
 /*
  * The Intel copyright applies to the analog register setup, and the
@@ -70,11 +70,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: igphy.c,v 1.26 2016/07/07 06:55:41 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: igphy.c,v 1.23.2.1 2016/02/26 22:08:17 snj Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_mii.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -166,7 +164,8 @@ igphyattach(device_t parent, device_t self, void *aux)
 
 	PHY_RESET(sc);
 
-	sc->mii_capabilities = PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
+	sc->mii_capabilities =
+	    PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
 	if (sc->mii_capabilities & BMSR_EXTSTAT)
 		sc->mii_extcapabilities = PHY_READ(sc, MII_EXTSR);
 	aprint_normal_dev(self, "");

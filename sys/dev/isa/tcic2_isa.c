@@ -1,4 +1,4 @@
-/*	$NetBSD: tcic2_isa.c,v 1.27 2016/07/14 10:19:06 msaitoh Exp $	*/
+/*	$NetBSD: tcic2_isa.c,v 1.26 2012/10/27 17:18:25 chs Exp $	*/
 
 /*
  *
@@ -32,7 +32,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcic2_isa.c,v 1.27 2016/07/14 10:19:06 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcic2_isa.c,v 1.26 2012/10/27 17:18:25 chs Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -224,18 +224,16 @@ tcic_isa_attach(device_t parent, device_t self, void *aux)
 	bus_space_handle_t ioh;
 	bus_space_handle_t memh;
 
-	aprint_naive("\n");
-
 	/* Map i/o space. */
 	if (bus_space_map(iot, ia->ia_io[0].ir_addr, TCIC_IOSIZE, 0, &ioh)) {
-		aprint_error(": can't map i/o space\n");
+		printf(": can't map i/o space\n");
 		return;
 	}
 
 	/* Map mem space. */
 	if (bus_space_map(memt, ia->ia_iomem[0].ir_addr,
 	    ia->ia_iomem[0].ir_size, 0, &memh)) {
-		aprint_error(": can't map mem space\n");
+		printf(": can't map mem space\n");
 		return;
 	}
 
@@ -276,9 +274,9 @@ tcic_isa_attach(device_t parent, device_t self, void *aux)
 			aprint_error_dev(self, "can't allocate interrupt\n");
 			return;
 		}
-		aprint_normal(": using irq %d", sc->irq);
+		printf(": using irq %d", sc->irq);
 	}
-	aprint_normal("\n");
+	printf("\n");
 
 	tcic_attach(sc);
 
@@ -323,13 +321,13 @@ tcic_isa_attach(device_t parent, device_t self, void *aux)
 		sc->iosize = tcic_isa_alloc_iosize;
 
 		DPRINTF(("%s: bus_space_alloc range 0x%04lx-0x%04lx "
-		    "(config override)\n", device_xname(self),
-		    (long)sc->iobase, (long)sc->iobase + sc->iosize));
+		    "(config override)\n", device_xname(self), (long) sc->iobase,
+		    (long) sc->iobase + sc->iosize));
 	}
 	sc->ih = isa_intr_establish(ic, sc->irq, IST_EDGE, IPL_TTY,
 	    tcic_intr, sc);
 	if (sc->ih == NULL) {
-		aprint_error_dev(self, "can't establish interrupt\n");
+		printf("%s: can't establish interrupt\n", device_xname(self));
 		return;
 	}
 
@@ -337,15 +335,14 @@ tcic_isa_attach(device_t parent, device_t self, void *aux)
 }
 
 void *
-tcic_isa_chip_intr_establish(pcmcia_chipset_handle_t pch,
-    struct pcmcia_function *pf, int ipl, int (*fct)(void *), void *arg)
+tcic_isa_chip_intr_establish(pcmcia_chipset_handle_t pch, struct pcmcia_function *pf,
+	int ipl, int (*fct)(void *), void *arg)
 {
 	struct tcic_handle *h = (struct tcic_handle *) pch;
 	int irq, ist;
 	void *ih;
 
-	DPRINTF(("%s: tcic_isa_chip_intr_establish\n",
-	    device_xname(h->sc->sc_dev)));
+	DPRINTF(("%s: tcic_isa_chip_intr_establish\n", device_xname(h->sc->sc_dev)));
 
 	/* XXX should we convert level to pulse? -chb  */
 	if (pf->cfe->flags & PCMCIA_CFE_IRQLEVEL)
@@ -377,8 +374,7 @@ tcic_isa_chip_intr_disestablish(pcmcia_chipset_handle_t pch, void *ih)
 	struct tcic_handle *h = (struct tcic_handle *) pch;
 	int val, reg;
 
-	DPRINTF(("%s: tcic_isa_chip_intr_disestablish\n",
-	    device_xname(h->sc->sc_dev)));
+	DPRINTF(("%s: tcic_isa_chip_intr_disestablish\n", device_xname(h->sc->sc_dev)));
 
 	h->ih_irq = 0;
 

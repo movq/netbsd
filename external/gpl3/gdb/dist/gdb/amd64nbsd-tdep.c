@@ -1,6 +1,6 @@
 /* Target-dependent code for NetBSD/amd64.
 
-   Copyright (C) 2003-2015 Free Software Foundation, Inc.
+   Copyright (C) 2003-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -23,6 +23,8 @@
 #include "gdbcore.h"
 #include "osabi.h"
 #include "symtab.h"
+
+#include "gdb_assert.h"
 
 #include "amd64-tdep.h"
 #include "nbsd-tdep.h"
@@ -228,16 +230,12 @@ amd64nbsd_trapframe_sniffer (const struct frame_unwind *self,
   const char *name;
   volatile struct gdb_exception ex;
 
-  TRY
+  TRY_CATCH (ex, RETURN_MASK_ERROR)
     {
       cs = get_frame_register_unsigned (this_frame, AMD64_CS_REGNUM);
     }
-  CATCH (ex, RETURN_MASK_ERROR)
-    {
-      if (ex.reason < 0 && ex.error != NOT_AVAILABLE_ERROR)
-	throw_exception (ex);
-    }
-  END_CATCH
+  if (ex.reason < 0 && ex.error != NOT_AVAILABLE_ERROR)
+    throw_exception (ex);
   if ((cs & I386_SEL_RPL) == I386_SEL_UPL)
     return 0;
 

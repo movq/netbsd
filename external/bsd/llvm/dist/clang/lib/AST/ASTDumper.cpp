@@ -21,10 +21,8 @@
 #include "clang/AST/DeclVisitor.h"
 #include "clang/AST/StmtVisitor.h"
 #include "clang/AST/TypeVisitor.h"
-#include "clang/Basic/Builtins.h"
 #include "clang/Basic/Module.h"
 #include "clang/Basic/SourceManager.h"
-#include "clang/Sema/LocInfoType.h"
 #include "llvm/Support/raw_ostream.h"
 using namespace clang;
 using namespace clang::comments;
@@ -242,9 +240,6 @@ namespace  {
     void dumpTemplateArgument(const TemplateArgument &A,
                               SourceRange R = SourceRange());
 
-    // Objective-C utilities.
-    void dumpObjCTypeParamList(const ObjCTypeParamList *typeParams);
-
     // Types
     void VisitComplexType(const ComplexType *T) {
       dumpTypeAsChild(T->getElementType());
@@ -449,7 +444,6 @@ namespace  {
         const ClassTemplatePartialSpecializationDecl *D);
     void VisitClassScopeFunctionSpecializationDecl(
         const ClassScopeFunctionSpecializationDecl *D);
-    void VisitBuiltinTemplateDecl(const BuiltinTemplateDecl *D);
     void VisitVarTemplateDecl(const VarTemplateDecl *D);
     void VisitVarTemplateSpecializationDecl(
         const VarTemplateSpecializationDecl *D);
@@ -469,7 +463,6 @@ namespace  {
     // ObjC Decls
     void VisitObjCIvarDecl(const ObjCIvarDecl *D);
     void VisitObjCMethodDecl(const ObjCMethodDecl *D);
-    void VisitObjCTypeParamDecl(const ObjCTypeParamDecl *D);
     void VisitObjCCategoryDecl(const ObjCCategoryDecl *D);
     void VisitObjCCategoryImplDecl(const ObjCCategoryImplDecl *D);
     void VisitObjCProtocolDecl(const ObjCProtocolDecl *D);
@@ -515,8 +508,6 @@ namespace  {
     void VisitCXXFunctionalCastExpr(const CXXFunctionalCastExpr *Node);
     void VisitCXXConstructExpr(const CXXConstructExpr *Node);
     void VisitCXXBindTemporaryExpr(const CXXBindTemporaryExpr *Node);
-    void VisitCXXNewExpr(const CXXNewExpr *Node);
-    void VisitCXXDeleteExpr(const CXXDeleteExpr *Node);
     void VisitMaterializeTemporaryExpr(const MaterializeTemporaryExpr *Node);
     void VisitExprWithCleanups(const ExprWithCleanups *Node);
     void VisitUnresolvedLookupExpr(const UnresolvedLookupExpr *Node);
@@ -525,7 +516,6 @@ namespace  {
       VisitExpr(Node);
       dumpDecl(Node->getLambdaClass());
     }
-    void VisitSizeOfPackExpr(const SizeOfPackExpr *Node);
 
     // ObjC
     void VisitObjCAtCatchStmt(const ObjCAtCatchStmt *Node);
@@ -654,15 +644,6 @@ void ASTDumper::dumpTypeAsChild(const Type *T) {
     if (!T) {
       ColorScope Color(*this, NullColor);
       OS << "<<<NULL>>>";
-      return;
-    }
-    if (const LocInfoType *LIT = llvm::dyn_cast<LocInfoType>(T)) {
-      {
-        ColorScope Color(*this, TypeColor);
-        OS << "LocInfo Type";
-      }
-      dumpPointer(T);
-      dumpTypeAsChild(LIT->getTypeSourceInfo()->getType());
       return;
     }
 
@@ -971,18 +952,6 @@ void ASTDumper::dumpTemplateArgument(const TemplateArgument &A, SourceRange R) {
 }
 
 //===----------------------------------------------------------------------===//
-//  Objective-C Utilities
-//===----------------------------------------------------------------------===//
-void ASTDumper::dumpObjCTypeParamList(const ObjCTypeParamList *typeParams) {
-  if (!typeParams)
-    return;
-
-  for (auto typeParam : *typeParams) {
-    dumpDecl(typeParam);
-  }
-}
-
-//===----------------------------------------------------------------------===//
 //  Decl dumping methods.
 //===----------------------------------------------------------------------===//
 
@@ -1005,14 +974,8 @@ void ASTDumper::dumpDecl(const Decl *D) {
     dumpSourceRange(D->getSourceRange());
     OS << ' ';
     dumpLocation(D->getLocation());
-    if (Module *M = D->getImportedOwningModule())
+    if (Module *M = D->getOwningModule())
       OS << " in " << M->getFullModuleName();
-    else if (Module *M = D->getLocalOwningModule())
-      OS << " in (local) " << M->getFullModuleName();
-    if (auto *ND = dyn_cast<NamedDecl>(D))
-      for (Module *M : D->getASTContext().getModulesWithMergedDefinition(
-               const_cast<NamedDecl *>(ND)))
-        dumpChild([=] { OS << "also in " << M->getFullModuleName(); });
     if (const NamedDecl *ND = dyn_cast<NamedDecl>(D))
       if (ND->isHidden())
         OS << " hidden";
@@ -1055,7 +1018,6 @@ void ASTDumper::VisitTypedefDecl(const TypedefDecl *D) {
   dumpType(D->getUnderlyingType());
   if (D->isModulePrivate())
     OS << " __module_private__";
-  dumpTypeAsChild(D->getUnderlyingType());
 }
 
 void ASTDumper::VisitEnumDecl(const EnumDecl *D) {
@@ -1137,13 +1099,10 @@ void ASTDumper::VisitFunctionDecl(const FunctionDecl *D) {
        E = D->getDeclsInPrototypeScope().end(); I != E; ++I)
     dumpDecl(*I);
 
-  if (!D->param_begin() && D->getNumParams())
-    dumpChild([=] { OS << "<<NULL params x " << D->getNumParams() << ">>"; });
-  else
-    for (FunctionDecl::param_const_iterator I = D->param_begin(),
-                                            E = D->param_end();
-         I != E; ++I)
-      dumpDecl(*I);
+  for (FunctionDecl::param_const_iterator I = D->param_begin(),
+                                          E = D->param_end();
+       I != E; ++I)
+    dumpDecl(*I);
 
   if (const CXXConstructorDecl *C = dyn_cast<CXXConstructorDecl>(D))
     for (CXXConstructorDecl::init_const_iterator I = C->init_begin(),
@@ -1227,7 +1186,6 @@ void ASTDumper::VisitNamespaceAliasDecl(const NamespaceAliasDecl *D) {
 void ASTDumper::VisitTypeAliasDecl(const TypeAliasDecl *D) {
   dumpName(D);
   dumpType(D->getUnderlyingType());
-  dumpTypeAsChild(D->getUnderlyingType());
 }
 
 void ASTDumper::VisitTypeAliasTemplateDecl(const TypeAliasTemplateDecl *D) {
@@ -1347,11 +1305,6 @@ void ASTDumper::VisitVarTemplateDecl(const VarTemplateDecl *D) {
   VisitTemplateDecl(D, false);
 }
 
-void ASTDumper::VisitBuiltinTemplateDecl(const BuiltinTemplateDecl *D) {
-  dumpName(D);
-  dumpTemplateParameters(D->getTemplateParameters());
-}
-
 void ASTDumper::VisitVarTemplateSpecializationDecl(
     const VarTemplateSpecializationDecl *D) {
   dumpTemplateArgumentList(D->getTemplateArgs());
@@ -1397,23 +1350,20 @@ void ASTDumper::VisitTemplateTemplateParmDecl(
 
 void ASTDumper::VisitUsingDecl(const UsingDecl *D) {
   OS << ' ';
-  if (D->getQualifier())
-    D->getQualifier()->print(OS, D->getASTContext().getPrintingPolicy());
+  D->getQualifier()->print(OS, D->getASTContext().getPrintingPolicy());
   OS << D->getNameAsString();
 }
 
 void ASTDumper::VisitUnresolvedUsingTypenameDecl(
     const UnresolvedUsingTypenameDecl *D) {
   OS << ' ';
-  if (D->getQualifier())
-    D->getQualifier()->print(OS, D->getASTContext().getPrintingPolicy());
+  D->getQualifier()->print(OS, D->getASTContext().getPrintingPolicy());
   OS << D->getNameAsString();
 }
 
 void ASTDumper::VisitUnresolvedUsingValueDecl(const UnresolvedUsingValueDecl *D) {
   OS << ' ';
-  if (D->getQualifier())
-    D->getQualifier()->print(OS, D->getASTContext().getPrintingPolicy());
+  D->getQualifier()->print(OS, D->getASTContext().getPrintingPolicy());
   OS << D->getNameAsString();
   dumpType(D->getType());
 }
@@ -1421,8 +1371,6 @@ void ASTDumper::VisitUnresolvedUsingValueDecl(const UnresolvedUsingValueDecl *D)
 void ASTDumper::VisitUsingShadowDecl(const UsingShadowDecl *D) {
   OS << ' ';
   dumpBareDeclRef(D->getTargetDecl());
-  if (auto *TD = dyn_cast<TypeDecl>(D->getUnderlyingDecl()))
-    dumpTypeAsChild(TD->getTypeForDecl());
 }
 
 void ASTDumper::VisitLinkageSpecDecl(const LinkageSpecDecl *D) {
@@ -1497,30 +1445,9 @@ void ASTDumper::VisitObjCMethodDecl(const ObjCMethodDecl *D) {
     dumpStmt(D->getBody());
 }
 
-void ASTDumper::VisitObjCTypeParamDecl(const ObjCTypeParamDecl *D) {
-  dumpName(D);
-  switch (D->getVariance()) {
-  case ObjCTypeParamVariance::Invariant:
-    break;
-
-  case ObjCTypeParamVariance::Covariant:
-    OS << " covariant";
-    break;
-
-  case ObjCTypeParamVariance::Contravariant:
-    OS << " contravariant";
-    break;
-  }
-
-  if (D->hasExplicitBound())
-    OS << " bounded";
-  dumpType(D->getUnderlyingType());
-}
-
 void ASTDumper::VisitObjCCategoryDecl(const ObjCCategoryDecl *D) {
   dumpName(D);
   dumpDeclRef(D->getClassInterface());
-  dumpObjCTypeParamList(D->getTypeParamList());
   dumpDeclRef(D->getImplementation());
   for (ObjCCategoryDecl::protocol_iterator I = D->protocol_begin(),
                                            E = D->protocol_end();
@@ -1543,7 +1470,6 @@ void ASTDumper::VisitObjCProtocolDecl(const ObjCProtocolDecl *D) {
 
 void ASTDumper::VisitObjCInterfaceDecl(const ObjCInterfaceDecl *D) {
   dumpName(D);
-  dumpObjCTypeParamList(D->getTypeParamListAsWritten());
   dumpDeclRef(D->getSuperClass(), "super");
 
   dumpDeclRef(D->getImplementation());
@@ -1661,8 +1587,8 @@ void ASTDumper::dumpStmt(const Stmt *S) {
 
     ConstStmtVisitor<ASTDumper>::Visit(S);
 
-    for (const Stmt *SubStmt : S->children())
-      dumpStmt(SubStmt);
+    for (Stmt::const_child_range CI = S->children(); CI; ++CI)
+      dumpStmt(*CI);
   });
 }
 
@@ -1891,9 +1817,6 @@ void ASTDumper::VisitUnaryExprOrTypeTraitExpr(
   case UETT_VecStep:
     OS << " vec_step";
     break;
-  case UETT_OpenMPRequiredSimdAlign:
-    OS << " __builtin_omp_required_simd_align";
-    break;
   }
   if (Node->isArgumentType())
     dumpType(Node->getArgumentType());
@@ -1990,32 +1913,6 @@ void ASTDumper::VisitCXXBindTemporaryExpr(const CXXBindTemporaryExpr *Node) {
   dumpCXXTemporary(Node->getTemporary());
 }
 
-void ASTDumper::VisitCXXNewExpr(const CXXNewExpr *Node) {
-  VisitExpr(Node);
-  if (Node->isGlobalNew())
-    OS << " global";
-  if (Node->isArray())
-    OS << " array";
-  if (Node->getOperatorNew()) {
-    OS << ' ';
-    dumpBareDeclRef(Node->getOperatorNew());
-  }
-  // We could dump the deallocation function used in case of error, but it's
-  // usually not that interesting.
-}
-
-void ASTDumper::VisitCXXDeleteExpr(const CXXDeleteExpr *Node) {
-  VisitExpr(Node);
-  if (Node->isGlobalDelete())
-    OS << " global";
-  if (Node->isArrayForm())
-    OS << " array";
-  if (Node->getOperatorDelete()) {
-    OS << ' ';
-    dumpBareDeclRef(Node->getOperatorDelete());
-  }
-}
-
 void
 ASTDumper::VisitMaterializeTemporaryExpr(const MaterializeTemporaryExpr *Node) {
   VisitExpr(Node);
@@ -2036,16 +1933,6 @@ void ASTDumper::dumpCXXTemporary(const CXXTemporary *Temporary) {
   dumpPointer(Temporary);
   OS << ")";
 }
-
-void ASTDumper::VisitSizeOfPackExpr(const SizeOfPackExpr *Node) {
-  VisitExpr(Node);
-  dumpPointer(Node->getPack());
-  dumpName(Node->getPack());
-  if (Node->isPartiallySubstituted())
-    for (const auto &A : Node->getPartialArguments())
-      dumpTemplateArgument(A);
-}
-
 
 //===----------------------------------------------------------------------===//
 // Obj-C Expressions
@@ -2365,11 +2252,6 @@ LLVM_DUMP_METHOD void Stmt::dump(SourceManager &SM) const {
 
 LLVM_DUMP_METHOD void Stmt::dump(raw_ostream &OS, SourceManager &SM) const {
   ASTDumper P(OS, nullptr, &SM);
-  P.dumpStmt(this);
-}
-
-LLVM_DUMP_METHOD void Stmt::dump(raw_ostream &OS) const {
-  ASTDumper P(OS, nullptr, nullptr);
   P.dumpStmt(this);
 }
 

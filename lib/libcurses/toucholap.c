@@ -1,4 +1,4 @@
-/*	$NetBSD: toucholap.c,v 1.16 2015/10/17 00:35:25 uwe Exp $	*/
+/*	$NetBSD: toucholap.c,v 1.15.54.1 2015/11/07 16:38:22 riz Exp $	*/
 
 /*
  * Copyright (c) 1981, 1993, 1994
@@ -34,7 +34,7 @@
 #if 0
 static char sccsid[] = "@(#)toucholap.c	8.2 (Berkeley) 5/4/94";
 #else
-__RCSID("$NetBSD: toucholap.c,v 1.16 2015/10/17 00:35:25 uwe Exp $");
+__RCSID("$NetBSD: toucholap.c,v 1.15.54.1 2015/11/07 16:38:22 riz Exp $");
 #endif
 #endif				/* not lint */
 

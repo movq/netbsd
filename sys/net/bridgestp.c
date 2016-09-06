@@ -1,4 +1,4 @@
-/*	$NetBSD: bridgestp.c,v 1.23 2016/06/10 13:27:15 ozaki-r Exp $	*/
+/*	$NetBSD: bridgestp.c,v 1.17 2014/07/14 02:34:36 ozaki-r Exp $	*/
 
 /*
  * Copyright (c) 2000 Jason L. Wright (jason@thought.net)
@@ -40,7 +40,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bridgestp.c,v 1.23 2016/06/10 13:27:15 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bridgestp.c,v 1.17 2014/07/14 02:34:36 ozaki-r Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -234,7 +234,7 @@ bstp_send_config_bpdu(struct bridge_softc *sc, struct bridge_iflist *bif,
 
 	eh = mtod(m, struct ether_header *);
 
-	m_set_rcvif(m, ifp);
+	m->m_pkthdr.rcvif = ifp;
 	m->m_pkthdr.len = sizeof(*eh) + sizeof(bpdu);
 	m->m_len = m->m_pkthdr.len;
 
@@ -341,7 +341,7 @@ bstp_config_bpdu_generation(struct bridge_softc *sc)
 {
 	struct bridge_iflist *bif;
 
-	BRIDGE_IFLIST_WRITER_FOREACH(bif, sc) {
+	LIST_FOREACH(bif, &sc->sc_iflist, bif_next) {
 		if ((bif->bif_flags & IFBIF_STP) == 0)
 			continue;
 		if (bstp_designated_port(sc, bif) &&
@@ -378,7 +378,7 @@ bstp_transmit_tcn(struct bridge_softc *sc)
 	if (m == NULL)
 		return;
 
-	m_set_rcvif(m, ifp);
+	m->m_pkthdr.rcvif = ifp;
 	m->m_pkthdr.len = sizeof(*eh) + sizeof(bpdu);
 	m->m_len = m->m_pkthdr.len;
 
@@ -415,7 +415,7 @@ bstp_root_selection(struct bridge_softc *sc)
 {
 	struct bridge_iflist *root_port = NULL, *bif;
 
-	BRIDGE_IFLIST_WRITER_FOREACH(bif, sc) {
+	LIST_FOREACH(bif, &sc->sc_iflist, bif_next) {
 		if ((bif->bif_flags & IFBIF_STP) == 0)
 			continue;
 		if (bstp_designated_port(sc, bif))
@@ -473,7 +473,7 @@ bstp_designated_port_selection(struct bridge_softc *sc)
 {
 	struct bridge_iflist *bif;
 
-	BRIDGE_IFLIST_WRITER_FOREACH(bif, sc) {
+	LIST_FOREACH(bif, &sc->sc_iflist, bif_next) {
 		if ((bif->bif_flags & IFBIF_STP) == 0)
 			continue;
 		if (bstp_designated_port(sc, bif))
@@ -512,7 +512,7 @@ bstp_port_state_selection(struct bridge_softc *sc)
 {
 	struct bridge_iflist *bif;
 
-	BRIDGE_IFLIST_WRITER_FOREACH(bif, sc) {
+	LIST_FOREACH(bif, &sc->sc_iflist, bif_next) {
 		if ((bif->bif_flags & IFBIF_STP) == 0)
 			continue;
 		if (bif == sc->sc_root_port) {
@@ -789,7 +789,7 @@ bstp_designated_for_some_port(struct bridge_softc *sc)
 
 	struct bridge_iflist *bif;
 
-	BRIDGE_IFLIST_WRITER_FOREACH(bif, sc) {
+	LIST_FOREACH(bif, &sc->sc_iflist, bif_next) {
 		if ((bif->bif_flags & IFBIF_STP) == 0)
 			continue;
 		if (bif->bif_designated_bridge == sc->sc_bridge_id)
@@ -828,7 +828,7 @@ bstp_initialization(struct bridge_softc *sc)
 
 	BRIDGE_LOCK(sc);
 
-	BRIDGE_IFLIST_WRITER_FOREACH(bif, sc) {
+	LIST_FOREACH(bif, &sc->sc_iflist, bif_next) {
 		if ((bif->bif_flags & IFBIF_STP) == 0)
 			continue;
 		if (bif->bif_ifp->if_type != IFT_ETHER)
@@ -882,7 +882,7 @@ bstp_initialization(struct bridge_softc *sc)
 
 	BRIDGE_LOCK(sc);
 
-	BRIDGE_IFLIST_WRITER_FOREACH(bif, sc) {
+	LIST_FOREACH(bif, &sc->sc_iflist, bif_next) {
 		if (bif->bif_flags & IFBIF_STP)
 			bstp_enable_port(sc, bif);
 		else
@@ -902,7 +902,7 @@ bstp_stop(struct bridge_softc *sc)
 	struct bridge_iflist *bif;
 
 	BRIDGE_LOCK(sc);
-	BRIDGE_IFLIST_WRITER_FOREACH(bif, sc) {
+	LIST_FOREACH(bif, &sc->sc_iflist, bif_next) {
 		bstp_set_port_state(bif, BSTP_IFSTATE_DISABLED);
 		bstp_timer_stop(&bif->bif_hold_timer);
 		bstp_timer_stop(&bif->bif_message_age_timer);
@@ -974,7 +974,7 @@ bstp_set_bridge_priority(struct bridge_softc *sc, uint64_t new_bridge_id)
 
 	root = bstp_root_bridge(sc);
 
-	BRIDGE_IFLIST_WRITER_FOREACH(bif, sc) {
+	LIST_FOREACH(bif, &sc->sc_iflist, bif_next) {
 		if ((bif->bif_flags & IFBIF_STP) == 0)
 			continue;
 		if (bstp_designated_port(sc, bif))
@@ -1067,7 +1067,7 @@ bstp_tick(void *arg)
 	s = splnet();
 	BRIDGE_LOCK(sc);
 
-	BRIDGE_IFLIST_WRITER_FOREACH(bif, sc) {
+	LIST_FOREACH(bif, &sc->sc_iflist, bif_next) {
 		if ((bif->bif_flags & IFBIF_STP) == 0)
 			continue;
 		/*
@@ -1090,7 +1090,7 @@ bstp_tick(void *arg)
 	    sc->sc_topology_change_time))
 		bstp_topology_change_timer_expiry(sc);
 
-	BRIDGE_IFLIST_WRITER_FOREACH(bif, sc) {
+	LIST_FOREACH(bif, &sc->sc_iflist, bif_next) {
 		if ((bif->bif_flags & IFBIF_STP) == 0)
 			continue;
 		if (bstp_timer_expired(&bif->bif_message_age_timer,
@@ -1098,7 +1098,7 @@ bstp_tick(void *arg)
 			bstp_message_age_timer_expiry(sc, bif);
 	}
 
-	BRIDGE_IFLIST_WRITER_FOREACH(bif, sc) {
+	LIST_FOREACH(bif, &sc->sc_iflist, bif_next) {
 		if ((bif->bif_flags & IFBIF_STP) == 0)
 			continue;
 		if (bstp_timer_expired(&bif->bif_forward_delay_timer,

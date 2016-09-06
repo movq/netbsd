@@ -29,7 +29,7 @@
 
 namespace llvm {
 /// \brief Collects and handles line tables information in a CodeView format.
-class LLVM_LIBRARY_VISIBILITY WinCodeViewLineTables : public AsmPrinterHandler {
+class WinCodeViewLineTables : public AsmPrinterHandler {
   AsmPrinter *Asm;
   DebugLoc PrevInstLoc;
 
@@ -52,13 +52,11 @@ class LLVM_LIBRARY_VISIBILITY WinCodeViewLineTables : public AsmPrinterHandler {
   struct InstrInfoTy {
     StringRef Filename;
     unsigned LineNumber;
-    unsigned ColumnNumber;
 
-    InstrInfoTy() : LineNumber(0), ColumnNumber(0) {}
+    InstrInfoTy() : LineNumber(0) {}
 
-    InstrInfoTy(StringRef Filename, unsigned LineNumber, unsigned ColumnNumber)
-        : Filename(Filename), LineNumber(LineNumber),
-          ColumnNumber(ColumnNumber) {}
+    InstrInfoTy(StringRef Filename, unsigned LineNumber)
+        : Filename(Filename), LineNumber(LineNumber) {}
   };
   DenseMap<MCSymbol *, InstrInfoTy> InstrInfo;
 
@@ -98,7 +96,7 @@ class LLVM_LIBRARY_VISIBILITY WinCodeViewLineTables : public AsmPrinterHandler {
     }
   } FileNameRegistry;
 
-  typedef std::map<std::pair<StringRef, StringRef>, std::string>
+  typedef std::map<std::pair<StringRef, StringRef>, char *>
       DirAndFilenameToFilepathMapTy;
   DirAndFilenameToFilepathMapTy DirAndFilenameToFilepathMap;
   StringRef getFullFilepath(const MDNode *S);
@@ -115,6 +113,14 @@ class LLVM_LIBRARY_VISIBILITY WinCodeViewLineTables : public AsmPrinterHandler {
 
 public:
   WinCodeViewLineTables(AsmPrinter *Asm);
+
+  ~WinCodeViewLineTables() {
+    for (DirAndFilenameToFilepathMapTy::iterator
+             I = DirAndFilenameToFilepathMap.begin(),
+             E = DirAndFilenameToFilepathMap.end();
+         I != E; ++I)
+      free(I->second);
+  }
 
   void setSymbolSize(const llvm::MCSymbol *, uint64_t) override {}
 

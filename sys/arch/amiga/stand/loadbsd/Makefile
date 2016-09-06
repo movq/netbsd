@@ -1,13 +1,13 @@
-#	$NetBSD: Makefile,v 1.3 2015/11/11 16:08:52 phx Exp $
+#	$NetBSD: Makefile,v 1.2 1998/01/05 20:51:30 perry Exp $
 #
-TARGET	= loadbsd
+CC = gcc
+CFLAGS = -m68030 -O2 -D__progname=program_name -noixemul
 
-CC	= gcc
-CFLAGS	= -D_STANDALONE -I./include -O -fomit-frame-pointer -msmall-code
-LDFLAGS	= -noixemul
-LDLIBS	=
+OBJS = loadbsd.o getopt.o
+LIBS = -lamiga
 
-OBJS	= loadbsd.o loadfile.o loadfile_aout.o loadfile_elf32.o getopt.o
+loadbsd: $(OBJS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o loadbsd $(OBJS) $(LIBS)
 
-$(TARGET): $(OBJS)
-	$(CC) $(LDFLAGS) -o $@ $(OBJS) $(LDLIBS)
+clean:
+	delete $(OBJS) loadbsd

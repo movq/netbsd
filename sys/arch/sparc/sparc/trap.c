@@ -1,4 +1,4 @@
-/*	$NetBSD: trap.c,v 1.195 2015/12/13 19:49:34 christos Exp $ */
+/*	$NetBSD: trap.c,v 1.191 2013/11/01 06:22:46 mrg Exp $ */
 
 /*
  * Copyright (c) 1996
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.195 2015/12/13 19:49:34 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: trap.c,v 1.191 2013/11/01 06:22:46 mrg Exp $");
 
 #include "opt_ddb.h"
 #include "opt_compat_svr4.h"
@@ -296,7 +296,7 @@ trap(unsigned type, int psr, int pc, struct trapframe *tf)
 		write_all_windows();
 		(void) kdb_trap(type, tf);
 #endif
-		panic("%s", type < N_TRAP_TYPES ? trap_type[type] : T);
+		panic(type < N_TRAP_TYPES ? trap_type[type] : T);
 		/* NOTREACHED */
 	}
 	if ((l = curlwp) == NULL)
@@ -949,26 +949,17 @@ kfault:
 			return;
 		}
 		KSI_INIT_TRAP(&ksi);
-		switch (rv) {
-		case ENOMEM:
+		if (rv == ENOMEM) {
 			printf("UVM: pid %d (%s), uid %d killed: out of swap\n",
 			       p->p_pid, p->p_comm,
 			       l->l_cred ?
 			       kauth_cred_geteuid(l->l_cred) : -1);
 			ksi.ksi_signo = SIGKILL;
-			break;
-		case EINVAL:
-			ksi.ksi_signo = SIGBUS;
-			ksi.ksi_code = BUS_ADRERR;
-			break;
-		case EACCES:
+			ksi.ksi_code = SI_NOINFO;
+		} else {
 			ksi.ksi_signo = SIGSEGV;
-			ksi.ksi_code = SEGV_ACCERR;
-			break;
-		default:
-			ksi.ksi_signo = SIGSEGV;
-			ksi.ksi_code = SEGV_MAPERR;
-			break;
+			ksi.ksi_code = (rv == EACCES
+				? SEGV_ACCERR : SEGV_MAPERR);
 		}
 		ksi.ksi_trap = type;
 		ksi.ksi_addr = (void *)v;
@@ -1245,26 +1236,17 @@ kfault:
 			return;
 		}
 		KSI_INIT_TRAP(&ksi);
-		switch (rv) {
-		case ENOMEM:
+		if (rv == ENOMEM) {
 			printf("UVM: pid %d (%s), uid %d killed: out of swap\n",
 			       p->p_pid, p->p_comm,
 			       l->l_cred ?
 			       kauth_cred_geteuid(l->l_cred) : -1);
 			ksi.ksi_signo = SIGKILL;
-			break;
-		case EINVAL:
-			ksi.ksi_signo = SIGBUS;
-			ksi.ksi_code = BUS_ADRERR;
-			break;
-		case EACCES:
+			ksi.ksi_code = SI_NOINFO;
+		} else {
 			ksi.ksi_signo = SIGSEGV;
-			ksi.ksi_code = SEGV_ACCERR;
-			break;
-		default:
-			ksi.ksi_signo = SIGSEGV;
-			ksi.ksi_code = SEGV_MAPERR;
-			break;
+			ksi.ksi_code = (rv == EACCES)
+				? SEGV_ACCERR : SEGV_MAPERR;
 		}
 		ksi.ksi_trap = type;
 		ksi.ksi_addr = (void *)sfva;

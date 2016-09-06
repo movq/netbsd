@@ -1,4 +1,4 @@
-/*	$NetBSD: ktrace.h,v 1.63 2016/03/19 17:04:12 dholland Exp $	*/
+/*	$NetBSD: ktrace.h,v 1.61 2013/12/09 17:43:58 pooka Exp $	*/
 
 /*
  * Copyright (c) 1988, 1993
@@ -36,9 +36,6 @@
 
 #include <sys/mutex.h>
 #include <sys/lwp.h>
-#include <sys/signal.h>
-#include <sys/time.h>
-#include <sys/uio.h>
 
 /*
  * operations to ktrace system call  (KTROP(op))
@@ -129,8 +126,8 @@ struct ktr_sysret {
 	short	ktr_code;
 	short	ktr_eosys;		/* XXX unused */
 	int	ktr_error;
-	__register_t ktr_retval;
-	__register_t ktr_retval_1;
+	register_t ktr_retval;
+	register_t ktr_retval_1;
 };
 
 /*

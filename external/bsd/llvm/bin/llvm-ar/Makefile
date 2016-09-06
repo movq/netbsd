@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.7 2016/02/27 21:47:31 joerg Exp $
+#	$NetBSD: Makefile,v 1.5.2.1 2015/06/04 20:04:22 snj Exp $
 
 PROG_CXX=	llvm-ar
 NOMAN=		yes
@@ -44,8 +44,6 @@ LLVM_LIBS+= \
 	MC \
 	BitReader \
 	IR \
-	LibDriver \
-	Option \
 	Support
 
 LDADD+=	-lz

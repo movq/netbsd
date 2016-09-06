@@ -1,4 +1,4 @@
-/*	$NetBSD: form.c,v 1.16 2016/03/09 19:47:13 christos Exp $	*/
+/*	$NetBSD: form.c,v 1.15 2004/11/24 11:57:09 blymn Exp $	*/
 
 /*-
  * Copyright (c) 1998-1999 Brett Lymn
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: form.c,v 1.16 2016/03/09 19:47:13 christos Exp $");
+__RCSID("$NetBSD: form.c,v 1.15 2004/11/24 11:57:09 blymn Exp $");
 
 #include <stdlib.h>
 #include <strings.h>
@@ -603,7 +603,9 @@ pos_form_cursor(FORM *form)
 		}
 	}
 	
-	_formi_dbg_printf("%s: row=%d, col=%d\n", __func__, row, col);
+#ifdef DEBUG
+	fprintf(dbg, "pos_cursor: row=%d, col=%d\n", row, col);
+#endif
 	
 	wmove(form->scrwin, row, col);
 

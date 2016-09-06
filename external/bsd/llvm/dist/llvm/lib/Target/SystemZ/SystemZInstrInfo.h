@@ -56,13 +56,10 @@ static inline unsigned getCompareZeroCCMask(unsigned int Flags) {
 // SystemZ MachineOperand target flags.
 enum {
   // Masks out the bits for the access model.
-  MO_SYMBOL_MODIFIER = (3 << 0),
+  MO_SYMBOL_MODIFIER = (1 << 0),
 
   // @GOT (aka @GOTENT)
-  MO_GOT = (1 << 0),
-
-  // @INDNTPOFF
-  MO_INDNTPOFF = (2 << 0)
+  MO_GOT = (1 << 0)
 };
 // Classifies a branch.
 enum BranchType {
@@ -149,7 +146,8 @@ public:
                      bool AllowModify) const override;
   unsigned RemoveBranch(MachineBasicBlock &MBB) const override;
   unsigned InsertBranch(MachineBasicBlock &MBB, MachineBasicBlock *TBB,
-                        MachineBasicBlock *FBB, ArrayRef<MachineOperand> Cond,
+                        MachineBasicBlock *FBB,
+                        const SmallVectorImpl<MachineOperand> &Cond,
                         DebugLoc DL) const override;
   bool analyzeCompare(const MachineInstr *MI, unsigned &SrcReg,
                       unsigned &SrcReg2, int &Mask, int &Value) const override;
@@ -159,14 +157,15 @@ public:
   bool isPredicable(MachineInstr *MI) const override;
   bool isProfitableToIfCvt(MachineBasicBlock &MBB, unsigned NumCycles,
                            unsigned ExtraPredCycles,
-                           BranchProbability Probability) const override;
+                           const BranchProbability &Probability) const override;
   bool isProfitableToIfCvt(MachineBasicBlock &TMBB,
                            unsigned NumCyclesT, unsigned ExtraPredCyclesT,
                            MachineBasicBlock &FMBB,
                            unsigned NumCyclesF, unsigned ExtraPredCyclesF,
-                           BranchProbability Probability) const override;
+                           const BranchProbability &Probability) const override;
   bool PredicateInstruction(MachineInstr *MI,
-                            ArrayRef<MachineOperand> Pred) const override;
+                            const SmallVectorImpl<MachineOperand> &Pred) const
+    override;
   void copyPhysReg(MachineBasicBlock &MBB, MachineBasicBlock::iterator MBBI,
                    DebugLoc DL, unsigned DestReg, unsigned SrcReg,
                    bool KillSrc) const override;
@@ -184,13 +183,11 @@ public:
                                       MachineBasicBlock::iterator &MBBI,
                                       LiveVariables *LV) const override;
   MachineInstr *foldMemoryOperandImpl(MachineFunction &MF, MachineInstr *MI,
-                                      ArrayRef<unsigned> Ops,
-                                      MachineBasicBlock::iterator InsertPt,
+                                      const SmallVectorImpl<unsigned> &Ops,
                                       int FrameIndex) const override;
-  MachineInstr *foldMemoryOperandImpl(MachineFunction &MF, MachineInstr *MI,
-                                      ArrayRef<unsigned> Ops,
-                                      MachineBasicBlock::iterator InsertPt,
-                                      MachineInstr *LoadMI) const override;
+  MachineInstr *foldMemoryOperandImpl(MachineFunction &MF, MachineInstr* MI,
+                                      const SmallVectorImpl<unsigned> &Ops,
+                                      MachineInstr* LoadMI) const override;
   bool expandPostRAPseudo(MachineBasicBlock::iterator MBBI) const override;
   bool ReverseBranchCondition(SmallVectorImpl<MachineOperand> &Cond) const
     override;

@@ -1,5 +1,5 @@
-/*	$NetBSD: ssh-dss.c,v 1.9 2016/08/02 13:45:12 christos Exp $	*/
-/* $OpenBSD: ssh-dss.c,v 1.35 2016/04/21 06:08:02 djm Exp $ */
+/*	$NetBSD: ssh-dss.c,v 1.5.4.1 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: ssh-dss.c,v 1.32 2014/06/24 01:13:21 djm Exp $ */
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
  *
@@ -25,7 +25,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: ssh-dss.c,v 1.9 2016/08/02 13:45:12 christos Exp $");
+__RCSID("$NetBSD: ssh-dss.c,v 1.5.4.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/types.h>
 
 #include <openssl/bn.h>
@@ -119,7 +119,8 @@ ssh_dss_sign(const struct sshkey *key, u_char **sigp, size_t *lenp,
 	explicit_bzero(digest, sizeof(digest));
 	if (sig != NULL)
 		DSA_SIG_free(sig);
-	sshbuf_free(b);
+	if (b != NULL)
+		sshbuf_free(b);
 	return ret;
 }
 
@@ -136,8 +137,7 @@ ssh_dss_verify(const struct sshkey *key,
 	char *ktype = NULL;
 
 	if (key == NULL || key->dsa == NULL ||
-	    sshkey_type_plain(key->type) != KEY_DSA ||
-	    signature == NULL || signaturelen == 0)
+	    sshkey_type_plain(key->type) != KEY_DSA)
 		return SSH_ERR_INVALID_ARGUMENT;
 	if (dlen == 0)
 		return SSH_ERR_INTERNAL_ERROR;
@@ -206,8 +206,10 @@ ssh_dss_verify(const struct sshkey *key,
 	explicit_bzero(digest, sizeof(digest));
 	if (sig != NULL)
 		DSA_SIG_free(sig);
-	sshbuf_free(b);
-	free(ktype);
+	if (b != NULL)
+		sshbuf_free(b);
+	if (ktype != NULL)
+		free(ktype);
 	if (sigblob != NULL) {
 		explicit_bzero(sigblob, len);
 		free(sigblob);

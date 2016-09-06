@@ -19,7 +19,6 @@
 #ifndef LLVM_CLANG_TOOLING_CORE_REPLACEMENT_H
 #define LLVM_CLANG_TOOLING_CORE_REPLACEMENT_H
 
-#include "clang/Basic/LangOptions.h"
 #include "clang/Basic/SourceLocation.h"
 #include "llvm/ADT/StringRef.h"
 #include <set>
@@ -78,24 +77,22 @@ public:
   /// \param FilePath A source file accessible via a SourceManager.
   /// \param Offset The byte offset of the start of the range in the file.
   /// \param Length The length of the range in bytes.
-  Replacement(StringRef FilePath, unsigned Offset, unsigned Length,
-              StringRef ReplacementText);
+  Replacement(StringRef FilePath, unsigned Offset,
+              unsigned Length, StringRef ReplacementText);
 
   /// \brief Creates a Replacement of the range [Start, Start+Length) with
   /// ReplacementText.
-  Replacement(const SourceManager &Sources, SourceLocation Start,
-              unsigned Length, StringRef ReplacementText);
+  Replacement(const SourceManager &Sources, SourceLocation Start, unsigned Length,
+              StringRef ReplacementText);
 
   /// \brief Creates a Replacement of the given range with ReplacementText.
   Replacement(const SourceManager &Sources, const CharSourceRange &Range,
-              StringRef ReplacementText,
-              const LangOptions &LangOpts = LangOptions());
+              StringRef ReplacementText);
 
   /// \brief Creates a Replacement of the node with ReplacementText.
   template <typename Node>
   Replacement(const SourceManager &Sources, const Node &NodeToReplace,
-              StringRef ReplacementText,
-              const LangOptions &LangOpts = LangOptions());
+              StringRef ReplacementText);
 
   /// \brief Returns whether this replacement can be applied to a file.
   ///
@@ -117,13 +114,11 @@ public:
   std::string toString() const;
 
  private:
-   void setFromSourceLocation(const SourceManager &Sources,
-                              SourceLocation Start, unsigned Length,
-                              StringRef ReplacementText);
-   void setFromSourceRange(const SourceManager &Sources,
-                           const CharSourceRange &Range,
-                           StringRef ReplacementText,
-                           const LangOptions &LangOpts);
+  void setFromSourceLocation(const SourceManager &Sources, SourceLocation Start,
+                             unsigned Length, StringRef ReplacementText);
+  void setFromSourceRange(const SourceManager &Sources,
+                          const CharSourceRange &Range,
+                          StringRef ReplacementText);
 
   std::string FilePath;
   Range ReplacementRange;
@@ -220,19 +215,12 @@ bool applyAllReplacements(const std::vector<Replacement> &Replaces,
 /// replacements cannot be applied, this returns an empty \c string.
 std::string applyAllReplacements(StringRef Code, const Replacements &Replaces);
 
-/// \brief Merges two sets of replacements with the second set referring to the
-/// code after applying the first set. Within both 'First' and 'Second',
-/// replacements must not overlap.
-Replacements mergeReplacements(const Replacements &First,
-                               const Replacements &Second);
-
 template <typename Node>
 Replacement::Replacement(const SourceManager &Sources,
-                         const Node &NodeToReplace, StringRef ReplacementText,
-                         const LangOptions &LangOpts) {
+                         const Node &NodeToReplace, StringRef ReplacementText) {
   const CharSourceRange Range =
       CharSourceRange::getTokenRange(NodeToReplace->getSourceRange());
-  setFromSourceRange(Sources, Range, ReplacementText, LangOpts);
+  setFromSourceRange(Sources, Range, ReplacementText);
 }
 
 } // end namespace tooling

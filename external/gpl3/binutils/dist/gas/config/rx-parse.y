@@ -1,5 +1,6 @@
 /* rx-parse.y  Renesas RX parser
-   Copyright (C) 2008-2015 Free Software Foundation, Inc.
+   Copyright 2008, 2009
+   Free Software Foundation, Inc.
 
    This file is part of GAS, the GNU Assembler.
 
@@ -103,7 +104,6 @@ static int sizemap[] = { BSIZE, WSIZE, LSIZE, WSIZE };
 
 #define id24(a,b2,b3)	   B3 (0xfb+a, b2, b3)
 
-static void	   rx_check_float_support (void);
 static int         rx_intop (expressionS, int, int);
 static int         rx_uintop (expressionS, int);
 static int         rx_disp3op (expressionS);
@@ -500,27 +500,27 @@ statement :
 /* ---------------------------------------------------------------------- */
 
 	| SCMPU
-	  { B2 (0x7f, 0x83); rx_note_string_insn_use (); }
+	  { B2 (0x7f, 0x83); }
 	| SMOVU
-	  { B2 (0x7f, 0x87); rx_note_string_insn_use (); }
+	  { B2 (0x7f, 0x87); }
 	| SMOVB
-	  { B2 (0x7f, 0x8b); rx_note_string_insn_use (); }
+	  { B2 (0x7f, 0x8b); }
 	| SMOVF
-	  { B2 (0x7f, 0x8f); rx_note_string_insn_use (); }
+	  { B2 (0x7f, 0x8f); }
 
 /* ---------------------------------------------------------------------- */
 
 	| SUNTIL bwl
-	  { B2 (0x7f, 0x80); F ($2, 14, 2); rx_note_string_insn_use (); }
+	  { B2 (0x7f, 0x80); F ($2, 14, 2); }
 	| SWHILE bwl
-	  { B2 (0x7f, 0x84); F ($2, 14, 2); rx_note_string_insn_use (); }
+	  { B2 (0x7f, 0x84); F ($2, 14, 2); }
 	| SSTR bwl
 	  { B2 (0x7f, 0x88); F ($2, 14, 2); }
 
 /* ---------------------------------------------------------------------- */
 
 	| RMPA bwl
-	  { B2 (0x7f, 0x8c); F ($2, 14, 2); rx_note_string_insn_use (); }
+	  { B2 (0x7f, 0x8c); F ($2, 14, 2); }
 
 /* ---------------------------------------------------------------------- */
 
@@ -636,13 +636,13 @@ statement :
 	| BNOT REG ',' REG
 	  { id24 (1, 0x6f, 0x00); F ($4, 16, 4); F ($2, 20, 4); }
 
-	| BSET REG ',' disp '[' REG ']' opt_b
+	| BSET REG ',' disp '[' REG ']' DOT_B
 	  { id24 (1, 0x60, 0x00); F ($6, 16, 4); F ($2, 20, 4); DSP ($4, 14, BSIZE); }
-	| BCLR REG ',' disp '[' REG ']' opt_b
+	| BCLR REG ',' disp '[' REG ']' DOT_B
 	  { id24 (1, 0x64, 0x00); F ($6, 16, 4); F ($2, 20, 4); DSP ($4, 14, BSIZE); }
-	| BTST REG ',' disp '[' REG ']' opt_b
+	| BTST REG ',' disp '[' REG ']' DOT_B
 	  { id24 (1, 0x68, 0x00); F ($6, 16, 4); F ($2, 20, 4); DSP ($4, 14, BSIZE); }
-	| BNOT REG ',' disp '[' REG ']' opt_b
+	| BNOT REG ',' disp '[' REG ']' DOT_B
 	  { id24 (1, 0x6c, 0x00); F ($6, 16, 4); F ($2, 20, 4); DSP ($4, 14, BSIZE); }
 
 /* ---------------------------------------------------------------------- */
@@ -664,13 +664,13 @@ statement :
 
 /* ---------------------------------------------------------------------- */
 
-	| BMCND '#' EXPR ',' disp '[' REG ']' opt_b
+	| BMCND '#' EXPR ',' disp '[' REG ']' DOT_B
 	  { id24 (1, 0xe0, 0x00); F ($1, 20, 4); FE ($3, 11, 3);
 	      F ($7, 16, 4); DSP ($5, 14, BSIZE); }
 
 /* ---------------------------------------------------------------------- */
 
-	| BNOT '#' EXPR ',' disp '[' REG ']' opt_b
+	| BNOT '#' EXPR ',' disp '[' REG ']' DOT_B
 	  { id24 (1, 0xe0, 0x0f); FE ($3, 11, 3); F ($7, 16, 4);
 	      DSP ($5, 14, BSIZE); }
 
@@ -881,20 +881,17 @@ op_shift
 	;
 
 
+
 float2_op
-	: { rx_check_float_support (); }
-	  '#' EXPR ',' REG
-	  { id24 (2, 0x72, sub_op << 4); F ($5, 20, 4); O4 ($3); }
+	: '#' EXPR ',' REG
+	  { id24 (2, 0x72, sub_op << 4); F ($4, 20, 4); O4 ($2); }
 	| float2_op_ni
 	;
-
 float2_op_ni
-	: { rx_check_float_support (); }
-	  REG ',' REG
-	  { id24 (1, 0x83 + (sub_op << 2), 0); F ($2, 16, 4); F ($4, 20, 4); }
-	| { rx_check_float_support (); }
-	  disp '[' REG ']' opt_l ',' REG
-	  { id24 (1, 0x80 + (sub_op << 2), 0); F ($4, 16, 4); F ($8, 20, 4); DSP ($2, 14, LSIZE); }
+	: REG ',' REG
+	  { id24 (1, 0x83 + (sub_op << 2), 0); F ($1, 16, 4); F ($3, 20, 4); }
+	| disp '[' REG ']' opt_l ',' REG
+	  { id24 (1, 0x80 + (sub_op << 2), 0); F ($3, 16, 4); F ($7, 20, 4); DSP ($1, 14, LSIZE); }
 	;
 
 /* ====================================================================== */
@@ -928,10 +925,6 @@ bw	:       { $$ = 1; }
 
 opt_l	: 	{}
 	| DOT_L {}
-	;
-
-opt_b	: 	{}
-	| DOT_B {}
 	;
 
 %%
@@ -1405,13 +1398,13 @@ rx_disp5op (expressionS * exp, int msize)
   switch (msize)
     {
     case BSIZE:
-      if (0 <= v && v <= 31)
+      if (0 < v && v <= 31)
 	return 1;
       break;
     case WSIZE:
       if (v & 1)
 	return 0;
-      if (0 <= v && v <= 63)
+      if (0 < v && v <= 63)
 	{
 	  exp->X_add_number >>= 1;
 	  return 1;
@@ -1420,7 +1413,7 @@ rx_disp5op (expressionS * exp, int msize)
     case LSIZE:
       if (v & 3)
 	return 0;
-      if (0 <= v && v <= 127)
+      if (0 < v && v <= 127)
 	{
 	  exp->X_add_number >>= 2;
 	  return 1;
@@ -1635,11 +1628,4 @@ rx_range (expressionS exp, int minv, int maxv)
   val = exp.X_add_number;
   if (val < minv || val > maxv)
     as_warn (_("Value %d out of range %d..%d"), val, minv, maxv);
-}
-
-static void
-rx_check_float_support (void)
-{
-  if (rx_cpu == RX100 || rx_cpu == RX200)
-    rx_error (_("target CPU type does not support floating point instructions"));
 }

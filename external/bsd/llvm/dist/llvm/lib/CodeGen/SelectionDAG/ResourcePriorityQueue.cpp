@@ -47,9 +47,9 @@ ResourcePriorityQueue::ResourcePriorityQueue(SelectionDAGISel *IS)
   TRI = STI.getRegisterInfo();
   TLI = IS->TLI;
   TII = STI.getInstrInfo();
-  ResourcesModel.reset(TII->CreateTargetScheduleState(STI));
+  ResourcesModel = TII->CreateTargetScheduleState(STI);
   // This hard requirement could be relaxed, but for now
-  // do not let it proceed.
+  // do not let it procede.
   assert(ResourcesModel && "Unimplemented CreateTargetScheduleState.");
 
   unsigned NumRC = TRI->getNumRegClasses();
@@ -269,12 +269,12 @@ bool ResourcePriorityQueue::isResourceAvailable(SUnit *SU) {
     }
 
   // Now see if there are no other dependencies
-  // to instructions already in the packet.
+  // to instructions alredy in the packet.
   for (unsigned i = 0, e = Packet.size(); i != e; ++i)
     for (SUnit::const_succ_iterator I = Packet[i]->Succs.begin(),
          E = Packet[i]->Succs.end(); I != E; ++I) {
       // Since we do not add pseudos to packets, might as well
-      // ignore order deps.
+      // ignor order deps.
       if (I->isCtrl())
         continue;
 
@@ -637,3 +637,17 @@ void ResourcePriorityQueue::remove(SUnit *SU) {
 
   Queue.pop_back();
 }
+
+
+#ifdef NDEBUG
+void ResourcePriorityQueue::dump(ScheduleDAG *DAG) const {}
+#else
+void ResourcePriorityQueue::dump(ScheduleDAG *DAG) const {
+  ResourcePriorityQueue q = *this;
+  while (!q.empty()) {
+    SUnit *su = q.pop();
+    dbgs() << "Height " << su->getHeight() << ": ";
+    su->dump(DAG);
+  }
+}
+#endif

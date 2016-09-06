@@ -1,6 +1,6 @@
 /* The common simulator framework for GDB, the GNU Debugger.
 
-   Copyright 2002-2015 Free Software Foundation, Inc.
+   Copyright 2002-2014 Free Software Foundation, Inc.
 
    Contributed by Andrew Cagney and Red Hat.
 
@@ -20,8 +20,8 @@
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 
-#ifndef SIM_BITS_H
-#define SIM_BITS_H
+#ifndef _SIM_BITS_H_
+#define _SIM_BITS_H_
 
 
 /* Bit manipulation routines:
@@ -605,4 +605,4 @@ INLINE_SIM_BITS(unsigned_word) MSSEXT (signed_word val, int sign_bit);
 #include "sim-bits.c"
 #endif
 
-#endif /* SIM_BITS_H */
+#endif /* _SIM_BITS_H_ */

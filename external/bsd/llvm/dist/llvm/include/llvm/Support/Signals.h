@@ -15,12 +15,10 @@
 #ifndef LLVM_SUPPORT_SIGNALS_H
 #define LLVM_SUPPORT_SIGNALS_H
 
-#include <string>
+#include "llvm/Support/Path.h"
+#include <cstdio>
 
 namespace llvm {
-class StringRef;
-class raw_ostream;
-
 namespace sys {
 
   /// This function runs all the registered interrupt handlers, including the
@@ -39,16 +37,10 @@ namespace sys {
   /// When an error signal (such as SIBABRT or SIGSEGV) is delivered to the
   /// process, print a stack trace and then exit.
   /// @brief Print a stack trace if a fatal signal occurs.
-  void PrintStackTraceOnErrorSignal(bool DisableCrashReporting = false);
+  void PrintStackTraceOnErrorSignal();
 
-  /// Disable all system dialog boxes that appear when the process crashes.
-  void DisableSystemDialogsOnCrash();
-
-  /// \brief Print the stack trace using the given \c raw_ostream object.
-  void PrintStackTrace(raw_ostream &OS);
-
-  // Run all registered signal handlers.
-  void RunSignalHandlers();
+  /// \brief Print the stack trace using the given \c FILE object.
+  void PrintStackTrace(FILE *);
 
   /// AddSignalHandler - Add a function to be called when an abort/kill signal
   /// is delivered to the process.  The handler can have a cookie passed to it

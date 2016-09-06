@@ -1,5 +1,6 @@
 /* Disassembly routines for TMS320C54X architecture
-   Copyright (C) 1999-2015 Free Software Foundation, Inc.
+   Copyright 1999, 2000, 2001, 2005, 2007, 2009, 2012
+   Free Software Foundation, Inc.
    Contributed by Timothy Wall (twall@cygnus.com)
 
    This file is part of the GNU opcodes library.
@@ -167,13 +168,14 @@ get_insn_size (unsigned short memdata, const insn_template *insn)
 }
 
 int
-print_instruction (disassemble_info *info,
-		   bfd_vma memaddr,
-		   unsigned short opcode,
-		   const char *tm_name,
-		   const enum optype tm_operands[],
-		   int size,
-		   int ext)
+print_instruction (info, memaddr, opcode, tm_name, tm_operands, size, ext)
+  disassemble_info *info;
+  bfd_vma memaddr;
+  unsigned short opcode;
+  const char *tm_name;
+  const enum optype tm_operands[];
+  int size;
+  int ext;
 {
   static int n;
   /* string storage for multiple operands */
@@ -467,11 +469,12 @@ print_instruction (disassemble_info *info,
 }
 
 static int
-print_parallel_instruction (disassemble_info *info,
-			    bfd_vma memaddr,
-			    unsigned short opcode,
-			    const insn_template *ptm,
-			    int size)
+print_parallel_instruction (info, memaddr, opcode, ptm, size)
+  disassemble_info *info;
+  bfd_vma memaddr;
+  unsigned short opcode;
+  const insn_template *ptm;
+  int size;
 {
   print_instruction (info, memaddr, opcode,
                      ptm->name, ptm->operand_types, size, 0);
@@ -481,9 +484,10 @@ print_parallel_instruction (disassemble_info *info,
 }
 
 static int
-sprint_dual_address (disassemble_info *info ATTRIBUTE_UNUSED,
-		     char buf[],
-		     unsigned short code)
+sprint_dual_address (info, buf, code)
+  disassemble_info *info ATTRIBUTE_UNUSED;
+  char buf[];
+  unsigned short code;
 {
   const char *formats[] = {
     "*ar%d",
@@ -495,9 +499,10 @@ sprint_dual_address (disassemble_info *info ATTRIBUTE_UNUSED,
 }
 
 static int
-sprint_indirect_address (disassemble_info *info ATTRIBUTE_UNUSED,
-			 char buf[],
-			 unsigned short opcode)
+sprint_indirect_address (info, buf, opcode)
+  disassemble_info *info ATTRIBUTE_UNUSED;
+  char buf[];
+  unsigned short opcode;
 {
   const char *formats[] = {
     "*ar%d",
@@ -517,18 +522,20 @@ sprint_indirect_address (disassemble_info *info ATTRIBUTE_UNUSED,
 }
 
 static int
-sprint_direct_address (disassemble_info *info ATTRIBUTE_UNUSED,
-		       char buf[],
-		       unsigned short opcode)
+sprint_direct_address (info, buf, opcode)
+  disassemble_info *info ATTRIBUTE_UNUSED;
+  char buf[];
+  unsigned short opcode;
 {
   /* FIXME -- look up relocation if available */
   return sprintf (buf, "DP+0x%02x", (int) (opcode & 0x7F));
 }
 
 static int
-sprint_mmr (disassemble_info *info ATTRIBUTE_UNUSED,
-	    char buf[],
-	    int mmr)
+sprint_mmr (info, buf, mmr)
+  disassemble_info *info ATTRIBUTE_UNUSED;
+  char buf[];
+  int mmr;
 {
   symbol *reg = (symbol *) mmregs;
   while (reg->name != NULL)
@@ -545,9 +552,10 @@ sprint_mmr (disassemble_info *info ATTRIBUTE_UNUSED,
 }
 
 static int
-sprint_cc2 (disassemble_info *info ATTRIBUTE_UNUSED,
-	    char *buf,
-	    unsigned short opcode)
+sprint_cc2 (info, buf, opcode)
+  disassemble_info *info ATTRIBUTE_UNUSED;
+  char *buf;
+  unsigned short opcode;
 {
   const char *cc2[] = {
     "??", "??", "ageq", "alt", "aneq", "aeq", "agt", "aleq",
@@ -557,9 +565,10 @@ sprint_cc2 (disassemble_info *info ATTRIBUTE_UNUSED,
 }
 
 static int
-sprint_condition (disassemble_info *info ATTRIBUTE_UNUSED,
-		  char *buf,
-		  unsigned short opcode)
+sprint_condition (info, buf, opcode)
+  disassemble_info *info ATTRIBUTE_UNUSED;
+  char *buf;
+  unsigned short opcode;
 {
   char *start = buf;
   const char *cmp[] = {

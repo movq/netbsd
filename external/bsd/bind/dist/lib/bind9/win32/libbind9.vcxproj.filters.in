@@ -38,8 +38,5 @@
     <ClInclude Include="..\include\bind9\getaddresses.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="..\include\bind9\version.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
 </Project>

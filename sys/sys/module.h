@@ -1,4 +1,4 @@
-/*	$NetBSD: module.h,v 1.40 2016/01/18 16:46:08 pooka Exp $	*/
+/*	$NetBSD: module.h,v 1.35 2014/04/23 23:25:45 pooka Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -65,7 +65,6 @@ typedef enum modcmd {
 
 #ifdef _KERNEL
 
-#include <sys/kernel.h>
 #include <sys/mutex.h>
 
 #include <prop/proplib.h>
@@ -106,12 +105,6 @@ typedef struct module {
  * Alternatively, in some environments rump kernels use
  * __attribute__((constructor)) due to link sets being
  * difficult (impossible?) to implement (e.g. GNU gold, OS X, etc.)
- * If we're cold (read: rump_init() has not been called), we lob the
- * module onto the list to be handled when rump_init() runs.
- * nb. it's not possible to use in-kernel locking mechanisms here since
- * the code runs before rump_init().  We solve the problem by decreeing
- * that thou shalt not call dlopen()/dlclose() for rump kernel components
- * from multiple threads before calling rump_init().
  */
 
 #ifdef RUMP_USE_CTOR
@@ -121,41 +114,29 @@ struct modinfo_chain {
 };
 LIST_HEAD(modinfo_boot_chain, modinfo_chain);
 #define _MODULE_REGISTER(name)						\
-static struct modinfo_chain __CONCAT(mc,name) = {			\
-	.mc_info = &__CONCAT(name,_modinfo),				\
-};									\
-static void __CONCAT(modctor_,name)(void) __attribute__((__constructor__));\
-static void __CONCAT(modctor_,name)(void)				\
+static void modctor_##name(void) __attribute__((constructor));		\
+static void modctor_##name(void)					\
 {									\
+	static struct modinfo_chain mc = {				\
+		.mc_info = &name##_modinfo,				\
+	};								\
 	extern struct modinfo_boot_chain modinfo_boot_chain;		\
-	if (cold) {							\
-		struct modinfo_chain *mc = &__CONCAT(mc,name);		\
-		LIST_INSERT_HEAD(&modinfo_boot_chain, mc, mc_entries);	\
-	}								\
-}									\
-									\
-static void __CONCAT(moddtor_,name)(void) __attribute__((__destructor__));\
-static void __CONCAT(moddtor_,name)(void)				\
-{									\
-	struct modinfo_chain *mc = &__CONCAT(mc,name);			\
-	if (cold) {							\
-		LIST_REMOVE(mc, mc_entries);				\
-	}								\
+	LIST_INSERT_HEAD(&modinfo_boot_chain, &mc, mc_entries);		\
 }
 
 #else /* RUMP_USE_CTOR */
 
-#define _MODULE_REGISTER(name) __link_set_add_rodata(modules, __CONCAT(name,_modinfo));
+#define _MODULE_REGISTER(name) __link_set_add_rodata(modules, name##_modinfo);
 
 #endif /* RUMP_USE_CTOR */
 
 #define	MODULE(class, name, required)				\
-static int __CONCAT(name,_modcmd)(modcmd_t, void *);		\
-static const modinfo_t __CONCAT(name,_modinfo) = {		\
+static int name##_modcmd(modcmd_t, void *);			\
+static const modinfo_t name##_modinfo = {			\
 	.mi_version = __NetBSD_Version__,			\
 	.mi_class = (class),					\
-	.mi_modcmd = __CONCAT(name,_modcmd),			\
-	.mi_name = __STRING(name),				\
+	.mi_modcmd = name##_modcmd,				\
+	.mi_name = #name,					\
 	.mi_required = (required)				\
 }; 								\
 _MODULE_REGISTER(name)
@@ -204,7 +185,7 @@ void	module_print(const char *, ...) __printflike(1, 2);
 
 #define MODULE_BASE_SIZE 64
 extern char	module_base[MODULE_BASE_SIZE];
-extern const char	*module_machine;
+extern char	*module_machine;
 
 #else	/* _KERNEL */
 
@@ -242,16 +223,9 @@ typedef struct modstat {
 	modclass_t	ms_class;
 	u_int		ms_size;
 	u_int		ms_refcnt;
-	u_int		ms_flags;
-	u_int		ms_reserved[3];
+	u_int		ms_reserved[4];
 } modstat_t;
 
 int	modctl(int, void *);
-
-#ifdef _KERNEL
-/* attention: pointers passed are userland pointers!,
-   see modctl_load_t */
-int	handle_modctl_load(const char *, int, const char *, size_t);
-#endif
 
 #endif	/* !_SYS_MODULE_H_ */

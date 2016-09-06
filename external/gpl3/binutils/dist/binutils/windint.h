@@ -1,5 +1,6 @@
 /* windint.h -- internal header file for windres program.
-   Copyright (C) 1997-2015 Free Software Foundation, Inc.
+   Copyright 1997, 1998, 1999, 2000, 2001, 2002, 2003, 2005, 2007, 2011
+   Free Software Foundation, Inc.
    Written by Kai Tietz, Onevision.
 
    This file is part of GNU Binutils.

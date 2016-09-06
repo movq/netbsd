@@ -20,26 +20,27 @@ namespace llvm {
 
 StringRef WinCodeViewLineTables::getFullFilepath(const MDNode *S) {
   assert(S);
-  assert((isa<DICompileUnit>(S) || isa<DIFile>(S) || isa<DISubprogram>(S) ||
-          isa<DILexicalBlockBase>(S)) &&
+  DIDescriptor D(S);
+  assert((D.isCompileUnit() || D.isFile() || D.isSubprogram() ||
+          D.isLexicalBlockFile() || D.isLexicalBlock()) &&
          "Unexpected scope info");
 
-  auto *Scope = cast<DIScope>(S);
-  StringRef Dir = Scope->getDirectory(),
-            Filename = Scope->getFilename();
-  std::string &Filepath =
-      DirAndFilenameToFilepathMap[std::make_pair(Dir, Filename)];
-  if (!Filepath.empty())
-    return Filepath;
+  DIScope Scope(S);
+  StringRef Dir = Scope.getDirectory(),
+            Filename = Scope.getFilename();
+  char *&Result = DirAndFilenameToFilepathMap[std::make_pair(Dir, Filename)];
+  if (Result)
+    return Result;
 
   // Clang emits directory and relative filename info into the IR, but CodeView
   // operates on full paths.  We could change Clang to emit full paths too, but
   // that would increase the IR size and probably not needed for other users.
   // For now, just concatenate and canonicalize the path here.
+  std::string Filepath;
   if (Filename.find(':') == 1)
     Filepath = Filename;
   else
-    Filepath = (Dir + "\\" + Filename).str();
+    Filepath = (Dir + Twine("\\") + Filename).str();
 
   // Canonicalize the path.  We have to do it textually because we may no longer
   // have access the file in the filesystem.
@@ -74,40 +75,30 @@ StringRef WinCodeViewLineTables::getFullFilepath(const MDNode *S) {
   while ((Cursor = Filepath.find("\\\\", Cursor)) != std::string::npos)
     Filepath.erase(Cursor, 1);
 
-  return Filepath;
+  Result = strdup(Filepath.c_str());
+  return StringRef(Result);
 }
 
 void WinCodeViewLineTables::maybeRecordLocation(DebugLoc DL,
                                                 const MachineFunction *MF) {
-  const MDNode *Scope = DL.getScope();
+  const MDNode *Scope = DL.getScope(MF->getFunction()->getContext());
   if (!Scope)
     return;
-  unsigned LineNumber = DL.getLine();
-  // Skip this line if it is longer than the maximum we can record.
-  if (LineNumber > COFF::CVL_MaxLineNumber)
-    return;
-
-  unsigned ColumnNumber = DL.getCol();
-  // Truncate the column number if it is longer than the maximum we can record.
-  if (ColumnNumber > COFF::CVL_MaxColumnNumber)
-    ColumnNumber = 0;
-
   StringRef Filename = getFullFilepath(Scope);
 
   // Skip this instruction if it has the same file:line as the previous one.
   assert(CurFn);
   if (!CurFn->Instrs.empty()) {
     const InstrInfoTy &LastInstr = InstrInfo[CurFn->Instrs.back()];
-    if (LastInstr.Filename == Filename && LastInstr.LineNumber == LineNumber &&
-        LastInstr.ColumnNumber == ColumnNumber)
+    if (LastInstr.Filename == Filename && LastInstr.LineNumber == DL.getLine())
       return;
   }
   FileNameRegistry.add(Filename);
 
-  MCSymbol *MCL = Asm->MMI->getContext().createTempSymbol();
-  Asm->OutStreamer->EmitLabel(MCL);
+  MCSymbol *MCL = Asm->MMI->getContext().CreateTempSymbol();
+  Asm->OutStreamer.EmitLabel(MCL);
   CurFn->Instrs.push_back(MCL);
-  InstrInfo[MCL] = InstrInfoTy(Filename, LineNumber, ColumnNumber);
+  InstrInfo[MCL] = InstrInfoTy(Filename, DL.getLine());
 }
 
 WinCodeViewLineTables::WinCodeViewLineTables(AsmPrinter *AP)
@@ -130,7 +121,7 @@ void WinCodeViewLineTables::endModule() {
     return;
 
   assert(Asm != nullptr);
-  Asm->OutStreamer->SwitchSection(
+  Asm->OutStreamer.SwitchSection(
       Asm->getObjFileLowering().getCOFFDebugSymbolsSection());
   Asm->EmitInt32(COFF::DEBUG_SECTION_MAGIC);
 
@@ -145,7 +136,7 @@ void WinCodeViewLineTables::endModule() {
     emitDebugInfoForFunction(VisitedFunctions[I]);
 
   // This subsection holds a file index to offset in string table table.
-  Asm->OutStreamer->AddComment("File index to string table offset subsection");
+  Asm->OutStreamer.AddComment("File index to string table offset subsection");
   Asm->EmitInt32(COFF::DEBUG_INDEX_SUBSECTION);
   size_t NumFilenames = FileNameRegistry.Infos.size();
   Asm->EmitInt32(8 * NumFilenames);
@@ -158,7 +149,7 @@ void WinCodeViewLineTables::endModule() {
   }
 
   // This subsection holds the string table.
-  Asm->OutStreamer->AddComment("String table");
+  Asm->OutStreamer.AddComment("String table");
   Asm->EmitInt32(COFF::DEBUG_STRING_TABLE_SUBSECTION);
   Asm->EmitInt32(FileNameRegistry.LastOffset);
   // The payload starts with a null character.
@@ -166,12 +157,12 @@ void WinCodeViewLineTables::endModule() {
 
   for (size_t I = 0, E = FileNameRegistry.Filenames.size(); I != E; ++I) {
     // Just emit unique filenames one by one, separated by a null character.
-    Asm->OutStreamer->EmitBytes(FileNameRegistry.Filenames[I]);
+    Asm->OutStreamer.EmitBytes(FileNameRegistry.Filenames[I]);
     Asm->EmitInt8(0);
   }
 
   // No more subsections. Fill with zeros to align the end of the section by 4.
-  Asm->OutStreamer->EmitFill((-FileNameRegistry.LastOffset) % 4, 0);
+  Asm->OutStreamer.EmitFill((-FileNameRegistry.LastOffset) % 4, 0);
 
   clear();
 }
@@ -181,10 +172,10 @@ static void EmitLabelDiff(MCStreamer &Streamer,
                           unsigned int Size = 4) {
   MCSymbolRefExpr::VariantKind Variant = MCSymbolRefExpr::VK_None;
   MCContext &Context = Streamer.getContext();
-  const MCExpr *FromRef = MCSymbolRefExpr::create(From, Variant, Context),
-               *ToRef   = MCSymbolRefExpr::create(To, Variant, Context);
+  const MCExpr *FromRef = MCSymbolRefExpr::Create(From, Variant, Context),
+               *ToRef   = MCSymbolRefExpr::Create(To, Variant, Context);
   const MCExpr *AddrDelta =
-      MCBinaryExpr::create(MCBinaryExpr::Sub, ToRef, FromRef, Context);
+      MCBinaryExpr::Create(MCBinaryExpr::Sub, ToRef, FromRef, Context);
   Streamer.EmitValue(AddrDelta, Size);
 }
 
@@ -199,11 +190,8 @@ void WinCodeViewLineTables::emitDebugInfoForFunction(const Function *GV) {
     return;
   assert(FI.End && "Don't know where the function ends?");
 
-  StringRef GVName = GV->getName();
-  StringRef FuncName;
-  if (auto *SP = getDISubprogram(GV))
-    FuncName = SP->getDisplayName();
-
+  StringRef FuncName = getDISubprogram(GV).getDisplayName(),
+            GVName = GV->getName();
   // FIXME Clang currently sets DisplayName to "bar" for a C++
   // "namespace_foo::bar" function, see PR21528.  Luckily, dbghelp.dll is trying
   // to demangle display names anyways, so let's just put a mangled name into
@@ -211,41 +199,41 @@ void WinCodeViewLineTables::emitDebugInfoForFunction(const Function *GV) {
   if (GVName.startswith("\01?"))
     FuncName = GVName.substr(1);
   // Emit a symbol subsection, required by VS2012+ to find function boundaries.
-  MCSymbol *SymbolsBegin = Asm->MMI->getContext().createTempSymbol(),
-           *SymbolsEnd = Asm->MMI->getContext().createTempSymbol();
-  Asm->OutStreamer->AddComment("Symbol subsection for " + Twine(FuncName));
+  MCSymbol *SymbolsBegin = Asm->MMI->getContext().CreateTempSymbol(),
+           *SymbolsEnd = Asm->MMI->getContext().CreateTempSymbol();
+  Asm->OutStreamer.AddComment("Symbol subsection for " + Twine(FuncName));
   Asm->EmitInt32(COFF::DEBUG_SYMBOL_SUBSECTION);
-  EmitLabelDiff(*Asm->OutStreamer, SymbolsBegin, SymbolsEnd);
-  Asm->OutStreamer->EmitLabel(SymbolsBegin);
+  EmitLabelDiff(Asm->OutStreamer, SymbolsBegin, SymbolsEnd);
+  Asm->OutStreamer.EmitLabel(SymbolsBegin);
   {
-    MCSymbol *ProcSegmentBegin = Asm->MMI->getContext().createTempSymbol(),
-             *ProcSegmentEnd = Asm->MMI->getContext().createTempSymbol();
-    EmitLabelDiff(*Asm->OutStreamer, ProcSegmentBegin, ProcSegmentEnd, 2);
-    Asm->OutStreamer->EmitLabel(ProcSegmentBegin);
+    MCSymbol *ProcSegmentBegin = Asm->MMI->getContext().CreateTempSymbol(),
+             *ProcSegmentEnd = Asm->MMI->getContext().CreateTempSymbol();
+    EmitLabelDiff(Asm->OutStreamer, ProcSegmentBegin, ProcSegmentEnd, 2);
+    Asm->OutStreamer.EmitLabel(ProcSegmentBegin);
 
     Asm->EmitInt16(COFF::DEBUG_SYMBOL_TYPE_PROC_START);
     // Some bytes of this segment don't seem to be required for basic debugging,
     // so just fill them with zeroes.
-    Asm->OutStreamer->EmitFill(12, 0);
+    Asm->OutStreamer.EmitFill(12, 0);
     // This is the important bit that tells the debugger where the function
     // code is located and what's its size:
-    EmitLabelDiff(*Asm->OutStreamer, Fn, FI.End);
-    Asm->OutStreamer->EmitFill(12, 0);
-    Asm->OutStreamer->EmitCOFFSecRel32(Fn);
-    Asm->OutStreamer->EmitCOFFSectionIndex(Fn);
+    EmitLabelDiff(Asm->OutStreamer, Fn, FI.End);
+    Asm->OutStreamer.EmitFill(12, 0);
+    Asm->OutStreamer.EmitCOFFSecRel32(Fn);
+    Asm->OutStreamer.EmitCOFFSectionIndex(Fn);
     Asm->EmitInt8(0);
     // Emit the function display name as a null-terminated string.
-    Asm->OutStreamer->EmitBytes(FuncName);
+    Asm->OutStreamer.EmitBytes(FuncName);
     Asm->EmitInt8(0);
-    Asm->OutStreamer->EmitLabel(ProcSegmentEnd);
+    Asm->OutStreamer.EmitLabel(ProcSegmentEnd);
 
     // We're done with this function.
     Asm->EmitInt16(0x0002);
     Asm->EmitInt16(COFF::DEBUG_SYMBOL_TYPE_PROC_END);
   }
-  Asm->OutStreamer->EmitLabel(SymbolsEnd);
+  Asm->OutStreamer.EmitLabel(SymbolsEnd);
   // Every subsection must be aligned to a 4-byte boundary.
-  Asm->OutStreamer->EmitFill((-FuncName.size()) % 4, 0);
+  Asm->OutStreamer.EmitFill((-FuncName.size()) % 4, 0);
 
   // PCs/Instructions are grouped into segments sharing the same filename.
   // Pre-calculate the lengths (in instructions) of these segments and store
@@ -263,60 +251,43 @@ void WinCodeViewLineTables::emitDebugInfoForFunction(const Function *GV) {
   }
   FilenameSegmentLengths[LastSegmentEnd] = FI.Instrs.size() - LastSegmentEnd;
 
-  // Emit a line table subsection, required to do PC-to-file:line lookup.
-  Asm->OutStreamer->AddComment("Line table subsection for " + Twine(FuncName));
+  // Emit a line table subsection, requred to do PC-to-file:line lookup.
+  Asm->OutStreamer.AddComment("Line table subsection for " + Twine(FuncName));
   Asm->EmitInt32(COFF::DEBUG_LINE_TABLE_SUBSECTION);
-  MCSymbol *LineTableBegin = Asm->MMI->getContext().createTempSymbol(),
-           *LineTableEnd = Asm->MMI->getContext().createTempSymbol();
-  EmitLabelDiff(*Asm->OutStreamer, LineTableBegin, LineTableEnd);
-  Asm->OutStreamer->EmitLabel(LineTableBegin);
+  MCSymbol *LineTableBegin = Asm->MMI->getContext().CreateTempSymbol(),
+           *LineTableEnd = Asm->MMI->getContext().CreateTempSymbol();
+  EmitLabelDiff(Asm->OutStreamer, LineTableBegin, LineTableEnd);
+  Asm->OutStreamer.EmitLabel(LineTableBegin);
 
   // Identify the function this subsection is for.
-  Asm->OutStreamer->EmitCOFFSecRel32(Fn);
-  Asm->OutStreamer->EmitCOFFSectionIndex(Fn);
-  // Insert flags after a 16-bit section index.
-  Asm->EmitInt16(COFF::DEBUG_LINE_TABLES_HAVE_COLUMN_RECORDS);
+  Asm->OutStreamer.EmitCOFFSecRel32(Fn);
+  Asm->OutStreamer.EmitCOFFSectionIndex(Fn);
+  // Insert padding after a 16-bit section index.
+  Asm->EmitInt16(0);
 
   // Length of the function's code, in bytes.
-  EmitLabelDiff(*Asm->OutStreamer, Fn, FI.End);
+  EmitLabelDiff(Asm->OutStreamer, Fn, FI.End);
 
   // PC-to-linenumber lookup table:
   MCSymbol *FileSegmentEnd = nullptr;
-
-  // The start of the last segment:
-  size_t LastSegmentStart = 0;
-
-  auto FinishPreviousChunk = [&] {
-    if (!FileSegmentEnd)
-      return;
-    for (size_t ColSegI = LastSegmentStart,
-                ColSegEnd = ColSegI + FilenameSegmentLengths[LastSegmentStart];
-         ColSegI != ColSegEnd; ++ColSegI) {
-      unsigned ColumnNumber = InstrInfo[FI.Instrs[ColSegI]].ColumnNumber;
-      assert(ColumnNumber <= COFF::CVL_MaxColumnNumber);
-      Asm->EmitInt16(ColumnNumber); // Start column
-      Asm->EmitInt16(0);            // End column
-    }
-    Asm->OutStreamer->EmitLabel(FileSegmentEnd);
-  };
-
   for (size_t J = 0, F = FI.Instrs.size(); J != F; ++J) {
     MCSymbol *Instr = FI.Instrs[J];
     assert(InstrInfo.count(Instr));
 
     if (FilenameSegmentLengths.count(J)) {
       // We came to a beginning of a new filename segment.
-      FinishPreviousChunk();
+      if (FileSegmentEnd)
+        Asm->OutStreamer.EmitLabel(FileSegmentEnd);
       StringRef CurFilename = InstrInfo[FI.Instrs[J]].Filename;
       assert(FileNameRegistry.Infos.count(CurFilename));
       size_t IndexInStringTable =
           FileNameRegistry.Infos[CurFilename].FilenameID;
       // Each segment starts with the offset of the filename
       // in the string table.
-      Asm->OutStreamer->AddComment(
+      Asm->OutStreamer.AddComment(
           "Segment for file '" + Twine(CurFilename) + "' begins");
-      MCSymbol *FileSegmentBegin = Asm->MMI->getContext().createTempSymbol();
-      Asm->OutStreamer->EmitLabel(FileSegmentBegin);
+      MCSymbol *FileSegmentBegin = Asm->MMI->getContext().CreateTempSymbol();
+      Asm->OutStreamer.EmitLabel(FileSegmentBegin);
       Asm->EmitInt32(8 * IndexInStringTable);
 
       // Number of PC records in the lookup table.
@@ -325,21 +296,18 @@ void WinCodeViewLineTables::emitDebugInfoForFunction(const Function *GV) {
 
       // Full size of the segment for this filename, including the prev two
       // records.
-      FileSegmentEnd = Asm->MMI->getContext().createTempSymbol();
-      EmitLabelDiff(*Asm->OutStreamer, FileSegmentBegin, FileSegmentEnd);
-      LastSegmentStart = J;
+      FileSegmentEnd = Asm->MMI->getContext().CreateTempSymbol();
+      EmitLabelDiff(Asm->OutStreamer, FileSegmentBegin, FileSegmentEnd);
     }
 
     // The first PC with the given linenumber and the linenumber itself.
-    EmitLabelDiff(*Asm->OutStreamer, Fn, Instr);
-    uint32_t LineNumber = InstrInfo[Instr].LineNumber;
-    assert(LineNumber <= COFF::CVL_MaxLineNumber);
-    uint32_t LineData = LineNumber | COFF::CVL_IsStatement;
-    Asm->EmitInt32(LineData);
+    EmitLabelDiff(Asm->OutStreamer, Fn, Instr);
+    Asm->EmitInt32(InstrInfo[Instr].LineNumber);
   }
 
-  FinishPreviousChunk();
-  Asm->OutStreamer->EmitLabel(LineTableEnd);
+  if (FileSegmentEnd)
+    Asm->OutStreamer.EmitLabel(FileSegmentEnd);
+  Asm->OutStreamer.EmitLabel(LineTableEnd);
 }
 
 void WinCodeViewLineTables::beginFunction(const MachineFunction *MF) {
@@ -359,7 +327,7 @@ void WinCodeViewLineTables::beginFunction(const MachineFunction *MF) {
   DebugLoc PrologEndLoc;
   bool EmptyPrologue = true;
   for (const auto &MBB : *MF) {
-    if (PrologEndLoc)
+    if (!PrologEndLoc.isUnknown())
       break;
     for (const auto &MI : MBB) {
       if (MI.isDebugValue())
@@ -368,7 +336,8 @@ void WinCodeViewLineTables::beginFunction(const MachineFunction *MF) {
       // First known non-DBG_VALUE and non-frame setup location marks
       // the beginning of the function body.
       // FIXME: do we need the first subcondition?
-      if (!MI.getFlag(MachineInstr::FrameSetup) && MI.getDebugLoc()) {
+      if (!MI.getFlag(MachineInstr::FrameSetup) &&
+          (!MI.getDebugLoc().isUnknown())) {
         PrologEndLoc = MI.getDebugLoc();
         break;
       }
@@ -376,8 +345,9 @@ void WinCodeViewLineTables::beginFunction(const MachineFunction *MF) {
     }
   }
   // Record beginning of function if we have a non-empty prologue.
-  if (PrologEndLoc && !EmptyPrologue) {
-    DebugLoc FnStartDL = PrologEndLoc.getFnDebugLoc();
+  if (!PrologEndLoc.isUnknown() && !EmptyPrologue) {
+    DebugLoc FnStartDL =
+        PrologEndLoc.getFnDebugLoc(MF->getFunction()->getContext());
     maybeRecordLocation(FnStartDL, MF);
   }
 }
@@ -394,7 +364,10 @@ void WinCodeViewLineTables::endFunction(const MachineFunction *MF) {
     FnDebugInfo.erase(GV);
     VisitedFunctions.pop_back();
   } else {
-    CurFn->End = Asm->getFunctionEnd();
+    // Define end label for subprogram.
+    MCSymbol *FunctionEndSym = Asm->OutStreamer.getContext().CreateTempSymbol();
+    Asm->OutStreamer.EmitLabel(FunctionEndSym);
+    CurFn->End = FunctionEndSym;
   }
   CurFn = nullptr;
 }
@@ -404,7 +377,7 @@ void WinCodeViewLineTables::beginInstruction(const MachineInstr *MI) {
   if (!Asm || MI->isDebugValue() || MI->getFlag(MachineInstr::FrameSetup))
     return;
   DebugLoc DL = MI->getDebugLoc();
-  if (DL == PrevInstLoc || !DL)
+  if (DL == PrevInstLoc || DL.isUnknown())
     return;
   maybeRecordLocation(DL, Asm->MF);
 }

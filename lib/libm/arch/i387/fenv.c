@@ -1,4 +1,4 @@
-/* $NetBSD: fenv.c,v 1.7 2016/02/17 19:54:11 christos Exp $ */
+/* $NetBSD: fenv.c,v 1.6 2013/11/11 00:31:51 joerg Exp $ */
 
 /*-
  * Copyright (c) 2004-2005 David Schultz <das@FreeBSD.ORG>
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: fenv.c,v 1.7 2016/02/17 19:54:11 christos Exp $");
+__RCSID("$NetBSD: fenv.c,v 1.6 2013/11/11 00:31:51 joerg Exp $");
 
 #include <sys/param.h>
 #include <sys/sysctl.h>
@@ -400,8 +400,9 @@ fesetenv(const fenv_t *envp)
 	__fe_dfl_env.x87.unused1 = env.x87.unused1;
 	__fe_dfl_env.x87.unused2 = env.x87.unused2;
 	__fe_dfl_env.x87.unused3 = env.x87.unused3;
-	memcpy(__fe_dfl_env.x87.others, env.x87.others,
-	    sizeof(__fe_dfl_env.x87.others));
+	memcpy(__fe_dfl_env.x87.others,
+	       env.x87.others,
+	       sizeof(__fe_dfl_env.x87.others) / sizeof(uint32_t));
 
 	__fldenv(envp->x87);
 	if (__HAS_SSE)
@@ -435,8 +436,9 @@ feupdateenv(const fenv_t *envp)
 	__fe_dfl_env.x87.unused1 = env.x87.unused1;
 	__fe_dfl_env.x87.unused2 = env.x87.unused2;
 	__fe_dfl_env.x87.unused3 = env.x87.unused3;
-	memcpy(__fe_dfl_env.x87.others, env.x87.others,
-	    sizeof(__fe_dfl_env.x87.others));
+	memcpy(__fe_dfl_env.x87.others,
+	       env.x87.others,
+	       sizeof(__fe_dfl_env.x87.others) / sizeof(uint32_t));
 
 	__fnstsw(&status);
 	if (__HAS_SSE)

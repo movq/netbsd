@@ -1,4 +1,4 @@
-/*	$NetBSD: undefined.c,v 1.56 2015/04/15 13:22:50 matt Exp $	*/
+/*	$NetBSD: undefined.c,v 1.54.4.1 2014/11/09 16:05:25 martin Exp $	*/
 
 /*
  * Copyright (c) 2001 Ben Harris.
@@ -55,7 +55,7 @@
 #include <sys/kgdb.h>
 #endif
 
-__KERNEL_RCSID(0, "$NetBSD: undefined.c,v 1.56 2015/04/15 13:22:50 matt Exp $");
+__KERNEL_RCSID(0, "$NetBSD: undefined.c,v 1.54.4.1 2014/11/09 16:05:25 martin Exp $");
 
 #include <sys/kmem.h>
 #include <sys/queue.h>
@@ -475,5 +475,24 @@ undefinedinstruction(trapframe_t *tf)
 	if ((fault_code & FAULT_USER) == 0)
 		return;
 
+#ifdef FAST_FPE
+	/* Optimised exit code */
+	{
+		/*
+		 * Check for reschedule request, at the moment there is only
+		 * 1 ast so this code should always be run
+		 */
+		if (curcpu()->ci_want_resched) {
+			/*
+			 * We are being preempted.
+			 */
+			preempt();
+		}
+
+		/* Invoke MI userret code */
+		mi_userret(l);
+	}
+#else
 	userret(l);
+#endif
 }

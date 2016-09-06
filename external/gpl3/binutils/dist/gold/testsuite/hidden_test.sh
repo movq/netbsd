@@ -2,7 +2,7 @@
 
 # hidden_test.sh -- a test case for hidden and internal symbols.
 
-# Copyright (C) 2009-2015 Free Software Foundation, Inc.
+# Copyright 2009 Free Software Foundation, Inc.
 # Written by Cary Coutant <ccoutant@google.com>.
 
 # This file is part of gold.
@@ -29,6 +29,19 @@
 # error messages are issued for the references to internal and
 # hidden symbols.  The errors will be found in hidden_test.err.
 
+check()
+{
+    if ! grep -q "$2" "$1"
+    then
+	echo "Did not find expected error in $1:"
+	echo "   $2"
+	echo ""
+	echo "Actual error output below:"
+	cat "$1"
+	exit 1
+    fi
+}
+
 check_missing()
 {
     if grep -q "$2" "$1"
@@ -42,29 +55,12 @@ check_missing()
     fi
 }
 
-check_missing_sym()
-{
-    if grep -q "$2" "$1"
-    then
-	echo "Found unexpected symbol in $1:"
-	echo "   $2"
-	echo ""
-	echo "Actual nm output below:"
-	cat "$1"
-	exit 1
-    fi
-}
+# We should see errors for hidden and internal symbols.
+check hidden_test.err "hidden symbol 'main_hidden' in hidden_test_main.o is referenced by DSO libhidden.so"
+check hidden_test.err "internal symbol 'main_internal' in hidden_test_main.o is referenced by DSO libhidden.so"
 
 # We shouldn't see errors for the default and protected symbols.
 check_missing hidden_test.err "main_default"
 check_missing hidden_test.err "main_protected"
-
-# We shouldn't see errors for the hidden and internal symbols either (PR 15574).
-check_missing hidden_test.err "main_hidden"
-check_missing hidden_test.err "main_internal"
-
-# We shouldn't see the hidden or internal symbols in the dynamic symbol table.
-check_missing_sym hidden_test.syms "main_hidden"
-check_missing_sym hidden_test.syms "main_internal"
 
 exit 0

@@ -229,6 +229,7 @@ public:
     return static_cast<CXXDeleteExpr *>(Data2.getPointer());
   }
 
+
 private:
   friend class CFGElement;
   CFGDeleteDtor() {}
@@ -321,7 +322,7 @@ public:
   Stmt &operator*() { return *getStmt(); }
   const Stmt &operator*() const { return *getStmt(); }
 
-  explicit operator bool() const { return getStmt(); }
+  LLVM_EXPLICIT operator bool() const { return getStmt(); }
 };
 
 /// CFGBlock - Represents a single basic block in a source-level CFG.
@@ -492,6 +493,7 @@ public:
     : Elements(C), Label(nullptr), Terminator(nullptr), LoopTarget(nullptr), 
       BlockID(blockid), Preds(C, 1), Succs(C, 1), HasNoReturnElement(false),
       Parent(parent) {}
+  ~CFGBlock() {}
 
   // Statement iterators
   typedef ElementList::iterator                      iterator;
@@ -692,7 +694,7 @@ public:
   iterator beginAutomaticObjDtorsInsert(iterator I, size_t Cnt,
       BumpVectorContext &C) {
     return iterator(Elements.insert(I.base(), Cnt,
-                                    CFGAutomaticObjDtor(nullptr, nullptr), C));
+                                    CFGAutomaticObjDtor(nullptr, 0), C));
   }
   iterator insertAutomaticObjDtor(iterator I, VarDecl *VD, Stmt *S) {
     *I = CFGAutomaticObjDtor(VD, S);
@@ -737,7 +739,6 @@ public:
     bool AddTemporaryDtors;
     bool AddStaticInitBranches;
     bool AddCXXNewAllocator;
-    bool AddCXXDefaultInitExprInCtors;
 
     bool alwaysAdd(const Stmt *stmt) const {
       return alwaysAddMask[stmt->getStmtClass()];
@@ -758,7 +759,7 @@ public:
         PruneTriviallyFalseEdges(true), AddEHEdges(false),
         AddInitializers(false), AddImplicitDtors(false),
         AddTemporaryDtors(false), AddStaticInitBranches(false),
-        AddCXXNewAllocator(false), AddCXXDefaultInitExprInCtors(false) {}
+        AddCXXNewAllocator(false) {}
   };
 
   /// \brief Provides a custom implementation of the iterator class to have the
@@ -766,7 +767,7 @@ public:
   /// (not a pointer to CFGBlock).
   class graph_iterator {
   public:
-    typedef CFGBlock                        value_type;
+    typedef const CFGBlock                  value_type;
     typedef value_type&                     reference;
     typedef value_type*                     pointer;
     typedef BumpVector<CFGBlock*>::iterator ImplTy;
@@ -1109,5 +1110,4 @@ template <> struct GraphTraits<Inverse<const ::clang::CFG*> >
   }
 };
 } // end llvm namespace
-
-#endif // LLVM_CLANG_ANALYSIS_CFG_H
+#endif

@@ -1,15 +1,12 @@
 /* This generated file is for internal use. Do not include it from headers. */
 
-#ifdef CLANG_CONFIG_H
+#ifdef CONFIG_H
 #error config.h can only be included once
 #else
-#define CLANG_CONFIG_H
+#define CONFIG_H
 
 /* Bug report URL. */
 #define BUG_REPORT_URL "${BUG_REPORT_URL}"
-
-/* Default OpenMP runtime used by -fopenmp. */
-#define CLANG_DEFAULT_OPENMP_RUNTIME "${CLANG_DEFAULT_OPENMP_RUNTIME}"
 
 /* Multilib suffix for libdir. */
 #define CLANG_LIBDIR_SUFFIX "${CLANG_LIBDIR_SUFFIX}"

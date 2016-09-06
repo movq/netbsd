@@ -1,4 +1,4 @@
-/*	$NetBSD: sbus.c,v 1.95 2016/07/07 06:55:38 msaitoh Exp $ */
+/*	$NetBSD: sbus.c,v 1.93 2012/01/30 04:25:15 mrg Exp $ */
 
 /*
  * Copyright (c) 1999-2002 Eduardo Horvath
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sbus.c,v 1.95 2016/07/07 06:55:38 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sbus.c,v 1.93 2012/01/30 04:25:15 mrg Exp $");
 
 #include "opt_ddb.h"
 
@@ -178,7 +178,7 @@ sbus_attach(device_t parent, device_t self, void *aux)
 	sc->sc_dev = self;
 	sc->sc_bustag = ma->ma_bustag;
 	sc->sc_dmatag = ma->ma_dmatag;
-	sc->sc_ign = ma->ma_interrupts[0] & INTMAP_IGN;
+	sc->sc_ign = ma->ma_interrupts[0] & INTMAP_IGN;		
 
 	/* XXXX Use sysio PROM mappings for interrupt vector regs. */
 	sparc_promaddr_to_handle(sc->sc_bustag,	ma->ma_address[0], &sc->sc_bh);
@@ -254,7 +254,8 @@ sbus_attach(device_t parent, device_t self, void *aux)
 	iommu_init(name, &sc->sc_is, 0, -1);
 
 	/* Enable the over temp intr */
-	ih = intrhand_alloc();
+	ih = (struct intrhand *)
+		malloc(sizeof(struct intrhand), M_DEVBUF, M_NOWAIT);
 	ih->ih_map = &sc->sc_sysio->therm_int_map;
 	ih->ih_clr = NULL; /* &sc->sc_sysio->therm_clr_int; */
 	ih->ih_fun = sbus_overtemp;
@@ -505,9 +506,12 @@ sbus_intr_establish(bus_space_tag_t t, int pri, int level,
 	struct sbus_softc *sc = t->cookie;
 	struct intrhand *ih;
 	int ipl;
-	long vec = pri;
+	long vec = pri; 
 
-	ih = intrhand_alloc();
+	ih = (struct intrhand *)
+		malloc(sizeof(struct intrhand), M_DEVBUF, M_NOWAIT);
+	if (ih == NULL)
+		return (NULL);
 
 	if ((vec & SBUS_INTR_COMPAT) != 0)
 		ipl = vec & ~SBUS_INTR_COMPAT;

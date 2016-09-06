@@ -1,4 +1,4 @@
-/*	$NetBSD: fdesc_vnops.c,v 1.127 2016/08/20 12:37:08 hannken Exp $	*/
+/*	$NetBSD: fdesc_vnops.c,v 1.121.2.1 2015/05/13 19:16:14 snj Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993
@@ -41,7 +41,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: fdesc_vnops.c,v 1.127 2016/08/20 12:37:08 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: fdesc_vnops.c,v 1.121.2.1 2015/05/13 19:16:14 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -346,9 +346,9 @@ fdesc_attr(int fd, struct vattr *vap, kauth_cred_t cred)
 
 	switch (fp->f_type) {
 	case DTYPE_VNODE:
-		vn_lock(fp->f_vnode, LK_SHARED | LK_RETRY);
-		error = VOP_GETATTR(fp->f_vnode, vap, cred);
-		VOP_UNLOCK(fp->f_vnode);
+		vn_lock((struct vnode *) fp->f_data, LK_SHARED | LK_RETRY);
+		error = VOP_GETATTR((struct vnode *) fp->f_data, vap, cred);
+		VOP_UNLOCK((struct vnode *) fp->f_data);
 		if (error == 0 && vap->va_type == VDIR) {
 			/*
 			 * directories can cause loops in the namespace,
@@ -862,6 +862,7 @@ fdesc_reclaim(void *v)
 	struct fdescnode *fd = VTOFDESC(vp);
 
 	vp->v_data = NULL;
+	vcache_remove(vp->v_mount, &fd->fd_ix, sizeof(fd->fd_ix));
 	kmem_free(fd, sizeof(struct fdescnode));
 
 	return (0);
@@ -921,13 +922,14 @@ fdesc_print(void *v)
 int
 fdesc_link(void *v)
 {
-	struct vop_link_v2_args /* {
+	struct vop_link_args /* {
 		struct vnode *a_dvp;
 		struct vnode *a_vp;
 		struct componentname *a_cnp;
 	} */ *ap = v;
 
 	VOP_ABORTOP(ap->a_dvp, ap->a_cnp);
+	vput(ap->a_dvp);
 	return (EROFS);
 }
 

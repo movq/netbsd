@@ -1,4 +1,4 @@
-/*	$NetBSD: valgrindtest.c,v 1.3 2015/03/31 21:39:43 christos Exp $	*/
+/*	$NetBSD: valgrindtest.c,v 1.1.1.1 2013/12/31 16:57:29 christos Exp $	*/
 
 /*
  * Copyright (c) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 2000
@@ -25,10 +25,9 @@
 static const char copyright[] _U_ =
     "@(#) Copyright (c) 1988, 1989, 1990, 1991, 1992, 1993, 1994, 1995, 1996, 1997, 2000\n\
 The Regents of the University of California.  All rights reserved.\n";
+static const char rcsid[] _U_ =
+    "@(#) Header: /tcpdump/master/libpcap/filtertest.c,v 1.2 2005-08-08 17:50:13 guy Exp  (LBL)";
 #endif
-
-#include <sys/cdefs.h>
-__RCSID("$NetBSD: valgrindtest.c,v 1.3 2015/03/31 21:39:43 christos Exp $");
 
 #ifdef HAVE_CONFIG_H
 #include "config.h"
@@ -236,7 +235,7 @@ main(int argc, char **argv)
 	dorfmon = 0;
 	useactivate = 0;
 	infile = NULL;
-
+  
 	if ((cp = strrchr(argv[0], '/')) != NULL)
 		program_name = cp + 1;
 	else

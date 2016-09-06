@@ -1,10 +1,9 @@
-#	$NetBSD: Makefile,v 1.8 2015/07/23 01:06:33 mrg Exp $
+#	$NetBSD: Makefile,v 1.5.22.2 2015/02/21 19:30:41 martin Exp $
 
 .include <bsd.own.mk>
 
 LIB=	xcb
 .PATH:	${X11SRCDIR.${LIB}}/src
-.PATH:	${X11SRCDIR.${LIB}}/man
 .PATH:	${X11SRCDIR.${LIB}}
 .PATH:	${.CURDIR}/../files
 

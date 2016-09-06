@@ -1,6 +1,6 @@
 /* Module support.
 
-   Copyright 1996-2015 Free Software Foundation, Inc.
+   Copyright 1996-2014 Free Software Foundation, Inc.
 
    Contributed by Cygnus Support.
 
@@ -19,7 +19,6 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "config.h"
 #include "sim-main.h"
 #include "sim-io.h"
 #include "sim-options.h"
@@ -27,11 +26,6 @@ along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
 #if WITH_HW
 #include "sim-hw.h"
-#endif
-
-#ifdef HAVE_DV_SOCKSER
-/* TODO: Shouldn't have device models here.  */
-#include "dv-sockser.h"
 #endif
 
 #include "libiberty.h"
@@ -46,7 +40,7 @@ static MODULE_INSTALL_FN * const modules[] = {
 #if WITH_ENGINE
   sim_engine_install,
 #endif
-#if WITH_TRACE_ANY_P
+#if WITH_TRACE
   trace_install,
 #endif
 #if WITH_PROFILE
@@ -65,10 +59,6 @@ static MODULE_INSTALL_FN * const modules[] = {
 #endif
 #if WITH_HW
   sim_hw_install,
-#endif
-#ifdef HAVE_DV_SOCKSER
-  /* TODO: Shouldn't have device models here.  */
-  dv_sockser_install,
 #endif
   /* Configured in [simulator specific] additional modules.  */
 #ifdef MODULE_LIST

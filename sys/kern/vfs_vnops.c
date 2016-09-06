@@ -1,4 +1,4 @@
-/*	$NetBSD: vfs_vnops.c,v 1.193 2015/02/04 07:09:37 msaitoh Exp $	*/
+/*	$NetBSD: vfs_vnops.c,v 1.190.2.1 2014/12/31 06:44:00 snj Exp $	*/
 
 /*-
  * Copyright (c) 2009 The NetBSD Foundation, Inc.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vfs_vnops.c,v 1.193 2015/02/04 07:09:37 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vfs_vnops.c,v 1.190.2.1 2014/12/31 06:44:00 snj Exp $");
 
 #include "veriexec.h"
 
@@ -470,7 +470,7 @@ int
 vn_readdir(file_t *fp, char *bf, int segflg, u_int count, int *done,
     struct lwp *l, off_t **cookies, int *ncookies)
 {
-	struct vnode *vp = fp->f_vnode;
+	struct vnode *vp = (struct vnode *)fp->f_data;
 	struct iovec aiov;
 	struct uio auio;
 	int error, eofflag;
@@ -520,7 +520,7 @@ unionread:
 		vp = vp->v_mount->mnt_vnodecovered;
 		vref(vp);
 		mutex_enter(&fp->f_lock);
-		fp->f_vnode = vp;
+		fp->f_data = vp;
 		fp->f_offset = 0;
 		mutex_exit(&fp->f_lock);
 		vrele(tvp);
@@ -537,7 +537,7 @@ static int
 vn_read(file_t *fp, off_t *offset, struct uio *uio, kauth_cred_t cred,
     int flags)
 {
-	struct vnode *vp = fp->f_vnode;
+	struct vnode *vp = (struct vnode *)fp->f_data;
 	int error, ioflag, fflag;
 	size_t count;
 
@@ -568,7 +568,7 @@ static int
 vn_write(file_t *fp, off_t *offset, struct uio *uio, kauth_cred_t cred,
     int flags)
 {
-	struct vnode *vp = fp->f_vnode;
+	struct vnode *vp = (struct vnode *)fp->f_data;
 	int error, ioflag, fflag;
 	size_t count;
 
@@ -622,7 +622,7 @@ vn_write(file_t *fp, off_t *offset, struct uio *uio, kauth_cred_t cred,
 static int
 vn_statfile(file_t *fp, struct stat *sb)
 {
-	struct vnode *vp = fp->f_vnode;
+	struct vnode *vp = fp->f_data;
 	int error;
 
 	vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
@@ -673,7 +673,7 @@ vn_stat(struct vnode *vp, struct stat *sb)
 		break;
 	default:
 		return (EBADF);
-	}
+	};
 	sb->st_mode = mode;
 	sb->st_nlink = va.va_nlink;
 	sb->st_uid = va.va_uid;
@@ -697,7 +697,7 @@ vn_stat(struct vnode *vp, struct stat *sb)
 static int
 vn_fcntl(file_t *fp, u_int com, void *data)
 {
-	struct vnode *vp = fp->f_vnode;
+	struct vnode *vp = fp->f_data;
 	int error;
 
 	error = VOP_FCNTL(vp, com, data, fp->f_flag, kauth_cred_get());
@@ -710,7 +710,7 @@ vn_fcntl(file_t *fp, u_int com, void *data)
 static int
 vn_ioctl(file_t *fp, u_long com, void *data)
 {
-	struct vnode *vp = fp->f_vnode, *ovp;
+	struct vnode *vp = fp->f_data, *ovp;
 	struct vattr vattr;
 	int error;
 
@@ -785,7 +785,7 @@ static int
 vn_poll(file_t *fp, int events)
 {
 
-	return (VOP_POLL(fp->f_vnode, events));
+	return (VOP_POLL(fp->f_data, events));
 }
 
 /*
@@ -795,7 +795,7 @@ int
 vn_kqfilter(file_t *fp, struct knote *kn)
 {
 
-	return (VOP_KQFILTER(fp->f_vnode, kn));
+	return (VOP_KQFILTER(fp->f_data, kn));
 }
 
 static int
@@ -817,7 +817,7 @@ vn_mmap(struct file *fp, off_t *offp, size_t size, int prot, int *flagsp,
 	flags = *flagsp;
 	maxprot = VM_PROT_EXECUTE;
 
-	vp = fp->f_vnode;
+	vp = fp->f_data;
 	if (vp->v_type != VREG && vp->v_type != VCHR &&
 	    vp->v_type != VBLK) {
 		/* only REG/CHR/BLK support mmap */
@@ -1048,7 +1048,7 @@ static int
 vn_closefile(file_t *fp)
 {
 
-	return vn_close(fp->f_vnode, fp->f_flag, fp->f_cred);
+	return vn_close(fp->f_data, fp->f_flag, fp->f_cred);
 }
 
 /*

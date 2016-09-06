@@ -1,6 +1,6 @@
 /* Read MiniDebugInfo data from an objfile.
 
-   Copyright (C) 2012-2015 Free Software Foundation, Inc.
+   Copyright (C) 2012-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -19,6 +19,7 @@
 
 #include "defs.h"
 #include "gdb_bfd.h"
+#include <string.h>
 #include "symfile.h"
 #include "objfiles.h"
 #include "gdbcore.h"
@@ -52,7 +53,7 @@ static lzma_allocator gdb_lzma_allocator = { alloc_lzma, free_lzma, NULL };
    a section.  This keeps only the last decompressed block in memory
    to allow larger data without using to much memory.  */
 
-struct gdb_lzma_stream
+struct lzma_stream
 {
   /* Section of input BFD from which we are decoding data.  */
   asection *section;
@@ -70,8 +71,8 @@ struct gdb_lzma_stream
    find_separate_debug_file_in_section.  OPEN_CLOSURE is 'asection *'
    of the section to decompress.
 
-   Return 'struct gdb_lzma_stream *' must be freed by caller by xfree,
-   together with its INDEX lzma data.  */
+   Return 'struct lzma_stream *' must be freed by caller by xfree, together
+   with its INDEX lzma data.  */
 
 static void *
 lzma_open (struct bfd *nbfd, void *open_closure)
@@ -84,7 +85,7 @@ lzma_open (struct bfd *nbfd, void *open_closure)
   lzma_index *index;
   int ret;
   uint64_t memlimit = UINT64_MAX;
-  struct gdb_lzma_stream *lstream;
+  struct lzma_stream *lstream;
   size_t pos;
 
   size = bfd_get_section_size (section);
@@ -118,7 +119,7 @@ lzma_open (struct bfd *nbfd, void *open_closure)
     }
   xfree (indexdata);
 
-  lstream = xzalloc (sizeof (struct gdb_lzma_stream));
+  lstream = xzalloc (sizeof (struct lzma_stream));
   lstream->section = section;
   lstream->index = index;
 
@@ -127,13 +128,13 @@ lzma_open (struct bfd *nbfd, void *open_closure)
 
 /* bfd_openr_iovec PREAD_P implementation for
    find_separate_debug_file_in_section.  Passed STREAM
-   is 'struct gdb_lzma_stream *'.  */
+   is 'struct lzma_stream *'.  */
 
 static file_ptr
 lzma_pread (struct bfd *nbfd, void *stream, void *buf, file_ptr nbytes,
 	    file_ptr offset)
 {
-  struct gdb_lzma_stream *lstream = stream;
+  struct lzma_stream *lstream = stream;
   bfd_size_type chunk_size;
   lzma_index_iter iter;
   gdb_byte *compressed, *uncompressed;
@@ -214,13 +215,13 @@ lzma_pread (struct bfd *nbfd, void *stream, void *buf, file_ptr nbytes,
 
 /* bfd_openr_iovec CLOSE_P implementation for
    find_separate_debug_file_in_section.  Passed STREAM
-   is 'struct gdb_lzma_stream *'.  */
+   is 'struct lzma_stream *'.  */
 
 static int
 lzma_close (struct bfd *nbfd,
 	    void *stream)
 {
-  struct gdb_lzma_stream *lstream = stream;
+  struct lzma_stream *lstream = stream;
 
   lzma_index_end (lstream->index, &gdb_lzma_allocator);
   xfree (lstream->data);
@@ -232,16 +233,15 @@ lzma_close (struct bfd *nbfd,
 
 /* bfd_openr_iovec STAT_P implementation for
    find_separate_debug_file_in_section.  Passed STREAM
-   is 'struct gdb_lzma_stream *'.  */
+   is 'struct lzma_stream *'.  */
 
 static int
 lzma_stat (struct bfd *abfd,
 	   void *stream,
 	   struct stat *sb)
 {
-  struct gdb_lzma_stream *lstream = stream;
+  struct lzma_stream *lstream = stream;
 
-  memset (sb, 0, sizeof (struct stat));
   sb->st_size = lzma_index_uncompressed_size (lstream->index);
   return 0;
 }

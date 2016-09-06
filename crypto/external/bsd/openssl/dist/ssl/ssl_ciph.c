@@ -357,8 +357,8 @@ static int get_optional_pkey_id(const char *pkey_name)
     ameth = EVP_PKEY_asn1_find_str(NULL, pkey_name, -1);
     if (ameth && EVP_PKEY_asn1_get0_info(&pkey_id, NULL, NULL, NULL, NULL,
                                          ameth) > 0) {
-        return pkey_id;
-    }
+    return pkey_id;
+}
     return 0;
 }
 

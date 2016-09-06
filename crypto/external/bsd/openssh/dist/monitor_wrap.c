@@ -1,5 +1,5 @@
-/*	$NetBSD: monitor_wrap.c,v 1.15 2016/08/02 13:45:12 christos Exp $	*/
-/* $OpenBSD: monitor_wrap.c,v 1.88 2016/03/07 19:02:43 djm Exp $ */
+/*	$NetBSD: monitor_wrap.c,v 1.8.4.1 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: monitor_wrap.c,v 1.84 2015/02/16 22:13:32 djm Exp $ */
 /*
  * Copyright 2002 Niels Provos <provos@citi.umich.edu>
  * Copyright 2002 Markus Friedl <markus@openbsd.org>
@@ -27,7 +27,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: monitor_wrap.c,v 1.15 2016/08/02 13:45:12 christos Exp $");
+__RCSID("$NetBSD: monitor_wrap.c,v 1.8.4.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/types.h>
 #include <sys/uio.h>
 #include <sys/queue.h>
@@ -78,6 +78,7 @@ __RCSID("$NetBSD: monitor_wrap.c,v 1.15 2016/08/02 13:45:12 christos Exp $");
 #include "channels.h"
 #include "session.h"
 #include "servconf.h"
+#include "roaming.h"
 
 #include "ssherr.h"
 
@@ -215,7 +216,7 @@ mm_choose_dh(int min, int nbits, int max)
 
 int
 mm_key_sign(Key *key, u_char **sigp, u_int *lenp,
-    const u_char *data, u_int datalen, const char *hostkey_alg)
+    const u_char *data, u_int datalen)
 {
 	struct kex *kex = *pmonitor->m_pkex;
 	Buffer m;
@@ -225,7 +226,6 @@ mm_key_sign(Key *key, u_char **sigp, u_int *lenp,
 	buffer_init(&m);
 	buffer_put_int(&m, kex->host_key_index(key, 0, active_state));
 	buffer_put_string(&m, data, datalen);
-	buffer_put_cstring(&m, hostkey_alg);
 
 	mm_request_send(pmonitor->m_recvfd, MONITOR_REQ_SIGN, &m);
 
@@ -365,34 +365,32 @@ mm_auth_password(Authctxt *authctxt, const char *password)
 }
 
 int
-mm_user_key_allowed(struct passwd *pw, Key *key, int pubkey_auth_attempt)
+mm_user_key_allowed(struct passwd *pw, Key *key)
 {
-	return (mm_key_allowed(MM_USERKEY, NULL, NULL, key,
-	    pubkey_auth_attempt));
+	return (mm_key_allowed(MM_USERKEY, NULL, NULL, key));
 }
 
 int
-mm_hostbased_key_allowed(struct passwd *pw, const char *user, const char *host,
+mm_hostbased_key_allowed(struct passwd *pw, char *user, char *host,
     Key *key)
 {
-	return (mm_key_allowed(MM_HOSTKEY, user, host, key, 0));
+	return (mm_key_allowed(MM_HOSTKEY, user, host, key));
 }
 
 int
-mm_auth_rhosts_rsa_key_allowed(struct passwd *pw, const char *user,
-    const char *host, Key *key)
+mm_auth_rhosts_rsa_key_allowed(struct passwd *pw, char *user,
+    char *host, Key *key)
 {
 	int ret;
 
 	key->type = KEY_RSA; /* XXX hack for key_to_blob */
-	ret = mm_key_allowed(MM_RSAHOSTKEY, user, host, key, 0);
+	ret = mm_key_allowed(MM_RSAHOSTKEY, user, host, key);
 	key->type = KEY_RSA1;
 	return (ret);
 }
 
 int
-mm_key_allowed(enum mm_keytype type, const char *user, const char *host,
-    Key *key, int pubkey_auth_attempt)
+mm_key_allowed(enum mm_keytype type, char *user, char *host, Key *key)
 {
 	Buffer m;
 	u_char *blob;
@@ -410,7 +408,6 @@ mm_key_allowed(enum mm_keytype type, const char *user, const char *host,
 	buffer_put_cstring(&m, user ? user : "");
 	buffer_put_cstring(&m, host ? host : "");
 	buffer_put_string(&m, blob, len);
-	buffer_put_int(&m, pubkey_auth_attempt);
 	free(blob);
 
 	mm_request_send(pmonitor->m_recvfd, MONITOR_REQ_KEYALLOWED, &m);

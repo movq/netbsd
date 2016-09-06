@@ -1,4 +1,4 @@
-# $NetBSD: t_rquotad.sh,v 1.5 2016/08/10 23:25:39 kre Exp $ 
+# $NetBSD: t_rquotad.sh,v 1.4 2014/03/13 12:45:14 gson Exp $ 
 #
 #  Copyright (c) 2011 Manuel Bouyer
 #  All rights reserved.
@@ -114,7 +114,7 @@ get_nfs_quota()
 	unset RUMPHIJACK
 	unset LD_PRELOAD
 
-	atf_check -s exit:0 rump_server -lrumpvfs -lrumpnet -lrumpdev   \
+	atf_check -s exit:0 rump_server -lrumpvfs -lrumpnet             \
             -lrumpnet_net -lrumpnet_netinet -lrumpnet_shmif -lrumpfs_nfs\
             ${RUMP_SERVER}
 

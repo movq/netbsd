@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.14 2016/02/27 21:47:32 joerg Exp $
+#	$NetBSD: Makefile,v 1.12.2.1 2015/06/04 20:05:43 snj Exp $
 
 LIB=	LLVMAsmPrinter
 
@@ -14,7 +14,6 @@ SRCS+=	ARMException.cpp \
 	DIE.cpp \
 	DIEHash.cpp \
 	DbgValueHistoryCalculator.cpp \
-	DebugLocStream.cpp \
 	DwarfAccelTable.cpp \
 	DwarfCFIException.cpp \
 	DwarfCompileUnit.cpp \
@@ -26,7 +25,7 @@ SRCS+=	ARMException.cpp \
 	EHStreamer.cpp \
 	ErlangGCPrinter.cpp \
 	OcamlGCPrinter.cpp \
-	WinException.cpp \
+	Win64Exception.cpp \
 	WinCodeViewLineTables.cpp
 
 .if defined(HOSTLIB)

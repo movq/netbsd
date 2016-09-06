@@ -1,4 +1,4 @@
-/*	$NetBSD: autoconf.c,v 1.6 2015/01/10 14:07:26 jmcneill Exp $	*/
+/*	$NetBSD: autoconf.c,v 1.5.12.1 2015/01/10 16:46:56 martin Exp $	*/
 
 /*
  * Copyright 2002 Wasabi Systems, Inc.
@@ -38,7 +38,7 @@
 #include "opt_md.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.6 2015/01/10 14:07:26 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: autoconf.c,v 1.5.12.1 2015/01/10 16:46:56 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

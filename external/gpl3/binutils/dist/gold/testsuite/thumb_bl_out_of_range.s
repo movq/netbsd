@@ -45,11 +45,8 @@ _forward_test:
 	.size	_forward_test, .-_forward_test
 	
 # switch back to ARM mode so that stubs are disassembled correctly.
-	.align	2
 	.code	32
-
-# Align stub table for address matching.
-	.align	8
+	nop
 
 	.section	.text.post,"x"
 

@@ -1,5 +1,4 @@
-# THIS FILE IS GENERATED.  -*- buffer-read-only: t -*- vi :set ro:
-# Generated from: tic6x-c64xp.xml
+# DO NOT EDIT: generated from tic6x-c64xp.xml
 name:tic6x_c64xp
 xmltarget:tic6x-c64xp.xml
 expedite:A15,PC

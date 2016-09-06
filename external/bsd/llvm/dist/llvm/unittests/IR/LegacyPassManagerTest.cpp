@@ -8,12 +8,13 @@
 //===----------------------------------------------------------------------===//
 //
 // This unit test exercises the legacy pass manager infrastructure. We use the
-// old names as well to ensure that the source-level compatibility is preserved
-// where possible.
+// old names as well to ensure that the source-level compatibility wrapper
+// works for out-of-tree code that expects to include llvm/PassManager.h and
+// subclass the core pass classes.
 //
 //===----------------------------------------------------------------------===//
 
-#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/PassManager.h"
 #include "llvm/ADT/SmallVector.h"
 #include "llvm/Analysis/CallGraphSCCPass.h"
 #include "llvm/Analysis/LoopInfo.h"
@@ -98,6 +99,7 @@ namespace llvm {
         initializeModuleNDMPass(*PassRegistry::getPassRegistry());
       }
       bool runOnModule(Module &M) override {
+        EXPECT_TRUE(getAnalysisIfAvailable<DataLayoutPass>());
         run++;
         return false;
       }
@@ -174,6 +176,7 @@ namespace llvm {
         initializeCGPassPass(*PassRegistry::getPassRegistry());
       }
       bool runOnSCC(CallGraphSCC &SCMM) override {
+        EXPECT_TRUE(getAnalysisIfAvailable<DataLayoutPass>());
         run();
         return false;
       }
@@ -212,6 +215,7 @@ namespace llvm {
         return false;
       }
       bool runOnLoop(Loop *L, LPPassManager &LPM) override {
+        EXPECT_TRUE(getAnalysisIfAvailable<DataLayoutPass>());
         run();
         return false;
       }
@@ -248,6 +252,7 @@ namespace llvm {
         return false;
       }
       bool runOnBasicBlock(BasicBlock &BB) override {
+        EXPECT_TRUE(getAnalysisIfAvailable<DataLayoutPass>());
         run();
         return false;
       }
@@ -272,6 +277,7 @@ namespace llvm {
         initializeFPassPass(*PassRegistry::getPassRegistry());
       }
       bool runOnModule(Module &M) override {
+        EXPECT_TRUE(getAnalysisIfAvailable<DataLayoutPass>());
         for (Module::iterator I=M.begin(),E=M.end(); I != E; ++I) {
           Function &F = *I;
           {
@@ -296,7 +302,8 @@ namespace llvm {
 
       mNDM->run = mNDNM->run = mDNM->run = mNDM2->run = 0;
 
-      legacy::PassManager Passes;
+      PassManager Passes;
+      Passes.add(new DataLayoutPass());
       Passes.add(mNDM2);
       Passes.add(mNDM);
       Passes.add(mNDNM);
@@ -319,7 +326,8 @@ namespace llvm {
 
       mNDM->run = mNDNM->run = mDNM->run = mNDM2->run = 0;
 
-      legacy::PassManager Passes;
+      PassManager Passes;
+      Passes.add(new DataLayoutPass());
       Passes.add(mNDM);
       Passes.add(mNDNM);
       Passes.add(mNDM2);// invalidates mNDM needed by mDNM
@@ -340,7 +348,8 @@ namespace llvm {
     void MemoryTestHelper(int run) {
       std::unique_ptr<Module> M(makeLLVMModule());
       T *P = new T();
-      legacy::PassManager Passes;
+      PassManager Passes;
+      Passes.add(new DataLayoutPass());
       Passes.add(P);
       Passes.run(*M);
       T::finishedOK(run);
@@ -350,7 +359,8 @@ namespace llvm {
     void MemoryTestHelper(int run, int N) {
       Module *M = makeLLVMModule();
       T *P = new T();
-      legacy::PassManager Passes;
+      PassManager Passes;
+      Passes.add(new DataLayoutPass());
       Passes.add(P);
       Passes.run(*M);
       T::finishedOK(run, N);
@@ -387,7 +397,8 @@ namespace llvm {
       {
         SCOPED_TRACE("Running OnTheFlyTest");
         struct OnTheFlyTest *O = new OnTheFlyTest();
-        legacy::PassManager Passes;
+        PassManager Passes;
+        Passes.add(new DataLayoutPass());
         Passes.add(O);
         Passes.run(*M);
 
@@ -510,7 +521,7 @@ namespace llvm {
       // Function: test4 (func_test4)
       {
         Function::arg_iterator args = func_test4->arg_begin();
-        Value *int1_f = &*args++;
+        Value* int1_f = args++;
         int1_f->setName("f");
 
         BasicBlock* label_entry_11 = BasicBlock::Create(getGlobalContext(), "entry",func_test4,nullptr);
@@ -543,6 +554,6 @@ INITIALIZE_PASS_DEPENDENCY(CallGraphWrapperPass)
 INITIALIZE_PASS_END(CGPass, "cgp","cgp", false, false)
 INITIALIZE_PASS(FPass, "fp","fp", false, false)
 INITIALIZE_PASS_BEGIN(LPass, "lp","lp", false, false)
-INITIALIZE_PASS_DEPENDENCY(LoopInfoWrapperPass)
+INITIALIZE_PASS_DEPENDENCY(LoopInfo)
 INITIALIZE_PASS_END(LPass, "lp","lp", false, false)
 INITIALIZE_PASS(BPass, "bp","bp", false, false)

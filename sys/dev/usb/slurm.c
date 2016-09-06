@@ -1,4 +1,4 @@
-/*	$NetBSD: slurm.c,v 1.3 2016/07/07 06:55:42 msaitoh Exp $ */
+/*	$NetBSD: slurm.c,v 1.1 2013/01/13 01:15:02 jakllsch Exp $ */
 
 /*
  * Copyright (c) 2012 Jonathan A. Kollasch
@@ -27,12 +27,13 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: slurm.c,v 1.3 2016/07/07 06:55:42 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: slurm.c,v 1.1 2013/01/13 01:15:02 jakllsch Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
 #include <sys/systm.h>
 #include <sys/kernel.h>
+#include <sys/malloc.h>
 #include <sys/device.h>
 #include <sys/conf.h>
 
@@ -59,8 +60,8 @@ int	slurmdebug = 0;
 
 struct slurm_softc {
 	device_t		sc_dev;
-	struct usbd_device *	sc_udev;
-	struct usbd_interface *	sc_uif;
+	usbd_device_handle	sc_udev;
+	usbd_interface_handle	sc_uif;
 	uint32_t		sc_band;
 	uint32_t		sc_space;
 };
@@ -102,30 +103,30 @@ static const struct radio_hw_if slurm_radio = {
 CFATTACH_DECL_NEW(slurm, sizeof(struct slurm_softc),
     slurm_match, slurm_attach, slurm_detach, NULL);
 
-static int
+static int 
 slurm_match(device_t parent, cfdata_t match, void *aux)
 {
-	const struct usbif_attach_arg * const uiaa = aux;
+	const struct usbif_attach_arg * const uaa = aux;
 
-	if (uiaa->uiaa_ifaceno != 2)
+	if (uaa->ifaceno != 2)
 		return UMATCH_NONE;
 
-	if (usb_lookup(slurm_devs, uiaa->uiaa_vendor, uiaa->uiaa_product) != NULL) {
+	if (usb_lookup(slurm_devs, uaa->vendor, uaa->product) != NULL) {
 		return UMATCH_VENDOR_PRODUCT;
 	}
 
 	return UMATCH_NONE;
 }
 
-static void
+static void 
 slurm_attach(device_t parent, device_t self, void *aux)
 {
 	struct slurm_softc * const sc = device_private(self);
-	const struct usbif_attach_arg * const uiaa = aux;
+	const struct usbif_attach_arg * const uaa = aux;
 
 	sc->sc_dev = self;
-	sc->sc_udev = uiaa->uiaa_device;
-	sc->sc_uif = uiaa->uiaa_iface;
+	sc->sc_udev = uaa->device;
+	sc->sc_uif = uaa->iface;
 
 	aprint_normal("\n");
 	aprint_naive("\n");
@@ -145,7 +146,7 @@ slurm_attach(device_t parent, device_t self, void *aux)
 	radio_attach_mi(&slurm_radio, sc, self);
 }
 
-static int
+static int 
 slurm_detach(device_t self, int flags)
 {
 	struct slurm_softc * const sc = device_private(self);
@@ -154,7 +155,8 @@ slurm_detach(device_t self, int flags)
 	if ((rv = config_detach_children(self, flags)) != 0)
 		return rv;
 
-	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev, sc->sc_dev);
+	usbd_add_drv_event(USB_EVENT_DRIVER_DETACH, sc->sc_udev,
+	    sc->sc_dev);
 
 	return (rv);
 }
@@ -201,7 +203,7 @@ static int
 slurm_search(void *v, int f)
 {
 	struct slurm_softc * const sc = v;
-
+	
 	return slurm_si470x_search(sc, f);
 }
 

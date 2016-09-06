@@ -54,7 +54,6 @@ const char *const CommonOptionsParser::HelpMessage =
     "\tsuffix of a path in the compile command database.\n"
     "\n";
 
-namespace {
 class ArgumentsAdjustingCompilations : public CompilationDatabase {
 public:
   ArgumentsAdjustingCompilations(
@@ -86,22 +85,21 @@ private:
   adjustCommands(std::vector<CompileCommand> Commands) const {
     for (CompileCommand &Command : Commands)
       for (const auto &Adjuster : Adjusters)
-        Command.CommandLine = Adjuster(Command.CommandLine, Command.Filename);
+        Command.CommandLine = Adjuster(Command.CommandLine);
     return Commands;
   }
 };
-} // namespace
 
-CommonOptionsParser::CommonOptionsParser(
-    int &argc, const char **argv, cl::OptionCategory &Category,
-    llvm::cl::NumOccurrencesFlag OccurrencesFlag, const char *Overview) {
+CommonOptionsParser::CommonOptionsParser(int &argc, const char **argv,
+                                         cl::OptionCategory &Category,
+                                         const char *Overview) {
   static cl::opt<bool> Help("h", cl::desc("Alias for -help"), cl::Hidden);
 
   static cl::opt<std::string> BuildPath("p", cl::desc("Build path"),
                                         cl::Optional, cl::cat(Category));
 
   static cl::list<std::string> SourcePaths(
-      cl::Positional, cl::desc("<source0> [... <sourceN>]"), OccurrencesFlag,
+      cl::Positional, cl::desc("<source0> [... <sourceN>]"), cl::OneOrMore,
       cl::cat(Category));
 
   static cl::list<std::string> ArgsAfter(
@@ -114,14 +112,20 @@ CommonOptionsParser::CommonOptionsParser(
       cl::desc("Additional argument to prepend to the compiler command line"),
       cl::cat(Category));
 
-  cl::HideUnrelatedOptions(Category);
+  // Hide unrelated options.
+  StringMap<cl::Option*> Options;
+  cl::getRegisteredOptions(Options);
+  for (StringMap<cl::Option *>::iterator I = Options.begin(), E = Options.end();
+       I != E; ++I) {
+    if (I->second->Category != &Category && I->first() != "help" &&
+        I->first() != "version")
+      I->second->setHiddenFlag(cl::ReallyHidden);
+  }
 
-  Compilations.reset(FixedCompilationDatabase::loadFromCommandLine(argc, argv));
+  Compilations.reset(FixedCompilationDatabase::loadFromCommandLine(argc,
+                                                                   argv));
   cl::ParseCommandLineOptions(argc, argv, Overview);
   SourcePathList = SourcePaths;
-  if ((OccurrencesFlag == cl::ZeroOrMore || OccurrencesFlag == cl::Optional) &&
-      SourcePathList.empty())
-    return;
   if (!Compilations) {
     std::string ErrorMessage;
     if (!BuildPath.empty()) {
@@ -131,12 +135,8 @@ CommonOptionsParser::CommonOptionsParser(
       Compilations = CompilationDatabase::autoDetectFromSource(SourcePaths[0],
                                                                ErrorMessage);
     }
-    if (!Compilations) {
-      llvm::errs() << "Error while trying to load a compilation database:\n"
-                   << ErrorMessage << "Running without flags.\n";
-      Compilations.reset(
-          new FixedCompilationDatabase(".", std::vector<std::string>()));
-    }
+    if (!Compilations)
+      llvm::report_fatal_error(ErrorMessage);
   }
   auto AdjustingCompilations =
       llvm::make_unique<ArgumentsAdjustingCompilations>(

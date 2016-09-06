@@ -1,4 +1,4 @@
-/*	Id: demandoc.c,v 1.27 2016/07/09 15:24:19 schwarze Exp  */
+/*	Id: demandoc.c,v 1.7 2012/05/31 22:27:14 schwarze Exp  */
 /*
  * Copyright (c) 2011 Kristaps Dzonsons <kristaps@bsd.lv>
  *
@@ -14,26 +14,26 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+#ifdef HAVE_CONFIG_H
 #include "config.h"
-
-#include <sys/types.h>
+#endif
 
 #include <assert.h>
 #include <ctype.h>
+#include <getopt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-#include "roff.h"
 #include "man.h"
 #include "mdoc.h"
 #include "mandoc.h"
 
 static	void	 pline(int, int *, int *, int);
-static	void	 pman(const struct roff_node *, int *, int *, int);
+static	void	 pman(const struct man_node *, int *, int *, int);
 static	void	 pmandoc(struct mparse *, int, const char *, int);
-static	void	 pmdoc(const struct roff_node *, int *, int *, int);
+static	void	 pmdoc(const struct mdoc_node *, int *, int *, int);
 static	void	 pstring(const char *, int, int *, int);
 static	void	 usage(void);
 
@@ -43,12 +43,11 @@ int
 main(int argc, char *argv[])
 {
 	struct mparse	*mp;
-	int		 ch, fd, i, list;
+	int		 ch, i, list;
 	extern int	 optind;
 
-	if (argc < 1)
-		progname = "demandoc";
-	else if ((progname = strrchr(argv[0], '/')) == NULL)
+	progname = strrchr(argv[0], '/');
+	if (progname == NULL)
 		progname = argv[0];
 	else
 		++progname;
@@ -71,31 +70,25 @@ main(int argc, char *argv[])
 			break;
 		default:
 			usage();
-			return (int)MANDOCLEVEL_BADARG;
+			return((int)MANDOCLEVEL_BADARG);
 		}
 
 	argc -= optind;
 	argv += optind;
 
-	mchars_alloc();
-	mp = mparse_alloc(MPARSE_SO, MANDOCLEVEL_BADARG, NULL, NULL);
+	mp = mparse_alloc(MPARSE_AUTO, MANDOCLEVEL_FATAL, NULL, NULL, NULL);
 	assert(mp);
 
-	if (argc < 1)
+	if (0 == argc)
 		pmandoc(mp, STDIN_FILENO, "<stdin>", list);
 
 	for (i = 0; i < argc; i++) {
 		mparse_reset(mp);
-		if ((fd = mparse_open(mp, argv[i])) == -1) {
-			perror(argv[i]);
-			continue;
-		}
-		pmandoc(mp, fd, argv[i], list);
+		pmandoc(mp, -1, argv[i], list);
 	}
 
 	mparse_free(mp);
-	mchars_free();
-	return (int)MANDOCLEVEL_OK;
+	return((int)MANDOCLEVEL_OK);
 }
 
 static void
@@ -108,24 +101,25 @@ usage(void)
 static void
 pmandoc(struct mparse *mp, int fd, const char *fn, int list)
 {
-	struct roff_man	*man;
+	struct mdoc	*mdoc;
+	struct man	*man;
 	int		 line, col;
 
-	mparse_readfd(mp, fd, fn);
-	close(fd);
-	mparse_result(mp, &man, NULL);
+	if (mparse_readfd(mp, fd, fn) >= MANDOCLEVEL_FATAL) {
+		fprintf(stderr, "%s: Parse failure\n", fn);
+		return;
+	}
+
+	mparse_result(mp, &mdoc, &man);
 	line = 1;
 	col = 0;
 
-	if (man == NULL)
+	if (mdoc) 
+		pmdoc(mdoc_node(mdoc), &line, &col, list);
+	else if (man)
+		pman(man_node(man), &line, &col, list);
+	else
 		return;
-	if (man->macroset == MACROSET_MDOC) {
-		mdoc_validate(man);
-		pmdoc(man->first->child, &line, &col, list);
-	} else {
-		man_validate(man);
-		pman(man->first->child, &line, &col, list);
-	}
 
 	if ( ! list)
 		putchar('\n');
@@ -170,7 +164,7 @@ again:
 		end = p - 1;
 
 		while (end > start)
-			if ('.' == *end || ',' == *end ||
+			if ('.' == *end || ',' == *end || 
 					'\'' == *end || '"' == *end ||
 					')' == *end || '!' == *end ||
 					'?' == *end || ':' == *end ||
@@ -202,7 +196,7 @@ again:
 	/*
 	 * Print the input word, skipping any special characters.
 	 */
-	while ('\0' != *p)
+	while ('\0' != *p) 
 		if ('\\' == *p) {
 			p++;
 			esc = mandoc_escape(&p, NULL, NULL);
@@ -223,7 +217,7 @@ pline(int line, int *linep, int *col, int list)
 
 	/*
 	 * Print out as many lines as needed to reach parity with the
-	 * original input.
+	 * original input. 
 	 */
 
 	while (*linep < line) {
@@ -235,29 +229,29 @@ pline(int line, int *linep, int *col, int list)
 }
 
 static void
-pmdoc(const struct roff_node *p, int *line, int *col, int list)
+pmdoc(const struct mdoc_node *p, int *line, int *col, int list)
 {
 
 	for ( ; p; p = p->next) {
 		if (MDOC_LINE & p->flags)
 			pline(p->line, line, col, list);
-		if (ROFFT_TEXT == p->type)
+		if (MDOC_TEXT == p->type)
 			pstring(p->string, p->pos, col, list);
-		if (p->child)
+		if (p->child) 
 			pmdoc(p->child, line, col, list);
 	}
 }
 
 static void
-pman(const struct roff_node *p, int *line, int *col, int list)
+pman(const struct man_node *p, int *line, int *col, int list)
 {
 
 	for ( ; p; p = p->next) {
 		if (MAN_LINE & p->flags)
 			pline(p->line, line, col, list);
-		if (ROFFT_TEXT == p->type)
+		if (MAN_TEXT == p->type)
 			pstring(p->string, p->pos, col, list);
-		if (p->child)
+		if (p->child) 
 			pman(p->child, line, col, list);
 	}
 }

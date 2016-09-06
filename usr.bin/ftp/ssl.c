@@ -1,4 +1,4 @@
-/*	$NetBSD: ssl.c,v 1.5 2015/09/16 15:32:53 joerg Exp $	*/
+/*	$NetBSD: ssl.c,v 1.2.14.2 2016/03/13 11:49:14 martin Exp $	*/
 
 /*-
  * Copyright (c) 1998-2004 Dag-Erling Coïdan Smørgrav
@@ -34,7 +34,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ssl.c,v 1.5 2015/09/16 15:32:53 joerg Exp $");
+__RCSID("$NetBSD: ssl.c,v 1.2.14.2 2016/03/13 11:49:14 martin Exp $");
 #endif
 
 #include <time.h>

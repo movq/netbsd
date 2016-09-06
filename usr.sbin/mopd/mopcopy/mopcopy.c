@@ -1,4 +1,4 @@
-/*	$NetBSD: mopcopy.c,v 1.6 2016/06/08 01:16:35 christos Exp $	*/
+/*	$NetBSD: mopcopy.c,v 1.5 2011/08/30 19:49:11 joerg Exp $	*/
 
 /* mopcopy - Convert a Unix format kernel into something that
  * can be transfered via MOP.
@@ -47,9 +47,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "port.h"
+#include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: mopcopy.c,v 1.6 2016/06/08 01:16:35 christos Exp $");
+__RCSID("$NetBSD: mopcopy.c,v 1.5 2011/08/30 19:49:11 joerg Exp $");
 #endif
 
 #include "os.h"

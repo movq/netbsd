@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.24 2016/01/23 21:22:46 christos Exp $
+#	$NetBSD: Makefile,v 1.21 2014/07/22 22:41:58 justin Exp $
 #
 
 .include <bsd.own.mk>
@@ -19,7 +19,7 @@ LIBDPLIBS+=	pthread ${.CURDIR}/../libpthread
 LIBDO.${lib}=	_external
 LIBDPLIBS+=	${lib} lib
 .endfor
-CPPFLAGS+=	-DLIBRUMPUSER -D_KERNTYPES
+CPPFLAGS+=	-DLIBRUMPUSER
 #CPPFLAGS+=	-D_DIAGNOSTIC
 
 
@@ -50,7 +50,9 @@ SRCS+=		rumpuser_errtrans.c rumpuser_sigtrans.c
 SRCS+=		rumpuser_dl.c rumpuser_daemonize.c
 
 INCSDIR=	/usr/include/rump
-INCS=		rumpuser_component.h rumpuser_port.h
+INCS=		rumpuser.h rumpuser_component.h rumpuser_port.h
+
+MAN=		rumpuser.3
 
 CPPFLAGS+=	-D_REENTRANT
 

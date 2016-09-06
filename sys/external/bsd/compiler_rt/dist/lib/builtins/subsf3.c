@@ -23,3 +23,4 @@ __subsf3(fp_t a, fp_t b) {
     return __addsf3(a, fromRep(toRep(b) ^ signBit));
 }
 
+/* FIXME: rsub for ARM EABI */

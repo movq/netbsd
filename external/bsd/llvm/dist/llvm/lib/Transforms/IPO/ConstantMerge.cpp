@@ -52,6 +52,7 @@ namespace {
     // alignment to a concrete value.
     unsigned getAlignment(GlobalVariable *GV) const;
 
+    const DataLayout *DL;
   };
 }
 
@@ -88,22 +89,32 @@ static bool IsBetterCanonical(const GlobalVariable &A,
   return A.hasUnnamedAddr();
 }
 
+bool ConstantMerge::hasKnownAlignment(GlobalVariable *GV) const {
+  return DL || GV->getAlignment() != 0;
+}
+
 unsigned ConstantMerge::getAlignment(GlobalVariable *GV) const {
   unsigned Align = GV->getAlignment();
   if (Align)
     return Align;
-  return GV->getParent()->getDataLayout().getPreferredAlignment(GV);
+  if (DL)
+    return DL->getPreferredAlignment(GV);
+  return 0;
 }
 
 bool ConstantMerge::runOnModule(Module &M) {
+  DataLayoutPass *DLP = getAnalysisIfAvailable<DataLayoutPass>();
+  DL = DLP ? &DLP->getDataLayout() : nullptr;
 
   // Find all the globals that are marked "used".  These cannot be merged.
   SmallPtrSet<const GlobalValue*, 8> UsedGlobals;
   FindUsedValues(M.getGlobalVariable("llvm.used"), UsedGlobals);
   FindUsedValues(M.getGlobalVariable("llvm.compiler.used"), UsedGlobals);
-
-  // Map unique constants to globals.
-  DenseMap<Constant *, GlobalVariable *> CMap;
+  
+  // Map unique <constants, has-unknown-alignment> pairs to globals.  We don't
+  // want to merge globals of unknown alignment with those of explicit
+  // alignment.  If we have DataLayout, we always know the alignment.
+  DenseMap<PointerIntPair<Constant*, 1, bool>, GlobalVariable*> CMap;
 
   // Replacements - This vector contains a list of replacements to perform.
   SmallVector<std::pair<GlobalVariable*, GlobalVariable*>, 32> Replacements;
@@ -119,7 +130,7 @@ bool ConstantMerge::runOnModule(Module &M) {
     // First: Find the canonical constants others will be merged with.
     for (Module::global_iterator GVI = M.global_begin(), E = M.global_end();
          GVI != E; ) {
-      GlobalVariable *GV = &*GVI++;
+      GlobalVariable *GV = GVI++;
 
       // If this GV is dead, remove it.
       GV->removeDeadConstantUsers();
@@ -145,7 +156,8 @@ bool ConstantMerge::runOnModule(Module &M) {
       Constant *Init = GV->getInitializer();
 
       // Check to see if the initializer is already known.
-      GlobalVariable *&Slot = CMap[Init];
+      PointerIntPair<Constant*, 1, bool> Pair(Init, hasKnownAlignment(GV));
+      GlobalVariable *&Slot = CMap[Pair];
 
       // If this is the first constant we find or if the old one is local,
       // replace with the current one. If the current is externally visible
@@ -160,7 +172,7 @@ bool ConstantMerge::runOnModule(Module &M) {
     // invalidating the Constant* pointers in CMap.
     for (Module::global_iterator GVI = M.global_begin(), E = M.global_end();
          GVI != E; ) {
-      GlobalVariable *GV = &*GVI++;
+      GlobalVariable *GV = GVI++;
 
       // Only process constants with initializers in the default address space.
       if (!GV->isConstant() || !GV->hasDefinitiveInitializer() ||
@@ -176,7 +188,8 @@ bool ConstantMerge::runOnModule(Module &M) {
       Constant *Init = GV->getInitializer();
 
       // Check to see if the initializer is already known.
-      GlobalVariable *Slot = CMap[Init];
+      PointerIntPair<Constant*, 1, bool> Pair(Init, hasKnownAlignment(GV));
+      GlobalVariable *Slot = CMap[Pair];
 
       if (!Slot || Slot == GV)
         continue;

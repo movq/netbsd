@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.7 2015/11/28 13:20:03 christos Exp $
+#	$NetBSD: Makefile,v 1.5 2014/05/23 19:59:17 dholland Exp $
 
 .include <bsd.own.mk>
 
@@ -10,7 +10,6 @@ CPPFLAGS+=-I${DIST}/include -I${.CURDIR} -I. -DGTAGS
 #DBG=-g
 #CPPFLAGS+=-DLOGDEBUG -DTRACE
 #CPPFLAGS+=-DDBDEBUG -DTRACE
-#CPPFLAGS+=-DQUEUEDEBUG
 
 #CWARNFLAGS+=-Wno-parentheses -Wno-unused -Wno-missing-prototypes
 #.if defined(HAVE_GCC)
@@ -18,8 +17,8 @@ CPPFLAGS+=-I${DIST}/include -I${.CURDIR} -I. -DGTAGS
 #COPTS+=-fno-strict-aliasing
 #.endif
 
-LDADD+=	-lcurses -lterminfo -lutil
-DPADD+=	${LIBCURSES} ${LIBTERMINFO} ${LIBUTIL}
+LDADD+=	-lcurses -lterminfo
+DPADD+=	${LIBCURSES} ${LIBTERMINFO}
 PROG=	vi
 SRCS=	api.c cl_bsd.c cl_funcs.c cl_main.c cl_read.c cl_screen.c cl_term.c \
 	conv.c cut.c delete.c ex.c ex_abbrev.c ex_append.c \

@@ -1,4 +1,4 @@
-/*	$NetBSD: readufs_lfs.c,v 1.17 2015/08/21 15:33:04 christos Exp $	*/
+/*	$NetBSD: readufs_lfs.c,v 1.15 2013/12/09 09:35:16 wiz Exp $	*/
 /*	from Id: readufs_lfs.c,v 1.7 2003/10/15 14:16:58 itohy Exp 	*/
 
 /*
@@ -21,7 +21,7 @@
 
 static int get_lfs_inode(ino32_t ino, union ufs_dinode *dibuf);
 
-static struct lfs32_dinode	ifile_dinode;
+static struct ulfs1_dinode	ifile_dinode;
 
 #define fsi	(*ufsinfo)
 #define fsi_lfs	fsi.fs_u.u_lfs
@@ -105,7 +105,7 @@ try_lfs(void)
 
 		if (sblk2.dlfs_magic == LFS_MAGIC) {
 			if (fsi_lfs.version == 1) {
-				if (sblk.dlfs_inopf > sblk2.dlfs_inopf)
+				if (sblk.dlfs_otstamp > sblk2.dlfs_otstamp)
 					s = &sblk2;
 			} else {
 				if (sblk.dlfs_serial > sblk2.dlfs_serial)
@@ -159,7 +159,7 @@ get_lfs_inode(ino32_t ino, union ufs_dinode *dibuf)
 	struct ufs_info *ufsinfo = &ufs_info;
 	daddr_t daddr;
 	char *buf = alloca(fsi.bsize);
-	struct lfs32_dinode *di, *diend;
+	struct ulfs1_dinode *di, *diend;
 	int i;
 
 	/* Get fs block which contains the specified inode. */
@@ -176,7 +176,7 @@ get_lfs_inode(ino32_t ino, union ufs_dinode *dibuf)
 		i = ino % fsi_lfs.ifpb;
 		daddr = (fsi_lfs.version == 1) ?
 		    ((IFILE_V1 *) buf + i)->if_daddr
-		    : ((IFILE32 *) buf + i)->if_daddr;
+		    : ((IFILE *) buf + i)->if_daddr;
 	}
 #ifdef DEBUG_WITH_STDIO
 	printf("LFS(%d): daddr: %d\n", ino, (int) daddr);
@@ -195,7 +195,7 @@ get_lfs_inode(ino32_t ino, union ufs_dinode *dibuf)
 	);
 
 	/* Search for the inode. */
-	di = (struct lfs32_dinode *) buf;
+	di = (struct ulfs1_dinode *) buf;
 	diend = di + fsi_lfs.inopb;
 
 	for ( ; di < diend; di++)
@@ -219,7 +219,7 @@ found:
 #endif
 #endif
 
-	dibuf->dil32 = *di;
+	dibuf->dil1 = *di;
 
 	return 0;
 }

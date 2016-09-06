@@ -1,4 +1,4 @@
-/*	$NetBSD: acpivar.h,v 1.74 2016/06/21 11:33:33 nonaka Exp $	*/
+/*	$NetBSD: acpivar.h,v 1.73 2011/08/01 11:25:59 jmcneill Exp $	*/
 
 /*
  * Copyright 2001 Wasabi Systems, Inc.
@@ -62,8 +62,6 @@ struct acpibus_attach_args {
 	pci_chipset_tag_t	 aa_pc;		/* PCI chipset */
 	int			 aa_pciflags;	/* PCI bus flags */
 	isa_chipset_tag_t	 aa_ic;		/* ISA chipset */
-	bus_dma_tag_t		 aa_dmat;	/* PCI DMA tag */
-	bus_dma_tag_t		 aa_dmat64;	/* PCI 64bit DMA tag */
 };
 
 /*
@@ -162,8 +160,6 @@ struct acpi_softc {
 	int			 sc_pciflags;	/* PCI bus flags */
 	int			 sc_pci_bus;	/* internal PCI fixup */
 	isa_chipset_tag_t	 sc_ic;		/* ISA chipset tag */
-	bus_dma_tag_t		 sc_dmat;	/* PCI DMA tag */
-	bus_dma_tag_t		 sc_dmat64;	/* PCI 64bit DMA tag */
 
 	void			*sc_sdhook;	/* shutdown hook */
 
@@ -189,8 +185,6 @@ struct acpi_attach_args {
 	pci_chipset_tag_t aa_pc;	/* PCI chipset tag */
 	int aa_pciflags;		/* PCI bus flags */
 	isa_chipset_tag_t aa_ic;	/* ISA chipset */
-	bus_dma_tag_t aa_dmat;		/* PCI DMA tag */
-	bus_dma_tag_t aa_dmat64;	/* PCI 64bit DMA tag */
 };
 
 /*

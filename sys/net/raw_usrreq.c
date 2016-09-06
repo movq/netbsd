@@ -1,4 +1,4 @@
-/*	$NetBSD: raw_usrreq.c,v 1.55 2016/01/20 21:43:59 riastradh Exp $	*/
+/*	$NetBSD: raw_usrreq.c,v 1.52 2014/08/09 05:33:01 rtr Exp $	*/
 
 /*
  * Copyright (c) 1980, 1986, 1993
@@ -36,7 +36,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: raw_usrreq.c,v 1.55 2016/01/20 21:43:59 riastradh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: raw_usrreq.c,v 1.52 2014/08/09 05:33:01 rtr Exp $");
 
 #include <sys/param.h>
 #include <sys/mbuf.h>
@@ -138,23 +138,24 @@ raw_ctlinput(int cmd, const struct sockaddr *arg, void *d)
 }
 
 void
-raw_setsockaddr(struct rawcb *rp, struct sockaddr *nam)
+raw_setsockaddr(struct rawcb *rp, struct mbuf *nam)
 {
 
-	memcpy(nam, rp->rcb_laddr, rp->rcb_laddr->sa_len);
+	nam->m_len = rp->rcb_laddr->sa_len;
+	memcpy(mtod(nam, void *), rp->rcb_laddr, (size_t)nam->m_len);
 }
 
 void
-raw_setpeeraddr(struct rawcb *rp, struct sockaddr *nam)
+raw_setpeeraddr(struct rawcb *rp, struct mbuf *nam)
 {
 
-	memcpy(nam, rp->rcb_faddr, rp->rcb_faddr->sa_len);
+	nam->m_len = rp->rcb_faddr->sa_len;
+	memcpy(mtod(nam, void *), rp->rcb_faddr, (size_t)nam->m_len);
 }
 
 int
-raw_send(struct socket *so, struct mbuf *m, struct sockaddr *nam,
-    struct mbuf *control, struct lwp *l,
-    int (*output)(struct mbuf *, struct socket *))
+raw_send(struct socket *so, struct mbuf *m, struct mbuf *nam,
+    struct mbuf *control, struct lwp *l)
 {
 	struct rawcb *rp = sotorawcb(so);
 	int error = 0;
@@ -187,7 +188,7 @@ raw_send(struct socket *so, struct mbuf *m, struct sockaddr *nam,
 			goto die;
 		}
 	}
-	error = (*output)(m, so);
+	error = (*so->so_proto->pr_output)(m, so);
 	if (nam)
 		raw_disconnect(rp);
 

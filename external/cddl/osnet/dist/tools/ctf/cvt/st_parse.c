@@ -80,7 +80,7 @@ static char *arraydef(char *cp, tdesc_t **rtdp);
 int debug_parse = DEBUG_PARSE;
 
 /*PRINTFLIKE3*/
-static void __printflike(3, 4)
+static void
 parse_debug(int level, char *cp, const char *fmt, ...)
 {
 	va_list ap;
@@ -95,7 +95,7 @@ parse_debug(int level, char *cp, const char *fmt, ...)
 		for (i = 0; i < 30; i++) {
 			if (cp[i] == '\0')
 				break;
-			if (!iscntrl((unsigned char)cp[i]))
+			if (!iscntrl(cp[i]))
 				tmp[i] = cp[i];
 		}
 		tmp[i] = '\0';
@@ -403,7 +403,7 @@ parse_sou(char *cp, iidesc_t *idp)
 }
 
 int
-parse_stab(stab_t *stab, char * volatile cp, iidesc_t **iidescp)
+parse_stab(stab_t *stab, char *cp, iidesc_t **iidescp)
 {
 	iidesc_t *ii = NULL;
 	iitype_t (*parse)(char *, iidesc_t *);
@@ -482,7 +482,7 @@ whitesp(char *cp)
 {
 	char c;
 
-	for (c = *cp++; isspace((unsigned char)c); c = *cp++)
+	for (c = *cp++; isspace(c); c = *cp++)
 		;
 	--cp;
 	return (cp);
@@ -498,8 +498,8 @@ name(char *cp, char **w)
 	c = *cp++;
 	if (c == ':')
 		*w = NULL;
-	else if (isalpha((unsigned char)c) || strchr("_.$#", c)) {
-		for (c = *cp++; isalnum((unsigned char)c) || strchr(" _.$#", c); c = *cp++)
+	else if (isalpha(c) || strchr("_.$#", c)) {
+		for (c = *cp++; isalnum(c) || strchr(" _.$#", c); c = *cp++)
 			;
 		if (c != ':')
 			reset();
@@ -540,7 +540,7 @@ id(char *cp, int *h)
 		if (*cp++ != ')')
 			expected("id", ")", cp - 1);
 		*h = MAKETYPEID(n1, n2);
-	} else if (isdigit((unsigned char)*cp)) { /* gcc style */
+	} else if (isdigit(*cp)) { /* gcc style */
 		cp = number(cp, &n1);
 		*h = n1;
 	} else {
@@ -805,7 +805,7 @@ intrinsic(char *cp, tdesc_t **rtdp)
 
 	case 'R':
 		intr->intr_type = INTR_REAL;
-		for (fmt = 0, i = 0; isdigit((unsigned char)*(cp + i)); i++)
+		for (fmt = 0, i = 0; isdigit(*(cp + i)); i++)
 			fmt = fmt * 10 + (*(cp + i) - '0');
 
 		if (fmt < 1 || fmt > CTF_FP_MAX)
@@ -1125,7 +1125,7 @@ compute_sum(const char *w)
 	return (HASH(sum));
 }
 
-static void __dead
+static void
 reset(void)
 {
 	longjmp(resetbuf, 1);

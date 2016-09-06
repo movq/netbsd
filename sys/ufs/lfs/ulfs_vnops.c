@@ -1,5 +1,5 @@
-/*	$NetBSD: ulfs_vnops.c,v 1.44 2016/06/20 03:36:09 dholland Exp $	*/
-/*  from NetBSD: ufs_vnops.c,v 1.232 2016/05/19 18:32:03 riastradh Exp  */
+/*	$NetBSD: ulfs_vnops.c,v 1.21 2014/05/17 07:09:09 dholland Exp $	*/
+/*  from NetBSD: ufs_vnops.c,v 1.213 2013/06/08 05:47:02 kardel Exp  */
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -67,7 +67,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ulfs_vnops.c,v 1.44 2016/06/20 03:36:09 dholland Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ulfs_vnops.c,v 1.21 2014/05/17 07:09:09 dholland Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_lfs.h"
@@ -90,15 +90,12 @@ __KERNEL_RCSID(0, "$NetBSD: ulfs_vnops.c,v 1.44 2016/06/20 03:36:09 dholland Exp
 #include <sys/dirent.h>
 #include <sys/lockf.h>
 #include <sys/kauth.h>
+#include <sys/wapbl.h>
 #include <sys/fstrans.h>
 
 #include <miscfs/specfs/specdev.h>
 #include <miscfs/fifofs/fifo.h>
 #include <miscfs/genfs/genfs.h>
-
-#include <ufs/lfs/lfs_extern.h>
-#include <ufs/lfs/lfs.h>
-#include <ufs/lfs/lfs_accessors.h>
 
 #include <ufs/lfs/ulfs_inode.h>
 #include <ufs/lfs/ulfsmount.h>
@@ -107,6 +104,8 @@ __KERNEL_RCSID(0, "$NetBSD: ulfs_vnops.c,v 1.44 2016/06/20 03:36:09 dholland Exp
 #ifdef LFS_DIRHASH
 #include <ufs/lfs/ulfs_dirhash.h>
 #endif
+#include <ufs/lfs/lfs_extern.h>
+#include <ufs/lfs/lfs.h>
 
 #include <uvm/uvm.h>
 
@@ -237,7 +236,6 @@ ulfs_setattr(void *v)
 	struct vattr	*vap;
 	struct vnode	*vp;
 	struct inode	*ip;
-	struct lfs	*fs;
 	kauth_cred_t	cred;
 	struct lwp	*l;
 	int		error;
@@ -247,7 +245,6 @@ ulfs_setattr(void *v)
 	vap = ap->a_vap;
 	vp = ap->a_vp;
 	ip = VTOI(vp);
-	fs = ip->i_lfs;
 	cred = ap->a_cred;
 	l = curlwp;
 	action = KAUTH_VNODE_WRITE_FLAGS;
@@ -282,8 +279,7 @@ ulfs_setattr(void *v)
 			action |= KAUTH_VNODE_HAS_SYSFLAGS;
 		}
 
-		if ((vap->va_flags & SF_SETTABLE) !=
-		    (ip->i_flags & SF_SETTABLE)) {
+		if ((vap->va_flags & SF_SETTABLE) != (ip->i_flags & SF_SETTABLE)) {
 			action |= KAUTH_VNODE_WRITE_SYSFLAGS;
 			changing_sysflags = true;
 		}
@@ -379,9 +375,10 @@ ulfs_setattr(void *v)
 			if (vp->v_mount->mnt_flag & MNT_RELATIME)
 				ip->i_flag |= IN_ACCESS;
 		}
-		if (vap->va_birthtime.tv_sec != VNOVAL) {
-			lfs_dino_setbirthtime(fs, ip->i_din,
-					      &vap->va_birthtime);
+		if (vap->va_birthtime.tv_sec != VNOVAL &&
+		    ip->i_ump->um_fstype == ULFS2) {
+			ip->i_ffs2_birthtime = vap->va_birthtime.tv_sec;
+			ip->i_ffs2_birthnsec = vap->va_birthtime.tv_nsec;
 		}
 		error = lfs_update(vp, &vap->va_atime, &vap->va_mtime, 0);
 		if (error)
@@ -505,21 +502,18 @@ ulfs_remove(void *v)
 	} */ *ap = v;
 	struct vnode	*vp, *dvp;
 	struct inode	*ip;
-	struct mount	*mp;
 	int		error;
 	struct ulfs_lookup_results *ulr;
 
 	vp = ap->a_vp;
 	dvp = ap->a_dvp;
 	ip = VTOI(vp);
-	mp = dvp->v_mount;
-	KASSERT(mp == vp->v_mount); /* XXX Not stable without lock.  */
 
 	/* XXX should handle this material another way */
 	ulr = &VTOI(dvp)->i_crap;
 	ULFS_CHECK_CRAPCOUNTER(VTOI(dvp));
 
-	fstrans_start(mp, FSTRANS_SHARED);
+	fstrans_start(dvp->v_mount, FSTRANS_SHARED);
 	if (vp->v_type == VDIR || (ip->i_flags & (IMMUTABLE | APPEND)) ||
 	    (VTOI(dvp)->i_flags & APPEND))
 		error = EPERM;
@@ -534,7 +528,7 @@ ulfs_remove(void *v)
 	else
 		vput(vp);
 	vput(dvp);
-	fstrans_done(mp);
+	fstrans_done(dvp->v_mount);
 	return (error);
 }
 
@@ -544,7 +538,7 @@ ulfs_remove(void *v)
 int
 ulfs_link(void *v)
 {
-	struct vop_link_v2_args /* {
+	struct vop_link_args /* {
 		struct vnode *a_dvp;
 		struct vnode *a_vp;
 		struct componentname *a_cnp;
@@ -552,20 +546,20 @@ ulfs_link(void *v)
 	struct vnode *dvp = ap->a_dvp;
 	struct vnode *vp = ap->a_vp;
 	struct componentname *cnp = ap->a_cnp;
-	struct mount *mp = dvp->v_mount;
 	struct inode *ip;
+	struct lfs_direct *newdir;
 	int error;
 	struct ulfs_lookup_results *ulr;
 
 	KASSERT(dvp != vp);
 	KASSERT(vp->v_type != VDIR);
-	KASSERT(mp == vp->v_mount); /* XXX Not stable without lock.  */
+	KASSERT(dvp->v_mount == vp->v_mount);
 
 	/* XXX should handle this material another way */
 	ulr = &VTOI(dvp)->i_crap;
 	ULFS_CHECK_CRAPCOUNTER(VTOI(dvp));
 
-	fstrans_start(mp, FSTRANS_SHARED);
+	fstrans_start(dvp->v_mount, FSTRANS_SHARED);
 	error = vn_lock(vp, LK_EXCLUSIVE);
 	if (error) {
 		VOP_ABORTOP(dvp, cnp);
@@ -587,8 +581,10 @@ ulfs_link(void *v)
 	ip->i_flag |= IN_CHANGE;
 	error = lfs_update(vp, NULL, NULL, UPDATE_DIROP);
 	if (!error) {
-		error = ulfs_direnter(dvp, ulr, vp,
-				      cnp, ip->i_number, LFS_IFTODT(ip->i_mode), NULL);
+		newdir = pool_cache_get(ulfs_direct_cache, PR_WAITOK);
+		ulfs_makedirentry(ip, cnp, newdir);
+		error = ulfs_direnter(dvp, ulr, vp, newdir, cnp, NULL);
+		pool_cache_put(ulfs_direct_cache, newdir);
 	}
 	if (error) {
 		ip->i_nlink--;
@@ -600,7 +596,8 @@ ulfs_link(void *v)
  out2:
 	VN_KNOTE(vp, NOTE_LINK);
 	VN_KNOTE(dvp, NOTE_WRITE);
-	fstrans_done(mp);
+	vput(dvp);
+	fstrans_done(dvp->v_mount);
 	return (error);
 }
 
@@ -617,6 +614,7 @@ ulfs_whiteout(void *v)
 	} */ *ap = v;
 	struct vnode		*dvp = ap->a_dvp;
 	struct componentname	*cnp = ap->a_cnp;
+	struct lfs_direct		*newdir;
 	int			error;
 	struct ulfsmount	*ump = VFSTOULFS(dvp->v_mount);
 	struct lfs *fs = ump->um_lfs;
@@ -642,8 +640,15 @@ ulfs_whiteout(void *v)
 			panic("ulfs_whiteout: old format filesystem");
 #endif
 
-		error = ulfs_direnter(dvp, ulr, NULL,
-				      cnp, ULFS_WINO, LFS_DT_WHT,  NULL);
+		newdir = pool_cache_get(ulfs_direct_cache, PR_WAITOK);
+		newdir->d_ino = ULFS_WINO;
+		newdir->d_namlen = cnp->cn_namelen;
+		memcpy(newdir->d_name, cnp->cn_nameptr,
+		    (size_t)cnp->cn_namelen);
+		newdir->d_name[cnp->cn_namelen] = '\0';
+		newdir->d_type = LFS_DT_WHT;
+		error = ulfs_direnter(dvp, ulr, NULL, newdir, cnp, NULL);
+		pool_cache_put(ulfs_direct_cache, newdir);
 		break;
 
 	case DELETE:
@@ -775,7 +780,7 @@ ulfs_readdir(void *v)
 		int		*ncookies;
 	} */ *ap = v;
 	struct vnode	*vp = ap->a_vp;
-	LFS_DIRHEADER	*cdp, *ecdp;
+	struct lfs_direct	*cdp, *ecdp;
 	struct dirent	*ndp;
 	char		*cdbuf, *ndbuf, *endp;
 	struct uio	auio, *uio;
@@ -787,11 +792,17 @@ ulfs_readdir(void *v)
 	size_t		skipbytes;
 	struct ulfsmount *ump = VFSTOULFS(vp->v_mount);
 	struct lfs *fs = ump->um_lfs;
+	int nswap = ULFS_MPNEEDSWAP(fs);
+#if BYTE_ORDER == LITTLE_ENDIAN
+	int needswap = fs->um_maxsymlinklen <= 0 && nswap == 0;
+#else
+	int needswap = fs->um_maxsymlinklen <= 0 && nswap != 0;
+#endif
 	uio = ap->a_uio;
 	count = uio->uio_resid;
 	rcount = count - ((uio->uio_offset + count) & (fs->um_dirblksiz - 1));
 
-	if (rcount < LFS_DIRECTSIZ(fs, 0) || count < _DIRENT_MINSIZE(ndp))
+	if (rcount < _DIRENT_MINSIZE(cdp) || count < _DIRENT_MINSIZE(ndp))
 		return EINVAL;
 
 	startoff = uio->uio_offset & ~(fs->um_dirblksiz - 1);
@@ -816,8 +827,8 @@ ulfs_readdir(void *v)
 
 	rcount -= auio.uio_resid;
 
-	cdp = (LFS_DIRHEADER *)(void *)cdbuf;
-	ecdp = (LFS_DIRHEADER *)(void *)&cdbuf[rcount];
+	cdp = (struct lfs_direct *)(void *)cdbuf;
+	ecdp = (struct lfs_direct *)(void *)&cdbuf[rcount];
 
 	ndbufsz = count;
 	ndbuf = kmem_alloc(ndbufsz, KM_SLEEP);
@@ -826,7 +837,7 @@ ulfs_readdir(void *v)
 
 	off = uio->uio_offset;
 	if (ap->a_cookies) {
-		ccount = rcount / _DIRENT_RECLEN(ndp, 1);
+		ccount = rcount / _DIRENT_RECLEN(cdp, 1);
 		ccp = *(ap->a_cookies) = malloc(ccount * sizeof(*ccp),
 		    M_TEMP, M_WAITOK);
 	} else {
@@ -836,10 +847,11 @@ ulfs_readdir(void *v)
 	}
 
 	while (cdp < ecdp) {
+		cdp->d_reclen = ulfs_rw16(cdp->d_reclen, nswap);
 		if (skipbytes > 0) {
-			if (lfs_dir_getreclen(fs, cdp) <= skipbytes) {
-				skipbytes -= lfs_dir_getreclen(fs, cdp);
-				cdp = LFS_NEXTDIR(fs, cdp);
+			if (cdp->d_reclen <= skipbytes) {
+				skipbytes -= cdp->d_reclen;
+				cdp = _DIRENT_NEXT(cdp);
 				continue;
 			}
 			/*
@@ -848,7 +860,7 @@ ulfs_readdir(void *v)
 			error = EINVAL;
 			goto out;
 		}
-		if (lfs_dir_getreclen(fs, cdp) == 0) {
+		if (cdp->d_reclen == 0) {
 			struct dirent *ondp = ndp;
 			ndp->d_reclen = _DIRENT_MINSIZE(ndp);
 			ndp = _DIRENT_NEXT(ndp);
@@ -856,24 +868,28 @@ ulfs_readdir(void *v)
 			cdp = ecdp;
 			break;
 		}
-		ndp->d_type = lfs_dir_gettype(fs, cdp);
-		ndp->d_namlen = lfs_dir_getnamlen(fs, cdp);
+		if (needswap) {
+			ndp->d_type = cdp->d_namlen;
+			ndp->d_namlen = cdp->d_type;
+		} else {
+			ndp->d_type = cdp->d_type;
+			ndp->d_namlen = cdp->d_namlen;
+		}
 		ndp->d_reclen = _DIRENT_RECLEN(ndp, ndp->d_namlen);
 		if ((char *)(void *)ndp + ndp->d_reclen +
 		    _DIRENT_MINSIZE(ndp) > endp)
 			break;
-		ndp->d_fileno = lfs_dir_getino(fs, cdp);
-		(void)memcpy(ndp->d_name, lfs_dir_nameptr(fs, cdp),
-			     ndp->d_namlen);
+		ndp->d_fileno = ulfs_rw32(cdp->d_ino, nswap);
+		(void)memcpy(ndp->d_name, cdp->d_name, ndp->d_namlen);
 		memset(&ndp->d_name[ndp->d_namlen], 0,
 		    ndp->d_reclen - _DIRENT_NAMEOFF(ndp) - ndp->d_namlen);
-		off += lfs_dir_getreclen(fs, cdp);
+		off += cdp->d_reclen;
 		if (ap->a_cookies) {
 			KASSERT(ccp - *(ap->a_cookies) < ccount);
 			*(ccp++) = off;
 		}
 		ndp = _DIRENT_NEXT(ndp);
-		cdp = LFS_NEXTDIR(fs, cdp);
+		cdp = _DIRENT_NEXT(cdp);
 	}
 
 	count = ((char *)(void *)ndp - ndbuf);
@@ -912,19 +928,13 @@ ulfs_readlink(void *v)
 	struct lfs *fs = ump->um_lfs;
 	int		isize;
 
-	/*
-	 * The test against um_maxsymlinklen is off by one; it should
-	 * theoretically be <=, not <. However, it cannot be changed
-	 * as that would break compatibility with existing fs images.
-	 */
-
 	isize = ip->i_size;
 	if (isize < fs->um_maxsymlinklen ||
 	    (fs->um_maxsymlinklen == 0 && DIP(ip, blocks) == 0)) {
 		uiomove((char *)SHORTLINK(ip), isize, ap->a_uio);
 		return (0);
 	}
-	return (lfs_bufrd(vp, ap->a_uio, 0, ap->a_cred));
+	return (VOP_READ(vp, ap->a_uio, 0, ap->a_cred));
 }
 
 /*
@@ -1127,12 +1137,11 @@ ulfs_vinit(struct mount *mntp, int (**specops)(void *), int (**fifoops)(void *),
 	case VBLK:
 		vp->v_op = specops;
 		ump = ip->i_ump;
-		// XXX clean this up
 		if (ump->um_fstype == ULFS1)
-			rdev = (dev_t)ulfs_rw32(ip->i_din->u_32.di_rdev,
+			rdev = (dev_t)ulfs_rw32(ip->i_ffs1_rdev,
 			    ULFS_MPNEEDSWAP(ump->um_lfs));
 		else
-			rdev = (dev_t)ulfs_rw64(ip->i_din->u_64.di_rdev,
+			rdev = (dev_t)ulfs_rw64(ip->i_ffs2_rdev,
 			    ULFS_MPNEEDSWAP(ump->um_lfs));
 		spec_node_init(vp, rdev);
 		break;
@@ -1156,6 +1165,91 @@ ulfs_vinit(struct mount *mntp, int (**specops)(void *), int (**fifoops)(void *),
 	ip->i_modrev = (uint64_t)(uint)tv.tv_sec << 32
 			| tv.tv_usec * 4294u;
 	*vpp = vp;
+}
+
+/*
+ * Allocate a new inode.
+ */
+int
+ulfs_makeinode(int mode, struct vnode *dvp, const struct ulfs_lookup_results *ulr,
+	struct vnode **vpp, struct componentname *cnp)
+{
+	struct inode	*ip, *pdir;
+	struct lfs_direct	*newdir;
+	struct vnode	*tvp;
+	int		error;
+
+	pdir = VTOI(dvp);
+
+	if ((mode & LFS_IFMT) == 0)
+		mode |= LFS_IFREG;
+
+	if ((error = lfs_valloc(dvp, mode, cnp->cn_cred, vpp)) != 0) {
+		return (error);
+	}
+	tvp = *vpp;
+	ip = VTOI(tvp);
+	ip->i_gid = pdir->i_gid;
+	DIP_ASSIGN(ip, gid, ip->i_gid);
+	ip->i_uid = kauth_cred_geteuid(cnp->cn_cred);
+	DIP_ASSIGN(ip, uid, ip->i_uid);
+#if defined(LFS_QUOTA) || defined(LFS_QUOTA2)
+	if ((error = lfs_chkiq(ip, 1, cnp->cn_cred, 0))) {
+		lfs_vfree(tvp, ip->i_number, mode);
+		vput(tvp);
+		return (error);
+	}
+#endif
+	ip->i_flag |= IN_ACCESS | IN_CHANGE | IN_UPDATE;
+	ip->i_mode = mode;
+	DIP_ASSIGN(ip, mode, mode);
+	tvp->v_type = IFTOVT(mode);	/* Rest init'd in getnewvnode(). */
+	ip->i_nlink = 1;
+	DIP_ASSIGN(ip, nlink, 1);
+
+	/* Authorize setting SGID if needed. */
+	if (ip->i_mode & ISGID) {
+		error = kauth_authorize_vnode(cnp->cn_cred, KAUTH_VNODE_WRITE_SECURITY,
+		    tvp, NULL, genfs_can_chmod(tvp->v_type, cnp->cn_cred, ip->i_uid,
+		    ip->i_gid, mode));
+		if (error) {
+			ip->i_mode &= ~ISGID;
+			DIP_ASSIGN(ip, mode, ip->i_mode);
+		}
+	}
+
+	if (cnp->cn_flags & ISWHITEOUT) {
+		ip->i_flags |= UF_OPAQUE;
+		DIP_ASSIGN(ip, flags, ip->i_flags);
+	}
+
+	/*
+	 * Make sure inode goes to disk before directory entry.
+	 */
+	if ((error = lfs_update(tvp, NULL, NULL, UPDATE_DIROP)) != 0)
+		goto bad;
+	newdir = pool_cache_get(ulfs_direct_cache, PR_WAITOK);
+	ulfs_makedirentry(ip, cnp, newdir);
+	error = ulfs_direnter(dvp, ulr, tvp, newdir, cnp, NULL);
+	pool_cache_put(ulfs_direct_cache, newdir);
+	if (error)
+		goto bad;
+	*vpp = tvp;
+	return (0);
+
+ bad:
+	/*
+	 * Write error occurred trying to update the inode
+	 * or the directory so must deallocate the inode.
+	 */
+	ip->i_nlink = 0;
+	DIP_ASSIGN(ip, nlink, 0);
+	ip->i_flag |= IN_CHANGE;
+	/* If IN_ADIROP, account for it */
+	lfs_unmark_vnode(tvp);
+	tvp->v_type = VNON;		/* explodes later if VBLK */
+	vput(tvp);
+	return (error);
 }
 
 /*
@@ -1225,46 +1319,4 @@ ulfs_gop_markupdate(struct vnode *vp, int flags)
 
 		ip->i_flag |= mask;
 	}
-}
-
-int
-ulfs_bufio(enum uio_rw rw, struct vnode *vp, void *buf, size_t len, off_t off,
-    int ioflg, kauth_cred_t cred, size_t *aresid, struct lwp *l)
-{
-	struct iovec iov;
-	struct uio uio;
-	int error;
-
-	KASSERT(ISSET(ioflg, IO_NODELOCKED));
-	KASSERT(VOP_ISLOCKED(vp));
-	KASSERT(rw != UIO_WRITE || VOP_ISLOCKED(vp) == LK_EXCLUSIVE);
-
-	iov.iov_base = buf;
-	iov.iov_len = len;
-	uio.uio_iov = &iov;
-	uio.uio_iovcnt = 1;
-	uio.uio_resid = len;
-	uio.uio_offset = off;
-	uio.uio_rw = rw;
-	UIO_SETUP_SYSSPACE(&uio);
-
-	switch (rw) {
-	case UIO_READ:
-		error = lfs_bufrd(vp, &uio, ioflg, cred);
-		break;
-	case UIO_WRITE:
-		error = lfs_bufwr(vp, &uio, ioflg, cred);
-		break;
-	default:
-		panic("invalid uio rw: %d", (int)rw);
-	}
-
-	if (aresid)
-		*aresid = uio.uio_resid;
-	else if (uio.uio_resid && error == 0)
-		error = EIO;
-
-	KASSERT(VOP_ISLOCKED(vp));
-	KASSERT(rw != UIO_WRITE || VOP_ISLOCKED(vp) == LK_EXCLUSIVE);
-	return error;
 }

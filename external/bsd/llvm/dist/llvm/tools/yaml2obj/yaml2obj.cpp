@@ -62,8 +62,7 @@ static cl::opt<std::string> OutputFilename("o", cl::desc("Output filename"),
 
 typedef int (*ConvertFuncPtr)(yaml::Input & YIn, raw_ostream &Out);
 
-static int convertYAML(yaml::Input &YIn, raw_ostream &Out,
-                       ConvertFuncPtr Convert) {
+int convertYAML(yaml::Input & YIn, raw_ostream &Out, ConvertFuncPtr Convert) {
   unsigned CurDocNum = 0;
   do {
     if (++CurDocNum == DocNum)

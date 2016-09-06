@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2013, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -40,6 +40,8 @@
  * IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  * POSSIBILITY OF SUCH DAMAGES.
  */
+
+#define __DSWSCOPE_C__
 
 #include "acpi.h"
 #include "accommon.h"
@@ -82,7 +84,6 @@ AcpiDsScopeStackClear (
         ACPI_DEBUG_PRINT ((ACPI_DB_EXEC,
             "Popped object type (%s)\n",
             AcpiUtGetTypeName (ScopeInfo->Common.Value)));
-
         AcpiUtDeleteGenericState (ScopeInfo);
     }
 }

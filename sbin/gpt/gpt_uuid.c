@@ -1,4 +1,4 @@
-/*	$NetBSD: gpt_uuid.c,v 1.13 2015/12/06 00:39:26 christos Exp $	*/
+/*	$NetBSD: gpt_uuid.c,v 1.10.2.2 2015/06/02 19:49:38 snj Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.
@@ -32,7 +32,7 @@
 
 #include <sys/cdefs.h>
 #ifdef __RCSID
-__RCSID("$NetBSD: gpt_uuid.c,v 1.13 2015/12/06 00:39:26 christos Exp $");
+__RCSID("$NetBSD: gpt_uuid.c,v 1.10.2.2 2015/06/02 19:49:38 snj Exp $");
 #endif
 
 #include <err.h>
@@ -136,7 +136,7 @@ gpt_uuid_symbolic(char *buf, size_t bufsiz, const struct dce_uuid *u)
 
 	for (i = 0; i < __arraycount(gpt_nv); i++)
 		if (memcmp(&gpt_nv[i].u, u, sizeof(*u)) == 0)
-			return (int)strlcpy(buf, gpt_nv[i].n, bufsiz);
+			return strlcpy(buf, gpt_nv[i].n, bufsiz);
 	return -1;
 }
 
@@ -147,7 +147,7 @@ gpt_uuid_descriptive(char *buf, size_t bufsiz, const struct dce_uuid *u)
 
 	for (i = 0; i < __arraycount(gpt_nv); i++)
 		if (memcmp(&gpt_nv[i].u, u, sizeof(*u)) == 0)
-			return (int)strlcpy(buf, gpt_nv[i].d, bufsiz);
+			return strlcpy(buf, gpt_nv[i].d, bufsiz);
 	return -1;
 }
 
@@ -231,15 +231,6 @@ gpt_uuid_parse(const char *s, gpt_uuid_t uuid)
 }
 
 void
-gpt_uuid_help(const char *prefix)
-{
-	size_t i;
-
-	for (i = 0; i < __arraycount(gpt_nv); i++)
-		printf("%s%18.18s\t%s\n", prefix, gpt_nv[i].n, gpt_nv[i].d);
-}
-
-void
 gpt_uuid_create(gpt_type_t t, gpt_uuid_t u, uint16_t *b, size_t s)
 {
 	gpt_dce_to_uuid(&gpt_nv[t].u, u);
@@ -247,8 +238,8 @@ gpt_uuid_create(gpt_type_t t, gpt_uuid_t u, uint16_t *b, size_t s)
 		utf8_to_utf16((const uint8_t *)gpt_nv[t].d, b, s / sizeof(*b));
 }
 
-int
-gpt_uuid_generate(gpt_t gpt, gpt_uuid_t t)
+void
+gpt_uuid_generate(gpt_uuid_t t)
 {
 	struct dce_uuid u;
 	int fd;
@@ -258,38 +249,26 @@ gpt_uuid_generate(gpt_t gpt, gpt_uuid_t t)
 
 	/* Randomly generate the content.  */
 	fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC);
-	if (fd == -1) {
-		gpt_warn(gpt, "Can't open `/dev/urandom'");
-		return -1;
-	}
-	for (p = (void *)&u, n = sizeof u; n > 0; p += nread, n -= (size_t)nread) {
+	if (fd == -1)
+		err(1, "open(/dev/urandom)");
+	for (p = (void *)&u, n = sizeof u; 0 < n; p += nread, n -= nread) {
 		nread = read(fd, p, n);
-		if (nread < 0) {
-			gpt_warn(gpt, "Can't read `/dev/urandom'");
-			goto out;
-		}
-		if (nread == 0) {
-			gpt_warn(gpt, "EOF from /dev/urandom");
-			goto out;
-		}
-		if ((size_t)nread > n) {
-			gpt_warnx(gpt, "read too much: %zd > %zu", nread, n);
-			goto out;
-		}
+		if (nread < 0)
+			err(1, "read(/dev/urandom)");
+		if (nread == 0)
+			errx(1, "EOF from /dev/urandom");
+		if ((size_t)nread > n)
+			errx(1, "read too much: %zd > %zu", nread, n);
 	}
 	(void)close(fd);
 
 	/* Set the version number to 4.  */
-	u.time_hi_and_version &= (uint16_t)~0xf000;
+	u.time_hi_and_version &= ~(uint32_t)0xf000;
 	u.time_hi_and_version |= 0x4000;
 
 	/* Fix the reserved bits.  */
-	u.clock_seq_hi_and_reserved &= (uint8_t)~0x40;
+	u.clock_seq_hi_and_reserved &= ~(uint8_t)0x40;
 	u.clock_seq_hi_and_reserved |= 0x80;
 
 	gpt_dce_to_uuid(&u, t);
-	close(fd);
-	return 0;
-out:
-	return -1;
 }

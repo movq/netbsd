@@ -39,6 +39,8 @@ public:
     NodeSubset() : Elements(0) {
       assert(N <= sizeof(BitVector)*CHAR_BIT && "Graph too big!");
     }
+    /// NodeSubset - Copy constructor.
+    NodeSubset(const NodeSubset &other) : Elements(other.Elements) {}
 
     /// Comparison operators.
     bool operator==(const NodeSubset &other) const {
@@ -250,7 +252,7 @@ TEST(SCCIteratorTest, AllSmallGraphs) {
   typedef Graph<NUM_NODES> GT;
 
   /// Enumerate all graphs using NUM_GRAPHS bits.
-  static_assert(NUM_GRAPHS < sizeof(unsigned) * CHAR_BIT, "Too many graphs!");
+  assert(NUM_GRAPHS < sizeof(unsigned) * CHAR_BIT && "Too many graphs!");
   for (unsigned GraphDescriptor = 0; GraphDescriptor < (1U << NUM_GRAPHS);
        ++GraphDescriptor) {
     GT G;

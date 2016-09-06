@@ -30,6 +30,8 @@ public:
   const char *getPassName() const override {
     return "optimise barriers pass";
   }
+
+private:
 };
 char ARMOptimizeBarriersPass::ID = 0;
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: swdmover.c,v 1.13 2015/08/20 14:40:17 christos Exp $	*/
+/*	$NetBSD: swdmover.c,v 1.12 2008/01/04 21:17:53 ad Exp $	*/
 
 /*
  * Copyright (c) 2002, 2003 Wasabi Systems, Inc.
@@ -49,7 +49,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: swdmover.c,v 1.13 2015/08/20 14:40:17 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: swdmover.c,v 1.12 2008/01/04 21:17:53 ad Exp $");
 
 #include <sys/param.h>
 #include <sys/kthread.h>
@@ -58,8 +58,6 @@ __KERNEL_RCSID(0, "$NetBSD: swdmover.c,v 1.13 2015/08/20 14:40:17 christos Exp $
 
 #include <dev/dmover/dmovervar.h>
 
-#include "ioconf.h"
-
 struct swdmover_function {
 	void	(*sdf_process)(struct dmover_request *);
 };
@@ -67,6 +65,8 @@ struct swdmover_function {
 static struct dmover_backend swdmover_backend;
 static struct lwp *swdmover_lwp;
 static int swdmover_cv;
+
+void	swdmoverattach(int);
 
 /*
  * swdmover_process:

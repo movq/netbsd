@@ -1,4 +1,4 @@
-/*	$NetBSD: intel-gtt.h,v 1.5 2015/03/06 22:03:06 riastradh Exp $	*/
+/*	$NetBSD: intel-gtt.h,v 1.4.2.1 2015/03/17 17:52:49 riz Exp $	*/
 
 /*-
  * Copyright (c) 2013 The NetBSD Foundation, Inc.

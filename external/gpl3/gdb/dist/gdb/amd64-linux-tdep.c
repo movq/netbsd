@@ -1,6 +1,6 @@
 /* Target-dependent code for GNU/Linux x86-64.
 
-   Copyright (C) 2001-2015 Free Software Foundation, Inc.
+   Copyright (C) 2001-2014 Free Software Foundation, Inc.
    Contributed by Jiri Smid, SuSE Labs.
 
    This file is part of GDB.
@@ -28,12 +28,12 @@
 #include "gdbtypes.h"
 #include "reggroups.h"
 #include "regset.h"
-#include "parser-defs.h"
-#include "user-regs.h"
 #include "amd64-linux-tdep.h"
 #include "i386-linux-tdep.h"
 #include "linux-tdep.h"
-#include "x86-xstate.h"
+#include "i386-xstate.h"
+
+#include <string.h>
 
 #include "amd64-tdep.h"
 #include "solib-svr4.h"
@@ -43,17 +43,23 @@
 #include "features/i386/amd64-linux.c"
 #include "features/i386/amd64-avx-linux.c"
 #include "features/i386/amd64-mpx-linux.c"
-#include "features/i386/amd64-avx512-linux.c"
-
 #include "features/i386/x32-linux.c"
 #include "features/i386/x32-avx-linux.c"
-#include "features/i386/x32-avx512-linux.c"
 
 /* The syscall's XML filename for i386.  */
 #define XML_SYSCALL_FILENAME_AMD64 "syscalls/amd64-linux.xml"
 
 #include "record-full.h"
 #include "linux-record.h"
+
+/* Supported register note sections.  */
+static struct core_regset_section amd64_linux_regset_sections[] =
+{
+  { ".reg", 27 * 8, "general-purpose" },
+  { ".reg2", 512, "floating-point" },
+  { ".reg-xstate", I386_XSTATE_MAX_SIZE, "XSAVE extended state" },
+  { NULL, 0 }
+};
 
 /* Mapping between the general-purpose registers in `struct user'
    format and GDB's register cache layout.  */
@@ -93,16 +99,7 @@ int amd64_linux_gregset_reg_offset[] =
   -1, -1, -1, -1, -1, -1, -1, -1,
   -1, -1, -1, -1,		/* MPX registers BND0 ... BND3.  */
   -1, -1,			/* MPX registers BNDCFGU and BNDSTATUS.  */
-  -1, -1, -1, -1, -1, -1, -1, -1,     /* xmm16 ... xmm31 (AVX512)  */
-  -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1,     /* ymm16 ... ymm31 (AVX512)  */
-  -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1,     /* k0 ... k7 (AVX512)  */
-  -1, -1, -1, -1, -1, -1, -1, -1,     /* zmm0 ... zmm31 (AVX512)  */
-  -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1,
-  -1, -1, -1, -1, -1, -1, -1, -1,
-  15 * 8			      /* "orig_rax" */
+  15 * 8			/* "orig_rax" */
 };
 
 
@@ -1576,20 +1573,14 @@ amd64_linux_core_read_description (struct gdbarch *gdbarch,
   /* Linux/x86-64.  */
   uint64_t xcr0 = i386_linux_core_read_xcr0 (abfd);
 
-  switch (xcr0 & X86_XSTATE_ALL_MASK)
+  switch (xcr0 & I386_XSTATE_ALL_MASK)
     {
-    case X86_XSTATE_MPX_AVX512_MASK:
-    case X86_XSTATE_AVX512_MASK:
-      if (gdbarch_ptr_bit (gdbarch) == 32)
-	return tdesc_x32_avx512_linux;
-      else
-	return tdesc_amd64_avx512_linux;
-    case X86_XSTATE_MPX_MASK:
+    case I386_XSTATE_MPX_MASK:
       if (gdbarch_ptr_bit (gdbarch) == 32)
 	return tdesc_x32_avx_linux;  /* No x32 MPX falling back to AVX.  */
       else
 	return tdesc_amd64_mpx_linux;
-    case X86_XSTATE_AVX_MASK:
+    case I386_XSTATE_AVX_MASK:
       if (gdbarch_ptr_bit (gdbarch) == 32)
 	return tdesc_x32_avx_linux;
       else
@@ -1599,189 +1590,6 @@ amd64_linux_core_read_description (struct gdbarch *gdbarch,
 	return tdesc_x32_linux;
       else
 	return tdesc_amd64_linux;
-    }
-}
-
-/* Similar to amd64_supply_fpregset, but use XSAVE extended state.  */
-
-static void
-amd64_linux_supply_xstateregset (const struct regset *regset,
-				 struct regcache *regcache, int regnum,
-				 const void *xstateregs, size_t len)
-{
-  amd64_supply_xsave (regcache, regnum, xstateregs);
-}
-
-/* Similar to amd64_collect_fpregset, but use XSAVE extended state.  */
-
-static void
-amd64_linux_collect_xstateregset (const struct regset *regset,
-				  const struct regcache *regcache,
-				  int regnum, void *xstateregs, size_t len)
-{
-  amd64_collect_xsave (regcache, regnum, xstateregs, 1);
-}
-
-static const struct regset amd64_linux_xstateregset =
-  {
-    NULL,
-    amd64_linux_supply_xstateregset,
-    amd64_linux_collect_xstateregset
-  };
-
-/* Iterate over core file register note sections.  */
-
-static void
-amd64_linux_iterate_over_regset_sections (struct gdbarch *gdbarch,
-					  iterate_over_regset_sections_cb *cb,
-					  void *cb_data,
-					  const struct regcache *regcache)
-{
-  struct gdbarch_tdep *tdep = gdbarch_tdep (gdbarch);
-
-  cb (".reg", 27 * 8, &i386_gregset, NULL, cb_data);
-  cb (".reg2", 512, &amd64_fpregset, NULL, cb_data);
-  cb (".reg-xstate",  X86_XSTATE_SIZE (tdep->xcr0),
-      &amd64_linux_xstateregset, "XSAVE extended state", cb_data);
-}
-
-/* The instruction sequences used in x86_64 machines for a
-   disabled is-enabled probe.  */
-
-const gdb_byte amd64_dtrace_disabled_probe_sequence_1[] = {
-  /* xor %rax, %rax */  0x48, 0x33, 0xc0,
-  /* nop            */  0x90,
-  /* nop            */  0x90
-};
-
-const gdb_byte amd64_dtrace_disabled_probe_sequence_2[] = {
-  /* xor %rax, %rax */  0x48, 0x33, 0xc0,
-  /* ret            */  0xc3,
-  /* nop            */  0x90
-};
-
-/* The instruction sequence used in x86_64 machines for enabling a
-   DTrace is-enabled probe.  */
-
-const gdb_byte amd64_dtrace_enable_probe_sequence[] = {
-  /* mov $0x1, %eax */ 0xb8, 0x01, 0x00, 0x00, 0x00
-};
-
-/* The instruction sequence used in x86_64 machines for disabling a
-   DTrace is-enabled probe.  */
-
-const gdb_byte amd64_dtrace_disable_probe_sequence[] = {
-  /* xor %rax, %rax; nop; nop */ 0x48, 0x33, 0xC0, 0x90, 0x90
-};
-
-/* Implementation of `gdbarch_dtrace_probe_is_enabled', as defined in
-   gdbarch.h.  */
-
-static int
-amd64_dtrace_probe_is_enabled (struct gdbarch *gdbarch, CORE_ADDR addr)
-{
-  gdb_byte buf[5];
-
-  /* This function returns 1 if the instructions at ADDR do _not_
-     follow any of the amd64_dtrace_disabled_probe_sequence_*
-     patterns.
-
-     Note that ADDR is offset 3 bytes from the beginning of these
-     sequences.  */
-  
-  read_code (addr - 3, buf, 5);
-  return (memcmp (buf, amd64_dtrace_disabled_probe_sequence_1, 5) != 0
-	  && memcmp (buf, amd64_dtrace_disabled_probe_sequence_2, 5) != 0);
-}
-
-/* Implementation of `gdbarch_dtrace_enable_probe', as defined in
-   gdbarch.h.  */
-
-static void
-amd64_dtrace_enable_probe (struct gdbarch *gdbarch, CORE_ADDR addr)
-{
-  /* Note also that ADDR is offset 3 bytes from the beginning of
-     amd64_dtrace_enable_probe_sequence.  */
-
-  write_memory (addr - 3, amd64_dtrace_enable_probe_sequence, 5);
-}
-
-/* Implementation of `gdbarch_dtrace_disable_probe', as defined in
-   gdbarch.h.  */
-
-static void
-amd64_dtrace_disable_probe (struct gdbarch *gdbarch, CORE_ADDR addr)
-{
-  /* Note also that ADDR is offset 3 bytes from the beginning of
-     amd64_dtrace_disable_probe_sequence.  */
-
-  write_memory (addr - 3, amd64_dtrace_disable_probe_sequence, 5);
-}
-
-/* Implementation of `gdbarch_dtrace_parse_probe_argument', as defined
-   in gdbarch.h.  */
-
-static void
-amd64_dtrace_parse_probe_argument (struct gdbarch *gdbarch,
-				   struct parser_state *pstate,
-				   int narg)
-{
-  enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
-  struct frame_info *this_frame = get_selected_frame (NULL);
-  struct stoken str;
-
-  /* DTrace probe arguments can be found on the ABI-defined places for
-     regular arguments at the current PC.  The probe abstraction
-     currently supports up to 12 arguments for probes.  */
-
-  if (narg < 6)
-    {
-      static const int arg_reg_map[6] =
-	{
-	  AMD64_RDI_REGNUM,  /* Arg 1.  */
-	  AMD64_RSI_REGNUM,  /* Arg 2.  */
-	  AMD64_RDX_REGNUM,  /* Arg 3.  */
-	  AMD64_RCX_REGNUM,  /* Arg 4.  */
-	  AMD64_R8_REGNUM,   /* Arg 5.  */
-	  AMD64_R9_REGNUM    /* Arg 6.  */
-	};
-      int regno = arg_reg_map[narg];
-      const char *regname = user_reg_map_regnum_to_name (gdbarch, regno);
-
-      write_exp_elt_opcode (pstate, OP_REGISTER);
-      str.ptr = regname;
-      str.length = strlen (regname);
-      write_exp_string (pstate, str);
-      write_exp_elt_opcode (pstate, OP_REGISTER);
-    }
-  else
-    {
-      /* Additional arguments are passed on the stack.  */
-      CORE_ADDR sp;
-      const char *regname = user_reg_map_regnum_to_name (gdbarch, AMD64_RSP_REGNUM);
-
-      /* Displacement.  */
-      write_exp_elt_opcode (pstate, OP_LONG);
-      write_exp_elt_type (pstate, builtin_type (gdbarch)->builtin_long);
-      write_exp_elt_longcst (pstate, narg - 6);
-      write_exp_elt_opcode (pstate, OP_LONG);
-
-      /* Register: SP.  */
-      write_exp_elt_opcode (pstate, OP_REGISTER);
-      str.ptr = regname;
-      str.length = strlen (regname);
-      write_exp_string (pstate, str);
-      write_exp_elt_opcode (pstate, OP_REGISTER);
-
-      write_exp_elt_opcode (pstate, BINOP_ADD);
-
-      /* Cast to long. */
-      write_exp_elt_opcode (pstate, UNOP_CAST);
-      write_exp_elt_type (pstate,
-			  lookup_pointer_type (builtin_type (gdbarch)->builtin_long));
-      write_exp_elt_opcode (pstate, UNOP_CAST);
-
-      write_exp_elt_opcode (pstate, UNOP_IND);
     }
 }
 
@@ -1805,7 +1613,7 @@ amd64_linux_init_abi_common(struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->register_reggroup_p = amd64_linux_register_reggroup_p;
 
   /* Functions for 'catch syscall'.  */
-  set_xml_syscall_file_name (gdbarch, XML_SYSCALL_FILENAME_AMD64);
+  set_xml_syscall_file_name (XML_SYSCALL_FILENAME_AMD64);
   set_gdbarch_get_syscall_number (gdbarch,
                                   amd64_linux_get_syscall_number);
 
@@ -1819,9 +1627,8 @@ amd64_linux_init_abi_common(struct gdbarch_info info, struct gdbarch *gdbarch)
   /* GNU/Linux uses the dynamic linker included in the GNU C Library.  */
   set_gdbarch_skip_solib_resolver (gdbarch, glibc_skip_solib_resolver);
 
-  /* Iterate over core file register note sections.  */
-  set_gdbarch_iterate_over_regset_sections
-    (gdbarch, amd64_linux_iterate_over_regset_sections);
+  /* Install supported register note sections.  */
+  set_gdbarch_core_regset_sections (gdbarch, amd64_linux_regset_sections);
 
   set_gdbarch_core_read_description (gdbarch,
 				     amd64_linux_core_read_description);
@@ -1833,7 +1640,9 @@ amd64_linux_init_abi_common(struct gdbarch_info info, struct gdbarch *gdbarch)
   set_gdbarch_displaced_step_free_closure (gdbarch,
                                            simple_displaced_step_free_closure);
   set_gdbarch_displaced_step_location (gdbarch,
-                                       linux_displaced_step_location);
+                                       displaced_step_at_entry_point);
+
+  set_gdbarch_get_siginfo_type (gdbarch, linux_get_siginfo_type);
 
   set_gdbarch_process_record (gdbarch, i386_process_record);
   set_gdbarch_process_record_signal (gdbarch, amd64_linux_record_signal);
@@ -2047,12 +1856,6 @@ amd64_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   /* GNU/Linux uses SVR4-style shared libraries.  */
   set_solib_svr4_fetch_link_map_offsets
     (gdbarch, svr4_lp64_fetch_link_map_offsets);
-
-  /* Register DTrace handlers.  */
-  set_gdbarch_dtrace_parse_probe_argument (gdbarch, amd64_dtrace_parse_probe_argument);
-  set_gdbarch_dtrace_probe_is_enabled (gdbarch, amd64_dtrace_probe_is_enabled);
-  set_gdbarch_dtrace_enable_probe (gdbarch, amd64_dtrace_enable_probe);
-  set_gdbarch_dtrace_disable_probe (gdbarch, amd64_dtrace_disable_probe);
 }
 
 static void
@@ -2280,9 +2083,6 @@ _initialize_amd64_linux_tdep (void)
   initialize_tdesc_amd64_linux ();
   initialize_tdesc_amd64_avx_linux ();
   initialize_tdesc_amd64_mpx_linux ();
-  initialize_tdesc_amd64_avx512_linux ();
-
   initialize_tdesc_x32_linux ();
   initialize_tdesc_x32_avx_linux ();
-  initialize_tdesc_x32_avx512_linux ();
 }

@@ -1,4 +1,4 @@
-/*	$NetBSD: in_var.h,v 1.79 2016/08/01 03:15:30 ozaki-r Exp $	*/
+/*	$NetBSD: in_var.h,v 1.70 2014/07/01 05:49:18 rtr Exp $	*/
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -66,15 +66,6 @@
 
 #include <sys/queue.h>
 
-#define IN_IFF_TENTATIVE	0x01	/* tentative address */
-#define IN_IFF_DUPLICATED	0x02	/* DAD detected duplicate */
-#define IN_IFF_DETACHED		0x04	/* may be detached from the link */
-#define IN_IFF_TRYTENTATIVE	0x08	/* intent to try DAD */
-
-/* do not input/output */
-#define IN_IFF_NOTREADY \
-    (IN_IFF_TRYTENTATIVE | IN_IFF_TENTATIVE | IN_IFF_DUPLICATED)
-
 /*
  * Interface address, Internet version.  One of these structures
  * is allocated for each interface with an Internet address.
@@ -101,34 +92,7 @@ struct in_ifaddr {
 	struct	in_multi *ia_allhosts;	/* multicast address record for
 					   the allhosts multicast group */
 	uint16_t ia_idsalt;		/* ip_id salt for this ia */
-	int	ia4_flags;		/* address flags */
-	void	(*ia_dad_start) (struct ifaddr *);	/* DAD start function */
-	void	(*ia_dad_stop) (struct ifaddr *);	/* DAD stop function */
-
-#ifdef _KERNEL
-	struct pslist_entry	ia_hash_pslist_entry;
-	struct pslist_entry	ia_pslist_entry;
-#endif
 };
-
-#ifdef _KERNEL
-static inline void
-ia4_acquire(struct in_ifaddr *ia, struct psref *psref)
-{
-
-	KASSERT(ia != NULL);
-	ifa_acquire(&ia->ia_ifa, psref);
-}
-
-static inline void
-ia4_release(struct in_ifaddr *ia, struct psref *psref)
-{
-
-	if (ia == NULL)
-		return;
-	ifa_release(&ia->ia_ifa, psref);
-}
-#endif
 
 struct	in_aliasreq {
 	char	ifra_name[IFNAMSIZ];		/* if name, e.g. "en0" */
@@ -137,14 +101,11 @@ struct	in_aliasreq {
 #define	ifra_broadaddr	ifra_dstaddr
 	struct	sockaddr_in ifra_mask;
 };
-
 /*
  * Given a pointer to an in_ifaddr (ifaddr),
  * return a pointer to the addr as a sockaddr_in.
  */
 #define	IA_SIN(ia) (&(((struct in_ifaddr *)(ia))->ia_addr))
-
-#define iatoifa(ia)	(struct ifaddr *)(ia)
 
 #ifdef _KERNEL
 
@@ -168,187 +129,69 @@ extern	u_long in_ifaddrhash;			/* size of hash table - 1 */
 extern  struct in_ifaddrhashhead *in_ifaddrhashtbl;	/* Hash table head */
 extern  struct in_ifaddrhead in_ifaddrhead;		/* List head (in ip_input) */
 
-extern struct pslist_head *in_ifaddrhashtbl_pslist;
-extern u_long in_ifaddrhash_pslist;
-extern struct pslist_head in_ifaddrhead_pslist;
-
-#define IN_IFADDR_HASH_PSLIST(x)					\
-	in_ifaddrhashtbl_pslist[(u_long)(x) % IN_IFADDR_HASH_SIZE]
-
-#define IN_ADDRHASH_READER_FOREACH(__ia, __addr)			\
-	PSLIST_READER_FOREACH((__ia), &IN_IFADDR_HASH_PSLIST(__addr),	\
-	    struct in_ifaddr, ia_hash_pslist_entry)
-#define IN_ADDRHASH_WRITER_INSERT_HEAD(__ia)				\
-	PSLIST_WRITER_INSERT_HEAD(					\
-	    &IN_IFADDR_HASH_PSLIST((__ia)->ia_addr.sin_addr.s_addr),	\
-	    (__ia), ia_hash_pslist_entry)
-#define IN_ADDRHASH_WRITER_REMOVE(__ia)					\
-	PSLIST_WRITER_REMOVE((__ia), ia_hash_pslist_entry)
-#define IN_ADDRHASH_ENTRY_INIT(__ia)					\
-	PSLIST_ENTRY_INIT((__ia), ia_hash_pslist_entry);
-#define IN_ADDRHASH_ENTRY_DESTROY(__ia)					\
-	PSLIST_ENTRY_DESTROY((__ia), ia_hash_pslist_entry);
-#define IN_ADDRHASH_READER_NEXT(__ia)					\
-	PSLIST_READER_NEXT((__ia), struct in_ifaddr, ia_hash_pslist_entry)
-
-#define IN_ADDRLIST_ENTRY_INIT(__ia)					\
-	PSLIST_ENTRY_INIT((__ia), ia_pslist_entry)
-#define IN_ADDRLIST_ENTRY_DESTROY(__ia)					\
-	PSLIST_ENTRY_DESTROY((__ia), ia_pslist_entry);
-#define IN_ADDRLIST_READER_EMPTY()					\
-	(PSLIST_READER_FIRST(&in_ifaddrhead_pslist, struct in_ifaddr,	\
-	                     ia_pslist_entry) == NULL)
-#define IN_ADDRLIST_READER_FIRST()					\
-	PSLIST_READER_FIRST(&in_ifaddrhead_pslist, struct in_ifaddr,	\
-	                    ia_pslist_entry)
-#define IN_ADDRLIST_READER_NEXT(__ia)					\
-	PSLIST_READER_NEXT((__ia), struct in_ifaddr, ia_pslist_entry)
-#define IN_ADDRLIST_READER_FOREACH(__ia)				\
-	PSLIST_READER_FOREACH((__ia), &in_ifaddrhead_pslist,		\
-	                      struct in_ifaddr, ia_pslist_entry)
-#define IN_ADDRLIST_WRITER_INSERT_HEAD(__ia)				\
-	PSLIST_WRITER_INSERT_HEAD(&in_ifaddrhead_pslist, (__ia),	\
-	    ia_pslist_entry)
-#define IN_ADDRLIST_WRITER_REMOVE(__ia)					\
-	PSLIST_WRITER_REMOVE((__ia), ia_pslist_entry)
-#define IN_ADDRLIST_WRITER_FOREACH(__ia)				\
-	PSLIST_WRITER_FOREACH((__ia), &in_ifaddrhead_pslist,		\
-	                      struct in_ifaddr, ia_pslist_entry)
-#define IN_ADDRLIST_WRITER_FIRST()					\
-	PSLIST_WRITER_FIRST(&in_ifaddrhead_pslist, struct in_ifaddr,	\
-	                    ia_pslist_entry)
-#define IN_ADDRLIST_WRITER_NEXT(__ia)					\
-	PSLIST_WRITER_NEXT((__ia), struct in_ifaddr, ia_pslist_entry)
-#define IN_ADDRLIST_WRITER_INSERT_AFTER(__ia, __new)			\
-	PSLIST_WRITER_INSERT_AFTER((__ia), (__new), ia_pslist_entry)
-#define IN_ADDRLIST_WRITER_EMPTY()					\
-	(PSLIST_WRITER_FIRST(&in_ifaddrhead_pslist, struct in_ifaddr,	\
-	    ia_pslist_entry) == NULL)
-#define IN_ADDRLIST_WRITER_INSERT_TAIL(__new)				\
-	do {								\
-		if (IN_ADDRLIST_WRITER_EMPTY()) {			\
-			IN_ADDRLIST_WRITER_INSERT_HEAD((__new));	\
-		} else {						\
-			struct in_ifaddr *__ia;				\
-			IN_ADDRLIST_WRITER_FOREACH(__ia) {		\
-				if (IN_ADDRLIST_WRITER_NEXT(__ia) == NULL) { \
-					IN_ADDRLIST_WRITER_INSERT_AFTER(__ia,\
-					    (__new));			\
-					break;				\
-				}					\
-			}						\
-		}							\
-	} while (0)
-
 extern	const	int	inetctlerrmap[];
 
 /*
- * Find whether an internet address (in_addr) belongs to one
+ * Macro for finding whether an internet address (in_addr) belongs to one
  * of our interfaces (in_ifaddr).  NULL if the address isn't ours.
  */
-static inline struct in_ifaddr *
-in_get_ia(struct in_addr addr)
-{
-	struct in_ifaddr *ia;
-
-	IN_ADDRHASH_READER_FOREACH(ia, addr.s_addr) {
-		if (in_hosteq(ia->ia_addr.sin_addr, addr))
-			break;
-	}
-
-	return ia;
-}
-
-static inline struct in_ifaddr *
-in_get_ia_psref(struct in_addr addr, struct psref *psref)
-{
-	struct in_ifaddr *ia;
-	int s;
-
-	s = pserialize_read_enter();
-	ia = in_get_ia(addr);
-	if (ia != NULL)
-		ia4_acquire(ia, psref);
-	pserialize_read_exit(s);
-
-	return ia;
+#define INADDR_TO_IA(addr, ia) \
+	/* struct in_addr addr; */ \
+	/* struct in_ifaddr *ia; */ \
+{ \
+	LIST_FOREACH(ia, &IN_IFADDR_HASH((addr).s_addr), ia_hash) { \
+		if (in_hosteq(ia->ia_addr.sin_addr, (addr))) \
+			break; \
+	} \
 }
 
 /*
- * Find whether an internet address (in_addr) belongs to a specified
- * interface.  NULL if the address isn't ours.
+ * Macro for finding the next in_ifaddr structure with the same internet
+ * address as ia. Call only with a valid ia pointer.
+ * Will set ia to NULL if none found.
  */
-static inline struct in_ifaddr *
-in_get_ia_on_iface(struct in_addr addr, struct ifnet *ifp)
-{
-	struct in_ifaddr *ia;
 
-	IN_ADDRHASH_READER_FOREACH(ia, addr.s_addr) {
-		if (in_hosteq(ia->ia_addr.sin_addr, addr) &&
-		    ia->ia_ifp == ifp)
-			break;
-	}
-
-	return ia;
-}
-
-static inline struct in_ifaddr *
-in_get_ia_on_iface_psref(struct in_addr addr, struct ifnet *ifp, struct psref *psref)
-{
-	struct in_ifaddr *ia;
-	int s;
-
-	s = pserialize_read_enter();
-	ia = in_get_ia_on_iface(addr, ifp);
-	if (ia != NULL)
-		ia4_acquire(ia, psref);
-	pserialize_read_exit(s);
-
-	return ia;
+#define NEXT_IA_WITH_SAME_ADDR(ia) \
+	/* struct in_ifaddr *ia; */ \
+{ \
+	struct in_addr addr; \
+	addr = ia->ia_addr.sin_addr; \
+	do { \
+		ia = LIST_NEXT(ia, ia_hash); \
+	} while ((ia != NULL) && !in_hosteq(ia->ia_addr.sin_addr, addr)); \
 }
 
 /*
- * Find an internet address structure (in_ifaddr) corresponding
+ * Macro for finding the interface (ifnet structure) corresponding to one
+ * of our IP addresses.
+ */
+#define INADDR_TO_IFP(addr, ifp) \
+	/* struct in_addr addr; */ \
+	/* struct ifnet *ifp; */ \
+{ \
+	struct in_ifaddr *ia; \
+\
+	INADDR_TO_IA(addr, ia); \
+	(ifp) = (ia == NULL) ? NULL : ia->ia_ifp; \
+}
+
+/*
+ * Macro for finding an internet address structure (in_ifaddr) corresponding
  * to a given interface (ifnet structure).
  */
-static inline struct in_ifaddr *
-in_get_ia_from_ifp(struct ifnet *ifp)
-{
-	struct ifaddr *ifa;
-
-	IFADDR_READER_FOREACH(ifa, ifp) {
-		if (ifa->ifa_addr->sa_family == AF_INET)
-			break;
-	}
-
-	return ifatoia(ifa);
+#define IFP_TO_IA(ifp, ia) \
+	/* struct ifnet *ifp; */ \
+	/* struct in_ifaddr *ia; */ \
+{ \
+	struct ifaddr *ifa; \
+\
+	IFADDR_FOREACH(ifa, ifp) { \
+		if (ifa->ifa_addr->sa_family == AF_INET) \
+			break; \
+	} \
+	(ia) = ifatoia(ifa); \
 }
-
-static inline struct in_ifaddr *
-in_get_ia_from_ifp_psref(struct ifnet *ifp, struct psref *psref)
-{
-	struct in_ifaddr *ia;
-	int s;
-
-	s = pserialize_read_enter();
-	ia = in_get_ia_from_ifp(ifp);
-	if (ia != NULL)
-		ia4_acquire(ia, psref);
-	pserialize_read_exit(s);
-
-	return ia;
-}
-
-#include <netinet/in_selsrc.h>
-/*
- * IPv4 per-interface state.
- */
-struct in_ifinfo {
-	struct lltable		*ii_llt;	/* ARP state */
-	struct in_ifsysctl	*ii_selsrc;
-};
-
-#endif /* _KERNEL */
+#endif
 
 /*
  * Internet multicast address structure.  There is one of these for each IP
@@ -374,8 +217,6 @@ struct in_multi {
 
 extern pktqueue_t *ip_pktq;
 
-extern int ip_dad_count;		/* Duplicate Address Detection probes */
-
 /*
  * Structure used by functions below to remember position when stepping
  * through all of the in_multi records.
@@ -399,7 +240,7 @@ int in_multi_lock_held(void);
 struct ifaddr;
 
 int	in_ifinit(struct ifnet *,
-	    struct in_ifaddr *, const struct sockaddr_in *, int, int);
+	    struct in_ifaddr *, const struct sockaddr_in *, int);
 void	in_savemkludge(struct in_ifaddr *);
 void	in_restoremkludge(struct in_ifaddr *, struct ifnet *);
 void	in_purgemkludge(struct ifnet *);
@@ -456,9 +297,6 @@ ip_newid(const struct in_ifaddr *ia)
 #ifdef SYSCTLFN_PROTO
 int	sysctl_inpcblist(SYSCTLFN_PROTO);
 #endif
-
-#define LLTABLE(ifp)	\
-	((struct in_ifinfo *)(ifp)->if_afdata[AF_INET])->ii_llt
 
 #endif	/* !_KERNEL */
 

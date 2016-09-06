@@ -1,4 +1,4 @@
-/*	$NetBSD: mouse.h,v 1.3 2015/09/07 03:49:45 dholland Exp $	*/
+/*	$NetBSD: mouse.h,v 1.2 2002/04/19 01:43:49 wiz Exp $	*/
 
 /*
  * Copyright (c) Mark Brinicombe 1996 All rights reserved
@@ -30,8 +30,6 @@
  * (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
-
-#include <sys/ioccom.h>
 
 /*
 #define MOUSE_BUTTON_RIGHT  0x10

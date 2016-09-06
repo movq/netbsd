@@ -1,5 +1,5 @@
 ;; Predicate definitions for Xtensa.
-;; Copyright (C) 2005-2015 Free Software Foundation, Inc.
+;; Copyright (C) 2005-2013 Free Software Foundation, Inc.
 ;;
 ;; This file is part of GCC.
 ;;
@@ -97,8 +97,7 @@
       /* Direct calls only allowed to static functions with PIC.  */
       if (flag_pic)
 	{
-	  tree callee;
-	  const char * callee_sec, * caller_sec;
+	  tree callee, callee_sec, caller_sec;
 
 	  if (GET_CODE (op) != SYMBOL_REF
 	      || !SYMBOL_REF_LOCAL_P (op) || SYMBOL_REF_EXTERNAL_P (op))
@@ -118,12 +117,13 @@
 	      if (DECL_ONE_ONLY (callee))
 		return false;
 	      callee_sec = DECL_SECTION_NAME (callee);
-	      if (((caller_sec == NULL) ^ (callee_sec == NULL))
-		  || (caller_sec != NULL
-		      && caller_sec != callee_sec))
+	      if (((caller_sec == NULL_TREE) ^ (callee_sec == NULL_TREE))
+		  || (caller_sec != NULL_TREE
+		      && strcmp (TREE_STRING_POINTER (caller_sec),
+				 TREE_STRING_POINTER (callee_sec)) != 0))
 		return false;
 	    }
-	  else if (caller_sec)
+	  else if (caller_sec != NULL_TREE)
 	    return false;
 	}
       return true;

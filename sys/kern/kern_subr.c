@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_subr.c,v 1.217 2016/05/12 02:24:16 ozaki-r Exp $	*/
+/*	$NetBSD: kern_subr.c,v 1.214.4.1 2016/07/05 19:06:48 snj Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998, 1999, 2002, 2007, 2008 The NetBSD Foundation, Inc.
@@ -79,7 +79,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_subr.c,v 1.217 2016/05/12 02:24:16 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_subr.c,v 1.214.4.1 2016/07/05 19:06:48 snj Exp $");
 
 #include "opt_ddb.h"
 #include "opt_md.h"
@@ -159,7 +159,6 @@ device_t booted_device;
 int booted_partition;
 daddr_t booted_startblk;
 uint64_t booted_nblks;
-char *bootspec;
 
 /*
  * Use partition letters if it's a disk class but not a wedge.
@@ -210,12 +209,6 @@ setroot(device_t bootdv, int bootpartition)
 	}
 
 	/*
-	 * Let bootcode augment "rootspec".
-	 */
-	if (rootspec == NULL)
-		rootspec = bootspec;
-
-	/*
 	 * If NFS is specified as the file system, and we found
 	 * a DV_DISK boot device (or no boot device at all), then
 	 * find a reasonable network interface for "rootspec".
@@ -224,8 +217,7 @@ setroot(device_t bootdv, int bootpartition)
 	if (vops != NULL && strcmp(rootfstype, MOUNT_NFS) == 0 &&
 	    rootspec == NULL &&
 	    (bootdv == NULL || device_class(bootdv) != DV_IFNET)) {
-		int s = pserialize_read_enter();
-		IFNET_READER_FOREACH(ifp) {
+		IFNET_FOREACH(ifp) {
 			if ((ifp->if_flags &
 			     (IFF_LOOPBACK|IFF_POINTOPOINT)) == 0)
 				break;
@@ -243,7 +235,6 @@ setroot(device_t bootdv, int bootpartition)
 			 */
 			rootspec = (const char *)ifp->if_xname;
 		}
-		pserialize_read_exit(s);
 	}
 	if (vops != NULL)
 		vfs_delref(vops);

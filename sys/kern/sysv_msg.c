@@ -1,4 +1,4 @@
-/*	$NetBSD: sysv_msg.c,v 1.70 2015/11/06 02:26:42 pgoyette Exp $	*/
+/*	$NetBSD: sysv_msg.c,v 1.66 2014/02/25 18:30:11 pooka Exp $	*/
 
 /*-
  * Copyright (c) 1999, 2006, 2007 The NetBSD Foundation, Inc.
@@ -50,11 +50,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sysv_msg.c,v 1.70 2015/11/06 02:26:42 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sysv_msg.c,v 1.66 2014/02/25 18:30:11 pooka Exp $");
 
-#ifdef _KERNEL_OPT
-#include "opt_sysv.h"
-#endif
+#define SYSVMSG
 
 #include <sys/param.h>
 #include <sys/kernel.h>
@@ -89,12 +87,8 @@ static kcondvar_t msg_realloc_cv;
 
 static void msg_freehdr(struct __msg *);
 
-extern int kern_has_sysvmsg;
-
-SYSCTL_SETUP_PROTO(sysctl_ipc_msg_setup);
-
 void
-msginit(struct sysctllog **clog)
+msginit(void)
 {
 	int i, sz;
 	vaddr_t v;
@@ -161,46 +155,7 @@ msginit(struct sysctllog **clog)
 	cv_init(&msg_realloc_cv, "msgrealc");
 	msg_realloc_state = false;
 
-	kern_has_sysvmsg = 1;
-
-#ifdef _MODULE
-	if (clog)
-		sysctl_ipc_msg_setup(clog);
-#endif
-}
-
-int
-msgfini(void)
-{
-	int i, sz;
-	vaddr_t v = (vaddr_t)msgpool;
-
-	mutex_enter(&msgmutex);
-	for (i = 0; i < msginfo.msgmni; i++) {
-		if (msqs[i].msq_u.msg_qbytes != 0) {
-			mutex_exit(&msgmutex);
-			return 1; /* queue not available, prevent unload! */
-		}
-	}
-/*
- * Destroy all condvars and free the memory we're using
- */
-	for (i = 0; i < msginfo.msgmni; i++) {
-		cv_destroy(&msqs[i].msq_cv);
-	}
-	sz = ALIGN(msginfo.msgmax) +
-	    ALIGN(msginfo.msgseg * sizeof(struct msgmap)) +
-	    ALIGN(msginfo.msgtql * sizeof(struct __msg)) +
-	    ALIGN(msginfo.msgmni * sizeof(kmsq_t));
-	sz = round_page(sz);
-	uvm_km_free(kernel_map, v, sz, UVM_KMF_WIRED);
-
-	mutex_exit(&msgmutex);
-	mutex_destroy(&msgmutex);
-
-	kern_has_sysvmsg = 0;
-
-	return 0;
+	sysvipcinit();
 }
 
 static int

@@ -1,5 +1,5 @@
 /* Simulator tracing/debugging support.
-   Copyright (C) 1997-2015 Free Software Foundation, Inc.
+   Copyright (C) 1997-2014 Free Software Foundation, Inc.
    Contributed by Cygnus Support.
 
 This file is part of GDB, the GNU debugger.
@@ -77,8 +77,7 @@ enum {
   OPTION_TRACE_DEBUG,
   OPTION_TRACE_FILE,
   OPTION_TRACE_VPU,
-  OPTION_TRACE_SYSCALL,
-  OPTION_TRACE_REGISTER
+  OPTION_TRACE_SYSCALL
 };
 
 static const OPTION trace_options[] =
@@ -103,19 +102,19 @@ static const OPTION trace_options[] =
       '\0', "on|off", "Trace memory operations",
       trace_option_handler, NULL },
   { {"trace-alu", optional_argument, NULL, OPTION_TRACE_ALU},
-      '\0', "on|off", "Trace ALU (Arithmetic Logic Unit) operations",
+      '\0', "on|off", "Trace ALU operations",
       trace_option_handler, NULL },
   { {"trace-fpu", optional_argument, NULL, OPTION_TRACE_FPU},
-      '\0', "on|off", "Trace FPU (Floating Point Unit) operations",
+      '\0', "on|off", "Trace FPU operations",
       trace_option_handler, NULL },
   { {"trace-vpu", optional_argument, NULL, OPTION_TRACE_VPU},
-      '\0', "on|off", "Trace VPU (Vector Processing Unit) operations",
+      '\0', "on|off", "Trace VPU operations",
       trace_option_handler, NULL },
   { {"trace-branch", optional_argument, NULL, OPTION_TRACE_BRANCH},
       '\0', "on|off", "Trace branching",
       trace_option_handler, NULL },
   { {"trace-semantics", optional_argument, NULL, OPTION_TRACE_SEMANTICS},
-      '\0', "on|off", "Perform ALU, FPU, VPU, MEMORY, and BRANCH tracing",
+      '\0', "on|off", "Perform ALU, FPU, MEMORY, and BRANCH tracing",
       trace_option_handler, NULL },
   { {"trace-model", optional_argument, NULL, OPTION_TRACE_MODEL},
       '\0', "on|off", "Include model performance data",
@@ -128,9 +127,6 @@ static const OPTION trace_options[] =
       trace_option_handler, NULL },
   { {"trace-syscall", optional_argument, NULL, OPTION_TRACE_SYSCALL},
       '\0', "on|off", "Trace system calls",
-      trace_option_handler, NULL },
-  { {"trace-register", optional_argument, NULL, OPTION_TRACE_REGISTER},
-      '\0', "on|off", "Trace cpu register accesses",
       trace_option_handler, NULL },
 #ifdef SIM_HAVE_ADDR_RANGE
   { {"trace-range", required_argument, NULL, OPTION_TRACE_RANGE},
@@ -177,14 +173,22 @@ set_trace_option_mask (SIM_DESC sd, const char *name, int mask, const char *arg)
 	}
     }
 
-  /* Update applicable trace bits.  */
+  /* update applicable trace bits */
   for (trace_nr = 0; trace_nr < MAX_TRACE_VALUES; ++trace_nr)
     {
       if ((mask & (1 << trace_nr)) == 0)
 	continue;
 
       /* Set non-cpu specific values.  */
-      STATE_TRACE_FLAGS (sd)[trace_nr] = trace_val;
+      switch (trace_nr)
+	{
+	case TRACE_EVENTS_IDX:
+	  STATE_EVENTS (sd)->trace = trace_val;
+	  break;
+	case TRACE_DEBUG_IDX:
+	  STATE_TRACE_FLAGS (sd)[trace_nr] = trace_val;
+	  break;
+	}
 
       /* Set cpu values.  */
       for (cpu_nr = 0; cpu_nr < MAX_NR_PROCESSORS; cpu_nr++)
@@ -236,7 +240,7 @@ trace_option_handler (SIM_DESC sd, sim_cpu *cpu, int opt,
   switch (opt)
     {
     case 't' :
-      if (!WITH_TRACE_ANY_P)
+      if (! WITH_TRACE)
 	sim_io_eprintf (sd, "Tracing not compiled in, `-t' ignored\n");
       else
 	return set_trace_option_mask (sd, "trace", TRACE_USEFUL_MASK, arg);
@@ -337,13 +341,6 @@ trace_option_handler (SIM_DESC sd, sim_cpu *cpu, int opt,
 	sim_io_eprintf (sd, "System call tracing not compiled in, `--trace-syscall' ignored\n");
       break;
 
-    case OPTION_TRACE_REGISTER :
-      if (WITH_TRACE_REGISTER_P)
-	return set_trace_option (sd, "-register", TRACE_REGISTER_IDX, arg);
-      else
-	sim_io_eprintf (sd, "Register tracing not compiled in, `--trace-register' ignored\n");
-      break;
-
     case OPTION_TRACE_SEMANTICS :
       if (WITH_TRACE_ALU_P
 	  && WITH_TRACE_FPU_P
@@ -363,7 +360,7 @@ trace_option_handler (SIM_DESC sd, sim_cpu *cpu, int opt,
 
 #ifdef SIM_HAVE_ADDR_RANGE
     case OPTION_TRACE_RANGE :
-      if (WITH_TRACE_ANY_P)
+      if (WITH_TRACE)
 	{
 	  int cpu_nr;
 	  char *chp = arg;
@@ -389,7 +386,7 @@ trace_option_handler (SIM_DESC sd, sim_cpu *cpu, int opt,
       break;
 
     case OPTION_TRACE_FUNCTION :
-      if (WITH_TRACE_ANY_P)
+      if (WITH_TRACE)
 	{
 	  /*wip: need to compute function range given name*/
 	}
@@ -406,7 +403,7 @@ trace_option_handler (SIM_DESC sd, sim_cpu *cpu, int opt,
       break;
 
     case OPTION_TRACE_FILE :
-      if (!WITH_TRACE_ANY_P)
+      if (! WITH_TRACE)
 	sim_io_eprintf (sd, "Tracing not compiled in, `--trace-file' ignored\n");
       else
 	{
@@ -614,18 +611,17 @@ trace_idx_to_str (int trace_idx)
   static char num[8];
   switch (trace_idx)
     {
-    case TRACE_ALU_IDX:      return "alu:     ";
-    case TRACE_INSN_IDX:     return "insn:    ";
-    case TRACE_DECODE_IDX:   return "decode:  ";
-    case TRACE_EXTRACT_IDX:  return "extract: ";
-    case TRACE_MEMORY_IDX:   return "memory:  ";
-    case TRACE_CORE_IDX:     return "core:    ";
-    case TRACE_EVENTS_IDX:   return "events:  ";
-    case TRACE_FPU_IDX:      return "fpu:     ";
-    case TRACE_BRANCH_IDX:   return "branch:  ";
-    case TRACE_SYSCALL_IDX:  return "syscall: ";
-    case TRACE_REGISTER_IDX: return "reg:     ";
-    case TRACE_VPU_IDX:      return "vpu:     ";
+    case TRACE_ALU_IDX:     return "alu:     ";
+    case TRACE_INSN_IDX:    return "insn:    ";
+    case TRACE_DECODE_IDX:  return "decode:  ";
+    case TRACE_EXTRACT_IDX: return "extract: ";
+    case TRACE_MEMORY_IDX:  return "memory:  ";
+    case TRACE_CORE_IDX:    return "core:    ";
+    case TRACE_EVENTS_IDX:  return "events:  ";
+    case TRACE_FPU_IDX:     return "fpu:     ";
+    case TRACE_BRANCH_IDX:  return "branch:  ";
+    case TRACE_SYSCALL_IDX: return "syscall: ";
+    case TRACE_VPU_IDX:     return "vpu:     ";
     default:
       sprintf (num, "?%d?", trace_idx);
       return num;
@@ -1218,12 +1214,107 @@ trace_vprintf (SIM_DESC sd, sim_cpu *cpu, const char *fmt, va_list ap)
     }
 }
 
+/* The function trace_one_insn has been replaced by the function pair
+   trace_prefix() + trace_generic().  It is still used. */
+void
+trace_one_insn (SIM_DESC sd, sim_cpu *cpu, address_word pc,
+		int line_p, const char *filename, int linenum,
+		const char *phase_wo_colon, const char *fmt,
+		...)
+{
+  va_list ap;
+  char phase[SIZE_PHASE+2];
+
+  strncpy (phase, phase_wo_colon, SIZE_PHASE);
+  strcat (phase, ":");
+
+  if (!line_p)
+    {
+      trace_printf (sd, cpu, "%-*s %s:%-*d 0x%.*lx ",
+		    SIZE_PHASE+1, phase,
+		    filename,
+		    SIZE_LINE_NUMBER, linenum,
+		    SIZE_PC, (long)pc);
+      va_start (ap, fmt);
+      trace_vprintf (sd, cpu, fmt, ap);
+      va_end (ap);
+      trace_printf (sd, cpu, "\n");
+    }
+  else
+    {
+      char buf[256];
+
+      buf[0] = 0;
+      if (STATE_TEXT_SECTION (CPU_STATE (cpu))
+	  && pc >= STATE_TEXT_START (CPU_STATE (cpu))
+	  && pc < STATE_TEXT_END (CPU_STATE (cpu)))
+	{
+	  const char *pc_filename = (const char *)0;
+	  const char *pc_function = (const char *)0;
+	  unsigned int pc_linenum = 0;
+
+	  if (bfd_find_nearest_line (STATE_PROG_BFD (CPU_STATE (cpu)),
+				     STATE_TEXT_SECTION (CPU_STATE (cpu)),
+				     (struct bfd_symbol **) 0,
+				     pc - STATE_TEXT_START (CPU_STATE (cpu)),
+				     &pc_filename, &pc_function, &pc_linenum))
+	    {
+	      char *p = buf;
+	      if (pc_linenum)
+		{
+		  sprintf (p, "#%-*d ", SIZE_LINE_NUMBER, pc_linenum);
+		  p += strlen (p);
+		}
+	      else
+		{
+		  sprintf (p, "%-*s ", SIZE_LINE_NUMBER+1, "---");
+		  p += SIZE_LINE_NUMBER+2;
+		}
+
+	      if (pc_function)
+		{
+		  sprintf (p, "%s ", pc_function);
+		  p += strlen (p);
+		}
+	      else if (pc_filename)
+		{
+		  char *q = (char *) strrchr (pc_filename, '/');
+		  sprintf (p, "%s ", (q) ? q+1 : pc_filename);
+		  p += strlen (p);
+		}
+
+	      if (*p == ' ')
+		*p = '\0';
+	    }
+	}
+
+      trace_printf (sd, cpu, "%-*s 0x%.*x %-*.*s ",
+		    SIZE_PHASE+1, phase,
+		    SIZE_PC, (unsigned) pc,
+		    SIZE_LOCATION, SIZE_LOCATION, buf);
+      va_start (ap, fmt);
+      trace_vprintf (sd, cpu, fmt, ap);
+      va_end (ap);
+      trace_printf (sd, cpu, "\n");
+    }
+}
+
 void
 trace_printf (SIM_DESC sd, sim_cpu *cpu, const char *fmt, ...)
 {
+#if !defined __STDC__ && !defined ALMOST_STDC
+  SIM_DESC sd;
+  sim_cpu *cpu;
+  const char *fmt;
+#endif
   va_list ap;
 
   va_start (ap, fmt);
+#if !defined __STDC__ && !defined ALMOST_STDC
+  sd = va_arg (ap, SIM_DESC);
+  cpu = va_arg (ap, sim_cpu *);
+  fmt = va_arg (ap, const char *);
+#endif
 
   trace_vprintf (sd, cpu, fmt, ap);
 
@@ -1231,11 +1322,19 @@ trace_printf (SIM_DESC sd, sim_cpu *cpu, const char *fmt, ...)
 }
 
 void
-sim_debug_printf (sim_cpu *cpu, const char *fmt, ...)
+debug_printf (sim_cpu *cpu, const char *fmt, ...)
 {
+#if !defined __STDC__ && !defined ALMOST_STDC
+  sim_cpu *cpu;
+  const char *fmt;
+#endif
   va_list ap;
 
   va_start (ap, fmt);
+#if !defined __STDC__ && !defined ALMOST_STDC
+  cpu = va_arg (ap, sim_cpu *);
+  fmt = va_arg (ap, const char *);
+#endif
 
   if (CPU_DEBUG_FILE (cpu) == NULL)
     (* STATE_CALLBACK (CPU_STATE (cpu))->evprintf_filtered)

@@ -1,4 +1,4 @@
-/*	$NetBSD: jobs.c,v 1.79 2016/05/07 20:07:47 kre Exp $	*/
+/*	$NetBSD: jobs.c,v 1.73.2.1 2015/11/04 17:58:38 riz Exp $	*/
 
 /*-
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
 #if 0
 static char sccsid[] = "@(#)jobs.c	8.5 (Berkeley) 5/4/95";
 #else
-__RCSID("$NetBSD: jobs.c,v 1.79 2016/05/07 20:07:47 kre Exp $");
+__RCSID("$NetBSD: jobs.c,v 1.73.2.1 2015/11/04 17:58:38 riz Exp $");
 #endif
 #endif /* not lint */
 
@@ -102,7 +102,6 @@ STATIC int waitproc(int, struct job *, int *);
 STATIC void cmdtxt(union node *);
 STATIC void cmdlist(union node *, int);
 STATIC void cmdputs(const char *);
-inline static void cmdputi(int);
 
 #ifdef SYSV
 STATIC int onsigchild(void);
@@ -162,7 +161,15 @@ setjobctl(int on)
 			if (i == 3)
 				goto out;
 		}
-		ttyfd = to_upper_fd(ttyfd);	/* Move to a high fd */
+		/* Move to a high fd */
+		for (i = 10; i > 2; i--) {
+			if ((err = fcntl(ttyfd, F_DUPFD, (1 << i) - 1)) != -1)
+				break;
+		}
+		if (err != -1) {
+			close(ttyfd);
+			ttyfd = err;
+		}
 #ifdef FIOCLEX
 		err = ioctl(ttyfd, FIOCLEX, 0);
 #elif FD_CLOEXEC
@@ -380,15 +387,6 @@ restartjob(struct job *jp)
 	INTON;
 }
 #endif
-
-inline static void
-cmdputi(int n)
-{
-	char str[20];
-
-	fmtstr(str, sizeof str, "%d", n);
-	cmdputs(str);
-}
 
 static void
 showjob(struct output *out, struct job *jp, int mode)
@@ -1259,6 +1257,7 @@ cmdtxt(union node *n)
 	struct nodelist *lp;
 	const char *p;
 	int i;
+	char s[2];
 
 	if (n == NULL || cmdnleft <= 0)
 		return;
@@ -1284,8 +1283,6 @@ cmdtxt(union node *n)
 			if (lp->next)
 				cmdputs(" | ");
 		}
-		if (n->npipe.backgnd)
-			cmdputs(" &");
 		break;
 	case NSUBSHELL:
 		cmdputs("(");
@@ -1346,8 +1343,6 @@ until:
 	case NCMD:
 		cmdlist(n->ncmd.args, 1);
 		cmdlist(n->ncmd.redirect, 0);
-		if (n->ncmd.backgnd)
-			cmdputs(" &");
 		break;
 	case NARG:
 		cmdputs(n->narg.text);
@@ -1367,14 +1362,16 @@ until:
 	case NFROMTO:
 		p = "<>";  i = 0;  goto redir;
 redir:
-		if (n->nfile.fd != i)
-			cmdputi(n->nfile.fd);
+		if (n->nfile.fd != i) {
+			s[0] = n->nfile.fd + '0';
+			s[1] = '\0';
+			cmdputs(s);
+		}
 		cmdputs(p);
 		if (n->type == NTOFD || n->type == NFROMFD) {
-			if (n->ndup.dupfd < 0)
-				cmdputs("-");
-			else
-				cmdputi(n->ndup.dupfd);
+			s[0] = n->ndup.dupfd + '0';
+			s[1] = '\0';
+			cmdputs(s);
 		} else {
 			cmdtxt(n->nfile.fname);
 		}

@@ -1,4 +1,4 @@
-# $NetBSD: XEN3_DOM0,v 1.120 2016/07/27 07:05:40 msaitoh Exp $
+# $NetBSD: XEN3_DOM0,v 1.103.2.4 2015/07/22 16:53:34 snj Exp $
 
 include 	"arch/amd64/conf/std.xen"
 
@@ -47,8 +47,9 @@ options 	SYSCTL_INCLUDE_DESCR	# Include sysctl descriptions in kernel
 options 	BUFQ_PRIOCSCAN
 
 # Diagnostic/debugging support options
-options 	DIAGNOSTIC	# inexpensive kernel consistency checks
+#options 	DIAGNOSTIC	# inexpensive kernel consistency checks
 #options 	DEBUG		# expensive debugging checks/support
+#options 	KMEMSTATS	# kernel memory statistics (vmstat -m)
 options 	DDB		# in-kernel debugger
 options 	DDB_ONPANIC=1	# see also sysctl(7): `ddb.onpanic'
 options 	DDB_HISTORY_SIZE=512	# enable history editing in DDB
@@ -59,16 +60,15 @@ makeoptions	COPTS="-O2 -fno-omit-frame-pointer"
 options DDB_COMMANDONENTER="trace;show registers"
 
 # Compatibility options
-options 	COMPAT_43	# 4.3BSD binary compatibility.
-options 	COMPAT_15	# NetBSD 1.5,
+options 	COMPAT_15	# compatibility with NetBSD 1.5,
 options 	COMPAT_16	# NetBSD 1.6,
 options 	COMPAT_20	# NetBSD 2.0,
 options 	COMPAT_30	# NetBSD 3.0,
-options 	COMPAT_40	# NetBSD 4.0,
-options 	COMPAT_50	# NetBSD 5.0,
-options 	COMPAT_60	# NetBSD 6.0, and
-options 	COMPAT_70	# NetBSD 7.0 binary compatibility.
+options 	COMPAT_40	# NetBSD 4.0 compatibility.
+options 	COMPAT_43	# and 4.3BSD
 #options 	COMPAT_386BSD_MBRPART # recognize old partition ID
+options 	COMPAT_50	# NetBSD 5.0
+options 	COMPAT_60	# NetBSD 6.0 compatibility.
 
 options 	COMPAT_OSSAUDIO
 options 	COMPAT_NETBSD32
@@ -80,9 +80,9 @@ options 	COMPAT_BSDPTY	# /dev/[pt]ty?? ptys.
 # Wedge support
 options 	DKWEDGE_AUTODISCOVER	# Automatically add dk(4) instances
 options 	DKWEDGE_METHOD_GPT	# Supports GPT partitions as wedges
+# The following two options can break /etc/fstab, so handle with care
 #options 	DKWEDGE_METHOD_BSDLABEL	# Support disklabel entries as wedges
 #options 	DKWEDGE_METHOD_MBR	# Support MBR partitions as wedges
-options		DKWEDGE_METHOD_APPLE    # Support Apple partitions as wedges
 
 # File systems
 file-system 	FFS		# UFS
@@ -219,7 +219,6 @@ options 	MPBIOS_SCANPCI		# MPBIOS configures PCI roots
 #options 	PCI_INTR_FIXUP		# fixup PCI interrupt routing
 #options 	PCIVERBOSE		# verbose PCI device autoconfig messages
 #options 	USBVERBOSE		# verbose USB device autoconfig messages
-#options 	HDAUDIOVERBOSE		# verbose HDAUDIO driver messages
 
 ioapic* 	at mainbus? apid ?
 
@@ -255,7 +254,6 @@ ichlpcib* at pci? dev ? function ?	# Intel ICH PCI-ISA w/ timecounter,
 					# watchdog and SpeedStep support
 pcib*	at pci? dev ? function ?	# PCI-ISA bridges
 pchb*	at pci? dev ? function ?	# PCI-Host bridges
-options 	AGP_X86
 ppb*	at pci? dev ? function ?	# PCI-PCI bridges
 # XXX 'puc's aren't really bridges, but there's no better place for them here
 puc*	at pci? dev ? function ?	# PCI "universal" comm. cards
@@ -301,32 +299,10 @@ amdtemp* at amdnb_misc?			# AMD CPU Temperature sensors
 amdpm*	at pci? dev ? function ?	# RNG and SMBus 1.0 interface
 #iic*	at amdpm?			# sensors below are on this bus
 
-# Intel ICH SMBus controller
-ichsmb* at pci? dev ? function ?
-iic*	at ichsmb?
-
 # Thermal monitor and fan controller
 #dbcool* at iic? addr 0x2C		# Unknown other motherboard(s)
 #dbcool* at iic? addr 0x2D		# Tyan S2881
 #dbcool* at iic? addr 0x2E		# Tyan S2882-D
-
-# Serial Presence Detect capable memory modules
-#spdmem* at iic? addr 0x50
-#spdmem* at iic? addr 0x51
-#spdmem* at iic? addr 0x52
-#spdmem* at iic? addr 0x53
-#spdmem* at iic? addr 0x54
-#spdmem* at iic? addr 0x55
-#spdmem* at iic? addr 0x56
-#spdmem* at iic? addr 0x57
-#sdtemp* at iic? addr 0x18
-#sdtemp* at iic? addr 0x19
-#sdtemp* at iic? addr 0x1a
-#sdtemp* at iic? addr 0x1b
-#sdtemp* at iic? addr 0x1c
-#sdtemp* at iic? addr 0x1d
-#sdtemp* at iic? addr 0x1e
-#sdtemp* at iic? addr 0x1f
 
 # Winbond LPC Super I/O
 #wbsio*	at isa? port 0x2e
@@ -364,7 +340,6 @@ hme*	at pci? dev ? function ?	# Sun Microelectronics STP2002-STQ
 ipw*	at pci? dev ? function ?	# Intel PRO/Wireless 2100
 iwi*	at pci? dev ? function ?	# Intel PRO/Wireless 2200BG
 iwn*	at pci? dev ? function ?	# Intel PRO/Wireless 4965AGN
-iwm*	at pci? dev ? function ?	# Intel Wireless WiFi Link 7xxx
 jme*	at pci? dev ? function ?	# JMicron JMC2[56]0 ethernet
 le*	at pci? dev ? function ?	# PCnet-PCI Ethernet
 lii*	at pci? dev ? function ?	# Atheros L2 Fast-Ethernet
@@ -551,10 +526,6 @@ ld*	at mlx? unit ?
 
 icpsp*	at icp? unit ?			# SCSI pass-through
 
-# NVM Express controllers and devices
-nvme*	at pci? dev ? function ?
-ld*	at nvme? nsid ?
-
 # wscons
 pckbc0		at isa?			# pc keyboard controller
 pckbd*		at pckbc?		# PC keyboard
@@ -687,7 +658,7 @@ ukyopon* at uhub? port ?
 ucom*	at ukyopon? portno ?
 
 # USB scanners
-#uscanner* at uhub? port ?
+uscanner* at uhub? port ?
 
 # USB scanners that use SCSI emulation, e.g., HP5300
 usscanner* at uhub? port ?
@@ -861,9 +832,6 @@ pseudo-device	vcoda			# coda minicache <-> venus comm.
 # a pseudo device needed for SMBFS
 pseudo-device	nsmb			# experimental - SMB requester
 
-# iSCSI initiator
-#pseudo-device	iscsi
-
 # wscons pseudo-devices
 pseudo-device	wsmux			# mouse & keyboard multiplexor
 pseudo-device	wsfont
@@ -876,8 +844,5 @@ pseudo-device	xenevt
 pseudo-device	xvif
 pseudo-device	xbdback
 
-options 	PAX_MPROTECT=1		# PaX mprotect(2) restrictions
-options 	PAX_ASLR=1		# PaX Address Space Layout Randomization
-
-# Atheros HAL options
-include "external/isc/atheros_hal/conf/std.ath_hal"
+options 	PAX_MPROTECT=0		# PaX mprotect(2) restrictions
+options 	PAX_ASLR=0		# PaX Address Space Layout Randomization

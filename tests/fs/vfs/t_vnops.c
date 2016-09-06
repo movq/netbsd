@@ -1,4 +1,4 @@
-/*	$NetBSD: t_vnops.c,v 1.57 2016/08/21 13:23:36 christos Exp $	*/
+/*	$NetBSD: t_vnops.c,v 1.40.2.1 2015/01/17 11:51:33 martin Exp $	*/
 
 /*-
  * Copyright (c) 2010 The NetBSD Foundation, Inc.
@@ -31,7 +31,6 @@
 
 #include <assert.h>
 #include <atf-c.h>
-#include <ctype.h>
 #include <fcntl.h>
 #include <libgen.h>
 #include <stdlib.h>
@@ -55,10 +54,10 @@
 	atf_tc_skip("symlinks not supported by file system")
 
 static char *
-md(char *buf, size_t buflen, const char *base, const char *tail)
+md(char *buf, const char *base, const char *tail)
 {
 
-	snprintf(buf, buflen, "%s/%s", base, tail);
+	sprintf(buf, "%s/%s", base, tail);
 	return buf;
 }
 
@@ -69,11 +68,11 @@ lookup_simple(const atf_tc_t *tc, const char *mountpath)
 	struct stat sb1, sb2;
 
 	strcpy(final, mountpath);
-	snprintf(pb, sizeof(pb), "%s/../%s", mountpath, basename(final));
+	sprintf(pb, "%s/../%s", mountpath, basename(final));
 	if (rump_sys_stat(pb, &sb1) == -1)
 		atf_tc_fail_errno("stat 1");
 
-	snprintf(pb, sizeof(pb), "%s/./../%s", mountpath, basename(final));
+	sprintf(pb, "%s/./../%s", mountpath, basename(final));
 	if (rump_sys_stat(pb, &sb2) == -1)
 		atf_tc_fail_errno("stat 2");
 
@@ -91,13 +90,13 @@ lookup_complex(const atf_tc_t *tc, const char *mountpath)
 	if (FSTYPE_UDF(tc))
 		atf_tc_expect_fail("PR kern/49033");
 
-	snprintf(pb, sizeof(pb), "%s/dir", mountpath);
+	sprintf(pb, "%s/dir", mountpath);
 	if (rump_sys_mkdir(pb, 0777) == -1)
 		atf_tc_fail_errno("mkdir");
 	if (rump_sys_stat(pb, &sb1) == -1)
 		atf_tc_fail_errno("stat 1");
 
-	snprintf(pb, sizeof(pb), "%s/./dir/../././dir/.", mountpath);
+	sprintf(pb, "%s/./dir/../././dir/.", mountpath);
 	if (rump_sys_stat(pb, &sb2) == -1)
 		atf_tc_fail_errno("stat 2");
 
@@ -119,10 +118,10 @@ lookup_complex(const atf_tc_t *tc, const char *mountpath)
 		FIELD(st_uid);
 		FIELD(st_gid);
 		FIELD(st_rdev);
-		TIME(st_atimespec);
-		TIME(st_mtimespec);
-		TIME(st_ctimespec);
-		TIME(st_birthtimespec);
+		TIME(st_atim);
+		TIME(st_mtim);
+		TIME(st_ctim);
+		TIME(st_birthtim);
 		FIELD(st_size);
 		FIELD(st_blocks);
 		FIELD(st_flags);
@@ -147,7 +146,7 @@ dir_simple(const atf_tc_t *tc, const char *mountpath)
 	USES_DIRS;
 
 	/* check we can create directories */
-	snprintf(pb, sizeof(pb), "%s/dir", mountpath);
+	sprintf(pb, "%s/dir", mountpath);
 	if (rump_sys_mkdir(pb, 0777) == -1)
 		atf_tc_fail_errno("mkdir");
 	if (rump_sys_stat(pb, &sb) == -1)
@@ -169,17 +168,19 @@ dir_notempty(const atf_tc_t *tc, const char *mountpath)
 	USES_DIRS;
 
 	/* check we can create directories */
-	snprintf(pb, sizeof(pb), "%s/dir", mountpath);
+	sprintf(pb, "%s/dir", mountpath);
 	if (rump_sys_mkdir(pb, 0777) == -1)
 		atf_tc_fail_errno("mkdir");
 
-	snprintf(pb2, sizeof(pb2), "%s/dir/file", mountpath);
+	sprintf(pb2, "%s/dir/file", mountpath);
 	fd = rump_sys_open(pb2, O_RDWR | O_CREAT, 0777);
 	if (fd == -1)
 		atf_tc_fail_errno("create file");
 	rump_sys_close(fd);
 
 	rv = rump_sys_rmdir(pb);
+	if (FSTYPE_ZFS(tc))
+		atf_tc_expect_fail("PR kern/47656: Test known to be broken");
 	if (rv != -1 || errno != ENOTEMPTY)
 		atf_tc_fail("non-empty directory removed succesfully");
 
@@ -205,9 +206,9 @@ dir_rmdirdotdot(const atf_tc_t *tc, const char *mp)
 	RL(rump_sys_mkdir("subtest", 0777));
 	RL(rump_sys_chdir("subtest"));
 
-	md(pb, sizeof(pb), mp, "test/subtest");
+	md(pb, mp, "test/subtest");
 	RL(rump_sys_rmdir(pb));
-	md(pb, sizeof(pb), mp, "test");
+	md(pb, mp, "test");
 	RL(rump_sys_rmdir(pb));
 
 	if (FSTYPE_NFS(tc))
@@ -225,7 +226,7 @@ checkfile(const char *path, struct stat *refp)
 	struct stat sb;
 	static int n = 1;
 
-	md(buf, sizeof(buf), path, "file");
+	md(buf, path, "file");
 	if (rump_sys_stat(buf, &sb) == -1)
 		atf_tc_fail_errno("cannot stat file %d (%s)", n, buf);
 	if (memcmp(&sb, refp, sizeof(sb)) != 0)
@@ -244,18 +245,18 @@ rename_dir(const atf_tc_t *tc, const char *mp)
 
 	USES_DIRS;
 
-	md(pb1, sizeof(pb1), mp, "dir1");
+	md(pb1, mp, "dir1");
 	if (rump_sys_mkdir(pb1, 0777) == -1)
 		atf_tc_fail_errno("mkdir 1");
 
-	md(pb2, sizeof(pb2), mp, "dir2");
+	md(pb2, mp, "dir2");
 	if (rump_sys_mkdir(pb2, 0777) == -1)
 		atf_tc_fail_errno("mkdir 2");
-	md(pb2, sizeof(pb2), mp, "dir2/subdir");
+	md(pb2, mp, "dir2/subdir");
 	if (rump_sys_mkdir(pb2, 0777) == -1)
 		atf_tc_fail_errno("mkdir 3");
 
-	md(pb3, sizeof(pb3), mp, "dir1/file");
+	md(pb3, mp, "dir1/file");
 	if (rump_sys_mknod(pb3, S_IFREG | 0777, -1) == -1)
 		atf_tc_fail_errno("create file");
 	if (rump_sys_stat(pb3, &ref) == -1)
@@ -266,28 +267,30 @@ rename_dir(const atf_tc_t *tc, const char *mp)
 	 */
 
 	/* rename within directory */
-	md(pb3, sizeof(pb3), mp, "dir3");
+	md(pb3, mp, "dir3");
 	if (rump_sys_rename(pb1, pb3) == -1)
 		atf_tc_fail_errno("rename 1");
 	checkfile(pb3, &ref);
 
 	/* rename directory onto itself (two ways, should fail) */
-	md(pb1, sizeof(pb1), mp, "dir3/.");
+	md(pb1, mp, "dir3/.");
 	if (rump_sys_rename(pb1, pb3) != -1 || errno != EINVAL)
 		atf_tc_fail_errno("rename 2");
+	if (FSTYPE_ZFS(tc))
+		atf_tc_expect_fail("PR kern/47656: Test known to be broken");
 	if (rump_sys_rename(pb3, pb1) != -1 || errno != EISDIR)
 		atf_tc_fail_errno("rename 3");
 
 	checkfile(pb3, &ref);
 
 	/* rename father of directory into directory */
-	md(pb1, sizeof(pb1), mp, "dir2/dir");
-	md(pb2, sizeof(pb2), mp, "dir2");
+	md(pb1, mp, "dir2/dir");
+	md(pb2, mp, "dir2");
 	if (rump_sys_rename(pb2, pb1) != -1 || errno != EINVAL)
 		atf_tc_fail_errno("rename 4");
 
 	/* same for grandfather */
-	md(pb1, sizeof(pb1), mp, "dir2/subdir/dir2");
+	md(pb1, mp, "dir2/subdir/dir2");
 	if (rump_sys_rename(pb2, pb1) != -1 || errno != EINVAL)
 		atf_tc_fail("rename 5");
 
@@ -298,29 +301,29 @@ rename_dir(const atf_tc_t *tc, const char *mp)
 		atf_tc_fail("rename 6");
 
 	/* cross-directory rename */
-	md(pb1, sizeof(pb1), mp, "dir3");
-	md(pb2, sizeof(pb2), mp, "dir2/somedir");
+	md(pb1, mp, "dir3");
+	md(pb2, mp, "dir2/somedir");
 	if (rump_sys_rename(pb1, pb2) == -1)
 		atf_tc_fail_errno("rename 7");
 	checkfile(pb2, &ref);
 
 	/* move to parent directory */
-	md(pb1, sizeof(pb1), mp, "dir2/somedir/../../dir3");
+	md(pb1, mp, "dir2/somedir/../../dir3");
 	if (rump_sys_rename(pb2, pb1) == -1)
 		atf_tc_fail_errno("rename 8");
-	md(pb1, sizeof(pb1), mp, "dir2/../dir3");
+	md(pb1, mp, "dir2/../dir3");
 	checkfile(pb1, &ref);
 
 	/* atomic cross-directory rename */
-	md(pb3, sizeof(pb3), mp, "dir2/subdir");
+	md(pb3, mp, "dir2/subdir");
 	if (rump_sys_rename(pb1, pb3) == -1)
 		atf_tc_fail_errno("rename 9");
 	checkfile(pb3, &ref);
 
 	/* rename directory over an empty directory */
-	md(pb1, sizeof(pb1), mp, "parent");
-	md(pb2, sizeof(pb2), mp, "parent/dir1");
-	md(pb3, sizeof(pb3), mp, "parent/dir2");
+	md(pb1, mp, "parent");
+	md(pb2, mp, "parent/dir1");
+	md(pb3, mp, "parent/dir2");
 	RL(rump_sys_mkdir(pb1, 0777));
 	RL(rump_sys_mkdir(pb2, 0777));
 	RL(rump_sys_mkdir(pb3, 0777));
@@ -439,78 +442,6 @@ rename_reg_nodir(const atf_tc_t *tc, const char *mp)
 	rump_sys_chdir("/");
 }
 
-/* PR kern/50607 */
-static void
-create_many(const atf_tc_t *tc, const char *mp)
-{
-	char buf[64];
-	int nfiles = 2324; /* #Nancy */
-	int i;
-
-	/* takes forever with many files */
-	if (FSTYPE_MSDOS(tc))
-		nfiles /= 4;
-
-	RL(rump_sys_chdir(mp));
-
-	if (FSTYPE_SYSVBFS(tc)) {
-		/* fs doesn't support many files or subdirectories */
-		nfiles = 5;
-	} else {
-		/* msdosfs doesn't like many entries in the root directory */
-		RL(rump_sys_mkdir("subdir", 0777));
-		RL(rump_sys_chdir("subdir"));
-	}
-
-	/* create them */
-#define TESTFN "testfile"
-	for (i = 0; i < nfiles; i++) {
-		int fd;
-
-		snprintf(buf, sizeof(buf), TESTFN "%d", i);
-		RL(fd = rump_sys_open(buf, O_RDWR|O_CREAT|O_EXCL, 0666));
-		RL(rump_sys_close(fd));
-	}
-
-	/* wipe them out */
-	for (i = 0; i < nfiles; i++) {
-		snprintf(buf, sizeof(buf), TESTFN "%d", i);
-		RLF(rump_sys_unlink(buf), "%s", buf);
-	}
-#undef TESTFN
-
-	rump_sys_chdir("/");
-}
-
-/*
- * Test creating files with one-character names using all possible
- * character values.  Failures to create the file are ignored as the
- * characters allowed in file names vary by file system, but at least
- * we can check that the fs does not crash, and if the file is
- * successfully created, unlinking it should also succeed.
- */
-static void
-create_nonalphanum(const atf_tc_t *tc, const char *mp)
-{
-	char buf[64];
-	int i;
-
-	RL(rump_sys_chdir(mp));
-
-	for (i = 0; i < 256; i++) {
-		int fd;
-		snprintf(buf, sizeof(buf), "%c", i);
-		fd = rump_sys_open(buf, O_RDWR|O_CREAT|O_EXCL, 0666);
-		if (fd == -1)
-			continue;
-		RLF(rump_sys_close(fd), "%d", fd);
-		RLF(rump_sys_unlink(buf), "%s", buf);
-	}
-	printf("\n");
-
-	rump_sys_chdir("/");
-}
-
 static void
 create_nametoolong(const atf_tc_t *tc, const char *mp)
 {
@@ -620,55 +551,16 @@ rename_nametoolong(const atf_tc_t *tc, const char *mp)
 	rump_sys_chdir("/");
 }
 
-/*
- * Test creating a symlink whose length is "len" bytes, not including
- * the terminating NUL.
- */
-static void
-symlink_len(const atf_tc_t *tc, const char *mp, size_t len)
-{
-	char *buf;
-	int r;
-
-	USES_SYMLINKS;
-
-	RLF(rump_sys_chdir(mp), "%s", mp);
-
-	buf = malloc(len + 1);
-	ATF_REQUIRE(buf);
-	memset(buf, 'a', len);
-	buf[len] = '\0';
-	r = rump_sys_symlink(buf, "afile");
-	if (r == -1) {
-		ATF_REQUIRE_ERRNO(ENAMETOOLONG, r);
-	} else {
-		RL(rump_sys_unlink("afile"));
-	}
-	free(buf);
-
-	RL(rump_sys_chdir("/"));
-}
-
 static void
 symlink_zerolen(const atf_tc_t *tc, const char *mp)
 {
-	symlink_len(tc, mp, 0);
-}
 
-static void
-symlink_long(const atf_tc_t *tc, const char *mp)
-{
-	/*
-	 * Test lengths close to powers of two, as those are likely
-	 * to be edge cases.
-	 */
-	size_t len;
-	int fuzz;
-	for (len = 2; len <= 65536; len *= 2) {
-		for (fuzz = -1; fuzz <= 1; fuzz++) {
-			symlink_len(tc, mp, len + fuzz);
-		}
-	}
+	USES_SYMLINKS;
+
+	RL(rump_sys_chdir(mp));
+
+	RL(rump_sys_symlink("", "afile"));
+	RL(rump_sys_chdir("/"));
 }
 
 static void
@@ -714,6 +606,8 @@ attrs(const atf_tc_t *tc, const char *mp)
 
 	RL(rump_sys_stat(TESTFILE, &sb2));
 #define CHECK(a) ATF_REQUIRE_EQ(sb.a, sb2.a)
+	if (FSTYPE_ZFS(tc))
+		atf_tc_expect_fail("PR kern/47656: Test known to be broken");
 	if (!(FSTYPE_MSDOS(tc) || FSTYPE_SYSVBFS(tc))) {
 		CHECK(st_uid);
 		CHECK(st_gid);
@@ -751,6 +645,9 @@ fcntl_lock(const atf_tc_t *tc, const char *mp)
 	RL(fd = rump_sys_open(TESTFILE, O_RDWR | O_CREAT, 0755));
 	RL(rump_sys_ftruncate(fd, 8192));
 
+	/* PR kern/43321 */
+	if (FSTYPE_ZFS(tc))
+		atf_tc_expect_fail("PR kern/47656: Test known to be broken");
 	RL(rump_sys_fcntl(fd, F_SETLK, &l));
 
 	/* Next, we fork and try to lock the same area */
@@ -884,6 +781,9 @@ fcntl_getlock_pids(const atf_tc_t *tc, const char *mp)
 
 		RL(rump_sys_ftruncate(fd[i], sz));
 
+		if (FSTYPE_ZFS(tc))
+			atf_tc_expect_fail("PR kern/47656: Test known to be "
+			    "broken");
 		if (i < __arraycount(lock)) {
 			RL(rump_sys_fcntl(fd[i], F_SETLK, &lock[i]));
 			expect[i].l_pid = pid[i];
@@ -992,7 +892,6 @@ lstat_symlink(const atf_tc_t *tc, const char *mp)
 	struct stat st;
 
 	USES_SYMLINKS;
-
 	FSTEST_ENTER();
 
 	src = "source";
@@ -1021,8 +920,7 @@ ATF_TC_FSAPPLY(rename_reg_nodir, "rename regular files, no subdirectories");
 ATF_TC_FSAPPLY(create_nametoolong, "create file with name too long");
 ATF_TC_FSAPPLY(create_exist, "create with O_EXCL");
 ATF_TC_FSAPPLY(rename_nametoolong, "rename to file with name too long");
-ATF_TC_FSAPPLY(symlink_zerolen, "symlink with target of length 0");
-ATF_TC_FSAPPLY(symlink_long, "symlink with target of length > 0");
+ATF_TC_FSAPPLY(symlink_zerolen, "symlink with 0-len target");
 ATF_TC_FSAPPLY(symlink_root, "symlink to root directory");
 ATF_TC_FSAPPLY(attrs, "check setting attributes works");
 ATF_TC_FSAPPLY(fcntl_lock, "check fcntl F_SETLK");
@@ -1030,11 +928,6 @@ ATF_TC_FSAPPLY(fcntl_getlock_pids,"fcntl F_GETLK w/ many procs, PR kern/44494");
 ATF_TC_FSAPPLY(access_simple, "access(2)");
 ATF_TC_FSAPPLY(read_directory, "read(2) on directories");
 ATF_TC_FSAPPLY(lstat_symlink, "lstat(2) values for symbolic links");
-
-#undef FSTEST_IMGSIZE
-#define FSTEST_IMGSIZE (1024*1024*64)
-ATF_TC_FSAPPLY(create_many, "create many directory entries");
-ATF_TC_FSAPPLY(create_nonalphanum, "non-alphanumeric filenames");
 
 ATF_TP_ADD_TCS(tp)
 {
@@ -1047,13 +940,10 @@ ATF_TP_ADD_TCS(tp)
 	ATF_TP_FSAPPLY(rename_dir);
 	ATF_TP_FSAPPLY(rename_dotdot);
 	ATF_TP_FSAPPLY(rename_reg_nodir);
-	ATF_TP_FSAPPLY(create_many);
-	ATF_TP_FSAPPLY(create_nonalphanum);
 	ATF_TP_FSAPPLY(create_nametoolong);
 	ATF_TP_FSAPPLY(create_exist);
 	ATF_TP_FSAPPLY(rename_nametoolong);
 	ATF_TP_FSAPPLY(symlink_zerolen);
-	ATF_TP_FSAPPLY(symlink_long);
 	ATF_TP_FSAPPLY(symlink_root);
 	ATF_TP_FSAPPLY(attrs);
 	ATF_TP_FSAPPLY(fcntl_lock);

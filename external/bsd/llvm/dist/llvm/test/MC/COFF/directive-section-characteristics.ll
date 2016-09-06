@@ -7,13 +7,7 @@ entry:
 }
 
 ; CHECK: Section {
-; CHECK:   Name: .text
-; CHECK:   PointerToRawData: 0xB4
-; CHECK: }
-
-; CHECK: Section {
 ; CHECK:   Name: .drectve
-; CHECK:   PointerToRawData: 0xB8
 ; CHECK:   Characteristics [
 ; CHECK:     IMAGE_SCN_ALIGN_1BYTES
 ; CHECK:     IMAGE_SCN_LNK_INFO

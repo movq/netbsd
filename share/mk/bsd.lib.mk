@@ -1,4 +1,4 @@
-#	$NetBSD: bsd.lib.mk,v 1.367 2016/03/12 23:08:58 mrg Exp $
+#	$NetBSD: bsd.lib.mk,v 1.355.2.1 2015/06/05 17:03:43 snj Exp $
 #	@(#)bsd.lib.mk	8.3 (Berkeley) 4/22/94
 
 .include <bsd.init.mk>
@@ -42,8 +42,7 @@ realinstall:	checkver libinstall
 # XXX: This is needed for programs that link with .a libraries
 # Perhaps a more correct solution is to always generate _pic.a
 # files or always have a shared library.
-# XXX: This breaks profiling (__mcount relocation is wrong)
-.if defined(MKPIE) && (${MKPIE} != "no") && !defined(NOPIE)
+.if defined(MKPIE) && (${MKPIE} != "no")
 CFLAGS+=        ${PIE_CFLAGS}
 AFLAGS+=        ${PIE_AFLAGS}
 .endif
@@ -65,7 +64,7 @@ DPADD+=		${LIBDO.${_lib}}/lib${_lib}.so	# Don't use _LIB_PREFIX
 .endif									# }
 
 ##### Build and install rules
-MKDEP_SUFFIXES?=	.o .po .pico .go .ln .d
+MKDEP_SUFFIXES?=	.o .po .pico .go .ln
 
 .if !defined(SHLIB_MAJOR) && exists(${SHLIB_VERSION_FILE})		# {
 SHLIB_MAJOR != . ${SHLIB_VERSION_FILE} ; echo $$major
@@ -157,7 +156,7 @@ MKSHLIBOBJS= yes
 MKSHLIBOBJS= no
 .endif
 
-.if (${MKDEBUG:Uno} != "no" && !defined(NODEBUG)) || \
+.if (defined(MKDEBUG) && (${MKDEBUG} != "no")) || \
     (defined(CFLAGS) && !empty(CFLAGS:M*-g*))
 # We only add -g to the shared library objects
 # because we don't currently split .a archives.
@@ -188,7 +187,7 @@ FFLAGS+=	${FOPTS}
 .if defined(CTFCONVERT)
 .if defined(CFLAGS) && !empty(CFLAGS:M*-g*)
 CTFFLAGS+=	-g
-.if defined(HAVE_GCC)
+.if defined(HAVE_GCC) && ${HAVE_GCC} >= 48
 #CFLAGS+=	-gdwarf-2
 .endif
 .endif
@@ -408,7 +407,7 @@ _LIB.so:=${_LIB}.so
 _LIB.so.major:=${_LIB}.so.${SHLIB_MAJOR}
 _LIB.so.full:=${_LIB}.so.${SHLIB_FULLVERSION}
 _LIB.so.link:=${_LIB}.so.${SHLIB_FULLVERSION}.link
-.if ${MKDEBUG:Uno} != "no" && !defined(NODEBUG)
+.if ${MKDEBUG} != "no"
 _LIB.so.debug:=${_LIB.so.full}.debug
 .endif
 .endif

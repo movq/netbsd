@@ -1,4 +1,4 @@
-/*	$NetBSD: device.c,v 1.13 2016/06/08 01:11:49 christos Exp $	*/
+/*	$NetBSD: device.c,v 1.12 2011/08/30 19:49:10 joerg Exp $	*/
 
 /*
  * Copyright (c) 1993-95 Mats O Jansson.  All rights reserved.
@@ -24,9 +24,9 @@
  * THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
  */
 
-#include "port.h"
+#include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: device.c,v 1.13 2016/06/08 01:11:49 christos Exp $");
+__RCSID("$NetBSD: device.c,v 1.12 2011/08/30 19:49:10 joerg Exp $");
 #endif
 
 #include "os.h"
@@ -40,6 +40,7 @@ struct	if_info *iflist;		/* Interface List		*/
 
 void	deviceOpen(const char *, u_short, int);
 
+#ifdef	DEV_NEW_CONF
 /*
  * Return ethernet address for interface
  */
@@ -47,20 +48,6 @@ void	deviceOpen(const char *, u_short, int);
 void
 deviceEthAddr(const char *ifname, u_char *eaddr)
 {
-#ifndef AF_LINK
-	int fd;
-	struct ifreq ifr;
-
-	/* Use datagram socket to get Ethernet address. */
-	if ((fd = socket(AF_INET, SOCK_DGRAM, 0)) == -1)
-		mopLogErr("deviceEthAddr: socket");
-
-	strncpy(ifr.ifr_name, ifname, sizeof(ifr.ifr_name));
-	if (ioctl(fd, SIOCGIFHWADDR, &ifr) == -1)
-		mopLogErr("deviceEthAddr: SIOGIFHWADDR");
-	memcpy(eaddr, ifr.ifr_hwaddr.sa_data, 6);
-	close(fd);
-#else
 	struct sockaddr_dl *sdl;
 	struct ifaddrs *ifap, *ifa;
 
@@ -81,8 +68,8 @@ deviceEthAddr(const char *ifname, u_char *eaddr)
 
 	freeifaddrs(ifap);
 	mopLogErrX("deviceEthAddr: Never saw interface `%s'!", ifname);
-#endif
 }
+#endif	/* DEV_NEW_CONF */
 
 void
 deviceOpen(const char *ifname, u_short proto, int trans)
@@ -106,7 +93,7 @@ deviceOpen(const char *ifname, u_short proto, int trans)
 	}
 	
 	if (tmp.fd != -1) {
-		p = malloc(sizeof(*p));
+		p = (struct if_info *)malloc(sizeof(*p));
 		if (p == 0)
 			mopLogErr("deviceOpen: malloc");
 	
@@ -233,19 +220,18 @@ deviceInitOne(const char *ifname)
 void
 deviceInitAll(void)
 {
+#ifdef	DEV_NEW_CONF
+	struct sockaddr_dl *sdl;
 	struct ifaddrs *ifap, *ifa;
 
 	if (getifaddrs(&ifap) != 0)
 		mopLogErr("deviceInitAll: socket");
 
 	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
-#ifdef	AF_LINK
-		struct sockaddr_dl *sdl;
 		sdl = (struct sockaddr_dl *)ifa->ifa_addr;
 		if (sdl->sdl_family != AF_LINK || sdl->sdl_type != IFT_ETHER ||
 		    sdl->sdl_alen != 6)
 			continue;
-#endif
 		if ((ifa->ifa_flags &
 		    (IFF_UP | IFF_LOOPBACK | IFF_POINTOPOINT)) != IFF_UP)
 			continue;
@@ -253,4 +239,20 @@ deviceInitAll(void)
 	}
 
 	freeifaddrs(ifap);
+#else
+	struct ifaddrs *ifap, *ifa;
+
+	if (getifaddrs(&ifap) != 0)
+		mopLogErr("deviceInitAll: old socket");
+
+	for (ifa = ifap; ifa; ifa = ifa->ifa_next) {
+		if (/*(ifa->ifa_flags & IFF_UP) == 0 ||*/
+		    ifa->ifa_flags & IFF_LOOPBACK ||
+		    ifa->ifa_flags & IFF_POINTOPOINT)
+			continue;
+		deviceInitOne(ifa->ifa_name);
+	}
+	
+	freeifaddrs(ifap);
+#endif /* DEV_NEW_CONF */
 }

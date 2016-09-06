@@ -1,4 +1,4 @@
-/*	$NetBSD: if_age.c,v 1.48 2016/06/10 13:27:14 ozaki-r Exp $ */
+/*	$NetBSD: if_age.c,v 1.44 2014/03/29 19:28:24 christos Exp $ */
 /*	$OpenBSD: if_age.c,v 1.1 2009/01/16 05:00:34 kevlo Exp $	*/
 
 /*-
@@ -31,7 +31,7 @@
 /* Driver for Attansic Technology Corp. L1 Gigabit Ethernet. */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_age.c,v 1.48 2016/06/10 13:27:14 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_age.c,v 1.44 2014/03/29 19:28:24 christos Exp $");
 
 #include "vlan.h"
 
@@ -64,6 +64,8 @@ __KERNEL_RCSID(0, "$NetBSD: if_age.c,v 1.48 2016/06/10 13:27:14 ozaki-r Exp $");
 #include <net/if_vlanvar.h>
 
 #include <net/bpf.h>
+
+#include <sys/rnd.h>
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
@@ -1462,7 +1464,7 @@ age_rxeof(struct age_softc *sc, struct rx_rdesc *rxrd)
 
 			m = sc->age_cdata.age_rxhead;
 			m->m_flags |= M_PKTHDR;
-			m_set_rcvif(m, ifp);
+			m->m_pkthdr.rcvif = ifp;
 			m->m_pkthdr.len = sc->age_cdata.age_rxlen;
 			/* Set the first mbuf length. */
 			m->m_len = sc->age_cdata.age_rxlen - pktlen;
@@ -1505,7 +1507,7 @@ age_rxeof(struct age_softc *sc, struct rx_rdesc *rxrd)
 
 			bpf_mtap(ifp, m);
 			/* Pass it on. */
-			if_percpuq_enqueue(ifp->if_percpuq, m);
+			(*ifp->if_input)(ifp, m);
 
 			/* Reset mbuf chains. */
 			AGE_RXCHAIN_RESET(sc);
@@ -2222,6 +2224,13 @@ age_newbuf(struct age_softc *sc, struct age_rxdesc *rxd, int init)
 	    sc->age_cdata.age_rx_sparemap, m, BUS_DMA_NOWAIT);
 
 	if (error != 0) {
+		if (!error) {
+			bus_dmamap_unload(sc->sc_dmat,
+			    sc->age_cdata.age_rx_sparemap);
+			error = EFBIG;
+			printf("%s: too many segments?!\n",
+			    device_xname(sc->sc_dev));
+		}
 		m_freem(m);
 
 		if (init)

@@ -37,9 +37,6 @@ class PathDiagnosticPiece;
 /// will have to provide your own implementation.)
 class BugReporterVisitor : public llvm::FoldingSetNode {
 public:
-  BugReporterVisitor() = default;
-  BugReporterVisitor(const BugReporterVisitor &) = default;
-  BugReporterVisitor(BugReporterVisitor &&) {}
   virtual ~BugReporterVisitor();
 
   /// \brief Returns a copy of this BugReporter.
@@ -95,8 +92,9 @@ class BugReporterVisitorImpl : public BugReporterVisitor {
   }
 };
 
-class FindLastStoreBRVisitor final
-    : public BugReporterVisitorImpl<FindLastStoreBRVisitor> {
+class FindLastStoreBRVisitor
+  : public BugReporterVisitorImpl<FindLastStoreBRVisitor>
+{
   const MemRegion *R;
   SVal V;
   bool Satisfied;
@@ -126,8 +124,9 @@ public:
                                  BugReport &BR) override;
 };
 
-class TrackConstraintBRVisitor final
-    : public BugReporterVisitorImpl<TrackConstraintBRVisitor> {
+class TrackConstraintBRVisitor
+  : public BugReporterVisitorImpl<TrackConstraintBRVisitor>
+{
   DefinedSVal Constraint;
   bool Assumption;
   bool IsSatisfied;
@@ -162,8 +161,8 @@ private:
 
 /// \class NilReceiverBRVisitor
 /// \brief Prints path notes when a message is sent to a nil receiver.
-class NilReceiverBRVisitor final
-    : public BugReporterVisitorImpl<NilReceiverBRVisitor> {
+class NilReceiverBRVisitor
+  : public BugReporterVisitorImpl<NilReceiverBRVisitor> {
 public:
 
   void Profile(llvm::FoldingSetNodeID &ID) const override {
@@ -182,8 +181,7 @@ public:
 };
 
 /// Visitor that tries to report interesting diagnostics from conditions.
-class ConditionBRVisitor final
-    : public BugReporterVisitorImpl<ConditionBRVisitor> {
+class ConditionBRVisitor : public BugReporterVisitorImpl<ConditionBRVisitor> {
 public:
   void Profile(llvm::FoldingSetNodeID &ID) const override {
     static int x = 0;
@@ -249,8 +247,8 @@ public:
 /// \brief Suppress reports that might lead to known false positives.
 ///
 /// Currently this suppresses reports based on locations of bugs.
-class LikelyFalsePositiveSuppressionBRVisitor final
-    : public BugReporterVisitorImpl<LikelyFalsePositiveSuppressionBRVisitor> {
+class LikelyFalsePositiveSuppressionBRVisitor
+  : public BugReporterVisitorImpl<LikelyFalsePositiveSuppressionBRVisitor> {
 public:
   static void *getTag() {
     static int Tag = 0;
@@ -278,8 +276,8 @@ public:
 ///
 /// As a result, BugReporter will not prune the path through the function even
 /// if the region's contents are not modified/accessed by the call.
-class UndefOrNullArgVisitor final
-    : public BugReporterVisitorImpl<UndefOrNullArgVisitor> {
+class UndefOrNullArgVisitor
+  : public BugReporterVisitorImpl<UndefOrNullArgVisitor> {
 
   /// The interesting memory region this visitor is tracking.
   const MemRegion *R;
@@ -299,8 +297,9 @@ public:
                                  BugReport &BR) override;
 };
 
-class SuppressInlineDefensiveChecksVisitor final
-    : public BugReporterVisitorImpl<SuppressInlineDefensiveChecksVisitor> {
+class SuppressInlineDefensiveChecksVisitor
+: public BugReporterVisitorImpl<SuppressInlineDefensiveChecksVisitor>
+{
   /// The symbolic value for which we are tracking constraints.
   /// This value is constrained to null in the end of path.
   DefinedSVal V;

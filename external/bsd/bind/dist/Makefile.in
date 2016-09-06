@@ -1,4 +1,4 @@
-# Copyright (C) 2004-2009, 2011-2015  Internet Systems Consortium, Inc. ("ISC")
+# Copyright (C) 2004-2009, 2011-2014  Internet Systems Consortium, Inc. ("ISC")
 # Copyright (C) 1998-2002  Internet Software Consortium.
 #
 # Permission to use, copy, modify, and/or distribute this software for any
@@ -19,7 +19,7 @@ srcdir =	@srcdir@
 VPATH =		@srcdir@
 top_srcdir =	@top_srcdir@
 
-VERSION=@BIND9_VERSION@
+@BIND9_VERSION@
 
 SUBDIRS =	make unit lib bin doc @LIBEXPORT@
 TARGETS =
@@ -32,9 +32,6 @@ HTMLPAGES =	isc-config.sh.html
 MANOBJS =	${MANPAGES} ${HTMLPAGES}
 
 @BIND9_MAKE_RULES@
-
-newrr:
-	cd lib/dns; ${MAKE} newrr
 
 bind.keys.h: ${top_srcdir}/bind.keys ${srcdir}/util/bindkeys.pl
 	${PERL} ${srcdir}/util/bindkeys.pl < ${top_srcdir}/bind.keys > $@

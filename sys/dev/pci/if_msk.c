@@ -1,4 +1,4 @@
-/* $NetBSD: if_msk.c,v 1.51 2016/06/10 13:27:14 ozaki-r Exp $ */
+/* $NetBSD: if_msk.c,v 1.46 2014/08/10 16:44:36 tls Exp $ */
 /*	$OpenBSD: if_msk.c,v 1.42 2007/01/17 02:43:02 krw Exp $	*/
 
 /*
@@ -52,7 +52,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: if_msk.c,v 1.51 2016/06/10 13:27:14 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: if_msk.c,v 1.46 2014/08/10 16:44:36 tls Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -79,7 +79,7 @@ __KERNEL_RCSID(0, "$NetBSD: if_msk.c,v 1.51 2016/06/10 13:27:14 ozaki-r Exp $");
 #include <net/if_media.h>
 
 #include <net/bpf.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #include <dev/mii/mii.h>
 #include <dev/mii/miivar.h>
@@ -165,7 +165,6 @@ static const struct msk_product {
 	{ PCI_VENDOR_MARVELL,		PCI_PRODUCT_MARVELL_YUKON_8036 },
 	{ PCI_VENDOR_MARVELL,		PCI_PRODUCT_MARVELL_YUKON_8038 },
 	{ PCI_VENDOR_MARVELL,		PCI_PRODUCT_MARVELL_YUKON_8039 },
-	{ PCI_VENDOR_MARVELL,		PCI_PRODUCT_MARVELL_YUKON_8040 },
 	{ PCI_VENDOR_MARVELL,		PCI_PRODUCT_MARVELL_YUKON_8050 },
 	{ PCI_VENDOR_MARVELL,		PCI_PRODUCT_MARVELL_YUKON_8052 },
 	{ PCI_VENDOR_MARVELL,		PCI_PRODUCT_MARVELL_YUKON_8053 },
@@ -949,7 +948,6 @@ msk_probe(device_t parent, cfdata_t match, void *aux)
 	case SK_YUKON_EC_U:
 	case SK_YUKON_EC:
 	case SK_YUKON_FE:
-	case SK_YUKON_FE_P:
 		return (1);
 	}
 
@@ -1742,7 +1740,7 @@ msk_rxeof(struct sk_if_softc *sc_if, u_int16_t len, u_int32_t rxstat)
 		m_adj(m0, ETHER_ALIGN);
 		m = m0;
 	} else {
-		m_set_rcvif(m, ifp);
+		m->m_pkthdr.rcvif = ifp;
 		m->m_pkthdr.len = m->m_len = total_len;
 	}
 
@@ -1751,7 +1749,7 @@ msk_rxeof(struct sk_if_softc *sc_if, u_int16_t len, u_int32_t rxstat)
 	bpf_mtap(ifp, m);
 
 	/* pass it on. */
-	if_percpuq_enqueue(ifp->if_percpuq, m);
+	(*ifp->if_input)(ifp, m);
 }
 
 void
@@ -2038,11 +2036,6 @@ msk_init_yukon(struct sk_if_softc *sc_if)
 	SK_YU_WRITE_2(sc_if, YUKON_SMR, reg);
 
 	DPRINTFN(6, ("msk_init_yukon: 10\n"));
-	struct ifnet *ifp = &sc_if->sk_ethercom.ec_if;
-	/* msk_attach calls me before ether_ifattach so check null */
-	if (ifp != NULL && ifp->if_sadl != NULL)
-		memcpy(sc_if->sk_enaddr, CLLADDR(ifp->if_sadl),
-		    sizeof(sc_if->sk_enaddr));
 	/* Setup Yukon's address */
 	for (i = 0; i < 3; i++) {
 		/* Write Source Address 1 (unicast filter) */

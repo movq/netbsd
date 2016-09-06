@@ -11,7 +11,6 @@
 #define LLVM_CLANG_FRONTEND_FRONTENDOPTIONS_H
 
 #include "clang/Frontend/CommandLineSourceLoc.h"
-#include "clang/Serialization/ModuleFileExtension.h"
 #include "clang/Sema/CodeCompleteOptions.h"
 #include "llvm/ADT/StringRef.h"
 #include <string>
@@ -72,7 +71,6 @@ enum InputKind {
   IK_PreprocessedObjCXX,
   IK_OpenCL,
   IK_CUDA,
-  IK_PreprocessedCuda,
   IK_AST,
   IK_LLVM_IR
 };
@@ -92,7 +90,7 @@ class FrontendInputFile {
   bool IsSystem;
 
 public:
-  FrontendInputFile() : Buffer(nullptr), Kind(IK_None), IsSystem(false) { }
+  FrontendInputFile() : Buffer(nullptr), Kind(IK_None) { }
   FrontendInputFile(StringRef File, InputKind Kind, bool IsSystem = false)
     : File(File.str()), Buffer(nullptr), Kind(Kind), IsSystem(IsSystem) { }
   FrontendInputFile(llvm::MemoryBuffer *buffer, InputKind Kind,
@@ -148,10 +146,6 @@ public:
                                            ///< dumps in AST dumps.
   unsigned ASTDumpLookups : 1;             ///< Whether we include lookup table
                                            ///< dumps in AST dumps.
-  unsigned BuildingImplicitModule : 1;     ///< Whether we are performing an
-                                           ///< implicit module build.
-  unsigned ModulesEmbedAllFiles : 1;       ///< Whether we should embed all used
-                                           ///< files into the PCM file.
 
   CodeCompleteOptions CodeCompleteOpts;
 
@@ -239,18 +233,12 @@ public:
   /// The list of plugins to load.
   std::vector<std::string> Plugins;
 
-  /// The list of module file extensions.
-  std::vector<IntrusiveRefCntPtr<ModuleFileExtension>> ModuleFileExtensions;
-
   /// \brief The list of module map files to load before processing the input.
   std::vector<std::string> ModuleMapFiles;
 
   /// \brief The list of additional prebuilt module files to load before
   /// processing the input.
   std::vector<std::string> ModuleFiles;
-
-  /// \brief The list of files to embed into the compiled module file.
-  std::vector<std::string> ModulesEmbedFiles;
 
   /// \brief The list of AST files to merge.
   std::vector<std::string> ASTMergeFiles;
@@ -262,10 +250,7 @@ public:
   /// \brief File name of the file that will provide record layouts
   /// (in the format produced by -fdump-record-layouts).
   std::string OverrideRecordLayoutsFile;
-
-  /// \brief Auxiliary triple for CUDA compilation.
-  std::string AuxTriple;
-
+  
 public:
   FrontendOptions() :
     DisableFree(false), RelocatablePCH(false), ShowHelp(false),
@@ -274,7 +259,6 @@ public:
     FixToTemporaries(false), ARCMTMigrateEmitARCErrors(false),
     SkipFunctionBodies(false), UseGlobalModuleIndex(true),
     GenerateGlobalModuleIndex(true), ASTDumpDecls(false), ASTDumpLookups(false),
-    BuildingImplicitModule(false), ModulesEmbedAllFiles(false),
     ARCMTAction(ARCMT_None), ObjCMTAction(ObjCMT_None),
     ProgramAction(frontend::ParseSyntaxOnly)
   {}

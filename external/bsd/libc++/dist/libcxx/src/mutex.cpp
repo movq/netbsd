@@ -12,10 +12,8 @@
 #include "limits"
 #include "system_error"
 #include "cassert"
-#include "include/atomic_support.h"
 
 _LIBCPP_BEGIN_NAMESPACE_STD
-#ifndef _LIBCPP_HAS_NO_THREADS
 
 const defer_lock_t  defer_lock = {};
 const try_to_lock_t try_to_lock = {};
@@ -208,45 +206,18 @@ recursive_timed_mutex::unlock() _NOEXCEPT
     }
 }
 
-#endif // !_LIBCPP_HAS_NO_THREADS
-
 // If dispatch_once_f ever handles C++ exceptions, and if one can get to it
 // without illegal macros (unexpected macros not beginning with _UpperCase or
 // __lowercase), and if it stops spinning waiting threads, then call_once should
 // call into dispatch_once_f instead of here. Relevant radar this code needs to
 // keep in sync with:  7741191.
 
-#ifndef _LIBCPP_HAS_NO_THREADS
 static pthread_mutex_t mut = PTHREAD_MUTEX_INITIALIZER;
 static pthread_cond_t  cv  = PTHREAD_COND_INITIALIZER;
-#endif
 
-/// NOTE: Changes to flag are done via relaxed atomic stores
-///       even though the accesses are protected by a mutex because threads
-///       just entering 'call_once` concurrently read from flag.
 void
 __call_once(volatile unsigned long& flag, void* arg, void(*func)(void*))
 {
-#if defined(_LIBCPP_HAS_NO_THREADS)
-    if (flag == 0)
-    {
-#ifndef _LIBCPP_NO_EXCEPTIONS
-        try
-        {
-#endif  // _LIBCPP_NO_EXCEPTIONS
-            flag = 1;
-            func(arg);
-            flag = ~0ul;
-#ifndef _LIBCPP_NO_EXCEPTIONS
-        }
-        catch (...)
-        {
-            flag = 0ul;
-            throw;
-        }
-#endif  // _LIBCPP_NO_EXCEPTIONS
-    }
-#else // !_LIBCPP_HAS_NO_THREADS
     pthread_mutex_lock(&mut);
     while (flag == 1)
         pthread_cond_wait(&cv, &mut);
@@ -256,11 +227,11 @@ __call_once(volatile unsigned long& flag, void* arg, void(*func)(void*))
         try
         {
 #endif  // _LIBCPP_NO_EXCEPTIONS
-            __libcpp_relaxed_store(&flag, 1ul);
+            flag = 1;
             pthread_mutex_unlock(&mut);
             func(arg);
             pthread_mutex_lock(&mut);
-            __libcpp_relaxed_store(&flag, ~0ul);
+            flag = ~0ul;
             pthread_mutex_unlock(&mut);
             pthread_cond_broadcast(&cv);
 #ifndef _LIBCPP_NO_EXCEPTIONS
@@ -268,7 +239,7 @@ __call_once(volatile unsigned long& flag, void* arg, void(*func)(void*))
         catch (...)
         {
             pthread_mutex_lock(&mut);
-            __libcpp_relaxed_store(&flag, 0ul);
+            flag = 0ul;
             pthread_mutex_unlock(&mut);
             pthread_cond_broadcast(&cv);
             throw;
@@ -277,8 +248,6 @@ __call_once(volatile unsigned long& flag, void* arg, void(*func)(void*))
     }
     else
         pthread_mutex_unlock(&mut);
-#endif // !_LIBCPP_HAS_NO_THREADS
-
 }
 
 _LIBCPP_END_NAMESPACE_STD

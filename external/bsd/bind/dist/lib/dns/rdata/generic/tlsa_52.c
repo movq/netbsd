@@ -1,4 +1,4 @@
-/*	$NetBSD: tlsa_52.c,v 1.1.1.6 2016/05/26 15:45:51 christos Exp $	*/
+/*	$NetBSD: tlsa_52.c,v 1.1.1.2.4.1 2016/03/13 08:06:14 martin Exp $	*/
 
 /*
  * Copyright (C) 2012, 2014, 2015  Internet Systems Consortium, Inc. ("ISC")
@@ -16,6 +16,8 @@
  * PERFORMANCE OF THIS SOFTWARE.
  */
 
+/* Id */
+
 /* rfc6698.txt */
 
 #ifndef RDATA_GENERIC_TLSA_52_C
@@ -24,8 +26,10 @@
 #define RRTYPE_TLSA_ATTRIBUTES 0
 
 static inline isc_result_t
-generic_fromtext_tlsa(ARGS_FROMTEXT) {
+fromtext_tlsa(ARGS_FROMTEXT) {
 	isc_token_t token;
+
+	REQUIRE(type == dns_rdatatype_tlsa);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -67,11 +71,12 @@ generic_fromtext_tlsa(ARGS_FROMTEXT) {
 }
 
 static inline isc_result_t
-generic_totext_tlsa(ARGS_TOTEXT) {
+totext_tlsa(ARGS_TOTEXT) {
 	isc_region_t sr;
 	char buf[sizeof("64000 ")];
 	unsigned int n;
 
+	REQUIRE(rdata->type == dns_rdatatype_tlsa);
 	REQUIRE(rdata->length != 0);
 
 	UNUSED(tctx);
@@ -119,8 +124,10 @@ generic_totext_tlsa(ARGS_TOTEXT) {
 }
 
 static inline isc_result_t
-generic_fromwire_tlsa(ARGS_FROMWIRE) {
+fromwire_tlsa(ARGS_FROMWIRE) {
 	isc_region_t sr;
+
+	REQUIRE(type == dns_rdatatype_tlsa);
 
 	UNUSED(type);
 	UNUSED(rdclass);
@@ -134,32 +141,6 @@ generic_fromwire_tlsa(ARGS_FROMWIRE) {
 
 	isc_buffer_forward(source, sr.length);
 	return (mem_tobuffer(target, sr.base, sr.length));
-}
-
-static inline isc_result_t
-fromtext_tlsa(ARGS_FROMTEXT) {
-
-	REQUIRE(type == dns_rdatatype_tlsa);
-
-	return (generic_fromtext_tlsa(rdclass, type, lexer, origin, options,
-				      target, callbacks));
-}
-
-static inline isc_result_t
-totext_tlsa(ARGS_TOTEXT) {
-
-	REQUIRE(rdata->type == dns_rdatatype_tlsa);
-
-	return (generic_totext_tlsa(rdata, tctx, target));
-}
-
-static inline isc_result_t
-fromwire_tlsa(ARGS_FROMWIRE) {
-
-	REQUIRE(type == dns_rdatatype_tlsa);
-
-	return (generic_fromwire_tlsa(rdclass, type, source, dctx, options,
-				      target));
 }
 
 static inline isc_result_t
@@ -192,9 +173,10 @@ compare_tlsa(ARGS_COMPARE) {
 }
 
 static inline isc_result_t
-generic_fromstruct_tlsa(ARGS_FROMSTRUCT) {
+fromstruct_tlsa(ARGS_FROMSTRUCT) {
 	dns_rdata_tlsa_t *tlsa = source;
 
+	REQUIRE(type == dns_rdatatype_tlsa);
 	REQUIRE(source != NULL);
 	REQUIRE(tlsa->common.rdtype == type);
 	REQUIRE(tlsa->common.rdclass == rdclass);
@@ -210,10 +192,11 @@ generic_fromstruct_tlsa(ARGS_FROMSTRUCT) {
 }
 
 static inline isc_result_t
-generic_tostruct_tlsa(ARGS_TOSTRUCT) {
+tostruct_tlsa(ARGS_TOSTRUCT) {
 	dns_rdata_tlsa_t *tlsa = target;
 	isc_region_t region;
 
+	REQUIRE(rdata->type == dns_rdatatype_tlsa);
 	REQUIRE(target != NULL);
 	REQUIRE(rdata->length != 0);
 
@@ -240,10 +223,11 @@ generic_tostruct_tlsa(ARGS_TOSTRUCT) {
 }
 
 static inline void
-generic_freestruct_tlsa(ARGS_FREESTRUCT) {
+freestruct_tlsa(ARGS_FREESTRUCT) {
 	dns_rdata_tlsa_t *tlsa = source;
 
 	REQUIRE(tlsa != NULL);
+	REQUIRE(tlsa->common.rdtype == dns_rdatatype_tlsa);
 
 	if (tlsa->mctx == NULL)
 		return;
@@ -251,38 +235,6 @@ generic_freestruct_tlsa(ARGS_FREESTRUCT) {
 	if (tlsa->data != NULL)
 		isc_mem_free(tlsa->mctx, tlsa->data);
 	tlsa->mctx = NULL;
-}
-
-static inline isc_result_t
-fromstruct_tlsa(ARGS_FROMSTRUCT) {
-
-	REQUIRE(type == dns_rdatatype_tlsa);
-
-	return (generic_fromstruct_tlsa(rdclass, type, source, target));
-}
-
-static inline isc_result_t
-tostruct_tlsa(ARGS_TOSTRUCT) {
-	dns_rdata_txt_t *txt = target;
-
-	REQUIRE(rdata->type == dns_rdatatype_tlsa);
-	REQUIRE(target != NULL);
-
-	txt->common.rdclass = rdata->rdclass;
-	txt->common.rdtype = rdata->type;
-	ISC_LINK_INIT(&txt->common, link);
-
-	return (generic_tostruct_tlsa(rdata, target, mctx));
-}
-
-static inline void
-freestruct_tlsa(ARGS_FREESTRUCT) {
-	dns_rdata_txt_t *txt = source;
-
-	REQUIRE(source != NULL);
-	REQUIRE(txt->common.rdtype == dns_rdatatype_tlsa);
-
-	generic_freestruct_tlsa(source);
 }
 
 static inline isc_result_t

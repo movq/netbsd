@@ -1,5 +1,5 @@
-/*	$NetBSD: sshpty.c,v 1.5 2015/08/13 10:33:21 christos Exp $	*/
-/* $OpenBSD: sshpty.c,v 1.30 2015/07/30 23:09:15 djm Exp $ */
+/*	$NetBSD: sshpty.c,v 1.2.26.2 2016/03/11 12:22:42 martin Exp $	*/
+/* $OpenBSD: sshpty.c,v 1.29 2014/09/03 18:55:07 djm Exp $ */
 /*
  * Author: Tatu Ylonen <ylo@cs.hut.fi>
  * Copyright (c) 1995 Tatu Ylonen <ylo@cs.hut.fi>, Espoo, Finland
@@ -14,7 +14,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: sshpty.c,v 1.5 2015/08/13 10:33:21 christos Exp $");
+__RCSID("$NetBSD: sshpty.c,v 1.2.26.2 2016/03/11 12:22:42 martin Exp $");
 #include <sys/types.h>
 #include <sys/ioctl.h>
 #include <sys/stat.h>

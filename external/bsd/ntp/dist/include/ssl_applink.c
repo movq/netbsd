@@ -1,4 +1,4 @@
-/*	$NetBSD: ssl_applink.c,v 1.4 2016/01/08 21:35:35 christos Exp $	*/
+/*	$NetBSD: ssl_applink.c,v 1.1.1.1.26.1 2014/12/24 00:05:16 riz Exp $	*/
 
 /*
  * include/ssl_applink.c -- common NTP code for openssl/applink.c

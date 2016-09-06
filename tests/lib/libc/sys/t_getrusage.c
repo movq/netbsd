@@ -1,4 +1,4 @@
-/* $NetBSD: t_getrusage.c,v 1.4 2016/08/05 15:01:39 scole Exp $ */
+/* $NetBSD: t_getrusage.c,v 1.2 2011/08/22 00:33:16 dholland Exp $ */
 
 /*-
  * Copyright (c) 2011 The NetBSD Foundation, Inc.
@@ -29,7 +29,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_getrusage.c,v 1.4 2016/08/05 15:01:39 scole Exp $");
+__RCSID("$NetBSD: t_getrusage.c,v 1.2 2011/08/22 00:33:16 dholland Exp $");
 
 #include <sys/resource.h>
 #include <sys/time.h>
@@ -58,13 +58,7 @@ work(void)
 	size_t n = UINT16_MAX * 10;
 
 	while (n > 0) {
-#ifdef __or1k__
-		 asm volatile("l.nop");	/* Do something. */
-#elif defined(__ia64__)
-		 asm volatile("nop 0"); /* Do something. */
-#else
 		 asm volatile("nop");	/* Do something. */
-#endif
 		 n--;
 	}
 }

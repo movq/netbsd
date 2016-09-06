@@ -1,4 +1,4 @@
-/*	$NetBSD: spec_vnops.c,v 1.163 2016/08/20 12:37:09 hannken Exp $	*/
+/*	$NetBSD: spec_vnops.c,v 1.145.2.1 2016/04/29 19:07:21 snj Exp $	*/
 
 /*-
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -58,7 +58,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: spec_vnops.c,v 1.163 2016/08/20 12:37:09 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: spec_vnops.c,v 1.145.2.1 2016/04/29 19:07:21 snj Exp $");
 
 #include <sys/param.h>
 #include <sys/proc.h>
@@ -101,7 +101,6 @@ const char	devcls[] = "devcls";
 #endif
 
 static vnode_t	*specfs_hash[SPECHSZ];
-extern struct mount *dead_rootmount;
 
 /*
  * This vnode operations vector is used for special device nodes
@@ -310,7 +309,7 @@ spec_node_lookup_by_dev(enum vtype type, dev_t dev, vnode_t **vpp)
 		mutex_enter(vp->v_interlock);
 	}
 	mutex_exit(&device_lock);
-	error = vget(vp, 0, true /* wait */);
+	error = vget(vp, 0);
 	if (error != 0)
 		return error;
 	*vpp = vp;
@@ -345,7 +344,7 @@ spec_node_lookup_by_mount(struct mount *mp, vnode_t **vpp)
 	}
 	mutex_enter(vq->v_interlock);
 	mutex_exit(&device_lock);
-	error = vget(vq, 0, true /* wait */);
+	error = vget(vq, 0);
 	if (error != 0)
 		return error;
 	*vpp = vq;
@@ -480,8 +479,6 @@ spec_lookup(void *v)
 	return (ENOTDIR);
 }
 
-typedef int (*spec_ioctl_t)(dev_t, u_long, void *, int, struct lwp *);
-
 /*
  * Open a special file.
  */
@@ -498,13 +495,13 @@ spec_open(void *v)
 	struct vnode *vp;
 	dev_t dev;
 	int error;
+	struct partinfo pi;
 	enum kauth_device_req req;
 	specnode_t *sn;
 	specdev_t *sd;
-	spec_ioctl_t ioctl;
+
 	u_int gen;
 	const char *name;
-	struct partinfo pi;
 	
 	l = curlwp;
 	vp = ap->a_vp;
@@ -658,12 +655,13 @@ spec_open(void *v)
 	if (cdev_type(dev) != D_DISK || error != 0)
 		return error;
 
-	
-	ioctl = vp->v_type == VCHR ? cdev_ioctl : bdev_ioctl;
-	error = (*ioctl)(vp->v_rdev, DIOCGPARTINFO, &pi, FREAD, curlwp);
+	if (vp->v_type == VCHR)
+		error = cdev_ioctl(vp->v_rdev, DIOCGPART, &pi, FREAD, curlwp);
+	else
+		error = bdev_ioctl(vp->v_rdev, DIOCGPART, &pi, FREAD, curlwp);
 	if (error == 0)
-		uvm_vnp_setsize(vp, (voff_t)pi.pi_secsize * pi.pi_size);
-
+		uvm_vnp_setsize(vp,
+		    (voff_t)pi.disklab->d_secsize * pi.part->p_size);
 	return 0;
 }
 
@@ -686,15 +684,17 @@ spec_read(void *v)
 	struct buf *bp;
 	daddr_t bn;
 	int bsize, bscale;
-	struct partinfo pi;
+	struct partinfo dpart;
 	int n, on;
 	int error = 0;
 
-	KASSERT(uio->uio_rw == UIO_READ);
-	KASSERTMSG(VMSPACE_IS_KERNEL_P(uio->uio_vmspace) ||
-		   uio->uio_vmspace == curproc->p_vmspace,
-		"vmspace belongs to neither kernel nor curproc");
-
+#ifdef DIAGNOSTIC
+	if (uio->uio_rw != UIO_READ)
+		panic("spec_read mode");
+	if (&uio->uio_vmspace->vm_map != kernel_map &&
+	    uio->uio_vmspace != curproc->p_vmspace)
+		panic("spec_read proc");
+#endif
 	if (uio->uio_resid == 0)
 		return (0);
 
@@ -710,18 +710,35 @@ spec_read(void *v)
 		KASSERT(vp == vp->v_specnode->sn_dev->sd_bdevvp);
 		if (uio->uio_offset < 0)
 			return (EINVAL);
+		bsize = BLKDEV_IOSIZE;
 
-		if (bdev_ioctl(vp->v_rdev, DIOCGPARTINFO, &pi, FREAD, l) == 0)
-			bsize = pi.pi_bsize;
-		else
-			bsize = BLKDEV_IOSIZE;
+		/*
+		 * dholland 20130616: XXX this logic should not be
+		 * here. It is here because the old buffer cache
+		 * demands that all accesses to the same blocks need
+		 * to be the same size; but it only works for FFS and
+		 * nowadays I think it'll fail silently if the size
+		 * info in the disklabel is wrong. (Or missing.) The
+		 * buffer cache needs to be smarter; or failing that
+		 * we need a reliable way here to get the right block
+		 * size; or a reliable way to guarantee that (a) the
+		 * fs is not mounted when we get here and (b) any
+		 * buffers generated here will get purged when the fs
+		 * does get mounted.
+		 */
+		if (bdev_ioctl(vp->v_rdev, DIOCGPART, &dpart, FREAD, l) == 0) {
+			if (dpart.part->p_fstype == FS_BSDFFS &&
+			    dpart.part->p_frag != 0 && dpart.part->p_fsize != 0)
+				bsize = dpart.part->p_frag *
+				    dpart.part->p_fsize;
+		}
 
 		bscale = bsize >> DEV_BSHIFT;
 		do {
 			bn = (uio->uio_offset >> DEV_BSHIFT) &~ (bscale - 1);
 			on = uio->uio_offset % bsize;
 			n = min((unsigned)(bsize - on), uio->uio_resid);
-			error = bread(vp, bn, bsize, 0, &bp);
+			error = bread(vp, bn, bsize, NOCRED, 0, &bp);
 			if (error) {
 				return (error);
 			}
@@ -756,14 +773,17 @@ spec_write(void *v)
 	struct buf *bp;
 	daddr_t bn;
 	int bsize, bscale;
-	struct partinfo pi;
+	struct partinfo dpart;
 	int n, on;
 	int error = 0;
 
-	KASSERT(uio->uio_rw == UIO_WRITE);
-	KASSERTMSG(VMSPACE_IS_KERNEL_P(uio->uio_vmspace) ||
-		   uio->uio_vmspace == curproc->p_vmspace,
-		"vmspace belongs to neither kernel nor curproc");
+#ifdef DIAGNOSTIC
+	if (uio->uio_rw != UIO_WRITE)
+		panic("spec_write mode");
+	if (&uio->uio_vmspace->vm_map != kernel_map &&
+	    uio->uio_vmspace != curproc->p_vmspace)
+		panic("spec_write proc");
+#endif
 
 	switch (vp->v_type) {
 
@@ -779,12 +799,13 @@ spec_write(void *v)
 			return (0);
 		if (uio->uio_offset < 0)
 			return (EINVAL);
-
-		if (bdev_ioctl(vp->v_rdev, DIOCGPARTINFO, &pi, FREAD, l) == 0)
-			bsize = pi.pi_bsize;
-		else
-			bsize = BLKDEV_IOSIZE;
-
+		bsize = BLKDEV_IOSIZE;
+		if (bdev_ioctl(vp->v_rdev, DIOCGPART, &dpart, FREAD, l) == 0) {
+			if (dpart.part->p_fstype == FS_BSDFFS &&
+			    dpart.part->p_frag != 0 && dpart.part->p_fsize != 0)
+				bsize = dpart.part->p_frag *
+				    dpart.part->p_fsize;
+		}
 		bscale = bsize >> DEV_BSHIFT;
 		do {
 			bn = (uio->uio_offset >> DEV_BSHIFT) &~ (bscale - 1);
@@ -793,7 +814,8 @@ spec_write(void *v)
 			if (n == bsize)
 				bp = getblk(vp, bn, bsize, 0, 0);
 			else
-				error = bread(vp, bn, bsize, B_MODIFY, &bp);
+				error = bread(vp, bn, bsize, NOCRED,
+				    B_MODIFY, &bp);
 			if (error) {
 				return (error);
 			}
@@ -1074,26 +1096,11 @@ spec_inactive(void *v)
 {
 	struct vop_inactive_args /* {
 		struct vnode *a_vp;
-		struct bool *a_recycle;
+		struct proc *a_l;
 	} */ *ap = v;
-	struct vnode *vp = ap->a_vp;
 
-	KASSERT(vp->v_mount == dead_rootmount);
-	*ap->a_recycle = true;
-	VOP_UNLOCK(vp);
-	return 0;
-}
-
-int
-spec_reclaim(void *v)
-{
-	struct vop_reclaim_args /* {
-		struct vnode *a_vp;
-	} */ *ap = v;
-	struct vnode *vp __diagused = ap->a_vp;
-
-	KASSERT(vp->v_mount == dead_rootmount);
-	return 0;
+	VOP_UNLOCK(ap->a_vp);
+	return (0);
 }
 
 /*

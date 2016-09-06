@@ -1,4 +1,4 @@
-/*	$NetBSD: subr_devsw.c,v 1.34 2016/02/01 05:05:43 riz Exp $	*/
+/*	$NetBSD: subr_devsw.c,v 1.32 2014/07/25 07:56:14 dholland Exp $	*/
 
 /*-
  * Copyright (c) 2001, 2002, 2007, 2008 The NetBSD Foundation, Inc.
@@ -69,11 +69,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: subr_devsw.c,v 1.34 2016/02/01 05:05:43 riz Exp $");
-
-#ifdef _KERNEL_OPT
-#include "opt_dtrace.h"
-#endif
+__KERNEL_RCSID(0, "$NetBSD: subr_devsw.c,v 1.32 2014/07/25 07:56:14 dholland Exp $");
 
 #include <sys/param.h>
 #include <sys/conf.h>
@@ -84,7 +80,6 @@ __KERNEL_RCSID(0, "$NetBSD: subr_devsw.c,v 1.34 2016/02/01 05:05:43 riz Exp $");
 #include <sys/cpu.h>
 #include <sys/buf.h>
 #include <sys/reboot.h>
-#include <sys/sdt.h>
 
 #ifdef DEVSW_DEBUG
 #define	DPRINTF(x)	printf x
@@ -183,25 +178,25 @@ devsw_attach(const char *devname,
 	}
 	if (i == max_devsw_convs) {
 		struct devsw_conv *newptr;
-		int old_convs, new_convs;
+		int old, new;
 
-		old_convs = max_devsw_convs;
-		new_convs = old_convs + 1;
+		old = max_devsw_convs;
+		new = old + 1;
 
-		newptr = kmem_zalloc(new_convs * DEVSWCONV_SIZE, KM_NOSLEEP);
+		newptr = kmem_zalloc(new * DEVSWCONV_SIZE, KM_NOSLEEP);
 		if (newptr == NULL) {
 			devsw_detach_locked(bdev, cdev);
 			error = ENOMEM;
 			goto fail;
 		}
-		newptr[old_convs].d_name = NULL;
-		newptr[old_convs].d_bmajor = -1;
-		newptr[old_convs].d_cmajor = -1;
-		memcpy(newptr, devsw_conv, old_convs * DEVSWCONV_SIZE);
+		newptr[old].d_name = NULL;
+		newptr[old].d_bmajor = -1;
+		newptr[old].d_cmajor = -1;
+		memcpy(newptr, devsw_conv, old * DEVSWCONV_SIZE);
 		if (devsw_conv != devsw_conv0)
-			kmem_free(devsw_conv, old_convs * DEVSWCONV_SIZE);
+			kmem_free(devsw_conv, old * DEVSWCONV_SIZE);
 		devsw_conv = newptr;
-		max_devsw_convs = new_convs;
+		max_devsw_convs = new;
 	}
 
 	len = strlen(devname) + 1;
@@ -735,16 +730,11 @@ bdev_close(dev_t dev, int flag, int devtype, lwp_t *l)
 	return rv;
 }
 
-SDT_PROVIDER_DECLARE(io);
-SDT_PROBE_DEFINE1(io, kernel, , start, "struct buf *"/*bp*/);
-
 void
 bdev_strategy(struct buf *bp)
 {
 	const struct bdevsw *d;
 	int mpflag;
-
-	SDT_PROBE1(io, kernel, , start, bp);
 
 	if ((d = bdevsw_lookup(bp->b_dev)) == NULL) {
 		bp->b_error = ENXIO;

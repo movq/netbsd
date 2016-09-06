@@ -1,4 +1,4 @@
-/*	$NetBSD: if_iwnvar.h,v 1.17 2015/09/22 23:23:06 nonaka Exp $	*/
+/*	$NetBSD: if_iwnvar.h,v 1.15.4.2 2015/11/06 00:50:52 riz Exp $	*/
 /*	$OpenBSD: if_iwnvar.h,v 1.28 2014/09/09 18:55:08 sthen Exp $	*/
 
 /*-

@@ -1,4 +1,4 @@
-/*	$NetBSD: ukphy.c,v 1.49 2016/07/07 06:55:41 msaitoh Exp $	*/
+/*	$NetBSD: ukphy.c,v 1.46.8.1 2016/02/26 22:08:17 snj Exp $	*/
 
 /*-
  * Copyright (c) 1998, 1999, 2000 The NetBSD Foundation, Inc.
@@ -59,11 +59,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ukphy.c,v 1.49 2016/07/07 06:55:41 msaitoh Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ukphy.c,v 1.46.8.1 2016/02/26 22:08:17 snj Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_mii.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -138,7 +136,8 @@ ukphyattach(device_t parent, device_t self, void *aux)
 
 	PHY_RESET(sc);
 
-	sc->mii_capabilities = PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
+	sc->mii_capabilities =
+	    PHY_READ(sc, MII_BMSR) & ma->mii_capmask;
 	if (sc->mii_capabilities & BMSR_EXTSTAT)
 		sc->mii_extcapabilities = PHY_READ(sc, MII_EXTSR);
 	aprint_normal_dev(self, "");

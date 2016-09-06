@@ -1,4 +1,4 @@
-/*	$NetBSD: ufs_inode.c,v 1.96 2016/08/20 12:37:10 hannken Exp $	*/
+/*	$NetBSD: ufs_inode.c,v 1.90.2.2 2015/07/16 21:40:22 snj Exp $	*/
 
 /*
  * Copyright (c) 1991, 1993
@@ -37,7 +37,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ufs_inode.c,v 1.96 2016/08/20 12:37:10 hannken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ufs_inode.c,v 1.90.2.2 2015/07/16 21:40:22 snj Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ffs.h"
@@ -163,6 +163,11 @@ ufs_reclaim(struct vnode *vp)
 		UFS_WAPBL_END(vp->v_mount);
 	}
 	UFS_UPDATE(vp, NULL, NULL, UPDATE_CLOSE);
+
+	/*
+	 * Remove the inode from the vnode cache.
+	 */
+	vcache_remove(vp->v_mount, &ip->i_number, sizeof(ip->i_number));
 
 	if (ip->i_devvp) {
 		vrele(ip->i_devvp);

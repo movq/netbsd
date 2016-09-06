@@ -1,4 +1,4 @@
-/*	$NetBSD: rgephy.c,v 1.40 2015/08/21 12:22:22 jmcneill Exp $	*/
+/*	$NetBSD: rgephy.c,v 1.35.4.4 2015/11/04 17:50:37 riz Exp $	*/
 
 /*
  * Copyright (c) 2003
@@ -33,7 +33,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: rgephy.c,v 1.40 2015/08/21 12:22:22 jmcneill Exp $");
+__KERNEL_RCSID(0, "$NetBSD: rgephy.c,v 1.35.4.4 2015/11/04 17:50:37 riz Exp $");
 
 
 /*

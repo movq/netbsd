@@ -1,4 +1,4 @@
-/*	$NetBSD: epolltable-internal.h,v 1.4 2016/01/08 21:35:40 christos Exp $	*/
+/*	$NetBSD: epolltable-internal.h,v 1.2.2.2 2014/12/24 00:05:25 riz Exp $	*/
 
 /*
  * Copyright (c) 2000-2007 Niels Provos <provos@citi.umich.edu>

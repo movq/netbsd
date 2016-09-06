@@ -1,4 +1,4 @@
-#	$NetBSD: INSTALL,v 1.92 2016/04/13 17:32:27 macallan Exp $
+#	$NetBSD: INSTALL,v 1.89 2014/03/24 14:15:38 szptvlfn Exp $
 #
 # from: NetBSD: GENERIC,v 1.84 1999/06/06 13:00:03 mrg Exp
 #
@@ -40,6 +40,14 @@ options 	SUN4_MMU3L	# 3-level MMU on sun4/400
 # Blink the power LED on some machines to indicate the system load.
 #options 	BLINK
 
+## Use a faster console than the PROM's slow drawing routines.  Not needed
+## for headless (no framebuffer) machines.
+#options 	RASTERCONSOLE		# fast rasterop console
+options 	FONT_GALLANT12x22	# the console font
+options 	FONT_BOLD8x16		# a somewhat smaller font
+#options 	RASTERCONSOLE_FGCOL=WSCOL_BLACK
+#options 	RASTERCONSOLE_BGCOL=WSCOL_WHITE
+
 # wscons stuff
 #options 	WSEMUL_SUN
 options 	WSEMUL_VT100
@@ -51,8 +59,6 @@ options 	WS_DEFAULT_FG=WSCOL_BLACK
 options 	WS_DEFAULT_BG=WSCOL_LIGHT_WHITE
 options 	WS_KERNEL_FG=WSCOL_GREEN
 options 	WS_KERNEL_BG=WSCOL_LIGHT_WHITE
-options 	FONT_GALLANT12x22	# the console font
-options 	FONT_BOLD8x16		# a somewhat smaller font
 
 #### System options that are the same for all ports
 
@@ -65,6 +71,11 @@ config		netbsd	root on ? type ?
 
 ## System call tracing (see ktrace(1)).
 #options 	KTRACE
+
+## Collect statistics on kernel malloc's and free's.  This does have a
+## significant performance hit on slower machines, so it is intended for
+## diagnostic use only.
+#options 	KMEMSTATS
 
 ## System V compatible IPC subsystem.  (msgctl(2), semctl(2), and shmctl(2))
 #options 	SYSVMSG		# System V message queues
@@ -138,16 +149,16 @@ options 	INSECURE
 ## compat_sunos(8) and compat_svr4(8).
 
 #options 	COMPAT_43	# 4.3BSD system interfaces
-#options 	COMPAT_10	# NetBSD 1.0,
-#options 	COMPAT_11	# NetBSD 1.1,
-#options 	COMPAT_12	# NetBSD 1.2,
-#options 	COMPAT_13	# NetBSD 1.3,
-#options 	COMPAT_14	# NetBSD 1.4,
-#options 	COMPAT_15	# NetBSD 1.5,
-#options 	COMPAT_16	# NetBSD 1.6,
-#options 	COMPAT_20	# NetBSD 2.0,
-#options 	COMPAT_30	# NetBSD 3.0, and
-#options 	COMPAT_40	# NetBSD 4.0 binary compatibility.
+#options 	COMPAT_10	# NetBSD 1.0 binary compatibility
+#options 	COMPAT_11	# NetBSD 1.1 binary compatibility
+#options 	COMPAT_12	# NetBSD 1.2 binary compatibility
+#options 	COMPAT_13	# NetBSD 1.3 binary compatibility
+#options 	COMPAT_14	# NetBSD 1.4 binary compatibility
+#options 	COMPAT_15	# NetBSD 1.5 binary compatibility
+#options 	COMPAT_16	# NetBSD 1.6 binary compatibility
+#options 	COMPAT_20	# NetBSD 2.0 binary compatibility
+#options 	COMPAT_30	# NetBSD 3.0 binary compatibility
+#options 	COMPAT_40	# NetBSD 4.0 binary compatibility
 #options 	COMPAT_SUNOS	# SunOS 4.x binary compatibility
 #options 	COMPAT_SVR4	# SunOS 5.x binary compatibility
 #options 	TCP_COMPAT_42	# 4.2BSD TCP/IP bug compat. Not recommended.
@@ -566,9 +577,6 @@ zx*		at sbus? slot ? offset ?
 
 # Fujitsu AG-10e accelerated graphics 8/24-bit board
 agten*	at sbus? slot ? offset ?
-
-## Southland Media Systems (now Quantum 3D) MGX
-mgx* 		at sbus? slot ? offset ?
 
 # generic framebuffer console
 genfb*	at sbus? slot ? offset ?

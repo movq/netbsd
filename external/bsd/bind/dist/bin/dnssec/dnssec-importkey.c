@@ -1,4 +1,4 @@
-/*	$NetBSD: dnssec-importkey.c,v 1.6 2015/07/08 17:28:55 christos Exp $	*/
+/*	$NetBSD: dnssec-importkey.c,v 1.4.2.2 2015/07/17 04:31:20 snj Exp $	*/
 
 /*
  * Copyright (C) 2013-2015  Internet Systems Consortium, Inc. ("ISC")

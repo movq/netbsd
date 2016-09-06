@@ -1,7 +1,7 @@
-/*	Id: tbl_data.c,v 1.41 2015/10/06 18:32:20 schwarze Exp  */
+/*	Id: tbl_data.c,v 1.28 2014/01/05 18:37:53 joerg Exp  */
 /*
  * Copyright (c) 2009, 2010, 2011 Kristaps Dzonsons <kristaps@bsd.lv>
- * Copyright (c) 2011, 2015 Ingo Schwarze <schwarze@openbsd.org>
+ * Copyright (c) 2011 Ingo Schwarze <schwarze@openbsd.org>
  *
  * Permission to use, copy, modify, and distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -15,9 +15,9 @@
  * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
+#ifdef HAVE_CONFIG_H
 #include "config.h"
-
-#include <sys/types.h>
+#endif
 
 #include <assert.h>
 #include <ctype.h>
@@ -26,28 +26,34 @@
 #include <time.h>
 
 #include "mandoc.h"
-#include "mandoc_aux.h"
 #include "libmandoc.h"
 #include "libroff.h"
 
-static	void		 getdata(struct tbl_node *, struct tbl_span *,
+static	int		 getdata(struct tbl_node *, struct tbl_span *, 
 				int, const char *, int *);
-static	struct tbl_span	*newspan(struct tbl_node *, int,
+static	struct tbl_span	*newspan(struct tbl_node *, int, 
 				struct tbl_row *);
 
-
-static void
-getdata(struct tbl_node *tbl, struct tbl_span *dp,
+static int
+getdata(struct tbl_node *tbl, struct tbl_span *dp, 
 		int ln, const char *p, int *pos)
 {
 	struct tbl_dat	*dat;
 	struct tbl_cell	*cp;
-	int		 sv;
+	int		 sv, spans;
 
-	/* Advance to the next layout cell, skipping spanners. */
+	cp = NULL;
+	if (dp->last && dp->last->layout)
+		cp = dp->last->layout->next;
+	else if (NULL == dp->last)
+		cp = dp->layout->first;
 
-	cp = dp->last == NULL ? dp->layout->first : dp->last->layout->next;
-	while (cp != NULL && cp->pos == TBL_CELL_SPAN)
+	/* 
+	 * Skip over spanners, since
+	 * we want to match data with data layout cells in the header.
+	 */
+
+	while (cp && TBL_CELL_SPAN == cp->pos)
 		cp = cp->next;
 
 	/*
@@ -55,30 +61,34 @@ getdata(struct tbl_node *tbl, struct tbl_span *dp,
 	 * cells.  This means that we have extra input.
 	 */
 
-	if (cp == NULL) {
-		mandoc_msg(MANDOCERR_TBLDATA_EXTRA, tbl->parse,
-		    ln, *pos, p + *pos);
+	if (NULL == cp) {
+		mandoc_msg(MANDOCERR_TBLEXTRADAT, 
+				tbl->parse, ln, *pos, NULL);
 		/* Skip to the end... */
 		while (p[*pos])
 			(*pos)++;
-		return;
+		return(1);
 	}
 
-	dat = mandoc_calloc(1, sizeof(*dat));
+	dat = mandoc_calloc(1, sizeof(struct tbl_dat));
 	dat->layout = cp;
 	dat->pos = TBL_DATA_NONE;
-	dat->spans = 0;
-	for (cp = cp->next; cp != NULL; cp = cp->next)
-		if (cp->pos == TBL_CELL_SPAN)
-			dat->spans++;
+
+	assert(TBL_CELL_SPAN != cp->pos);
+
+	for (spans = 0, cp = cp->next; cp; cp = cp->next)
+		if (TBL_CELL_SPAN == cp->pos)
+			spans++;
 		else
 			break;
+	
+	dat->spans = spans;
 
-	if (dp->last == NULL)
-		dp->first = dat;
-	else
+	if (dp->last) {
 		dp->last->next = dat;
-	dp->last = dat;
+		dp->last = dat;
+	} else
+		dp->last = dp->first = dat;
 
 	sv = *pos;
 	while (p[*pos] && p[*pos] != tbl->opts.tab)
@@ -90,12 +100,16 @@ getdata(struct tbl_node *tbl, struct tbl_span *dp,
 	 * until a standalone `T}', are included in our cell.
 	 */
 
-	if (*pos - sv == 2 && p[sv] == 'T' && p[sv + 1] == '{') {
+	if (*pos - sv == 2 && 'T' == p[sv] && '{' == p[sv + 1]) {
 		tbl->part = TBL_PART_CDATA;
-		return;
+		return(1);
 	}
 
-	dat->string = mandoc_strndup(p + sv, *pos - sv);
+	assert(*pos - sv >= 0);
+
+	dat->string = mandoc_malloc((size_t)(*pos - sv + 1));
+	memcpy(dat->string, &p[sv], (size_t)(*pos - sv));
+	dat->string[*pos - sv] = '\0';
 
 	if (p[*pos])
 		(*pos)++;
@@ -111,19 +125,25 @@ getdata(struct tbl_node *tbl, struct tbl_span *dp,
 	else
 		dat->pos = TBL_DATA_DATA;
 
-	if ((dat->layout->pos == TBL_CELL_HORIZ ||
-	    dat->layout->pos == TBL_CELL_DHORIZ ||
-	    dat->layout->pos == TBL_CELL_DOWN) &&
-	    dat->pos == TBL_DATA_DATA && *dat->string != '\0')
-		mandoc_msg(MANDOCERR_TBLDATA_SPAN,
-		    tbl->parse, ln, sv, dat->string);
+	if (TBL_CELL_HORIZ == dat->layout->pos ||
+			TBL_CELL_DHORIZ == dat->layout->pos ||
+			TBL_CELL_DOWN == dat->layout->pos)
+		if (TBL_DATA_DATA == dat->pos && '\0' != *dat->string)
+			mandoc_msg(MANDOCERR_TBLIGNDATA, 
+					tbl->parse, ln, sv, NULL);
+
+	return(1);
 }
 
+/* ARGSUSED */
 int
-tbl_cdata(struct tbl_node *tbl, int ln, const char *p, int pos)
+tbl_cdata(struct tbl_node *tbl, int ln, const char *p)
 {
 	struct tbl_dat	*dat;
-	size_t		 sz;
+	size_t	 	 sz;
+	int		 pos;
+
+	pos = 0;
 
 	dat = tbl->last_span->last;
 
@@ -132,12 +152,10 @@ tbl_cdata(struct tbl_node *tbl, int ln, const char *p, int pos)
 		if (p[pos] == tbl->opts.tab) {
 			tbl->part = TBL_PART_DATA;
 			pos++;
-			while (p[pos] != '\0')
-				getdata(tbl, tbl->last_span, ln, p, &pos);
-			return 1;
-		} else if (p[pos] == '\0') {
+			return(getdata(tbl, tbl->last_span, ln, p, &pos));
+		} else if ('\0' == p[pos]) {
 			tbl->part = TBL_PART_DATA;
-			return 1;
+			return(1);
 		}
 
 		/* Fallthrough: T} is part of a word. */
@@ -145,19 +163,19 @@ tbl_cdata(struct tbl_node *tbl, int ln, const char *p, int pos)
 
 	dat->pos = TBL_DATA_DATA;
 
-	if (dat->string != NULL) {
-		sz = strlen(p + pos) + strlen(dat->string) + 2;
+	if (dat->string) {
+		sz = strlen(p) + strlen(dat->string) + 2;
 		dat->string = mandoc_realloc(dat->string, sz);
-		(void)strlcat(dat->string, " ", sz);
-		(void)strlcat(dat->string, p + pos, sz);
+		strlcat(dat->string, " ", sz);
+		strlcat(dat->string, p, sz);
 	} else
-		dat->string = mandoc_strdup(p + pos);
+		dat->string = mandoc_strdup(p);
 
-	if (dat->layout->pos == TBL_CELL_DOWN)
-		mandoc_msg(MANDOCERR_TBLDATA_SPAN, tbl->parse,
-		    ln, pos, dat->string);
+	if (TBL_CELL_DOWN == dat->layout->pos) 
+		mandoc_msg(MANDOCERR_TBLIGNDATA, 
+				tbl->parse, ln, pos, NULL);
 
-	return 0;
+	return(0);
 }
 
 static struct tbl_span *
@@ -165,29 +183,39 @@ newspan(struct tbl_node *tbl, int line, struct tbl_row *rp)
 {
 	struct tbl_span	*dp;
 
-	dp = mandoc_calloc(1, sizeof(*dp));
+	dp = mandoc_calloc(1, sizeof(struct tbl_span));
 	dp->line = line;
 	dp->opts = &tbl->opts;
 	dp->layout = rp;
-	dp->prev = tbl->last_span;
+	dp->head = tbl->first_head;
 
-	if (dp->prev == NULL) {
-		tbl->first_span = dp;
+	if (tbl->last_span) {
+		tbl->last_span->next = dp;
+		tbl->last_span = dp;
+	} else {
+		tbl->last_span = tbl->first_span = dp;
 		tbl->current_span = NULL;
-	} else
-		dp->prev->next = dp;
-	tbl->last_span = dp;
+		dp->flags |= TBL_SPAN_FIRST;
+	}
 
-	return dp;
+	return(dp);
 }
 
-void
-tbl_data(struct tbl_node *tbl, int ln, const char *p, int pos)
+int
+tbl_data(struct tbl_node *tbl, int ln, const char *p)
 {
 	struct tbl_span	*dp;
 	struct tbl_row	*rp;
+	int		 pos;
 
-	/*
+	pos = 0;
+
+	if ('\0' == p[pos]) {
+		mandoc_msg(MANDOCERR_TBL, tbl->parse, ln, pos, NULL);
+		return(0);
+	}
+
+	/* 
 	 * Choose a layout row: take the one following the last parsed
 	 * span's.  If that doesn't exist, use the last parsed span's.
 	 * If there's no last parsed span, use the first row.  Lastly,
@@ -195,17 +223,17 @@ tbl_data(struct tbl_node *tbl, int ln, const char *p, int pos)
 	 * (it doesn't "consume" the layout).
 	 */
 
-	if (tbl->last_span != NULL) {
+	if (tbl->last_span) {
+		assert(tbl->last_span->layout);
 		if (tbl->last_span->pos == TBL_SPAN_DATA) {
 			for (rp = tbl->last_span->layout->next;
-			     rp != NULL && rp->first != NULL;
-			     rp = rp->next) {
+					rp && rp->first; rp = rp->next) {
 				switch (rp->first->pos) {
-				case TBL_CELL_HORIZ:
+				case (TBL_CELL_HORIZ):
 					dp = newspan(tbl, ln, rp);
 					dp->pos = TBL_SPAN_HORIZ;
 					continue;
-				case TBL_CELL_DHORIZ:
+				case (TBL_CELL_DHORIZ):
 					dp = newspan(tbl, ln, rp);
 					dp->pos = TBL_SPAN_DHORIZ;
 					continue;
@@ -217,7 +245,7 @@ tbl_data(struct tbl_node *tbl, int ln, const char *p, int pos)
 		} else
 			rp = tbl->last_span->layout;
 
-		if (rp == NULL)
+		if (NULL == rp)
 			rp = tbl->last_span->layout;
 	} else
 		rp = tbl->first_row;
@@ -228,14 +256,19 @@ tbl_data(struct tbl_node *tbl, int ln, const char *p, int pos)
 
 	if ( ! strcmp(p, "_")) {
 		dp->pos = TBL_SPAN_HORIZ;
-		return;
+		return(1);
 	} else if ( ! strcmp(p, "=")) {
 		dp->pos = TBL_SPAN_DHORIZ;
-		return;
+		return(1);
 	}
 
 	dp->pos = TBL_SPAN_DATA;
 
-	while (p[pos] != '\0')
-		getdata(tbl, dp, ln, p, &pos);
+	/* This returns 0 when TBL_PART_CDATA is entered. */
+
+	while ('\0' != p[pos])
+		if ( ! getdata(tbl, dp, ln, p, &pos))
+			return(0);
+
+	return(1);
 }

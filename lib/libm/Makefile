@@ -1,4 +1,4 @@
-#  $NetBSD: Makefile,v 1.177 2016/03/30 07:44:06 martin Exp $
+#  $NetBSD: Makefile,v 1.164.2.3 2015/11/08 00:24:25 riz Exp $
 #
 #  @(#)Makefile 5.1beta 93/09/24
 #
@@ -140,16 +140,13 @@ ARCH_SRCS = e_acos.S e_asin.S e_atanh.S e_cosh.S e_exp.S e_fmod.S e_log.S \
 	    e_log10.S e_remainder.S e_scalb.S e_sinh.S e_sqrt.S s_atan.S \
 	    s_ceil.S s_copysign.S s_cos.S s_expm1.S s_finite.S s_floor.S \
 	    s_log1p.S s_logb.S s_rint.S s_scalbn.S s_sin.S s_tan.S s_tanh.S
-COPTS.e_sqrtl.c += -DHAVE_FENV_H
-COMMON_SRCS += fenv.c
 .endif
 .endif
 # end of m68k
 .elif (${LIBC_MACHINE_ARCH} == "vax")
 .PATH:	${.CURDIR}/arch/vax
 
-#NOIEEE_ARCH+= s_fmax.c s_fmaxf.c s_fmaxl.c
-#NOIEEE_ARCH+= n_infnan.S n_argred.S n_sqrt.S
+#NOIEEE_ARCH= n_infnan.S n_argred.S n_sqrt.S
 #ARCH_SRCS = n_atan2.S n_cabs.S n_cbrt.S n_support.S n_sincos.S n_tan.S
 # XXX - ripped out due to lack of the insn polyd in the Mariah chip,
 # and emulation code isn't written yet.
@@ -168,14 +165,6 @@ ARCH_SRCS += s_fma.S s_fmaf.S
 ARCH_SRCS += s_fmax.S s_fmaxf.S
 ARCH_SRCS += s_fmin.S s_fminf.S
 .endif
-.elif (${LIBC_MACHINE_ARCH} == "powerpc")
-.PATH:	${.CURDIR}/arch/powerpc
-COPTS.e_sqrtl.c += -DHAVE_FENV_H
-COMMON_SRCS += fenv.c
-.elif (${LIBC_MACHINE_CPU} == "mips")
-.PATH:	${.CURDIR}/arch/mips
-COPTS.e_sqrtl.c += -DHAVE_FENV_H
-COMMON_SRCS += fenv.c
 .endif
 
 WARNS?=5
@@ -288,7 +277,7 @@ COPTS.s_tanh.c+= -O0
 MAN+=	acos.3 acosh.3 asin.3 asinh.3 atan.3 atan2.3 atanh.3 \
 	ceil.3 copysign.3 cos.3 cosh.3 \
 	erf.3 exp.3 \
-	fabs.3 finite.3 fma.3 fmod.3 frexp.3 hypot.3 \
+	fabs.3 finite.3 fmod.3 frexp.3 hypot.3 \
 	ieee_test.3 ilogb.3 isinff.3 j0.3 ldexp.3 lgamma.3 log.3 lrint.3 \
 	math.3 modf.3 nextafter.3 pow.3 \
 	remainder.3 rint.3 round.3 \
@@ -339,8 +328,7 @@ MLINKS+=log.3 logf.3 \
 	log.3 log2.3 \
 	log.3 log2f.3
 MLINKS+=pow.3 powf.3
-MLINKS+=fabs.3 fabsf.3 \
-	fabs.3 fabsl.3
+MLINKS+=fabs.3 fabsf.3
 MLINKS+=finite.3 finitef.3
 MLINKS+=fmod.3 fmodf.3 \
 	fmod.3 fmodl.3
@@ -352,8 +340,6 @@ MLINKS+=ilogb.3 ilogbf.3 ilogb.3 ilogbl.3
 MLINKS+=isinff.3 isnanf.3
 MLINKS+=j0.3 j0f.3 j0.3 j1.3 j0.3 j1f.3 j0.3 jn.3 j0.3 jnf.3 \
 	j0.3 y0.3 j0.3 y0f.3 j0.3 y1.3 j0.3 y1f.3 j0.3 yn.3 j0.3 ynf.3
-MLINKS+=ldexp.3 ldexpf.3 \
-	ldexp.3 ldexpl.3
 MLINKS+=lgamma.3 lgammaf.3 lgamma.3 lgamma_r.3 lgamma.3 lgammaf_r.3 \
 	lgamma.3 gamma.3 lgamma.3 gammaf.3 lgamma.3 gamma_r.3 \
 	lgamma.3 gammaf_r.3 lgamma.3 tgamma.3 lgamma.3 tgammaf.3
@@ -361,17 +347,12 @@ MLINKS+=modf.3 modff.3 \
 	modf.3 modfl.3
 MLINKS+=nextafter.3 nextafterf.3 \
 	nextafter.3 nextafterl.3 \
-	nextafter.3 nexttoward.3 \
-	nextafter.3 nexttowardf.3
+	nextafter.3 nexttoward.3
 MLINKS+=lrint.3 lrintf.3 lrint.3 llrint.3 lrint.3 llrintf.3
 MLINKS+=remainder.3 remainderf.3 \
 	remainder.3 remquo.3 \
 	remainder.3 remquof.3
-MLINKS+=rint.3 rintf.3 \
-	rint.3 rintl.3 \
-	rint.3 nearbyint.3 \
-	rint.3 nearbyintf.3 \
-	rint.3 nearbyintl.3
+MLINKS+=rint.3 rintf.3
 MLINKS+=scalbn.3 scalbnf.3 \
 	scalbn.3 scalbnl.3
 MLINKS+=sin.3 sinf.3
@@ -391,8 +372,6 @@ MLINKS+=fmax.3 fminl.3
 MLINKS+=fmax.3 fminf.3
 MLINKS+=fdim.3 fdiml.3
 MLINKS+=fdim.3 fdimf.3
-MLINKS+=fma.3 fmaf.3 \
-	fma.3 fmal.3
 
 .if (${MKCOMPLEX} != "no")
 .include "${.CURDIR}/complex/Makefile.inc"

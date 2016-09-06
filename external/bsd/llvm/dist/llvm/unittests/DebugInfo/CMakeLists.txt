@@ -1,3 +1,11 @@
+set(LLVM_LINK_COMPONENTS
+  DebugInfo
+  )
 
-add_subdirectory(DWARF)
-add_subdirectory(PDB)
+set(DebugInfoSources
+  DWARFFormValueTest.cpp
+  )
+
+add_llvm_unittest(DebugInfoTests
+  ${DebugInfoSources}
+  )

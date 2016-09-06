@@ -1,4 +1,4 @@
-#	$NetBSD: std.beagle,v 1.13 2014/08/24 07:59:22 jnemeth Exp $
+#	$NetBSD: std.beagle,v 1.12.4.1 2015/05/15 03:44:18 snj Exp $
 #
 # standard NetBSD/evbarm for BEAGLEBOARD options
 

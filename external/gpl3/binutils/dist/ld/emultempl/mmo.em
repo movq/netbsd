@@ -1,5 +1,6 @@
 # This shell script emits a C file. -*- C -*-
-#   Copyright (C) 2001-2015 Free Software Foundation, Inc.
+#   Copyright 2001, 2002, 2003, 2004, 2005, 2006, 2007, 2008, 2009
+#   Free Software Foundation, Inc.
 #
 # This file is part of the GNU Binutils.
 #
@@ -88,12 +89,10 @@ mmo_place_orphan (asection *s,
   lang_output_section_statement_type *after;
   lang_output_section_statement_type *os;
   size_t i;
-  flagword flags;
-  asection *nexts;
 
   /* We have nothing to say for anything other than a final link or
      for sections that are excluded.  */
-  if (bfd_link_relocatable (&link_info)
+  if (link_info.relocatable
       || (s->flags & SEC_EXCLUDE) != 0)
     return NULL;
 
@@ -107,31 +106,13 @@ mmo_place_orphan (asection *s,
       return os;
     }
 
-  flags = s->flags;
-  if (!bfd_link_relocatable (&link_info))
-    {
-      nexts = s;
-      while ((nexts = bfd_get_next_section_by_name (nexts->owner, nexts))
-	     != NULL)
-	if (nexts->output_section == NULL
-	    && (nexts->flags & SEC_EXCLUDE) == 0
-	    && ((nexts->flags ^ flags) & (SEC_LOAD | SEC_ALLOC)) == 0
-	    && (nexts->owner->flags & DYNAMIC) == 0
-	    && nexts->owner->usrdata != NULL
-	    && !(((lang_input_statement_type *) nexts->owner->usrdata)
-		 ->flags.just_syms))
-	  flags = (((flags ^ SEC_READONLY) | (nexts->flags ^ SEC_READONLY))
-		   ^ SEC_READONLY);
-    }
-
   /* Check for matching section type flags for sections we care about.
      A section without contents can have SEC_LOAD == 0, but we still
      want it attached to a sane section so the symbols appear as
      expected.  */
-
-  if ((flags & (SEC_ALLOC | SEC_READONLY)) != SEC_READONLY)
+  if ((s->flags & (SEC_ALLOC | SEC_READONLY)) != SEC_READONLY)
     for (i = 0; i < sizeof (holds) / sizeof (holds[0]); i++)
-      if ((flags & holds[i].nonzero_flags) != 0)
+      if ((s->flags & holds[i].nonzero_flags) != 0)
 	{
 	  place = &holds[i].orphansave;
 	  if (place->os == NULL)

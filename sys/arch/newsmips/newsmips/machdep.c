@@ -1,4 +1,4 @@
-/*	$NetBSD: machdep.c,v 1.118 2016/07/21 19:49:59 christos Exp $	*/
+/*	$NetBSD: machdep.c,v 1.115 2014/03/24 20:05:20 christos Exp $	*/
 
 /*
  * Copyright (c) 1988 University of Utah.
@@ -39,7 +39,7 @@
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
 
-__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.118 2016/07/21 19:49:59 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.115 2014/03/24 20:05:20 christos Exp $");
 
 /* from: Utah Hdr: machdep.c 1.63 91/04/24 */
 
@@ -75,9 +75,6 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.118 2016/07/21 19:49:59 christos Exp $
 
 #include <ufs/mfs/mfs_extern.h>		/* mfs_initminiroot() */
 
-#include <mips/cache.h>
-#include <mips/locore.h>
-
 #include <machine/reg.h>
 #include <machine/psl.h>
 #include <machine/pte.h>
@@ -86,6 +83,8 @@ __KERNEL_RCSID(0, "$NetBSD: machdep.c,v 1.118 2016/07/21 19:49:59 christos Exp $
 #include <machine/apbus.h>
 #include <machine/apcall.h>
 
+#include <mips/cache.h>
+#include <mips/locore.h>
 
 #define	_NEWSMIPS_BUS_DMA_PRIVATE
 #include <machine/bus.h>
@@ -197,7 +196,7 @@ mach_init(int x_boothowto, int x_bootdev, int x_bootname, int x_maxmem)
 #ifdef news5000
 	if (systype == NEWS5000) {
 		int i;
-		char *bspec = (char *)x_bootdev;
+		char *bootspec = (char *)x_bootdev;
 
 		if (bi_arg == NULL)
 			panic("news5000 requires BTINFO_BOOTARG to boot");
@@ -205,21 +204,21 @@ mach_init(int x_boothowto, int x_bootdev, int x_bootname, int x_maxmem)
 		_sip = (void *)bi_arg->sip;
 		x_maxmem = _sip->apbsi_memsize;
 		x_maxmem -= 0x00100000;	/* reserve 1MB for ROM monitor */
-		if (strncmp(bspec, "scsi", 4) == 0) {
+		if (strncmp(bootspec, "scsi", 4) == 0) {
 			x_bootdev = (5 << 28) | 0;	 /* magic, sd */
-			bspec += 4;
-			if (*bspec != '(' /*)*/)
+			bootspec += 4;
+			if (*bootspec != '(' /*)*/)
 				goto bootspec_end;
-			i = strtoul(bspec + 1, &bspec, 10);
+			i = strtoul(bootspec + 1, &bootspec, 10);
 			x_bootdev |= (i << 24);		/* bus */
-			if (*bspec != ',')
+			if (*bootspec != ',')
 				goto bootspec_end;
-			i = strtoul(bspec + 1, &bspec, 10);
+			i = strtoul(bootspec + 1, &bootspec, 10);
 			x_bootdev |= (i / 10) << 20;	/* controller */
 			x_bootdev |= (i % 10) << 16;	/* unit */
-			if (*bspec != ',')
+			if (*bootspec != ',')
 				goto bootspec_end;
-			i = strtoul(bspec + 1, &bspec, 10);
+			i = strtoul(bootspec + 1, &bootspec, 10);
 			x_bootdev |= (i << 8);		/* partition */
 		}
  bootspec_end:
@@ -371,10 +370,42 @@ mips_machdep_cache_config(void)
 void
 cpu_startup(void)
 {
+	vaddr_t minaddr, maxaddr;
+	char pbuf[9];
+#ifdef DEBUG
+	extern int pmapdebug;
+	int opmapdebug = pmapdebug;
+
+	pmapdebug = 0;
+#endif
+
+	/*
+	 * Good {morning,afternoon,evening,night}.
+	 */
+	printf("%s%s", copyright, version);
 	printf("SONY NET WORK STATION, Model %s, ", idrom.id_model);
 	printf("Machine ID #%d\n", idrom.id_serial);
+	format_bytes(pbuf, sizeof(pbuf), ctob(physmem));
+	printf("total memory = %s\n", pbuf);
 
-	cpu_startup_common();
+	minaddr = 0;
+	/*
+	 * Allocate a submap for physio
+	 */
+	phys_map = uvm_km_suballoc(kernel_map, &minaddr, &maxaddr,
+	    VM_PHYS_SIZE, 0, false, NULL);
+
+	/*
+	 * No need to allocate an mbuf cluster submap.  Mbuf clusters
+	 * are allocated via the pool allocator, and we use KSEG to
+	 * map those pages.
+	 */
+
+#ifdef DEBUG
+	pmapdebug = opmapdebug;
+#endif
+	format_bytes(pbuf, sizeof(pbuf), ptoa(uvmexp.free));
+	printf("avail memory = %s\n", pbuf);
 }
 
 /*

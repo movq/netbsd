@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.11 2016/02/09 20:40:45 plunky Exp $
+#	$NetBSD: Makefile,v 1.10 2014/07/24 20:20:49 plunky Exp $
 
 .include <bsd.init.mk>
 
@@ -10,7 +10,8 @@
 
 PROG=	pcpp
 
-SRCS+=	cpc.c cpp.c token.c
+SRCS=	cpy.y
+SRCS+=	cpp.c token.c
 
 MAN=	pcpp.1
 
@@ -23,7 +24,8 @@ CPPFLAGS+=	-I${.OBJDIR}
 CPPFLAGS+=	-I${PCC_DIST}/mip
 CPPFLAGS+=	-I${PCC_DIST}/cc/cpp
 
-COPTS.cpp.c+=	${${ACTIVE_CC} == "gcc" :? -Wno-error=cast-qual :}
+# generate cpy.h
+YHEADER=
 
 CLEANFILES+=	pcpp.1
 

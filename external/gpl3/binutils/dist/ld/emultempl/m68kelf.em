@@ -1,5 +1,6 @@
 # This shell script emits a C file. -*- C -*-
-#   Copyright (C) 2000-2015 Free Software Foundation, Inc.
+#   Copyright 2000, 2001, 2003, 2005, 2007, 2008, 2009
+#   Free Software Foundation, Inc.
 #   Written by Michael Sokolov <msokolov@ivan.Harhan.ORG>, based on armelf.em
 #
 # This file is part of the GNU Binutils.
@@ -67,7 +68,7 @@ m68k_elf_after_open (void)
 
 #ifdef SUPPORT_EMBEDDED_RELOCS
   if (command_line.embedded_relocs
-      && (!bfd_link_relocatable (&link_info)))
+      && (! link_info.relocatable))
     {
       bfd *abfd;
 
@@ -75,7 +76,7 @@ m68k_elf_after_open (void)
 	 input file with a nonzero .data section.  The BFD backend will fill in
 	 these sections with magic numbers which can be used to relocate the
 	 data section at run time.  */
-      for (abfd = link_info.input_bfds; abfd != NULL; abfd = abfd->link.next)
+      for (abfd = link_info.input_bfds; abfd != NULL; abfd = abfd->link_next)
 	{
 	  asection *datasec;
 
@@ -147,13 +148,13 @@ m68k_elf_after_allocation (void)
 
 #ifdef SUPPORT_EMBEDDED_RELOCS
   if (command_line.embedded_relocs
-      && (!bfd_link_relocatable (&link_info)))
+      && (! link_info.relocatable))
     {
       bfd *abfd;
 
       /* If we are generating embedded relocs, call a special BFD backend
 	 routine to do the work.  */
-      for (abfd = link_info.input_bfds; abfd != NULL; abfd = abfd->link.next)
+      for (abfd = link_info.input_bfds; abfd != NULL; abfd = abfd->link_next)
 	{
 	  asection *datasec, *relsec;
 	  char *errmsg;

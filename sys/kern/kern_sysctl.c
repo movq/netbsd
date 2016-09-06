@@ -1,4 +1,4 @@
-/*	$NetBSD: kern_sysctl.c,v 1.258 2015/10/23 01:58:43 pgoyette Exp $	*/
+/*	$NetBSD: kern_sysctl.c,v 1.253 2014/08/10 16:44:36 tls Exp $	*/
 
 /*-
  * Copyright (c) 2003, 2007, 2008 The NetBSD Foundation, Inc.
@@ -68,12 +68,9 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: kern_sysctl.c,v 1.258 2015/10/23 01:58:43 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: kern_sysctl.c,v 1.253 2014/08/10 16:44:36 tls Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_defcorename.h"
-#endif
-
 #include "ksyms.h"
 
 #include <sys/param.h>
@@ -87,7 +84,7 @@ __KERNEL_RCSID(0, "$NetBSD: kern_sysctl.c,v 1.258 2015/10/23 01:58:43 pgoyette E
 #include <sys/syscallargs.h>
 #include <sys/kauth.h>
 #include <sys/ktrace.h>
-#include <sys/rndsource.h>
+#include <sys/rnd.h>
 
 #define	MAXDESCLEN	1024
 MALLOC_DEFINE(M_SYSCTLNODE, "sysctlnode", "sysctl node structures");
@@ -798,7 +795,7 @@ sysctl_create(SYSCTLFN_ARGS)
 
 	/*
 	 * the name must be only alphanumerics or - or _, longer than
-	 * 0 bytes and less than SYSCTL_NAMELEN
+	 * 0 bytes and less that SYSCTL_NAMELEN
 	 */
 	nsz = 0;
 	while (nsz < SYSCTL_NAMELEN && nnode.sysctl_name[nsz] != '\0') {
@@ -1639,7 +1636,6 @@ sysctl_mmap(SYSCTLFN_ARGS)
 	const struct sysctlnode *node;
 	struct sysctlnode nnode;
 	int error;
-	int sysctl_num;
 
 	if (SYSCTL_VERS(rnode->sysctl_flags) != SYSCTL_VERSION) {
 		printf("sysctl_mmap: rnode %p wrong version\n", rnode);
@@ -1667,8 +1663,7 @@ sysctl_mmap(SYSCTLFN_ARGS)
 	if (namelen != 1)
 		return (EOPNOTSUPP);
 	node = rnode;
-	sysctl_num = nnode.sysctl_num;
-	error = sysctl_locate(l, &sysctl_num, 1, &node, NULL);
+        error = sysctl_locate(l, &nnode.sysctl_num, 1, &node, NULL);
 	if (error)
 		return (error);
 

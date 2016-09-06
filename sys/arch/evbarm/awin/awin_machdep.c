@@ -1,4 +1,4 @@
-/*	$NetBSD: awin_machdep.c,v 1.48 2016/04/25 20:15:46 bouyer Exp $ */
+/*	$NetBSD: awin_machdep.c,v 1.8.2.10 2015/01/07 21:08:06 msaitoh Exp $ */
 
 /*
  * Machine dependent functions for kernel setup for TI OSK5912 board.
@@ -125,7 +125,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: awin_machdep.c,v 1.48 2016/04/25 20:15:46 bouyer Exp $");
+__KERNEL_RCSID(0, "$NetBSD: awin_machdep.c,v 1.8.2.10 2015/01/07 21:08:06 msaitoh Exp $");
 
 #include "opt_machdep.h"
 #include "opt_ddb.h"
@@ -139,8 +139,6 @@ __KERNEL_RCSID(0, "$NetBSD: awin_machdep.c,v 1.48 2016/04/25 20:15:46 bouyer Exp
 #include "com.h"
 #include "ukbd.h"
 #include "genfb.h"
-#include "ether.h"
-#include "axp20x.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -179,10 +177,6 @@ __KERNEL_RCSID(0, "$NetBSD: awin_machdep.c,v 1.48 2016/04/25 20:15:46 bouyer Exp
 #include <dev/ic/ns16550reg.h>
 #include <dev/ic/comreg.h>
 
-#if NAXP20X > 0
-#include <dev/i2c/axp20xvar.h>
-#endif
-
 #include <arm/allwinner/awin_reg.h>
 #include <arm/allwinner/awin_var.h>
 
@@ -210,11 +204,6 @@ bool cubietruck_p;
 #define cubietruck_p	true
 #else
 #define cubietruck_p	false
-#endif
-
-#if NAXP20X > 0
-static device_t pmic_dev = NULL;
-static int pmic_cpu_dcdc;
 #endif
 
 #ifdef AWIN_SYSCONFIG
@@ -260,12 +249,6 @@ static void awin_device_register(device_t, void *);
 
 #ifdef AWIN_SYSCONFIG
 static void awin_gpio_sysconfig(prop_dictionary_t);
-static void awin_display_sysconfig(prop_dictionary_t);
-static void awin_hdmi_sysconfig(prop_dictionary_t);
-static void awin_tcon_sysconfig(device_t, prop_dictionary_t);
-static void awin_tcon_lcd_sysconfig(const char *, prop_dictionary_t);
-static void awin_lradc_sysconfig(prop_dictionary_t);
-static void awin_lradc_chan_sysconfig(int, prop_dictionary_t);
 #endif
 
 #if NCOM > 0
@@ -303,48 +286,6 @@ static const struct pmap_devmap devmap[] = {
 		.pd_prot = VM_PROT_READ|VM_PROT_WRITE,
 		.pd_cache = PTE_NOCACHE
 	},
-#if defined(ALLWINNER_A80)
-	{
-		/*
-		 * A80 SYS_CTRL, HS TIMER, DMA, MSG-BOX, SPINLOCK
-		 */
-		.pd_va = _A(AWIN_A80_CORE2_VBASE),
-		.pd_pa = _A(AWIN_A80_CORE2_PBASE),
-		.pd_size = _S(AWIN_A80_CORE2_SIZE),
-		.pd_prot = VM_PROT_READ|VM_PROT_WRITE,
-		.pd_cache = PTE_NOCACHE
-	},
-	{
-		/*
-		 * A80 USB-EHCI0/OHCI0, USB-EHCI1, USB-EHCI2/OHCI2
-		 */
-		.pd_va = _A(AWIN_A80_USB_VBASE),
-		.pd_pa = _A(AWIN_A80_USB_PBASE),
-		.pd_size = _S(AWIN_A80_USB_SIZE),
-		.pd_prot = VM_PROT_READ|VM_PROT_WRITE,
-		.pd_cache = PTE_NOCACHE
-	},
-	{
-		/*
-		 * A80 RSB, RPRCM
-		 */
-		.pd_va = _A(AWIN_A80_RCPUS_VBASE),
-		.pd_pa = _A(AWIN_A80_RCPUS_PBASE),
-		.pd_size = _S(AWIN_A80_RCPUS_SIZE),
-		.pd_prot = VM_PROT_READ|VM_PROT_WRITE,
-		.pd_cache = PTE_NOCACHE
-	},
-	{
-		/*
-		 * A80 CPUCFG
-		 */
-		.pd_va = _A(AWIN_A80_RCPUCFG_VBASE),
-		.pd_pa = _A(AWIN_A80_RCPUCFG_PBASE),
-		.pd_size = _S(AWIN_A80_RCPUCFG_SIZE),
-		.pd_prot = VM_PROT_READ|VM_PROT_WRITE,
-		.pd_cache = PTE_NOCACHE
-	},
-#endif
 	{
 		/*
 		 * Map all 1MB of SRAM area.
@@ -540,13 +481,8 @@ initarm(void *arg)
 #define CONMODE ((TTYDEF_CFLAG & ~(CSIZE | CSTOPB | PARENB | HUPCL)) | CS8) /* 8N1 */
 #endif
 
-#ifdef ALLWINNER_A80
-__CTASSERT(AWIN_CORE_PBASE + AWIN_A80_UART0_OFFSET <= CONADDR);
-__CTASSERT(CONADDR <= AWIN_CORE_PBASE + AWIN_A80_UART5_OFFSET);
-#else
 __CTASSERT(AWIN_CORE_PBASE + AWIN_UART0_OFFSET <= CONADDR);
 __CTASSERT(CONADDR <= AWIN_CORE_PBASE + AWIN_UART7_OFFSET);
-#endif
 __CTASSERT(CONADDR % AWIN_UART_SIZE == 0);
 static const bus_addr_t conaddr = CONADDR;
 static const int conspeed = CONSPEED;
@@ -556,7 +492,7 @@ static const int conmode = CONMODE;
 void
 consinit(void)
 {
-	bus_space_tag_t bst = &armv7_generic_a4x_bs_tag;
+	bus_space_tag_t bst = &awin_a4x_bs_tag;
 #if NCOM > 0
 	bus_space_handle_t bh;
 #endif
@@ -636,17 +572,6 @@ awin_device_register(device_t self, void *aux)
 
 	if (device_is_a(self, "armperiph")
 	    && device_is_a(device_parent(self), "mainbus")) {
-
-#if defined(ALLWINNER_A80)
-		/* XXX Cubie4 SDK u-boot wrongly sets cbar to 0x01c80000 */
-		if (armreg_cbar_read() != AWIN_A80_GIC_BASE) {
-			aprint_normal("fixup: cbar %#x -> %#x\n",
-			    armreg_cbar_read(), AWIN_A80_GIC_BASE);
-			prop_dictionary_set_uint32(dict, "cbar",
-			    AWIN_A80_GIC_BASE);
-		}
-#endif
-
 		/*
 		 * XXX KLUDGE ALERT XXX
 		 * The iot mainbus supplies is completely wrong since it scales
@@ -654,7 +579,7 @@ awin_device_register(device_t self, void *aux)
 		 * bus space used for the armcore regisers (which armperiph uses). 
 		 */
 		struct mainbus_attach_args * const mb = aux;
-		mb->mb_iot = &armv7_generic_bs_tag;
+		mb->mb_iot = &awin_bs_tag;
 		return;
 	}
  
@@ -676,13 +601,8 @@ awin_device_register(device_t self, void *aux)
 		} else {
 			prop_dictionary_set_bool(dict, "no-awge", true);
 		}
-#elif AWIN_board == AWIN_bpi || AWIN_board == AWIN_olimexlime2
+#elif AWIN_board == AWIN_bpi
 		prop_dictionary_set_bool(dict, "no-awe", true);
-#endif
-#ifdef AWIN_SYSCONFIG
-		if (awin_sysconfig_p) {
-			awin_display_sysconfig(dict);
-		}
 #endif
 		return;
 	}
@@ -703,6 +623,15 @@ awin_device_register(device_t self, void *aux)
 		 */
 		prop_dictionary_set_cstring(dict, "satapwren",
 		    (cubietruck_p ? ">PH12" : ">PB8"));
+#if AWIN_board == AWIN_cubieboard || AWIN_board == AWIN_cubietruck || AWIN_board == AWIN_bpi
+		if (cubietruck_p) {
+			prop_dictionary_set_cstring(dict, "usb0drv", ">PH17");
+		} else if (awin_chip_id() == AWIN_CHIP_ID_A20) {
+			prop_dictionary_set_cstring(dict, "usb0drv", ">PB9");
+		} else {
+			prop_dictionary_set_cstring(dict, "usb0drv", ">PB2");
+		}
+#endif
 #if AWIN_board == AWIN_hummingbird_a31
 		prop_dictionary_set_cstring(dict, "usb0iddet", "<PA15");
 		prop_dictionary_set_cstring(dict, "usb0vbusdet", "<PA16");
@@ -711,17 +640,7 @@ awin_device_register(device_t self, void *aux)
 		prop_dictionary_set_cstring(dict, "usb1drv", ">PH27");
 		prop_dictionary_set_cstring(dict, "usb1restrict", ">PH26");
 		prop_dictionary_set_cstring(dict, "usb2drv", ">PH24");
-#elif AWIN_board == AWIN_allwinner_a80
-		prop_dictionary_set_cstring(dict, "usb1drv", ">PH14");
-		prop_dictionary_set_cstring(dict, "usb2drv", ">PH15");
 #else
-		if (cubietruck_p) {
-			prop_dictionary_set_cstring(dict, "usb0drv", ">PH17");
-		} else if (awin_chip_id() == AWIN_CHIP_ID_A20) {
-			prop_dictionary_set_cstring(dict, "usb0drv", ">PB9");
-		} else {
-			prop_dictionary_set_cstring(dict, "usb0drv", ">PB2");
-		}
 		prop_dictionary_set_cstring(dict, "usb2drv", ">PH3");
 		prop_dictionary_set_cstring(dict, "usb0iddet",
 		    (cubietruck_p ? "<PH19" : "<PH4"));
@@ -732,10 +651,6 @@ awin_device_register(device_t self, void *aux)
 #if AWIN_board == AWIN_cubietruck
 		prop_dictionary_set_cstring(dict, "usb0restrict", ">PH0");
 #endif
-#if AWIN_board == AWIN_allwinner_a80
-		prop_dictionary_set_cstring(dict, "status-led1", ">PH06");
-		prop_dictionary_set_cstring(dict, "status-led2", ">PH17");
-#else
 		prop_dictionary_set_cstring(dict, "status-led1", ">PH21");
 		prop_dictionary_set_cstring(dict, "status-led2", ">PH20");
 		if (cubietruck_p) {
@@ -745,15 +660,12 @@ awin_device_register(device_t self, void *aux)
 			prop_dictionary_set_cstring(dict, "hdd5ven", ">PH17");
 			prop_dictionary_set_cstring(dict, "emacpwren", ">PH19");
 		}
-#endif
-#if AWIN_board == AWIN_cubieboard || AWIN_board == AWIN_cubietruck || AWIN_board == AWIN_olimexlime2
+#if AWIN_board == AWIN_cubieboard || AWIN_board == AWIN_cubietruck
 		prop_dictionary_set_cstring(dict, "mmc0detect", "<PH1");
 #elif AWIN_board == AWIN_bpi
 		prop_dictionary_set_cstring(dict, "mmc0detect", "<PH10");
 #elif AWIN_board == AWIN_hummingbird_a31
 		prop_dictionary_set_cstring(dict, "mmc0detect", "<PH8");
-#elif AWIN_board == AWIN_allwinner_a80
-		prop_dictionary_set_cstring(dict, "mmc0detect", "<PH18");
 #endif
 
 #if AWIN_board == AWIN_hummingbird_a31
@@ -804,20 +716,28 @@ awin_device_register(device_t self, void *aux)
 		return;
 	}
 
-	if (device_is_a(self, "awge") && device_unit(self) == 0) {
-#if NETHER > 0
+	if (device_is_a(self, "awge")) {
 		/*
 		 * Get the GMAC MAC address from cmdline.
 		 */
 		uint8_t enaddr[ETHER_ADDR_LEN];
-		if (get_bootconf_option(boot_args, "awge0.mac-address",
-		    BOOTOPT_TYPE_MACADDR, enaddr)) {
-			prop_data_t pd = prop_data_create_data(enaddr,
-			    sizeof(enaddr));
-			prop_dictionary_set(dict, "mac-address", pd);
-			prop_object_release(pd);
+		char argname[strlen("awge?.mac-address") + 1];
+		char *mac_addr;
+		snprintf(argname, sizeof(argname), "%s.mac-address",
+		    device_xname(self));
+
+		if (get_bootconf_option(boot_args, argname,
+		    BOOTOPT_TYPE_STRING, &mac_addr)) {
+			char mac[strlen("XX:XX:XX:XX:XX:XX") + 1];
+			strlcpy(mac, mac_addr, sizeof(mac));
+			if (!ether_aton_r(enaddr, sizeof(enaddr), mac)) {
+				prop_data_t pd;
+				pd = prop_data_create_data(enaddr, sizeof(enaddr));
+				KASSERT(pd != NULL);
+				prop_dictionary_set(dict, "mac-address", pd);
+				prop_object_release(pd);
+			}
 		}
-#endif
 
 #if AWIN_board == AWIN_cubieboard
 		if (awin_chip_id() == AWIN_CHIP_ID_A20) {
@@ -861,33 +781,7 @@ awin_device_register(device_t self, void *aux)
 				    "display-mode", "dvi");
 			}
 		}
-#ifdef AWIN_SYSCONFIG
-		if (awin_sysconfig_p) {
-			awin_hdmi_sysconfig(dict);
-		}
-#endif
 	}
-#ifdef AWIN_SYSCONFIG
-	if (device_is_a(self, "awintcon")) {
-		if (awin_sysconfig_p) {
-			awin_tcon_sysconfig(self, dict);
-		}
-	}
-	if (device_is_a(self, "awinlradc")) {
-		if (awin_sysconfig_p) {
-			awin_lradc_sysconfig(dict);
-		}
-	}
-#endif
-
-#if NAXP20X > 0
-	if (device_is_a(self, "axp20x")) {
-		pmic_dev = self;
-#if AWIN_board == AWIN_cubieboard || AWIN_board == AWIN_cubietruck || AWIN_board == AWIN_bpi || AWIN_board == AWIN_olimexlime2
-		pmic_cpu_dcdc = AXP20X_DCDC2;
-#endif
-	}
-#endif
 
 #if NGENFB > 0
 	if (device_is_a(self, "genfb")) {
@@ -906,17 +800,6 @@ awin_device_register(device_t self, void *aux)
 		}
 	}
 #endif
-}
-
-int
-awin_set_mpu_volt(int mvolt, bool poll)
-{
-#if NAXP20X > 0
-	if (pmic_dev && device_is_a(pmic_dev, "axp20x")) {
-		return axp20x_set_dcdc(pmic_dev, pmic_cpu_dcdc, mvolt, 0);
-	}
-#endif
-	return ENODEV;
 }
 
 #ifdef AWIN_SYSCONFIG
@@ -948,10 +831,6 @@ awin_gpio_sysconfig(prop_dictionary_t dict)
 		{ "mmc0detect",		"mmc0_para", "sdc_det" },
 		{ "audiopactrl",	"audio_para", "audio_pa_ctrl" },
 		{ "gmacpwren",		"gmac_phy_power", "gmac_phy_power_en" },
-		{ "lcd0_power_en",	"lcd0_para", "lcd_power" },
-		{ "lcd0_bl_en",		"lcd0_para", "lcd_bl_en" },
-		{ "lcd1_power_en",	"lcd1_para", "lcd_power" },
-		{ "lcd1_bl_en",		"lcd1_para", "lcd_bl_en" },
 	};
 	unsigned int n;
 
@@ -964,292 +843,6 @@ awin_gpio_sysconfig(prop_dictionary_t dict)
 			aprint_normal(" [%s %s]", gpios[n].prop, cfg);
 			prop_dictionary_set_cstring(dict, gpios[n].prop, cfg);
 		}
-	}
-}
-
-/* see which display devices needs to be disabled */
-
-static void
-awin_display_sysconfig(prop_dictionary_t dict)
-{
-	bool hdmi_used = false;
-	int screen0_type, screen1_type;
-
-	switch(awin_sysconfig_get_int("disp_init", "disp_init_enable")) {
-	case -1:
-		return;
-	case 0:
-		prop_dictionary_set_bool(dict, "no-awindebe-0", true);
-		prop_dictionary_set_bool(dict, "no-awindebe-1", true);
-		prop_dictionary_set_bool(dict, "no-awintcon-0", true);
-		prop_dictionary_set_bool(dict, "no-awintcon-1", true);
-		prop_dictionary_set_bool(dict, "no-awinhdmi", true);
-		prop_dictionary_set_bool(dict, "no-awinhdmiaudio", true);
-		return;
-	default:
-		break;
-	}
-	screen0_type = awin_sysconfig_get_int("disp_init", "screen0_output_type");
-	screen1_type = awin_sysconfig_get_int("disp_init", "screen1_output_type");
-	switch(awin_sysconfig_get_int("disp_init", "disp_mode")) {
-	case 0:
-		/* screen0, fb0 */
-		prop_dictionary_set_bool(dict, "no-awindebe-1", true);
-		prop_dictionary_set_bool(dict, "no-awintcon-1", true);
-		hdmi_used = (screen0_type == 3);
-		break;
-	case 1:
-		/* screen1, fb0 */
-		prop_dictionary_set_bool(dict, "no-awindebe-0", true);
-		prop_dictionary_set_bool(dict, "no-awintcon-0", true);
-		hdmi_used = (screen1_type == 3);
-		break;
-	case 2:
-		/* dual-head; all tcon and debe used */
-		hdmi_used = (screen0_type == 3 || screen1_type == 3);
-		break;
-	case 3:
-		/* xinerama */
-	case 4:
-		/* clone */
-		hdmi_used = (screen0_type == 3 || screen1_type == 3);
-		break;
-	default:
-		return;
-	}
-	if (!hdmi_used) {
-		prop_dictionary_set_bool(dict, "no-awinhdmi", true);
-		prop_dictionary_set_bool(dict, "no-awinhdmiaudio", true);
-	}
-
-}
-
-static void
-awin_hdmi_sysconfig(prop_dictionary_t dict)
-{
-	int type;
-
-	if (awin_sysconfig_get_int("disp_init", "disp_mode") != 1) {
-		/* tcon0 enabled, try tcon0 first */
-		type =
-		    awin_sysconfig_get_int("disp_init", "screen0_output_type");
-		if (type < 0)
-			return;
-		if (type == 3) {
-			prop_dictionary_set_int8(dict, "tcon_unit", 0);
-			return;
-		}
-	}
-	/* either tcon0 is not enabled, or not in hdmi mode. try tcon1 */
-	type = awin_sysconfig_get_int("disp_init", "screen1_output_type");
-	if (type == 3) {
-		prop_dictionary_set_int8(dict, "tcon_unit", 1);
-		return;
-	}
-	/*
-	 * all other cases, including failure to get screen1_output_type
-	 * Note that this should not happen as HDMI should have been
-	 * disabled in this case.
-	 */
-	prop_dictionary_set_int8(dict, "tcon_unit", -1);
-}
-
-static void
-awin_tcon_sysconfig(device_t self, prop_dictionary_t dict)
-{
-	int mode = awin_sysconfig_get_int("disp_init", "disp_mode");
-	int type;
-
-	if (device_unit(self) == 0) {
-		if (mode < 0)
-			return;
-
-		type = awin_sysconfig_get_int("disp_init", "screen0_output_type");
-		if (type == 1) {
-			/* LCD/LVDS output */
-			awin_tcon_lcd_sysconfig("lcd0_para", dict);
-			if (awin_sysconfig_get_int("lcd0_para",
-			    "lcd_bl_en_used") == 1) {
-				prop_dictionary_set_cstring(dict,
-				    "lcd_bl_en", "lcd0_bl_en");
-			}
-			if (awin_sysconfig_get_int("lcd0_para",
-			    "lcd_power_used") == 1) {
-				prop_dictionary_set_cstring(dict,
-				    "lcd_power_en", "lcd0_power_en");
-			}
-			return;
-		}
-		if (type == 3) {
-			prop_dictionary_set_cstring(dict, "output", "hdmi");
-			return;
-		}
-		/* unsupported mode */
-		return;
-	}
-	if (device_unit(self) == 1) {
-		type = awin_sysconfig_get_int("disp_init", "screen1_output_type");
-		if (type == 1) {
-			/* LCD/LVDS output */
-			awin_tcon_lcd_sysconfig("lcd1_para", dict);
-			if (awin_sysconfig_get_int("lcd1_para",
-			    "lcd_bl_en_used") == 1) {
-				prop_dictionary_set_cstring(dict,
-				    "lcd_bl_en", "lcd1_bl_en");
-			}
-			if (awin_sysconfig_get_int("lcd1_para",
-			    "lcd_power_used") == 1) {
-				prop_dictionary_set_cstring(dict,
-				    "lcd_power_en", "lcd1_power_en");
-			}
-			return;
-		}
-		if (type == 3) {
-			prop_dictionary_set_cstring(dict, "output", "hdmi");
-			return;
-		}
-		/* unsupported mode */
-		return;
-	}
-}
-
-static void
-awin_tcon_lcd_sysconfig(const char *key, prop_dictionary_t dict)
-{
-	static const char *lcdtimings[] = {
-		"lcd_x",
-		"lcd_y",
-		"lcd_dclk_freq",
-		"lcd_hbp",
-		"lcd_ht",
-		"lcd_hspw",
-		"lcd_vbp",
-		"lcd_vt",
-		"lcd_vspw",
-		"lcd_io_cfg0",
-	};
-	static const char *lcdgpio[] = {
-		"lcdd0",
-		"lcdd1",
-		"lcdd2",
-		"lcdd3",
-		"lcdd4",
-		"lcdd5",
-		"lcdd6",
-		"lcdd7",
-		"lcdd8",
-		"lcdd9",
-		"lcdd10",
-		"lcdd11",
-		"lcdd12",
-		"lcdd13",
-		"lcdd14",
-		"lcdd15",
-		"lcdd16",
-		"lcdd17",
-		"lcdd18",
-		"lcdd19",
-		"lcdd20",
-		"lcdd21",
-		"lcdd22",
-		"lcdd23",
-		"lcdclk",
-		"lcdde",
-		"lcdhsync",
-		"lcdvsync"
-	};
-	unsigned int n;
-	const char *cfg;
-
-	switch(awin_sysconfig_get_int(key, "lcd_if")) {
-	case -1:
-		/* error */
-		return;
-	case 3:
-		prop_dictionary_set_cstring(dict, "output", "lvds");
-
-		if (awin_sysconfig_get_int(key, "lcd_lvds_ch") == 1)
-			prop_dictionary_set_bool(dict, "lvds_dual", true);
-		else
-			prop_dictionary_set_bool(dict, "lvds_dual", false);
-
-		if (awin_sysconfig_get_int(key, "lcd_lvds_mode") == 1)
-			prop_dictionary_set_bool(dict, "lvds_mode_jeida", true);
-		else
-			prop_dictionary_set_bool(dict, "lvds_mode_jeida", false);
-
-		if (awin_sysconfig_get_int(key, "lcd_lvds_bitwidth") == 1)
-			prop_dictionary_set_bool(dict, "lvds_18bits", true);
-		else
-			prop_dictionary_set_bool(dict, "lvds_18bits", false);
-		break;
-	default:
-		/* unsupported */
-		return;
-	}
-
-	for (n = 0; n < __arraycount(lcdtimings); n++) {
-		int value = awin_sysconfig_get_int( key, lcdtimings[n]);
-		if (value >= 0) {
-			prop_dictionary_set_int32(dict, lcdtimings[n], value);
-		}
-	}
-	for (n = 0; n < __arraycount(lcdgpio); n++) {
-		cfg = awin_sysconfig_get_string(key, lcdgpio[n]);
-		if (cfg != NULL) {
-			prop_dictionary_set_cstring(dict, lcdgpio[n], cfg);
-		}
-	}
-
-}
-
-static void
-awin_lradc_sysconfig(prop_dictionary_t dict)
-{
-	int chan;
-	int vref;
-
-	switch(awin_sysconfig_get_int("lradc_para", "lradc_used")) {
-	case 0:
-		/* unused */
-		return;
-	case 1:
-		/* used */
-		break;
-	default:
-		/* error */
-		return;
-	}
-	vref = awin_sysconfig_get_int("lradc_para", "lradc_vref");
-	if (vref <= 0)
-		return;
-	prop_dictionary_set_int32(dict, "vref", vref);
-	for (chan = 0; chan < 2; chan++)
-		awin_lradc_chan_sysconfig(chan, dict);
-}
-
-static void
-awin_lradc_chan_sysconfig(int chan, prop_dictionary_t dict)
-{
-	int i;
-	char level_key[14];
-	int level;
-	char name_key[13];
-	const char *name;
-
-	for (i = 0; i < 32; i++) {
-		snprintf(level_key, sizeof(level_key), "chan%d_level%d",
-		    chan, i);
-		snprintf(name_key, sizeof(name_key), "chan%d_name%d",
-		    chan, i);
-		level = awin_sysconfig_get_int("lradc_para", level_key);
-		if (level < 0)
-			break;
-		name = awin_sysconfig_get_string("lradc_para", name_key);
-		if (name == NULL)
-			break;
-		prop_dictionary_set_int32(dict, level_key, level);
-		prop_dictionary_set_cstring(dict, name_key, name);
 	}
 }
 #endif

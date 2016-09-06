@@ -1,6 +1,6 @@
 /* Python interface to architecture
 
-   Copyright (C) 2013-2015 Free Software Foundation, Inc.
+   Copyright (C) 2013-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -42,7 +42,7 @@ static struct gdbarch_data *arch_object_data = NULL;
       }								\
   } while (0)
 
-extern PyTypeObject arch_object_type
+static PyTypeObject arch_object_type
     CPYCHECKER_TYPE_OBJECT_FOR_TYPEDEF ("arch_object");
 
 /* Associates an arch_object with GDBARCH as gdbarch_data via the gdbarch
@@ -199,6 +199,7 @@ archpy_disassemble (PyObject *self, PyObject *args, PyObject *kw)
       char *as = NULL;
       struct ui_file *memfile = mem_fileopen ();
       PyObject *insn_dict = PyDict_New ();
+      volatile struct gdb_exception except;
 
       if (insn_dict == NULL)
         {
@@ -216,11 +217,11 @@ archpy_disassemble (PyObject *self, PyObject *args, PyObject *kw)
           return NULL;  /* PyList_Append Sets the exception.  */
         }
 
-      TRY
+      TRY_CATCH (except, RETURN_MASK_ALL)
         {
           insn_len = gdb_print_insn (gdbarch, pc, memfile, NULL);
         }
-      CATCH (except, RETURN_MASK_ALL)
+      if (except.reason < 0)
         {
           Py_DECREF (result_list);
           ui_file_delete (memfile);
@@ -228,7 +229,6 @@ archpy_disassemble (PyObject *self, PyObject *args, PyObject *kw)
 	  gdbpy_convert_exception (except);
 	  return NULL;
         }
-      END_CATCH
 
       as = ui_file_xstrdup (memfile, NULL);
       if (PyDict_SetItemString (insn_dict, "addr",
@@ -281,7 +281,7 @@ END_PC." },
   {NULL}  /* Sentinel */
 };
 
-PyTypeObject arch_object_type = {
+static PyTypeObject arch_object_type = {
   PyVarObject_HEAD_INIT (NULL, 0)
   "gdb.Architecture",                 /* tp_name */
   sizeof (arch_object),               /* tp_basicsize */

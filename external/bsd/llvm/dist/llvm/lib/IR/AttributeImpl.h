@@ -18,7 +18,6 @@
 
 #include "llvm/ADT/FoldingSet.h"
 #include "llvm/IR/Attributes.h"
-#include "llvm/Support/TrailingObjects.h"
 #include <string>
 
 namespace llvm {
@@ -34,8 +33,8 @@ class AttributeImpl : public FoldingSetNode {
   unsigned char KindID; ///< Holds the AttrEntryKind of the attribute
 
   // AttributesImpl is uniqued, these should not be publicly available.
-  void operator=(const AttributeImpl &) = delete;
-  AttributeImpl(const AttributeImpl &) = delete;
+  void operator=(const AttributeImpl &) LLVM_DELETED_FUNCTION;
+  AttributeImpl(const AttributeImpl &) LLVM_DELETED_FUNCTION;
 
 protected:
   enum AttrEntryKind {
@@ -116,10 +115,10 @@ class IntAttributeImpl : public EnumAttributeImpl {
 public:
   IntAttributeImpl(Attribute::AttrKind Kind, uint64_t Val)
       : EnumAttributeImpl(IntAttrEntry, Kind), Val(Val) {
-    assert((Kind == Attribute::Alignment || Kind == Attribute::StackAlignment ||
-            Kind == Attribute::Dereferenceable ||
-            Kind == Attribute::DereferenceableOrNull) &&
-           "Wrong kind for int attribute!");
+    assert(
+        (Kind == Attribute::Alignment || Kind == Attribute::StackAlignment ||
+         Kind == Attribute::Dereferenceable) &&
+        "Wrong kind for int attribute!");
   }
 
   uint64_t getValue() const { return Val; }
@@ -142,21 +141,18 @@ public:
 /// \class
 /// \brief This class represents a group of attributes that apply to one
 /// element: function, return type, or parameter.
-class AttributeSetNode final
-    : public FoldingSetNode,
-      private TrailingObjects<AttributeSetNode, Attribute> {
-  friend TrailingObjects;
-
+class AttributeSetNode : public FoldingSetNode {
   unsigned NumAttrs; ///< Number of attributes in this node.
 
   AttributeSetNode(ArrayRef<Attribute> Attrs) : NumAttrs(Attrs.size()) {
     // There's memory after the node where we can store the entries in.
-    std::copy(Attrs.begin(), Attrs.end(), getTrailingObjects<Attribute>());
+    std::copy(Attrs.begin(), Attrs.end(),
+              reinterpret_cast<Attribute *>(this + 1));
   }
 
   // AttributesSetNode is uniqued, these should not be publicly available.
-  void operator=(const AttributeSetNode &) = delete;
-  AttributeSetNode(const AttributeSetNode &) = delete;
+  void operator=(const AttributeSetNode &) LLVM_DELETED_FUNCTION;
+  AttributeSetNode(const AttributeSetNode &) LLVM_DELETED_FUNCTION;
 public:
   static AttributeSetNode *get(LLVMContext &C, ArrayRef<Attribute> Attrs);
 
@@ -170,11 +166,10 @@ public:
   unsigned getAlignment() const;
   unsigned getStackAlignment() const;
   uint64_t getDereferenceableBytes() const;
-  uint64_t getDereferenceableOrNullBytes() const;
   std::string getAsString(bool InAttrGrp) const;
 
   typedef const Attribute *iterator;
-  iterator begin() const { return getTrailingObjects<Attribute>(); }
+  iterator begin() const { return reinterpret_cast<iterator>(this + 1); }
   iterator end() const { return begin() + NumAttrs; }
 
   void Profile(FoldingSetNodeID &ID) const {
@@ -186,38 +181,30 @@ public:
   }
 };
 
-typedef std::pair<unsigned, AttributeSetNode *> IndexAttrPair;
-
 //===----------------------------------------------------------------------===//
 /// \class
 /// \brief This class represents a set of attributes that apply to the function,
 /// return type, and parameters.
-class AttributeSetImpl final
-    : public FoldingSetNode,
-      private TrailingObjects<AttributeSetImpl, IndexAttrPair> {
+class AttributeSetImpl : public FoldingSetNode {
   friend class AttributeSet;
-  friend TrailingObjects;
 
-private:
   LLVMContext &Context;
-  unsigned NumAttrs; ///< Number of entries in this set.
 
-  // Helper fn for TrailingObjects class.
-  size_t numTrailingObjects(OverloadToken<IndexAttrPair>) { return NumAttrs; }
+  typedef std::pair<unsigned, AttributeSetNode*> IndexAttrPair;
+  unsigned NumAttrs; ///< Number of entries in this set.
 
   /// \brief Return a pointer to the IndexAttrPair for the specified slot.
   const IndexAttrPair *getNode(unsigned Slot) const {
-    return getTrailingObjects<IndexAttrPair>() + Slot;
+    return reinterpret_cast<const IndexAttrPair *>(this + 1) + Slot;
   }
 
   // AttributesSet is uniqued, these should not be publicly available.
-  void operator=(const AttributeSetImpl &) = delete;
-  AttributeSetImpl(const AttributeSetImpl &) = delete;
+  void operator=(const AttributeSetImpl &) LLVM_DELETED_FUNCTION;
+  AttributeSetImpl(const AttributeSetImpl &) LLVM_DELETED_FUNCTION;
 public:
   AttributeSetImpl(LLVMContext &C,
                    ArrayRef<std::pair<unsigned, AttributeSetNode *> > Attrs)
       : Context(C), NumAttrs(Attrs.size()) {
-
 #ifndef NDEBUG
     if (Attrs.size() >= 2) {
       for (const std::pair<unsigned, AttributeSetNode *> *i = Attrs.begin() + 1,
@@ -228,7 +215,8 @@ public:
     }
 #endif
     // There's memory after the node where we can store the entries in.
-    std::copy(Attrs.begin(), Attrs.end(), getTrailingObjects<IndexAttrPair>());
+    std::copy(Attrs.begin(), Attrs.end(),
+              reinterpret_cast<IndexAttrPair *>(this + 1));
   }
 
   /// \brief Get the context that created this AttributeSetImpl.

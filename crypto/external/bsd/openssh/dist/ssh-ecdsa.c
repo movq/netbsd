@@ -1,5 +1,5 @@
-/*	$NetBSD: ssh-ecdsa.c,v 1.8 2016/08/02 13:45:12 christos Exp $	*/
-/* $OpenBSD: ssh-ecdsa.c,v 1.13 2016/04/21 06:08:02 djm Exp $ */
+/*	$NetBSD: ssh-ecdsa.c,v 1.4.4.1 2015/04/30 06:07:30 riz Exp $	*/
+/* $OpenBSD: ssh-ecdsa.c,v 1.11 2014/06/24 01:13:21 djm Exp $ */
 /*
  * Copyright (c) 2000 Markus Friedl.  All rights reserved.
  * Copyright (c) 2010 Damien Miller.  All rights reserved.
@@ -26,7 +26,7 @@
  */
 
 #include "includes.h"
-__RCSID("$NetBSD: ssh-ecdsa.c,v 1.8 2016/08/02 13:45:12 christos Exp $");
+__RCSID("$NetBSD: ssh-ecdsa.c,v 1.4.4.1 2015/04/30 06:07:30 riz Exp $");
 #include <sys/types.h>
 
 #include <openssl/bn.h>
@@ -98,8 +98,10 @@ ssh_ecdsa_sign(const struct sshkey *key, u_char **sigp, size_t *lenp,
 	ret = 0;
  out:
 	explicit_bzero(digest, sizeof(digest));
-	sshbuf_free(b);
-	sshbuf_free(bb);
+	if (b != NULL)
+		sshbuf_free(b);
+	if (bb != NULL)
+		sshbuf_free(bb);
 	if (sig != NULL)
 		ECDSA_SIG_free(sig);
 	return ret;
@@ -120,8 +122,7 @@ ssh_ecdsa_verify(const struct sshkey *key,
 	char *ktype = NULL;
 
 	if (key == NULL || key->ecdsa == NULL ||
-	    sshkey_type_plain(key->type) != KEY_ECDSA ||
-	    signature == NULL || signaturelen == 0)
+	    sshkey_type_plain(key->type) != KEY_ECDSA)
 		return SSH_ERR_INVALID_ARGUMENT;
 
 	if ((hash_alg = sshkey_ec_nid_to_hash_alg(key->ecdsa_nid)) == -1 ||
@@ -177,8 +178,10 @@ ssh_ecdsa_verify(const struct sshkey *key,
 
  out:
 	explicit_bzero(digest, sizeof(digest));
-	sshbuf_free(sigbuf);
-	sshbuf_free(b);
+	if (sigbuf != NULL)
+		sshbuf_free(sigbuf);
+	if (b != NULL)
+		sshbuf_free(b);
 	if (sig != NULL)
 		ECDSA_SIG_free(sig);
 	free(ktype);

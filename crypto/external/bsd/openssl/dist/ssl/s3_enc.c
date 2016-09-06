@@ -767,9 +767,9 @@ int n_ssl3_mac(SSL *ssl, unsigned char *md, int send)
 
         /* Final param == is SSLv3 */
         if (ssl3_cbc_digest_record(hash,
-                                   md, &md_size,
-                                   header, rec->input,
-                                   rec->length + md_size, orig_len,
+                               md, &md_size,
+                               header, rec->input,
+                               rec->length + md_size, orig_len,
                                    mac_sec, md_size, 1) <= 0)
             return -1;
     } else {

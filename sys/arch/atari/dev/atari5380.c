@@ -1,4 +1,4 @@
-/*	$NetBSD: atari5380.c,v 1.62 2014/10/18 08:33:25 snj Exp $	*/
+/*	$NetBSD: atari5380.c,v 1.61 2014/07/05 09:36:49 tsutsui Exp $	*/
 
 /*
  * Copyright (c) 1995 Leo Weppelman.
@@ -26,7 +26,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: atari5380.c,v 1.62 2014/10/18 08:33:25 snj Exp $");
+__KERNEL_RCSID(0, "$NetBSD: atari5380.c,v 1.61 2014/07/05 09:36:49 tsutsui Exp $");
 
 #include "opt_atariscsi.h"
 
@@ -445,7 +445,7 @@ tt_get_dma_result(SC_REQ *reqp, u_long *bytes_left)
 	if (dmastat & SD_BUSERR) {
 		/*
 		 * The DMA-controller seems to access 8 bytes beyond
-		 * its limits on output. Therefore check also the byte
+		 * it's limits on output. Therefore check also the byte
 		 * count. If it's zero, ignore the bus error.
 		 */
 		if (leftover != 0) {

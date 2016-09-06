@@ -30,22 +30,24 @@ class UndefBranchChecker : public Checker<check::BranchCondition> {
     ProgramStateRef St;
     const LocationContext *LCtx;
 
-    FindUndefExpr(ProgramStateRef S, const LocationContext *L)
+    FindUndefExpr(ProgramStateRef S, const LocationContext *L) 
       : St(S), LCtx(L) {}
 
     const Expr *FindExpr(const Expr *Ex) {
       if (!MatchesCriteria(Ex))
         return nullptr;
 
-      for (const Stmt *SubStmt : Ex->children())
-        if (const Expr *ExI = dyn_cast_or_null<Expr>(SubStmt))
-          if (const Expr *E2 = FindExpr(ExI))
-            return E2;
+      for (Stmt::const_child_iterator I = Ex->child_begin(), 
+                                      E = Ex->child_end();I!=E;++I)
+        if (const Expr *ExI = dyn_cast_or_null<Expr>(*I)) {
+          const Expr *E2 = FindExpr(ExI);
+          if (E2) return E2;
+        }
 
       return Ex;
     }
 
-    bool MatchesCriteria(const Expr *Ex) {
+    bool MatchesCriteria(const Expr *Ex) { 
       return St->getSVal(Ex, LCtx).isUndef();
     }
   };
@@ -62,7 +64,7 @@ void UndefBranchChecker::checkBranchCondition(const Stmt *Condition,
   if (X.isUndef()) {
     // Generate a sink node, which implicitly marks both outgoing branches as
     // infeasible.
-    ExplodedNode *N = Ctx.generateErrorNode();
+    ExplodedNode *N = Ctx.generateSink();
     if (N) {
       if (!BT)
         BT.reset(new BuiltinBug(
@@ -96,11 +98,11 @@ void UndefBranchChecker::checkBranchCondition(const Stmt *Condition,
       Ex = FindIt.FindExpr(Ex);
 
       // Emit the bug report.
-      auto R = llvm::make_unique<BugReport>(*BT, BT->getDescription(), N);
+      BugReport *R = new BugReport(*BT, BT->getDescription(), N);
       bugreporter::trackNullOrUndefValue(N, Ex, *R);
       R->addRange(Ex->getSourceRange());
 
-      Ctx.emitReport(std::move(R));
+      Ctx.emitReport(R);
     }
   }
 }

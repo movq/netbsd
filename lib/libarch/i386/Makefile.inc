@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.inc,v 1.15 2015/06/08 04:08:30 matt Exp $
+#	$NetBSD: Makefile.inc,v 1.14.24.1 2015/06/10 17:16:24 snj Exp $
 
 .if (${MACHINE_ARCH} == "i386" || ${MLIBDIR:Unone} == "i386")
 SRCS+=	i386_get_ldt.c i386_set_ldt.c \

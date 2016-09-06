@@ -305,15 +305,15 @@ void OpcodeDecoder::Decode(const uint8_t *Opcodes, off_t Offset, size_t Length) 
 
 template <typename ET>
 class PrinterContext {
-  typedef typename object::ELFFile<ET>::Elf_Sym Elf_Sym;
-  typedef typename object::ELFFile<ET>::Elf_Shdr Elf_Shdr;
-  typedef typename object::ELFFile<ET>::Elf_Rel Elf_Rel;
-  typedef typename object::ELFFile<ET>::Elf_Word Elf_Word;
-
   StreamWriter &SW;
   const object::ELFFile<ET> *ELF;
-  const Elf_Shdr *Symtab;
-  ArrayRef<Elf_Word> ShndxTable;
+
+  typedef typename object::ELFFile<ET>::Elf_Sym Elf_Sym;
+  typedef typename object::ELFFile<ET>::Elf_Shdr Elf_Shdr;
+
+  typedef typename object::ELFFile<ET>::Elf_Rel_Iter Elf_Rel_iterator;
+  typedef typename object::ELFFile<ET>::Elf_Sym_Iter Elf_Sym_iterator;
+  typedef typename object::ELFFile<ET>::Elf_Shdr_Iter Elf_Shdr_iterator;
 
   static const size_t IndexTableEntrySize;
 
@@ -334,9 +334,8 @@ class PrinterContext {
   void PrintOpcodes(const uint8_t *Entry, size_t Length, off_t Offset) const;
 
 public:
-  PrinterContext(StreamWriter &SW, const object::ELFFile<ET> *ELF,
-                 const Elf_Shdr *Symtab)
-      : SW(SW), ELF(ELF), Symtab(Symtab) {}
+  PrinterContext(StreamWriter &Writer, const object::ELFFile<ET> *File)
+    : SW(Writer), ELF(File) {}
 
   void PrintUnwindInformation() const;
 };
@@ -345,17 +344,13 @@ template <typename ET>
 const size_t PrinterContext<ET>::IndexTableEntrySize = 8;
 
 template <typename ET>
-ErrorOr<StringRef>
-PrinterContext<ET>::FunctionAtAddress(unsigned Section,
-                                      uint64_t Address) const {
-  ErrorOr<StringRef> StrTableOrErr = ELF->getStringTableForSymtab(*Symtab);
-  error(StrTableOrErr.getError());
-  StringRef StrTable = *StrTableOrErr;
-
-  for (const Elf_Sym &Sym : ELF->symbols(Symtab))
-    if (Sym.st_shndx == Section && Sym.st_value == Address &&
-        Sym.getType() == ELF::STT_FUNC)
-      return Sym.getName(StrTable);
+ErrorOr<StringRef> PrinterContext<ET>::FunctionAtAddress(unsigned Section,
+                                                         uint64_t Address) const {
+  for (Elf_Sym_iterator SI = ELF->begin_symbols(), SE = ELF->end_symbols();
+       SI != SE; ++SI)
+    if (SI->st_shndx == Section && SI->st_value == Address &&
+        SI->getType() == ELF::STT_FUNC)
+      return ELF->getSymbolName(SI);
   return readobj_error::unknown_symbol;
 }
 
@@ -371,30 +366,23 @@ PrinterContext<ET>::FindExceptionTable(unsigned IndexSectionIndex,
   /// handling table.  Use this symbol to recover the actual exception handling
   /// table.
 
-  for (const Elf_Shdr &Sec : ELF->sections()) {
-    if (Sec.sh_type != ELF::SHT_REL || Sec.sh_info != IndexSectionIndex)
-      continue;
+  for (Elf_Shdr_iterator SI = ELF->begin_sections(), SE = ELF->end_sections();
+       SI != SE; ++SI) {
+    if (SI->sh_type == ELF::SHT_REL && SI->sh_info == IndexSectionIndex) {
+      for (Elf_Rel_iterator RI = ELF->begin_rel(&*SI), RE = ELF->end_rel(&*SI);
+           RI != RE; ++RI) {
+        if (RI->r_offset == static_cast<unsigned>(IndexTableOffset)) {
+          typename object::ELFFile<ET>::Elf_Rela RelA;
+          RelA.r_offset = RI->r_offset;
+          RelA.r_info = RI->r_info;
+          RelA.r_addend = 0;
 
-    ErrorOr<const Elf_Shdr *> SymTabOrErr = ELF->getSection(Sec.sh_link);
-    error(SymTabOrErr.getError());
-    const Elf_Shdr *SymTab = *SymTabOrErr;
+          std::pair<const Elf_Shdr *, const Elf_Sym *> Symbol =
+            ELF->getRelocationSymbol(&(*SI), &RelA);
 
-    for (const Elf_Rel &R : ELF->rels(&Sec)) {
-      if (R.r_offset != static_cast<unsigned>(IndexTableOffset))
-        continue;
-
-      typename object::ELFFile<ET>::Elf_Rela RelA;
-      RelA.r_offset = R.r_offset;
-      RelA.r_info = R.r_info;
-      RelA.r_addend = 0;
-
-      const Elf_Sym *Symbol = ELF->getRelocationSymbol(&RelA, SymTab);
-
-      ErrorOr<const Elf_Shdr *> Ret =
-          ELF->getSection(Symbol, SymTab, ShndxTable);
-      if (std::error_code EC = Ret.getError())
-        report_fatal_error(EC.message());
-      return *Ret;
+          return ELF->getSection(Symbol.second);
+        }
+      }
     }
   }
   return nullptr;
@@ -540,18 +528,20 @@ void PrinterContext<ET>::PrintUnwindInformation() const {
   DictScope UI(SW, "UnwindInformation");
 
   int SectionIndex = 0;
-  for (const Elf_Shdr &Sec : ELF->sections()) {
-    if (Sec.sh_type == ELF::SHT_ARM_EXIDX) {
+  for (Elf_Shdr_iterator SI = ELF->begin_sections(), SE = ELF->end_sections();
+       SI != SE; ++SI, ++SectionIndex) {
+    if (SI->sh_type == ELF::SHT_ARM_EXIDX) {
+      const Elf_Shdr *IT = &(*SI);
+
       DictScope UIT(SW, "UnwindIndexTable");
 
       SW.printNumber("SectionIndex", SectionIndex);
-      if (ErrorOr<StringRef> SectionName = ELF->getSectionName(&Sec))
+      if (ErrorOr<StringRef> SectionName = ELF->getSectionName(IT))
         SW.printString("SectionName", *SectionName);
-      SW.printHex("SectionOffset", Sec.sh_offset);
+      SW.printHex("SectionOffset", IT->sh_offset);
 
-      PrintIndexTable(SectionIndex, &Sec);
+      PrintIndexTable(SectionIndex, IT);
     }
-    ++SectionIndex;
   }
 }
 }

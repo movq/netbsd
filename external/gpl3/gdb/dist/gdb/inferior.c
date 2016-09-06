@@ -1,6 +1,6 @@
 /* Multi-process control for GDB, the GNU debugger.
 
-   Copyright (C) 2008-2015 Free Software Foundation, Inc.
+   Copyright (C) 2008-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -101,7 +101,7 @@ free_inferior (struct inferior *inf)
   xfree (inf->terminal);
   free_environ (inf->environment);
   target_desc_info_free (inf->tdesc_info);
-  xfree (inf->priv);
+  xfree (inf->private);
   xfree (inf);
 }
 
@@ -275,6 +275,8 @@ exit_inferior_1 (struct inferior *inftoex, int silent)
       inf->vfork_child = NULL;
     }
 
+  inf->has_exit_code = 0;
+  inf->exit_code = 0;
   inf->pending_detach = 0;
 }
 
@@ -310,7 +312,7 @@ detach_inferior (int pid)
 {
   struct inferior *inf = find_inferior_pid (pid);
 
-  exit_inferior_1 (inf, 0);
+  exit_inferior_1 (inf, 1);
 
   if (print_inferior_events)
     printf_unfiltered (_("[Inferior %d detached]\n"), pid);
@@ -320,8 +322,6 @@ void
 inferior_appeared (struct inferior *inf, int pid)
 {
   inf->pid = pid;
-  inf->has_exit_code = 0;
-  inf->exit_code = 0;
 
   observer_notify_inferior_appeared (inf);
 }
@@ -367,23 +367,12 @@ find_inferior_pid (int pid)
   return NULL;
 }
 
-/* See inferior.h */
-
-struct inferior *
-find_inferior_ptid (ptid_t ptid)
-{
-  return find_inferior_pid (ptid_get_pid (ptid));
-}
-
-/* See inferior.h.  */
+/* Find an inferior bound to PSPACE.  */
 
 struct inferior *
 find_inferior_for_program_space (struct program_space *pspace)
 {
-  struct inferior *inf = current_inferior ();
-
-  if (inf->pspace == pspace)
-    return inf;
+  struct inferior *inf;
 
   for (inf = inferior_list; inf != NULL; inf = inf->next)
     {
@@ -486,8 +475,8 @@ have_live_inferiors (void)
   return inf != NULL;
 }
 
-/* Prune away any unused inferiors, and then prune away no longer used
-   program spaces.  */
+/* Prune away automatically added program spaces that aren't required
+   anymore.  */
 
 void
 prune_inferiors (void)
@@ -799,8 +788,6 @@ remove_inferior_command (char *args, int from_tty)
 
       delete_inferior_1 (inf, 1);
     }
-
-  prune_program_spaces ();
 }
 
 struct inferior *

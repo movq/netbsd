@@ -1,4 +1,4 @@
-/*	$NetBSD: cache_r10k.c,v 1.8 2016/07/13 21:25:15 macallan Exp $	*/
+/*	$NetBSD: cache_r10k.c,v 1.5 2011/02/20 07:45:47 matt Exp $	*/
 
 /*-
  * Copyright (c) 2003 Takao Shinohara.
@@ -61,7 +61,6 @@
 
 #include <sys/param.h>
 
-#include <mips/cpuregs.h>
 #include <mips/cache.h>
 #include <mips/cache_r4k.h>
 #include <mips/cache_r10k.h>
@@ -91,15 +90,14 @@ r10k_icache_sync_all(void)
 	__asm volatile("sync");
 
 	while (va < eva) {
-		cache_op_r4k_line(va, CACHE_R4K_I|CACHEOP_R4K_INDEX_INV);
-		va++;
-		cache_op_r4k_line(va, CACHE_R4K_I|CACHEOP_R4K_INDEX_INV);
-		va += 63;
+		cache_op_r4k_line(va+0, CACHE_R4K_I|CACHEOP_R4K_INDEX_INV);
+		cache_op_r4k_line(va+1, CACHE_R4K_I|CACHEOP_R4K_INDEX_INV);
+		va += 64;
 	}
 }
 
 void
-r10k_icache_sync_range(register_t va, vsize_t size)
+r10k_icache_sync_range(vaddr_t va, vsize_t size)
 {
 	vaddr_t eva = round_line(va + size);
 
@@ -142,10 +140,9 @@ r10k_icache_sync_range_index(vaddr_t va, vsize_t size)
 	va = trunc_line(va);
 
 	while (va < eva) {
-		cache_op_r4k_line(va, CACHE_R4K_I|CACHEOP_R4K_INDEX_INV);
-		va++;
-		cache_op_r4k_line(va, CACHE_R4K_I|CACHEOP_R4K_INDEX_INV);
-		va += 63;
+		cache_op_r4k_line(va+0, CACHE_R4K_I|CACHEOP_R4K_INDEX_INV);
+		cache_op_r4k_line(va+1, CACHE_R4K_I|CACHEOP_R4K_INDEX_INV);
+		va += 64;
 	}
 }
 
@@ -163,15 +160,14 @@ r10k_pdcache_wbinv_all(void)
 	vaddr_t eva = va + mci->mci_pdcache_way_size;
 
 	while (va < eva) {
-		cache_op_r4k_line(va, CACHE_R4K_D|CACHEOP_R4K_INDEX_WB_INV);
-		va++;
-		cache_op_r4k_line(va, CACHE_R4K_D|CACHEOP_R4K_INDEX_WB_INV);
-		va += 31;
+		cache_op_r4k_line(va+0, CACHE_R4K_D|CACHEOP_R4K_INDEX_WB_INV);
+		cache_op_r4k_line(va+1, CACHE_R4K_D|CACHEOP_R4K_INDEX_WB_INV);
+		va += 32;
 	}
 }
 
 void
-r10k_pdcache_wbinv_range(register_t va, vsize_t size)
+r10k_pdcache_wbinv_range(vaddr_t va, vsize_t size)
 {
 	vaddr_t eva = round_line(va + size);
 
@@ -201,15 +197,14 @@ r10k_pdcache_wbinv_range_index(vaddr_t va, vsize_t size)
 	va = trunc_line(va);
 
 	while (va < eva) {
-		cache_op_r4k_line(va, CACHE_R4K_D|CACHEOP_R4K_INDEX_WB_INV);
-		va++;
-		cache_op_r4k_line(va, CACHE_R4K_D|CACHEOP_R4K_INDEX_WB_INV);
-		va += 31;
+		cache_op_r4k_line(va+0, CACHE_R4K_D|CACHEOP_R4K_INDEX_WB_INV);
+		cache_op_r4k_line(va+1, CACHE_R4K_D|CACHEOP_R4K_INDEX_WB_INV);
+		va += 32;
 	}
 }
 
 void
-r10k_pdcache_inv_range(register_t va, vsize_t size)
+r10k_pdcache_inv_range(vaddr_t va, vsize_t size)
 {
 	vaddr_t eva = round_line(va + size);
 
@@ -222,7 +217,7 @@ r10k_pdcache_inv_range(register_t va, vsize_t size)
 }
 
 void
-r10k_pdcache_wb_range(register_t va, vsize_t size)
+r10k_pdcache_wb_range(vaddr_t va, vsize_t size)
 {
 	vaddr_t eva = round_line(va + size);
 
@@ -250,15 +245,14 @@ r10k_sdcache_wbinv_all(void)
 	vsize_t line_size = mci->mci_sdcache_line_size;
 
 	while (va < eva) {
-		cache_op_r4k_line(va, CACHE_R4K_SD|CACHEOP_R4K_INDEX_WB_INV);
-		va++;
-		cache_op_r4k_line(va, CACHE_R4K_SD|CACHEOP_R4K_INDEX_WB_INV);
-		va += line_size - 1;
+		cache_op_r4k_line(va+0, CACHE_R4K_SD|CACHEOP_R4K_INDEX_WB_INV);
+		cache_op_r4k_line(va+1, CACHE_R4K_SD|CACHEOP_R4K_INDEX_WB_INV);
+		va += line_size;
 	}
 }
 
 void
-r10k_sdcache_wbinv_range(register_t va, vsize_t size)
+r10k_sdcache_wbinv_range(vaddr_t va, vsize_t size)
 {
 	const struct mips_cache_info * const mci = &mips_cache_info;
 	vaddr_t eva = round_line(va + size);
@@ -291,15 +285,14 @@ r10k_sdcache_wbinv_range_index(vaddr_t va, vsize_t size)
 	va = trunc_line(va);
 
 	while (va < eva) {
-		cache_op_r4k_line(va, CACHE_R4K_SD|CACHEOP_R4K_INDEX_WB_INV);
-		va++;
-		cache_op_r4k_line(va, CACHE_R4K_SD|CACHEOP_R4K_INDEX_WB_INV);
-		va += line_size - 1;
+		cache_op_r4k_line(va+0, CACHE_R4K_SD|CACHEOP_R4K_INDEX_WB_INV);
+		cache_op_r4k_line(va+1, CACHE_R4K_SD|CACHEOP_R4K_INDEX_WB_INV);
+		va += line_size;
 	}
 }
 
 void
-r10k_sdcache_inv_range(register_t va, vsize_t size)
+r10k_sdcache_inv_range(vaddr_t va, vsize_t size)
 {
 	const struct mips_cache_info * const mci = &mips_cache_info;
 	vaddr_t eva = round_line(va + size);
@@ -314,7 +307,7 @@ r10k_sdcache_inv_range(register_t va, vsize_t size)
 }
 
 void
-r10k_sdcache_wb_range(register_t va, vsize_t size)
+r10k_sdcache_wb_range(vaddr_t va, vsize_t size)
 {
 	const struct mips_cache_info * const mci = &mips_cache_info;
 	vaddr_t eva = round_line(va + size);

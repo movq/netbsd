@@ -1,4 +1,4 @@
-/*	$NetBSD: panic.c,v 1.14 2016/03/13 00:32:09 dholland Exp $	*/
+/*	$NetBSD: panic.c,v 1.13 2008/04/05 16:26:57 christos Exp $	*/
 
 /*
  * panic.c - terminate fast in case of error
@@ -46,7 +46,7 @@
 #if 0
 static char rcsid[] = "$OpenBSD: panic.c,v 1.4 1997/03/01 23:40:09 millert Exp $";
 #else
-__RCSID("$NetBSD: panic.c,v 1.14 2016/03/13 00:32:09 dholland Exp $");
+__RCSID("$NetBSD: panic.c,v 1.13 2008/04/05 16:26:57 christos Exp $");
 #endif
 #endif
 
@@ -61,9 +61,9 @@ panic(const char *a)
 	 * Something fatal has happened, print error message and exit.
 	 */
 	if (fcreated) {
-		privs_enter();
+		PRIV_START;
 		(void)unlink(atfile);
-		privs_exit();
+		PRIV_END;
 	}
 	errx(EXIT_FAILURE, "%s", a);
 }
@@ -78,18 +78,11 @@ perr(const char *a)
 	 */
 	perror(a);
 	if (fcreated) {
-		privs_enter();
+		PRIV_START;
 		(void)unlink(atfile);
-		privs_exit();
+		PRIV_END;
 	}
 	exit(EXIT_FAILURE);
-}
-
-__dead
-void
-privs_fail(const char *msg)
-{
-	perr(msg);
 }
 
 __dead

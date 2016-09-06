@@ -1,4 +1,4 @@
-/*	$NetBSD: ip6_output.c,v 1.173 2016/08/01 03:15:31 ozaki-r Exp $	*/
+/*	$NetBSD: ip6_output.c,v 1.157.2.3 2015/02/14 07:14:23 snj Exp $	*/
 /*	$KAME: ip6_output.c,v 1.172 2001/03/25 09:55:56 itojun Exp $	*/
 
 /*
@@ -62,13 +62,11 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ip6_output.c,v 1.173 2016/08/01 03:15:31 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ip6_output.c,v 1.157.2.3 2015/02/14 07:14:23 snj Exp $");
 
-#ifdef _KERNEL_OPT
 #include "opt_inet.h"
 #include "opt_inet6.h"
 #include "opt_ipsec.h"
-#endif
 
 #include <sys/param.h>
 #include <sys/malloc.h>
@@ -88,7 +86,6 @@ __KERNEL_RCSID(0, "$NetBSD: ip6_output.c,v 1.173 2016/08/01 03:15:31 ozaki-r Exp
 #include <netinet/in.h>
 #include <netinet/in_var.h>
 #include <netinet/ip6.h>
-#include <netinet/ip_var.h>
 #include <netinet/icmp6.h>
 #include <netinet/in_offload.h>
 #include <netinet/portalgo.h>
@@ -125,8 +122,8 @@ static int ip6_pcbopt(int, u_char *, int, struct ip6_pktopts **,
 static int ip6_getpcbopt(struct ip6_pktopts *, int, struct sockopt *);
 static int ip6_setpktopt(int, u_char *, int, struct ip6_pktopts *, kauth_cred_t,
 	int, int, int);
-static int ip6_setmoptions(const struct sockopt *, struct in6pcb *);
-static int ip6_getmoptions(struct sockopt *, struct in6pcb *);
+static int ip6_setmoptions(const struct sockopt *, struct ip6_moptions **);
+static int ip6_getmoptions(struct sockopt *, struct ip6_moptions *);
 static int ip6_copyexthdr(struct mbuf **, void *, int);
 static int ip6_insertfraghdr(struct mbuf *, struct mbuf *, int,
 	struct ip6_frag **);
@@ -163,13 +160,13 @@ ip6_output(
 )
 {
 	struct ip6_hdr *ip6, *mhip6;
-	struct ifnet *ifp = NULL, *origifp = NULL;
+	struct ifnet *ifp, *origifp;
 	struct mbuf *m = m0;
 	int hlen, tlen, len, off;
 	bool tso;
 	struct route ip6route;
 	struct rtentry *rt = NULL;
-	const struct sockaddr_in6 *dst;
+	const struct sockaddr_in6 *dst = NULL;
 	struct sockaddr_in6 src_sa, dst_sa;
 	int error = 0;
 	struct in6_ifaddr *ia = NULL;
@@ -185,9 +182,8 @@ ip6_output(
 #ifdef IPSEC
 	struct secpolicy *sp = NULL;
 #endif
-	struct psref psref, psref_ia;
-	int bound = curlwp_bind();
-	bool release_psref_ia = false;
+
+	memset(&ip6route, 0, sizeof(ip6route));
 
 #ifdef  DIAGNOSTIC
 	if ((m->m_flags & M_PKTHDR) == 0)
@@ -435,7 +431,6 @@ ip6_output(
 	 */
 	/* initialize cached route */
 	if (ro == NULL) {
-		memset(&ip6route, 0, sizeof(ip6route));
 		ro = &ip6route;
 	}
 	ro_pmtu = ro;
@@ -491,7 +486,7 @@ ip6_output(
 
 	sockaddr_in6_init(&dst_sa, &ip6->ip6_dst, 0, 0, 0);
 	if ((error = in6_selectroute(&dst_sa, opt, im6o, ro,
-	    &ifp, &psref, &rt, 0)) != 0) {
+	    &ifp, &rt, 0)) != 0) {
 		if (ifp != NULL)
 			in6_ifstat_inc(ifp, ifs6_out_discard);
 		goto bad;
@@ -524,13 +519,9 @@ ip6_output(
 	 * destination addresses.  We should use ia_ifp to support the
 	 * case of sending packets to an address of our own.
 	 */
-	if (ia != NULL && ia->ia_ifp) {
+	if (ia != NULL && ia->ia_ifp)
 		origifp = ia->ia_ifp;
-		if (if_is_deactivated(origifp))
-			goto bad;
-		if_acquire_NOMPSAFE(origifp, &psref_ia);
-		release_psref_ia = true;
-	} else
+	else
 		origifp = ifp;
 
 	src0 = ip6->ip6_src;
@@ -551,7 +542,8 @@ ip6_output(
 	/* scope check is done. */
 
 	if (rt == NULL || IN6_IS_ADDR_MULTICAST(&ip6->ip6_dst)) {
-		dst = satocsin6(rtcache_getdst(ro));
+		if (dst == NULL)
+			dst = satocsin6(rtcache_getdst(ro));
 		KASSERT(dst != NULL);
 	} else if (opt && rtcache_validate(&opt->ip6po_nextroute) != NULL) {
 		/*
@@ -562,7 +554,7 @@ ip6_output(
 		dst = (struct sockaddr_in6 *)opt->ip6po_nexthop;
 	} else if ((rt->rt_flags & RTF_GATEWAY))
 		dst = (struct sockaddr_in6 *)rt->rt_gateway;
-	else
+	else if (dst == NULL)
 		dst = satocsin6(rtcache_getdst(ro));
 
 	/*
@@ -763,16 +755,13 @@ ip6_output(
 		/* case 1-a and 2-a */
 		struct in6_ifaddr *ia6;
 		int sw_csum;
-		int s;
 
 		ip6 = mtod(m, struct ip6_hdr *);
-		s = pserialize_read_enter();
 		ia6 = in6_ifawithifp(ifp, &ip6->ip6_src);
 		if (ia6) {
 			/* Record statistics for this interface address. */
 			ia6->ia_ifa.ifa_data.ifad_outbytes += m->m_pkthdr.len;
 		}
-		pserialize_read_exit(s);
 
 		sw_csum = m->m_pkthdr.csum_flags & ~ifp->if_csum_flags_tx;
 		if ((sw_csum & (M_CSUM_UDPv6|M_CSUM_TCPv6)) != 0) {
@@ -901,7 +890,7 @@ ip6_output(
 				IP6_STATINC(IP6_STAT_ODROPPED);
 				goto sendorfree;
 			}
-			m_reset_rcvif(m);
+			m->m_pkthdr.rcvif = NULL;
 			m->m_flags = m0->m_flags & M_COPYFLAGS;
 			*mnext = m;
 			mnext = &m->m_nextpkt;
@@ -935,7 +924,7 @@ ip6_output(
 				;
 			mlast->m_next = m_frgpart;
 			m->m_pkthdr.len = len + hlen + sizeof(*ip6f);
-			m_reset_rcvif(m);
+			m->m_pkthdr.rcvif = NULL;
 			ip6f->ip6f_reserved = 0;
 			ip6f->ip6f_ident = id;
 			ip6f->ip6f_nxt = nextproto;
@@ -958,9 +947,7 @@ sendorfree:
 		m->m_nextpkt = 0;
 		if (error == 0) {
 			struct in6_ifaddr *ia6;
-			int s;
 			ip6 = mtod(m, struct ip6_hdr *);
-			s = pserialize_read_enter();
 			ia6 = in6_ifawithifp(ifp, &ip6->ip6_src);
 			if (ia6) {
 				/*
@@ -970,7 +957,6 @@ sendorfree:
 				ia6->ia_ifa.ifa_data.ifad_outbytes +=
 				    m->m_pkthdr.len;
 			}
-			pserialize_read_exit(s);
 			KASSERT(dst != NULL);
 			error = nd6_output(ifp, origifp, m, dst, rt);
 		} else
@@ -981,18 +967,13 @@ sendorfree:
 		IP6_STATINC(IP6_STAT_FRAGMENTED);
 
 done:
-	if (ro == &ip6route)
-		rtcache_free(&ip6route);
+	rtcache_free(&ip6route);
 
 #ifdef IPSEC
 	if (sp != NULL)
 		KEY_FREESP(&sp);
 #endif /* IPSEC */
 
-	if_put(ifp, &psref);
-	if (release_psref_ia)
-		if_put(origifp, &psref_ia);
-	curlwp_bindx(bound);
 
 	return (error);
 
@@ -1283,7 +1264,6 @@ ip6_ctloutput(int op, struct socket *so, struct sockopt *sopt)
 	int optdatalen, uproto;
 	void *optdata;
 	struct in6pcb *in6p = sotoin6pcb(so);
-	struct ip_moptions **mopts;
 	int error, optval;
 	int level, optname;
 
@@ -1295,29 +1275,7 @@ ip6_ctloutput(int op, struct socket *so, struct sockopt *sopt)
 	error = optval = 0;
 	uproto = (int)so->so_proto->pr_protocol;
 
-	switch (level) {
-	case IPPROTO_IP:
-		switch (optname) {
-		case IP_ADD_MEMBERSHIP:
-		case IP_DROP_MEMBERSHIP:
-		case IP_MULTICAST_IF:
-		case IP_MULTICAST_LOOP:
-		case IP_MULTICAST_TTL:
-			mopts = &in6p->in6p_v4moptions;
-			switch (op) {
-			case PRCO_GETOPT:
-				return ip_getmoptions(*mopts, sopt);
-			case PRCO_SETOPT:
-				return ip_setmoptions(mopts, sopt);
-			default:
-				return EINVAL;
-			}
-		default:
-			return ENOPROTOOPT;
-		}
-	case IPPROTO_IPV6:
-		break;
-	default:
+	if (level != IPPROTO_IPV6) {
 		return ENOPROTOOPT;
 	}
 	switch (op) {
@@ -1655,7 +1613,7 @@ else 					\
 		case IPV6_MULTICAST_LOOP:
 		case IPV6_JOIN_GROUP:
 		case IPV6_LEAVE_GROUP:
-			error = ip6_setmoptions(sopt, in6p);
+			error = ip6_setmoptions(sopt, &in6p->in6p_moptions);
 			break;
 
 		case IPV6_PORTRANGE:
@@ -1880,7 +1838,7 @@ else 					\
 		case IPV6_MULTICAST_LOOP:
 		case IPV6_JOIN_GROUP:
 		case IPV6_LEAVE_GROUP:
-			error = ip6_getmoptions(sopt, in6p);
+			error = ip6_getmoptions(sopt, in6p->in6p_moptions);
 			break;
 
 		case IPV6_PORTALGO:
@@ -2233,7 +2191,6 @@ copypktopts(struct ip6_pktopts *dst, struct ip6_pktopts *src, int canwait)
 	dst->ip6po_hlim = src->ip6po_hlim;
 	dst->ip6po_tclass = src->ip6po_tclass;
 	dst->ip6po_flags = src->ip6po_flags;
-	dst->ip6po_minmtu = src->ip6po_minmtu;
 	dst->ip6po_prefer_tempaddr = src->ip6po_prefer_tempaddr;
 	if (src->ip6po_pktinfo) {
 		dst->ip6po_pktinfo = malloc(sizeof(*dst->ip6po_pktinfo),
@@ -2298,92 +2255,20 @@ ip6_freepcbopts(struct ip6_pktopts *pktopt)
 	free(pktopt, M_IP6OPT);
 }
 
-int
-ip6_get_membership(const struct sockopt *sopt, struct ifnet **ifp, void *v,
-    size_t l)
-{
-	struct ipv6_mreq mreq;
-	int error;
-	struct in6_addr *ia = &mreq.ipv6mr_multiaddr;
-	struct in_addr *ia4 = (void *)&ia->s6_addr32[3];
-	error = sockopt_get(sopt, &mreq, sizeof(mreq));
-	if (error != 0)
-		return error;
-
-	if (IN6_IS_ADDR_UNSPECIFIED(ia)) {
-		/*
-		 * We use the unspecified address to specify to accept
-		 * all multicast addresses. Only super user is allowed
-		 * to do this.
-		 */
-		if (kauth_authorize_network(curlwp->l_cred, KAUTH_NETWORK_IPV6,
-		    KAUTH_REQ_NETWORK_IPV6_JOIN_MULTICAST, NULL, NULL, NULL))
-			return EACCES;
-	} else if (IN6_IS_ADDR_V4MAPPED(ia)) {
-		// Don't bother if we are not going to use ifp.
-		if (l == sizeof(*ia)) {
-			memcpy(v, ia, l);
-			return 0;
-		}
-	} else if (!IN6_IS_ADDR_MULTICAST(ia)) {
-		return EINVAL;
-	}
-
-	/*
-	 * If no interface was explicitly specified, choose an
-	 * appropriate one according to the given multicast address.
-	 */
-	if (mreq.ipv6mr_interface == 0) {
-		struct rtentry *rt;
-		union {
-			struct sockaddr		dst;
-			struct sockaddr_in	dst4;
-			struct sockaddr_in6	dst6;
-		} u;
-		struct route ro;
-
-		/*
-		 * Look up the routing table for the
-		 * address, and choose the outgoing interface.
-		 *   XXX: is it a good approach?
-		 */
-		memset(&ro, 0, sizeof(ro));
-		if (IN6_IS_ADDR_V4MAPPED(ia))
-			sockaddr_in_init(&u.dst4, ia4, 0);
-		else
-			sockaddr_in6_init(&u.dst6, ia, 0, 0, 0);
-		error = rtcache_setdst(&ro, &u.dst);
-		if (error != 0)
-			return error;
-		*ifp = (rt = rtcache_init(&ro)) != NULL ? rt->rt_ifp : NULL;
-		rtcache_free(&ro);
-	} else {
-		/*
-		 * If the interface is specified, validate it.
-		 */
-		if ((*ifp = if_byindex(mreq.ipv6mr_interface)) == NULL)
-			return ENXIO;	/* XXX EINVAL? */
-	}
-	if (sizeof(*ia) == l)
-		memcpy(v, ia, l);
-	else
-		memcpy(v, ia4, l);
-	return 0;
-}
-
 /*
  * Set the IP6 multicast options in response to user setsockopt().
  */
 static int
-ip6_setmoptions(const struct sockopt *sopt, struct in6pcb *in6p)
+ip6_setmoptions(const struct sockopt *sopt, struct ip6_moptions **im6op)
 {
 	int error = 0;
 	u_int loop, ifindex;
 	struct ipv6_mreq mreq;
-	struct in6_addr ia;
 	struct ifnet *ifp;
-	struct ip6_moptions *im6o = in6p->in6p_moptions;
+	struct ip6_moptions *im6o = *im6op;
+	struct route ro;
 	struct in6_multi_mship *imm;
+	struct lwp *l = curlwp;	/* XXX */
 
 	if (im6o == NULL) {
 		/*
@@ -2393,8 +2278,9 @@ ip6_setmoptions(const struct sockopt *sopt, struct in6pcb *in6p)
 		im6o = malloc(sizeof(*im6o), M_IPMOPTS, M_NOWAIT);
 		if (im6o == NULL)
 			return (ENOBUFS);
-		in6p->in6p_moptions = im6o;
-		im6o->im6o_multicast_if_index = 0;
+
+		*im6op = im6o;
+		im6o->im6o_multicast_ifp = NULL;
 		im6o->im6o_multicast_hlim = ip6_defmcasthlim;
 		im6o->im6o_multicast_loop = IPV6_DEFAULT_MULTICAST_LOOP;
 		LIST_INIT(&im6o->im6o_memberships);
@@ -2421,7 +2307,7 @@ ip6_setmoptions(const struct sockopt *sopt, struct in6pcb *in6p)
 			}
 		} else
 			ifp = NULL;
-		im6o->im6o_multicast_if_index = if_get_index(ifp);
+		im6o->im6o_multicast_ifp = ifp;
 		break;
 
 	case IPV6_MULTICAST_HOPS:
@@ -2464,13 +2350,60 @@ ip6_setmoptions(const struct sockopt *sopt, struct in6pcb *in6p)
 		 * Add a multicast group membership.
 		 * Group must be a valid IP6 multicast address.
 		 */
-		if ((error = ip6_get_membership(sopt, &ifp, &ia, sizeof(ia))))
-			return error;
+		error = sockopt_get(sopt, &mreq, sizeof(mreq));
+		if (error != 0)
+			break;
 
-		if (IN6_IS_ADDR_V4MAPPED(&ia)) {
-			error = ip_setmoptions(&in6p->in6p_v4moptions, sopt);
+		if (IN6_IS_ADDR_UNSPECIFIED(&mreq.ipv6mr_multiaddr)) {
+			/*
+			 * We use the unspecified address to specify to accept
+			 * all multicast addresses. Only super user is allowed
+			 * to do this.
+			 */
+			if (kauth_authorize_network(l->l_cred, KAUTH_NETWORK_IPV6,
+			    KAUTH_REQ_NETWORK_IPV6_JOIN_MULTICAST, NULL, NULL, NULL))
+			{
+				error = EACCES;
+				break;
+			}
+		} else if (!IN6_IS_ADDR_MULTICAST(&mreq.ipv6mr_multiaddr)) {
+			error = EINVAL;
 			break;
 		}
+
+		/*
+		 * If no interface was explicitly specified, choose an
+		 * appropriate one according to the given multicast address.
+		 */
+		if (mreq.ipv6mr_interface == 0) {
+			struct rtentry *rt;
+			union {
+				struct sockaddr		dst;
+				struct sockaddr_in6	dst6;
+			} u;
+
+			/*
+			 * Look up the routing table for the
+			 * address, and choose the outgoing interface.
+			 *   XXX: is it a good approach?
+			 */
+			memset(&ro, 0, sizeof(ro));
+			sockaddr_in6_init(&u.dst6, &mreq.ipv6mr_multiaddr, 0,
+			    0, 0);
+			rtcache_setdst(&ro, &u.dst);
+			ifp = (rt = rtcache_init(&ro)) != NULL ? rt->rt_ifp
+			                                        : NULL;
+			rtcache_free(&ro);
+		} else {
+			/*
+			 * If the interface is specified, validate it.
+			 */
+			if ((ifp = if_byindex(mreq.ipv6mr_interface)) == NULL) {
+				error = ENXIO;	/* XXX EINVAL? */
+				break;
+			}
+		}
+
 		/*
 		 * See if we found an interface, and confirm that it
 		 * supports multicast
@@ -2480,7 +2413,7 @@ ip6_setmoptions(const struct sockopt *sopt, struct in6pcb *in6p)
 			break;
 		}
 
-		if (in6_setscope(&ia, ifp, NULL)) {
+		if (in6_setscope(&mreq.ipv6mr_multiaddr, ifp, NULL)) {
 			error = EADDRNOTAVAIL; /* XXX: should not happen */
 			break;
 		}
@@ -2492,7 +2425,7 @@ ip6_setmoptions(const struct sockopt *sopt, struct in6pcb *in6p)
 		     imm != NULL; imm = imm->i6mm_chain.le_next)
 			if (imm->i6mm_maddr->in6m_ifp == ifp &&
 			    IN6_ARE_ADDR_EQUAL(&imm->i6mm_maddr->in6m_addr,
-			    &ia))
+			    &mreq.ipv6mr_multiaddr))
 				break;
 		if (imm != NULL) {
 			error = EADDRINUSE;
@@ -2502,7 +2435,7 @@ ip6_setmoptions(const struct sockopt *sopt, struct in6pcb *in6p)
 		 * Everything looks good; add a new record to the multicast
 		 * address list for the given interface.
 		 */
-		imm = in6_joingroup(ifp, &ia, &error, 0);
+		imm = in6_joingroup(ifp, &mreq.ipv6mr_multiaddr, &error, 0);
 		if (imm == NULL)
 			break;
 		LIST_INSERT_HEAD(&im6o->im6o_memberships, imm, i6mm_chain);
@@ -2517,10 +2450,6 @@ ip6_setmoptions(const struct sockopt *sopt, struct in6pcb *in6p)
 		if (error != 0)
 			break;
 
-		if (IN6_IS_ADDR_V4MAPPED(&mreq.ipv6mr_multiaddr)) {
-			error = ip_setmoptions(&in6p->in6p_v4moptions, sopt);
-			break;
-		}
 		/*
 		 * If an interface address was specified, get a pointer
 		 * to its ifnet structure.
@@ -2602,12 +2531,12 @@ ip6_setmoptions(const struct sockopt *sopt, struct in6pcb *in6p)
 	/*
 	 * If all options have default values, no need to keep the mbuf.
 	 */
-	if (im6o->im6o_multicast_if_index == 0 &&
+	if (im6o->im6o_multicast_ifp == NULL &&
 	    im6o->im6o_multicast_hlim == ip6_defmcasthlim &&
 	    im6o->im6o_multicast_loop == IPV6_DEFAULT_MULTICAST_LOOP &&
 	    im6o->im6o_memberships.lh_first == NULL) {
-		free(in6p->in6p_moptions, M_IPMOPTS);
-		in6p->in6p_moptions = NULL;
+		free(*im6op, M_IPMOPTS);
+		*im6op = NULL;
 	}
 
 	return (error);
@@ -2617,18 +2546,17 @@ ip6_setmoptions(const struct sockopt *sopt, struct in6pcb *in6p)
  * Return the IP6 multicast options in response to user getsockopt().
  */
 static int
-ip6_getmoptions(struct sockopt *sopt, struct in6pcb *in6p)
+ip6_getmoptions(struct sockopt *sopt, struct ip6_moptions *im6o)
 {
 	u_int optval;
 	int error;
-	struct ip6_moptions *im6o = in6p->in6p_moptions;
 
 	switch (sopt->sopt_name) {
 	case IPV6_MULTICAST_IF:
-		if (im6o == NULL || im6o->im6o_multicast_if_index == 0)
+		if (im6o == NULL || im6o->im6o_multicast_ifp == NULL)
 			optval = 0;
 		else
-			optval = im6o->im6o_multicast_if_index;
+			optval = im6o->im6o_multicast_ifp->if_index;
 
 		error = sockopt_set(sopt, &optval, sizeof(optval));
 		break;
@@ -2799,6 +2727,7 @@ ip6_setpktopt(int optname, u_char *buf, int len, struct ip6_pktopts *opt,
 #endif
 	case IPV6_PKTINFO:
 	{
+		struct ifnet *ifp = NULL;
 		struct in6_pktinfo *pktinfo;
 
 		if (len != sizeof(struct in6_pktinfo))
@@ -2826,14 +2755,9 @@ ip6_setpktopt(int optname, u_char *buf, int len, struct ip6_pktopts *opt,
 
 		/* Validate the interface index if specified. */
 		if (pktinfo->ipi6_ifindex) {
-			struct ifnet *ifp;
-			int s = pserialize_read_enter();
 			ifp = if_byindex(pktinfo->ipi6_ifindex);
-			if (ifp == NULL) {
-				pserialize_read_exit(s);
-				return ENXIO;
-			}
-			pserialize_read_exit(s);
+			if (ifp == NULL)
+				return (ENXIO);
 		}
 
 		/*

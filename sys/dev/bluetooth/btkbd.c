@@ -1,4 +1,4 @@
-/*	$NetBSD: btkbd.c,v 1.17 2014/11/16 16:20:00 ozaki-r Exp $	*/
+/*	$NetBSD: btkbd.c,v 1.16.4.1 2014/12/01 11:38:43 martin Exp $	*/
 
 /*
  * Copyright (c) 1998 The NetBSD Foundation, Inc.
@@ -66,7 +66,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: btkbd.c,v 1.17 2014/11/16 16:20:00 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: btkbd.c,v 1.16.4.1 2014/12/01 11:38:43 martin Exp $");
 
 #include <sys/param.h>
 #include <sys/callout.h>

@@ -1,6 +1,6 @@
 /* Serial interface for raw TCP connections on Un*x like systems.
 
-   Copyright (C) 1992-2015 Free Software Foundation, Inc.
+   Copyright (C) 1992-2014 Free Software Foundation, Inc.
 
    This file is part of GDB.
 
@@ -53,6 +53,7 @@
 #endif
 
 #include <signal.h>
+#include <string.h>
 #include "gdb_select.h"
 
 #ifndef HAVE_SOCKLEN_T
@@ -168,12 +169,12 @@ net_open (struct serial *scb, const char *name)
   unsigned int polls = 0;
 
   use_udp = 0;
-  if (startswith (name, "udp:"))
+  if (strncmp (name, "udp:", 4) == 0)
     {
       use_udp = 1;
       name = name + 4;
     }
-  else if (startswith (name, "tcp:"))
+  else if (strncmp (name, "tcp:", 4) == 0)
     name = name + 4;
 
   port_str = strchr (name, ':');
@@ -362,13 +363,13 @@ ser_tcp_send_break (struct serial *scb)
 static void
 set_tcp_cmd (char *args, int from_tty)
 {
-  help_list (tcp_set_cmdlist, "set tcp ", all_commands, gdb_stdout);
+  help_list (tcp_set_cmdlist, "set tcp ", -1, gdb_stdout);
 }
 
 static void
 show_tcp_cmd (char *args, int from_tty)
 {
-  help_list (tcp_show_cmdlist, "show tcp ", all_commands, gdb_stdout);
+  help_list (tcp_show_cmdlist, "show tcp ", -1, gdb_stdout);
 }
 
 #ifndef USE_WIN32API
@@ -394,7 +395,6 @@ static const struct serial_ops tcp_ops =
   ser_base_noflush_set_tty_state,
   ser_base_setbaudrate,
   ser_base_setstopbits,
-  ser_base_setparity,
   ser_base_drain_output,
   ser_base_async,
   net_read_prim,

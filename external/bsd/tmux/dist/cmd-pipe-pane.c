@@ -1,4 +1,4 @@
-/* $OpenBSD$ */
+/* Id */
 
 /*
  * Copyright (c) 2009 Nicholas Marriott <nicm@users.sourceforge.net>
@@ -21,7 +21,6 @@
 
 #include <errno.h>
 #include <fcntl.h>
-#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
@@ -41,6 +40,7 @@ const struct cmd_entry cmd_pipe_pane_entry = {
 	"ot:", 0, 1,
 	"[-o] " CMD_TARGET_PANE_USAGE " [command]",
 	0,
+	NULL,
 	cmd_pipe_pane_exec
 };
 
@@ -49,14 +49,11 @@ cmd_pipe_pane_exec(struct cmd *self, struct cmd_q *cmdq)
 {
 	struct args		*args = self->args;
 	struct client		*c;
-	struct session		*s;
-	struct winlink		*wl;
 	struct window_pane	*wp;
-	char			*cmd;
+	char			*command;
 	int			 old_fd, pipe_fd[2], null_fd;
-	struct format_tree	*ft;
 
-	if ((wl = cmd_find_pane(cmdq, args_get(args, 't'), &s, &wp)) == NULL)
+	if (cmd_find_pane(cmdq, args_get(args, 't'), NULL, &wp) == NULL)
 		return (CMD_RETURN_ERROR);
 	c = cmd_find_client(cmdq, NULL, 1);
 
@@ -87,18 +84,10 @@ cmd_pipe_pane_exec(struct cmd *self, struct cmd_q *cmdq)
 		return (CMD_RETURN_ERROR);
 	}
 
-	/* Expand the command. */
-	ft = format_create();
-	format_defaults(ft, c, s, wl, wp);
-	cmd = format_expand_time(ft, args->argv[0], time(NULL));
-	format_free(ft);
-
 	/* Fork the child. */
 	switch (fork()) {
 	case -1:
 		cmdq_error(cmdq, "fork error: %s", strerror(errno));
-
-		free(cmd);
 		return (CMD_RETURN_ERROR);
 	case 0:
 		/* Child process. */
@@ -120,7 +109,9 @@ cmd_pipe_pane_exec(struct cmd *self, struct cmd_q *cmdq)
 
 		closefrom(STDERR_FILENO + 1);
 
-		execl(_PATH_BSHELL, "sh", "-c", cmd, (char *) NULL);
+		command = status_replace(
+		    c, NULL, NULL, NULL, args->argv[0], time(NULL), 0);
+		execl(_PATH_BSHELL, "sh", "-c", command, (char *) NULL);
 		_exit(1);
 	default:
 		/* Parent process. */
@@ -134,8 +125,6 @@ cmd_pipe_pane_exec(struct cmd *self, struct cmd_q *cmdq)
 		bufferevent_enable(wp->pipe_event, EV_WRITE);
 
 		setblocking(wp->pipe_fd, 0);
-
-		free(cmd);
 		return (CMD_RETURN_NORMAL);
 	}
 }
