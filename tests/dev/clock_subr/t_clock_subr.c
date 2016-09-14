@@ -1,4 +1,4 @@
-/* $NetBSD: t_clock_subr.c,v 1.2 2016/08/17 12:06:49 jakllsch Exp $ */
+/* $NetBSD: t_clock_subr.c,v 1.2.2.2 2016/09/14 03:04:19 pgoyette Exp $ */
 
 /*
  * Copyright (c) 2016 Jonathan A. Kollasch
@@ -29,7 +29,7 @@
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2016\
  Jonathan A. Kollasch. All rights reserved.");
-__RCSID("$NetBSD: t_clock_subr.c,v 1.2 2016/08/17 12:06:49 jakllsch Exp $");
+__RCSID("$NetBSD: t_clock_subr.c,v 1.2.2.2 2016/09/14 03:04:19 pgoyette Exp $");
 
 #include <sys/types.h>
 #include <dev/clock_subr.h>

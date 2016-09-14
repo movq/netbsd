@@ -1,4 +1,4 @@
-/*	$NetBSD: fenv.c,v 1.1 2016/08/23 10:00:15 christos Exp $	*/
+/*	$NetBSD: fenv.c,v 1.1.2.2 2016/09/14 03:04:16 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2004-2005 David Schultz <das@FreeBSD.ORG>
@@ -28,7 +28,7 @@
  * $FreeBSD: src/lib/msun/alpha/fenv.c,v 1.2 2005/03/16 19:03:44 das Exp $
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: fenv.c,v 1.1 2016/08/23 10:00:15 christos Exp $");
+__RCSID("$NetBSD: fenv.c,v 1.1.2.2 2016/09/14 03:04:16 pgoyette Exp $");
 
 #ifdef __weak_alias
 #define feenableexcept _feenableexcept

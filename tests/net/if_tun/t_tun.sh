@@ -1,4 +1,4 @@
-#	$NetBSD: t_tun.sh,v 1.2 2016/09/05 04:35:46 ozaki-r Exp $
+#	$NetBSD: t_tun.sh,v 1.2.2.2 2016/09/14 03:04:19 pgoyette Exp $
 #
 # Copyright (c) 2016 Internet Initiative Japan Inc.
 # All rights reserved.

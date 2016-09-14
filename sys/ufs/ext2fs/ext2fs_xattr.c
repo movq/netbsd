@@ -1,4 +1,4 @@
-/*	$NetBSD: ext2fs_xattr.c,v 1.4 2016/08/23 06:40:54 christos Exp $	*/
+/*	$NetBSD: ext2fs_xattr.c,v 1.4.2.2 2016/09/14 03:04:19 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: ext2fs_xattr.c,v 1.4 2016/08/23 06:40:54 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: ext2fs_xattr.c,v 1.4.2.2 2016/09/14 03:04:19 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

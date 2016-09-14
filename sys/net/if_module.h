@@ -1,4 +1,4 @@
-/*	$NetBSD: if_module.h,v 1.1 2016/08/07 17:38:34 christos Exp $	*/
+/*	$NetBSD: if_module.h,v 1.1.2.2 2016/09/14 03:04:19 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
