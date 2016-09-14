@@ -1,4 +1,4 @@
-/*	$NetBSD: tun_component.c,v 1.1 2016/09/05 02:25:38 ozaki-r Exp $	*/
+/*	$NetBSD: tun_component.c,v 1.1.2.2 2016/09/14 03:04:19 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2016 Internet Initiative Japan Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tun_component.c,v 1.1 2016/09/05 02:25:38 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tun_component.c,v 1.1.2.2 2016/09/14 03:04:19 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/device.h>

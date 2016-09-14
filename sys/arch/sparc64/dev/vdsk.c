@@ -1,4 +1,4 @@
-/*	$NetBSD: vdsk.c,v 1.2 2016/08/20 18:21:18 nakayama Exp $	*/
+/*	$NetBSD: vdsk.c,v 1.2.2.2 2016/09/14 03:04:17 pgoyette Exp $	*/
 /*	$OpenBSD: vdsk.c,v 1.46 2015/01/25 21:42:13 kettenis Exp $	*/
 /*
  * Copyright (c) 2009, 2011 Mark Kettenis

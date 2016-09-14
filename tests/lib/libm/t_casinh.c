@@ -1,4 +1,4 @@
-/* $NetBSD: t_casinh.c,v 1.1 2016/08/31 14:05:10 maya Exp $ */
+/* $NetBSD: t_casinh.c,v 1.1.2.2 2016/09/14 03:04:19 pgoyette Exp $ */
 
 /*
  * Written by Maya Rashish

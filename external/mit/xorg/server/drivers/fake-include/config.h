@@ -1,4 +1,4 @@
-/*	$NetBSD: config.h,v 1.1 2016/08/20 00:22:02 mrg Exp $	*/
+/*	$NetBSD: config.h,v 1.1.2.2 2016/09/14 03:04:16 pgoyette Exp $	*/
 
 /*
  * Fake header for drivers missing generated config.h and need it for

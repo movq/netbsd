@@ -1,4 +1,4 @@
-/*	$NetBSD: fpreg.h,v 1.1 2016/08/25 12:14:10 christos Exp $	*/
+/*	$NetBSD: fpreg.h,v 1.1.2.2 2016/09/14 03:04:17 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
