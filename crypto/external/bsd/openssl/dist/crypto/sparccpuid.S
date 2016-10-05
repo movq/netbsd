@@ -29,11 +29,11 @@ OPENSSL_wipe_cpu:
 #include <sys/trap.h>
 	ta	ST_CLEAN_WINDOWS
 #else
-	call	_walk.reg.wins
+	call	.walk.reg.wins
 #endif
 	nop
-	call	_PIC.zero.up
-	mov	_zero-(.-4),%o0
+	call	.PIC.zero.up
+	mov	.zero-(.-4),%o0
 	ld	[%o0],%f0
 	ld	[%o0],%f1
 
@@ -123,13 +123,13 @@ OPENSSL_wipe_cpu:
 			fmovs	%f1,%f3
 			fmovs	%f0,%f2
 
-	add	%fp,BIAS,%i0	! return pointer to callerÂ´s top of stack
+	add	%fp,BIAS,%i0	! return pointer to caller´s top of stack
 
 	ret
 	restore
 
-_zero:	.long	0x0,0x0
-_PIC.zero.up:
+.zero:	.long	0x0,0x0
+.PIC.zero.up:
 	retl
 	add	%o0,%o7,%o0
 #ifdef DEBUG
@@ -137,7 +137,7 @@ _PIC.zero.up:
 .type	walk_reg_wins,#function
 walk_reg_wins:
 #endif
-_walk.reg.wins:
+.walk.reg.wins:
 	save	%sp,FRAME,%sp
 	cmp	%i7,%o7
 	be	2f
@@ -145,7 +145,7 @@ _walk.reg.wins:
 	cmp	%o7,0	! compiler never cleans %o7...
 	be	1f	! could have been a leaf function...
 	clr	%o1
-	call	_walk.reg.wins
+	call	.walk.reg.wins
 	nop
 1:	clr	%o2
 	clr	%o3
@@ -179,7 +179,7 @@ OPENSSL_atomic_add:
 	ba	.enter
 	nop
 #ifdef __sun
-! Note that you do not have to link with libthread to call thr_yield,
+! Note that you don't have to link with libthread to call thr_yield,
 ! as libc provides a stub, which is overloaded the moment you link
 ! with *either* libpthread or libthread...
 #define	YIELD_CPU	thr_yield
@@ -225,94 +225,12 @@ _sparcv9_rdtick:
 	xor	%o0,%o0,%o0
 	.word	0x91410000	!rd	%tick,%o0
 	retl
-	.word	0x93323020	!srlx	%o0,32,%o1
+	.word	0x93323020	!srlx	%o2,32,%o1
 .notick:
 	retl
 	xor	%o1,%o1,%o1
 .type	_sparcv9_rdtick,#function
 .size	_sparcv9_rdtick,.-_sparcv9_rdtick
-
-.global	_sparcv9_vis1_probe
-.align	8
-_sparcv9_vis1_probe:
-	add	%sp,BIAS+2,%o1
-	.word	0xc19a5a40	!ldda	[%o1]ASI_FP16_P,%f0
-	retl
-	.word	0x81b00d80	!fxor	%f0,%f0,%f0
-.type	_sparcv9_vis1_probe,#function
-.size	_sparcv9_vis1_probe,.-_sparcv9_vis1_probe
-
-! Probe and instrument VIS1 instruction. Output is number of cycles it
-! takes to execute rdtick and pair of VIS1 instructions. US-Tx VIS unit
-! is slow (documented to be 6 cycles on T2) and the core is in-order
-! single-issue, it should be possible to distinguish Tx reliably...
-! Observed return values are:
-!
-!	UltraSPARC IIe		7
-!	UltraSPARC III		7
-!	UltraSPARC T1		24
-!
-! Numbers for T2 and SPARC64 V-VII are more than welcomed.
-!
-! It would be possible to detect specifically US-T1 by instrumenting
-! fmul8ulx16, which is emulated on T1 and as such accounts for quite
-! a lot of %tick-s, couple of thousand on Linux...
-.global	_sparcv9_vis1_instrument
-.align	8
-_sparcv9_vis1_instrument:
-	.word	0x91410000	!rd	%tick,%o0
-	.word	0x81b00d80	!fxor	%f0,%f0,%f0
-	.word	0x85b08d82	!fxor	%f2,%f2,%f2
-	.word	0x93410000	!rd	%tick,%o1
-	.word	0x81b00d80	!fxor	%f0,%f0,%f0
-	.word	0x85b08d82	!fxor	%f2,%f2,%f2
-	.word	0x95410000	!rd	%tick,%o2
-	.word	0x81b00d80	!fxor	%f0,%f0,%f0
-	.word	0x85b08d82	!fxor	%f2,%f2,%f2
-	.word	0x97410000	!rd	%tick,%o3
-	.word	0x81b00d80	!fxor	%f0,%f0,%f0
-	.word	0x85b08d82	!fxor	%f2,%f2,%f2
-	.word	0x99410000	!rd	%tick,%o4
-
-	! calculate intervals
-	sub	%o1,%o0,%o0
-	sub	%o2,%o1,%o1
-	sub	%o3,%o2,%o2
-	sub	%o4,%o3,%o3
-
-	! find minumum value
-	cmp	%o0,%o1
-	.word	0x38680002	!bgu,a	%xcc,.+8
-	mov	%o1,%o0
-	cmp	%o0,%o2
-	.word	0x38680002	!bgu,a	%xcc,.+8
-	mov	%o2,%o0
-	cmp	%o0,%o3
-	.word	0x38680002	!bgu,a	%xcc,.+8
-	mov	%o3,%o0
-
-	retl
-	nop
-.type	_sparcv9_vis1_instrument,#function
-.size	_sparcv9_vis1_instrument,.-_sparcv9_vis1_instrument
-
-.global	_sparcv9_vis2_probe
-.align	8
-_sparcv9_vis2_probe:
-	retl
-	.word	0x81b00980	!bshuffle	%f0,%f0,%f0
-.type	_sparcv9_vis2_probe,#function
-.size	_sparcv9_vis2_probe,.-_sparcv9_vis2_probe
-
-.global	_sparcv9_fmadd_probe
-.align	8
-_sparcv9_fmadd_probe:
-	.word	0x81b00d80	!fxor	%f0,%f0,%f0
-	.word	0x85b08d82	!fxor	%f2,%f2,%f2
-	retl
-	.word	0x81b80440	!fmaddd	%f0,%f0,%f2,%f0
-.type	_sparcv9_fmadd_probe,#function
-.size	_sparcv9_fmadd_probe,.-_sparcv9_fmadd_probe
 
 .global	OPENSSL_cleanse
 .align	32
@@ -324,10 +242,6 @@ OPENSSL_cleanse:
 #else
 	bgu	.Lot
 #endif
-	cmp	%o1,0
-	bne	.Little
-	nop
-	retl
 	nop
 
 .Little:

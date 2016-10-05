@@ -88,10 +88,4 @@ if [ -f "$LIBCRYPTOSO" -a -z "$preload_var" ]; then
 	export LD_PRELOAD _RLD_LIST DYLD_INSERT_LIBRARIES
 fi
 
-cmd="$1${EXE_EXT}"
-shift
-if [ $# -eq 0 ]; then
-	exec "$cmd"	# old sh, such as Tru64 4.x, fails to expand empty "$@"
-else
-	exec "$cmd" "$@"
-fi
+exec "$@"

@@ -1,16 +1,10 @@
 /* opensslconf.h */
 /* WARNING: Generated automatically from opensslconf.h.in by Configure. */
 
-#ifdef  __cplusplus
-extern "C" {
-#endif
 /* OpenSSL was configured with the following options: */
 #ifndef OPENSSL_DOING_MAKEDEPEND
 
 
-#ifndef OPENSSL_NO_EC_NISTP_64_GCC_128
-# define OPENSSL_NO_EC_NISTP_64_GCC_128
-#endif
 #ifndef OPENSSL_NO_GMP
 # define OPENSSL_NO_GMP
 #endif
@@ -24,36 +18,34 @@ extern "C" {
 #ifndef OPENSSL_NO_MD2
 # define OPENSSL_NO_MD2
 #endif
+#ifndef OPENSSL_NO_MDC2
+# define OPENSSL_NO_MDC2
+#endif
 #ifndef OPENSSL_NO_RC5
 # define OPENSSL_NO_RC5
 #endif
 #ifndef OPENSSL_NO_RFC3779
 # define OPENSSL_NO_RFC3779
 #endif
-#ifndef OPENSSL_NO_SCTP
-# define OPENSSL_NO_SCTP
-#endif
-#ifndef OPENSSL_NO_SSL2
-# define OPENSSL_NO_SSL2
-#endif
 #ifndef OPENSSL_NO_STORE
 # define OPENSSL_NO_STORE
 #endif
-#ifndef OPENSSL_NO_UNIT_TEST
-# define OPENSSL_NO_UNIT_TEST
+#else
+#ifndef OPENSSL_THREADS
+#define OPENSSL_THREADS
 #endif
-#else /* __NetBSD__ */
-#ifndef OPENSSL_NO_SCTP
-# define OPENSSL_NO_SCTP
+#ifndef OPENSSL_NO_HW_PADLOCK
+#define OPENSSL_NO_HW_PADLOCK
 #endif
-#ifndef OPENSSL_NO_SSL2
-# define OPENSSL_NO_SSL2
+#ifndef OPENSSL_NO_GOST
+#define OPENSSL_NO_GOST
 #endif
-#endif /* __NetBSD__ */
-
-#define OPENSSL_CPUID_OBJ
-#ifndef OPENSSL_NO_WEAK_SSL_CIPHERS
-# define OPENSSL_NO_WEAK_SSL_CIPHERS
+#ifndef OPENSSL_NO_SEED
+#define OPENSSL_NO_SEED
+#endif
+#ifndef OPENSSL_NO_WHIRLPOOL
+#define OPENSSL_NO_WHIRLPOOL
+#endif
 #endif
 
 #endif /* OPENSSL_DOING_MAKEDEPEND */
@@ -70,8 +62,8 @@ extern "C" {
    who haven't had the time to do the appropriate changes in their
    applications.  */
 #ifdef OPENSSL_ALGORITHM_DEFINES
-# if defined(OPENSSL_NO_EC_NISTP_64_GCC_128) && !defined(NO_EC_NISTP_64_GCC_128)
-#  define NO_EC_NISTP_64_GCC_128
+# if defined(OPENSSL_NO_CAMELLIA) && !defined(NO_CAMELLIA)
+#  define NO_CAMELLIA
 # endif
 # if defined(OPENSSL_NO_GMP) && !defined(NO_GMP)
 #  define NO_GMP
@@ -85,26 +77,17 @@ extern "C" {
 # if defined(OPENSSL_NO_MD2) && !defined(NO_MD2)
 #  define NO_MD2
 # endif
+# if defined(OPENSSL_NO_MDC2) && !defined(NO_MDC2)
+#  define NO_MDC2
+# endif
 # if defined(OPENSSL_NO_RC5) && !defined(NO_RC5)
 #  define NO_RC5
 # endif
 # if defined(OPENSSL_NO_RFC3779) && !defined(NO_RFC3779)
 #  define NO_RFC3779
 # endif
-# if defined(OPENSSL_NO_SCTP) && !defined(NO_SCTP)
-#  define NO_SCTP
-# endif
-# if defined(OPENSSL_NO_SSL2) && !defined(NO_SSL2)
-#  define NO_SSL2
-# endif
 # if defined(OPENSSL_NO_STORE) && !defined(NO_STORE)
 #  define NO_STORE
-# endif
-# if defined(OPENSSL_NO_UNIT_TEST) && !defined(NO_UNIT_TEST)
-#  define NO_UNIT_TEST
-# endif
-# if defined(OPENSSL_NO_WEAK_SSL_CIPHERS) && !defined(NO_WEAK_SSL_CIPHERS)
-#  define NO_WEAK_SSL_CIPHERS
 # endif
 #endif
 
@@ -123,10 +106,11 @@ extern "C" {
 #undef OPENSSL_UNISTD
 #define OPENSSL_UNISTD <unistd.h>
 
+#include <sys/types.h>
 #undef OPENSSL_EXPORT_VAR_AS_FUNCTION
 
 #if defined(HEADER_IDEA_H) && !defined(IDEA_INT)
-#define IDEA_INT uint32_t
+#define IDEA_INT unsigned int
 #endif
 
 #if defined(HEADER_MD2_H) && !defined(MD2_INT)
@@ -154,11 +138,7 @@ extern "C" {
  * This enables code handling data aligned at natural CPU word
  * boundary. See crypto/rc4/rc4_enc.c for further details.
  */
-#ifdef _LP64
-#define RC4_CHUNK uint64_t
-#else
 #undef RC4_CHUNK
-#endif
 #endif
 #endif
 
@@ -172,7 +152,7 @@ extern "C" {
 
 #if defined(HEADER_BN_H) && !defined(CONFIG_HEADER_BN_H)
 #define CONFIG_HEADER_BN_H
-/* #undef BN_LLONG */
+#undef BN_LLONG
 
 /* Should we define BN_DIV2W here? */
 
@@ -186,13 +166,15 @@ extern "C" {
 #undef SIXTY_FOUR_BIT
 #define THIRTY_TWO_BIT
 #endif
+#undef SIXTEEN_BIT
+#undef EIGHT_BIT
 #endif
 
 #if defined(HEADER_RC4_LOCL_H) && !defined(CONFIG_HEADER_RC4_LOCL_H)
 #define CONFIG_HEADER_RC4_LOCL_H
 /* if this is defined data[i] is used instead of *data, this is a %20
  * speedup on x86 */
-/* #undef RC4_INDEX */
+#undef RC4_INDEX
 #endif
 
 #if defined(HEADER_BF_LOCL_H) && !defined(CONFIG_HEADER_BF_LOCL_H)
@@ -206,28 +188,28 @@ extern "C" {
 /* the following is tweaked from a config script, that is why it is a
  * protected undef/define */
 #ifndef DES_PTR
-/* #undef DES_PTR */
+#undef DES_PTR
 #endif
 
 /* This helps C compiler generate the correct code for multiple functional
  * units.  It reduces register dependancies at the expense of 2 more
  * registers */
 #ifndef DES_RISC1
-/* #undef DES_RISC1 */
+#undef DES_RISC1
 #endif
 
 #ifndef DES_RISC2
-/* #undef DES_RISC2 */
+#undef DES_RISC2
 #endif
 
 #if defined(DES_RISC1) && defined(DES_RISC2)
-#error YOU SHOULD NOT HAVE BOTH DES_RISC1 AND DES_RISC2 DEFINED!!!!!
+YOU SHOULD NOT HAVE BOTH DES_RISC1 AND DES_RISC2 DEFINED!!!!!
 #endif
 
 /* Unroll the inner loop, this sometimes helps, sometimes hinders.
  * Very mucy CPU dependant */
 #ifndef DES_UNROLL
-/* #undef DES_UNROLL */
+#undef DES_UNROLL
 #endif
 
 /* These default values were supplied by
@@ -240,7 +222,7 @@ extern "C" {
    optimization options.  Older Sparc's work better with only UNROLL, but
    there's no way to tell at compile time what it is you're running on */
  
-#if defined( __sun ) || defined ( sun )		/* Newer Sparc's */
+#if defined( sun )		/* Newer Sparc's */
 #  define DES_PTR
 #  define DES_RISC1
 #  define DES_UNROLL
@@ -272,6 +254,3 @@ extern "C" {
 
 #endif /* DES_DEFAULT_OPTIONS */
 #endif /* HEADER_DES_LOCL_H */
-#ifdef  __cplusplus
-}
-#endif

@@ -19,7 +19,6 @@ B<openssl> B<x509>
 [B<-hash>]
 [B<-subject_hash>]
 [B<-issuer_hash>]
-[B<-ocspid>]
 [B<-subject>]
 [B<-issuer>]
 [B<-nameopt option>]
@@ -29,9 +28,7 @@ B<openssl> B<x509>
 [B<-enddate>]
 [B<-purpose>]
 [B<-dates>]
-[B<-checkend num>]
 [B<-modulus>]
-[B<-pubkey>]
 [B<-fingerprint>]
 [B<-alias>]
 [B<-noout>]
@@ -44,7 +41,6 @@ B<openssl> B<x509>
 [B<-days arg>]
 [B<-set_serial n>]
 [B<-signkey filename>]
-[B<-passin arg>]
 [B<-x509toreq>]
 [B<-req>]
 [B<-CA filename>]
@@ -52,7 +48,6 @@ B<openssl> B<x509>
 [B<-CAcreateserial>]
 [B<-CAserial filename>]
 [B<-text>]
-[B<-certopt option>]
 [B<-C>]
 [B<-md2|-md5|-sha1|-mdc2>]
 [B<-clrext>]
@@ -140,10 +135,6 @@ section for more information.
 
 this option prevents output of the encoded version of the request.
 
-=item B<-pubkey>
-
-outputs the the certificate's SubjectPublicKeyInfo block in PEM format.
-
 =item B<-modulus>
 
 this option prints out the value of the modulus of the public key
@@ -163,23 +154,9 @@ name.
 
 outputs the "hash" of the certificate issuer name.
 
-=item B<-ocspid>
-
-outputs the OCSP hash values for the subject name and public key.
-
 =item B<-hash>
 
 synonym for "-subject_hash" for backward compatibility reasons.
-
-=item B<-subject_hash_old>
-
-outputs the "hash" of the certificate subject name using the older algorithm
-as used by OpenSSL versions before 1.0.0.
-
-=item B<-issuer_hash_old>
-
-outputs the "hash" of the certificate issuer name using the older algorithm
-as used by OpenSSL versions before 1.0.0.
 
 =item B<-subject>
 
@@ -215,11 +192,6 @@ prints out the expiry date of the certificate, that is the notAfter date.
 =item B<-dates>
 
 prints out the start and expiry dates of a certificate.
-
-=item B<-checkend arg>
-
-checks if the certificate expires within the next B<arg> seconds and exits
-non-zero if yes it will expire or zero if not.
 
 =item B<-fingerprint>
 
@@ -325,11 +297,6 @@ the B<-clrext> option is supplied.
 If the input is a certificate request then a self signed certificate
 is created using the supplied private key using the subject name in
 the request.
-
-=item B<-passin arg>
-
-the key password source. For more information about the format of B<arg>
-see the B<PASS PHRASE ARGUMENTS> section in L<openssl(1)|openssl(1)>.
 
 =item B<-clrext>
 
@@ -486,7 +453,7 @@ using the format \UXXXX for 16 bits and \WXXXXXXXX for 32 bits.
 Also if this option is off any UTF8Strings will be converted to their
 character form first.
 
-=item B<ignore_type>
+=item B<no_type>
 
 this option does not attempt to interpret multibyte characters in any
 way. That is their content octets are merely dumped as though one octet
@@ -529,8 +496,7 @@ very rare and their use is discouraged). The options ending in
 "space" additionally place a space after the separator to make it
 more readable. The B<sep_multiline> uses a linefeed character for
 the RDN separator and a spaced B<+> for the AVA separator. It also
-indents the fields by four characters. If no field separator is specified
-then B<sep_comma_plus_space> is used by default.
+indents the fields by four characters.
 
 =item B<dn_rev>
 
@@ -870,11 +836,5 @@ L<x509v3_config(5)|x509v3_config(5)>
 =head1 HISTORY
 
 Before OpenSSL 0.9.8, the default digest for RSA keys was MD5.
-
-The hash algorithm used in the B<-subject_hash> and B<-issuer_hash> options
-before OpenSSL 1.0.0 was based on the deprecated MD5 algorithm and the encoding
-of the distinguished name. In OpenSSL 1.0.0 and later it is based on a
-canonical version of the DN using SHA1. This means that any directories using
-the old form must have their links rebuilt using B<c_rehash> or similar. 
 
 =cut

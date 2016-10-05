@@ -107,25 +107,24 @@ install:
 	@[ -n "$(INSTALLTOP)" ] # should be set by top Makefile...
 	@if [ -n "$(SHARED_LIBS)" ]; then \
 		set -e; \
-		$(PERL) $(TOP)/util/mkdir-p.pl $(INSTALL_PREFIX)$(INSTALLTOP)/$(LIBDIR)/engines; \
 		for l in $(LIBNAMES); do \
 			( echo installing $$l; \
 			  pfx=lib; \
 			  if [ "$(PLATFORM)" != "Cygwin" ]; then \
 				case "$(CFLAGS)" in \
 				*DSO_BEOS*)	sfx=".so";;	\
-				*DSO_DLFCN*)	sfx=`expr "$(SHLIB_EXT)" : '.*\(\.[a-z][a-z]*\)' \| ".so"`;;	\
+				*DSO_DLFCN*)	sfx=".so";;	\
 				*DSO_DL*)	sfx=".sl";;	\
 				*DSO_WIN32*)	sfx="eay32.dll"; pfx=;;	\
 				*)		sfx=".bad";;	\
 				esac; \
-				cp $$pfx$$l$$sfx $(INSTALL_PREFIX)$(INSTALLTOP)/$(LIBDIR)/engines/$$pfx$$l$$sfx.new; \
+				cp $$pfx$$l$$sfx $(INSTALL_PREFIX)$(INSTALLTOP)/lib/engines/$$pfx$$l$$sfx.new; \
 			  else \
 				sfx=".so"; \
-				cp cyg$$l.dll $(INSTALL_PREFIX)$(INSTALLTOP)/$(LIBDIR)/engines/$$pfx$$l$$sfx.new; \
+				cp cyg$$l.dll $(INSTALL_PREFIX)$(INSTALLTOP)/lib/engines/$$pfx$$l$$sfx.new; \
 			  fi; \
-			  chmod 555 $(INSTALL_PREFIX)$(INSTALLTOP)/$(LIBDIR)/engines/$$pfx$$l$$sfx.new; \
-			  mv -f $(INSTALL_PREFIX)$(INSTALLTOP)/$(LIBDIR)/engines/$$pfx$$l$$sfx.new $(INSTALL_PREFIX)$(INSTALLTOP)/$(LIBDIR)/engines/$$pfx$$l$$sfx ); \
+			  chmod 555 $(INSTALL_PREFIX)$(INSTALLTOP)/lib/engines/$$pfx$$l$$sfx.new; \
+			  mv -f $(INSTALL_PREFIX)$(INSTALLTOP)/lib/engines/$$pfx$$l$$sfx.new $(INSTALL_PREFIX)$(INSTALLTOP)/lib/engines/$$pfx$$l$$sfx ); \
 		done; \
 	fi
 	@target=install; $(RECURSIVE_MAKE)
@@ -146,15 +145,12 @@ lint:
 	lint -DLINT $(INCLUDES) $(SRC)>fluff
 	@target=lint; $(RECURSIVE_MAKE)
 
-update: local_depend
-	@if [ -z "$(THIS)" ]; then $(MAKE) -f $(TOP)/Makefile reflect THIS=$@; fi
-	@[ -z "$(THIS)" ] || (set -e; target=update; $(RECURSIVE_MAKE) )
-
-depend: local_depend
-	@if [ -z "$(THIS)" ]; then $(MAKE) -f $(TOP)/Makefile reflect THIS=$@; fi
-	@[ -z "$(THIS)" ] || (set -e; target=depend; $(RECURSIVE_MAKE) )
-local_depend:
+depend:
+	@if [ -z "$(THIS)" ]; then \
+	    $(MAKE) -f $(TOP)/Makefile reflect THIS=$@; \
+	fi
 	@[ -z "$(THIS)" ] || $(MAKEDEPEND) -- $(CFLAG) $(INCLUDES) $(DEPFLAG) -- $(PROGS) $(LIBSRC)
+	@[ -z "$(THIS)" ] || (set -e; target=depend; $(RECURSIVE_MAKE) )
 
 dclean:
 	$(PERL) -pe 'if (/^# DO NOT DELETE THIS LINE/) {print; exit(0);}' $(MAKEFILE) >Makefile.new

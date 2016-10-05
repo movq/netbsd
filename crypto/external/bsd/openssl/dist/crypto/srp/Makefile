@@ -43,8 +43,7 @@ links:
 	@$(PERL) $(TOP)/util/mklink.pl ../../apps $(APPS)
 
 install:
-	@[ -n "$(INSTALLTOP)" ] # should be set by top Makefile...
-	@headerlist="$(EXHEADER)"; for i in $$headerlist ; \
+	@for i in $(EXHEADER) ; \
 	do  \
 	(cp $$i $(INSTALL_PREFIX)$(INSTALLTOP)/include/openssl/$$i; \
 	chmod 644 $(INSTALL_PREFIX)$(INSTALLTOP)/include/openssl/$$i ); \
@@ -60,8 +59,6 @@ srptest: top srptest.c $(LIB)
 
 lint:
 	lint -DLINT $(INCLUDES) $(SRC)>fluff
-
-update: depend
 
 depend:
 	$(MAKEDEPEND) -- $(CFLAG) $(INCLUDES) $(DEPFLAG) -- $(PROGS) $(LIBSRC)

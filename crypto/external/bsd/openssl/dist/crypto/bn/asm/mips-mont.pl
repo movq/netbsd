@@ -133,7 +133,7 @@ $code.=<<___;
 	bnez	$at,1f
 	li	$t0,0
 	slt	$at,$num,17	# on in-order CPU
-	bnez	$at,bn_mul_mont_internal
+	bnezl	$at,bn_mul_mont_internal
 	nop
 1:	jr	$ra
 	li	$a0,0

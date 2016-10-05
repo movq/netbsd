@@ -57,13 +57,15 @@ see the B<PASS PHRASE ARGUMENTS> section in L<openssl(1)|openssl(1)>.
 
 =item B<-salt>
 
-use a salt in the key derivation routines. This is the default.
+use a salt in the key derivation routines. This option should B<ALWAYS>
+be used unless compatibility with previous versions of OpenSSL or SSLeay
+is required. This option is only present on OpenSSL versions 0.9.5 or
+above.
 
 =item B<-nosalt>
 
-don't use a salt in the key derivation routines. This option B<SHOULD NOT> be
-used except for test purposes or compatibility with ancient versions of OpenSSL
-and SSLeay.
+don't use a salt in the key derivation routines. This is the default for
+compatibility with previous versions of OpenSSL and SSLeay.
 
 =item B<-e>
 
@@ -214,10 +216,6 @@ in the configuration file. The output of the B<enc> command run with
 unsupported options (for example B<openssl enc -help>) includes a
 list of ciphers, supported by your versesion of OpenSSL, including
 ones provided by configured engines.
-
-The B<enc> program does not support authenticated encryption modes
-like CCM and GCM. The utility does not store or retrieve the
-authentication tag.
 
 
  base64             Base 64

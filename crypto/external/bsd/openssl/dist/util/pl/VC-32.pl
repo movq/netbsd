@@ -6,28 +6,12 @@
 $ssl=	"ssleay32";
 $crypto="libeay32";
 
-if ($fips && !$shlib)
-	{
-	$crypto="libeayfips32";
-	$crypto_compat = "libeaycompat32.lib";
-	}
-else
-	{
-	$crypto="libeay32";
-	}
-
 $o='\\';
 $cp='$(PERL) util/copy.pl';
 $mkdir='$(PERL) util/mkdir-p.pl';
 $rm='del /Q';
 
 $zlib_lib="zlib1.lib";
-
-# Santize -L options for ms link
-$l_flags =~ s/-L("\[^"]+")/\/libpath:$1/g;
-$l_flags =~ s/-L(\S+)/\/libpath:$1/g;
-
-my $ff = "";
 
 # C compiler stuff
 $cc='cl';
@@ -45,7 +29,7 @@ if ($FLAVOR =~ /WIN64/)
     # considered safe to ignore.
     # 
     $base_cflags= " $mf_cflag";
-    my $f = $shlib || $fips ?' /MD':' /MT';
+    my $f = $shlib?' /MD':' /MT';
     $lib_cflag='/Zl' if (!$shlib);	# remove /DEFAULTLIBs from static lib
     $opt_cflags=$f.' /Ox';
     $dbg_cflags=$f.'d /Od -DDEBUG -D_DEBUG';
@@ -120,40 +104,34 @@ elsif ($FLAVOR =~ /CE/)
     $base_cflags.=' -I$(WCECOMPAT)/include'		if (defined($ENV{'WCECOMPAT'}));
     $base_cflags.=' -I$(PORTSDK_LIBPATH)/../../include'	if (defined($ENV{'PORTSDK_LIBPATH'}));
     $opt_cflags=' /MC /O1i';	# optimize for space, but with intrinsics...
-    $dbg_cflags=' /MC /Od -DDEBUG -D_DEBUG';
+    $dbg_clfags=' /MC /Od -DDEBUG -D_DEBUG';
     $lflags="/nologo /opt:ref $wcelflag";
     }
 else	# Win32
     {
     $base_cflags= " $mf_cflag";
-    my $f = $shlib || $fips ?' /MD':' /MT';
+    my $f = $shlib?' /MD':' /MT';
     $lib_cflag='/Zl' if (!$shlib);	# remove /DEFAULTLIBs from static lib
-    $ff = "/fixed";
     $opt_cflags=$f.' /Ox /O2 /Ob2';
     $dbg_cflags=$f.'d /Od -DDEBUG -D_DEBUG';
     $lflags="/nologo /subsystem:console /opt:ref";
     }
 $mlflags='';
 
-$out_def ="out32";	$out_def.="dll"			if ($shlib);
-			$out_def.='_$(TARGETCPU)'	if ($FLAVOR =~ /CE/);
-$tmp_def ="tmp32";	$tmp_def.="dll"			if ($shlib);
-			$tmp_def.='_$(TARGETCPU)'	if ($FLAVOR =~ /CE/);
+$out_def="out32"; $out_def.='_$(TARGETCPU)' if ($FLAVOR =~ /CE/);
+$tmp_def="tmp32"; $tmp_def.='_$(TARGETCPU)' if ($FLAVOR =~ /CE/);
 $inc_def="inc32";
 
 if ($debug)
 	{
 	$cflags=$dbg_cflags.$base_cflags;
+	$lflags.=" /debug";
+	$mlflags.=' /debug';
 	}
 else
 	{
 	$cflags=$opt_cflags.$base_cflags;
 	}
-
-# generate symbols.pdb unconditionally
-$app_cflag.=" /Zi /Fd\$(TMP_D)/app";
-$lib_cflag.=" /Zi /Fd\$(TMP_D)/lib";
-$lflags.=" /debug";
 
 $obj='.obj';
 $asm_suffix='.asm';
@@ -177,7 +155,7 @@ if ($FLAVOR =~ /CE/)
 else
 	{
 	$ex_libs.=' gdi32.lib advapi32.lib crypt32.lib user32.lib';
-	$ex_libs.=' bufferoverflowu.lib' if ($FLAVOR =~ /WIN64/ and `cl 2>&1` =~ /14\.00\.4[0-9]{4}\./);
+	$ex_libs.=' bufferoverflowu.lib' if ($FLAVOR =~ /WIN64/);
 	# WIN32 UNICODE build gets linked with unicows.lib for
 	# backward compatibility with Win9x.
 	$ex_libs="unicows.lib $ex_libs" if ($FLAVOR =~ /WIN32/ and $cflags =~ /\-DUNICODE/);
@@ -194,25 +172,29 @@ $lfile='/out:';
 $shlib_ex_obj="";
 $app_ex_obj="setargv.obj" if ($FLAVOR !~ /CE/);
 if ($FLAVOR =~ /WIN64A/) {
-	if (`nasm -v 2>NUL` =~ /NASM version ([0-9]+\.[0-9]+)/ && $1 >= 2.0) {
-		$asm='nasm -f win64 -DNEAR -Ox -g';
+	if (`nasm -v` =~ /NASM version ([0-9]+\.[0-9]+)/ && $1 >= 2.0) {
+		$asm='nasm -f win64 -DNEAR -Ox';
+		$asm.=' -g' if $debug;
 		$afile='-o ';
 	} else {
-		$asm='ml64 /c /Cp /Cx /Zi';
+		$asm='ml64 /c /Cp /Cx';
+		$asm.=" /Zi" if $debug;
 		$afile='/Fo';
 	}
 } elsif ($FLAVOR =~ /WIN64I/) {
-	$asm='ias -d debug';
+	$asm='ias';
+	$asm.=" -d debug" if $debug;
 	$afile="-o ";
 } elsif ($nasm) {
 	my $ver=`nasm -v 2>NUL`;
 	my $vew=`nasmw -v 2>NUL`;
 	# pick newest version
-	$asm=($ver ge $vew?"nasm":"nasmw")." -f win32";
+	$asm=($ver gt $vew?"nasm":"nasmw")." -f win32";
 	$asmtype="win32n";
 	$afile='-o ';
 } else {
-	$asm='ml /nologo /Cp /coff /c /Cx /Zi';
+	$asm='ml /nologo /Cp /coff /c /Cx';
+	$asm.=" /Zi" if $debug;
 	$afile='/Fo';
 	$asmtype="win32";
 }
@@ -244,7 +226,9 @@ if (!$no_asm)
 if ($shlib && $FLAVOR !~ /CE/)
 	{
 	$mlflags.=" $lflags /dll";
-	$lib_cflag.=" -D_WINDLL";
+	$lib_cflag=" -D_WINDLL";
+	$out_def="out32dll";
+	$tmp_def="tmp32dll";
 	#
 	# Engage Applink...
 	#
@@ -274,24 +258,19 @@ elsif ($shlib && $FLAVOR =~ /CE/)
 	{
 	$mlflags.=" $lflags /dll";
 	$lflags.=' /entry:mainCRTstartup' if(defined($ENV{'PORTSDK_LIBPATH'}));
-	$lib_cflag.=" -D_WINDLL -D_DLL";
+	$lib_cflag=" -D_WINDLL -D_DLL";
+	$out_def='out32dll_$(TARGETCPU)';
+	$tmp_def='tmp32dll_$(TARGETCPU)';
 	}
+
+$cflags.=" /Fd$out_def";
 
 sub do_lib_rule
 	{
-	my($objs,$target,$name,$shlib,$ign,$base_addr) = @_;
+	local($objs,$target,$name,$shlib)=@_;
 	local($ret);
 
 	$taget =~ s/\//$o/g if $o ne '/';
-	my $base_arg;
-	if ($base_addr ne "")
-		{
-		$base_arg= " /base:$base_addr";
-		}
-	else
-		{
-		$base_arg = "";
-		}
 	if ($name ne "")
 		{
 		$name =~ tr/a-z/A-Z/;
@@ -299,38 +278,41 @@ sub do_lib_rule
 		}
 
 #	$target="\$(LIB_D)$o$target";
-#	$ret.="$target: $objs\n";
+	$ret.="$target: $objs\n";
 	if (!$shlib)
 		{
 #		$ret.="\t\$(RM) \$(O_$Name)\n";
-		$ret.="$target: $objs\n";
-		$ret.="\t\$(MKLIB) $lfile$target @<<\n  $objs\n<<\n";
+		$ex =' ';
+		$ret.="\t\$(MKLIB) $lfile$target @<<\n  $objs $ex\n<<\n";
 		}
 	else
 		{
 		local($ex)=($target =~ /O_CRYPTO/)?'':' $(L_CRYPTO)';
-		$ex.=" $zlib_lib" if $zlib_opt == 1 && $target =~ /O_CRYPTO/;
-
- 		if ($fips && $target =~ /O_CRYPTO/)
+		if ($name eq "")
 			{
-			$ret.="$target: $objs \$(PREMAIN_DSO_EXE)";
-			$ret.="\n\tSET FIPS_LINK=\$(LINK_CMD)\n";
-			$ret.="\tSET FIPS_CC=\$(CC)\n";
-			$ret.="\tSET FIPS_CC_ARGS=/Fo\$(OBJ_D)${o}fips_premain.obj \$(SHLIB_CFLAGS) -c\n";
-			$ret.="\tSET PREMAIN_DSO_EXE=\$(PREMAIN_DSO_EXE)\n";
-			$ret.="\tSET FIPS_SHA1_EXE=\$(FIPS_SHA1_EXE)\n";
-			$ret.="\tSET FIPS_TARGET=$target\n";
-			$ret.="\tSET FIPSLIB_D=\$(FIPSLIB_D)\n";
-			$ret.="\t\$(FIPSLINK) \$(MLFLAGS) $ff /map $base_arg $efile$target ";
-			$ret.="$name @<<\n  \$(SHLIB_EX_OBJ) $objs \$(EX_LIBS) ";
-			$ret.="\$(OBJ_D)${o}fips_premain.obj $ex\n<<\n";
+			$ex.=' bufferoverflowu.lib' if ($FLAVOR =~ /WIN64/);
+			if ($target =~ /capi/)
+				{
+				$ex.=' crypt32.lib advapi32.lib';
+				}
+			}
+		elsif ($FLAVOR =~ /CE/)
+			{
+			$ex.=' winsock.lib';
+			$ex.=' $(WCECOMPAT)/lib/wcecompatex.lib' if (defined($ENV{'WCECOMPAT'}));
+			$ex.=' $(PORTSDK_LIBPATH)/portlib.lib'	 if (defined($ENV{'PORTSDK_LIBPATH'}));
 			}
 		else
 			{
-			$ret.="$target: $objs";
-			$ret.="\n\t\$(LINK_CMD) \$(MLFLAGS) $efile$target $name @<<\n  \$(SHLIB_EX_OBJ) $objs $ex \$(EX_LIBS)\n<<\n";
+			$ex.=' unicows.lib' if ($FLAVOR =~ /NT/);
+			$ex.=' ws2_32.lib gdi32.lib advapi32.lib user32.lib';
+			$ex.=' crypt32.lib';
+			$ex.=' cryptui.lib' if $cflags =~ /-DOPENSSL_CAPIENG_DIALOG/;
+			$ex.=' bufferoverflowu.lib' if ($FLAVOR =~ /WIN64/);
 			}
-		$ret.="\tIF EXIST \$@.manifest mt -nologo -manifest \$@.manifest -outputresource:\$@;2\n\n";
+		$ex.=" $zlib_lib" if $zlib_opt == 1 && $target =~ /O_CRYPTO/;
+		$ret.="\t\$(LINK) \$(MLFLAGS) $efile$target $name @<<\n  \$(SHLIB_EX_OBJ) $objs $ex\n<<\n";
+        $ret.="\tIF EXIST \$@.manifest mt -nologo -manifest \$@.manifest -outputresource:\$@;2\n\n";
 		}
 	$ret.="\n";
 	return($ret);
@@ -338,42 +320,15 @@ sub do_lib_rule
 
 sub do_link_rule
 	{
-	my($target,$files,$dep_libs,$libs,$standalone)=@_;
+	local($target,$files,$dep_libs,$libs)=@_;
 	local($ret,$_);
+	
 	$file =~ s/\//$o/g if $o ne '/';
-	$n=&bname($target);
-	$ret.="$target: $files $dep_libs";
-	if ($standalone == 1)
-		{
-		$ret.=" \$(OBJ_D)${o}applink.obj" if $shlib;
-		$ret.="\n";
-		$ret.="  \$(LINK_CMD) \$(LFLAGS) $efile$target @<<\n\t";
-		if ($files =~ /O_FIPSCANISTER/ && !$fipscanisterbuild) {
-			$ret.= "\$(EX_LIBS) ";
-			$ret.= "\$(OBJ_D)${o}applink.obj " if $shlib;
-		}
-		$ret.="$files $libs\n<<\n";
-		}
-	elsif ($standalone == 2)
-		{
-		$ret.="\n";
-		$ret.="\tSET FIPS_LINK=\$(LINK_CMD)\n";
-		$ret.="\tSET FIPS_CC=\$(CC)\n";
-		$ret.="\tSET FIPS_CC_ARGS=/Fo\$(OBJ_D)${o}fips_premain.obj \$(SHLIB_CFLAGS) -c\n";
-		$ret.="\tSET PREMAIN_DSO_EXE=\n";
-		$ret.="\tSET FIPS_TARGET=$target\n";
-		$ret.="\tSET FIPS_SHA1_EXE=\$(FIPS_SHA1_EXE)\n";
-		$ret.="\tSET FIPSLIB_D=\$(FIPSLIB_D)\n";
-		$ret.="\t\$(FIPSLINK) \$(LFLAGS) $ff /map $efile$target @<<\n";
-		$ret.="\t\$(APP_EX_OBJ) $files \$(OBJ_D)${o}fips_premain.obj $libs\n<<\n";
-		}
-	else
-		{
-		$ret.="\n";
-		$ret.="\t\$(LINK_CMD) \$(LFLAGS) $efile$target @<<\n";
-		$ret.="\t\$(APP_EX_OBJ) $files $libs\n<<\n";
-		}
-    	$ret.="\tIF EXIST \$@.manifest mt -nologo -manifest \$@.manifest -outputresource:\$@;1\n\n";
+	$n=&bname($targer);
+	$ret.="$target: $files $dep_libs\n";
+	$ret.="\t\$(LINK) \$(LFLAGS) $efile$target @<<\n";
+	$ret.="  \$(APP_EX_OBJ) $files $libs\n<<\n";
+    $ret.="\tIF EXIST \$@.manifest mt -nologo -manifest \$@.manifest -outputresource:\$@;1\n\n";
 	return($ret);
 	}
 
