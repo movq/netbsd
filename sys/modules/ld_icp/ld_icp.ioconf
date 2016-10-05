@@ -1,4 +1,4 @@
-#       $NetBSD: ld_icp.ioconf,v 1.1 2016/09/27 03:53:08 pgoyette Exp $
+#       $NetBSD: ld_icp.ioconf,v 1.1.2.2 2016/10/05 20:56:06 skrll Exp $
 
 ioconf ld_icp
 

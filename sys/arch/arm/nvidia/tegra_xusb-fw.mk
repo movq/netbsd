@@ -1,4 +1,4 @@
-#	$NetBSD: tegra_xusb-fw.mk,v 1.1 2016/09/26 20:05:03 jakllsch Exp $
+#	$NetBSD: tegra_xusb-fw.mk,v 1.1.2.2 2016/10/05 20:55:25 skrll Exp $
 
 .if defined(TEGRA124_XUSB_BIN_STATIC)
 MD_OBJS+=	tegra124_xusb_bin.o

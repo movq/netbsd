@@ -1,4 +1,4 @@
-/* $NetBSD: pmap_synci.h,v 1.1 2016/07/11 16:06:09 matt Exp $ */
+/* $NetBSD: pmap_synci.h,v 1.1.4.2 2016/10/05 20:56:12 skrll Exp $ */
 /*-
  * Copyright (c) 2015 The NetBSD Foundation, Inc.
  * All rights reserved.
