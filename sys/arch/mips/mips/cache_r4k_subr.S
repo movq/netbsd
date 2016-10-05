@@ -37,7 +37,7 @@
 
 #include <mips/asm.h>
 
-RCSID("$NetBSD: cache_r4k_subr.S,v 1.2 2016/07/11 16:15:36 matt Exp $")
+RCSID("$NetBSD: cache_r4k_subr.S,v 1.2.4.2 2016/10/05 20:55:32 skrll Exp $")
 
 #include <mips/cache_r4k.h>
 

@@ -1,4 +1,4 @@
-/*	$NetBSD: efilib.h,v 1.1 2016/08/04 18:07:43 scole Exp $	*/
+/*	$NetBSD: efilib.h,v 1.1.4.2 2016/10/05 20:55:29 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2000 Doug Rabson

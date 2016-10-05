@@ -1,4 +1,4 @@
-#	$NetBSD: ppp.ioconf,v 1.1 2016/08/06 06:06:54 christos Exp $
+#	$NetBSD: ppp.ioconf,v 1.1.4.2 2016/10/05 20:56:05 skrll Exp $
 
 ioconf		ppp
 

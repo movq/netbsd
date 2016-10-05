@@ -1,4 +1,4 @@
-/*	$NetBSD: tun.c,v 1.1 2016/09/10 03:26:10 pgoyette Exp $ */
+/*	$NetBSD: tun.c,v 1.1.4.2 2016/10/05 20:56:07 skrll Exp $ */
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tun.c,v 1.1 2016/09/10 03:26:10 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tun.c,v 1.1.4.2 2016/10/05 20:56:07 skrll Exp $");
 
 #include <sys/errno.h>
 #include <sys/module.h>

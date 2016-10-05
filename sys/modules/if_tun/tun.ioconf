@@ -1,4 +1,4 @@
-#	$NetBSD: tun.ioconf,v 1.1 2016/08/07 14:27:39 christos Exp $
+#	$NetBSD: tun.ioconf,v 1.1.4.2 2016/10/05 20:56:05 skrll Exp $
 
 ioconf		tun
 

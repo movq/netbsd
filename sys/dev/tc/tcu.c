@@ -1,4 +1,4 @@
-/* $NetBSD: tcu.c,v 1.2 2016/09/13 16:54:26 christos Exp $ */
+/* $NetBSD: tcu.c,v 1.2.4.2 2016/10/05 20:55:57 skrll Exp $ */
 
 /*-
  * Copyright (c) 2016, Felix Deichmann
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tcu.c,v 1.2 2016/09/13 16:54:26 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tcu.c,v 1.2.4.2 2016/10/05 20:55:57 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
