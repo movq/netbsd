@@ -69,8 +69,7 @@ $avx=1 if (!$avx && $win64 && ($flavour =~ /masm/ || $ENV{ASM} =~ /ml64/) &&
 	   `ml64 2>&1` =~ /Version ([0-9]+)\./ &&
 	   $1>=10);
 
-open OUT,"| \"$^X\" $xlate $flavour $output";
-*STDOUT=*OUT;
+open STDOUT,"| $^X $xlate $flavour $output";
 
 # void aesni_cbc_sha1_enc(const void *inp,
 #			void *out,
@@ -89,11 +88,15 @@ $code.=<<___;
 .align	16
 aesni_cbc_sha1_enc:
 	# caller should check for SSSE3 and AES-NI bits
-	mov	OPENSSL_ia32cap_P(%rip),%r10
+	mov	OPENSSL_ia32cap_P+0(%rip),%r10d
+	mov	OPENSSL_ia32cap_P+4(%rip),%r11d
 ___
 $code.=<<___ if ($avx);
-	bt	\$28, 4(%r10)
-	jc	aesni_cbc_sha1_enc_avx
+	and	\$`1<<28`,%r11d		# mask AVX bit
+	and	\$`1<<30`,%r10d		# mask "Intel CPU" bit
+	or	%r11d,%r10d
+	cmp	\$`1<<28|1<<30`,%r10d
+	je	aesni_cbc_sha1_enc_avx
 ___
 $code.=<<___;
 	jmp	aesni_cbc_sha1_enc_ssse3

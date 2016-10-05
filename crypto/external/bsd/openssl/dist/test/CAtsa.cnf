@@ -3,7 +3,10 @@
 # This config is used by the Time Stamp Authority tests.
 #
 
-RANDFILE		= ./.rnd
+# This definition stops the following lines choking if HOME isn't
+# defined.
+HOME			= .
+RANDFILE		= $ENV::HOME/.rnd
 
 # Extra OBJECT IDENTIFIER info:
 oid_section		= new_oids

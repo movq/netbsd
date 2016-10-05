@@ -16,7 +16,7 @@
 # table]. I stick to value of 2 for two reasons: 1. smaller table
 # minimizes cache trashing and thus mitigates the hazard of side-
 # channel leakage similar to AES cache-timing one; 2. performance
-# gap among different Âµ-archs is smaller.
+# gap among different µ-archs is smaller.
 #
 # Performance table lists rounded amounts of CPU cycles spent by
 # whirlpool_block_mmx routine on single 64 byte input block, i.e.
@@ -119,7 +119,7 @@ $tbl="ebp";
 	&mov	("eax",&DWP(0,"esp"));
 	&mov	("ebx",&DWP(4,"esp"));
 for($i=0;$i<8;$i++) {
-    my $func = ($i==0)? \&movq : \&pxor;
+    my $func = ($i==0)? movq : pxor;
 	&movb	(&LB("ecx"),&LB("eax"));
 	&movb	(&LB("edx"),&HB("eax"));
 	&scale	("esi","ecx");

@@ -13,7 +13,7 @@ AR=		ar r
 CFLAGS= $(INCLUDES) $(CFLAG)
 
 GENERAL=Makefile README
-TEST=verify_extra_test.c
+TEST=
 APPS=
 
 LIB=$(TOP)/libcrypto.a
@@ -70,8 +70,6 @@ tests:
 
 lint:
 	lint -DLINT $(INCLUDES) $(SRC)>fluff
-
-update: depend
 
 depend:
 	@[ -n "$(MAKEDEPEND)" ] # should be set by upper Makefile...

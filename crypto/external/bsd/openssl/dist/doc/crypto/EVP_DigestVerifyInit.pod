@@ -37,11 +37,10 @@ EVP_DigestVerifyInit() and EVP_DigestVerifyUpdate() return 1 for success and 0
 or a negative value for failure. In particular a return value of -2 indicates
 the operation is not supported by the public key algorithm.
 
-EVP_DigestVerifyFinal() returns 1 for success; any other value indicates
-failure.  A return value of zero indicates that the signature did not verify
-successfully (that is, tbs did not match the original data or the signature had
-an invalid form), while other values indicate a more serious error (and
-sometimes also indicate an invalid signature form).
+Unlike other functions the return value 0 from EVP_DigestVerifyFinal() only
+indicates that the signature did not not verify successfully (that is tbs did
+not match the original data or the signature was of invalid form) it is not an
+indication of a more serious error.
 
 The error codes can be obtained from L<ERR_get_error(3)|ERR_get_error(3)>.
 
@@ -60,7 +59,7 @@ For some key types and parameters the random number generator must be seeded
 or the operation will fail. 
 
 The call to EVP_DigestVerifyFinal() internally finalizes a copy of the digest
-context. This means that EVP_VerifyUpdate() and EVP_VerifyFinal() can
+context. This means that calls to EVP_VerifyUpdate() and EVP_VerifyFinal() can
 be called later to digest and verify additional data.
 
 Since only a copy of the digest context is ever finalized the context must
@@ -78,6 +77,6 @@ L<sha(3)|sha(3)>, L<dgst(1)|dgst(1)>
 =head1 HISTORY
 
 EVP_DigestVerifyInit(), EVP_DigestVerifyUpdate() and EVP_DigestVerifyFinal() 
-were first added to OpenSSL 1.0.0.
+were first added to OpenSSL 0.9.9.
 
 =cut

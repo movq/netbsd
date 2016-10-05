@@ -199,4 +199,3 @@ while (<IN>) {
 }
 print "\nTest report in file $report\n";
 
-die if $ok != 2;

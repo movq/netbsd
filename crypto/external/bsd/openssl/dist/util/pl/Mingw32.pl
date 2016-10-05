@@ -82,7 +82,7 @@ sub do_lib_rule
 
 	$target =~ s/\//$o/g if $o ne '/';
 	$target="$target";
-	(Name=name) =~ tr/a-z/A-Z/;
+	($Name=$name) =~ tr/a-z/A-Z/;
 
 	$ret.="$target: \$(${Name}OBJ)\n";
 	$ret.="\tif exist $target \$(RM) $target\n";
@@ -98,7 +98,7 @@ sub do_link_rule
 	$file =~ s/\//$o/g if $o ne '/';
 	$n=&bname($target);
 	$ret.="$target: $files $dep_libs\n";
-	$ret.="\t\$(LINK_CMD) ${efile}$target \$(LFLAGS) $files $libs\n\n";
+	$ret.="\t\$(LINK) ${efile}$target \$(LFLAGS) $files $libs\n\n";
 	return($ret);
 	}
 1;

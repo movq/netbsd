@@ -4,7 +4,7 @@
 ## Makefile for OpenSSL
 ##
 
-VERSION=1.0.1t
+VERSION=1.0.1c
 MAJOR=1
 MINOR=0.1
 SHLIB_VERSION_NUMBER=1.0.0
@@ -13,7 +13,7 @@ SHLIB_MAJOR=1
 SHLIB_MINOR=0.0
 SHLIB_EXT=
 PLATFORM=dist
-OPTIONS= no-ec_nistp_64_gcc_128 no-gmp no-jpake no-krb5 no-md2 no-rc5 no-rfc3779 no-sctp no-shared no-ssl2 no-store no-unit-test no-weak-ssl-ciphers no-zlib no-zlib-dynamic static-engine
+OPTIONS= no-ec_nistp_64_gcc_128 no-gmp no-jpake no-krb5 no-md2 no-rc5 no-rfc3779 no-sctp no-shared no-store no-zlib no-zlib-dynamic static-engine
 CONFIGURE_ARGS=dist
 SHLIB_TARGET=
 
@@ -61,7 +61,7 @@ OPENSSLDIR=/usr/local/ssl
 
 CC= cc
 CFLAG= -O
-DEPFLAG= -DOPENSSL_NO_EC_NISTP_64_GCC_128 -DOPENSSL_NO_GMP -DOPENSSL_NO_JPAKE -DOPENSSL_NO_MD2 -DOPENSSL_NO_RC5 -DOPENSSL_NO_RFC3779 -DOPENSSL_NO_SCTP -DOPENSSL_NO_SSL2 -DOPENSSL_NO_STORE -DOPENSSL_NO_UNIT_TEST -DOPENSSL_NO_WEAK_SSL_CIPHERS
+DEPFLAG= -DOPENSSL_NO_EC_NISTP_64_GCC_128 -DOPENSSL_NO_GMP -DOPENSSL_NO_JPAKE -DOPENSSL_NO_MD2 -DOPENSSL_NO_RC5 -DOPENSSL_NO_RFC3779 -DOPENSSL_NO_SCTP -DOPENSSL_NO_STORE
 PEX_LIBS= 
 EX_LIBS= 
 EXE_EXT= 
@@ -69,9 +69,9 @@ ARFLAGS=
 AR= ar $(ARFLAGS) r
 RANLIB= /usr/bin/ranlib
 NM= nm
-PERL= /usr/pkg/bin/perl
+PERL= /usr/bin/perl
 TAR= tar
-TARFLAGS= --no-recursion --record-size=10240
+TARFLAGS= --no-recursion
 MAKEDEPPROG=makedepend
 LIBDIR=lib
 
@@ -181,11 +181,12 @@ SHARED_LDFLAGS=
 GENERAL=        Makefile
 BASENAME=       openssl
 NAME=           $(BASENAME)-$(VERSION)
-TARFILE=        ../$(NAME).tar
+TARFILE=        $(NAME).tar
+WTARFILE=       $(NAME)-win.tar
 EXHEADER=       e_os2.h
 HEADER=         e_os.h
 
-all: Makefile build_all
+all: Makefile build_all openssl.pc libssl.pc libcrypto.pc
 
 # as we stick to -e, CLEARENV ensures that local variables in lower
 # Makefiles remain local and variable. $${VAR+VAR} is tribute to Korn
@@ -269,25 +270,21 @@ reflect:
 	@[ -n "$(THIS)" ] && $(CLEARENV) && $(MAKE) $(THIS) -e $(BUILDENV)
 
 sub_all: build_all
-
 build_all: build_libs build_apps build_tests build_tools
 
-build_libs: build_libcrypto build_libssl openssl.pc
-
-build_libcrypto: build_crypto build_engines libcrypto.pc
-build_libssl: build_ssl libssl.pc
+build_libs: build_crypto build_ssl build_engines
 
 build_crypto:
 	@dir=crypto; target=all; $(BUILD_ONE_CMD)
-build_ssl: build_crypto
+build_ssl:
 	@dir=ssl; target=all; $(BUILD_ONE_CMD)
-build_engines: build_crypto
+build_engines:
 	@dir=engines; target=all; $(BUILD_ONE_CMD)
-build_apps: build_libs
+build_apps:
 	@dir=apps; target=all; $(BUILD_ONE_CMD)
-build_tests: build_libs
+build_tests:
 	@dir=test; target=all; $(BUILD_ONE_CMD)
-build_tools: build_libs
+build_tools:
 	@dir=tools; target=all; $(BUILD_ONE_CMD)
 
 all_testapps: build_libs build_testapps
@@ -307,8 +304,7 @@ libcrypto$(SHLIB_EXT): libcrypto.a fips_premain_dso$(EXE_EXT)
 			FIPSLD_CC="$(CC)"; CC=$(FIPSDIR)/bin/fipsld; \
 			export CC FIPSLD_CC FIPSLD_LIBCRYPTO; \
 		fi; \
-		$(MAKE) -e SHLIBDIRS=crypto  CC="$${CC:-$(CC)}" build-shared && \
-		(touch -c fips_premain_dso$(EXE_EXT) || :); \
+		$(MAKE) -e SHLIBDIRS=crypto build-shared; \
 	else \
 		echo "There's no support for shared libraries on this platform" >&2; \
 		exit 1; \
@@ -450,7 +446,7 @@ rehash.time: certs apps
 		[ -x "apps/openssl.exe" ] && OPENSSL="apps/openssl.exe" || :; \
 		OPENSSL_DEBUG_MEMORY=on; \
 		export OPENSSL OPENSSL_DEBUG_MEMORY; \
-		$(PERL) tools/c_rehash certs/demo) && \
+		$(PERL) tools/c_rehash certs) && \
 		touch rehash.time; \
 	else :; fi
 
@@ -463,9 +459,6 @@ tests: rehash
 
 report:
 	@$(PERL) util/selftest.pl
-
-update: errors stacks util/libeay.num util/ssleay.num TABLE
-	@set -e; target=update; $(RECURSIVE_BUILD_CMD)
 
 depend:
 	@set -e; target=depend; $(RECURSIVE_BUILD_CMD)
@@ -491,44 +484,60 @@ util/libeay.num::
 util/ssleay.num::
 	$(PERL) util/mkdef.pl ssl update
 
+crypto/objects/obj_dat.h: crypto/objects/obj_dat.pl crypto/objects/obj_mac.h
+	$(PERL) crypto/objects/obj_dat.pl crypto/objects/obj_mac.h crypto/objects/obj_dat.h
+crypto/objects/obj_mac.h: crypto/objects/objects.pl crypto/objects/objects.txt crypto/objects/obj_mac.num
+	$(PERL) crypto/objects/objects.pl crypto/objects/objects.txt crypto/objects/obj_mac.num crypto/objects/obj_mac.h
+crypto/objects/obj_xref.h: crypto/objects/objxref.pl crypto/objects/obj_xref.txt crypto/objects/obj_mac.num
+	$(PERL) crypto/objects/objxref.pl crypto/objects/obj_mac.num crypto/objects/obj_xref.txt >crypto/objects/obj_xref.h
+
+apps/openssl-vms.cnf: apps/openssl.cnf
+	$(PERL) VMS/VMSify-conf.pl < apps/openssl.cnf > apps/openssl-vms.cnf
+
+crypto/bn/bn_prime.h: crypto/bn/bn_prime.pl
+	$(PERL) crypto/bn/bn_prime.pl >crypto/bn/bn_prime.h
+
+
 TABLE: Configure
 	(echo 'Output of `Configure TABLE'"':"; \
 	$(PERL) Configure TABLE) > TABLE
+
+update: errors stacks util/libeay.num util/ssleay.num crypto/objects/obj_dat.h crypto/objects/obj_xref.h apps/openssl-vms.cnf crypto/bn/bn_prime.h TABLE depend
 
 # Build distribution tar-file. As the list of files returned by "find" is
 # pretty long, on several platforms a "too many arguments" error or similar
 # would occur. Therefore the list of files is temporarily stored into a file
 # and read directly, requiring GNU-Tar. Call "make TAR=gtar dist" if the normal
 # tar does not support the --files-from option.
-TAR_COMMAND=$(TAR) $(TARFLAGS) --files-from $(TARFILE).list \
-	                       --owner 0 --group 0 \
-			       --transform 's|^|$(NAME)/|' \
-			       -cvf -
-
-$(TARFILE).list:
-	find * \! -name STATUS \! -name TABLE \! -name '*.o' \! -name '*.a' \
-	       \! -name '*.so' \! -name '*.so.*'  \! -name 'openssl' \
-	       \( \! -name '*test' -o -name bctest -o -name pod2mantest \) \
-	       \! -name '.#*' \! -name '*~' \! -type l \
-	    | sort > $(TARFILE).list
-
-tar: $(TARFILE).list
+tar:
 	find . -type d -print | xargs chmod 755
 	find . -type f -print | xargs chmod a+r
 	find . -type f -perm -0100 -print | xargs chmod a+x
-	$(TAR_COMMAND) | gzip --best > $(TARFILE).gz
-	rm -f $(TARFILE).list
-	ls -l $(TARFILE).gz
+	find * \! -path CVS/\* \! -path \*/CVS/\* \! -name CVS \! -name .cvsignore \! -name STATUS \! -name TABLE | sort > ../$(TARFILE).list; \
+	$(TAR) $(TARFLAGS) --files-from ../$(TARFILE).list -cvf - | \
+	tardy --user_number=0  --user_name=openssl \
+	      --group_number=0 --group_name=openssl \
+	      --prefix=openssl-$(VERSION) - |\
+	gzip --best >../$(TARFILE).gz; \
+	rm -f ../$(TARFILE).list; \
+	ls -l ../$(TARFILE).gz
 
-tar-snap: $(TARFILE).list
-	$(TAR_COMMAND) > $(TARFILE)
-	rm -f $(TARFILE).list
-	ls -l $(TARFILE)
+tar-snap:
+	@$(TAR) $(TARFLAGS) -cvf - \
+		`find * \! -path CVS/\* \! -path \*/CVS/\* \! -name CVS \! -name .cvsignore \! -name STATUS \! -name TABLE \! -name '*.o' \! -name '*.a' \! -name '*.so' \! -name '*.so.*'  \! -name 'openssl' \! -name '*test' \! -name '.#*' \! -name '*~' | sort` |\
+	tardy --user_number=0  --user_name=openssl \
+	      --group_number=0 --group_name=openssl \
+	      --prefix=openssl-$(VERSION) - > ../$(TARFILE);\
+	ls -l ../$(TARFILE)
 
 dist:   
 	$(PERL) Configure dist
+	@$(MAKE) dist_pem_h
 	@$(MAKE) SDIRS='$(SDIRS)' clean
-	@$(MAKE) TAR='$(TAR)' TARFLAGS='$(TARFLAGS)' $(DISTTARVARS) tar
+	@$(MAKE) TAR='$(TAR)' TARFLAGS='$(TARFLAGS)' tar
+
+dist_pem_h:
+	(cd crypto/pem; $(MAKE) -e $(BUILDENV) pem.h; $(MAKE) clean)
 
 install: all install_docs install_sw
 
