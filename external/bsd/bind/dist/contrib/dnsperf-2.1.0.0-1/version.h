@@ -1,4 +1,4 @@
-/*	$NetBSD: version.h,v 1.1.1.1 2016/05/26 15:45:46 christos Exp $	*/
+/*	$NetBSD: version.h,v 1.1.1.1.4.2 2016/10/14 11:42:41 martin Exp $	*/
 
 #ifndef VERSION_H
 
