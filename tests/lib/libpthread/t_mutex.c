@@ -1,4 +1,4 @@
-/* $NetBSD: t_mutex.c,v 1.10 2016/07/31 13:01:29 christos Exp $ */
+/* $NetBSD: t_mutex.c,v 1.11 2016/10/30 16:17:16 kamil Exp $ */
 
 /*
  * Copyright (c) 2008 The NetBSD Foundation, Inc.
@@ -26,10 +26,12 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 
+/* Please sync code from this test with t_timedmutex.c */
+
 #include <sys/cdefs.h>
 __COPYRIGHT("@(#) Copyright (c) 2008\
  The NetBSD Foundation, inc. All rights reserved.");
-__RCSID("$NetBSD: t_mutex.c,v 1.10 2016/07/31 13:01:29 christos Exp $");
+__RCSID("$NetBSD: t_mutex.c,v 1.11 2016/10/30 16:17:16 kamil Exp $");
 
 #include <pthread.h>
 #include <stdio.h>
