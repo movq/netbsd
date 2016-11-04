@@ -1,4 +1,4 @@
-/*	$NetBSD: tifbvar.h,v 1.1 2016/10/18 14:14:51 kiyohara Exp $	*/
+/*	$NetBSD: tifbvar.h,v 1.1.2.2 2016/11/04 14:48:59 pgoyette Exp $	*/
 /*
  * Copyright (c) 2016 KIYOHARA Takashi
  * All rights reserved.

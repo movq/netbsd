@@ -1,4 +1,4 @@
-/*	$NetBSD: catrigl.c,v 1.1 2016/09/19 22:05:05 christos Exp $	*/
+/*	$NetBSD: catrigl.c,v 1.1.2.2 2016/11/04 14:48:54 pgoyette Exp $	*/
 /*-
  * Copyright (c) 2012 Stephen Montgomery-Smith <stephen@FreeBSD.ORG>
  * All rights reserved.
@@ -35,7 +35,7 @@
  * The code for catrig.c contains complete comments.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: catrigl.c,v 1.1 2016/09/19 22:05:05 christos Exp $");
+__RCSID("$NetBSD: catrigl.c,v 1.1.2.2 2016/11/04 14:48:54 pgoyette Exp $");
 
 #include "namespace.h"
 #ifdef __weak_alias

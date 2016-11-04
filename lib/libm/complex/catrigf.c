@@ -1,4 +1,4 @@
-/*	$NetBSD: catrigf.c,v 1.1 2016/09/19 22:05:05 christos Exp $	*/
+/*	$NetBSD: catrigf.c,v 1.1.2.2 2016/11/04 14:48:54 pgoyette Exp $	*/
 /*-
  * Copyright (c) 2012 Stephen Montgomery-Smith <stephen@FreeBSD.ORG>
  * All rights reserved.
@@ -43,7 +43,7 @@
 #if 0
 __FBSDID("$FreeBSD: head/lib/msun/src/catrigf.c 275819 2014-12-16 09:21:56Z ed $");
 #endif
-__RCSID("$NetBSD: catrigf.c,v 1.1 2016/09/19 22:05:05 christos Exp $");
+__RCSID("$NetBSD: catrigf.c,v 1.1.2.2 2016/11/04 14:48:54 pgoyette Exp $");
 
 #include "namespace.h"
 #ifdef __weak_alias

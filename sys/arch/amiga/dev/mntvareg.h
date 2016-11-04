@@ -1,4 +1,4 @@
-/*	$NetBSD: mntvareg.h,v 1.1 2016/10/03 14:26:02 rkujawa Exp $  */
+/*	$NetBSD: mntvareg.h,v 1.1.4.2 2016/11/04 14:48:57 pgoyette Exp $  */
 
 /*
  * Copyright (c) 2012, 2016 The NetBSD Foundation, Inc. 

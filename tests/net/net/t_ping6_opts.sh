@@ -1,4 +1,4 @@
-#	$NetBSD: t_ping6_opts.sh,v 1.1 2016/10/31 10:38:25 ozaki-r Exp $
+#	$NetBSD: t_ping6_opts.sh,v 1.1.2.2 2016/11/04 14:49:24 pgoyette Exp $
 #
 # Copyright (c) 2016 Internet Initiative Japan Inc.
 # All rights reserved.

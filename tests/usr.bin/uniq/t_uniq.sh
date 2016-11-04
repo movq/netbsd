@@ -1,4 +1,4 @@
-# $NetBSD: t_uniq.sh,v 1.1 2016/10/22 14:13:39 abhinav Exp $
+# $NetBSD: t_uniq.sh,v 1.1.2.2 2016/11/04 14:49:24 pgoyette Exp $
 #
 # Copyright (c) 2016 The NetBSD Foundation, Inc.
 # All rights reserved.

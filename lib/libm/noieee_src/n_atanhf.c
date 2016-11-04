@@ -1,4 +1,4 @@
-/*      $NetBSD: n_atanhf.c,v 1.1 2016/09/21 14:11:40 christos Exp $ */
+/*      $NetBSD: n_atanhf.c,v 1.1.2.2 2016/11/04 14:48:54 pgoyette Exp $ */
 /*
  * Copyright (c) 1985, 1993
  *	The Regents of the University of California.  All rights reserved.
@@ -28,7 +28,7 @@
  * SUCH DAMAGE.
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: n_atanhf.c,v 1.1 2016/09/21 14:11:40 christos Exp $");
+__RCSID("$NetBSD: n_atanhf.c,v 1.1.2.2 2016/11/04 14:48:54 pgoyette Exp $");
 
 #ifndef lint
 #if 0

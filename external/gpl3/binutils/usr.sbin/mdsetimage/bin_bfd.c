@@ -1,4 +1,4 @@
-/*	$NetBSD: bin_bfd.c,v 1.1 2016/09/21 21:52:26 christos Exp $	*/
+/*	$NetBSD: bin_bfd.c,v 1.1.2.2 2016/11/04 14:43:47 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 1996, 2002 Christopher G. Demetriou
@@ -34,7 +34,7 @@
 #endif
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: bin_bfd.c,v 1.1 2016/09/21 21:52:26 christos Exp $");
+__RCSID("$NetBSD: bin_bfd.c,v 1.1.2.2 2016/11/04 14:43:47 pgoyette Exp $");
 
 #include <stdio.h>
 #include <string.h>

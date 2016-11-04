@@ -1,4 +1,4 @@
-/*	$NetBSD: wcsnlen.c,v 1.2 2016/10/15 14:30:36 kamil Exp $	*/
+/*	$NetBSD: wcsnlen.c,v 1.2.2.2 2016/11/04 14:48:53 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: wcsnlen.c,v 1.2 2016/10/15 14:30:36 kamil Exp $");
+__RCSID("$NetBSD: wcsnlen.c,v 1.2.2.2 2016/11/04 14:48:53 pgoyette Exp $");
 
 #include <assert.h>
 #include <wchar.h>

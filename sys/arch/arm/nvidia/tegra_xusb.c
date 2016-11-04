@@ -1,4 +1,4 @@
-/* $NetBSD: tegra_xusb.c,v 1.1 2016/09/26 20:05:03 jakllsch Exp $ */
+/* $NetBSD: tegra_xusb.c,v 1.1.4.2 2016/11/04 14:48:58 pgoyette Exp $ */
 
 /*
  * Copyright (c) 2016 Jonathan A. Kollasch
@@ -30,7 +30,7 @@
 #include "opt_tegra.h"
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: tegra_xusb.c,v 1.1 2016/09/26 20:05:03 jakllsch Exp $");
+__KERNEL_RCSID(0, "$NetBSD: tegra_xusb.c,v 1.1.4.2 2016/11/04 14:48:58 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/bus.h>

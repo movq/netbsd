@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile.sysv,v 1.1 2016/11/03 04:26:58 riastradh Exp $
+#	$NetBSD: Makefile.sysv,v 1.1.2.2 2016/11/04 14:49:07 pgoyette Exp $
 
 # Sources for sysv ipc compatibility across the versions.
 
