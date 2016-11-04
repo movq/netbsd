@@ -1,4 +1,4 @@
-/* $NetBSD: t_timedmutex.c,v 1.2 2016/10/31 16:21:23 christos Exp $ */
+/* $NetBSD: t_timedmutex.c,v 1.2.2.2 2016/11/04 14:49:23 pgoyette Exp $ */
 
 /*
  * Copyright (c) 2008 The NetBSD Foundation, Inc.

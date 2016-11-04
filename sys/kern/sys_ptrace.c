@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_ptrace.c,v 1.2 2016/11/03 03:57:05 pgoyette Exp $	*/
+/*	$NetBSD: sys_ptrace.c,v 1.2.2.2 2016/11/04 14:49:17 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -118,7 +118,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_ptrace.c,v 1.2 2016/11/03 03:57:05 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_ptrace.c,v 1.2.2.2 2016/11/04 14:49:17 pgoyette Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ptrace.h"

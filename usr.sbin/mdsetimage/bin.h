@@ -1,4 +1,4 @@
-/*	$NetBSD: bin.h,v 1.1 2016/09/21 16:25:41 christos Exp $	*/
+/*	$NetBSD: bin.h,v 1.1.2.2 2016/11/04 14:49:27 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.

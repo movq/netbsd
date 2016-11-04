@@ -1,4 +1,4 @@
-/*	$NetBSD: stdalign.h,v 1.1 2016/10/02 17:19:00 kamil Exp $	*/
+/*	$NetBSD: stdalign.h,v 1.1.2.2 2016/11/04 14:48:51 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.

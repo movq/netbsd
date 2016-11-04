@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.1 2016/10/15 12:19:02 christos Exp $
+#	$NetBSD: Makefile,v 1.1.2.2 2016/11/04 14:42:36 pgoyette Exp $
 
 BITS=64
 .include "${.CURDIR}/../powerpc/Makefile"

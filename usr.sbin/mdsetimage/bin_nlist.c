@@ -1,4 +1,4 @@
-/*	$NetBSD: bin_nlist.c,v 1.1 2016/09/21 16:25:41 christos Exp $	*/
+/*	$NetBSD: bin_nlist.c,v 1.1.2.2 2016/11/04 14:49:27 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 1996, 2002 Christopher G. Demetriou
@@ -29,7 +29,7 @@
  * <<Id: LICENSE_GC,v 1.1 2001/10/01 23:24:05 cgd Exp>>
  */
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: bin_nlist.c,v 1.1 2016/09/21 16:25:41 christos Exp $");
+__RCSID("$NetBSD: bin_nlist.c,v 1.1.2.2 2016/11/04 14:49:27 pgoyette Exp $");
 
 #include <stdio.h>
 #include <stdlib.h>
