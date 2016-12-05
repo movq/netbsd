@@ -1,4 +1,4 @@
-/*	$NetBSD: vlan_component.c,v 1.1 2016/11/26 03:17:58 ozaki-r Exp $	*/
+/*	$NetBSD: vlan_component.c,v 1.1.2.2 2016/12/05 10:55:29 skrll Exp $	*/
 
 /*
  * Copyright (c) 2009 Antti Kantee.  All Rights Reserved.
@@ -28,7 +28,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: vlan_component.c,v 1.1 2016/11/26 03:17:58 ozaki-r Exp $");
+__KERNEL_RCSID(0, "$NetBSD: vlan_component.c,v 1.1.2.2 2016/12/05 10:55:29 skrll Exp $");
 
 #include <sys/param.h>
 

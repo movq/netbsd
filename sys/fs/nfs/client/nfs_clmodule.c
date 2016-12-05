@@ -1,4 +1,4 @@
-/* $NetBSD: nfs_clmodule.c,v 1.1 2016/11/18 22:41:19 pgoyette Exp $ */
+/* $NetBSD: nfs_clmodule.c,v 1.1.2.2 2016/12/05 10:55:25 skrll Exp $ */
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.

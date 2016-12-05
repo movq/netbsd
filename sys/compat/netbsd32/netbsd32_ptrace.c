@@ -1,4 +1,4 @@
-/*	$NetBSD: netbsd32_ptrace.c,v 1.2 2016/11/02 00:11:59 pgoyette Exp $	*/
+/*	$NetBSD: netbsd32_ptrace.c,v 1.2.4.2 2016/12/05 10:55:00 skrll Exp $	*/
 
 /*
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: netbsd32_ptrace.c,v 1.2 2016/11/02 00:11:59 pgoyette Exp $");
+__KERNEL_RCSID(0, "$NetBSD: netbsd32_ptrace.c,v 1.2.4.2 2016/12/05 10:55:00 skrll Exp $");
 
 #if defined(_KERNEL_OPT)
 #include "opt_ptrace.h"

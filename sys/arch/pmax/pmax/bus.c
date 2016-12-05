@@ -1,4 +1,4 @@
-/*	$NetBSD: bus.c,v 1.1 2016/11/16 19:37:06 macallan Exp $	*/
+/*	$NetBSD: bus.c,v 1.1.2.2 2016/12/05 10:54:56 skrll Exp $	*/
 
 /*-
  * Copyright (c) 1997, 1998 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: bus.c,v 1.1 2016/11/16 19:37:06 macallan Exp $");
+__KERNEL_RCSID(0, "$NetBSD: bus.c,v 1.1.2.2 2016/12/05 10:54:56 skrll Exp $");
 
 #include "opt_cputype.h"
 

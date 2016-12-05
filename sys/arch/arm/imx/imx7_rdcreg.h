@@ -1,4 +1,4 @@
-/*	$NetBSD: imx7_rdcreg.h,v 1.1 2016/10/17 09:21:51 ryo Exp $	*/
+/*	$NetBSD: imx7_rdcreg.h,v 1.1.4.2 2016/12/05 10:54:50 skrll Exp $	*/
 
 /*
  * Copyright (c) 2016 Ryo Shimizu <ryo@nerv.org>

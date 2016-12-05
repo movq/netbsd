@@ -1,4 +1,4 @@
-/*	$NetBSD: if_43.h,v 1.1 2016/11/05 23:30:22 pgoyette Exp $	*/
+/*	$NetBSD: if_43.h,v 1.1.2.2 2016/12/05 10:54:59 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
