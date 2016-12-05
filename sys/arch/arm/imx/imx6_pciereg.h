@@ -1,4 +1,4 @@
-/*	$NetBSD: imx6_pciereg.h,v 1.1 2016/11/24 12:06:43 hkenken Exp $	*/
+/*	$NetBSD: imx6_pciereg.h,v 1.1.2.2 2016/12/05 10:54:50 skrll Exp $	*/
 
 /*
  * Copyright (c) 2015 Ryo Shimizu <ryo@nerv.org>

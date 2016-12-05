@@ -1,4 +1,4 @@
-/*	$NetBSD: sys_ptrace_common.c,v 1.5 2016/11/19 19:06:12 christos Exp $	*/
+/*	$NetBSD: sys_ptrace_common.c,v 1.5.2.2 2016/12/05 10:55:26 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2008, 2009 The NetBSD Foundation, Inc.
@@ -118,7 +118,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: sys_ptrace_common.c,v 1.5 2016/11/19 19:06:12 christos Exp $");
+__KERNEL_RCSID(0, "$NetBSD: sys_ptrace_common.c,v 1.5.2.2 2016/12/05 10:55:26 skrll Exp $");
 
 #ifdef _KERNEL_OPT
 #include "opt_ptrace.h"
