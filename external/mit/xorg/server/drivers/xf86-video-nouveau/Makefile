@@ -1,4 +1,4 @@
-#	$NetBSD: Makefile,v 1.6 2016/11/17 05:28:43 snj Exp $
+#	$NetBSD: Makefile,v 1.6.2.2 2016/12/12 10:01:17 msaitoh Exp $
 
 DRIVER=		xf86-video-nouveau
 DRIVER_NAME=	nouveau_drv
@@ -46,16 +46,6 @@ CPPFLAGS+=	-DNV_PATCHLEVEL=${PACKAGE_PATCH}
 CPPFLAGS+=	-DNV_DRIVER_DATE=${DRIVER_DATE}
 
 .include "../Makefile.xf86-driver"
-
-# XXX
-.if ${HAVE_GCC:U0} > 48
-COPTS.nouveau_xv.c+=	${${ACTIVE_CC} == "gcc":? -Wno-error=discarded-qualifiers :}
-.endif
-COPTS.nouveau_xv.c+=	${${ACTIVE_CC} == "clang":? -Wno-error=incompatible-pointer-types-discards-qualifiers :}
-
-.if ${XORG_SERVER_SUBDIR} != "xorg-server.old"
-CPPFLAGS+=	-DHAVE_XORG_LIST
-.endif
 
 # from pkgsrc/x11/xf86-video-nouveau/patches/patch-configure
 DRIVER_DATE!=awk '/^Date:/{print "\"" $0 "\"";exit}' ${X11SRCDIR.${DRIVER}}/ChangeLog

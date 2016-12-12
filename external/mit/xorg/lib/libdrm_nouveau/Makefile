@@ -1,4 +1,4 @@
-#      $NetBSD: Makefile,v 1.2 2016/08/21 18:23:33 joerg Exp $
+#      $NetBSD: Makefile,v 1.2.2.2 2016/12/12 10:01:17 msaitoh Exp $
 
 .include <bsd.own.mk>
 
@@ -10,8 +10,6 @@ SRCS=	nouveau.c \
 	pushbuf.c \
 	bufctx.c \
 	abi16.c
-
-COPTS.nouveau.c+=	${${ACTIVE_CC} == "clang":? -Wno-error=gnu-variable-sized-type-not-at-end :}
 
 CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/libdrm
 CPPFLAGS+=	-I${DESTDIR}${X11INCDIR}/X11 -I${X11SRCDIR.drm}
