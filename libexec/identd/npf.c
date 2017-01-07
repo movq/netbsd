@@ -1,4 +1,4 @@
-/*	$NetBSD: npf.c,v 1.2 2016/12/10 22:09:18 christos Exp $	*/
+/*	$NetBSD: npf.c,v 1.2.2.2 2017/01/07 08:56:05 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
@@ -30,7 +30,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: npf.c,v 1.2 2016/12/10 22:09:18 christos Exp $");
+__RCSID("$NetBSD: npf.c,v 1.2.2.2 2017/01/07 08:56:05 pgoyette Exp $");
 
 #include <sys/types.h>
 #include <sys/socket.h>

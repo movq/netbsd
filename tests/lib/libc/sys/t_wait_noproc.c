@@ -1,4 +1,4 @@
-/* $NetBSD: t_wait_noproc.c,v 1.5 2016/11/09 17:50:19 kamil Exp $ */
+/* $NetBSD: t_wait_noproc.c,v 1.5.2.2 2017/01/07 08:56:55 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_wait_noproc.c,v 1.5 2016/11/09 17:50:19 kamil Exp $");
+__RCSID("$NetBSD: t_wait_noproc.c,v 1.5.2.2 2017/01/07 08:56:55 pgoyette Exp $");
 
 #include <sys/wait.h>
 #include <sys/resource.h>

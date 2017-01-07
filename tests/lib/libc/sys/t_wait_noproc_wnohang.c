@@ -1,4 +1,4 @@
-/* $NetBSD: t_wait_noproc_wnohang.c,v 1.1 2016/11/06 15:03:30 kamil Exp $ */
+/* $NetBSD: t_wait_noproc_wnohang.c,v 1.1.2.2 2017/01/07 08:56:55 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.

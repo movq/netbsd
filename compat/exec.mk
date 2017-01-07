@@ -1,4 +1,4 @@
-#	$NetBSD: exec.mk,v 1.3 2017/01/05 21:28:42 skrll Exp $
+#	$NetBSD: exec.mk,v 1.3.2.2 2017/01/07 08:53:41 pgoyette Exp $
 
 # this makefile fragment can be included to modify the default
 # ABI a program is compiled with.  this is designed to be used

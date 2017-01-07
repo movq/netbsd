@@ -1,4 +1,4 @@
-#	$NetBSD: t_vlan.sh,v 1.1 2016/11/26 03:19:49 ozaki-r Exp $
+#	$NetBSD: t_vlan.sh,v 1.1.2.2 2017/01/07 08:56:56 pgoyette Exp $
 #
 # Copyright (c) 2016 Internet Initiative Japan Inc.
 # All rights reserved.

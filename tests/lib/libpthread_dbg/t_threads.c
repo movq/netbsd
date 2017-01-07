@@ -1,4 +1,4 @@
-/*	$NetBSD: t_threads.c,v 1.7 2016/11/24 19:26:32 joerg Exp $	*/
+/*	$NetBSD: t_threads.c,v 1.7.2.2 2017/01/07 08:56:55 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
@@ -28,7 +28,7 @@
 
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_threads.c,v 1.7 2016/11/24 19:26:32 joerg Exp $");
+__RCSID("$NetBSD: t_threads.c,v 1.7.2.2 2017/01/07 08:56:55 pgoyette Exp $");
 
 #include <dlfcn.h>
 #include <pthread.h>

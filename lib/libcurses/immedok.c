@@ -1,4 +1,4 @@
-/*	$NetBSD: immedok.c,v 1.2 2017/01/06 13:53:18 roy Exp $	*/
+/*	$NetBSD: immedok.c,v 1.2.2.2 2017/01/07 08:56:04 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2017 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: immedok.c,v 1.2 2017/01/06 13:53:18 roy Exp $");
+__RCSID("$NetBSD: immedok.c,v 1.2.2.2 2017/01/07 08:56:04 pgoyette Exp $");
 #endif				/* not lint */
 
 #include "curses.h"

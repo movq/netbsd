@@ -1,4 +1,4 @@
-/*	$NetBSD: fuse_lowlevel.h,v 1.1 2016/11/20 13:26:28 pho Exp $	*/
+/*	$NetBSD: fuse_lowlevel.h,v 1.1.2.2 2017/01/07 08:56:04 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2016 The NetBSD Foundation, Inc.

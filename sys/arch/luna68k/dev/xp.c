@@ -1,4 +1,4 @@
-/* $NetBSD: xp.c,v 1.1 2016/12/03 17:38:02 tsutsui Exp $ */
+/* $NetBSD: xp.c,v 1.1.6.2 2017/01/07 08:56:20 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2016 Izumi Tsutsui.  All rights reserved.
@@ -29,7 +29,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: xp.c,v 1.1 2016/12/03 17:38:02 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: xp.c,v 1.1.6.2 2017/01/07 08:56:20 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

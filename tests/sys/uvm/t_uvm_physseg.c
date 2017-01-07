@@ -1,4 +1,4 @@
-/* $NetBSD: t_uvm_physseg.c,v 1.2 2016/12/22 08:15:20 cherry Exp $ */
+/* $NetBSD: t_uvm_physseg.c,v 1.2.2.2 2017/01/07 08:56:56 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2015, 2016 The NetBSD Foundation, Inc.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_uvm_physseg.c,v 1.2 2016/12/22 08:15:20 cherry Exp $");
+__RCSID("$NetBSD: t_uvm_physseg.c,v 1.2.2.2 2017/01/07 08:56:56 pgoyette Exp $");
 
 /*
  * If this line is commented out tests related to uvm_physseg_get_pmseg()

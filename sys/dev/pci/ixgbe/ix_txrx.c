@@ -59,7 +59,7 @@
  * POSSIBILITY OF SUCH DAMAGE.
  */
 /*$FreeBSD: head/sys/dev/ixgbe/ix_txrx.c 301538 2016-06-07 04:51:50Z sephe $*/
-/*$NetBSD: ix_txrx.c,v 1.14 2017/01/05 05:53:23 msaitoh Exp $*/
+/*$NetBSD: ix_txrx.c,v 1.14.2.2 2017/01/07 08:56:40 pgoyette Exp $*/
 
 #include "opt_inet.h"
 #include "opt_inet6.h"

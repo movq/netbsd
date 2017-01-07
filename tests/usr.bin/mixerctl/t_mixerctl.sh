@@ -1,4 +1,4 @@
-# $NetBSD: t_mixerctl.sh,v 1.1 2017/01/02 15:40:09 christos Exp $
+# $NetBSD: t_mixerctl.sh,v 1.1.2.2 2017/01/07 08:56:57 pgoyette Exp $
 
 atf_test_case noargs_usage
 noargs_usage_head() {

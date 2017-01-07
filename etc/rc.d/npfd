@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-# $NetBSD: npfd,v 1.1 2017/01/05 14:39:09 christos Exp $
+# $NetBSD: npfd,v 1.1.2.2 2017/01/07 08:53:48 pgoyette Exp $
 #
 
 # PROVIDE: npfd

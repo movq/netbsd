@@ -1,4 +1,4 @@
-/*	$NetBSD: biohist.h,v 1.2 2016/12/27 04:12:34 pgoyette Exp $ */
+/*	$NetBSD: biohist.h,v 1.2.2.2 2017/01/07 08:56:53 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.

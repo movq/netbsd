@@ -1,4 +1,4 @@
-#	$NetBSD: net_common.sh,v 1.9 2016/11/28 07:29:56 ozaki-r Exp $
+#	$NetBSD: net_common.sh,v 1.9.2.2 2017/01/07 08:56:55 pgoyette Exp $
 #
 # Copyright (c) 2016 Internet Initiative Japan Inc.
 # All rights reserved.

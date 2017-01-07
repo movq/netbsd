@@ -1,4 +1,4 @@
-/*	$NetBSD: t_dummy.c,v 1.6 2016/11/19 15:13:46 kamil Exp $	*/
+/*	$NetBSD: t_dummy.c,v 1.6.2.2 2017/01/07 08:56:55 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
@@ -28,7 +28,7 @@
 
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_dummy.c,v 1.6 2016/11/19 15:13:46 kamil Exp $");
+__RCSID("$NetBSD: t_dummy.c,v 1.6.2.2 2017/01/07 08:56:55 pgoyette Exp $");
 
 #include "h_common.h"
 #include <pthread_dbg.h>
