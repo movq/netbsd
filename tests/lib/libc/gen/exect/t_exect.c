@@ -1,4 +1,4 @@
-/*	$NetBSD: t_exect.c,v 1.6 2016/12/12 10:34:55 joerg Exp $	*/
+/*	$NetBSD: t_exect.c,v 1.6.2.2 2017/01/07 08:56:55 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2014 The NetBSD Foundation, Inc.

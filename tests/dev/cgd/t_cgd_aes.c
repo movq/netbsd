@@ -1,4 +1,4 @@
-/*	$NetBSD: t_cgd_aes.c,v 1.5 2016/12/11 00:23:44 alnsn Exp $	*/
+/*	$NetBSD: t_cgd_aes.c,v 1.5.2.2 2017/01/07 08:56:54 pgoyette Exp $	*/
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
  * Copyright (c) 2007 The Institute of Electrical and Electronics Engineers, Inc

@@ -1,4 +1,4 @@
-/*	$NetBSD: spkrio.h,v 1.2 2016/12/09 04:46:39 christos Exp $	*/
+/*	$NetBSD: spkrio.h,v 1.2.2.2 2017/01/07 08:56:31 pgoyette Exp $	*/
 
 /*
  * spkrio.h -- interface definitions for speaker ioctl()

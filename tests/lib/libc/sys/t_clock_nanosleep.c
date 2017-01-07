@@ -1,4 +1,4 @@
-/* $NetBSD: t_clock_nanosleep.c,v 1.1 2016/11/11 15:30:44 njoly Exp $ */
+/* $NetBSD: t_clock_nanosleep.c,v 1.1.2.2 2017/01/07 08:56:55 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
@@ -27,7 +27,7 @@
  */
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: t_clock_nanosleep.c,v 1.1 2016/11/11 15:30:44 njoly Exp $");
+__RCSID("$NetBSD: t_clock_nanosleep.c,v 1.1.2.2 2017/01/07 08:56:55 pgoyette Exp $");
 
 #include <atf-c.h>
 #include <time.h>

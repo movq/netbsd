@@ -1,5 +1,5 @@
 #
-#	$NetBSD: HUMMINGBOARD,v 1.1 2016/11/24 12:06:44 hkenken Exp $
+#	$NetBSD: HUMMINGBOARD,v 1.1.4.2 2017/01/07 08:56:13 pgoyette Exp $
 #
 #	Hummingboard -- Freescale i.MX6 Eval Board Kernel
 #

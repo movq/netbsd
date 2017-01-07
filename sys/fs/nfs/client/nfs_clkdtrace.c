@@ -1,4 +1,4 @@
-/*	$NetBSD: nfs_clkdtrace.c,v 1.2 2016/11/18 22:58:08 pgoyette Exp $	*/
+/*	$NetBSD: nfs_clkdtrace.c,v 1.2.4.2 2017/01/07 08:56:48 pgoyette Exp $	*/
 /*-
  * Copyright (c) 2009 Robert N. M. Watson
  * All rights reserved.
@@ -30,7 +30,7 @@
 
 #include <sys/cdefs.h>
 /* __FBSDID("FreeBSD: head/sys/fs/nfsclient/nfs_clkdtrace.c 298788 2016-04-29 16:07:25Z pfg "); */
-__RCSID("$NetBSD: nfs_clkdtrace.c,v 1.2 2016/11/18 22:58:08 pgoyette Exp $");
+__RCSID("$NetBSD: nfs_clkdtrace.c,v 1.2.4.2 2017/01/07 08:56:48 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>

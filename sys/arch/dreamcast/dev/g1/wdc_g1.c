@@ -1,4 +1,4 @@
-/* $NetBSD: wdc_g1.c,v 1.1 2016/12/29 11:49:05 tsutsui Exp $ */
+/* $NetBSD: wdc_g1.c,v 1.1.2.2 2017/01/07 08:56:12 pgoyette Exp $ */
 
 /*-
  * Copyright (c) 1998 The NetBSD Foundation, Inc.

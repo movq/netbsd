@@ -1,4 +1,4 @@
-/*	$NetBSD: t_cgd_3des.c,v 1.1 2016/11/11 07:39:58 alnsn Exp $	*/
+/*	$NetBSD: t_cgd_3des.c,v 1.1.2.2 2017/01/07 08:56:54 pgoyette Exp $	*/
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
  * All rights reserved.

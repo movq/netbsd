@@ -1,4 +1,4 @@
-/* $NetBSD: uvm_physseg.c,v 1.6 2016/12/29 12:58:38 rin Exp $ */
+/* $NetBSD: uvm_physseg.c,v 1.6.2.2 2017/01/07 08:56:53 pgoyette Exp $ */
 
 /*
  * Copyright (c) 1997 Charles D. Cranor and Washington University.

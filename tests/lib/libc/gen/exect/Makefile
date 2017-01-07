@@ -1,4 +1,4 @@
-# $NetBSD: Makefile,v 1.1 2016/12/09 04:00:36 kamil Exp $
+# $NetBSD: Makefile,v 1.1.2.2 2017/01/07 08:56:55 pgoyette Exp $
 
 NOMAN=		# defined
 WARNS=4

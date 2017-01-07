@@ -1,4 +1,4 @@
-/*	$NetBSD: npf_os.c,v 1.5 2017/01/03 00:58:05 rmind Exp $	*/
+/*	$NetBSD: npf_os.c,v 1.5.2.2 2017/01/07 08:56:50 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2009-2016 The NetBSD Foundation, Inc.
@@ -35,7 +35,7 @@
 
 #ifdef _KERNEL
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: npf_os.c,v 1.5 2017/01/03 00:58:05 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: npf_os.c,v 1.5.2.2 2017/01/07 08:56:50 pgoyette Exp $");
 
 #ifdef _KERNEL_OPT
 #include "pf.h"

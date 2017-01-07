@@ -1,4 +1,4 @@
-#	$NetBSD: t_mtudisc6.sh,v 1.5 2016/11/25 08:51:17 ozaki-r Exp $
+#	$NetBSD: t_mtudisc6.sh,v 1.5.2.2 2017/01/07 08:56:56 pgoyette Exp $
 #
 # Copyright (c) 2016 Internet Initiative Japan Inc.
 # All rights reserved.

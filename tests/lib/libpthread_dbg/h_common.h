@@ -1,4 +1,4 @@
-/*	$NetBSD: h_common.h,v 1.2 2016/11/19 02:30:54 kamil Exp $	*/
+/*	$NetBSD: h_common.h,v 1.2.2.2 2017/01/07 08:56:55 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.

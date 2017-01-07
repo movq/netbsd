@@ -1,4 +1,4 @@
-/*	$NetBSD: imx6_pcie.c,v 1.2 2016/11/25 05:03:36 hkenken Exp $	*/
+/*	$NetBSD: imx6_pcie.c,v 1.2.4.2 2017/01/07 08:56:11 pgoyette Exp $	*/
 
 /*
  * Copyright (c) 2016  Genetec Corporation.  All rights reserved.
@@ -31,7 +31,7 @@
  */
 
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: imx6_pcie.c,v 1.2 2016/11/25 05:03:36 hkenken Exp $");
+__KERNEL_RCSID(0, "$NetBSD: imx6_pcie.c,v 1.2.4.2 2017/01/07 08:56:11 pgoyette Exp $");
 
 #include "opt_pci.h"
 

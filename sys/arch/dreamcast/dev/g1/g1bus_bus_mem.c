@@ -1,4 +1,4 @@
-/*	$NetBSD: g1bus_bus_mem.c,v 1.1 2016/12/29 11:49:05 tsutsui Exp $	*/
+/*	$NetBSD: g1bus_bus_mem.c,v 1.1.2.2 2017/01/07 08:56:12 pgoyette Exp $	*/
 
 /*-
  * Copyright (c) 2001 The NetBSD Foundation, Inc.
@@ -34,7 +34,7 @@
  */
 
 #include <sys/cdefs.h>			/* RCS ID & Copyright macro defns */
-__KERNEL_RCSID(0, "$NetBSD: g1bus_bus_mem.c,v 1.1 2016/12/29 11:49:05 tsutsui Exp $");
+__KERNEL_RCSID(0, "$NetBSD: g1bus_bus_mem.c,v 1.1.2.2 2017/01/07 08:56:12 pgoyette Exp $");
 
 #include <sys/param.h>
 #include <sys/systm.h>
