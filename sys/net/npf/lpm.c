@@ -31,7 +31,7 @@
 
 #if defined(_KERNEL)
 #include <sys/cdefs.h>
-__KERNEL_RCSID(0, "$NetBSD: lpm.c,v 1.3 2016/12/26 21:16:06 rmind Exp $");
+__KERNEL_RCSID(0, "$NetBSD: lpm.c,v 1.3.6.2 2017/01/18 08:46:46 skrll Exp $");
 
 #include <sys/param.h>
 #include <sys/types.h>
