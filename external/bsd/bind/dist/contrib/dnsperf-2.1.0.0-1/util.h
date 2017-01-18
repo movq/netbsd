@@ -1,4 +1,4 @@
-/*	$NetBSD: util.h,v 1.1.1.1 2016/05/26 15:45:46 christos Exp $	*/
+/*	$NetBSD: util.h,v 1.1.1.1.10.2 2017/01/18 08:46:06 skrll Exp $	*/
 
 /*
  * Copyright (C) 2012 - 2015 Nominum, Inc.

@@ -1,4 +1,4 @@
-/*	$NetBSD: csync_62.c,v 1.1.1.1 2016/05/26 15:45:51 christos Exp $	*/
+/*	$NetBSD: csync_62.c,v 1.1.1.1.10.2 2017/01/18 08:46:12 skrll Exp $	*/
 
 /*
  * Copyright (C) 2015  Internet Systems Consortium, Inc. ("ISC")
