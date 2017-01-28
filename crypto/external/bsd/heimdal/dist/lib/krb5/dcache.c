@@ -1,4 +1,4 @@
-/*	$NetBSD: dcache.c,v 1.1 2017/01/28 20:46:51 christos Exp $	*/
+/*	$NetBSD: dcache.c,v 1.1.1.1 2017/01/28 20:46:51 christos Exp $	*/
 
 /*
  * Copyright (c) 1997 - 2008 Kungliga Tekniska Högskolan

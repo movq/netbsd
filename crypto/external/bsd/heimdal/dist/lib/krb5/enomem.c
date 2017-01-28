@@ -1,4 +1,4 @@
-/*	$NetBSD: enomem.c,v 1.1 2017/01/28 20:46:51 christos Exp $	*/
+/*	$NetBSD: enomem.c,v 1.1.1.1 2017/01/28 20:46:51 christos Exp $	*/
 
 /*
  * Copyright (c) 1997 Kungliga Tekniska Högskolan

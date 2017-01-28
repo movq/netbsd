@@ -1,4 +1,4 @@
-/*	$NetBSD: getxxyyy.c,v 1.1 2017/01/28 20:46:53 christos Exp $	*/
+/*	$NetBSD: getxxyyy.c,v 1.1.1.1 2017/01/28 20:46:53 christos Exp $	*/
 
 /*
  * Copyright (c) 2011 Kungliga Tekniska Högskolan

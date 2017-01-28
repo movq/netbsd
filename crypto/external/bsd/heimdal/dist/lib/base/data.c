@@ -1,4 +1,4 @@
-/*	$NetBSD: data.c,v 1.1 2017/01/28 20:46:43 christos Exp $	*/
+/*	$NetBSD: data.c,v 1.1.1.1 2017/01/28 20:46:43 christos Exp $	*/
 
 /*
  * Copyright (c) 2011 Kungliga Tekniska Högskolan
