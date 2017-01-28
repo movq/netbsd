@@ -1,4 +1,4 @@
-/*	$NetBSD: strtoll.c,v 1.1 2017/01/28 20:46:53 christos Exp $	*/
+/*	$NetBSD: strtoll.c,v 1.1.1.1 2017/01/28 20:46:53 christos Exp $	*/
 
 /*
  * Copyright (c) 1992, 1993

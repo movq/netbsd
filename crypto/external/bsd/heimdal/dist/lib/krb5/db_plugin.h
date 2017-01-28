@@ -1,4 +1,4 @@
-/*	$NetBSD: db_plugin.h,v 1.1 2017/01/28 20:46:51 christos Exp $	*/
+/*	$NetBSD: db_plugin.h,v 1.1.1.1 2017/01/28 20:46:51 christos Exp $	*/
 
 /*
  * Copyright (c) 2011, Secure Endpoints Inc.

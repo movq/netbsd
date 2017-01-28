@@ -1,4 +1,4 @@
-/*	$NetBSD: baselocl.h,v 1.1 2017/01/28 20:46:43 christos Exp $	*/
+/*	$NetBSD: baselocl.h,v 1.1.1.1 2017/01/28 20:46:43 christos Exp $	*/
 
 /*
  * Copyright (c) 2010 - 2011 Kungliga Tekniska Högskolan
