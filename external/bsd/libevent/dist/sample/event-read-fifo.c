@@ -1,4 +1,4 @@
-/*	$NetBSD: event-read-fifo.c,v 1.1 2017/01/31 21:14:53 christos Exp $	*/
+/*	$NetBSD: event-read-fifo.c,v 1.1.1.1 2017/01/31 21:14:53 christos Exp $	*/
 /*
  * This sample code shows how to use Libevent to read from a named pipe.
  * XXX This code could make better use of the Libevent interfaces.

@@ -1,4 +1,4 @@
-/*	$NetBSD: openssl-compat.h,v 1.1 2017/01/31 21:14:53 christos Exp $	*/
+/*	$NetBSD: openssl-compat.h,v 1.1.1.1 2017/01/31 21:14:53 christos Exp $	*/
 #ifndef OPENSSL_COMPAT_H
 #define OPENSSL_COMPAT_H
 
