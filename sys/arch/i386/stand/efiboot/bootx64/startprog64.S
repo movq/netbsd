@@ -1,4 +1,4 @@
-/*	$NetBSD: startprog64.S,v 1.2 2017/02/04 16:14:27 christos Exp $	*/
+/*	$NetBSD: startprog64.S,v 1.2.2.2 2017/02/05 13:40:13 skrll Exp $	*/
 /*	NetBSD: startprog.S,v 1.3 2003/02/01 14:48:18 dsl Exp	*/
 
 /* starts program in protected mode / flat space
@@ -110,11 +110,11 @@ start:
 	.code32
 start32a:
 	movl	$DATA_SEGMENT, %eax
-	movw	%ax, %ds
-	movw	%ax, %es
-	movw	%ax, %fs
-	movw	%ax, %gs
-	movw	%ax, %ss
+	movw	%eax, %ds
+	movw	%eax, %es
+	movw	%eax, %fs
+	movw	%eax, %gs
+	movw	%eax, %ss
 
 	movl	%edx, %esp
 

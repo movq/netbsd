@@ -1,4 +1,4 @@
-# $NetBSD: Makefile.efiboot,v 1.5 2017/02/05 10:13:18 joerg Exp $
+# $NetBSD: Makefile.efiboot,v 1.5.2.2 2017/02/05 13:40:12 skrll Exp $
 
 S=		${.CURDIR}/../../../../..
 
@@ -46,9 +46,9 @@ CPPFLAGS+= -I$S -I${.CURDIR} -I${.CURDIR}/.. -I$S/lib/libsa
 CPPFLAGS+= -I${.OBJDIR}
 CPPFLAGS+= -I${.CURDIR}/../../lib
 
+CWARNFLAGS.clang+= -Wno-invalid-noreturn #panic.c
 COPTS+= -ffreestanding -fPIC -fshort-wchar -fno-strict-aliasing -fno-builtin
 COPTS+= -fno-stack-protector
-COPTS+= ${${ACTIVE_CC} == "gcc":? -Wno-error=unused-but-set-variable :}
 COPTS+= ${${ACTIVE_CC} == "gcc":? -falign-functions=16 :}
 CPPFLAGS+= -nostdinc -D_STANDALONE
 CPPFLAGS+= -DEFIBOOT

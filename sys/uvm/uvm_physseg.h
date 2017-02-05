@@ -1,4 +1,4 @@
-/* $NetBSD: uvm_physseg.h,v 1.8 2017/01/02 20:08:32 cherry Exp $ */
+/* $NetBSD: uvm_physseg.h,v 1.8.6.2 2017/02/05 13:41:01 skrll Exp $ */
 
 /*-
  * Copyright (c) 2016 The NetBSD Foundation, Inc.
