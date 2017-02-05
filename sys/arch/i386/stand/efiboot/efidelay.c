@@ -1,4 +1,4 @@
-/*	$NetBSD: efidelay.c,v 1.1 2017/01/24 11:09:14 nonaka Exp $	*/
+/*	$NetBSD: efidelay.c,v 1.1.2.2 2017/02/05 13:40:12 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2016 Kimihiro Nonaka <nonaka@netbsd.org>

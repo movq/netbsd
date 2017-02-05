@@ -1,4 +1,4 @@
-/*	$NetBSD: boot.c,v 1.2 2017/02/03 16:42:26 roy Exp $	*/
+/*	$NetBSD: boot.c,v 1.2.2.2 2017/02/05 13:40:12 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2016 Kimihiro Nonaka <nonaka@netbsd.org>

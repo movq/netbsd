@@ -1,4 +1,4 @@
-/*	$NetBSD: ldscript,v 1.1 2017/01/24 11:09:14 nonaka Exp $	*/
+/*	$NetBSD: ldscript,v 1.1.2.2 2017/02/05 13:40:12 skrll Exp $	*/
 OUTPUT_FORMAT("elf32-i386", "elf32-i386", "elf32-i386")
 OUTPUT_ARCH(i386)
 ENTRY(_start)

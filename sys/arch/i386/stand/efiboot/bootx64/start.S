@@ -1,4 +1,4 @@
-/*	$NetBSD: start.S,v 1.1 2017/01/24 11:09:14 nonaka Exp $	*/
+/*	$NetBSD: start.S,v 1.1.2.2 2017/02/05 13:40:13 skrll Exp $	*/
 
 /*-
  * Copyright (C) 1999 Hewlett-Packard Co.

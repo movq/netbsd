@@ -1,4 +1,4 @@
-/*	$NetBSD: g1busvar.h,v 1.1 2016/12/29 11:49:05 tsutsui Exp $	*/
+/*	$NetBSD: g1busvar.h,v 1.1.6.2 2017/02/05 13:40:06 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2001 Marcus Comstedt

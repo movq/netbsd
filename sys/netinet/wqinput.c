@@ -1,4 +1,4 @@
-/*	$NetBSD: wqinput.c,v 1.1 2017/02/02 02:52:10 ozaki-r Exp $	*/
+/*	$NetBSD: wqinput.c,v 1.1.2.2 2017/02/05 13:40:59 skrll Exp $	*/
 
 /*-
  * Copyright (c) 2017 Internet Initiative Japan Inc.
