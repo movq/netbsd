@@ -1,4 +1,4 @@
-/*	$NetBSD: pw-pbkdf2.c,v 1.1 2017/02/09 01:46:42 christos Exp $	*/
+/*	$NetBSD: pw-pbkdf2.c,v 1.1.1.1 2017/02/09 01:46:42 christos Exp $	*/
 
 /* $OpenLDAP$ */
 /* This work is part of OpenLDAP Software <http://www.openldap.org/>.
@@ -21,7 +21,7 @@
 #define _GNU_SOURCE
 
 #include <sys/cdefs.h>
-__RCSID("$NetBSD: pw-pbkdf2.c,v 1.1 2017/02/09 01:46:42 christos Exp $");
+__RCSID("$NetBSD: pw-pbkdf2.c,v 1.1.1.1 2017/02/09 01:46:42 christos Exp $");
 
 #include "portable.h"
 #include <ac/string.h>

@@ -1,4 +1,4 @@
-/*	$NetBSD: mdb_dump.c,v 1.1 2017/02/09 01:46:44 christos Exp $	*/
+/*	$NetBSD: mdb_dump.c,v 1.1.1.1 2017/02/09 01:46:44 christos Exp $	*/
 
 /* mdb_dump.c - memory-mapped database dump tool */
 /*
