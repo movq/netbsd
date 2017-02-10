@@ -1,4 +1,4 @@
-/*	$NetBSD: der.h,v 1.1 2017/02/10 17:42:57 christos Exp $	*/
+/*	$NetBSD: der.h,v 1.1.1.1 2017/02/10 17:42:57 christos Exp $	*/
 
 /*-
  * Copyright (c) 2016 Christos Zoulas
