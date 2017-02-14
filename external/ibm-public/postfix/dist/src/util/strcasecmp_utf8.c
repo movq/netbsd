@@ -1,4 +1,4 @@
-/*	$NetBSD: strcasecmp_utf8.c,v 1.1 2017/02/14 01:13:44 christos Exp $	*/
+/*	$NetBSD: strcasecmp_utf8.c,v 1.1.1.1 2017/02/14 01:13:44 christos Exp $	*/
 
 /*++
 /* NAME
