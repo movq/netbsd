@@ -15,7 +15,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: print-otv.c,v 1.3 2017/02/05 04:05:05 spz Exp $");
+__RCSID("$NetBSD: print-otv.c,v 1.3.2.2 2017/02/19 07:35:24 snj Exp $");
 #endif
 
 /* \summary: Overlay Transport Virtualization (OTV) printer */
