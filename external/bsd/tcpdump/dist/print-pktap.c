@@ -21,7 +21,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: print-pktap.c,v 1.4 2017/02/05 04:05:05 spz Exp $");
+__RCSID("$NetBSD: print-pktap.c,v 1.4.10.2 2017/02/19 07:37:08 snj Exp $");
 #endif
 
 /* \summary: Apple's DLT_PKTAP printer */
