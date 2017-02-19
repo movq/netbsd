@@ -24,7 +24,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: print-m3ua.c,v 1.4 2017/02/05 04:05:05 spz Exp $");
+__RCSID("$NetBSD: print-m3ua.c,v 1.4.8.2 2017/02/19 07:36:19 snj Exp $");
 #endif
 
 /* \summary: Message Transfer Part 3 (MTP3) User Adaptation Layer (M3UA) printer */

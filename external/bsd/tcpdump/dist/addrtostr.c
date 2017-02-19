@@ -38,7 +38,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: addrtostr.c,v 1.3 2017/02/05 04:05:05 spz Exp $");
+__RCSID("$NetBSD: addrtostr.c,v 1.3.8.2 2017/02/19 07:36:17 snj Exp $");
 #endif
 
 #ifdef HAVE_CONFIG_H
