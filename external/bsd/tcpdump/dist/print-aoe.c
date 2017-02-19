@@ -27,7 +27,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: print-aoe.c,v 1.4 2017/02/05 04:05:05 spz Exp $");
+__RCSID("$NetBSD: print-aoe.c,v 1.4.2.2 2017/02/19 04:59:44 snj Exp $");
 #endif
 
 /* \summary: ATA over Ethernet (AoE) protocol printer */
