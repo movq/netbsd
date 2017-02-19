@@ -21,7 +21,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: print-rpki-rtr.c,v 1.4 2017/02/05 04:05:05 spz Exp $");
+__RCSID("$NetBSD: print-rpki-rtr.c,v 1.4.4.2 2017/02/19 07:36:20 snj Exp $");
 #endif
 
 #ifdef HAVE_CONFIG_H
