@@ -17,7 +17,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: strtoaddr.c,v 1.3 2017/02/05 04:05:05 spz Exp $");
+__RCSID("$NetBSD: strtoaddr.c,v 1.3.4.2 2017/02/19 05:01:17 snj Exp $");
 #endif
 
 #ifdef HAVE_CONFIG_H
