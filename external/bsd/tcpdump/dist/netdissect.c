@@ -24,7 +24,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: netdissect.c,v 1.2 2017/02/05 04:05:05 spz Exp $");
+__RCSID("$NetBSD: netdissect.c,v 1.2.12.2 2017/03/13 07:41:13 skrll Exp $");
 #endif
 
 #ifdef HAVE_CONFIG_H

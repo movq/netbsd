@@ -23,7 +23,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: print-vxlan-gpe.c,v 1.3 2017/02/05 04:05:05 spz Exp $");
+__RCSID("$NetBSD: print-vxlan-gpe.c,v 1.3.12.2 2017/03/13 07:41:15 skrll Exp $");
 #endif
 
 /* \summary: Generic Protocol Extension for VXLAN (VXLAN GPE) printer */
