@@ -12,7 +12,7 @@
 
 #include <sys/cdefs.h>
 #ifndef lint
-__RCSID("$NetBSD: ascii_strcasecmp.c,v 1.2 2017/01/24 23:29:13 christos Exp $");
+__RCSID("$NetBSD: ascii_strcasecmp.c,v 1.2.12.2 2017/03/13 07:41:13 skrll Exp $");
 #endif
 
 #include "ascii_strcasecmp.h"
